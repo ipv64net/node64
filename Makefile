@@ -29,3 +29,10 @@ docker-multiarch:
 
 clean:
 	rm -rf bin dist
+
+# ---- hub (Serverdienst Healthchecks 2.0)
+hub:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.Version=$(VERSION)" -o build/hub-linux-amd64 ./cmd/hub
+
+hub-deploy:
+	bash deploy/server/hub-deploy.sh $(VERSION)

@@ -1,9 +1,10 @@
-/bin/
-/dist/
-/data/
 *.db
-*.db-wal
 *.db-shm
-*.test
+*.db-wal
 *.out
+*.test
 .env
+/bin/
+/data/
+/dist/
+build/
