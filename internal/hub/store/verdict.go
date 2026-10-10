@@ -190,7 +190,7 @@ func eventKind(from, to scheduler.State) (string, bool) {
 	case from == scheduler.StateDegraded && to == scheduler.StateUp:
 		return "degraded_end", false
 	case to == scheduler.StateUp:
-		return "up", from != scheduler.StatePending // pending -> up ist kein Alarm
+		return "up", from == scheduler.StatePending // pending -> up ist kein Alarm (still)
 	default:
 		return "state", true
 	}
