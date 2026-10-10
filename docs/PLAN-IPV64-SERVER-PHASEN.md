@@ -6,7 +6,7 @@ Rahmen (entschieden):
 - **Zwei hub-Server** (Hetzner Cloud, Nürnberg `nbg` und Falkenstein `fsn`) für `ipv64-hub`; Redis auf nbg; der Web-Server behält Portal, PHP, MySQL.
 - Beide Server sind gleichwertig (gateway + checker); Online-Checks laufen von **beiden Standorten**, Hybrid-Checks (innen + außen) mit Gesamtzustand nach Regel (Sync-Plan 3.12).
 - **IPv4 und IPv6** an jeder Stelle.
-- Alte Healthcheck-Bots und Seiten bleiben, bis der Schattenbetrieb sauber ist (Strangler-Fig, Flag `users.hc2`).
+- **Keine Migration**: die alte Welt bleibt unverändert und läuft parallel; wer die neue aktiviert (`users.hc2 = 1`), fängt bei null an. Abschaltung alt erst nach Frist (Sync-Plan Abschnitt 7).
 - Änderungen am Webcode als Vorher/Nachher-Schnipsel, minimal, Dennis spielt ein. Go-Code im Agent-Repo (`cmd/hub`), Deploy per Binary + systemd.
 
 ---
@@ -17,11 +17,11 @@ Jede Phase endet mit **einer** Abnahme durch Dennis; dazwischen arbeite ich durc
 
 | Phase | Inhalt | Arbeitspakete | Abnahme (kurz) |
 | --- | --- | --- | --- |
-| **1 Grundlagen** | hub-Server aufsetzen, `latest.json`, Tabellen `hc2_*`, MySQL-Benutzer, Migrationsskript, Portal-Hooks, alte Bots überspringen `hc2`-Accounts | S0, S1, S2 | Server erreichbar v4/v6, Testaccount migriert, alt/neu identisch |
+| **1 Grundlagen** | hub-Server aufsetzen, `latest.json`, Tabellen `hc2_*`, dbconnect-Block (Hooks, Push-Eingang) | S0, S1, S2 | Server erreichbar v4/v6, Tabellen da, health.php nimmt neue Tokens an |
 | **2 hub: Checks und Alarme** | Rolle checker (Online-Checks, Zustände, Push-Watchdog, Aggregation, Agent-Ausfall) und serverseitige Benachrichtigungen (alle Kanaltypen, Verifizierung) | S3, S4 | Online-Checks des Testaccounts laufen im hub, Alarme kommen über jeden Kanaltyp (Schattenmodus) |
 | **3 hub: Agents anbinden** | Rolle gateway (WebSocket, Device-Code, Abgleich, Testläufe, Lasttest), Agent-Sync-Client, Betriebsgrundlagen (Metriken, Deploy, Runbook) | S5, S6, S10 (Teil) | Testkisten-Agent verknüpft, alle Offline-Szenarien 3.10 bestanden, Lasttest 10.000 Agents |
 | **4 Portal** | Neue Seiten `/healthchecks2`, `/notifications`, `/agents`, `/link`, Umhängen lokal↔online, Konflikte, Statusseite, `health.php`, API v2 | S7 | Testaccount bedient alles ohne alte Seiten, Umhängen in beide Richtungen |
-| **5 Schatten, Rollout, Betrieb** | Schattenbetrieb mit Vergleichsbot und Beta-Nutzern, Rollout in Wellen, Abschaltung alt, Monitoring/Alarmierung des hub, Weg zur zweiten Instanz | S8, S9, S10 (Rest) | 14 Tage ohne Abweichung, alte Bots aus |
+| **5 Beta, Freigabe, Betrieb** | Beta mit Dennis und Freiwilligen, Freigabe für alle, spätere Abschaltung alt, Monitoring/Alarmierung des hub, dritter Standort | S8, S9, S10 (Rest) | Beta ohne offene Fehler, Freigabe |
 
 Reihenfolge 1 → 2 → 3 → 4 → 5. Innerhalb von Phase 2–4 kann Go (hub) parallel zu PHP (Portal) laufen; Phase 4 braucht die Tabellen aus 1 und für Live-Daten den hub aus 2.
 
@@ -79,16 +79,16 @@ Reihenfolge 1 → 2 → 3 → 4 → 5. Innerhalb von Phase 2–4 kann Go (hub) p
 1. DDL als `deploy/sql/hc2_schema.sql` (neue, eigene Datenbank) und `deploy/sql/ipv64_main.sql` (Hauptdatenbank: Flags, `hc_locations`, Sicht, Leserechte) im Agent-Repo – idempotent, auf der Testkiste in MariaDB 10.5 geprüft; Dennis spielt ein, kein MySQL-Zugriff für mich. Portal-Benutzer braucht Rechte auf die neue Datenbank; PHP spricht die Tabellen als `<db>`.`hc2_*` an. Partitionierung `hc2_measurements` tagesweise, 8 Partitionen plus `pMAX`; Partitions-Rotation macht der hub (S3) täglich (`ALTER TABLE ... DROP PARTITION`, `ADD PARTITION`).
 2. `ALTER TABLE users ADD hc2 TINYINT NOT NULL DEFAULT 0` (und `hc2_shadow TINYINT` für S8).
 3. MySQL-Benutzer `hc2'@'<hub-ip>'` (v4 und v6 je ein Eintrag): `SELECT, INSERT, UPDATE, DELETE` auf `hc2_*`, `SELECT` auf `users` (nur Spalten `id, email, user_class, hc2, hc2_shadow` – per View `hc2_users_v`, damit keine Passwort-Hashes lesbar sind), `SELECT` auf `user_class`, `SELECT` auf `healthchecks` (für den Vergleichsbot in S8), `ALTER` auf `hc2_measurements` (Partitionen). `REQUIRE SSL`.
-4. Migrationsskript `bots/hc2_migrate.php <userid|all> [--dry-run]`: Mapping aus Abschnitt 2 (Checks, Integrationen → Kanäle, letzte 7 Tage Events → Messpunkte, ältere → `hc2_daily`, Incidents), idempotent (zweiter Lauf ändert nichts), schreibt Protokoll nach `hc2_migration_log`. Setzt am Ende `users.hc2 = 1` (nur ohne `--dry-run` und mit `--activate`). Laufzeit je Account < 1 s, `all` in Batches à 100 Accounts.
-5. Portal-Hooks in `dbconnect.php`: Funktionen `hc2_log_change($pdo, $userid, $entity, $id, $op, $agentId = null)` (Revision aus `hc2_revisions`-Zähler je Account, INSERT in `hc2_config_log`) und `hc2_signal($userid)` (Redis `PUBLISH hc2:cfg:<userid>`, Fehler werden nur geloggt, nie an den Nutzer). Redis-Verbindung über das vorhandene `connectRedis()`, Host/Passwort in der bestehenden Konfigurationsstelle.
-6. Alte Bots anpassen: `healthcheck_*_live.php`, `healthcheck_alarm.php` bekommen in ihrer Account-/Check-Abfrage `JOIN users u ... WHERE u.hc2 = 0` (eine Zeile je Bot), damit migrierte Accounts nicht doppelt geprüft werden. In S8 kommt `OR u.hc2_shadow = 1` dazu.
-7. `health.php`: nach dem bisherigen Schreiben zusätzlich, wenn Besitzer `hc2 = 1`: INSERT in `hc2_measurements` (status up, `flags`, `reason push`), `PUBLISH hc2:push <token>`. Bei `hc2 = 0` unverändert. Die neue URL `agents.ipv64.net/v1/push/{token}` kommt in S5.
+4. ~~Migrationsskript~~ entfällt (keine Migration).
+5. dbconnect-Block `deploy/web/dbconnect_hc2.php`: eigene Verbindung `hc2_pdo()` mit `ipv64_hc`, `hc2_log_change()` (Revision + Config-Log + Redis-Signal), `hc2_signal()` (Redis-PUBLISH über vorhandenes `connectRedis()`, Fehler nur geloggt), `hc2_push()` (Heartbeat neuer Tokens über `health.php`), `hc2_encrypt()/hc2_decrypt()` kompatibel zum Agent.
+6. Alte Bots: **unverändert** (keine `hc2 = 0`-Bedingung; alte Welt läuft für alle weiter).
+7. `health.php`: eine Zeile nach der Token-Prüfung: `if (hc2_push($key, $_GET + $_POST)) { ... exit; }` – neue Tokens landen in `hc2_measurements` + Redis `hc2:push`, alte laufen wie bisher.
 
-**Dateien**: `ipv64_datenbank/hc2_schema.sql`, `bots/hc2_migrate.php`, `dbconnect.php` (+2 Funktionen), `bots/healthcheck_*_live.php`, `bots/healthcheck_alarm.php`, `health.php`.
+**Dateien**: `deploy/sql/hc2_schema.sql`, `deploy/sql/ipv64_main.sql`, `deploy/web/dbconnect_hc2.php`, `deploy/web/PHASE1-VORHER-NACHHER.md`, `health.php` (eine Zeile).
 
-**Abnahme**: Schema angelegt; `hc2_migrate.php <Dennis-Testaccount> --dry-run` zeigt plausibles Mapping; echter Lauf; Vergleichsabfrage alt/neu (Anzahl Checks, Zustände, Kanäle) identisch; Änderung an einem alten Check im Portal erzeugt **keinen** Log-Eintrag (alte Seiten sind nicht angebunden, gewollt), Änderung in der neuen Seite (S7) später schon. Redis-PUBLISH vom Web-Server aus funktioniert (`redis-cli -h hub MONITOR`).
+**Abnahme**: Schema angelegt; `health.php?token=<neuer Token>` schreibt nach `hc2_measurements` und publiziert `hc2:push`; alte Tokens unverändert; Redis-PUBLISH vom Web-Server aus funktioniert (`redis-cli -h 10.10.0.11 MONITOR`).
 
-**Rückweg**: `users.hc2 = 0` → alte Bots übernehmen wieder; Tabellen bleiben.
+**Rückweg**: Block entfernen; alte Welt war nie betroffen.
 
 **Von Dennis**: Bestätigung Testaccount; Ort der Redis-Zugangsdaten in der PHP-Konfiguration.
 

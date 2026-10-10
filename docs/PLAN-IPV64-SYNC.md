@@ -11,7 +11,7 @@ Ergänzt das Konzept („ipv64 Agent – Konzept & Funktionsumfang“) und erset
 | Nr. | Entscheidung | Begründung |
 | --- | --- | --- |
 | L1 | **Ein Check-Bot in Go** für Agent und Server (`internal/checks`, `internal/scheduler`, `internal/notify` aus dem Agent-Repo). Die PHP-Bots `healthcheck_*_live.php`, `healthcheck_alarm.php` werden abgelöst. | Gleiche Logik, gleiche Fehlergründe, gleiche Zustandsmaschine überall. |
-| L2 | **Neuer Dienst `ipv64-hub`** (Rolle `checker` ersetzt die PHP-Bots) auf den ipv64-Servern neben dem Altsystem (Strangler-Fig). Neue Tabellen mit Präfix `hc2_`. Freischaltung je Account per Flag. | Kein Big Bang, Rollback per Flag. |
+| L2 | **Neuer Dienst `ipv64-hub`** (Rolle `checker`) auf eigenen Servern neben dem Altsystem. Neue Tabellen mit Präfix `hc2_` in eigener Datenbank. **Keine Migration**: Wer die neue Welt aktiviert (`users.hc2 = 1`), fängt bei null an; die alte Welt bleibt unverändert und läuft parallel, bis sie abgeschaltet wird. | Entscheidung Dennis 2026-10-10: einfacher, kein Mapping-Risiko, kein Doppelbetrieb-Abgleich. |
 | L3 | **Server ist führend** für Konfiguration (Checks, Kanäle, Wartungsfenster), sobald ein Agent verknüpft ist. **Agent ist führend** für seine Messergebnisse (append-only). | Konzept, Abschnitt Synchronisation. |
 | L4 | **Eigener Go-Dienst `ipv64-hub` bei ipv64 für die gesamte Agent-Kommunikation** (Host `agents.ipv64.net`): eine WebSocket-Dauerverbindung je Agent plus HTTPS-Endpunkte für große Abgleiche. `api_v2.php` bleibt für Nutzer, Portal und Fremdsoftware; Agents reden nicht mit PHP. | Entscheidung Dennis 2026-10-10: von Anfang an für viele tausend Agents und mehrere Server-Instanzen auslegen. PHP kann weder Dauerverbindungen halten noch so skalieren; Long-Poll würde je Agent einen PHP-Prozess belegen. |
 | L9 | **Zwei hub-Server von Anfang an, Nürnberg und Falkenstein** (Hetzner Cloud), getrennt vom Web-Server. Auf beiden läuft dasselbe Binary mit beiden Rollen (`gateway` + `checker`), Zustand nur in MySQL und Redis. Jeder Server ist ein **Standort** (`location`: `nbg`, `fsn`); Online-Checks werden standardmäßig **von beiden Standorten** gemessen. Fällt ein Server aus, übernimmt der andere die Agents sofort und die Online-Messung läuft mit einem Standort weiter. Ein dritter Standort ist nur ein weiterer Server mit eigenem `location`. | Entscheidung Dennis 2026-10-10: „lieber größer denken als klein“, zwei Standorte, Trennung vom Web-Server. |
@@ -19,7 +19,7 @@ Ergänzt das Konzept („ipv64 Agent – Konzept & Funktionsumfang“) und erset
 | L10 | **IPv4 und IPv6 überall** (Namensgeber von ipv64): hub lauscht Dual-Stack, `agents.ipv64.net` hat A- und AAAA-Record, Online-Checks laufen je nach `ip_mode` über v4, v6 oder beides, MySQL/Redis-Verbindungen und nginx sind Dual-Stack; der Agent ist es bereits (Listener, Checks, ICMPv6, TLS-SANs, Ratelimits je /64). | Entscheidung Dennis 2026-10-10. |
 | L5 | **Rohe Messpunkte der Online-Checks nur 7 Tage in MySQL** (partitioniert), Stunden- und Tageswerte in MySQL. Influx wird nicht mehr für Healthchecks gebraucht. | Ein Datenmodell für Agent und Server, gleiche Charts. Influx bleibt für CDN/Statistiken. |
 | L6 | **Integrationen werden zu Kanälen** (`hc2_channels`), gleiche Typen wie im Agent (`smtp`, `telegram`, `discord`, `ntfy`, `gotify`, `webhook`, `pushover`) plus serverseitig `app`, `ipv64_mail`, `ipv64_sms`. Pushover auch im Agent, weil der Container ohne ipv64-Account vollwertig bleiben soll; `ipv64_mail`/`ipv64_sms` kann ein verknüpfter Agent über den hub nutzen. Alte `integrations` werden einmalig migriert, die Verifizierung per Mail/SMS bleibt. | Gleicher Versandcode (Go) auf Server und Agent; die bekannten Lücken im alten PHP (activate_integration ohne Login) verschwinden. |
-| L7 | **Push-URLs bleiben stabil**: `https://ipv64.net/health.php?token=...` und der neue Pfad `/api/v2/push/{token}` funktionieren beide, auch nach der Migration. | Tausende Geräte rufen die alte URL. |
+| L7 | **Push-URLs**: `https://ipv64.net/health.php?token=...` funktioniert für alte und neue Tokens (health.php prüft zuerst `hc2_checks`), zusätzlich `https://hc-srv0X.ipv64.net/v1/push/{token}` direkt am hub. | Tausende Geräte rufen die alte URL. |
 | L8 | Lokale Messungen im Container haben **kein Limit**. Gegen `user_class.healthcheck_limit` zählt die Zahl der **Online-Messstellen**: jeder Check mit `execution online/both` zählt einmal **je gewähltem Standort** (ein Check an nbg + fsn = 2). Kein Limit für die Anzahl Agents je Account. **Mehrere Standorte je Check** (nbg + fsn) gibt es erst ab Account-Klasse **Supporter** (neue Spalte `user_class.hc_locations`: Standard 1, alle anderen 2); darunter wählt der Server einen Standort (abwechselnd nach `crc32(token)`, damit die Last verteilt ist, im Portal änderbar). | Entscheidung Dennis, 2026-10-10. |
 
 ---
@@ -210,21 +210,7 @@ CREATE TABLE hc2_slot_leases (location VARCHAR(16), slot SMALLINT, owner VARCHAR
 CREATE TABLE hc2_dirty_hours (token CHAR(32), source VARCHAR(40) NOT NULL, hour DATETIME, PRIMARY KEY (token, source, hour));
 ```
 
-**Mapping Alt → Neu** (Migrationsskript, pro Account beim Setzen von `users.hc2 = 1`):
-
-| alt `healthchecks` | neu `hc2_checks` |
-| --- | --- |
-| `healthtoken` | `token` |
-| `type` health / ping / web / tcp / keyword | `push` / `icmp` / `http` / `tcp` / `keyword` |
-| `zeit1`,`zeit2` (1=min,2=h,3=d), `grace1`,`grace2` | push: `params.period_seconds`, `params.grace_seconds` |
-| `type_options` JSON: `hostnameip`, `preferv4`, `tcpport`, `url`, `ssltrust`, `keyword`, `checkintervall1/2` (0=s,1=min,2=h), `fehlerintervall1/2`, `checkcount` | `target`, `ip_mode` (preferv4 → `ipv4`), `params.port`, `params.insecure_tls = !ssltrust`, `params.keyword`, `interval_sec`, `retry_interval_sec`, `retries = checkcount-1` |
-| `alarm_down`, `alarm_up`, `integration` (csv von `integrations.id`, 0 = Account-Mail) | `notify_down`, `notify_up`, `channels` (neue IDs aus `hc2_channels.legacy_integration_id`; 0 → Standardkanal `ipv64_mail`) |
-| `status` 0 new / 1 up / 2 paused / 3 warning / 4 down / 5 stabilizing | `state` pending / up / paused / down (warning gibt es nicht mehr: Karenz = Retry-Phase) / down / stabilizing |
-| `healthcheck_events` (`status`, `text`, `latency`, `payload`) | letzte 7 Tage → `hc2_measurements` (status 1 → up, 3/4 → down), ältere → `hc2_daily` aus den Tageswerten |
-| `healthcheck_incidents` + `_events` | `hc2_incidents` (Events-Text geht in `hc2_events`) |
-| `integrations` (telegram, gotify, ntfy, pushover, discord, webhook, email, sms, mobil) | `hc2_channels` gleiche Typen (`mobil` → `app`), `options` → `config_enc`, `status 0` → `verified 0`, `default_inte` → `is_default` |
-| `status_pages.healthchecks` (csv `healthchecks.id`) | Spalte wird auf Tokens umgestellt (`status_pages.hc2_tokens`), die Seite liest je nach `users.hc2` alt oder neu |
-| `dns_failover_monitors.healthtoken` | unverändert, Failover liest `state` aus `hc2_checks` statt `status` aus `healthchecks` (Mapping down/flapping/dependent → 4) |
+**Alt → Neu**: keine Datenübernahme (L2). Die Spalten `legacy_id`/`legacy_integration_id` bleiben ungenutzt. Statusseiten und DNS-Failover lesen weiter die alte Welt, bis diese abgeschaltet wird; die neue Welt bekommt eigene Statusseiten (Abschnitt 6).
 
 ---
 
@@ -506,20 +492,18 @@ Pfade während der Umstellung unter `/healthchecks2/...`, nach Abschluss überne
 | Statusseiten | bestehende `statuspage.php`/`status.php` liest Zustände aus `hc2_*` (Tokens statt IDs), Design unverändert |
 | Öffentliche Seite | `healthcheck_updater_api.php` erweitern um die neue Push-URL und die Agent-Doku |
 
-## 7. Migration und Rollout (Strangler-Fig)
+## 7. Einführung und Abschaltung alt (ohne Migration)
 
 | Schritt | Inhalt | Rückweg |
 | --- | --- | --- |
-| M0 | Tabellen `hc2_*` anlegen, `users.hc2` Flag, `latest.json` ausliefern | – |
-| M1 | `ipv64-hub` deployen (Go, systemd, zwei Server, nginx davor, Redis), zunächst ohne Nutzer; Lasttest mit simulierten Agents | Dienst stoppen |
-| M2 | Migrationsskript `bots/hc2_migrate.php <userid>`: kopiert Checks, Events (7 Tage), Incidents, Integrationen; setzt `users.hc2 = 1`; alte Bots überspringen Accounts mit `hc2 = 1` (`JOIN users ... WHERE hc2 = 0`) | Flag auf 0, alte Bots übernehmen wieder (hc2-Daten bleiben) |
-| M3 | Neue Portalseiten unter `/healthchecks2`, Menü zeigt je nach Flag alt oder neu; `health.php` schreibt bei `hc2 = 1` nach `hc2_measurements` + Redis | Flag |
-| M4 | hub: Agent-Endpunkte und WebSocket, Device-Code; Portal: `/link`, `/agents`; Agent-Release mit Sync | Agent entkoppeln |
-| M5 | Testaccounts (Dennis, Beta-Nutzer) umstellen, zwei Wochen Schattenbetrieb: alte Bots laufen für diese Accounts **zusätzlich weiter, aber ohne Alarme** (Schattenmodus-Flag), Vergleich der Zustände in einem Bot `hc2_compare.php` | Flag |
-| M6 | Alle Accounts in Wellen (Free zuletzt), Vergleich beobachten | Flag je Account |
-| M7 | Alte Bots abschalten, alte Seiten auf neue umleiten, `integrations.php` abschalten, API v2 Healthcheck-Pfade auf neues Modell | Backup der alten Tabellen bleibt 90 Tage |
+| M0 | Tabellen `hc2_*` in eigener Datenbank, `users.hc2` Flag, `latest.json` | – |
+| M1 | `ipv64-hub` auf beiden Servern, zunächst ohne Nutzer; Lasttest | Dienst stoppen |
+| M2 | Neue Portalseiten unter `/healthchecks2`; Schalter „Neue Healthchecks aktivieren“ setzt `hc2 = 1` (Menü zeigt dann beide Welten: „Healthchecks (neu)“ und „Healthchecks (alt)“); `health.php` nimmt neue Tokens an | Flag auf 0 blendet die neue Welt aus, Daten bleiben |
+| M3 | Agent-Release mit Sync; Beta mit Dennis und Freiwilligen | Agent entkoppeln |
+| M4 | Freigabe für alle (Ankündigung Blog/Wiki); alte Welt bleibt parallel, neue Checks nur noch in der neuen Welt anlegbar (alte Seite: Hinweis statt „Neu“) | Hinweis entfernen |
+| M5 | Nach Frist (Vorschlag 6 Monate): alte Bots aus, alte Seiten nur noch lesend, dann abgeschaltet; alte Tabellen 90 Tage als Dump | Backup |
 
-Push-URL `health.php?token=` bleibt dauerhaft; sie prüft `hc2` des Besitzers und schreibt entsprechend.
+Limits: alte und neue Welt zählen getrennt (alt wie bisher gegen `healthcheck_limit`, neu Online-Messstellen gegen dasselbe Limit); während der Parallelzeit gilt das Limit also je Welt. Entscheidung, ob beide zusammen zählen sollen, offen (Dennis).
 
 ---
 
@@ -541,15 +525,15 @@ Push-URL `health.php?token=` bleibt dauerhaft; sie prüft `hc2` des Besitzers un
 | # | Paket | Repo | Abnahme |
 | --- | --- | --- | --- |
 | 1 | `latest.json` + Versionsprüfung | ipv64 | Agent zeigt Version |
-| 2 | `hc2_*` DDL, Migrationsskript, `users.hc2`, Redis-Publish im Portal | ipv64 | Testaccount migriert, Vergleich alt/neu identisch |
+| 2 | `hc2_*` DDL in eigener DB, `users.hc2`, dbconnect-Block (Hooks, Push-Eingang, Verschlüsselung) | ipv64 | Tabellen da, health.php nimmt neue Tokens an |
 | 3 | `cmd/hub` Rolle **checker**: MySQL-Adapter für `scheduler.Store`, Standorte, `hc2_nodes`/Slots/Leases je Standort, Messstellen-Zustände + Gesamtzustand (3.12), Konfig-Log + Redis, Push-Watchdog, Aggregation, Agent-/Standort-Ausfall | Agent-Repo | Online-Checks eines Testaccounts laufen über zwei hub-Instanzen; eine stoppen → die andere übernimmt binnen 30 s |
 | 4 | `notify`: `pushover` (Agent + Server), `app`, `ipv64_mail`, `ipv64_sms` (Server, Backend über SMTP/SMS-Gateway wie heute), Agent-Weiterleitung `notify` | Agent-Repo | Testnachrichten je Typ, lokal und über hub |
 | 5 | Portal: `/notifications` (Kanäle), Verifizierung | ipv64 | Alte Integrationen migriert, Test-Button |
 | 6 | Portal: `/healthchecks2` Übersicht, Detail, Formular, Wartung, Störungen, Statusseite auf `hc2` | ipv64 | Feature-Parität zur alten Seite plus neue Typen |
 | 7 | `cmd/hub` Rolle **gateway**: WebSocket, Device-Code, HTTPS-Abgleich, Redis-Fanout, Batch-Writer; Portal `/link`, `/agents`; nginx-Konfiguration; Lasttest `cmd/hubload` mit 10.000 simulierten Agents | Agent-Repo + ipv64 | Lasttest ohne Fehler, Instanz-Neustart ohne Datenverlust (Messpunkte kommen per Outbox nach) |
 | 8 | Agent: `internal/sync` echter Client (Link, WebSocket, Outbox, Konflikte, Repair, Reconnect-Ablauf 3.9), UI „ipv64-Verknüpfung“, Konfliktseite, Umhängen (3.11), Kanaltypen `ipv64_mail`/`ipv64_sms` | Agent-Repo | Jede Zeile der Tabelle 3.10 als Test; hub-Wechsel unbemerkt |
-| 9 | Schattenbetrieb und Vergleichsbot | ipv64 | Zwei Wochen ohne Abweichung |
-| 10 | Rollout in Wellen, Abschaltung alt | ipv64 | Alte Bots aus |
+| 9 | Beta (Dennis + Freiwillige) mit Agent und Portal, zwei Wochen | ipv64 | keine offenen Fehler |
+| 10 | Freigabe für alle, später Abschaltung alt (Abschnitt 7) | ipv64 | Alte Bots aus |
 
 Reihenfolge: 1 → 2 → 3 → 4 → 7 → 8 → 5 → 6 → 9 → 10. Pakete 3/4/7/8 (Go) und 5/6 (PHP) können parallel laufen; 7 und 8 werden gegeneinander getestet.
 
@@ -569,5 +553,6 @@ Reihenfolge: 1 → 2 → 3 → 4 → 7 → 8 → 5 → 6 → 9 → 10. Pakete 3/
 11. **Hybrid**: lokal + online gleichzeitig möglich; Gesamtzustand nach Regel je Check (**einstellbar**: alle / eine / Mehrheit), Standard „down nur, wenn alle Messstellen down“, sonst „teilweise gestört“; Alarm bei „teilweise gestört“ ist eine Option je Check (3.12).
 12. **Standorte und Limit**: mehrere Online-Standorte je Check erst ab Klasse Supporter (Standard-Klasse: ein Standort). Das Healthcheck-Limit der Klasse zählt Online-Messstellen (Check × Standorte); lokale Messungen zählen nie (L8).
 9. **IPv6** überall, Agent und Server (L10).
+13. **Keine Migration**: neue Welt startet je Nutzer bei null, alte Welt läuft unverändert parallel bis zur Abschaltung (L2, Abschnitt 7).
 
 Der vollständige Phasenplan für die Serverseite steht in `PLAN-IPV64-SERVER-PHASEN.md`.
