@@ -11,22 +11,24 @@ import (
 func TestEventKind(t *testing.T) {
 	cases := []struct {
 		from, to scheduler.State
+		incident bool
 		kind     string
 		silent   bool
 	}{
-		{scheduler.StatePending, scheduler.StateUp, "up", true},
-		{scheduler.StateUp, scheduler.StateDown, "down", false},
-		{scheduler.StateDown, scheduler.StateUp, "up", false},
-		{scheduler.StateUp, scheduler.StateDegraded, "degraded", false},
-		{scheduler.StateDegraded, scheduler.StateUp, "degraded_end", false},
-		{scheduler.StateDegraded, scheduler.StateDown, "down", false},
-		{scheduler.StateDown, scheduler.StateDegraded, "up", false},
-		{scheduler.StateUp, scheduler.StateFlapping, "flapping_start", false},
-		{scheduler.StateFlapping, scheduler.StateUp, "flapping_end", false},
-		{scheduler.StateUp, scheduler.StatePaused, "state", true},
+		{scheduler.StatePending, scheduler.StateUp, false, "up", true},
+		{scheduler.StateUp, scheduler.StateDown, false, "down", false},
+		{scheduler.StateDown, scheduler.StateUp, true, "up", false},
+		{scheduler.StateUp, scheduler.StateDegraded, false, "degraded", false},
+		{scheduler.StateDegraded, scheduler.StateUp, false, "degraded_end", false},
+		{scheduler.StateDegraded, scheduler.StateDown, false, "down", false},
+		{scheduler.StateDown, scheduler.StateDegraded, true, "degraded", false},
+		{scheduler.StateDegraded, scheduler.StateUp, true, "up", false}, // Stoerung endet erst mit up
+		{scheduler.StateUp, scheduler.StateFlapping, false, "flapping_start", false},
+		{scheduler.StateFlapping, scheduler.StateUp, true, "flapping_end", false},
+		{scheduler.StateUp, scheduler.StatePaused, false, "state", true},
 	}
 	for _, c := range cases {
-		k, s := eventKind(c.from, c.to)
+		k, s := eventKind(c.from, c.to, c.incident)
 		if k != c.kind || s != c.silent {
 			t.Errorf("%s->%s: got %s/%v want %s/%v", c.from, c.to, k, s, c.kind, c.silent)
 		}

@@ -117,7 +117,8 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 	}
 
 	old := scheduler.State(state)
-	kind, silent := eventKind(old, overall)
+	incidentOpen := incident.Valid && incident.Int64 > 0
+	kind, silent := eventKind(old, overall, incidentOpen)
 	nowS := now.Format(TimeFormat)
 	var durationSec int64
 	ds := pt(downSince)
@@ -139,7 +140,8 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		}
 		id, _ := res.LastInsertId()
 		incidentID = id
-	case overall != scheduler.StateDown && overall != scheduler.StateFlapping && incidentID != nil:
+	case incidentID != nil && overall != scheduler.StateDown && overall != scheduler.StateFlapping && overall != scheduler.StateDegraded:
+		// degraded nach down laesst die Stoerung offen: erst "up" beendet sie
 		if _, err := tx.ExecContext(ctx, `UPDATE hc2_incidents SET ended_at = ? WHERE id = ? AND ended_at IS NULL`, nowS, incidentID); err != nil {
 			return err
 		}
@@ -204,23 +206,28 @@ type OverallEvent struct {
 	NotifyDegraded       bool
 }
 
-// eventKind leitet Ereignisart und Stille aus dem Wechsel ab.
-func eventKind(from, to scheduler.State) (string, bool) {
+// eventKind leitet Ereignisart und Stille aus dem Wechsel ab. incidentOpen:
+// vor dem Wechsel lief eine Stoerung (Check war down/flapping, evtl. inzwischen
+// teilweise erholt). Erst "up" beendet sie; "degraded" dazwischen ist nur fuer
+// Nutzer mit notify_degraded interessant.
+func eventKind(from, to scheduler.State, incidentOpen bool) (string, bool) {
 	switch {
 	case to == scheduler.StateDown:
 		return "down", false
 	case to == scheduler.StateFlapping:
 		return "flapping_start", false
-	case from == scheduler.StateFlapping && to == scheduler.StateUp:
+	case to == scheduler.StateUp && from == scheduler.StateFlapping:
 		return "flapping_end", false
-	case from == scheduler.StateDown || from == scheduler.StateFlapping:
+	case to == scheduler.StateUp && incidentOpen:
 		return "up", false
+	case to == scheduler.StateUp && from == scheduler.StateDegraded:
+		return "degraded_end", false
+	case to == scheduler.StateUp && from == scheduler.StatePending:
+		return "up", true // erster Zustand ist kein Alarm
+	case to == scheduler.StateUp:
+		return "up", true // z. B. aus paused/dependent
 	case to == scheduler.StateDegraded:
 		return "degraded", false
-	case from == scheduler.StateDegraded && to == scheduler.StateUp:
-		return "degraded_end", false
-	case to == scheduler.StateUp:
-		return "up", from == scheduler.StatePending // pending -> up ist kein Alarm (still)
 	default:
 		return "state", true
 	}
