@@ -96,6 +96,9 @@ Reihenfolge 1 → 2 → 3 → 4 → 5. Innerhalb von Phase 2–4 kann Go (hub) p
 
 ## Phase 2 – hub: Checks und Alarme
 
+**Stand 2026-10-10 (spät):** umgesetzt und auf beiden Servern im Betrieb (`cmd/hub`, Version 0.6.x-dev): MySQL-Store mit Messstellen-Zuständen und Gesamtzustand (Regel all/any/majority, degraded, Diagnose), Slots je Standort über `hc2_nodes`, Config-Log-Polling (2 s), Heartbeat-Poll für Push-Checks (5 s, nur erster Standort), stündliche/tägliche Verdichtung, Partitionsrotation, Aufräumen, `/v1/health`, `/metrics`; Benachrichtigungen über den Agent-Dispatcher je Account (`hc2_channels`, `hc2_settings`, `hc2_deliveries`), direkte Sender (Telegram, Discord, ntfy, Gotify, Pushover, Webhook, SMTP) und Brücke `hc2_send.php` für ipv64_mail/ipv64_sms/App, Erinnerungen (`repeat_minutes`). Getestet mit sechs Checks des Testaccounts: beide Standorte messen v4+v6, Störung mit Incident, degraded bei Blockade eines Standorts, Live-Übernahme von Änderungen, Neustart ohne Doppel-Ereignisse. Offen aus Phase 2: Redis-Signal (nur Beschleuniger, kommt mit Phase 3), `hc2_slot_leases` (erst bei mehr als einem Node je Standort nötig), Standort-Ausfallalarm an Dennis (S10).
+
+
 ### S3 – hub Rolle checker
 
 **Ziel**: Online-Checks der `hc2`-Accounts laufen im hub mit derselben Logik wie im Agent; Zustände, Ereignisse, Störungen und Aggregate stehen in `hc2_*`; Push-Checks werden überwacht; Agent-Ausfälle erkannt.
