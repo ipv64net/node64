@@ -319,7 +319,7 @@ func TestQuietHoursAndCritical(t *testing.T) {
 		t.Fatalf("only the critical alert may pass quiet hours: %+v", rec.list())
 	}
 	// Fenster ueber Mitternacht: 02:00 am Folgetag liegt drin, 08:00 nicht
-	if !d.inQuietHours(time.Date(2026, 1, 8, 2, 0, 0, 0, time.UTC)) || d.inQuietHours(time.Date(2026, 1, 8, 8, 0, 0, 0, time.UTC)) {
+	if !d.inQuietHours(0, time.Date(2026, 1, 8, 2, 0, 0, 0, time.UTC)) || d.inQuietHours(0, time.Date(2026, 1, 8, 8, 0, 0, 0, time.UTC)) {
 		t.Fatal("quiet window across midnight wrong")
 	}
 }

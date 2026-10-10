@@ -343,7 +343,8 @@
       "locations_hint": "Mehrere Standorte ab Account-Klasse Supporter. Jede Online-Messstelle zählt gegen das Healthcheck-Limit der Klasse, lokale Messungen nie.",
       "policy": "Gestört, wenn …",
       "policy_hint": "Mit mehreren Messstellen (Agent, Nürnberg, Falkenstein) legt diese Regel fest, wann der Check als gestört gilt. Meldet nur ein Teil eine Störung, ist der Check „teilweise gestört“.",
-      "notify_degraded": "Auch bei „teilweise gestört“ benachrichtigen"
+      "notify_degraded": "Auch bei „teilweise gestört“ benachrichtigen",
+      "notify_degraded_hint": "Nur mit mehreren Messstellen relevant."
     },
     "push": {
       "title": "Push-URL",
@@ -387,7 +388,9 @@
       "flapping_end": "🟢 {name} ist wieder stabil",
       "reminder": "🔴 {name} ist weiterhin gestört ({duration})",
       "summary_down": "🔴 {count} Checks gestört",
-      "test": "ipv64 Agent: Testnachricht"
+      "test": "ipv64 Agent: Testnachricht",
+      "degraded": "⚠️ Teilweise gestört: {{name}}",
+      "degraded_end": "✅ Wieder vollständig erreichbar: {{name}}"
     },
     "body": {
       "check": "Check: {name} ({type})",
@@ -430,7 +433,8 @@
       "gotify": "Gotify",
       "webhook": "Webhook",
       "ipv64_mail": "E-Mail über ipv64",
-      "ipv64_sms": "SMS über ipv64"
+      "ipv64_sms": "SMS über ipv64",
+      "pushover": "Pushover"
     },
     "field": {
       "host": "SMTP-Server",
@@ -457,7 +461,9 @@
       "headers": "Header (eine Zeile je Header)",
       "body": "Eigener Body (leer = JSON-Payload)",
       "body_hint": "Platzhalter: {{title}} {{text}} {{name}} {{status}} {{kind}} {{reason}} {{message}} {{url}} {{token}} {{time}}",
-      "insecure_tls": "Zertifikatsfehler ignorieren"
+      "insecure_tls": "Zertifikatsfehler ignorieren",
+      "user_key": "User-Key",
+      "device": "Gerät (optional)"
     },
     "quiet": "Ruhezeiten",
     "quiet_hint": "In dieser Zeit alarmieren nur Checks, die als kritisch markiert sind.",

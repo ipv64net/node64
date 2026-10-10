@@ -27,6 +27,8 @@ const (
 	KindUp            Kind = "up"
 	KindFlappingStart Kind = "flapping_start"
 	KindFlappingEnd   Kind = "flapping_end"
+	KindDegraded      Kind = "degraded" // teilweise gestoert (mehrere Messstellen)
+	KindDegradedEnd   Kind = "degraded_end"
 	KindReminder      Kind = "reminder"
 	KindSummary       Kind = "summary"
 	KindTest          Kind = "test"
@@ -34,14 +36,16 @@ const (
 
 // CheckInfo sind die Angaben zum Check, die in Nachrichten erscheinen.
 type CheckInfo struct {
-	Token      string
-	Name       string
-	Type       string
-	Target     string
-	Critical   bool
-	Channels   []int64 // leer = Standardkanaele
-	NotifyDown bool
-	NotifyUp   bool
+	UserID         int64 // Account auf dem Server; im Agent 0
+	Token          string
+	Name           string
+	Type           string
+	Target         string
+	Critical       bool
+	Channels       []int64 // leer = Standardkanaele
+	NotifyDown     bool
+	NotifyUp       bool
+	NotifyDegraded bool
 }
 
 // Message ist die fertig formulierte Nachricht fuer einen Sender.
@@ -70,8 +74,56 @@ func Senders(version string) map[Type]Sender {
 	ua := "ipv64-agent/" + version
 	return map[Type]Sender{
 		TypeSMTP: smtpSender{}, TypeTelegram: telegramSender{ua}, TypeDiscord: discordSender{ua},
-		TypeNtfy: ntfySender{ua}, TypeGotify: gotifySender{ua}, TypeWebhook: webhookSender{ua},
+		TypeNtfy: ntfySender{ua}, TypeGotify: gotifySender{ua}, TypeWebhook: webhookSender{ua}, TypePushover: pushoverSender{ua},
 	}
+}
+
+// ---------------------------------------------------------------- Pushover
+
+type pushoverSender struct{ ua string }
+
+func (p pushoverSender) Send(ctx context.Context, ch *Channel, m Message) error {
+	prio := ch.Config["priority_up"]
+	if m.Kind == KindDown || m.Kind == KindReminder || m.Kind == KindFlappingStart || m.Kind == KindSummary || m.Kind == KindDegraded {
+		prio = ch.Config["priority_down"]
+	}
+	if prio == "" {
+		prio = "0"
+	}
+	form := url.Values{"token": {ch.Config["app_token"]}, "user": {ch.Config["user_key"]}, "title": {m.Title}, "message": {m.Text}, "priority": {prio}}
+	if m.URL != "" {
+		form.Set("url", m.URL)
+	}
+	if ch.Config["device"] != "" {
+		form.Set("device", ch.Config["device"])
+	}
+	if prio == "2" { // Notfall: Pushover verlangt Wiederholung und Ablauf
+		form.Set("retry", "60")
+		form.Set("expire", "3600")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.pushover.net/1/messages.json", strings.NewReader(form.Encode()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", p.ua)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	rb, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode != 200 {
+		var e struct {
+			Errors []string `json:"errors"`
+		}
+		_ = json.Unmarshal(rb, &e)
+		if len(e.Errors) > 0 {
+			return fmt.Errorf("pushover: %s", strings.Join(e.Errors, "; "))
+		}
+		return httpErr(resp.StatusCode, rb)
+	}
+	return nil
 }
 
 func postJSON(ctx context.Context, ua, u string, body any, headers map[string]string) ([]byte, int, error) {

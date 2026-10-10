@@ -343,7 +343,8 @@
       "locations_hint": "Multiple locations from account class Supporter. Every online measuring point counts against the class's healthcheck limit, local measurements never do.",
       "policy": "Down when …",
       "policy_hint": "With several measuring points (agent, Nuremberg, Falkenstein) this rule decides when the check counts as down. If only some report a failure, the check is \\u201cpartially down\\u201d.",
-      "notify_degraded": "Also notify on \\u201cpartially down\\u201d"
+      "notify_degraded": "Also notify on \\u201cpartially down\\u201d",
+      "notify_degraded_hint": "Only relevant with several measuring points."
     },
     "push": {
       "title": "Push URL",
@@ -387,7 +388,9 @@
       "flapping_end": "🟢 {name} is stable again",
       "reminder": "🔴 {name} is still down ({duration})",
       "summary_down": "🔴 {count} checks down",
-      "test": "ipv64 Agent: test message"
+      "test": "ipv64 Agent: test message",
+      "degraded": "⚠️ Partially down: {{name}}",
+      "degraded_end": "✅ Fully reachable again: {{name}}"
     },
     "body": {
       "check": "Check: {name} ({type})",
@@ -430,7 +433,8 @@
       "gotify": "Gotify",
       "webhook": "Webhook",
       "ipv64_mail": "E-mail via ipv64",
-      "ipv64_sms": "SMS via ipv64"
+      "ipv64_sms": "SMS via ipv64",
+      "pushover": "Pushover"
     },
     "field": {
       "host": "SMTP server",
@@ -457,7 +461,9 @@
       "headers": "Headers (one per line)",
       "body": "Custom body (empty = JSON payload)",
       "body_hint": "Placeholders: {{title}} {{text}} {{name}} {{status}} {{kind}} {{reason}} {{message}} {{url}} {{token}} {{time}}",
-      "insecure_tls": "Ignore certificate errors"
+      "insecure_tls": "Ignore certificate errors",
+      "user_key": "User key",
+      "device": "Device (optional)"
     },
     "quiet": "Quiet hours",
     "quiet_hint": "During this time only checks marked as critical alert.",

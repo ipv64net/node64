@@ -28,6 +28,18 @@ type Alert struct {
 // Settings liest Einstellungen des Kerns (Agent-Name, Ruhezeiten, Basis-URL).
 type Settings func(key, def string) string
 
+// SettingsFor liefert die Einstellungen eines Accounts (Server) bzw. die des
+// Agents (userID 0).
+type SettingsFor func(userID int64) Settings
+
+// ChannelStore sind die Zugriffe, die der Dispatcher braucht: Kanaele eines
+// Accounts, Zustellprotokoll, letzte Nutzung.
+type ChannelStore interface {
+	ChannelsFor(ctx context.Context, userID int64) ([]*Channel, error)
+	AddDelivery(ctx context.Context, d Delivery) error
+	Touch(ctx context.Context, id int64, errText string) error
+}
+
 // Einstellungs-Schluessel
 const (
 	SetBaseURL        = "agent.base_url"
@@ -46,11 +58,11 @@ const (
 
 // Dispatcher verteilt Alerts an Kanaele.
 type Dispatcher struct {
-	st       *Store
-	senders  map[Type]Sender
-	i18n     *i18n.Bundle
-	settings Settings
-	log      *slog.Logger
+	st          ChannelStore
+	senders     map[Type]Sender
+	i18n        *i18n.Bundle
+	settingsFor SettingsFor
+	log         *slog.Logger
 
 	queue   chan Alert
 	mu      sync.Mutex
@@ -69,9 +81,24 @@ type bucket struct {
 	last   time.Time
 }
 
+// NewDispatcher ist der Dispatcher des Agents (ein Account).
 func NewDispatcher(st *Store, senders map[Type]Sender, bundle *i18n.Bundle, settings Settings, log *slog.Logger) *Dispatcher {
-	return &Dispatcher{st: st, senders: senders, i18n: bundle, settings: settings, log: log.With("module", "notify"),
+	return NewMultiDispatcher(st, senders, bundle, func(int64) Settings { return settings }, log)
+}
+
+// NewMultiDispatcher ist der Dispatcher des Servers: Kanaele und Einstellungen je Account.
+func NewMultiDispatcher(st ChannelStore, senders map[Type]Sender, bundle *i18n.Bundle, settingsFor SettingsFor, log *slog.Logger) *Dispatcher {
+	return &Dispatcher{st: st, senders: senders, i18n: bundle, settingsFor: settingsFor, log: log.With("module", "notify"),
 		queue: make(chan Alert, 1000), buckets: map[int64]*bucket{}, now: func() time.Time { return time.Now() }}
+}
+
+// settings liefert die Einstellungen eines Accounts (0 = Agent/global).
+func (d *Dispatcher) settings(userID int64) Settings {
+	s := d.settingsFor(userID)
+	if s == nil {
+		return func(_, def string) string { return def }
+	}
+	return s
 }
 
 // Start startet die Verarbeitung.
@@ -100,7 +127,7 @@ func (d *Dispatcher) Dispatch(a Alert) {
 }
 
 func (d *Dispatcher) intSetting(key string, def int) int {
-	n, err := strconv.Atoi(d.settings(key, strconv.Itoa(def)))
+	n, err := strconv.Atoi(d.settings(0)(key, strconv.Itoa(def)))
 	if err != nil {
 		return def
 	}
@@ -166,7 +193,7 @@ func (d *Dispatcher) flush(ctx context.Context) {
 // channelsFor liefert die Kanaele eines Alerts: eigene Auswahl des Checks
 // oder die Standardkanaele, jeweils nur aktive.
 func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
-	all, err := d.st.Channels(ctx)
+	all, err := d.st.ChannelsFor(ctx, c.UserID)
 	if err != nil {
 		d.log.Error("channels", "err", err)
 		return nil
@@ -192,20 +219,23 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 }
 
 func isDownKind(k Kind) bool {
-	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary
+	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded
 }
 
 // allowed prueft die Flags von Check und Kanal sowie Ruhezeiten.
 func (d *Dispatcher) allowed(a Alert, ch *Channel) (bool, string) {
 	down := isDownKind(a.Kind)
 	if a.Kind != KindTest {
+		if (a.Kind == KindDegraded || a.Kind == KindDegradedEnd) && !a.Check.NotifyDegraded {
+			return false, "notify_degraded off"
+		}
 		if down && (!a.Check.NotifyDown || !ch.NotifyDown) {
 			return false, "notify_down off"
 		}
 		if !down && (!a.Check.NotifyUp || !ch.NotifyUp) {
 			return false, "notify_up off"
 		}
-		if !a.Check.Critical && d.inQuietHours(d.now()) {
+		if !a.Check.Critical && d.inQuietHours(a.Check.UserID, d.now()) {
 			return false, "quiet hours"
 		}
 	}
@@ -214,9 +244,9 @@ func (d *Dispatcher) allowed(a Alert, ch *Channel) (bool, string) {
 
 // location ist die Zeitzone fuer Ruhezeiten und Zeitangaben: Ruhezeiten-
 // Einstellung, sonst die Zeitzone des Agents (aus dem Setup), sonst UTC.
-func (d *Dispatcher) location() *time.Location {
+func (d *Dispatcher) location(uid int64) *time.Location {
 	for _, key := range []string{SetQuietTZ, SetAgentTimezone} {
-		if tz := d.settings(key, ""); tz != "" {
+		if tz := d.settings(uid)(key, ""); tz != "" {
 			if l, err := time.LoadLocation(tz); err == nil {
 				return l
 			}
@@ -226,17 +256,18 @@ func (d *Dispatcher) location() *time.Location {
 }
 
 // inQuietHours prueft das Ruhefenster aus den Einstellungen.
-func (d *Dispatcher) inQuietHours(now time.Time) bool {
-	if d.settings(SetQuietEnabled, "0") != "1" {
+func (d *Dispatcher) inQuietHours(uid int64, now time.Time) bool {
+	set := d.settings(uid)
+	if set(SetQuietEnabled, "0") != "1" {
 		return false
 	}
-	now = now.In(d.location())
-	from, err1 := time.Parse("15:04", d.settings(SetQuietFrom, "22:00"))
-	to, err2 := time.Parse("15:04", d.settings(SetQuietTo, "07:00"))
+	now = now.In(d.location(uid))
+	from, err1 := time.Parse("15:04", set(SetQuietFrom, "22:00"))
+	to, err2 := time.Parse("15:04", set(SetQuietTo, "07:00"))
 	if err1 != nil || err2 != nil {
 		return false
 	}
-	days := d.settings(SetQuietDays, "1,2,3,4,5,6,7")
+	days := set(SetQuietDays, "1,2,3,4,5,6,7")
 	wd := int(now.Weekday())
 	if wd == 0 {
 		wd = 7
@@ -320,10 +351,11 @@ func (d *Dispatcher) sendSummary(ctx context.Context, downs []Alert) {
 		for _, a := range list {
 			lines = append(lines, d.i18n.T(lang, "notify.body.summary_item", "name", a.Check.Name, "message", a.Message))
 		}
-		m := Message{Kind: KindSummary, Priority: 5, Time: d.now(), Language: lang, EventID: list[0].EventID,
+		uid := list[0].Check.UserID
+		m := Message{Kind: KindSummary, Priority: 5, Time: d.now(), Language: lang, EventID: list[0].EventID, Check: CheckInfo{UserID: uid},
 			Title: d.i18n.T(lang, "notify.subject.summary_down", "count", len(list)),
-			Text:  strings.Join(lines, "\n") + "\n" + d.agentLine(lang), URL: d.baseURL("/healthchecks?state=down")}
-		m.Payload = map[string]any{"kind": "summary", "count": len(list), "checks": names(list), "agent": d.agentName(), "time": m.Time.UTC().Format(time.RFC3339)}
+			Text:  strings.Join(lines, "\n") + "\n" + d.agentLine(uid, lang), URL: d.baseURL(uid, "/healthchecks?state=down")}
+		m.Payload = map[string]any{"kind": "summary", "count": len(list), "checks": names(list), "agent": d.agentName(uid), "time": m.Time.UTC().Format(time.RFC3339)}
 		d.send(ctx, ch, m)
 	}
 }
@@ -336,20 +368,21 @@ func names(list []Alert) []string {
 	return out
 }
 
-func (d *Dispatcher) agentName() string {
-	name := d.settings(SetAgentName, "ipv64 Agent")
-	if loc := d.settings(SetAgentLocation, ""); loc != "" {
+func (d *Dispatcher) agentName(uid int64) string {
+	set := d.settings(uid)
+	name := set(SetAgentName, "ipv64 Agent")
+	if loc := set(SetAgentLocation, ""); loc != "" {
 		name += " (" + loc + ")"
 	}
 	return name
 }
 
-func (d *Dispatcher) agentLine(lang string) string {
-	return d.i18n.T(lang, "notify.body.agent", "agent", d.agentName())
+func (d *Dispatcher) agentLine(uid int64, lang string) string {
+	return d.i18n.T(lang, "notify.body.agent", "agent", d.agentName(uid))
 }
 
-func (d *Dispatcher) baseURL(path string) string {
-	base := strings.TrimRight(d.settings(SetBaseURL, ""), "/")
+func (d *Dispatcher) baseURL(uid int64, path string) string {
+	base := strings.TrimRight(d.settings(uid)(SetBaseURL, ""), "/")
 	if base == "" {
 		return ""
 	}
@@ -359,8 +392,9 @@ func (d *Dispatcher) baseURL(path string) string {
 // compose formuliert die Nachricht in der Sprache des Kanals.
 func (d *Dispatcher) compose(lang string, a Alert) Message {
 	t := func(key string, args ...any) string { return d.i18n.T(lang, key, args...) }
+	uid := a.Check.UserID
 	m := Message{Kind: a.Kind, Time: a.Time, Check: a.Check, EventID: a.EventID, Language: lang, Priority: 3,
-		URL: d.baseURL("/healthchecks/" + a.Check.Token)}
+		URL: d.baseURL(uid, "/healthchecks/"+a.Check.Token)}
 	if m.Time.IsZero() {
 		m.Time = d.now()
 	}
@@ -377,10 +411,14 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 		m.Title, m.Priority = t("notify.subject.flapping_start", "name", a.Check.Name), 4
 	case KindFlappingEnd:
 		m.Title, m.Priority = t("notify.subject.flapping_end", "name", a.Check.Name), 3
+	case KindDegraded:
+		m.Title, m.Priority = t("notify.subject.degraded", "name", a.Check.Name), 4
+	case KindDegradedEnd:
+		m.Title, m.Priority = t("notify.subject.degraded_end", "name", a.Check.Name), 3
 	case KindTest:
 		m.Title, m.Priority = t("notify.subject.test"), 2
-		m.Text = t("notify.body.test", "channel", a.Check.Name) + "\n" + d.agentLine(lang)
-		m.Payload = map[string]any{"kind": "test", "agent": d.agentName(), "time": m.Time.UTC().Format(time.RFC3339)}
+		m.Text = t("notify.body.test", "channel", a.Check.Name) + "\n" + d.agentLine(uid, lang)
+		m.Payload = map[string]any{"kind": "test", "agent": d.agentName(uid), "time": m.Time.UTC().Format(time.RFC3339)}
 		return m
 	default:
 		m.Title = string(a.Kind) + ": " + a.Check.Name
@@ -401,17 +439,20 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 	if a.Flaps > 0 {
 		lines = append(lines, t("notify.body.flaps", "count", a.Flaps))
 	}
-	lines = append(lines, t("notify.body.time", "time", d.i18n.FormatDateTime(lang, m.Time, d.location())), d.agentLine(lang))
+	lines = append(lines, t("notify.body.time", "time", d.i18n.FormatDateTime(lang, m.Time, d.location(uid))), d.agentLine(uid, lang))
 	m.Text = strings.Join(lines, "\n")
 	status := "down"
-	if a.Kind == KindUp || a.Kind == KindFlappingEnd {
+	if a.Kind == KindUp || a.Kind == KindFlappingEnd || a.Kind == KindDegradedEnd {
 		status = "up"
+	}
+	if a.Kind == KindDegraded {
+		status = "degraded"
 	}
 	m.Payload = map[string]any{
 		"event_id": a.EventID, "kind": string(a.Kind), "status": status, "time": m.Time.UTC().Format(time.RFC3339),
 		"check":  map[string]any{"token": a.Check.Token, "name": a.Check.Name, "type": a.Check.Type, "target": a.Check.Target, "critical": a.Check.Critical},
 		"reason": a.Reason, "message": a.Message, "duration_seconds": int(a.Duration.Seconds()), "flaps": a.Flaps,
-		"agent": map[string]any{"name": d.settings(SetAgentName, ""), "location": d.settings(SetAgentLocation, "")}, "url": m.URL,
+		"agent": map[string]any{"name": d.settings(uid)(SetAgentName, ""), "location": d.settings(uid)(SetAgentLocation, "")}, "url": m.URL,
 		"title": m.Title, "text": m.Text,
 	}
 	return m
@@ -425,7 +466,7 @@ func (d *Dispatcher) send(ctx context.Context, ch *Channel, m Message) {
 		return
 	}
 	if m.Kind != KindTest && !d.rateOK(ch.ID) {
-		d.record(ctx, ch, m, fmt.Errorf("rate limited (%s per hour)", d.settings(SetRatePerHour, "60")))
+		d.record(ctx, ch, m, fmt.Errorf("rate limited (%s per hour)", d.settings(0)(SetRatePerHour, "60")))
 		return
 	}
 	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -455,7 +496,7 @@ func (d *Dispatcher) Test(ctx context.Context, ch *Channel) error {
 	if !ok {
 		return fmt.Errorf("no sender for type %s", ch.Type)
 	}
-	m := d.compose(ch.Lang, Alert{Kind: KindTest, Check: CheckInfo{Name: ch.Name}, EventID: "test-" + strconv.FormatInt(d.now().UnixNano(), 36)})
+	m := d.compose(ch.Lang, Alert{Kind: KindTest, Check: CheckInfo{UserID: ch.UserID, Name: ch.Name}, EventID: "test-" + strconv.FormatInt(d.now().UnixNano(), 36)})
 	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	err := s.Send(sctx, ch, m)

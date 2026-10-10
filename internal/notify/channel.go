@@ -24,10 +24,11 @@ const (
 	TypeDiscord  Type = "discord"
 	TypeNtfy     Type = "ntfy"
 	TypeGotify   Type = "gotify"
+	TypePushover Type = "pushover"
 )
 
 // Types in Anzeigereihenfolge.
-var Types = []Type{TypeSMTP, TypeTelegram, TypeDiscord, TypeNtfy, TypeGotify, TypeWebhook}
+var Types = []Type{TypeSMTP, TypeTelegram, TypeDiscord, TypeNtfy, TypeGotify, TypePushover, TypeWebhook}
 
 // Planned sind Kanaele, die ipv64.net nach der Verknuepfung bereitstellt:
 // Mail ohne eigenen SMTP-Server und SMS ueber das ipv64-Gateway. Sie werden
@@ -37,6 +38,7 @@ var Planned = []Type{"ipv64_mail", "ipv64_sms"}
 // Channel ist ein Benachrichtigungskanal.
 type Channel struct {
 	ID              int64
+	UserID          int64 // Account auf dem Server; im Agent 0
 	Type            Type
 	Name            string
 	Config          map[string]string // Klartext im Speicher, verschluesselt in der DB
@@ -88,6 +90,12 @@ var Fields = map[Type][]Field{
 	TypeGotify: {
 		{Key: "server", Kind: "url", Required: true}, {Key: "app_token", Secret: true, Required: true, Kind: "password"},
 		{Key: "priority", Kind: "number", Default: "5"},
+	},
+	TypePushover: {
+		{Key: "user_key", Secret: true, Required: true, Kind: "password"}, {Key: "app_token", Secret: true, Required: true, Kind: "password"},
+		{Key: "device"},
+		{Key: "priority_down", Kind: "select", Options: []string{"-2", "-1", "0", "1", "2"}, Default: "1"},
+		{Key: "priority_up", Kind: "select", Options: []string{"-2", "-1", "0", "1", "2"}, Default: "0"},
 	},
 	TypeWebhook: {
 		{Key: "url", Kind: "url", Required: true},
@@ -264,6 +272,11 @@ func (c *Channel) Summary() string {
 		return strings.TrimRight(g("server"), "/") + "/" + g("topic")
 	case TypeGotify:
 		return g("server")
+	case TypePushover:
+		if g("device") != "" {
+			return "Pushover (" + g("device") + ")"
+		}
+		return "Pushover"
 	case TypeWebhook:
 		return g("method") + " " + g("url")
 	}

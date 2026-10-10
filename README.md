@@ -4,7 +4,7 @@ Ein leichtgewichtiger Docker-Container für das Heimnetz: Healthchecks (als Upti
 
 Ein einziges Go-Binary, SQLite, eingebettete Weboberfläche, keine externen Abhängigkeiten zur Laufzeit. Läuft auf amd64 und arm64, auch auf einem Raspberry Pi.
 
-**Stand: Phase 5 (Betrieb).** Der erste Entwurf ist vollständig: Kern mit Setup, Login, Zwei-Faktor-Anmeldung (TOTP mit Wiederherstellungscodes), API-Keys, Modulsystem, Datenbank mit Migrationen, Backup und Wiederherstellung, Export und Import der Konfiguration, Audit-Log, Logs mit Log-Level je Bereich, Versionsprüfung per Opt-in. Healthchecks mit allen Typen, Scheduler, Oberfläche, Wartungsfenstern und JSON-API. Benachrichtigungen über E-Mail, Telegram, Discord, ntfy, Gotify und Webhook. Was ipv64.net für die Verknüpfung bauen muss, steht in [docs/SYNC.md](docs/SYNC.md).
+**Stand: Phase 5 (Betrieb).** Der erste Entwurf ist vollständig: Kern mit Setup, Login, Zwei-Faktor-Anmeldung (TOTP mit Wiederherstellungscodes), API-Keys, Modulsystem, Datenbank mit Migrationen, Backup und Wiederherstellung, Export und Import der Konfiguration, Audit-Log, Logs mit Log-Level je Bereich, Versionsprüfung per Opt-in. Healthchecks mit allen Typen, Scheduler, Oberfläche, Wartungsfenstern und JSON-API. Benachrichtigungen über E-Mail, Telegram, Discord, ntfy, Gotify, Pushover und Webhook. Was ipv64.net für die Verknüpfung bauen muss, steht in [docs/SYNC.md](docs/SYNC.md).
 
 ## Benachrichtigungen
 

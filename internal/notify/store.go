@@ -49,6 +49,9 @@ func (s *Store) scan(row interface{ Scan(...any) error }) (*Channel, error) {
 }
 
 // Channels liefert alle Kanaele sortiert nach Name.
+// ChannelsFor (ChannelStore): im Agent gibt es nur einen Account.
+func (s *Store) ChannelsFor(ctx context.Context, _ int64) ([]*Channel, error) { return s.Channels(ctx) }
+
 func (s *Store) Channels(ctx context.Context) ([]*Channel, error) {
 	rows, err := s.r.QueryContext(ctx, `SELECT `+channelCols+` FROM nf_channels ORDER BY name COLLATE NOCASE, id`)
 	if err != nil {
