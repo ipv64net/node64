@@ -40,6 +40,8 @@ type Store struct {
 	wg     sync.WaitGroup
 
 	Metrics *Metrics
+	// OnOverall wird nach jedem benachrichtigungswuerdigen Wechsel des Gesamtzustands gerufen.
+	OnOverall func(OverallEvent)
 }
 
 // Open verbindet sich und prueft die Verbindung.

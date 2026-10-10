@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/ipv64net/agent/internal/checks"
+	hubnotify "github.com/ipv64net/agent/internal/hub/notify"
 	"github.com/ipv64net/agent/internal/hub/store"
+	"github.com/ipv64net/agent/internal/notify"
 	"github.com/ipv64net/agent/internal/scheduler"
 )
 
@@ -25,6 +27,10 @@ type Checker struct {
 
 	sched   *scheduler.Scheduler
 	started time.Time
+	// Benachrichtigungen (nil = nur Log)
+	dispatcher *notify.Dispatcher
+	nfStore    *hubnotify.Store
+	reminders  map[string]time.Time
 
 	mu       sync.Mutex
 	slotIdx  int
@@ -39,7 +45,67 @@ type Checker struct {
 // New erzeugt den Checker.
 func New(st *store.Store, log *slog.Logger, location, version, roles string, workers int) *Checker {
 	return &Checker{st: st, log: log.With("module", "checker"), location: location, version: version, roles: roles, workers: workers,
-		loaded: map[string]int64{}, slotMod: 1}
+		loaded: map[string]int64{}, slotMod: 1, reminders: map[string]time.Time{}}
+}
+
+// SetNotifier haengt Dispatcher und Kanal-Store an; der Store ruft OnOverall.
+func (c *Checker) SetNotifier(d *notify.Dispatcher, nf *hubnotify.Store) {
+	c.dispatcher, c.nfStore = d, nf
+	c.st.OnOverall = c.onOverall
+}
+
+// onOverall setzt einen Wechsel des Gesamtzustands in einen Alert um.
+func (c *Checker) onOverall(e store.OverallEvent) {
+	kind := notify.Kind(e.Kind)
+	switch kind {
+	case notify.KindDown, notify.KindUp, notify.KindFlappingStart, notify.KindFlappingEnd, notify.KindDegraded, notify.KindDegradedEnd:
+	default:
+		return
+	}
+	if kind == notify.KindUp {
+		c.mu.Lock()
+		delete(c.reminders, e.Token)
+		c.mu.Unlock()
+	}
+	if c.dispatcher == nil {
+		c.log.Info("notification", "check", e.Name, "kind", kind, "reason", e.Reason, "message", e.Message)
+		return
+	}
+	c.dispatcher.Dispatch(notify.Alert{EventID: e.EventID, Kind: kind, Time: e.Time, Reason: e.Reason, Message: e.Message, Duration: e.Duration,
+		Check: notify.CheckInfo{UserID: e.UserID, Token: e.Token, Name: e.Name, Type: e.Type, Target: e.Target, Critical: e.Critical, Channels: e.Channels,
+			NotifyDown: e.NotifyDown, NotifyUp: e.NotifyUp, NotifyDegraded: e.NotifyDegraded}})
+}
+
+// remind schickt Erinnerungen fuer laenger gestoerte Checks (repeat_minutes);
+// nur der Housekeeper, damit es sie nur einmal gibt.
+func (c *Checker) remind(ctx context.Context) {
+	if c.dispatcher == nil {
+		return
+	}
+	list, err := c.st.DueReminders(ctx)
+	if err != nil {
+		c.log.Warn("reminders query failed", "err", err)
+		return
+	}
+	now := time.Now().UTC()
+	for _, e := range list {
+		c.mu.Lock()
+		last, ok := c.reminders[e.Token]
+		if !ok {
+			last = e.Time // down_since
+		}
+		due := !last.IsZero() && now.Sub(last) >= e.Duration // Duration = repeat
+		if due {
+			c.reminders[e.Token] = now
+		}
+		c.mu.Unlock()
+		if !due {
+			continue
+		}
+		c.dispatcher.Dispatch(notify.Alert{EventID: scheduler.NewID(), Kind: notify.KindReminder, Time: now, Reason: e.Reason, Message: e.Message, Duration: now.Sub(e.Time),
+			Check: notify.CheckInfo{UserID: e.UserID, Token: e.Token, Name: e.Name, Type: e.Type, Target: e.Target, Critical: e.Critical, Channels: e.Channels,
+				NotifyDown: e.NotifyDown, NotifyUp: e.NotifyUp, NotifyDegraded: e.NotifyDegraded}})
+	}
 }
 
 // notifier: Ereignisse je Messstelle sind still; Alarme kommen aus dem
@@ -253,6 +319,10 @@ func (c *Checker) configLoop(ctx context.Context) {
 					c.applyCheck(ctx, ch.EntityID)
 				case "maintenance":
 					maint = true
+				case "channel", "settings":
+					if c.nfStore != nil {
+						c.nfStore.Invalidate(ch.UserID)
+					}
 				}
 			}
 			if maint {
@@ -312,6 +382,9 @@ func (c *Checker) housekeepingLoop(ctx context.Context) {
 		case <-minute.C:
 			if err := c.st.ReloadMaintenance(ctx); err != nil {
 				c.log.Warn("maintenance reload failed", "err", err)
+			}
+			if nodes, err := c.st.LiveNodes(ctx); err == nil && c.st.IsHousekeeper(nodes) {
+				c.remind(ctx)
 			}
 		case <-five.C:
 			now := time.Now().UTC()

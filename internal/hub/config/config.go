@@ -25,7 +25,11 @@ type Config struct {
 		Password string `yaml:"password"`
 	} `yaml:"redis"`
 	SecretKeyFile string `yaml:"secret_key_file"`
-	Limits        struct {
+	Bridge        struct {
+		URL        string `yaml:"url"`         // https://ipv64.net/hc2_send.php
+		SecretFile string `yaml:"secret_file"` // /etc/ipv64-hub/bridge.secret
+	} `yaml:"bridge"`
+	Limits struct {
 		MaxConnections int `yaml:"max_connections"`
 		CheckerWorkers int `yaml:"checker_workers"`
 	} `yaml:"limits"`

@@ -25,6 +25,10 @@ const (
 	TypeNtfy     Type = "ntfy"
 	TypeGotify   Type = "gotify"
 	TypePushover Type = "pushover"
+	// Server-Typen: Versand ueber ipv64.net (im Agent erst nach Verknuepfung)
+	TypeIPv64Mail Type = "ipv64_mail"
+	TypeIPv64SMS  Type = "ipv64_sms"
+	TypeApp       Type = "app"
 )
 
 // Types in Anzeigereihenfolge.
@@ -33,7 +37,7 @@ var Types = []Type{TypeSMTP, TypeTelegram, TypeDiscord, TypeNtfy, TypeGotify, Ty
 // Planned sind Kanaele, die ipv64.net nach der Verknuepfung bereitstellt:
 // Mail ohne eigenen SMTP-Server und SMS ueber das ipv64-Gateway. Sie werden
 // vom Server gesendet (execution "ipv64") und sind standalone nicht verfuegbar.
-var Planned = []Type{"ipv64_mail", "ipv64_sms"}
+var Planned = []Type{TypeIPv64Mail, TypeIPv64SMS}
 
 // Channel ist ein Benachrichtigungskanal.
 type Channel struct {
@@ -97,6 +101,9 @@ var Fields = map[Type][]Field{
 		{Key: "priority_down", Kind: "select", Options: []string{"-2", "-1", "0", "1", "2"}, Default: "1"},
 		{Key: "priority_up", Kind: "select", Options: []string{"-2", "-1", "0", "1", "2"}, Default: "0"},
 	},
+	TypeIPv64Mail: {{Key: "email", Required: true}},
+	TypeIPv64SMS:  {{Key: "number", Required: true}},
+	TypeApp:       {{Key: "device_token", Secret: true, Required: true, Kind: "password"}},
 	TypeWebhook: {
 		{Key: "url", Kind: "url", Required: true},
 		{Key: "method", Kind: "select", Options: []string{"POST", "PUT", "GET"}, Default: "POST"},
@@ -277,6 +284,12 @@ func (c *Channel) Summary() string {
 			return "Pushover (" + g("device") + ")"
 		}
 		return "Pushover"
+	case TypeIPv64Mail:
+		return g("email") + " via ipv64.net"
+	case TypeIPv64SMS:
+		return "+" + g("number") + " via ipv64.net"
+	case TypeApp:
+		return "ipv64 App"
 	case TypeWebhook:
 		return g("method") + " " + g("url")
 	}

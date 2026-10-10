@@ -23,12 +23,13 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 	defer tx.Rollback() //nolint:errcheck
 
 	var userid int64
-	var policy, state, name string
-	var intervalSec int
+	var policy, state, name, ctype, target, channels string
+	var intervalSec, critical, nd, nu, ndeg int
 	var incident sql.NullInt64
 	var downSince sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT userid, policy, state, name, interval_sec, incident_id, down_since FROM hc2_checks WHERE token = ? AND deleted_at IS NULL FOR UPDATE`, token).
-		Scan(&userid, &policy, &state, &name, &intervalSec, &incident, &downSince)
+	err = tx.QueryRowContext(ctx, `SELECT userid, policy, state, name, interval_sec, incident_id, down_since, type, target, critical, channels, notify_down, notify_up, notify_degraded
+		FROM hc2_checks WHERE token = ? AND deleted_at IS NULL FOR UPDATE`, token).
+		Scan(&userid, &policy, &state, &name, &intervalSec, &incident, &downSince, &ctype, &target, &critical, &channels, &nd, &nu, &ndeg)
 	if err == sql.ErrNoRows {
 		return nil
 	}
@@ -162,16 +163,45 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 	if silent {
 		flags |= FlagSilent
 	}
+	eventID := scheduler.NewID()
 	if _, err := tx.ExecContext(ctx, `INSERT INTO hc2_events (event_id, token, userid, source, kind, time, from_state, to_state, reason, message, duration_sec, flaps, flags, incident_id)
 		VALUES (?,?,?,'',?,?,?,?,?,?,?,0,?,?)`,
-		scheduler.NewID(), token, userid, kind, nowS, string(old), string(overall), nullStr(reason), truncate(message, 500), durationSec, flags, incidentID); err != nil {
+		eventID, token, userid, kind, nowS, string(old), string(overall), nullStr(reason), truncate(message, 500), durationSec, flags, incidentID); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	s.log.Info("overall state changed", "token", token, "name", name, "from", old, "to", overall, "down", downList, "up", upList)
+	if !silent && s.OnOverall != nil {
+		var chIDs []int64
+		for _, c := range splitList(channels) {
+			var id int64
+			if _, err := fmtSscan(c, &id); err == nil {
+				chIDs = append(chIDs, id)
+			}
+		}
+		s.OnOverall(OverallEvent{EventID: eventID, Token: token, UserID: userid, Name: name, Type: ctype, Target: target, Kind: kind, Time: now,
+			From: old, To: overall, Reason: reason, Message: message, Duration: time.Duration(durationSec) * time.Second,
+			Critical: critical == 1, Channels: chIDs, NotifyDown: nd == 1, NotifyUp: nu == 1, NotifyDegraded: ndeg == 1})
+	}
 	return nil
+}
+
+// OverallEvent ist ein Wechsel des Gesamtzustands, der benachrichtigt werden soll.
+type OverallEvent struct {
+	EventID, Token       string
+	UserID               int64
+	Name, Type, Target   string
+	Kind                 string // down, up, degraded, degraded_end, flapping_start, flapping_end
+	Time                 time.Time
+	From, To             scheduler.State
+	Reason, Message      string
+	Duration             time.Duration
+	Critical             bool
+	Channels             []int64
+	NotifyDown, NotifyUp bool
+	NotifyDegraded       bool
 }
 
 // eventKind leitet Ereignisart und Stille aus dem Wechsel ab.
@@ -228,4 +258,36 @@ func diagnosis(down, up []string) string {
 	default:
 		return "gestört: " + strings.Join(down, ", ") + "; OK: " + strings.Join(up, ", ")
 	}
+}
+
+// DueReminders liefert gestoerte Checks mit Wiederholung (repeat_minutes > 0).
+// Time = down_since, Duration = Wiederholungsabstand.
+func (s *Store) DueReminders(ctx context.Context) ([]OverallEvent, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT token, userid, name, type, target, critical, channels, notify_down, notify_up, notify_degraded, repeat_minutes, down_since, last_reason, last_message
+		FROM hc2_checks WHERE deleted_at IS NULL AND repeat_minutes > 0 AND state IN ('down','flapping') AND execution IN ('online','both')`)
+	if err != nil {
+		s.Metrics.add(&s.Metrics.DBErrors, 1)
+		return nil, err
+	}
+	defer rows.Close()
+	var out []OverallEvent
+	for rows.Next() {
+		var e OverallEvent
+		var critical, nd, nu, ndeg, repeat int
+		var channels string
+		var ds, reason, msg sql.NullString
+		if err := rows.Scan(&e.Token, &e.UserID, &e.Name, &e.Type, &e.Target, &critical, &channels, &nd, &nu, &ndeg, &repeat, &ds, &reason, &msg); err != nil {
+			return nil, err
+		}
+		e.Critical, e.NotifyDown, e.NotifyUp, e.NotifyDegraded = critical == 1, nd == 1, nu == 1, ndeg == 1
+		e.Time, e.Duration, e.Reason, e.Message, e.Kind = pt(ds), time.Duration(repeat)*time.Minute, reason.String, msg.String, "reminder"
+		for _, c := range splitList(channels) {
+			var id int64
+			if _, err := fmtSscan(c, &id); err == nil {
+				e.Channels = append(e.Channels, id)
+			}
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
 }

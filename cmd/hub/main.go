@@ -18,7 +18,11 @@ import (
 	"github.com/ipv64net/agent/internal/hub/checker"
 	"github.com/ipv64net/agent/internal/hub/config"
 	"github.com/ipv64net/agent/internal/hub/httpapi"
+	hubnotify "github.com/ipv64net/agent/internal/hub/notify"
 	"github.com/ipv64net/agent/internal/hub/store"
+	"github.com/ipv64net/agent/internal/i18n"
+	"github.com/ipv64net/agent/internal/notify"
+	"github.com/ipv64net/agent/internal/secrets"
 )
 
 // Version wird beim Build gesetzt.
@@ -64,9 +68,37 @@ func run(cfgPath string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Benachrichtigungen: Kanal-Geheimnisse mit dem gemeinsamen Schluessel, Versand ueber Bruecke + direkte Sender
+	var box *secrets.Box
+	if key, err := os.ReadFile(cfg.SecretKeyFile); err == nil {
+		if box, err = secrets.New(key); err != nil {
+			return fmt.Errorf("secret key: %w", err)
+		}
+	} else {
+		log.Warn("secret key file missing, channel secrets cannot be decrypted", "file", cfg.SecretKeyFile)
+	}
+	var bridge *hubnotify.Bridge
+	if cfg.Bridge.URL != "" {
+		sec, err := os.ReadFile(cfg.Bridge.SecretFile)
+		if err != nil {
+			log.Warn("bridge secret missing, ipv64_mail/sms/app disabled", "file", cfg.Bridge.SecretFile)
+		} else {
+			bridge = hubnotify.NewBridge(cfg.Bridge.URL, []byte(strings.TrimSpace(string(sec))), "ipv64-hub/"+Version)
+		}
+	}
+	bundle, err := i18n.Load()
+	if err != nil {
+		return err
+	}
+	nfStore := hubnotify.New(st.DB(), box, log)
+	dispatcher := notify.NewMultiDispatcher(nfStore, hubnotify.Senders(Version, bridge, nfStore), bundle, nfStore.SettingsFor, log)
+	dispatcher.Start(ctx)
+	defer dispatcher.Stop()
+
 	var chk *checker.Checker
 	if cfg.HasRole("checker") {
 		chk = checker.New(st, log, cfg.Location, Version, strings.Join(cfg.Roles, ","), cfg.Limits.CheckerWorkers)
+		chk.SetNotifier(dispatcher, nfStore)
 		if err := chk.Start(ctx); err != nil {
 			return fmt.Errorf("checker: %w", err)
 		}
