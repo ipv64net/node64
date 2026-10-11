@@ -74,7 +74,7 @@ type State struct {
 	Conflicts   int
 	LastError   string
 	PendingCode string
-	Requesting  bool // Code wird gerade beim hub angefordert (laeuft im Hintergrund)
+	Requesting  bool   // Code wird gerade beim hub angefordert (laeuft im Hintergrund)
 	ConnectedAt string // seit wann die aktuelle Verbindung steht
 	RxBytes     int64  // Sync-Verkehr seit Start (empfangen)
 	TxBytes     int64  // Sync-Verkehr seit Start (gesendet)
