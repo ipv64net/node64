@@ -260,9 +260,9 @@ func (m *Module) RunNow(token string) bool {
 	return false
 }
 
-// SetPausedRemote pausiert/setzt fort auf Anweisung des Servers.
+// SetPausedRemote pausiert/setzt fort auf Anweisung des Servers (Kommando pause/resume).
+// Bewusst als lokale Aenderung, damit der neue Wert ueber den Postausgang zum Server zurueckgeht.
 func (m *Module) SetPausedRemote(ctx context.Context, token string, paused bool) error {
-	ctx = WithRemote(ctx)
 	if err := m.st.SetPaused(ctx, token, paused, "ipv64"); err != nil {
 		return err
 	}

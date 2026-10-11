@@ -260,6 +260,10 @@ func (s *session) request(t string, data any) (wire.Msg, error) {
 		s.mu.Lock()
 		delete(s.waiters, id)
 		s.mu.Unlock()
+		// Ohne Antwort ist die Verbindung mit hoher Wahrscheinlichkeit tot (z. B. harte Netztrennung):
+		// Sitzung beenden, die Schleife verbindet neu und spielt den Postausgang nach.
+		s.c.log.Warn("no ack from hub, reconnecting", "type", t)
+		s.cancel()
 		return wire.Msg{}, errors.New("timeout waiting for ack")
 	case <-s.ctx.Done():
 		return wire.Msg{}, s.ctx.Err()
@@ -284,10 +288,22 @@ func (s *session) worker() {
 	defer status.Stop()
 	states := time.NewTicker(2 * time.Second)
 	defer states.Stop()
+	// Eigener Ping: nur so faellt eine stille Netztrennung (Pakete werden verworfen) zeitnah auf.
+	ping := time.NewTicker(30 * time.Second)
+	defer ping.Stop()
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
+		case <-ping.C:
+			pctx, pcancel := context.WithTimeout(s.ctx, 10*time.Second)
+			err := s.ws.Ping(pctx)
+			pcancel()
+			if err != nil && s.ctx.Err() == nil {
+				c.log.Warn("hub not answering ping, reconnecting", "err", err)
+				s.cancel()
+				return
+			}
 		case <-c.wake:
 			s.replayOutbox()
 			s.flushStates()
