@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/ipv64net/node64/internal/checks"
 	"hash/crc32"
+	"strconv"
 	"strings"
 	"time"
 
@@ -693,7 +694,14 @@ func (s *Store) Bootstrap(ctx context.Context, userID int64, nodeID string, in w
 			localID = ch.ID
 		}
 		data, _ := json.Marshal(ch)
-		res, err := s.Propose(ctx, userID, nodeID, wire.Propose{Entity: "channel", Op: "upsert", ID: "0", BaseRevision: -1, Data: data}, "node")
+		// Bei erneutem Verknuepfen denselben Kanal der Node weiterverwenden (sonst entstehen Dubletten)
+		id := "0"
+		var existing int64
+		if err := s.db.QueryRowContext(ctx, `SELECT id FROM hc2_channels WHERE userid = ? AND node_id = ? AND type = ? AND name = ? AND deleted_at IS NULL ORDER BY id LIMIT 1`,
+			userID, nodeID, ch.Type, ch.Name).Scan(&existing); err == nil && existing > 0 {
+			id = strconv.FormatInt(existing, 10)
+		}
+		res, err := s.Propose(ctx, userID, nodeID, wire.Propose{Entity: "channel", Op: "upsert", ID: id, BaseRevision: -1, Data: data}, "node")
 		if err != nil {
 			return nil, err
 		}
