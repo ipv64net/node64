@@ -150,6 +150,11 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 			return err
 		}
 		incidentID = nil
+	case incidentID != nil:
+		// Stoerung bleibt offen (down <-> degraded/flapping): betroffene Messstellen nachfuehren
+		if _, err := tx.ExecContext(ctx, `UPDATE hc2_incidents SET sources = ? WHERE id = ? AND ended_at IS NULL`, strings.Join(downList, ","), incidentID); err != nil {
+			return err
+		}
 	}
 
 	newDownSince := any(nil)
