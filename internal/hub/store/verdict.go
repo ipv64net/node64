@@ -27,9 +27,10 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 	var intervalSec, critical, nd, nu, ndeg int
 	var incident sql.NullInt64
 	var downSince sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT userid, policy, state, name, interval_sec, incident_id, down_since, type, target, critical, channels, notify_down, notify_up, notify_degraded
+	var execution string
+	err = tx.QueryRowContext(ctx, `SELECT userid, policy, state, name, interval_sec, incident_id, down_since, type, target, critical, channels, notify_down, notify_up, notify_degraded, execution
 		FROM hc2_checks WHERE token = ? AND deleted_at IS NULL FOR UPDATE`, token).
-		Scan(&userid, &policy, &state, &name, &intervalSec, &incident, &downSince, &ctype, &target, &critical, &channels, &nd, &nu, &ndeg)
+		Scan(&userid, &policy, &state, &name, &intervalSec, &incident, &downSince, &ctype, &target, &critical, &channels, &nd, &nu, &ndeg, &execution)
 	if err == sql.ErrNoRows {
 		return nil
 	}
@@ -64,6 +65,11 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		}
 		x.State, x.LastStatus = scheduler.State(st.String), checks.Status(ls.String)
 		x.reason, x.message, x.latency, x.updated = reason.String, msg.String, lat.Float64, pt(upd)
+		// Nach dem Umhaengen zaehlen nur Messstellen des aktuellen Ausfuehrungsorts
+		isNode := strings.HasPrefix(x.Source, "node:")
+		if (execution == "online" && isNode) || (execution == "local" && !isNode) {
+			continue
+		}
 		// Node-Messstellen sind frisch, solange die Node online ist; Standorte nach Alter des Zustands
 		if strings.HasPrefix(x.Source, "node:") {
 			x.Fresh = !x.updated.IsZero() && s.NodeIsOnline(ctx, strings.TrimPrefix(x.Source, "node:"))
