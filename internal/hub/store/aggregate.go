@@ -23,6 +23,22 @@ func (s *Store) AggregateHourly(ctx context.Context, now time.Time) error {
 	return err
 }
 
+// AggregateHourlyShared verdichtet Messstellen ohne festen Standort (Nodes, Push) der laufenden
+// und der vorigen Stunde. Nur der Housekeeper ruft es (sonst doppelte Arbeit).
+func (s *Store) AggregateHourlyShared(ctx context.Context, now time.Time) error {
+	from := now.UTC().Truncate(time.Hour).Add(-time.Hour)
+	to := now.UTC().Truncate(time.Hour).Add(time.Hour)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO hc2_hourly (token, source, hour, count, up_count, min_ms, avg_ms, max_ms)
+		SELECT token, source, DATE_FORMAT(time, '%Y-%m-%d %H:00:00'), COUNT(*), SUM(status = 1), MIN(NULLIF(latency_ms, 0)), AVG(NULLIF(latency_ms, 0)), MAX(latency_ms)
+		FROM hc2_measurements WHERE time >= ? AND time < ? AND (source LIKE 'node:%' OR source = 'push') GROUP BY token, source, DATE_FORMAT(time, '%Y-%m-%d %H:00:00')
+		ON DUPLICATE KEY UPDATE count = VALUES(count), up_count = VALUES(up_count), min_ms = VALUES(min_ms), avg_ms = VALUES(avg_ms), max_ms = VALUES(max_ms)`,
+		from.Format(TimeFormat), to.Format(TimeFormat))
+	if err != nil {
+		s.Metrics.add(&s.Metrics.DBErrors, 1)
+	}
+	return err
+}
+
 // AggregateDaily rechnet Tageswerte fuer alle Messstellen aus hc2_hourly
 // (gestern und heute). Idempotent; nur der Housekeeper ruft es.
 func (s *Store) AggregateDaily(ctx context.Context, now time.Time) error {

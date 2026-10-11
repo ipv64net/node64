@@ -472,6 +472,9 @@ func (c *Checker) housekeepingLoop(ctx context.Context) {
 				continue
 			}
 			c.st.Metrics.Set(c.Count(), len(nodes), c.slotIdx, c.slotMod)
+			if err := c.st.AggregateHourlyShared(ctx, now); err != nil {
+				c.log.Error("hourly aggregation (nodes/push) failed", "err", err)
+			}
 			day := now.Format("2006-01-02")
 			if lastDaily == day || now.Hour() < 0 {
 				continue

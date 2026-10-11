@@ -30,8 +30,9 @@ type Config struct {
 		SecretFile string `yaml:"secret_file"` // /etc/ipv64-hub/bridge.secret
 	} `yaml:"bridge"`
 	Limits struct {
-		MaxConnections int `yaml:"max_connections"`
-		CheckerWorkers int `yaml:"checker_workers"`
+		MaxConnections int      `yaml:"max_connections"`
+		CheckerWorkers int      `yaml:"checker_workers"`
+		TrustedIPs     []string `yaml:"trusted_ips"` // ohne IP-Ratenlimit (z. B. Lasttest-Quelle); leer im Normalbetrieb
 	} `yaml:"limits"`
 	LogLevel string `yaml:"log_level"` // debug, info, warn, error
 }

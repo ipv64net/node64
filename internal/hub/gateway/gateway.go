@@ -32,7 +32,8 @@ type Gateway struct {
 	version      string
 	location     string
 	maxConns     int
-	portalSecret []byte // Portal -> hub (portal.go), gleiches Geheimnis wie die Bruecke
+	portalSecret []byte
+	trusted      map[string]bool // IPs ohne Ratenlimit (Lasttest) // Portal -> hub (portal.go), gleiches Geheimnis wie die Bruecke
 
 	mu      sync.RWMutex
 	conns   map[string]*conn         // node_id -> Verbindung
@@ -168,7 +169,7 @@ func (g *Gateway) auth(h http.HandlerFunc) http.Handler {
 		if tok == "" {
 			tok = r.URL.Query().Get("token") // WebSocket aus Browsern o. ae.
 		}
-		if !g.limiter.allow("auth:"+clientIP(r), 60, time.Minute) {
+		if !g.trusted[clientIP(r)] && !g.limiter.allow("auth:"+clientIP(r), 60, time.Minute) {
 			writeErr(w, http.StatusTooManyRequests, "too many requests")
 			return
 		}

@@ -804,44 +804,46 @@ func (s *Store) IngestMeasurements(ctx context.Context, n *Node, batch []wire.Me
 	}
 	source := "node:" + n.ID
 	now := time.Now().UTC()
-	var sb strings.Builder
-	sb.WriteString(`INSERT IGNORE INTO hc2_measurements (token, source, node_seq, time, status, latency_ms, reason, message, family, details, flags, received_at) VALUES `)
-	args := make([]any, 0, len(batch)*12)
-	k := 0
+	job := ingestJob{nodeID: n.ID, done: make(chan error, 1)}
 	for _, m := range batch {
 		if m.Time.After(now.Add(5 * time.Minute)) {
 			ack.Rejected = append(ack.Rejected, m.Seq)
 		} else if m.Time.Before(now.AddDate(0, 0, -8)) {
 			// aelter als die Rohdaten-Partitionen: nicht speichern, aber bestaetigen
 		} else {
-			if k > 0 {
-				sb.WriteString(",")
-			}
-			sb.WriteString("(?,?,?,?,?,?,?,?,?,?,?,?)")
 			var details any
 			if len(m.Details) > 0 {
 				if b, err := json.Marshal(m.Details); err == nil {
 					details = string(b)
 				}
 			}
-			args = append(args, m.Token, source, m.Seq, m.Time.UTC().Format(TimeFormat), b2i(m.Status == "up"), m.LatencyMS, truncate(m.Reason, 64), truncate(m.Message, 500), truncate(m.Family, 4), details, m.Flags, nowStr())
-			k++
+			job.rows = append(job.rows, []any{m.Token, source, m.Seq, m.Time.UTC().Format(TimeFormat), b2i(m.Status == "up"), m.LatencyMS, truncate(m.Reason, 64), truncate(m.Message, 500), truncate(m.Family, 4), details, m.Flags, nowStr()})
 		}
 		if m.Seq > ack.AckSeq {
 			ack.AckSeq = m.Seq
 		}
 	}
-	if k > 0 {
-		if _, err := s.db.ExecContext(ctx, sb.String(), args...); err != nil {
-			s.Metrics.add(&s.Metrics.DBErrors, 1)
+	if ack.AckSeq > n.LastAckSeq {
+		job.ackSeq = ack.AckSeq
+	}
+	if len(job.rows) == 0 && job.ackSeq == 0 {
+		return ack, nil
+	}
+	// ueber den Sammel-Schreiber (ingest.go); Ack erst nach dem Schreiben
+	select {
+	case s.ingest <- job:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	select {
+	case err := <-job.done:
+		if err != nil {
 			return nil, err
 		}
-		s.Metrics.add(&s.Metrics.Measurements, int64(k))
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
-	if ack.AckSeq > n.LastAckSeq {
-		_, _ = s.db.ExecContext(ctx, `UPDATE hc2_nodes SET last_ack_seq = ? WHERE node_id = ?`, ack.AckSeq, n.ID)
-		n.LastAckSeq = ack.AckSeq
-	}
+	n.LastAckSeq = ack.AckSeq
 	return ack, nil
 }
 

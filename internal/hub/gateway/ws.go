@@ -34,6 +34,7 @@ type conn struct {
 	mu      sync.Mutex
 	closed  bool
 	nextID  int64
+	work    chan wire.Msg // Nachrichten mit DB-Arbeit (Messpunkte usw.), eigener Worker je Verbindung
 }
 
 func (c *conn) send(m wire.Msg) {
@@ -85,8 +86,10 @@ func (g *Gateway) ws(w http.ResponseWriter, r *http.Request) {
 	_ = g.st.NodeSeen(ctx, n.ID, n.Token.ID)
 	g.log.Info("node connected", "node", n.Name, "user", n.UserID, "ip", clientIP(r), "since", since)
 
+	c.work = make(chan wire.Msg, 64)
 	go c.writer()
 	go c.pinger()
+	go c.worker()
 	c.hello(ctx)
 	c.reader()
 }
@@ -200,7 +203,29 @@ func (c *conn) reader() {
 		if err := json.Unmarshal(data, &m); err != nil {
 			continue
 		}
-		c.handle(m)
+		switch m.T {
+		case "measurements", "events", "states", "deliveries", "status":
+			// DB-lastig: im Worker, damit der Leser weiter liest (Pongs!) und eine langsame DB keine Verbindungen trennt
+			select {
+			case c.work <- m:
+			case <-c.ctx.Done():
+				return
+			}
+		default:
+			c.handle(m)
+		}
+	}
+}
+
+// worker arbeitet DB-lastige Nachrichten der Verbindung der Reihe nach ab.
+func (c *conn) worker() {
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		case m := <-c.work:
+			c.handle(m)
+		}
 	}
 }
 

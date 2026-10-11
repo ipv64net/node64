@@ -40,6 +40,7 @@ type Store struct {
 	box        *secrets.Box // Kanal-Geheimnisse (Server-Schluessel), nil = nicht konfiguriert
 
 	meas   chan measurementRow
+	ingest chan ingestJob // Messpunkte der Nodes (ingest.go)
 	stopCh chan struct{}
 	wg     sync.WaitGroup
 
@@ -67,6 +68,7 @@ func Open(dsn, location, node string, log *slog.Logger) (*Store, error) {
 		meas: make(chan measurementRow, 10000), stopCh: make(chan struct{}), Metrics: NewMetrics()}
 	s.wg.Add(1)
 	go s.measurementWriter()
+	s.startIngestWriter()
 	return s, nil
 }
 

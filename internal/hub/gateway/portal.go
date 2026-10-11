@@ -20,6 +20,14 @@ import (
 //	POST /v1/portal/channel-test  {ts, userid, channel_id, kind: test|verify, code?, lang?}
 //	  -> {"ok":true} | {"ok":false,"error":"..."}; Node-Kanaele werden als Sendeauftrag an die Node gegeben ("queued").
 
+// SetTrusted setzt IPs ohne Ratenlimit (nur fuer Lasttests gedacht).
+func (g *Gateway) SetTrusted(ips []string) {
+	g.trusted = map[string]bool{}
+	for _, ip := range ips {
+		g.trusted[ip] = true
+	}
+}
+
 // SetPortalSecret aktiviert die Portal-Endpunkte.
 func (g *Gateway) SetPortalSecret(secret []byte) { g.portalSecret = secret }
 

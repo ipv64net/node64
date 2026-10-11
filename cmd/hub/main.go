@@ -122,6 +122,7 @@ func run(cfgPath string) error {
 		gw = gateway.New(st, nfStore, senders, log, Version, cfg.Location, cfg.Limits.MaxConnections)
 		// Eigener Kontext: beim Stopp-Signal sollen die Nodes erst "bye" bekommen (gw.Stop), nicht sofort EOF
 		gw.SetPortalSecret(portalSecret)
+		gw.SetTrusted(cfg.Limits.TrustedIPs)
 		if err := gw.Start(context.Background()); err != nil {
 			return fmt.Errorf("gateway: %w", err)
 		}
