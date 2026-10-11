@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/config"
+	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/i18n"
 	"github.com/ipv64net/node64/internal/logging"
 	"github.com/ipv64net/node64/internal/module"
@@ -39,6 +40,8 @@ type Deps struct {
 	Notify     *notify.Store
 	Dispatcher *notify.Dispatcher
 	Sync       nodesync.Client
+	Linker     nodesync.Linker      // nil = Verknuepfung nicht verfuegbar
+	HC         *healthchecks.Module // fuer Konflikte auf der Verknuepfungsseite
 	Version    string
 	StartedAt  time.Time
 	// Restart beendet den Node kontrolliert (Docker startet ihn neu), z. B.
@@ -144,6 +147,7 @@ func (s *Server) routes() {
 	s.authRoutes()
 	s.backupRoutes()
 	s.apiRoutes()
+	s.syncRoutes()
 
 	s.mux.Handle("GET /{$}", s.auth(s.dashboard))
 	s.mux.Handle("GET /settings", s.auth(s.settings))

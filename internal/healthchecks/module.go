@@ -151,6 +151,9 @@ func (m *Module) Start(ctx context.Context) error {
 		return err
 	}
 	for _, c := range list {
+		if !c.MeasuredHere() { // fremde oder reine Online-Checks nur zur Anzeige
+			continue
+		}
 		rt := c.Runtime
 		m.sched.Upsert(c.SchedulerCheck(), &rt)
 	}

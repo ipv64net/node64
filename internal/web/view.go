@@ -157,6 +157,7 @@ func (s *Server) nav(r *http.Request) []NavItem {
 		items = append(items, NavItem{Key: m.Info.TitleKey, Path: m.Info.Path, Icon: m.Info.Icon, Image: m.Info.Image, Available: m.Info.Available, Enabled: m.Running})
 	}
 	items = append(items,
+		NavItem{Key: "nav.link", Path: "/link", Icon: "bi-cloud", Available: true, Enabled: true},
 		NavItem{Key: "nav.notifications", Path: "/notifications", Icon: "bi-bell", Available: true, Enabled: s.Notify != nil},
 		NavItem{Key: "nav.settings", Path: "/settings", Icon: "bi-gear", Available: true, Enabled: true},
 		NavItem{Key: "nav.audit", Path: "/audit", Icon: "bi-journal-text", Available: true, Enabled: true},

@@ -74,7 +74,12 @@ type Dispatcher struct {
 	cancel  context.CancelFunc
 	// Hooks fuer Tests
 	now func() time.Time
+	// sendServerChannels: Server-Kanaele trotzdem lokal senden (Node-Einstellung)
+	sendServerChannels bool
 }
+
+// SetSendServerChannels schaltet den lokalen Versand ueber Server-Kanaele.
+func (d *Dispatcher) SetSendServerChannels(on bool) { d.sendServerChannels = on }
 
 type bucket struct {
 	tokens float64
@@ -206,6 +211,9 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 	for _, ch := range all {
 		if !ch.Enabled {
 			continue
+		}
+		if ch.Execution == "server" && !d.sendServerChannels {
+			continue // vom ipv64-hub gesendet
 		}
 		if len(want) > 0 {
 			if want[ch.ID] {

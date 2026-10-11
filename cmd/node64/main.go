@@ -116,15 +116,24 @@ func run() error {
 	defer dispatcher.Stop()
 
 	modules := module.NewRegistry(st, logger.Slog())
-	modules.Register(healthchecks.New(st, logger.Slog(), dispatcher, nfStore, Version))
+	hcModule := healthchecks.New(st, logger.Slog(), dispatcher, nfStore, Version)
+	modules.Register(hcModule)
 	registerModules(modules)
 	modules.StartEnabled(ctx)
 	defer modules.StopAll()
+
+	// Verknuepfung mit ipv64.net (Sync-Client); standalone bleibt alles wie gehabt
+	syncClient := nodesync.New(nodesync.Deps{Core: st, HC: hcModule, NF: nfStore, Box: box, Version: Version, Log: logger.Slog(), Senders: notify.Senders(Version)})
+	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
+	if err := syncClient.Start(ctx); err != nil {
+		log.Warn("sync start failed", "err", err)
+	}
+	defer syncClient.Stop(context.Background())
 	go updateLoop(ctx, st, log)
 
 	srv, err := web.New(web.Deps{
 		Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: modules, Notify: nfStore, Dispatcher: dispatcher,
-		Sync: nodesync.NoOp{}, Version: Version, StartedAt: time.Now(), Restart: stop,
+		Sync: syncClient, Linker: syncClient, HC: hcModule, Version: Version, StartedAt: time.Now(), Restart: stop,
 	})
 	if err != nil {
 		return err
@@ -138,7 +147,6 @@ func run() error {
 func registerModules(r *module.Registry) {
 	r.Register(module.Placeholder{I: module.Info{Name: "dyndns", TitleKey: "nav.dyndns", Icon: "bi-globe", Image: "dyndns64.webp", Path: "/dyndns", Order: 20}})
 	r.Register(module.Placeholder{I: module.Info{Name: "proxy", TitleKey: "nav.proxy", Icon: "bi-diagram-3", Image: "cdn64.webp", Path: "/proxy", Order: 30}})
-	r.Register(module.Placeholder{I: module.Info{Name: "link", TitleKey: "nav.link", Icon: "bi-cloud", Path: "/link", Order: 90}})
 }
 
 // updateLoop prueft taeglich auf neue Versionen, aber nur wenn der Nutzer es

@@ -1,31 +1,95 @@
-// Package sync ist der Platzhalter fuer die spaetere Anbindung an ipv64.net.
+// Package sync ist die Verbindung der Node zu ipv64.net (hub): Erstverknuepfung
+// per Code, WebSocket-Dauerverbindung, Konfigurationsabgleich mit Revisionen
+// (Server fuehrend), Outbox und Konflikte fuer lokale Aenderungen, Upload von
+// Messpunkten, Zustaenden und Ereignissen, Kommandos und Sendeauftraege.
 //
-// Im ersten Entwurf laeuft der Node nur standalone. Das Interface steht,
-// damit Scheduler und Store spaeter ohne Umbau einen echten Client bekommen.
-// Vorgesehen laut Konzept: ausgehende Dauerverbindung, Konfigurations-Sync
-// mit Revisionen (Server fuehrend), Messergebnisse append-only mit
-// Sequenznummern je Node, Outbox bei Verbindungsverlust.
+// Ablauf nach jeder Verbindung (Sync-Plan 3.9): hello -> config anwenden
+// (ausstehende lokale Aenderungen derselben Entitaet werden Konflikt) ->
+// Outbox abspielen -> Messpunkte/Ereignisse nachliefern.
 package sync
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"math/rand/v2"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/ipv64net/node64/internal/healthchecks"
+	"github.com/ipv64net/node64/internal/notify"
+	"github.com/ipv64net/node64/internal/scheduler"
+	"github.com/ipv64net/node64/internal/secrets"
+	"github.com/ipv64net/node64/internal/store"
+	"github.com/ipv64net/node64/internal/wire"
+)
+
+// DefaultEndpoints sind die hub-Server, solange keine Liste vom Server vorliegt.
+// NODE64_HUB_URL ueberschreibt sie (Tests).
+var DefaultEndpoints = []wire.Endpoint{
+	{Location: "fsn", Name: "Falkenstein", URL: "https://hc-srv01.ipv64.net"},
+	{Location: "nbg", Name: "Nürnberg", URL: "https://hc-srv02.ipv64.net"},
+}
+
+// Einstellungsschluessel (Kern-Store).
+const (
+	SetToken      = "sync.token" // verschluesselt
+	SetAccount    = "sync.account"
+	SetEndpoints  = "sync.endpoints"
+	SetNodeName   = "sync.node_name"
+	SetLocation   = "sync.location"
+	SetRemoteMgmt = "sync.remote_mgmt"
+	SetRevision   = "sync.last_revision"
+	SetAckSeq     = "sync.ack_seq"
+	SetEventID    = "sync.last_event_id"
+	SetLinkedAt   = "sync.linked_at"
+	SetHub        = "sync.hub"
+	SetPendCode   = "sync.pending_code"
+	SetPendSecret = "sync.pending_secret"
+	SetPendExp    = "sync.pending_expires"
+	SetLocalNotif = "sync.local_notifications" // "1": Node alarmiert ihre Kanaele auch verknuepft
+)
 
 // State beschreibt den Verbindungszustand fuer die Anzeige im UI.
 type State struct {
-	Linked     bool
-	Connected  bool
-	AccountID  string
-	LastSyncAt string
-	Outbox     int
-	LastError  string
+	Linked      bool
+	Connected   bool
+	AccountID   string
+	Plan        string
+	NodeName    string
+	Location    string
+	RemoteMgmt  string
+	Hub         string
+	LastSyncAt  string
+	Outbox      int
+	Conflicts   int
+	LastError   string
+	PendingCode string
+	Revision    int64
+	Endpoints   []wire.Endpoint
+	LinkedAt    string
 }
 
-// Client ist die spaetere Verbindung zu ipv64.net.
+// Client ist die Verbindung zu ipv64.net.
 type Client interface {
-	// State liefert den aktuellen Zustand.
 	State() State
-	// Start startet die Verbindung, Stop beendet sie.
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
+}
+
+// Linker sind die Aktionen der Verknuepfungsseite.
+type Linker interface {
+	LinkStart(ctx context.Context) (code string, expires time.Time, err error)
+	LinkPoll(ctx context.Context) (bool, error)
+	LinkCancel()
+	Unlink(ctx context.Context, keepChecks bool) error
+	Resolve(ctx context.Context, id int64, keepServer bool) error
 }
 
 // NoOp ist der Standalone-Client: nicht verknuepft, tut nichts.
@@ -34,3 +98,796 @@ type NoOp struct{}
 func (NoOp) State() State                { return State{} }
 func (NoOp) Start(context.Context) error { return nil }
 func (NoOp) Stop(context.Context) error  { return nil }
+
+// Deps sind die Abhaengigkeiten des echten Clients.
+type Deps struct {
+	Core    *store.Store
+	HC      *healthchecks.Module
+	NF      *notify.Store
+	Box     *secrets.Box
+	Version string
+	Log     *slog.Logger
+	Senders map[notify.Type]notify.Sender
+}
+
+// Live ist der echte Client.
+type Live struct {
+	d   Deps
+	log *slog.Logger
+	hc  *http.Client
+
+	mu        sync.Mutex
+	connected bool
+	hub       string
+	lastErr   string
+	lastSync  time.Time
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	running   bool
+	wake      chan struct{}
+	states    map[string]wire.State
+	ws        *session
+}
+
+// New erzeugt den Client; Start installiert die Hooks.
+func New(d Deps) *Live {
+	return &Live{d: d, log: d.Log.With("module", "sync"), hc: &http.Client{Timeout: 60 * time.Second}, wake: make(chan struct{}, 1), states: map[string]wire.State{}}
+}
+
+// nodeID ist die beim Setup erzeugte Kennung (node.id).
+func (c *Live) nodeID() string { return c.d.Core.SettingOr(context.Background(), "node.id", "") }
+
+func (c *Live) setting(key, def string) string {
+	return c.d.Core.SettingOr(context.Background(), key, def)
+}
+
+func (c *Live) set(key, val string) {
+	_ = c.d.Core.SetSetting(context.Background(), key, val)
+}
+
+func (c *Live) setInt(key string, v int64) { c.set(key, strconv.FormatInt(v, 10)) }
+
+func (c *Live) getInt(key string) int64 {
+	v, _ := strconv.ParseInt(c.setting(key, "0"), 10, 64)
+	return v
+}
+
+func (c *Live) token() string {
+	enc := c.setting(SetToken, "")
+	if enc == "" {
+		return ""
+	}
+	if c.d.Box != nil && secrets.IsEncrypted(enc) {
+		plain, err := c.d.Box.Decrypt(enc)
+		if err != nil {
+			return ""
+		}
+		return plain
+	}
+	return enc
+}
+
+// Linked sagt, ob ein Token vorliegt.
+func (c *Live) Linked() bool { return c.token() != "" }
+
+func (c *Live) endpoints() []wire.Endpoint {
+	if u := os.Getenv("NODE64_HUB_URL"); u != "" {
+		return []wire.Endpoint{{Location: "test", Name: "Test", URL: strings.TrimRight(u, "/")}}
+	}
+	var eps []wire.Endpoint
+	if raw := c.setting(SetEndpoints, ""); raw != "" {
+		_ = json.Unmarshal([]byte(raw), &eps)
+	}
+	if len(eps) == 0 {
+		return DefaultEndpoints
+	}
+	return eps
+}
+
+// State liefert den Zustand fuer die Oberflaeche.
+func (c *Live) State() State {
+	ctx := context.Background()
+	c.mu.Lock()
+	st := State{Connected: c.connected, Hub: c.hub, LastError: c.lastErr}
+	if !c.lastSync.IsZero() {
+		st.LastSyncAt = c.lastSync.UTC().Format(time.RFC3339)
+	}
+	c.mu.Unlock()
+	st.Linked = c.Linked()
+	st.NodeName, st.Location, st.RemoteMgmt = c.setting(SetNodeName, ""), c.setting(SetLocation, ""), c.setting(SetRemoteMgmt, "")
+	st.LinkedAt, st.Revision = c.setting(SetLinkedAt, ""), c.getInt(SetRevision)
+	st.Endpoints = c.endpoints()
+	var acc wire.Account
+	if raw := c.setting(SetAccount, ""); raw != "" && json.Unmarshal([]byte(raw), &acc) == nil {
+		st.AccountID, st.Plan = strconv.FormatInt(acc.ID, 10), acc.Plan
+	}
+	if exp := c.setting(SetPendExp, ""); exp != "" {
+		if t, err := time.Parse(time.RFC3339, exp); err == nil && time.Now().Before(t) {
+			st.PendingCode = c.setting(SetPendCode, "")
+		}
+	}
+	if c.d.HC != nil {
+		st.Outbox, st.Conflicts = c.d.HC.OutboxCount(ctx), c.d.HC.ConflictCount(ctx)
+	}
+	return st
+}
+
+// Start installiert die Hooks und startet die Verbindung, wenn verknuepft.
+func (c *Live) Start(ctx context.Context) error {
+	c.d.HC.Store().OnChange = c.onChange
+	c.d.HC.Store().OnRuntime = c.onRuntime
+	notify.OnChange = c.onChannelChange
+	if c.Linked() {
+		c.startLoop(ctx)
+	}
+	return nil
+}
+
+func (c *Live) startLoop(ctx context.Context) {
+	c.mu.Lock()
+	if c.running {
+		c.mu.Unlock()
+		return
+	}
+	c.running = true
+	ctx, c.cancel = context.WithCancel(ctx)
+	c.mu.Unlock()
+	c.wg.Add(1)
+	go c.loop(ctx)
+}
+
+// Stop beendet die Verbindung.
+func (c *Live) Stop(ctx context.Context) error {
+	c.mu.Lock()
+	cancel := c.cancel
+	c.running = false
+	c.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	done := make(chan struct{})
+	go func() { c.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+	return nil
+}
+
+func (c *Live) setErr(err error) {
+	c.mu.Lock()
+	if err != nil {
+		c.lastErr = err.Error()
+	} else {
+		c.lastErr = ""
+	}
+	c.mu.Unlock()
+}
+
+// ---------------------------------------------------------------- Erstverknuepfung
+
+// LinkStart holt einen Code beim hub. Der Nutzer gibt ihn im Portal ein.
+func (c *Live) LinkStart(ctx context.Context) (code string, expires time.Time, err error) {
+	name := c.d.Core.SettingOr(ctx, "node.name", "Node64")
+	body, _ := json.Marshal(wire.LinkStart{NodeID: c.nodeID(), Name: name, Version: c.d.Version})
+	var out wire.LinkStarted
+	var lastErr error
+	for _, ep := range c.endpoints() {
+		resp, err := c.post(ctx, ep.URL+"/v1/nodes/link/start", "", body)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if err := json.Unmarshal(resp, &out); err != nil || out.Code == "" {
+			lastErr = errors.New("unexpected answer from hub")
+			continue
+		}
+		c.set(SetPendCode, out.Code)
+		c.set(SetPendSecret, out.PollSecret)
+		c.set(SetPendExp, out.ExpiresAt.Format(time.RFC3339))
+		c.set(SetHub, ep.URL)
+		return out.Code, out.ExpiresAt, nil
+	}
+	return "", time.Time{}, fmt.Errorf("hub not reachable: %w", lastErr)
+}
+
+// LinkPoll fragt nach, ob der Code eingeloest wurde. true = jetzt verknuepft.
+func (c *Live) LinkPoll(ctx context.Context) (bool, error) {
+	code, secret := c.setting(SetPendCode, ""), c.setting(SetPendSecret, "")
+	if code == "" {
+		return false, errors.New("no pending code")
+	}
+	body, _ := json.Marshal(wire.LinkPoll{Code: code, PollSecret: secret})
+	hub := c.setting(SetHub, c.endpoints()[0].URL)
+	resp, status, err := c.postStatus(ctx, hub+"/v1/nodes/link/poll", "", body)
+	if err != nil {
+		return false, err
+	}
+	switch status {
+	case http.StatusAccepted:
+		return false, nil
+	case http.StatusOK:
+	default:
+		c.LinkCancel()
+		return false, fmt.Errorf("code expired or rejected (%d)", status)
+	}
+	var out wire.Linked
+	if err := json.Unmarshal(resp, &out); err != nil || out.NodeToken == "" {
+		return false, errors.New("unexpected answer from hub")
+	}
+	tok := out.NodeToken
+	if c.d.Box != nil {
+		tok = c.d.Box.Encrypt(tok)
+	}
+	c.set(SetToken, tok)
+	acc, _ := json.Marshal(out.Account)
+	c.set(SetAccount, string(acc))
+	if len(out.Endpoints) > 0 {
+		eps, _ := json.Marshal(out.Endpoints)
+		c.set(SetEndpoints, string(eps))
+	}
+	c.set(SetNodeName, out.Name)
+	c.set(SetLocation, out.Location)
+	c.set(SetRemoteMgmt, out.RemoteMgmt)
+	c.set(SetLinkedAt, time.Now().UTC().Format(time.RFC3339))
+	c.LinkCancel()
+	c.log.Info("linked with ipv64", "account", out.Account.ID, "plan", out.Account.Plan)
+	if err := c.bootstrap(ctx); err != nil {
+		c.log.Error("bootstrap failed", "err", err)
+		c.setErr(err)
+	}
+	c.startLoop(context.Background())
+	return true, nil
+}
+
+// LinkCancel verwirft einen offenen Code.
+func (c *Live) LinkCancel() {
+	c.set(SetPendCode, "")
+	c.set(SetPendSecret, "")
+	c.set(SetPendExp, "")
+}
+
+// Unlink trennt die Verknuepfung; keepChecks = Checks beim Account als online weiterlaufen lassen.
+func (c *Live) Unlink(ctx context.Context, keepChecks bool) error {
+	body, _ := json.Marshal(map[string]bool{"keep_checks": keepChecks})
+	tok := c.token()
+	for _, ep := range c.endpoints() {
+		if _, err := c.post(ctx, ep.URL+"/v1/nodes/me/unlink", tok, body); err == nil {
+			break
+		}
+	}
+	_ = c.Stop(ctx)
+	for _, k := range []string{SetToken, SetAccount, SetLinkedAt, SetRevision, SetAckSeq, SetEventID, SetHub} {
+		c.set(k, "")
+	}
+	c.mu.Lock()
+	c.connected, c.hub, c.lastErr = false, "", ""
+	c.mu.Unlock()
+	if err := c.d.HC.SetOwnerAllSelf(ctx); err != nil {
+		return err
+	}
+	// Platzhalter der Server-Kanaele entfernen
+	if chans, err := c.d.NF.Channels(ctx); err == nil {
+		for _, ch := range chans {
+			if ch.Execution == "server" {
+				_ = c.d.NF.Delete(notify.WithRemote(ctx), ch.ID)
+			} else if ch.RemoteID != 0 {
+				_ = c.d.NF.SetRemote(ctx, ch.ID, 0, ch.Revision)
+			}
+		}
+	}
+	c.log.Info("unlinked from ipv64", "keep_checks", keepChecks)
+	return nil
+}
+
+// ---------------------------------------------------------------- HTTP
+
+func (c *Live) post(ctx context.Context, url, token string, body []byte) ([]byte, error) {
+	b, status, err := c.postStatus(ctx, url, token, body)
+	if err != nil {
+		return nil, err
+	}
+	if status < 200 || status >= 300 {
+		return nil, fmt.Errorf("hub %s: HTTP %d: %s", url, status, strings.TrimSpace(string(b)))
+	}
+	return b, nil
+}
+
+func (c *Live) postStatus(ctx context.Context, url, token string, body []byte) ([]byte, int, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(body)))
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "node64/"+c.d.Version)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	var buf strings.Builder
+	_, _ = copyLimited(&buf, resp, 16<<20)
+	return []byte(buf.String()), resp.StatusCode, nil
+}
+
+func (c *Live) get(ctx context.Context, url, token string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "node64/"+c.d.Version)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var buf strings.Builder
+	_, _ = copyLimited(&buf, resp, 16<<20)
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("hub %s: HTTP %d", url, resp.StatusCode)
+	}
+	return []byte(buf.String()), nil
+}
+
+func copyLimited(dst *strings.Builder, resp *http.Response, limit int64) (int64, error) {
+	buf := make([]byte, 32<<10)
+	var n int64
+	for n < limit {
+		k, err := resp.Body.Read(buf)
+		if k > 0 {
+			dst.Write(buf[:k])
+			n += int64(k)
+		}
+		if err != nil {
+			break
+		}
+	}
+	return n, nil
+}
+
+// ---------------------------------------------------------------- Bootstrap
+
+// bootstrap laedt die lokale Konfiguration nach der Erstverknuepfung hoch.
+func (c *Live) bootstrap(ctx context.Context) error {
+	var in wire.Bootstrap
+	chans, _ := c.d.NF.Channels(ctx)
+	for _, ch := range chans {
+		if ch.Execution == "server" {
+			continue
+		}
+		w := wire.Channel{LocalID: ch.ID, Type: string(ch.Type), Name: ch.Name, Enabled: ch.Enabled, Default: ch.Default, Lang: ch.Lang, NotifyDown: ch.NotifyDown, NotifyUp: ch.NotifyUp, Revision: ch.Revision}
+		if !ch.SecretOnlyLocal {
+			w.Config = ch.Config
+		} else {
+			w.Config = ch.Masked()
+		}
+		in.Channels = append(in.Channels, w)
+	}
+	checks, _ := c.d.HC.AllChecks(ctx)
+	for _, ck := range checks {
+		if !ck.MeasuredHere() {
+			continue
+		}
+		in.Checks = append(in.Checks, c.d.HC.WireCheck(ck, nil)) // Kanaele: lokale IDs, der Server bildet sie ueber channel_map ab
+	}
+	maint, _ := c.d.HC.AllMaintenance(ctx)
+	for _, mw := range maint {
+		w := c.d.HC.WireMaintenance(mw)
+		w.ID = mw.ID // lokale ID, der Server liefert die Zuordnung
+		in.Maintenance = append(in.Maintenance, w)
+	}
+	body, _ := json.Marshal(in)
+	resp, err := c.post(ctx, c.hubURL()+"/v1/nodes/me/bootstrap", c.token(), body)
+	if err != nil {
+		return err
+	}
+	var out wire.BootstrapResult
+	if err := json.Unmarshal(resp, &out); err != nil {
+		return err
+	}
+	for local, remote := range out.ChannelMap {
+		if ch, _ := c.d.NF.Channel(ctx, local); ch != nil {
+			_ = c.d.NF.SetRemote(ctx, local, remote, ch.Revision)
+		}
+	}
+	for local, remote := range out.MaintMap {
+		_ = c.d.HC.SetMaintenanceRemote(ctx, local, remote, 1)
+	}
+	for _, ck := range out.Checks {
+		_ = c.d.HC.SetCheckRevision(ctx, ck.Token, ck.Revision)
+	}
+	for _, r := range out.Renamed {
+		c.log.Warn("token collision, server assigned a new token (not applied locally)", "old", r.OldToken, "new", r.NewToken)
+	}
+	// Vollabgleich holt Server-Kanaele und fremde Checks; Messdaten ab jetzt
+	c.setInt(SetAckSeq, c.d.HC.MaxMeasurementSeq(ctx))
+	c.setInt(SetEventID, c.d.HC.MaxEventID(ctx))
+	return c.fullSync(ctx)
+}
+
+func (c *Live) hubURL() string {
+	if h := c.setting(SetHub, ""); h != "" {
+		return h
+	}
+	return c.endpoints()[0].URL
+}
+
+// fullSync holt die gesamte Konfiguration (Repair, Sync-Plan 3.6) und wendet sie an.
+func (c *Live) fullSync(ctx context.Context) error {
+	resp, err := c.get(ctx, c.hubURL()+"/v1/nodes/me/config", c.token())
+	if err != nil {
+		return err
+	}
+	var cfg wire.FullConfig
+	if err := json.Unmarshal(resp, &cfg); err != nil {
+		return err
+	}
+	var changes []wire.Change
+	for _, ch := range cfg.Channels {
+		changes = append(changes, wire.Change{Entity: "channel", ID: strconv.FormatInt(ch.ID, 10), Op: "upsert", Revision: ch.Revision, Data: mustJSON(ch)})
+	}
+	for _, ck := range cfg.Checks {
+		changes = append(changes, wire.Change{Entity: "check", ID: ck.Token, Op: "upsert", Revision: ck.Revision, Data: mustJSON(ck)})
+	}
+	for _, mw := range cfg.Maintenance {
+		changes = append(changes, wire.Change{Entity: "maintenance", ID: strconv.FormatInt(mw.ID, 10), Op: "upsert", Revision: mw.Revision, Data: mustJSON(mw)})
+	}
+	// Eigene Checks, die der Server nicht (mehr) kennt, sind dort geloescht
+	known := map[string]bool{}
+	for _, ck := range cfg.Checks {
+		known[ck.Token] = true
+	}
+	if list, err := c.d.HC.AllChecks(ctx); err == nil {
+		for _, ck := range list {
+			if !known[ck.Token] && !c.d.HC.OutboxHas(ctx, "check", ck.Token) {
+				changes = append(changes, wire.Change{Entity: "check", ID: ck.Token, Op: "delete"})
+			}
+		}
+	}
+	c.applyChanges(ctx, changes, cfg.Revision)
+	return nil
+}
+
+func mustJSON(v any) json.RawMessage {
+	b, _ := json.Marshal(v)
+	return b
+}
+
+// ---------------------------------------------------------------- Aenderungen anwenden
+
+// applyChanges wendet Server-Aenderungen an; Entitaeten mit ausstehender lokaler
+// Aenderung werden zum Konflikt (Sync-Plan 3.9 Schritt 2).
+func (c *Live) applyChanges(ctx context.Context, changes []wire.Change, revision int64) {
+	remoteToLocal := func(remote int64) int64 {
+		if ch, _ := c.d.NF.ByRemote(ctx, remote); ch != nil {
+			return ch.ID
+		}
+		return 0
+	}
+	for _, ch := range changes {
+		if ch.Entity == "check" || ch.Entity == "maintenance" || ch.Entity == "channel" {
+			id := ch.ID
+			if ch.Entity != "check" {
+				// Outbox fuehrt lokale IDs; Server-ID auf lokale abbilden
+				id = c.localIDFor(ctx, ch.Entity, ch.ID)
+			}
+			if id != "" && c.d.HC.OutboxHas(ctx, ch.Entity, id) {
+				c.conflict(ctx, ch.Entity, id, ch)
+				continue
+			}
+		}
+		var err error
+		switch ch.Entity {
+		case "check":
+			if ch.Op == "delete" {
+				err = c.d.HC.RemoveRemoteCheck(ctx, ch.ID)
+			} else {
+				var w wire.Check
+				if err = json.Unmarshal(ch.Data, &w); err == nil {
+					err = c.d.HC.ApplyWireCheck(ctx, w, remoteToLocal)
+				}
+			}
+		case "maintenance":
+			var rid int64
+			fmt.Sscan(ch.ID, &rid)
+			if ch.Op == "delete" {
+				err = c.d.HC.RemoveRemoteMaintenance(ctx, rid)
+			} else {
+				var w wire.Maintenance
+				if err = json.Unmarshal(ch.Data, &w); err == nil {
+					err = c.d.HC.ApplyWireMaintenance(ctx, w)
+				}
+			}
+		case "channel":
+			var rid int64
+			fmt.Sscan(ch.ID, &rid)
+			if ch.Op == "delete" {
+				err = c.removeRemoteChannel(ctx, rid)
+			} else {
+				var w wire.Channel
+				if err = json.Unmarshal(ch.Data, &w); err == nil {
+					err = c.applyChannel(ctx, w)
+				}
+			}
+		case "node":
+			var n struct {
+				Name, Location, RemoteMgmt string `json:"-"`
+			}
+			_ = n
+			// Name/Standort/Remote-Verwaltung kommen ueber /me beim naechsten hello
+		}
+		if err != nil {
+			c.log.Warn("apply change failed", "entity", ch.Entity, "id", ch.ID, "op", ch.Op, "err", err)
+		}
+		if ch.Revision > c.getInt(SetRevision) {
+			c.setInt(SetRevision, ch.Revision)
+		}
+	}
+	if revision > c.getInt(SetRevision) {
+		c.setInt(SetRevision, revision)
+	}
+	c.mu.Lock()
+	c.lastSync = time.Now()
+	c.mu.Unlock()
+}
+
+func (c *Live) localIDFor(ctx context.Context, entity, remoteID string) string {
+	var rid int64
+	fmt.Sscan(remoteID, &rid)
+	switch entity {
+	case "maintenance":
+		if list, err := c.d.HC.AllMaintenance(ctx); err == nil {
+			for _, mw := range list {
+				if mw.RemoteID == rid {
+					return strconv.FormatInt(mw.ID, 10)
+				}
+			}
+		}
+	case "channel":
+		if ch, _ := c.d.NF.ByRemote(ctx, rid); ch != nil {
+			return strconv.FormatInt(ch.ID, 10)
+		}
+	}
+	return ""
+}
+
+func (c *Live) conflict(ctx context.Context, entity, localID string, ch wire.Change) {
+	local := ""
+	if list, err := c.d.HC.OutboxPending(ctx); err == nil {
+		for _, o := range list {
+			if o.Entity == entity && o.EntityID == localID {
+				local = o.Payload
+				_ = c.d.HC.OutboxSetError(ctx, o.ID, "conflict", "server changed the same entity")
+			}
+		}
+	}
+	_ = c.d.HC.ConflictAdd(ctx, healthchecks.Conflict{Entity: entity, EntityID: localID, LocalOp: "upsert", LocalPayload: local, ServerPayload: string(ch.Data), ServerRevision: ch.Revision})
+	c.log.Warn("sync conflict", "entity", entity, "id", localID)
+}
+
+// applyChannel: Server-Kanaele als Platzhalter (execution server), eigene Kanaele aktualisieren.
+func (c *Live) applyChannel(ctx context.Context, w wire.Channel) error {
+	rctx := notify.WithRemote(ctx)
+	existing, _ := c.d.NF.ByRemote(ctx, w.ID)
+	mine := w.NodeID != "" && w.NodeID == c.nodeID()
+	if existing == nil {
+		if w.NodeID != "" && !mine {
+			return nil // Kanal einer anderen Node: nicht anzeigen
+		}
+		ch := &notify.Channel{Type: notify.Type(w.Type), Name: w.Name, Enabled: w.Enabled, Default: w.Default, Lang: w.Lang, NotifyDown: w.NotifyDown, NotifyUp: w.NotifyUp,
+			RemoteID: w.ID, Revision: w.Revision, Execution: "server", Config: map[string]string{}}
+		if mine {
+			ch.Execution = "node"
+			ch.Config = w.Config
+		}
+		if ch.Lang == "" {
+			ch.Lang = "de"
+		}
+		return c.d.NF.Insert(rctx, ch)
+	}
+	existing.Name, existing.Enabled, existing.Default, existing.NotifyDown, existing.NotifyUp, existing.Revision = w.Name, w.Enabled, w.Default, w.NotifyDown, w.NotifyUp, w.Revision
+	if w.Lang != "" {
+		existing.Lang = w.Lang
+	}
+	if mine && len(w.Config) > 0 {
+		existing.Config = w.Config
+	}
+	return c.d.NF.Update(rctx, existing)
+}
+
+func (c *Live) removeRemoteChannel(ctx context.Context, remoteID int64) error {
+	ch, err := c.d.NF.ByRemote(ctx, remoteID)
+	if err != nil || ch == nil {
+		return err
+	}
+	return c.d.NF.Delete(notify.WithRemote(ctx), ch.ID)
+}
+
+// ---------------------------------------------------------------- Hooks (lokale Aenderungen)
+
+func (c *Live) onChange(ctx context.Context, entity, id, op string) {
+	if !c.Linked() {
+		return
+	}
+	payload, base := "", int64(0)
+	switch entity {
+	case "check":
+		if op == "delete" {
+			base = -1 // Server kennt die letzte Revision; Loeschen ohne Basispruefung
+		} else {
+			ck, _ := c.d.HC.CheckByToken(ctx, id)
+			if ck == nil {
+				return
+			}
+			if !ck.MeasuredHere() && ck.Execution != "online" {
+				return
+			}
+			base = ck.Revision - 1
+			if base < 0 {
+				base = 0
+			}
+			if ck.Revision <= 1 {
+				base = 0
+			}
+			w := c.d.HC.WireCheck(ck, c.localToRemote(ctx))
+			payload = string(mustJSON(w))
+		}
+	case "maintenance":
+		var lid int64
+		fmt.Sscan(id, &lid)
+		if op == "delete" {
+			base = -1
+		} else {
+			mw, _ := c.d.HC.MaintenanceByID(ctx, lid)
+			if mw == nil {
+				return
+			}
+			base = mw.Revision - 1
+			if mw.RemoteID == 0 {
+				base = 0
+			}
+			payload = string(mustJSON(c.d.HC.WireMaintenance(*mw)))
+		}
+	}
+	if err := c.d.HC.OutboxAdd(ctx, entity, id, op, base, payload); err != nil {
+		c.log.Error("outbox add failed", "err", err)
+		return
+	}
+	c.poke()
+}
+
+func (c *Live) onChannelChange(ctx context.Context, id int64, op string) {
+	if !c.Linked() {
+		return
+	}
+	payload := ""
+	base := int64(-1)
+	if op != "delete" {
+		ch, _ := c.d.NF.Channel(ctx, id)
+		if ch == nil || ch.Execution == "server" {
+			return
+		}
+		w := wire.Channel{ID: ch.RemoteID, Type: string(ch.Type), Name: ch.Name, Enabled: ch.Enabled, Default: ch.Default, Lang: ch.Lang, NotifyDown: ch.NotifyDown, NotifyUp: ch.NotifyUp, Revision: ch.Revision, LocalID: ch.ID}
+		if !ch.SecretOnlyLocal {
+			w.Config = ch.Config
+		}
+		payload = string(mustJSON(w))
+		base = ch.Revision - 1
+		if ch.RemoteID == 0 {
+			base = 0
+		}
+	}
+	if err := c.d.HC.OutboxAdd(ctx, "channel", strconv.FormatInt(id, 10), op, base, payload); err != nil {
+		c.log.Error("outbox add failed", "err", err)
+		return
+	}
+	c.poke()
+}
+
+func (c *Live) localToRemote(ctx context.Context) healthchecks.ChannelMap {
+	return func(local int64) int64 {
+		if ch, _ := c.d.NF.Channel(ctx, local); ch != nil {
+			return ch.RemoteID
+		}
+		return 0
+	}
+}
+
+func (c *Live) onRuntime(token string, rt scheduler.Runtime) {
+	if !c.Linked() {
+		return
+	}
+	c.mu.Lock()
+	c.states[token] = c.d.HC.StateOf(token, rt)
+	c.mu.Unlock()
+	c.poke()
+}
+
+func (c *Live) poke() {
+	select {
+	case c.wake <- struct{}{}:
+	default:
+	}
+}
+
+// ---------------------------------------------------------------- Konflikte
+
+// Resolve entscheidet einen Konflikt: keepServer = Server-Version uebernehmen,
+// sonst die lokale Version erneut senden (mit der Server-Revision als Basis).
+func (c *Live) Resolve(ctx context.Context, id int64, keepServer bool) error {
+	cf, err := c.d.HC.ConflictByID(ctx, id)
+	if err != nil || cf == nil {
+		return errors.New("conflict not found")
+	}
+	if keepServer {
+		if cf.ServerPayload == "" {
+			switch cf.Entity {
+			case "check":
+				err = c.d.HC.RemoveRemoteCheck(ctx, cf.EntityID)
+			case "maintenance":
+				var lid int64
+				fmt.Sscan(cf.EntityID, &lid)
+				if mw, _ := c.d.HC.MaintenanceByID(ctx, lid); mw != nil {
+					err = c.d.HC.RemoveRemoteMaintenance(ctx, mw.RemoteID)
+				}
+			case "channel":
+				var lid int64
+				fmt.Sscan(cf.EntityID, &lid)
+				err = c.d.NF.Delete(notify.WithRemote(ctx), lid)
+			}
+		} else {
+			c.applyChanges(ctx, []wire.Change{{Entity: cf.Entity, ID: c.remoteIDOf(ctx, cf), Op: "upsert", Revision: cf.ServerRevision, Data: json.RawMessage(cf.ServerPayload)}}, 0)
+		}
+		_ = c.d.HC.OutboxDeleteEntity(ctx, cf.Entity, cf.EntityID)
+	} else {
+		// lokale Version mit aktueller Server-Revision als Basis erneut einreihen
+		_ = c.d.HC.OutboxDeleteEntity(ctx, cf.Entity, cf.EntityID)
+		op := cf.LocalOp
+		if cf.LocalPayload == "" {
+			op = "delete"
+		}
+		if err := c.d.HC.OutboxAdd(ctx, cf.Entity, cf.EntityID, op, cf.ServerRevision, cf.LocalPayload); err != nil {
+			return err
+		}
+		c.poke()
+	}
+	if err != nil {
+		return err
+	}
+	return c.d.HC.ConflictDelete(ctx, id)
+}
+
+func (c *Live) remoteIDOf(ctx context.Context, cf *healthchecks.Conflict) string {
+	if cf.Entity == "check" {
+		return cf.EntityID
+	}
+	var x struct {
+		ID int64 `json:"id"`
+	}
+	if cf.ServerPayload != "" && json.Unmarshal([]byte(cf.ServerPayload), &x) == nil && x.ID > 0 {
+		return strconv.FormatInt(x.ID, 10)
+	}
+	return cf.EntityID
+}
+
+// pickEndpoint waehlt den zuletzt guten hub oder zufaellig einen anderen.
+func (c *Live) pickEndpoint(failed string) string {
+	eps := c.endpoints()
+	if h := c.setting(SetHub, ""); h != "" && h != failed {
+		return h
+	}
+	var cands []string
+	for _, e := range eps {
+		if e.URL != failed {
+			cands = append(cands, e.URL)
+		}
+	}
+	if len(cands) == 0 {
+		return eps[0].URL
+	}
+	return cands[rand.IntN(len(cands))]
+}

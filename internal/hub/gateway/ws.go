@@ -108,9 +108,8 @@ func (c *conn) hello(ctx context.Context) {
 		c.send(wire.Msg{T: "revision_gap"})
 		return
 	}
-	if len(changes) > 0 {
-		c.sendConfig(changes, rev)
-	}
+	// immer eine config schicken (auch leer): die Node wartet darauf, bevor sie ihre Outbox abspielt
+	c.sendConfig(changes, rev)
 	c.deliverPending(ctx)
 }
 
