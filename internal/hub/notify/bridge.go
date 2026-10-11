@@ -152,11 +152,37 @@ func (a appSender) Send(ctx context.Context, ch *notify.Channel, msg notify.Mess
 	return a.b.Send(ctx, bridgeRequest{Type: "app", To: tok, Subject: msg.Title, Text: msg.Check.Name, UpDown: updown(msg.Kind), UserID: ch.UserID, EventID: msg.EventID})
 }
 
-// Senders liefert alle Sender des Servers: die des Nodes plus Bruecken-Typen.
+// relaySender: Node-Kanaele (Execution "node") werden als Sendeauftrag an die
+// Node gegeben, alle anderen direkt gesendet.
+type relaySender struct {
+	inner notify.Sender
+	st    *Store
+}
+
+func (r relaySender) Send(ctx context.Context, ch *notify.Channel, m notify.Message) error {
+	if ch.Execution == "node" {
+		nodeID := r.st.NodeOfChannel(ch.ID)
+		if nodeID == "" {
+			return errors.New("node channel without node")
+		}
+		return r.st.AddSendOrder(ctx, nodeID, ch, m)
+	}
+	if r.inner == nil {
+		return errors.New("no sender for type " + string(ch.Type))
+	}
+	return r.inner.Send(ctx, ch, m)
+}
+
+// Senders liefert alle Sender des Servers: die der Node plus Bruecken-Typen;
+// Node-Kanaele werden weitergereicht.
 func Senders(version string, b *Bridge, st *Store) map[notify.Type]notify.Sender {
 	m := notify.Senders(version)
 	m[notify.TypeIPv64Mail] = mailSender{b}
 	m[notify.TypeIPv64SMS] = smsSender{b, st}
 	m[notify.TypeApp] = appSender{b}
-	return m
+	out := map[notify.Type]notify.Sender{}
+	for t, snd := range m {
+		out[t] = relaySender{inner: snd, st: st}
+	}
+	return out
 }

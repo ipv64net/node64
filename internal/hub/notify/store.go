@@ -27,7 +27,8 @@ type Store struct {
 	log *slog.Logger
 
 	mu       sync.RWMutex
-	owner    map[int64]int64 // channel id -> userid (fuer Deliveries)
+	owner    map[int64]int64  // channel id -> userid (fuer Deliveries)
+	nodeOf   map[int64]string // channel id -> node_id bei Node-Kanaelen
 	cache    map[int64]cached
 	setmu    sync.Mutex
 	setcache map[int64]cachedSettings
@@ -45,11 +46,12 @@ type cachedSettings struct {
 
 // New erzeugt den Store. box entschluesselt Kanal-Geheimnisse (secret.key wie auf dem Web-Server).
 func New(db *sql.DB, box *secrets.Box, log *slog.Logger) *Store {
-	return &Store{db: db, box: box, log: log.With("module", "hubnotify"), owner: map[int64]int64{}, cache: map[int64]cached{}, setcache: map[int64]cachedSettings{}}
+	return &Store{db: db, box: box, log: log.With("module", "hubnotify"), owner: map[int64]int64{}, nodeOf: map[int64]string{}, cache: map[int64]cached{}, setcache: map[int64]cachedSettings{}}
 }
 
-// ChannelsFor liefert die aktiven Server-Kanaele eines Accounts (Agent-Kanaele
-// sendet der Node selbst; Sendeauftraege dafuer kommen in Phase 3).
+// ChannelsFor liefert die aktiven Kanaele eines Accounts: Server-Kanaele sendet
+// der hub selbst, Node-Kanaele (node_id gesetzt) werden als Sendeauftrag an die
+// Node gegeben (Execution "node").
 func (s *Store) ChannelsFor(ctx context.Context, userID int64) ([]*notify.Channel, error) {
 	s.mu.RLock()
 	c, ok := s.cache[userID]
@@ -57,8 +59,8 @@ func (s *Store) ChannelsFor(ctx context.Context, userID int64) ([]*notify.Channe
 	if ok && time.Since(c.at) < 30*time.Second {
 		return c.list, nil
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id, type, name, config_enc, enabled, is_default, lang, notify_down, notify_up, verified, revision
-		FROM hc2_channels WHERE userid = ? AND deleted_at IS NULL AND node_id IS NULL ORDER BY name, id`, userID)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, type, name, config_enc, enabled, is_default, lang, notify_down, notify_up, verified, revision, node_id
+		FROM hc2_channels WHERE userid = ? AND deleted_at IS NULL ORDER BY name, id`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -68,12 +70,20 @@ func (s *Store) ChannelsFor(ctx context.Context, userID int64) ([]*notify.Channe
 		var ch notify.Channel
 		var typ, cfg string
 		var enabled, def, nd, nu, verified int
-		if err := rows.Scan(&ch.ID, &typ, &ch.Name, &cfg, &enabled, &def, &ch.Lang, &nd, &nu, &verified, &ch.Revision); err != nil {
+		var nodeID sql.NullString
+		if err := rows.Scan(&ch.ID, &typ, &ch.Name, &cfg, &enabled, &def, &ch.Lang, &nd, &nu, &verified, &ch.Revision, &nodeID); err != nil {
 			return nil, err
 		}
 		ch.UserID, ch.Type = userID, notify.Type(typ)
 		ch.Enabled, ch.Default, ch.NotifyDown, ch.NotifyUp = enabled == 1 && verified == 1, def == 1, nd == 1, nu == 1
 		ch.Execution = "server"
+		if nodeID.Valid && nodeID.String != "" {
+			ch.Execution = "node"
+			s.mu.Lock()
+			s.nodeOf[ch.ID] = nodeID.String
+			s.mu.Unlock()
+			cfg = "" // Geheimnisse der Node bleiben bei der Node
+		}
 		m := map[string]string{}
 		if cfg != "" {
 			if err := json.Unmarshal([]byte(cfg), &m); err != nil {
@@ -112,6 +122,22 @@ func (s *Store) ChannelsFor(ctx context.Context, userID int64) ([]*notify.Channe
 	s.cache[userID] = cached{at: time.Now(), list: list}
 	s.mu.Unlock()
 	return list, nil
+}
+
+// NodeOfChannel liefert die Besitzer-Node eines Node-Kanals.
+func (s *Store) NodeOfChannel(id int64) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.nodeOf[id]
+}
+
+// AddSendOrder legt einen Sendeauftrag fuer einen Node-Kanal an.
+func (s *Store) AddSendOrder(ctx context.Context, nodeID string, ch *notify.Channel, m notify.Message) error {
+	payload, _ := json.Marshal(map[string]any{"title": m.Title, "text": m.Text, "url": m.URL, "priority": m.Priority, "kind": m.Kind, "language": m.Language,
+		"check": m.Check, "payload": m.Payload, "time": m.Time.UTC().Format(time.RFC3339)})
+	_, err := s.db.ExecContext(ctx, `INSERT INTO hc2_send_orders (node_id, channel_id, event_id, kind, payload, created_at) VALUES (?,?,?,?,?,?)`,
+		nodeID, ch.ID, m.EventID, string(m.Kind), string(payload), time.Now().UTC().Format(timeFormat))
+	return err
 }
 
 // Invalidate verwirft den Cache eines Accounts (nach Config-Log-Aenderung).

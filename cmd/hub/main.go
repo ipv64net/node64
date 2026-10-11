@@ -18,6 +18,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/hub/checker"
 	"github.com/ipv64net/node64/internal/hub/config"
+	"github.com/ipv64net/node64/internal/hub/gateway"
 	"github.com/ipv64net/node64/internal/hub/httpapi"
 	hubnotify "github.com/ipv64net/node64/internal/hub/notify"
 	"github.com/ipv64net/node64/internal/hub/store"
@@ -97,8 +98,10 @@ func run(cfgPath string) error {
 	if err != nil {
 		return err
 	}
+	st.SetBox(box)
 	nfStore := hubnotify.New(st.DB(), box, log)
-	dispatcher := notify.NewMultiDispatcher(nfStore, hubnotify.Senders(Version, bridge, nfStore), bundle, nfStore.SettingsFor, log)
+	senders := hubnotify.Senders(Version, bridge, nfStore)
+	dispatcher := notify.NewMultiDispatcher(nfStore, senders, bundle, nfStore.SettingsFor, log)
 	dispatcher.Start(ctx)
 	defer dispatcher.Stop()
 
@@ -112,14 +115,29 @@ func run(cfgPath string) error {
 		defer chk.Stop()
 	}
 
+	var gw *gateway.Gateway
+	if cfg.HasRole("gateway") {
+		gw = gateway.New(st, nfStore, senders, log, Version, cfg.Location, cfg.Limits.MaxConnections)
+		if err := gw.Start(ctx); err != nil {
+			return fmt.Errorf("gateway: %w", err)
+		}
+		defer gw.Stop()
+	}
+
 	status := func() map[string]any {
 		out := map[string]any{"node": cfg.NodeName, "location": cfg.Location, "roles": cfg.Roles, "version": Version}
 		if chk != nil {
 			out["checks"] = chk.Count()
 		}
+		if gw != nil {
+			out["connections"] = gw.Connections()
+		}
 		return out
 	}
 	srv := httpapi.New(cfg.Listen, log, st.Metrics, status)
+	if gw != nil {
+		gw.Register(srv.Mux())
+	}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
 	log.Info("http listening", "addr", cfg.Listen)
