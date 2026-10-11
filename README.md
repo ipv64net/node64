@@ -39,6 +39,10 @@ services:
       # - "8443:8443"   # optional HTTPS, dazu NODE64_HTTPS_PORT=8443 setzen
     volumes:
       - node64-data:/data
+      # Optional: Docker-Container überwachen (siehe "Docker-Container prüfen")
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+    # group_add:
+    #   - "996"   # Gruppe des Sockets: stat -c %g /var/run/docker.sock
     environment:
       NODE64_LOG_LEVEL: info
       # NODE64_HTTPS_PORT: 8443
@@ -53,6 +57,23 @@ services:
 volumes:
   node64-data:
 ```
+
+### Docker-Container prüfen
+
+Der Check-Typ **Docker-Container** fragt die Docker-Engine-API nach dem Zustand eines Containers auf demselben Host (nur lesende Anfragen). Dazu braucht die Node Zugriff auf den Socket:
+
+```yaml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    group_add:
+      - "996"   # stat -c %g /var/run/docker.sock
+```
+
+Bewertung (angelehnt an Uptime Kuma): läuft = OK, läuft mit Healthcheck „healthy“ oder „starting“ = OK, Healthcheck „unhealthy“, gestoppt (mit Exit-Code, OOM), pausiert oder in einer Neustart-Schleife = gestört, nicht vorhanden = gestört. Die Healthchecks-Seite zeigt Docker-Checks in einer eigenen Tabelle und listet Container, die noch nicht überwacht werden, zum Anlegen per Klick.
+
+Docker-Checks laufen nur lokal auf der Node; sie lassen sich nicht online prüfen oder umhängen. Mit ipv64 verknüpft wird ihr Zustand trotzdem gemeldet und ist im Portal sichtbar.
+
+**Sicherheit:** Wer den Docker-Socket hat, kann den Host steuern – auch mit `:ro` (das schützt nur die Datei, nicht die API). Die Node sendet ausschließlich GET-Anfragen. Wer das Risiko begrenzen will, setzt einen [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) mit `CONTAINERS=1` davor und trägt in der Node `NODE64_DOCKER_HOST=tcp://socket-proxy:2375` ein (oder je Check unter „Docker-Host“).
 
 ## Lokale API
 
