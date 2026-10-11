@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -69,6 +70,7 @@ type Check struct {
 	Policy         string   // all | any | majority (Gesamtzustand aus mehreren Messstellen)
 	Locations      []string // Online-Standorte, leer = Vorgabe des Servers
 	NotifyDegraded bool     // auch bei "teilweise gestoert" benachrichtigen
+	Owner          string   // self (hier gemessen), online (nur bei ipv64), other (andere Node)
 	NotifyDown     bool
 	NotifyUp       bool
 	Channels       []int64
@@ -97,6 +99,28 @@ type Store struct {
 	w, r  *sql.DB
 	mu    sync.RWMutex
 	maint []Maintenance // Cache der Wartungsfenster
+
+	// Sync-Hooks (nil = standalone). OnChange nach jeder lokalen Konfigurations-
+	// aenderung (nicht bei Aenderungen, die vom Server kommen: WithRemote);
+	// OnRuntime nach jedem gespeicherten Laufzeitzustand.
+	OnChange  func(ctx context.Context, entity, id, op string)
+	OnRuntime func(token string, rt scheduler.Runtime)
+}
+
+type remoteKey struct{}
+
+// WithRemote markiert einen Kontext als "Aenderung kommt vom Server" (kein Outbox-Eintrag).
+func WithRemote(ctx context.Context) context.Context {
+	return context.WithValue(ctx, remoteKey{}, true)
+}
+
+// IsRemote sagt, ob der Kontext vom Server stammt.
+func IsRemote(ctx context.Context) bool { v, _ := ctx.Value(remoteKey{}).(bool); return v }
+
+func (s *Store) changed(ctx context.Context, entity, id, op string) {
+	if s.OnChange != nil && !IsRemote(ctx) {
+		s.OnChange(ctx, entity, id, op)
+	}
 }
 
 func NewStore(core *store.Store) *Store { return &Store{w: core.Writer(), r: core.Reader()} }
@@ -116,7 +140,7 @@ func NewToken() string {
 
 const checkCols = `token, type, name, target, params, interval_sec, retry_interval_sec, retries, connect_timeout_ms, total_timeout_ms,
 	invert, stabilize, ip_mode, tags, description, paused, parent_token, critical, execution, notify_down, notify_up, channels, repeat_minutes,
-	policy, locations, notify_degraded,
+	policy, locations, notify_degraded, owner,
 	revision, created_at, updated_at, updated_by,
 	state, state_since, last_check_at, next_check_at, consecutive_fail, consecutive_ok, last_status, last_latency_ms, last_reason, last_message,
 	last_push_at, down_since, flap_since, transitions, incident_id`
@@ -131,7 +155,7 @@ func scanCheck(row interface{ Scan(...any) error }) (*Check, error) {
 	var lastReason, lastMsg string
 	if err := row.Scan(&c.Token, &c.Type, &c.Name, &c.Target, &params, &iv, &riv, &c.Retries, &cto, &tto,
 		&invert, &c.Stabilize, &c.IPMode, &tags, &c.Description, &paused, &c.Parent, &critical, &c.Execution, &nd, &nu, &channels, &c.RepeatMinutes,
-		&c.Policy, &locations, &ndeg,
+		&c.Policy, &locations, &ndeg, &c.Owner,
 		&c.Revision, &created, &updated, &c.UpdatedBy,
 		&state, &since, &last, &next, &c.Runtime.ConsecutiveFail, &c.Runtime.ConsecutiveOK, &lastStatus, &lastLat, &lastReason, &lastMsg,
 		&lastPush, &downSince, &flapSince, &transitions, &c.Runtime.Incident); err != nil {
@@ -233,13 +257,19 @@ func (s *Store) Insert(ctx context.Context, c *Check) error {
 	if c.Policy == "" {
 		c.Policy = "all"
 	}
-	_, err := s.w.ExecContext(ctx, `INSERT INTO hc_checks (`+checkCols+`) VALUES (`+strings.TrimSuffix(strings.Repeat("?,", 45), ",")+`)`,
+	if c.Owner == "" {
+		c.Owner = "self"
+	}
+	_, err := s.w.ExecContext(ctx, `INSERT INTO hc_checks (`+checkCols+`) VALUES (`+strings.TrimSuffix(strings.Repeat("?,", 46), ",")+`)`,
 		c.Token, string(c.Type), c.Name, c.Target, string(c.Params), int64(c.Interval.Seconds()), int64(c.RetryInterval.Seconds()), c.Retries,
 		c.ConnectTimeout.Milliseconds(), c.TotalTimeout.Milliseconds(), b2i(c.Invert), c.Stabilize, string(c.IPMode), strings.Join(c.Tags, ","), c.Description,
 		b2i(c.Paused), c.Parent, b2i(c.Critical), c.Execution, b2i(c.NotifyDown), b2i(c.NotifyUp), joinInts(c.Channels), c.RepeatMinutes,
-		c.Policy, strings.Join(c.Locations, ","), b2i(c.NotifyDegraded),
+		c.Policy, strings.Join(c.Locations, ","), b2i(c.NotifyDegraded), c.Owner,
 		c.Revision, now, now, c.UpdatedBy,
 		"pending", now, "", "", 0, 0, "", 0.0, "", "", "", "", "", "", 0)
+	if err == nil {
+		s.changed(ctx, "check", c.Token, "upsert")
+	}
 	return err
 }
 
@@ -250,13 +280,29 @@ func (s *Store) Update(ctx context.Context, c *Check) error {
 	c.Revision++
 	_, err := s.w.ExecContext(ctx, `UPDATE hc_checks SET type=?, name=?, target=?, params=?, interval_sec=?, retry_interval_sec=?, retries=?,
 		connect_timeout_ms=?, total_timeout_ms=?, invert=?, stabilize=?, ip_mode=?, tags=?, description=?, paused=?, parent_token=?, critical=?,
-		execution=?, notify_down=?, notify_up=?, channels=?, repeat_minutes=?, policy=?, locations=?, notify_degraded=?,
+		execution=?, notify_down=?, notify_up=?, channels=?, repeat_minutes=?, policy=?, locations=?, notify_degraded=?, owner=?,
 		revision=?, updated_at=?, updated_by=? WHERE token=?`,
 		string(c.Type), c.Name, c.Target, string(c.Params), int64(c.Interval.Seconds()), int64(c.RetryInterval.Seconds()), c.Retries,
 		c.ConnectTimeout.Milliseconds(), c.TotalTimeout.Milliseconds(), b2i(c.Invert), c.Stabilize, string(c.IPMode), strings.Join(c.Tags, ","), c.Description,
 		b2i(c.Paused), c.Parent, b2i(c.Critical), c.Execution, b2i(c.NotifyDown), b2i(c.NotifyUp), joinInts(c.Channels), c.RepeatMinutes,
-		c.Policy, strings.Join(c.Locations, ","), b2i(c.NotifyDegraded),
+		c.Policy, strings.Join(c.Locations, ","), b2i(c.NotifyDegraded), orSelf(c.Owner),
 		c.Revision, now, c.UpdatedBy, c.Token)
+	if err == nil {
+		s.changed(ctx, "check", c.Token, "upsert")
+	}
+	return err
+}
+
+func orSelf(o string) string {
+	if o == "" {
+		return "self"
+	}
+	return o
+}
+
+// SetRevision setzt die vom Server vergebene Revision (ohne Hook).
+func (s *Store) SetRevision(ctx context.Context, token string, rev int64) error {
+	_, err := s.w.ExecContext(ctx, `UPDATE hc_checks SET revision=? WHERE token=?`, rev, token)
 	return err
 }
 
@@ -268,6 +314,9 @@ func (s *Store) SetPaused(ctx context.Context, token string, paused bool, by str
 	}
 	_, err := s.w.ExecContext(ctx, `UPDATE hc_checks SET paused=?, state=?, state_since=?, updated_at=?, updated_by=?, revision=revision+1 WHERE token=?`,
 		b2i(paused), st, ft(time.Now()), ft(time.Now()), by, token)
+	if err == nil {
+		s.changed(ctx, "check", token, "upsert")
+	}
 	return err
 }
 
@@ -296,7 +345,11 @@ func (s *Store) Delete(ctx context.Context, token string) error {
 	if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO hc_tombstones (token, revision, deleted_at) VALUES (?, ?, ?)`, token, rev, ft(time.Now())); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.changed(ctx, "check", token, "delete")
+	return nil
 }
 
 // ---------------------------------------------------------------- scheduler.Store
@@ -331,6 +384,9 @@ func (s *Store) SaveRuntime(ctx context.Context, token string, rt scheduler.Runt
 		last_status=?, last_latency_ms=?, last_reason=?, last_message=?, last_push_at=?, down_since=?, flap_since=?, transitions=?, incident_id=? WHERE token=?`,
 		string(rt.State), ft(rt.Since), ft(rt.LastCheck), ft(rt.NextCheck), rt.ConsecutiveFail, rt.ConsecutiveOK,
 		string(rt.LastStatus), msf(rt.LastLatency), string(rt.LastReason), rt.LastMessage, ft(rt.LastPush), ft(rt.DownSince), ft(rt.FlapSince), strings.Join(tr, ","), rt.Incident, token)
+	if err == nil && s.OnRuntime != nil {
+		s.OnRuntime(token, rt)
+	}
 	return err
 }
 
@@ -695,6 +751,8 @@ func (s *Store) Aggregate(ctx context.Context, now time.Time) error {
 
 type Maintenance struct {
 	ID          int64     `json:"id"`
+	RemoteID    int64     `json:"remote_id,omitempty"`
+	Revision    int64     `json:"revision,omitempty"`
 	Name        string    `json:"name"`
 	StartAt     time.Time `json:"start_at"`
 	EndAt       time.Time `json:"end_at"`
@@ -759,7 +817,7 @@ func (m Maintenance) Covers(token string, t time.Time) bool {
 }
 
 func (s *Store) MaintenanceList(ctx context.Context) ([]Maintenance, error) {
-	rows, err := s.r.QueryContext(ctx, `SELECT id, name, start_at, end_at, repeat, repeat_until, tokens, active, created_at FROM hc_maintenance ORDER BY start_at DESC`)
+	rows, err := s.r.QueryContext(ctx, `SELECT id, name, start_at, end_at, repeat, repeat_until, tokens, active, created_at, remote_id, revision FROM hc_maintenance ORDER BY start_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -769,7 +827,7 @@ func (s *Store) MaintenanceList(ctx context.Context) ([]Maintenance, error) {
 		var m Maintenance
 		var st, en, until, tokens, created string
 		var active int
-		if err := rows.Scan(&m.ID, &m.Name, &st, &en, &m.Repeat, &until, &tokens, &active, &created); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &st, &en, &m.Repeat, &until, &tokens, &active, &created, &m.RemoteID, &m.Revision); err != nil {
 			return nil, err
 		}
 		m.StartAt, m.EndAt, m.RepeatUntil, m.CreatedAt = pt(st), pt(en), pt(until), pt(created)
@@ -784,27 +842,48 @@ func (s *Store) MaintenanceList(ctx context.Context) ([]Maintenance, error) {
 }
 
 func (s *Store) MaintenanceInsert(ctx context.Context, m *Maintenance) error {
-	res, err := s.w.ExecContext(ctx, `INSERT INTO hc_maintenance (name, start_at, end_at, repeat, repeat_until, tokens, active, created_at) VALUES (?,?,?,?,?,?,?,?)`,
-		m.Name, ft(m.StartAt), ft(m.EndAt), m.Repeat, ft(m.RepeatUntil), strings.Join(m.Tokens, ","), b2i(m.Active), ft(time.Now()))
+	res, err := s.w.ExecContext(ctx, `INSERT INTO hc_maintenance (name, start_at, end_at, repeat, repeat_until, tokens, active, created_at, remote_id, revision) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		m.Name, ft(m.StartAt), ft(m.EndAt), m.Repeat, ft(m.RepeatUntil), strings.Join(m.Tokens, ","), b2i(m.Active), ft(time.Now()), m.RemoteID, max(m.Revision, 1))
 	if err != nil {
 		return err
 	}
 	m.ID, _ = res.LastInsertId()
 	s.reloadMaintenance(ctx)
+	s.changed(ctx, "maintenance", strconv.FormatInt(m.ID, 10), "upsert")
 	return nil
 }
 
 func (s *Store) MaintenanceUpdate(ctx context.Context, m *Maintenance) error {
-	_, err := s.w.ExecContext(ctx, `UPDATE hc_maintenance SET name=?, start_at=?, end_at=?, repeat=?, repeat_until=?, tokens=?, active=? WHERE id=?`,
-		m.Name, ft(m.StartAt), ft(m.EndAt), m.Repeat, ft(m.RepeatUntil), strings.Join(m.Tokens, ","), b2i(m.Active), m.ID)
+	_, err := s.w.ExecContext(ctx, `UPDATE hc_maintenance SET name=?, start_at=?, end_at=?, repeat=?, repeat_until=?, tokens=?, active=?, remote_id=CASE WHEN ?>0 THEN ? ELSE remote_id END, revision=CASE WHEN ?>0 THEN ? ELSE revision+1 END WHERE id=?`,
+		m.Name, ft(m.StartAt), ft(m.EndAt), m.Repeat, ft(m.RepeatUntil), strings.Join(m.Tokens, ","), b2i(m.Active), m.RemoteID, m.RemoteID, m.Revision, m.Revision, m.ID)
 	s.reloadMaintenance(ctx)
+	if err == nil {
+		s.changed(ctx, "maintenance", strconv.FormatInt(m.ID, 10), "upsert")
+	}
 	return err
 }
 
 func (s *Store) MaintenanceDelete(ctx context.Context, id int64) error {
 	_, err := s.w.ExecContext(ctx, `DELETE FROM hc_maintenance WHERE id = ?`, id)
 	s.reloadMaintenance(ctx)
+	if err == nil {
+		s.changed(ctx, "maintenance", strconv.FormatInt(id, 10), "delete")
+	}
 	return err
+}
+
+// MaintenanceByRemote findet ein Wartungsfenster ueber seine Server-ID.
+func (s *Store) MaintenanceByRemote(ctx context.Context, remoteID int64) (*Maintenance, error) {
+	list, err := s.MaintenanceList(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		if list[i].RemoteID == remoteID {
+			return &list[i], nil
+		}
+	}
+	return nil, nil
 }
 
 func (s *Store) reloadMaintenance(ctx context.Context) {

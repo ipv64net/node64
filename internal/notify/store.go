@@ -27,13 +27,13 @@ func NewStore(core *store.Store, box *secrets.Box) *Store {
 	return &Store{w: core.Writer(), r: core.Reader(), box: box}
 }
 
-const channelCols = `id, type, name, config, enabled, is_default, lang, notify_down, notify_up, secret_only_local, execution, revision, created_at, updated_at, last_used_at, last_error`
+const channelCols = `id, type, name, config, enabled, is_default, lang, notify_down, notify_up, secret_only_local, execution, revision, created_at, updated_at, last_used_at, last_error, remote_id`
 
 func (s *Store) scan(row interface{ Scan(...any) error }) (*Channel, error) {
 	var c Channel
 	var cfg, created, updated, used string
 	var enabled, def, nd, nu, sol int
-	if err := row.Scan(&c.ID, &c.Type, &c.Name, &cfg, &enabled, &def, &c.Lang, &nd, &nu, &sol, &c.Execution, &c.Revision, &created, &updated, &used, &c.LastError); err != nil {
+	if err := row.Scan(&c.ID, &c.Type, &c.Name, &cfg, &enabled, &def, &c.Lang, &nd, &nu, &sol, &c.Execution, &c.Revision, &created, &updated, &used, &c.LastError, &c.RemoteID); err != nil {
 		return nil, err
 	}
 	c.Enabled, c.Default, c.NotifyDown, c.NotifyUp, c.SecretOnlyLocal = enabled == 1, def == 1, nd == 1, nu == 1, sol == 1
@@ -85,18 +85,52 @@ func b2i(b bool) int {
 	return 0
 }
 
+// OnChange (Sync): nach lokalen Aenderungen an Kanaelen; nil = standalone.
+var OnChange func(ctx context.Context, id int64, op string)
+
+type remoteKey struct{}
+
+// WithRemote markiert Aenderungen, die vom Server kommen (kein Outbox-Eintrag).
+func WithRemote(ctx context.Context) context.Context {
+	return context.WithValue(ctx, remoteKey{}, true)
+}
+
+func changed(ctx context.Context, id int64, op string) {
+	if OnChange != nil {
+		if v, _ := ctx.Value(remoteKey{}).(bool); !v {
+			OnChange(ctx, id, op)
+		}
+	}
+}
+
+// ByRemote findet einen Kanal ueber seine Server-ID.
+func (s *Store) ByRemote(ctx context.Context, remoteID int64) (*Channel, error) {
+	c, err := s.scan(s.r.QueryRowContext(ctx, `SELECT `+channelCols+` FROM nf_channels WHERE remote_id = ?`, remoteID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return c, err
+}
+
+// SetRemote setzt Server-ID und Revision (ohne Hook).
+func (s *Store) SetRemote(ctx context.Context, id, remoteID, revision int64) error {
+	_, err := s.w.ExecContext(ctx, `UPDATE nf_channels SET remote_id = ?, revision = ? WHERE id = ?`, remoteID, revision, id)
+	return err
+}
+
 func (s *Store) Insert(ctx context.Context, c *Channel) error {
 	cfg, err := encodeConfig(s.box, c.Type, c.Config)
 	if err != nil {
 		return err
 	}
 	now := store.Now()
-	res, err := s.w.ExecContext(ctx, `INSERT INTO nf_channels (type, name, config, enabled, is_default, lang, notify_down, notify_up, secret_only_local, execution, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`, string(c.Type), c.Name, cfg, b2i(c.Enabled), b2i(c.Default), c.Lang, b2i(c.NotifyDown), b2i(c.NotifyUp), b2i(c.SecretOnlyLocal), c.Execution, now, now)
+	res, err := s.w.ExecContext(ctx, `INSERT INTO nf_channels (type, name, config, enabled, is_default, lang, notify_down, notify_up, secret_only_local, execution, created_at, updated_at, remote_id, revision)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, string(c.Type), c.Name, cfg, b2i(c.Enabled), b2i(c.Default), c.Lang, b2i(c.NotifyDown), b2i(c.NotifyUp), b2i(c.SecretOnlyLocal), c.Execution, now, now, c.RemoteID, max(c.Revision, 1))
 	if err != nil {
 		return err
 	}
 	c.ID, _ = res.LastInsertId()
+	changed(ctx, c.ID, "upsert")
 	return nil
 }
 
@@ -105,13 +139,19 @@ func (s *Store) Update(ctx context.Context, c *Channel) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.w.ExecContext(ctx, `UPDATE nf_channels SET type=?, name=?, config=?, enabled=?, is_default=?, lang=?, notify_down=?, notify_up=?, secret_only_local=?, revision=revision+1, updated_at=? WHERE id=?`,
-		string(c.Type), c.Name, cfg, b2i(c.Enabled), b2i(c.Default), c.Lang, b2i(c.NotifyDown), b2i(c.NotifyUp), b2i(c.SecretOnlyLocal), store.Now(), c.ID)
+	_, err = s.w.ExecContext(ctx, `UPDATE nf_channels SET type=?, name=?, config=?, enabled=?, is_default=?, lang=?, notify_down=?, notify_up=?, secret_only_local=?, revision=CASE WHEN ?>0 THEN ? ELSE revision+1 END, updated_at=? WHERE id=?`,
+		string(c.Type), c.Name, cfg, b2i(c.Enabled), b2i(c.Default), c.Lang, b2i(c.NotifyDown), b2i(c.NotifyUp), b2i(c.SecretOnlyLocal), c.Revision, c.Revision, store.Now(), c.ID)
+	if err == nil {
+		changed(ctx, c.ID, "upsert")
+	}
 	return err
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {
 	_, err := s.w.ExecContext(ctx, `DELETE FROM nf_channels WHERE id = ?`, id)
+	if err == nil {
+		changed(ctx, id, "delete")
+	}
 	return err
 }
 
