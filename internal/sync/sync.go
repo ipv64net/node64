@@ -630,11 +630,8 @@ func (c *Live) applyChanges(ctx context.Context, changes []wire.Change, revision
 				}
 			}
 		case "node":
-			var n struct {
-				Name, Location, RemoteMgmt string `json:"-"`
-			}
-			_ = n
-			// Name/Standort/Remote-Verwaltung kommen ueber /me beim naechsten hello
+			// Name/Standort/Fernverwaltung wurden im Portal geaendert: sofort nachladen
+			c.refreshMe(ctx)
 		}
 		if err != nil {
 			c.log.Warn("apply change failed", "entity", ch.Entity, "id", ch.ID, "op", ch.Op, "err", err)
@@ -802,6 +799,27 @@ func (c *Live) onChannelChange(ctx context.Context, id int64, op string) {
 		return
 	}
 	c.poke()
+}
+
+// refreshMe holt Name, Standort und Fernverwaltung vom hub (nach Aenderung im Portal).
+func (c *Live) refreshMe(ctx context.Context) {
+	resp, err := c.get(ctx, c.hubURL()+"/v1/nodes/me", c.token())
+	if err != nil {
+		return
+	}
+	var me struct {
+		Name       string `json:"name"`
+		Location   string `json:"location"`
+		RemoteMgmt string `json:"remote_mgmt"`
+	}
+	if json.Unmarshal(resp, &me) != nil || me.Name == "" {
+		return
+	}
+	c.set(SetNodeName, me.Name)
+	c.set(SetLocation, me.Location)
+	if me.RemoteMgmt != "" {
+		c.set(SetRemoteMgmt, me.RemoteMgmt)
+	}
 }
 
 func (c *Live) localToRemote(ctx context.Context) healthchecks.ChannelMap {

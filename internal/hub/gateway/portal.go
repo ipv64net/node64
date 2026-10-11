@@ -115,8 +115,16 @@ func (g *Gateway) portalChannelTest(w http.ResponseWriter, r *http.Request) {
 	}
 	sctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
-	if err := s.Send(sctx, ch, m); err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+	err = s.Send(sctx, ch, m)
+	errText := ""
+	if err != nil {
+		errText = err.Error()
+	}
+	// Zustellprotokoll und last_used/last_error wie beim Dispatcher
+	_ = g.nf.AddDelivery(ctx, notify.Delivery{Time: m.Time, EventID: m.EventID, ChannelID: ch.ID, Channel: ch.Name, Kind: string(m.Kind), OK: err == nil, Error: errText})
+	_ = g.nf.Touch(ctx, ch.ID, errText)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": errText})
 		return
 	}
 	out := map[string]any{"ok": true}

@@ -65,9 +65,10 @@ func (s *Store) PendingTestruns(ctx context.Context, loc string) ([]Testrun, err
 
 // TestrunResult traegt das Ergebnis einer Messstelle ein und schliesst den Lauf ab, wenn alles da ist.
 func (s *Store) TestrunResult(ctx context.Context, id int64, key string, o TestrunOutcome) error {
-	b, _ := json.Marshal(o)
-	if _, err := s.db.ExecContext(ctx, `UPDATE hc2_testruns SET status = IF(status = 'pending', 'running', status), result = JSON_SET(COALESCE(result, '{}'), ?, CAST(? AS JSON)) WHERE id = ? AND status IN ('pending','running')`,
-		"$."+key, string(b), id); err != nil {
+	// MariaDB kennt kein CAST(... AS JSON): Teilergebnis als Dokument {"<key>": {...}} einmischen
+	b, _ := json.Marshal(map[string]TestrunOutcome{key: o})
+	if _, err := s.db.ExecContext(ctx, `UPDATE hc2_testruns SET status = IF(status = 'pending', 'running', status), result = JSON_MERGE_PATCH(COALESCE(result, '{}'), ?) WHERE id = ? AND status IN ('pending','running')`,
+		string(b), id); err != nil {
 		return err
 	}
 	return s.finalizeTestrun(ctx, id)
