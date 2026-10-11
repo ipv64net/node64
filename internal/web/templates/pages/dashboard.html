@@ -40,6 +40,31 @@
 	</div>
 	<div class="col-md-6 col-xl-4">
 		<div class="card h-100">
+			<div class="card-header"><i class="bi bi-hdd"></i> {{.T "dashboard.storage"}}</div>
+			<div class="card-body">
+				<dl class="row mb-0 small">
+					<dt class="col-6">{{.T "dashboard.storage_total"}}</dt><dd class="col-6 fw-semibold">{{.Bytes $d.Data.Total}}</dd>
+					<dt class="col-6">{{.T "dashboard.database"}}</dt><dd class="col-6">{{.Bytes $d.Data.DB}}{{if $d.Data.WAL}} <span class="text-body-secondary">+ {{.Bytes $d.Data.WAL}} WAL</span>{{end}}</dd>
+					<dt class="col-6">{{.T "dashboard.backups"}}</dt><dd class="col-6">{{.Bytes $d.Data.Backups}} <span class="text-body-secondary">({{$d.Data.Backupfiles}})</span></dd>
+					{{with index $d.Data.Rows "hc_measurements"}}<dt class="col-6">{{$.T "dashboard.rows_measurements"}}</dt><dd class="col-6">{{$.Int .}}</dd>{{end}}
+					{{with index $d.Data.Rows "hc_events"}}<dt class="col-6">{{$.T "dashboard.rows_events"}}</dt><dd class="col-6">{{$.Int .}}</dd>{{end}}
+					{{with index $d.Data.Rows "nf_deliveries"}}<dt class="col-6">{{$.T "dashboard.rows_deliveries"}}</dt><dd class="col-6">{{$.Int .}}</dd>{{end}}
+				</dl>
+				<hr class="my-2">
+				<div class="small fw-semibold mb-1"><i class="bi bi-arrow-down-up"></i> {{.T "dashboard.traffic"}}</div>
+				{{if $d.NetOK}}
+				<dl class="row mb-0 small">
+					<dt class="col-6">{{.T "dashboard.traffic_start"}}</dt><dd class="col-6">↓ {{.Bytes $d.NetRx}} · ↑ {{.Bytes $d.NetTx}}</dd>
+					<dt class="col-6">{{.T "dashboard.traffic_total"}}</dt><dd class="col-6">↓ {{.Bytes $d.NetRxTot}} · ↑ {{.Bytes $d.NetTxTot}}</dd>
+					{{if not $d.NetSince.IsZero}}<dt class="col-6">{{.T "dashboard.traffic_since"}}</dt><dd class="col-6">{{.Date $d.NetSince}}</dd>{{end}}
+					{{if .Sync.Linked}}<dt class="col-6">{{.T "dashboard.traffic_sync"}}</dt><dd class="col-6">↓ {{.Bytes .Sync.RxBytes}} · ↑ {{.Bytes .Sync.TxBytes}}</dd>{{end}}
+				</dl>
+				{{else}}<div class="small text-body-secondary">{{.T "dashboard.traffic_na"}}</div>{{end}}
+			</div>
+		</div>
+	</div>
+	<div class="col-md-6 col-xl-4">
+		<div class="card h-100">
 			<div class="card-header"><i class="bi bi-grid"></i> {{.T "dashboard.modules"}}</div>
 			<div class="card-body">
 				<ul class="list-unstyled mb-0 small">
@@ -60,7 +85,24 @@
 		<div class="card h-100">
 			<div class="card-header"><i class="bi bi-cloud"></i> {{.T "dashboard.link_status"}}</div>
 			<div class="card-body small">
-				{{if .Sync.Linked}}<i class="bi bi-cloud-check text-success"></i> ipv64.net{{else}}<i class="bi bi-cloud-slash text-body-secondary"></i> {{.T "dashboard.not_linked"}}{{end}}
+				{{if .Sync.Linked}}{{$s := .Sync}}
+				<div class="mb-2">{{if $s.Connected}}<span class="badge text-bg-success"><i class="bi bi-cloud-check"></i> {{.T "link.connected"}}</span>{{else}}<span class="badge text-bg-warning"><i class="bi bi-cloud-slash"></i> {{.T "link.disconnected"}}</span>{{end}}
+					{{if $s.Hub}}<span class="text-body-secondary ms-1">{{$s.Hub}}</span>{{end}}</div>
+				<dl class="row mb-0">
+					<dt class="col-6">{{.T "dashboard.link_account"}}</dt><dd class="col-6">#{{$s.AccountID}}{{if $s.Plan}} · {{$s.Plan}}{{end}}</dd>
+					{{if $s.NodeName}}<dt class="col-6">{{.T "dashboard.link_name"}}</dt><dd class="col-6">{{$s.NodeName}}{{if $s.Location}} <span class="text-body-secondary">({{$s.Location}})</span>{{end}}</dd>{{end}}
+					{{if not $d.ConnectedAt.IsZero}}<dt class="col-6">{{.T "dashboard.link_connected_since"}}</dt><dd class="col-6">{{.Ago $d.ConnectedAt}}</dd>{{end}}
+					<dt class="col-6">{{.T "dashboard.link_last_sync"}}</dt><dd class="col-6">{{if $d.LastSync.IsZero}}–{{else}}{{.Ago $d.LastSync}}{{end}}</dd>
+					<dt class="col-6">{{.T "dashboard.link_checks"}}</dt><dd class="col-6">{{$d.Own}} {{.T "dashboard.link_own"}}{{if $d.Hybrid}} · {{$d.Hybrid}} {{.T "dashboard.link_hybrid"}}{{end}}{{if $d.OnlineOnly}} · {{$d.OnlineOnly}} {{.T "dashboard.link_online"}}{{end}}{{if $d.Other}} · {{$d.Other}} {{.T "dashboard.link_other"}}{{end}}</dd>
+					<dt class="col-6">{{.T "dashboard.link_points"}}</dt><dd class="col-6">{{$d.OnlinePoints}} / {{if $s.OnlineLimit}}{{$s.OnlineLimit}}{{else}}∞{{end}}{{if $s.Locations}} <span class="text-body-secondary">· {{$s.Locations}} {{.T "dashboard.link_locs"}}</span>{{end}}</dd>
+					<dt class="col-6">{{.T "dashboard.link_outbox"}}</dt><dd class="col-6">{{$s.Outbox}}{{if $s.Conflicts}} · <a class="text-danger" href="/link">{{$s.Conflicts}} {{.T "dashboard.link_conflicts"}}</a>{{end}}</dd>
+					<dt class="col-6">{{.T "dashboard.link_remote"}}</dt><dd class="col-6">{{.T (print "dashboard.remote_" $s.RemoteMgmt)}}</dd>
+					<dt class="col-6">{{.T "dashboard.link_revision"}}</dt><dd class="col-6">{{$s.Revision}}</dd>
+					{{if not $d.LinkedAt.IsZero}}<dt class="col-6">{{.T "dashboard.link_since"}}</dt><dd class="col-6">{{.Date $d.LinkedAt}}</dd>{{end}}
+				</dl>
+				{{if $s.LastError}}{{if not $s.Connected}}<div class="alert alert-warning py-1 px-2 small mt-2 mb-0 text-break">{{$s.LastError}}</div>{{end}}{{end}}
+				<a class="btn btn-sm btn-outline-secondary mt-2" href="/link">{{.T "dashboard.link_details"}}</a>
+				{{else}}<i class="bi bi-cloud-slash text-body-secondary"></i> {{.T "dashboard.not_linked"}}<br><a class="btn btn-sm btn-outline-primary mt-2" href="/link"><i class="bi bi-cloud-plus"></i> {{.T "link.start"}}</a>{{end}}
 			</div>
 		</div>
 	</div>

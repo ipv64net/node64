@@ -119,6 +119,7 @@ func (c *Live) runSession(ctx context.Context, hub string) error {
 	c.mu.Lock()
 	c.ws = s
 	c.connected, c.hub = true, hub
+	c.connAt = time.Now()
 	c.lastErr = ""
 	c.mu.Unlock()
 	c.set(SetHub, hub)
@@ -149,6 +150,7 @@ func (c *Live) runSession(ctx context.Context, hub string) error {
 func (s *session) reader() error {
 	for {
 		_, data, err := s.ws.Read(s.ctx)
+		s.c.rxBytes.Add(int64(len(data)))
 		if err != nil {
 			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
 				return errBye
@@ -243,6 +245,7 @@ func (s *session) send(m wire.Msg) error {
 	if err != nil {
 		return err
 	}
+	s.c.txBytes.Add(int64(len(b)))
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
 	wctx, cancel := context.WithTimeout(s.ctx, 15*time.Second)

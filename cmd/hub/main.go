@@ -140,6 +140,11 @@ func run(cfgPath string) error {
 		return out
 	}
 	srv := httpapi.New(cfg.Listen, log, st.Metrics, status)
+	locName := map[string]string{"fsn": "Falkenstein (Deutschland)", "nbg": "Nürnberg (Deutschland)"}[cfg.Location]
+	if locName == "" {
+		locName = cfg.Location
+	}
+	srv.RegisterInfo(httpapi.Info{Name: cfg.NodeName, Location: locName, Version: Version})
 	if gw != nil {
 		gw.Register(srv.Mux())
 		gw.RegisterPortal(srv.Mux())

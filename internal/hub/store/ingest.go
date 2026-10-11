@@ -85,8 +85,16 @@ func (s *Store) writeIngest(batch []ingestJob) error {
 		}
 	}
 	if n > 0 {
-		if _, err := s.db.ExecContext(ctx, sb.String(), args...); err != nil {
+		var err error
+		for try := 0; try < 3; try++ { // Sperrkonflikte (z. B. mit der Verdichtung) kurz abwarten
+			if _, err = s.db.ExecContext(ctx, sb.String(), args...); err == nil {
+				break
+			}
+			time.Sleep(time.Duration(200*(try+1)) * time.Millisecond)
+		}
+		if err != nil {
 			s.Metrics.add(&s.Metrics.DBErrors, 1)
+			s.log.Error("node measurements insert failed", "rows", n, "err", err)
 			return err
 		}
 		s.Metrics.add(&s.Metrics.Measurements, int64(n))

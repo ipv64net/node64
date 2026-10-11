@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ipv64net/node64/internal/netstat"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -225,6 +226,15 @@ type dashboardData struct {
 	DBSize    int64
 	Modules   []module.Status
 	Boards    []module.DashboardInfo
+	Data      store.DataStats
+	// Netzverkehr des Containers: seit Start und gesamt (ueber Neustarts)
+	NetOK              bool
+	NetRx, NetTx       int64
+	NetRxTot, NetTxTot int64
+	NetSince           time.Time
+	// Checks nach Besitzer (verknuepft)
+	Own, Hybrid, OnlineOnly, Other, OnlinePoints int
+	ConnectedAt, LastSync, LinkedAt              time.Time
 }
 
 func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
@@ -239,6 +249,39 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 		Modules:   s.Modules.List(ctx),
 	}
 	d := v.Data.(dashboardData)
+	d.Data = s.Store.Stats(ctx)
+	d.NetRx, d.NetTx, d.NetOK = netstat.Read()
+	d.NetRxTot, d.NetTxTot, d.NetSince = netstat.Totals(ctx, s.Store)
+	if d.NetRxTot < d.NetRx { // erste Minute nach dem allerersten Start
+		d.NetRxTot, d.NetTxTot = d.NetRx, d.NetTx
+	}
+	if s.HC != nil {
+		if list, err := s.HC.AllChecks(ctx); err == nil {
+			for _, c := range list {
+				switch {
+				case c.Owner == "other":
+					d.Other++
+				case c.Owner == "online" || c.Execution == "online":
+					d.OnlineOnly++
+				case c.Execution == "both":
+					d.Hybrid++
+				default:
+					d.Own++
+				}
+				if c.Execution == "online" || c.Execution == "both" {
+					n := len(c.Locations)
+					if n == 0 {
+						n = 2
+					}
+					d.OnlinePoints += n
+				}
+			}
+		}
+	}
+	st := v.Sync
+	d.ConnectedAt, _ = time.Parse(time.RFC3339, st.ConnectedAt)
+	d.LastSync, _ = time.Parse(time.RFC3339, st.LastSyncAt)
+	d.LinkedAt, _ = time.Parse(time.RFC3339, st.LinkedAt)
 	for _, m := range s.Modules.Modules() {
 		p, ok := m.(module.DashboardProvider)
 		if !ok || !s.Modules.IsRunning(m.Info().Name) {

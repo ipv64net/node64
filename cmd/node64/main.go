@@ -12,6 +12,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/ipv64net/node64/internal/netstat"
 	"log/slog"
 	"net"
 	"net/http"
@@ -126,6 +127,7 @@ func run() error {
 	syncClient := nodesync.New(nodesync.Deps{Core: st, HC: hcModule, NF: nfStore, Box: box, Version: Version, Log: logger.Slog(), Senders: notify.Senders(Version)})
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(func() bool { return syncClient.State().Connected })
+	go netstat.Loop(ctx, st) // Datenverkehr des Containers fuer das Dashboard
 	if err := syncClient.Start(ctx); err != nil {
 		log.Warn("sync start failed", "err", err)
 	}

@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ipv64net/node64/internal/healthchecks"
@@ -74,6 +75,11 @@ type State struct {
 	LastError   string
 	PendingCode string
 	Requesting  bool // Code wird gerade beim hub angefordert (laeuft im Hintergrund)
+	ConnectedAt string // seit wann die aktuelle Verbindung steht
+	RxBytes     int64  // Sync-Verkehr seit Start (empfangen)
+	TxBytes     int64  // Sync-Verkehr seit Start (gesendet)
+	OnlineLimit int    // Online-Messstellen laut Account (0 = unbegrenzt)
+	Locations   int    // Standorte je Check laut Account
 	Revision    int64
 	Endpoints   []wire.Endpoint
 	LinkedAt    string
@@ -127,6 +133,9 @@ type Live struct {
 	hub       string
 	lastErr   string
 	lastSync  time.Time
+	connAt    time.Time
+	rxBytes   atomic.Int64
+	txBytes   atomic.Int64
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 	running   bool
@@ -205,9 +214,12 @@ func (c *Live) endpoints() []wire.Endpoint {
 func (c *Live) State() State {
 	ctx := context.Background()
 	c.mu.Lock()
-	st := State{Connected: c.connected, Hub: c.hub, LastError: c.lastErr}
+	st := State{Connected: c.connected, Hub: c.hub, LastError: c.lastErr, RxBytes: c.rxBytes.Load(), TxBytes: c.txBytes.Load()}
 	if !c.lastSync.IsZero() {
 		st.LastSyncAt = c.lastSync.UTC().Format(time.RFC3339)
+	}
+	if c.connected && !c.connAt.IsZero() {
+		st.ConnectedAt = c.connAt.UTC().Format(time.RFC3339)
 	}
 	c.mu.Unlock()
 	st.Linked = c.Linked()
@@ -220,6 +232,7 @@ func (c *Live) State() State {
 	var acc wire.Account
 	if raw := c.setting(SetAccount, ""); raw != "" && json.Unmarshal([]byte(raw), &acc) == nil {
 		st.AccountID, st.Plan = strconv.FormatInt(acc.ID, 10), acc.Plan
+		st.OnlineLimit, st.Locations = acc.Limits["healthchecks_online"], acc.Limits["locations"]
 	}
 	if exp := c.setting(SetPendExp, ""); exp != "" {
 		if t, err := time.Parse(time.RFC3339, exp); err == nil && time.Now().Before(t) {
@@ -447,6 +460,8 @@ func (c *Live) postStatus(ctx context.Context, url, token string, body []byte) (
 	defer resp.Body.Close()
 	var buf strings.Builder
 	_, _ = copyLimited(&buf, resp, 16<<20)
+	c.txBytes.Add(int64(len(body)))
+	c.rxBytes.Add(int64(buf.Len()))
 	return []byte(buf.String()), resp.StatusCode, nil
 }
 
@@ -464,6 +479,7 @@ func (c *Live) get(ctx context.Context, url, token string) ([]byte, error) {
 	defer resp.Body.Close()
 	var buf strings.Builder
 	_, _ = copyLimited(&buf, resp, 16<<20)
+	c.rxBytes.Add(int64(buf.Len()))
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("hub %s: HTTP %d", url, resp.StatusCode)
 	}
