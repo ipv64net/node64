@@ -45,7 +45,8 @@
 	{{if $d.Sort}}<input type="hidden" name="sort" value="{{$d.Sort}}"><input type="hidden" name="dir" value="{{$d.Dir}}">{{end}}
 </form>
 
-{{if not $d.Rows}}
+{{if and (not $d.Rows) $d.Docker}}
+{{else if not $d.Rows}}
 <div class="card"><div class="card-body text-center text-body-secondary py-4">
 	{{if $d.Total}}<i class="bi bi-heart-pulse fs-1 d-block mb-2"></i>{{.T "hc.empty_filter"}}
 	{{else}}
@@ -106,10 +107,10 @@
 			{{if eq .State "paused"}}
 			<button class="btn btn-sm btn-outline-success" form="act-{{$c.Token}}" name="action" value="resume" title="{{$.T "hc.action.resume"}}"><i class="bi bi-play-fill"></i></button>
 			{{else}}
-			<button class="btn btn-sm btn-outline-secondary" form="act-{{$c.Token}}" name="action" value="pause" title="{{$.T "hc.action.pause"}}"><i class="bi bi-pause-fill"></i></button>
+			<button class="btn btn-sm btn-outline-warning" form="act-{{$c.Token}}" name="action" value="pause" title="{{$.T "hc.action.pause"}}"><i class="bi bi-pause-fill"></i></button>
 			{{end}}
-			{{if $c.Runnable}}<button class="btn btn-sm btn-outline-secondary" form="act-{{$c.Token}}" name="action" value="run" title="{{$.T "hc.action.run"}}"><i class="bi bi-lightning-charge"></i></button>{{end}}
-			<a class="btn btn-sm btn-outline-secondary" href="/healthchecks/{{$c.Token}}/edit" title="{{$.T "hc.edit"}}"><i class="bi bi-pencil"></i></a>
+			{{if $c.Runnable}}<button class="btn btn-sm btn-outline-info" form="act-{{$c.Token}}" name="action" value="run" title="{{$.T "hc.action.run"}}"><i class="bi bi-lightning-charge"></i></button>{{end}}
+			<a class="btn btn-sm btn-outline-primary" href="/healthchecks/{{$c.Token}}/edit" title="{{$.T "hc.edit"}}"><i class="bi bi-pencil"></i></a>
 			{{end}}
 		</td>
 	</tr>
@@ -129,9 +130,63 @@
 	<button class="btn btn-sm btn-outline-primary" type="submit" data-confirm="{{.T "common.confirm"}}">{{.T "hc.bulk.apply"}}</button>
 </div>
 </form>
+{{end}}
 {{range $d.Rows}}
 <form method="post" action="/healthchecks/{{.Check.Token}}/action" id="act-{{.Check.Token}}" class="d-none"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="back" value="list"></form>
 {{end}}
+{{range $d.Docker}}
+<form method="post" action="/healthchecks/{{.Check.Token}}/action" id="act-{{.Check.Token}}" class="d-none"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="back" value="list"></form>
+{{end}}
+{{if or $d.Docker $d.DockerShown}}
+<div class="card shadow-sm mt-4">
+	<div class="card-header d-flex align-items-center gap-2 flex-wrap">
+		<span><i class="bi bi-box-seam text-primary"></i> {{.T "hc.docker.title"}} <span class="badge text-bg-secondary">{{len $d.Docker}}</span></span>
+		<span class="small text-body-secondary">{{.T "hc.docker.subtitle"}}</span>
+		<a class="btn btn-sm btn-primary ms-auto" href="/healthchecks/new?type=docker"><i class="bi bi-plus-lg"></i> {{.T "hc.docker.add"}}</a>
+	</div>
+	{{if $d.DockerErr}}<div class="alert alert-warning m-3 small mb-0"><i class="bi bi-exclamation-triangle"></i> {{$d.DockerErr}}</div>{{end}}
+	{{if $d.Docker}}
+	<div class="table-responsive">
+	<table class="table table-hover table-sm align-middle table-cards hc-table mb-0">
+		<thead><tr><th class="ps-3">{{.T "common.status"}}</th><th>{{.T "hc.docker.container"}}</th><th class="d-none d-md-table-cell">{{.T "hc.docker.state"}}</th><th>{{.T "hc.recent"}}</th><th class="d-none d-md-table-cell">{{.T "hc.changed"}}</th><th class="text-end pe-3">{{.T "common.actions"}}</th></tr></thead>
+		<tbody>
+		{{range $d.Docker}}{{$c := .Check}}
+		<tr>
+			<td data-label="{{$.T "common.status"}}" class="hc-c-status ps-3"><span class="badge hc-state-{{.State}}">{{$.T (print "hc.state." .State)}}</span></td>
+			<td data-label="{{$.T "hc.docker.container"}}" class="hc-c-name"><a href="/healthchecks/{{$c.Token}}" class="fw-semibold">{{$c.Name}}</a>
+				{{if $c.Foreign}}<span class="badge text-bg-light hc-exec"><i class="bi bi-hdd-network"></i> {{$.T "hc.owner.other"}}</span>{{end}}
+				<div class="small text-body-secondary hc-target"><i class="bi bi-box"></i> {{$c.Target}}</div></td>
+			<td data-label="{{$.T "hc.docker.state"}}" class="small d-none d-md-table-cell">{{if .Message}}{{.Message}}{{else}}–{{end}}</td>
+			<td data-label="{{$.T "hc.recent"}}" class="hc-beats"><div class="beats">{{range .Pills}}<span class="beat beat-{{.Class}}" data-bs-toggle="tooltip" data-tip-label="{{.Label}}" data-tip-when="{{.When}}" data-tip-ms="{{.Latency}}" data-tip-msg="{{.Message}}"></span>{{end}}</div></td>
+			<td data-label="{{$.T "hc.changed"}}" class="small text-nowrap d-none d-md-table-cell" title="{{$.Time .Changed}}">{{$.Ago .Changed}}</td>
+			<td data-label="{{$.T "common.actions"}}" class="text-end text-nowrap hc-c-actions pe-3">
+				{{if $c.Foreign}}<a class="btn btn-sm btn-outline-secondary" href="/healthchecks/{{$c.Token}}" title="{{$.T "hc.view"}}"><i class="bi bi-eye"></i></a>
+				{{else}}
+				{{if eq .State "paused"}}<button class="btn btn-sm btn-outline-success" form="act-{{$c.Token}}" name="action" value="resume" title="{{$.T "hc.action.resume"}}"><i class="bi bi-play-fill"></i></button>
+				{{else}}<button class="btn btn-sm btn-outline-warning" form="act-{{$c.Token}}" name="action" value="pause" title="{{$.T "hc.action.pause"}}"><i class="bi bi-pause-fill"></i></button>{{end}}
+				<button class="btn btn-sm btn-outline-info" form="act-{{$c.Token}}" name="action" value="run" title="{{$.T "hc.action.run"}}"><i class="bi bi-lightning-charge"></i></button>
+				<a class="btn btn-sm btn-outline-primary" href="/healthchecks/{{$c.Token}}/edit" title="{{$.T "hc.edit"}}"><i class="bi bi-pencil"></i></a>
+				{{end}}
+			</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table>
+	</div>
+	{{end}}
+	{{if $d.Unwatched}}
+	<div class="card-body border-top">
+		<div class="small fw-semibold mb-2"><i class="bi bi-eye-slash text-secondary"></i> {{.T "hc.docker.unwatched"}}</div>
+		<div class="d-flex flex-wrap gap-2">
+		{{range $d.Unwatched}}
+			<a class="btn btn-sm btn-outline-secondary text-start" href="/healthchecks/new?type=docker&target={{.Name}}&name={{.Name}}" title="{{.Image}} · {{.Status}}">
+				<i class="bi bi-circle-fill {{if eq .State "running"}}text-success{{else}}text-secondary{{end}}" style="font-size:.55rem;vertical-align:.15rem"></i> {{.Name}} <i class="bi bi-plus-circle text-primary ms-1"></i>
+			</a>
+		{{end}}
+		</div>
+	</div>
+	{{end}}
+</div>
 {{end}}
 {{end}}
 {{define "scripts"}}<script src="/static/js/healthchecks.js?v={{.Version}}"></script>{{end}}

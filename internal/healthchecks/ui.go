@@ -75,18 +75,22 @@ type group struct {
 }
 
 type listData struct {
-	Groups  []group
-	Grouped bool     // mindestens ein Check hat eine Gruppe
-	AllGrps []string // alle Gruppennamen (Filter, Vorschlaege)
-	Rows    []row
-	Types   []checks.Type
-	Tags    []string
-	States  []string
-	Filter  map[string]string
-	Sort    string
-	Dir     string
-	Counts  map[string]int
-	Total   int
+	Docker      []row              // Docker-Checks (eigene Tabelle)
+	Unwatched   []checks.Container // Container ohne Check
+	DockerErr   string
+	DockerShown bool
+	Groups      []group
+	Grouped     bool     // mindestens ein Check hat eine Gruppe
+	AllGrps     []string // alle Gruppennamen (Filter, Vorschlaege)
+	Rows        []row
+	Types       []checks.Type
+	Tags        []string
+	States      []string
+	Filter      map[string]string
+	Sort        string
+	Dir         string
+	Counts      map[string]int
+	Total       int
 }
 
 var listStates = []string{"up", "down", "stabilizing", "flapping", "dependent", "pending", "paused"}
@@ -202,8 +206,32 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 		if f["q"] != "" && !strings.Contains(strings.ToLower(c.Name+" "+c.Target+" "+c.Group+" "+strings.Join(c.Tags, " ")), strings.ToLower(f["q"])) {
 			continue
 		}
+		if c.Type == checks.TypeDocker {
+			d.Docker = append(d.Docker, rw)
+			continue
+		}
 		d.Rows = append(d.Rows, rw)
 	}
+	// Container des Hosts, die noch keinen Check haben (nur wenn der Socket da ist)
+	cctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	if cs, err := checks.ListContainers(cctx, ""); err == nil {
+		watched := map[string]bool{}
+		for _, c := range list {
+			if c.Type == checks.TypeDocker {
+				watched[strings.TrimPrefix(c.Target, "/")] = true
+			}
+		}
+		for _, ct := range cs {
+			if !watched[ct.Name] && !watched[ct.ID] {
+				d.Unwatched = append(d.Unwatched, ct)
+			}
+		}
+		d.DockerShown = true
+	} else if len(d.Docker) > 0 {
+		d.DockerErr, d.DockerShown = err.Error(), true
+	}
+	cancel()
+	sortRows(d.Docker, d.Sort, d.Dir == "desc")
 	for t := range tagSet {
 		d.Tags = append(d.Tags, t)
 	}
@@ -395,16 +423,19 @@ func (d detailData) Crumb() string {
 }
 
 type formData struct {
-	Edit     bool
-	Token    string
-	Form     map[string]string
-	Errors   map[string]string
-	Types    []checks.Type
-	Parents  []*Check
-	Groups   []string // vorhandene Gruppen (Vorschlaege)
-	IPModes  []string
-	Error    string
-	Channels []channelOpt
+	Edit       bool
+	Token      string
+	Form       map[string]string
+	Errors     map[string]string
+	Types      []checks.Type
+	Parents    []*Check
+	Groups     []string           // vorhandene Gruppen (Vorschlaege)
+	Containers []checks.Container // Docker: Container des Hosts (Vorschlaege)
+	DockerErr  string
+	DockerHost string
+	IPModes    []string
+	Error      string
+	Channels   []channelOpt
 	// Hybrid-Vorbereitung: Messstellen und Bewertung (aktiv erst mit ipv64-Verknuepfung)
 	Policies   []string
 	Locations  []string
@@ -517,6 +548,8 @@ func formFromCheck(c *Check) map[string]string {
 	case checks.TypePush:
 		set("period_seconds", "period_seconds")
 		set("grace_seconds", "grace_seconds")
+	case checks.TypeDocker:
+		set("docker_host", "host")
 	}
 	return f
 }
@@ -689,6 +722,10 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 		if on("skip_hostname") {
 			p["skip_hostname"] = true
 		}
+	case checks.TypeDocker:
+		if s := strings.TrimSpace(v("docker_host")); s != "" {
+			p["host"] = s
+		}
 	case checks.TypePush:
 		if err := num("period_seconds", "period_seconds"); err != nil {
 			return in, err
@@ -714,6 +751,13 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 		}
 	}
 	sort.Strings(d.Groups)
+	d.DockerHost = checks.DefaultDockerHost()
+	cctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	var derr error
+	if d.Containers, derr = checks.ListContainers(cctx, d.Form["docker_host"]); derr != nil {
+		d.DockerErr = derr.Error()
+	}
+	cancel()
 	d.Types = checks.Types
 	d.IPModes = []string{"auto", "ipv4", "ipv6", "both"}
 	d.Policies, d.Locations, d.Executions = Policies, KnownLocations, []string{"local", "online", "both"}
@@ -754,6 +798,12 @@ func (m *Module) pageForm(w http.ResponseWriter, r *http.Request) {
 		d.Edit, d.Token, d.Form = true, c.Token, formFromCheck(c)
 	} else if t := r.URL.Query().Get("type"); t != "" {
 		d.Form["type"] = t
+		if v := strings.TrimSpace(r.URL.Query().Get("target")); v != "" {
+			d.Form["target"] = v
+		}
+		if v := strings.TrimSpace(r.URL.Query().Get("name")); v != "" {
+			d.Form["name"] = v
+		}
 	}
 	m.formPage(w, r, http.StatusOK, d)
 }

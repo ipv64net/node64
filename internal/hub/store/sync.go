@@ -429,6 +429,10 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 			res.Error = fmt.Sprintf("online limit reached (%d of %d measuring points)", used, lim)
 			return nil
 		}
+		if c.Type == "docker" {
+			res.Error = "docker checks run only locally on a node and cannot be moved"
+			return nil
+		}
 		if isPrivateTarget(c.Type, c.Target) {
 			res.Error = "online checks cannot target private addresses"
 			return nil

@@ -35,7 +35,7 @@ const (
 )
 
 // Types sind alle bekannten Typen in Anzeigereihenfolge.
-var Types = []Type{TypeHTTP, TypeKeyword, TypeICMP, TypeTCP, TypePort, TypeCert, TypePush}
+var Types = []Type{TypeHTTP, TypeKeyword, TypeICMP, TypeTCP, TypePort, TypeCert, TypePush, TypeDocker}
 
 // IPMode bestimmt, welche Adressfamilie geprueft wird.
 type IPMode string
@@ -161,7 +161,7 @@ type famState struct {
 func NewRunner() *Runner {
 	r := &Runner{checkers: map[Type]Checker{}, Resolver: net.DefaultResolver, Now: func() time.Time { return time.Now().UTC() }, famCache: map[string]famState{}}
 	r.FamilyProbe = probeFamily
-	for _, c := range []Checker{&httpChecker{}, &httpChecker{keyword: true}, &tcpChecker{}, &portChecker{}, &certChecker{}, &icmpChecker{}} {
+	for _, c := range []Checker{&httpChecker{}, &httpChecker{keyword: true}, &tcpChecker{}, &portChecker{}, &certChecker{}, &icmpChecker{}, dockerChecker{}} {
 		r.checkers[c.Type()] = c
 	}
 	return r
@@ -190,6 +190,15 @@ func (r *Runner) Run(ctx context.Context, def Definition) []Result {
 	}
 	if def.IPMode == "" {
 		def.IPMode = IPAuto
+	}
+	if def.Type == TypeDocker { // kein Netzwerkziel: direkt die Docker-API fragen
+		cctx, cancel := context.WithTimeout(ctx, def.Timeouts.Total)
+		res := c.Check(cctx, def, nil)
+		cancel()
+		if res.Time.IsZero() {
+			res.Time = now
+		}
+		return []Result{res}
 	}
 	host := TargetHost(def)
 	if host == "" {
@@ -405,6 +414,17 @@ func Validate(def Definition) error {
 		}
 		if p.MaxLossPercent < 0 || p.MaxLossPercent > 100 {
 			return errors.New("max_loss_percent must be between 0 and 100")
+		}
+	case TypeDocker:
+		if !containerRe.MatchString(strings.TrimSpace(def.Target)) {
+			return errors.New("container name or id is required (letters, digits, _ . -)")
+		}
+		var p DockerParams
+		if err := decode(def.Params, &p); err != nil {
+			return err
+		}
+		if !validDockerHost(p.Host) {
+			return errors.New("docker host must start with unix://, tcp:// or http(s)://")
 		}
 	case TypePush:
 		var p PushParams

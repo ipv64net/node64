@@ -13,8 +13,20 @@
 				el.querySelectorAll("input, select, textarea").forEach(function (i) { i.disabled = !on; });
 			});
 		};
-		typeSel.addEventListener("change", update);
-		update();
+		var exSel = document.getElementById("execution");
+		var lockExec = function () {
+			if (!exSel) { return; }
+			var docker = typeSel.value === "docker";
+			exSel.querySelectorAll("option").forEach(function (o) {
+				if (o.value !== "local") {
+					if (docker) { o.dataset.wasDisabled = o.dataset.wasDisabled || String(o.disabled); o.disabled = true; }
+					else if (o.dataset.wasDisabled) { o.disabled = o.dataset.wasDisabled === "true"; delete o.dataset.wasDisabled; }
+				}
+			});
+			if (docker) { exSel.value = "local"; }
+		};
+		typeSel.addEventListener("change", function () { update(); lockExec(); });
+		update(); lockExec();
 	}
 
 	// Tooltips der Pillen: Inhalt aus data-Attributen, hier maskiert und als HTML gesetzt

@@ -231,6 +231,19 @@
     "link": "ipv64 Link"
   },
   "hc": {
+    "docker": {
+      "title": "Docker containers",
+      "subtitle": "checked locally via the Docker socket",
+      "add": "Monitor a container",
+      "container": "Container",
+      "state": "State",
+      "unwatched": "Not monitored yet – click to add:",
+      "target_hint": "Name or ID of the container on this host (suggestions from the container list).",
+      "host": "Docker host",
+      "host_hint": "Empty = default. unix:///var/run/docker.sock or tcp://socket-proxy:2375 (e.g. docker-socket-proxy).",
+      "found": "Docker reachable, {count} containers found.",
+      "rules": "Docker checks run only on this node (not online, not movable). Rating: running = OK; healthcheck “unhealthy”, stopped, paused or restart loop = down. When linked to ipv64 the state is reported and visible in the portal too."
+    },
     "foreign_readonly": "Belongs to another node – read-only here",
     "run_remote": "Measured by ipv64 or another node; “run now” only works for own checks.",
     "view": "View",
@@ -307,7 +320,8 @@
       "tcp": "TCP",
       "port": "Port",
       "cert": "Certificate",
-      "push": "Push / heartbeat"
+      "push": "Push / heartbeat",
+      "docker": "Docker container"
     },
     "ipmode": {
       "auto": "Automatic (by DNS)",
