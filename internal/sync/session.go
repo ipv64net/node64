@@ -334,6 +334,13 @@ func (s *session) replayOutbox() {
 		if o.Payload != "" {
 			p.Data = json.RawMessage(o.Payload)
 		}
+		if o.Entity == "check" && o.Op == "upsert" {
+			// Kanalzuordnung erst beim Senden abbilden: ein gerade neu angelegter Kanal hat seine
+			// Server-ID moeglicherweise erst nach dem Anlegen des Check-Eintrags im Postausgang bekommen.
+			if ck, _ := c.d.HC.CheckByToken(ctx, o.EntityID); ck != nil {
+				p.Data = mustJSON(c.d.HC.WireCheck(ck, c.localToRemote(ctx)))
+			}
+		}
 		if o.Entity != "check" {
 			// Server-ID statt lokaler ID
 			var lid int64
