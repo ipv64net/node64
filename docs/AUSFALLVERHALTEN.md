@@ -66,3 +66,4 @@ Jeder hub prüft jede Minute den anderen (`/v1/health` über das Internet) und d
 - Stamm-hubs: Dev-Node `nz5EcC…` → hc-srv01, Testbox-Node `qFhQgD…` → hc-srv02 (je Node fest).
 - 19:33:22 UTC hc-srv02 gestoppt: Testbox-Node um 19:33:23 mit hc-srv01 verbunden (1 s).
 - Push-Check `t2hubpush…` (Standorte nbg,fsn, Push alle 20 s): Auswertung wanderte nach fsn (erste Messung 19:33:48), Gesamtzustand blieb „OK“, kein Fehlalarm; nach dem Neustart von hc-srv02 (19:37:26) übernahm nbg wieder, ebenfalls ohne Fehlalarm.
+- 19:51:25 UTC: Testbox-Node kehrte automatisch zu ihrem Stamm-hub hc-srv02 zurück (18 min nach dem Wechsel, Umschalten in < 0,1 s).
