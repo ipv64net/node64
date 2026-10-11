@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -259,8 +260,39 @@ func (s *Store) Unlink(ctx context.Context, n *Node, keepChecks bool) error {
 		return err
 	}
 	if keepChecks {
-		_, err := s.db.ExecContext(ctx, `UPDATE hc2_checks SET execution = 'online', updated_at = ? WHERE node_id = ? AND deleted_at IS NULL AND execution IN ('local','both')`, now, n.ID)
-		return err
+		// Weiterlaufen lassen als Online-Checks, soweit Ziel oeffentlich und Limit frei; sonst loeschen.
+		// Ueber Propose, damit Limit, Log und andere Nodes des Accounts stimmen.
+		rows, err := s.db.QueryContext(ctx, `SELECT token FROM hc2_checks WHERE node_id = ? AND deleted_at IS NULL AND execution IN ('local','both')`, n.ID)
+		if err != nil {
+			return err
+		}
+		var tokens []string
+		for rows.Next() {
+			var t string
+			if rows.Scan(&t) == nil {
+				tokens = append(tokens, t)
+			}
+		}
+		rows.Close()
+		for _, t := range tokens {
+			c, _, err := s.WireCheck(ctx, t)
+			if err != nil || c == nil {
+				continue
+			}
+			c.Execution, c.NodeID = "online", ""
+			data, _ := json.Marshal(c)
+			res, err := s.Propose(ctx, n.UserID, "", wire.Propose{Entity: "check", Op: "upsert", ID: t, BaseRevision: -1, Data: data}, "system")
+			if err != nil {
+				return err
+			}
+			if res.Error != "" {
+				s.log.Info("unlink: check not kept online", "token", t, "reason", res.Error)
+				if _, err := s.Propose(ctx, n.UserID, n.ID, wire.Propose{Entity: "check", Op: "delete", ID: t, BaseRevision: -1}, "system"); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT token FROM hc2_checks WHERE node_id = ? AND deleted_at IS NULL AND execution = 'local'`, n.ID)
 	if err != nil {
