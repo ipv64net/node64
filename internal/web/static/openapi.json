@@ -5,103 +5,1492 @@
     "version": "1.0.0",
     "description": "JSON-API des Nodes im eigenen Netz. Anmeldung mit API-Key (Einstellungen > API-Keys) als `Authorization: Bearer node64_...` oder mit der Browser-Sitzung (dann `X-CSRF-Token` bei POST/PUT/DELETE). Zeiten sind ISO 8601 in UTC. Dieselbe API nutzt die Oberfläche für Charts."
   },
-  "servers": [{"url": "/api"}],
-  "tags": [{"name": "Node"}, {"name": "Healthchecks"}, {"name": "Benachrichtigungen"}],
-  "security": [{"apiKey": []}],
+  "servers": [
+    {
+      "url": "/api"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Node"
+    },
+    {
+      "name": "Healthchecks"
+    },
+    {
+      "name": "Benachrichtigungen"
+    }
+  ],
+  "security": [
+    {
+      "apiKey": []
+    }
+  ],
   "components": {
-    "securitySchemes": {"apiKey": {"type": "http", "scheme": "bearer", "description": "API-Key aus den Einstellungen"}},
+    "securitySchemes": {
+      "apiKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "API-Key aus den Einstellungen"
+      }
+    },
     "schemas": {
-      "Check": {"type": "object", "properties": {
-        "token": {"type": "string", "description": "32 Zeichen, Primärschlüssel"}, "name": {"type": "string"},
-        "type": {"type": "string", "enum": ["http", "keyword", "icmp", "tcp", "port", "cert", "push"]},
-        "target": {"type": "string", "description": "URL, Host, IP oder host:port, bei push leer"},
-        "params": {"type": "object", "description": "Typabhängig: http/keyword method, headers, body, basic_user, basic_password, accept_status, follow_redirects, max_redirects, insecure_tls, keyword, keyword_absent; icmp count, max_loss_percent, max_latency_ms; tcp port, send, expect, tls; port port, expect (open|closed); cert port, min_days, server_name, skip_chain, skip_hostname; push period_seconds, grace_seconds"},
-        "interval_seconds": {"type": "integer", "minimum": 20}, "retry_interval_seconds": {"type": "integer", "minimum": 5},
-        "retries": {"type": "integer"}, "connect_timeout_seconds": {"type": "number"}, "timeout_seconds": {"type": "number"},
-        "invert": {"type": "boolean"}, "stabilize": {"type": "integer"}, "ip_mode": {"type": "string", "enum": ["auto", "ipv4", "ipv6", "both"]},
-        "tags": {"type": "array", "items": {"type": "string"}}, "description": {"type": "string"}, "paused": {"type": "boolean"},
-        "parent": {"type": "string"}, "critical": {"type": "boolean"}, "execution": {"type": "string", "enum": ["local", "online", "both"], "description": "online/both erst mit ipv64-Verknüpfung"},
-        "policy": {"type": "string", "enum": ["all", "any", "majority"], "description": "Gesamtzustand bei mehreren Messstellen: down nur wenn alle / eine / Mehrheit down"},
-        "locations": {"type": "array", "items": {"type": "string"}, "description": "Online-Standorte (nbg, fsn), nur mit Verknüpfung"},
-        "notify_degraded": {"type": "boolean", "description": "auch bei teilweise gestört benachrichtigen"},
-        "notify_down": {"type": "boolean"}, "notify_up": {"type": "boolean"}, "channels": {"type": "array", "items": {"type": "integer"}, "description": "Kanal-IDs, leer = Standardkanäle"},
-        "repeat_minutes": {"type": "integer"}, "revision": {"type": "integer"}, "created_at": {"type": "string"}, "updated_at": {"type": "string"},
-        "push_url": {"type": "string"}, "state": {"$ref": "#/components/schemas/State"}
-      }},
-      "State": {"type": "object", "properties": {
-        "state": {"type": "string", "enum": ["pending", "up", "degraded", "down", "stabilizing", "flapping", "dependent", "paused"]},
-        "since": {"type": "string"}, "last_check_at": {"type": "string"}, "next_check_at": {"type": "string"}, "last_status": {"type": "string"},
-        "last_latency_ms": {"type": "number"}, "last_reason": {"type": "string"}, "last_message": {"type": "string"},
-        "consecutive_fail": {"type": "integer"}, "consecutive_ok": {"type": "integer"}, "last_push_at": {"type": "string"}, "down_since": {"type": "string"},
-        "incident_id": {"type": "integer"}, "maintenance": {"type": "boolean"}
-      }},
-      "Measurement": {"type": "object", "properties": {"seq": {"type": "integer"}, "time": {"type": "string"}, "status": {"type": "string", "enum": ["up", "down"]}, "latency_ms": {"type": "number"}, "reason": {"type": "string"}, "message": {"type": "string"}, "family": {"type": "string"}, "details": {"type": "object"}, "maintenance": {"type": "boolean"}, "dependent": {"type": "boolean"}}},
-      "Event": {"type": "object", "properties": {"id": {"type": "integer"}, "event_id": {"type": "string"}, "token": {"type": "string"}, "kind": {"type": "string"}, "time": {"type": "string"}, "from": {"type": "string"}, "to": {"type": "string"}, "reason": {"type": "string"}, "message": {"type": "string"}, "duration_seconds": {"type": "integer"}, "flaps": {"type": "integer"}, "maintenance": {"type": "boolean"}, "silent": {"type": "boolean"}, "incident_id": {"type": "integer"}}},
-      "Incident": {"type": "object", "properties": {"id": {"type": "integer"}, "token": {"type": "string"}, "started_at": {"type": "string"}, "ended_at": {"type": "string"}, "open": {"type": "boolean"}, "reason": {"type": "string"}, "message": {"type": "string"}}},
-      "Stats": {"type": "object", "properties": {"range": {"type": "string"}, "from": {"type": "string"}, "to": {"type": "string"}, "count": {"type": "integer"}, "up_count": {"type": "integer"}, "up_percent": {"type": "number"}, "avg_ms": {"type": "number"}, "min_ms": {"type": "number"}, "max_ms": {"type": "number"}, "bucket_seconds": {"type": "integer"}, "series": {"type": "array", "items": {"type": "object", "properties": {"time": {"type": "string"}, "count": {"type": "integer"}, "up_count": {"type": "integer"}, "avg_ms": {"type": "number"}, "min_ms": {"type": "number"}, "max_ms": {"type": "number"}, "up_percent": {"type": "number"}}}}}},
-      "Maintenance": {"type": "object", "properties": {"id": {"type": "integer"}, "name": {"type": "string"}, "start_at": {"type": "string"}, "end_at": {"type": "string"}, "repeat": {"type": "string", "enum": ["none", "daily", "weekly", "monthly"]}, "repeat_until": {"type": "string"}, "tokens": {"type": "array", "items": {"type": "string"}}, "active": {"type": "boolean"}}},
-      "Channel": {"type": "object", "properties": {"id": {"type": "integer"}, "type": {"type": "string", "enum": ["smtp", "telegram", "discord", "ntfy", "gotify", "pushover", "webhook"]}, "name": {"type": "string"}, "config": {"type": "object", "description": "Felder je Typ, siehe /channel-types; Geheimnisse maskiert, außer ?include_secrets=true"}, "enabled": {"type": "boolean"}, "default": {"type": "boolean"}, "lang": {"type": "string"}, "notify_down": {"type": "boolean"}, "notify_up": {"type": "boolean"}, "execution": {"type": "string"}, "revision": {"type": "integer"}, "last_used_at": {"type": "string"}, "last_error": {"type": "string"}}},
-      "Error": {"type": "object", "properties": {"error": {"type": "string"}}}
+      "Check": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "32 Zeichen, Primärschlüssel"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "http",
+              "keyword",
+              "icmp",
+              "tcp",
+              "port",
+              "cert",
+              "push"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "description": "URL, Host, IP oder host:port, bei push leer"
+          },
+          "params": {
+            "type": "object",
+            "description": "Typabhängig: http/keyword method, headers, body, basic_user, basic_password, accept_status, follow_redirects, max_redirects, insecure_tls, keyword, keyword_absent; icmp count, max_loss_percent, max_latency_ms; tcp port, send, expect, tls; port port, expect (open|closed); cert port, min_days, server_name, skip_chain, skip_hostname; push period_seconds, grace_seconds"
+          },
+          "interval_seconds": {
+            "type": "integer",
+            "minimum": 20
+          },
+          "retry_interval_seconds": {
+            "type": "integer",
+            "minimum": 5
+          },
+          "retries": {
+            "type": "integer"
+          },
+          "connect_timeout_seconds": {
+            "type": "number"
+          },
+          "timeout_seconds": {
+            "type": "number"
+          },
+          "invert": {
+            "type": "boolean"
+          },
+          "stabilize": {
+            "type": "integer"
+          },
+          "ip_mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "ipv4",
+              "ipv6",
+              "both"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "parent": {
+            "type": "string"
+          },
+          "critical": {
+            "type": "boolean"
+          },
+          "execution": {
+            "type": "string",
+            "enum": [
+              "local",
+              "online",
+              "both"
+            ],
+            "description": "online/both erst mit ipv64-Verknüpfung"
+          },
+          "policy": {
+            "type": "string",
+            "enum": [
+              "all",
+              "any",
+              "majority"
+            ],
+            "description": "Gesamtzustand bei mehreren Messstellen: down nur wenn alle / eine / Mehrheit down"
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Online-Standorte (nbg, fsn), nur mit Verknüpfung"
+          },
+          "notify_degraded": {
+            "type": "boolean",
+            "description": "auch bei teilweise gestört benachrichtigen"
+          },
+          "notify_down": {
+            "type": "boolean"
+          },
+          "notify_up": {
+            "type": "boolean"
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Kanal-IDs, leer = Standardkanäle"
+          },
+          "repeat_minutes": {
+            "type": "integer"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "push_url": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/State"
+          },
+          "group": {
+            "type": "string",
+            "description": "Frei benannte Gruppe (Anzeige, Filter)",
+            "example": "Heimnetz"
+          }
+        }
+      },
+      "State": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "up",
+              "degraded",
+              "down",
+              "stabilizing",
+              "flapping",
+              "dependent",
+              "paused"
+            ]
+          },
+          "since": {
+            "type": "string"
+          },
+          "last_check_at": {
+            "type": "string"
+          },
+          "next_check_at": {
+            "type": "string"
+          },
+          "last_status": {
+            "type": "string"
+          },
+          "last_latency_ms": {
+            "type": "number"
+          },
+          "last_reason": {
+            "type": "string"
+          },
+          "last_message": {
+            "type": "string"
+          },
+          "consecutive_fail": {
+            "type": "integer"
+          },
+          "consecutive_ok": {
+            "type": "integer"
+          },
+          "last_push_at": {
+            "type": "string"
+          },
+          "down_since": {
+            "type": "string"
+          },
+          "incident_id": {
+            "type": "integer"
+          },
+          "maintenance": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Measurement": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer"
+          },
+          "time": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down"
+            ]
+          },
+          "latency_ms": {
+            "type": "number"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object"
+          },
+          "maintenance": {
+            "type": "boolean"
+          },
+          "dependent": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Event": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "duration_seconds": {
+            "type": "integer"
+          },
+          "flaps": {
+            "type": "integer"
+          },
+          "maintenance": {
+            "type": "boolean"
+          },
+          "silent": {
+            "type": "boolean"
+          },
+          "incident_id": {
+            "type": "integer"
+          }
+        }
+      },
+      "Incident": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "token": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "ended_at": {
+            "type": "string"
+          },
+          "open": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "Stats": {
+        "type": "object",
+        "properties": {
+          "range": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "up_count": {
+            "type": "integer"
+          },
+          "up_percent": {
+            "type": "number"
+          },
+          "avg_ms": {
+            "type": "number"
+          },
+          "min_ms": {
+            "type": "number"
+          },
+          "max_ms": {
+            "type": "number"
+          },
+          "bucket_seconds": {
+            "type": "integer"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "time": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "up_count": {
+                  "type": "integer"
+                },
+                "avg_ms": {
+                  "type": "number"
+                },
+                "min_ms": {
+                  "type": "number"
+                },
+                "max_ms": {
+                  "type": "number"
+                },
+                "up_percent": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Maintenance": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "start_at": {
+            "type": "string"
+          },
+          "end_at": {
+            "type": "string"
+          },
+          "repeat": {
+            "type": "string",
+            "enum": [
+              "none",
+              "daily",
+              "weekly",
+              "monthly"
+            ]
+          },
+          "repeat_until": {
+            "type": "string"
+          },
+          "tokens": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Channel": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "smtp",
+              "telegram",
+              "discord",
+              "ntfy",
+              "gotify",
+              "pushover",
+              "webhook"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "config": {
+            "type": "object",
+            "description": "Felder je Typ, siehe /channel-types; Geheimnisse maskiert, außer ?include_secrets=true"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "lang": {
+            "type": "string"
+          },
+          "notify_down": {
+            "type": "boolean"
+          },
+          "notify_up": {
+            "type": "boolean"
+          },
+          "execution": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "last_used_at": {
+            "type": "string"
+          },
+          "last_error": {
+            "type": "string"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "paths": {
-    "/health": {"get": {"tags": ["Node"], "summary": "Verfügbarkeit (ohne Anmeldung, für Docker HEALTHCHECK)", "security": [], "responses": {"200": {"description": "{status, version, time}"}}}},
-    "/version": {"get": {"tags": ["Node"], "summary": "Version und Startzeit", "responses": {"200": {"description": "{version, started_at, hostname, time}"}}}},
-    "/status": {"get": {"tags": ["Node"], "summary": "Dashboard-Daten: Node, Module, Zusammenfassung je Modul, Verknüpfung", "responses": {"200": {"description": "OK"}}}},
-    "/modules": {"get": {"tags": ["Node"], "summary": "Module mit Zustand", "responses": {"200": {"description": "OK"}}}},
-    "/modules/{name}/enable": {"post": {"tags": ["Node"], "summary": "Modul aktivieren (läuft sofort, ohne Neustart)", "parameters": [{"name": "name", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "OK"}, "422": {"description": "nicht verfügbar"}}}},
-    "/modules/{name}/disable": {"post": {"tags": ["Node"], "summary": "Modul deaktivieren", "parameters": [{"name": "name", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "OK"}}}},
-    "/settings": {
-      "get": {"tags": ["Node"], "summary": "Einstellungen (Agent-Name, Standort, Zeitzone, Benachrichtigungen, Updates)", "responses": {"200": {"description": "Schlüssel-Wert-Objekt"}}},
-      "put": {"tags": ["Node"], "summary": "Einstellungen ändern (nur mitgeschickte Schlüssel)", "requestBody": {"content": {"application/json": {"schema": {"type": "object", "additionalProperties": {"type": "string"}}}}}, "responses": {"200": {"description": "OK"}, "422": {"description": "unbekannter Schlüssel"}}}
+    "/health": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Verfügbarkeit (ohne Anmeldung, für Docker HEALTHCHECK)",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "{status, version, time}"
+          }
+        }
+      }
     },
-    "/audit": {"get": {"tags": ["Node"], "summary": "Audit-Log (neueste zuerst)", "parameters": [{"name": "limit", "in": "query", "schema": {"type": "integer"}}, {"name": "before", "in": "query", "schema": {"type": "integer"}}], "responses": {"200": {"description": "OK"}}}},
-    "/logs": {"get": {"tags": ["Node"], "summary": "Letzte Logzeilen", "parameters": [{"name": "lines", "in": "query", "schema": {"type": "integer", "default": 200}}], "responses": {"200": {"description": "{level, lines[]}"}}}},
-    "/backup": {"get": {"tags": ["Node"], "summary": "Konsistentes Backup der Datenbank (SQLite-Datei)", "responses": {"200": {"description": "application/vnd.sqlite3"}}}},
-    "/openapi.json": {"get": {"tags": ["Node"], "summary": "Diese Beschreibung", "responses": {"200": {"description": "OpenAPI 3.1"}}}},
+    "/version": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Version und Startzeit",
+        "responses": {
+          "200": {
+            "description": "{version, started_at, hostname, time}"
+          }
+        }
+      }
+    },
+    "/status": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Dashboard-Daten: Node, Module, Zusammenfassung je Modul, Verknüpfung",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/modules": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Module mit Zustand",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/modules/{name}/enable": {
+      "post": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Modul aktivieren (läuft sofort, ohne Neustart)",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "422": {
+            "description": "nicht verfügbar"
+          }
+        }
+      }
+    },
+    "/modules/{name}/disable": {
+      "post": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Modul deaktivieren",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/settings": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Einstellungen (Agent-Name, Standort, Zeitzone, Benachrichtigungen, Updates)",
+        "responses": {
+          "200": {
+            "description": "Schlüssel-Wert-Objekt"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Einstellungen ändern (nur mitgeschickte Schlüssel)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "422": {
+            "description": "unbekannter Schlüssel"
+          }
+        }
+      }
+    },
+    "/audit": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Audit-Log (neueste zuerst)",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/logs": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Letzte Logzeilen",
+        "parameters": [
+          {
+            "name": "lines",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{level, lines[]}"
+          }
+        }
+      }
+    },
+    "/backup": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Konsistentes Backup der Datenbank (SQLite-Datei)",
+        "responses": {
+          "200": {
+            "description": "application/vnd.sqlite3"
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Diese Beschreibung",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1"
+          }
+        }
+      }
+    },
     "/checks": {
-      "get": {"tags": ["Healthchecks"], "summary": "Alle Checks", "parameters": [{"name": "type", "in": "query", "schema": {"type": "string"}}, {"name": "state", "in": "query", "schema": {"type": "string"}}, {"name": "tag", "in": "query", "schema": {"type": "string"}}, {"name": "q", "in": "query", "schema": {"type": "string"}}], "responses": {"200": {"description": "Liste", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/Check"}}}}}}},
-      "post": {"tags": ["Healthchecks"], "summary": "Check anlegen", "description": "Pflicht: name, type, target (außer push). Beispiel: {\"name\":\"Web\",\"type\":\"http\",\"target\":\"https://example.com/\",\"interval_seconds\":60,\"params\":{\"accept_status\":\"200-299\"}}", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Check"}}}}, "responses": {"201": {"description": "angelegt"}, "422": {"description": "ungültig"}}}
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Alle Checks",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Check"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Check anlegen",
+        "description": "Pflicht: name, type, target (außer push). Beispiel: {\"name\":\"Web\",\"type\":\"http\",\"target\":\"https://example.com/\",\"interval_seconds\":60,\"params\":{\"accept_status\":\"200-299\"}}",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Check"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt"
+          },
+          "422": {
+            "description": "ungültig"
+          }
+        }
+      }
     },
     "/checks/{token}": {
-      "parameters": [{"name": "token", "in": "path", "required": true, "schema": {"type": "string"}}],
-      "get": {"tags": ["Healthchecks"], "summary": "Einzelner Check mit Zustand", "responses": {"200": {"description": "OK"}, "404": {"description": "nicht gefunden"}}},
-      "put": {"tags": ["Healthchecks"], "summary": "Check ändern (vollständiges Objekt; fehlende Felder behalten ihren Wert)", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Check"}}}}, "responses": {"200": {"description": "OK"}, "422": {"description": "ungültig"}}},
-      "delete": {"tags": ["Healthchecks"], "summary": "Check mit allen Messdaten löschen", "responses": {"204": {"description": "gelöscht"}}}
+      "parameters": [
+        {
+          "name": "token",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Einzelner Check mit Zustand",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "nicht gefunden"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Check ändern (vollständiges Objekt; fehlende Felder behalten ihren Wert)",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Check"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "422": {
+            "description": "ungültig"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Check mit allen Messdaten löschen",
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          }
+        }
+      }
     },
-    "/checks/{token}/pause": {"post": {"tags": ["Healthchecks"], "summary": "Pausieren", "parameters": [{"name": "token", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "OK"}}}},
-    "/checks/{token}/resume": {"post": {"tags": ["Healthchecks"], "summary": "Fortsetzen (prüft sofort)", "parameters": [{"name": "token", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "OK"}}}},
-    "/checks/{token}/run": {"post": {"tags": ["Healthchecks"], "summary": "Jetzt prüfen", "parameters": [{"name": "token", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"202": {"description": "angestoßen"}, "409": {"description": "Push-Check"}}}},
-    "/checks/{token}/clone": {"post": {"tags": ["Healthchecks"], "summary": "Kopieren (Kopie ist pausiert)", "parameters": [{"name": "token", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"201": {"description": "Kopie"}}}},
-    "/checks/{token}/measurements": {"get": {"tags": ["Healthchecks"], "summary": "Messpunkte (neueste zuerst)", "parameters": [{"name": "token", "in": "path", "required": true, "schema": {"type": "string"}}, {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 100, "maximum": 5000}}, {"name": "before", "in": "query", "schema": {"type": "integer"}, "description": "Cursor: seq"}, {"name": "from", "in": "query", "schema": {"type": "string"}}, {"name": "to", "in": "query", "schema": {"type": "string"}}], "responses": {"200": {"description": "Liste", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/Measurement"}}}}}}}},
-    "/checks/{token}/events": {"get": {"tags": ["Healthchecks"], "summary": "Statuswechsel eines Checks", "parameters": [{"name": "token", "in": "path", "required": true, "schema": {"type": "string"}}, {"name": "limit", "in": "query", "schema": {"type": "integer"}}, {"name": "before", "in": "query", "schema": {"type": "integer"}}], "responses": {"200": {"description": "Liste", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/Event"}}}}}}}},
-    "/checks/{token}/incidents": {"get": {"tags": ["Healthchecks"], "summary": "Störungen eines Checks", "parameters": [{"name": "token", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "Liste"}}}},
-    "/checks/{token}/stats": {"get": {"tags": ["Healthchecks"], "summary": "Verfügbarkeit und Latenz als Zeitreihe", "parameters": [{"name": "token", "in": "path", "required": true, "schema": {"type": "string"}}, {"name": "range", "in": "query", "schema": {"type": "string", "enum": ["1h", "24h", "7d", "30d", "1y"], "default": "24h"}}], "responses": {"200": {"description": "Stats", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Stats"}}}}}}},
-    "/events": {"get": {"tags": ["Healthchecks"], "summary": "Statuswechsel aller Checks", "parameters": [{"name": "limit", "in": "query", "schema": {"type": "integer"}}, {"name": "before", "in": "query", "schema": {"type": "integer"}}], "responses": {"200": {"description": "Liste"}}}},
-    "/incidents": {"get": {"tags": ["Healthchecks"], "summary": "Störungen aller Checks", "responses": {"200": {"description": "Liste"}}}},
-    "/check-types": {"get": {"tags": ["Healthchecks"], "summary": "Verfügbare Check-Typen", "responses": {"200": {"description": "Liste"}}}},
+    "/checks/{token}/pause": {
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Pausieren",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/checks/{token}/resume": {
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Fortsetzen (prüft sofort)",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/checks/{token}/run": {
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Jetzt prüfen",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "angestoßen"
+          },
+          "409": {
+            "description": "Push-Check"
+          }
+        }
+      }
+    },
+    "/checks/{token}/clone": {
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Kopieren (Kopie ist pausiert)",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Kopie"
+          }
+        }
+      }
+    },
+    "/checks/{token}/measurements": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Messpunkte (neueste zuerst)",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "maximum": 5000
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Cursor: seq"
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Measurement"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/checks/{token}/events": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Statuswechsel eines Checks",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Event"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/checks/{token}/incidents": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Störungen eines Checks",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste"
+          }
+        }
+      }
+    },
+    "/checks/{token}/stats": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Verfügbarkeit und Latenz als Zeitreihe",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1h",
+                "24h",
+                "7d",
+                "30d",
+                "1y"
+              ],
+              "default": "24h"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stats",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stats"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Statuswechsel aller Checks",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste"
+          }
+        }
+      }
+    },
+    "/incidents": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Störungen aller Checks",
+        "responses": {
+          "200": {
+            "description": "Liste"
+          }
+        }
+      }
+    },
+    "/check-types": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Verfügbare Check-Typen",
+        "responses": {
+          "200": {
+            "description": "Liste"
+          }
+        }
+      }
+    },
     "/maintenance": {
-      "get": {"tags": ["Healthchecks"], "summary": "Wartungsfenster", "responses": {"200": {"description": "Liste"}}},
-      "post": {"tags": ["Healthchecks"], "summary": "Wartungsfenster anlegen", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Maintenance"}}}}, "responses": {"201": {"description": "angelegt"}}}
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Wartungsfenster",
+        "responses": {
+          "200": {
+            "description": "Liste"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Wartungsfenster anlegen",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Maintenance"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt"
+          }
+        }
+      }
     },
     "/maintenance/{id}": {
-      "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}],
-      "put": {"tags": ["Healthchecks"], "summary": "Wartungsfenster ändern", "responses": {"200": {"description": "OK"}}},
-      "delete": {"tags": ["Healthchecks"], "summary": "Wartungsfenster löschen", "responses": {"204": {"description": "gelöscht"}}}
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "put": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Wartungsfenster ändern",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Wartungsfenster löschen",
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          }
+        }
+      }
     },
-    "/push/{token}": {"get": {"tags": ["Healthchecks"], "summary": "Heartbeat eines Push-Checks (ohne Anmeldung)", "description": "Auch POST. Optional ?status=down&msg=... Antwort ist für unbekannte Tokens identisch. Mindestabstand 1 s, höchstens 60 pro Minute.", "security": [], "parameters": [{"name": "token", "in": "path", "required": true, "schema": {"type": "string"}}, {"name": "status", "in": "query", "schema": {"type": "string", "enum": ["up", "down"]}}, {"name": "msg", "in": "query", "schema": {"type": "string"}}], "responses": {"200": {"description": "{status: ok}"}, "429": {"description": "zu schnell"}}}},
+    "/push/{token}": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Heartbeat eines Push-Checks (ohne Anmeldung)",
+        "description": "Auch POST. Optional ?status=down&msg=... Antwort ist für unbekannte Tokens identisch. Mindestabstand 1 s, höchstens 60 pro Minute.",
+        "security": [],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "up",
+                "down"
+              ]
+            }
+          },
+          {
+            "name": "msg",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{status: ok}"
+          },
+          "429": {
+            "description": "zu schnell"
+          }
+        }
+      }
+    },
     "/channels": {
-      "get": {"tags": ["Benachrichtigungen"], "summary": "Kanäle", "parameters": [{"name": "include_secrets", "in": "query", "schema": {"type": "boolean"}}], "responses": {"200": {"description": "Liste", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/Channel"}}}}}}},
-      "post": {"tags": ["Benachrichtigungen"], "summary": "Kanal anlegen", "description": "Beispiel: {\"type\":\"telegram\",\"name\":\"Mein Telegram\",\"config\":{\"bot_token\":\"...\",\"chat_id\":\"123\"},\"default\":true}", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Channel"}}}}, "responses": {"201": {"description": "angelegt"}, "422": {"description": "ungültig"}}}
+      "get": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "Kanäle",
+        "parameters": [
+          {
+            "name": "include_secrets",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Channel"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "Kanal anlegen",
+        "description": "Beispiel: {\"type\":\"telegram\",\"name\":\"Mein Telegram\",\"config\":{\"bot_token\":\"...\",\"chat_id\":\"123\"},\"default\":true}",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Channel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt"
+          },
+          "422": {
+            "description": "ungültig"
+          }
+        }
+      }
     },
     "/channels/{id}": {
-      "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}],
-      "get": {"tags": ["Benachrichtigungen"], "summary": "Einzelner Kanal", "responses": {"200": {"description": "OK"}}},
-      "put": {"tags": ["Benachrichtigungen"], "summary": "Kanal ändern (leere Geheimnisse behalten den gespeicherten Wert)", "responses": {"200": {"description": "OK"}}},
-      "delete": {"tags": ["Benachrichtigungen"], "summary": "Kanal löschen", "responses": {"204": {"description": "gelöscht"}}}
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "Einzelner Kanal",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "Kanal ändern (leere Geheimnisse behalten den gespeicherten Wert)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "Kanal löschen",
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          }
+        }
+      }
     },
-    "/channels/{id}/test": {"post": {"tags": ["Benachrichtigungen"], "summary": "Testnachricht senden", "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "{ok: true}"}, "502": {"description": "{ok: false, error}"}}}},
-    "/channel-types": {"get": {"tags": ["Benachrichtigungen"], "summary": "Kanaltypen mit Feldern", "responses": {"200": {"description": "OK"}}}},
-    "/deliveries": {"get": {"tags": ["Benachrichtigungen"], "summary": "Zustellprotokoll", "parameters": [{"name": "limit", "in": "query", "schema": {"type": "integer"}}, {"name": "before", "in": "query", "schema": {"type": "integer"}}, {"name": "channel", "in": "query", "schema": {"type": "integer"}}], "responses": {"200": {"description": "Liste"}}}}
+    "/channels/{id}/test": {
+      "post": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "Testnachricht senden",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ok: true}"
+          },
+          "502": {
+            "description": "{ok: false, error}"
+          }
+        }
+      }
+    },
+    "/channel-types": {
+      "get": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "Kanaltypen mit Feldern",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/deliveries": {
+      "get": {
+        "tags": [
+          "Benachrichtigungen"
+        ],
+        "summary": "Zustellprotokoll",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Liste"
+          }
+        }
+      }
+    }
   }
 }
