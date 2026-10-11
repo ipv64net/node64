@@ -14,9 +14,8 @@
 <header class="navbar navbar-expand topbar border-bottom px-3">
 	<button class="btn btn-outline-secondary d-lg-none me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidenav" aria-label="{{.T "nav.menu"}}"><i class="bi bi-list"></i></button>
 	<a class="navbar-brand d-flex align-items-center" href="/">
-		<img src="/static/img/ipv64_logo.svg" alt="ipv64" class="logo logo-light" height="28">
-		<img src="/static/img/ipv64_logo_white.svg" alt="ipv64" class="logo logo-dark" height="28">
-		<span class="ms-2 fw-semibold">Node</span>
+		<img src="/static/img/node64.svg?v={{.Version}}" alt="Node64" class="logo logo-light" height="28">
+		<img src="/static/img/node64_dark.svg?v={{.Version}}" alt="Node64" class="logo logo-dark" height="28">
 	</a>
 	<div class="ms-auto d-flex align-items-center gap-2">
 		<button class="btn btn-outline-secondary btn-sm theme-toggle" type="button" id="themeToggle" title="{{.T "nav.theme"}}"><i class="bi bi-sun-fill"></i><i class="bi bi-moon-stars-fill"></i></button>
@@ -50,9 +49,9 @@
 	<div class="auth-card card shadow-sm">
 		<div class="card-body p-4">
 			<div class="text-center mb-3">
-				<img src="/static/img/ipv64_logo.svg" alt="ipv64" class="logo logo-light" height="40">
-				<img src="/static/img/ipv64_logo_white.svg" alt="ipv64" class="logo logo-dark" height="40">
-				<div class="text-body-secondary small mt-1">{{.T "app.name"}}</div>
+				<img src="/static/img/node64.svg?v={{.Version}}" alt="Node64" class="logo logo-light" height="40">
+				<img src="/static/img/node64_dark.svg?v={{.Version}}" alt="Node64" class="logo logo-dark" height="40">
+				<div class="text-body-secondary small mt-1">{{.T "app.tagline"}}</div>
 			</div>
 			{{if .Flash}}<div class="alert alert-{{.Flash.Kind}}" role="alert">{{.Flash.Text}}</div>{{end}}
 			{{template "content" .}}
