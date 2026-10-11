@@ -67,8 +67,8 @@ func (c *Live) loop(ctx context.Context) {
 		}
 		if errors.Is(err, errBye) {
 			backoff = time.Second
-			failed = ""
-			continue // sofort neu verbinden (anderer hub)
+			failed = hub // sofort neu verbinden, bevorzugt beim anderen hub
+			continue
 		}
 		if err != nil {
 			c.setErr(err)
