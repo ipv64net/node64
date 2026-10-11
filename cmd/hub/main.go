@@ -86,12 +86,14 @@ func run(cfgPath string) error {
 		log.Warn("secret key file missing, channel secrets cannot be decrypted", "file", cfg.SecretKeyFile)
 	}
 	var bridge *hubnotify.Bridge
+	var portalSecret []byte
 	if cfg.Bridge.URL != "" {
 		sec, err := os.ReadFile(cfg.Bridge.SecretFile)
 		if err != nil {
 			log.Warn("bridge secret missing, ipv64_mail/sms/app disabled", "file", cfg.Bridge.SecretFile)
 		} else {
 			bridge = hubnotify.NewBridge(cfg.Bridge.URL, []byte(strings.TrimSpace(string(sec))), "ipv64-hub/"+Version)
+			portalSecret = []byte(strings.TrimSpace(string(sec)))
 		}
 	}
 	bundle, err := i18n.Load()
@@ -119,6 +121,7 @@ func run(cfgPath string) error {
 	if cfg.HasRole("gateway") {
 		gw = gateway.New(st, nfStore, senders, log, Version, cfg.Location, cfg.Limits.MaxConnections)
 		// Eigener Kontext: beim Stopp-Signal sollen die Nodes erst "bye" bekommen (gw.Stop), nicht sofort EOF
+		gw.SetPortalSecret(portalSecret)
 		if err := gw.Start(context.Background()); err != nil {
 			return fmt.Errorf("gateway: %w", err)
 		}
@@ -138,6 +141,7 @@ func run(cfgPath string) error {
 	srv := httpapi.New(cfg.Listen, log, st.Metrics, status)
 	if gw != nil {
 		gw.Register(srv.Mux())
+		gw.RegisterPortal(srv.Mux())
 	}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()

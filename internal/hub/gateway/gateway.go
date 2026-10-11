@@ -25,13 +25,14 @@ import (
 
 // Gateway haelt die Verbindungen einer Instanz.
 type Gateway struct {
-	st       *store.Store
-	nf       *hubnotify.Store
-	senders  map[notify.Type]notify.Sender
-	log      *slog.Logger
-	version  string
-	location string
-	maxConns int
+	st           *store.Store
+	nf           *hubnotify.Store
+	senders      map[notify.Type]notify.Sender
+	log          *slog.Logger
+	version      string
+	location     string
+	maxConns     int
+	portalSecret []byte // Portal -> hub (portal.go), gleiches Geheimnis wie die Bruecke
 
 	mu      sync.RWMutex
 	conns   map[string]*conn         // node_id -> Verbindung

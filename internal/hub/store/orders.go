@@ -38,8 +38,24 @@ func (s *Store) CommandDone(ctx context.Context, r wire.CommandResult) error {
 	if r.Error != "" {
 		out = r.Error
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE hc2_commands SET done_at = ?, ok = ?, output = ? WHERE id = ?`, nowStr(), b2i(r.OK), truncate(out, 65000), r.ID)
-	return err
+	if _, err := s.db.ExecContext(ctx, `UPDATE hc2_commands SET done_at = ?, ok = ?, output = ? WHERE id = ?`, nowStr(), b2i(r.OK), truncate(out, 65000), r.ID); err != nil {
+		return err
+	}
+	// Gehoert das Kommando zu einem Testlauf (Umhaengen), Ergebnis dort als Messstelle "node" eintragen
+	var args sql.NullString
+	if err := s.db.QueryRowContext(ctx, `SELECT args FROM hc2_commands WHERE id = ? AND name = 'test_check'`, r.ID).Scan(&args); err == nil && args.Valid {
+		var a struct {
+			TestrunID int64 `json:"testrun_id"`
+		}
+		if json.Unmarshal([]byte(args.String), &a) == nil && a.TestrunID > 0 {
+			o := TestrunOutcome{OK: r.OK, Error: r.Error, Time: time.Now().UTC()}
+			if json.Valid(r.Output) {
+				o.Results = r.Output
+			}
+			return s.TestrunResult(ctx, a.TestrunID, "node", o)
+		}
+	}
+	return nil
 }
 
 // AddCommand legt ein Kommando an (Portal/Tests).

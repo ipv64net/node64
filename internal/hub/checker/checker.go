@@ -5,6 +5,7 @@ package checker
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"sync"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/ipv64net/node64/internal/hub/store"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/scheduler"
+	"github.com/ipv64net/node64/internal/wire"
 )
 
 // Checker haelt Scheduler und Hintergrundschleifen einer Instanz.
@@ -138,12 +140,86 @@ func (c *Checker) Start(ctx context.Context) error {
 		return err
 	}
 	c.sched.Start(ctx)
-	c.wg.Add(4)
+	c.wg.Add(5)
 	go c.heartbeatLoop(ctx)
 	go c.configLoop(ctx)
 	go c.pushLoop(ctx)
 	go c.housekeepingLoop(ctx)
+	go c.testrunLoop(ctx, runner)
 	return nil
+}
+
+// testrunLoop fuehrt Testlaeufe des Umhaengens (hc2_testruns) fuer diesen Standort aus (alle 2 s).
+func (c *Checker) testrunLoop(ctx context.Context, runner *checks.Runner) {
+	defer c.wg.Done()
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+	expire := time.NewTicker(30 * time.Second)
+	defer expire.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-expire.C:
+			c.st.ExpireTestruns(ctx)
+		case <-t.C:
+			list, err := c.st.PendingTestruns(ctx, c.location)
+			if err != nil {
+				c.log.Warn("testruns query failed", "err", err)
+				continue
+			}
+			for _, tr := range list {
+				out := c.runTest(ctx, runner, tr.Definition)
+				if err := c.st.TestrunResult(ctx, tr.ID, c.location, out); err != nil {
+					c.log.Warn("testrun result failed", "id", tr.ID, "err", err)
+				}
+				c.log.Info("testrun done", "id", tr.ID, "token", tr.Token, "ok", out.OK)
+			}
+		}
+	}
+}
+
+// runTest fuehrt eine Check-Definition (wire.Check als JSON) einmal aus.
+func (c *Checker) runTest(ctx context.Context, runner *checks.Runner, raw json.RawMessage) store.TestrunOutcome {
+	out := store.TestrunOutcome{Time: time.Now().UTC()}
+	var w wire.Check
+	if err := json.Unmarshal(raw, &w); err != nil {
+		out.Error = "invalid definition: " + err.Error()
+		return out
+	}
+	def := checks.Definition{Token: w.Token, Type: checks.Type(w.Type), Target: w.Target, Params: w.Params, IPMode: checks.IPMode(w.IPMode),
+		Timeouts: checks.Timeouts{Connect: time.Duration(w.ConnectTimeoutSeconds * float64(time.Second)), Total: time.Duration(w.TimeoutSeconds * float64(time.Second))}}
+	if def.Timeouts.Connect <= 0 {
+		def.Timeouts.Connect = checks.DefaultConnectTimeout
+	}
+	if def.Timeouts.Total <= 0 {
+		def.Timeouts.Total = checks.DefaultTotalTimeout
+	}
+	if err := checks.Validate(def); err != nil {
+		out.Error = err.Error()
+		return out
+	}
+	if store.PrivateTarget(string(def.Type), def.Target) {
+		out.Error = "online checks cannot target private addresses"
+		return out
+	}
+	if def.Type == checks.TypePush {
+		out.OK = true // nichts zu messen
+		return out
+	}
+	rctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	results := runner.Run(rctx, def)
+	list := make([]map[string]any, 0, len(results))
+	out.OK = len(results) > 0
+	for _, r := range results {
+		if r.Status != checks.Up {
+			out.OK = false
+		}
+		list = append(list, map[string]any{"status": r.Status, "latency_ms": r.LatencyMS(), "reason": r.Reason, "message": r.Message, "family": r.Family, "time": r.Time})
+	}
+	out.Results, _ = json.Marshal(list)
+	return out
 }
 
 // Stop haelt alles an und meldet die Instanz ab.
