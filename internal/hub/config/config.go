@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/ipv64net/node64/internal/hub/ops"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,7 +35,8 @@ type Config struct {
 		CheckerWorkers int      `yaml:"checker_workers"`
 		TrustedIPs     []string `yaml:"trusted_ips"` // ohne IP-Ratenlimit (z. B. Lasttest-Quelle); leer im Normalbetrieb
 	} `yaml:"limits"`
-	LogLevel string `yaml:"log_level"` // debug, info, warn, error
+	LogLevel string     `yaml:"log_level"` // debug, info, warn, error
+	Ops      ops.Config `yaml:"ops"`       // Betriebsalarme an den Betreiber (andere hubs, Datenbank)
 }
 
 // Load liest und prueft die Datei.

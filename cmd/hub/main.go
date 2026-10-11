@@ -21,6 +21,7 @@ import (
 	"github.com/ipv64net/node64/internal/hub/gateway"
 	"github.com/ipv64net/node64/internal/hub/httpapi"
 	hubnotify "github.com/ipv64net/node64/internal/hub/notify"
+	"github.com/ipv64net/node64/internal/hub/ops"
 	"github.com/ipv64net/node64/internal/hub/store"
 	"github.com/ipv64net/node64/internal/i18n"
 	"github.com/ipv64net/node64/internal/notify"
@@ -30,9 +31,12 @@ import (
 // Version wird beim Build gesetzt.
 var Version = "dev"
 
+var opsTest *bool
+
 func main() {
 	cfgPath := flag.String("config", "/etc/ipv64-hub/config.yaml", "Konfigurationsdatei")
 	showVersion := flag.Bool("version", false, "Version ausgeben")
+	opsTest = flag.Bool("ops-test", false, "Testnachricht an die Betriebsalarm-Kanaele schicken und beenden")
 	flag.Parse()
 	if *showVersion {
 		fmt.Println("ipv64-hub", Version)
@@ -129,8 +133,22 @@ func run(cfgPath string) error {
 		defer gw.Stop()
 	}
 
+	locName := map[string]string{"fsn": "Falkenstein (Deutschland)", "nbg": "Nürnberg (Deutschland)"}[cfg.Location]
+	if locName == "" {
+		locName = cfg.Location
+	}
+	// Betriebsalarme (andere hubs, eigene Datenbank) an den Betreiber
+	watcher := ops.New(cfg.Ops, cfg.NodeName, locName, st.DB(), senders, log)
+	if *opsTest {
+		watcher.Test(ctx)
+		return nil
+	}
+	go watcher.Run(ctx)
 	status := func() map[string]any {
-		out := map[string]any{"node": cfg.NodeName, "location": cfg.Location, "roles": cfg.Roles, "version": Version}
+		out := map[string]any{"node": cfg.NodeName, "location": cfg.Location, "roles": cfg.Roles, "version": Version, "db": "ok"}
+		if ok, e := watcher.DBStatus(); !ok {
+			out["status"], out["db"] = "degraded", e
+		}
 		if chk != nil {
 			out["checks"] = chk.Count()
 		}
@@ -140,10 +158,6 @@ func run(cfgPath string) error {
 		return out
 	}
 	srv := httpapi.New(cfg.Listen, log, st.Metrics, status)
-	locName := map[string]string{"fsn": "Falkenstein (Deutschland)", "nbg": "Nürnberg (Deutschland)"}[cfg.Location]
-	if locName == "" {
-		locName = cfg.Location
-	}
 	srv.RegisterInfo(httpapi.Info{Name: cfg.NodeName, Location: locName, Version: Version})
 	if gw != nil {
 		gw.Register(srv.Mux())
