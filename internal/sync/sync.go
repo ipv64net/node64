@@ -874,7 +874,17 @@ func (c *Live) Resolve(ctx context.Context, id int64, keepServer bool) error {
 	if err != nil {
 		return err
 	}
-	return c.d.HC.ConflictDelete(ctx, id)
+	if err := c.d.HC.ConflictDelete(ctx, id); err != nil {
+		return err
+	}
+	// Konfliktzahl am hub sofort aktualisieren (sonst erst mit dem naechsten 5-min-Status)
+	c.mu.Lock()
+	s := c.ws
+	c.mu.Unlock()
+	if s != nil {
+		go s.sendStatus()
+	}
+	return nil
 }
 
 func (c *Live) remoteIDOf(ctx context.Context, cf *healthchecks.Conflict) string {

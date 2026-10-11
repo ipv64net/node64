@@ -146,6 +146,8 @@ Reihenfolge 1 → 2 → 3 → 4 → 5. Innerhalb von Phase 2–4 kann Go (hub) p
 
 ## Phase 3 – hub: Nodes anbinden
 
+**Stand 2026-10-11:** umgesetzt und auf beiden hubs im Betrieb (0.8.x-dev): Rolle `gateway` (WebSocket `/v1/ws`, Device-Code `link/start|poll`, Bootstrap/Config/Results über HTTPS, Push-Eingang, Kommandos `run_check`/`pause`/`resume`/`test_check`/`repair`/`resolve_conflict`, Sendeaufträge für Node-Kanäle, Online-Verfolgung mit 60 s Karenz, Hausmeister setzt stehengebliebene Nodes nach 3 min offline), Node-Client `internal/sync` (Link-Seite, Outbox, Konflikte mit Auflösung in der Node, Reconnect mit Backoff, eigener Ping gegen stille Netztrennungen, Neuverbindung bei ausbleibendem Ack), Besitzer-Badges in der Node (eigene / andere Node / online). Getestet mit Dev-Node (PC) und Testbox: Verknüpfung per Code (Einlösen per SQL wie `link.php`), Bootstrap 9 + 11 Checks, Messpunkte/Zustände/Ereignisse am hub, Portal-Änderung in der Node < 5 s, Node-Änderung am hub sofort, Kommandos aus `hc2_commands` inkl. Testlauf, Konflikt lokal/Portal erkannt und über die Node-Seite aufgelöst, Netztrennung 10 min mit Änderungen auf beiden Seiten (siehe Testprotokoll unten), Node-Neustart während der Trennung. Noch offen in Phase 3: Lasttest `cmd/hubload`, Redis-Fanout (hub pollt `hc2_config_log` jede Sekunde, reicht vorerst), `revision_gap`-Vollabgleich nur im Code geprüft, 2-h-Trennung, Umhängen mit Testlauf über das Portal (Server-Seite fertig, Portal-Seite kommt in Phase 4).
+
 ### S5 – hub Rolle gateway
 
 **Ziel**: Nodes verbinden sich per WebSocket, erhalten Konfiguration in Echtzeit, liefern Messpunkte/Ereignisse, Device-Code-Verknüpfung funktioniert, Lasttest mit 10.000 simulierten Nodes besteht.
