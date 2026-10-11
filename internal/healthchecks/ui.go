@@ -781,6 +781,7 @@ func (m *Module) doAction(r *http.Request, c *Check, action string) error {
 		if s := m.scheduler(); s != nil && nc != nil {
 			s.Upsert(nc.SchedulerCheck(), nil)
 		}
+		m.PushState(c.Token)
 		m.audit(r, "check."+action, c)
 	case "run":
 		if c.Type == checks.TypePush {

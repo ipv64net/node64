@@ -510,6 +510,9 @@ func (c *Live) bootstrap(ctx context.Context) error {
 }
 
 func (c *Live) hubURL() string {
+	if u := os.Getenv("NODE64_HUB_URL"); u != "" {
+		return strings.TrimRight(u, "/")
+	}
 	if h := c.setting(SetHub, ""); h != "" {
 		return h
 	}
@@ -876,6 +879,9 @@ func (c *Live) remoteIDOf(ctx context.Context, cf *healthchecks.Conflict) string
 
 // pickEndpoint waehlt den zuletzt guten hub oder zufaellig einen anderen.
 func (c *Live) pickEndpoint(failed string) string {
+	if u := os.Getenv("NODE64_HUB_URL"); u != "" {
+		return strings.TrimRight(u, "/")
+	}
 	eps := c.endpoints()
 	if h := c.setting(SetHub, ""); h != "" && h != failed {
 		return h

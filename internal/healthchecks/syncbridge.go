@@ -236,6 +236,22 @@ func (m *Module) Snapshot(ctx context.Context) []wire.State {
 	return out
 }
 
+// PushState meldet den aktuellen Zustand eines Checks an den Sync (nach pausieren/fortsetzen).
+func (m *Module) PushState(token string) {
+	if m.st.OnRuntime == nil {
+		return
+	}
+	if s := m.scheduler(); s != nil {
+		if rt, ok := s.Runtime(token); ok {
+			m.st.OnRuntime(token, rt)
+			return
+		}
+	}
+	if c, _ := m.st.Check(context.Background(), token); c != nil {
+		m.st.OnRuntime(token, c.Runtime)
+	}
+}
+
 // RunNow stoesst einen Check an.
 func (m *Module) RunNow(token string) bool {
 	if s := m.scheduler(); s != nil {
@@ -255,6 +271,7 @@ func (m *Module) SetPausedRemote(ctx context.Context, token string, paused bool)
 			s.Upsert(c.SchedulerCheck(), nil)
 		}
 	}
+	m.PushState(token)
 	return nil
 }
 

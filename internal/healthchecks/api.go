@@ -472,6 +472,7 @@ func (m *Module) setPaused(w http.ResponseWriter, r *http.Request, paused bool) 
 	if s := m.scheduler(); s != nil {
 		s.Upsert(c.SchedulerCheck(), nil)
 	}
+	m.PushState(c.Token)
 	m.audit(r, map[bool]string{true: "check.pause", false: "check.resume"}[paused], c)
 	writeJSON(w, http.StatusOK, m.toJSON(c, r))
 }
