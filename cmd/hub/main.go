@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -71,6 +72,12 @@ func run(cfgPath string) error {
 	// Benachrichtigungen: Kanal-Geheimnisse mit dem gemeinsamen Schluessel, Versand ueber Bruecke + direkte Sender
 	var box *secrets.Box
 	if key, err := os.ReadFile(cfg.SecretKeyFile); err == nil {
+		// Textdatei mit 64 Hex-Zeichen (kopierbar) oder 32 Rohbytes
+		if t := strings.TrimSpace(string(key)); len(t) == 64 {
+			if raw, err := hex.DecodeString(t); err == nil {
+				key = raw
+			}
+		}
 		if box, err = secrets.New(key); err != nil {
 			return fmt.Errorf("secret key: %w", err)
 		}
