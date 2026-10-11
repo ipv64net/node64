@@ -545,12 +545,15 @@ func (s *session) runCommand(cmd wire.Command) {
 		}
 		results := c.d.HC.TestDefinition(ctx, def)
 		res.OK = true
+		out := make([]map[string]any, 0, len(results))
 		for _, r := range results {
 			if r.Status != "up" {
 				res.OK = false
 			}
+			// Portal-freundliche Form (snake_case, Latenz in ms)
+			out = append(out, map[string]any{"status": r.Status, "latency_ms": r.LatencyMS(), "reason": r.Reason, "message": r.Message, "time": r.Time, "family": r.Family, "details": r.Details})
 		}
-		res.Output = mustJSON(results)
+		res.Output = mustJSON(out)
 	case cmd.Name == "repair":
 		if err := c.fullSync(ctx); err != nil {
 			res.Error = err.Error()
