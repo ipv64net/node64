@@ -48,10 +48,14 @@ func (c *Live) loop(ctx context.Context) {
 			return
 		}
 		hub := c.pickEndpoint(failed)
+		started := time.Now()
 		err := c.runSession(ctx, hub)
 		c.mu.Lock()
 		c.connected, c.hub = false, ""
 		c.mu.Unlock()
+		if time.Since(started) > 30*time.Second {
+			backoff = time.Second // stabile Sitzung gehabt: Wartezeit zuruecksetzen
+		}
 		if ctx.Err() != nil {
 			return
 		}

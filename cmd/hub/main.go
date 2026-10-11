@@ -118,7 +118,8 @@ func run(cfgPath string) error {
 	var gw *gateway.Gateway
 	if cfg.HasRole("gateway") {
 		gw = gateway.New(st, nfStore, senders, log, Version, cfg.Location, cfg.Limits.MaxConnections)
-		if err := gw.Start(ctx); err != nil {
+		// Eigener Kontext: beim Stopp-Signal sollen die Nodes erst "bye" bekommen (gw.Stop), nicht sofort EOF
+		if err := gw.Start(context.Background()); err != nil {
 			return fmt.Errorf("gateway: %w", err)
 		}
 		defer gw.Stop()
