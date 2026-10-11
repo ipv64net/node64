@@ -58,7 +58,15 @@ a { color: var(--bs-primary); }
 .sidebar .nav-link:hover, .sidebar-offcanvas .nav-link:hover { background: var(--bs-secondary-bg); }
 .sidebar .nav-link.active, .sidebar-offcanvas .nav-link.active { border-left-color: var(--ipv64-orange); font-weight: 600; background: var(--bs-secondary-bg); }
 .sidebar .nav-link.disabled, .sidebar-offcanvas .nav-link.disabled { opacity: .55; }
-.content { max-width: 1600px; min-width: 0; }
+.content { min-width: 0; } /* volle Breite auf allen Seiten */
+
+/* Brotkrumen in der Kopfzeile */
+.topbar-crumbs .breadcrumb { font-size: .9rem; flex-wrap: nowrap; white-space: nowrap; }
+.topbar-crumbs .breadcrumb-item { overflow: hidden; text-overflow: ellipsis; }
+.topbar-crumbs .breadcrumb-item:last-child { max-width: 40vw; font-weight: 600; }
+.topbar-crumbs .breadcrumb-item a { color: var(--bs-secondary-color); text-decoration: none; }
+.topbar-crumbs .breadcrumb-item a:hover { color: var(--bs-body-color); }
+.topbar-crumb-mobile { max-width: 45vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 
 /* Theme-Umschalter: Sonne im Dunkelmodus, Mond im Hellmodus */
 .theme-toggle .bi-sun-fill { display: none; color: var(--ipv64-orange); }
@@ -102,7 +110,26 @@ a { color: var(--bs-primary); }
 .tile-other { border-left-color: var(--bs-info); }
 
 /* Healthchecks */
-.hc-target { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+/* Pillen-Spalte waechst nicht ueber den Platz hinaus; aelteste Pillen werden links abgeschnitten,
+   die neuesten bleiben sichtbar. So passen auf dem Tablet alle Spalten inkl. Aktionen. */
+@media (min-width: 768px) {
+	.hc-table td.hc-beats { width: 30%; max-width: 0; }
+	.hc-table td.hc-beats .beats { justify-content: flex-end; }
+}
+/* Handy: kompakte Karte je Check (Zustand, Name, Aktionen; darunter die Pillen), ohne Feldnamen */
+@media (max-width: 767.98px) {
+	.table-cards.hc-table tr { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "status name actions" "beats beats beats"; gap: .35rem .6rem; align-items: start; padding: .6rem .7rem; }
+	.table-cards.hc-table td { display: block; padding: 0; }
+	.table-cards.hc-table td::before { content: none; }
+	.table-cards.hc-table td.hc-c-status { grid-area: status; padding-top: .1rem; }
+	.table-cards.hc-table td.hc-c-name { grid-area: name; min-width: 0; }
+	.table-cards.hc-table td.hc-c-actions { grid-area: actions; }
+	.table-cards.hc-table td.hc-c-actions .btn { padding: .15rem .4rem; }
+	.table-cards.hc-table td.hc-beats { grid-area: beats; }
+	.table-cards.hc-table .hc-target { max-width: 100%; display: block; }
+	.table-cards.hc-table .hc-exec { display: none; } /* Ausfuehrungsort erst auf der Detailseite */
+}
+.hc-target { max-width: min(42vw, 640px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
 .hc-beats { min-width: 140px; }
 .hc-state-up { background: var(--bs-success) !important; color: #fff; }
 .hc-state-down, .hc-state-flapping { background: var(--bs-danger) !important; color: #fff; }

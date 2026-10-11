@@ -17,6 +17,12 @@
 		<img src="/static/img/node64.svg?v={{.Version}}" alt="Node64" class="logo logo-light" height="28">
 		<img src="/static/img/node64_dark.svg?v={{.Version}}" alt="Node64" class="logo logo-dark" height="28">
 	</a>
+	<nav aria-label="breadcrumb" class="topbar-crumbs d-none d-md-block ms-3 border-start ps-3 min-w-0">
+		<ol class="breadcrumb mb-0">
+			{{range .Crumbs}}{{if .URL}}<li class="breadcrumb-item"><a href="{{.URL}}">{{.Label}}</a></li>{{else}}<li class="breadcrumb-item active" aria-current="page">{{.Label}}</li>{{end}}{{end}}
+		</ol>
+	</nav>
+	<span class="topbar-crumb-mobile d-md-none ms-2 small">{{.LastCrumb}}</span>
 	<div class="ms-auto d-flex align-items-center gap-2">
 		<button class="btn btn-outline-secondary btn-sm theme-toggle" type="button" id="themeToggle" title="{{.T "nav.theme"}}"><i class="bi bi-sun-fill"></i><i class="bi bi-moon-stars-fill"></i></button>
 		<span class="d-none d-sm-inline text-body-secondary small"><i class="bi bi-person-circle"></i> {{.User.Username}}</span>

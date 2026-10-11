@@ -45,6 +45,59 @@ type NavItem struct {
 	Active    bool
 }
 
+// Crumb ist ein Element der Brotkrumen in der Kopfzeile (URL leer = aktuelle Seite).
+type Crumb struct {
+	Label string
+	URL   string
+}
+
+// Crumbs: Dashboard > Bereich (Menuepunkt) > aktuelle Seite. Daten koennen mit Crumb() string
+// eine eigene letzte Stufe liefern (z. B. den Namen eines Checks).
+func (v *View) Crumbs() []Crumb {
+	if v.User == nil {
+		return nil
+	}
+	out := []Crumb{{Label: v.T("nav.dashboard"), URL: "/"}}
+	if v.Path == "/" {
+		out[0].URL = ""
+		return out
+	}
+	var sec *NavItem
+	for i := range v.Nav {
+		n := &v.Nav[i]
+		if n.Path == "/" {
+			continue
+		}
+		if (v.Path == n.Path || strings.HasPrefix(v.Path, n.Path+"/")) && (sec == nil || len(n.Path) > len(sec.Path)) {
+			sec = n
+		}
+	}
+	leaf := v.Title
+	if c, ok := v.Data.(interface{ Crumb() string }); ok && c.Crumb() != "" {
+		leaf = c.Crumb()
+	}
+	if sec != nil {
+		label := v.T(sec.Key)
+		if v.Path == sec.Path {
+			return append(out, Crumb{Label: label})
+		}
+		out = append(out, Crumb{Label: label, URL: sec.Path})
+		if leaf == label {
+			leaf = v.Title
+		}
+	}
+	return append(out, Crumb{Label: leaf})
+}
+
+// LastCrumb ist die aktuelle Seite (fuer schmale Bildschirme).
+func (v *View) LastCrumb() string {
+	c := v.Crumbs()
+	if len(c) == 0 {
+		return ""
+	}
+	return c[len(c)-1].Label
+}
+
 type Flash struct {
 	Kind string // success, warning, danger
 	Text string

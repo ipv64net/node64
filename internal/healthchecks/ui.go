@@ -330,6 +330,14 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 
 // ---------------------------------------------------------------- Formular
 
+// Crumb: Name des Checks in den Brotkrumen.
+func (d detailData) Crumb() string {
+	if d.Row.Check != nil {
+		return d.Row.Check.Name
+	}
+	return ""
+}
+
 type formData struct {
 	Edit     bool
 	Token    string
