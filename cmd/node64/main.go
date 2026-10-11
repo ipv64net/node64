@@ -126,7 +126,7 @@ func run() error {
 	// Verknuepfung mit ipv64.net (Sync-Client); standalone bleibt alles wie gehabt
 	syncClient := nodesync.New(nodesync.Deps{Core: st, HC: hcModule, NF: nfStore, Box: box, Version: Version, Log: logger.Slog(), Senders: notify.Senders(Version)})
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
-	dispatcher.SetServerSends(func() bool { return syncClient.State().Connected })
+	dispatcher.SetServerSends(syncClient.ServerSends)
 	go netstat.Loop(ctx, st) // Datenverkehr des Containers fuer das Dashboard
 	if err := syncClient.Start(ctx); err != nil {
 		log.Warn("sync start failed", "err", err)

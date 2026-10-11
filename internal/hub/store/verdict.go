@@ -38,7 +38,7 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		return err
 	}
 
-	rows, err := tx.QueryContext(ctx, `SELECT source, state, last_status, last_reason, last_message, last_latency_ms, updated_at FROM hc2_check_states WHERE token = ?`, token)
+	rows, err := tx.QueryContext(ctx, `SELECT source, state, last_status, last_reason, last_message, last_latency_ms, updated_at, since FROM hc2_check_states WHERE token = ?`, token)
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		scheduler.SourceState
 		reason, message string
 		latency         float64
-		updated         time.Time
+		updated, since  time.Time
 	}
 	var srcs []src
 	now := time.Now().UTC()
@@ -58,13 +58,13 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		var x src
 		var st, ls, reason, msg sql.NullString
 		var lat sql.NullFloat64
-		var upd sql.NullString
-		if err := rows.Scan(&x.Source, &st, &ls, &reason, &msg, &lat, &upd); err != nil {
+		var upd, since sql.NullString
+		if err := rows.Scan(&x.Source, &st, &ls, &reason, &msg, &lat, &upd, &since); err != nil {
 			rows.Close()
 			return err
 		}
 		x.State, x.LastStatus = scheduler.State(st.String), checks.Status(ls.String)
-		x.reason, x.message, x.latency, x.updated = reason.String, msg.String, lat.Float64, pt(upd)
+		x.reason, x.message, x.latency, x.updated, x.since = reason.String, msg.String, lat.Float64, pt(upd), pt(since)
 		// Nach dem Umhaengen zaehlen nur Messstellen des aktuellen Ausfuehrungsorts
 		isNode := strings.HasPrefix(x.Source, "node:")
 		if (execution == "online" && isNode) || (execution == "local" && !isNode) {
@@ -129,6 +129,11 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 	old := scheduler.State(state)
 	incidentOpen := incident.Valid && incident.Int64 > 0
 	kind, silent := eventKind(old, overall, incidentOpen)
+	// Verspaetet gemeldeter Zustand einer Node (Node war offline oder der hub ohne Datenbank):
+	// die Node hat in der Zeit selbst benachrichtigt, also hier still nachtragen statt doppelt melden.
+	if lead != nil && strings.HasPrefix(lead.Source, "node:") && now.Sub(lead.updated) < 15*time.Second && !lead.since.IsZero() && now.Sub(lead.since) > 5*time.Minute {
+		silent = true
+	}
 	nowS := now.Format(TimeFormat)
 	var durationSec int64
 	ds := pt(downSince)

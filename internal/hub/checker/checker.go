@@ -38,6 +38,7 @@ type Checker struct {
 	slotIdx  int
 	slotMod  int
 	loaded   map[string]int64 // token -> revision
+	liveLocs map[string]bool  // Standorte mit lebendem hub (Push-Auswertung)
 	lastLog  int64
 	lastPush time.Time
 	wg       sync.WaitGroup
@@ -136,6 +137,9 @@ func (c *Checker) Start(ctx context.Context) error {
 	c.sched = scheduler.New(c.st, notifier{c.log}, runner, c.log, scheduler.Options{Workers: c.workers})
 	nodes, _ := c.st.LiveNodes(ctx)
 	c.slotIdx, c.slotMod = c.st.SlotShare(nodes)
+	if len(nodes) > 0 {
+		c.liveLocs = locsOf(nodes)
+	}
 	if err := c.reloadAll(ctx); err != nil {
 		return err
 	}
@@ -262,7 +266,7 @@ func (c *Checker) reloadAll(ctx context.Context) error {
 	want := map[string]bool{}
 	added, updated := 0, 0
 	for _, ck := range list {
-		if !ck.MeasuredHere(c.location) {
+		if !ck.MeasuredHere(c.location, c.live()) {
 			continue
 		}
 		want[ck.Token] = true
@@ -310,7 +314,7 @@ func (c *Checker) applyCheck(ctx context.Context, token string) {
 	idx, mod := c.slotIdx, c.slotMod
 	_, known := c.loaded[token]
 	c.mu.Unlock()
-	mine := ck != nil && ck.MeasuredHere(c.location) && ck.Slot%mod == idx
+	mine := ck != nil && ck.MeasuredHere(c.location, c.live()) && ck.Slot%mod == idx
 	switch {
 	case mine && known:
 		c.st.Remember(ck)
@@ -340,6 +344,40 @@ func (c *Checker) applyCheck(ctx context.Context, token string) {
 	c.st.Metrics.Set(n, 0, idx, mod)
 }
 
+func locsOf(nodes []store.HubInstance) map[string]bool {
+	m := map[string]bool{}
+	for _, n := range nodes {
+		m[n.Location] = true
+	}
+	return m
+}
+
+func sameLocs(a, b map[string]bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k := range a {
+		if !b[k] {
+			return false
+		}
+	}
+	return true
+}
+
+// live liefert die lebenden Standorte (Kopie); vor dem ersten Heartbeat nil.
+func (c *Checker) live() map[string]bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.liveLocs == nil {
+		return nil
+	}
+	m := make(map[string]bool, len(c.liveLocs))
+	for k, v := range c.liveLocs {
+		m[k] = v
+	}
+	return m
+}
+
 func (c *Checker) heartbeatLoop(ctx context.Context) {
 	defer c.wg.Done()
 	t := time.NewTicker(10 * time.Second)
@@ -358,9 +396,10 @@ func (c *Checker) heartbeatLoop(ctx context.Context) {
 				continue
 			}
 			idx, mod := c.st.SlotShare(nodes)
+			locs := locsOf(nodes)
 			c.mu.Lock()
-			changed := idx != c.slotIdx || mod != c.slotMod
-			c.slotIdx, c.slotMod = idx, mod
+			changed := idx != c.slotIdx || mod != c.slotMod || !sameLocs(locs, c.liveLocs)
+			c.slotIdx, c.slotMod, c.liveLocs = idx, mod, locs
 			c.mu.Unlock()
 			if changed {
 				c.log.Info("slot share changed", "slot", idx, "of", mod, "nodes", len(nodes))

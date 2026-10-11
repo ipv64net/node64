@@ -15,10 +15,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -125,8 +127,9 @@ type Live struct {
 	log *slog.Logger
 	hc  *http.Client
 
-	linkBusy     bool // LinkStart laeuft gerade
-	sessionReady bool // aktuelle Sitzung hat hello/config erhalten
+	linkBusy      bool      // LinkStart laeuft gerade
+	ackOK, ackBad time.Time // letzte Bestaetigung ohne bzw. mit Fehler (hub erreichbar, aber z. B. ohne Datenbank)
+	sessionReady  bool      // aktuelle Sitzung hat hello/config erhalten
 
 	mu        sync.Mutex
 	connected bool
@@ -205,9 +208,78 @@ func (c *Live) endpoints() []wire.Endpoint {
 		_ = json.Unmarshal([]byte(raw), &eps)
 	}
 	if len(eps) == 0 {
-		return DefaultEndpoints
+		eps = append([]wire.Endpoint(nil), DefaultEndpoints...)
 	}
+	sort.Slice(eps, func(i, j int) bool { return eps[i].URL < eps[j].URL })
 	return eps
+}
+
+// ServerSends sagt, ob der hub die Benachrichtigungen gerade uebernehmen kann: verbunden und
+// die letzte Bestaetigung kam ohne Fehler. Sonst sendet die Node ihre Kanaele selbst.
+func (c *Live) ServerSends() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.connected {
+		return false
+	}
+	return c.ackBad.IsZero() || c.ackOK.After(c.ackBad)
+}
+
+func (c *Live) noteAck(ok bool) {
+	c.mu.Lock()
+	wasOK := c.ackBad.IsZero() || c.ackOK.After(c.ackBad)
+	if ok {
+		c.ackOK = time.Now()
+	} else {
+		c.ackBad = time.Now()
+	}
+	c.mu.Unlock()
+	switch {
+	case wasOK && !ok:
+		c.log.Warn("hub not confirming (e.g. database down): node sends its own notifications")
+	case !wasOK && ok:
+		c.log.Info("hub confirming again: notifications via ipv64")
+	}
+}
+
+// hubHealthy fragt /v1/health eines hubs ab.
+func (c *Live) hubHealthy(ctx context.Context, url string) bool {
+	hctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(hctx, http.MethodGet, url+"/v1/health", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	var h struct {
+		Status string `json:"status"`
+	}
+	return resp.StatusCode == 200 && json.NewDecoder(resp.Body).Decode(&h) == nil && h.Status == "ok"
+}
+
+// homeHub ist der Stamm-hub dieser Node: fest nach Node-ID verteilt (crc32), damit sich die Nodes
+// gleichmaessig auf die hubs aufteilen und jede Node immer denselben bevorzugt.
+func (c *Live) homeHub() string {
+	eps := c.endpoints()
+	return eps[int(crc32.ChecksumIEEE([]byte(c.nodeID()))%uint32(len(eps)))].URL
+}
+
+// ordered liefert die Endpunkte mit dem Stamm-hub zuerst.
+func (c *Live) ordered() []wire.Endpoint {
+	eps, home := c.endpoints(), c.homeHub()
+	out := make([]wire.Endpoint, 0, len(eps))
+	for _, e := range eps {
+		if e.URL == home {
+			out = append([]wire.Endpoint{e}, out...)
+		} else {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // State liefert den Zustand fuer die Oberflaeche.
@@ -319,7 +391,7 @@ func (c *Live) LinkStart(ctx context.Context) (code string, expires time.Time, e
 	body, _ := json.Marshal(wire.LinkStart{NodeID: c.nodeID(), Name: name, Version: c.d.Version})
 	var out wire.LinkStarted
 	var lastErr error
-	for _, ep := range c.endpoints() {
+	for _, ep := range c.ordered() {
 		// je hub hoechstens 12 s, sonst wartet der Nutzer bei blockiertem Netz minutenlang
 		ectx, cancel := context.WithTimeout(ctx, 12*time.Second)
 		resp, err := c.post(ectx, ep.URL+"/v1/nodes/link/start", "", body)
@@ -997,7 +1069,7 @@ func (c *Live) pickEndpoint(failed string) string {
 		return strings.TrimRight(u, "/")
 	}
 	eps := c.endpoints()
-	if h := c.setting(SetHub, ""); h != "" && h != failed {
+	if h := c.homeHub(); h != failed {
 		return h
 	}
 	var cands []string

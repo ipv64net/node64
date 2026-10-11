@@ -33,6 +33,8 @@ type session struct {
 	ready   chan struct{} // nach hello + erster config
 	readyOk bool
 	sendMu  sync.Mutex
+
+	returnHome bool // Sitzung endet, weil der Stamm-hub wieder erreichbar ist
 }
 
 // loop haelt die Verbindung mit Backoff und Jitter (1 s .. 60 s, +-30 %).
@@ -66,6 +68,10 @@ func (c *Live) loop(ctx context.Context) {
 			c.set(SetToken, "")
 			return
 		}
+		if errors.Is(err, errHome) {
+			backoff, failed = time.Second, ""
+			continue // direkt zum Stamm-hub
+		}
 		if errors.Is(err, errBye) {
 			backoff = time.Second
 			failed = hub // sofort neu verbinden, bevorzugt beim anderen hub
@@ -92,6 +98,7 @@ func (c *Live) loop(ctx context.Context) {
 var (
 	errRevoked = errors.New("token revoked")
 	errBye     = errors.New("hub said bye")
+	errHome    = errors.New("returning to home hub")
 	errGap     = errors.New("revision gap")
 )
 
@@ -143,6 +150,9 @@ func (c *Live) runSession(ctx context.Context, hub string) error {
 	go s.worker()
 
 	err = <-errc
+	if s.returnHome {
+		return errHome
+	}
 	return err
 }
 
@@ -266,11 +276,17 @@ func (s *session) request(t string, data any) (wire.Msg, error) {
 	}
 	select {
 	case m := <-ch:
+		var a struct {
+			Error string `json:"error"`
+		}
+		_ = json.Unmarshal(m.Data, &a)
+		s.c.noteAck(!(m.T == "ack" && a.Error != ""))
 		return m, nil
 	case <-time.After(30 * time.Second):
 		s.mu.Lock()
 		delete(s.waiters, id)
 		s.mu.Unlock()
+		s.c.noteAck(false)
 		// Ohne Antwort ist die Verbindung mit hoher Wahrscheinlichkeit tot (z. B. harte Netztrennung):
 		// Sitzung beenden, die Schleife verbindet neu und spielt den Postausgang nach.
 		s.c.log.Warn("no ack from hub, reconnecting", "type", t)
@@ -302,10 +318,21 @@ func (s *session) worker() {
 	// Eigener Ping: nur so faellt eine stille Netztrennung (Pakete werden verworfen) zeitnah auf.
 	ping := time.NewTicker(30 * time.Second)
 	defer ping.Stop()
+	// Nicht beim Stamm-hub (nach einem Ausfall): nach 10-20 min pruefen, ob er wieder da ist, und zurueckwechseln.
+	home := time.NewTimer(time.Duration(10+rand.IntN(10)) * time.Minute)
+	defer home.Stop()
 	for {
 		select {
 		case <-s.ctx.Done():
 			return
+		case <-home.C:
+			if h := c.homeHub(); s.hub != h && c.hubHealthy(s.ctx, h) {
+				c.log.Info("home hub is back, switching", "from", s.hub, "to", h)
+				s.returnHome = true
+				s.cancel()
+				return
+			}
+			home.Reset(time.Duration(10+rand.IntN(10)) * time.Minute)
 		case <-ping.C:
 			pctx, pcancel := context.WithTimeout(s.ctx, 10*time.Second)
 			err := s.ws.Ping(pctx)

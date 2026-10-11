@@ -56,7 +56,9 @@ func (c *Check) SchedulerCheck() scheduler.Check {
 // MeasuredHere sagt, ob diese Messstelle den Check ausfuehrt: Online-Checks an
 // jedem gewaehlten Standort; Push-Checks nur am ersten gewaehlten Standort, damit
 // der Heartbeat nicht doppelt bewertet wird.
-func (c *Check) MeasuredHere(location string) bool {
+// live: Standorte mit lebendem hub; Push-Checks wertet der erste lebende Standort des Checks aus
+// (faellt er aus, uebernimmt der naechste). nil = alle als lebend annehmen.
+func (c *Check) MeasuredHere(location string, live map[string]bool) bool {
 	if c.Deleted || (c.Execution != "online" && c.Execution != "both") {
 		return false
 	}
@@ -64,6 +66,11 @@ func (c *Check) MeasuredHere(location string) bool {
 		return false
 	}
 	if c.Type == checks.TypePush {
+		for _, l := range c.Locations {
+			if live == nil || live[l] {
+				return l == location
+			}
+		}
 		return c.Locations[0] == location
 	}
 	for _, l := range c.Locations {
@@ -78,7 +85,7 @@ const checkCols = `c.token, c.userid, c.execution, c.locations, c.policy, c.noti
 	c.interval_sec, c.retry_interval_sec, c.retries, c.connect_timeout_ms, c.total_timeout_ms, c.invert, c.stabilize, c.ip_mode, c.paused,
 	c.parent_token, c.critical, c.notify_down, c.notify_up, c.channels, c.repeat_minutes, c.revision, c.deleted_at,
 	st.state, st.since, st.last_check_at, st.next_check_at, st.last_status, st.last_latency_ms, st.last_reason, st.last_message,
-	st.consecutive_fail, st.consecutive_ok, st.down_since`
+	st.consecutive_fail, st.consecutive_ok, st.down_since, c.last_push_at`
 
 // LoadChecks laedt alle Checks, die dieser Messstelle zugeteilt sind
 // (slot % n == i), inklusive Zustand dieser Messstelle.
@@ -119,13 +126,13 @@ func scanCheck(row interface{ Scan(...any) error }) (*Check, error) {
 	var iv, riv, cto, tto int64
 	var invert, paused, critical, nd, nu, ndeg int
 	var parent, deletedAt sql.NullString
-	var state, since, last, next, lastStatus, lastReason, lastMsg, downSince sql.NullString
+	var state, since, last, next, lastStatus, lastReason, lastMsg, downSince, lastPush sql.NullString
 	var lastLat sql.NullFloat64
 	var cfail, cok sql.NullInt64
 	if err := row.Scan(&c.Token, &c.UserID, &c.Execution, &locations, &c.Policy, &ndeg, &c.Slot, &typ, &c.Name, &c.Target, &params,
 		&iv, &riv, &c.Retries, &cto, &tto, &invert, &c.Stabilize, &ipMode, &paused,
 		&parent, &critical, &nd, &nu, &channels, &c.RepeatMinutes, &c.Revision, &deletedAt,
-		&state, &since, &last, &next, &lastStatus, &lastLat, &lastReason, &lastMsg, &cfail, &cok, &downSince); err != nil {
+		&state, &since, &last, &next, &lastStatus, &lastLat, &lastReason, &lastMsg, &cfail, &cok, &downSince, &lastPush); err != nil {
 		return nil, err
 	}
 	c.Type, c.IPMode = checks.Type(typ), checks.IPMode(ipMode)
@@ -151,6 +158,14 @@ func scanCheck(row interface{ Scan(...any) error }) (*Check, error) {
 			LastReason: checks.Reason(lastReason.String), LastMessage: lastMsg.String, ConsecutiveFail: int(cfail.Int64), ConsecutiveOK: int(cok.Int64),
 			DownSince: pt(downSince)}
 		c.Runtime = rt
+	}
+	// Push-Checks: letzter Heartbeat aus hc2_checks (gilt fuer alle Standorte). Sonst wuerde ein Standort,
+	// der nach einem Ausfall (oder als Vertretung) uebernimmt, sofort "Push ausgeblieben" melden.
+	if c.Type == checks.TypePush && lastPush.Valid {
+		if c.Runtime == nil {
+			c.Runtime = &scheduler.Runtime{State: scheduler.StatePending}
+		}
+		c.Runtime.LastPush = pt(lastPush)
 	}
 	return &c, nil
 }
