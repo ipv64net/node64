@@ -1,0 +1,126 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"strings"
+	"time"
+
+	"github.com/ipv64net/node64/internal/wire"
+)
+
+// PendingCommands liefert offene Kommandos einer Node (max. 1 h alt).
+func (s *Store) PendingCommands(ctx context.Context, nodeID string) ([]wire.Command, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, name, args FROM hc2_commands WHERE node_id = ? AND done_at IS NULL AND created_at > ? ORDER BY id`, nodeID, time.Now().UTC().Add(-time.Hour).Format(TimeFormat))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []wire.Command
+	for rows.Next() {
+		var c wire.Command
+		var args sql.NullString
+		if err := rows.Scan(&c.ID, &c.Name, &args); err != nil {
+			return nil, err
+		}
+		if args.Valid {
+			c.Args = json.RawMessage(args.String)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// CommandDone traegt das Ergebnis ein.
+func (s *Store) CommandDone(ctx context.Context, r wire.CommandResult) error {
+	out := string(r.Output)
+	if r.Error != "" {
+		out = r.Error
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE hc2_commands SET done_at = ?, ok = ?, output = ? WHERE id = ?`, nowStr(), b2i(r.OK), truncate(out, 65000), r.ID)
+	return err
+}
+
+// AddCommand legt ein Kommando an (Portal/Tests).
+func (s *Store) AddCommand(ctx context.Context, nodeID, name string, args any) (int64, error) {
+	b, _ := json.Marshal(args)
+	res, err := s.db.ExecContext(ctx, `INSERT INTO hc2_commands (node_id, name, args, created_at) VALUES (?,?,?,?)`, nodeID, name, string(b), nowStr())
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// PendingSendOrders liefert nicht abgeholte Sendeauftraege einer Node und markiert sie als abgeholt.
+func (s *Store) PendingSendOrders(ctx context.Context, nodeID string) ([]wire.SendOrder, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, channel_id, event_id, kind, payload FROM hc2_send_orders WHERE node_id = ? AND done_at IS NULL AND fetched_at IS NULL AND created_at > ? ORDER BY id LIMIT 100`,
+		nodeID, time.Now().UTC().Add(-time.Hour).Format(TimeFormat))
+	if err != nil {
+		return nil, err
+	}
+	var out []wire.SendOrder
+	for rows.Next() {
+		var o wire.SendOrder
+		var payload string
+		if err := rows.Scan(&o.ID, &o.ChannelID, &o.EventID, &o.Kind, &payload); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		_ = json.Unmarshal([]byte(payload), &o.Payload)
+		out = append(out, o)
+	}
+	rows.Close()
+	for _, o := range out {
+		_, _ = s.db.ExecContext(ctx, `UPDATE hc2_send_orders SET fetched_at = ? WHERE id = ?`, nowStr(), o.ID)
+	}
+	return out, nil
+}
+
+// SendOrderDone traegt das Ergebnis eines Sendeauftrags ein.
+func (s *Store) SendOrderDone(ctx context.Context, id int64, ok bool, errText string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE hc2_send_orders SET done_at = ?, ok = ?, error = ? WHERE id = ?`, nowStr(), b2i(ok), truncate(errText, 500), id)
+	return err
+}
+
+// PushIn nimmt einen Heartbeat am hub an (Messpunkt + last_push_at); der checker bewertet.
+func (s *Store) PushIn(ctx context.Context, token string, down bool, msg, from string) (bool, error) {
+	var t string
+	err := s.db.QueryRowContext(ctx, `SELECT token FROM hc2_checks WHERE token = ? AND type = 'push' AND deleted_at IS NULL`, token).Scan(&t)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	details, _ := json.Marshal(map[string]string{"from": from, "via": "hub:" + s.location})
+	status, reason := 1, ""
+	if down {
+		status, reason = 0, "push_down"
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT IGNORE INTO hc2_measurements (token, source, node_seq, time, status, latency_ms, reason, message, details, received_at) VALUES (?,'push',0,?,?,0,?,?,?,?)`,
+		t, nowStr(), status, reason, truncate(strings.TrimSpace(msg), 500), string(details), nowStr()); err != nil {
+		return false, err
+	}
+	_, _ = s.db.ExecContext(ctx, `UPDATE hc2_checks SET last_push_at = ? WHERE token = ?`, nowStr(), t)
+	return true, nil
+}
+
+// NodesSeen schreibt last_seen/online fuer mehrere Nodes gebuendelt.
+func (s *Store) NodesSeen(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	args := make([]any, 0, len(ids)+2)
+	args = append(args, nowStr(), s.node)
+	ph := make([]string, len(ids))
+	for i, id := range ids {
+		ph[i] = "?"
+		args = append(args, id)
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE hc2_nodes SET last_seen = ?, online = 1, node = ? WHERE node_id IN (`+strings.Join(ph, ",")+`)`, args...)
+	for _, id := range ids {
+		s.setNodeOnline(id, true)
+	}
+	return err
+}

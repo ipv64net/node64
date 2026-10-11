@@ -64,8 +64,12 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		}
 		x.State, x.LastStatus = scheduler.State(st.String), checks.Status(ls.String)
 		x.reason, x.message, x.latency, x.updated = reason.String, msg.String, lat.Float64, pt(upd)
-		// Agent-Messstellen gelten als frisch, solange der Node online ist (Phase 3); bis dahin wie Standorte.
-		x.Fresh = !x.updated.IsZero() && now.Sub(x.updated) <= fresh
+		// Node-Messstellen sind frisch, solange die Node online ist; Standorte nach Alter des Zustands
+		if strings.HasPrefix(x.Source, "node:") {
+			x.Fresh = !x.updated.IsZero() && s.NodeIsOnline(ctx, strings.TrimPrefix(x.Source, "node:"))
+		} else {
+			x.Fresh = !x.updated.IsZero() && now.Sub(x.updated) <= fresh
+		}
 		srcs = append(srcs, x)
 	}
 	rows.Close()

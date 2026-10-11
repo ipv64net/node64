@@ -16,6 +16,8 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // Treiber
+
+	"github.com/ipv64net/node64/internal/secrets"
 )
 
 // TimeFormat ist das Format fuer DATETIME(3) in UTC.
@@ -29,11 +31,13 @@ type Store struct {
 	location string
 	node     string
 
-	mu      sync.RWMutex
-	users   map[string]int64 // token -> userid (fuer Events, Wartung)
-	intervl map[string]int   // token -> interval_sec (Frische im Verdict)
-	states  map[string]string
-	maint   []Maintenance
+	mu         sync.RWMutex
+	users      map[string]int64 // token -> userid (fuer Events, Wartung)
+	intervl    map[string]int   // token -> interval_sec (Frische im Verdict)
+	states     map[string]string
+	maint      []Maintenance
+	nodeOnline map[string]onlineState
+	box        *secrets.Box // Kanal-Geheimnisse (Server-Schluessel), nil = nicht konfiguriert
 
 	meas   chan measurementRow
 	stopCh chan struct{}
@@ -72,6 +76,9 @@ func (s *Store) Close() error {
 	s.wg.Wait()
 	return s.db.Close()
 }
+
+// SetBox setzt den Schluessel fuer Kanal-Geheimnisse (Node-Kanaele im Sync).
+func (s *Store) SetBox(b *secrets.Box) { s.box = b }
 
 // Source ist die Messstelle dieser Instanz.
 func (s *Store) Source() string { return s.source }

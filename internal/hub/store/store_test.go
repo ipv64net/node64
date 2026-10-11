@@ -55,19 +55,19 @@ func TestDiagnosis(t *testing.T) {
 
 func TestSlotShare(t *testing.T) {
 	s := &Store{location: "nbg", node: "hc-srv02"}
-	idx, n := s.SlotShare([]Node{{"hc-srv01", "fsn"}, {"hc-srv02", "nbg"}})
+	idx, n := s.SlotShare([]HubInstance{{"hc-srv01", "fsn"}, {"hc-srv02", "nbg"}})
 	if idx != 0 || n != 1 {
 		t.Fatalf("single node per location: %d/%d", idx, n)
 	}
-	idx, n = s.SlotShare([]Node{{"hc-srv02", "nbg"}, {"hc-srv03", "nbg"}, {"hc-srv01", "fsn"}})
+	idx, n = s.SlotShare([]HubInstance{{"hc-srv02", "nbg"}, {"hc-srv03", "nbg"}, {"hc-srv01", "fsn"}})
 	if idx != 0 || n != 2 {
 		t.Fatalf("two nodes: %d/%d", idx, n)
 	}
 	s2 := &Store{location: "nbg", node: "hc-srv03"}
-	if idx, n = s2.SlotShare([]Node{{"hc-srv02", "nbg"}}); idx != 1 || n != 2 {
+	if idx, n = s2.SlotShare([]HubInstance{{"hc-srv02", "nbg"}}); idx != 1 || n != 2 {
 		t.Fatalf("self not yet listed: %d/%d", idx, n)
 	}
-	if !s.IsHousekeeper([]Node{{"hc-srv02", "nbg"}, {"hc-srv03", "nbg"}}) || s.IsHousekeeper([]Node{{"hc-srv01", "fsn"}}) {
+	if !s.IsHousekeeper([]HubInstance{{"hc-srv02", "nbg"}, {"hc-srv03", "nbg"}}) || s.IsHousekeeper([]HubInstance{{"hc-srv01", "fsn"}}) {
 		t.Fatal("housekeeper is the alphabetically first live node")
 	}
 }
