@@ -1,15 +1,15 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-IMAGE   ?= ghcr.io/ipv64net/agent
+IMAGE   ?= ghcr.io/ipv64net/node64
 LDFLAGS := -s -w -X main.Version=$(VERSION)
 GOFLAGS := -trimpath
 
 .PHONY: build run test vet tidy docker docker-multiarch clean
 
 build:
-	CGO_ENABLED=0 go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o bin/agent ./cmd/agent
+	CGO_ENABLED=0 go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o bin/node ./cmd/node
 
 run: build
-	AGENT_DATA_DIR=./data AGENT_LOG_LEVEL=debug ./bin/agent
+	NODE64_DATA_DIR=./data NODE64_LOG_LEVEL=debug ./bin/node
 
 test:
 	go test ./... -count=1

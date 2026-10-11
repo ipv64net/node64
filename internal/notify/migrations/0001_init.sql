@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS nf_channels (
 	notify_down       INTEGER NOT NULL DEFAULT 1,
 	notify_up         INTEGER NOT NULL DEFAULT 1,
 	secret_only_local INTEGER NOT NULL DEFAULT 0, -- vorbereitet fuer den Sync
-	execution         TEXT NOT NULL DEFAULT 'agent',
+	execution         TEXT NOT NULL DEFAULT 'node',
 	revision          INTEGER NOT NULL DEFAULT 1,
 	created_at        TEXT NOT NULL,
 	updated_at        TEXT NOT NULL,

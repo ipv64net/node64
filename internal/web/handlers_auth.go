@@ -10,8 +10,8 @@ import (
 
 	qrcode "github.com/skip2/go-qrcode"
 
-	"github.com/ipv64net/agent/internal/store"
-	"github.com/ipv64net/agent/internal/totp"
+	"github.com/ipv64net/node64/internal/store"
+	"github.com/ipv64net/node64/internal/totp"
 )
 
 // Zweite Stufe der Anmeldung, 2FA-Einrichtung und API-Keys.
@@ -114,7 +114,7 @@ func (s *Server) twoFASetup(w http.ResponseWriter, r *http.Request) {
 			_ = s.Store.SetSetting(ctx, key, secret)
 		}
 		d.Secret = secret
-		d.URL = totp.URL("ipv64 Agent", u.Username+"@"+s.Store.SettingOr(ctx, SettingAgentName, "agent"), secret)
+		d.URL = totp.URL("Node64", u.Username+"@"+s.Store.SettingOr(ctx, SettingNodeName, "node"), secret)
 		if png, err := qrcode.Encode(d.URL, qrcode.Medium, 220); err == nil {
 			d.QR = template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(png)) //nolint:gosec // selbst erzeugtes PNG
 		}
@@ -210,6 +210,6 @@ func (s *Server) certificateDownload(w http.ResponseWriter, r *http.Request) {
 		file = s.Cfg.TLSDir() + "/cert.pem"
 	}
 	w.Header().Set("Content-Type", "application/x-pem-file")
-	w.Header().Set("Content-Disposition", `attachment; filename="ipv64-agent.pem"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="node64.pem"`)
 	http.ServeFile(w, r, file)
 }

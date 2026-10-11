@@ -131,7 +131,7 @@ const (
 	MinInterval           = 20 * time.Second
 	DefaultInterval       = 60 * time.Second
 	MaxBody               = 1 << 20
-	UserAgent             = "ipv64-agent"
+	UserAgent             = "node64"
 )
 
 // Resolver loest Hostnamen auf; austauschbar fuer Tests.
@@ -144,7 +144,7 @@ type Runner struct {
 	checkers map[Type]Checker
 	Resolver Resolver
 	Now      func() time.Time
-	// FamilyProbe sagt, ob der Agent selbst ipv4 bzw. ipv6 erreichen kann.
+	// FamilyProbe sagt, ob der Node selbst ipv4 bzw. ipv6 erreichen kann.
 	// Im Modus auto werden nur verfuegbare Familien geprueft; austauschbar fuer Tests.
 	FamilyProbe func(family string) bool
 
@@ -265,7 +265,7 @@ func (r *Runner) resolve(ctx context.Context, host string, mode IPMode, timeout 
 			return nil, &Result{Status: Down, Reason: ReasonNoAddress, Message: "both IPv4 and IPv6 required but " + host + " has only one family", Time: now}
 		}
 		ips = []net.IP{pick(v4), pick(v6)}
-	default: // auto: was DNS liefert, aber nur Familien, die der Agent selbst hat
+	default: // auto: was DNS liefert, aber nur Familien, die der Node selbst hat
 		if len(v4) > 0 && r.hasFamily("ipv4") {
 			ips = append(ips, pick(v4))
 		}
@@ -273,7 +273,7 @@ func (r *Runner) resolve(ctx context.Context, host string, mode IPMode, timeout 
 			ips = append(ips, pick(v6))
 		}
 		if len(ips) == 0 {
-			// Keine passende Familie am Agent: trotzdem pruefen, damit der Grund sichtbar wird
+			// Keine passende Familie am Node: trotzdem pruefen, damit der Grund sichtbar wird
 			if len(v4) > 0 {
 				ips = append(ips, pick(v4))
 			} else if len(v6) > 0 {

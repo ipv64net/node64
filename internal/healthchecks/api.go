@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ipv64net/agent/internal/checks"
-	"github.com/ipv64net/agent/internal/scheduler"
+	"github.com/ipv64net/node64/internal/checks"
+	"github.com/ipv64net/node64/internal/scheduler"
 )
 
 var locationRe = regexp.MustCompile(`^[a-z0-9]{2,16}$`)

@@ -4,14 +4,14 @@
 <div class="row g-3">
 	<div class="col-lg-6">
 		<div class="card">
-			<div class="card-header"><i class="bi bi-hdd-network"></i> {{.T "settings.agent"}}</div>
+			<div class="card-header"><i class="bi bi-hdd-network"></i> {{.T "settings.node"}}</div>
 			<div class="card-body">
-				<form method="post" action="/settings/agent">
+				<form method="post" action="/settings/node">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<div class="mb-3">
-						<label class="form-label" for="agent_name">{{.T "settings.agent_name"}}</label>
-						<input class="form-control{{if .Err "agent_name"}} is-invalid{{end}}" id="agent_name" name="agent_name" value="{{.Val "agent_name"}}" maxlength="64" required>
-						<div class="invalid-feedback">{{.Err "agent_name"}}</div>
+						<label class="form-label" for="node_name">{{.T "settings.node_name"}}</label>
+						<input class="form-control{{if .Err "node_name"}} is-invalid{{end}}" id="node_name" name="node_name" value="{{.Val "node_name"}}" maxlength="64" required>
+						<div class="invalid-feedback">{{.Err "node_name"}}</div>
 					</div>
 					<div class="mb-3">
 						<label class="form-label" for="location">{{.T "settings.location"}}</label>

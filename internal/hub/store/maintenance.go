@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Maintenance ist ein Wartungsfenster aus hc2_maintenance (Logik wie im Agent).
+// Maintenance ist ein Wartungsfenster aus hc2_maintenance (Logik wie im Node).
 type Maintenance struct {
 	ID          int64
 	UserID      int64

@@ -31,10 +31,10 @@
 	</div>
 	<div class="row">
 		<div class="col-md-6 mb-3">
-			<label class="form-label" for="agent_name">{{.T "setup.agent_name"}}</label>
-			<input class="form-control{{if .Err "agent_name"}} is-invalid{{end}}" id="agent_name" name="agent_name" value="{{.Val "agent_name"}}" maxlength="64" required>
+			<label class="form-label" for="node_name">{{.T "setup.node_name"}}</label>
+			<input class="form-control{{if .Err "node_name"}} is-invalid{{end}}" id="node_name" name="node_name" value="{{.Val "node_name"}}" maxlength="64" required>
 			<div class="form-text">{{.T "setup.agent_name_hint"}}</div>
-			<div class="invalid-feedback">{{.Err "agent_name"}}</div>
+			<div class="invalid-feedback">{{.Err "node_name"}}</div>
 		</div>
 		<div class="col-md-6 mb-3">
 			<label class="form-label" for="location">{{.T "setup.location"}} <span class="text-body-secondary">({{.T "common.optional"}})</span></label>

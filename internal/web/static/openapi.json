@@ -1,12 +1,12 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "ipv64 Agent – lokale API",
+    "title": "Node64 – lokale API",
     "version": "1.0.0",
-    "description": "JSON-API des Agents im eigenen Netz. Anmeldung mit API-Key (Einstellungen > API-Keys) als `Authorization: Bearer ipv64a_...` oder mit der Browser-Sitzung (dann `X-CSRF-Token` bei POST/PUT/DELETE). Zeiten sind ISO 8601 in UTC. Dieselbe API nutzt die Oberfläche für Charts."
+    "description": "JSON-API des Nodes im eigenen Netz. Anmeldung mit API-Key (Einstellungen > API-Keys) als `Authorization: Bearer node64_...` oder mit der Browser-Sitzung (dann `X-CSRF-Token` bei POST/PUT/DELETE). Zeiten sind ISO 8601 in UTC. Dieselbe API nutzt die Oberfläche für Charts."
   },
   "servers": [{"url": "/api"}],
-  "tags": [{"name": "Agent"}, {"name": "Healthchecks"}, {"name": "Benachrichtigungen"}],
+  "tags": [{"name": "Node"}, {"name": "Healthchecks"}, {"name": "Benachrichtigungen"}],
   "security": [{"apiKey": []}],
   "components": {
     "securitySchemes": {"apiKey": {"type": "http", "scheme": "bearer", "description": "API-Key aus den Einstellungen"}},
@@ -45,20 +45,20 @@
     }
   },
   "paths": {
-    "/health": {"get": {"tags": ["Agent"], "summary": "Verfügbarkeit (ohne Anmeldung, für Docker HEALTHCHECK)", "security": [], "responses": {"200": {"description": "{status, version, time}"}}}},
-    "/version": {"get": {"tags": ["Agent"], "summary": "Version und Startzeit", "responses": {"200": {"description": "{version, started_at, hostname, time}"}}}},
-    "/status": {"get": {"tags": ["Agent"], "summary": "Dashboard-Daten: Agent, Module, Zusammenfassung je Modul, Verknüpfung", "responses": {"200": {"description": "OK"}}}},
-    "/modules": {"get": {"tags": ["Agent"], "summary": "Module mit Zustand", "responses": {"200": {"description": "OK"}}}},
-    "/modules/{name}/enable": {"post": {"tags": ["Agent"], "summary": "Modul aktivieren (läuft sofort, ohne Neustart)", "parameters": [{"name": "name", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "OK"}, "422": {"description": "nicht verfügbar"}}}},
-    "/modules/{name}/disable": {"post": {"tags": ["Agent"], "summary": "Modul deaktivieren", "parameters": [{"name": "name", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "OK"}}}},
+    "/health": {"get": {"tags": ["Node"], "summary": "Verfügbarkeit (ohne Anmeldung, für Docker HEALTHCHECK)", "security": [], "responses": {"200": {"description": "{status, version, time}"}}}},
+    "/version": {"get": {"tags": ["Node"], "summary": "Version und Startzeit", "responses": {"200": {"description": "{version, started_at, hostname, time}"}}}},
+    "/status": {"get": {"tags": ["Node"], "summary": "Dashboard-Daten: Node, Module, Zusammenfassung je Modul, Verknüpfung", "responses": {"200": {"description": "OK"}}}},
+    "/modules": {"get": {"tags": ["Node"], "summary": "Module mit Zustand", "responses": {"200": {"description": "OK"}}}},
+    "/modules/{name}/enable": {"post": {"tags": ["Node"], "summary": "Modul aktivieren (läuft sofort, ohne Neustart)", "parameters": [{"name": "name", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "OK"}, "422": {"description": "nicht verfügbar"}}}},
+    "/modules/{name}/disable": {"post": {"tags": ["Node"], "summary": "Modul deaktivieren", "parameters": [{"name": "name", "in": "path", "required": true, "schema": {"type": "string"}}], "responses": {"200": {"description": "OK"}}}},
     "/settings": {
-      "get": {"tags": ["Agent"], "summary": "Einstellungen (Agent-Name, Standort, Zeitzone, Benachrichtigungen, Updates)", "responses": {"200": {"description": "Schlüssel-Wert-Objekt"}}},
-      "put": {"tags": ["Agent"], "summary": "Einstellungen ändern (nur mitgeschickte Schlüssel)", "requestBody": {"content": {"application/json": {"schema": {"type": "object", "additionalProperties": {"type": "string"}}}}}, "responses": {"200": {"description": "OK"}, "422": {"description": "unbekannter Schlüssel"}}}
+      "get": {"tags": ["Node"], "summary": "Einstellungen (Agent-Name, Standort, Zeitzone, Benachrichtigungen, Updates)", "responses": {"200": {"description": "Schlüssel-Wert-Objekt"}}},
+      "put": {"tags": ["Node"], "summary": "Einstellungen ändern (nur mitgeschickte Schlüssel)", "requestBody": {"content": {"application/json": {"schema": {"type": "object", "additionalProperties": {"type": "string"}}}}}, "responses": {"200": {"description": "OK"}, "422": {"description": "unbekannter Schlüssel"}}}
     },
-    "/audit": {"get": {"tags": ["Agent"], "summary": "Audit-Log (neueste zuerst)", "parameters": [{"name": "limit", "in": "query", "schema": {"type": "integer"}}, {"name": "before", "in": "query", "schema": {"type": "integer"}}], "responses": {"200": {"description": "OK"}}}},
-    "/logs": {"get": {"tags": ["Agent"], "summary": "Letzte Logzeilen", "parameters": [{"name": "lines", "in": "query", "schema": {"type": "integer", "default": 200}}], "responses": {"200": {"description": "{level, lines[]}"}}}},
-    "/backup": {"get": {"tags": ["Agent"], "summary": "Konsistentes Backup der Datenbank (SQLite-Datei)", "responses": {"200": {"description": "application/vnd.sqlite3"}}}},
-    "/openapi.json": {"get": {"tags": ["Agent"], "summary": "Diese Beschreibung", "responses": {"200": {"description": "OpenAPI 3.1"}}}},
+    "/audit": {"get": {"tags": ["Node"], "summary": "Audit-Log (neueste zuerst)", "parameters": [{"name": "limit", "in": "query", "schema": {"type": "integer"}}, {"name": "before", "in": "query", "schema": {"type": "integer"}}], "responses": {"200": {"description": "OK"}}}},
+    "/logs": {"get": {"tags": ["Node"], "summary": "Letzte Logzeilen", "parameters": [{"name": "lines", "in": "query", "schema": {"type": "integer", "default": 200}}], "responses": {"200": {"description": "{level, lines[]}"}}}},
+    "/backup": {"get": {"tags": ["Node"], "summary": "Konsistentes Backup der Datenbank (SQLite-Datei)", "responses": {"200": {"description": "application/vnd.sqlite3"}}}},
+    "/openapi.json": {"get": {"tags": ["Node"], "summary": "Diese Beschreibung", "responses": {"200": {"description": "OpenAPI 3.1"}}}},
     "/checks": {
       "get": {"tags": ["Healthchecks"], "summary": "Alle Checks", "parameters": [{"name": "type", "in": "query", "schema": {"type": "string"}}, {"name": "state", "in": "query", "schema": {"type": "string"}}, {"name": "tag", "in": "query", "schema": {"type": "string"}}, {"name": "q", "in": "query", "schema": {"type": "string"}}], "responses": {"200": {"description": "Liste", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/Check"}}}}}}},
       "post": {"tags": ["Healthchecks"], "summary": "Check anlegen", "description": "Pflicht: name, type, target (außer push). Beispiel: {\"name\":\"Web\",\"type\":\"http\",\"target\":\"https://example.com/\",\"interval_seconds\":60,\"params\":{\"accept_status\":\"200-299\"}}", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Check"}}}}, "responses": {"201": {"description": "angelegt"}, "422": {"description": "ungültig"}}}

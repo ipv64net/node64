@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ipv64net/agent/internal/logging"
-	"github.com/ipv64net/agent/internal/module"
-	"github.com/ipv64net/agent/internal/notify"
+	"github.com/ipv64net/node64/internal/logging"
+	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/notify"
 )
 
 // Lokale JSON-API des Kerns: Status, Kanaele, Zustellprotokoll, Einstellungen,
@@ -66,9 +66,9 @@ func (s *Server) apiVersion(w http.ResponseWriter, r *http.Request) {
 func (s *Server) apiStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	out := map[string]any{
-		"agent": map[string]any{
-			"id": s.Store.SettingOr(ctx, SettingAgentID, ""), "name": s.Store.SettingOr(ctx, SettingAgentName, ""),
-			"location": s.Store.SettingOr(ctx, SettingAgentLocation, ""), "timezone": s.Store.SettingOr(ctx, SettingAgentTimezone, ""),
+		"node": map[string]any{
+			"id": s.Store.SettingOr(ctx, SettingNodeID, ""), "name": s.Store.SettingOr(ctx, SettingNodeName, ""),
+			"location": s.Store.SettingOr(ctx, SettingNodeLocation, ""), "timezone": s.Store.SettingOr(ctx, SettingNodeTimezone, ""),
 			"version": s.Version, "started_at": s.StartedAt.UTC(), "uptime_seconds": int(time.Since(s.StartedAt).Seconds()),
 			"database_bytes": s.Store.Size(), "log_level": logging.LevelName(s.Log.Level()),
 		},
@@ -142,7 +142,7 @@ func (s *Server) apiLogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"level": logging.LevelName(s.Log.Level()), "lines": s.Log.Lines(n)})
 }
 
-var apiSettingKeys = []string{SettingAgentName, SettingAgentLocation, SettingAgentTimezone, notify.SetBaseURL, notify.SetQuietEnabled, notify.SetQuietFrom,
+var apiSettingKeys = []string{SettingNodeName, SettingNodeLocation, SettingNodeTimezone, notify.SetBaseURL, notify.SetQuietEnabled, notify.SetQuietFrom,
 	notify.SetQuietTo, notify.SetQuietDays, notify.SetQuietTZ, notify.SetRatePerHour, notify.SetBatchThreshold, notify.SetBatchWindow, "updates.check"}
 
 func (s *Server) apiSettingsGet(w http.ResponseWriter, r *http.Request) {
@@ -170,7 +170,7 @@ func (s *Server) apiSettingsPut(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusUnprocessableEntity, "unknown setting "+k)
 			return
 		}
-		if k == SettingAgentTimezone || k == notify.SetQuietTZ {
+		if k == SettingNodeTimezone || k == notify.SetQuietTZ {
 			if v != "" && !validTimezone(v) {
 				writeErr(w, http.StatusUnprocessableEntity, "invalid timezone for "+k)
 				return
@@ -448,7 +448,7 @@ func (s *Server) apiDocs(w http.ResponseWriter, r *http.Request) {
 			groups[tag] = append(groups[tag], op{Method: method, Path: path, Summary: summary, Description: desc, Public: pub})
 		}
 	}
-	// Gruppen in Dokumentreihenfolge (Agent zuerst), Operationen nach Pfad und Methode
+	// Gruppen in Dokumentreihenfolge (Node zuerst), Operationen nach Pfad und Methode
 	tagRank := map[string]int{}
 	for i, t := range spec.Tags {
 		if n, _ := t["name"].(string); n != "" {

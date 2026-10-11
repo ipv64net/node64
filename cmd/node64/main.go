@@ -1,10 +1,10 @@
-// ipv64 Agent: ein Binary mit Weboberflaeche, SQLite und Modulen.
+// Node64: ein Binary mit Weboberflaeche, SQLite und Modulen.
 //
 // Befehle:
 //
-//	agent              startet den Agent
-//	agent healthcheck  prueft die lokale UI (fuer Docker HEALTHCHECK), Exit 0 = gesund
-//	agent version      zeigt die Version
+//	node              startet den Node
+//	node healthcheck  prueft die lokale UI (fuer Docker HEALTHCHECK), Exit 0 = gesund
+//	node version      zeigt die Version
 package main
 
 import (
@@ -23,17 +23,17 @@ import (
 	"time"
 	_ "time/tzdata" // Zeitzonen im Binary, das Laufzeit-Image hat keine
 
-	"github.com/ipv64net/agent/internal/config"
-	"github.com/ipv64net/agent/internal/healthchecks"
-	"github.com/ipv64net/agent/internal/i18n"
-	"github.com/ipv64net/agent/internal/logging"
-	"github.com/ipv64net/agent/internal/module"
-	"github.com/ipv64net/agent/internal/notify"
-	"github.com/ipv64net/agent/internal/secrets"
-	"github.com/ipv64net/agent/internal/store"
-	agentsync "github.com/ipv64net/agent/internal/sync"
-	"github.com/ipv64net/agent/internal/update"
-	"github.com/ipv64net/agent/internal/web"
+	"github.com/ipv64net/node64/internal/config"
+	"github.com/ipv64net/node64/internal/healthchecks"
+	"github.com/ipv64net/node64/internal/i18n"
+	"github.com/ipv64net/node64/internal/logging"
+	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/notify"
+	"github.com/ipv64net/node64/internal/secrets"
+	"github.com/ipv64net/node64/internal/store"
+	nodesync "github.com/ipv64net/node64/internal/sync"
+	"github.com/ipv64net/node64/internal/update"
+	"github.com/ipv64net/node64/internal/web"
 )
 
 // Version wird beim Build gesetzt: -ldflags "-X main.Version=1.2.3"
@@ -43,14 +43,14 @@ func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "version":
-			fmt.Println("ipv64 agent", Version)
+			fmt.Println("node64", Version)
 			return
 		case "healthcheck":
 			os.Exit(healthcheck())
 		}
 	}
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "agent:", err)
+		fmt.Fprintln(os.Stderr, "node:", err)
 		os.Exit(1)
 	}
 }
@@ -64,7 +64,7 @@ func run() error {
 	defer logger.Close()
 	log := logger.Slog().With("module", "core")
 	logger.OnChange(func() { log.Info("log level changed", "level", logging.LevelName(logger.Level())) })
-	log.Info("ipv64 agent starting", "version", Version, "data", cfg.DataDir)
+	log.Info("node64 starting", "version", Version, "data", cfg.DataDir)
 
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
 		return fmt.Errorf("data dir %s: %w", cfg.DataDir, err)
@@ -124,13 +124,13 @@ func run() error {
 
 	srv, err := web.New(web.Deps{
 		Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: modules, Notify: nfStore, Dispatcher: dispatcher,
-		Sync: agentsync.NoOp{}, Version: Version, StartedAt: time.Now(), Restart: stop,
+		Sync: nodesync.NoOp{}, Version: Version, StartedAt: time.Now(), Restart: stop,
 	})
 	if err != nil {
 		return err
 	}
 	err = srv.Run(ctx)
-	log.Info("ipv64 agent stopped")
+	log.Info("node64 stopped")
 	return err
 }
 
@@ -156,7 +156,7 @@ func updateLoop(ctx context.Context, st *store.Store, log *slog.Logger) {
 		b, _ := json.Marshal(info)
 		_ = st.SetSetting(ctx, "updates.latest", string(b))
 		if info.Newer {
-			log.Info("new agent version available", "version", info.Version, "url", info.URL)
+			log.Info("new node version available", "version", info.Version, "url", info.URL)
 		}
 	}
 	t := time.NewTicker(24 * time.Hour)
@@ -177,7 +177,7 @@ func updateLoop(ctx context.Context, st *store.Store, log *slog.Logger) {
 	}
 }
 
-// applyRestore setzt eine hochgeladene Datenbank (agent.db.restore) ein und
+// applyRestore setzt eine hochgeladene Datenbank (node.db.restore) ein und
 // sichert die bisherige vorher unter backups/.
 func applyRestore(cfg *config.Config, log *slog.Logger) error {
 	restore := filepath.Join(cfg.DataDir, web.RestoreFileName)
@@ -188,7 +188,7 @@ func applyRestore(cfg *config.Config, log *slog.Logger) error {
 		return err
 	}
 	if _, err := os.Stat(cfg.DBPath()); err == nil {
-		dest := filepath.Join(cfg.BackupDir(), "agent-"+time.Now().UTC().Format("20060102-150405")+"-pre-restore.db")
+		dest := filepath.Join(cfg.BackupDir(), "node64-"+time.Now().UTC().Format("20060102-150405")+"-pre-restore.db")
 		if err := os.Rename(cfg.DBPath(), dest); err != nil {
 			return fmt.Errorf("move old database: %w", err)
 		}
@@ -204,7 +204,7 @@ func applyRestore(cfg *config.Config, log *slog.Logger) error {
 	return nil
 }
 
-// firstAdminFromEnv legt den Administrator aus AGENT_ADMIN_USER/PASSWORD an,
+// firstAdminFromEnv legt den Administrator aus NODE64_ADMIN_USER/PASSWORD an,
 // aber nur, solange noch kein Benutzer existiert.
 func firstAdminFromEnv(ctx context.Context, cfg *config.Config, st *store.Store, log *slog.Logger) error {
 	if cfg.AdminUser == "" {
@@ -222,7 +222,7 @@ func firstAdminFromEnv(ctx context.Context, cfg *config.Config, st *store.Store,
 		return fmt.Errorf("create admin from environment: %w", err)
 	}
 	host, _ := os.Hostname()
-	_ = st.SetSetting(ctx, web.SettingAgentName, host)
+	_ = st.SetSetting(ctx, web.SettingNodeName, host)
 	_ = st.Audit(ctx, store.AuditEntry{Actor: cfg.AdminUser, Action: "setup", Details: "admin created from environment"})
 	log.Info("admin user created from environment", "user", cfg.AdminUser)
 	return nil

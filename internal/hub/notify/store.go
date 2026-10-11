@@ -1,4 +1,4 @@
-// Package hubnotify verbindet den Benachrichtigungs-Dispatcher des Agents
+// Package hubnotify verbindet den Benachrichtigungs-Dispatcher des Nodes
 // (internal/notify) mit MySQL (hc2_channels, hc2_deliveries, hc2_settings)
 // und liefert die Server-Sender ipv64_mail, ipv64_sms und app ueber die
 // PHP-Bruecke des Portals.
@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ipv64net/agent/internal/notify"
-	"github.com/ipv64net/agent/internal/secrets"
+	"github.com/ipv64net/node64/internal/notify"
+	"github.com/ipv64net/node64/internal/secrets"
 )
 
 const timeFormat = "2006-01-02 15:04:05.000"
@@ -49,7 +49,7 @@ func New(db *sql.DB, box *secrets.Box, log *slog.Logger) *Store {
 }
 
 // ChannelsFor liefert die aktiven Server-Kanaele eines Accounts (Agent-Kanaele
-// sendet der Agent selbst; Sendeauftraege dafuer kommen in Phase 3).
+// sendet der Node selbst; Sendeauftraege dafuer kommen in Phase 3).
 func (s *Store) ChannelsFor(ctx context.Context, userID int64) ([]*notify.Channel, error) {
 	s.mu.RLock()
 	c, ok := s.cache[userID]
@@ -58,7 +58,7 @@ func (s *Store) ChannelsFor(ctx context.Context, userID int64) ([]*notify.Channe
 		return c.list, nil
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT id, type, name, config_enc, enabled, is_default, lang, notify_down, notify_up, verified, revision
-		FROM hc2_channels WHERE userid = ? AND deleted_at IS NULL AND agent_id IS NULL ORDER BY name, id`, userID)
+		FROM hc2_channels WHERE userid = ? AND deleted_at IS NULL AND node_id IS NULL ORDER BY name, id`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (s *Store) AddDelivery(ctx context.Context, d notify.Delivery) error {
 	if d.OK {
 		ok = 1
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT IGNORE INTO hc2_deliveries (event_id, channel_id, userid, agent_id, time, kind, ok, error) VALUES (?,?,?,'',?,?,?,?)`,
+	_, err := s.db.ExecContext(ctx, `INSERT IGNORE INTO hc2_deliveries (event_id, channel_id, userid, node_id, time, kind, ok, error) VALUES (?,?,?,'',?,?,?,?)`,
 		d.EventID, d.ChannelID, uid, time.Now().UTC().Format(timeFormat), d.Kind, ok, truncate(d.Error, 500))
 	return err
 }
@@ -152,11 +152,11 @@ func (s *Store) SettingsFor(userID int64) notify.Settings {
 			return v
 		}
 		switch key {
-		case notify.SetAgentName:
+		case notify.SetNodeName:
 			return "ipv64.net Healthchecks"
 		case notify.SetBaseURL:
 			return "https://ipv64.net/healthchecks2"
-		case notify.SetAgentTimezone:
+		case notify.SetNodeTimezone:
 			return "Europe/Berlin"
 		}
 		return def

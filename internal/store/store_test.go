@@ -12,7 +12,7 @@ import (
 func openTest(t *testing.T) *Store {
 	t.Helper()
 	dir := t.TempDir()
-	st, err := Open(context.Background(), filepath.Join(dir, "agent.db"), filepath.Join(dir, "backups"), slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	st, err := Open(context.Background(), filepath.Join(dir, "node.db"), filepath.Join(dir, "backups"), slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}

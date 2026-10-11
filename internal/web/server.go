@@ -1,4 +1,4 @@
-// Package web ist die lokale Oberflaeche und API des Agents.
+// Package web ist die lokale Oberflaeche und API des Nodes.
 //
 // Go html/template, Bootstrap 5.3 und wenig Vanilla-JS, alles eingebettet.
 // Sitzungen liegen in der Datenbank, Formulare sind CSRF-geschuetzt, der
@@ -20,13 +20,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ipv64net/agent/internal/config"
-	"github.com/ipv64net/agent/internal/i18n"
-	"github.com/ipv64net/agent/internal/logging"
-	"github.com/ipv64net/agent/internal/module"
-	"github.com/ipv64net/agent/internal/notify"
-	"github.com/ipv64net/agent/internal/store"
-	agentsync "github.com/ipv64net/agent/internal/sync"
+	"github.com/ipv64net/node64/internal/config"
+	"github.com/ipv64net/node64/internal/i18n"
+	"github.com/ipv64net/node64/internal/logging"
+	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/notify"
+	"github.com/ipv64net/node64/internal/store"
+	nodesync "github.com/ipv64net/node64/internal/sync"
 )
 
 // Deps sind die Abhaengigkeiten der Oberflaeche.
@@ -38,10 +38,10 @@ type Deps struct {
 	Modules    *module.Registry
 	Notify     *notify.Store
 	Dispatcher *notify.Dispatcher
-	Sync       agentsync.Client
+	Sync       nodesync.Client
 	Version    string
 	StartedAt  time.Time
-	// Restart beendet den Agent kontrolliert (Docker startet ihn neu), z. B.
+	// Restart beendet den Node kontrolliert (Docker startet ihn neu), z. B.
 	// nach einer Wiederherstellung der Datenbank.
 	Restart func()
 }
@@ -147,7 +147,7 @@ func (s *Server) routes() {
 
 	s.mux.Handle("GET /{$}", s.auth(s.dashboard))
 	s.mux.Handle("GET /settings", s.auth(s.settings))
-	s.mux.Handle("POST /settings/agent", s.auth(s.settingsAgent))
+	s.mux.Handle("POST /settings/node", s.auth(s.settingsNode))
 	s.mux.Handle("POST /settings/user", s.auth(s.settingsUser))
 	s.mux.Handle("POST /settings/password", s.auth(s.settingsPassword))
 	s.mux.Handle("POST /settings/modules", s.auth(s.settingsModules))

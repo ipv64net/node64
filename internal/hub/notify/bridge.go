@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ipv64net/agent/internal/notify"
+	"github.com/ipv64net/node64/internal/notify"
 )
 
 // Bridge ruft die PHP-Bruecke des Portals (hc2_send.php) auf, die Mail, SMS
@@ -152,7 +152,7 @@ func (a appSender) Send(ctx context.Context, ch *notify.Channel, msg notify.Mess
 	return a.b.Send(ctx, bridgeRequest{Type: "app", To: tok, Subject: msg.Title, Text: msg.Check.Name, UpDown: updown(msg.Kind), UserID: ch.UserID, EventID: msg.EventID})
 }
 
-// Senders liefert alle Sender des Servers: die des Agents plus Bruecken-Typen.
+// Senders liefert alle Sender des Servers: die des Nodes plus Bruecken-Typen.
 func Senders(version string, b *Bridge, st *Store) map[notify.Type]notify.Sender {
 	m := notify.Senders(version)
 	m[notify.TypeIPv64Mail] = mailSender{b}

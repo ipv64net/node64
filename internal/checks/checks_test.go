@@ -39,18 +39,18 @@ func testRunner() *Runner {
 
 func TestAutoSkipsUnavailableFamily(t *testing.T) {
 	r := testRunner()
-	// Agent ohne IPv6: auto prueft nur IPv4
+	// Node ohne IPv6: auto prueft nur IPv4
 	r.FamilyProbe = func(fam string) bool { return fam == "ipv4" }
 	res := r.Run(context.Background(), def(TypePort, "dual.test:1", nil))
 	if len(res) != 1 || res[0].Family != "ipv4" {
 		t.Fatalf("auto without ipv6 should check ipv4 only, got %+v", res)
 	}
-	// Agent mit beidem: zwei Teilergebnisse (neuer Runner, die Probe wird eine Minute gecacht)
+	// Node mit beidem: zwei Teilergebnisse (neuer Runner, die Probe wird eine Minute gecacht)
 	r = testRunner()
 	if res := r.Run(context.Background(), def(TypePort, "dual.test:1", nil)); len(res) != 2 {
 		t.Fatalf("auto with both families should check both, got %d", len(res))
 	}
-	// Explizit both bleibt strikt, auch ohne IPv6 am Agent
+	// Explizit both bleibt strikt, auch ohne IPv6 am Node
 	r = testRunner()
 	r.FamilyProbe = func(fam string) bool { return fam == "ipv4" }
 	d := def(TypePort, "dual.test:1", nil)
@@ -314,10 +314,10 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-// TestICMP laeuft nur mit AGENT_TEST_ICMP=1 (braucht Ping-Rechte).
+// TestICMP laeuft nur mit NODE64_TEST_ICMP=1 (braucht Ping-Rechte).
 func TestICMP(t *testing.T) {
-	if os.Getenv("AGENT_TEST_ICMP") == "" {
-		t.Skip("set AGENT_TEST_ICMP=1 to run")
+	if os.Getenv("NODE64_TEST_ICMP") == "" {
+		t.Skip("set NODE64_TEST_ICMP=1 to run")
 	}
 	r := testRunner()
 	res := one(t, r, def(TypeICMP, "localhost", ICMPParams{Count: 2}))

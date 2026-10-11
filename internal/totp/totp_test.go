@@ -30,8 +30,8 @@ func TestRFC6238Vector(t *testing.T) {
 
 func TestSecretAndRecovery(t *testing.T) {
 	s := NewSecret()
-	if len(s) != 32 || !strings.HasPrefix(URL("ipv64 Agent", "admin", s), "otpauth://totp/ipv64%20Agent:admin?") {
-		t.Fatalf("secret/url: %s %s", s, URL("ipv64 Agent", "admin", s))
+	if len(s) != 32 || !strings.HasPrefix(URL("Node64", "admin", s), "otpauth://totp/Node64:admin?") {
+		t.Fatalf("secret/url: %s %s", s, URL("Node64", "admin", s))
 	}
 	if _, err := Code(s, time.Now()); err != nil {
 		t.Fatal(err)

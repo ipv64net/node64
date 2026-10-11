@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ipv64net/agent/internal/checks"
-	"github.com/ipv64net/agent/internal/module"
-	"github.com/ipv64net/agent/internal/notify"
-	"github.com/ipv64net/agent/internal/scheduler"
-	"github.com/ipv64net/agent/internal/store"
+	"github.com/ipv64net/node64/internal/checks"
+	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/notify"
+	"github.com/ipv64net/node64/internal/scheduler"
+	"github.com/ipv64net/node64/internal/store"
 )
 
 //go:embed migrations/*.sql

@@ -6,8 +6,8 @@
 </div>
 <p class="text-body-secondary">{{index $d.Info "description"}}</p>
 <div class="card mb-3"><div class="card-body">
-<pre class="mb-0 small">curl -H "Authorization: Bearer ipv64a_…" {{.Scheme}}://{{.Host}}/api/checks
-curl -X POST -H "Authorization: Bearer ipv64a_…" -H "Content-Type: application/json" \
+<pre class="mb-0 small">curl -H "Authorization: Bearer node64_…" {{.Scheme}}://{{.Host}}/api/checks
+curl -X POST -H "Authorization: Bearer node64_…" -H "Content-Type: application/json" \
   -d '{"name":"Web","type":"http","target":"https://example.com/","interval_seconds":60}' {{.Scheme}}://{{.Host}}/api/checks</pre>
 </div></div>
 {{range $tag := $d.Order}}

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ipv64net/agent/internal/scheduler"
+	"github.com/ipv64net/node64/internal/scheduler"
 )
 
 func TestEventKind(t *testing.T) {
@@ -36,10 +36,10 @@ func TestEventKind(t *testing.T) {
 }
 
 func TestDiagnosis(t *testing.T) {
-	if d := diagnosis([]string{"agent:abc"}, []string{"loc:nbg", "loc:fsn"}); d != "innen gestört, außen OK → Heimnetz/Agent" {
+	if d := diagnosis([]string{"node:abc"}, []string{"loc:nbg", "loc:fsn"}); d != "innen gestört, außen OK → Heimnetz/Node" {
 		t.Errorf("inside: %q", d)
 	}
-	if d := diagnosis([]string{"loc:nbg", "loc:fsn"}, []string{"agent:abc"}); !strings.HasPrefix(d, "außen") {
+	if d := diagnosis([]string{"loc:nbg", "loc:fsn"}, []string{"node:abc"}); !strings.HasPrefix(d, "außen") {
 		t.Errorf("outside: %q", d)
 	}
 	if d := diagnosis([]string{"loc:nbg"}, []string{"loc:fsn"}); d != "gestört: loc:nbg; OK: loc:fsn" {

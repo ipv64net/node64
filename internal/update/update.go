@@ -1,4 +1,4 @@
-// Package update prueft per Opt-in, ob eine neuere Version des Agents
+// Package update prueft per Opt-in, ob eine neuere Version des Nodes
 // verfuegbar ist. Es wird nur die Versionsdatei abgerufen, keine Telemetrie
 // gesendet. Erwartetes Format unter der URL:
 //
@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-const DefaultURL = "https://ipv64.net/agent/latest.json"
+const DefaultURL = "https://ipv64.net/node64/latest.json"
 
 // Info ist das Ergebnis einer Pruefung.
 type Info struct {
@@ -45,7 +45,7 @@ func (c *Checker) Check(ctx context.Context) (*Info, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "ipv64-agent/"+c.Current)
+	req.Header.Set("User-Agent", "node64/"+c.Current)
 	req.Header.Set("Accept", "application/json")
 	resp, err := c.Client.Do(req)
 	if err != nil {

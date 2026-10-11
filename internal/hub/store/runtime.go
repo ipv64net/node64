@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ipv64net/agent/internal/checks"
-	"github.com/ipv64net/agent/internal/scheduler"
+	"github.com/ipv64net/node64/internal/checks"
+	"github.com/ipv64net/node64/internal/scheduler"
 )
 
 // Flags in hc2_measurements.flags und hc2_events.flags
@@ -104,7 +104,7 @@ func (s *Store) measurementWriter() {
 
 func (s *Store) insertMeasurements(rows []measurementRow) error {
 	var sb strings.Builder
-	sb.WriteString(`INSERT IGNORE INTO hc2_measurements (token, source, agent_seq, time, status, latency_ms, reason, message, family, details, flags, received_at) VALUES `)
+	sb.WriteString(`INSERT IGNORE INTO hc2_measurements (token, source, node_seq, time, status, latency_ms, reason, message, family, details, flags, received_at) VALUES `)
 	args := make([]any, 0, len(rows)*12)
 	now := nowStr()
 	for i, r := range rows {

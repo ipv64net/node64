@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ipv64net/agent/internal/hub/store"
+	"github.com/ipv64net/node64/internal/hub/store"
 )
 
 // Status liefert Laufzeitdaten fuer /v1/health.

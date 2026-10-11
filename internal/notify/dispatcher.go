@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ipv64net/agent/internal/i18n"
+	"github.com/ipv64net/node64/internal/i18n"
 )
 
 // Alert ist ein Ereignis, das benachrichtigt werden soll (vom Modul gemeldet).
@@ -29,7 +29,7 @@ type Alert struct {
 type Settings func(key, def string) string
 
 // SettingsFor liefert die Einstellungen eines Accounts (Server) bzw. die des
-// Agents (userID 0).
+// Nodes (userID 0).
 type SettingsFor func(userID int64) Settings
 
 // ChannelStore sind die Zugriffe, die der Dispatcher braucht: Kanaele eines
@@ -42,15 +42,15 @@ type ChannelStore interface {
 
 // Einstellungs-Schluessel
 const (
-	SetBaseURL        = "agent.base_url"
-	SetAgentName      = "agent.name"
-	SetAgentLocation  = "agent.location"
+	SetBaseURL        = "node.base_url"
+	SetNodeName       = "node.name"
+	SetNodeLocation   = "node.location"
 	SetQuietEnabled   = "notify.quiet_enabled"
 	SetQuietFrom      = "notify.quiet_from"
 	SetQuietTo        = "notify.quiet_to"
 	SetQuietDays      = "notify.quiet_days" // 1=Mo ... 7=So
 	SetQuietTZ        = "notify.quiet_tz"
-	SetAgentTimezone  = "agent.timezone"
+	SetNodeTimezone   = "node.timezone"
 	SetRatePerHour    = "notify.rate_per_hour"
 	SetBatchThreshold = "notify.batch_threshold"
 	SetBatchWindow    = "notify.batch_window_seconds"
@@ -81,7 +81,7 @@ type bucket struct {
 	last   time.Time
 }
 
-// NewDispatcher ist der Dispatcher des Agents (ein Account).
+// NewDispatcher ist der Dispatcher des Nodes (ein Account).
 func NewDispatcher(st *Store, senders map[Type]Sender, bundle *i18n.Bundle, settings Settings, log *slog.Logger) *Dispatcher {
 	return NewMultiDispatcher(st, senders, bundle, func(int64) Settings { return settings }, log)
 }
@@ -92,7 +92,7 @@ func NewMultiDispatcher(st ChannelStore, senders map[Type]Sender, bundle *i18n.B
 		queue: make(chan Alert, 1000), buckets: map[int64]*bucket{}, now: func() time.Time { return time.Now() }}
 }
 
-// settings liefert die Einstellungen eines Accounts (0 = Agent/global).
+// settings liefert die Einstellungen eines Accounts (0 = Node/global).
 func (d *Dispatcher) settings(userID int64) Settings {
 	s := d.settingsFor(userID)
 	if s == nil {
@@ -243,9 +243,9 @@ func (d *Dispatcher) allowed(a Alert, ch *Channel) (bool, string) {
 }
 
 // location ist die Zeitzone fuer Ruhezeiten und Zeitangaben: Ruhezeiten-
-// Einstellung, sonst die Zeitzone des Agents (aus dem Setup), sonst UTC.
+// Einstellung, sonst die Zeitzone des Nodes (aus dem Setup), sonst UTC.
 func (d *Dispatcher) location(uid int64) *time.Location {
-	for _, key := range []string{SetQuietTZ, SetAgentTimezone} {
+	for _, key := range []string{SetQuietTZ, SetNodeTimezone} {
 		if tz := d.settings(uid)(key, ""); tz != "" {
 			if l, err := time.LoadLocation(tz); err == nil {
 				return l
@@ -354,8 +354,8 @@ func (d *Dispatcher) sendSummary(ctx context.Context, downs []Alert) {
 		uid := list[0].Check.UserID
 		m := Message{Kind: KindSummary, Priority: 5, Time: d.now(), Language: lang, EventID: list[0].EventID, Check: CheckInfo{UserID: uid},
 			Title: d.i18n.T(lang, "notify.subject.summary_down", "count", len(list)),
-			Text:  strings.Join(lines, "\n") + "\n" + d.agentLine(uid, lang), URL: d.baseURL(uid, "/healthchecks?state=down")}
-		m.Payload = map[string]any{"kind": "summary", "count": len(list), "checks": names(list), "agent": d.agentName(uid), "time": m.Time.UTC().Format(time.RFC3339)}
+			Text:  strings.Join(lines, "\n") + "\n" + d.nodeLine(uid, lang), URL: d.baseURL(uid, "/healthchecks?state=down")}
+		m.Payload = map[string]any{"kind": "summary", "count": len(list), "checks": names(list), "node": d.nodeName(uid), "time": m.Time.UTC().Format(time.RFC3339)}
 		d.send(ctx, ch, m)
 	}
 }
@@ -368,17 +368,17 @@ func names(list []Alert) []string {
 	return out
 }
 
-func (d *Dispatcher) agentName(uid int64) string {
+func (d *Dispatcher) nodeName(uid int64) string {
 	set := d.settings(uid)
-	name := set(SetAgentName, "ipv64 Agent")
-	if loc := set(SetAgentLocation, ""); loc != "" {
+	name := set(SetNodeName, "Node64")
+	if loc := set(SetNodeLocation, ""); loc != "" {
 		name += " (" + loc + ")"
 	}
 	return name
 }
 
-func (d *Dispatcher) agentLine(uid int64, lang string) string {
-	return d.i18n.T(lang, "notify.body.agent", "agent", d.agentName(uid))
+func (d *Dispatcher) nodeLine(uid int64, lang string) string {
+	return d.i18n.T(lang, "notify.body.node", "node", d.nodeName(uid))
 }
 
 func (d *Dispatcher) baseURL(uid int64, path string) string {
@@ -417,8 +417,8 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 		m.Title, m.Priority = t("notify.subject.degraded_end", "name", a.Check.Name), 3
 	case KindTest:
 		m.Title, m.Priority = t("notify.subject.test"), 2
-		m.Text = t("notify.body.test", "channel", a.Check.Name) + "\n" + d.agentLine(uid, lang)
-		m.Payload = map[string]any{"kind": "test", "agent": d.agentName(uid), "time": m.Time.UTC().Format(time.RFC3339)}
+		m.Text = t("notify.body.test", "channel", a.Check.Name) + "\n" + d.nodeLine(uid, lang)
+		m.Payload = map[string]any{"kind": "test", "node": d.nodeName(uid), "time": m.Time.UTC().Format(time.RFC3339)}
 		return m
 	default:
 		m.Title = string(a.Kind) + ": " + a.Check.Name
@@ -439,7 +439,7 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 	if a.Flaps > 0 {
 		lines = append(lines, t("notify.body.flaps", "count", a.Flaps))
 	}
-	lines = append(lines, t("notify.body.time", "time", d.i18n.FormatDateTime(lang, m.Time, d.location(uid))), d.agentLine(uid, lang))
+	lines = append(lines, t("notify.body.time", "time", d.i18n.FormatDateTime(lang, m.Time, d.location(uid))), d.nodeLine(uid, lang))
 	m.Text = strings.Join(lines, "\n")
 	status := "down"
 	if a.Kind == KindUp || a.Kind == KindFlappingEnd || a.Kind == KindDegradedEnd {
@@ -452,7 +452,7 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 		"event_id": a.EventID, "kind": string(a.Kind), "status": status, "time": m.Time.UTC().Format(time.RFC3339),
 		"check":  map[string]any{"token": a.Check.Token, "name": a.Check.Name, "type": a.Check.Type, "target": a.Check.Target, "critical": a.Check.Critical},
 		"reason": a.Reason, "message": a.Message, "duration_seconds": int(a.Duration.Seconds()), "flaps": a.Flaps,
-		"agent": map[string]any{"name": d.settings(uid)(SetAgentName, ""), "location": d.settings(uid)(SetAgentLocation, "")}, "url": m.URL,
+		"node": map[string]any{"name": d.settings(uid)(SetNodeName, ""), "location": d.settings(uid)(SetNodeLocation, "")}, "url": m.URL,
 		"title": m.Title, "text": m.Text,
 	}
 	return m

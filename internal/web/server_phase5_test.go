@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ipv64net/agent/internal/module"
-	"github.com/ipv64net/agent/internal/notify"
-	"github.com/ipv64net/agent/internal/secrets"
-	"github.com/ipv64net/agent/internal/store"
-	"github.com/ipv64net/agent/internal/totp"
+	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/notify"
+	"github.com/ipv64net/node64/internal/secrets"
+	"github.com/ipv64net/node64/internal/store"
+	"github.com/ipv64net/node64/internal/totp"
 )
 
 // pingModule ist ein Modul mit einer geschuetzten API-Route fuer Tests.
@@ -86,7 +86,7 @@ func TestAPIKeyAuth(t *testing.T) {
 	if resp.StatusCode != 200 || string(b) != "pong admin" {
 		t.Fatalf("api key: %d %s", resp.StatusCode, b)
 	}
-	req.Header.Set("Authorization", "Bearer ipv64a_wrong")
+	req.Header.Set("Authorization", "Bearer node64_wrong")
 	resp, _ = a.client.Do(req)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -164,7 +164,7 @@ func TestBackupExportImport(t *testing.T) {
 	if err := nf.Insert(ctx, ch); err != nil {
 		t.Fatal(err)
 	}
-	_ = a.store.SetSetting(ctx, SettingAgentName, "Pi")
+	_ = a.store.SetSetting(ctx, SettingNodeName, "Pi")
 	loginAs(t, a, "admin", "sehr geheimes passwort")
 	_, body := a.get(t, "/settings")
 	csrf := csrfOf(t, body)
@@ -176,7 +176,7 @@ func TestBackupExportImport(t *testing.T) {
 	}
 	// Export ohne Geheimnisse
 	resp, body = a.post(t, "/settings/export", url.Values{"_csrf": {csrf}, "secrets": {"none"}})
-	if resp.StatusCode != 200 || strings.Contains(body, "123:SECRET") || !strings.Contains(body, `"ipv64-agent-config"`) {
+	if resp.StatusCode != 200 || strings.Contains(body, "123:SECRET") || !strings.Contains(body, `"node64-config"`) {
 		t.Fatalf("export none: %d", resp.StatusCode)
 	}
 	// Export mit Passwort: Geheimnis verschluesselt enthalten
@@ -185,7 +185,7 @@ func TestBackupExportImport(t *testing.T) {
 		t.Fatalf("export password: %d", resp.StatusCode)
 	}
 	var cf configFile
-	if err := json.Unmarshal([]byte(body), &cf); err != nil || cf.Settings[SettingAgentName] != "Pi" || len(cf.Channels) != 1 {
+	if err := json.Unmarshal([]byte(body), &cf); err != nil || cf.Settings[SettingNodeName] != "Pi" || len(cf.Channels) != 1 {
 		t.Fatalf("export content: %v %+v", err, cf)
 	}
 	// Import in eine frische Instanz
@@ -218,7 +218,7 @@ func TestBackupExportImport(t *testing.T) {
 	if len(chans) != 1 || chans[0].Config["bot_token"] != "123:SECRET" || !chans[0].Default {
 		t.Fatalf("imported channel: %+v", chans)
 	}
-	if v := b.store.SettingOr(ctx, SettingAgentName, ""); v != "Pi" {
+	if v := b.store.SettingOr(ctx, SettingNodeName, ""); v != "Pi" {
 		t.Fatalf("imported setting: %q", v)
 	}
 	// Ohne Passwort: Fehler, nichts importiert

@@ -1,4 +1,4 @@
-# ipv64 Agent
+# Node64
 
 Ein leichtgewichtiger Docker-Container für das Heimnetz: Healthchecks (als Uptime-Kuma-Alternative), später DynDNS-Updater und Reverse-Proxy, standalone oder verknüpft mit einem [ipv64.net](https://ipv64.net)-Account.
 
@@ -10,18 +10,18 @@ Ein einziges Go-Binary, SQLite, eingebettete Weboberfläche, keine externen Abh�
 
 Kanäle werden unter *Benachrichtigungen* angelegt und getestet. Standardkanäle bekommen alle Checks, die keine eigene Auswahl haben. Texte gehen in der Sprache des Kanals raus (Deutsch oder Englisch). Geheimnisse wie Bot-Tokens oder SMTP-Passwörter liegen verschlüsselt in der Datenbank, der Schlüssel in `/data/secret.key`.
 
-Webhooks bekommen standardmäßig ein JSON mit `event_id`, `kind` (down, up, flapping_start, flapping_end, reminder, summary, test), `status`, `check` (token, name, type, target), `reason`, `message`, `duration_seconds`, `agent` und `url`. Ein eigener Body mit Platzhaltern wie `{{name}}` oder `{{status}}` ist möglich.
+Webhooks bekommen standardmäßig ein JSON mit `event_id`, `kind` (down, up, flapping_start, flapping_end, reminder, summary, test), `status`, `check` (token, name, type, target), `reason`, `message`, `duration_seconds`, `node` und `url`. Ein eigener Body mit Platzhaltern wie `{{name}}` oder `{{status}}` ist möglich.
 
-Gegen Alarmrauschen wirken Wiederholungen vor Alarm, Stabilisierung, Flatter-Erkennung, Sammelmeldungen ab drei gleichzeitigen Störungen, Ruhezeiten (nur kritische Checks alarmieren) und höchstens 60 Nachrichten je Kanal und Stunde. Links in Nachrichten brauchen die externe Adresse des Agents in den Einstellungen der Benachrichtigungen.
+Gegen Alarmrauschen wirken Wiederholungen vor Alarm, Stabilisierung, Flatter-Erkennung, Sammelmeldungen ab drei gleichzeitigen Störungen, Ruhezeiten (nur kritische Checks alarmieren) und höchstens 60 Nachrichten je Kanal und Stunde. Links in Nachrichten brauchen die externe Adresse des Nodes in den Einstellungen der Benachrichtigungen.
 
 ## Schnellstart
 
 ```bash
-docker run -d --name ipv64-agent \
+docker run -d --name node64 \
   -p 8080:8080 \
-  -v ipv64-agent-data:/data \
+  -v node64-data:/data \
   --restart unless-stopped \
-  ghcr.io/ipv64net/agent:latest
+  ghcr.io/ipv64net/node64:latest
 ```
 
 Danach `http://<host>:8080` öffnen. Beim ersten Start führt ein Assistent durch Sprache und Admin-Konto. Es gibt kein Standardpasswort.
@@ -30,20 +30,20 @@ Danach `http://<host>:8080` öffnen. Beim ersten Start führt ein Assistent durc
 
 ```yaml
 services:
-  agent:
-    image: ghcr.io/ipv64net/agent:latest
-    container_name: ipv64-agent
+  node:
+    image: ghcr.io/ipv64net/node64:latest
+    container_name: node64
     restart: unless-stopped
     ports:
       - "8080:8080"
-      # - "8443:8443"   # optional HTTPS, dazu AGENT_HTTPS_PORT=8443 setzen
+      # - "8443:8443"   # optional HTTPS, dazu NODE64_HTTPS_PORT=8443 setzen
     volumes:
-      - ipv64-agent-data:/data
+      - node64-data:/data
     environment:
-      AGENT_LOG_LEVEL: info
-      # AGENT_HTTPS_PORT: 8443
-      # AGENT_ADMIN_USER: admin            # nur beim allerersten Start
-      # AGENT_ADMIN_PASSWORD: change-me    # nur beim allerersten Start
+      NODE64_LOG_LEVEL: info
+      # NODE64_HTTPS_PORT: 8443
+      # NODE64_ADMIN_USER: admin            # nur beim allerersten Start
+      # NODE64_ADMIN_PASSWORD: change-me    # nur beim allerersten Start
     read_only: true
     tmpfs:
       - /tmp
@@ -51,14 +51,14 @@ services:
     sysctls:
       - net.ipv4.ping_group_range=0 65535
 volumes:
-  ipv64-agent-data:
+  node64-data:
 ```
 
 ## Lokale API
 
-Der Agent stellt alles, was die Oberfläche kann, auch als JSON-API im eigenen Netz bereit: Status, Module, Einstellungen, Audit-Log, Logs, Backup, Benachrichtigungskanäle und das komplette Healthchecks-Modul. Die Referenz liegt im Agent unter `/api/docs`, die maschinenlesbare Beschreibung (OpenAPI 3.1) unter `/api/openapi.json`.
+Der Node stellt alles, was die Oberfläche kann, auch als JSON-API im eigenen Netz bereit: Status, Module, Einstellungen, Audit-Log, Logs, Backup, Benachrichtigungskanäle und das komplette Healthchecks-Modul. Die Referenz liegt im Node unter `/api/docs`, die maschinenlesbare Beschreibung (OpenAPI 3.1) unter `/api/openapi.json`.
 
-Anmeldung mit einem API-Key aus den Einstellungen (`Authorization: Bearer ipv64a_…`) oder mit der Browser-Sitzung. Ohne Anmeldung erreichbar sind nur `/api/health` (für Docker) und `/api/push/{token}` (Heartbeats).
+Anmeldung mit einem API-Key aus den Einstellungen (`Authorization: Bearer node64_…`) oder mit der Browser-Sitzung. Ohne Anmeldung erreichbar sind nur `/api/health` (für Docker) und `/api/push/{token}` (Heartbeats).
 
 ![Healthchecks](internal/web/static/img/healthcheck_service_monitoring_ipv64.png)
 
@@ -68,7 +68,7 @@ Das Modul wird in den Einstellungen aktiviert. Check-Typen: `http`, `keyword`, `
 
 ```bash
 # Check anlegen
-curl -X POST http://localhost:8080/api/checks -H "Authorization: Bearer ipv64a_…" -H "Content-Type: application/json" -d '{
+curl -X POST http://localhost:8080/api/checks -H "Authorization: Bearer node64_…" -H "Content-Type: application/json" -d '{
   "name": "Webseite", "type": "http", "target": "https://example.com/",
   "interval_seconds": 60, "retries": 1, "stabilize": 3,
   "params": {"accept_status": "200-299"}
@@ -88,16 +88,16 @@ ICMP-Checks brauchen im Container entweder unprivilegiertes Ping (`sysctls: net.
 
 ## Betrieb
 
-- **Backup:** Unter *Einstellungen* lässt sich die Datenbank im laufenden Betrieb konsistent herunterladen und aus einer Datei wiederherstellen. Nach der Wiederherstellung startet der Agent neu (Docker startet ihn mit `restart: unless-stopped` automatisch), die alte Datenbank bleibt unter `/data/backups`. Vor jeder Migration entsteht dort ebenfalls ein Backup.
+- **Backup:** Unter *Einstellungen* lässt sich die Datenbank im laufenden Betrieb konsistent herunterladen und aus einer Datei wiederherstellen. Nach der Wiederherstellung startet der Node neu (Docker startet ihn mit `restart: unless-stopped` automatisch), die alte Datenbank bleibt unter `/data/backups`. Vor jeder Migration entsteht dort ebenfalls ein Backup.
 - **Export und Import:** Die Konfiguration (Checks, Wartungsfenster, Kanäle, Einstellungen) als JSON, wahlweise ohne Geheimnisse oder mit Passwort verschlüsselt. Der Import gleicht Checks über den Token und Kanäle über den Namen ab und löscht nichts.
 - **Zwei-Faktor-Anmeldung:** TOTP mit jeder Authenticator-App, acht Wiederherstellungscodes.
-- **API-Keys:** Für Skripte gegen die lokale API, `Authorization: Bearer ipv64a_...`. Keys werden nur einmal angezeigt und gehasht gespeichert.
+- **API-Keys:** Für Skripte gegen die lokale API, `Authorization: Bearer node64_...`. Keys werden nur einmal angezeigt und gehasht gespeichert.
 - **Schutz:** Login-Ratelimit, Ratelimit je IP für alle Anfragen, Push-URLs mit Mindestabstand, höchstens 60 Nachrichten je Kanal und Stunde.
-- **Updates:** Optional prüft der Agent täglich eine Versionsdatei bei ipv64.net. Es werden keine Daten gesendet.
+- **Updates:** Optional prüft der Node täglich eine Versionsdatei bei ipv64.net. Es werden keine Daten gesendet.
 
 ## IPv4 und IPv6
 
-Der Agent ist durchgehend Dual-Stack: die Oberfläche lauscht auf IPv4 und IPv6, jeder Check hat einen Modus (`auto`, `ipv4`, `ipv6`, `both` = zwei getrennte Ergebnisse), ICMP pingt v4 und v6, Benachrichtigungen und die spätere ipv64-Verknüpfung nutzen beides. Vor jedem Check prüft der Agent, ob die jeweilige Adressfamilie im Container überhaupt erreichbar ist, damit ein fehlendes IPv6 im Docker-Netz nicht als Störung des Ziels gemeldet wird.
+Der Node ist durchgehend Dual-Stack: die Oberfläche lauscht auf IPv4 und IPv6, jeder Check hat einen Modus (`auto`, `ipv4`, `ipv6`, `both` = zwei getrennte Ergebnisse), ICMP pingt v4 und v6, Benachrichtigungen und die spätere ipv64-Verknüpfung nutzen beides. Vor jedem Check prüft der Node, ob die jeweilige Adressfamilie im Container überhaupt erreichbar ist, damit ein fehlendes IPv6 im Docker-Netz nicht als Störung des Ziels gemeldet wird.
 
 Docker gibt Containern standardmäßig **kein IPv6**. Damit Checks per IPv6 laufen, dem Netz IPv6 geben (Docker 27+, compose):
 
@@ -116,15 +116,15 @@ Alternativ `network_mode: host`. `net.ipv4.ping_group_range` gilt trotz des Name
 
 | Variable | Standard | Bedeutung |
 | --- | --- | --- |
-| `AGENT_DATA_DIR` | `/data` | Einziges beschreibbares Verzeichnis: Datenbank, Backups, Schlüssel, Zertifikat |
-| `AGENT_HTTP_PORT` | `8080` | Port der Oberfläche, `0` = aus |
-| `AGENT_HTTPS_PORT` | `0` | Port für HTTPS mit selbstsigniertem Zertifikat, `0` = aus |
-| `AGENT_BIND_ADDR` | leer (alle) | Bind-Adresse |
-| `AGENT_TLS_CERT` / `AGENT_TLS_KEY` | leer | Eigenes Zertifikat statt des selbstsignierten |
-| `AGENT_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`; zur Laufzeit im UI änderbar |
-| `AGENT_LOG_FORMAT` | `text` | `text` oder `json` |
-| `AGENT_ADMIN_USER` / `AGENT_ADMIN_PASSWORD` | leer | Admin beim allerersten Start anlegen; danach ignoriert |
-| `AGENT_TRUST_PROXY` | `false` | `X-Forwarded-For` auswerten, nur hinter eigenem Reverse Proxy |
+| `NODE64_DATA_DIR` | `/data` | Einziges beschreibbares Verzeichnis: Datenbank, Backups, Schlüssel, Zertifikat |
+| `NODE64_HTTP_PORT` | `8080` | Port der Oberfläche, `0` = aus |
+| `NODE64_HTTPS_PORT` | `0` | Port für HTTPS mit selbstsigniertem Zertifikat, `0` = aus |
+| `NODE64_BIND_ADDR` | leer (alle) | Bind-Adresse |
+| `NODE64_TLS_CERT` / `NODE64_TLS_KEY` | leer | Eigenes Zertifikat statt des selbstsignierten |
+| `NODE64_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`; zur Laufzeit im UI änderbar |
+| `NODE64_LOG_FORMAT` | `text` | `text` oder `json` |
+| `NODE64_ADMIN_USER` / `NODE64_ADMIN_PASSWORD` | leer | Admin beim allerersten Start anlegen; danach ignoriert |
+| `NODE64_TRUST_PROXY` | `false` | `X-Forwarded-For` auswerten, nur hinter eigenem Reverse Proxy |
 
 ## Sicherheit
 
@@ -139,7 +139,7 @@ Alternativ `network_mode: host`. `net.ipv4.ping_group_range` gilt trotz des Name
 Voraussetzung: Go 1.27 oder neuer. Kein CGO nötig.
 
 ```bash
-make build          # Binary nach bin/agent
+make build          # Binary nach bin/node
 make test           # Tests
 make run            # lokal mit ./data und Debug-Log
 make docker         # Image für die eigene Architektur
@@ -149,7 +149,7 @@ make docker-multiarch PUSH=--push   # amd64 + arm64 über buildx
 Projektstruktur:
 
 ```
-cmd/agent/          main, Subcommands (healthcheck, version)
+cmd/node/          main, Subcommands (healthcheck, version)
 internal/checks/    Check-Bot (Phase 2), ohne Abhängigkeit zu web/store/scheduler/notify
 internal/scheduler/ Intervalle, Retry, Worker-Pool, Zustandsautomat (Phase 2)
 internal/store/     SQLite, Migrationen je Scope, Backups

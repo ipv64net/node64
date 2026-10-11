@@ -1,4 +1,4 @@
-// Package logging kapselt slog mit drei Zusaetzen, die der Agent braucht:
+// Package logging kapselt slog mit drei Zusaetzen, die der Node braucht:
 //
 //   - Log-Level zur Laufzeit umschaltbar, global und je Modul, mit
 //     automatischem Zuruecksetzen nach einer einstellbaren Zeit.

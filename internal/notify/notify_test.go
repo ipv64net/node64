@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ipv64net/agent/internal/i18n"
-	"github.com/ipv64net/agent/internal/secrets"
-	"github.com/ipv64net/agent/internal/store"
+	"github.com/ipv64net/node64/internal/i18n"
+	"github.com/ipv64net/node64/internal/secrets"
+	"github.com/ipv64net/node64/internal/store"
 )
 
 func testStore(t *testing.T) *Store {
@@ -184,13 +184,13 @@ func fakeSMTP(t *testing.T) (string, *strings.Builder) {
 func TestSMTP(t *testing.T) {
 	addr, data := fakeSMTP(t)
 	host, port, _ := net.SplitHostPort(addr)
-	ch := &Channel{Type: TypeSMTP, Config: map[string]string{"host": host, "port": port, "security": "none", "from": "agent@example.com", "to": "a@example.com, b@example.com"}}
-	m := Message{Kind: KindDown, Title: "Störung: Test", Text: "Zeile 1\nZeile 2", Time: time.Now(), URL: "http://agent/x", EventID: "e1"}
+	ch := &Channel{Type: TypeSMTP, Config: map[string]string{"host": host, "port": port, "security": "none", "from": "node@example.com", "to": "a@example.com, b@example.com"}}
+	m := Message{Kind: KindDown, Title: "Störung: Test", Text: "Zeile 1\nZeile 2", Time: time.Now(), URL: "http://node/x", EventID: "e1"}
 	if err := Senders("test")[TypeSMTP].Send(context.Background(), ch, m); err != nil {
 		t.Fatal(err)
 	}
 	got := data.String()
-	if !strings.Contains(got, "To: a@example.com, b@example.com") || !strings.Contains(got, "Subject: =?utf-8?q?") || !strings.Contains(got, "Zeile 2") || !strings.Contains(got, "http://agent/x") {
+	if !strings.Contains(got, "To: a@example.com, b@example.com") || !strings.Contains(got, "Subject: =?utf-8?q?") || !strings.Contains(got, "Zeile 2") || !strings.Contains(got, "http://node/x") {
 		t.Fatalf("mail content:\n%s", got)
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ipv64net/agent/internal/checks"
+	"github.com/ipv64net/node64/internal/checks"
 )
 
 // scripted liefert vorgegebene Ergebnisse, das letzte wiederholt sich.

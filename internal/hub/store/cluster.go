@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-// Heartbeat traegt diese Instanz in hc2_nodes ein bzw. erneuert sie.
+// Heartbeat traegt diese Instanz in hc2_hubs ein bzw. erneuert sie.
 func (s *Store) Heartbeat(ctx context.Context, roles, version string, connections int, started time.Time) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO hc2_nodes (name, location, roles, version, connections, started_at, heartbeat) VALUES (?,?,?,?,?,?,?)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO hc2_hubs (name, location, roles, version, connections, started_at, heartbeat) VALUES (?,?,?,?,?,?,?)
 		ON DUPLICATE KEY UPDATE location=VALUES(location), roles=VALUES(roles), version=VALUES(version), connections=VALUES(connections), started_at=VALUES(started_at), heartbeat=VALUES(heartbeat)`,
 		s.node, s.location, roles, version, connections, ft(started), nowStr())
 	if err != nil {
@@ -19,7 +19,7 @@ func (s *Store) Heartbeat(ctx context.Context, roles, version string, connection
 
 // Leave entfernt die Instanz beim sauberen Herunterfahren.
 func (s *Store) Leave(ctx context.Context) {
-	_, _ = s.db.ExecContext(ctx, `DELETE FROM hc2_nodes WHERE name = ?`, s.node)
+	_, _ = s.db.ExecContext(ctx, `DELETE FROM hc2_hubs WHERE name = ?`, s.node)
 }
 
 // Node ist eine lebende hub-Instanz.
@@ -29,7 +29,7 @@ type Node struct {
 
 // LiveNodes liefert alle Instanzen mit Heartbeat in den letzten 30 s, sortiert.
 func (s *Store) LiveNodes(ctx context.Context) ([]Node, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT name, location FROM hc2_nodes WHERE heartbeat > ? ORDER BY name`, time.Now().UTC().Add(-30*time.Second).Format(TimeFormat))
+	rows, err := s.db.QueryContext(ctx, `SELECT name, location FROM hc2_hubs WHERE heartbeat > ? ORDER BY name`, time.Now().UTC().Add(-30*time.Second).Format(TimeFormat))
 	if err != nil {
 		s.Metrics.add(&s.Metrics.DBErrors, 1)
 		return nil, err

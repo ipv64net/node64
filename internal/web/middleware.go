@@ -12,15 +12,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ipv64net/agent/internal/store"
+	"github.com/ipv64net/node64/internal/store"
 )
 
 const (
-	sessionCookie = "agent_session"
-	csrfCookie    = "agent_csrf"
-	flashCookie   = "agent_flash"
-	themeCookie   = "agent_theme"
-	langCookie    = "agent_lang"
+	sessionCookie = "node64_session"
+	csrfCookie    = "node64_csrf"
+	flashCookie   = "node64_flash"
+	themeCookie   = "node64_theme"
+	langCookie    = "node64_lang"
 
 	sessionIdle = 12 * time.Hour
 	sessionMax  = 7 * 24 * time.Hour
@@ -98,9 +98,9 @@ func (s *Server) bodyLimit(next http.Handler) http.Handler {
 func (s *Server) session(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		// API-Key: Authorization: Bearer ipv64a_... (nur fuer /api/)
+		// API-Key: Authorization: Bearer node64_... (nur fuer /api/)
 		if strings.HasPrefix(r.URL.Path, "/api/") {
-			if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ipv64a_") {
+			if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer node64_") {
 				key, err := s.Store.APIKeyByValue(ctx, strings.TrimSpace(strings.TrimPrefix(h, "Bearer ")))
 				if err == nil && key != nil {
 					if u, err := s.Store.UserByID(ctx, key.UserID); err == nil && u != nil {
@@ -239,7 +239,7 @@ func (s *Server) clearCookie(w http.ResponseWriter, r *http.Request, name string
 }
 
 // clientIP liefert die Adresse des Aufrufers; X-Forwarded-For nur, wenn
-// AGENT_TRUST_PROXY gesetzt ist.
+// NODE64_TRUST_PROXY gesetzt ist.
 func (s *Server) clientIP(r *http.Request) string {
 	if s.Cfg.TrustProxyHeaders {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {

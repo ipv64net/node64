@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ipv64net/agent/internal/checks"
-	"github.com/ipv64net/agent/internal/module"
-	"github.com/ipv64net/agent/internal/notify"
-	"github.com/ipv64net/agent/internal/scheduler"
+	"github.com/ipv64net/node64/internal/checks"
+	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/notify"
+	"github.com/ipv64net/node64/internal/scheduler"
 )
 
 //go:embed templates
@@ -105,7 +105,7 @@ func (m *Module) rowOf(ctx context.Context, lang string, c *Check, pills map[str
 func (m *Module) pillsFor(ctx context.Context, lang string, loc *time.Location, n int) (map[string][]Pill, error) {
 	tr := m.translator(lang)
 	rows, err := m.st.r.QueryContext(ctx, `SELECT token, time, status, latency_ms, flags, reason, message FROM (
-		SELECT token, time, status, latency_ms, flags, reason, message, row_number() OVER (PARTITION BY token ORDER BY agent_seq DESC) AS rn FROM hc_measurements
+		SELECT token, time, status, latency_ms, flags, reason, message, row_number() OVER (PARTITION BY token ORDER BY node_seq DESC) AS rn FROM hc_measurements
 	) WHERE rn <= ? ORDER BY token, time`, n)
 	if err != nil {
 		return nil, err

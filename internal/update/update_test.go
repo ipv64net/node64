@@ -25,7 +25,7 @@ func TestNewer(t *testing.T) {
 
 func TestCheck(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.Header.Get("User-Agent"), "ipv64-agent/") {
+		if !strings.HasPrefix(r.Header.Get("User-Agent"), "node64/") {
 			w.WriteHeader(400)
 			return
 		}

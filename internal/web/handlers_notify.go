@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ipv64net/agent/internal/notify"
+	"github.com/ipv64net/node64/internal/notify"
 )
 
 // Seiten fuer Benachrichtigungskanaele, Ruhezeiten und Zustellprotokoll.

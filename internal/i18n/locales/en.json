@@ -5,7 +5,7 @@
     "en": "English"
   },
   "app": {
-    "name": "ipv64 Agent",
+    "name": "Node64",
     "tagline": "Health checks, DynDNS and more in your own network"
   },
   "nav": {
@@ -74,7 +74,7 @@
     "in": "in {duration}"
   },
   "setup": {
-    "title": "Welcome to the ipv64 Agent",
+    "title": "Welcome to Node64",
     "intro": "Choose your language and create the local administrator. There is no default password.",
     "language": "Language",
     "username": "Username",
@@ -82,12 +82,12 @@
     "password_repeat": "Repeat password",
     "password_hint": "At least 10 characters. Use a passphrase or a password manager.",
     "timezone": "Time zone",
-    "agent_name": "Name of this agent",
+    "node_name": "Name of this node",
     "agent_name_hint": "For example “Pi in the basement”. Shown later in the ipv64 portal, too.",
     "location": "Location",
-    "location_hint": "For example Home, Office, Parents. A location can have several agents.",
-    "submit": "Set up agent",
-    "done": "The agent is set up. You can sign in now."
+    "location_hint": "For example Home, Office, Parents. A location can have several nodes.",
+    "submit": "Set up node",
+    "done": "The node is set up. You can sign in now."
   },
   "login": {
     "title": "Sign in",
@@ -104,8 +104,8 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "agent": "Agent",
-    "agent_name": "Name",
+    "node": "Node",
+    "node_name": "Name",
     "location": "Location",
     "version": "Version",
     "uptime": "Running since",
@@ -113,7 +113,7 @@
     "modules": "Modules",
     "no_modules": "No module is active yet. Enable Healthchecks in the settings.",
     "link_status": "ipv64 link",
-    "not_linked": "Not linked. The agent runs standalone.",
+    "not_linked": "Not linked. The node runs standalone.",
     "ok": "OK",
     "down": "Down",
     "paused": "Paused",
@@ -123,8 +123,8 @@
   },
   "settings": {
     "title": "Settings",
-    "agent": "Agent",
-    "agent_name": "Agent name",
+    "node": "Node",
+    "node_name": "Node name",
     "location": "Location",
     "modules": "Modules",
     "modules_hint": "A disabled module does not run, uses no resources and has no menu entry. Its configuration is kept.",
@@ -223,11 +223,11 @@
     "last_raw": "Last measurement in detail",
     "delete_confirm": "Delete check “{name}” with all its data?",
     "execution": {
-      "local": "This agent only (local)",
+      "local": "This node only (local)",
       "online": "Online at ipv64 only",
       "both": "Local and online (hybrid)"
     },
-    "execution_hint": "Checked by this agent",
+    "execution_hint": "Checked by this node",
     "range": {
       "24h": "24 hours",
       "30d": "30 days",
@@ -342,7 +342,7 @@
       "locations": "Online locations",
       "locations_hint": "Multiple locations from account class Supporter. Every online measuring point counts against the class's healthcheck limit, local measurements never do.",
       "policy": "Down when …",
-      "policy_hint": "With several measuring points (agent, Nuremberg, Falkenstein) this rule decides when the check counts as down. If only some report a failure, the check is \\u201cpartially down\\u201d.",
+      "policy_hint": "With several measuring points (node, Nuremberg, Falkenstein) this rule decides when the check counts as down. If only some report a failure, the check is “partially down”.",
       "notify_degraded": "Also notify on \\u201cpartially down\\u201d",
       "notify_degraded_hint": "Only relevant with several measuring points."
     },
@@ -388,7 +388,7 @@
       "flapping_end": "🟢 {name} is stable again",
       "reminder": "🔴 {name} is still down ({duration})",
       "summary_down": "🔴 {count} checks down",
-      "test": "ipv64 Agent: test message",
+      "test": "Node64: test message",
       "degraded": "⚠️ Partially down: {{name}}",
       "degraded_end": "✅ Fully reachable again: {{name}}"
     },
@@ -400,7 +400,7 @@
       "duration": "Outage duration: {duration}",
       "flaps": "{count} state changes",
       "time": "Time: {time}",
-      "agent": "Agent: {agent}",
+      "node": "Node: {node}",
       "test": "If you can read this, the channel “{channel}” works.",
       "summary_item": "• {name}: {message}"
     }
@@ -472,8 +472,8 @@
     "quiet_to": "To",
     "quiet_days": "Days",
     "general": "General",
-    "base_url": "External address of the agent",
-    "base_url_hint": "For links in messages, e.g. https://agent.example.com. Empty = no links.",
+    "base_url": "External address of the node",
+    "base_url_hint": "For links in messages, e.g. https://node.example.com. Empty = no links.",
     "rate_per_hour": "Max. messages per channel and hour",
     "batch_threshold": "Summary message from simultaneous outages",
     "batch_window": "Collection window (seconds)",
@@ -530,11 +530,11 @@
     "download": "Download database",
     "restore": "Restore database",
     "restore_btn": "Restore",
-    "restore_hint": "The agent restarts afterwards. The previous database is kept under /data/backups.",
-    "restore_confirm": "The current database will be replaced and the agent restarted. Continue?",
-    "restarting": "Database accepted, the agent is restarting now. Sign in again in a few seconds.",
+    "restore_hint": "The node restarts afterwards. The previous database is kept under /data/backups.",
+    "restore_confirm": "The current database will be replaced and the node restarted. Continue?",
+    "restarting": "Database accepted, the node is restarting now. Sign in again in a few seconds.",
     "no_file": "No file selected.",
-    "invalid": "This is not an ipv64 Agent database.",
+    "invalid": "This is not a Node64 database.",
     "export": "Export configuration",
     "export_none": "without secrets (tokens, passwords)",
     "export_password": "secrets encrypted with a password",
@@ -544,7 +544,7 @@
     "import": "Import configuration",
     "import_btn": "Import",
     "import_hint": "Checks are matched by token, channels and maintenance windows by name. Nothing is deleted.",
-    "invalid_config": "This is not an ipv64 Agent configuration file.",
+    "invalid_config": "This is not a Node64 configuration file.",
     "password_needed": "The file is encrypted, please enter the password.",
     "password_wrong": "The password does not match the file.",
     "imported": "{count} items imported."

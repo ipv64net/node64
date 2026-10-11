@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ipv64net/agent/internal/checks"
-	"github.com/ipv64net/agent/internal/scheduler"
+	"github.com/ipv64net/node64/internal/checks"
+	"github.com/ipv64net/node64/internal/scheduler"
 )
 
 // Reverdict berechnet den Gesamtzustand eines Checks aus allen Messstellen
@@ -64,7 +64,7 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		}
 		x.State, x.LastStatus = scheduler.State(st.String), checks.Status(ls.String)
 		x.reason, x.message, x.latency, x.updated = reason.String, msg.String, lat.Float64, pt(upd)
-		// Agent-Messstellen gelten als frisch, solange der Agent online ist (Phase 3); bis dahin wie Standorte.
+		// Agent-Messstellen gelten als frisch, solange der Node online ist (Phase 3); bis dahin wie Standorte.
 		x.Fresh = !x.updated.IsZero() && now.Sub(x.updated) <= fresh
 		srcs = append(srcs, x)
 	}
@@ -243,7 +243,7 @@ func diagnosis(down, up []string) string {
 	}
 	inside := func(list []string) bool {
 		for _, s := range list {
-			if strings.HasPrefix(s, "agent:") {
+			if strings.HasPrefix(s, "node:") {
 				return true
 			}
 		}
@@ -259,7 +259,7 @@ func diagnosis(down, up []string) string {
 	}
 	switch {
 	case inside(down) && !outside(down) && outside(up):
-		return "innen gestört, außen OK → Heimnetz/Agent"
+		return "innen gestört, außen OK → Heimnetz/Node"
 	case outside(down) && !inside(down) && inside(up):
 		return "außen gestört (" + strings.Join(down, ", ") + "), innen OK → Router/Portfreigabe/CDN"
 	default:

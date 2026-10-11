@@ -1,10 +1,10 @@
 // Package sync ist der Platzhalter fuer die spaetere Anbindung an ipv64.net.
 //
-// Im ersten Entwurf laeuft der Agent nur standalone. Das Interface steht,
+// Im ersten Entwurf laeuft der Node nur standalone. Das Interface steht,
 // damit Scheduler und Store spaeter ohne Umbau einen echten Client bekommen.
 // Vorgesehen laut Konzept: ausgehende Dauerverbindung, Konfigurations-Sync
 // mit Revisionen (Server fuehrend), Messergebnisse append-only mit
-// Sequenznummern je Agent, Outbox bei Verbindungsverlust.
+// Sequenznummern je Node, Outbox bei Verbindungsverlust.
 package sync
 
 import "context"

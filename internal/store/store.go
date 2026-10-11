@@ -1,4 +1,4 @@
-// Package store kapselt die SQLite-Datenbank des Agents.
+// Package store kapselt die SQLite-Datenbank des Nodes.
 //
 // Eine Datei unter /data, WAL-Modus, versionierte Migrationen je Scope
 // (Kern und jedes Modul getrennt), automatisches Backup vor Migrationen.

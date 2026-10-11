@@ -1,4 +1,4 @@
-// ipv64 Agent: wenig Vanilla-JS. Farbschema, Hinweise ausblenden.
+// Node64: wenig Vanilla-JS. Farbschema, Hinweise ausblenden.
 (function () {
 	"use strict";
 	var root = document.documentElement;
@@ -16,16 +16,16 @@
 	}
 	// Ohne Cookie folgt das Schema dem System
 	if (!root.getAttribute("data-bs-theme")) {
-		apply(cookie("agent_theme"));
+		apply(cookie("node64_theme"));
 		window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
-			if (!cookie("agent_theme")) { apply(""); }
+			if (!cookie("node64_theme")) { apply(""); }
 		});
 	}
 	document.querySelectorAll("#themeToggle, .theme-toggle").forEach(function (btn) {
 		btn.addEventListener("click", function () {
 			var next = root.getAttribute("data-bs-theme") === "dark" ? "light" : "dark";
 			apply(next);
-			document.cookie = "agent_theme=" + next + "; path=/; max-age=31536000; samesite=lax";
+			document.cookie = "node64_theme=" + next + "; path=/; max-age=31536000; samesite=lax";
 		});
 	});
 

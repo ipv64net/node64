@@ -12,19 +12,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ipv64net/agent/internal/logging"
-	"github.com/ipv64net/agent/internal/module"
-	"github.com/ipv64net/agent/internal/store"
+	"github.com/ipv64net/node64/internal/logging"
+	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/store"
 )
 
 var usernameRe = regexp.MustCompile(`^[A-Za-z0-9._-]{3,64}$`)
 
 // Einstellungs-Schluessel in der Tabelle settings
 const (
-	SettingAgentID       = "agent.id"
-	SettingAgentName     = "agent.name"
-	SettingAgentLocation = "agent.location"
-	SettingAgentTimezone = "agent.timezone"
+	SettingNodeID       = "node.id"
+	SettingNodeName     = "node.name"
+	SettingNodeLocation = "node.location"
+	SettingNodeTimezone = "node.timezone"
 )
 
 // ---------------------------------------------------------------- API
@@ -62,7 +62,7 @@ func (s *Server) setupForm(w http.ResponseWriter, r *http.Request) {
 	if v.Lang == "de" {
 		tz = "Europe/Berlin"
 	}
-	v.Form = map[string]string{"username": "admin", "timezone": tz, "agent_name": host, "location": ""}
+	v.Form = map[string]string{"username": "admin", "timezone": tz, "node_name": host, "location": ""}
 	s.render(w, r, http.StatusOK, "setup", v)
 }
 
@@ -78,11 +78,11 @@ func (s *Server) setupSubmit(w http.ResponseWriter, r *http.Request) {
 	if s.I18n.Has(lang) {
 		v.Lang = lang
 	}
-	f := s.formValues(r, "username", "password", "password2", "timezone", "agent_name", "location")
+	f := s.formValues(r, "username", "password", "password2", "timezone", "node_name", "location")
 	v.Form = f
 	s.validateUser(v, f["username"], f["password"], f["password2"])
 	s.validateTimezone(v, f["timezone"])
-	s.validateAgent(v, f["agent_name"])
+	s.validateNode(v, f["node_name"])
 	if len(v.Errors) > 0 {
 		v.Flash = &Flash{Kind: "danger", Text: v.T("errors.validation")}
 		s.render(w, r, http.StatusUnprocessableEntity, "setup", v)
@@ -99,9 +99,9 @@ func (s *Server) setupSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if f["timezone"] != "" {
-		_ = s.Store.SetSetting(ctx, SettingAgentTimezone, f["timezone"])
+		_ = s.Store.SetSetting(ctx, SettingNodeTimezone, f["timezone"])
 	}
-	if err := s.ensureAgentIdentity(r, f["agent_name"], f["location"]); err != nil {
+	if err := s.ensureNodeIdentity(r, f["node_name"], f["location"]); err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -116,17 +116,17 @@ func (s *Server) setupSubmit(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-func (s *Server) ensureAgentIdentity(r *http.Request, name, location string) error {
+func (s *Server) ensureNodeIdentity(r *http.Request, name, location string) error {
 	ctx := r.Context()
-	if _, ok, _ := s.Store.Setting(ctx, SettingAgentID); !ok {
-		if err := s.Store.SetSetting(ctx, SettingAgentID, randomToken(24)); err != nil {
+	if _, ok, _ := s.Store.Setting(ctx, SettingNodeID); !ok {
+		if err := s.Store.SetSetting(ctx, SettingNodeID, randomToken(24)); err != nil {
 			return err
 		}
 	}
-	if err := s.Store.SetSetting(ctx, SettingAgentName, name); err != nil {
+	if err := s.Store.SetSetting(ctx, SettingNodeName, name); err != nil {
 		return err
 	}
-	return s.Store.SetSetting(ctx, SettingAgentLocation, location)
+	return s.Store.SetSetting(ctx, SettingNodeLocation, location)
 }
 
 // ---------------------------------------------------------------- Login
@@ -218,8 +218,8 @@ func safeNext(next string) string {
 // ---------------------------------------------------------------- Dashboard
 
 type dashboardData struct {
-	AgentID   string
-	AgentName string
+	NodeID    string
+	NodeName  string
 	Location  string
 	StartedAt time.Time
 	DBSize    int64
@@ -231,9 +231,9 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	v := s.view(r, "dashboard.title")
 	v.Data = dashboardData{
-		AgentID:   s.Store.SettingOr(ctx, SettingAgentID, ""),
-		AgentName: s.Store.SettingOr(ctx, SettingAgentName, ""),
-		Location:  s.Store.SettingOr(ctx, SettingAgentLocation, ""),
+		NodeID:    s.Store.SettingOr(ctx, SettingNodeID, ""),
+		NodeName:  s.Store.SettingOr(ctx, SettingNodeName, ""),
+		Location:  s.Store.SettingOr(ctx, SettingNodeLocation, ""),
 		StartedAt: s.StartedAt,
 		DBSize:    s.Store.Size(),
 		Modules:   s.Modules.List(ctx),
@@ -260,7 +260,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------- Settings
 
 type settingsData struct {
-	AgentName  string
+	NodeName   string
 	Location   string
 	Modules    []module.Status
 	LogLevel   string
@@ -284,8 +284,8 @@ func (s *Server) settingsView(r *http.Request) *View {
 	ctx := r.Context()
 	v := s.view(r, "settings.title")
 	d := settingsData{
-		AgentName:  s.Store.SettingOr(ctx, SettingAgentName, ""),
-		Location:   s.Store.SettingOr(ctx, SettingAgentLocation, ""),
+		NodeName:   s.Store.SettingOr(ctx, SettingNodeName, ""),
+		Location:   s.Store.SettingOr(ctx, SettingNodeLocation, ""),
 		Modules:    s.Modules.List(ctx),
 		LogLevel:   logging.LevelName(s.Log.Level()),
 		LogResetAt: s.Log.ResetAt(),
@@ -307,7 +307,7 @@ func (s *Server) settingsView(r *http.Request) *View {
 	}
 	d.Modules2 = []string{"core", "web", "store", "scheduler", "notify", "healthchecks"}
 	v.Data = d
-	v.Form = map[string]string{"agent_name": d.AgentName, "location": d.Location, "lang": v.User.Lang, "timezone": v.User.Timezone, "level": d.LogLevel}
+	v.Form = map[string]string{"node_name": d.NodeName, "location": d.Location, "lang": v.User.Lang, "timezone": v.User.Timezone, "level": d.LogLevel}
 	return v
 }
 
@@ -327,20 +327,20 @@ func (s *Server) settingsUpdates(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
 
-func (s *Server) settingsAgent(w http.ResponseWriter, r *http.Request) {
-	f := s.formValues(r, "agent_name", "location")
+func (s *Server) settingsNode(w http.ResponseWriter, r *http.Request) {
+	f := s.formValues(r, "node_name", "location")
 	v := s.settingsView(r)
-	v.Form["agent_name"], v.Form["location"] = f["agent_name"], f["location"]
-	s.validateAgent(v, f["agent_name"])
+	v.Form["node_name"], v.Form["location"] = f["node_name"], f["location"]
+	s.validateNode(v, f["node_name"])
 	if len(v.Errors) > 0 {
 		s.render(w, r, http.StatusUnprocessableEntity, "settings", v)
 		return
 	}
-	if err := s.ensureAgentIdentity(r, f["agent_name"], f["location"]); err != nil {
+	if err := s.ensureNodeIdentity(r, f["node_name"], f["location"]); err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	s.audit(r, "settings.agent", "", fmt.Sprintf("name=%q location=%q", f["agent_name"], f["location"]))
+	s.audit(r, "settings.node", "", fmt.Sprintf("name=%q location=%q", f["node_name"], f["location"]))
 	s.flash(w, r, "success", v.T("common.saved"))
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }
@@ -362,7 +362,7 @@ func (s *Server) settingsUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if f["timezone"] != "" {
-		_ = s.Store.SetSetting(r.Context(), SettingAgentTimezone, f["timezone"])
+		_ = s.Store.SetSetting(r.Context(), SettingNodeTimezone, f["timezone"])
 	}
 	s.setCookie(w, r, langCookie, f["lang"], 365*24*3600)
 	s.audit(r, "settings.user", v.User.Username, "lang="+f["lang"]+" timezone="+f["timezone"])
@@ -521,9 +521,9 @@ func (s *Server) validateTimezone(v *View, tz string) {
 	}
 }
 
-func (s *Server) validateAgent(v *View, name string) {
+func (s *Server) validateNode(v *View, name string) {
 	if name == "" || len(name) > 64 {
-		v.Errors["agent_name"] = v.T("common.required")
+		v.Errors["node_name"] = v.T("common.required")
 	}
 }
 

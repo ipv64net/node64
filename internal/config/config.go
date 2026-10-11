@@ -1,6 +1,6 @@
-// Package config liest die Konfiguration des Agents aus Umgebungsvariablen.
+// Package config liest die Konfiguration des Nodes aus Umgebungsvariablen.
 //
-// Alle Variablen beginnen mit AGENT_. Werte, die der Nutzer spaeter im UI
+// Alle Variablen beginnen mit NODE64_. Werte, die der Nutzer spaeter im UI
 // aendert (Name, Standort, Sprache, Log-Level), liegen in der Datenbank;
 // die Umgebung liefert nur das, was vor dem Start feststehen muss.
 package config
@@ -39,7 +39,7 @@ type Config struct {
 	TrustProxyHeaders bool
 }
 
-func (c *Config) DBPath() string        { return filepath.Join(c.DataDir, "agent.db") }
+func (c *Config) DBPath() string        { return filepath.Join(c.DataDir, "node.db") }
 func (c *Config) BackupDir() string     { return filepath.Join(c.DataDir, "backups") }
 func (c *Config) TLSDir() string        { return filepath.Join(c.DataDir, "tls") }
 func (c *Config) SecretKeyPath() string { return filepath.Join(c.DataDir, "secret.key") }
@@ -47,45 +47,45 @@ func (c *Config) SecretKeyPath() string { return filepath.Join(c.DataDir, "secre
 // Load liest die Umgebung und prueft die Werte.
 func Load() (*Config, error) {
 	c := &Config{
-		DataDir:           env("AGENT_DATA_DIR", "/data"),
-		BindAddr:          env("AGENT_BIND_ADDR", ""),
-		LogLevel:          strings.ToLower(env("AGENT_LOG_LEVEL", "info")),
-		LogFormat:         strings.ToLower(env("AGENT_LOG_FORMAT", "text")),
-		AdminUser:         env("AGENT_ADMIN_USER", ""),
-		AdminPassword:     env("AGENT_ADMIN_PASSWORD", ""),
-		TLSCertFile:       env("AGENT_TLS_CERT", ""),
-		TLSKeyFile:        env("AGENT_TLS_KEY", ""),
-		TrustProxyHeaders: envBool("AGENT_TRUST_PROXY", false),
+		DataDir:           env("NODE64_DATA_DIR", "/data"),
+		BindAddr:          env("NODE64_BIND_ADDR", ""),
+		LogLevel:          strings.ToLower(env("NODE64_LOG_LEVEL", "info")),
+		LogFormat:         strings.ToLower(env("NODE64_LOG_FORMAT", "text")),
+		AdminUser:         env("NODE64_ADMIN_USER", ""),
+		AdminPassword:     env("NODE64_ADMIN_PASSWORD", ""),
+		TLSCertFile:       env("NODE64_TLS_CERT", ""),
+		TLSKeyFile:        env("NODE64_TLS_KEY", ""),
+		TrustProxyHeaders: envBool("NODE64_TRUST_PROXY", false),
 	}
 	var err error
-	if c.HTTPPort, err = envInt("AGENT_HTTP_PORT", 8080); err != nil {
+	if c.HTTPPort, err = envInt("NODE64_HTTP_PORT", 8080); err != nil {
 		return nil, err
 	}
-	if c.HTTPSPort, err = envInt("AGENT_HTTPS_PORT", 0); err != nil {
+	if c.HTTPSPort, err = envInt("NODE64_HTTPS_PORT", 0); err != nil {
 		return nil, err
 	}
 	if c.HTTPPort == 0 && c.HTTPSPort == 0 {
-		return nil, errors.New("AGENT_HTTP_PORT and AGENT_HTTPS_PORT are both 0, the UI would be unreachable")
+		return nil, errors.New("NODE64_HTTP_PORT and NODE64_HTTPS_PORT are both 0, the UI would be unreachable")
 	}
 	if c.HTTPPort == c.HTTPSPort {
-		return nil, errors.New("AGENT_HTTP_PORT and AGENT_HTTPS_PORT must differ")
+		return nil, errors.New("NODE64_HTTP_PORT and NODE64_HTTPS_PORT must differ")
 	}
 	switch c.LogLevel {
 	case "debug", "info", "warn", "error":
 	default:
-		return nil, fmt.Errorf("AGENT_LOG_LEVEL %q is not one of debug, info, warn, error", c.LogLevel)
+		return nil, fmt.Errorf("NODE64_LOG_LEVEL %q is not one of debug, info, warn, error", c.LogLevel)
 	}
 	if c.LogFormat != "text" && c.LogFormat != "json" {
-		return nil, fmt.Errorf("AGENT_LOG_FORMAT %q is not text or json", c.LogFormat)
+		return nil, fmt.Errorf("NODE64_LOG_FORMAT %q is not text or json", c.LogFormat)
 	}
 	if (c.TLSCertFile == "") != (c.TLSKeyFile == "") {
-		return nil, errors.New("AGENT_TLS_CERT and AGENT_TLS_KEY must be set together")
+		return nil, errors.New("NODE64_TLS_CERT and NODE64_TLS_KEY must be set together")
 	}
 	if (c.AdminUser == "") != (c.AdminPassword == "") {
-		return nil, errors.New("AGENT_ADMIN_USER and AGENT_ADMIN_PASSWORD must be set together")
+		return nil, errors.New("NODE64_ADMIN_USER and NODE64_ADMIN_PASSWORD must be set together")
 	}
 	if c.AdminPassword != "" && len(c.AdminPassword) < 8 {
-		return nil, errors.New("AGENT_ADMIN_PASSWORD must have at least 8 characters")
+		return nil, errors.New("NODE64_ADMIN_PASSWORD must have at least 8 characters")
 	}
 	return c, nil
 }

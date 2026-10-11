@@ -1,17 +1,17 @@
 package scheduler
 
-import "github.com/ipv64net/agent/internal/checks"
+import "github.com/ipv64net/node64/internal/checks"
 
-// SourceState ist der Zustand einer Messstelle (Agent oder ipv64-Standort).
+// SourceState ist der Zustand einer Messstelle (Node oder ipv64-Standort).
 type SourceState struct {
-	Source     string // "agent:<id>", "loc:nbg", ...
+	Source     string // "node:<id>", "loc:nbg", ...
 	State      State
 	LastStatus checks.Status
 	Fresh      bool // aktuelle Daten vorhanden (nicht offline/ausgefallen)
 }
 
 // Overall berechnet den Gesamtzustand nach der Regel policy (all, any,
-// majority). Gleiche Funktion auf Agent und Server.
+// majority). Gleiche Funktion auf Node und Server.
 //
 // Zaehlt nur Messstellen mit frischen Daten im Zustand up/down/stabilizing/
 // flapping; stabilizing gilt als up (LastStatus up), flapping nach LastStatus.

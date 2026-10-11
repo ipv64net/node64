@@ -16,14 +16,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ipv64net/agent/internal/hub/checker"
-	"github.com/ipv64net/agent/internal/hub/config"
-	"github.com/ipv64net/agent/internal/hub/httpapi"
-	hubnotify "github.com/ipv64net/agent/internal/hub/notify"
-	"github.com/ipv64net/agent/internal/hub/store"
-	"github.com/ipv64net/agent/internal/i18n"
-	"github.com/ipv64net/agent/internal/notify"
-	"github.com/ipv64net/agent/internal/secrets"
+	"github.com/ipv64net/node64/internal/hub/checker"
+	"github.com/ipv64net/node64/internal/hub/config"
+	"github.com/ipv64net/node64/internal/hub/httpapi"
+	hubnotify "github.com/ipv64net/node64/internal/hub/notify"
+	"github.com/ipv64net/node64/internal/hub/store"
+	"github.com/ipv64net/node64/internal/i18n"
+	"github.com/ipv64net/node64/internal/notify"
+	"github.com/ipv64net/node64/internal/secrets"
 )
 
 // Version wird beim Build gesetzt.

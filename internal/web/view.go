@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ipv64net/agent/internal/module"
-	"github.com/ipv64net/agent/internal/store"
-	agentsync "github.com/ipv64net/agent/internal/sync"
+	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/store"
+	nodesync "github.com/ipv64net/node64/internal/sync"
 )
 
 // View ist der Datensatz, den jedes Template bekommt. Die Methoden stehen in
@@ -25,7 +25,7 @@ type View struct {
 	Version  string
 	Nav      []NavItem
 	Flash    *Flash
-	Sync     agentsync.State
+	Sync     nodesync.State
 	SetupRun bool
 	Data     any
 	Scheme   string

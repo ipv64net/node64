@@ -5,7 +5,7 @@
     "en": "Englisch"
   },
   "app": {
-    "name": "ipv64 Agent",
+    "name": "Node64",
     "tagline": "Healthchecks, DynDNS und mehr im eigenen Netz"
   },
   "nav": {
@@ -74,7 +74,7 @@
     "in": "in {duration}"
   },
   "setup": {
-    "title": "Willkommen beim ipv64 Agent",
+    "title": "Willkommen bei Node64",
     "intro": "Lege zuerst die Sprache und den lokalen Administrator fest. Es gibt kein Standardpasswort.",
     "language": "Sprache",
     "username": "Benutzername",
@@ -82,12 +82,12 @@
     "password_repeat": "Passwort wiederholen",
     "password_hint": "Mindestens 10 Zeichen. Nimm einen Satz oder einen Passwort-Manager.",
     "timezone": "Zeitzone",
-    "agent_name": "Name dieses Agents",
+    "node_name": "Name dieser Node",
     "agent_name_hint": "Zum Beispiel „Pi im Keller“. Erscheint später auch im ipv64-Portal.",
     "location": "Standort",
-    "location_hint": "Zum Beispiel Zuhause, Büro, Eltern. Ein Standort kann mehrere Agents haben.",
-    "submit": "Agent einrichten",
-    "done": "Der Agent ist eingerichtet. Du kannst dich jetzt anmelden."
+    "location_hint": "Zum Beispiel Zuhause, Büro, Eltern. Ein Standort kann mehrere Nodes haben.",
+    "submit": "Node einrichten",
+    "done": "Die Node ist eingerichtet. Du kannst dich jetzt anmelden."
   },
   "login": {
     "title": "Anmelden",
@@ -104,8 +104,8 @@
   },
   "dashboard": {
     "title": "Dashboard",
-    "agent": "Agent",
-    "agent_name": "Name",
+    "node": "Node",
+    "node_name": "Name",
     "location": "Standort",
     "version": "Version",
     "uptime": "Läuft seit",
@@ -113,7 +113,7 @@
     "modules": "Module",
     "no_modules": "Noch kein Modul aktiv. Aktiviere Healthchecks in den Einstellungen.",
     "link_status": "ipv64-Verknüpfung",
-    "not_linked": "Nicht verknüpft. Der Agent läuft standalone.",
+    "not_linked": "Nicht verknüpft. Die Node läuft standalone.",
     "ok": "OK",
     "down": "Gestört",
     "paused": "Pausiert",
@@ -123,8 +123,8 @@
   },
   "settings": {
     "title": "Einstellungen",
-    "agent": "Agent",
-    "agent_name": "Name des Agents",
+    "node": "Node",
+    "node_name": "Name der Node",
     "location": "Standort",
     "modules": "Module",
     "modules_hint": "Ein deaktiviertes Modul läuft nicht, belegt nichts und hat keinen Menüpunkt. Die Konfiguration bleibt erhalten.",
@@ -223,11 +223,11 @@
     "last_raw": "Letzte Messung im Detail",
     "delete_confirm": "Check „{name}“ mit allen Messdaten löschen?",
     "execution": {
-      "local": "Nur dieser Agent (lokal)",
+      "local": "Nur diese Node (lokal)",
       "online": "Nur online bei ipv64",
       "both": "Lokal und online (Hybrid)"
     },
-    "execution_hint": "Wird von diesem Agent geprüft",
+    "execution_hint": "Wird von dieser Node geprüft",
     "range": {
       "24h": "24 Stunden",
       "30d": "30 Tage",
@@ -342,7 +342,7 @@
       "locations": "Online-Standorte",
       "locations_hint": "Mehrere Standorte ab Account-Klasse Supporter. Jede Online-Messstelle zählt gegen das Healthcheck-Limit der Klasse, lokale Messungen nie.",
       "policy": "Gestört, wenn …",
-      "policy_hint": "Mit mehreren Messstellen (Agent, Nürnberg, Falkenstein) legt diese Regel fest, wann der Check als gestört gilt. Meldet nur ein Teil eine Störung, ist der Check „teilweise gestört“.",
+      "policy_hint": "Mit mehreren Messstellen (Node, Nürnberg, Falkenstein) legt diese Regel fest, wann der Check als gestört gilt. Meldet nur ein Teil eine Störung, ist der Check „teilweise gestört“.",
       "notify_degraded": "Auch bei „teilweise gestört“ benachrichtigen",
       "notify_degraded_hint": "Nur mit mehreren Messstellen relevant."
     },
@@ -388,7 +388,7 @@
       "flapping_end": "🟢 {name} ist wieder stabil",
       "reminder": "🔴 {name} ist weiterhin gestört ({duration})",
       "summary_down": "🔴 {count} Checks gestört",
-      "test": "ipv64 Agent: Testnachricht",
+      "test": "Node64: Testnachricht",
       "degraded": "⚠️ Teilweise gestört: {{name}}",
       "degraded_end": "✅ Wieder vollständig erreichbar: {{name}}"
     },
@@ -400,7 +400,7 @@
       "duration": "Dauer der Störung: {duration}",
       "flaps": "{count} Statuswechsel",
       "time": "Zeit: {time}",
-      "agent": "Agent: {agent}",
+      "node": "Node: {node}",
       "test": "Wenn du das liest, funktioniert der Kanal „{channel}“.",
       "summary_item": "• {name}: {message}"
     }
@@ -472,8 +472,8 @@
     "quiet_to": "Bis",
     "quiet_days": "Tage",
     "general": "Allgemein",
-    "base_url": "Externe Adresse des Agents",
-    "base_url_hint": "Für Links in Nachrichten, z. B. https://agent.example.com. Leer = keine Links.",
+    "base_url": "Externe Adresse der Node",
+    "base_url_hint": "Für Links in Nachrichten, z. B. https://node.example.com. Leer = keine Links.",
     "rate_per_hour": "Höchstens Nachrichten je Kanal und Stunde",
     "batch_threshold": "Sammelmeldung ab gleichzeitigen Störungen",
     "batch_window": "Sammelfenster (Sekunden)",
@@ -530,11 +530,11 @@
     "download": "Datenbank herunterladen",
     "restore": "Datenbank wiederherstellen",
     "restore_btn": "Wiederherstellen",
-    "restore_hint": "Der Agent startet danach neu. Die bisherige Datenbank bleibt unter /data/backups erhalten.",
-    "restore_confirm": "Die aktuelle Datenbank wird ersetzt und der Agent neu gestartet. Fortfahren?",
-    "restarting": "Datenbank übernommen, der Agent startet jetzt neu. In ein paar Sekunden neu anmelden.",
+    "restore_hint": "Die Node startet danach neu. Die bisherige Datenbank bleibt unter /data/backups erhalten.",
+    "restore_confirm": "Die aktuelle Datenbank wird ersetzt und die Node neu gestartet. Fortfahren?",
+    "restarting": "Datenbank übernommen, die Node startet jetzt neu. In ein paar Sekunden neu anmelden.",
     "no_file": "Keine Datei ausgewählt.",
-    "invalid": "Das ist keine Datenbank des ipv64 Agents.",
+    "invalid": "Das ist keine Node64-Datenbank.",
     "export": "Konfiguration exportieren",
     "export_none": "ohne Geheimnisse (Tokens, Passwörter)",
     "export_password": "Geheimnisse mit Passwort verschlüsselt",
@@ -544,7 +544,7 @@
     "import": "Konfiguration importieren",
     "import_btn": "Importieren",
     "import_hint": "Checks werden über den Token abgeglichen, Kanäle und Wartungsfenster über den Namen. Nichts wird gelöscht.",
-    "invalid_config": "Das ist keine Konfigurationsdatei des ipv64 Agents.",
+    "invalid_config": "Das ist keine Node64-Konfigurationsdatei.",
     "password_needed": "Die Datei ist verschlüsselt, bitte das Passwort angeben.",
     "password_wrong": "Das Passwort passt nicht zur Datei.",
     "imported": "{count} Einträge importiert."

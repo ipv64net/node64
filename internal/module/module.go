@@ -1,4 +1,4 @@
-// Package module definiert das Modulsystem des Agents.
+// Package module definiert das Modulsystem des Nodes.
 //
 // Der Kern (Web-UI, Datenbank, Benachrichtigungen, Sync, Audit) laeuft immer.
 // Alles andere sind Module mit einheitlichem Lebenszyklus: Ein deaktiviertes
@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ipv64net/agent/internal/store"
+	"github.com/ipv64net/node64/internal/store"
 )
 
 // Info beschreibt ein Modul fuer Navigation und Einstellungen.

@@ -17,15 +17,15 @@ import (
 
 	"golang.org/x/crypto/argon2"
 
-	"github.com/ipv64net/agent/internal/module"
-	"github.com/ipv64net/agent/internal/notify"
-	"github.com/ipv64net/agent/internal/secrets"
+	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/notify"
+	"github.com/ipv64net/node64/internal/secrets"
 )
 
 // Backup der Datenbank, Wiederherstellung, Export und Import der Konfiguration.
 
 const (
-	RestoreFileName = "agent.db.restore"
+	RestoreFileName = "node.db.restore"
 	maxUpload       = 1 << 30 // 1 GB fuer Datenbank-Wiederherstellung
 	maxImport       = 16 << 20
 )
@@ -63,12 +63,12 @@ func (s *Server) backupDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "backup.download", "", "")
 	w.Header().Set("Content-Type", "application/vnd.sqlite3")
-	w.Header().Set("Content-Disposition", `attachment; filename="ipv64-agent-`+time.Now().Format("20060102-1504")+`.db"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="node64-`+time.Now().Format("20060102-1504")+`.db"`)
 	http.ServeFile(w, r, tmp.Name())
 }
 
-// restoreUpload prueft die Datei, legt sie als agent.db.restore ab und startet
-// den Agent neu; beim Start wird sie eingesetzt (siehe cmd/agent).
+// restoreUpload prueft die Datei, legt sie als node.db.restore ab und startet
+// den Node neu; beim Start wird sie eingesetzt (siehe cmd/node).
 func (s *Server) restoreUpload(w http.ResponseWriter, r *http.Request) {
 	v := s.view(r, "settings.title")
 	f, _, err := r.FormFile("file")
@@ -130,7 +130,7 @@ func validateSQLite(ctx context.Context, path string) error {
 	defer db.Close()
 	var n int
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM schema_migrations WHERE scope = 'core'`).Scan(&n); err != nil || n == 0 {
-		return fmt.Errorf("no ipv64 agent schema found")
+		return fmt.Errorf("no node64 schema found")
 	}
 	var users int
 	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM users`).Scan(&users); err != nil {
@@ -145,7 +145,7 @@ type configFile struct {
 	Format     string                     `json:"format"`
 	Version    int                        `json:"version"`
 	ExportedAt time.Time                  `json:"exported_at"`
-	Agent      map[string]string          `json:"agent"`
+	Node       map[string]string          `json:"node"`
 	Secrets    *configSecrets             `json:"secrets,omitempty"`
 	Settings   map[string]string          `json:"settings"`
 	Channels   []configChannel            `json:"channels"`
@@ -168,7 +168,7 @@ type configChannel struct {
 	Config     map[string]string `json:"config"`
 }
 
-var exportedSettings = []string{SettingAgentName, SettingAgentLocation, SettingAgentTimezone, notify.SetBaseURL, notify.SetQuietEnabled, notify.SetQuietFrom,
+var exportedSettings = []string{SettingNodeName, SettingNodeLocation, SettingNodeTimezone, notify.SetBaseURL, notify.SetQuietEnabled, notify.SetQuietFrom,
 	notify.SetQuietTo, notify.SetQuietDays, notify.SetQuietTZ, notify.SetRatePerHour, notify.SetBatchThreshold, notify.SetBatchWindow}
 
 func deriveBox(password string, salt []byte) (*secrets.Box, error) {
@@ -186,7 +186,7 @@ func (s *Server) exportConfig(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 		return
 	}
-	cf := configFile{Format: "ipv64-agent-config", Version: 1, ExportedAt: time.Now().UTC(), Agent: map[string]string{"version": s.Version},
+	cf := configFile{Format: "node64-config", Version: 1, ExportedAt: time.Now().UTC(), Node: map[string]string{"version": s.Version},
 		Settings: map[string]string{}, Channels: []configChannel{}, Modules: map[string]json.RawMessage{}}
 	for _, k := range exportedSettings {
 		if val, ok, _ := s.Store.Setting(ctx, k); ok {
@@ -243,7 +243,7 @@ func (s *Server) exportConfig(w http.ResponseWriter, r *http.Request) {
 	s.audit(r, "config.export", "", "secrets="+cf.Secrets.Mode)
 	out, _ := json.MarshalIndent(cf, "", "  ")
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Disposition", `attachment; filename="ipv64-agent-config-`+time.Now().Format("20060102-1504")+`.json"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="node64-config-`+time.Now().Format("20060102-1504")+`.json"`)
 	_, _ = w.Write(out)
 }
 
@@ -263,7 +263,7 @@ func (s *Server) importConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var cf configFile
-	if err := json.Unmarshal(raw, &cf); err != nil || cf.Format != "ipv64-agent-config" {
+	if err := json.Unmarshal(raw, &cf); err != nil || cf.Format != "node64-config" {
 		s.flash(w, r, "danger", v.T("backup.invalid_config"))
 		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 		return

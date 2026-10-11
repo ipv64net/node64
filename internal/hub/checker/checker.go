@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ipv64net/agent/internal/checks"
-	hubnotify "github.com/ipv64net/agent/internal/hub/notify"
-	"github.com/ipv64net/agent/internal/hub/store"
-	"github.com/ipv64net/agent/internal/notify"
-	"github.com/ipv64net/agent/internal/scheduler"
+	"github.com/ipv64net/node64/internal/checks"
+	hubnotify "github.com/ipv64net/node64/internal/hub/notify"
+	"github.com/ipv64net/node64/internal/hub/store"
+	"github.com/ipv64net/node64/internal/notify"
+	"github.com/ipv64net/node64/internal/scheduler"
 )
 
 // Checker haelt Scheduler und Hintergrundschleifen einer Instanz.

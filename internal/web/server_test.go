@@ -15,12 +15,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ipv64net/agent/internal/config"
-	"github.com/ipv64net/agent/internal/i18n"
-	"github.com/ipv64net/agent/internal/logging"
-	"github.com/ipv64net/agent/internal/module"
-	"github.com/ipv64net/agent/internal/store"
-	agentsync "github.com/ipv64net/agent/internal/sync"
+	"github.com/ipv64net/node64/internal/config"
+	"github.com/ipv64net/node64/internal/i18n"
+	"github.com/ipv64net/node64/internal/logging"
+	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/store"
+	nodesync "github.com/ipv64net/node64/internal/sync"
 )
 
 var csrfRe = regexp.MustCompile(`name="_csrf" value="([^"]+)"`)
@@ -39,7 +39,7 @@ func newTestAppWith(t *testing.T, mods ...module.Module) *testApp {
 	t.Helper()
 	dir := t.TempDir()
 	logger := logging.New("debug", "text", io.Discard)
-	st, err := store.Open(context.Background(), filepath.Join(dir, "agent.db"), filepath.Join(dir, "backups"), logger.Slog())
+	st, err := store.Open(context.Background(), filepath.Join(dir, "node.db"), filepath.Join(dir, "backups"), logger.Slog())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func newTestAppWith(t *testing.T, mods ...module.Module) *testApp {
 		reg.Register(m)
 	}
 	cfg := &config.Config{DataDir: dir, HTTPPort: 8080, LogLevel: "info"}
-	s, err := New(Deps{Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: reg, Sync: agentsync.NoOp{}, Version: "test", StartedAt: time.Now()})
+	s, err := New(Deps{Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: reg, Sync: nodesync.NoOp{}, Version: "test", StartedAt: time.Now()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestSetupLoginSettingsFlow(t *testing.T) {
 		t.Fatalf("expected redirect to /setup, got %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 	resp, body := a.get(t, "/setup")
-	if resp.StatusCode != 200 || !strings.Contains(body, `name="agent_name"`) {
+	if resp.StatusCode != 200 || !strings.Contains(body, `name="node_name"`) {
 		t.Fatalf("setup page: %d", resp.StatusCode)
 	}
 	csrf := csrfOf(t, body)
@@ -120,12 +120,12 @@ func TestSetupLoginSettingsFlow(t *testing.T) {
 		t.Fatalf("csrf: expected 403, got %d", resp.StatusCode)
 	}
 	// Zu kurzes Passwort: 422 mit Fehlermarkierung
-	resp, body = a.post(t, "/setup", url.Values{"_csrf": {csrf}, "lang": {"de"}, "username": {"admin"}, "password": {"short"}, "password2": {"short"}, "timezone": {"Europe/Berlin"}, "agent_name": {"pi"}})
+	resp, body = a.post(t, "/setup", url.Values{"_csrf": {csrf}, "lang": {"de"}, "username": {"admin"}, "password": {"short"}, "password2": {"short"}, "timezone": {"Europe/Berlin"}, "node_name": {"pi"}})
 	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(body, "is-invalid") {
 		t.Fatalf("validation: expected 422, got %d", resp.StatusCode)
 	}
 	// Erfolgreiches Setup meldet direkt an
-	resp, _ = a.post(t, "/setup", url.Values{"_csrf": {csrf}, "lang": {"de"}, "username": {"admin"}, "password": {"sehr geheimes passwort"}, "password2": {"sehr geheimes passwort"}, "timezone": {"Europe/Berlin"}, "agent_name": {"Pi im Keller"}, "location": {"Zuhause"}})
+	resp, _ = a.post(t, "/setup", url.Values{"_csrf": {csrf}, "lang": {"de"}, "username": {"admin"}, "password": {"sehr geheimes passwort"}, "password2": {"sehr geheimes passwort"}, "timezone": {"Europe/Berlin"}, "node_name": {"Pi im Keller"}, "location": {"Zuhause"}})
 	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/" {
 		t.Fatalf("setup: expected redirect to /, got %d", resp.StatusCode)
 	}
@@ -142,12 +142,12 @@ func TestSetupLoginSettingsFlow(t *testing.T) {
 	// Einstellungen: Agent-Name aendern
 	resp, body = a.get(t, "/settings")
 	csrf = csrfOf(t, body)
-	resp, _ = a.post(t, "/settings/agent", url.Values{"_csrf": {csrf}, "agent_name": {"Neuer Name"}, "location": {"Büro"}})
+	resp, _ = a.post(t, "/settings/node", url.Values{"_csrf": {csrf}, "node_name": {"Neuer Name"}, "location": {"Büro"}})
 	if resp.StatusCode != http.StatusSeeOther {
-		t.Fatalf("settings/agent: %d", resp.StatusCode)
+		t.Fatalf("settings/node: %d", resp.StatusCode)
 	}
-	if v := a.store.SettingOr(context.Background(), SettingAgentName, ""); v != "Neuer Name" {
-		t.Fatalf("agent name not saved: %q", v)
+	if v := a.store.SettingOr(context.Background(), SettingNodeName, ""); v != "Neuer Name" {
+		t.Fatalf("node name not saved: %q", v)
 	}
 	// Sprache auf Englisch
 	resp, _ = a.post(t, "/settings/user", url.Values{"_csrf": {csrf}, "lang": {"en"}, "timezone": {"UTC"}})
@@ -233,7 +233,7 @@ func TestSecurityHeadersAndStatic(t *testing.T) {
 			t.Errorf("missing header %s", h)
 		}
 	}
-	resp, body := a.get(t, "/static/css/agent.css")
+	resp, body := a.get(t, "/static/css/node64.css")
 	if resp.StatusCode != 200 || !strings.Contains(body, "ipv64") {
 		t.Fatalf("static css: %d", resp.StatusCode)
 	}

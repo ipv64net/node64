@@ -36,7 +36,7 @@ const (
 
 // CheckInfo sind die Angaben zum Check, die in Nachrichten erscheinen.
 type CheckInfo struct {
-	UserID         int64 // Account auf dem Server; im Agent 0
+	UserID         int64 // Account auf dem Server; im Node 0
 	Token          string
 	Name           string
 	Type           string
@@ -71,7 +71,7 @@ var httpClient = &http.Client{Timeout: 20 * time.Second}
 
 // Senders liefert die eingebauten Sender je Typ.
 func Senders(version string) map[Type]Sender {
-	ua := "ipv64-agent/" + version
+	ua := "node64/" + version
 	return map[Type]Sender{
 		TypeSMTP: smtpSender{}, TypeTelegram: telegramSender{ua}, TypeDiscord: discordSender{ua},
 		TypeNtfy: ntfySender{ua}, TypeGotify: gotifySender{ua}, TypeWebhook: webhookSender{ua}, TypePushover: pushoverSender{ua},
@@ -427,8 +427,8 @@ func (smtpSender) Send(ctx context.Context, ch *Channel, m Message) error {
 	fmt.Fprintf(&buf, "To: %s\r\n", strings.Join(tos, ", "))
 	fmt.Fprintf(&buf, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", m.Title))
 	fmt.Fprintf(&buf, "Date: %s\r\n", time.Now().Format(time.RFC1123Z))
-	fmt.Fprintf(&buf, "Message-ID: <%s.%d@ipv64-agent>\r\n", m.EventID, time.Now().UnixNano())
-	buf.WriteString("MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\nX-Mailer: ipv64-agent\r\n\r\n")
+	fmt.Fprintf(&buf, "Message-ID: <%s.%d@node64>\r\n", m.EventID, time.Now().UnixNano())
+	buf.WriteString("MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\nX-Mailer: node64\r\n\r\n")
 	text := m.Text
 	if m.URL != "" {
 		text += "\n\n" + m.URL

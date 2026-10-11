@@ -3,7 +3,7 @@ package healthchecks
 import (
 	"net"
 
-	"github.com/ipv64net/agent/internal/store"
+	"github.com/ipv64net/node64/internal/store"
 )
 
 func splitHostPort(addr string) (string, string, error) { return net.SplitHostPort(addr) }

@@ -7,8 +7,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/ipv64net/agent/internal/secrets"
-	"github.com/ipv64net/agent/internal/store"
+	"github.com/ipv64net/node64/internal/secrets"
+	"github.com/ipv64net/node64/internal/store"
 )
 
 //go:embed migrations/*.sql
@@ -49,7 +49,7 @@ func (s *Store) scan(row interface{ Scan(...any) error }) (*Channel, error) {
 }
 
 // Channels liefert alle Kanaele sortiert nach Name.
-// ChannelsFor (ChannelStore): im Agent gibt es nur einen Account.
+// ChannelsFor (ChannelStore): im Node gibt es nur einen Account.
 func (s *Store) ChannelsFor(ctx context.Context, _ int64) ([]*Channel, error) { return s.Channels(ctx) }
 
 func (s *Store) Channels(ctx context.Context) ([]*Channel, error) {

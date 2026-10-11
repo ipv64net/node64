@@ -16,7 +16,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/ipv64net/agent/internal/config"
+	"github.com/ipv64net/node64/internal/config"
 )
 
 // loadOrCreateCertificate laedt das eigene Zertifikat aus der Konfiguration
@@ -51,7 +51,7 @@ func createSelfSigned(certFile, keyFile string) error {
 	host, _ := os.Hostname()
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: "ipv64 Agent", Organization: []string{"ipv64 Agent (self-signed)"}},
+		Subject:      pkix.Name{CommonName: "Node64", Organization: []string{"Node64 (self-signed)"}},
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().AddDate(10, 0, 0),
 		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,

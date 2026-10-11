@@ -1,9 +1,9 @@
 package healthchecks
 
-import "github.com/ipv64net/agent/internal/scheduler"
+import "github.com/ipv64net/node64/internal/scheduler"
 
 // Bewertungsregeln fuer den Gesamtzustand eines Checks mit mehreren
-// Messstellen (Agent innen, ipv64-Standorte aussen). Standalone hat ein Check
+// Messstellen (Node innen, ipv64-Standorte aussen). Standalone hat ein Check
 // genau eine Messstelle, dann ist der Gesamtzustand ihr Zustand. Dieselbe
 // Regel laeuft auf dem ipv64-Server (Sync-Plan 3.12).
 const (

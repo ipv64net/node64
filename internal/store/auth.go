@@ -63,7 +63,7 @@ func (s *Store) NewAPIKey(ctx context.Context, userID int64, name string) (strin
 	if _, err := rand.Read(raw); err != nil {
 		return "", nil, err
 	}
-	key := "ipv64a_" + base64.RawURLEncoding.EncodeToString(raw)
+	key := "node64_" + base64.RawURLEncoding.EncodeToString(raw)
 	hint := key[:7] + "…" + key[len(key)-4:]
 	res, err := s.w.ExecContext(ctx, `INSERT INTO api_keys (user_id, name, key_hash, key_hint, created_at) VALUES (?,?,?,?,?)`, userID, name, HashAPIKey(key), hint, Now())
 	if err != nil {

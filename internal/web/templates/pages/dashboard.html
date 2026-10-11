@@ -26,10 +26,10 @@
 <div class="row g-3">
 	<div class="col-md-6 col-xl-4">
 		<div class="card h-100">
-			<div class="card-header"><i class="bi bi-hdd-network"></i> {{.T "dashboard.agent"}}</div>
+			<div class="card-header"><i class="bi bi-hdd-network"></i> {{.T "dashboard.node"}}</div>
 			<div class="card-body">
 				<dl class="row mb-0 small">
-					<dt class="col-5">{{.T "dashboard.agent_name"}}</dt><dd class="col-7">{{$d.AgentName}}</dd>
+					<dt class="col-5">{{.T "dashboard.node_name"}}</dt><dd class="col-7">{{$d.NodeName}}</dd>
 					<dt class="col-5">{{.T "dashboard.location"}}</dt><dd class="col-7">{{if $d.Location}}{{$d.Location}}{{else}}–{{end}}</dd>
 					<dt class="col-5">{{.T "dashboard.version"}}</dt><dd class="col-7">{{.Version}}</dd>
 					<dt class="col-5">{{.T "dashboard.uptime"}}</dt><dd class="col-7">{{.Time $d.StartedAt}}</dd>

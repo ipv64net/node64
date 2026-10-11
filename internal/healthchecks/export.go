@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ipv64net/agent/internal/checks"
-	"github.com/ipv64net/agent/internal/scheduler"
+	"github.com/ipv64net/node64/internal/checks"
+	"github.com/ipv64net/node64/internal/scheduler"
 )
 
 // Export/Import der Konfiguration (module.Exporter). Messdaten sind nicht

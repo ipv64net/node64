@@ -3,7 +3,7 @@ package scheduler
 import (
 	"testing"
 
-	"github.com/ipv64net/agent/internal/checks"
+	"github.com/ipv64net/node64/internal/checks"
 )
 
 func TestOverall(t *testing.T) {
@@ -28,7 +28,7 @@ func TestOverall(t *testing.T) {
 		{"majority: 1 of 3", "majority", []SourceState{src(StateDown, true), src(StateUp, true), src(StateUp, true)}, StateDegraded},
 		{"majority: 2 of 3", "majority", []SourceState{src(StateDown, true), src(StateDown, true), src(StateUp, true)}, StateDown},
 		{"majority: 1 of 2 is not majority", "majority", []SourceState{src(StateDown, true), src(StateUp, true)}, StateDegraded},
-		{"offline agent ignored", "all", []SourceState{src(StateDown, false), src(StateUp, true)}, StateUp},
+		{"offline node ignored", "all", []SourceState{src(StateDown, false), src(StateUp, true)}, StateUp},
 		{"all without data -> pending", "all", []SourceState{src(StateDown, false), src(StatePending, true)}, StatePending},
 		{"paused ignored, remaining down", "all", []SourceState{src(StatePaused, true), src(StateDown, true)}, StateDown},
 		{"stabilizing counts as up", "all", []SourceState{src(StateStabilizing, true), src(StateDown, true)}, StateDegraded},

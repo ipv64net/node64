@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ipv64net/agent/internal/secrets"
+	"github.com/ipv64net/node64/internal/secrets"
 )
 
 type Type string
@@ -25,7 +25,7 @@ const (
 	TypeNtfy     Type = "ntfy"
 	TypeGotify   Type = "gotify"
 	TypePushover Type = "pushover"
-	// Server-Typen: Versand ueber ipv64.net (im Agent erst nach Verknuepfung)
+	// Server-Typen: Versand ueber ipv64.net (im Node erst nach Verknuepfung)
 	TypeIPv64Mail Type = "ipv64_mail"
 	TypeIPv64SMS  Type = "ipv64_sms"
 	TypeApp       Type = "app"
@@ -42,7 +42,7 @@ var Planned = []Type{TypeIPv64Mail, TypeIPv64SMS}
 // Channel ist ein Benachrichtigungskanal.
 type Channel struct {
 	ID              int64
-	UserID          int64 // Account auf dem Server; im Agent 0
+	UserID          int64 // Account auf dem Server; im Node 0
 	Type            Type
 	Name            string
 	Config          map[string]string // Klartext im Speicher, verschluesselt in der DB
@@ -189,7 +189,7 @@ func (c *Channel) Validate() error {
 		c.Lang = "de"
 	}
 	if c.Execution == "" {
-		c.Execution = "agent"
+		c.Execution = "node"
 	}
 	return nil
 }

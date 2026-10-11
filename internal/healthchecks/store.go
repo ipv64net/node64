@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ipv64net/agent/internal/checks"
-	"github.com/ipv64net/agent/internal/scheduler"
-	"github.com/ipv64net/agent/internal/store"
+	"github.com/ipv64net/node64/internal/checks"
+	"github.com/ipv64net/node64/internal/scheduler"
+	"github.com/ipv64net/node64/internal/store"
 )
 
 // TimeFormat hat feste Breite, damit Zeichenketten in Zeitreihenfolge sortieren.
@@ -380,7 +380,7 @@ func (s *Store) Measurements(ctx context.Context, token string, from, to time.Ti
 	if limit <= 0 || limit > 5000 {
 		limit = 100
 	}
-	q := `SELECT agent_seq, time, status, latency_ms, reason, message, family, details, flags FROM hc_measurements WHERE token = ?`
+	q := `SELECT node_seq, time, status, latency_ms, reason, message, family, details, flags FROM hc_measurements WHERE token = ?`
 	args := []any{token}
 	if !from.IsZero() {
 		q += ` AND time >= ?`
@@ -391,10 +391,10 @@ func (s *Store) Measurements(ctx context.Context, token string, from, to time.Ti
 		args = append(args, ft(to))
 	}
 	if before > 0 {
-		q += ` AND agent_seq < ?`
+		q += ` AND node_seq < ?`
 		args = append(args, before)
 	}
-	q += ` ORDER BY agent_seq DESC LIMIT ?`
+	q += ` ORDER BY node_seq DESC LIMIT ?`
 	args = append(args, limit)
 	rows, err := s.r.QueryContext(ctx, q, args...)
 	if err != nil {

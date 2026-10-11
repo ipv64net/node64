@@ -1,4 +1,4 @@
-module github.com/ipv64net/agent
+module github.com/ipv64net/node64
 
 go 1.27.0
 

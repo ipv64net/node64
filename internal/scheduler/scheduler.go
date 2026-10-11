@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ipv64net/agent/internal/checks"
+	"github.com/ipv64net/node64/internal/checks"
 )
 
 type State string

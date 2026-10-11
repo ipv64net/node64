@@ -109,7 +109,7 @@ func (s *Store) Cleanup(ctx context.Context, now time.Time) {
 	exec(`DELETE FROM hc2_commands WHERE created_at < ?`, now.UTC().AddDate(0, 0, -1).Format(TimeFormat))
 	exec(`DELETE FROM hc2_link_codes WHERE expires_at < ?`, now.UTC().AddDate(0, 0, -1).Format(TimeFormat))
 	exec(`DELETE FROM hc2_testruns WHERE created_at < ?`, now.UTC().AddDate(0, 0, -7).Format(TimeFormat))
-	exec(`DELETE FROM hc2_nodes WHERE heartbeat < ?`, now.UTC().Add(-24*time.Hour).Format(TimeFormat))
+	exec(`DELETE FROM hc2_hubs WHERE heartbeat < ?`, now.UTC().Add(-24*time.Hour).Format(TimeFormat))
 	old := now.UTC().AddDate(0, 0, -90).Format(TimeFormat)
 	exec(`DELETE st FROM hc2_check_states st JOIN hc2_checks c ON c.token = st.token WHERE c.deleted_at IS NOT NULL AND c.deleted_at < ?`, old)
 	exec(`DELETE FROM hc2_checks WHERE deleted_at IS NOT NULL AND deleted_at < ?`, old)
