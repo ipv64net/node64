@@ -199,6 +199,7 @@ func (g *Gateway) linkStart(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := g.st.LinkStart(r.Context(), in)
 	if err != nil {
+		g.log.Error("handler failed", "path", r.URL.Path, "err", err)
 		writeErr(w, http.StatusInternalServerError, "database error")
 		return
 	}
@@ -221,6 +222,7 @@ func (g *Gateway) linkPoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		g.log.Error("handler failed", "path", r.URL.Path, "err", err)
 		writeErr(w, http.StatusInternalServerError, "database error")
 		return
 	}
@@ -277,6 +279,7 @@ func (g *Gateway) config(w http.ResponseWriter, r *http.Request) {
 	n := nodeOf(r)
 	cfg, err := g.st.FullConfig(r.Context(), n.UserID, n.ID)
 	if err != nil {
+		g.log.Error("handler failed", "path", r.URL.Path, "err", err)
 		writeErr(w, http.StatusInternalServerError, "database error")
 		return
 	}
@@ -287,6 +290,7 @@ func (g *Gateway) results(w http.ResponseWriter, r *http.Request) {
 	n := nodeOf(r)
 	states, err := g.st.Results(r.Context(), n.UserID)
 	if err != nil {
+		g.log.Error("handler failed", "path", r.URL.Path, "err", err)
 		writeErr(w, http.StatusInternalServerError, "database error")
 		return
 	}
@@ -321,6 +325,7 @@ func (g *Gateway) httpMeasurements(w http.ResponseWriter, r *http.Request) {
 	}
 	ack, err := g.st.IngestMeasurements(r.Context(), n, batch)
 	if err != nil {
+		g.log.Error("handler failed", "path", r.URL.Path, "err", err)
 		writeErr(w, http.StatusInternalServerError, "database error")
 		return
 	}
@@ -336,6 +341,7 @@ func (g *Gateway) httpEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	ack, err := g.st.IngestEvents(r.Context(), n, batch)
 	if err != nil {
+		g.log.Error("handler failed", "path", r.URL.Path, "err", err)
 		writeErr(w, http.StatusInternalServerError, "database error")
 		return
 	}
@@ -365,6 +371,7 @@ func (g *Gateway) httpProposeCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := g.st.Propose(r.Context(), n.UserID, n.ID, p, "node")
 	if err != nil {
+		g.log.Error("handler failed", "path", r.URL.Path, "err", err)
 		writeErr(w, http.StatusInternalServerError, "database error")
 		return
 	}

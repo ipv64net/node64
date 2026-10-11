@@ -51,15 +51,15 @@ const wireCheckCols = `token, node_id, execution, locations, policy, notify_degr
 
 func scanWireCheck(row interface{ Scan(...any) error }) (*wire.Check, bool, error) {
 	var c wire.Check
-	var nodeID, parent, deleted sql.NullString
+	var nodeID, parent, deleted, description sql.NullString
 	var locations, tags, channels, params string
 	var iv, riv, cto, tto int64
 	var invert, paused, critical, nd, nu, ndeg int
 	if err := row.Scan(&c.Token, &nodeID, &c.Execution, &locations, &c.Policy, &ndeg, &c.Type, &c.Name, &c.Target, &params, &iv, &riv, &c.Retries,
-		&cto, &tto, &invert, &c.Stabilize, &c.IPMode, &tags, &c.Description, &paused, &parent, &critical, &nd, &nu, &channels, &c.RepeatMinutes, &c.Revision, &deleted); err != nil {
+		&cto, &tto, &invert, &c.Stabilize, &c.IPMode, &tags, &description, &paused, &parent, &critical, &nd, &nu, &channels, &c.RepeatMinutes, &c.Revision, &deleted); err != nil {
 		return nil, false, err
 	}
-	c.NodeID, c.Parent = nodeID.String, parent.String
+	c.NodeID, c.Parent, c.Description = nodeID.String, parent.String, description.String
 	c.Params = json.RawMessage(params)
 	if strings.TrimSpace(params) == "" {
 		c.Params = json.RawMessage("{}")
