@@ -245,6 +245,9 @@ Im Node64-Repo (eigener Phasenplan dort, Phase 6): `internal/sync` echter Client
 
 ### S10 – Betrieb des hub
 
+**Stand 2026-10-11:** Lasttest mit `cmd/hubload` bestanden (10.000 Nodes an einem hub: 0 Abbrüche, Ack p99 < 0,4 s, ~32 % CPU auf 2 Kernen, ~1 GB RAM, ~7 DB-Statements/s dank Sammel-Schreiber; nginx `worker_connections` angehoben). Betriebsalarme eingebaut (`internal/hub/ops`): jeder hub prüft die anderen über `https://…/v1/health` und die eigene Datenbank, Alarm nach 3 Fehlversuchen, Erinnerung stündlich, Entwarnung nach 2 Erfolgen; Kanäle in `config.yaml` (`ops.alerts`), Test mit `hub -ops-test`; getestet durch Stoppen von hc-srv02. Infoseite unter `/`. Offen: Alarmkanal von Dennis eintragen; fallen beide hubs oder die Datenbank beim Start aus, alarmiert niemand (externer Monitor als Ergänzung).
+
+
 **Ziel**: Beide hub-Server sind überwacht, alarmieren selbst, lassen sich sicher einzeln aktualisieren (Rolling: erst fsn, dann nbg), und der Weg zu einem dritten Standort ist beschrieben.
 
 **Schritte**
