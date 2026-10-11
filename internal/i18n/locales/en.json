@@ -228,6 +228,12 @@
       "both": "Local and online (hybrid)"
     },
     "execution_hint": "Checked by this node",
+    "owner": {
+      "online": "Online at ipv64",
+      "online_hint": "Checked by ipv64.net only, shown here for reference",
+      "other": "Other node",
+      "other_hint": "Belongs to another node of your account, shown here for reference"
+    },
     "range": {
       "24h": "24 hours",
       "30d": "30 days",

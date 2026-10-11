@@ -79,7 +79,9 @@
 		</td>
 		<td data-label="{{$.T "common.name"}}">
 			<a href="/healthchecks/{{$c.Token}}" class="fw-semibold">{{$c.Name}}</a>
-			<span class="badge text-bg-light hc-exec" title="{{$.T "hc.execution_hint"}}"><i class="bi bi-house"></i> {{$.T "hc.execution.local"}}</span>
+			{{if eq $c.Owner "online"}}<span class="badge text-bg-light hc-exec" title="{{$.T "hc.owner.online_hint"}}"><i class="bi bi-cloud"></i> {{$.T "hc.owner.online"}}</span>
+			{{else if eq $c.Owner "other"}}<span class="badge text-bg-light hc-exec" title="{{$.T "hc.owner.other_hint"}}"><i class="bi bi-hdd-network"></i> {{$.T "hc.owner.other"}}</span>
+			{{else}}<span class="badge text-bg-light hc-exec" title="{{$.T "hc.execution_hint"}}"><i class="bi bi-house"></i> {{$.T (print "hc.execution." $c.Execution)}}</span>{{end}}
 			{{range $c.Tags}}<span class="badge rounded-pill text-bg-secondary">{{.}}</span> {{end}}
 			<div class="small text-body-secondary hc-target" title="{{$c.Target}}">{{if $c.Target}}{{$c.Target}}{{else}}{{$.T "hc.type.push"}}{{end}}</div>
 		</td>
