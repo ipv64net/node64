@@ -73,6 +73,7 @@ type State struct {
 	Conflicts   int
 	LastError   string
 	PendingCode string
+	Requesting  bool // Code wird gerade beim hub angefordert (laeuft im Hintergrund)
 	Revision    int64
 	Endpoints   []wire.Endpoint
 	LinkedAt    string
@@ -117,6 +118,8 @@ type Live struct {
 	d   Deps
 	log *slog.Logger
 	hc  *http.Client
+
+	linkBusy bool // LinkStart laeuft gerade
 
 	mu        sync.Mutex
 	connected bool
@@ -208,6 +211,9 @@ func (c *Live) State() State {
 	c.mu.Unlock()
 	st.Linked = c.Linked()
 	st.NodeName, st.Location, st.RemoteMgmt = c.setting(SetNodeName, ""), c.setting(SetLocation, ""), c.setting(SetRemoteMgmt, "")
+	c.mu.Lock()
+	st.Requesting = c.linkBusy
+	c.mu.Unlock()
 	st.LinkedAt, st.Revision = c.setting(SetLinkedAt, ""), c.getInt(SetRevision)
 	st.Endpoints = c.endpoints()
 	var acc wire.Account
@@ -280,13 +286,30 @@ func (c *Live) setErr(err error) {
 // ---------------------------------------------------------------- Erstverknuepfung
 
 // LinkStart holt einen Code beim hub. Der Nutzer gibt ihn im Portal ein.
+// Die Oberflaeche ruft das im Hintergrund auf (Seite blockiert nicht); Fehler landen im Status (LastError).
 func (c *Live) LinkStart(ctx context.Context) (code string, expires time.Time, err error) {
+	c.mu.Lock()
+	if c.linkBusy {
+		c.mu.Unlock()
+		return "", time.Time{}, errors.New("already requesting")
+	}
+	c.linkBusy = true
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		c.linkBusy = false
+		c.mu.Unlock()
+		c.setErr(err)
+	}()
 	name := c.d.Core.SettingOr(ctx, "node.name", "Node64")
 	body, _ := json.Marshal(wire.LinkStart{NodeID: c.nodeID(), Name: name, Version: c.d.Version})
 	var out wire.LinkStarted
 	var lastErr error
 	for _, ep := range c.endpoints() {
-		resp, err := c.post(ctx, ep.URL+"/v1/nodes/link/start", "", body)
+		// je hub hoechstens 12 s, sonst wartet der Nutzer bei blockiertem Netz minutenlang
+		ectx, cancel := context.WithTimeout(ctx, 12*time.Second)
+		resp, err := c.post(ectx, ep.URL+"/v1/nodes/link/start", "", body)
+		cancel()
 		if err != nil {
 			lastErr = err
 			continue
@@ -301,7 +324,7 @@ func (c *Live) LinkStart(ctx context.Context) (code string, expires time.Time, e
 		c.set(SetHub, ep.URL)
 		return out.Code, out.ExpiresAt, nil
 	}
-	return "", time.Time{}, fmt.Errorf("hub not reachable: %w", lastErr)
+	return "", time.Time{}, fmt.Errorf("hub not reachable (check DNS, outbound HTTPS and the clock): %w", lastErr)
 }
 
 // LinkPoll fragt nach, ob der Code eingeloest wurde. true = jetzt verknuepft.

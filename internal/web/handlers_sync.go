@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -75,17 +76,22 @@ func (s *Server) linkStart(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/link", http.StatusSeeOther)
 		return
 	}
-	if _, _, err := s.Linker.LinkStart(r.Context()); err != nil {
-		s.flash(w, r, "danger", s.tr(r, "link.start_failed")+": "+err.Error())
-	}
+	// Im Hintergrund anfordern: bei blockiertem Netz wuerde die Seite sonst minutenlang laden
+	linker := s.Linker
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+		defer cancel()
+		_, _, _ = linker.LinkStart(ctx)
+	}()
 	s.audit(r, "sync.link_start", "", "")
+	time.Sleep(300 * time.Millisecond) // kurz warten, damit die Seite bei schneller Antwort direkt den Code zeigt
 	http.Redirect(w, r, "/link", http.StatusSeeOther)
 }
 
 // linkStatus wird von der Seite per JS abgefragt; solange ein Code offen ist, wird beim hub nachgefragt.
 func (s *Server) linkStatus(w http.ResponseWriter, r *http.Request) {
 	st := s.Sync.State()
-	out := map[string]any{"linked": st.Linked, "connected": st.Connected, "code": st.PendingCode, "hub": st.Hub, "error": st.LastError}
+	out := map[string]any{"linked": st.Linked, "connected": st.Connected, "code": st.PendingCode, "hub": st.Hub, "error": st.LastError, "requesting": st.Requesting}
 	if !st.Linked && st.PendingCode != "" && s.Linker != nil {
 		linked, err := s.Linker.LinkPoll(r.Context())
 		if err != nil {

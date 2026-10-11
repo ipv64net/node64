@@ -45,8 +45,12 @@
 			<div class="d-flex align-items-center gap-2" id="link-wait"><div class="spinner-border spinner-border-sm" role="status"></div> <span>{{.T "link.waiting"}}</span></div>
 			<div class="alert alert-danger py-2 small mt-2 d-none" id="link-error"></div>
 			<form method="post" action="/link/cancel" class="mt-3"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-secondary btn-sm">{{.T "common.cancel"}}</button></form>
+		{{else if $st.Requesting}}
+			<div class="d-flex align-items-center gap-2 my-3"><div class="spinner-border spinner-border-sm" role="status"></div> <span>{{.T "link.requesting"}}</span></div>
+			<div class="alert alert-danger py-2 small mt-2 d-none" id="link-error"></div>
 		{{else}}
 			<p>{{.T "link.intro"}}</p>
+			{{if $st.LastError}}<div class="alert alert-danger py-2 small">{{.T "link.start_failed"}}: {{$st.LastError}}<br>{{.T "link.start_failed_hint"}}</div>{{end}}
 			<ul class="small text-body-secondary">
 				<li>{{.T "link.benefit1"}}</li><li>{{.T "link.benefit2"}}</li><li>{{.T "link.benefit3"}}</li>
 			</ul>
@@ -91,19 +95,20 @@
 {{end}}
 {{end}}
 {{define "scripts"}}
-{{if .Data.State.PendingCode}}
+{{if or .Data.State.PendingCode .Data.State.Requesting}}
 <script>
 (function(){
-	var tries = 0;
+	var tries = 0, hadCode = {{if .Data.State.PendingCode}}true{{else}}false{{end}};
 	function poll(){
 		fetch("/link/status", {credentials: "same-origin"}).then(function(r){return r.json();}).then(function(d){
 			if (d.linked) { location.reload(); return; }
 			if (d.error) { var e = document.getElementById("link-error"); e.textContent = d.error; e.classList.remove("d-none"); }
-			if (!d.code) { location.reload(); return; }
-			if (++tries < 150) { setTimeout(poll, 5000); }
+			if (hadCode && !d.code) { location.reload(); return; }
+			if (!hadCode && (d.code || !d.requesting)) { location.reload(); return; }
+			if (++tries < 150) { setTimeout(poll, hadCode ? 5000 : 2000); }
 		}).catch(function(){ setTimeout(poll, 10000); });
 	}
-	setTimeout(poll, 3000);
+	setTimeout(poll, hadCode ? 3000 : 2000);
 })();
 </script>
 {{end}}

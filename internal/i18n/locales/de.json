@@ -597,6 +597,8 @@
     "privacy": "Hinweis: Nach der Verknüpfung werden Konfiguration und Messergebnisse dieser Node an ipv64.net übertragen – auch Ziele im Heimnetz.",
     "start": "Mit ipv64.net verknüpfen",
     "start_failed": "Verknüpfung konnte nicht gestartet werden",
+    "start_failed_hint": "Die Node muss hc-srv01.ipv64.net und hc-srv02.ipv64.net per HTTPS (Port 443) erreichen: DNS, Firewall und Uhrzeit prüfen.",
+    "requesting": "Code wird bei ipv64.net angefordert …",
     "endpoints": "ipv64-Server",
     "conflicts": "Konflikte",
     "conflicts_hint": "Dieselbe Einstellung wurde hier und bei ipv64.net geändert, während keine Verbindung bestand. Entscheide, welche Version gilt – nichts wird stillschweigend überschrieben.",

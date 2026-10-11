@@ -597,6 +597,8 @@
     "privacy": "Note: after linking, configuration and results of this node are sent to ipv64.net – including targets in your home network.",
     "start": "Link with ipv64.net",
     "start_failed": "Linking could not be started",
+    "start_failed_hint": "The node must reach hc-srv01.ipv64.net and hc-srv02.ipv64.net via HTTPS (port 443): check DNS, firewall and clock.",
+    "requesting": "Requesting a code from ipv64.net …",
     "endpoints": "ipv64 servers",
     "conflicts": "Conflicts",
     "conflicts_hint": "The same setting was changed here and at ipv64.net while there was no connection. Decide which version applies – nothing is overwritten silently.",
