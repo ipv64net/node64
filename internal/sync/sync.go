@@ -10,6 +10,8 @@ package sync
 
 import (
 	"context"
+	crand "crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -134,8 +136,19 @@ func New(d Deps) *Live {
 	return &Live{d: d, log: d.Log.With("module", "sync"), hc: &http.Client{Timeout: 60 * time.Second}, wake: make(chan struct{}, 1), states: map[string]wire.State{}}
 }
 
-// nodeID ist die beim Setup erzeugte Kennung (node.id).
-func (c *Live) nodeID() string { return c.d.Core.SettingOr(context.Background(), "node.id", "") }
+// nodeID ist die beim Setup erzeugte Kennung (node.id). Aeltere Installationen haben keine;
+// dann wird sie hier einmalig erzeugt (32 Zeichen, wie beim Setup).
+func (c *Live) nodeID() string {
+	ctx := context.Background()
+	if id := c.d.Core.SettingOr(ctx, "node.id", ""); id != "" {
+		return id
+	}
+	b := make([]byte, 24)
+	_, _ = crand.Read(b)
+	id := base64.RawURLEncoding.EncodeToString(b)
+	_ = c.d.Core.SetSetting(ctx, "node.id", id)
+	return id
+}
 
 func (c *Live) setting(key, def string) string {
 	return c.d.Core.SettingOr(context.Background(), key, def)
