@@ -119,7 +119,8 @@ type Live struct {
 	log *slog.Logger
 	hc  *http.Client
 
-	linkBusy bool // LinkStart laeuft gerade
+	linkBusy     bool // LinkStart laeuft gerade
+	sessionReady bool // aktuelle Sitzung hat hello/config erhalten
 
 	mu        sync.Mutex
 	connected bool

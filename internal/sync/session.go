@@ -48,13 +48,14 @@ func (c *Live) loop(ctx context.Context) {
 			return
 		}
 		hub := c.pickEndpoint(failed)
-		started := time.Now()
 		err := c.runSession(ctx, hub)
 		c.mu.Lock()
 		c.connected, c.hub = false, ""
+		stable := c.sessionReady
+		c.sessionReady = false
 		c.mu.Unlock()
-		if time.Since(started) > 30*time.Second {
-			backoff = time.Second // stabile Sitzung gehabt: Wartezeit zuruecksetzen
+		if stable {
+			backoff = time.Second // echte Sitzung gehabt (hello empfangen): Wartezeit zuruecksetzen
 		}
 		if ctx.Err() != nil {
 			return
@@ -134,6 +135,9 @@ func (c *Live) runSession(ctx context.Context, hub string) error {
 		return err
 	case <-s.ready:
 	}
+	c.mu.Lock()
+	c.sessionReady = true // nur eine Sitzung mit hello zaehlt als stabil (nicht ein 30-s-Dial-Timeout)
+	c.mu.Unlock()
 	s.afterConnect()
 	go s.worker()
 
