@@ -127,6 +127,7 @@ func run() error {
 	syncClient := nodesync.New(nodesync.Deps{Core: st, HC: hcModule, NF: nfStore, Box: box, Version: Version, Log: logger.Slog(), Senders: notify.Senders(Version)})
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)
+	hcModule.SetLinked(syncClient.Linked)
 	go netstat.Loop(ctx, st) // Datenverkehr des Containers fuer das Dashboard
 	if err := syncClient.Start(ctx); err != nil {
 		log.Warn("sync start failed", "err", err)
@@ -150,6 +151,7 @@ func run() error {
 func registerModules(r *module.Registry) {
 	r.Register(module.Placeholder{I: module.Info{Name: "dyndns", TitleKey: "nav.dyndns", Icon: "bi-globe", Image: "dyndns64.webp", Path: "/dyndns", Order: 20}})
 	r.Register(module.Placeholder{I: module.Info{Name: "proxy", TitleKey: "nav.proxy", Icon: "bi-diagram-3", Image: "cdn64.webp", Path: "/proxy", Order: 30}})
+	r.Register(module.Placeholder{I: module.Info{Name: "dns64", TitleKey: "nav.dns64", Icon: "bi-shield-check", Image: "dns64.webp", Path: "/dns64", Order: 40}})
 }
 
 // updateLoop prueft taeglich auf neue Versionen, aber nur wenn der Nutzer es

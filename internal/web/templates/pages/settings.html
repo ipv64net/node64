@@ -10,12 +10,12 @@
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<div class="mb-3">
 						<label class="form-label" for="node_name">{{.T "settings.node_name"}}</label>
-						<input class="form-control{{if .Err "node_name"}} is-invalid{{end}}" id="node_name" name="node_name" value="{{.Val "node_name"}}" maxlength="64" required>
-						<div class="invalid-feedback">{{.Err "node_name"}}</div>
+						<div class="input-group has-validation"><span class="input-group-text"><i class="bi bi-tag"></i></span><input class="form-control{{if .Err "node_name"}} is-invalid{{end}}" id="node_name" name="node_name" value="{{.Val "node_name"}}" maxlength="64" required>
+						<div class="invalid-feedback">{{.Err "node_name"}}</div></div>
 					</div>
 					<div class="mb-3">
 						<label class="form-label" for="location">{{.T "settings.location"}}</label>
-						<input class="form-control" id="location" name="location" value="{{.Val "location"}}" maxlength="64">
+						<div class="input-group"><span class="input-group-text"><i class="bi bi-geo-alt"></i></span><input class="form-control" id="location" name="location" value="{{.Val "location"}}" maxlength="64"></div>
 					</div>
 					<button class="btn btn-primary" type="submit">{{.T "common.save"}}</button>
 				</form>
@@ -66,13 +66,13 @@
 					<div class="row">
 						<div class="col-sm-5 mb-3">
 							<label class="form-label" for="lang">{{.T "settings.language"}}</label>
-							<select class="form-select" id="lang" name="lang">
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-translate"></i></span><select class="form-select" id="lang" name="lang">
 								{{range .Languages}}<option value="{{.}}"{{if eq . ($.Val "lang")}} selected{{end}}>{{$.T (print "lang." .)}}</option>{{end}}
-							</select>
+							</select></div>
 						</div>
 						<div class="col-sm-7 mb-3">
 							<label class="form-label" for="timezone">{{.T "settings.timezone"}}</label>
-							<input class="form-control{{if .Err "timezone"}} is-invalid{{end}}" id="timezone" name="timezone" list="tzlist" value="{{.Val "timezone"}}">
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-clock-history"></i></span><input class="form-control{{if .Err "timezone"}} is-invalid{{end}}" id="timezone" name="timezone" list="tzlist" value="{{.Val "timezone"}}"></div>
 							<datalist id="tzlist">{{range .Timezones}}<option value="{{.}}">{{end}}</datalist>
 							<div class="invalid-feedback">{{.Err "timezone"}}</div>
 						</div>
@@ -83,19 +83,19 @@
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<div class="mb-3">
 						<label class="form-label" for="current">{{.T "settings.password_current"}}</label>
-						<input class="form-control{{if .Err "current"}} is-invalid{{end}}" type="password" id="current" name="current" autocomplete="current-password" required>
-						<div class="invalid-feedback">{{.Err "current"}}</div>
+						<div class="input-group has-validation"><span class="input-group-text"><i class="bi bi-unlock"></i></span><input class="form-control{{if .Err "current"}} is-invalid{{end}}" type="password" id="current" name="current" autocomplete="current-password" required>
+						<div class="invalid-feedback">{{.Err "current"}}</div></div>
 					</div>
 					<div class="row">
 						<div class="col-sm-6 mb-3">
 							<label class="form-label" for="password">{{.T "settings.password_new"}}</label>
-							<input class="form-control{{if .Err "password"}} is-invalid{{end}}" type="password" id="password" name="password" minlength="10" autocomplete="new-password" required>
-							<div class="invalid-feedback">{{.Err "password"}}</div>
+							<div class="input-group has-validation"><span class="input-group-text"><i class="bi bi-lock"></i></span><input class="form-control{{if .Err "password"}} is-invalid{{end}}" type="password" id="password" name="password" minlength="10" autocomplete="new-password" required>
+							<div class="invalid-feedback">{{.Err "password"}}</div></div>
 						</div>
 						<div class="col-sm-6 mb-3">
 							<label class="form-label" for="password2">{{.T "setup.password_repeat"}}</label>
-							<input class="form-control{{if .Err "password2"}} is-invalid{{end}}" type="password" id="password2" name="password2" autocomplete="new-password" required>
-							<div class="invalid-feedback">{{.Err "password2"}}</div>
+							<div class="input-group has-validation"><span class="input-group-text"><i class="bi bi-lock-fill"></i></span><input class="form-control{{if .Err "password2"}} is-invalid{{end}}" type="password" id="password2" name="password2" autocomplete="new-password" required>
+							<div class="invalid-feedback">{{.Err "password2"}}</div></div>
 						</div>
 					</div>
 					<button class="btn btn-outline-primary" type="submit">{{.T "common.save"}}</button>
@@ -118,7 +118,7 @@
 			<div class="card-header"><i class="bi bi-key"></i> {{.T "apikey.title"}}</div>
 			<div class="card-body">
 				<p class="small text-body-secondary">{{.T "apikey.hint"}}</p>
-				{{if $d.NewAPIKey}}<div class="alert alert-warning small"><strong>{{.T "apikey.show_once"}}</strong><br><code class="user-select-all">{{$d.NewAPIKey}}</code></div>{{end}}
+				{{if $d.NewAPIKey}}<div class="alert alert-warning small"><strong>{{.T "apikey.show_once"}}</strong><br><div class="input-group input-group-sm mt-1"><span class="input-group-text"><i class="bi bi-key"></i></span><input class="form-control font-monospace" id="new-api-key" value="{{$d.NewAPIKey}}" readonly><button class="btn btn-outline-secondary btn-copy" type="button" data-copy-target="#new-api-key" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div></div>{{end}}
 				{{if $d.APIKeys}}
 				<ul class="list-group list-group-flush mb-3">
 				{{range $d.APIKeys}}
@@ -147,29 +147,29 @@
 					<div class="row">
 						<div class="col-sm-4 mb-3">
 							<label class="form-label" for="log_module">{{.T "settings.log_module"}}</label>
-							<select class="form-select" id="log_module" name="module">
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-box"></i></span><select class="form-select" id="log_module" name="module">
 								<option value="global">{{.T "common.all"}}</option>
 								{{range $d.Modules2}}<option value="{{.}}">{{.}}{{with index $d.LogModules .}} ({{.}}){{end}}</option>{{end}}
-							</select>
+							</select></div>
 						</div>
 						<div class="col-sm-4 mb-3">
 							<label class="form-label" for="level">{{.T "settings.log_level"}}</label>
-							<select class="form-select" id="level" name="level">
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-bar-chart-steps"></i></span><select class="form-select" id="level" name="level">
 								<option value="inherit">{{.T "settings.log_inherit"}}</option>
 								<option value="debug"{{if eq $d.LogLevel "debug"}} selected{{end}}>debug</option>
 								<option value="info"{{if eq $d.LogLevel "info"}} selected{{end}}>info</option>
 								<option value="warn"{{if eq $d.LogLevel "warn"}} selected{{end}}>warn</option>
 								<option value="error"{{if eq $d.LogLevel "error"}} selected{{end}}>error</option>
-							</select>
+							</select></div>
 						</div>
 						<div class="col-sm-4 mb-3">
 							<label class="form-label" for="reset_minutes">{{.T "settings.log_reset_after"}}</label>
-							<select class="form-select" id="reset_minutes" name="reset_minutes">
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-clock"></i></span><select class="form-select" id="reset_minutes" name="reset_minutes">
 								<option value="30">30 {{.T "common.minutes"}}</option>
 								<option value="60" selected>60 {{.T "common.minutes"}}</option>
 								<option value="240">240 {{.T "common.minutes"}}</option>
 								<option value="0">{{.T "settings.log_reset_never"}}</option>
-							</select>
+							</select></div>
 						</div>
 					</div>
 					<p class="form-text">{{.T "settings.log_level_hint"}}</p>

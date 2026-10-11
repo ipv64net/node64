@@ -60,7 +60,21 @@ a { color: var(--bs-primary); }
 .sidebar .nav-link.disabled, .sidebar-offcanvas .nav-link.disabled { opacity: .55; }
 .content { min-width: 0; } /* volle Breite auf allen Seiten */
 
-/* Brotkrumen in der Kopfzeile */
+/* Brotkrumen in der Kopfzeile; ab lg buendig mit dem Inhalt (Logo-Bereich = Seitenleiste) */
+@media (min-width: 992px) {
+	.topbar .navbar-brand { width: calc(var(--sidebar-width) - 1rem); margin-right: 0; }
+	.topbar .topbar-crumbs { margin-left: 0 !important; padding-left: 1.5rem !important; border-left: 0 !important; }
+}
+/* Healthchecks-Herz in Rot */
+.bi-heart-pulse { color: var(--bs-danger); }
+/* Tabellen ausserhalb von Karten: leichter Schatten (nicht im Karten-Modus auf dem Handy) */
+@media (min-width: 768px) {
+	.table-shadow { box-shadow: var(--bs-box-shadow-sm); border: 1px solid var(--bs-border-color-translucent); border-radius: .5rem; background: var(--bs-body-bg); }
+	.table-shadow > .table { margin-bottom: 0; }
+	.table-shadow > .table > :not(caption) > * > :first-child { padding-left: .75rem; }
+}
+/* Kopieren in die Zwischenablage */
+.btn-copy.copied { color: var(--bs-success); border-color: var(--bs-success); }
 .topbar-crumbs .breadcrumb { font-size: .9rem; flex-wrap: nowrap; white-space: nowrap; }
 .topbar-crumbs .breadcrumb-item { overflow: hidden; text-overflow: ellipsis; }
 .topbar-crumbs .breadcrumb-item:last-child { max-width: 40vw; font-weight: 600; }

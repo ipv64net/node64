@@ -53,7 +53,7 @@
 {{$qs := print "&q=" $f.q "&state=" $f.state "&type=" $f.type "&tag=" $f.tag}}
 <form method="post" action="/healthchecks/bulk" id="hc-bulk">
 <input type="hidden" name="_csrf" value="{{.CSRF}}">
-<div class="table-responsive">
+<div class="table-responsive table-shadow">
 <table class="table table-hover table-sm align-middle table-cards hc-table">
 	<thead>
 		<tr>

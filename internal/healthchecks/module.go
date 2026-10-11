@@ -126,6 +126,9 @@ func (m *Module) remind(ctx context.Context) {
 // Store gibt die Datenhaltung frei (Dashboard, Tests).
 func (m *Module) Store() *Store { return m.st }
 
+// SetLinked meldet, ob die Node mit ipv64 verknuepft ist (schaltet Online/Hybrid im Formular frei).
+func (m *Module) SetLinked(fn func() bool) { m.linked = fn }
+
 func (m *Module) Info() module.Info {
 	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10}
 }

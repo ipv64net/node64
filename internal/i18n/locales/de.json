@@ -9,6 +9,7 @@
     "tagline": "Healthchecks, DynDNS und mehr im eigenen Netz"
   },
   "nav": {
+    "dns64": "DNS64",
     "dashboard": "Dashboard",
     "healthchecks": "Healthchecks",
     "dyndns": "DynDNS",
@@ -31,6 +32,7 @@
     "api": "API"
   },
   "common": {
+    "copy": "Kopieren",
     "save": "Speichern",
     "cancel": "Abbrechen",
     "delete": "Löschen",
@@ -220,6 +222,7 @@
     "setup_done": "Die Einrichtung ist bereits abgeschlossen."
   },
   "module": {
+    "dns64": "DNS64 (lokaler DNS mit Blocklisten)",
     "healthchecks": "Healthchecks",
     "dyndns": "DynDNS-Updater",
     "proxy": "Reverse-Proxy",

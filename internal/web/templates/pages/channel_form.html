@@ -1,7 +1,6 @@
 {{define "content"}}
 {{$d := .Data}}
 {{$f := $d.Form}}
-<div class="small"><a href="/notifications">{{.T "nf.title"}}</a></div>
 <h1 class="h4 mb-3">{{if $d.Edit}}{{.T "nf.edit"}}{{else}}{{.T "nf.new"}}{{end}} <span class="badge text-bg-light fs-6">{{.T (print "nf.type." $d.Type)}}</span></h1>
 {{if $d.Error}}<div class="alert alert-danger">{{$d.Error}}</div>{{end}}
 {{if not $d.Edit}}
@@ -16,7 +15,7 @@
 			<div class="card-body">
 				<div class="mb-3">
 					<label class="form-label" for="name">{{.T "common.name"}}</label>
-					<input class="form-control" id="name" name="name" value="{{index $f "name"}}" maxlength="100" required autofocus>
+					<div class="input-group"><span class="input-group-text"><i class="bi bi-tag"></i></span><input class="form-control" id="name" name="name" value="{{index $f "name"}}" maxlength="100" required autofocus></div>
 				</div>
 				{{range $d.Fields}}
 				{{$key := print "cfg_" .Key}}
@@ -48,7 +47,7 @@
 			<div class="card-body">
 				<div class="mb-3">
 					<label class="form-label" for="lang">{{.T "nf.lang"}}</label>
-					<select class="form-select" id="lang" name="lang">{{range $d.Langs}}<option value="{{.}}"{{if eq . (index $f "lang")}} selected{{end}}>{{$.T (print "lang." .)}}</option>{{end}}</select>
+					<div class="input-group"><span class="input-group-text"><i class="bi bi-translate"></i></span><select class="form-select" id="lang" name="lang">{{range $d.Langs}}<option value="{{.}}"{{if eq . (index $f "lang")}} selected{{end}}>{{$.T (print "lang." .)}}</option>{{end}}</select></div>
 				</div>
 				<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" name="enabled" id="enabled"{{if index $f "enabled"}} checked{{end}}><label class="form-check-label" for="enabled">{{.T "nf.enabled"}}</label></div>
 				<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" name="default" id="default"{{if index $f "default"}} checked{{end}}><label class="form-check-label" for="default">{{.T "nf.default"}}</label><div class="form-text">{{.T "nf.default_hint"}}</div></div>

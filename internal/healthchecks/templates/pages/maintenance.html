@@ -1,7 +1,6 @@
 {{define "content"}}
 {{$d := .Data}}
 {{$f := $d.Form}}
-<div class="small"><a href="/healthchecks">{{.T "nav.healthchecks"}}</a></div>
 <h1 class="h4 mb-3">{{.T "hc.maint.title"}}</h1>
 <p class="text-body-secondary small">{{.T "hc.maint.hint"}}</p>
 <div class="row g-3">
@@ -37,15 +36,15 @@
 				{{if $d.Error}}<div class="alert alert-danger small">{{$d.Error}}</div>{{end}}
 				<form method="post" action="{{if $d.Edit}}/healthchecks/maintenance/{{$d.Edit.ID}}/edit{{else}}/healthchecks/maintenance{{end}}">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
-					<div class="mb-2"><label class="form-label" for="name">{{.T "common.name"}}</label><input class="form-control" id="name" name="name" value="{{index $f "name"}}" maxlength="200" required></div>
+					<div class="mb-2"><label class="form-label" for="name">{{.T "common.name"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-tag"></i></span><input class="form-control" id="name" name="name" value="{{index $f "name"}}" maxlength="200" required></div></div>
 					<div class="row g-2 mb-2">
-						<div class="col-6"><label class="form-label" for="start_at">{{.T "hc.maint.start"}}</label><input class="form-control" type="datetime-local" id="start_at" name="start_at" value="{{index $f "start_at"}}" required></div>
-						<div class="col-6"><label class="form-label" for="end_at">{{.T "hc.maint.end"}}</label><input class="form-control" type="datetime-local" id="end_at" name="end_at" value="{{index $f "end_at"}}" required></div>
+						<div class="col-6"><label class="form-label" for="start_at">{{.T "hc.maint.start"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-calendar-event"></i></span><input class="form-control" type="datetime-local" id="start_at" name="start_at" value="{{index $f "start_at"}}" required></div></div>
+						<div class="col-6"><label class="form-label" for="end_at">{{.T "hc.maint.end"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-calendar-x"></i></span><input class="form-control" type="datetime-local" id="end_at" name="end_at" value="{{index $f "end_at"}}" required></div></div>
 					</div>
 					<div class="row g-2 mb-2">
 						<div class="col-6"><label class="form-label" for="repeat">{{.T "hc.maint.repeat"}}</label>
-							<select class="form-select" id="repeat" name="repeat">{{range $d.Repeats}}<option value="{{.}}"{{if eq . (index $f "repeat")}} selected{{end}}>{{$.T (print "hc.maint.repeat_" .)}}</option>{{end}}</select></div>
-						<div class="col-6"><label class="form-label" for="repeat_until">{{.T "hc.maint.until"}}</label><input class="form-control" type="datetime-local" id="repeat_until" name="repeat_until" value="{{index $f "repeat_until"}}"></div>
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-arrow-repeat"></i></span><select class="form-select" id="repeat" name="repeat">{{range $d.Repeats}}<option value="{{.}}"{{if eq . (index $f "repeat")}} selected{{end}}>{{$.T (print "hc.maint.repeat_" .)}}</option>{{end}}</select></div></div>
+						<div class="col-6"><label class="form-label" for="repeat_until">{{.T "hc.maint.until"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-calendar-range"></i></span><input class="form-control" type="datetime-local" id="repeat_until" name="repeat_until" value="{{index $f "repeat_until"}}"></div></div>
 					</div>
 					<label class="form-label">{{.T "nav.healthchecks"}} <span class="text-body-secondary">({{.T "hc.maint.all_hint"}})</span></label>
 					<div class="border rounded p-2 mb-2" style="max-height:220px;overflow:auto">

@@ -4,7 +4,6 @@
 {{$j := $d.JSON}}
 <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
 	<div>
-		<div class="small"><a href="/healthchecks">{{.T "nav.healthchecks"}}</a></div>
 		<h1 class="h4 mb-1">{{$c.Name}} <span class="badge hc-state-{{$d.Row.State}}">{{$.T (print "hc.state." $d.Row.State)}}</span>
 			{{if $d.Row.Retrying}}<i class="bi bi-arrow-repeat text-warning fs-6" title="{{.T "hc.retrying"}}"></i>{{end}}
 			{{if $d.Row.Maint}}<span class="badge text-bg-secondary"><i class="bi bi-wrench"></i> {{.T "hc.maintenance"}}</span>{{end}}
@@ -107,7 +106,7 @@
 					{{if $d.Children}}<dt class="col-6">{{.T "hc.children"}}</dt><dd class="col-6">{{range $d.Children}}<a href="/healthchecks/{{.Token}}">{{.Name}}</a><br>{{end}}</dd>{{end}}
 					{{range $k, $v := $d.Params}}{{if ne $k "basic_password"}}<dt class="col-6 text-truncate">{{$k}}</dt><dd class="col-6 text-break">{{$v}}</dd>{{end}}{{end}}
 					<dt class="col-6">{{.T "hc.next_check"}}</dt><dd class="col-6">{{if $d.Row.NextAt.IsZero}}–{{else}}{{.Time $d.Row.NextAt}}{{end}}</dd>
-					<dt class="col-6">Token</dt><dd class="col-6"><code class="small">{{$c.Token}}</code></dd>
+					<dt class="col-6">Token</dt><dd class="col-6"><code class="small">{{$c.Token}}</code> <button class="btn btn-sm btn-link p-0 btn-copy" type="button" data-copy-text="{{$c.Token}}" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></dd>
 				</dl>
 				{{if $c.Description}}<p class="mt-2 mb-0">{{$c.Description}}</p>{{end}}
 			</div>
@@ -118,7 +117,7 @@
 			<div class="card-header"><i class="bi bi-broadcast"></i> {{.T "hc.push.title"}}</div>
 			<div class="card-body small">
 				<p>{{.T "hc.push.hint"}}</p>
-				<input class="form-control form-control-sm font-monospace mb-2" value="{{$d.PushURL}}" readonly data-copy>
+				<div class="input-group input-group-sm mb-2"><span class="input-group-text"><i class="bi bi-link-45deg"></i></span><input class="form-control font-monospace" id="push-url" value="{{$d.PushURL}}" readonly data-copy><button class="btn btn-outline-secondary btn-copy" type="button" data-copy-target="#push-url" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
 				<pre class="hc-json border rounded p-2 mb-0">curl -fsS "{{$d.PushURL}}"
 curl -fsS "{{$d.PushURL}}?status=down&amp;msg=backup+failed"</pre>
 			</div>

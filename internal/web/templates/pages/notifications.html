@@ -61,9 +61,9 @@
 				<p class="small text-body-secondary">{{.T "nf.quiet_hint"}}</p>
 				<div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" name="quiet_enabled" id="quiet_enabled"{{if eq (index $d.Quiet "enabled") "1"}} checked{{end}}><label class="form-check-label" for="quiet_enabled">{{.T "nf.quiet_enabled"}}</label></div>
 				<div class="row g-2 mb-2">
-					<div class="col-4"><label class="form-label" for="quiet_from">{{.T "nf.quiet_from"}}</label><input class="form-control" type="time" id="quiet_from" name="quiet_from" value="{{index $d.Quiet "from"}}"></div>
-					<div class="col-4"><label class="form-label" for="quiet_to">{{.T "nf.quiet_to"}}</label><input class="form-control" type="time" id="quiet_to" name="quiet_to" value="{{index $d.Quiet "to"}}"></div>
-					<div class="col-4"><label class="form-label" for="quiet_tz">{{.T "settings.timezone"}}</label><input class="form-control" id="quiet_tz" name="quiet_tz" list="tzlist" value="{{index $d.Quiet "tz"}}"><datalist id="tzlist">{{range .Timezones}}<option value="{{.}}">{{end}}</datalist></div>
+					<div class="col-4"><label class="form-label" for="quiet_from">{{.T "nf.quiet_from"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-moon"></i></span><input class="form-control" type="time" id="quiet_from" name="quiet_from" value="{{index $d.Quiet "from"}}"></div></div>
+					<div class="col-4"><label class="form-label" for="quiet_to">{{.T "nf.quiet_to"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-sunrise"></i></span><input class="form-control" type="time" id="quiet_to" name="quiet_to" value="{{index $d.Quiet "to"}}"></div></div>
+					<div class="col-4"><label class="form-label" for="quiet_tz">{{.T "settings.timezone"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-clock-history"></i></span><input class="form-control" id="quiet_tz" name="quiet_tz" list="tzlist" value="{{index $d.Quiet "tz"}}"></div><datalist id="tzlist">{{range .Timezones}}<option value="{{.}}">{{end}}</datalist></div>
 				</div>
 				<label class="form-label d-block">{{.T "nf.quiet_days"}}</label>
 				{{range $d.Days}}
@@ -78,13 +78,13 @@
 			<div class="card-body">
 				<div class="mb-3">
 					<label class="form-label" for="base_url">{{.T "nf.base_url"}}</label>
-					<input class="form-control" id="base_url" name="base_url" value="{{index $d.Quiet "base_url"}}" placeholder="https://node.example.com">
+					<div class="input-group"><span class="input-group-text"><i class="bi bi-link-45deg"></i></span><input class="form-control" id="base_url" name="base_url" value="{{index $d.Quiet "base_url"}}" placeholder="https://node.example.com"></div>
 					<div class="form-text">{{.T "nf.base_url_hint"}}</div>
 				</div>
 				<div class="row g-2">
-					<div class="col-4"><label class="form-label" for="rate">{{.T "nf.rate_per_hour"}}</label><input class="form-control" type="number" id="rate" name="rate" value="{{index $d.Quiet "rate"}}" min="0" max="10000"></div>
-					<div class="col-4"><label class="form-label" for="batch_threshold">{{.T "nf.batch_threshold"}}</label><input class="form-control" type="number" id="batch_threshold" name="batch_threshold" value="{{index $d.Quiet "batch_threshold"}}" min="0" max="100"></div>
-					<div class="col-4"><label class="form-label" for="batch_window">{{.T "nf.batch_window"}}</label><input class="form-control" type="number" id="batch_window" name="batch_window" value="{{index $d.Quiet "batch_window"}}" min="0" max="300"></div>
+					<div class="col-4"><label class="form-label" for="rate">{{.T "nf.rate_per_hour"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-speedometer"></i></span><input class="form-control" type="number" id="rate" name="rate" value="{{index $d.Quiet "rate"}}" min="0" max="10000"></div></div>
+					<div class="col-4"><label class="form-label" for="batch_threshold">{{.T "nf.batch_threshold"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-collection"></i></span><input class="form-control" type="number" id="batch_threshold" name="batch_threshold" value="{{index $d.Quiet "batch_threshold"}}" min="0" max="100"></div></div>
+					<div class="col-4"><label class="form-label" for="batch_window">{{.T "nf.batch_window"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-hourglass"></i></span><input class="form-control" type="number" id="batch_window" name="batch_window" value="{{index $d.Quiet "batch_window"}}" min="0" max="300"></div></div>
 				</div>
 			</div>
 		</div>

@@ -193,8 +193,20 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 	if in.RepeatMinutes != nil {
 		c.RepeatMinutes = *in.RepeatMinutes
 	}
-	if in.Execution != "" && in.Execution != "local" {
-		return errors.New("execution: online and both need the ipv64 link (coming with the sync phase)")
+	if in.Execution != "" {
+		switch in.Execution {
+		case "local":
+		case "online", "both":
+			if m.linked == nil || !m.linked() {
+				return errors.New("execution: online and hybrid need the ipv64 link")
+			}
+			if c.Type != checks.TypePush && checks.IsPrivateTarget(string(c.Type), c.Target) {
+				return errors.New("execution: ipv64 cannot check private targets (home network, localhost, .local) from outside – keep this check local")
+			}
+		default:
+			return errors.New("execution must be local, online or both")
+		}
+		c.Execution = in.Execution
 	}
 	if in.Policy != "" {
 		c.Policy = strings.ToLower(strings.TrimSpace(in.Policy))

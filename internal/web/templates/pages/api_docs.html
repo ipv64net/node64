@@ -12,7 +12,7 @@ curl -X POST -H "Authorization: Bearer node64_…" -H "Content-Type: application
 </div></div>
 {{range $tag := $d.Order}}
 <h2 class="h5 mt-4">{{$tag}}</h2>
-<div class="table-responsive"><table class="table table-sm table-hover">
+<div class="table-responsive table-shadow"><table class="table table-sm table-hover">
 	<tbody>
 	{{range index $d.Groups $tag}}
 	<tr>

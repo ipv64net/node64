@@ -36,7 +36,7 @@
 			</form>
 		{{else if $st.PendingCode}}
 			<p>{{.T "link.code_intro"}}</p>
-			<div class="display-6 font-monospace text-center my-3" id="link-code">{{slice $st.PendingCode 0 4}}-{{slice $st.PendingCode 4}}</div>
+			<div class="display-6 font-monospace text-center my-3"><span id="link-code">{{slice $st.PendingCode 0 4}}-{{slice $st.PendingCode 4}}</span> <button class="btn btn-outline-secondary btn-copy align-middle" type="button" data-copy-text="{{$st.PendingCode}}" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
 			<ol class="small">
 				<li>{{.T "link.step1"}} <a href="https://ipv64.net/link.php" target="_blank" rel="noopener">ipv64.net/link</a></li>
 				<li>{{.T "link.step2"}}</li>
