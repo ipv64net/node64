@@ -631,8 +631,7 @@ func (c *Live) applyChanges(ctx context.Context, changes []wire.Change, revision
 				// Outbox fuehrt lokale IDs; Server-ID auf lokale abbilden
 				id = c.localIDFor(ctx, ch.Entity, ch.ID)
 			}
-			if id != "" && c.d.HC.OutboxHas(ctx, ch.Entity, id) {
-				c.conflict(ctx, ch.Entity, id, ch)
+			if id != "" && c.d.HC.OutboxHas(ctx, ch.Entity, id) && c.conflict(ctx, ch.Entity, id, ch) {
 				continue
 			}
 		}
@@ -708,18 +707,52 @@ func (c *Live) localIDFor(ctx context.Context, entity, remoteID string) string {
 	return ""
 }
 
-func (c *Live) conflict(ctx context.Context, entity, localID string, ch wire.Change) {
-	local := ""
-	if list, err := c.d.HC.OutboxPending(ctx); err == nil {
+// conflict haelt einen Konflikt fest. Ist die Server-Fassung inhaltlich gleich der lokalen
+// (z. B. die eigene, gerade bestaetigte Aenderung kommt als config zurueck), gibt es keinen
+// Konflikt: der Postausgang-Eintrag entfaellt, die Aenderung wird normal uebernommen (false).
+func (c *Live) conflict(ctx context.Context, entity, localID string, ch wire.Change) bool {
+	list, _ := c.d.HC.OutboxPending(ctx)
+	if ch.Op == "upsert" {
+		same := true
 		for _, o := range list {
-			if o.Entity == entity && o.EntityID == localID {
-				local = o.Payload
-				_ = c.d.HC.OutboxSetError(ctx, o.ID, "conflict", "server changed the same entity")
+			if o.Entity == entity && o.EntityID == localID && !sameContent(o.Payload, ch.Data) {
+				same = false
 			}
+		}
+		if same {
+			for _, o := range list {
+				if o.Entity == entity && o.EntityID == localID {
+					_ = c.d.HC.OutboxDelete(ctx, o.ID)
+				}
+			}
+			return false
+		}
+	}
+	local := ""
+	for _, o := range list {
+		if o.Entity == entity && o.EntityID == localID {
+			local = o.Payload
+			_ = c.d.HC.OutboxSetError(ctx, o.ID, "conflict", "server changed the same entity")
 		}
 	}
 	_ = c.d.HC.ConflictAdd(ctx, healthchecks.Conflict{Entity: entity, EntityID: localID, LocalOp: "upsert", LocalPayload: local, ServerPayload: string(ch.Data), ServerRevision: ch.Revision})
 	c.log.Warn("sync conflict", "entity", entity, "id", localID)
+	return true
+}
+
+// sameContent vergleicht zwei JSON-Fassungen ohne Verwaltungsfelder.
+func sameContent(a string, b []byte) bool {
+	var x, y map[string]any
+	if json.Unmarshal([]byte(a), &x) != nil || json.Unmarshal(b, &y) != nil {
+		return false
+	}
+	for _, k := range []string{"revision", "created_at", "updated_at", "state", "owner", "node_id", "id", "local_id"} {
+		delete(x, k)
+		delete(y, k)
+	}
+	xb, _ := json.Marshal(x)
+	yb, _ := json.Marshal(y)
+	return string(xb) == string(yb)
 }
 
 // applyChannel: Server-Kanaele als Platzhalter (execution server), eigene Kanaele aktualisieren.
