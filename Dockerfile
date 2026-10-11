@@ -11,7 +11,7 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags="-s -w -X main.Version=$VERSION" -o /out/node ./cmd/node
+    go build -trimpath -ldflags="-s -w -X main.Version=$VERSION" -o /out/node64 ./cmd/node64
 # Datenverzeichnis mit passenden Rechten fuer den Nicht-Root-Benutzer vorbereiten
 RUN mkdir -p /out/data && chown 65532:65532 /out/data
 
@@ -23,7 +23,7 @@ RUN apk add --no-cache ca-certificates
 # ---- Laufzeit: leeres Image, nur das Binary
 FROM scratch
 COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=build /out/node /node
+COPY --from=build /out/node64 /node64
 COPY --from=build --chown=65532:65532 /out/data /data
 USER 65532:65532
 ENV NODE64_DATA_DIR=/data \
@@ -31,5 +31,5 @@ ENV NODE64_DATA_DIR=/data \
     NODE64_HTTPS_PORT=0
 VOLUME ["/data"]
 EXPOSE 8080 8443
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD ["/node", "healthcheck"]
-ENTRYPOINT ["/node"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD ["/node64", "healthcheck"]
+ENTRYPOINT ["/node64"]

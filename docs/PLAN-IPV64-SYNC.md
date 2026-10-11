@@ -10,7 +10,7 @@ Ergänzt das Konzept („Node64 – Konzept & Funktionsumfang“) und ersetzt di
 
 | Nr. | Entscheidung | Begründung |
 | --- | --- | --- |
-| L1 | **Ein Check-Bot in Go** für Node und Server (`internal/checks`, `internal/scheduler`, `internal/notify` aus dem Agent-Repo). Die PHP-Bots `healthcheck_*_live.php`, `healthcheck_alarm.php` werden abgelöst. | Gleiche Logik, gleiche Fehlergründe, gleiche Zustandsmaschine überall. |
+| L1 | **Ein Check-Bot in Go** für Node und Server (`internal/checks`, `internal/scheduler`, `internal/notify` aus dem Node64-Repo). Die PHP-Bots `healthcheck_*_live.php`, `healthcheck_alarm.php` werden abgelöst. | Gleiche Logik, gleiche Fehlergründe, gleiche Zustandsmaschine überall. |
 | L2 | **Neuer Dienst `ipv64-hub`** (Rolle `checker`) auf eigenen Servern neben dem Altsystem. Neue Tabellen mit Präfix `hc2_` in eigener Datenbank. **Keine Migration**: Wer die neue Welt aktiviert (`users.hc2 = 1`), fängt bei null an; die alte Welt bleibt unverändert und läuft parallel, bis sie abgeschaltet wird. | Entscheidung Dennis 2026-10-10: einfacher, kein Mapping-Risiko, kein Doppelbetrieb-Abgleich. |
 | L3 | **Server ist führend** für Konfiguration (Checks, Kanäle, Wartungsfenster), sobald ein Node verknüpft ist. **Node ist führend** für seine Messergebnisse (append-only). | Konzept, Abschnitt Synchronisation. |
 | L4 | **Eigener Go-Dienst `ipv64-hub` bei ipv64 für die gesamte Agent-Kommunikation** (Host `nodes.ipv64.net`): eine WebSocket-Dauerverbindung je Node plus HTTPS-Endpunkte für große Abgleiche. `api_v2.php` bleibt für Nutzer, Portal und Fremdsoftware; Nodes reden nicht mit PHP. | Entscheidung Dennis 2026-10-10: von Anfang an für viele tausend Nodes und mehrere Server-Instanzen auslegen. PHP kann weder Dauerverbindungen halten noch so skalieren; Long-Poll würde je Node einen PHP-Prozess belegen. |
@@ -34,7 +34,7 @@ Node ══WSS══► (nginx/LB)      ──► ipv64-hub Instanz B ───�
 Geräte ──► health.php?token= (PHP)  oder  nodes.ipv64.net/v1/push/{token} (hub) ──► hc2_measurements + Redis "hc2:push"
 ```
 
-**ipv64-hub** (Go, aus dem Agent-Repo gebaut, `cmd/hub`; nutzt `internal/checks`, `internal/scheduler`, `internal/notify`): ein Binary, zwei Rollen, standardmäßig beide auf jeder Instanz aktiv, einzeln per Flag abschaltbar.
+**ipv64-hub** (Go, aus dem Node64-Repo gebaut, `cmd/hub`; nutzt `internal/checks`, `internal/scheduler`, `internal/notify`): ein Binary, zwei Rollen, standardmäßig beide auf jeder Instanz aktiv, einzeln per Flag abschaltbar.
 
 Rolle **gateway** (Agent-Kommunikation):
 - nimmt WebSocket-Verbindungen der Nodes an (`/v1/ws`), prüft den Agent-Token, hält je Verbindung zwei Goroutines (ca. 20–50 KB Speicher; 10.000 Verbindungen je Instanz sind unkritisch, Limit per Flag),
@@ -50,7 +50,7 @@ Rolle **checker** (Online-Checks, ersetzt `healthcheck_*_live.php`, `healthcheck
 - lädt die Checks seiner Slots mit `execution IN ('online','both')`, `paused = 0`, plant sie wie der Node (Worker-Pool, Jitter, Retry, Stabilisierung, Flattern, Abhängigkeiten, Wartungsfenster), schreibt Messpunkte, Zustände, Ereignisse, Störungen in `hc2_*`,
 - bewertet Push-Checks seiner Slots per Watchdog; Push-Eingang kommt aus `health.php` (Redis `hc2:push`) oder aus dem hub selbst,
 - verschickt Benachrichtigungen (Server-Kanäle, `ipv64_mail`, `ipv64_sms`, `app`) und erzeugt Sendeaufträge für Agent-Kanäle,
-- Agent-Ausfallerkennung: die Instanz, die Slot 0 hält, prüft alle 30 s `hc2_nodes.online = 1` gegen die Redis-Keys,
+- Node-Ausfallerkennung: die Instanz, die Slot 0 hält, prüft alle 30 s `hc2_nodes.online = 1` gegen die Redis-Keys,
 - verdichtet stündlich/täglich (`hc2_dirty_hours`), räumt Partitionen, Log und Tombstones auf,
 - bekommt Konfigurationsänderungen über dieselbe Redis-Subscription wie das gateway (nur eigene Slots).
 
@@ -323,7 +323,7 @@ Auslöser: `revision_gap`, Erstverknüpfung, nach Wiederherstellung der Agent-Da
 
 Erstverknüpfung = Repair mit vorherigem `POST /v1/nodes/me/bootstrap`: der Node lädt seine lokalen Checks, Kanäle und Wartungsfenster hoch, der Server legt sie mit `execution local`, `node_id` an (Token-Kollisionen siehe 3.1), ohne Limitprüfung. Danach gilt der Server als führend.
 
-### 3.7 Heartbeat und Agent-Ausfall
+### 3.7 Heartbeat und Node-Ausfall
 
 - Jeder `pong` erneuert den Redis-Key `hc2:online:<node_id>` (TTL 90 s); `hc2_nodes.last_seen` wird gebündelt geschrieben. Beim sauberen Schließen setzt das gateway `online = 0` erst nach 60 s Karenz (der Node verbindet sich meist sofort mit der anderen Instanz).
 - Der checker mit Slot 0 prüft alle 30 s: `online = 1` in MySQL, aber kein Redis-Key → `online = 0`, Ereignis `agent_offline` (Kanäle: Server-Kanäle des Accounts, `ipv64_mail` als Standard). Rückkehr: `agent_online` mit Dauer. Stirbt eine hub-Instanz, laufen die Keys ihrer Nodes nach 90 s ab, sofern die Nodes nicht längst neu verbunden sind.
@@ -499,7 +499,7 @@ Pfade während der Umstellung unter `/healthchecks2/...`, nach Abschluss überne
 | M0 | Tabellen `hc2_*` in eigener Datenbank, `users.hc2` Flag, `latest.json` | – |
 | M1 | `ipv64-hub` auf beiden Servern, zunächst ohne Nutzer; Lasttest | Dienst stoppen |
 | M2 | Neue Portalseiten unter `/healthchecks2`; Schalter „Neue Healthchecks aktivieren“ setzt `hc2 = 1` (Menü zeigt dann beide Welten: „Healthchecks (neu)“ und „Healthchecks (alt)“); `health.php` nimmt neue Tokens an | Flag auf 0 blendet die neue Welt aus, Daten bleiben |
-| M3 | Agent-Release mit Sync; Beta mit Dennis und Freiwilligen | Node entkoppeln |
+| M3 | Node64-Release mit Sync; Beta mit Dennis und Freiwilligen | Node entkoppeln |
 | M4 | Freigabe für alle (Ankündigung Blog/Wiki); alte Welt bleibt parallel, neue Checks nur noch in der neuen Welt anlegbar (alte Seite: Hinweis statt „Neu“) | Hinweis entfernen |
 | M5 | Nach Frist (Vorschlag 6 Monate): alte Bots aus, alte Seiten nur noch lesend, dann abgeschaltet; alte Tabellen 90 Tage als Dump | Backup |
 
@@ -526,12 +526,12 @@ Limits: alte und neue Welt zählen getrennt (alt wie bisher gegen `healthcheck_l
 | --- | --- | --- | --- |
 | 1 | `latest.json` + Versionsprüfung | ipv64 | Node zeigt Version |
 | 2 | `hc2_*` DDL in eigener DB, `users.hc2`, dbconnect-Block (Hooks, Push-Eingang, Verschlüsselung) | ipv64 | Tabellen da, health.php nimmt neue Tokens an |
-| 3 | `cmd/hub` Rolle **checker**: MySQL-Adapter für `scheduler.Store`, Standorte, `hc2_hubs`/Slots/Leases je Standort, Messstellen-Zustände + Gesamtzustand (3.12), Konfig-Log + Redis, Push-Watchdog, Aggregation, Agent-/Standort-Ausfall | Agent-Repo | Online-Checks eines Testaccounts laufen über zwei hub-Instanzen; eine stoppen → die andere übernimmt binnen 30 s |
-| 4 | `notify`: `pushover` (Node + Server), `app`, `ipv64_mail`, `ipv64_sms` (Server, Backend über SMTP/SMS-Gateway wie heute), Agent-Weiterleitung `notify` | Agent-Repo | Testnachrichten je Typ, lokal und über hub |
+| 3 | `cmd/hub` Rolle **checker**: MySQL-Adapter für `scheduler.Store`, Standorte, `hc2_hubs`/Slots/Leases je Standort, Messstellen-Zustände + Gesamtzustand (3.12), Konfig-Log + Redis, Push-Watchdog, Aggregation, Agent-/Standort-Ausfall | Node64-Repo | Online-Checks eines Testaccounts laufen über zwei hub-Instanzen; eine stoppen → die andere übernimmt binnen 30 s |
+| 4 | `notify`: `pushover` (Node + Server), `app`, `ipv64_mail`, `ipv64_sms` (Server, Backend über SMTP/SMS-Gateway wie heute), Agent-Weiterleitung `notify` | Node64-Repo | Testnachrichten je Typ, lokal und über hub |
 | 5 | Portal: `/notifications` (Kanäle), Verifizierung | ipv64 | Alte Integrationen migriert, Test-Button |
 | 6 | Portal: `/healthchecks2` Übersicht, Detail, Formular, Wartung, Störungen, Statusseite auf `hc2` | ipv64 | Feature-Parität zur alten Seite plus neue Typen |
-| 7 | `cmd/hub` Rolle **gateway**: WebSocket, Device-Code, HTTPS-Abgleich, Redis-Fanout, Batch-Writer; Portal `/link`, `/nodes`; nginx-Konfiguration; Lasttest `cmd/hubload` mit 10.000 simulierten Nodes | Agent-Repo + ipv64 | Lasttest ohne Fehler, Instanz-Neustart ohne Datenverlust (Messpunkte kommen per Outbox nach) |
-| 8 | Node: `internal/sync` echter Client (Link, WebSocket, Outbox, Konflikte, Repair, Reconnect-Ablauf 3.9), UI „ipv64-Verknüpfung“, Konfliktseite, Umhängen (3.11), Kanaltypen `ipv64_mail`/`ipv64_sms` | Agent-Repo | Jede Zeile der Tabelle 3.10 als Test; hub-Wechsel unbemerkt |
+| 7 | `cmd/hub` Rolle **gateway**: WebSocket, Device-Code, HTTPS-Abgleich, Redis-Fanout, Batch-Writer; Portal `/link`, `/nodes`; nginx-Konfiguration; Lasttest `cmd/hubload` mit 10.000 simulierten Nodes | Node64-Repo + ipv64 | Lasttest ohne Fehler, Instanz-Neustart ohne Datenverlust (Messpunkte kommen per Outbox nach) |
+| 8 | Node: `internal/sync` echter Client (Link, WebSocket, Outbox, Konflikte, Repair, Reconnect-Ablauf 3.9), UI „ipv64-Verknüpfung“, Konfliktseite, Umhängen (3.11), Kanaltypen `ipv64_mail`/`ipv64_sms` | Node64-Repo | Jede Zeile der Tabelle 3.10 als Test; hub-Wechsel unbemerkt |
 | 9 | Beta (Dennis + Freiwillige) mit Node und Portal, zwei Wochen | ipv64 | keine offenen Fehler |
 | 10 | Freigabe für alle, später Abschaltung alt (Abschnitt 7) | ipv64 | Alte Bots aus |
 

@@ -177,7 +177,7 @@ func updateLoop(ctx context.Context, st *store.Store, log *slog.Logger) {
 	}
 }
 
-// applyRestore setzt eine hochgeladene Datenbank (node.db.restore) ein und
+// applyRestore setzt eine hochgeladene Datenbank (node64.db.restore) ein und
 // sichert die bisherige vorher unter backups/.
 func applyRestore(cfg *config.Config, log *slog.Logger) error {
 	restore := filepath.Join(cfg.DataDir, web.RestoreFileName)

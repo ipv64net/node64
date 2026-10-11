@@ -7,7 +7,7 @@ Rahmen (entschieden):
 - Beide Server sind gleichwertig (gateway + checker); Online-Checks laufen von **beiden Standorten**, Hybrid-Checks (innen + außen) mit Gesamtzustand nach Regel (Sync-Plan 3.12).
 - **IPv4 und IPv6** an jeder Stelle.
 - **Keine Migration**: die alte Welt bleibt unverändert und läuft parallel; wer die neue aktiviert (`users.hc2 = 1`), fängt bei null an. Abschaltung alt erst nach Frist (Sync-Plan Abschnitt 7).
-- Änderungen am Webcode als Vorher/Nachher-Schnipsel, minimal, Dennis spielt ein. Go-Code im Agent-Repo (`cmd/hub`), Deploy per Binary + systemd.
+- Änderungen am Webcode als Vorher/Nachher-Schnipsel, minimal, Dennis spielt ein. Go-Code im Node64-Repo (`cmd/hub`), Deploy per Binary + systemd.
 
 ---
 
@@ -18,8 +18,8 @@ Jede Phase endet mit **einer** Abnahme durch Dennis; dazwischen arbeite ich durc
 | Phase | Inhalt | Arbeitspakete | Abnahme (kurz) |
 | --- | --- | --- | --- |
 | **1 Grundlagen** | hub-Server aufsetzen, `latest.json`, Tabellen `hc2_*`, dbconnect-Block (Hooks, Push-Eingang) | S0, S1, S2 | Server erreichbar v4/v6, Tabellen da, health.php nimmt neue Tokens an |
-| **2 hub: Checks und Alarme** | Rolle checker (Online-Checks, Zustände, Push-Watchdog, Aggregation, Agent-Ausfall) und serverseitige Benachrichtigungen (alle Kanaltypen, Verifizierung) | S3, S4 | Online-Checks des Testaccounts laufen im hub, Alarme kommen über jeden Kanaltyp (Schattenmodus) |
-| **3 hub: Nodes anbinden** | Rolle gateway (WebSocket, Device-Code, Abgleich, Testläufe, Lasttest), Agent-Sync-Client, Betriebsgrundlagen (Metriken, Deploy, Runbook) | S5, S6, S10 (Teil) | Testkisten-Agent verknüpft, alle Offline-Szenarien 3.10 bestanden, Lasttest 10.000 Nodes |
+| **2 hub: Checks und Alarme** | Rolle checker (Online-Checks, Zustände, Push-Watchdog, Aggregation, Node-Ausfall) und serverseitige Benachrichtigungen (alle Kanaltypen, Verifizierung) | S3, S4 | Online-Checks des Testaccounts laufen im hub, Alarme kommen über jeden Kanaltyp (Schattenmodus) |
+| **3 hub: Nodes anbinden** | Rolle gateway (WebSocket, Device-Code, Abgleich, Testläufe, Lasttest), Node64-Sync-Client, Betriebsgrundlagen (Metriken, Deploy, Runbook) | S5, S6, S10 (Teil) | Testkisten-Node verknüpft, alle Offline-Szenarien 3.10 bestanden, Lasttest 10.000 Nodes |
 | **4 Portal** | Neue Seiten `/healthchecks2`, `/notifications`, `/nodes`, `/link`, Umhängen lokal↔online, Konflikte, Statusseite, `health.php`, API v2 | S7 | Testaccount bedient alles ohne alte Seiten, Umhängen in beide Richtungen |
 | **5 Beta, Freigabe, Betrieb** | Beta mit Dennis und Freiwilligen, Freigabe für alle, spätere Abschaltung alt, Monitoring/Alarmierung des hub, dritter Standort | S8, S9, S10 (Rest) | Beta ohne offene Fehler, Freigabe |
 
@@ -45,10 +45,10 @@ Reihenfolge 1 → 2 → 3 → 4 → 5. Innerhalb von Phase 2–4 kann Go (hub) p
 8. Redis: `bind 127.0.0.1 ::1` plus die private/öffentliche Adresse für den Web-Server, `requirepass`, `protected-mode yes`, `maxmemory 256mb`, `maxmemory-policy allkeys-lru` (nur Signale/TTL-Keys), Persistenz aus (`save ""`, `appendonly no`) – alles, was in Redis liegt, ist rekonstruierbar. Port 6379 in nftables nur für die Web-Server-IP(s) v4/v6 offen.
 9. Firewall (nftables): eingehend 22 (nur Admin-IPs oder Fail2ban), 80/443 (alle), 6379 (nur Web-Server), alles andere zu; ausgehend frei (Checks müssen überall hin). ICMP/ICMPv6 erlaubt.
 10. MySQL: Hauptserver 10.100.0.110 ist aus dem privaten Netz beider hub-Server erreichbar (geprüft); eigene Datenbank für hc2 mit Benutzer `ipv64_hc` (von Dennis angelegt), Verbindung ohne TLS im privaten Netz (`--skip-ssl` / DSN `tls=false`).
-11. Deploy-Skript `deploy/hub-deploy.sh` (im Agent-Repo): baut `cmd/hub` lokal (`CGO_ENABLED=0 GOOS=linux GOARCH=amd64`), kopiert nach `/opt/ipv64-hub/hub.new`, `mv hub hub.prev && mv hub.new hub`, `systemctl restart`, prüft `/v1/health`. Rollback = `hub.prev` zurückschieben.
+11. Deploy-Skript `deploy/hub-deploy.sh` (im Node64-Repo): baut `cmd/hub` lokal (`CGO_ENABLED=0 GOOS=linux GOARCH=amd64`), kopiert nach `/opt/ipv64-hub/hub.new`, `mv hub hub.prev && mv hub.new hub`, `systemctl restart`, prüft `/v1/health`. Rollback = `hub.prev` zurückschieben.
 12. Backups: nichts Fachliches auf dem hub-Server (alles in MySQL). Sichern: `/etc/ipv64-hub/`, `/var/lib/ipv64-hub/secret.key`, nginx-Config. Einmalig wegkopieren.
 
-**Dateien**: `deploy/ipv64-hub.service`, `deploy/nginx-agents.conf`, `deploy/redis.conf.diff`, `deploy/nftables.conf`, `deploy/hub-deploy.sh`, `deploy/config.example.yaml` (alle im Agent-Repo unter `deploy/`).
+**Dateien**: `deploy/ipv64-hub.service`, `deploy/nginx-agents.conf`, `deploy/redis.conf.diff`, `deploy/nftables.conf`, `deploy/hub-deploy.sh`, `deploy/config.example.yaml` (alle im Node64-Repo unter `deploy/`).
 
 **Abnahme**: `curl -4 https://nodes.ipv64.net/v1/health` und `curl -6 ...` liefern `{status:"ok"}` (mit einem Platzhalter-hub aus S3), Zertifikat gültig, Redis von außer nur vom Web-Server erreichbar, `systemctl status` sauber nach Reboot.
 
@@ -64,7 +64,7 @@ Reihenfolge 1 → 2 → 3 → 4 → 5. Innerhalb von Phase 2–4 kann Go (hub) p
 
 **Schritte**
 1. Statische Datei `node/latest.json` im Webroot: `{"version":"0.6.0","url":"https://github.com/ipv64net/node64/releases","image":"ghcr.io/ipv64net/node64:0.6.0","published":"2026-10-20","notes":"..."}`.
-2. Pflege: bei jedem Agent-Release Datei anpassen (Schritt im Release-Prozess des Agent-Repos, Makefile-Target `release-notes`). Später optional: GitHub-Action, die die Datei per API v2 setzt.
+2. Pflege: bei jedem Node64-Release Datei anpassen (Schritt im Release-Prozess des Node64-Repos, Makefile-Target `release-notes`). Später optional: GitHub-Action, die die Datei per API v2 setzt.
 3. `Cache-Control: max-age=3600`, `Content-Type: application/json`, CORS nicht nötig.
 
 **Abnahme**: Node (Einstellungen → Updates) zeigt die Version. **Rückweg**: Datei löschen → Node meldet „Prüfung fehlgeschlagen“, sonst nichts.
@@ -76,7 +76,7 @@ Reihenfolge 1 → 2 → 3 → 4 → 5. Innerhalb von Phase 2–4 kann Go (hub) p
 **Ziel**: Alle `hc2_*`-Tabellen vorhanden, ein Testaccount migriert, das Portal schreibt bei jeder Änderung Config-Log und Redis-Signal, ohne dass die alten Seiten etwas merken.
 
 **Schritte**
-1. DDL als `deploy/sql/hc2_schema.sql` (neue, eigene Datenbank) und `deploy/sql/ipv64_main.sql` (Hauptdatenbank: Flags, `hc_locations`, Sicht, Leserechte) im Agent-Repo – idempotent, auf der Testkiste in MariaDB 10.5 geprüft; Dennis spielt ein, kein MySQL-Zugriff für mich. Portal-Benutzer braucht Rechte auf die neue Datenbank; PHP spricht die Tabellen als `<db>`.`hc2_*` an. Partitionierung `hc2_measurements` tagesweise, 8 Partitionen plus `pMAX`; Partitions-Rotation macht der hub (S3) täglich (`ALTER TABLE ... DROP PARTITION`, `ADD PARTITION`).
+1. DDL als `deploy/sql/hc2_schema.sql` (neue, eigene Datenbank) und `deploy/sql/ipv64_main.sql` (Hauptdatenbank: Flags, `hc_locations`, Sicht, Leserechte) im Node64-Repo – idempotent, auf der Testkiste in MariaDB 10.5 geprüft; Dennis spielt ein, kein MySQL-Zugriff für mich. Portal-Benutzer braucht Rechte auf die neue Datenbank; PHP spricht die Tabellen als `<db>`.`hc2_*` an. Partitionierung `hc2_measurements` tagesweise, 8 Partitionen plus `pMAX`; Partitions-Rotation macht der hub (S3) täglich (`ALTER TABLE ... DROP PARTITION`, `ADD PARTITION`).
 2. `ALTER TABLE users ADD hc2 TINYINT NOT NULL DEFAULT 0` (und `hc2_shadow TINYINT` für S8).
 3. MySQL-Benutzer `hc2'@'<hub-ip>'` (v4 und v6 je ein Eintrag): `SELECT, INSERT, UPDATE, DELETE` auf `hc2_*`, `SELECT` auf `users` (nur Spalten `id, email, user_class, hc2, hc2_shadow` – per View `hc2_users_v`, damit keine Passwort-Hashes lesbar sind), `SELECT` auf `user_class`, `SELECT` auf `healthchecks` (für den Vergleichsbot in S8), `ALTER` auf `hc2_measurements` (Partitionen). `REQUIRE SSL`.
 4. ~~Migrationsskript~~ entfällt (keine Migration).
@@ -103,7 +103,7 @@ Reihenfolge 1 → 2 → 3 → 4 → 5. Innerhalb von Phase 2–4 kann Go (hub) p
 
 **Ziel**: Online-Checks der `hc2`-Accounts laufen im hub mit derselben Logik wie im Node; Zustände, Ereignisse, Störungen und Aggregate stehen in `hc2_*`; Push-Checks werden überwacht; Agent-Ausfälle erkannt.
 
-**Schritte (Go, Agent-Repo)**
+**Schritte (Go, Node64-Repo)**
 1. `cmd/hub/main.go`: Konfiguration aus `/etc/ipv64-hub/config.yaml` (`mysql.dsn`, `redis.addr/password`, `listen 127.0.0.1:9000`, `roles: [checker, gateway]`, `node_name`, `location`, `limits.*`, `smtp.*`, `sms.*`, `firebase.*`, `secret_key_file`), Logging wie im Node (`internal/logging`, JSON für journald), Signal-Handling, `/v1/health` und `/metrics` (Prometheus-Format, einfach selbst geschrieben, keine Abhängigkeit).
 2. `internal/hub/mysql`: Store-Adapter für `scheduler.Store` (Interfaces aus `internal/scheduler`): Checks laden (eigene Slots), Zustand schreiben, Messpunkte/Ereignisse/Störungen schreiben, Wartungsfenster, `hc2_config_log` lesen. Verbindungspool (`SetMaxOpenConns 20`), Prepared Statements, alle Zeiten UTC `DATETIME(3)`. Batch-Writer für Messpunkte (500 ms / 500 Zeilen).
 3. `internal/hub/cluster`: `hc2_hubs` Heartbeat (10 s), Slot-Zuteilung (deterministisch nach sortierter Node-Liste, 1024 Slots), `hc2_slot_leases` (60 s) als Sicherung. Mit einem Node: alle Slots. Logausgabe bei jeder Umverteilung.
@@ -111,7 +111,7 @@ Reihenfolge 1 → 2 → 3 → 4 → 5. Innerhalb von Phase 2–4 kann Go (hub) p
 5. Checker-Lauf: `scheduler.Scheduler` aus dem Node, Worker-Pool größer (Flag, Standard 200), Checks mit `execution IN ('online','both')`, `paused = 0`, `locations` enthält den eigenen Standort, eigene Slots. Zustand je Messstelle in `hc2_check_states (token, 'loc:<location>')`; nach jeder Änderung Gesamtzustand nach Regel (`internal/hub/verdict`, gleiche Funktion wie im Node in `internal/scheduler/verdict.go`), Ereignis nur bei Wechsel des Gesamtzustands. Konfigurationsänderung → `Upsert`/`Remove` am Scheduler. IPv4/IPv6 nach `ip_mode`; `FamilyProbe` wie im Node (der Server hat beides; falls nicht, Alarm in `/metrics`).
 6. Private Ziele: Online-Checks auf RFC-1918/ULA/Loopback/Link-Local werden beim Laden übersprungen und mit `reason private_target` als down markiert (das Portal verhindert das Anlegen, S7; das ist die zweite Sicherung).
 7. Push-Watchdog: Push-Checks der eigenen Slots; `hc2:push`-Signal oder `last_push_at`-Polling alle 10 s; Logik `period/grace` aus dem Node.
-8. Agent-Ausfall: Slot-0-Node prüft alle 30 s `hc2_nodes.online = 1` gegen Redis `hc2:online:<id>`; Ereignis `agent_offline`/`agent_online` (Versand in S4).
+8. Node-Ausfall: Slot-0-Node prüft alle 30 s `hc2_nodes.online = 1` gegen Redis `hc2:online:<id>`; Ereignis `agent_offline`/`agent_online` (Versand in S4).
 9. Aggregation: `hc2_dirty_hours` abarbeiten (alle 5 min), Stunden- und Tageswerte; Partitions-Rotation täglich 00:10 UTC; `hc2_config_log` > 30 Tage, Tombstones > 90 Tage, `hc2_send_orders`/`hc2_commands` > 1 h erledigt löschen; `hc2_link_codes` abgelaufen.
 10. Tests: Unit-Tests mit SQLite-Mock für Store-Logik, wo möglich; Integrationstest gegen eine lokale MariaDB in Docker auf der Testkiste (`make hub-itest`), inkl. Slot-Umverteilung mit zwei Prozessen auf einer Maschine.
 11. Deploy auf den hub-Server (S0-Skript), Rolle `gateway` noch aus.
@@ -129,7 +129,7 @@ Reihenfolge 1 → 2 → 3 → 4 → 5. Innerhalb von Phase 2–4 kann Go (hub) p
 **Ziel**: Der hub verschickt Benachrichtigungen für Online-Checks, Agent-Ereignisse und (verknüpfte) Agent-Checks über Server-Kanäle; `ipv64_mail`, `ipv64_sms`, `app` existieren als Kanaltypen; Pushover ist überall gleich.
 
 **Schritte**
-1. `internal/notify` (Agent-Repo): Sender `pushover` (API `https://api.pushover.net/1/messages.json`, Felder `user_key`, `app_token` optional eigener, sonst ipv64-App-Token aus Config – im Node standalone ist das Nutzer-Token Pflicht), Sender `app` (Firebase HTTP v1 mit Service-Account aus der Config; Gerätetoken aus Kanal-Config wie heute `mobil`), Sender `ipv64_mail` (SMTP-Daten aus Config, Absender wie heute `send_mail`, HTML-Vorlage wie heute), Sender `ipv64_sms` (Gateway wie `send_sms`, Tageslimit `user_class.sms_limit` über `hc2_sms_counter`).
+1. `internal/notify` (Node64-Repo): Sender `pushover` (API `https://api.pushover.net/1/messages.json`, Felder `user_key`, `app_token` optional eigener, sonst ipv64-App-Token aus Config – im Node standalone ist das Nutzer-Token Pflicht), Sender `app` (Firebase HTTP v1 mit Service-Account aus der Config; Gerätetoken aus Kanal-Config wie heute `mobil`), Sender `ipv64_mail` (SMTP-Daten aus Config, Absender wie heute `send_mail`, HTML-Vorlage wie heute), Sender `ipv64_sms` (Gateway wie `send_sms`, Tageslimit `user_class.sms_limit` über `hc2_sms_counter`).
 2. Kanal-Geheimnisse serverseitig: `hc2_channels.config_enc` mit AES-GCM (`internal/secrets`, Schlüssel `/var/lib/ipv64-hub/secret.key`). PHP muss Kanäle anlegen können → in S7 verschlüsselt PHP mit demselben Schlüssel (`sodium_crypto_aead_aes256gcm_encrypt` oder `openssl_encrypt aes-256-gcm`, Format `enc:v1:` identisch zum Node). Schlüssel liegt dann auf beiden Servern (Web: außerhalb des Webroots).
 3. Dispatcher aus dem Node (`internal/notify.Dispatcher`) mit Account-Einstellungen (`hc2_settings`: Ruhezeiten, Sammelmeldungen, Wiederholung, Sprache) statt Agent-Einstellungen; Deduplizierung `hc2_deliveries (event_id, channel_id)`; Ratenlimit je Kanal 60/h wie im Node.
 4. Sendeaufträge für Agent-Kanäle: `hc2_send_orders` + Redis `hc2:node:<id>` (Zustellung über den Socket in S5).
@@ -173,7 +173,7 @@ Reihenfolge 1 → 2 → 3 → 4 → 5. Innerhalb von Phase 2–4 kann Go (hub) p
 
 ### S6 – Node: Sync-Client
 
-Im Agent-Repo (eigener Phasenplan dort, Phase 6): `internal/sync` echter Client (Link, WebSocket, Outbox, Konflikte, Repair, Reconnect-Backoff), UI „ipv64-Verknüpfung“, Ausführungsort-Badge, Kanaltypen `ipv64_mail`/`ipv64_sms`, Pushover als Kanal. Wird gegen S5 entwickelt und getestet. Release mit `latest.json` (S1).
+Im Node64-Repo (eigener Phasenplan dort, Phase 6): `internal/sync` echter Client (Link, WebSocket, Outbox, Konflikte, Repair, Reconnect-Backoff), UI „ipv64-Verknüpfung“, Ausführungsort-Badge, Kanaltypen `ipv64_mail`/`ipv64_sms`, Pushover als Kanal. Wird gegen S5 entwickelt und getestet. Release mit `latest.json` (S1).
 
 ---
 

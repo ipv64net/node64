@@ -25,7 +25,7 @@ import (
 // Backup der Datenbank, Wiederherstellung, Export und Import der Konfiguration.
 
 const (
-	RestoreFileName = "node.db.restore"
+	RestoreFileName = "node64.db.restore"
 	maxUpload       = 1 << 30 // 1 GB fuer Datenbank-Wiederherstellung
 	maxImport       = 16 << 20
 )
@@ -67,8 +67,8 @@ func (s *Server) backupDownload(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, tmp.Name())
 }
 
-// restoreUpload prueft die Datei, legt sie als node.db.restore ab und startet
-// den Node neu; beim Start wird sie eingesetzt (siehe cmd/node).
+// restoreUpload prueft die Datei, legt sie als node64.db.restore ab und startet
+// den Node neu; beim Start wird sie eingesetzt (siehe cmd/node64).
 func (s *Server) restoreUpload(w http.ResponseWriter, r *http.Request) {
 	v := s.view(r, "settings.title")
 	f, _, err := r.FormFile("file")

@@ -39,7 +39,7 @@ type Config struct {
 	TrustProxyHeaders bool
 }
 
-func (c *Config) DBPath() string        { return filepath.Join(c.DataDir, "node.db") }
+func (c *Config) DBPath() string        { return filepath.Join(c.DataDir, "node64.db") }
 func (c *Config) BackupDir() string     { return filepath.Join(c.DataDir, "backups") }
 func (c *Config) TLSDir() string        { return filepath.Join(c.DataDir, "tls") }
 func (c *Config) SecretKeyPath() string { return filepath.Join(c.DataDir, "secret.key") }

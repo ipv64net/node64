@@ -39,7 +39,7 @@ func newTestAppWith(t *testing.T, mods ...module.Module) *testApp {
 	t.Helper()
 	dir := t.TempDir()
 	logger := logging.New("debug", "text", io.Discard)
-	st, err := store.Open(context.Background(), filepath.Join(dir, "node.db"), filepath.Join(dir, "backups"), logger.Slog())
+	st, err := store.Open(context.Background(), filepath.Join(dir, "node64.db"), filepath.Join(dir, "backups"), logger.Slog())
 	if err != nil {
 		t.Fatal(err)
 	}

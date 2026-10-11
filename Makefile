@@ -6,10 +6,10 @@ GOFLAGS := -trimpath
 .PHONY: build run test vet tidy docker docker-multiarch clean
 
 build:
-	CGO_ENABLED=0 go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o bin/node ./cmd/node
+	CGO_ENABLED=0 go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o bin/node64 ./cmd/node64
 
 run: build
-	NODE64_DATA_DIR=./data NODE64_LOG_LEVEL=debug ./bin/node
+	NODE64_DATA_DIR=./data NODE64_LOG_LEVEL=debug ./bin/node64
 
 test:
 	go test ./... -count=1

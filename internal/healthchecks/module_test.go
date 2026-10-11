@@ -25,7 +25,7 @@ func newTestModule(t *testing.T) (*Module, *httptest.Server) {
 	t.Helper()
 	dir := t.TempDir()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	core, err := store.Open(context.Background(), filepath.Join(dir, "node.db"), filepath.Join(dir, "backups"), log)
+	core, err := store.Open(context.Background(), filepath.Join(dir, "node64.db"), filepath.Join(dir, "backups"), log)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func TestAggregation(t *testing.T) {
 	// Eigener Store ohne gestartetes Modul, sonst laeuft die Start-Verdichtung parallel
 	dir := t.TempDir()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	core, err := store.Open(context.Background(), filepath.Join(dir, "node.db"), filepath.Join(dir, "backups"), log)
+	core, err := store.Open(context.Background(), filepath.Join(dir, "node64.db"), filepath.Join(dir, "backups"), log)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -139,7 +139,7 @@ Alternativ `network_mode: host`. `net.ipv4.ping_group_range` gilt trotz des Name
 Voraussetzung: Go 1.27 oder neuer. Kein CGO nötig.
 
 ```bash
-make build          # Binary nach bin/node
+make build          # Binary nach bin/node64
 make test           # Tests
 make run            # lokal mit ./data und Debug-Log
 make docker         # Image für die eigene Architektur
@@ -149,7 +149,7 @@ make docker-multiarch PUSH=--push   # amd64 + arm64 über buildx
 Projektstruktur:
 
 ```
-cmd/node/          main, Subcommands (healthcheck, version)
+cmd/node64/         main, Subcommands (healthcheck, version)
 internal/checks/    Check-Bot (Phase 2), ohne Abhängigkeit zu web/store/scheduler/notify
 internal/scheduler/ Intervalle, Retry, Worker-Pool, Zustandsautomat (Phase 2)
 internal/store/     SQLite, Migrationen je Scope, Backups
