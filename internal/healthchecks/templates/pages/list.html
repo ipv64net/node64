@@ -99,13 +99,18 @@
 		<td data-label="{{$.T "hc.recent"}}" class="hc-beats"><div class="beats">{{range .Pills}}<span class="beat beat-{{.Class}}" data-bs-toggle="tooltip" data-tip-label="{{.Label}}" data-tip-when="{{.When}}" data-tip-ms="{{.Latency}}" data-tip-msg="{{.Message}}"></span>{{end}}</div></td>
 		<td data-label="{{$.T "hc.changed"}}" class="small text-nowrap d-none d-md-table-cell" title="{{$.Time .Changed}}">{{$.Ago .Changed}}</td>
 		<td data-label="{{$.T "common.actions"}}" class="text-end text-nowrap hc-c-actions">
+			{{if $c.Foreign}}
+			<span class="text-body-tertiary me-1" title="{{$.T "hc.foreign_readonly"}}"><i class="bi bi-lock"></i></span>
+			<a class="btn btn-sm btn-outline-secondary" href="/healthchecks/{{$c.Token}}" title="{{$.T "hc.view"}}"><i class="bi bi-eye"></i></a>
+			{{else}}
 			{{if eq .State "paused"}}
 			<button class="btn btn-sm btn-outline-success" form="act-{{$c.Token}}" name="action" value="resume" title="{{$.T "hc.action.resume"}}"><i class="bi bi-play-fill"></i></button>
 			{{else}}
 			<button class="btn btn-sm btn-outline-secondary" form="act-{{$c.Token}}" name="action" value="pause" title="{{$.T "hc.action.pause"}}"><i class="bi bi-pause-fill"></i></button>
 			{{end}}
-			{{if ne (print $c.Type) "push"}}<button class="btn btn-sm btn-outline-secondary" form="act-{{$c.Token}}" name="action" value="run" title="{{$.T "hc.action.run"}}"><i class="bi bi-lightning-charge"></i></button>{{end}}
+			{{if $c.Runnable}}<button class="btn btn-sm btn-outline-secondary" form="act-{{$c.Token}}" name="action" value="run" title="{{$.T "hc.action.run"}}"><i class="bi bi-lightning-charge"></i></button>{{end}}
 			<a class="btn btn-sm btn-outline-secondary" href="/healthchecks/{{$c.Token}}/edit" title="{{$.T "hc.edit"}}"><i class="bi bi-pencil"></i></a>
+			{{end}}
 		</td>
 	</tr>
 	{{end}}

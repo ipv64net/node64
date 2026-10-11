@@ -19,12 +19,15 @@
 	</div>
 	<form method="post" action="/healthchecks/{{$c.Token}}/action" class="d-flex gap-1 flex-wrap">
 		<input type="hidden" name="_csrf" value="{{.CSRF}}">
+		{{if $c.Foreign}}<span class="badge text-bg-light align-self-center"><i class="bi bi-lock"></i> {{.T "hc.foreign_readonly"}}</span>
+		{{else}}
 		<a class="btn btn-sm btn-outline-primary" href="/healthchecks/{{$c.Token}}/edit"><i class="bi bi-pencil"></i> {{.T "hc.edit"}}</a>
 		{{if eq $d.Row.State "paused"}}<button class="btn btn-sm btn-outline-success" name="action" value="resume"><i class="bi bi-play-fill"></i> {{.T "hc.action.resume"}}</button>
 		{{else}}<button class="btn btn-sm btn-outline-secondary" name="action" value="pause"><i class="bi bi-pause-fill"></i> {{.T "hc.action.pause"}}</button>{{end}}
-		{{if ne (print $c.Type) "push"}}<button class="btn btn-sm btn-outline-secondary" name="action" value="run"><i class="bi bi-lightning-charge"></i> {{.T "hc.action.run"}}</button>{{end}}
+		{{if $c.Runnable}}<button class="btn btn-sm btn-outline-secondary" name="action" value="run"><i class="bi bi-lightning-charge"></i> {{.T "hc.action.run"}}</button>{{end}}
+		{{end}}
 		<button class="btn btn-sm btn-outline-secondary" name="action" value="clone"><i class="bi bi-files"></i> {{.T "hc.action.clone"}}</button>
-		<button class="btn btn-sm btn-outline-danger" name="action" value="delete" data-confirm="{{.T "hc.delete_confirm" "name" $c.Name}}"><i class="bi bi-trash"></i> {{.T "common.delete"}}</button>
+		{{if not $c.Foreign}}<button class="btn btn-sm btn-outline-danger" name="action" value="delete" data-confirm="{{.T "hc.delete_confirm" "name" $c.Name}}"><i class="bi bi-trash"></i> {{.T "common.delete"}}</button>{{end}}
 	</form>
 </div>
 

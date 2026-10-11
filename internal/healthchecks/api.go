@@ -428,6 +428,10 @@ func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
 	if c == nil {
 		return
 	}
+	if c.Foreign() {
+		writeErr(w, http.StatusConflict, "check belongs to another node (read-only here)")
+		return
+	}
 	var in checkJSON
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json: "+err.Error())
@@ -469,6 +473,10 @@ func (m *Module) apiDelete(w http.ResponseWriter, r *http.Request) {
 	if c == nil {
 		return
 	}
+	if c.Foreign() {
+		writeErr(w, http.StatusConflict, "check belongs to another node (read-only here)")
+		return
+	}
 	if s := m.scheduler(); s != nil {
 		s.Remove(c.Token)
 	}
@@ -483,6 +491,10 @@ func (m *Module) apiDelete(w http.ResponseWriter, r *http.Request) {
 func (m *Module) setPaused(w http.ResponseWriter, r *http.Request, paused bool) {
 	c := m.load(w, r)
 	if c == nil {
+		return
+	}
+	if c.Foreign() {
+		writeErr(w, http.StatusConflict, "check belongs to another node (read-only here)")
 		return
 	}
 	if err := m.st.SetPaused(r.Context(), c.Token, paused, actor(r)); err != nil {
@@ -504,6 +516,14 @@ func (m *Module) apiResume(w http.ResponseWriter, r *http.Request) { m.setPaused
 func (m *Module) apiRun(w http.ResponseWriter, r *http.Request) {
 	c := m.load(w, r)
 	if c == nil {
+		return
+	}
+	if c.Foreign() {
+		writeErr(w, http.StatusConflict, "check belongs to another node (read-only here)")
+		return
+	}
+	if !c.Runnable() && c.Type != checks.TypePush {
+		writeErr(w, http.StatusConflict, "measured by ipv64 or another node; run now only works for own checks")
 		return
 	}
 	if c.Type == checks.TypePush {

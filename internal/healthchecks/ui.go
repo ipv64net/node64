@@ -746,6 +746,11 @@ func (m *Module) pageForm(w http.ResponseWriter, r *http.Request) {
 		if c == nil {
 			return
 		}
+		if c.Foreign() {
+			m.g.Flash(w, r, "warning", m.errForeign(r).Error())
+			http.Redirect(w, r, "/healthchecks/"+c.Token, http.StatusSeeOther)
+			return
+		}
 		d.Edit, d.Token, d.Form = true, c.Token, formFromCheck(c)
 	} else if t := r.URL.Query().Get("type"); t != "" {
 		d.Form["type"] = t
@@ -759,6 +764,11 @@ func (m *Module) pageFormSubmit(w http.ResponseWriter, r *http.Request) {
 	edit := r.PathValue("token") != ""
 	if edit {
 		if c = m.loadPage(w, r); c == nil {
+			return
+		}
+		if c.Foreign() {
+			m.g.Flash(w, r, "warning", m.errForeign(r).Error())
+			http.Redirect(w, r, "/healthchecks/"+c.Token, http.StatusSeeOther)
 			return
 		}
 	} else {
@@ -817,6 +827,17 @@ func (m *Module) pageFormSubmit(w http.ResponseWriter, r *http.Request) {
 
 // ---------------------------------------------------------------- Aktionen
 
+// Foreign: Check einer anderen Node (hier nur lesbar).
+func (c *Check) Foreign() bool { return c.Owner == "other" }
+
+// Runnable: "Jetzt pruefen" ist nur moeglich, wenn diese Node den Check selbst misst.
+func (c *Check) Runnable() bool { return c.MeasuredHere() && c.Type != checks.TypePush }
+
+// errForeign: Aenderungen an Checks anderer Nodes sind hier nicht moeglich.
+func (m *Module) errForeign(r *http.Request) error {
+	return fmt.Errorf("%s", m.g.T(r, "hc.foreign_readonly"))
+}
+
 func (m *Module) pageAction(w http.ResponseWriter, r *http.Request) {
 	c := m.loadPage(w, r)
 	if c == nil {
@@ -845,6 +866,12 @@ func (m *Module) pageAction(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) doAction(r *http.Request, c *Check, action string) error {
 	ctx := r.Context()
+	if c.Foreign() && action != "clone" {
+		return m.errForeign(r)
+	}
+	if action == "run" && !c.Runnable() && c.Type != checks.TypePush {
+		return fmt.Errorf("%s", m.g.T(r, "hc.run_remote"))
+	}
 	switch action {
 	case "pause", "resume":
 		paused := action == "pause"
@@ -867,6 +894,10 @@ func (m *Module) doAction(r *http.Request, c *Check, action string) error {
 	case "clone":
 		n := *c
 		n.Token, n.Name, n.Paused, n.Revision, n.UpdatedBy, n.Runtime = NewToken(), c.Name+" (copy)", true, 0, m.g.Actor(r), scheduler.Runtime{}
+		if c.Owner == "other" {
+			n.Execution = "local" // Kopie eines Checks einer anderen Node misst diese Node selbst
+		}
+		n.Owner = "self"
 		if err := m.st.Insert(ctx, &n); err != nil {
 			return err
 		}

@@ -231,6 +231,9 @@
     "link": "ipv64-Verknüpfung"
   },
   "hc": {
+    "foreign_readonly": "Gehört einer anderen Node – hier nur lesbar",
+    "run_remote": "Wird von ipv64 bzw. einer anderen Node gemessen; „Jetzt prüfen“ geht nur bei eigenen Checks.",
+    "view": "Ansehen",
     "chart": {
       "warn": "Stabilisierung / teilweise gestört"
     },
