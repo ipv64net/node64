@@ -76,10 +76,15 @@ type Dispatcher struct {
 	now func() time.Time
 	// sendServerChannels: Server-Kanaele trotzdem lokal senden (Node-Einstellung)
 	sendServerChannels bool
+	serverSends        func() bool
 }
 
 // SetSendServerChannels schaltet den lokalen Versand ueber Server-Kanaele.
 func (d *Dispatcher) SetSendServerChannels(on bool) { d.sendServerChannels = on }
+
+// SetServerSends meldet, ob gerade der ipv64-hub die Benachrichtigungen uebernimmt (verknuepft und verbunden).
+// Dann sendet die Node ihre eigenen Kanaele nicht selbst, sondern erhaelt Sendeauftraege vom hub.
+func (d *Dispatcher) SetServerSends(fn func() bool) { d.serverSends = fn }
 
 type bucket struct {
 	tokens float64
@@ -214,6 +219,9 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 		}
 		if ch.Execution == "server" && !d.sendServerChannels {
 			continue // vom ipv64-hub gesendet
+		}
+		if !d.sendServerChannels && d.serverSends != nil && d.serverSends() {
+			continue // verknuepft und verbunden: der hub sendet (eigene Kanaele per Sendeauftrag), sonst kaeme alles doppelt
 		}
 		if len(want) > 0 {
 			if want[ch.ID] {
