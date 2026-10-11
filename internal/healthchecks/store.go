@@ -62,6 +62,7 @@ type Check struct {
 	Stabilize      int
 	IPMode         checks.IPMode
 	Tags           []string
+	Group          string // frei benannte Gruppe
 	Description    string
 	Paused         bool
 	Parent         string
@@ -143,7 +144,7 @@ const checkCols = `token, type, name, target, params, interval_sec, retry_interv
 	policy, locations, notify_degraded, owner,
 	revision, created_at, updated_at, updated_by,
 	state, state_since, last_check_at, next_check_at, consecutive_fail, consecutive_ok, last_status, last_latency_ms, last_reason, last_message,
-	last_push_at, down_since, flap_since, transitions, incident_id`
+	last_push_at, down_since, flap_since, transitions, incident_id, group_name`
 
 func scanCheck(row interface{ Scan(...any) error }) (*Check, error) {
 	var c Check
@@ -158,7 +159,7 @@ func scanCheck(row interface{ Scan(...any) error }) (*Check, error) {
 		&c.Policy, &locations, &ndeg, &c.Owner,
 		&c.Revision, &created, &updated, &c.UpdatedBy,
 		&state, &since, &last, &next, &c.Runtime.ConsecutiveFail, &c.Runtime.ConsecutiveOK, &lastStatus, &lastLat, &lastReason, &lastMsg,
-		&lastPush, &downSince, &flapSince, &transitions, &c.Runtime.Incident); err != nil {
+		&lastPush, &downSince, &flapSince, &transitions, &c.Runtime.Incident, &c.Group); err != nil {
 		return nil, err
 	}
 	c.Params = json.RawMessage(params)
@@ -260,13 +261,13 @@ func (s *Store) Insert(ctx context.Context, c *Check) error {
 	if c.Owner == "" {
 		c.Owner = "self"
 	}
-	_, err := s.w.ExecContext(ctx, `INSERT INTO hc_checks (`+checkCols+`) VALUES (`+strings.TrimSuffix(strings.Repeat("?,", 46), ",")+`)`,
+	_, err := s.w.ExecContext(ctx, `INSERT INTO hc_checks (`+checkCols+`) VALUES (`+strings.TrimSuffix(strings.Repeat("?,", 47), ",")+`)`,
 		c.Token, string(c.Type), c.Name, c.Target, string(c.Params), int64(c.Interval.Seconds()), int64(c.RetryInterval.Seconds()), c.Retries,
 		c.ConnectTimeout.Milliseconds(), c.TotalTimeout.Milliseconds(), b2i(c.Invert), c.Stabilize, string(c.IPMode), strings.Join(c.Tags, ","), c.Description,
 		b2i(c.Paused), c.Parent, b2i(c.Critical), c.Execution, b2i(c.NotifyDown), b2i(c.NotifyUp), joinInts(c.Channels), c.RepeatMinutes,
 		c.Policy, strings.Join(c.Locations, ","), b2i(c.NotifyDegraded), c.Owner,
 		c.Revision, now, now, c.UpdatedBy,
-		"pending", now, "", "", 0, 0, "", 0.0, "", "", "", "", "", "", 0)
+		"pending", now, "", "", 0, 0, "", 0.0, "", "", "", "", "", "", 0, c.Group)
 	if err == nil {
 		s.changed(ctx, "check", c.Token, "upsert")
 	}
@@ -281,12 +282,12 @@ func (s *Store) Update(ctx context.Context, c *Check) error {
 	_, err := s.w.ExecContext(ctx, `UPDATE hc_checks SET type=?, name=?, target=?, params=?, interval_sec=?, retry_interval_sec=?, retries=?,
 		connect_timeout_ms=?, total_timeout_ms=?, invert=?, stabilize=?, ip_mode=?, tags=?, description=?, paused=?, parent_token=?, critical=?,
 		execution=?, notify_down=?, notify_up=?, channels=?, repeat_minutes=?, policy=?, locations=?, notify_degraded=?, owner=?,
-		revision=?, updated_at=?, updated_by=? WHERE token=?`,
+		revision=?, updated_at=?, updated_by=?, group_name=? WHERE token=?`,
 		string(c.Type), c.Name, c.Target, string(c.Params), int64(c.Interval.Seconds()), int64(c.RetryInterval.Seconds()), c.Retries,
 		c.ConnectTimeout.Milliseconds(), c.TotalTimeout.Milliseconds(), b2i(c.Invert), c.Stabilize, string(c.IPMode), strings.Join(c.Tags, ","), c.Description,
 		b2i(c.Paused), c.Parent, b2i(c.Critical), c.Execution, b2i(c.NotifyDown), b2i(c.NotifyUp), joinInts(c.Channels), c.RepeatMinutes,
 		c.Policy, strings.Join(c.Locations, ","), b2i(c.NotifyDegraded), orSelf(c.Owner),
-		c.Revision, now, c.UpdatedBy, c.Token)
+		c.Revision, now, c.UpdatedBy, c.Group, c.Token)
 	if err == nil {
 		s.changed(ctx, "check", c.Token, "upsert")
 	}

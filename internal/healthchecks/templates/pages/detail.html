@@ -4,7 +4,7 @@
 {{$j := $d.JSON}}
 <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
 	<div>
-		<h1 class="h4 mb-1">{{$c.Name}} <span class="badge hc-state-{{$d.Row.State}}">{{$.T (print "hc.state." $d.Row.State)}}</span>
+		<h1 class="h4 mb-1"><i class="bi bi-heart-pulse me-1"></i> {{$c.Name}} <span class="badge hc-state-{{$d.Row.State}}">{{$.T (print "hc.state." $d.Row.State)}}</span>
 			{{if $d.Row.Retrying}}<i class="bi bi-arrow-repeat text-warning fs-6" title="{{.T "hc.retrying"}}"></i>{{end}}
 			{{if $d.Row.Maint}}<span class="badge text-bg-secondary"><i class="bi bi-wrench"></i> {{.T "hc.maintenance"}}</span>{{end}}
 		</h1>
@@ -63,11 +63,11 @@
 					<button type="button" class="btn btn-outline-secondary" data-range="30d">30 d</button>
 				</div>
 			</div>
-			<div class="card-body"><div class="hc-chart-wrap"><canvas id="hc-chart" data-token="{{$c.Token}}" data-label-latency="{{.T "hc.latency"}}" data-label-up="{{.T "hc.availability"}}"></canvas></div></div>
+			<div class="card-body"><div class="hc-chart-wrap"><canvas id="hc-chart" data-token="{{$c.Token}}" data-label-latency="{{.T "hc.latency"}}" data-label-up="{{.T "hc.availability"}}" data-label-down="{{.T "hc.state.down"}}" data-label-warn="{{.T "hc.chart.warn"}}" data-label-flap="{{.T "hc.state.flapping"}}"></canvas></div></div>
 		</div>
 
 		<div class="card mb-3">
-			<div class="card-header"><i class="bi bi-clock-history"></i> {{.T "hc.events"}}</div>
+			<div class="card-header"><i class="bi bi-clock-history text-primary"></i> {{.T "hc.events"}}</div>
 			{{if $d.Events}}
 			<div class="table-responsive"><table class="table table-sm table-striped mb-0 table-cards">
 				<thead><tr><th>{{.T "common.time"}}</th><th>{{.T "hc.event"}}</th><th>{{.T "hc.reason"}}</th><th>{{.T "common.details"}}</th></tr></thead>
@@ -114,7 +114,7 @@
 
 		{{if $d.PushURL}}
 		<div class="card mb-3">
-			<div class="card-header"><i class="bi bi-broadcast"></i> {{.T "hc.push.title"}}</div>
+			<div class="card-header"><i class="bi bi-broadcast text-info"></i> {{.T "hc.push.title"}}</div>
 			<div class="card-body small">
 				<p>{{.T "hc.push.hint"}}</p>
 				<div class="input-group input-group-sm mb-2"><span class="input-group-text"><i class="bi bi-link-45deg"></i></span><input class="form-control font-monospace" id="push-url" value="{{$d.PushURL}}" readonly data-copy><button class="btn btn-outline-secondary btn-copy" type="button" data-copy-target="#push-url" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
@@ -126,7 +126,7 @@ curl -fsS "{{$d.PushURL}}?status=down&amp;msg=backup+failed"</pre>
 
 		{{if $d.Incidents}}
 		<div class="card mb-3">
-			<div class="card-header"><i class="bi bi-exclamation-triangle"></i> {{.T "hc.incidents"}}</div>
+			<div class="card-header"><i class="bi bi-exclamation-triangle text-danger"></i> {{.T "hc.incidents"}}</div>
 			<ul class="list-group list-group-flush small">
 			{{range $d.Incidents}}
 				<li class="list-group-item">
@@ -141,7 +141,7 @@ curl -fsS "{{$d.PushURL}}?status=down&amp;msg=backup+failed"</pre>
 
 		{{if $d.Last}}
 		<div class="card mb-3">
-			<div class="card-header"><i class="bi bi-braces"></i> {{.T "hc.last_raw"}}</div>
+			<div class="card-header"><i class="bi bi-braces text-secondary"></i> {{.T "hc.last_raw"}}</div>
 			<div class="card-body small">
 				<div class="mb-1">{{.Time $d.Last.Time}} · <strong>{{$d.Last.Status}}</strong> · {{ms $d.Last.LatencyMS}} ms · <code>{{$d.Last.Reason}}</code>{{if $d.Last.Family}} · {{$d.Last.Family}}{{end}}</div>
 				<div class="mb-2">{{$d.Last.Message}}</div>

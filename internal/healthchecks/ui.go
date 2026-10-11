@@ -67,16 +67,26 @@ type row struct {
 	Retrying bool
 }
 
+// group ist ein Abschnitt der Liste (eine frei benannte Gruppe).
+type group struct {
+	Key, Name        string
+	Rows             []row
+	Up, Down, Others int
+}
+
 type listData struct {
-	Rows   []row
-	Types  []checks.Type
-	Tags   []string
-	States []string
-	Filter map[string]string
-	Sort   string
-	Dir    string
-	Counts map[string]int
-	Total  int
+	Groups  []group
+	Grouped bool     // mindestens ein Check hat eine Gruppe
+	AllGrps []string // alle Gruppennamen (Filter, Vorschlaege)
+	Rows    []row
+	Types   []checks.Type
+	Tags    []string
+	States  []string
+	Filter  map[string]string
+	Sort    string
+	Dir     string
+	Counts  map[string]int
+	Total   int
 }
 
 var listStates = []string{"up", "down", "stabilizing", "flapping", "dependent", "pending", "paused"}
@@ -164,12 +174,15 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	f := map[string]string{"state": q.Get("state"), "type": q.Get("type"), "tag": q.Get("tag"), "q": strings.TrimSpace(q.Get("q"))}
+	f := map[string]string{"state": q.Get("state"), "type": q.Get("type"), "tag": q.Get("tag"), "group": q.Get("group"), "q": strings.TrimSpace(q.Get("q"))}
 	d := listData{Types: checks.Types, States: listStates, Filter: f, Sort: q.Get("sort"), Dir: q.Get("dir"), Counts: map[string]int{}}
-	tagSet := map[string]bool{}
+	tagSet, grpSet := map[string]bool{}, map[string]bool{}
 	for _, c := range list {
 		for _, t := range c.Tags {
 			tagSet[t] = true
+		}
+		if c.Group != "" {
+			grpSet[c.Group] = true
 		}
 		rw := m.rowOf(ctx, lang, c, pills)
 		d.Counts[rw.State]++
@@ -183,7 +196,10 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 		if f["tag"] != "" && !contains(c.Tags, f["tag"]) {
 			continue
 		}
-		if f["q"] != "" && !strings.Contains(strings.ToLower(c.Name+" "+c.Target+" "+strings.Join(c.Tags, " ")), strings.ToLower(f["q"])) {
+		if f["group"] != "" && c.Group != f["group"] {
+			continue
+		}
+		if f["q"] != "" && !strings.Contains(strings.ToLower(c.Name+" "+c.Target+" "+c.Group+" "+strings.Join(c.Tags, " ")), strings.ToLower(f["q"])) {
 			continue
 		}
 		d.Rows = append(d.Rows, rw)
@@ -192,8 +208,48 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 		d.Tags = append(d.Tags, t)
 	}
 	sort.Strings(d.Tags)
+	for g := range grpSet {
+		d.AllGrps = append(d.AllGrps, g)
+	}
+	sort.Slice(d.AllGrps, func(i, j int) bool { return strings.ToLower(d.AllGrps[i]) < strings.ToLower(d.AllGrps[j]) })
 	sortRows(d.Rows, d.Sort, d.Dir == "desc")
+	d.Grouped = len(d.AllGrps) > 0
+	d.Groups = groupRows(d.Rows, d.AllGrps, m.g.T(r, "hc.group.none"))
 	m.g.Render(w, r, http.StatusOK, Name+"/list", "nav.healthchecks", d)
+}
+
+// groupRows verteilt die (schon sortierten) Zeilen auf Gruppen; Checks ohne Gruppe kommen zuletzt.
+func groupRows(rows []row, names []string, none string) []group {
+	idx := map[string]int{}
+	var out []group
+	for i, n := range names {
+		idx[n] = i
+		out = append(out, group{Key: "g" + strconv.Itoa(i), Name: n})
+	}
+	out = append(out, group{Key: "g-none", Name: none})
+	for _, r := range rows {
+		i, ok := idx[r.Check.Group]
+		if !ok {
+			i = len(out) - 1
+		}
+		g := &out[i]
+		g.Rows = append(g.Rows, r)
+		switch r.State {
+		case "up":
+			g.Up++
+		case "down", "flapping":
+			g.Down++
+		default:
+			g.Others++
+		}
+	}
+	res := out[:0]
+	for _, g := range out {
+		if len(g.Rows) > 0 {
+			res = append(res, g)
+		}
+	}
+	return res
 }
 
 var stateOrder = map[string]int{"down": 0, "flapping": 1, "dependent": 2, "stabilizing": 3, "pending": 4, "up": 5, "paused": 6}
@@ -345,6 +401,7 @@ type formData struct {
 	Errors   map[string]string
 	Types    []checks.Type
 	Parents  []*Check
+	Groups   []string // vorhandene Gruppen (Vorschlaege)
 	IPModes  []string
 	Error    string
 	Channels []channelOpt
@@ -385,6 +442,7 @@ func formFromCheck(c *Check) map[string]string {
 	f["connect_timeout_seconds"] = strconv.FormatFloat(c.ConnectTimeout.Seconds(), 'f', -1, 64)
 	f["timeout_seconds"] = strconv.FormatFloat(c.TotalTimeout.Seconds(), 'f', -1, 64)
 	f["ip_mode"], f["tags"], f["description"], f["parent"] = string(c.IPMode), strings.Join(c.Tags, ", "), c.Description, c.Parent
+	f["group"] = c.Group
 	f["invert"], f["critical"], f["paused"] = onOff(c.Invert), onOff(c.Critical), onOff(c.Paused)
 	f["notify_down"], f["notify_up"] = onOff(c.NotifyDown), onOff(c.NotifyUp)
 	f["repeat_minutes"] = strconv.Itoa(c.RepeatMinutes)
@@ -528,6 +586,8 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 	in.NotifyDown, in.NotifyUp, in.NotifyDegraded = b(on("notify_down")), b(on("notify_up")), b(on("notify_degraded"))
 	parent := v("parent")
 	in.Parent = &parent
+	grp := v("group")
+	in.Group = &grp
 	in.Tags = []string{}
 	for _, t := range strings.Split(v("tags"), ",") {
 		if t = strings.TrimSpace(t); t != "" {
@@ -643,11 +703,17 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 
 func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d formData) {
 	all, _ := m.st.Checks(r.Context())
+	seen := map[string]bool{}
 	for _, c := range all {
 		if c.Token != d.Token {
 			d.Parents = append(d.Parents, c)
 		}
+		if c.Group != "" && !seen[c.Group] {
+			seen[c.Group] = true
+			d.Groups = append(d.Groups, c.Group)
+		}
 	}
+	sort.Strings(d.Groups)
 	d.Types = checks.Types
 	d.IPModes = []string{"auto", "ipv4", "ipv6", "both"}
 	d.Policies, d.Locations, d.Executions = Policies, KnownLocations, []string{"local", "online", "both"}

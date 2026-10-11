@@ -78,7 +78,8 @@ func (g *Gateway) Start(ctx context.Context) error {
 	if id, err := g.st.MaxConfigLogID(ctx); err == nil {
 		g.lastLog = id
 	}
-	g.wg.Add(2)
+	g.wg.Add(3)
+	go g.remoteLoop()
 	go g.fanoutLoop()
 	go g.seenLoop()
 	return nil

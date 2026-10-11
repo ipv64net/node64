@@ -49,7 +49,7 @@ func (s *Store) CurrentRevision(ctx context.Context, userID int64) int64 {
 // ---------------------------------------------------------------- Checks <-> wire
 
 const wireCheckCols = `token, node_id, execution, locations, policy, notify_degraded, type, name, target, params, interval_sec, retry_interval_sec, retries,
-	connect_timeout_ms, total_timeout_ms, invert, stabilize, ip_mode, tags, description, paused, parent_token, critical, notify_down, notify_up, channels, repeat_minutes, revision, deleted_at`
+	connect_timeout_ms, total_timeout_ms, invert, stabilize, ip_mode, tags, description, paused, parent_token, critical, notify_down, notify_up, channels, repeat_minutes, revision, deleted_at, group_name`
 
 func scanWireCheck(row interface{ Scan(...any) error }) (*wire.Check, bool, error) {
 	var c wire.Check
@@ -58,7 +58,7 @@ func scanWireCheck(row interface{ Scan(...any) error }) (*wire.Check, bool, erro
 	var iv, riv, cto, tto int64
 	var invert, paused, critical, nd, nu, ndeg int
 	if err := row.Scan(&c.Token, &nodeID, &c.Execution, &locations, &c.Policy, &ndeg, &c.Type, &c.Name, &c.Target, &params, &iv, &riv, &c.Retries,
-		&cto, &tto, &invert, &c.Stabilize, &c.IPMode, &tags, &description, &paused, &parent, &critical, &nd, &nu, &channels, &c.RepeatMinutes, &c.Revision, &deleted); err != nil {
+		&cto, &tto, &invert, &c.Stabilize, &c.IPMode, &tags, &description, &paused, &parent, &critical, &nd, &nu, &channels, &c.RepeatMinutes, &c.Revision, &deleted, &c.Group); err != nil {
 		return nil, false, err
 	}
 	c.NodeID, c.Parent, c.Description = nodeID.String, parent.String, description.String
@@ -442,20 +442,20 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 	if exists {
 		_, err = tx.ExecContext(ctx, `UPDATE hc2_checks SET node_id=?, execution=?, locations=?, policy=?, notify_degraded=?, slot=?, type=?, name=?, target=?, params=?,
 			interval_sec=?, retry_interval_sec=?, retries=?, connect_timeout_ms=?, total_timeout_ms=?, invert=?, stabilize=?, ip_mode=?, tags=?, description=?, paused=?,
-			parent_token=?, critical=?, notify_down=?, notify_up=?, channels=?, repeat_minutes=?, revision=?, updated_at=?, updated_by=?, deleted_at=NULL WHERE token=?`,
+			parent_token=?, critical=?, notify_down=?, notify_up=?, channels=?, repeat_minutes=?, revision=?, updated_at=?, updated_by=?, deleted_at=NULL, group_name=? WHERE token=?`,
 			nodeRef, c.Execution, strings.Join(locs, ","), orDefault(c.Policy, "all"), b2i(c.NotifyDegraded), slotOf(c.Token), c.Type, truncate(c.Name, 200), truncate(c.Target, 500), params,
 			c.IntervalSeconds, c.RetryIntervalSeconds, c.Retries, int(c.ConnectTimeoutSeconds*1000), int(c.TimeoutSeconds*1000), b2i(c.Invert), c.Stabilize, orDefault(c.IPMode, "auto"),
 			truncate(strings.Join(c.Tags, ","), 255), c.Description, paused, nullStr(c.Parent), b2i(c.Critical), b2i(c.NotifyDown), b2i(c.NotifyUp), joinInts(c.Channels), c.RepeatMinutes,
-			rev, nowStr(), origin, c.Token)
+			rev, nowStr(), origin, truncate(c.Group, 100), c.Token)
 	} else {
 		_, err = tx.ExecContext(ctx, `INSERT INTO hc2_checks (token, userid, node_id, execution, locations, policy, notify_degraded, slot, type, name, target, params,
 			interval_sec, retry_interval_sec, retries, connect_timeout_ms, total_timeout_ms, invert, stabilize, ip_mode, tags, description, paused,
-			parent_token, critical, notify_down, notify_up, channels, repeat_minutes, revision, created_at, updated_at, updated_by)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?,?)`,
+			parent_token, critical, notify_down, notify_up, channels, repeat_minutes, revision, created_at, updated_at, updated_by, group_name)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?,?,?)`,
 			c.Token, userID, nodeRef, c.Execution, strings.Join(locs, ","), orDefault(c.Policy, "all"), b2i(c.NotifyDegraded), slotOf(c.Token), c.Type, truncate(c.Name, 200), truncate(c.Target, 500), params,
 			c.IntervalSeconds, c.RetryIntervalSeconds, c.Retries, int(c.ConnectTimeoutSeconds*1000), int(c.TimeoutSeconds*1000), b2i(c.Invert), c.Stabilize, orDefault(c.IPMode, "auto"),
 			truncate(strings.Join(c.Tags, ","), 255), c.Description, paused,
-			nullStr(c.Parent), b2i(c.Critical), b2i(c.NotifyDown), b2i(c.NotifyUp), joinInts(c.Channels), c.RepeatMinutes, rev, nowStr(), nowStr(), origin)
+			nullStr(c.Parent), b2i(c.Critical), b2i(c.NotifyDown), b2i(c.NotifyUp), joinInts(c.Channels), c.RepeatMinutes, rev, nowStr(), nowStr(), origin, truncate(c.Group, 100))
 	}
 	if err != nil {
 		return err

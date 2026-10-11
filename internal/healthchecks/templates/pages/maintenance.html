@@ -1,12 +1,12 @@
 {{define "content"}}
 {{$d := .Data}}
 {{$f := $d.Form}}
-<h1 class="h4 mb-3">{{.T "hc.maint.title"}}</h1>
+<h1 class="h4 mb-3"><i class="bi bi-wrench-adjustable text-warning me-1"></i> {{.T "hc.maint.title"}}</h1>
 <p class="text-body-secondary small">{{.T "hc.maint.hint"}}</p>
 <div class="row g-3">
 	<div class="col-lg-7">
 		<div class="card">
-			<div class="card-header"><i class="bi bi-wrench"></i> {{.T "hc.maint.list"}}</div>
+			<div class="card-header"><i class="bi bi-wrench text-warning"></i> {{.T "hc.maint.list"}}</div>
 			{{if not $d.Windows}}<div class="card-body small text-body-secondary">{{.T "hc.maint.empty"}}</div>
 			{{else}}
 			<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards">
@@ -31,7 +31,7 @@
 	</div>
 	<div class="col-lg-5">
 		<div class="card">
-			<div class="card-header">{{if $d.Edit}}{{.T "hc.edit"}}: {{$d.Edit.Name}}{{else}}{{.T "hc.maint.new"}}{{end}}</div>
+			<div class="card-header"><i class="bi bi-calendar-plus text-primary"></i> {{if $d.Edit}}{{.T "hc.edit"}}: {{$d.Edit.Name}}{{else}}{{.T "hc.maint.new"}}{{end}}</div>
 			<div class="card-body">
 				{{if $d.Error}}<div class="alert alert-danger small">{{$d.Error}}</div>{{end}}
 				<form method="post" action="{{if $d.Edit}}/healthchecks/maintenance/{{$d.Edit.ID}}/edit{{else}}/healthchecks/maintenance{{end}}">

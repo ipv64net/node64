@@ -27,6 +27,7 @@ type Check struct {
 	Stabilize             int             `json:"stabilize"`
 	IPMode                string          `json:"ip_mode"`
 	Tags                  []string        `json:"tags"`
+	Group                 string          `json:"group,omitempty"` // frei benannte Gruppe (Anzeige)
 	Description           string          `json:"description"`
 	Paused                bool            `json:"paused"`
 	Parent                string          `json:"parent"`

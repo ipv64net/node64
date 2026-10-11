@@ -114,6 +114,10 @@ func (c *conn) hello(ctx context.Context) {
 	// immer eine config schicken (auch leer): die Node wartet darauf, bevor sie ihre Outbox abspielt
 	c.sendConfig(changes, rev)
 	c.deliverPending(ctx)
+	// aktueller Stand der Checks, die die Node nicht selbst misst
+	if items, err := g.st.RemoteStatesOf(ctx, n.UserID); err == nil {
+		c.sendRemote(items)
+	}
 }
 
 func (c *conn) sendConfig(changes []wire.Change, rev int64) {
@@ -472,6 +476,63 @@ func (g *Gateway) seenLoop() {
 			}
 			cancel()
 		}
+	}
+}
+
+// remoteLoop schickt den Nodes alle 15 s die Zustaende der Checks, die sie nicht selbst messen
+// (Online-Checks, Checks anderer Nodes des Accounts), damit ihre Oberflaeche aktuell ist.
+func (g *Gateway) remoteLoop() {
+	defer g.wg.Done()
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
+	last := time.Now().UTC().Add(-time.Minute)
+	for {
+		select {
+		case <-g.ctx.Done():
+			return
+		case <-t.C:
+			if g.Connections() == 0 {
+				last = time.Now().UTC().Add(-time.Minute)
+				continue
+			}
+			ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
+			now := time.Now().UTC()
+			list, err := g.st.RemoteStatesSince(ctx, last.Add(-2*time.Second))
+			cancel()
+			if err != nil {
+				g.log.Warn("remote states query failed", "err", err)
+				continue
+			}
+			last = now
+			byUser := map[int64][]store.RemoteState{}
+			for _, r := range list {
+				byUser[r.UserID] = append(byUser[r.UserID], r)
+			}
+			for uid, items := range byUser {
+				g.mu.RLock()
+				conns := make([]*conn, 0, len(g.byUser[uid]))
+				for c := range g.byUser[uid] {
+					conns = append(conns, c)
+				}
+				g.mu.RUnlock()
+				for _, c := range conns {
+					c.sendRemote(items)
+				}
+			}
+		}
+	}
+}
+
+// sendRemote filtert die Zustaende fuer diese Node und schickt sie (Nachricht remote_states).
+func (c *conn) sendRemote(items []store.RemoteState) {
+	out := make([]store.RemoteState, 0, len(items))
+	for _, r := range items {
+		if r.ForNode(c.node.ID) {
+			out = append(out, r)
+		}
+	}
+	if len(out) > 0 {
+		c.send(wire.Msg{T: "remote_states", Data: raw(map[string]any{"items": out})})
 	}
 }
 

@@ -1,14 +1,14 @@
 {{define "content"}}
 {{$d := .Data}}
 {{$f := $d.Form}}
-<h1 class="h4 mb-3">{{if $d.Edit}}{{.T "hc.edit"}}{{else}}{{.T "hc.new"}}{{end}}</h1>
+<h1 class="h4 mb-3"><i class="bi {{if $d.Edit}}bi-pencil-square{{else}}bi-plus-circle{{end}} text-primary me-1"></i> {{if $d.Edit}}{{.T "hc.edit"}}{{else}}{{.T "hc.new"}}{{end}}</h1>
 {{if $d.Error}}<div class="alert alert-danger">{{$d.Error}}</div>{{end}}
 <form method="post" action="{{if $d.Edit}}/healthchecks/{{$d.Token}}/edit{{else}}/healthchecks/new{{end}}" id="hc-form">
 <input type="hidden" name="_csrf" value="{{.CSRF}}">
 <div class="row g-3">
 	<div class="col-lg-7">
 		<div class="card mb-3">
-			<div class="card-header">{{.T "hc.form.general"}}</div>
+			<div class="card-header"><i class="bi bi-card-text text-primary"></i> {{.T "hc.form.general"}}</div>
 			<div class="card-body">
 				<div class="row g-3">
 					<div class="col-md-8">
@@ -28,6 +28,12 @@
 					</div>
 					<div class="col-12" data-types="push">
 						<div class="alert alert-info small mb-0">{{.T "hc.form.push_hint"}}</div>
+					</div>
+					<div class="col-md-6">
+						<label class="form-label" for="group">{{.T "hc.group.label"}}</label>
+						<div class="input-group"><span class="input-group-text"><i class="bi bi-collection text-primary"></i></span><input class="form-control" id="group" name="group" value="{{index $f "group"}}" maxlength="100" list="hc-groups" placeholder="{{.T "hc.group.placeholder"}}"></div>
+						<datalist id="hc-groups">{{range $d.Groups}}<option value="{{.}}">{{end}}</datalist>
+						<div class="form-text">{{.T "hc.group.hint"}}</div>
 					</div>
 					<div class="col-md-6">
 						<label class="form-label" for="tags">{{.T "hc.tags"}}</label>
@@ -50,7 +56,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="http keyword">
-			<div class="card-header">{{.T "hc.type.http"}}</div>
+			<div class="card-header"><i class="bi bi-globe2 text-info"></i> {{.T "hc.type.http"}}</div>
 			<div class="card-body">
 				<div class="row g-3">
 					<div class="col-md-3">
@@ -99,7 +105,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="icmp">
-			<div class="card-header">{{.T "hc.type.icmp"}}</div>
+			<div class="card-header"><i class="bi bi-broadcast-pin text-info"></i> {{.T "hc.type.icmp"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-md-4"><label class="form-label" for="count">{{.T "hc.form.count"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-hash"></i></span><input class="form-control" type="number" id="count" name="count" value="{{index $f "count"}}" min="1" max="20"></div></div>
 				<div class="col-md-4"><label class="form-label" for="max_loss_percent">{{.T "hc.form.max_loss"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-percent"></i></span><input class="form-control" type="number" id="max_loss_percent" name="max_loss_percent" value="{{index $f "max_loss_percent"}}" min="0" max="100"></div></div>
@@ -109,7 +115,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="tcp">
-			<div class="card-header">{{.T "hc.type.tcp"}}</div>
+			<div class="card-header"><i class="bi bi-ethernet text-info"></i> {{.T "hc.type.tcp"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-md-3"><label class="form-label" for="tcp_port">{{.T "hc.form.port"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-plug"></i></span><input class="form-control" type="number" id="tcp_port" name="tcp_port" value="{{index $f "tcp_port"}}" min="1" max="65535"></div></div>
 				<div class="col-md-4"><label class="form-label" for="send">{{.T "hc.form.send"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-send"></i></span><input class="form-control font-monospace" id="send" name="send" value="{{index $f "send"}}" placeholder="EHLO x\r\n"></div></div>
@@ -119,7 +125,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="port">
-			<div class="card-header">{{.T "hc.type.port"}}</div>
+			<div class="card-header"><i class="bi bi-plug text-info"></i> {{.T "hc.type.port"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-md-4"><label class="form-label" for="port_port">{{.T "hc.form.port"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-plug"></i></span><input class="form-control" type="number" id="port_port" name="port_port" value="{{index $f "port_port"}}" min="1" max="65535"></div></div>
 				<div class="col-md-8"><label class="form-label" for="port_expect">{{.T "hc.form.port_expect"}}</label>
@@ -128,7 +134,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="cert">
-			<div class="card-header">{{.T "hc.type.cert"}}</div>
+			<div class="card-header"><i class="bi bi-patch-check text-success"></i> {{.T "hc.type.cert"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-md-3"><label class="form-label" for="cert_port">{{.T "hc.form.port"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-plug"></i></span><input class="form-control" type="number" id="cert_port" name="cert_port" value="{{index $f "cert_port"}}" min="1" max="65535"></div></div>
 				<div class="col-md-3"><label class="form-label" for="min_days">{{.T "hc.form.min_days"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-calendar-check"></i></span><input class="form-control" type="number" id="min_days" name="min_days" value="{{index $f "min_days"}}" min="0" max="3650"></div></div>
@@ -141,7 +147,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="push">
-			<div class="card-header">{{.T "hc.type.push"}}</div>
+			<div class="card-header"><i class="bi bi-send-check text-info"></i> {{.T "hc.type.push"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-md-6"><label class="form-label" for="period_seconds">{{.T "hc.form.period"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-arrow-repeat"></i></span><input class="form-control" type="number" id="period_seconds" name="period_seconds" value="{{index $f "period_seconds"}}" min="20"></div></div>
 				<div class="col-md-6"><label class="form-label" for="grace_seconds">{{.T "hc.form.grace"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-hourglass-split"></i></span><input class="form-control" type="number" id="grace_seconds" name="grace_seconds" value="{{index $f "grace_seconds"}}" min="0"></div></div>
@@ -151,7 +157,7 @@
 
 	<div class="col-lg-5">
 		<div class="card mb-3" data-types="http keyword icmp tcp port cert">
-			<div class="card-header">{{.T "hc.form.timing"}}</div>
+			<div class="card-header"><i class="bi bi-stopwatch text-secondary"></i> {{.T "hc.form.timing"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-6"><label class="form-label" for="interval_seconds">{{.T "hc.form.interval"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-clock"></i></span><input class="form-control" type="number" id="interval_seconds" name="interval_seconds" value="{{index $f "interval_seconds"}}" min="20" max="86400"><span class="input-group-text">s</span></div></div>
 				<div class="col-6"><label class="form-label" for="retry_interval_seconds">{{.T "hc.form.retry_interval"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-arrow-clockwise"></i></span><input class="form-control" type="number" id="retry_interval_seconds" name="retry_interval_seconds" value="{{index $f "retry_interval_seconds"}}" min="5"><span class="input-group-text">s</span></div></div>
@@ -163,7 +169,7 @@
 		</div>
 
 		<div class="card mb-3">
-			<div class="card-header">{{.T "hc.form.sources"}}</div>
+			<div class="card-header"><i class="bi bi-geo-alt-fill text-danger"></i> {{.T "hc.form.sources"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-12"><label class="form-label" for="execution">{{.T "hc.form.execution"}}</label>
 					<div class="input-group"><span class="input-group-text"><i class="bi bi-geo"></i></span><select class="form-select" id="execution" name="execution">{{range $d.Executions}}<option value="{{.}}"{{if eq . (index $f "execution")}} selected{{end}}{{if and (ne . "local") (not $d.Linked)}} disabled{{end}}>{{$.T (print "hc.execution." .)}}</option>{{end}}</select></div>
@@ -179,7 +185,7 @@
 		</div>
 
 		<div class="card mb-3">
-			<div class="card-header">{{.T "hc.form.alerting"}}</div>
+			<div class="card-header"><i class="bi bi-bell-fill text-warning"></i> {{.T "hc.form.alerting"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-6"><label class="form-label" for="retries">{{.T "hc.form.retries"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-arrow-repeat"></i></span><input class="form-control" type="number" id="retries" name="retries" value="{{index $f "retries"}}" min="0" max="10"></div><div class="form-text">{{.T "hc.form.retries_hint"}}</div></div>
 				<div class="col-6"><label class="form-label" for="stabilize">{{.T "hc.form.stabilize"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-graph-up"></i></span><input class="form-control" type="number" id="stabilize" name="stabilize" value="{{index $f "stabilize"}}" min="1" max="20"></div><div class="form-text">{{.T "hc.form.stabilize_hint"}}</div></div>

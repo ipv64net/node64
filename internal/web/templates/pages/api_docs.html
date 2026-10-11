@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-	<h1 class="h4 mb-0">{{.T "api.title"}}</h1>
+	<h1 class="h4 mb-0"><i class="bi bi-code-slash text-primary me-1"></i> {{.T "api.title"}}</h1>
 	<a class="btn btn-outline-secondary btn-sm" href="/api/openapi.json" target="_blank"><i class="bi bi-filetype-json"></i> openapi.json</a>
 </div>
 <p class="text-body-secondary">{{index $d.Info "description"}}</p>

@@ -2,7 +2,7 @@
 {{$d := .Data}}
 {{$f := $d.Filter}}
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-	<h1 class="h4 mb-0">{{.T "nav.healthchecks"}} <span class="text-body-secondary fs-6">{{$d.Total}}</span></h1>
+	<h1 class="h4 mb-0"><i class="bi bi-heart-pulse me-1"></i> {{.T "nav.healthchecks"}} <span class="text-body-secondary fs-6">{{$d.Total}}</span></h1>
 	<div class="d-flex gap-2">
 		<a class="btn btn-outline-secondary btn-sm" href="/healthchecks{{if $f.q}}?q={{$f.q}}{{end}}" title="{{.T "logs.refresh"}}"><i class="bi bi-arrow-clockwise"></i></a>
 		<a class="btn btn-outline-secondary btn-sm" href="/healthchecks/maintenance"><i class="bi bi-wrench"></i> {{.T "hc.maint.title"}}</a>
@@ -26,6 +26,12 @@
 			{{range $d.Types}}<option value="{{.}}"{{if eq (print .) $f.type}} selected{{end}}>{{$.T (print "hc.type." .)}}</option>{{end}}
 		</select>
 	</div>
+	{{if $d.AllGrps}}<div class="col-6 col-md-2">
+		<select class="form-select form-select-sm" name="group">
+			<option value="">{{.T "hc.group.label"}}: {{.T "common.all"}}</option>
+			{{range $d.AllGrps}}<option value="{{.}}"{{if eq . $f.group}} selected{{end}}>{{.}}</option>{{end}}
+		</select>
+	</div>{{end}}
 	<div class="col-6 col-md-2">
 		<select class="form-select form-select-sm" name="tag">
 			<option value="">{{.T "hc.tags"}}: {{.T "common.all"}}</option>
@@ -34,7 +40,7 @@
 	</div>
 	<div class="col-6 col-md-2 d-flex gap-2">
 		<button class="btn btn-outline-secondary btn-sm" type="submit">{{.T "hc.filter"}}</button>
-		{{if or $f.q $f.state $f.type $f.tag}}<a class="btn btn-link btn-sm" href="/healthchecks">{{.T "hc.reset"}}</a>{{end}}
+		{{if or $f.q $f.state $f.type $f.tag $f.group}}<a class="btn btn-link btn-sm" href="/healthchecks">{{.T "hc.reset"}}</a>{{end}}
 	</div>
 	{{if $d.Sort}}<input type="hidden" name="sort" value="{{$d.Sort}}"><input type="hidden" name="dir" value="{{$d.Dir}}">{{end}}
 </form>
@@ -68,9 +74,12 @@
 		</tr>
 	</thead>
 	<tbody>
-	{{range $d.Rows}}
+	{{range $g := $d.Groups}}
+	{{if $d.Grouped}}<tr class="hc-group-row" data-group="{{$g.Key}}"><td colspan="9"><button type="button" class="btn btn-link p-0 text-reset text-decoration-none hc-group-toggle" data-group="{{$g.Key}}"><i class="bi bi-chevron-down hc-group-chev"></i> <i class="bi bi-collection text-primary"></i> <strong>{{$g.Name}}</strong></button>
+		<span class="ms-2 small">{{if $g.Up}}<span class="badge text-bg-success">{{$g.Up}}</span> {{end}}{{if $g.Down}}<span class="badge text-bg-danger">{{$g.Down}}</span> {{end}}{{if $g.Others}}<span class="badge text-bg-secondary">{{$g.Others}}</span>{{end}}</span></td></tr>{{end}}
+	{{range $g.Rows}}
 	{{$c := .Check}}
-	<tr>
+	<tr data-group-row="{{$g.Key}}">
 		<td data-label="" class="d-none d-md-table-cell"><input type="checkbox" class="form-check-input" name="tokens" value="{{$c.Token}}"></td>
 		<td data-label="{{$.T "common.status"}}" class="hc-c-status">
 			<span class="badge hc-state-{{.State}}">{{$.T (print "hc.state." .State)}}</span>
@@ -99,6 +108,7 @@
 			<a class="btn btn-sm btn-outline-secondary" href="/healthchecks/{{$c.Token}}/edit" title="{{$.T "hc.edit"}}"><i class="bi bi-pencil"></i></a>
 		</td>
 	</tr>
+	{{end}}
 	{{end}}
 	</tbody>
 </table>

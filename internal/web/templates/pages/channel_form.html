@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 {{$f := $d.Form}}
-<h1 class="h4 mb-3">{{if $d.Edit}}{{.T "nf.edit"}}{{else}}{{.T "nf.new"}}{{end}} <span class="badge text-bg-light fs-6">{{.T (print "nf.type." $d.Type)}}</span></h1>
+<h1 class="h4 mb-3"><i class="bi bi-bell-fill text-warning me-1"></i> {{if $d.Edit}}{{.T "nf.edit"}}{{else}}{{.T "nf.new"}}{{end}} <span class="badge text-bg-light fs-6">{{.T (print "nf.type." $d.Type)}}</span></h1>
 {{if $d.Error}}<div class="alert alert-danger">{{$d.Error}}</div>{{end}}
 {{if not $d.Edit}}
 <div class="mb-3">{{range $d.Types}}<a class="btn btn-sm {{if eq . $d.Type}}btn-primary{{else}}btn-outline-secondary{{end}} me-1 mb-1" href="/notifications/new?type={{.}}">{{$.T (print "nf.type." .)}}</a>{{end}}</div>

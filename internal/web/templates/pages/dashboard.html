@@ -1,6 +1,6 @@
 {{define "content"}}
 {{$d := .Data}}
-<h1 class="h4 mb-3">{{.T "dashboard.title"}}</h1>
+<h1 class="h4 mb-3"><i class="bi bi-speedometer2 text-primary me-1"></i> {{.T "dashboard.title"}}</h1>
 {{range $d.Boards}}
 <div class="row g-3 mb-3">
 	<div class="col-6 col-md-3"><a class="card tile tile-ok text-decoration-none" href="{{.Path}}?state=up"><div class="card-body"><div class="display-6">{{.OK}}</div><div class="small">{{$.T "dashboard.ok"}}</div></div></a></div>
@@ -9,7 +9,7 @@
 	<div class="col-6 col-md-3"><a class="card tile tile-other text-decoration-none" href="{{.Path}}"><div class="card-body"><div class="display-6">{{.Other}}</div><div class="small">{{$.T "dashboard.other"}}</div></div></a></div>
 </div>
 <div class="card mb-3">
-	<div class="card-header"><i class="bi bi-exclamation-triangle"></i> {{$.T "dashboard.last_incidents"}}</div>
+	<div class="card-header"><i class="bi bi-exclamation-triangle text-danger"></i> {{$.T "dashboard.last_incidents"}}</div>
 	{{if .Incidents}}
 	<ul class="list-group list-group-flush">
 	{{range .Incidents}}
@@ -26,7 +26,7 @@
 <div class="row g-3">
 	<div class="col-md-6 col-xl-4">
 		<div class="card h-100">
-			<div class="card-header"><i class="bi bi-hdd-network"></i> {{.T "dashboard.node"}}</div>
+			<div class="card-header"><i class="bi bi-hdd-network text-primary"></i> {{.T "dashboard.node"}}</div>
 			<div class="card-body">
 				<dl class="row mb-0 small">
 					<dt class="col-5">{{.T "dashboard.node_name"}}</dt><dd class="col-7">{{$d.NodeName}}</dd>
@@ -40,7 +40,7 @@
 	</div>
 	<div class="col-md-6 col-xl-4">
 		<div class="card h-100">
-			<div class="card-header"><i class="bi bi-hdd"></i> {{.T "dashboard.storage"}}</div>
+			<div class="card-header"><i class="bi bi-hdd text-secondary"></i> {{.T "dashboard.storage"}}</div>
 			<div class="card-body">
 				<dl class="row mb-0 small">
 					<dt class="col-6">{{.T "dashboard.storage_total"}}</dt><dd class="col-6 fw-semibold">{{.Bytes $d.Data.Total}}</dd>
@@ -65,7 +65,7 @@
 	</div>
 	<div class="col-md-6 col-xl-4">
 		<div class="card h-100">
-			<div class="card-header"><i class="bi bi-grid"></i> {{.T "dashboard.modules"}}</div>
+			<div class="card-header"><i class="bi bi-grid text-primary"></i> {{.T "dashboard.modules"}}</div>
 			<div class="card-body">
 				<ul class="list-unstyled mb-0 small">
 				{{range $d.Modules}}
@@ -83,7 +83,7 @@
 	</div>
 	<div class="col-md-6 col-xl-4">
 		<div class="card h-100">
-			<div class="card-header"><i class="bi bi-cloud"></i> {{.T "dashboard.link_status"}}</div>
+			<div class="card-header"><i class="bi bi-cloud text-info"></i> {{.T "dashboard.link_status"}}</div>
 			<div class="card-body small">
 				{{if .Sync.Linked}}{{$s := .Sync}}
 				<div class="mb-2">{{if $s.Connected}}<span class="badge text-bg-success"><i class="bi bi-cloud-check"></i> {{.T "link.connected"}}</span>{{else}}<span class="badge text-bg-warning"><i class="bi bi-cloud-slash"></i> {{.T "link.disconnected"}}</span>{{end}}

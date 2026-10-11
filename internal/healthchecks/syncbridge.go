@@ -25,7 +25,7 @@ func (m *Module) WireCheck(c *Check, chanMap ChannelMap) wire.Check {
 	w := wire.Check{Token: c.Token, Name: c.Name, Type: string(c.Type), Target: c.Target, Params: c.Params,
 		IntervalSeconds: int(c.Interval.Seconds()), RetryIntervalSeconds: int(c.RetryInterval.Seconds()), Retries: c.Retries,
 		ConnectTimeoutSeconds: c.ConnectTimeout.Seconds(), TimeoutSeconds: c.TotalTimeout.Seconds(), Invert: c.Invert, Stabilize: c.Stabilize,
-		IPMode: string(c.IPMode), Tags: c.Tags, Description: c.Description, Paused: c.Paused, Parent: c.Parent, Critical: c.Critical,
+		IPMode: string(c.IPMode), Tags: c.Tags, Group: c.Group, Description: c.Description, Paused: c.Paused, Parent: c.Parent, Critical: c.Critical,
 		Execution: c.Execution, Policy: c.Policy, Locations: c.Locations, NotifyDegraded: c.NotifyDegraded, NotifyDown: c.NotifyDown, NotifyUp: c.NotifyUp,
 		RepeatMinutes: c.RepeatMinutes, Revision: c.Revision, Channels: []int64{}}
 	if w.Tags == nil {
@@ -63,7 +63,8 @@ func (m *Module) ApplyWireCheck(ctx context.Context, w wire.Check, chanMap Chann
 		c = &Check{Token: w.Token}
 	}
 	oldType := c.Type
-	in := checkJSON{Name: w.Name, Type: w.Type, Target: w.Target, Params: w.Params, IPMode: w.IPMode, Tags: w.Tags, Description: w.Description,
+	grp := w.Group
+	in := checkJSON{Name: w.Name, Type: w.Type, Target: w.Target, Params: w.Params, IPMode: w.IPMode, Tags: w.Tags, Group: &grp, Description: w.Description,
 		Execution: "local", Policy: w.Policy, Locations: w.Locations}
 	iv, riv, re, st, rp := w.IntervalSeconds, w.RetryIntervalSeconds, w.Retries, w.Stabilize, w.RepeatMinutes
 	ct, tt := w.ConnectTimeoutSeconds, w.TimeoutSeconds
@@ -528,3 +529,43 @@ func (m *Module) SetOwnerAllSelf(ctx context.Context) error {
 
 var _ = strconv.Itoa
 var _ = strings.TrimSpace
+
+// RemoteState ist der Zustand eines Checks, den diese Node nicht selbst misst (vom hub).
+type RemoteState struct {
+	Token     string    `json:"token"`
+	State     string    `json:"state"`
+	Since     time.Time `json:"since"`
+	Source    string    `json:"source"`
+	Time      time.Time `json:"time"`
+	Status    string    `json:"status"`
+	LatencyMS float64   `json:"latency_ms"`
+	Reason    string    `json:"reason"`
+	Message   string    `json:"message"`
+}
+
+// ApplyRemoteState uebernimmt Zustand und letzten Messpunkt eines fremden Checks (nur Anzeige):
+// Gesamtzustand in hc_checks, Messpunkt in hc_measurements (flags 8 = von ipv64, wird nicht hochgeladen).
+func (m *Module) ApplyRemoteState(ctx context.Context, r RemoteState) {
+	c, _ := m.st.Check(ctx, r.Token)
+	if c == nil || c.MeasuredHere() {
+		return
+	}
+	if r.State != "" {
+		_, _ = m.st.w.ExecContext(ctx, `UPDATE hc_checks SET state=?, state_since=?, last_check_at=?, last_status=?, last_latency_ms=?, last_reason=?, last_message=? WHERE token=?`,
+			r.State, ft(r.Since), ft(r.Time), r.Status, r.LatencyMS, r.Reason, r.Message, r.Token)
+	}
+	if r.Time.IsZero() || (r.Status != "up" && r.Status != "down") {
+		return
+	}
+	var last string
+	_ = m.st.r.QueryRowContext(ctx, `SELECT COALESCE(MAX(time), '') FROM hc_measurements WHERE token = ?`, r.Token).Scan(&last)
+	if last != "" && !r.Time.After(pt(last)) {
+		return // schon bekannt
+	}
+	st := 0
+	if r.Status == "up" {
+		st = 1
+	}
+	_, _ = m.st.w.ExecContext(ctx, `INSERT INTO hc_measurements (token, time, status, latency_ms, reason, message, family, details, flags) VALUES (?,?,?,?,?,?,?,?,8)`,
+		r.Token, ft(r.Time), st, r.LatencyMS, r.Reason, r.Message, "", r.Source)
+}

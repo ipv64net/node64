@@ -38,6 +38,7 @@ type checkJSON struct {
 	Stabilize             *int            `json:"stabilize,omitempty"`
 	IPMode                string          `json:"ip_mode,omitempty"`
 	Tags                  []string        `json:"tags"`
+	Group                 *string         `json:"group,omitempty"`
 	Description           string          `json:"description"`
 	Paused                *bool           `json:"paused,omitempty"`
 	Parent                *string         `json:"parent,omitempty"`
@@ -89,7 +90,7 @@ func (m *Module) toJSON(c *Check, r *http.Request) checkJSON {
 	}
 	out := checkJSON{Token: c.Token, Name: c.Name, Type: string(c.Type), Target: c.Target, Params: c.Params,
 		IntervalSeconds: &iv, RetryIntervalSeconds: &riv, Retries: &re, ConnectTimeoutSeconds: &ct, TimeoutSeconds: &tt,
-		Invert: &inv, Stabilize: &st, IPMode: string(c.IPMode), Tags: c.Tags, Description: c.Description, Paused: &pa, Parent: &parent,
+		Invert: &inv, Stabilize: &st, IPMode: string(c.IPMode), Tags: c.Tags, Group: &c.Group, Description: c.Description, Paused: &pa, Parent: &parent,
 		Critical: &cr, Execution: c.Execution, Owner: c.Owner, Policy: c.Policy, Locations: c.Locations, NotifyDegraded: &ndeg,
 		NotifyDown: &nd, NotifyUp: &nu, Channels: c.Channels, RepeatMinutes: &rp,
 		Revision: c.Revision, CreatedAt: &created, UpdatedAt: &updated,
@@ -170,6 +171,13 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 				c.Tags = append(c.Tags, t)
 			}
 		}
+	}
+	if in.Group != nil {
+		g := strings.TrimSpace(*in.Group)
+		if len([]rune(g)) > 100 {
+			g = string([]rune(g)[:100])
+		}
+		c.Group = g
 	}
 	c.Description = strings.TrimSpace(in.Description)
 	if in.Paused != nil {

@@ -9,6 +9,8 @@
     "tagline": "Health checks, DynDNS and more in your own network"
   },
   "nav": {
+    "connected": "connected to ipv64",
+    "disconnected": "ipv64 unreachable",
     "dns64": "DNS64",
     "dashboard": "Dashboard",
     "healthchecks": "Healthchecks",
@@ -229,6 +231,15 @@
     "link": "ipv64 Link"
   },
   "hc": {
+    "chart": {
+      "warn": "stabilizing / partly down"
+    },
+    "group": {
+      "label": "Group",
+      "placeholder": "e.g. home network, websites",
+      "hint": "Checks with the same group are listed together.",
+      "none": "No group"
+    },
     "new": "New check",
     "edit": "Edit check",
     "missing": "This check does not exist.",

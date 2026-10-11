@@ -201,6 +201,15 @@ func (s *session) handle(m wire.Msg) error {
 				c.mu.Unlock()
 			}
 		}
+	case "remote_states":
+		var in struct {
+			Items []healthchecks.RemoteState `json:"items"`
+		}
+		if err := json.Unmarshal(m.Data, &in); err == nil {
+			for _, it := range in.Items {
+				c.d.HC.ApplyRemoteState(ctx, it)
+			}
+		}
 	case "config":
 		var in struct {
 			Revision int64         `json:"revision"`
