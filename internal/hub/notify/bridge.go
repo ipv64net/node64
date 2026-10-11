@@ -180,9 +180,18 @@ func Senders(version string, b *Bridge, st *Store) map[notify.Type]notify.Sender
 	m[notify.TypeIPv64Mail] = mailSender{b}
 	m[notify.TypeIPv64SMS] = smsSender{b, st}
 	m[notify.TypeApp] = appSender{b}
+	// Browser-Kanaele gibt es nur an der Node; der hub reicht sie als Sendeauftrag weiter
+	m[notify.TypeBrowser] = nodeOnlySender{}
 	out := map[notify.Type]notify.Sender{}
 	for t, snd := range m {
 		out[t] = relaySender{inner: snd, st: st}
 	}
 	return out
+}
+
+// nodeOnlySender: Typen, die nur eine Node selbst ausliefern kann (z. B. Browser).
+type nodeOnlySender struct{}
+
+func (nodeOnlySender) Send(context.Context, *notify.Channel, notify.Message) error {
+	return errors.New("this channel type can only be delivered by its node")
 }

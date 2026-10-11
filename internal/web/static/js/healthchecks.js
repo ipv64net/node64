@@ -49,7 +49,7 @@
 	document.querySelectorAll("[data-confirm]").forEach(function (b) {
 		b.addEventListener("click", function (e) {
 			var form = b.form || b.closest("form");
-			if (form && form.id === "hc-bulk") {
+			if (form && form.id.indexOf("hc-bulk") === 0) {
 				var sel = form.querySelector("select[name=action]");
 				if (sel && sel.value !== "delete") { return; }
 			}
@@ -58,12 +58,14 @@
 	});
 
 	// Alle auswaehlen
-	var all = document.getElementById("hc-select-all");
-	if (all) {
+	// Alle auswaehlen: je Tabelle (Haupttabelle, Docker), nur sichtbare Zeilen
+	document.querySelectorAll("[data-select-all]").forEach(function (all) {
 		all.addEventListener("change", function () {
-			document.querySelectorAll("input[name=tokens]").forEach(function (c) { c.checked = all.checked; });
+			all.closest("form").querySelectorAll("input[name=tokens]").forEach(function (c) {
+				if (!c.closest("tr") || !c.closest("tr").classList.contains("d-none")) { c.checked = all.checked; }
+			});
 		});
-	}
+	});
 
 	// Gruppen auf- und zuklappen (Zustand im Browser gemerkt)
 	var closed = {};

@@ -23,7 +23,7 @@
 	--bs-body-font-family: "Open Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 	--ipv64-orange: #f59c1a;
 	--ipv64-dark: #272828;
-	--sidebar-width: 240px;
+	--sidebar-width: 15rem;
 	--sidebar-bg: var(--bs-tertiary-bg);
 }
 [data-bs-theme="dark"] {
@@ -50,8 +50,8 @@ a { color: var(--bs-primary); }
 
 /* Layout: Topbar, Sidebar links, Inhalt */
 .topbar { background: var(--bs-body-bg); min-height: 56px; position: sticky; top: 0; z-index: 1020; }
-.app-body { min-height: calc(100vh - 57px); }
-.sidebar { width: var(--sidebar-width); flex: 0 0 var(--sidebar-width); background: var(--sidebar-bg); position: sticky; top: 57px; height: calc(100vh - 57px); }
+.app-body { min-height: calc(100vh - 3.6rem); }
+.sidebar { width: var(--sidebar-width); flex: 0 0 var(--sidebar-width); background: var(--sidebar-bg); position: sticky; top: 3.6rem; height: calc(100vh - 3.6rem); overflow-y: auto; scrollbar-width: thin; }
 .sidebar-offcanvas { width: var(--sidebar-width); }
 .sidebar .nav-link, .sidebar-offcanvas .nav-link { color: var(--bs-body-color); padding: .55rem 1rem; border-left: 3px solid transparent; }
 .sidebar .nav-link .bi, .sidebar-offcanvas .nav-link .bi { width: 1.4rem; display: inline-block; }
@@ -175,3 +175,14 @@ th a:hover { text-decoration: underline; }
 .hc-tip .hc-tip-dependent { color: #9aa3ad; }
 .nav-img { height: 16px; width: auto; vertical-align: -2px; margin-right: 2px; }
 .hc-empty-img { max-width: 520px; }
+
+/* Schriftgroesse (Einstellungen > Darstellung): alles ist rem-basiert und skaliert mit */
+html[data-fs="sm"] { font-size: 87.5%; }
+html[data-fs="lg"] { font-size: 112.5%; }
+html[data-fs="xl"] { font-size: 125%; }
+@media (max-width: 575.98px) {
+	html[data-fs="xl"] { font-size: 118.75%; } /* Handy: etwas gebremst, damit Tabellen-Karten nicht umbrechen */
+}
+.ui-choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .5rem; }
+.ui-choice .btn { white-space: nowrap; }
+.fs-choice .fs-a-sm { font-size: .8rem; } .fs-choice .fs-a-md { font-size: 1rem; } .fs-choice .fs-a-lg { font-size: 1.2rem; } .fs-choice .fs-a-xl { font-size: 1.4rem; }

@@ -65,6 +65,19 @@ type row struct {
 	Message  string
 	Maint    bool
 	Retrying bool
+	CertDays int       // Restlaufzeit des Zertifikats (HTTPS), -1 = unbekannt
+	CertTill time.Time // Ablaufdatum
+}
+
+// CertClass: Farbe fuer die Restlaufzeit.
+func (r row) CertClass() string {
+	switch {
+	case r.CertDays <= 7:
+		return "danger"
+	case r.CertDays <= 21:
+		return "warning"
+	}
+	return "success"
 }
 
 // group ist ein Abschnitt der Liste (eine frei benannte Gruppe).
@@ -108,7 +121,7 @@ func (m *Module) rowOf(ctx context.Context, lang string, c *Check, pills map[str
 	rt := m.liveRuntime(c)
 	r := row{Check: c, State: string(rt.State), Status: string(rt.LastStatus), Latency: msf(rt.LastLatency), Pills: pills[c.Token],
 		Changed: rt.Since, NextAt: rt.NextCheck, Reason: string(rt.LastReason), Message: rt.LastMessage,
-		Maint: m.st.InMaintenance(ctx, c.Token, time.Now()), Retrying: rt.State == scheduler.StateUp && rt.ConsecutiveFail > 0}
+		Maint: m.st.InMaintenance(ctx, c.Token, time.Now()), Retrying: rt.State == scheduler.StateUp && rt.ConsecutiveFail > 0, CertDays: -1}
 	if r.State == "" {
 		r.State = "pending"
 	}
@@ -177,6 +190,7 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, r, err)
 		return
 	}
+	certs := m.st.CertExpiries(ctx)
 	q := r.URL.Query()
 	f := map[string]string{"state": q.Get("state"), "type": q.Get("type"), "tag": q.Get("tag"), "group": q.Get("group"), "q": strings.TrimSpace(q.Get("q"))}
 	d := listData{Types: checks.Types, States: listStates, Filter: f, Sort: q.Get("sort"), Dir: q.Get("dir"), Counts: map[string]int{}}
@@ -189,6 +203,9 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 			grpSet[c.Group] = true
 		}
 		rw := m.rowOf(ctx, lang, c, pills)
+		if t, ok := certs[c.Token]; ok {
+			rw.CertTill, rw.CertDays = t, int(time.Until(t).Hours()/24)
+		}
 		d.Counts[rw.State]++
 		d.Total++
 		if f["state"] != "" && rw.State != f["state"] {
@@ -368,6 +385,10 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := detailData{Row: m.rowOf(ctx, lang, c, pills), JSON: m.toJSON(c, r), Pills: pills[c.Token], PushURL: ""}
+	d.Row.CertDays = -1
+	if t, ok := m.st.CertExpiries(ctx)[c.Token]; ok {
+		d.Row.CertTill, d.Row.CertDays = t, int(time.Until(t).Hours()/24)
+	}
 	now := time.Now().UTC()
 	for _, rg := range []string{"24h", "30d", "1y"} {
 		st, err := m.st.Stats(ctx, c.Token, rg, now)
@@ -459,7 +480,7 @@ func formDefaults() map[string]string {
 		"execution": "local", "policy": PolicyAll, "locations": "nbg,fsn",
 		"method": "GET", "accept_status": "200-299", "follow_redirects": "on", "max_redirects": "5",
 		"count": "3", "max_loss_percent": "50", "cert_port": "443", "min_days": "14", "port_expect": "open",
-		"period_seconds": "3600", "grace_seconds": "600",
+		"period_seconds": "3600", "grace_seconds": "600", "cert_min_days": "14",
 	}
 }
 
@@ -520,6 +541,10 @@ func formFromCheck(c *Check) map[string]string {
 		set("basic_password", "basic_password")
 		set("keyword", "keyword")
 		f["keyword_absent"] = str("keyword_absent")
+		f["cert_min_days"] = str("cert_min_days")
+		if f["cert_min_days"] == "" {
+			f["cert_min_days"] = "0"
+		}
 		if h, ok := p["headers"].(map[string]any); ok {
 			var lines []string
 			for k, v := range h {
@@ -681,6 +706,9 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 			if on("keyword_absent") {
 				p["keyword_absent"] = true
 			}
+		}
+		if n, err := strconv.Atoi(strings.TrimSpace(v("cert_min_days"))); err == nil && n > 0 {
+			p["cert_min_days"] = n
 		}
 	case checks.TypeICMP:
 		for _, k := range []string{"count", "max_loss_percent", "max_latency_ms"} {

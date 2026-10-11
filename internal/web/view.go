@@ -18,6 +18,7 @@ type View struct {
 	s        *Server
 	Lang     string
 	Theme    string
+	FontSize string // sm, lg, xl oder leer
 	Path     string
 	Title    string
 	User     *store.User
@@ -190,6 +191,9 @@ func (s *Server) view(r *http.Request, titleKey string) *View {
 	}
 	if c, err := r.Cookie(themeCookie); err == nil && (c.Value == "light" || c.Value == "dark") {
 		v.Theme = c.Value
+	}
+	if c, err := r.Cookie(fontCookie); err == nil && (c.Value == "sm" || c.Value == "lg" || c.Value == "xl") {
+		v.FontSize = c.Value
 	}
 	if v.User != nil {
 		v.Nav = s.nav(r)

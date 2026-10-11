@@ -58,6 +58,29 @@
 	</div>
 
 	<div class="col-lg-6">
+		<div class="card mb-3" id="appearance">
+			<div class="card-header"><i class="bi bi-palette text-info"></i> {{.T "settings.appearance"}}</div>
+			<div class="card-body">
+				<div class="mb-3">
+					<div class="form-label">{{.T "nav.theme"}}</div>
+					<div class="ui-choice" role="group">
+						<input type="radio" class="btn-check" name="ui_theme" id="ui-theme-auto" value=""{{if not .Theme}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-theme-auto"><i class="bi bi-circle-half"></i> {{.T "nav.theme_auto"}}</label>
+						<input type="radio" class="btn-check" name="ui_theme" id="ui-theme-light" value="light"{{if eq .Theme "light"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-theme-light"><i class="bi bi-sun"></i> {{.T "nav.theme_light"}}</label>
+						<input type="radio" class="btn-check" name="ui_theme" id="ui-theme-dark" value="dark"{{if eq .Theme "dark"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-theme-dark"><i class="bi bi-moon-stars"></i> {{.T "nav.theme_dark"}}</label>
+					</div>
+				</div>
+				<div>
+					<div class="form-label">{{.T "settings.font_size"}}</div>
+					<div class="ui-choice fs-choice" role="group">
+						<input type="radio" class="btn-check" name="ui_fs" id="ui-fs-sm" value="sm"{{if eq .FontSize "sm"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-fs-sm" title="{{.T "settings.fs_sm"}}"><span class="fs-a-sm">A</span> <span class="small">{{.T "settings.fs_sm"}}</span></label>
+						<input type="radio" class="btn-check" name="ui_fs" id="ui-fs-md" value=""{{if not .FontSize}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-fs-md" title="{{.T "settings.fs_md"}}"><span class="fs-a-md">A</span> <span class="small">{{.T "settings.fs_md"}}</span></label>
+						<input type="radio" class="btn-check" name="ui_fs" id="ui-fs-lg" value="lg"{{if eq .FontSize "lg"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-fs-lg" title="{{.T "settings.fs_lg"}}"><span class="fs-a-lg">A</span> <span class="small">{{.T "settings.fs_lg"}}</span></label>
+						<input type="radio" class="btn-check" name="ui_fs" id="ui-fs-xl" value="xl"{{if eq .FontSize "xl"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-fs-xl" title="{{.T "settings.fs_xl"}}"><span class="fs-a-xl">A</span> <span class="small">{{.T "settings.fs_xl"}}</span></label>
+					</div>
+					<div class="form-text">{{.T "settings.appearance_hint"}}</div>
+				</div>
+			</div>
+		</div>
 		<div class="card">
 			<div class="card-header"><i class="bi bi-person text-primary"></i> {{.T "settings.user"}}: {{.User.Username}}</div>
 			<div class="card-body">

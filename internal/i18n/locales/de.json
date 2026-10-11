@@ -159,6 +159,13 @@
     "other": "Sonstige"
   },
   "settings": {
+    "appearance": "Darstellung",
+    "font_size": "Schriftgröße",
+    "fs_sm": "Klein",
+    "fs_md": "Normal",
+    "fs_lg": "Groß",
+    "fs_xl": "Sehr groß",
+    "appearance_hint": "Gilt sofort und für diesen Browser. Alles wächst mit, auch auf Handy und Tablet.",
     "title": "Einstellungen",
     "node": "Node",
     "node_name": "Name der Node",
@@ -231,6 +238,8 @@
     "link": "ipv64-Verknüpfung"
   },
   "hc": {
+    "cert_until": "Zertifikat gültig bis",
+    "cert_days": "noch {days} Tage",
     "docker": {
       "title": "Docker-Container",
       "subtitle": "lokal über den Docker-Socket geprüft",
@@ -349,6 +358,9 @@
       "done": "{count} Checks geändert."
     },
     "form": {
+      "cert_min_days": "Zertifikat: warnen unter",
+      "days": "Tagen",
+      "cert_min_days_hint": "HTTPS: gestört melden, wenn das Zertifikat in weniger Tagen abläuft (0 = aus). Das Ablaufdatum wird immer mitgelesen.",
       "general": "Allgemein",
       "target": "Ziel",
       "target_hint": "URL, Hostname, IP oder host:port, je nach Typ.",
@@ -476,6 +488,21 @@
     }
   },
   "nf": {
+    "browser": {
+      "title": "Browser-Benachrichtigungen",
+      "intro": "Störungen und Entwarnungen erscheinen direkt im Browser – ohne E-Mail oder App. Dazu einen Kanal vom Typ „Browser“ anlegen (er gilt wie jeder Kanal für die gewählten Checks) und hier in jedem Browser einschalten.",
+      "enable": "In diesem Browser einschalten",
+      "disable": "Ausschalten",
+      "try": "Probe anzeigen",
+      "create": "Kanal „Browser“ anlegen",
+      "on": "in diesem Browser an",
+      "off": "in diesem Browser aus",
+      "insecure": "Systembenachrichtigungen erlaubt der Browser nur über HTTPS oder localhost.",
+      "denied": "Der Browser hat Benachrichtigungen für diese Seite blockiert (Schloss-Symbol in der Adresszeile).",
+      "unsupported": "Dieser Browser kann keine Systembenachrichtigungen.",
+      "inpage": "Meldungen erscheinen dann unten rechts in der geöffneten Seite.",
+      "note": "Es kommt nur etwas an, solange eine Node64-Seite in diesem Browser geöffnet ist (auch im Hintergrund-Tab)."
+    },
     "title": "Benachrichtigungen",
     "channels": "Kanäle",
     "new": "Neuer Kanal",
@@ -504,7 +531,8 @@
       "webhook": "Webhook",
       "ipv64_mail": "E-Mail über ipv64",
       "ipv64_sms": "SMS über ipv64",
-      "pushover": "Pushover"
+      "pushover": "Pushover",
+      "browser": "Browser"
     },
     "field": {
       "host": "SMTP-Server",

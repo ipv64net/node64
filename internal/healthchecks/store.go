@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -926,4 +927,71 @@ func (s *Store) Counts(ctx context.Context) (map[string]int, error) {
 		out[st] = n
 	}
 	return out, rows.Err()
+}
+
+// CertExpiries liefert je HTTP(S)-Check das Ablaufdatum des Zertifikats aus der letzten Messung.
+func (s *Store) CertExpiries(ctx context.Context) map[string]time.Time {
+	out := map[string]time.Time{}
+	rows, err := s.r.QueryContext(ctx, `SELECT m.token, m.details, m.message FROM hc_measurements m
+		JOIN (SELECT mm.token, MAX(mm.node_seq) seq FROM hc_measurements mm JOIN hc_checks c ON c.token = mm.token
+		      WHERE c.type IN ('http','keyword') AND (mm.details LIKE '%cert_not_after%' OR mm.message LIKE '%cert valid until%') AND mm.time > ? GROUP BY mm.token) x
+		ON x.seq = m.node_seq`, ft(time.Now().Add(-3*24*time.Hour)))
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var token, details, msg string
+		if rows.Scan(&token, &details, &msg) != nil {
+			continue
+		}
+		if t, ok := certNotAfter([]byte(details)); ok {
+			out[token] = t
+		} else if t, ok := CertFromMessage(msg); ok {
+			out[token] = t
+		}
+	}
+	return out
+}
+
+// certNotAfter liest cert_not_after aus den Details; bei IPv4+IPv6 (verschachtelt je Familie) das fruehere.
+func certNotAfter(raw []byte) (time.Time, bool) {
+	var top map[string]json.RawMessage
+	if json.Unmarshal(raw, &top) != nil {
+		return time.Time{}, false
+	}
+	parse := func(m map[string]json.RawMessage) (time.Time, bool) {
+		var v string
+		if json.Unmarshal(m["cert_not_after"], &v) != nil {
+			return time.Time{}, false
+		}
+		t, err := time.Parse(time.RFC3339, v)
+		return t, err == nil
+	}
+	if t, ok := parse(top); ok {
+		return t, true
+	}
+	var best time.Time
+	for _, fam := range []string{"ipv4", "ipv6"} {
+		var sub map[string]json.RawMessage
+		if json.Unmarshal(top[fam], &sub) == nil {
+			if t, ok := parse(sub); ok && (best.IsZero() || t.Before(best)) {
+				best = t
+			}
+		}
+	}
+	return best, !best.IsZero()
+}
+
+var reCertUntil = regexp.MustCompile(`cert valid until (\d{4}-\d{2}-\d{2})`)
+
+// CertFromMessage liest das Ablaufdatum aus der Meldung (Online-Checks: vom Hub nur die Meldung).
+func CertFromMessage(msg string) (time.Time, bool) {
+	var best time.Time
+	for _, m := range reCertUntil.FindAllStringSubmatch(msg, -1) {
+		if t, err := time.Parse("2006-01-02", m[1]); err == nil && (best.IsZero() || t.Before(best)) {
+			best = t
+		}
+	}
+	return best, !best.IsZero()
 }

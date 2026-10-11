@@ -20,6 +20,7 @@ const (
 	csrfCookie    = "node64_csrf"
 	flashCookie   = "node64_flash"
 	themeCookie   = "node64_theme"
+	fontCookie    = "node64_fs" // Schriftgroesse: sm, lg, xl (leer = normal)
 	langCookie    = "node64_lang"
 
 	sessionIdle = 12 * time.Hour

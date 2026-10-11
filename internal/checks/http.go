@@ -27,6 +27,7 @@ type HTTPParams struct {
 	InsecureTLS     bool              `json:"insecure_tls,omitempty"`     // Zertifikatsfehler ignorieren
 	Keyword         string            `json:"keyword,omitempty"`          // nur keyword
 	KeywordAbsent   bool              `json:"keyword_absent,omitempty"`   // true = Begriff darf NICHT vorkommen
+	CertMinDays     int               `json:"cert_min_days,omitempty"`    // HTTPS: gestoert, wenn das Zertifikat in weniger Tagen ablaeuft (0 = aus)
 }
 
 type httpChecker struct{ keyword bool }
@@ -154,7 +155,10 @@ func (c *httpChecker) Check(ctx context.Context, def Definition, ip net.IP) Resu
 	details["final_url"] = resp.Request.URL.String()
 	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
 		details["tls_version"] = tls.VersionName(resp.TLS.Version)
-		details["cert_not_after"] = resp.TLS.PeerCertificates[0].NotAfter.UTC().Format(time.RFC3339)
+		crt := resp.TLS.PeerCertificates[0]
+		details["cert_not_after"] = crt.NotAfter.UTC().Format(time.RFC3339)
+		details["cert_days_left"] = int(time.Until(crt.NotAfter).Hours() / 24)
+		details["cert_issuer"] = crt.Issuer.CommonName
 	}
 	// Body nur lesen, wenn er gebraucht wird (Keyword), sonst nur Kopf
 	var text string
@@ -185,7 +189,17 @@ func (c *httpChecker) Check(ctx context.Context, def Definition, ip net.IP) Resu
 			return fail(ReasonKeywordMissing, fmt.Sprintf("keyword %q not found", p.Keyword), lat, details)
 		}
 	}
-	return ok("HTTP "+strconv.Itoa(resp.StatusCode), lat, details)
+	msg := "HTTP " + strconv.Itoa(resp.StatusCode)
+	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
+		na := resp.TLS.PeerCertificates[0].NotAfter
+		days := int(time.Until(na).Hours() / 24)
+		if p.CertMinDays > 0 && days < p.CertMinDays {
+			return fail(ReasonCertExpiring, fmt.Sprintf("certificate expires in %d days (%s)", days, na.UTC().Format("2006-01-02")), lat, details)
+		}
+		// Datum in der Meldung: so kommt es auch bei Online-Checks (nur Meldung) an Node und Portal
+		msg += fmt.Sprintf(", cert valid until %s (%d days)", na.UTC().Format("2006-01-02"), days)
+	}
+	return ok(msg, lat, details)
 }
 
 var errTooManyRedirects = errors.New("too many redirects")

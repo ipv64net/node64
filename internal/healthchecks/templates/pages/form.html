@@ -99,6 +99,11 @@
 						<label class="form-label" for="body">{{.T "hc.form.body"}}</label>
 						<textarea class="form-control font-monospace" id="body" name="body" rows="3">{{index $f "body"}}</textarea>
 					</div>
+					<div class="col-md-6">
+						<label class="form-label" for="cert_min_days">{{.T "hc.form.cert_min_days"}}</label>
+						<div class="input-group"><span class="input-group-text"><i class="bi bi-shield-lock text-success"></i></span><input class="form-control" type="number" id="cert_min_days" name="cert_min_days" value="{{index $f "cert_min_days"}}" min="0" max="3650"><span class="input-group-text">{{.T "hc.form.days"}}</span></div>
+						<div class="form-text">{{.T "hc.form.cert_min_days_hint"}}</div>
+					</div>
 					<div class="col-12">
 						<div class="form-check"><input class="form-check-input" type="checkbox" name="insecure_tls" id="insecure_tls"{{if index $f "insecure_tls"}} checked{{end}}><label class="form-check-label" for="insecure_tls">{{.T "hc.form.insecure_tls"}}</label></div>
 					</div>

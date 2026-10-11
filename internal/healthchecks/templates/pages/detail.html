@@ -15,6 +15,7 @@
 			{{else}}<span class="badge text-bg-light hc-exec" title="{{$.T "hc.execution_hint"}}"><i class="bi bi-house"></i> {{$.T (print "hc.execution." $c.Execution)}}</span>{{end}}
 			{{range $c.Tags}}<span class="badge rounded-pill text-bg-secondary">{{.}}</span> {{end}}
 			{{if $c.Target}}<code class="ms-1">{{$c.Target}}</code>{{end}}
+			{{if ge $d.Row.CertDays 0}}<span class="badge text-bg-{{$d.Row.CertClass}} ms-1"><i class="bi bi-shield-lock"></i> {{.T "hc.cert_until"}} {{.Date $d.Row.CertTill}} · {{.T "hc.cert_days" "days" $d.Row.CertDays}}</span>{{end}}
 		</div>
 	</div>
 	<form method="post" action="/healthchecks/{{$c.Token}}/action" class="d-flex gap-1 flex-wrap">

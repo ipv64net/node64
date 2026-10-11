@@ -75,6 +75,7 @@ func Senders(version string) map[Type]Sender {
 	return map[Type]Sender{
 		TypeSMTP: smtpSender{}, TypeTelegram: telegramSender{ua}, TypeDiscord: discordSender{ua},
 		TypeNtfy: ntfySender{ua}, TypeGotify: gotifySender{ua}, TypeWebhook: webhookSender{ua}, TypePushover: pushoverSender{ua},
+		TypeBrowser: browserSender{},
 	}
 }
 

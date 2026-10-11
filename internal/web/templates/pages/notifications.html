@@ -12,6 +12,22 @@
 	</div>
 </div>
 
+<div class="card mb-3 border-primary-subtle" id="browser-notify-card">
+	<div class="card-header"><i class="bi bi-window-stack text-primary"></i> {{.T "nf.browser.title"}}</div>
+	<div class="card-body small">
+		<p class="mb-2">{{.T "nf.browser.intro"}}</p>
+		<div class="d-flex flex-wrap align-items-center gap-2">
+			<span id="bn-state" class="badge text-bg-secondary">…</span>
+			<button type="button" class="btn btn-sm btn-primary" id="bn-enable"><i class="bi bi-bell"></i> {{.T "nf.browser.enable"}}</button>
+			<button type="button" class="btn btn-sm btn-outline-secondary d-none" id="bn-disable"><i class="bi bi-bell-slash"></i> {{.T "nf.browser.disable"}}</button>
+			<button type="button" class="btn btn-sm btn-outline-info d-none" id="bn-test"><i class="bi bi-send"></i> {{.T "nf.browser.try"}}</button>
+			{{if not $d.HasBrowser}}<a class="btn btn-sm btn-outline-primary" href="/notifications/new?type=browser"><i class="bi bi-plus-lg"></i> {{.T "nf.browser.create"}}</a>{{end}}
+		</div>
+		<div class="text-body-secondary mt-2" id="bn-hint" data-insecure="{{.T "nf.browser.insecure"}}" data-denied="{{.T "nf.browser.denied"}}" data-on="{{.T "nf.browser.on"}}" data-off="{{.T "nf.browser.off"}}" data-unsupported="{{.T "nf.browser.unsupported"}}" data-inpage="{{.T "nf.browser.inpage"}}"></div>
+		<div class="text-body-secondary mt-1">{{.T "nf.browser.note"}}</div>
+	</div>
+</div>
+
 <div class="card mb-3">
 	<div class="card-header"><i class="bi bi-bell text-warning"></i> {{.T "nf.channels"}}</div>
 	{{if not $d.Channels}}

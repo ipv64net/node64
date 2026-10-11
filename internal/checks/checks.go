@@ -375,6 +375,9 @@ func Validate(def Definition) error {
 		if def.Type == TypeKeyword && strings.TrimSpace(p.Keyword) == "" {
 			return errors.New("keyword is required")
 		}
+		if p.CertMinDays < 0 || p.CertMinDays > 3650 {
+			return errors.New("cert_min_days must be between 0 and 3650")
+		}
 	case TypeTCP, TypePort:
 		host := TargetHost(def)
 		if host == "" {

@@ -159,6 +159,13 @@
     "other": "Other"
   },
   "settings": {
+    "appearance": "Appearance",
+    "font_size": "Font size",
+    "fs_sm": "Small",
+    "fs_md": "Normal",
+    "fs_lg": "Large",
+    "fs_xl": "Extra large",
+    "appearance_hint": "Applies immediately, for this browser. Everything scales along, on phones and tablets too.",
     "title": "Settings",
     "node": "Node",
     "node_name": "Node name",
@@ -231,6 +238,8 @@
     "link": "ipv64 Link"
   },
   "hc": {
+    "cert_until": "Certificate valid until",
+    "cert_days": "{days} days left",
     "docker": {
       "title": "Docker containers",
       "subtitle": "checked locally via the Docker socket",
@@ -349,6 +358,9 @@
       "done": "{count} checks changed."
     },
     "form": {
+      "cert_min_days": "Certificate: warn below",
+      "days": "days",
+      "cert_min_days_hint": "HTTPS: report down when the certificate expires in fewer days (0 = off). The expiry date is always read.",
       "general": "General",
       "target": "Target",
       "target_hint": "URL, hostname, IP or host:port, depending on the type.",
@@ -476,6 +488,21 @@
     }
   },
   "nf": {
+    "browser": {
+      "title": "Browser notifications",
+      "intro": "Outages and recoveries appear right in the browser – no e-mail or app needed. Create a channel of type “Browser” (it applies to the selected checks like any channel) and switch it on here in every browser.",
+      "enable": "Turn on in this browser",
+      "disable": "Turn off",
+      "try": "Show a sample",
+      "create": "Create “Browser” channel",
+      "on": "on in this browser",
+      "off": "off in this browser",
+      "insecure": "Browsers allow system notifications only via HTTPS or localhost.",
+      "denied": "The browser blocked notifications for this site (lock icon in the address bar).",
+      "unsupported": "This browser cannot show system notifications.",
+      "inpage": "Messages then appear at the bottom right of the open page.",
+      "note": "Only delivered while a Node64 page is open in this browser (a background tab is enough)."
+    },
     "title": "Notifications",
     "channels": "Channels",
     "new": "New channel",
@@ -504,7 +531,8 @@
       "webhook": "Webhook",
       "ipv64_mail": "E-mail via ipv64",
       "ipv64_sms": "SMS via ipv64",
-      "pushover": "Pushover"
+      "pushover": "Pushover",
+      "browser": "Browser"
     },
     "field": {
       "host": "SMTP server",

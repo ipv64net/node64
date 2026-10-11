@@ -1,10 +1,13 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ipv64net/node64/internal/notify"
 )
@@ -19,6 +22,7 @@ type notifyData struct {
 	Planned    []notify.Type
 	Quiet      map[string]string
 	Days       []int
+	HasBrowser bool // es gibt schon einen Browser-Kanal
 }
 
 func (s *Server) notifyRoutes() {
@@ -31,6 +35,47 @@ func (s *Server) notifyRoutes() {
 	s.mux.Handle("POST /notifications/{id}/test", s.auth(s.channelTest))
 	s.mux.Handle("POST /notifications/{id}/delete", s.auth(s.channelDelete))
 	s.mux.Handle("POST /notifications/{id}/toggle", s.auth(s.channelToggle))
+	s.mux.Handle("GET /notifications/stream", s.auth(s.notifyStream))
+}
+
+// notifyStream liefert Browser-Benachrichtigungen als Server-Sent Events an die geoeffnete Seite.
+func (s *Server) notifyStream(w http.ResponseWriter, r *http.Request) {
+	rc := http.NewResponseController(w)
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Accel-Buffering", "no")
+	events, cancel := notify.Browser.Subscribe()
+	defer cancel()
+	write := func(s string) bool {
+		_ = rc.SetWriteDeadline(time.Now().Add(30 * time.Second))
+		if _, err := io.WriteString(w, s); err != nil {
+			return false
+		}
+		return rc.Flush() == nil
+	}
+	if !write(": connected\nretry: 5000\n\n") {
+		return
+	}
+	ping := time.NewTicker(25 * time.Second)
+	defer ping.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ping.C:
+			if !write(": ping\n\n") {
+				return
+			}
+		case e, ok := <-events:
+			if !ok {
+				return
+			}
+			b, _ := json.Marshal(e)
+			if !write("event: notify\ndata: " + string(b) + "\n\n") {
+				return
+			}
+		}
+	}
 }
 
 func (s *Server) notifyIndex(w http.ResponseWriter, r *http.Request) {
@@ -48,6 +93,11 @@ func (s *Server) notifyIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := notifyData{Channels: chans, Deliveries: dl, Types: notify.Types, Planned: notify.Planned, Days: []int{1, 2, 3, 4, 5, 6, 7}}
+	for _, ch := range chans {
+		if ch.Type == notify.TypeBrowser {
+			d.HasBrowser = true
+		}
+	}
 	if len(dl) == 50 {
 		d.NextBefore = dl[len(dl)-1].ID
 	}

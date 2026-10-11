@@ -32,7 +32,7 @@ const (
 )
 
 // Types in Anzeigereihenfolge.
-var Types = []Type{TypeSMTP, TypeTelegram, TypeDiscord, TypeNtfy, TypeGotify, TypePushover, TypeWebhook}
+var Types = []Type{TypeBrowser, TypeSMTP, TypeTelegram, TypeDiscord, TypeNtfy, TypeGotify, TypePushover, TypeWebhook}
 
 // Planned sind Kanaele, die ipv64.net nach der Verknuepfung bereitstellt:
 // Mail ohne eigenen SMTP-Server und SMS ueber das ipv64-Gateway. Sie werden
@@ -102,6 +102,7 @@ var Fields = map[Type][]Field{
 		{Key: "priority_down", Kind: "select", Options: []string{"-2", "-1", "0", "1", "2"}, Default: "1"},
 		{Key: "priority_up", Kind: "select", Options: []string{"-2", "-1", "0", "1", "2"}, Default: "0"},
 	},
+	TypeBrowser:   {},
 	TypeIPv64Mail: {{Key: "email", Required: true}},
 	TypeIPv64SMS:  {{Key: "number", Required: true}},
 	TypeApp:       {{Key: "device_token", Secret: true, Required: true, Kind: "password"}},
