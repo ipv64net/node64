@@ -76,6 +76,21 @@
 		window.addEventListener("resize", function () { clearTimeout(t); t = setTimeout(fit, 100); });
 	});
 
+	// Filter der Liste: Auswahl sofort anwenden, Suche bei Enter, beim Verlassen des Feldes oder beim Leeren
+	document.querySelectorAll("form[data-autosubmit]").forEach(function (f) {
+		var go = function () {
+			// leere Felder nicht in die Adresse schreiben
+			f.querySelectorAll("input[name], select[name]").forEach(function (el) { if (!el.value) { el.disabled = true; } });
+			f.submit();
+		};
+		f.querySelectorAll("select").forEach(function (s) { s.addEventListener("change", go); });
+		var q = f.querySelector("input[type=search]");
+		if (q) {
+			q.addEventListener("change", go);
+			q.addEventListener("search", function () { if (!q.value) { go(); } });
+		}
+	});
+
 	// Rueckfrage vor Loeschen und Massenaktionen
 	document.querySelectorAll("[data-confirm]").forEach(function (b) {
 		b.addEventListener("click", function (e) {
