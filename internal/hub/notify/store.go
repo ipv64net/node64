@@ -174,8 +174,8 @@ func (s *Store) Touch(ctx context.Context, id int64, errText string) error {
 func (s *Store) SettingsFor(userID int64) notify.Settings {
 	return func(key, def string) string {
 		kv := s.settings(userID)
-		if v, ok := kv[key]; ok && v != "" {
-			return v
+		if v, ok := kv[key]; ok && (v != "" || key == notify.SetQuietDays) {
+			return v // leere Tagesauswahl = keine Ruhezeit (wie auf der Node)
 		}
 		switch key {
 		case notify.SetNodeName:

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata" // Zeitzonen fuer Ruhezeiten auch ohne zoneinfo auf dem Server
 
 	"github.com/ipv64net/node64/internal/hub/checker"
 	"github.com/ipv64net/node64/internal/hub/config"
@@ -108,6 +109,15 @@ func run(cfgPath string) error {
 	nfStore := hubnotify.New(st.DB(), box, log)
 	senders := hubnotify.Senders(Version, bridge, nfStore)
 	dispatcher := notify.NewMultiDispatcher(nfStore, senders, bundle, nfStore.SettingsFor, log)
+	// der hub verschickt alle Kanaele: ipv64-Mail/SMS/App und Portal-Kanaele selbst, Node-Kanaele per Sendeauftrag
+	dispatcher.SetSendServerChannels(true)
+	// Links fuehren auf die Seiten des Portals
+	dispatcher.SetLinks(func(token string) string { return "/check.php?token=" + token }, func(q string) string {
+		if q == "" {
+			return "/"
+		}
+		return "/index.php?" + q
+	})
 	dispatcher.Start(ctx)
 	defer dispatcher.Stop()
 

@@ -248,6 +248,32 @@ func (s *Store) RenameNode(ctx context.Context, userID int64, nodeID, name, loca
 	return rev, tx.Commit()
 }
 
+// SetAccountSettings speichert Benachrichtigungs-Einstellungen eines Accounts (von einer Node) und meldet
+// die Aenderung allen Nodes.
+func (s *Store) SetAccountSettings(ctx context.Context, userID int64, kv map[string]string) (int64, error) {
+	if len(kv) == 0 {
+		return 0, nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	for k, v := range kv {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO hc2_settings (userid, `key`, `value`) VALUES (?,?,?) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)", userID, k, truncate(v, 500)); err != nil {
+			return 0, err
+		}
+	}
+	rev, err := nextRevision(ctx, tx, userID)
+	if err != nil {
+		return 0, err
+	}
+	if err := logChange(ctx, tx, userID, nil, "settings", "notify", "upsert", rev, "node"); err != nil {
+		return 0, err
+	}
+	return rev, tx.Commit()
+}
+
 // StaleNodes markiert Nodes offline, deren last_seen aelter als 3 Minuten ist
 // (hub abgestuerzt o. ae.). Liefert die betroffenen IDs.
 func (s *Store) StaleNodes(ctx context.Context) ([]string, error) {

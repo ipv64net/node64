@@ -375,6 +375,34 @@ func (c *conn) handle(m wire.Msg) {
 				g.log.Warn("run check failed", "node", n.ID, "err", err)
 			}
 		}
+	case "settings":
+		// Ruhezeiten/Grenzen an einer Node geaendert: gelten fuer den Account (Portal und alle Nodes)
+		var in map[string]string
+		if json.Unmarshal(m.Data, &in) != nil {
+			c.ack(m.ID, map[string]any{"ok": false, "error": "invalid settings"})
+			return
+		}
+		clean := map[string]string{}
+		for _, k := range notify.SyncedSettings {
+			if v, ok := in[k]; ok {
+				nv, err := notify.NormalizeSetting(k, v)
+				if err != nil {
+					c.ack(m.ID, map[string]any{"ok": false, "error": err.Error()})
+					return
+				}
+				clean[k] = nv
+			}
+		}
+		rev, err := g.st.SetAccountSettings(ctx, n.UserID, clean)
+		if err != nil {
+			g.log.Error("settings from node failed", "node", n.ID, "err", err)
+			c.ack(m.ID, map[string]any{"ok": false, "error": "database error"})
+			return
+		}
+		if rev > c.lastRev {
+			c.lastRev = rev
+		}
+		c.ack(m.ID, map[string]any{"ok": true})
 	case "node_info":
 		// Name/Standort an der Node geaendert: Portal und andere Nodes (ueber config "node") sehen es sofort
 		var in struct {

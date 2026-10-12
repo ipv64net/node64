@@ -31,6 +31,7 @@ const (
 	KindDegradedEnd   Kind = "degraded_end"
 	KindReminder      Kind = "reminder"
 	KindSummary       Kind = "summary"
+	KindSummaryUp     Kind = "summary_up" // gesammelte Entwarnungen
 	KindTest          Kind = "test"
 )
 

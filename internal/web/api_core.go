@@ -176,10 +176,25 @@ func (s *Server) apiSettingsPut(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		if notify.IsSyncedSetting(k) {
+			nv, err := notify.NormalizeSetting(k, v)
+			if err != nil {
+				writeErr(w, http.StatusUnprocessableEntity, err.Error())
+				return
+			}
+			in[k] = nv
+		}
+	}
+	synced := false
+	for k, v := range in {
 		if err := s.Store.SetSetting(r.Context(), k, v); err != nil {
 			writeErr(w, 500, "database error")
 			return
 		}
+		synced = synced || notify.IsSyncedSetting(k)
+	}
+	if synced && s.Linker != nil {
+		s.Linker.NotifySettingsChanged()
 	}
 	s.audit(r, "settings.api", "", "")
 	s.apiSettingsGet(w, r)

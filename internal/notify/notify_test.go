@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -369,4 +370,118 @@ func TestTestMessage(t *testing.T) {
 	}
 	var e string
 	_ = json.Unmarshal([]byte(`"x"`), &e)
+}
+
+// testClock ist eine verstellbare Uhr fuer den Dispatcher.
+type testClock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *testClock) now() time.Time  { c.mu.Lock(); defer c.mu.Unlock(); return c.t }
+func (c *testClock) set(t time.Time) { c.mu.Lock(); c.t = t; c.mu.Unlock() }
+
+func TestQuietHoursDigestAfterwards(t *testing.T) {
+	clk := &testClock{t: time.Date(2026, 1, 7, 23, 30, 0, 0, time.UTC)} // Mittwoch
+	d, st, rec := testDispatcher(t, map[string]string{SetQuietEnabled: "1", SetQuietFrom: "22:00", SetQuietTo: "07:00", SetQuietDays: "1,2,3,4,5,6,7", SetQuietTZ: "UTC"})
+	d.now = clk.now
+	addChannel(t, st, "default", true)
+	a := CheckInfo{Token: "a", Name: "Alpha", NotifyDown: true, NotifyUp: true}
+	b := CheckInfo{Token: "b", Name: "Beta", NotifyDown: true, NotifyUp: true}
+	d.Dispatch(Alert{EventID: "1", Kind: KindDown, Check: a, Time: clk.now(), Message: "timeout"})
+	d.Dispatch(Alert{EventID: "2", Kind: KindDown, Check: b, Time: clk.now()})
+	d.Dispatch(Alert{EventID: "3", Kind: KindUp, Check: b, Time: clk.now().Add(time.Hour)})
+	time.Sleep(300 * time.Millisecond)
+	if n := len(rec.list()); n != 0 {
+		t.Fatalf("nothing may be sent during quiet hours, got %d", n)
+	}
+	clk.set(time.Date(2026, 1, 8, 7, 1, 0, 0, time.UTC))
+	msgs := waitMsgs(t, rec, 1)
+	m := msgs[0]
+	if m.Kind != KindSummary || !strings.Contains(m.Title, "2 Checks") || !strings.Contains(m.Title, "1 noch") ||
+		!strings.Contains(m.Text, "Alpha: gestört seit") || !strings.Contains(m.Text, "Beta: war gestört, wieder OK") {
+		t.Fatalf("digest after quiet hours: %+v", m)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if n := len(rec.list()); n != 1 {
+		t.Fatalf("exactly one digest expected, got %d", n)
+	}
+}
+
+func TestQuietHoursUseAlertTimeAndWeekdays(t *testing.T) {
+	d, _, _ := testDispatcher(t, map[string]string{SetQuietEnabled: "1", SetQuietFrom: "22:00", SetQuietTo: "07:00", SetQuietDays: "1,2,3,4,5", SetQuietTZ: "Europe/Berlin"})
+	berlin, _ := time.LoadLocation("Europe/Berlin")
+	cases := []struct {
+		at   time.Time
+		want bool
+	}{
+		{time.Date(2026, 1, 9, 23, 0, 0, 0, berlin), true},    // Freitag 23 Uhr: Fenster beginnt am Freitag
+		{time.Date(2026, 1, 10, 2, 0, 0, 0, berlin), true},    // Samstag 2 Uhr: gehoert zum Freitag
+		{time.Date(2026, 1, 10, 23, 0, 0, 0, berlin), false},  // Samstag 23 Uhr: kein Ruhetag
+		{time.Date(2026, 1, 12, 2, 0, 0, 0, berlin), false},   // Montag 2 Uhr: gehoert zum Sonntag
+		{time.Date(2026, 1, 12, 22, 0, 0, 0, berlin), true},   // Montag 22:00 (Beginn zaehlt)
+		{time.Date(2026, 1, 13, 7, 0, 0, 0, berlin), false},   // Dienstag 07:00 (Ende zaehlt nicht)
+		{time.Date(2026, 7, 9, 21, 30, 0, 0, time.UTC), true}, // Sommerzeit: 23:30 in Berlin
+	}
+	for _, c := range cases {
+		if got := d.inQuietHours(0, c.at); got != c.want {
+			t.Errorf("inQuietHours(%s) = %v, want %v", c.at, got, c.want)
+		}
+	}
+	// massgeblich ist der Zeitpunkt des Alerts, nicht der des Versands
+	d.now = func() time.Time { return time.Date(2026, 1, 13, 7, 5, 0, 0, berlin) }
+	if !d.quiet(Alert{Kind: KindDown, Time: time.Date(2026, 1, 13, 6, 59, 0, 0, berlin)}) {
+		t.Error("alert raised at 06:59 must count as quiet")
+	}
+	if d.quiet(Alert{Kind: KindDown, Check: CheckInfo{Critical: true}, Time: time.Date(2026, 1, 13, 6, 59, 0, 0, berlin)}) {
+		t.Error("critical checks are never quiet")
+	}
+}
+
+func TestSummaryOfRecoveries(t *testing.T) {
+	d, st, rec := testDispatcher(t, map[string]string{SetBatchWindow: "1", SetBatchThreshold: "3"})
+	addChannel(t, st, "default", true)
+	for _, n := range []string{"a", "b", "c"} {
+		d.Dispatch(Alert{EventID: "u" + n, Kind: KindUp, Check: CheckInfo{Token: n, Name: "Check " + n, NotifyDown: true, NotifyUp: true}})
+	}
+	msgs := waitMsgs(t, rec, 1)
+	time.Sleep(100 * time.Millisecond)
+	if msgs = rec.list(); len(msgs) != 1 || msgs[0].Kind != KindSummaryUp || !strings.Contains(msgs[0].Title, "3 Checks wieder OK") {
+		t.Fatalf("expected one recovery summary, got %+v", msgs)
+	}
+}
+
+func TestRateLimitPerAccountKeepsChannelHealthy(t *testing.T) {
+	st := testStore(t)
+	bundle, _ := i18n.Load()
+	rec := &recorder{}
+	per := map[int64]string{1: "1", 2: "0"} // Account 1: 1 pro Stunde, Account 2: unbegrenzt
+	d := NewMultiDispatcher(st, map[Type]Sender{TypeWebhook: rec}, bundle, func(uid int64) Settings {
+		return func(key, def string) string {
+			switch key {
+			case SetRatePerHour:
+				return per[uid]
+			case SetBatchWindow:
+				return "0"
+			}
+			return def
+		}
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ch := addChannel(t, st, "default", true)
+	d.Start(context.Background())
+	defer d.Stop()
+	for i := 0; i < 3; i++ {
+		d.Dispatch(Alert{EventID: fmt.Sprint("x", i), Kind: KindUp, Check: CheckInfo{UserID: 1, Token: "a", Name: "A", NotifyUp: true}})
+	}
+	time.Sleep(400 * time.Millisecond)
+	if n := len(rec.list()); n != 1 {
+		t.Fatalf("account 1 is limited to 1 per hour, sent %d", n)
+	}
+	got, _ := st.Channel(context.Background(), ch.ID)
+	if got == nil || got.LastError != "" {
+		t.Fatalf("rate limiting must not mark the channel as broken: %+v", got)
+	}
+	// der Bucket ist je Kanal; ein Account ohne Limit wird nicht vom anderen gebremst
+	d.Dispatch(Alert{EventID: "y", Kind: KindUp, Check: CheckInfo{UserID: 2, Token: "b", Name: "B", NotifyUp: true}})
+	waitMsgs(t, rec, 2)
 }

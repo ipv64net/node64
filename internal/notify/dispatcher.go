@@ -66,8 +66,8 @@ type Dispatcher struct {
 
 	queue   chan Alert
 	mu      sync.Mutex
-	pending []Alert
-	timer   *time.Timer
+	pending map[int64]*batch  // je Account gesammelte Alerts (Sammelmeldung)
+	held    map[int64][]Alert // in der Ruhezeit zurueckgehalten, danach als Sammelmeldung
 	buckets map[int64]*bucket
 	wg      sync.WaitGroup
 	ctx     context.Context
@@ -76,7 +76,10 @@ type Dispatcher struct {
 	now func() time.Time
 	// sendServerChannels: Server-Kanaele trotzdem lokal senden (Node-Einstellung)
 	sendServerChannels bool
-	serverSends        func() bool
+	// Pfade fuer Links (nil = Seiten des Nodes)
+	checkPath   func(string) string
+	listPath    func(string) string
+	serverSends func() bool
 }
 
 // SetSendServerChannels schaltet den lokalen Versand ueber Server-Kanaele.
@@ -91,6 +94,14 @@ type bucket struct {
 	last   time.Time
 }
 
+type batch struct {
+	alerts []Alert
+	due    time.Time
+}
+
+// maxHeld begrenzt die in der Ruhezeit gemerkten Alerts je Account.
+const maxHeld = 500
+
 // NewDispatcher ist der Dispatcher des Nodes (ein Account).
 func NewDispatcher(st *Store, senders map[Type]Sender, bundle *i18n.Bundle, settings Settings, log *slog.Logger) *Dispatcher {
 	return NewMultiDispatcher(st, senders, bundle, func(int64) Settings { return settings }, log)
@@ -99,7 +110,7 @@ func NewDispatcher(st *Store, senders map[Type]Sender, bundle *i18n.Bundle, sett
 // NewMultiDispatcher ist der Dispatcher des Servers: Kanaele und Einstellungen je Account.
 func NewMultiDispatcher(st ChannelStore, senders map[Type]Sender, bundle *i18n.Bundle, settingsFor SettingsFor, log *slog.Logger) *Dispatcher {
 	return &Dispatcher{st: st, senders: senders, i18n: bundle, settingsFor: settingsFor, log: log.With("module", "notify"),
-		queue: make(chan Alert, 1000), buckets: map[int64]*bucket{}, now: func() time.Time { return time.Now() }}
+		queue: make(chan Alert, 1000), buckets: map[int64]*bucket{}, pending: map[int64]*batch{}, held: map[int64][]Alert{}, now: func() time.Time { return time.Now() }}
 }
 
 // settings liefert die Einstellungen eines Accounts (0 = Node/global).
@@ -136,65 +147,99 @@ func (d *Dispatcher) Dispatch(a Alert) {
 	}
 }
 
-func (d *Dispatcher) intSetting(key string, def int) int {
-	n, err := strconv.Atoi(d.settings(0)(key, strconv.Itoa(def)))
+// intSetting liest eine Zahl aus den Einstellungen eines Accounts (Node: 0).
+func (d *Dispatcher) intSetting(uid int64, key string, def int) int {
+	n, err := strconv.Atoi(d.settings(uid)(key, strconv.Itoa(def)))
 	if err != nil {
 		return def
 	}
 	return n
 }
 
-// run sammelt Alerts kurz, damit viele gleichzeitige Stoerungen zu einer
-// Sammelmeldung werden, und verschickt dann.
+// run sammelt Alerts je Account kurz (Sammelmeldung bei vielen gleichzeitigen Aenderungen), verschickt
+// sie und gibt nach dem Ende einer Ruhezeit das Zurueckgehaltene als Sammelmeldung aus.
 func (d *Dispatcher) run() {
 	defer d.wg.Done()
-	var flush <-chan time.Time
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	lastHeld := time.Time{}
 	for {
 		select {
 		case <-d.ctx.Done():
-			d.flush(context.Background())
+			d.flushDue(context.Background(), true)
 			return
 		case a := <-d.queue:
-			d.mu.Lock()
-			d.pending = append(d.pending, a)
-			d.mu.Unlock()
-			if flush == nil {
-				window := time.Duration(d.intSetting(SetBatchWindow, 10)) * time.Second
-				if window <= 0 {
-					window = time.Millisecond
-				}
-				flush = time.After(window)
+			d.enqueue(a)
+		case <-tick.C:
+			d.flushDue(d.ctx, false)
+			if now := d.now(); now.Sub(lastHeld) >= 30*time.Second || now.Before(lastHeld) {
+				lastHeld = now
+				d.releaseHeld(d.ctx)
 			}
-		case <-flush:
-			flush = nil
-			d.flush(d.ctx)
 		}
 	}
 }
 
-// flush verschickt alle gesammelten Alerts.
-func (d *Dispatcher) flush(ctx context.Context) {
+// enqueue legt einen Alert in die Sammlung seines Accounts (Sammelfenster je Account).
+func (d *Dispatcher) enqueue(a Alert) {
+	uid := a.Check.UserID
+	window := time.Duration(d.intSetting(uid, SetBatchWindow, 10)) * time.Second
 	d.mu.Lock()
-	batch := d.pending
-	d.pending = nil
+	b := d.pending[uid]
+	if b == nil {
+		b = &batch{due: d.now().Add(window)}
+		d.pending[uid] = b
+	}
+	b.alerts = append(b.alerts, a)
 	d.mu.Unlock()
-	if len(batch) == 0 {
+}
+
+// flushDue verschickt die Sammlungen, deren Fenster abgelaufen ist (all: alle, beim Beenden).
+func (d *Dispatcher) flushDue(ctx context.Context, all bool) {
+	now := d.now()
+	d.mu.Lock()
+	due := map[int64][]Alert{}
+	for uid, b := range d.pending {
+		if all || !now.Before(b.due) {
+			due[uid] = b.alerts
+			delete(d.pending, uid)
+		}
+	}
+	d.mu.Unlock()
+	for uid, list := range due {
+		d.flush(ctx, uid, list)
+	}
+}
+
+// flush verschickt die gesammelten Alerts eines Accounts: ab der Schwelle werden gleichzeitige
+// Stoerungen und ebenso gleichzeitige Entwarnungen je Kanal zu einer Sammelmeldung.
+func (d *Dispatcher) flush(ctx context.Context, uid int64, list []Alert) {
+	if len(list) == 0 {
 		return
 	}
-	threshold := d.intSetting(SetBatchThreshold, 3)
-	var downs, rest []Alert
-	for _, a := range batch {
-		if a.Kind == KindDown {
+	threshold := d.intSetting(uid, SetBatchThreshold, 3)
+	var downs, ups, rest []Alert
+	for _, a := range list {
+		switch a.Kind {
+		case KindDown:
 			downs = append(downs, a)
-		} else {
+		case KindUp:
+			ups = append(ups, a)
+		default:
 			rest = append(rest, a)
 		}
 	}
 	if threshold > 1 && len(downs) >= threshold {
-		d.sendSummary(ctx, downs)
+		d.sendSummary(ctx, downs, false)
 	} else {
-		rest = append(downs, rest...)
+		rest = append(rest, downs...)
 	}
+	if threshold > 1 && len(ups) >= threshold {
+		d.sendSummary(ctx, ups, true)
+	} else {
+		rest = append(rest, ups...)
+	}
+	sort.SliceStable(rest, func(i, j int) bool { return rest[i].Time.Before(rest[j].Time) })
 	for _, a := range rest {
 		d.deliver(ctx, a)
 	}
@@ -234,28 +279,118 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 	return out
 }
 
+// isDownKind: Stoerungsmeldungen (Sammelmeldung der Entwarnungen zaehlt als Entwarnung).
 func isDownKind(k Kind) bool {
 	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded
 }
 
-// allowed prueft die Flags von Check und Kanal sowie Ruhezeiten.
-func (d *Dispatcher) allowed(a Alert, ch *Channel) (bool, string) {
+// flagsOK prueft die Schalter von Check und Kanal (Stoerung/Entwarnung/teilweise gestoert).
+func flagsOK(a Alert, ch *Channel) (bool, string) {
+	if a.Kind == KindTest {
+		return true, ""
+	}
 	down := isDownKind(a.Kind)
-	if a.Kind != KindTest {
-		if (a.Kind == KindDegraded || a.Kind == KindDegradedEnd) && !a.Check.NotifyDegraded {
-			return false, "notify_degraded off"
-		}
-		if down && (!a.Check.NotifyDown || !ch.NotifyDown) {
-			return false, "notify_down off"
-		}
-		if !down && (!a.Check.NotifyUp || !ch.NotifyUp) {
-			return false, "notify_up off"
-		}
-		if !a.Check.Critical && d.inQuietHours(a.Check.UserID, d.now()) {
-			return false, "quiet hours"
-		}
+	if (a.Kind == KindDegraded || a.Kind == KindDegradedEnd) && !a.Check.NotifyDegraded {
+		return false, "notify_degraded off"
+	}
+	if down && (!a.Check.NotifyDown || !ch.NotifyDown) {
+		return false, "notify_down off"
+	}
+	if !down && (!a.Check.NotifyUp || !ch.NotifyUp) {
+		return false, "notify_up off"
 	}
 	return true, ""
+}
+
+// quiet: der Alert faellt in die Ruhezeit (massgeblich ist sein Zeitpunkt); kritische Checks melden immer.
+func (d *Dispatcher) quiet(a Alert) bool {
+	if a.Kind == KindTest || a.Check.Critical {
+		return false
+	}
+	at := a.Time
+	if at.IsZero() {
+		at = d.now()
+	}
+	return d.inQuietHours(a.Check.UserID, at)
+}
+
+// hold merkt einen in der Ruhezeit unterdrueckten Alert fuer die Sammelmeldung danach.
+func (d *Dispatcher) hold(a Alert) {
+	if a.Time.IsZero() {
+		a.Time = d.now()
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if len(d.held[a.Check.UserID]) < maxHeld {
+		d.held[a.Check.UserID] = append(d.held[a.Check.UserID], a)
+	}
+}
+
+// releaseHeld schickt nach dem Ende der Ruhezeit eine Sammelmeldung mit dem, was in der Zeit passiert ist:
+// je Check der letzte Stand (noch gestoert bzw. zwischendurch gestoert und wieder OK).
+func (d *Dispatcher) releaseHeld(ctx context.Context) {
+	now := d.now()
+	d.mu.Lock()
+	ready := map[int64][]Alert{}
+	for uid, list := range d.held {
+		if !d.inQuietHours(uid, now) {
+			ready[uid] = list
+			delete(d.held, uid)
+		}
+	}
+	d.mu.Unlock()
+	for uid, list := range ready {
+		d.sendDigest(ctx, uid, list)
+	}
+}
+
+// sendDigest fasst die Ereignisse einer Ruhezeit je Kanal zusammen.
+func (d *Dispatcher) sendDigest(ctx context.Context, uid int64, list []Alert) {
+	sort.SliceStable(list, func(i, j int) bool { return list[i].Time.Before(list[j].Time) })
+	last := map[string]Alert{} // je Check der letzte Alert
+	first := map[string]Alert{}
+	for _, a := range list {
+		if _, ok := first[a.Check.Token]; !ok {
+			first[a.Check.Token] = a
+		}
+		last[a.Check.Token] = a
+	}
+	perChannel := map[int64][]Alert{}
+	chans := map[int64]*Channel{}
+	for _, a := range last {
+		for _, ch := range d.channelsFor(ctx, a.Check) {
+			if ok, _ := flagsOK(a, ch); ok {
+				perChannel[ch.ID] = append(perChannel[ch.ID], a)
+				chans[ch.ID] = ch
+			}
+		}
+	}
+	loc := d.location(uid)
+	for id, items := range perChannel {
+		ch := chans[id]
+		lang := ch.Lang
+		sort.Slice(items, func(i, j int) bool { return items[i].Check.Name < items[j].Check.Name })
+		var lines []string
+		stillDown := 0
+		for _, a := range items {
+			at := d.i18n.FormatDateTime(lang, first[a.Check.Token].Time, loc)
+			if isDownKind(a.Kind) {
+				stillDown++
+				lines = append(lines, d.i18n.T(lang, "notify.body.digest_down", "name", a.Check.Name, "time", at, "message", a.Message))
+			} else {
+				lines = append(lines, d.i18n.T(lang, "notify.body.digest_up", "name", a.Check.Name, "time", d.i18n.FormatDateTime(lang, a.Time, loc)))
+			}
+		}
+		kind, path := KindSummaryUp, "/healthchecks"
+		if stillDown > 0 {
+			kind, path = KindSummary, "/healthchecks?state=down"
+		}
+		m := Message{Kind: kind, Priority: 4, Time: d.now(), Language: lang, EventID: "quiet-" + strconv.FormatInt(d.now().UnixNano(), 36), Check: CheckInfo{UserID: uid},
+			Title: d.i18n.T(lang, "notify.subject.quiet_digest", "count", len(items), "down", stillDown),
+			Text:  d.i18n.T(lang, "notify.body.digest_intro") + "\n" + strings.Join(lines, "\n") + "\n" + d.nodeLine(uid, lang), URL: d.listURL(uid, path)}
+		m.Payload = map[string]any{"kind": string(kind), "count": len(items), "down": stillDown, "checks": names(items), "node": d.nodeName(uid), "time": m.Time.UTC().Format(time.RFC3339), "title": m.Title, "text": m.Text}
+		d.send(ctx, ch, m)
+	}
 }
 
 // location ist die Zeitzone fuer Ruhezeiten und Zeitangaben: Ruhezeiten-
@@ -307,9 +442,8 @@ func (d *Dispatcher) inQuietHours(uid int64, now time.Time) bool {
 	return false
 }
 
-// rateOK: Token-Bucket je Kanal (Standard 60 pro Stunde).
-func (d *Dispatcher) rateOK(id int64) bool {
-	per := float64(d.intSetting(SetRatePerHour, 60))
+// rateOK: Token-Bucket je Kanal (Standard 60 pro Stunde, Einstellung des Accounts).
+func (d *Dispatcher) rateOK(id int64, per float64) bool {
 	if per <= 0 {
 		return true
 	}
@@ -330,10 +464,15 @@ func (d *Dispatcher) rateOK(id int64) bool {
 	return true
 }
 
-// deliver verschickt einen Alert an alle zustaendigen Kanaele.
+// deliver verschickt einen Alert an alle zustaendigen Kanaele (in der Ruhezeit: fuer spaeter merken).
 func (d *Dispatcher) deliver(ctx context.Context, a Alert) {
+	if d.quiet(a) {
+		d.hold(a)
+		d.log.Debug("notification held (quiet hours)", "check", a.Check.Name, "kind", a.Kind)
+		return
+	}
 	for _, ch := range d.channelsFor(ctx, a.Check) {
-		if ok, why := d.allowed(a, ch); !ok {
+		if ok, why := flagsOK(a, ch); !ok {
 			d.log.Debug("notification suppressed", "check", a.Check.Name, "channel", ch.Name, "why", why)
 			continue
 		}
@@ -342,13 +481,17 @@ func (d *Dispatcher) deliver(ctx context.Context, a Alert) {
 	}
 }
 
-// sendSummary fasst viele gleichzeitige Stoerungen je Kanal zusammen.
-func (d *Dispatcher) sendSummary(ctx context.Context, downs []Alert) {
+// sendSummary fasst viele gleichzeitige Stoerungen (bzw. Entwarnungen) je Kanal zusammen.
+func (d *Dispatcher) sendSummary(ctx context.Context, list0 []Alert, up bool) {
 	perChannel := map[int64][]Alert{}
 	chans := map[int64]*Channel{}
-	for _, a := range downs {
+	for _, a := range list0 {
+		if d.quiet(a) {
+			d.hold(a)
+			continue
+		}
 		for _, ch := range d.channelsFor(ctx, a.Check) {
-			if ok, _ := d.allowed(a, ch); !ok {
+			if ok, _ := flagsOK(a, ch); !ok {
 				continue
 			}
 			perChannel[ch.ID] = append(perChannel[ch.ID], a)
@@ -368,10 +511,14 @@ func (d *Dispatcher) sendSummary(ctx context.Context, downs []Alert) {
 			lines = append(lines, d.i18n.T(lang, "notify.body.summary_item", "name", a.Check.Name, "message", a.Message))
 		}
 		uid := list[0].Check.UserID
-		m := Message{Kind: KindSummary, Priority: 5, Time: d.now(), Language: lang, EventID: list[0].EventID, Check: CheckInfo{UserID: uid},
-			Title: d.i18n.T(lang, "notify.subject.summary_down", "count", len(list)),
-			Text:  strings.Join(lines, "\n") + "\n" + d.nodeLine(uid, lang), URL: d.baseURL(uid, "/healthchecks?state=down")}
-		m.Payload = map[string]any{"kind": "summary", "count": len(list), "checks": names(list), "node": d.nodeName(uid), "time": m.Time.UTC().Format(time.RFC3339)}
+		kind, prio, key, path := KindSummary, 5, "notify.subject.summary_down", "/healthchecks?state=down"
+		if up {
+			kind, prio, key, path = KindSummaryUp, 3, "notify.subject.summary_up", "/healthchecks"
+		}
+		m := Message{Kind: kind, Priority: prio, Time: d.now(), Language: lang, EventID: list[0].EventID, Check: CheckInfo{UserID: uid},
+			Title: d.i18n.T(lang, key, "count", len(list)),
+			Text:  strings.Join(lines, "\n") + "\n" + d.nodeLine(uid, lang), URL: d.listURL(uid, path)}
+		m.Payload = map[string]any{"kind": string(kind), "count": len(list), "checks": names(list), "node": d.nodeName(uid), "time": m.Time.UTC().Format(time.RFC3339), "title": m.Title, "text": m.Text}
 		d.send(ctx, ch, m)
 	}
 }
@@ -405,12 +552,37 @@ func (d *Dispatcher) baseURL(uid int64, path string) string {
 	return base + path
 }
 
+// SetLinks setzt die Pfade fuer Links in Nachrichten (Standard: Seiten des Nodes). Der hub verlinkt
+// die Seiten des Portals: check(token) fuer einen Check, list(query) fuer die Liste.
+func (d *Dispatcher) SetLinks(check func(token string) string, list func(query string) string) {
+	d.checkPath, d.listPath = check, list
+}
+
+func (d *Dispatcher) checkURL(uid int64, token string) string {
+	if d.checkPath != nil {
+		return d.baseURL(uid, d.checkPath(token))
+	}
+	return d.baseURL(uid, "/healthchecks/"+token)
+}
+
+// listURL: path ist ein Node-Pfad wie "/healthchecks?state=down"; auf dem hub zaehlt nur die Abfrage.
+func (d *Dispatcher) listURL(uid int64, path string) string {
+	if d.listPath != nil {
+		q := ""
+		if i := strings.Index(path, "?"); i >= 0 {
+			q = path[i+1:]
+		}
+		return d.baseURL(uid, d.listPath(q))
+	}
+	return d.baseURL(uid, path)
+}
+
 // compose formuliert die Nachricht in der Sprache des Kanals.
 func (d *Dispatcher) compose(lang string, a Alert) Message {
 	t := func(key string, args ...any) string { return d.i18n.T(lang, key, args...) }
 	uid := a.Check.UserID
 	m := Message{Kind: a.Kind, Time: a.Time, Check: a.Check, EventID: a.EventID, Language: lang, Priority: 3,
-		URL: d.baseURL(uid, "/healthchecks/"+a.Check.Token)}
+		URL: d.checkURL(uid, a.Check.Token)}
 	if m.Time.IsZero() {
 		m.Time = d.now()
 	}
@@ -481,8 +653,10 @@ func (d *Dispatcher) send(ctx context.Context, ch *Channel, m Message) {
 		d.record(ctx, ch, m, fmt.Errorf("no sender for type %s", ch.Type))
 		return
 	}
-	if m.Kind != KindTest && !d.rateOK(ch.ID) {
-		d.record(ctx, ch, m, fmt.Errorf("rate limited (%s per hour)", d.settings(0)(SetRatePerHour, "60")))
+	if per := d.intSetting(m.Check.UserID, SetRatePerHour, 60); m.Kind != KindTest && !d.rateOK(ch.ID, float64(per)) {
+		// im Protokoll vermerken, den Kanal aber nicht als fehlerhaft markieren (er funktioniert ja)
+		d.log.Warn("notification rate limited", "channel", ch.Name, "kind", m.Kind, "per_hour", per)
+		_ = d.st.AddDelivery(ctx, Delivery{EventID: m.EventID, ChannelID: ch.ID, Channel: ch.Name, Kind: string(m.Kind), CheckToken: m.Check.Token, Subject: m.Title, OK: false, Error: fmt.Sprintf("rate limited (%d per hour)", per)})
 		return
 	}
 	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)

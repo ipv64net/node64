@@ -488,10 +488,12 @@
       "flapping_start": "🟠 {name} is flapping",
       "flapping_end": "🟢 {name} is stable again",
       "reminder": "🔴 {name} is still down ({duration})",
+      "summary_up": "🟢 {count} checks OK again",
+      "quiet_digest": "🌙 During quiet hours: {count} checks, {down} still down",
       "summary_down": "🔴 {count} checks down",
       "test": "Node64: test message",
-      "degraded": "⚠️ Partially down: {{name}}",
-      "degraded_end": "✅ Fully reachable again: {{name}}"
+      "degraded": "⚠️ Partially down: {name}",
+      "degraded_end": "✅ Fully reachable again: {name}"
     },
     "body": {
       "check": "Check: {name} ({type})",
@@ -503,6 +505,9 @@
       "time": "Time: {time}",
       "node": "Node: {node}",
       "test": "If you can read this, the channel “{channel}” works.",
+      "digest_intro": "These notifications were held back during quiet hours:",
+      "digest_down": "• {name}: down since {time} – {message}",
+      "digest_up": "• {name}: was down, OK again since {time}",
       "summary_item": "• {name}: {message}"
     }
   },
@@ -596,6 +601,7 @@
     "general": "General",
     "base_url": "External address of the node",
     "base_url_hint": "For links in messages, e.g. https://node.example.com. Empty = no links.",
+    "settings_synced": "When linked with ipv64.net, quiet hours, rate limit and summaries apply to the whole account: the portal and all nodes use them. Events during quiet hours arrive afterwards as one summary.",
     "rate_per_hour": "Max. messages per channel and hour",
     "batch_threshold": "Summary message from simultaneous outages",
     "batch_window": "Collection window (seconds)",

@@ -50,6 +50,7 @@ const (
 	SetNodeName      = "sync.node_name"
 	SetLocation      = "sync.location"
 	SetNodeInfoDirty = "sync.node_info_dirty" // Name/Standort lokal geaendert, noch nicht beim hub
+	SetNotifyDirty   = "sync.notify_dirty"    // Benachrichtigungs-Einstellungen lokal geaendert, noch nicht beim hub
 	SetRemoteMgmt    = "sync.remote_mgmt"
 	SetRevision      = "sync.last_revision"
 	SetAckSeq        = "sync.ack_seq"
@@ -106,6 +107,8 @@ type Linker interface {
 	TestServerChannel(ctx context.Context, remoteID int64, lang string) error
 	// NodeInfoChanged: Name/Standort wurden in den Einstellungen geaendert, an ipv64 melden.
 	NodeInfoChanged()
+	// NotifySettingsChanged: Ruhezeiten/Grenzen geaendert, gelten fuer den Account (an ipv64 melden).
+	NotifySettingsChanged()
 }
 
 // NoOp ist der Standalone-Client: nicht verknuepft, tut nichts.
@@ -138,6 +141,7 @@ type Live struct {
 	pushOnce      sync.Once // Warteschlange fuer weitergereichte Pushes
 	pushQ         chan wire.Msg
 	infoGen       atomic.Int64 // zaehlt lokale Aenderungen von Name/Standort (refreshMe ueberschreibt sie nicht)
+	notifyGen     atomic.Int64 // zaehlt lokale Aenderungen der Benachrichtigungs-Einstellungen
 
 	mu        sync.Mutex
 	connected bool
@@ -685,6 +689,7 @@ func (c *Live) fullSync(ctx context.Context) error {
 		}
 	}
 	c.applyChanges(ctx, changes, cfg.Revision)
+	c.applySettings(ctx, cfg.Settings)
 	return nil
 }
 
@@ -751,6 +756,11 @@ func (c *Live) applyChanges(ctx context.Context, changes []wire.Change, revision
 		case "node":
 			// Name/Standort/Fernverwaltung wurden im Portal geaendert: sofort nachladen
 			c.refreshMe(ctx)
+		case "settings":
+			var kv map[string]string
+			if json.Unmarshal(ch.Data, &kv) == nil {
+				c.applySettings(ctx, kv)
+			}
 		}
 		if err != nil {
 			c.log.Warn("apply change failed", "entity", ch.Entity, "id", ch.ID, "op", ch.Op, "err", err)
@@ -983,6 +993,47 @@ func (c *Live) NodeInfoChanged() {
 	}
 	c.set(SetNodeInfoDirty, "1")
 	c.poke()
+}
+
+// NotifySettingsChanged merkt geaenderte Benachrichtigungs-Einstellungen vor; die Sitzung meldet sie dem hub
+// (sie gelten fuer den Account: Portal und alle Nodes), auch nach einer Trennung.
+func (c *Live) NotifySettingsChanged() {
+	c.notifyGen.Add(1)
+	if !c.Linked() {
+		return
+	}
+	c.set(SetNotifyDirty, "1")
+	c.poke()
+}
+
+// notifySettings liefert die gesetzten account-weiten Einstellungen dieser Node.
+func (c *Live) notifySettings(ctx context.Context) map[string]string {
+	out := map[string]string{}
+	for _, k := range notify.SyncedSettings {
+		if v, ok, _ := c.d.Core.Setting(ctx, k); ok {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// applySettings uebernimmt die Einstellungen des Accounts vom hub. Eine noch nicht gemeldete lokale Aenderung
+// geht vor (sie wird gleich gemeldet); kennt der Account noch keine, meldet die Node ihre eigenen.
+func (c *Live) applySettings(ctx context.Context, kv map[string]string) {
+	if c.setting(SetNotifyDirty, "") == "1" {
+		return
+	}
+	n := 0
+	for _, k := range notify.SyncedSettings {
+		if v, ok := kv[k]; ok {
+			n++
+			_ = c.d.Core.SetSetting(ctx, k, v)
+		}
+	}
+	if n == 0 && len(c.notifySettings(ctx)) > 0 {
+		c.set(SetNotifyDirty, "1")
+		c.poke()
+	}
 }
 
 // nodeInfoPending: Name/Standort wurden lokal geaendert und sind noch nicht beim hub. sync.node_name und

@@ -488,10 +488,12 @@
       "flapping_start": "🟠 {name} flattert",
       "flapping_end": "🟢 {name} ist wieder stabil",
       "reminder": "🔴 {name} ist weiterhin gestört ({duration})",
+      "summary_up": "🟢 {count} Checks wieder OK",
+      "quiet_digest": "🌙 Während der Ruhezeit: {count} Checks, davon {down} noch gestört",
       "summary_down": "🔴 {count} Checks gestört",
       "test": "Node64: Testnachricht",
-      "degraded": "⚠️ Teilweise gestört: {{name}}",
-      "degraded_end": "✅ Wieder vollständig erreichbar: {{name}}"
+      "degraded": "⚠️ Teilweise gestört: {name}",
+      "degraded_end": "✅ Wieder vollständig erreichbar: {name}"
     },
     "body": {
       "check": "Check: {name} ({type})",
@@ -503,6 +505,9 @@
       "time": "Zeit: {time}",
       "node": "Node: {node}",
       "test": "Wenn du das liest, funktioniert der Kanal „{channel}“.",
+      "digest_intro": "Diese Meldungen wurden während der Ruhezeit zurückgehalten:",
+      "digest_down": "• {name}: gestört seit {time} – {message}",
+      "digest_up": "• {name}: war gestört, wieder OK seit {time}",
       "summary_item": "• {name}: {message}"
     }
   },
@@ -596,6 +601,7 @@
     "general": "Allgemein",
     "base_url": "Externe Adresse der Node",
     "base_url_hint": "Für Links in Nachrichten, z. B. https://node.example.com. Leer = keine Links.",
+    "settings_synced": "Mit ipv64.net verknüpft gelten Ruhezeiten, Höchstzahl und Sammelmeldung für den ganzen Account: Portal und alle Nodes übernehmen sie. Was in der Ruhezeit passiert, kommt danach als eine Sammelmeldung.",
     "rate_per_hour": "Höchstens Nachrichten je Kanal und Stunde",
     "batch_threshold": "Sammelmeldung ab gleichzeitigen Störungen",
     "batch_window": "Sammelfenster (Sekunden)",

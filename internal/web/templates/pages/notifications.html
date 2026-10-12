@@ -99,14 +99,14 @@
 					<div class="form-text">{{.T "nf.base_url_hint"}}</div>
 				</div>
 				<div class="row g-2">
-					<div class="col-4"><label class="form-label" for="rate">{{.T "nf.rate_per_hour"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-speedometer"></i></span><input class="form-control" type="number" id="rate" name="rate" value="{{index $d.Quiet "rate"}}" min="0" max="10000"></div></div>
+					<div class="col-4"><label class="form-label" for="rate">{{.T "nf.rate_per_hour"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-speedometer"></i></span><input class="form-control" type="number" id="rate" name="rate" value="{{index $d.Quiet "rate"}}" min="0" max="1000"></div></div>
 					<div class="col-4"><label class="form-label" for="batch_threshold">{{.T "nf.batch_threshold"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-collection"></i></span><input class="form-control" type="number" id="batch_threshold" name="batch_threshold" value="{{index $d.Quiet "batch_threshold"}}" min="0" max="100"></div></div>
-					<div class="col-4"><label class="form-label" for="batch_window">{{.T "nf.batch_window"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-hourglass"></i></span><input class="form-control" type="number" id="batch_window" name="batch_window" value="{{index $d.Quiet "batch_window"}}" min="0" max="300"></div></div>
+					<div class="col-4"><label class="form-label" for="batch_window">{{.T "nf.batch_window"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-hourglass"></i></span><input class="form-control" type="number" id="batch_window" name="batch_window" value="{{index $d.Quiet "batch_window"}}" min="0" max="600"></div></div>
 				</div>
 			</div>
 		</div>
 	</div>
-	<div class="col-12"><button class="btn btn-primary" type="submit">{{.T "common.save"}}</button></div>
+	<div class="col-12 d-flex align-items-center gap-3 flex-wrap"><button class="btn btn-primary" type="submit">{{.T "common.save"}}</button><span class="small text-body-secondary"><i class="bi bi-arrow-repeat"></i> {{.T "nf.settings_synced"}}</span></div>
 </div>
 </form>
 

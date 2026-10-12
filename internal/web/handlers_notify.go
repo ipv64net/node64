@@ -151,13 +151,16 @@ func (s *Server) notifySettings(w http.ResponseWriter, r *http.Request) {
 	set := map[string]string{
 		notify.SetQuietEnabled: enabled, notify.SetQuietFrom: f["quiet_from"], notify.SetQuietTo: f["quiet_to"], notify.SetQuietDays: strings.Join(days, ","),
 		notify.SetQuietTZ: tz, notify.SetBaseURL: strings.TrimRight(f["base_url"], "/"),
-		notify.SetRatePerHour: clampStr(f["rate"], 0, 10000, "60"), notify.SetBatchThreshold: clampStr(f["batch_threshold"], 0, 100, "3"), notify.SetBatchWindow: clampStr(f["batch_window"], 0, 300, "10"),
+		notify.SetRatePerHour: clampStr(f["rate"], 0, 1000, "60"), notify.SetBatchThreshold: clampStr(f["batch_threshold"], 0, 100, "3"), notify.SetBatchWindow: clampStr(f["batch_window"], 0, 600, "10"),
 	}
 	for k, val := range set {
 		if err := s.Store.SetSetting(ctx, k, val); err != nil {
 			s.fail(w, r, err)
 			return
 		}
+	}
+	if s.Linker != nil {
+		s.Linker.NotifySettingsChanged() // gelten fuer den Account: an ipv64 und die anderen Nodes
 	}
 	s.audit(r, "notify.settings", "", fmt.Sprintf("quiet=%s %s-%s days=%s", enabled, f["quiet_from"], f["quiet_to"], strings.Join(days, ",")))
 	s.flash(w, r, "success", v.T("common.saved"))

@@ -305,7 +305,8 @@ func (s *session) request(t string, data any) (wire.Msg, error) {
 
 // afterConnect: Outbox, Nachlieferung, Zustands-Schnappschuss, Status.
 func (s *session) afterConnect() {
-	s.pushNodeInfo()                       // lokal geaenderter Name/Standort zuerst, sonst holt refreshMe den alten
+	s.pushNodeInfo() // lokal geaenderter Name/Standort zuerst, sonst holt refreshMe den alten
+	s.pushNotifySettings()
 	go s.c.refreshMe(context.Background()) // Name, Standort und Nodes des Accounts aktualisieren
 	s.replayOutbox()
 	s.uploadMeasurements()
@@ -352,6 +353,7 @@ func (s *session) worker() {
 			}
 		case <-c.wake:
 			s.pushNodeInfo()
+			s.pushNotifySettings()
 			s.replayOutbox()
 			s.flushStates()
 		case <-states.C:
@@ -593,6 +595,30 @@ func (s *session) pushNodeInfo() {
 	c.set(SetLocation, loc)
 	if c.infoGen.Load() == gen {
 		c.set(SetNodeInfoDirty, "")
+	}
+}
+
+// pushNotifySettings meldet lokal geaenderte Benachrichtigungs-Einstellungen (Ruhezeiten, Grenzen) an den hub.
+func (s *session) pushNotifySettings() {
+	c := s.c
+	if c.setting(SetNotifyDirty, "") != "1" {
+		return
+	}
+	gen := c.notifyGen.Load()
+	m, err := s.request("settings", c.notifySettings(s.ctx))
+	if err != nil {
+		return
+	}
+	var res struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	_ = json.Unmarshal(m.Data, &res)
+	if !res.OK {
+		c.log.Warn("hub rejected notification settings", "err", res.Error)
+	}
+	if c.notifyGen.Load() == gen {
+		c.set(SetNotifyDirty, "")
 	}
 }
 
