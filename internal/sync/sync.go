@@ -1058,6 +1058,7 @@ func (c *Live) refreshMe(ctx context.Context) {
 		Location   string            `json:"location"`
 		RemoteMgmt string            `json:"remote_mgmt"`
 		Nodes      []json.RawMessage `json:"nodes"`
+		Settings   map[string]string `json:"settings"`
 	}
 	if json.Unmarshal(resp, &me) != nil || me.Name == "" {
 		return
@@ -1077,6 +1078,9 @@ func (c *Live) refreshMe(ctx context.Context) {
 	}
 	if me.RemoteMgmt != "" {
 		c.set(SetRemoteMgmt, me.RemoteMgmt)
+	}
+	if me.Settings != nil {
+		c.applySettings(ctx, me.Settings) // Ruhezeiten und Grenzen des Accounts
 	}
 }
 

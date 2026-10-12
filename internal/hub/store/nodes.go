@@ -248,6 +248,23 @@ func (s *Store) RenameNode(ctx context.Context, userID int64, nodeID, name, loca
 	return rev, tx.Commit()
 }
 
+// AccountSettings liefert die Benachrichtigungs-Einstellungen eines Accounts (hc2_settings).
+func (s *Store) AccountSettings(ctx context.Context, userID int64) (map[string]string, error) {
+	out := map[string]string{}
+	rows, err := s.db.QueryContext(ctx, "SELECT `key`, `value` FROM hc2_settings WHERE userid = ?", userID)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k, v string
+		if rows.Scan(&k, &v) == nil {
+			out[k] = v
+		}
+	}
+	return out, rows.Err()
+}
+
 // SetAccountSettings speichert Benachrichtigungs-Einstellungen eines Accounts (von einer Node) und meldet
 // die Aenderung allen Nodes.
 func (s *Store) SetAccountSettings(ctx context.Context, userID int64, kv map[string]string) (int64, error) {

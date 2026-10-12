@@ -244,8 +244,9 @@ func (g *Gateway) me(w http.ResponseWriter, r *http.Request) {
 	acc, _ := g.st.Account(r.Context(), n.UserID)
 	eps, _ := g.st.Endpoints(r.Context())
 	peers, _ := g.st.AccountNodes(r.Context(), n.UserID)
+	settings, _ := g.st.AccountSettings(r.Context(), n.UserID)
 	writeJSON(w, http.StatusOK, map[string]any{"node_id": n.ID, "name": n.Name, "location": n.Location, "remote_mgmt": n.RemoteMgmt, "account": acc,
-		"nodes": peers, "endpoints": eps, "revision": g.st.CurrentRevision(r.Context(), n.UserID), "ack_seq": n.LastAckSeq, "server_time": time.Now().UTC(), "hub": g.location})
+		"nodes": peers, "settings": settings, "endpoints": eps, "revision": g.st.CurrentRevision(r.Context(), n.UserID), "ack_seq": n.LastAckSeq, "server_time": time.Now().UTC(), "hub": g.location})
 }
 
 func (g *Gateway) patchMe(w http.ResponseWriter, r *http.Request) {
