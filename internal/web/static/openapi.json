@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Node64 – lokale API",
-    "version": "1.0.0",
-    "description": "JSON-API des Nodes im eigenen Netz. Anmeldung mit API-Key (Einstellungen > API-Keys) als `Authorization: Bearer node64_...` oder mit der Browser-Sitzung (dann `X-CSRF-Token` bei POST/PUT/DELETE). Zeiten sind ISO 8601 in UTC. Dieselbe API nutzt die Oberfläche für Charts."
+    "version": "1.1.0",
+    "description": "JSON-API des Nodes im eigenen Netz. Anmeldung mit API-Key (Einstellungen > API-Keys) als `Authorization: Bearer node64_...` oder mit der Browser-Sitzung (dann `X-CSRF-Token` bei POST/PUT/DELETE). Zeiten sind ISO 8601 in UTC. Dieselbe API nutzt die Oberfläche.\n\n**Fehler:** JSON `{\"error\": \"...\"}`. 401 `authentication required` bzw. `invalid api key`; 403 bei fehlendem CSRF-Token (Sitzung ohne API-Key); 404 auch, wenn das Healthchecks-Modul ausgeschaltet ist; 429 `too many requests` mit `Retry-After: 10` (Begrenzung je IP).\n\n**Mit ipv64.net verknüpft:** Alle Nodes des Accounts bilden ein System. Checks, Wartungsfenster und Kanäle lassen sich von jeder Node aus ändern, pausieren, löschen und messen lassen, auch wenn sie einer anderen Node gehören (`owner: other`). Änderungen gehen über ipv64.net an das Portal und alle Nodes; ohne Verbindung werden sie gepuffert und nachgeliefert, bei gleichzeitigen Änderungen gewinnt die jüngere. Nur die Messstelle eines Docker-Checks bleibt bei der Node, die den Container steuert. Optionaler Kopf `X-Agent-Actor` setzt den Namen im Audit-Log."
   },
   "servers": [
     {
@@ -40,7 +40,8 @@
         "properties": {
           "token": {
             "type": "string",
-            "description": "32 Zeichen, Primärschlüssel"
+            "description": "32 Zeichen, Primärschlüssel",
+            "readOnly": true
           },
           "name": {
             "type": "string"
@@ -54,7 +55,8 @@
               "tcp",
               "port",
               "cert",
-              "push"
+              "push",
+              "docker"
             ]
           },
           "target": {
@@ -63,18 +65,21 @@
           },
           "params": {
             "type": "object",
-            "description": "Typabhängig: http/keyword method, headers, body, basic_user, basic_password, accept_status, follow_redirects, max_redirects, insecure_tls, keyword, keyword_absent; icmp count, max_loss_percent, max_latency_ms; tcp port, send, expect, tls; port port, expect (open|closed); cert port, min_days, server_name, skip_chain, skip_hostname; push period_seconds, grace_seconds"
+            "description": "Typabhängig: http/keyword method, headers, body, basic_user, basic_password, accept_status, follow_redirects, max_redirects, insecure_tls, keyword, keyword_absent; icmp count, max_loss_percent, max_latency_ms; tcp port, send, expect, tls; port port, expect (open|closed); cert port, min_days, server_name, skip_chain, skip_hostname; push period_seconds, grace_seconds docker: host (unix://, tcp:// oder http(s)://, Standard unix:///var/run/docker.sock)."
           },
           "interval_seconds": {
             "type": "integer",
-            "minimum": 20
+            "minimum": 20,
+            "description": "20 bis 86400 (bei push ohne Bedeutung). Standard 60."
           },
           "retry_interval_seconds": {
             "type": "integer",
-            "minimum": 5
+            "minimum": 5,
+            "description": "5 bis interval_seconds. Standard 20."
           },
           "retries": {
-            "type": "integer"
+            "type": "integer",
+            "description": "0 bis 10. Standard 1."
           },
           "connect_timeout_seconds": {
             "type": "number"
@@ -86,7 +91,8 @@
             "type": "boolean"
           },
           "stabilize": {
-            "type": "integer"
+            "type": "integer",
+            "description": "1 bis 20. Standard 3."
           },
           "ip_mode": {
             "type": "string",
@@ -122,7 +128,7 @@
               "online",
               "both"
             ],
-            "description": "online/both erst mit ipv64-Verknüpfung"
+            "description": "local = auf Nodes (siehe nodes), online = nur ipv64-Standorte, both = beides. online/both erst mit ipv64-Verknüpfung; docker nur local; private Ziele (LAN) nicht online/both (422)."
           },
           "policy": {
             "type": "string",
@@ -158,27 +164,50 @@
             "description": "Kanal-IDs, leer = Standardkanäle"
           },
           "repeat_minutes": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Erinnerung bei andauernder Störung, 0 bis 1440 (0 = aus)."
           },
           "revision": {
-            "type": "integer"
+            "type": "integer",
+            "readOnly": true
           },
           "created_at": {
-            "type": "string"
+            "type": "string",
+            "readOnly": true
           },
           "updated_at": {
-            "type": "string"
+            "type": "string",
+            "readOnly": true
           },
           "push_url": {
-            "type": "string"
+            "type": "string",
+            "readOnly": true
           },
           "state": {
-            "$ref": "#/components/schemas/State"
+            "$ref": "#/components/schemas/State",
+            "readOnly": true
           },
           "group": {
             "type": "string",
-            "description": "Frei benannte Gruppe (Anzeige, Filter)",
+            "description": "Frei benannte Gruppe (Anzeige, Filter) Höchstens 100 Zeichen.",
             "example": "Heimnetz"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Messende Nodes (IDs) bei local/both, nur mit Verknüpfung. Leer = die Besitzer-Node. Bei online und bei docker ohne Wirkung (Docker misst immer die Besitzer-Node). Jede Node des Accounts darf die Liste ändern."
+          },
+          "owner": {
+            "type": "string",
+            "enum": [
+              "self",
+              "other",
+              "online"
+            ],
+            "readOnly": true,
+            "description": "self = diese Node besitzt den Check, other = eine andere Node des Accounts (trotzdem hier änderbar), online = nur bei ipv64. Wird bei Eingaben ignoriert."
           }
         }
       },
@@ -450,6 +479,18 @@
           },
           "active": {
             "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "remote_id": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "revision": {
+            "type": "integer",
+            "readOnly": true
           }
         }
       },
@@ -462,13 +503,17 @@
           "type": {
             "type": "string",
             "enum": [
+              "browser",
               "smtp",
               "telegram",
               "discord",
               "ntfy",
               "gotify",
               "pushover",
-              "webhook"
+              "webhook",
+              "ipv64_mail",
+              "ipv64_sms",
+              "app"
             ]
           },
           "name": {
@@ -494,7 +539,13 @@
             "type": "boolean"
           },
           "execution": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "node",
+              "server"
+            ],
+            "readOnly": true,
+            "description": "node = diese Node sendet; server = Kanal des Portals oder einer anderen Node (ipv64 sendet; hier nur Name und Schalter änderbar, Zugangsdaten nur beim Besitzer)."
           },
           "revision": {
             "type": "integer"
@@ -504,6 +555,16 @@
           },
           "last_error": {
             "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
           }
         }
       },
@@ -512,6 +573,56 @@
         "properties": {
           "error": {
             "type": "string"
+          },
+          "field": {
+            "type": "string",
+            "description": "betroffenes Feld (optional)"
+          }
+        }
+      },
+      "MaintenanceInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "start_at",
+          "end_at"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "start_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "nach start_at, höchstens 30 Tage später"
+          },
+          "repeat": {
+            "type": "string",
+            "enum": [
+              "none",
+              "daily",
+              "weekly",
+              "monthly"
+            ]
+          },
+          "repeat_until": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tokens": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "betroffene Checks; leer = alle"
+          },
+          "active": {
+            "type": "boolean",
+            "default": true
           }
         }
       }
@@ -528,6 +639,9 @@
         "responses": {
           "200": {
             "description": "{status, version, time}"
+          },
+          "503": {
+            "description": "{status: degraded, database: unreachable}"
           }
         }
       }
@@ -630,7 +744,8 @@
           "200": {
             "description": "Schlüssel-Wert-Objekt"
           }
-        }
+        },
+        "description": "Schlüssel: node.name, node.location, node.timezone, node.base_url, notify.quiet_enabled (0/1), notify.quiet_from, notify.quiet_to (HH:MM), notify.quiet_days (1=Mo … 7=So, leer = kein Tag), notify.quiet_tz, notify.rate_per_hour (0–1000 je Kanal, 0 = unbegrenzt), notify.batch_threshold (0–100), notify.batch_window_seconds (0–600), updates.check."
       },
       "put": {
         "tags": [
@@ -654,9 +769,17 @@
             "description": "OK"
           },
           "422": {
-            "description": "unbekannter Schlüssel"
+            "description": "unbekannter Schlüssel oder ungültiger Wert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
-        }
+        },
+        "description": "Werte werden geprüft (422 mit Grund). Mit Verknüpfung gelten die notify.*-Einstellungen für den ganzen Account: sie gehen an ipv64 und alle Nodes. Was während der Ruhezeit passiert, kommt danach als eine Sammelmeldung; kritische Checks melden auch in der Ruhezeit."
       }
     },
     "/audit": {
@@ -794,7 +917,7 @@
           "Healthchecks"
         ],
         "summary": "Check anlegen",
-        "description": "Pflicht: name, type, target (außer push). Beispiel: {\"name\":\"Web\",\"type\":\"http\",\"target\":\"https://example.com/\",\"interval_seconds\":60,\"params\":{\"accept_status\":\"200-299\"}}",
+        "description": "Legt einen Check an. Pflicht: name, type, target (außer push). Mit Verknüpfung: execution und nodes bestimmen die Messstellen. Die anlegende Node ist Besitzerin.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -810,6 +933,16 @@
           },
           "422": {
             "description": "ungültig"
+          },
+          "400": {
+            "description": "ungültiges JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -843,7 +976,7 @@
         "tags": [
           "Healthchecks"
         ],
-        "summary": "Check ändern (vollständiges Objekt; fehlende Felder behalten ihren Wert)",
+        "summary": "Check ändern",
         "requestBody": {
           "content": {
             "application/json": {
@@ -859,8 +992,29 @@
           },
           "422": {
             "description": "ungültig"
+          },
+          "400": {
+            "description": "ungültiges JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Check nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
-        }
+        },
+        "description": "name, type und target werden immer übernommen (mitschicken!), description wird ohne Angabe geleert. Weggelassene Werte wie params, tags, channels, locations, nodes und alle Zahlen- und Schalterfelder bleiben. Auch Checks anderer Nodes (owner: other) sind änderbar; Besitzer-Node und die Messstelle eines Docker-Checks bleiben dabei."
       },
       "delete": {
         "tags": [
@@ -870,8 +1024,19 @@
         "responses": {
           "204": {
             "description": "gelöscht"
+          },
+          "404": {
+            "description": "Check nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
-        }
+        },
+        "description": "Löscht den Check auf allen Nodes und bei ipv64, auch wenn er einer anderen Node gehört."
       }
     },
     "/checks/{token}/pause": {
@@ -892,9 +1057,27 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "Check",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Check"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Check nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
-        }
+        },
+        "description": "Gilt für den Check auf allen Nodes; auch für Checks anderer Nodes."
       }
     },
     "/checks/{token}/resume": {
@@ -915,9 +1098,27 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "Check",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Check"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Check nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
-        }
+        },
+        "description": "Gilt für den Check auf allen Nodes; auch für Checks anderer Nodes."
       }
     },
     "/checks/{token}/run": {
@@ -940,10 +1141,28 @@
           "202": {
             "description": "angestoßen"
           },
+          "404": {
+            "description": "Check nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
-            "description": "Push-Check"
+            "description": "`push checks cannot be run manually` | `measured by ipv64 only; online checks run on their interval` | `no measuring node reachable` (nicht verbunden)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
-        }
+        },
+        "description": "Misst sofort: auf dieser Node, wenn sie den Check misst, und über ipv64 auf den anderen messenden Nodes. Funktioniert daher auch für Checks, die nur andere Nodes messen. Antwort 202 ohne Inhalt."
       }
     },
     "/checks/{token}/clone": {
@@ -964,9 +1183,27 @@
         ],
         "responses": {
           "201": {
-            "description": "Kopie"
+            "description": "neuer Check",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Check"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Check nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
-        }
+        },
+        "description": "Kopie mit Namenszusatz \"(copy)\", pausiert. Die Kopie gehört dieser Node (bei Checks anderer Nodes: Ausführung local)."
       }
     },
     "/checks/{token}/measurements": {
@@ -1094,6 +1331,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 1000
+            }
           }
         ],
         "responses": {
@@ -1144,6 +1390,16 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "range muss 1h, 24h, 7d, 30d oder 1y sein",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1187,7 +1443,18 @@
           "200": {
             "description": "Liste"
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 1000
+            }
+          }
+        ]
       }
     },
     "/check-types": {
@@ -1200,7 +1467,8 @@
           "200": {
             "description": "Liste"
           }
-        }
+        },
+        "description": "Liste der Typen: http, keyword, icmp, tcp, port, cert, push, docker."
       }
     },
     "/maintenance": {
@@ -1221,10 +1489,11 @@
         ],
         "summary": "Wartungsfenster anlegen",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Maintenance"
+                "$ref": "#/components/schemas/MaintenanceInput"
               }
             }
           }
@@ -1232,6 +1501,26 @@
         "responses": {
           "201": {
             "description": "angelegt"
+          },
+          "400": {
+            "description": "ungültiges JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültige Angaben",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1255,6 +1544,47 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "400": {
+            "description": "ungültiges JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "maintenance window not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültige Angaben",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Ersetzt das Wartungsfenster vollständig (alle Felder mitschicken). Auch Fenster anderer Nodes und aus dem Portal sind änderbar.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaintenanceInput"
+              }
+            }
           }
         }
       },
@@ -1267,7 +1597,8 @@
           "204": {
             "description": "gelöscht"
           }
-        }
+        },
+        "description": "Löscht überall (auch Fenster anderer Nodes). Antwort 204 auch für unbekannte IDs."
       }
     },
     "/push/{token}": {
@@ -1276,7 +1607,7 @@
           "Healthchecks"
         ],
         "summary": "Heartbeat eines Push-Checks (ohne Anmeldung)",
-        "description": "Auch POST. Optional ?status=down&msg=... Antwort ist für unbekannte Tokens identisch. Mindestabstand 1 s, höchstens 60 pro Minute.",
+        "description": "Auch als POST (ohne Anmeldung und ohne CSRF-Token). Optional ?status=down&msg=... (msg höchstens 200 Zeichen, jeder andere status gilt als up); ein POST-Inhalt bis 4 KB wird als details.payload gespeichert. Die Antwort ist für unbekannte Tokens identisch. Mindestabstand 1 s, höchstens 60 pro Minute.\n\nPush-Checks lassen sich an jeder Node des Accounts und bei ipv64 auslösen: Misst diese Node den Check nicht allein, wird der Push über ipv64 an die anderen messenden Nodes weitergegeben. 503, wenn der Push weder hier gemessen noch weitergegeben werden konnte (keine Verbindung zu ipv64).",
         "security": [],
         "parameters": [
           {
@@ -1308,10 +1639,74 @@
         ],
         "responses": {
           "200": {
-            "description": "{status: ok}"
+            "description": "{\"status\": \"ok\"}"
           },
           "429": {
-            "description": "zu schnell"
+            "description": "zu schnell (leerer Inhalt)"
+          },
+          "503": {
+            "description": "{\"status\": \"error\", \"error\": \"not connected to ipv64, push not delivered\"}"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Heartbeat eines Push-Checks per POST (ohne Anmeldung)",
+        "description": "Auch als POST (ohne Anmeldung und ohne CSRF-Token). Optional ?status=down&msg=... (msg höchstens 200 Zeichen, jeder andere status gilt als up); ein POST-Inhalt bis 4 KB wird als details.payload gespeichert. Die Antwort ist für unbekannte Tokens identisch. Mindestabstand 1 s, höchstens 60 pro Minute.\n\nPush-Checks lassen sich an jeder Node des Accounts und bei ipv64 auslösen: Misst diese Node den Check nicht allein, wird der Push über ipv64 an die anderen messenden Nodes weitergegeben. 503, wenn der Push weder hier gemessen noch weitergegeben werden konnte (keine Verbindung zu ipv64).",
+        "security": [],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "up",
+                "down"
+              ]
+            }
+          },
+          {
+            "name": "msg",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{\"status\": \"ok\"}"
+          },
+          "429": {
+            "description": "zu schnell (leerer Inhalt)"
+          },
+          "503": {
+            "description": "{\"status\": \"error\", \"error\": \"not connected to ipv64, push not delivered\"}"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            },
+            "text/plain": {
+              "schema": {
+                "type": "string"
+              }
+            }
           }
         }
       }
@@ -1391,6 +1786,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "404": {
+            "description": "channel not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1402,6 +1807,16 @@
         "responses": {
           "200": {
             "description": "OK"
+          },
+          "404": {
+            "description": "channel not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -1413,6 +1828,16 @@
         "responses": {
           "204": {
             "description": "gelöscht"
+          },
+          "404": {
+            "description": "channel not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -1488,6 +1913,122 @@
         "responses": {
           "200": {
             "description": "Liste"
+          }
+        }
+      }
+    },
+    "/checks/{token}/chart": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Diagrammdaten je Messstelle",
+        "description": "Latenz je Messstelle (diese Node, andere Nodes, ipv64-Standorte). 1h–24h als Einzelmessungen, 7d/30d stündlich, 1y täglich. ms = null bedeutet gestört oder keine Messung; up = Verfügbarkeit in Prozent (nur stündlich/täglich).",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1h",
+                "6h",
+                "24h",
+                "7d",
+                "30d",
+                "1y"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reihen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "range": {
+                      "type": "string"
+                    },
+                    "bucket": {
+                      "type": "string",
+                      "enum": [
+                        "raw",
+                        "hour",
+                        "day"
+                      ]
+                    },
+                    "series": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "source": {
+                            "type": "string",
+                            "description": "self, node:<id> oder loc:<code>"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "points": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "t": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                "ms": {
+                                  "type": [
+                                    "number",
+                                    "null"
+                                  ]
+                                },
+                                "up": {
+                                  "type": "number"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "range fehlt oder ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Check nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }

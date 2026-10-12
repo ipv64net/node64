@@ -547,6 +547,10 @@ func (m *Module) apiClone(w http.ResponseWriter, r *http.Request) {
 	n.Revision = 0
 	n.UpdatedBy = actor(r)
 	n.Runtime = scheduler.Runtime{}
+	if c.Owner == "other" {
+		n.Execution = "local" // wie in der Oberflaeche: die Kopie gehoert dieser Node
+	}
+	n.Owner = "self"
 	if err := m.st.Insert(r.Context(), &n); err != nil {
 		writeErr(w, http.StatusInternalServerError, "database error")
 		return

@@ -85,7 +85,9 @@ Anmeldung mit einem API-Key aus den Einstellungen (`Authorization: Bearer node64
 
 ### Healthchecks per API
 
-Das Modul wird in den Einstellungen aktiviert. Check-Typen: `http`, `keyword`, `icmp`, `tcp`, `port`, `cert`, `push`.
+Das Modul wird in den Einstellungen aktiviert. Check-Typen: `http`, `keyword`, `icmp`, `tcp`, `port`, `cert`, `push`, `docker`.
+
+Mit ipv64.net verknüpft bilden alle Nodes eines Accounts ein System: `nodes` legt fest, welche Nodes einen Check messen, `owner` zeigt, ob er dieser Node (`self`), einer anderen (`other`) oder nur ipv64 (`online`) gehört. Jede Node darf jeden Check ändern, pausieren, löschen und mit `run` sofort messen lassen. Misst sie ihn nicht selbst, geht der Auftrag über ipv64 an die messenden Nodes. Nur die Messstelle eines Docker-Checks bleibt bei der Node mit dem Container. Ohne Verbindung werden Änderungen gepuffert und nachgeliefert, bei gleichzeitigen Änderungen gewinnt die jüngere.
 
 ```bash
 # Check anlegen
@@ -95,15 +97,20 @@ curl -X POST http://localhost:8080/api/checks -H "Authorization: Bearer node64_�
   "params": {"accept_status": "200-299"}
 }'
 # Liste, Details, Messpunkte, Ereignisse, Statistik
-curl http://localhost:8080/api/checks
-curl http://localhost:8080/api/checks/<token>/measurements?limit=50
-curl http://localhost:8080/api/checks/<token>/stats?range=24h
+curl -H "Authorization: Bearer node64_…" http://localhost:8080/api/checks
+curl -H "Authorization: Bearer node64_…" "http://localhost:8080/api/checks/<token>/measurements?limit=50"
+curl -H "Authorization: Bearer node64_…" "http://localhost:8080/api/checks/<token>/stats?range=24h"
+# Diagrammdaten je Messstelle (diese Node, andere Nodes, ipv64-Standorte)
+curl -H "Authorization: Bearer node64_…" "http://localhost:8080/api/checks/<token>/chart?range=24h"
 # Heartbeat (Push-Check): der Dienst meldet sich selbst
 curl http://localhost:8080/api/push/<token>
 curl "http://localhost:8080/api/push/<token>?status=down&msg=backup+failed"
+curl -X POST --data '{"files": 1200}' http://localhost:8080/api/push/<token>
 ```
 
-Weitere Endpunkte: `PUT`/`DELETE /api/checks/{token}`, `POST .../pause|resume|run|clone`, `GET .../events|incidents`, `GET /api/events`, `GET /api/incidents`, `GET|POST /api/maintenance`, `PUT|DELETE /api/maintenance/{id}`, `GET|POST /api/channels`, `POST /api/channels/{id}/test`, `GET /api/status`, `GET|PUT /api/settings`, `GET /api/backup`. Alles mit Parametern und Antworten unter `/api/docs`.
+Push-Checks lassen sich an jeder Node und bei ipv64 auslösen. Misst diese Node den Check nicht allein, gibt sie den Push über ipv64 an die anderen messenden Nodes weiter; ist das ohne Verbindung nicht möglich, antwortet sie mit 503.
+
+Weitere Endpunkte: `PUT`/`DELETE /api/checks/{token}`, `POST .../pause|resume|run|clone`, `GET .../events|incidents|chart`, `GET /api/events`, `GET /api/incidents`, `GET|POST /api/maintenance`, `PUT|DELETE /api/maintenance/{id}`, `GET|POST /api/channels`, `POST /api/channels/{id}/test`, `GET /api/status`, `GET|PUT /api/settings`, `GET /api/backup`. Alles mit Parametern und Antworten unter `/api/docs`.
 
 ICMP-Checks brauchen im Container entweder unprivilegiertes Ping (`sysctls: net.ipv4.ping_group_range=0 65535`, siehe compose oben) oder `cap_add: NET_RAW`.
 

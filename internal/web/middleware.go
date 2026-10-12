@@ -166,7 +166,10 @@ func (s *Server) session(next http.Handler) http.Handler {
 		switch r.Method {
 		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
 			if strings.HasPrefix(r.URL.Path, "/api/") && r.Header.Get("Authorization") != "" {
-				break // API-Key-Auth (spaetere Phase) braucht kein CSRF
+				break // API-Key-Auth braucht kein CSRF
+			}
+			if strings.HasPrefix(r.URL.Path, "/api/push/") {
+				break // Push-URL: oeffentlich, der Token in der URL ist die Berechtigung (keine Sitzung)
 			}
 			tok := r.Header.Get("X-CSRF-Token")
 			if tok == "" {
