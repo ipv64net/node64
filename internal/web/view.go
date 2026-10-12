@@ -111,6 +111,14 @@ func (v *View) T(key string, args ...any) string { return v.s.I18n.T(v.Lang, key
 func (v *View) Time(t time.Time) string { return v.s.I18n.FormatDateTime(v.Lang, t, v.loc) }
 
 // Date formatiert nur das Datum.
+// TimeStr formatiert eine Zeit im Textformat (RFC 3339) in der Zeitzone des Benutzers.
+func (v *View) TimeStr(s string) string {
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return v.Time(t)
+	}
+	return s
+}
+
 func (v *View) Date(t time.Time) string { return v.s.I18n.FormatDate(v.Lang, t, v.loc) }
 
 // Ago liefert "vor 5 min" fuer eine Zeit.

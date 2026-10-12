@@ -19,8 +19,8 @@
 				<dt class="col-5">{{.T "link.account"}}</dt><dd class="col-7">#{{$st.AccountID}} · {{$st.Plan}}</dd>
 				<dt class="col-5">{{.T "link.node_name"}}</dt><dd class="col-7">{{$st.NodeName}}{{if $st.Location}} ({{$st.Location}}){{end}}</dd>
 				<dt class="col-5">{{.T "link.remote_mgmt"}}</dt><dd class="col-7">{{.T (print "link.remote." $st.RemoteMgmt)}}</dd>
-				<dt class="col-5">{{.T "link.linked_at"}}</dt><dd class="col-7">{{$st.LinkedAt}}</dd>
-				<dt class="col-5">{{.T "link.last_sync"}}</dt><dd class="col-7">{{if $st.LastSyncAt}}{{$st.LastSyncAt}}{{else}}–{{end}}</dd>
+				<dt class="col-5">{{.T "link.linked_at"}}</dt><dd class="col-7">{{.TimeStr $st.LinkedAt}}</dd>
+				<dt class="col-5">{{.T "link.last_sync"}}</dt><dd class="col-7">{{if $st.LastSyncAt}}{{.TimeStr $st.LastSyncAt}}{{else}}–{{end}}</dd>
 				<dt class="col-5">{{.T "link.revision"}}</dt><dd class="col-7">{{$st.Revision}}</dd>
 				<dt class="col-5">{{.T "link.outbox"}}</dt><dd class="col-7">{{$st.Outbox}}{{if $st.Conflicts}} · <span class="text-danger">{{.T "link.conflicts_n" "count" $st.Conflicts}}</span>{{end}}</dd>
 			</dl>

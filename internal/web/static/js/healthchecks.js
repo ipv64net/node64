@@ -179,6 +179,19 @@
 			if (range === "1y") { return t.toLocaleDateString([], { month: "short", year: "2-digit" }); }
 			return t.toLocaleDateString([], { day: "2-digit", month: "2-digit" });
 		};
+		// Messpausen (Node aus, pausiert) nicht ueberbruecken: Luecke, wenn der Abstand weit ueber dem ueblichen liegt
+		var withGaps = function (pts) {
+			if (pts.length < 3) { return pts; }
+			var d = [];
+			for (var i = 1; i < pts.length; i++) { d.push(pts[i].x - pts[i - 1].x); }
+			d.sort(function (a, b) { return a - b; });
+			var limit = Math.max(3 * d[Math.floor(d.length / 2)], 120000), out = [pts[0]];
+			for (var j = 1; j < pts.length; j++) {
+				if (pts[j].x - pts[j - 1].x > limit) { out.push({ x: pts[j - 1].x + 1, y: null }); }
+				out.push(pts[j]);
+			}
+			return out;
+		};
 		var load = function (range) {
 			Promise.all([
 				fetch("/api/checks/" + token + "/chart?range=" + range, { credentials: "same-origin" }).then(function (r) { return r.json(); }),
@@ -193,7 +206,7 @@
 					return {
 						label: s.label, borderColor: col, backgroundColor: col, borderWidth: 1.5, tension: 0.2, fill: false, spanGaps: false,
 						pointRadius: raw ? 1.2 : 0, pointHoverRadius: 4,
-						data: s.points.map(function (p) { return { x: new Date(p.t).getTime(), y: p.ms }; })
+						data: withGaps(s.points.map(function (p) { return { x: new Date(p.t).getTime(), y: p.ms }; }))
 					};
 				});
 				// Ausfaelle: rote Punkte auf der Nulllinie (Stunden/Tage mit Verlust gelb)
