@@ -511,6 +511,11 @@ func (c *Checker) housekeepingLoop(ctx context.Context) {
 				continue
 			}
 			c.st.Metrics.Set(c.Count(), len(nodes), c.slotIdx, c.slotMod)
+			if n, err := c.st.CleanupStaleSources(ctx, now); err != nil {
+				c.log.Warn("cleaning up stale sources failed", "err", err)
+			} else if n > 0 {
+				c.log.Info("removed stale sources", "count", n)
+			}
 			if n, err := c.st.CloseDeletedIncidents(ctx); err != nil {
 				c.log.Warn("closing incidents of deleted checks failed", "err", err)
 			} else if n > 0 {

@@ -335,7 +335,7 @@ func (s *Store) Delete(ctx context.Context, token string) error {
 	}
 	for _, q := range []string{
 		`DELETE FROM hc_checks WHERE token = ?`, `DELETE FROM hc_measurements WHERE token = ?`, `DELETE FROM hc_events WHERE token = ?`,
-		`DELETE FROM hc_incidents WHERE token = ?`, `DELETE FROM hc_hourly WHERE token = ?`, `DELETE FROM hc_daily WHERE token = ?`,
+		`DELETE FROM hc_incidents WHERE token = ?`, `DELETE FROM hc_sources WHERE token = ?`, `DELETE FROM hc_source_points WHERE token = ?`, `DELETE FROM hc_hourly WHERE token = ?`, `DELETE FROM hc_daily WHERE token = ?`,
 	} {
 		if _, err := tx.ExecContext(ctx, q, token); err != nil {
 			return err
@@ -740,6 +740,9 @@ func (s *Store) Aggregate(ctx context.Context, now time.Time) error {
 		return err
 	}
 	if _, err := s.w.ExecContext(ctx, `DELETE FROM hc_measurements WHERE time < ?`, rawCut); err != nil {
+		return err
+	}
+	if _, err := s.w.ExecContext(ctx, `DELETE FROM hc_source_points WHERE time < ?`, rawCut); err != nil {
 		return err
 	}
 	if _, err := s.w.ExecContext(ctx, `DELETE FROM hc_hourly WHERE hour < ?`, ft(now.Add(-HourlyRetention))); err != nil {

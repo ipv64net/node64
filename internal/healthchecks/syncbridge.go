@@ -541,13 +541,23 @@ type RemoteState struct {
 	LatencyMS float64   `json:"latency_ms"`
 	Reason    string    `json:"reason"`
 	Message   string    `json:"message"`
+	// je Messstelle (ab Hub 0.10.4; aeltere Hubs schicken nur den Gesamtzustand)
+	SourceState string    `json:"source_state,omitempty"`
+	SourceSince time.Time `json:"source_since,omitempty"`
+	SourceLabel string    `json:"source_label,omitempty"`
 }
 
 // ApplyRemoteState uebernimmt Zustand und letzten Messpunkt eines fremden Checks (nur Anzeige):
 // Gesamtzustand in hc_checks, Messpunkt in hc_measurements (flags 8 = von ipv64, wird nicht hochgeladen).
 func (m *Module) ApplyRemoteState(ctx context.Context, r RemoteState) {
 	c, _ := m.st.Check(ctx, r.Token)
-	if c == nil || c.MeasuredHere() {
+	if c == nil {
+		return
+	}
+	if r.Source != "" && r.SourceState != "" {
+		m.applySource(ctx, c, r)
+	}
+	if c.MeasuredHere() {
 		return
 	}
 	if r.State != "" {
@@ -559,7 +569,7 @@ func (m *Module) ApplyRemoteState(ctx context.Context, r RemoteState) {
 		return
 	}
 	var last string
-	_ = m.st.r.QueryRowContext(ctx, `SELECT COALESCE(MAX(time), '') FROM hc_measurements WHERE token = ?`, r.Token).Scan(&last)
+	_ = m.st.r.QueryRowContext(ctx, `SELECT COALESCE(MAX(time), '') FROM hc_measurements WHERE token = ? AND details = ?`, r.Token, r.Source).Scan(&last)
 	if last != "" && !r.Time.After(pt(last)) {
 		return // schon bekannt
 	}

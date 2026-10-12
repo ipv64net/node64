@@ -56,18 +56,44 @@
 	</div>
 </div>
 
+{{if $d.Diagnosis}}<div class="alert alert-info py-2 small"><i class="bi bi-clipboard2-pulse"></i> {{$d.Diagnosis}}</div>{{end}}
+{{if $d.Sources}}
+<div class="card mb-3">
+	<div class="card-header"><i class="bi bi-geo-alt-fill text-primary"></i> {{.T "hc.sources.title"}} <span class="badge text-bg-secondary">{{len $d.Sources}}</span></div>
+	<div class="table-responsive">
+	<table class="table table-sm table-hover align-middle mb-0 table-cards hc-sources">
+		<thead><tr><th class="ps-3">{{.T "hc.sources.source"}}</th><th>{{.T "common.status"}}</th><th class="text-end">{{.T "hc.latency"}}</th><th>{{.T "hc.sources.last"}}</th><th class="d-none d-md-table-cell">{{.T "hc.sources.message"}}</th></tr></thead>
+		<tbody>
+		{{range $d.Sources}}
+		<tr{{if .Stale}} class="opacity-50"{{end}}>
+			<td data-label="{{$.T "hc.sources.source"}}" class="ps-3 fw-semibold"><i class="bi {{.Icon}} me-1"></i> {{.Label}}</td>
+			<td data-label="{{$.T "common.status"}}">{{if .State}}<span class="badge hc-state-{{.State}}">{{$.T (print "hc.state." .State)}}</span>{{else}}–{{end}}{{if .Stale}} <span class="badge text-bg-secondary" title="{{$.T "hc.sources.stale_hint"}}">{{$.T "hc.sources.stale"}}</span>{{end}}</td>
+			<td data-label="{{$.T "hc.latency"}}" class="text-end text-nowrap">{{if eq .Status "up"}}{{ms .LatencyMS}} ms{{else}}–{{end}}</td>
+			<td data-label="{{$.T "hc.sources.last"}}" class="small text-nowrap" title="{{if not .LastCheck.IsZero}}{{$.Time .LastCheck}}{{end}}">{{if .LastCheck.IsZero}}–{{else}}{{$.Ago .LastCheck}}{{end}}</td>
+			<td data-label="{{$.T "hc.sources.message"}}" class="small text-body-secondary d-none d-md-table-cell text-break">{{if .Message}}{{.Message}}{{else}}–{{end}}</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table>
+	</div>
+</div>
+{{end}}
+
 <div class="row g-3">
 	<div class="col-xl-8">
 		<div class="card mb-3">
-			<div class="card-header d-flex justify-content-between align-items-center">
-				<span><i class="bi bi-graph-up"></i> {{.T "hc.latency"}}</span>
+			<div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+				<span><i class="bi bi-graph-up text-primary"></i> {{.T "hc.latency"}}</span>
 				<div class="btn-group btn-group-sm" role="group" id="hc-ranges">
+					<button type="button" class="btn btn-outline-secondary" data-range="6h">6 h</button>
 					<button type="button" class="btn btn-outline-secondary active" data-range="24h">24 h</button>
 					<button type="button" class="btn btn-outline-secondary" data-range="7d">7 d</button>
 					<button type="button" class="btn btn-outline-secondary" data-range="30d">30 d</button>
+					<button type="button" class="btn btn-outline-secondary" data-range="1y">{{.T "hc.chart.year"}}</button>
 				</div>
 			</div>
-			<div class="card-body"><div class="hc-chart-wrap"><canvas id="hc-chart" data-token="{{$c.Token}}" data-label-latency="{{.T "hc.latency"}}" data-label-up="{{.T "hc.availability"}}" data-label-down="{{.T "hc.state.down"}}" data-label-warn="{{.T "hc.chart.warn"}}" data-label-flap="{{.T "hc.state.flapping"}}"></canvas></div></div>
+			<div class="card-body"><div class="hc-chart-wrap"><canvas id="hc-chart" data-token="{{$c.Token}}" data-label-latency="{{.T "hc.latency"}}" data-label-up="{{.T "hc.availability"}}" data-label-down="{{.T "hc.state.down"}}" data-label-warn="{{.T "hc.chart.warn"}}" data-label-flap="{{.T "hc.state.flapping"}}"></canvas></div>
+				<div class="small text-body-secondary mt-1" id="hc-chart-note" data-raw="{{.T "hc.chart.note_raw"}}" data-hour="{{.T "hc.chart.note_hour"}}" data-day="{{.T "hc.chart.note_day"}}" data-empty="{{.T "hc.no_data"}}"></div></div>
 		</div>
 
 		<div class="card mb-3">

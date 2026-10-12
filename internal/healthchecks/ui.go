@@ -352,6 +352,8 @@ type detailData struct {
 	ParentName string
 	Children   []*Check
 	PushURL    string
+	Sources    []SourceRow // Messstellen (leer = nur diese Node)
+	Diagnosis  string
 }
 
 func (m *Module) loadPage(w http.ResponseWriter, r *http.Request) *Check {
@@ -396,6 +398,9 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 			d.Ranges = append(d.Ranges, rangeStat{Range: rg, UpPercent: st.UpPercent, AvgMS: st.AvgMS, Count: st.Count})
 		}
 	}
+	tr := m.translator(lang)
+	d.Sources = m.sources(ctx, c, tr("hc.sources.this_node"))
+	d.Diagnosis = diagnosis(d.Sources, tr)
 	d.Events, _ = m.st.Events(ctx, c.Token, 50, 0)
 	d.Incidents, _ = m.st.Incidents(ctx, c.Token, 10)
 	if ms, err := m.st.Measurements(ctx, c.Token, time.Time{}, time.Time{}, 1, 0); err == nil && len(ms) > 0 {

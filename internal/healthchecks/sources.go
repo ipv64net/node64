@@ -1,0 +1,318 @@
+package healthchecks
+
+import (
+	"context"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// Messstellen eines Checks (Node, ipv64-Standorte, andere Nodes) wie im Portal: letzter Zustand je
+// Messstelle aus den remote_states des Hubs, dazu der eigene Zustand, wenn diese Node mitmisst.
+
+// SourceRow ist eine Zeile der Messstellen-Tabelle.
+type SourceRow struct {
+	Source    string
+	Label     string
+	State     string
+	Since     time.Time
+	LastCheck time.Time
+	Status    string
+	LatencyMS float64
+	Reason    string
+	Message   string
+	Self      bool // diese Node
+	Stale     bool // laenger keine Messung
+}
+
+// Icon fuer die Art der Messstelle.
+func (s SourceRow) Icon() string {
+	switch {
+	case s.Self:
+		return "bi-house-fill text-success"
+	case strings.HasPrefix(s.Source, "loc:"):
+		return "bi-cloud-fill text-primary"
+	}
+	return "bi-hdd-network text-secondary"
+}
+
+// sourceLabel liefert einen lesbaren Namen fuer eine Messstelle.
+func sourceLabel(source, label string) string {
+	switch {
+	case strings.HasPrefix(source, "loc:"):
+		if label == "" {
+			label = strings.TrimPrefix(source, "loc:")
+		}
+		return "ipv64 " + label
+	case label != "":
+		return label
+	case strings.HasPrefix(source, "node:"):
+		return "Node " + strings.TrimPrefix(source, "node:")
+	}
+	return source
+}
+
+// sourceBelongs: gleiche Regeln wie im Hub (nach dem Umhaengen zaehlen nur aktuelle Messstellen).
+func sourceBelongs(c *Check, source string) bool {
+	isNode := strings.HasPrefix(source, "node:")
+	if (c.Execution == "online" && isNode) || (c.Execution == "local" && !isNode) {
+		return false
+	}
+	if strings.HasPrefix(source, "loc:") && len(c.Locations) > 0 {
+		code := strings.TrimPrefix(source, "loc:")
+		for _, l := range c.Locations {
+			if l == code {
+				return true
+			}
+		}
+		return false
+	}
+	return true
+}
+
+// applySource speichert Zustand und Messpunkt einer Messstelle. Messpunkte nur fuer Checks, die
+// diese Node selbst misst (Hybrid); fuer reine Online-/Fremd-Checks liegen sie in hc_measurements.
+func (m *Module) applySource(ctx context.Context, c *Check, r RemoteState) {
+	_, _ = m.st.w.ExecContext(ctx, `INSERT INTO hc_sources (token, source, label, state, since, last_check_at, last_status, latency_ms, reason, message, updated_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(token, source) DO UPDATE SET label=excluded.label, state=excluded.state, since=excluded.since, last_check_at=excluded.last_check_at,
+			last_status=excluded.last_status, latency_ms=excluded.latency_ms, reason=excluded.reason, message=excluded.message, updated_at=excluded.updated_at`,
+		r.Token, r.Source, r.SourceLabel, r.SourceState, ft(r.SourceSince), ft(r.Time), r.Status, r.LatencyMS, r.Reason, r.Message, ft(time.Now()))
+	if c.MeasuredHere() && !r.Time.IsZero() && (r.Status == "up" || r.Status == "down") {
+		st := 0
+		if r.Status == "up" {
+			st = 1
+		}
+		_, _ = m.st.w.ExecContext(ctx, `INSERT OR IGNORE INTO hc_source_points (token, source, time, status, latency_ms) VALUES (?,?,?,?,?)`,
+			r.Token, r.Source, ft(r.Time), st, r.LatencyMS)
+	}
+}
+
+// sources liefert die Messstellen-Tabelle eines Checks (eigene Zeile zuerst).
+func (m *Module) sources(ctx context.Context, c *Check, selfLabel string) []SourceRow {
+	var out []SourceRow
+	rows, err := m.st.r.QueryContext(ctx, `SELECT source, label, state, since, last_check_at, last_status, latency_ms, reason, message FROM hc_sources WHERE token = ? ORDER BY source`, c.Token)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	staleAfter := 3 * c.Interval
+	if staleAfter < 10*time.Minute {
+		staleAfter = 10 * time.Minute
+	}
+	for rows.Next() {
+		var s SourceRow
+		var since, last string
+		if rows.Scan(&s.Source, &s.Label, &s.State, &since, &last, &s.Status, &s.LatencyMS, &s.Reason, &s.Message) != nil {
+			continue
+		}
+		if !sourceBelongs(c, s.Source) {
+			continue
+		}
+		s.Since, s.LastCheck, s.Label = pt(since), pt(last), sourceLabel(s.Source, s.Label)
+		s.Stale = s.LastCheck.IsZero() || time.Since(s.LastCheck) > staleAfter
+		out = append(out, s)
+	}
+	if len(out) == 0 {
+		return nil // nur diese Node misst: keine Tabelle noetig
+	}
+	if c.MeasuredHere() {
+		rt := m.liveRuntime(c)
+		self := SourceRow{Source: "self", Label: selfLabel, State: string(rt.State), Since: rt.Since, LastCheck: rt.LastCheck, Status: string(rt.LastStatus),
+			LatencyMS: msf(rt.LastLatency), Reason: string(rt.LastReason), Message: rt.LastMessage, Self: true}
+		out = append([]SourceRow{self}, out...)
+	}
+	return out
+}
+
+// diagnosis vergleicht innen (Node) und aussen (ipv64-Standorte) wie im Portal.
+func diagnosis(rows []SourceRow, tr func(string, ...any) string) string {
+	in := ""
+	var out []string
+	for _, s := range rows {
+		if s.Stale {
+			continue
+		}
+		if s.Self || strings.HasPrefix(s.Source, "node:") {
+			in = s.State
+		} else if strings.HasPrefix(s.Source, "loc:") {
+			out = append(out, s.State)
+		}
+	}
+	if in == "" || len(out) == 0 {
+		return ""
+	}
+	outUp, outDown := false, true
+	for _, s := range out {
+		if s == "up" {
+			outUp = true
+		}
+		if s != "down" {
+			outDown = false
+		}
+	}
+	switch {
+	case in == "down" && outUp:
+		return tr("hc.diag.inside")
+	case in == "up" && outDown:
+		return tr("hc.diag.outside")
+	case in == "down" && outDown:
+		return tr("hc.diag.both")
+	}
+	return ""
+}
+
+// ---------------------------------------------------------------- Diagramm (Linie je Messstelle)
+
+type chartPoint struct {
+	T  time.Time `json:"t"`
+	MS *float64  `json:"ms"`           // null = gestoert bzw. keine Messung
+	Up *float64  `json:"up,omitempty"` // Verfuegbarkeit in % (Stunden-/Tageswerte)
+}
+
+type chartSeries struct {
+	Source string       `json:"source"`
+	Label  string       `json:"label"`
+	Points []chartPoint `json:"points"`
+}
+
+var chartRanges = map[string]struct {
+	span   time.Duration
+	bucket string // raw, hour, day
+}{
+	"1h": {time.Hour, "raw"}, "6h": {6 * time.Hour, "raw"}, "24h": {24 * time.Hour, "raw"},
+	"7d": {7 * 24 * time.Hour, "hour"}, "30d": {30 * 24 * time.Hour, "hour"}, "1y": {365 * 24 * time.Hour, "day"},
+}
+
+func f64(v float64) *float64 { return &v }
+
+// apiChart liefert Messreihen je Messstelle: bis 24 h Einzelmessungen, 7/30 Tage Stundenmittel,
+// 1 Jahr Tagesmittel (wie das Portal).
+func (m *Module) apiChart(w http.ResponseWriter, r *http.Request) {
+	c := m.load(w, r)
+	if c == nil {
+		return
+	}
+	rng := r.URL.Query().Get("range")
+	cr, ok := chartRanges[rng]
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "range must be one of 1h, 6h, 24h, 7d, 30d, 1y")
+		return
+	}
+	ctx := r.Context()
+	tr := m.translator(m.g.Lang(r))
+	from := time.Now().UTC().Add(-cr.span)
+	series := map[string]*chartSeries{}
+	get := func(src string) *chartSeries {
+		s := series[src]
+		if s == nil {
+			s = &chartSeries{Source: src}
+			series[src] = s
+		}
+		return s
+	}
+	labels := map[string]string{}
+	for _, s := range m.sources(ctx, c, tr("hc.sources.this_node")) {
+		labels[s.Source] = s.Label
+	}
+	// Quelle der Punkte: eigene Messungen (flags ohne 8), fremde Messstellen je nach Check
+	type q struct {
+		sql  string
+		args []any
+	}
+	var qs []q
+	selfSel := `'self', time, status, latency_ms FROM hc_measurements WHERE token = ? AND time >= ? AND (flags & 8) = 0`
+	remoteSel := `source, time, status, latency_ms FROM hc_source_points WHERE token = ? AND time >= ?`
+	if !c.MeasuredHere() {
+		remoteSel = `details, time, status, latency_ms FROM hc_measurements WHERE token = ? AND time >= ? AND (flags & 8) != 0`
+	}
+	switch cr.bucket {
+	case "raw":
+		qs = append(qs, q{`SELECT ` + selfSel + ` ORDER BY time LIMIT 20000`, []any{c.Token, ft(from)}},
+			q{`SELECT ` + remoteSel + ` ORDER BY time LIMIT 40000`, []any{c.Token, ft(from)}})
+	default:
+		n := 13 // Stunde
+		if cr.bucket == "day" {
+			n = 10
+		}
+		agg := func(sel string) string {
+			// sel: "<src>, time, status, latency_ms FROM ..." -> gruppiert je Quelle und Zeitraum
+			parts := strings.SplitN(sel, ", time, status, latency_ms FROM ", 2)
+			return `SELECT ` + parts[0] + `, substr(time, 1, ` + strconv.Itoa(n) + `), count(*), sum(status), avg(CASE WHEN status = 1 THEN latency_ms END) FROM ` + parts[1] + ` GROUP BY 1, 2 ORDER BY 2`
+		}
+		qs = append(qs, q{agg(selfSel), []any{c.Token, ft(from)}}, q{agg(remoteSel), []any{c.Token, ft(from)}})
+		if cr.bucket == "day" && c.MeasuredHere() {
+			// eigene Tageswerte (Rohpunkte gibt es nur 30 Tage)
+			qs = append(qs, q{`SELECT 'self', day, count, up_count, avg_ms FROM hc_daily WHERE token = ? AND day >= ? AND day < ? ORDER BY day`,
+				[]any{c.Token, from.Format("2006-01-02"), time.Now().UTC().Add(-RawRetention).Format("2006-01-02")}})
+		}
+	}
+	for _, x := range qs {
+		rows, err := m.st.r.QueryContext(ctx, x.sql, x.args...)
+		if err != nil {
+			m.log.Warn("chart query failed", "err", err)
+			continue
+		}
+		for rows.Next() {
+			var src, t string
+			if cr.bucket == "raw" {
+				var status int
+				var lat float64
+				if rows.Scan(&src, &t, &status, &lat) != nil {
+					continue
+				}
+				p := chartPoint{T: pt(t)}
+				if status == 1 {
+					p.MS = f64(round2(lat))
+				}
+				get(src).Points = append(get(src).Points, p)
+				continue
+			}
+			var count, up int
+			var avg *float64
+			if rows.Scan(&src, &t, &count, &up, &avg) != nil {
+				continue
+			}
+			var tm time.Time
+			if len(t) == 13 {
+				tm, _ = time.Parse("2006-01-02T15", t)
+			} else {
+				tm, _ = time.Parse("2006-01-02", t[:10])
+			}
+			p := chartPoint{T: tm}
+			if avg != nil {
+				p.MS = f64(round2(*avg))
+			}
+			if count > 0 {
+				p.Up = f64(round2(100 * float64(up) / float64(count)))
+			}
+			get(src).Points = append(get(src).Points, p)
+		}
+		rows.Close()
+	}
+	out := make([]chartSeries, 0, len(series))
+	for src, s := range series {
+		if len(s.Points) == 0 {
+			continue
+		}
+		sort.Slice(s.Points, func(i, j int) bool { return s.Points[i].T.Before(s.Points[j].T) })
+		switch {
+		case src == "self":
+			s.Label = tr("hc.sources.this_node")
+		case labels[src] != "":
+			s.Label = labels[src]
+		default:
+			s.Label = sourceLabel(src, "")
+		}
+		out = append(out, *s)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if (out[i].Source == "self") != (out[j].Source == "self") {
+			return out[i].Source == "self"
+		}
+		return out[i].Source < out[j].Source
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"range": rng, "bucket": cr.bucket, "series": out})
+}

@@ -242,6 +242,7 @@ func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /api/checks/{token}/events", api(m.apiEvents))
 	mux.Handle("GET /api/checks/{token}/incidents", api(m.apiIncidents))
 	mux.Handle("GET /api/checks/{token}/stats", api(m.apiStats))
+	mux.Handle("GET /api/checks/{token}/chart", api(m.apiChart))
 	mux.Handle("GET /api/events", api(m.apiAllEvents))
 	mux.Handle("GET /api/incidents", api(m.apiAllIncidents))
 	mux.Handle("GET /api/maintenance", api(m.apiMaintenanceList))

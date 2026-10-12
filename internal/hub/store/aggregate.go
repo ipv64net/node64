@@ -150,3 +150,19 @@ func (s *Store) CloseDeletedIncidents(ctx context.Context) (int64, error) {
 	}
 	return n, nil
 }
+
+// CleanupStaleSources loescht Zustaende von Messstellen, die nach einem Umhaengen nicht mehr
+// zum Check gehoeren (gleiche Regeln wie die Bewertung). 10 Minuten Karenz fuer laufende Wechsel.
+func (s *Store) CleanupStaleSources(ctx context.Context, now time.Time) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE st FROM hc2_check_states st JOIN hc2_checks c ON c.token = st.token
+		WHERE st.updated_at < ? AND c.deleted_at IS NULL AND (
+			(c.execution = 'online' AND st.source LIKE 'node:%')
+			OR (c.execution = 'local' AND st.source NOT LIKE 'node:%')
+			OR (st.source LIKE 'node:%' AND st.source <> CONCAT('node:', COALESCE(c.node_id, '')))
+			OR (st.source LIKE 'loc:%%' AND FIND_IN_SET(SUBSTRING(st.source, 5), c.locations) = 0))`,
+		now.UTC().Add(-10*time.Minute).Format(TimeFormat))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}

@@ -238,6 +238,8 @@
     "link": "ipv64-Verknüpfung"
   },
   "hc": {
+    "sources": {"title": "Messstellen", "this_node": "Diese Node", "source": "Messstelle", "last": "Letzte Messung", "message": "Meldung", "stale": "veraltet", "stale_hint": "Von dieser Messstelle kam länger keine Messung (Node offline oder Standort umgestellt)."},
+    "diag": {"inside": "Innen gestört, außen OK: Problem im Heimnetz, auf der Node oder im internen Pfad.", "outside": "Innen OK, außen gestört: Internetanbindung, Portweiterleitung, DNS oder Firewall.", "both": "Innen und außen gestört: der Dienst selbst ist betroffen."},
     "cert_until": "Zertifikat gültig bis",
     "cert_days": "noch {days} Tage",
     "docker": {
@@ -257,6 +259,10 @@
     "run_remote": "Wird von ipv64 bzw. einer anderen Node gemessen; „Jetzt prüfen“ geht nur bei eigenen Checks.",
     "view": "Ansehen",
     "chart": {
+      "year": "1 J",
+      "note_raw": "Einzelmessungen je Messstelle; Lücken = gestört.",
+      "note_hour": "Mittelwerte je Stunde und Messstelle.",
+      "note_day": "Mittelwerte je Tag und Messstelle.",
       "warn": "Stabilisierung / teilweise gestört"
     },
     "group": {
