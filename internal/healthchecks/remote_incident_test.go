@@ -16,6 +16,9 @@ func TestRemoteIncident(t *testing.T) {
 	}
 	var c struct{ Token string }
 	_ = json.Unmarshal(b, &c)
+	if _, ok := m.scheduler().Runtime(c.Token); ok {
+		t.Fatal("online check must not be scheduled on the node")
+	}
 	ctx := context.Background()
 	t0 := time.Now().UTC().Add(-10 * time.Minute).Truncate(time.Second)
 	m.ApplyRemoteState(ctx, RemoteState{Token: c.Token, State: "down", Since: t0, Time: t0, Status: "down", Reason: "timeout", Message: "x"})

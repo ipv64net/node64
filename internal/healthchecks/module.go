@@ -254,3 +254,16 @@ func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /api/push/{token}", g.Enabled(http.HandlerFunc(m.apiPush)))
 	m.uiRoutes(mux, g)
 }
+
+// upsertSched plant einen Check ein, wenn diese Node ihn misst; Online-Checks und Checks
+// anderer Nodes kommen aus dem Scheduler raus (sonst misst die Node sie bis zum Neustart mit).
+func upsertSched(s *scheduler.Scheduler, c *Check, rt *scheduler.Runtime) {
+	if c == nil {
+		return
+	}
+	if c.MeasuredHere() {
+		s.Upsert(c.SchedulerCheck(), rt)
+	} else {
+		s.Remove(c.Token)
+	}
+}

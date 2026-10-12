@@ -878,7 +878,7 @@ func (m *Module) pageFormSubmit(w http.ResponseWriter, r *http.Request) {
 							rt = &live
 						}
 					}
-					s.Upsert(c.SchedulerCheck(), rt)
+					upsertSched(s, c, rt)
 				}
 				m.audit(r, map[bool]string{true: "check.update", false: "check.create"}[edit], c)
 				m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
@@ -958,7 +958,7 @@ func (m *Module) doAction(r *http.Request, c *Check, action string) error {
 		}
 		nc, _ := m.st.Check(ctx, c.Token)
 		if s := m.scheduler(); s != nil && nc != nil {
-			s.Upsert(nc.SchedulerCheck(), nil)
+			upsertSched(s, nc, nil)
 		}
 		m.PushState(c.Token)
 		m.audit(r, "check."+action, c)
@@ -981,7 +981,7 @@ func (m *Module) doAction(r *http.Request, c *Check, action string) error {
 		}
 		if nc, _ := m.st.Check(ctx, n.Token); nc != nil {
 			if s := m.scheduler(); s != nil {
-				s.Upsert(nc.SchedulerCheck(), nil)
+				upsertSched(s, nc, nil)
 			}
 			m.audit(r, "check.clone", nc)
 			r.Header.Set("X-Clone-Token", n.Token)

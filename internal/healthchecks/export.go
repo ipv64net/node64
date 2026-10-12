@@ -104,7 +104,7 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 							rt = &live
 						}
 					}
-					s.Upsert(nc.SchedulerCheck(), rt)
+					upsertSched(s, nc, rt)
 				}
 			}
 		}

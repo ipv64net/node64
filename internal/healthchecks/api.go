@@ -413,7 +413,7 @@ func (m *Module) apiCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	c, _ = m.st.Check(r.Context(), c.Token)
 	if s := m.scheduler(); s != nil {
-		s.Upsert(c.SchedulerCheck(), nil)
+		upsertSched(s, c, nil)
 	}
 	m.audit(r, "check.create", c)
 	writeJSON(w, http.StatusCreated, m.toJSON(c, r))
@@ -464,7 +464,7 @@ func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
 				rt = &live
 			}
 		}
-		s.Upsert(c.SchedulerCheck(), rt)
+		upsertSched(s, c, rt)
 	}
 	m.audit(r, "check.update", c)
 	c, _ = m.st.Check(r.Context(), c.Token)
@@ -506,7 +506,7 @@ func (m *Module) setPaused(w http.ResponseWriter, r *http.Request, paused bool) 
 	}
 	c, _ = m.st.Check(r.Context(), c.Token)
 	if s := m.scheduler(); s != nil {
-		s.Upsert(c.SchedulerCheck(), nil)
+		upsertSched(s, c, nil)
 	}
 	m.PushState(c.Token)
 	m.audit(r, map[bool]string{true: "check.pause", false: "check.resume"}[paused], c)
@@ -558,7 +558,7 @@ func (m *Module) apiClone(w http.ResponseWriter, r *http.Request) {
 	}
 	nc, _ := m.st.Check(r.Context(), n.Token)
 	if s := m.scheduler(); s != nil {
-		s.Upsert(nc.SchedulerCheck(), nil)
+		upsertSched(s, nc, nil)
 	}
 	m.audit(r, "check.clone", nc)
 	writeJSON(w, http.StatusCreated, m.toJSON(nc, r))
