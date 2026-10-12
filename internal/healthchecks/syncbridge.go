@@ -553,6 +553,7 @@ func (m *Module) ApplyRemoteState(ctx context.Context, r RemoteState) {
 	if r.State != "" {
 		_, _ = m.st.w.ExecContext(ctx, `UPDATE hc_checks SET state=?, state_since=?, last_check_at=?, last_status=?, last_latency_ms=?, last_reason=?, last_message=? WHERE token=?`,
 			r.State, ft(r.Since), ft(r.Time), r.Status, r.LatencyMS, r.Reason, r.Message, r.Token)
+		m.remoteIncident(ctx, r)
 	}
 	if r.Time.IsZero() || (r.Status != "up" && r.Status != "down") {
 		return
@@ -568,4 +569,28 @@ func (m *Module) ApplyRemoteState(ctx context.Context, r RemoteState) {
 	}
 	_, _ = m.st.w.ExecContext(ctx, `INSERT INTO hc_measurements (token, time, status, latency_ms, reason, message, family, details, flags) VALUES (?,?,?,?,?,?,?,?,8)`,
 		r.Token, ft(r.Time), st, r.LatencyMS, r.Reason, r.Message, "", r.Source)
+}
+
+// remoteIncident fuehrt Stoerungen fuer Checks, die ipv64 bewertet (Online-Checks, Checks anderer
+// Nodes), nach denselben Regeln wie der Hub: "down" oeffnet, degraded/flapping halten offen,
+// alles andere beendet. Beginn und Ende kommen aus dem Zeitpunkt des Zustandswechsels.
+func (m *Module) remoteIncident(ctx context.Context, r RemoteState) {
+	var id int64
+	_ = m.st.r.QueryRowContext(ctx, `SELECT id FROM hc_incidents WHERE token = ? AND ended_at = '' ORDER BY id DESC LIMIT 1`, r.Token).Scan(&id)
+	at := r.Since
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	switch r.State {
+	case "down":
+		if id == 0 {
+			_, _ = m.st.OpenIncident(ctx, r.Token, at, checks.Reason(r.Reason), r.Message)
+		}
+	case "degraded", "flapping":
+		// offen lassen bzw. nicht neu oeffnen (wie im Hub)
+	default:
+		if id != 0 {
+			_ = m.st.CloseIncident(ctx, id, at)
+		}
+	}
 }

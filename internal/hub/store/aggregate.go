@@ -134,3 +134,19 @@ func (s *Store) Cleanup(ctx context.Context, now time.Time) {
 	exec(`DELETE FROM hc2_hourly WHERE hour < ?`, now.UTC().AddDate(-1, 0, 0).Format("2006-01-02 15:04:05"))
 	exec(`DELETE FROM hc2_events WHERE time < ?`, now.UTC().AddDate(-1, 0, 0).Format(TimeFormat))
 }
+
+// CloseDeletedIncidents schliesst offene Stoerungen geloeschter Checks (Ende = Loeschzeitpunkt).
+// Faengt alle Loeschwege ab (Portal, API v2, Node) und raeumt Altfaelle auf.
+func (s *Store) CloseDeletedIncidents(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE hc2_incidents i JOIN hc2_checks c ON c.token = i.token
+		SET i.ended_at = GREATEST(c.deleted_at, i.started_at)
+		WHERE i.ended_at IS NULL AND c.deleted_at IS NOT NULL`)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	if n > 0 {
+		_, _ = s.db.ExecContext(ctx, `UPDATE hc2_checks SET incident_id = NULL WHERE deleted_at IS NOT NULL AND incident_id IS NOT NULL`)
+	}
+	return n, nil
+}

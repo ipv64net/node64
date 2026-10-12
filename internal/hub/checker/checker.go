@@ -511,6 +511,11 @@ func (c *Checker) housekeepingLoop(ctx context.Context) {
 				continue
 			}
 			c.st.Metrics.Set(c.Count(), len(nodes), c.slotIdx, c.slotMod)
+			if n, err := c.st.CloseDeletedIncidents(ctx); err != nil {
+				c.log.Warn("closing incidents of deleted checks failed", "err", err)
+			} else if n > 0 {
+				c.log.Info("closed incidents of deleted checks", "count", n)
+			}
 			if err := c.st.AggregateHourlyShared(ctx, now); err != nil {
 				c.log.Error("hourly aggregation (nodes/push) failed", "err", err)
 			}

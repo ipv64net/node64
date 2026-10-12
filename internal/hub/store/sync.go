@@ -381,7 +381,11 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 	}
 	if p.Op == "delete" {
 		if exists {
-			if _, err := tx.ExecContext(ctx, `UPDATE hc2_checks SET deleted_at = ?, revision = ?, updated_at = ?, updated_by = ? WHERE token = ?`, nowStr(), rev, nowStr(), origin, p.ID); err != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE hc2_checks SET deleted_at = ?, revision = ?, updated_at = ?, updated_by = ?, incident_id = NULL WHERE token = ?`, nowStr(), rev, nowStr(), origin, p.ID); err != nil {
+				return err
+			}
+			// offene Stoerung endet mit dem Loeschen (die Node loescht ihre Stoerungen mit dem Check)
+			if _, err := tx.ExecContext(ctx, `UPDATE hc2_incidents SET ended_at = ? WHERE token = ? AND ended_at IS NULL`, nowStr(), p.ID); err != nil {
 				return err
 			}
 		}
