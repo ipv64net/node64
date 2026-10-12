@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/ipv64net/node64/internal/notify"
 )
@@ -120,7 +121,7 @@ type smsSender struct {
 }
 
 func (s smsSender) Send(ctx context.Context, ch *notify.Channel, msg notify.Message) error {
-	num := strings.TrimSpace(ch.Config["number"])
+	num := smsNumber(ch.Config["number"])
 	if num == "" {
 		return errors.New("ipv64_sms: no number")
 	}
@@ -135,6 +136,7 @@ func (s smsSender) Send(ctx context.Context, ch *notify.Channel, msg notify.Mess
 	if first := strings.SplitN(msg.Text, "\n", 3); len(first) > 1 {
 		text += " - " + first[1]
 	}
+	text = smsText(text)
 	if len(text) > 300 {
 		text = text[:300]
 	}
@@ -194,4 +196,41 @@ type nodeOnlySender struct{}
 
 func (nodeOnlySender) Send(context.Context, *notify.Channel, notify.Message) error {
 	return errors.New("this channel type can only be delivered by its node")
+}
+
+// smsNumber bringt eine Rufnummer in das Format des SMS-Gateways wie in der alten Welt
+// (Laendervorwahl mit 00, z. B. 0049177...): "+49 177", "0049177", "49177" und "0177" (Deutschland).
+func smsNumber(in string) string {
+	var b strings.Builder
+	for i, r := range strings.TrimSpace(in) {
+		switch {
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '+' && i == 0:
+			b.WriteString("00")
+		}
+	}
+	n := b.String()
+	switch {
+	case n == "":
+		return ""
+	case strings.HasPrefix(n, "00"):
+		return n
+	case strings.HasPrefix(n, "0"):
+		return "0049" + n[1:] // nationale Schreibweise: Deutschland
+	default:
+		return "00" + n // Laendervorwahl ohne 00
+	}
+}
+
+// smsText entfernt Emoji und Bildzeichen, die viele SMS-Gateways nicht uebertragen.
+func smsText(in string) string {
+	var b strings.Builder
+	for _, r := range in {
+		if r > 0xFFFF || unicode.Is(unicode.So, r) || r == 0xFE0F || r == 0x200D {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
 }
