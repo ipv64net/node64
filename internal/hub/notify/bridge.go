@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"io"
 	"net/http"
 	"strings"
@@ -108,11 +107,9 @@ func (m mailSender) Send(ctx context.Context, ch *notify.Channel, msg notify.Mes
 	if to == "" {
 		return errors.New("ipv64_mail: no address")
 	}
-	htmlBody := "<p><strong>" + html.EscapeString(msg.Title) + "</strong></p><p>" + strings.ReplaceAll(html.EscapeString(msg.Text), "\n", "<br>") + "</p>"
-	if msg.URL != "" {
-		htmlBody += "<p><a href=\"" + html.EscapeString(msg.URL) + "\">" + html.EscapeString(msg.URL) + "</a></p>"
-	}
-	return m.b.Send(ctx, bridgeRequest{Type: "mail", To: to, Subject: msg.Title, Text: msg.Text, HTML: htmlBody, UpDown: updown(msg.Kind), UserID: ch.UserID, EventID: msg.EventID})
+	// vollstaendige Mail (Betreff, Textteil, HTML im ipv64-Design); das Portal verschickt sie unveraendert
+	subject, text, htmlBody := notify.MailContent(msg, notify.MailBrand{Name: "IPv64.net Healthchecks", ManageURL: "https://ipv64.net/notifications.php"})
+	return m.b.Send(ctx, bridgeRequest{Type: "mail", To: to, Subject: subject, Text: text, HTML: htmlBody, UpDown: updown(msg.Kind), UserID: ch.UserID, EventID: msg.EventID})
 }
 
 // smsSender: ipv64_sms mit Tageslimit.

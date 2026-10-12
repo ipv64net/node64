@@ -9,11 +9,12 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"mime"
 	"net"
 	"net/http"
+	"net/mail"
 	"net/smtp"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -359,6 +360,25 @@ func fillTemplate(tpl string, m Message) string {
 
 // ---------------------------------------------------------------- SMTP
 
+// heloName: voller Rechnername, sonst die Domain der Absenderadresse.
+func heloName(from string) string {
+	if h, err := os.Hostname(); err == nil && strings.Contains(h, ".") {
+		return h
+	}
+	if i := strings.LastIndex(from, "@"); i >= 0 && i < len(from)-1 {
+		return from[i+1:]
+	}
+	return "localhost"
+}
+
+// manageURL: Seite der Benachrichtigungen des Nodes (aus dem Link der Nachricht abgeleitet).
+func manageURL(u string) string {
+	if i := strings.Index(u, "/healthchecks"); i > 0 {
+		return u[:i] + "/notifications"
+	}
+	return ""
+}
+
 type smtpSender struct{}
 
 func (smtpSender) Send(ctx context.Context, ch *Channel, m Message) error {
@@ -391,6 +411,10 @@ func (smtpSender) Send(ctx context.Context, ch *Channel, m Message) error {
 		return err
 	}
 	defer c.Close()
+	// EHLO mit einem richtigen Namen statt "localhost" (Spamfilter pruefen den HELO-Namen)
+	if err := c.Hello(heloName(ch.Config["from"])); err != nil {
+		return fmt.Errorf("ehlo: %w", err)
+	}
 	if security == "starttls" {
 		if okTLS, _ := c.Extension("STARTTLS"); !okTLS {
 			return errors.New("server does not offer STARTTLS")
@@ -424,19 +448,8 @@ func (smtpSender) Send(ctx context.Context, ch *Channel, m Message) error {
 	if err != nil {
 		return err
 	}
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "From: %s\r\n", from)
-	fmt.Fprintf(&buf, "To: %s\r\n", strings.Join(tos, ", "))
-	fmt.Fprintf(&buf, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", m.Title))
-	fmt.Fprintf(&buf, "Date: %s\r\n", time.Now().Format(time.RFC1123Z))
-	fmt.Fprintf(&buf, "Message-ID: <%s.%d@node64>\r\n", m.EventID, time.Now().UnixNano())
-	buf.WriteString("MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\nX-Mailer: node64\r\n\r\n")
-	text := m.Text
-	if m.URL != "" {
-		text += "\n\n" + m.URL
-	}
-	buf.WriteString(strings.ReplaceAll(text, "\n", "\r\n"))
-	buf.WriteString("\r\n")
+	subject, text, htmlBody := MailContent(m, MailBrand{Name: "Node64", ManageURL: manageURL(m.URL)})
+	buf := bytes.NewBuffer(BuildMail(mail.Address{Name: "Node64", Address: from}, tos, subject, text, htmlBody))
 	if _, err := wc.Write(buf.Bytes()); err != nil {
 		return err
 	}
