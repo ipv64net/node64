@@ -40,6 +40,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /healthchecks/{token}/edit", page(m.pageFormSubmit))
 	mux.Handle("POST /healthchecks/{token}/action", page(m.pageAction))
 	m.maintenanceRoutes(mux, page)
+	m.incidentsRoutes(mux, page)
 }
 
 // ---------------------------------------------------------------- Darstellung
@@ -1020,6 +1021,12 @@ func (m *Module) pageBulk(w http.ResponseWriter, r *http.Request) {
 		if action == "clone" {
 			continue
 		}
+		if action == "tag" || action == "untag" {
+			if m.bulkTag(r, c, action == "tag", r.PostFormValue("tag")) {
+				n++
+			}
+			continue
+		}
 		if err := m.doAction(r, c, action); err == nil {
 			n++
 		}
@@ -1078,4 +1085,35 @@ func (m *Module) translator(lang string) func(key string, args ...any) string {
 		}
 		return key
 	}
+}
+
+// bulkTag setzt oder entfernt einen Tag (Massenaktion); fremde Checks bleiben unberuehrt.
+func (m *Module) bulkTag(r *http.Request, c *Check, add bool, tag string) bool {
+	tag = strings.TrimSpace(tag)
+	if tag == "" || len(tag) > 40 || strings.ContainsAny(tag, ", \t") || c.Foreign() {
+		return false
+	}
+	has := false
+	var keep []string
+	for _, t := range c.Tags {
+		if t == tag {
+			has = true
+			continue
+		}
+		keep = append(keep, t)
+	}
+	switch {
+	case add && !has:
+		c.Tags = append(c.Tags, tag)
+	case !add && has:
+		c.Tags = keep
+	default:
+		return false
+	}
+	c.UpdatedBy = m.g.Actor(r)
+	if err := m.st.Update(r.Context(), c); err != nil {
+		return false
+	}
+	m.audit(r, "check.update", c)
+	return true
 }

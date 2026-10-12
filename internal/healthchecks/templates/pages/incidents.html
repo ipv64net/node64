@@ -1,0 +1,32 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1 class="h4 mb-3"><i class="bi bi-exclamation-triangle-fill text-danger me-1"></i> {{.T "hc.incident_list.title"}}</h1>
+<div class="card">
+	<div class="card-header d-flex flex-wrap align-items-center gap-2">
+		<span class="badge {{if $d.Open}}text-bg-danger{{else}}text-bg-success{{end}}">{{.T "hc.incident_list.open_count" "count" $d.Open}}</span>
+		<span class="badge text-bg-light">{{.T "hc.incident_list.summary" "count" (len $d.Rows) "days" $d.Days}} · {{.Duration $d.Total}}</span>
+		<form method="get" class="ms-auto d-flex align-items-center gap-2 flex-wrap">
+			<div class="input-group input-group-sm w-auto"><span class="input-group-text"><i class="bi bi-calendar3 text-primary"></i></span>
+				<select class="form-select form-select-sm" name="days" onchange="this.form.submit()">{{range $d.Choices}}<option value="{{.}}"{{if eq . $d.Days}} selected{{end}}>{{$.T "hc.incident_list.days" "days" .}}</option>{{end}}</select></div>
+			<div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" role="switch" id="inc-open" name="open" value="1"{{if $d.OnlyOpen}} checked{{end}} onchange="this.form.submit()"><label class="form-check-label small" for="inc-open">{{.T "hc.incident_list.only_open"}}</label></div>
+		</form>
+	</div>
+	<div class="table-responsive">
+	<table class="table table-sm table-hover align-middle mb-0 table-cards">
+		<thead><tr><th class="ps-3">{{.T "hc.incident_list.check"}}</th><th>{{.T "hc.incident_list.start"}}</th><th>{{.T "hc.incident_list.end"}}</th><th>{{.T "hc.incident_list.duration"}}</th><th>{{.T "hc.incident_list.reason"}}</th></tr></thead>
+		<tbody>
+		{{if not $d.Rows}}<tr><td colspan="5" class="text-body-secondary p-3">{{.T "hc.incident_list.none"}}</td></tr>{{end}}
+		{{range $d.Rows}}
+		<tr>
+			<td data-label="{{$.T "hc.incident_list.check"}}" class="ps-3">{{if .Exists}}<a href="/healthchecks/{{.Token}}" class="fw-semibold">{{.Name}}</a>{{else}}<span class="text-body-secondary">{{.Token}} ({{$.T "hc.incident_list.deleted"}})</span>{{end}}</td>
+			<td data-label="{{$.T "hc.incident_list.start"}}" class="small text-nowrap">{{$.Time .StartedAt}}</td>
+			<td data-label="{{$.T "hc.incident_list.end"}}" class="small text-nowrap">{{if .Open}}<span class="badge text-bg-danger">{{$.T "hc.open"}}</span>{{else}}{{$.Time .EndedAt}}{{end}}</td>
+			<td data-label="{{$.T "hc.incident_list.duration"}}" class="small text-nowrap">{{$.Duration .Duration}}</td>
+			<td data-label="{{$.T "hc.incident_list.reason"}}" class="small">{{if .Reason}}<strong>{{.Reason}}</strong>{{end}}{{if .Message}} – {{.Message}}{{end}}</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table>
+	</div>
+</div>
+{{end}}

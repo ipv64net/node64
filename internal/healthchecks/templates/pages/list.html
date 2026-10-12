@@ -5,7 +5,8 @@
 	<h1 class="h4 mb-0"><i class="bi bi-heart-pulse me-1"></i> {{.T "nav.healthchecks"}} <span class="text-body-secondary fs-6">{{$d.Total}}</span></h1>
 	<div class="d-flex gap-2">
 		<a class="btn btn-outline-secondary btn-sm" href="/healthchecks{{if $f.q}}?q={{$f.q}}{{end}}" title="{{.T "logs.refresh"}}"><i class="bi bi-arrow-clockwise"></i></a>
-		<a class="btn btn-outline-secondary btn-sm" href="/healthchecks/maintenance"><i class="bi bi-wrench"></i> {{.T "hc.maint.title"}}</a>
+		<a class="btn btn-outline-danger btn-sm" href="/healthchecks/incidents"><i class="bi bi-exclamation-triangle"></i> {{.T "hc.incident_list.title"}}</a>
+		<a class="btn btn-outline-secondary btn-sm" href="/healthchecks/maintenance"><i class="bi bi-wrench text-warning"></i> {{.T "hc.maint.title"}}</a>
 		<a class="btn btn-primary btn-sm" href="/healthchecks/new"><i class="bi bi-plus-lg"></i> {{.T "hc.new"}}</a>
 	</div>
 </div>
@@ -126,8 +127,11 @@
 		<option value="pause">{{.T "hc.action.pause"}}</option>
 		<option value="resume">{{.T "hc.action.resume"}}</option>
 		<option value="run">{{.T "hc.action.run"}}</option>
+		<option value="tag">{{.T "hc.bulk.tag_add"}}</option>
+		<option value="untag">{{.T "hc.bulk.tag_remove"}}</option>
 		<option value="delete">{{.T "common.delete"}}</option>
 	</select>
+	<div class="input-group input-group-sm w-auto"><span class="input-group-text"><i class="bi bi-tag text-secondary"></i></span><input class="form-control" name="tag" maxlength="40" placeholder="{{.T "hc.bulk.tag_placeholder"}}" style="max-width:10rem"></div>
 	<button class="btn btn-sm btn-outline-primary" type="submit" data-confirm="{{.T "common.confirm"}}">{{.T "hc.bulk.apply"}}</button>
 </div>
 </form>

@@ -24,13 +24,13 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 
 	var userid int64
 	var policy, state, name, ctype, target, channels string
-	var intervalSec, critical, nd, nu, ndeg int
+	var intervalSec, critical, nd, nu, ndeg, paused int
 	var incident sql.NullInt64
 	var downSince sql.NullString
 	var execution string
-	err = tx.QueryRowContext(ctx, `SELECT userid, policy, state, name, interval_sec, incident_id, down_since, type, target, critical, channels, notify_down, notify_up, notify_degraded, execution
+	err = tx.QueryRowContext(ctx, `SELECT userid, policy, state, name, interval_sec, incident_id, down_since, type, target, critical, channels, notify_down, notify_up, notify_degraded, execution, paused
 		FROM hc2_checks WHERE token = ? AND deleted_at IS NULL FOR UPDATE`, token).
-		Scan(&userid, &policy, &state, &name, &intervalSec, &incident, &downSince, &ctype, &target, &critical, &channels, &nd, &nu, &ndeg, &execution)
+		Scan(&userid, &policy, &state, &name, &intervalSec, &incident, &downSince, &ctype, &target, &critical, &channels, &nd, &nu, &ndeg, &execution, &paused)
 	if err == sql.ErrNoRows {
 		return nil
 	}
@@ -85,6 +85,9 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		states[i] = srcs[i].SourceState
 	}
 	overall := scheduler.Overall(policy, states)
+	if paused != 0 {
+		overall = scheduler.StatePaused // pausiert statt "pending" (pausierte Messstellen zaehlen nicht)
+	}
 	if string(overall) == state {
 		return tx.Commit()
 	}
@@ -155,7 +158,7 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		}
 		id, _ := res.LastInsertId()
 		incidentID = id
-	case incidentID != nil && overall != scheduler.StateDown && overall != scheduler.StateFlapping && overall != scheduler.StateDegraded:
+	case incidentID != nil && overall != scheduler.StateDown && overall != scheduler.StateFlapping && overall != scheduler.StateDegraded && overall != scheduler.StatePaused:
 		// degraded nach down laesst die Stoerung offen: erst "up" beendet sie
 		if _, err := tx.ExecContext(ctx, `UPDATE hc2_incidents SET ended_at = ? WHERE id = ? AND ended_at IS NULL`, nowS, incidentID); err != nil {
 			return err

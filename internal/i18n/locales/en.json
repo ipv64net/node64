@@ -238,6 +238,7 @@
     "link": "ipv64 Link"
   },
   "hc": {
+    "incident_list": {"title": "Incidents", "open_count": "{count} open", "summary": "{count} in {days} days", "days": "{days} days", "only_open": "open only", "check": "Check", "start": "Start", "end": "End", "duration": "Duration", "reason": "Reason", "none": "No incidents in this period.", "deleted": "deleted"},
     "sources": {"title": "Measuring points", "this_node": "This node", "source": "Measuring point", "last": "Last check", "message": "Message", "stale": "stale", "stale_hint": "No measurement from this point for a while (node offline or location changed)."},
     "diag": {"inside": "Down inside, OK outside: problem in the home network, on the node or the internal path.", "outside": "OK inside, down outside: internet uplink, port forwarding, DNS or firewall.", "both": "Down inside and outside: the service itself is affected."},
     "cert_until": "Certificate valid until",
@@ -359,6 +360,9 @@
     },
     "run_push": "Push checks are reported by the service itself.",
     "bulk": {
+      "tag_add": "Add tag",
+      "tag_remove": "Remove tag",
+      "tag_placeholder": "Tag",
       "selected": "Selected:",
       "apply": "Apply",
       "done": "{count} checks changed."
