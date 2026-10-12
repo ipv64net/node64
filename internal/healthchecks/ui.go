@@ -384,7 +384,7 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	lang := m.g.Lang(r)
-	pills, err := m.pillsFor(ctx, lang, m.g.Timezone(r), 100)
+	pills, err := m.pillsFor(ctx, lang, m.g.Timezone(r), 300) // reicht auch fuer breite Bildschirme
 	if err != nil {
 		m.fail(w, r, err)
 		return

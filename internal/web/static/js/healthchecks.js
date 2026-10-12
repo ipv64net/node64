@@ -56,6 +56,26 @@
 		});
 	}
 
+	// Detailseite: so viele Pillen, wie in die Breite passen (neueste rechts), fehlende links als Platzhalter
+	document.querySelectorAll(".beats-fill").forEach(function (bar) {
+		var real = Array.prototype.slice.call(bar.querySelectorAll(".beat"));
+		if (!real.length) { return; }
+		var fit = function () {
+			var w = real[real.length - 1].offsetWidth || 6, gap = parseFloat(getComputedStyle(bar).columnGap) || 2;
+			var n = Math.max(1, Math.floor((bar.clientWidth + gap) / (w + gap)));
+			bar.querySelectorAll(".beat-empty").forEach(function (e) { e.remove(); });
+			real.forEach(function (el, i) { el.style.display = i < real.length - n ? "none" : ""; });
+			for (var i = real.length; i < n; i++) {
+				var e = document.createElement("span");
+				e.className = "beat beat-lg beat-empty";
+				bar.insertBefore(e, bar.firstChild);
+			}
+		};
+		fit();
+		var t;
+		window.addEventListener("resize", function () { clearTimeout(t); t = setTimeout(fit, 100); });
+	});
+
 	// Rueckfrage vor Loeschen und Massenaktionen
 	document.querySelectorAll("[data-confirm]").forEach(function (b) {
 		b.addEventListener("click", function (e) {
