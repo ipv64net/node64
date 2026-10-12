@@ -370,11 +370,12 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 		return nil
 	}
 	if exists && owner.Valid && owner.String != nodeID && origin == "node" {
-		// Checks einer anderen Node sind read-only; Online-Checks darf jede Node aendern
-		var exec string
-		_ = tx.QueryRowContext(ctx, `SELECT execution FROM hc2_checks WHERE token = ?`, p.ID).Scan(&exec)
-		if exec != "online" {
-			res.Error = "check belongs to another node"
+		// Checks einer anderen Node darf jede Node des Accounts aendern (auch die Messstellen);
+		// nur Docker-Checks bleiben bei der Node, die den Container steuert
+		var exec, typ string
+		_ = tx.QueryRowContext(ctx, `SELECT execution, type FROM hc2_checks WHERE token = ?`, p.ID).Scan(&exec, &typ)
+		if exec != "online" && typ == "docker" {
+			res.Error = "docker check belongs to another node"
 			return nil
 		}
 	}
@@ -411,6 +412,9 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 	}
 	nodeRef := any(nil)
 	if c.Execution == "local" || c.Execution == "both" {
+		if c.NodeID == "" && exists && owner.Valid && owner.String != "" {
+			c.NodeID = owner.String // Besitzerin bleibt, auch wenn eine andere Node aendert
+		}
 		if c.NodeID == "" {
 			c.NodeID = nodeID
 		}

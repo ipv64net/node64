@@ -442,8 +442,8 @@ func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
 	if c == nil {
 		return
 	}
-	if c.Foreign() {
-		writeErr(w, http.StatusConflict, "check belongs to another node (read-only here)")
+	if c.ReadOnly() {
+		writeErr(w, http.StatusConflict, "docker check of another node: only that node can change it")
 		return
 	}
 	var in checkJSON
@@ -487,8 +487,8 @@ func (m *Module) apiDelete(w http.ResponseWriter, r *http.Request) {
 	if c == nil {
 		return
 	}
-	if c.Foreign() {
-		writeErr(w, http.StatusConflict, "check belongs to another node (read-only here)")
+	if c.ReadOnly() {
+		writeErr(w, http.StatusConflict, "docker check of another node: only that node can change it")
 		return
 	}
 	if s := m.scheduler(); s != nil {
@@ -507,8 +507,8 @@ func (m *Module) setPaused(w http.ResponseWriter, r *http.Request, paused bool) 
 	if c == nil {
 		return
 	}
-	if c.Foreign() {
-		writeErr(w, http.StatusConflict, "check belongs to another node (read-only here)")
+	if c.ReadOnly() {
+		writeErr(w, http.StatusConflict, "docker check of another node: only that node can change it")
 		return
 	}
 	if err := m.st.SetPaused(r.Context(), c.Token, paused, actor(r)); err != nil {
@@ -532,8 +532,8 @@ func (m *Module) apiRun(w http.ResponseWriter, r *http.Request) {
 	if c == nil {
 		return
 	}
-	if c.Foreign() {
-		writeErr(w, http.StatusConflict, "check belongs to another node (read-only here)")
+	if c.ReadOnly() {
+		writeErr(w, http.StatusConflict, "docker check of another node: only that node can change it")
 		return
 	}
 	if !c.Runnable() && c.Type != checks.TypePush {

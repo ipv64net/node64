@@ -850,7 +850,7 @@ func (m *Module) pageForm(w http.ResponseWriter, r *http.Request) {
 		if c == nil {
 			return
 		}
-		if c.Foreign() {
+		if c.ReadOnly() {
 			m.g.Flash(w, r, "warning", m.errForeign(r).Error())
 			http.Redirect(w, r, "/healthchecks/"+c.Token, http.StatusSeeOther)
 			return
@@ -876,7 +876,7 @@ func (m *Module) pageFormSubmit(w http.ResponseWriter, r *http.Request) {
 		if c = m.loadPage(w, r); c == nil {
 			return
 		}
-		if c.Foreign() {
+		if c.ReadOnly() {
 			m.g.Flash(w, r, "warning", m.errForeign(r).Error())
 			http.Redirect(w, r, "/healthchecks/"+c.Token, http.StatusSeeOther)
 			return
@@ -937,13 +937,17 @@ func (m *Module) pageFormSubmit(w http.ResponseWriter, r *http.Request) {
 
 // ---------------------------------------------------------------- Aktionen
 
-// Foreign: Check einer anderen Node (hier nur lesbar).
+// Foreign: Check einer anderen Node (gehoert ihr, darf aber hier bearbeitet werden, ausser Docker).
 func (c *Check) Foreign() bool { return c.Owner == "other" }
+
+// ReadOnly: hier nicht aenderbar. Checks anderer Nodes darf jede Node des Accounts bearbeiten (auch die
+// Messstellen), nur Docker-Checks bleiben bei der Node, die den Container steuert.
+func (c *Check) ReadOnly() bool { return c.Foreign() && c.Type == checks.TypeDocker }
 
 // Runnable: "Jetzt pruefen" ist nur moeglich, wenn diese Node den Check selbst misst.
 func (c *Check) Runnable() bool { return c.MeasuredHere() && c.Type != checks.TypePush }
 
-// errForeign: Aenderungen an Checks anderer Nodes sind hier nicht moeglich.
+// errForeign: Docker-Checks anderer Nodes sind hier nicht aenderbar.
 func (m *Module) errForeign(r *http.Request) error {
 	return fmt.Errorf("%s", m.g.T(r, "hc.foreign_readonly"))
 }
@@ -976,7 +980,7 @@ func (m *Module) pageAction(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) doAction(r *http.Request, c *Check, action string) error {
 	ctx := r.Context()
-	if c.Foreign() && action != "clone" {
+	if c.ReadOnly() && action != "clone" {
 		return m.errForeign(r)
 	}
 	if action == "run" && !c.Runnable() && c.Type != checks.TypePush {
@@ -1116,7 +1120,7 @@ func (m *Module) translator(lang string) func(key string, args ...any) string {
 // bulkTag setzt oder entfernt einen Tag (Massenaktion); fremde Checks bleiben unberuehrt.
 func (m *Module) bulkTag(r *http.Request, c *Check, add bool, tag string) bool {
 	tag = strings.TrimSpace(tag)
-	if tag == "" || len(tag) > 40 || strings.ContainsAny(tag, ", \t") || c.Foreign() {
+	if tag == "" || len(tag) > 40 || strings.ContainsAny(tag, ", \t") || c.ReadOnly() {
 		return false
 	}
 	has := false

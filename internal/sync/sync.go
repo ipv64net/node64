@@ -889,9 +889,9 @@ func (c *Live) onChange(ctx context.Context, entity, id, op string) {
 			if ck == nil {
 				return
 			}
-			// fremde Checks sind hier schreibgeschuetzt; ein eigener Check wird auch gemeldet, wenn
-			// diese Node ihn nicht (mehr) misst, sonst erfaehrt die neue Messstelle nie davon
-			if ck.Foreign() {
+			// jede Aenderung melden, auch wenn diese Node den Check nicht (mehr) misst oder er einer
+			// anderen Node gehoert (sonst erfaehrt die neue Messstelle nie davon); nur Docker bleibt fest
+			if ck.ReadOnly() {
 				return
 			}
 			base = ck.Revision - 1

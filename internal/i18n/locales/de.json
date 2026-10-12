@@ -256,7 +256,7 @@
       "found": "Docker erreichbar, {count} Container gefunden.",
       "rules": "Docker-Checks laufen nur auf dieser Node (nicht online, nicht umhängbar). Bewertung: läuft = OK, Healthcheck „unhealthy“, gestoppt, pausiert oder Neustart-Schleife = gestört. Mit ipv64 verknüpft wird der Zustand gemeldet und ist auch im Portal sichtbar."
     },
-    "foreign_readonly": "Gehört einer anderen Node – hier nur lesbar",
+    "foreign_readonly": "Docker-Check einer anderen Node – nur dort änderbar",
     "run_remote": "Wird von ipv64 bzw. einer anderen Node gemessen; „Jetzt prüfen“ geht nur bei eigenen Checks.",
     "view": "Ansehen",
     "chart": {
