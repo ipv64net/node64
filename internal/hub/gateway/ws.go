@@ -365,6 +365,26 @@ func (c *conn) handle(m wire.Msg) {
 			c.lastRev = res.Revision
 		}
 		c.ack(m.ID, res)
+	case "node_info":
+		// Name/Standort an der Node geaendert: Portal und andere Nodes (ueber config "node") sehen es sofort
+		var in struct {
+			Name     string `json:"name"`
+			Location string `json:"location"`
+		}
+		if json.Unmarshal(m.Data, &in) != nil || strings.TrimSpace(in.Name) == "" {
+			c.ack(m.ID, map[string]any{"ok": false, "error": "name required"})
+			return
+		}
+		rev, err := g.st.RenameNode(ctx, n.UserID, n.ID, strings.TrimSpace(in.Name), strings.TrimSpace(in.Location))
+		if err != nil {
+			g.log.Error("node rename failed", "node", n.ID, "err", err)
+			c.ack(m.ID, map[string]any{"ok": false, "error": "database error"})
+			return
+		}
+		if rev > c.lastRev {
+			c.lastRev = rev
+		}
+		c.ack(m.ID, map[string]any{"ok": true})
 	case "status":
 		var st wire.Status
 		if err := json.Unmarshal(m.Data, &st); err == nil {

@@ -395,6 +395,9 @@ func (s *Server) settingsNode(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	if s.Linker != nil {
+		s.Linker.NodeInfoChanged() // an ipv64 und die anderen Nodes weitergeben
+	}
 	s.audit(r, "settings.node", "", fmt.Sprintf("name=%q location=%q", f["node_name"], f["location"]))
 	s.flash(w, r, "success", v.T("common.saved"))
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)

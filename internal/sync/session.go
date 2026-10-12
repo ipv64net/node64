@@ -308,6 +308,7 @@ func (s *session) request(t string, data any) (wire.Msg, error) {
 
 // afterConnect: Outbox, Nachlieferung, Zustands-Schnappschuss, Status.
 func (s *session) afterConnect() {
+	s.pushNodeInfo()                       // lokal geaenderter Name/Standort zuerst, sonst holt refreshMe den alten
 	go s.c.refreshMe(context.Background()) // Name, Standort und Nodes des Accounts aktualisieren
 	s.replayOutbox()
 	s.uploadMeasurements()
@@ -353,6 +354,7 @@ func (s *session) worker() {
 				return
 			}
 		case <-c.wake:
+			s.pushNodeInfo()
 			s.replayOutbox()
 			s.flushStates()
 		case <-states.C:
@@ -557,6 +559,34 @@ func (s *session) flushStates() {
 			}
 		}
 		c.mu.Unlock()
+	}
+}
+
+// pushNodeInfo meldet lokal geaenderten Namen/Standort an den hub (Portal, andere Nodes).
+func (s *session) pushNodeInfo() {
+	c := s.c
+	if c.setting(SetNodeInfoDirty, "") != "1" {
+		return
+	}
+	gen := c.infoGen.Load()
+	name, loc := c.setting("node.name", ""), c.setting("node.location", "")
+	m, err := s.request("node_info", map[string]string{"name": name, "location": loc})
+	if err != nil {
+		return
+	}
+	var res struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	_ = json.Unmarshal(m.Data, &res)
+	if !res.OK {
+		c.log.Warn("hub rejected node name", "err", res.Error)
+	} else {
+		c.set(SetNodeName, name)
+		c.set(SetLocation, loc)
+	}
+	if c.infoGen.Load() == gen {
+		c.set(SetNodeInfoDirty, "")
 	}
 }
 

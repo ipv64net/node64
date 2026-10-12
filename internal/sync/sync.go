@@ -44,21 +44,22 @@ var DefaultEndpoints = []wire.Endpoint{
 
 // Einstellungsschluessel (Kern-Store).
 const (
-	SetToken      = "sync.token" // verschluesselt
-	SetAccount    = "sync.account"
-	SetEndpoints  = "sync.endpoints"
-	SetNodeName   = "sync.node_name"
-	SetLocation   = "sync.location"
-	SetRemoteMgmt = "sync.remote_mgmt"
-	SetRevision   = "sync.last_revision"
-	SetAckSeq     = "sync.ack_seq"
-	SetEventID    = "sync.last_event_id"
-	SetLinkedAt   = "sync.linked_at"
-	SetHub        = "sync.hub"
-	SetPendCode   = "sync.pending_code"
-	SetPendSecret = "sync.pending_secret"
-	SetPendExp    = "sync.pending_expires"
-	SetLocalNotif = "sync.local_notifications" // "1": Node alarmiert ihre Kanaele auch verknuepft
+	SetToken         = "sync.token" // verschluesselt
+	SetAccount       = "sync.account"
+	SetEndpoints     = "sync.endpoints"
+	SetNodeName      = "sync.node_name"
+	SetLocation      = "sync.location"
+	SetNodeInfoDirty = "sync.node_info_dirty" // Name/Standort lokal geaendert, noch nicht beim hub
+	SetRemoteMgmt    = "sync.remote_mgmt"
+	SetRevision      = "sync.last_revision"
+	SetAckSeq        = "sync.ack_seq"
+	SetEventID       = "sync.last_event_id"
+	SetLinkedAt      = "sync.linked_at"
+	SetHub           = "sync.hub"
+	SetPendCode      = "sync.pending_code"
+	SetPendSecret    = "sync.pending_secret"
+	SetPendExp       = "sync.pending_expires"
+	SetLocalNotif    = "sync.local_notifications" // "1": Node alarmiert ihre Kanaele auch verknuepft
 )
 
 // State beschreibt den Verbindungszustand fuer die Anzeige im UI.
@@ -103,6 +104,8 @@ type Linker interface {
 	Resolve(ctx context.Context, id int64, keepServer bool) error
 	// TestServerChannel laesst ipv64 einen Testversand ueber einen Server-Kanal machen (Mail, SMS, App).
 	TestServerChannel(ctx context.Context, remoteID int64, lang string) error
+	// NodeInfoChanged: Name/Standort wurden in den Einstellungen geaendert, an ipv64 melden.
+	NodeInfoChanged()
 }
 
 // NoOp ist der Standalone-Client: nicht verknuepft, tut nichts.
@@ -134,6 +137,7 @@ type Live struct {
 	sessionReady  bool      // aktuelle Sitzung hat hello/config erhalten
 	pushOnce      sync.Once // Warteschlange fuer weitergereichte Pushes
 	pushQ         chan wire.Msg
+	infoGen       atomic.Int64 // zaehlt lokale Aenderungen von Name/Standort (refreshMe ueberschreibt sie nicht)
 
 	mu        sync.Mutex
 	connected bool
@@ -952,8 +956,20 @@ func (c *Live) onChannelChange(ctx context.Context, id int64, op string) {
 	c.poke()
 }
 
+// NodeInfoChanged merkt eine lokale Aenderung von Name/Standort vor; die Sitzung meldet sie dem hub,
+// der sie ins Portal und an die anderen Nodes weitergibt (auch nach einer Trennung).
+func (c *Live) NodeInfoChanged() {
+	c.infoGen.Add(1)
+	if !c.Linked() {
+		return
+	}
+	c.set(SetNodeInfoDirty, "1")
+	c.poke()
+}
+
 // refreshMe holt Name, Standort und Fernverwaltung vom hub (nach Aenderung im Portal).
 func (c *Live) refreshMe(ctx context.Context) {
+	gen := c.infoGen.Load()
 	resp, err := c.get(ctx, c.hubURL()+"/v1/nodes/me", c.token())
 	if err != nil {
 		return
@@ -975,6 +991,11 @@ func (c *Live) refreshMe(ctx context.Context) {
 	}
 	c.set(SetNodeName, me.Name)
 	c.set(SetLocation, me.Location)
+	if c.infoGen.Load() == gen && c.setting(SetNodeInfoDirty, "") != "1" {
+		// im Portal umbenannt: auch Name/Standort der Node selbst (Einstellungen, Status)
+		c.set("node.name", me.Name)
+		c.set("node.location", me.Location)
+	}
 	if me.RemoteMgmt != "" {
 		c.set(SetRemoteMgmt, me.RemoteMgmt)
 	}

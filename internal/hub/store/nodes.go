@@ -227,6 +227,27 @@ func (s *Store) NodeStatus(ctx context.Context, nodeID string, st wire.Status) e
 	return err
 }
 
+// RenameNode uebernimmt Name und Standort, die an der Node geaendert wurden, und vermerkt die Aenderung
+// fuer alle Nodes des Accounts (deren Liste der Messstellen zeigt den neuen Namen).
+func (s *Store) RenameNode(ctx context.Context, userID int64, nodeID, name, location string) (int64, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `UPDATE hc2_nodes SET name = ?, location = ? WHERE node_id = ? AND userid = ?`, truncate(name, 100), truncate(location, 100), nodeID, userID); err != nil {
+		return 0, err
+	}
+	rev, err := nextRevision(ctx, tx, userID)
+	if err != nil {
+		return 0, err
+	}
+	if err := logChange(ctx, tx, userID, nil, "node", nodeID, "upsert", rev, "node"); err != nil {
+		return 0, err
+	}
+	return rev, tx.Commit()
+}
+
 // StaleNodes markiert Nodes offline, deren last_seen aelter als 3 Minuten ist
 // (hub abgestuerzt o. ae.). Liefert die betroffenen IDs.
 func (s *Store) StaleNodes(ctx context.Context) ([]string, error) {
