@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func TestMultiNodeMeasuredHere(t *testing.T) {
@@ -50,4 +51,53 @@ func TestMultiNodeMeasuredHere(t *testing.T) {
 	if w := m.WireCheck(c, nil); len(w.Nodes) != 1 || w.Nodes[0] != other {
 		t.Fatalf("wire nodes: %+v", w.Nodes)
 	}
+}
+
+// Historie fremder Messstellen bleibt im Diagramm, wenn diese Node spaeter mitmisst.
+func TestChartKeepsRemoteHistory(t *testing.T) {
+	m, srv := newTestModule(t)
+	ctx := context.Background()
+	me := "selfnode0000000000000000000000cc"
+	_ = m.core.SetSetting(ctx, "node.id", me)
+	self.Lock()
+	self.id = ""
+	self.Unlock()
+	t.Cleanup(func() { self.Lock(); self.id = ""; self.Unlock() })
+	m.SetLinked(func() bool { return true })
+	code, b := call(t, srv, "POST", "/api/checks", map[string]any{"name": "q9", "type": "icmp", "target": "9.9.9.9", "execution": "online", "interval_seconds": 60})
+	if code != 201 && code != 200 {
+		t.Fatalf("create: %d %s", code, b)
+	}
+	var cj struct{ Token string }
+	_ = json.Unmarshal(b, &cj)
+	t0 := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
+	m.ApplyRemoteState(ctx, RemoteState{Token: cj.Token, State: "up", Since: t0, Time: t0, Status: "up", LatencyMS: 10, Source: "loc:fsn", SourceState: "up"})
+	// jetzt misst diese Node mit (hybrid)
+	c, _ := m.st.Check(ctx, cj.Token)
+	c.Execution, c.Nodes = "both", []string{me}
+	if err := m.st.Update(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	t1 := time.Now().UTC().Add(-time.Minute).Truncate(time.Second)
+	m.ApplyRemoteState(ctx, RemoteState{Token: cj.Token, State: "up", Since: t0, Time: t1, Status: "up", LatencyMS: 12, Source: "loc:fsn", SourceState: "up"})
+	code, b = call(t, srv, "GET", "/api/checks/"+cj.Token+"/chart?range=24h", nil)
+	if code != 200 {
+		t.Fatalf("chart: %d %s", code, b)
+	}
+	var out struct {
+		Series []struct {
+			Source string
+			Points []json.RawMessage
+		}
+	}
+	_ = json.Unmarshal(b, &out)
+	for _, s := range out.Series {
+		if s.Source == "loc:fsn" {
+			if len(s.Points) != 2 {
+				t.Fatalf("loc:fsn points: %d (old history lost?)", len(s.Points))
+			}
+			return
+		}
+	}
+	t.Fatalf("no loc:fsn series: %s", b)
 }

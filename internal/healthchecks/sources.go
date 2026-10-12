@@ -211,7 +211,11 @@ func (m *Module) apiChart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	tr := m.translator(m.g.Lang(r))
+	lang := ""
+	if m.g.Lang != nil {
+		lang = m.g.Lang(r)
+	}
+	tr := m.translator(lang)
 	from := time.Now().UTC().Add(-cr.span)
 	series := map[string]*chartSeries{}
 	get := func(src string) *chartSeries {
@@ -233,14 +237,16 @@ func (m *Module) apiChart(w http.ResponseWriter, r *http.Request) {
 	}
 	var qs []q
 	selfSel := `'self', time, status, latency_ms FROM hc_measurements WHERE token = ? AND time >= ? AND (flags & 8) = 0`
-	remoteSel := `source, time, status, latency_ms FROM hc_source_points WHERE token = ? AND time >= ?`
-	if !c.MeasuredHere() {
-		remoteSel = `details, time, status, latency_ms FROM hc_measurements WHERE token = ? AND time >= ? AND (flags & 8) != 0`
-	}
+	// Fremde Messstellen aus beiden Ablagen: hc_measurements (flags 8, solange diese Node nicht mitmisst)
+	// und hc_source_points (seit sie mitmisst). So bleibt die Historie beim Aendern der Messstellen erhalten.
+	remoteSel := `src, time, status, latency_ms FROM (
+		SELECT details AS src, time, status, latency_ms FROM hc_measurements WHERE token = ? AND time >= ? AND (flags & 8) != 0
+		UNION ALL SELECT source AS src, time, status, latency_ms FROM hc_source_points WHERE token = ? AND time >= ?)`
+	selfArgs, remoteArgs := []any{c.Token, ft(from)}, []any{c.Token, ft(from), c.Token, ft(from)}
 	switch cr.bucket {
 	case "raw":
-		qs = append(qs, q{`SELECT ` + selfSel + ` ORDER BY time LIMIT 20000`, []any{c.Token, ft(from)}},
-			q{`SELECT ` + remoteSel + ` ORDER BY time LIMIT 40000`, []any{c.Token, ft(from)}})
+		qs = append(qs, q{`SELECT ` + selfSel + ` ORDER BY time LIMIT 20000`, selfArgs},
+			q{`SELECT ` + remoteSel + ` ORDER BY time LIMIT 40000`, remoteArgs})
 	default:
 		n := 13 // Stunde
 		if cr.bucket == "day" {
@@ -251,7 +257,7 @@ func (m *Module) apiChart(w http.ResponseWriter, r *http.Request) {
 			parts := strings.SplitN(sel, ", time, status, latency_ms FROM ", 2)
 			return `SELECT ` + parts[0] + `, substr(time, 1, ` + strconv.Itoa(n) + `), count(*), sum(status), avg(CASE WHEN status = 1 THEN latency_ms END) FROM ` + parts[1] + ` GROUP BY 1, 2 ORDER BY 2`
 		}
-		qs = append(qs, q{agg(selfSel), []any{c.Token, ft(from)}}, q{agg(remoteSel), []any{c.Token, ft(from)}})
+		qs = append(qs, q{agg(selfSel), selfArgs}, q{agg(remoteSel), remoteArgs})
 		if cr.bucket == "day" && c.MeasuredHere() {
 			// eigene Tageswerte (Rohpunkte gibt es nur 30 Tage)
 			qs = append(qs, q{`SELECT 'self', day, count, up_count, avg_ms FROM hc_daily WHERE token = ? AND day >= ? AND day < ? ORDER BY day`,
