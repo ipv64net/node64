@@ -953,12 +953,19 @@ func (c *Live) refreshMe(ctx context.Context) {
 		return
 	}
 	var me struct {
-		Name       string `json:"name"`
-		Location   string `json:"location"`
-		RemoteMgmt string `json:"remote_mgmt"`
+		Name       string            `json:"name"`
+		Location   string            `json:"location"`
+		RemoteMgmt string            `json:"remote_mgmt"`
+		Nodes      []json.RawMessage `json:"nodes"`
 	}
 	if json.Unmarshal(resp, &me) != nil || me.Name == "" {
 		return
+	}
+	if me.Nodes != nil {
+		// Nodes des Accounts: Auswahl der messenden Nodes im Formular
+		if b, err := json.Marshal(me.Nodes); err == nil {
+			c.set(healthchecks.SettingPeers, string(b))
+		}
 	}
 	c.set(SetNodeName, me.Name)
 	c.set(SetLocation, me.Location)

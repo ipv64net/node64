@@ -73,6 +73,7 @@ type Check struct {
 	Locations      []string // Online-Standorte, leer = Vorgabe des Servers
 	NotifyDegraded bool     // auch bei "teilweise gestoert" benachrichtigen
 	Owner          string   // self (hier gemessen), online (nur bei ipv64), other (andere Node)
+	Nodes          []string // messende Nodes (verknuepft, local/both); leer = nur der Besitzer
 	NotifyDown     bool
 	NotifyUp       bool
 	Channels       []int64
@@ -145,11 +146,11 @@ const checkCols = `token, type, name, target, params, interval_sec, retry_interv
 	policy, locations, notify_degraded, owner,
 	revision, created_at, updated_at, updated_by,
 	state, state_since, last_check_at, next_check_at, consecutive_fail, consecutive_ok, last_status, last_latency_ms, last_reason, last_message,
-	last_push_at, down_since, flap_since, transitions, incident_id, group_name`
+	last_push_at, down_since, flap_since, transitions, incident_id, group_name, nodes`
 
 func scanCheck(row interface{ Scan(...any) error }) (*Check, error) {
 	var c Check
-	var params, tags, channels, created, updated, locations string
+	var params, tags, channels, created, updated, locations, nodes string
 	var iv, riv, cto, tto int64
 	var invert, paused, critical, nd, nu, ndeg int
 	var state, since, last, next, lastStatus, lastPush, downSince, flapSince, transitions string
@@ -160,7 +161,7 @@ func scanCheck(row interface{ Scan(...any) error }) (*Check, error) {
 		&c.Policy, &locations, &ndeg, &c.Owner,
 		&c.Revision, &created, &updated, &c.UpdatedBy,
 		&state, &since, &last, &next, &c.Runtime.ConsecutiveFail, &c.Runtime.ConsecutiveOK, &lastStatus, &lastLat, &lastReason, &lastMsg,
-		&lastPush, &downSince, &flapSince, &transitions, &c.Runtime.Incident, &c.Group); err != nil {
+		&lastPush, &downSince, &flapSince, &transitions, &c.Runtime.Incident, &c.Group, &nodes); err != nil {
 		return nil, err
 	}
 	c.Params = json.RawMessage(params)
@@ -171,7 +172,7 @@ func scanCheck(row interface{ Scan(...any) error }) (*Check, error) {
 	c.ConnectTimeout, c.TotalTimeout = time.Duration(cto)*time.Millisecond, time.Duration(tto)*time.Millisecond
 	c.Invert, c.Paused, c.Critical, c.NotifyDown, c.NotifyUp = invert == 1, paused == 1, critical == 1, nd == 1, nu == 1
 	c.NotifyDegraded = ndeg == 1
-	c.Tags, c.Locations = splitList(tags), splitList(locations)
+	c.Tags, c.Locations, c.Nodes = splitList(tags), splitList(locations), splitList(nodes)
 	for _, ch := range splitList(channels) {
 		var id int64
 		if _, err := fmt.Sscan(ch, &id); err == nil {
@@ -262,13 +263,13 @@ func (s *Store) Insert(ctx context.Context, c *Check) error {
 	if c.Owner == "" {
 		c.Owner = "self"
 	}
-	_, err := s.w.ExecContext(ctx, `INSERT INTO hc_checks (`+checkCols+`) VALUES (`+strings.TrimSuffix(strings.Repeat("?,", 47), ",")+`)`,
+	_, err := s.w.ExecContext(ctx, `INSERT INTO hc_checks (`+checkCols+`) VALUES (`+strings.TrimSuffix(strings.Repeat("?,", 48), ",")+`)`,
 		c.Token, string(c.Type), c.Name, c.Target, string(c.Params), int64(c.Interval.Seconds()), int64(c.RetryInterval.Seconds()), c.Retries,
 		c.ConnectTimeout.Milliseconds(), c.TotalTimeout.Milliseconds(), b2i(c.Invert), c.Stabilize, string(c.IPMode), strings.Join(c.Tags, ","), c.Description,
 		b2i(c.Paused), c.Parent, b2i(c.Critical), c.Execution, b2i(c.NotifyDown), b2i(c.NotifyUp), joinInts(c.Channels), c.RepeatMinutes,
 		c.Policy, strings.Join(c.Locations, ","), b2i(c.NotifyDegraded), c.Owner,
 		c.Revision, now, now, c.UpdatedBy,
-		"pending", now, "", "", 0, 0, "", 0.0, "", "", "", "", "", "", 0, c.Group)
+		"pending", now, "", "", 0, 0, "", 0.0, "", "", "", "", "", "", 0, c.Group, strings.Join(c.Nodes, ","))
 	if err == nil {
 		s.changed(ctx, "check", c.Token, "upsert")
 	}
@@ -283,12 +284,12 @@ func (s *Store) Update(ctx context.Context, c *Check) error {
 	_, err := s.w.ExecContext(ctx, `UPDATE hc_checks SET type=?, name=?, target=?, params=?, interval_sec=?, retry_interval_sec=?, retries=?,
 		connect_timeout_ms=?, total_timeout_ms=?, invert=?, stabilize=?, ip_mode=?, tags=?, description=?, paused=?, parent_token=?, critical=?,
 		execution=?, notify_down=?, notify_up=?, channels=?, repeat_minutes=?, policy=?, locations=?, notify_degraded=?, owner=?,
-		revision=?, updated_at=?, updated_by=?, group_name=? WHERE token=?`,
+		revision=?, updated_at=?, updated_by=?, group_name=?, nodes=? WHERE token=?`,
 		string(c.Type), c.Name, c.Target, string(c.Params), int64(c.Interval.Seconds()), int64(c.RetryInterval.Seconds()), c.Retries,
 		c.ConnectTimeout.Milliseconds(), c.TotalTimeout.Milliseconds(), b2i(c.Invert), c.Stabilize, string(c.IPMode), strings.Join(c.Tags, ","), c.Description,
 		b2i(c.Paused), c.Parent, b2i(c.Critical), c.Execution, b2i(c.NotifyDown), b2i(c.NotifyUp), joinInts(c.Channels), c.RepeatMinutes,
 		c.Policy, strings.Join(c.Locations, ","), b2i(c.NotifyDegraded), orSelf(c.Owner),
-		c.Revision, now, c.UpdatedBy, c.Group, c.Token)
+		c.Revision, now, c.UpdatedBy, c.Group, strings.Join(c.Nodes, ","), c.Token)
 	if err == nil {
 		s.changed(ctx, "check", c.Token, "upsert")
 	}

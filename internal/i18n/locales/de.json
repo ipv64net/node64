@@ -368,6 +368,10 @@
       "done": "{count} Checks geändert."
     },
     "form": {
+      "nodes": "Messende Nodes",
+      "this_node": "diese Node",
+      "nodes_hint": "Mehrere Nodes möglich, z. B. an verschiedenen Standorten oder mit Zugang über VPN. Jede gewählte Node misst den Check selbst und erscheint als eigene Messstelle.",
+      "nodes_single": "Docker- und Push-Checks gehören zu genau einer Node (Container bzw. Push-Adresse) und sind nicht umhängbar.",
       "cert_min_days": "Zertifikat: warnen unter",
       "days": "Tagen",
       "cert_min_days_hint": "HTTPS: gestört melden, wenn das Zertifikat in weniger Tagen abläuft (0 = aus). Das Ablaufdatum wird immer mitgelesen.",

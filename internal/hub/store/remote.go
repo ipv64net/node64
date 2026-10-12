@@ -85,5 +85,5 @@ func (s *Store) RemoteStatesOf(ctx context.Context, userID int64) ([]RemoteState
 
 // ForNode sagt, ob die Node diesen Zustand angezeigt bekommen soll (nicht ihre eigenen Messungen).
 func (r RemoteState) ForNode(nodeID string) bool {
-	return r.Source != "node:"+nodeID && !(r.NodeID == nodeID && r.Execution == "local")
+	return r.Source != "node:"+nodeID
 }

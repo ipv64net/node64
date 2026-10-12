@@ -60,6 +60,15 @@ func sourceBelongs(c *Check, source string) bool {
 	if (c.Execution == "online" && isNode) || (c.Execution == "local" && !isNode) {
 		return false
 	}
+	if isNode && len(c.Nodes) > 0 {
+		id := strings.TrimPrefix(source, "node:")
+		for _, n := range c.Nodes {
+			if n == id {
+				return true
+			}
+		}
+		return false
+	}
 	if strings.HasPrefix(source, "loc:") && len(c.Locations) > 0 {
 		code := strings.TrimPrefix(source, "loc:")
 		for _, l := range c.Locations {

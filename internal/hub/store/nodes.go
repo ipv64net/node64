@@ -259,6 +259,42 @@ func (s *Store) Unlink(ctx context.Context, n *Node, keepChecks bool) error {
 	if _, err := s.db.ExecContext(ctx, `UPDATE hc2_nodes SET revoked_at = ?, online = 0 WHERE node_id = ?`, now, n.ID); err != nil {
 		return err
 	}
+	// Checks mit mehreren messenden Nodes: diese Node austragen; war sie Besitzer, uebernimmt die naechste
+	if rows, err := s.db.QueryContext(ctx, `SELECT token FROM hc2_checks WHERE userid = ? AND deleted_at IS NULL AND execution IN ('local','both') AND FIND_IN_SET(?, nodes) > 0`, n.UserID, n.ID); err == nil {
+		var tokens []string
+		for rows.Next() {
+			var t string
+			if rows.Scan(&t) == nil {
+				tokens = append(tokens, t)
+			}
+		}
+		rows.Close()
+		for _, t := range tokens {
+			c, _, err := s.WireCheck(ctx, t)
+			if err != nil || c == nil {
+				continue
+			}
+			var rest []string
+			for _, id := range c.Nodes {
+				if id != n.ID {
+					rest = append(rest, id)
+				}
+			}
+			if len(rest) == 0 {
+				continue // nur diese Node: wie bisher (online weiter oder loeschen)
+			}
+			c.Nodes = rest
+			if c.NodeID == n.ID {
+				c.NodeID = rest[0]
+			}
+			data, _ := json.Marshal(c)
+			if res, err := s.Propose(ctx, n.UserID, "", wire.Propose{Entity: "check", Op: "upsert", ID: t, BaseRevision: -1, Data: data}, "system"); err != nil {
+				return err
+			} else if res.Error != "" {
+				s.log.Info("unlink: node not removed from check", "token", t, "reason", res.Error)
+			}
+		}
+	}
 	if keepChecks {
 		// Weiterlaufen lassen als Online-Checks, soweit Ziel oeffentlich und Limit frei; sonst loeschen.
 		// Ueber Propose, damit Limit, Log und andere Nodes des Accounts stimmen.
@@ -381,4 +417,31 @@ func (s *Store) NodeIsOnline(ctx context.Context, id string) bool {
 	on := online == 1 && time.Since(pt(lastSeen)) < 3*time.Minute
 	s.setNodeOnline(id, on)
 	return on
+}
+
+// AccountNode ist eine Node des Accounts (Auswahl der messenden Nodes).
+type AccountNode struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Location string `json:"location"`
+	Online   bool   `json:"online"`
+}
+
+// AccountNodes liefert die verknuepften Nodes eines Accounts.
+func (s *Store) AccountNodes(ctx context.Context, userID int64) ([]AccountNode, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT node_id, name, location, online FROM hc2_nodes WHERE userid = ? AND revoked_at IS NULL ORDER BY name`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []AccountNode{}
+	for rows.Next() {
+		var a AccountNode
+		var online int
+		if rows.Scan(&a.ID, &a.Name, &a.Location, &online) == nil {
+			a.Online = online == 1
+			out = append(out, a)
+		}
+	}
+	return out, rows.Err()
 }

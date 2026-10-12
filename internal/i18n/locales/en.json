@@ -368,6 +368,10 @@
       "done": "{count} checks changed."
     },
     "form": {
+      "nodes": "Measuring nodes",
+      "this_node": "this node",
+      "nodes_hint": "Several nodes possible, e.g. at different sites or with VPN access. Every selected node measures the check itself and shows up as its own measuring point.",
+      "nodes_single": "Docker and push checks belong to exactly one node (container or push address) and cannot be moved.",
       "cert_min_days": "Certificate: warn below",
       "days": "days",
       "cert_min_days_hint": "HTTPS: report down when the certificate expires in fewer days (0 = off). The expiry date is always read.",

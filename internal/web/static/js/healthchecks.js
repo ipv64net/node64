@@ -25,8 +25,19 @@
 			});
 			if (docker) { exSel.value = "local"; }
 		};
-		typeSel.addEventListener("change", function () { update(); lockExec(); });
-		update(); lockExec();
+		var nodesBox = document.getElementById("nodesbox");
+		var syncNodes = function () {
+			if (!nodesBox) { return; }
+			nodesBox.classList.toggle("d-none", !!exSel && exSel.value === "online");
+			var single = typeSel.value === "docker" || typeSel.value === "push";
+			nodesBox.querySelectorAll("input[name=nodes]").forEach(function (cb) {
+				var own = cb.closest(".form-check").querySelector(".badge.text-bg-success");
+				if (single) { cb.checked = !!own; cb.disabled = true; } else { cb.disabled = false; }
+			});
+		};
+		if (exSel) { exSel.addEventListener("change", syncNodes); }
+		typeSel.addEventListener("change", function () { update(); lockExec(); syncNodes(); });
+		update(); lockExec(); syncNodes();
 	}
 
 	// Tooltips der Pillen: Inhalt aus data-Attributen, hier maskiert und als HTML gesetzt

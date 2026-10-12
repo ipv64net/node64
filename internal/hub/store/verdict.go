@@ -27,10 +27,11 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 	var intervalSec, critical, nd, nu, ndeg, paused int
 	var incident sql.NullInt64
 	var downSince sql.NullString
-	var execution string
-	err = tx.QueryRowContext(ctx, `SELECT userid, policy, state, name, interval_sec, incident_id, down_since, type, target, critical, channels, notify_down, notify_up, notify_degraded, execution, paused
+	var execution, nodesCol string
+	var ownerNode sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT userid, policy, state, name, interval_sec, incident_id, down_since, type, target, critical, channels, notify_down, notify_up, notify_degraded, execution, paused, nodes, node_id
 		FROM hc2_checks WHERE token = ? AND deleted_at IS NULL FOR UPDATE`, token).
-		Scan(&userid, &policy, &state, &name, &intervalSec, &incident, &downSince, &ctype, &target, &critical, &channels, &nd, &nu, &ndeg, &execution, &paused)
+		Scan(&userid, &policy, &state, &name, &intervalSec, &incident, &downSince, &ctype, &target, &critical, &channels, &nd, &nu, &ndeg, &execution, &paused, &nodesCol, &ownerNode)
 	if err == sql.ErrNoRows {
 		return nil
 	}
@@ -69,6 +70,9 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		isNode := strings.HasPrefix(x.Source, "node:")
 		if (execution == "online" && isNode) || (execution == "local" && !isNode) {
 			continue
+		}
+		if isNode && !inList(measuringNodes(splitList(nodesCol), ownerNode.String), strings.TrimPrefix(x.Source, "node:")) {
+			continue // Node misst den Check nicht (mehr)
 		}
 		// Node-Messstellen sind frisch, solange die Node online ist; Standorte nach Alter des Zustands
 		if strings.HasPrefix(x.Source, "node:") {
@@ -320,4 +324,13 @@ func (s *Store) DueReminders(ctx context.Context) ([]OverallEvent, error) {
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+func inList(list []string, v string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
 }

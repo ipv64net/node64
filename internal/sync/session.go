@@ -308,6 +308,7 @@ func (s *session) request(t string, data any) (wire.Msg, error) {
 
 // afterConnect: Outbox, Nachlieferung, Zustands-Schnappschuss, Status.
 func (s *session) afterConnect() {
+	go s.c.refreshMe(context.Background()) // Name, Standort und Nodes des Accounts aktualisieren
 	s.replayOutbox()
 	s.uploadMeasurements()
 	s.uploadEvents()

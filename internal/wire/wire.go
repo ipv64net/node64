@@ -41,7 +41,8 @@ type Check struct {
 	Channels              []int64         `json:"channels"`
 	RepeatMinutes         int             `json:"repeat_minutes"`
 	Revision              int64           `json:"revision"`
-	NodeID                string          `json:"node_id,omitempty"` // Besitzer-Node (local/both)
+	NodeID                string          `json:"node_id,omitempty"` // Besitzer-Node (local/both): bearbeitet, benachrichtigt
+	Nodes                 []string        `json:"nodes,omitempty"`   // messende Nodes (local/both); leer = nur die Besitzer-Node
 	Owner                 string          `json:"owner,omitempty"`   // self, other, online (nur Server -> Node)
 }
 

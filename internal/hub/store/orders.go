@@ -43,7 +43,8 @@ func (s *Store) CommandDone(ctx context.Context, r wire.CommandResult) error {
 	}
 	// Gehoert das Kommando zu einem Testlauf (Umhaengen), Ergebnis dort als Messstelle "node" eintragen
 	var args sql.NullString
-	if err := s.db.QueryRowContext(ctx, `SELECT args FROM hc2_commands WHERE id = ? AND name = 'test_check'`, r.ID).Scan(&args); err == nil && args.Valid {
+	var cmdNode string
+	if err := s.db.QueryRowContext(ctx, `SELECT args, node_id FROM hc2_commands WHERE id = ? AND name = 'test_check'`, r.ID).Scan(&args, &cmdNode); err == nil && args.Valid {
 		var a struct {
 			TestrunID int64 `json:"testrun_id"`
 		}
@@ -52,7 +53,7 @@ func (s *Store) CommandDone(ctx context.Context, r wire.CommandResult) error {
 			if json.Valid(r.Output) {
 				o.Results = r.Output
 			}
-			return s.TestrunResult(ctx, a.TestrunID, "node", o)
+			return s.TestrunResult(ctx, a.TestrunID, "node:"+cmdNode, o)
 		}
 	}
 	return nil

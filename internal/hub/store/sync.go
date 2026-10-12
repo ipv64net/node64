@@ -49,19 +49,22 @@ func (s *Store) CurrentRevision(ctx context.Context, userID int64) int64 {
 // ---------------------------------------------------------------- Checks <-> wire
 
 const wireCheckCols = `token, node_id, execution, locations, policy, notify_degraded, type, name, target, params, interval_sec, retry_interval_sec, retries,
-	connect_timeout_ms, total_timeout_ms, invert, stabilize, ip_mode, tags, description, paused, parent_token, critical, notify_down, notify_up, channels, repeat_minutes, revision, deleted_at, group_name`
+	connect_timeout_ms, total_timeout_ms, invert, stabilize, ip_mode, tags, description, paused, parent_token, critical, notify_down, notify_up, channels, repeat_minutes, revision, deleted_at, group_name, nodes`
 
 func scanWireCheck(row interface{ Scan(...any) error }) (*wire.Check, bool, error) {
 	var c wire.Check
 	var nodeID, parent, deleted, description sql.NullString
-	var locations, tags, channels, params string
+	var locations, tags, channels, params, nodes string
 	var iv, riv, cto, tto int64
 	var invert, paused, critical, nd, nu, ndeg int
 	if err := row.Scan(&c.Token, &nodeID, &c.Execution, &locations, &c.Policy, &ndeg, &c.Type, &c.Name, &c.Target, &params, &iv, &riv, &c.Retries,
-		&cto, &tto, &invert, &c.Stabilize, &c.IPMode, &tags, &description, &paused, &parent, &critical, &nd, &nu, &channels, &c.RepeatMinutes, &c.Revision, &deleted, &c.Group); err != nil {
+		&cto, &tto, &invert, &c.Stabilize, &c.IPMode, &tags, &description, &paused, &parent, &critical, &nd, &nu, &channels, &c.RepeatMinutes, &c.Revision, &deleted, &c.Group, &nodes); err != nil {
 		return nil, false, err
 	}
 	c.NodeID, c.Parent, c.Description = nodeID.String, parent.String, description.String
+	if c.Execution != "online" {
+		c.Nodes = measuringNodes(splitList(nodes), c.NodeID)
+	}
 	c.Params = json.RawMessage(params)
 	if strings.TrimSpace(params) == "" {
 		c.Params = json.RawMessage("{}")
@@ -417,6 +420,36 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 	} else if c.NodeID != "" {
 		nodeRef = c.NodeID
 	}
+	// Messende Nodes: nur aktive Nodes des Accounts; Docker und Push bleiben bei genau einer Node
+	var nodeList []string
+	if c.Execution != "online" {
+		owner0 := ""
+		if v, ok := nodeRef.(string); ok {
+			owner0 = v
+		}
+		if c.Type == "docker" && exists && owner.Valid && owner.String != "" && owner0 != owner.String {
+			res.Error = "docker checks belong to the node that runs the container and cannot be moved"
+			return nil
+		}
+		nodeList = measuringNodes(c.Nodes, owner0)
+		if singleNodeType(c.Type) {
+			nodeList = measuringNodes(nil, owner0)
+		}
+		if len(nodeList) > 20 {
+			res.Error = "at most 20 measuring nodes"
+			return nil
+		}
+		for _, id := range nodeList {
+			var ok int
+			if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM hc2_nodes WHERE userid = ? AND node_id = ? AND revoked_at IS NULL`, userID, id).Scan(&ok); err != nil {
+				return err
+			}
+			if ok == 0 {
+				res.Error = "unknown or unlinked node " + id
+				return nil
+			}
+		}
+	}
 	acc, _ := s.Account(ctx, userID)
 	locs := c.Locations
 	if len(locs) == 0 {
@@ -450,20 +483,20 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 	if exists {
 		_, err = tx.ExecContext(ctx, `UPDATE hc2_checks SET node_id=?, execution=?, locations=?, policy=?, notify_degraded=?, slot=?, type=?, name=?, target=?, params=?,
 			interval_sec=?, retry_interval_sec=?, retries=?, connect_timeout_ms=?, total_timeout_ms=?, invert=?, stabilize=?, ip_mode=?, tags=?, description=?, paused=?,
-			parent_token=?, critical=?, notify_down=?, notify_up=?, channels=?, repeat_minutes=?, revision=?, updated_at=?, updated_by=?, deleted_at=NULL, group_name=? WHERE token=?`,
+			parent_token=?, critical=?, notify_down=?, notify_up=?, channels=?, repeat_minutes=?, revision=?, updated_at=?, updated_by=?, deleted_at=NULL, group_name=?, nodes=? WHERE token=?`,
 			nodeRef, c.Execution, strings.Join(locs, ","), orDefault(c.Policy, "all"), b2i(c.NotifyDegraded), slotOf(c.Token), c.Type, truncate(c.Name, 200), truncate(c.Target, 500), params,
 			c.IntervalSeconds, c.RetryIntervalSeconds, c.Retries, int(c.ConnectTimeoutSeconds*1000), int(c.TimeoutSeconds*1000), b2i(c.Invert), c.Stabilize, orDefault(c.IPMode, "auto"),
 			truncate(strings.Join(c.Tags, ","), 255), c.Description, paused, nullStr(c.Parent), b2i(c.Critical), b2i(c.NotifyDown), b2i(c.NotifyUp), joinInts(c.Channels), c.RepeatMinutes,
-			rev, nowStr(), origin, truncate(c.Group, 100), c.Token)
+			rev, nowStr(), origin, truncate(c.Group, 100), strings.Join(nodeList, ","), c.Token)
 	} else {
 		_, err = tx.ExecContext(ctx, `INSERT INTO hc2_checks (token, userid, node_id, execution, locations, policy, notify_degraded, slot, type, name, target, params,
 			interval_sec, retry_interval_sec, retries, connect_timeout_ms, total_timeout_ms, invert, stabilize, ip_mode, tags, description, paused,
-			parent_token, critical, notify_down, notify_up, channels, repeat_minutes, revision, created_at, updated_at, updated_by, group_name)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?,?,?)`,
+			parent_token, critical, notify_down, notify_up, channels, repeat_minutes, revision, created_at, updated_at, updated_by, group_name, nodes)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?,?,?,?)`,
 			c.Token, userID, nodeRef, c.Execution, strings.Join(locs, ","), orDefault(c.Policy, "all"), b2i(c.NotifyDegraded), slotOf(c.Token), c.Type, truncate(c.Name, 200), truncate(c.Target, 500), params,
 			c.IntervalSeconds, c.RetryIntervalSeconds, c.Retries, int(c.ConnectTimeoutSeconds*1000), int(c.TimeoutSeconds*1000), b2i(c.Invert), c.Stabilize, orDefault(c.IPMode, "auto"),
 			truncate(strings.Join(c.Tags, ","), 255), c.Description, paused,
-			nullStr(c.Parent), b2i(c.Critical), b2i(c.NotifyDown), b2i(c.NotifyUp), joinInts(c.Channels), c.RepeatMinutes, rev, nowStr(), nowStr(), origin, truncate(c.Group, 100))
+			nullStr(c.Parent), b2i(c.Critical), b2i(c.NotifyDown), b2i(c.NotifyUp), joinInts(c.Channels), c.RepeatMinutes, rev, nowStr(), nowStr(), origin, truncate(c.Group, 100), strings.Join(nodeList, ","))
 	}
 	if err != nil {
 		return err
@@ -935,3 +968,23 @@ func (s *Store) OverallStates(ctx context.Context, userID int64) (map[string]str
 }
 
 var _ = scheduler.StatePending
+
+// measuringNodes liefert die messenden Nodes; leer = die Besitzer-Node (alte Checks).
+func measuringNodes(list []string, owner string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, id := range list {
+		id = strings.TrimSpace(id)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	if len(out) == 0 && owner != "" {
+		out = append(out, owner)
+	}
+	return out
+}
+
+// singleNodeType: Push-URL und Docker-Socket gehoeren zu genau einer Node.
+func singleNodeType(typ string) bool { return typ == "push" || typ == "docker" }

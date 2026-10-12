@@ -75,9 +75,9 @@ func (s *Store) TestrunResult(ctx context.Context, id int64, key string, o Testr
 }
 
 func (s *Store) finalizeTestrun(ctx context.Context, id int64) error {
-	var target, locs string
-	var res sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT target_execution, locations, result FROM hc2_testruns WHERE id = ? AND status IN ('pending','running')`, id).Scan(&target, &locs, &res)
+	var target, locs, nodes string
+	var res, owner sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT target_execution, locations, result, nodes, node_id FROM hc2_testruns WHERE id = ? AND status IN ('pending','running')`, id).Scan(&target, &locs, &res, &nodes, &owner)
 	if err == sql.ErrNoRows {
 		return nil
 	}
@@ -93,7 +93,9 @@ func (s *Store) finalizeTestrun(ctx context.Context, id int64) error {
 		need = append(need, splitList(locs)...)
 	}
 	if target != "online" {
-		need = append(need, "node")
+		for _, n := range measuringNodes(splitList(nodes), owner.String) {
+			need = append(need, "node:"+n)
+		}
 	}
 	ok := true
 	for _, k := range need {

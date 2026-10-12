@@ -116,6 +116,7 @@
 			<div class="card-header"><i class="bi bi-sliders"></i> {{.T "hc.settings"}}</div>
 			<div class="card-body small">
 				<dl class="row mb-0">
+					{{if $d.NodeNames}}<dt class="col-6">{{.T "hc.form.nodes"}}</dt><dd class="col-6">{{range $d.NodeNames}}<i class="bi bi-hdd-network text-primary"></i> {{.}}<br>{{end}}</dd>{{end}}
 					{{if ne (print $c.Type) "push"}}
 					<dt class="col-6">{{.T "hc.form.interval"}}</dt><dd class="col-6">{{$j.IntervalSeconds}} s</dd>
 					<dt class="col-6">{{.T "hc.form.retry_interval"}}</dt><dd class="col-6">{{$j.RetryIntervalSeconds}} s</dd>

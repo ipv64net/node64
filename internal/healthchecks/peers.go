@@ -1,0 +1,126 @@
+package healthchecks
+
+import (
+	"context"
+	"encoding/json"
+	"regexp"
+	"strings"
+	"sync"
+
+	"github.com/ipv64net/node64/internal/checks"
+	"github.com/ipv64net/node64/internal/store"
+)
+
+// Mehrere Nodes je Account: ein Check kann von mehreren Nodes gemessen werden (Liste Nodes).
+// Besitzer bleibt die Node, die ihn angelegt hat (bearbeiten, Benachrichtigung ohne hub).
+// Docker und Push gehoeren zu genau einer Node.
+
+// Peer ist eine Node des Accounts (vom hub, /v1/nodes/me).
+type Peer struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Location string `json:"location"`
+	Online   bool   `json:"online"`
+	Self     bool   `json:"-"`
+}
+
+// SettingPeers haelt die Nodes des Accounts (JSON, vom Sync-Client geschrieben).
+const SettingPeers = "sync.account_nodes"
+
+var nodeIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{16,40}$`)
+
+// self merkt sich die eigene Node-Kennung (node.id); leer, solange keine erzeugt wurde.
+var self struct {
+	sync.Mutex
+	core *store.Store
+	id   string
+}
+
+func setSelfStore(core *store.Store) {
+	self.Lock()
+	self.core = core
+	self.Unlock()
+}
+
+// selfNodeID liefert die eigene Kennung (aus den Einstellungen, einmal gelesen).
+func selfNodeID() string {
+	self.Lock()
+	defer self.Unlock()
+	if self.id == "" && self.core != nil {
+		self.id = self.core.SettingOr(context.Background(), "node.id", "")
+	}
+	return self.id
+}
+
+func singleNode(t checks.Type) bool { return t == checks.TypeDocker || t == checks.TypePush }
+
+// measures sagt, ob diese Node den Check misst (ohne Ausfuehrungsort).
+func (c *Check) measures() bool {
+	if len(c.Nodes) > 0 {
+		if id := selfNodeID(); id != "" {
+			for _, n := range c.Nodes {
+				if n == id {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	return c.Owner == "" || c.Owner == "self"
+}
+
+// peers liefert die Nodes des Accounts; die eigene ist markiert und steht vorn.
+func (m *Module) peers(ctx context.Context) []Peer {
+	var list []Peer
+	_ = json.Unmarshal([]byte(m.core.SettingOr(ctx, SettingPeers, "[]")), &list)
+	me := selfNodeID()
+	out := make([]Peer, 0, len(list)+1)
+	found := false
+	for _, p := range list {
+		if p.ID == me {
+			p.Self, found = true, true
+			out = append([]Peer{p}, out...)
+			continue
+		}
+		out = append(out, p)
+	}
+	if !found && me != "" {
+		out = append([]Peer{{ID: me, Name: m.core.SettingOr(ctx, "sync.node_name", "Node"), Online: true, Self: true}}, out...)
+	}
+	return out
+}
+
+// nodeNames liefert lesbare Namen der messenden Nodes.
+func (m *Module) nodeNames(ctx context.Context, ids []string) []string {
+	names := map[string]string{}
+	for _, p := range m.peers(ctx) {
+		names[p.ID] = p.Name
+	}
+	var out []string
+	for _, id := range ids {
+		if n := names[id]; n != "" {
+			out = append(out, n)
+		} else {
+			out = append(out, "Node "+id[:min(8, len(id))])
+		}
+	}
+	return out
+}
+
+// cleanNodes prueft und entdoppelt eine Node-Liste.
+func cleanNodes(in []string) ([]string, bool) {
+	seen := map[string]bool{}
+	var out []string
+	for _, id := range in {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		if !nodeIDRe.MatchString(id) {
+			return nil, false
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out, true
+}

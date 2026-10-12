@@ -354,6 +354,7 @@ type detailData struct {
 	Children   []*Check
 	PushURL    string
 	Sources    []SourceRow // Messstellen (leer = nur diese Node)
+	NodeNames  []string    // messende Nodes (mehrere moeglich)
 	Diagnosis  string
 }
 
@@ -402,6 +403,9 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 	tr := m.translator(lang)
 	d.Sources = m.sources(ctx, c, tr("hc.sources.this_node"))
 	d.Diagnosis = diagnosis(d.Sources, tr)
+	if c.Execution != "online" && len(c.Nodes) > 0 {
+		d.NodeNames = m.nodeNames(ctx, c.Nodes)
+	}
 	d.Events, _ = m.st.Events(ctx, c.Token, 50, 0)
 	d.Incidents, _ = m.st.Incidents(ctx, c.Token, 10)
 	if ms, err := m.st.Measurements(ctx, c.Token, time.Time{}, time.Time{}, 1, 0); err == nil && len(ms) > 0 {
@@ -468,6 +472,7 @@ type formData struct {
 	Locations  []string
 	Executions []string
 	Linked     bool
+	Peers      []Peer // Nodes des Accounts (messende Nodes waehlen)
 }
 
 type channelOpt struct {
@@ -505,6 +510,7 @@ func formFromCheck(c *Check) map[string]string {
 	f["notify_down"], f["notify_up"] = onOff(c.NotifyDown), onOff(c.NotifyUp)
 	f["repeat_minutes"] = strconv.Itoa(c.RepeatMinutes)
 	f["execution"], f["policy"], f["notify_degraded"] = c.Execution, c.Policy, onOff(c.NotifyDegraded)
+	f["nodes"] = strings.Join(c.Nodes, ",")
 	if len(c.Locations) > 0 {
 		f["locations"] = strings.Join(c.Locations, ",")
 	}
@@ -623,6 +629,12 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 		Execution: v("execution"), Policy: v("policy"), Locations: r.Form["locations"]}
 	if in.Locations == nil {
 		in.Locations = []string{}
+	}
+	if v("nodes_present") == "1" {
+		in.Nodes = r.Form["nodes"]
+		if in.Nodes == nil {
+			in.Nodes = []string{selfNodeID()} // nichts gewaehlt: diese Node
+		}
 	}
 	if in.IntervalSeconds, err = intp("interval_seconds"); err != nil {
 		return in, err
@@ -796,6 +808,12 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 	d.IPModes = []string{"auto", "ipv4", "ipv6", "both"}
 	d.Policies, d.Locations, d.Executions = Policies, KnownLocations, []string{"local", "online", "both"}
 	d.Linked = m.linked != nil && m.linked()
+	if d.Linked {
+		d.Peers = m.peers(r.Context())
+		if d.Form["nodes"] == "" {
+			d.Form["nodes"] = selfNodeID() // neu bzw. bisher nur diese Node
+		}
+	}
 	if m.dispatcher != nil {
 		selected := map[string]bool{}
 		for _, id := range strings.Split(d.Form["channels"], ",") {

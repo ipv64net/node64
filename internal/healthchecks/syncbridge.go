@@ -28,6 +28,9 @@ func (m *Module) WireCheck(c *Check, chanMap ChannelMap) wire.Check {
 		IPMode: string(c.IPMode), Tags: c.Tags, Group: c.Group, Description: c.Description, Paused: c.Paused, Parent: c.Parent, Critical: c.Critical,
 		Execution: c.Execution, Policy: c.Policy, Locations: c.Locations, NotifyDegraded: c.NotifyDegraded, NotifyDown: c.NotifyDown, NotifyUp: c.NotifyUp,
 		RepeatMinutes: c.RepeatMinutes, Revision: c.Revision, Channels: []int64{}}
+	if c.Execution != "online" && len(c.Nodes) > 0 {
+		w.Nodes = append([]string{}, c.Nodes...)
+	}
 	if w.Tags == nil {
 		w.Tags = []string{}
 	}
@@ -95,6 +98,10 @@ func (m *Module) ApplyWireCheck(ctx context.Context, w wire.Check, chanMap Chann
 	if c.Owner == "" {
 		c.Owner = "self"
 	}
+	c.Nodes = nil
+	if c.Execution != "online" {
+		c.Nodes = w.Nodes
+	}
 	if c.Parent != "" {
 		if p, _ := m.st.Check(ctx, c.Parent); p == nil {
 			c.Parent = ""
@@ -131,7 +138,7 @@ func (m *Module) ApplyWireCheck(ctx context.Context, w wire.Check, chanMap Chann
 
 // MeasuredHere: eigener Check, der lokal gemessen wird.
 func (c *Check) MeasuredHere() bool {
-	return (c.Owner == "" || c.Owner == "self") && c.Execution != "online"
+	return c.Execution != "online" && c.measures()
 }
 
 // RemoveRemoteCheck loescht einen Check auf Anweisung des Servers (ohne Outbox).
@@ -291,7 +298,7 @@ func (m *Module) TestDefinition(ctx context.Context, w wire.Check) []checks.Resu
 // MeasurementsAfter liefert Messpunkte eigener Checks mit node_seq > seq (aelteste zuerst).
 func (m *Module) MeasurementsAfter(ctx context.Context, seq int64, limit int) ([]wire.Measurement, error) {
 	rows, err := m.st.r.QueryContext(ctx, `SELECT m.node_seq, m.token, m.time, m.status, m.latency_ms, m.reason, m.message, m.family, m.details, m.flags
-		FROM hc_measurements m JOIN hc_checks c ON c.token = m.token WHERE m.node_seq > ? AND c.owner IN ('', 'self') ORDER BY m.node_seq LIMIT ?`, seq, limit)
+		FROM hc_measurements m JOIN hc_checks c ON c.token = m.token WHERE m.node_seq > ? AND (c.owner IN ('', 'self') OR (',' || c.nodes || ',') LIKE ?) ORDER BY m.node_seq LIMIT ?`, seq, "%,"+selfNodeID()+",%", limit)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +334,7 @@ func (m *Module) MaxMeasurementSeq(ctx context.Context) int64 {
 // EventsAfter liefert Ereignisse eigener Checks mit id > after.
 func (m *Module) EventsAfter(ctx context.Context, after int64, limit int) ([]wire.Event, int64, error) {
 	rows, err := m.st.r.QueryContext(ctx, `SELECT e.id, e.event_id, e.token, e.kind, e.time, e.from_state, e.to_state, e.reason, e.message, e.duration_sec, e.flaps, e.flags
-		FROM hc_events e JOIN hc_checks c ON c.token = e.token WHERE e.id > ? AND c.owner IN ('', 'self') ORDER BY e.id LIMIT ?`, after, limit)
+		FROM hc_events e JOIN hc_checks c ON c.token = e.token WHERE e.id > ? AND (c.owner IN ('', 'self') OR (',' || c.nodes || ',') LIKE ?) ORDER BY e.id LIMIT ?`, after, "%,"+selfNodeID()+",%", limit)
 	if err != nil {
 		return nil, after, err
 	}
@@ -510,7 +517,7 @@ func (m *Module) SetOwnerAllSelf(ctx context.Context) error {
 	if _, err := m.st.w.ExecContext(ctx, `DELETE FROM hc_checks WHERE owner IN ('other', 'online')`); err != nil {
 		return err
 	}
-	_, err := m.st.w.ExecContext(ctx, `UPDATE hc_checks SET owner = 'self', execution = 'local'`)
+	_, err := m.st.w.ExecContext(ctx, `UPDATE hc_checks SET owner = 'self', execution = 'local', nodes = ''`)
 	if err != nil {
 		return err
 	}

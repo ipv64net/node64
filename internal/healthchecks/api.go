@@ -47,6 +47,7 @@ type checkJSON struct {
 	Owner                 string          `json:"owner,omitempty"` // self, online, other (nur Ausgabe)
 	Policy                string          `json:"policy,omitempty"`
 	Locations             []string        `json:"locations"`
+	Nodes                 []string        `json:"nodes,omitempty"` // messende Nodes (verknuepft, local/both)
 	NotifyDegraded        *bool           `json:"notify_degraded,omitempty"`
 	NotifyDown            *bool           `json:"notify_down,omitempty"`
 	NotifyUp              *bool           `json:"notify_up,omitempty"`
@@ -91,7 +92,7 @@ func (m *Module) toJSON(c *Check, r *http.Request) checkJSON {
 	out := checkJSON{Token: c.Token, Name: c.Name, Type: string(c.Type), Target: c.Target, Params: c.Params,
 		IntervalSeconds: &iv, RetryIntervalSeconds: &riv, Retries: &re, ConnectTimeoutSeconds: &ct, TimeoutSeconds: &tt,
 		Invert: &inv, Stabilize: &st, IPMode: string(c.IPMode), Tags: c.Tags, Group: &c.Group, Description: c.Description, Paused: &pa, Parent: &parent,
-		Critical: &cr, Execution: c.Execution, Owner: c.Owner, Policy: c.Policy, Locations: c.Locations, NotifyDegraded: &ndeg,
+		Critical: &cr, Execution: c.Execution, Owner: c.Owner, Policy: c.Policy, Locations: c.Locations, Nodes: c.Nodes, NotifyDegraded: &ndeg,
 		NotifyDown: &nd, NotifyUp: &nu, Channels: c.Channels, RepeatMinutes: &rp,
 		Revision: c.Revision, CreatedAt: &created, UpdatedAt: &updated,
 		State: &stateJSON{State: string(rt.State), Since: rt.Since, LastCheckAt: rt.LastCheck, NextCheckAt: rt.NextCheck, LastStatus: string(rt.LastStatus),
@@ -235,6 +236,16 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 				c.Locations = append(c.Locations, l)
 			}
 		}
+	}
+	if in.Nodes != nil {
+		list, ok := cleanNodes(in.Nodes)
+		if !ok {
+			return errors.New("nodes: invalid node id")
+		}
+		c.Nodes = list
+	}
+	if c.Execution == "online" || singleNode(c.Type) {
+		c.Nodes = nil // online: keine Nodes; Docker/Push: nur die Besitzer-Node
 	}
 	if in.NotifyDegraded != nil {
 		c.NotifyDegraded = *in.NotifyDegraded

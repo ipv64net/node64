@@ -47,6 +47,7 @@ type Module struct {
 func New(core *store.Store, log *slog.Logger, dispatcher *notify.Dispatcher, notifyStore *notify.Store, version string) *Module {
 	m := &Module{core: core, st: NewStore(core), log: log.With("module", Name), dispatcher: dispatcher, notifyStore: notifyStore, version: version, push: newPushLimiter(), reminders: map[string]time.Time{}}
 	m.notifier = m
+	setSelfStore(core)
 	return m
 }
 
@@ -58,6 +59,9 @@ func (m *Module) Notify(ctx context.Context, e scheduler.Event, c scheduler.Chec
 	full, err := m.st.Check(ctx, c.Token)
 	if err != nil || full == nil {
 		return
+	}
+	if full.Foreign() {
+		return // misst nur mit: benachrichtigt der hub bzw. die Besitzer-Node (sonst doppelt)
 	}
 	var kind notify.Kind
 	switch e.Kind {
