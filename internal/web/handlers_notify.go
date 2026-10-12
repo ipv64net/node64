@@ -320,7 +320,14 @@ func (s *Server) channelTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := s.view(r, "nf.title")
-	if err := s.Dispatcher.Test(r.Context(), ch); err != nil {
+	var err error
+	if serverOnly(ch) && s.Linker != nil {
+		// Mail, SMS und App stellt nur ipv64 zu: Test ueber den hub
+		err = s.Linker.TestServerChannel(r.Context(), ch.RemoteID, v.Lang)
+	} else {
+		err = s.Dispatcher.Test(r.Context(), ch)
+	}
+	if err != nil {
 		s.flash(w, r, "danger", v.T("nf.test_failed", "name", ch.Name, "error", err.Error()))
 	} else {
 		s.flash(w, r, "success", v.T("nf.test_ok", "name", ch.Name))
@@ -361,4 +368,13 @@ func (s *Server) channelToggle(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "channel.update", ch.Name, fmt.Sprintf("enabled=%v default=%v", ch.Enabled, ch.Default))
 	http.Redirect(w, r, "/notifications", http.StatusSeeOther)
+}
+
+// serverOnly: Kanaele, die nur der ipv64-hub zustellen kann.
+func serverOnly(ch *notify.Channel) bool {
+	switch ch.Type {
+	case notify.TypeIPv64Mail, notify.TypeIPv64SMS, notify.TypeApp:
+		return true
+	}
+	return ch.Execution == "server"
 }

@@ -101,6 +101,8 @@ type Linker interface {
 	LinkCancel()
 	Unlink(ctx context.Context, keepChecks bool) error
 	Resolve(ctx context.Context, id int64, keepServer bool) error
+	// TestServerChannel laesst ipv64 einen Testversand ueber einen Server-Kanal machen (Mail, SMS, App).
+	TestServerChannel(ctx context.Context, remoteID int64, lang string) error
 }
 
 // NoOp ist der Standalone-Client: nicht verknuepft, tut nichts.
@@ -1102,4 +1104,36 @@ func (c *Live) ForwardPush(token string, down bool, msg, from string) {
 	}
 	data, _ := json.Marshal(map[string]any{"token": token, "down": down, "msg": msg, "from": from})
 	go func() { _ = s.send(wire.Msg{T: "push", Data: data}) }()
+}
+
+// TestServerChannel bittet den hub, ueber einen Kanal zu senden, den nur ipv64 zustellen kann.
+func (c *Live) TestServerChannel(ctx context.Context, remoteID int64, lang string) error {
+	if remoteID <= 0 {
+		return errors.New("channel not synced with ipv64 yet")
+	}
+	c.mu.Lock()
+	s := c.ws
+	c.mu.Unlock()
+	if s == nil {
+		return errors.New("not connected to ipv64")
+	}
+	m, err := s.request("channel_test", map[string]any{"channel_id": remoteID, "lang": lang})
+	if err != nil {
+		return err
+	}
+	var res struct {
+		OK        bool   `json:"ok"`
+		TestError string `json:"test_error"`
+		Error     string `json:"error"`
+	}
+	_ = json.Unmarshal(m.Data, &res)
+	switch {
+	case res.OK:
+		return nil
+	case res.TestError != "":
+		return errors.New(res.TestError)
+	case res.Error != "":
+		return errors.New(res.Error)
+	}
+	return errors.New("test not confirmed by ipv64")
 }

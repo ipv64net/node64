@@ -307,6 +307,30 @@ func (c *conn) handle(m wire.Msg) {
 				c.g.log.Warn("push from node failed", "node", n.ID, "err", err)
 			}
 		}
+	case "channel_test":
+		// Test eines Kanals, den nur ipv64 zustellen kann (Mail, SMS, App), angefordert von der Node
+		var in struct {
+			ChannelID int64  `json:"channel_id"`
+			Lang      string `json:"lang"`
+		}
+		res := map[string]any{"ok": false}
+		if json.Unmarshal(m.Data, &in) == nil && in.ChannelID > 0 {
+			var ch *notify.Channel
+			if list, err := g.nf.ChannelsFor(ctx, n.UserID); err == nil {
+				for _, x := range list {
+					if x.ID == in.ChannelID {
+						ch = x
+					}
+				}
+			}
+			if ch == nil {
+				res["test_error"] = "channel not found"
+			} else {
+				errText, _, _ := g.sendChannelTest(ctx, ch, n.UserID, "test", "", in.Lang)
+				res["ok"], res["test_error"] = errText == "", errText
+			}
+		}
+		c.ack(m.ID, res) // Fehler des Tests nicht als "error": der Versandweg zum hub ist in Ordnung
 	case "propose":
 		var p wire.Propose
 		if err := json.Unmarshal(m.Data, &p); err != nil {

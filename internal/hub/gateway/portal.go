@@ -94,7 +94,31 @@ func (g *Gateway) portalChannelTest(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "channel not found")
 		return
 	}
-	lang := in.Lang
+	errText, queued, code := g.sendChannelTest(ctx, ch, in.UserID, in.Kind, in.Code, in.Lang)
+	if code != 0 {
+		writeErr(w, code, errText)
+		return
+	}
+	if errText != "" {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": errText})
+		return
+	}
+	out := map[string]any{"ok": true}
+	if queued {
+		out["queued"] = true // die Node schickt selbst (Sendeauftrag)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// sendChannelTest schickt eine Test- oder Bestaetigungsnachricht ueber einen Kanal (Portal und Node).
+// Liefert den Fehlertext des Versands, ob eine Node selbst zustellt, und einen HTTP-Code bei Aufruffehlern.
+func (g *Gateway) sendChannelTest(ctx context.Context, ch *notify.Channel, userID int64, kind, code, lang string) (string, bool, int) {
+	in := struct {
+		UserID     int64
+		Kind, Code string
+		Lang       string
+	}{userID, kind, code, lang}
+	lang = in.Lang
 	if lang != "en" {
 		lang = "de"
 	}
@@ -118,12 +142,11 @@ func (g *Gateway) portalChannelTest(w http.ResponseWriter, r *http.Request) {
 	m.Payload = map[string]any{"kind": string(m.Kind), "title": m.Title, "text": m.Text, "time": m.Time.Format(time.RFC3339), "channel": ch.Name}
 	s, ok := g.senders[ch.Type]
 	if !ok {
-		writeErr(w, http.StatusUnprocessableEntity, "no sender for type "+string(ch.Type))
-		return
+		return "no sender for type " + string(ch.Type), false, http.StatusUnprocessableEntity
 	}
 	sctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
-	err = s.Send(sctx, ch, m)
+	err := s.Send(sctx, ch, m)
 	errText := ""
 	if err != nil {
 		errText = err.Error()
@@ -131,13 +154,5 @@ func (g *Gateway) portalChannelTest(w http.ResponseWriter, r *http.Request) {
 	// Zustellprotokoll und last_used/last_error wie beim Dispatcher
 	_ = g.nf.AddDelivery(ctx, notify.Delivery{Time: m.Time, EventID: m.EventID, ChannelID: ch.ID, Channel: ch.Name, Kind: string(m.Kind), OK: err == nil, Error: errText})
 	_ = g.nf.Touch(ctx, ch.ID, errText)
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": errText})
-		return
-	}
-	out := map[string]any{"ok": true}
-	if ch.Execution == "node" {
-		out["queued"] = true // die Node schickt selbst (Sendeauftrag)
-	}
-	writeJSON(w, http.StatusOK, out)
+	return errText, err == nil && ch.Execution == "node", 0
 }
