@@ -554,6 +554,9 @@
       "browser": "Browser"
     },
     "field": {
+      "email": "E-Mail-Adresse",
+      "number": "Mobilnummer mit Ländervorwahl (z. B. +49 177 1234567)",
+      "device_token": "Geräte-Token der ipv64-App",
       "host": "SMTP-Server",
       "port": "Port",
       "security": "Verschlüsselung",

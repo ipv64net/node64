@@ -554,6 +554,9 @@
       "browser": "Browser"
     },
     "field": {
+      "email": "E-mail address",
+      "number": "Mobile number with country code (e.g. +49 177 1234567)",
+      "device_token": "Device token of the ipv64 app",
       "host": "SMTP server",
       "port": "Port",
       "security": "Encryption",
