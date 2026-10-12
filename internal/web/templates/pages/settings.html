@@ -95,8 +95,7 @@
 						</div>
 						<div class="col-sm-7 mb-3">
 							<label class="form-label" for="timezone">{{.T "settings.timezone"}}</label>
-							<div class="input-group"><span class="input-group-text"><i class="bi bi-clock-history"></i></span><input class="form-control{{if .Err "timezone"}} is-invalid{{end}}" id="timezone" name="timezone" list="tzlist" value="{{.Val "timezone"}}"></div>
-							<datalist id="tzlist">{{range .Timezones}}<option value="{{.}}">{{end}}</datalist>
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-clock-history"></i></span><select class="form-select{{if .Err "timezone"}} is-invalid{{end}}" id="timezone" name="timezone">{{range .TimezoneOptions}}<option value="{{.}}"{{if eq . ($.Val "timezone")}} selected{{end}}>{{.}}</option>{{end}}</select></div>
 							<div class="invalid-feedback">{{.Err "timezone"}}</div>
 						</div>
 					</div>

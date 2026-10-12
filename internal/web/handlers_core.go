@@ -357,6 +357,12 @@ func (s *Server) settingsView(r *http.Request) *View {
 	d.Modules2 = []string{"core", "web", "store", "scheduler", "notify", "healthchecks"}
 	v.Data = d
 	v.Form = map[string]string{"node_name": d.NodeName, "location": d.Location, "lang": v.User.Lang, "timezone": v.User.Timezone, "level": d.LogLevel}
+	if v.Form["lang"] == "" {
+		v.Form["lang"] = v.Lang // noch nicht gespeichert: die angezeigte Sprache
+	}
+	if v.Form["timezone"] == "" {
+		v.Form["timezone"] = DefaultTimezone
+	}
 	return v
 }
 

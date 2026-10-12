@@ -161,6 +161,20 @@ func (v *View) Languages() []string { return v.s.I18n.Languages() }
 // Timezones liefert eine Auswahl gaengiger Zeitzonen fuer die Datalist.
 func (v *View) Timezones() []string { return commonTimezones }
 
+// TimezoneOptions: Auswahlliste der Zeitzonen inklusive eines gespeicherten Werts, der nicht in der Liste steht.
+func (v *View) TimezoneOptions() []string {
+	cur := v.Form["timezone"]
+	for _, z := range commonTimezones {
+		if z == cur {
+			return commonTimezones
+		}
+	}
+	if cur == "" {
+		return commonTimezones
+	}
+	return append([]string{cur}, commonTimezones...)
+}
+
 // DefaultTimezone gilt, solange der Benutzer keine eigene gewaehlt hat (UTC+1/+2, Berlin).
 const DefaultTimezone = "Europe/Berlin"
 

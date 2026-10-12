@@ -64,7 +64,7 @@ func Load() (*Bundle, error) {
 	}
 	sort.Strings(b.langs)
 	// Fallback zuerst, damit der Matcher ihn als Standard nimmt
-	sort.SliceStable(b.langs, func(i, j int) bool { return b.langs[i] == Fallback && b.langs[j] != Fallback })
+	sort.SliceStable(b.langs, func(i, j int) bool { return b.langs[i] == Default && b.langs[j] != Default })
 	for _, l := range b.langs {
 		b.tags = append(b.tags, language.Make(l))
 	}
