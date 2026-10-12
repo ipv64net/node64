@@ -689,7 +689,7 @@ func (c *Live) fullSync(ctx context.Context) error {
 		}
 	}
 	c.applyChanges(ctx, changes, cfg.Revision)
-	c.applySettings(ctx, cfg.Settings)
+	c.applySettings(ctx, cfg.Settings, true)
 	return nil
 }
 
@@ -759,7 +759,7 @@ func (c *Live) applyChanges(ctx context.Context, changes []wire.Change, revision
 		case "settings":
 			var kv map[string]string
 			if json.Unmarshal(ch.Data, &kv) == nil {
-				c.applySettings(ctx, kv)
+				c.applySettings(ctx, kv, false)
 			}
 		}
 		if err != nil {
@@ -1018,8 +1018,9 @@ func (c *Live) notifySettings(ctx context.Context) map[string]string {
 }
 
 // applySettings uebernimmt die Einstellungen des Accounts vom hub. Eine noch nicht gemeldete lokale Aenderung
-// geht vor (sie wird gleich gemeldet); kennt der Account noch keine, meldet die Node ihre eigenen.
-func (c *Live) applySettings(ctx context.Context, kv map[string]string) {
+// geht vor (sie wird gleich gemeldet). initial (Verbinden/Vollabgleich): kennt der Account noch keine,
+// meldet die Node ihre eigenen; eine Aenderungsmeldung loest nie ein Zuruecksenden aus.
+func (c *Live) applySettings(ctx context.Context, kv map[string]string, initial bool) {
 	if c.setting(SetNotifyDirty, "") == "1" {
 		return
 	}
@@ -1030,7 +1031,7 @@ func (c *Live) applySettings(ctx context.Context, kv map[string]string) {
 			_ = c.d.Core.SetSetting(ctx, k, v)
 		}
 	}
-	if n == 0 && len(c.notifySettings(ctx)) > 0 {
+	if initial && n == 0 && len(c.notifySettings(ctx)) > 0 {
 		c.set(SetNotifyDirty, "1")
 		c.poke()
 	}
@@ -1080,7 +1081,7 @@ func (c *Live) refreshMe(ctx context.Context) {
 		c.set(SetRemoteMgmt, me.RemoteMgmt)
 	}
 	if me.Settings != nil {
-		c.applySettings(ctx, me.Settings) // Ruhezeiten und Grenzen des Accounts
+		c.applySettings(ctx, me.Settings, true) // Ruhezeiten und Grenzen des Accounts
 	}
 }
 

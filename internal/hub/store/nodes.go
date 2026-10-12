@@ -268,6 +268,16 @@ func (s *Store) AccountSettings(ctx context.Context, userID int64) (map[string]s
 // SetAccountSettings speichert Benachrichtigungs-Einstellungen eines Accounts (von einer Node) und meldet
 // die Aenderung allen Nodes.
 func (s *Store) SetAccountSettings(ctx context.Context, userID int64, kv map[string]string) (int64, error) {
+	// nur tatsaechliche Aenderungen speichern und melden (keine Rundlaeufe zwischen den Nodes)
+	cur, err := s.AccountSettings(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	for k, v := range kv {
+		if old, ok := cur[k]; ok && old == v {
+			delete(kv, k)
+		}
+	}
 	if len(kv) == 0 {
 		return 0, nil
 	}

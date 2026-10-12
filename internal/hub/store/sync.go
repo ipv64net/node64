@@ -265,7 +265,7 @@ func (s *Store) ConfigSince(ctx context.Context, userID int64, nodeID string, si
 		seen[key] = true
 		ch := wire.Change{Entity: r.entity, ID: r.id, Op: r.op, Revision: r.rev}
 		if r.op == "upsert" {
-			data, err := s.entityData(ctx, r.entity, r.id, nodeID)
+			data, err := s.entityData(ctx, r.entity, r.id, nodeID, userID)
 			if err != nil {
 				return nil, false, err
 			}
@@ -280,7 +280,7 @@ func (s *Store) ConfigSince(ctx context.Context, userID int64, nodeID string, si
 	return changes, false, nil
 }
 
-func (s *Store) entityData(ctx context.Context, entity, id, nodeID string) (json.RawMessage, error) {
+func (s *Store) entityData(ctx context.Context, entity, id, nodeID string, userID int64) (json.RawMessage, error) {
 	switch entity {
 	case "check":
 		c, deleted, err := s.WireCheck(ctx, id)
@@ -308,11 +308,11 @@ func (s *Store) entityData(ctx context.Context, entity, id, nodeID string) (json
 		}
 		return json.Marshal(ch)
 	case "settings":
-		cfg, err := s.FullConfig(ctx, 0, nodeID)
+		kv, err := s.AccountSettings(ctx, userID) // Einstellungen dieses Accounts
 		if err != nil {
 			return nil, err
 		}
-		return json.Marshal(cfg.Settings)
+		return json.Marshal(kv)
 	}
 	return nil, nil
 }
@@ -555,7 +555,7 @@ func (s *Store) proposeMaintenance(ctx context.Context, tx *sql.Tx, userID int64
 	}
 	if exists && p.BaseRevision >= 0 && cur != p.BaseRevision && !p.ChangedAt.After(pt(updated)) {
 		res.Conflict, res.Revision = true, cur
-		if d, err := s.entityData(ctx, "maintenance", p.ID, nodeID); err == nil {
+		if d, err := s.entityData(ctx, "maintenance", p.ID, nodeID, userID); err == nil {
 			res.Server = d
 		}
 		return nil
@@ -631,7 +631,7 @@ func (s *Store) proposeChannel(ctx context.Context, tx *sql.Tx, userID int64, no
 	foreign := exists && (!owner.Valid || owner.String != nodeID)
 	if exists && p.BaseRevision >= 0 && cur != p.BaseRevision && !p.ChangedAt.After(pt(updated)) {
 		res.Conflict, res.Revision = true, cur
-		if d, err := s.entityData(ctx, "channel", p.ID, nodeID); err == nil {
+		if d, err := s.entityData(ctx, "channel", p.ID, nodeID, userID); err == nil {
 			res.Server = d
 		}
 		return nil
