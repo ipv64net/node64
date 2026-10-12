@@ -59,10 +59,7 @@ func (s *Server) setupForm(w http.ResponseWriter, r *http.Request) {
 	v := s.view(r, "setup.title")
 	v.SetupRun = true
 	host, _ := os.Hostname()
-	tz := "UTC"
-	if v.Lang == "de" {
-		tz = "Europe/Berlin"
-	}
+	tz := DefaultTimezone
 	v.Form = map[string]string{"username": "admin", "timezone": tz, "node_name": host, "location": ""}
 	s.render(w, r, http.StatusOK, "setup", v)
 }
@@ -235,6 +232,7 @@ type dashboardData struct {
 	// Checks nach Besitzer (verknuepft)
 	Own, Hybrid, OnlineOnly, Other, OnlinePoints int
 	ConnectedAt, LastSync, LinkedAt              time.Time
+	Peers, PeersOnline                           int // Nodes dieser Verknuepfung
 }
 
 func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
@@ -254,6 +252,14 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	d.NetRxTot, d.NetTxTot, d.NetSince = netstat.Totals(ctx, s.Store)
 	if d.NetRxTot < d.NetRx { // erste Minute nach dem allerersten Start
 		d.NetRxTot, d.NetTxTot = d.NetRx, d.NetTx
+	}
+	if s.HC != nil {
+		for _, p := range s.HC.Peers(ctx) {
+			d.Peers++
+			if p.Online {
+				d.PeersOnline++
+			}
+		}
 	}
 	if s.HC != nil {
 		if list, err := s.HC.AllChecks(ctx); err == nil {

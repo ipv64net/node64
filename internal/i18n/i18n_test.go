@@ -54,7 +54,7 @@ func TestEveryKeyExistsInAllLanguages(t *testing.T) {
 
 func TestMatch(t *testing.T) {
 	b, _ := Load()
-	cases := map[string]string{"de-DE,de;q=0.9,en;q=0.8": "de", "en-US,en;q=0.9": "en", "fr-FR": "en", "": "en", "de-AT": "de"}
+	cases := map[string]string{"de-DE,de;q=0.9,en;q=0.8": "de", "en-US,en;q=0.9": "en", "fr-FR": "de", "": "de", "de-AT": "de"}
 	for in, want := range cases {
 		if got := b.Match(in); got != want {
 			t.Errorf("Match(%q) = %q, want %q", in, got, want)

@@ -443,6 +443,11 @@
       "notify_degraded_hint": "Nur mit mehreren Messstellen relevant."
     },
     "push": {
+      "local": "Lokal (diese Node)",
+      "local_hint": "Im eigenen Netz erreichbar; funktioniert auch ohne Internet und ohne ipv64.",
+      "online": "Online über ipv64",
+      "online_hint_local": "Von überall erreichbar. ipv64 reicht den Push an diese Node weiter, solange sie verbunden ist.",
+      "online_hint_online": "Der Check wird bei ipv64 ausgewertet; diese Adresse verwenden.",
       "title": "Push-URL",
       "hint": "Diese URL regelmäßig aufrufen, z. B. per Cron. Mit ?status=down meldet der Dienst selbst eine Störung."
     },
@@ -666,6 +671,9 @@
     "public": "ohne Anmeldung"
   },
   "link": {
+    "peers": "Nodes in dieser Verknüpfung",
+    "peer_checks": "{count} Checks",
+    "peers_hint": "Bekannt über die ipv64-Hub-Server. Die Nodes verbinden sich nicht direkt miteinander; ein Check kann von mehreren Nodes gemessen werden.",
     "title": "ipv64-Verknüpfung",
     "status": "Status",
     "unavailable": "Die Verknüpfung ist in dieser Installation nicht verfügbar.",

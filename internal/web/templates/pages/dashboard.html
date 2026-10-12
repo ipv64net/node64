@@ -93,6 +93,7 @@
 					{{if $s.NodeName}}<dt class="col-6">{{.T "dashboard.link_name"}}</dt><dd class="col-6">{{$s.NodeName}}{{if $s.Location}} <span class="text-body-secondary">({{$s.Location}})</span>{{end}}</dd>{{end}}
 					{{if not $d.ConnectedAt.IsZero}}<dt class="col-6">{{.T "dashboard.link_connected_since"}}</dt><dd class="col-6">{{.Ago $d.ConnectedAt}}</dd>{{end}}
 					<dt class="col-6">{{.T "dashboard.link_last_sync"}}</dt><dd class="col-6">{{if $d.LastSync.IsZero}}–{{else}}{{.Ago $d.LastSync}}{{end}}</dd>
+					{{if gt $d.Peers 1}}<dt class="col-6">{{.T "link.peers"}}</dt><dd class="col-6"><a href="/link#nodes">{{$d.Peers}}</a> <span class="text-body-secondary">({{$d.PeersOnline}} online)</span></dd>{{end}}
 					<dt class="col-6">{{.T "dashboard.link_checks"}}</dt><dd class="col-6">{{$d.Own}} {{.T "dashboard.link_own"}}{{if $d.Hybrid}} · {{$d.Hybrid}} {{.T "dashboard.link_hybrid"}}{{end}}{{if $d.OnlineOnly}} · {{$d.OnlineOnly}} {{.T "dashboard.link_online"}}{{end}}{{if $d.Other}} · {{$d.Other}} {{.T "dashboard.link_other"}}{{end}}</dd>
 					<dt class="col-6">{{.T "dashboard.link_points"}}</dt><dd class="col-6">{{$d.OnlinePoints}} / {{if $s.OnlineLimit}}{{$s.OnlineLimit}}{{else}}∞{{end}}{{if $s.Locations}} <span class="text-body-secondary">· {{$s.Locations}} {{.T "dashboard.link_locs"}}</span>{{end}}</dd>
 					<dt class="col-6">{{.T "dashboard.link_outbox"}}</dt><dd class="col-6">{{$s.Outbox}}{{if $s.Conflicts}} · <a class="text-danger" href="/link">{{$s.Conflicts}} {{.T "dashboard.link_conflicts"}}</a>{{end}}</dd>

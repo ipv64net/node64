@@ -261,6 +261,29 @@ func (m *Module) PushState(token string) {
 }
 
 // RunNow stoesst einen Check an.
+// OnlinePushURL ist die Push-Adresse bei ipv64 (health.php); fuer lokale Checks reicht ipv64 sie an die Node weiter.
+const OnlinePushURL = "https://ipv64.net/health.php?token="
+
+// PushRemote nimmt einen ueber ipv64 eingegangenen Push an (Kommando "push" vom hub).
+// Zu alte Pushes (Node war offline) werden verworfen, damit sie keinen Ausfall verdecken.
+func (m *Module) PushRemote(ctx context.Context, token string, down bool, msg, from string, at time.Time) bool {
+	if !at.IsZero() && time.Since(at) > 2*time.Minute {
+		return false
+	}
+	s := m.scheduler()
+	if s == nil {
+		return false
+	}
+	status := checks.Up
+	if down {
+		status = checks.Down
+	}
+	if len(msg) > 200 {
+		msg = msg[:200]
+	}
+	return s.Push(ctx, token, status, msg, map[string]any{"via": "ipv64", "from": from})
+}
+
 func (m *Module) RunNow(token string) bool {
 	if s := m.scheduler(); s != nil {
 		return s.RunNow(token)

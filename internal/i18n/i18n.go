@@ -25,6 +25,9 @@ var localeFS embed.FS
 
 const Fallback = "en"
 
+// Default ist die Sprache ohne passende Browser-Angabe (ipv64: Deutsch).
+const Default = "de"
+
 type Bundle struct {
 	msgs  map[string]map[string]string
 	langs []string
@@ -94,15 +97,15 @@ func (b *Bundle) Has(lang string) bool { _, ok := b.msgs[lang]; return ok }
 // Match waehlt aus einem Accept-Language-Header die beste verfuegbare Sprache.
 func (b *Bundle) Match(acceptLanguage string) string {
 	if acceptLanguage == "" {
-		return Fallback
+		return b.def()
 	}
 	tags, _, err := language.ParseAcceptLanguage(acceptLanguage)
 	if err != nil || len(tags) == 0 {
-		return Fallback
+		return b.def()
 	}
-	_, idx, _ := language.NewMatcher(b.tags).Match(tags...)
-	if idx < 0 || idx >= len(b.langs) {
-		return Fallback
+	_, idx, conf := language.NewMatcher(b.tags).Match(tags...)
+	if conf == language.No || idx < 0 || idx >= len(b.langs) {
+		return b.def()
 	}
 	return b.langs[idx]
 }
@@ -243,4 +246,12 @@ func (b *Bundle) FormatDuration(lang string, d time.Duration) string {
 		parts = append(parts, fmt.Sprintf("%d s", s))
 	}
 	return strings.Join(parts, " ")
+}
+
+// def liefert die Standardsprache (Deutsch, sonst die Rueckfallsprache).
+func (b *Bundle) def() string {
+	if b.Has(Default) {
+		return Default
+	}
+	return Fallback
 }

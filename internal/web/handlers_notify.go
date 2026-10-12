@@ -103,7 +103,7 @@ func (s *Server) notifyIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	tz := v.User.Timezone
 	if tz == "" {
-		tz = "UTC"
+		tz = DefaultTimezone
 	}
 	d.Quiet = map[string]string{
 		"enabled": s.Store.SettingOr(ctx, notify.SetQuietEnabled, "0"), "from": s.Store.SettingOr(ctx, notify.SetQuietFrom, "22:00"),
@@ -145,7 +145,7 @@ func (s *Server) notifySettings(w http.ResponseWriter, r *http.Request) {
 	}
 	tz := f["quiet_tz"]
 	if tz == "" || !validTimezone(tz) {
-		tz = "UTC"
+		tz = DefaultTimezone
 	}
 	set := map[string]string{
 		notify.SetQuietEnabled: enabled, notify.SetQuietFrom: f["quiet_from"], notify.SetQuietTo: f["quiet_to"], notify.SetQuietDays: strings.Join(days, ","),

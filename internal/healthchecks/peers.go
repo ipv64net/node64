@@ -124,3 +124,37 @@ func cleanNodes(in []string) ([]string, bool) {
 	}
 	return out, true
 }
+
+// PeerRow ist eine Node des Accounts mit der Zahl der Checks, die sie misst.
+type PeerRow struct {
+	Peer
+	Checks int
+}
+
+// Peers liefert die Nodes dieser Verknuepfung (ueber die ipv64-hubs bekannt; keine direkte Verbindung).
+func (m *Module) Peers(ctx context.Context) []PeerRow {
+	list := m.peers(ctx)
+	count := map[string]int{}
+	if checks, err := m.st.Checks(ctx); err == nil {
+		me := selfNodeID()
+		for _, c := range checks {
+			if c.Execution == "online" {
+				continue
+			}
+			if len(c.Nodes) == 0 {
+				if c.Owner == "" || c.Owner == "self" {
+					count[me]++
+				}
+				continue
+			}
+			for _, id := range c.Nodes {
+				count[id]++
+			}
+		}
+	}
+	out := make([]PeerRow, 0, len(list))
+	for _, p := range list {
+		out = append(out, PeerRow{Peer: p, Checks: count[p.ID]})
+	}
+	return out
+}

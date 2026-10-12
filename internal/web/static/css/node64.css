@@ -96,6 +96,9 @@ a { color: var(--bs-primary); }
 .beat { display: inline-block; width: 6px; height: 20px; border-radius: 50rem; background: silver; flex: 0 0 auto; transition: transform .05s; cursor: pointer; }
 .beat:hover { transform: scale(1.4); }
 .beat-lg { width: 10px; height: 28px; }
+/* Detailseite: Pillen ueber die ganze Breite, neueste rechts (schmale Bildschirme schneiden links ab) */
+.beats-fill { justify-content: flex-end; gap: 3px; }
+.beats-fill .beat { flex: 1 1 0; width: auto; min-width: 4px; max-width: 18px; }
 .beat-up { background: var(--bs-success); }
 .beat-down { background: var(--bs-danger); }
 .beat-warning { background: var(--bs-warning); }

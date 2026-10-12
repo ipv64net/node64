@@ -352,7 +352,8 @@ type detailData struct {
 	Params     map[string]any
 	ParentName string
 	Children   []*Check
-	PushURL    string
+	PushURL    string      // lokal an dieser Node (nur wenn sie den Push-Check misst)
+	PushOnline string      // ueber ipv64 (verknuepft)
 	Sources    []SourceRow // Messstellen (leer = nur diese Node)
 	NodeNames  []string    // messende Nodes (mehrere moeglich)
 	Diagnosis  string
@@ -383,7 +384,7 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	lang := m.g.Lang(r)
-	pills, err := m.pillsFor(ctx, lang, m.g.Timezone(r), 60)
+	pills, err := m.pillsFor(ctx, lang, m.g.Timezone(r), 100)
 	if err != nil {
 		m.fail(w, r, err)
 		return
@@ -426,7 +427,14 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 			d.Children = append(d.Children, x)
 		}
 	}
-	d.PushURL = d.JSON.PushURL
+	if c.Type == checks.TypePush {
+		if c.MeasuredHere() {
+			d.PushURL = d.JSON.PushURL
+		}
+		if (m.linked != nil && m.linked()) || c.Execution == "online" {
+			d.PushOnline = OnlinePushURL + c.Token
+		}
+	}
 	if chans, err := m.channels(ctx); err == nil {
 		for _, ch := range chans {
 			sel := false

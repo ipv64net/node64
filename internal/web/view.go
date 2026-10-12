@@ -153,6 +153,9 @@ func (v *View) Languages() []string { return v.s.I18n.Languages() }
 // Timezones liefert eine Auswahl gaengiger Zeitzonen fuer die Datalist.
 func (v *View) Timezones() []string { return commonTimezones }
 
+// DefaultTimezone gilt, solange der Benutzer keine eigene gewaehlt hat (UTC+1/+2, Berlin).
+const DefaultTimezone = "Europe/Berlin"
+
 var commonTimezones = []string{
 	"UTC", "Europe/Berlin", "Europe/Vienna", "Europe/Zurich", "Europe/Amsterdam", "Europe/Brussels", "Europe/Paris",
 	"Europe/London", "Europe/Dublin", "Europe/Madrid", "Europe/Rome", "Europe/Warsaw", "Europe/Prague", "Europe/Stockholm",
@@ -177,6 +180,9 @@ func (s *Server) location(r *http.Request) *time.Location {
 		if loc, err := time.LoadLocation(u.Timezone); err == nil {
 			return loc
 		}
+	}
+	if loc, err := time.LoadLocation(DefaultTimezone); err == nil {
+		return loc
 	}
 	return time.UTC
 }

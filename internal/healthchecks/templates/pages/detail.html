@@ -41,7 +41,7 @@
 
 <div class="card mb-3">
 	<div class="card-body">
-		<div class="beats mb-2">{{range $d.Pills}}<span class="beat beat-lg beat-{{.Class}}" data-bs-toggle="tooltip" data-tip-label="{{.Label}}" data-tip-when="{{.When}}" data-tip-ms="{{.Latency}}" data-tip-msg="{{.Message}}"></span>{{end}}{{if not $d.Pills}}<span class="text-body-secondary small">{{.T "hc.no_data"}}</span>{{end}}</div>
+		<div class="beats beats-fill mb-2">{{range $d.Pills}}<span class="beat beat-lg beat-{{.Class}}" data-bs-toggle="tooltip" data-tip-label="{{.Label}}" data-tip-when="{{.When}}" data-tip-ms="{{.Latency}}" data-tip-msg="{{.Message}}"></span>{{end}}{{if not $d.Pills}}<span class="text-body-secondary small">{{.T "hc.no_data"}}</span>{{end}}</div>
 		<div class="row g-2 text-center">
 			{{range $d.Ranges}}
 			<div class="col-4">
@@ -138,14 +138,24 @@
 			</div>
 		</div>
 
-		{{if $d.PushURL}}
+		{{if or $d.PushURL $d.PushOnline}}
 		<div class="card mb-3">
 			<div class="card-header"><i class="bi bi-broadcast text-info"></i> {{.T "hc.push.title"}}</div>
 			<div class="card-body small">
 				<p>{{.T "hc.push.hint"}}</p>
-				<div class="input-group input-group-sm mb-2"><span class="input-group-text"><i class="bi bi-link-45deg"></i></span><input class="form-control font-monospace" id="push-url" value="{{$d.PushURL}}" readonly data-copy><button class="btn btn-outline-secondary btn-copy" type="button" data-copy-target="#push-url" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
-				<pre class="hc-json border rounded p-2 mb-0">curl -fsS "{{$d.PushURL}}"
-curl -fsS "{{$d.PushURL}}?status=down&amp;msg=backup+failed"</pre>
+				{{if $d.PushURL}}
+				<div class="fw-semibold mb-1"><i class="bi bi-house-fill text-success"></i> {{.T "hc.push.local"}}</div>
+				<div class="input-group input-group-sm mb-1"><span class="input-group-text"><i class="bi bi-link-45deg"></i></span><input class="form-control font-monospace" id="push-url" value="{{$d.PushURL}}" readonly data-copy><button class="btn btn-outline-secondary btn-copy" type="button" data-copy-target="#push-url" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
+				<div class="text-body-secondary mb-2">{{.T "hc.push.local_hint"}}</div>
+				{{end}}
+				{{if $d.PushOnline}}
+				<div class="fw-semibold mb-1"><i class="bi bi-cloud-fill text-primary"></i> {{.T "hc.push.online"}}</div>
+				<div class="input-group input-group-sm mb-1"><span class="input-group-text"><i class="bi bi-link-45deg"></i></span><input class="form-control font-monospace" id="push-online" value="{{$d.PushOnline}}" readonly data-copy><button class="btn btn-outline-secondary btn-copy" type="button" data-copy-target="#push-online" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
+				<div class="text-body-secondary mb-2">{{if eq $c.Execution "online"}}{{.T "hc.push.online_hint_online"}}{{else}}{{.T "hc.push.online_hint_local"}}{{end}}</div>
+				{{end}}
+				{{$u := $d.PushURL}}{{if not $u}}{{$u = $d.PushOnline}}{{end}}
+				<pre class="hc-json border rounded p-2 mb-0">curl -fsS "{{$u}}"
+curl -fsS "{{$u}}{{if $d.PushURL}}?{{else}}&amp;{{end}}status=down&amp;msg=backup+failed"</pre>
 			</div>
 		</div>
 		{{end}}

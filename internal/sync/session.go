@@ -362,6 +362,7 @@ func (s *session) worker() {
 			s.uploadEvents()
 		case <-status.C:
 			s.sendStatus()
+			go s.c.refreshMe(context.Background()) // Nodes des Accounts (Online-Status) aktuell halten
 		}
 	}
 }
@@ -578,10 +579,23 @@ func (s *session) runCommand(cmd wire.Command) {
 	var args map[string]any
 	_ = json.Unmarshal(cmd.Args, &args)
 	token, _ := args["token"].(string)
-	allowed := mode == "full" || (mode == "read" && (cmd.Name == "repair" || cmd.Name == "test_check" || cmd.Name == "run_check"))
+	allowed := mode == "full" || (mode == "read" && (cmd.Name == "repair" || cmd.Name == "test_check" || cmd.Name == "run_check")) || cmd.Name == "push"
 	switch {
 	case !allowed:
 		res.Error = "not allowed by remote management setting (" + mode + ")"
+	case cmd.Name == "push":
+		// Heartbeat ueber ipv64 (health.php) fuer einen lokalen Push-Check
+		down, _ := args["down"].(bool)
+		msg, _ := args["msg"].(string)
+		from, _ := args["from"].(string)
+		var at time.Time
+		if v, _ := args["time"].(string); v != "" {
+			at, _ = time.Parse(time.RFC3339Nano, v)
+		}
+		res.OK = c.d.HC.PushRemote(ctx, token, down, msg, from, at)
+		if !res.OK {
+			res.Error = "push not accepted (unknown check or too old)"
+		}
 	case cmd.Name == "run_check":
 		res.OK = c.d.HC.RunNow(token)
 		if !res.OK {
