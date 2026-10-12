@@ -256,8 +256,8 @@
       "found": "Docker reachable, {count} containers found.",
       "rules": "Docker checks run only on this node (not online, not movable). Rating: running = OK; healthcheck “unhealthy”, stopped, paused or restart loop = down. When linked to ipv64 the state is reported and visible in the portal too."
     },
-    "foreign_readonly": "Docker check of another node – can only be changed there",
-    "run_remote": "Measured by ipv64 or another node; “run now” only works for own checks.",
+    "run_unreachable": "No measuring node reachable (not connected to ipv64?).",
+    "run_remote": "Measured by ipv64 only; online checks run on their interval.",
     "view": "View",
     "chart": {
       "year": "1 y",

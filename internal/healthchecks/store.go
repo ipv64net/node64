@@ -870,12 +870,22 @@ func (s *Store) MaintenanceUpdate(ctx context.Context, m *Maintenance) error {
 }
 
 func (s *Store) MaintenanceDelete(ctx context.Context, id int64) error {
+	var rid int64
+	_ = s.w.QueryRowContext(ctx, `SELECT remote_id FROM hc_maintenance WHERE id = ?`, id).Scan(&rid)
 	_, err := s.w.ExecContext(ctx, `DELETE FROM hc_maintenance WHERE id = ?`, id)
 	s.reloadMaintenance(ctx)
 	if err == nil {
-		s.changed(ctx, "maintenance", strconv.FormatInt(id, 10), "delete")
+		s.changed(context.WithValue(ctx, deletedRemoteKey{}, rid), "maintenance", strconv.FormatInt(id, 10), "delete")
 	}
 	return err
+}
+
+type deletedRemoteKey struct{}
+
+// DeletedRemoteID liefert im "delete"-Hook die Server-ID des geloeschten Wartungsfensters (0 = nie synchronisiert).
+func DeletedRemoteID(ctx context.Context) int64 {
+	v, _ := ctx.Value(deletedRemoteKey{}).(int64)
+	return v
 }
 
 // MaintenanceByRemote findet ein Wartungsfenster ueber seine Server-ID.

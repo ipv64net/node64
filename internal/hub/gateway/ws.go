@@ -365,6 +365,16 @@ func (c *conn) handle(m wire.Msg) {
 			c.lastRev = res.Revision
 		}
 		c.ack(m.ID, res)
+	case "run_check":
+		// "Jetzt pruefen" an einer Node: die anderen messenden Nodes beauftragen
+		var in struct {
+			Token string `json:"token"`
+		}
+		if json.Unmarshal(m.Data, &in) == nil && in.Token != "" && g.limiter.allow("run:"+in.Token, 10, time.Minute) {
+			if err := g.st.RunCheckOn(ctx, n.UserID, in.Token, n.ID); err != nil {
+				g.log.Warn("run check failed", "node", n.ID, "err", err)
+			}
+		}
 	case "node_info":
 		// Name/Standort an der Node geaendert: Portal und andere Nodes (ueber config "node") sehen es sofort
 		var in struct {

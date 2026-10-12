@@ -102,10 +102,6 @@
 		<td data-label="{{$.T "hc.recent"}}" class="hc-beats"><div class="beats">{{range .Pills}}<span class="beat beat-{{.Class}}" data-bs-toggle="tooltip" data-tip-label="{{.Label}}" data-tip-when="{{.When}}" data-tip-ms="{{.Latency}}" data-tip-msg="{{.Message}}"></span>{{end}}</div></td>
 		<td data-label="{{$.T "hc.changed"}}" class="small text-nowrap d-none d-md-table-cell" title="{{$.Time .Changed}}">{{$.Ago .Changed}}</td>
 		<td data-label="{{$.T "common.actions"}}" class="text-end text-nowrap hc-c-actions">
-			{{if $c.ReadOnly}}
-			<span class="text-body-tertiary me-1" title="{{$.T "hc.foreign_readonly"}}"><i class="bi bi-lock"></i></span>
-			<a class="btn btn-sm btn-outline-secondary" href="/healthchecks/{{$c.Token}}" title="{{$.T "hc.view"}}"><i class="bi bi-eye"></i></a>
-			{{else}}
 			{{if eq .State "paused"}}
 			<button class="btn btn-sm btn-outline-success" form="act-{{$c.Token}}" name="action" value="resume" title="{{$.T "hc.action.resume"}}"><i class="bi bi-play-fill"></i></button>
 			{{else}}
@@ -113,7 +109,6 @@
 			{{end}}
 			{{if $c.Runnable}}<button class="btn btn-sm btn-outline-info" form="act-{{$c.Token}}" name="action" value="run" title="{{$.T "hc.action.run"}}"><i class="bi bi-lightning-charge"></i></button>{{end}}
 			<a class="btn btn-sm btn-outline-primary" href="/healthchecks/{{$c.Token}}/edit" title="{{$.T "hc.edit"}}"><i class="bi bi-pencil"></i></a>
-			{{end}}
 		</td>
 	</tr>
 	{{end}}
@@ -159,7 +154,7 @@
 		<tbody>
 		{{range $d.Docker}}{{$c := .Check}}
 		<tr>
-			<td data-label="" class="ps-3 d-none d-md-table-cell">{{if not $c.ReadOnly}}<input type="checkbox" class="form-check-input" name="tokens" value="{{$c.Token}}">{{end}}</td>
+			<td data-label="" class="ps-3 d-none d-md-table-cell"><input type="checkbox" class="form-check-input" name="tokens" value="{{$c.Token}}"></td>
 			<td data-label="{{$.T "common.status"}}" class="hc-c-status"><span class="badge hc-state-{{.State}}">{{$.T (print "hc.state." .State)}}</span></td>
 			<td data-label="{{$.T "hc.docker.container"}}" class="hc-c-name"><a href="/healthchecks/{{$c.Token}}" class="fw-semibold">{{$c.Name}}</a>
 				{{if $c.Foreign}}<span class="badge text-bg-light hc-exec"><i class="bi bi-hdd-network"></i> {{$.T "hc.owner.other"}}</span>{{end}}
@@ -168,13 +163,10 @@
 			<td data-label="{{$.T "hc.recent"}}" class="hc-beats"><div class="beats">{{range .Pills}}<span class="beat beat-{{.Class}}" data-bs-toggle="tooltip" data-tip-label="{{.Label}}" data-tip-when="{{.When}}" data-tip-ms="{{.Latency}}" data-tip-msg="{{.Message}}"></span>{{end}}</div></td>
 			<td data-label="{{$.T "hc.changed"}}" class="small text-nowrap d-none d-md-table-cell" title="{{$.Time .Changed}}">{{$.Ago .Changed}}</td>
 			<td data-label="{{$.T "common.actions"}}" class="text-end text-nowrap hc-c-actions pe-3">
-				{{if $c.ReadOnly}}<a class="btn btn-sm btn-outline-secondary" href="/healthchecks/{{$c.Token}}" title="{{$.T "hc.view"}}"><i class="bi bi-eye"></i></a>
-				{{else}}
 				{{if eq .State "paused"}}<button class="btn btn-sm btn-outline-success" form="act-{{$c.Token}}" name="action" value="resume" title="{{$.T "hc.action.resume"}}"><i class="bi bi-play-fill"></i></button>
 				{{else}}<button class="btn btn-sm btn-outline-warning" form="act-{{$c.Token}}" name="action" value="pause" title="{{$.T "hc.action.pause"}}"><i class="bi bi-pause-fill"></i></button>{{end}}
 				<button class="btn btn-sm btn-outline-info" form="act-{{$c.Token}}" name="action" value="run" title="{{$.T "hc.action.run"}}"><i class="bi bi-lightning-charge"></i></button>
 				<a class="btn btn-sm btn-outline-primary" href="/healthchecks/{{$c.Token}}/edit" title="{{$.T "hc.edit"}}"><i class="bi bi-pencil"></i></a>
-				{{end}}
 			</td>
 		</tr>
 		{{end}}

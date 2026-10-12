@@ -442,10 +442,6 @@ func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
 	if c == nil {
 		return
 	}
-	if c.ReadOnly() {
-		writeErr(w, http.StatusConflict, "docker check of another node: only that node can change it")
-		return
-	}
 	var in checkJSON
 	if err := readJSON(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json: "+err.Error())
@@ -487,10 +483,6 @@ func (m *Module) apiDelete(w http.ResponseWriter, r *http.Request) {
 	if c == nil {
 		return
 	}
-	if c.ReadOnly() {
-		writeErr(w, http.StatusConflict, "docker check of another node: only that node can change it")
-		return
-	}
 	if s := m.scheduler(); s != nil {
 		s.Remove(c.Token)
 	}
@@ -505,10 +497,6 @@ func (m *Module) apiDelete(w http.ResponseWriter, r *http.Request) {
 func (m *Module) setPaused(w http.ResponseWriter, r *http.Request, paused bool) {
 	c := m.load(w, r)
 	if c == nil {
-		return
-	}
-	if c.ReadOnly() {
-		writeErr(w, http.StatusConflict, "docker check of another node: only that node can change it")
 		return
 	}
 	if err := m.st.SetPaused(r.Context(), c.Token, paused, actor(r)); err != nil {
@@ -532,20 +520,16 @@ func (m *Module) apiRun(w http.ResponseWriter, r *http.Request) {
 	if c == nil {
 		return
 	}
-	if c.ReadOnly() {
-		writeErr(w, http.StatusConflict, "docker check of another node: only that node can change it")
-		return
-	}
-	if !c.Runnable() && c.Type != checks.TypePush {
-		writeErr(w, http.StatusConflict, "measured by ipv64 or another node; run now only works for own checks")
-		return
-	}
 	if c.Type == checks.TypePush {
 		writeErr(w, http.StatusConflict, "push checks cannot be run manually")
 		return
 	}
-	if s := m.scheduler(); s == nil || !s.RunNow(c.Token) {
-		writeErr(w, http.StatusConflict, "scheduler not running")
+	if !c.Runnable() {
+		writeErr(w, http.StatusConflict, "measured by ipv64 only; online checks run on their interval")
+		return
+	}
+	if err := m.runNow(c); err != nil {
+		writeErr(w, http.StatusConflict, err.Error())
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)

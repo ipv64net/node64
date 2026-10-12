@@ -401,8 +401,16 @@ func (s *session) replayOutbox() {
 				}
 			}
 			if p.ID == "0" && o.Op == "delete" {
-				_ = c.d.HC.OutboxDelete(ctx, o.ID) // nie auf dem Server gewesen
-				continue
+				// lokal schon geloescht: die Server-ID steht im Postausgang
+				var x struct {
+					ID int64 `json:"id"`
+				}
+				if json.Unmarshal([]byte(o.Payload), &x) == nil && x.ID > 0 {
+					p.ID = strconv.FormatInt(x.ID, 10)
+				} else {
+					_ = c.d.HC.OutboxDelete(ctx, o.ID) // nie auf dem Server gewesen
+					continue
+				}
 			}
 		}
 		m, err := s.request("propose", p)
@@ -605,7 +613,8 @@ func (s *session) runCommand(cmd wire.Command) {
 	var args map[string]any
 	_ = json.Unmarshal(cmd.Args, &args)
 	token, _ := args["token"].(string)
-	allowed := mode == "full" || (mode == "read" && (cmd.Name == "repair" || cmd.Name == "test_check" || cmd.Name == "run_check")) || cmd.Name == "push"
+	// push und "Jetzt pruefen" kommen von anderen Nodes desselben Accounts: immer erlaubt
+	allowed := mode == "full" || (mode == "read" && (cmd.Name == "repair" || cmd.Name == "test_check")) || cmd.Name == "push" || cmd.Name == "run_check"
 	switch {
 	case !allowed:
 		res.Error = "not allowed by remote management setting (" + mode + ")"

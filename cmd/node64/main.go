@@ -129,6 +129,7 @@ func run() error {
 	dispatcher.SetServerSends(syncClient.ServerSends)
 	hcModule.SetLinked(syncClient.Linked)
 	hcModule.SetPushForward(syncClient.ForwardPush)
+	hcModule.SetRunRemote(syncClient.RunRemote)
 	go netstat.Loop(ctx, st) // Datenverkehr des Containers fuer das Dashboard
 	if err := syncClient.Start(ctx); err != nil {
 		log.Warn("sync start failed", "err", err)

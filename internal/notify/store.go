@@ -148,11 +148,21 @@ func (s *Store) Update(ctx context.Context, c *Channel) error {
 }
 
 func (s *Store) Delete(ctx context.Context, id int64) error {
+	var rid int64
+	_ = s.w.QueryRowContext(ctx, `SELECT remote_id FROM nf_channels WHERE id = ?`, id).Scan(&rid)
 	_, err := s.w.ExecContext(ctx, `DELETE FROM nf_channels WHERE id = ?`, id)
 	if err == nil {
-		changed(ctx, id, "delete")
+		changed(context.WithValue(ctx, deletedRemoteKey{}, rid), id, "delete")
 	}
 	return err
+}
+
+type deletedRemoteKey struct{}
+
+// DeletedRemoteID liefert im "delete"-Hook die Server-ID des geloeschten Kanals (0 = nie synchronisiert).
+func DeletedRemoteID(ctx context.Context) int64 {
+	v, _ := ctx.Value(deletedRemoteKey{}).(int64)
+	return v
 }
 
 // Touch merkt den letzten Versand und Fehler am Kanal.

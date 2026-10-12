@@ -890,10 +890,7 @@ func (c *Live) onChange(ctx context.Context, entity, id, op string) {
 				return
 			}
 			// jede Aenderung melden, auch wenn diese Node den Check nicht (mehr) misst oder er einer
-			// anderen Node gehoert (sonst erfaehrt die neue Messstelle nie davon); nur Docker bleibt fest
-			if ck.ReadOnly() {
-				return
-			}
+			// anderen Node gehoert (sonst erfaehrt die neue Messstelle nie davon)
 			base = ck.Revision - 1
 			if base < 0 {
 				base = 0
@@ -909,12 +906,18 @@ func (c *Live) onChange(ctx context.Context, entity, id, op string) {
 		fmt.Sscan(id, &lid)
 		if op == "delete" {
 			base = -1
+			rid := healthchecks.DeletedRemoteID(ctx)
+			if rid == 0 {
+				return // nie auf dem Server gewesen
+			}
+			payload = fmt.Sprintf(`{"id":%d}`, rid)
 		} else {
 			mw, _ := c.d.HC.MaintenanceByID(ctx, lid)
 			if mw == nil {
 				return
 			}
-			base = mw.Revision - 1
+			// lokale Aenderungen erhoehen die Revision nicht: sie ist der zuletzt bekannte Server-Stand
+			base = mw.Revision
 			if mw.RemoteID == 0 {
 				base = 0
 			}
@@ -934,17 +937,26 @@ func (c *Live) onChannelChange(ctx context.Context, id int64, op string) {
 	}
 	payload := ""
 	base := int64(-1)
-	if op != "delete" {
+	if op == "delete" {
+		rid := notify.DeletedRemoteID(ctx)
+		if rid == 0 {
+			return // nie auf dem Server gewesen
+		}
+		payload = fmt.Sprintf(`{"id":%d}`, rid)
+	} else {
 		ch, _ := c.d.NF.Channel(ctx, id)
-		if ch == nil || ch.Execution == "server" {
+		if ch == nil {
 			return
 		}
 		w := wire.Channel{ID: ch.RemoteID, Type: string(ch.Type), Name: ch.Name, Enabled: ch.Enabled, Default: ch.Default, Lang: ch.Lang, NotifyDown: ch.NotifyDown, NotifyUp: ch.NotifyUp, Revision: ch.Revision, LocalID: ch.ID}
-		if !ch.SecretOnlyLocal {
+		// Kanaele des Portals/anderer Nodes (execution server): Name, Schalter usw. melden, die Zugangsdaten
+		// kennt nur der Besitzer (der hub behaelt sie)
+		if !ch.SecretOnlyLocal && ch.Execution != "server" {
 			w.Config = ch.Config
 		}
 		payload = string(mustJSON(w))
-		base = ch.Revision - 1
+		// lokale Aenderungen erhoehen die Revision nicht: sie ist der zuletzt bekannte Server-Stand
+		base = ch.Revision
 		if ch.RemoteID == 0 {
 			base = 0
 		}
@@ -1148,6 +1160,18 @@ func (c *Live) ForwardPush(token string, down bool, msg, from string) bool {
 	default:
 		return false
 	}
+}
+
+// RunRemote bittet den hub, den Check bei den anderen messenden Nodes sofort zu messen.
+func (c *Live) RunRemote(token string) bool {
+	c.mu.Lock()
+	s := c.ws
+	c.mu.Unlock()
+	if s == nil {
+		return false
+	}
+	data, _ := json.Marshal(map[string]string{"token": token})
+	return s.send(wire.Msg{T: "run_check", Data: data}) == nil
 }
 
 // pushLoop schickt Pushes ueber die jeweils aktuelle Sitzung; der hub verwirft, was zu alt ist.

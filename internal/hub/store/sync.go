@@ -369,16 +369,8 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 		}
 		return nil
 	}
-	if exists && owner.Valid && owner.String != nodeID && origin == "node" {
-		// Checks einer anderen Node darf jede Node des Accounts aendern (auch die Messstellen);
-		// nur Docker-Checks bleiben bei der Node, die den Container steuert
-		var exec, typ string
-		_ = tx.QueryRowContext(ctx, `SELECT execution, type FROM hc2_checks WHERE token = ?`, p.ID).Scan(&exec, &typ)
-		if exec != "online" && typ == "docker" {
-			res.Error = "docker check belongs to another node"
-			return nil
-		}
-	}
+	// Checks einer anderen Node darf jede Node des Accounts aendern, pausieren und loeschen;
+	// nur die Messstelle eines Docker-Checks bleibt bei der Container-Node (siehe unten)
 	rev, err := nextRevision(ctx, tx, userID)
 	if err != nil {
 		return err
@@ -405,6 +397,28 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 	if err := validateWireCheck(&c); err != nil {
 		res.Error = err.Error()
 		return nil
+	}
+	if exists {
+		// Kanaele anderer Nodes sieht die vorschlagende Node nicht (nicht synchronisiert): beibehalten
+		var cur string
+		_ = tx.QueryRowContext(ctx, `SELECT channels FROM hc2_checks WHERE token = ?`, p.ID).Scan(&cur)
+		if cur != "" {
+			rows, err := tx.QueryContext(ctx, `SELECT id FROM hc2_channels WHERE userid = ? AND node_id IS NOT NULL AND node_id <> ? AND deleted_at IS NULL AND FIND_IN_SET(id, ?)`, userID, nodeID, cur)
+			if err != nil {
+				return err
+			}
+			have := map[int64]bool{}
+			for _, id := range c.Channels {
+				have[id] = true
+			}
+			for rows.Next() {
+				var id int64
+				if rows.Scan(&id) == nil && !have[id] {
+					c.Channels = append(c.Channels, id)
+				}
+			}
+			rows.Close()
+		}
 	}
 	// Ausfuehrungsort und Standorte: Node-Checks gehoeren der Node; Standorte auf die Klasse begrenzen
 	if c.Execution == "" {
@@ -594,10 +608,13 @@ func (s *Store) proposeChannel(ctx context.Context, tx *sql.Tx, userID int64, no
 	if err != nil && err != sql.ErrNoRows {
 		return err
 	}
-	if exists && (ownerUser != userID || (owner.Valid && owner.String != nodeID) || !owner.Valid) {
-		res.Error = "channel is not owned by this node"
+	if exists && ownerUser != userID {
+		res.Error = "channel belongs to another account"
 		return nil
 	}
+	// Kanal des Portals oder einer anderen Node: jede Node darf ihn aendern und loeschen, die Zugangsdaten
+	// (config_enc) und die Besitzer-Node bleiben dabei unveraendert
+	foreign := exists && (!owner.Valid || owner.String != nodeID)
 	if exists && p.BaseRevision >= 0 && cur != p.BaseRevision {
 		res.Conflict, res.Revision = true, cur
 		if d, err := s.entityData(ctx, "channel", p.ID, nodeID); err == nil {
@@ -640,7 +657,10 @@ func (s *Store) proposeChannel(ctx context.Context, tx *sql.Tx, userID int64, no
 	if ch.Lang == "" {
 		ch.Lang = "de"
 	}
-	if exists {
+	if foreign {
+		_, err = tx.ExecContext(ctx, `UPDATE hc2_channels SET name=?, enabled=?, is_default=?, lang=?, notify_down=?, notify_up=?, revision=?, updated_at=? WHERE id=?`,
+			truncate(ch.Name, 100), b2i(ch.Enabled), b2i(ch.Default), ch.Lang, b2i(ch.NotifyDown), b2i(ch.NotifyUp), rev, nowStr(), id)
+	} else if exists {
 		_, err = tx.ExecContext(ctx, `UPDATE hc2_channels SET type=?, name=?, config_enc=?, enabled=?, is_default=?, lang=?, notify_down=?, notify_up=?, revision=?, updated_at=? WHERE id=?`,
 			ch.Type, truncate(ch.Name, 100), string(cfgJSON), b2i(ch.Enabled), b2i(ch.Default), ch.Lang, b2i(ch.NotifyDown), b2i(ch.NotifyUp), rev, nowStr(), id)
 	} else {
@@ -655,6 +675,9 @@ func (s *Store) proposeChannel(ctx context.Context, tx *sql.Tx, userID int64, no
 		return err
 	}
 	ch.ID, ch.Revision, ch.NodeID = id, rev, nodeID
+	if foreign {
+		ch.NodeID, ch.Config = owner.String, nil
+	}
 	if err := logChange(ctx, tx, userID, nil, "channel", fmt.Sprint(id), "upsert", rev, origin); err != nil {
 		return err
 	}

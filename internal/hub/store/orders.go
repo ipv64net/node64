@@ -60,6 +60,27 @@ func (s *Store) CommandDone(ctx context.Context, r wire.CommandResult) error {
 }
 
 // AddCommand legt ein Kommando an (Portal/Tests).
+// RunCheckOn beauftragt alle messenden Nodes eines Checks (ausser der anfragenden) mit einer sofortigen Messung.
+func (s *Store) RunCheckOn(ctx context.Context, userID int64, token, senderNode string) error {
+	var nodes, execution string
+	var owner sql.NullString
+	err := s.db.QueryRowContext(ctx, `SELECT nodes, execution, node_id FROM hc2_checks WHERE token = ? AND userid = ? AND deleted_at IS NULL`, token, userID).Scan(&nodes, &execution, &owner)
+	if err == sql.ErrNoRows || execution == "online" {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, id := range measuringNodes(splitList(nodes), owner.String) {
+		if id != senderNode {
+			if _, err := s.AddCommand(ctx, id, "run_check", map[string]string{"token": token}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (s *Store) AddCommand(ctx context.Context, nodeID, name string, args any) (int64, error) {
 	b, _ := json.Marshal(args)
 	res, err := s.db.ExecContext(ctx, `INSERT INTO hc2_commands (node_id, name, args, created_at) VALUES (?,?,?,?)`, nodeID, name, string(b), nowStr())

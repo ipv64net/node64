@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -850,11 +851,6 @@ func (m *Module) pageForm(w http.ResponseWriter, r *http.Request) {
 		if c == nil {
 			return
 		}
-		if c.ReadOnly() {
-			m.g.Flash(w, r, "warning", m.errForeign(r).Error())
-			http.Redirect(w, r, "/healthchecks/"+c.Token, http.StatusSeeOther)
-			return
-		}
 		d.Edit, d.Token, d.Form = true, c.Token, formFromCheck(c)
 	} else if t := r.URL.Query().Get("type"); t != "" {
 		d.Form["type"] = t
@@ -874,11 +870,6 @@ func (m *Module) pageFormSubmit(w http.ResponseWriter, r *http.Request) {
 	edit := r.PathValue("token") != ""
 	if edit {
 		if c = m.loadPage(w, r); c == nil {
-			return
-		}
-		if c.ReadOnly() {
-			m.g.Flash(w, r, "warning", m.errForeign(r).Error())
-			http.Redirect(w, r, "/healthchecks/"+c.Token, http.StatusSeeOther)
 			return
 		}
 	} else {
@@ -937,19 +928,28 @@ func (m *Module) pageFormSubmit(w http.ResponseWriter, r *http.Request) {
 
 // ---------------------------------------------------------------- Aktionen
 
-// Foreign: Check einer anderen Node (gehoert ihr, darf aber hier bearbeitet werden, ausser Docker).
+// Foreign: Check einer anderen Node. Jede Node des Accounts darf ihn trotzdem bearbeiten, pausieren,
+// loeschen und messen lassen; nur die Messstelle eines Docker-Checks bleibt bei der Container-Node.
 func (c *Check) Foreign() bool { return c.Owner == "other" }
 
-// ReadOnly: hier nicht aenderbar. Checks anderer Nodes darf jede Node des Accounts bearbeiten (auch die
-// Messstellen), nur Docker-Checks bleiben bei der Node, die den Container steuert.
-func (c *Check) ReadOnly() bool { return c.Foreign() && c.Type == checks.TypeDocker }
+// Runnable: "Jetzt pruefen" geht bei allen Checks mit Node-Messstellen (hier oder ueber den hub).
+func (c *Check) Runnable() bool { return c.Type != checks.TypePush && c.Execution != "online" }
 
-// Runnable: "Jetzt pruefen" ist nur moeglich, wenn diese Node den Check selbst misst.
-func (c *Check) Runnable() bool { return c.MeasuredHere() && c.Type != checks.TypePush }
-
-// errForeign: Docker-Checks anderer Nodes sind hier nicht aenderbar.
-func (m *Module) errForeign(r *http.Request) error {
-	return fmt.Errorf("%s", m.g.T(r, "hc.foreign_readonly"))
+// runNow misst sofort: hier, wenn diese Node misst, und ueber den hub bei den anderen messenden Nodes.
+func (m *Module) runNow(c *Check) error {
+	ran := false
+	if c.MeasuredHere() {
+		if s := m.scheduler(); s != nil && s.RunNow(c.Token) {
+			ran = true
+		}
+	}
+	if m.runRemote != nil && m.linked != nil && m.linked() && (!c.MeasuredHere() || len(c.Nodes) > 1) && m.runRemote(c.Token) {
+		ran = true
+	}
+	if !ran {
+		return errors.New("no measuring node reachable")
+	}
+	return nil
 }
 
 func (m *Module) pageAction(w http.ResponseWriter, r *http.Request) {
@@ -980,9 +980,6 @@ func (m *Module) pageAction(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) doAction(r *http.Request, c *Check, action string) error {
 	ctx := r.Context()
-	if c.ReadOnly() && action != "clone" {
-		return m.errForeign(r)
-	}
 	if action == "run" && !c.Runnable() && c.Type != checks.TypePush {
 		return fmt.Errorf("%s", m.g.T(r, "hc.run_remote"))
 	}
@@ -1002,8 +999,8 @@ func (m *Module) doAction(r *http.Request, c *Check, action string) error {
 		if c.Type == checks.TypePush {
 			return fmt.Errorf("%s", m.g.T(r, "hc.run_push"))
 		}
-		if s := m.scheduler(); s == nil || !s.RunNow(c.Token) {
-			return fmt.Errorf("scheduler not running")
+		if err := m.runNow(c); err != nil {
+			return fmt.Errorf("%s", m.g.T(r, "hc.run_unreachable"))
 		}
 	case "clone":
 		n := *c
@@ -1120,7 +1117,7 @@ func (m *Module) translator(lang string) func(key string, args ...any) string {
 // bulkTag setzt oder entfernt einen Tag (Massenaktion); fremde Checks bleiben unberuehrt.
 func (m *Module) bulkTag(r *http.Request, c *Check, add bool, tag string) bool {
 	tag = strings.TrimSpace(tag)
-	if tag == "" || len(tag) > 40 || strings.ContainsAny(tag, ", \t") || c.ReadOnly() {
+	if tag == "" || len(tag) > 40 || strings.ContainsAny(tag, ", \t") {
 		return false
 	}
 	has := false

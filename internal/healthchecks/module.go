@@ -43,6 +43,8 @@ type Module struct {
 	linked func() bool // ipv64-Verknuepfung aktiv (Sync-Phase), nil = standalone
 	// pushFwd meldet einen lokal empfangenen Push an den hub (der ihn an andere Messstellen weitergibt)
 	pushFwd func(token string, down bool, msg, from string) bool
+	// runRemote bittet den hub, den Check bei den anderen messenden Nodes sofort zu messen
+	runRemote func(token string) bool
 }
 
 // New erzeugt das Modul. dispatcher und notifyStore duerfen nil sein (dann nur Log).
@@ -134,6 +136,9 @@ func (m *Module) Store() *Store { return m.st }
 
 // SetLinked meldet, ob die Node mit ipv64 verknuepft ist (schaltet Online/Hybrid im Formular frei).
 func (m *Module) SetLinked(fn func() bool) { m.linked = fn }
+
+// SetRunRemote installiert "Jetzt pruefen" ueber den hub (andere messende Nodes).
+func (m *Module) SetRunRemote(fn func(token string) bool) { m.runRemote = fn }
 
 // SetPushForward installiert die Weitergabe lokal empfangener Pushes an den hub.
 func (m *Module) SetPushForward(fn func(token string, down bool, msg, from string) bool) {
