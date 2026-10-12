@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -213,6 +214,7 @@ func (s *Server) loadChannel(w http.ResponseWriter, r *http.Request) *notify.Cha
 func (s *Server) channelForm(w http.ResponseWriter, r *http.Request) {
 	v := s.view(r, "nf.new")
 	d := channelFormData{Types: notify.Types, Form: map[string]string{"enabled": "on", "notify_down": "on", "notify_up": "on", "lang": v.Lang}, Langs: s.I18n.Languages()}
+	server := false
 	if r.PathValue("id") != "" {
 		ch := s.loadChannel(w, r)
 		if ch == nil {
@@ -220,6 +222,7 @@ func (s *Server) channelForm(w http.ResponseWriter, r *http.Request) {
 		}
 		v.Title = v.T("nf.edit")
 		d.Edit, d.ID, d.Type = true, ch.ID, ch.Type
+		server = ch.Execution == "server"
 		d.Form = map[string]string{"name": ch.Name, "lang": ch.Lang}
 		if ch.Enabled {
 			d.Form["enabled"] = "on"
@@ -251,6 +254,9 @@ func (s *Server) channelForm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	d.Fields = notify.Fields[d.Type]
+	if server {
+		d.Fields = nil // Kanal des Portals/einer anderen Node: Zugangsdaten nur dort, hier Name und Schalter
+	}
 	v.Data = d
 	s.render(w, r, http.StatusOK, "channel_form", v)
 }
@@ -277,7 +283,12 @@ func (s *Server) channelSubmit(w http.ResponseWriter, r *http.Request) {
 	if l := r.PostFormValue("lang"); s.I18n.Has(l) {
 		ch.Lang = l
 	}
+	// Kanal des Portals/einer anderen Node: Zugangsdaten kennt nur der Besitzer, hier Name und Schalter
+	server := edit && ch.Execution == "server"
 	for _, f := range notify.Fields[ch.Type] {
+		if server {
+			break
+		}
 		val := r.PostFormValue("cfg_" + f.Key)
 		if f.Kind == "bool" {
 			val = map[bool]string{true: "true", false: "false"}[val == "on"]
@@ -287,7 +298,12 @@ func (s *Server) channelSubmit(w http.ResponseWriter, r *http.Request) {
 		}
 		ch.Config[f.Key] = strings.TrimSpace(val)
 	}
-	err := ch.Validate()
+	var err error
+	if !server {
+		err = ch.Validate()
+	} else if ch.Name == "" {
+		err = errors.New("name is required")
+	}
 	if err == nil {
 		if edit {
 			err = s.Notify.Update(ctx, ch)
