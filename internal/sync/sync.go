@@ -967,6 +967,16 @@ func (c *Live) NodeInfoChanged() {
 	c.poke()
 }
 
+// nodeInfoPending: Name/Standort wurden lokal geaendert und sind noch nicht beim hub. sync.node_name und
+// sync.location halten den zuletzt mit ipv64 abgeglichenen Stand; eine Abweichung kann nur von hier kommen.
+func (c *Live) nodeInfoPending() bool {
+	if c.setting(SetNodeInfoDirty, "") == "1" {
+		return true
+	}
+	synced := c.setting(SetNodeName, "")
+	return synced != "" && (c.setting("node.name", "") != synced || c.setting("node.location", "") != c.setting(SetLocation, ""))
+}
+
 // refreshMe holt Name, Standort und Fernverwaltung vom hub (nach Aenderung im Portal).
 func (c *Live) refreshMe(ctx context.Context) {
 	gen := c.infoGen.Load()
@@ -989,10 +999,10 @@ func (c *Live) refreshMe(ctx context.Context) {
 			c.set(healthchecks.SettingPeers, string(b))
 		}
 	}
-	c.set(SetNodeName, me.Name)
-	c.set(SetLocation, me.Location)
-	if c.infoGen.Load() == gen && c.setting(SetNodeInfoDirty, "") != "1" {
+	if c.infoGen.Load() == gen && !c.nodeInfoPending() {
 		// im Portal umbenannt: auch Name/Standort der Node selbst (Einstellungen, Status)
+		c.set(SetNodeName, me.Name)
+		c.set(SetLocation, me.Location)
 		c.set("node.name", me.Name)
 		c.set("node.location", me.Location)
 	}

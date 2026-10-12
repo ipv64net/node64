@@ -190,10 +190,7 @@ func (s *session) handle(m wire.Msg) error {
 			}
 			acc, _ := json.Marshal(h.Account)
 			c.set(SetAccount, string(acc))
-			if h.NodeName != "" {
-				c.set(SetNodeName, h.NodeName)
-			}
-			c.set(SetLocation, h.Location)
+			// Name/Standort uebernimmt refreshMe nach afterConnect (lokale Aenderungen gehen vor)
 			c.set(SetRemoteMgmt, h.RemoteMgmt)
 			if h.Hub != "" {
 				c.mu.Lock()
@@ -565,7 +562,7 @@ func (s *session) flushStates() {
 // pushNodeInfo meldet lokal geaenderten Namen/Standort an den hub (Portal, andere Nodes).
 func (s *session) pushNodeInfo() {
 	c := s.c
-	if c.setting(SetNodeInfoDirty, "") != "1" {
+	if !c.nodeInfoPending() {
 		return
 	}
 	gen := c.infoGen.Load()
@@ -581,10 +578,9 @@ func (s *session) pushNodeInfo() {
 	_ = json.Unmarshal(m.Data, &res)
 	if !res.OK {
 		c.log.Warn("hub rejected node name", "err", res.Error)
-	} else {
-		c.set(SetNodeName, name)
-		c.set(SetLocation, loc)
 	}
+	c.set(SetNodeName, name) // abgeglichener Stand (auch bei Ablehnung, sonst endlose Wiederholung)
+	c.set(SetLocation, loc)
 	if c.infoGen.Load() == gen {
 		c.set(SetNodeInfoDirty, "")
 	}
