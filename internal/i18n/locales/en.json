@@ -302,7 +302,7 @@
     "last_raw": "Last measurement in detail",
     "delete_confirm": "Delete check “{name}” with all its data?",
     "execution": {
-      "local": "This node only (local)",
+      "local": "Local on nodes",
       "online": "Online at ipv64 only",
       "both": "Local and online (hybrid)"
     },
