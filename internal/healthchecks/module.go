@@ -42,7 +42,7 @@ type Module struct {
 	push   *pushLimiter
 	linked func() bool // ipv64-Verknuepfung aktiv (Sync-Phase), nil = standalone
 	// pushFwd meldet einen lokal empfangenen Push an den hub (der ihn an andere Messstellen weitergibt)
-	pushFwd func(token string, down bool, msg, from string)
+	pushFwd func(token string, down bool, msg, from string) bool
 }
 
 // New erzeugt das Modul. dispatcher und notifyStore duerfen nil sein (dann nur Log).
@@ -136,7 +136,9 @@ func (m *Module) Store() *Store { return m.st }
 func (m *Module) SetLinked(fn func() bool) { m.linked = fn }
 
 // SetPushForward installiert die Weitergabe lokal empfangener Pushes an den hub.
-func (m *Module) SetPushForward(fn func(token string, down bool, msg, from string)) { m.pushFwd = fn }
+func (m *Module) SetPushForward(fn func(token string, down bool, msg, from string) bool) {
+	m.pushFwd = fn
+}
 
 func (m *Module) Info() module.Info {
 	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10}

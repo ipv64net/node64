@@ -882,17 +882,23 @@ func (m *Module) apiPush(w http.ResponseWriter, r *http.Request) {
 		}
 		details["from"] = ip
 	}
+	measured := false
 	if s := m.scheduler(); s != nil {
-		if !s.Push(r.Context(), token, status, msg, details) {
-			m.log.Debug("push not measured here", "token", token)
-		}
+		measured = s.Push(r.Context(), token, status, msg, details)
 	}
 	// Push-Checks sind von ueberall ausloesbar: weitere Messstellen (andere Nodes, ipv64) ueber den hub informieren
 	if m.pushFwd != nil && m.linked != nil && m.linked() {
 		if c, _ := m.st.Check(r.Context(), token); c != nil && c.Type == checks.TypePush && (c.Execution != "local" || len(c.Nodes) > 1 || !c.MeasuredHere()) {
 			from, _ := details["from"].(string)
-			m.pushFwd(token, status == checks.Down, msg, from)
+			if !m.pushFwd(token, status == checks.Down, msg, from) && !measured {
+				// weder hier gemessen noch weitergegeben: dem Aufrufer nicht "ok" melden
+				writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "error", "error": "not connected to ipv64, push not delivered"})
+				return
+			}
 		}
+	}
+	if !measured {
+		m.log.Debug("push not measured here", "token", token)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

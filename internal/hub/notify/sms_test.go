@@ -1,16 +1,17 @@
 package hubnotify
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"unicode/utf8"
+)
 
-func TestSMSNumber(t *testing.T) {
-	cases := map[string]string{"491771234567": "00491771234567", "+49 177 1234567": "00491771234567", "00491771234567": "00491771234567",
-		"01771234567": "00491771234567", "43 660 123": "0043660123", "": ""}
-	for in, want := range cases {
-		if got := smsNumber(in); got != want {
-			t.Errorf("smsNumber(%q) = %q, want %q", in, got, want)
-		}
-	}
+func TestSMSText(t *testing.T) {
 	if got := smsText("✅ IPv64.net Testbenachrichtigung - Dies ist ein Test für „x“ 🔴"); got != "IPv64.net Testbenachrichtigung - Dies ist ein Test für „x“" {
 		t.Errorf("smsText = %q", got)
+	}
+	long := strings.Repeat("a", 299) + "ü" // 301 Bytes, das ü beginnt bei Byte 299
+	if got := truncRunes(long, 300); !utf8.ValidString(got) || len(got) != 299 {
+		t.Errorf("truncRunes cut a rune: len %d valid %v", len(got), utf8.ValidString(got))
 	}
 }

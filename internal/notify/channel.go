@@ -146,6 +146,13 @@ func (c *Channel) Validate() error {
 		if f.Required && v == "" {
 			return fmt.Errorf("%s is required", f.Key)
 		}
+		if c.Type == TypeIPv64SMS && f.Key == "number" {
+			n, err := SMSNumber(v)
+			if err != nil {
+				return fmt.Errorf("%s: %w", f.Key, err)
+			}
+			c.Config[f.Key] = n
+		}
 		switch f.Kind {
 		case "url":
 			if v != "" {

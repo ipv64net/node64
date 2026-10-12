@@ -132,6 +132,8 @@ type Live struct {
 	linkBusy      bool      // LinkStart laeuft gerade
 	ackOK, ackBad time.Time // letzte Bestaetigung ohne bzw. mit Fehler (hub erreichbar, aber z. B. ohne Datenbank)
 	sessionReady  bool      // aktuelle Sitzung hat hello/config erhalten
+	pushOnce      sync.Once // Warteschlange fuer weitergereichte Pushes
+	pushQ         chan wire.Msg
 
 	mu        sync.Mutex
 	connected bool
@@ -1093,17 +1095,38 @@ func (c *Live) pickEndpoint(failed string) string {
 	return cands[rand.IntN(len(cands))]
 }
 
-// ForwardPush meldet einen lokal empfangenen Push an den hub (Weitergabe an andere Messstellen).
-// Ohne Verbindung entfaellt die Weitergabe; lokal zaehlt der Push trotzdem.
-func (c *Live) ForwardPush(token string, down bool, msg, from string) {
+// ForwardPush stellt einen lokal empfangenen Push zur Weitergabe an den hub in eine feste Warteschlange
+// (ein Sender je Prozess, keine Goroutine je Push). false: nicht verbunden oder Warteschlange voll.
+func (c *Live) ForwardPush(token string, down bool, msg, from string) bool {
 	c.mu.Lock()
-	s := c.ws
+	connected := c.ws != nil
 	c.mu.Unlock()
-	if s == nil {
-		return
+	if !connected {
+		return false
 	}
-	data, _ := json.Marshal(map[string]any{"token": token, "down": down, "msg": msg, "from": from})
-	go func() { _ = s.send(wire.Msg{T: "push", Data: data}) }()
+	c.pushOnce.Do(func() {
+		c.pushQ = make(chan wire.Msg, 64)
+		go c.pushLoop()
+	})
+	data, _ := json.Marshal(map[string]any{"token": token, "down": down, "msg": msg, "from": from, "time": time.Now().UTC().Format(time.RFC3339Nano)})
+	select {
+	case c.pushQ <- wire.Msg{T: "push", Data: data}:
+		return true
+	default:
+		return false
+	}
+}
+
+// pushLoop schickt Pushes ueber die jeweils aktuelle Sitzung; der hub verwirft, was zu alt ist.
+func (c *Live) pushLoop() {
+	for m := range c.pushQ {
+		c.mu.Lock()
+		s := c.ws
+		c.mu.Unlock()
+		if s != nil {
+			_ = s.send(m)
+		}
+	}
 }
 
 // TestServerChannel bittet den hub, ueber einen Kanal zu senden, den nur ipv64 zustellen kann.

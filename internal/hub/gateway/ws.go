@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -35,6 +36,7 @@ type conn struct {
 	closed  bool
 	nextID  int64
 	work    chan wire.Msg // Nachrichten mit DB-Arbeit (Messpunkte usw.), eigener Worker je Verbindung
+	testing atomic.Bool   // laeuft gerade ein Kanal-Test dieser Node
 }
 
 func (c *conn) send(m wire.Msg) {
@@ -215,6 +217,9 @@ func (c *conn) reader() {
 			case <-c.ctx.Done():
 				return
 			}
+		case "channel_test":
+			// Versand ueber Mail/SMS-Bruecke kann dauern: weder Leser noch Worker blockieren
+			go c.handle(m)
 		default:
 			c.handle(m)
 		}
@@ -301,10 +306,14 @@ func (c *conn) handle(m wire.Msg) {
 			Down  bool   `json:"down"`
 			Msg   string `json:"msg"`
 			From  string `json:"from"`
+			Time  string `json:"time"`
 		}
-		if json.Unmarshal(m.Data, &in) == nil && in.Token != "" {
+		if json.Unmarshal(m.Data, &in) == nil && in.Token != "" && g.limiter.allow("push:"+in.Token, 60, time.Minute) {
+			if t, err := time.Parse(time.RFC3339Nano, in.Time); err == nil && time.Since(t) > 2*time.Minute {
+				break // lag zu lange in der Warteschlange der Node: wuerde einen Ausfall verdecken
+			}
 			if _, err := g.st.PushInFrom(ctx, in.Token, in.Down, in.Msg, "node "+n.Name+" ("+in.From+")", n.ID, n.UserID); err != nil {
-				c.g.log.Warn("push from node failed", "node", n.ID, "err", err)
+				g.log.Warn("push from node failed", "node", n.ID, "err", err)
 			}
 		}
 	case "channel_test":
@@ -314,6 +323,11 @@ func (c *conn) handle(m wire.Msg) {
 			Lang      string `json:"lang"`
 		}
 		res := map[string]any{"ok": false}
+		if !c.testing.CompareAndSwap(false, true) {
+			c.ack(m.ID, map[string]any{"ok": false, "test_error": "another test is still running"})
+			return
+		}
+		defer c.testing.Store(false)
 		if json.Unmarshal(m.Data, &in) == nil && in.ChannelID > 0 {
 			var ch *notify.Channel
 			if list, err := g.nf.ChannelsFor(ctx, n.UserID); err == nil {

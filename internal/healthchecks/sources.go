@@ -236,28 +236,27 @@ func (m *Module) apiChart(w http.ResponseWriter, r *http.Request) {
 		args []any
 	}
 	var qs []q
-	selfSel := `'self', time, status, latency_ms FROM hc_measurements WHERE token = ? AND time >= ? AND (flags & 8) = 0`
-	// Fremde Messstellen aus beiden Ablagen: hc_measurements (flags 8, solange diese Node nicht mitmisst)
-	// und hc_source_points (seit sie mitmisst). So bleibt die Historie beim Aendern der Messstellen erhalten.
-	remoteSel := `src, time, status, latency_ms FROM (
-		SELECT details AS src, time, status, latency_ms FROM hc_measurements WHERE token = ? AND time >= ? AND (flags & 8) != 0
-		UNION ALL SELECT source AS src, time, status, latency_ms FROM hc_source_points WHERE token = ? AND time >= ?)`
+	// Quellen liefern einheitlich (src, time, status, latency_ms). Fremde Messstellen aus beiden Ablagen:
+	// hc_measurements (flags 8, solange diese Node nicht mitmisst) und hc_source_points (seit sie mitmisst).
+	selfSrc := `SELECT 'self' AS src, time, status, latency_ms FROM hc_measurements WHERE token = ? AND time >= ? AND (flags & 8) = 0`
+	remoteSrc := `SELECT details AS src, time, status, latency_ms FROM hc_measurements WHERE token = ? AND time >= ? AND (flags & 8) != 0
+		UNION ALL SELECT source AS src, time, status, latency_ms FROM hc_source_points WHERE token = ? AND time >= ?`
 	selfArgs, remoteArgs := []any{c.Token, ft(from)}, []any{c.Token, ft(from), c.Token, ft(from)}
 	switch cr.bucket {
 	case "raw":
-		qs = append(qs, q{`SELECT ` + selfSel + ` ORDER BY time LIMIT 20000`, selfArgs},
-			q{`SELECT ` + remoteSel + ` ORDER BY time LIMIT 40000`, remoteArgs})
+		raw := func(src string, limit int) string {
+			return `SELECT src, time, status, latency_ms FROM (` + src + `) ORDER BY time LIMIT ` + strconv.Itoa(limit)
+		}
+		qs = append(qs, q{raw(selfSrc, 20000), selfArgs}, q{raw(remoteSrc, 40000), remoteArgs})
 	default:
 		n := 13 // Stunde
 		if cr.bucket == "day" {
 			n = 10
 		}
-		agg := func(sel string) string {
-			// sel: "<src>, time, status, latency_ms FROM ..." -> gruppiert je Quelle und Zeitraum
-			parts := strings.SplitN(sel, ", time, status, latency_ms FROM ", 2)
-			return `SELECT ` + parts[0] + `, substr(time, 1, ` + strconv.Itoa(n) + `), count(*), sum(status), avg(CASE WHEN status = 1 THEN latency_ms END) FROM ` + parts[1] + ` GROUP BY 1, 2 ORDER BY 2`
+		agg := func(src string) string {
+			return `SELECT src, substr(time, 1, ` + strconv.Itoa(n) + `), count(*), sum(status), avg(CASE WHEN status = 1 THEN latency_ms END) FROM (` + src + `) GROUP BY 1, 2 ORDER BY 2`
 		}
-		qs = append(qs, q{agg(selfSel), selfArgs}, q{agg(remoteSel), remoteArgs})
+		qs = append(qs, q{agg(selfSrc), selfArgs}, q{agg(remoteSrc), remoteArgs})
 		if cr.bucket == "day" && c.MeasuredHere() {
 			// eigene Tageswerte (Rohpunkte gibt es nur 30 Tage)
 			qs = append(qs, q{`SELECT 'self', day, count, up_count, avg_ms FROM hc_daily WHERE token = ? AND day >= ? AND day < ? ORDER BY day`,

@@ -34,6 +34,42 @@ func (g *Gateway) SetPortalSecret(secret []byte) { g.portalSecret = secret }
 // RegisterPortal haengt die Portal-Routen an den Multiplexer.
 func (g *Gateway) RegisterPortal(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/portal/channel-test", g.portalChannelTest)
+	mux.HandleFunc("POST /v1/portal/push", g.portalPush)
+}
+
+// portalPush nimmt einen Heartbeat von health.php an: Messpunkt, last_push_at und Weitergabe an die
+// messenden Nodes an einer Stelle (PushIn). Erreicht PHP keinen hub, speichert es selbst ohne Weitergabe.
+//
+//	POST /v1/portal/push {ts, token, down, msg, from} -> {"ok":true|false}
+func (g *Gateway) portalPush(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		TS    int64  `json:"ts"`
+		Token string `json:"token"`
+		Down  bool   `json:"down"`
+		Msg   string `json:"msg"`
+		From  string `json:"from"`
+	}
+	if !g.portalAuth(w, r, &in) {
+		return
+	}
+	if d := time.Since(time.Unix(in.TS, 0)); d > 5*time.Minute || d < -5*time.Minute {
+		writeErr(w, http.StatusBadRequest, "stale request")
+		return
+	}
+	if len(in.Token) < 20 || len(in.Token) > 50 {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false})
+		return
+	}
+	if !g.limiter.allow("push:"+in.Token, 60, time.Minute) {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "limited": true}) // wie am HTTP-Eingang: verworfen
+		return
+	}
+	ok, err := g.st.PushIn(r.Context(), in.Token, in.Down, in.Msg, in.From)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": ok})
 }
 
 type portalReq struct {
@@ -113,24 +149,18 @@ func (g *Gateway) portalChannelTest(w http.ResponseWriter, r *http.Request) {
 // sendChannelTest schickt eine Test- oder Bestaetigungsnachricht ueber einen Kanal (Portal und Node).
 // Liefert den Fehlertext des Versands, ob eine Node selbst zustellt, und einen HTTP-Code bei Aufruffehlern.
 func (g *Gateway) sendChannelTest(ctx context.Context, ch *notify.Channel, userID int64, kind, code, lang string) (string, bool, int) {
-	in := struct {
-		UserID     int64
-		Kind, Code string
-		Lang       string
-	}{userID, kind, code, lang}
-	lang = in.Lang
 	if lang != "en" {
 		lang = "de"
 	}
 	m := notify.Message{Kind: notify.KindTest, Time: time.Now().UTC(), Language: lang, Priority: 3,
-		Check: notify.CheckInfo{UserID: in.UserID, Name: ch.Name}, EventID: "portal-" + strconv.FormatInt(time.Now().UnixNano(), 36),
+		Check: notify.CheckInfo{UserID: userID, Name: ch.Name}, EventID: "portal-" + strconv.FormatInt(time.Now().UnixNano(), 36),
 		URL: "https://ipv64.net/notifications.php"}
-	switch in.Kind {
+	switch kind {
 	case "verify":
 		if lang == "en" {
-			m.Title, m.Text = "IPv64.net: confirmation code", "Your code to confirm the notification channel \""+ch.Name+"\": "+in.Code+"\nValid for 15 minutes."
+			m.Title, m.Text = "IPv64.net: confirmation code", "Your code to confirm the notification channel \""+ch.Name+"\": "+code+"\nValid for 15 minutes."
 		} else {
-			m.Title, m.Text = "IPv64.net: Bestätigungscode", "Dein Code zur Bestätigung des Benachrichtigungskanals \""+ch.Name+"\": "+in.Code+"\nGültig 15 Minuten."
+			m.Title, m.Text = "IPv64.net: Bestätigungscode", "Dein Code zur Bestätigung des Benachrichtigungskanals \""+ch.Name+"\": "+code+"\nGültig 15 Minuten."
 		}
 	default:
 		if lang == "en" {
