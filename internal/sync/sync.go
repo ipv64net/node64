@@ -1090,3 +1090,16 @@ func (c *Live) pickEndpoint(failed string) string {
 	}
 	return cands[rand.IntN(len(cands))]
 }
+
+// ForwardPush meldet einen lokal empfangenen Push an den hub (Weitergabe an andere Messstellen).
+// Ohne Verbindung entfaellt die Weitergabe; lokal zaehlt der Push trotzdem.
+func (c *Live) ForwardPush(token string, down bool, msg, from string) {
+	c.mu.Lock()
+	s := c.ws
+	c.mu.Unlock()
+	if s == nil {
+		return
+	}
+	data, _ := json.Marshal(map[string]any{"token": token, "down": down, "msg": msg, "from": from})
+	go func() { _ = s.send(wire.Msg{T: "push", Data: data}) }()
+}

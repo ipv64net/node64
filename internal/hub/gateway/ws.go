@@ -208,7 +208,7 @@ func (c *conn) reader() {
 			continue
 		}
 		switch m.T {
-		case "measurements", "events", "states", "deliveries", "status":
+		case "measurements", "events", "states", "deliveries", "status", "push":
 			// DB-lastig: im Worker, damit der Leser weiter liest (Pongs!) und eine langsame DB keine Verbindungen trennt
 			select {
 			case c.work <- m:
@@ -294,6 +294,19 @@ func (c *conn) handle(m wire.Msg) {
 			_ = g.st.IngestDeliveries(ctx, n, in.Batch)
 		}
 		c.ack(m.ID, wire.Ack{})
+	case "push":
+		// Push, den die Node lokal empfangen hat: Messpunkt am hub, Weitergabe an die anderen messenden Nodes
+		var in struct {
+			Token string `json:"token"`
+			Down  bool   `json:"down"`
+			Msg   string `json:"msg"`
+			From  string `json:"from"`
+		}
+		if json.Unmarshal(m.Data, &in) == nil && in.Token != "" {
+			if _, err := g.st.PushInFrom(ctx, in.Token, in.Down, in.Msg, "node "+n.Name+" ("+in.From+")", n.ID, n.UserID); err != nil {
+				c.g.log.Warn("push from node failed", "node", n.ID, "err", err)
+			}
+		}
 	case "propose":
 		var p wire.Propose
 		if err := json.Unmarshal(m.Data, &p); err != nil {

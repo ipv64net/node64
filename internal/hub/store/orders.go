@@ -102,8 +102,20 @@ func (s *Store) SendOrderDone(ctx context.Context, id int64, ok bool, errText st
 
 // PushIn nimmt einen Heartbeat am hub an (Messpunkt + last_push_at); der checker bewertet.
 func (s *Store) PushIn(ctx context.Context, token string, down bool, msg, from string) (bool, error) {
-	var t string
-	err := s.db.QueryRowContext(ctx, `SELECT token FROM hc2_checks WHERE token = ? AND type = 'push' AND deleted_at IS NULL`, token).Scan(&t)
+	return s.PushInFrom(ctx, token, down, msg, from, "", 0)
+}
+
+// PushInFrom nimmt einen Heartbeat an und reicht ihn an alle messenden Nodes weiter (ausser der
+// Absenderin). userID > 0: nur Checks dieses Accounts (Push, den eine Node lokal empfangen hat).
+func (s *Store) PushInFrom(ctx context.Context, token string, down bool, msg, from, senderNode string, userID int64) (bool, error) {
+	var t, execution string
+	var owner sql.NullString
+	var nodes string
+	var uid int64
+	err := s.db.QueryRowContext(ctx, `SELECT token, userid, execution, node_id, nodes FROM hc2_checks WHERE token = ? AND type = 'push' AND deleted_at IS NULL`, token).Scan(&t, &uid, &execution, &owner, &nodes)
+	if err == nil && userID > 0 && uid != userID {
+		return false, nil
+	}
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
@@ -120,6 +132,14 @@ func (s *Store) PushIn(ctx context.Context, token string, down bool, msg, from s
 		return false, err
 	}
 	_, _ = s.db.ExecContext(ctx, `UPDATE hc2_checks SET last_push_at = ? WHERE token = ?`, nowStr(), t)
+	if execution != "online" {
+		args, _ := json.Marshal(map[string]any{"token": t, "down": down, "msg": msg, "from": from, "time": time.Now().UTC().Format(time.RFC3339)})
+		for _, id := range measuringNodes(splitList(nodes), owner.String) {
+			if id != senderNode {
+				_, _ = s.db.ExecContext(ctx, `INSERT INTO hc2_commands (node_id, name, args, created_at) VALUES (?, 'push', ?, ?)`, id, string(args), nowStr())
+			}
+		}
+	}
 	return true, nil
 }
 

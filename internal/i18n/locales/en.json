@@ -371,7 +371,7 @@
       "nodes": "Measuring nodes",
       "this_node": "this node",
       "nodes_hint": "Several nodes possible, e.g. at different sites or with VPN access. Every selected node measures the check itself and shows up as its own measuring point.",
-      "nodes_single": "Docker and push checks belong to exactly one node (container or push address) and cannot be moved.",
+      "nodes_single": "Docker checks belong to the node that runs the container and cannot be moved.",
       "cert_min_days": "Certificate: warn below",
       "days": "days",
       "cert_min_days_hint": "HTTPS: report down when the certificate expires in fewer days (0 = off). The expiry date is always read.",
@@ -444,7 +444,7 @@
     },
     "push": {
       "local": "Local (this node)",
-      "local_hint": "Reachable in your own network; works without internet and without ipv64.",
+      "local_hint": "Reachable in your own network. If this node measures the check, the push counts even without internet; ipv64 and other nodes learn about it via the link.",
       "online": "Online via ipv64",
       "online_hint_local": "Reachable from anywhere. ipv64 forwards the push to this node while it is connected.",
       "online_hint_online": "The check is evaluated at ipv64; use this address.",

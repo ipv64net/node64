@@ -371,7 +371,7 @@
       "nodes": "Messende Nodes",
       "this_node": "diese Node",
       "nodes_hint": "Mehrere Nodes möglich, z. B. an verschiedenen Standorten oder mit Zugang über VPN. Jede gewählte Node misst den Check selbst und erscheint als eigene Messstelle.",
-      "nodes_single": "Docker- und Push-Checks gehören zu genau einer Node (Container bzw. Push-Adresse) und sind nicht umhängbar.",
+      "nodes_single": "Docker-Checks gehören zu der Node, auf der der Container läuft, und sind nicht umhängbar.",
       "cert_min_days": "Zertifikat: warnen unter",
       "days": "Tagen",
       "cert_min_days_hint": "HTTPS: gestört melden, wenn das Zertifikat in weniger Tagen abläuft (0 = aus). Das Ablaufdatum wird immer mitgelesen.",
@@ -444,7 +444,7 @@
     },
     "push": {
       "local": "Lokal (diese Node)",
-      "local_hint": "Im eigenen Netz erreichbar; funktioniert auch ohne Internet und ohne ipv64.",
+      "local_hint": "Im eigenen Netz erreichbar. Misst diese Node den Check, zählt der Push auch ohne Internet; ipv64 und weitere Nodes erfahren ihn über die Verbindung.",
       "online": "Online über ipv64",
       "online_hint_local": "Von überall erreichbar. ipv64 reicht den Push an diese Node weiter, solange sie verbunden ist.",
       "online_hint_online": "Der Check wird bei ipv64 ausgewertet; diese Adresse verwenden.",

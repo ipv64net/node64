@@ -13,7 +13,7 @@ import (
 
 // Mehrere Nodes je Account: ein Check kann von mehreren Nodes gemessen werden (Liste Nodes).
 // Besitzer bleibt die Node, die ihn angelegt hat (bearbeiten, Benachrichtigung ohne hub).
-// Docker und Push gehoeren zu genau einer Node.
+// Docker-Checks gehoeren zu genau einer Node; Push-Checks koennen ueberall ausgeloest werden.
 
 // Peer ist eine Node des Accounts (vom hub, /v1/nodes/me).
 type Peer struct {
@@ -52,7 +52,8 @@ func selfNodeID() string {
 	return self.id
 }
 
-func singleNode(t checks.Type) bool { return t == checks.TypeDocker || t == checks.TypePush }
+// singleNode: Docker-Checks gehoeren zur Node mit dem Container (Push-Checks sind frei zuordenbar).
+func singleNode(t checks.Type) bool { return t == checks.TypeDocker }
 
 // measures sagt, ob diese Node den Check misst (ohne Ausfuehrungsort).
 func (c *Check) measures() bool {

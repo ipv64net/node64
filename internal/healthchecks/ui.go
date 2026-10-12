@@ -428,8 +428,8 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if c.Type == checks.TypePush {
-		if c.MeasuredHere() {
-			d.PushURL = d.JSON.PushURL
+		if c.MeasuredHere() || (m.linked != nil && m.linked()) {
+			d.PushURL = d.JSON.PushURL // misst sie nicht selbst, reicht die Node den Push ueber ipv64 weiter
 		}
 		if (m.linked != nil && m.linked()) || c.Execution == "online" {
 			d.PushOnline = OnlinePushURL + c.Token

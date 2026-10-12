@@ -420,7 +420,7 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 	} else if c.NodeID != "" {
 		nodeRef = c.NodeID
 	}
-	// Messende Nodes: nur aktive Nodes des Accounts; Docker und Push bleiben bei genau einer Node
+	// Messende Nodes: nur aktive Nodes des Accounts; Docker bleibt bei genau einer Node
 	var nodeList []string
 	if c.Execution != "online" {
 		owner0 := ""
@@ -986,5 +986,5 @@ func measuringNodes(list []string, owner string) []string {
 	return out
 }
 
-// singleNodeType: Push-URL und Docker-Socket gehoeren zu genau einer Node.
-func singleNodeType(typ string) bool { return typ == "push" || typ == "docker" }
+// singleNodeType: der Docker-Socket gehoert zu genau einer Node (Push-Checks sind frei zuordenbar).
+func singleNodeType(typ string) bool { return typ == "docker" }

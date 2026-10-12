@@ -41,6 +41,8 @@ type Module struct {
 	wg     sync.WaitGroup
 	push   *pushLimiter
 	linked func() bool // ipv64-Verknuepfung aktiv (Sync-Phase), nil = standalone
+	// pushFwd meldet einen lokal empfangenen Push an den hub (der ihn an andere Messstellen weitergibt)
+	pushFwd func(token string, down bool, msg, from string)
 }
 
 // New erzeugt das Modul. dispatcher und notifyStore duerfen nil sein (dann nur Log).
@@ -132,6 +134,9 @@ func (m *Module) Store() *Store { return m.st }
 
 // SetLinked meldet, ob die Node mit ipv64 verknuepft ist (schaltet Online/Hybrid im Formular frei).
 func (m *Module) SetLinked(fn func() bool) { m.linked = fn }
+
+// SetPushForward installiert die Weitergabe lokal empfangener Pushes an den hub.
+func (m *Module) SetPushForward(fn func(token string, down bool, msg, from string)) { m.pushFwd = fn }
 
 func (m *Module) Info() module.Info {
 	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10}

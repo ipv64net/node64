@@ -29,7 +29,7 @@
 		var syncNodes = function () {
 			if (!nodesBox) { return; }
 			nodesBox.classList.toggle("d-none", !!exSel && exSel.value === "online");
-			var single = typeSel.value === "docker" || typeSel.value === "push";
+			var single = typeSel.value === "docker";
 			nodesBox.querySelectorAll("input[name=nodes]").forEach(function (cb) {
 				var own = cb.closest(".form-check").querySelector(".badge.text-bg-success");
 				if (single) { cb.checked = !!own; cb.disabled = true; } else { cb.disabled = false; }
