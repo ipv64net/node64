@@ -508,6 +508,8 @@
   },
   "nf": {
     "browser": {
+      "sound": "Ton abspielen",
+      "sound_note": "Zusätzlich zum Ton des Betriebssystems spielt die geöffnete Seite einen kurzen Hinweiston (Störung tief, Entwarnung hoch). Browser erlauben Ton erst, nachdem die Seite einmal angeklickt wurde.",
       "title": "Browser-Benachrichtigungen",
       "intro": "Störungen und Entwarnungen erscheinen direkt im Browser – ohne E-Mail oder App. Dazu einen Kanal vom Typ „Browser“ anlegen (er gilt wie jeder Kanal für die gewählten Checks) und hier in jedem Browser einschalten.",
       "enable": "In diesem Browser einschalten",

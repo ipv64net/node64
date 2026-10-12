@@ -107,13 +107,44 @@
 		head.querySelector(".btn-close").addEventListener("click", function () { t.remove(); });
 		setTimeout(function () { t.remove(); }, down ? 30000 : 10000);
 	}
+	// Hinweiston (Web Audio, keine Datei): Stoerung zwei fallende Toene, Entwarnung zwei steigende.
+	// Browser erlauben Ton erst nach einer Bedienung der Seite; der Kontext wird beim ersten Klick freigeschaltet.
+	var SOUND_KEY = "node64_browser_sound";
+	var soundOn = function () { try { return localStorage.getItem(SOUND_KEY) !== "0"; } catch (e) { return true; } };
+	var audio = null;
+	var unlockAudio = function () {
+		try {
+			if (!audio) { audio = new (window.AudioContext || window.webkitAudioContext)(); }
+			if (audio.state === "suspended") { audio.resume(); }
+		} catch (e) {}
+	};
+	if (bnOn()) { ["click", "keydown", "touchstart"].forEach(function (t) { document.addEventListener(t, unlockAudio, { once: true, passive: true }); }); }
+	function beep(down) {
+		if (!soundOn()) { return; }
+		unlockAudio();
+		if (!audio) { return; }
+		var t0 = audio.currentTime + 0.02;
+		(down ? [880, 587] : [660, 988]).forEach(function (f, i) {
+			var o = audio.createOscillator(), g = audio.createGain();
+			o.type = "sine"; o.frequency.value = f;
+			g.gain.setValueAtTime(0.0001, t0 + i * 0.22);
+			g.gain.exponentialRampToValueAtTime(0.25, t0 + i * 0.22 + 0.02);
+			g.gain.exponentialRampToValueAtTime(0.0001, t0 + i * 0.22 + 0.2);
+			o.connect(g); g.connect(audio.destination);
+			o.start(t0 + i * 0.22); o.stop(t0 + i * 0.22 + 0.21);
+		});
+	}
 	function show(ev) {
+		var down = /down|reminder|flapping_start|degraded$|summary/.test(ev.kind || "");
 		if (canNotify() && Notification.permission === "granted") {
 			try {
-				var n = new Notification(ev.title || "Node64", { body: ev.text || "", tag: ev.token ? "node64-" + ev.token : undefined, icon: "/static/img/favicon.png" });
+				// renotify: auch eine erneute Meldung zum selben Check bekommt den Ton des Betriebssystems
+				var tag = ev.token ? "node64-" + ev.token : undefined;
+				var n = new Notification(ev.title || "Node64", { body: ev.text || "", tag: tag, renotify: !!tag, silent: false, requireInteraction: down, icon: "/static/img/favicon.png" });
 				n.onclick = function () { window.focus(); if (ev.token) { location.href = "/healthchecks/" + ev.token; } n.close(); };
 			} catch (e) {}
 		}
+		beep(down);
 		if (!document.hidden || !(canNotify() && Notification.permission === "granted")) { toast(ev); }
 	}
 	window.node64ShowNotification = show;
@@ -143,7 +174,12 @@
 			} else { refresh(); location.reload(); }
 		});
 		dis.addEventListener("click", function () { bnSet(false); refresh(); location.reload(); });
-		tr.addEventListener("click", function () { show({ kind: "test", title: "Node64", text: tr.textContent.trim() + " ✓" }); });
+		tr.addEventListener("click", function () { unlockAudio(); show({ kind: "test", title: "Node64", text: tr.textContent.trim() + " ✓" }); });
+		var snd = document.getElementById("bn-sound");
+		if (snd) {
+			snd.checked = soundOn();
+			snd.addEventListener("change", function () { try { localStorage.setItem(SOUND_KEY, snd.checked ? "1" : "0"); } catch (e) {} if (snd.checked) { unlockAudio(); beep(false); } });
+		}
 		refresh();
 	}
 

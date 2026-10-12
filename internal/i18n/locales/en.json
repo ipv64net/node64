@@ -508,6 +508,8 @@
   },
   "nf": {
     "browser": {
+      "sound": "Play sound",
+      "sound_note": "Besides the operating system sound, the open page plays a short tone (outage low, recovery high). Browsers allow sound only after the page was clicked once.",
       "title": "Browser notifications",
       "intro": "Outages and recoveries appear right in the browser – no e-mail or app needed. Create a channel of type “Browser” (it applies to the selected checks like any channel) and switch it on here in every browser.",
       "enable": "Turn on in this browser",

@@ -21,10 +21,11 @@
 			<button type="button" class="btn btn-sm btn-primary" id="bn-enable"><i class="bi bi-bell"></i> {{.T "nf.browser.enable"}}</button>
 			<button type="button" class="btn btn-sm btn-outline-secondary d-none" id="bn-disable"><i class="bi bi-bell-slash"></i> {{.T "nf.browser.disable"}}</button>
 			<button type="button" class="btn btn-sm btn-outline-info d-none" id="bn-test"><i class="bi bi-send"></i> {{.T "nf.browser.try"}}</button>
+			<div class="form-check form-switch m-0 ms-1"><input class="form-check-input" type="checkbox" role="switch" id="bn-sound" checked><label class="form-check-label" for="bn-sound"><i class="bi bi-volume-up"></i> {{.T "nf.browser.sound"}}</label></div>
 			{{if not $d.HasBrowser}}<a class="btn btn-sm btn-outline-primary" href="/notifications/new?type=browser"><i class="bi bi-plus-lg"></i> {{.T "nf.browser.create"}}</a>{{end}}
 		</div>
 		<div class="text-body-secondary mt-2" id="bn-hint" data-insecure="{{.T "nf.browser.insecure"}}" data-denied="{{.T "nf.browser.denied"}}" data-on="{{.T "nf.browser.on"}}" data-off="{{.T "nf.browser.off"}}" data-unsupported="{{.T "nf.browser.unsupported"}}" data-inpage="{{.T "nf.browser.inpage"}}"></div>
-		<div class="text-body-secondary mt-1">{{.T "nf.browser.note"}}</div>
+		<div class="text-body-secondary mt-1">{{.T "nf.browser.note"}} {{.T "nf.browser.sound_note"}}</div>
 	</div>
 </div>
 
