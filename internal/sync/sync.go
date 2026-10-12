@@ -885,7 +885,9 @@ func (c *Live) onChange(ctx context.Context, entity, id, op string) {
 			if ck == nil {
 				return
 			}
-			if !ck.MeasuredHere() && ck.Execution != "online" {
+			// fremde Checks sind hier schreibgeschuetzt; ein eigener Check wird auch gemeldet, wenn
+			// diese Node ihn nicht (mehr) misst, sonst erfaehrt die neue Messstelle nie davon
+			if ck.Foreign() {
 				return
 			}
 			base = ck.Revision - 1
