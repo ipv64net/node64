@@ -349,9 +349,9 @@ func (s *Store) Propose(ctx context.Context, userID int64, nodeID string, p wire
 func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, nodeID string, p wire.Propose, origin string, res *wire.ProposeResult) error {
 	var cur sql.NullInt64
 	var owner sql.NullString
-	var deleted sql.NullString
+	var deleted, updated sql.NullString
 	var ownerUser sql.NullInt64
-	err := tx.QueryRowContext(ctx, `SELECT revision, node_id, deleted_at, userid FROM hc2_checks WHERE token = ? FOR UPDATE`, p.ID).Scan(&cur, &owner, &deleted, &ownerUser)
+	err := tx.QueryRowContext(ctx, `SELECT revision, node_id, deleted_at, userid, updated_at FROM hc2_checks WHERE token = ? FOR UPDATE`, p.ID).Scan(&cur, &owner, &deleted, &ownerUser, &updated)
 	exists := err == nil
 	if err != nil && err != sql.ErrNoRows {
 		return err
@@ -360,7 +360,12 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 		res.Error = "token belongs to another account"
 		return nil
 	}
-	if exists && p.BaseRevision >= 0 && cur.Int64 != p.BaseRevision && !deleted.Valid {
+	if exists && deleted.Valid && p.Op != "delete" && p.BaseRevision > 0 && !p.ChangedAt.After(pt(deleted)) {
+		// nach der Aenderung an der Node geloescht: bleibt geloescht (leere Server-Fassung = loeschen)
+		res.Conflict, res.Revision = true, cur.Int64
+		return nil
+	}
+	if exists && p.BaseRevision >= 0 && cur.Int64 != p.BaseRevision && !deleted.Valid && !p.ChangedAt.After(pt(updated)) {
 		res.Conflict = true
 		res.Revision = cur.Int64
 		if c, _, err := s.WireCheck(ctx, p.ID); err == nil && c != nil {
@@ -534,7 +539,12 @@ func (s *Store) proposeMaintenance(ctx context.Context, tx *sql.Tx, userID int64
 	fmt.Sscan(p.ID, &id)
 	var cur int64
 	var ownerUser int64
-	err := tx.QueryRowContext(ctx, `SELECT revision, userid FROM hc2_maintenance WHERE id = ? AND deleted_at IS NULL FOR UPDATE`, id).Scan(&cur, &ownerUser)
+	var updated sql.NullString
+	if gone, err := deletedAfterChange(ctx, tx, "hc2_maintenance", id, userID, p); err != nil || gone {
+		res.Conflict = gone
+		return err
+	}
+	err := tx.QueryRowContext(ctx, `SELECT revision, userid, updated_at FROM hc2_maintenance WHERE id = ? AND deleted_at IS NULL FOR UPDATE`, id).Scan(&cur, &ownerUser, &updated)
 	exists := err == nil
 	if err != nil && err != sql.ErrNoRows {
 		return err
@@ -543,7 +553,7 @@ func (s *Store) proposeMaintenance(ctx context.Context, tx *sql.Tx, userID int64
 		res.Error = "maintenance belongs to another account"
 		return nil
 	}
-	if exists && p.BaseRevision >= 0 && cur != p.BaseRevision {
+	if exists && p.BaseRevision >= 0 && cur != p.BaseRevision && !p.ChangedAt.After(pt(updated)) {
 		res.Conflict, res.Revision = true, cur
 		if d, err := s.entityData(ctx, "maintenance", p.ID, nodeID); err == nil {
 			res.Server = d
@@ -602,8 +612,12 @@ func (s *Store) proposeChannel(ctx context.Context, tx *sql.Tx, userID int64, no
 	var id int64
 	fmt.Sscan(p.ID, &id)
 	var cur, ownerUser int64
-	var owner sql.NullString
-	err := tx.QueryRowContext(ctx, `SELECT revision, userid, node_id FROM hc2_channels WHERE id = ? AND deleted_at IS NULL FOR UPDATE`, id).Scan(&cur, &ownerUser, &owner)
+	var owner, updated sql.NullString
+	if gone, err := deletedAfterChange(ctx, tx, "hc2_channels", id, userID, p); err != nil || gone {
+		res.Conflict = gone
+		return err
+	}
+	err := tx.QueryRowContext(ctx, `SELECT revision, userid, node_id, updated_at FROM hc2_channels WHERE id = ? AND deleted_at IS NULL FOR UPDATE`, id).Scan(&cur, &ownerUser, &owner, &updated)
 	exists := err == nil
 	if err != nil && err != sql.ErrNoRows {
 		return err
@@ -615,7 +629,7 @@ func (s *Store) proposeChannel(ctx context.Context, tx *sql.Tx, userID int64, no
 	// Kanal des Portals oder einer anderen Node: jede Node darf ihn aendern und loeschen, die Zugangsdaten
 	// (config_enc) und die Besitzer-Node bleiben dabei unveraendert
 	foreign := exists && (!owner.Valid || owner.String != nodeID)
-	if exists && p.BaseRevision >= 0 && cur != p.BaseRevision {
+	if exists && p.BaseRevision >= 0 && cur != p.BaseRevision && !p.ChangedAt.After(pt(updated)) {
 		res.Conflict, res.Revision = true, cur
 		if d, err := s.entityData(ctx, "channel", p.ID, nodeID); err == nil {
 			res.Server = d
@@ -684,6 +698,23 @@ func (s *Store) proposeChannel(ctx context.Context, tx *sql.Tx, userID int64, no
 	res.Revision = rev
 	res.Data, _ = json.Marshal(ch)
 	return nil
+}
+
+// deletedAfterChange: Wartung/Kanal wurde geloescht, nachdem die Node ihn geaendert hat -> bleibt geloescht
+// (Konflikt ohne Server-Fassung, die Node loescht ihre Kopie). Eine juengere Aenderung legt ihn neu an.
+func deletedAfterChange(ctx context.Context, tx *sql.Tx, table string, id, userID int64, p wire.Propose) (bool, error) {
+	if id <= 0 || p.Op == "delete" || p.BaseRevision <= 0 {
+		return false, nil
+	}
+	var deleted sql.NullString
+	err := tx.QueryRowContext(ctx, `SELECT deleted_at FROM `+table+` WHERE id = ? AND userid = ? AND deleted_at IS NOT NULL`, id, userID).Scan(&deleted)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return !p.ChangedAt.After(pt(deleted)), nil
 }
 
 func isSecretField(k string) bool {

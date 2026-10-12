@@ -374,7 +374,7 @@ func (s *session) replayOutbox() {
 		return
 	}
 	for _, o := range list {
-		p := wire.Propose{Entity: o.Entity, Op: o.Op, ID: o.EntityID, BaseRevision: o.BaseRevision}
+		p := wire.Propose{Entity: o.Entity, Op: o.Op, ID: o.EntityID, BaseRevision: o.BaseRevision, ChangedAt: o.CreatedAt}
 		if o.Payload != "" {
 			p.Data = json.RawMessage(o.Payload)
 		}
@@ -422,9 +422,11 @@ func (s *session) replayOutbox() {
 		_ = json.Unmarshal(m.Data, &res)
 		switch {
 		case m.T == "conflict" || res.Conflict:
-			_ = c.d.HC.OutboxSetError(ctx, o.ID, "conflict", "server changed the same entity")
-			_ = c.d.HC.ConflictAdd(ctx, healthchecks.Conflict{Entity: o.Entity, EntityID: o.EntityID, LocalOp: o.Op, LocalPayload: o.Payload, ServerPayload: string(res.Server), ServerRevision: res.Revision})
-			c.log.Warn("sync conflict", "entity", o.Entity, "id", o.EntityID)
+			// der hub hat eine juengere Fassung (oder hat geloescht): die zuletzt gemachte Aenderung gewinnt,
+			// also die Server-Fassung uebernehmen und die lokale verwerfen
+			_ = c.d.HC.OutboxDelete(ctx, o.ID)
+			c.adoptServer(ctx, o.Entity, p.ID, res)
+			c.log.Info("sync: newer server version adopted", "entity", o.Entity, "id", o.EntityID)
 		case res.Error != "":
 			_ = c.d.HC.OutboxSetError(ctx, o.ID, "pending", res.Error)
 			c.log.Warn("server rejected change", "entity", o.Entity, "id", o.EntityID, "err", res.Error)

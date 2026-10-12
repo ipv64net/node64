@@ -176,6 +176,9 @@ type Propose struct {
 	ID           string          `json:"id"`
 	BaseRevision int64           `json:"base_revision"`
 	Data         json.RawMessage `json:"data,omitempty"`
+	// ChangedAt: wann die Aenderung an der Node gemacht wurde. Passt die Basis nicht (beide Seiten haben
+	// geaendert, z. B. waehrend einer Trennung), gewinnt die juengere Aenderung.
+	ChangedAt time.Time `json:"changed_at,omitempty"`
 }
 
 // ProposeResult ist die Antwort auf propose.

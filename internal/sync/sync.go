@@ -787,9 +787,22 @@ func (c *Live) localIDFor(ctx context.Context, entity, remoteID string) string {
 	return ""
 }
 
-// conflict haelt einen Konflikt fest. Ist die Server-Fassung inhaltlich gleich der lokalen
-// (z. B. die eigene, gerade bestaetigte Aenderung kommt als config zurueck), gibt es keinen
-// Konflikt: der Postausgang-Eintrag entfaellt, die Aenderung wird normal uebernommen (false).
+// adoptServer uebernimmt die Server-Fassung nach einem abgelehnten Vorschlag (leer = auf dem Server geloescht).
+func (c *Live) adoptServer(ctx context.Context, entity, remoteID string, res wire.ProposeResult) {
+	ch := wire.Change{Entity: entity, ID: remoteID, Op: "upsert", Revision: res.Revision, Data: res.Server}
+	if len(res.Server) == 0 || string(res.Server) == "null" {
+		ch.Op, ch.Data = "delete", nil
+	}
+	if remoteID == "" || remoteID == "0" {
+		return
+	}
+	c.applyChanges(ctx, []wire.Change{ch}, 0)
+}
+
+// conflict: eine Server-Aenderung trifft auf eine noch nicht gemeldete lokale Aenderung. Ist sie inhaltlich
+// gleich (z. B. die eigene, gerade bestaetigte Aenderung kommt als config zurueck), entfaellt der
+// Postausgang-Eintrag und die Aenderung wird uebernommen (false). Sonst bleibt die lokale Fassung vorerst
+// stehen (true) und geht mit ihrer Aenderungszeit an den hub: der entscheidet, welche juenger ist.
 func (c *Live) conflict(ctx context.Context, entity, localID string, ch wire.Change) bool {
 	list, _ := c.d.HC.OutboxPending(ctx)
 	if ch.Op == "upsert" {
@@ -808,15 +821,8 @@ func (c *Live) conflict(ctx context.Context, entity, localID string, ch wire.Cha
 			return false
 		}
 	}
-	local := ""
-	for _, o := range list {
-		if o.Entity == entity && o.EntityID == localID {
-			local = o.Payload
-			_ = c.d.HC.OutboxSetError(ctx, o.ID, "conflict", "server changed the same entity")
-		}
-	}
-	_ = c.d.HC.ConflictAdd(ctx, healthchecks.Conflict{Entity: entity, EntityID: localID, LocalOp: "upsert", LocalPayload: local, ServerPayload: string(ch.Data), ServerRevision: ch.Revision})
-	c.log.Warn("sync conflict", "entity", entity, "id", localID)
+	c.log.Info("sync: local change pending, hub decides by change time", "entity", entity, "id", localID)
+	c.poke()
 	return true
 }
 
