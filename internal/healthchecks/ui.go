@@ -932,6 +932,9 @@ func (m *Module) pageFormSubmit(w http.ResponseWriter, r *http.Request) {
 // loeschen und messen lassen; nur die Messstelle eines Docker-Checks bleibt bei der Container-Node.
 func (c *Check) Foreign() bool { return c.Owner == "other" }
 
+// DisplayTarget: Ziel fuer die Uebersicht (mit Port bei TCP/Port).
+func (c *Check) DisplayTarget() string { return checks.DisplayTarget(c.Definition()) }
+
 // Runnable: "Jetzt pruefen" geht bei allen Checks mit Node-Messstellen (hier oder ueber den hub).
 func (c *Check) Runnable() bool { return c.Type != checks.TypePush && c.Execution != "online" }
 

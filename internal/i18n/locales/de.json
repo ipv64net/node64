@@ -301,6 +301,7 @@
     "silent": "ohne Benachrichtigung",
     "events": "Ereignisse",
     "event": "Ereignis",
+    "target": "Ziel",
     "reasons": {
       "ok": "OK",
       "timeout": "Zeitüberschreitung",

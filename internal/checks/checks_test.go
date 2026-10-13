@@ -325,3 +325,23 @@ func TestICMP(t *testing.T) {
 		t.Fatalf("icmp localhost: %+v", res)
 	}
 }
+
+func TestDisplayTarget(t *testing.T) {
+	cases := []struct {
+		def  Definition
+		want string
+	}{
+		{Definition{Type: TypeTCP, Target: "192.168.10.30", Params: []byte(`{"port":22}`)}, "192.168.10.30:22"},
+		{Definition{Type: TypePort, Target: "2001:db8::1", Params: []byte(`{"port":443}`)}, "[2001:db8::1]:443"},
+		{Definition{Type: TypeTCP, Target: "example.com:25", Params: []byte(`{}`)}, "example.com:25"},
+		{Definition{Type: TypeCert, Target: "ipv64.net", Params: []byte(`{"port":443}`)}, "ipv64.net"},
+		{Definition{Type: TypeCert, Target: "mail.example.com", Params: []byte(`{"port":993}`)}, "mail.example.com:993"},
+		{Definition{Type: TypeHTTP, Target: "https://ipv64.net/", Params: []byte(`{}`)}, "https://ipv64.net/"},
+		{Definition{Type: TypeICMP, Target: "1.1.1.1"}, "1.1.1.1"},
+	}
+	for _, c := range cases {
+		if got := DisplayTarget(c.def); got != c.want {
+			t.Errorf("DisplayTarget(%s %q) = %q, want %q", c.def.Type, c.def.Target, got, c.want)
+		}
+	}
+}

@@ -68,6 +68,7 @@
 			<th style="width:1%" class="d-none d-md-table-cell"><input type="checkbox" class="form-check-input" id="hc-select-all" data-select-all aria-label="all"></th>
 			<th><a href="?sort=state&dir={{if and (eq $d.Sort "state") (ne $d.Dir "desc")}}desc{{else}}asc{{end}}{{$qs}}">{{.T "common.status"}}</a></th>
 			<th><a href="?sort=name&dir={{if and (or (eq $d.Sort "name") (eq $d.Sort "")) (ne $d.Dir "desc")}}desc{{else}}asc{{end}}{{$qs}}">{{.T "common.name"}}</a></th>
+			<th class="d-none d-md-table-cell">{{.T "hc.target"}}</th>
 			<th class="d-none d-md-table-cell"><a href="?sort=type&dir={{if and (eq $d.Sort "type") (ne $d.Dir "desc")}}desc{{else}}asc{{end}}{{$qs}}">{{.T "common.type"}}</a></th>
 			<th class="text-end d-none d-md-table-cell"><a href="?sort=latency&dir={{if and (eq $d.Sort "latency") (ne $d.Dir "desc")}}desc{{else}}asc{{end}}{{$qs}}">{{.T "hc.latency"}}</a></th>
 			<th>{{.T "hc.recent"}}</th>
@@ -77,7 +78,7 @@
 	</thead>
 	<tbody>
 	{{range $g := $d.Groups}}
-	{{if $d.Grouped}}<tr class="hc-group-row" data-group="{{$g.Key}}"><td colspan="9"><button type="button" class="btn btn-link p-0 text-reset text-decoration-none hc-group-toggle" data-group="{{$g.Key}}"><i class="bi bi-chevron-down hc-group-chev"></i> <i class="bi bi-collection text-primary"></i> <strong>{{$g.Name}}</strong></button>
+	{{if $d.Grouped}}<tr class="hc-group-row" data-group="{{$g.Key}}"><td colspan="10"><button type="button" class="btn btn-link p-0 text-reset text-decoration-none hc-group-toggle" data-group="{{$g.Key}}"><i class="bi bi-chevron-down hc-group-chev"></i> <i class="bi bi-collection text-primary"></i> <strong>{{$g.Name}}</strong></button>
 		<span class="ms-2 small">{{if $g.Up}}<span class="badge text-bg-success">{{$g.Up}}</span> {{end}}{{if $g.Down}}<span class="badge text-bg-danger">{{$g.Down}}</span> {{end}}{{if $g.Others}}<span class="badge text-bg-secondary">{{$g.Others}}</span>{{end}}</span></td></tr>{{end}}
 	{{range $g.Rows}}
 	{{$c := .Check}}
@@ -94,9 +95,10 @@
 			{{else if eq $c.Owner "other"}}<span class="badge text-bg-light hc-exec" title="{{$.T "hc.owner.other_hint"}}"><i class="bi bi-hdd-network"></i> {{$.T "hc.owner.other"}}</span>
 			{{else}}<span class="badge text-bg-light hc-exec" title="{{$.T "hc.execution_hint"}}"><i class="bi bi-house"></i> {{$.T (print "hc.execution." $c.Execution)}}</span>{{end}}
 			{{range $c.Tags}}<span class="badge rounded-pill text-bg-secondary">{{.}}</span> {{end}}
-			<div class="small text-body-secondary hc-target" title="{{$c.Target}}">{{if $c.Target}}{{$c.Target}}{{else}}{{$.T "hc.type.push"}}{{end}}</div>
+			<div class="small text-body-secondary hc-target d-md-none" title="{{$c.DisplayTarget}}">{{if $c.Target}}{{$c.DisplayTarget}}{{else}}{{$.T "hc.type.push"}}{{end}}</div>
 			{{if ge .CertDays 0}}<span class="badge text-bg-{{.CertClass}} bg-opacity-75 hc-cert" title="{{$.T "hc.cert_until"}} {{$.Date .CertTill}}"><i class="bi bi-shield-lock"></i> {{$.T "hc.cert_days" "days" .CertDays}}</span>{{end}}
 		</td>
+		<td data-label="{{$.T "hc.target"}}" class="d-none d-md-table-cell hc-c-target">{{if $c.Target}}<span class="hc-target font-monospace small" title="{{$c.DisplayTarget}}">{{$c.DisplayTarget}}</span>{{else}}<span class="small text-body-secondary">{{$.T "hc.type.push"}}</span>{{end}}</td>
 		<td data-label="{{$.T "common.type"}}" class="d-none d-md-table-cell"><span class="badge text-bg-light">{{$.T (print "hc.type." $c.Type)}}</span></td>
 		<td data-label="{{$.T "hc.latency"}}" class="text-end text-nowrap d-none d-md-table-cell">{{if gt .Latency 0.0}}{{ms .Latency}} ms{{else}}–{{end}}</td>
 		<td data-label="{{$.T "hc.recent"}}" class="hc-beats"><div class="beats">{{range .Pills}}<span class="beat beat-{{.Class}}" data-bs-toggle="tooltip" data-tip-label="{{.Label}}" data-tip-when="{{.When}}" data-tip-ms="{{.Latency}}" data-tip-msg="{{.Message}}"></span>{{end}}</div></td>

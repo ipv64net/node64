@@ -461,6 +461,34 @@ func decode(raw json.RawMessage, v any) error {
 }
 
 // portOf nimmt den Port aus den Parametern, sonst aus host:port im Ziel.
+// DisplayTarget ist das Ziel fuer Listen: bei TCP/Port mit Port, beim Zertifikat mit abweichendem Port.
+func DisplayTarget(def Definition) string {
+	t := strings.TrimSpace(def.Target)
+	if t == "" {
+		return ""
+	}
+	if _, _, err := net.SplitHostPort(t); err == nil {
+		return t // Port steht schon im Ziel
+	}
+	port := 0
+	switch def.Type {
+	case TypeTCP, TypePort:
+		var p TCPParams
+		_ = decode(def.Params, &p)
+		port = p.Port
+	case TypeCert:
+		var p CertParams
+		_ = decode(def.Params, &p)
+		if p.Port != 443 {
+			port = p.Port
+		}
+	}
+	if port <= 0 {
+		return t
+	}
+	return net.JoinHostPort(strings.Trim(t, "[]"), strconv.Itoa(port))
+}
+
 func portOf(def Definition, p int) (int, error) {
 	if p == 0 {
 		if _, ps, err := net.SplitHostPort(strings.TrimSpace(def.Target)); err == nil {
