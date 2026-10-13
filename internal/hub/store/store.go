@@ -55,8 +55,10 @@ func Open(dsn, location, node string, log *slog.Logger) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(20)
-	db.SetMaxIdleConns(5)
+	// Verbindungen offen halten: ein kleiner Leerlauf-Vorrat fuehrte unter Last zu tausenden
+	// Verbindungsaufbauten pro Minute (Anmeldung am DB-Server, TIME_WAIT-Ports)
+	db.SetMaxOpenConns(40)
+	db.SetMaxIdleConns(40)
 	db.SetConnMaxLifetime(30 * time.Minute)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

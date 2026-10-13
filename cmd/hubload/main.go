@@ -1,11 +1,12 @@
 // hubload: Lasttest fuer den ipv64-hub (Rolle gateway). Simuliert viele Nodes.
 //
-//	hubload gen -n 10000 -o lt        -> lt.tokens (node_id token) und lt.sql (Nodes + Tokens anlegen)
-//	hubload run -url https://hc-srv01.ipv64.net -tokens lt.tokens -rate 200 -interval 30s -duration 10m
+//	hubload gen -n 10000 -checks 10 -prefill 3h -o lt -> lt.tokens, lt.sql (Nodes, Tokens, Checks), lt.csv (Messpunkte)
+//	hubload run -url https://hc-srv01.ipv64.net -tokens lt.tokens -rate 200 -interval 60s -duration 10m
 //
-// Jede simulierte Node verbindet sich per WebSocket, wartet auf hello+config und schickt
-// im Intervall einen Messpunkt (wie eine echte Node). Ausgegeben werden alle 10 s
-// verbundene Nodes, Fehler und die Ack-Latenz (p50/p99).
+// Jede simulierte Node verbindet sich per WebSocket, wartet auf hello+config und verhaelt sich wie
+// eine echte Node: jeder Check misst im Intervall, Zustaende gehen alle 2 s ("states"), Messpunkte
+// gesammelt alle 30 s ("measurements"). Mit -fail stoeren einzelne Checks zeitweise (Stoerungslogik).
+// Ausgegeben werden alle 10 s verbundene Nodes, Fehler und die Ack-Latenz (p50/p99).
 package main
 
 import (
@@ -64,7 +65,18 @@ func gen(args []string) {
 	fs := flag.NewFlagSet("gen", flag.ExitOnError)
 	n := fs.Int("n", 1000, "Anzahl Nodes")
 	out := fs.String("o", "lt", "Dateipraefix")
+	nChecks := fs.Int("checks", 0, "Checks je Node (0 = keine, wie bisher)")
+	prefill := fs.Duration("prefill", 0, "Messpunkte rueckwirkend erzeugen (CSV fuer LOAD DATA)")
+	every := fs.Duration("interval", time.Minute, "Messabstand fuer die Vorbefuellung")
 	_ = fs.Parse(args)
+	var csv *bufio.Writer
+	if *prefill > 0 && *nChecks > 0 {
+		cf, err := os.Create(*out + ".csv")
+		must(err)
+		defer cf.Close()
+		csv = bufio.NewWriterSize(cf, 1<<20)
+		defer csv.Flush()
+	}
 	tf, err := os.Create(*out + ".tokens")
 	must(err)
 	sf, err := os.Create(*out + ".sql")
@@ -73,19 +85,36 @@ func gen(args []string) {
 	defer sf.Close()
 	now := time.Now().UTC().Format("2006-01-02 15:04:05.000")
 	fmt.Fprintln(sf, "-- hubload: Testnodes; entfernen mit: DELETE FROM hc2_node_tokens WHERE node_id LIKE 'lt%'; DELETE FROM hc2_nodes WHERE node_id LIKE 'lt%';")
-	var nodes, toks []string
+	var nodes, toks, chks []string
 	flush := func() {
 		if len(nodes) > 0 {
 			fmt.Fprintf(sf, "INSERT INTO hc2_nodes (userid, node_id, name, location, remote_mgmt, created_at) VALUES %s;\n", strings.Join(nodes, ","))
 			fmt.Fprintf(sf, "INSERT INTO hc2_node_tokens (node_id, token_hash, created_at) VALUES %s;\n", strings.Join(toks, ","))
 		}
-		nodes, toks = nodes[:0], toks[:0]
+		if len(chks) > 0 {
+			fmt.Fprintf(sf, "INSERT INTO hc2_checks (token, userid, node_id, nodes, execution, type, name, target, params, interval_sec, created_at, updated_at) VALUES %s;\n", strings.Join(chks, ","))
+		}
+		nodes, toks, chks = nodes[:0], toks[:0], chks[:0]
 	}
+	start := time.Now().UTC().Add(-*prefill)
 	for i := 0; i < *n; i++ {
 		id := "lt" + randStr(30)
 		tok := "node64t_" + randStr(40)
 		h := sha256.Sum256([]byte(tok))
-		fmt.Fprintf(tf, "%s %s\n", id, tok)
+		var tokens []string
+		for k := 0; k < *nChecks; k++ {
+			ct := "lt" + randStr(30)
+			tokens = append(tokens, ct)
+			chks = append(chks, fmt.Sprintf("('%s',%d,'%s','%s','local','http','loadtest %d','https://example.invalid/','{}',60,'%s','%s')", ct, 900000000+i, id, id, k, now, now))
+			if csv != nil {
+				// Messpunkte wie von der Node (node_seq laufend je Node)
+				for t, seq := start, int64(k+1); t.Before(time.Now().UTC()); t, seq = t.Add(*every), seq+int64(*nChecks) {
+					ts := t.Add(time.Duration(k) * time.Second).Format("2006-01-02 15:04:05.000")
+					fmt.Fprintf(csv, "%s\tnode:%s\t%d\t%s\t1\t%.1f\tok\t200 OK\tipv4\t\\N\t0\t%s\n", ct, id, seq, ts, 5+mrand.Float64()*40, ts)
+				}
+			}
+		}
+		fmt.Fprintf(tf, "%s %s %s\n", id, tok, strings.Join(tokens, ","))
 		nodes = append(nodes, fmt.Sprintf("(%d,'%s','loadtest','lasttest','read','%s')", 900000000+i, id, now))
 		toks = append(toks, fmt.Sprintf("('%s','%s','%s')", id, hex.EncodeToString(h[:]), now))
 		if len(nodes) == 500 {
@@ -93,7 +122,7 @@ func gen(args []string) {
 		}
 	}
 	flush()
-	fmt.Printf("%d Nodes: %s.tokens, %s.sql\n", *n, *out, *out)
+	fmt.Printf("%d Nodes mit je %d Checks: %s.tokens, %s.sql (Vorbefuellung %v)\n", *n, *nChecks, *out, *out, *prefill)
 }
 
 type stats struct {
@@ -136,19 +165,28 @@ func run(args []string) {
 	tokFile := fs.String("tokens", "lt.tokens", "Token-Datei aus gen")
 	n := fs.Int("n", 0, "Anzahl (0 = alle aus der Datei)")
 	rate := fs.Int("rate", 100, "neue Verbindungen pro Sekunde")
-	interval := fs.Duration("interval", 30*time.Second, "Abstand der Messpunkte je Node")
+	interval := fs.Duration("interval", time.Minute, "Messintervall je Check")
+	fail := fs.Float64("fail", 0.001, "Anteil der Messungen, mit denen ein Check fuer 3 Messungen stoert")
 	duration := fs.Duration("duration", 10*time.Minute, "Laufzeit nach dem Hochfahren")
 	_ = fs.Parse(args)
 
 	f, err := os.Open(*tokFile)
 	must(err)
-	type node struct{ id, tok string }
+	type node struct {
+		id, tok string
+		checks  []string
+	}
 	var list []node
 	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 1<<20), 1<<20)
 	for sc.Scan() {
 		p := strings.Fields(sc.Text())
-		if len(p) == 2 {
-			list = append(list, node{p[0], p[1]})
+		if len(p) >= 2 {
+			nd := node{id: p[0], tok: p[1]}
+			if len(p) == 3 {
+				nd.checks = strings.Split(p[2], ",")
+			}
+			list = append(list, nd)
 		}
 	}
 	f.Close()
@@ -197,7 +235,7 @@ func run(args []string) {
 			}
 			ws.SetReadLimit(1 << 20)
 			st.connected.Add(1)
-			session(ctx, ws, st, *interval)
+			session(ctx, ws, st, *interval, nd.checks, *fail)
 			st.connected.Add(-1)
 			if ctx.Err() == nil {
 				st.dropped.Add(1)
@@ -229,8 +267,8 @@ func run(args []string) {
 	fmt.Println("Ende")
 }
 
-// session: hello/config abwarten, dann im Intervall Messpunkte schicken und Acks messen.
-func session(ctx context.Context, ws *websocket.Conn, st *stats, interval time.Duration) {
+// session: hello/config abwarten, dann wie eine echte Node messen, Zustaende und Messpunkte schicken.
+func session(ctx context.Context, ws *websocket.Conn, st *stats, interval time.Duration, checks []string, fail float64) {
 	sctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer ws.Close(websocket.StatusNormalClosure, "")
@@ -289,33 +327,67 @@ func session(ctx context.Context, ws *websocket.Conn, st *stats, interval time.D
 		return
 	case <-ready:
 	}
-	// erster Messpunkt zufaellig verteilt, damit nicht alle gleichzeitig senden
-	jit := time.NewTimer(time.Duration(mrand.Int64N(int64(interval))))
-	defer jit.Stop()
-	select {
-	case <-sctx.Done():
-		return
-	case <-jit.C:
+	if len(checks) == 0 {
+		checks = []string{"lt" + randStr(30)} // altes Verhalten: ein Messpunkt ohne Check
 	}
-	t := time.NewTicker(interval)
-	defer t.Stop()
-	var id, seq int64
-	tok := "lt" + randStr(30)
-	for {
+	var id int64
+	request := func(t string, data any) error {
 		id++
-		seq++
-		batch := []map[string]any{{"seq": seq, "token": tok, "time": time.Now().UTC(), "status": "up", "latency_ms": 12.5, "reason": "ok", "message": "loadtest", "family": "ipv4"}}
-		d, _ := json.Marshal(map[string]any{"batch": batch})
+		d, _ := json.Marshal(data)
 		mu.Lock()
 		waiting[id] = time.Now()
 		mu.Unlock()
-		if err := send(sctx, ws, msg{T: "measurements", ID: id, Data: d}); err != nil {
-			return
-		}
+		return send(sctx, ws, msg{T: t, ID: id, Data: d})
+	}
+	// je Check: naechste Messung (gleichmaessig verteilt) und wie viele Messungen er noch stoert
+	due := make([]time.Time, len(checks))
+	bad := make([]int, len(checks))
+	for i := range due {
+		due[i] = time.Now().Add(time.Duration(mrand.Int64N(int64(interval))))
+	}
+	seq := int64(1_000_000_000) + time.Now().Unix()%1_000_000*100
+	var pending []map[string]any
+	stTick := time.NewTicker(2 * time.Second) // wie die Node: Zustaende alle 2 s
+	defer stTick.Stop()
+	upTick := time.NewTicker(30 * time.Second) // Messpunkte gesammelt alle 30 s
+	defer upTick.Stop()
+	for {
 		select {
 		case <-sctx.Done():
 			return
-		case <-t.C:
+		case <-upTick.C:
+			for len(pending) > 0 {
+				n := min(len(pending), 500)
+				if err := request("measurements", map[string]any{"batch": pending[:n]}); err != nil {
+					return
+				}
+				pending = pending[n:]
+			}
+		case now := <-stTick.C:
+			var states []map[string]any
+			for i, tok := range checks {
+				if now.Before(due[i]) {
+					continue
+				}
+				due[i] = due[i].Add(interval)
+				if bad[i] == 0 && mrand.Float64() < fail {
+					bad[i] = 3
+				}
+				status, state, reason := "up", "up", "ok"
+				if bad[i] > 0 {
+					bad[i]--
+					status, state, reason = "down", "down", "timeout"
+				}
+				seq++
+				pending = append(pending, map[string]any{"seq": seq, "token": tok, "time": now.UTC(), "status": status, "latency_ms": 5 + mrand.Float64()*40, "reason": reason, "message": "loadtest", "family": "ipv4"})
+				states = append(states, map[string]any{"token": tok, "state": state, "last_status": status, "latency_ms": 12.5, "reason": reason, "message": "loadtest",
+					"since": now.UTC(), "last_check_at": now.UTC(), "next_check_at": due[i].UTC()})
+			}
+			if len(states) > 0 {
+				if err := request("states", map[string]any{"items": states}); err != nil {
+					return
+				}
+			}
 		}
 	}
 }

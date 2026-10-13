@@ -2,57 +2,103 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
 )
+
+// Die Verdichtungen lesen mit einer normalen (sperrfreien) Abfrage und schreiben das Ergebnis in Paketen.
+// Ein INSERT ... SELECT setzt in MariaDB Lesesperren auf alle gelesenen Messpunkte; im Lasttest
+// (100.000 Checks) blockierte das die Annahme neuer Messpunkte fuer ueber eine Minute.
+
+const hourlySelect = `SELECT token, source, DATE_FORMAT(time, '%Y-%m-%d %H:00:00'), COUNT(*), SUM(status = 1), MIN(NULLIF(latency_ms, 0)), AVG(NULLIF(latency_ms, 0)), MAX(latency_ms)
+	FROM hc2_measurements WHERE `
 
 // AggregateHourly verdichtet die Messpunkte dieser Messstelle der letzten
 // Stunden (laufende und zwei davor) in hc2_hourly. Idempotent.
 func (s *Store) AggregateHourly(ctx context.Context, now time.Time) error {
 	from := now.UTC().Truncate(time.Hour).Add(-2 * time.Hour)
 	to := now.UTC().Truncate(time.Hour).Add(time.Hour)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO hc2_hourly (token, source, hour, count, up_count, min_ms, avg_ms, max_ms)
-		SELECT token, source, DATE_FORMAT(time, '%Y-%m-%d %H:00:00'), COUNT(*), SUM(status = 1), MIN(NULLIF(latency_ms, 0)), AVG(NULLIF(latency_ms, 0)), MAX(latency_ms)
-		FROM hc2_measurements WHERE source = ? AND time >= ? AND time < ? GROUP BY token, source, DATE_FORMAT(time, '%Y-%m-%d %H:00:00')
-		ON DUPLICATE KEY UPDATE count = VALUES(count), up_count = VALUES(up_count), min_ms = VALUES(min_ms), avg_ms = VALUES(avg_ms), max_ms = VALUES(max_ms)`,
+	return s.aggregate(ctx, "hc2_hourly", "hour", hourlySelect+`source = ? AND time >= ? AND time < ? GROUP BY token, source, DATE_FORMAT(time, '%Y-%m-%d %H:00:00')`,
 		s.source, from.Format(TimeFormat), to.Format(TimeFormat))
-	if err != nil {
-		s.Metrics.add(&s.Metrics.DBErrors, 1)
-	}
-	return err
 }
 
-// AggregateHourlyShared verdichtet Messstellen ohne festen Standort (Nodes, Push) der laufenden
-// und der vorigen Stunde. Nur der Housekeeper ruft es (sonst doppelte Arbeit).
+// AggregateHourlyShared verdichtet die Messpunkte der Nodes und Pushes (gemeinsam fuer alle hubs).
+// Laufende Stunde; die vorige nur in den ersten 10 Minuten (spaet eintreffende Messpunkte). Rechnet
+// gerade ein anderer hub, wird uebersprungen (Datenbank-Sperre statt doppelter Arbeit).
 func (s *Store) AggregateHourlyShared(ctx context.Context, now time.Time) error {
-	from := now.UTC().Truncate(time.Hour).Add(-time.Hour)
-	to := now.UTC().Truncate(time.Hour).Add(time.Hour)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO hc2_hourly (token, source, hour, count, up_count, min_ms, avg_ms, max_ms)
-		SELECT token, source, DATE_FORMAT(time, '%Y-%m-%d %H:00:00'), COUNT(*), SUM(status = 1), MIN(NULLIF(latency_ms, 0)), AVG(NULLIF(latency_ms, 0)), MAX(latency_ms)
-		FROM hc2_measurements WHERE time >= ? AND time < ? AND (source LIKE 'node:%' OR source = 'push') GROUP BY token, source, DATE_FORMAT(time, '%Y-%m-%d %H:00:00')
-		ON DUPLICATE KEY UPDATE count = VALUES(count), up_count = VALUES(up_count), min_ms = VALUES(min_ms), avg_ms = VALUES(avg_ms), max_ms = VALUES(max_ms)`,
-		from.Format(TimeFormat), to.Format(TimeFormat))
+	conn, err := s.db.Conn(ctx)
 	if err != nil {
-		s.Metrics.add(&s.Metrics.DBErrors, 1)
+		return err
 	}
-	return err
+	defer conn.Close()
+	var got sql.NullInt64
+	if err := conn.QueryRowContext(ctx, `SELECT GET_LOCK('hc2_aggregate_shared', 0)`).Scan(&got); err != nil {
+		return err
+	}
+	if got.Int64 != 1 {
+		return nil // ein anderer hub verdichtet gerade
+	}
+	defer conn.ExecContext(context.Background(), `SELECT RELEASE_LOCK('hc2_aggregate_shared')`) //nolint:errcheck
+	from := now.UTC().Truncate(time.Hour)
+	if now.UTC().Minute() < 10 {
+		from = from.Add(-time.Hour)
+	}
+	to := now.UTC().Truncate(time.Hour).Add(time.Hour)
+	return s.aggregate(ctx, "hc2_hourly", "hour", hourlySelect+`time >= ? AND time < ? AND (source LIKE 'node:%' OR source = 'push') GROUP BY token, source, DATE_FORMAT(time, '%Y-%m-%d %H:00:00')`,
+		from.Format(TimeFormat), to.Format(TimeFormat))
 }
 
-// AggregateDaily rechnet Tageswerte fuer alle Messstellen aus hc2_hourly
-// (gestern und heute). Idempotent; nur der Housekeeper ruft es.
+// AggregateDaily verdichtet hc2_hourly des Vortags und des laufenden Tags in hc2_daily.
 func (s *Store) AggregateDaily(ctx context.Context, now time.Time) error {
 	day := now.UTC().Truncate(24 * time.Hour)
 	from := day.AddDate(0, 0, -1)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO hc2_daily (token, source, day, count, up_count, min_ms, avg_ms, max_ms)
-		SELECT token, source, DATE(hour), SUM(count), SUM(up_count), MIN(min_ms), SUM(avg_ms * count) / NULLIF(SUM(count), 0), MAX(max_ms)
-		FROM hc2_hourly WHERE hour >= ? GROUP BY token, source, DATE(hour)
-		ON DUPLICATE KEY UPDATE count = VALUES(count), up_count = VALUES(up_count), min_ms = VALUES(min_ms), avg_ms = VALUES(avg_ms), max_ms = VALUES(max_ms)`,
-		from.Format("2006-01-02 15:04:05"))
+	return s.aggregate(ctx, "hc2_daily", "day", `SELECT token, source, DATE(hour), SUM(count), SUM(up_count), MIN(min_ms), SUM(avg_ms * count) / NULLIF(SUM(count), 0), MAX(max_ms)
+		FROM hc2_hourly WHERE hour >= ? GROUP BY token, source, DATE(hour)`, from.Format("2006-01-02 15:04:05"))
+}
+
+// aggregate liest die Verdichtung sperrfrei und schreibt sie in Paketen zu 500 Zeilen (Upsert).
+func (s *Store) aggregate(ctx context.Context, table, col, query string, args ...any) error {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		s.Metrics.add(&s.Metrics.DBErrors, 1)
+		return err
 	}
-	return err
+	defer rows.Close()
+	var vals []string
+	var batch []any
+	flush := func() error {
+		if len(vals) == 0 {
+			return nil
+		}
+		_, err := s.db.ExecContext(ctx, `INSERT INTO `+table+` (token, source, `+col+`, count, up_count, min_ms, avg_ms, max_ms) VALUES `+strings.Join(vals, ",")+`
+			ON DUPLICATE KEY UPDATE count = VALUES(count), up_count = VALUES(up_count), min_ms = VALUES(min_ms), avg_ms = VALUES(avg_ms), max_ms = VALUES(max_ms)`, batch...)
+		vals, batch = vals[:0], batch[:0]
+		if err != nil {
+			s.Metrics.add(&s.Metrics.DBErrors, 1)
+		}
+		return err
+	}
+	for rows.Next() {
+		var token, source, bucket string
+		var count, up int64
+		var minMS, avgMS, maxMS sql.NullFloat64
+		if err := rows.Scan(&token, &source, &bucket, &count, &up, &minMS, &avgMS, &maxMS); err != nil {
+			return err
+		}
+		vals = append(vals, "(?,?,?,?,?,?,?,?)")
+		batch = append(batch, token, source, bucket, count, up, minMS, avgMS, maxMS)
+		if len(vals) == 500 {
+			if err := flush(); err != nil {
+				return err
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return flush()
 }
 
 // RotatePartitions legt Tagespartitionen fuer heute bis uebermorgen an und

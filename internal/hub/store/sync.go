@@ -928,25 +928,83 @@ func (s *Store) IngestMeasurements(ctx context.Context, n *Node, batch []wire.Me
 
 // IngestStates uebernimmt Zustaende der Messstelle node:<id> und bewertet den Gesamtzustand neu.
 func (s *Store) IngestStates(ctx context.Context, n *Node, items []wire.State) error {
+	if len(items) == 0 {
+		return nil
+	}
 	source := "node:" + n.ID
+	// eine Abfrage fuer alle: Besitzer, Gesamtzustand und bisheriger Zustand dieser Messstelle
+	type prev struct {
+		overall, nodes, owner, execution string
+		state, last                      sql.NullString
+		paused                           int
+	}
+	tokens := make([]any, 0, len(items)+1)
+	tokens = append(tokens, source)
+	ph := make([]string, 0, len(items))
 	for _, it := range items {
-		var owner int64
-		if err := s.db.QueryRowContext(ctx, `SELECT userid FROM hc2_checks WHERE token = ? AND deleted_at IS NULL`, it.Token).Scan(&owner); err != nil || owner != n.UserID {
-			continue
-		}
-		_, err := s.db.ExecContext(ctx, `INSERT INTO hc2_check_states (token, source, state, since, last_check_at, next_check_at, last_status, last_latency_ms, last_reason, last_message, consecutive_fail, consecutive_ok, down_since, updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-			ON DUPLICATE KEY UPDATE state=VALUES(state), since=VALUES(since), last_check_at=VALUES(last_check_at), next_check_at=VALUES(next_check_at), last_status=VALUES(last_status),
-				last_latency_ms=VALUES(last_latency_ms), last_reason=VALUES(last_reason), last_message=VALUES(last_message), consecutive_fail=VALUES(consecutive_fail), consecutive_ok=VALUES(consecutive_ok),
-				down_since=VALUES(down_since), updated_at=VALUES(updated_at)`,
-			it.Token, source, orDefault(it.State, "pending"), ft(it.Since), ft(it.LastCheckAt), ft(it.NextCheckAt), nullStr(it.LastStatus), it.LatencyMS, nullStr(truncate(it.Reason, 64)), truncate(it.Message, 500),
-			it.ConsecutiveFail, it.ConsecutiveOK, ft(it.DownSince), nowStr())
-		if err != nil {
-			s.Metrics.add(&s.Metrics.DBErrors, 1)
+		tokens = append(tokens, it.Token)
+		ph = append(ph, "?")
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT c.token, c.userid, c.state, c.nodes, COALESCE(c.node_id, ''), c.execution, c.paused, st.state, st.last_status
+		FROM hc2_checks c LEFT JOIN hc2_check_states st ON st.token = c.token AND st.source = ?
+		WHERE c.token IN (`+strings.Join(ph, ",")+`) AND c.deleted_at IS NULL`, tokens...)
+	if err != nil {
+		s.Metrics.add(&s.Metrics.DBErrors, 1)
+		return err
+	}
+	known := map[string]prev{}
+	for rows.Next() {
+		var tok string
+		var uid int64
+		var p prev
+		if err := rows.Scan(&tok, &uid, &p.overall, &p.nodes, &p.owner, &p.execution, &p.paused, &p.state, &p.last); err != nil {
+			rows.Close()
 			return err
 		}
-		if err := s.Reverdict(ctx, it.Token); err != nil {
-			s.log.Error("verdict after node state failed", "token", it.Token, "err", err)
+		if uid == n.UserID {
+			known[tok] = p
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	// alle Zustaende mit einem Befehl schreiben (ein Abschluss statt einer je Check)
+	var vals []string
+	var args []any
+	var changed []string
+	for _, it := range items {
+		p, ok := known[it.Token]
+		if !ok {
+			continue
+		}
+		vals = append(vals, "(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+		state := orDefault(it.State, "pending")
+		args = append(args, it.Token, source, state, ft(it.Since), ft(it.LastCheckAt), ft(it.NextCheckAt), nullStr(it.LastStatus), it.LatencyMS, nullStr(truncate(it.Reason, 64)), truncate(it.Message, 500),
+			it.ConsecutiveFail, it.ConsecutiveOK, ft(it.DownSince), nowStr())
+		// Neubewertung nur, wenn sich an dieser Messstelle etwas geaendert hat oder der Gesamtzustand
+		// nicht dazu passt (neuer Check, einzige Messstelle mit anderem Zustand); sonst bleibt alles, wie es ist
+		single := p.execution == "local" && len(measuringNodes(splitList(p.nodes), p.owner)) <= 1
+		if !p.state.Valid || p.state.String != state || p.last.String != it.LastStatus || p.overall == "pending" ||
+			(single && p.paused == 0 && p.overall != state) {
+			changed = append(changed, it.Token)
+		}
+	}
+	if len(vals) == 0 {
+		return nil
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO hc2_check_states (token, source, state, since, last_check_at, next_check_at, last_status, last_latency_ms, last_reason, last_message, consecutive_fail, consecutive_ok, down_since, updated_at)
+		VALUES `+strings.Join(vals, ",")+`
+		ON DUPLICATE KEY UPDATE state=VALUES(state), since=VALUES(since), last_check_at=VALUES(last_check_at), next_check_at=VALUES(next_check_at), last_status=VALUES(last_status),
+			last_latency_ms=VALUES(last_latency_ms), last_reason=VALUES(last_reason), last_message=VALUES(last_message), consecutive_fail=VALUES(consecutive_fail), consecutive_ok=VALUES(consecutive_ok),
+			down_since=VALUES(down_since), updated_at=VALUES(updated_at)`, args...)
+	if err != nil {
+		s.Metrics.add(&s.Metrics.DBErrors, 1)
+		return err
+	}
+	for _, tok := range changed {
+		if err := s.Reverdict(ctx, tok); err != nil {
+			s.log.Error("verdict after node state failed", "token", tok, "err", err)
 		}
 	}
 	return nil
