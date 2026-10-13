@@ -884,10 +884,11 @@ func (s *Store) IngestMeasurements(ctx context.Context, n *Node, batch []wire.Me
 	source := "node:" + n.ID
 	now := time.Now().UTC()
 	job := ingestJob{nodeID: n.ID, done: make(chan error, 1)}
+	var earliest time.Time
 	for _, m := range batch {
 		if m.Time.After(now.Add(5 * time.Minute)) {
 			ack.Rejected = append(ack.Rejected, m.Seq)
-		} else if m.Time.Before(now.AddDate(0, 0, -8)) {
+		} else if m.Time.Before(now.AddDate(0, 0, -RawKeepDays)) {
 			// aelter als die Rohdaten-Partitionen: nicht speichern, aber bestaetigen
 		} else {
 			var details any
@@ -895,6 +896,9 @@ func (s *Store) IngestMeasurements(ctx context.Context, n *Node, batch []wire.Me
 				if b, err := json.Marshal(m.Details); err == nil {
 					details = string(b)
 				}
+			}
+			if earliest.IsZero() || m.Time.Before(earliest) {
+				earliest = m.Time.UTC()
 			}
 			job.rows = append(job.rows, []any{m.Token, source, m.Seq, m.Time.UTC().Format(TimeFormat), b2i(m.Status == "up"), m.LatencyMS, truncate(m.Reason, 64), truncate(m.Message, 500), truncate(m.Family, 4), details, m.Flags, nowStr()})
 		}
@@ -923,6 +927,9 @@ func (s *Store) IngestMeasurements(ctx context.Context, n *Node, batch []wire.Me
 		return nil, ctx.Err()
 	}
 	n.LastAckSeq = ack.AckSeq
+	if hour := now.Truncate(time.Hour); !earliest.IsZero() && earliest.Before(hour) {
+		go s.aggregateLate(source, earliest, now)
+	}
 	return ack, nil
 }
 

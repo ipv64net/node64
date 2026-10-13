@@ -255,7 +255,7 @@ Im Node64-Repo (eigener Phasenplan dort, Phase 6): `internal/sync` echter Client
 2. Selbstüberwachung: hub meldet eigene Probleme (DB nicht erreichbar, Redis weg, Slot-Verlust, Zertifikat < 14 Tage, Disk) über `ipv64_mail`/SMS an Dennis (Kanal `hc2_channels` mit `userid = 0`), Entprellung 5 min. Zusätzlich ein **externer** Healthcheck im alten System oder bei einem Drittanbieter auf `https://nodes.ipv64.net/v1/health` (v4 und v6).
 3. Logs: journald mit `SystemMaxUse=1G`; Log-Level zur Laufzeit per `SIGHUP`/Admin-Endpunkt (`/v1/admin/loglevel`, nur localhost).
 4. Updates: `hub-deploy.sh` mit Drain (`bye` an Nodes, 10 s), Rollback mit `hub.prev`; Datenbank-Migrationen des hub versioniert (`hc2_schema_version`), vorwärts-kompatibel (Spalten hinzufügen, nie umbenennen), Migration vor dem Binary-Wechsel.
-5. Backups: MySQL ist Sache des Web-Servers (bestehender Prozess; `hc2_measurements` darf aus dem Backup ausgenommen werden – 7 Tage Rohdaten sind verzichtbar, Aggregate nicht). hub-Server: `/etc/ipv64-hub`, `secret.key`, nginx.
+5. Backups: MySQL ist Sache des Web-Servers (bestehender Prozess; `hc2_measurements` darf aus dem Backup ausgenommen werden – 2 Tage Rohdaten sind verzichtbar, Aggregate nicht). hub-Server: `/etc/ipv64-hub`, `secret.key`, nginx.
 6. Runbook (`docs/RUNBOOK-HUB.md`): Start/Stop, Logs lesen, häufige Fehler (DB-Verbindung, Zertifikat, Redis), Agent-Token widerrufen, Account auf alt zurückstellen, Slots prüfen, Lasttest wiederholen.
 7. **Dritter Standort** (wenn gewünscht): Server wie S0 (ohne Redis), `config.yaml` mit `redis.addr` von nbg über das private Netz, `location` neu (z. B. `hel`), Zeile in `hc2_locations`, DNS ergänzen; Portal zeigt den Standort automatisch zur Auswahl. Redis-Ausfallsicherheit: Ausfall von nbg = Polling-Fallback auf fsn (2 s), kein Stillstand; bei Bedarf später Redis auf beiden mit Replikation/Sentinel.
 7a. **Standort-Ausfall**: fällt nbg oder fsn komplett aus, verbinden sich die Nodes mit dem anderen (Endpunktliste aus `hello`), Online-Checks laufen mit einem Standort weiter, Gesamtzustände rechnen ohne die fehlende Messstelle, Alarm `location_down` an Dennis. Nach Rückkehr holt der Standort seine Slots wieder, Lücke in der Messreihe bleibt sichtbar.
@@ -277,7 +277,7 @@ Im Node64-Repo (eigener Phasenplan dort, Phase 6): `internal/sync` echter Client
 
 | Risiko | Gegenmittel |
 | --- | --- |
-| MySQL-Last durch Messpunkte | Batch-Inserts, Partitionen, Index nur `(token, node_id, time, seq)` + `(time)`; Rohdaten 7 Tage; Charts aus Aggregaten |
+| MySQL-Last durch Messpunkte | Batch-Inserts, Partitionen, Index nur `(token, node_id, time, seq)` + `(time)`; Rohdaten 2 Tage, Stundenwerte 90 Tage; Charts aus Aggregaten |
 | Netz zwischen hub und MySQL fällt aus | Checker puffert Messpunkte 10 min im Speicher, Gateway antwortet `ack` erst nach DB-Schreiben (Node hält Outbox), Alarm an Dennis |
 | Redis fällt aus | Polling-Fallback 2 s; Online-Status über `last_seen` mit 3-min-Karenz |
 | Reconnect-Sturm nach hub-Neustart | Agent-Backoff mit Jitter, `bye` mit Drain, Verbindungslimit mit `Retry-After` |

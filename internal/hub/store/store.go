@@ -23,6 +23,13 @@ import (
 // TimeFormat ist das Format fuer DATETIME(3) in UTC.
 const TimeFormat = "2006-01-02 15:04:05.000"
 
+// Aufbewahrung. Rohdaten braucht nur die Ansicht bis 24 h (und die Pillen), laengere Zeitraeume kommen
+// aus hc2_hourly (bis 30 Tage) und hc2_daily (1 Jahr). Bei 100.000 Checks sind das sonst Milliarden Zeilen.
+const (
+	RawKeepDays    = 2  // hc2_measurements (Tagespartitionen)
+	HourlyKeepDays = 90 // hc2_hourly
+)
+
 // Store ist die Verbindung einer Instanz zur Datenbank.
 type Store struct {
 	db       *sql.DB

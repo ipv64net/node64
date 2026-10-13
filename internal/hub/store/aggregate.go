@@ -58,6 +58,24 @@ func (s *Store) AggregateDaily(ctx context.Context, now time.Time) error {
 		FROM hc2_hourly WHERE hour >= ? GROUP BY token, source, DATE(hour)`, from.Format("2006-01-02 15:04:05"))
 }
 
+// aggregateLate verdichtet nachgelieferte Messpunkte einer Node (war offline): deren Stunden und Tage,
+// die die laufende Verdichtung (nur aktuelle Stunde) nicht mehr erfasst.
+func (s *Store) aggregateLate(source string, earliest, now time.Time) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	from := earliest.Truncate(time.Hour)
+	if err := s.aggregate(ctx, "hc2_hourly", "hour", hourlySelect+`source = ? AND time >= ? AND time < ? GROUP BY token, source, DATE_FORMAT(time, '%Y-%m-%d %H:00:00')`,
+		source, from.Format(TimeFormat), now.Truncate(time.Hour).Add(time.Hour).Format(TimeFormat)); err != nil {
+		s.log.Warn("late aggregation failed", "source", source, "err", err)
+		return
+	}
+	day := from.Truncate(24 * time.Hour)
+	if err := s.aggregate(ctx, "hc2_daily", "day", `SELECT token, source, DATE(hour), SUM(count), SUM(up_count), MIN(min_ms), SUM(avg_ms * count) / NULLIF(SUM(count), 0), MAX(max_ms)
+		FROM hc2_hourly WHERE source = ? AND hour >= ? GROUP BY token, source, DATE(hour)`, source, day.Format("2006-01-02 15:04:05")); err != nil {
+		s.log.Warn("late daily aggregation failed", "source", source, "err", err)
+	}
+}
+
 // aggregate liest die Verdichtung sperrfrei und schreibt sie in Paketen zu 500 Zeilen (Upsert).
 func (s *Store) aggregate(ctx context.Context, table, col, query string, args ...any) error {
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -177,7 +195,7 @@ func (s *Store) Cleanup(ctx context.Context, now time.Time) {
 	exec(`DELETE FROM hc2_checks WHERE deleted_at IS NOT NULL AND deleted_at < ?`, old)
 	exec(`DELETE FROM hc2_channels WHERE deleted_at IS NOT NULL AND deleted_at < ?`, old)
 	exec(`DELETE FROM hc2_maintenance WHERE deleted_at IS NOT NULL AND deleted_at < ?`, old)
-	exec(`DELETE FROM hc2_hourly WHERE hour < ?`, now.UTC().AddDate(-1, 0, 0).Format("2006-01-02 15:04:05"))
+	exec(`DELETE FROM hc2_hourly WHERE hour < ?`, now.UTC().AddDate(0, 0, -HourlyKeepDays).Format("2006-01-02 15:04:05"))
 	exec(`DELETE FROM hc2_events WHERE time < ?`, now.UTC().AddDate(-1, 0, 0).Format(TimeFormat))
 }
 

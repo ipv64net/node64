@@ -367,7 +367,7 @@ Gilt nach jeder Unterbrechung, egal ob 10 Sekunden, 10 Minuten oder 10 Tage. Der
 | 11 | Agent-UI: Check A auf online umgehängt (offline) | Outbox-Vorschlag; bis zum `ack` läuft A lokal weiter (nichts geht verloren); Server macht beim `propose` den Testlauf, Erfolg → `execution = online`, Node stoppt A |
 | 12 | Portal: Kanal getestet / Befehl „jetzt prüfen“ | Sendeauftrag/Kommando wartet bis 1 h, danach verfallen mit Fehlermeldung im Portal |
 | 13 | Portal: Agent-Token widerrufen | Verbindung scheitert mit `token_revoked`; Node zeigt „Verknüpfung getrennt“, bleibt standalone, Outbox bleibt erhalten (für ein erneutes Verknüpfen desselben Accounts) |
-| 14 | Node war > 30 Tage weg | `revision_gap` → Vollabgleich mit Konflikt-Erkennung (1a); Messdaten älter als 7 Tage werden nur als Aggregat übernommen (Server rechnet `hc2_daily` aus den nachgelieferten Punkten, Rohdaten > 7 Tage verwirft er) |
+| 14 | Node war > 30 Tage weg | `revision_gap` → Vollabgleich mit Konflikt-Erkennung (1a); Messdaten älter als 2 Tage werden nur als Aggregat übernommen (Server rechnet `hc2_daily` aus den nachgelieferten Punkten, Rohdaten > 7 Tage verwirft er) |
 | 15 | Agent-Datenbank aus Backup wiederhergestellt (älterer `last_revision`, kleinere `node_seq`) | Server erkennt `node_seq` ≤ `last_ack_seq` → `INSERT IGNORE` verwirft Doppelte; Konfiguration: Vollabgleich, Server gewinnt für alles ohne Outbox-Eintrag |
 | 16 | Uhr des Nodes falsch | Messpunkte > 5 min in der Zukunft werden abgelehnt (`rejected`), Warnung im Portal und Node; Vergangenheit wird akzeptiert |
 | 17 | hub neu gestartet / Instanz gewechselt | `bye` → sofortiger Reconnect ohne Backoff; Schritte 1–6 laufen mit leerer Differenz in < 1 s |
@@ -541,7 +541,7 @@ Reihenfolge: 1 → 2 → 3 → 4 → 7 → 8 → 5 → 6 → 9 → 10. Pakete 3/
 
 ## 10. Entscheidungen (Stand 2026-10-10, Dennis)
 
-1. **Rohdaten der Online-Checks:** 7 Tage in MySQL.
+1. **Rohdaten:** 2 Tage in MySQL (Stundenwerte 90 Tage, Tageswerte 1 Jahr; Lasttest 10.000 Accounts).
 2. **Limits:** nur für Online-Checks, wie bisher aus der User-Class; lokal im Container unbegrenzt; keine Obergrenze für Nodes je Account.
 3. **Pfad:** neue Seiten unter `/healthchecks2`; wie und wann umgestellt wird (Migrationsweg), bleibt offen.
 4. **Pushover** auch im Node (Standalone ohne ipv64-Account muss vollwertig sein). **App** nur serverseitig. **E-Mail und SMS über ipv64** als Agent-Kanäle, die nur verknüpft funktionieren.

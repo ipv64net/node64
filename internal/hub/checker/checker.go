@@ -529,7 +529,7 @@ func (c *Checker) housekeepingLoop(ctx context.Context) {
 				continue
 			}
 			// einmal taeglich (erste Fuenf-Minuten-Runde des Tages, bei Start sofort)
-			if err := c.st.RotatePartitions(ctx, now, 8); err != nil {
+			if err := c.st.RotatePartitions(ctx, now, store.RawKeepDays); err != nil {
 				c.log.Error("partition rotation failed", "err", err)
 			}
 			if err := c.st.AggregateDaily(ctx, now); err != nil {
