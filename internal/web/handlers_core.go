@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/netstat"
 	"log/slog"
 	"net/http"
@@ -327,6 +328,11 @@ type settingsData struct {
 	APIKeys    []store.APIKey
 	NewAPIKey  string
 	HTTPSPort  int
+	// lokale Datenhaltung (Healthchecks)
+	RawDays, HourlyDays       int
+	ChartDetail               string
+	RawOptions, HourlyOptions []int
+	ChartOptions              []string
 }
 
 func (s *Server) settingsView(r *http.Request) *View {
@@ -346,6 +352,8 @@ func (s *Server) settingsView(r *http.Request) *View {
 		HTTPSPort:  s.Cfg.HTTPSPort,
 	}
 	d.APIKeys, _ = s.Store.APIKeys(ctx, v.User.ID)
+	d.RawDays, d.HourlyDays, d.ChartDetail = healthchecks.RawDays(s.Store), healthchecks.HourlyDays(s.Store), healthchecks.ChartDetail(s.Store)
+	d.RawOptions, d.HourlyOptions, d.ChartOptions = healthchecks.RawDayOptions, healthchecks.HourlyDayOptions, healthchecks.ChartDetailOptions
 	d.UpdateOn = s.Store.SettingOr(ctx, "updates.check", "0") == "1"
 	if raw := s.Store.SettingOr(ctx, "updates.latest", ""); raw != "" {
 		_ = json.Unmarshal([]byte(raw), &d.Update)
@@ -484,6 +492,39 @@ func (s *Server) settingsModules(w http.ResponseWriter, r *http.Request) {
 		s.flash(w, r, "success", v.T(key, "name", title))
 	}
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// settingsData speichert die lokale Datenhaltung (nur diese Node; ipv64 behaelt eigene Fristen).
+func (s *Server) settingsData(w http.ResponseWriter, r *http.Request) {
+	f := s.formValues(r, "raw_days", "hourly_days", "chart_detail")
+	v := s.settingsView(r)
+	inInts := func(val string, opts []int) bool {
+		n, err := strconv.Atoi(val)
+		for _, o := range opts {
+			if err == nil && o == n {
+				return true
+			}
+		}
+		return false
+	}
+	okDetail := false
+	for _, o := range healthchecks.ChartDetailOptions {
+		okDetail = okDetail || o == f["chart_detail"]
+	}
+	if !inInts(f["raw_days"], healthchecks.RawDayOptions) || !inInts(f["hourly_days"], healthchecks.HourlyDayOptions) || !okDetail {
+		s.flash(w, r, "danger", v.T("errors.validation"))
+		http.Redirect(w, r, "/settings#data", http.StatusSeeOther)
+		return
+	}
+	for k, val := range map[string]string{healthchecks.SettingRawDays: f["raw_days"], healthchecks.SettingHourlyDays: f["hourly_days"], healthchecks.SettingChartDetail: f["chart_detail"]} {
+		if err := s.Store.SetSetting(r.Context(), k, val); err != nil {
+			s.fail(w, r, err)
+			return
+		}
+	}
+	s.audit(r, "settings.data", "", fmt.Sprintf("raw_days=%s hourly_days=%s chart=%s", f["raw_days"], f["hourly_days"], f["chart_detail"]))
+	s.flash(w, r, "success", v.T("common.saved"))
+	http.Redirect(w, r, "/settings#data", http.StatusSeeOther)
 }
 
 func (s *Server) settingsLogging(w http.ResponseWriter, r *http.Request) {

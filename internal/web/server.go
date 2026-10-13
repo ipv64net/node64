@@ -156,6 +156,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /settings/password", s.auth(s.settingsPassword))
 	s.mux.Handle("POST /settings/modules", s.auth(s.settingsModules))
 	s.mux.Handle("POST /settings/logging", s.auth(s.settingsLogging))
+	s.mux.Handle("POST /settings/data", s.auth(s.settingsData))
 	s.mux.Handle("POST /settings/updates", s.auth(s.settingsUpdates))
 	if s.Notify != nil {
 		s.notifyRoutes()

@@ -210,6 +210,8 @@ func (m *Module) apiChart(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "range must be one of 1h, 6h, 24h, 7d, 30d, 1y")
 		return
 	}
+	cr.bucket = chartBuckets[ChartDetail(m.core)][rng] // Diagramm-Aufloesung aus den Einstellungen
+	rawCut := time.Now().UTC().Add(-m.st.rawRetention())
 	ctx := r.Context()
 	lang := ""
 	if m.g.Lang != nil {
@@ -247,7 +249,11 @@ func (m *Module) apiChart(w http.ResponseWriter, r *http.Request) {
 		raw := func(src string, limit int) string {
 			return `SELECT src, time, status, latency_ms FROM (` + src + `) ORDER BY time LIMIT ` + strconv.Itoa(limit)
 		}
-		qs = append(qs, q{raw(selfSrc, 20000), selfArgs}, q{raw(remoteSrc, 40000), remoteArgs})
+		limit := 20000
+		if cr.span > 24*time.Hour {
+			limit = 200000 // feine Aufloesung ueber Tage: jede Messung
+		}
+		qs = append(qs, q{raw(selfSrc, limit), selfArgs}, q{raw(remoteSrc, 2*limit), remoteArgs})
 	default:
 		n := 13 // Stunde
 		if cr.bucket == "day" {
@@ -258,9 +264,14 @@ func (m *Module) apiChart(w http.ResponseWriter, r *http.Request) {
 		}
 		qs = append(qs, q{agg(selfSrc), selfArgs}, q{agg(remoteSrc), remoteArgs})
 		if cr.bucket == "day" && c.MeasuredHere() {
-			// eigene Tageswerte (Rohpunkte gibt es nur 30 Tage)
+			// eigene Tageswerte fuer die Zeit vor den aufbewahrten Einzelmessungen
 			qs = append(qs, q{`SELECT 'self', day, count, up_count, avg_ms FROM hc_daily WHERE token = ? AND day >= ? AND day < ? ORDER BY day`,
-				[]any{c.Token, from.Format("2006-01-02"), time.Now().UTC().Add(-RawRetention).Format("2006-01-02")}})
+				[]any{c.Token, from.Format("2006-01-02"), rawCut.Format("2006-01-02")}})
+		}
+		if cr.bucket == "hour" && c.MeasuredHere() && from.Before(rawCut) {
+			// eigene Stundenwerte fuer die Zeit vor den aufbewahrten Einzelmessungen
+			qs = append(qs, q{`SELECT 'self', substr(hour, 1, 13), count, up_count, avg_ms FROM hc_hourly WHERE token = ? AND hour >= ? AND hour < ? ORDER BY hour`,
+				[]any{c.Token, ft(from), ft(rawCut)}})
 		}
 	}
 	for _, x := range qs {

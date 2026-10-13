@@ -102,6 +102,8 @@ type Store struct {
 	w, r  *sql.DB
 	mu    sync.RWMutex
 	maint []Maintenance // Cache der Wartungsfenster
+	// Aufbewahrung (Einstellung der Node); 0 = Standard, hourlyRet < 0 = unbegrenzt
+	rawRet, hourlyRet time.Duration
 
 	// Sync-Hooks (nil = standalone). OnChange nach jeder lokalen Konfigurations-
 	// aenderung (nicht bei Aenderungen, die vom Server kommen: WithRemote);
@@ -722,11 +724,38 @@ func sortInts(a []int64) {
 
 // ---------------------------------------------------------------- Verdichtung und Aufbewahrung
 
+// SetRetention setzt die Aufbewahrung aus den Einstellungen (hourly 0 = unbegrenzt).
+func (s *Store) SetRetention(raw, hourly time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rawRet, s.hourlyRet = raw, hourly
+	if hourly == 0 {
+		s.hourlyRet = -1
+	}
+}
+
+// rawRetention: wie lange Einzelmessungen bleiben (Standard 30 Tage).
+func (s *Store) rawRetention() time.Duration {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.rawRet > 0 {
+		return s.rawRet
+	}
+	return RawRetention
+}
+
 // Aggregate verdichtet: abgeschlossene Tage zu Tageswerten, Rohpunkte aelter
-// als 30 Tage zu Stundenwerten (dann loeschen), Stundenwerte aelter als ein
-// Jahr loeschen. Idempotent, laeuft stuendlich.
+// als die Aufbewahrung (Standard 30 Tage) zu Stundenwerten (dann loeschen),
+// Stundenwerte aelter als ihre Aufbewahrung (Standard ein Jahr) loeschen.
+// Idempotent, laeuft stuendlich.
 func (s *Store) Aggregate(ctx context.Context, now time.Time) error {
-	rawCut := ft(now.Add(-RawRetention))
+	rawCut := ft(now.Add(-s.rawRetention()))
+	s.mu.RLock()
+	hourlyRet := s.hourlyRet
+	s.mu.RUnlock()
+	if hourlyRet == 0 {
+		hourlyRet = HourlyRetention
+	}
 	// Tageswerte fuer alle abgeschlossenen Tage, die noch Rohpunkte haben
 	dayCut := now.UTC().Truncate(24 * time.Hour).Format(TimeFormat)
 	if _, err := s.w.ExecContext(ctx, `INSERT OR REPLACE INTO hc_daily (token, day, count, up_count, min_ms, avg_ms, max_ms)
@@ -746,10 +775,13 @@ func (s *Store) Aggregate(ctx context.Context, now time.Time) error {
 	if _, err := s.w.ExecContext(ctx, `DELETE FROM hc_source_points WHERE time < ?`, rawCut); err != nil {
 		return err
 	}
-	if _, err := s.w.ExecContext(ctx, `DELETE FROM hc_hourly WHERE hour < ?`, ft(now.Add(-HourlyRetention))); err != nil {
+	if hourlyRet < 0 {
+		return nil // Stundenwerte und Ereignisse unbegrenzt
+	}
+	if _, err := s.w.ExecContext(ctx, `DELETE FROM hc_hourly WHERE hour < ?`, ft(now.Add(-hourlyRet))); err != nil {
 		return err
 	}
-	_, err := s.w.ExecContext(ctx, `DELETE FROM hc_events WHERE time < ?`, ft(now.Add(-HourlyRetention)))
+	_, err := s.w.ExecContext(ctx, `DELETE FROM hc_events WHERE time < ?`, ft(now.Add(-hourlyRet)))
 	return err
 }
 

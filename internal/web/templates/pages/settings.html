@@ -204,6 +204,26 @@
 	</div>
 
 	<div class="col-lg-6">
+		{{$d := .Data}}
+		<div class="card mb-3" id="data">
+			<div class="card-header"><i class="bi bi-bar-chart-line text-info"></i> {{.T "settings.data"}}</div>
+			<div class="card-body">
+				<p class="small text-body-secondary">{{.T "settings.data_hint"}}</p>
+				<form method="post" action="/settings/data">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<div class="row g-2 mb-2">
+						<div class="col-sm-6"><label class="form-label" for="raw_days">{{.T "settings.data_raw"}}</label>
+							<select class="form-select form-select-sm" id="raw_days" name="raw_days">{{range $d.RawOptions}}<option value="{{.}}"{{if eq . $d.RawDays}} selected{{end}}>{{$.T "settings.data_days" "n" .}}</option>{{end}}</select></div>
+						<div class="col-sm-6"><label class="form-label" for="hourly_days">{{.T "settings.data_hourly"}}</label>
+							<select class="form-select form-select-sm" id="hourly_days" name="hourly_days">{{range $d.HourlyOptions}}<option value="{{.}}"{{if eq . $d.HourlyDays}} selected{{end}}>{{if eq . 0}}{{$.T "settings.data_unlimited"}}{{else}}{{$.T "settings.data_days" "n" .}}{{end}}</option>{{end}}</select></div>
+					</div>
+					<label class="form-label" for="chart_detail">{{.T "settings.data_chart"}}</label>
+					<select class="form-select form-select-sm mb-1" id="chart_detail" name="chart_detail">{{range $d.ChartOptions}}<option value="{{.}}"{{if eq . $d.ChartDetail}} selected{{end}}>{{$.T (print "settings.data_chart_" .)}}</option>{{end}}</select>
+					<div class="form-text mb-2">{{.T "settings.data_chart_hint"}}</div>
+					<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>
+				</form>
+			</div>
+		</div>
 		<div class="card mb-3">
 			<div class="card-header"><i class="bi bi-database text-info"></i> {{.T "backup.title"}}</div>
 			<div class="card-body">

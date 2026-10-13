@@ -235,6 +235,7 @@ func (m *Module) housekeeping(ctx context.Context) {
 
 func (m *Module) aggregate(ctx context.Context) {
 	start := time.Now()
+	m.st.SetRetention(m.retention())
 	if err := m.st.Aggregate(ctx, time.Now()); err != nil {
 		m.log.Error("aggregation failed", "err", err)
 		return
