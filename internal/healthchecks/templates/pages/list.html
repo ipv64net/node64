@@ -95,10 +95,10 @@
 			{{else if eq $c.Owner "other"}}<span class="badge text-bg-light hc-exec" title="{{$.T "hc.owner.other_hint"}}"><i class="bi bi-hdd-network"></i> {{$.T "hc.owner.other"}}</span>
 			{{else}}<span class="badge text-bg-light hc-exec" title="{{$.T "hc.execution_hint"}}"><i class="bi bi-house"></i> {{$.T (print "hc.execution." $c.Execution)}}</span>{{end}}
 			{{range $c.Tags}}<span class="badge rounded-pill text-bg-secondary">{{.}}</span> {{end}}
-			<div class="small text-body-secondary hc-target d-md-none" title="{{$c.DisplayTarget}}">{{if $c.Target}}{{$c.DisplayTarget}}{{else}}{{$.T "hc.type.push"}}{{end}}</div>
+			<div class="d-md-none mt-1">{{if $c.Target}}{{$tb := $c.TargetBadge}}<span class="hc-target-badge" title="{{$c.DisplayTarget}}"><i class="bi {{$tb.Class}}"></i><span>{{$tb.Text}}</span></span>{{else}}<span class="hc-target-badge hc-target-push"><i class="bi bi-arrow-down-circle"></i><span>{{$.T "hc.type.push"}}</span></span>{{end}}</div>
 			{{if ge .CertDays 0}}<span class="badge text-bg-{{.CertClass}} bg-opacity-75 hc-cert" title="{{$.T "hc.cert_until"}} {{$.Date .CertTill}}"><i class="bi bi-shield-lock"></i> {{$.T "hc.cert_days" "days" .CertDays}}</span>{{end}}
 		</td>
-		<td data-label="{{$.T "hc.target"}}" class="d-none d-md-table-cell hc-c-target">{{if $c.Target}}<span class="hc-target font-monospace small" title="{{$c.DisplayTarget}}">{{$c.DisplayTarget}}</span>{{else}}<span class="small text-body-secondary">{{$.T "hc.type.push"}}</span>{{end}}</td>
+		<td data-label="{{$.T "hc.target"}}" class="d-none d-md-table-cell hc-c-target">{{if $c.Target}}{{$tb := $c.TargetBadge}}<span class="hc-target-badge" title="{{$c.DisplayTarget}}"><i class="bi {{$tb.Class}}"></i><span>{{$tb.Text}}</span></span>{{else}}<span class="hc-target-badge hc-target-push"><i class="bi bi-arrow-down-circle"></i><span>{{$.T "hc.type.push"}}</span></span>{{end}}</td>
 		<td data-label="{{$.T "common.type"}}" class="d-none d-md-table-cell"><span class="badge text-bg-light">{{$.T (print "hc.type." $c.Type)}}</span></td>
 		<td data-label="{{$.T "hc.latency"}}" class="text-end text-nowrap d-none d-md-table-cell">{{if gt .Latency 0.0}}{{ms .Latency}} ms{{else}}–{{end}}</td>
 		<td data-label="{{$.T "hc.recent"}}" class="hc-beats"><div class="beats">{{range .Pills}}<span class="beat beat-{{.Class}}" data-bs-toggle="tooltip" data-tip-label="{{.Label}}" data-tip-when="{{.When}}" data-tip-ms="{{.Latency}}" data-tip-msg="{{.Message}}"></span>{{end}}</div></td>

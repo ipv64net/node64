@@ -935,6 +935,32 @@ func (c *Check) Foreign() bool { return c.Owner == "other" }
 // DisplayTarget: Ziel fuer die Uebersicht (mit Port bei TCP/Port).
 func (c *Check) DisplayTarget() string { return checks.DisplayTarget(c.Definition()) }
 
+// TargetBadge: Symbol und Kurztext des Ziels fuer die Uebersicht (URL ohne https:// und ohne "/" am Ende).
+func (c *Check) TargetBadge() Badge {
+	t := c.DisplayTarget()
+	switch c.Type {
+	case checks.TypeHTTP, checks.TypeKeyword:
+		icon := "bi-lock-fill"
+		if strings.HasPrefix(strings.ToLower(t), "http://") {
+			icon = "bi-unlock"
+		}
+		short := t
+		if i := strings.Index(short, "://"); i >= 0 {
+			short = short[i+3:]
+		}
+		return Badge{Text: strings.TrimSuffix(short, "/"), Class: icon}
+	case checks.TypeTCP, checks.TypePort:
+		return Badge{Text: t, Class: "bi-plug"}
+	case checks.TypeICMP:
+		return Badge{Text: t, Class: "bi-broadcast-pin"}
+	case checks.TypeCert:
+		return Badge{Text: t, Class: "bi-shield-lock"}
+	case checks.TypeDocker:
+		return Badge{Text: t, Class: "bi-box"}
+	}
+	return Badge{Text: t, Class: "bi-bullseye"}
+}
+
 // Runnable: "Jetzt pruefen" geht bei allen Checks mit Node-Messstellen (hier oder ueber den hub).
 func (c *Check) Runnable() bool { return c.Type != checks.TypePush && c.Execution != "online" }
 
