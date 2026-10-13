@@ -1,8 +1,10 @@
 {{define "content"}}
 {{$d := .Data}}
 <h1 class="h4 mb-3"><i class="bi bi-gear-fill text-secondary me-1"></i> {{.T "settings.title"}}</h1>
-<div class="row g-3">
-	<div class="col-lg-6">
+<!-- zwei unabhaengige Spalten: Karten stehen lueckenlos untereinander (keine Zeilen mit ungleich hohen Paaren) -->
+<div class="row g-3 align-items-start">
+	<div class="col-lg-6 d-flex flex-column gap-3">
+		<!-- Node, Benutzer und Zugang -->
 		<div class="card">
 			<div class="card-header"><i class="bi bi-hdd-network text-primary"></i> {{.T "settings.node"}}</div>
 			<div class="card-body">
@@ -19,66 +21,6 @@
 					</div>
 					<button class="btn btn-primary" type="submit">{{.T "common.save"}}</button>
 				</form>
-			</div>
-		</div>
-	</div>
-
-	<div class="col-lg-6">
-		<div class="card" id="modules">
-			<div class="card-header"><i class="bi bi-grid text-primary"></i> {{.T "settings.modules"}}</div>
-			<div class="card-body">
-				<p class="text-body-secondary small">{{.T "settings.modules_hint"}}</p>
-				<ul class="list-group list-group-flush">
-				{{range $d.Modules}}
-					<li class="list-group-item d-flex align-items-center justify-content-between px-0">
-						<span>
-							<i class="bi {{.Info.Icon}}"></i> {{$.T .Info.TitleKey}}
-							{{if .LastError}}<div class="text-danger small">{{.LastError}}</div>{{end}}
-						</span>
-						{{if not .Info.Available}}
-						<span class="badge text-bg-light">{{$.T "nav.soon"}}</span>
-						{{else}}
-						<form method="post" action="/settings/modules" class="m-0">
-							<input type="hidden" name="_csrf" value="{{$.CSRF}}">
-							<input type="hidden" name="module" value="{{.Info.Name}}">
-							{{if .Enabled}}
-							<input type="hidden" name="action" value="disable">
-							<button class="btn btn-sm btn-outline-danger" type="submit">{{$.T "common.disable"}}</button>
-							{{else}}
-							<input type="hidden" name="action" value="enable">
-							<button class="btn btn-sm btn-success" type="submit">{{$.T "common.enable"}}</button>
-							{{end}}
-						</form>
-						{{end}}
-					</li>
-				{{end}}
-				</ul>
-			</div>
-		</div>
-	</div>
-
-	<div class="col-lg-6">
-		<div class="card mb-3" id="appearance">
-			<div class="card-header"><i class="bi bi-palette text-info"></i> {{.T "settings.appearance"}}</div>
-			<div class="card-body">
-				<div class="mb-3">
-					<div class="form-label">{{.T "nav.theme"}}</div>
-					<div class="ui-choice" role="group">
-						<input type="radio" class="btn-check" name="ui_theme" id="ui-theme-auto" value=""{{if not .Theme}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-theme-auto"><i class="bi bi-circle-half"></i> {{.T "nav.theme_auto"}}</label>
-						<input type="radio" class="btn-check" name="ui_theme" id="ui-theme-light" value="light"{{if eq .Theme "light"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-theme-light"><i class="bi bi-sun"></i> {{.T "nav.theme_light"}}</label>
-						<input type="radio" class="btn-check" name="ui_theme" id="ui-theme-dark" value="dark"{{if eq .Theme "dark"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-theme-dark"><i class="bi bi-moon-stars"></i> {{.T "nav.theme_dark"}}</label>
-					</div>
-				</div>
-				<div>
-					<div class="form-label">{{.T "settings.font_size"}}</div>
-					<div class="ui-choice fs-choice" role="group">
-						<input type="radio" class="btn-check" name="ui_fs" id="ui-fs-sm" value="sm"{{if eq .FontSize "sm"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-fs-sm" title="{{.T "settings.fs_sm"}}"><span class="fs-a-sm">A</span> <span class="small">{{.T "settings.fs_sm"}}</span></label>
-						<input type="radio" class="btn-check" name="ui_fs" id="ui-fs-md" value=""{{if not .FontSize}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-fs-md" title="{{.T "settings.fs_md"}}"><span class="fs-a-md">A</span> <span class="small">{{.T "settings.fs_md"}}</span></label>
-						<input type="radio" class="btn-check" name="ui_fs" id="ui-fs-lg" value="lg"{{if eq .FontSize "lg"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-fs-lg" title="{{.T "settings.fs_lg"}}"><span class="fs-a-lg">A</span> <span class="small">{{.T "settings.fs_lg"}}</span></label>
-						<input type="radio" class="btn-check" name="ui_fs" id="ui-fs-xl" value="xl"{{if eq .FontSize "xl"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-fs-xl" title="{{.T "settings.fs_xl"}}"><span class="fs-a-xl">A</span> <span class="small">{{.T "settings.fs_xl"}}</span></label>
-					</div>
-					<div class="form-text">{{.T "settings.appearance_hint"}}</div>
-				</div>
 			</div>
 		</div>
 		<div class="card">
@@ -124,10 +66,30 @@
 				</form>
 			</div>
 		</div>
-	</div>
-
-	<div class="col-lg-6">
-		<div class="card mb-3">
+		<div class="card" id="appearance">
+			<div class="card-header"><i class="bi bi-palette text-info"></i> {{.T "settings.appearance"}}</div>
+			<div class="card-body">
+				<div class="mb-3">
+					<div class="form-label">{{.T "nav.theme"}}</div>
+					<div class="ui-choice" role="group">
+						<input type="radio" class="btn-check" name="ui_theme" id="ui-theme-auto" value=""{{if not .Theme}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-theme-auto"><i class="bi bi-circle-half"></i> {{.T "nav.theme_auto"}}</label>
+						<input type="radio" class="btn-check" name="ui_theme" id="ui-theme-light" value="light"{{if eq .Theme "light"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-theme-light"><i class="bi bi-sun"></i> {{.T "nav.theme_light"}}</label>
+						<input type="radio" class="btn-check" name="ui_theme" id="ui-theme-dark" value="dark"{{if eq .Theme "dark"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-theme-dark"><i class="bi bi-moon-stars"></i> {{.T "nav.theme_dark"}}</label>
+					</div>
+				</div>
+				<div>
+					<div class="form-label">{{.T "settings.font_size"}}</div>
+					<div class="ui-choice fs-choice" role="group">
+						<input type="radio" class="btn-check" name="ui_fs" id="ui-fs-sm" value="sm"{{if eq .FontSize "sm"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-fs-sm" title="{{.T "settings.fs_sm"}}"><span class="fs-a-sm">A</span> <span class="small">{{.T "settings.fs_sm"}}</span></label>
+						<input type="radio" class="btn-check" name="ui_fs" id="ui-fs-md" value=""{{if not .FontSize}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-fs-md" title="{{.T "settings.fs_md"}}"><span class="fs-a-md">A</span> <span class="small">{{.T "settings.fs_md"}}</span></label>
+						<input type="radio" class="btn-check" name="ui_fs" id="ui-fs-lg" value="lg"{{if eq .FontSize "lg"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-fs-lg" title="{{.T "settings.fs_lg"}}"><span class="fs-a-lg">A</span> <span class="small">{{.T "settings.fs_lg"}}</span></label>
+						<input type="radio" class="btn-check" name="ui_fs" id="ui-fs-xl" value="xl"{{if eq .FontSize "xl"}} checked{{end}}><label class="btn btn-outline-secondary" for="ui-fs-xl" title="{{.T "settings.fs_xl"}}"><span class="fs-a-xl">A</span> <span class="small">{{.T "settings.fs_xl"}}</span></label>
+					</div>
+					<div class="form-text">{{.T "settings.appearance_hint"}}</div>
+				</div>
+			</div>
+		</div>
+		<div class="card">
 			<div class="card-header"><i class="bi bi-shield-lock text-success"></i> {{.T "twofa.title"}}</div>
 			<div class="card-body">
 				{{if $d.TOTP}}<p class="mb-2"><i class="bi bi-shield-check text-success"></i> {{.T "twofa.active"}}</p>
@@ -158,9 +120,6 @@
 				</form>
 			</div>
 		</div>
-	</div>
-
-	<div class="col-lg-6">
 		<div class="card">
 			<div class="card-header"><i class="bi bi-terminal text-body-secondary"></i> {{.T "settings.logging"}}</div>
 			<div class="card-body">
@@ -203,9 +162,40 @@
 		</div>
 	</div>
 
-	<div class="col-lg-6">
-		{{$d := .Data}}
-		<div class="card mb-3" id="data">
+	<div class="col-lg-6 d-flex flex-column gap-3">
+		<!-- Module, Daten und System -->
+		<div class="card" id="modules">
+			<div class="card-header"><i class="bi bi-grid text-primary"></i> {{.T "settings.modules"}}</div>
+			<div class="card-body">
+				<p class="text-body-secondary small">{{.T "settings.modules_hint"}}</p>
+				<ul class="list-group list-group-flush">
+				{{range $d.Modules}}
+					<li class="list-group-item d-flex align-items-center justify-content-between px-0">
+						<span>
+							<i class="bi {{.Info.Icon}}"></i> {{$.T .Info.TitleKey}}
+							{{if .LastError}}<div class="text-danger small">{{.LastError}}</div>{{end}}
+						</span>
+						{{if not .Info.Available}}
+						<span class="badge text-bg-light">{{$.T "nav.soon"}}</span>
+						{{else}}
+						<form method="post" action="/settings/modules" class="m-0">
+							<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+							<input type="hidden" name="module" value="{{.Info.Name}}">
+							{{if .Enabled}}
+							<input type="hidden" name="action" value="disable">
+							<button class="btn btn-sm btn-outline-danger" type="submit">{{$.T "common.disable"}}</button>
+							{{else}}
+							<input type="hidden" name="action" value="enable">
+							<button class="btn btn-sm btn-success" type="submit">{{$.T "common.enable"}}</button>
+							{{end}}
+						</form>
+						{{end}}
+					</li>
+				{{end}}
+				</ul>
+			</div>
+		</div>
+		<div class="card" id="data">
 			<div class="card-header"><i class="bi bi-bar-chart-line text-info"></i> {{.T "settings.data"}}</div>
 			<div class="card-body">
 				<p class="small text-body-secondary">{{.T "settings.data_hint"}}</p>
@@ -224,7 +214,7 @@
 				</form>
 			</div>
 		</div>
-		<div class="card mb-3">
+		<div class="card">
 			<div class="card-header"><i class="bi bi-database text-info"></i> {{.T "backup.title"}}</div>
 			<div class="card-body">
 				<p class="small text-body-secondary">{{.T "backup.hint"}}</p>
