@@ -61,7 +61,7 @@
           },
           "target": {
             "type": "string",
-            "description": "URL, Host, IP oder host:port, bei push leer"
+            "description": "http/keyword: URL; icmp/tcp/port/cert: Host oder IP (Port in params.port; host:port wird beim Anlegen/Ändern ins Port-Feld übernommen); push: leer"
           },
           "params": {
             "type": "object",

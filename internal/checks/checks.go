@@ -461,32 +461,55 @@ func decode(raw json.RawMessage, v any) error {
 }
 
 // portOf nimmt den Port aus den Parametern, sonst aus host:port im Ziel.
-// DisplayTarget ist das Ziel fuer Listen: bei TCP/Port mit Port, beim Zertifikat mit abweichendem Port.
+// DisplayTarget ist das Ziel fuer Listen: bei TCP/Port/Zertifikat Host mit dem Port, der wirklich
+// gemessen wird (Port-Feld vor Port im Ziel), beim Zertifikat nur, wenn er von 443 abweicht.
 func DisplayTarget(def Definition) string {
 	t := strings.TrimSpace(def.Target)
-	if t == "" {
-		return ""
-	}
-	if _, _, err := net.SplitHostPort(t); err == nil {
-		return t // Port steht schon im Ziel
-	}
-	port := 0
-	switch def.Type {
-	case TypeTCP, TypePort:
-		var p TCPParams
-		_ = decode(def.Params, &p)
-		port = p.Port
-	case TypeCert:
-		var p CertParams
-		_ = decode(def.Params, &p)
-		if p.Port != 443 {
-			port = p.Port
-		}
-	}
-	if port <= 0 {
+	if t == "" || (def.Type != TypeTCP && def.Type != TypePort && def.Type != TypeCert) {
 		return t
 	}
-	return net.JoinHostPort(strings.Trim(t, "[]"), strconv.Itoa(port))
+	var p TCPParams
+	_ = decode(def.Params, &p)
+	port, err := portOf(def, p.Port)
+	if def.Type == TypeCert && (err != nil || port == 443) {
+		port = 0
+	}
+	if err != nil || port == 0 {
+		return TargetHost(def)
+	}
+	return net.JoinHostPort(TargetHost(def), strconv.Itoa(port))
+}
+
+// SplitTargetPort traegt bei TCP, Port und Zertifikat einen Port aus dem Ziel (host:port) ins Port-Feld
+// ein, das Ziel bleibt nur Host oder IP. Stehen dort zwei verschiedene Ports, ist das ein Fehler.
+// Nur fuer Eingaben (Formular, lokale API), nicht beim Sync: dort misst ein Check unveraendert weiter.
+func SplitTargetPort(typ Type, target string, params json.RawMessage) (string, json.RawMessage, error) {
+	if typ != TypeTCP && typ != TypePort && typ != TypeCert {
+		return target, params, nil
+	}
+	host, ps, err := net.SplitHostPort(strings.TrimSpace(target))
+	if err != nil {
+		return target, params, nil
+	}
+	tp, err := strconv.Atoi(ps)
+	if err != nil || tp < 1 || tp > 65535 {
+		return target, params, fmt.Errorf("target: port %q must be between 1 and 65535", ps)
+	}
+	p := map[string]any{}
+	if len(params) > 0 {
+		if err := json.Unmarshal(params, &p); err != nil {
+			return target, params, fmt.Errorf("params: %w", err)
+		}
+	}
+	if fp, _ := p["port"].(float64); fp != 0 && int(fp) != tp {
+		return target, params, fmt.Errorf("the target contains port %d, the port field %d: enter the port only in the port field", tp, int(fp))
+	}
+	p["port"] = tp
+	out, err := json.Marshal(p)
+	if err != nil {
+		return target, params, err
+	}
+	return host, out, nil
 }
 
 func portOf(def Definition, p int) (int, error) {

@@ -899,7 +899,9 @@ func (m *Module) pageFormSubmit(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		c.UpdatedBy = m.g.Actor(r)
 		oldType := c.Type
-		err = m.apply(c, in, !edit)
+		if err = splitPort(c, &in); err == nil {
+			err = m.apply(c, in, !edit)
+		}
 		if err == nil && c.Parent != "" {
 			if cyc, cerr := m.parentCycle(r, c.Token, c.Parent); cerr != nil || cyc {
 				err = fmt.Errorf("parent: %s", errText(cerr, "would create a cycle"))

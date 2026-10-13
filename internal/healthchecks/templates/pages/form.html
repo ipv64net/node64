@@ -24,7 +24,9 @@
 					<div class="col-12" data-types="http keyword icmp tcp port cert docker">
 						<label class="form-label" for="target">{{.T "hc.form.target"}}</label>
 						<div class="input-group"><span class="input-group-text"><i class="bi bi-bullseye"></i></span><input class="form-control" id="target" name="target" value="{{index $f "target"}}" maxlength="500" list="hc-containers"></div>
-						<div class="form-text" data-types="http keyword icmp tcp port cert">{{.T "hc.form.target_hint"}}</div>
+						<div class="form-text" data-types="http keyword">{{.T "hc.form.target_hint"}}</div>
+						<div class="form-text" data-types="icmp">{{.T "hc.form.target_hint_host"}}</div>
+						<div class="form-text" data-types="tcp port cert">{{.T "hc.form.target_hint_port"}}</div>
 						<div class="form-text" data-types="docker">{{.T "hc.docker.target_hint"}}</div>
 						<datalist id="hc-containers">{{range $d.Containers}}<option value="{{.Name}}">{{.Image}} · {{.Status}}</option>{{end}}</datalist>
 					</div>

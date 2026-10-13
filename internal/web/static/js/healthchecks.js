@@ -13,6 +13,17 @@
 				el.querySelectorAll("input, select, textarea").forEach(function (i) { i.disabled = !on; });
 			});
 		};
+		// TCP/Port/Zertifikat: host:port im Ziel gleich ins Port-Feld uebernehmen (der Port steht nur dort)
+		var targetIn = document.getElementById("target");
+		if (targetIn) {
+			targetIn.addEventListener("change", function () {
+				var pf = document.getElementById({ tcp: "tcp_port", port: "port_port", cert: "cert_port" }[typeSel.value]);
+				var m = /^\[?([^\[\]\/]+?)\]?:(\d{1,5})$/.exec(targetIn.value.trim());
+				if (!pf || !m || (m[1].indexOf(":") >= 0 && targetIn.value.trim().charAt(0) !== "[")) { return; }
+				pf.value = m[2];
+				targetIn.value = m[1];
+			});
+		}
 		var exSel = document.getElementById("execution");
 		var lockExec = function () {
 			if (!exSel) { return; }

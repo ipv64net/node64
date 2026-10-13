@@ -118,6 +118,22 @@ func (m *Module) toJSON(c *Check, r *http.Request) checkJSON {
 	return out
 }
 
+// splitPort: Port aus dem Ziel (host:port) ins Port-Feld, nur fuer Eingaben aus Formular und API.
+func splitPort(c *Check, in *checkJSON) error {
+	params := in.Params
+	if len(params) == 0 {
+		params = c.Params
+	}
+	t, p, err := checks.SplitTargetPort(checks.Type(strings.ToLower(strings.TrimSpace(in.Type))), in.Target, params)
+	if err != nil {
+		return err
+	}
+	if t != in.Target {
+		in.Target, in.Params = t, p
+	}
+	return nil
+}
+
 // apply uebertraegt Eingaben auf einen Check und prueft sie.
 func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 	if create {
@@ -407,6 +423,10 @@ func (m *Module) apiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := &Check{Token: NewToken(), UpdatedBy: actor(r)}
+	if err := splitPort(c, &in); err != nil {
+		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
 	if err := m.apply(c, in, true); err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -449,6 +469,10 @@ func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	oldType := c.Type
 	c.UpdatedBy = actor(r)
+	if err := splitPort(c, &in); err != nil {
+		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
 	if err := m.apply(c, in, false); err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
