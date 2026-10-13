@@ -435,6 +435,9 @@ func (s *Store) Account(ctx context.Context, userID int64) (wire.Account, error)
 	a.ID, a.HCLocation = userID, hcloc
 	a.Plan = map[int]string{1: "Standard", 2: "VIP", 3: "Premium", 4: "Business", 5: "Company", 6: "Supporter"}[class]
 	a.Limits = map[string]int{"healthchecks_online": limit, "locations": hcloc, "sms_per_day": sms}
+	var smsToday int
+	_ = s.db.QueryRowContext(ctx, `SELECT count FROM hc2_sms_counter WHERE userid = ? AND day = ?`, userID, time.Now().UTC().Format("2006-01-02")).Scan(&smsToday)
+	a.Usage = map[string]int{"sms_today": smsToday}
 	return a, nil
 }
 

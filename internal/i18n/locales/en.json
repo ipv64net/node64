@@ -544,6 +544,8 @@
     "channels": "Channels",
     "new": "New channel",
     "server_channel_hint": "Portal channel: credentials (tokens, passwords) are stored at ipv64.net. Empty secret fields stay unchanged. A new e-mail address or number must be confirmed in the portal before anything is sent there.",
+    "sms_left": "{left} of {limit} SMS left today",
+    "sms_none": "SMS are not included in your account class",
     "edit": "Edit channel",
     "empty": "No channel yet. Create one so outages get reported.",
     "default": "Default",

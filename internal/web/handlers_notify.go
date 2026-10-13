@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,6 +24,26 @@ type notifyData struct {
 	Quiet      map[string]string
 	Days       []int
 	HasBrowser bool // es gibt schon einen Browser-Kanal
+	SMS        *smsQuota
+}
+
+// smsQuota: SMS des ipv64-Accounts heute (nur verknuepft; Stand der letzten Abfrage, hoechstens 5 min alt).
+type smsQuota struct{ Left, Limit int }
+
+func (s *Server) smsQuota(ctx context.Context) *smsQuota {
+	if s.Sync == nil || !s.Sync.State().Linked {
+		return nil
+	}
+	var acc struct {
+		Limits map[string]int `json:"limits"`
+		Usage  map[string]int `json:"usage"`
+	}
+	if json.Unmarshal([]byte(s.Store.SettingOr(ctx, "sync.account", "")), &acc) != nil || acc.Limits == nil {
+		return nil
+	}
+	q := &smsQuota{Limit: acc.Limits["sms_per_day"]}
+	q.Left = max(0, q.Limit-acc.Usage["sms_today"])
+	return q
 }
 
 func (s *Server) notifyRoutes() {
@@ -92,7 +113,7 @@ func (s *Server) notifyIndex(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	d := notifyData{Channels: chans, Deliveries: dl, Types: notify.Types, Planned: notify.Planned, Days: []int{1, 2, 3, 4, 5, 6, 7}}
+	d := notifyData{Channels: chans, Deliveries: dl, Types: notify.Types, Planned: notify.Planned, Days: []int{1, 2, 3, 4, 5, 6, 7}, SMS: s.smsQuota(r.Context())}
 	for _, ch := range chans {
 		if ch.Type == notify.TypeBrowser {
 			d.HasBrowser = true

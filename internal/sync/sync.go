@@ -1068,6 +1068,7 @@ func (c *Live) refreshMe(ctx context.Context) {
 		RemoteMgmt string            `json:"remote_mgmt"`
 		Nodes      []json.RawMessage `json:"nodes"`
 		Settings   map[string]string `json:"settings"`
+		Account    json.RawMessage   `json:"account"`
 	}
 	if json.Unmarshal(resp, &me) != nil || me.Name == "" {
 		return
@@ -1090,6 +1091,9 @@ func (c *Live) refreshMe(ctx context.Context) {
 	}
 	if me.Settings != nil {
 		c.applySettings(ctx, me.Settings, true) // Ruhezeiten und Grenzen des Accounts
+	}
+	if len(me.Account) > 2 {
+		c.set(SetAccount, string(me.Account)) // Klasse, Limits und Verbrauch (z. B. SMS heute)
 	}
 }
 

@@ -99,6 +99,7 @@ type Account struct {
 	Plan       string         `json:"plan"`
 	Limits     map[string]int `json:"limits"`
 	HCLocation int            `json:"hc_locations"`
+	Usage      map[string]int `json:"usage,omitempty"` // Verbrauch, z. B. sms_today (UTC-Tag)
 }
 
 // Hello ist die erste Nachricht des Servers nach dem Verbinden.
