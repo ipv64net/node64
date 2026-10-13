@@ -543,6 +543,7 @@
     "title": "Benachrichtigungen",
     "channels": "Kanäle",
     "new": "Neuer Kanal",
+    "server_channel_hint": "Kanal des Portals: Zugangsdaten (Token, Passwörter) liegen bei ipv64.net. Leere Geheimnis-Felder bleiben unverändert. Eine neue E-Mail-Adresse oder Nummer muss im Portal bestätigt werden, bevor dorthin gesendet wird.",
     "edit": "Kanal bearbeiten",
     "empty": "Noch kein Kanal. Lege einen an, damit Störungen gemeldet werden.",
     "default": "Standard",

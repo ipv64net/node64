@@ -864,7 +864,9 @@ func (c *Live) applyChannel(ctx context.Context, w wire.Channel) error {
 			RemoteID: w.ID, Revision: w.Revision, Execution: "server", Config: map[string]string{}}
 		if mine {
 			ch.Execution = "node"
-			ch.Config = w.Config
+		}
+		if w.Config != nil {
+			ch.Config = w.Config // eigene: alles; Portal-Kanaele: nur nicht geheime Werte (Anzeige)
 		}
 		if ch.Lang == "" {
 			ch.Lang = "de"
@@ -875,7 +877,7 @@ func (c *Live) applyChannel(ctx context.Context, w wire.Channel) error {
 	if w.Lang != "" {
 		existing.Lang = w.Lang
 	}
-	if mine && len(w.Config) > 0 {
+	if len(w.Config) > 0 || (!mine && w.Config != nil) {
 		existing.Config = w.Config
 	}
 	return c.d.NF.Update(rctx, existing)
@@ -965,9 +967,15 @@ func (c *Live) onChannelChange(ctx context.Context, id int64, op string) {
 			return
 		}
 		w := wire.Channel{ID: ch.RemoteID, Type: string(ch.Type), Name: ch.Name, Enabled: ch.Enabled, Default: ch.Default, Lang: ch.Lang, NotifyDown: ch.NotifyDown, NotifyUp: ch.NotifyUp, Revision: ch.Revision, LocalID: ch.ID}
-		// Kanaele des Portals/anderer Nodes (execution server): Name, Schalter usw. melden, die Zugangsdaten
-		// kennt nur der Besitzer (der hub behaelt sie)
-		if !ch.SecretOnlyLocal && ch.Execution != "server" {
+		// Kanaele des Portals (execution server): nur gesetzte Werte melden, leere Geheimnisse behaelt der hub
+		if ch.Execution == "server" {
+			w.Config = map[string]string{}
+			for k, v := range ch.Config {
+				if strings.TrimSpace(v) != "" {
+					w.Config[k] = v
+				}
+			}
+		} else if !ch.SecretOnlyLocal {
 			w.Config = ch.Config
 		}
 		payload = string(mustJSON(w))

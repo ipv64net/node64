@@ -307,6 +307,12 @@ func (s *session) request(t string, data any) (wire.Msg, error) {
 func (s *session) afterConnect() {
 	s.pushNodeInfo() // lokal geaenderter Name/Standort zuerst, sonst holt refreshMe den alten
 	s.pushNotifySettings()
+	if s.c.setting("sync.channel_config_v1", "") == "" {
+		// einmalig: Portal-Kanaele bringen jetzt ihre nicht geheimen Werte mit (Felder zum Bearbeiten)
+		if err := s.c.fullSync(s.ctx); err == nil {
+			s.c.set("sync.channel_config_v1", "1")
+		}
+	}
 	go s.c.refreshMe(context.Background()) // Name, Standort und Nodes des Accounts aktualisieren
 	s.replayOutbox()
 	s.uploadMeasurements()

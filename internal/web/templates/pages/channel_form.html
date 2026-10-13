@@ -17,6 +17,7 @@
 					<label class="form-label" for="name">{{.T "common.name"}}</label>
 					<div class="input-group"><span class="input-group-text"><i class="bi bi-tag"></i></span><input class="form-control" id="name" name="name" value="{{index $f "name"}}" maxlength="100" required autofocus></div>
 				</div>
+				{{if $d.Server}}<div class="alert alert-info small py-2"><i class="bi bi-cloud"></i> {{.T "nf.server_channel_hint"}}</div>{{end}}
 				{{range $d.Fields}}
 				{{$key := print "cfg_" .Key}}
 				<div class="mb-3">

@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ipv64net/node64/internal/checks"
+	"github.com/ipv64net/node64/internal/notify"
 	"hash/crc32"
+	"net/mail"
 	"strconv"
 	"strings"
 	"time"
@@ -204,6 +206,18 @@ func (s *Store) scanWireChannel(row interface{ Scan(...any) error }, nodeID stri
 	ch.Enabled, ch.Default, ch.NotifyDown, ch.NotifyUp, ch.NodeID = enabled == 1, def == 1, nd == 1, nu == 1, owner.String
 	// Konfiguration nur fuer die Besitzer-Node (verschluesselt, wie gespeichert; die Node hat denselben Schluessel nicht,
 	// daher liefert der Server bei secret_only_local gar nichts und sonst den Klartext)
+	if !(owner.Valid && owner.String == nodeID) && sol == 0 && cfg != "" {
+		// Kanal des Portals: die nicht geheimen Werte (Adresse, Nummer, URL ...) zum Anzeigen und Bearbeiten
+		m := map[string]string{}
+		if json.Unmarshal([]byte(cfg), &m) == nil {
+			ch.Config = map[string]string{}
+			for k, v := range m {
+				if !isSecretField(k) && !strings.HasPrefix(v, "enc:v1:") {
+					ch.Config[k] = v
+				}
+			}
+		}
+	}
 	if owner.Valid && owner.String == nodeID && sol == 0 && cfg != "" {
 		m := map[string]string{}
 		if json.Unmarshal([]byte(cfg), &m) == nil {
@@ -671,7 +685,47 @@ func (s *Store) proposeChannel(ctx context.Context, tx *sql.Tx, userID int64, no
 	if ch.Lang == "" {
 		ch.Lang = "de"
 	}
-	if foreign {
+	if foreign && !owner.Valid && len(ch.Config) > 0 {
+		// Kanal des Portals mit geaenderten Werten: einmischen (leere = unveraendert), Geheimnisse verschluesselt;
+		// eine neue Adresse/Nummer gilt erst nach Bestaetigung im Portal (wie dort)
+		var curCfg string
+		var verified int
+		if err := tx.QueryRowContext(ctx, `SELECT config_enc, verified FROM hc2_channels WHERE id = ?`, id).Scan(&curCfg, &verified); err != nil {
+			return err
+		}
+		merged := map[string]string{}
+		_ = json.Unmarshal([]byte(curCfg), &merged)
+		for k, v := range ch.Config {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			switch {
+			case ch.Type == "ipv64_mail" && k == "email":
+				if a, err := mail.ParseAddress(v); err != nil || a.Address != v {
+					res.Error = "email: invalid address"
+					return nil
+				}
+			case ch.Type == "ipv64_sms" && k == "number":
+				n, err := notify.SMSNumber(v)
+				if err != nil {
+					res.Error = "number: " + err.Error()
+					return nil
+				}
+				v = n
+			}
+			if (k == "email" || k == "number") && merged[k] != v {
+				verified = 0
+			}
+			if isSecretField(k) && s.box != nil {
+				v = s.box.Encrypt(v)
+			}
+			merged[k] = v
+		}
+		cfgMerged, _ := json.Marshal(merged)
+		_, err = tx.ExecContext(ctx, `UPDATE hc2_channels SET name=?, config_enc=?, verified=?, enabled=?, is_default=?, lang=?, notify_down=?, notify_up=?, revision=?, updated_at=? WHERE id=?`,
+			truncate(ch.Name, 100), string(cfgMerged), verified, b2i(ch.Enabled), b2i(ch.Default), ch.Lang, b2i(ch.NotifyDown), b2i(ch.NotifyUp), rev, nowStr(), id)
+	} else if foreign {
 		_, err = tx.ExecContext(ctx, `UPDATE hc2_channels SET name=?, enabled=?, is_default=?, lang=?, notify_down=?, notify_up=?, revision=?, updated_at=? WHERE id=?`,
 			truncate(ch.Name, 100), b2i(ch.Enabled), b2i(ch.Default), ch.Lang, b2i(ch.NotifyDown), b2i(ch.NotifyUp), rev, nowStr(), id)
 	} else if exists {

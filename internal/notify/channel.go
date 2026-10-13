@@ -126,7 +126,13 @@ func IsSecret(t Type, key string) bool {
 }
 
 // Validate prueft Typ und Pflichtfelder.
-func (c *Channel) Validate() error {
+func (c *Channel) Validate() error { return c.validate(false) }
+
+// ValidateKeepSecrets prueft wie Validate, laesst aber leere Pflicht-Geheimnisse zu: Kanaele des
+// Portals, deren Zugangsdaten bei ipv64 liegen (leer = unveraendert lassen).
+func (c *Channel) ValidateKeepSecrets() error { return c.validate(true) }
+
+func (c *Channel) validate(keepSecrets bool) error {
 	fields, ok := Fields[c.Type]
 	if !ok {
 		return fmt.Errorf("unknown channel type %q", c.Type)
@@ -143,7 +149,7 @@ func (c *Channel) Validate() error {
 		if v == "" && f.Default != "" {
 			v = f.Default
 		}
-		if f.Required && v == "" {
+		if f.Required && v == "" && !(keepSecrets && f.Secret) {
 			return fmt.Errorf("%s is required", f.Key)
 		}
 		if c.Type == TypeIPv64SMS && f.Key == "number" {

@@ -2,7 +2,6 @@ package web
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -190,6 +189,7 @@ func clampStr(s string, lo, hi int, def string) string {
 }
 
 type channelFormData struct {
+	Server bool // Kanal des Portals (Geheimnisse bei ipv64)
 	Edit   bool
 	ID     int64
 	Type   notify.Type
@@ -257,9 +257,7 @@ func (s *Server) channelForm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	d.Fields = notify.Fields[d.Type]
-	if server {
-		d.Fields = nil // Kanal des Portals/einer anderen Node: Zugangsdaten nur dort, hier Name und Schalter
-	}
+	d.Server = server // Kanal des Portals: Geheimnisse liegen bei ipv64 (leer = unveraendert)
 	v.Data = d
 	s.render(w, r, http.StatusOK, "channel_form", v)
 }
@@ -286,12 +284,9 @@ func (s *Server) channelSubmit(w http.ResponseWriter, r *http.Request) {
 	if l := r.PostFormValue("lang"); s.I18n.Has(l) {
 		ch.Lang = l
 	}
-	// Kanal des Portals/einer anderen Node: Zugangsdaten kennt nur der Besitzer, hier Name und Schalter
+	// Kanal des Portals: die Node kennt nur die nicht geheimen Werte; leere Geheimnisse bleiben bei ipv64
 	server := edit && ch.Execution == "server"
 	for _, f := range notify.Fields[ch.Type] {
-		if server {
-			break
-		}
 		val := r.PostFormValue("cfg_" + f.Key)
 		if f.Kind == "bool" {
 			val = map[bool]string{true: "true", false: "false"}[val == "on"]
@@ -302,10 +297,10 @@ func (s *Server) channelSubmit(w http.ResponseWriter, r *http.Request) {
 		ch.Config[f.Key] = strings.TrimSpace(val)
 	}
 	var err error
-	if !server {
+	if server {
+		err = ch.ValidateKeepSecrets()
+	} else {
 		err = ch.Validate()
-	} else if ch.Name == "" {
-		err = errors.New("name is required")
 	}
 	if err == nil {
 		if edit {
