@@ -46,6 +46,7 @@
 	{{if $d.Sort}}<input type="hidden" name="sort" value="{{$d.Sort}}"><input type="hidden" name="dir" value="{{$d.Dir}}">{{end}}
 </form>
 
+<div id="hc-live" data-t-in="{{.T "hc.next_in"}}" data-t-now="{{.T "hc.next_now"}}" data-t-push="{{.T "hc.next_push_until"}}" data-t-overdue="{{.T "hc.next_overdue"}}">
 {{if and (not $d.Rows) $d.Docker}}
 {{else if not $d.Rows}}
 <div class="card"><div class="card-body text-center text-body-secondary py-4">
@@ -72,7 +73,7 @@
 			<th class="d-none d-md-table-cell"><a href="?sort=type&dir={{if and (eq $d.Sort "type") (ne $d.Dir "desc")}}desc{{else}}asc{{end}}{{$qs}}">{{.T "common.type"}}</a></th>
 			<th class="text-end d-none d-md-table-cell"><a href="?sort=latency&dir={{if and (eq $d.Sort "latency") (ne $d.Dir "desc")}}desc{{else}}asc{{end}}{{$qs}}">{{.T "hc.latency"}}</a></th>
 			<th>{{.T "hc.recent"}}</th>
-			<th class="d-none d-md-table-cell"><a href="?sort=changed&dir={{if and (eq $d.Sort "changed") (ne $d.Dir "desc")}}desc{{else}}asc{{end}}{{$qs}}">{{.T "hc.changed"}}</a></th>
+			<th class="d-none d-md-table-cell"><a href="?sort=next&dir={{if and (eq $d.Sort "next") (ne $d.Dir "desc")}}desc{{else}}asc{{end}}{{$qs}}">{{.T "hc.next"}}</a></th>
 			<th class="text-end">{{.T "common.actions"}}</th>
 		</tr>
 	</thead>
@@ -102,7 +103,7 @@
 		<td data-label="{{$.T "common.type"}}" class="d-none d-md-table-cell"><span class="badge text-bg-light">{{$.T (print "hc.type." $c.Type)}}</span></td>
 		<td data-label="{{$.T "hc.latency"}}" class="text-end text-nowrap d-none d-md-table-cell">{{if gt .Latency 0.0}}{{ms .Latency}} ms{{else}}–{{end}}</td>
 		<td data-label="{{$.T "hc.recent"}}" class="hc-beats"><div class="beats">{{range .Pills}}<span class="beat beat-{{.Class}}" data-bs-toggle="tooltip" data-tip-label="{{.Label}}" data-tip-when="{{.When}}" data-tip-ms="{{.Latency}}" data-tip-msg="{{.Message}}"></span>{{end}}</div></td>
-		<td data-label="{{$.T "hc.changed"}}" class="small text-nowrap d-none d-md-table-cell" title="{{$.Time .Changed}}">{{$.Ago .Changed}}</td>
+		<td data-label="{{$.T "hc.next"}}" class="small text-nowrap d-none d-md-table-cell">{{if eq .State "paused"}}<span class="text-body-secondary">{{$.T "hc.state.paused"}}</span>{{else if .NextAt.IsZero}}<span class="text-body-secondary">–</span>{{else}}<span class="hc-next{{if .NextEst}} fst-italic{{end}}" data-next="{{.NextAt.UTC.Format "2006-01-02T15:04:05.000Z"}}"{{if .NextPush}} data-push="1"{{end}} title="{{if .NextPush}}{{$.T "hc.next_push"}}{{else}}{{$.T "hc.next"}}{{end}}: {{$.Time .NextAt}}{{if .NextEst}} ({{$.T "hc.next_est"}}){{end}}">{{$.Time .NextAt}}</span>{{end}}</td>
 		<td data-label="{{$.T "common.actions"}}" class="text-end text-nowrap hc-c-actions">
 			{{if eq .State "paused"}}
 			<button class="btn btn-sm btn-outline-success" form="act-{{$c.Token}}" name="action" value="resume" title="{{$.T "hc.action.resume"}}"><i class="bi bi-play-fill"></i></button>
@@ -152,7 +153,7 @@
 	<input type="hidden" name="_csrf" value="{{.CSRF}}">
 	<div class="table-responsive">
 	<table class="table table-hover table-sm align-middle table-cards hc-table mb-0">
-		<thead><tr><th style="width:1%" class="ps-3 d-none d-md-table-cell"><input type="checkbox" class="form-check-input" data-select-all aria-label="all"></th><th>{{.T "common.status"}}</th><th>{{.T "hc.docker.container"}}</th><th class="d-none d-md-table-cell">{{.T "hc.docker.state"}}</th><th>{{.T "hc.recent"}}</th><th class="d-none d-md-table-cell">{{.T "hc.changed"}}</th><th class="text-end pe-3">{{.T "common.actions"}}</th></tr></thead>
+		<thead><tr><th style="width:1%" class="ps-3 d-none d-md-table-cell"><input type="checkbox" class="form-check-input" data-select-all aria-label="all"></th><th>{{.T "common.status"}}</th><th>{{.T "hc.docker.container"}}</th><th class="d-none d-md-table-cell">{{.T "hc.docker.state"}}</th><th>{{.T "hc.recent"}}</th><th class="d-none d-md-table-cell">{{.T "hc.next"}}</th><th class="text-end pe-3">{{.T "common.actions"}}</th></tr></thead>
 		<tbody>
 		{{range $d.Docker}}{{$c := .Check}}
 		<tr>
@@ -163,7 +164,7 @@
 				<div class="small text-body-secondary hc-target"><i class="bi bi-box"></i> {{$c.Target}}</div></td>
 			<td data-label="{{$.T "hc.docker.state"}}" class="small d-none d-md-table-cell">{{if .Message}}{{.Message}}{{else}}–{{end}}</td>
 			<td data-label="{{$.T "hc.recent"}}" class="hc-beats"><div class="beats">{{range .Pills}}<span class="beat beat-{{.Class}}" data-bs-toggle="tooltip" data-tip-label="{{.Label}}" data-tip-when="{{.When}}" data-tip-ms="{{.Latency}}" data-tip-msg="{{.Message}}"></span>{{end}}</div></td>
-			<td data-label="{{$.T "hc.changed"}}" class="small text-nowrap d-none d-md-table-cell" title="{{$.Time .Changed}}">{{$.Ago .Changed}}</td>
+			<td data-label="{{$.T "hc.next"}}" class="small text-nowrap d-none d-md-table-cell">{{if eq .State "paused"}}<span class="text-body-secondary">{{$.T "hc.state.paused"}}</span>{{else if .NextAt.IsZero}}<span class="text-body-secondary">–</span>{{else}}<span class="hc-next{{if .NextEst}} fst-italic{{end}}" data-next="{{.NextAt.UTC.Format "2006-01-02T15:04:05.000Z"}}"{{if .NextPush}} data-push="1"{{end}} title="{{if .NextPush}}{{$.T "hc.next_push"}}{{else}}{{$.T "hc.next"}}{{end}}: {{$.Time .NextAt}}{{if .NextEst}} ({{$.T "hc.next_est"}}){{end}}">{{$.Time .NextAt}}</span>{{end}}</td>
 			<td data-label="{{$.T "common.actions"}}" class="text-end text-nowrap hc-c-actions pe-3">
 				{{if eq .State "paused"}}<button class="btn btn-sm btn-outline-success" form="act-{{$c.Token}}" name="action" value="resume" title="{{$.T "hc.action.resume"}}"><i class="bi bi-play-fill"></i></button>
 				{{else}}<button class="btn btn-sm btn-outline-warning" form="act-{{$c.Token}}" name="action" value="pause" title="{{$.T "hc.action.pause"}}"><i class="bi bi-pause-fill"></i></button>{{end}}
@@ -201,5 +202,6 @@
 	{{end}}
 </div>
 {{end}}
+</div>
 {{end}}
 {{define "scripts"}}<script src="/static/js/healthchecks.js?v={{.Version}}"></script>{{end}}

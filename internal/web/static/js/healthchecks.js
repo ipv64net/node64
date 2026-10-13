@@ -41,9 +41,10 @@
 	}
 
 	// Tooltips der Pillen: Inhalt aus data-Attributen, hier maskiert und als HTML gesetzt
-	if (window.bootstrap && bootstrap.Tooltip) {
-		var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
-		document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+	var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+	var initTips = function (root) {
+		if (!window.bootstrap || !bootstrap.Tooltip) { return; }
+		root.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
 			var title = el.getAttribute("data-bs-title") || el.getAttribute("title") || "";
 			if (el.hasAttribute("data-tip-label")) {
 				var cls = (el.className.match(/beat-(up|down|maintenance|dependent)/) || [])[1] || "";
@@ -54,7 +55,8 @@
 			}
 			new bootstrap.Tooltip(el, { title: title, html: true, customClass: "hc-tip", container: "body", delay: { show: 80, hide: 0 } });
 		});
-	}
+	};
+	initTips(document);
 
 	// Detailseite: so viele Pillen, wie in die Breite passen (neueste rechts), fehlende links als Platzhalter
 	document.querySelectorAll(".beats-fill").forEach(function (bar) {
@@ -92,7 +94,7 @@
 	});
 
 	// Rueckfrage vor Loeschen und Massenaktionen
-	document.querySelectorAll("[data-confirm]").forEach(function (b) {
+	var initConfirm = function (root) { root.querySelectorAll("[data-confirm]").forEach(function (b) {
 		b.addEventListener("click", function (e) {
 			var form = b.form || b.closest("form");
 			if (form && form.id.indexOf("hc-bulk") === 0) {
@@ -101,17 +103,18 @@
 			}
 			if (!window.confirm(b.getAttribute("data-confirm"))) { e.preventDefault(); }
 		});
-	});
+	}); };
+	initConfirm(document);
 
-	// Alle auswaehlen
 	// Alle auswaehlen: je Tabelle (Haupttabelle, Docker), nur sichtbare Zeilen
-	document.querySelectorAll("[data-select-all]").forEach(function (all) {
+	var initSelectAll = function (root) { root.querySelectorAll("[data-select-all]").forEach(function (all) {
 		all.addEventListener("change", function () {
 			all.closest("form").querySelectorAll("input[name=tokens]").forEach(function (c) {
 				if (!c.closest("tr") || !c.closest("tr").classList.contains("d-none")) { c.checked = all.checked; }
 			});
 		});
-	});
+	}); };
+	initSelectAll(document);
 
 	// Gruppen auf- und zuklappen (Zustand im Browser gemerkt)
 	var closed = {};
@@ -121,7 +124,7 @@
 		var head = document.querySelector('tr.hc-group-row[data-group="' + key + '"]');
 		if (head) { head.classList.toggle("collapsed", hide); }
 	}
-	document.querySelectorAll(".hc-group-toggle").forEach(function (btn) {
+	var initGroups = function (root) { root.querySelectorAll(".hc-group-toggle").forEach(function (btn) {
 		var key = btn.getAttribute("data-group");
 		var name = btn.textContent.trim();
 		if (closed[name]) { setGroup(key, true); }
@@ -131,7 +134,60 @@
 			if (hide) { closed[name] = 1; } else { delete closed[name]; }
 			try { localStorage.setItem("node64_hc_closed", JSON.stringify(closed)); } catch (e) {}
 		});
-	});
+	}); };
+	initGroups(document);
+
+	// Uebersicht: Countdown bis zur naechsten Messung (bei Push: Frist bis zum naechsten Push). Laeuft einer ab,
+	// holt die Seite kurz darauf nur die Tabelle neu; Haekchen, Gruppen und Eingaben bleiben erhalten.
+	var live = document.getElementById("hc-live");
+	if (live) {
+		var tx = function (k, d) { return live.getAttribute("data-t-" + k) || d; };
+		var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+		var left = function (ms) {
+			var s = Math.max(0, Math.ceil(ms / 1000));
+			if (s >= 86400) { return Math.floor(s / 86400) + " d " + Math.floor(s % 86400 / 3600) + " h"; }
+			if (s >= 3600) { return Math.floor(s / 3600) + ":" + pad(Math.floor(s % 3600 / 60)) + " h"; }
+			return Math.floor(s / 60) + ":" + pad(s % 60);
+		};
+		var triggered = {}, refreshAt = 0, busy = false, lastRefresh = Date.now();
+		var refresh = function () {
+			var act = document.activeElement;
+			if (busy || document.hidden || (act && live.contains(act) && /INPUT|SELECT|TEXTAREA/.test(act.tagName) && act.type !== "checkbox")) { return; }
+			busy = true;
+			fetch(location.href, { credentials: "same-origin" }).then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); }).then(function (html) {
+				var fresh = new DOMParser().parseFromString(html, "text/html").getElementById("hc-live");
+				if (!fresh) { return; }
+				var checked = {};
+				live.querySelectorAll("input[name=tokens]:checked").forEach(function (c) { checked[c.value] = 1; });
+				if (window.bootstrap && bootstrap.Tooltip) {
+					live.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) { var t = bootstrap.Tooltip.getInstance(el); if (t) { t.dispose(); } });
+				}
+				live.innerHTML = fresh.innerHTML;
+				live.querySelectorAll("input[name=tokens]").forEach(function (c) { if (checked[c.value]) { c.checked = true; } });
+				initTips(live); initConfirm(live); initSelectAll(live); initGroups(live);
+				tick();
+			}).catch(function () {}).then(function () { busy = false; lastRefresh = Date.now(); });
+		};
+		var tick = function () {
+			var now = Date.now(), due = false;
+			live.querySelectorAll(".hc-next").forEach(function (el) {
+				var at = el.getAttribute("data-next"), ms = Date.parse(at) - now, push = el.hasAttribute("data-push");
+				if (ms > 0) {
+					el.textContent = (push ? tx("push", "bis {t}") : tx("in", "in {t}")).replace("{t}", left(ms));
+					el.classList.remove("text-danger");
+				} else if (push) {
+					el.textContent = tx("overdue", "überfällig"); el.classList.add("text-danger");
+				} else {
+					el.textContent = tx("now", "läuft …");
+					if (ms > -60000 && !triggered[at]) { triggered[at] = 1; due = true; } // je Termin nur einmal neu laden
+				}
+			});
+			if (due && !refreshAt) { refreshAt = now + 4000; } // kurz warten, bis das Ergebnis gespeichert ist
+			if ((refreshAt && now >= refreshAt && now - lastRefresh > 8000) || now - lastRefresh > 60000) { refreshAt = 0; refresh(); }
+		};
+		setInterval(tick, 1000);
+		tick();
+	}
 
 	// Push-URL in die Zwischenablage
 	document.querySelectorAll("[data-copy]").forEach(function (el) {

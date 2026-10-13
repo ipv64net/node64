@@ -62,6 +62,8 @@ type row struct {
 	Latency  float64
 	Pills    []Pill
 	Changed  time.Time
+	NextPush bool // NextAt ist die Frist fuer den naechsten Push
+	NextEst  bool // NextAt geschaetzt (misst eine andere Messstelle: letzte Messung + Intervall)
 	NextAt   time.Time
 	Reason   string
 	Message  string
@@ -126,6 +128,16 @@ func (m *Module) rowOf(ctx context.Context, lang string, c *Check, pills map[str
 		Maint: m.st.InMaintenance(ctx, c.Token, time.Now()), Retrying: rt.State == scheduler.StateUp && rt.ConsecutiveFail > 0, CertDays: -1}
 	if r.State == "" {
 		r.State = "pending"
+	}
+	switch {
+	case c.Type == checks.TypePush:
+		r.NextAt, r.NextPush = time.Time{}, true
+		if !rt.LastPush.IsZero() {
+			period, grace := checks.PushWindow(c.Params)
+			r.NextAt = rt.LastPush.Add(time.Duration(period+grace) * time.Second)
+		}
+	case !c.MeasuredHere() && !rt.LastCheck.IsZero() && c.Interval > 0:
+		r.NextAt, r.NextEst = rt.LastCheck.Add(c.Interval), true
 	}
 	return r
 }
@@ -320,6 +332,13 @@ func sortRows(rows []row, key string, desc bool) {
 		case "changed":
 			if !a.Changed.Equal(b.Changed) {
 				return a.Changed.After(b.Changed)
+			}
+		case "next": // naechster Termin zuerst, ohne Termin ans Ende
+			if a.NextAt.IsZero() != b.NextAt.IsZero() {
+				return !a.NextAt.IsZero()
+			}
+			if !a.NextAt.Equal(b.NextAt) {
+				return a.NextAt.Before(b.NextAt)
 			}
 		}
 		return strings.ToLower(a.Check.Name) < strings.ToLower(b.Check.Name)

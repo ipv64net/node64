@@ -301,6 +301,13 @@
     "silent": "no notification",
     "events": "Events",
     "event": "Event",
+    "next": "Next check",
+    "next_in": "in {t}",
+    "next_now": "running …",
+    "next_push": "Push due by",
+    "next_push_until": "push in {t}",
+    "next_overdue": "push overdue",
+    "next_est": "estimated: measured by another source",
     "target": "Target",
     "reasons": {
       "ok": "OK",

@@ -301,6 +301,13 @@
     "silent": "ohne Benachrichtigung",
     "events": "Ereignisse",
     "event": "Ereignis",
+    "next": "Nächste Messung",
+    "next_in": "in {t}",
+    "next_now": "läuft …",
+    "next_push": "Push spätestens",
+    "next_push_until": "Push in {t}",
+    "next_overdue": "Push überfällig",
+    "next_est": "geschätzt: misst eine andere Messstelle",
     "target": "Ziel",
     "reasons": {
       "ok": "OK",
