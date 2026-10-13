@@ -54,8 +54,8 @@ func (s *Store) AggregateHourlyShared(ctx context.Context, now time.Time) error 
 func (s *Store) AggregateDaily(ctx context.Context, now time.Time) error {
 	day := now.UTC().Truncate(24 * time.Hour)
 	from := day.AddDate(0, 0, -1)
-	return s.aggregate(ctx, "hc2_daily", "day", `SELECT token, source, DATE(hour), SUM(count), SUM(up_count), MIN(min_ms), SUM(avg_ms * count) / NULLIF(SUM(count), 0), MAX(max_ms)
-		FROM hc2_hourly WHERE hour >= ? GROUP BY token, source, DATE(hour)`, from.Format("2006-01-02 15:04:05"))
+	return s.aggregate(ctx, "hc2_daily", "day", `SELECT token, source, DATE_FORMAT(hour, '%Y-%m-%d'), SUM(count), SUM(up_count), MIN(min_ms), SUM(avg_ms * count) / NULLIF(SUM(count), 0), MAX(max_ms)
+		FROM hc2_hourly WHERE hour >= ? GROUP BY token, source, DATE_FORMAT(hour, '%Y-%m-%d')`, from.Format("2006-01-02 15:04:05"))
 }
 
 // aggregateLate verdichtet nachgelieferte Messpunkte einer Node (war offline): deren Stunden und Tage,
@@ -70,13 +70,14 @@ func (s *Store) aggregateLate(source string, earliest, now time.Time) {
 		return
 	}
 	day := from.Truncate(24 * time.Hour)
-	if err := s.aggregate(ctx, "hc2_daily", "day", `SELECT token, source, DATE(hour), SUM(count), SUM(up_count), MIN(min_ms), SUM(avg_ms * count) / NULLIF(SUM(count), 0), MAX(max_ms)
-		FROM hc2_hourly WHERE source = ? AND hour >= ? GROUP BY token, source, DATE(hour)`, source, day.Format("2006-01-02 15:04:05")); err != nil {
+	if err := s.aggregate(ctx, "hc2_daily", "day", `SELECT token, source, DATE_FORMAT(hour, '%Y-%m-%d'), SUM(count), SUM(up_count), MIN(min_ms), SUM(avg_ms * count) / NULLIF(SUM(count), 0), MAX(max_ms)
+		FROM hc2_hourly WHERE source = ? AND hour >= ? GROUP BY token, source, DATE_FORMAT(hour, '%Y-%m-%d')`, source, day.Format("2006-01-02 15:04:05")); err != nil {
 		s.log.Warn("late daily aggregation failed", "source", source, "err", err)
 	}
 }
 
-// aggregate liest die Verdichtung sperrfrei und schreibt sie in Paketen zu 500 Zeilen (Upsert).
+// aggregate liest die Verdichtung sperrfrei und schreibt sie in Paketen zu 500 Zeilen (Upsert). Die Zeitspalte
+// muss als Text kommen (DATE_FORMAT): mit parseTime=true wird sonst ein Zeitstempel daraus, den DATE nicht annimmt.
 func (s *Store) aggregate(ctx context.Context, table, col, query string, args ...any) error {
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
