@@ -498,6 +498,40 @@ type Event struct {
 	IncidentID  int64     `json:"incident_id,omitempty"`
 }
 
+// Badge ist eine farbige Kennzeichnung in Tabellen (Bootstrap-Klasse).
+type Badge struct{ Text, Class string }
+
+var httpCodeRe = regexp.MustCompile(`\bHTTP (\d{3})\b`)
+
+// HTTPBadges: die HTTP-Codes aus der Meldung (ipv4 und ipv6 je einmal), farbig nach Klasse.
+func (e Event) HTTPBadges() []Badge {
+	var out []Badge
+	seen := map[string]bool{}
+	for _, m := range httpCodeRe.FindAllStringSubmatch(e.Message, -1) {
+		if seen[m[1]] {
+			continue
+		}
+		seen[m[1]] = true
+		class := map[byte]string{'2': "text-bg-success", '3': "text-bg-info", '4': "text-bg-warning", '5': "text-bg-danger"}[m[1][0]]
+		if class == "" {
+			class = "text-bg-secondary"
+		}
+		out = append(out, Badge{Text: m[1], Class: class})
+	}
+	return out
+}
+
+// ReasonClass: Farbe des Grund-Badges (OK gruen, Warnungen gelb, Fehler rot).
+func (e Event) ReasonClass() string {
+	switch e.Reason {
+	case "", "ok":
+		return "text-bg-success"
+	case "cert_expiring", "latency_high", "packet_loss", "dependency_down", "container_restarting", "container_paused":
+		return "text-bg-warning"
+	}
+	return "text-bg-danger"
+}
+
 // Events liefert Ereignisse, neueste zuerst; token leer = alle.
 func (s *Store) Events(ctx context.Context, token string, limit int, before int64) ([]Event, error) {
 	if limit <= 0 || limit > 1000 {

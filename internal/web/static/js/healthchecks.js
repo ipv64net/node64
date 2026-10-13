@@ -146,6 +146,32 @@
 	if (canvas && window.Chart) {
 		var token = canvas.getAttribute("data-token");
 		var chart = null;
+		// Legende filtert nach Messstelle: Klick = nur diese (nochmal = alle), Strg/Cmd/Umschalt-Klick = mehrere.
+		// Die Auswahl bleibt beim Wechsel des Zeitraums; die Stoerungspunkte folgen ihr.
+		var only = null; // Labels der sichtbaren Messstellen, null = alle
+		var applyOnly = function (ch) {
+			var names = ch.data.datasets.filter(function (d) { return !d.hcBad; }).map(function (d) { return d.label; });
+			if (only && !names.some(function (n) { return only.indexOf(n) >= 0; })) { only = null; }
+			ch.data.datasets.forEach(function (d, i) {
+				if (d.hcBad) { d.data = d.hcAll.filter(function (p) { return !only || only.indexOf(p.src) >= 0; }); }
+				else { ch.setDatasetVisibility(i, !only || only.indexOf(d.label) >= 0); }
+			});
+			ch.update();
+		};
+		var legendClick = function (e, item, legend) {
+			var ch = legend.chart, ds = ch.data.datasets[item.datasetIndex];
+			if (ds.hcBad) { ch.setDatasetVisibility(item.datasetIndex, !ch.isDatasetVisible(item.datasetIndex)); ch.update(); return; }
+			var names = ch.data.datasets.filter(function (d) { return !d.hcBad; }).map(function (d) { return d.label; });
+			var ev = e.native || {};
+			if (ev.ctrlKey || ev.metaKey || ev.shiftKey) {
+				var sel = (only || []).slice(), at = sel.indexOf(ds.label);
+				if (at >= 0) { sel.splice(at, 1); } else { sel.push(ds.label); }
+				only = sel.length && sel.length < names.length ? sel : null;
+			} else {
+				only = only && only.length === 1 && only[0] === ds.label ? null : [ds.label];
+			}
+			applyOnly(ch);
+		};
 		var note = document.getElementById("hc-chart-note");
 		var css = getComputedStyle(document.documentElement);
 		var color = function (name, fallback) { return (css.getPropertyValue(name) || fallback).trim(); };
@@ -245,19 +271,19 @@
 					};
 				});
 				// Ausfaelle: rote Punkte auf der Nulllinie (Stunden/Tage mit Verlust gelb)
-				var bad = [], badCol = [];
+				var bad = [];
 				series.forEach(function (s) {
 					s.points.forEach(function (p) {
 						var isBad = raw ? p.ms === null : (typeof p.up === "number" && p.up < 100);
 						if (isBad) {
-							bad.push({ x: new Date(p.t).getTime(), y: 0, up: p.up, src: s.label });
-							badCol.push(raw || p.up <= 0 ? danger : warn);
+							bad.push({ x: new Date(p.t).getTime(), y: 0, up: p.up, src: s.label, col: raw || p.up <= 0 ? danger : warn });
 						}
 					});
 				});
 				if (bad.length) {
-					datasets.push({ label: canvas.getAttribute("data-label-down") || "down", data: bad, showLine: false, pointRadius: 3, pointHoverRadius: 5,
-						pointBackgroundColor: badCol, pointBorderColor: badCol, borderColor: danger, backgroundColor: danger });
+					var badColor = function (c) { return (c.raw && c.raw.col) || danger; };
+					datasets.push({ label: canvas.getAttribute("data-label-down") || "down", data: bad, hcBad: true, hcAll: bad.slice(), showLine: false, pointRadius: 3, pointHoverRadius: 5,
+						pointBackgroundColor: badColor, pointBorderColor: badColor, borderColor: danger, backgroundColor: danger });
 				}
 				// Zustandsphasen aus den Ereignissen als farbige Baender
 				var ev = events.slice().sort(function (a, b) { return new Date(a.time) - new Date(b.time); });
@@ -281,7 +307,7 @@
 							y: { beginAtZero: true, title: { display: true, text: "ms" } }
 						},
 						plugins: {
-							legend: { display: datasets.length > 1 },
+							legend: { display: datasets.length > 1, onClick: legendClick },
 							tooltip: { callbacks: {
 								title: function (items) { return items.length ? fmt(items[0].parsed.x, range, true) : ""; },
 								label: function (it) {
@@ -297,6 +323,8 @@
 				};
 				if (chart) { chart.destroy(); }
 				chart = new Chart(canvas.getContext("2d"), cfg);
+				if (only) { applyOnly(chart); }
+				if (note && series.length > 1) { note.textContent += " " + (note.getAttribute("data-legend") || ""); }
 			}).catch(function () {});
 		};
 		document.querySelectorAll("#hc-ranges button").forEach(function (b) {
