@@ -708,6 +708,14 @@
     "deleted": "API key deleted.",
     "show_once": "The key is shown only now:"
   },
+  "reset": {
+    "title": "Reset node",
+    "hint": "Deletes all local data: checks, measurements, channels, users, settings, keys and backups. The node then starts like a fresh install. A link with ipv64 is removed first.",
+    "password": "Your password",
+    "button": "Reset",
+    "confirm": "Really delete ALL data of this node permanently and restart?",
+    "restarting": "The node is being reset and restarts. In a few seconds you can set it up again."
+  },
   "backup": {
     "title": "Backup and configuration",
     "hint": "The backup contains the whole database including measurements. The export contains only the configuration as JSON.",

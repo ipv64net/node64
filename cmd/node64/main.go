@@ -20,6 +20,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 	_ "time/tzdata" // Zeitzonen im Binary, das Laufzeit-Image hat keine
@@ -69,6 +70,9 @@ func run() error {
 
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
 		return fmt.Errorf("data dir %s: %w", cfg.DataDir, err)
+	}
+	if err := applyReset(cfg, log); err != nil {
+		return err
 	}
 	box, err := secrets.Load(cfg.SecretKeyPath())
 	if err != nil {
@@ -190,6 +194,45 @@ func updateLoop(ctx context.Context, st *store.Store, log *slog.Logger) {
 			check()
 		}
 	}
+}
+
+// applyReset leert nach einem Zuruecksetzen (Merker node64.reset) das Datenverzeichnis; nur ein
+// eigenes Zertifikat (NODE64_TLS_CERT/KEY), das dort liegt, bleibt erhalten.
+func applyReset(cfg *config.Config, log *slog.Logger) error {
+	if _, err := os.Stat(filepath.Join(cfg.DataDir, web.ResetFileName)); err != nil {
+		return nil
+	}
+	var keep []string
+	for _, f := range []string{cfg.TLSCertFile, cfg.TLSKeyFile} {
+		if f != "" {
+			if abs, err := filepath.Abs(f); err == nil {
+				keep = append(keep, abs)
+			}
+		}
+	}
+	entries, err := os.ReadDir(cfg.DataDir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		p := filepath.Join(cfg.DataDir, e.Name())
+		abs, _ := filepath.Abs(p)
+		held := false
+		for _, k := range keep {
+			held = held || k == abs || strings.HasPrefix(k, abs+string(filepath.Separator))
+		}
+		if held || e.Name() == web.ResetFileName {
+			continue
+		}
+		if err := os.RemoveAll(p); err != nil {
+			return fmt.Errorf("reset %s: %w", p, err)
+		}
+	}
+	if err := os.Remove(filepath.Join(cfg.DataDir, web.ResetFileName)); err != nil {
+		return err
+	}
+	log.Warn("factory reset: data directory cleared")
+	return nil
 }
 
 // applyRestore setzt eine hochgeladene Datenbank (node64.db.restore) ein und

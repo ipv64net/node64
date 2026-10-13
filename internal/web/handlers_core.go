@@ -17,6 +17,7 @@ import (
 	"github.com/ipv64net/node64/internal/logging"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/store"
+	nodesync "github.com/ipv64net/node64/internal/sync"
 )
 
 var usernameRe = regexp.MustCompile(`^[A-Za-z0-9._-]{3,64}$`)
@@ -310,6 +311,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------- Settings
 
 type settingsData struct {
+	Linked     bool // mit ipv64 verknuepft (Zuruecksetzen trennt die Verknuepfung)
 	NodeName   string
 	Location   string
 	Modules    []module.Status
@@ -355,6 +357,7 @@ func (s *Server) settingsView(r *http.Request) *View {
 	d.RawDays, d.HourlyDays, d.ChartDetail = healthchecks.RawDays(s.Store), healthchecks.HourlyDays(s.Store), healthchecks.ChartDetail(s.Store)
 	d.RawOptions, d.HourlyOptions, d.ChartOptions = healthchecks.RawDayOptions, healthchecks.HourlyDayOptions, healthchecks.ChartDetailOptions
 	d.UpdateOn = s.Store.SettingOr(ctx, "updates.check", "0") == "1"
+	d.Linked = s.Linker != nil && s.Store.SettingOr(ctx, nodesync.SetToken, "") != ""
 	if raw := s.Store.SettingOr(ctx, "updates.latest", ""); raw != "" {
 		_ = json.Unmarshal([]byte(raw), &d.Update)
 	}

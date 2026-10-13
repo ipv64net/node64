@@ -117,6 +117,7 @@ ICMP-Checks brauchen im Container entweder unprivilegiertes Ping (`sysctls: net.
 ## Betrieb
 
 - **Backup:** Unter *Einstellungen* lässt sich die Datenbank im laufenden Betrieb konsistent herunterladen und aus einer Datei wiederherstellen. Nach der Wiederherstellung startet der Node neu (Docker startet ihn mit `restart: unless-stopped` automatisch), die alte Datenbank bleibt unter `/data/backups`. Vor jeder Migration entsteht dort ebenfalls ein Backup.
+- **Zurücksetzen:** Unter *Einstellungen → Über* setzt *Node zurücksetzen* (Passwort und Rückfrage) den Node auf den Auslieferungszustand: eine Verknüpfung mit ipv64 wird getrennt, nach dem Neustart ist `/data` leer (Datenbank, Schlüssel, Zertifikat, Backups) und die Einrichtung beginnt neu. Ein eigenes Zertifikat (`NODE64_TLS_CERT`/`NODE64_TLS_KEY`) unter `/data` bleibt erhalten. Bewusst nur in der Oberfläche, nicht per API-Key.
 - **Export und Import:** Die Konfiguration (Checks, Wartungsfenster, Kanäle, Einstellungen) als JSON, wahlweise ohne Geheimnisse oder mit Passwort verschlüsselt. Der Import gleicht Checks über den Token und Kanäle über den Namen ab und löscht nichts.
 - **Zwei-Faktor-Anmeldung:** TOTP mit jeder Authenticator-App, acht Wiederherstellungscodes.
 - **API-Keys:** Für Skripte gegen die lokale API, `Authorization: Bearer node64_...`. Keys werden nur einmal angezeigt und gehasht gespeichert.

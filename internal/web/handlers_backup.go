@@ -20,13 +20,15 @@ import (
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/secrets"
+	nodesync "github.com/ipv64net/node64/internal/sync"
 )
 
 // Backup der Datenbank, Wiederherstellung, Export und Import der Konfiguration.
 
 const (
 	RestoreFileName = "node64.db.restore"
-	maxUpload       = 1 << 30 // 1 GB fuer Datenbank-Wiederherstellung
+	ResetFileName   = "node64.reset" // Merker: beim naechsten Start das Datenverzeichnis leeren
+	maxUpload       = 1 << 30        // 1 GB fuer Datenbank-Wiederherstellung
 	maxImport       = 16 << 20
 )
 
@@ -35,6 +37,7 @@ func (s *Server) backupRoutes() {
 	s.mux.Handle("POST /settings/restore", s.auth(s.restoreUpload))
 	s.mux.Handle("POST /settings/export", s.auth(s.exportConfig))
 	s.mux.Handle("POST /settings/import", s.auth(s.importConfig))
+	s.mux.Handle("POST /settings/reset", s.auth(s.resetNode))
 }
 
 // bodyLimitFor erlaubt fuer Uploads groessere Bodys.
@@ -106,6 +109,40 @@ func (s *Server) restoreUpload(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			time.Sleep(1500 * time.Millisecond)
 			s.log.Warn("restarting for database restore")
+			s.Restart()
+		}()
+	}
+}
+
+// resetNode setzt den Node auf den Auslieferungszustand zurueck: nach Passwort-Pruefung wird eine
+// bestehende Verknuepfung sauber getrennt, ein Merker abgelegt und neu gestartet; beim Start
+// leert cmd/node64 dann das Datenverzeichnis (Datenbank, Schluessel, Zertifikat, Backups).
+func (s *Server) resetNode(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	v := s.view(r, "settings.title")
+	if !VerifyPassword(v.User.PasswordHash, r.PostFormValue("password")) {
+		s.flash(w, r, "danger", v.T("settings.password_wrong"))
+		http.Redirect(w, r, "/settings#reset", http.StatusSeeOther)
+		return
+	}
+	if s.Linker != nil && s.Store.SettingOr(ctx, nodesync.SetToken, "") != "" {
+		keep := r.PostFormValue("keep_checks") == "on"
+		if err := s.Linker.Unlink(ctx, keep); err != nil {
+			s.log.Warn("reset: unlink failed, resetting anyway", "err", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(s.Cfg.DataDir, ResetFileName), []byte(time.Now().UTC().Format(time.RFC3339)), 0o600); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.audit(r, "node.reset", "", "")
+	s.log.Warn("factory reset requested", "user", v.User.Username)
+	s.flash(w, r, "warning", v.T("reset.restarting"))
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	if s.Restart != nil {
+		go func() {
+			time.Sleep(1500 * time.Millisecond)
+			s.log.Warn("restarting for factory reset")
 			s.Restart()
 		}()
 	}
