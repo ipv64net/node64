@@ -42,6 +42,7 @@ type Key struct {
 	box    *secrets.Box
 	client *Client
 	log    *slog.Logger
+	ovc    overviewCache // Account-Uebersicht (overview.go)
 }
 
 // NewKey erzeugt die Ablage; box darf nil sein (dann unverschluesselt, nur Tests).

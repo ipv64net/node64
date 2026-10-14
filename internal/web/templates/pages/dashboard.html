@@ -82,6 +82,34 @@
 		</div>
 	</div>
 	<div class="col-md-6 col-xl-4">
+		<div class="card h-100" id="account">
+			<div class="card-header d-flex align-items-center"><span><img src="/static/img/ipv64_logo.svg" alt="" height="14" class="logo logo-light align-baseline"><img src="/static/img/ipv64_logo_white.svg" alt="" height="14" class="logo logo-dark align-baseline"> {{.T "dashboard.account"}}</span>
+				{{if $d.API}}<a class="ms-auto text-body-secondary" href="/?refresh=account#account" title="{{.T "logs.refresh"}}"><i class="bi bi-arrow-clockwise"></i></a>{{end}}</div>
+			<div class="card-body small">
+				{{with $d.API}}{{if .Account}}
+				<div class="mb-2"><span class="badge text-bg-success"><i class="bi bi-key-fill"></i> {{$.T "dashboard.api_ok"}}</span> {{.Account}}{{if .Plan}} <span class="badge text-bg-light">{{.Plan}}</span>{{end}}</div>
+				{{if not .PlanUntil.IsZero}}<div class="text-body-secondary mb-2">{{$.T "dashboard.plan_until" "date" ($.Date .PlanUntil)}}</div>{{end}}
+				{{if .Err}}<div class="alert alert-warning py-1 px-2 mb-2">{{$.T "dashboard.api_err"}}: {{.Err}}</div>{{end}}
+				{{range .Limits}}<div class="mb-2">
+					<div class="d-flex justify-content-between gap-2"><span>{{$.T (print "dashboard.limit." .Key)}}</span><span class="text-nowrap {{if .Full}}text-danger{{else if .Warn}}text-warning-emphasis{{else}}text-body-secondary{{end}}">{{.UsedText}} / {{if .Unlimited}}∞{{else}}{{.MaxText}}{{end}}</span></div>
+					{{if not .Unlimited}}<div class="progress mt-1" style="height:.4rem" role="progressbar" aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{if .Full}}bg-danger{{else if .Warn}}bg-warning{{else}}bg-success{{end}}" style="width:{{.Pct}}%"></div></div>{{end}}
+				</div>{{end}}
+				<div class="text-body-secondary" title="{{$.Time .At}}">{{$.T "dashboard.api_at"}} {{$.Ago .At}}</div>
+				{{else}}<div class="alert alert-warning py-1 px-2 mb-0">{{$.T "dashboard.api_err"}}: {{.Err}} <a href="/settings#ipv64">{{$.T "nav.settings"}}</a></div>{{end}}
+				{{else}}
+				<p class="text-body-secondary mb-2">{{.T "dashboard.api_none"}}</p>
+				<a class="btn btn-outline-primary btn-sm" href="/settings#ipv64"><i class="bi bi-key"></i> {{.T "dashboard.api_setup"}}</a>
+				{{end}}
+				{{if $d.Mismatch}}<div class="alert alert-warning py-1 px-2 mt-2 mb-0"><i class="bi bi-exclamation-triangle"></i> {{.T "dashboard.mismatch"}}</div>{{end}}
+				<hr class="my-2">
+				<div><i class="bi bi-cloud"></i> {{.T "dashboard.hc_sync"}}:
+					{{if .Sync.Linked}}{{if .Sync.Connected}}<span class="badge text-bg-success">{{.T "link.connected"}}</span>{{else}}<span class="badge text-bg-warning">{{.T "link.disconnected"}}</span>{{end}}
+					{{else}}<span class="badge text-bg-light">{{.T "dashboard.hc_off"}}</span> <a href="/link">{{.T "dashboard.hc_link"}}</a>{{end}}</div>
+				<div class="text-body-secondary">{{.T "dashboard.hc_hint"}}</div>
+			</div>
+		</div>
+	</div>
+	<div class="col-md-6 col-xl-4">
 		<div class="card h-100">
 			<div class="card-header"><i class="bi bi-cloud text-info"></i> {{.T "dashboard.link_status"}}</div>
 			<div class="card-body small">

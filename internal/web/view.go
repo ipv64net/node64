@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/store"
 	nodesync "github.com/ipv64net/node64/internal/sync"
@@ -27,6 +28,8 @@ type View struct {
 	Nav      []NavItem
 	Flash    *Flash
 	Sync     nodesync.State
+	API      ipv64api.AccountInfo // zentraler API-Key (Account leer = keiner)
+	APIOk    bool                 // Key hinterlegt und nicht abgelaufen
 	SetupRun bool
 	Data     any
 	Scheme   string
@@ -213,6 +216,10 @@ func (s *Server) view(r *http.Request, titleKey string) *View {
 	v := &View{s: s, Lang: s.lang(r), Path: r.URL.Path, User: currentUser(r), CSRF: csrfToken(r), Version: s.Version,
 		Errors: map[string]string{}, Form: map[string]string{}, loc: s.location(r), Sync: s.Sync.State()}
 	v.Title = v.T(titleKey)
+	if s.IPv64 != nil && s.Store.SettingOr(r.Context(), ipv64api.SetKey, "") != "" {
+		v.API = s.IPv64.Info(r.Context())
+		v.APIOk = v.API.Account != "" && !v.API.Expired()
+	}
 	v.Scheme, v.Host = "http", r.Host
 	if r.TLS != nil {
 		v.Scheme = "https"

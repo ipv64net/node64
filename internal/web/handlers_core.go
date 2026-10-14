@@ -236,8 +236,11 @@ type dashboardData struct {
 	// Checks nach Besitzer (verknuepft)
 	Own, Hybrid, OnlineOnly, Other, OnlinePoints int
 	ChecksProj                                   int // Tageskontingent: hochgerechneter Verbrauch pro Tag
-	ConnectedAt, LastSync, LinkedAt              time.Time
-	Peers, PeersOnline                           int // Nodes dieser Verknuepfung
+	// ipv64-Account direkt ueber die API v2 (nil = kein Key)
+	API                             *ipv64api.Overview
+	Mismatch                        bool // API-Key gehoert zu einem anderen Account als der Healthchecks-Sync
+	ConnectedAt, LastSync, LinkedAt time.Time
+	Peers, PeersOnline              int // Nodes dieser Verknuepfung
 }
 
 func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
@@ -289,6 +292,13 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 				d.ChecksProj += healthchecks.CheckDailyCost(c, v.Sync.Locations)
 			}
 		}
+	}
+	if s.IPv64 != nil {
+		if r.URL.Query().Get("refresh") == "account" {
+			s.IPv64.ResetOverview()
+		}
+		d.API = s.IPv64.Overview(ctx, 5*time.Minute)
+		d.Mismatch = d.API != nil && v.Sync.Linked && v.API.ID != 0 && v.Sync.AccountID != "" && v.Sync.AccountID != strconv.Itoa(v.API.ID)
 	}
 	st := v.Sync
 	d.ConnectedAt, _ = time.Parse(time.RFC3339, st.ConnectedAt)
