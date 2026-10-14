@@ -28,6 +28,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /dyndns", page(m.pageOverview))
 	mux.Handle("POST /dyndns/check", page(m.pageCheckNow))
 	mux.Handle("POST /dyndns/settings", page(m.pageSettings))
+	m.targetRoutes(mux, page)
 }
 
 // famView ist eine Adressfamilie fuer die Anzeige.
@@ -55,6 +56,9 @@ type checkRow struct {
 
 type overviewData struct {
 	Targets   int
+	List      []*Target
+	HasKey    bool
+	Account   accountInfo
 	V4, V6    famView
 	Fams      []famView // V4, V6 fuer die Schleife im Template
 	Local     []ifAddr
@@ -100,7 +104,9 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 	if !last.IsZero() {
 		d.NextAt = last.Add(m.interval())
 	}
-	_ = m.core.Reader().QueryRowContext(ctx, `SELECT count(*) FROM dyn_targets`).Scan(&d.Targets)
+	d.List, _ = m.Targets(ctx)
+	d.Targets = len(d.List)
+	d.HasKey, d.Account = m.apiKey(ctx) != "", m.account(ctx)
 	rows, err := m.core.Reader().QueryContext(ctx, `SELECT time, family, source, ip, error, duration_ms, changed FROM dyn_checks ORDER BY id DESC LIMIT 12`)
 	if err == nil {
 		for rows.Next() {

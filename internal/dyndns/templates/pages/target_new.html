@@ -1,0 +1,67 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1 class="h4 mb-3"><img src="/static/img/dyndns64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{.T "dyn.targets.add"}}</h1>
+<div class="row g-3">
+	<div class="col-lg-8">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-list-check text-primary"></i> {{.T "dyn.pick.title"}}{{if $d.Account.Account}} <span class="text-body-secondary small">({{$d.Account.Account}})</span>{{end}}</div>
+			{{if not $d.HasKey}}
+			<div class="card-body small">{{.T "dyn.pick.need_key"}} <a href="/dyndns#api">{{.T "dyn.api.title"}}</a></div>
+			{{else if $d.Err}}
+			<div class="card-body small"><span class="badge text-bg-danger">{{$d.Err}}</span></div>
+			{{else if not $d.Names}}
+			<div class="card-body small text-body-secondary">{{.T "dyn.pick.empty"}}</div>
+			{{else}}
+			<form method="post" action="/dyndns/targets/new">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards small">
+					<thead><tr><th style="width:1%" class="ps-3"><input type="checkbox" class="form-check-input" data-pick-all aria-label="all"></th><th>{{.T "dyn.targets.name"}}</th><th>A</th><th>AAAA</th><th>{{.T "dyn.pick.note"}}</th></tr></thead>
+					<tbody>
+					{{range $d.Names}}
+					<tr{{if or .Exists .Blocked}} class="text-body-tertiary"{{end}}>
+						<td class="ps-3"><input type="checkbox" class="form-check-input" name="pick" value="{{.Key}}" aria-label="{{.FQDN}}"{{if or .Exists .Blocked}} disabled{{end}}></td>
+						<td data-label="{{$.T "dyn.targets.name"}}"><span class="fw-semibold text-break">{{.FQDN}}</span>{{if eq .Kind "own"}} <span class="badge text-bg-light">{{$.T "dyn.pick.own"}}</span>{{end}}</td>
+						<td data-label="A" class="font-monospace text-break">{{range .A}}{{.}}<br>{{end}}</td>
+						<td data-label="AAAA" class="font-monospace text-break">{{range .AAAA}}{{.}}<br>{{end}}</td>
+						<td data-label="{{$.T "dyn.pick.note"}}">{{if .Exists}}<span class="badge text-bg-secondary">{{$.T "dyn.pick.exists"}}</span>{{else if .Blocked}}<span class="badge text-bg-warning">{{$.T "dyn.pick.blocked"}}: {{.Blocked}}</span>{{else if .Suffix}}<span class="badge text-bg-info">{{$.T "dyn.pick.suffix"}}</span>{{end}}{{if .Ignore}}{{if ne .Ignore "none"}} <span class="badge text-bg-light">{{$.T "dyn.pick.ignored" "family" .Ignore}}</span>{{end}}{{end}}</td>
+					</tr>
+					{{end}}
+					</tbody>
+				</table></div>
+				<div class="card-body small border-top">
+					<div class="text-body-secondary mb-2">{{.T "dyn.pick.hint"}}</div>
+					<button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-plus-lg"></i> {{.T "dyn.pick.submit"}}</button>
+					<a class="btn btn-outline-secondary btn-sm" href="/dyndns">{{.T "common.cancel"}}</a>
+				</div>
+			</form>
+			{{end}}
+		</div>
+	</div>
+	<div class="col-lg-4">
+		<div class="card" id="manual">
+			<div class="card-header"><i class="bi bi-pencil-square text-secondary"></i> {{.T "dyn.manual.title"}}</div>
+			<div class="card-body small">
+				<p class="text-body-secondary">{{.T "dyn.manual.hint"}}</p>
+				<form method="post" action="/dyndns/targets/manual">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<label class="form-label" for="m_domain">{{.T "dyn.field.domain"}}</label>
+					<input class="form-control form-control-sm mb-2" id="m_domain" name="domain" placeholder="beispiel.ipv64.net" required maxlength="253">
+					<label class="form-label" for="m_host">{{.T "dyn.field.host"}}</label>
+					<input class="form-control form-control-sm mb-2" id="m_host" name="host" placeholder="nas" maxlength="200">
+					<label class="form-label" for="m_kind">{{.T "dyn.field.token_kind"}}</label>
+					<select class="form-select form-select-sm mb-2" id="m_kind" name="token_kind"><option value="record">{{.T "dyn.token.record"}}</option><option value="domain">{{.T "dyn.token.domain"}}</option></select>
+					<label class="form-label" for="m_token">{{.T "dyn.field.token"}}</label>
+					<input class="form-control form-control-sm mb-1 font-monospace" id="m_token" name="token" type="password" autocomplete="off" required maxlength="32">
+					<div class="form-text mb-2">{{.T "dyn.manual.token_hint"}}</div>
+					<div class="row g-2 mb-2">
+						<div class="col-6"><label class="form-label" for="m_mode4">IPv4</label><select class="form-select form-select-sm" id="m_mode4" name="mode4"><option value="auto">{{.T "dyn.mode4.auto"}}</option><option value="off">{{.T "dyn.mode4.off"}}</option></select></div>
+						<div class="col-6"><label class="form-label" for="m_mode6">IPv6</label><select class="form-select form-select-sm" id="m_mode6" name="mode6"><option value="off">{{.T "dyn.mode6.off"}}</option><option value="host">{{.T "dyn.mode6.host"}}</option><option value="prefix">{{.T "dyn.mode6.prefix"}}</option></select></div>
+					</div>
+					<button class="btn btn-outline-primary btn-sm" type="submit">{{.T "dyn.manual.submit"}}</button>
+				</form>
+			</div>
+		</div>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/dyndns.js?v={{.Version}}"></script>{{end}}

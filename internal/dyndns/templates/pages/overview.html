@@ -34,6 +34,29 @@
 				{{if not $d.NextAt.IsZero}}<span class="text-body-secondary" title="{{.Time $d.NextAt}}">{{.T "dyn.conn.next" "minutes" $d.Interval}}</span>{{end}}
 			</div>
 		</div>
+		<div class="card" id="api">
+			<div class="card-header"><i class="bi bi-key text-warning"></i> {{.T "dyn.api.title"}}</div>
+			<div class="card-body small">
+				{{if $d.HasKey}}
+				<div class="mb-2"><i class="bi bi-check-circle-fill text-success"></i> {{.T "dyn.api.connected" "account" $d.Account.Account}}{{if $d.Account.Plan}} <span class="badge text-bg-light">{{$d.Account.Plan}}</span>{{end}}</div>
+				<div class="text-body-secondary mb-2">{{.T "dyn.api.stored_hint"}}</div>
+				<div class="d-flex gap-2">
+					<form method="post" action="/dyndns/apikey" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-arrow-repeat"></i> {{.T "dyn.api.recheck"}}</button></form>
+					<form method="post" action="/dyndns/apikey/delete" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="{{.T "dyn.api.remove_confirm"}}"><i class="bi bi-trash"></i> {{.T "dyn.api.remove"}}</button></form>
+				</div>
+				{{else}}
+				<p class="text-body-secondary mb-2">{{.T "dyn.api.hint"}} <a href="https://ipv64.net/api_settings" target="_blank" rel="noopener">{{.T "dyn.api.create_link"}}</a></p>
+				<form method="post" action="/dyndns/apikey">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<div class="input-group input-group-sm">
+						<input class="form-control" type="password" name="apikey" placeholder="{{.T "dyn.api.placeholder"}}" autocomplete="off" required>
+						<button class="btn btn-outline-primary" type="submit">{{.T "dyn.api.save"}}</button>
+					</div>
+					<div class="form-text">{{.T "dyn.api.stored_hint"}}</div>
+				</form>
+				{{end}}
+			</div>
+		</div>
 		<div class="card" id="settings">
 			<div class="card-header"><i class="bi bi-sliders text-secondary"></i> {{.T "dyn.settings.title"}}</div>
 			<div class="card-body small">
@@ -54,8 +77,24 @@
 	</div>
 	<div class="col-lg-7 d-flex flex-column gap-3">
 		<div class="card">
-			<div class="card-header"><i class="bi bi-globe text-primary"></i> {{.T "dyn.targets.title"}}</div>
-			{{if not $d.Targets}}<div class="card-body small text-body-secondary">{{.T "dyn.targets.empty"}}</div>{{end}}
+			<div class="card-header d-flex align-items-center"><span><i class="bi bi-globe text-primary"></i> {{.T "dyn.targets.title"}}</span><a class="btn btn-primary btn-sm ms-auto" href="/dyndns/targets/new"><i class="bi bi-plus-lg"></i> {{.T "dyn.targets.add"}}</a></div>
+			{{if not $d.Targets}}<div class="card-body small text-body-secondary">{{.T "dyn.targets.empty"}}</div>
+			{{else}}
+			<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards small">
+				<thead><tr><th>{{.T "dyn.targets.name"}}</th><th>IPv4</th><th>IPv6</th><th class="d-none d-md-table-cell">{{.T "dyn.targets.token"}}</th><th class="text-end">{{.T "common.actions"}}</th></tr></thead>
+				<tbody>
+				{{range $d.List}}
+				<tr{{if not .Enabled}} class="text-body-tertiary"{{end}}>
+					<td data-label="{{$.T "dyn.targets.name"}}"><a href="/dyndns/targets/{{.ID}}" class="fw-semibold text-break">{{.FQDN}}</a>{{if not .Enabled}} <span class="badge text-bg-secondary">{{$.T "dyn.targets.paused"}}</span>{{end}}{{if .Paused}} <span class="badge text-bg-warning">{{$.T "dyn.targets.autopaused"}}: {{.Paused}}</span>{{end}}</td>
+					<td data-label="IPv4"><span class="badge text-bg-light">{{$.T (print "dyn.mode4." .Mode4)}}</span>{{if .LastIP4}}<div class="font-monospace text-break">{{.LastIP4}}</div>{{end}}</td>
+					<td data-label="IPv6"><span class="badge text-bg-light">{{$.T (print "dyn.mode6." .Mode6)}}</span>{{if .LastIP6}}<div class="font-monospace text-break">{{.LastIP6}}</div>{{end}}{{if .LastPrefix}}<div class="font-monospace text-break">{{.LastPrefix}}</div>{{end}}</td>
+					<td data-label="{{$.T "dyn.targets.token"}}" class="d-none d-md-table-cell"><span class="badge {{if eq .TokenKind "record"}}text-bg-success{{else}}text-bg-warning{{end}}">{{$.T (print "dyn.token." .TokenKind)}}</span></td>
+					<td class="text-end"><a class="btn btn-outline-secondary btn-sm" href="/dyndns/targets/{{.ID}}" title="{{$.T "dyn.targets.edit"}}"><i class="bi bi-pencil"></i></a></td>
+				</tr>
+				{{end}}
+				</tbody>
+			</table></div>
+			{{end}}
 		</div>
 		<div class="card">
 			<div class="card-header"><i class="bi bi-clock-history text-secondary"></i> {{.T "dyn.checks.title"}}</div>
@@ -80,3 +119,4 @@
 	</div>
 </div>
 {{end}}
+{{define "scripts"}}<script src="/static/js/dyndns.js?v={{.Version}}"></script>{{end}}

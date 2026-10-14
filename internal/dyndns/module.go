@@ -40,6 +40,7 @@ type Module struct {
 	probe   func(fam int) bool // Route fuer die Familie vorhanden?
 	trace   func(ctx context.Context, dst netip.Addr, maxHops int) ([]netip.Addr, error)
 	trigger chan chan struct{} // "Jetzt pruefen"
+	api     *apiClient         // ipv64 API v2 (Auswahl, Tokens, Limit)
 
 	stMu sync.Mutex
 	fam  [2]famState // [0] IPv4, [1] IPv6
@@ -48,7 +49,8 @@ type Module struct {
 // New erzeugt das Modul. dispatcher darf nil sein.
 func New(core *store.Store, log *slog.Logger, box *secrets.Box, dispatcher *notify.Dispatcher, version string) *Module {
 	return &Module{core: core, log: log.With("module", Name), box: box, dispatcher: dispatcher, version: version,
-		fetch: newFetcher("node64/" + version), probe: defaultProbe, trace: traceUDP, trigger: make(chan chan struct{})}
+		fetch: newFetcher("node64/" + version), probe: defaultProbe, trace: traceUDP, trigger: make(chan chan struct{}),
+		api: newAPIClient(defaultAPIBase, "node64/"+version)}
 }
 
 func (m *Module) Info() module.Info {

@@ -272,7 +272,23 @@
     },
     "targets": {
       "title": "Targets",
-      "empty": "No targets set up yet."
+      "empty": "No targets set up yet.",
+      "add": "Add target",
+      "name": "Name",
+      "token": "Token",
+      "paused": "paused",
+      "autopaused": "paused automatically",
+      "edit": "Edit target",
+      "enabled": "Keep this target up to date",
+      "none_picked": "Nothing selected.",
+      "add_failed": "Not added: {names}",
+      "added": "{count} target(s) set up.",
+      "exists": "This name is already set up as a target.",
+      "invalid": "Please check: {field}",
+      "missing": "This target no longer exists.",
+      "no_record": "ipv64 has no A or AAAA record for this name anymore.",
+      "token_refreshed": "Token fetched again from ipv64.",
+      "deleted": "{name} removed. The history is kept."
     },
     "settings": {
       "title": "Checking",
@@ -301,6 +317,98 @@
       "link_article": "What is CGNAT?",
       "link_faq": "FAQ: DS-Lite and CG-NAT",
       "link_portmapper": "Solution: ipv64 Portmapper"
+    },
+    "api": {
+      "title": "ipv64 access",
+      "connected": "Connected as {account}",
+      "stored_hint": "The API key is stored encrypted on this node. It is only used to pick domains, to fetch tokens again and for the limit display. Updates themselves use the record token.",
+      "recheck": "Check",
+      "remove_confirm": "Remove the API key from this node? Configured targets keep updating (they have their own tokens).",
+      "remove": "Remove",
+      "hint": "With an ipv64 API key you pick domains and records from a list.",
+      "create_link": "Create an API key at ipv64",
+      "placeholder": "API key",
+      "save": "Save and check",
+      "invalid": "This does not look like an ipv64 API key (16 to 64 letters and digits).",
+      "failed": "ipv64 not reachable or error: {error}",
+      "rejected": "ipv64 rejected the API key (wrong, expired or deleted).",
+      "saved": "API key saved, connected as {account}.",
+      "removed": "API key removed.",
+      "needed": "This needs an API key."
+    },
+    "mode4": {
+      "auto": "automatic",
+      "fixed": "fixed address",
+      "off": "off"
+    },
+    "mode6": {
+      "host": "address of this host",
+      "prefix": "prefix only (zone-wide)",
+      "suffix": "prefix + interface ID",
+      "iface": "interface",
+      "fixed": "fixed address",
+      "off": "off"
+    },
+    "mode4_hint": "Automatic reports the public IPv4 of the connection (the router's). Behind CGNAT/DS-Lite the IPv4 cannot be reached from outside, then set IPv4 to \"off\".",
+    "mode6_hint": {
+      "host": "Reports the IPv6 address of this node as seen from outside. Fits with network_mode: host; temporary privacy addresses change regularly.",
+      "prefix": "Reports only the /64 prefix. ipv64 applies it to all AAAA records of the zone that only carry an interface ID (::1:2:3:4). Affects the whole zone.",
+      "suffix": "Combines the current /64 prefix with the interface ID entered here and reports the full address for this record only. Good for LAN devices with a fixed interface ID.",
+      "iface": "Uses the stable global address of a network interface (temporary addresses are skipped). Only with network_mode: host.",
+      "fixed": "Always reports this address.",
+      "off": "IPv6 is not updated for this name."
+    },
+    "token": {
+      "record": "Record token",
+      "domain": "Domain token"
+    },
+    "token_hint": {
+      "record": "Safest level: the token can only change this one name.",
+      "domain": "The domain token can change the whole domain including subhosts. Use a record token if possible."
+    },
+    "pick": {
+      "title": "Domains and records of your account",
+      "need_key": "Picking from the account needs an API key:",
+      "empty": "The account has no active domains with A or AAAA records.",
+      "note": "Note",
+      "own": "own domain",
+      "exists": "already set up",
+      "blocked": "not possible",
+      "suffix": "interface ID → prefix mode",
+      "ignored": "{family} is ignored at ipv64",
+      "hint": "The record token is used (safest level). IPv4 and IPv6 are preset from the existing records and can be changed per target afterwards.",
+      "submit": "Add selection"
+    },
+    "manual": {
+      "title": "Enter manually",
+      "hint": "Without an API key: enter domain, host and token yourself. The record token is shown at the record at ipv64, the domain token at the domain.",
+      "token_hint": "32 characters. Stored encrypted.",
+      "submit": "Create target"
+    },
+    "field": {
+      "domain": "Domain",
+      "host": "Host (empty = the domain itself)",
+      "token_kind": "Token type",
+      "token": "Token",
+      "mode": "Mode",
+      "mode_none": "enable at least IPv4 or IPv6",
+      "fixed4": "fixed IPv4 (public)",
+      "fixed6": "fixed IPv6 (public)",
+      "suffix6": "Interface ID (lower 64 bits, e.g. ::1a2b:3c4d:5e6f:7a8b)",
+      "iface": "Interface"
+    },
+    "edit": {
+      "ifaces": "Interfaces found:",
+      "no_ifaces": "No global IPv6 addresses visible. This mode needs network_mode: host.",
+      "modes_help": "What do the IPv6 modes mean?",
+      "token_manual": "Change token manually",
+      "token_placeholder": "new token (empty = unchanged)",
+      "state": "State",
+      "last_ok": "Last update",
+      "last_error": "Last error",
+      "updater_soon": "Updates start with the next stage (updater).",
+      "token_refresh": "Fetch token again",
+      "delete_confirm": "Stop updating {name}? The record stays at ipv64."
     }
   },
   "hc": {

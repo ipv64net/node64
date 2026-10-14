@@ -1,0 +1,400 @@
+package dyndns
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// Einstellungen fuer den ipv64-Zugang
+const (
+	SetAPIKey  = "dyndns.apikey"  // verschluesselt
+	SetAccount = "dyndns.account" // {account, plan, checked_at} zur Anzeige
+)
+
+type accountInfo struct {
+	Account   string    `json:"account"`
+	Plan      string    `json:"plan"`
+	CheckedAt time.Time `json:"checked_at"`
+}
+
+// apiKey liefert den gespeicherten API-Key (leer = keiner).
+func (m *Module) apiKey(ctx context.Context) string {
+	v := m.core.SettingOr(ctx, SetAPIKey, "")
+	if v == "" || m.box == nil {
+		return v
+	}
+	plain, err := m.box.Decrypt(v)
+	if err != nil {
+		m.log.Error("api key not readable", "err", err)
+		return ""
+	}
+	return plain
+}
+
+func (m *Module) account(ctx context.Context) accountInfo {
+	var a accountInfo
+	_ = json.Unmarshal([]byte(m.core.SettingOr(ctx, SetAccount, "")), &a)
+	return a
+}
+
+func (m *Module) targetRoutes(mux interface {
+	Handle(string, http.Handler)
+}, page func(http.HandlerFunc) http.Handler) {
+	mux.Handle("POST /dyndns/apikey", page(m.pageAPIKey))
+	mux.Handle("POST /dyndns/apikey/delete", page(m.pageAPIKeyDelete))
+	mux.Handle("GET /dyndns/targets/new", page(m.pageTargetNew))
+	mux.Handle("POST /dyndns/targets/new", page(m.pageTargetPick))
+	mux.Handle("POST /dyndns/targets/manual", page(m.pageTargetManual))
+	mux.Handle("GET /dyndns/targets/{id}", page(m.pageTargetEdit))
+	mux.Handle("POST /dyndns/targets/{id}", page(m.pageTargetSave))
+	mux.Handle("POST /dyndns/targets/{id}/token", page(m.pageTargetToken))
+	mux.Handle("POST /dyndns/targets/{id}/delete", page(m.pageTargetDelete))
+}
+
+func (m *Module) back(w http.ResponseWriter, r *http.Request, kind, text, to string) {
+	if text != "" {
+		m.g.Flash(w, r, kind, text)
+	}
+	http.Redirect(w, r, to, http.StatusSeeOther)
+}
+
+// ---------------------------------------------------------------- API-Key
+
+func (m *Module) pageAPIKey(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	key := strings.TrimSpace(r.PostFormValue("apikey"))
+	if key == "" { // nur erneut pruefen
+		key = m.apiKey(ctx)
+	}
+	if !apiKeyRe.MatchString(key) {
+		m.back(w, r, "danger", m.g.T(r, "dyn.api.invalid"), "/dyndns#api")
+		return
+	}
+	me, err := m.api.me(ctx, key)
+	if err != nil {
+		msg := m.g.T(r, "dyn.api.failed", "error", err.Error())
+		if errors.Is(err, ErrUnauthorized) {
+			msg = m.g.T(r, "dyn.api.rejected")
+		}
+		m.back(w, r, "danger", msg, "/dyndns#api")
+		return
+	}
+	if err := m.core.SetSetting(ctx, SetAPIKey, m.seal(key)); err != nil {
+		m.back(w, r, "danger", err.Error(), "/dyndns#api")
+		return
+	}
+	raw, _ := json.Marshal(accountInfo{Account: me.Account(), Plan: me.Plan.Name, CheckedAt: time.Now().UTC()})
+	_ = m.core.SetSetting(ctx, SetAccount, string(raw))
+	m.audit(r, "dyndns.apikey", "account="+me.Account())
+	m.back(w, r, "success", m.g.T(r, "dyn.api.saved", "account", me.Account()), "/dyndns#api")
+}
+
+func (m *Module) pageAPIKeyDelete(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	_ = m.core.SetSetting(ctx, SetAPIKey, "")
+	_ = m.core.SetSetting(ctx, SetAccount, "")
+	m.audit(r, "dyndns.apikey_removed", "")
+	m.back(w, r, "success", m.g.T(r, "dyn.api.removed"), "/dyndns#api")
+}
+
+// ---------------------------------------------------------------- Auswahl aus dem Account
+
+// pickName ist ein Name im Account mit seinen A/AAAA-Records.
+type pickName struct {
+	Key      string // domain|host
+	Domain   string
+	Host     string
+	FQDN     string
+	A        []string
+	AAAA     []string
+	Suffix   bool   // AAAA mit Interface-ID (::...), wird ueber das Praefix aktualisiert
+	Blocked  string // Grund, warum der Name nicht waehlbar ist (CDN, Failover)
+	Exists   bool   // schon als Ziel eingerichtet
+	Kind     string // dyndns, own
+	Ignore   string // ipv4/ipv6: bei ipv64 fuer Updater ignoriert
+	recordID int64
+	token    string
+	aID      int64 // erster A-Record (sein Token wirkt bei ipv64 fuer A und AAAA des Namens)
+	aToken   string
+}
+
+// accountNames laedt Domains und Records und fasst sie je Name zusammen (Tokens nur intern).
+func (m *Module) accountNames(ctx context.Context, key string) ([]*pickName, error) {
+	doms, err := m.api.domains(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	existing := map[string]bool{}
+	if ts, err := m.Targets(ctx); err == nil {
+		for _, t := range ts {
+			existing[t.Domain+"|"+t.Host] = true
+		}
+	}
+	var out []*pickName
+	for _, d := range doms {
+		if !d.Active {
+			continue
+		}
+		recs, err := m.api.records(ctx, key, d.Name)
+		if err != nil {
+			return nil, err
+		}
+		byHost := map[string]*pickName{}
+		for _, rec := range recs {
+			if rec.Type != "A" && rec.Type != "AAAA" {
+				continue
+			}
+			p := byHost[rec.Prefix]
+			if p == nil {
+				p = &pickName{Key: d.Name + "|" + rec.Prefix, Domain: d.Name, Host: rec.Prefix, FQDN: rec.FQDN, Kind: d.Kind, Ignore: d.Ignore, Exists: existing[d.Name+"|"+rec.Prefix]}
+				byHost[rec.Prefix] = p
+			}
+			switch rec.State {
+			case "active", "inactive":
+			default:
+				p.Blocked = rec.State
+			}
+			if rec.Type == "A" {
+				p.A = append(p.A, rec.Content)
+			} else {
+				p.AAAA = append(p.AAAA, rec.Content)
+				p.Suffix = p.Suffix || strings.HasPrefix(rec.Content, "::")
+			}
+			if p.token == "" {
+				p.token, p.recordID = rec.Token, int64(rec.ID)
+			}
+			if rec.Type == "A" && p.aToken == "" {
+				p.aToken, p.aID = rec.Token, int64(rec.ID)
+			}
+		}
+		for _, p := range byHost {
+			if p.aToken != "" { // Record-Token: A bevorzugt
+				p.token, p.recordID = p.aToken, p.aID
+			}
+			out = append(out, p)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Domain != out[j].Domain {
+			return out[i].Domain < out[j].Domain
+		}
+		return out[i].Host < out[j].Host
+	})
+	return out, nil
+}
+
+// defaultsFor waehlt die Modi fuer einen neu gewaehlten Namen.
+func (m *Module) defaultsFor(p *pickName) *Target {
+	t := &Target{Domain: p.Domain, Host: p.Host, RecordID: p.recordID, TokenKind: "record", Token: p.token, Mode4: Mode4Off, Mode6: Mode6Off, Enabled: true}
+	if len(p.A) > 0 && p.Ignore != "ipv4" {
+		t.Mode4 = Mode4Auto
+	}
+	if len(p.AAAA) > 0 && p.Ignore != "ipv6" {
+		t.Mode6 = Mode6Host
+		if p.Suffix {
+			t.Mode6 = Mode6Prefix
+		}
+	}
+	return t
+}
+
+type newData struct {
+	HasKey  bool
+	Account accountInfo
+	Names   []*pickName
+	Err     string
+	Modes4  []string
+	Modes6  []string
+}
+
+func (m *Module) pageTargetNew(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	d := newData{Account: m.account(ctx), Modes4: Modes4, Modes6: Modes6}
+	if key := m.apiKey(ctx); key != "" {
+		d.HasKey = true
+		lctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		names, err := m.accountNames(lctx, key)
+		cancel()
+		if err != nil {
+			d.Err = err.Error()
+		}
+		d.Names = names
+	}
+	m.g.Render(w, r, http.StatusOK, Name+"/target_new", "dyn.targets.add", d)
+}
+
+func (m *Module) pageTargetPick(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	key := m.apiKey(ctx)
+	_ = r.ParseForm()
+	picked := r.PostForm["pick"]
+	if key == "" || len(picked) == 0 {
+		m.back(w, r, "warning", m.g.T(r, "dyn.targets.none_picked"), "/dyndns/targets/new")
+		return
+	}
+	lctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	names, err := m.accountNames(lctx, key) // Tokens frisch vom Server, nie aus dem Formular
+	cancel()
+	if err != nil {
+		m.back(w, r, "danger", m.g.T(r, "dyn.api.failed", "error", err.Error()), "/dyndns/targets/new")
+		return
+	}
+	want := map[string]bool{}
+	for _, p := range picked {
+		want[p] = true
+	}
+	added, failed := 0, []string{}
+	for _, p := range names {
+		if !want[p.Key] || p.Exists || p.Blocked != "" {
+			continue
+		}
+		t := m.defaultsFor(p)
+		if t.Mode4 == Mode4Off && t.Mode6 == Mode6Off {
+			failed = append(failed, p.FQDN)
+			continue
+		}
+		if err := m.InsertTarget(ctx, t); err != nil {
+			failed = append(failed, p.FQDN)
+			continue
+		}
+		added++
+		m.audit(r, "dyndns.target_add", t.FQDN())
+	}
+	if len(failed) > 0 {
+		m.g.Flash(w, r, "warning", m.g.T(r, "dyn.targets.add_failed", "names", strings.Join(failed, ", ")))
+	}
+	m.back(w, r, "success", m.g.T(r, "dyn.targets.added", "count", added), "/dyndns")
+}
+
+// pageTargetManual legt ein Ziel ohne API-Key an (Token von Hand).
+func (m *Module) pageTargetManual(w http.ResponseWriter, r *http.Request) {
+	t := &Target{Domain: r.PostFormValue("domain"), Host: r.PostFormValue("host"), TokenKind: r.PostFormValue("token_kind"), Token: r.PostFormValue("token"),
+		Mode4: r.PostFormValue("mode4"), Mode6: r.PostFormValue("mode6"), Enabled: true}
+	// hier nur die einfachen Modi; Feinheiten (fest, Interface-ID, Interface) danach in der Bearbeitung
+	if t.Mode4 != Mode4Auto {
+		t.Mode4 = Mode4Off
+	}
+	if t.Mode6 != Mode6Host && t.Mode6 != Mode6Prefix {
+		t.Mode6 = Mode6Off
+	}
+	if err := m.InsertTarget(r.Context(), t); err != nil {
+		m.back(w, r, "danger", m.fieldErr(r, err), "/dyndns/targets/new#manual")
+		return
+	}
+	m.audit(r, "dyndns.target_add", t.FQDN()+" (manual)")
+	m.back(w, r, "success", m.g.T(r, "dyn.targets.added", "count", 1), "/dyndns/targets/"+strconv.FormatInt(t.ID, 10))
+}
+
+func (m *Module) fieldErr(r *http.Request, err error) string {
+	if errors.Is(err, ErrExists) {
+		return m.g.T(r, "dyn.targets.exists")
+	}
+	return m.g.T(r, "dyn.targets.invalid", "field", m.g.T(r, "dyn.field."+err.Error()))
+}
+
+// ---------------------------------------------------------------- Bearbeiten
+
+type editData struct {
+	T      *Target
+	HasKey bool
+	Modes4 []string
+	Modes6 []string
+	Local  []ifAddr
+}
+
+func (m *Module) loadTarget(w http.ResponseWriter, r *http.Request) *Target {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	t, err := m.Target(r.Context(), id)
+	if err != nil || t == nil {
+		m.back(w, r, "warning", m.g.T(r, "dyn.targets.missing"), "/dyndns")
+		return nil
+	}
+	return t
+}
+
+func (m *Module) pageTargetEdit(w http.ResponseWriter, r *http.Request) {
+	t := m.loadTarget(w, r)
+	if t == nil {
+		return
+	}
+	m.g.Render(w, r, http.StatusOK, Name+"/target_edit", "dyn.targets.edit", editData{T: t, HasKey: m.apiKey(r.Context()) != "", Modes4: Modes4, Modes6: Modes6, Local: localIPv6()})
+}
+
+func (m *Module) pageTargetSave(w http.ResponseWriter, r *http.Request) {
+	t := m.loadTarget(w, r)
+	if t == nil {
+		return
+	}
+	t.Mode4, t.Fixed4 = r.PostFormValue("mode4"), r.PostFormValue("fixed4")
+	t.Mode6, t.Fixed6, t.Suffix6, t.Iface = r.PostFormValue("mode6"), r.PostFormValue("fixed6"), r.PostFormValue("suffix6"), r.PostFormValue("iface")
+	t.Enabled = r.PostFormValue("enabled") == "on"
+	if t.Enabled {
+		t.Paused = "" // wieder einschalten hebt eine automatische Pause auf
+	}
+	if tok := strings.TrimSpace(r.PostFormValue("token")); tok != "" {
+		t.Token, t.TokenKind = tok, r.PostFormValue("token_kind")
+	}
+	if err := m.UpdateTarget(r.Context(), t); err != nil {
+		m.back(w, r, "danger", m.fieldErr(r, err), "/dyndns/targets/"+r.PathValue("id"))
+		return
+	}
+	m.audit(r, "dyndns.target_edit", t.FQDN())
+	m.back(w, r, "success", m.g.T(r, "common.saved"), "/dyndns")
+}
+
+// pageTargetToken holt den Record-Token ueber die API neu (z. B. nach Token-Wechsel bei ipv64).
+func (m *Module) pageTargetToken(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	t := m.loadTarget(w, r)
+	if t == nil {
+		return
+	}
+	key := m.apiKey(ctx)
+	if key == "" {
+		m.back(w, r, "warning", m.g.T(r, "dyn.api.needed"), "/dyndns/targets/"+r.PathValue("id"))
+		return
+	}
+	recs, err := m.api.records(ctx, key, t.Domain)
+	if err != nil {
+		m.back(w, r, "danger", m.g.T(r, "dyn.api.failed", "error", err.Error()), "/dyndns/targets/"+r.PathValue("id"))
+		return
+	}
+	found := false
+	for _, rec := range recs {
+		if rec.Prefix == t.Host && (rec.Type == "A" || rec.Type == "AAAA") && (!found || int64(rec.ID) == t.RecordID) {
+			t.Token, t.TokenKind, t.RecordID, found = rec.Token, "record", int64(rec.ID), true
+		}
+	}
+	if !found {
+		m.back(w, r, "warning", m.g.T(r, "dyn.targets.no_record"), "/dyndns/targets/"+r.PathValue("id"))
+		return
+	}
+	if t.Paused == "badauth" {
+		t.Paused = ""
+	}
+	if err := m.UpdateTarget(ctx, t); err != nil {
+		m.back(w, r, "danger", err.Error(), "/dyndns/targets/"+r.PathValue("id"))
+		return
+	}
+	m.audit(r, "dyndns.token_refresh", t.FQDN())
+	m.back(w, r, "success", m.g.T(r, "dyn.targets.token_refreshed"), "/dyndns/targets/"+r.PathValue("id"))
+}
+
+func (m *Module) pageTargetDelete(w http.ResponseWriter, r *http.Request) {
+	t := m.loadTarget(w, r)
+	if t == nil {
+		return
+	}
+	if err := m.DeleteTarget(r.Context(), t.ID); err != nil {
+		m.back(w, r, "danger", err.Error(), "/dyndns")
+		return
+	}
+	m.audit(r, "dyndns.target_delete", t.FQDN())
+	m.back(w, r, "success", m.g.T(r, "dyn.targets.deleted", "name", t.FQDN()), "/dyndns")
+}

@@ -1,0 +1,65 @@
+{{define "content"}}
+{{$d := .Data}}
+{{$t := $d.T}}
+<h1 class="h4 mb-3"><img src="/static/img/dyndns64.webp" alt="" height="26" class="me-1 align-text-bottom"> <span class="text-break">{{$t.FQDN}}</span></h1>
+<div class="row g-3">
+	<div class="col-lg-7">
+		<form method="post" action="/dyndns/targets/{{$t.ID}}" class="card">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-header"><i class="bi bi-sliders text-primary"></i> {{.T "dyn.targets.edit"}}</div>
+			<div class="card-body small">
+				<div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" name="enabled" id="enabled"{{if $t.Enabled}} checked{{end}}><label class="form-check-label" for="enabled">{{.T "dyn.targets.enabled"}}</label></div>
+				{{if $t.Paused}}<div class="alert alert-warning py-2">{{.T "dyn.targets.autopaused"}}: {{$t.Paused}}</div>{{end}}
+
+				<label class="form-label fw-semibold" for="mode4">IPv4</label>
+				<select class="form-select form-select-sm mb-1" id="mode4" name="mode4" data-mode-select>{{range $d.Modes4}}<option value="{{.}}"{{if eq . $t.Mode4}} selected{{end}}>{{$.T (print "dyn.mode4." .)}}</option>{{end}}</select>
+				<div data-mode-of="mode4" data-modes="fixed"><input class="form-control form-control-sm font-monospace mb-1" name="fixed4" value="{{$t.Fixed4}}" placeholder="203.0.113.10" maxlength="15"></div>
+				<div class="form-text mb-3">{{.T "dyn.mode4_hint"}}</div>
+
+				<label class="form-label fw-semibold" for="mode6">IPv6</label>
+				<select class="form-select form-select-sm mb-1" id="mode6" name="mode6" data-mode-select>{{range $d.Modes6}}<option value="{{.}}"{{if eq . $t.Mode6}} selected{{end}}>{{$.T (print "dyn.mode6." .)}}</option>{{end}}</select>
+				<div data-mode-of="mode6" data-modes="suffix"><label class="form-label" for="suffix6">{{.T "dyn.field.suffix6"}}</label><input class="form-control form-control-sm font-monospace mb-1" id="suffix6" name="suffix6" value="{{$t.Suffix6}}" placeholder="::1a2b:3c4d:5e6f:7a8b" maxlength="45"></div>
+				<div data-mode-of="mode6" data-modes="iface"><label class="form-label" for="iface">{{.T "dyn.field.iface"}}</label><input class="form-control form-control-sm mb-1" id="iface" name="iface" value="{{$t.Iface}}" placeholder="eth0" maxlength="15">
+					{{if $d.Local}}<div class="form-text">{{.T "dyn.edit.ifaces"}} {{range $d.Local}}{{if not .Temporary}}<code>{{.Iface}}</code> {{end}}{{end}}</div>{{else}}<div class="form-text text-warning">{{.T "dyn.edit.no_ifaces"}}</div>{{end}}</div>
+				<div data-mode-of="mode6" data-modes="fixed"><input class="form-control form-control-sm font-monospace mb-1" name="fixed6" value="{{$t.Fixed6}}" placeholder="2001:db8::10" maxlength="45"></div>
+				<div class="form-text mb-1">{{.T (print "dyn.mode6_hint." $t.Mode6)}}</div>
+				<details class="form-text mb-3"><summary>{{.T "dyn.edit.modes_help"}}</summary>{{range $d.Modes6}}<div><strong>{{$.T (print "dyn.mode6." .)}}:</strong> {{$.T (print "dyn.mode6_hint." .)}}</div>{{end}}</details>
+
+				<div class="fw-semibold mb-1">{{.T "dyn.targets.token"}}</div>
+				<div class="mb-1"><span class="badge {{if eq $t.TokenKind "record"}}text-bg-success{{else}}text-bg-warning{{end}}">{{.T (print "dyn.token." $t.TokenKind)}}</span> <code>{{$t.TokenMasked}}</code></div>
+				<div class="form-text mb-2">{{.T (print "dyn.token_hint." $t.TokenKind)}}</div>
+				<details class="mb-3"><summary class="small">{{.T "dyn.edit.token_manual"}}</summary>
+					<div class="row g-2 mt-1">
+						<div class="col-sm-4"><select class="form-select form-select-sm" name="token_kind" aria-label="{{.T "dyn.field.token_kind"}}"><option value="record"{{if eq $t.TokenKind "record"}} selected{{end}}>{{.T "dyn.token.record"}}</option><option value="domain"{{if eq $t.TokenKind "domain"}} selected{{end}}>{{.T "dyn.token.domain"}}</option></select></div>
+						<div class="col-sm-8"><input class="form-control form-control-sm font-monospace" name="token" type="password" autocomplete="off" maxlength="32" placeholder="{{.T "dyn.edit.token_placeholder"}}" aria-label="{{.T "dyn.field.token"}}"></div>
+					</div>
+				</details>
+				<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>
+				<a class="btn btn-outline-secondary btn-sm" href="/dyndns">{{.T "common.cancel"}}</a>
+			</div>
+		</form>
+	</div>
+	<div class="col-lg-5 d-flex flex-column gap-3">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-info-circle text-info"></i> {{.T "dyn.edit.state"}}</div>
+			<div class="card-body small">
+				<dl class="row mb-0">
+					<dt class="col-5">{{.T "dyn.edit.last_ok"}}</dt><dd class="col-7">{{if $t.LastOKAt.IsZero}}–{{else}}<span title="{{.Time $t.LastOKAt}}">{{.Ago $t.LastOKAt}}</span>{{end}}</dd>
+					{{if $t.LastIP4}}<dt class="col-5">IPv4</dt><dd class="col-7 font-monospace text-break">{{$t.LastIP4}}</dd>{{end}}
+					{{if $t.LastIP6}}<dt class="col-5">IPv6</dt><dd class="col-7 font-monospace text-break">{{$t.LastIP6}}</dd>{{end}}
+					{{if $t.LastPrefix}}<dt class="col-5">{{.T "dyn.conn.prefix"}}</dt><dd class="col-7 font-monospace text-break">{{$t.LastPrefix}}</dd>{{end}}
+					{{if $t.LastError}}<dt class="col-5">{{.T "dyn.edit.last_error"}}</dt><dd class="col-7"><span class="badge text-bg-danger text-wrap">{{$t.LastError}}</span> <span class="text-body-secondary">{{.Ago $t.LastErrAt}}</span></dd>{{end}}
+				</dl>
+				{{if $t.LastOKAt.IsZero}}<div class="text-body-secondary mt-2">{{.T "dyn.edit.updater_soon"}}</div>{{end}}
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-body small d-flex flex-wrap gap-2">
+				{{if $d.HasKey}}<form method="post" action="/dyndns/targets/{{$t.ID}}/token" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-arrow-repeat"></i> {{.T "dyn.edit.token_refresh"}}</button></form>{{end}}
+				<form method="post" action="/dyndns/targets/{{$t.ID}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="{{.T "dyn.edit.delete_confirm" "name" $t.FQDN}}"><i class="bi bi-trash"></i> {{.T "common.delete"}}</button></form>
+			</div>
+		</div>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/dyndns.js?v={{.Version}}"></script>{{end}}
