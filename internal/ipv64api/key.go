@@ -20,6 +20,7 @@ const (
 
 // AccountInfo ist das Konto hinter dem gespeicherten Key (zur Anzeige, ohne Key).
 type AccountInfo struct {
+	ID        int       `json:"id,omitempty"` // Account-ID (Vergleich mit der Healthchecks-Verknuepfung)
 	Account   string    `json:"account"`
 	Plan      string    `json:"plan"`
 	CheckedAt time.Time `json:"checked_at"`
@@ -95,7 +96,7 @@ func (k *Key) Set(ctx context.Context, key string) (*Me, error) {
 	if err := k.st.SetSetting(ctx, SetKey, stored); err != nil {
 		return nil, err
 	}
-	info := AccountInfo{Account: me.Account(), Plan: me.Plan.Name, CheckedAt: time.Now().UTC(), KeyName: me.Auth.KeyName}
+	info := AccountInfo{ID: me.ID, Account: me.Account(), Plan: me.Plan.Name, CheckedAt: time.Now().UTC(), KeyName: me.Auth.KeyName}
 	if me.Auth.KeyID != nil { // Ablauf steht nur in der Liste der Keys
 		if keys, err := k.client.APIKeys(ctx, key); err == nil {
 			for _, ak := range keys {
@@ -122,7 +123,7 @@ func (k *Key) RefreshIfStale(ctx context.Context, maxAge time.Duration) {
 		return
 	}
 	info := k.Info(ctx)
-	if info.KeyName != "" && time.Since(info.CheckedAt) < maxAge {
+	if info.KeyName != "" && info.ID != 0 && time.Since(info.CheckedAt) < maxAge {
 		return
 	}
 	if _, err := k.Set(ctx, ""); err != nil {

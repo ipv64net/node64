@@ -970,6 +970,18 @@
     "public": "no auth"
   },
   "link": {
+    "key_title": "Link with one click",
+    "key_text": "An ipv64 API key for {account} is stored in this container. The node links directly with it, without a code and without signing in on the website. The key is only used to redeem the code; the node gets its own access as always, which you can revoke separately.",
+    "key_location": "Location (optional)",
+    "key_button": "Link with {account}",
+    "key_or": "Or with a code on the website:",
+    "key_hint": "Tip: with an ipv64 API key in the settings, linking takes one click.",
+    "key_missing": "No ipv64 API key stored.",
+    "key_invalid": "ipv64 rejected the API key (invalid or expired). Please check it in the settings.",
+    "key_failed": "Linking with the API key failed: {err}",
+    "key_done": "Linked with {account}.",
+    "key_pending": "Code redeemed. The connection follows in a few seconds.",
+    "key_mismatch": "The ipv64 API key in the settings belongs to a different account ({account}, #{key}) than this link (#{link}). DynDNS and healthchecks then run under different accounts.",
     "quota": "Online checks today",
     "quota_value": "{today} of {limit}",
     "peers": "Nodes in this link",

@@ -125,7 +125,7 @@ func run() error {
 	modules := module.NewRegistry(st, logger.Slog())
 	hcModule := healthchecks.New(st, logger.Slog(), dispatcher, nfStore, Version)
 	modules.Register(hcModule)
-	ipv64Key := ipv64api.NewKey(st, box, ipv64api.NewClient("", "node64/"+Version), logger.Slog())
+	ipv64Key := ipv64api.NewKey(st, box, ipv64api.NewClient(os.Getenv("NODE64_IPV64_API"), "node64/"+Version), logger.Slog()) // leer = ipv64.net (Env nur fuer Tests)
 	dynModule := dyndns.New(st, logger.Slog(), box, dispatcher, Version)
 	dynModule.SetKey(ipv64Key)
 	modules.Register(dynModule)

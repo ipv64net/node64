@@ -970,6 +970,18 @@
     "public": "ohne Anmeldung"
   },
   "link": {
+    "key_title": "Mit einem Klick verknüpfen",
+    "key_text": "Im Container ist ein ipv64-API-Key für {account} hinterlegt. Damit verknüpft sich die Node direkt, ohne Code und ohne Anmeldung auf der Webseite. Der Key wird nur zum Einlösen benutzt; die Node bekommt wie immer ihren eigenen Zugang, den du einzeln widerrufen kannst.",
+    "key_location": "Standort (optional)",
+    "key_button": "Mit {account} verknüpfen",
+    "key_or": "Oder mit Code auf der Webseite:",
+    "key_hint": "Tipp: Mit einem ipv64-API-Key in den Einstellungen geht das Verknüpfen mit einem Klick.",
+    "key_missing": "Kein ipv64-API-Key hinterlegt.",
+    "key_invalid": "ipv64 hat den API-Key abgelehnt (ungültig oder abgelaufen). Bitte in den Einstellungen prüfen.",
+    "key_failed": "Verknüpfen über den API-Key fehlgeschlagen: {err}",
+    "key_done": "Verknüpft mit {account}.",
+    "key_pending": "Code eingelöst. Die Verbindung steht in wenigen Sekunden.",
+    "key_mismatch": "Der ipv64-API-Key in den Einstellungen gehört zu einem anderen Account ({account}, #{key}) als diese Verknüpfung (#{link}). DynDNS und Healthchecks laufen dann unter verschiedenen Accounts.",
     "quota": "Online-Messungen heute",
     "quota_value": "{today} von {limit}",
     "peers": "Nodes in dieser Verknüpfung",

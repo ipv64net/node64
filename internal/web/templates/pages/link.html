@@ -26,6 +26,7 @@
 				<dt class="col-5">{{.T "link.outbox"}}</dt><dd class="col-7">{{$st.Outbox}}{{if $st.Conflicts}} · <span class="text-danger">{{.T "link.conflicts_n" "count" $st.Conflicts}}</span>{{end}}</dd>
 			</dl>
 			{{if $st.LastError}}<div class="alert alert-warning py-2 small mb-2">{{$st.LastError}}</div>{{end}}
+			{{if $d.Mismatch}}<div class="alert alert-warning py-2 small mb-2"><i class="bi bi-exclamation-triangle"></i> {{.T "link.key_mismatch" "key" $d.Key.ID "account" $d.Key.Account "link" $st.AccountID}} <a href="/settings#ipv64">{{.T "nav.settings"}}</a></div>{{end}}
 			<form method="post" action="/link/settings" class="mb-3">
 				<input type="hidden" name="_csrf" value="{{.CSRF}}">
 				<div class="form-check"><input class="form-check-input" type="checkbox" name="local_notifications" id="local_notifications"{{if $d.LocalNotif}} checked{{end}} data-autosubmit><label class="form-check-label" for="local_notifications">{{.T "link.local_notifications"}}</label><div class="form-text">{{.T "link.local_notifications_hint"}}</div></div>
@@ -57,7 +58,23 @@
 				<li>{{.T "link.benefit1"}}</li><li>{{.T "link.benefit2"}}</li><li>{{.T "link.benefit3"}}</li>
 			</ul>
 			<p class="small text-body-secondary">{{.T "link.privacy"}}</p>
+			{{if $d.KeyOK}}
+			<form method="post" action="/link/apikey" class="border rounded p-3 mb-3">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="fw-semibold mb-1"><i class="bi bi-lightning-charge text-warning"></i> {{.T "link.key_title"}}</div>
+				<p class="small text-body-secondary mb-2">{{.T "link.key_text" "account" $d.Key.Account}}</p>
+				<div class="row g-2 mb-2">
+					<div class="col-sm-6"><label class="form-label small mb-1" for="key_location">{{.T "link.key_location"}}</label><input class="form-control form-control-sm" id="key_location" name="location" value="{{$d.Location}}" maxlength="100"></div>
+					<div class="col-sm-6"><label class="form-label small mb-1" for="key_remote">{{.T "link.remote_mgmt"}}</label><select class="form-select form-select-sm" id="key_remote" name="remote_mgmt"><option value="full" selected>{{.T "link.remote.full"}}</option><option value="read">{{.T "link.remote.read"}}</option><option value="off">{{.T "link.remote.off"}}</option></select></div>
+				</div>
+				<button class="btn btn-primary"><i class="bi bi-cloud-plus"></i> {{.T "link.key_button" "account" $d.Key.Account}}</button>
+			</form>
+			<p class="small text-body-secondary mb-2">{{.T "link.key_or"}}</p>
+			<form method="post" action="/link/start"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-secondary btn-sm"><i class="bi bi-123"></i> {{.T "link.start"}}</button></form>
+			{{else}}
 			<form method="post" action="/link/start"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-primary"><i class="bi bi-cloud-plus"></i> {{.T "link.start"}}</button></form>
+			<p class="small text-body-secondary mt-2 mb-0"><i class="bi bi-lightbulb"></i> {{.T "link.key_hint"}} <a href="/settings#ipv64">{{.T "nav.settings"}}</a></p>
+			{{end}}
 		{{end}}
 		</div>
 	</div>

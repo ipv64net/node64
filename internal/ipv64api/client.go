@@ -4,6 +4,7 @@
 package ipv64api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -106,9 +107,25 @@ type Record struct {
 }
 
 func (c *Client) get(ctx context.Context, key, path string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
+	return c.do(ctx, http.MethodGet, key, path, nil, out)
+}
+
+// do schickt eine Anfrage (in nil = ohne Body) und liest data aus der Antwort (2xx).
+func (c *Client) do(ctx context.Context, method, key, path string, in any, out any) error {
+	var rd io.Reader
+	if in != nil {
+		b, err := json.Marshal(in)
+		if err != nil {
+			return err
+		}
+		rd = bytes.NewReader(b)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.base+path, rd)
 	if err != nil {
 		return err
+	}
+	if in != nil {
+		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Authorization", "Bearer "+key)
 	req.Header.Set("Accept", "application/json")
@@ -129,7 +146,7 @@ func (c *Client) get(ctx context.Context, key, path string, out any) error {
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return ErrUnauthorized
 	}
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		var p struct {
 			Detail string `json:"detail"`
 		}
@@ -144,7 +161,16 @@ func (c *Client) get(ctx context.Context, key, path string, out any) error {
 	if err := json.Unmarshal(body, &env); err != nil || len(env.Data) == 0 {
 		return errors.New("ipv64: unexpected answer")
 	}
+	if out == nil {
+		return nil
+	}
 	return json.Unmarshal(env.Data, out)
+}
+
+// LinkNode loest einen Verknuepfungs-Code der Healthchecks im Account des Keys ein (POST /hc2/nodes/link);
+// die Node holt sich danach ihren eigenen Node-Token beim hub.
+func (c *Client) LinkNode(ctx context.Context, key, code, location, remoteMgmt string) error {
+	return c.do(ctx, http.MethodPost, key, "/hc2/nodes/link", map[string]string{"code": code, "location": location, "remote_mgmt": remoteMgmt}, nil)
 }
 
 // Me liefert das Konto hinter dem Key.
