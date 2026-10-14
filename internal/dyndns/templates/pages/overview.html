@@ -66,6 +66,11 @@
 						<div class="col-6"><label class="form-label" for="keep_checks">{{.T "dyn.settings.keep_checks"}}</label><select class="form-select form-select-sm" id="keep_checks" name="keep_checks">{{range $d.KeepCOpts}}<option value="{{.}}"{{if eq . $d.KeepC}} selected{{end}}>{{$.T "dyn.settings.days" "n" .}}</option>{{end}}</select></div>
 						<div class="col-6"><label class="form-label" for="keep_updates">{{.T "dyn.settings.keep_updates"}}</label><select class="form-select form-select-sm" id="keep_updates" name="keep_updates">{{range $d.KeepUOpts}}<option value="{{.}}"{{if eq . $d.KeepU}} selected{{end}}>{{if eq . 0}}{{$.T "dyn.settings.forever"}}{{else}}{{$.T "dyn.settings.days" "n" .}}{{end}}</option>{{end}}</select></div>
 					</div>
+					<div class="fw-semibold mb-1">{{.T "dyn.settings.notify"}}</div>
+					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="notify_ip" id="notify_ip"{{if $d.NotifyIP}} checked{{end}}><label class="form-check-label" for="notify_ip">{{.T "dyn.settings.notify_ip"}}</label></div>
+					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="notify_fail" id="notify_fail"{{if $d.NotifyErr}} checked{{end}}><label class="form-check-label" for="notify_fail">{{.T "dyn.settings.notify_fail"}}</label></div>
+					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="notify_limit" id="notify_limit"{{if $d.NotifyLim}} checked{{end}}><label class="form-check-label" for="notify_limit">{{.T "dyn.settings.notify_limit"}}</label></div>
+					<div class="form-text mb-2">{{.T "dyn.settings.notify_hint"}} <a href="/notifications">{{.T "nav.notifications"}}</a></div>
 					<button class="btn btn-outline-primary btn-sm" type="submit">{{.T "common.save"}}</button>
 				</form>
 			</div>

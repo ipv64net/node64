@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Node64 – lokale API",
-    "version": "1.1.0",
-    "description": "JSON-API des Nodes im eigenen Netz. Anmeldung mit API-Key (Einstellungen > API-Keys) als `Authorization: Bearer node64_...` oder mit der Browser-Sitzung (dann `X-CSRF-Token` bei POST/PUT/DELETE). Zeiten sind ISO 8601 in UTC. Dieselbe API nutzt die Oberfläche.\n\n**Fehler:** JSON `{\"error\": \"...\"}`. 401 `authentication required` bzw. `invalid api key`; 403 bei fehlendem CSRF-Token (Sitzung ohne API-Key); 404 auch, wenn das Healthchecks-Modul ausgeschaltet ist; 429 `too many requests` mit `Retry-After: 10` (Begrenzung je IP).\n\n**Mit ipv64.net verknüpft:** Alle Nodes des Accounts bilden ein System. Checks, Wartungsfenster und Kanäle lassen sich von jeder Node aus ändern, pausieren, löschen und messen lassen, auch wenn sie einer anderen Node gehören (`owner: other`). Änderungen gehen über ipv64.net an das Portal und alle Nodes; ohne Verbindung werden sie gepuffert und nachgeliefert, bei gleichzeitigen Änderungen gewinnt die jüngere. Nur die Messstelle eines Docker-Checks bleibt bei der Node, die den Container steuert. Optionaler Kopf `X-Agent-Actor` setzt den Namen im Audit-Log."
+    "version": "1.2.0",
+    "description": "JSON-API des Nodes im eigenen Netz. Anmeldung mit API-Key (Einstellungen > API-Keys) als `Authorization: Bearer node64_...` oder mit der Browser-Sitzung (dann `X-CSRF-Token` bei POST/PUT/DELETE). Zeiten sind ISO 8601 in UTC. Dieselbe API nutzt die Oberfläche.\n\n**Fehler:** JSON `{\"error\": \"...\"}`. 401 `authentication required` bzw. `invalid api key`; 403 bei fehlendem CSRF-Token (Sitzung ohne API-Key); 404 auch, wenn das jeweilige Modul (Healthchecks, DynDNS) ausgeschaltet ist; 429 `too many requests` mit `Retry-After: 10` (Begrenzung je IP).\n\n**Mit ipv64.net verknüpft:** Alle Nodes des Accounts bilden ein System. Checks, Wartungsfenster und Kanäle lassen sich von jeder Node aus ändern, pausieren, löschen und messen lassen, auch wenn sie einer anderen Node gehören (`owner: other`). Änderungen gehen über ipv64.net an das Portal und alle Nodes; ohne Verbindung werden sie gepuffert und nachgeliefert, bei gleichzeitigen Änderungen gewinnt die jüngere. Nur die Messstelle eines Docker-Checks bleibt bei der Node, die den Container steuert. Optionaler Kopf `X-Agent-Actor` setzt den Namen im Audit-Log."
   },
   "servers": [
     {
@@ -19,6 +19,10 @@
     },
     {
       "name": "Benachrichtigungen"
+    },
+    {
+      "name": "DynDNS",
+      "description": "DynDNS-Updater: hält ausgewählte Namen bei ipv64 mit der öffentlichen Adresse des Anschlusses aktuell. Aktualisiert wird nur bei einer Abweichung (zuletzt gemeldete Adresse und direkte Abfrage der ipv64-Nameserver), mit Record- bzw. Domain-Token im Header. Tokens werden angenommen, aber nie ausgegeben (nur `token_hint`)."
     }
   ],
   "security": [
@@ -623,6 +627,193 @@
           "active": {
             "type": "boolean",
             "default": true
+          }
+        }
+      },
+      "DynDNSTarget": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "domain": {
+            "type": "string",
+            "description": "Domain bei ipv64, z. B. home.ipv64.net"
+          },
+          "host": {
+            "type": "string",
+            "description": "Unterhost (praefix), leer = Domain selbst"
+          },
+          "fqdn": {
+            "type": "string"
+          },
+          "record_id": {
+            "type": "integer",
+            "description": "Record bei ipv64 (0 = unbekannt)"
+          },
+          "token_kind": {
+            "type": "string",
+            "enum": [
+              "record",
+              "domain"
+            ]
+          },
+          "token_hint": {
+            "type": "string",
+            "description": "nur Anfang und Ende des Tokens"
+          },
+          "mode4": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "fixed",
+              "off"
+            ]
+          },
+          "fixed4": {
+            "type": "string"
+          },
+          "mode6": {
+            "type": "string",
+            "enum": [
+              "host",
+              "prefix",
+              "suffix",
+              "iface",
+              "fixed",
+              "off"
+            ],
+            "description": "host = von außen gesehene IPv6; prefix = nur /64-Präfix (zonenweit, onlyprefix); suffix = Präfix + suffix6 (nur dieser Record); iface = stabile Adresse von iface (Host-Netzwerk); fixed = fixed6"
+          },
+          "fixed6": {
+            "type": "string"
+          },
+          "suffix6": {
+            "type": "string",
+            "description": "Interface-ID, z. B. ::1a2b:3c4d:5e6f:7a8b"
+          },
+          "iface": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "paused": {
+            "type": "string",
+            "description": "Grund einer automatischen Pause: badauth, nohost, conflict, flapping, ignored (leer = keine)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "new",
+              "ok",
+              "pending",
+              "dns",
+              "error",
+              "paused",
+              "off"
+            ]
+          },
+          "last_ipv4": {
+            "type": "string"
+          },
+          "last_ipv6": {
+            "type": "string"
+          },
+          "last_prefix": {
+            "type": "string"
+          },
+          "last_ok_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "last_error": {
+            "type": "string"
+          },
+          "last_error_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "dns_state": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "ok",
+              "differs"
+            ]
+          }
+        }
+      },
+      "DynDNSTargetInput": {
+        "type": "object",
+        "required": [
+          "domain",
+          "token",
+          "mode4",
+          "mode6"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "token_kind": {
+            "type": "string",
+            "enum": [
+              "record",
+              "domain"
+            ],
+            "default": "record"
+          },
+          "token": {
+            "type": "string",
+            "description": "Record- oder Domain-Token (24 oder 32 Zeichen); beim Ändern leer = unverändert"
+          },
+          "record_id": {
+            "type": "integer"
+          },
+          "mode4": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "fixed",
+              "off"
+            ]
+          },
+          "fixed4": {
+            "type": "string"
+          },
+          "mode6": {
+            "type": "string",
+            "enum": [
+              "host",
+              "prefix",
+              "suffix",
+              "iface",
+              "fixed",
+              "off"
+            ]
+          },
+          "fixed6": {
+            "type": "string"
+          },
+          "suffix6": {
+            "type": "string"
+          },
+          "iface": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "true hebt auch eine automatische Pause auf"
           }
         }
       }
@@ -2029,6 +2220,324 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/dyndns/status": {
+      "get": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Stand: öffentliche IPv4/IPv6 und Präfix, Anschluss-Hinweis (CGNAT/DS-Lite), Ziele nach Status, Update-Limit",
+        "description": "`limit` nur mit ipv64-API-Key (Einstellungen): `used`/`limit` des Accounts (0 = unbegrenzt) und `own_24h` = Aufrufe dieser Node. `connection.suspect`: cgnat oder dslite, wenn die ersten Stationen ins Internet darauf hindeuten (nicht sicher erkennbar).",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/dyndns/check": {
+      "post": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Jetzt prüfen: Adressen ermitteln und Ziele abgleichen",
+        "description": "Wartet bis zu 45 s und liefert danach den Stand wie GET /dyndns/status; 202, wenn die Runde länger dauert.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "202": {
+            "description": "läuft noch"
+          }
+        }
+      }
+    },
+    "/dyndns/targets": {
+      "get": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Alle Ziele",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DynDNSTarget"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Ziel anlegen",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DynDNSTargetInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DynDNSTarget"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ungültiges JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Domain + Host gibt es schon",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültiges Feld",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dyndns/targets/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Einzelnes Ziel",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DynDNSTarget"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Ziel ändern",
+        "description": "Modi, Adressen und `enabled` werden übernommen; `token` leer = unverändert. Domain und Host lassen sich nicht ändern (neues Ziel anlegen).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DynDNSTargetInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DynDNSTarget"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Ziel löschen (bei ipv64 bleibt der Record; der Verlauf bleibt)",
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "404": {
+            "description": "nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dyndns/targets/{id}/update": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Jetzt aktualisieren",
+        "description": "Meldet die Adresse sofort an ipv64, auch ohne Änderung (kostet Update-Limit), und hebt eine automatische Pause auf. Antwort: das Ziel mit Ergebnis (`status`, `last_error`).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DynDNSTarget"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dyndns/history": {
+      "get": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Verlauf: Updates bei ipv64 oder IP-Prüfungen",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "updates",
+                "checks"
+              ],
+              "default": "updates"
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "nur Updates eines Ziels"
+          },
+          {
+            "name": "family",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "4",
+                "6"
+              ]
+            },
+            "description": "nur bei type=checks"
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 7
+            },
+            "description": "0 = alles"
+          }
+        ],
+        "description": "Höchstens 300 Einträge, neueste zuerst; `truncated` zeigt, ob es mehr gibt.",
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }

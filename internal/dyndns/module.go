@@ -38,11 +38,12 @@ type Module struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
-	fetch   fetchFunc          // Abruf einer IP-Quelle (Tests ersetzen ihn)
-	probe   func(fam int) bool // Route fuer die Familie vorhanden?
-	trace   func(ctx context.Context, dst netip.Addr, maxHops int) ([]netip.Addr, error)
-	trigger chan chan struct{} // "Jetzt pruefen"
-	key     *ipv64api.Key      // zentraler ipv64-API-Key des Containers (Auswahl, Tokens, Limit)
+	notifier func(notify.Alert) // Meldungen (nil = keine)
+	fetch    fetchFunc          // Abruf einer IP-Quelle (Tests ersetzen ihn)
+	probe    func(fam int) bool // Route fuer die Familie vorhanden?
+	trace    func(ctx context.Context, dst netip.Addr, maxHops int) ([]netip.Addr, error)
+	trigger  chan chan struct{} // "Jetzt pruefen"
+	key      *ipv64api.Key      // zentraler ipv64-API-Key des Containers (Auswahl, Tokens, Limit)
 
 	upd       *updState                                    // Abstand, Backoff, Tageslimit der Update-Aufrufe
 	updateURL string                                       // update.php (Tests ersetzen ihn)
@@ -57,10 +58,14 @@ type Module struct {
 
 // New erzeugt das Modul. dispatcher darf nil sein.
 func New(core *store.Store, log *slog.Logger, box *secrets.Box, dispatcher *notify.Dispatcher, version string) *Module {
-	return &Module{core: core, log: log.With("module", Name), box: box, dispatcher: dispatcher, version: version,
+	m := &Module{core: core, log: log.With("module", Name), box: box, dispatcher: dispatcher, version: version,
 		fetch: newFetcher("node64/" + version), probe: defaultProbe, trace: traceUDP, trigger: make(chan chan struct{}),
 		upd: &updState{flaps: map[int64][]time.Time{}, nsCache: map[string]nsEntry{}}, updateURL: defaultUpdateURL,
 		httpc: &http.Client{Timeout: 20 * time.Second}, local: localIPv6}
+	if dispatcher != nil {
+		m.notifier = dispatcher.Dispatch
+	}
+	return m
 }
 
 // SetKey installiert den zentralen API-Key des Containers.
@@ -101,6 +106,7 @@ func (m *Module) Migrations() []store.Migration {
 
 func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	m.uiRoutes(mux, g)
+	m.apiRoutes(mux, g)
 }
 
 // Start laedt den letzten Stand und startet die Pruefrunden.

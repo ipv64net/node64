@@ -265,7 +265,7 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 		if ch.Execution == "server" && !d.sendServerChannels {
 			continue // vom ipv64-hub gesendet
 		}
-		if !d.sendServerChannels && d.serverSends != nil && d.serverSends() {
+		if !c.Local && !d.sendServerChannels && d.serverSends != nil && d.serverSends() {
 			continue // verknuepft und verbunden: der hub sendet (eigene Kanaele per Sendeauftrag), sonst kaeme alles doppelt
 		}
 		if len(want) > 0 {
@@ -281,7 +281,7 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 
 // isDownKind: Stoerungsmeldungen (Sammelmeldung der Entwarnungen zaehlt als Entwarnung).
 func isDownKind(k Kind) bool {
-	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded
+	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded || k == KindDynFail || k == KindDynLimit
 }
 
 // flagsOK prueft die Schalter von Check und Kanal (Stoerung/Entwarnung/teilweise gestoert).
@@ -466,6 +466,10 @@ func (d *Dispatcher) rateOK(id int64, per float64) bool {
 
 // deliver verschickt einen Alert an alle zustaendigen Kanaele (in der Ruhezeit: fuer spaeter merken).
 func (d *Dispatcher) deliver(ctx context.Context, a Alert) {
+	if d.quiet(a) && IsDynDNS(a.Kind) {
+		d.log.Debug("dyndns notification dropped (quiet hours)", "name", a.Check.Name, "kind", a.Kind)
+		return // steht im Verlauf des Moduls; keine Sammelmeldung danach
+	}
 	if d.quiet(a) {
 		d.hold(a)
 		d.log.Debug("notification held (quiet hours)", "check", a.Check.Name, "kind", a.Kind)
@@ -586,6 +590,9 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 	if m.Time.IsZero() {
 		m.Time = d.now()
 	}
+	if IsDynDNS(a.Kind) {
+		return d.composeDynDNS(lang, a, m)
+	}
 	typeName := t("hc.type." + a.Check.Type)
 	var lines []string
 	switch a.Kind {
@@ -643,6 +650,30 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 		"node": map[string]any{"name": d.settings(uid)(SetNodeName, ""), "location": d.settings(uid)(SetNodeLocation, "")}, "url": m.URL,
 		"title": m.Title, "text": m.Text,
 	}
+	return m
+}
+
+// composeDynDNS formuliert Meldungen des DynDNS-Moduls (Name = Ziel bzw. Adressfamilie, Message = Einzelheiten).
+func (d *Dispatcher) composeDynDNS(lang string, a Alert, m Message) Message {
+	t := func(key string, args ...any) string { return d.i18n.T(lang, key, args...) }
+	uid := a.Check.UserID
+	m.URL = d.baseURL(uid, "/dyndns")
+	m.Title, m.Priority = t("notify.subject."+string(a.Kind), "name", a.Check.Name), 4
+	if a.Kind == KindDynIP {
+		m.Priority = 2
+	}
+	var lines []string
+	if a.Message != "" {
+		lines = append(lines, a.Message)
+	}
+	if a.Reason != "" {
+		lines = append(lines, t("notify.body.reason", "reason", a.Reason))
+	}
+	lines = append(lines, t("notify.body.time", "time", d.i18n.FormatDateTime(lang, m.Time, d.location(uid))), d.nodeLine(uid, lang))
+	m.Text = strings.Join(lines, "\n")
+	m.Payload = map[string]any{"event_id": a.EventID, "kind": string(a.Kind), "time": m.Time.UTC().Format(time.RFC3339), "name": a.Check.Name,
+		"reason": a.Reason, "message": a.Message, "url": m.URL, "title": m.Title, "text": m.Text,
+		"node": map[string]any{"name": d.settings(uid)(SetNodeName, ""), "location": d.settings(uid)(SetNodeLocation, "")}}
 	return m
 }
 

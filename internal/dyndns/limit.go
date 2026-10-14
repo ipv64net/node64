@@ -2,7 +2,10 @@ package dyndns
 
 import (
 	"context"
+	"strconv"
 	"time"
+
+	"github.com/ipv64net/node64/internal/notify"
 )
 
 // Update-Limit des Accounts (API v2 GET /me: usage.dyndns_updates_24h), nur mit API-Key.
@@ -64,6 +67,13 @@ func (m *Module) refreshLimit(ctx context.Context, maxAge time.Duration) {
 	m.lim.Known, m.lim.Err, m.lim.Used, m.lim.Limit = true, "", me.Usage.DynDNSUpdates.Used, 0
 	if l := me.Usage.DynDNSUpdates.Limit; l != nil {
 		m.lim.Limit = *l
+	}
+	if l := m.lim; l.Warn() {
+		go func() { // ausserhalb der Sperre
+			if !m.limitNotifiedToday(ctx) {
+				m.alert(ctx, SetNotifyLimit, notify.KindDynLimit, "", "", strconv.Itoa(l.Used)+" / "+strconv.Itoa(l.Limit))
+			}
+		}()
 	}
 }
 

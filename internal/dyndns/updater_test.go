@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/ipv64net/node64/internal/notify"
 )
 
 // fakeUpdate bildet update.php nach und merkt sich jede Anfrage.
@@ -240,5 +242,51 @@ func TestUpdaterDNSGrace(t *testing.T) {
 	m.runUpdates(ctx)
 	if f.n() != 2 {
 		t.Fatalf("after grace: %d calls", f.n())
+	}
+}
+
+// Meldungen: Adresswechsel, erster Fehler (nicht jede Wiederholung), ausgeschaltet = keine.
+func TestUpdaterNotifications(t *testing.T) {
+	ctx := context.Background()
+	m, f, _ := setupUpdater(t)
+	var mu sync.Mutex
+	var got []notify.Alert
+	m.notifier = func(a notify.Alert) { mu.Lock(); got = append(got, a); mu.Unlock() }
+	count := func(k notify.Kind) int {
+		mu.Lock()
+		defer mu.Unlock()
+		n := 0
+		for _, a := range got {
+			if a.Kind == k && a.Check.Local {
+				n++
+			}
+		}
+		return n
+	}
+	f.reply = func(string) (int, string) {
+		return http.StatusBadRequest, `{"status":"400 Bad Request","info":"No correct IP transmitted"}`
+	}
+	addTarget(t, m, "x", Mode4Auto, Mode6Off, "")
+	m.runUpdates(ctx)
+	m.runUpdates(ctx) // gleicher Fehler erneut: keine zweite Meldung
+	if count(notify.KindDynFail) != 1 {
+		t.Fatalf("fail alerts: %d", count(notify.KindDynFail))
+	}
+	_ = m.core.SetSetting(ctx, SetNotifyIP, "0")
+	m.fetch = func(context.Context, int, string) (netip.Addr, error) {
+		return netip.MustParseAddr("93.184.216.99"), nil
+	}
+	m.probe = func(fam int) bool { return fam == 4 }
+	m.checkFamily(ctx, 4)
+	if count(notify.KindDynIP) != 0 {
+		t.Fatal("ip alert although switched off")
+	}
+	_ = m.core.SetSetting(ctx, SetNotifyIP, "1")
+	m.fetch = func(context.Context, int, string) (netip.Addr, error) {
+		return netip.MustParseAddr("93.184.216.100"), nil
+	}
+	m.checkFamily(ctx, 4)
+	if count(notify.KindDynIP) != 1 {
+		t.Fatalf("ip alerts: %d", count(notify.KindDynIP))
 	}
 }

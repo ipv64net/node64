@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/store"
 )
 
@@ -389,6 +390,7 @@ func (m *Module) doCall(ctx context.Context, q url.Values, token string) updResu
 func (m *Module) apply(ctx context.Context, t *Target, r updResult, ip4, ip6, prefix string) bool {
 	now := time.Now()
 	u := m.upd
+	prevErr, prevPaused := t.LastError, t.Paused
 	switch {
 	case r.OK:
 		if ip4 != "" {
@@ -421,6 +423,15 @@ func (m *Module) apply(ctx context.Context, t *Target, r updResult, ip4, ip6, pr
 		t.LastError, t.LastErrAt = r.Err, now
 	}
 	m.saveRuntime(ctx, t)
+	switch {
+	case r.Limit:
+		if !m.limitNotifiedToday(ctx) {
+			m.alert(ctx, SetNotifyLimit, notify.KindDynLimit, "", "", "ipv64: daily update limit reached")
+		}
+	case r.OK || r.Cooldown:
+	case (t.Paused != "" && prevPaused == "") || prevErr == "": // Pause bzw. erster Fehler nach Erfolg, nicht jede Wiederholung
+		m.alert(ctx, SetNotifyFail, notify.KindDynFail, t.FQDN(), r.Err, "")
+	}
 	return r.Limit || r.Cooldown
 }
 

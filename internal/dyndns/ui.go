@@ -84,6 +84,9 @@ type overviewData struct {
 	KeepU     int
 	KeepCOpts []int
 	KeepUOpts []int
+	NotifyIP  bool
+	NotifyErr bool
+	NotifyLim bool
 	HasKey    bool
 	Account   ipv64api.AccountInfo
 	V4, V6    famView
@@ -135,6 +138,7 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 	d.Targets, d.Groups = len(d.List), groupTargets(d.List)
 	d.KeepC, d.KeepU = m.keepDays(ctx, SetKeepChecks, 30), m.keepDays(ctx, SetKeepUpdates, 365)
 	d.KeepCOpts, d.KeepUOpts = KeepChecksOptions, KeepUpdatesOptions
+	d.NotifyIP, d.NotifyErr, d.NotifyLim = m.notifyOn(ctx, SetNotifyIP), m.notifyOn(ctx, SetNotifyFail), m.notifyOn(ctx, SetNotifyLimit)
 	if d.HasKey = m.keyOf(ctx) != ""; d.HasKey {
 		d.Account = m.key.Info(ctx)
 		m.refreshLimit(ctx, limitPage)
@@ -182,7 +186,14 @@ func (m *Module) pageSettings(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/dyndns#settings", http.StatusSeeOther)
 		return
 	}
-	for k, v := range map[string]string{SetInterval: strconv.Itoa(iv), SetSource4: s4, SetSource6: s6, SetKeepChecks: strconv.Itoa(kc), SetKeepUpdates: strconv.Itoa(ku)} {
+	onoff := func(name string) string {
+		if r.PostFormValue(name) == "on" {
+			return "1"
+		}
+		return "0"
+	}
+	for k, v := range map[string]string{SetInterval: strconv.Itoa(iv), SetSource4: s4, SetSource6: s6, SetKeepChecks: strconv.Itoa(kc), SetKeepUpdates: strconv.Itoa(ku),
+		SetNotifyIP: onoff("notify_ip"), SetNotifyFail: onoff("notify_fail"), SetNotifyLimit: onoff("notify_limit")} {
 		if err := m.core.SetSetting(ctx, k, v); err != nil {
 			m.g.Flash(w, r, "danger", err.Error())
 			http.Redirect(w, r, "/dyndns#settings", http.StatusSeeOther)

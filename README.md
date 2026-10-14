@@ -1,6 +1,6 @@
 # Node64
 
-Ein leichtgewichtiger Docker-Container für das Heimnetz: Healthchecks (als Uptime-Kuma-Alternative), später DynDNS-Updater und Reverse-Proxy, standalone oder verknüpft mit einem [ipv64.net](https://ipv64.net)-Account.
+Ein leichtgewichtiger Docker-Container für das Heimnetz: Healthchecks (als Uptime-Kuma-Alternative), DynDNS-Updater für ipv64, später Reverse-Proxy, standalone oder verknüpft mit einem [ipv64.net](https://ipv64.net)-Account.
 
 Ein einziges Go-Binary, SQLite, eingebettete Weboberfläche, keine externen Abhängigkeiten zur Laufzeit. Läuft auf amd64 und arm64, auch auf einem Raspberry Pi.
 
@@ -10,7 +10,7 @@ Ein einziges Go-Binary, SQLite, eingebettete Weboberfläche, keine externen Abh�
 
 Kanäle werden unter *Benachrichtigungen* angelegt und getestet. Standardkanäle bekommen alle Checks, die keine eigene Auswahl haben. Texte gehen in der Sprache des Kanals raus (Deutsch oder Englisch). Geheimnisse wie Bot-Tokens oder SMTP-Passwörter liegen verschlüsselt in der Datenbank, der Schlüssel in `/data/secret.key`.
 
-Webhooks bekommen standardmäßig ein JSON mit `event_id`, `kind` (down, up, flapping_start, flapping_end, reminder, summary, test), `status`, `check` (token, name, type, target), `reason`, `message`, `duration_seconds`, `node` und `url`. Ein eigener Body mit Platzhaltern wie `{{name}}` oder `{{status}}` ist möglich.
+Webhooks bekommen standardmäßig ein JSON mit `event_id`, `kind` (down, up, flapping_start, flapping_end, reminder, summary, test, dyndns_ip, dyndns_fail, dyndns_limit), `status`, `check` (token, name, type, target), `reason`, `message`, `duration_seconds`, `node` und `url`. Ein eigener Body mit Platzhaltern wie `{{name}}` oder `{{status}}` ist möglich.
 
 Gegen Alarmrauschen wirken Wiederholungen vor Alarm, Stabilisierung, Flatter-Erkennung, Sammelmeldungen ab drei gleichzeitigen Störungen, Ruhezeiten (nur kritische Checks alarmieren) und höchstens 60 Nachrichten je Kanal und Stunde. Links in Nachrichten brauchen die externe Adresse des Nodes in den Einstellungen der Benachrichtigungen.
 
@@ -113,6 +113,18 @@ Push-Checks lassen sich an jeder Node und bei ipv64 auslösen. Misst diese Node 
 Weitere Endpunkte: `PUT`/`DELETE /api/checks/{token}`, `POST .../pause|resume|run|clone`, `GET .../events|incidents|chart`, `GET /api/events`, `GET /api/incidents`, `GET|POST /api/maintenance`, `PUT|DELETE /api/maintenance/{id}`, `GET|POST /api/channels`, `POST /api/channels/{id}/test`, `GET /api/status`, `GET|PUT /api/settings`, `GET /api/backup`. Alles mit Parametern und Antworten unter `/api/docs`.
 
 ICMP-Checks brauchen im Container entweder unprivilegiertes Ping (`sysctls: net.ipv4.ping_group_range=0 65535`, siehe compose oben) oder `cap_add: NET_RAW`.
+
+## DynDNS-Updater
+
+Das Modul *DynDNS* (in den Einstellungen einschalten) hält ausgewählte Domains und Records bei ipv64 mit der öffentlichen Adresse des Anschlusses aktuell. Ausgeschaltet läuft nichts.
+
+- **ipv64-API-Key:** einmal unter *Einstellungen → ipv64-API-Key* eintragen (verschlüsselt gespeichert, mit Ablaufdatum). Damit wählst du unter *DynDNS → Ziel hinzufügen* die Namen aus deinem Account und je Name, was aktualisiert wird. Ohne Key lassen sich Ziele von Hand mit Token anlegen.
+- **Sicherster Token:** Die Updates laufen nie mit dem API-Key, sondern mit dem Record-Token des Namens (sonst Domain-Token), im HTTP-Header.
+- **Nur bei Änderung:** Die Node ermittelt ihre öffentliche IPv4/IPv6 über `ipv4.ipv64.net` bzw. `ipv6.ipv64.net` (alle 5 min, einstellbar) und fragt die ipv64-Nameserver direkt, was sie ausliefern. `update.php` wird nur bei einer Abweichung aufgerufen, denn auch `nochg` zählt auf das Tageslimit. Zwischen zwei Aufrufen liegen mindestens 5 s; Cooldown, Tageslimit, ungültiger Token, Konflikte und Records, die woanders ständig anders gesetzt werden, pausieren statt Limit zu verbrauchen.
+- **IPv6-Modi:** Adresse dieses Hosts, nur Präfix (zonenweit, für Records mit Interface-ID wie `::1:2:3:4`), Präfix + eigene Interface-ID (nur dieser Record, stabil trotz Privacy-Adressen), Interface (stabile Adresse, nur mit `network_mode: host`), fest oder aus.
+- **Router-IP:** Bei IPv4 sieht ipv64 automatisch die Adresse des Routers, nie die interne Container-Adresse. Bei IPv6 gibt es kein NAT: ohne IPv6 im Docker-Netz zeigt die Seite einen Hinweis (siehe [IPv4 und IPv6](#ipv4-und-ipv6)). Deuten die ersten Stationen ins Internet auf CGNAT (100.64.0.0/10) oder DS-Lite (192.0.0.1) hin, erscheint ein Hinweis mit Links zu ipv64.
+- **Verlauf und Limit:** Jede Prüfung und jeder Aufruf steht im Verlauf (Aufbewahrung einstellbar). Mit API-Key zeigt die Seite das Update-Limit des Accounts. Benachrichtigungen (Adresswechsel, Fehler, Limit) gehen an die Standardkanäle, auch bei verknüpfter Node, nicht in der Ruhezeit.
+- **API und Export:** `GET /api/dyndns/status`, `GET|POST /api/dyndns/targets`, `GET|PUT|DELETE /api/dyndns/targets/{id}`, `POST /api/dyndns/targets/{id}/update`, `POST /api/dyndns/check`, `GET /api/dyndns/history`. Der Export enthält Ziele und Einstellungen ohne Tokens; der Import holt sie mit dem API-Key neu.
 
 ## Betrieb
 

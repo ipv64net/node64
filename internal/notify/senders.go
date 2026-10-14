@@ -34,6 +34,10 @@ const (
 	KindSummary       Kind = "summary"
 	KindSummaryUp     Kind = "summary_up" // gesammelte Entwarnungen
 	KindTest          Kind = "test"
+	// DynDNS-Modul (kein Check; laeuft immer ueber die lokalen Kanaele)
+	KindDynIP    Kind = "dyndns_ip"    // oeffentliche Adresse gewechselt
+	KindDynFail  Kind = "dyndns_fail"  // Update fehlgeschlagen bzw. Ziel pausiert
+	KindDynLimit Kind = "dyndns_limit" // Update-Limit des Accounts fast oder ganz erreicht
 )
 
 // CheckInfo sind die Angaben zum Check, die in Nachrichten erscheinen.
@@ -48,7 +52,11 @@ type CheckInfo struct {
 	NotifyDown     bool
 	NotifyUp       bool
 	NotifyDegraded bool
+	Local          bool // immer ueber die lokalen Kanaele senden (der hub kennt den Anlass nicht, z. B. DynDNS)
 }
+
+// IsDynDNS: Meldung des DynDNS-Moduls.
+func IsDynDNS(k Kind) bool { return k == KindDynIP || k == KindDynFail || k == KindDynLimit }
 
 // Message ist die fertig formulierte Nachricht fuer einen Sender.
 type Message struct {

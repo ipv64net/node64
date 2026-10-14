@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/checks"
+	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/store"
 )
 
@@ -178,6 +179,7 @@ func (m *Module) checkFamily(ctx context.Context, fam int) {
 		} else if changed {
 			cur.ChangedAt = start
 			m.log.Info("public address changed", "family", fam, "old", prev.IP.String(), "new", addr.String(), "source", src)
+			m.alert(ctx, SetNotifyIP, notify.KindDynIP, "IPv"+strconv.Itoa(fam), "", "IPv"+strconv.Itoa(fam)+": "+prev.IP.String()+" → "+addr.String())
 		}
 	} else if prev.Err != cur.Err && cur.NoRoute { // ohne Route ist normal (z. B. Docker-Bridge ohne IPv6)
 		m.log.Info("no route for address family", "family", fam)

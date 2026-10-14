@@ -331,7 +331,12 @@
       "keep_checks": "Keep IP checks",
       "keep_updates": "Keep updates",
       "days": "{n} days",
-      "forever": "forever"
+      "forever": "forever",
+      "notify": "Notifications",
+      "notify_ip": "Public address has changed",
+      "notify_fail": "Update failed or target paused",
+      "notify_limit": "Update limit almost or fully reached (at most once a day)",
+      "notify_hint": "Sent to the default channels of this node, even when it is linked with ipv64. Nothing is sent during quiet hours; the history still shows everything."
     },
     "checks": {
       "title": "Recent checks",
@@ -812,7 +817,10 @@
       "summary_down": "🔴 {count} checks down",
       "test": "Node64: test message",
       "degraded": "⚠️ Partially down: {name}",
-      "degraded_end": "✅ Fully reachable again: {name}"
+      "degraded_end": "✅ Fully reachable again: {name}",
+      "dyndns_ip": "🔄 Public {name} has changed",
+      "dyndns_fail": "⚠️ DynDNS: update for {name} failed",
+      "dyndns_limit": "⚠️ DynDNS: update limit {name}"
     },
     "body": {
       "check": "Check: {name} ({type})",
