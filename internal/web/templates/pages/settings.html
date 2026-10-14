@@ -273,7 +273,8 @@
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<div class="fw-semibold text-danger mb-1"><i class="bi bi-exclamation-octagon"></i> {{.T "reset.title"}}</div>
 					<div class="form-text mb-2">{{.T "reset.hint"}}</div>
-					{{if $d.Linked}}<div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="keep_checks" id="reset_keep" checked><label class="form-check-label" for="reset_keep">{{.T "link.keep_checks"}}</label></div>{{end}}
+					{{if $d.Linked}}<div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="keep_checks" id="reset_keep" checked><label class="form-check-label" for="reset_keep">{{.T "link.keep_checks" "count" $d.Own}}</label></div>
+					<div class="form-text mb-2">{{$.T "link.scope" "own" $d.Own "other" $d.Other}}</div>{{end}}
 					<div class="input-group input-group-sm">
 						<input class="form-control" type="password" name="password" placeholder="{{.T "reset.password"}}" autocomplete="current-password" required>
 						<button class="btn btn-outline-danger" type="submit" data-confirm="{{.T "reset.confirm"}}"><i class="bi bi-arrow-counterclockwise"></i> {{.T "reset.button"}}</button>

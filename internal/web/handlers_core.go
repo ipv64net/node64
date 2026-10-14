@@ -312,6 +312,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 
 type settingsData struct {
 	Linked     bool // mit ipv64 verknuepft (Zuruecksetzen trennt die Verknuepfung)
+	Own, Other int  // Checks nur dieser Node / uebrige im Account
 	NodeName   string
 	Location   string
 	Modules    []module.Status
@@ -358,6 +359,9 @@ func (s *Server) settingsView(r *http.Request) *View {
 	d.RawOptions, d.HourlyOptions, d.ChartOptions = healthchecks.RawDayOptions, healthchecks.HourlyDayOptions, healthchecks.ChartDetailOptions
 	d.UpdateOn = s.Store.SettingOr(ctx, "updates.check", "0") == "1"
 	d.Linked = s.Linker != nil && s.Store.SettingOr(ctx, nodesync.SetToken, "") != ""
+	if d.Linked && s.HC != nil {
+		d.Own, d.Other = s.HC.LinkScope(ctx)
+	}
 	if raw := s.Store.SettingOr(ctx, "updates.latest", ""); raw != "" {
 		_ = json.Unmarshal([]byte(raw), &d.Update)
 	}

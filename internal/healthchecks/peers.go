@@ -133,6 +133,23 @@ type PeerRow struct {
 }
 
 // Peers liefert die Nodes dieser Verknuepfung (ueber die ipv64-hubs bekannt; keine direkte Verbindung).
+// LinkScope zaehlt fuer Trennen/Zuruecksetzen: own = Checks, die nur diese Node misst (laufen online
+// weiter oder werden geloescht); other = alle anderen im Account (andere Nodes, Online-Checks), die bleiben.
+func (m *Module) LinkScope(ctx context.Context) (own, other int) {
+	list, err := m.st.Checks(ctx)
+	if err != nil {
+		return 0, 0
+	}
+	for _, c := range list {
+		if c.Owner == "self" && c.Execution != "online" && len(c.Nodes) <= 1 {
+			own++
+		} else {
+			other++
+		}
+	}
+	return own, other
+}
+
 func (m *Module) Peers(ctx context.Context) []PeerRow {
 	list := m.peers(ctx)
 	count := map[string]int{}

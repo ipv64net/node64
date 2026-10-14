@@ -31,7 +31,8 @@
 			</form>
 			<form method="post" action="/link/unlink">
 				<input type="hidden" name="_csrf" value="{{.CSRF}}">
-				<div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="keep_checks" id="keep_checks"><label class="form-check-label" for="keep_checks">{{.T "link.keep_checks"}}</label></div>
+				<div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="keep_checks" id="keep_checks"><label class="form-check-label" for="keep_checks">{{.T "link.keep_checks" "count" $d.Own}}</label></div>
+				<div class="form-text mb-2">{{$.T "link.scope" "own" $d.Own "other" $d.Other}}</div>
 				<button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="{{.T "link.unlink_confirm"}}"><i class="bi bi-x-circle"></i> {{.T "link.unlink"}}</button>
 			</form>
 		{{else if $st.PendingCode}}

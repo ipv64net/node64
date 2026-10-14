@@ -29,6 +29,7 @@ type linkData struct {
 	Conflicts  []conflictRow
 	LocalNotif bool
 	Peers      []healthchecks.PeerRow // Nodes des Accounts
+	Own, Other int                    // Checks nur dieser Node / uebrige im Account (Trennen)
 }
 
 type conflictRow struct {
@@ -57,6 +58,7 @@ func (s *Server) linkPage(w http.ResponseWriter, r *http.Request) {
 	d.LocalNotif = s.Store.SettingOr(r.Context(), nodesync.SetLocalNotif, "0") == "1"
 	if s.HC != nil && d.State.Linked {
 		d.Peers = s.HC.Peers(r.Context())
+		d.Own, d.Other = s.HC.LinkScope(r.Context())
 	}
 	v.Data = d
 	s.render(w, r, http.StatusOK, "link", v)
