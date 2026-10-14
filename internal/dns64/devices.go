@@ -49,7 +49,13 @@ func (m *Module) encView(r *http.Request, c config) encView {
 		v.Rows = append(v.Rows, row)
 	}
 	if e != nil && e.enc != nil {
-		v.Names, v.NotAfter = e.enc.names, e.enc.notAfter
+		v.NotAfter = e.enc.notAfter
+		for _, n := range e.enc.names { // Auswahl fuer Geraete ohne localhost/Loopback
+			if ip := net.ParseIP(n); n == "localhost" || (ip != nil && ip.IsLoopback()) {
+				continue
+			}
+			v.Names = append(v.Names, n)
+		}
 	}
 	// Name fuer die Geraete: Auswahl (?host=), sonst der erste eingestellte Name, sonst die Adresse im Browser
 	v.Host = r.URL.Query().Get("host")

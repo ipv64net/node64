@@ -159,12 +159,13 @@ func wantedNames(extra []string) ([]string, []net.IP) {
 	if addrs, err := net.InterfaceAddrs(); err == nil {
 		for _, a := range addrs {
 			n, ok := a.(*net.IPNet)
-			if !ok || n.IP.IsLoopback() || !(n.IP.IsPrivate() || n.IP.IsLinkLocalUnicast() || isCGNAT(n.IP)) {
+			// private und CGNAT-Adressen; keine Link-Local-Adressen (169.254.x, fe80::), die wechseln und nutzt niemand
+			if !ok || n.IP.IsLoopback() || n.IP.IsLinkLocalUnicast() || !(n.IP.IsPrivate() || isCGNAT(n.IP)) {
 				continue
 			}
 			if v4 := n.IP.To4(); v4 != nil {
 				ips = append(ips, v4)
-			} else if !n.IP.IsLinkLocalUnicast() {
+			} else {
 				ips = append(ips, n.IP)
 			}
 		}
