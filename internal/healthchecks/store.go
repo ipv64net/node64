@@ -838,6 +838,7 @@ func (s *Store) Aggregate(ctx context.Context, now time.Time) error {
 
 type Maintenance struct {
 	ID          int64     `json:"id"`
+	UID         string    `json:"-"` // gleich auf allen Nodes der lokalen Gruppe (peermaint.go)
 	RemoteID    int64     `json:"remote_id,omitempty"`
 	Revision    int64     `json:"revision,omitempty"`
 	Name        string    `json:"name"`
@@ -929,8 +930,11 @@ func (s *Store) MaintenanceList(ctx context.Context) ([]Maintenance, error) {
 }
 
 func (s *Store) MaintenanceInsert(ctx context.Context, m *Maintenance) error {
-	res, err := s.w.ExecContext(ctx, `INSERT INTO hc_maintenance (name, start_at, end_at, repeat, repeat_until, tokens, active, created_at, remote_id, revision) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-		m.Name, ft(m.StartAt), ft(m.EndAt), m.Repeat, ft(m.RepeatUntil), strings.Join(m.Tokens, ","), b2i(m.Active), ft(time.Now()), m.RemoteID, max(m.Revision, 1))
+	if m.UID == "" {
+		m.UID = newUID()
+	}
+	res, err := s.w.ExecContext(ctx, `INSERT INTO hc_maintenance (name, start_at, end_at, repeat, repeat_until, tokens, active, created_at, remote_id, revision, uid, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		m.Name, ft(m.StartAt), ft(m.EndAt), m.Repeat, ft(m.RepeatUntil), strings.Join(m.Tokens, ","), b2i(m.Active), ft(time.Now()), m.RemoteID, max(m.Revision, 1), m.UID, ft(changeTime(ctx)))
 	if err != nil {
 		return err
 	}
@@ -941,8 +945,8 @@ func (s *Store) MaintenanceInsert(ctx context.Context, m *Maintenance) error {
 }
 
 func (s *Store) MaintenanceUpdate(ctx context.Context, m *Maintenance) error {
-	_, err := s.w.ExecContext(ctx, `UPDATE hc_maintenance SET name=?, start_at=?, end_at=?, repeat=?, repeat_until=?, tokens=?, active=?, remote_id=CASE WHEN ?>0 THEN ? ELSE remote_id END, revision=CASE WHEN ?>0 THEN ? ELSE revision+1 END WHERE id=?`,
-		m.Name, ft(m.StartAt), ft(m.EndAt), m.Repeat, ft(m.RepeatUntil), strings.Join(m.Tokens, ","), b2i(m.Active), m.RemoteID, m.RemoteID, m.Revision, m.Revision, m.ID)
+	_, err := s.w.ExecContext(ctx, `UPDATE hc_maintenance SET name=?, start_at=?, end_at=?, repeat=?, repeat_until=?, tokens=?, active=?, remote_id=CASE WHEN ?>0 THEN ? ELSE remote_id END, revision=CASE WHEN ?>0 THEN ? ELSE revision+1 END, updated_at=? WHERE id=?`,
+		m.Name, ft(m.StartAt), ft(m.EndAt), m.Repeat, ft(m.RepeatUntil), strings.Join(m.Tokens, ","), b2i(m.Active), m.RemoteID, m.RemoteID, m.Revision, m.Revision, ft(changeTime(ctx)), m.ID)
 	s.reloadMaintenance(ctx)
 	if err == nil {
 		s.changed(ctx, "maintenance", strconv.FormatInt(m.ID, 10), "upsert")
@@ -952,11 +956,16 @@ func (s *Store) MaintenanceUpdate(ctx context.Context, m *Maintenance) error {
 
 func (s *Store) MaintenanceDelete(ctx context.Context, id int64) error {
 	var rid int64
-	_ = s.w.QueryRowContext(ctx, `SELECT remote_id FROM hc_maintenance WHERE id = ?`, id).Scan(&rid)
+	var uid string
+	_ = s.w.QueryRowContext(ctx, `SELECT remote_id, uid FROM hc_maintenance WHERE id = ?`, id).Scan(&rid, &uid)
 	_, err := s.w.ExecContext(ctx, `DELETE FROM hc_maintenance WHERE id = ?`, id)
 	s.reloadMaintenance(ctx)
 	if err == nil {
-		s.changed(context.WithValue(ctx, deletedRemoteKey{}, rid), "maintenance", strconv.FormatInt(id, 10), "delete")
+		if uid != "" { // Loeschvermerk fuer die lokale Gruppe (Server-ID in revision)
+			_, _ = s.w.ExecContext(ctx, `INSERT OR REPLACE INTO hc_tombstones (token, revision, deleted_at) VALUES (?, ?, ?)`, "m:"+uid, rid, ft(changeTime(ctx)))
+		}
+		ctx = context.WithValue(context.WithValue(ctx, deletedRemoteKey{}, rid), deletedUIDKey{}, uid)
+		s.changed(ctx, "maintenance", strconv.FormatInt(id, 10), "delete")
 	}
 	return err
 }

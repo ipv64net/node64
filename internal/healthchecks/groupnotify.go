@@ -13,8 +13,9 @@ import (
 // Benachrichtigungen in der lokalen Gruppe (peer-Paket, Schritt 4): Messen mehrere Nodes der Gruppe einen
 // Check und benachrichtigt nicht der hub, meldet genau eine Node – die erste erreichbare in der Liste der
 // messenden Nodes (die Besitzer-Node, faellt sie aus, die naechste). Gemeldet wird der Gesamtzustand aus allen
-// Messstellen wie beim hub. Jede messende Node fuehrt diesen Zustand mit (group_state), damit die naechste
-// beim Uebernehmen weiss, was schon gemeldet ist, und nichts doppelt kommt.
+// Messstellen wie beim hub. Den zuletzt gemeldeten Zustand (group_state) schreibt nur die meldende Node; die
+// anderen uebernehmen ihn beim Abgleich, damit die naechste beim Uebernehmen weiss, was schon gemeldet ist, und
+// nichts doppelt kommt (bestimmten auch die anderen ihn selbst, entginge der meldenden Node ein Wechsel).
 
 // GroupRole sagt fuer die messenden Nodes eines Checks, ob die Gruppe benachrichtigt (nicht der hub), ob
 // diese Node an der Reihe ist und ob sie den Stand der Gruppe schon kennt (nach dem Start erst abgleichen).
@@ -130,6 +131,9 @@ func (m *Module) groupVerdict(ctx context.Context, c *Check) {
 	if c.Paused {
 		overall = scheduler.StatePaused
 	}
+	if !me {
+		return // eine andere Node der Gruppe meldet (ihren Stand uebernimmt diese Node beim Abgleich)
+	}
 	old, oldSince := m.groupState(ctx, c.Token)
 	if overall == old || overall == scheduler.StatePending {
 		return // unveraendert bzw. noch keine Messung
@@ -141,9 +145,9 @@ func (m *Module) groupVerdict(ctx context.Context, c *Check) {
 		delete(m.reminders, c.Token)
 		m.mu.Unlock()
 	}
-	m.log.Info("group state changed", "check", c.Name, "from", old, "to", overall, "notifies_here", me)
-	if !me || m.dispatcher == nil {
-		return // eine andere Node der Gruppe meldet
+	m.log.Info("group state changed", "check", c.Name, "from", old, "to", overall)
+	if m.dispatcher == nil {
+		return
 	}
 	var kind notify.Kind
 	switch {

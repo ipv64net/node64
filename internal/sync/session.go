@@ -310,7 +310,9 @@ func (s *session) request(t string, data any) (wire.Msg, error) {
 			Error string `json:"error"`
 		}
 		_ = json.Unmarshal(m.Data, &a)
-		s.c.noteAck(!(m.T == "ack" && a.Error != ""))
+		// nur ein Datenbankfehler zaehlt als "hub bestaetigt nicht"; eine inhaltliche Ablehnung (z. B. unbekannte
+		// Node) zeigt, dass der hub arbeitet
+		s.c.noteAck(!(m.T == "ack" && a.Error == "database error"))
 		return m, nil
 	case <-time.After(30 * time.Second):
 		s.mu.Lock()

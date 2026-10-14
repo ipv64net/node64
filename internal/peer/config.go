@@ -24,6 +24,15 @@ type Checks interface {
 	PeerTokens(ctx context.Context) []string
 }
 
+// Maint ist die Anbindung an die Wartungsfenster des Healthchecks-Moduls (peermaint.go).
+type Maint interface {
+	MaintUID(ctx context.Context, localID string) string
+	PeerMaintUIDs(ctx context.Context) []string
+	PeerMaintenance(ctx context.Context, uid string) (*healthchecks.PeerMaint, time.Time, time.Time, int64, error)
+	ApplyPeerMaintenance(ctx context.Context, p healthchecks.PeerMaint, at time.Time, origin string) (int64, bool, error)
+	DeletePeerMaintenance(ctx context.Context, uid string, remote int64, at time.Time, origin string) (int64, bool, error)
+}
+
 const (
 	pullEvery = 15 * time.Second
 	pageSize  = 200
@@ -31,13 +40,15 @@ const (
 
 // change ist ein Eintrag beim Abholen.
 type change struct {
-	Seq       int64       `json:"seq"`
-	Entity    string      `json:"entity"`
-	ID        string      `json:"id"`
-	Op        string      `json:"op"`
-	Origin    string      `json:"origin"`
-	ChangedAt time.Time   `json:"changed_at"`
-	Check     *wire.Check `json:"check,omitempty"`
+	Seq       int64                   `json:"seq"`
+	Entity    string                  `json:"entity"`
+	ID        string                  `json:"id"`
+	Op        string                  `json:"op"`
+	Origin    string                  `json:"origin"`
+	ChangedAt time.Time               `json:"changed_at"`
+	Check     *wire.Check             `json:"check,omitempty"`
+	Maint     *healthchecks.PeerMaint `json:"maintenance,omitempty"`
+	Remote    int64                   `json:"remote,omitempty"` // Server-ID eines geloeschten Wartungsfensters
 }
 
 type changesOut struct {
@@ -57,7 +68,20 @@ type pullState struct {
 // LogChange haengt eine Aenderung an das Protokoll (Hook des Healthchecks-Stores, auch fuer Aenderungen vom hub
 // und von anderen Nodes) und stoesst die Gruppe an.
 func (m *Manager) LogChange(ctx context.Context, entity, id, op string) {
-	if entity != "check" {
+	switch entity {
+	case "check":
+	case "maintenance": // Kennung statt lokaler Nummer
+		if op == "delete" {
+			id = healthchecks.DeletedMaintUID(ctx)
+		} else if mc := m.maint(); mc != nil {
+			id = mc.MaintUID(ctx, id)
+		} else {
+			id = ""
+		}
+		if id == "" {
+			return
+		}
+	default:
 		return
 	}
 	origin, at, ok := healthchecks.PeerSource(ctx)
@@ -87,13 +111,24 @@ func (m *Manager) seed(ctx context.Context) {
 		return
 	}
 	var n int
-	_ = m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM peer_log`).Scan(&n)
-	if n > 0 {
-		return
+	_ = m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM peer_log WHERE entity = 'check'`).Scan(&n)
+	if n == 0 {
+		for _, tok := range hc.PeerTokens(ctx) {
+			_, _ = m.db.ExecContext(ctx, `INSERT OR IGNORE INTO peer_log (entity, entity_id, op, origin, changed_at) VALUES ('check',?,'upsert',?,?)`, tok, m.d.NodeID(), fmtTime(time.Now()))
+		}
 	}
-	for _, tok := range hc.PeerTokens(ctx) {
-		_, _ = m.db.ExecContext(ctx, `INSERT OR IGNORE INTO peer_log (entity, entity_id, op, origin, changed_at) VALUES ('check',?,'upsert',?,?)`, tok, m.d.NodeID(), fmtTime(time.Now()))
+	mc := m.maint()
+	_ = m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM peer_log WHERE entity = 'maintenance'`).Scan(&n)
+	if n == 0 && mc != nil {
+		for _, uid := range mc.PeerMaintUIDs(ctx) {
+			_, _ = m.db.ExecContext(ctx, `INSERT OR IGNORE INTO peer_log (entity, entity_id, op, origin, changed_at) VALUES ('maintenance',?,'upsert',?,?)`, uid, m.d.NodeID(), fmtTime(time.Now()))
+		}
 	}
+}
+
+func (m *Manager) maint() Maint {
+	mc, _ := m.checks().(Maint)
+	return mc
 }
 
 func (m *Manager) checks() Checks {
@@ -158,6 +193,25 @@ func (m *Manager) handleChanges(w http.ResponseWriter, r *http.Request, _ *Membe
 	self := m.d.NodeID()
 	for _, c := range list {
 		out.Last = c.Seq
+		if c.Entity == "maintenance" {
+			mc := m.maint()
+			if mc == nil {
+				continue
+			}
+			p, upd, del, rid, err := mc.PeerMaintenance(ctx, c.ID)
+			switch {
+			case err != nil:
+				continue
+			case p != nil:
+				c.Op, c.Maint, c.ChangedAt = "upsert", p, upd
+			case !del.IsZero(): // nur mit echtem Loeschvermerk (sonst koennte eine Loeschung bis zum hub laufen)
+				c.Op, c.ChangedAt, c.Remote = "delete", del, rid
+			default:
+				continue
+			}
+			out.Items = append(out.Items, c)
+			continue
+		}
 		if c.Entity != "check" {
 			continue
 		}
@@ -225,6 +279,44 @@ func (m *Manager) pullAll(ctx context.Context, only string) {
 		}
 	}
 	m.verdicts(ctx)
+}
+
+// applyMaint uebernimmt ein Wartungsfenster. Verknuepfte Nodes bekommen Fenster vom hub; aus der Gruppe
+// uebernimmt nur die weiterreichende Node die Fenster nicht verknuepfter Nodes (und meldet sie dem hub).
+func (m *Manager) applyMaint(ctx context.Context, x Member, c change) int {
+	mc := m.maint()
+	if mc == nil {
+		return 0
+	}
+	forward := false
+	if m.linkedSelf() {
+		if !m.forwardFor(ctx, c.Origin) {
+			return 0
+		}
+		forward = true
+	}
+	var id int64
+	var ok bool
+	var err error
+	switch {
+	case c.Op == "upsert" && c.Maint != nil:
+		id, ok, err = mc.ApplyPeerMaintenance(ctx, *c.Maint, c.ChangedAt, c.Origin)
+		if ok && forward {
+			m.d.Forward(ctx, "maintenance", strconv.FormatInt(id, 10), "upsert")
+		}
+	case c.Op == "delete":
+		id, ok, err = mc.DeletePeerMaintenance(ctx, c.ID, c.Remote, c.ChangedAt, c.Origin)
+		if ok && forward && c.Remote > 0 {
+			m.d.Forward(healthchecks.WithDeletedRemote(ctx, c.Remote), "maintenance", strconv.FormatInt(id, 10), "delete")
+		}
+	}
+	if err != nil {
+		m.d.Log.Warn("peer maintenance not applied", "from", x.Name, "id", c.ID, "err", err)
+	}
+	if ok {
+		return 1
+	}
+	return 0
 }
 
 // forwardFor: diese Node reicht die Aenderung an den hub weiter (Urheberin ist eine nicht verknuepfte Node).
@@ -299,6 +391,13 @@ func (m *Manager) pullFrom(ctx context.Context, x Member) error {
 			continue
 		}
 		for _, c := range out.Items {
+			if c.Entity == "maintenance" {
+				applied += m.applyMaint(ctx, x, c)
+				continue
+			}
+			if c.Origin == "hub" && m.linkedSelf() {
+				continue // Aenderung vom hub: kommt hier direkt vom hub (sonst pendelt sie zwischen den Nodes)
+			}
 			var ok bool
 			switch {
 			case c.Op == "upsert" && c.Check != nil:

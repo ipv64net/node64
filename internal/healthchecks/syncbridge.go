@@ -190,8 +190,13 @@ func (m *Module) RemoveRemoteMaintenance(ctx context.Context, remoteID int64) er
 
 // SetMaintenanceRemote traegt nach einem ack die Server-ID und Revision ein.
 func (m *Module) SetMaintenanceRemote(ctx context.Context, localID, remoteID, revision int64) error {
+	var old int64
+	_ = m.st.r.QueryRowContext(ctx, `SELECT remote_id FROM hc_maintenance WHERE id = ?`, localID).Scan(&old)
 	_, err := m.st.w.ExecContext(ctx, `UPDATE hc_maintenance SET remote_id=?, revision=? WHERE id=?`, remoteID, revision, localID)
 	m.st.reloadMaintenance(ctx)
+	if err == nil && old == 0 && remoteID > 0 {
+		m.LogMaintenanceRemote(ctx, localID) // die Gruppe ordnet das Fenster dem vom hub zu
+	}
 	return err
 }
 

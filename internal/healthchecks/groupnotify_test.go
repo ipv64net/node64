@@ -61,14 +61,19 @@ func TestGroupVerdict(t *testing.T) {
 	if got() != scheduler.StateDegraded {
 		t.Fatalf("B down: %s", got())
 	}
-	// beide gestoert: down (auch wenn eine andere Node meldet, wird der Zustand mitgefuehrt)
+	// meldet eine andere Node, bleibt der gemeldete Stand hier unveraendert (er kommt von ihr)
 	me = false
 	set(scheduler.StateDown)
 	c, _ = m.st.Check(ctx, cr.Token)
 	m.groupVerdict(ctx, c)
-	if got() != scheduler.StateDown {
-		t.Fatalf("both down: %s", got())
+	if got() != scheduler.StateDegraded {
+		t.Fatalf("other node notifies: %s", got())
 	}
+	m.ApplyPeerGroups(ctx, []GroupState{{Token: cr.Token, State: "down", Since: time.Now().UTC().Add(time.Second)}})
+	if got() != scheduler.StateDown {
+		t.Fatalf("adopted from notifying node: %s", got())
+	}
+	me = true
 	// B nicht erreichbar: zaehlt nicht mehr, Zustand der eigenen Messung
 	_, _ = m.st.w.ExecContext(ctx, `UPDATE hc_sources SET updated_at = ? WHERE token = ?`, ft(time.Now().Add(-10*time.Minute)), cr.Token)
 	set(scheduler.StateUp)

@@ -1,5 +1,20 @@
 # Änderungen – Healthchecks
 
+## 2.4.0 – 2026-10-14
+
+### Neu
+- Lokale Gruppe: Wartungsfenster werden zwischen den Nodes abgeglichen (anlegen, ändern, löschen auf jeder Node).
+  Fenster von Nodes ohne Healthchecks-Sync reicht eine verknüpfte Node an ipv64 weiter; dasselbe Fenster vom hub
+  und aus der Gruppe wird zusammengeführt, nicht doppelt angelegt.
+
+### Behoben
+- Änderungen von ipv64 liefen zwischen verknüpften Nodes der Gruppe noch einmal hin und her.
+- Lehnte ipv64 eine einzelne Änderung inhaltlich ab, galt der hub als „bestätigt nicht“ und die Node verschickte
+  ihre Meldungen selbst; das gilt jetzt nur noch bei einem echten Ausfall (Datenbankfehler, keine Antwort).
+- Gruppen-Benachrichtigung: Übernahm eine Node bei Ausfall der meldenden, konnte ihr ein Wechsel entgehen (z. B.
+  die Entwarnung), weil sie den Zustand einer anderen Node übernommen hatte. Den gemeldeten Zustand schreibt jetzt
+  nur die meldende Node.
+
 ## 2.3.0 – 2026-10-14
 
 ### Neu
