@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/checks"
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/scheduler"
@@ -42,6 +43,8 @@ type Module struct {
 	push   *pushLimiter
 	linked func() bool                     // ipv64-Verknuepfung aktiv (Sync-Phase), nil = standalone
 	quota  func() (today, limit, locs int) // Tageskontingent der Online-Checks, nil = standalone
+	api    *ipv64api.Key                   // zentraler API-Key: Online-Checks ohne Sync (online_api.go)
+	onl    onlineCache
 	// pushFwd meldet einen lokal empfangenen Push an den hub (der ihn an andere Messstellen weitergibt)
 	pushFwd func(token string, down bool, msg, from string) bool
 	// runRemote bittet den hub, den Check bei den anderen messenden Nodes sofort zu messen
@@ -275,6 +278,7 @@ func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /api/push/{token}", g.Enabled(http.HandlerFunc(m.apiPush)))
 	mux.Handle("POST /api/push/{token}", g.Enabled(http.HandlerFunc(m.apiPush)))
 	m.uiRoutes(mux, g)
+	m.onlineRoutes(mux, g)
 }
 
 // upsertSched plant einen Check ein, wenn diese Node ihn misst; Online-Checks und Checks

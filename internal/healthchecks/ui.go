@@ -98,20 +98,24 @@ type listData struct {
 	DockerErr   string
 	DockerShown bool
 	Groups      []group
-	Grouped     bool     // mindestens ein Check hat eine Gruppe
-	QuotaToday  int      // Online-Messungen heute (Tageskontingent)
-	QuotaLimit  int      // Tageskontingent (0 = unbegrenzt/standalone)
-	QuotaNear   bool     // mindestens 90 % verbraucht
-	AllGrps     []string // alle Gruppennamen (Filter, Vorschlaege)
-	Rows        []row
-	Types       []checks.Type
-	Tags        []string
-	States      []string
-	Filter      map[string]string
-	Sort        string
-	Dir         string
-	Counts      map[string]int
-	Total       int
+	Grouped     bool // mindestens ein Check hat eine Gruppe
+	QuotaToday  int  // Online-Messungen heute (Tageskontingent)
+	QuotaLimit  int  // Tageskontingent (0 = unbegrenzt/standalone)
+	QuotaNear   bool // mindestens 90 % verbraucht
+	// Online-Checks direkt ueber die API (Key hinterlegt, kein Sync)
+	APIMode   bool
+	Online    []onlineRow
+	OnlineErr string
+	AllGrps   []string // alle Gruppennamen (Filter, Vorschlaege)
+	Rows      []row
+	Types     []checks.Type
+	Tags      []string
+	States    []string
+	Filter    map[string]string
+	Sort      string
+	Dir       string
+	Counts    map[string]int
+	Total     int
 }
 
 var listStates = []string{"up", "down", "stabilizing", "flapping", "dependent", "pending", "paused"}
@@ -218,6 +222,10 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 		d.QuotaNear = d.QuotaLimit > 0 && d.QuotaToday*10 >= d.QuotaLimit*9
 	}
 	syncErrs := m.OutboxErrors(ctx)
+	if key, cl := m.apiMode(ctx); key != "" {
+		d.APIMode = true
+		d.Online, d.OnlineErr = m.onlineChecks(ctx, key, cl)
+	}
 	for _, c := range list {
 		for _, t := range c.Tags {
 			tagSet[t] = true
@@ -514,6 +522,7 @@ type formData struct {
 	Peers      []Peer // Nodes des Accounts (messende Nodes waehlen)
 	// Tageskontingent: Vorschau im Formular (Verbrauch der uebrigen Checks, heute, Limit, Standorte je Check)
 	ProjOther, QuotaToday, QuotaLimit, AccLocs int
+	APIMode                                    bool // Online-Check direkt ueber die API v2 (online_api.go)
 }
 
 type channelOpt struct {
@@ -867,6 +876,15 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 		if chans, err := m.channels(r.Context()); err == nil {
 			for _, ch := range chans {
 				d.Channels = append(d.Channels, channelOpt{ID: ch.ID, Name: ch.Name, Type: string(ch.Type), Default: ch.Default, Selected: selected[strconv.FormatInt(ch.ID, 10)]})
+			}
+		}
+	}
+	if d.APIMode { // Online-Check bei ipv64: nur online, ohne lokale Kanaele, Eltern-Checks und Docker
+		d.Executions, d.Channels, d.Parents, d.Peers = []string{"online"}, nil, nil, nil
+		d.Types = nil
+		for _, t := range checks.Types {
+			if t != checks.TypeDocker {
+				d.Types = append(d.Types, t)
 			}
 		}
 	}

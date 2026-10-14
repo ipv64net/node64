@@ -208,3 +208,6 @@ html[data-fs="xl"] { font-size: 125%; }
 .dyn-domain-row > td { background: var(--bs-tertiary-bg) !important; }
 .dyn-host { padding-left: 1.5rem !important; }
 @media (max-width: 767.98px) { .table-cards .dyn-domain-row > td::before { content: none; } .dyn-host { padding-left: .5rem !important; } }
+
+/* Unterpunkt im Menue (z. B. Healthchecks-Sync unter Healthchecks) */
+.nav-link.nav-sub { padding-left: 2.6rem; padding-top: .2rem; padding-bottom: .2rem; }

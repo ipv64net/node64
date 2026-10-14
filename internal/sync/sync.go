@@ -130,6 +130,8 @@ type Deps struct {
 	Log     *slog.Logger
 	Senders map[notify.Type]notify.Sender
 	Modules Modules // nil = Module nicht automatisch einschalten
+	// UnlinkAPI trennt die Node ueber die ipv64 API v2, wenn kein hub erreichbar ist (nil = ohne API-Key)
+	UnlinkAPI func(ctx context.Context, nodeID string, keepChecks bool) error
 }
 
 // Modules schaltet beim Verknuepfen das Healthchecks-Modul ein (sonst fehlen die Tabellen fuer die Checks von ipv64).
@@ -549,9 +551,18 @@ func (c *Live) LinkCancel() {
 func (c *Live) Unlink(ctx context.Context, keepChecks bool) error {
 	body, _ := json.Marshal(map[string]bool{"keep_checks": keepChecks})
 	tok := c.token()
+	hubOK := false
 	for _, ep := range c.endpoints() {
 		if _, err := c.post(ctx, ep.URL+"/v1/nodes/me/unlink", tok, body); err == nil {
+			hubOK = true
 			break
+		}
+	}
+	if !hubOK && c.d.UnlinkAPI != nil { // hubs nicht erreichbar: direkt ueber die API v2 trennen
+		if err := c.d.UnlinkAPI(ctx, c.nodeID(), keepChecks); err != nil {
+			c.log.Warn("unlink via ipv64 API failed", "err", err)
+		} else {
+			c.log.Info("hubs unreachable, unlinked via ipv64 API")
 		}
 	}
 	_ = c.Stop(ctx)

@@ -46,6 +46,7 @@ type NavItem struct {
 	Image     string
 	Available bool
 	Enabled   bool
+	Sub       bool // Unterpunkt (eingerueckt)
 	Active    bool
 }
 
@@ -245,11 +246,19 @@ func (s *Server) view(r *http.Request, titleKey string) *View {
 
 func (s *Server) nav(r *http.Request) []NavItem {
 	items := []NavItem{{Key: "nav.dashboard", Path: "/", Icon: "bi-speedometer2", Available: true, Enabled: true}}
+	link := NavItem{Key: "nav.link", Path: "/link", Icon: "bi-cloud", Available: true, Enabled: true, Sub: true}
+	placed := false
 	for _, m := range s.Modules.List(r.Context()) {
 		items = append(items, NavItem{Key: m.Info.TitleKey, Path: m.Info.Path, Icon: m.Info.Icon, Image: m.Info.Image, Available: m.Info.Available, Enabled: m.Running})
+		if m.Info.Path == "/healthchecks" { // Healthchecks-Sync gehoert zu den Healthchecks
+			items, placed = append(items, link), true
+		}
+	}
+	if !placed {
+		link.Sub = false
+		items = append(items, link)
 	}
 	items = append(items,
-		NavItem{Key: "nav.link", Path: "/link", Icon: "bi-cloud", Available: true, Enabled: true},
 		NavItem{Key: "nav.notifications", Path: "/notifications", Icon: "bi-bell", Available: true, Enabled: s.Notify != nil},
 		NavItem{Key: "nav.settings", Path: "/settings", Icon: "bi-gear", Available: true, Enabled: true},
 		NavItem{Key: "nav.audit", Path: "/audit", Icon: "bi-journal-text", Available: true, Enabled: true},

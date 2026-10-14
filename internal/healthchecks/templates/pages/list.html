@@ -205,6 +205,30 @@
 	{{end}}
 </div>
 {{end}}
+{{if $d.APIMode}}
+<div class="card mt-3" id="online">
+	<div class="card-header d-flex align-items-center flex-wrap gap-2"><span><i class="bi bi-cloud text-info"></i> {{.T "hc.api.title"}} <span class="text-body-secondary small">{{len $d.Online}}</span></span>
+		<a class="btn btn-primary btn-sm ms-auto" href="/healthchecks/online/new"><i class="bi bi-plus-lg"></i> {{.T "hc.api.new"}}</a></div>
+	<div class="card-body small pb-0"><div class="alert alert-info py-2"><i class="bi bi-info-circle"></i> {{.T "hc.api.hint"}} <a href="/link">{{.T "hc.api.sync_link"}}</a></div></div>
+	{{if $d.OnlineErr}}<div class="alert alert-warning mx-3 small">{{.T "hc.api.error"}}: {{$d.OnlineErr}}</div>{{end}}
+	{{if $d.Online}}<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0">
+		<thead><tr><th class="ps-3">{{.T "common.status"}}</th><th>{{.T "common.name"}}</th><th class="d-none d-md-table-cell">{{.T "hc.target"}}</th><th class="d-none d-md-table-cell">{{.T "hc.api.interval"}}</th><th class="d-none d-md-table-cell">{{.T "hc.api.last"}}</th><th class="text-end pe-3">{{.T "common.actions"}}</th></tr></thead>
+		<tbody>{{range $d.Online}}<tr>
+			<td class="ps-3"><span class="badge hc-state-{{.State}}">{{$.T (print "hc.state." .State)}}</span></td>
+			<td><span class="fw-semibold">{{.Name}}</span> <span class="badge text-bg-light">{{$.T (print "hc.type." .Type)}}</span>{{if .Message}}<div class="small text-body-secondary text-truncate" style="max-width:380px" title="{{.Message}}">{{.Message}}</div>{{end}}</td>
+			<td class="d-none d-md-table-cell">{{if .Target}}<span class="hc-target-badge" title="{{.Target}}"><i class="bi {{.Badge.Class}}"></i><span>{{.Badge.Text}}</span></span>{{else}}<span class="hc-target-badge hc-target-push"><i class="bi bi-arrow-down-circle"></i><span>{{$.T "hc.type.push"}}</span></span>{{end}}</td>
+			<td class="d-none d-md-table-cell small text-nowrap">{{.Interval}} s · {{.Locs}}</td>
+			<td class="d-none d-md-table-cell small text-nowrap">{{if .LastCheck.IsZero}}–{{else}}<span title="{{$.Time .LastCheck}}">{{$.Ago .LastCheck}}</span>{{end}}</td>
+			<td class="text-end pe-3 text-nowrap">
+				<a class="btn btn-sm btn-outline-secondary" href="/healthchecks/online/{{.Token}}/edit" title="{{$.T "hc.edit"}}"><i class="bi bi-pencil"></i></a>
+				<form method="post" action="/healthchecks/online/{{.Token}}/run" class="d-inline"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-secondary" title="{{$.T "hc.api.run"}}"><i class="bi bi-arrow-repeat"></i></button></form>
+				<form method="post" action="/healthchecks/online/{{.Token}}/{{if .Paused}}resume{{else}}pause{{end}}" class="d-inline"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-secondary" title="{{if .Paused}}{{$.T "hc.api.resume"}}{{else}}{{$.T "hc.api.pause"}}{{end}}"><i class="bi {{if .Paused}}bi-play{{else}}bi-pause{{end}}"></i></button></form>
+				<form method="post" action="/healthchecks/online/{{.Token}}/delete" class="d-inline"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" data-confirm="{{$.T "hc.api.delete_confirm" "name" .Name}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button></form>
+			</td></tr>{{end}}</tbody>
+	</table></div>
+	{{else if not $d.OnlineErr}}<div class="card-body pt-0 text-body-secondary small">{{.T "hc.api.empty"}}</div>{{end}}
+</div>
+{{end}}
 </div>
 {{end}}
 {{define "scripts"}}<script src="/static/js/healthchecks.js?v={{.Version}}"></script>{{end}}

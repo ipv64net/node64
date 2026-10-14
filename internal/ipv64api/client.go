@@ -143,7 +143,7 @@ func (c *Client) do(ctx context.Context, method, key, path string, in any, out a
 	if err != nil {
 		return err
 	}
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+	if resp.StatusCode == http.StatusUnauthorized {
 		return ErrUnauthorized
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
@@ -155,14 +155,14 @@ func (c *Client) do(ctx context.Context, method, key, path string, in any, out a
 		}
 		return fmt.Errorf("ipv64: HTTP %d", resp.StatusCode)
 	}
+	if out == nil {
+		return nil // ohne Antwortdaten (z. B. 204 No Content)
+	}
 	env := struct {
 		Data json.RawMessage `json:"data"`
 	}{}
 	if err := json.Unmarshal(body, &env); err != nil || len(env.Data) == 0 {
 		return errors.New("ipv64: unexpected answer")
-	}
-	if out == nil {
-		return nil
 	}
 	return json.Unmarshal(env.Data, out)
 }

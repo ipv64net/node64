@@ -11,6 +11,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/ipv64net/node64/internal/netstat"
 	"log/slog"
@@ -134,11 +135,19 @@ func run() error {
 	defer modules.StopAll()
 
 	// Verknuepfung mit ipv64.net (Sync-Client); standalone bleibt alles wie gehabt
-	syncClient := nodesync.New(nodesync.Deps{Core: st, HC: hcModule, NF: nfStore, Box: box, Version: Version, Log: logger.Slog(), Senders: notify.Senders(Version), Modules: modules})
+	syncClient := nodesync.New(nodesync.Deps{Core: st, HC: hcModule, NF: nfStore, Box: box, Version: Version, Log: logger.Slog(), Senders: notify.Senders(Version), Modules: modules,
+		UnlinkAPI: func(ctx context.Context, nodeID string, keep bool) error { // hubs nicht erreichbar: ueber die API v2 trennen
+			key := ipv64Key.Get(ctx)
+			if key == "" {
+				return errors.New("no ipv64 api key")
+			}
+			return ipv64Key.Client().HC2UnlinkNode(ctx, key, nodeID, keep)
+		}})
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)
 	hcModule.SetLinked(syncClient.Linked)
 	hcModule.SetQuota(syncClient.Quota)
+	hcModule.SetAPI(ipv64Key) // Online-Checks direkt ueber die API v2, solange kein Sync besteht
 	hcModule.SetPushForward(syncClient.ForwardPush)
 	hcModule.SetRunRemote(syncClient.RunRemote)
 	go netstat.Loop(ctx, st) // Datenverkehr des Containers fuer das Dashboard

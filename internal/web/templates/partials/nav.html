@@ -6,7 +6,7 @@
 	{{else if not .Enabled}}
 	<a class="nav-link text-body-tertiary" href="/settings#modules">{{if .Image}}<img src="/static/img/{{.Image}}" alt="" class="nav-img">{{else}}<i class="bi {{.Icon}}"></i>{{end}} {{$.T .Key}} <span class="badge text-bg-light ms-1">{{$.T "nav.disabled"}}</span></a>
 	{{else}}
-	<a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}">{{if .Image}}<img src="/static/img/{{.Image}}" alt="" class="nav-img">{{else}}<i class="bi {{.Icon}}"></i>{{end}} {{$.T .Key}}</a>
+	<a class="nav-link{{if .Active}} active{{end}}{{if .Sub}} nav-sub small{{end}}" href="{{.Path}}">{{if .Image}}<img src="/static/img/{{.Image}}" alt="" class="nav-img">{{else}}<i class="bi {{.Icon}}"></i>{{end}} {{$.T .Key}}</a>
 	{{end}}
 	{{end}}
 </nav>
