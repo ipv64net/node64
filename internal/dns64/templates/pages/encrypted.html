@@ -1,0 +1,89 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{.T "dns64.title"}}</h1>
+	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "dns64.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "dns64.listening" "addr" $d.Listen}}</span>{{end}}
+	
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+{{if not $d.Running}}<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.not_running"}}{{if $d.Err}}<div class="small mt-1 font-monospace">{{$d.Err}}</div><div class="small mt-1">{{.T "dns64.retrying"}}</div>{{end}}</div>{{end}}
+<script type="application/json" id="dns64-data">{{$d.JS}}</script>
+{{$e := $d.Enc}}
+<div class="row g-3">
+	<div class="col-xl-6">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-lock text-success"></i> {{.T "dns64.enc.title"}}</div>
+			<div class="card-body">
+				<p class="small text-body-secondary">{{.T "dns64.enc.hint"}}</p>
+				<form method="post" action="/dns64/encrypted">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<table class="table table-sm align-middle small">
+						<thead><tr><th>{{.T "dns64.lists.on"}}</th><th>{{.T "dns64.enc.service"}}</th><th>{{.T "common.status"}}</th></tr></thead>
+						<tbody>
+						{{range $e.Rows}}<tr>
+							<td><input class="form-check-input" type="checkbox" id="enc-{{.Proto}}" name="{{.Proto}}" value="1"{{if .On}} checked{{end}}></td>
+							<td><label for="enc-{{.Proto}}">{{.Label}}</label></td>
+							<td>{{if .Err}}<span class="badge text-bg-danger text-wrap text-start">{{.Err}}</span>{{else if .Addr}}<span class="badge text-bg-success">{{$.T "dns64.enc.listening" "addr" .Addr}}</span>{{else if .On}}<span class="badge text-bg-secondary">{{$.T "dns64.enc.not_running"}}</span>{{else}}<span class="badge text-bg-light">{{$.T "dns64.js.off"}}</span>{{end}}</td>
+						</tr>{{end}}
+						</tbody>
+					</table>
+					<div class="row g-3">
+						<div class="col-sm-6">
+							<label class="form-label" for="doh_port">{{.T "dns64.enc.doh_port"}}</label>
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-hash"></i></span><input type="number" class="form-control" id="doh_port" name="doh_port" min="1" max="65535" value="{{$d.Cfg.DoHPort}}" required></div>
+						</div>
+						<div class="col-sm-6">
+							<label class="form-label" for="dot_port">{{.T "dns64.enc.dot_port"}}</label>
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-hash"></i></span><input type="number" class="form-control" id="dot_port" name="dot_port" min="1" max="65535" value="{{$d.Cfg.DoTPort}}" required></div>
+						</div>
+						<div class="col-12 form-text mt-1">{{.T "dns64.enc.ports_hint"}}</div>
+						<div class="col-12">
+							<label class="form-label" for="names">{{.T "dns64.enc.names"}}</label>
+							<textarea class="form-control font-monospace" id="names" name="names" rows="2" placeholder="dns.home.lan">{{range $i, $n := $d.Cfg.Names}}{{if $i}}
+{{end}}{{$n}}{{end}}</textarea>
+							<div class="form-text">{{.T "dns64.enc.names_hint"}}</div>
+						</div>
+						<div class="col-12">
+							<label class="form-label" for="cert_mode">{{.T "dns64.enc.cert"}}</label>
+							<select class="form-select" id="cert_mode" name="cert_mode">
+								<option value="self"{{if eq $d.Cfg.CertMode "self"}} selected{{end}}>{{.T "dns64.enc.cert_self"}}</option>
+								<option value="node64"{{if eq $d.Cfg.CertMode "node64"}} selected{{end}}>{{.T "dns64.enc.cert_node64"}}</option>
+							</select>
+							<div class="form-text">{{.T "dns64.enc.cert_hint"}}</div>
+						</div>
+					</div>
+					<button class="btn btn-primary mt-3" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>
+				</form>
+			</div>
+		</div>
+	</div>
+	<div class="col-xl-6">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-phone text-primary"></i> {{.T "dns64.enc.devices"}}</div>
+			<div class="card-body small">
+				{{if $e.Names}}<div class="mb-2">{{.T "dns64.enc.host"}}
+					{{range $e.Names}}<a class="badge {{if eq . $e.Host}}text-bg-primary{{else}}text-bg-light{{end}} text-decoration-none font-monospace" href="?host={{.}}">{{.}}</a> {{end}}</div>{{end}}
+				<dl class="row mb-2">
+					<dt class="col-sm-3">DoH</dt><dd class="col-sm-9 font-monospace text-break">{{$e.DoHURL}}</dd>
+					<dt class="col-sm-3">DoT</dt><dd class="col-sm-9 font-monospace text-break">{{$e.Host}} <span class="text-body-secondary">({{.T "dns64.enc.port" "port" $d.Cfg.DoTPort}})</span></dd>
+					<dt class="col-sm-3">DoQ</dt><dd class="col-sm-9 font-monospace text-break">{{$e.DoQURL}}</dd>
+				</dl>
+				<div class="d-flex flex-wrap gap-2 mb-3">
+					{{if $e.CA}}<a class="btn btn-sm btn-outline-primary" href="/dns64/ca.crt"><i class="bi bi-download"></i> {{.T "dns64.enc.dl_ca"}}</a>{{end}}
+					<a class="btn btn-sm btn-outline-primary" href="/dns64/dns64.mobileconfig?proto=doh&amp;host={{$e.Host}}"><i class="bi bi-apple"></i> {{.T "dns64.enc.dl_profile" "proto" "DoH"}}</a>
+					<a class="btn btn-sm btn-outline-primary" href="/dns64/dns64.mobileconfig?proto=dot&amp;host={{$e.Host}}"><i class="bi bi-apple"></i> {{.T "dns64.enc.dl_profile" "proto" "DoT"}}</a>
+				</div>
+				<ul class="ps-3 mb-2">
+					<li>{{.T "dns64.enc.howto_apple"}}</li>
+					<li>{{.T "dns64.enc.howto_windows"}}</li>
+					<li>{{.T "dns64.enc.howto_browser"}}</li>
+					<li>{{.T "dns64.enc.howto_android"}}</li>
+				</ul>
+				{{if $e.Names}}<div class="text-body-secondary">{{.T "dns64.enc.cert_names"}} <span class="font-monospace">{{range $i, $n := $e.Names}}{{if $i}}, {{end}}{{$n}}{{end}}</span>{{if not $e.NotAfter.IsZero}} · {{.T "dns64.enc.valid_until" "date" (.Date $e.NotAfter)}}{{end}}</div>{{end}}
+			</div>
+		</div>
+	</div>
+</div>
+{{end}}

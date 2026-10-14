@@ -34,7 +34,8 @@ ENV NODE64_DATA_DIR=/data \
     NODE64_HTTP_PORT=8080 \
     NODE64_HTTPS_PORT=0
 VOLUME ["/data"]
-# 53/udp+tcp nur mit Modul DNS64 (empfohlen: Host-Netzwerk, siehe README)
-EXPOSE 8080 8443
+# Weboberflaeche; dazu nur mit Modul DNS64: DNS 53 (UDP/TCP), DoH 443/TCP, DoT 853/TCP, DoQ 853/UDP
+# (empfohlen: Host-Netzwerk, siehe README)
+EXPOSE 8080 8443 53/udp 53/tcp 443/tcp 853/tcp 853/udp
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD ["/node64", "healthcheck"]
 ENTRYPOINT ["/node64"]

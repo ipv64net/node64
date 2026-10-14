@@ -1209,7 +1209,8 @@
       "log": "Query log",
       "lists": "Allowlist & blocklists",
       "settings": "Settings",
-      "records": "Custom records"
+      "records": "Custom records",
+      "encrypted": "Encryption"
     },
     "log": {
       "title": "Query log",
@@ -1311,7 +1312,7 @@
       "title": "Setup",
       "router": "Enter this host's IP as DNS server in your router (DHCP). Then all devices on your network use DNS64 automatically.",
       "docker": "In a container DNS64 needs host networking (network_mode: host), so it sees the real device IPs and finds the router by itself.",
-      "later": "Encrypted queries from devices to DNS64 itself (DoH/DoT/DoQ on the home network) will follow."
+      "later": "Encrypted queries from devices (DoH/DoT/DoQ) are on the “Encryption” tab."
     },
     "js": {
       "status": {
@@ -1376,7 +1377,14 @@
       "reason_released": "allowed (otherwise: {list})",
       "mode_parallel": "Parallel (fastest answer)",
       "mode_ordered": "In order (fallback on error)",
-      "off": "off"
+      "off": "off",
+      "proto": {
+        "udp": "UDP",
+        "tcp": "TCP",
+        "doh": "DoH",
+        "dot": "DoT",
+        "doq": "DoQ"
+      }
     },
     "retrying": "Retrying every minute; port or address can be changed in the settings.",
     "custom": "custom",
@@ -1414,7 +1422,36 @@
       "target": "Invalid target name.",
       "type": "Unknown type.",
       "dup": "This record already exists.",
-      "cname": "A CNAME stands alone: no other record for the same name."
+      "cname": "A CNAME stands alone: no other record for the same name.",
+      "enc_port": "The ports for DoH and DoT/DoQ must be between 1 and 65535 and differ from the DNS port (DoH also from DoT).",
+      "enc_name": "“{name}” is not a valid name (IPs are added to the certificate automatically)."
+    },
+    "enc": {
+      "title": "Encrypted on the home network",
+      "hint": "Devices ask DNS64 encrypted instead of port 53: DNS-over-HTTPS (browsers, Windows, iOS/macOS), DNS-over-TLS (iOS/macOS, Android) and DNS-over-QUIC. The same blocklists, allowlist and allowed networks apply.",
+      "service": "Service",
+      "listening": "running on {addr}",
+      "not_running": "not running",
+      "doh_port": "Port for DoH",
+      "dot_port": "Port for DoT and DoQ",
+      "ports_hint": "DoH uses HTTPS (TCP), DoT TCP and DoQ UDP; defaults are 443 and 853. The DoH port must not be the web interface port.",
+      "names": "Names for devices",
+      "names_hint": "Names devices use to reach DNS64 (e.g. dns.home.lan, as a custom record pointing to the node's IP), one per line. The node's IPs are added to the certificate automatically.",
+      "cert": "Certificate",
+      "cert_self": "Own home network CA (default)",
+      "cert_node64": "Certificate of the web interface (NODE64_TLS_CERT)",
+      "cert_hint": "With the own CA, devices install the CA certificate once; it may only vouch for private addresses. A publicly valid certificate (e.g. for an ipv64 domain) can be provided via NODE64_TLS_CERT/NODE64_TLS_KEY.",
+      "devices": "For devices",
+      "host": "Name:",
+      "port": "port {port}",
+      "dl_ca": "CA certificate",
+      "dl_profile": "Profile iOS/macOS ({proto})",
+      "howto_apple": "iPhone, iPad, Mac: download the profile, install it under Settings → General → VPN & Device Management and, with the own CA, trust it under About → Certificate Trust Settings.",
+      "howto_windows": "Windows 11: import the CA certificate into “Trusted Root Certification Authorities”, then set DNS manually to the node's IP with DNS-over-HTTPS and the DoH address above.",
+      "howto_browser": "Firefox/Chrome: secure DNS with the DoH address above; Firefox has its own certificate store (import the CA there).",
+      "howto_android": "Android “Private DNS” (DoT) only accepts publicly valid certificates, no own CA; use the web interface certificate with a real certificate for that.",
+      "cert_names": "Certificate for:",
+      "valid_until": "valid until {date}"
     }
   }
 }

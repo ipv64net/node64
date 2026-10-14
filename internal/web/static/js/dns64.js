@@ -338,7 +338,7 @@
 				st.append(badge(r.status));
 				var action = el("td", { "class": "text-end" });
 				if (r.status === "blocked") { action.append(releaseButton(r.domain)); }
-				tr.append(el("td", { "class": "text-nowrap" }, time), client, domain, el("td", {}, r.qtype), st,
+				tr.append(el("td", { "class": "text-nowrap" }, time), client, domain, el("td", { "class": "text-nowrap" }, r.qtype + (r.proto && r.proto !== "udp" ? " · " + t("proto." + r.proto) : "")), st,
 					el("td", { "class": "text-body-secondary text-truncate", style: "max-width:22rem", title: details }, details),
 					el("td", { "class": "text-end text-nowrap" }, r.ms < 1 ? "<1 ms" : pf.format(r.ms) + " ms"), action);
 				tb.append(tr);

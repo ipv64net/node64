@@ -43,7 +43,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.2.0"
+	version   = "1.3.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -68,6 +68,8 @@ type Module struct {
 	lastErr string  // letzter Fehler beim Start (z. B. Port belegt)
 
 	recs atomic.Pointer[recordTable] // eigene DNS-Eintraege (records.go)
+
+	webCert, webKey string // Zertifikat der Weboberflaeche (cert_mode node64)
 }
 
 const retryEvery = time.Minute
@@ -82,6 +84,7 @@ type engine struct {
 	up      *upstream.Resolver
 	local   *localnet.Resolver
 	srv     *dnsserver.Server
+	enc     *encrypted // DoH/DoT/DoQ fuer Geraete
 	cancel  context.CancelFunc
 	wg      sync.WaitGroup
 }
@@ -240,6 +243,7 @@ func (m *Module) start(ctx context.Context) error {
 		e.up.Close()
 		return fmt.Errorf("dns %s: %w", e.addr, err)
 	}
+	e.enc = m.startEncrypted(cfg, e.srv)
 	ectx, cancel := context.WithCancel(ctx)
 	e.cancel = cancel
 	for _, run := range []func(context.Context){st.Run, e.lists.Run, e.local.Run} {
@@ -264,6 +268,7 @@ func (m *Module) Stop(ctx context.Context) error {
 	if e == nil {
 		return nil
 	}
+	e.enc.stop(ctx)
 	e.srv.Shutdown(ctx)
 	e.cancel()
 	done := make(chan struct{})

@@ -142,9 +142,22 @@ Das Modul *DNS64* (in den Einstellungen einschalten) ist ein cachender DNS-Serve
         - node64-data:/data
   ```
 
+  Ohne Host-Netzwerk (Bridge) die Ports freigeben; DNS64 sieht die Geräte-IPs dann trotzdem (Docker leitet per NAT weiter), den Router für lokale Namen unter *Einstellungen* eintragen:
+
+  ```yaml
+      ports:
+        - "8080:8080"
+        - "53:53/udp"
+        - "53:53/tcp"
+        - "443:443/tcp"     # DoH (nur wenn eingeschaltet)
+        - "853:853/tcp"     # DoT
+        - "853:853/udp"     # DoQ
+  ```
+
   Ist Port 53 auf dem Host schon belegt (z. B. `systemd-resolved` mit `DNSStubListener=yes`), meldet die Seite den Fehler, das Modul versucht es jede Minute erneut, und der Port lässt sich ändern.
 - **Blocklisten:** Standard sind StevenBlack, AdGuard DNS, OISD Small, HaGeZi Multi, EasyPrivacy und URLhaus; dazu wählbar OISD Big, HaGeZi Pro, HaGeZi Threat Intelligence und eigene Listen (hosts, Domain je Zeile, Adblock-Syntax). Aktualisierung alle 6–48 Stunden. Tracker hinter CNAMEs werden erkannt. Blockiert wird mit `0.0.0.0` bzw. `::` oder wahlweise NXDOMAIN. Freigaben gelten für die Domain samt Subdomains und gehen per Klick im Abfrage-Log.
 - **Upstream:** verschlüsselt per DNS-over-HTTPS (`https://…`), DNS-over-TLS (`tls://name`, Port 853) oder DNS-over-QUIC (`quic://name`, Port 853), wählbar Cloudflare, Quad9, Google, AdGuard, Mullvad oder eigene Server (mit Bootstrap-IPs, damit DNS64 sie ohne DNS erreicht; das Zertifikat wird auf den Namen geprüft). Parallel (schnellste gültige Antwort gewinnt) oder der Reihe nach. Optimistischer Cache, Größe einstellbar (Standard 20.000).
+- **Verschlüsselt im Heimnetz:** Geräte können DNS64 selbst per DNS-over-HTTPS (`https://<node>/dns-query`, Port 443), DNS-over-TLS und DNS-over-QUIC (Port 853) fragen; einzeln einschaltbar unter *DNS64 → Verschlüsselung*. Das Zertifikat stellt eine eigene Heimnetz-CA aus (enthält alle privaten IPs und eingestellten Namen; die CA darf nur private Adressen bestätigen) oder es wird das Zertifikat der Weboberfläche genutzt (`NODE64_TLS_CERT`). Zum Herunterladen: CA-Zertifikat und Profil für iPhone/iPad/Mac (DoH oder DoT). Android „Privates DNS“ braucht ein öffentlich gültiges Zertifikat.
 - **Eigene Einträge:** A, AAAA und CNAME, auch Wildcards (`*.home.lan`); zu A/AAAA gibt es die Rückwärtssuche (PTR) dazu. Sie gelten sofort, kommen vor den Blocklisten und gehen nie ins Internet.
 - **Datenschutz:** Client-Adressen im Abfrage-Log vollständig, gekürzt (IPv4 /24, IPv6 /48) oder gar nicht speichern. Weitere Client-Netze (z. B. ein öffentliches IPv6-Präfix) lassen sich erlauben, offen fürs Internet wird DNS64 nie.
 - **Lokale Namen:** `*.fritz.box`, `*.lan`, `*.home.arpa`, einzelne Hostnamen und Reverse-Lookups privater IPs gehen nur an den Router (Default-Gateway oder eingestellt), nie ins Internet. Gerätenamen der Clients kommen per PTR vom Router.

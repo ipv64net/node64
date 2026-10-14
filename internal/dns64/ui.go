@@ -30,6 +30,10 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /dns64/log", page(m.pageTab("log", "dns64.log.title")))
 	mux.Handle("GET /dns64/lists", page(m.pageTab("lists", "dns64.lists.title")))
 	mux.Handle("GET /dns64/records", page(m.pageTab("records", "dns64.records.title")))
+	mux.Handle("GET /dns64/encrypted", page(m.pageTab("encrypted", "dns64.enc.title")))
+	mux.Handle("POST /dns64/encrypted", page(m.pageEncryptedSave))
+	mux.Handle("GET /dns64/ca.crt", page(m.pageCA))
+	mux.Handle("GET /dns64/dns64.mobileconfig", page(m.pageProfile))
 	mux.Handle("GET /dns64/settings", page(m.pageTab("settings", "dns64.settings.title")))
 	mux.Handle("POST /dns64/settings", page(m.pageSettingsSave))
 	mux.Handle("POST /dns64/upstreams", page(m.pageUpstreamsSave))
@@ -62,11 +66,12 @@ type pageData struct {
 	Hours   []int
 	Records []Record
 	Types   []string
+	Enc     encView
 }
 
 var tabs = []tab{{"overview", "/dns64", "dns64.tab.overview", "bi-speedometer2", false}, {"log", "/dns64/log", "dns64.tab.log", "bi-list-ul", false},
 	{"lists", "/dns64/lists", "dns64.tab.lists", "bi-funnel", false}, {"records", "/dns64/records", "dns64.tab.records", "bi-signpost-split", false},
-	{"settings", "/dns64/settings", "dns64.tab.settings", "bi-gear", false}}
+	{"encrypted", "/dns64/encrypted", "dns64.tab.encrypted", "bi-lock", false}, {"settings", "/dns64/settings", "dns64.tab.settings", "bi-gear", false}}
 
 func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +85,9 @@ func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 			d.Running, d.Listen, d.Started, d.Router, d.Source = true, e.addr, e.started, e.local.Addr(), e.local.Source()
 		}
 		d.Err = m.startError()
+		if key == "encrypted" {
+			d.Enc = m.encView(r, d.Cfg)
+		}
 		if key == "records" {
 			var err error
 			if d.Records, err = m.Records(ctx); err != nil {
@@ -97,7 +105,8 @@ var jsKeys = []string{"status.allowed", "status.blocked", "status.cached", "stat
 	"no_releases", "ready", "online", "disturbed", "avg", "fastest", "requests", "errors", "last_error", "router_auto", "router_config", "router_none",
 	"of", "failed", "just_now", "min_ago", "hours_ago", "days_ago", "per_hour", "pct_all", "pct_cache", "loaded", "no_data", "empty_chart",
 	"blocked_n", "no_entries", "via", "entries", "page", "live_paused", "flush_confirm", "flushed", "error", "active", "loading",
-	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_released", "mode_parallel", "mode_ordered", "off"}
+	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_released", "mode_parallel", "mode_ordered", "off",
+	"proto.udp", "proto.tcp", "proto.doh", "proto.dot", "proto.doq"}
 
 func (m *Module) jsTexts(r *http.Request) map[string]string {
 	out := make(map[string]string, len(jsKeys))

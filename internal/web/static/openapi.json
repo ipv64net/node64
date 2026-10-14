@@ -2691,7 +2691,7 @@
           "DNS64"
         ],
         "summary": "Abfrage-Log, neueste zuerst",
-        "description": "`rows` und `total`. `status`: allowed, cached, blocked, local, error; `reason` = Blockliste bzw. Hinweis; `clientName` per PTR beim Router.",
+        "description": "`rows` und `total`. `status`: allowed, cached, blocked, local, error; `reason` = Blockliste bzw. Hinweis; `clientName` per PTR beim Router. `proto`: udp, tcp, doh, dot, doq.",
         "parameters": [
           {
             "name": "status",
@@ -2869,7 +2869,7 @@
           "DNS64"
         ],
         "summary": "Einstellungen",
-        "description": "`port`, `bind`, `router`, `retention_days`, `upstream_mode` (parallel|ordered), `upstreams` (name, url = https://… fuer DoH, tls://name[:853] fuer DoT, quic://name[:853] fuer DoQ, ips, enabled, custom), `lists` (name, url, enabled, custom), `list_hours`, `block_mode` (zero|nxdomain), `cache_size`, `anonymize` (off|mask|hide), `allow_nets`.",
+        "description": "`port`, `bind`, `router`, `retention_days`, `upstream_mode` (parallel|ordered), `upstreams` (name, url = https://… fuer DoH, tls://name[:853] fuer DoT, quic://name[:853] fuer DoQ, ips, enabled, custom), `lists` (name, url, enabled, custom), `list_hours`, `block_mode` (zero|nxdomain), `cache_size`, `anonymize` (off|mask|hide), `allow_nets`. Verschluesselt fuer Geraete: `doh`, `dot`, `doq` (an/aus), `doh_port` (443), `dot_port` (853, DoT TCP und DoQ UDP), `names` (Namen fuer Geraete und Zertifikat), `cert_mode` (self = eigene Heimnetz-CA, node64 = Zertifikat der Weboberflaeche).",
         "responses": {
           "200": {
             "description": "OK"

@@ -140,7 +140,13 @@ func run() error {
 	dynModule := dyndns.New(st, logger.Slog(), box, dispatcher, Version)
 	dynModule.SetKey(ipv64Key)
 	modules.Register(dynModule)
-	modules.Register(dns64.New(st, logger.Slog(), cfg.DataDir, Version))
+	dnsModule := dns64.New(st, logger.Slog(), cfg.DataDir, Version)
+	if cfg.TLSCertFile != "" { // DNS64 kann fuer DoH/DoT/DoQ das Zertifikat der Weboberflaeche nutzen
+		dnsModule.SetWebCert(cfg.TLSCertFile, cfg.TLSKeyFile)
+	} else {
+		dnsModule.SetWebCert(filepath.Join(cfg.TLSDir(), "cert.pem"), filepath.Join(cfg.TLSDir(), "key.pem"))
+	}
+	modules.Register(dnsModule)
 	registerModules(modules)
 	modules.StartEnabled(ctx)
 	defer modules.StopAll()

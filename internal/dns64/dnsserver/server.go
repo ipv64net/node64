@@ -91,17 +91,30 @@ func (s *Server) Shutdown(ctx context.Context) {
 }
 
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
-	start := time.Now()
-	clientIP := remoteIP(w.RemoteAddr())
+	proto := "udp"
+	if _, isTCP := w.RemoteAddr().(*net.TCPAddr); isTCP {
+		proto = "tcp"
+	}
+	reply(w, r, s.Answer(r, remoteIP(w.RemoteAddr()), proto))
+}
 
+// Handler answers on another transport (DoT) and records proto in the query log.
+func (s *Server) Handler(proto string) dns.Handler {
+	return dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
+		reply(w, r, s.Answer(r, remoteIP(w.RemoteAddr()), proto))
+	})
+}
+
+// Answer resolves one query of clientIP; proto (udp, tcp, doh, dot, doq) goes into the query log.
+// Clients outside the allowed networks get REFUSED.
+func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg {
+	start := time.Now()
 	if !s.acl.allowed(clientIP) {
 		// Never act as an open resolver on the internet.
-		reply(w, r, errorMsg(r, dns.RcodeRefused))
-		return
+		return errorMsg(r, dns.RcodeRefused)
 	}
 	if r.Opcode != dns.OpcodeQuery || len(r.Question) != 1 {
-		reply(w, r, errorMsg(r, dns.RcodeFormatError))
-		return
+		return errorMsg(r, dns.RcodeFormatError)
 	}
 
 	q := r.Question[0]
@@ -115,6 +128,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		Client: client,
 		Domain: name,
 		QType:  dns.TypeToString[q.Qtype],
+		Proto:  proto,
 	}
 	if entry.QType == "" {
 		entry.QType = dns.Type(q.Qtype).String()
@@ -124,9 +138,12 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	resp.Id = r.Id
 	entry.Rcode = dns.RcodeToString[resp.Rcode]
 	entry.Duration = time.Since(start)
-	reply(w, r, resp)
 	s.Log.Add(entry)
+	return resp
 }
+
+// Allowed reports whether ip may use this resolver (private, attached or configured networks).
+func (s *Server) Allowed(ip netip.Addr) bool { return s.acl.allowed(ip) }
 
 func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry) *dns.Msg {
 	q := r.Question[0]

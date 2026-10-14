@@ -26,6 +26,13 @@ const (
 	setCacheSize = "dns64.cache_size"
 	setAnonymize = "dns64.anonymize"  // off | mask | hide
 	setAllowNets = "dns64.allow_nets" // weitere Client-Netze, eins je Zeile
+	setDoH       = "dns64.doh"        // 1 = DoH fuer Geraete
+	setDoT       = "dns64.dot"
+	setDoQ       = "dns64.doq"
+	setDoHPort   = "dns64.doh_port"
+	setDoTPort   = "dns64.dot_port" // DoT (TCP) und DoQ (UDP)
+	setNames     = "dns64.names"    // Namen fuer Geraete und Zertifikat
+	setCertMode  = "dns64.cert_mode"
 )
 
 const (
@@ -71,6 +78,13 @@ type config struct {
 	CacheSize int               `json:"cache_size"`
 	Anonymize string            `json:"anonymize"`
 	AllowNets []string          `json:"allow_nets"`
+	DoH       bool              `json:"doh"`
+	DoT       bool              `json:"dot"`
+	DoQ       bool              `json:"doq"`
+	DoHPort   int               `json:"doh_port"`
+	DoTPort   int               `json:"dot_port"`
+	Names     []string          `json:"names"`
+	CertMode  string            `json:"cert_mode"`
 }
 
 func (m *Module) intSetting(ctx context.Context, key string, def, lo, hi int) int {
@@ -103,6 +117,13 @@ func (m *Module) loadConfig(ctx context.Context) config {
 		CacheSize: m.intSetting(ctx, setCacheSize, cacheSize, 1000, 200000),
 		Anonymize: oneOf(m.core.SettingOr(ctx, setAnonymize, ""), anonOff, anonOff, anonMask, anonHide),
 		AllowNets: splitLines(m.core.SettingOr(ctx, setAllowNets, "")),
+		DoH:       m.core.SettingOr(ctx, setDoH, "0") == "1",
+		DoT:       m.core.SettingOr(ctx, setDoT, "0") == "1",
+		DoQ:       m.core.SettingOr(ctx, setDoQ, "0") == "1",
+		DoHPort:   m.intSetting(ctx, setDoHPort, 443, 1, 65535),
+		DoTPort:   m.intSetting(ctx, setDoTPort, 853, 1, 65535),
+		Names:     splitLines(m.core.SettingOr(ctx, setNames, "")),
+		CertMode:  oneOf(m.core.SettingOr(ctx, setCertMode, ""), certSelf, certSelf, certNode64),
 	}
 	_ = json.Unmarshal([]byte(m.core.SettingOr(ctx, setUpstreams, "")), &c.Upstreams)
 	c.Upstreams = mergeUpstreams(c.Upstreams)
@@ -214,6 +235,8 @@ func (m *Module) saveConfig(ctx context.Context, c config) error {
 		setUpMode: c.UpMode, setUpstreams: string(ups), setLists: string(lists), setListHours: strconv.Itoa(c.ListHours),
 		setBlockMode: c.BlockMode, setCacheSize: strconv.Itoa(c.CacheSize), setAnonymize: c.Anonymize,
 		setAllowNets: strings.Join(c.AllowNets, "\n"),
+		setDoH:       b2s(c.DoH), setDoT: b2s(c.DoT), setDoQ: b2s(c.DoQ), setDoHPort: strconv.Itoa(c.DoHPort), setDoTPort: strconv.Itoa(c.DoTPort),
+		setNames: strings.Join(c.Names, "\n"), setCertMode: c.CertMode,
 	} {
 		if err := m.core.SetSetting(ctx, k, v); err != nil {
 			return err
@@ -262,6 +285,28 @@ func (c *config) validate() error {
 	if c.ListHours < 1 || c.ListHours > 168 {
 		return errCfg("err_hours")
 	}
+	if c.DoHPort < 1 || c.DoHPort > 65535 || c.DoTPort < 1 || c.DoTPort > 65535 {
+		return errCfg("err_enc_port")
+	}
+	if c.DoH && (c.DoHPort == c.Port || c.DoHPort == c.DoTPort) {
+		return errCfg("err_enc_port")
+	}
+	if (c.DoT || c.DoQ) && c.DoTPort == c.Port {
+		return errCfg("err_enc_port")
+	}
+	var names []string
+	for _, n := range c.Names {
+		n = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(n)), ".")
+		if n == "" {
+			continue
+		}
+		if !validName(n) || net.ParseIP(n) != nil {
+			return errCfg("err_enc_name", "name", n)
+		}
+		names = append(names, n)
+	}
+	c.Names = names
+	c.CertMode = oneOf(c.CertMode, certSelf, certSelf, certNode64)
 	c.UpMode = oneOf(c.UpMode, upstream.ModeParallel, upstream.ModeParallel, upstream.ModeOrdered)
 	c.BlockMode = oneOf(c.BlockMode, blockZero, blockZero, blockNX)
 	c.Anonymize = oneOf(c.Anonymize, anonOff, anonOff, anonMask, anonHide)
@@ -358,3 +403,10 @@ func splitLines(s string) []string {
 }
 
 var errNotFound = errors.New("not found")
+
+func b2s(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
+}

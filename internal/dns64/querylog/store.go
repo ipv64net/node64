@@ -53,6 +53,7 @@ type Entry struct {
 	Rcode    string
 	Upstream string
 	Duration time.Duration
+	Proto    string // udp, tcp, doh, dot, doq
 }
 
 const schema = `
@@ -70,6 +71,9 @@ CREATE TABLE IF NOT EXISTS queries (
 );
 CREATE INDEX IF NOT EXISTS idx_queries_ts ON queries(ts);
 `
+
+// columns added later (ALTER TABLE, skipped when present)
+var addColumns = []string{`ALTER TABLE queries ADD COLUMN proto TEXT NOT NULL DEFAULT ''`}
 
 type Store struct {
 	db        *sql.DB
@@ -90,6 +94,12 @@ func Open(path string, retention time.Duration, log *slog.Logger) (*Store, error
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
+	}
+	for _, q := range addColumns {
+		if _, err := db.Exec(q); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			db.Close()
+			return nil, fmt.Errorf("update schema: %w", err)
+		}
 	}
 	return &Store{
 		db:        db,
@@ -167,8 +177,8 @@ func (s *Store) write(batch []Entry) {
 		s.log.Error("querylog begin", "err", err)
 		return
 	}
-	stmt, err := tx.Prepare(`INSERT INTO queries (ts, client, domain, qtype, status, reason, rcode, upstream, duration_us)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	stmt, err := tx.Prepare(`INSERT INTO queries (ts, client, domain, qtype, status, reason, rcode, upstream, duration_us, proto)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		tx.Rollback()
 		s.log.Error("querylog prepare", "err", err)
@@ -177,7 +187,7 @@ func (s *Store) write(batch []Entry) {
 	defer stmt.Close()
 	for _, e := range batch {
 		if _, err := stmt.Exec(e.Time.UnixMilli(), e.Client, e.Domain, e.QType, int(e.Status),
-			e.Reason, e.Rcode, e.Upstream, e.Duration.Microseconds()); err != nil {
+			e.Reason, e.Rcode, e.Upstream, e.Duration.Microseconds(), e.Proto); err != nil {
 			tx.Rollback()
 			s.log.Error("querylog insert", "err", err)
 			return
@@ -320,6 +330,7 @@ type LogRow struct {
 	Rcode      string  `json:"rcode,omitempty"`
 	Upstream   string  `json:"upstream,omitempty"`
 	DurationMs float64 `json:"ms"`
+	Proto      string  `json:"proto,omitempty"`
 }
 
 type LogFilter struct {
@@ -352,7 +363,7 @@ func (s *Store) Recent(ctx context.Context, f LogFilter) ([]LogRow, int64, error
 		return nil, 0, err
 	}
 
-	q := `SELECT ts, client, domain, qtype, status, reason, rcode, upstream, duration_us FROM queries` +
+	q := `SELECT ts, client, domain, qtype, status, reason, rcode, upstream, duration_us, proto FROM queries` +
 		cond + " ORDER BY id DESC LIMIT ? OFFSET ?"
 	rows, err := s.db.QueryContext(ctx, q, append(args, f.Limit, f.Offset)...)
 	if err != nil {
@@ -364,7 +375,7 @@ func (s *Store) Recent(ctx context.Context, f LogFilter) ([]LogRow, int64, error
 		var r LogRow
 		var st int
 		var us int64
-		if err := rows.Scan(&r.Time, &r.Client, &r.Domain, &r.QType, &st, &r.Reason, &r.Rcode, &r.Upstream, &us); err != nil {
+		if err := rows.Scan(&r.Time, &r.Client, &r.Domain, &r.QType, &st, &r.Reason, &r.Rcode, &r.Upstream, &us, &r.Proto); err != nil {
 			return nil, 0, err
 		}
 		r.Status = Status(st).String()

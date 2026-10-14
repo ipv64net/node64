@@ -1,5 +1,13 @@
 # Änderungen – DNS64
 
+## 1.3.0 – 2026-10-14
+
+### Neu
+- Verschlüsselt im Heimnetz: Geräte fragen DNS64 selbst per DNS-over-HTTPS (RFC 8484, GET und POST, eigener Port, Standard 443), DNS-over-TLS (RFC 7858, 853/TCP) und DNS-over-QUIC (RFC 9250, 853/UDP); jeder Dienst einzeln einschaltbar, ein belegter Port stoppt nur diesen Dienst.
+- Eigene Heimnetz-CA (10 Jahre, darf nur private Adressen bestätigen) stellt das Server-Zertifikat aus: alle privaten IPs der Node und die eingestellten Namen, 800 Tage, wird bei neuen Namen/IPs oder kurz vor Ablauf neu ausgestellt. Alternativ das Zertifikat der Weboberfläche.
+- Neuer Reiter „Verschlüsselung“ mit Zustand je Dienst, Verbindungsdaten für Geräte, CA-Zertifikat und Profil für iPhone/iPad/Mac (DoH oder DoT) zum Herunterladen.
+- Abfrage-Log zeigt das Protokoll (TCP, DoH, DoT, DoQ).
+
 ## 1.2.0 – 2026-10-14
 
 ### Neu

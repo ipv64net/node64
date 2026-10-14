@@ -1209,7 +1209,8 @@
       "log": "Abfrage-Log",
       "lists": "Freigaben & Blocklisten",
       "settings": "Einstellungen",
-      "records": "Eigene Einträge"
+      "records": "Eigene Einträge",
+      "encrypted": "Verschlüsselung"
     },
     "log": {
       "title": "Abfrage-Log",
@@ -1311,7 +1312,7 @@
       "title": "Einrichtung",
       "router": "Tragen Sie im Router (DHCP) die IP dieses Hosts als DNS-Server ein. Dann fragen alle Geräte im Heimnetz automatisch über DNS64.",
       "docker": "Im Container braucht DNS64 das Host-Netzwerk (network_mode: host). So sieht es die echten IPs der Geräte und findet den Router selbst.",
-      "later": "Verschlüsselte Anfragen der Geräte an DNS64 selbst (DoH/DoT/DoQ im Heimnetz) folgen."
+      "later": "Verschlüsselte Anfragen der Geräte (DoH/DoT/DoQ) gibt es im Reiter „Verschlüsselung“."
     },
     "js": {
       "status": {
@@ -1376,7 +1377,14 @@
       "reason_released": "freigegeben (sonst: {list})",
       "mode_parallel": "Parallel (schnellste Antwort)",
       "mode_ordered": "Der Reihe nach (Ausweichen bei Fehler)",
-      "off": "aus"
+      "off": "aus",
+      "proto": {
+        "udp": "UDP",
+        "tcp": "TCP",
+        "doh": "DoH",
+        "dot": "DoT",
+        "doq": "DoQ"
+      }
     },
     "retrying": "Neuer Versuch jede Minute; Port oder Adresse lassen sich unter Einstellungen ändern.",
     "custom": "eigene",
@@ -1414,7 +1422,36 @@
       "target": "Ungültiger Zielname.",
       "type": "Unbekannter Typ.",
       "dup": "Diesen Eintrag gibt es schon.",
-      "cname": "Ein CNAME steht allein: kein weiterer Eintrag für denselben Namen."
+      "cname": "Ein CNAME steht allein: kein weiterer Eintrag für denselben Namen.",
+      "enc_port": "Die Ports für DoH und DoT/DoQ müssen zwischen 1 und 65535 liegen und sich vom DNS-Port unterscheiden (DoH auch von DoT).",
+      "enc_name": "„{name}“ ist kein gültiger Name (IPs stehen automatisch im Zertifikat)."
+    },
+    "enc": {
+      "title": "Verschlüsselt im Heimnetz",
+      "hint": "Geräte fragen DNS64 verschlüsselt statt über Port 53: DNS-over-HTTPS (Browser, Windows, iOS/macOS), DNS-over-TLS (iOS/macOS, Android) und DNS-over-QUIC. Es gelten dieselben Blocklisten, Freigaben und erlaubten Netze.",
+      "service": "Dienst",
+      "listening": "läuft auf {addr}",
+      "not_running": "läuft nicht",
+      "doh_port": "Port für DoH",
+      "dot_port": "Port für DoT und DoQ",
+      "ports_hint": "DoH nutzt HTTPS (TCP), DoT TCP und DoQ UDP; Standard sind 443 und 853. Der Port für DoH darf nicht der der Weboberfläche sein.",
+      "names": "Namen für Geräte",
+      "names_hint": "Namen, unter denen Geräte DNS64 erreichen (z. B. dns.home.lan, als eigener Eintrag auf die IP der Node), einer je Zeile. Die IPs der Node stehen automatisch im Zertifikat.",
+      "cert": "Zertifikat",
+      "cert_self": "Eigene Heimnetz-CA (Standard)",
+      "cert_node64": "Zertifikat der Weboberfläche (NODE64_TLS_CERT)",
+      "cert_hint": "Mit der eigenen CA installieren die Geräte einmal das CA-Zertifikat; sie darf nur private Adressen bestätigen. Ein öffentlich gültiges Zertifikat (z. B. für eine ipv64-Domain) lässt sich über NODE64_TLS_CERT/NODE64_TLS_KEY einbinden.",
+      "devices": "Für Geräte",
+      "host": "Name:",
+      "port": "Port {port}",
+      "dl_ca": "CA-Zertifikat",
+      "dl_profile": "Profil iOS/macOS ({proto})",
+      "howto_apple": "iPhone, iPad, Mac: Profil laden, unter Einstellungen → Allgemein → VPN und Geräteverwaltung installieren und bei eigener CA unter Info → Zertifikatsvertrauenseinstellungen vertrauen.",
+      "howto_windows": "Windows 11: CA-Zertifikat unter „Vertrauenswürdige Stammzertifizierungsstellen“ importieren, dann in den Netzwerkeinstellungen DNS manuell auf die IP der Node mit DNS-over-HTTPS und der DoH-Adresse oben stellen.",
+      "howto_browser": "Firefox/Chrome: Sicheres DNS mit der DoH-Adresse oben; Firefox hat einen eigenen Zertifikatspeicher (CA dort importieren).",
+      "howto_android": "Android „Privates DNS“ (DoT) akzeptiert nur öffentlich gültige Zertifikate, keine eigene CA; dafür das Zertifikat der Weboberfläche mit einem echten Zertifikat nutzen.",
+      "cert_names": "Zertifikat für:",
+      "valid_until": "gültig bis {date}"
     }
   }
 }
