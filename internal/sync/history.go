@@ -15,7 +15,7 @@ import (
 // davor (bis 90 Tage, so lange haelt der hub sie). Laeuft im Hintergrund, ein Abruf je Check und Seite.
 
 const (
-	SetHistoryHourly = "sync.history_hourly" // Verknuepfung (linked_at), fuer die die Stundenwerte geholt sind
+	SetHistoryHourly = "sync.history_full" // Verknuepfung (linked_at), fuer die der Verlauf davor geholt ist
 	historyRaw       = 48 * time.Hour
 	historyHourly    = 90 * 24 * time.Hour
 	historyPage      = 5000
@@ -39,28 +39,39 @@ func (c *Live) backfill(gaps map[string]time.Time) {
 	defer cancel()
 	hub, tok := c.hubURL(), c.token()
 	raw, hourly := 0, 0
-	for token, since := range gaps {
+	loadRaw := func(token string, since, until time.Time) bool {
 		for page := 0; page < 50; page++ {
-			pts, err := c.history(ctx, hub, tok, token, "raw", since, time.Time{})
+			pts, err := c.history(ctx, hub, tok, token, "raw", since, until)
 			if err != nil {
 				c.log.Debug("history", "token", token, "err", err)
-				break
+				return false
 			}
 			raw += c.d.HC.StoreHistory(ctx, token, pts)
 			if len(pts) < historyPage {
-				break
+				return true
 			}
 			since = pts[len(pts)-1].Time
 		}
+		return true
+	}
+	for token, since := range gaps { // Luecke am Ende (Offline-Zeit)
+		loadRaw(token, since, time.Time{})
 		time.Sleep(50 * time.Millisecond)
 	}
 	if linked := c.setting(SetLinkedAt, ""); linked != "" && c.setting(SetHistoryHourly, "") != linked {
+		// einmal je Verknuepfung: Einzelpunkte vor dem aeltesten eigenen Stand, davor Stundenwerte
 		now := time.Now().UTC()
+		cut := now.Add(-historyRaw).Truncate(time.Hour) // davor Stundenwerte, ab hier Einzelpunkte (keine Ueberschneidung)
 		ok := true
+		earliest := c.d.HC.HistoryEarliest(ctx)
 		for _, token := range c.d.HC.HistoryTokens(ctx) {
+			if e, has := earliest[token]; has && e.After(cut) {
+				ok = loadRaw(token, cut, e) && ok
+			}
+			c.d.HC.DropSourceHourlyFrom(ctx, token, cut) // ab hier gibt es Einzelpunkte
 			since := now.Add(-historyHourly)
 			for page := 0; page < 20; page++ {
-				pts, err := c.history(ctx, hub, tok, token, "hourly", since, now.Add(-historyRaw))
+				pts, err := c.history(ctx, hub, tok, token, "hourly", since, cut)
 				if err != nil {
 					ok = false
 					break

@@ -41,7 +41,7 @@ func (m *Module) HistoryGaps(ctx context.Context, maxAge time.Duration) map[stri
 		return nil
 	}
 	now := time.Now().UTC()
-	floor := now.Add(-maxAge)
+	floor := now.Add(-maxAge).Truncate(time.Hour) // gleiche Grenze wie die Stundenwerte
 	out := map[string]time.Time{}
 	for _, c := range list {
 		if c.Execution == "local" && len(c.Nodes) <= 1 && c.MeasuresHere() {
@@ -59,6 +59,30 @@ func (m *Module) HistoryGaps(ctx context.Context, maxAge time.Duration) map[stri
 		out[c.Token] = since
 	}
 	return out
+}
+
+// HistoryEarliest: aeltester fremder Messpunkt je Check (fuer das einmalige Nachladen davor).
+func (m *Module) HistoryEarliest(ctx context.Context) map[string]time.Time {
+	out := map[string]time.Time{}
+	rows, err := m.st.r.QueryContext(ctx, `SELECT token, MIN(time) FROM (SELECT token, time FROM hc_measurements WHERE (flags & 8) != 0
+		UNION ALL SELECT token, time FROM hc_source_points) GROUP BY token`)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var tok, t string
+		if rows.Scan(&tok, &t) == nil {
+			out[tok] = pt(t)
+		}
+	}
+	return out
+}
+
+// DropSourceHourlyFrom verwirft Stundenwerte fremder Messstellen ab from, sobald dort Einzelpunkte liegen
+// (sonst zaehlte das Diagramm diese Stunden doppelt).
+func (m *Module) DropSourceHourlyFrom(ctx context.Context, token string, from time.Time) {
+	_, _ = m.st.w.ExecContext(ctx, `DELETE FROM hc_source_hourly WHERE token = ? AND hour >= ?`, token, ft(from))
 }
 
 // HistoryTokens: alle Checks mit moeglichen fremden Messstellen (fuer die Stundenwerte nach dem Verknuepfen).
