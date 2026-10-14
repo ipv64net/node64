@@ -121,6 +121,7 @@ func (s *Server) resetNode(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	v := s.view(r, "settings.title")
 	if !VerifyPassword(v.User.PasswordHash, r.PostFormValue("password")) {
+		s.audit(r, "node.reset_denied", "", "wrong password")
 		s.flash(w, r, "danger", v.T("settings.password_wrong"))
 		http.Redirect(w, r, "/settings#reset", http.StatusSeeOther)
 		return

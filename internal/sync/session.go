@@ -483,6 +483,11 @@ func (s *session) applyAck(ctx context.Context, o healthchecks.Outbox, res wire.
 	case "check":
 		if o.Op != "delete" {
 			_ = c.d.HC.SetCheckRevision(ctx, o.EntityID, res.Revision)
+			// Zustand erneut melden: die erste Messung eines neuen Checks kommt oft an, bevor der hub ihn kennt,
+			// und ginge sonst bis zur naechsten Messung verloren (Zertifikat: Stunden)
+			if ck, _ := c.d.HC.CheckByToken(ctx, o.EntityID); ck != nil && ck.MeasuredHere() {
+				c.d.HC.PushState(o.EntityID)
+			}
 			var w wire.Check
 			if json.Unmarshal(res.Data, &w) == nil && len(w.Locations) > 0 {
 				// Server kann Standorte gekuerzt haben: lokal uebernehmen, ohne neuen Vorschlag

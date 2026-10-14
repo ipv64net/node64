@@ -87,12 +87,13 @@ type Deps struct {
 
 // Manager verwaltet Identitaet, Kopplung und Mitglieder.
 type Manager struct {
-	d     Deps
-	db    *sql.DB
-	priv  ed25519.PrivateKey
-	hc    *http.Client
-	pull  pullState   // Abgleich der Konfiguration (config.go)
-	ready atomic.Bool // erster Abgleich nach dem Start erledigt (notify.go)
+	d      Deps
+	db     *sql.DB
+	priv   ed25519.PrivateKey
+	hc     *http.Client
+	pull   pullState   // Abgleich der Konfiguration (config.go)
+	ready  atomic.Bool // erster Abgleich nach dem Start erledigt (notify.go)
+	seeded atomic.Bool // vorhandene Checks und Fenster im Protokoll (config.go)
 
 	mu    sync.Mutex
 	code  string // offener Kopplungscode
@@ -236,6 +237,9 @@ func (m *Manager) Run(ctx context.Context) {
 }
 
 func (m *Manager) pingAll(ctx context.Context) {
+	if m.checks() == nil {
+		return // Healthchecks aus: die Gruppe hat nichts abzugleichen
+	}
 	list, err := m.Members(ctx)
 	if err != nil {
 		return

@@ -86,6 +86,9 @@ func TestGroupPairing(t *testing.T) {
 	ctx := context.Background()
 	a, b, c := newNode(t, "node-a", "A", 522), newNode(t, "node-b", "B", 522), newNode(t, "node-c", "C", 522)
 	other := newNode(t, "node-x", "X", 999)
+	for _, n := range []*testNode{a, b, c, other} {
+		newFake(n) // Healthchecks laeuft (ohne pingt die Gruppe nicht)
+	}
 
 	// falscher Code
 	code, _, err := a.m.StartPairing()

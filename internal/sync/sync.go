@@ -224,6 +224,19 @@ func (c *Live) token() string {
 // Linked sagt, ob ein Token vorliegt.
 func (c *Live) Linked() bool { return c.token() != "" }
 
+// AccountID: ipv64-Account der Verknuepfung (0 = nicht verknuepft), ohne den ganzen Status zu lesen (die lokale
+// Gruppe fragt das bei jeder Anfrage).
+func (c *Live) AccountID() int64 {
+	if !c.Linked() {
+		return 0
+	}
+	var acc struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.Unmarshal([]byte(c.setting(SetAccount, "")), &acc)
+	return acc.ID
+}
+
 func (c *Live) endpoints() []wire.Endpoint {
 	if u := os.Getenv("NODE64_HUB_URL"); u != "" {
 		return []wire.Endpoint{{Location: "test", Name: "Test", URL: strings.TrimRight(u, "/")}}

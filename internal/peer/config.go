@@ -270,6 +270,10 @@ func (m *Manager) pullAll(ctx context.Context, only string) {
 	if m.checks() == nil {
 		return
 	}
+	if !m.seeded.Load() { // Healthchecks erst nach dem Start eingeschaltet: vorhandene Checks nachtragen
+		m.seed(ctx)
+		m.seeded.Store(true)
+	}
 	m.checkSettings(ctx)
 	list, err := m.Members(ctx)
 	if err != nil {

@@ -388,8 +388,10 @@ func (s *Server) apiChannelTest(w http.ResponseWriter, r *http.Request) {
 	if ch == nil {
 		return
 	}
-	if err := s.Dispatcher.Test(r.Context(), ch); err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": err.Error()})
+	err := s.Dispatcher.Test(r.Context(), ch)
+	s.audit(r, "channel.test", ch.Name, string(ch.Type))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": notify.RedactURLs(err.Error())})
 		return
 	}
 	writeJSON(w, 200, map[string]any{"ok": true})

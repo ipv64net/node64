@@ -181,10 +181,8 @@ func run() error {
 		NodeID:   func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") },
 		NodeName: func() string { return st.SettingOr(context.Background(), web.SettingNodeName, "Node64") },
 		AccountID: func() int64 { // ipv64-Account aus dem Healthchecks-Sync, sonst vom API-Key
-			if s := syncClient.State(); s.Linked {
-				if id, err := strconv.ParseInt(s.AccountID, 10, 64); err == nil && id > 0 {
-					return id
-				}
+			if id := syncClient.AccountID(); id > 0 {
+				return id
 			}
 			return int64(ipv64Key.Info(context.Background()).ID)
 		},

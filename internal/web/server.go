@@ -173,7 +173,7 @@ func (s *Server) routes() {
 
 	// Module registrieren ihre Pfade selbst; deaktiviert = 404
 	s.Modules.Routes(s.mux, http.HandlerFunc(s.notFound), module.Guards{
-		Auth: s.authHandler, Render: s.renderModule, T: s.tr, Flash: s.flash, Actor: s.actor, CSRF: csrfToken, Lang: s.lang, Timezone: s.location,
+		Auth: s.authHandler, Render: s.renderModule, T: s.tr, Flash: s.flash, Actor: s.actor, ClientIP: s.clientIP, Audit: s.audit, CSRF: csrfToken, Lang: s.lang, Timezone: s.location,
 		Translate: s.I18n.T,
 	})
 	s.mux.HandleFunc("/", s.notFound)

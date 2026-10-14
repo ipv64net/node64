@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -198,7 +200,7 @@ func (d *Dispatcher) intSetting(uid int64, key string, def int) int {
 // sie und gibt nach dem Ende einer Ruhezeit das Zurueckgehaltene als Sammelmeldung aus.
 func (d *Dispatcher) run() {
 	defer d.wg.Done()
-	tick := time.NewTicker(100 * time.Millisecond)
+	tick := time.NewTicker(time.Second) // Sammelfenster mind. 10 s: haeufiger aufzuwachen spart nichts
 	defer tick.Stop()
 	lastHeld := time.Time{}
 	for {
@@ -208,6 +210,7 @@ func (d *Dispatcher) run() {
 			return
 		case a := <-d.queue:
 			d.enqueue(a)
+			d.flushDue(d.ctx, false) // ohne Sammelfenster sofort, nicht erst beim naechsten Takt
 		case <-tick.C:
 			d.flushDue(d.ctx, false)
 			if now := d.now(); now.Sub(lastHeld) >= 30*time.Second || now.Before(lastHeld) {
@@ -713,7 +716,7 @@ func (d *Dispatcher) composeDynDNS(lang string, a Alert, m Message) Message {
 		m.URL = d.baseURL(uid, "/dns64")
 	}
 	m.Title, m.Priority = t("notify.subject."+string(a.Kind), "name", a.Check.Name), 4
-	if a.Kind == KindDynIP || a.Kind == KindDNS64Up {
+	if a.Kind == KindDynIP || a.Kind == KindDynOK || a.Kind == KindDNS64Up {
 		m.Priority = 2
 	}
 	var lines []string
@@ -778,12 +781,12 @@ func (f apiSender) Send(ctx context.Context, ch *Channel, m Message) error { ret
 func (d *Dispatcher) record(ctx context.Context, ch *Channel, m Message, err error) {
 	if errors.Is(err, ErrUnavailable) { // nicht der Kanal ist gestoert, der Weg fehlt noch
 		d.log.Info("notification not sent, path not available", "channel", ch.Name, "kind", m.Kind, "err", err)
-		_ = d.st.AddDelivery(ctx, Delivery{EventID: m.EventID, ChannelID: ch.ID, Channel: ch.Name, Kind: string(m.Kind), CheckToken: m.Check.Token, Subject: m.Title, OK: false, Error: err.Error()})
+		_ = d.st.AddDelivery(ctx, Delivery{EventID: m.EventID, ChannelID: ch.ID, Channel: ch.Name, Kind: string(m.Kind), CheckToken: m.Check.Token, Subject: m.Title, OK: false, Error: RedactURLs(err.Error())})
 		return
 	}
 	errText := ""
 	if err != nil {
-		errText = err.Error()
+		errText = RedactURLs(err.Error())
 		if len(errText) > 500 {
 			errText = errText[:500]
 		}
@@ -793,6 +796,24 @@ func (d *Dispatcher) record(ctx context.Context, ch *Channel, m Message, err err
 	}
 	_ = d.st.AddDelivery(ctx, Delivery{EventID: m.EventID, ChannelID: ch.ID, Channel: ch.Name, Kind: string(m.Kind), CheckToken: m.Check.Token, Subject: m.Title, OK: err == nil, Error: errText})
 	_ = d.st.Touch(ctx, ch.ID, errText)
+}
+
+// urlRe findet Adressen in Fehlertexten (Fehler von net/http enthalten die komplette URL).
+var urlRe = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.-]*://[^\s"'<>]+`)
+
+// RedactURLs kuerzt Adressen in einem Text auf Schema und Host: Webhook-, Telegram-, Discord- und Slack-URLs
+// enthalten Tokens, die so weder ins Log noch in die Zustellliste oder zum hub gelangen.
+func RedactURLs(s string) string {
+	return urlRe.ReplaceAllStringFunc(s, func(raw string) string {
+		u, err := url.Parse(raw)
+		if err != nil || u.Host == "" {
+			return "[url]"
+		}
+		if u.Path == "" && u.RawQuery == "" && u.User == nil {
+			return raw
+		}
+		return u.Scheme + "://" + u.Host + "/…"
+	})
 }
 
 // Test schickt sofort eine Testnachricht ueber einen Kanal.

@@ -74,6 +74,11 @@ type Guards struct {
 	Flash func(w http.ResponseWriter, r *http.Request, kind, text string)
 	// Actor ist der angemeldete Benutzername (fuer Audit).
 	Actor func(r *http.Request) string
+	// ClientIP ist die Adresse des Aufrufers wie im Audit des Kerns (X-Forwarded-For nur mit NODE64_TRUST_PROXY).
+	ClientIP func(r *http.Request) string
+	// Audit schreibt einen Eintrag ins Audit-Log wie der Kern (Benutzer aus Sitzung bzw. API-Key, IP, Fehler
+	// werden geloggt). target: was (Name/Kennung), details: Zusatz ohne Geheimnisse.
+	Audit func(r *http.Request, action, target, details string)
 	// CSRF liefert den Token fuer Formulare.
 	CSRF func(r *http.Request) string
 	// Lang liefert die Sprache des Aufrufers.
@@ -161,6 +166,7 @@ var (
 )
 
 type entry struct {
+	life      sync.Mutex // serialisiert Start und Stop (zwei gleichzeitige Enable starteten sonst doppelt)
 	mod       Module
 	cancel    context.CancelFunc
 	running   bool
@@ -333,6 +339,8 @@ func (r *Registry) start(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	e.life.Lock()
+	defer e.life.Unlock()
 	r.mu.Lock()
 	if e.running {
 		r.mu.Unlock()
@@ -366,6 +374,8 @@ func (r *Registry) stop(name string) error {
 	if err != nil {
 		return err
 	}
+	e.life.Lock()
+	defer e.life.Unlock()
 	r.mu.Lock()
 	if !e.running {
 		r.mu.Unlock()

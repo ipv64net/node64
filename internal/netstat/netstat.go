@@ -63,18 +63,20 @@ func Totals(ctx context.Context, s Settings) (rx, tx int64, since time.Time) {
 	return rx, tx, since
 }
 
-// Loop schreibt jede Minute die Zuwaechse in die Gesamtsumme (Zaehler-Ruecksprung = Neustart).
+// Loop schreibt alle 10 Minuten und beim Beenden die Zuwaechse in die Gesamtsumme (Zaehler-Ruecksprung =
+// Neustart); unveraenderte Werte werden nicht geschrieben (schont SD-Karten).
 func Loop(ctx context.Context, s Settings) {
+	wctx := context.WithoutCancel(ctx) // auch beim Beenden noch schreiben
 	update := func() {
 		rx, tx, ok := Read()
 		if !ok {
 			return
 		}
-		if s.SettingOr(ctx, keySince, "") == "" {
-			_ = s.SetSetting(ctx, keySince, time.Now().UTC().Format(time.RFC3339))
+		if s.SettingOr(wctx, keySince, "") == "" {
+			_ = s.SetSetting(wctx, keySince, time.Now().UTC().Format(time.RFC3339))
 		}
 		add := func(totalKey, lastKey string, cur int64) {
-			last, _ := strconv.ParseInt(s.SettingOr(ctx, lastKey, "-1"), 10, 64)
+			last, _ := strconv.ParseInt(s.SettingOr(wctx, lastKey, "-1"), 10, 64)
 			delta := cur - last
 			if last < 0 || delta < 0 {
 				delta = cur // erster Lauf oder Zaehler neu (Container neu gestartet)
@@ -82,15 +84,18 @@ func Loop(ctx context.Context, s Settings) {
 					delta = 0
 				}
 			}
-			total, _ := strconv.ParseInt(s.SettingOr(ctx, totalKey, "0"), 10, 64)
-			_ = s.SetSetting(ctx, totalKey, strconv.FormatInt(total+delta, 10))
-			_ = s.SetSetting(ctx, lastKey, strconv.FormatInt(cur, 10))
+			if delta == 0 && last == cur {
+				return
+			}
+			total, _ := strconv.ParseInt(s.SettingOr(wctx, totalKey, "0"), 10, 64)
+			_ = s.SetSetting(wctx, totalKey, strconv.FormatInt(total+delta, 10))
+			_ = s.SetSetting(wctx, lastKey, strconv.FormatInt(cur, 10))
 		}
 		add(keyRxTotal, keyRxLast, rx)
 		add(keyTxTotal, keyTxLast, tx)
 	}
 	update()
-	t := time.NewTicker(time.Minute)
+	t := time.NewTicker(10 * time.Minute)
 	defer t.Stop()
 	for {
 		select {

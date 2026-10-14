@@ -18,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ipv64net/node64/internal/store"
 )
 
 // Signierte Anfragen zwischen den Nodes der Gruppe: Kopfzeilen mit Absenderin, Zeit und Account, Signatur
@@ -341,6 +343,7 @@ func (m *Manager) handlePair(w http.ResponseWriter, r *http.Request) {
 	}
 	out.MAC = out.mac(code)
 	m.d.Log.Info("node joined local group", "node", in.Name, "url", url)
+	m.auditPeer(r.Context(), in.Name, "peer.joined", in.Name, url)
 	go m.gossip(context.Background(), memberOp{Op: "add", Member: newcomer}, in.NodeID) // die anderen lernen die neue Node kennen
 	writeJSON(w, http.StatusOK, out)
 }
@@ -388,6 +391,7 @@ func (m *Manager) handleMembers(w http.ResponseWriter, r *http.Request, from *Me
 		if op.Member.NodeID == m.d.NodeID() { // diese Node wurde entfernt: Gruppe verlassen
 			_, _ = m.db.ExecContext(ctx, `DELETE FROM peer_members`)
 			m.d.Log.Warn("removed from local group", "by", from.Name)
+			m.auditPeer(r.Context(), from.Name, "peer.removed_by", from.Name, "")
 		} else {
 			_ = m.remove(ctx, op.Member.NodeID)
 		}
@@ -413,4 +417,11 @@ func (m *Manager) Leave(ctx context.Context) error {
 	m.gossip(ctx, memberOp{Op: "remove", Member: Member{NodeID: m.d.NodeID()}}, "")
 	_, err := m.db.ExecContext(ctx, `DELETE FROM peer_members`)
 	return err
+}
+
+// auditPeer schreibt eine Aenderung, die eine andere Node der Gruppe ausgeloest hat, ins Audit-Log.
+func (m *Manager) auditPeer(ctx context.Context, by, action, target, details string) {
+	if err := m.d.Core.Audit(context.WithoutCancel(ctx), store.AuditEntry{Actor: "node:" + by, Action: action, Target: target, Details: details, Origin: "peer"}); err != nil {
+		m.d.Log.Error("audit write failed", "err", err)
+	}
 }

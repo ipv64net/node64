@@ -1097,6 +1097,7 @@ func (m *Module) doAction(r *http.Request, c *Check, action string) error {
 		if err := m.runNow(c); err != nil {
 			return fmt.Errorf("%s", m.g.T(r, "hc.run_unreachable"))
 		}
+		m.audit(r, "check.run", c)
 	case "clone":
 		n := *c
 		n.Token, n.Name, n.Paused, n.Revision, n.UpdatedBy, n.Runtime = NewToken(), c.Name+" (copy)", true, 0, m.g.Actor(r), scheduler.Runtime{}

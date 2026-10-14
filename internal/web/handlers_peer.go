@@ -79,6 +79,7 @@ func (s *Server) groupErr(r *http.Request, err error) string {
 func (s *Server) groupCode(w http.ResponseWriter, r *http.Request) {
 	if r.PostFormValue("cancel") != "" {
 		s.Peer.CancelPairing()
+		s.audit(r, "peer.code_cancel", "", "")
 		s.groupBack(w, r, "", "")
 		return
 	}
@@ -128,6 +129,7 @@ func (s *Server) groupURL(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	s.audit(r, "peer.url", r.PathValue("id"), u)
 	s.groupBack(w, r, "success", s.tr(r, "common.saved"))
 }
 

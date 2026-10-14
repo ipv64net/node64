@@ -1,5 +1,19 @@
 # Änderungen – Healthchecks
 
+## 2.6.2 – 2026-10-14
+
+### Behoben
+- Der erste Zustand eines neuen Checks ging verloren, wenn er beim hub ankam, bevor der Check dort angelegt war;
+  bei langen Intervallen (z. B. Zertifikat) blieb der Check im Portal und auf anderen Nodes stundenlang
+  „ausstehend“. Nach dem Anlegen meldet die Node den Zustand jetzt erneut.
+- Audit: Als Akteur stand bei Checks und Wartungsfenstern immer „api“ (und per API-Key fälschbar) statt des
+  Benutzers; die IP wird jetzt wie im Kern bestimmt (auch hinter einem Proxy).
+- Audit-Einträge ergänzt für „Jetzt prüfen“ und für Online-Checks im API-Modus (anlegen, ändern, pausieren,
+  fortsetzen, prüfen, löschen); Fehler dabei werden geloggt.
+- Lokale Gruppe: ohne laufendes Healthchecks keine Pings mehr; die Account-Prüfung je Anfrage liest nicht mehr
+  den ganzen Sync-Status; wird Healthchecks erst nach dem Start eingeschaltet, kommen die vorhandenen Checks
+  trotzdem in die Gruppe.
+
 ## 2.6.1 – 2026-10-14
 
 ### Behoben

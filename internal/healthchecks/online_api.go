@@ -182,6 +182,7 @@ func (m *Module) onlineSubmit(w http.ResponseWriter, r *http.Request) {
 		_, err = cl.HC2SaveCheck(ctx, key, token, body)
 	}
 	if err != nil {
+		m.log.Warn("online check not saved via ipv64 API", "token", token, "err", err)
 		_ = r.ParseForm()
 		d := formData{Form: formDefaults(), APIMode: true, Edit: token != "", Token: token, Error: err.Error()}
 		for k := range r.PostForm {
@@ -191,6 +192,11 @@ func (m *Module) onlineSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.onlineInvalidate()
+	if token == "" {
+		m.auditText(r, "check.online_create", in.Name)
+	} else {
+		m.auditText(r, "check.online_update", in.Name+" ("+token+")")
+	}
 	m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
 	http.Redirect(w, r, "/healthchecks#online", http.StatusSeeOther)
 }
@@ -215,8 +221,10 @@ func (m *Module) onlineAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		m.log.Warn("online check action via ipv64 API failed", "token", token, "action", action, "err", err)
 		m.g.Flash(w, r, "danger", m.g.T(r, "hc.api.error")+": "+err.Error())
 	} else {
+		m.auditText(r, "check.online_"+action, token)
 		m.onlineInvalidate()
 		m.g.Flash(w, r, "success", m.g.T(r, "hc.api.done_"+action))
 	}

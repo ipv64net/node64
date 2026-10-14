@@ -262,7 +262,8 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	if d.NetRxTot < d.NetRx { // erste Minute nach dem allerersten Start
 		d.NetRxTot, d.NetTxTot = d.NetRx, d.NetTx
 	}
-	if s.HC != nil {
+	hcOn := s.HC != nil && s.Modules != nil && s.Modules.IsRunning(healthchecks.Name) // aus: keine Abfragen
+	if hcOn {
 		for _, p := range s.HC.Peers(ctx) {
 			d.Peers++
 			if p.Online {
@@ -270,7 +271,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if s.HC != nil {
+	if hcOn {
 		if list, err := s.HC.AllChecks(ctx); err == nil {
 			for _, c := range list {
 				switch c.Where().Key { // wo gemessen wird, wie in der Uebersicht

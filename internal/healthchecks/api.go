@@ -348,9 +348,12 @@ func readJSON(r *http.Request, v any) error {
 	return json.Unmarshal(b, v)
 }
 
-func actor(r *http.Request) string {
-	if a := r.Header.Get("X-Agent-Actor"); a != "" {
-		return a
+// actor: angemeldeter Benutzer (Sitzung oder API-Key) fuer Audit und "geaendert von".
+func (m *Module) actor(r *http.Request) string {
+	if m.g.Actor != nil {
+		if a := m.g.Actor(r); a != "" && a != "-" {
+			return a
+		}
 	}
 	return "api"
 }
@@ -422,7 +425,7 @@ func (m *Module) apiCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json: "+err.Error())
 		return
 	}
-	c := &Check{Token: NewToken(), UpdatedBy: actor(r)}
+	c := &Check{Token: NewToken(), UpdatedBy: m.actor(r)}
 	if err := splitPort(c, &in); err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -468,7 +471,7 @@ func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	oldType := c.Type
-	c.UpdatedBy = actor(r)
+	c.UpdatedBy = m.actor(r)
 	if err := splitPort(c, &in); err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -523,7 +526,7 @@ func (m *Module) setPaused(w http.ResponseWriter, r *http.Request, paused bool) 
 	if c == nil {
 		return
 	}
-	if err := m.st.SetPaused(r.Context(), c.Token, paused, actor(r)); err != nil {
+	if err := m.st.SetPaused(r.Context(), c.Token, paused, m.actor(r)); err != nil {
 		writeErr(w, http.StatusInternalServerError, "database error")
 		return
 	}
@@ -556,6 +559,7 @@ func (m *Module) apiRun(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, err.Error())
 		return
 	}
+	m.audit(r, "check.run", c)
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -569,7 +573,7 @@ func (m *Module) apiClone(w http.ResponseWriter, r *http.Request) {
 	n.Name = c.Name + " (copy)"
 	n.Paused = true
 	n.Revision = 0
-	n.UpdatedBy = actor(r)
+	n.UpdatedBy = m.actor(r)
 	n.Runtime = scheduler.Runtime{}
 	if c.Owner == "other" {
 		n.Execution = "local" // wie in der Oberflaeche: die Kopie gehoert dieser Node
@@ -923,10 +927,12 @@ func (m *Module) audit(r *http.Request, action string, c *Check) {
 
 func (m *Module) auditText(r *http.Request, action, target string) {
 	ip := r.RemoteAddr
-	if h, _, err := splitHostPort(ip); err == nil {
+	if m.g.ClientIP != nil {
+		ip = m.g.ClientIP(r)
+	} else if h, _, err := splitHostPort(ip); err == nil {
 		ip = h
 	}
-	if err := m.core.Audit(r.Context(), auditEntry(actor(r), action, target, ip)); err != nil {
+	if err := m.core.Audit(r.Context(), auditEntry(m.actor(r), action, target, ip)); err != nil {
 		m.log.Error("audit", "err", err)
 	}
 }

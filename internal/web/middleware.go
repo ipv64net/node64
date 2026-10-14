@@ -113,6 +113,7 @@ func (s *Server) session(next http.Handler) http.Handler {
 					}
 				}
 				s.limiter.fail("apikey:" + ipKey(s.clientIP(r)))
+				s.log.Warn("invalid api key", "ip", s.clientIP(r), "path", r.URL.Path)
 				w.Header().Set("WWW-Authenticate", "Bearer")
 				http.Error(w, `{"error":"invalid api key"}`, http.StatusUnauthorized)
 				return

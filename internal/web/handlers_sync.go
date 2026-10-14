@@ -186,6 +186,7 @@ func (s *Server) linkAPIKey(w http.ResponseWriter, r *http.Request) {
 func (s *Server) linkCancel(w http.ResponseWriter, r *http.Request) {
 	if s.Linker != nil {
 		s.Linker.LinkCancel()
+		s.audit(r, "sync.link_cancel", "", "")
 	}
 	http.Redirect(w, r, "/link", http.StatusSeeOther)
 }
@@ -226,7 +227,11 @@ func (s *Server) linkSettings(w http.ResponseWriter, r *http.Request) {
 	if r.PostFormValue("local_notifications") == "on" {
 		v = "1"
 	}
-	_ = s.Store.SetSetting(r.Context(), nodesync.SetLocalNotif, v)
+	if err := s.Store.SetSetting(r.Context(), nodesync.SetLocalNotif, v); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.audit(r, "sync.local_notifications", "", v)
 	s.flash(w, r, "success", s.tr(r, "common.saved"))
 	http.Redirect(w, r, "/link", http.StatusSeeOther)
 }

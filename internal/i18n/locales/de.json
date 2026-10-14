@@ -886,6 +886,7 @@
       "dyndns_ip": "🔄 Öffentliche {name} hat sich geändert",
       "dyndns_fail": "⚠️ DynDNS: Update für {name} fehlgeschlagen",
       "dyndns_limit": "⚠️ DynDNS: Update-Limit {name}",
+      "dyndns_ok": "✅ DynDNS: {name} läuft wieder",
       "dns64_upstream": "⚠️ DNS64: Upstream-Server {name} gestört",
       "dns64_upstream_ok": "✅ DNS64: Upstream-Server {name} antwortet wieder",
       "dns64_lists": "⚠️ DNS64: Blockliste {name} lässt sich nicht aktualisieren",
