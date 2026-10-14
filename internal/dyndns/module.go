@@ -22,6 +22,11 @@ import (
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 
+// changelog wird unter Einstellungen > Module angezeigt (Version siehe Info).
+//
+//go:embed CHANGELOG.md
+var changelog string
+
 const Name = "dyndns"
 
 // Module implementiert module.Module.
@@ -93,7 +98,8 @@ func (m *Module) adoptOldKey(ctx context.Context) {
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.dyndns", Icon: "bi-globe", Image: "dyndns64.webp", Path: "/dyndns", Available: true, Order: 20}
+	return module.Info{Name: Name, TitleKey: "nav.dyndns", Icon: "bi-globe", Image: "dyndns64.webp", Path: "/dyndns", Available: true, Order: 20,
+		Version: "1.0.0", Changelog: changelog}
 }
 
 func (m *Module) Migrations() []store.Migration {
