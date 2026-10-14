@@ -217,8 +217,13 @@ func (m *Manager) pullAll(ctx context.Context, only string) {
 		}
 		if err := m.pullFrom(ctx, x); err != nil {
 			m.d.Log.Debug("peer pull", "from", x.Name, "err", err)
+			continue
+		}
+		if err := m.pullData(ctx, x); err != nil {
+			m.d.Log.Debug("peer measurements", "from", x.Name, "err", err)
 		}
 	}
+	m.verdicts(ctx)
 }
 
 // forwardFor: diese Node reicht die Aenderung an den hub weiter (Urheberin ist eine nicht verknuepfte Node).

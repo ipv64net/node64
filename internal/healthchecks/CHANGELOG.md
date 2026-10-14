@@ -1,5 +1,14 @@
 # Änderungen – Healthchecks
 
+## 2.2.0 – 2026-10-14
+
+### Neu
+- Lokale Gruppe: Messwerte und Zustände werden zwischen den Nodes ausgetauscht. Jede Node zeigt die Checks der
+  anderen mit aktuellem Zustand, Messstellen-Tabelle und Diagramm (eine neue Node bekommt die letzten 24 h).
+- Ohne Healthchecks-Sync (oder für Checks, die ipv64 nicht kennt) bestimmt die Node den Gesamtzustand aus den
+  Messstellen der Gruppe nach derselben Regel wie ipv64, inklusive Störungen. Ist die messende Node nicht
+  erreichbar, wird der Zustand nach 2 Minuten „ausstehend“; eine offene Störung bleibt offen.
+
 ## 2.1.0 – 2026-10-14
 
 ### Neu

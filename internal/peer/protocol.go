@@ -128,6 +128,7 @@ func (m *Manager) Register(mux *http.ServeMux) {
 	mux.Handle("POST /peer/v1/members", m.Handle(m.handleMembers))
 	mux.Handle("GET /peer/v1/changes", m.Handle(m.handleChanges))
 	mux.Handle("POST /peer/v1/poke", m.Handle(m.handlePoke))
+	mux.Handle("GET /peer/v1/measurements", m.Handle(m.handleMeasurements))
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
