@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ipv64net/node64/internal/dns64/filter"
 	"github.com/ipv64net/node64/internal/dns64/upstream"
 	"github.com/ipv64net/node64/internal/module"
 )
@@ -135,8 +134,9 @@ func (m *Module) errText(r *http.Request, err error) string {
 	return err.Error()
 }
 
-// apply speichert die Einstellungen, startet den DNS-Dienst neu und leitet mit Meldung zurueck.
-func (m *Module) apply(w http.ResponseWriter, r *http.Request, back string, c config) {
+// apply speichert die Einstellungen, startet den DNS-Dienst neu und leitet mit Meldung zurueck. action/target
+// gehen ins Audit-Log.
+func (m *Module) apply(w http.ResponseWriter, r *http.Request, back string, c config, action, target string) {
 	ctx := r.Context()
 	if err := m.saveConfig(ctx, c); err != nil {
 		m.g.Flash(w, r, "danger", m.errText(r, err))
@@ -144,6 +144,7 @@ func (m *Module) apply(w http.ResponseWriter, r *http.Request, back string, c co
 		return
 	}
 	m.log.Info("settings saved", "page", back, "by", m.g.Actor(r))
+	m.audit(r, action, target, "")
 	if err := m.restart(ctx); err != nil {
 		m.log.Error("restart after settings failed", "err", err)
 		m.g.Flash(w, r, "danger", m.g.T(r, "dns64.err.restart", "err", err.Error()))
@@ -167,7 +168,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	c.CacheSize, c.BlockMode, c.Anonymize = formInt(r, "cache_size"), r.PostFormValue("block_mode"), r.PostFormValue("anonymize")
 	c.NotifyUp, c.NotifyLst = r.PostFormValue("notify_upstream") != "", r.PostFormValue("notify_lists") != ""
 	c.AllowNets = splitLines(r.PostFormValue("allow_nets"))
-	m.apply(w, r, "/dns64/settings", c)
+	m.apply(w, r, "/dns64/settings", c, "dns64.settings", "")
 }
 
 // pageUpstreamsSave uebernimmt die Haken (on_<index>) und die Betriebsart.
@@ -177,22 +178,28 @@ func (m *Module) pageUpstreamsSave(w http.ResponseWriter, r *http.Request) {
 		c.Upstreams[i].Enabled = r.PostFormValue("on_"+strconv.Itoa(i)) != ""
 	}
 	c.UpMode = r.PostFormValue("mode")
-	m.apply(w, r, "/dns64/settings#upstreams", c)
+	m.apply(w, r, "/dns64/settings#upstreams", c, "dns64.upstreams", c.UpMode)
 }
 
 func (m *Module) pageUpstreamAdd(w http.ResponseWriter, r *http.Request) {
 	c := m.loadConfig(r.Context())
 	s := upstream.Server{Name: r.PostFormValue("name"), URL: r.PostFormValue("url"), IPs: splitLines(r.PostFormValue("ips"))}
-	c.Upstreams = append(c.Upstreams, upstreamSetting{Server: s, Enabled: true, Custom: true})
-	m.apply(w, r, "/dns64/settings#upstreams", c)
+	if err := c.addUpstream(s); err != nil {
+		m.g.Flash(w, r, "danger", m.errText(r, err))
+		http.Redirect(w, r, "/dns64/settings#upstreams", http.StatusSeeOther)
+		return
+	}
+	m.apply(w, r, "/dns64/settings#upstreams", c, "dns64.upstream.add", s.URL)
 }
 
 func (m *Module) pageUpstreamRemove(w http.ResponseWriter, r *http.Request) {
 	c := m.loadConfig(r.Context())
+	url := ""
 	if i := formInt(r, "remove"); i >= 0 && i < len(c.Upstreams) && c.Upstreams[i].Custom {
+		url = c.Upstreams[i].URL
 		c.Upstreams = append(c.Upstreams[:i], c.Upstreams[i+1:]...)
 	}
-	m.apply(w, r, "/dns64/settings#upstreams", c)
+	m.apply(w, r, "/dns64/settings#upstreams", c, "dns64.upstream.remove", url)
 }
 
 func (m *Module) pageListsSave(w http.ResponseWriter, r *http.Request) {
@@ -201,59 +208,36 @@ func (m *Module) pageListsSave(w http.ResponseWriter, r *http.Request) {
 		c.Lists[i].Enabled = r.PostFormValue("on_"+strconv.Itoa(i)) != ""
 	}
 	c.ListHours = formInt(r, "hours")
-	m.apply(w, r, "/dns64/lists", c)
+	m.apply(w, r, "/dns64/lists", c, "dns64.lists", "")
 }
 
 func (m *Module) pageListAdd(w http.ResponseWriter, r *http.Request) {
 	c := m.loadConfig(r.Context())
-	u, name := strings.TrimSpace(r.PostFormValue("url")), strings.TrimSpace(r.PostFormValue("name"))
-	if err := checkListURL(u); err != nil {
+	u := strings.TrimSpace(r.PostFormValue("url"))
+	if err := c.addList(r.PostFormValue("name"), u); err != nil {
 		m.g.Flash(w, r, "danger", m.errText(r, err))
 		http.Redirect(w, r, "/dns64/lists", http.StatusSeeOther)
 		return
 	}
-	for _, l := range c.Lists {
-		if l.URL == u {
-			m.g.Flash(w, r, "danger", m.g.T(r, "dns64.err.list_dup"))
-			http.Redirect(w, r, "/dns64/lists", http.StatusSeeOther)
-			return
-		}
-	}
-	if name == "" {
-		name = u
-	}
-	c.Lists = append(c.Lists, listSetting{List: filter.List{Name: name, URL: u}, Enabled: true, Custom: true})
-	m.apply(w, r, "/dns64/lists", c)
+	m.apply(w, r, "/dns64/lists", c, "dns64.list.add", u)
 }
 
 func (m *Module) pageListRemove(w http.ResponseWriter, r *http.Request) {
 	c := m.loadConfig(r.Context())
+	url := ""
 	if i := formInt(r, "remove"); i >= 0 && i < len(c.Lists) && c.Lists[i].Custom {
+		url = c.Lists[i].URL
 		c.Lists = append(c.Lists[:i], c.Lists[i+1:]...)
 	}
-	m.apply(w, r, "/dns64/lists", c)
+	m.apply(w, r, "/dns64/lists", c, "dns64.list.remove", url)
 }
 
 // pageAllowImport uebernimmt Freigaben aus einer Liste (eine Domain je Zeile; allowlist.txt des alten
 // Containers, Pi-hole-Whitelist; Kommentare und Zeitstempel werden ignoriert).
 func (m *Module) pageAllowImport(w http.ResponseWriter, r *http.Request) {
-	a, err := m.allowlist()
-	n, bad := 0, 0
+	n, bad, err := m.importAllow(strings.Split(r.PostFormValue("domains"), "\n"))
 	if err == nil {
-		for _, line := range strings.Split(r.PostFormValue("domains"), "\n") {
-			line = strings.TrimSpace(line)
-			if i := strings.IndexAny(line, "#\t "); i >= 0 {
-				line = strings.TrimSpace(line[:i])
-			}
-			if line == "" {
-				continue
-			}
-			if _, err := a.Add(line); err != nil {
-				bad++
-				continue
-			}
-			n++
-		}
+		m.audit(r, "dns64.allowlist.import", strconv.Itoa(n)+" domains", strconv.Itoa(bad)+" invalid")
 	}
 	if err != nil {
 		m.g.Flash(w, r, "danger", err.Error())
@@ -281,6 +265,7 @@ func (m *Module) pageRecordAdd(w http.ResponseWriter, r *http.Request) {
 	rec, err := m.AddRecord(r.Context(), Record{Name: r.PostFormValue("name"), Type: r.PostFormValue("type"), Value: r.PostFormValue("value"), TTL: ttl})
 	if err == nil {
 		m.log.Info("record added", "name", rec.Name, "type", rec.Type, "value", rec.Value, "by", m.g.Actor(r))
+		m.audit(r, "dns64.record.add", rec.Name, rec.Type+" "+rec.Value)
 	}
 	m.recordBack(w, r, err, "dns64.records.added")
 }
@@ -290,11 +275,17 @@ func (m *Module) pageRecordDelete(w http.ResponseWriter, r *http.Request) {
 	err := m.DeleteRecord(r.Context(), id)
 	if err == nil {
 		m.log.Info("record deleted", "id", id, "by", m.g.Actor(r))
+		m.audit(r, "dns64.record.delete", r.PathValue("id"), "")
 	}
 	m.recordBack(w, r, err, "dns64.records.deleted")
 }
 
 func (m *Module) pageRecordToggle(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	m.recordBack(w, r, m.SetRecordEnabled(r.Context(), id, r.PostFormValue("on") == "1"), "")
+	on := r.PostFormValue("on") == "1"
+	err := m.SetRecordEnabled(r.Context(), id, on)
+	if err == nil {
+		m.audit(r, "dns64.record."+map[bool]string{true: "enable", false: "disable"}[on], r.PathValue("id"), "")
+	}
+	m.recordBack(w, r, err, "")
 }

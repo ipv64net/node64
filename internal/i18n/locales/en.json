@@ -1449,7 +1449,8 @@
       "acme_tos": "Please accept the Let's Encrypt terms of service.",
       "acme_domain": "Please choose a valid ipv64 domain.",
       "acme_prefix": "Invalid name in front of the domain (e.g. dns).",
-      "acme_email": "Invalid e-mail address."
+      "acme_email": "Invalid e-mail address.",
+      "up_dup": "This server already exists."
     },
     "enc": {
       "title": "Encrypted on the home network",

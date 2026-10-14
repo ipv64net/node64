@@ -46,7 +46,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.6.0"
+	version   = "1.7.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -64,6 +64,7 @@ type Module struct {
 
 	g module.Guards
 
+	ctl     sync.Mutex // serialisiert Start, Stop und Neustart
 	mu      sync.Mutex
 	life    context.CancelFunc // nil = Modul aus
 	retryWG sync.WaitGroup
@@ -128,6 +129,7 @@ func (m *Module) Migrations() []store.Migration {
 func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	m.uiRoutes(mux, g)
 	m.apiRoutes(mux, g)
+	m.apiMoreRoutes(mux, g)
 }
 
 func (m *Module) dir() string { return filepath.Join(m.dataDir, "dns64") }
@@ -178,6 +180,13 @@ func (m *Module) routerAddr(ctx context.Context) string {
 // (z. B. Port belegt), bleibt das Modul an, damit Seiten und Einstellungen erreichbar sind; der Fehler steht auf
 // den Seiten und der Start wird jede Minute wiederholt.
 func (m *Module) Start(ctx context.Context) error {
+	m.ctl.Lock()
+	defer m.ctl.Unlock()
+	return m.startLocked()
+}
+
+// startLocked: Start ohne m.ctl (Aufrufer haelt ihn).
+func (m *Module) startLocked() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.life != nil {
@@ -275,6 +284,13 @@ func (m *Module) start(ctx context.Context) error {
 
 // Stop schliesst die Sockets, schreibt das Abfrage-Log zu Ende und gibt Listen und Cache frei.
 func (m *Module) Stop(ctx context.Context) error {
+	m.ctl.Lock()
+	defer m.ctl.Unlock()
+	return m.stopLocked(ctx)
+}
+
+// stopLocked: Stop ohne m.ctl (Aufrufer haelt ihn).
+func (m *Module) stopLocked(ctx context.Context) error {
 	m.mu.Lock()
 	if m.life != nil {
 		m.life() // unter m.mu, damit ein laufender Wiederholversuch danach nichts mehr startet
@@ -295,6 +311,9 @@ func (m *Module) Stop(ctx context.Context) error {
 	select {
 	case <-done:
 	case <-ctx.Done():
+		// Hintergrundjobs haengen: Verbindungen trotzdem schliessen, das Abfrage-Log, sobald sie fertig sind
+		e.up.Close()
+		go func() { e.wg.Wait(); _ = e.store.Close() }()
 		return ctx.Err()
 	}
 	err := e.store.Close()
@@ -318,7 +337,11 @@ func (m *Module) startError() string {
 }
 
 // restart startet den Resolver mit neuen Einstellungen neu (nur wenn das Modul an ist).
+// Unter m.ctl: ein gleichzeitiges Abschalten (Registry.Disable -> Stop) wartet, bis der Neustart fertig ist, und
+// stoppt danach; kommt es zuerst, ist das Modul aus und es wird nicht neu gestartet.
 func (m *Module) restart(ctx context.Context) error {
+	m.ctl.Lock()
+	defer m.ctl.Unlock()
 	m.mu.Lock()
 	on := m.life != nil
 	m.mu.Unlock()
@@ -327,10 +350,10 @@ func (m *Module) restart(ctx context.Context) error {
 	}
 	sctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	if err := m.Stop(sctx); err != nil {
+	if err := m.stopLocked(sctx); err != nil {
 		return err
 	}
-	_ = m.Start(context.Background())
+	_ = m.startLocked()
 	if e := m.startError(); e != "" {
 		return errors.New(e)
 	}

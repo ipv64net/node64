@@ -71,6 +71,7 @@ func (m *Module) apiSettingsPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.log.Info("settings saved", "via", "api", "by", m.g.Actor(r))
+	m.audit(r, "dns64.settings", "", "(api)")
 	if err := m.restart(ctx); err != nil {
 		writeErr(w, http.StatusConflict, m.g.T(r, "dns64.err.restart", "err", err.Error()))
 		return
@@ -104,6 +105,7 @@ func (m *Module) apiRecordAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.log.Info("record added", "name", rec.Name, "type", rec.Type, "value", rec.Value, "via", "api", "by", m.g.Actor(r))
+	m.audit(r, "dns64.record.add", rec.Name, rec.Type+" "+rec.Value+" (api)")
 	writeJSON(w, http.StatusCreated, rec)
 }
 
@@ -118,6 +120,7 @@ func (m *Module) apiRecordDelete(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, err)
 		return
 	}
+	m.audit(r, "dns64.record.delete", r.PathValue("id"), "(api)")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -267,6 +270,7 @@ func (m *Module) apiCache(w http.ResponseWriter, r *http.Request, e *engine) {
 func (m *Module) apiCacheFlush(w http.ResponseWriter, r *http.Request, e *engine) {
 	n := e.cache.Flush()
 	m.log.Info("cache flushed", "entries", n, "by", m.g.Actor(r))
+	m.audit(r, "dns64.cache.flush", strconv.Itoa(n)+" entries", "")
 	writeJSON(w, http.StatusOK, map[string]int{"flushed": n})
 }
 
@@ -292,6 +296,7 @@ func (m *Module) apiAllowAdd(w http.ResponseWriter, r *http.Request, e *engine) 
 		return
 	}
 	m.log.Info("domain released", "domain", d, "by", m.g.Actor(r))
+	m.audit(r, "dns64.allowlist.add", d, "")
 	writeJSON(w, http.StatusOK, map[string]string{"domain": d})
 }
 
@@ -307,6 +312,7 @@ func (m *Module) apiAllowRemove(w http.ResponseWriter, r *http.Request, e *engin
 		return
 	}
 	m.log.Info("domain release removed", "domain", d, "by", m.g.Actor(r))
+	m.audit(r, "dns64.allowlist.remove", d, "")
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -1,5 +1,17 @@
 # Änderungen – DNS64
 
+## 1.7.0 – 2026-10-14
+
+### Neu
+- Alles aus der Oberfläche auch per API: Let's Encrypt einrichten, holen und erneuern (`GET|POST /api/dns64/acme`, `POST /api/dns64/acme/renew`), eigene Einträge an/aus (`POST /api/dns64/records/{id}/enable|disable`), Freigaben übernehmen (`POST /api/dns64/allowlist/import`), CA und iOS-/macOS-Profil (`GET /api/dns64/ca.crt`, `GET /api/dns64/mobileconfig`), eigene Upstreams und Listen einzeln (`POST|DELETE /api/dns64/upstreams`, `POST|DELETE /api/dns64/lists`).
+- Jede Änderung (Einstellungen, Upstreams, Listen, Freigaben, eigene Einträge, Verschlüsselung, Let's Encrypt samt Zustimmung zu den Nutzungsbedingungen, Pause, Cache leeren) steht im Audit-Log, aus Oberfläche und API.
+- OpenAPI mit Schemas für Anfragen und Antworten aller DNS64-Endpunkte.
+
+### Behoben
+- Neustart nach geänderten Einstellungen und gleichzeitiges Abschalten des Moduls konnten DNS-Port und DoH/DoT/DoQ offen lassen; Start, Stopp und Neustart laufen jetzt nacheinander.
+- Hängt das Stoppen, werden die Upstream-Verbindungen trotzdem geschlossen und das Abfrage-Log danach.
+- Fehler beim Speichern der Zustimmung zu den Nutzungsbedingungen wurden verschluckt.
+
 ## 1.6.0 – 2026-10-14
 
 ### Neu

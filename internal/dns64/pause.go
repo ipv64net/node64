@@ -91,6 +91,8 @@ func (m *Module) pagePause(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := m.setPaused(r.Context(), minutes, m.g.Actor(r)); err != nil {
 		m.g.Flash(w, r, "danger", err.Error())
+	} else {
+		m.audit(r, "dns64.pause", strconv.Itoa(minutes)+" min", "0 = until resumed")
 	}
 	http.Redirect(w, r, backTo(r), http.StatusSeeOther)
 }
@@ -98,6 +100,8 @@ func (m *Module) pagePause(w http.ResponseWriter, r *http.Request) {
 func (m *Module) pageResume(w http.ResponseWriter, r *http.Request) {
 	if err := m.setPaused(r.Context(), -1, m.g.Actor(r)); err != nil {
 		m.g.Flash(w, r, "danger", err.Error())
+	} else {
+		m.audit(r, "dns64.resume", "", "")
 	}
 	http.Redirect(w, r, backTo(r), http.StatusSeeOther)
 }
@@ -115,6 +119,7 @@ func (m *Module) apiPause(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, err)
 		return
 	}
+	m.audit(r, "dns64.pause", strconv.Itoa(*in.Minutes)+" min", "(api)")
 	writeJSON(w, http.StatusOK, m.pauseJSON())
 }
 
@@ -123,6 +128,7 @@ func (m *Module) apiResume(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, err)
 		return
 	}
+	m.audit(r, "dns64.resume", "", "(api)")
 	writeJSON(w, http.StatusOK, m.pauseJSON())
 }
 

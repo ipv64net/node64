@@ -820,6 +820,465 @@
             "description": "true hebt auch eine automatische Pause auf"
           }
         }
+      },
+      "DNS64Upstream": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "description": "https://… (DoH), tls://name[:853] (DoT), quic://name[:853] (DoQ)"
+          },
+          "ips": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "custom": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DNS64List": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "custom": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DNS64Settings": {
+        "type": "object",
+        "properties": {
+          "port": {
+            "type": "integer"
+          },
+          "bind": {
+            "type": "string"
+          },
+          "router": {
+            "type": "string"
+          },
+          "retention_days": {
+            "type": "integer"
+          },
+          "upstream_mode": {
+            "type": "string",
+            "enum": [
+              "parallel",
+              "ordered"
+            ]
+          },
+          "upstreams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DNS64Upstream"
+            }
+          },
+          "lists": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DNS64List"
+            }
+          },
+          "list_hours": {
+            "type": "integer"
+          },
+          "block_mode": {
+            "type": "string",
+            "enum": [
+              "zero",
+              "nxdomain"
+            ]
+          },
+          "cache_size": {
+            "type": "integer"
+          },
+          "anonymize": {
+            "type": "string",
+            "enum": [
+              "off",
+              "mask",
+              "hide"
+            ]
+          },
+          "allow_nets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "doh": {
+            "type": "boolean"
+          },
+          "dot": {
+            "type": "boolean"
+          },
+          "doq": {
+            "type": "boolean"
+          },
+          "doh_port": {
+            "type": "integer"
+          },
+          "dot_port": {
+            "type": "integer"
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cert_mode": {
+            "type": "string",
+            "enum": [
+              "self",
+              "node64",
+              "acme"
+            ]
+          },
+          "notify_upstream": {
+            "type": "boolean"
+          },
+          "notify_lists": {
+            "type": "boolean"
+          },
+          "acme_domain": {
+            "type": "string"
+          },
+          "acme_prefix": {
+            "type": "string"
+          },
+          "acme_email": {
+            "type": "string"
+          },
+          "acme_staging": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DNS64Record": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string",
+            "example": "nas.home.lan"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "A",
+              "AAAA",
+              "CNAME"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "example": "192.168.1.10"
+          },
+          "ttl": {
+            "type": "integer",
+            "default": 300
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "value"
+        ]
+      },
+      "DNS64Summary": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer"
+              },
+              "blocked": {
+                "type": "integer"
+              },
+              "cached": {
+                "type": "integer"
+              },
+              "clients": {
+                "type": "integer"
+              },
+              "avgUpstreamMs": {
+                "type": "number"
+              },
+              "droppedLogEntries": {
+                "type": "integer"
+              }
+            }
+          },
+          "blocklistSize": {
+            "type": "integer"
+          },
+          "listsLoadedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cache": {
+            "$ref": "#/components/schemas/DNS64Cache"
+          },
+          "uptimeSeconds": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "DNS64Cache": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "integer"
+          },
+          "max": {
+            "type": "integer"
+          },
+          "staleEntries": {
+            "type": "integer"
+          },
+          "hits": {
+            "type": "integer"
+          },
+          "misses": {
+            "type": "integer"
+          },
+          "staleServed": {
+            "type": "integer"
+          },
+          "refreshed": {
+            "type": "integer"
+          },
+          "refreshFailures": {
+            "type": "integer"
+          }
+        }
+      },
+      "DNS64LogRow": {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "integer",
+            "description": "Unix-ms"
+          },
+          "client": {
+            "type": "string"
+          },
+          "clientName": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "qtype": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "allowed",
+              "cached",
+              "blocked",
+              "local",
+              "error",
+              "custom"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Liste; released:<liste>, paused:<liste>, stale"
+          },
+          "rcode": {
+            "type": "string"
+          },
+          "upstream": {
+            "type": "string"
+          },
+          "ms": {
+            "type": "number"
+          },
+          "proto": {
+            "type": "string",
+            "enum": [
+              "udp",
+              "tcp",
+              "doh",
+              "dot",
+              "doq"
+            ]
+          }
+        }
+      },
+      "DNS64ListStatus": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "rules": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "type": "string"
+          },
+          "failures": {
+            "type": "integer"
+          }
+        }
+      },
+      "DNS64UpstreamStats": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "proto": {
+            "type": "string",
+            "enum": [
+              "doh",
+              "dot",
+              "doq"
+            ]
+          },
+          "ips": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "wins": {
+            "type": "integer"
+          },
+          "errors": {
+            "type": "integer"
+          },
+          "avgMs": {
+            "type": "number"
+          },
+          "healthy": {
+            "type": "boolean"
+          },
+          "lastError": {
+            "type": "string"
+          },
+          "lastErrorAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DNS64Blocking": {
+        "type": "object",
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          },
+          "until_resumed": {
+            "type": "boolean"
+          },
+          "paused_until": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DNS64ACME": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "cert_mode": {
+            "type": "string"
+          },
+          "staging": {
+            "type": "boolean"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "step": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "tos_accepted": {
+            "type": "boolean"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "not_after": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_run": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DNS64TopItem": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "blocked": {
+            "type": "integer"
+          }
+        }
       }
     }
   },
@@ -2569,7 +3028,38 @@
         "description": "`listen` (Adresse:Port), `startedAt`, `router` (DNS fuer lokale Namen, leer = keiner), `routerSource` (config|auto), `retentionDays`. `blocking`: `paused`, `until_resumed`, `paused_until`.",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string"
+                    },
+                    "listen": {
+                      "type": "string"
+                    },
+                    "startedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "router": {
+                      "type": "string"
+                    },
+                    "routerSource": {
+                      "type": "string"
+                    },
+                    "retentionDays": {
+                      "type": "integer"
+                    },
+                    "blocking": {
+                      "$ref": "#/components/schemas/DNS64Blocking"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -2599,7 +3089,14 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Summary"
+                }
+              }
+            }
           }
         }
       }
@@ -2629,7 +3126,36 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "stepMs": {
+                      "type": "integer"
+                    },
+                    "buckets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "t": {
+                            "type": "integer"
+                          },
+                          "total": {
+                            "type": "integer"
+                          },
+                          "blocked": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -2680,7 +3206,17 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DNS64TopItem"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -2735,7 +3271,25 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DNS64LogRow"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -2748,7 +3302,90 @@
         "summary": "Blocklisten mit Anzahl Domains, Stand und Fehler",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DNS64ListStatus"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigene Blockliste hinzufuegen (an)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "url"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Neuer Stand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Settings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungueltig oder doppelt"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigene Blockliste entfernen",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Settings"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Keine eigene Liste mit dieser URL"
           }
         }
       }
@@ -2761,10 +3398,113 @@
         "summary": "Upstream-Server (DNS-over-HTTPS) mit Statistik und Router fuer lokale Namen",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string"
+                    },
+                    "servers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DNS64UpstreamStats"
+                      }
+                    },
+                    "localDNS": {
+                      "type": "string"
+                    },
+                    "localSource": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "description": "Je Server `name`, `url`, `proto` (doh, dot, doq), `ips` (Bootstrap), Anfragen, Siege, Fehler, Schnitt in ms, `healthy`; dazu `mode` (parallel|ordered) und der Router fuer lokale Namen."
+      },
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigenen Upstream-Server hinzufuegen (an)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "url": {
+                    "type": "string"
+                  },
+                  "ips": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "url"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Neuer Stand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Settings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungueltig oder doppelt"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigenen Upstream-Server entfernen",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Settings"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Kein eigener Server mit dieser URL"
+          }
+        }
       }
     },
     "/dns64/cache": {
@@ -2775,7 +3515,14 @@
         "summary": "Cache-Zaehler seit dem Start",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Cache"
+                }
+              }
+            }
           }
         }
       }
@@ -2788,7 +3535,19 @@
         "summary": "Cache leeren",
         "responses": {
           "200": {
-            "description": "`flushed` = Anzahl Eintraege"
+            "description": "`flushed` = Anzahl Eintraege",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "flushed": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -2801,7 +3560,26 @@
         "summary": "Freigegebene Domains (gelten samt Subdomains)",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "domain": {
+                        "type": "string"
+                      },
+                      "addedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -2831,7 +3609,19 @@
         },
         "responses": {
           "200": {
-            "description": "`domain` (normalisiert)"
+            "description": "`domain` (normalisiert)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "domain": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "400": {
             "description": "Ungueltiger Domainname"
@@ -2872,7 +3662,14 @@
         "description": "`port`, `bind`, `router`, `retention_days`, `upstream_mode` (parallel|ordered), `upstreams` (name, url = https://… fuer DoH, tls://name[:853] fuer DoT, quic://name[:853] fuer DoQ, ips, enabled, custom), `lists` (name, url, enabled, custom), `list_hours`, `block_mode` (zero|nxdomain), `cache_size`, `anonymize` (off|mask|hide), `allow_nets`. Verschluesselt fuer Geraete: `doh`, `dot`, `doq` (an/aus), `doh_port` (443), `dot_port` (853, DoT TCP und DoQ UDP), `names` (Namen fuer Geraete und Zertifikat), `cert_mode` (self = eigene Heimnetz-CA, node64 = Zertifikat der Weboberflaeche, acme = Let's Encrypt), `acme_domain` (ipv64-Domain), `acme_prefix`, `acme_email`, `acme_staging`. Den Abruf startet die Oberflaeche (Nutzungsbedingungen von Let's Encrypt).",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Settings"
+                }
+              }
+            }
           }
         }
       },
@@ -2887,7 +3684,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object"
+                "$ref": "#/components/schemas/DNS64Settings"
               },
               "example": {
                 "upstream_mode": "ordered",
@@ -2899,7 +3696,14 @@
         },
         "responses": {
           "200": {
-            "description": "Neuer Stand"
+            "description": "Neuer Stand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Settings"
+                }
+              }
+            }
           },
           "400": {
             "description": "Ungueltige Einstellung"
@@ -2924,39 +3728,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "integer"
-                      },
-                      "name": {
-                        "type": "string",
-                        "example": "nas.home.lan"
-                      },
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "A",
-                          "AAAA",
-                          "CNAME"
-                        ]
-                      },
-                      "value": {
-                        "type": "string",
-                        "example": "192.168.1.10"
-                      },
-                      "ttl": {
-                        "type": "integer",
-                        "default": 300
-                      },
-                      "enabled": {
-                        "type": "boolean"
-                      },
-                      "created_at": {
-                        "type": "string",
-                        "format": "date-time"
-                      }
-                    }
+                    "$ref": "#/components/schemas/DNS64Record"
                   }
                 }
               }
@@ -2975,39 +3747,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "integer"
-                  },
-                  "name": {
-                    "type": "string",
-                    "example": "nas.home.lan"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "A",
-                      "AAAA",
-                      "CNAME"
-                    ]
-                  },
-                  "value": {
-                    "type": "string",
-                    "example": "192.168.1.10"
-                  },
-                  "ttl": {
-                    "type": "integer",
-                    "default": 300
-                  },
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "created_at": {
-                    "type": "string",
-                    "format": "date-time"
-                  }
-                }
+                "$ref": "#/components/schemas/DNS64Record"
               },
               "example": {
                 "name": "nas.home.lan",
@@ -3020,7 +3760,14 @@
         },
         "responses": {
           "201": {
-            "description": "Angelegt"
+            "description": "Angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Record"
+                }
+              }
+            }
           },
           "400": {
             "description": "Ungueltig oder doppelt"
@@ -3086,7 +3833,14 @@
         },
         "responses": {
           "200": {
-            "description": "Neuer Stand"
+            "description": "Neuer Stand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Blocking"
+                }
+              }
+            }
           },
           "400": {
             "description": "Ungueltige Dauer"
@@ -3102,7 +3856,284 @@
         "summary": "Blockieren wieder einschalten",
         "responses": {
           "200": {
-            "description": "Neuer Stand"
+            "description": "Neuer Stand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Blocking"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dns64/acme": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Let's-Encrypt-Stand",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64ACME"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Let's Encrypt einrichten und Zertifikat holen",
+        "description": "Setzt cert_mode=acme, speichert die Zustimmung zu den Nutzungsbedingungen von Let's Encrypt (`accept_tos` muss true sein), legt mit `lan_ip` den Namen als eigenen Eintrag an und startet den Abruf im Hintergrund (DNS-01 ueber die ipv64-API, zentraler API-Key noetig). Fortschritt ueber GET /dns64/acme.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "type": "string"
+                  },
+                  "prefix": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "staging": {
+                    "type": "boolean"
+                  },
+                  "accept_tos": {
+                    "type": "boolean"
+                  },
+                  "lan_ip": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "domain",
+                  "accept_tos"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Abruf gestartet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64ACME"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungueltig oder Nutzungsbedingungen nicht akzeptiert"
+          },
+          "409": {
+            "description": "Laeuft schon oder Modul aus"
+          }
+        }
+      }
+    },
+    "/dns64/acme/renew": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Zertifikat jetzt erneuern",
+        "responses": {
+          "202": {
+            "description": "Abruf gestartet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64ACME"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Nicht eingerichtet, laeuft schon oder Modul aus"
+          }
+        }
+      }
+    },
+    "/dns64/records/{id}/enable": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigenen Eintrag einschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/records/{id}/disable": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigenen Eintrag ausschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/allowlist/import": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Freigaben uebernehmen (viele auf einmal)",
+        "description": "Eine Domain je Eintrag; Kommentare (#) und Zeitstempel hinter der Domain werden ignoriert, vorhandene bleiben.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "domains": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "domains"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "imported": {
+                      "type": "integer"
+                    },
+                    "invalid": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dns64/ca.crt": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Heimnetz-CA (DER)",
+        "responses": {
+          "200": {
+            "description": "Zertifikat",
+            "content": {
+              "application/x-x509-ca-cert": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Keine eigene CA"
+          }
+        }
+      }
+    },
+    "/dns64/mobileconfig": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Profil fuer iOS/macOS",
+        "parameters": [
+          {
+            "name": "proto",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "doh",
+                "dot"
+              ],
+              "default": "doh"
+            }
+          },
+          {
+            "name": "host",
+            "in": "query",
+            "description": "Name oder IP fuer die Geraete",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profil",
+            "content": {
+              "application/x-apple-aspen-config": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }

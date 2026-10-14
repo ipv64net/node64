@@ -1449,7 +1449,8 @@
       "acme_tos": "Bitte die Nutzungsbedingungen von Let's Encrypt akzeptieren.",
       "acme_domain": "Bitte eine gültige ipv64-Domain wählen.",
       "acme_prefix": "Ungültiger Name vor der Domain (z. B. dns).",
-      "acme_email": "Ungültige E-Mail-Adresse."
+      "acme_email": "Ungültige E-Mail-Adresse.",
+      "up_dup": "Diesen Server gibt es schon."
     },
     "enc": {
       "title": "Verschlüsselt im Heimnetz",

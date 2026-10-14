@@ -135,42 +135,29 @@ func (m *Module) pageACME(w http.ResponseWriter, r *http.Request) {
 		m.g.Flash(w, r, kind, msg)
 		http.Redirect(w, r, "/dns64/encrypted#acme", http.StatusSeeOther)
 	}
-	if r.PostFormValue("tos") == "" {
-		back("danger", m.g.T(r, "dns64.err.acme_tos"))
-		return
-	}
-	c := m.loadConfig(ctx)
-	c.CertMode, c.ACMEDomain, c.ACMEPrefix = certACME, r.PostFormValue("domain"), r.PostFormValue("prefix")
-	c.ACMEEmail, c.ACMEStaging = r.PostFormValue("email"), r.PostFormValue("staging") != ""
-	if err := m.saveConfig(ctx, c); err != nil {
+	in := acmeInput{Domain: r.PostFormValue("domain"), Prefix: r.PostFormValue("prefix"), Email: r.PostFormValue("email"),
+		Staging: r.PostFormValue("staging") != "", AcceptTOS: r.PostFormValue("tos") != "", LANIP: r.PostFormValue("lan_ip")}
+	name, err := m.configureACME(ctx, in)
+	if err != nil {
 		back("danger", m.errText(r, err))
 		return
 	}
-	_ = m.core.SetSetting(ctx, setACMETOS, time.Now().UTC().Format(time.RFC3339))
-	c = m.loadConfig(ctx)
-	name := acmeName(c)
-	if ip := strings.TrimSpace(r.PostFormValue("lan_ip")); ip != "" { // Name zeigt im Heimnetz auf die Node
-		typ := "A"
-		if a := net.ParseIP(ip); a != nil && a.To4() == nil {
-			typ = "AAAA"
-		}
-		if _, err := m.AddRecord(ctx, Record{Name: name, Type: typ, Value: ip}); err != nil && !isDup(err) {
-			back("danger", m.errText(r, err))
-			return
-		}
-	}
-	m.log.Info("acme configured", "name", name, "staging", c.ACMEStaging, "by", m.g.Actor(r))
+	m.log.Info("acme configured", "name", name, "staging", in.Staging, "by", m.g.Actor(r))
+	m.audit(r, "dns64.acme_tos", name, "staging="+strconv.FormatBool(in.Staging))
 	if err := m.restart(ctx); err != nil {
 		back("danger", m.g.T(r, "dns64.err.restart", "err", err.Error()))
 		return
 	}
 	m.startACME("issue")
+	m.audit(r, "dns64.acme_issue", name, "")
 	back("success", m.g.T(r, "dns64.acme.started", "name", name))
 }
 
 func (m *Module) pageACMERenew(w http.ResponseWriter, r *http.Request) {
 	if m.startACME("manual") {
-		m.g.Flash(w, r, "success", m.g.T(r, "dns64.acme.started", "name", acmeName(m.loadConfig(r.Context()))))
+		name := acmeName(m.loadConfig(r.Context()))
+		m.audit(r, "dns64.acme_renew", name, "")
+		m.g.Flash(w, r, "success", m.g.T(r, "dns64.acme.started", "name", name))
 	}
 	http.Redirect(w, r, "/dns64/encrypted#acme", http.StatusSeeOther)
 }
@@ -203,7 +190,7 @@ func (m *Module) pageEncryptedSave(w http.ResponseWriter, r *http.Request) {
 	c.DoHPort, c.DoTPort = formInt(r, "doh_port"), formInt(r, "dot_port")
 	c.Names = splitLines(r.PostFormValue("names"))
 	c.CertMode = r.PostFormValue("cert_mode")
-	m.apply(w, r, "/dns64/encrypted", c)
+	m.apply(w, r, "/dns64/encrypted", c, "dns64.encrypted", "doh="+b2s(c.DoH)+" dot="+b2s(c.DoT)+" doq="+b2s(c.DoQ)+" cert="+c.CertMode)
 }
 
 // caDER liefert die Heimnetz-CA (nil, wenn es keine gibt).
