@@ -80,6 +80,53 @@
 	</div>
 </div>
 <div class="col-lg-5">
+	{{$g := $d.Group}}{{if $g.Available}}
+	<div class="card mb-3" id="group">
+		<div class="card-header"><i class="bi bi-share-fill text-primary"></i> {{.T "peer.title"}}{{if $g.Members}} <span class="badge text-bg-secondary">{{len $g.Members}}</span>{{end}}</div>
+		<div class="card-body small">
+		{{if not $g.Account}}
+			<p class="text-body-secondary mb-0">{{.T "peer.need_account"}}</p>
+		{{else}}
+			<p class="text-body-secondary">{{.T "peer.hint"}}</p>
+			{{if $g.Members}}<ul class="list-group mb-3">{{range $g.Members}}
+				<li class="list-group-item">
+					<div class="d-flex align-items-center gap-2">
+						{{if .Online}}<span class="badge text-bg-success">online</span>{{else if .LastError}}<span class="badge text-bg-danger">{{$.T "peer.error"}}</span>{{else}}<span class="badge text-bg-secondary">offline</span>{{end}}
+						<span class="fw-semibold">{{.Name}}</span>{{if .Version}}<span class="text-body-secondary">{{.Version}}</span>{{end}}
+						<form method="post" action="/link/group/{{.NodeID}}/remove" class="ms-auto m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" data-confirm="{{$.T "peer.remove_confirm" "name" .Name}}" title="{{$.T "peer.remove"}}"><i class="bi bi-x-lg"></i></button></form>
+					</div>
+					<form method="post" action="/link/group/{{.NodeID}}/url" class="input-group input-group-sm mt-1"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input class="form-control font-monospace" name="url" value="{{.URL}}" aria-label="URL"><button class="btn btn-outline-secondary" title="{{$.T "common.save"}}"><i class="bi bi-check-lg"></i></button></form>
+					{{if .LastError}}<div class="text-danger mt-1">{{.LastError}}</div>{{else if not .LastSeen.IsZero}}<div class="text-body-secondary mt-1">{{$.T "peer.seen"}} {{$.Ago .LastSeen}}</div>{{end}}
+				</li>{{end}}
+			</ul>{{end}}
+			<div class="fw-semibold mb-1">{{.T "peer.add_title"}}</div>
+			{{if $g.Code}}
+			<div class="alert alert-info py-2 mb-2">{{.T "peer.code_intro"}}
+				<div class="fs-3 font-monospace my-1">{{slice $g.Code 0 4}}-{{slice $g.Code 4}} <button class="btn btn-outline-secondary btn-sm btn-copy align-middle" type="button" data-copy-text="{{$g.Code}}" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
+				<div>{{.T "peer.code_addr"}} <code>{{$g.SelfURL}}</code></div>
+				<div class="text-body-secondary">{{.T "peer.code_valid"}} {{.Time $g.CodeExp}}</div></div>
+			<form method="post" action="/link/group/code" class="mb-3"><input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="cancel" value="1"><button class="btn btn-outline-secondary btn-sm">{{.T "common.cancel"}}</button></form>
+			{{else}}
+			<p class="text-body-secondary mb-1">{{.T "peer.add_hint"}}</p>
+			<form method="post" action="/link/group/code" class="mb-3"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-primary btn-sm"><i class="bi bi-plus-lg"></i> {{.T "peer.add"}}</button></form>
+			{{end}}
+			<div class="fw-semibold mb-1">{{.T "peer.join_title"}}</div>
+			<form method="post" action="/link/group/join" class="mb-2">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<label class="form-label mb-0" for="g_addr">{{.T "peer.addr"}}</label>
+				<input class="form-control form-control-sm font-monospace mb-1" id="g_addr" name="addr" placeholder="http://192.168.1.20:8091" required>
+				<label class="form-label mb-0" for="g_code">{{.T "peer.code"}}</label>
+				<input class="form-control form-control-sm font-monospace mb-1" id="g_code" name="code" placeholder="ABCD-EFGH" autocomplete="off" required>
+				<label class="form-label mb-0" for="g_self">{{.T "peer.self_url"}}</label>
+				<input class="form-control form-control-sm font-monospace mb-1" id="g_self" name="self_url" value="{{$g.SelfURL}}" required>
+				<div class="form-text mb-2">{{.T "peer.self_url_hint"}}</div>
+				<button class="btn btn-primary btn-sm"><i class="bi bi-box-arrow-in-right"></i> {{.T "peer.join"}}</button>
+			</form>
+			{{if $g.Members}}<form method="post" action="/link/group/leave" class="mt-3"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-danger btn-sm" data-confirm="{{.T "peer.leave_confirm"}}"><i class="bi bi-box-arrow-right"></i> {{.T "peer.leave"}}</button></form>{{end}}
+		{{end}}
+		</div>
+	</div>
+	{{end}}
 	{{if $d.Peers}}
 	<div class="card mb-3" id="nodes">
 		<div class="card-header"><i class="bi bi-diagram-3-fill text-primary"></i> {{.T "link.peers"}} <span class="badge text-bg-secondary">{{len $d.Peers}}</span></div>

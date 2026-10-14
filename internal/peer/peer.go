@@ -1,0 +1,236 @@
+// Package peer ist die lokale Gruppe: Nodes desselben ipv64-Accounts koppeln sich per Code und gleichen
+// Healthchecks direkt untereinander ab (im lokalen Netz, ueber den normalen Web-Port), zusaetzlich zum hub.
+//
+// Vertrauen: jede Node hat ein Ed25519-Schluesselpaar. Gekoppelt wird mit einem Code, den Node A zeigt und
+// der auf Node B eingegeben wird; beide beweisen per HMAC, dass sie den Code kennen (er geht nie im Klartext
+// ueber das Netz) und tauschen ihre Schluessel. Danach ist jede Anfrage signiert, und der ipv64-Account der
+// Absenderin muss bei jeder Anfrage mit dem eigenen uebereinstimmen.
+package peer
+
+import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"database/sql"
+	"embed"
+	"encoding/base64"
+	"errors"
+	"log/slog"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/ipv64net/node64/internal/secrets"
+	"github.com/ipv64net/node64/internal/store"
+)
+
+//go:embed migrations/*.sql
+var migrationFS embed.FS
+
+// Migrations liefert das Schema der lokalen Gruppe.
+func Migrations() ([]store.Migration, error) { return store.ReadMigrations(migrationFS, "migrations") }
+
+const (
+	setKey    = "peer.key" // privater Schluessel (verschluesselt)
+	codeTTL   = 10 * time.Minute
+	pingEvery = 30 * time.Second
+	offline   = 2 * time.Minute
+	timeSkew  = 5 * time.Minute
+)
+
+// Errors der Kopplung (fuer verstaendliche Meldungen in der Oberflaeche).
+var (
+	ErrNoAccount       = errors.New("no ipv64 account")
+	ErrAccountMismatch = errors.New("account mismatch")
+	ErrCode            = errors.New("code wrong or expired")
+	ErrSelf            = errors.New("cannot pair with itself")
+)
+
+// Member ist eine andere Node der Gruppe.
+type Member struct {
+	NodeID    string    `json:"node_id"`
+	Name      string    `json:"name"`
+	URL       string    `json:"url"`
+	PubKey    string    `json:"pubkey"`
+	AccountID int64     `json:"account_id"`
+	AddedAt   time.Time `json:"-"`
+	AddedBy   string    `json:"-"`
+	LastSeen  time.Time `json:"-"`
+	LastError string    `json:"-"`
+	Version   string    `json:"-"`
+}
+
+// Online: in den letzten zwei Minuten erreicht.
+func (m Member) Online() bool { return !m.LastSeen.IsZero() && time.Since(m.LastSeen) < offline }
+
+// Deps sind die Anbindungen an den Rest der Node.
+type Deps struct {
+	Core      *store.Store
+	Box       *secrets.Box
+	Log       *slog.Logger
+	Version   string
+	NodeID    func() string
+	NodeName  func() string
+	AccountID func() int64 // ipv64-Account (Healthchecks-Sync oder API-Key), 0 = keiner
+}
+
+// Manager verwaltet Identitaet, Kopplung und Mitglieder.
+type Manager struct {
+	d    Deps
+	db   *sql.DB
+	priv ed25519.PrivateKey
+	hc   *http.Client
+
+	mu    sync.Mutex
+	code  string // offener Kopplungscode
+	exp   time.Time
+	tries int
+}
+
+// New laedt bzw. erzeugt den Schluessel.
+func New(ctx context.Context, d Deps) (*Manager, error) {
+	m := &Manager{d: d, db: d.Core.Writer(), hc: &http.Client{Timeout: 10 * time.Second}}
+	raw := d.Core.SettingOr(ctx, setKey, "")
+	if raw != "" && d.Box != nil {
+		if plain, err := d.Box.Decrypt(raw); err == nil {
+			raw = plain
+		}
+	}
+	if b, err := base64.StdEncoding.DecodeString(raw); err == nil && len(b) == ed25519.PrivateKeySize {
+		m.priv = ed25519.PrivateKey(b)
+		return m, nil
+	}
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	m.priv = priv
+	v := base64.StdEncoding.EncodeToString(priv)
+	if d.Box != nil {
+		v = d.Box.Encrypt(v)
+	}
+	return m, d.Core.SetSetting(ctx, setKey, v)
+}
+
+// Account ist der ipv64-Account dieser Node (0 = keiner, dann keine Gruppe).
+func (m *Manager) Account() int64 { return m.d.AccountID() }
+
+// PublicKey der eigenen Node (base64).
+func (m *Manager) PublicKey() string {
+	return base64.StdEncoding.EncodeToString(m.priv.Public().(ed25519.PublicKey))
+}
+
+// Members liefert die Gruppe (ohne die eigene Node), nach Name sortiert.
+func (m *Manager) Members(ctx context.Context) ([]Member, error) {
+	rows, err := m.db.QueryContext(ctx, `SELECT node_id, name, url, pubkey, account_id, added_at, added_by, last_seen, last_error, version FROM peer_members ORDER BY name, node_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Member
+	for rows.Next() {
+		var x Member
+		var added, seen string
+		if err := rows.Scan(&x.NodeID, &x.Name, &x.URL, &x.PubKey, &x.AccountID, &added, &x.AddedBy, &seen, &x.LastError, &x.Version); err != nil {
+			return nil, err
+		}
+		x.AddedAt, x.LastSeen = parseTime(added), parseTime(seen)
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+
+func (m *Manager) member(ctx context.Context, nodeID string) (*Member, error) {
+	list, err := m.Members(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		if list[i].NodeID == nodeID {
+			return &list[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// upsert nimmt eine Node auf oder aktualisiert Name, Adresse und Schluessel.
+func (m *Manager) upsert(ctx context.Context, x Member, by string) error {
+	if x.NodeID == "" || x.NodeID == m.d.NodeID() || x.PubKey == "" {
+		return nil
+	}
+	_, err := m.db.ExecContext(ctx, `INSERT INTO peer_members (node_id, name, url, pubkey, account_id, added_at, added_by) VALUES (?,?,?,?,?,?,?)
+		ON CONFLICT(node_id) DO UPDATE SET name = excluded.name, url = CASE WHEN excluded.url != '' THEN excluded.url ELSE url END,
+		pubkey = excluded.pubkey, account_id = excluded.account_id`,
+		x.NodeID, trunc(x.Name, 100), trunc(strings.TrimRight(x.URL, "/"), 300), x.PubKey, x.AccountID, fmtTime(time.Now()), by)
+	return err
+}
+
+func (m *Manager) remove(ctx context.Context, nodeID string) error {
+	_, err := m.db.ExecContext(ctx, `DELETE FROM peer_members WHERE node_id = ?`, nodeID)
+	return err
+}
+
+// SetURL aendert die Adresse einer Node (falls sie umgezogen ist).
+func (m *Manager) SetURL(ctx context.Context, nodeID, url string) error {
+	_, err := m.db.ExecContext(ctx, `UPDATE peer_members SET url = ? WHERE node_id = ?`, trunc(strings.TrimRight(strings.TrimSpace(url), "/"), 300), nodeID)
+	return err
+}
+
+func (m *Manager) seen(ctx context.Context, nodeID, version, name string, err error) {
+	if err != nil {
+		_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET last_error = ? WHERE node_id = ?`, trunc(err.Error(), 300), nodeID)
+		return
+	}
+	_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET last_seen = ?, last_error = '', version = ?, name = CASE WHEN ? != '' THEN ? ELSE name END WHERE node_id = ?`,
+		fmtTime(time.Now()), trunc(version, 32), name, trunc(name, 100), nodeID)
+}
+
+// Run pingt die Gruppe regelmaessig (Erreichbarkeit, Version, Account).
+func (m *Manager) Run(ctx context.Context) {
+	t := time.NewTicker(pingEvery)
+	defer t.Stop()
+	m.pingAll(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			m.pingAll(ctx)
+		}
+	}
+}
+
+func (m *Manager) pingAll(ctx context.Context) {
+	list, err := m.Members(ctx)
+	if err != nil {
+		return
+	}
+	for _, x := range list {
+		var out pingInfo
+		err := m.call(ctx, x, http.MethodGet, "/peer/v1/ping", nil, &out)
+		if err == nil && out.NodeID != x.NodeID {
+			err = errors.New("other node at this address")
+		}
+		m.seen(ctx, x.NodeID, out.Version, out.Name, err)
+	}
+}
+
+type pingInfo struct {
+	NodeID    string `json:"node_id"`
+	Name      string `json:"name"`
+	Version   string `json:"version"`
+	AccountID int64  `json:"account_id"`
+}
+
+func fmtTime(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05.000Z") }
+func parseTime(s string) time.Time {
+	t, _ := time.Parse("2006-01-02T15:04:05.000Z", s)
+	return t
+}
+func trunc(s string, n int) string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
+}

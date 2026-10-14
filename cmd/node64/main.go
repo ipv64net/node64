@@ -34,6 +34,7 @@ import (
 	"github.com/ipv64net/node64/internal/logging"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
+	"github.com/ipv64net/node64/internal/peer"
 	"github.com/ipv64net/node64/internal/secrets"
 	"github.com/ipv64net/node64/internal/store"
 	nodesync "github.com/ipv64net/node64/internal/sync"
@@ -143,6 +144,29 @@ func run() error {
 			}
 			return ipv64Key.Client().HC2UnlinkNode(ctx, key, nodeID, keep)
 		}})
+	// lokale Gruppe: Nodes desselben ipv64-Accounts gleichen direkt untereinander ab
+	peerMigrations, err := peer.Migrations()
+	if err != nil {
+		return err
+	}
+	if err := st.Migrate(ctx, "peer", peerMigrations); err != nil {
+		return err
+	}
+	peerMgr, err := peer.New(ctx, peer.Deps{Core: st, Box: box, Log: logger.Slog().With("module", "peer"), Version: Version,
+		NodeID:   func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") },
+		NodeName: func() string { return st.SettingOr(context.Background(), web.SettingNodeName, "Node64") },
+		AccountID: func() int64 { // ipv64-Account aus dem Healthchecks-Sync, sonst vom API-Key
+			if s := syncClient.State(); s.Linked {
+				if id, err := strconv.ParseInt(s.AccountID, 10, 64); err == nil && id > 0 {
+					return id
+				}
+			}
+			return int64(ipv64Key.Info(context.Background()).ID)
+		}})
+	if err != nil {
+		return err
+	}
+	go peerMgr.Run(ctx)
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)
 	// Meldungen der Module (z. B. DynDNS) ueber ipv64-Mail/-SMS direkt per API, ohne hub; ohne Verknuepfung die Kanaele des Accounts
@@ -167,7 +191,7 @@ func run() error {
 
 	srv, err := web.New(web.Deps{
 		Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: modules, Notify: nfStore, Dispatcher: dispatcher,
-		Sync: syncClient, Linker: syncClient, HC: hcModule, IPv64: ipv64Key, Version: Version, StartedAt: time.Now(), Restart: stop,
+		Sync: syncClient, Linker: syncClient, HC: hcModule, IPv64: ipv64Key, Peer: peerMgr, Version: Version, StartedAt: time.Now(), Restart: stop,
 	})
 	if err != nil {
 		return err

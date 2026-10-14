@@ -38,6 +38,7 @@ type linkData struct {
 	KeyOK      bool                   // Key hinterlegt: Verknuepfen mit einem Klick
 	Location   string                 // Vorgabe Standort
 	Mismatch   bool                   // Key gehoert zu einem anderen Account als die Verknuepfung
+	Group      groupData              // lokale Gruppe (handlers_peer.go)
 }
 
 type conflictRow struct {
@@ -69,6 +70,7 @@ func (s *Server) linkPage(w http.ResponseWriter, r *http.Request) {
 		d.Mismatch = d.State.Linked && d.Key.ID != 0 && d.State.AccountID != "" && d.State.AccountID != strconv.Itoa(d.Key.ID)
 	}
 	d.Location = s.Store.SettingOr(r.Context(), SettingNodeLocation, "")
+	d.Group = s.groupView(r)
 	if s.HC != nil && d.State.Linked {
 		d.Peers = s.HC.Peers(r.Context())
 		d.Own, d.Other = s.HC.LinkScope(r.Context())
