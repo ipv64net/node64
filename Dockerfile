@@ -14,9 +14,10 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     go build -trimpath -ldflags="-s -w -X main.Version=$VERSION" -o /out/node64 ./cmd/node64
 # Datenverzeichnis mit passenden Rechten fuer den Nicht-Root-Benutzer vorbereiten
 RUN mkdir -p /out/data && chown 65532:65532 /out/data
-# DNS64 lauscht auf Port 53 (und spaeter 853): das Recht fuer Ports unter 1024 bekommt nur das Binary, der
-# Prozess laeuft weiter ohne Root
-RUN apk add --no-cache libcap && setcap cap_net_bind_service=+ep /out/node64
+# Ports unter 1024 (DNS64: 53, spaeter 853) und ICMP ohne Root: die Rechte bekommt nur das Binary, und nur als
+# "erlaubt" (+p). Node64 schaltet sie beim Start selbst scharf (internal/caps); fehlen sie im Container (cap_drop,
+# Podman), startet es trotzdem. Der Prozess laeuft weiter als 65532.
+RUN apk add --no-cache libcap && setcap cap_net_bind_service,cap_net_raw=+p /out/node64
 
 # ---- CA-Zertifikate (Zeitzonen sind im Binary eingebettet). Laeuft auf der
 #      Build-Plattform, die Zertifikate sind architekturunabhaengig.

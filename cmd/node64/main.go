@@ -28,6 +28,7 @@ import (
 	"time"
 	_ "time/tzdata" // Zeitzonen im Binary, das Laufzeit-Image hat keine
 
+	"github.com/ipv64net/node64/internal/caps"
 	"github.com/ipv64net/node64/internal/config"
 	"github.com/ipv64net/node64/internal/dns64"
 	"github.com/ipv64net/node64/internal/dyndns"
@@ -73,6 +74,11 @@ func run() error {
 	defer logger.Close()
 	log := logger.Slog().With("module", "core")
 	logger.OnChange(func() { log.Info("log level changed", "level", logging.LevelName(logger.Level())) })
+	if raised, err := caps.Raise(); err != nil { // Ports unter 1024 (DNS64) und ICMP ohne Root, siehe Dockerfile
+		log.Warn("capabilities could not be raised", "err", err)
+	} else if raised {
+		log.Debug("capabilities raised")
+	}
 	log.Info("node64 starting", "version", Version, "data", cfg.DataDir)
 
 	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
