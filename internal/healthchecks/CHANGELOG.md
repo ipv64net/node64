@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.6.1 – 2026-10-14
+
+### Behoben
+- Lokale Gruppe: Eine Node ohne Healthchecks-Sync blieb beim Übernehmen der weitergereichten hub-Daten hängen
+  (sie wartete in der Datenbank auf sich selbst) und war für die Gruppe nicht mehr erreichbar.
+
 ## 2.6.0 – 2026-10-14
 
 ### Neu

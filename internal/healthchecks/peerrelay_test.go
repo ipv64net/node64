@@ -27,7 +27,16 @@ func TestPeerRelay(t *testing.T) {
 	states := []RelayState{{Token: cr.Token, State: "down", Since: t0, LastCheck: t0, Status: "down", Reason: "timeout",
 		Sources: []RelaySource{{Source: "loc:fsn", Label: "Falkenstein", State: "down", LastCheck: t0, Status: "down", UpdatedAt: time.Now()}}}}
 	pts := []RelayPoint{{Token: cr.Token, Source: "loc:fsn", Time: t0, Status: 0}, {Token: cr.Token, Source: "node:node-pi", Time: t0, Status: 0}}
-	all := func([]string) bool { return true }
+	// wie im Betrieb fragt overall die Datenbank (Schreibverbindung); haengt das, haengt die Node
+	all := func([]string) bool {
+		qctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		var x int
+		if err := m.st.w.QueryRowContext(qctx, `SELECT 1`).Scan(&x); err != nil {
+			t.Errorf("overall must not wait for the database: %v", err)
+		}
+		return true
+	}
 	for i := 0; i < 2; i++ { // zweimal: keine doppelten Punkte
 		if n, err := m.ApplyPeerRelay(ctx, states, pts, all); err != nil || n != 2 {
 			t.Fatalf("apply relay: %d %v", n, err)

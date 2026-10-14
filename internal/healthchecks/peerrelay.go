@@ -155,6 +155,17 @@ func (m *Module) ApplyPeerRelay(ctx context.Context, states []RelayState, pts []
 		}
 		return c
 	}
+	// vor der Transaktion entscheiden: overall fragt die Gruppe (Datenbank), die Transaktion haelt die einzige
+	// Schreibverbindung – darin aufgerufen, wartete die Node auf sich selbst
+	take := map[string]bool{}
+	for _, r := range states {
+		if c := get(r.Token); c != nil && r.State != "" && !c.MeasuredHere() && (c.Execution == "online" || overall(c.Nodes)) {
+			take[r.Token] = true
+		}
+	}
+	for _, p := range pts {
+		get(p.Token)
+	}
 	tx, err := m.st.w.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -178,7 +189,7 @@ func (m *Module) ApplyPeerRelay(ctx context.Context, states []RelayState, pts []
 				return 0, err
 			}
 		}
-		if r.State == "" || c.MeasuredHere() || (c.Execution != "online" && !overall(c.Nodes)) {
+		if !take[r.Token] {
 			continue
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE hc_checks SET state=?, state_since=?, last_check_at=?, last_status=?, last_latency_ms=?, last_reason=?, last_message=? WHERE token=?`,
