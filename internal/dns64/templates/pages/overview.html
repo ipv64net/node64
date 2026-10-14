@@ -12,7 +12,7 @@
 <ul class="nav nav-tabs mb-3">
 	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
 </ul>
-{{if not $d.Running}}<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.not_running"}}{{if $d.Err}}<div class="small mt-1 font-monospace">{{$d.Err}}</div>{{end}}</div>{{end}}
+{{if not $d.Running}}<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.not_running"}}{{if $d.Err}}<div class="small mt-1 font-monospace">{{$d.Err}}</div><div class="small mt-1">{{.T "dns64.retrying"}}</div>{{end}}</div>{{end}}
 <script type="application/json" id="dns64-data">{{$d.JS}}</script>
 {{if $d.Running}}
 <div class="row g-3 mb-3" data-dns64-page="overview">
@@ -30,7 +30,7 @@
 <div class="row g-3 mb-3">
 	<div class="col-lg-6">
 		<div class="card h-100">
-			<div class="card-header d-flex align-items-center"><span><i class="bi bi-cloud-arrow-up text-info"></i> {{.T "dns64.up.title"}}</span><span class="badge text-bg-light ms-auto">{{.T "dns64.up.parallel"}}</span></div>
+			<div class="card-header d-flex align-items-center"><span><i class="bi bi-cloud-arrow-up text-info"></i> {{.T "dns64.up.title"}}</span><span class="badge text-bg-light ms-auto" id="up-mode"></span></div>
 			<div class="card-body small">
 				<p class="text-body-secondary">{{.T "dns64.up.hint"}}</p>
 				<div id="upstreams" class="d-flex flex-column gap-2"></div>

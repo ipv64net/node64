@@ -1,9 +1,13 @@
 package filter
 
 import (
+	"io"
+	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseLine(t *testing.T) {
@@ -117,7 +121,7 @@ func TestManagerCheck(t *testing.T) {
 		t.Fatalf("got %v %q", blocked, reason)
 	}
 	a.Add("tracker.example.com")
-	if blocked, reason := m.Check("cdn.tracker.example.com"); blocked || !strings.HasPrefix(reason, "Freigegeben") {
+	if blocked, reason := m.Check("cdn.tracker.example.com"); blocked || reason != ReleasedPrefix+"list" {
 		t.Fatalf("released domain: got %v %q", blocked, reason)
 	}
 }
@@ -135,5 +139,24 @@ func BenchmarkMatch(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		m.Match("some.deep.subdomain.of.a.normal-site.de")
+	}
+}
+
+func TestListFilesByURL(t *testing.T) {
+	dir := t.TempDir()
+	// Datei einer alten Version (Index in DefaultLists) wird nach URL umbenannt
+	if err := os.WriteFile(filepath.Join(dir, "list-1.txt"), []byte("||ads.example.com^\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := LoadAllowlist(filepath.Join(dir, "allow.txt"))
+	m, err := NewManager(dir, []List{DefaultLists[1]}, time.Hour, a, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if blocked, list := m.Check("ads.example.com"); !blocked || list != DefaultLists[1].Name {
+		t.Fatalf("migrated list not loaded: %v %q", blocked, list)
+	}
+	if _, err := os.Stat(fileFor(dir, DefaultLists[1].URL)); err != nil {
+		t.Fatal("file not renamed")
 	}
 }

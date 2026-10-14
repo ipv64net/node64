@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ipv64net/node64/internal/dns64/filter"
@@ -42,6 +43,80 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /api/dns64/allowlist", api(m.apiAllowList))
 	mux.Handle("POST /api/dns64/allowlist", api(m.apiAllowAdd))
 	mux.Handle("DELETE /api/dns64/allowlist", api(m.apiAllowRemove))
+	// Einstellungen und eigene Eintraege gehen auch, wenn der DNS-Dienst gerade nicht laeuft
+	plain := func(h http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(h)) }
+	mux.Handle("GET /api/dns64/settings", plain(m.apiSettings))
+	mux.Handle("PUT /api/dns64/settings", plain(m.apiSettingsPut))
+	mux.Handle("GET /api/dns64/records", plain(m.apiRecords))
+	mux.Handle("POST /api/dns64/records", plain(m.apiRecordAdd))
+	mux.Handle("DELETE /api/dns64/records/{id}", plain(m.apiRecordDelete))
+}
+
+func (m *Module) apiSettings(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, m.loadConfig(r.Context()))
+}
+
+// apiSettingsPut uebernimmt die angegebenen Felder (fehlende bleiben) und startet den DNS-Dienst neu.
+func (m *Module) apiSettingsPut(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	c := m.loadConfig(ctx)
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&c); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if err := m.saveConfig(ctx, c); err != nil {
+		writeErr(w, http.StatusBadRequest, m.errText(r, err))
+		return
+	}
+	m.log.Info("settings saved", "via", "api", "by", m.g.Actor(r))
+	if err := m.restart(ctx); err != nil {
+		writeErr(w, http.StatusConflict, m.g.T(r, "dns64.err.restart", "err", err.Error()))
+		return
+	}
+	writeJSON(w, http.StatusOK, m.loadConfig(ctx))
+}
+
+func (m *Module) apiRecords(w http.ResponseWriter, r *http.Request) {
+	list, err := m.Records(r.Context())
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+func (m *Module) apiRecordAdd(w http.ResponseWriter, r *http.Request) {
+	var in Record
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	rec, err := m.AddRecord(r.Context(), in)
+	var ce *cfgError
+	if errors.As(err, &ce) {
+		writeErr(w, http.StatusBadRequest, m.errText(r, err))
+		return
+	}
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	m.log.Info("record added", "name", rec.Name, "type", rec.Type, "value", rec.Value, "via", "api", "by", m.g.Actor(r))
+	writeJSON(w, http.StatusCreated, rec)
+}
+
+func (m *Module) apiRecordDelete(w http.ResponseWriter, r *http.Request) {
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	err := m.DeleteRecord(r.Context(), id)
+	if errors.Is(err, errNotFound) {
+		writeErr(w, http.StatusNotFound, m.errText(r, err))
+		return
+	}
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -175,7 +250,7 @@ func (m *Module) apiLists(w http.ResponseWriter, r *http.Request, e *engine) {
 
 func (m *Module) apiUpstreams(w http.ResponseWriter, r *http.Request, e *engine) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"mode":        "parallel",
+		"mode":        e.up.Mode(),
 		"servers":     e.up.Stats(),
 		"localDNS":    e.local.Addr(),
 		"localSource": e.local.Source(),
@@ -234,11 +309,13 @@ func (m *Module) apiAllowRemove(w http.ResponseWriter, r *http.Request, e *engin
 
 // ---- Export/Import (module.Exporter) ----
 
-var exportSettings = []string{setPort, setBind, setRouter, setRetention}
+var exportSettings = []string{setPort, setBind, setRouter, setRetention, setUpstreams, setUpMode, setLists, setListHours,
+	setBlockMode, setCacheSize, setAnonymize, setAllowNets}
 
 type exportData struct {
 	Settings  map[string]string `json:"settings"`
 	Allowlist []string          `json:"allowlist"`
+	Records   []Record          `json:"records"`
 }
 
 // allowlist liefert die Freigaben: vom laufenden Resolver oder direkt aus der Datei.
@@ -254,7 +331,7 @@ func (m *Module) allowlist() (*filter.Allowlist, error) {
 
 // Export liefert Einstellungen und Freigaben (das Abfrage-Log bleibt lokal).
 func (m *Module) Export(ctx context.Context) (any, error) {
-	out := exportData{Settings: map[string]string{}, Allowlist: []string{}}
+	out := exportData{Settings: map[string]string{}, Allowlist: []string{}, Records: []Record{}}
 	for _, k := range exportSettings {
 		if v, ok, _ := m.core.Setting(ctx, k); ok {
 			out.Settings[k] = v
@@ -266,6 +343,12 @@ func (m *Module) Export(ctx context.Context) (any, error) {
 	}
 	for _, e := range a.List() {
 		out.Allowlist = append(out.Allowlist, e.Domain)
+	}
+	if out.Records, err = m.Records(ctx); err != nil && !m.noTable(err) {
+		return nil, err
+	}
+	if out.Records == nil {
+		out.Records = []Record{}
 	}
 	return out, nil
 }
@@ -291,5 +374,17 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 			n++
 		}
 	}
+	for _, rec := range in.Records { // vorhandene (gleicher Name, Typ, Wert) bleiben
+		if _, err := m.AddRecord(ctx, rec); err == nil {
+			n++
+		} else if m.noTable(err) {
+			break
+		}
+	}
 	return n, m.restart(ctx)
+}
+
+// noTable: das Modul war noch nie an, die Tabelle der eigenen Eintraege fehlt.
+func (m *Module) noTable(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "no such table")
 }

@@ -2861,6 +2861,197 @@
           }
         }
       }
+    },
+    "/dns64/settings": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Einstellungen",
+        "description": "`port`, `bind`, `router`, `retention_days`, `upstream_mode` (parallel|ordered), `upstreams` (name, url, ips, enabled, custom), `lists` (name, url, enabled, custom), `list_hours`, `block_mode` (zero|nxdomain), `cache_size`, `anonymize` (off|mask|hide), `allow_nets`.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Einstellungen aendern",
+        "description": "Nur angegebene Felder aendern sich (die Listen `upstreams`/`lists` werden ganz ersetzt). Danach startet der DNS-Dienst neu. Geht auch, wenn er gerade nicht laeuft.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "upstream_mode": "ordered",
+                "block_mode": "nxdomain",
+                "anonymize": "mask"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Neuer Stand"
+          },
+          "400": {
+            "description": "Ungueltige Einstellung"
+          },
+          "409": {
+            "description": "Gespeichert, aber der DNS-Dienst startet nicht"
+          }
+        }
+      }
+    },
+    "/dns64/records": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigene DNS-Eintraege",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "name": {
+                        "type": "string",
+                        "example": "nas.home.lan"
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "A",
+                          "AAAA",
+                          "CNAME"
+                        ]
+                      },
+                      "value": {
+                        "type": "string",
+                        "example": "192.168.1.10"
+                      },
+                      "ttl": {
+                        "type": "integer",
+                        "default": 300
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigenen Eintrag anlegen",
+        "description": "Gilt sofort. `*.name` = alle Unternamen; ein CNAME steht allein je Name; zu A/AAAA gibt es PTR dazu.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  },
+                  "name": {
+                    "type": "string",
+                    "example": "nas.home.lan"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "A",
+                      "AAAA",
+                      "CNAME"
+                    ]
+                  },
+                  "value": {
+                    "type": "string",
+                    "example": "192.168.1.10"
+                  },
+                  "ttl": {
+                    "type": "integer",
+                    "default": 300
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "created_at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              },
+              "example": {
+                "name": "nas.home.lan",
+                "type": "A",
+                "value": "192.168.1.10",
+                "ttl": 300
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Angelegt"
+          },
+          "400": {
+            "description": "Ungueltig oder doppelt"
+          }
+        }
+      }
+    },
+    "/dns64/records/{id}": {
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigenen Eintrag loeschen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Geloescht"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
     }
   }
 }

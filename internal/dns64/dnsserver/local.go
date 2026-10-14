@@ -61,13 +61,14 @@ var cgnat = netip.MustParsePrefix("100.64.0.0/10") // Tailscale & co.
 // clientACL accepts private/local addresses plus any address in a subnet
 // directly attached to this host (covers public IPv6 prefixes at home).
 type clientACL struct {
+	extra   []netip.Prefix // from the settings
 	mu      sync.RWMutex
 	nets    []netip.Prefix
 	updated time.Time
 }
 
-func newClientACL() *clientACL {
-	a := &clientACL{}
+func newClientACL(extra []netip.Prefix) *clientACL {
+	a := &clientACL{extra: extra}
 	a.refresh()
 	return a
 }
@@ -78,6 +79,11 @@ func (a *clientACL) allowed(ip netip.Addr) bool {
 	}
 	if ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || cgnat.Contains(ip) {
 		return true
+	}
+	for _, p := range a.extra {
+		if p.Contains(ip) {
+			return true
+		}
 	}
 	a.mu.RLock()
 	stale := time.Since(a.updated) > time.Minute

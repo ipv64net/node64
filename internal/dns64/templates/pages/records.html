@@ -1,0 +1,62 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{.T "dns64.title"}}</h1>
+	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "dns64.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "dns64.listening" "addr" $d.Listen}}</span>{{end}}
+	
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+{{if not $d.Running}}<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.not_running"}}{{if $d.Err}}<div class="small mt-1 font-monospace">{{$d.Err}}</div><div class="small mt-1">{{.T "dns64.retrying"}}</div>{{end}}</div>{{end}}
+<script type="application/json" id="dns64-data">{{$d.JS}}</script>
+<div class="row g-3" data-dns64-page="records">
+	<div class="col-xl-4">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-plus-circle text-primary"></i> {{.T "dns64.records.add"}}</div>
+			<div class="card-body">
+				<form method="post" action="/dns64/records">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<label class="form-label" for="r-name">{{.T "common.name"}}</label>
+					<input type="text" class="form-control font-monospace mb-2" id="r-name" name="name" placeholder="nas.home.lan" required maxlength="253">
+					<div class="row g-2 mb-2">
+						<div class="col-4"><label class="form-label" for="r-type">{{.T "common.type"}}</label>
+							<select class="form-select" id="r-type" name="type">{{range $d.Types}}<option>{{.}}</option>{{end}}</select></div>
+						<div class="col-8"><label class="form-label" for="r-value">{{.T "dns64.records.value"}}</label>
+							<input type="text" class="form-control font-monospace" id="r-value" name="value" placeholder="192.168.1.10" required maxlength="253"></div>
+					</div>
+					<label class="form-label" for="r-ttl">TTL</label>
+					<div class="input-group mb-2"><input type="number" class="form-control" id="r-ttl" name="ttl" min="1" max="86400" value="300"><span class="input-group-text">{{.T "common.seconds"}}</span></div>
+					<div class="form-text mb-3">{{.T "dns64.records.hint"}}</div>
+					<button class="btn btn-primary" type="submit"><i class="bi bi-plus"></i> {{.T "dns64.records.add_btn"}}</button>
+				</form>
+			</div>
+		</div>
+	</div>
+	<div class="col-xl-8">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-signpost-split text-primary"></i> {{.T "dns64.records.title"}}</div>
+			{{if $d.Records}}<form method="post">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="table-responsive">
+					<table class="table table-sm table-hover align-middle mb-0 small">
+						<thead><tr><th class="ps-3">{{.T "common.name"}}</th><th>{{.T "common.type"}}</th><th>{{.T "dns64.records.value"}}</th><th class="text-end">TTL</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
+						<tbody>
+						{{range $d.Records}}<tr{{if not .Enabled}} class="text-body-tertiary"{{end}}>
+							<td class="ps-3 font-monospace text-break">{{.Name}}</td><td><span class="badge text-bg-light">{{.Type}}</span></td>
+							<td class="font-monospace text-break">{{.Value}}</td><td class="text-end">{{.TTL}}</td>
+							<td>{{if .Enabled}}<span class="badge text-bg-success">{{$.T "dns64.js.active"}}</span>{{else}}<span class="badge text-bg-secondary">{{$.T "dns64.js.off"}}</span>{{end}}</td>
+							<td class="text-end pe-3 text-nowrap">
+								<button type="submit" class="btn btn-sm btn-outline-secondary py-0" formaction="/dns64/records/{{.ID}}/toggle" name="on" value="{{if .Enabled}}0{{else}}1{{end}}" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause{{else}}bi-play{{end}}"></i></button>
+								<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/records/{{.ID}}/delete" data-confirm="{{$.T "dns64.records.delete_confirm" "name" .Name}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button>
+							</td>
+						</tr>{{end}}
+						</tbody>
+					</table>
+				</div>
+			</form>{{else}}<div class="card-body small text-body-secondary">{{.T "dns64.records.none"}}</div>{{end}}
+		</div>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/dns64.js?v={{.Version}}"></script>{{end}}

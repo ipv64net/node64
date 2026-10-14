@@ -22,9 +22,10 @@ const (
 	StatusBlocked               // blocked by a list
 	StatusLocal                 // local name, answered by router or NXDOMAIN
 	StatusError                 // upstream failed
+	StatusCustom                // own DNS record (settings)
 )
 
-var statusNames = [...]string{"allowed", "cached", "blocked", "local", "error"}
+var statusNames = [...]string{"allowed", "cached", "blocked", "local", "error", "custom"}
 
 func (s Status) String() string {
 	if int(s) < len(statusNames) {
@@ -285,7 +286,7 @@ func (s *Store) Top(ctx context.Context, kind string, since time.Time, limit int
 		     WHERE ts >= ? AND status = 2 GROUP BY domain ORDER BY c DESC LIMIT ?`
 	case "allowed":
 		q = `SELECT domain, COUNT(*) AS c, 0 FROM queries
-		     WHERE ts >= ? AND status IN (0, 1, 3) GROUP BY domain ORDER BY c DESC LIMIT ?`
+		     WHERE ts >= ? AND status IN (0, 1, 3, 5) GROUP BY domain ORDER BY c DESC LIMIT ?`
 	case "clients":
 		q = `SELECT client, COUNT(*) AS c, COALESCE(SUM(status = 2), 0) FROM queries
 		     WHERE ts >= ? GROUP BY client ORDER BY c DESC LIMIT ?`

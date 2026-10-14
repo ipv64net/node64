@@ -8,7 +8,7 @@ package dns64
 
 import (
 	"context"
-	_ "embed"
+	"embed"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ipv64net/node64/internal/dns64/cache"
@@ -37,9 +38,12 @@ import (
 //go:embed CHANGELOG.md
 var changelog string
 
+//go:embed migrations/*.sql
+var migrationFS embed.FS
+
 const (
 	Name      = "dns64"
-	version   = "1.0.0"
+	version   = "1.1.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -62,6 +66,8 @@ type Module struct {
 	retryWG sync.WaitGroup
 	eng     *engine // nil = DNS-Dienst laeuft nicht
 	lastErr string  // letzter Fehler beim Start (z. B. Port belegt)
+
+	recs atomic.Pointer[recordTable] // eigene DNS-Eintraege (records.go)
 }
 
 const retryEvery = time.Minute
@@ -90,8 +96,14 @@ func (m *Module) Info() module.Info {
 		Version: version, Changelog: changelog}
 }
 
-// Migrations: das Modul hat keine Tabellen in node64.db (Abfrage-Log in eigener Datei, Einstellungen im Kern).
-func (m *Module) Migrations() []store.Migration { return nil }
+// Migrations: eigene DNS-Eintraege in node64.db (Abfrage-Log in eigener Datei, Einstellungen im Kern).
+func (m *Module) Migrations() []store.Migration {
+	ms, err := store.ReadMigrations(migrationFS, "migrations")
+	if err != nil {
+		panic(err)
+	}
+	return ms
+}
 
 func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	m.uiRoutes(mux, g)
@@ -198,8 +210,12 @@ func (m *Module) start(ctx context.Context) error {
 	if err := os.MkdirAll(m.dir(), 0o750); err != nil {
 		return err
 	}
+	if err := m.loadRecords(ctx); err != nil {
+		return fmt.Errorf("load records: %w", err)
+	}
+	cfg := m.loadConfig(ctx)
 	e := &engine{addr: m.listenAddr(ctx), started: time.Now()}
-	st, err := querylog.Open(filepath.Join(m.dir(), "dns64.db"), time.Duration(m.retention(ctx))*24*time.Hour, m.log)
+	st, err := querylog.Open(filepath.Join(m.dir(), "dns64.db"), time.Duration(cfg.Retention)*24*time.Hour, m.log)
 	if err != nil {
 		return fmt.Errorf("open query log: %w", err)
 	}
@@ -209,14 +225,16 @@ func (m *Module) start(ctx context.Context) error {
 		st.CloseNow()
 		return fmt.Errorf("load allowlist: %w", err)
 	}
-	if e.lists, err = filter.NewManager(filepath.Join(m.dir(), "lists"), allow, listClient(m.selfAddr(ctx)), m.log); err != nil {
+	lists := filepath.Join(m.dir(), "lists")
+	if e.lists, err = filter.NewManager(lists, cfg.activeLists(), time.Duration(cfg.ListHours)*time.Hour, allow, listClient(m.selfAddr(ctx)), m.log); err != nil {
 		st.CloseNow()
 		return err
 	}
-	e.cache = cache.New(cacheSize)
-	e.up = upstream.New(upstream.DefaultServers)
+	e.cache = cache.New(cfg.CacheSize)
+	e.up = upstream.New(cfg.activeUpstreams(), cfg.UpMode)
 	e.local = localnet.New(m.routerAddr(ctx), m.log)
-	e.srv = &dnsserver.Server{Addr: e.addr, Local: e.local, Filter: e.lists, Upstream: e.up, Cache: e.cache, Log: st, Logger: m.log}
+	e.srv = &dnsserver.Server{Addr: e.addr, Local: e.local, Filter: e.lists, Upstream: e.up, Cache: e.cache, Log: st, Logger: m.log,
+		Records: m, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer()}
 	if err := e.srv.Start(); err != nil {
 		st.CloseNow()
 		e.up.Close()

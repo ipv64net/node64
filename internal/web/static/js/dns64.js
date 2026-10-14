@@ -1,6 +1,12 @@
 // DNS64: Seiten Uebersicht, Abfrage-Log, Freigaben & Blocklisten. Daten ueber /api/dns64/*.
 (function () {
 	"use strict";
+	// Rueckfrage vor Loeschen/Entfernen (Buttons mit data-confirm, auch in Formularen mit formaction)
+	document.querySelectorAll("[data-confirm]").forEach(function (b) {
+		b.addEventListener("click", function (e) {
+			if (!window.confirm(b.getAttribute("data-confirm"))) { e.preventDefault(); }
+		});
+	});
 	var dataEl = document.getElementById("dns64-data");
 	var page = document.querySelector("[data-dns64-page]");
 	if (!dataEl || !page) { return; }
@@ -68,7 +74,7 @@
 	}
 
 	function badge(status) {
-		var cls = { allowed: "text-bg-success", blocked: "text-bg-danger", cached: "text-bg-info", local: "text-bg-secondary", error: "text-bg-warning" }[status] || "text-bg-light";
+		var cls = { allowed: "text-bg-success", blocked: "text-bg-danger", cached: "text-bg-info", local: "text-bg-secondary", error: "text-bg-warning", custom: "text-bg-primary" }[status] || "text-bg-light";
 		return el("span", { "class": "badge " + cls }, t("status." + status));
 	}
 
@@ -140,6 +146,7 @@
 		return api("upstreams").then(function (d) {
 			var box = $("upstreams");
 			box.replaceChildren();
+			$("up-mode").textContent = t("mode_" + d.mode);
 			var wins = d.servers.reduce(function (a, s) { return a + s.wins; }, 0);
 			var avgs = d.servers.map(function (s) { return s.avgMs; }).filter(Boolean);
 			upstreamAvgMs = avgs.length ? Math.min.apply(null, avgs) : 0;
@@ -322,6 +329,8 @@
 				var domain = el("td", { "class": "font-monospace text-break", role: "button", title: r.domain }, r.domain);
 				domain.addEventListener("click", function () { searchFor(r.domain); });
 				var details = r.reason || "";
+				if (details === "stale") { details = t("reason_stale"); }
+				else if (details.indexOf("released:") === 0) { details = t("reason_released", { list: details.slice(9) }); }
 				if (!details && r.upstream) { details = t("via", { name: r.upstream }); }
 				if (r.rcode && r.rcode !== "NOERROR") { details = (details ? details + " · " : "") + r.rcode; }
 				var st = el("td");
@@ -348,21 +357,20 @@
 
 	// ---------- Blocklisten ----------
 
+	// loadLists traegt Domains, Stand und Status in die Zeilen der Listen-Tabelle ein (Zeile per data-url)
 	function loadLists() {
 		return api("lists").then(function (lists) {
-			var tb = $("lists-body");
-			tb.replaceChildren();
 			lists.forEach(function (l) {
-				var tr = el("tr");
-				var name = el("td");
-				name.append(el("a", { href: l.url, target: "_blank", rel: "noopener noreferrer" }, l.name));
+				var tr = Array.prototype.find.call(document.querySelectorAll("tr[data-url]"), function (x) { return x.getAttribute("data-url") === l.url; });
+				if (!tr) { return; }
 				var loaded = l.updatedAt && l.updatedAt.indexOf("0001") !== 0;
-				var status = el("td");
+				tr.querySelector(".l-rules").textContent = nf.format(l.rules);
+				tr.querySelector(".l-updated").textContent = loaded ? ago(new Date(l.updatedAt)) : "–";
+				var status = tr.querySelector(".l-status");
+				status.replaceChildren();
 				if (l.error) { status.append(el("span", { "class": "badge text-bg-danger text-wrap", title: l.error }, t("error") + ": " + l.error)); }
 				else if (loaded) { status.append(el("span", { "class": "badge text-bg-success" }, t("active"))); }
 				else { status.append(el("span", { "class": "badge text-bg-secondary" }, t("loading"))); }
-				tr.append(name, el("td", { "class": "text-end" }, nf.format(l.rules)), el("td", { "class": "text-nowrap" }, loaded ? ago(new Date(l.updatedAt)) : "–"), status);
-				tb.append(tr);
 			});
 		});
 	}
@@ -423,7 +431,7 @@
 		every(3000, function () { return state.live && state.page === 0 ? loadLog() : Promise.resolve(); });
 	}
 
-	if (kind === "lists") {
+	if (kind === "lists" && $("allow-form")) {
 		$("allow-form").addEventListener("submit", function (e) {
 			e.preventDefault();
 			var v = $("allow-input").value.trim().toLowerCase();

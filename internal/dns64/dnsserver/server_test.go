@@ -57,3 +57,18 @@ func TestBlockedMsg(t *testing.T) {
 		}
 	}
 }
+
+func TestBlockModeAndExtraNets(t *testing.T) {
+	req := new(dns.Msg)
+	req.SetQuestion("ads.example.com.", dns.TypeA)
+	if resp := (&Server{BlockNX: true}).blockedMsg(req); resp.Rcode != dns.RcodeNameError || len(resp.Answer) != 0 {
+		t.Fatalf("nxdomain mode: rcode %d, %d answers", resp.Rcode, len(resp.Answer))
+	}
+	if resp := (&Server{}).blockedMsg(req); resp.Rcode != dns.RcodeSuccess || len(resp.Answer) != 1 {
+		t.Fatal("zero mode must answer 0.0.0.0")
+	}
+	a := newClientACL([]netip.Prefix{netip.MustParsePrefix("2001:db8:1::/48")})
+	if !a.allowed(netip.MustParseAddr("2001:db8:1::5")) || a.allowed(netip.MustParseAddr("2001:db8:2::5")) {
+		t.Fatal("extra networks not applied")
+	}
+}

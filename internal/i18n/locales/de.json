@@ -1208,10 +1208,11 @@
       "overview": "Übersicht",
       "log": "Abfrage-Log",
       "lists": "Freigaben & Blocklisten",
-      "settings": "Einstellungen"
+      "settings": "Einstellungen",
+      "records": "Eigene Einträge"
     },
     "log": {
-      "title": "DNS64 · Abfrage-Log",
+      "title": "Abfrage-Log",
       "search": "Domain oder IP suchen",
       "live": "Live",
       "client": "Client",
@@ -1220,14 +1221,23 @@
     },
     "lists": {
       "title": "Blocklisten",
-      "hint": "Werden automatisch alle 24 Stunden aktualisiert. „Domains“ zählt nur Einträge, die nicht schon in einer Liste davor stehen.",
+      "hint": "Haken setzen und übernehmen; der DNS-Dienst lädt die Listen dann neu. „Domains“ zählt nur Einträge, die nicht schon in einer Liste davor stehen.",
       "list": "Liste",
       "domains": "Domains",
-      "updated": "Stand"
+      "updated": "Stand",
+      "on": "An",
+      "interval": "Aktualisierung",
+      "every": "alle {n} Std.",
+      "apply": "Übernehmen",
+      "remove_confirm": "Liste „{name}“ entfernen?",
+      "add": "Eigene Blockliste",
+      "add_btn": "Hinzufügen",
+      "add_hint": "Formate: hosts-Datei, eine Domain je Zeile oder Adblock-Syntax (||domain^, Ausnahmen @@||domain^)."
     },
     "allow": {
       "title": "Freigegebene Domains",
-      "hint": "Werden nie blockiert, inklusive aller Subdomains."
+      "hint": "Werden nie blockiert, inklusive aller Subdomains.",
+      "not_running": "Freigaben lassen sich bearbeiten, sobald der DNS-Dienst läuft."
     },
     "kpi": {
       "total": "Anfragen",
@@ -1244,8 +1254,7 @@
     },
     "up": {
       "title": "Upstream-Server",
-      "parallel": "Parallel",
-      "hint": "Jede Anfrage geht gleichzeitig verschlüsselt (DNS-over-HTTPS) an alle Server, die schnellste gültige Antwort gewinnt."
+      "hint": "Anfragen ins Internet gehen verschlüsselt per DNS-over-HTTPS an die eingestellten Server. „Schnellster bei“ zeigt, wie oft ein Server zuerst geantwortet hat."
     },
     "cache": {
       "title": "DNS-Cache",
@@ -1265,7 +1274,7 @@
       "clients": "Top Clients"
     },
     "settings": {
-      "title": "DNS64 · Einstellungen",
+      "title": "Einstellungen",
       "port": "DNS-Port",
       "bind": "Adresse",
       "bind_all": "alle Adressen",
@@ -1277,17 +1286,32 @@
       "router_hint": "Namen wie fritz.box, .lan oder einzelne Hostnamen gehen nur an diesen DNS-Server, nie ins Internet. IP oder IP:Port.",
       "retention": "Abfrage-Log",
       "days": "Tage",
-      "err_port": "Der Port muss zwischen 1 und 65535 liegen.",
-      "err_bind": "Die Adresse muss eine IP sein (leer = alle).",
-      "err_router": "Der Router muss als IP oder IP:Port angegeben werden.",
-      "err_retention": "Das Abfrage-Log hält 1 bis 90 Tage.",
-      "err_restart": "Gespeichert, aber der DNS-Dienst startet nicht: {err}"
+      "general": "Allgemein",
+      "block_mode": "Antwort bei Blockierung",
+      "block_mode_zero": "0.0.0.0 / :: (empfohlen)",
+      "block_mode_nxdomain": "NXDOMAIN (Name gibt es nicht)",
+      "cache_size": "DNS-Cache",
+      "entries": "Einträge",
+      "anonymize": "Client-Adressen im Log",
+      "anonymize_off": "vollständig",
+      "anonymize_mask": "gekürzt (IPv4 /24, IPv6 /48)",
+      "anonymize_hide": "nicht speichern",
+      "anonymize_hint": "Gekürzt oder nicht gespeichert gilt für neue Einträge; Gerätenamen und Top-Clients gibt es dann nur eingeschränkt bzw. gar nicht.",
+      "allow_nets": "Weitere erlaubte Client-Netze",
+      "allow_nets_hint": "Private Netze, Tailscale (100.64.0.0/10) und direkt angeschlossene Netze sind immer erlaubt. Hier z. B. ein öffentliches IPv6-Präfix oder VPN-Netze, eins je Zeile.",
+      "up_hint": "Anfragen ins Internet gehen verschlüsselt per DNS-over-HTTPS an die angehakten Server.",
+      "up_ips": "Bootstrap-IPs",
+      "up_remove_confirm": "Server „{name}“ entfernen?",
+      "up_mode": "Betriebsart",
+      "up_add": "Eigener DoH-Server",
+      "up_ips_ph": "Bootstrap-IPs, z. B. 9.9.9.9, 149.112.112.112",
+      "up_add_hint": "URL mit https://. Die Bootstrap-IPs braucht DNS64, um den Server ohne DNS zu erreichen (Pflicht, wenn in der URL ein Name steht)."
     },
     "setup": {
       "title": "Einrichtung",
       "router": "Tragen Sie im Router (DHCP) die IP dieses Hosts als DNS-Server ein. Dann fragen alle Geräte im Heimnetz automatisch über DNS64.",
       "docker": "Im Container braucht DNS64 das Host-Netzwerk (network_mode: host). So sieht es die echten IPs der Geräte und findet den Router selbst.",
-      "later": "Weitere Einstellungen (Upstreams, Blocklisten, eigene Einträge, DNS-over-TLS/QUIC) folgen."
+      "later": "DNS-over-TLS und DNS-over-QUIC sowie verschlüsselte Anfragen der Geräte (DoH/DoT) folgen."
     },
     "js": {
       "status": {
@@ -1295,7 +1319,8 @@
         "blocked": "Blockiert",
         "cached": "Cache",
         "local": "Lokal",
-        "error": "Fehler"
+        "error": "Fehler",
+        "custom": "Eigener Eintrag"
       },
       "released": "freigegeben",
       "release": "Freigeben",
@@ -1346,7 +1371,50 @@
       "uptime": "Läuft seit {d}",
       "allowed": "Erlaubt",
       "blocked": "Blockiert",
-      "no_conn": "Keine Verbindung zum Server"
+      "no_conn": "Keine Verbindung zum Server",
+      "reason_stale": "abgelaufen, wird im Hintergrund erneuert",
+      "reason_released": "freigegeben (sonst: {list})",
+      "mode_parallel": "Parallel (schnellste Antwort)",
+      "mode_ordered": "Der Reihe nach (Ausweichen bei Fehler)",
+      "off": "aus"
+    },
+    "retrying": "Neuer Versuch jede Minute; Port oder Adresse lassen sich unter Einstellungen ändern.",
+    "custom": "eigene",
+    "records": {
+      "title": "Eigene DNS-Einträge",
+      "add": "Eintrag hinzufügen",
+      "value": "Wert",
+      "add_btn": "Hinzufügen",
+      "hint": "A = IPv4, AAAA = IPv6, CNAME = anderer Name. *.home.lan gilt für alle Namen darunter. Zu A/AAAA beantwortet DNS64 auch die Rückwärtssuche (PTR). Eigene Einträge gehen vor Blocklisten und nie ins Internet.",
+      "none": "Noch keine eigenen Einträge.",
+      "delete_confirm": "Eintrag „{name}“ löschen?",
+      "added": "Eintrag angelegt, gilt sofort.",
+      "deleted": "Eintrag gelöscht."
+    },
+    "err": {
+      "port": "Der Port muss zwischen 1 und 65535 liegen.",
+      "bind": "Die Adresse muss eine IP sein (leer = alle).",
+      "router": "Der Router muss als IP oder IP:Port angegeben werden.",
+      "retention": "Das Abfrage-Log hält 1 bis 90 Tage.",
+      "cache": "Der Cache hat 1.000 bis 200.000 Einträge.",
+      "hours": "Die Aktualisierung liegt zwischen 1 und 168 Stunden.",
+      "net": "„{net}“ ist kein Netz (z. B. 2001:db8::/48 oder 10.8.0.0/24).",
+      "no_upstream": "Mindestens ein Upstream-Server muss an sein.",
+      "up_url": "„{url}“ ist keine DoH-URL mit https://.",
+      "up_ip": "„{ip}“ ist keine IP-Adresse.",
+      "up_ips": "Für „{name}“ fehlen die Bootstrap-IPs.",
+      "list_url": "„{url}“ ist keine gültige Listen-URL.",
+      "list_dup": "Diese Liste gibt es schon.",
+      "restart": "Gespeichert, aber der DNS-Dienst startet nicht: {err}",
+      "not_found": "Nicht gefunden.",
+      "ttl": "Die TTL liegt zwischen 1 und 86.400 Sekunden.",
+      "name": "Ungültiger Name.",
+      "ip_a": "Für A wird eine IPv4-Adresse gebraucht.",
+      "ip_aaaa": "Für AAAA wird eine IPv6-Adresse gebraucht.",
+      "target": "Ungültiger Zielname.",
+      "type": "Unbekannter Typ.",
+      "dup": "Diesen Eintrag gibt es schon.",
+      "cname": "Ein CNAME steht allein: kein weiterer Eintrag für denselben Namen."
     }
   }
 }

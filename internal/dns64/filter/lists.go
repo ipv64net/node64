@@ -2,6 +2,8 @@ package filter
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log/slog"
@@ -20,6 +22,7 @@ type List struct {
 }
 
 // DefaultLists is the "balanced" preset: good coverage with few false positives.
+// The order matters for old installations (list-<index>.txt, see migrateFiles).
 var DefaultLists = []List{
 	{"StevenBlack Unified", "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"},
 	{"AdGuard DNS Filter", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt"},
@@ -29,9 +32,16 @@ var DefaultLists = []List{
 	{"URLhaus Malware", "https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-agh.txt"},
 }
 
+// MoreLists are offered in the settings but off by default.
+var MoreLists = []List{
+	{"OISD Big", "https://big.oisd.nl/"},
+	{"HaGeZi Pro", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt"},
+	{"HaGeZi Threat Intelligence", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.txt"},
+}
+
 const (
-	updateInterval = 24 * time.Hour
-	maxListSize    = 64 << 20
+	defaultInterval = 24 * time.Hour
+	maxListSize     = 64 << 20
 )
 
 type ListStatus struct {
@@ -44,11 +54,12 @@ type ListStatus struct {
 // Manager downloads the blocklists, keeps them cached on disk and publishes
 // a fresh Matcher after every update without interrupting DNS traffic.
 type Manager struct {
-	dir    string
-	lists  []List
-	client *http.Client
-	log    *slog.Logger
-	Allow  *Allowlist
+	dir      string
+	lists    []List
+	interval time.Duration
+	client   *http.Client
+	log      *slog.Logger
+	Allow    *Allowlist
 
 	cur       atomic.Pointer[Matcher]
 	rebuildMu sync.Mutex // one rebuild at a time; parallel downloads trigger it
@@ -58,11 +69,20 @@ type Manager struct {
 	updated time.Time
 }
 
-func NewManager(dir string, allow *Allowlist, client *http.Client, log *slog.Logger) (*Manager, error) {
+// NewManager loads the given lists (nil = DefaultLists) from disk; Run keeps them fresh every interval
+// (0 = 24 h).
+func NewManager(dir string, lists []List, interval time.Duration, allow *Allowlist, client *http.Client, log *slog.Logger) (*Manager, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	m := &Manager{dir: dir, lists: DefaultLists, client: client, log: log, Allow: allow}
+	if lists == nil {
+		lists = DefaultLists
+	}
+	if interval <= 0 {
+		interval = defaultInterval
+	}
+	m := &Manager{dir: dir, lists: lists, interval: interval, client: client, log: log, Allow: allow}
+	m.migrateFiles()
 	m.status = make([]ListStatus, len(m.lists))
 	for i, l := range m.lists {
 		m.status[i].List = l
@@ -72,6 +92,9 @@ func NewManager(dir string, allow *Allowlist, client *http.Client, log *slog.Log
 	return m, nil
 }
 
+// ReleasedPrefix marks the reason of a released domain that a list would block ("released:<list>").
+const ReleasedPrefix = "released:"
+
 func (m *Manager) Matcher() *Matcher { return m.cur.Load() }
 
 // Check decides whether name is blocked. reason names the blocking list, or
@@ -79,7 +102,7 @@ func (m *Manager) Matcher() *Matcher { return m.cur.Load() }
 func (m *Manager) Check(name string) (blocked bool, reason string) {
 	blocked, list := m.cur.Load().Match(name)
 	if blocked && m.Allow.Contains(name) {
-		return false, "Freigegeben (sonst: " + list + ")"
+		return false, ReleasedPrefix + list // UI: "freigegeben (sonst: <list>)"
 	}
 	return blocked, list
 }
@@ -90,7 +113,7 @@ func (m *Manager) Status() ([]ListStatus, time.Time) {
 	return append([]ListStatus(nil), m.status...), m.updated
 }
 
-// Run refreshes stale lists immediately and then once per updateInterval.
+// Run refreshes stale lists immediately and then once per interval.
 func (m *Manager) Run(ctx context.Context) {
 	wait := 2 * time.Second // let the DNS listener come up; downloads resolve through it
 	for {
@@ -107,7 +130,27 @@ func (m *Manager) Run(ctx context.Context) {
 	}
 }
 
-func (m *Manager) path(i int) string { return filepath.Join(m.dir, fmt.Sprintf("list-%d.txt", i)) }
+// path is the cache file of list i, named after its URL so lists can be added, removed and reordered.
+func (m *Manager) path(i int) string { return fileFor(m.dir, m.lists[i].URL) }
+
+func fileFor(dir, url string) string {
+	h := sha256.Sum256([]byte(url))
+	return filepath.Join(dir, "list-"+hex.EncodeToString(h[:6])+".txt")
+}
+
+// migrateFiles renames cache files of older versions (list-<index of DefaultLists>.txt).
+func (m *Manager) migrateFiles() {
+	for i, l := range DefaultLists {
+		old := filepath.Join(m.dir, fmt.Sprintf("list-%d.txt", i))
+		if _, err := os.Stat(old); err != nil {
+			continue
+		}
+		if _, err := os.Stat(fileFor(m.dir, l.URL)); err == nil {
+			continue
+		}
+		_ = os.Rename(old, fileFor(m.dir, l.URL))
+	}
+}
 
 // refresh downloads stale lists in parallel and reports whether any download
 // failed. Each list goes live as soon as it arrives, so one slow server does
@@ -115,7 +158,7 @@ func (m *Manager) path(i int) string { return filepath.Join(m.dir, fmt.Sprintf("
 func (m *Manager) refresh(ctx context.Context) (failed bool) {
 	var wg sync.WaitGroup
 	for i, l := range m.lists {
-		if fi, err := os.Stat(m.path(i)); err == nil && time.Since(fi.ModTime()) < updateInterval {
+		if fi, err := os.Stat(m.path(i)); err == nil && time.Since(fi.ModTime()) < m.interval {
 			continue
 		}
 		wg.Add(1)
@@ -147,7 +190,7 @@ func (m *Manager) download(ctx context.Context, url, dst string) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "dns64/1.0")
+	req.Header.Set("User-Agent", "Node64-DNS64/1.0")
 	resp, err := m.client.Do(req)
 	if err != nil {
 		return err

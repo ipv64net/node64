@@ -1208,10 +1208,11 @@
       "overview": "Overview",
       "log": "Query log",
       "lists": "Allowlist & blocklists",
-      "settings": "Settings"
+      "settings": "Settings",
+      "records": "Custom records"
     },
     "log": {
-      "title": "DNS64 · Query log",
+      "title": "Query log",
       "search": "Search domain or IP",
       "live": "Live",
       "client": "Client",
@@ -1220,14 +1221,23 @@
     },
     "lists": {
       "title": "Blocklists",
-      "hint": "Updated automatically every 24 hours. “Domains” only counts entries not already in a list above.",
+      "hint": "Tick and apply; the DNS service then reloads the lists. “Domains” only counts entries not already in a list above.",
       "list": "List",
       "domains": "Domains",
-      "updated": "Updated"
+      "updated": "Updated",
+      "on": "On",
+      "interval": "Update",
+      "every": "every {n} h",
+      "apply": "Apply",
+      "remove_confirm": "Remove list “{name}”?",
+      "add": "Custom blocklist",
+      "add_btn": "Add",
+      "add_hint": "Formats: hosts file, one domain per line or Adblock syntax (||domain^, exceptions @@||domain^)."
     },
     "allow": {
       "title": "Allowed domains",
-      "hint": "Never blocked, including all subdomains."
+      "hint": "Never blocked, including all subdomains.",
+      "not_running": "The allowlist can be edited once the DNS service is running."
     },
     "kpi": {
       "total": "Queries",
@@ -1244,8 +1254,7 @@
     },
     "up": {
       "title": "Upstream servers",
-      "parallel": "Parallel",
-      "hint": "Every query goes encrypted (DNS-over-HTTPS) to all servers at once; the fastest valid answer wins."
+      "hint": "Queries to the internet go encrypted via DNS-over-HTTPS to the configured servers. “Fastest in” shows how often a server answered first."
     },
     "cache": {
       "title": "DNS cache",
@@ -1265,7 +1274,7 @@
       "clients": "Top clients"
     },
     "settings": {
-      "title": "DNS64 · Settings",
+      "title": "Settings",
       "port": "DNS port",
       "bind": "Address",
       "bind_all": "all addresses",
@@ -1277,17 +1286,32 @@
       "router_hint": "Names like fritz.box, .lan or single host names only go to this DNS server, never to the internet. IP or IP:port.",
       "retention": "Query log",
       "days": "days",
-      "err_port": "The port must be between 1 and 65535.",
-      "err_bind": "The address must be an IP (empty = all).",
-      "err_router": "Enter the router as IP or IP:port.",
-      "err_retention": "The query log keeps 1 to 90 days.",
-      "err_restart": "Saved, but the DNS service does not start: {err}"
+      "general": "General",
+      "block_mode": "Answer when blocked",
+      "block_mode_zero": "0.0.0.0 / :: (recommended)",
+      "block_mode_nxdomain": "NXDOMAIN (name does not exist)",
+      "cache_size": "DNS cache",
+      "entries": "entries",
+      "anonymize": "Client addresses in the log",
+      "anonymize_off": "full",
+      "anonymize_mask": "shortened (IPv4 /24, IPv6 /48)",
+      "anonymize_hide": "do not store",
+      "anonymize_hint": "Shortened or not stored applies to new entries; device names and top clients are then limited or unavailable.",
+      "allow_nets": "Further allowed client networks",
+      "allow_nets_hint": "Private networks, Tailscale (100.64.0.0/10) and directly attached networks are always allowed. Add e.g. a public IPv6 prefix or VPN networks here, one per line.",
+      "up_hint": "Queries to the internet go encrypted via DNS-over-HTTPS to the ticked servers.",
+      "up_ips": "Bootstrap IPs",
+      "up_remove_confirm": "Remove server “{name}”?",
+      "up_mode": "Mode",
+      "up_add": "Custom DoH server",
+      "up_ips_ph": "Bootstrap IPs, e.g. 9.9.9.9, 149.112.112.112",
+      "up_add_hint": "URL with https://. DNS64 needs the bootstrap IPs to reach the server without DNS (required when the URL contains a name)."
     },
     "setup": {
       "title": "Setup",
       "router": "Enter this host's IP as DNS server in your router (DHCP). Then all devices on your network use DNS64 automatically.",
       "docker": "In a container DNS64 needs host networking (network_mode: host), so it sees the real device IPs and finds the router by itself.",
-      "later": "More settings (upstreams, blocklists, custom records, DNS-over-TLS/QUIC) will follow."
+      "later": "DNS-over-TLS and DNS-over-QUIC as well as encrypted queries from devices (DoH/DoT) will follow."
     },
     "js": {
       "status": {
@@ -1295,7 +1319,8 @@
         "blocked": "Blocked",
         "cached": "Cache",
         "local": "Local",
-        "error": "Error"
+        "error": "Error",
+        "custom": "Custom record"
       },
       "released": "allowed",
       "release": "Allow",
@@ -1346,7 +1371,50 @@
       "uptime": "Running for {d}",
       "allowed": "Allowed",
       "blocked": "Blocked",
-      "no_conn": "No connection to the server"
+      "no_conn": "No connection to the server",
+      "reason_stale": "expired, refreshed in the background",
+      "reason_released": "allowed (otherwise: {list})",
+      "mode_parallel": "Parallel (fastest answer)",
+      "mode_ordered": "In order (fallback on error)",
+      "off": "off"
+    },
+    "retrying": "Retrying every minute; port or address can be changed in the settings.",
+    "custom": "custom",
+    "records": {
+      "title": "Custom DNS records",
+      "add": "Add record",
+      "value": "Value",
+      "add_btn": "Add",
+      "hint": "A = IPv4, AAAA = IPv6, CNAME = other name. *.home.lan covers all names below. For A/AAAA DNS64 also answers reverse lookups (PTR). Custom records win over blocklists and never go to the internet.",
+      "none": "No custom records yet.",
+      "delete_confirm": "Delete record “{name}”?",
+      "added": "Record added, active immediately.",
+      "deleted": "Record deleted."
+    },
+    "err": {
+      "port": "The port must be between 1 and 65535.",
+      "bind": "The address must be an IP (empty = all).",
+      "router": "Enter the router as IP or IP:port.",
+      "retention": "The query log keeps 1 to 90 days.",
+      "cache": "The cache holds 1,000 to 200,000 entries.",
+      "hours": "The update interval is 1 to 168 hours.",
+      "net": "“{net}” is not a network (e.g. 2001:db8::/48 or 10.8.0.0/24).",
+      "no_upstream": "At least one upstream server must be on.",
+      "up_url": "“{url}” is not a DoH URL with https://.",
+      "up_ip": "“{ip}” is not an IP address.",
+      "up_ips": "Bootstrap IPs are missing for “{name}”.",
+      "list_url": "“{url}” is not a valid list URL.",
+      "list_dup": "This list already exists.",
+      "restart": "Saved, but the DNS service does not start: {err}",
+      "not_found": "Not found.",
+      "ttl": "The TTL is between 1 and 86,400 seconds.",
+      "name": "Invalid name.",
+      "ip_a": "A needs an IPv4 address.",
+      "ip_aaaa": "AAAA needs an IPv6 address.",
+      "target": "Invalid target name.",
+      "type": "Unknown type.",
+      "dup": "This record already exists.",
+      "cname": "A CNAME stands alone: no other record for the same name."
     }
   }
 }

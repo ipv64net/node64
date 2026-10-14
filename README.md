@@ -143,11 +143,13 @@ Das Modul *DNS64* (in den Einstellungen einschalten) ist ein cachender DNS-Serve
   ```
 
   Ist Port 53 auf dem Host schon belegt (z. B. `systemd-resolved` mit `DNSStubListener=yes`), meldet die Seite den Fehler, das Modul versucht es jede Minute erneut, und der Port lässt sich ändern.
-- **Blocklisten:** StevenBlack, AdGuard DNS, OISD Small, HaGeZi Multi, EasyPrivacy, URLhaus, alle 24 Stunden aktualisiert; Tracker hinter CNAMEs werden erkannt. Blockiert wird mit `0.0.0.0` bzw. `::`. Freigaben gelten für die Domain samt Subdomains und gehen per Klick im Abfrage-Log.
-- **Upstream:** verschlüsselt per DNS-over-HTTPS an Cloudflare und Quad9 parallel, die schnellste gültige Antwort gewinnt. Optimistischer Cache mit 20.000 Einträgen.
+- **Blocklisten:** Standard sind StevenBlack, AdGuard DNS, OISD Small, HaGeZi Multi, EasyPrivacy und URLhaus; dazu wählbar OISD Big, HaGeZi Pro, HaGeZi Threat Intelligence und eigene Listen (hosts, Domain je Zeile, Adblock-Syntax). Aktualisierung alle 6–48 Stunden. Tracker hinter CNAMEs werden erkannt. Blockiert wird mit `0.0.0.0` bzw. `::` oder wahlweise NXDOMAIN. Freigaben gelten für die Domain samt Subdomains und gehen per Klick im Abfrage-Log.
+- **Upstream:** verschlüsselt per DNS-over-HTTPS, wählbar Cloudflare, Quad9, Google, AdGuard, Mullvad oder eigene DoH-Server (mit Bootstrap-IPs, damit DNS64 sie ohne DNS erreicht). Parallel (schnellste gültige Antwort gewinnt) oder der Reihe nach. Optimistischer Cache, Größe einstellbar (Standard 20.000).
+- **Eigene Einträge:** A, AAAA und CNAME, auch Wildcards (`*.home.lan`); zu A/AAAA gibt es die Rückwärtssuche (PTR) dazu. Sie gelten sofort, kommen vor den Blocklisten und gehen nie ins Internet.
+- **Datenschutz:** Client-Adressen im Abfrage-Log vollständig, gekürzt (IPv4 /24, IPv6 /48) oder gar nicht speichern. Weitere Client-Netze (z. B. ein öffentliches IPv6-Präfix) lassen sich erlauben, offen fürs Internet wird DNS64 nie.
 - **Lokale Namen:** `*.fritz.box`, `*.lan`, `*.home.arpa`, einzelne Hostnamen und Reverse-Lookups privater IPs gehen nur an den Router (Default-Gateway oder eingestellt), nie ins Internet. Gerätenamen der Clients kommen per PTR vom Router.
-- **Daten:** unter `/data/dns64/` (Abfrage-Log `dns64.db`, Aufbewahrung 1–90 Tage, Freigaben `allowlist.txt`, Blocklisten `lists/`). Export/Import enthält Einstellungen und Freigaben.
-- **API:** `GET /api/dns64/status|summary|timeline|top|log|lists|upstreams|cache`, `POST /api/dns64/cache/flush`, `GET|POST|DELETE /api/dns64/allowlist`.
+- **Daten:** unter `/data/dns64/` (Abfrage-Log `dns64.db`, Aufbewahrung 1–90 Tage, Freigaben `allowlist.txt`, Blocklisten `lists/`); Einstellungen und eigene Einträge in der Datenbank der Node. Export/Import enthält Einstellungen, Freigaben und eigene Einträge.
+- **API:** `GET /api/dns64/status|summary|timeline|top|log|lists|upstreams|cache`, `POST /api/dns64/cache/flush`, `GET|POST|DELETE /api/dns64/allowlist`, `GET|PUT /api/dns64/settings`, `GET|POST /api/dns64/records`, `DELETE /api/dns64/records/{id}`.
 
 ## Betrieb
 

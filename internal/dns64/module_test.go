@@ -35,6 +35,9 @@ func testModule(t *testing.T) (*Module, int) {
 	_ = core.SetSetting(ctx, setBind, "127.0.0.1")
 	_ = core.SetSetting(ctx, setRouter, fakeRouter(t)) // lokale Namen gehen nur an den (Test-)Router
 	m := New(core, log, dir, "test")
+	if err := core.Migrate(ctx, Name, m.Migrations()); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() { _ = m.Stop(context.Background()) })
 	return m, port
 }

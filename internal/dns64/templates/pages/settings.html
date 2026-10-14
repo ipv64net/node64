@@ -8,42 +8,59 @@
 <ul class="nav nav-tabs mb-3">
 	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
 </ul>
-{{if not $d.Running}}<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.not_running"}}{{if $d.Err}}<div class="small mt-1 font-monospace">{{$d.Err}}</div>{{end}}</div>{{end}}
+{{if not $d.Running}}<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.not_running"}}{{if $d.Err}}<div class="small mt-1 font-monospace">{{$d.Err}}</div><div class="small mt-1">{{.T "dns64.retrying"}}</div>{{end}}</div>{{end}}
 <script type="application/json" id="dns64-data">{{$d.JS}}</script>
 <div class="row g-3">
-	<div class="col-lg-7">
+	<div class="col-xl-6">
 		<div class="card">
-			<div class="card-header"><i class="bi bi-gear text-primary"></i> {{.T "dns64.settings.title"}}</div>
+			<div class="card-header"><i class="bi bi-gear text-primary"></i> {{.T "dns64.settings.general"}}</div>
 			<div class="card-body">
 				<form method="post" action="/dns64/settings">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<div class="row g-3">
 						<div class="col-sm-4">
 							<label class="form-label" for="port">{{.T "dns64.settings.port"}}</label>
-							<div class="input-group"><span class="input-group-text"><i class="bi bi-hash"></i></span><input type="number" class="form-control" id="port" name="port" min="1" max="65535" value="{{$d.Port}}" required></div>
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-hash"></i></span><input type="number" class="form-control" id="port" name="port" min="1" max="65535" value="{{$d.Cfg.Port}}" required></div>
 						</div>
 						<div class="col-sm-8">
 							<label class="form-label" for="bind">{{.T "dns64.settings.bind"}}</label>
-							<div class="input-group"><span class="input-group-text"><i class="bi bi-ethernet"></i></span><input type="text" class="form-control font-monospace" id="bind" name="bind" value="{{$d.Bind}}" placeholder="{{.T "dns64.settings.bind_all"}}"></div>
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-ethernet"></i></span><input type="text" class="form-control font-monospace" id="bind" name="bind" value="{{$d.Cfg.Bind}}" placeholder="{{.T "dns64.settings.bind_all"}}"></div>
 						</div>
 						<div class="col-12 form-text mt-1">{{.T "dns64.settings.port_hint"}}</div>
-						<div class="col-sm-8">
+						<div class="col-12">
 							<label class="form-label" for="router">{{.T "dns64.settings.router"}}</label>
-							<div class="input-group"><span class="input-group-text"><i class="bi bi-router"></i></span><input type="text" class="form-control font-monospace" id="router" name="router" value="{{$d.RouterSet}}" placeholder="{{.T "dns64.settings.router_auto"}}"></div>
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-router"></i></span><input type="text" class="form-control font-monospace" id="router" name="router" value="{{$d.Cfg.Router}}" placeholder="{{.T "dns64.settings.router_auto"}}"></div>
 							<div class="form-text">{{if and $d.Running $d.Router}}{{.T "dns64.settings.router_now" "addr" $d.Router}} {{else if $d.Running}}{{.T "dns64.settings.router_none"}} {{end}}{{.T "dns64.settings.router_hint"}}</div>
 						</div>
-						<div class="col-sm-4">
+						<div class="col-sm-6">
+							<label class="form-label" for="block_mode">{{.T "dns64.settings.block_mode"}}</label>
+							<select class="form-select" id="block_mode" name="block_mode"><option value="zero"{{if eq $d.Cfg.BlockMode "zero"}} selected{{end}}>{{.T "dns64.settings.block_mode_zero"}}</option><option value="nxdomain"{{if eq $d.Cfg.BlockMode "nxdomain"}} selected{{end}}>{{.T "dns64.settings.block_mode_nxdomain"}}</option></select>
+						</div>
+						<div class="col-sm-6">
+							<label class="form-label" for="cache_size">{{.T "dns64.settings.cache_size"}}</label>
+							<div class="input-group"><input type="number" class="form-control" id="cache_size" name="cache_size" min="1000" max="200000" step="1000" value="{{$d.Cfg.CacheSize}}" required><span class="input-group-text">{{.T "dns64.settings.entries"}}</span></div>
+						</div>
+						<div class="col-sm-6">
+							<label class="form-label" for="anonymize">{{.T "dns64.settings.anonymize"}}</label>
+							<select class="form-select" id="anonymize" name="anonymize"><option value="off"{{if eq $d.Cfg.Anonymize "off"}} selected{{end}}>{{.T "dns64.settings.anonymize_off"}}</option><option value="mask"{{if eq $d.Cfg.Anonymize "mask"}} selected{{end}}>{{.T "dns64.settings.anonymize_mask"}}</option><option value="hide"{{if eq $d.Cfg.Anonymize "hide"}} selected{{end}}>{{.T "dns64.settings.anonymize_hide"}}</option></select>
+						</div>
+						<div class="col-sm-6">
 							<label class="form-label" for="retention">{{.T "dns64.settings.retention"}}</label>
-							<div class="input-group"><input type="number" class="form-control" id="retention" name="retention" min="1" max="90" value="{{$d.Retention}}" required><span class="input-group-text">{{.T "dns64.settings.days"}}</span></div>
+							<div class="input-group"><input type="number" class="form-control" id="retention" name="retention" min="1" max="90" value="{{$d.Cfg.Retention}}" required><span class="input-group-text">{{.T "dns64.settings.days"}}</span></div>
+						</div>
+						<div class="col-12 form-text mt-1">{{.T "dns64.settings.anonymize_hint"}}</div>
+						<div class="col-12">
+							<label class="form-label" for="allow_nets">{{.T "dns64.settings.allow_nets"}}</label>
+							<textarea class="form-control font-monospace" id="allow_nets" name="allow_nets" rows="2" placeholder="2001:db8:1234::/48">{{range $i, $n := $d.Cfg.AllowNets}}{{if $i}}
+{{end}}{{$n}}{{end}}</textarea>
+							<div class="form-text">{{.T "dns64.settings.allow_nets_hint"}}</div>
 						</div>
 					</div>
 					<button class="btn btn-primary mt-3" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>
 				</form>
 			</div>
 		</div>
-	</div>
-	<div class="col-lg-5">
-		<div class="card">
+		<div class="card mt-3">
 			<div class="card-header"><i class="bi bi-info-circle text-info"></i> {{.T "dns64.setup.title"}}</div>
 			<div class="card-body small">
 				<p>{{.T "dns64.setup.router"}}</p>
@@ -52,5 +69,49 @@
 			</div>
 		</div>
 	</div>
+	<div class="col-xl-6">
+		<div class="card" id="upstreams">
+			<div class="card-header"><i class="bi bi-cloud-arrow-up text-info"></i> {{.T "dns64.up.title"}}</div>
+			<form method="post" action="/dns64/upstreams">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="card-body small pb-0"><p class="text-body-secondary">{{.T "dns64.settings.up_hint"}}</p></div>
+				<div class="table-responsive">
+					<table class="table table-sm align-middle mb-0 small">
+						<thead><tr><th class="ps-3">{{.T "dns64.lists.on"}}</th><th>{{.T "common.name"}}</th><th>{{.T "dns64.settings.up_ips"}}</th><th></th></tr></thead>
+						<tbody>
+						{{range $i, $u := $d.Cfg.Upstreams}}<tr>
+							<td class="ps-3"><input class="form-check-input" type="checkbox" name="on_{{$i}}" value="1"{{if $u.Enabled}} checked{{end}} aria-label="{{$u.Name}}"></td>
+							<td><b>{{$u.Name}}</b>{{if $u.Custom}} <span class="badge text-bg-light">{{$.T "dns64.custom"}}</span>{{end}}<div class="text-body-secondary text-break">{{$u.URL}}</div></td>
+							<td class="font-monospace text-break">{{range $j, $ip := $u.IPs}}{{if $j}}, {{end}}{{$ip}}{{end}}</td>
+							<td class="text-end pe-3">{{if $u.Custom}}<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/upstreams/remove" name="remove" value="{{$i}}" data-confirm="{{$.T "dns64.settings.up_remove_confirm" "name" $u.Name}}" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-trash"></i></button>{{end}}</td>
+						</tr>{{end}}
+						</tbody>
+					</table>
+				</div>
+				<div class="card-footer d-flex flex-wrap align-items-center gap-2">
+					<label class="small" for="mode">{{.T "dns64.settings.up_mode"}}</label>
+					<select class="form-select form-select-sm w-auto" id="mode" name="mode">
+						<option value="parallel"{{if eq $d.Cfg.UpMode "parallel"}} selected{{end}}>{{.T "dns64.js.mode_parallel"}}</option>
+						<option value="ordered"{{if eq $d.Cfg.UpMode "ordered"}} selected{{end}}>{{.T "dns64.js.mode_ordered"}}</option>
+					</select>
+					<button class="btn btn-sm btn-primary ms-auto" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>
+				</div>
+			</form>
+		</div>
+		<div class="card mt-3">
+			<div class="card-header"><i class="bi bi-plus-circle text-primary"></i> {{.T "dns64.settings.up_add"}}</div>
+			<div class="card-body">
+				<form method="post" action="/dns64/upstreams/add" class="row g-2">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<div class="col-sm-4"><input type="text" class="form-control form-control-sm" name="name" placeholder="{{.T "common.name"}}" aria-label="{{.T "common.name"}}" maxlength="60"></div>
+					<div class="col-sm-8"><input type="url" class="form-control form-control-sm font-monospace" name="url" placeholder="https://dns.example/dns-query" aria-label="URL" required></div>
+					<div class="col-sm-9"><input type="text" class="form-control form-control-sm font-monospace" name="ips" placeholder="{{.T "dns64.settings.up_ips_ph"}}" aria-label="{{.T "dns64.settings.up_ips"}}"></div>
+					<div class="col-sm-3 d-grid"><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus"></i> {{.T "dns64.lists.add_btn"}}</button></div>
+					<div class="col-12 form-text mt-0">{{.T "dns64.settings.up_add_hint"}}</div>
+				</form>
+			</div>
+		</div>
+	</div>
 </div>
 {{end}}
+{{define "scripts"}}<script src="/static/js/dns64.js?v={{.Version}}"></script>{{end}}

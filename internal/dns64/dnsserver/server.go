@@ -6,6 +6,7 @@ import (
 	"context"
 	"log/slog"
 	"net"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,14 @@ import (
 
 const blockedTTL = 10
 
+// Reason codes in the query log (translated in the UI).
+const ReasonStale = "stale" // served from cache after expiry, refreshed in the background
+
+// Records are own DNS entries from the settings. ok = the name is known (then the answer may be empty).
+type Records interface {
+	Lookup(name string, qtype uint16) (rrs []dns.RR, ok bool)
+}
+
 type Server struct {
 	Addr     string
 	Local    *localnet.Resolver // router DNS for local names
@@ -29,6 +38,11 @@ type Server struct {
 	Cache    *cache.Cache
 	Log      *querylog.Store
 	Logger   *slog.Logger
+
+	Records   Records                 // nil = none
+	BlockNX   bool                    // blocked names answer NXDOMAIN instead of 0.0.0.0 / ::
+	ExtraNets []netip.Prefix          // further client networks besides private and attached ones
+	Anonymize func(netip.Addr) string // client as stored in the log, nil = full IP
 
 	acl        *clientACL
 	srv        []*dns.Server
@@ -39,7 +53,7 @@ type Server struct {
 // Start opens the UDP and TCP sockets right away (so a busy port is reported
 // to the caller) and serves them in the background until Shutdown.
 func (s *Server) Start() error {
-	s.acl = newClientACL()
+	s.acl = newClientACL(s.ExtraNets)
 	s.refreshSem = make(chan struct{}, 32)
 	pc, err := net.ListenPacket("udp", s.Addr)
 	if err != nil {
@@ -92,9 +106,13 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	q := r.Question[0]
 	name := strings.TrimSuffix(strings.ToLower(q.Name), ".")
+	client := clientIP.String()
+	if s.Anonymize != nil {
+		client = s.Anonymize(clientIP)
+	}
 	entry := querylog.Entry{
 		Time:   start,
-		Client: clientIP.String(),
+		Client: client,
 		Domain: name,
 		QType:  dns.TypeToString[q.Qtype],
 	}
@@ -113,6 +131,13 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry) *dns.Msg {
 	q := r.Question[0]
 
+	if s.Records != nil {
+		if rrs, ok := s.Records.Lookup(name, q.Qtype); ok {
+			e.Status = querylog.StatusCustom
+			return s.custom(r, rrs)
+		}
+	}
+
 	if isLocalName(name) {
 		e.Status = querylog.StatusLocal
 		if s.Local.Addr() != "" {
@@ -130,14 +155,14 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry) *dns.Msg {
 	blocked, reason := s.Filter.Check(name)
 	if blocked {
 		e.Status, e.Reason = querylog.StatusBlocked, reason
-		return blockedMsg(r)
+		return s.blockedMsg(r)
 	}
 	released := reason != "" || s.Filter.Allow.Contains(name)
 
 	if resp, state, refresh := s.Cache.Get(r); resp != nil {
 		e.Status = querylog.StatusCached
 		if state == cache.Stale {
-			e.Reason = "abgelaufen, wird im Hintergrund erneuert"
+			e.Reason = ReasonStale
 		}
 		if refresh {
 			s.refresh(r, released)
@@ -158,7 +183,7 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry) *dns.Msg {
 	if !released {
 		if blocked, why := s.cnameBlocked(resp, q.Qtype); blocked {
 			e.Status, e.Reason = querylog.StatusBlocked, why
-			return blockedMsg(r)
+			return s.blockedMsg(r)
 		}
 	}
 
@@ -233,8 +258,46 @@ func errorMsg(r *dns.Msg, rcode int) *dns.Msg {
 	return m
 }
 
-// blockedMsg answers A with 0.0.0.0, AAAA with :: and everything else with
-// an empty NOERROR, the same behaviour as Pi-hole and AdGuard Home.
+// custom answers from own records. A CNAME is followed: to further own records, otherwise like any query
+// (blocklists, cache, upstream), so the client gets the addresses in one answer.
+func (s *Server) custom(r *dns.Msg, rrs []dns.RR) *dns.Msg {
+	m := new(dns.Msg)
+	m.SetReply(r)
+	m.RecursionAvailable = true
+	m.Authoritative = true
+	m.Answer = rrs
+	qtype := r.Question[0].Qtype
+	for depth := 0; depth < 8 && qtype != dns.TypeCNAME && len(m.Answer) > 0; depth++ {
+		c, ok := m.Answer[len(m.Answer)-1].(*dns.CNAME)
+		if !ok {
+			break
+		}
+		target := strings.TrimSuffix(strings.ToLower(c.Target), ".")
+		if more, ok := s.Records.Lookup(target, qtype); ok {
+			m.Answer = append(m.Answer, more...)
+			continue
+		}
+		sub := new(dns.Msg)
+		sub.SetQuestion(dns.Fqdn(target), qtype)
+		sub.RecursionDesired = true
+		resp := s.resolve(sub, target, &querylog.Entry{})
+		m.Answer = append(m.Answer, resp.Answer...)
+		m.Rcode = resp.Rcode
+		break
+	}
+	copyEdns(r, m)
+	return m
+}
+
+// blockedMsg answers NXDOMAIN when configured; otherwise A with 0.0.0.0, AAAA with :: and everything else
+// with an empty NOERROR, the same behaviour as Pi-hole and AdGuard Home.
+func (s *Server) blockedMsg(r *dns.Msg) *dns.Msg {
+	if s.BlockNX {
+		return errorMsg(r, dns.RcodeNameError)
+	}
+	return blockedMsg(r)
+}
+
 func blockedMsg(r *dns.Msg) *dns.Msg {
 	q := r.Question[0]
 	m := new(dns.Msg)
