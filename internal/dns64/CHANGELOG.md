@@ -1,5 +1,11 @@
 # Änderungen – DNS64
 
+## 1.4.0 – 2026-10-14
+
+### Neu
+- Benachrichtigungen über die Standardkanäle: Upstream-Server länger als 3 Minuten gestört und wieder erreichbar, Blockliste dreimal hintereinander nicht ladbar; abschaltbar unter Einstellungen. Webhook-Arten `dns64_upstream`, `dns64_upstream_ok`, `dns64_lists`.
+- Freigaben übernehmen: Liste einfügen (eine Domain je Zeile, z. B. allowlist.txt des alten DNS64-Containers oder Pi-hole-Whitelist).
+
 ## 1.3.0 – 2026-10-14
 
 ### Neu

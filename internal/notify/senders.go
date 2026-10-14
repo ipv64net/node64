@@ -38,6 +38,10 @@ const (
 	KindDynIP    Kind = "dyndns_ip"    // oeffentliche Adresse gewechselt
 	KindDynFail  Kind = "dyndns_fail"  // Update fehlgeschlagen bzw. Ziel pausiert
 	KindDynLimit Kind = "dyndns_limit" // Update-Limit des Accounts fast oder ganz erreicht
+	// DNS64-Modul (ebenfalls nur lokal)
+	KindDNS64Down  Kind = "dns64_upstream"    // Upstream-Server gestoert
+	KindDNS64Up    Kind = "dns64_upstream_ok" // Upstream-Server antwortet wieder
+	KindDNS64Lists Kind = "dns64_lists"       // Blockliste laesst sich nicht aktualisieren
 
 	KindQuota Kind = "quota" // Tageskontingent der Online-Checks erreicht (Account, vom hub)
 )
@@ -59,6 +63,12 @@ type CheckInfo struct {
 
 // IsDynDNS: Meldung des DynDNS-Moduls.
 func IsDynDNS(k Kind) bool { return k == KindDynIP || k == KindDynFail || k == KindDynLimit }
+
+// IsDNS64: Meldung des DNS64-Moduls.
+func IsDNS64(k Kind) bool { return k == KindDNS64Down || k == KindDNS64Up || k == KindDNS64Lists }
+
+// IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64).
+func IsModule(k Kind) bool { return IsDynDNS(k) || IsDNS64(k) }
 
 // Message ist die fertig formulierte Nachricht fuer einen Sender.
 type Message struct {

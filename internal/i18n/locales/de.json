@@ -884,7 +884,10 @@
       "degraded_end": "✅ Wieder vollständig erreichbar: {name}",
       "dyndns_ip": "🔄 Öffentliche {name} hat sich geändert",
       "dyndns_fail": "⚠️ DynDNS: Update für {name} fehlgeschlagen",
-      "dyndns_limit": "⚠️ DynDNS: Update-Limit {name}"
+      "dyndns_limit": "⚠️ DynDNS: Update-Limit {name}",
+      "dns64_upstream": "⚠️ DNS64: Upstream-Server {name} gestört",
+      "dns64_upstream_ok": "✅ DNS64: Upstream-Server {name} antwortet wieder",
+      "dns64_lists": "⚠️ DNS64: Blockliste {name} lässt sich nicht aktualisieren"
     },
     "body": {
       "quota_used": "Verbraucht: {used} von {limit} Online-Messungen heute",
@@ -1238,7 +1241,11 @@
     "allow": {
       "title": "Freigegebene Domains",
       "hint": "Werden nie blockiert, inklusive aller Subdomains.",
-      "not_running": "Freigaben lassen sich bearbeiten, sobald der DNS-Dienst läuft."
+      "not_running": "Freigaben lassen sich bearbeiten, sobald der DNS-Dienst läuft.",
+      "import": "Freigaben übernehmen",
+      "import_btn": "Übernehmen",
+      "import_hint": "Eine Domain je Zeile, z. B. aus der allowlist.txt des alten DNS64-Containers oder einer Pi-hole-Whitelist. Kommentare (#) und Zeitstempel werden ignoriert, vorhandene bleiben.",
+      "imported": "{n} Freigaben übernommen, {bad} Zeilen ungültig."
     },
     "kpi": {
       "total": "Anfragen",
@@ -1306,7 +1313,11 @@
       "up_mode": "Betriebsart",
       "up_add": "Eigener Server",
       "up_ips_ph": "Bootstrap-IPs, z. B. 9.9.9.9, 149.112.112.112",
-      "up_add_hint": "https://…/dns-query für DoH, tls://name[:853] für DoT, quic://name[:853] für DoQ. Die Bootstrap-IPs braucht DNS64, um den Server ohne DNS zu erreichen (Pflicht, wenn in der Adresse ein Name steht); geprüft wird das Zertifikat auf den Namen."
+      "up_add_hint": "https://…/dns-query für DoH, tls://name[:853] für DoT, quic://name[:853] für DoQ. Die Bootstrap-IPs braucht DNS64, um den Server ohne DNS zu erreichen (Pflicht, wenn in der Adresse ein Name steht); geprüft wird das Zertifikat auf den Namen.",
+      "notify": "Benachrichtigungen",
+      "notify_upstream": "Upstream-Server länger als 3 Minuten gestört und wieder erreichbar",
+      "notify_lists": "Blockliste dreimal hintereinander nicht ladbar",
+      "notify_hint": "Gehen an die Standardkanäle (nicht in der Ruhezeit), einzurichten unter"
     },
     "setup": {
       "title": "Einrichtung",

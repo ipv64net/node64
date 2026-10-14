@@ -327,7 +327,8 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 
 // isDownKind: Stoerungsmeldungen (Sammelmeldung der Entwarnungen zaehlt als Entwarnung).
 func isDownKind(k Kind) bool {
-	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded || k == KindDynFail || k == KindDynLimit || k == KindQuota
+	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded || k == KindDynFail || k == KindDynLimit || k == KindQuota ||
+		k == KindDNS64Down || k == KindDNS64Lists
 }
 
 // flagsOK prueft die Schalter von Check und Kanal (Stoerung/Entwarnung/teilweise gestoert).
@@ -512,7 +513,7 @@ func (d *Dispatcher) rateOK(id int64, per float64) bool {
 
 // deliver verschickt einen Alert an alle zustaendigen Kanaele (in der Ruhezeit: fuer spaeter merken).
 func (d *Dispatcher) deliver(ctx context.Context, a Alert) {
-	if d.quiet(a) && (IsDynDNS(a.Kind) || a.Kind == KindQuota) {
+	if d.quiet(a) && (IsModule(a.Kind) || a.Kind == KindQuota) {
 		d.log.Debug("notification dropped (quiet hours)", "name", a.Check.Name, "kind", a.Kind)
 		return // steht im Verlauf des Moduls; keine Sammelmeldung danach
 	}
@@ -636,7 +637,7 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 	if m.Time.IsZero() {
 		m.Time = d.now()
 	}
-	if IsDynDNS(a.Kind) {
+	if IsModule(a.Kind) {
 		return d.composeDynDNS(lang, a, m)
 	}
 	if a.Kind == KindQuota {
@@ -702,13 +703,17 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 	return m
 }
 
-// composeDynDNS formuliert Meldungen des DynDNS-Moduls (Name = Ziel bzw. Adressfamilie, Message = Einzelheiten).
+// composeDynDNS formuliert Meldungen der Module DynDNS und DNS64 (Name = Ziel, Adressfamilie, Server oder
+// Liste; Message = Einzelheiten).
 func (d *Dispatcher) composeDynDNS(lang string, a Alert, m Message) Message {
 	t := func(key string, args ...any) string { return d.i18n.T(lang, key, args...) }
 	uid := a.Check.UserID
 	m.URL = d.baseURL(uid, "/dyndns")
+	if IsDNS64(a.Kind) {
+		m.URL = d.baseURL(uid, "/dns64")
+	}
 	m.Title, m.Priority = t("notify.subject."+string(a.Kind), "name", a.Check.Name), 4
-	if a.Kind == KindDynIP {
+	if a.Kind == KindDynIP || a.Kind == KindDNS64Up {
 		m.Priority = 2
 	}
 	var lines []string

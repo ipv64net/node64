@@ -30,6 +30,7 @@ import (
 	"github.com/ipv64net/node64/internal/dns64/querylog"
 	"github.com/ipv64net/node64/internal/dns64/upstream"
 	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/store"
 )
 
@@ -43,7 +44,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.3.0"
+	version   = "1.4.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -70,6 +71,8 @@ type Module struct {
 	recs atomic.Pointer[recordTable] // eigene DNS-Eintraege (records.go)
 
 	webCert, webKey string // Zertifikat der Weboberflaeche (cert_mode node64)
+
+	notifier func(notify.Alert) // Meldungen (nil = keine)
 }
 
 const retryEvery = time.Minute
@@ -246,7 +249,7 @@ func (m *Module) start(ctx context.Context) error {
 	e.enc = m.startEncrypted(cfg, e.srv)
 	ectx, cancel := context.WithCancel(ctx)
 	e.cancel = cancel
-	for _, run := range []func(context.Context){st.Run, e.lists.Run, e.local.Run} {
+	for _, run := range []func(context.Context){st.Run, e.lists.Run, e.local.Run, func(ctx context.Context) { m.runMonitor(ctx, e) }} {
 		e.wg.Add(1)
 		go func() { defer e.wg.Done(); run(ectx) }()
 	}

@@ -62,6 +62,15 @@
 					<button class="btn btn-success" type="submit"><i class="bi bi-check2"></i> {{.T "dns64.js.release"}}</button>
 				</form>
 				<ul class="list-group list-group-flush" id="allow-list"></ul>{{else}}<p class="mb-0">{{.T "dns64.allow.not_running"}}</p>{{end}}
+				<details class="mt-3">
+					<summary class="text-body-secondary">{{.T "dns64.allow.import"}}</summary>
+					<form method="post" action="/dns64/allowlist/import" class="mt-2">
+						<input type="hidden" name="_csrf" value="{{.CSRF}}">
+						<textarea class="form-control font-monospace mb-2" name="domains" rows="4" placeholder="example.com&#10;cdn.example.org" aria-label="{{.T "dns64.allow.import"}}"></textarea>
+						<div class="form-text mb-2">{{.T "dns64.allow.import_hint"}}</div>
+						<button class="btn btn-sm btn-outline-success" type="submit"><i class="bi bi-upload"></i> {{.T "dns64.allow.import_btn"}}</button>
+					</form>
+				</details>
 			</div>
 		</div>
 	</div>

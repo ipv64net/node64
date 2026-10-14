@@ -884,7 +884,10 @@
       "degraded_end": "✅ Fully reachable again: {name}",
       "dyndns_ip": "🔄 Public {name} has changed",
       "dyndns_fail": "⚠️ DynDNS: update for {name} failed",
-      "dyndns_limit": "⚠️ DynDNS: update limit {name}"
+      "dyndns_limit": "⚠️ DynDNS: update limit {name}",
+      "dns64_upstream": "⚠️ DNS64: upstream server {name} failing",
+      "dns64_upstream_ok": "✅ DNS64: upstream server {name} answers again",
+      "dns64_lists": "⚠️ DNS64: blocklist {name} cannot be updated"
     },
     "body": {
       "quota_used": "Used: {used} of {limit} online checks today",
@@ -1238,7 +1241,11 @@
     "allow": {
       "title": "Allowed domains",
       "hint": "Never blocked, including all subdomains.",
-      "not_running": "The allowlist can be edited once the DNS service is running."
+      "not_running": "The allowlist can be edited once the DNS service is running.",
+      "import": "Import allowed domains",
+      "import_btn": "Import",
+      "import_hint": "One domain per line, e.g. from the allowlist.txt of the old DNS64 container or a Pi-hole whitelist. Comments (#) and timestamps are ignored, existing entries stay.",
+      "imported": "{n} domains imported, {bad} lines invalid."
     },
     "kpi": {
       "total": "Queries",
@@ -1306,7 +1313,11 @@
       "up_mode": "Mode",
       "up_add": "Custom server",
       "up_ips_ph": "Bootstrap IPs, e.g. 9.9.9.9, 149.112.112.112",
-      "up_add_hint": "https://…/dns-query for DoH, tls://name[:853] for DoT, quic://name[:853] for DoQ. DNS64 needs the bootstrap IPs to reach the server without DNS (required when the address contains a name); the certificate is checked against the name."
+      "up_add_hint": "https://…/dns-query for DoH, tls://name[:853] for DoT, quic://name[:853] for DoQ. DNS64 needs the bootstrap IPs to reach the server without DNS (required when the address contains a name); the certificate is checked against the name.",
+      "notify": "Notifications",
+      "notify_upstream": "Upstream server failing for more than 3 minutes and back again",
+      "notify_lists": "Blocklist failed to load three times in a row",
+      "notify_hint": "Sent to the default channels (not during quiet hours), set up under"
     },
     "setup": {
       "title": "Setup",

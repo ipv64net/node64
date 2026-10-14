@@ -42,6 +42,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /dns64/lists", page(m.pageListsSave))
 	mux.Handle("POST /dns64/lists/add", page(m.pageListAdd))
 	mux.Handle("POST /dns64/lists/remove", page(m.pageListRemove))
+	mux.Handle("POST /dns64/allowlist/import", page(m.pageAllowImport))
 	mux.Handle("POST /dns64/records", page(m.pageRecordAdd))
 	mux.Handle("POST /dns64/records/{id}/delete", page(m.pageRecordDelete))
 	mux.Handle("POST /dns64/records/{id}/toggle", page(m.pageRecordToggle))
@@ -158,6 +159,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	c := m.loadConfig(r.Context())
 	c.Port, c.Bind, c.Router, c.Retention = formInt(r, "port"), r.PostFormValue("bind"), r.PostFormValue("router"), formInt(r, "retention")
 	c.CacheSize, c.BlockMode, c.Anonymize = formInt(r, "cache_size"), r.PostFormValue("block_mode"), r.PostFormValue("anonymize")
+	c.NotifyUp, c.NotifyLst = r.PostFormValue("notify_upstream") != "", r.PostFormValue("notify_lists") != ""
 	c.AllowNets = splitLines(r.PostFormValue("allow_nets"))
 	m.apply(w, r, "/dns64/settings", c)
 }
@@ -224,6 +226,36 @@ func (m *Module) pageListRemove(w http.ResponseWriter, r *http.Request) {
 		c.Lists = append(c.Lists[:i], c.Lists[i+1:]...)
 	}
 	m.apply(w, r, "/dns64/lists", c)
+}
+
+// pageAllowImport uebernimmt Freigaben aus einer Liste (eine Domain je Zeile; allowlist.txt des alten
+// Containers, Pi-hole-Whitelist; Kommentare und Zeitstempel werden ignoriert).
+func (m *Module) pageAllowImport(w http.ResponseWriter, r *http.Request) {
+	a, err := m.allowlist()
+	n, bad := 0, 0
+	if err == nil {
+		for _, line := range strings.Split(r.PostFormValue("domains"), "\n") {
+			line = strings.TrimSpace(line)
+			if i := strings.IndexAny(line, "#\t "); i >= 0 {
+				line = strings.TrimSpace(line[:i])
+			}
+			if line == "" {
+				continue
+			}
+			if _, err := a.Add(line); err != nil {
+				bad++
+				continue
+			}
+			n++
+		}
+	}
+	if err != nil {
+		m.g.Flash(w, r, "danger", err.Error())
+	} else {
+		m.log.Info("allowlist imported", "domains", n, "invalid", bad, "by", m.g.Actor(r))
+		m.g.Flash(w, r, "success", m.g.T(r, "dns64.allow.imported", "n", n, "bad", bad))
+	}
+	http.Redirect(w, r, "/dns64/lists", http.StatusSeeOther)
 }
 
 func (m *Module) recordBack(w http.ResponseWriter, r *http.Request, err error, okKey string) {

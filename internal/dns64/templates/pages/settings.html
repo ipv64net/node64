@@ -50,6 +50,12 @@
 						</div>
 						<div class="col-12 form-text mt-1">{{.T "dns64.settings.anonymize_hint"}}</div>
 						<div class="col-12">
+							<div class="form-label">{{.T "dns64.settings.notify"}}</div>
+							<div class="form-check"><input class="form-check-input" type="checkbox" id="notify_upstream" name="notify_upstream" value="1"{{if $d.Cfg.NotifyUp}} checked{{end}}><label class="form-check-label" for="notify_upstream">{{.T "dns64.settings.notify_upstream"}}</label></div>
+							<div class="form-check"><input class="form-check-input" type="checkbox" id="notify_lists" name="notify_lists" value="1"{{if $d.Cfg.NotifyLst}} checked{{end}}><label class="form-check-label" for="notify_lists">{{.T "dns64.settings.notify_lists"}}</label></div>
+							<div class="form-text">{{.T "dns64.settings.notify_hint"}} <a href="/notifications">{{.T "nav.notifications"}}</a></div>
+						</div>
+						<div class="col-12">
 							<label class="form-label" for="allow_nets">{{.T "dns64.settings.allow_nets"}}</label>
 							<textarea class="form-control font-monospace" id="allow_nets" name="allow_nets" rows="2" placeholder="2001:db8:1234::/48">{{range $i, $n := $d.Cfg.AllowNets}}{{if $i}}
 {{end}}{{$n}}{{end}}</textarea>

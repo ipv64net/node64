@@ -49,6 +49,7 @@ type ListStatus struct {
 	Rules     int       `json:"rules"`
 	UpdatedAt time.Time `json:"updatedAt"`
 	Error     string    `json:"error,omitempty"`
+	Failures  int       `json:"failures"` // Fehlversuche hintereinander
 }
 
 // Manager downloads the blocklists, keeps them cached on disk and publishes
@@ -169,9 +170,10 @@ func (m *Manager) refresh(ctx context.Context) (failed bool) {
 			if err != nil {
 				failed = true
 				m.status[i].Error = err.Error()
+				m.status[i].Failures++
 				m.log.Warn("blocklist download failed", "list", l.Name, "err", err)
 			} else {
-				m.status[i].Error = ""
+				m.status[i].Error, m.status[i].Failures = "", 0
 			}
 			m.mu.Unlock()
 			if err == nil {

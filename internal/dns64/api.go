@@ -310,7 +310,8 @@ func (m *Module) apiAllowRemove(w http.ResponseWriter, r *http.Request, e *engin
 // ---- Export/Import (module.Exporter) ----
 
 var exportSettings = []string{setPort, setBind, setRouter, setRetention, setUpstreams, setUpMode, setLists, setListHours,
-	setBlockMode, setCacheSize, setAnonymize, setAllowNets, setDoH, setDoT, setDoQ, setDoHPort, setDoTPort, setNames, setCertMode}
+	setBlockMode, setCacheSize, setAnonymize, setAllowNets, setDoH, setDoT, setDoQ, setDoHPort, setDoTPort, setNames, setCertMode,
+	setNotifyUpstream, setNotifyLists}
 
 type exportData struct {
 	Settings  map[string]string `json:"settings"`

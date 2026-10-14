@@ -10,7 +10,7 @@ Ein einziges Go-Binary, SQLite, eingebettete Weboberfläche, keine externen Abh�
 
 Kanäle werden unter *Benachrichtigungen* angelegt und getestet. Standardkanäle bekommen alle Checks, die keine eigene Auswahl haben. Texte gehen in der Sprache des Kanals raus (Deutsch oder Englisch). Geheimnisse wie Bot-Tokens oder SMTP-Passwörter liegen verschlüsselt in der Datenbank, der Schlüssel in `/data/secret.key`.
 
-Webhooks bekommen standardmäßig ein JSON mit `event_id`, `kind` (down, up, flapping_start, flapping_end, reminder, summary, test, dyndns_ip, dyndns_fail, dyndns_limit), `status`, `check` (token, name, type, target), `reason`, `message`, `duration_seconds`, `node` und `url`. Ein eigener Body mit Platzhaltern wie `{{name}}` oder `{{status}}` ist möglich.
+Webhooks bekommen standardmäßig ein JSON mit `event_id`, `kind` (down, up, flapping_start, flapping_end, reminder, summary, test, dyndns_ip, dyndns_fail, dyndns_limit, dns64_upstream, dns64_upstream_ok, dns64_lists), `status`, `check` (token, name, type, target), `reason`, `message`, `duration_seconds`, `node` und `url`. Ein eigener Body mit Platzhaltern wie `{{name}}` oder `{{status}}` ist möglich.
 
 Gegen Alarmrauschen wirken Wiederholungen vor Alarm, Stabilisierung, Flatter-Erkennung, Sammelmeldungen ab drei gleichzeitigen Störungen, Ruhezeiten (nur kritische Checks alarmieren) und höchstens 60 Nachrichten je Kanal und Stunde. Links in Nachrichten brauchen die externe Adresse des Nodes in den Einstellungen der Benachrichtigungen.
 
@@ -161,6 +161,7 @@ Das Modul *DNS64* (in den Einstellungen einschalten) ist ein cachender DNS-Serve
 - **Eigene Einträge:** A, AAAA und CNAME, auch Wildcards (`*.home.lan`); zu A/AAAA gibt es die Rückwärtssuche (PTR) dazu. Sie gelten sofort, kommen vor den Blocklisten und gehen nie ins Internet.
 - **Datenschutz:** Client-Adressen im Abfrage-Log vollständig, gekürzt (IPv4 /24, IPv6 /48) oder gar nicht speichern. Weitere Client-Netze (z. B. ein öffentliches IPv6-Präfix) lassen sich erlauben, offen fürs Internet wird DNS64 nie.
 - **Lokale Namen:** `*.fritz.box`, `*.lan`, `*.home.arpa`, einzelne Hostnamen und Reverse-Lookups privater IPs gehen nur an den Router (Default-Gateway oder eingestellt), nie ins Internet. Gerätenamen der Clients kommen per PTR vom Router.
+- **Benachrichtigungen:** an die Standardkanäle, wenn ein Upstream-Server länger als 3 Minuten gestört ist (und wenn er wieder antwortet) und wenn eine Blockliste dreimal hintereinander nicht geladen werden kann; abschaltbar unter *DNS64 → Einstellungen*.
 - **Daten:** unter `/data/dns64/` (Abfrage-Log `dns64.db`, Aufbewahrung 1–90 Tage, Freigaben `allowlist.txt`, Blocklisten `lists/`); Einstellungen und eigene Einträge in der Datenbank der Node. Export/Import enthält Einstellungen, Freigaben und eigene Einträge.
 - **API:** `GET /api/dns64/status|summary|timeline|top|log|lists|upstreams|cache`, `POST /api/dns64/cache/flush`, `GET|POST|DELETE /api/dns64/allowlist`, `GET|PUT /api/dns64/settings`, `GET|POST /api/dns64/records`, `DELETE /api/dns64/records/{id}`.
 

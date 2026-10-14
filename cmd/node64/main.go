@@ -146,6 +146,7 @@ func run() error {
 	} else {
 		dnsModule.SetWebCert(filepath.Join(cfg.TLSDir(), "cert.pem"), filepath.Join(cfg.TLSDir(), "key.pem"))
 	}
+	dnsModule.SetNotifier(dispatcher.Dispatch) // Upstream gestoert, Blockliste nicht ladbar
 	modules.Register(dnsModule)
 	registerModules(modules)
 	modules.StartEnabled(ctx)

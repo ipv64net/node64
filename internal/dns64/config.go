@@ -85,6 +85,8 @@ type config struct {
 	DoTPort   int               `json:"dot_port"`
 	Names     []string          `json:"names"`
 	CertMode  string            `json:"cert_mode"`
+	NotifyUp  bool              `json:"notify_upstream"`
+	NotifyLst bool              `json:"notify_lists"`
 }
 
 func (m *Module) intSetting(ctx context.Context, key string, def, lo, hi int) int {
@@ -124,6 +126,8 @@ func (m *Module) loadConfig(ctx context.Context) config {
 		DoTPort:   m.intSetting(ctx, setDoTPort, 853, 1, 65535),
 		Names:     splitLines(m.core.SettingOr(ctx, setNames, "")),
 		CertMode:  oneOf(m.core.SettingOr(ctx, setCertMode, ""), certSelf, certSelf, certNode64),
+		NotifyUp:  m.core.SettingOr(ctx, setNotifyUpstream, "1") == "1",
+		NotifyLst: m.core.SettingOr(ctx, setNotifyLists, "1") == "1",
 	}
 	_ = json.Unmarshal([]byte(m.core.SettingOr(ctx, setUpstreams, "")), &c.Upstreams)
 	c.Upstreams = mergeUpstreams(c.Upstreams)
@@ -236,7 +240,7 @@ func (m *Module) saveConfig(ctx context.Context, c config) error {
 		setBlockMode: c.BlockMode, setCacheSize: strconv.Itoa(c.CacheSize), setAnonymize: c.Anonymize,
 		setAllowNets: strings.Join(c.AllowNets, "\n"),
 		setDoH:       b2s(c.DoH), setDoT: b2s(c.DoT), setDoQ: b2s(c.DoQ), setDoHPort: strconv.Itoa(c.DoHPort), setDoTPort: strconv.Itoa(c.DoTPort),
-		setNames: strings.Join(c.Names, "\n"), setCertMode: c.CertMode,
+		setNames: strings.Join(c.Names, "\n"), setCertMode: c.CertMode, setNotifyUpstream: b2s(c.NotifyUp), setNotifyLists: b2s(c.NotifyLst),
 	} {
 		if err := m.core.SetSetting(ctx, k, v); err != nil {
 			return err
