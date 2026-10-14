@@ -486,6 +486,10 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 				return nil
 			}
 		}
+		// Besitzerin misst nicht mehr mit: Besitz an die erste messende Node (wie im Portal und beim Trennen)
+		if len(nodeList) > 0 && !inList(nodeList, owner0) {
+			nodeRef, c.NodeID = nodeList[0], nodeList[0]
+		}
 	}
 	acc, _ := s.Account(ctx, userID)
 	locs := c.Locations

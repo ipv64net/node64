@@ -56,6 +56,9 @@ func selfNodeID() string {
 func singleNode(t checks.Type) bool { return t == checks.TypeDocker }
 
 // measures sagt, ob diese Node den Check misst (ohne Ausfuehrungsort).
+// MeasuresHere: diese Node misst den Check (auch wenn eine andere Node Besitzerin ist).
+func (c *Check) MeasuresHere() bool { return c.Execution != "online" && c.measures() }
+
 func (c *Check) measures() bool {
 	if len(c.Nodes) > 0 {
 		if id := selfNodeID(); id != "" {
@@ -141,7 +144,7 @@ func (m *Module) LinkScope(ctx context.Context) (own, other int) {
 		return 0, 0
 	}
 	for _, c := range list {
-		if c.Owner == "self" && c.Execution != "online" && len(c.Nodes) <= 1 {
+		if c.MeasuresHere() && len(c.Nodes) <= 1 { // misst nur diese Node (Besitz egal)
 			own++
 		} else {
 			other++
