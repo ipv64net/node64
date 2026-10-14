@@ -857,6 +857,7 @@
   },
   "notify": {
     "subject": {
+      "quota": "🟠 Tageskontingent für Online-Checks erreicht",
       "down": "🔴 {name} ist gestört",
       "up": "🟢 {name} ist wieder OK",
       "flapping_start": "🟠 {name} flattert",
@@ -873,6 +874,9 @@
       "dyndns_limit": "⚠️ DynDNS: Update-Limit {name}"
     },
     "body": {
+      "quota_used": "Verbraucht: {used} von {limit} Online-Messungen heute",
+      "quota_pause": "Die Online-Messungen bei ipv64 pausieren bis Mitternacht und laufen danach von selbst weiter. In der Zeit gibt es für reine Online-Checks keine Alarme.",
+      "quota_local": "Lokale Messungen deiner Nodes laufen weiter. Mehr Messungen pro Tag: längere Intervalle, weniger Standorte oder eine höhere Account-Klasse.",
       "check": "Check: {name} ({type})",
       "target": "Ziel: {target}",
       "reason": "Grund: {reason}",

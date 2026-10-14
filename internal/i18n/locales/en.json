@@ -857,6 +857,7 @@
   },
   "notify": {
     "subject": {
+      "quota": "🟠 Daily quota for online checks reached",
       "down": "🔴 {name} is down",
       "up": "🟢 {name} is up again",
       "flapping_start": "🟠 {name} is flapping",
@@ -873,6 +874,9 @@
       "dyndns_limit": "⚠️ DynDNS: update limit {name}"
     },
     "body": {
+      "quota_used": "Used: {used} of {limit} online checks today",
+      "quota_pause": "Online checks at ipv64 pause until midnight and then resume on their own. Meanwhile there are no alerts for online-only checks.",
+      "quota_local": "Local checks of your nodes keep running. More checks per day: longer intervals, fewer locations or a higher account class.",
       "check": "Check: {name} ({type})",
       "target": "Target: {target}",
       "reason": "Reason: {reason}",

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -145,6 +146,28 @@ func (s *Store) usageFlipped(ids []int64, blocked bool) {
 			f(id, blocked)
 		}
 	}
+	if f := s.OnQuotaReached; f != nil && blocked {
+		for _, id := range ids {
+			today, limit, _ := s.DailyUsage(id)
+			f(id, today, limit)
+		}
+	}
+}
+
+// ClaimQuotaNotice reserviert die Meldung "Kontingent erreicht" fuer Account und Tag (beide hubs bemerken es;
+// nur wer die Zeile im Zustellprotokoll anlegt, verschickt). Liefert die Ereignis-ID oder "".
+func (s *Store) ClaimQuotaNotice(ctx context.Context, userID int64) string {
+	id := "quota-" + strconv.FormatInt(userID, 10) + "-" + strings.ReplaceAll(usageDay(time.Now()), "-", "")
+	res, err := s.db.ExecContext(ctx, `INSERT IGNORE INTO hc2_deliveries (event_id, channel_id, userid, node_id, time, kind, ok, error) VALUES (?,0,?,'',?,'quota',1,'claim')`,
+		id, userID, nowStr())
+	if err != nil {
+		s.log.Warn("quota notice claim failed", "err", err)
+		return ""
+	}
+	if n, _ := res.RowsAffected(); n != 1 {
+		return ""
+	}
+	return id
 }
 
 // UsageLoop schreibt den Verbrauch alle 30 s und gleicht ihn mit dem anderen hub ab.

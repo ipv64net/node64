@@ -327,7 +327,7 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 
 // isDownKind: Stoerungsmeldungen (Sammelmeldung der Entwarnungen zaehlt als Entwarnung).
 func isDownKind(k Kind) bool {
-	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded || k == KindDynFail || k == KindDynLimit
+	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded || k == KindDynFail || k == KindDynLimit || k == KindQuota
 }
 
 // flagsOK prueft die Schalter von Check und Kanal (Stoerung/Entwarnung/teilweise gestoert).
@@ -512,8 +512,8 @@ func (d *Dispatcher) rateOK(id int64, per float64) bool {
 
 // deliver verschickt einen Alert an alle zustaendigen Kanaele (in der Ruhezeit: fuer spaeter merken).
 func (d *Dispatcher) deliver(ctx context.Context, a Alert) {
-	if d.quiet(a) && IsDynDNS(a.Kind) {
-		d.log.Debug("dyndns notification dropped (quiet hours)", "name", a.Check.Name, "kind", a.Kind)
+	if d.quiet(a) && (IsDynDNS(a.Kind) || a.Kind == KindQuota) {
+		d.log.Debug("notification dropped (quiet hours)", "name", a.Check.Name, "kind", a.Kind)
 		return // steht im Verlauf des Moduls; keine Sammelmeldung danach
 	}
 	if d.quiet(a) {
@@ -639,6 +639,9 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 	if IsDynDNS(a.Kind) {
 		return d.composeDynDNS(lang, a, m)
 	}
+	if a.Kind == KindQuota {
+		return d.composeQuota(lang, a, m)
+	}
 	typeName := t("hc.type." + a.Check.Type)
 	var lines []string
 	switch a.Kind {
@@ -720,6 +723,20 @@ func (d *Dispatcher) composeDynDNS(lang string, a Alert, m Message) Message {
 	m.Payload = map[string]any{"event_id": a.EventID, "kind": string(a.Kind), "time": m.Time.UTC().Format(time.RFC3339), "name": a.Check.Name,
 		"reason": a.Reason, "message": a.Message, "url": m.URL, "title": m.Title, "text": m.Text,
 		"node": map[string]any{"name": d.settings(uid)(SetNodeName, ""), "location": d.settings(uid)(SetNodeLocation, "")}}
+	return m
+}
+
+// composeQuota: Tageskontingent der Online-Checks erreicht (Message = "verbraucht/Limit").
+func (d *Dispatcher) composeQuota(lang string, a Alert, m Message) Message {
+	t := func(key string, args ...any) string { return d.i18n.T(lang, key, args...) }
+	uid := a.Check.UserID
+	used, limit, _ := strings.Cut(a.Message, "/")
+	m.URL, m.Priority = d.listURL(uid, "/healthchecks"), 4
+	m.Title = t("notify.subject.quota")
+	m.Text = strings.Join([]string{t("notify.body.quota_used", "used", used, "limit", limit), t("notify.body.quota_pause"), t("notify.body.quota_local"),
+		t("notify.body.time", "time", d.i18n.FormatDateTime(lang, m.Time, d.location(uid)))}, "\n")
+	m.Payload = map[string]any{"event_id": a.EventID, "kind": string(a.Kind), "time": m.Time.UTC().Format(time.RFC3339), "used": used, "limit": limit,
+		"url": m.URL, "title": m.Title, "text": m.Text}
 	return m
 }
 

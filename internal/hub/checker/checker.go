@@ -6,6 +6,7 @@ package checker
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -55,6 +56,23 @@ func New(st *store.Store, log *slog.Logger, location, version, roles string, wor
 func (c *Checker) SetNotifier(d *notify.Dispatcher, nf *hubnotify.Store) {
 	c.dispatcher, c.nfStore = d, nf
 	c.st.OnOverall = c.onOverall
+	c.st.OnQuotaReached = c.quotaReached
+}
+
+// quotaReached meldet einmal je Account und Tag, dass das Tageskontingent der Online-Checks erreicht ist
+// (Standardkanaele des Accounts; die Online-Checks pausieren bis Mitternacht).
+func (c *Checker) quotaReached(userID int64, today, limit int) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		id := c.st.ClaimQuotaNotice(ctx, userID)
+		if id == "" {
+			return // schon gemeldet (heute oder vom anderen hub)
+		}
+		c.log.Info("daily quota reached, notifying", "user", userID, "used", today, "limit", limit)
+		c.dispatcher.Dispatch(notify.Alert{EventID: id, Kind: notify.KindQuota, Time: time.Now().UTC(), Message: fmt.Sprintf("%d/%d", today, limit),
+			Check: notify.CheckInfo{UserID: userID, Name: "Healthchecks", NotifyDown: true, NotifyUp: true}})
+	}()
 }
 
 // onOverall setzt einen Wechsel des Gesamtzustands in einen Alert um.

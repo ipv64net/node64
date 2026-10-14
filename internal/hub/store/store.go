@@ -56,6 +56,8 @@ type Store struct {
 	OnOverall func(OverallEvent)
 	// OnUsageFlip: Tageskontingent eines Accounts erschoepft (true) bzw. wieder frei (false), usage.go.
 	OnUsageFlip func(userID int64, blocked bool)
+	// OnQuotaReached: Tageskontingent erreicht (zur Benachrichtigung, checker.go)
+	OnQuotaReached func(userID int64, today, limit int)
 
 	use usage
 }

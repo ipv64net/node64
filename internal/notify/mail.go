@@ -39,7 +39,7 @@ func mailStatus(k Kind, lang string) (color, label string) {
 		return "#d63939", l["down"]
 	case KindUp, KindFlappingEnd, KindDegradedEnd, KindSummaryUp:
 		return "#2fb344", l["up"]
-	case KindDegraded, KindFlappingStart:
+	case KindDegraded, KindFlappingStart, KindQuota:
 		return "#f59f00", l["warn"]
 	}
 	return "#17bebb", l["info"]

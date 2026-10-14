@@ -38,6 +38,8 @@ const (
 	KindDynIP    Kind = "dyndns_ip"    // oeffentliche Adresse gewechselt
 	KindDynFail  Kind = "dyndns_fail"  // Update fehlgeschlagen bzw. Ziel pausiert
 	KindDynLimit Kind = "dyndns_limit" // Update-Limit des Accounts fast oder ganz erreicht
+
+	KindQuota Kind = "quota" // Tageskontingent der Online-Checks erreicht (Account, vom hub)
 )
 
 // CheckInfo sind die Angaben zum Check, die in Nachrichten erscheinen.
