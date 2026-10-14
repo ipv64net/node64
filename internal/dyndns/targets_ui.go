@@ -22,6 +22,7 @@ func (m *Module) targetRoutes(mux interface {
 	mux.Handle("POST /dyndns/targets/{id}", page(m.pageTargetSave))
 	mux.Handle("POST /dyndns/targets/{id}/token", page(m.pageTargetToken))
 	mux.Handle("POST /dyndns/targets/{id}/delete", page(m.pageTargetDelete))
+	mux.Handle("POST /dyndns/targets/{id}/update", page(m.pageTargetUpdate))
 }
 
 func (m *Module) back(w http.ResponseWriter, r *http.Request, kind, text, to string) {
@@ -315,6 +316,33 @@ func (m *Module) pageTargetToken(w http.ResponseWriter, r *http.Request) {
 	}
 	m.audit(r, "dyndns.token_refresh", t.FQDN())
 	m.back(w, r, "success", m.g.T(r, "dyn.targets.token_refreshed"), "/dyndns/targets/"+r.PathValue("id"))
+}
+
+// pageTargetUpdate meldet das Ziel sofort (auch ohne Abweichung; kostet Update-Limit).
+func (m *Module) pageTargetUpdate(w http.ResponseWriter, r *http.Request) {
+	t := m.loadTarget(w, r)
+	if t == nil {
+		return
+	}
+	if t.Paused != "" { // manuell anstossen hebt die Pause auf (z. B. nach neuem Token)
+		t.Paused = ""
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	m.UpdateNow(ctx, t)
+	m.audit(r, "dyndns.update_now", t.FQDN())
+	back := "/dyndns/targets/" + r.PathValue("id")
+	if r.PostFormValue("back") == "list" {
+		back = "/dyndns"
+	}
+	if got, _ := m.Target(r.Context(), t.ID); got != nil && got.Status() == "error" {
+		m.back(w, r, "danger", m.g.T(r, "dyn.update.failed", "name", t.FQDN(), "error", got.LastError), back)
+		return
+	} else if got != nil && got.Paused != "" {
+		m.back(w, r, "warning", m.g.T(r, "dyn.update.paused", "name", t.FQDN(), "reason", m.g.T(r, "dyn.pause."+got.Paused)), back)
+		return
+	}
+	m.back(w, r, "success", m.g.T(r, "dyn.update.done", "name", t.FQDN()), back)
 }
 
 func (m *Module) pageTargetDelete(w http.ResponseWriter, r *http.Request) {

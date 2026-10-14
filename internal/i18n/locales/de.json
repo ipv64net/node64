@@ -315,7 +315,8 @@
       "missing": "Dieses Ziel gibt es nicht mehr.",
       "no_record": "Bei ipv64 gibt es für diesen Namen keinen A- oder AAAA-Record mehr.",
       "token_refreshed": "Token neu von ipv64 geholt.",
-      "deleted": "{name} entfernt. Der Verlauf bleibt erhalten."
+      "deleted": "{name} entfernt. Der Verlauf bleibt erhalten.",
+      "status": "Status"
     },
     "settings": {
       "title": "Prüfung",
@@ -424,9 +425,36 @@
       "state": "Stand",
       "last_ok": "Letzte Aktualisierung",
       "last_error": "Letzter Fehler",
-      "updater_soon": "Aktualisiert wird ab der nächsten Ausbaustufe (Updater).",
       "token_refresh": "Token neu holen",
-      "delete_confirm": "{name} nicht mehr aktualisieren? Bei ipv64 bleibt der Record bestehen."
+      "delete_confirm": "{name} nicht mehr aktualisieren? Bei ipv64 bleibt der Record bestehen.",
+      "dns_checked": "DNS geprüft"
+    },
+    "status": {
+      "ok": "aktuell",
+      "dns": "DNS weicht ab",
+      "error": "Fehler",
+      "new": "noch nicht abgeglichen",
+      "off": "aus",
+      "paused": "pausiert"
+    },
+    "pause": {
+      "badauth": "Token abgelehnt",
+      "nohost": "Name unbekannt",
+      "conflict": "Konflikt (CNAME/CDN)",
+      "flapping": "wird woanders geändert"
+    },
+    "pause_hint": {
+      "badauth": "ipv64 hat den Token abgelehnt, z. B. weil er neu erzeugt wurde. „Token neu holen“ oder einen neuen Token eintragen; danach „Jetzt aktualisieren“.",
+      "nohost": "Diesen Namen gibt es bei ipv64 nicht (mehr). Bei ipv64 prüfen oder das Ziel löschen.",
+      "conflict": "Ein CNAME, CDN oder Failover am Namen verhindert das Update. Das bei ipv64 auflösen, dann „Jetzt aktualisieren“.",
+      "flapping": "Der Record wurde mehrfach von anderer Stelle anders gesetzt (z. B. ein zweiter Updater oder eine andere Node). Damit sich nicht beide gegenseitig überschreiben und das Update-Limit verbrauchen, ist das Ziel pausiert. Die andere Stelle abschalten, dann „Jetzt aktualisieren“."
+    },
+    "update": {
+      "now": "Jetzt aktualisieren",
+      "now_hint": "Meldet die Adresse sofort an ipv64, auch ohne Änderung. Kostet Update-Limit.",
+      "done": "{name} an ipv64 gemeldet.",
+      "failed": "{name}: Update fehlgeschlagen ({error}).",
+      "paused": "{name} pausiert: {reason}."
     }
   },
   "hc": {

@@ -315,7 +315,8 @@
       "missing": "This target no longer exists.",
       "no_record": "ipv64 has no A or AAAA record for this name anymore.",
       "token_refreshed": "Token fetched again from ipv64.",
-      "deleted": "{name} removed. The history is kept."
+      "deleted": "{name} removed. The history is kept.",
+      "status": "Status"
     },
     "settings": {
       "title": "Checking",
@@ -424,9 +425,36 @@
       "state": "State",
       "last_ok": "Last update",
       "last_error": "Last error",
-      "updater_soon": "Updates start with the next stage (updater).",
       "token_refresh": "Fetch token again",
-      "delete_confirm": "Stop updating {name}? The record stays at ipv64."
+      "delete_confirm": "Stop updating {name}? The record stays at ipv64.",
+      "dns_checked": "DNS checked"
+    },
+    "status": {
+      "ok": "up to date",
+      "dns": "DNS differs",
+      "error": "error",
+      "new": "not synced yet",
+      "off": "off",
+      "paused": "paused"
+    },
+    "pause": {
+      "badauth": "token rejected",
+      "nohost": "unknown name",
+      "conflict": "conflict (CNAME/CDN)",
+      "flapping": "changed elsewhere"
+    },
+    "pause_hint": {
+      "badauth": "ipv64 rejected the token, e.g. because it was regenerated. Use \"Fetch token again\" or enter a new token, then \"Update now\".",
+      "nohost": "This name does not exist (anymore) at ipv64. Check it at ipv64 or delete the target.",
+      "conflict": "A CNAME, CDN or failover on the name prevents the update. Resolve it at ipv64, then \"Update now\".",
+      "flapping": "The record was set differently from elsewhere several times (e.g. a second updater or another node). To keep both from overwriting each other and using up the update limit, the target is paused. Turn off the other updater, then \"Update now\"."
+    },
+    "update": {
+      "now": "Update now",
+      "now_hint": "Reports the address to ipv64 right away, even without a change. Uses update limit.",
+      "done": "{name} reported to ipv64.",
+      "failed": "{name}: update failed ({error}).",
+      "paused": "{name} paused: {reason}."
     }
   },
   "hc": {

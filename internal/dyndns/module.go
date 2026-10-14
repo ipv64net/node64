@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/netip"
 	"sync"
+	"time"
 
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/module"
@@ -43,6 +44,12 @@ type Module struct {
 	trigger chan chan struct{} // "Jetzt pruefen"
 	key     *ipv64api.Key      // zentraler ipv64-API-Key des Containers (Auswahl, Tokens, Limit)
 
+	upd       *updState                                    // Abstand, Backoff, Tageslimit der Update-Aufrufe
+	updateURL string                                       // update.php (Tests ersetzen ihn)
+	httpc     *http.Client                                 // fuer update.php
+	local     func() []ifAddr                              // globale IPv6-Adressen der Interfaces
+	dnsLookup func(ctx context.Context, t *Target) dnsView // nil = Nameserver von ipv64 direkt fragen
+
 	stMu sync.Mutex
 	fam  [2]famState // [0] IPv4, [1] IPv6
 }
@@ -50,7 +57,9 @@ type Module struct {
 // New erzeugt das Modul. dispatcher darf nil sein.
 func New(core *store.Store, log *slog.Logger, box *secrets.Box, dispatcher *notify.Dispatcher, version string) *Module {
 	return &Module{core: core, log: log.With("module", Name), box: box, dispatcher: dispatcher, version: version,
-		fetch: newFetcher("node64/" + version), probe: defaultProbe, trace: traceUDP, trigger: make(chan chan struct{})}
+		fetch: newFetcher("node64/" + version), probe: defaultProbe, trace: traceUDP, trigger: make(chan chan struct{}),
+		upd: &updState{flaps: map[int64][]time.Time{}, nsCache: map[string]nsEntry{}}, updateURL: defaultUpdateURL,
+		httpc: &http.Client{Timeout: 20 * time.Second}, local: localIPv6}
 }
 
 // SetKey installiert den zentralen API-Key des Containers.

@@ -67,15 +67,17 @@
 			{{if not $d.Targets}}<div class="card-body small text-body-secondary">{{.T "dyn.targets.empty"}}</div>
 			{{else}}
 			<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards small">
-				<thead><tr><th>{{.T "dyn.targets.name"}}</th><th>IPv4</th><th>IPv6</th><th class="d-none d-md-table-cell">{{.T "dyn.targets.token"}}</th><th class="text-end">{{.T "common.actions"}}</th></tr></thead>
+				<thead><tr><th>{{.T "dyn.targets.name"}}</th><th>IPv4</th><th>IPv6</th><th>{{.T "dyn.targets.status"}}</th><th class="d-none d-md-table-cell">{{.T "dyn.targets.token"}}</th><th class="text-end">{{.T "common.actions"}}</th></tr></thead>
 				<tbody>
 				{{range $d.List}}
 				<tr{{if not .Enabled}} class="text-body-tertiary"{{end}}>
-					<td data-label="{{$.T "dyn.targets.name"}}"><a href="/dyndns/targets/{{.ID}}" class="fw-semibold text-break">{{.FQDN}}</a>{{if not .Enabled}} <span class="badge text-bg-secondary">{{$.T "dyn.targets.paused"}}</span>{{end}}{{if .Paused}} <span class="badge text-bg-warning">{{$.T "dyn.targets.autopaused"}}: {{.Paused}}</span>{{end}}</td>
+					<td data-label="{{$.T "dyn.targets.name"}}"><a href="/dyndns/targets/{{.ID}}" class="fw-semibold text-break">{{.FQDN}}</a></td>
 					<td data-label="IPv4"><span class="badge text-bg-light">{{$.T (print "dyn.mode4." .Mode4)}}</span>{{if .LastIP4}}<div class="font-monospace text-break">{{.LastIP4}}</div>{{end}}</td>
 					<td data-label="IPv6"><span class="badge text-bg-light">{{$.T (print "dyn.mode6." .Mode6)}}</span>{{if .LastIP6}}<div class="font-monospace text-break">{{.LastIP6}}</div>{{end}}{{if .LastPrefix}}<div class="font-monospace text-break">{{.LastPrefix}}</div>{{end}}</td>
+					<td data-label="{{$.T "dyn.targets.status"}}"><span class="badge {{.StatusClass}}"{{if .LastError}} title="{{.LastError}}"{{end}}>{{if .Paused}}{{$.T (print "dyn.pause." .Paused)}}{{else}}{{$.T (print "dyn.status." .Status)}}{{end}}</span>{{if not .LastOKAt.IsZero}}<div class="text-body-secondary" title="{{$.Time .LastOKAt}}">{{$.Ago .LastOKAt}}</div>{{end}}</td>
 					<td data-label="{{$.T "dyn.targets.token"}}" class="d-none d-md-table-cell"><span class="badge {{if eq .TokenKind "record"}}text-bg-success{{else}}text-bg-warning{{end}}">{{$.T (print "dyn.token." .TokenKind)}}</span></td>
-					<td class="text-end"><a class="btn btn-outline-secondary btn-sm" href="/dyndns/targets/{{.ID}}" title="{{$.T "dyn.targets.edit"}}"><i class="bi bi-pencil"></i></a></td>
+					<td class="text-end text-nowrap"><form method="post" action="/dyndns/targets/{{.ID}}/update" class="d-inline"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="back" value="list"><button class="btn btn-outline-primary btn-sm" type="submit" title="{{$.T "dyn.update.now"}}"><i class="bi bi-cloud-upload"></i></button></form>
+						<a class="btn btn-outline-secondary btn-sm" href="/dyndns/targets/{{.ID}}" title="{{$.T "dyn.targets.edit"}}"><i class="bi bi-pencil"></i></a></td>
 				</tr>
 				{{end}}
 				</tbody>

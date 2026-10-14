@@ -97,10 +97,12 @@ func (m *Module) loop(ctx context.Context) {
 		case <-t.C:
 			m.round(ctx)
 			m.maybeAnalyze(ctx)
+			m.runUpdates(ctx)
 			t.Reset(next())
 		case done := <-m.trigger:
 			m.round(ctx)
 			m.maybeAnalyze(ctx)
+			m.runUpdates(ctx)
 			close(done)
 			if !t.Stop() {
 				select {
