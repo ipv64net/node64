@@ -1,5 +1,13 @@
 # Änderungen – Healthchecks
 
+## 2.6.0 – 2026-10-14
+
+### Neu
+- Lokale Gruppe: Eine mit ipv64 verknüpfte Node reicht die Daten vom hub an Nodes ohne Healthchecks-Sync weiter –
+  den Gesamtzustand von Checks, die keine Node der Gruppe misst (z. B. Online-Checks), und die Messstellen
+  außerhalb der Gruppe (ipv64-Standorte, andere Nodes) samt Verlauf. Eine Node ohne Sync zeigt so alle Checks
+  vollständig an.
+
 ## 2.5.0 – 2026-10-14
 
 ### Neu

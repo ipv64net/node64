@@ -1,6 +1,6 @@
 # Lokale Gruppe (Node64)
 
-Stand 2026-10-14 (Healthchecks 2.5.0). Beschreibt, was im Betrieb wirklich passiert. Code: `internal/peer`
+Stand 2026-10-14 (Healthchecks 2.6.0). Beschreibt, was im Betrieb wirklich passiert. Code: `internal/peer`
 (Protokoll, Abgleich, Rollen) und in `internal/healthchecks` die Dateien `peersync.go`, `peerdata.go`,
 `peermaint.go` und `groupnotify.go`.
 
@@ -37,6 +37,7 @@ Checks wie die verknüpften, und die Gruppe benachrichtigt auch dann, wenn ipv64
 | Benachrichtigungs-Einstellungen (Ruhezeiten, Grenzen, Sammelmeldung) | als ein Paket, erkannt an der Änderung des Inhalts | jüngeres Paket gewinnt; eine verknüpfte Node bringt beim ersten Mal die Einstellungen des Accounts mit |
 | Messwerte | `/peer/v1/measurements`: eigene Messpunkte ab einer Nummer, eine neue Node bekommt zuerst die letzten 24 h | doppelte Punkte werden verworfen |
 | Zustände | mit dem ersten Abruf jeder Runde | gelten 2 Minuten bzw. 3 × Intervall nach der letzten Messung |
+| Daten vom hub (nur für Nodes ohne Sync) | `/peer/v1/relay` bei der weiterreichenden Node: Gesamtzustand der Checks, die keine Node der Gruppe misst, und Messstellen außerhalb der Gruppe samt Messpunkten (erster Abruf: 24 h) | was ein Mitglied selbst misst, kommt von ihm |
 
 **Kanäle** bleiben je Node eigene Einstellung und werden nicht abgeglichen.
 

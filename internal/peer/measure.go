@@ -127,5 +127,6 @@ func (m *Manager) verdicts(ctx context.Context) {
 		return
 	}
 	linked := m.linkedSelf()
-	d.PeerVerdicts(ctx, func(nodes []string) bool { return !linked || !m.hubKnows(ctx, nodes) })
+	// nur Checks, die eine Node der Gruppe misst (sonst kommt der Gesamtzustand vom hub bzw. weitergereicht)
+	d.PeerVerdicts(ctx, func(nodes []string) bool { return (!linked || !m.hubKnows(ctx, nodes)) && m.involved(ctx, nodes) })
 }

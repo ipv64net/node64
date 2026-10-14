@@ -286,6 +286,9 @@ func (m *Manager) pullAll(ctx context.Context, only string) {
 		if err := m.pullData(ctx, x); err != nil {
 			m.d.Log.Debug("peer measurements", "from", x.Name, "err", err)
 		}
+		if err := m.pullRelay(ctx, x); err != nil {
+			m.d.Log.Debug("peer relay", "from", x.Name, "err", err)
+		}
 	}
 	m.verdicts(ctx)
 }
