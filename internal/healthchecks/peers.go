@@ -109,6 +109,19 @@ func (m *Module) peers(ctx context.Context) []Peer {
 	if !found && me != "" {
 		out = append([]Peer{{ID: me, Name: m.core.SettingOr(ctx, "sync.node_name", "Node"), Online: true, Self: true}}, out...)
 	}
+	if m.groupPeers != nil { // Nodes der lokalen Gruppe (auch ohne hub)
+		at := map[string]int{}
+		for i, p := range out {
+			at[p.ID] = i
+		}
+		for _, g := range m.groupPeers(ctx) {
+			if i, ok := at[g.ID]; ok {
+				out[i].Online = out[i].Online || g.Online
+				continue
+			}
+			out = append(out, g)
+		}
+	}
 	return out
 }
 

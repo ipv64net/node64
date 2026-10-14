@@ -115,6 +115,8 @@ func (m *Manager) Handle(h func(w http.ResponseWriter, r *http.Request, from *Me
 			writeJSON(w, code, map[string]string{"error": err.Error()})
 			return
 		}
+		// jede gueltige Anfrage ist ein Lebenszeichen (eine zurueckgekehrte Node gilt sofort wieder als erreichbar)
+		_, _ = m.db.ExecContext(r.Context(), `UPDATE peer_members SET last_seen = ?, last_error = '' WHERE node_id = ?`, fmtTime(time.Now()), from.NodeID)
 		h(w, r, from, body)
 	})
 }

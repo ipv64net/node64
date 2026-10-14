@@ -1,5 +1,19 @@
 # Änderungen – Healthchecks
 
+## 2.3.0 – 2026-10-14
+
+### Neu
+- Lokale Gruppe: Messen mehrere Nodes der Gruppe einen Check, benachrichtigt genau eine – die erste erreichbare
+  in der Liste der messenden Nodes (die Besitzer-Node, fällt sie aus, die nächste). Gemeldet wird der
+  Gesamtzustand aller Messstellen wie bei ipv64 (inkl. „teilweise gestört“, wenn eingeschaltet). Kommt eine Node
+  zurück, übernimmt sie den Stand der Gruppe und meldet nichts doppelt.
+- Ohne ipv64-Sync oder für Checks, die ipv64 nicht kennt, gehen diese Meldungen über die Kanäle der meldenden
+  Node (ipv64-Mail/-SMS über den API-Key); sonst meldet weiter ipv64.
+- Die Nodes der lokalen Gruppe stehen bei den messenden Nodes zur Auswahl (auch ohne ipv64-Sync).
+
+### Behoben
+- Erinnerungen („noch gestört“) schickte auch eine Node, die den Check nicht misst oder nicht besitzt.
+
 ## 2.2.0 – 2026-10-14
 
 ### Neu

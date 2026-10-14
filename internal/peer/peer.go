@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ipv64net/node64/internal/secrets"
@@ -76,17 +77,20 @@ type Deps struct {
 	AccountID func() int64  // ipv64-Account (Healthchecks-Sync oder API-Key), 0 = keiner
 	Checks    func() Checks // Healthchecks-Modul (nil bzw. Rueckgabe nil = nicht aktiv)
 	Linked    func() bool   // mit dem hub verknuepft (Healthchecks-Sync)
+	// HubNotifies: der hub ist verbunden und bestaetigt, er uebernimmt die Benachrichtigungen
+	HubNotifies func() bool
 	// Forward reicht eine uebernommene Aenderung an den hub weiter (Outbox), wenn ihre Urheberin nicht verknuepft ist
 	Forward func(ctx context.Context, entity, id, op string)
 }
 
 // Manager verwaltet Identitaet, Kopplung und Mitglieder.
 type Manager struct {
-	d    Deps
-	db   *sql.DB
-	priv ed25519.PrivateKey
-	hc   *http.Client
-	pull pullState // Abgleich der Konfiguration (config.go)
+	d     Deps
+	db    *sql.DB
+	priv  ed25519.PrivateKey
+	hc    *http.Client
+	pull  pullState   // Abgleich der Konfiguration (config.go)
+	ready atomic.Bool // erster Abgleich nach dem Start erledigt (notify.go)
 
 	mu    sync.Mutex
 	code  string // offener Kopplungscode

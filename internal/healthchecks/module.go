@@ -39,15 +39,17 @@ type Module struct {
 
 	g module.Guards
 
-	mu     sync.Mutex
-	sched  *scheduler.Scheduler
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
-	push   *pushLimiter
-	linked func() bool                     // ipv64-Verknuepfung aktiv (Sync-Phase), nil = standalone
-	quota  func() (today, limit, locs int) // Tageskontingent der Online-Checks, nil = standalone
-	api    *ipv64api.Key                   // zentraler API-Key: Online-Checks ohne Sync (online_api.go)
-	onl    onlineCache
+	mu         sync.Mutex
+	sched      *scheduler.Scheduler
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
+	push       *pushLimiter
+	linked     func() bool                      // ipv64-Verknuepfung aktiv (Sync-Phase), nil = standalone
+	quota      func() (today, limit, locs int)  // Tageskontingent der Online-Checks, nil = standalone
+	api        *ipv64api.Key                    // zentraler API-Key: Online-Checks ohne Sync (online_api.go)
+	groupRole  GroupRole                        // lokale Gruppe: wer benachrichtigt (groupnotify.go), nil = keine Gruppe
+	groupPeers func(ctx context.Context) []Peer // Nodes der lokalen Gruppe (Auswahl der Messstellen)
+	onl        onlineCache
 	// pushFwd meldet einen lokal empfangenen Push an den hub (der ihn an andere Messstellen weitergibt)
 	pushFwd func(token string, down bool, msg, from string) bool
 	// runRemote bittet den hub, den Check bei den anderen messenden Nodes sofort zu messen
@@ -64,11 +66,15 @@ func New(core *store.Store, log *slog.Logger, dispatcher *notify.Dispatcher, not
 
 // Notify (scheduler.Notifier): Ereignis in einen Alert fuer den Dispatcher umsetzen.
 func (m *Module) Notify(ctx context.Context, e scheduler.Event, c scheduler.Check) {
-	if e.Silent {
-		return
-	}
 	full, err := m.st.Check(ctx, c.Token)
 	if err != nil || full == nil {
+		return
+	}
+	if group, _, _ := m.role(ctx, full); group {
+		m.groupVerdict(ctx, full) // mehrere Nodes der Gruppe messen: Gesamtzustand, genau eine meldet
+		return
+	}
+	if e.Silent {
 		return
 	}
 	if full.Foreign() {
@@ -117,6 +123,14 @@ func (m *Module) remind(ctx context.Context) {
 			continue
 		}
 		rt := m.liveRuntime(c)
+		if group, me, ready := m.role(ctx, c); group { // Gruppe: nur die Node, die an der Reihe ist, nach dem Gesamtzustand
+			if !me || !ready {
+				continue
+			}
+			rt.State, rt.DownSince = m.groupState(ctx, c.Token)
+		} else if !c.MeasuredHere() || c.Foreign() {
+			continue // misst hier nicht oder gehoert einer anderen Node: meldet der hub bzw. die Besitzer-Node
+		}
 		if rt.State != scheduler.StateDown && rt.State != scheduler.StateFlapping {
 			continue
 		}
@@ -156,7 +170,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.2.0", Changelog: changelog}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.3.0", Changelog: changelog}
 }
 
 func (m *Module) Migrations() []store.Migration {

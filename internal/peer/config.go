@@ -191,6 +191,7 @@ func (m *Manager) pullLoop(ctx context.Context) {
 	t := time.NewTicker(pullEvery)
 	defer t.Stop()
 	m.pullAll(ctx, "")
+	m.ready.Store(true)
 	for {
 		select {
 		case <-ctx.Done():

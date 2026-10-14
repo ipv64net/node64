@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/wire"
 )
 
@@ -19,6 +20,8 @@ type Data interface {
 	MaxMeasurementSeq(ctx context.Context) int64
 	Snapshot(ctx context.Context) []wire.State
 	ApplyPeerData(ctx context.Context, origin, label string, states []wire.State, ms []wire.Measurement) (int, error)
+	PeerGroups(ctx context.Context) []healthchecks.GroupState
+	ApplyPeerGroups(ctx context.Context, list []healthchecks.GroupState)
 	PeerVerdicts(ctx context.Context, decide func(nodes []string) bool)
 }
 
@@ -30,11 +33,12 @@ const (
 )
 
 type measOut struct {
-	States []wire.State       `json:"states,omitempty"`
-	Items  []wire.Measurement `json:"items"`
-	Last   int64              `json:"last"`
-	Head   int64              `json:"head"`
-	More   bool               `json:"more"`
+	States []wire.State              `json:"states,omitempty"`
+	Groups []healthchecks.GroupState `json:"groups,omitempty"` // Gesamtzustand der Gruppe (Benachrichtigungen)
+	Items  []wire.Measurement        `json:"items"`
+	Last   int64                     `json:"last"`
+	Head   int64                     `json:"head"`
+	More   bool                      `json:"more"`
 }
 
 func (m *Manager) data() Data {
@@ -56,7 +60,7 @@ func (m *Manager) handleMeasurements(w http.ResponseWriter, r *http.Request, _ *
 		since = d.PeerStartSeq(ctx, time.Now().Add(-firstSpan))
 	}
 	if r.URL.Query().Get("states") == "1" {
-		out.States = d.Snapshot(ctx)
+		out.States, out.Groups = d.Snapshot(ctx), d.PeerGroups(ctx)
 	}
 	items, last, more, err := d.PeerMeasurements(ctx, since, measPage)
 	if err != nil {
@@ -95,6 +99,7 @@ func (m *Manager) pullData(ctx context.Context, x Member) error {
 			cursor = startFresh
 			continue
 		}
+		d.ApplyPeerGroups(ctx, out.Groups)
 		n, err := d.ApplyPeerData(ctx, x.NodeID, x.Name, out.States, out.Items)
 		if err != nil {
 			return err

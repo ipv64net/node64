@@ -110,7 +110,11 @@ func (m *Module) PeerVerdicts(ctx context.Context, decide func(nodes []string) b
 		return
 	}
 	for _, c := range list {
-		if c.MeasuredHere() || c.Execution == "online" || !decide(c.Nodes) {
+		if c.MeasuredHere() {
+			m.groupVerdict(ctx, c) // misst mit: Gesamtzustand der Gruppe fuer die Benachrichtigung
+			continue
+		}
+		if c.Execution == "online" || !decide(c.Nodes) {
 			continue
 		}
 		m.peerVerdict(ctx, c)
@@ -147,7 +151,7 @@ func (m *Module) peerVerdict(ctx context.Context, c *Check) {
 			nodes++
 			limit = peerFresh
 		}
-		x.Fresh = !x.updated.IsZero() && time.Since(x.updated) <= limit
+		x.Fresh = !x.updated.IsZero() && time.Since(x.updated) <= limit && (!strings.HasPrefix(x.Source, "node:") || measuredLately(c, x.last))
 		srcs = append(srcs, x)
 	}
 	rows.Close()
