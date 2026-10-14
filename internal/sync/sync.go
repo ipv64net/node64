@@ -552,8 +552,10 @@ func (c *Live) clearLink(ctx context.Context) error {
 	c.mu.Lock()
 	c.connected, c.hub, c.lastErr = false, "", ""
 	c.mu.Unlock()
-	if err := c.d.HC.SetOwnerAllSelf(ctx); err != nil {
-		return err
+	if m := c.d.Modules; m == nil || m.IsRunning(healthchecks.Name) { // ohne Modul gibt es keine Checks
+		if err := c.d.HC.SetOwnerAllSelf(ctx); err != nil {
+			return err
+		}
 	}
 	// Platzhalter der Server-Kanaele entfernen
 	if chans, err := c.d.NF.Channels(ctx); err == nil {
