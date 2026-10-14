@@ -46,7 +46,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.5.0"
+	version   = "1.6.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -81,6 +81,8 @@ type Module struct {
 	cur   atomic.Pointer[tls.Certificate] // aktuelles Zertifikat fuer DoH/DoT/DoQ (wechselt ohne Neustart)
 	bg    sync.WaitGroup                  // Hintergrundlaeufe (Zertifikatsabruf)
 	bgCtx context.Context                 // endet mit dem Modul
+
+	pauseUntil atomic.Int64 // Blockieren aus bis (UnixNano), -1 = bis zum Wiedereinschalten, 0 = aktiv (pause.go)
 
 	domMu   sync.Mutex // Domains des Accounts (Seite Verschluesselung)
 	domList []string
@@ -232,6 +234,7 @@ func (m *Module) start(ctx context.Context) error {
 		return fmt.Errorf("load records: %w", err)
 	}
 	cfg := m.loadConfig(ctx)
+	m.loadPause(ctx)
 	e := &engine{addr: m.listenAddr(ctx), started: time.Now()}
 	st, err := querylog.Open(filepath.Join(m.dir(), "dns64.db"), time.Duration(cfg.Retention)*24*time.Hour, m.log)
 	if err != nil {
@@ -252,7 +255,7 @@ func (m *Module) start(ctx context.Context) error {
 	e.up = upstream.New(cfg.activeUpstreams(), cfg.UpMode)
 	e.local = localnet.New(m.routerAddr(ctx), m.log)
 	e.srv = &dnsserver.Server{Addr: e.addr, Local: e.local, Filter: e.lists, Upstream: e.up, Cache: e.cache, Log: st, Logger: m.log,
-		Records: m, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer()}
+		Records: m, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused}
 	if err := e.srv.Start(); err != nil {
 		st.CloseNow()
 		e.up.Close()
@@ -376,6 +379,13 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 		{LabelKey: "dns64.card.cached", Value: sum.Cached},
 		{LabelKey: "dns64.card.clients", Value: sum.Clients},
 		{LabelKey: "dns64.card.lists", Value: int64(e.lists.Matcher().Size())},
+	}
+	if p := m.pauseState(); p.Active { // Blockieren pausiert: oben und gelb
+		until := "∞"
+		if !p.Forever {
+			until = p.Until.Format("15:04")
+		}
+		c.Stats = append([]module.CardStat{{LabelKey: "dns64.card.paused", Text: until, Class: "text-warning-emphasis"}}, c.Stats...)
 	}
 	return c, nil
 }

@@ -3,6 +3,18 @@
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
 	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{.T "dns64.title"}}</h1>
 	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "dns64.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "dns64.listening" "addr" $d.Listen}}</span>{{end}}
+	{{if $d.Running}}<div class="ms-auto d-flex align-items-center gap-2" id="dns64-pause">
+		{{if $d.Pause.Active}}<span class="badge text-bg-warning"><i class="bi bi-pause-circle"></i> {{if $d.Pause.Forever}}{{.T "dns64.pause.paused"}}{{else}}{{.T "dns64.pause.paused_until" "time" (.Time $d.Pause.Until)}}{{end}}</span>
+		<form method="post" action="/dns64/resume" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-sm btn-success" type="submit"><i class="bi bi-play-fill"></i> {{.T "dns64.pause.resume"}}</button></form>
+		{{else}}<div class="dropdown">
+			<button class="btn btn-sm btn-outline-warning dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-pause-fill"></i> {{.T "dns64.pause.button"}}</button>
+			<form method="post" action="/dns64/pause" class="dropdown-menu dropdown-menu-end">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<button class="dropdown-item" type="submit" name="minutes" value="10"><i class="bi bi-clock"></i> {{.T "dns64.pause.ten"}}</button>
+				<button class="dropdown-item" type="submit" name="minutes" value="0"><i class="bi bi-pause-circle"></i> {{.T "dns64.pause.forever"}}</button>
+			</form>
+		</div>{{end}}
+	</div>{{end}}
 	
 </div>
 <ul class="nav nav-tabs mb-3">

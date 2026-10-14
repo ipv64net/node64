@@ -1205,7 +1205,8 @@
       "blocked": "Blocked",
       "cached": "From cache",
       "clients": "Clients",
-      "lists": "Domains in blocklists"
+      "lists": "Domains in blocklists",
+      "paused": "Blocking paused until"
     },
     "since": "running since {time}",
     "listening": "DNS on {addr}",
@@ -1403,7 +1404,8 @@
         "doh": "DoH",
         "dot": "DoT",
         "doq": "DoQ"
-      }
+      },
+      "reason_paused": "blocking paused (otherwise: {list})"
     },
     "retrying": "Retrying every minute; port or address can be changed in the settings.",
     "custom": "custom",
@@ -1507,6 +1509,14 @@
         "certificate": "issuing certificate",
         "ok": "done"
       }
+    },
+    "pause": {
+      "button": "Pause blocking",
+      "ten": "10 minutes",
+      "forever": "Until switched back on",
+      "paused": "Blocking paused",
+      "paused_until": "Blocking paused until {time}",
+      "resume": "Switch back on"
     }
   }
 }

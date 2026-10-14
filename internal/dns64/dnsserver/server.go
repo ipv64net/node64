@@ -25,6 +25,9 @@ const blockedTTL = 10
 // Reason codes in the query log (translated in the UI).
 const ReasonStale = "stale" // served from cache after expiry, refreshed in the background
 
+// ReasonPaused marks a query a list would have blocked while blocking was paused ("paused:<list>").
+const ReasonPaused = "paused:"
+
 // Records are own DNS entries from the settings. ok = the name is known (then the answer may be empty).
 type Records interface {
 	Lookup(name string, qtype uint16) (rrs []dns.RR, ok bool)
@@ -43,6 +46,7 @@ type Server struct {
 	BlockNX   bool                    // blocked names answer NXDOMAIN instead of 0.0.0.0 / ::
 	ExtraNets []netip.Prefix          // further client networks besides private and attached ones
 	Anonymize func(netip.Addr) string // client as stored in the log, nil = full IP
+	Paused    func() bool             // blocking switched off for now (nil = never)
 
 	acl        *clientACL
 	srv        []*dns.Server
@@ -170,11 +174,15 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry) *dns.Msg {
 	}
 
 	blocked, reason := s.Filter.Check(name)
+	pausedNow := s.Paused != nil && s.Paused()
+	if blocked && pausedNow {
+		blocked, reason = false, ReasonPaused+reason // wird nur protokolliert
+	}
 	if blocked {
 		e.Status, e.Reason = querylog.StatusBlocked, reason
 		return s.blockedMsg(r)
 	}
-	released := reason != "" || s.Filter.Allow.Contains(name)
+	released := reason != "" || s.Filter.Allow.Contains(name) || pausedNow
 
 	if resp, state, refresh := s.Cache.Get(r); resp != nil {
 		e.Status = querylog.StatusCached

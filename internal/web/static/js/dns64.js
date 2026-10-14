@@ -335,6 +335,7 @@
 				var details = r.reason || "";
 				if (details === "stale") { details = t("reason_stale"); }
 				else if (details.indexOf("released:") === 0) { details = t("reason_released", { list: details.slice(9) }); }
+				else if (details.indexOf("paused:") === 0) { details = t("reason_paused", { list: details.slice(7) }); }
 				if (!details && r.upstream) { details = t("via", { name: r.upstream }); }
 				if (r.rcode && r.rcode !== "NOERROR") { details = (details ? details + " · " : "") + r.rcode; }
 				var st = el("td");

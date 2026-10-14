@@ -46,6 +46,8 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	// Einstellungen und eigene Eintraege gehen auch, wenn der DNS-Dienst gerade nicht laeuft
 	plain := func(h http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(h)) }
 	mux.Handle("GET /api/dns64/settings", plain(m.apiSettings))
+	mux.Handle("POST /api/dns64/pause", api(func(w http.ResponseWriter, r *http.Request, _ *engine) { m.apiPause(w, r) }))
+	mux.Handle("POST /api/dns64/resume", api(func(w http.ResponseWriter, r *http.Request, _ *engine) { m.apiResume(w, r) }))
 	mux.Handle("PUT /api/dns64/settings", plain(m.apiSettingsPut))
 	mux.Handle("GET /api/dns64/records", plain(m.apiRecords))
 	mux.Handle("POST /api/dns64/records", plain(m.apiRecordAdd))
@@ -162,6 +164,7 @@ func (m *Module) apiStatus(w http.ResponseWriter, r *http.Request, e *engine) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"version": version, "listen": e.addr, "startedAt": e.started.UTC(),
 		"router": e.local.Addr(), "routerSource": e.local.Source(), "retentionDays": m.retention(r.Context()),
+		"blocking": m.pauseJSON(),
 	})
 }
 

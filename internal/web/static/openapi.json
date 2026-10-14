@@ -2566,7 +2566,7 @@
           "DNS64"
         ],
         "summary": "Zustand des DNS-Dienstes",
-        "description": "`listen` (Adresse:Port), `startedAt`, `router` (DNS fuer lokale Namen, leer = keiner), `routerSource` (config|auto), `retentionDays`.",
+        "description": "`listen` (Adresse:Port), `startedAt`, `router` (DNS fuer lokale Namen, leer = keiner), `routerSource` (config|auto), `retentionDays`. `blocking`: `paused`, `until_resumed`, `paused_until`.",
         "responses": {
           "200": {
             "description": "OK"
@@ -3050,6 +3050,59 @@
           },
           "404": {
             "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/pause": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Blockieren pausieren",
+        "description": "Der DNS-Dienst laeuft weiter, nur Blocklisten greifen nicht. `minutes`: 1-1440, 0 = bis zum Wiedereinschalten. Antwort: `paused`, `until_resumed`, `paused_until`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "minutes"
+                ],
+                "properties": {
+                  "minutes": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1440
+                  }
+                }
+              },
+              "example": {
+                "minutes": 10
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Neuer Stand"
+          },
+          "400": {
+            "description": "Ungueltige Dauer"
+          }
+        }
+      }
+    },
+    "/dns64/resume": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Blockieren wieder einschalten",
+        "responses": {
+          "200": {
+            "description": "Neuer Stand"
           }
         }
       }

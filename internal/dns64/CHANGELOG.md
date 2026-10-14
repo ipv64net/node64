@@ -1,5 +1,11 @@
 # Änderungen – DNS64
 
+## 1.6.0 – 2026-10-14
+
+### Neu
+- Blockieren pausieren: Knopf oben rechts auf allen DNS64-Seiten, für 10 Minuten oder bis zum Wiedereinschalten. Der DNS-Dienst läuft weiter, nur Blocklisten greifen nicht; eigene Einträge, lokale Namen und Freigaben bleiben. Im Abfrage-Log steht, was sonst blockiert worden wäre; die Dashboard-Karte zeigt die Pause.
+- API: `POST /api/dns64/pause` (`{"minutes": 10}`, 0 = bis zum Wiedereinschalten) und `POST /api/dns64/resume`; Stand in `GET /api/dns64/status` (`blocking`).
+
 ## 1.5.0 – 2026-10-14
 
 ### Neu
