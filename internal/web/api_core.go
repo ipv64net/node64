@@ -76,7 +76,7 @@ func (s *Server) apiStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	var mods []map[string]any
 	for _, st := range s.Modules.List(ctx) {
-		m := map[string]any{"name": st.Info.Name, "available": st.Info.Available, "enabled": st.Enabled, "running": st.Running, "path": st.Info.Path}
+		m := map[string]any{"name": st.Info.Name, "version": st.Info.Version, "available": st.Info.Available, "enabled": st.Enabled, "running": st.Running, "path": st.Info.Path}
 		if st.LastError != "" {
 			m["last_error"] = st.LastError
 		}
@@ -98,7 +98,14 @@ func (s *Server) apiStatus(w http.ResponseWriter, r *http.Request) {
 func (s *Server) apiModules(w http.ResponseWriter, r *http.Request) {
 	var mods []map[string]any
 	for _, st := range s.Modules.List(r.Context()) {
-		mods = append(mods, map[string]any{"name": st.Info.Name, "available": st.Info.Available, "enabled": st.Enabled, "running": st.Running, "path": st.Info.Path, "last_error": st.LastError})
+		m := map[string]any{"name": st.Info.Name, "version": st.Info.Version, "available": st.Info.Available, "enabled": st.Enabled, "running": st.Running, "path": st.Info.Path, "last_error": st.LastError}
+		if d := st.Info.LastChange(); !d.IsZero() {
+			m["changed"] = d.Format("2006-01-02")
+		}
+		if r.URL.Query().Get("changelog") == "1" {
+			m["changelog"] = st.Info.Changelog
+		}
+		mods = append(mods, m)
 	}
 	writeJSON(w, 200, mods)
 }

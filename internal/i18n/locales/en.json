@@ -205,6 +205,8 @@
     "location": "Location",
     "modules": "Modules",
     "modules_hint": "A disabled module does not run, uses no resources and has no menu entry. Its configuration is kept.",
+    "module_changed": "as of {date}",
+    "module_changelog": "Changelog",
     "module_enabled": "Module {name} enabled.",
     "module_disabled": "Module {name} disabled.",
     "module_error": "Module {name}: {error}",

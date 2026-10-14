@@ -70,7 +70,7 @@
 				<ul class="list-unstyled mb-0 small">
 				{{range $d.Modules}}
 					<li class="d-flex justify-content-between py-1">
-						<span><i class="bi {{.Info.Icon}}"></i> {{$.T .Info.TitleKey}}</span>
+						<span><i class="bi {{.Info.Icon}}"></i> {{$.T .Info.TitleKey}}{{if .Info.Version}} <a href="/settings#modules" class="text-body-secondary text-decoration-none font-monospace">v{{.Info.Version}}</a>{{end}}</span>
 						{{if not .Info.Available}}<span class="badge text-bg-light">{{$.T "nav.soon"}}</span>
 						{{else if .Running}}<span class="badge text-bg-success">{{$.T "common.running"}}</span>
 						{{else}}<span class="badge text-bg-secondary">{{$.T "common.disabled"}}</span>{{end}}

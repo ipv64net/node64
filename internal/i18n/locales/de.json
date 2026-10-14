@@ -205,6 +205,8 @@
     "location": "Standort",
     "modules": "Module",
     "modules_hint": "Ein deaktiviertes Modul läuft nicht, belegt nichts und hat keinen Menüpunkt. Die Konfiguration bleibt erhalten.",
+    "module_changed": "Stand {date}",
+    "module_changelog": "Änderungen",
     "module_enabled": "Modul {name} aktiviert.",
     "module_disabled": "Modul {name} deaktiviert.",
     "module_error": "Modul {name}: {error}",

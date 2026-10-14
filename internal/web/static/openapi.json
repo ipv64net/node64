@@ -869,6 +869,20 @@
           "Node"
         ],
         "summary": "Module mit Zustand",
+        "description": "Je Modul: name, version (eigene SemVer-Zaehlung je Modul), changed (Datum der neuesten Version im Aenderungsprotokoll), available, enabled, running, path, last_error.",
+        "parameters": [
+          {
+            "name": "changelog",
+            "in": "query",
+            "description": "1 = Aenderungsprotokoll (Markdown) je Modul mitliefern",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK"
