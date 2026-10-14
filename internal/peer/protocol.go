@@ -123,9 +123,11 @@ func (m *Manager) Handle(h func(w http.ResponseWriter, r *http.Request, from *Me
 func (m *Manager) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /peer/v1/pair", m.handlePair)
 	mux.Handle("GET /peer/v1/ping", m.Handle(func(w http.ResponseWriter, r *http.Request, _ *Member, _ []byte) {
-		writeJSON(w, http.StatusOK, pingInfo{NodeID: m.d.NodeID(), Name: m.d.NodeName(), Version: m.d.Version, AccountID: m.d.AccountID()})
+		writeJSON(w, http.StatusOK, pingInfo{NodeID: m.d.NodeID(), Name: m.d.NodeName(), Version: m.d.Version, AccountID: m.d.AccountID(), Linked: m.linkedSelf()})
 	}))
 	mux.Handle("POST /peer/v1/members", m.Handle(m.handleMembers))
+	mux.Handle("GET /peer/v1/changes", m.Handle(m.handleChanges))
+	mux.Handle("POST /peer/v1/poke", m.Handle(m.handlePoke))
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -264,7 +266,11 @@ func (m *Manager) Join(ctx context.Context, addr, code, selfURL string) error {
 		}
 	}
 	m.d.Log.Info("joined local group", "via", out.Name, "members", len(out.Members)+1)
-	go m.pingAll(context.Background())
+	go func() {
+		m.pingAll(context.Background())
+		m.pullAll(context.Background(), "")
+		m.pokeSoon() // die anderen holen den Bestand dieser Node
+	}()
 	return nil
 }
 

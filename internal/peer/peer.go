@@ -59,6 +59,7 @@ type Member struct {
 	LastSeen  time.Time `json:"-"`
 	LastError string    `json:"-"`
 	Version   string    `json:"-"`
+	Linked    bool      `json:"-"` // mit dem hub verknuepft
 }
 
 // Online: in den letzten zwei Minuten erreicht.
@@ -72,7 +73,11 @@ type Deps struct {
 	Version   string
 	NodeID    func() string
 	NodeName  func() string
-	AccountID func() int64 // ipv64-Account (Healthchecks-Sync oder API-Key), 0 = keiner
+	AccountID func() int64  // ipv64-Account (Healthchecks-Sync oder API-Key), 0 = keiner
+	Checks    func() Checks // Healthchecks-Modul (nil bzw. Rueckgabe nil = nicht aktiv)
+	Linked    func() bool   // mit dem hub verknuepft (Healthchecks-Sync)
+	// Forward reicht eine uebernommene Aenderung an den hub weiter (Outbox), wenn ihre Urheberin nicht verknuepft ist
+	Forward func(ctx context.Context, entity, id, op string)
 }
 
 // Manager verwaltet Identitaet, Kopplung und Mitglieder.
@@ -81,6 +86,7 @@ type Manager struct {
 	db   *sql.DB
 	priv ed25519.PrivateKey
 	hc   *http.Client
+	pull pullState // Abgleich der Konfiguration (config.go)
 
 	mu    sync.Mutex
 	code  string // offener Kopplungscode
@@ -91,6 +97,7 @@ type Manager struct {
 // New laedt bzw. erzeugt den Schluessel.
 func New(ctx context.Context, d Deps) (*Manager, error) {
 	m := &Manager{d: d, db: d.Core.Writer(), hc: &http.Client{Timeout: 10 * time.Second}}
+	m.pull.kick, m.pull.busy = make(chan string, 16), map[string]*sync.Mutex{}
 	raw := d.Core.SettingOr(ctx, setKey, "")
 	if raw != "" && d.Box != nil {
 		if plain, err := d.Box.Decrypt(raw); err == nil {
@@ -123,7 +130,7 @@ func (m *Manager) PublicKey() string {
 
 // Members liefert die Gruppe (ohne die eigene Node), nach Name sortiert.
 func (m *Manager) Members(ctx context.Context) ([]Member, error) {
-	rows, err := m.db.QueryContext(ctx, `SELECT node_id, name, url, pubkey, account_id, added_at, added_by, last_seen, last_error, version FROM peer_members ORDER BY name, node_id`)
+	rows, err := m.db.QueryContext(ctx, `SELECT node_id, name, url, pubkey, account_id, added_at, added_by, last_seen, last_error, version, linked FROM peer_members ORDER BY name, node_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +139,7 @@ func (m *Manager) Members(ctx context.Context) ([]Member, error) {
 	for rows.Next() {
 		var x Member
 		var added, seen string
-		if err := rows.Scan(&x.NodeID, &x.Name, &x.URL, &x.PubKey, &x.AccountID, &added, &x.AddedBy, &seen, &x.LastError, &x.Version); err != nil {
+		if err := rows.Scan(&x.NodeID, &x.Name, &x.URL, &x.PubKey, &x.AccountID, &added, &x.AddedBy, &seen, &x.LastError, &x.Version, &x.Linked); err != nil {
 			return nil, err
 		}
 		x.AddedAt, x.LastSeen = parseTime(added), parseTime(seen)
@@ -177,17 +184,38 @@ func (m *Manager) SetURL(ctx context.Context, nodeID, url string) error {
 	return err
 }
 
-func (m *Manager) seen(ctx context.Context, nodeID, version, name string, err error) {
+func (m *Manager) seen(ctx context.Context, nodeID string, info pingInfo, err error) {
 	if err != nil {
 		_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET last_error = ? WHERE node_id = ?`, trunc(err.Error(), 300), nodeID)
 		return
 	}
-	_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET last_seen = ?, last_error = '', version = ?, name = CASE WHEN ? != '' THEN ? ELSE name END WHERE node_id = ?`,
-		fmtTime(time.Now()), trunc(version, 32), name, trunc(name, 100), nodeID)
+	_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET last_seen = ?, last_error = '', version = ?, linked = ?, name = CASE WHEN ? != '' THEN ? ELSE name END WHERE node_id = ?`,
+		fmtTime(time.Now()), trunc(info.Version, 32), info.Linked, info.Name, trunc(info.Name, 100), nodeID)
+}
+
+// linkedSelf: diese Node ist mit dem hub verknuepft.
+func (m *Manager) linkedSelf() bool { return m.d.Linked != nil && m.d.Linked() }
+
+// forwarder: diese Node reicht Aenderungen nicht verknuepfter Nodes an den hub weiter (genau eine: die mit der
+// kleinsten Kennung unter den erreichbaren verknuepften Nodes, damit der hub nichts doppelt bekommt).
+func (m *Manager) forwarder(ctx context.Context) bool {
+	if !m.linkedSelf() {
+		return false
+	}
+	self := m.d.NodeID()
+	list, _ := m.Members(ctx)
+	for _, x := range list {
+		if x.Linked && x.Online() && x.NodeID < self {
+			return false
+		}
+	}
+	return true
 }
 
 // Run pingt die Gruppe regelmaessig (Erreichbarkeit, Version, Account).
 func (m *Manager) Run(ctx context.Context) {
+	m.seed(ctx)
+	go m.pullLoop(ctx)
 	t := time.NewTicker(pingEvery)
 	defer t.Stop()
 	m.pingAll(ctx)
@@ -212,7 +240,7 @@ func (m *Manager) pingAll(ctx context.Context) {
 		if err == nil && out.NodeID != x.NodeID {
 			err = errors.New("other node at this address")
 		}
-		m.seen(ctx, x.NodeID, out.Version, out.Name, err)
+		m.seen(ctx, x.NodeID, out, err)
 	}
 }
 
@@ -221,6 +249,7 @@ type pingInfo struct {
 	Name      string `json:"name"`
 	Version   string `json:"version"`
 	AccountID int64  `json:"account_id"`
+	Linked    bool   `json:"linked"`
 }
 
 func fmtTime(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05.000Z") }

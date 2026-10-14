@@ -1,5 +1,17 @@
 # Änderungen – Healthchecks
 
+## 2.1.0 – 2026-10-14
+
+### Neu
+- Lokale Gruppe: Nodes desselben ipv64-Accounts im lokalen Netz gleichen ihre Checks untereinander ab (anlegen,
+  ändern, löschen auf jeder Node, nach wenigen Sekunden überall). Die jüngere Änderung gewinnt; Kanäle bleiben je
+  Node eigene Einstellung.
+- Änderungen von Nodes ohne Healthchecks-Sync reicht eine verknüpfte Node der Gruppe an ipv64 weiter. Checks, die
+  nur auf Nodes ohne Sync gemessen werden, bleiben in der Gruppe.
+
+### Behoben
+- Ohne Sync (nur API-Key) erschienen Online-Checks, die aus der Gruppe kamen, doppelt in der Übersicht.
+
 ## 2.0.0 – 2026-10-14
 
 Healthchecks 2.0: erste vollständige Fassung in Node64, lokal und zusammen mit den ipv64-hubs.

@@ -171,10 +171,23 @@ func run() error {
 				}
 			}
 			return int64(ipv64Key.Info(context.Background()).ID)
+		},
+		Checks: func() peer.Checks { // Abgleich der Checks nur bei laufendem Healthchecks-Modul
+			if !modules.IsRunning(healthchecks.Name) {
+				return nil
+			}
+			return hcModule
+		},
+		Linked: syncClient.Linked,
+		Forward: func(ctx context.Context, entity, id, op string) { // Aenderung einer nicht verknuepften Node an den hub
+			if f := hcModule.Store().OnChange; f != nil {
+				f(context.WithoutCancel(ctx), entity, id, op)
+			}
 		}})
 	if err != nil {
 		return err
 	}
+	hcModule.Store().OnAnyChange = peerMgr.LogChange
 	go peerMgr.Run(ctx)
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)
@@ -194,6 +207,14 @@ func run() error {
 	go netstat.Loop(ctx, st) // Datenverkehr des Containers fuer das Dashboard
 	if err := syncClient.Start(ctx); err != nil {
 		log.Warn("sync start failed", "err", err)
+	}
+	if toHub := hcModule.Store().OnChange; toHub != nil { // Checks nur nicht verknuepfter Nodes der Gruppe bleiben lokal
+		hcModule.Store().OnChange = func(ctx context.Context, entity, id, op string) {
+			if entity == "check" && op != "delete" && !peerMgr.HubKnowsCheck(ctx, id) {
+				return
+			}
+			toHub(ctx, entity, id, op)
+		}
 	}
 	defer syncClient.Stop(context.Background())
 	go updateLoop(ctx, st, log)

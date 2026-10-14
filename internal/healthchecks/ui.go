@@ -226,7 +226,14 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 		d.APIMode = true
 		d.Online, d.OnlineErr = m.onlineChecks(ctx, key, cl)
 	}
+	viaAPI := map[string]bool{} // Online-Checks aus der API (Kopien aus der lokalen Gruppe nicht doppelt zeigen)
+	for _, o := range d.Online {
+		viaAPI[o.Token] = true
+	}
 	for _, c := range list {
+		if viaAPI[c.Token] {
+			continue
+		}
 		for _, t := range c.Tags {
 			tagSet[t] = true
 		}

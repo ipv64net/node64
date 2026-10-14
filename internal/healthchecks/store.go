@@ -110,6 +110,8 @@ type Store struct {
 	// OnRuntime nach jedem gespeicherten Laufzeitzustand.
 	OnChange  func(ctx context.Context, entity, id, op string)
 	OnRuntime func(token string, rt scheduler.Runtime)
+	// OnAnyChange nach jeder Konfigurationsaenderung, auch vom hub oder von anderen Nodes (lokale Gruppe)
+	OnAnyChange func(ctx context.Context, entity, id, op string)
 }
 
 type remoteKey struct{}
@@ -125,6 +127,9 @@ func IsRemote(ctx context.Context) bool { v, _ := ctx.Value(remoteKey{}).(bool);
 func (s *Store) changed(ctx context.Context, entity, id, op string) {
 	if s.OnChange != nil && !IsRemote(ctx) {
 		s.OnChange(ctx, entity, id, op)
+	}
+	if s.OnAnyChange != nil {
+		s.OnAnyChange(ctx, entity, id, op)
 	}
 }
 
