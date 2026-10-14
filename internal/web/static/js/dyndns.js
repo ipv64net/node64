@@ -38,3 +38,11 @@
 		});
 	}
 })();
+
+// Filter im Verlauf: bei Aenderung sofort anwenden
+(function () {
+	"use strict";
+	document.querySelectorAll("form[data-autosubmit] select").forEach(function (sel) {
+		sel.addEventListener("change", function () { sel.form.submit(); });
+	});
+})();

@@ -316,7 +316,8 @@
       "no_record": "ipv64 has no A or AAAA record for this name anymore.",
       "token_refreshed": "Token fetched again from ipv64.",
       "deleted": "{name} removed. The history is kept.",
-      "status": "Status"
+      "status": "Status",
+      "apex": "the domain itself"
     },
     "settings": {
       "title": "Checking",
@@ -326,7 +327,11 @@
       "source4": "Own check URL IPv4 (optional)",
       "source6": "Own check URL IPv6 (optional)",
       "source_hint": "Empty = ipv64. An own URL must return the address as text or JSON; ipv64 stays the fallback.",
-      "invalid": "Invalid input: check interval or URL (http/https only)."
+      "invalid": "Invalid input: check interval or URL (http/https only).",
+      "keep_checks": "Keep IP checks",
+      "keep_updates": "Keep updates",
+      "days": "{n} days",
+      "forever": "forever"
     },
     "checks": {
       "title": "Recent checks",
@@ -460,6 +465,38 @@
       "done": "{name} reported to ipv64.",
       "failed": "{name}: update failed ({error}).",
       "paused": "{name} paused: {reason}."
+    },
+    "limit": {
+      "used": "DynDNS updates today: {used} of {limit}",
+      "unlimited": "DynDNS updates today: {used} (unlimited)",
+      "own": "of which from this node (24 h): {count}",
+      "warn": "The update limit is almost reached. After that ipv64 accepts no more updates until the reset.",
+      "unknown": "limit not available"
+    },
+    "history": {
+      "title": "History",
+      "updates": "Updates",
+      "checks": "IP checks",
+      "all_targets": "all targets",
+      "all_fams": "all families",
+      "all_results": "all results",
+      "ok": "successful",
+      "err": "errors",
+      "changed": "changes only",
+      "days_all": "everything",
+      "day1": "24 hours",
+      "days": "{n} days",
+      "filter": "Filter",
+      "empty": "No entries in this period.",
+      "limited": "Showing the newest {n} entries.",
+      "target": "Target",
+      "sent": "Sent",
+      "result": "Result",
+      "trigger": "Trigger",
+      "trigger_auto": "automatic",
+      "trigger_manual": "manual",
+      "back": "Back to the overview",
+      "deleted": "deleted"
     }
   },
   "hc": {

@@ -98,11 +98,13 @@ func (m *Module) loop(ctx context.Context) {
 			m.round(ctx)
 			m.maybeAnalyze(ctx)
 			m.runUpdates(ctx)
+			m.refreshLimit(ctx, limitEvery)
 			t.Reset(next())
 		case done := <-m.trigger:
 			m.round(ctx)
 			m.maybeAnalyze(ctx)
 			m.runUpdates(ctx)
+			m.refreshLimit(ctx, limitEvery)
 			close(done)
 			if !t.Stop() {
 				select {

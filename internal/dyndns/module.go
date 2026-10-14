@@ -52,6 +52,7 @@ type Module struct {
 
 	stMu sync.Mutex
 	fam  [2]famState // [0] IPv4, [1] IPv6
+	lim  limitInfo   // Update-Limit des Accounts (mit API-Key)
 }
 
 // New erzeugt das Modul. dispatcher darf nil sein.

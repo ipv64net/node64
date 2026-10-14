@@ -38,7 +38,13 @@
 			<div class="card-header"><i class="bi bi-key text-warning"></i> {{.T "dyn.api.title"}}</div>
 			<div class="card-body small">
 				{{if $d.HasKey}}<i class="bi bi-check-circle-fill text-success"></i> {{.T "dyn.api.connected" "account" $d.Account.Account}}{{if $d.Account.Plan}} <span class="badge text-bg-light">{{$d.Account.Plan}}</span>{{end}}
-				<div class="text-body-secondary mt-1">{{.T "dyn.api.central"}} <a href="/settings#ipv64">{{.T "dyn.api.to_settings"}}</a></div>
+				{{with $d.Limit}}{{if .Known}}
+				<div class="mt-2">{{if .Limit}}{{$.T "dyn.limit.used" "used" .Used "limit" .Limit}}{{else}}{{$.T "dyn.limit.unlimited" "used" .Used}}{{end}} <span class="text-body-secondary" title="{{$.Time .At}}">({{$.Ago .At}})</span></div>
+				{{if .Limit}}<div class="progress mt-1" style="height:.4rem" role="progressbar" aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{if .Warn}}bg-warning{{else}}bg-success{{end}}" style="width:{{.Pct}}%"></div></div>{{end}}
+				<div class="text-body-secondary">{{$.T "dyn.limit.own" "count" .Own24h}}</div>
+				{{if .Warn}}<div class="alert alert-warning py-2 mt-2 mb-0">{{$.T "dyn.limit.warn"}}</div>{{end}}
+				{{else if .Err}}<div class="mt-2"><span class="badge text-bg-warning">{{$.T "dyn.limit.unknown"}}</span> <span class="text-body-secondary">{{.Err}}</span></div>{{end}}{{end}}
+				<div class="text-body-secondary mt-2">{{.T "dyn.api.central"}} <a href="/settings#ipv64">{{.T "dyn.api.to_settings"}}</a></div>
 				{{else}}<div class="text-body-secondary">{{.T "dyn.api.hint"}}</div>
 				<a class="btn btn-outline-primary btn-sm mt-2" href="/settings#ipv64"><i class="bi bi-key"></i> {{.T "dyn.api.to_settings"}}</a>{{end}}
 			</div>
@@ -56,6 +62,10 @@
 					<label class="form-label" for="source6">{{.T "dyn.settings.source6"}}</label>
 					<input class="form-control form-control-sm mb-1" id="source6" name="source6" value="{{$d.Source6}}" placeholder="https://ipv6.ipv64.net/ipcheck.php?ipv6" maxlength="300">
 					<div class="form-text mb-2">{{.T "dyn.settings.source_hint"}}</div>
+					<div class="row g-2 mb-2">
+						<div class="col-6"><label class="form-label" for="keep_checks">{{.T "dyn.settings.keep_checks"}}</label><select class="form-select form-select-sm" id="keep_checks" name="keep_checks">{{range $d.KeepCOpts}}<option value="{{.}}"{{if eq . $d.KeepC}} selected{{end}}>{{$.T "dyn.settings.days" "n" .}}</option>{{end}}</select></div>
+						<div class="col-6"><label class="form-label" for="keep_updates">{{.T "dyn.settings.keep_updates"}}</label><select class="form-select form-select-sm" id="keep_updates" name="keep_updates">{{range $d.KeepUOpts}}<option value="{{.}}"{{if eq . $d.KeepU}} selected{{end}}>{{if eq . 0}}{{$.T "dyn.settings.forever"}}{{else}}{{$.T "dyn.settings.days" "n" .}}{{end}}</option>{{end}}</select></div>
+					</div>
 					<button class="btn btn-outline-primary btn-sm" type="submit">{{.T "common.save"}}</button>
 				</form>
 			</div>
@@ -69,9 +79,11 @@
 			<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards small">
 				<thead><tr><th>{{.T "dyn.targets.name"}}</th><th>IPv4</th><th>IPv6</th><th>{{.T "dyn.targets.status"}}</th><th class="d-none d-md-table-cell">{{.T "dyn.targets.token"}}</th><th class="text-end">{{.T "common.actions"}}</th></tr></thead>
 				<tbody>
-				{{range $d.List}}
+				{{range $g := $d.Groups}}
+				<tr class="dyn-domain-row"><td colspan="6"><i class="bi bi-globe2 text-primary"></i> <span class="fw-semibold">{{$g.Domain}}</span> <span class="text-body-secondary">({{len $g.Items}})</span></td></tr>
+				{{range $g.Items}}
 				<tr{{if not .Enabled}} class="text-body-tertiary"{{end}}>
-					<td data-label="{{$.T "dyn.targets.name"}}"><a href="/dyndns/targets/{{.ID}}" class="fw-semibold text-break">{{.FQDN}}</a></td>
+					<td data-label="{{$.T "dyn.targets.name"}}" class="dyn-host"><a href="/dyndns/targets/{{.ID}}" class="text-break">{{if .Host}}<span class="text-body-secondary">↳</span> <span class="fw-semibold">{{.Host}}</span>{{else}}<span class="fw-semibold">@</span> <span class="text-body-secondary">{{$.T "dyn.targets.apex"}}</span>{{end}}</a></td>
 					<td data-label="IPv4"><span class="badge text-bg-light">{{$.T (print "dyn.mode4." .Mode4)}}</span>{{if .LastIP4}}<div class="font-monospace text-break">{{.LastIP4}}</div>{{end}}</td>
 					<td data-label="IPv6"><span class="badge text-bg-light">{{$.T (print "dyn.mode6." .Mode6)}}</span>{{if .LastIP6}}<div class="font-monospace text-break">{{.LastIP6}}</div>{{end}}{{if .LastPrefix}}<div class="font-monospace text-break">{{.LastPrefix}}</div>{{end}}</td>
 					<td data-label="{{$.T "dyn.targets.status"}}"><span class="badge {{.StatusClass}}"{{if .LastError}} title="{{.LastError}}"{{end}}>{{if .Paused}}{{$.T (print "dyn.pause." .Paused)}}{{else}}{{$.T (print "dyn.status." .Status)}}{{end}}</span>{{if not .LastOKAt.IsZero}}<div class="text-body-secondary" title="{{$.Time .LastOKAt}}">{{$.Ago .LastOKAt}}</div>{{end}}</td>
@@ -80,12 +92,13 @@
 						<a class="btn btn-outline-secondary btn-sm" href="/dyndns/targets/{{.ID}}" title="{{$.T "dyn.targets.edit"}}"><i class="bi bi-pencil"></i></a></td>
 				</tr>
 				{{end}}
+				{{end}}
 				</tbody>
 			</table></div>
 			{{end}}
 		</div>
 		<div class="card">
-			<div class="card-header"><i class="bi bi-clock-history text-secondary"></i> {{.T "dyn.checks.title"}}</div>
+			<div class="card-header d-flex align-items-center"><span><i class="bi bi-clock-history text-secondary"></i> {{.T "dyn.checks.title"}}</span><a class="btn btn-outline-secondary btn-sm ms-auto" href="/dyndns/history"><i class="bi bi-list-ul"></i> {{.T "dyn.history.title"}}</a></div>
 			{{if not $d.Checks}}<div class="card-body small text-body-secondary">{{.T "dyn.checks.empty"}}</div>
 			{{else}}
 			<div class="table-responsive"><table class="table table-sm align-middle mb-0 table-cards small">

@@ -53,6 +53,7 @@ type pickName struct {
 	token    string
 	aID      int64 // erster A-Record (sein Token wirkt bei ipv64 fuer A und AAAA des Namens)
 	aToken   string
+	First    bool   // erster Name einer Domain (Kopfzeile in der Liste)
 	Def4     string // Vorbelegung der Modi in der Liste
 	Def6     string
 	SuffixOf string // Interface-ID aus dem vorhandenen AAAA (fuer "Praefix + Interface-ID"), leer = keine
@@ -150,6 +151,9 @@ func (m *Module) accountNames(ctx context.Context, key string) ([]*pickName, err
 		}
 		return out[i].Host < out[j].Host
 	})
+	for i, p := range out {
+		p.First = i == 0 || out[i-1].Domain != p.Domain
+	}
 	return out, nil
 }
 

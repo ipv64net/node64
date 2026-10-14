@@ -18,9 +18,10 @@
 					<thead><tr><th style="width:1%" class="ps-3"><input type="checkbox" class="form-check-input" data-pick-all aria-label="all"></th><th>{{.T "dyn.targets.name"}}</th><th>A</th><th>AAAA</th><th>{{.T "dyn.pick.update"}}</th><th>{{.T "dyn.pick.note"}}</th></tr></thead>
 					<tbody>
 					{{range $d.Names}}
-					{{$p := .}}<tr{{if or .Exists .Blocked}} class="text-body-tertiary"{{end}} data-pick-row>
+					{{$p := .}}{{if .First}}<tr class="dyn-domain-row"><td colspan="6"><i class="bi bi-globe2 text-primary"></i> <span class="fw-semibold">{{.Domain}}</span>{{if eq .Kind "own"}} <span class="badge text-bg-light">{{$.T "dyn.pick.own"}}</span>{{end}}</td></tr>{{end}}
+					<tr{{if or .Exists .Blocked}} class="text-body-tertiary"{{end}} data-pick-row>
 						<td class="ps-3"><input type="checkbox" class="form-check-input" name="pick" value="{{.Key}}" aria-label="{{.FQDN}}"{{if or .Exists .Blocked}} disabled{{end}}></td>
-						<td data-label="{{$.T "dyn.targets.name"}}"><span class="fw-semibold text-break">{{.FQDN}}</span>{{if eq .Kind "own"}} <span class="badge text-bg-light">{{$.T "dyn.pick.own"}}</span>{{end}}</td>
+						<td data-label="{{$.T "dyn.targets.name"}}" class="dyn-host">{{if .Host}}<span class="text-body-secondary">↳</span> <span class="fw-semibold text-break">{{.Host}}</span>{{else}}<span class="fw-semibold">@</span> <span class="text-body-secondary">{{$.T "dyn.targets.apex"}}</span>{{end}}</td>
 						<td data-label="A" class="font-monospace text-break">{{range .A}}{{.}}<br>{{end}}</td>
 						<td data-label="AAAA" class="font-monospace text-break">{{range .AAAA}}{{.}}<br>{{end}}</td>
 						<td data-label="{{$.T "dyn.pick.update"}}">{{if not (or .Exists .Blocked)}}

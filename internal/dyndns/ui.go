@@ -1,6 +1,7 @@
 package dyndns
 
 import (
+	"context"
 	"embed"
 	"io/fs"
 	"net/http"
@@ -29,6 +30,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /dyndns", page(m.pageOverview))
 	mux.Handle("POST /dyndns/check", page(m.pageCheckNow))
 	mux.Handle("POST /dyndns/settings", page(m.pageSettings))
+	mux.Handle("GET /dyndns/history", page(m.pageHistory))
 	m.targetRoutes(mux, page)
 }
 
@@ -55,9 +57,33 @@ type checkRow struct {
 	Changed bool
 }
 
+// targetGroup sind die Ziele einer Domain (Domain selbst zuerst, dann die Unterhosts).
+type targetGroup struct {
+	Domain string
+	Items  []*Target
+}
+
+func groupTargets(list []*Target) []targetGroup {
+	var out []targetGroup
+	for _, t := range list { // Targets() ist nach Domain und Host sortiert
+		if len(out) == 0 || out[len(out)-1].Domain != t.Domain {
+			out = append(out, targetGroup{Domain: t.Domain})
+		}
+		g := &out[len(out)-1]
+		g.Items = append(g.Items, t)
+	}
+	return out
+}
+
 type overviewData struct {
 	Targets   int
 	List      []*Target
+	Groups    []targetGroup
+	Limit     limitInfo
+	KeepC     int
+	KeepU     int
+	KeepCOpts []int
+	KeepUOpts []int
 	HasKey    bool
 	Account   ipv64api.AccountInfo
 	V4, V6    famView
@@ -106,9 +132,13 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 		d.NextAt = last.Add(m.interval())
 	}
 	d.List, _ = m.Targets(ctx)
-	d.Targets = len(d.List)
+	d.Targets, d.Groups = len(d.List), groupTargets(d.List)
+	d.KeepC, d.KeepU = m.keepDays(ctx, SetKeepChecks, 30), m.keepDays(ctx, SetKeepUpdates, 365)
+	d.KeepCOpts, d.KeepUOpts = KeepChecksOptions, KeepUpdatesOptions
 	if d.HasKey = m.keyOf(ctx) != ""; d.HasKey {
 		d.Account = m.key.Info(ctx)
+		m.refreshLimit(ctx, limitPage)
+		d.Limit = m.limit(ctx)
 	}
 	rows, err := m.core.Reader().QueryContext(ctx, `SELECT time, family, source, ip, error, duration_ms, changed FROM dyn_checks ORDER BY id DESC LIMIT 12`)
 	if err == nil {
@@ -144,12 +174,15 @@ func (m *Module) pageSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s4, s6 := strings.TrimSpace(r.PostFormValue("source4")), strings.TrimSpace(r.PostFormValue("source6"))
-	if !ok || (s4 != "" && !validSource(s4)) || (s6 != "" && !validSource(s6)) || len(s4) > 300 || len(s6) > 300 {
+	kc, errC := strconv.Atoi(r.PostFormValue("keep_checks"))
+	ku, errU := strconv.Atoi(r.PostFormValue("keep_updates"))
+	okKeep := errC == nil && errU == nil && in(strconv.Itoa(kc), itoaList(KeepChecksOptions)) && in(strconv.Itoa(ku), itoaList(KeepUpdatesOptions))
+	if !ok || !okKeep || (s4 != "" && !validSource(s4)) || (s6 != "" && !validSource(s6)) || len(s4) > 300 || len(s6) > 300 {
 		m.g.Flash(w, r, "danger", m.g.T(r, "dyn.settings.invalid"))
 		http.Redirect(w, r, "/dyndns#settings", http.StatusSeeOther)
 		return
 	}
-	for k, v := range map[string]string{SetInterval: strconv.Itoa(iv), SetSource4: s4, SetSource6: s6} {
+	for k, v := range map[string]string{SetInterval: strconv.Itoa(iv), SetSource4: s4, SetSource6: s6, SetKeepChecks: strconv.Itoa(kc), SetKeepUpdates: strconv.Itoa(ku)} {
 		if err := m.core.SetSetting(ctx, k, v); err != nil {
 			m.g.Flash(w, r, "danger", err.Error())
 			http.Redirect(w, r, "/dyndns#settings", http.StatusSeeOther)
@@ -159,6 +192,23 @@ func (m *Module) pageSettings(w http.ResponseWriter, r *http.Request) {
 	m.audit(r, "dyndns.settings", "interval="+strconv.Itoa(iv)+"m")
 	m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
 	http.Redirect(w, r, "/dyndns#settings", http.StatusSeeOther)
+}
+
+func itoaList(l []int) []string {
+	out := make([]string, len(l))
+	for i, n := range l {
+		out[i] = strconv.Itoa(n)
+	}
+	return out
+}
+
+// keepDays liest eine Aufbewahrung in Tagen (0 = unbegrenzt).
+func (m *Module) keepDays(ctx context.Context, key string, def int) int {
+	n, err := strconv.Atoi(m.core.SettingOr(ctx, key, ""))
+	if err != nil || n < 0 {
+		return def
+	}
+	return n
 }
 
 func (m *Module) audit(r *http.Request, action, details string) {

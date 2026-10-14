@@ -209,3 +209,10 @@ func TestNormalize(t *testing.T) {
 		t.Fatalf("withSuffix: %s %v", a, err)
 	}
 }
+
+func TestGroupTargets(t *testing.T) {
+	g := groupTargets([]*Target{{Domain: "a.ipv64.net"}, {Domain: "a.ipv64.net", Host: "nas"}, {Domain: "b.any64.de", Host: "x"}})
+	if len(g) != 2 || len(g[0].Items) != 2 || g[0].Items[1].Host != "nas" || g[1].Domain != "b.any64.de" {
+		t.Fatalf("groups: %+v", g)
+	}
+}

@@ -316,7 +316,8 @@
       "no_record": "Bei ipv64 gibt es für diesen Namen keinen A- oder AAAA-Record mehr.",
       "token_refreshed": "Token neu von ipv64 geholt.",
       "deleted": "{name} entfernt. Der Verlauf bleibt erhalten.",
-      "status": "Status"
+      "status": "Status",
+      "apex": "Domain selbst"
     },
     "settings": {
       "title": "Prüfung",
@@ -326,7 +327,11 @@
       "source4": "Eigene Prüf-URL IPv4 (optional)",
       "source6": "Eigene Prüf-URL IPv6 (optional)",
       "source_hint": "Leer = ipv64. Eine eigene URL muss die Adresse als Text oder JSON liefern; ipv64 bleibt der Rückfall.",
-      "invalid": "Ungültige Eingabe: Prüfabstand oder URL (nur http/https)."
+      "invalid": "Ungültige Eingabe: Prüfabstand oder URL (nur http/https).",
+      "keep_checks": "IP-Prüfungen aufbewahren",
+      "keep_updates": "Updates aufbewahren",
+      "days": "{n} Tage",
+      "forever": "unbegrenzt"
     },
     "checks": {
       "title": "Letzte Prüfungen",
@@ -460,6 +465,38 @@
       "done": "{name} an ipv64 gemeldet.",
       "failed": "{name}: Update fehlgeschlagen ({error}).",
       "paused": "{name} pausiert: {reason}."
+    },
+    "limit": {
+      "used": "DynDNS-Updates heute: {used} von {limit}",
+      "unlimited": "DynDNS-Updates heute: {used} (unbegrenzt)",
+      "own": "davon von dieser Node (24 h): {count}",
+      "warn": "Das Update-Limit ist fast erreicht. Danach nimmt ipv64 bis zum Zurücksetzen keine Updates mehr an.",
+      "unknown": "Limit nicht abrufbar"
+    },
+    "history": {
+      "title": "Verlauf",
+      "updates": "Updates",
+      "checks": "IP-Prüfungen",
+      "all_targets": "alle Ziele",
+      "all_fams": "alle Familien",
+      "all_results": "alle Ergebnisse",
+      "ok": "erfolgreich",
+      "err": "Fehler",
+      "changed": "nur Wechsel",
+      "days_all": "alles",
+      "day1": "24 Stunden",
+      "days": "{n} Tage",
+      "filter": "Filtern",
+      "empty": "Keine Einträge im Zeitraum.",
+      "limited": "Es werden die neuesten {n} Einträge gezeigt.",
+      "target": "Ziel",
+      "sent": "Gesendet",
+      "result": "Ergebnis",
+      "trigger": "Auslöser",
+      "trigger_auto": "automatisch",
+      "trigger_manual": "von Hand",
+      "back": "Zurück zur Übersicht",
+      "deleted": "gelöscht"
     }
   },
   "hc": {

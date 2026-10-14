@@ -1,0 +1,63 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1 class="h4 mb-3"><img src="/static/img/dyndns64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{.T "dyn.history.title"}}</h1>
+<ul class="nav nav-tabs mb-3">
+	<li class="nav-item"><a class="nav-link{{if eq $d.Tab "updates"}} active{{end}}" href="?tab=updates">{{.T "dyn.history.updates"}}</a></li>
+	<li class="nav-item"><a class="nav-link{{if eq $d.Tab "checks"}} active{{end}}" href="?tab=checks">{{.T "dyn.history.checks"}}</a></li>
+</ul>
+<form method="get" class="d-flex flex-wrap gap-2 mb-3" data-autosubmit>
+	<input type="hidden" name="tab" value="{{$d.Tab}}">
+	{{if eq $d.Tab "updates"}}
+	<select class="form-select form-select-sm w-auto" name="target" aria-label="{{.T "dyn.history.target"}}"><option value="0">{{.T "dyn.history.all_targets"}}</option>{{range $d.Targets}}<option value="{{.ID}}"{{if eq .ID $d.Target}} selected{{end}}>{{.FQDN}}</option>{{end}}</select>
+	<select class="form-select form-select-sm w-auto" name="result" aria-label="{{.T "dyn.history.result"}}"><option value="">{{.T "dyn.history.all_results"}}</option><option value="ok"{{if eq $d.Result "ok"}} selected{{end}}>{{.T "dyn.history.ok"}}</option><option value="err"{{if eq $d.Result "err"}} selected{{end}}>{{.T "dyn.history.err"}}</option></select>
+	{{else}}
+	<select class="form-select form-select-sm w-auto" name="fam" aria-label="{{.T "dyn.checks.family"}}"><option value="">{{.T "dyn.history.all_fams"}}</option><option value="4"{{if eq $d.Fam "4"}} selected{{end}}>IPv4</option><option value="6"{{if eq $d.Fam "6"}} selected{{end}}>IPv6</option></select>
+	<select class="form-select form-select-sm w-auto" name="result" aria-label="{{.T "dyn.history.result"}}"><option value="">{{.T "dyn.history.all_results"}}</option><option value="changed"{{if eq $d.Result "changed"}} selected{{end}}>{{.T "dyn.history.changed"}}</option><option value="err"{{if eq $d.Result "err"}} selected{{end}}>{{.T "dyn.history.err"}}</option></select>
+	{{end}}
+	<select class="form-select form-select-sm w-auto" name="days" aria-label="{{.T "dyn.checks.time"}}">{{range $d.DaysOpts}}<option value="{{.}}"{{if eq . $d.Days}} selected{{end}}>{{if eq . 0}}{{$.T "dyn.history.days_all"}}{{else if eq . 1}}{{$.T "dyn.history.day1"}}{{else}}{{$.T "dyn.history.days" "n" .}}{{end}}</option>{{end}}</select>
+	<noscript><button class="btn btn-outline-primary btn-sm" type="submit">{{.T "dyn.history.filter"}}</button></noscript>
+	<a class="btn btn-outline-secondary btn-sm ms-auto" href="/dyndns"><i class="bi bi-arrow-left"></i> {{.T "dyn.history.back"}}</a>
+</form>
+<div class="card">
+	{{if eq $d.Tab "updates"}}
+	{{if not $d.Updates}}<div class="card-body small text-body-secondary">{{.T "dyn.history.empty"}}</div>
+	{{else}}
+	<div class="table-responsive"><table class="table table-sm align-middle mb-0 table-cards small">
+		<thead><tr><th>{{.T "dyn.checks.time"}}</th><th>{{.T "dyn.history.target"}}</th><th>{{.T "dyn.history.sent"}}</th><th>{{.T "dyn.history.result"}}</th><th class="d-none d-md-table-cell">{{.T "dyn.history.trigger"}}</th><th class="text-end d-none d-md-table-cell">{{.T "dyn.checks.duration"}}</th></tr></thead>
+		<tbody>
+		{{range $d.Updates}}
+		<tr>
+			<td data-label="{{$.T "dyn.checks.time"}}" class="text-nowrap" title="{{$.Ago .Time}}">{{$.Time .Time}}</td>
+			<td data-label="{{$.T "dyn.history.target"}}" class="text-break">{{.Target}}</td>
+			<td data-label="{{$.T "dyn.history.sent"}}" class="font-monospace text-break">{{if .Sent4}}<div>{{.Sent4}}</div>{{end}}{{if .Sent6}}<div>{{.Sent6}}</div>{{end}}{{if .Prefix}}<div>{{.Prefix}} <span class="badge text-bg-light">{{$.T "dyn.conn.prefix"}}</span></div>{{end}}</td>
+			<td data-label="{{$.T "dyn.history.result"}}">{{if .OK}}<span class="badge text-bg-success">{{if .Info}}{{.Info}}{{else}}ok{{end}}</span>{{else}}<span class="badge text-bg-danger text-wrap">{{.Err}}</span>{{end}}{{if .HTTP}} <span class="text-body-secondary">HTTP {{.HTTP}}</span>{{end}}</td>
+			<td data-label="{{$.T "dyn.history.trigger"}}" class="d-none d-md-table-cell">{{$.T (print "dyn.history.trigger_" .Trigger)}}</td>
+			<td data-label="{{$.T "dyn.checks.duration"}}" class="text-end text-nowrap d-none d-md-table-cell">{{.Ms}} ms</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table></div>
+	{{end}}
+	{{else}}
+	{{if not $d.Checks}}<div class="card-body small text-body-secondary">{{.T "dyn.history.empty"}}</div>
+	{{else}}
+	<div class="table-responsive"><table class="table table-sm align-middle mb-0 table-cards small">
+		<thead><tr><th>{{.T "dyn.checks.time"}}</th><th>{{.T "dyn.checks.family"}}</th><th>{{.T "dyn.checks.result"}}</th><th class="d-none d-md-table-cell">{{.T "dyn.checks.source"}}</th><th class="text-end d-none d-md-table-cell">{{.T "dyn.checks.duration"}}</th></tr></thead>
+		<tbody>
+		{{range $d.Checks}}
+		<tr>
+			<td data-label="{{$.T "dyn.checks.time"}}" class="text-nowrap" title="{{$.Ago .Time}}">{{$.Time .Time}}</td>
+			<td data-label="{{$.T "dyn.checks.family"}}"><span class="badge text-bg-light">IPv{{.Family}}</span></td>
+			<td data-label="{{$.T "dyn.checks.result"}}">{{if .IP}}<span class="font-monospace text-break">{{.IP}}</span>{{if .Changed}} <span class="badge text-bg-success">{{$.T "dyn.checks.changed"}}</span>{{end}}{{else if eq .Err "no route"}}<span class="text-body-secondary">{{$.T "dyn.conn.no_route"}}</span>{{else}}<span class="badge text-bg-danger">{{.Err}}</span>{{end}}</td>
+			<td data-label="{{$.T "dyn.checks.source"}}" class="d-none d-md-table-cell text-body-secondary">{{.Source}}</td>
+			<td data-label="{{$.T "dyn.checks.duration"}}" class="text-end text-nowrap d-none d-md-table-cell">{{if .Source}}{{.Ms}} ms{{end}}</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table></div>
+	{{end}}
+	{{end}}
+	{{if $d.Limited}}<div class="card-footer small text-body-secondary">{{.T "dyn.history.limited" "n" 300}}</div>{{end}}
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/dyndns.js?v={{.Version}}"></script>{{end}}
