@@ -202,6 +202,7 @@ func (s *session) handle(m wire.Msg) error {
 				c.hub = s.hub + " (" + h.Hub + ")"
 				c.mu.Unlock()
 			}
+			c.startBackfill(ctx) // Luecken im Verlauf fremder Messstellen nachladen
 		}
 	case "usage":
 		// Tageskontingent der Online-Checks (bei Sperre/Freigabe sofort, sonst alle 2 min)

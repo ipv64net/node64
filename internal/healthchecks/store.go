@@ -338,7 +338,7 @@ func (s *Store) Delete(ctx context.Context, token string) error {
 	}
 	for _, q := range []string{
 		`DELETE FROM hc_checks WHERE token = ?`, `DELETE FROM hc_measurements WHERE token = ?`, `DELETE FROM hc_events WHERE token = ?`,
-		`DELETE FROM hc_incidents WHERE token = ?`, `DELETE FROM hc_sources WHERE token = ?`, `DELETE FROM hc_source_points WHERE token = ?`, `DELETE FROM hc_hourly WHERE token = ?`, `DELETE FROM hc_daily WHERE token = ?`,
+		`DELETE FROM hc_incidents WHERE token = ?`, `DELETE FROM hc_sources WHERE token = ?`, `DELETE FROM hc_source_points WHERE token = ?`, `DELETE FROM hc_source_hourly WHERE token = ?`, `DELETE FROM hc_hourly WHERE token = ?`, `DELETE FROM hc_daily WHERE token = ?`,
 	} {
 		if _, err := tx.ExecContext(ctx, q, token); err != nil {
 			return err
@@ -803,6 +803,13 @@ func (s *Store) Aggregate(ctx context.Context, now time.Time) error {
 		FROM hc_measurements WHERE time < ? AND flags = 0 GROUP BY token, substr(time, 1, 13)`, rawCut); err != nil {
 		return err
 	}
+	// fremde Messstellen ebenso zu Stundenwerten verdichten, bevor ihre Einzelpunkte geloescht werden
+	if _, err := s.w.ExecContext(ctx, `INSERT OR IGNORE INTO hc_source_hourly (token, source, hour, count, up_count, avg_ms)
+		SELECT token, src, substr(time, 1, 13) || ':00:00.000Z', count(*), sum(status), avg(CASE WHEN status = 1 THEN latency_ms END)
+		FROM (SELECT token, details AS src, time, status, latency_ms FROM hc_measurements WHERE (flags & 8) != 0 AND time < ?
+			UNION ALL SELECT token, source, time, status, latency_ms FROM hc_source_points WHERE time < ?) GROUP BY 1, 2, 3`, rawCut, rawCut); err != nil {
+		return err
+	}
 	if _, err := s.w.ExecContext(ctx, `DELETE FROM hc_measurements WHERE time < ?`, rawCut); err != nil {
 		return err
 	}
@@ -813,6 +820,9 @@ func (s *Store) Aggregate(ctx context.Context, now time.Time) error {
 		return nil // Stundenwerte und Ereignisse unbegrenzt
 	}
 	if _, err := s.w.ExecContext(ctx, `DELETE FROM hc_hourly WHERE hour < ?`, ft(now.Add(-hourlyRet))); err != nil {
+		return err
+	}
+	if _, err := s.w.ExecContext(ctx, `DELETE FROM hc_source_hourly WHERE hour < ?`, ft(now.Add(-hourlyRet))); err != nil {
 		return err
 	}
 	_, err := s.w.ExecContext(ctx, `DELETE FROM hc_events WHERE time < ?`, ft(now.Add(-hourlyRet)))

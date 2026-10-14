@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -62,6 +63,7 @@ func (g *Gateway) Register(mux *http.ServeMux) {
 	mux.Handle("POST /v1/nodes/me/bootstrap", g.auth(g.bootstrap))
 	mux.Handle("GET /v1/nodes/me/config", g.auth(g.config))
 	mux.Handle("GET /v1/nodes/me/results", g.auth(g.results))
+	mux.Handle("GET /v1/nodes/me/history", g.auth(g.history))
 	mux.Handle("POST /v1/nodes/me/unlink", g.auth(g.unlink))
 	mux.Handle("POST /v1/nodes/me/measurements", g.auth(g.httpMeasurements))
 	mux.Handle("POST /v1/nodes/me/events", g.auth(g.httpEvents))
@@ -301,6 +303,42 @@ func (g *Gateway) results(w http.ResponseWriter, r *http.Request) {
 	}
 	overall, _ := g.st.OverallStates(r.Context(), n.UserID)
 	writeJSON(w, http.StatusOK, map[string]any{"states": states, "overall": overall, "server_time": time.Now().UTC()})
+}
+
+// history liefert Verlauf eines Checks zum Nachladen in die Node (?token, since, until, kind=raw|hourly, limit).
+func (g *Gateway) history(w http.ResponseWriter, r *http.Request) {
+	n, q := nodeOf(r), r.URL.Query()
+	since, err := time.Parse(time.RFC3339Nano, q.Get("since"))
+	if err != nil || q.Get("token") == "" {
+		writeErr(w, http.StatusBadRequest, "token and since (RFC 3339) required")
+		return
+	}
+	until := time.Now().UTC()
+	if u := q.Get("until"); u != "" {
+		if until, err = time.Parse(time.RFC3339Nano, u); err != nil {
+			writeErr(w, http.StatusBadRequest, "until must be RFC 3339")
+			return
+		}
+	}
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 || limit > 10000 {
+		limit = 5000
+	}
+	if !g.limiter.allow("hist:"+n.ID, 600, time.Minute) {
+		writeErr(w, http.StatusTooManyRequests, "too many requests")
+		return
+	}
+	pts, err := g.st.History(r.Context(), n.UserID, q.Get("token"), "node:"+n.ID, q.Get("kind") == "hourly", since, until, limit)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "check not found")
+		return
+	}
+	if err != nil {
+		g.log.Error("handler failed", "path", r.URL.Path, "err", err)
+		writeErr(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"points": pts})
 }
 
 func (g *Gateway) unlink(w http.ResponseWriter, r *http.Request) {

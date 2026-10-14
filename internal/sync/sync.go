@@ -148,6 +148,7 @@ type Live struct {
 
 	linkBusy      bool       // LinkStart laeuft gerade
 	pollMu        sync.Mutex // LinkPoll nur einmal gleichzeitig (Seite und Hintergrund fragen beide)
+	histMu        sync.Mutex // Nachladen des Verlaufs (history.go) nur einmal gleichzeitig
 	ackOK, ackBad time.Time  // letzte Bestaetigung ohne bzw. mit Fehler (hub erreichbar, aber z. B. ohne Datenbank)
 	sessionReady  bool       // aktuelle Sitzung hat hello/config erhalten
 	pushOnce      sync.Once  // Warteschlange fuer weitergereichte Pushes

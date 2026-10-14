@@ -268,12 +268,21 @@ func (m *Module) apiChart(w http.ResponseWriter, r *http.Request) {
 			qs = append(qs, q{`SELECT 'self', day, count, up_count, avg_ms FROM hc_daily WHERE token = ? AND day >= ? AND day < ? ORDER BY day`,
 				[]any{c.Token, from.Format("2006-01-02"), rawCut.Format("2006-01-02")}})
 		}
+		// fremde Messstellen: Stundenwerte (vom hub nachgeladen bzw. verdichtet) fuer Zeiten ohne Einzelpunkte
+		qs = append(qs, q{`SELECT source, substr(hour, 1, ` + strconv.Itoa(n) + `), sum(count), sum(up_count), sum(avg_ms * up_count) / NULLIF(sum(CASE WHEN avg_ms IS NOT NULL THEN up_count END), 0)
+			FROM hc_source_hourly WHERE token = ? AND hour >= ? GROUP BY 1, 2 ORDER BY 2`, []any{c.Token, ft(from)}})
 		if cr.bucket == "hour" && c.MeasuredHere() && from.Before(rawCut) {
 			// eigene Stundenwerte fuer die Zeit vor den aufbewahrten Einzelmessungen
 			qs = append(qs, q{`SELECT 'self', substr(hour, 1, 13), count, up_count, avg_ms FROM hc_hourly WHERE token = ? AND hour >= ? AND hour < ? ORDER BY hour`,
 				[]any{c.Token, ft(from), ft(rawCut)}})
 		}
 	}
+	type acc struct {
+		count, up int
+		latW      float64
+		latN      int
+	}
+	sums := map[string]map[time.Time]*acc{}
 	for _, x := range qs {
 		rows, err := m.st.r.QueryContext(ctx, x.sql, x.args...)
 		if err != nil {
@@ -306,16 +315,34 @@ func (m *Module) apiChart(w http.ResponseWriter, r *http.Request) {
 			} else {
 				tm, _ = time.Parse("2006-01-02", t[:10])
 			}
-			p := chartPoint{T: tm}
-			if avg != nil {
-				p.MS = f64(round2(*avg))
+			if sums[src] == nil {
+				sums[src] = map[time.Time]*acc{}
 			}
-			if count > 0 {
-				p.Up = f64(round2(100 * float64(up) / float64(count)))
+			a := sums[src][tm]
+			if a == nil {
+				a = &acc{}
+				sums[src][tm] = a
+			}
+			a.count += count
+			a.up += up
+			if avg != nil && up > 0 {
+				a.latW += *avg * float64(up)
+				a.latN += up
+			}
+		}
+		rows.Close()
+	}
+	for src, byT := range sums {
+		for tm, a := range byT {
+			p := chartPoint{T: tm}
+			if a.latN > 0 {
+				p.MS = f64(round2(a.latW / float64(a.latN)))
+			}
+			if a.count > 0 {
+				p.Up = f64(round2(100 * float64(a.up) / float64(a.count)))
 			}
 			get(src).Points = append(get(src).Points, p)
 		}
-		rows.Close()
 	}
 	out := make([]chartSeries, 0, len(series))
 	for src, s := range series {
