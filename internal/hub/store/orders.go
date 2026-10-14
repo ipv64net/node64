@@ -165,6 +165,40 @@ func (s *Store) PushInFrom(ctx context.Context, token string, down bool, msg, fr
 }
 
 // NodesSeen schreibt last_seen/online fuer mehrere Nodes gebuendelt.
+// GoneNodes liefert aus ids die Nodes, die inzwischen getrennt (Token widerrufen) oder entfernt sind,
+// z. B. im Portal; deren Verbindung beendet der gateway (die Node bekommt beim Neuverbinden 401).
+func (s *Store) GoneNodes(ctx context.Context, ids []string) ([]string, error) {
+	var gone []string
+	for len(ids) > 0 {
+		n := min(len(ids), 500)
+		part := ids[:n]
+		ids = ids[n:]
+		ph := make([]string, len(part))
+		args := make([]any, len(part))
+		for i, id := range part {
+			ph[i], args[i] = "?", id
+		}
+		rows, err := s.db.QueryContext(ctx, `SELECT node_id FROM hc2_nodes WHERE node_id IN (`+strings.Join(ph, ",")+`) AND revoked_at IS NULL`, args...)
+		if err != nil {
+			return gone, err
+		}
+		live := map[string]bool{}
+		for rows.Next() {
+			var id string
+			if rows.Scan(&id) == nil {
+				live[id] = true
+			}
+		}
+		rows.Close()
+		for _, id := range part {
+			if !live[id] {
+				gone = append(gone, id)
+			}
+		}
+	}
+	return gone, nil
+}
+
 func (s *Store) NodesSeen(ctx context.Context, ids []string) error {
 	if len(ids) == 0 {
 		return nil

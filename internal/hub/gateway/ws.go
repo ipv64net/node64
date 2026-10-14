@@ -578,6 +578,21 @@ func (g *Gateway) seenLoop() {
 					g.log.Warn("nodes seen update failed", "err", err)
 				}
 			}
+			// im Portal getrennte oder entfernte Nodes: Verbindung beenden
+			g.mu.Lock()
+			connected := make([]string, 0, len(g.conns))
+			for id := range g.conns {
+				connected = append(connected, id)
+			}
+			g.mu.Unlock()
+			if gone, err := g.st.GoneNodes(ctx, connected); err == nil {
+				for _, id := range gone {
+					if c := g.get(id); c != nil {
+						g.log.Info("node unlinked elsewhere, closing", "node", c.node.Name)
+						c.close(websocket.StatusPolicyViolation, "token revoked")
+					}
+				}
+			}
 			if nodes, err := g.st.LiveNodes(ctx); err == nil && g.st.IsHousekeeper(nodes) {
 				if stale, _ := g.st.StaleNodes(ctx); len(stale) > 0 {
 					g.log.Info("nodes marked offline", "count", len(stale))
