@@ -82,6 +82,7 @@ type Dispatcher struct {
 	listPath    func(string) string
 	serverSends func() bool
 	// direkter Versand ueber die ipv64-API (Meldungen der Module) und Kanalliste ohne Verknuepfung
+	hookMu   sync.RWMutex // die Hooks darunter werden evtl. erst nach Start gesetzt
 	apiSend  func(ctx context.Context, ch *Channel, m Message) error
 	apiReady func() bool
 	remote   func(ctx context.Context) []*Channel
@@ -102,15 +103,28 @@ var ErrUnavailable = errors.New("delivery path not available")
 // Er gilt nur fuer Meldungen der Module (CheckInfo.Local); Healthchecks bleiben beim hub. ready meldet,
 // ob ein API-Key da ist.
 func (d *Dispatcher) SetAPISender(send func(ctx context.Context, ch *Channel, m Message) error, ready func() bool) {
+	d.hookMu.Lock()
 	d.apiSend, d.apiReady = send, ready
+	d.hookMu.Unlock()
 }
 
 // SetRemoteChannels liefert ohne Verknuepfung die ipv64-Kanaele des Accounts (nur lesend, nicht gespeichert).
-func (d *Dispatcher) SetRemoteChannels(fn func(ctx context.Context) []*Channel) { d.remote = fn }
+func (d *Dispatcher) SetRemoteChannels(fn func(ctx context.Context) []*Channel) {
+	d.hookMu.Lock()
+	d.remote = fn
+	d.hookMu.Unlock()
+}
+
+func (d *Dispatcher) hooks() (send func(context.Context, *Channel, Message) error, ready func() bool, remote func(context.Context) []*Channel) {
+	d.hookMu.RLock()
+	defer d.hookMu.RUnlock()
+	return d.apiSend, d.apiReady, d.remote
+}
 
 // viaAPI: Server-Kanaele dieses Alerts gehen direkt ueber die API.
 func (d *Dispatcher) viaAPI(c CheckInfo) bool {
-	return c.Local && !d.sendServerChannels && d.apiSend != nil && d.apiReady != nil && d.apiReady()
+	send, ready, _ := d.hooks()
+	return c.Local && !d.sendServerChannels && send != nil && ready != nil && ready()
 }
 
 type bucket struct {
@@ -301,8 +315,8 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 		}
 	}
 	// ohne Verknuepfung: die ipv64-Kanaele des Accounts ueber die API (nur Standardkanaele)
-	if d.viaAPI(c) && d.remote != nil && len(want) == 0 {
-		for _, ch := range d.remote(ctx) {
+	if _, _, remote := d.hooks(); d.viaAPI(c) && remote != nil && len(want) == 0 {
+		for _, ch := range remote(ctx) {
 			if ch.Enabled && ch.Default {
 				out = append(out, ch)
 			}
@@ -713,8 +727,8 @@ func (d *Dispatcher) composeDynDNS(lang string, a Alert, m Message) Message {
 func (d *Dispatcher) send(ctx context.Context, ch *Channel, m Message) {
 	var s Sender
 	ok := false
-	if ch.Execution == "server" && !d.sendServerChannels && d.apiSend != nil {
-		s, ok = apiSender(d.apiSend), true // Server-Kanal direkt ueber die ipv64-API (nur Local-Alerts kommen hier an)
+	if send, _, _ := d.hooks(); ch.Execution == "server" && !d.sendServerChannels && send != nil {
+		s, ok = apiSender(send), true // Server-Kanal direkt ueber die ipv64-API (nur Local-Alerts kommen hier an)
 	} else {
 		s, ok = d.senders[ch.Type]
 	}
