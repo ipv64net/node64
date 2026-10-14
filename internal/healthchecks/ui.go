@@ -214,7 +214,7 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 	d := listData{Types: checks.Types, States: listStates, Filter: f, Sort: q.Get("sort"), Dir: q.Get("dir"), Counts: map[string]int{}}
 	tagSet, grpSet := map[string]bool{}, map[string]bool{}
 	if m.quota != nil {
-		d.QuotaToday, d.QuotaLimit = m.quota()
+		d.QuotaToday, d.QuotaLimit, _ = m.quota()
 		d.QuotaNear = d.QuotaLimit > 0 && d.QuotaToday*10 >= d.QuotaLimit*9
 	}
 	syncErrs := m.OutboxErrors(ctx)
@@ -512,6 +512,8 @@ type formData struct {
 	Executions []string
 	Linked     bool
 	Peers      []Peer // Nodes des Accounts (messende Nodes waehlen)
+	// Tageskontingent: Vorschau im Formular (Verbrauch der uebrigen Checks, heute, Limit, Standorte je Check)
+	ProjOther, QuotaToday, QuotaLimit, AccLocs int
 }
 
 type channelOpt struct {
@@ -847,6 +849,10 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 	d.IPModes = []string{"auto", "ipv4", "ipv6", "both"}
 	d.Policies, d.Locations, d.Executions = Policies, KnownLocations, []string{"local", "online", "both"}
 	d.Linked = m.linked != nil && m.linked()
+	if d.Linked && m.quota != nil {
+		d.QuotaToday, d.QuotaLimit, d.AccLocs = m.quota()
+		d.ProjOther = m.DailyProjection(r.Context(), d.Token, d.AccLocs)
+	}
 	if d.Linked {
 		d.Peers = m.peers(r.Context())
 		if d.Form["nodes"] == "" {

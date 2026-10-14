@@ -40,8 +40,8 @@ type Module struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 	push   *pushLimiter
-	linked func() bool               // ipv64-Verknuepfung aktiv (Sync-Phase), nil = standalone
-	quota  func() (today, limit int) // Tageskontingent der Online-Checks, nil = standalone
+	linked func() bool                     // ipv64-Verknuepfung aktiv (Sync-Phase), nil = standalone
+	quota  func() (today, limit, locs int) // Tageskontingent der Online-Checks, nil = standalone
 	// pushFwd meldet einen lokal empfangenen Push an den hub (der ihn an andere Messstellen weitergibt)
 	pushFwd func(token string, down bool, msg, from string) bool
 	// runRemote bittet den hub, den Check bei den anderen messenden Nodes sofort zu messen
@@ -139,7 +139,7 @@ func (m *Module) Store() *Store { return m.st }
 func (m *Module) SetLinked(fn func() bool) { m.linked = fn }
 
 // SetQuota liefert das Tageskontingent der Online-Checks (Hinweis in der Uebersicht).
-func (m *Module) SetQuota(fn func() (today, limit int)) { m.quota = fn }
+func (m *Module) SetQuota(fn func() (today, limit, locs int)) { m.quota = fn }
 
 // SetRunRemote installiert "Jetzt pruefen" ueber den hub (andere messende Nodes).
 func (m *Module) SetRunRemote(fn func(token string) bool) { m.runRemote = fn }

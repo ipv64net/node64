@@ -13,6 +13,37 @@
 				el.querySelectorAll("input, select, textarea").forEach(function (i) { i.disabled = !on; });
 			});
 		};
+		// Tageskontingent: Verbrauch dieses Checks und des Accounts pro Tag live hochrechnen (wie der hub zaehlt)
+		var proj = document.getElementById("hc-proj");
+		if (proj) {
+			var pnum = function (k) { return parseInt(proj.getAttribute("data-" + k), 10) || 0; };
+			var ptx = function (k) { return proj.getAttribute("data-t-" + k) || ""; };
+			var pfmt = function (n) { return n.toLocaleString(); };
+			var calc = function () {
+				var ex = document.getElementById("execution"), iv = document.getElementById("interval_seconds"), pa = document.querySelector("input[name=paused]");
+				var sec = parseInt(iv && iv.value, 10) || 0;
+				var locs = document.querySelectorAll("input[name=locations]:checked").length || 2;
+				if (pnum("acclocs") === 1 && locs > 1) { locs = 1; }
+				var cost = 0;
+				if (ex && ex.value !== "local" && typeSel.value !== "push" && !(pa && pa.checked) && sec > 0) { cost = Math.floor(86400 / sec) * locs; }
+				var total = pnum("other") + cost, limit = pnum("limit"), over = total > limit;
+				var parts = [cost > 0 ? ptx("check").replace("{n}", pfmt(cost)).replace("{sec}", sec).replace("{locs}", locs) : ptx("local"),
+					ptx("total").replace("{n}", pfmt(total)).replace("{limit}", pfmt(limit))];
+				if (over) {
+					var msg = ptx("over"), left = limit - pnum("today"), perMin = total / 1440;
+					if (left > 0) {
+						var at = new Date(Date.now() + left / perMin * 60000);
+						if (at.toDateString() === new Date().toDateString()) { msg = ptx("runout").replace("{time}", at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })); }
+					}
+					parts.push(msg);
+				}
+				proj.textContent = parts.join(" ");
+				proj.className = "small mt-1 " + (over ? "text-warning-emphasis fw-semibold" : "text-body-secondary");
+			};
+			var pform = proj.closest("form");
+			["change", "input"].forEach(function (ev) { (pform || document).addEventListener(ev, calc); });
+			calc();
+		}
 		// TCP/Port/Zertifikat: host:port im Ziel gleich ins Port-Feld uebernehmen (der Port steht nur dort)
 		var targetIn = document.getElementById("target");
 		if (targetIn) {

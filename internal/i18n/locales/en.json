@@ -107,6 +107,9 @@
     "totp_failed": "The code is wrong or expired."
   },
   "dashboard": {
+    "link_quota": "Online checks today",
+    "link_quota_value": "{today} of {limit}",
+    "link_quota_proj": "projected {n} per day",
     "storage": "Storage and traffic",
     "storage_total": "Used in total",
     "backups": "Backups",
@@ -422,6 +425,13 @@
     }
   },
   "hc": {
+    "proj": {
+      "check": "This check: {n} online checks per day ({sec} s × {locs} location(s)).",
+      "local": "This check uses no daily quota (local, paused or push).",
+      "total": "Account total about {n} of {limit} per day (without pushes).",
+      "over": "That does not last a full day: once the quota is used up, online checks pause until midnight.",
+      "runout": "At this rate the quota runs out today around {time}; online checks then pause until midnight."
+    },
     "quota": {
       "reached": "Daily quota for online checks reached ({today} of {limit}). Online checks and push evaluation at ipv64 pause until midnight; local checks of this node keep running.",
       "near": "Daily quota for online checks almost reached: {today} of {limit} today. After that, online checks pause until midnight."

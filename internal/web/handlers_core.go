@@ -234,6 +234,7 @@ type dashboardData struct {
 	NetSince           time.Time
 	// Checks nach Besitzer (verknuepft)
 	Own, Hybrid, OnlineOnly, Other, OnlinePoints int
+	ChecksProj                                   int // Tageskontingent: hochgerechneter Verbrauch pro Tag
 	ConnectedAt, LastSync, LinkedAt              time.Time
 	Peers, PeersOnline                           int // Nodes dieser Verknuepfung
 }
@@ -284,6 +285,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 					}
 					d.OnlinePoints += n
 				}
+				d.ChecksProj += healthchecks.CheckDailyCost(c, v.Sync.Locations)
 			}
 		}
 	}

@@ -107,6 +107,9 @@
     "totp_failed": "Der Code ist falsch oder abgelaufen."
   },
   "dashboard": {
+    "link_quota": "Online-Messungen heute",
+    "link_quota_value": "{today} von {limit}",
+    "link_quota_proj": "voraussichtlich {n} pro Tag",
     "storage": "Speicher und Verkehr",
     "storage_total": "Belegt gesamt",
     "backups": "Sicherungen",
@@ -422,6 +425,13 @@
     }
   },
   "hc": {
+    "proj": {
+      "check": "Dieser Check: {n} Online-Messungen pro Tag ({sec} s × {locs} Standort(e)).",
+      "local": "Dieser Check verbraucht kein Tageskontingent (lokal, pausiert oder Push).",
+      "total": "Account gesamt voraussichtlich {n} von {limit} pro Tag (ohne Pushes).",
+      "over": "Das reicht nicht für den ganzen Tag: Ist das Kontingent erreicht, pausieren die Online-Checks bis Mitternacht.",
+      "runout": "Bei diesem Stand ist das Kontingent heute gegen {time} Uhr erreicht, danach pausieren die Online-Checks bis Mitternacht."
+    },
     "quota": {
       "reached": "Tageskontingent für Online-Messungen erreicht ({today} von {limit}). Online-Messungen und Push-Auswertung bei ipv64 pausieren bis Mitternacht; die lokalen Messungen dieser Node laufen weiter.",
       "near": "Tageskontingent für Online-Messungen fast erreicht: {today} von {limit} heute. Danach pausieren die Online-Messungen bis Mitternacht."

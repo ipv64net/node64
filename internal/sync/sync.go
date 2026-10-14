@@ -461,16 +461,17 @@ func (c *Live) pollPending(code string, exp time.Time) {
 	}
 }
 
-// Quota liefert das Tageskontingent der Online-Checks (heute, Limit; Limit 0 = unbegrenzt oder unbekannt).
-func (c *Live) Quota() (today, limit int) {
+// Quota liefert das Tageskontingent der Online-Checks (heute, Limit; Limit 0 = unbegrenzt oder unbekannt)
+// und die Standorte je Check laut Account (fuer die Hochrechnung).
+func (c *Live) Quota() (today, limit, locs int) {
 	if !c.Linked() {
-		return 0, 0
+		return 0, 0, 0
 	}
 	var acc wire.Account
 	if raw := c.setting(SetAccount, ""); raw == "" || json.Unmarshal([]byte(raw), &acc) != nil {
-		return 0, 0
+		return 0, 0, 0
 	}
-	return acc.Usage["checks_today"], acc.Limits["checks_per_day"]
+	return acc.Usage["checks_today"], acc.Limits["checks_per_day"], acc.HCLocation
 }
 
 // LinkPoll fragt nach, ob der Code eingeloest wurde. true = jetzt verknuepft.
