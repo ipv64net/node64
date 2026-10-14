@@ -253,11 +253,46 @@
     "hint": "Hält ausgewählte Domains und Records bei ipv64 mit der öffentlichen Adresse dieses Anschlusses aktuell. Aktualisiert wird nur, wenn sich die Adresse wirklich geändert hat.",
     "conn": {
       "title": "Anschluss",
-      "none": "Noch nicht geprüft."
+      "none": "Noch nicht geprüft.",
+      "prefix": "IPv6-Präfix",
+      "no_route": "kein IPv6 im Container",
+      "unknown": "nicht ermittelt",
+      "last_known": "zuletzt bekannte Adresse",
+      "via": "über {source}",
+      "checked": "geprüft",
+      "changed": "geändert",
+      "no_route6_hint": "Dieser Container hat keine IPv6-Verbindung. Für IPv6 den Container mit network_mode: host starten oder IPv6 im Docker-Netz aktivieren. IPv4 funktioniert trotzdem.",
+      "temporary_badge": "temporär",
+      "deprecated": "veraltet",
+      "temporary_hint": "Die von außen gesehene IPv6 ist eine temporäre Privacy-Adresse und wechselt regelmäßig. Für AAAA-Records später „Präfix + Interface-ID“ oder „Interface“ verwenden.",
+      "local6": "Globale IPv6-Adressen dieses Hosts",
+      "check_now": "Jetzt prüfen",
+      "next": "Prüfung alle {minutes} min",
+      "check_busy": "Die Prüfung dauert länger, das Ergebnis erscheint gleich im Protokoll."
     },
     "targets": {
       "title": "Ziele",
       "empty": "Noch keine Ziele eingerichtet."
+    },
+    "settings": {
+      "title": "Prüfung",
+      "interval": "Prüfabstand",
+      "minutes": "{n} min",
+      "interval_hint": "Die Abfrage der eigenen Adresse kostet kein DynDNS-Update-Limit. Aktualisiert wird nur bei einer Änderung.",
+      "source4": "Eigene Prüf-URL IPv4 (optional)",
+      "source6": "Eigene Prüf-URL IPv6 (optional)",
+      "source_hint": "Leer = ipv64. Eine eigene URL muss die Adresse als Text oder JSON liefern; ipv64 bleibt der Rückfall.",
+      "invalid": "Ungültige Eingabe: Prüfabstand oder URL (nur http/https)."
+    },
+    "checks": {
+      "title": "Letzte Prüfungen",
+      "empty": "Noch keine Prüfung.",
+      "time": "Zeit",
+      "family": "Familie",
+      "result": "Ergebnis",
+      "source": "Quelle",
+      "duration": "Dauer",
+      "changed": "neu"
     }
   },
   "hc": {

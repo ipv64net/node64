@@ -34,11 +34,19 @@ type Module struct {
 	mu     sync.Mutex
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	fetch   fetchFunc          // Abruf einer IP-Quelle (Tests ersetzen ihn)
+	probe   func(fam int) bool // Route fuer die Familie vorhanden?
+	trigger chan chan struct{} // "Jetzt pruefen"
+
+	stMu sync.Mutex
+	fam  [2]famState // [0] IPv4, [1] IPv6
 }
 
 // New erzeugt das Modul. dispatcher darf nil sein.
 func New(core *store.Store, log *slog.Logger, box *secrets.Box, dispatcher *notify.Dispatcher, version string) *Module {
-	return &Module{core: core, log: log.With("module", Name), box: box, dispatcher: dispatcher, version: version}
+	return &Module{core: core, log: log.With("module", Name), box: box, dispatcher: dispatcher, version: version,
+		fetch: newFetcher("node64/" + version), probe: defaultProbe, trigger: make(chan chan struct{})}
 }
 
 func (m *Module) Info() module.Info {
@@ -57,12 +65,15 @@ func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	m.uiRoutes(mux, g)
 }
 
-// Start startet die Hintergrundarbeit (Pruefrunde ab Phase D2).
+// Start laedt den letzten Stand und startet die Pruefrunden.
 func (m *Module) Start(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	_, m.cancel = context.WithCancel(ctx)
-	m.log.Info("dyndns started")
+	ctx, m.cancel = context.WithCancel(ctx)
+	m.loadState(ctx)
+	m.wg.Add(1)
+	go m.loop(ctx)
+	m.log.Info("dyndns started", "interval", m.interval().String())
 	return nil
 }
 

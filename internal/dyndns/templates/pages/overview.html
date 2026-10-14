@@ -3,16 +3,76 @@
 <h1 class="h4 mb-3"><img src="/static/img/dyndns64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{.T "dyn.title"}}</h1>
 <p class="text-body-secondary small">{{.T "dyn.hint"}}</p>
 <div class="row g-3">
-	<div class="col-lg-5">
+	<div class="col-lg-5 d-flex flex-column gap-3">
 		<div class="card">
 			<div class="card-header"><i class="bi bi-router text-info"></i> {{.T "dyn.conn.title"}}</div>
-			<div class="card-body small text-body-secondary">{{.T "dyn.conn.none"}}</div>
+			<div class="card-body small">
+				{{if and $d.V4.CheckedAt.IsZero $d.V6.CheckedAt.IsZero}}<div class="text-body-secondary mb-2">{{.T "dyn.conn.none"}}</div>{{end}}
+				<dl class="row mb-0">
+					{{range $f := $d.Fams}}
+					<dt class="col-4">IPv{{$f.Fam}}</dt>
+					<dd class="col-8">
+						{{if $f.IP}}<span class="font-monospace text-break">{{$f.IP}}</span>{{if $f.Temporary}} <span class="badge text-bg-warning">{{$.T "dyn.conn.temporary_badge"}}</span>{{end}}{{else if $f.NoRoute}}<span class="text-body-secondary">{{$.T "dyn.conn.no_route"}}</span>{{else if $f.CheckedAt.IsZero}}<span class="text-body-secondary">–</span>{{else}}<span class="text-body-secondary">{{$.T "dyn.conn.unknown"}}</span>{{end}}
+						{{if and $f.Err (not $f.NoRoute)}}<div><span class="badge text-bg-danger">{{$f.Err}}</span>{{if $f.IP}} <span class="text-body-secondary">{{$.T "dyn.conn.last_known"}}</span>{{end}}</div>{{end}}
+						{{if not $f.CheckedAt.IsZero}}<div class="text-body-secondary">{{if $f.Source}}{{$.T "dyn.conn.via" "source" $f.Source}} · {{end}}<span title="{{$.Time $f.CheckedAt}}">{{$.T "dyn.conn.checked"}} {{$.Ago $f.CheckedAt}}</span>{{if not $f.ChangedAt.IsZero}} · <span title="{{$.Time $f.ChangedAt}}">{{$.T "dyn.conn.changed"}} {{$.Ago $f.ChangedAt}}</span>{{end}}</div>{{end}}
+					</dd>
+					{{end}}
+					{{if $d.V6.Prefix}}<dt class="col-4">{{.T "dyn.conn.prefix"}}</dt><dd class="col-8"><span class="font-monospace">{{$d.V6.Prefix}}</span></dd>{{end}}
+				</dl>
+				{{if $d.V6.NoRoute}}<div class="alert alert-info py-2 mt-2 mb-0"><i class="bi bi-info-circle"></i> {{.T "dyn.conn.no_route6_hint"}}</div>{{end}}
+				{{if $d.V6.Temporary}}<div class="alert alert-warning py-2 mt-2 mb-0"><i class="bi bi-exclamation-triangle"></i> {{.T "dyn.conn.temporary_hint"}}</div>{{end}}
+				{{if $d.Local}}
+				<div class="mt-3 fw-semibold">{{.T "dyn.conn.local6"}}</div>
+				<ul class="list-unstyled mb-0">{{range $d.Local}}<li><span class="font-monospace text-break">{{.Addr}}</span> <span class="text-body-secondary">{{.Iface}}</span>{{if .Temporary}} <span class="badge text-bg-light">{{$.T "dyn.conn.temporary_badge"}}</span>{{end}}{{if .Deprecated}} <span class="badge text-bg-light">{{$.T "dyn.conn.deprecated"}}</span>{{end}}</li>{{end}}</ul>
+				{{end}}
+			</div>
+			<div class="card-footer d-flex align-items-center gap-2 small">
+				<form method="post" action="/dyndns/check" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-arrow-repeat"></i> {{.T "dyn.conn.check_now"}}</button></form>
+				{{if not $d.NextAt.IsZero}}<span class="text-body-secondary" title="{{.Time $d.NextAt}}">{{.T "dyn.conn.next" "minutes" $d.Interval}}</span>{{end}}
+			</div>
+		</div>
+		<div class="card" id="settings">
+			<div class="card-header"><i class="bi bi-sliders text-secondary"></i> {{.T "dyn.settings.title"}}</div>
+			<div class="card-body small">
+				<form method="post" action="/dyndns/settings">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<label class="form-label" for="interval">{{.T "dyn.settings.interval"}}</label>
+					<select class="form-select form-select-sm mb-1" id="interval" name="interval">{{range $d.Intervals}}<option value="{{.}}"{{if eq . $d.Interval}} selected{{end}}>{{$.T "dyn.settings.minutes" "n" .}}</option>{{end}}</select>
+					<div class="form-text mb-2">{{.T "dyn.settings.interval_hint"}}</div>
+					<label class="form-label" for="source4">{{.T "dyn.settings.source4"}}</label>
+					<input class="form-control form-control-sm mb-2" id="source4" name="source4" value="{{$d.Source4}}" placeholder="https://ipv4.ipv64.net/ipcheck.php?ipv4" maxlength="300">
+					<label class="form-label" for="source6">{{.T "dyn.settings.source6"}}</label>
+					<input class="form-control form-control-sm mb-1" id="source6" name="source6" value="{{$d.Source6}}" placeholder="https://ipv6.ipv64.net/ipcheck.php?ipv6" maxlength="300">
+					<div class="form-text mb-2">{{.T "dyn.settings.source_hint"}}</div>
+					<button class="btn btn-outline-primary btn-sm" type="submit">{{.T "common.save"}}</button>
+				</form>
+			</div>
 		</div>
 	</div>
-	<div class="col-lg-7">
+	<div class="col-lg-7 d-flex flex-column gap-3">
 		<div class="card">
 			<div class="card-header"><i class="bi bi-globe text-primary"></i> {{.T "dyn.targets.title"}}</div>
 			{{if not $d.Targets}}<div class="card-body small text-body-secondary">{{.T "dyn.targets.empty"}}</div>{{end}}
+		</div>
+		<div class="card">
+			<div class="card-header"><i class="bi bi-clock-history text-secondary"></i> {{.T "dyn.checks.title"}}</div>
+			{{if not $d.Checks}}<div class="card-body small text-body-secondary">{{.T "dyn.checks.empty"}}</div>
+			{{else}}
+			<div class="table-responsive"><table class="table table-sm align-middle mb-0 table-cards small">
+				<thead><tr><th>{{.T "dyn.checks.time"}}</th><th>{{.T "dyn.checks.family"}}</th><th>{{.T "dyn.checks.result"}}</th><th class="d-none d-md-table-cell">{{.T "dyn.checks.source"}}</th><th class="text-end d-none d-md-table-cell">{{.T "dyn.checks.duration"}}</th></tr></thead>
+				<tbody>
+				{{range $d.Checks}}
+				<tr>
+					<td data-label="{{$.T "dyn.checks.time"}}" class="text-nowrap" title="{{$.Time .Time}}">{{$.Ago .Time}}</td>
+					<td data-label="{{$.T "dyn.checks.family"}}"><span class="badge text-bg-light">IPv{{.Family}}</span></td>
+					<td data-label="{{$.T "dyn.checks.result"}}">{{if .IP}}<span class="font-monospace text-break">{{.IP}}</span>{{if .Changed}} <span class="badge text-bg-success">{{$.T "dyn.checks.changed"}}</span>{{end}}{{else if eq .Err "no route"}}<span class="text-body-secondary">{{$.T "dyn.conn.no_route"}}</span>{{else}}<span class="badge text-bg-danger">{{.Err}}</span>{{end}}</td>
+					<td data-label="{{$.T "dyn.checks.source"}}" class="d-none d-md-table-cell text-body-secondary">{{.Source}}</td>
+					<td data-label="{{$.T "dyn.checks.duration"}}" class="text-end text-nowrap d-none d-md-table-cell">{{if .Source}}{{.Ms}} ms{{end}}</td>
+				</tr>
+				{{end}}
+				</tbody>
+			</table></div>
+			{{end}}
 		</div>
 	</div>
 </div>

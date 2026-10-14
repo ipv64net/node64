@@ -253,11 +253,46 @@
     "hint": "Keeps selected domains and records at ipv64 up to date with the public address of this connection. Updates are only sent when the address has actually changed.",
     "conn": {
       "title": "Connection",
-      "none": "Not checked yet."
+      "none": "Not checked yet.",
+      "prefix": "IPv6 prefix",
+      "no_route": "no IPv6 in the container",
+      "unknown": "not determined",
+      "last_known": "last known address",
+      "via": "via {source}",
+      "checked": "checked",
+      "changed": "changed",
+      "no_route6_hint": "This container has no IPv6 connectivity. For IPv6 start the container with network_mode: host or enable IPv6 in the Docker network. IPv4 still works.",
+      "temporary_badge": "temporary",
+      "deprecated": "deprecated",
+      "temporary_hint": "The IPv6 address seen from outside is a temporary privacy address and changes regularly. For AAAA records use \"prefix + interface ID\" or \"interface\" later.",
+      "local6": "Global IPv6 addresses of this host",
+      "check_now": "Check now",
+      "next": "checked every {minutes} min",
+      "check_busy": "The check takes longer, the result will show up in the log shortly."
     },
     "targets": {
       "title": "Targets",
       "empty": "No targets set up yet."
+    },
+    "settings": {
+      "title": "Checking",
+      "interval": "Check interval",
+      "minutes": "{n} min",
+      "interval_hint": "Looking up the own address does not count against the DynDNS update limit. Updates are only sent on a change.",
+      "source4": "Own check URL IPv4 (optional)",
+      "source6": "Own check URL IPv6 (optional)",
+      "source_hint": "Empty = ipv64. An own URL must return the address as text or JSON; ipv64 stays the fallback.",
+      "invalid": "Invalid input: check interval or URL (http/https only)."
+    },
+    "checks": {
+      "title": "Recent checks",
+      "empty": "No check yet.",
+      "time": "Time",
+      "family": "Family",
+      "result": "Result",
+      "source": "Source",
+      "duration": "Duration",
+      "changed": "new"
     }
   },
   "hc": {

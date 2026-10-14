@@ -314,6 +314,9 @@ func (r *Runner) hasFamily(fam string) bool {
 	return ok
 }
 
+// ProbeFamily meldet, ob eine Route fuer "ipv4" bzw. "ipv6" existiert (fuer andere Module).
+func ProbeFamily(fam string) bool { return probeFamily(fam) }
+
 // probeFamily prueft per UDP-"Connect" (es wird kein Paket gesendet), ob eine
 // Route fuer die Familie existiert. Ohne IPv6-Route antwortet der Kernel mit
 // "network is unreachable".
