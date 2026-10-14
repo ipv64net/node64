@@ -64,6 +64,11 @@
 		try { document.execCommand("copy"); } catch (e) {}
 		document.body.removeChild(ta);
 	}
+	// Formular beim Aendern absenden (statt onchange-Attribut, das die CSP blockiert)
+	document.addEventListener("change", function (ev) {
+		var el = ev.target.closest ? ev.target.closest("[data-autosubmit]") : null;
+		if (el && el.form) { el.form.submit(); }
+	});
 	document.addEventListener("click", function (ev) {
 		var btn = ev.target.closest("[data-copy-target],[data-copy-text]");
 		if (!btn) { return; }

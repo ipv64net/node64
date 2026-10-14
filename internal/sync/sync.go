@@ -127,6 +127,13 @@ type Deps struct {
 	Version string
 	Log     *slog.Logger
 	Senders map[notify.Type]notify.Sender
+	Modules Modules // nil = Module nicht automatisch einschalten
+}
+
+// Modules schaltet beim Verknuepfen das Healthchecks-Modul ein (sonst fehlen die Tabellen fuer die Checks von ipv64).
+type Modules interface {
+	IsRunning(name string) bool
+	Enable(ctx context.Context, name string) error
 }
 
 // Live ist der echte Client.
@@ -135,10 +142,11 @@ type Live struct {
 	log *slog.Logger
 	hc  *http.Client
 
-	linkBusy      bool      // LinkStart laeuft gerade
-	ackOK, ackBad time.Time // letzte Bestaetigung ohne bzw. mit Fehler (hub erreichbar, aber z. B. ohne Datenbank)
-	sessionReady  bool      // aktuelle Sitzung hat hello/config erhalten
-	pushOnce      sync.Once // Warteschlange fuer weitergereichte Pushes
+	linkBusy      bool       // LinkStart laeuft gerade
+	pollMu        sync.Mutex // LinkPoll nur einmal gleichzeitig (Seite und Hintergrund fragen beide)
+	ackOK, ackBad time.Time  // letzte Bestaetigung ohne bzw. mit Fehler (hub erreichbar, aber z. B. ohne Datenbank)
+	sessionReady  bool       // aktuelle Sitzung hat hello/config erhalten
+	pushOnce      sync.Once  // Warteschlange fuer weitergereichte Pushes
 	pushQ         chan wire.Msg
 	infoGen       atomic.Int64 // zaehlt lokale Aenderungen von Name/Standort (refreshMe ueberschreibt sie nicht)
 	notifyGen     atomic.Int64 // zaehlt lokale Aenderungen der Benachrichtigungs-Einstellungen
@@ -336,6 +344,10 @@ func (c *Live) Start(ctx context.Context) error {
 	notify.OnChange = c.onChannelChange
 	if c.Linked() {
 		c.startLoop(ctx)
+	} else if code := c.setting(SetPendCode, ""); code != "" {
+		if exp, err := time.Parse(time.RFC3339, c.setting(SetPendExp, "")); err == nil && time.Now().Before(exp) {
+			go c.pollPending(code, exp) // offener Code vom letzten Lauf
+		}
 	}
 	return nil
 }
@@ -420,13 +432,39 @@ func (c *Live) LinkStart(ctx context.Context) (code string, expires time.Time, e
 		c.set(SetPendSecret, out.PollSecret)
 		c.set(SetPendExp, out.ExpiresAt.Format(time.RFC3339))
 		c.set(SetHub, ep.URL)
+		go c.pollPending(out.Code, out.ExpiresAt)
 		return out.Code, out.ExpiresAt, nil
 	}
 	return "", time.Time{}, fmt.Errorf("hub not reachable (check DNS, outbound HTTPS and the clock): %w", lastErr)
 }
 
+// pollPending fragt im Hintergrund nach, bis der Code eingeloest, abgelaufen oder verworfen ist.
+// So klappt die Verknuepfung auch, wenn die Seite im Browser nicht offen ist.
+func (c *Live) pollPending(code string, exp time.Time) {
+	for time.Now().Before(exp.Add(30 * time.Second)) {
+		time.Sleep(5 * time.Second)
+		if c.setting(SetPendCode, "") != code {
+			return // verknuepft, abgebrochen oder neuer Code
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		linked, err := c.LinkPoll(ctx)
+		cancel()
+		if linked {
+			return
+		}
+		if err != nil {
+			c.log.Debug("link poll", "err", err)
+		}
+	}
+}
+
 // LinkPoll fragt nach, ob der Code eingeloest wurde. true = jetzt verknuepft.
 func (c *Live) LinkPoll(ctx context.Context) (bool, error) {
+	c.pollMu.Lock()
+	defer c.pollMu.Unlock()
+	if c.Linked() {
+		return true, nil // inzwischen vom Hintergrund-Poll verknuepft
+	}
 	code, secret := c.setting(SetPendCode, ""), c.setting(SetPendSecret, "")
 	if code == "" {
 		return false, errors.New("no pending code")
@@ -466,6 +504,13 @@ func (c *Live) LinkPoll(ctx context.Context) (bool, error) {
 	c.set(SetLinkedAt, time.Now().UTC().Format(time.RFC3339))
 	c.LinkCancel()
 	c.log.Info("linked with ipv64", "account", out.Account.ID, "plan", out.Account.Plan)
+	if m := c.d.Modules; m != nil && !m.IsRunning(healthchecks.Name) {
+		if err := m.Enable(ctx, healthchecks.Name); err != nil {
+			c.log.Error("enable healthchecks after link", "err", err)
+		} else {
+			c.log.Info("healthchecks module enabled for the link")
+		}
+	}
 	if err := c.bootstrap(ctx); err != nil {
 		c.log.Error("bootstrap failed", "err", err)
 		c.setErr(err)
@@ -491,6 +536,16 @@ func (c *Live) Unlink(ctx context.Context, keepChecks bool) error {
 		}
 	}
 	_ = c.Stop(ctx)
+	if err := c.clearLink(ctx); err != nil {
+		return err
+	}
+	c.log.Info("unlinked from ipv64", "keep_checks", keepChecks)
+	return nil
+}
+
+// clearLink setzt die Node lokal auf standalone: Zugangsdaten weg, alle Checks wieder eigene,
+// Platzhalter der Server-Kanaele entfernt. Beim Trennen hier und beim Widerruf durch ipv64.
+func (c *Live) clearLink(ctx context.Context) error {
 	for _, k := range []string{SetToken, SetAccount, SetLinkedAt, SetRevision, SetAckSeq, SetEventID, SetHub} {
 		c.set(k, "")
 	}
@@ -510,7 +565,6 @@ func (c *Live) Unlink(ctx context.Context, keepChecks bool) error {
 			}
 		}
 	}
-	c.log.Info("unlinked from ipv64", "keep_checks", keepChecks)
 	return nil
 }
 

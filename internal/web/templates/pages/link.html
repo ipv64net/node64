@@ -27,12 +27,12 @@
 			{{if $st.LastError}}<div class="alert alert-warning py-2 small mb-2">{{$st.LastError}}</div>{{end}}
 			<form method="post" action="/link/settings" class="mb-3">
 				<input type="hidden" name="_csrf" value="{{.CSRF}}">
-				<div class="form-check"><input class="form-check-input" type="checkbox" name="local_notifications" id="local_notifications"{{if $d.LocalNotif}} checked{{end}} onchange="this.form.submit()"><label class="form-check-label" for="local_notifications">{{.T "link.local_notifications"}}</label><div class="form-text">{{.T "link.local_notifications_hint"}}</div></div>
+				<div class="form-check"><input class="form-check-input" type="checkbox" name="local_notifications" id="local_notifications"{{if $d.LocalNotif}} checked{{end}} data-autosubmit><label class="form-check-label" for="local_notifications">{{.T "link.local_notifications"}}</label><div class="form-text">{{.T "link.local_notifications_hint"}}</div></div>
 			</form>
-			<form method="post" action="/link/unlink" onsubmit="return confirm({{.T "link.unlink_confirm"}})">
+			<form method="post" action="/link/unlink">
 				<input type="hidden" name="_csrf" value="{{.CSRF}}">
 				<div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="keep_checks" id="keep_checks"><label class="form-check-label" for="keep_checks">{{.T "link.keep_checks"}}</label></div>
-				<button class="btn btn-outline-danger btn-sm" type="submit"><i class="bi bi-x-circle"></i> {{.T "link.unlink"}}</button>
+				<button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="{{.T "link.unlink_confirm"}}"><i class="bi bi-x-circle"></i> {{.T "link.unlink"}}</button>
 			</form>
 		{{else if $st.PendingCode}}
 			<p>{{.T "link.code_intro"}}</p>
@@ -114,21 +114,6 @@
 {{end}}
 {{end}}
 {{define "scripts"}}
-{{if or .Data.State.PendingCode .Data.State.Requesting}}
-<script>
-(function(){
-	var tries = 0, hadCode = {{if .Data.State.PendingCode}}true{{else}}false{{end}};
-	function poll(){
-		fetch("/link/status", {credentials: "same-origin"}).then(function(r){return r.json();}).then(function(d){
-			if (d.linked) { location.reload(); return; }
-			if (d.error) { var e = document.getElementById("link-error"); e.textContent = d.error; e.classList.remove("d-none"); }
-			if (hadCode && !d.code) { location.reload(); return; }
-			if (!hadCode && (d.code || !d.requesting)) { location.reload(); return; }
-			if (++tries < 150) { setTimeout(poll, hadCode ? 5000 : 2000); }
-		}).catch(function(){ setTimeout(poll, 10000); });
-	}
-	setTimeout(poll, hadCode ? 3000 : 2000);
-})();
-</script>
-{{end}}
+<script src="/static/js/healthchecks.js?v={{.Version}}"></script>
+{{if or .Data.State.PendingCode .Data.State.Requesting}}<script src="/static/js/link.js?v={{.Version}}" id="link-poll" data-had-code="{{if .Data.State.PendingCode}}1{{end}}"></script>{{end}}
 {{end}}

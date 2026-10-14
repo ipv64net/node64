@@ -116,7 +116,7 @@ func (s *Store) LinkPoll(ctx context.Context, in wire.LinkPoll) (*wire.Linked, e
 	}
 	rm := remote.String
 	if rm == "" {
-		rm = "read"
+		rm = "full"
 	}
 	loc := location.String
 	// Node anlegen oder reaktivieren (gleiche node_id = gleiche Installation)
@@ -129,7 +129,7 @@ func (s *Store) LinkPoll(ctx context.Context, in wire.LinkPoll) (*wire.Linked, e
 	if _, err := tx.ExecContext(ctx, `INSERT INTO hc2_node_tokens (node_id, token_hash, created_at) VALUES (?,?,?)`, nodeID, tokenHash(token), nowStr()); err != nil {
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE hc2_link_codes SET consumed_at = ? WHERE code = ?`, nowStr(), in.Code); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE hc2_link_codes SET consumed_at = ? WHERE code = ?`, nowStr(), strings.ToUpper(strings.ReplaceAll(in.Code, "-", ""))); err != nil {
 		return nil, err
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO hc2_config_log (userid, node_id, entity, entity_id, op, revision, origin, time) VALUES (?,?,'node',?,'upsert',0,'system',?)`, userid.Int64, nil, nodeID, nowStr()); err != nil {

@@ -64,8 +64,13 @@ func (c *Live) loop(ctx context.Context) {
 		}
 		if errors.Is(err, errRevoked) {
 			c.log.Warn("ipv64 link revoked by server; staying standalone")
-			c.setErr(err)
-			c.set(SetToken, "")
+			if cerr := c.clearLink(context.Background()); cerr != nil {
+				c.log.Error("cleanup after revoke failed", "err", cerr)
+			}
+			c.mu.Lock()
+			c.running = false // erneutes Verknuepfen startet die Schleife wieder
+			c.mu.Unlock()
+			c.setErr(errors.New("the link was removed on ipv64.net, the node runs standalone"))
 			return
 		}
 		if errors.Is(err, errHome) {
@@ -643,7 +648,7 @@ func (s *session) runCommand(cmd wire.Command) {
 	c := s.c
 	ctx := s.ctx
 	res := wire.CommandResult{ID: cmd.ID}
-	mode := c.setting(SetRemoteMgmt, "read")
+	mode := c.setting(SetRemoteMgmt, "full")
 	var args map[string]any
 	_ = json.Unmarshal(cmd.Args, &args)
 	token, _ := args["token"].(string)

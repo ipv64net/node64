@@ -128,7 +128,7 @@ func run() error {
 	defer modules.StopAll()
 
 	// Verknuepfung mit ipv64.net (Sync-Client); standalone bleibt alles wie gehabt
-	syncClient := nodesync.New(nodesync.Deps{Core: st, HC: hcModule, NF: nfStore, Box: box, Version: Version, Log: logger.Slog(), Senders: notify.Senders(Version)})
+	syncClient := nodesync.New(nodesync.Deps{Core: st, HC: hcModule, NF: nfStore, Box: box, Version: Version, Log: logger.Slog(), Senders: notify.Senders(Version), Modules: modules})
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)
 	hcModule.SetLinked(syncClient.Linked)
