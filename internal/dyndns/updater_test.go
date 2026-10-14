@@ -272,6 +272,12 @@ func TestUpdaterNotifications(t *testing.T) {
 	if count(notify.KindDynFail) != 1 {
 		t.Fatalf("fail alerts: %d", count(notify.KindDynFail))
 	}
+	list, _ := m.Targets(ctx)
+	list[0].LastError = "" // wie nach einem Erfolg
+	m.UpdateNow(ctx, list[0])
+	if count(notify.KindDynFail) != 1 {
+		t.Fatal("manual update must not notify")
+	}
 	_ = m.core.SetSetting(ctx, SetNotifyIP, "0")
 	m.fetch = func(context.Context, int, string) (netip.Addr, error) {
 		return netip.MustParseAddr("93.184.216.99"), nil

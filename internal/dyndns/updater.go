@@ -209,13 +209,13 @@ func (m *Module) updateTarget(ctx context.Context, t *Target, force bool, trigge
 			ip6 = p.IP6
 		}
 		r := m.call(ctx, t, ip4, ip6, "", trigger)
-		if m.apply(ctx, t, r, ip4, ip6, "") {
+		if m.apply(ctx, t, r, ip4, ip6, "", trigger) {
 			return true
 		}
 	}
 	if needP && t.Paused == "" {
 		r := m.call(ctx, t, "", "", p.Prefix, trigger)
-		if m.apply(ctx, t, r, "", "", p.Prefix) {
+		if m.apply(ctx, t, r, "", "", p.Prefix, trigger) {
 			return true
 		}
 	}
@@ -387,7 +387,8 @@ func (m *Module) doCall(ctx context.Context, q url.Values, token string) updResu
 }
 
 // apply uebernimmt das Ergebnis in das Ziel und den gemeinsamen Zustand; true = Runde abbrechen.
-func (m *Module) apply(ctx context.Context, t *Target, r updResult, ip4, ip6, prefix string) bool {
+// Fehlermeldungen nur bei automatischen Laeufen (von Hand sieht man das Ergebnis sofort).
+func (m *Module) apply(ctx context.Context, t *Target, r updResult, ip4, ip6, prefix, trigger string) bool {
 	now := time.Now()
 	u := m.upd
 	prevErr, prevPaused := t.LastError, t.Paused
@@ -428,7 +429,7 @@ func (m *Module) apply(ctx context.Context, t *Target, r updResult, ip4, ip6, pr
 		if !m.limitNotifiedToday(ctx) {
 			m.alert(ctx, SetNotifyLimit, notify.KindDynLimit, "", "", "ipv64: daily update limit reached")
 		}
-	case r.OK || r.Cooldown:
+	case r.OK || r.Cooldown || trigger == "manual":
 	case (t.Paused != "" && prevPaused == "") || prevErr == "": // Pause bzw. erster Fehler nach Erfolg, nicht jede Wiederholung
 		m.alert(ctx, SetNotifyFail, notify.KindDynFail, t.FQDN(), r.Err, "")
 	}
