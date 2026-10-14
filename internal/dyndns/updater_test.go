@@ -202,3 +202,20 @@ func TestUpdaterErrors(t *testing.T) {
 		t.Fatalf("manual update: %v", f.calls)
 	}
 }
+
+// ipv64 meldet success, ignoriert aber IPv4 (Domain-Einstellung): Ziel pausieren statt erneut zu senden.
+func TestUpdaterIgnored(t *testing.T) {
+	ctx := context.Background()
+	m, f, dns := setupUpdater(t)
+	f.reply = func(string) (int, string) {
+		return http.StatusOK, `{"status":"success","info":"","ip":{"ipv4":"ignore","ipv6":""}}`
+	}
+	dns.A = []string{"212.132.105.130"}
+	tg := addTarget(t, m, "blog", Mode4Auto, Mode6Off, "")
+	m.runUpdates(ctx)
+	m.runUpdates(ctx)
+	got := reload(t, m, tg.ID)
+	if f.n() != 1 || got.Paused != PauseIgnored || got.LastIP4 != "" || got.Status() != "paused" {
+		t.Fatalf("calls %d, target %+v", f.n(), got)
+	}
+}

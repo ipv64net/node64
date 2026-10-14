@@ -441,13 +441,15 @@
       "badauth": "Token abgelehnt",
       "nohost": "Name unbekannt",
       "conflict": "Konflikt (CNAME/CDN)",
-      "flapping": "wird woanders geändert"
+      "flapping": "wird woanders geändert",
+      "ignored": "bei ipv64 ignoriert"
     },
     "pause_hint": {
       "badauth": "ipv64 hat den Token abgelehnt, z. B. weil er neu erzeugt wurde. „Token neu holen“ oder einen neuen Token eintragen; danach „Jetzt aktualisieren“.",
       "nohost": "Diesen Namen gibt es bei ipv64 nicht (mehr). Bei ipv64 prüfen oder das Ziel löschen.",
       "conflict": "Ein CNAME, CDN oder Failover am Namen verhindert das Update. Das bei ipv64 auflösen, dann „Jetzt aktualisieren“.",
-      "flapping": "Der Record wurde mehrfach von anderer Stelle anders gesetzt (z. B. ein zweiter Updater oder eine andere Node). Damit sich nicht beide gegenseitig überschreiben und das Update-Limit verbrauchen, ist das Ziel pausiert. Die andere Stelle abschalten, dann „Jetzt aktualisieren“."
+      "flapping": "Der Record wurde mehrfach von anderer Stelle anders gesetzt (z. B. ein zweiter Updater oder eine andere Node). Damit sich nicht beide gegenseitig überschreiben und das Update-Limit verbrauchen, ist das Ziel pausiert. Die andere Stelle abschalten, dann „Jetzt aktualisieren“.",
+      "ignored": "Für diese Domain ist bei ipv64 eingestellt, dass der Updater IPv4 bzw. IPv6 ignoriert (z. B. wegen DS-Lite/CGNAT). Die Adresse wurde nicht übernommen. Die betroffene Familie hier auf „aus“ stellen oder die Einstellung bei ipv64 ändern, dann das Ziel wieder einschalten."
     },
     "update": {
       "now": "Jetzt aktualisieren",

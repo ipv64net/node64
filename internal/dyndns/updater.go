@@ -36,6 +36,7 @@ const (
 	PauseNoHost   = "nohost"   // Name gibt es bei ipv64 nicht
 	PauseConflict = "conflict" // CNAME/CDN/Failover verhindert das Update
 	PauseFlapping = "flapping" // jemand anderes setzt den Record staendig anders
+	PauseIgnored  = "ignored"  // ipv64 ignoriert die Familie fuer diese Domain (Einstellung bei ipv64)
 )
 
 // updState ist der gemeinsame Zustand aller Aufrufe (Abstand, Backoff, Tageslimit).
@@ -330,8 +331,14 @@ func (m *Module) doCall(ctx context.Context, q url.Values, token string) updResu
 		Status     string          `json:"status"`
 		Info       string          `json:"info"`
 		IPv6Prefix json.RawMessage `json:"ipv6prefix"`
+		IP         json.RawMessage `json:"ip"`
 	}
 	_ = json.Unmarshal(body, &a)
+	var ips struct {
+		IPv4 string `json:"ipv4"`
+		IPv6 string `json:"ipv6"`
+	}
+	_ = json.Unmarshal(a.IP, &ips)
 	r.Status, r.Info = a.Status, a.Info
 	if len(a.IPv6Prefix) > 0 {
 		_ = json.Unmarshal(a.IPv6Prefix, &r.Prefix)
@@ -357,6 +364,18 @@ func (m *Module) doCall(ctx context.Context, q url.Values, token string) updResu
 		r.Err = firstNonEmpty(r.Info, r.Status, "unexpected answer")
 	default:
 		r.Err = fmt.Sprintf("HTTP %d %s", r.HTTP, firstNonEmpty(r.Info, r.Status))
+	}
+	// "success", aber ipv64 hat die Adresse nicht uebernommen: Familie ignoriert oder CDN verwaltet den Record
+	for _, x := range []struct{ sent, got, fam string }{{q.Get("ipv4"), ips.IPv4, "ipv4"}, {q.Get("ipv6"), ips.IPv6, "ipv6"}} {
+		if !r.OK || x.sent == "" {
+			continue
+		}
+		switch strings.ToLower(x.got) {
+		case "ignore":
+			r.OK, r.Pause, r.Err = false, PauseIgnored, x.fam+" ignored by ipv64 (domain setting)"
+		case "cdn":
+			r.OK, r.Pause, r.Err = false, PauseConflict, x.fam+" managed by the ipv64 CDN"
+		}
 	}
 	return r
 }
