@@ -38,6 +38,10 @@ type Info struct {
 	Available bool
 	// Order bestimmt die Reihenfolge im Menue.
 	Order int
+	// Version des Moduls (SemVer, eigene Zaehlung je Modul, siehe docs/MODUL-VERSIONEN.md).
+	Version string
+	// Changelog ist der Inhalt der CHANGELOG.md des Moduls (per go:embed), leer = keiner.
+	Changelog string
 }
 
 // Module ist das Interface, das jedes Modul erfuellt.
