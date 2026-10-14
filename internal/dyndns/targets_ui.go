@@ -2,52 +2,19 @@ package dyndns
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ipv64net/node64/internal/ipv64api"
 )
-
-// Einstellungen fuer den ipv64-Zugang
-const (
-	SetAPIKey  = "dyndns.apikey"  // verschluesselt
-	SetAccount = "dyndns.account" // {account, plan, checked_at} zur Anzeige
-)
-
-type accountInfo struct {
-	Account   string    `json:"account"`
-	Plan      string    `json:"plan"`
-	CheckedAt time.Time `json:"checked_at"`
-}
-
-// apiKey liefert den gespeicherten API-Key (leer = keiner).
-func (m *Module) apiKey(ctx context.Context) string {
-	v := m.core.SettingOr(ctx, SetAPIKey, "")
-	if v == "" || m.box == nil {
-		return v
-	}
-	plain, err := m.box.Decrypt(v)
-	if err != nil {
-		m.log.Error("api key not readable", "err", err)
-		return ""
-	}
-	return plain
-}
-
-func (m *Module) account(ctx context.Context) accountInfo {
-	var a accountInfo
-	_ = json.Unmarshal([]byte(m.core.SettingOr(ctx, SetAccount, "")), &a)
-	return a
-}
 
 func (m *Module) targetRoutes(mux interface {
 	Handle(string, http.Handler)
 }, page func(http.HandlerFunc) http.Handler) {
-	mux.Handle("POST /dyndns/apikey", page(m.pageAPIKey))
-	mux.Handle("POST /dyndns/apikey/delete", page(m.pageAPIKeyDelete))
 	mux.Handle("GET /dyndns/targets/new", page(m.pageTargetNew))
 	mux.Handle("POST /dyndns/targets/new", page(m.pageTargetPick))
 	mux.Handle("POST /dyndns/targets/manual", page(m.pageTargetManual))
@@ -62,45 +29,6 @@ func (m *Module) back(w http.ResponseWriter, r *http.Request, kind, text, to str
 		m.g.Flash(w, r, kind, text)
 	}
 	http.Redirect(w, r, to, http.StatusSeeOther)
-}
-
-// ---------------------------------------------------------------- API-Key
-
-func (m *Module) pageAPIKey(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	key := strings.TrimSpace(r.PostFormValue("apikey"))
-	if key == "" { // nur erneut pruefen
-		key = m.apiKey(ctx)
-	}
-	if !apiKeyRe.MatchString(key) {
-		m.back(w, r, "danger", m.g.T(r, "dyn.api.invalid"), "/dyndns#api")
-		return
-	}
-	me, err := m.api.me(ctx, key)
-	if err != nil {
-		msg := m.g.T(r, "dyn.api.failed", "error", err.Error())
-		if errors.Is(err, ErrUnauthorized) {
-			msg = m.g.T(r, "dyn.api.rejected")
-		}
-		m.back(w, r, "danger", msg, "/dyndns#api")
-		return
-	}
-	if err := m.core.SetSetting(ctx, SetAPIKey, m.seal(key)); err != nil {
-		m.back(w, r, "danger", err.Error(), "/dyndns#api")
-		return
-	}
-	raw, _ := json.Marshal(accountInfo{Account: me.Account(), Plan: me.Plan.Name, CheckedAt: time.Now().UTC()})
-	_ = m.core.SetSetting(ctx, SetAccount, string(raw))
-	m.audit(r, "dyndns.apikey", "account="+me.Account())
-	m.back(w, r, "success", m.g.T(r, "dyn.api.saved", "account", me.Account()), "/dyndns#api")
-}
-
-func (m *Module) pageAPIKeyDelete(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	_ = m.core.SetSetting(ctx, SetAPIKey, "")
-	_ = m.core.SetSetting(ctx, SetAccount, "")
-	m.audit(r, "dyndns.apikey_removed", "")
-	m.back(w, r, "success", m.g.T(r, "dyn.api.removed"), "/dyndns#api")
 }
 
 // ---------------------------------------------------------------- Auswahl aus dem Account
@@ -126,7 +54,7 @@ type pickName struct {
 
 // accountNames laedt Domains und Records und fasst sie je Name zusammen (Tokens nur intern).
 func (m *Module) accountNames(ctx context.Context, key string) ([]*pickName, error) {
-	doms, err := m.api.domains(ctx, key)
+	doms, err := m.key.Client().Domains(ctx, key)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +69,7 @@ func (m *Module) accountNames(ctx context.Context, key string) ([]*pickName, err
 		if !d.Active {
 			continue
 		}
-		recs, err := m.api.records(ctx, key, d.Name)
+		recs, err := m.key.Client().Records(ctx, key, d.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -206,7 +134,7 @@ func (m *Module) defaultsFor(p *pickName) *Target {
 
 type newData struct {
 	HasKey  bool
-	Account accountInfo
+	Account ipv64api.AccountInfo
 	Names   []*pickName
 	Err     string
 	Modes4  []string
@@ -215,8 +143,11 @@ type newData struct {
 
 func (m *Module) pageTargetNew(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	d := newData{Account: m.account(ctx), Modes4: Modes4, Modes6: Modes6}
-	if key := m.apiKey(ctx); key != "" {
+	d := newData{Modes4: Modes4, Modes6: Modes6}
+	if m.key != nil {
+		d.Account = m.key.Info(ctx)
+	}
+	if key := m.keyOf(ctx); key != "" {
 		d.HasKey = true
 		lctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		names, err := m.accountNames(lctx, key)
@@ -231,7 +162,7 @@ func (m *Module) pageTargetNew(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) pageTargetPick(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	key := m.apiKey(ctx)
+	key := m.keyOf(ctx)
 	_ = r.ParseForm()
 	picked := r.PostForm["pick"]
 	if key == "" || len(picked) == 0 {
@@ -323,7 +254,7 @@ func (m *Module) pageTargetEdit(w http.ResponseWriter, r *http.Request) {
 	if t == nil {
 		return
 	}
-	m.g.Render(w, r, http.StatusOK, Name+"/target_edit", "dyn.targets.edit", editData{T: t, HasKey: m.apiKey(r.Context()) != "", Modes4: Modes4, Modes6: Modes6, Local: localIPv6()})
+	m.g.Render(w, r, http.StatusOK, Name+"/target_edit", "dyn.targets.edit", editData{T: t, HasKey: m.keyOf(r.Context()) != "", Modes4: Modes4, Modes6: Modes6, Local: localIPv6()})
 }
 
 func (m *Module) pageTargetSave(w http.ResponseWriter, r *http.Request) {
@@ -355,12 +286,12 @@ func (m *Module) pageTargetToken(w http.ResponseWriter, r *http.Request) {
 	if t == nil {
 		return
 	}
-	key := m.apiKey(ctx)
+	key := m.keyOf(ctx)
 	if key == "" {
 		m.back(w, r, "warning", m.g.T(r, "dyn.api.needed"), "/dyndns/targets/"+r.PathValue("id"))
 		return
 	}
-	recs, err := m.api.records(ctx, key, t.Domain)
+	recs, err := m.key.Client().Records(ctx, key, t.Domain)
 	if err != nil {
 		m.back(w, r, "danger", m.g.T(r, "dyn.api.failed", "error", err.Error()), "/dyndns/targets/"+r.PathValue("id"))
 		return

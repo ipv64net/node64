@@ -248,6 +248,25 @@
     "proxy": "Reverse-Proxy",
     "link": "ipv64-Verknüpfung"
   },
+  "ipv64key": {
+    "title": "ipv64-API-Key",
+    "hint": "Ein API-Key für alle Module dieses Containers: Darüber holt sich z. B. der DynDNS-Updater Domains, Records, Tokens und das Update-Limit. Der Key wird einmal hier eingetragen.",
+    "connected": "Verbunden als {account}",
+    "checked": "geprüft",
+    "placeholder": "API-Key",
+    "placeholder_new": "neuer API-Key (leer = gespeicherten prüfen)",
+    "save": "Speichern und prüfen",
+    "recheck": "Prüfen / ersetzen",
+    "stored_hint": "Wird bei ipv64 geprüft und verschlüsselt in dieser Node gespeichert. Ein API-Key hat volle Rechte im Account, deshalb nur auf eigenen Geräten eintragen.",
+    "create_link": "API-Key bei ipv64 anlegen",
+    "remove": "API-Key entfernen",
+    "remove_confirm": "API-Key aus dieser Node entfernen? Module, die ihn brauchen (z. B. Auswahl im DynDNS-Updater), gehen dann nicht mehr. Eingerichtete DynDNS-Ziele aktualisieren weiter.",
+    "invalid": "Das sieht nicht nach einem ipv64-API-Key aus (16 bis 64 Buchstaben und Ziffern).",
+    "rejected": "ipv64 hat den API-Key abgelehnt (falsch, abgelaufen oder gelöscht).",
+    "failed": "ipv64 nicht erreichbar oder Fehler: {error}",
+    "saved": "API-Key gespeichert, verbunden als {account}.",
+    "removed": "API-Key entfernt."
+  },
   "dyn": {
     "title": "DynDNS-Updater",
     "hint": "Hält ausgewählte Domains und Records bei ipv64 mit der öffentlichen Adresse dieses Anschlusses aktuell. Aktualisiert wird nur, wenn sich die Adresse wirklich geändert hat.",
@@ -321,20 +340,11 @@
     "api": {
       "title": "ipv64-Zugang",
       "connected": "Verbunden als {account}",
-      "stored_hint": "Der API-Key liegt verschlüsselt in dieser Node. Er dient nur zum Auswählen der Domains, zum Nachholen von Tokens und für die Limit-Anzeige. Die Updates selbst laufen mit dem Record-Token.",
-      "recheck": "Prüfen",
-      "remove_confirm": "API-Key aus dieser Node entfernen? Eingerichtete Ziele aktualisieren weiter (sie haben eigene Tokens).",
-      "remove": "Entfernen",
-      "hint": "Mit einem ipv64-API-Key wählst du Domains und Records bequem aus einer Liste aus.",
-      "create_link": "API-Key bei ipv64 anlegen",
-      "placeholder": "API-Key",
-      "save": "Speichern und prüfen",
-      "invalid": "Das sieht nicht nach einem ipv64-API-Key aus (16 bis 64 Buchstaben und Ziffern).",
+      "central": "Der API-Key wird zentral in den Einstellungen verwaltet.",
+      "to_settings": "Zu den Einstellungen",
+      "hint": "Für die Auswahl der Domains aus deinem Account einmal den ipv64-API-Key in den Einstellungen eintragen. Ohne Key lassen sich Ziele auch von Hand anlegen.",
       "failed": "ipv64 nicht erreichbar oder Fehler: {error}",
-      "rejected": "ipv64 hat den API-Key abgelehnt (falsch, abgelaufen oder gelöscht).",
-      "saved": "API-Key gespeichert, verbunden als {account}.",
-      "removed": "API-Key entfernt.",
-      "needed": "Dafür wird ein API-Key gebraucht."
+      "needed": "Dafür wird der ipv64-API-Key in den Einstellungen gebraucht."
     },
     "mode4": {
       "auto": "automatisch",

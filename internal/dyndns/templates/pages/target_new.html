@@ -6,7 +6,7 @@
 		<div class="card">
 			<div class="card-header"><i class="bi bi-list-check text-primary"></i> {{.T "dyn.pick.title"}}{{if $d.Account.Account}} <span class="text-body-secondary small">({{$d.Account.Account}})</span>{{end}}</div>
 			{{if not $d.HasKey}}
-			<div class="card-body small">{{.T "dyn.pick.need_key"}} <a href="/dyndns#api">{{.T "dyn.api.title"}}</a></div>
+			<div class="card-body small">{{.T "dyn.pick.need_key"}} <a href="/settings#ipv64">{{.T "dyn.api.to_settings"}}</a></div>
 			{{else if $d.Err}}
 			<div class="card-body small"><span class="badge text-bg-danger">{{$d.Err}}</span></div>
 			{{else if not $d.Names}}

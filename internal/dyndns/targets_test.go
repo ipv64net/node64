@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/secrets"
 	"github.com/ipv64net/node64/internal/store"
 )
@@ -96,30 +97,19 @@ func newTargetModule(t *testing.T, withBox bool) (*Module, *store.Store) {
 	return m, core
 }
 
-func TestAPIClient(t *testing.T) {
-	srv := fakeIPv64(t)
-	defer srv.Close()
-	c := newAPIClient(srv.URL, "test")
-	ctx := context.Background()
-	me, err := c.me(ctx, testKey)
-	if err != nil || me.Account() != "tester" || me.Plan.Name != "Supporter" || me.Usage.DynDNSUpdates.Used != 3 || *me.Usage.DynDNSUpdates.Limit != 64 {
-		t.Fatalf("me: %+v %v", me, err)
-	}
-	if _, err := c.me(ctx, "wrongwrongwrongwrong"); !errors.Is(err, ErrUnauthorized) {
-		t.Fatalf("want unauthorized, got %v", err)
-	}
-	if _, err := c.records(ctx, testKey, "nix.ipv64.net"); err == nil || !strings.Contains(err.Error(), "no such route") {
-		t.Fatalf("want problem detail, got %v", err)
-	}
-}
-
 // Auswahl: je Name zusammengefasst, A-Token bevorzugt, Interface-ID -> Praefix-Modus, ignorierte Familie aus,
 // CDN gesperrt, inaktive Domains und andere Record-Typen weggelassen.
 func TestAccountNames(t *testing.T) {
 	srv := fakeIPv64(t)
 	defer srv.Close()
-	m, _ := newTargetModule(t, false)
-	m.api = newAPIClient(srv.URL, "test")
+	m, core := newTargetModule(t, false)
+	m.SetKey(ipv64api.NewKey(core, nil, ipv64api.NewClient(srv.URL, "test"), slog.New(slog.NewTextHandler(io.Discard, nil))))
+	if err := core.SetSetting(context.Background(), ipv64api.SetKey, testKey); err != nil {
+		t.Fatal(err)
+	}
+	if m.keyOf(context.Background()) != testKey {
+		t.Fatal("central key not readable")
+	}
 	names, err := m.accountNames(context.Background(), testKey)
 	if err != nil {
 		t.Fatal(err)

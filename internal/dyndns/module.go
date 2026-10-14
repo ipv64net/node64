@@ -11,6 +11,7 @@ import (
 	"net/netip"
 	"sync"
 
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/secrets"
@@ -40,7 +41,7 @@ type Module struct {
 	probe   func(fam int) bool // Route fuer die Familie vorhanden?
 	trace   func(ctx context.Context, dst netip.Addr, maxHops int) ([]netip.Addr, error)
 	trigger chan chan struct{} // "Jetzt pruefen"
-	api     *apiClient         // ipv64 API v2 (Auswahl, Tokens, Limit)
+	key     *ipv64api.Key      // zentraler ipv64-API-Key des Containers (Auswahl, Tokens, Limit)
 
 	stMu sync.Mutex
 	fam  [2]famState // [0] IPv4, [1] IPv6
@@ -49,8 +50,31 @@ type Module struct {
 // New erzeugt das Modul. dispatcher darf nil sein.
 func New(core *store.Store, log *slog.Logger, box *secrets.Box, dispatcher *notify.Dispatcher, version string) *Module {
 	return &Module{core: core, log: log.With("module", Name), box: box, dispatcher: dispatcher, version: version,
-		fetch: newFetcher("node64/" + version), probe: defaultProbe, trace: traceUDP, trigger: make(chan chan struct{}),
-		api: newAPIClient(defaultAPIBase, "node64/"+version)}
+		fetch: newFetcher("node64/" + version), probe: defaultProbe, trace: traceUDP, trigger: make(chan chan struct{})}
+}
+
+// SetKey installiert den zentralen API-Key des Containers.
+func (m *Module) SetKey(k *ipv64api.Key) { m.key = k }
+
+// keyOf liefert den zentralen API-Key (leer = keiner eingetragen).
+func (m *Module) keyOf(ctx context.Context) string {
+	if m.key == nil {
+		return ""
+	}
+	return m.key.Get(ctx)
+}
+
+// adoptOldKey zieht einen frueher im Modul gespeicherten Key in die zentrale Ablage um.
+func (m *Module) adoptOldKey(ctx context.Context) {
+	old := m.core.SettingOr(ctx, "dyndns.apikey", "")
+	if old == "" || m.key == nil {
+		return
+	}
+	if m.key.Adopt(ctx, old, m.core.SettingOr(ctx, "dyndns.account", "")) {
+		m.log.Info("api key moved to the central ipv64 settings")
+	}
+	_ = m.core.SetSetting(ctx, "dyndns.apikey", "")
+	_ = m.core.SetSetting(ctx, "dyndns.account", "")
 }
 
 func (m *Module) Info() module.Info {
@@ -74,6 +98,7 @@ func (m *Module) Start(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	ctx, m.cancel = context.WithCancel(ctx)
+	m.adoptOldKey(ctx)
 	m.loadState(ctx)
 	m.wg.Add(1)
 	go m.loop(ctx)

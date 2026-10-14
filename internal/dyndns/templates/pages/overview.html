@@ -37,24 +37,10 @@
 		<div class="card" id="api">
 			<div class="card-header"><i class="bi bi-key text-warning"></i> {{.T "dyn.api.title"}}</div>
 			<div class="card-body small">
-				{{if $d.HasKey}}
-				<div class="mb-2"><i class="bi bi-check-circle-fill text-success"></i> {{.T "dyn.api.connected" "account" $d.Account.Account}}{{if $d.Account.Plan}} <span class="badge text-bg-light">{{$d.Account.Plan}}</span>{{end}}</div>
-				<div class="text-body-secondary mb-2">{{.T "dyn.api.stored_hint"}}</div>
-				<div class="d-flex gap-2">
-					<form method="post" action="/dyndns/apikey" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-arrow-repeat"></i> {{.T "dyn.api.recheck"}}</button></form>
-					<form method="post" action="/dyndns/apikey/delete" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="{{.T "dyn.api.remove_confirm"}}"><i class="bi bi-trash"></i> {{.T "dyn.api.remove"}}</button></form>
-				</div>
-				{{else}}
-				<p class="text-body-secondary mb-2">{{.T "dyn.api.hint"}} <a href="https://ipv64.net/api_settings" target="_blank" rel="noopener">{{.T "dyn.api.create_link"}}</a></p>
-				<form method="post" action="/dyndns/apikey">
-					<input type="hidden" name="_csrf" value="{{.CSRF}}">
-					<div class="input-group input-group-sm">
-						<input class="form-control" type="password" name="apikey" placeholder="{{.T "dyn.api.placeholder"}}" autocomplete="off" required>
-						<button class="btn btn-outline-primary" type="submit">{{.T "dyn.api.save"}}</button>
-					</div>
-					<div class="form-text">{{.T "dyn.api.stored_hint"}}</div>
-				</form>
-				{{end}}
+				{{if $d.HasKey}}<i class="bi bi-check-circle-fill text-success"></i> {{.T "dyn.api.connected" "account" $d.Account.Account}}{{if $d.Account.Plan}} <span class="badge text-bg-light">{{$d.Account.Plan}}</span>{{end}}
+				<div class="text-body-secondary mt-1">{{.T "dyn.api.central"}} <a href="/settings#ipv64">{{.T "dyn.api.to_settings"}}</a></div>
+				{{else}}<div class="text-body-secondary">{{.T "dyn.api.hint"}}</div>
+				<a class="btn btn-outline-primary btn-sm mt-2" href="/settings#ipv64"><i class="bi bi-key"></i> {{.T "dyn.api.to_settings"}}</a>{{end}}
 			</div>
 		</div>
 		<div class="card" id="settings">

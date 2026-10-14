@@ -29,6 +29,7 @@ import (
 	"github.com/ipv64net/node64/internal/dyndns"
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/i18n"
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/logging"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
@@ -124,7 +125,10 @@ func run() error {
 	modules := module.NewRegistry(st, logger.Slog())
 	hcModule := healthchecks.New(st, logger.Slog(), dispatcher, nfStore, Version)
 	modules.Register(hcModule)
-	modules.Register(dyndns.New(st, logger.Slog(), box, dispatcher, Version))
+	ipv64Key := ipv64api.NewKey(st, box, ipv64api.NewClient("", "node64/"+Version), logger.Slog())
+	dynModule := dyndns.New(st, logger.Slog(), box, dispatcher, Version)
+	dynModule.SetKey(ipv64Key)
+	modules.Register(dynModule)
 	registerModules(modules)
 	modules.StartEnabled(ctx)
 	defer modules.StopAll()
@@ -146,7 +150,7 @@ func run() error {
 
 	srv, err := web.New(web.Deps{
 		Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: modules, Notify: nfStore, Dispatcher: dispatcher,
-		Sync: syncClient, Linker: syncClient, HC: hcModule, Version: Version, StartedAt: time.Now(), Restart: stop,
+		Sync: syncClient, Linker: syncClient, HC: hcModule, IPv64: ipv64Key, Version: Version, StartedAt: time.Now(), Restart: stop,
 	})
 	if err != nil {
 		return err

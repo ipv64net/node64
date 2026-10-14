@@ -23,6 +23,7 @@ import (
 	"github.com/ipv64net/node64/internal/config"
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/i18n"
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/logging"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
@@ -42,6 +43,7 @@ type Deps struct {
 	Sync       nodesync.Client
 	Linker     nodesync.Linker      // nil = Verknuepfung nicht verfuegbar
 	HC         *healthchecks.Module // fuer Konflikte auf der Verknuepfungsseite
+	IPv64      *ipv64api.Key        // zentraler ipv64-API-Key (nil = nicht verfuegbar)
 	Version    string
 	StartedAt  time.Time
 	// Restart beendet den Node kontrolliert (Docker startet ihn neu), z. B.
@@ -158,6 +160,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /settings/logging", s.auth(s.settingsLogging))
 	s.mux.Handle("POST /settings/data", s.auth(s.settingsData))
 	s.mux.Handle("POST /settings/updates", s.auth(s.settingsUpdates))
+	s.ipv64Routes()
 	if s.Notify != nil {
 		s.notifyRoutes()
 	}

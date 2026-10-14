@@ -248,6 +248,25 @@
     "proxy": "Reverse Proxy",
     "link": "ipv64 Link"
   },
+  "ipv64key": {
+    "title": "ipv64 API key",
+    "hint": "One API key for all modules of this container: the DynDNS updater, for example, uses it to fetch domains, records, tokens and the update limit. Enter it once here.",
+    "connected": "Connected as {account}",
+    "checked": "checked",
+    "placeholder": "API key",
+    "placeholder_new": "new API key (empty = check the stored one)",
+    "save": "Save and check",
+    "recheck": "Check / replace",
+    "stored_hint": "Checked at ipv64 and stored encrypted on this node. An API key has full rights in the account, so only enter it on your own devices.",
+    "create_link": "Create an API key at ipv64",
+    "remove": "Remove API key",
+    "remove_confirm": "Remove the API key from this node? Modules that need it (e.g. picking in the DynDNS updater) will stop working. Configured DynDNS targets keep updating.",
+    "invalid": "This does not look like an ipv64 API key (16 to 64 letters and digits).",
+    "rejected": "ipv64 rejected the API key (wrong, expired or deleted).",
+    "failed": "ipv64 not reachable or error: {error}",
+    "saved": "API key saved, connected as {account}.",
+    "removed": "API key removed."
+  },
   "dyn": {
     "title": "DynDNS updater",
     "hint": "Keeps selected domains and records at ipv64 up to date with the public address of this connection. Updates are only sent when the address has actually changed.",
@@ -321,20 +340,11 @@
     "api": {
       "title": "ipv64 access",
       "connected": "Connected as {account}",
-      "stored_hint": "The API key is stored encrypted on this node. It is only used to pick domains, to fetch tokens again and for the limit display. Updates themselves use the record token.",
-      "recheck": "Check",
-      "remove_confirm": "Remove the API key from this node? Configured targets keep updating (they have their own tokens).",
-      "remove": "Remove",
-      "hint": "With an ipv64 API key you pick domains and records from a list.",
-      "create_link": "Create an API key at ipv64",
-      "placeholder": "API key",
-      "save": "Save and check",
-      "invalid": "This does not look like an ipv64 API key (16 to 64 letters and digits).",
+      "central": "The API key is managed centrally in the settings.",
+      "to_settings": "Go to settings",
+      "hint": "To pick domains from your account, enter the ipv64 API key once in the settings. Without a key, targets can be added manually.",
       "failed": "ipv64 not reachable or error: {error}",
-      "rejected": "ipv64 rejected the API key (wrong, expired or deleted).",
-      "saved": "API key saved, connected as {account}.",
-      "removed": "API key removed.",
-      "needed": "This needs an API key."
+      "needed": "This needs the ipv64 API key in the settings."
     },
     "mode4": {
       "auto": "automatic",

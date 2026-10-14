@@ -1,4 +1,7 @@
-package dyndns
+// Package ipv64api ist die Anbindung an die ipv64 API v2 mit dem zentralen API-Key des Containers.
+// Der Key wird einmal in den Einstellungen eingetragen (verschluesselt gespeichert); alle Module
+// bedienen sich daran (z. B. DynDNS: Domains, Records, Tokens, Update-Limit).
+package ipv64api
 
 import (
 	"context"
@@ -6,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -13,33 +17,38 @@ import (
 	"time"
 )
 
-// Anbindung an die ipv64 API v2 (nur mit API-Key): Konto, Domains, Records und deren Tokens.
-// Die eigentlichen Updates laufen spaeter ueber update.php mit Record- bzw. Domain-Token, nie mit dem API-Key.
+// DefaultBase ist die Adresse der API v2.
+const DefaultBase = "https://ipv64.net/api/v2"
 
-const defaultAPIBase = "https://ipv64.net/api/v2"
-
-var apiKeyRe = regexp.MustCompile(`^[A-Za-z0-9]{16,64}$`)
+// KeyRe ist das Format eines API-Keys (wie api_v2.php: 16 bis 64 Buchstaben und Ziffern).
+var KeyRe = regexp.MustCompile(`^[A-Za-z0-9]{16,64}$`)
 
 // ErrUnauthorized: API-Key ungueltig, abgelaufen oder widerrufen.
 var ErrUnauthorized = errors.New("API key rejected by ipv64")
 
-type apiClient struct {
+// Client spricht die API v2 an.
+type Client struct {
 	base string
 	http *http.Client
 	ua   string
 }
 
-func newAPIClient(base, ua string) *apiClient {
-	return &apiClient{base: strings.TrimRight(base, "/"), http: &http.Client{Timeout: 15 * time.Second}, ua: ua}
+// NewClient erzeugt einen Client (base leer = DefaultBase).
+func NewClient(base, userAgent string) *Client {
+	if base == "" {
+		base = DefaultBase
+	}
+	return &Client{base: strings.TrimRight(base, "/"), http: &http.Client{Timeout: 15 * time.Second}, ua: userAgent}
 }
 
-// usage ist ein Verbrauch mit Grenze (Limit nil = unbegrenzt).
-type usage struct {
+// Usage ist ein Verbrauch mit Grenze (Limit nil = unbegrenzt).
+type Usage struct {
 	Used  int  `json:"used"`
 	Limit *int `json:"limit"`
 }
 
-type apiMe struct {
+// Me ist das Konto hinter dem Key (GET /me).
+type Me struct {
 	ID       int     `json:"id"`
 	Email    string  `json:"email"`
 	Username *string `json:"username"`
@@ -47,19 +56,20 @@ type apiMe struct {
 		Name string `json:"name"`
 	} `json:"plan"`
 	Usage struct {
-		DynDNSUpdates usage `json:"dyndns_updates_24h"`
+		DynDNSUpdates Usage `json:"dyndns_updates_24h"`
 	} `json:"usage"`
 }
 
 // Account ist der Name, unter dem der Key angemeldet ist.
-func (me *apiMe) Account() string {
+func (me *Me) Account() string {
 	if me.Username != nil && *me.Username != "" {
 		return *me.Username
 	}
 	return me.Email
 }
 
-type apiDomain struct {
+// Domain ist eine Domain im Account (GET /domains).
+type Domain struct {
 	ID          int     `json:"id"`
 	Name        string  `json:"name"`
 	Kind        string  `json:"kind"` // dyndns, own
@@ -70,7 +80,8 @@ type apiDomain struct {
 	UpdateToken string  `json:"update_token"`
 }
 
-type apiRecord struct {
+// Record ist ein DNS-Record einer Domain (GET /domains/{domain}/records).
+type Record struct {
 	ID      int    `json:"id"`
 	Domain  string `json:"domain"`
 	Prefix  string `json:"prefix"`
@@ -81,7 +92,7 @@ type apiRecord struct {
 	Token   string `json:"token"`
 }
 
-func (c *apiClient) get(ctx context.Context, key, path string, out any) error {
+func (c *Client) get(ctx context.Context, key, path string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
 	if err != nil {
 		return err
@@ -91,7 +102,11 @@ func (c *apiClient) get(ctx context.Context, key, path string, out any) error {
 	req.Header.Set("User-Agent", c.ua)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return shortErr(err)
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			return errors.New("ipv64: timeout")
+		}
+		return fmt.Errorf("ipv64 not reachable: %w", err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
@@ -104,7 +119,6 @@ func (c *apiClient) get(ctx context.Context, key, path string, out any) error {
 	if resp.StatusCode != http.StatusOK {
 		var p struct {
 			Detail string `json:"detail"`
-			Code   string `json:"code"`
 		}
 		if json.Unmarshal(body, &p) == nil && p.Detail != "" {
 			return fmt.Errorf("ipv64: %s (%d)", p.Detail, resp.StatusCode)
@@ -120,20 +134,23 @@ func (c *apiClient) get(ctx context.Context, key, path string, out any) error {
 	return json.Unmarshal(env.Data, out)
 }
 
-func (c *apiClient) me(ctx context.Context, key string) (*apiMe, error) {
-	var me apiMe
+// Me liefert das Konto hinter dem Key.
+func (c *Client) Me(ctx context.Context, key string) (*Me, error) {
+	var me Me
 	if err := c.get(ctx, key, "/me", &me); err != nil {
 		return nil, err
 	}
 	return &me, nil
 }
 
-func (c *apiClient) domains(ctx context.Context, key string) ([]apiDomain, error) {
-	var out []apiDomain
+// Domains liefert alle Domains des Accounts.
+func (c *Client) Domains(ctx context.Context, key string) ([]Domain, error) {
+	var out []Domain
 	return out, c.get(ctx, key, "/domains", &out)
 }
 
-func (c *apiClient) records(ctx context.Context, key, domain string) ([]apiRecord, error) {
-	var out []apiRecord
+// Records liefert die Records einer Domain.
+func (c *Client) Records(ctx context.Context, key, domain string) ([]Record, error) {
+	var out []Record
 	return out, c.get(ctx, key, "/domains/"+url.PathEscape(domain)+"/records", &out)
 }

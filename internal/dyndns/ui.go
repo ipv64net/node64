@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/store"
 )
@@ -58,7 +59,7 @@ type overviewData struct {
 	Targets   int
 	List      []*Target
 	HasKey    bool
-	Account   accountInfo
+	Account   ipv64api.AccountInfo
 	V4, V6    famView
 	Fams      []famView // V4, V6 fuer die Schleife im Template
 	Local     []ifAddr
@@ -106,7 +107,9 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 	}
 	d.List, _ = m.Targets(ctx)
 	d.Targets = len(d.List)
-	d.HasKey, d.Account = m.apiKey(ctx) != "", m.account(ctx)
+	if d.HasKey = m.keyOf(ctx) != ""; d.HasKey {
+		d.Account = m.key.Info(ctx)
+	}
 	rows, err := m.core.Reader().QueryContext(ctx, `SELECT time, family, source, ip, error, duration_ms, changed FROM dyn_checks ORDER BY id DESC LIMIT 12`)
 	if err == nil {
 		for rows.Next() {

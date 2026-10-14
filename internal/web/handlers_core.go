@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ipv64net/node64/internal/healthchecks"
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/netstat"
 	"log/slog"
 	"net/http"
@@ -312,7 +313,10 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 
 type settingsData struct {
 	Linked     bool // mit ipv64 verknuepft (Zuruecksetzen trennt die Verknuepfung)
-	Own, Other int  // Checks nur dieser Node / uebrige im Account
+	IPv64On    bool // zentraler API-Key verfuegbar
+	IPv64Set   bool // API-Key eingetragen
+	IPv64      ipv64api.AccountInfo
+	Own, Other int // Checks nur dieser Node / uebrige im Account
 	NodeName   string
 	Location   string
 	Modules    []module.Status
@@ -358,6 +362,12 @@ func (s *Server) settingsView(r *http.Request) *View {
 	d.RawDays, d.HourlyDays, d.ChartDetail = healthchecks.RawDays(s.Store), healthchecks.HourlyDays(s.Store), healthchecks.ChartDetail(s.Store)
 	d.RawOptions, d.HourlyOptions, d.ChartOptions = healthchecks.RawDayOptions, healthchecks.HourlyDayOptions, healthchecks.ChartDetailOptions
 	d.UpdateOn = s.Store.SettingOr(ctx, "updates.check", "0") == "1"
+	if s.IPv64 != nil {
+		d.IPv64On = true
+		if d.IPv64Set = s.IPv64.Get(ctx) != ""; d.IPv64Set {
+			d.IPv64 = s.IPv64.Info(ctx)
+		}
+	}
 	d.Linked = s.Linker != nil && s.Store.SettingOr(ctx, nodesync.SetToken, "") != ""
 	if d.Linked && s.HC != nil {
 		d.Own, d.Other = s.HC.LinkScope(ctx)

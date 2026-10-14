@@ -23,6 +23,26 @@
 				</form>
 			</div>
 		</div>
+		{{if $d.IPv64On}}
+		<div class="card" id="ipv64">
+			<div class="card-header"><img src="/static/img/ipv64_logo.svg" alt="" height="14" class="logo logo-light align-baseline"><img src="/static/img/ipv64_logo_white.svg" alt="" height="14" class="logo logo-dark align-baseline"> {{.T "ipv64key.title"}}</div>
+			<div class="card-body small">
+				<p class="text-body-secondary">{{.T "ipv64key.hint"}}</p>
+				{{if $d.IPv64Set}}
+				<div class="mb-2"><i class="bi bi-check-circle-fill text-success"></i> {{.T "ipv64key.connected" "account" $d.IPv64.Account}}{{if $d.IPv64.Plan}} <span class="badge text-bg-light">{{$d.IPv64.Plan}}</span>{{end}}{{if not $d.IPv64.CheckedAt.IsZero}} <span class="text-body-secondary" title="{{.Time $d.IPv64.CheckedAt}}">· {{.T "ipv64key.checked"}} {{.Ago $d.IPv64.CheckedAt}}</span>{{end}}</div>
+				{{end}}
+				<form method="post" action="/settings/ipv64">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<div class="input-group input-group-sm mb-1">
+						<input class="form-control" type="password" name="apikey" placeholder="{{if $d.IPv64Set}}{{.T "ipv64key.placeholder_new"}}{{else}}{{.T "ipv64key.placeholder"}}{{end}}" autocomplete="off"{{if not $d.IPv64Set}} required{{end}}>
+						<button class="btn btn-outline-primary" type="submit">{{if $d.IPv64Set}}{{.T "ipv64key.recheck"}}{{else}}{{.T "ipv64key.save"}}{{end}}</button>
+					</div>
+					<div class="form-text mb-2">{{.T "ipv64key.stored_hint"}} <a href="https://ipv64.net/api_settings" target="_blank" rel="noopener">{{.T "ipv64key.create_link"}}</a></div>
+				</form>
+				{{if $d.IPv64Set}}<form method="post" action="/settings/ipv64/delete" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="{{.T "ipv64key.remove_confirm"}}"><i class="bi bi-trash"></i> {{.T "ipv64key.remove"}}</button></form>{{end}}
+			</div>
+		</div>
+		{{end}}
 		<div class="card">
 			<div class="card-header"><i class="bi bi-person text-primary"></i> {{.T "settings.user"}}: {{.User.Username}}</div>
 			<div class="card-body">
