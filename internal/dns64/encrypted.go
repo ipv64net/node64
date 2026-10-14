@@ -59,10 +59,12 @@ func (m *Module) startEncrypted(c config, srv *dnsserver.Server) *encrypted {
 		return x
 	}
 	x.names = names
+	m.cur.Store(&crt)
 	if leaf, err := x509.ParseCertificate(crt.Certificate[0]); err == nil {
 		x.notAfter = leaf.NotAfter
 	}
-	base := &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{crt}}
+	// das Zertifikat kommt bei jeder Verbindung aus m.cur: ein neues (Let's Encrypt) gilt sofort
+	base := &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) { return m.cur.Load(), nil }}
 	if c.DoT {
 		addr := net.JoinHostPort(c.Bind, strconv.Itoa(c.DoTPort))
 		cfg := base.Clone()

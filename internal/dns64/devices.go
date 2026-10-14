@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"html"
 	"net"
@@ -26,6 +27,11 @@ type encRow struct {
 }
 
 type encView struct {
+	ACME     acmeView
+	Domains  []string // Domains des ipv64-Accounts (fuer Let's Encrypt)
+	KeyOK    bool     // zentraler API-Key eingetragen
+	TOS      bool     // Nutzungsbedingungen von Let's Encrypt akzeptiert
+	LANIP    string   // Vorschlag fuer den eigenen Eintrag im Heimnetz
 	Rows     []encRow
 	Names    []string // im Zertifikat
 	NotAfter time.Time
@@ -68,9 +74,110 @@ func (m *Module) encView(r *http.Request, c config) encView {
 			v.Host = h
 		}
 	}
+	v.ACME = m.acmeView(c)
+	v.TOS = m.core.SettingOr(r.Context(), setACMETOS, "") != ""
+	v.KeyOK, v.Domains = m.accountDomains(r)
+	v.LANIP = lanIP(r)
+	if v.ACME.Name != "" && c.CertMode == certACME && v.ACME.Issuer != "" {
+		v.Host = v.ACME.Name // mit Let's Encrypt gilt das Zertifikat nur fuer diesen Namen
+	}
 	v.DoHURL = dohURL(v.Host, c.DoHPort)
 	v.DoQURL = "quic://" + hostPort(v.Host, c.DoTPort)
 	return v
+}
+
+// accountDomains liefert die Domains des ipv64-Accounts (5 Minuten zwischengespeichert).
+func (m *Module) accountDomains(r *http.Request) (bool, []string) {
+	if m.key == nil || m.key.Get(r.Context()) == "" {
+		return false, nil
+	}
+	m.domMu.Lock()
+	defer m.domMu.Unlock()
+	if time.Since(m.domAt) < 5*time.Minute {
+		return true, m.domList
+	}
+	list, err := m.key.Client().Domains(r.Context(), m.key.Get(r.Context()))
+	if err != nil {
+		m.log.Warn("ipv64 domains", "err", err)
+		return true, m.domList
+	}
+	m.domList = nil
+	for _, d := range list {
+		m.domList = append(m.domList, d.Name)
+	}
+	m.domAt = time.Now()
+	return true, m.domList
+}
+
+// lanIP schlaegt die IP der Node im Heimnetz vor: die Adresse im Browser, sonst die erste private IPv4.
+func lanIP(r *http.Request) string {
+	h := r.Host
+	if x, _, err := net.SplitHostPort(r.Host); err == nil {
+		h = x
+	}
+	if ip := net.ParseIP(h); ip != nil && ip.To4() != nil && !ip.IsLoopback() {
+		return ip.String()
+	}
+	_, ips := wantedNames(nil)
+	for _, ip := range ips {
+		if v4 := ip.To4(); v4 != nil && !v4.IsLoopback() && !(v4[0] == 172 && v4[1] >= 17 && v4[1] <= 31) {
+			return v4.String()
+		}
+	}
+	return ""
+}
+
+// pageACME speichert die Angaben fuer Let's Encrypt, legt den eigenen Eintrag im Heimnetz an und holt das
+// Zertifikat im Hintergrund.
+func (m *Module) pageACME(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	back := func(kind, msg string) {
+		m.g.Flash(w, r, kind, msg)
+		http.Redirect(w, r, "/dns64/encrypted#acme", http.StatusSeeOther)
+	}
+	if r.PostFormValue("tos") == "" {
+		back("danger", m.g.T(r, "dns64.err.acme_tos"))
+		return
+	}
+	c := m.loadConfig(ctx)
+	c.CertMode, c.ACMEDomain, c.ACMEPrefix = certACME, r.PostFormValue("domain"), r.PostFormValue("prefix")
+	c.ACMEEmail, c.ACMEStaging = r.PostFormValue("email"), r.PostFormValue("staging") != ""
+	if err := m.saveConfig(ctx, c); err != nil {
+		back("danger", m.errText(r, err))
+		return
+	}
+	_ = m.core.SetSetting(ctx, setACMETOS, time.Now().UTC().Format(time.RFC3339))
+	c = m.loadConfig(ctx)
+	name := acmeName(c)
+	if ip := strings.TrimSpace(r.PostFormValue("lan_ip")); ip != "" { // Name zeigt im Heimnetz auf die Node
+		typ := "A"
+		if a := net.ParseIP(ip); a != nil && a.To4() == nil {
+			typ = "AAAA"
+		}
+		if _, err := m.AddRecord(ctx, Record{Name: name, Type: typ, Value: ip}); err != nil && !isDup(err) {
+			back("danger", m.errText(r, err))
+			return
+		}
+	}
+	m.log.Info("acme configured", "name", name, "staging", c.ACMEStaging, "by", m.g.Actor(r))
+	if err := m.restart(ctx); err != nil {
+		back("danger", m.g.T(r, "dns64.err.restart", "err", err.Error()))
+		return
+	}
+	m.startACME("issue")
+	back("success", m.g.T(r, "dns64.acme.started", "name", name))
+}
+
+func (m *Module) pageACMERenew(w http.ResponseWriter, r *http.Request) {
+	if m.startACME("manual") {
+		m.g.Flash(w, r, "success", m.g.T(r, "dns64.acme.started", "name", acmeName(m.loadConfig(r.Context()))))
+	}
+	http.Redirect(w, r, "/dns64/encrypted#acme", http.StatusSeeOther)
+}
+
+func isDup(err error) bool {
+	var ce *cfgError
+	return errors.As(err, &ce) && ce.Key == "err_dup"
 }
 
 func hostPort(host string, port int) string {

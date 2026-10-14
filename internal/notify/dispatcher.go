@@ -328,7 +328,7 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 // isDownKind: Stoerungsmeldungen (Sammelmeldung der Entwarnungen zaehlt als Entwarnung).
 func isDownKind(k Kind) bool {
 	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded || k == KindDynFail || k == KindDynLimit || k == KindQuota ||
-		k == KindDNS64Down || k == KindDNS64Lists
+		k == KindDNS64Down || k == KindDNS64Lists || k == KindDNS64Cert
 }
 
 // flagsOK prueft die Schalter von Check und Kanal (Stoerung/Entwarnung/teilweise gestoert).

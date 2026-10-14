@@ -147,6 +147,7 @@ func run() error {
 		dnsModule.SetWebCert(filepath.Join(cfg.TLSDir(), "cert.pem"), filepath.Join(cfg.TLSDir(), "key.pem"))
 	}
 	dnsModule.SetNotifier(dispatcher.Dispatch) // Upstream gestoert, Blockliste nicht ladbar
+	dnsModule.SetKey(ipv64Key)                 // Let's Encrypt per DNS-01 ueber die ipv64-API
 	modules.Register(dnsModule)
 	registerModules(modules)
 	modules.StartEnabled(ctx)

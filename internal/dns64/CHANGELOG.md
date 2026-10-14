@@ -1,5 +1,13 @@
 # Änderungen – DNS64
 
+## 1.5.0 – 2026-10-14
+
+### Neu
+- Let's Encrypt: öffentlich gültiges Zertifikat für einen Namen unter einer ipv64-Domain (z. B. dns.<domain>), bestätigt per DNS-01 über die ipv64-API mit dem zentralen API-Key; DNS64 wartet, bis die ipv64-Nameserver den TXT-Record ausliefern, und löscht ihn danach. Damit klappen DoH/DoT/DoQ auf allen Geräten ohne CA-Installation, auch Android „Privates DNS“.
+- Automatische Verlängerung 30 Tage vor Ablauf; das neue Zertifikat gilt sofort, ohne Neustart der Dienste. Bis zum ersten Abruf laufen die Dienste mit der eigenen Heimnetz-CA.
+- Der Name wird auf Wunsch als eigener Eintrag auf die IP der Node im Heimnetz gelegt; Testumgebung von Let's Encrypt wählbar.
+- Benachrichtigung `dns64_cert`, wenn Abruf oder Verlängerung scheitert.
+
 ## 1.4.0 – 2026-10-14
 
 ### Neu

@@ -87,6 +87,11 @@ type config struct {
 	CertMode  string            `json:"cert_mode"`
 	NotifyUp  bool              `json:"notify_upstream"`
 	NotifyLst bool              `json:"notify_lists"`
+	// Let's Encrypt (cert_mode acme)
+	ACMEDomain  string `json:"acme_domain"`
+	ACMEPrefix  string `json:"acme_prefix"`
+	ACMEEmail   string `json:"acme_email"`
+	ACMEStaging bool   `json:"acme_staging"`
 }
 
 func (m *Module) intSetting(ctx context.Context, key string, def, lo, hi int) int {
@@ -109,25 +114,29 @@ func oneOf(v, def string, allowed ...string) string {
 // loadConfig liest die Einstellungen mit Standardwerten.
 func (m *Module) loadConfig(ctx context.Context) config {
 	c := config{
-		Port:      m.port(ctx),
-		Bind:      m.core.SettingOr(ctx, setBind, ""),
-		Router:    m.core.SettingOr(ctx, setRouter, ""),
-		Retention: m.retention(ctx),
-		UpMode:    oneOf(m.core.SettingOr(ctx, setUpMode, ""), upstream.ModeParallel, upstream.ModeParallel, upstream.ModeOrdered),
-		ListHours: m.intSetting(ctx, setListHours, 24, 1, 168),
-		BlockMode: oneOf(m.core.SettingOr(ctx, setBlockMode, ""), blockZero, blockZero, blockNX),
-		CacheSize: m.intSetting(ctx, setCacheSize, cacheSize, 1000, 200000),
-		Anonymize: oneOf(m.core.SettingOr(ctx, setAnonymize, ""), anonOff, anonOff, anonMask, anonHide),
-		AllowNets: splitLines(m.core.SettingOr(ctx, setAllowNets, "")),
-		DoH:       m.core.SettingOr(ctx, setDoH, "0") == "1",
-		DoT:       m.core.SettingOr(ctx, setDoT, "0") == "1",
-		DoQ:       m.core.SettingOr(ctx, setDoQ, "0") == "1",
-		DoHPort:   m.intSetting(ctx, setDoHPort, 443, 1, 65535),
-		DoTPort:   m.intSetting(ctx, setDoTPort, 853, 1, 65535),
-		Names:     splitLines(m.core.SettingOr(ctx, setNames, "")),
-		CertMode:  oneOf(m.core.SettingOr(ctx, setCertMode, ""), certSelf, certSelf, certNode64),
-		NotifyUp:  m.core.SettingOr(ctx, setNotifyUpstream, "1") == "1",
-		NotifyLst: m.core.SettingOr(ctx, setNotifyLists, "1") == "1",
+		Port:        m.port(ctx),
+		Bind:        m.core.SettingOr(ctx, setBind, ""),
+		Router:      m.core.SettingOr(ctx, setRouter, ""),
+		Retention:   m.retention(ctx),
+		UpMode:      oneOf(m.core.SettingOr(ctx, setUpMode, ""), upstream.ModeParallel, upstream.ModeParallel, upstream.ModeOrdered),
+		ListHours:   m.intSetting(ctx, setListHours, 24, 1, 168),
+		BlockMode:   oneOf(m.core.SettingOr(ctx, setBlockMode, ""), blockZero, blockZero, blockNX),
+		CacheSize:   m.intSetting(ctx, setCacheSize, cacheSize, 1000, 200000),
+		Anonymize:   oneOf(m.core.SettingOr(ctx, setAnonymize, ""), anonOff, anonOff, anonMask, anonHide),
+		AllowNets:   splitLines(m.core.SettingOr(ctx, setAllowNets, "")),
+		DoH:         m.core.SettingOr(ctx, setDoH, "0") == "1",
+		DoT:         m.core.SettingOr(ctx, setDoT, "0") == "1",
+		DoQ:         m.core.SettingOr(ctx, setDoQ, "0") == "1",
+		DoHPort:     m.intSetting(ctx, setDoHPort, 443, 1, 65535),
+		DoTPort:     m.intSetting(ctx, setDoTPort, 853, 1, 65535),
+		Names:       splitLines(m.core.SettingOr(ctx, setNames, "")),
+		CertMode:    oneOf(m.core.SettingOr(ctx, setCertMode, ""), certSelf, certSelf, certNode64, certACME),
+		NotifyUp:    m.core.SettingOr(ctx, setNotifyUpstream, "1") == "1",
+		NotifyLst:   m.core.SettingOr(ctx, setNotifyLists, "1") == "1",
+		ACMEDomain:  m.core.SettingOr(ctx, setACMEDom, ""),
+		ACMEPrefix:  m.core.SettingOr(ctx, setACMEPre, ""),
+		ACMEEmail:   m.core.SettingOr(ctx, setACMEMail, ""),
+		ACMEStaging: m.core.SettingOr(ctx, setACMEStage, "0") == "1",
 	}
 	_ = json.Unmarshal([]byte(m.core.SettingOr(ctx, setUpstreams, "")), &c.Upstreams)
 	c.Upstreams = mergeUpstreams(c.Upstreams)
@@ -241,6 +250,7 @@ func (m *Module) saveConfig(ctx context.Context, c config) error {
 		setAllowNets: strings.Join(c.AllowNets, "\n"),
 		setDoH:       b2s(c.DoH), setDoT: b2s(c.DoT), setDoQ: b2s(c.DoQ), setDoHPort: strconv.Itoa(c.DoHPort), setDoTPort: strconv.Itoa(c.DoTPort),
 		setNames: strings.Join(c.Names, "\n"), setCertMode: c.CertMode, setNotifyUpstream: b2s(c.NotifyUp), setNotifyLists: b2s(c.NotifyLst),
+		setACMEDom: c.ACMEDomain, setACMEPre: c.ACMEPrefix, setACMEMail: c.ACMEEmail, setACMEStage: b2s(c.ACMEStaging),
 	} {
 		if err := m.core.SetSetting(ctx, k, v); err != nil {
 			return err
@@ -310,7 +320,22 @@ func (c *config) validate() error {
 		names = append(names, n)
 	}
 	c.Names = names
-	c.CertMode = oneOf(c.CertMode, certSelf, certSelf, certNode64)
+	c.CertMode = oneOf(c.CertMode, certSelf, certSelf, certNode64, certACME)
+	c.ACMEDomain = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(c.ACMEDomain)), ".")
+	c.ACMEPrefix = strings.Trim(strings.ToLower(strings.TrimSpace(c.ACMEPrefix)), ".")
+	c.ACMEEmail = strings.TrimSpace(c.ACMEEmail)
+	if c.ACMEDomain != "" && !validName(c.ACMEDomain) {
+		return errCfg("err_acme_domain")
+	}
+	if c.ACMEPrefix != "" && (!validName(c.ACMEPrefix) || strings.HasPrefix(c.ACMEPrefix, "_")) {
+		return errCfg("err_acme_prefix")
+	}
+	if c.ACMEEmail != "" && (!strings.Contains(c.ACMEEmail, "@") || strings.ContainsAny(c.ACMEEmail, " <>")) {
+		return errCfg("err_acme_email")
+	}
+	if c.CertMode == certACME && c.ACMEDomain == "" {
+		return errCfg("err_acme_domain")
+	}
 	c.UpMode = oneOf(c.UpMode, upstream.ModeParallel, upstream.ModeParallel, upstream.ModeOrdered)
 	c.BlockMode = oneOf(c.BlockMode, blockZero, blockZero, blockNX)
 	c.Anonymize = oneOf(c.Anonymize, anonOff, anonOff, anonMask, anonHide)

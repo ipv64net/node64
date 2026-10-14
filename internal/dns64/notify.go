@@ -96,6 +96,7 @@ func (m *Module) runMonitor(ctx context.Context, e *engine) {
 			return
 		case <-t.C:
 		}
+		m.acmeDue(ctx)
 		lists, _ := e.lists.Status()
 		x.check(time.Now(), e.up.Stats(), lists, m.core.SettingOr(ctx, setNotifyUpstream, "1") == "1", m.core.SettingOr(ctx, setNotifyLists, "1") == "1")
 	}

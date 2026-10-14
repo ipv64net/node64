@@ -41,6 +41,16 @@ func (m *Module) caFile() string { return filepath.Join(m.tlsDir(), "ca.pem") }
 
 // serverCert liefert das Zertifikat fuer DoH/DoT/DoQ und die Namen, auf die es lautet.
 func (m *Module) serverCert(c config) (tls.Certificate, []string, error) {
+	if c.CertMode == certACME {
+		if crt, leaf := m.acmeCert(acmeName(c)); crt != nil {
+			return *crt, certNames(leaf), nil
+		}
+		// noch kein Zertifikat: bis zum Abruf mit der eigenen CA (Dienste laufen trotzdem)
+		c.CertMode = certSelf
+		if n := acmeName(c); n != "" && !slices.Contains(c.Names, n) {
+			c.Names = append(c.Names, n)
+		}
+	}
 	if c.CertMode == certNode64 {
 		if m.webCert == "" {
 			return tls.Certificate{}, nil, errors.New("no web certificate")

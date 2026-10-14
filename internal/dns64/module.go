@@ -8,6 +8,7 @@ package dns64
 
 import (
 	"context"
+	"crypto/tls"
 	"embed"
 	"errors"
 	"fmt"
@@ -29,6 +30,7 @@ import (
 	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/dns64/querylog"
 	"github.com/ipv64net/node64/internal/dns64/upstream"
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/store"
@@ -44,7 +46,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.4.0"
+	version   = "1.5.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -73,6 +75,16 @@ type Module struct {
 	webCert, webKey string // Zertifikat der Weboberflaeche (cert_mode node64)
 
 	notifier func(notify.Alert) // Meldungen (nil = keine)
+
+	key   *ipv64api.Key                   // zentraler ipv64-API-Key (Let's Encrypt per DNS-01)
+	acme  acmeState                       // Stand des letzten Zertifikatsabrufs
+	cur   atomic.Pointer[tls.Certificate] // aktuelles Zertifikat fuer DoH/DoT/DoQ (wechselt ohne Neustart)
+	bg    sync.WaitGroup                  // Hintergrundlaeufe (Zertifikatsabruf)
+	bgCtx context.Context                 // endet mit dem Modul
+
+	domMu   sync.Mutex // Domains des Accounts (Seite Verschluesselung)
+	domList []string
+	domAt   time.Time
 }
 
 const retryEvery = time.Minute
@@ -170,7 +182,7 @@ func (m *Module) Start(ctx context.Context) error {
 		return nil
 	}
 	lctx, cancel := context.WithCancel(context.Background())
-	m.life = cancel
+	m.life, m.bgCtx = cancel, lctx
 	if m.tryStart(lctx) != nil {
 		m.retryWG.Add(1)
 		go m.retry(lctx)
@@ -268,6 +280,7 @@ func (m *Module) Stop(ctx context.Context) error {
 	m.life, m.eng, m.lastErr = nil, nil, ""
 	m.mu.Unlock()
 	m.retryWG.Wait()
+	m.bg.Wait() // laufender Zertifikatsabruf endet mit dem Kontext
 	if e == nil {
 		return nil
 	}

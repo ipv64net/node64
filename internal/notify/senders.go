@@ -42,6 +42,7 @@ const (
 	KindDNS64Down  Kind = "dns64_upstream"    // Upstream-Server gestoert
 	KindDNS64Up    Kind = "dns64_upstream_ok" // Upstream-Server antwortet wieder
 	KindDNS64Lists Kind = "dns64_lists"       // Blockliste laesst sich nicht aktualisieren
+	KindDNS64Cert  Kind = "dns64_cert"        // Zertifikat (Let's Encrypt) laesst sich nicht holen/verlaengern
 
 	KindQuota Kind = "quota" // Tageskontingent der Online-Checks erreicht (Account, vom hub)
 )
@@ -65,7 +66,9 @@ type CheckInfo struct {
 func IsDynDNS(k Kind) bool { return k == KindDynIP || k == KindDynFail || k == KindDynLimit }
 
 // IsDNS64: Meldung des DNS64-Moduls.
-func IsDNS64(k Kind) bool { return k == KindDNS64Down || k == KindDNS64Up || k == KindDNS64Lists }
+func IsDNS64(k Kind) bool {
+	return k == KindDNS64Down || k == KindDNS64Up || k == KindDNS64Lists || k == KindDNS64Cert
+}
 
 // IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64).
 func IsModule(k Kind) bool { return IsDynDNS(k) || IsDNS64(k) }

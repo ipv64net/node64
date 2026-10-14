@@ -7,6 +7,9 @@
 			if (!window.confirm(b.getAttribute("data-confirm"))) { e.preventDefault(); }
 		});
 	});
+	// laufender Zertifikatsabruf: Seite alle paar Sekunden neu laden, bis er fertig ist
+	var reload = document.querySelector("[data-dns64-reload]");
+	if (reload) { setTimeout(function () { location.reload(); }, 1000 * Number(reload.getAttribute("data-dns64-reload") || 3)); }
 	var dataEl = document.getElementById("dns64-data");
 	var page = document.querySelector("[data-dns64-page]");
 	if (!dataEl || !page) { return; }
