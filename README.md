@@ -1,6 +1,6 @@
 # Node64
 
-Ein leichtgewichtiger Docker-Container für das Heimnetz: Healthchecks (als Uptime-Kuma-Alternative), DynDNS-Updater für ipv64, später Reverse-Proxy, standalone oder verknüpft mit einem [ipv64.net](https://ipv64.net)-Account.
+Ein leichtgewichtiger Docker-Container für das Heimnetz: Healthchecks (als Uptime-Kuma-Alternative), DynDNS-Updater für ipv64, DNS64 als lokaler DNS-Resolver mit Blocklisten, später Reverse-Proxy, standalone oder verknüpft mit einem [ipv64.net](https://ipv64.net)-Account.
 
 Ein einziges Go-Binary, SQLite, eingebettete Weboberfläche, keine externen Abhängigkeiten zur Laufzeit. Läuft auf amd64 und arm64, auch auf einem Raspberry Pi.
 
@@ -125,6 +125,29 @@ Das Modul *DynDNS* (in den Einstellungen einschalten) hält ausgewählte Domains
 - **Router-IP:** Bei IPv4 sieht ipv64 automatisch die Adresse des Routers, nie die interne Container-Adresse. Bei IPv6 gibt es kein NAT: ohne IPv6 im Docker-Netz zeigt die Seite einen Hinweis (siehe [IPv4 und IPv6](#ipv4-und-ipv6)). Deuten die ersten Stationen ins Internet auf CGNAT (100.64.0.0/10) oder DS-Lite (192.0.0.1) hin, erscheint ein Hinweis mit Links zu ipv64.
 - **Verlauf und Limit:** Jede Prüfung und jeder Aufruf steht im Verlauf (Aufbewahrung einstellbar). Mit API-Key zeigt die Seite das Update-Limit des Accounts. Benachrichtigungen (Adresswechsel, Fehler, Limit) gehen an die Standardkanäle, auch bei verknüpfter Node, nicht in der Ruhezeit. ipv64-Mail und -SMS laufen für Modul-Meldungen mit dem API-Key direkt über die ipv64-API (`POST /hc2/channels/{id}/send`), nicht über die hubs; ohne Verknüpfung liest die Node die Kanäle des Accounts über die API.
 - **API und Export:** `GET /api/dyndns/status`, `GET|POST /api/dyndns/targets`, `GET|PUT|DELETE /api/dyndns/targets/{id}`, `POST /api/dyndns/targets/{id}/update`, `POST /api/dyndns/check`, `GET /api/dyndns/history`. Der Export enthält Ziele und Einstellungen ohne Tokens; der Import holt sie mit dem API-Key neu.
+
+## DNS64 (lokaler DNS-Resolver)
+
+Das Modul *DNS64* (in den Einstellungen einschalten) ist ein cachender DNS-Server fürs Heimnetz, der Werbung, Tracker und Malware über Blocklisten filtert. Ausgeschaltet läuft nichts und kein Port ist offen.
+
+- **Einrichten:** Im Router (DHCP) die IP des Hosts als DNS-Server eintragen. DNS64 lauscht auf Port 53 (UDP und TCP, einstellbar unter *DNS64 → Einstellungen*) und antwortet nur privaten und direkt angeschlossenen Netzen, nie als offener Resolver im Internet.
+- **Docker:** Mit Host-Netzwerk sieht DNS64 die echten IPs der Geräte und findet den Router für lokale Namen selbst. Das Image erlaubt dem Binary Ports unter 1024, der Prozess läuft weiter ohne Root.
+
+  ```yaml
+  services:
+    node:
+      image: ghcr.io/ipv64net/node64:latest
+      network_mode: host        # statt ports:, Oberfläche dann auf NODE64_HTTP_PORT (8080)
+      volumes:
+        - node64-data:/data
+  ```
+
+  Ist Port 53 auf dem Host schon belegt (z. B. `systemd-resolved` mit `DNSStubListener=yes`), meldet die Seite den Fehler, das Modul versucht es jede Minute erneut, und der Port lässt sich ändern.
+- **Blocklisten:** StevenBlack, AdGuard DNS, OISD Small, HaGeZi Multi, EasyPrivacy, URLhaus, alle 24 Stunden aktualisiert; Tracker hinter CNAMEs werden erkannt. Blockiert wird mit `0.0.0.0` bzw. `::`. Freigaben gelten für die Domain samt Subdomains und gehen per Klick im Abfrage-Log.
+- **Upstream:** verschlüsselt per DNS-over-HTTPS an Cloudflare und Quad9 parallel, die schnellste gültige Antwort gewinnt. Optimistischer Cache mit 20.000 Einträgen.
+- **Lokale Namen:** `*.fritz.box`, `*.lan`, `*.home.arpa`, einzelne Hostnamen und Reverse-Lookups privater IPs gehen nur an den Router (Default-Gateway oder eingestellt), nie ins Internet. Gerätenamen der Clients kommen per PTR vom Router.
+- **Daten:** unter `/data/dns64/` (Abfrage-Log `dns64.db`, Aufbewahrung 1–90 Tage, Freigaben `allowlist.txt`, Blocklisten `lists/`). Export/Import enthält Einstellungen und Freigaben.
+- **API:** `GET /api/dns64/status|summary|timeline|top|log|lists|upstreams|cache`, `POST /api/dns64/cache/flush`, `GET|POST|DELETE /api/dns64/allowlist`.
 
 ## Betrieb
 

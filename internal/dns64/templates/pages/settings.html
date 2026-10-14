@@ -1,0 +1,56 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{.T "dns64.title"}}</h1>
+	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "dns64.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "dns64.listening" "addr" $d.Listen}}</span>{{end}}
+	
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+{{if not $d.Running}}<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.not_running"}}{{if $d.Err}}<div class="small mt-1 font-monospace">{{$d.Err}}</div>{{end}}</div>{{end}}
+<script type="application/json" id="dns64-data">{{$d.JS}}</script>
+<div class="row g-3">
+	<div class="col-lg-7">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-gear text-primary"></i> {{.T "dns64.settings.title"}}</div>
+			<div class="card-body">
+				<form method="post" action="/dns64/settings">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<div class="row g-3">
+						<div class="col-sm-4">
+							<label class="form-label" for="port">{{.T "dns64.settings.port"}}</label>
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-hash"></i></span><input type="number" class="form-control" id="port" name="port" min="1" max="65535" value="{{$d.Port}}" required></div>
+						</div>
+						<div class="col-sm-8">
+							<label class="form-label" for="bind">{{.T "dns64.settings.bind"}}</label>
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-ethernet"></i></span><input type="text" class="form-control font-monospace" id="bind" name="bind" value="{{$d.Bind}}" placeholder="{{.T "dns64.settings.bind_all"}}"></div>
+						</div>
+						<div class="col-12 form-text mt-1">{{.T "dns64.settings.port_hint"}}</div>
+						<div class="col-sm-8">
+							<label class="form-label" for="router">{{.T "dns64.settings.router"}}</label>
+							<div class="input-group"><span class="input-group-text"><i class="bi bi-router"></i></span><input type="text" class="form-control font-monospace" id="router" name="router" value="{{$d.RouterSet}}" placeholder="{{.T "dns64.settings.router_auto"}}"></div>
+							<div class="form-text">{{if and $d.Running $d.Router}}{{.T "dns64.settings.router_now" "addr" $d.Router}} {{else if $d.Running}}{{.T "dns64.settings.router_none"}} {{end}}{{.T "dns64.settings.router_hint"}}</div>
+						</div>
+						<div class="col-sm-4">
+							<label class="form-label" for="retention">{{.T "dns64.settings.retention"}}</label>
+							<div class="input-group"><input type="number" class="form-control" id="retention" name="retention" min="1" max="90" value="{{$d.Retention}}" required><span class="input-group-text">{{.T "dns64.settings.days"}}</span></div>
+						</div>
+					</div>
+					<button class="btn btn-primary mt-3" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>
+				</form>
+			</div>
+		</div>
+	</div>
+	<div class="col-lg-5">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-info-circle text-info"></i> {{.T "dns64.setup.title"}}</div>
+			<div class="card-body small">
+				<p>{{.T "dns64.setup.router"}}</p>
+				<p>{{.T "dns64.setup.docker"}}</p>
+				<p class="mb-0 text-body-secondary">{{.T "dns64.setup.later"}}</p>
+			</div>
+		</div>
+	</div>
+</div>
+{{end}}

@@ -241,6 +241,7 @@ type dashboardData struct {
 	Mismatch                        bool // API-Key gehoert zu einem anderen Account als der Healthchecks-Sync
 	ConnectedAt, LastSync, LinkedAt time.Time
 	Peers, PeersOnline              int // Nodes dieser Verknuepfung
+	Cards                           []module.Card
 }
 
 func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
@@ -316,6 +317,17 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 		if info != nil {
 			d.Boards = append(d.Boards, *info)
+		}
+	}
+	for _, m := range s.Modules.Modules() {
+		p, ok := m.(module.CardProvider)
+		if !ok || !s.Modules.IsRunning(m.Info().Name) {
+			continue
+		}
+		if c, err := p.Card(ctx); err != nil {
+			s.log.Error("dashboard card", "module", m.Info().Name, "err", err)
+		} else if c != nil {
+			d.Cards = append(d.Cards, *c)
 		}
 	}
 	v.Data = d

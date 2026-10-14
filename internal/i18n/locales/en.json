@@ -1185,5 +1185,168 @@
     "keep_server": "Keep server version",
     "keep_local": "Send my version",
     "conflict_resolved": "Conflict resolved."
+  },
+  "dns64": {
+    "title": "DNS64",
+    "card": {
+      "listen": "DNS on",
+      "total": "Queries (24 h)",
+      "blocked": "Blocked",
+      "cached": "From cache",
+      "clients": "Clients",
+      "lists": "Domains in blocklists"
+    },
+    "since": "running since {time}",
+    "listening": "DNS on {addr}",
+    "not_running": "The DNS service is not running.",
+    "range": "Time range",
+    "range_1h": "1 h",
+    "range_24h": "24 h",
+    "range_7d": "7 days",
+    "err_domain": "Invalid domain name",
+    "tab": {
+      "overview": "Overview",
+      "log": "Query log",
+      "lists": "Allowlist & blocklists",
+      "settings": "Settings"
+    },
+    "log": {
+      "title": "DNS64 · Query log",
+      "search": "Search domain or IP",
+      "live": "Live",
+      "client": "Client",
+      "domain": "Domain",
+      "duration": "Duration"
+    },
+    "lists": {
+      "title": "Blocklists",
+      "hint": "Updated automatically every 24 hours. “Domains” only counts entries not already in a list above.",
+      "list": "List",
+      "domains": "Domains",
+      "updated": "Updated"
+    },
+    "allow": {
+      "title": "Allowed domains",
+      "hint": "Never blocked, including all subdomains."
+    },
+    "kpi": {
+      "total": "Queries",
+      "blocked": "Blocked",
+      "cached": "From cache",
+      "clients": "Clients",
+      "clients_hint": "distinct IPs",
+      "latency": "Ø upstream",
+      "latency_hint": "DNS-over-HTTPS",
+      "lists": "Blocklists"
+    },
+    "chart": {
+      "title": "Queries over time"
+    },
+    "up": {
+      "title": "Upstream servers",
+      "parallel": "Parallel",
+      "hint": "Every query goes encrypted (DNS-over-HTTPS) to all servers at once; the fastest valid answer wins."
+    },
+    "cache": {
+      "title": "DNS cache",
+      "optimistic": "Optimistic",
+      "hint": "Popular domains are renewed shortly before they expire. Expired entries are served instantly for up to 1 hour and refreshed in the background.",
+      "rate": "Hit rate",
+      "entries": "Entries",
+      "saved": "Waiting time saved",
+      "stale": "Served stale",
+      "refreshed": "Refreshed in background",
+      "since_start": "Counters since the last start",
+      "flush": "Flush cache"
+    },
+    "top": {
+      "blocked": "Top blocked domains",
+      "allowed": "Top allowed domains",
+      "clients": "Top clients"
+    },
+    "settings": {
+      "title": "DNS64 · Settings",
+      "port": "DNS port",
+      "bind": "Address",
+      "bind_all": "all addresses",
+      "port_hint": "UDP and TCP. Devices on your network use this host's IP as DNS server, which only works with port 53. Other ports are for testing or when 53 is taken.",
+      "router": "Router for local names",
+      "router_auto": "automatic (default gateway)",
+      "router_now": "Currently: {addr}.",
+      "router_none": "No router found at the moment, local names are not resolved.",
+      "router_hint": "Names like fritz.box, .lan or single host names only go to this DNS server, never to the internet. IP or IP:port.",
+      "retention": "Query log",
+      "days": "days",
+      "err_port": "The port must be between 1 and 65535.",
+      "err_bind": "The address must be an IP (empty = all).",
+      "err_router": "Enter the router as IP or IP:port.",
+      "err_retention": "The query log keeps 1 to 90 days.",
+      "err_restart": "Saved, but the DNS service does not start: {err}"
+    },
+    "setup": {
+      "title": "Setup",
+      "router": "Enter this host's IP as DNS server in your router (DHCP). Then all devices on your network use DNS64 automatically.",
+      "docker": "In a container DNS64 needs host networking (network_mode: host), so it sees the real device IPs and finds the router by itself.",
+      "later": "More settings (upstreams, blocklists, custom records, DNS-over-TLS/QUIC) will follow."
+    },
+    "js": {
+      "status": {
+        "allowed": "Allowed",
+        "blocked": "Blocked",
+        "cached": "Cache",
+        "local": "Local",
+        "error": "Error"
+      },
+      "released": "allowed",
+      "release": "Allow",
+      "release_title": "Allow {domain} and all subdomains",
+      "release_confirm": "Allow “{domain}” and all subdomains?\n\nThe domain will no longer be blocked.",
+      "unrelease_confirm": "Remove “{domain}” from the allowlist? It will be blocked again if it is on a list.",
+      "released_toast": "{domain} is allowed. Devices pick this up within a few seconds.",
+      "unreleased_toast": "{domain} removed from the allowlist.",
+      "remove": "Remove",
+      "no_releases": "No allowed domains yet",
+      "ready": "Ready",
+      "online": "Online",
+      "disturbed": "Failing",
+      "avg": "Ø",
+      "fastest": "Fastest in",
+      "requests": "Queries",
+      "errors": "Errors",
+      "last_error": "Last error",
+      "router_auto": "Local names and device names: router {addr} (detected automatically)",
+      "router_config": "Local names and device names: router {addr} (configured)",
+      "router_none": "No router DNS found: local names are not resolved. The router can be set in the settings.",
+      "of": "of",
+      "failed": "failed",
+      "just_now": "just now",
+      "min_ago": "{n} min ago",
+      "hours_ago": "{n} h ago",
+      "days_ago": "{n} days ago",
+      "per_hour": "≈ {n} per hour",
+      "pct_all": "{n} % of all queries",
+      "pct_cache": "{n} % answered instantly",
+      "loaded": "domains, loaded {ago}",
+      "no_data": "No data",
+      "empty_chart": "No queries in this time range yet",
+      "blocked_n": "{n} blocked",
+      "no_entries": "No matching entries",
+      "via": "via {name}",
+      "entries": "Entries {from}–{to} of {total}",
+      "page": "Page {n} of {of}",
+      "live_paused": "Live paused (page 1 only)",
+      "flush_confirm": "Flush the cache? The next queries go to the upstream servers again.",
+      "flushed": "Cache flushed ({n} entries).",
+      "error": "Error",
+      "active": "Active",
+      "loading": "Loading",
+      "sec": "s",
+      "min": "min",
+      "hours": "h",
+      "uptime": "Running for {d}",
+      "allowed": "Allowed",
+      "blocked": "Blocked",
+      "no_conn": "No connection to the server"
+    }
   }
 }

@@ -14,6 +14,9 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     go build -trimpath -ldflags="-s -w -X main.Version=$VERSION" -o /out/node64 ./cmd/node64
 # Datenverzeichnis mit passenden Rechten fuer den Nicht-Root-Benutzer vorbereiten
 RUN mkdir -p /out/data && chown 65532:65532 /out/data
+# DNS64 lauscht auf Port 53 (und spaeter 853): das Recht fuer Ports unter 1024 bekommt nur das Binary, der
+# Prozess laeuft weiter ohne Root
+RUN apk add --no-cache libcap && setcap cap_net_bind_service=+ep /out/node64
 
 # ---- CA-Zertifikate (Zeitzonen sind im Binary eingebettet). Laeuft auf der
 #      Build-Plattform, die Zertifikate sind architekturunabhaengig.
@@ -30,6 +33,7 @@ ENV NODE64_DATA_DIR=/data \
     NODE64_HTTP_PORT=8080 \
     NODE64_HTTPS_PORT=0
 VOLUME ["/data"]
+# 53/udp+tcp nur mit Modul DNS64 (empfohlen: Host-Netzwerk, siehe README)
 EXPOSE 8080 8443
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD ["/node64", "healthcheck"]
 ENTRYPOINT ["/node64"]

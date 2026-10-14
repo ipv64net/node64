@@ -23,6 +23,10 @@
     {
       "name": "DynDNS",
       "description": "DynDNS-Updater: hält ausgewählte Namen bei ipv64 mit der öffentlichen Adresse des Anschlusses aktuell. Aktualisiert wird nur bei einer Abweichung (zuletzt gemeldete Adresse und direkte Abfrage der ipv64-Nameserver), mit Record- bzw. Domain-Token im Header. Tokens werden angenommen, aber nie ausgegeben (nur `token_hint`)."
+    },
+    {
+      "name": "DNS64",
+      "description": "Lokaler DNS-Resolver mit Blocklisten (Modul DNS64). Ist das Modul aus: 404; laeuft der DNS-Dienst nicht (z. B. Port belegt): 503."
     }
   ],
   "security": [
@@ -2552,6 +2556,308 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/dns64/status": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Zustand des DNS-Dienstes",
+        "description": "`listen` (Adresse:Port), `startedAt`, `router` (DNS fuer lokale Namen, leer = keiner), `routerSource` (config|auto), `retentionDays`.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/dns64/summary": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Kennzahlen im Zeitraum",
+        "description": "Anfragen, blockiert, aus dem Cache, Clients, Schnitt der Upstream-Antwortzeit; Groesse der Blocklisten, Cache-Zaehler, Laufzeit.",
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "description": "Zeitraum",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1h",
+                "24h",
+                "7d"
+              ],
+              "default": "24h"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/dns64/timeline": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Anfragen im Zeitverlauf",
+        "description": "`buckets` mit `t` (Unix-ms), `total`, `blocked`; `stepMs` = Balkenbreite (1h: 2 min, 24h: 30 min, 7d: 4 h).",
+        "parameters": [
+          {
+            "name": "range",
+            "in": "query",
+            "description": "Zeitraum",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1h",
+                "24h",
+                "7d"
+              ],
+              "default": "24h"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/dns64/top": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Top-Listen",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "blocked",
+                "allowed",
+                "clients"
+              ]
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "description": "Zeitraum",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1h",
+                "24h",
+                "7d"
+              ],
+              "default": "24h"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/dns64/log": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Abfrage-Log, neueste zuerst",
+        "description": "`rows` und `total`. `status`: allowed, cached, blocked, local, error; `reason` = Blockliste bzw. Hinweis; `clientName` per PTR beim Router.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "allowed",
+                "cached",
+                "blocked",
+                "local",
+                "error"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Teil von Domain oder Client-IP",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 500
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/dns64/lists": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Blocklisten mit Anzahl Domains, Stand und Fehler",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/dns64/upstreams": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Upstream-Server (DNS-over-HTTPS) mit Statistik und Router fuer lokale Namen",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/dns64/cache": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Cache-Zaehler seit dem Start",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/dns64/cache/flush": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Cache leeren",
+        "responses": {
+          "200": {
+            "description": "`flushed` = Anzahl Eintraege"
+          }
+        }
+      }
+    },
+    "/dns64/allowlist": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Freigegebene Domains (gelten samt Subdomains)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Domain freigeben",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "domain"
+                ],
+                "properties": {
+                  "domain": {
+                    "type": "string",
+                    "example": "example.com"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "`domain` (normalisiert)"
+          },
+          "400": {
+            "description": "Ungueltiger Domainname"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Freigabe entfernen",
+        "parameters": [
+          {
+            "name": "domain",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Entfernt"
+          },
+          "400": {
+            "description": "Ungueltiger Domainname"
           }
         }
       }

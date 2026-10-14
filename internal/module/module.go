@@ -100,6 +100,30 @@ type DashboardProvider interface {
 	Dashboard(ctx context.Context) (*DashboardInfo, error)
 }
 
+// CardProvider liefert eine kleine Karte mit Kennzahlen fuer das Dashboard (fuer Module ohne Checks).
+type CardProvider interface {
+	Card(ctx context.Context) (*Card, error)
+}
+
+// Card ist die Dashboard-Karte eines Moduls.
+type Card struct {
+	TitleKey string
+	Image    string // Logo unter /static/img (sonst Icon)
+	Icon     string
+	Path     string
+	Stats    []CardStat
+	Err      string // Hinweis bei Stoerung (rot)
+}
+
+// CardStat ist eine Zeile der Karte: Value wird als Zahl formatiert, ausser Text ist gesetzt.
+type CardStat struct {
+	LabelKey string
+	Value    int64
+	Text     string
+	Pct      float64 // > 0: Anteil in Prozent hinter der Zahl
+	Class    string  // z. B. "text-danger"
+}
+
 // DashboardInfo sind die Zahlen eines Moduls fuer das Dashboard.
 type DashboardInfo struct {
 	Module    string

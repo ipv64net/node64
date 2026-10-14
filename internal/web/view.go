@@ -139,6 +139,11 @@ func (v *View) Duration(d time.Duration) string { return v.s.I18n.FormatDuration
 // Int formatiert eine Zahl nach Locale.
 func (v *View) Int(n int64) string { return v.s.I18n.FormatInt(v.Lang, n) }
 
+// Float formatiert eine Kommazahl nach Locale.
+func (v *View) Float(f float64, decimals int) string {
+	return v.s.I18n.FormatFloat(v.Lang, f, decimals)
+}
+
 // Bytes formatiert eine Groesse lesbar.
 func (v *View) Bytes(n int64) string {
 	const unit = 1024

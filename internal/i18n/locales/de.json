@@ -1185,5 +1185,168 @@
     "keep_server": "Server-Version behalten",
     "keep_local": "Meine Version senden",
     "conflict_resolved": "Konflikt aufgelöst."
+  },
+  "dns64": {
+    "title": "DNS64",
+    "card": {
+      "listen": "DNS auf",
+      "total": "Anfragen (24 Std.)",
+      "blocked": "Blockiert",
+      "cached": "Aus dem Cache",
+      "clients": "Clients",
+      "lists": "Domains in Blocklisten"
+    },
+    "since": "läuft seit {time}",
+    "listening": "DNS auf {addr}",
+    "not_running": "Der DNS-Dienst läuft nicht.",
+    "range": "Zeitraum",
+    "range_1h": "1 Std.",
+    "range_24h": "24 Std.",
+    "range_7d": "7 Tage",
+    "err_domain": "Ungültiger Domainname",
+    "tab": {
+      "overview": "Übersicht",
+      "log": "Abfrage-Log",
+      "lists": "Freigaben & Blocklisten",
+      "settings": "Einstellungen"
+    },
+    "log": {
+      "title": "DNS64 · Abfrage-Log",
+      "search": "Domain oder IP suchen",
+      "live": "Live",
+      "client": "Client",
+      "domain": "Domain",
+      "duration": "Dauer"
+    },
+    "lists": {
+      "title": "Blocklisten",
+      "hint": "Werden automatisch alle 24 Stunden aktualisiert. „Domains“ zählt nur Einträge, die nicht schon in einer Liste davor stehen.",
+      "list": "Liste",
+      "domains": "Domains",
+      "updated": "Stand"
+    },
+    "allow": {
+      "title": "Freigegebene Domains",
+      "hint": "Werden nie blockiert, inklusive aller Subdomains."
+    },
+    "kpi": {
+      "total": "Anfragen",
+      "blocked": "Blockiert",
+      "cached": "Aus dem Cache",
+      "clients": "Clients",
+      "clients_hint": "verschiedene IPs",
+      "latency": "Ø Upstream",
+      "latency_hint": "DNS-over-HTTPS",
+      "lists": "Blocklisten"
+    },
+    "chart": {
+      "title": "Anfragen im Zeitverlauf"
+    },
+    "up": {
+      "title": "Upstream-Server",
+      "parallel": "Parallel",
+      "hint": "Jede Anfrage geht gleichzeitig verschlüsselt (DNS-over-HTTPS) an alle Server, die schnellste gültige Antwort gewinnt."
+    },
+    "cache": {
+      "title": "DNS-Cache",
+      "optimistic": "Optimistisch",
+      "hint": "Häufige Domains werden kurz vor Ablauf automatisch erneuert. Abgelaufene Einträge werden bis zu 1 Stunde sofort ausgeliefert und im Hintergrund aktualisiert.",
+      "rate": "Trefferquote",
+      "entries": "Einträge",
+      "saved": "Eingesparte Wartezeit",
+      "stale": "Veraltet ausgeliefert",
+      "refreshed": "Im Hintergrund erneuert",
+      "since_start": "Zähler seit dem letzten Start",
+      "flush": "Cache leeren"
+    },
+    "top": {
+      "blocked": "Top blockierte Domains",
+      "allowed": "Top erlaubte Domains",
+      "clients": "Top Clients"
+    },
+    "settings": {
+      "title": "DNS64 · Einstellungen",
+      "port": "DNS-Port",
+      "bind": "Adresse",
+      "bind_all": "alle Adressen",
+      "port_hint": "UDP und TCP. Geräte im Heimnetz verwenden die IP dieses Hosts als DNS-Server, das geht nur mit Port 53. Andere Ports sind für Tests oder wenn 53 schon belegt ist.",
+      "router": "Router für lokale Namen",
+      "router_auto": "automatisch (Default-Gateway)",
+      "router_now": "Zurzeit: {addr}.",
+      "router_none": "Zurzeit wurde kein Router gefunden, lokale Namen werden nicht aufgelöst.",
+      "router_hint": "Namen wie fritz.box, .lan oder einzelne Hostnamen gehen nur an diesen DNS-Server, nie ins Internet. IP oder IP:Port.",
+      "retention": "Abfrage-Log",
+      "days": "Tage",
+      "err_port": "Der Port muss zwischen 1 und 65535 liegen.",
+      "err_bind": "Die Adresse muss eine IP sein (leer = alle).",
+      "err_router": "Der Router muss als IP oder IP:Port angegeben werden.",
+      "err_retention": "Das Abfrage-Log hält 1 bis 90 Tage.",
+      "err_restart": "Gespeichert, aber der DNS-Dienst startet nicht: {err}"
+    },
+    "setup": {
+      "title": "Einrichtung",
+      "router": "Tragen Sie im Router (DHCP) die IP dieses Hosts als DNS-Server ein. Dann fragen alle Geräte im Heimnetz automatisch über DNS64.",
+      "docker": "Im Container braucht DNS64 das Host-Netzwerk (network_mode: host). So sieht es die echten IPs der Geräte und findet den Router selbst.",
+      "later": "Weitere Einstellungen (Upstreams, Blocklisten, eigene Einträge, DNS-over-TLS/QUIC) folgen."
+    },
+    "js": {
+      "status": {
+        "allowed": "Erlaubt",
+        "blocked": "Blockiert",
+        "cached": "Cache",
+        "local": "Lokal",
+        "error": "Fehler"
+      },
+      "released": "freigegeben",
+      "release": "Freigeben",
+      "release_title": "{domain} und alle Subdomains freigeben",
+      "release_confirm": "„{domain}“ und alle Subdomains freigeben?\n\nDie Domain wird dann nicht mehr blockiert.",
+      "unrelease_confirm": "Freigabe für „{domain}“ entfernen? Die Domain wird wieder blockiert, falls sie auf einer Liste steht.",
+      "released_toast": "{domain} ist freigegeben. Geräte übernehmen das in wenigen Sekunden.",
+      "unreleased_toast": "Freigabe für {domain} entfernt.",
+      "remove": "Entfernen",
+      "no_releases": "Noch keine Freigaben",
+      "ready": "Bereit",
+      "online": "Online",
+      "disturbed": "Gestört",
+      "avg": "Ø",
+      "fastest": "Schnellster bei",
+      "requests": "Anfragen",
+      "errors": "Fehler",
+      "last_error": "Letzter Fehler",
+      "router_auto": "Lokale Namen und Gerätenamen: Router {addr} (automatisch erkannt)",
+      "router_config": "Lokale Namen und Gerätenamen: Router {addr} (eingestellt)",
+      "router_none": "Kein Router-DNS gefunden: Lokale Namen werden nicht aufgelöst. Der Router lässt sich in den Einstellungen festlegen.",
+      "of": "von",
+      "failed": "fehlgeschlagen",
+      "just_now": "gerade eben",
+      "min_ago": "vor {n} Min.",
+      "hours_ago": "vor {n} Std.",
+      "days_ago": "vor {n} Tagen",
+      "per_hour": "≈ {n} pro Stunde",
+      "pct_all": "{n} % aller Anfragen",
+      "pct_cache": "{n} % sofort beantwortet",
+      "loaded": "Domains, geladen {ago}",
+      "no_data": "Keine Daten",
+      "empty_chart": "Noch keine Anfragen in diesem Zeitraum",
+      "blocked_n": "{n} blockiert",
+      "no_entries": "Keine passenden Einträge",
+      "via": "über {name}",
+      "entries": "Einträge {from}–{to} von {total}",
+      "page": "Seite {n} von {of}",
+      "live_paused": "Live pausiert (nur Seite 1)",
+      "flush_confirm": "Cache leeren? Die nächsten Anfragen gehen dann wieder an die Upstream-Server.",
+      "flushed": "Cache geleert ({n} Einträge).",
+      "error": "Fehler",
+      "active": "Aktiv",
+      "loading": "Wird geladen",
+      "sec": "s",
+      "min": "Min.",
+      "hours": "Std.",
+      "uptime": "Läuft seit {d}",
+      "allowed": "Erlaubt",
+      "blocked": "Blockiert",
+      "no_conn": "Keine Verbindung zum Server"
+    }
   }
 }

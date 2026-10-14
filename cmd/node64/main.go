@@ -29,6 +29,7 @@ import (
 	_ "time/tzdata" // Zeitzonen im Binary, das Laufzeit-Image hat keine
 
 	"github.com/ipv64net/node64/internal/config"
+	"github.com/ipv64net/node64/internal/dns64"
 	"github.com/ipv64net/node64/internal/dyndns"
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/i18n"
@@ -133,6 +134,7 @@ func run() error {
 	dynModule := dyndns.New(st, logger.Slog(), box, dispatcher, Version)
 	dynModule.SetKey(ipv64Key)
 	modules.Register(dynModule)
+	modules.Register(dns64.New(st, logger.Slog(), cfg.DataDir, Version))
 	registerModules(modules)
 	modules.StartEnabled(ctx)
 	defer modules.StopAll()
@@ -234,7 +236,6 @@ func run() error {
 // registerModules meldet die Platzhalter an, die erst spaeter kommen.
 func registerModules(r *module.Registry) {
 	r.Register(module.Placeholder{I: module.Info{Name: "proxy", TitleKey: "nav.proxy", Icon: "bi-diagram-3", Image: "cdn64.webp", Path: "/proxy", Order: 30}})
-	r.Register(module.Placeholder{I: module.Info{Name: "dns64", TitleKey: "nav.dns64", Icon: "bi-shield-check", Image: "dns64.webp", Path: "/dns64", Order: 40}})
 }
 
 // updateLoop prueft taeglich auf neue Versionen, aber nur wenn der Nutzer es

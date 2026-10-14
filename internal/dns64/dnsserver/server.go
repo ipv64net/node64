@@ -1,0 +1,258 @@
+// Package dnsserver answers DNS queries: local names, blocklist, cache,
+// then encrypted upstream.
+package dnsserver
+
+import (
+	"context"
+	"log/slog"
+	"net"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/miekg/dns"
+
+	"github.com/ipv64net/node64/internal/dns64/cache"
+	"github.com/ipv64net/node64/internal/dns64/filter"
+	"github.com/ipv64net/node64/internal/dns64/localnet"
+	"github.com/ipv64net/node64/internal/dns64/querylog"
+	"github.com/ipv64net/node64/internal/dns64/upstream"
+)
+
+const blockedTTL = 10
+
+type Server struct {
+	Addr     string
+	Local    *localnet.Resolver // router DNS for local names
+	Filter   *filter.Manager
+	Upstream *upstream.Resolver
+	Cache    *cache.Cache
+	Log      *querylog.Store
+	Logger   *slog.Logger
+
+	acl        *clientACL
+	srv        []*dns.Server
+	refreshSem chan struct{} // bounds concurrent background refreshes
+	wg         sync.WaitGroup
+}
+
+// Start opens the UDP and TCP sockets right away (so a busy port is reported
+// to the caller) and serves them in the background until Shutdown.
+func (s *Server) Start() error {
+	s.acl = newClientACL()
+	s.refreshSem = make(chan struct{}, 32)
+	pc, err := net.ListenPacket("udp", s.Addr)
+	if err != nil {
+		return err
+	}
+	ln, err := net.Listen("tcp", s.Addr)
+	if err != nil {
+		pc.Close()
+		return err
+	}
+	s.srv = []*dns.Server{{PacketConn: pc, Net: "udp", Handler: s}, {Listener: ln, Net: "tcp", Handler: s}}
+	for _, srv := range s.srv {
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			if err := srv.ActivateAndServe(); err != nil {
+				s.Logger.Debug("dns listener ended", "net", srv.Net, "err", err)
+			}
+		}()
+	}
+	return nil
+}
+
+// Shutdown closes the sockets and waits for running background refreshes.
+func (s *Server) Shutdown(ctx context.Context) {
+	for _, srv := range s.srv {
+		srv.ShutdownContext(ctx)
+	}
+	done := make(chan struct{})
+	go func() { s.wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+}
+
+func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
+	start := time.Now()
+	clientIP := remoteIP(w.RemoteAddr())
+
+	if !s.acl.allowed(clientIP) {
+		// Never act as an open resolver on the internet.
+		reply(w, r, errorMsg(r, dns.RcodeRefused))
+		return
+	}
+	if r.Opcode != dns.OpcodeQuery || len(r.Question) != 1 {
+		reply(w, r, errorMsg(r, dns.RcodeFormatError))
+		return
+	}
+
+	q := r.Question[0]
+	name := strings.TrimSuffix(strings.ToLower(q.Name), ".")
+	entry := querylog.Entry{
+		Time:   start,
+		Client: clientIP.String(),
+		Domain: name,
+		QType:  dns.TypeToString[q.Qtype],
+	}
+	if entry.QType == "" {
+		entry.QType = dns.Type(q.Qtype).String()
+	}
+
+	resp := s.resolve(r, name, &entry)
+	resp.Id = r.Id
+	entry.Rcode = dns.RcodeToString[resp.Rcode]
+	entry.Duration = time.Since(start)
+	reply(w, r, resp)
+	s.Log.Add(entry)
+}
+
+func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry) *dns.Msg {
+	q := r.Question[0]
+
+	if isLocalName(name) {
+		e.Status = querylog.StatusLocal
+		if s.Local.Addr() != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if resp, err := s.Local.Exchange(ctx, r); err == nil {
+				e.Upstream = "Router"
+				return resp
+			}
+		}
+		// Local names must never leak to public resolvers.
+		return errorMsg(r, dns.RcodeNameError)
+	}
+
+	blocked, reason := s.Filter.Check(name)
+	if blocked {
+		e.Status, e.Reason = querylog.StatusBlocked, reason
+		return blockedMsg(r)
+	}
+	released := reason != "" || s.Filter.Allow.Contains(name)
+
+	if resp, state, refresh := s.Cache.Get(r); resp != nil {
+		e.Status = querylog.StatusCached
+		if state == cache.Stale {
+			e.Reason = "abgelaufen, wird im Hintergrund erneuert"
+		}
+		if refresh {
+			s.refresh(r, released)
+		}
+		return resp
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	resp, up, err := s.Upstream.Exchange(ctx, r)
+	if err != nil {
+		s.Logger.Warn("upstream failed", "domain", name, "err", err)
+		e.Status = querylog.StatusError
+		return errorMsg(r, dns.RcodeServerFailure)
+	}
+	e.Upstream = up
+
+	if !released {
+		if blocked, why := s.cnameBlocked(resp, q.Qtype); blocked {
+			e.Status, e.Reason = querylog.StatusBlocked, why
+			return blockedMsg(r)
+		}
+	}
+
+	e.Status, e.Reason = querylog.StatusAllowed, reason
+	s.Cache.Set(r, resp)
+	return resp
+}
+
+// cnameBlocked detects CNAME cloaking: trackers hide behind a first-party
+// name that points to a blocked domain.
+func (s *Server) cnameBlocked(resp *dns.Msg, qtype uint16) (bool, string) {
+	if qtype == dns.TypeCNAME {
+		return false, ""
+	}
+	for _, rr := range resp.Answer {
+		if c, ok := rr.(*dns.CNAME); ok {
+			target := strings.TrimSuffix(strings.ToLower(c.Target), ".")
+			if blocked, list := s.Filter.Check(target); blocked {
+				return true, list + " (CNAME " + target + ")"
+			}
+		}
+	}
+	return false, ""
+}
+
+// refresh fetches a new copy of a cached answer in the background, so the
+// client that triggered it is answered from the cache without waiting.
+func (s *Server) refresh(r *dns.Msg, released bool) {
+	select {
+	case s.refreshSem <- struct{}{}:
+	default:
+		return // busy; the cache allows a retry after a short back-off
+	}
+	req := r.Copy()
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		defer func() { <-s.refreshSem }()
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		resp, _, err := s.Upstream.Exchange(ctx, req)
+		if err != nil {
+			s.Cache.RefreshDone(false)
+			return
+		}
+		if blocked, _ := s.cnameBlocked(resp, req.Question[0].Qtype); blocked && !released {
+			s.Cache.Delete(req)
+			s.Cache.RefreshDone(true)
+			return
+		}
+		s.Cache.Set(req, resp)
+		s.Cache.RefreshDone(true)
+	}()
+}
+
+func reply(w dns.ResponseWriter, req, resp *dns.Msg) {
+	size := dns.MinMsgSize
+	if _, isTCP := w.RemoteAddr().(*net.TCPAddr); isTCP {
+		size = dns.MaxMsgSize
+	} else if opt := req.IsEdns0(); opt != nil {
+		size = max(int(opt.UDPSize()), dns.MinMsgSize)
+	}
+	resp.Truncate(size)
+	w.WriteMsg(resp)
+}
+
+func errorMsg(r *dns.Msg, rcode int) *dns.Msg {
+	m := new(dns.Msg)
+	m.SetRcode(r, rcode)
+	m.RecursionAvailable = true
+	copyEdns(r, m)
+	return m
+}
+
+// blockedMsg answers A with 0.0.0.0, AAAA with :: and everything else with
+// an empty NOERROR, the same behaviour as Pi-hole and AdGuard Home.
+func blockedMsg(r *dns.Msg) *dns.Msg {
+	q := r.Question[0]
+	m := new(dns.Msg)
+	m.SetReply(r)
+	m.RecursionAvailable = true
+	hdr := dns.RR_Header{Name: q.Name, Rrtype: q.Qtype, Class: dns.ClassINET, Ttl: blockedTTL}
+	switch q.Qtype {
+	case dns.TypeA:
+		m.Answer = []dns.RR{&dns.A{Hdr: hdr, A: net.IPv4zero}}
+	case dns.TypeAAAA:
+		m.Answer = []dns.RR{&dns.AAAA{Hdr: hdr, AAAA: net.IPv6zero}}
+	}
+	copyEdns(r, m)
+	return m
+}
+
+func copyEdns(req, resp *dns.Msg) {
+	if opt := req.IsEdns0(); opt != nil {
+		resp.SetEdns0(dns.DefaultMsgSize, opt.Do())
+	}
+}

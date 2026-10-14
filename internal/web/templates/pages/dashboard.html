@@ -23,6 +23,17 @@
 	{{else}}<div class="card-body text-body-secondary small">{{$.T "dashboard.no_incidents"}}</div>{{end}}
 </div>
 {{end}}
+{{if $d.Cards}}<div class="row g-3 mb-3">
+{{range $d.Cards}}	<div class="col-md-6 col-xl-4">
+		<div class="card h-100">
+			<div class="card-header d-flex align-items-center"><span>{{if .Image}}<img src="/static/img/{{.Image}}" alt="" height="16" class="align-text-bottom">{{else}}<i class="bi {{.Icon}} text-primary"></i>{{end}} {{$.T .TitleKey}}</span><a class="ms-auto text-body-secondary" href="{{.Path}}" title="{{$.T .TitleKey}}"><i class="bi bi-arrow-right"></i></a></div>
+			<div class="card-body small">
+				{{if .Stats}}<dl class="row mb-0">{{range .Stats}}<dt class="col-7 fw-normal text-body-secondary">{{$.T .LabelKey}}</dt><dd class="col-5 text-end mb-1 {{.Class}}">{{if .Text}}{{.Text}}{{else}}{{$.Int .Value}}{{end}}{{if .Pct}} ({{$.Float .Pct 1}} %){{end}}</dd>{{end}}</dl>{{end}}
+				{{with .Err}}<div class="alert alert-warning py-1 px-2 mt-2 mb-0"><i class="bi bi-exclamation-triangle"></i> {{.}}</div>{{end}}
+			</div>
+		</div>
+	</div>
+{{end}}</div>{{end}}
 <div class="row g-3">
 	<div class="col-md-6 col-xl-4">
 		<div class="card h-100">
@@ -77,7 +88,7 @@
 					</li>
 				{{end}}
 				</ul>
-				{{if not $d.Boards}}<div class="text-body-secondary small mt-2">{{.T "dashboard.no_modules"}}</div>{{end}}
+				{{if not (or $d.Boards $d.Cards)}}<div class="text-body-secondary small mt-2">{{.T "dashboard.no_modules"}}</div>{{end}}
 			</div>
 		</div>
 	</div>

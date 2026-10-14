@@ -1,0 +1,379 @@
+// Package querylog persists every DNS query in SQLite and answers the
+// statistics queries for the web UI.
+package querylog
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"strings"
+	"sync/atomic"
+	"time"
+
+	_ "modernc.org/sqlite"
+)
+
+type Status int
+
+const (
+	StatusAllowed Status = iota // forwarded upstream
+	StatusCached                // answered from cache
+	StatusBlocked               // blocked by a list
+	StatusLocal                 // local name, answered by router or NXDOMAIN
+	StatusError                 // upstream failed
+)
+
+var statusNames = [...]string{"allowed", "cached", "blocked", "local", "error"}
+
+func (s Status) String() string {
+	if int(s) < len(statusNames) {
+		return statusNames[s]
+	}
+	return "unknown"
+}
+
+func ParseStatus(s string) (Status, bool) {
+	for i, n := range statusNames {
+		if n == s {
+			return Status(i), true
+		}
+	}
+	return 0, false
+}
+
+type Entry struct {
+	Time     time.Time
+	Client   string
+	Domain   string
+	QType    string
+	Status   Status
+	Reason   string // blocklist name or CNAME info
+	Rcode    string
+	Upstream string
+	Duration time.Duration
+}
+
+const schema = `
+CREATE TABLE IF NOT EXISTS queries (
+	id          INTEGER PRIMARY KEY,
+	ts          INTEGER NOT NULL,
+	client      TEXT    NOT NULL,
+	domain      TEXT    NOT NULL,
+	qtype       TEXT    NOT NULL,
+	status      INTEGER NOT NULL,
+	reason      TEXT    NOT NULL DEFAULT '',
+	rcode       TEXT    NOT NULL DEFAULT '',
+	upstream    TEXT    NOT NULL DEFAULT '',
+	duration_us INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_queries_ts ON queries(ts);
+`
+
+type Store struct {
+	db        *sql.DB
+	ch        chan Entry
+	retention time.Duration
+	log       *slog.Logger
+	dropped   atomic.Uint64
+	done      chan struct{}
+}
+
+func Open(path string, retention time.Duration, log *slog.Logger) (*Store, error) {
+	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(4)
+	if _, err := db.Exec(schema); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("init schema: %w", err)
+	}
+	return &Store{
+		db:        db,
+		ch:        make(chan Entry, 8192),
+		retention: retention,
+		log:       log,
+		done:      make(chan struct{}),
+	}, nil
+}
+
+// Add queues an entry. It never blocks the DNS path: if the writer falls
+// behind, entries are dropped and counted.
+func (s *Store) Add(e Entry) {
+	select {
+	case s.ch <- e:
+	default:
+		s.dropped.Add(1)
+	}
+}
+
+// Run writes queued entries in batches and prunes old rows until ctx ends.
+func (s *Store) Run(ctx context.Context) {
+	defer close(s.done)
+	flush := time.NewTicker(time.Second)
+	prune := time.NewTicker(time.Hour)
+	defer flush.Stop()
+	defer prune.Stop()
+	s.prune()
+
+	batch := make([]Entry, 0, 1024)
+	for {
+		select {
+		case e := <-s.ch:
+			batch = append(batch, e)
+			if len(batch) >= 1000 {
+				s.write(batch)
+				batch = batch[:0]
+			}
+		case <-flush.C:
+			if len(batch) > 0 {
+				s.write(batch)
+				batch = batch[:0]
+			}
+		case <-prune.C:
+			s.prune()
+		case <-ctx.Done():
+			for {
+				select {
+				case e := <-s.ch:
+					batch = append(batch, e)
+					continue
+				default:
+				}
+				break
+			}
+			if len(batch) > 0 {
+				s.write(batch)
+			}
+			return
+		}
+	}
+}
+
+func (s *Store) Close() error {
+	<-s.done
+	return s.db.Close()
+}
+
+// CloseNow closes the database when Run was never started.
+func (s *Store) CloseNow() error { return s.db.Close() }
+
+func (s *Store) write(batch []Entry) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		s.log.Error("querylog begin", "err", err)
+		return
+	}
+	stmt, err := tx.Prepare(`INSERT INTO queries (ts, client, domain, qtype, status, reason, rcode, upstream, duration_us)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		tx.Rollback()
+		s.log.Error("querylog prepare", "err", err)
+		return
+	}
+	defer stmt.Close()
+	for _, e := range batch {
+		if _, err := stmt.Exec(e.Time.UnixMilli(), e.Client, e.Domain, e.QType, int(e.Status),
+			e.Reason, e.Rcode, e.Upstream, e.Duration.Microseconds()); err != nil {
+			tx.Rollback()
+			s.log.Error("querylog insert", "err", err)
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		s.log.Error("querylog commit", "err", err)
+	}
+}
+
+func (s *Store) prune() {
+	cutoff := time.Now().Add(-s.retention).UnixMilli()
+	res, err := s.db.Exec(`DELETE FROM queries WHERE ts < ?`, cutoff)
+	if err != nil {
+		s.log.Error("querylog prune", "err", err)
+		return
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		s.log.Info("querylog pruned", "rows", n)
+		s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
+	}
+}
+
+// ---- statistics ----
+
+type Summary struct {
+	Total        int64   `json:"total"`
+	Blocked      int64   `json:"blocked"`
+	Cached       int64   `json:"cached"`
+	Clients      int64   `json:"clients"`
+	AvgUpstreamM float64 `json:"avgUpstreamMs"`
+	Dropped      uint64  `json:"droppedLogEntries"`
+}
+
+func (s *Store) Summary(ctx context.Context, since time.Time) (Summary, error) {
+	var out Summary
+	var avgUs sql.NullFloat64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*),
+		       COALESCE(SUM(status = ?), 0),
+		       COALESCE(SUM(status = ?), 0),
+		       COUNT(DISTINCT client),
+		       AVG(CASE WHEN status = ? THEN duration_us END)
+		FROM queries WHERE ts >= ?`,
+		int(StatusBlocked), int(StatusCached), int(StatusAllowed), since.UnixMilli(),
+	).Scan(&out.Total, &out.Blocked, &out.Cached, &out.Clients, &avgUs)
+	out.AvgUpstreamM = avgUs.Float64 / 1000
+	out.Dropped = s.dropped.Load()
+	return out, err
+}
+
+type Bucket struct {
+	Start   int64 `json:"t"` // unix ms
+	Total   int64 `json:"total"`
+	Blocked int64 `json:"blocked"`
+}
+
+// Timeline returns one bucket per step from since until now, including
+// empty buckets so the chart has a continuous x axis.
+func (s *Store) Timeline(ctx context.Context, since time.Time, step time.Duration) ([]Bucket, error) {
+	stepMs := step.Milliseconds()
+	from := since.UnixMilli() / stepMs * stepMs
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT (ts / ?) * ? AS b, COUNT(*), COALESCE(SUM(status = ?), 0)
+		FROM queries WHERE ts >= ? GROUP BY b ORDER BY b`,
+		stepMs, stepMs, int(StatusBlocked), from)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	got := map[int64]Bucket{}
+	for rows.Next() {
+		var b Bucket
+		if err := rows.Scan(&b.Start, &b.Total, &b.Blocked); err != nil {
+			return nil, err
+		}
+		got[b.Start] = b
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	now := time.Now().UnixMilli()
+	var out []Bucket
+	for t := from; t <= now; t += stepMs {
+		b := got[t]
+		b.Start = t
+		out = append(out, b)
+	}
+	return out, nil
+}
+
+type TopItem struct {
+	Name     string `json:"name"`
+	Hostname string `json:"hostname,omitempty"` // clients only
+	Count    int64  `json:"count"`
+	Blocked  int64  `json:"blocked"`
+}
+
+// Top returns the most frequent domains or clients. kind is one of
+// "blocked", "allowed" or "clients".
+func (s *Store) Top(ctx context.Context, kind string, since time.Time, limit int) ([]TopItem, error) {
+	var q string
+	switch kind {
+	case "blocked":
+		q = `SELECT domain, COUNT(*) AS c, COUNT(*) FROM queries
+		     WHERE ts >= ? AND status = 2 GROUP BY domain ORDER BY c DESC LIMIT ?`
+	case "allowed":
+		q = `SELECT domain, COUNT(*) AS c, 0 FROM queries
+		     WHERE ts >= ? AND status IN (0, 1, 3) GROUP BY domain ORDER BY c DESC LIMIT ?`
+	case "clients":
+		q = `SELECT client, COUNT(*) AS c, COALESCE(SUM(status = 2), 0) FROM queries
+		     WHERE ts >= ? GROUP BY client ORDER BY c DESC LIMIT ?`
+	default:
+		return nil, fmt.Errorf("unknown kind %q", kind)
+	}
+	rows, err := s.db.QueryContext(ctx, q, since.UnixMilli(), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []TopItem{}
+	for rows.Next() {
+		var it TopItem
+		if err := rows.Scan(&it.Name, &it.Count, &it.Blocked); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+type LogRow struct {
+	Time       int64   `json:"t"`
+	Client     string  `json:"client"`
+	ClientName string  `json:"clientName,omitempty"`
+	Domain     string  `json:"domain"`
+	QType      string  `json:"qtype"`
+	Status     string  `json:"status"`
+	Reason     string  `json:"reason,omitempty"`
+	Rcode      string  `json:"rcode,omitempty"`
+	Upstream   string  `json:"upstream,omitempty"`
+	DurationMs float64 `json:"ms"`
+}
+
+type LogFilter struct {
+	Status *Status
+	Search string // substring of domain or client
+	Limit  int
+	Offset int
+}
+
+// Recent returns one page of the log, newest first, and the number of rows
+// matching the filter.
+func (s *Store) Recent(ctx context.Context, f LogFilter) ([]LogRow, int64, error) {
+	var where []string
+	var args []any
+	if f.Status != nil {
+		where = append(where, "status = ?")
+		args = append(args, int(*f.Status))
+	}
+	if f.Search != "" {
+		like := "%" + escapeLike(strings.ToLower(f.Search)) + "%"
+		where = append(where, `(domain LIKE ? ESCAPE '\' OR client LIKE ? ESCAPE '\')`)
+		args = append(args, like, like)
+	}
+	cond := ""
+	if len(where) > 0 {
+		cond = " WHERE " + strings.Join(where, " AND ")
+	}
+	var total int64
+	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM queries"+cond, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	q := `SELECT ts, client, domain, qtype, status, reason, rcode, upstream, duration_us FROM queries` +
+		cond + " ORDER BY id DESC LIMIT ? OFFSET ?"
+	rows, err := s.db.QueryContext(ctx, q, append(args, f.Limit, f.Offset)...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	out := []LogRow{}
+	for rows.Next() {
+		var r LogRow
+		var st int
+		var us int64
+		if err := rows.Scan(&r.Time, &r.Client, &r.Domain, &r.QType, &st, &r.Reason, &r.Rcode, &r.Upstream, &us); err != nil {
+			return nil, 0, err
+		}
+		r.Status = Status(st).String()
+		r.DurationMs = float64(us) / 1000
+		out = append(out, r)
+	}
+	return out, total, rows.Err()
+}
+
+func escapeLike(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return r.Replace(s)
+}
