@@ -87,6 +87,9 @@ Verschlüsselung), Last- und Langzeittest auf der Box.
   den Upstreams.
 - P4 fertig (Modul 1.3.0): DoH (eigener Port statt Web-Port, damit 443 ohne Port in der URL geht und der Web-Kern
   unberuehrt bleibt), DoT, DoQ fuer Geraete; eigene Heimnetz-CA mit Name Constraints; iOS-/macOS-Profil.
+- P6 fertig (2294531, Modul 1.4.0): Benachrichtigungen (Upstream gestoert/wieder da, Blockliste nicht ladbar),
+  Freigaben uebernehmen per Liste; Lasttest lokal ca. 38.000 Anfragen/s ohne Verluste (p99 < 6 ms, ~106 MB RAM);
+  Box im Dauerbetrieb seit 2026-10-14 15:31 (Heimnetz, ~22 Geraete, 47 MB RAM, 0,1 % CPU).
 - Idee fuer spaeter: oeffentlich gueltiges Zertifikat per ACME (Let's Encrypt, DNS-01 ueber die ipv64-API mit dem
   zentralen API-Key) fuer eine ipv64-Domain, damit auch Android „Privates DNS“ ohne Weiteres geht.
 - Box seit 2026-10-14 15:31: node64 im Host-Netzwerk mit DNS64 auf Port 53, alter Container `dns64` gestoppt
