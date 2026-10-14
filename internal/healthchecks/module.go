@@ -49,7 +49,9 @@ type Module struct {
 	api        *ipv64api.Key                    // zentraler API-Key: Online-Checks ohne Sync (online_api.go)
 	groupRole  GroupRole                        // lokale Gruppe: wer benachrichtigt (groupnotify.go), nil = keine Gruppe
 	groupPeers func(ctx context.Context) []Peer // Nodes der lokalen Gruppe (Auswahl der Messstellen)
-	onl        onlineCache
+	// wer in der lokalen Gruppe benachrichtigt (Anzeige, groupnotify.go)
+	groupNotifier func(ctx context.Context, nodes []string) (key, name string)
+	onl           onlineCache
 	// pushFwd meldet einen lokal empfangenen Push an den hub (der ihn an andere Messstellen weitergibt)
 	pushFwd func(token string, down bool, msg, from string) bool
 	// runRemote bittet den hub, den Check bei den anderen messenden Nodes sofort zu messen
@@ -170,7 +172,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.4.0", Changelog: changelog}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.5.0", Changelog: changelog}
 }
 
 func (m *Module) Migrations() []store.Migration {

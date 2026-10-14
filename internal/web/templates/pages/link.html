@@ -88,11 +88,18 @@
 			<p class="text-body-secondary mb-0">{{.T "peer.need_account"}}</p>
 		{{else}}
 			<p class="text-body-secondary">{{.T "peer.hint"}}</p>
-			{{if $g.Members}}<ul class="list-group mb-3">{{range $g.Members}}
+			{{if $g.Members}}
+			<ul class="list-unstyled mb-3">
+				<li><i class="bi bi-arrow-left-right text-primary"></i> {{.T "peer.how_sync"}}</li>
+				<li><i class="bi bi-bell text-primary"></i> {{.T "peer.how_notify"}}</li>
+				<li><i class="bi bi-cloud-arrow-up text-primary"></i> {{if not $g.Forwarder}}{{.T "peer.fwd_none"}}{{else if $g.FwdSelf}}{{.T "peer.fwd_self"}}{{else}}{{.T "peer.fwd_other" "name" $g.Forwarder}}{{end}}</li>
+			</ul>
+			<ul class="list-group mb-3">{{range $g.Members}}
 				<li class="list-group-item">
 					<div class="d-flex align-items-center gap-2">
 						{{if .Online}}<span class="badge text-bg-success">online</span>{{else if .LastError}}<span class="badge text-bg-danger">{{$.T "peer.error"}}</span>{{else}}<span class="badge text-bg-secondary">offline</span>{{end}}
 						<span class="fw-semibold">{{.Name}}</span>{{if .Version}}<span class="text-body-secondary">{{.Version}}</span>{{end}}
+						{{if .Linked}}<span class="badge text-bg-light" title="{{$.T "peer.linked_hint"}}"><i class="bi bi-cloud-check"></i> ipv64</span>{{end}}
 						<form method="post" action="/link/group/{{.NodeID}}/remove" class="ms-auto m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" data-confirm="{{$.T "peer.remove_confirm" "name" .Name}}" title="{{$.T "peer.remove"}}"><i class="bi bi-x-lg"></i></button></form>
 					</div>
 					<form method="post" action="/link/group/{{.NodeID}}/url" class="input-group input-group-sm mt-1"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input class="form-control font-monospace" name="url" value="{{.URL}}" aria-label="URL"><button class="btn btn-outline-secondary" title="{{$.T "common.save"}}"><i class="bi bi-check-lg"></i></button></form>

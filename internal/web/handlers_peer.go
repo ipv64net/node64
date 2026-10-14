@@ -20,6 +20,9 @@ type groupData struct {
 	Code      string
 	CodeExp   time.Time
 	SelfURL   string // Adresse, unter der der Browser diese Node gerade erreicht
+	Linked    bool   // diese Node ist mit ipv64 verknuepft
+	Forwarder string // Node, die Aenderungen der Nodes ohne Sync an ipv64 weiterreicht ("" = keine)
+	FwdSelf   bool   // das ist diese Node
 }
 
 func (s *Server) peerRoutes() {
@@ -42,6 +45,8 @@ func (s *Server) groupView(r *http.Request) groupData {
 	g.Account = s.Peer.Account()
 	g.Members, _ = s.Peer.Members(r.Context())
 	g.Code, g.CodeExp = s.Peer.PairingCode()
+	g.Linked = s.Peer.LinkedSelf()
+	_, g.Forwarder, g.FwdSelf = s.Peer.Forwarder(r.Context())
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"

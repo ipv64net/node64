@@ -31,6 +31,11 @@ type GroupState struct {
 // SetGroupRole haengt die lokale Gruppe an (nil = keine Gruppe).
 func (m *Module) SetGroupRole(f GroupRole) { m.groupRole = f }
 
+// SetGroupNotifier haengt die Anzeige an, wer in der lokalen Gruppe benachrichtigt (Detailseite).
+func (m *Module) SetGroupNotifier(f func(ctx context.Context, nodes []string) (key, name string)) {
+	m.groupNotifier = f
+}
+
 // SetGroupPeers haengt die Nodes der lokalen Gruppe an: sie stehen zur Auswahl der messenden Nodes und
 // haben lesbare Namen, auch ohne hub.
 func (m *Module) SetGroupPeers(f func(ctx context.Context) []Peer) { m.groupPeers = f }
@@ -82,6 +87,29 @@ func measuredLately(c *Check, last time.Time) bool {
 		limit = peerFresh
 	}
 	return !last.IsZero() && time.Since(last) <= limit
+}
+
+// notifiedBy: wer fuer einen Check benachrichtigt (Anzeige auf der Detailseite): Schluessel unter hc.notifier
+// und Name der Node.
+func (m *Module) notifiedBy(ctx context.Context, c *Check) (key, name string) {
+	if c.Execution == "online" {
+		return "hub", ""
+	}
+	if m.groupNotifier != nil && len(c.Nodes) > 0 {
+		if key, name := m.groupNotifier(ctx, c.Nodes); key != "" { // Nodes der lokalen Gruppe messen mit
+			return key, name
+		}
+	}
+	if m.linked != nil && m.linked() {
+		return "hub", ""
+	}
+	if c.MeasuredHere() && !c.Foreign() {
+		return "self", ""
+	}
+	if names := m.nodeNames(ctx, c.Nodes); len(names) > 0 {
+		return "owner", names[0]
+	}
+	return "none", ""
 }
 
 // groupState: zuletzt bestimmter Gesamtzustand der Gruppe fuer einen Check.

@@ -48,7 +48,8 @@ type change struct {
 	ChangedAt time.Time               `json:"changed_at"`
 	Check     *wire.Check             `json:"check,omitempty"`
 	Maint     *healthchecks.PeerMaint `json:"maintenance,omitempty"`
-	Remote    int64                   `json:"remote,omitempty"` // Server-ID eines geloeschten Wartungsfensters
+	Remote    int64                   `json:"remote,omitempty"`   // Server-ID eines geloeschten Wartungsfensters
+	Settings  map[string]string       `json:"settings,omitempty"` // Benachrichtigungs-Einstellungen (settings.go)
 }
 
 type changesOut struct {
@@ -69,7 +70,7 @@ type pullState struct {
 // und von anderen Nodes) und stoesst die Gruppe an.
 func (m *Manager) LogChange(ctx context.Context, entity, id, op string) {
 	switch entity {
-	case "check":
+	case "check", "settings":
 	case "maintenance": // Kennung statt lokaler Nummer
 		if op == "delete" {
 			id = healthchecks.DeletedMaintUID(ctx)
@@ -193,6 +194,13 @@ func (m *Manager) handleChanges(w http.ResponseWriter, r *http.Request, _ *Membe
 	self := m.d.NodeID()
 	for _, c := range list {
 		out.Last = c.Seq
+		if c.Entity == "settings" {
+			if c.ChangedAt = m.settingsAt(ctx); !c.ChangedAt.IsZero() {
+				c.Settings = m.settingsBundle(ctx)
+				out.Items = append(out.Items, c)
+			}
+			continue
+		}
 		if c.Entity == "maintenance" {
 			mc := m.maint()
 			if mc == nil {
@@ -262,6 +270,7 @@ func (m *Manager) pullAll(ctx context.Context, only string) {
 	if m.checks() == nil {
 		return
 	}
+	m.checkSettings(ctx)
 	list, err := m.Members(ctx)
 	if err != nil {
 		return
@@ -336,6 +345,9 @@ func (m *Manager) forwardFor(ctx context.Context, origin string) bool {
 func (m *Manager) hubKnows(ctx context.Context, nodes []string) bool {
 	for _, id := range nodes {
 		if id == m.d.NodeID() {
+			if !m.linkedSelf() {
+				return false // diese Node misst mit und ist nicht verknuepft
+			}
 			continue
 		}
 		if x, _ := m.member(ctx, id); x != nil && !x.Linked {
@@ -393,6 +405,10 @@ func (m *Manager) pullFrom(ctx context.Context, x Member) error {
 		for _, c := range out.Items {
 			if c.Entity == "maintenance" {
 				applied += m.applyMaint(ctx, x, c)
+				continue
+			}
+			if c.Entity == "settings" {
+				applied += m.applySettings(ctx, c)
 				continue
 			}
 			if c.Origin == "hub" && m.linkedSelf() {

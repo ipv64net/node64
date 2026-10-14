@@ -194,7 +194,7 @@ func run() error {
 			}
 			return hcModule
 		},
-		Linked: syncClient.Linked, HubNotifies: syncClient.ServerSends,
+		Linked: syncClient.Linked, HubNotifies: syncClient.ServerSends, SettingsToHub: syncClient.NotifySettingsChanged,
 		Forward: func(ctx context.Context, entity, id, op string) { // Aenderung einer nicht verknuepften Node an den hub
 			if f := hcModule.Store().OnChange; f != nil {
 				f(context.WithoutCancel(ctx), entity, id, op)
@@ -205,6 +205,7 @@ func run() error {
 	}
 	hcModule.Store().OnAnyChange = peerMgr.LogChange
 	hcModule.SetGroupRole(peerMgr.NotifyRole)
+	hcModule.SetGroupNotifier(peerMgr.NotifierOf)
 	hcModule.SetGroupPeers(func(ctx context.Context) []healthchecks.Peer { // Nodes der lokalen Gruppe zur Auswahl
 		list, _ := peerMgr.Members(ctx)
 		out := make([]healthchecks.Peer, 0, len(list))

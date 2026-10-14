@@ -79,6 +79,8 @@ type Deps struct {
 	Linked    func() bool   // mit dem hub verknuepft (Healthchecks-Sync)
 	// HubNotifies: der hub ist verbunden und bestaetigt, er uebernimmt die Benachrichtigungen
 	HubNotifies func() bool
+	// SettingsToHub meldet geaenderte Benachrichtigungs-Einstellungen an den hub (settings.go)
+	SettingsToHub func()
 	// Forward reicht eine uebernommene Aenderung an den hub weiter (Outbox), wenn ihre Urheberin nicht verknuepft ist
 	Forward func(ctx context.Context, entity, id, op string)
 }

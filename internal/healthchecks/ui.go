@@ -402,6 +402,8 @@ type detailData struct {
 	Sources    []SourceRow // Messstellen (leer = nur diese Node)
 	NodeNames  []string    // messende Nodes (mehrere moeglich)
 	Diagnosis  string
+	Notifier   string // wer benachrichtigt: Schluessel unter hc.notifier (groupnotify.go)
+	NotifierBy string // Name der Node
 }
 
 func (m *Module) loadPage(w http.ResponseWriter, r *http.Request) *Check {
@@ -453,6 +455,7 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 	if c.Execution != "online" && len(c.Nodes) > 0 {
 		d.NodeNames = m.nodeNames(ctx, c.Nodes)
 	}
+	d.Notifier, d.NotifierBy = m.notifiedBy(ctx, c)
 	d.Events, _ = m.st.Events(ctx, c.Token, 50, 0)
 	d.Incidents, _ = m.st.Incidents(ctx, c.Token, 10)
 	if ms, err := m.st.Measurements(ctx, c.Token, time.Time{}, time.Time{}, 1, 0); err == nil && len(ms) > 0 {
@@ -869,7 +872,7 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 		d.QuotaToday, d.QuotaLimit, d.AccLocs = m.quota()
 		d.ProjOther = m.DailyProjection(r.Context(), d.Token, d.AccLocs)
 	}
-	if d.Linked {
+	if d.Linked || (m.groupPeers != nil && len(m.groupPeers(r.Context())) > 0) { // auch in der lokalen Gruppe ohne hub
 		d.Peers = m.peers(r.Context())
 		if d.Form["nodes"] == "" {
 			d.Form["nodes"] = selfNodeID() // neu bzw. bisher nur diese Node

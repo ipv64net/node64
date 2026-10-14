@@ -1,5 +1,16 @@
 # Änderungen – Healthchecks
 
+## 2.5.0 – 2026-10-14
+
+### Neu
+- Lokale Gruppe: Die Benachrichtigungs-Einstellungen des Accounts (Ruhezeiten, Grenzen, Sammelmeldung) werden
+  zwischen den Nodes abgeglichen; Änderungen auf einer Node ohne Healthchecks-Sync gehen über die Gruppe an ipv64.
+- Detailseite: „Benachrichtigt“ zeigt, wer bei einem Statuswechsel meldet (ipv64, diese Node oder eine Node der
+  Gruppe).
+- Die Gruppen-Karte erklärt, was abgeglichen wird, zeigt, welche Nodes mit ipv64 verknüpft sind und welche Node
+  Änderungen an ipv64 weiterreicht.
+- Die Auswahl der messenden Nodes steht auch ohne ipv64-Sync zur Verfügung, sobald die Node in einer Gruppe ist.
+
 ## 2.4.0 – 2026-10-14
 
 ### Neu
