@@ -304,6 +304,12 @@
     }
   },
   "hc": {
+    "quota": {
+      "reached": "Daily quota for online checks reached ({today} of {limit}). Online checks and push evaluation at ipv64 pause until midnight; local checks of this node keep running.",
+      "near": "Daily quota for online checks almost reached: {today} of {limit} today. After that, online checks pause until midnight."
+    },
+    "sync_rejected": "Rejected by ipv64",
+    "sync_rejected_hint": "The change only applies locally. Reduce online measuring points (locations, online/hybrid) or upgrade the account class, then save again.",
     "incident_list": {"title": "Incidents", "open_count": "{count} open", "summary": "{count} in {days} days", "days": "{days} days", "only_open": "open only", "check": "Check", "start": "Start", "end": "End", "duration": "Duration", "reason": "Reason", "none": "No incidents in this period.", "deleted": "deleted"},
     "sources": {"title": "Measuring points", "this_node": "This node", "source": "Measuring point", "last": "Last check", "message": "Message", "stale": "stale", "stale_hint": "No measurement from this point for a while (node offline or location changed)."},
     "diag": {"inside": "Down inside, OK outside: problem in the home network, on the node or the internal path.", "outside": "OK inside, down outside: internet uplink, port forwarding, DNS or firewall.", "both": "Down inside and outside: the service itself is affected."},
@@ -803,6 +809,8 @@
     "public": "no auth"
   },
   "link": {
+    "quota": "Online checks today",
+    "quota_value": "{today} of {limit}",
     "peers": "Nodes in this link",
     "peer_checks": "{count} checks",
     "peers_hint": "Known via the ipv64 hub servers. Nodes do not connect to each other directly; a check can be measured by several nodes.",

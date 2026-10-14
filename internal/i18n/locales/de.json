@@ -304,6 +304,12 @@
     }
   },
   "hc": {
+    "quota": {
+      "reached": "Tageskontingent für Online-Messungen erreicht ({today} von {limit}). Online-Messungen und Push-Auswertung bei ipv64 pausieren bis Mitternacht; die lokalen Messungen dieser Node laufen weiter.",
+      "near": "Tageskontingent für Online-Messungen fast erreicht: {today} von {limit} heute. Danach pausieren die Online-Messungen bis Mitternacht."
+    },
+    "sync_rejected": "Von ipv64 abgelehnt",
+    "sync_rejected_hint": "Die Änderung gilt nur lokal. Online-Messstellen reduzieren (Standorte, Online/Hybrid) oder die Account-Klasse erhöhen, dann erneut speichern.",
     "incident_list": {"title": "Störungen", "open_count": "{count} offen", "summary": "{count} in {days} Tagen", "days": "{days} Tage", "only_open": "nur offene", "check": "Check", "start": "Beginn", "end": "Ende", "duration": "Dauer", "reason": "Grund", "none": "Keine Störungen im Zeitraum.", "deleted": "gelöscht"},
     "sources": {"title": "Messstellen", "this_node": "Diese Node", "source": "Messstelle", "last": "Letzte Messung", "message": "Meldung", "stale": "veraltet", "stale_hint": "Von dieser Messstelle kam länger keine Messung (Node offline oder Standort umgestellt)."},
     "diag": {"inside": "Innen gestört, außen OK: Problem im Heimnetz, auf der Node oder im internen Pfad.", "outside": "Innen OK, außen gestört: Internetanbindung, Portweiterleitung, DNS oder Firewall.", "both": "Innen und außen gestört: der Dienst selbst ist betroffen."},
@@ -803,6 +809,8 @@
     "public": "ohne Anmeldung"
   },
   "link": {
+    "quota": "Online-Messungen heute",
+    "quota_value": "{today} von {limit}",
     "peers": "Nodes in dieser Verknüpfung",
     "peer_checks": "{count} Checks",
     "peers_hint": "Bekannt über die ipv64-Hub-Server. Die Nodes verbinden sich nicht direkt miteinander; ein Check kann von mehreren Nodes gemessen werden.",

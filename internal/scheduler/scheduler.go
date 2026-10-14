@@ -141,6 +141,8 @@ type Options struct {
 	FlapWindow    time.Duration // Zeitfenster; Standard 15 min
 	FlapCalm      time.Duration // Ruhe bis Ende des Flatterns; Standard 15 min
 	Jitter        float64       // Anteil des Intervalls, Standard 0.1
+	// Allow (optional, hub): false = Ausfuehrung auslassen, z. B. Tageskontingent erschoepft; push = Push-Auswertung
+	Allow func(token string, push bool) bool
 }
 
 type entry struct {
@@ -402,6 +404,12 @@ func (s *Scheduler) loop(e *entry) {
 // runOnce fuehrt den Check aus und verarbeitet das Ergebnis.
 func (s *Scheduler) runOnce(e *entry) {
 	ctx := s.ctx
+	if s.opts.Allow != nil && !s.opts.Allow(e.check.Token, e.check.Def.Type == checks.TypePush) {
+		e.mu.Lock()
+		e.rt.NextCheck = s.now().Add(e.check.Interval) // ausgelassen, Zustand bleibt
+		e.mu.Unlock()
+		return
+	}
 	results := s.runner.Run(ctx, e.check.Def)
 	if ctx.Err() != nil {
 		return

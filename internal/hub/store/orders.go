@@ -143,6 +143,12 @@ func (s *Store) PushInFrom(ctx context.Context, token string, down bool, msg, fr
 	if err != nil {
 		return false, err
 	}
+	if senderNode == "" && execution != "local" { // Push an die Online-Adresse: Tageskontingent
+		if s.DailyBlocked(uid) {
+			return false, ErrDailyLimit
+		}
+		s.countUse(uid)
+	}
 	details, _ := json.Marshal(map[string]string{"from": from, "via": "hub:" + s.location})
 	status, reason := 1, ""
 	if down {

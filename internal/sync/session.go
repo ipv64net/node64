@@ -203,6 +203,24 @@ func (s *session) handle(m wire.Msg) error {
 				c.mu.Unlock()
 			}
 		}
+	case "usage":
+		// Tageskontingent der Online-Checks (bei Sperre/Freigabe sofort, sonst alle 2 min)
+		var in struct {
+			Today int `json:"checks_today"`
+			Limit int `json:"checks_per_day"`
+		}
+		var acc wire.Account
+		if json.Unmarshal(m.Data, &in) == nil && json.Unmarshal([]byte(c.setting(SetAccount, "{}")), &acc) == nil {
+			if acc.Usage == nil {
+				acc.Usage = map[string]int{}
+			}
+			if acc.Limits == nil {
+				acc.Limits = map[string]int{}
+			}
+			acc.Usage["checks_today"], acc.Limits["checks_per_day"] = in.Today, in.Limit
+			b, _ := json.Marshal(acc)
+			c.set(SetAccount, string(b))
+		}
 	case "remote_states":
 		var in struct {
 			Items []healthchecks.RemoteState `json:"items"`

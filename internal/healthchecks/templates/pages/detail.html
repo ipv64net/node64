@@ -8,6 +8,7 @@
 			{{if $d.Row.Retrying}}<i class="bi bi-arrow-repeat text-warning fs-6" title="{{.T "hc.retrying"}}"></i>{{end}}
 			{{if $d.Row.Maint}}<span class="badge text-bg-secondary"><i class="bi bi-wrench"></i> {{.T "hc.maintenance"}}</span>{{end}}
 		</h1>
+		{{if $d.Row.SyncErr}}<div class="alert alert-danger py-2 small mb-2"><i class="bi bi-cloud-slash"></i> {{.T "hc.sync_rejected"}}: {{$d.Row.SyncErr}}<br>{{.T "hc.sync_rejected_hint"}}</div>{{end}}
 		<div class="text-body-secondary small">
 			<span class="badge text-bg-light">{{.T (print "hc.type." $c.Type)}}</span>
 			{{if eq $c.Owner "online"}}<span class="badge text-bg-light hc-exec" title="{{$.T "hc.owner.online_hint"}}"><i class="bi bi-cloud"></i> {{$.T "hc.owner.online"}}</span>

@@ -427,17 +427,23 @@ func (s *Store) Unlink(ctx context.Context, n *Node, keepChecks bool) error {
 // Account liefert Klasse und Limits fuer hello.
 func (s *Store) Account(ctx context.Context, userID int64) (wire.Account, error) {
 	var a wire.Account
-	var class, limit, hcloc, sms int
-	err := s.db.QueryRowContext(ctx, `SELECT user_class, healthcheck_limit, hc_locations, sms_limit FROM ipv64.hc2_users_v WHERE id = ?`, userID).Scan(&class, &limit, &hcloc, &sms)
+	var class, limit, hcloc, sms, daily int
+	err := s.db.QueryRowContext(ctx, `SELECT v.user_class, v.healthcheck_limit, v.hc_locations, v.sms_limit, c.healthcheck_update_limit FROM ipv64.hc2_users_v v
+		JOIN ipv64.user_class c ON c.id = v.user_class WHERE v.id = ?`, userID).Scan(&class, &limit, &hcloc, &sms, &daily)
 	if err != nil {
 		return a, err
 	}
 	a.ID, a.HCLocation = userID, hcloc
 	a.Plan = map[int]string{1: "Standard", 2: "VIP", 3: "Premium", 4: "Business", 5: "Company", 6: "Supporter"}[class]
-	a.Limits = map[string]int{"healthchecks_online": limit, "locations": hcloc, "sms_per_day": sms}
+	a.Limits = map[string]int{"healthchecks_online": limit, "locations": hcloc, "sms_per_day": sms, "checks_per_day": daily}
 	var smsToday int
 	_ = s.db.QueryRowContext(ctx, `SELECT count FROM hc2_sms_counter WHERE userid = ? AND day = ?`, userID, time.Now().UTC().Format("2006-01-02")).Scan(&smsToday)
-	a.Usage = map[string]int{"sms_today": smsToday}
+	var checksToday int
+	_ = s.db.QueryRowContext(ctx, `SELECT checks FROM hc2_usage_daily WHERE userid = ? AND day = ?`, userID, usageDay(time.Now())).Scan(&checksToday)
+	if mem, _, _ := s.DailyUsage(userID); mem > checksToday {
+		checksToday = mem
+	}
+	a.Usage = map[string]int{"sms_today": smsToday, "checks_today": checksToday}
 	return a, nil
 }
 

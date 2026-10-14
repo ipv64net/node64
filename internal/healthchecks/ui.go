@@ -62,8 +62,9 @@ type row struct {
 	Latency  float64
 	Pills    []Pill
 	Changed  time.Time
-	NextPush bool // NextAt ist die Frist fuer den naechsten Push
-	NextEst  bool // NextAt geschaetzt (misst eine andere Messstelle: letzte Messung + Intervall)
+	NextPush bool   // NextAt ist die Frist fuer den naechsten Push
+	SyncErr  string // ipv64 hat die letzte Aenderung abgelehnt (z. B. Online-Limit)
+	NextEst  bool   // NextAt geschaetzt (misst eine andere Messstelle: letzte Messung + Intervall)
 	NextAt   time.Time
 	Reason   string
 	Message  string
@@ -98,6 +99,9 @@ type listData struct {
 	DockerShown bool
 	Groups      []group
 	Grouped     bool     // mindestens ein Check hat eine Gruppe
+	QuotaToday  int      // Online-Messungen heute (Tageskontingent)
+	QuotaLimit  int      // Tageskontingent (0 = unbegrenzt/standalone)
+	QuotaNear   bool     // mindestens 90 % verbraucht
 	AllGrps     []string // alle Gruppennamen (Filter, Vorschlaege)
 	Rows        []row
 	Types       []checks.Type
@@ -209,6 +213,11 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 	f := map[string]string{"state": q.Get("state"), "type": q.Get("type"), "tag": q.Get("tag"), "group": q.Get("group"), "q": strings.TrimSpace(q.Get("q"))}
 	d := listData{Types: checks.Types, States: listStates, Filter: f, Sort: q.Get("sort"), Dir: q.Get("dir"), Counts: map[string]int{}}
 	tagSet, grpSet := map[string]bool{}, map[string]bool{}
+	if m.quota != nil {
+		d.QuotaToday, d.QuotaLimit = m.quota()
+		d.QuotaNear = d.QuotaLimit > 0 && d.QuotaToday*10 >= d.QuotaLimit*9
+	}
+	syncErrs := m.OutboxErrors(ctx)
 	for _, c := range list {
 		for _, t := range c.Tags {
 			tagSet[t] = true
@@ -217,6 +226,7 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 			grpSet[c.Group] = true
 		}
 		rw := m.rowOf(ctx, lang, c, pills)
+		rw.SyncErr = syncErrs[c.Token]
 		if t, ok := certs[c.Token]; ok {
 			rw.CertTill, rw.CertDays = t, int(time.Until(t).Hours()/24)
 		}
@@ -410,6 +420,7 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := detailData{Row: m.rowOf(ctx, lang, c, pills), JSON: m.toJSON(c, r), Pills: pills[c.Token], PushURL: ""}
+	d.Row.SyncErr = m.OutboxErrors(ctx)[c.Token]
 	d.Row.CertDays = -1
 	if t, ok := m.st.CertExpiries(ctx)[c.Token]; ok {
 		d.Row.CertTill, d.Row.CertDays = t, int(time.Until(t).Hours()/24)

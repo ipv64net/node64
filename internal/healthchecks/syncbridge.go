@@ -445,6 +445,23 @@ func (m *Module) OutboxPending(ctx context.Context) ([]Outbox, error) {
 	return out, rows.Err()
 }
 
+// OutboxErrors: Checks, deren Aenderung ipv64 abgelehnt hat (z. B. Online-Limit), Token -> Grund.
+func (m *Module) OutboxErrors(ctx context.Context) map[string]string {
+	out := map[string]string{}
+	rows, err := m.st.r.QueryContext(ctx, `SELECT entity_id, error FROM hc_outbox WHERE entity = 'check' AND status = 'pending' AND error IS NOT NULL AND error != ''`)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, e string
+		if rows.Scan(&id, &e) == nil {
+			out[id] = e
+		}
+	}
+	return out
+}
+
 func (m *Module) OutboxCount(ctx context.Context) int {
 	var n int
 	_ = m.st.r.QueryRowContext(ctx, `SELECT COUNT(*) FROM hc_outbox WHERE status = 'pending'`).Scan(&n)

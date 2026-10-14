@@ -134,6 +134,7 @@ func run() error {
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)
 	hcModule.SetLinked(syncClient.Linked)
+	hcModule.SetQuota(syncClient.Quota)
 	hcModule.SetPushForward(syncClient.ForwardPush)
 	hcModule.SetRunRemote(syncClient.RunRemote)
 	go netstat.Loop(ctx, st) // Datenverkehr des Containers fuer das Dashboard

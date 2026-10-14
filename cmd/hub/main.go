@@ -74,6 +74,7 @@ func run(cfgPath string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	go st.UsageLoop(ctx) // Tageskontingent der Online-Checks
 
 	// Benachrichtigungen: Kanal-Geheimnisse mit dem gemeinsamen Schluessel, Versand ueber Bruecke + direkte Sender
 	var box *secrets.Box

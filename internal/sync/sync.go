@@ -83,6 +83,8 @@ type State struct {
 	RxBytes     int64  // Sync-Verkehr seit Start (empfangen)
 	TxBytes     int64  // Sync-Verkehr seit Start (gesendet)
 	OnlineLimit int    // Online-Messstellen laut Account (0 = unbegrenzt)
+	ChecksToday int    // Online-Messungen und Pushes heute (Tageskontingent)
+	ChecksLimit int    // Tageskontingent laut Account (0 = unbegrenzt)
 	Locations   int    // Standorte je Check laut Account
 	Revision    int64
 	Endpoints   []wire.Endpoint
@@ -325,6 +327,7 @@ func (c *Live) State() State {
 	if raw := c.setting(SetAccount, ""); raw != "" && json.Unmarshal([]byte(raw), &acc) == nil {
 		st.AccountID, st.Plan = strconv.FormatInt(acc.ID, 10), acc.Plan
 		st.OnlineLimit, st.Locations = acc.Limits["healthchecks_online"], acc.Limits["locations"]
+		st.ChecksToday, st.ChecksLimit = acc.Usage["checks_today"], acc.Limits["checks_per_day"]
 	}
 	if exp := c.setting(SetPendExp, ""); exp != "" {
 		if t, err := time.Parse(time.RFC3339, exp); err == nil && time.Now().Before(t) {
@@ -456,6 +459,18 @@ func (c *Live) pollPending(code string, exp time.Time) {
 			c.log.Debug("link poll", "err", err)
 		}
 	}
+}
+
+// Quota liefert das Tageskontingent der Online-Checks (heute, Limit; Limit 0 = unbegrenzt oder unbekannt).
+func (c *Live) Quota() (today, limit int) {
+	if !c.Linked() {
+		return 0, 0
+	}
+	var acc wire.Account
+	if raw := c.setting(SetAccount, ""); raw == "" || json.Unmarshal([]byte(raw), &acc) != nil {
+		return 0, 0
+	}
+	return acc.Usage["checks_today"], acc.Limits["checks_per_day"]
 }
 
 // LinkPoll fragt nach, ob der Code eingeloest wurde. true = jetzt verknuepft.

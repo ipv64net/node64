@@ -134,7 +134,7 @@ func (c *Checker) Start(ctx context.Context) error {
 	}
 	c.lastPush = time.Now().UTC()
 	runner := checks.NewRunner()
-	c.sched = scheduler.New(c.st, notifier{c.log}, runner, c.log, scheduler.Options{Workers: c.workers})
+	c.sched = scheduler.New(c.st, notifier{c.log}, runner, c.log, scheduler.Options{Workers: c.workers, Allow: c.st.AllowRun})
 	nodes, _ := c.st.LiveNodes(ctx)
 	c.slotIdx, c.slotMod = c.st.SlotShare(nodes)
 	if len(nodes) > 0 {
@@ -536,6 +536,7 @@ func (c *Checker) housekeepingLoop(ctx context.Context) {
 				c.log.Error("daily aggregation failed", "err", err)
 			}
 			c.st.Cleanup(ctx, now)
+			c.st.PruneUsage(ctx)
 			lastDaily = day
 		}
 	}

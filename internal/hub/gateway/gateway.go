@@ -405,6 +405,11 @@ func (g *Gateway) push(w http.ResponseWriter, r *http.Request) {
 		msg = r.URL.Query().Get("message")
 	}
 	ok, err := g.st.PushIn(r.Context(), token, down, msg, clientIP(r))
+	if errors.Is(err, store.ErrDailyLimit) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprint(w, "Daily limit reached")
+		return
+	}
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprint(w, "Error")

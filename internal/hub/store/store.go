@@ -54,6 +54,10 @@ type Store struct {
 	Metrics *Metrics
 	// OnOverall wird nach jedem benachrichtigungswuerdigen Wechsel des Gesamtzustands gerufen.
 	OnOverall func(OverallEvent)
+	// OnUsageFlip: Tageskontingent eines Accounts erschoepft (true) bzw. wieder frei (false), usage.go.
+	OnUsageFlip func(userID int64, blocked bool)
+
+	use usage
 }
 
 // Open verbindet sich und prueft die Verbindung.

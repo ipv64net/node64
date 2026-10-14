@@ -6,11 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/ipv64net/node64/internal/hub/store"
 	"github.com/ipv64net/node64/internal/notify"
 )
 
@@ -65,6 +67,10 @@ func (g *Gateway) portalPush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ok, err := g.st.PushIn(r.Context(), in.Token, in.Down, in.Msg, in.From)
+	if errors.Is(err, store.ErrDailyLimit) {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "daily_limit": true})
+		return
+	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "database error")
 		return

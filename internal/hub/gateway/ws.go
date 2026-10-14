@@ -555,16 +555,49 @@ func (g *Gateway) markSeen(nodeID string) {
 	g.mu.Unlock()
 }
 
+// sendUsage schickt den Nodes eines Accounts den Stand des Tageskontingents der Online-Checks.
+func (g *Gateway) sendUsage(userID int64) {
+	today, limit, known := g.st.DailyUsage(userID)
+	if !known {
+		return
+	}
+	m := wire.Msg{T: "usage", Data: raw(map[string]any{"checks_today": today, "checks_per_day": limit, "blocked": g.st.DailyBlocked(userID)})}
+	g.mu.RLock()
+	conns := make([]*conn, 0, len(g.byUser[userID]))
+	for c := range g.byUser[userID] {
+		conns = append(conns, c)
+	}
+	g.mu.RUnlock()
+	for _, c := range conns {
+		c.send(m)
+	}
+}
+
 // seenLoop schreibt last_seen gebuendelt und erkennt veraltete Nodes (Housekeeper).
 func (g *Gateway) seenLoop() {
 	defer g.wg.Done()
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
+	g.st.OnUsageFlip = func(userID int64, _ bool) { g.sendUsage(userID) } // gesperrt/frei: sofort melden
+	tick := 0
 	for {
 		select {
 		case <-g.ctx.Done():
 			return
 		case <-t.C:
+			// Tageskontingent: Accounts der verbundenen Nodes abgleichen, alle 2 min den Stand schicken
+			g.mu.RLock()
+			uids := make([]int64, 0, len(g.byUser))
+			for id := range g.byUser {
+				uids = append(uids, id)
+			}
+			g.mu.RUnlock()
+			g.st.TrackUsage(uids)
+			if tick++; tick%4 == 0 {
+				for _, id := range uids {
+					g.sendUsage(id)
+				}
+			}
 			g.mu.Lock()
 			ids := make([]string, 0, len(g.seen))
 			for id := range g.seen {
