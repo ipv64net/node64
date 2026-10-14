@@ -105,7 +105,7 @@ Rahmen (entschieden, Dennis 2026-10-14):
 - Abweichung vom Plan: Der API-Key liegt **zentral in den Container-Einstellungen** (Paket `internal/ipv64api`), alle Module bedienen sich daran; Name und Ablaufdatum werden angezeigt.
 - Ergänzt: Auswahl je Name direkt in der Liste, Ziele unter ihrer Domain gruppiert, CGNAT/DS-Lite-Hinweis über die ersten Stationen, Schonfrist 3 min nach einem Update, Pause bei `ignore`/`cdn` in der Antwort.
 - D6: Meldungen (Adresswechsel, Fehler/Pause nur bei automatischen Läufen, Limit höchstens einmal am Tag) über die lokalen Standardkanäle, auch bei verknüpfter Node; in der Ruhezeit verworfen. Lokale API `/api/dyndns/*` (OpenAPI 1.2.0), Export/Import ohne Tokens, README.
-- Offen: IPv6 live (Box ohne IPv6), Dashboard-Kachel (Dashboard ist auf Healthchecks zugeschnitten), DynDNS-Meldungen über Server-Kanäle (ipv64-Mail/SMS gehen nur über den hub; der ist bewusst nicht beteiligt, lokale Kanäle funktionieren).
+- Offen: IPv6 live (Box ohne IPv6), Dashboard-Kachel (Dashboard ist auf Healthchecks zugeschnitten), (erledigt) DynDNS-Meldungen über ipv64-Mail/-SMS laufen seit 2026-10-14 direkt über die API v2 (`POST /hc2/channels/{id}/send`, zentraler API-Key), nicht über die hubs; Ende-zu-Ende mit dem Testaccount abgenommen (Mail angekommen, Design passt).
 
 ## Überblick: 6 Phasen
 
