@@ -248,6 +248,18 @@
     "proxy": "Reverse-Proxy",
     "link": "ipv64-Verknüpfung"
   },
+  "dyn": {
+    "title": "DynDNS-Updater",
+    "hint": "Hält ausgewählte Domains und Records bei ipv64 mit der öffentlichen Adresse dieses Anschlusses aktuell. Aktualisiert wird nur, wenn sich die Adresse wirklich geändert hat.",
+    "conn": {
+      "title": "Anschluss",
+      "none": "Noch nicht geprüft."
+    },
+    "targets": {
+      "title": "Ziele",
+      "empty": "Noch keine Ziele eingerichtet."
+    }
+  },
   "hc": {
     "incident_list": {"title": "Störungen", "open_count": "{count} offen", "summary": "{count} in {days} Tagen", "days": "{days} Tage", "only_open": "nur offene", "check": "Check", "start": "Beginn", "end": "Ende", "duration": "Dauer", "reason": "Grund", "none": "Keine Störungen im Zeitraum.", "deleted": "gelöscht"},
     "sources": {"title": "Messstellen", "this_node": "Diese Node", "source": "Messstelle", "last": "Letzte Messung", "message": "Meldung", "stale": "veraltet", "stale_hint": "Von dieser Messstelle kam länger keine Messung (Node offline oder Standort umgestellt)."},

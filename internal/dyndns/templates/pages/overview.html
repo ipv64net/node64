@@ -1,0 +1,19 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1 class="h4 mb-3"><img src="/static/img/dyndns64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{.T "dyn.title"}}</h1>
+<p class="text-body-secondary small">{{.T "dyn.hint"}}</p>
+<div class="row g-3">
+	<div class="col-lg-5">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-router text-info"></i> {{.T "dyn.conn.title"}}</div>
+			<div class="card-body small text-body-secondary">{{.T "dyn.conn.none"}}</div>
+		</div>
+	</div>
+	<div class="col-lg-7">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-globe text-primary"></i> {{.T "dyn.targets.title"}}</div>
+			{{if not $d.Targets}}<div class="card-body small text-body-secondary">{{.T "dyn.targets.empty"}}</div>{{end}}
+		</div>
+	</div>
+</div>
+{{end}}

@@ -365,7 +365,7 @@ func (s *Server) settingsView(r *http.Request) *View {
 	for k, l := range s.Log.ModuleLevels() {
 		d.LogModules[k] = logging.LevelName(l)
 	}
-	d.Modules2 = []string{"core", "web", "store", "scheduler", "notify", "healthchecks"}
+	d.Modules2 = []string{"core", "web", "store", "scheduler", "notify", "healthchecks", "dyndns"}
 	v.Data = d
 	v.Form = map[string]string{"node_name": d.NodeName, "location": d.Location, "lang": v.User.Lang, "timezone": v.User.Timezone, "level": d.LogLevel}
 	if v.Form["lang"] == "" {

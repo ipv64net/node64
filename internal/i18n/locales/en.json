@@ -248,6 +248,18 @@
     "proxy": "Reverse Proxy",
     "link": "ipv64 Link"
   },
+  "dyn": {
+    "title": "DynDNS updater",
+    "hint": "Keeps selected domains and records at ipv64 up to date with the public address of this connection. Updates are only sent when the address has actually changed.",
+    "conn": {
+      "title": "Connection",
+      "none": "Not checked yet."
+    },
+    "targets": {
+      "title": "Targets",
+      "empty": "No targets set up yet."
+    }
+  },
   "hc": {
     "incident_list": {"title": "Incidents", "open_count": "{count} open", "summary": "{count} in {days} days", "days": "{days} days", "only_open": "open only", "check": "Check", "start": "Start", "end": "End", "duration": "Duration", "reason": "Reason", "none": "No incidents in this period.", "deleted": "deleted"},
     "sources": {"title": "Measuring points", "this_node": "This node", "source": "Measuring point", "last": "Last check", "message": "Message", "stale": "stale", "stale_hint": "No measurement from this point for a while (node offline or location changed)."},
