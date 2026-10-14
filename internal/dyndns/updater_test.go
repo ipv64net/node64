@@ -156,6 +156,8 @@ func TestUpdaterFlapping(t *testing.T) {
 	dns.A = []string{"1.1.1.1"} // jemand anderes
 	for i := 0; i < 5; i++ {
 		m.runUpdates(ctx)
+		// naechste Runde nach der Schonfrist (die Nameserver zeigen weiter die fremde Adresse)
+		_, _ = m.core.Writer().Exec(`UPDATE dyn_targets SET last_ok_at = '2000-01-01T00:00:00Z' WHERE id = ?`, tg.ID)
 	}
 	got := reload(t, m, tg.ID)
 	if got.Paused != PauseFlapping || f.n() != flapMax {
@@ -217,5 +219,26 @@ func TestUpdaterIgnored(t *testing.T) {
 	got := reload(t, m, tg.ID)
 	if f.n() != 1 || got.Paused != PauseIgnored || got.LastIP4 != "" || got.Status() != "paused" {
 		t.Fatalf("calls %d, target %+v", f.n(), got)
+	}
+}
+
+// Kurz nach dem Update liefern die Nameserver noch den alten Stand: kein zweiter Aufruf, kein Flattern.
+func TestUpdaterDNSGrace(t *testing.T) {
+	ctx := context.Background()
+	m, f, dns := setupUpdater(t)
+	dns.A = []string{"1.2.3.4"}
+	tg := addTarget(t, m, "test", Mode4Auto, Mode6Off, "")
+	for i := 0; i < 4; i++ {
+		m.runUpdates(ctx)
+	}
+	got := reload(t, m, tg.ID)
+	if f.n() != 1 || got.Paused != "" || got.Status() != "pending" {
+		t.Fatalf("calls %d, status %s, paused %q", f.n(), got.Status(), got.Paused)
+	}
+	// nach der Schonfrist noch immer alt: dann wieder melden
+	_, _ = m.core.Writer().Exec(`UPDATE dyn_targets SET last_ok_at = '2000-01-01T00:00:00Z' WHERE id = ?`, tg.ID)
+	m.runUpdates(ctx)
+	if f.n() != 2 {
+		t.Fatalf("after grace: %d calls", f.n())
 	}
 }

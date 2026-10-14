@@ -437,7 +437,8 @@
       "error": "error",
       "new": "not synced yet",
       "off": "off",
-      "paused": "paused"
+      "paused": "paused",
+      "pending": "being applied"
     },
     "pause": {
       "badauth": "token rejected",

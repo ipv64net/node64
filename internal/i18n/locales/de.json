@@ -437,7 +437,8 @@
       "error": "Fehler",
       "new": "noch nicht abgeglichen",
       "off": "aus",
-      "paused": "pausiert"
+      "paused": "pausiert",
+      "pending": "wird übernommen"
     },
     "pause": {
       "badauth": "Token abgelehnt",

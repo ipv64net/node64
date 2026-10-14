@@ -24,7 +24,8 @@ import (
 const (
 	defaultUpdateURL = "https://ipv64.net/update.php"
 	flapWindow       = 2 * time.Hour
-	flapMax          = 3 // so oft in flapWindow von aussen geaendert -> Ziel pausieren
+	flapMax          = 3               // so oft in flapWindow von aussen geaendert -> Ziel pausieren
+	dnsGrace         = 3 * time.Minute // nach einem Update: alte DNS-Antwort heisst "wird uebernommen" (Bot bei ipv64)
 )
 
 // callGap ist der Mindestabstand zwischen zwei Aufrufen (Variable nur fuer Tests).
@@ -172,11 +173,15 @@ func (m *Module) updateTarget(ctx context.Context, t *Target, force bool, trigge
 			t.DNSState = 2
 		}
 	}
-	need4 := p.IP4 != "" && (p.IP4 != t.LastIP4 || (dns.Known && !dns.has(dns.A, p.IP4)))
-	need6 := p.IP6 != "" && (p.IP6 != t.LastIP6 || (dns.Known && !dns.has(dns.AAAA, p.IP6)))
+	// kurz nach einem Update liefern die Nameserver evtl. noch den alten Stand: dann nicht erneut melden
+	grace := !t.LastOKAt.IsZero() && now.Sub(t.LastOKAt) < dnsGrace
+	diff4 := dns.Known && p.IP4 != "" && !dns.has(dns.A, p.IP4) && !(grace && p.IP4 == t.LastIP4)
+	diff6 := dns.Known && p.IP6 != "" && !dns.has(dns.AAAA, p.IP6) && !(grace && p.IP6 == t.LastIP6)
+	need4 := p.IP4 != "" && (p.IP4 != t.LastIP4 || diff4)
+	need6 := p.IP6 != "" && (p.IP6 != t.LastIP6 || diff6)
 	needP := p.Prefix != "" && p.Prefix != t.LastPrefix
 	// von aussen geaendert: Soll unveraendert, aber DNS weicht ab
-	external := dns.Known && ((p.IP4 != "" && p.IP4 == t.LastIP4 && !dns.has(dns.A, p.IP4)) || (p.IP6 != "" && p.IP6 == t.LastIP6 && !dns.has(dns.AAAA, p.IP6)))
+	external := (diff4 && p.IP4 == t.LastIP4) || (diff6 && p.IP6 == t.LastIP6)
 	if external && !force && m.flapped(t.ID, now) {
 		t.Paused = PauseFlapping
 		m.log.Warn("target changed from elsewhere repeatedly, paused", "target", t.FQDN())
