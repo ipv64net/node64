@@ -51,7 +51,28 @@ type updState struct {
 	limitTill time.Time // Tageslimit erreicht
 	flaps     map[int64][]time.Time
 	nsCache   map[string]nsEntry
+	external  map[int64]bool     // letzte Runde sah eine Aenderung von aussen (erst die zweite in Folge zaehlt)
+	tback     map[int64]tBackoff // Rueckhalt je Ziel nach Server- oder Netzfehlern
+	alerted   map[int64]bool     // Fehler dieses Ziels wurde gemeldet (Entwarnung beim naechsten Erfolg)
 }
+
+// tBackoff haelt ein Ziel nach wiederholten Server- oder Netzfehlern zurueck.
+type tBackoff struct {
+	n     int
+	until time.Time
+}
+
+// ErrBusy: gerade laeuft schon ein Abgleich.
+var ErrBusy = errors.New("update already running")
+
+// Ergebnis von UpdateNow
+const (
+	NowSent    = "sent"    // an ipv64 gemeldet
+	NowNothing = "nothing" // nichts zu melden (keine aktuelle Adresse fuer die Modi)
+)
+
+// Automatische Pausen werden nach dieser Zeit erneut versucht (badauth nur mit neuem Token).
+var resumeAfter = map[string]time.Duration{PauseNoHost: 6 * time.Hour, PauseConflict: 6 * time.Hour, PauseIgnored: 6 * time.Hour, PauseFlapping: 6 * time.Hour}
 
 type nsEntry struct {
 	addrs []string
@@ -89,7 +110,7 @@ func (m *Module) planFor(t *Target) plan {
 	switch t.Mode6 {
 	case Mode6Host:
 		if v6.IP.IsValid() {
-			p.IP6 = v6.IP.String()
+			p.IP6 = m.stableFor(v6.IP).String()
 		} else {
 			p.Note = "ipv6 unknown"
 		}
@@ -123,6 +144,28 @@ func (m *Module) planFor(t *Target) plan {
 	return p
 }
 
+// stableFor ersetzt eine temporaere Privacy-Adresse dieses Hosts durch eine stabile aus demselben /64
+// (sonst wechselt der AAAA-Record taeglich). Ohne passende Adresse bleibt es bei der gesehenen.
+func (m *Module) stableFor(a netip.Addr) netip.Addr {
+	local := m.local()
+	temp := false
+	for _, l := range local {
+		if l.Addr == a && l.Temporary {
+			temp = true
+		}
+	}
+	if !temp {
+		return a
+	}
+	pfx := prefix64(a)
+	for _, l := range local {
+		if !l.Temporary && !l.Deprecated && pfx.Contains(l.Addr) {
+			return l.Addr
+		}
+	}
+	return a
+}
+
 // dnsView ist, was die Nameserver von ipv64 fuer den Namen liefern (Known=false: nicht abfragbar).
 type dnsView struct {
 	Known  bool
@@ -131,11 +174,17 @@ type dnsView struct {
 	Failed string
 }
 
+// has: die Soll-Adresse ist unter den ausgelieferten (mehrere A/AAAA sind erlaubt, z. B. Round-Robin).
 func (d dnsView) has(list []string, want string) bool {
-	return len(list) == 1 && list[0] == want
+	for _, x := range list {
+		if x == want {
+			return true
+		}
+	}
+	return false
 }
 
-// matches: liefert DNS genau die Soll-Adressen (Praefix-Modus laesst sich so nicht pruefen)?
+// matches: liefert DNS die Soll-Adressen (Praefix-Modus laesst sich so nicht pruefen)?
 func (d dnsView) matches(p plan) bool {
 	return (p.IP4 == "" || d.has(d.A, p.IP4)) && (p.IP6 == "" || d.has(d.AAAA, p.IP6))
 }
@@ -149,11 +198,18 @@ func (m *Module) runUpdates(ctx context.Context) {
 		m.log.Error("targets", "err", err)
 		return
 	}
+	now := time.Now()
 	for _, t := range list {
 		if ctx.Err() != nil {
 			return
 		}
-		if !t.Enabled || t.Paused != "" {
+		if !t.Enabled {
+			continue
+		}
+		if t.Paused != "" && !m.resume(ctx, t, now) {
+			continue
+		}
+		if m.heldBack(t.ID, now) {
 			continue
 		}
 		if stop := m.updateTarget(ctx, t, false, "auto"); stop {
@@ -163,10 +219,49 @@ func (m *Module) runUpdates(ctx context.Context) {
 }
 
 // UpdateNow gleicht ein Ziel sofort ab und meldet es auch ohne Abweichung (Knopf "Jetzt aktualisieren").
-func (m *Module) UpdateNow(ctx context.Context, t *Target) {
-	m.upd.run.Lock()
+// Laeuft gerade eine Runde, kommt ErrBusy (statt zu warten und die Zeit des Aufrufers zu verbrauchen).
+func (m *Module) UpdateNow(ctx context.Context, t *Target) (string, error) {
+	if !m.upd.run.TryLock() {
+		return "", ErrBusy
+	}
 	defer m.upd.run.Unlock()
+	t.Paused = ""
+	m.setPaused(ctx, t, "")
+	if p := m.planFor(t); p.IP4 == "" && p.IP6 == "" && p.Prefix == "" {
+		return NowNothing, nil
+	}
 	m.updateTarget(ctx, t, true, "manual")
+	return NowSent, nil
+}
+
+// resume nimmt eine automatische Pause wieder auf: nach Ablauf der Wartezeit, bei badauth nur mit neuem
+// Token (mit API-Key wird er geholt). true = Ziel jetzt abgleichen.
+func (m *Module) resume(ctx context.Context, t *Target, now time.Time) bool {
+	if t.Paused == PauseBadAuth {
+		if m.keyOf(ctx) == "" || now.Sub(t.LastErrAt) < time.Hour {
+			return false
+		}
+		old := t.Token
+		if err := m.refreshToken(ctx, t); err != nil || t.Token == old {
+			t.LastErrAt = now // naechster Versuch in einer Stunde
+			m.saveRuntime(ctx, t)
+			return false
+		}
+		m.log.Info("new record token fetched, target resumed", "target", t.FQDN())
+	} else if wait, ok := resumeAfter[t.Paused]; !ok || now.Sub(t.LastErrAt) < wait {
+		return false
+	}
+	m.log.Info("paused target retried", "target", t.FQDN(), "reason", t.Paused)
+	t.Paused = ""
+	m.setPaused(ctx, t, "")
+	return true
+}
+
+// heldBack: Ziel nach Server- oder Netzfehlern noch zurueckhalten?
+func (m *Module) heldBack(id int64, now time.Time) bool {
+	m.upd.mu.Lock()
+	defer m.upd.mu.Unlock()
+	return now.Before(m.upd.tback[id].until)
 }
 
 // updateTarget gleicht ein Ziel ab und ruft bei Bedarf (oder erzwungen) update.php auf.
@@ -183,7 +278,7 @@ func (m *Module) updateTarget(ctx context.Context, t *Target, force bool, trigge
 		}
 	}
 	// kurz nach einem Update liefern die Nameserver evtl. noch den alten Stand: dann nicht erneut melden
-	grace := !t.LastOKAt.IsZero() && now.Sub(t.LastOKAt) < dnsGrace
+	grace := !t.LastOKAt.IsZero() && now.Sub(t.LastOKAt) < max(dnsGrace, 2*m.interval())
 	diff4 := dns.Known && p.IP4 != "" && !dns.has(dns.A, p.IP4) && !(grace && p.IP4 == t.LastIP4)
 	diff6 := dns.Known && p.IP6 != "" && !dns.has(dns.AAAA, p.IP6) && !(grace && p.IP6 == t.LastIP6)
 	need4 := p.IP4 != "" && (p.IP4 != t.LastIP4 || diff4)
@@ -191,10 +286,12 @@ func (m *Module) updateTarget(ctx context.Context, t *Target, force bool, trigge
 	needP := p.Prefix != "" && p.Prefix != t.LastPrefix
 	// von aussen geaendert: Soll unveraendert, aber DNS weicht ab
 	external := (diff4 && p.IP4 == t.LastIP4) || (diff6 && p.IP6 == t.LastIP6)
-	if external && !force && m.flapped(t.ID, now) {
-		t.Paused = PauseFlapping
+	if !force && m.externalInRow(t.ID, external) && m.flapped(t.ID, now) {
+		t.Paused, t.LastError, t.LastErrAt = PauseFlapping, "changed from elsewhere repeatedly", now
 		m.log.Warn("target changed from elsewhere repeatedly, paused", "target", t.FQDN())
 		m.saveRuntime(ctx, t)
+		m.setPaused(ctx, t, PauseFlapping)
+		m.alertFail(ctx, t, "flapping")
 		return false
 	}
 	if force {
@@ -243,6 +340,16 @@ func (m *Module) blocked(now time.Time) (time.Duration, string) {
 		return u.backoff.Sub(now), "cooldown"
 	}
 	return 0, ""
+}
+
+// externalInRow merkt, ob die letzte Runde auch schon eine Aenderung von aussen sah; erst dann zaehlt sie
+// (eine einzelne verspaetete Antwort eines Nameservers loest nichts aus).
+func (m *Module) externalInRow(id int64, external bool) bool {
+	m.upd.mu.Lock()
+	defer m.upd.mu.Unlock()
+	prev := m.upd.external[id]
+	m.upd.external[id] = external
+	return external && prev
 }
 
 // flapped merkt eine Aenderung von aussen; true, wenn es zu oft war.
@@ -308,11 +415,15 @@ func (m *Module) call(ctx context.Context, t *Target, ip4, ip6, prefix, trigger 
 	start := time.Now()
 	r := m.doCall(ctx, q, t.Token)
 	r.Dur = time.Since(start)
+	if ctx.Err() != nil { // Modul stoppt oder Aufrufer weg: kein Ergebnis, nichts protokollieren
+		r.Err = "canceled"
+		return r
+	}
 	ok := 0
 	if r.OK {
 		ok = 1
 	}
-	if _, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dyn_updates (time, target_id, target, trigger, sent4, sent6, sent_prefix, http_status, status, info, ok, error, duration_ms)
+	if _, err := m.core.Writer().ExecContext(context.WithoutCancel(ctx), `INSERT INTO dyn_updates (time, target_id, target, trigger, sent4, sent6, sent_prefix, http_status, status, info, ok, error, duration_ms)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, store.FormatTime(start), t.ID, t.FQDN(), trigger, ip4, ip6, prefix, r.HTTP, r.Status, r.Info, ok, r.Err, r.Dur.Milliseconds()); err != nil {
 		m.log.Error("dyn_updates insert", "err", err)
 	}
@@ -347,7 +458,7 @@ func (m *Module) doCall(ctx context.Context, q url.Values, token string) updResu
 		IPv6Prefix json.RawMessage `json:"ipv6prefix"`
 		IP         json.RawMessage `json:"ip"`
 	}
-	_ = json.Unmarshal(body, &a)
+	parsed := json.Unmarshal(body, &a) == nil
 	var ips struct {
 		IPv4 string `json:"ipv4"`
 		IPv6 string `json:"ipv6"`
@@ -358,21 +469,23 @@ func (m *Module) doCall(ctx context.Context, q url.Values, token string) updResu
 		_ = json.Unmarshal(a.IPv6Prefix, &r.Prefix)
 	}
 	text := strings.ToLower(string(body))
-	low := strings.ToLower(r.Info + " " + r.Status)
+	info := strings.ToLower(strings.TrimSpace(r.Info))
 	switch {
 	case r.HTTP == http.StatusTooManyRequests && strings.Contains(text, "overcommited"):
 		r.Limit, r.Err = true, "daily update limit reached"
 	case r.HTTP == http.StatusTooManyRequests:
 		r.Cooldown, r.Err = true, "cooldown"
-	case r.HTTP == http.StatusUnauthorized || strings.Contains(low, "badauth"):
+	case r.HTTP == http.StatusUnauthorized || (parsed && info == "badauth"):
 		r.Pause, r.Err = PauseBadAuth, "token rejected (badauth)"
-	case r.HTTP == http.StatusNotFound || strings.Contains(low, "nohost"):
+	case r.HTTP == http.StatusNotFound || (parsed && info == "nohost"):
 		r.Pause, r.Err = PauseNoHost, "name not found (nohost)"
-	case r.HTTP == http.StatusConflict || strings.Contains(low, "cname"):
+	case r.HTTP == http.StatusConflict:
 		r.Pause, r.Err = PauseConflict, "conflict: "+firstNonEmpty(r.Info, "CNAME/CDN")
+	case r.HTTP == http.StatusOK && !parsed:
+		r.Err = "unexpected answer (no JSON)"
 	case r.HTTP == http.StatusOK && r.Prefix == "format error":
 		r.Err = "prefix format error"
-	case r.HTTP == http.StatusOK && (r.Status == "success" || r.Status == "" && q.Get("onlyprefix") != ""):
+	case r.HTTP == http.StatusOK && (r.Status == "success" || r.Status == "" && q.Get("onlyprefix") != "" && (r.Prefix != "" || r.Info != "")):
 		r.OK = true // bei geaendertem Praefix fehlt status
 	case r.HTTP == http.StatusOK:
 		r.Err = firstNonEmpty(r.Info, r.Status, "unexpected answer")
@@ -397,9 +510,12 @@ func (m *Module) doCall(ctx context.Context, q url.Values, token string) updResu
 // apply uebernimmt das Ergebnis in das Ziel und den gemeinsamen Zustand; true = Runde abbrechen.
 // Fehlermeldungen nur bei automatischen Laeufen (von Hand sieht man das Ergebnis sofort).
 func (m *Module) apply(ctx context.Context, t *Target, r updResult, ip4, ip6, prefix, trigger string) bool {
+	if ctx.Err() != nil {
+		return true // Modul stoppt: kein Fehler, keine Meldung
+	}
+	ctx = context.WithoutCancel(ctx)
 	now := time.Now()
 	u := m.upd
-	prevErr, prevPaused := t.LastError, t.Paused
 	switch {
 	case r.OK:
 		if ip4 != "" {
@@ -414,6 +530,7 @@ func (m *Module) apply(ctx context.Context, t *Target, r updResult, ip4, ip6, pr
 		t.LastOKAt, t.LastError = now, ""
 		u.mu.Lock()
 		u.step = 0
+		delete(u.tback, t.ID)
 		u.mu.Unlock()
 	case r.Limit:
 		u.mu.Lock()
@@ -427,21 +544,63 @@ func (m *Module) apply(ctx context.Context, t *Target, r updResult, ip4, ip6, pr
 		u.mu.Unlock()
 	case r.Pause != "":
 		t.Paused = r.Pause
+	default: // Server- oder Netzfehler: dieses Ziel 2, 4, 8 ... hoechstens 60 min zurueckhalten
+		u.mu.Lock()
+		b := u.tback[t.ID]
+		b.n++
+		b.until = now.Add(min(time.Duration(1<<min(b.n, 6))*time.Minute, time.Hour))
+		u.tback[t.ID] = b
+		u.mu.Unlock()
 	}
 	if !r.OK {
 		t.LastError, t.LastErrAt = r.Err, now
 	}
 	m.saveRuntime(ctx, t)
+	if r.Pause != "" {
+		m.setPaused(ctx, t, r.Pause)
+	}
 	switch {
 	case r.Limit:
-		if !m.limitNotifiedToday(ctx) {
+		if m.notifyOnce(ctx, setLimitReachedSent) {
 			m.alert(ctx, SetNotifyLimit, notify.KindDynLimit, "", "", "ipv64: daily update limit reached")
 		}
-	case r.OK || r.Cooldown || trigger == "manual":
-	case (t.Paused != "" && prevPaused == "") || prevErr == "": // Pause bzw. erster Fehler nach Erfolg, nicht jede Wiederholung
-		m.alert(ctx, SetNotifyFail, notify.KindDynFail, t.FQDN(), r.Err, "")
+	case r.OK:
+		m.alertOK(ctx, t)
+	case r.Cooldown || trigger == "manual":
+	default:
+		m.alertFail(ctx, t, r.Err)
 	}
 	return r.Limit || r.Cooldown
+}
+
+// alertFail meldet den Fehler eines Ziels einmal (bis zum naechsten Erfolg).
+func (m *Module) alertFail(ctx context.Context, t *Target, reason string) {
+	m.upd.mu.Lock()
+	done := m.upd.alerted[t.ID]
+	m.upd.alerted[t.ID] = true
+	m.upd.mu.Unlock()
+	if !done {
+		m.alert(ctx, SetNotifyFail, notify.KindDynFail, t.FQDN(), reason, "")
+	}
+}
+
+// alertOK meldet nach einem gemeldeten Fehler, dass das Ziel wieder aktualisiert wird.
+func (m *Module) alertOK(ctx context.Context, t *Target) {
+	m.upd.mu.Lock()
+	was := m.upd.alerted[t.ID]
+	delete(m.upd.alerted, t.ID)
+	m.upd.mu.Unlock()
+	if was {
+		m.alert(ctx, SetNotifyFail, notify.KindDynOK, t.FQDN(), "", "")
+	}
+}
+
+// setPaused speichert nur den Pausegrund (getrennt vom Laufzeitstand, damit eine gleichzeitige Bearbeitung
+// durch den Nutzer, z. B. neuer Token, nicht ueberschrieben wird).
+func (m *Module) setPaused(ctx context.Context, t *Target, reason string) {
+	if _, err := m.core.Writer().ExecContext(context.WithoutCancel(ctx), `UPDATE dyn_targets SET paused = ? WHERE id = ?`, reason, t.ID); err != nil {
+		m.log.Error("save pause", "err", err)
+	}
 }
 
 // saveRuntime speichert den Laufzeitstand eines Ziels.
@@ -452,8 +611,8 @@ func (m *Module) saveRuntime(ctx context.Context, t *Target) {
 		}
 		return store.FormatTime(x)
 	}
-	if _, err := m.core.Writer().ExecContext(ctx, `UPDATE dyn_targets SET paused = ?, last_ip4 = ?, last_ip6 = ?, last_prefix = ?, last_ok_at = ?, last_error = ?, last_err_at = ?, dns_state = ?, dns_at = ? WHERE id = ?`,
-		t.Paused, t.LastIP4, t.LastIP6, t.LastPrefix, ft(t.LastOKAt), t.LastError, ft(t.LastErrAt), t.DNSState, ft(t.DNSAt), t.ID); err != nil {
+	if _, err := m.core.Writer().ExecContext(context.WithoutCancel(ctx), `UPDATE dyn_targets SET last_ip4 = ?, last_ip6 = ?, last_prefix = ?, last_ok_at = ?, last_error = ?, last_err_at = ?, dns_state = ?, dns_at = ? WHERE id = ?`,
+		t.LastIP4, t.LastIP6, t.LastPrefix, ft(t.LastOKAt), t.LastError, ft(t.LastErrAt), t.DNSState, ft(t.DNSAt), t.ID); err != nil {
 		m.log.Error("save target state", "err", err)
 	}
 }
@@ -471,19 +630,31 @@ func (m *Module) lookupDNS(ctx context.Context, t *Target) dnsView {
 		v.Failed = "no nameserver"
 		return v
 	}
+	// bis zu zwei Nameserver fragen und zusammenfassen: liefert einer schon die neue Adresse, gilt sie als da
+	name := t.FQDN() + "." // absolut, keine Suchdomains
+	asked := 0
 	for _, ns := range servers {
+		if asked == 2 {
+			break
+		}
 		r := &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			d := net.Dialer{Timeout: 3 * time.Second}
 			return d.DialContext(ctx, "udp", ns)
 		}}
 		lctx, cancel := context.WithTimeout(ctx, 6*time.Second)
-		a, err4 := lookupFam(lctx, r, "ip4", t.FQDN())
-		aaaa, err6 := lookupFam(lctx, r, "ip6", t.FQDN())
+		a, err4 := lookupFam(lctx, r, "ip4", name)
+		aaaa, err6 := lookupFam(lctx, r, "ip6", name)
 		cancel()
-		if err4 == nil && err6 == nil {
-			return dnsView{Known: true, A: a, AAAA: aaaa}
+		if err4 != nil || err6 != nil {
+			v.Failed = firstNonEmpty(errText(err4), errText(err6))
+			continue
 		}
-		v.Failed = firstNonEmpty(errText(err4), errText(err6))
+		asked++
+		v.Known = true
+		v.A, v.AAAA = union(v.A, a), union(v.AAAA, aaaa)
+	}
+	if v.Known {
+		v.Failed = ""
 	}
 	return v
 }
@@ -546,6 +717,19 @@ func (m *Module) nameservers(ctx context.Context, domain string) ([]string, erro
 	u.nsCache[domain] = nsEntry{addrs: addrs, at: time.Now()}
 	u.mu.Unlock()
 	return addrs, nil
+}
+
+func union(a, b []string) []string {
+	for _, x := range b {
+		found := false
+		for _, y := range a {
+			found = found || x == y
+		}
+		if !found {
+			a = append(a, x)
+		}
+	}
+	return a
 }
 
 func errText(err error) string {

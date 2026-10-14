@@ -1,5 +1,31 @@
 # Änderungen – DynDNS-Updater
 
+## 1.1.0 – 2026-10-14
+
+Prüfauftrag: Ergebnisse des Code-Reviews umgesetzt.
+
+### Geändert
+- DNS-Abgleich: Die Soll-Adresse muss nur unter den ausgelieferten sein (mehrere A/AAAA erlaubt), beide Nameserver werden gefragt, der Name absolut (mit Punkt).
+- Schonfrist nach einem Update mindestens zwei Prüftakte; „wird woanders geändert“ zählt erst ab der zweiten Runde in Folge.
+- Automatische Pausen werden wieder aufgenommen: nohost, Konflikt, ignoriert und Flattern nach 6 h; badauth mit API-Key stündlich mit neu geholtem Token.
+- Pausen nur noch nach dem Status bzw. der info-Antwort von update.php, nicht nach Text irgendwo in der Antwort; im Präfix-Modus zählt eine 200 nur mit gültigem JSON.
+- Server- oder Netzfehler halten nur das betroffene Ziel zurück (2, 4, 8 … höchstens 60 min).
+- Im Modus „Adresse dieses Hosts“ wird eine temporäre Privacy-Adresse durch die stabile aus demselben /64 ersetzt.
+- Ohne eingeschaltetes Ziel ruht die regelmäßige Prüfung (keine Abfragen, keine Einträge, kein Limit-Abruf); „Jetzt prüfen“ geht weiter.
+- „Jetzt aktualisieren“ meldet „läuft gerade“ statt zu warten, und „nichts zu melden“, wenn keine aktuelle Adresse bekannt ist.
+- Token-Anzeige nur noch mit den letzten 4 Zeichen.
+- Audit über den Kern (Benutzer und IP wie dort), mit Ziel als Target; „Jetzt prüfen“ wird protokolliert.
+- Lokale API: Einstellungen (`GET|PUT /api/dyndns/settings`), Auswahl aus dem Account (`GET /api/dyndns/account/names`, `POST /api/dyndns/targets/from-account`), Token neu holen (`POST /api/dyndns/targets/{id}/token`).
+
+### Behoben
+- Warnung „Limit fast erreicht“ und „Limit erreicht“ teilten sich einen Tagesmerker; jetzt getrennt, Prüfen und Setzen unter Sperre, ohne Hintergrund-Goroutine.
+- Pause wegen „wird woanders geändert“ wurde nicht gemeldet.
+- Ein von Hand ausgelöster Fehler unterdrückte spätere automatische Fehlermeldungen; Meldungen jetzt einmal je Störung, Entwarnung sobald der Kern sie kennt.
+- Eine dauerhaft gestörte IP-Ermittlung (3 Runden in Folge) wurde nicht gemeldet.
+- Beim Stoppen während eines Updates kam eine Fehlermeldung „context canceled“; Protokoll wird auch bei abgebrochenem Aufrufer geschrieben.
+- Wurde während einer Runde ein Token gespeichert, schrieb die Runde die alte Pause zurück.
+- „Token neu holen“ nahm bei A und AAAA den falschen Record, wenn der AAAA zuerst kam.
+
 ## 1.0.1 – 2026-10-14
 
 ### Geändert

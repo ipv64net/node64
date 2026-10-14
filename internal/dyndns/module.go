@@ -58,16 +58,18 @@ type Module struct {
 
 	startedAt time.Time // Start des Moduls (Anschluss-Analyse danach neu, z. B. nach Wechsel des Netzwerkmodus)
 
-	stMu sync.Mutex
-	fam  [2]famState // [0] IPv4, [1] IPv6
-	lim  limitInfo   // Update-Limit des Accounts (mit API-Key)
+	stMu      sync.Mutex
+	fam       [2]famState // [0] IPv4, [1] IPv6
+	lim       limitInfo   // Update-Limit des Accounts (mit API-Key)
+	ipFail    [2]int      // Fehlversuche der IP-Ermittlung in Folge je Familie (Meldung ab ipFailAlert)
+	ipAlerted [2]bool
 }
 
 // New erzeugt das Modul. dispatcher darf nil sein.
 func New(core *store.Store, log *slog.Logger, box *secrets.Box, dispatcher *notify.Dispatcher, version string) *Module {
 	m := &Module{core: core, log: log.With("module", Name), box: box, dispatcher: dispatcher, version: version,
 		fetch: newFetcher("node64/" + version), probe: defaultProbe, trace: traceUDP, trigger: make(chan chan struct{}),
-		upd: &updState{flaps: map[int64][]time.Time{}, nsCache: map[string]nsEntry{}}, updateURL: defaultUpdateURL,
+		upd: &updState{flaps: map[int64][]time.Time{}, nsCache: map[string]nsEntry{}, external: map[int64]bool{}, tback: map[int64]tBackoff{}, alerted: map[int64]bool{}}, updateURL: defaultUpdateURL,
 		httpc: &http.Client{Timeout: 20 * time.Second}, local: localIPv6}
 	if dispatcher != nil {
 		m.notifier = dispatcher.Dispatch
@@ -101,7 +103,7 @@ func (m *Module) adoptOldKey(ctx context.Context) {
 
 func (m *Module) Info() module.Info {
 	return module.Info{Name: Name, TitleKey: "nav.dyndns", Icon: "bi-globe", Image: "dyndns64.webp", Path: "/dyndns", Available: true, Order: 20,
-		Version: "1.0.1", Changelog: changelog}
+		Version: "1.1.0", Changelog: changelog}
 }
 
 func (m *Module) Migrations() []store.Migration {

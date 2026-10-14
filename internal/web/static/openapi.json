@@ -664,7 +664,7 @@
           },
           "token_hint": {
             "type": "string",
-            "description": "nur Anfang und Ende des Tokens"
+            "description": "nur die letzten 4 Zeichen des Tokens"
           },
           "mode4": {
             "type": "string",
@@ -704,7 +704,7 @@
           },
           "paused": {
             "type": "string",
-            "description": "Grund einer automatischen Pause: badauth, nohost, conflict, flapping, ignored (leer = keine)"
+            "description": "Grund einer automatischen Pause: badauth (mit API-Key wird stündlich ein neuer Token versucht), nohost, conflict, flapping, ignored (je nach 6 h erneut versucht); leer = keine"
           },
           "status": {
             "type": "string",
@@ -1277,6 +1277,113 @@
           },
           "blocked": {
             "type": "integer"
+          }
+        }
+      },
+      "DynDNSSettings": {
+        "type": "object",
+        "properties": {
+          "interval_minutes": {
+            "type": "integer",
+            "enum": [
+              1,
+              2,
+              5,
+              10,
+              15,
+              30,
+              60
+            ]
+          },
+          "source4": {
+            "type": "string",
+            "description": "eigene Prüf-URL IPv4 (leer = ipv64)"
+          },
+          "source6": {
+            "type": "string",
+            "description": "eigene Prüf-URL IPv6 (leer = ipv64)"
+          },
+          "keep_checks_days": {
+            "type": "integer",
+            "enum": [
+              7,
+              30,
+              90,
+              365
+            ]
+          },
+          "keep_updates_days": {
+            "type": "integer",
+            "enum": [
+              90,
+              365,
+              0
+            ],
+            "description": "0 = unbegrenzt"
+          },
+          "notify_ip": {
+            "type": "boolean"
+          },
+          "notify_fail": {
+            "type": "boolean"
+          },
+          "notify_limit": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DynDNSAccountName": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "\"<domain>|<host>\" für targets/from-account"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "fqdn": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "dyndns",
+              "own"
+            ]
+          },
+          "a": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "aaaa": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "suffix_of": {
+            "type": "string",
+            "description": "Interface-ID aus dem vorhandenen AAAA (für mode6=suffix)"
+          },
+          "default_mode4": {
+            "type": "string"
+          },
+          "default_mode6": {
+            "type": "string"
+          },
+          "exists": {
+            "type": "boolean",
+            "description": "schon als Ziel eingerichtet"
+          },
+          "blocked": {
+            "type": "string",
+            "description": "nicht wählbar (CDN, Failover)"
           }
         }
       }
@@ -2707,7 +2814,7 @@
           "DynDNS"
         ],
         "summary": "Stand: öffentliche IPv4/IPv6 und Präfix, Anschluss-Hinweis (CGNAT/DS-Lite), Ziele nach Status, Update-Limit",
-        "description": "`limit` nur mit ipv64-API-Key (Einstellungen): `used`/`limit` des Accounts (0 = unbegrenzt) und `own_24h` = Aufrufe dieser Node. `connection.suspect`: cgnat oder dslite, wenn die ersten Stationen ins Internet darauf hindeuten (nicht sicher erkennbar).",
+        "description": "`limit` nur mit ipv64-API-Key (Einstellungen): `used`/`limit` des Accounts (0 = unbegrenzt) und `own_24h` = Aufrufe dieser Node. `connection.suspect`: cgnat oder dslite, wenn die ersten Stationen ins Internet darauf hindeuten (nicht sicher erkennbar). Ohne eingeschaltetes Ziel ruht die regelmäßige Prüfung; POST /dyndns/check prüft trotzdem.",
         "responses": {
           "200": {
             "description": "OK"
@@ -2937,20 +3044,23 @@
           "DynDNS"
         ],
         "summary": "Jetzt aktualisieren",
-        "description": "Meldet die Adresse sofort an ipv64, auch ohne Änderung (kostet Update-Limit), und hebt eine automatische Pause auf. Antwort: das Ziel mit Ergebnis (`status`, `last_error`).",
+        "description": "Meldet die Adresse sofort an ipv64, auch ohne Änderung (kostet Update-Limit), und hebt eine automatische Pause auf. Antwort {\"result\": \"sent\" | \"nothing\", \"target\": ...}; \"nothing\": für die Modi ist gerade keine aktuelle Adresse bekannt. 409, wenn gerade eine Runde läuft.",
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "OK"
+          },
+          "404": {
+            "description": "nicht gefunden",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DynDNSTarget"
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
           },
-          "404": {
-            "description": "nicht gefunden",
+          "409": {
+            "description": "Abgleich läuft gerade",
             "content": {
               "application/json": {
                 "schema": {
@@ -4131,6 +4241,246 @@
               "application/x-apple-aspen-config": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dyndns/settings": {
+      "get": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Einstellungen des Moduls",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DynDNSSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Einstellungen ändern",
+        "description": "Weggelassene Felder behalten ihren Wert.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DynDNSSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DynDNSSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültiger Wert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dyndns/account/names": {
+      "get": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Wählbare Namen aus dem ipv64-Account (ohne Tokens)",
+        "description": "Braucht den zentralen ipv64-API-Key. Je Name die vorhandenen A/AAAA-Records und die vorgeschlagenen Modi.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DynDNSAccountName"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-API-Key in den Einstellungen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dyndns/targets/from-account": {
+      "post": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Ziele aus dem Account anlegen",
+        "description": "Body: Liste aus {key, mode4, mode6}; leere Modi = Vorschlag. Die Record-Tokens holt die Node selbst von ipv64. Antwort: angelegte Ziele und nicht übernommene Namen.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "mode4": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "off"
+                      ]
+                    },
+                    "mode6": {
+                      "type": "string",
+                      "enum": [
+                        "host",
+                        "prefix",
+                        "suffix",
+                        "off"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt"
+          },
+          "400": {
+            "description": "ungültiges JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-API-Key in den Einstellungen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dyndns/targets/{id}/token": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "DynDNS"
+        ],
+        "summary": "Record-Token neu von ipv64 holen",
+        "description": "Hebt eine Pause wegen badauth auf.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DynDNSTarget"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Ziel oder Record nicht gefunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-API-Key in den Einstellungen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

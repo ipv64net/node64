@@ -19,6 +19,7 @@
 					{{end}}
 					{{if $d.V6.Prefix}}<dt class="col-4">{{.T "dyn.conn.prefix"}}</dt><dd class="col-8"><span class="font-monospace">{{$d.V6.Prefix}}</span></dd>{{end}}
 				</dl>
+				{{if $d.Idle}}<div class="alert alert-secondary py-2 mt-2 mb-0"><i class="bi bi-pause-circle"></i> {{.T "dyn.conn.idle"}}</div>{{end}}
 				{{if $d.Net.Kind}}<div class="alert alert-warning py-2 mt-2 mb-0"><i class="bi bi-exclamation-triangle"></i> {{.T (print "dyn.net." $d.Net.Kind) "hop" $d.Net.Hop}}
 					<div class="mt-1"><a href="https://ipv64.net/blog/cgnat/was-ist-ein-cgnat-carrier-grade-nat-100-64-0-0-10-ipv4-ipv6-glasfaser/" target="_blank" rel="noopener">{{.T "dyn.net.link_article"}}</a> · <a href="https://ipv64.net/faq#h-ds-lite" target="_blank" rel="noopener">{{.T "dyn.net.link_faq"}}</a> · <a href="https://ipv64.net/portmapper" target="_blank" rel="noopener">{{.T "dyn.net.link_portmapper"}}</a></div></div>
 				{{else if and (not $d.Net.At.IsZero) $d.Net.Hops}}<div class="text-body-secondary mt-2" title="{{$d.NetHops}}"><i class="bi bi-check2-circle text-success"></i> {{.T "dyn.net.ok"}}</div>{{end}}

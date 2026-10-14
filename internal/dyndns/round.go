@@ -96,16 +96,20 @@ func (m *Module) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			m.round(ctx)
-			m.maybeAnalyze(ctx)
-			m.runUpdates(ctx)
-			m.refreshLimit(ctx, limitEvery)
+			if m.hasActive(ctx) { // ohne aktive Ziele ruht das Modul (keine Abfragen, keine Protokollzeilen)
+				m.round(ctx)
+				m.maybeAnalyze(ctx)
+				m.runUpdates(ctx)
+				m.refreshLimit(ctx, limitEvery)
+			}
 			t.Reset(next())
-		case done := <-m.trigger:
+		case done := <-m.trigger: // "Jetzt pruefen": immer eine Runde
 			m.round(ctx)
-			m.maybeAnalyze(ctx)
-			m.runUpdates(ctx)
-			m.refreshLimit(ctx, limitEvery)
+			if m.hasActive(ctx) {
+				m.maybeAnalyze(ctx)
+				m.runUpdates(ctx)
+				m.refreshLimit(ctx, limitEvery)
+			}
 			close(done)
 			if !t.Stop() {
 				select {
@@ -130,6 +134,54 @@ func (m *Module) maybeAnalyze(ctx context.Context) {
 	}
 	if last.At.IsZero() || last.At.Before(m.startedAt) || time.Since(last.At) > 6*time.Hour || v4.ChangedAt.After(last.At) {
 		m.analyzePath(ctx)
+	}
+}
+
+// familyUsed: ein aktives Ziel braucht die Adresse dieser Familie.
+func (m *Module) familyUsed(ctx context.Context, fam int) bool {
+	q := `SELECT count(*) FROM dyn_targets WHERE enabled = 1 AND mode4 = 'auto'`
+	if fam == 6 {
+		q = `SELECT count(*) FROM dyn_targets WHERE enabled = 1 AND mode6 IN ('host', 'prefix', 'suffix')`
+	}
+	var n int
+	_ = m.core.Reader().QueryRowContext(ctx, q).Scan(&n)
+	return n > 0
+}
+
+// hasActive: mindestens ein eingeschaltetes Ziel.
+func (m *Module) hasActive(ctx context.Context) bool {
+	var n int
+	_ = m.core.Reader().QueryRowContext(ctx, `SELECT count(*) FROM dyn_targets WHERE enabled = 1`).Scan(&n)
+	return n > 0
+}
+
+// ipFailAlert: so viele fehlgeschlagene Ermittlungen in Folge werden gemeldet (bei 5 min Takt: 15 min).
+const ipFailAlert = 3
+
+// trackIPFailure meldet eine dauerhaft gestoerte IP-Ermittlung einmal und gibt Entwarnung, wenn sie wieder klappt.
+func (m *Module) trackIPFailure(ctx context.Context, fam int, failed bool, errText string) {
+	i := famIdx(fam)
+	m.stMu.Lock()
+	if failed {
+		m.ipFail[i]++
+	} else {
+		m.ipFail[i] = 0
+	}
+	n, alerted := m.ipFail[i], m.ipAlerted[i]
+	send, recover := failed && n >= ipFailAlert && !alerted, !failed && alerted
+	if send {
+		m.ipAlerted[i] = true
+	}
+	if recover {
+		m.ipAlerted[i] = false
+	}
+	m.stMu.Unlock()
+	name := "IPv" + strconv.Itoa(fam)
+	switch {
+	case send:
+		m.alert(ctx, SetNotifyFail, notify.KindDynFail, name, errText, "public "+name+" address not determined "+strconv.Itoa(n)+" times in a row")
+	case recover:
+		m.alert(ctx, SetNotifyFail, notify.KindDynOK, name, "", "")
 	}
 }
 
@@ -185,6 +237,9 @@ func (m *Module) checkFamily(ctx context.Context, fam int) {
 		m.log.Info("no route for address family", "family", fam)
 	} else if prev.Err != cur.Err { // Fehler nur beim Wechsel laut melden
 		m.log.Warn("public address not determined", "family", fam, "err", cur.Err)
+	}
+	if !cur.NoRoute && m.familyUsed(ctx, fam) {
+		m.trackIPFailure(ctx, fam, !addr.IsValid(), cur.Err)
 	}
 	ip := ""
 	if addr.IsValid() {

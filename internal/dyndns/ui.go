@@ -3,6 +3,7 @@ package dyndns
 import (
 	"context"
 	"embed"
+	"errors"
 	"io/fs"
 	"net/http"
 	"strconv"
@@ -76,6 +77,7 @@ func groupTargets(list []*Target) []targetGroup {
 }
 
 type overviewData struct {
+	Idle      bool // kein aktives Ziel: Pruefung ruht
 	Targets   int
 	List      []*Target
 	Groups    []targetGroup
@@ -136,6 +138,7 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 	}
 	d.List, _ = m.Targets(ctx)
 	d.Targets, d.Groups = len(d.List), groupTargets(d.List)
+	d.Idle = !m.hasActive(ctx)
 	d.KeepC, d.KeepU = m.keepDays(ctx, SetKeepChecks, 30), m.keepDays(ctx, SetKeepUpdates, 365)
 	d.KeepCOpts, d.KeepUOpts = KeepChecksOptions, KeepUpdatesOptions
 	d.NotifyIP, d.NotifyErr, d.NotifyLim = m.notifyOn(ctx, SetNotifyIP), m.notifyOn(ctx, SetNotifyFail), m.notifyOn(ctx, SetNotifyLimit)
@@ -161,6 +164,7 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) pageCheckNow(w http.ResponseWriter, r *http.Request) {
+	m.audit(r, "dyndns.check", "", "")
 	if !m.checkNow(30 * time.Second) {
 		m.g.Flash(w, r, "warning", m.g.T(r, "dyn.conn.check_busy"))
 	}
@@ -168,39 +172,20 @@ func (m *Module) pageCheckNow(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) pageSettings(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	iv, err := strconv.Atoi(r.PostFormValue("interval"))
-	ok := err == nil
-	if ok {
-		ok = false
-		for _, o := range IntervalOptions {
-			ok = ok || o == iv
+	atoi := func(k string) int { n, _ := strconv.Atoi(r.PostFormValue(k)); return n }
+	s := moduleSettings{Interval: atoi("interval"), Source4: r.PostFormValue("source4"), Source6: r.PostFormValue("source6"),
+		KeepChecks: atoi("keep_checks"), KeepUpdates: atoi("keep_updates"),
+		NotifyIP: r.PostFormValue("notify_ip") == "on", NotifyFail: r.PostFormValue("notify_fail") == "on", NotifyLimit: r.PostFormValue("notify_limit") == "on"}
+	if err := m.saveSettings(r.Context(), s); err != nil {
+		msg := err.Error()
+		if errors.Is(err, errSettings) {
+			msg = m.g.T(r, "dyn.settings.invalid")
 		}
-	}
-	s4, s6 := strings.TrimSpace(r.PostFormValue("source4")), strings.TrimSpace(r.PostFormValue("source6"))
-	kc, errC := strconv.Atoi(r.PostFormValue("keep_checks"))
-	ku, errU := strconv.Atoi(r.PostFormValue("keep_updates"))
-	okKeep := errC == nil && errU == nil && in(strconv.Itoa(kc), itoaList(KeepChecksOptions)) && in(strconv.Itoa(ku), itoaList(KeepUpdatesOptions))
-	if !ok || !okKeep || (s4 != "" && !validSource(s4)) || (s6 != "" && !validSource(s6)) || len(s4) > 300 || len(s6) > 300 {
-		m.g.Flash(w, r, "danger", m.g.T(r, "dyn.settings.invalid"))
+		m.g.Flash(w, r, "danger", msg)
 		http.Redirect(w, r, "/dyndns#settings", http.StatusSeeOther)
 		return
 	}
-	onoff := func(name string) string {
-		if r.PostFormValue(name) == "on" {
-			return "1"
-		}
-		return "0"
-	}
-	for k, v := range map[string]string{SetInterval: strconv.Itoa(iv), SetSource4: s4, SetSource6: s6, SetKeepChecks: strconv.Itoa(kc), SetKeepUpdates: strconv.Itoa(ku),
-		SetNotifyIP: onoff("notify_ip"), SetNotifyFail: onoff("notify_fail"), SetNotifyLimit: onoff("notify_limit")} {
-		if err := m.core.SetSetting(ctx, k, v); err != nil {
-			m.g.Flash(w, r, "danger", err.Error())
-			http.Redirect(w, r, "/dyndns#settings", http.StatusSeeOther)
-			return
-		}
-	}
-	m.audit(r, "dyndns.settings", "interval="+strconv.Itoa(iv)+"m")
+	m.audit(r, "dyndns.settings", "settings", "interval="+strconv.Itoa(s.Interval)+"m")
 	m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
 	http.Redirect(w, r, "/dyndns#settings", http.StatusSeeOther)
 }
@@ -222,12 +207,23 @@ func (m *Module) keepDays(ctx context.Context, key string, def int) int {
 	return n
 }
 
-func (m *Module) audit(r *http.Request, action, details string) {
+// audit schreibt ins Audit-Log ueber den Kern (gleiche Benutzer- und IP-Ermittlung); target ist der Name.
+func (m *Module) audit(r *http.Request, action, target, details string) {
+	if m.g.Audit != nil {
+		m.g.Audit(r, action, target, details)
+		return
+	}
 	ip := r.RemoteAddr
-	if i := strings.LastIndex(ip, ":"); i > 0 {
+	if m.g.ClientIP != nil {
+		ip = m.g.ClientIP(r)
+	} else if i := strings.LastIndex(ip, ":"); i > 0 {
 		ip = strings.Trim(ip[:i], "[]")
 	}
-	if err := m.core.Audit(r.Context(), store.AuditEntry{Actor: m.g.Actor(r), Action: action, Details: details, IP: ip, Origin: "local"}); err != nil {
+	actor := "api"
+	if m.g.Actor != nil {
+		actor = m.g.Actor(r)
+	}
+	if err := m.core.Audit(r.Context(), store.AuditEntry{Actor: actor, Action: action, Target: target, Details: details, IP: ip, Origin: "local"}); err != nil {
 		m.log.Error("audit", "err", err)
 	}
 }

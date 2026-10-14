@@ -2,10 +2,12 @@ package dyndns
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -162,11 +164,12 @@ func TestUpdaterFlapping(t *testing.T) {
 		_, _ = m.core.Writer().Exec(`UPDATE dyn_targets SET last_ok_at = '2000-01-01T00:00:00Z' WHERE id = ?`, tg.ID)
 	}
 	got := reload(t, m, tg.ID)
-	if got.Paused != PauseFlapping || f.n() != flapMax {
+	// erste Runde meldet, danach zaehlt "von aussen" erst ab der zweiten Runde in Folge: flapMax+1 Aufrufe
+	if got.Paused != PauseFlapping || f.n() != flapMax+1 {
 		t.Fatalf("paused %q after %d calls", got.Paused, f.n())
 	}
 	m.runUpdates(ctx) // pausiert -> nichts mehr
-	if f.n() != flapMax {
+	if f.n() != flapMax+1 {
 		t.Fatal("paused target must not be updated")
 	}
 }
@@ -310,5 +313,138 @@ func TestUpdaterSkipsStaleAddress(t *testing.T) {
 	m.runUpdates(ctx)
 	if f.n() != 1 || strings.Contains(f.last(), "ipv6=") || !strings.Contains(f.last(), "praefix=both") {
 		t.Fatalf("only the IPv4 of 'both' may be sent: %v", f.calls)
+	}
+}
+
+// Review 2026-10-14: mehrere A-Records, Rueckhalt nach Serverfehler, Wiederaufnahme, UpdateNow besetzt,
+// temporaere IPv6, onlyprefix ohne JSON, Meldungen einmal und nach manuellem Fehler.
+func TestUpdaterReviewFixes(t *testing.T) {
+	ctx := context.Background()
+	m, f, dns := setupUpdater(t)
+	var mu sync.Mutex
+	var alerts []notify.Alert
+	m.notifier = func(a notify.Alert) { mu.Lock(); alerts = append(alerts, a); mu.Unlock() }
+	fails := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		n := 0
+		for _, a := range alerts {
+			if a.Kind == notify.KindDynFail {
+				n++
+			}
+		}
+		return n
+	}
+
+	// zwei A-Records (Round-Robin), einer ist unsere Adresse: kein Update
+	dns.A = []string{"10.9.9.9", "93.184.216.34"}
+	rr := addTarget(t, m, "rr", Mode4Auto, Mode6Off, "")
+	_, _ = m.core.Writer().Exec(`UPDATE dyn_targets SET last_ip4 = '93.184.216.34' WHERE id = ?`, rr.ID)
+	m.runUpdates(ctx)
+	if f.n() != 0 {
+		t.Fatalf("round-robin must not trigger an update: %v", f.calls)
+	}
+	_ = m.DeleteTarget(ctx, rr.ID)
+
+	// Serverfehler: Meldung einmal, danach Rueckhalt statt Aufruf in jeder Runde
+	dns.A = nil
+	f.reply = func(string) (int, string) { return http.StatusInternalServerError, "oops" }
+	se := addTarget(t, m, "se", Mode4Auto, Mode6Off, "")
+	m.runUpdates(ctx)
+	m.runUpdates(ctx)
+	if f.n() != 1 || fails() != 1 {
+		t.Fatalf("server error: calls %d alerts %d", f.n(), fails())
+	}
+	// "Jetzt aktualisieren" scheitert ebenfalls: keine Meldung, blockiert aber spaetere automatische nicht
+	m.upd.mu.Lock()
+	delete(m.upd.tback, se.ID)
+	delete(m.upd.alerted, se.ID)
+	m.upd.mu.Unlock()
+	if res, err := m.UpdateNow(ctx, reload(t, m, se.ID)); err != nil || res != NowSent || fails() != 1 {
+		t.Fatalf("manual: %s %v alerts %d", res, err, fails())
+	}
+	m.upd.mu.Lock()
+	delete(m.upd.tback, se.ID) // Rueckhalt nach dem manuellen Fehler abgelaufen
+	m.upd.mu.Unlock()
+	m.runUpdates(ctx)
+	if fails() != 2 {
+		t.Fatalf("auto failure after a manual one must be reported: %d", fails())
+	}
+	_ = m.DeleteTarget(ctx, se.ID)
+
+	// UpdateNow waehrend einer Runde: sofort "besetzt" statt warten
+	m.upd.run.Lock()
+	if _, err := m.UpdateNow(ctx, reload(t, m, addTarget(t, m, "busy", Mode4Auto, Mode6Off, "").ID)); !errors.Is(err, ErrBusy) {
+		t.Fatalf("want ErrBusy, got %v", err)
+	}
+	m.upd.run.Unlock()
+
+	// nohost: pausiert, nach 6 h erneut versucht
+	f.reply = func(string) (int, string) { return http.StatusNotFound, `{"status":"404 Not Found","info":"nohost"}` }
+	nh := addTarget(t, m, "nh", Mode4Auto, Mode6Off, "")
+	before := f.n()
+	m.runUpdates(ctx)
+	if got := reload(t, m, nh.ID); got.Paused != PauseNoHost {
+		t.Fatalf("nohost: %+v", got)
+	}
+	m.runUpdates(ctx)
+	_, _ = m.core.Writer().Exec(`UPDATE dyn_targets SET last_err_at = '2000-01-01T00:00:00Z' WHERE id = ?`, nh.ID)
+	f.reply = nil
+	m.runUpdates(ctx)
+	if got := reload(t, m, nh.ID); got.Paused != "" || got.LastOKAt.IsZero() {
+		t.Fatalf("nohost not resumed: %+v (calls %d)", got, f.n()-before)
+	}
+
+	// onlyprefix: 200 ohne JSON ist kein Erfolg
+	r := m.doCallFor(t, `<html>maintenance</html>`)
+	if r.OK {
+		t.Fatal("html answer must not count as success")
+	}
+}
+
+// doCallFor wertet eine feste Antwort im Praefix-Modus aus (Hilfe fuer den Test).
+func (m *Module) doCallFor(t *testing.T, body string) updResult {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, body) }))
+	defer srv.Close()
+	old := m.updateURL
+	m.updateURL = srv.URL
+	defer func() { m.updateURL = old }()
+	return m.doCall(context.Background(), url.Values{"ipv6prefix": {"2a01::/64"}, "onlyprefix": {"1"}}, tokA)
+}
+
+// Host-Modus: temporaere Privacy-Adresse wird durch die stabile aus demselben /64 ersetzt.
+func TestUpdaterStableIPv6(t *testing.T) {
+	m, _, _ := setupUpdater(t)
+	temp := netip.MustParseAddr("2a01:4f8:1:2:aaaa:bbbb:cccc:dddd")
+	stable := netip.MustParseAddr("2a01:4f8:1:2::10")
+	m.local = func() []ifAddr {
+		return []ifAddr{{Iface: "eth0", Addr: temp, Temporary: true}, {Iface: "eth0", Addr: stable}}
+	}
+	if p := m.planFor(&Target{Mode4: Mode4Off, Mode6: Mode6Host}); p.IP6 != stable.String() {
+		t.Fatalf("want stable address, got %q", p.IP6)
+	}
+}
+
+// Nach einer gemeldeten Stoerung kommt beim naechsten Erfolg genau eine Entwarnung.
+func TestUpdaterRecoveryAlert(t *testing.T) {
+	ctx := context.Background()
+	m, f, _ := setupUpdater(t)
+	var mu sync.Mutex
+	kinds := map[notify.Kind]int{}
+	m.notifier = func(a notify.Alert) { mu.Lock(); kinds[a.Kind]++; mu.Unlock() }
+	f.reply = func(string) (int, string) { return http.StatusBadRequest, `{"status":"400 Bad Request","info":"No correct IP transmitted"}` }
+	tg := addTarget(t, m, "rec", Mode4Auto, Mode6Off, "")
+	m.runUpdates(ctx)
+	m.upd.mu.Lock()
+	delete(m.upd.tback, tg.ID)
+	m.upd.mu.Unlock()
+	f.reply = nil
+	m.runUpdates(ctx)
+	m.runUpdates(ctx)
+	mu.Lock()
+	defer mu.Unlock()
+	if kinds[notify.KindDynFail] != 1 || kinds[notify.KindDynOK] != 1 {
+		t.Fatalf("alerts: %v", kinds)
 	}
 }

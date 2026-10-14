@@ -327,7 +327,8 @@
       "local6": "Globale IPv6-Adressen dieses Hosts",
       "check_now": "Jetzt prüfen",
       "next": "Prüfung alle {minutes} min",
-      "check_busy": "Die Prüfung dauert länger, das Ergebnis erscheint gleich im Protokoll."
+      "check_busy": "Die Prüfung dauert länger, das Ergebnis erscheint gleich im Protokoll.",
+      "idle": "Kein Ziel ist eingeschaltet. Die regelmäßige Prüfung ruht deshalb (keine Abfragen, keine Einträge); „Jetzt prüfen“ geht trotzdem."
     },
     "targets": {
       "title": "Ziele",
@@ -501,7 +502,9 @@
       "now_hint": "Meldet die Adresse sofort an ipv64, auch ohne Änderung. Kostet Update-Limit.",
       "done": "{name} an ipv64 gemeldet.",
       "failed": "{name}: Update fehlgeschlagen ({error}).",
-      "paused": "{name} pausiert: {reason}."
+      "paused": "{name} pausiert: {reason}.",
+      "busy": "Gerade läuft ein Abgleich. Bitte in ein paar Sekunden noch einmal.",
+      "nothing": "{name}: nichts zu melden – für die gewählten Modi ist gerade keine aktuelle Adresse bekannt."
     },
     "limit": {
       "used": "DynDNS-Updates heute: {used} von {limit}",

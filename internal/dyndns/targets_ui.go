@@ -206,52 +206,28 @@ func (m *Module) pageTargetPick(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	key := m.keyOf(ctx)
 	_ = r.ParseForm()
-	picked := r.PostForm["pick"]
-	if key == "" || len(picked) == 0 {
+	if key == "" || len(r.PostForm["pick"]) == 0 {
 		m.back(w, r, "warning", m.g.T(r, "dyn.targets.none_picked"), "/dyndns/targets/new")
 		return
 	}
+	picks := map[string]pickChoice{}
+	for _, k := range r.PostForm["pick"] {
+		picks[k] = pickChoice{Mode4: r.PostFormValue("m4:" + k), Mode6: r.PostFormValue("m6:" + k)}
+	}
 	lctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	names, err := m.accountNames(lctx, key) // Tokens frisch vom Server, nie aus dem Formular
+	added, failed, err := m.addPicked(lctx, key, picks)
 	cancel()
 	if err != nil {
 		m.back(w, r, "danger", m.g.T(r, "dyn.api.failed", "error", err.Error()), "/dyndns/targets/new")
 		return
 	}
-	want := map[string]bool{}
-	for _, p := range picked {
-		want[p] = true
-	}
-	added, failed := 0, []string{}
-	for _, p := range names {
-		if !want[p.Key] || p.Exists || p.Blocked != "" {
-			continue
-		}
-		t := m.defaultsFor(p)
-		if v := r.PostFormValue("m4:" + p.Key); in(v, pickModes4) {
-			t.Mode4 = v
-		}
-		if v := r.PostFormValue("m6:" + p.Key); in(v, pickModes6) && (v != Mode6Suffix || p.SuffixOf != "") {
-			t.Mode6 = v
-		}
-		if t.Mode6 == Mode6Suffix {
-			t.Suffix6 = p.SuffixOf
-		}
-		if t.Mode4 == Mode4Off && t.Mode6 == Mode6Off {
-			failed = append(failed, p.FQDN)
-			continue
-		}
-		if err := m.InsertTarget(ctx, t); err != nil {
-			failed = append(failed, p.FQDN)
-			continue
-		}
-		added++
-		m.audit(r, "dyndns.target_add", t.FQDN())
+	for _, t := range added {
+		m.audit(r, "dyndns.target_add", t.FQDN(), "")
 	}
 	if len(failed) > 0 {
 		m.g.Flash(w, r, "warning", m.g.T(r, "dyn.targets.add_failed", "names", strings.Join(failed, ", ")))
 	}
-	m.back(w, r, "success", m.g.T(r, "dyn.targets.added", "count", added), "/dyndns")
+	m.back(w, r, "success", m.g.T(r, "dyn.targets.added", "count", len(added)), "/dyndns")
 }
 
 // pageTargetManual legt ein Ziel ohne API-Key an (Token von Hand).
@@ -269,7 +245,7 @@ func (m *Module) pageTargetManual(w http.ResponseWriter, r *http.Request) {
 		m.back(w, r, "danger", m.fieldErr(r, err), "/dyndns/targets/new#manual")
 		return
 	}
-	m.audit(r, "dyndns.target_add", t.FQDN()+" (manual)")
+	m.audit(r, "dyndns.target_add", t.FQDN(), "manual")
 	m.back(w, r, "success", m.g.T(r, "dyn.targets.added", "count", 1), "/dyndns/targets/"+strconv.FormatInt(t.ID, 10))
 }
 
@@ -326,46 +302,69 @@ func (m *Module) pageTargetSave(w http.ResponseWriter, r *http.Request) {
 		m.back(w, r, "danger", m.fieldErr(r, err), "/dyndns/targets/"+r.PathValue("id"))
 		return
 	}
-	m.audit(r, "dyndns.target_edit", t.FQDN())
+	m.audit(r, "dyndns.target_edit", t.FQDN(), "")
 	m.back(w, r, "success", m.g.T(r, "common.saved"), "/dyndns")
 }
 
 // pageTargetToken holt den Record-Token ueber die API neu (z. B. nach Token-Wechsel bei ipv64).
+// errNoRecord: bei ipv64 gibt es fuer den Namen keinen A/AAAA-Record mehr.
+var errNoRecord = errors.New("no A or AAAA record for this name at ipv64")
+
+// refreshToken holt den Record-Token ueber die API neu und speichert ihn (badauth-Pause wird aufgehoben).
+func (m *Module) refreshToken(ctx context.Context, t *Target) error {
+	key := m.keyOf(ctx)
+	if key == "" {
+		return ipv64api.ErrNoKey
+	}
+	recs, err := m.key.Client().Records(ctx, key, t.Domain)
+	if err != nil {
+		return err
+	}
+	// gespeicherter Record zuerst, sonst A vor AAAA (wie bei der Auswahl)
+	var best *ipv64api.Record
+	score := func(rec *ipv64api.Record) int {
+		switch {
+		case int64(rec.ID) == t.RecordID:
+			return 3
+		case rec.Type == "A":
+			return 2
+		}
+		return 1
+	}
+	for i := range recs {
+		rec := &recs[i]
+		if rec.Prefix == t.Host && (rec.Type == "A" || rec.Type == "AAAA") && (best == nil || score(rec) > score(best)) {
+			best = rec
+		}
+	}
+	if best == nil {
+		return errNoRecord
+	}
+	t.Token, t.TokenKind, t.RecordID = best.Token, "record", int64(best.ID)
+	if t.Paused == PauseBadAuth {
+		t.Paused = ""
+	}
+	return m.UpdateTarget(ctx, t)
+}
+
 func (m *Module) pageTargetToken(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	t := m.loadTarget(w, r)
 	if t == nil {
 		return
 	}
-	key := m.keyOf(ctx)
-	if key == "" {
-		m.back(w, r, "warning", m.g.T(r, "dyn.api.needed"), "/dyndns/targets/"+r.PathValue("id"))
-		return
+	back := "/dyndns/targets/" + r.PathValue("id")
+	switch err := m.refreshToken(ctx, t); {
+	case errors.Is(err, ipv64api.ErrNoKey):
+		m.back(w, r, "warning", m.g.T(r, "dyn.api.needed"), back)
+	case errors.Is(err, errNoRecord):
+		m.back(w, r, "warning", m.g.T(r, "dyn.targets.no_record"), back)
+	case err != nil:
+		m.back(w, r, "danger", m.g.T(r, "dyn.api.failed", "error", err.Error()), back)
+	default:
+		m.audit(r, "dyndns.token_refresh", t.FQDN(), "")
+		m.back(w, r, "success", m.g.T(r, "dyn.targets.token_refreshed"), back)
 	}
-	recs, err := m.key.Client().Records(ctx, key, t.Domain)
-	if err != nil {
-		m.back(w, r, "danger", m.g.T(r, "dyn.api.failed", "error", err.Error()), "/dyndns/targets/"+r.PathValue("id"))
-		return
-	}
-	found := false
-	for _, rec := range recs {
-		if rec.Prefix == t.Host && (rec.Type == "A" || rec.Type == "AAAA") && (!found || int64(rec.ID) == t.RecordID) {
-			t.Token, t.TokenKind, t.RecordID, found = rec.Token, "record", int64(rec.ID), true
-		}
-	}
-	if !found {
-		m.back(w, r, "warning", m.g.T(r, "dyn.targets.no_record"), "/dyndns/targets/"+r.PathValue("id"))
-		return
-	}
-	if t.Paused == "badauth" {
-		t.Paused = ""
-	}
-	if err := m.UpdateTarget(ctx, t); err != nil {
-		m.back(w, r, "danger", err.Error(), "/dyndns/targets/"+r.PathValue("id"))
-		return
-	}
-	m.audit(r, "dyndns.token_refresh", t.FQDN())
-	m.back(w, r, "success", m.g.T(r, "dyn.targets.token_refreshed"), "/dyndns/targets/"+r.PathValue("id"))
 }
 
 // pageTargetUpdate meldet das Ziel sofort (auch ohne Abweichung; kostet Update-Limit).
@@ -374,17 +373,20 @@ func (m *Module) pageTargetUpdate(w http.ResponseWriter, r *http.Request) {
 	if t == nil {
 		return
 	}
-	if t.Paused != "" { // manuell anstossen hebt die Pause auf (z. B. nach neuem Token)
-		t.Paused = ""
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
-	defer cancel()
-	m.UpdateNow(ctx, t)
-	m.audit(r, "dyndns.update_now", t.FQDN())
 	back := "/dyndns/targets/" + r.PathValue("id")
 	if r.PostFormValue("back") == "list" {
 		back = "/dyndns"
 	}
+	res, err := m.UpdateNow(r.Context(), t)
+	switch {
+	case errors.Is(err, ErrBusy):
+		m.back(w, r, "warning", m.g.T(r, "dyn.update.busy"), back)
+		return
+	case res == NowNothing:
+		m.back(w, r, "warning", m.g.T(r, "dyn.update.nothing", "name", t.FQDN()), back)
+		return
+	}
+	m.audit(r, "dyndns.update_now", t.FQDN(), "")
 	if got, _ := m.Target(r.Context(), t.ID); got != nil && got.Status() == "error" {
 		m.back(w, r, "danger", m.g.T(r, "dyn.update.failed", "name", t.FQDN(), "error", got.LastError), back)
 		return
@@ -404,6 +406,6 @@ func (m *Module) pageTargetDelete(w http.ResponseWriter, r *http.Request) {
 		m.back(w, r, "danger", err.Error(), "/dyndns")
 		return
 	}
-	m.audit(r, "dyndns.target_delete", t.FQDN())
+	m.audit(r, "dyndns.target_delete", t.FQDN(), "")
 	m.back(w, r, "success", m.g.T(r, "dyn.targets.deleted", "name", t.FQDN()), "/dyndns")
 }

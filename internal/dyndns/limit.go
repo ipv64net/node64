@@ -58,22 +58,20 @@ func (m *Module) refreshLimit(ctx context.Context, maxAge time.Duration) {
 	me, err := m.key.Client().Me(lctx, key)
 	cancel()
 	m.stMu.Lock()
-	defer m.stMu.Unlock()
 	m.lim.At = time.Now()
 	if err != nil {
 		m.lim.Err = err.Error()
+		m.stMu.Unlock()
 		return
 	}
 	m.lim.Known, m.lim.Err, m.lim.Used, m.lim.Limit = true, "", me.Usage.DynDNSUpdates.Used, 0
 	if l := me.Usage.DynDNSUpdates.Limit; l != nil {
 		m.lim.Limit = *l
 	}
-	if l := m.lim; l.Warn() {
-		go func() { // ausserhalb der Sperre
-			if !m.limitNotifiedToday(ctx) {
-				m.alert(ctx, SetNotifyLimit, notify.KindDynLimit, "", "", strconv.Itoa(l.Used)+" / "+strconv.Itoa(l.Limit))
-			}
-		}()
+	l := m.lim
+	m.stMu.Unlock()
+	if l.Warn() && m.notifyOnce(context.WithoutCancel(ctx), setLimitWarnSent) {
+		m.alert(context.WithoutCancel(ctx), SetNotifyLimit, notify.KindDynLimit, "", "", strconv.Itoa(l.Used)+" / "+strconv.Itoa(l.Limit))
 	}
 }
 

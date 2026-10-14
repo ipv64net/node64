@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/module"
 )
 
@@ -27,6 +28,11 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("DELETE /api/dyndns/targets/{id}", api(m.apiTargetDelete))
 	mux.Handle("POST /api/dyndns/targets/{id}/update", api(m.apiTargetUpdateNow))
 	mux.Handle("GET /api/dyndns/history", api(m.apiHistory))
+	mux.Handle("GET /api/dyndns/settings", api(m.apiSettingsGet))
+	mux.Handle("PUT /api/dyndns/settings", api(m.apiSettingsPut))
+	mux.Handle("GET /api/dyndns/account/names", api(m.apiAccountNames))
+	mux.Handle("POST /api/dyndns/targets/from-account", api(m.apiFromAccount))
+	mux.Handle("POST /api/dyndns/targets/{id}/token", api(m.apiTargetToken))
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -145,6 +151,7 @@ func (m *Module) apiStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) apiCheck(w http.ResponseWriter, r *http.Request) {
+	m.audit(r, "dyndns.check", "", "api")
 	if !m.checkNow(45 * time.Second) {
 		writeErr(w, http.StatusAccepted, "check still running")
 		return
@@ -208,7 +215,7 @@ func (m *Module) apiTargetCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, status, fieldError(err))
 		return
 	}
-	m.audit(r, "dyndns.target_add", t.FQDN()+" (api)")
+	m.audit(r, "dyndns.target_add", t.FQDN(), "api")
 	writeJSON(w, http.StatusCreated, targetOut(t))
 }
 
@@ -234,7 +241,7 @@ func (m *Module) apiTargetUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, fieldError(err))
 		return
 	}
-	m.audit(r, "dyndns.target_edit", t.FQDN()+" (api)")
+	m.audit(r, "dyndns.target_edit", t.FQDN(), "api")
 	writeJSON(w, http.StatusOK, targetOut(t))
 }
 
@@ -247,7 +254,7 @@ func (m *Module) apiTargetDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	m.audit(r, "dyndns.target_delete", t.FQDN()+" (api)")
+	m.audit(r, "dyndns.target_delete", t.FQDN(), "api")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -256,15 +263,17 @@ func (m *Module) apiTargetUpdateNow(w http.ResponseWriter, r *http.Request) {
 	if t == nil {
 		return
 	}
-	t.Paused = ""
-	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
-	defer cancel()
-	m.UpdateNow(ctx, t)
-	m.audit(r, "dyndns.update_now", t.FQDN()+" (api)")
+	res, err := m.UpdateNow(r.Context(), t)
+	if errors.Is(err, ErrBusy) {
+		writeErr(w, http.StatusConflict, "an update round is running, try again in a few seconds")
+		return
+	}
+	m.audit(r, "dyndns.update_now", t.FQDN(), "api")
 	if got, _ := m.Target(r.Context(), t.ID); got != nil {
 		t = got
 	}
-	writeJSON(w, http.StatusOK, targetOut(t))
+	out := map[string]any{"result": res, "target": targetOut(t)}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (m *Module) apiHistory(w http.ResponseWriter, r *http.Request) {
@@ -300,6 +309,120 @@ func (m *Module) apiHistory(w http.ResponseWriter, r *http.Request) {
 			"sent_prefix": u.Prefix, "http_status": u.HTTP, "status": u.Status, "info": u.Info, "ok": u.OK, "error": u.Err, "duration_ms": u.Ms})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"type": "updates", "items": out, "truncated": more})
+}
+
+// ---------------------------------------------------------------- Einstellungen, Account, Token
+
+func (m *Module) apiSettingsGet(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, m.getSettings(r.Context()))
+}
+
+// apiSettingsPut: Vollupdate; weggelassene Felder behalten ihren Wert.
+func (m *Module) apiSettingsPut(w http.ResponseWriter, r *http.Request) {
+	s := m.getSettings(r.Context())
+	if err := readJSON(r, &s); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid json: "+err.Error())
+		return
+	}
+	if err := m.saveSettings(r.Context(), s); err != nil {
+		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	m.audit(r, "dyndns.settings", "settings", "api")
+	writeJSON(w, http.StatusOK, m.getSettings(r.Context()))
+}
+
+// pickJSON ist ein waehlbarer Name aus dem Account (ohne Token).
+type pickJSON struct {
+	Key          string   `json:"key"`
+	Domain       string   `json:"domain"`
+	Host         string   `json:"host"`
+	FQDN         string   `json:"fqdn"`
+	Kind         string   `json:"kind"`
+	A            []string `json:"a"`
+	AAAA         []string `json:"aaaa"`
+	SuffixOf     string   `json:"suffix_of,omitempty"`
+	DefaultMode4 string   `json:"default_mode4"`
+	DefaultMode6 string   `json:"default_mode6"`
+	Exists       bool     `json:"exists"`
+	Blocked      string   `json:"blocked,omitempty"`
+}
+
+func (m *Module) apiAccountNames(w http.ResponseWriter, r *http.Request) {
+	key := m.keyOf(r.Context())
+	if key == "" {
+		writeErr(w, http.StatusConflict, "the ipv64 API key is needed (settings)")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	names, err := m.accountNames(ctx, key)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	out := []pickJSON{}
+	for _, p := range names {
+		out = append(out, pickJSON{Key: p.Key, Domain: p.Domain, Host: p.Host, FQDN: p.FQDN, Kind: p.Kind, A: p.A, AAAA: p.AAAA, SuffixOf: p.SuffixOf,
+			DefaultMode4: p.Def4, DefaultMode6: p.Def6, Exists: p.Exists, Blocked: p.Blocked})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// apiFromAccount legt Ziele aus dem Account an: [{"key":"home.ipv64.net|nas","mode4":"auto","mode6":"off"}].
+func (m *Module) apiFromAccount(w http.ResponseWriter, r *http.Request) {
+	key := m.keyOf(r.Context())
+	if key == "" {
+		writeErr(w, http.StatusConflict, "the ipv64 API key is needed (settings)")
+		return
+	}
+	var in []struct {
+		Key   string `json:"key"`
+		Mode4 string `json:"mode4"`
+		Mode6 string `json:"mode6"`
+	}
+	if err := readJSON(r, &in); err != nil || len(in) == 0 {
+		writeErr(w, http.StatusBadRequest, "expected a JSON list of {key, mode4, mode6}")
+		return
+	}
+	picks := map[string]pickChoice{}
+	for _, p := range in {
+		picks[p.Key] = pickChoice{Mode4: p.Mode4, Mode6: p.Mode6}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	added, failed, err := m.addPicked(ctx, key, picks)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	out := []targetJSON{}
+	for _, t := range added {
+		m.audit(r, "dyndns.target_add", t.FQDN(), "api")
+		out = append(out, targetOut(t))
+	}
+	if failed == nil {
+		failed = []string{}
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"added": out, "failed": failed})
+}
+
+func (m *Module) apiTargetToken(w http.ResponseWriter, r *http.Request) {
+	t := m.apiLoad(w, r)
+	if t == nil {
+		return
+	}
+	switch err := m.refreshToken(r.Context(), t); {
+	case errors.Is(err, ipv64api.ErrNoKey):
+		writeErr(w, http.StatusConflict, "the ipv64 API key is needed (settings)")
+	case errors.Is(err, errNoRecord):
+		writeErr(w, http.StatusNotFound, err.Error())
+	case err != nil:
+		writeErr(w, http.StatusBadGateway, err.Error())
+	default:
+		m.audit(r, "dyndns.token_refresh", t.FQDN(), "api")
+		writeJSON(w, http.StatusOK, targetOut(t))
+	}
 }
 
 // ---------------------------------------------------------------- Export / Import (module.Exporter)

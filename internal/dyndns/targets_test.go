@@ -156,7 +156,7 @@ func TestTargetStore(t *testing.T) {
 		t.Fatalf("token not encrypted: %q", raw)
 	}
 	back, err := m.Target(ctx, tg.ID)
-	if err != nil || back.Token != tokA || back.FQDN() != "nas.home.ipv64.net" || back.Suffix6 != "::1:2:3:4" || back.TokenMasked() != "AAAA…AAAA" {
+	if err != nil || back.Token != tokA || back.FQDN() != "nas.home.ipv64.net" || back.Suffix6 != "::1:2:3:4" || back.TokenMasked() != "…AAAA" {
 		t.Fatalf("read back: %+v %v", back, err)
 	}
 	dup := &Target{Domain: "home.ipv64.net", Host: "nas", TokenKind: "record", Token: tokA, Mode4: Mode4Auto, Mode6: Mode6Off}

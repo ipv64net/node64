@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -47,7 +48,7 @@ func TestAPI(t *testing.T) {
 	srv := apiServer(t, m)
 	in := map[string]any{"domain": "home.ipv64.net", "host": "nas", "token_kind": "record", "token": tokA, "mode4": "auto", "mode6": "off"}
 	code, body := call(t, "POST", srv.URL+"/api/dyndns/targets", in)
-	if code != 201 || strings.Contains(body, tokA) || !strings.Contains(body, `"token_hint":"AAAA…AAAA"`) || !strings.Contains(body, `"fqdn":"nas.home.ipv64.net"`) {
+	if code != 201 || strings.Contains(body, tokA) || !strings.Contains(body, `"token_hint":"…AAAA"`) || !strings.Contains(body, `"fqdn":"nas.home.ipv64.net"`) {
 		t.Fatalf("create: %d %s", code, body)
 	}
 	if code, _ := call(t, "POST", srv.URL+"/api/dyndns/targets", in); code != 409 {
@@ -105,5 +106,46 @@ func TestAPI(t *testing.T) {
 	list, _ := m.Targets(context.Background())
 	if err != nil || len(list) != 1 || list[0].Token != tokSuf || list[0].Mode6 != Mode6Suffix {
 		t.Fatalf("import: n=%d err=%v list=%+v", n, err, list)
+	}
+}
+
+// Review 2026-10-14: Einstellungen, Auswahl aus dem Account und Token neu holen per API.
+func TestAPIAccountAndSettings(t *testing.T) {
+	m, core := newTargetModule(t, true)
+	srv := apiServer(t, m)
+	if code, body := call(t, "GET", srv.URL+"/api/dyndns/settings", nil); code != 200 || !strings.Contains(body, `"interval_minutes":5`) {
+		t.Fatalf("settings get: %d %s", code, body)
+	}
+	if code, _ := call(t, "PUT", srv.URL+"/api/dyndns/settings", map[string]any{"interval_minutes": 7}); code != 422 {
+		t.Fatalf("invalid interval must be rejected: %d", code)
+	}
+	if code, body := call(t, "PUT", srv.URL+"/api/dyndns/settings", map[string]any{"interval_minutes": 10, "notify_ip": false}); code != 200 || !strings.Contains(body, `"interval_minutes":10`) || !strings.Contains(body, `"notify_ip":false`) || !strings.Contains(body, `"keep_checks_days":30`) {
+		t.Fatalf("settings put: %d %s", code, body)
+	}
+	if code, _ := call(t, "GET", srv.URL+"/api/dyndns/account/names", nil); code != 409 {
+		t.Fatalf("names without key: %d", code)
+	}
+	api := fakeIPv64(t)
+	defer api.Close()
+	m.SetKey(ipv64api.NewKey(core, m.box, ipv64api.NewClient(api.URL, "test"), slog.New(slog.NewTextHandler(io.Discard, nil))))
+	if _, err := m.key.Set(context.Background(), testKey); err != nil {
+		t.Fatal(err)
+	}
+	code, body := call(t, "GET", srv.URL+"/api/dyndns/account/names", nil)
+	if code != 200 || strings.Contains(body, tokA) || !strings.Contains(body, `"key":"home.ipv64.net|nas"`) || !strings.Contains(body, `"default_mode6":"prefix"`) {
+		t.Fatalf("names: %d %s", code, body)
+	}
+	code, body = call(t, "POST", srv.URL+"/api/dyndns/targets/from-account", []map[string]string{{"key": "home.ipv64.net|", "mode4": "auto", "mode6": "off"}, {"key": "home.ipv64.net|web"}})
+	if code != 201 || strings.Contains(body, tokA) || !strings.Contains(body, `"fqdn":"home.ipv64.net"`) || !strings.Contains(body, `"mode6":"off"`) {
+		t.Fatalf("from-account: %d %s", code, body)
+	}
+	list, _ := m.Targets(context.Background())
+	if len(list) != 1 || list[0].Token != tokA {
+		t.Fatalf("targets: %+v", list)
+	}
+	_, _ = core.Writer().Exec(`UPDATE dyn_targets SET token = ?, paused = 'badauth' WHERE id = ?`, m.seal(tokOther), list[0].ID)
+	code, body = call(t, "POST", srv.URL+"/api/dyndns/targets/"+strconv.FormatInt(list[0].ID, 10)+"/token", nil)
+	if got, _ := m.Target(context.Background(), list[0].ID); code != 200 || got.Token != tokA || got.Paused != "" {
+		t.Fatalf("token refresh: %d %s %+v", code, body, got)
 	}
 }

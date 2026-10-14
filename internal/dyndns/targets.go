@@ -101,7 +101,7 @@ func (t *Target) TokenMasked() string {
 	if len(t.Token) < 8 {
 		return "••••"
 	}
-	return t.Token[:4] + "…" + t.Token[len(t.Token)-4:]
+	return "…" + t.Token[len(t.Token)-4:]
 }
 
 // Normalize bereinigt Eingaben und prueft sie.

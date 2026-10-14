@@ -327,7 +327,8 @@
       "local6": "Global IPv6 addresses of this host",
       "check_now": "Check now",
       "next": "checked every {minutes} min",
-      "check_busy": "The check takes longer, the result will show up in the log shortly."
+      "check_busy": "The check takes longer, the result will show up in the log shortly.",
+      "idle": "No target is enabled, so the regular check is paused (no lookups, no entries); \"Check now\" still works."
     },
     "targets": {
       "title": "Targets",
@@ -501,7 +502,9 @@
       "now_hint": "Reports the address to ipv64 right away, even without a change. Uses update limit.",
       "done": "{name} reported to ipv64.",
       "failed": "{name}: update failed ({error}).",
-      "paused": "{name} paused: {reason}."
+      "paused": "{name} paused: {reason}.",
+      "busy": "A sync is running right now. Please try again in a few seconds.",
+      "nothing": "{name}: nothing to report, no current address is known for the selected modes."
     },
     "limit": {
       "used": "DynDNS updates today: {used} of {limit}",
