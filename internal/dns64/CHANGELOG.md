@@ -4,7 +4,7 @@
 
 ### Neu
 - Alles aus der Oberfläche auch per API: Let's Encrypt einrichten, holen und erneuern (`GET|POST /api/dns64/acme`, `POST /api/dns64/acme/renew`), eigene Einträge an/aus (`POST /api/dns64/records/{id}/enable|disable`), Freigaben übernehmen (`POST /api/dns64/allowlist/import`), CA und iOS-/macOS-Profil (`GET /api/dns64/ca.crt`, `GET /api/dns64/mobileconfig`), eigene Upstreams und Listen einzeln (`POST|DELETE /api/dns64/upstreams`, `POST|DELETE /api/dns64/lists`).
-- Jede Änderung (Einstellungen, Upstreams, Listen, Freigaben, eigene Einträge, Verschlüsselung, Let's Encrypt samt Zustimmung zu den Nutzungsbedingungen, Pause, Cache leeren) steht im Audit-Log, aus Oberfläche und API.
+- Jede Änderung (Einstellungen, Upstreams, Listen, Freigaben, eigene Einträge, Verschlüsselung, Let's Encrypt samt Zustimmung zu den Nutzungsbedingungen, Pause, Cache leeren) steht im Audit-Log, aus Oberfläche und API (Akteur und IP wie im Kern, auch hinter einem Proxy).
 - OpenAPI mit Schemas für Anfragen und Antworten aller DNS64-Endpunkte.
 
 ### Behoben
