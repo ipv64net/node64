@@ -1,5 +1,12 @@
 # Änderungen – Healthchecks
 
+## 2.7.0 – 2026-10-14
+
+### Neu
+- JSON-API für Online-Checks im API-Modus (nur ipv64-API-Key, kein Sync): `/api/online-checks` – auflisten,
+  anlegen, lesen, ändern, löschen, pausieren, fortsetzen, jetzt prüfen; gleiche Prüfung der Eingaben und gleiche
+  Audit-Einträge wie in der Oberfläche.
+
 ## 2.6.2 – 2026-10-14
 
 ### Behoben

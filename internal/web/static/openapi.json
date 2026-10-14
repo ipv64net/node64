@@ -5721,6 +5721,274 @@
           }
         }
       }
+    },
+    "/online-checks": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Online-Checks des Accounts (API-Modus)",
+        "description": "Nur im API-Modus: Node hat einen ipv64-API-Key, aber keinen Healthchecks-Sync. Die Anfragen gehen an die ipv64 API v2. Mit Sync sind Online-Checks normale Checks unter /checks (execution online). Sonst 409.",
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Check"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "nicht im API-Modus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Online-Check anlegen (API-Modus)",
+        "description": "Nur im API-Modus: Node hat einen ipv64-API-Key, aber keinen Healthchecks-Sync. Die Anfragen gehen an die ipv64 API v2. Mit Sync sind Online-Checks normale Checks unter /checks (execution online). Sonst 409. Gleiche Felder wie POST /checks; Kanäle und Eltern-Check gelten bei ipv64 nicht.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Check"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Check"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "nicht im API-Modus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültig oder Limit erreicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/online-checks/{token}": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Online-Check lesen (API-Modus)",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Check",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Check"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Fehler bei ipv64",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Online-Check ändern (API-Modus)",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Check"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Check"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültig oder Limit erreicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Online-Check löschen (API-Modus)",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "502": {
+            "description": "Fehler bei ipv64",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/online-checks/{token}/{action}": {
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Online-Check pausieren, fortsetzen oder jetzt prüfen (API-Modus)",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pause",
+                "resume",
+                "run"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "ausgeführt"
+          },
+          "404": {
+            "description": "unbekannte Aktion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Fehler bei ipv64",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

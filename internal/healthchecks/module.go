@@ -172,7 +172,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.6.2", Changelog: changelog}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.7.0", Changelog: changelog}
 }
 
 func (m *Module) Migrations() []store.Migration {
@@ -298,6 +298,7 @@ func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /api/push/{token}", g.Enabled(http.HandlerFunc(m.apiPush)))
 	m.uiRoutes(mux, g)
 	m.onlineRoutes(mux, g)
+	m.onlineAPIRoutes(mux, api)
 }
 
 // upsertSched plant einen Check ein, wenn diese Node ihn misst; Online-Checks und Checks
