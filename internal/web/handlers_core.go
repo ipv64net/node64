@@ -272,15 +272,15 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	if s.HC != nil {
 		if list, err := s.HC.AllChecks(ctx); err == nil {
 			for _, c := range list {
-				switch {
-				case c.Owner == "other":
-					d.Other++
-				case c.Owner == "online" || c.Execution == "online":
+				switch c.Where().Key { // wo gemessen wird, wie in der Uebersicht
+				case "hc.where.online":
 					d.OnlineOnly++
-				case c.Execution == "both":
+				case "hc.where.hybrid":
 					d.Hybrid++
-				default:
+				case "hc.where.local":
 					d.Own++
+				default:
+					d.Other++
 				}
 				if c.Execution == "online" || c.Execution == "both" {
 					n := len(c.Locations)

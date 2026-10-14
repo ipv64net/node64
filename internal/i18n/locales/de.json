@@ -535,6 +535,17 @@
     }
   },
   "hc": {
+    "where": {
+      "online": "Online",
+      "online_hint": "Wird nur von ipv64 an den gewählten Standorten gemessen",
+      "hybrid": "Hybrid",
+      "hybrid_here": "Lokal auf dieser Node (und ggf. weiteren) und online bei ipv64",
+      "hybrid_other": "Lokal auf einer anderen Node und online bei ipv64; diese Node misst nicht mit",
+      "local": "Lokal",
+      "local_here": "Wird von dieser Node gemessen (ggf. auch von weiteren Nodes)",
+      "other": "Andere Node",
+      "other_hint": "Wird nur von einer anderen Node deines Accounts gemessen; hier nur sichtbar"
+    },
     "api": {
       "title": "Online-Checks bei ipv64 (direkt über die API)",
       "new": "Online-Check anlegen",

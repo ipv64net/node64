@@ -56,6 +56,24 @@ func selfNodeID() string {
 func singleNode(t checks.Type) bool { return t == checks.TypeDocker }
 
 // measures sagt, ob diese Node den Check misst (ohne Ausfuehrungsort).
+// Where beschreibt fuer die Anzeige, wo ein Check gemessen wird (nicht, wem er gehoert):
+// Online (nur ipv64), Hybrid (Nodes und ipv64), Lokal (diese Node misst mit), Andere Node.
+type Where struct{ Key, Icon, Hint string }
+
+func (c *Check) Where() Where {
+	switch {
+	case c.Execution == "online" || c.Owner == "online":
+		return Where{"hc.where.online", "bi-cloud", "hc.where.online_hint"}
+	case c.Execution == "both" && c.measures():
+		return Where{"hc.where.hybrid", "bi-cloud-plus", "hc.where.hybrid_here"}
+	case c.Execution == "both":
+		return Where{"hc.where.hybrid", "bi-cloud-plus", "hc.where.hybrid_other"}
+	case c.measures():
+		return Where{"hc.where.local", "bi-house", "hc.where.local_here"}
+	}
+	return Where{"hc.where.other", "bi-hdd-network", "hc.where.other_hint"}
+}
+
 // MeasuresHere: diese Node misst den Check (auch wenn eine andere Node Besitzerin ist).
 func (c *Check) MeasuresHere() bool { return c.Execution != "online" && c.measures() }
 
