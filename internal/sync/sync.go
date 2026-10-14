@@ -500,6 +500,9 @@ func (c *Live) LinkPoll(ctx context.Context) (bool, error) {
 	}
 	c.set(SetNodeName, out.Name)
 	c.set(SetLocation, out.Location)
+	if out.Location != "" {
+		c.set("node.location", out.Location) // beim Verknuepfen im Portal eingetragen; leer = eigener Standort geht an ipv64
+	}
 	c.set(SetRemoteMgmt, out.RemoteMgmt)
 	c.set(SetLinkedAt, time.Now().UTC().Format(time.RFC3339))
 	c.LinkCancel()
