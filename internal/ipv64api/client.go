@@ -58,6 +58,19 @@ type Me struct {
 	Usage struct {
 		DynDNSUpdates Usage `json:"dyndns_updates_24h"`
 	} `json:"usage"`
+	Auth struct {
+		Type    string `json:"type"` // api_key, account_key
+		KeyID   *int   `json:"key_id"`
+		KeyName string `json:"key_name"`
+	} `json:"auth"`
+}
+
+// APIKey ist ein API-Key des Accounts (GET /api-keys, ohne den Key selbst).
+type APIKey struct {
+	ID        int        `json:"id"`
+	Name      string     `json:"name"`
+	ExpiresAt *time.Time `json:"expires_at"` // nil = laeuft nicht ab
+	Expired   bool       `json:"expired"`
 }
 
 // Account ist der Name, unter dem der Key angemeldet ist.
@@ -141,6 +154,12 @@ func (c *Client) Me(ctx context.Context, key string) (*Me, error) {
 		return nil, err
 	}
 	return &me, nil
+}
+
+// APIKeys liefert die API-Keys des Accounts (Name, Ablauf; ohne Token).
+func (c *Client) APIKeys(ctx context.Context, key string) ([]APIKey, error) {
+	var out []APIKey
+	return out, c.get(ctx, key, "/api-keys", &out)
 }
 
 // Domains liefert alle Domains des Accounts.

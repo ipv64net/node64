@@ -24,12 +24,16 @@ func fake() *httptest.Server {
 			_, _ = io.WriteString(w, `{"status":401,"code":"unauthorized","detail":"bad key"}`)
 			return
 		}
+		if r.URL.Path == "/api-keys" {
+			_, _ = io.WriteString(w, `{"data":[{"id":6,"name":"Alt","expires_at":null,"expired":false},{"id":7,"name":"Node64 Keller","expires_at":"2099-12-01T00:00:00+01:00","expired":false}]}`)
+			return
+		}
 		if r.URL.Path != "/me" {
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = io.WriteString(w, `{"status":404,"code":"not_found","detail":"no such route"}`)
 			return
 		}
-		_, _ = io.WriteString(w, `{"data":{"id":522,"email":"t@example.com","username":"tester","plan":{"name":"Supporter"},"usage":{"dyndns_updates_24h":{"used":3,"limit":64}}}}`)
+		_, _ = io.WriteString(w, `{"data":{"id":522,"email":"t@example.com","username":"tester","plan":{"name":"Supporter"},"usage":{"dyndns_updates_24h":{"used":3,"limit":64}},"auth":{"type":"api_key","key_id":7,"key_name":"Node64 Keller"}}}`)
 	}))
 }
 
@@ -79,6 +83,9 @@ func TestKey(t *testing.T) {
 	}
 	if raw := st.SettingOr(ctx, SetKey, ""); !secrets.IsEncrypted(raw) || strings.Contains(raw, testKey) {
 		t.Fatalf("not encrypted: %q", raw)
+	}
+	if inf := k.Info(ctx); inf.KeyName != "Node64 Keller" || inf.ExpiresAt.Year() != 2099 || inf.Expired() || inf.DaysLeft() < 1000 {
+		t.Fatalf("expiry: %+v", inf)
 	}
 	if k.Get(ctx) != testKey || k.Info(ctx).Account != "tester" || k.Info(ctx).Plan != "Supporter" {
 		t.Fatalf("get/info: %q %+v", k.Get(ctx), k.Info(ctx))

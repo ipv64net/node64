@@ -23,7 +23,17 @@ type AccountInfo struct {
 	Account   string    `json:"account"`
 	Plan      string    `json:"plan"`
 	CheckedAt time.Time `json:"checked_at"`
+	KeyName   string    `json:"key_name,omitempty"`
+	ExpiresAt time.Time `json:"expires_at,omitempty"` // Null = laeuft nicht ab
 }
+
+// DaysLeft sind die ganzen Tage bis zum Ablauf (negativ = abgelaufen); nur sinnvoll mit ExpiresAt.
+func (a AccountInfo) DaysLeft() int {
+	return int(time.Until(a.ExpiresAt).Hours() / 24)
+}
+
+// Expired: der Key ist abgelaufen.
+func (a AccountInfo) Expired() bool { return !a.ExpiresAt.IsZero() && time.Now().After(a.ExpiresAt) }
 
 // Key ist der zentrale API-Key des Containers.
 type Key struct {
@@ -85,9 +95,39 @@ func (k *Key) Set(ctx context.Context, key string) (*Me, error) {
 	if err := k.st.SetSetting(ctx, SetKey, stored); err != nil {
 		return nil, err
 	}
-	raw, _ := json.Marshal(AccountInfo{Account: me.Account(), Plan: me.Plan.Name, CheckedAt: time.Now().UTC()})
+	info := AccountInfo{Account: me.Account(), Plan: me.Plan.Name, CheckedAt: time.Now().UTC(), KeyName: me.Auth.KeyName}
+	if me.Auth.KeyID != nil { // Ablauf steht nur in der Liste der Keys
+		if keys, err := k.client.APIKeys(ctx, key); err == nil {
+			for _, ak := range keys {
+				if ak.ID == *me.Auth.KeyID {
+					info.KeyName = ak.Name
+					if ak.ExpiresAt != nil {
+						info.ExpiresAt = ak.ExpiresAt.UTC()
+					}
+				}
+			}
+		} else {
+			k.log.Warn("api key list not readable", "err", err)
+		}
+	}
+	raw, _ := json.Marshal(info)
 	_ = k.st.SetSetting(ctx, SetAccount, string(raw))
 	return me, nil
+}
+
+// RefreshIfStale prueft den gespeicherten Key erneut, wenn die letzte Pruefung aelter als maxAge ist
+// oder Name/Ablauf noch fehlen (z. B. nach dem Umzug aus einem Modul).
+func (k *Key) RefreshIfStale(ctx context.Context, maxAge time.Duration) {
+	if k.Get(ctx) == "" {
+		return
+	}
+	info := k.Info(ctx)
+	if info.KeyName != "" && time.Since(info.CheckedAt) < maxAge {
+		return
+	}
+	if _, err := k.Set(ctx, ""); err != nil {
+		k.log.Warn("ipv64 api key check failed", "err", err)
+	}
 }
 
 // Clear entfernt den Key.

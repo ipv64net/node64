@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/ipv64net/node64/internal/healthchecks"
@@ -366,6 +367,9 @@ func (s *Server) settingsView(r *http.Request) *View {
 	d.UpdateOn = s.Store.SettingOr(ctx, "updates.check", "0") == "1"
 	if s.IPv64 != nil {
 		d.IPv64On = true
+		rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		s.IPv64.RefreshIfStale(rctx, 24*time.Hour) // Name und Ablauf des Keys aktuell halten
+		cancel()
 		if d.IPv64Set = s.IPv64.Get(ctx) != ""; d.IPv64Set {
 			d.IPv64 = s.IPv64.Info(ctx)
 		}

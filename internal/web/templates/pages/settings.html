@@ -30,6 +30,8 @@
 				<p class="text-body-secondary">{{.T "ipv64key.hint"}}</p>
 				{{if $d.IPv64Set}}
 				<div class="mb-2"><i class="bi bi-check-circle-fill text-success"></i> {{.T "ipv64key.connected" "account" $d.IPv64.Account}}{{if $d.IPv64.Plan}} <span class="badge text-bg-light">{{$d.IPv64.Plan}}</span>{{end}}{{if not $d.IPv64.CheckedAt.IsZero}} <span class="text-body-secondary" title="{{.Time $d.IPv64.CheckedAt}}">· {{.T "ipv64key.checked"}} {{.Ago $d.IPv64.CheckedAt}}</span>{{end}}</div>
+				<div class="mb-2">{{if $d.IPv64.KeyName}}<span class="text-body-secondary">{{.T "ipv64key.key_name"}}</span> {{$d.IPv64.KeyName}} · {{end}}{{if $d.IPv64.ExpiresAt.IsZero}}<span class="text-body-secondary">{{.T "ipv64key.no_expiry"}}</span>{{else if $d.IPv64.Expired}}<span class="badge text-bg-danger">{{.T "ipv64key.expired" "date" (.Date $d.IPv64.ExpiresAt)}}</span>{{else}}<span class="badge {{if lt $d.IPv64.DaysLeft 14}}text-bg-warning{{else}}text-bg-light{{end}}" title="{{.Time $d.IPv64.ExpiresAt}}">{{.T "ipv64key.expires" "date" (.Date $d.IPv64.ExpiresAt) "days" $d.IPv64.DaysLeft}}</span>{{end}}</div>
+				{{if and (not $d.IPv64.ExpiresAt.IsZero) (lt $d.IPv64.DaysLeft 14)}}<div class="alert alert-warning py-2">{{.T "ipv64key.expiry_warn"}}</div>{{end}}
 				{{end}}
 				<form method="post" action="/settings/ipv64">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">

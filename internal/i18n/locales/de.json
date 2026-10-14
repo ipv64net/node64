@@ -268,7 +268,12 @@
     "rejected": "ipv64 hat den API-Key abgelehnt (falsch, abgelaufen oder gelöscht).",
     "failed": "ipv64 nicht erreichbar oder Fehler: {error}",
     "saved": "API-Key gespeichert, verbunden als {account}.",
-    "removed": "API-Key entfernt."
+    "removed": "API-Key entfernt.",
+    "key_name": "Key:",
+    "no_expiry": "läuft nicht ab",
+    "expired": "abgelaufen am {date}",
+    "expires": "läuft ab am {date} (noch {days} Tage)",
+    "expiry_warn": "Der API-Key läuft bald ab. Lege bei ipv64 rechtzeitig einen neuen an und trage ihn hier ein, sonst funktionieren die Module nicht mehr, die ihn brauchen."
   },
   "dyn": {
     "title": "DynDNS-Updater",
