@@ -1,5 +1,10 @@
 # Änderungen – DynDNS-Updater
 
+## 1.0.1 – 2026-10-14
+
+### Geändert
+- Die Anschluss-Analyse (CGNAT/DS-Lite) läuft nach jedem Start des Moduls neu, z. B. nach einem Wechsel ins Host-Netzwerk.
+
 ## 1.0.0 – 2026-10-14
 
 Erste vollständige Fassung, auf der Testbox und der Dev-Node live abgenommen (IPv4 und IPv6).

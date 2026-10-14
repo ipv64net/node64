@@ -56,6 +56,8 @@ type Module struct {
 	local     func() []ifAddr                              // globale IPv6-Adressen der Interfaces
 	dnsLookup func(ctx context.Context, t *Target) dnsView // nil = Nameserver von ipv64 direkt fragen
 
+	startedAt time.Time // Start des Moduls (Anschluss-Analyse danach neu, z. B. nach Wechsel des Netzwerkmodus)
+
 	stMu sync.Mutex
 	fam  [2]famState // [0] IPv4, [1] IPv6
 	lim  limitInfo   // Update-Limit des Accounts (mit API-Key)
@@ -99,7 +101,7 @@ func (m *Module) adoptOldKey(ctx context.Context) {
 
 func (m *Module) Info() module.Info {
 	return module.Info{Name: Name, TitleKey: "nav.dyndns", Icon: "bi-globe", Image: "dyndns64.webp", Path: "/dyndns", Available: true, Order: 20,
-		Version: "1.0.0", Changelog: changelog}
+		Version: "1.0.1", Changelog: changelog}
 }
 
 func (m *Module) Migrations() []store.Migration {
@@ -120,6 +122,7 @@ func (m *Module) Start(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	ctx, m.cancel = context.WithCancel(ctx)
+	m.startedAt = time.Now()
 	m.adoptOldKey(ctx)
 	m.loadState(ctx)
 	m.wg.Add(1)

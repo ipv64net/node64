@@ -120,15 +120,15 @@ func (m *Module) loop(ctx context.Context) {
 	}
 }
 
-// maybeAnalyze prueft den Weg ins Internet (CGNAT/DS-Lite) beim Start, alle 6 Stunden und nach
-// einem Wechsel der IPv4.
+// maybeAnalyze prueft den Weg ins Internet (CGNAT/DS-Lite) nach jedem Start des Moduls (auch nach
+// einem Wechsel des Netzwerkmodus), alle 6 Stunden und nach einem Wechsel der IPv4.
 func (m *Module) maybeAnalyze(ctx context.Context) {
 	last := m.lastNetInfo(ctx)
 	v4 := m.state(4)
 	if !v4.IP.IsValid() && !v4.NoRoute && v4.Err != "" {
 		return // gerade keine Verbindung, spaeter erneut
 	}
-	if last.At.IsZero() || time.Since(last.At) > 6*time.Hour || v4.ChangedAt.After(last.At) {
+	if last.At.IsZero() || last.At.Before(m.startedAt) || time.Since(last.At) > 6*time.Hour || v4.ChangedAt.After(last.At) {
 		m.analyzePath(ctx)
 	}
 }
