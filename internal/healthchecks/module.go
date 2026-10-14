@@ -21,6 +21,9 @@ import (
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 
+//go:embed CHANGELOG.md
+var changelog string
+
 const Name = "healthchecks"
 
 // Module implementiert module.Module.
@@ -153,7 +156,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.0.0", Changelog: changelog}
 }
 
 func (m *Module) Migrations() []store.Migration {
