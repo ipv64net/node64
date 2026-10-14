@@ -44,6 +44,13 @@ type upstreamSetting struct {
 	Custom  bool `json:"custom,omitempty"`
 }
 
+// Proto ist das Protokoll fuer die Anzeige (DoH, DoT, DoQ).
+func (u upstreamSetting) Proto() string { return protoLabel(upstream.Proto(u.URL)) }
+
+func protoLabel(p string) string {
+	return map[string]string{"doh": "DoH", "dot": "DoT", "doq": "DoQ"}[p]
+}
+
 type listSetting struct {
 	filter.List
 	Enabled bool `json:"enabled"`
@@ -299,13 +306,16 @@ func parsePrefix(s string) (netip.Prefix, error) {
 	return netip.PrefixFrom(a, a.BitLen()), nil
 }
 
-// checkUpstream: DoH-URL mit https; Bootstrap-IPs noetig, wenn der Host kein IP ist (sonst Schleife ueber
-// den eigenen Resolver).
+// checkUpstream: https:// (DoH), tls:// (DoT) oder quic:// (DoQ); Bootstrap-IPs noetig, wenn der Host kein IP
+// ist (sonst Schleife ueber den eigenen Resolver).
 func checkUpstream(s *upstream.Server) error {
 	s.Name = strings.TrimSpace(s.Name)
 	u, err := url.Parse(strings.TrimSpace(s.URL))
-	if err != nil || u.Scheme != "https" || u.Host == "" {
+	if err != nil || upstream.Proto(s.URL) == "" || u.Host == "" || (u.Scheme != "https" && u.Path != "" && u.Path != "/") {
 		return errCfg("err_up_url", "url", s.URL)
+	}
+	if u.Scheme != "https" {
+		u.Path = ""
 	}
 	s.URL = u.String()
 	if s.Name == "" {

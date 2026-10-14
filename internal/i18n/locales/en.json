@@ -1246,7 +1246,7 @@
       "clients": "Clients",
       "clients_hint": "distinct IPs",
       "latency": "Ø upstream",
-      "latency_hint": "DNS-over-HTTPS",
+      "latency_hint": "encrypted (DoH/DoT/DoQ)",
       "lists": "Blocklists"
     },
     "chart": {
@@ -1254,7 +1254,7 @@
     },
     "up": {
       "title": "Upstream servers",
-      "hint": "Queries to the internet go encrypted via DNS-over-HTTPS to the configured servers. “Fastest in” shows how often a server answered first."
+      "hint": "Queries to the internet go encrypted to the configured servers: DNS-over-HTTPS (DoH), DNS-over-TLS (DoT) or DNS-over-QUIC (DoQ). “Fastest in” shows how often a server answered first."
     },
     "cache": {
       "title": "DNS cache",
@@ -1299,19 +1299,19 @@
       "anonymize_hint": "Shortened or not stored applies to new entries; device names and top clients are then limited or unavailable.",
       "allow_nets": "Further allowed client networks",
       "allow_nets_hint": "Private networks, Tailscale (100.64.0.0/10) and directly attached networks are always allowed. Add e.g. a public IPv6 prefix or VPN networks here, one per line.",
-      "up_hint": "Queries to the internet go encrypted via DNS-over-HTTPS to the ticked servers.",
+      "up_hint": "Queries to the internet go encrypted to the ticked servers: DoH (HTTPS, port 443), DoT (TLS, port 853) or DoQ (QUIC, port 853). Each server's certificate is verified.",
       "up_ips": "Bootstrap IPs",
       "up_remove_confirm": "Remove server “{name}”?",
       "up_mode": "Mode",
-      "up_add": "Custom DoH server",
+      "up_add": "Custom server",
       "up_ips_ph": "Bootstrap IPs, e.g. 9.9.9.9, 149.112.112.112",
-      "up_add_hint": "URL with https://. DNS64 needs the bootstrap IPs to reach the server without DNS (required when the URL contains a name)."
+      "up_add_hint": "https://…/dns-query for DoH, tls://name[:853] for DoT, quic://name[:853] for DoQ. DNS64 needs the bootstrap IPs to reach the server without DNS (required when the address contains a name); the certificate is checked against the name."
     },
     "setup": {
       "title": "Setup",
       "router": "Enter this host's IP as DNS server in your router (DHCP). Then all devices on your network use DNS64 automatically.",
       "docker": "In a container DNS64 needs host networking (network_mode: host), so it sees the real device IPs and finds the router by itself.",
-      "later": "DNS-over-TLS and DNS-over-QUIC as well as encrypted queries from devices (DoH/DoT) will follow."
+      "later": "Encrypted queries from devices to DNS64 itself (DoH/DoT/DoQ on the home network) will follow."
     },
     "js": {
       "status": {
@@ -1400,7 +1400,7 @@
       "hours": "The update interval is 1 to 168 hours.",
       "net": "“{net}” is not a network (e.g. 2001:db8::/48 or 10.8.0.0/24).",
       "no_upstream": "At least one upstream server must be on.",
-      "up_url": "“{url}” is not a DoH URL with https://.",
+      "up_url": "“{url}” is not a valid address (https://…, tls://… or quic://…).",
       "up_ip": "“{ip}” is not an IP address.",
       "up_ips": "Bootstrap IPs are missing for “{name}”.",
       "list_url": "“{url}” is not a valid list URL.",

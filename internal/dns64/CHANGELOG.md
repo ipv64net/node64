@@ -1,5 +1,12 @@
 # Änderungen – DNS64
 
+## 1.2.0 – 2026-10-14
+
+### Neu
+- Upstream-Server auch über DNS-over-TLS (`tls://name[:853]`, RFC 7858) und DNS-over-QUIC (`quic://name[:853]`, RFC 9250); Vorlagen für Cloudflare, Quad9, Google, AdGuard und Mullvad über DoT sowie AdGuard über DoQ, eigene Server mit allen drei Protokollen.
+- Zertifikatsprüfung auf den Namen des Servers bei allen Protokollen; Verbindungen werden wiederverwendet (DoT: bis zu 4 offene Verbindungen, DoQ: eine QUIC-Verbindung mit einem Stream je Anfrage).
+- Protokoll je Server in Übersicht und Einstellungen sichtbar, `proto` in `GET /api/dns64/upstreams`.
+
 ## 1.1.0 – 2026-10-14
 
 ### Neu

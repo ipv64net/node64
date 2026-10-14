@@ -1246,7 +1246,7 @@
       "clients": "Clients",
       "clients_hint": "verschiedene IPs",
       "latency": "Ø Upstream",
-      "latency_hint": "DNS-over-HTTPS",
+      "latency_hint": "verschlüsselt (DoH/DoT/DoQ)",
       "lists": "Blocklisten"
     },
     "chart": {
@@ -1254,7 +1254,7 @@
     },
     "up": {
       "title": "Upstream-Server",
-      "hint": "Anfragen ins Internet gehen verschlüsselt per DNS-over-HTTPS an die eingestellten Server. „Schnellster bei“ zeigt, wie oft ein Server zuerst geantwortet hat."
+      "hint": "Anfragen ins Internet gehen verschlüsselt an die eingestellten Server: DNS-over-HTTPS (DoH), DNS-over-TLS (DoT) oder DNS-over-QUIC (DoQ). „Schnellster bei“ zeigt, wie oft ein Server zuerst geantwortet hat."
     },
     "cache": {
       "title": "DNS-Cache",
@@ -1299,19 +1299,19 @@
       "anonymize_hint": "Gekürzt oder nicht gespeichert gilt für neue Einträge; Gerätenamen und Top-Clients gibt es dann nur eingeschränkt bzw. gar nicht.",
       "allow_nets": "Weitere erlaubte Client-Netze",
       "allow_nets_hint": "Private Netze, Tailscale (100.64.0.0/10) und direkt angeschlossene Netze sind immer erlaubt. Hier z. B. ein öffentliches IPv6-Präfix oder VPN-Netze, eins je Zeile.",
-      "up_hint": "Anfragen ins Internet gehen verschlüsselt per DNS-over-HTTPS an die angehakten Server.",
+      "up_hint": "Anfragen ins Internet gehen verschlüsselt an die angehakten Server: DoH (HTTPS, Port 443), DoT (TLS, Port 853) oder DoQ (QUIC, Port 853). Jeder Server prüft sein Zertifikat.",
       "up_ips": "Bootstrap-IPs",
       "up_remove_confirm": "Server „{name}“ entfernen?",
       "up_mode": "Betriebsart",
-      "up_add": "Eigener DoH-Server",
+      "up_add": "Eigener Server",
       "up_ips_ph": "Bootstrap-IPs, z. B. 9.9.9.9, 149.112.112.112",
-      "up_add_hint": "URL mit https://. Die Bootstrap-IPs braucht DNS64, um den Server ohne DNS zu erreichen (Pflicht, wenn in der URL ein Name steht)."
+      "up_add_hint": "https://…/dns-query für DoH, tls://name[:853] für DoT, quic://name[:853] für DoQ. Die Bootstrap-IPs braucht DNS64, um den Server ohne DNS zu erreichen (Pflicht, wenn in der Adresse ein Name steht); geprüft wird das Zertifikat auf den Namen."
     },
     "setup": {
       "title": "Einrichtung",
       "router": "Tragen Sie im Router (DHCP) die IP dieses Hosts als DNS-Server ein. Dann fragen alle Geräte im Heimnetz automatisch über DNS64.",
       "docker": "Im Container braucht DNS64 das Host-Netzwerk (network_mode: host). So sieht es die echten IPs der Geräte und findet den Router selbst.",
-      "later": "DNS-over-TLS und DNS-over-QUIC sowie verschlüsselte Anfragen der Geräte (DoH/DoT) folgen."
+      "later": "Verschlüsselte Anfragen der Geräte an DNS64 selbst (DoH/DoT/DoQ im Heimnetz) folgen."
     },
     "js": {
       "status": {
@@ -1400,7 +1400,7 @@
       "hours": "Die Aktualisierung liegt zwischen 1 und 168 Stunden.",
       "net": "„{net}“ ist kein Netz (z. B. 2001:db8::/48 oder 10.8.0.0/24).",
       "no_upstream": "Mindestens ein Upstream-Server muss an sein.",
-      "up_url": "„{url}“ ist keine DoH-URL mit https://.",
+      "up_url": "„{url}“ ist keine gültige Adresse (https://…, tls://… oder quic://…).",
       "up_ip": "„{ip}“ ist keine IP-Adresse.",
       "up_ips": "Für „{name}“ fehlen die Bootstrap-IPs.",
       "list_url": "„{url}“ ist keine gültige Listen-URL.",

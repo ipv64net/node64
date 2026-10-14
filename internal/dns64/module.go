@@ -43,7 +43,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.1.0"
+	version   = "1.2.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53

@@ -1,14 +1,18 @@
-// Package upstream forwards DNS queries over DNS-over-HTTPS (RFC 8484).
+// Package upstream forwards DNS queries encrypted: DNS-over-HTTPS (RFC 8484, https://), DNS-over-TLS
+// (RFC 7858, tls://host[:853]) and DNS-over-QUIC (RFC 9250, quic://host[:853]).
 package upstream
 
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -32,6 +36,29 @@ var Presets = []Server{
 	{Name: "Google", URL: "https://dns.google/dns-query", IPs: []string{"8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844"}},
 	{Name: "AdGuard", URL: "https://dns.adguard-dns.com/dns-query", IPs: []string{"94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff"}},
 	{Name: "Mullvad", URL: "https://dns.mullvad.net/dns-query", IPs: []string{"194.242.2.2", "2a07:e340::2"}},
+	{Name: "Cloudflare", URL: "tls://one.one.one.one", IPs: []string{"1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"}},
+	{Name: "Quad9", URL: "tls://dns.quad9.net", IPs: []string{"9.9.9.9", "149.112.112.112", "2620:fe::fe", "2620:fe::9"}},
+	{Name: "Google", URL: "tls://dns.google", IPs: []string{"8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844"}},
+	{Name: "AdGuard", URL: "tls://dns.adguard-dns.com", IPs: []string{"94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff"}},
+	{Name: "AdGuard", URL: "quic://dns.adguard-dns.com", IPs: []string{"94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff"}},
+	{Name: "Mullvad", URL: "tls://dns.mullvad.net", IPs: []string{"194.242.2.2", "2a07:e340::2"}},
+}
+
+// Proto is the transport of an upstream URL: doh, dot or doq ("" = not supported).
+func Proto(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	switch u.Scheme {
+	case "https":
+		return "doh"
+	case "tls":
+		return "dot"
+	case "quic":
+		return "doq"
+	}
+	return ""
 }
 
 // Modes: parallel = all at once, fastest valid answer wins; ordered = one after another, next on error.
@@ -42,9 +69,14 @@ const (
 
 const attemptTimeout = 3 * time.Second
 
+// testRoots replaces the system CAs in tests (nil = system).
+var testRoots *x509.CertPool
+
+// doh is one upstream with its statistics; client is used for DoH, ex for DoT and DoQ.
 type doh struct {
 	Server
 	client *http.Client
+	ex     exchanger
 
 	mu        sync.Mutex
 	requests  uint64
@@ -70,7 +102,21 @@ func New(servers []Server, mode string) *Resolver {
 	}
 	r := &Resolver{mode: mode}
 	for _, s := range servers {
-		r.ups = append(r.ups, &doh{Server: s, client: newClient(s.IPs)})
+		u := &doh{Server: s}
+		pu, _ := url.Parse(s.URL)
+		port := "853"
+		if pu != nil && pu.Port() != "" {
+			port = pu.Port()
+		}
+		switch Proto(s.URL) {
+		case "dot":
+			u.ex = newDoT(pu.Hostname(), port, s.IPs)
+		case "doq":
+			u.ex = newDoQ(pu.Hostname(), port, s.IPs)
+		default:
+			u.client = newClient(s.IPs)
+		}
+		r.ups = append(r.ups, u)
 	}
 	return r
 }
@@ -101,6 +147,7 @@ func newClient(ips []string) *http.Client {
 		MaxIdleConnsPerHost: 16,
 		IdleConnTimeout:     5 * time.Minute,
 		TLSHandshakeTimeout: 3 * time.Second,
+		TLSClientConfig:     &tls.Config{RootCAs: testRoots, MinVersion: tls.VersionTLS12},
 	}
 	return &http.Client{Transport: tr}
 }
@@ -108,7 +155,11 @@ func newClient(ips []string) *http.Client {
 // Close drops the idle connections to the upstreams (and their goroutines).
 func (r *Resolver) Close() {
 	for _, u := range r.ups {
-		u.client.CloseIdleConnections()
+		if u.ex != nil {
+			u.ex.close()
+		} else {
+			u.client.CloseIdleConnections()
+		}
 	}
 }
 
@@ -233,6 +284,7 @@ func (u *doh) win() {
 type Stats struct {
 	Name      string    `json:"name"`
 	URL       string    `json:"url"`
+	Proto     string    `json:"proto"` // doh, dot, doq
 	IPs       []string  `json:"ips"`
 	Requests  uint64    `json:"requests"`
 	Wins      uint64    `json:"wins"`
@@ -248,7 +300,7 @@ func (r *Resolver) Stats() []Stats {
 	for _, u := range r.ups {
 		u.mu.Lock()
 		out = append(out, Stats{
-			Name: u.Name, URL: u.URL, IPs: u.IPs,
+			Name: u.Name, URL: u.URL, Proto: Proto(u.URL), IPs: u.IPs,
 			Requests: u.requests, Wins: u.wins, Errors: u.errors, AvgMs: u.avgMs,
 			// healthy until an error is newer than the last success
 			Healthy:   u.lastErrAt.IsZero() || u.lastOKAt.After(u.lastErrAt),
@@ -260,6 +312,9 @@ func (r *Resolver) Stats() []Stats {
 }
 
 func (u *doh) exchange(ctx context.Context, req *dns.Msg) (*dns.Msg, error) {
+	if u.ex != nil {
+		return u.ex.exchange(ctx, req)
+	}
 	q := req.Copy()
 	q.Id = 0 // RFC 8484 §4.1: use ID 0 for cache friendliness
 	wire, err := q.Pack()

@@ -2763,7 +2763,8 @@
           "200": {
             "description": "OK"
           }
-        }
+        },
+        "description": "Je Server `name`, `url`, `proto` (doh, dot, doq), `ips` (Bootstrap), Anfragen, Siege, Fehler, Schnitt in ms, `healthy`; dazu `mode` (parallel|ordered) und der Router fuer lokale Namen."
       }
     },
     "/dns64/cache": {
@@ -2868,7 +2869,7 @@
           "DNS64"
         ],
         "summary": "Einstellungen",
-        "description": "`port`, `bind`, `router`, `retention_days`, `upstream_mode` (parallel|ordered), `upstreams` (name, url, ips, enabled, custom), `lists` (name, url, enabled, custom), `list_hours`, `block_mode` (zero|nxdomain), `cache_size`, `anonymize` (off|mask|hide), `allow_nets`.",
+        "description": "`port`, `bind`, `router`, `retention_days`, `upstream_mode` (parallel|ordered), `upstreams` (name, url = https://… fuer DoH, tls://name[:853] fuer DoT, quic://name[:853] fuer DoQ, ips, enabled, custom), `lists` (name, url, enabled, custom), `list_hours`, `block_mode` (zero|nxdomain), `cache_size`, `anonymize` (off|mask|hide), `allow_nets`.",
         "responses": {
           "200": {
             "description": "OK"
