@@ -144,10 +144,12 @@ func (s *Store) PushInFrom(ctx context.Context, token string, down bool, msg, fr
 		return false, err
 	}
 	if senderNode == "" && execution != "local" { // Push an die Online-Adresse: Tageskontingent
-		if s.DailyBlocked(uid) {
+		switch blocked := s.DailyBlocked(uid); {
+		case blocked && execution == "online":
 			return false, ErrDailyLimit
-		}
-		s.countUse(uid)
+		case !blocked:
+			s.countUse(uid)
+		} // Hybrid bei erschoepftem Kontingent: annehmen und an die Nodes weiterreichen (sonst lokal "ueberfaellig")
 	}
 	details, _ := json.Marshal(map[string]string{"from": from, "via": "hub:" + s.location})
 	status, reason := 1, ""

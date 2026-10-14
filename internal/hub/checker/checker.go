@@ -92,6 +92,9 @@ func (c *Checker) remind(ctx context.Context) {
 	}
 	now := time.Now().UTC()
 	for _, e := range list {
+		if e.Execution == "online" && c.st.DailyBlocked(e.UserID) {
+			continue // Tageskontingent erschoepft: nicht gemessen, also auch nicht "noch gestoert" erinnern
+		}
 		c.mu.Lock()
 		last, ok := c.reminders[e.Token]
 		if !ok {

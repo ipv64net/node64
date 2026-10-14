@@ -231,6 +231,7 @@ type OverallEvent struct {
 	Channels             []int64
 	NotifyDown, NotifyUp bool
 	NotifyDegraded       bool
+	Execution            string // nur bei Erinnerungen gesetzt (online, both)
 }
 
 // eventKind leitet Ereignisart und Stille aus dem Wechsel ab. incidentOpen:
@@ -297,7 +298,7 @@ func diagnosis(down, up []string) string {
 // DueReminders liefert gestoerte Checks mit Wiederholung (repeat_minutes > 0).
 // Time = down_since, Duration = Wiederholungsabstand.
 func (s *Store) DueReminders(ctx context.Context) ([]OverallEvent, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT token, userid, name, type, target, critical, channels, notify_down, notify_up, notify_degraded, repeat_minutes, down_since, last_reason, last_message
+	rows, err := s.db.QueryContext(ctx, `SELECT token, userid, name, type, target, critical, channels, notify_down, notify_up, notify_degraded, repeat_minutes, down_since, last_reason, last_message, execution
 		FROM hc2_checks WHERE deleted_at IS NULL AND repeat_minutes > 0 AND state IN ('down','flapping') AND execution IN ('online','both')`)
 	if err != nil {
 		s.Metrics.add(&s.Metrics.DBErrors, 1)
@@ -310,7 +311,7 @@ func (s *Store) DueReminders(ctx context.Context) ([]OverallEvent, error) {
 		var critical, nd, nu, ndeg, repeat int
 		var channels string
 		var ds, reason, msg sql.NullString
-		if err := rows.Scan(&e.Token, &e.UserID, &e.Name, &e.Type, &e.Target, &critical, &channels, &nd, &nu, &ndeg, &repeat, &ds, &reason, &msg); err != nil {
+		if err := rows.Scan(&e.Token, &e.UserID, &e.Name, &e.Type, &e.Target, &critical, &channels, &nd, &nu, &ndeg, &repeat, &ds, &reason, &msg, &e.Execution); err != nil {
 			return nil, err
 		}
 		e.Critical, e.NotifyDown, e.NotifyUp, e.NotifyDegraded = critical == 1, nd == 1, nu == 1, ndeg == 1
