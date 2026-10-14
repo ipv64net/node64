@@ -145,6 +145,14 @@ func run() error {
 		}})
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)
+	// Meldungen der Module (z. B. DynDNS) ueber ipv64-Mail/-SMS direkt per API, ohne hub; ohne Verknuepfung die Kanaele des Accounts
+	dispatcher.SetAPISender(ipv64Key.SendNotification, ipv64Key.APIReady)
+	dispatcher.SetRemoteChannels(func(ctx context.Context) []*notify.Channel {
+		if syncClient.Linked() {
+			return nil // verknuepft: die Server-Kanaele kommen als Platzhalter ueber den Sync
+		}
+		return ipv64Key.RemoteChannels(ctx)
+	})
 	hcModule.SetLinked(syncClient.Linked)
 	hcModule.SetQuota(syncClient.Quota)
 	hcModule.SetAPI(ipv64Key) // Online-Checks direkt ueber die API v2, solange kein Sync besteht

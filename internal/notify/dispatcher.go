@@ -2,6 +2,7 @@ package notify
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -80,6 +81,10 @@ type Dispatcher struct {
 	checkPath   func(string) string
 	listPath    func(string) string
 	serverSends func() bool
+	// direkter Versand ueber die ipv64-API (Meldungen der Module) und Kanalliste ohne Verknuepfung
+	apiSend  func(ctx context.Context, ch *Channel, m Message) error
+	apiReady func() bool
+	remote   func(ctx context.Context) []*Channel
 }
 
 // SetSendServerChannels schaltet den lokalen Versand ueber Server-Kanaele.
@@ -88,6 +93,25 @@ func (d *Dispatcher) SetSendServerChannels(on bool) { d.sendServerChannels = on 
 // SetServerSends meldet, ob gerade der ipv64-hub die Benachrichtigungen uebernimmt (verknuepft und verbunden).
 // Dann sendet die Node ihre eigenen Kanaele nicht selbst, sondern erhaelt Sendeauftraege vom hub.
 func (d *Dispatcher) SetServerSends(fn func() bool) { d.serverSends = fn }
+
+// ErrUnavailable: der Versandweg ist (noch) nicht verfuegbar, z. B. kein API-Key oder die Route fehlt auf
+// dem Server. Wird protokolliert, markiert den Kanal aber nicht als gestoert.
+var ErrUnavailable = errors.New("delivery path not available")
+
+// SetAPISender installiert den direkten Versand ueber die ipv64-API fuer Server-Kanaele (ipv64-Mail, -SMS).
+// Er gilt nur fuer Meldungen der Module (CheckInfo.Local); Healthchecks bleiben beim hub. ready meldet,
+// ob ein API-Key da ist.
+func (d *Dispatcher) SetAPISender(send func(ctx context.Context, ch *Channel, m Message) error, ready func() bool) {
+	d.apiSend, d.apiReady = send, ready
+}
+
+// SetRemoteChannels liefert ohne Verknuepfung die ipv64-Kanaele des Accounts (nur lesend, nicht gespeichert).
+func (d *Dispatcher) SetRemoteChannels(fn func(ctx context.Context) []*Channel) { d.remote = fn }
+
+// viaAPI: Server-Kanaele dieses Alerts gehen direkt ueber die API.
+func (d *Dispatcher) viaAPI(c CheckInfo) bool {
+	return c.Local && !d.sendServerChannels && d.apiSend != nil && d.apiReady != nil && d.apiReady()
+}
 
 type bucket struct {
 	tokens float64
@@ -262,7 +286,7 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 		if !ch.Enabled {
 			continue
 		}
-		if ch.Execution == "server" && !d.sendServerChannels {
+		if ch.Execution == "server" && !d.sendServerChannels && !d.viaAPI(c) {
 			continue // vom ipv64-hub gesendet
 		}
 		if !c.Local && !d.sendServerChannels && d.serverSends != nil && d.serverSends() {
@@ -274,6 +298,14 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 			}
 		} else if ch.Default {
 			out = append(out, ch)
+		}
+	}
+	// ohne Verknuepfung: die ipv64-Kanaele des Accounts ueber die API (nur Standardkanaele)
+	if d.viaAPI(c) && d.remote != nil && len(want) == 0 {
+		for _, ch := range d.remote(ctx) {
+			if ch.Enabled && ch.Default {
+				out = append(out, ch)
+			}
 		}
 	}
 	return out
@@ -679,7 +711,13 @@ func (d *Dispatcher) composeDynDNS(lang string, a Alert, m Message) Message {
 
 // send verschickt und protokolliert.
 func (d *Dispatcher) send(ctx context.Context, ch *Channel, m Message) {
-	s, ok := d.senders[ch.Type]
+	var s Sender
+	ok := false
+	if ch.Execution == "server" && !d.sendServerChannels && d.apiSend != nil {
+		s, ok = apiSender(d.apiSend), true // Server-Kanal direkt ueber die ipv64-API (nur Local-Alerts kommen hier an)
+	} else {
+		s, ok = d.senders[ch.Type]
+	}
 	if !ok {
 		d.record(ctx, ch, m, fmt.Errorf("no sender for type %s", ch.Type))
 		return
@@ -696,7 +734,17 @@ func (d *Dispatcher) send(ctx context.Context, ch *Channel, m Message) {
 	d.record(ctx, ch, m, err)
 }
 
+// apiSender macht aus der Versandfunktion einen Sender.
+type apiSender func(ctx context.Context, ch *Channel, m Message) error
+
+func (f apiSender) Send(ctx context.Context, ch *Channel, m Message) error { return f(ctx, ch, m) }
+
 func (d *Dispatcher) record(ctx context.Context, ch *Channel, m Message, err error) {
+	if errors.Is(err, ErrUnavailable) { // nicht der Kanal ist gestoert, der Weg fehlt noch
+		d.log.Info("notification not sent, path not available", "channel", ch.Name, "kind", m.Kind, "err", err)
+		_ = d.st.AddDelivery(ctx, Delivery{EventID: m.EventID, ChannelID: ch.ID, Channel: ch.Name, Kind: string(m.Kind), CheckToken: m.Check.Token, Subject: m.Title, OK: false, Error: err.Error()})
+		return
+	}
 	errText := ""
 	if err != nil {
 		errText = err.Error()

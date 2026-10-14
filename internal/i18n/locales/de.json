@@ -366,7 +366,7 @@
       "notify_ip": "Öffentliche Adresse hat sich geändert",
       "notify_fail": "Update fehlgeschlagen oder Ziel pausiert",
       "notify_limit": "Update-Limit fast oder ganz erreicht (höchstens einmal am Tag)",
-      "notify_hint": "Geht an die Standardkanäle dieser Node, auch wenn sie mit ipv64 verknüpft ist. In der Ruhezeit wird nichts gesendet, der Verlauf zeigt trotzdem alles."
+      "notify_hint": "Geht an die Standardkanäle dieser Node, auch wenn sie mit ipv64 verknüpft ist. ipv64-Mail und -SMS laufen dabei mit dem ipv64-API-Key direkt über die API, nicht über die hub-Server. In der Ruhezeit wird nichts gesendet, der Verlauf zeigt trotzdem alles."
     },
     "checks": {
       "title": "Letzte Prüfungen",
