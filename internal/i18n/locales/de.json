@@ -293,6 +293,14 @@
       "source": "Quelle",
       "duration": "Dauer",
       "changed": "neu"
+    },
+    "net": {
+      "cgnat": "Möglicherweise CGNAT: Auf dem Weg ins Internet liegt die Station {hop} aus dem Provider-NAT-Bereich 100.64.0.0/10. Dann teilst du dir die IPv4 mit anderen Kunden und bist darüber von außen nicht erreichbar, auch wenn DynDNS sie richtig einträgt. Von innen lässt sich das nicht sicher erkennen, ist hier aber sehr wahrscheinlich.",
+      "dslite": "Möglicherweise DS-Lite: Auf dem Weg ins Internet liegt der DS-Lite-Tunnelendpunkt {hop}. IPv4 läuft dann über eine geteilte Adresse des Providers und ist von außen nicht erreichbar, erreichbar bist du über IPv6. Von innen lässt sich das nicht sicher erkennen, ist hier aber sehr wahrscheinlich.",
+      "ok": "Weg ins Internet geprüft: kein Hinweis auf CGNAT oder DS-Lite.",
+      "link_article": "Was ist CGNAT?",
+      "link_faq": "FAQ: DS-Lite und CG-NAT",
+      "link_portmapper": "Lösung: ipv64 Portmapper"
     }
   },
   "hc": {

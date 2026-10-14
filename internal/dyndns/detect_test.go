@@ -116,3 +116,26 @@ func TestRound(t *testing.T) {
 		t.Fatalf("reloaded %+v", s)
 	}
 }
+
+func TestClassifyHops(t *testing.T) {
+	p := func(s ...string) []netip.Addr {
+		var out []netip.Addr
+		for _, x := range s {
+			a, _ := netip.ParseAddr(x)
+			out = append(out, a)
+		}
+		return out
+	}
+	for _, c := range []struct {
+		hops []string
+		kind string
+	}{
+		{[]string{"172.17.0.1", "192.168.10.1", "100.72.0.1", "62.155.1.1"}, "cgnat"},
+		{[]string{"172.17.0.1", "192.168.178.1", "192.0.0.1", "80.69.1.1"}, "dslite"},
+		{[]string{"172.17.0.1", "192.168.178.1", "", "87.186.1.1"}, ""},
+	} {
+		if k, _ := classifyHops(p(c.hops...)); k != c.kind {
+			t.Errorf("%v: got %q want %q", c.hops, k, c.kind)
+		}
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"embed"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"sync"
 
 	"github.com/ipv64net/node64/internal/module"
@@ -37,6 +38,7 @@ type Module struct {
 
 	fetch   fetchFunc          // Abruf einer IP-Quelle (Tests ersetzen ihn)
 	probe   func(fam int) bool // Route fuer die Familie vorhanden?
+	trace   func(ctx context.Context, dst netip.Addr, maxHops int) ([]netip.Addr, error)
 	trigger chan chan struct{} // "Jetzt pruefen"
 
 	stMu sync.Mutex
@@ -46,7 +48,7 @@ type Module struct {
 // New erzeugt das Modul. dispatcher darf nil sein.
 func New(core *store.Store, log *slog.Logger, box *secrets.Box, dispatcher *notify.Dispatcher, version string) *Module {
 	return &Module{core: core, log: log.With("module", Name), box: box, dispatcher: dispatcher, version: version,
-		fetch: newFetcher("node64/" + version), probe: defaultProbe, trigger: make(chan chan struct{})}
+		fetch: newFetcher("node64/" + version), probe: defaultProbe, trace: traceUDP, trigger: make(chan chan struct{})}
 }
 
 func (m *Module) Info() module.Info {

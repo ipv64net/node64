@@ -64,6 +64,8 @@ type overviewData struct {
 	Intervals []int
 	Source4   string
 	Source6   string
+	Net       netInfo // Anschluss-Analyse (CGNAT/DS-Lite)
+	NetHops   string
 }
 
 func (m *Module) famView(fam int, local []ifAddr) famView {
@@ -89,6 +91,8 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 		Source4: m.core.SettingOr(ctx, SetSource4, ""), Source6: m.core.SettingOr(ctx, SetSource6, "")}
 	d.V4, d.V6 = m.famView(4, d.Local), m.famView(6, d.Local)
 	d.Fams = []famView{d.V4, d.V6}
+	d.Net = m.lastNetInfo(ctx)
+	d.NetHops = strings.Join(d.Net.Hops, " → ")
 	last := d.V4.CheckedAt
 	if d.V6.CheckedAt.After(last) {
 		last = d.V6.CheckedAt

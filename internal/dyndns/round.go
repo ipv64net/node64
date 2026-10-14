@@ -96,9 +96,11 @@ func (m *Module) loop(ctx context.Context) {
 			return
 		case <-t.C:
 			m.round(ctx)
+			m.maybeAnalyze(ctx)
 			t.Reset(next())
 		case done := <-m.trigger:
 			m.round(ctx)
+			m.maybeAnalyze(ctx)
 			close(done)
 			if !t.Stop() {
 				select {
@@ -110,6 +112,19 @@ func (m *Module) loop(ctx context.Context) {
 		case <-prune.C:
 			m.prune(ctx)
 		}
+	}
+}
+
+// maybeAnalyze prueft den Weg ins Internet (CGNAT/DS-Lite) beim Start, alle 6 Stunden und nach
+// einem Wechsel der IPv4.
+func (m *Module) maybeAnalyze(ctx context.Context) {
+	last := m.lastNetInfo(ctx)
+	v4 := m.state(4)
+	if !v4.IP.IsValid() && !v4.NoRoute && v4.Err != "" {
+		return // gerade keine Verbindung, spaeter erneut
+	}
+	if last.At.IsZero() || time.Since(last.At) > 6*time.Hour || v4.ChangedAt.After(last.At) {
+		m.analyzePath(ctx)
 	}
 }
 

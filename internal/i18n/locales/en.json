@@ -293,6 +293,14 @@
       "source": "Source",
       "duration": "Duration",
       "changed": "new"
+    },
+    "net": {
+      "cgnat": "Possibly CGNAT: on the way to the internet there is hop {hop} from the provider NAT range 100.64.0.0/10. Then you share the IPv4 address with other customers and cannot be reached through it from outside, even if DynDNS sets it correctly. This cannot be detected with certainty from inside, but is very likely here.",
+      "dslite": "Possibly DS-Lite: on the way to the internet there is the DS-Lite tunnel endpoint {hop}. IPv4 then runs over a shared provider address and cannot be reached from outside; you are reachable via IPv6. This cannot be detected with certainty from inside, but is very likely here.",
+      "ok": "Path to the internet checked: no sign of CGNAT or DS-Lite.",
+      "link_article": "What is CGNAT?",
+      "link_faq": "FAQ: DS-Lite and CG-NAT",
+      "link_portmapper": "Solution: ipv64 Portmapper"
     }
   },
   "hc": {
