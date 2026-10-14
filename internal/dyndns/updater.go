@@ -68,6 +68,14 @@ type plan struct {
 func (m *Module) planFor(t *Target) plan {
 	var p plan
 	v4, v6 := m.state(4), m.state(6)
+	// nur aktuelle Adressen melden: schlug die letzte Pruefung fehl, bleibt die Familie unangetastet
+	// (sonst wuerde z. B. bei ausgefallenem IPv6 die alte, nicht mehr gueltige Adresse gemeldet)
+	if v4.Err != "" {
+		v4.IP = netip.Addr{}
+	}
+	if v6.Err != "" {
+		v6.IP = netip.Addr{}
+	}
 	switch t.Mode4 {
 	case Mode4Auto:
 		if v4.IP.IsValid() {

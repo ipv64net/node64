@@ -296,3 +296,19 @@ func TestUpdaterNotifications(t *testing.T) {
 		t.Fatalf("ip alerts: %d", count(notify.KindDynIP))
 	}
 }
+
+// Letzte IPv6-Pruefung fehlgeschlagen (z. B. IPv6 ausgefallen): die alte Adresse nicht melden.
+func TestUpdaterSkipsStaleAddress(t *testing.T) {
+	ctx := context.Background()
+	m, f, _ := setupUpdater(t)
+	m.stMu.Lock()
+	m.fam[1].Err = "timeout" // IP noch als "zuletzt bekannt" im Stand
+	m.stMu.Unlock()
+	addTarget(t, m, "v6", Mode4Off, Mode6Host, "")
+	addTarget(t, m, "pfx", Mode4Off, Mode6Prefix, "")
+	addTarget(t, m, "both", Mode4Auto, Mode6Host, "")
+	m.runUpdates(ctx)
+	if f.n() != 1 || strings.Contains(f.last(), "ipv6=") || !strings.Contains(f.last(), "praefix=both") {
+		t.Fatalf("only the IPv4 of 'both' may be sent: %v", f.calls)
+	}
+}
