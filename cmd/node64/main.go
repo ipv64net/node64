@@ -9,7 +9,9 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -145,6 +147,13 @@ func run() error {
 			return ipv64Key.Client().HC2UnlinkNode(ctx, key, nodeID, keep)
 		}})
 	// lokale Gruppe: Nodes desselben ipv64-Accounts gleichen direkt untereinander ab
+	if st.SettingOr(ctx, web.SettingNodeID, "") == "" { // Kennung der Node (sonst erst beim Setup-Assistenten oder Verknuepfen)
+		b := make([]byte, 24)
+		_, _ = rand.Read(b)
+		if err := st.SetSetting(ctx, web.SettingNodeID, base64.RawURLEncoding.EncodeToString(b)); err != nil {
+			return err
+		}
+	}
 	peerMigrations, err := peer.Migrations()
 	if err != nil {
 		return err
