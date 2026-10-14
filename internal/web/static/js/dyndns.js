@@ -22,6 +22,14 @@
 		sync(sel);
 	});
 
+	// Modus in einer Zeile geaendert: Zeile gleich mit auswaehlen
+	document.querySelectorAll("[data-pick-row] select").forEach(function (sel) {
+		sel.addEventListener("change", function () {
+			var c = sel.closest("tr").querySelector('input[name="pick"]');
+			if (c && !c.disabled) { c.checked = true; }
+		});
+	});
+
 	// Alle waehlbaren Namen an-/abhaken
 	var all = document.querySelector("[data-pick-all]");
 	if (all) {

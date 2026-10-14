@@ -396,7 +396,9 @@
       "suffix": "interface ID → prefix mode",
       "ignored": "{family} is ignored at ipv64",
       "hint": "The record token is used (safest level). IPv4 and IPv6 are preset from the existing records and can be changed per target afterwards.",
-      "submit": "Add selection"
+      "submit": "Add selection",
+      "update": "Update",
+      "modes_hint": "Choose per name what gets updated; fixed addresses and the interface mode are available afterwards when editing. With \"prefix + interface ID\" the interface ID is taken from the existing AAAA record."
     },
     "manual": {
       "title": "Enter manually",

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"net/netip"
+
 	"github.com/ipv64net/node64/internal/ipv64api"
 )
 
@@ -51,6 +53,32 @@ type pickName struct {
 	token    string
 	aID      int64 // erster A-Record (sein Token wirkt bei ipv64 fuer A und AAAA des Namens)
 	aToken   string
+	Def4     string // Vorbelegung der Modi in der Liste
+	Def6     string
+	SuffixOf string // Interface-ID aus dem vorhandenen AAAA (fuer "Praefix + Interface-ID"), leer = keine
+}
+
+// Modi, die sich direkt in der Auswahlliste waehlen lassen (alles weitere in der Bearbeitung)
+var (
+	pickModes4 = []string{Mode4Auto, Mode4Off}
+	pickModes6 = []string{Mode6Host, Mode6Prefix, Mode6Suffix, Mode6Off}
+)
+
+// suffixOf liefert die unteren 64 Bit einer vollen IPv6 als Interface-ID ("::x:x:x:x"), sonst leer.
+func suffixOf(content string) string {
+	a, err := netip.ParseAddr(content)
+	if err != nil || !a.Is6() || strings.HasPrefix(content, "::") {
+		return ""
+	}
+	b := a.As16()
+	for i := 0; i < 8; i++ {
+		b[i] = 0
+	}
+	s := netip.AddrFrom16(b)
+	if s.IsUnspecified() {
+		return ""
+	}
+	return s.String()
 }
 
 // accountNames laedt Domains und Records und fasst sie je Name zusammen (Tokens nur intern).
@@ -106,6 +134,13 @@ func (m *Module) accountNames(ctx context.Context, key string) ([]*pickName, err
 			if p.aToken != "" { // Record-Token: A bevorzugt
 				p.token, p.recordID = p.aToken, p.aID
 			}
+			for _, c := range p.AAAA {
+				if s := suffixOf(c); s != "" && p.SuffixOf == "" {
+					p.SuffixOf = s
+				}
+			}
+			d := m.defaultsFor(p)
+			p.Def4, p.Def6 = d.Mode4, d.Mode6
 			out = append(out, p)
 		}
 	}
@@ -134,6 +169,8 @@ func (m *Module) defaultsFor(p *pickName) *Target {
 }
 
 type newData struct {
+	Modes4P []string // in der Liste waehlbar
+	Modes6P []string
 	HasKey  bool
 	Account ipv64api.AccountInfo
 	Names   []*pickName
@@ -144,7 +181,7 @@ type newData struct {
 
 func (m *Module) pageTargetNew(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	d := newData{Modes4: Modes4, Modes6: Modes6}
+	d := newData{Modes4: Modes4, Modes6: Modes6, Modes4P: pickModes4, Modes6P: pickModes6}
 	if m.key != nil {
 		d.Account = m.key.Info(ctx)
 	}
@@ -187,6 +224,15 @@ func (m *Module) pageTargetPick(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		t := m.defaultsFor(p)
+		if v := r.PostFormValue("m4:" + p.Key); in(v, pickModes4) {
+			t.Mode4 = v
+		}
+		if v := r.PostFormValue("m6:" + p.Key); in(v, pickModes6) && (v != Mode6Suffix || p.SuffixOf != "") {
+			t.Mode6 = v
+		}
+		if t.Mode6 == Mode6Suffix {
+			t.Suffix6 = p.SuffixOf
+		}
 		if t.Mode4 == Mode4Off && t.Mode6 == Mode6Off {
 			failed = append(failed, p.FQDN)
 			continue

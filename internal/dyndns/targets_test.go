@@ -121,6 +121,12 @@ func TestAccountNames(t *testing.T) {
 	if len(names) != 4 || got["mail.home.ipv64.net"] != nil || got["off.ipv64.net"] != nil {
 		t.Fatalf("names: %d %v", len(names), got)
 	}
+	if h := got["home.ipv64.net"]; h.Def4 != Mode4Auto || h.Def6 != Mode6Host || h.SuffixOf != "::1" || got["nas.home.ipv64.net"].SuffixOf != "" {
+		t.Fatalf("pick defaults: %+v", h)
+	}
+	if suffixOf("2a01:4f8:1:2:1a2b:3c4d:5e6f:7a8b") != "::1a2b:3c4d:5e6f:7a8b" || suffixOf("2a01:4f8:1:2::") != "" {
+		t.Fatal("suffixOf")
+	}
 	home := m.defaultsFor(got["home.ipv64.net"])
 	if home.Token != tokA || home.RecordID != 10 || home.Mode4 != Mode4Auto || home.Mode6 != Mode6Host || home.TokenKind != "record" {
 		t.Fatalf("home: %+v", home)
