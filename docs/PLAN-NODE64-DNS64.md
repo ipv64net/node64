@@ -80,6 +80,13 @@ Benachrichtigungen (Upstream ausgefallen, Listen-Aktualisierung fehlgeschlagen) 
 Übernahme aus dem eigenständigen Container (Freigaben, optional Log), Tests (Pipeline, Cache, Filter,
 Verschlüsselung), Last- und Langzeittest auf der Box.
 
+## Stand
+
+- P0 und P1 fertig (Commits 32cfb94, 032aca2, 71d9c3d, 79d912b), Box 0.11.67-dev.
+- Box seit 2026-10-14 15:31: node64 im Host-Netzwerk mit DNS64 auf Port 53, alter Container `dns64` gestoppt
+  (restart=no, Rollback: `/opt/ipv64-agent/dns64_switch.sh rollback`). Freigaben, Blocklisten und Abfrage-Log
+  übernommen.
+
 ## Entscheidungen (2026-10-14)
 
 1. Ports/Docker: Host-Netzwerk.
