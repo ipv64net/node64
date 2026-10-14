@@ -78,7 +78,7 @@ Rahmen (entschieden, Dennis 2026-10-14):
   - *Interface (nur `network_mode: host`):* stabile globale Adresse direkt vom Interface. Temporäre Privacy-Adressen (Flag `temporary`), ULA und Link-Local werden übersprungen.
   - *Fest / aus.*
 - Hat der Container kein IPv6 (Docker-Bridge ohne IPv6), zeigt die Oberfläche das klar an, mit Hinweis auf `network_mode: host` oder IPv6 in Docker.
-- DS-Lite: Die IPv4 ist dann eine geteilte Adresse des Providers. Je Ziel lässt sich IPv4 abschalten. Ein Hinweis erscheint, wenn IPv4 und IPv6 erkennbar zu verschiedenen Anbietern gehören.
+- DS-Lite: Die IPv4 ist dann eine geteilte Adresse des Providers. Je Ziel lässt sich IPv4 abschalten. Ein automatischer DS-Lite-Hinweis ist von innen nicht zuverlässig möglich (in D2 geprüft), deshalb nur ein Hilfetext.
 
 **Tokens und Zugang:**
 - **Mit API-Key (Standard, bequem):**
@@ -139,7 +139,7 @@ Rahmen (entschieden, Dennis 2026-10-14):
    - Liegt die von außen gesehene IPv6 auf einer temporären Privacy-Adresse, gibt es einen Hinweis. Für AAAA-Records stattdessen *Präfix + Interface-ID* oder *Interface* verwenden.
    - Interface-Quelle (nur Host-Netzwerk): `/proc/net/if_inet6` auswerten, temporäre und deprecated Adressen auslassen, Interface wählbar.
 4. Prüfrunde im Takt `dyndns.interval` mit leichtem Zufallsversatz, damit nicht alle Nodes zur gleichen Sekunde fragen. Jede Prüfung landet in `dyn_checks`.
-5. Seite `/dyndns`, Karte „Anschluss“: aktuelle IPv4/IPv6/Präfix, Quelle, letzte Prüfung, letzte Änderung, Hinweise (kein IPv6, DS-Lite-Verdacht).
+5. Seite `/dyndns`, Karte „Anschluss“: aktuelle IPv4/IPv6/Präfix, Quelle, letzte Prüfung, letzte Änderung, Hinweise (kein IPv6, temporäre Privacy-Adresse). Erledigt 2026-10-14.
 
 **Abnahme:**
 - Auf der Box (Bridge ohne IPv6) zeigt sie die Router-IPv4 und den IPv6-Hinweis.

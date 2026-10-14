@@ -160,6 +160,8 @@ func (m *Module) checkFamily(ctx context.Context, fam int) {
 			cur.ChangedAt = start
 			m.log.Info("public address changed", "family", fam, "old", prev.IP.String(), "new", addr.String(), "source", src)
 		}
+	} else if prev.Err != cur.Err && cur.NoRoute { // ohne Route ist normal (z. B. Docker-Bridge ohne IPv6)
+		m.log.Info("no route for address family", "family", fam)
 	} else if prev.Err != cur.Err { // Fehler nur beim Wechsel laut melden
 		m.log.Warn("public address not determined", "family", fam, "err", cur.Err)
 	}
