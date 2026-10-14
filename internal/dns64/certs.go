@@ -190,8 +190,12 @@ func isCGNAT(ip net.IP) bool {
 	return n.Contains(ip)
 }
 
-// covers: das Zertifikat enthaelt alle gewuenschten Namen und Adressen.
+// covers: das Zertifikat enthaelt genau die gewuenschten Adressen und alle gewuenschten Namen (eine Adresse, die
+// die Node nicht mehr hat, fuehrt zu einem neuen Zertifikat).
 func covers(c *x509.Certificate, names []string, ips []net.IP) bool {
+	if len(c.IPAddresses) != len(ips) {
+		return false
+	}
 	for _, n := range names {
 		if !slices.Contains(c.DNSNames, n) {
 			return false

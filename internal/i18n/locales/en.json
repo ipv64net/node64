@@ -1456,7 +1456,7 @@
       "cert": "Certificate",
       "cert_self": "Own home network CA (default)",
       "cert_node64": "Certificate of the web interface (NODE64_TLS_CERT)",
-      "cert_hint": "With the own CA, devices install the CA certificate once; it may only vouch for private addresses. A publicly valid certificate (e.g. for an ipv64 domain) can be provided via NODE64_TLS_CERT/NODE64_TLS_KEY.",
+      "cert_hint": "With the own CA, devices install the CA certificate once; it may only vouch for private addresses. Publicly valid without installing anything: Let's Encrypt (card on the right) or an own certificate via NODE64_TLS_CERT/NODE64_TLS_KEY.",
       "devices": "For devices",
       "host": "Name:",
       "port": "port {port}",
@@ -1465,7 +1465,7 @@
       "howto_apple": "iPhone, iPad, Mac: download the profile, install it under Settings → General → VPN & Device Management and, with the own CA, trust it under About → Certificate Trust Settings.",
       "howto_windows": "Windows 11: import the CA certificate into “Trusted Root Certification Authorities”, then set DNS manually to the node's IP with DNS-over-HTTPS and the DoH address above.",
       "howto_browser": "Firefox/Chrome: secure DNS with the DoH address above; Firefox has its own certificate store (import the CA there).",
-      "howto_android": "Android “Private DNS” (DoT) only accepts publicly valid certificates, no own CA; use the web interface certificate with a real certificate for that.",
+      "howto_android": "Android “Private DNS” (DoT) only accepts publicly valid certificates, no own CA: set up Let's Encrypt above and enter the name as private DNS provider.",
       "cert_names": "Certificate for:",
       "valid_until": "valid until {date}",
       "cert_acme": "Let's Encrypt (ipv64 domain)"

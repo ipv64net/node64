@@ -1456,7 +1456,7 @@
       "cert": "Zertifikat",
       "cert_self": "Eigene Heimnetz-CA (Standard)",
       "cert_node64": "Zertifikat der Weboberfläche (NODE64_TLS_CERT)",
-      "cert_hint": "Mit der eigenen CA installieren die Geräte einmal das CA-Zertifikat; sie darf nur private Adressen bestätigen. Ein öffentlich gültiges Zertifikat (z. B. für eine ipv64-Domain) lässt sich über NODE64_TLS_CERT/NODE64_TLS_KEY einbinden.",
+      "cert_hint": "Mit der eigenen CA installieren die Geräte einmal das CA-Zertifikat; sie darf nur private Adressen bestätigen. Öffentlich gültig ohne Installation: Let's Encrypt (Karte rechts) oder ein eigenes Zertifikat über NODE64_TLS_CERT/NODE64_TLS_KEY.",
       "devices": "Für Geräte",
       "host": "Name:",
       "port": "Port {port}",
@@ -1465,7 +1465,7 @@
       "howto_apple": "iPhone, iPad, Mac: Profil laden, unter Einstellungen → Allgemein → VPN und Geräteverwaltung installieren und bei eigener CA unter Info → Zertifikatsvertrauenseinstellungen vertrauen.",
       "howto_windows": "Windows 11: CA-Zertifikat unter „Vertrauenswürdige Stammzertifizierungsstellen“ importieren, dann in den Netzwerkeinstellungen DNS manuell auf die IP der Node mit DNS-over-HTTPS und der DoH-Adresse oben stellen.",
       "howto_browser": "Firefox/Chrome: Sicheres DNS mit der DoH-Adresse oben; Firefox hat einen eigenen Zertifikatspeicher (CA dort importieren).",
-      "howto_android": "Android „Privates DNS“ (DoT) akzeptiert nur öffentlich gültige Zertifikate, keine eigene CA; dafür das Zertifikat der Weboberfläche mit einem echten Zertifikat nutzen.",
+      "howto_android": "Android „Privates DNS“ (DoT) akzeptiert nur öffentlich gültige Zertifikate, keine eigene CA: dafür oben Let's Encrypt einrichten und den Namen als privaten DNS-Anbieter eintragen.",
       "cert_names": "Zertifikat für:",
       "valid_until": "gültig bis {date}",
       "cert_acme": "Let's Encrypt (ipv64-Domain)"
