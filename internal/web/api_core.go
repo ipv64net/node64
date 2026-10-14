@@ -177,6 +177,10 @@ func (s *Server) apiSettingsPut(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusUnprocessableEntity, "unknown setting "+k)
 			return
 		}
+		if k == SettingNodeName && (strings.TrimSpace(v) == "" || len(v) > 64) {
+			writeErr(w, http.StatusUnprocessableEntity, "node.name must be 1-64 characters")
+			return
+		}
 		if k == SettingNodeTimezone || k == notify.SetQuietTZ {
 			if v != "" && !validTimezone(v) {
 				writeErr(w, http.StatusUnprocessableEntity, "invalid timezone for "+k)
@@ -203,7 +207,17 @@ func (s *Server) apiSettingsPut(w http.ResponseWriter, r *http.Request) {
 	if synced && s.Linker != nil {
 		s.Linker.NotifySettingsChanged()
 	}
-	s.audit(r, "settings.api", "", "")
+	_, nameSet := in[SettingNodeName]
+	_, locSet := in[SettingNodeLocation]
+	if (nameSet || locSet) && s.Linker != nil {
+		s.Linker.NodeInfoChanged() // an ipv64 und die anderen Nodes weitergeben (wie die Oberflaeche)
+	}
+	keys := make([]string, 0, len(in))
+	for k := range in {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	s.audit(r, "settings.api", "", strings.Join(keys, ","))
 	s.apiSettingsGet(w, r)
 }
 
@@ -325,6 +339,9 @@ func (s *Server) applyChannel(ch *notify.Channel, in channelJSON, create bool) e
 	if in.Lang != "" && s.I18n.Has(in.Lang) {
 		ch.Lang = in.Lang
 	}
+	if !create && serverOnly(ch) {
+		return ch.ValidateKeepSecrets() // Kanal von ipv64: Geheimnisse liegen beim hub
+	}
 	return ch.Validate()
 }
 
@@ -344,6 +361,9 @@ func (s *Server) apiChannelCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "channel.create", ch.Name, string(ch.Type))
+	if stored, err := s.Notify.Channel(r.Context(), ch.ID); err == nil && stored != nil {
+		ch = stored // mit Zeitstempeln
+	}
 	writeJSON(w, 201, channelOut(ch, false))
 }
 
@@ -388,7 +408,12 @@ func (s *Server) apiChannelTest(w http.ResponseWriter, r *http.Request) {
 	if ch == nil {
 		return
 	}
-	err := s.Dispatcher.Test(r.Context(), ch)
+	var err error
+	if serverOnly(ch) && s.Linker != nil { // Mail, SMS, App stellt nur ipv64 zu: Test ueber den hub (wie die Oberflaeche)
+		err = s.Linker.TestServerChannel(r.Context(), ch.RemoteID, s.lang(r))
+	} else {
+		err = s.Dispatcher.Test(r.Context(), ch)
+	}
 	s.audit(r, "channel.test", ch.Name, string(ch.Type))
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{"ok": false, "error": notify.RedactURLs(err.Error())})

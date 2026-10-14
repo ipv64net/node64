@@ -15,6 +15,14 @@
       "name": "Node"
     },
     {
+      "name": "Lokale Gruppe",
+      "description": "Nodes desselben ipv64-Accounts im lokalen Netz"
+    },
+    {
+      "name": "Verknüpfung",
+      "description": "Healthchecks-Sync mit ipv64 und zentraler ipv64-API-Key"
+    },
+    {
       "name": "Healthchecks"
     },
     {
@@ -1514,7 +1522,7 @@
         "tags": [
           "Node"
         ],
-        "summary": "Einstellungen (Agent-Name, Standort, Zeitzone, Benachrichtigungen, Updates)",
+        "summary": "Einstellungen (Node-Name, Standort, Zeitzone, Benachrichtigungen, Updates)",
         "responses": {
           "200": {
             "description": "Schlüssel-Wert-Objekt"
@@ -1554,7 +1562,7 @@
             }
           }
         },
-        "description": "Werte werden geprüft (422 mit Grund). Mit Verknüpfung gelten die notify.*-Einstellungen für den ganzen Account: sie gehen an ipv64 und alle Nodes. Was während der Ruhezeit passiert, kommt danach als eine Sammelmeldung; kritische Checks melden auch in der Ruhezeit."
+        "description": "Eine Umbenennung (node.name, node.location) geht wie in der Oberfläche an ipv64 und die anderen Nodes. node.name: 1–64 Zeichen."
       }
     },
     "/audit": {
@@ -4477,6 +4485,1232 @@
           },
           "502": {
             "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/link": {
+      "get": {
+        "tags": [
+          "Verknüpfung"
+        ],
+        "summary": "Status des Healthchecks-Sync mit ipv64",
+        "responses": {
+          "200": {
+            "description": "Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "linked": {
+                      "type": "boolean"
+                    },
+                    "connected": {
+                      "type": "boolean"
+                    },
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "plan": {
+                      "type": "string"
+                    },
+                    "node_name": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    },
+                    "remote_mgmt": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "read",
+                        "off"
+                      ]
+                    },
+                    "hub": {
+                      "type": "string"
+                    },
+                    "last_sync_at": {
+                      "type": "string"
+                    },
+                    "connected_at": {
+                      "type": "string"
+                    },
+                    "linked_at": {
+                      "type": "string"
+                    },
+                    "outbox": {
+                      "type": "integer"
+                    },
+                    "conflicts": {
+                      "type": "integer"
+                    },
+                    "last_error": {
+                      "type": "string"
+                    },
+                    "pending_code": {
+                      "type": "string"
+                    },
+                    "requesting": {
+                      "type": "boolean"
+                    },
+                    "online_limit": {
+                      "type": "integer"
+                    },
+                    "checks_today": {
+                      "type": "integer"
+                    },
+                    "checks_limit": {
+                      "type": "integer"
+                    },
+                    "locations_per_check": {
+                      "type": "integer"
+                    },
+                    "local_notifications": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/link/apikey": {
+      "post": {
+        "tags": [
+          "Verknüpfung"
+        ],
+        "summary": "Mit einem Klick verknüpfen (zentraler ipv64-API-Key)",
+        "description": "Braucht einen hinterlegten Key (PUT /ipv64/key). Wartet bis zu 10 s auf den Node-Token.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "location": {
+                    "type": "string",
+                    "description": "Standort, optional"
+                  },
+                  "remote_mgmt": {
+                    "type": "string",
+                    "enum": [
+                      "full",
+                      "read",
+                      "off"
+                    ],
+                    "description": "Fernverwaltung im Portal, Standard full"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "verknüpft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "linked": {
+                      "type": "boolean"
+                    },
+                    "connected": {
+                      "type": "boolean"
+                    },
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "plan": {
+                      "type": "string"
+                    },
+                    "node_name": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    },
+                    "remote_mgmt": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "read",
+                        "off"
+                      ]
+                    },
+                    "hub": {
+                      "type": "string"
+                    },
+                    "last_sync_at": {
+                      "type": "string"
+                    },
+                    "connected_at": {
+                      "type": "string"
+                    },
+                    "linked_at": {
+                      "type": "string"
+                    },
+                    "outbox": {
+                      "type": "integer"
+                    },
+                    "conflicts": {
+                      "type": "integer"
+                    },
+                    "last_error": {
+                      "type": "string"
+                    },
+                    "pending_code": {
+                      "type": "string"
+                    },
+                    "requesting": {
+                      "type": "boolean"
+                    },
+                    "online_limit": {
+                      "type": "integer"
+                    },
+                    "checks_today": {
+                      "type": "integer"
+                    },
+                    "checks_limit": {
+                      "type": "integer"
+                    },
+                    "locations_per_check": {
+                      "type": "integer"
+                    },
+                    "local_notifications": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "eingelöst, Token folgt im Hintergrund",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "linked": {
+                      "type": "boolean"
+                    },
+                    "connected": {
+                      "type": "boolean"
+                    },
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "plan": {
+                      "type": "string"
+                    },
+                    "node_name": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string"
+                    },
+                    "remote_mgmt": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "read",
+                        "off"
+                      ]
+                    },
+                    "hub": {
+                      "type": "string"
+                    },
+                    "last_sync_at": {
+                      "type": "string"
+                    },
+                    "connected_at": {
+                      "type": "string"
+                    },
+                    "linked_at": {
+                      "type": "string"
+                    },
+                    "outbox": {
+                      "type": "integer"
+                    },
+                    "conflicts": {
+                      "type": "integer"
+                    },
+                    "last_error": {
+                      "type": "string"
+                    },
+                    "pending_code": {
+                      "type": "string"
+                    },
+                    "requesting": {
+                      "type": "boolean"
+                    },
+                    "online_limit": {
+                      "type": "integer"
+                    },
+                    "checks_today": {
+                      "type": "integer"
+                    },
+                    "checks_limit": {
+                      "type": "integer"
+                    },
+                    "locations_per_check": {
+                      "type": "integer"
+                    },
+                    "local_notifications": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ipv64 hat den Key abgelehnt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "schon verknüpft oder kein Key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "hub/ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/link/unlink": {
+      "post": {
+        "tags": [
+          "Verknüpfung"
+        ],
+        "summary": "Verknüpfung trennen",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "keep_checks": {
+                    "type": "boolean",
+                    "description": "Checks lokal behalten (sonst werden Online-Checks und fremde Checks entfernt)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "getrennt"
+          },
+          "502": {
+            "description": "Trennen fehlgeschlagen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/link/conflicts": {
+      "get": {
+        "tags": [
+          "Verknüpfung"
+        ],
+        "summary": "Offene Konflikte (lokale und Server-Fassung)",
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "entity": {
+                        "type": "string"
+                      },
+                      "entity_id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "local_op": {
+                        "type": "string"
+                      },
+                      "local": {
+                        "type": "object"
+                      },
+                      "server": {
+                        "type": "object"
+                      },
+                      "server_revision": {
+                        "type": "integer"
+                      },
+                      "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/link/conflicts/{id}": {
+      "post": {
+        "tags": [
+          "Verknüpfung"
+        ],
+        "summary": "Konflikt lösen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "keep": {
+                    "type": "string",
+                    "enum": [
+                      "server",
+                      "local"
+                    ],
+                    "description": "Standard server"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "gelöst"
+          },
+          "422": {
+            "description": "unbekannter Konflikt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/link/settings": {
+      "put": {
+        "tags": [
+          "Verknüpfung"
+        ],
+        "summary": "Einstellungen des Sync",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "local_notifications": {
+                    "type": "boolean",
+                    "description": "Server-Kanäle trotzdem lokal senden"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "aktueller Stand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "local_notifications": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipv64": {
+      "get": {
+        "tags": [
+          "Verknüpfung"
+        ],
+        "summary": "Zentraler ipv64-API-Key: Account, Plan, Ablauf",
+        "responses": {
+          "200": {
+            "description": "Info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "key_stored": {
+                      "type": "boolean"
+                    },
+                    "account": {
+                      "type": "string"
+                    },
+                    "account_id": {
+                      "type": "integer"
+                    },
+                    "plan": {
+                      "type": "string"
+                    },
+                    "key_name": {
+                      "type": "string"
+                    },
+                    "checked_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "days_left": {
+                      "type": "integer"
+                    }
+                  },
+                  "description": "Der Key selbst wird nie ausgegeben."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ipv64/key": {
+      "put": {
+        "tags": [
+          "Verknüpfung"
+        ],
+        "summary": "ipv64-API-Key hinterlegen (wird bei ipv64 geprüft, verschlüsselt gespeichert)",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "key_stored": {
+                      "type": "boolean"
+                    },
+                    "account": {
+                      "type": "string"
+                    },
+                    "account_id": {
+                      "type": "integer"
+                    },
+                    "plan": {
+                      "type": "string"
+                    },
+                    "key_name": {
+                      "type": "string"
+                    },
+                    "checked_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "days_left": {
+                      "type": "integer"
+                    }
+                  },
+                  "description": "Der Key selbst wird nie ausgegeben."
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Format falsch oder von ipv64 abgelehnt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Verknüpfung"
+        ],
+        "summary": "ipv64-API-Key entfernen",
+        "responses": {
+          "204": {
+            "description": "entfernt"
+          }
+        }
+      }
+    },
+    "/group": {
+      "get": {
+        "tags": [
+          "Lokale Gruppe"
+        ],
+        "summary": "Mitglieder, weiterreichende Node, offener Code",
+        "responses": {
+          "200": {
+            "description": "Gruppe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "account_id": {
+                      "type": "integer"
+                    },
+                    "linked": {
+                      "type": "boolean",
+                      "description": "diese Node ist mit ipv64 verknüpft"
+                    },
+                    "forwarder": {
+                      "type": "string",
+                      "description": "Node, die Änderungen der Nodes ohne Sync an ipv64 weiterreicht"
+                    },
+                    "forwarder_self": {
+                      "type": "boolean"
+                    },
+                    "code": {
+                      "type": "string",
+                      "description": "offener Kopplungscode"
+                    },
+                    "code_expires": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "members": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "node_id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "online": {
+                            "type": "boolean"
+                          },
+                          "linked": {
+                            "type": "boolean"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "last_seen": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "last_error": {
+                            "type": "string"
+                          },
+                          "added_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group/code": {
+      "post": {
+        "tags": [
+          "Lokale Gruppe"
+        ],
+        "summary": "Kopplungscode für eine weitere Node (10 min, einmal gültig)",
+        "responses": {
+          "201": {
+            "description": "Code",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "expires": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-Account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Lokale Gruppe"
+        ],
+        "summary": "Offenen Code verwerfen",
+        "responses": {
+          "204": {
+            "description": "verworfen"
+          }
+        }
+      }
+    },
+    "/group/join": {
+      "post": {
+        "tags": [
+          "Lokale Gruppe"
+        ],
+        "summary": "Einer Gruppe beitreten",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "addr": {
+                    "type": "string",
+                    "description": "Adresse einer Node der Gruppe, http(s)://…"
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "self_url": {
+                    "type": "string",
+                    "description": "Adresse dieser Node für die anderen"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "beigetreten",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "account_id": {
+                      "type": "integer"
+                    },
+                    "linked": {
+                      "type": "boolean",
+                      "description": "diese Node ist mit ipv64 verknüpft"
+                    },
+                    "forwarder": {
+                      "type": "string",
+                      "description": "Node, die Änderungen der Nodes ohne Sync an ipv64 weiterreicht"
+                    },
+                    "forwarder_self": {
+                      "type": "boolean"
+                    },
+                    "code": {
+                      "type": "string",
+                      "description": "offener Kopplungscode"
+                    },
+                    "code_expires": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "members": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "node_id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "online": {
+                            "type": "boolean"
+                          },
+                          "linked": {
+                            "type": "boolean"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "last_seen": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "last_error": {
+                            "type": "string"
+                          },
+                          "added_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "anderer ipv64-Account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein Account oder diese Node selbst",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Code falsch/abgelaufen oder Eingaben ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Node nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group/leave": {
+      "post": {
+        "tags": [
+          "Lokale Gruppe"
+        ],
+        "summary": "Gruppe verlassen (die anderen erfahren es)",
+        "responses": {
+          "204": {
+            "description": "verlassen"
+          }
+        }
+      }
+    },
+    "/group/members/{id}": {
+      "put": {
+        "tags": [
+          "Lokale Gruppe"
+        ],
+        "summary": "Adresse eines Mitglieds ändern",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "gespeichert"
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Lokale Gruppe"
+        ],
+        "summary": "Mitglied aus der Gruppe nehmen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "entfernt"
+          },
+          "502": {
+            "description": "fehlgeschlagen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/logging": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Log-Level (global und je Modul)",
+        "responses": {
+          "200": {
+            "description": "Level",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "debug",
+                        "info",
+                        "warn",
+                        "error"
+                      ]
+                    },
+                    "modules": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Log-Level ändern",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "level": {
+                    "type": "string",
+                    "enum": [
+                      "debug",
+                      "info",
+                      "warn",
+                      "error"
+                    ]
+                  },
+                  "reset_minutes": {
+                    "type": "integer",
+                    "description": "debug nach so vielen Minuten zurücksetzen, 0 = nie"
+                  },
+                  "modules": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "description": "Level oder inherit"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "neuer Stand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "level": {
+                      "type": "string",
+                      "enum": [
+                        "debug",
+                        "info",
+                        "warn",
+                        "error"
+                      ]
+                    },
+                    "modules": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültiges Level",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/retention": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Datenhaltung der Messwerte und Diagramm-Auflösung",
+        "responses": {
+          "200": {
+            "description": "Stand mit erlaubten Werten",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "raw_days": {
+                      "type": "integer"
+                    },
+                    "hourly_days": {
+                      "type": "integer",
+                      "description": "0 = unbegrenzt"
+                    },
+                    "chart_detail": {
+                      "type": "string"
+                    },
+                    "options": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Datenhaltung ändern (nur mitgeschickte Felder)",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "raw_days": {
+                    "type": "integer"
+                  },
+                  "hourly_days": {
+                    "type": "integer"
+                  },
+                  "chart_detail": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "neuer Stand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "raw_days": {
+                      "type": "integer"
+                    },
+                    "hourly_days": {
+                      "type": "integer",
+                      "description": "0 = unbegrenzt"
+                    },
+                    "chart_detail": {
+                      "type": "string"
+                    },
+                    "options": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Wert nicht erlaubt",
             "content": {
               "application/json": {
                 "schema": {

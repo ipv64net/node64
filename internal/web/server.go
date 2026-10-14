@@ -151,6 +151,7 @@ func (s *Server) routes() {
 	s.authRoutes()
 	s.backupRoutes()
 	s.apiRoutes()
+	s.apiLinkRoutes()
 	s.syncRoutes()
 	s.peerRoutes()
 
