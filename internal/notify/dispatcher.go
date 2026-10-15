@@ -81,14 +81,14 @@ type Dispatcher struct {
 	// sendServerChannels: Server-Kanaele trotzdem lokal senden (Node-Einstellung)
 	sendServerChannels atomic.Bool
 	// Pfade fuer Links (nil = Seiten des Nodes)
-	checkPath   func(string) string
-	listPath    func(string) string
-	serverSends func() bool
+	checkPath func(string) string
+	listPath  func(string) string
 	// direkter Versand ueber die ipv64-API (Meldungen der Module) und Kanalliste ohne Verknuepfung
-	hookMu   sync.RWMutex // die Hooks darunter werden evtl. erst nach Start gesetzt
-	apiSend  func(ctx context.Context, ch *Channel, m Message) error
-	apiReady func() bool
-	remote   func(ctx context.Context) []*Channel
+	hookMu      sync.RWMutex // die Hooks darunter werden evtl. erst nach Start gesetzt
+	serverSends func() bool
+	apiSend     func(ctx context.Context, ch *Channel, m Message) error
+	apiReady    func() bool
+	remote      func(ctx context.Context) []*Channel
 }
 
 // SetSendServerChannels schaltet den lokalen Versand ueber Server-Kanaele.
@@ -96,7 +96,19 @@ func (d *Dispatcher) SetSendServerChannels(on bool) { d.sendServerChannels.Store
 
 // SetServerSends meldet, ob gerade der ipv64-hub die Benachrichtigungen uebernimmt (verknuepft und verbunden).
 // Dann sendet die Node ihre eigenen Kanaele nicht selbst, sondern erhaelt Sendeauftraege vom hub.
-func (d *Dispatcher) SetServerSends(fn func() bool) { d.serverSends = fn }
+func (d *Dispatcher) SetServerSends(fn func() bool) {
+	d.hookMu.Lock()
+	d.serverSends = fn
+	d.hookMu.Unlock()
+}
+
+// hubSends: der hub uebernimmt gerade die Benachrichtigungen (SetServerSends).
+func (d *Dispatcher) hubSends() bool {
+	d.hookMu.RLock()
+	fn := d.serverSends
+	d.hookMu.RUnlock()
+	return fn != nil && fn()
+}
 
 // ErrUnavailable: der Versandweg ist (noch) nicht verfuegbar, z. B. kein API-Key oder die Route fehlt auf
 // dem Server. Wird protokolliert, markiert den Kanal aber nicht als gestoert.
@@ -323,7 +335,7 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 		if ch.Execution == "server" && !d.sendServerChannels.Load() && !d.viaAPI(c) {
 			continue // vom ipv64-hub gesendet
 		}
-		if !c.Local && !d.sendServerChannels.Load() && d.serverSends != nil && d.serverSends() {
+		if !c.Local && !d.sendServerChannels.Load() && d.hubSends() {
 			continue // verknuepft und verbunden: der hub sendet (eigene Kanaele per Sendeauftrag), sonst kaeme alles doppelt
 		}
 		if len(want) > 0 {
