@@ -1,5 +1,10 @@
 # Änderungen – DNS64
 
+## 1.7.1 – 2026-10-15
+
+### Geändert
+- Audit-Log: Änderungen per API-Key tragen die Herkunft jetzt im Feld „Herkunft“ (Key-Name), der Zusatz „(api)“ in den Details entfällt.
+
 ## 1.7.0 – 2026-10-14
 
 ### Neu

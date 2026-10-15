@@ -71,7 +71,7 @@ func (m *Module) apiSettingsPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.log.Info("settings saved", "via", "api", "by", m.g.Actor(r))
-	m.audit(r, "dns64.settings", "", "(api)")
+	m.audit(r, "dns64.settings", "", "")
 	if err := m.restart(ctx); err != nil {
 		writeErr(w, http.StatusConflict, m.g.T(r, "dns64.err.restart", "err", err.Error()))
 		return
@@ -105,7 +105,7 @@ func (m *Module) apiRecordAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.log.Info("record added", "name", rec.Name, "type", rec.Type, "value", rec.Value, "via", "api", "by", m.g.Actor(r))
-	m.audit(r, "dns64.record.add", rec.Name, rec.Type+" "+rec.Value+" (api)")
+	m.audit(r, "dns64.record.add", rec.Name, rec.Type+" "+rec.Value)
 	writeJSON(w, http.StatusCreated, rec)
 }
 
@@ -120,7 +120,7 @@ func (m *Module) apiRecordDelete(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, err)
 		return
 	}
-	m.audit(r, "dns64.record.delete", r.PathValue("id"), "(api)")
+	m.audit(r, "dns64.record.delete", r.PathValue("id"), "")
 	w.WriteHeader(http.StatusNoContent)
 }
 

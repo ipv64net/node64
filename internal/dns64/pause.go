@@ -119,7 +119,7 @@ func (m *Module) apiPause(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, err)
 		return
 	}
-	m.audit(r, "dns64.pause", strconv.Itoa(*in.Minutes)+" min", "(api)")
+	m.audit(r, "dns64.pause", strconv.Itoa(*in.Minutes)+" min", "")
 	writeJSON(w, http.StatusOK, m.pauseJSON())
 }
 
@@ -128,7 +128,7 @@ func (m *Module) apiResume(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, err)
 		return
 	}
-	m.audit(r, "dns64.resume", "", "(api)")
+	m.audit(r, "dns64.resume", "", "")
 	writeJSON(w, http.StatusOK, m.pauseJSON())
 }
 

@@ -182,7 +182,7 @@ func (m *Module) apiACMEIssue(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, m.errText(r, err))
 		return
 	}
-	m.audit(r, "dns64.acme_tos", name, "staging="+strconv.FormatBool(in.Staging)+" (api)")
+	m.audit(r, "dns64.acme_tos", name, "staging="+strconv.FormatBool(in.Staging))
 	if err := m.restart(r.Context()); err != nil {
 		writeErr(w, http.StatusConflict, m.g.T(r, "dns64.err.restart", "err", err.Error()))
 		return
@@ -191,7 +191,7 @@ func (m *Module) apiACMEIssue(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "certificate request already running or module off")
 		return
 	}
-	m.audit(r, "dns64.acme_issue", name, "(api)")
+	m.audit(r, "dns64.acme_issue", name, "")
 	writeJSON(w, http.StatusAccepted, m.acmeJSON(r.Context()))
 }
 
@@ -205,7 +205,7 @@ func (m *Module) apiACMERenew(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "certificate request already running or module off")
 		return
 	}
-	m.audit(r, "dns64.acme_renew", acmeName(c), "(api)")
+	m.audit(r, "dns64.acme_renew", acmeName(c), "")
 	writeJSON(w, http.StatusAccepted, m.acmeJSON(r.Context()))
 }
 
@@ -221,7 +221,7 @@ func (m *Module) apiRecordToggle(on bool) http.HandlerFunc {
 			m.fail(w, err)
 			return
 		}
-		m.audit(r, "dns64.record."+map[bool]string{true: "enable", false: "disable"}[on], r.PathValue("id"), "(api)")
+		m.audit(r, "dns64.record."+map[bool]string{true: "enable", false: "disable"}[on], r.PathValue("id"), "")
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -239,7 +239,7 @@ func (m *Module) apiAllowImport(w http.ResponseWriter, r *http.Request) {
 		m.fail(w, err)
 		return
 	}
-	m.audit(r, "dns64.allowlist.import", strconv.Itoa(n)+" domains", strconv.Itoa(bad)+" invalid (api)")
+	m.audit(r, "dns64.allowlist.import", strconv.Itoa(n)+" domains", strconv.Itoa(bad)+" invalid")
 	writeJSON(w, http.StatusOK, map[string]int{"imported": n, "invalid": bad})
 }
 
@@ -254,7 +254,7 @@ func (m *Module) apiUpstreamAdd(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, m.errText(r, err))
 		return
 	}
-	m.audit(r, "dns64.upstream.add", in.URL, "(api)")
+	m.audit(r, "dns64.upstream.add", in.URL, "")
 	m.apiSave(w, r, c, http.StatusCreated)
 }
 
@@ -269,7 +269,7 @@ func (m *Module) apiListAdd(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, m.errText(r, err))
 		return
 	}
-	m.audit(r, "dns64.list.add", in.URL, "(api)")
+	m.audit(r, "dns64.list.add", in.URL, "")
 	m.apiSave(w, r, c, http.StatusCreated)
 }
 
@@ -283,7 +283,7 @@ func (m *Module) apiCustomRemove(kind string) http.HandlerFunc {
 			writeErr(w, http.StatusNotFound, m.errText(r, errNotFound))
 			return
 		}
-		m.audit(r, "dns64."+kind+".remove", url, "(api)")
+		m.audit(r, "dns64."+kind+".remove", url, "")
 		m.apiSave(w, r, c, http.StatusOK)
 	}
 }
