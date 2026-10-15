@@ -376,10 +376,11 @@ func TestPushWatchdog(t *testing.T) {
 		rt, _ := s.Runtime("push")
 		return rt.State == StateDown
 	}, "down after missing push")
-	loud := n.loud()
-	if len(loud) == 0 || loud[len(loud)-1].Kind != EventDown || loud[len(loud)-1].Reason != checks.ReasonPushMissing {
-		t.Fatalf("expected push_missing alarm, got %+v", loud)
-	}
+	// der Alarm folgt dem Zustandswechsel (unter Last etwas spaeter): darauf warten statt sofort zu lesen
+	waitFor(t, func() bool {
+		loud := n.loud()
+		return len(loud) > 0 && loud[len(loud)-1].Kind == EventDown && loud[len(loud)-1].Reason == checks.ReasonPushMissing
+	}, "push_missing alarm")
 	if !s.Push(context.Background(), "push", checks.Up, "", nil) {
 		t.Fatal("push")
 	}
