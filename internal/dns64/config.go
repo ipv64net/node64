@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ipv64net/node64/internal/dns64/dnsserver"
 	"github.com/ipv64net/node64/internal/dns64/filter"
 	"github.com/ipv64net/node64/internal/dns64/upstream"
 )
@@ -208,8 +209,19 @@ func (c config) activeLists() []filter.List {
 func (c config) allowPrefixes() []netip.Prefix {
 	var out []netip.Prefix
 	for _, s := range c.AllowNets {
-		if p, err := parsePrefix(s); err == nil {
+		if p, err := parsePrefix(s); err == nil && p.Bits() > 0 {
 			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// PublicNets sind eingetragene Netze, die nicht privat sind (Warnung: offener Resolver fuer diese Netze).
+func (c config) PublicNets() []string {
+	var out []string
+	for _, p := range c.allowPrefixes() {
+		if !dnsserver.PrivatePrefix(p) {
+			out = append(out, p.String())
 		}
 	}
 	return out
@@ -348,6 +360,9 @@ func (c *config) validate() error {
 		p, err := parsePrefix(s)
 		if err != nil {
 			return errCfg("err_net", "net", s)
+		}
+		if p.Bits() == 0 {
+			return errCfg("err_net_any", "net", s)
 		}
 		nets = append(nets, p.String())
 	}

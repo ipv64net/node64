@@ -1,5 +1,14 @@
 # Änderungen – DNS64
 
+## 1.8.0 – 2026-10-15
+
+### Geändert
+- Freigabeliste gehärtet: „Weitere Client-Netze“ lehnen 0.0.0.0/0 und ::/0 ab (alte Einträge dieser Art gelten nicht mehr). Netze an den eigenen Schnittstellen zählen nur noch, wenn sie privat sind oder ein IPv6-/64 (bzw. kleiner); ein öffentliches IPv4-Netz auf einem gemieteten Server gab sonst die Nachbarn im Rechenzentrum frei.
+
+### Neu
+- Warnung in den Einstellungen bei öffentlichen Netzen in der Freigabeliste.
+- Abgelehnte Anfragen von fremden Adressen werden gezählt (Einstellungen: Anzahl, zuletzt welche Adresse) und höchstens einmal je Stunde ins Log geschrieben, damit eine versehentliche Freigabe auffällt.
+
 ## 1.7.2 – 2026-10-15
 
 ### Behoben

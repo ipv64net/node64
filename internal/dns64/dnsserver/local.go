@@ -1,10 +1,12 @@
 package dnsserver
 
 import (
+	"log/slog"
 	"net"
 	"net/netip"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -58,6 +60,49 @@ func remoteIP(a net.Addr) netip.Addr {
 
 var cgnat = netip.MustParsePrefix("100.64.0.0/10") // Tailscale & co.
 
+// privateNets are never routed on the internet (plus loopback, link-local and CGNAT).
+var privateNets = []netip.Prefix{
+	netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("172.16.0.0/12"), netip.MustParsePrefix("192.168.0.0/16"),
+	netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("169.254.0.0/16"), cgnat,
+	netip.MustParsePrefix("fc00::/7"), netip.MustParsePrefix("fe80::/10"), netip.MustParsePrefix("::1/128"),
+}
+
+// PrivatePrefix reports whether p lies completely inside a private, loopback, link-local or CGNAT range.
+func PrivatePrefix(p netip.Prefix) bool {
+	p = netip.PrefixFrom(p.Addr().Unmap(), p.Bits()-unmapBits(p)).Masked()
+	for _, q := range privateNets {
+		if q.Bits() <= p.Bits() && q.Contains(p.Addr()) {
+			return true
+		}
+	}
+	return false
+}
+
+func unmapBits(p netip.Prefix) int {
+	if p.Addr().Is4In6() {
+		return 96
+	}
+	return 0
+}
+
+// attachedAllowed: a network on one of our interfaces counts only if it is private or an IPv6 /64 (or
+// smaller). A public IPv4 network on a rented server would otherwise open the resolver to the neighbours
+// in the data centre.
+func attachedAllowed(p netip.Prefix) bool {
+	if PrivatePrefix(p) {
+		return true
+	}
+	a := p.Addr()
+	return a.Is6() && !a.Is4In6() && p.Bits() >= 64
+}
+
+// Refused counts queries from outside the allowed networks (since start).
+type Refused struct {
+	Count  int64
+	LastIP netip.Addr
+	LastAt time.Time
+}
+
 // clientACL accepts private/local addresses plus any address in a subnet
 // directly attached to this host (covers public IPv6 prefixes at home).
 type clientACL struct {
@@ -65,6 +110,12 @@ type clientACL struct {
 	mu      sync.RWMutex
 	nets    []netip.Prefix
 	updated time.Time
+
+	log     *slog.Logger // nil = no log line
+	refused atomic.Int64
+	lastMu  sync.Mutex
+	last    Refused
+	logged  time.Time // last log line (at most one per hour)
 }
 
 func newClientACL(extra []netip.Prefix) *clientACL {
@@ -81,7 +132,7 @@ func (a *clientACL) allowed(ip netip.Addr) bool {
 		return true
 	}
 	for _, p := range a.extra {
-		if p.Contains(ip) {
+		if p.Bits() > 0 && p.Contains(ip) {
 			return true
 		}
 	}
@@ -100,7 +151,32 @@ func (a *clientACL) allowed(ip netip.Addr) bool {
 			return true
 		}
 	}
+	a.refuse(ip)
 	return false
+}
+
+// refuse counts a query from outside and logs at most once per hour, so an accidental exposure shows up.
+func (a *clientACL) refuse(ip netip.Addr) {
+	n := a.refused.Add(1)
+	now := time.Now()
+	a.lastMu.Lock()
+	a.last = Refused{Count: n, LastIP: ip, LastAt: now}
+	logIt := a.log != nil && now.Sub(a.logged) >= time.Hour
+	if logIt {
+		a.logged = now
+	}
+	a.lastMu.Unlock()
+	if logIt {
+		a.log.Warn("dns64 refused query from outside the allowed networks", "ip", ip.String(), "count", n)
+	}
+}
+
+func (a *clientACL) stats() Refused {
+	a.lastMu.Lock()
+	defer a.lastMu.Unlock()
+	r := a.last
+	r.Count = a.refused.Load()
+	return r
 }
 
 func (a *clientACL) refresh() {
@@ -108,7 +184,7 @@ func (a *clientACL) refresh() {
 	if addrs, err := net.InterfaceAddrs(); err == nil {
 		for _, ad := range addrs {
 			if n, ok := ad.(*net.IPNet); ok {
-				if p, err := netip.ParsePrefix(n.String()); err == nil {
+				if p, err := netip.ParsePrefix(n.String()); err == nil && attachedAllowed(p.Masked()) {
 					nets = append(nets, p.Masked())
 				}
 			}

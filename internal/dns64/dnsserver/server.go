@@ -58,6 +58,7 @@ type Server struct {
 // to the caller) and serves them in the background until Shutdown.
 func (s *Server) Start() error {
 	s.acl = newClientACL(s.ExtraNets)
+	s.acl.log = s.Logger
 	s.refreshSem = make(chan struct{}, 32)
 	pc, err := net.ListenPacket("udp", s.Addr)
 	if err != nil {
@@ -161,6 +162,9 @@ func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg 
 
 // Allowed reports whether ip may use this resolver (private, attached or configured networks).
 func (s *Server) Allowed(ip netip.Addr) bool { return s.acl.allowed(ip) }
+
+// Refused: queries from outside the allowed networks since start.
+func (s *Server) Refused() Refused { return s.acl.stats() }
 
 func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry) *dns.Msg {
 	q := r.Question[0]

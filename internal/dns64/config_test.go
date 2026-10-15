@@ -2,6 +2,7 @@ package dns64
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/netip"
 	"strconv"
@@ -115,5 +116,21 @@ func TestRecords(t *testing.T) {
 	}
 	if r := ask("app.dev.lan", dns.TypeA); r.Rcode != dns.RcodeNameError {
 		t.Fatalf("disabled wildcard still answers: %v", r)
+	}
+}
+
+func TestAllowNetsHardening(t *testing.T) {
+	m, _ := testModule(t)
+	for _, n := range []string{"0.0.0.0/0", "::/0"} {
+		c := m.loadConfig(context.Background())
+		c.AllowNets = []string{n}
+		var ce *cfgError
+		if err := c.validate(); !errors.As(err, &ce) || ce.Key != "err_net_any" {
+			t.Fatalf("%s: err = %v", n, err)
+		}
+	}
+	c := config{AllowNets: []string{"10.8.0.0/24", "2001:db8:7::/48", "fd00::/8", "0.0.0.0/0"}}
+	if got := c.PublicNets(); len(got) != 1 || got[0] != "2001:db8:7::/48" {
+		t.Fatalf("public = %v", got)
 	}
 }

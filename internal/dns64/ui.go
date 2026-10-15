@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/dns64/dnsserver"
 	"github.com/ipv64net/node64/internal/dns64/upstream"
 	"github.com/ipv64net/node64/internal/module"
 )
@@ -72,6 +73,7 @@ type pageData struct {
 	Types   []string
 	Enc     encView
 	Pause   pauseView
+	Refused dnsserver.Refused // Anfragen von fremden Adressen seit dem Start
 }
 
 var tabs = []tab{{"overview", "/dns64", "dns64.tab.overview", "bi-speedometer2", false}, {"log", "/dns64/log", "dns64.tab.log", "bi-list-ul", false},
@@ -93,6 +95,9 @@ func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 		d.Pause = m.pauseState()
 		if key == "encrypted" {
 			d.Enc = m.encView(r, d.Cfg)
+		}
+		if e := m.running(); e != nil && key == "settings" {
+			d.Refused = e.srv.Refused()
 		}
 		if key == "records" {
 			var err error
