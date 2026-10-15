@@ -92,7 +92,8 @@ func TestCheckLifecycleViaAPI(t *testing.T) {
 	}
 	var c checkJSON
 	_ = json.Unmarshal(b, &c)
-	if len(c.Token) != 32 || c.State.State != "pending" || *c.IntervalSeconds != 20 || c.Revision != 1 {
+	// "up" ist auch richtig: die erste Messung kann schon vor der Antwort gelaufen sein (z. B. mit -race)
+	if len(c.Token) != 32 || (c.State.State != "pending" && c.State.State != "up") || *c.IntervalSeconds != 20 || c.Revision != 1 {
 		t.Fatalf("created: %+v", c)
 	}
 	// Erste Messung abwarten
