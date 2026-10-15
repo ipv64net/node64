@@ -124,16 +124,44 @@ Damit funktionieren DNS64 mit DoH, CDN64 und die Oberfläche in **einem** Contai
   scheitern.
 - Für den Normalfall gilt: **ein Container, eine Portweiterleitung im Router (80/443 → Node64), alles dahinter.**
 
-**Vorbereitet für das ipv64-CDN** (siehe unten), schon ab C0 im Edge:
+**Für später:** Die Anbindung an die ipv64-CDN-Server (mit und ohne TLS-Terminierung, Tunnel über QUIC) ist
+**nicht Teil dieses Plans**. Sie bekommt einen eigenen Phasenplan
+([PLAN-NODE64-CDN64-ONLINE.md](PLAN-NODE64-CDN64-ONLINE.md), derzeit nur Merkzettel). Edge wird so gebaut, dass
+das PROXY-Protokoll und das Durchreichen vom CDN später ergänzt werden können, ohne den Eingang umzubauen.
 
-- **PROXY-Protokoll v2:** Wird eine Verbindung roh durchgereicht, liefert das CDN die echte Client-IP im
-  PROXY-Kopf. Edge akzeptiert diesen Kopf nur von vertrauenswürdigen Quellen (Liste der ipv64-CDN-Server, per API).
-- **Vertrauenswürdige Proxys:** `X-Forwarded-For`/`X-Real-IP` gelten nur von diesen Quellen. Für Nutzer hinter
-  Cloudflare kann die Liste erweitert werden.
-- **SNI-Durchreichen:** Ein Name kann statt Terminierung roh an ein Ziel gehen, lokal (eigener Host-Typ in C3) wie
-  vom CDN.
-- **Herkunftsschutz:** Je Host lässt sich „nur über das ipv64-CDN“ einstellen. Direkte Zugriffe auf den Namen
-  werden dann abgewiesen.
+## DNS bleibt im LAN, auch über Port 443
+
+Wird 443 im Router freigegeben, kommen dort auch Anfragen aus dem Internet an. **Proxy-Hosts** sind für alle da,
+das ist ihr Zweck. **DNS64 (DoH)** antwortet dagegen nur Geräten aus dem eigenen Netz. Ein offener Resolver aus dem
+Internet wird sonst für Angriffe (Verstärkung, Ausspähen) missbraucht.
+
+- **Schon heute** prüft DNS64 jede Anfrage über dieselbe Freigabeliste, egal ob über 53, DoT, DoQ oder DoH.
+  - Erlaubt sind private Netze, Loopback, Link-local und 100.64.0.0/10 (Tailscale u. a.).
+  - Dazu kommen die Netze an den eigenen Schnittstellen (z. B. das öffentliche IPv6-/64 zu Hause) und die
+    eingetragenen „weiteren Client-Netze“.
+  - Alles andere bekommt keine Antwort.
+- **Mit Edge kommt dazu (C0/C6):**
+  - Edge reicht `/dns-query` **nur für die DNS64-Namen** weiter, nie für Proxy-Hosts oder unbekannte Namen.
+  - Fremde IPs sieht DNS64 gar nicht erst: Edge prüft die Freigabeliste von DNS64 vor der Weitergabe. Ein Zugriff
+    aus dem Internet bekommt ein neutrales 404, kein 403, das verrät nichts.
+  - Für DNS zählt **immer die echte Gegenstelle der Verbindung**. `X-Forwarded-For` und ähnliche Köpfe werden für
+    DNS nie ausgewertet, auch wenn sie für Proxy-Hosts später vertrauenswürdig sind (Cloudflare). Sonst könnte jemand
+    von außen „ich bin 192.168.1.5“ behaupten.
+  - DoT/DoQ (853) und DNS (53) laufen nicht über Edge. In Doku und Oberfläche steht der Hinweis: 53 und 853 **nie**
+    im Router freigeben.
+- **Härtung in DNS64 (mit C6, abgestimmt mit der DNS64-Sitzung):**
+  - In den „weiteren Client-Netzen“ werden `0.0.0.0/0` und `::/0` abgelehnt.
+  - Bei öffentlichen Netzen erscheint eine deutliche Warnung („offener Resolver für dieses Netz“).
+  - Netze an den eigenen Schnittstellen zählen nur noch, wenn sie privat sind oder ein IPv6-/64 (bzw. kleiner).
+    Ein öffentliches IPv4-Netz an der Schnittstelle (z. B. auf einem gemieteten Server) gibt sonst die Nachbarn im
+    Rechenzentrum frei.
+  - Abgelehnte Zugriffe von außen werden gezählt (je Stunde, nicht je Anfrage) und als Kennzahl angezeigt, damit
+    eine versehentliche Freigabe auffällt.
+- **Tests:**
+  - DoH über Edge von einer öffentlichen Absenderadresse liefert 404.
+  - Ein gefälschtes `X-Forwarded-For: 192.168.x.x` von außen liefert 404.
+  - Ein Gerät aus dem LAN bekommt eine Antwort.
+  - Über einen Proxy-Host-Namen ist `/dns-query` nicht erreichbar.
 
 ## SSL-Zertifikate (eigener Reiter)
 
@@ -288,72 +316,6 @@ und die Oberfläche könnte auch eines nutzen. **Entschieden:**
   - README-Abschnitt.
   - `CHANGELOG.md` des Moduls.
 
-## ipv64-CDN: vorgelagerte Server (spätere Phase, Architektur jetzt)
-
-ipv64 betreibt schon CDN-Server: nginx mit IPv4 und IPv6, gesteuert über `bots/cdn_bot.php` und API v2 `/cdn`
-(Proxy, Portmapper, Zugriffsliste, Caching, Let's Encrypt). Zielgruppe sind Anschlüsse **ohne eigene öffentliche
-IPv4**, z. B. DS-Lite oder CGNAT. Besucher kommen über IPv4 oder IPv6 zum CDN-Server, und der CDN-Server erreicht
-die Node über IPv6.
-
-CDN64 soll diese Server später aus der Oberfläche heraus verknüpfen, **je Host wählbar**:
-
-| Veröffentlichung | Weg | TLS | Was das CDN sieht |
-|---|---|---|---|
-| **Direkt** (Standard) | Besucher → Router → Node64 | auf der Node | – |
-| **ipv64-CDN mit TLS-Terminierung** (wie Cloudflare) | Besucher → CDN-Server (TLS endet dort) → neu verschlüsselt → Node64 | zweimal: am CDN mit eigenem Zertifikat, zur Node mit dem Zertifikat der Node | Inhalte; dafür Caching, Zugriffsliste, Schutz vor Angriffen am CDN |
-| **ipv64-CDN ohne TLS-Terminierung** (Durchreichen) | Besucher → CDN-Server (liest nur den Namen, SNI) → rohe TCP-Verbindung → Node64 | Ende-zu-Ende nur auf der Node | nur Name, IPs, Datenmenge; kein Caching am CDN |
-
-**Was die Node dafür mitbringt:**
-
-- **Verknüpfen über API v2** mit dem zentralen API-Key, wie bei allen Diensten (Entscheidung „API zuerst“).
-  - CDN64 legt die CDN-Domain bzw. den Eintrag an, wählt den Modus und setzt die DNS-Einträge.
-  - Es zeigt den Zustand an (zugewiesener Server, Zertifikat am CDN, Datenmenge, Limit der Klasse).
-- **Ein Herkunfts-Port für alle Hosts:** Das CDN verbindet sich immer mit Edge auf 443, und Edge verteilt nach dem
-  Namen. Mit TLS-Terminierung muss das CDN dafür den Namen weitergeben (nginx `proxy_ssl_server_name on`). Die Node
-  braucht so keine zweite Freigabe im Router.
-- **Echte Client-IP:**
-  - Mit TLS-Terminierung über `X-Forwarded-For`.
-  - Beim Durchreichen über das PROXY-Protokoll.
-  - Beides gilt nur, wenn die Verbindung von einem ipv64-CDN-Server kommt; die Liste kommt per API.
-- **Herkunftsschutz:**
-  - Option „nur über das CDN“.
-  - Später gegenseitige Zertifikatsprüfung (mTLS) zwischen CDN und Node. Im cdn_bot ist `ssl_verify_client`
-    dafür schon angedacht.
-- **Zertifikate:**
-  - Mit TLS-Terminierung: am CDN das Zertifikat von ipv64 (wie heute) und auf der Node ein eigenes. Das CDN prüft
-    das Zertifikat der Node; sie bekommt es per ipv64 DNS-01, ohne dass Port 80 offen sein muss.
-  - Beim Durchreichen gibt es nur das Zertifikat auf der Node.
-- **HTTP/3:**
-  - Mit TLS-Terminierung spricht das CDN mit dem Besucher, was nginx dort kann.
-  - Beim Durchreichen läuft zunächst HTTP/1.1 und HTTP/2 über TCP. QUIC durchzureichen braucht am CDN ein Programm,
-    das den Namen aus dem QUIC-Paket liest; nginx kann das nicht. Edge kündigt HTTP/3 (`Alt-Svc`) daher nur an, wo
-    es auch ankommt.
-- **Erreichbarkeit:** In der Liste steht zusätzlich „CDN → Node erreichbar“, geprüft vom CDN-Server, per API
-  abgefragt.
-
-**Was auf der ipv64-Seite dazukommt (nicht in diesem Repo, eigene Abstimmung):**
-
-- **Für das Durchreichen:**
-  - Auf den CDN-Servern kommt vor 443 ein nginx-`stream` mit `ssl_preread`. Namen im Durchreich-Modus gehen roh
-    (mit `proxy_protocol`) zur Node, alle anderen an den bestehenden HTTP-Teil auf dem Server selbst.
-  - Port 80 leitet für diese Namen nur auf HTTPS um.
-- API v2 `/cdn`:
-  - Modus je Eintrag (terminieren/durchreichen);
-  - Herkunfts-Port und -Schema, mehrere Namen je Domain;
-  - Liste der CDN-Server-IPs;
-  - Prüfung „CDN → Node“.
-- Später, falls gewünscht: mTLS zur Node.
-
-**Merkposten Tunnel (Idee, nicht entschieden):** Wer auch per IPv6 nicht von außen erreichbar ist (doppeltes
-CGNAT, Mobilfunk, strenge Firewall), dem hilft nur eine ausgehende Verbindung von der Node zum CDN-Server (wie
-Cloudflare Tunnel). Beide Modi könnten darüber laufen. Das Datenmodell sieht dafür einen dritten Transportweg vor.
-
-**Datenmodell schon ab C1:**
-
-- Jeder Host hat `publish` = `direct` | `ipv64_cdn_tls` | `ipv64_cdn_passthrough` (später ggf. `…_tunnel`) und
-  `origin_only_cdn`.
-- Bis Phase C7 ist nur `direct` wählbar. So muss später nichts umgebaut werden.
-
 ## Was nicht dazugehört (vorerst)
 
 - Die freie nginx-Konfiguration: Die festen Felder unter „Erweitert“ decken die üblichen Fälle ab.
@@ -373,7 +335,7 @@ der nächsten Phase. Ausgerollt auf der Box wird nur mit Dennis' Go.
   - An- und Abmelden von Abnehmern, Routing nach SNI und Host;
   - Standardseite;
   - Start nur bei Bedarf;
-  - PROXY-Protokoll v2 und vertrauenswürdige Proxys (nur von Quellen aus einer Liste).
+  - DNS nur für die DNS64-Namen und nur für Clients aus der Freigabeliste (echte Gegenstelle, keine Köpfe).
 - **Port-Verwaltung** mit Konfliktprüfung, Probe-Bind und Übersicht „Ports“ (Einstellungen und API).
 - `internal/certs`:
   - Speicher (Laden, Ablauf, Zuordnung nach Namen), ACME-Konto;
@@ -391,7 +353,6 @@ der nächsten Phase. Ausgerollt auf der Box wird nur mit Dennis' Go.
   - Ziel http/https, WebSockets, Block Common Exploits, Cache Assets;
   - Force SSL, HTTP/2, HTTP/3, HSTS.
 - Erreichbarkeit der Ziele in der Liste.
-- Datenmodell mit `publish` (vorerst nur `direct`) und `origin_only_cdn`.
 - Audit und API für alles Obige.
 
 ### C2 Reiter SSL-Zertifikate
@@ -425,25 +386,12 @@ der nächsten Phase. Ausgerollt auf der Box wird nur mit Dennis' Go.
 - **DNS64:**
   - DoH über Edge statt eigenem Listener (DNS64 1.8.0);
   - Zertifikatsmodus „aus der Zertifikatsverwaltung“;
+  - Härtung der Freigabeliste (siehe „DNS bleibt im LAN“);
   - abgestimmt mit der DNS64-Sitzung, Ausrollen nur mit Dennis' Go, weil das Heimnetz-DNS dranhängt.
 - Node64-Oberfläche optional unter eigener Domain über Edge.
 - Lasttest (z. B. 1.000 gleichzeitige Verbindungen, WebSocket-Dauerverbindungen, große Uploads), Speicherverbrauch
   im Leerlauf mit und ohne Modul.
 - Doku, OpenAPI, README.
-
-### C7 ipv64-CDN (nach Abstimmung der Server-Seite)
-- **Node:**
-  - CDN verknüpfen über API v2;
-  - je Host Veröffentlichung „ipv64-CDN mit TLS-Terminierung“ bzw. „ohne TLS-Terminierung“;
-  - DNS-Einträge über das CDN;
-  - Herkunftsschutz;
-  - Anzeige: Server, Zustand, Datenmenge, „CDN → Node erreichbar“.
-- **ipv64-Seite (eigene Abstimmung):**
-  - `ssl_preread`-Vorstufe mit `proxy_protocol` auf den CDN-Servern;
-  - Erweiterungen in API v2 `/cdn`;
-  - Liste der CDN-Server-IPs.
-  - Website-Code nur als Vorher/Nachher zur Prüfung.
-- Später optional: mTLS zur Node, Tunnel.
 
 ## Testumgebung
 
@@ -466,13 +414,8 @@ der nächsten Phase. Ausgerollt auf der Box wird nur mit Dennis' Go.
   von CDN64.
 - **Port 443 gemeinsam über Edge** im Kern, mit Port-Übersicht und Konfliktprüfung.
 - **Kein Import aus dem NPM.**
-- **ipv64-CDN** (Ergänzung Dennis): Der lokale Reverse-Proxy ist der Grundbestandteil. Später kommen zwei Wege über
-  die bestehenden ipv64-CDN-Server dazu, je Host wählbar: mit TLS-Terminierung am CDN (wie Cloudflare) und ohne
-  (Durchreichen, TLS endet erst auf der Node). Zweck: Erreichbarkeit über IPv4 für Anschlüsse ohne eigene IPv4.
-  Die Architektur (Edge, Datenmodell) berücksichtigt das ab C0/C1.
-
-## Offene Fragen (für C7, nicht blockierend)
-
-- **Tunnel** für Anschlüsse, die auch per IPv6 nicht erreichbar sind: gewünscht?
-- **Durchreichen und HTTP/3:** reicht HTTP/2 über TCP, oder soll QUIC später auch durchgereicht werden (eigenes
-  Programm statt nginx vor 443 auf den CDN-Servern)?
+- **Nur lokaler Reverse-Proxy in diesem Plan.** Die Anbindung an die ipv64-CDN-Server (mit und ohne
+  TLS-Terminierung, Tunnel über QUIC) bekommt später einen eigenen Phasenplan
+  ([PLAN-NODE64-CDN64-ONLINE.md](PLAN-NODE64-CDN64-ONLINE.md)).
+- **DNS über 443 nur für das eigene Netz:** DoH über den freigegebenen Port 443 nur für private bzw. lokale
+  Absender, nie aus dem Internet.
