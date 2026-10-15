@@ -114,8 +114,9 @@ func (m *Manager) proxyData(ctx context.Context, h Hub, x Member, hubAck int64) 
 	return nil
 }
 
-// forwardHeld reicht Checks an den hub weiter, die bisher in der Gruppe blieben, weil der hub eine messende Node
-// nicht kannte – einmal je Mitglied und Prozess, sobald der hub es als Stellvertreter-Node fuehrt.
+// forwardHeld reicht Checks mit einem Mitglied unter den messenden Nodes an den hub weiter – einmal je Mitglied und
+// Prozess, sobald der hub es als Stellvertreter-Node fuehrt. Neue Checks und Aenderungen (z. B. das Mitglied als
+// weitere messende Node) blieben bis dahin in der Gruppe, weil der hub das Mitglied nicht kannte.
 func (m *Manager) forwardHeld(ctx context.Context, acks map[string]int64) {
 	hc := m.checks()
 	if hc == nil || m.d.Forward == nil {
@@ -139,7 +140,7 @@ func (m *Manager) forwardHeld(ctx context.Context, acks map[string]int64) {
 	n := 0
 	for _, t := range hc.PeerTokens(ctx) {
 		w, _, _, err := hc.PeerCheck(ctx, t, m.d.NodeID())
-		if err != nil || w == nil || w.Revision > 0 || w.Execution == "online" || !m.hubKnows(ctx, w.Nodes) {
+		if err != nil || w == nil || w.Execution == "online" || !m.hubKnows(ctx, w.Nodes) {
 			continue
 		}
 		for _, id := range w.Nodes {

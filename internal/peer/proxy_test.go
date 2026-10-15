@@ -2,6 +2,7 @@ package peer
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -99,7 +100,10 @@ func TestProxyNodes(t *testing.T) {
 	if a.m.hubKnows(ctx, both) || a.m.hubDecides(ctx, both) {
 		t.Fatal("hub must not know B yet")
 	}
-	fa.chk["t1"] = wire.Check{Token: "t1", Name: "Web", Nodes: both} // bisher nur in der Gruppe (Revision 0)
+	fa.chk["t1"] = wire.Check{Token: "t1", Name: "Web", Nodes: both}                         // bisher nur in der Gruppe (Revision 0)
+	fa.chk["t2"] = wire.Check{Token: "t2", Name: "GW", Nodes: both, Revision: 7}             // beim hub, B nur in der Gruppe ergaenzt
+	fa.chk["t3"] = wire.Check{Token: "t3", Name: "Nur A", Nodes: []string{"node-a"}}         // ohne B: bleibt
+	fa.chk["t4"] = wire.Check{Token: "t4", Name: "Online", Nodes: both, Execution: "online"} // Online-Check: bleibt
 
 	a.m.pushProxies(ctx, mustMembers(t, a))
 	if len(hub.reg) != 1 || len(hub.reg[0]) != 1 || hub.reg[0][0].ID != "node-b" || !hub.reg[0][0].Online {
@@ -125,11 +129,12 @@ func TestProxyNodes(t *testing.T) {
 	if hub.points["node-b"] != 4 {
 		t.Fatalf("only the new point: %d", hub.points["node-b"])
 	}
-	if len(fwd) != 1 || fwd[0] != "check:t1:upsert" {
-		t.Fatalf("held check not forwarded: %v", fwd)
+	sort.Strings(fwd)
+	if len(fwd) != 2 || fwd[0] != "check:t1:upsert" || fwd[1] != "check:t2:upsert" {
+		t.Fatalf("held checks not forwarded: %v", fwd)
 	}
 	a.m.pushProxies(ctx, mustMembers(t, a)) // einmal je Mitglied
-	if len(fwd) != 1 {
+	if len(fwd) != 2 {
 		t.Fatalf("forwarded twice: %v", fwd)
 	}
 	// B ist inzwischen selbst verknuepft: keine Stellvertreter-Node mehr
