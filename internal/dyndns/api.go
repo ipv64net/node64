@@ -151,7 +151,7 @@ func (m *Module) apiStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) apiCheck(w http.ResponseWriter, r *http.Request) {
-	m.audit(r, "dyndns.check", "", "api")
+	m.audit(r, "dyndns.check", "", "")
 	if !m.checkNow(45 * time.Second) {
 		writeErr(w, http.StatusAccepted, "check still running")
 		return
@@ -215,7 +215,7 @@ func (m *Module) apiTargetCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, status, fieldError(err))
 		return
 	}
-	m.audit(r, "dyndns.target_add", t.FQDN(), "api")
+	m.audit(r, "dyndns.target_add", t.FQDN(), "")
 	writeJSON(w, http.StatusCreated, targetOut(t))
 }
 
@@ -241,7 +241,7 @@ func (m *Module) apiTargetUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, fieldError(err))
 		return
 	}
-	m.audit(r, "dyndns.target_edit", t.FQDN(), "api")
+	m.audit(r, "dyndns.target_edit", t.FQDN(), "")
 	writeJSON(w, http.StatusOK, targetOut(t))
 }
 
@@ -254,7 +254,7 @@ func (m *Module) apiTargetDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	m.audit(r, "dyndns.target_delete", t.FQDN(), "api")
+	m.audit(r, "dyndns.target_delete", t.FQDN(), "")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -268,7 +268,7 @@ func (m *Module) apiTargetUpdateNow(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "an update round is running, try again in a few seconds")
 		return
 	}
-	m.audit(r, "dyndns.update_now", t.FQDN(), "api")
+	m.audit(r, "dyndns.update_now", t.FQDN(), "")
 	if got, _ := m.Target(r.Context(), t.ID); got != nil {
 		t = got
 	}
@@ -328,7 +328,7 @@ func (m *Module) apiSettingsPut(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	m.audit(r, "dyndns.settings", "settings", "api")
+	m.audit(r, "dyndns.settings", "settings", "")
 	writeJSON(w, http.StatusOK, m.getSettings(r.Context()))
 }
 
@@ -398,7 +398,7 @@ func (m *Module) apiFromAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []targetJSON{}
 	for _, t := range added {
-		m.audit(r, "dyndns.target_add", t.FQDN(), "api")
+		m.audit(r, "dyndns.target_add", t.FQDN(), "")
 		out = append(out, targetOut(t))
 	}
 	if failed == nil {
@@ -420,7 +420,7 @@ func (m *Module) apiTargetToken(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		writeErr(w, http.StatusBadGateway, err.Error())
 	default:
-		m.audit(r, "dyndns.token_refresh", t.FQDN(), "api")
+		m.audit(r, "dyndns.token_refresh", t.FQDN(), "")
 		writeJSON(w, http.StatusOK, targetOut(t))
 	}
 }

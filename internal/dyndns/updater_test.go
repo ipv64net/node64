@@ -433,7 +433,9 @@ func TestUpdaterRecoveryAlert(t *testing.T) {
 	var mu sync.Mutex
 	kinds := map[notify.Kind]int{}
 	m.notifier = func(a notify.Alert) { mu.Lock(); kinds[a.Kind]++; mu.Unlock() }
-	f.reply = func(string) (int, string) { return http.StatusBadRequest, `{"status":"400 Bad Request","info":"No correct IP transmitted"}` }
+	f.reply = func(string) (int, string) {
+		return http.StatusBadRequest, `{"status":"400 Bad Request","info":"No correct IP transmitted"}`
+	}
 	tg := addTarget(t, m, "rec", Mode4Auto, Mode6Off, "")
 	m.runUpdates(ctx)
 	m.upd.mu.Lock()
