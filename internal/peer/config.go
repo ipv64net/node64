@@ -313,6 +313,9 @@ func (m *Manager) pullAll(ctx context.Context, only string) {
 			m.d.Log.Debug("peer relay", "from", x.Name, "err", err)
 		}
 	}
+	if only == "" {
+		m.pushProxies(ctx, list)
+	}
 	m.verdicts(ctx)
 }
 
@@ -366,13 +369,37 @@ func (m *Manager) forwardFor(ctx context.Context, origin string) bool {
 	return m.forwarder(ctx)
 }
 
-// hubKnows: keine der messenden Nodes ist ein nicht verknuepftes Mitglied der Gruppe (sonst lehnt der hub den
-// Check ab; er bleibt dann in der lokalen Gruppe). Nodes ausserhalb der Gruppe kennt nur der hub.
+// hubKnows: der hub kennt alle messenden Nodes – verknuepfte und nicht verknuepfte Mitglieder, die die
+// weiterreichende Node dort als Stellvertreter angemeldet hat (sonst lehnt der hub den Check ab; er bleibt dann in
+// der lokalen Gruppe). Nodes ausserhalb der Gruppe kennt nur der hub.
 func (m *Manager) hubKnows(ctx context.Context, nodes []string) bool {
+	var known map[string]bool
 	for _, id := range nodes {
 		if id == m.d.NodeID() {
 			if !m.linkedSelf() {
 				return false // diese Node misst mit und ist nicht verknuepft
+			}
+			continue
+		}
+		if x, _ := m.member(ctx, id); x != nil && !x.Linked {
+			if known == nil {
+				known = m.hubNodes(ctx)
+			}
+			if !known[id] {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// hubDecides: der hub bewertet und benachrichtigt – keine der messenden Nodes ist ein nicht verknuepftes Mitglied
+// der Gruppe. Checks von Stellvertreter-Nodes zeigt der hub nur an; sie bewertet und meldet die Gruppe.
+func (m *Manager) hubDecides(ctx context.Context, nodes []string) bool {
+	for _, id := range nodes {
+		if id == m.d.NodeID() {
+			if !m.linkedSelf() {
+				return false
 			}
 			continue
 		}

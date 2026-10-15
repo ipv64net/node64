@@ -42,10 +42,10 @@ func (m *Manager) NotifyRole(ctx context.Context, nodes []string) (group, me, re
 	return true, false, ready
 }
 
-// hubSends: der hub bewertet und meldet (er kennt alle messenden Nodes; ist diese Node verknuepft, muss er
+// hubSends: der hub bewertet und meldet (alle messenden Nodes sind verknuepft; ist diese Node verknuepft, muss er
 // auch bestaetigen). Gleiches Ergebnis von jeder Node aus, auch von einer, die den Check nicht misst.
 func (m *Manager) hubSends(ctx context.Context, nodes []string) bool {
-	if !m.hubKnows(ctx, nodes) {
+	if !m.hubDecides(ctx, nodes) {
 		return false
 	}
 	return !m.linkedSelf() || (m.d.HubNotifies != nil && m.d.HubNotifies())

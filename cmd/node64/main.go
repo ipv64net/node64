@@ -197,12 +197,14 @@ func run() error {
 			if f := hcModule.Store().OnChange; f != nil {
 				f(context.WithoutCancel(ctx), entity, id, op)
 			}
-		}})
+		},
+		Hub: syncClient}) // nicht verknuepfte Mitglieder als Stellvertreter-Nodes beim hub
 	if err != nil {
 		return err
 	}
 	hcModule.Store().OnAnyChange = peerMgr.LogChange
 	hcModule.SetGroupRole(peerMgr.NotifyRole)
+	hcModule.SetGroupDecides(peerMgr.GroupDecides)
 	hcModule.SetGroupNotifier(peerMgr.NotifierOf)
 	hcModule.SetGroupPeers(func(ctx context.Context) []healthchecks.Peer { // Nodes der lokalen Gruppe zur Auswahl
 		list, _ := peerMgr.Members(ctx)

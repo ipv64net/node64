@@ -113,6 +113,24 @@ type Hello struct {
 	Endpoints  []Endpoint `json:"endpoints"`
 	Hub        string     `json:"hub"` // Standort dieses hubs
 	Locations  []Endpoint `json:"locations"`
+	Features   []string   `json:"features,omitempty"` // z. B. "proxy": nimmt Stellvertreter-Nodes an
+}
+
+// ProxyNode ist ein nicht verknuepftes Mitglied der lokalen Gruppe, das die weiterreichende Node beim hub
+// vertritt (Nachricht proxies).
+type ProxyNode struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Location string `json:"location"`
+	Version  string `json:"version"`
+	Online   bool   `json:"online"`
+}
+
+// ProxyData sind Zustaende und Messpunkte einer Stellvertreter-Node (Nachricht proxy_data).
+type ProxyData struct {
+	Node   string        `json:"node"`
+	States []State       `json:"states,omitempty"`
+	Batch  []Measurement `json:"batch,omitempty"`
 }
 
 // Measurement ist ein Messpunkt der Node.

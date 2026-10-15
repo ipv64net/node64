@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -36,6 +37,8 @@ type session struct {
 	sendMu  sync.Mutex
 
 	returnHome bool // Sitzung endet, weil der Stamm-hub wieder erreichbar ist
+
+	proxy atomic.Bool // der hub nimmt Stellvertreter-Nodes an (hello)
 }
 
 // loop haelt die Verbindung mit Backoff und Jitter (1 s .. 60 s, +-30 %).
@@ -198,6 +201,11 @@ func (s *session) handle(m wire.Msg) error {
 			c.set(SetAccount, string(acc))
 			// Name/Standort uebernimmt refreshMe nach afterConnect (lokale Aenderungen gehen vor)
 			c.set(SetRemoteMgmt, h.RemoteMgmt)
+			for _, f := range h.Features {
+				if f == "proxy" {
+					s.proxy.Store(true)
+				}
+			}
 			if h.Hub != "" {
 				c.mu.Lock()
 				c.hub = s.hub + " (" + h.Hub + ")"

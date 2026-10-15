@@ -30,6 +30,7 @@ type Node struct {
 	Online     bool
 	Hub        string
 	RevokedAt  time.Time
+	ProxyVia   string // Stellvertreter-Node: meldet ueber diese Node (proxy.go)
 	Token      *NodeToken
 }
 
@@ -121,7 +122,7 @@ func (s *Store) LinkPoll(ctx context.Context, in wire.LinkPoll) (*wire.Linked, e
 	loc := location.String
 	// Node anlegen oder reaktivieren (gleiche node_id = gleiche Installation)
 	if _, err := tx.ExecContext(ctx, `INSERT INTO hc2_nodes (userid, node_id, name, location, version, created_at, remote_mgmt) VALUES (?,?,?,?,?,?,?)
-		ON DUPLICATE KEY UPDATE userid = VALUES(userid), name = VALUES(name), location = VALUES(location), version = VALUES(version), remote_mgmt = VALUES(remote_mgmt), revoked_at = NULL`,
+		ON DUPLICATE KEY UPDATE userid = VALUES(userid), name = VALUES(name), location = VALUES(location), version = VALUES(version), remote_mgmt = VALUES(remote_mgmt), revoked_at = NULL, proxy_via = NULL`,
 		userid.Int64, nodeID, name, loc, version, nowStr(), rm); err != nil {
 		return nil, err
 	}
@@ -187,8 +188,8 @@ func (s *Store) NodeByID(ctx context.Context, nodeID string) (*Node, error) {
 	var n Node
 	var lastSeen, revoked sql.NullString
 	var online int
-	err := s.db.QueryRowContext(ctx, `SELECT node_id, userid, name, location, version, timezone, modules, remote_mgmt, last_seen, last_ack_seq, online, node, revoked_at FROM hc2_nodes WHERE node_id = ?`, nodeID).
-		Scan(&n.ID, &n.UserID, &n.Name, &n.Location, &n.Version, &n.Timezone, &n.Modules, &n.RemoteMgmt, &lastSeen, &n.LastAckSeq, &online, &n.Hub, &revoked)
+	err := s.db.QueryRowContext(ctx, `SELECT node_id, userid, name, location, version, timezone, modules, remote_mgmt, last_seen, last_ack_seq, online, node, revoked_at, COALESCE(proxy_via, '') FROM hc2_nodes WHERE node_id = ?`, nodeID).
+		Scan(&n.ID, &n.UserID, &n.Name, &n.Location, &n.Version, &n.Timezone, &n.Modules, &n.RemoteMgmt, &lastSeen, &n.LastAckSeq, &online, &n.Hub, &revoked, &n.ProxyVia)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -508,11 +509,12 @@ type AccountNode struct {
 	Name     string `json:"name"`
 	Location string `json:"location"`
 	Online   bool   `json:"online"`
+	Via      string `json:"via,omitempty"` // Stellvertreter-Node: meldet ueber diese Node
 }
 
-// AccountNodes liefert die verknuepften Nodes eines Accounts.
+// AccountNodes liefert die verknuepften Nodes eines Accounts (mit den Stellvertreter-Nodes).
 func (s *Store) AccountNodes(ctx context.Context, userID int64) ([]AccountNode, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT node_id, name, location, online FROM hc2_nodes WHERE userid = ? AND revoked_at IS NULL ORDER BY name`, userID)
+	rows, err := s.db.QueryContext(ctx, `SELECT node_id, name, location, online, COALESCE(proxy_via, '') FROM hc2_nodes WHERE userid = ? AND revoked_at IS NULL ORDER BY name`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -521,7 +523,7 @@ func (s *Store) AccountNodes(ctx context.Context, userID int64) ([]AccountNode, 
 	for rows.Next() {
 		var a AccountNode
 		var online int
-		if rows.Scan(&a.ID, &a.Name, &a.Location, &online) == nil {
+		if rows.Scan(&a.ID, &a.Name, &a.Location, &online, &a.Via) == nil {
 			a.Online = online == 1
 			out = append(out, a)
 		}

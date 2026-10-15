@@ -56,6 +56,8 @@ type Module struct {
 	pushFwd func(token string, down bool, msg, from string) bool
 	// runRemote bittet den hub, den Check bei den anderen messenden Nodes sofort zu messen
 	runRemote func(token string) bool
+	// lokale Gruppe: sie bewertet den Gesamtzustand statt des hub (Stellvertreter-Nodes), nil = keine Gruppe
+	groupDecides func(ctx context.Context, nodes []string) bool
 }
 
 // New erzeugt das Modul. dispatcher und notifyStore duerfen nil sein (dann nur Log).
@@ -172,7 +174,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.8.0", Changelog: changelog}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.9.0", Changelog: changelog}
 }
 
 func (m *Module) Migrations() []store.Migration {

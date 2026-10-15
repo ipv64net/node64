@@ -50,8 +50,18 @@ Diagramm und Verlauf funktionieren dadurch unverändert.
   Gruppe, damit nichts hin und her pendelt.
 - **Änderungen von Nodes ohne Sync:** Genau eine verknüpfte Node reicht sie an den hub weiter. Das ist die mit
   der kleinsten Kennung unter den erreichbaren verknüpften Nodes; die Gruppen-Karte zeigt, welche es ist.
-- **Checks nur auf Nodes ohne Sync:** Ein Check, den nur Nodes ohne Sync messen, bleibt in der Gruppe. Der hub
-  kennt diese Nodes nicht und würde ihn ablehnen.
+- **Checks von Nodes ohne Sync (Stellvertreter-Nodes):** Die weiterreichende Node meldet alle Mitglieder ohne
+  Sync beim hub als Stellvertreter-Nodes an (`hc2_nodes.proxy_via` = ihre Kennung, kein Token) und reicht deren
+  Zustände und Messpunkte weiter (Nachrichten `proxies` und `proxy_data`, alle 15 s). Damit erscheinen auch
+  Checks, die solche Nodes messen, mit Messwerten im Portal. Checks, die bisher in der Gruppe blieben, schickt sie
+  einmal an den hub, sobald er das Mitglied führt.
+  - Der hub zeigt diese Checks nur an und benachrichtigt nicht (auch keine Erinnerungen): das macht weiter die
+    Gruppe, sonst käme jede Meldung doppelt.
+  - Online ist eine Stellvertreter-Node, solange die weiterreichende Node sie als erreichbar meldet (nach 3 Minuten
+    ohne Meldung offline, wie bei verknüpften Nodes).
+  - Verlässt ein Mitglied die Gruppe oder verknüpft es sich selbst, nimmt die weiterreichende Node es aus der Liste;
+    der hub widerruft dann die Stellvertreter-Node. Im Portal entfernt, legt die nächste Meldung sie wieder an.
+  - Ohne weiterreichende Node (keine verknüpfte Node erreichbar) bleibt alles in der Gruppe wie bisher.
 - **Wartungsfenster** von Nodes ohne Sync gehen über die weiterreichende Node an den hub. Nach der Bestätigung
   erfährt die Gruppe die Server-ID.
 - **„hub bestätigt nicht“** gilt nur bei einem Datenbankfehler des hub oder wenn keine Antwort kommt. Eine
@@ -59,7 +69,8 @@ Diagramm und Verlauf funktionieren dadurch unverändert.
 
 ## Gesamtzustand
 
-- **Mit hub:** Der hub bewertet, wenn die Node verknüpft ist und er alle messenden Nodes kennt.
+- **Mit hub:** Der hub bewertet, wenn die Node verknüpft ist und alle messenden Nodes verknüpft sind. Misst eine
+  Stellvertreter-Node mit, bewertet die Gruppe; der Gesamtzustand vom hub wird dann nicht übernommen.
 - **Ohne hub:** Sonst bewertet die Node selbst, mit `scheduler.Overall` wie der hub und mit den Regeln „alle“,
   „eine“ oder „Mehrheit“, und führt dabei auch die Störungen.
 - **Messende Node nicht erreichbar:** Nach 2 Minuten ist der Zustand „ausstehend“. Eine offene Störung bleibt

@@ -612,7 +612,9 @@ func (m *Module) ApplyRemoteState(ctx context.Context, r RemoteState) {
 	if c.MeasuredHere() {
 		return
 	}
-	if r.State != "" {
+	// misst eine nicht verknuepfte Node der Gruppe mit, bewertet die Gruppe (der hub zeigt den Check nur an)
+	group := m.groupDecides != nil && c.Execution != "online" && m.groupDecides(ctx, c.Nodes)
+	if r.State != "" && !group {
 		_, _ = m.st.w.ExecContext(ctx, `UPDATE hc_checks SET state=?, state_since=?, last_check_at=?, last_status=?, last_latency_ms=?, last_reason=?, last_message=? WHERE token=?`,
 			r.State, ft(r.Since), ft(r.Time), r.Status, r.LatencyMS, r.Reason, r.Message, r.Token)
 		m.remoteIncident(ctx, r)

@@ -1,5 +1,12 @@
 # Änderungen – Healthchecks
 
+## 2.9.0 – 2026-10-15
+
+### Neu
+- Stellvertreter-Nodes: Checks, die Nodes der lokalen Gruppe ohne eigene ipv64-Verknüpfung messen, erscheinen über
+  die weiterreichende Node mit Zuständen und Messwerten im Portal. Benachrichtigungen bleiben bei der Gruppe; den
+  Gesamtzustand solcher Checks bewertet die Gruppe auch auf verknüpften Nodes.
+
 ## 2.8.0 – 2026-10-15
 
 ### Neu

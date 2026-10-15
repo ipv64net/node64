@@ -31,6 +31,11 @@ type GroupState struct {
 // SetGroupRole haengt die lokale Gruppe an (nil = keine Gruppe).
 func (m *Module) SetGroupRole(f GroupRole) { m.groupRole = f }
 
+// SetGroupDecides haengt die Regel an, wann die Gruppe den Gesamtzustand bewertet statt des hub.
+func (m *Module) SetGroupDecides(f func(ctx context.Context, nodes []string) bool) {
+	m.groupDecides = f
+}
+
 // SetGroupNotifier haengt die Anzeige an, wer in der lokalen Gruppe benachrichtigt (Detailseite).
 func (m *Module) SetGroupNotifier(f func(ctx context.Context, nodes []string) (key, name string)) {
 	m.groupNotifier = f

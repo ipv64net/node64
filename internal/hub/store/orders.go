@@ -71,8 +71,13 @@ func (s *Store) RunCheckOn(ctx context.Context, userID int64, token, senderNode 
 	if err != nil {
 		return err
 	}
-	for _, id := range measuringNodes(splitList(nodes), owner.String) {
-		if id != senderNode {
+	list := measuringNodes(splitList(nodes), owner.String)
+	proxies, err := proxySet(ctx, s.db, list)
+	if err != nil {
+		return err
+	}
+	for _, id := range list {
+		if id != senderNode && !proxies[id] { // Stellvertreter-Nodes haben keine Verbindung (die Gruppe misst selbst)
 			if _, err := s.AddCommand(ctx, id, "run_check", map[string]string{"token": token}); err != nil {
 				return err
 			}

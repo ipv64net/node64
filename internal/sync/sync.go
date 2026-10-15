@@ -1400,3 +1400,61 @@ func (c *Live) TestServerChannel(ctx context.Context, remoteID int64, lang strin
 	}
 	return errors.New("test not confirmed by ipv64")
 }
+
+// ---------------------------------------------------------------- Stellvertreter-Nodes (lokale Gruppe)
+
+// ProxyReady: verbunden mit einem hub, der Stellvertreter-Nodes annimmt.
+func (c *Live) ProxyReady() bool {
+	c.mu.Lock()
+	s := c.ws
+	c.mu.Unlock()
+	return s != nil && s.proxy.Load()
+}
+
+// RegisterProxies meldet die nicht verknuepften Mitglieder der lokalen Gruppe beim hub an (diese Node reicht
+// weiter). Ergebnis: je angenommener Node der bestaetigte Messpunkt-Stand beim hub.
+func (c *Live) RegisterProxies(ctx context.Context, items []wire.ProxyNode) (map[string]int64, error) {
+	c.mu.Lock()
+	s := c.ws
+	c.mu.Unlock()
+	if s == nil || !s.proxy.Load() {
+		return nil, errors.New("not connected to ipv64")
+	}
+	m, err := s.request("proxies", map[string]any{"items": items})
+	if err != nil {
+		return nil, err
+	}
+	var a struct {
+		Acks  map[string]int64 `json:"acks"`
+		Error string           `json:"error"`
+	}
+	if err := json.Unmarshal(m.Data, &a); err != nil {
+		return nil, err
+	}
+	if a.Error != "" {
+		return nil, errors.New(a.Error)
+	}
+	return a.Acks, nil
+}
+
+// ProxyData reicht Zustaende und Messpunkte einer Stellvertreter-Node an den hub; Ergebnis: bestaetigte Nummer.
+func (c *Live) ProxyData(ctx context.Context, node string, states []wire.State, batch []wire.Measurement) (int64, error) {
+	c.mu.Lock()
+	s := c.ws
+	c.mu.Unlock()
+	if s == nil || !s.proxy.Load() {
+		return 0, errors.New("not connected to ipv64")
+	}
+	m, err := s.request("proxy_data", wire.ProxyData{Node: node, States: states, Batch: batch})
+	if err != nil {
+		return 0, err
+	}
+	var a wire.Ack
+	if err := json.Unmarshal(m.Data, &a); err != nil {
+		return 0, err
+	}
+	if a.Error != "" {
+		return 0, errors.New(a.Error)
+	}
+	return a.AckSeq, nil
+}

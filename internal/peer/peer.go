@@ -87,6 +87,8 @@ type Deps struct {
 	SettingsToHub func()
 	// Forward reicht eine uebernommene Aenderung an den hub weiter (Outbox), wenn ihre Urheberin nicht verknuepft ist
 	Forward func(ctx context.Context, entity, id, op string)
+	// Hub meldet nicht verknuepfte Mitglieder als Stellvertreter-Nodes beim hub an (proxy.go), nil = nie
+	Hub Hub
 }
 
 // Manager verwaltet Identitaet, Kopplung und Mitglieder.
@@ -99,10 +101,11 @@ type Manager struct {
 	ready  atomic.Bool // erster Abgleich nach dem Start erledigt (notify.go)
 	seeded atomic.Bool // vorhandene Checks und Fenster im Protokoll (config.go)
 
-	mu    sync.Mutex
-	code  string // offener Kopplungscode
-	exp   time.Time
-	tries int
+	mu      sync.Mutex
+	proxied map[string]bool // Mitglieder, deren zurueckgehaltene Checks schon an den hub gingen (proxy.go)
+	code    string          // offener Kopplungscode
+	exp     time.Time
+	tries   int
 }
 
 // New laedt bzw. erzeugt den Schluessel.

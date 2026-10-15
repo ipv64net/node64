@@ -119,14 +119,18 @@ func (m *Manager) pullData(ctx context.Context, x Member) error {
 	return nil
 }
 
-// verdicts: Gesamtzustand der Checks, die diese Node nicht misst – ohne hub-Verknuepfung oder fuer Checks,
-// die der hub nicht kennt, entscheidet die Gruppe.
+// verdicts: Gesamtzustand der Checks, die diese Node nicht misst – ohne hub-Verknuepfung oder fuer Checks, die
+// eine nicht verknuepfte Node mitmisst (auch als Stellvertreter-Node beim hub), entscheidet die Gruppe.
 func (m *Manager) verdicts(ctx context.Context) {
 	d := m.data()
 	if d == nil {
 		return
 	}
-	linked := m.linkedSelf()
-	// nur Checks, die eine Node der Gruppe misst (sonst kommt der Gesamtzustand vom hub bzw. weitergereicht)
-	d.PeerVerdicts(ctx, func(nodes []string) bool { return (!linked || !m.hubKnows(ctx, nodes)) && m.involved(ctx, nodes) })
+	d.PeerVerdicts(ctx, func(nodes []string) bool { return m.GroupDecides(ctx, nodes) })
+}
+
+// GroupDecides: die Gruppe bewertet den Check, nicht der hub – eine Node der Gruppe misst ihn und diese Node ist
+// nicht verknuepft oder eine messende Node ist es nicht (sonst kommt der Gesamtzustand vom hub bzw. weitergereicht).
+func (m *Manager) GroupDecides(ctx context.Context, nodes []string) bool {
+	return (!m.linkedSelf() || !m.hubDecides(ctx, nodes)) && m.involved(ctx, nodes)
 }

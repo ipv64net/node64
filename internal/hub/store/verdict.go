@@ -141,6 +141,14 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 	if lead != nil && strings.HasPrefix(lead.Source, "node:") && now.Sub(lead.updated) < 15*time.Second && !lead.since.IsZero() && now.Sub(lead.since) > 5*time.Minute {
 		silent = true
 	}
+	// misst eine Stellvertreter-Node mit, benachrichtigt die lokale Gruppe (hier nur anzeigen)
+	if !silent && execution != "online" {
+		proxies, err := proxySet(ctx, tx, measuringNodes(splitList(nodesCol), ownerNode.String))
+		if err != nil {
+			return err
+		}
+		silent = len(proxies) > 0
+	}
 	nowS := now.Format(TimeFormat)
 	var durationSec int64
 	ds := pt(downSince)
@@ -299,7 +307,9 @@ func diagnosis(down, up []string) string {
 // Time = down_since, Duration = Wiederholungsabstand.
 func (s *Store) DueReminders(ctx context.Context) ([]OverallEvent, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT token, userid, name, type, target, critical, channels, notify_down, notify_up, notify_degraded, repeat_minutes, down_since, last_reason, last_message, execution
-		FROM hc2_checks WHERE deleted_at IS NULL AND repeat_minutes > 0 AND state IN ('down','flapping') AND execution IN ('online','both')`)
+		FROM hc2_checks WHERE deleted_at IS NULL AND repeat_minutes > 0 AND state IN ('down','flapping') AND execution IN ('online','both')
+		AND NOT EXISTS (SELECT 1 FROM hc2_nodes n WHERE n.userid = hc2_checks.userid AND n.proxy_via IS NOT NULL AND n.revoked_at IS NULL
+			AND (FIND_IN_SET(n.node_id, hc2_checks.nodes) > 0 OR n.node_id = hc2_checks.node_id))`) // Stellvertreter: die Gruppe erinnert
 	if err != nil {
 		s.Metrics.add(&s.Metrics.DBErrors, 1)
 		return nil, err

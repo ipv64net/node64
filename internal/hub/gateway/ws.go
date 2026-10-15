@@ -102,7 +102,8 @@ func (c *conn) hello(ctx context.Context) {
 	acc, _ := g.st.Account(ctx, n.UserID)
 	eps, _ := g.st.Endpoints(ctx)
 	rev := g.st.CurrentRevision(ctx, n.UserID)
-	c.send(wire.Msg{T: "hello", Data: raw(wire.Hello{ServerTime: time.Now().UTC(), Revision: rev, Account: acc, RemoteMgmt: n.RemoteMgmt, NodeName: n.Name, Location: n.Location, Endpoints: eps, Hub: g.location})})
+	c.send(wire.Msg{T: "hello", Data: raw(wire.Hello{ServerTime: time.Now().UTC(), Revision: rev, Account: acc, RemoteMgmt: n.RemoteMgmt, NodeName: n.Name, Location: n.Location, Endpoints: eps, Hub: g.location,
+		Features: []string{"proxy"}})})
 	// Aenderungen seit dem Stand der Node
 	changes, gap, err := g.st.ConfigSince(ctx, n.UserID, n.ID, c.lastRev)
 	if err != nil {
@@ -210,7 +211,7 @@ func (c *conn) reader() {
 			continue
 		}
 		switch m.T {
-		case "measurements", "events", "states", "deliveries", "status", "push":
+		case "measurements", "events", "states", "deliveries", "status", "push", "proxies", "proxy_data":
 			// DB-lastig: im Worker, damit der Leser weiter liest (Pongs!) und eine langsame DB keine Verbindungen trennt
 			select {
 			case c.work <- m:
@@ -277,6 +278,48 @@ func (c *conn) handle(m wire.Msg) {
 			return
 		}
 		c.ack(m.ID, wire.Ack{})
+	case "proxies":
+		// weiterreichende Node meldet die nicht verknuepften Mitglieder ihrer lokalen Gruppe (proxy.go)
+		var in struct {
+			Items []wire.ProxyNode `json:"items"`
+		}
+		if err := json.Unmarshal(m.Data, &in); err != nil || len(in.Items) > store.MaxProxies {
+			c.ack(m.ID, wire.Ack{Error: "invalid proxies"})
+			return
+		}
+		acks, err := g.st.RegisterProxies(ctx, n, in.Items)
+		if err != nil {
+			g.log.Error("register proxies failed", "node", n.ID, "err", err)
+			c.ack(m.ID, wire.Ack{Error: "database error"})
+			return
+		}
+		c.ack(m.ID, map[string]any{"acks": acks})
+	case "proxy_data":
+		// Zustaende und Messpunkte einer Stellvertreter-Node, ueber die weiterreichende Node
+		var in wire.ProxyData
+		if err := json.Unmarshal(m.Data, &in); err != nil || len(in.Batch) > 500 {
+			c.ack(m.ID, wire.Ack{Error: "invalid batch (max 500)"})
+			return
+		}
+		p, err := g.st.ProxyOf(ctx, n, in.Node)
+		if err != nil {
+			c.ack(m.ID, wire.Ack{Error: "database error"})
+			return
+		}
+		if p == nil {
+			c.ack(m.ID, wire.Ack{Error: "not a proxy of this node"})
+			return
+		}
+		if err := g.st.IngestStates(ctx, p, in.States); err != nil {
+			c.ack(m.ID, wire.Ack{Error: "database error"})
+			return
+		}
+		ack, err := g.st.IngestMeasurements(ctx, p, in.Batch)
+		if err != nil {
+			c.ack(m.ID, wire.Ack{Error: "database error"})
+			return
+		}
+		c.ack(m.ID, ack)
 	case "events":
 		var in struct {
 			Batch []wire.Event `json:"batch"`
