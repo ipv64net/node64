@@ -292,10 +292,10 @@ func TestNormalizeName(t *testing.T) {
 func TestEdgeWithRegistry(t *testing.T) {
 	reg := ports.New()
 	var e *Edge
-	e, cfg := newEdge(t, func(ctx context.Context, want []ports.Claim) error { return reg.Check(ctx, Owner, want) })
+	e, _ = newEdge(t, func(ctx context.Context, want []ports.Claim) error { return reg.Check(ctx, Owner, want) })
 	reg.Provide(Owner, e.Claims)
-	reg.Provide("dns64", func(context.Context) []ports.Claim {
-		return []ports.Claim{{Purpose: "DoH", Proto: ports.TCP, Port: cfg.HTTPSPort, Active: true}}
+	reg.Provide("dns64", func(context.Context) []ports.Claim { // fragt wie DNS64 dabei den Eingang (Config)
+		return []ports.Claim{{Purpose: "DoH", Proto: ports.TCP, Port: e.Config().HTTPSPort, Active: true}}
 	})
 	done := make(chan error, 1)
 	go func() {

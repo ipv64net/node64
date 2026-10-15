@@ -174,6 +174,7 @@ type Edge struct {
 	passClosed bool
 
 	table    atomic.Pointer[table]
+	cfgNow   atomic.Pointer[Config] // Kopie von cfg fuer Config(): Abnehmer fragen sie auch waehrend e.mu (Port-Pruefung)
 	h3On     atomic.Bool
 	defClose atomic.Bool
 	fallback struct {
@@ -198,6 +199,7 @@ func New(cfg Config, certs Certs, check func(ctx context.Context, want []ports.C
 	e := &Edge{log: log.With("module", "edge"), certs: certs, check: check, cfg: cfg, owners: map[string][]Route{}, tokens: map[string]string{},
 		lst: map[string]*listener{"http": {}, "https": {}, "http3": {}}, pass: map[net.Conn]struct{}{}}
 	e.defClose.Store(cfg.Default == DefaultClose)
+	e.cfgNow.Store(&cfg)
 	e.table.Store(buildTable(nil))
 	return e, nil
 }
@@ -283,6 +285,7 @@ func (e *Edge) Configure(cfg Config) error {
 		return nil
 	}
 	e.cfg = cfg
+	e.cfgNow.Store(&cfg)
 	e.defClose.Store(cfg.Default == DefaultClose)
 	stops := e.stopAllLocked()
 	e.mu.Unlock()
@@ -295,11 +298,10 @@ func (e *Edge) Configure(cfg Config) error {
 	return nil
 }
 
-// Config liefert die aktuellen Einstellungen.
+// Config liefert die aktuellen Einstellungen. Ohne Sperre: die Port-Pruefung beim Oeffnen laeuft unter e.mu und
+// fragt dabei die Abnehmer (DNS64 liest dort Config), das darf nicht haengen.
 func (e *Edge) Config() Config {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.cfg
+	return *e.cfgNow.Load()
 }
 
 // Present beantwortet eine ACME-HTTP-01-Pruefung auf Port 80 (fuer jeden Namen), bis release aufgerufen wird.
