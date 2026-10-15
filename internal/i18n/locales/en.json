@@ -631,7 +631,10 @@
     "err_port": "Ports must be between 0 and 65535 (0 = off).",
     "err_save": "Not saved: {error}",
     "edge_default_redirect": "Redirect (see CDN64 → Default page)",
-    "edge_default_html": "Own page (see CDN64 → Default page)"
+    "edge_default_html": "Own page (see CDN64 → Default page)",
+    "ui_name": "Web interface under this name (optional)",
+    "ui_public": "Also reachable from the internet (not recommended)",
+    "ui_hint": "The Node64 interface is then also reachable at https://<name>, with a certificate from the manager. Default: only from your own network (private networks, Tailscale); everyone else gets a neutral 404."
   },
   "settings": {
     "appearance": "Appearance",

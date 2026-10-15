@@ -631,7 +631,10 @@
     "err_port": "Ports müssen zwischen 0 und 65535 liegen (0 = aus).",
     "err_save": "Nicht gespeichert: {error}",
     "edge_default_redirect": "Weiterleitung (unter CDN64 → Standardseite)",
-    "edge_default_html": "Eigene Seite (unter CDN64 → Standardseite)"
+    "edge_default_html": "Eigene Seite (unter CDN64 → Standardseite)",
+    "ui_name": "Oberfläche unter diesem Namen (optional)",
+    "ui_public": "Auch aus dem Internet erreichbar (nicht empfohlen)",
+    "ui_hint": "Die Node64-Oberfläche ist dann auch unter https://<Name> erreichbar, mit Zertifikat aus der Verwaltung. Standard: nur aus dem eigenen Netz (private Netze, Tailscale); alle anderen bekommen eine neutrale 404."
   },
   "settings": {
     "appearance": "Darstellung",

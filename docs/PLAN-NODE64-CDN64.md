@@ -421,6 +421,12 @@ anlegen“ über `healthchecks.CreateFromJSON` (Healthchecks 2.10.0).
 - DNS-Eintrag bei ipv64 beim Anlegen eines Hosts.
 
 ### C6 Zusammenführung und Abschluss
+**Stand 2026-10-15:**
+- Lasttest (`internal/cdn64/load_test.go`, Tag `loadtest`) gemacht; Ergebnisse in `docs/CDN64.md`.
+- Oberfläche über den Eingang (`edge.ui_name`, Standard nur LAN) ist eingebaut.
+- Betriebsdoku `docs/CDN64.md` steht.
+- DoH über den Eingang baut die DNS64-Sitzung (DNS64 1.8.0); die Härtung der Freigabeliste ist in b6c2b33.
+
 **Absprache mit der DNS64-Sitzung (2026-10-15):**
 - Der Eingang ist von mir.
   - Route-Felder `GetCert` (je Handshake), `Fallback` (Aufruf per IP bzw. ohne SNI; höchstens ein Abnehmer),

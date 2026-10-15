@@ -10110,6 +10110,94 @@
           }
         }
       }
+    },
+    "/edge/ui": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Node64-Oberfläche unter eigenem Namen über den gemeinsamen Eingang",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Name der Oberfläche über den Eingang, \"\" = aus"
+                    },
+                    "public": {
+                      "type": "boolean",
+                      "description": "auch aus dem Internet (Standard: nur eigenes Netz)"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Name/Freigabe der Oberfläche ändern",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Name der Oberfläche über den Eingang, \"\" = aus"
+                  },
+                  "public": {
+                    "type": "boolean",
+                    "description": "auch aus dem Internet (Standard: nur eigenes Netz)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Name der Oberfläche über den Eingang, \"\" = aus"
+                    },
+                    "public": {
+                      "type": "boolean",
+                      "description": "auch aus dem Internet (Standard: nur eigenes Netz)"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Name ungültig oder schon von einem Host belegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

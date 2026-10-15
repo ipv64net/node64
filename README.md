@@ -173,9 +173,12 @@ Diese Teile gehören zum Kern und werden von Modulen genutzt, zuerst vom Reverse
 - **Ports:** *Einstellungen → Ports* zeigt, welche Ports die Oberfläche, DNS64 und der Eingang belegen bzw. belegen wollen, und meldet Überschneidungen. `GET /api/ports/probe?proto=tcp&port=443` prüft, ob ein Port auf dem Host frei ist.
 - **Gemeinsamer Eingang:** HTTP (80) und HTTPS (443, auch HTTP/3 über 443/UDP) öffnet nur der Kern, und nur solange ein Modul sie braucht. Module melden dort ihre Namen an; verteilt wird nach dem Namen der TLS-Verbindung (SNI) und dem Host-Kopf, unbekannte Namen bekommen eine neutrale 404 (oder die Verbindung wird geschlossen). So teilen sich mehrere Module die Ports 80/443 in einem Container. Die Ports sind einstellbar, z. B. wenn der Router 443 auf 8443 weiterleitet (dann „HTTPS-Port von außen“ = 443).
 - **Zertifikate:** Let's Encrypt für Namen im ipv64-Account per DNS-01 über den API-Key (auch Wildcards, Port 80 muss nicht offen sein), für fremde Domains per CNAME `_acme-challenge.<name>` → `_acme-challenge.<präfix>.<ipv64-domain>` (keine Zugangsdaten des fremden Anbieters nötig), per HTTP-01 über Port 80 oder als eigenes Zertifikat zum Hochladen. Schlüssel liegen verschlüsselt in der Datenbank (im Backup enthalten). Erneuert wird 30 Tage vor Ablauf, solange ein Modul die Zertifikate nutzt; bei Fehlern und 14 bzw. 3 Tage vor Ablauf gibt es eine Meldung an die Standardkanäle.
-- **API:** `GET /api/ports`, `GET|PUT /api/edge`, `GET|POST /api/certs`, `POST /api/certs/upload`, `GET|PUT /api/certs/account`, `GET /api/certs/domains`, `GET|PUT|DELETE /api/certs/{id}`, `POST /api/certs/{id}/renew`, `GET /api/certs/{id}/chain`.
+- **Oberfläche unter eigenem Namen:** Optional ist die Node64-Oberfläche auch unter `https://<name>` über den Eingang erreichbar, standardmäßig nur aus dem eigenen Netz.
+- **API:** `GET /api/ports`, `GET|PUT /api/edge`, `GET|PUT /api/edge/ui`, `GET|POST /api/certs`, `POST /api/certs/upload`, `GET|PUT /api/certs/account`, `GET /api/certs/domains`, `GET|PUT|DELETE /api/certs/{id}`, `POST /api/certs/{id}/renew`, `GET /api/certs/{id}/chain`.
 
 ## CDN64 (Reverse-Proxy)
+
+Ausführlich: [docs/CDN64.md](docs/CDN64.md).
 
 Das Modul *CDN64* (in den Einstellungen einschalten) ersetzt den Nginx Proxy Manager: Proxy-Hosts leiten Anfragen für eine Domain an einen Dienst im Heimnetz weiter. Es braucht kein nginx, Node64 macht das selbst (HTTP/1.1, HTTP/2, HTTP/3). Ausgeschaltet läuft nichts und der gemeinsame Eingang schließt seine Ports.
 

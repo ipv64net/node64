@@ -22,6 +22,8 @@ func (s *Server) portRoutes() {
 	s.mux.Handle("GET /api/edge", s.auth(s.apiEdgeGet))
 	s.mux.Handle("PUT /api/edge", s.auth(s.apiEdgePut))
 	s.mux.Handle("POST /settings/edge", s.auth(s.settingsEdge))
+	s.mux.Handle("GET /api/edge/ui", s.auth(s.apiEdgeUIGet))
+	s.mux.Handle("PUT /api/edge/ui", s.auth(s.apiEdgeUIPut))
 }
 
 func (s *Server) apiPorts(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +110,8 @@ func (s *Server) settingsEdge(w http.ResponseWriter, r *http.Request) {
 		s.flash(w, r, "danger", v.T("ports.err_port"))
 	} else if err := s.saveEdge(r, cfg); err != nil {
 		s.flash(w, r, "danger", v.T("ports.err_save", "error", err.Error()))
+	} else if err := s.saveUIRoute(r, r.PostFormValue("ui_name"), r.PostFormValue("ui_public") == "on"); err != nil {
+		s.flash(w, r, "danger", v.T("ports.err_save", "error", err.Error()))
 	} else {
 		s.flash(w, r, "success", v.T("common.saved"))
 	}
@@ -116,13 +120,16 @@ func (s *Server) settingsEdge(w http.ResponseWriter, r *http.Request) {
 
 // portsView: Daten der Karte Ports.
 type portsView struct {
-	Entries []ports.Entry
-	Edge    edge.Status
+	Entries  []ports.Entry
+	Edge     edge.Status
+	UIName   string
+	UIPublic bool
 }
 
 func (s *Server) portsData(ctx context.Context) *portsView {
 	if s.Ports == nil || s.Edge == nil {
 		return nil
 	}
-	return &portsView{Entries: s.Ports.Overview(ctx), Edge: s.Edge.Status()}
+	return &portsView{Entries: s.Ports.Overview(ctx), Edge: s.Edge.Status(), UIName: s.Store.SettingOr(ctx, setUIName, ""),
+		UIPublic: s.Store.SettingOr(ctx, setUIPublic, "0") == "1"}
 }
