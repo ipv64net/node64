@@ -769,9 +769,22 @@ func (d *Dispatcher) composeQuota(lang string, a Alert, m Message) Message {
 func (d *Dispatcher) send(ctx context.Context, ch *Channel, m Message) {
 	var s Sender
 	ok := false
-	if send, _, _ := d.hooks(); ch.Execution == "server" && !d.sendServerChannels.Load() && send != nil {
+	if send, _, _ := d.hooks(); ch.Execution == "server" && !d.sendServerChannels.Load() && send != nil && apiType(ch.Type) {
 		s, ok = apiSender(send), true // Server-Kanal direkt ueber die ipv64-API (nur Local-Alerts kommen hier an)
 	} else {
+		if ch.Execution == "server" && !d.sendServerChannels.Load() {
+			// anderer Portal-Kanal (z. B. Webhook, Telegram): die Node sendet selbst mit den Werten aus dem Sync;
+			// fehlt ein Geheimnis, das nur bei ipv64 liegt, ist der Weg nicht verfuegbar (Kanal nicht gestoert)
+			cp := *ch
+			cp.Config = make(map[string]string, len(ch.Config))
+			for k, v := range ch.Config {
+				cp.Config[k] = v
+			}
+			if err := cp.Validate(); err != nil {
+				d.record(ctx, ch, m, fmt.Errorf("%w: %v (only stored at ipv64)", ErrUnavailable, err))
+				return
+			}
+		}
 		s, ok = d.senders[ch.Type]
 	}
 	if !ok {
@@ -789,6 +802,9 @@ func (d *Dispatcher) send(ctx context.Context, ch *Channel, m Message) {
 	err := s.Send(sctx, ch, m)
 	d.record(ctx, ch, m, err)
 }
+
+// apiType: Kanaltypen, die die ipv64-API zustellt (die anderen Portal-Kanaele sendet die Node selbst).
+func apiType(t Type) bool { return t == TypeIPv64Mail || t == TypeIPv64SMS || t == TypeApp }
 
 // apiSender macht aus der Versandfunktion einen Sender.
 type apiSender func(ctx context.Context, ch *Channel, m Message) error

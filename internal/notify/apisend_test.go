@@ -83,3 +83,40 @@ func TestAPISender(t *testing.T) {
 		t.Fatalf("remote list: %d", at(2))
 	}
 }
+
+// Andere Portal-Kanaele (Webhook, Telegram) stellt die API nicht zu: die Node sendet sie bei eigenen Meldungen
+// selbst; fehlt ein Geheimnis, das nur bei ipv64 liegt, ist der Weg nicht verfuegbar und der Kanal nicht gestoert.
+func TestServerChannelSentLocally(t *testing.T) {
+	d, st, rec := testDispatcher(t, nil)
+	ctx := context.Background()
+	hook := &Channel{Type: TypeWebhook, Name: "Portal-Webhook", Config: map[string]string{"url": "http://x/", "method": "POST"}, Enabled: true, Default: true, NotifyDown: true, NotifyUp: true, Lang: "de", Execution: "server", RemoteID: 3}
+	tg := &Channel{Type: TypeTelegram, Name: "Portal-Telegram", Config: map[string]string{"chat_id": "7"}, Enabled: true, Default: true, NotifyDown: true, NotifyUp: true, Lang: "de", Execution: "server", RemoteID: 4}
+	for _, c := range []*Channel{hook, tg} {
+		if err := st.Insert(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	api := 0
+	var mu sync.Mutex
+	d.SetAPISender(func(context.Context, *Channel, Message) error { mu.Lock(); api++; mu.Unlock(); return nil }, func() bool { return true })
+	d.Dispatch(Alert{EventID: "g1", Kind: KindDown, Check: CheckInfo{Token: "t", Name: "Web", NotifyDown: true, NotifyUp: true, Local: true}})
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && len(rec.list()) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if got := rec.list(); len(got) != 1 {
+		t.Fatalf("webhook must be sent locally once: %v", got)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if api != 0 {
+		t.Fatalf("api path used for webhook/telegram: %d", api)
+	}
+	chans, _ := st.Channels(ctx)
+	for _, c := range chans {
+		if c.LastError != "" {
+			t.Fatalf("%s must not be marked failing: %q", c.Name, c.LastError)
+		}
+	}
+}

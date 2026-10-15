@@ -96,6 +96,45 @@ einen gemeinsamen Eingang. Module melden sich dort an:
 
 Damit funktionieren DNS64 mit DoH, CDN64 und die Oberfläche in **einem** Container ohne Konflikt.
 
+**Warum das geht:**
+
+- Ein Port ist je IP-Adresse und Protokoll nur von **einem Programm** zu öffnen. In Node64 sind alle Module ein
+  einziges Programm. Edge öffnet 443 genau einmal und verteilt intern.
+- Bei TLS steht der gewünschte Name unverschlüsselt in der ersten Nachricht des Browsers (SNI). Edge entscheidet
+  also vor dem Entschlüsseln:
+  - mit welchem Zertifikat terminiert wird und an welchen Abnehmer es geht (Proxy-Host, DoH, Oberfläche), oder
+  - ob die Verbindung roh durchgereicht wird (TLS-Durchreichen, siehe unten).
+- Bei HTTP auf Port 80 entscheidet der `Host`-Kopf.
+- Bei HTTP/3 auf 443/UDP trägt QUIC den Namen ebenso.
+- DoH ist damit nur ein weiterer Name bzw. Pfad, wie jeder Proxy-Host.
+
+**Was nicht geteilt werden kann:**
+
+- Dienste ohne Namen in der Verbindung: reine TCP/UDP-Streams (z. B. Minecraft 25565, WireGuard 51820/udp) und
+  DNS auf 53. Sie brauchen je einen eigenen Port. Die Port-Verwaltung verhindert Doppelbelegungen und zeigt sie an.
+- TLS-Streams mit Namen dagegen können sich 443 teilen, als „TLS durchreichen“ nach SNI.
+
+**Wann trotzdem zwei IP-Adressen nötig sind:**
+
+- Nur wenn ein **anderes Programm außerhalb von Node64** auf demselben Host und derselben IP 443 will (z. B. ein
+  alter NPM, UniFi, die Weboberfläche eines Pi-hole).
+- Oder wenn jemand zwei Node64-Container mit denselben Modulen im Host-Netzwerk betreibt.
+- Lösung in diesen Fällen: anderen Port wählen, zweite IP bzw. macvlan, oder den Dienst als Proxy-Host hinter
+  Node64 legen. Node64 erkennt die Belegung per Probe-Bind und sagt das in der Oberfläche, statt still zu
+  scheitern.
+- Für den Normalfall gilt: **ein Container, eine Portweiterleitung im Router (80/443 → Node64), alles dahinter.**
+
+**Vorbereitet für das ipv64-CDN** (siehe unten), schon ab C0 im Edge:
+
+- **PROXY-Protokoll v2:** Wird eine Verbindung roh durchgereicht, liefert das CDN die echte Client-IP im
+  PROXY-Kopf. Edge akzeptiert diesen Kopf nur von vertrauenswürdigen Quellen (Liste der ipv64-CDN-Server, per API).
+- **Vertrauenswürdige Proxys:** `X-Forwarded-For`/`X-Real-IP` gelten nur von diesen Quellen. Für Nutzer hinter
+  Cloudflare kann die Liste erweitert werden.
+- **SNI-Durchreichen:** Ein Name kann statt Terminierung roh an ein Ziel gehen, lokal (eigener Host-Typ in C3) wie
+  vom CDN.
+- **Herkunftsschutz:** Je Host lässt sich „nur über das ipv64-CDN“ einstellen. Direkte Zugriffe auf den Namen
+  werden dann abgewiesen.
+
 ## SSL-Zertifikate (eigener Reiter)
 
 ### Zertifikatsspeicher im Kern
@@ -249,6 +288,72 @@ und die Oberfläche könnte auch eines nutzen. **Entschieden:**
   - README-Abschnitt.
   - `CHANGELOG.md` des Moduls.
 
+## ipv64-CDN: vorgelagerte Server (spätere Phase, Architektur jetzt)
+
+ipv64 betreibt schon CDN-Server: nginx mit IPv4 und IPv6, gesteuert über `bots/cdn_bot.php` und API v2 `/cdn`
+(Proxy, Portmapper, Zugriffsliste, Caching, Let's Encrypt). Zielgruppe sind Anschlüsse **ohne eigene öffentliche
+IPv4**, z. B. DS-Lite oder CGNAT. Besucher kommen über IPv4 oder IPv6 zum CDN-Server, und der CDN-Server erreicht
+die Node über IPv6.
+
+CDN64 soll diese Server später aus der Oberfläche heraus verknüpfen, **je Host wählbar**:
+
+| Veröffentlichung | Weg | TLS | Was das CDN sieht |
+|---|---|---|---|
+| **Direkt** (Standard) | Besucher → Router → Node64 | auf der Node | – |
+| **ipv64-CDN mit TLS-Terminierung** (wie Cloudflare) | Besucher → CDN-Server (TLS endet dort) → neu verschlüsselt → Node64 | zweimal: am CDN mit eigenem Zertifikat, zur Node mit dem Zertifikat der Node | Inhalte; dafür Caching, Zugriffsliste, Schutz vor Angriffen am CDN |
+| **ipv64-CDN ohne TLS-Terminierung** (Durchreichen) | Besucher → CDN-Server (liest nur den Namen, SNI) → rohe TCP-Verbindung → Node64 | Ende-zu-Ende nur auf der Node | nur Name, IPs, Datenmenge; kein Caching am CDN |
+
+**Was die Node dafür mitbringt:**
+
+- **Verknüpfen über API v2** mit dem zentralen API-Key, wie bei allen Diensten (Entscheidung „API zuerst“).
+  - CDN64 legt die CDN-Domain bzw. den Eintrag an, wählt den Modus und setzt die DNS-Einträge.
+  - Es zeigt den Zustand an (zugewiesener Server, Zertifikat am CDN, Datenmenge, Limit der Klasse).
+- **Ein Herkunfts-Port für alle Hosts:** Das CDN verbindet sich immer mit Edge auf 443, und Edge verteilt nach dem
+  Namen. Mit TLS-Terminierung muss das CDN dafür den Namen weitergeben (nginx `proxy_ssl_server_name on`). Die Node
+  braucht so keine zweite Freigabe im Router.
+- **Echte Client-IP:**
+  - Mit TLS-Terminierung über `X-Forwarded-For`.
+  - Beim Durchreichen über das PROXY-Protokoll.
+  - Beides gilt nur, wenn die Verbindung von einem ipv64-CDN-Server kommt; die Liste kommt per API.
+- **Herkunftsschutz:**
+  - Option „nur über das CDN“.
+  - Später gegenseitige Zertifikatsprüfung (mTLS) zwischen CDN und Node. Im cdn_bot ist `ssl_verify_client`
+    dafür schon angedacht.
+- **Zertifikate:**
+  - Mit TLS-Terminierung: am CDN das Zertifikat von ipv64 (wie heute) und auf der Node ein eigenes. Das CDN prüft
+    das Zertifikat der Node; sie bekommt es per ipv64 DNS-01, ohne dass Port 80 offen sein muss.
+  - Beim Durchreichen gibt es nur das Zertifikat auf der Node.
+- **HTTP/3:**
+  - Mit TLS-Terminierung spricht das CDN mit dem Besucher, was nginx dort kann.
+  - Beim Durchreichen läuft zunächst HTTP/1.1 und HTTP/2 über TCP. QUIC durchzureichen braucht am CDN ein Programm,
+    das den Namen aus dem QUIC-Paket liest; nginx kann das nicht. Edge kündigt HTTP/3 (`Alt-Svc`) daher nur an, wo
+    es auch ankommt.
+- **Erreichbarkeit:** In der Liste steht zusätzlich „CDN → Node erreichbar“, geprüft vom CDN-Server, per API
+  abgefragt.
+
+**Was auf der ipv64-Seite dazukommt (nicht in diesem Repo, eigene Abstimmung):**
+
+- **Für das Durchreichen:**
+  - Auf den CDN-Servern kommt vor 443 ein nginx-`stream` mit `ssl_preread`. Namen im Durchreich-Modus gehen roh
+    (mit `proxy_protocol`) zur Node, alle anderen an den bestehenden HTTP-Teil auf dem Server selbst.
+  - Port 80 leitet für diese Namen nur auf HTTPS um.
+- API v2 `/cdn`:
+  - Modus je Eintrag (terminieren/durchreichen);
+  - Herkunfts-Port und -Schema, mehrere Namen je Domain;
+  - Liste der CDN-Server-IPs;
+  - Prüfung „CDN → Node“.
+- Später, falls gewünscht: mTLS zur Node.
+
+**Merkposten Tunnel (Idee, nicht entschieden):** Wer auch per IPv6 nicht von außen erreichbar ist (doppeltes
+CGNAT, Mobilfunk, strenge Firewall), dem hilft nur eine ausgehende Verbindung von der Node zum CDN-Server (wie
+Cloudflare Tunnel). Beide Modi könnten darüber laufen. Das Datenmodell sieht dafür einen dritten Transportweg vor.
+
+**Datenmodell schon ab C1:**
+
+- Jeder Host hat `publish` = `direct` | `ipv64_cdn_tls` | `ipv64_cdn_passthrough` (später ggf. `…_tunnel`) und
+  `origin_only_cdn`.
+- Bis Phase C7 ist nur `direct` wählbar. So muss später nichts umgebaut werden.
+
 ## Was nicht dazugehört (vorerst)
 
 - Die freie nginx-Konfiguration: Die festen Felder unter „Erweitert“ decken die üblichen Fälle ab.
@@ -267,7 +372,8 @@ der nächsten Phase. Ausgerollt auf der Box wird nur mit Dennis' Go.
   - gemeinsamer Eingang 80/443 (TCP) und 443/UDP (HTTP/3);
   - An- und Abmelden von Abnehmern, Routing nach SNI und Host;
   - Standardseite;
-  - Start nur bei Bedarf.
+  - Start nur bei Bedarf;
+  - PROXY-Protokoll v2 und vertrauenswürdige Proxys (nur von Quellen aus einer Liste).
 - **Port-Verwaltung** mit Konfliktprüfung, Probe-Bind und Übersicht „Ports“ (Einstellungen und API).
 - `internal/certs`:
   - Speicher (Laden, Ablauf, Zuordnung nach Namen), ACME-Konto;
@@ -285,6 +391,7 @@ der nächsten Phase. Ausgerollt auf der Box wird nur mit Dennis' Go.
   - Ziel http/https, WebSockets, Block Common Exploits, Cache Assets;
   - Force SSL, HTTP/2, HTTP/3, HSTS.
 - Erreichbarkeit der Ziele in der Liste.
+- Datenmodell mit `publish` (vorerst nur `direct`) und `origin_only_cdn`.
 - Audit und API für alles Obige.
 
 ### C2 Reiter SSL-Zertifikate
@@ -300,6 +407,7 @@ der nächsten Phase. Ausgerollt auf der Box wird nur mit Dennis' Go.
 ### C3 Redirection Hosts, 404 Hosts, Streams, Standardseite
 - Die drei Host-Typen mit SSL.
 - Streams TCP/UDP mit Port-Verwaltung und optionalem TLS.
+- **TLS durchreichen:** Host-Typ, der einen Namen auf 443 roh (nach SNI) an ein Ziel im LAN weitergibt.
 - Standardseite einstellbar.
 
 ### C4 Erweitert
@@ -323,6 +431,20 @@ der nächsten Phase. Ausgerollt auf der Box wird nur mit Dennis' Go.
   im Leerlauf mit und ohne Modul.
 - Doku, OpenAPI, README.
 
+### C7 ipv64-CDN (nach Abstimmung der Server-Seite)
+- **Node:**
+  - CDN verknüpfen über API v2;
+  - je Host Veröffentlichung „ipv64-CDN mit TLS-Terminierung“ bzw. „ohne TLS-Terminierung“;
+  - DNS-Einträge über das CDN;
+  - Herkunftsschutz;
+  - Anzeige: Server, Zustand, Datenmenge, „CDN → Node erreichbar“.
+- **ipv64-Seite (eigene Abstimmung):**
+  - `ssl_preread`-Vorstufe mit `proxy_protocol` auf den CDN-Servern;
+  - Erweiterungen in API v2 `/cdn`;
+  - Liste der CDN-Server-IPs.
+  - Website-Code nur als Vorher/Nachher zur Prüfung.
+- Später optional: mTLS zur Node, Tunnel.
+
 ## Testumgebung
 
 - **Lokal:**
@@ -344,8 +466,13 @@ der nächsten Phase. Ausgerollt auf der Box wird nur mit Dennis' Go.
   von CDN64.
 - **Port 443 gemeinsam über Edge** im Kern, mit Port-Übersicht und Konfliktprüfung.
 - **Kein Import aus dem NPM.**
+- **ipv64-CDN** (Ergänzung Dennis): Der lokale Reverse-Proxy ist der Grundbestandteil. Später kommen zwei Wege über
+  die bestehenden ipv64-CDN-Server dazu, je Host wählbar: mit TLS-Terminierung am CDN (wie Cloudflare) und ohne
+  (Durchreichen, TLS endet erst auf der Node). Zweck: Erreichbarkeit über IPv4 für Anschlüsse ohne eigene IPv4.
+  Die Architektur (Edge, Datenmodell) berücksichtigt das ab C0/C1.
 
-## Offene Frage
+## Offene Fragen (für C7, nicht blockierend)
 
-- **Warum „CDN64“?** Die angekündigte Erklärung fehlt noch. Davon hängt ab, ob z. B. Caching, mehrere Nodes oder
-  ein Zusammenspiel mit ipv64 schon im Grundgerüst berücksichtigt werden müssen.
+- **Tunnel** für Anschlüsse, die auch per IPv6 nicht erreichbar sind: gewünscht?
+- **Durchreichen und HTTP/3:** reicht HTTP/2 über TCP, oder soll QUIC später auch durchgereicht werden (eigenes
+  Programm statt nginx vor 443 auf den CDN-Servern)?
