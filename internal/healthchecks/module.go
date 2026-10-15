@@ -172,7 +172,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.7.2", Changelog: changelog}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.8.0", Changelog: changelog}
 }
 
 func (m *Module) Migrations() []store.Migration {
@@ -281,6 +281,7 @@ func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /api/checks/{token}/resume", api(m.apiResume))
 	mux.Handle("POST /api/checks/{token}/run", api(m.apiRun))
 	mux.Handle("POST /api/checks/{token}/clone", api(m.apiClone))
+	mux.Handle("POST /api/checks/bulk", api(m.apiBulk))
 	mux.Handle("GET /api/checks/{token}/measurements", api(m.apiMeasurements))
 	mux.Handle("GET /api/checks/{token}/events", api(m.apiEvents))
 	mux.Handle("GET /api/checks/{token}/incidents", api(m.apiIncidents))

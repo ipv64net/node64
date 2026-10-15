@@ -940,3 +940,67 @@ func (m *Module) auditText(r *http.Request, action, target string) {
 		m.log.Error("audit", "err", err)
 	}
 }
+
+// apiBulk fuehrt eine Aktion fuer mehrere Checks aus, wie die Sammelaktionen der Oberflaeche:
+// pause, resume, run, delete, tag, untag (mit "tag"). Ergebnis je Check, ein Sammeleintrag im Audit.
+func (m *Module) apiBulk(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Action string   `json:"action"`
+		Tokens []string `json:"tokens"`
+		Tag    string   `json:"tag"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid json: "+err.Error())
+		return
+	}
+	switch in.Action {
+	case "pause", "resume", "run", "delete", "tag", "untag":
+	default:
+		writeErr(w, http.StatusUnprocessableEntity, "action must be pause, resume, run, delete, tag or untag")
+		return
+	}
+	if len(in.Tokens) == 0 || len(in.Tokens) > 1000 {
+		writeErr(w, http.StatusUnprocessableEntity, "tokens: 1 to 1000 check tokens")
+		return
+	}
+	type failure struct {
+		Token string `json:"token"`
+		Error string `json:"error"`
+	}
+	done, failed := 0, []failure{}
+	for _, t := range in.Tokens {
+		if !tokenRe.MatchString(t) {
+			failed = append(failed, failure{t, "invalid token"})
+			continue
+		}
+		c, err := m.st.Check(r.Context(), t)
+		if err != nil || c == nil {
+			failed = append(failed, failure{t, "not found"})
+			continue
+		}
+		if in.Action == "tag" || in.Action == "untag" {
+			if m.bulkTag(r, c, in.Action == "tag", in.Tag) {
+				done++
+			} else {
+				failed = append(failed, failure{t, "tag invalid or nothing to change"})
+			}
+			continue
+		}
+		if err := m.doAction(r, c, in.Action); err != nil {
+			failed = append(failed, failure{t, err.Error()})
+			continue
+		}
+		done++
+	}
+	m.auditBulk(r, in.Action, in.Tag, done, len(in.Tokens))
+	writeJSON(w, http.StatusOK, map[string]any{"done": done, "failed": failed})
+}
+
+// auditBulk schreibt einen Sammeleintrag fuer eine Sammelaktion (die einzelnen Checks haben eigene Eintraege).
+func (m *Module) auditBulk(r *http.Request, action, tag string, done, total int) {
+	target := fmt.Sprintf("%d/%d checks", done, total)
+	if tag != "" && (action == "tag" || action == "untag") {
+		target = "tag " + tag + ": " + target
+	}
+	m.auditText(r, "check.bulk_"+action, target)
+}

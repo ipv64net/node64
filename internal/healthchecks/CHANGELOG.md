@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.8.0 – 2026-10-15
+
+### Neu
+- `POST /api/checks/bulk`: Sammelaktionen per API (pausieren, fortsetzen, jetzt prüfen, löschen, Tag setzen oder
+  entfernen) mit Ergebnis je Check; Sammelaktionen (auch in der Oberfläche) bekommen einen Sammeleintrag im Audit.
+
 ## 2.7.2 – 2026-10-15
 
 ### Behoben

@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,9 +44,9 @@ func (s *Server) backupRoutes() {
 // bodyLimitFor erlaubt fuer Uploads groessere Bodys.
 func bodyLimitFor(path string) int64 {
 	switch path {
-	case "/settings/restore":
+	case "/settings/restore", "/api/backup/restore":
 		return maxUpload
-	case "/settings/import":
+	case "/settings/import", "/api/import":
 		return maxImport
 	}
 	return maxBody
@@ -70,8 +71,7 @@ func (s *Server) backupDownload(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, tmp.Name())
 }
 
-// restoreUpload prueft die Datei, legt sie als node64.db.restore ab und startet
-// den Node neu; beim Start wird sie eingesetzt (siehe cmd/node64).
+// restoreUpload nimmt eine Datenbank zur Wiederherstellung an (Neustart danach).
 func (s *Server) restoreUpload(w http.ResponseWriter, r *http.Request) {
 	v := s.view(r, "settings.title")
 	f, _, err := r.FormFile("file")
@@ -81,34 +81,62 @@ func (s *Server) restoreUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
-	dest := filepath.Join(s.Cfg.DataDir, RestoreFileName)
-	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-	if err != nil {
+	n, err := s.restoreFrom(r.Context(), f)
+	switch {
+	case errors.Is(err, errRestoreInvalid):
+		msg := v.T("backup.invalid")
+		if detail := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(err.Error(), errRestoreInvalid.Error()), ":")); detail != "" {
+			msg += " (" + detail + ")"
+		}
+		s.flash(w, r, "danger", msg)
+		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		return
+	case err != nil:
 		s.fail(w, r, err)
-		return
-	}
-	n, err := io.Copy(out, io.LimitReader(f, maxUpload))
-	out.Close()
-	if err != nil || n < 1024 {
-		os.Remove(dest)
-		s.flash(w, r, "danger", v.T("backup.invalid"))
-		http.Redirect(w, r, "/settings", http.StatusSeeOther)
-		return
-	}
-	if err := validateSQLite(r.Context(), dest); err != nil {
-		os.Remove(dest)
-		s.log.Warn("restore rejected", "err", err)
-		s.flash(w, r, "danger", v.T("backup.invalid")+" ("+err.Error()+")")
-		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 		return
 	}
 	s.audit(r, "backup.restore", "", fmt.Sprintf("%d bytes", n))
 	s.flash(w, r, "warning", v.T("backup.restarting"))
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	s.restartSoon("restarting for database restore")
+}
+
+var (
+	errRestoreInvalid = errors.New("not a valid node64 database")
+	errPasswordShort  = errors.New("password must have at least 8 characters")
+	errConfigInvalid  = errors.New("not a node64 config file")
+	errPasswordNeeded = errors.New("the file contains encrypted secrets: password required")
+	errPasswordWrong  = errors.New("wrong password for the encrypted secrets")
+)
+
+// restoreFrom legt eine Datenbank fuer die Wiederherstellung beim naechsten Start ab (Oberflaeche und API);
+// sie wird vorher geprueft. Fehler errRestoreInvalid (mit Grund) oder ein Dateifehler.
+func (s *Server) restoreFrom(ctx context.Context, src io.Reader) (int64, error) {
+	dest := filepath.Join(s.Cfg.DataDir, RestoreFileName)
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return 0, err
+	}
+	n, err := io.Copy(out, io.LimitReader(src, maxUpload))
+	out.Close()
+	if err != nil || n < 1024 {
+		os.Remove(dest)
+		return n, errRestoreInvalid
+	}
+	if err := validateSQLite(ctx, dest); err != nil {
+		os.Remove(dest)
+		s.log.Warn("restore rejected", "err", err)
+		return n, fmt.Errorf("%w: %v", errRestoreInvalid, err)
+	}
+	return n, nil
+}
+
+// restartSoon startet den Node kurz nach der Antwort neu (Docker startet ihn wieder).
+func (s *Server) restartSoon(reason string) {
 	if s.Restart != nil {
 		go func() {
 			time.Sleep(1500 * time.Millisecond)
-			s.log.Warn("restarting for database restore")
+			s.log.Warn(reason)
 			s.Restart()
 		}()
 	}
@@ -118,7 +146,6 @@ func (s *Server) restoreUpload(w http.ResponseWriter, r *http.Request) {
 // bestehende Verknuepfung sauber getrennt, ein Merker abgelegt und neu gestartet; beim Start
 // leert cmd/node64 dann das Datenverzeichnis (Datenbank, Schluessel, Zertifikat, Backups).
 func (s *Server) resetNode(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	v := s.view(r, "settings.title")
 	if !VerifyPassword(v.User.PasswordHash, r.PostFormValue("password")) {
 		s.audit(r, "node.reset_denied", "", "wrong password")
@@ -126,13 +153,7 @@ func (s *Server) resetNode(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/settings#reset", http.StatusSeeOther)
 		return
 	}
-	if s.Linker != nil && s.Store.SettingOr(ctx, nodesync.SetToken, "") != "" {
-		keep := r.PostFormValue("keep_checks") == "on"
-		if err := s.Linker.Unlink(ctx, keep); err != nil {
-			s.log.Warn("reset: unlink failed, resetting anyway", "err", err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(s.Cfg.DataDir, ResetFileName), []byte(time.Now().UTC().Format(time.RFC3339)), 0o600); err != nil {
+	if err := s.requestReset(r.Context(), r.PostFormValue("keep_checks") == "on"); err != nil {
 		s.fail(w, r, err)
 		return
 	}
@@ -140,13 +161,18 @@ func (s *Server) resetNode(w http.ResponseWriter, r *http.Request) {
 	s.log.Warn("factory reset requested", "user", v.User.Username)
 	s.flash(w, r, "warning", v.T("reset.restarting"))
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
-	if s.Restart != nil {
-		go func() {
-			time.Sleep(1500 * time.Millisecond)
-			s.log.Warn("restarting for factory reset")
-			s.Restart()
-		}()
+	s.restartSoon("restarting for factory reset")
+}
+
+// requestReset trennt eine bestehende Verknuepfung und legt den Merker fuer den Werksreset beim naechsten Start ab
+// (Oberflaeche und API; das Passwort prueft der Aufrufer).
+func (s *Server) requestReset(ctx context.Context, keepChecks bool) error {
+	if s.Linker != nil && s.Store.SettingOr(ctx, nodesync.SetToken, "") != "" {
+		if err := s.Linker.Unlink(ctx, keepChecks); err != nil {
+			s.log.Warn("reset: unlink failed, resetting anyway", "err", err)
+		}
 	}
+	return os.WriteFile(filepath.Join(s.Cfg.DataDir, ResetFileName), []byte(time.Now().UTC().Format(time.RFC3339)), 0o600)
 }
 
 // validateSQLite prueft Kopf und Kernschema einer hochgeladenen Datenbank.
@@ -214,17 +240,33 @@ func deriveBox(password string, salt []byte) (*secrets.Box, error) {
 	return secrets.New(key)
 }
 
+// exportConfig liefert die Konfiguration als Datei (Geheimnisse weggelassen oder mit Passwort verschluesselt).
 func (s *Server) exportConfig(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	v := s.view(r, "settings.title")
-	mode := r.PostFormValue("secrets")
-	password := r.PostFormValue("password")
-	if mode == "password" && len(password) < 8 {
+	cf, err := s.buildExport(r.Context(), r.PostFormValue("secrets"), r.PostFormValue("password"))
+	if errors.Is(err, errPasswordShort) {
 		s.flash(w, r, "danger", v.T("backup.password_short"))
 		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 		return
 	}
-	cf := configFile{Format: "node64-config", Version: 1, ExportedAt: time.Now().UTC(), Node: map[string]string{"version": s.Version},
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	s.audit(r, "config.export", "", "secrets="+cf.Secrets.Mode)
+	out, _ := json.MarshalIndent(cf, "", "  ")
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", `attachment; filename="node64-config-`+time.Now().Format("20060102-1504")+`.json"`)
+	_, _ = w.Write(out)
+}
+
+// buildExport stellt die Konfiguration zusammen (Oberflaeche und API). mode "password" verschluesselt die
+// Geheimnisse der Kanaele mit password (mind. 8 Zeichen), sonst fehlen sie.
+func (s *Server) buildExport(ctx context.Context, mode, password string) (*configFile, error) {
+	if mode == "password" && len(password) < 8 {
+		return nil, errPasswordShort
+	}
+	cf := &configFile{Format: "node64-config", Version: 1, ExportedAt: time.Now().UTC(), Node: map[string]string{"version": s.Version},
 		Settings: map[string]string{}, Channels: []configChannel{}, Modules: map[string]json.RawMessage{}}
 	for _, k := range exportedSettings {
 		if val, ok, _ := s.Store.Setting(ctx, k); ok {
@@ -237,8 +279,7 @@ func (s *Server) exportConfig(w http.ResponseWriter, r *http.Request) {
 		_, _ = rand.Read(salt)
 		b, err := deriveBox(password, salt)
 		if err != nil {
-			s.fail(w, r, err)
-			return
+			return nil, err
 		}
 		box = b
 		cf.Secrets = &configSecrets{Mode: "password", Salt: base64.StdEncoding.EncodeToString(salt)}
@@ -248,8 +289,7 @@ func (s *Server) exportConfig(w http.ResponseWriter, r *http.Request) {
 	if s.Notify != nil {
 		chans, err := s.Notify.Channels(ctx)
 		if err != nil {
-			s.fail(w, r, err)
-			return
+			return nil, err
 		}
 		for _, ch := range chans {
 			cfg := map[string]string{}
@@ -267,26 +307,21 @@ func (s *Server) exportConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, m := range s.Modules.Modules() {
 		ex, ok := m.(module.Exporter)
-		if !ok {
-			continue
+		if !ok || !s.Modules.IsRunning(m.Info().Name) {
+			continue // nur laufende Module: ein nie eingeschaltetes hat noch keine Tabellen (Export brach sonst ab)
 		}
 		data, err := ex.Export(ctx)
 		if err != nil {
-			s.fail(w, r, err)
-			return
+			return nil, err
 		}
 		raw, _ := json.Marshal(data)
 		cf.Modules[m.Info().Name] = raw
 	}
-	s.audit(r, "config.export", "", "secrets="+cf.Secrets.Mode)
-	out, _ := json.MarshalIndent(cf, "", "  ")
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Content-Disposition", `attachment; filename="node64-config-`+time.Now().Format("20060102-1504")+`.json"`)
-	_, _ = w.Write(out)
+	return cf, nil
 }
 
+// importConfig uebernimmt eine exportierte Konfiguration aus einer Datei.
 func (s *Server) importConfig(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	v := s.view(r, "settings.title")
 	f, _, err := r.FormFile("file")
 	if err != nil {
@@ -300,27 +335,64 @@ func (s *Server) importConfig(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
+	count, problems, err := s.applyImport(r.Context(), raw, r.PostFormValue("password"))
+	switch {
+	case errors.Is(err, errConfigInvalid):
+		s.flash(w, r, "danger", v.T("backup.invalid_config"))
+	case errors.Is(err, errPasswordNeeded):
+		s.flash(w, r, "danger", v.T("backup.password_needed"))
+	case errors.Is(err, errPasswordWrong):
+		s.flash(w, r, "danger", v.T("backup.password_wrong"))
+	case err != nil:
+		s.fail(w, r, err)
+		return
+	default:
+		s.audit(r, "config.import", "", fmt.Sprintf("%d items", count))
+		if len(problems) > 0 {
+			s.flash(w, r, "warning", v.T("backup.imported", "count", count)+" "+strings.Join(problems, "; "))
+		} else {
+			s.flash(w, r, "success", v.T("backup.imported", "count", count))
+		}
+	}
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// applyImport uebernimmt eine exportierte Konfiguration (Oberflaeche und API): Einstellungen, Kanaele (gleicher
+// Name = aktualisieren) und Module (werden dafuer eingeschaltet). count = uebernommene Eintraege, problems =
+// Hinweise je Modul. Fehler: errConfigInvalid, errPasswordNeeded, errPasswordWrong.
+func (s *Server) applyImport(ctx context.Context, raw []byte, password string) (count int, problems []string, err error) {
 	var cf configFile
 	if err := json.Unmarshal(raw, &cf); err != nil || cf.Format != "node64-config" {
-		s.flash(w, r, "danger", v.T("backup.invalid_config"))
-		http.Redirect(w, r, "/settings", http.StatusSeeOther)
-		return
+		return 0, nil, errConfigInvalid
 	}
 	var box *secrets.Box
 	if cf.Secrets != nil && cf.Secrets.Mode == "password" {
 		salt, err := base64.StdEncoding.DecodeString(cf.Secrets.Salt)
-		pw := r.PostFormValue("password")
-		if err != nil || pw == "" {
-			s.flash(w, r, "danger", v.T("backup.password_needed"))
-			http.Redirect(w, r, "/settings", http.StatusSeeOther)
-			return
+		if err != nil || password == "" {
+			return 0, nil, errPasswordNeeded
 		}
-		if box, err = deriveBox(pw, salt); err != nil {
-			s.fail(w, r, err)
-			return
+		if box, err = deriveBox(password, salt); err != nil {
+			return 0, nil, err
 		}
 	}
-	count := 0
+	// Geheimnisse zuerst entschluesseln: bei falschem Passwort wird nichts uebernommen
+	plain := make([]map[string]string, len(cf.Channels))
+	for i, in := range cf.Channels {
+		plain[i] = map[string]string{}
+		for k, val := range in.Config {
+			if secrets.IsEncrypted(val) {
+				if box == nil {
+					continue
+				}
+				p, err := box.Decrypt(val)
+				if err != nil {
+					return 0, nil, errPasswordWrong
+				}
+				val = p
+			}
+			plain[i][k] = val
+		}
+	}
 	for k, val := range cf.Settings {
 		allowed := false
 		for _, x := range exportedSettings {
@@ -340,31 +412,20 @@ func (s *Server) importConfig(w http.ResponseWriter, r *http.Request) {
 		for _, ch := range existing {
 			byName[ch.Name] = ch
 		}
-		for _, in := range cf.Channels {
+		for i, in := range cf.Channels {
 			ch, ok := byName[in.Name]
 			if !ok {
 				ch = &notify.Channel{Config: map[string]string{}}
 			}
 			ch.Name, ch.Type, ch.Enabled, ch.Default, ch.Lang, ch.NotifyDown, ch.NotifyUp = in.Name, notify.Type(in.Type), in.Enabled, in.Default, in.Lang, in.NotifyDown, in.NotifyUp
-			for k, val := range in.Config {
-				if secrets.IsEncrypted(val) {
-					if box == nil {
-						continue
-					}
-					plain, err := box.Decrypt(val)
-					if err != nil {
-						s.flash(w, r, "danger", v.T("backup.password_wrong"))
-						http.Redirect(w, r, "/settings", http.StatusSeeOther)
-						return
-					}
-					val = plain
-				}
+			for k, val := range plain[i] {
 				ch.Config[k] = val
 			}
 			if err := ch.Validate(); err != nil {
 				s.log.Warn("import: channel skipped", "name", in.Name, "err", err)
 				continue
 			}
+			var err error
 			if ok {
 				err = s.Notify.Update(ctx, ch)
 			} else {
@@ -375,7 +436,6 @@ func (s *Server) importConfig(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	var problems []string
 	for _, m := range s.Modules.Modules() {
 		ex, ok := m.(module.Exporter)
 		raw, present := cf.Modules[m.Info().Name]
@@ -394,11 +454,5 @@ func (s *Server) importConfig(w http.ResponseWriter, r *http.Request) {
 			problems = append(problems, err.Error())
 		}
 	}
-	s.audit(r, "config.import", "", fmt.Sprintf("%d items", count))
-	if len(problems) > 0 {
-		s.flash(w, r, "warning", v.T("backup.imported", "count", count)+" "+strings.Join(problems, "; "))
-	} else {
-		s.flash(w, r, "success", v.T("backup.imported", "count", count))
-	}
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	return count, problems, nil
 }

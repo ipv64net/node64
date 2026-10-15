@@ -1394,6 +1394,195 @@
             "description": "nicht wählbar (CDN, Failover)"
           }
         }
+      },
+      "Link": {
+        "type": "object",
+        "properties": {
+          "linked": {
+            "type": "boolean"
+          },
+          "connected": {
+            "type": "boolean"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "plan": {
+            "type": "string"
+          },
+          "node_name": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "remote_mgmt": {
+            "type": "string",
+            "enum": [
+              "full",
+              "read",
+              "off"
+            ]
+          },
+          "hub": {
+            "type": "string"
+          },
+          "last_sync_at": {
+            "type": "string"
+          },
+          "connected_at": {
+            "type": "string"
+          },
+          "linked_at": {
+            "type": "string"
+          },
+          "outbox": {
+            "type": "integer"
+          },
+          "conflicts": {
+            "type": "integer"
+          },
+          "last_error": {
+            "type": "string"
+          },
+          "pending_code": {
+            "type": "string"
+          },
+          "requesting": {
+            "type": "boolean"
+          },
+          "online_limit": {
+            "type": "integer"
+          },
+          "checks_today": {
+            "type": "integer"
+          },
+          "checks_limit": {
+            "type": "integer"
+          },
+          "locations_per_check": {
+            "type": "integer"
+          },
+          "local_notifications": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ModuleStatus": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          },
+          "last_error": {
+            "type": "string"
+          }
+        }
+      },
+      "AuditEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "details": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "description": "local (Oberfläche), api:<Key-Name> (<Hinweis>), peer (andere Node der Gruppe)"
+          }
+        }
+      },
+      "Delivery": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "channel_id": {
+            "type": "integer"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "check_token": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string",
+            "description": "Fehlertext; Adressen sind auf Schema und Host gekürzt"
+          }
+        }
+      },
+      "APIKey": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "hint": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_used_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       }
     }
   },
@@ -1423,7 +1612,30 @@
         "summary": "Version und Startzeit",
         "responses": {
           "200": {
-            "description": "{version, started_at, hostname, time}"
+            "description": "{version, started_at, hostname, time}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string"
+                    },
+                    "started_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "hostname": {
+                      "type": "string"
+                    },
+                    "time": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1436,7 +1648,81 @@
         "summary": "Dashboard-Daten: Node, Module, Zusammenfassung je Modul, Verknüpfung",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "node": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "location": {
+                          "type": "string"
+                        },
+                        "timezone": {
+                          "type": "string"
+                        },
+                        "version": {
+                          "type": "string"
+                        },
+                        "started_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "uptime_seconds": {
+                          "type": "integer"
+                        },
+                        "database_bytes": {
+                          "type": "integer"
+                        },
+                        "log_level": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "link": {
+                      "$ref": "#/components/schemas/Link"
+                    },
+                    "modules": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ModuleStatus"
+                      }
+                    },
+                    "boards": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "module": {
+                            "type": "string"
+                          },
+                          "ok": {
+                            "type": "integer"
+                          },
+                          "down": {
+                            "type": "integer"
+                          },
+                          "paused": {
+                            "type": "integer"
+                          },
+                          "other": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1463,7 +1749,17 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModuleStatus"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1525,7 +1821,17 @@
         "summary": "Einstellungen (Node-Name, Standort, Zeitzone, Benachrichtigungen, Updates)",
         "responses": {
           "200": {
-            "description": "Schlüssel-Wert-Objekt"
+            "description": "Schlüssel-Wert-Objekt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
           }
         },
         "description": "Schlüssel: node.name, node.location, node.timezone, node.base_url, notify.quiet_enabled (0/1), notify.quiet_from, notify.quiet_to (HH:MM), notify.quiet_days (1=Mo … 7=So, leer = kein Tag), notify.quiet_tz, notify.rate_per_hour (0–1000 je Kanal, 0 = unbegrenzt), notify.batch_threshold (0–100), notify.batch_window_seconds (0–600), updates.check."
@@ -1549,7 +1855,17 @@
         },
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
           },
           "422": {
             "description": "unbekannter Schlüssel oder ungültiger Wert",
@@ -1589,7 +1905,17 @@
         ],
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEntry"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1612,7 +1938,25 @@
         ],
         "responses": {
           "200": {
-            "description": "{level, lines[]}"
+            "description": "{level, lines[]}",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "level": {
+                      "type": "string"
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -1748,7 +2092,14 @@
         "summary": "Einzelner Check mit Zustand",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Check"
+                }
+              }
+            }
           },
           "404": {
             "description": "nicht gefunden"
@@ -2127,7 +2478,17 @@
         ],
         "responses": {
           "200": {
-            "description": "Liste"
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Incident"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -2211,7 +2572,17 @@
         ],
         "responses": {
           "200": {
-            "description": "Liste"
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Event"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -2224,7 +2595,17 @@
         "summary": "Störungen aller Checks",
         "responses": {
           "200": {
-            "description": "Liste"
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Incident"
+                  }
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -2262,7 +2643,17 @@
         "summary": "Wartungsfenster",
         "responses": {
           "200": {
-            "description": "Liste"
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Maintenance"
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -2532,6 +2923,7 @@
         "summary": "Kanal anlegen",
         "description": "Beispiel: {\"type\":\"telegram\",\"name\":\"Mein Telegram\",\"config\":{\"bot_token\":\"...\",\"chat_id\":\"123\"},\"default\":true}",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -2542,7 +2934,14 @@
         },
         "responses": {
           "201": {
-            "description": "angelegt"
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Channel"
+                }
+              }
+            }
           },
           "422": {
             "description": "ungültig"
@@ -2598,6 +2997,16 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Channel"
               }
             }
           }
@@ -2695,7 +3104,17 @@
         ],
         "responses": {
           "200": {
-            "description": "Liste"
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Delivery"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -4508,77 +4927,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "linked": {
-                      "type": "boolean"
-                    },
-                    "connected": {
-                      "type": "boolean"
-                    },
-                    "account_id": {
-                      "type": "string"
-                    },
-                    "plan": {
-                      "type": "string"
-                    },
-                    "node_name": {
-                      "type": "string"
-                    },
-                    "location": {
-                      "type": "string"
-                    },
-                    "remote_mgmt": {
-                      "type": "string",
-                      "enum": [
-                        "full",
-                        "read",
-                        "off"
-                      ]
-                    },
-                    "hub": {
-                      "type": "string"
-                    },
-                    "last_sync_at": {
-                      "type": "string"
-                    },
-                    "connected_at": {
-                      "type": "string"
-                    },
-                    "linked_at": {
-                      "type": "string"
-                    },
-                    "outbox": {
-                      "type": "integer"
-                    },
-                    "conflicts": {
-                      "type": "integer"
-                    },
-                    "last_error": {
-                      "type": "string"
-                    },
-                    "pending_code": {
-                      "type": "string"
-                    },
-                    "requesting": {
-                      "type": "boolean"
-                    },
-                    "online_limit": {
-                      "type": "integer"
-                    },
-                    "checks_today": {
-                      "type": "integer"
-                    },
-                    "checks_limit": {
-                      "type": "integer"
-                    },
-                    "locations_per_check": {
-                      "type": "integer"
-                    },
-                    "local_notifications": {
-                      "type": "boolean"
-                    }
-                  }
+                  "$ref": "#/components/schemas/Link"
                 }
               }
             }
@@ -5996,6 +6345,597 @@
           },
           "502": {
             "description": "Fehler bei ipv64",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/keys": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "API-Keys des Benutzers (ohne den Key selbst)",
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/APIKey"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "API-Key anlegen – der Key steht nur in dieser Antwort",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "1–100 Zeichen"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "hint": {
+                      "type": "string"
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "key": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Name fehlt oder zu lang",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/keys/{id}": {
+      "delete": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "API-Key widerrufen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "widerrufen"
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/backup/restore": {
+      "post": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Datenbank wiederherstellen (Node startet neu)",
+        "description": "Body: die Datenbank roh (application/octet-stream) oder multipart mit Feld file. Höchstens 1 GB; die Datei wird vorher geprüft.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "angenommen, Neustart folgt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "restarting": {
+                      "type": "boolean"
+                    },
+                    "bytes": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "keine gültige Node64-Datenbank",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/export": {
+      "post": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Konfiguration exportieren (Einstellungen, Kanäle, Module)",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "secrets": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "password"
+                    ],
+                    "description": "Standard none: Geheimnisse fehlen"
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "bei password: mind. 8 Zeichen"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Konfigurationsdatei (für POST /import)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Passwort zu kurz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/import": {
+      "post": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Konfiguration importieren",
+        "description": "Body: die Datei aus POST /export. Passwort für verschlüsselte Geheimnisse im Kopf X-Config-Password. Bei falschem Passwort wird nichts übernommen.",
+        "parameters": [
+          {
+            "name": "X-Config-Password",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "übernommen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "imported": {
+                      "type": "integer"
+                    },
+                    "problems": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "keine Node64-Konfiguration, Passwort fehlt oder falsch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reset": {
+      "post": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Werksreset (Node startet neu und leert das Datenverzeichnis)",
+        "description": "Wie in der Oberfläche nur mit dem Passwort des Benutzers, auch per API-Key. Eine Verknüpfung mit ipv64 wird vorher getrennt.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "password": {
+                    "type": "string"
+                  },
+                  "keep_checks": {
+                    "type": "boolean",
+                    "description": "bei Verknüpfung: Checks bei ipv64 behalten"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "angenommen, Neustart folgt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "restarting": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Passwort falsch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/overview": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Zahlen des Dashboards: Node, Module, Datenverkehr, Healthchecks, ipv64-Account, Update",
+        "responses": {
+          "200": {
+            "description": "Übersicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "node": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "location": {
+                          "type": "string"
+                        },
+                        "version": {
+                          "type": "string"
+                        },
+                        "started_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "db_bytes": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "modules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "running": {
+                            "type": "boolean"
+                          },
+                          "last_error": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "traffic": {
+                      "type": "object",
+                      "properties": {
+                        "available": {
+                          "type": "boolean"
+                        },
+                        "rx_since_start": {
+                          "type": "integer"
+                        },
+                        "tx_since_start": {
+                          "type": "integer"
+                        },
+                        "rx_total": {
+                          "type": "integer"
+                        },
+                        "tx_total": {
+                          "type": "integer"
+                        },
+                        "since": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    },
+                    "healthchecks": {
+                      "type": "object",
+                      "properties": {
+                        "checks_by_location": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "integer"
+                          }
+                        },
+                        "nodes": {
+                          "type": "integer"
+                        },
+                        "nodes_online": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "account": {
+                      "type": "object",
+                      "properties": {
+                        "account": {
+                          "type": "string"
+                        },
+                        "plan": {
+                          "type": "string"
+                        },
+                        "plan_until": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "checked_at": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "limits": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "key": {
+                                "type": "string"
+                              },
+                              "used": {
+                                "type": "number"
+                              },
+                              "max": {
+                                "type": "number"
+                              },
+                              "unlimited": {
+                                "type": "boolean"
+                              },
+                              "pct": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "update": {
+                      "type": "object",
+                      "description": "neueste Version (wenn die Update-Prüfung an ist)"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/checks/bulk": {
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Sammelaktion für mehrere Checks",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "pause",
+                      "resume",
+                      "run",
+                      "delete",
+                      "tag",
+                      "untag"
+                    ]
+                  },
+                  "tokens": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "tag": {
+                    "type": "string",
+                    "description": "bei tag/untag"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ergebnis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "done": {
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "token": {
+                            "type": "string"
+                          },
+                          "error": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "unbekannte Aktion oder keine/zu viele Tokens (1–1000)",
             "content": {
               "application/json": {
                 "schema": {

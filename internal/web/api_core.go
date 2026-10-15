@@ -72,7 +72,7 @@ func (s *Server) apiStatus(w http.ResponseWriter, r *http.Request) {
 			"version": s.Version, "started_at": s.StartedAt.UTC(), "uptime_seconds": int(time.Since(s.StartedAt).Seconds()),
 			"database_bytes": s.Store.Size(), "log_level": logging.LevelName(s.Log.Level()),
 		},
-		"link": s.Sync.State(),
+		"link": s.linkJSON(ctx), // wie GET /api/link (snake_case)
 	}
 	var mods []map[string]any
 	for _, st := range s.Modules.List(ctx) {

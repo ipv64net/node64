@@ -1081,7 +1081,7 @@ func (m *Module) doAction(r *http.Request, c *Check, action string) error {
 	switch action {
 	case "pause", "resume":
 		paused := action == "pause"
-		if err := m.st.SetPaused(ctx, c.Token, paused, m.g.Actor(r)); err != nil {
+		if err := m.st.SetPaused(ctx, c.Token, paused, m.actor(r)); err != nil {
 			return err
 		}
 		nc, _ := m.st.Check(ctx, c.Token)
@@ -1100,7 +1100,7 @@ func (m *Module) doAction(r *http.Request, c *Check, action string) error {
 		m.audit(r, "check.run", c)
 	case "clone":
 		n := *c
-		n.Token, n.Name, n.Paused, n.Revision, n.UpdatedBy, n.Runtime = NewToken(), c.Name+" (copy)", true, 0, m.g.Actor(r), scheduler.Runtime{}
+		n.Token, n.Name, n.Paused, n.Revision, n.UpdatedBy, n.Runtime = NewToken(), c.Name+" (copy)", true, 0, m.actor(r), scheduler.Runtime{}
 		if c.Owner == "other" {
 			n.Execution = "local" // Kopie eines Checks einer anderen Node misst diese Node selbst
 		}
@@ -1153,6 +1153,9 @@ func (m *Module) pageBulk(w http.ResponseWriter, r *http.Request) {
 		if err := m.doAction(r, c, action); err == nil {
 			n++
 		}
+	}
+	if action != "clone" {
+		m.auditBulk(r, action, r.PostFormValue("tag"), n, len(r.PostForm["tokens"]))
 	}
 	m.g.Flash(w, r, "success", m.g.T(r, "hc.bulk.done", "count", n))
 	http.Redirect(w, r, "/healthchecks", http.StatusSeeOther)
@@ -1233,7 +1236,7 @@ func (m *Module) bulkTag(r *http.Request, c *Check, add bool, tag string) bool {
 	default:
 		return false
 	}
-	c.UpdatedBy = m.g.Actor(r)
+	c.UpdatedBy = m.actor(r)
 	if err := m.st.Update(r.Context(), c); err != nil {
 		return false
 	}
