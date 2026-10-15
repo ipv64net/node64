@@ -179,6 +179,7 @@ func run() error {
 	dynModule.SetKey(ipv64Key)
 	modules.Register(dynModule)
 	dnsModule := dns64.New(st, logger.Slog(), cfg.DataDir, Version)
+	dnsModule.SetEdge(edgeSrv) // DoH teilt sich den HTTPS-Port mit CDN64
 	if cfg.TLSCertFile != "" { // DNS64 kann fuer DoH/DoT/DoQ das Zertifikat der Weboberflaeche nutzen
 		dnsModule.SetWebCert(cfg.TLSCertFile, cfg.TLSKeyFile)
 	} else {

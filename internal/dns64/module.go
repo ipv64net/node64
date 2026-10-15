@@ -30,6 +30,7 @@ import (
 	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/dns64/querylog"
 	"github.com/ipv64net/node64/internal/dns64/upstream"
+	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
@@ -68,8 +69,9 @@ type Module struct {
 	mu      sync.Mutex
 	life    context.CancelFunc // nil = Modul aus
 	retryWG sync.WaitGroup
-	eng     *engine // nil = DNS-Dienst laeuft nicht
-	lastErr string  // letzter Fehler beim Start (z. B. Port belegt)
+	eng     *engine    // nil = DNS-Dienst laeuft nicht
+	ingress *edge.Edge // gemeinsamer Eingang des Kerns (DoH auf dem HTTPS-Port), nil = keiner
+	lastErr string     // letzter Fehler beim Start (z. B. Port belegt)
 
 	recs atomic.Pointer[recordTable] // eigene DNS-Eintraege (records.go)
 

@@ -6,6 +6,7 @@
 - Freigabeliste gehärtet: „Weitere Client-Netze“ lehnen 0.0.0.0/0 und ::/0 ab (alte Einträge dieser Art gelten nicht mehr). Netze an den eigenen Schnittstellen zählen nur noch, wenn sie privat sind oder ein IPv6-/64 (bzw. kleiner); ein öffentliches IPv4-Netz auf einem gemieteten Server gab sonst die Nachbarn im Rechenzentrum frei.
 
 ### Neu
+- DoH über den gemeinsamen Eingang des Kerns: Ist der DoH-Port der HTTPS-Port des Eingangs (Standard 443), öffnet DNS64 keinen eigenen Listener mehr, sondern meldet `/dns-query` auf seinen Namen und für Aufrufe per IP an. DoH und CDN64 teilen sich so Port 443; der Eingang lässt nur Geräte aus den erlaubten Netzen durch (echte Gegenstelle, sonst neutrales 404), öffnet für DoH keinen Port 80 und bietet DoH auch über HTTP/3 an. Gehört ein Name schon einem Proxy-Host, fällt nur dieser Name für DoH weg. Ein anderer DoH-Port läuft wie bisher über einen eigenen Listener.
 - Warnung in den Einstellungen bei öffentlichen Netzen in der Freigabeliste.
 - Abgelehnte Anfragen von fremden Adressen werden gezählt (Einstellungen: Anzahl, zuletzt welche Adresse) und höchstens einmal je Stunde ins Log geschrieben, damit eine versehentliche Freigabe auffällt.
 

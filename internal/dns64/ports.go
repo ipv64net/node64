@@ -14,7 +14,7 @@ func (m *Module) Ports(ctx context.Context, running bool) []ports.Claim {
 		{Owner: Name, Purpose: "DNS", Proto: ports.UDP, Port: c.Port, Bind: c.Bind, Active: running},
 		{Owner: Name, Purpose: "DNS", Proto: ports.TCP, Port: c.Port, Bind: c.Bind, Active: running},
 	}
-	if c.DoH {
+	if c.DoH && !m.dohViaEdge(c) { // ueber den Eingang: 443 fuehrt der Eingang
 		out = append(out, ports.Claim{Owner: Name, Purpose: "DoH", Proto: ports.TCP, Port: c.DoHPort, Bind: c.Bind, Active: running})
 	}
 	if c.DoT {

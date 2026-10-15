@@ -20,6 +20,7 @@ import (
 	"github.com/quic-go/quic-go"
 
 	"github.com/ipv64net/node64/internal/dns64/dnsserver"
+	"github.com/ipv64net/node64/internal/edge"
 )
 
 // Verschluesselte Anfragen der Geraete im Heimnetz: DoH (RFC 8484, eigener HTTPS-Port), DoT (RFC 7858, 853/TCP)
@@ -36,12 +37,13 @@ type encrypted struct {
 	errs     map[string]string // doh/dot/doq -> Fehler beim Start
 	addrs    map[string]string // doh/dot/doq -> Adresse
 
-	dot  *dns.Server
-	doh  *http.Server
-	doq  *quic.Listener
-	mu   sync.Mutex
-	qcon map[*quic.Conn]struct{}
-	wg   sync.WaitGroup
+	dot     *dns.Server
+	doh     *http.Server
+	ingress *edge.Edge // DoH beim gemeinsamen Eingang angemeldet
+	doq     *quic.Listener
+	mu      sync.Mutex
+	qcon    map[*quic.Conn]struct{}
+	wg      sync.WaitGroup
 }
 
 // startEncrypted startet die eingeschalteten Dienste (nie fatal fuer das Modul).
@@ -90,7 +92,13 @@ func (m *Module) startEncrypted(c config, srv *dnsserver.Server) *encrypted {
 			go func() { defer x.wg.Done(); x.serveDoQ(srv) }()
 		}
 	}
-	if c.DoH {
+	if m.dohViaEdge(c) {
+		if err := m.startDoHEdge(x, names, srv); err != nil {
+			x.errs["doh"] = err.Error()
+		} else {
+			x.addrs["doh"] = net.JoinHostPort(m.ingress.Config().Bind, strconv.Itoa(c.DoHPort))
+		}
+	} else if c.DoH {
 		addr := net.JoinHostPort(c.Bind, strconv.Itoa(c.DoHPort))
 		cfg := base.Clone()
 		cfg.NextProtos = []string{"h2", "http/1.1"}
@@ -121,6 +129,9 @@ func (x *encrypted) stop(ctx context.Context) {
 	}
 	if x.doh != nil {
 		_ = x.doh.Shutdown(ctx)
+	}
+	if x.ingress != nil {
+		x.ingress.Remove(Name)
 	}
 	if x.doq != nil {
 		_ = x.doq.Close()
