@@ -59,11 +59,11 @@ func (m *Manager) checkSettings(ctx context.Context) {
 	if h == old {
 		return
 	}
-	_ = m.d.Core.SetSetting(ctx, setSettingsHash, h)
+	m.saveSetting(ctx, setSettingsHash, h)
 	if old == "" && (!m.linkedSelf() || len(kv) == 0) {
 		return // erster Lauf ohne ipv64: kein Zeitpunkt, die Einstellungen der Gruppe gehen vor
 	}
-	_ = m.d.Core.SetSetting(ctx, setSettingsAt, fmtTime(time.Now()))
+	m.saveSetting(ctx, setSettingsAt, fmtTime(time.Now()))
 	m.LogChange(ctx, "settings", "notify", "upsert")
 }
 
@@ -75,11 +75,11 @@ func (m *Manager) applySettings(ctx context.Context, c change) int {
 	}
 	for _, k := range notify.SyncedSettings {
 		if v, ok := c.Settings[k]; ok {
-			_ = m.d.Core.SetSetting(ctx, k, v)
+			m.saveSetting(ctx, k, v)
 		}
 	}
-	_ = m.d.Core.SetSetting(ctx, setSettingsHash, hashKV(m.settingsBundle(ctx)))
-	_ = m.d.Core.SetSetting(ctx, setSettingsAt, fmtTime(c.ChangedAt))
+	m.saveSetting(ctx, setSettingsHash, hashKV(m.settingsBundle(ctx)))
+	m.saveSetting(ctx, setSettingsAt, fmtTime(c.ChangedAt))
 	m.LogChange(healthchecks.WithPeer(ctx, c.Origin, c.ChangedAt), "settings", "notify", "upsert")
 	if m.d.SettingsToHub != nil && m.forwardFor(ctx, c.Origin) {
 		m.d.SettingsToHub()
@@ -104,3 +104,10 @@ func (m *Manager) Forwarder(ctx context.Context) (id, name string, self bool) {
 
 // LinkedSelf: diese Node ist mit ipv64 verknuepft (Anzeige).
 func (m *Manager) LinkedSelf() bool { return m.linkedSelf() }
+
+// saveSetting speichert eine Einstellung der Gruppe und loggt einen Fehler (sonst blieben Nodes still verschieden).
+func (m *Manager) saveSetting(ctx context.Context, key, value string) {
+	if err := m.d.Core.SetSetting(ctx, key, value); err != nil {
+		m.d.Log.Error("group setting not saved", "key", key, "err", err)
+	}
+}

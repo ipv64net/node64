@@ -188,7 +188,7 @@ func (c *Live) nodeID() string {
 	b := make([]byte, 24)
 	_, _ = crand.Read(b)
 	id := base64.RawURLEncoding.EncodeToString(b)
-	_ = c.d.Core.SetSetting(ctx, "node.id", id)
+	c.logErr("SetSetting", c.d.Core.SetSetting(ctx, "node.id", id))
 	return id
 }
 
@@ -197,7 +197,15 @@ func (c *Live) setting(key, def string) string {
 }
 
 func (c *Live) set(key, val string) {
-	_ = c.d.Core.SetSetting(context.Background(), key, val)
+	c.logErr("save setting "+key, c.d.Core.SetSetting(context.Background(), key, val))
+}
+
+// logErr loggt einen Fehler beim Speichern des Sync-Stands (Revisionen, Zuordnungen, Postausgang, Zustellungen).
+// Solche Fehler blieben sonst still und Node und hub liefen unbemerkt auseinander.
+func (c *Live) logErr(what string, err error) {
+	if err != nil {
+		c.log.Error("sync state not saved", "what", what, "err", err)
+	}
 }
 
 func (c *Live) setInt(key string, v int64) { c.set(key, strconv.FormatInt(v, 10)) }
@@ -606,9 +614,9 @@ func (c *Live) clearLink(ctx context.Context) error {
 	if chans, err := c.d.NF.Channels(ctx); err == nil {
 		for _, ch := range chans {
 			if ch.Execution == "server" {
-				_ = c.d.NF.Delete(notify.WithRemote(ctx), ch.ID)
+				c.logErr("Delete", c.d.NF.Delete(notify.WithRemote(ctx), ch.ID))
 			} else if ch.RemoteID != 0 {
-				_ = c.d.NF.SetRemote(ctx, ch.ID, 0, ch.Revision)
+				c.logErr("SetRemote", c.d.NF.SetRemote(ctx, ch.ID, 0, ch.Revision))
 			}
 		}
 	}
@@ -729,14 +737,14 @@ func (c *Live) bootstrap(ctx context.Context) error {
 	}
 	for local, remote := range out.ChannelMap {
 		if ch, _ := c.d.NF.Channel(ctx, local); ch != nil {
-			_ = c.d.NF.SetRemote(ctx, local, remote, ch.Revision)
+			c.logErr("SetRemote", c.d.NF.SetRemote(ctx, local, remote, ch.Revision))
 		}
 	}
 	for local, remote := range out.MaintMap {
-		_ = c.d.HC.SetMaintenanceRemote(ctx, local, remote, 1)
+		c.logErr("SetMaintenanceRemote", c.d.HC.SetMaintenanceRemote(ctx, local, remote, 1))
 	}
 	for _, ck := range out.Checks {
-		_ = c.d.HC.SetCheckRevision(ctx, ck.Token, ck.Revision)
+		c.logErr("SetCheckRevision", c.d.HC.SetCheckRevision(ctx, ck.Token, ck.Revision))
 	}
 	for _, r := range out.Renamed {
 		c.log.Warn("token collision, server assigned a new token (not applied locally)", "old", r.OldToken, "new", r.NewToken)
@@ -926,7 +934,7 @@ func (c *Live) conflict(ctx context.Context, entity, localID string, ch wire.Cha
 		if same {
 			for _, o := range list {
 				if o.Entity == entity && o.EntityID == localID {
-					_ = c.d.HC.OutboxDelete(ctx, o.ID)
+					c.logErr("OutboxDelete", c.d.HC.OutboxDelete(ctx, o.ID))
 				}
 			}
 			return false
@@ -1137,7 +1145,7 @@ func (c *Live) applySettings(ctx context.Context, kv map[string]string, initial 
 	for _, k := range notify.SyncedSettings {
 		if v, ok := kv[k]; ok {
 			n++
-			_ = c.d.Core.SetSetting(ctx, k, v)
+			c.logErr("SetSetting", c.d.Core.SetSetting(ctx, k, v))
 		}
 	}
 	if initial && n == 0 && len(c.notifySettings(ctx)) > 0 {
@@ -1252,10 +1260,10 @@ func (c *Live) Resolve(ctx context.Context, id int64, keepServer bool) error {
 		} else {
 			c.applyChanges(ctx, []wire.Change{{Entity: cf.Entity, ID: c.remoteIDOf(ctx, cf), Op: "upsert", Revision: cf.ServerRevision, Data: json.RawMessage(cf.ServerPayload)}}, 0)
 		}
-		_ = c.d.HC.OutboxDeleteEntity(ctx, cf.Entity, cf.EntityID)
+		c.logErr("OutboxDeleteEntity", c.d.HC.OutboxDeleteEntity(ctx, cf.Entity, cf.EntityID))
 	} else {
 		// lokale Version mit aktueller Server-Revision als Basis erneut einreihen
-		_ = c.d.HC.OutboxDeleteEntity(ctx, cf.Entity, cf.EntityID)
+		c.logErr("OutboxDeleteEntity", c.d.HC.OutboxDeleteEntity(ctx, cf.Entity, cf.EntityID))
 		op := cf.LocalOp
 		if cf.LocalPayload == "" {
 			op = "delete"

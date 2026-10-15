@@ -443,7 +443,7 @@ func (s *session) replayOutbox() {
 				if json.Unmarshal([]byte(o.Payload), &x) == nil && x.ID > 0 {
 					p.ID = strconv.FormatInt(x.ID, 10)
 				} else {
-					_ = c.d.HC.OutboxDelete(ctx, o.ID) // nie auf dem Server gewesen
+					c.logErr("OutboxDelete", c.d.HC.OutboxDelete(ctx, o.ID)) // nie auf dem Server gewesen
 					continue
 				}
 			}
@@ -459,18 +459,18 @@ func (s *session) replayOutbox() {
 		case m.T == "conflict" || res.Conflict:
 			// der hub hat eine juengere Fassung (oder hat geloescht): die zuletzt gemachte Aenderung gewinnt,
 			// also die Server-Fassung uebernehmen und die lokale verwerfen
-			_ = c.d.HC.OutboxDelete(ctx, o.ID)
+			c.logErr("OutboxDelete", c.d.HC.OutboxDelete(ctx, o.ID))
 			c.adoptServer(ctx, o.Entity, p.ID, res)
 			c.log.Info("sync: newer server version adopted", "entity", o.Entity, "id", checks.TokenHint(o.EntityID))
 		case res.Error != "":
-			_ = c.d.HC.OutboxSetError(ctx, o.ID, "pending", res.Error)
+			c.logErr("OutboxSetError", c.d.HC.OutboxSetError(ctx, o.ID, "pending", res.Error))
 			c.log.Warn("server rejected change", "entity", o.Entity, "id", checks.TokenHint(o.EntityID), "err", res.Error)
 			// Ablehnung (z. B. Limit): Eintrag bleibt mit Fehler stehen, blockiert aber nichts anderes
-			_ = c.d.HC.OutboxSetError(ctx, o.ID, "conflict", res.Error)
-			_ = c.d.HC.ConflictAdd(ctx, healthchecks.Conflict{Entity: o.Entity, EntityID: o.EntityID, LocalOp: o.Op, LocalPayload: o.Payload, ServerPayload: "", ServerRevision: 0})
+			c.logErr("OutboxSetError", c.d.HC.OutboxSetError(ctx, o.ID, "conflict", res.Error))
+			c.logErr("ConflictAdd", c.d.HC.ConflictAdd(ctx, healthchecks.Conflict{Entity: o.Entity, EntityID: o.EntityID, LocalOp: o.Op, LocalPayload: o.Payload, ServerPayload: "", ServerRevision: 0}))
 		default:
 			s.applyAck(ctx, o, res)
-			_ = c.d.HC.OutboxDelete(ctx, o.ID)
+			c.logErr("OutboxDelete", c.d.HC.OutboxDelete(ctx, o.ID))
 		}
 	}
 }
@@ -483,7 +483,7 @@ func (s *session) applyAck(ctx context.Context, o healthchecks.Outbox, res wire.
 	switch o.Entity {
 	case "check":
 		if o.Op != "delete" {
-			_ = c.d.HC.SetCheckRevision(ctx, o.EntityID, res.Revision)
+			c.logErr("SetCheckRevision", c.d.HC.SetCheckRevision(ctx, o.EntityID, res.Revision))
 			// Zustand erneut melden: die erste Messung eines neuen Checks kommt oft an, bevor der hub ihn kennt,
 			// und ginge sonst bis zur naechsten Messung verloren (Zertifikat: Stunden)
 			if ck, _ := c.d.HC.CheckByToken(ctx, o.EntityID); ck != nil && ck.MeasuredHere() {
@@ -492,26 +492,26 @@ func (s *session) applyAck(ctx context.Context, o healthchecks.Outbox, res wire.
 			var w wire.Check
 			if json.Unmarshal(res.Data, &w) == nil && len(w.Locations) > 0 {
 				// Server kann Standorte gekuerzt haben: lokal uebernehmen, ohne neuen Vorschlag
-				_ = c.d.HC.ApplyWireCheck(ctx, w, func(remote int64) int64 {
+				c.logErr("apply trimmed locations", c.d.HC.ApplyWireCheck(ctx, w, func(remote int64) int64 {
 					if ch, _ := c.d.NF.ByRemote(ctx, remote); ch != nil {
 						return ch.ID
 					}
 					return 0
-				})
+				}))
 			}
 		}
 	case "maintenance":
 		if o.Op != "delete" {
 			var w wire.Maintenance
 			if json.Unmarshal(res.Data, &w) == nil {
-				_ = c.d.HC.SetMaintenanceRemote(ctx, lid, w.ID, res.Revision)
+				c.logErr("SetMaintenanceRemote", c.d.HC.SetMaintenanceRemote(ctx, lid, w.ID, res.Revision))
 			}
 		}
 	case "channel":
 		if o.Op != "delete" {
 			var w wire.Channel
 			if json.Unmarshal(res.Data, &w) == nil {
-				_ = c.d.NF.SetRemote(ctx, lid, w.ID, res.Revision)
+				c.logErr("SetRemote", c.d.NF.SetRemote(ctx, lid, w.ID, res.Revision))
 			}
 		}
 	}
@@ -789,7 +789,7 @@ func (s *session) runSendOrder(o wire.SendOrder) {
 	if err != nil {
 		errText = err.Error()
 	}
-	_ = c.d.NF.AddDelivery(ctx, notify.Delivery{EventID: o.EventID, ChannelID: ch.ID, Channel: ch.Name, Kind: o.Kind, CheckToken: m.Check.Token, Subject: m.Title, OK: err == nil, Error: errText})
-	_ = c.d.NF.Touch(ctx, ch.ID, errText)
+	c.logErr("AddDelivery", c.d.NF.AddDelivery(ctx, notify.Delivery{EventID: o.EventID, ChannelID: ch.ID, Channel: ch.Name, Kind: o.Kind, CheckToken: m.Check.Token, Subject: m.Title, OK: err == nil, Error: errText}))
+	c.logErr("Touch", c.d.NF.Touch(ctx, ch.ID, errText))
 	done(err == nil, errText)
 }
