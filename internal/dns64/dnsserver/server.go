@@ -70,15 +70,28 @@ func (s *Server) Start() error {
 	}
 	s.srv = []*dns.Server{{PacketConn: pc, Net: "udp", Handler: s}, {Listener: ln, Net: "tcp", Handler: s}}
 	for _, srv := range s.srv {
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
-			if err := srv.ActivateAndServe(); err != nil {
-				s.Logger.Debug("dns listener ended", "net", srv.Net, "err", err)
-			}
-		}()
+		Serve(srv, &s.wg, func(err error) { s.Logger.Debug("dns listener ended", "net", srv.Net, "err", err) })
 	}
 	return nil
+}
+
+// Serve starts srv in the background and returns once it serves, so a Shutdown right afterwards closes the
+// socket (miekg/dns ignores a Shutdown before ActivateAndServe ran, and the port would stay bound).
+// ended gets the error when serving stops (nil error is not reported).
+func Serve(srv *dns.Server, wg *sync.WaitGroup, ended func(error)) {
+	ready := make(chan struct{})
+	started := sync.OnceFunc(func() { close(ready) })
+	srv.NotifyStartedFunc = started
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := srv.ActivateAndServe()
+		started() // failed before serving
+		if err != nil && ended != nil {
+			ended(err)
+		}
+	}()
+	<-ready
 }
 
 // Shutdown closes the sockets and waits for running background refreshes.

@@ -74,8 +74,7 @@ func (m *Module) startEncrypted(c config, srv *dnsserver.Server) *encrypted {
 		} else {
 			x.addrs["dot"] = addr
 			x.dot = &dns.Server{Listener: ln, Net: "tcp-tls", Handler: srv.Handler("dot"), IdleTimeout: func() time.Duration { return 30 * time.Second }}
-			x.wg.Add(1)
-			go func() { defer x.wg.Done(); _ = x.dot.ActivateAndServe() }()
+			dnsserver.Serve(x.dot, &x.wg, nil)
 		}
 	}
 	if c.DoQ {

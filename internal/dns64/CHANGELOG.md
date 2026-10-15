@@ -1,5 +1,10 @@
 # Änderungen – DNS64
 
+## 1.7.2 – 2026-10-15
+
+### Behoben
+- Unter Last konnte ein Neustart oder Abschalten kurz nach dem Start den DNS-Port (und DoT) belegt lassen: Der Dienst startete erst nach dem Stopp und lief weiter, ein neuer Start scheiterte dann an „address in use“. Start wartet jetzt, bis der Dienst läuft.
+
 ## 1.7.1 – 2026-10-15
 
 ### Geändert
