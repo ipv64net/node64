@@ -11,6 +11,7 @@ import (
 	"net/http/httputil"
 	"net/netip"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -95,38 +96,202 @@ func redirectHandler(h *Host) http.Handler {
 	})
 }
 
-// proxyHandler baut den Reverse-Proxy eines Hosts.
-func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
-	target := &url.URL{Scheme: h.Scheme, Host: net.JoinHostPort(h.TargetHost, strconv.Itoa(h.TargetPort))}
+// transportFor: geteilte Verbindungen, mit eigenem Timeout nur fuer Hosts, die einen eingestellt haben.
+func (m *Module) transportFor(h *Host) http.RoundTripper {
+	base := m.transport(h.VerifyTarget)
+	if h.Advanced.TimeoutSeconds <= 0 {
+		return base
+	}
+	tr := base.(*http.Transport).Clone()
+	tr.ResponseHeaderTimeout = time.Duration(h.Advanced.TimeoutSeconds) * time.Second
+	m.mu.Lock()
+	if old := m.hostTr[h.ID]; old != nil {
+		old.CloseIdleConnections()
+	}
+	m.hostTr[h.ID] = tr
+	m.mu.Unlock()
+	return tr
+}
+
+// target ist ein Ziel des Proxys (der Host selbst oder eine Location).
+type target struct {
+	url     *url.URL
+	prefix  string // Location: Pfad beim Besucher
+	forward string // Location: Pfad beim Ziel ("" = unveraendert)
+}
+
+// reverseProxy baut den Proxy zu einem Ziel mit den Optionen des Hosts.
+func (m *Module) reverseProxy(h *Host, t target, st *hostStats, tr http.RoundTripper) http.Handler {
 	token := m.loopToken
+	adv := &h.Advanced
 	rp := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
-			pr.SetURL(target)
-			pr.Out.Host = pr.In.Host // wie NPM: das Ziel sieht den Namen, unter dem der Besucher kam
-			pr.SetXForwarded()       // nur die echte Gegenstelle; mitgeschickte X-Forwarded-* verwirft Rewrite
-			if ip := peerIP(pr.In); ip.IsValid() {
+			pr.SetURL(t.url)
+			if t.forward != "" { // /api/x -> /v1/x
+				rest := strings.TrimPrefix(strings.TrimPrefix(pr.In.URL.Path, t.prefix), "/")
+				pr.Out.URL.Path = t.forward
+				if rest != "" || strings.HasSuffix(pr.In.URL.Path, "/") {
+					pr.Out.URL.Path = strings.TrimSuffix(t.forward, "/") + "/" + rest
+				}
+				pr.Out.URL.RawPath = ""
+			}
+			switch adv.HostHeader {
+			case "": // wie NPM: das Ziel sieht den Namen, unter dem der Besucher kam
+				pr.Out.Host = pr.In.Host
+			case "target": // Name des Ziels (SetURL)
+			default:
+				pr.Out.Host = adv.HostHeader
+			}
+			pr.SetXForwarded() // mitgeschickte X-Forwarded-* verwirft Rewrite; For danach mit der echten Client-IP
+			if ip := clientOf(pr.In); ip.IsValid() {
+				pr.Out.Header.Set("X-Forwarded-For", ip.String())
 				pr.Out.Header.Set("X-Real-IP", ip.String())
+			}
+			for _, n := range adv.RequestRemove {
+				pr.Out.Header.Del(n)
+			}
+			for _, x := range adv.RequestHeaders {
+				pr.Out.Header.Set(x.Name, x.Value)
 			}
 			pr.Out.Header.Set(loopHeader, token)
 		},
-		Transport: m.transport(h.VerifyTarget),
+		Transport: tr,
 		ErrorLog:  log.New(io.Discard, "", 0),
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			st.errors.Add(1)
 			if !errors.Is(err, context.Canceled) {
-				m.log.Debug("target not reachable", "host", r.Host, "target", target.Host, "err", err)
+				m.log.Debug("target not reachable", "host", r.Host, "target", t.url.Host, "err", err)
 			}
-			page(w, http.StatusBadGateway)
+			status := http.StatusBadGateway
+			var mbe *http.MaxBytesError
+			if errors.As(err, &mbe) {
+				status = http.StatusRequestEntityTooLarge
+			}
+			page(w, status)
 		},
 	}
-	if h.CacheAssets {
-		return m.cache.cached(h.ID, rp)
+	if len(adv.ResponseHeaders) > 0 || len(adv.ResponseRemove) > 0 {
+		rp.ModifyResponse = func(resp *http.Response) error {
+			for _, n := range adv.ResponseRemove {
+				resp.Header.Del(n)
+			}
+			for _, x := range adv.ResponseHeaders {
+				resp.Header.Set(x.Name, x.Value)
+			}
+			return nil
+		}
+	}
+	if adv.NoBuffering {
+		rp.FlushInterval = -1
 	}
 	return rp
 }
 
-// handlerFor: was ein Host tut, mit Zaehlern, Schleifenschutz, Exploit-Sperre, WebSocket-Schalter und HSTS.
+// route ist ein Pfad eines Hosts mit eigenem Proxy und eigener Zugriffsliste.
+type route struct {
+	prefix string // "" = Host selbst
+	ws     bool
+	acl    int64
+	next   http.Handler
+}
+
+// proxyHandler baut den Reverse-Proxy eines Hosts mit seinen Locations (laengster Praefix gewinnt).
+func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
+	tr := m.transportFor(h)
+	mk := func(scheme, host string, port int) *url.URL {
+		return &url.URL{Scheme: scheme, Host: net.JoinHostPort(host, strconv.Itoa(port))}
+	}
+	var next http.Handler = m.reverseProxy(h, target{url: mk(h.Scheme, h.TargetHost, h.TargetPort)}, st, tr)
+	if h.CacheAssets {
+		next = m.cache.cached(h.ID, next)
+	}
+	if h.Advanced.Gzip {
+		next = withGzip(next)
+	}
+	routes := []route{{ws: h.WebSockets, acl: h.AccessListID, next: next}}
+	for _, l := range h.Locations {
+		var ln http.Handler = m.reverseProxy(h, target{url: mk(l.Scheme, l.TargetHost, l.TargetPort), prefix: l.Path, forward: l.ForwardPath}, st, tr)
+		if h.Advanced.Gzip {
+			ln = withGzip(ln)
+		}
+		acl := l.AccessListID
+		if acl == 0 {
+			acl = h.AccessListID
+		}
+		routes = append(routes, route{prefix: l.Path, ws: l.WebSockets, acl: acl, next: ln})
+	}
+	sort.SliceStable(routes, func(i, j int) bool { return len(routes[i].prefix) > len(routes[j].prefix) })
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rt := &routes[len(routes)-1]
+		for i := range routes {
+			p := routes[i].prefix
+			if p == "" || r.URL.Path == p || strings.HasPrefix(r.URL.Path, p+"/") {
+				rt = &routes[i]
+				break
+			}
+		}
+		if !rt.ws && r.Header.Get("Upgrade") != "" {
+			r.Header.Del("Upgrade")
+			r.Header.Del("Connection")
+		}
+		if !m.allowed(w, r, h, rt.acl) {
+			return
+		}
+		rt.next.ServeHTTP(w, r)
+	})
+}
+
+// allowed prueft die Zugriffsliste; false = Antwort ist schon geschrieben (401/403/429).
+func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl int64) bool {
+	if acl <= 0 {
+		return true
+	}
+	m.mu.Lock()
+	g := m.acl[acl]
+	m.mu.Unlock()
+	if g == nil { // Liste geloescht: lieber sperren als offen lassen
+		page(w, http.StatusForbidden)
+		return false
+	}
+	ip := clientOf(r)
+	if m.authFail.blocked(ip) {
+		w.Header().Set("Retry-After", strconv.Itoa(int(authBlockFor.Seconds())))
+		page(w, http.StatusTooManyRequests)
+		return false
+	}
+	ok, status, failed := g.decide(r, ip)
+	if ok {
+		if len(g.list.Users) > 0 && !g.list.PassAuth {
+			r.Header.Del("Authorization")
+		}
+		return true
+	}
+	if failed && m.authFail.failed(ip) {
+		m.log.Warn("access list: too many failed logins, ip blocked", "host", h.Names[0], "ip", ip, "minutes", int(authBlockFor.Minutes()))
+		if m.g.Audit != nil {
+			m.g.Audit(r, "cdn64.access.blocked", h.Names[0], "ip="+ip.String())
+		}
+	}
+	if status == http.StatusUnauthorized {
+		w.Header().Set("WWW-Authenticate", `Basic realm="`+strings.ReplaceAll(g.list.Name, `"`, "")+`", charset="UTF-8"`)
+	}
+	page(w, status)
+	return false
+}
+
+// ctxClient: echte Client-IP (nach den vertrauenswuerdigen Proxys des Hosts), im Kontext der Anfrage.
+type ctxClientKey struct{}
+
+func clientOf(r *http.Request) netip.Addr {
+	if ip, ok := r.Context().Value(ctxClientKey{}).(netip.Addr); ok {
+		return ip
+	}
+	return peerIP(r)
+}
+
+// handlerFor: was ein Host tut, mit Zaehlern, Statistik, Schleifenschutz, Exploit-Sperre, Upload-Grenze und HSTS.
 func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
+	h.Advanced.prepare()
 	next := m.inner(h, st)
 	token := m.loopToken
 	hsts := ""
@@ -136,26 +301,50 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			hsts += "; includeSubDomains"
 		}
 	}
+	maxBody := int64(h.Advanced.MaxBodyMB) << 20
+	if h.Kind == KindProxy && !h.WebSockets && len(h.Locations) == 0 {
+		next = stripUpgrade(next)
+	}
+	if h.Kind != KindProxy && h.AccessListID > 0 { // Weiterleitung mit Zugriffsliste
+		inner, acl := next, h.AccessListID
+		next = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if m.allowed(w, r, h, acl) {
+				inner.ServeHTTP(w, r)
+			}
+		})
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
 		st.requests.Add(1)
+		client := h.Advanced.clientIP(r)
+		r = r.WithContext(context.WithValue(r.Context(), ctxClientKey{}, client))
+		sw := &statusWriter{ResponseWriter: w}
+		defer func() {
+			if sdb := m.stats2.Load(); sdb != nil {
+				sdb.add(hit{time: start, hostID: h.ID, client: client, method: r.Method, host: hostOnly(r.Host), path: trunc(r.URL.RequestURI(), 500),
+					status: sw.code(), bytes: sw.bytes, ms: time.Since(start).Milliseconds(), ua: trunc(r.UserAgent(), 200), log: h.Advanced.AccessLog})
+			}
+		}()
 		if r.Header.Get(loopHeader) == token { // Ziel zeigt auf diesen Proxy selbst
 			st.errors.Add(1)
-			page(w, http.StatusLoopDetected)
+			page(sw, http.StatusLoopDetected)
 			return
 		}
 		if h.BlockExploits && blocked(r) {
 			st.blocked.Add(1)
-			page(w, http.StatusForbidden)
+			page(sw, http.StatusForbidden)
 			return
 		}
-		if !h.WebSockets && r.Header.Get("Upgrade") != "" {
-			r.Header.Del("Upgrade")
-			r.Header.Del("Connection")
+		if maxBody > 0 {
+			if r.ContentLength > maxBody {
+				page(sw, http.StatusRequestEntityTooLarge)
+				return
+			}
+			r.Body = http.MaxBytesReader(sw, r.Body, maxBody)
 		}
 		if hsts != "" && r.TLS != nil {
-			w.Header().Set("Strict-Transport-Security", hsts)
+			sw.Header().Set("Strict-Transport-Security", hsts)
 		}
-		sw := &statusWriter{ResponseWriter: w}
 		next.ServeHTTP(sw, r)
 		if sw.status >= 500 && sw.status != http.StatusBadGateway { // 502 zaehlt der ErrorHandler schon
 			st.errors.Add(1)
@@ -163,9 +352,42 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 	})
 }
 
+func stripUpgrade(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Upgrade") != "" {
+			r.Header.Del("Upgrade")
+			r.Header.Del("Connection")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func hostOnly(h string) string {
+	if x, _, err := net.SplitHostPort(h); err == nil {
+		return x
+	}
+	return h
+}
+
+func trunc(s string, n int) string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
+}
+
 type statusWriter struct {
 	http.ResponseWriter
 	status int
+	bytes  int64
+}
+
+// code: Status der Antwort (0 = abgebrochen bzw. WebSocket uebernommen).
+func (w *statusWriter) code() int {
+	if w.status == 0 {
+		return 499
+	}
+	return w.status
 }
 
 func (w *statusWriter) WriteHeader(code int) {
@@ -179,7 +401,9 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
-	return w.ResponseWriter.Write(b)
+	n, err := w.ResponseWriter.Write(b)
+	w.bytes += int64(n)
+	return n, err
 }
 
 func (w *statusWriter) Flush() {
@@ -233,6 +457,10 @@ func (m *Module) apply(ctx context.Context) {
 		m.log.Error("hosts not readable", "err", err)
 		return
 	}
+	guards := m.guards(ctx)
+	m.mu.Lock()
+	m.acl = guards
+	m.mu.Unlock()
 	errs := map[int64]string{}
 	var active []*Host
 	for _, h := range list {

@@ -16,7 +16,10 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"path/filepath"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ipv64net/node64/internal/certs"
@@ -39,7 +42,7 @@ var changelog string
 
 const (
 	Name    = "cdn64"
-	Version = "1.2.0"
+	Version = "1.3.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -66,7 +69,13 @@ type Module struct {
 	trInsecure *http.Transport
 	cache      *assetCache
 	reach      *reacher
-	ports      *ports.Registry // Pruefung der Stream-Ports (nil = keine)
+	ports      *ports.Registry         // Pruefung der Stream-Ports (nil = keine)
+	dataDir    string                  // fuer cdn64.db ("" = keine Statistik)
+	stats2     atomic.Pointer[statsDB] // Statistik und Zugriffs-Log (nur bei laufendem Modul)
+	acl        map[int64]*guard
+	authFail   *failLimiter
+	hostTr     map[int64]*http.Transport
+	checks     CheckCreator // Healthcheck anlegen (nil = nicht verfuegbar)
 
 	sapply sync.Mutex // ein Abgleich der Streams gleichzeitig
 	smu    sync.Mutex // Streams (nur kurz halten)
@@ -81,8 +90,18 @@ func New(core *store.Store, log *slog.Logger, e *edge.Edge, c *certs.Manager, ve
 	_, _ = rand.Read(b)
 	return &Module{core: core, log: log.With("module", Name), edge: e, certs: c, version: version, stats: map[int64]*hostStats{},
 		routeErr: map[int64]string{}, loopToken: hex.EncodeToString(b), trVerify: newTransport(true), trInsecure: newTransport(false),
-		cache: newAssetCache(cacheLimit), reach: newReacher(), runs: map[int64]*streamRun{}, sstats: map[int64]*streamStats{}, sreach: newReacher()}
+		cache: newAssetCache(cacheLimit), reach: newReacher(), runs: map[int64]*streamRun{}, sstats: map[int64]*streamStats{}, sreach: newReacher(),
+		acl: map[int64]*guard{}, authFail: newFailLimiter(), hostTr: map[int64]*http.Transport{}}
 }
+
+// SetDataDir legt fest, wo cdn64.db liegt (Statistik, Zugriffs-Log).
+func (m *Module) SetDataDir(dir string) { m.dataDir = dir }
+
+// CheckCreator legt einen Healthchecks-Check an (JSON wie POST /api/checks) und liefert seinen Token.
+type CheckCreator func(r *http.Request, body []byte) (token string, err error)
+
+// SetCheckCreator haengt das Anlegen von Healthchecks an ("Healthcheck fuer dieses Ziel").
+func (m *Module) SetCheckCreator(f CheckCreator) { m.checks = f }
 
 // SetPorts haengt die Port-Verwaltung an (Streams pruefen ihre Ports vor dem Oeffnen).
 func (m *Module) SetPorts(r *ports.Registry) { m.ports = r }
@@ -123,6 +142,15 @@ func (m *Module) Start(ctx context.Context) error {
 	m.running, m.startedAt = true, time.Now()
 	m.wg.Add(1)
 	m.mu.Unlock()
+	if m.dataDir != "" {
+		st, err := openStats(filepath.Join(m.dataDir, Name), m.log, func() int { return m.logDays(context.Background()) },
+			func() bool { return m.core.SettingOr(context.Background(), setAnonymize, "off") == "mask" })
+		if err != nil {
+			m.log.Warn("cdn64 statistics not available", "err", err)
+		} else {
+			m.stats2.Store(st)
+		}
+	}
 	if m.certs != nil {
 		m.certs.SetUsers(Name, m.certUsers)
 		m.certs.Acquire(Name)
@@ -163,6 +191,16 @@ func (m *Module) Stop(ctx context.Context) error {
 	case <-ctx.Done():
 	}
 	m.cache.clear()
+	st := m.stats2.Swap(nil)
+	m.mu.Lock()
+	for id, tr := range m.hostTr {
+		tr.CloseIdleConnections()
+		delete(m.hostTr, id)
+	}
+	m.mu.Unlock()
+	if st != nil {
+		st.close()
+	}
 	m.trVerify.CloseIdleConnections()
 	m.trInsecure.CloseIdleConnections()
 	m.log.Info("cdn64 stopped")
@@ -294,4 +332,13 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		n++
 	}
 	return n, firstErr
+}
+
+// logDays: Aufbewahrung des Zugriffs-Logs in Tagen (1-90, Standard 7).
+func (m *Module) logDays(ctx context.Context) int {
+	n, err := strconv.Atoi(m.core.SettingOr(ctx, setLogDays, "7"))
+	if err != nil || n < 1 || n > 90 {
+		return 7
+	}
+	return n
 }

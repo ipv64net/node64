@@ -1,5 +1,31 @@
 # Änderungen – CDN64
 
+## 1.3.0 – 2026-10-15
+
+Custom Locations, Zugriffslisten, erweiterte Optionen, Statistik und Zugriffs-Log.
+
+### Neu
+- Custom Locations: Pfade eines Proxy-Hosts mit eigenem Ziel (z. B. /api auf einen anderen Dienst).
+  - Optional mit anderem Pfad beim Ziel, eigener WebSocket-Einstellung und eigener Zugriffsliste.
+  - Der längste passende Pfad gewinnt.
+- Zugriffslisten:
+  - Benutzer mit Passwort (nur als bcrypt-Hash gespeichert) und IP-Regeln (allow/deny, erster Treffer gilt, sonst gesperrt).
+  - „Beides nötig“ oder „eine Bedingung genügt“; die Anmeldung lässt sich an das Ziel weiterreichen.
+  - Nach 10 falschen Anmeldungen in 5 Minuten ist die IP 15 Minuten gesperrt; die Sperre steht im Audit.
+  - Gilt für Proxy-Hosts, Locations und Weiterleitungen.
+- Erweitert:
+  - Kopfzeilen zum Ziel und zum Besucher setzen bzw. entfernen;
+  - Host-Kopf (Name des Besuchers, des Ziels oder fester Wert);
+  - Timeout zum Ziel, Upload-Grenze (413), nicht puffern, gzip für Text-Antworten;
+  - vertrauenswürdige Proxys mit Cloudflare-Vorlage für die echte Client-IP.
+- Statistik: Anfragen je Host und Stunde (2xx–5xx, Datenmenge) über 90 Tage. Die Liste zeigt die Anfragen der letzten 24 Stunden.
+- Zugriffs-Log je Host einschaltbar:
+  - Reiter „Zugriffe“ mit Filter nach Host, Status und Suche;
+  - Aufbewahrung 1–90 Tage, Client-IPs auf Wunsch gekürzt;
+  - eigene Datei cdn64.db.
+- „Healthcheck für dieses Ziel anlegen“ bei Proxy-Hosts, TLS durchreichen und TCP-Streams (braucht das Modul Healthchecks).
+- API: Zugriffslisten, Zugriffs-Log, Statistik, Einstellungen, Healthcheck anlegen.
+
 ## 1.2.0 – 2026-10-15
 
 Weiterleitungen, 404-Hosts, Streams, TLS durchreichen und die Standardseite.

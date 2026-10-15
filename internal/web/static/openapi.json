@@ -1954,6 +1954,19 @@
           },
           "preserve_path": {
             "type": "boolean"
+          },
+          "access_list_id": {
+            "type": "integer",
+            "description": "0 = öffentlich"
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CDNLocation"
+            }
+          },
+          "advanced": {
+            "$ref": "#/components/schemas/CDNAdvanced"
           }
         },
         "description": "Fehlende Felder: beim Anlegen Standardwerte (eingeschaltet, http, Port 80, WebSockets, HTTP/2, HTTP/3, TLS 1.2), beim Ändern bleiben sie."
@@ -2147,6 +2160,19 @@
           },
           "preserve_path": {
             "type": "boolean"
+          },
+          "access_list_id": {
+            "type": "integer",
+            "description": "0 = öffentlich"
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CDNLocation"
+            }
+          },
+          "advanced": {
+            "$ref": "#/components/schemas/CDNAdvanced"
           }
         }
       },
@@ -2251,6 +2277,212 @@
           },
           "cert_name": {
             "type": "string"
+          }
+        }
+      },
+      "CDNLocation": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "scheme": {
+            "type": "string",
+            "enum": [
+              "http",
+              "https"
+            ]
+          },
+          "target_host": {
+            "type": "string"
+          },
+          "target_port": {
+            "type": "integer"
+          },
+          "forward_path": {
+            "type": "string",
+            "description": "ersetzt den Pfad beim Ziel"
+          },
+          "websockets": {
+            "type": "boolean"
+          },
+          "access_list_id": {
+            "type": "integer",
+            "description": "0 = wie der Host"
+          }
+        }
+      },
+      "CDNAdvanced": {
+        "type": "object",
+        "properties": {
+          "request_headers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "request_remove": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "response_headers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "response_remove": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "host_header": {
+            "type": "string",
+            "description": "\"\" = Name des Besuchers, \"target\" = Ziel, sonst fester Wert"
+          },
+          "timeout_seconds": {
+            "type": "integer"
+          },
+          "max_body_mb": {
+            "type": "integer"
+          },
+          "no_buffering": {
+            "type": "boolean"
+          },
+          "gzip": {
+            "type": "boolean"
+          },
+          "trusted_proxies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "access_log": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CDNAccessList": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "satisfy_any": {
+            "type": "boolean"
+          },
+          "pass_auth": {
+            "type": "boolean"
+          },
+          "users": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "username": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "allow",
+                    "deny"
+                  ]
+                },
+                "cidr": {
+                  "type": "string",
+                  "description": "IP, Netz oder all"
+                }
+              }
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CDNAccessListInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "satisfy_any": {
+            "type": "boolean"
+          },
+          "pass_auth": {
+            "type": "boolean"
+          },
+          "users": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "username": {
+                  "type": "string"
+                },
+                "password": {
+                  "type": "string",
+                  "description": "leer = bisheriges behalten"
+                }
+              }
+            },
+            "description": "ersetzt die Benutzer; fehlt = unverändert"
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "allow",
+                    "deny"
+                  ]
+                },
+                "cidr": {
+                  "type": "string",
+                  "description": "IP, Netz oder all"
+                }
+              }
+            }
           }
         }
       }
@@ -8974,6 +9206,562 @@
           },
           "422": {
             "description": "Adresse fehlt/ungültig oder Seite leer/zu groß",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/access-lists": {
+      "get": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Zugriffslisten (ohne Passwörter) mit den Hosts, die sie benutzen",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "access_list": {
+                        "$ref": "#/components/schemas/CDNAccessList"
+                      },
+                      "used_by": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Zugriffsliste anlegen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CDNAccessListInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNAccessList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Feld ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/access-lists/{id}": {
+      "get": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Eine Zugriffsliste",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNAccessList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Zugriffsliste ändern",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CDNAccessListInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNAccessList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Feld ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Zugriffsliste löschen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "409": {
+            "description": "noch benutzt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/log": {
+      "get": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Zugriffs-Log (neueste zuerst)",
+        "parameters": [
+          {
+            "name": "host",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "enum": [
+                2,
+                3,
+                4,
+                5
+              ]
+            },
+            "description": "Klasse"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "in Pfad, Client oder User-Agent"
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Seiten: Einträge mit kleinerer ID"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "1–500, Standard 100"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "time": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
+                      "host_id": {
+                        "type": "integer"
+                      },
+                      "client": {
+                        "type": "string"
+                      },
+                      "method": {
+                        "type": "string"
+                      },
+                      "host": {
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "integer"
+                      },
+                      "bytes": {
+                        "type": "integer"
+                      },
+                      "ms": {
+                        "type": "integer"
+                      },
+                      "user_agent": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Modul läuft nicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/stats": {
+      "get": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Anfragen je Host und Verlauf je Stunde",
+        "parameters": [
+          {
+            "name": "hours",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "1–2160, Standard 24"
+          },
+          {
+            "name": "host",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Modul läuft nicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/settings": {
+      "get": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Aufbewahrung des Zugriffs-Logs",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "log_days": {
+                      "type": "integer",
+                      "description": "1–90"
+                    },
+                    "anonymize": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Aufbewahrung ändern",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "log_days": {
+                    "type": "integer",
+                    "description": "1–90"
+                  },
+                  "anonymize": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "log_days": {
+                      "type": "integer",
+                      "description": "1–90"
+                    },
+                    "anonymize": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Tage ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/hosts/{id}/healthcheck": {
+      "post": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Healthcheck für das Ziel dieses Host anlegen (Modul Healthchecks)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "kein Ziel oder Healthchecks aus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/streams/{id}/healthcheck": {
+      "post": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Healthcheck für das Ziel dieses Stream anlegen (Modul Healthchecks)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "kein Ziel oder Healthchecks aus",
             "content": {
               "application/json": {
                 "schema": {

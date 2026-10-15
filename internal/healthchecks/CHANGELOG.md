@@ -1,5 +1,10 @@
 # Änderungen – Healthchecks
 
+## 2.10.0 – 2026-10-15
+
+### Neu
+- Andere Module können einen Check anlegen, auf demselben Weg wie die API (Prüfung, Sync, lokale Gruppe, Limits und Audit inklusive). Zuerst nutzt das CDN64 mit „Healthcheck für dieses Ziel anlegen“.
+
 ## 2.9.1 – 2026-10-15
 
 ### Behoben

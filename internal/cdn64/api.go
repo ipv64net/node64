@@ -26,6 +26,7 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /api/cdn64/hosts/{id}/enable", api(m.apiToggle))
 	mux.Handle("POST /api/cdn64/hosts/{id}/disable", api(m.apiToggle))
 	m.streamAPIRoutes(mux, api)
+	m.c4APIRoutes(mux, api)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

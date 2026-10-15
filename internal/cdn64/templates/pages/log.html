@@ -1,0 +1,70 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{.T "cdn64.title"}}</h1>
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+{{if $d.NoDB}}<div class="alert alert-warning small">{{.T "cdn64.log.no_db"}}</div>{{else}}
+<div class="row g-3 mb-3">
+	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">{{.T "cdn64.log.req24"}}</div><div class="fs-5 font-monospace">{{.Int $d.Total.Requests}}</div></div></div></div>
+	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">2xx</div><div class="fs-5 font-monospace text-success">{{.Int $d.Total.S2}}</div></div></div></div>
+	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">3xx</div><div class="fs-5 font-monospace">{{.Int $d.Total.S3}}</div></div></div></div>
+	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">4xx</div><div class="fs-5 font-monospace text-warning-emphasis">{{.Int $d.Total.S4}}</div></div></div></div>
+	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">5xx</div><div class="fs-5 font-monospace text-danger">{{.Int $d.Total.S5}}</div></div></div></div>
+	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">{{.T "cdn64.log.traffic"}}</div><div class="fs-5 font-monospace">{{.Bytes $d.Total.Bytes}}</div></div></div></div>
+</div>
+{{end}}
+<div class="row g-3">
+	<div class="col-xl-9">
+		<div class="card">
+			<div class="card-header">
+				<form method="get" action="/cdn64/log" class="row g-2 align-items-center">
+					<div class="col-sm-4"><select class="form-select form-select-sm" name="host" aria-label="{{.T "cdn64.col.names"}}"><option value="0">{{.T "cdn64.log.all_hosts"}}</option>
+						{{range $d.Hosts}}<option value="{{.ID}}"{{if eq .ID $d.Filter.HostID}} selected{{end}}>{{index .Names 0}}{{if not .Advanced.AccessLog}} ({{$.T "cdn64.log.not_logged"}}){{end}}</option>{{end}}</select></div>
+					<div class="col-sm-2"><select class="form-select form-select-sm" name="status" aria-label="Status"><option value="0">{{.T "cdn64.log.all_status"}}</option>
+						{{range (split "2 3 4 5")}}<option value="{{.}}"{{if eq . (print $d.Filter.Status)}} selected{{end}}>{{.}}xx</option>{{end}}</select></div>
+					<div class="col-sm-4"><input class="form-control form-control-sm" name="q" value="{{$d.Filter.Query}}" placeholder="{{.T "cdn64.log.search"}}" maxlength="200"></div>
+					<div class="col-sm-2"><button class="btn btn-sm btn-outline-primary w-100" type="submit"><i class="bi bi-search"></i> {{.T "cdn64.log.filter"}}</button></div>
+				</form>
+			</div>
+			{{if not $d.Entries}}<div class="card-body text-body-secondary small">{{if eq $d.Enabled 0}}{{.T "cdn64.log.none_enabled"}}{{else}}{{.T "cdn64.log.empty"}}{{end}}</div>
+			{{else}}
+			<div class="table-responsive">
+			<table class="table table-sm table-hover align-middle mb-0 small">
+				<thead><tr><th class="ps-3">{{.T "cdn64.log.time"}}</th><th>{{.T "cdn64.log.client"}}</th><th>{{.T "cdn64.log.request"}}</th><th>Status</th><th class="text-end">{{.T "cdn64.log.size"}}</th><th class="text-end pe-3">ms</th></tr></thead>
+				<tbody>
+				{{range $d.Entries}}
+				<tr>
+					<td class="ps-3 text-nowrap">{{$.Time .Time}}</td>
+					<td class="font-monospace">{{.Client}}</td>
+					<td class="text-break" title="{{.UA}}"><span class="badge text-bg-light">{{.Method}}</span> <span class="font-monospace">{{.Host}}{{.Path}}</span></td>
+					<td><span class="badge {{if lt .Status 300}}text-bg-success{{else if lt .Status 400}}text-bg-light{{else if lt .Status 500}}text-bg-warning{{else}}text-bg-danger{{end}}">{{.Status}}</span></td>
+					<td class="text-end font-monospace">{{$.Bytes .Bytes}}</td>
+					<td class="text-end pe-3 font-monospace">{{.Ms}}</td>
+				</tr>
+				{{end}}
+				</tbody>
+			</table>
+			</div>
+			{{if $d.Next}}<div class="card-footer text-end"><a class="btn btn-sm btn-outline-secondary" href="/cdn64/log?host={{$d.Filter.HostID}}&amp;status={{$d.Filter.Status}}&amp;q={{$d.Filter.Query}}&amp;before={{$d.Next}}">{{.T "cdn64.log.older"}} <i class="bi bi-chevron-right"></i></a></div>{{end}}
+			{{end}}
+		</div>
+	</div>
+	<div class="col-xl-3">
+		<form method="post" action="/cdn64/log/settings" class="card">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-header"><i class="bi bi-sliders text-primary"></i> {{.T "cdn64.log.settings"}}</div>
+			<div class="card-body small">
+				<label class="form-label" for="days">{{.T "cdn64.log.days"}}</label>
+				<input class="form-control form-control-sm mb-2" type="number" min="1" max="90" id="days" name="days" value="{{$d.Days}}">
+				<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" name="anonymize" id="anonymize"{{if $d.Anon}} checked{{end}}><label class="form-check-label" for="anonymize">{{.T "cdn64.log.anonymize"}}</label></div>
+				<div class="form-text mb-2">{{.T "cdn64.log.settings_hint"}}</div>
+				<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>
+			</div>
+		</form>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}

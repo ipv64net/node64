@@ -23,7 +23,7 @@
 	<table class="table table-hover align-middle mb-0 small">
 		<thead><tr>
 			<th class="ps-3">{{.T "cdn64.col.names"}}</th>{{if ne $d.Kind "dead"}}<th>{{.T "cdn64.col.target"}}</th>{{end}}<th>{{.T "cdn64.col.ssl"}}</th><th>{{.T "cdn64.col.options"}}</th>
-			{{if eq $d.Kind "proxy"}}<th>{{.T "cdn64.col.reach"}}</th>{{end}}<th class="text-end">{{.T "cdn64.col.requests"}}</th><th class="text-end pe-3"></th>
+			{{if eq $d.Kind "proxy"}}<th>{{.T "cdn64.col.reach"}}</th>{{end}}<th class="text-end">{{.T "cdn64.col.requests24"}}</th><th class="text-end pe-3"></th>
 		</tr></thead>
 		<tbody>
 		{{range $d.Rows}}
@@ -48,6 +48,9 @@
 				{{if .CacheAssets}}<i class="bi bi-lightning-charge me-1" title="{{$.T "cdn64.f.cache_assets"}}"></i>{{end}}
 				{{if .ForceSSL}}<i class="bi bi-arrow-up-right-square me-1" title="{{$.T "cdn64.f.force_ssl"}}"></i>{{end}}
 				{{if .HSTS}}<i class="bi bi-shield-lock me-1" title="HSTS"></i>{{end}}
+				{{if .ACLName}}<span class="badge text-bg-info" title="{{$.T "cdn64.f.access_list"}}"><i class="bi bi-person-lock"></i> {{.ACLName}}</span>{{end}}
+				{{if .Locations}}<span class="badge text-bg-light" title="{{$.T "cdn64.f.locations"}}"><i class="bi bi-signpost"></i> {{len .Locations}}</span>{{end}}
+				{{if .Advanced.AccessLog}}<i class="bi bi-list-columns me-1" title="{{$.T "cdn64.f.adv_access_log"}}"></i>{{end}}
 				{{if and .HTTPS .HTTP3}}<span class="badge text-bg-light" title="{{$.T "cdn64.f.http3"}}">H3</span>{{end}}
 			</td>
 			{{if eq .Kind "proxy"}}<td>{{if .Enabled}}{{with .Reach}}
@@ -56,9 +59,10 @@
 				{{else if eq .State "down"}}<span class="badge text-bg-danger" title="{{.Error}}">{{$.T "cdn64.reach.down"}}</span><div class="text-body-secondary">{{$.T "cdn64.reach.since" "ago" ($.Ago .Since)}}</div>
 				{{else}}<span class="badge text-bg-light">{{$.T "cdn64.reach.unknown"}}</span>{{end}}
 			{{end}}{{end}}</td>{{end}}
-			<td class="text-end font-monospace">{{$.Int .Requests}}{{if .Errors}}<div class="text-danger">{{$.T "cdn64.errors" "n" .Errors}}</div>{{end}}{{if .Blocked}}<div class="text-body-secondary">{{$.T "cdn64.blocked" "n" .Blocked}}</div>{{end}}</td>
+			<td class="text-end font-monospace" title="{{$.T "cdn64.since_start" "n" .Requests}}">{{$.Int .Day.Requests}}{{if .Errors}}<div class="text-danger">{{$.T "cdn64.errors" "n" .Errors}}</div>{{end}}{{if .Blocked}}<div class="text-body-secondary">{{$.T "cdn64.blocked" "n" .Blocked}}</div>{{end}}</td>
 			<td class="text-end pe-3 text-nowrap">
 				{{if .URL}}<a class="btn btn-sm btn-outline-secondary py-0" href="{{.URL}}" target="_blank" rel="noopener" title="{{$.T "cdn64.open"}}"><i class="bi bi-box-arrow-up-right"></i></a>{{end}}
+				{{if eq .Kind "proxy"}}<form method="post" action="/cdn64/hosts/{{.ID}}/healthcheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "cdn64.create_check"}}"><i class="bi bi-heart-pulse"></i></button></form>{{end}}
 				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/hosts/{{.ID}}" title="{{$.T "cdn64.edit"}}"><i class="bi bi-pencil"></i></a>
 				<form method="post" action="/cdn64/hosts/{{.ID}}/{{if .Enabled}}disable{{else}}enable{{end}}" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
 					<button class="btn btn-sm {{if .Enabled}}btn-outline-warning{{else}}btn-outline-success{{end}} py-0" type="submit" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause-fill{{else}}bi-play-fill{{end}}"></i></button></form>

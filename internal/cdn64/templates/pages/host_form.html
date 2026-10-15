@@ -11,7 +11,9 @@
 			<div class="card-header pb-0 border-bottom-0">
 				<ul class="nav nav-tabs card-header-tabs" role="tablist">
 					<li class="nav-item" role="presentation"><button class="nav-link active" type="button" data-bs-toggle="tab" data-bs-target="#tab-details" role="tab"><i class="bi bi-sliders"></i> {{.T "cdn64.tab_details"}}</button></li>
+					{{if eq $h.Kind "proxy"}}<li class="nav-item" role="presentation"><button class="nav-link{{if index $d.Errors "locations"}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-locations" role="tab"><i class="bi bi-signpost"></i> {{.T "cdn64.f.locations"}}</button></li>{{end}}
 					{{if ne $h.Kind "passthrough"}}<li class="nav-item" role="presentation"><button class="nav-link{{if or (index $d.Errors "cert_id") (index $d.Errors "min_tls")}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-ssl" role="tab"><i class="bi bi-lock"></i> SSL</button></li>{{end}}
+					{{if ne $h.Kind "passthrough"}}<li class="nav-item" role="presentation"><button class="nav-link{{if index $d.Errors "advanced"}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-advanced" role="tab"><i class="bi bi-gear"></i> {{.T "cdn64.f.advanced"}}</button></li>{{end}}
 				</ul>
 			</div>
 			<div class="card-body small tab-content">
@@ -67,9 +69,76 @@
 						<div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="websockets" id="websockets"{{if $h.WebSockets}} checked{{end}}><label class="form-check-label" for="websockets">{{.T "cdn64.f.websockets"}}</label></div><div class="form-text">{{.T "cdn64.f.websockets_hint"}}</div></div>
 					</div>
 					{{end}}
+					{{if or (eq $h.Kind "proxy") (eq $h.Kind "redirect")}}
+					<label class="form-label fw-semibold mt-3" for="access_list_id">{{.T "cdn64.f.access_list"}}</label>
+					<select class="form-select form-select-sm{{if index $d.Errors "access_list_id"}} is-invalid{{end}}" id="access_list_id" name="access_list_id">
+						<option value="0">{{.T "cdn64.f.access_public"}}</option>
+						{{range $d.ACLs}}<option value="{{.ID}}"{{if eq .ID $h.AccessListID}} selected{{end}}>{{.Name}}</option>{{end}}
+					</select>
+					{{with index $d.Errors "access_list_id"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "cdn64.f.access_hint"}} <a href="/cdn64/access">{{.T "cdn64.tab.access"}}</a></div>
+					{{end}}
 					<hr>
 					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="enabled" id="enabled"{{if $h.Enabled}} checked{{end}}><label class="form-check-label" for="enabled">{{.T "cdn64.f.enabled"}}</label></div>
 				</div>
+				{{if eq $h.Kind "proxy"}}
+				<div class="tab-pane fade" id="tab-locations" role="tabpanel">
+					<input type="hidden" name="has_locations" value="1"><input type="hidden" name="loc_count" value="{{len $d.Locs}}">
+					<p class="text-body-secondary">{{.T "cdn64.f.locations_hint"}}</p>
+					{{with index $d.Errors "locations"}}<div class="alert alert-danger py-1">{{.}}</div>{{end}}
+					{{range $i, $l := $d.Locs}}
+					<div class="border rounded p-2 mb-2">
+						<div class="row g-2">
+							<div class="col-sm-3"><label class="form-label" for="loc_{{$i}}_path">{{$.T "cdn64.f.loc_path"}}</label><input class="form-control form-control-sm font-monospace" id="loc_{{$i}}_path" name="loc_{{$i}}_path" value="{{$l.Path}}" placeholder="/api" maxlength="200"></div>
+							<div class="col-sm-2"><label class="form-label" for="loc_{{$i}}_scheme">{{$.T "cdn64.f.scheme"}}</label><select class="form-select form-select-sm" id="loc_{{$i}}_scheme" name="loc_{{$i}}_scheme"><option value="http"{{if eq $l.Scheme "http"}} selected{{end}}>http</option><option value="https"{{if eq $l.Scheme "https"}} selected{{end}}>https</option></select></div>
+							<div class="col-sm-4"><label class="form-label" for="loc_{{$i}}_host">{{$.T "cdn64.f.target_host"}}</label><input class="form-control form-control-sm font-monospace" id="loc_{{$i}}_host" name="loc_{{$i}}_host" value="{{$l.TargetHost}}" maxlength="253"></div>
+							<div class="col-sm-3"><label class="form-label" for="loc_{{$i}}_port">{{$.T "cdn64.f.target_port"}}</label><input class="form-control form-control-sm font-monospace" type="number" min="1" max="65535" id="loc_{{$i}}_port" name="loc_{{$i}}_port" value="{{if $l.TargetPort}}{{$l.TargetPort}}{{end}}"></div>
+							<div class="col-sm-3"><label class="form-label" for="loc_{{$i}}_forward">{{$.T "cdn64.f.loc_forward"}}</label><input class="form-control form-control-sm font-monospace" id="loc_{{$i}}_forward" name="loc_{{$i}}_forward" value="{{$l.ForwardPath}}" placeholder="/" maxlength="200"></div>
+							<div class="col-sm-5"><label class="form-label" for="loc_{{$i}}_acl">{{$.T "cdn64.f.access_list"}}</label><select class="form-select form-select-sm" id="loc_{{$i}}_acl" name="loc_{{$i}}_acl"><option value="0">{{$.T "cdn64.f.loc_acl_host"}}</option>{{range $.Data.ACLs}}<option value="{{.ID}}"{{if eq .ID $l.AccessListID}} selected{{end}}>{{.Name}}</option>{{end}}</select></div>
+							<div class="col-sm-4 d-flex align-items-end"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="loc_{{$i}}_ws" id="loc_{{$i}}_ws"{{if $l.WebSockets}} checked{{end}}><label class="form-check-label" for="loc_{{$i}}_ws">{{$.T "cdn64.f.websockets"}}</label></div></div>
+						</div>
+					</div>
+					{{end}}
+					<div class="form-text">{{.T "cdn64.f.locations_more"}}</div>
+				</div>
+				{{end}}
+				{{if ne $h.Kind "passthrough"}}
+				<div class="tab-pane fade" id="tab-advanced" role="tabpanel">
+					<input type="hidden" name="has_advanced" value="1">
+					{{with index $d.Errors "advanced"}}<div class="alert alert-danger py-1">{{.}}</div>{{end}}
+					{{if eq $h.Kind "proxy"}}
+					<div class="row g-2">
+						<div class="col-md-6"><label class="form-label fw-semibold" for="adv_req_set">{{.T "cdn64.f.adv_req_set"}}</label><textarea class="form-control form-control-sm font-monospace" id="adv_req_set" name="adv_req_set" rows="3" placeholder="X-Custom: Wert">{{$d.Adv.ReqSet}}</textarea></div>
+						<div class="col-md-6"><label class="form-label fw-semibold" for="adv_req_del">{{.T "cdn64.f.adv_req_del"}}</label><textarea class="form-control form-control-sm font-monospace" id="adv_req_del" name="adv_req_del" rows="3" placeholder="Cookie">{{$d.Adv.ReqDel}}</textarea></div>
+					</div>
+					{{end}}
+					<div class="row g-2 mt-1">
+						<div class="col-md-6"><label class="form-label fw-semibold" for="adv_resp_set">{{.T "cdn64.f.adv_resp_set"}}</label><textarea class="form-control form-control-sm font-monospace" id="adv_resp_set" name="adv_resp_set" rows="3" placeholder="X-Frame-Options: SAMEORIGIN">{{$d.Adv.RespSet}}</textarea></div>
+						<div class="col-md-6"><label class="form-label fw-semibold" for="adv_resp_del">{{.T "cdn64.f.adv_resp_del"}}</label><textarea class="form-control form-control-sm font-monospace" id="adv_resp_del" name="adv_resp_del" rows="3" placeholder="Server">{{$d.Adv.RespDel}}</textarea></div>
+					</div>
+					<div class="form-text mb-3">{{.T "cdn64.f.adv_headers_hint"}}</div>
+					{{if eq $h.Kind "proxy"}}
+					<div class="row g-2 mb-2">
+						<div class="col-md-5"><label class="form-label fw-semibold" for="adv_host_mode">{{.T "cdn64.f.adv_host"}}</label>
+							<select class="form-select form-select-sm" id="adv_host_mode" name="adv_host_mode"><option value="">{{.T "cdn64.f.adv_host_pass"}}</option><option value="target"{{if eq $d.Adv.HostMode "target"}} selected{{end}}>{{.T "cdn64.f.adv_host_target"}}</option><option value="custom"{{if eq $d.Adv.HostMode "custom"}} selected{{end}}>{{.T "cdn64.f.adv_host_custom"}}</option></select></div>
+						<div class="col-md-7"><label class="form-label" for="adv_host_value">{{.T "cdn64.f.adv_host_value"}}</label><input class="form-control form-control-sm font-monospace" id="adv_host_value" name="adv_host_value" value="{{$d.Adv.HostValue}}" maxlength="253"></div>
+						<div class="col-md-3"><label class="form-label fw-semibold" for="adv_timeout">{{.T "cdn64.f.adv_timeout"}}</label><input class="form-control form-control-sm" type="number" min="0" max="86400" id="adv_timeout" name="adv_timeout" value="{{if $h.Advanced.TimeoutSeconds}}{{$h.Advanced.TimeoutSeconds}}{{end}}" placeholder="0"></div>
+						<div class="col-md-3"><label class="form-label fw-semibold" for="adv_max_body">{{.T "cdn64.f.adv_max_body"}}</label><input class="form-control form-control-sm" type="number" min="0" id="adv_max_body" name="adv_max_body" value="{{if $h.Advanced.MaxBodyMB}}{{$h.Advanced.MaxBodyMB}}{{end}}" placeholder="0"></div>
+						<div class="col-md-6 d-flex flex-column justify-content-end">
+							<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="adv_no_buffering" id="adv_no_buffering"{{if $h.Advanced.NoBuffering}} checked{{end}}><label class="form-check-label" for="adv_no_buffering">{{.T "cdn64.f.adv_no_buffering"}}</label></div>
+							<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="adv_gzip" id="adv_gzip"{{if $h.Advanced.Gzip}} checked{{end}}><label class="form-check-label" for="adv_gzip">{{.T "cdn64.f.adv_gzip"}}</label></div>
+						</div>
+					</div>
+					<div class="form-text mb-3">{{.T "cdn64.f.adv_limits_hint"}}</div>
+					{{end}}
+					<label class="form-label fw-semibold" for="adv_trusted">{{.T "cdn64.f.adv_trusted"}}</label>
+					<textarea class="form-control form-control-sm font-monospace mb-1" id="adv_trusted" name="adv_trusted" rows="3" placeholder="173.245.48.0/20" data-trusted>{{$d.Adv.Trusted}}</textarea>
+					<button class="btn btn-sm btn-outline-secondary mb-1" type="button" data-cf-nets="{{$d.CFNets}}"><i class="bi bi-cloud"></i> {{.T "cdn64.f.adv_cloudflare"}}</button>
+					<div class="form-text mb-3">{{.T "cdn64.f.adv_trusted_hint"}}</div>
+					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="adv_access_log" id="adv_access_log"{{if $h.Advanced.AccessLog}} checked{{end}}><label class="form-check-label" for="adv_access_log">{{.T "cdn64.f.adv_access_log"}}</label>
+						<div class="form-text">{{.T "cdn64.f.adv_access_log_hint"}}</div></div>
+				</div>
+				{{end}}
 
 				{{if ne $h.Kind "passthrough"}}<div class="tab-pane fade" id="tab-ssl" role="tabpanel">
 					<label class="form-label fw-semibold" for="cert_id">{{.T "cdn64.f.cert"}}</label>

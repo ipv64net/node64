@@ -197,8 +197,16 @@ Das Modul *CDN64* (in den Einstellungen einschalten) ersetzt den Nginx Proxy Man
 - **Weiterleitungen und 404-Hosts:** Weiterleitungen gehen auf eine andere Domain (Code 301/302/303/307/308, Pfad mitnehmen, Schema wie die Anfrage oder fest). 404-Hosts antworten bewusst mit „nicht gefunden“. Beide mit denselben SSL-Optionen.
 - **Streams:** Ein Port (TCP und/oder UDP) wird roh an ein Ziel weitergereicht, z. B. für Spiele-Server, MQTT oder WireGuard. Bei TCP geht optional ein TLS-Abschluss mit einem Zertifikat der Verwaltung. Belegte Ports werden erkannt und am Stream angezeigt. Im Bridge-Modus muss der Port zusätzlich am Container freigegeben sein.
 - **TLS durchreichen:** Ein Name auf Port 443 geht ohne Entschlüsselung an einen Dienst mit eigenem Zertifikat. Die übrigen Namen auf 443 bleiben bei Node64.
+- **Custom Locations:** Pfade eines Proxy-Hosts mit eigenem Ziel (z. B. `/api` auf einen anderen Dienst, optional mit anderem Pfad beim Ziel), eigener Zugriffsliste und eigenem WebSocket-Schalter.
+- **Zugriffslisten:** Benutzer mit Passwort (bcrypt) und IP-Regeln (allow/deny, erster Treffer gilt). Dazu „beides nötig“ oder „eine Bedingung genügt“, auf Wunsch wird die Anmeldung an das Ziel weitergereicht. Nach 10 Fehlversuchen in 5 Minuten ist die IP 15 Minuten gesperrt.
+- **Erweitert (statt freier nginx-Konfiguration):**
+  - Kopfzeilen setzen bzw. entfernen;
+  - Host-Kopf, Timeout zum Ziel, Upload-Grenze, nicht puffern, gzip;
+  - vertrauenswürdige Proxys davor (Cloudflare-Vorlage), damit die echte Client-IP beim Ziel, in den Zugriffslisten und im Log ankommt.
+- **Statistik und Zugriffs-Log:** Anfragen je Host und Stunde (90 Tage) immer; das Einzel-Log ist je Host einschaltbar (1–90 Tage, IPs auf Wunsch gekürzt). Beides liegt in `/data/cdn64/cdn64.db`, nicht im Backup der Node.
+- **Healthcheck dafür anlegen:** Ein Klick legt im Modul Healthchecks einen Check auf das Ziel an (HTTP oder TCP).
 - **Standardseite:** Für unbekannte Namen oder den Aufruf per IP antwortet Node64 mit 404, schließt die Verbindung, leitet weiter oder zeigt eine eigene HTML-Seite.
-- **API:** `GET /api/cdn64/status`, `POST /api/cdn64/check`, `GET|POST /api/cdn64/hosts` (`kind`: proxy, redirect, dead, passthrough), `GET|PUT|DELETE /api/cdn64/hosts/{id}`, `POST /api/cdn64/hosts/{id}/enable|disable`, `GET|POST /api/cdn64/streams`, `GET|PUT|DELETE /api/cdn64/streams/{id}`, `POST /api/cdn64/streams/{id}/enable|disable`, `GET|PUT /api/cdn64/default`.
+- **API:** `GET /api/cdn64/status`, `POST /api/cdn64/check`, `GET|POST /api/cdn64/hosts` (`kind`: proxy, redirect, dead, passthrough), `GET|PUT|DELETE /api/cdn64/hosts/{id}`, `POST /api/cdn64/hosts/{id}/enable|disable`, `GET|POST /api/cdn64/streams`, `GET|PUT|DELETE /api/cdn64/streams/{id}`, `POST /api/cdn64/streams/{id}/enable|disable`, `GET|PUT /api/cdn64/default`, `GET|POST /api/cdn64/access-lists`, `GET|PUT|DELETE /api/cdn64/access-lists/{id}`, `GET /api/cdn64/log`, `GET /api/cdn64/stats`, `GET|PUT /api/cdn64/settings`, `POST /api/cdn64/hosts/{id}/healthcheck`, `POST /api/cdn64/streams/{id}/healthcheck`.
 
 ## Betrieb
 

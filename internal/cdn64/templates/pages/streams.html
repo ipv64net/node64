@@ -36,6 +36,7 @@
 			<td class="text-end font-monospace">{{$.Int .Stats.Conns}}{{if .Stats.Active}}<div class="text-body-secondary">{{$.T "cdn64.streams.active" "n" .Stats.Active}}</div>{{end}}</td>
 			<td class="text-end font-monospace">{{$.Bytes .Stats.BytesIn}} / {{$.Bytes .Stats.BytesUp}}</td>
 			<td class="text-end pe-3 text-nowrap">
+				{{if .TCP}}<form method="post" action="/cdn64/streams/{{.ID}}/healthcheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "cdn64.create_check"}}"><i class="bi bi-heart-pulse"></i></button></form>{{end}}
 				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/streams/{{.ID}}" title="{{$.T "cdn64.streams.edit"}}"><i class="bi bi-pencil"></i></a>
 				<form method="post" action="/cdn64/streams/{{.ID}}/{{if .Enabled}}disable{{else}}enable{{end}}" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
 					<button class="btn btn-sm {{if .Enabled}}btn-outline-warning{{else}}btn-outline-success{{end}} py-0" type="submit" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause-fill{{else}}bi-play-fill{{end}}"></i></button></form>
@@ -69,6 +70,7 @@
 				{{else}}<span class="badge text-bg-light">{{$.T "cdn64.reach.unknown"}}</span>{{end}}{{end}}{{end}}</td>
 			<td class="text-end font-monospace">{{$.Int .Requests}}</td>
 			<td class="text-end pe-3 text-nowrap">
+				<form method="post" action="/cdn64/hosts/{{.ID}}/healthcheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "cdn64.create_check"}}"><i class="bi bi-heart-pulse"></i></button></form>
 				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/hosts/{{.ID}}" title="{{$.T "cdn64.edit"}}"><i class="bi bi-pencil"></i></a>
 				<form method="post" action="/cdn64/hosts/{{.ID}}/{{if .Enabled}}disable{{else}}enable{{end}}" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
 					<button class="btn btn-sm {{if .Enabled}}btn-outline-warning{{else}}btn-outline-success{{end}} py-0" type="submit"><i class="bi {{if .Enabled}}bi-pause-fill{{else}}bi-play-fill{{end}}"></i></button></form>

@@ -1,0 +1,45 @@
+{{define "content"}}
+{{$d := .Data}}
+{{$a := $d.A}}
+<h1 class="h4 mb-3"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{if $d.New}}{{.T "cdn64.acl.new"}}{{else}}{{$a.Name}}{{end}}</h1>
+{{if $d.Error}}<div class="alert alert-danger small">{{$d.Error}}</div>{{end}}
+<div class="row g-3">
+	<div class="col-xl-8">
+		<form method="post" action="{{if $d.New}}/cdn64/access{{else}}/cdn64/access/{{$a.ID}}{{end}}" class="card">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-body small">
+				<label class="form-label fw-semibold" for="name">{{.T "cdn64.acl.name"}}</label>
+				<input class="form-control form-control-sm mb-3{{if index $d.Errors "name"}} is-invalid{{end}}" id="name" name="name" value="{{$a.Name}}" required maxlength="100">
+				{{with index $d.Errors "name"}}<div class="invalid-feedback d-block mb-2">{{.}}</div>{{end}}
+
+				<div class="fw-semibold mb-1">{{.T "cdn64.acl.users"}}</div>
+				{{if $a.Users}}<ul class="list-unstyled mb-2">{{range $a.Users}}<li class="d-flex align-items-center gap-2"><i class="bi bi-person"></i> <span class="font-monospace">{{.Username}}</span>
+					<span class="form-check ms-2"><input class="form-check-input" type="checkbox" name="remove_user" value="{{.Username}}" id="rm-{{.Username}}"><label class="form-check-label text-danger" for="rm-{{.Username}}">{{$.T "cdn64.acl.remove_user"}}</label></span></li>{{end}}</ul>{{end}}
+				<textarea class="form-control form-control-sm font-monospace{{if index $d.Errors "users"}} is-invalid{{end}}" name="new_users" rows="2" placeholder="name:passwort" autocomplete="off" aria-label="{{.T "cdn64.acl.new_users"}}"></textarea>
+				{{with index $d.Errors "users"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+				<div class="form-text mb-3">{{.T "cdn64.acl.users_hint"}}</div>
+
+				<label class="form-label fw-semibold" for="rules">{{.T "cdn64.acl.rules"}}</label>
+				<textarea class="form-control form-control-sm font-monospace{{if index $d.Errors "rules"}} is-invalid{{end}}" id="rules" name="rules" rows="6" placeholder="allow 192.168.0.0/16&#10;deny all">{{$d.Rules}}</textarea>
+				{{with index $d.Errors "rules"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+				<div class="form-text mb-3">{{.T "cdn64.acl.rules_hint"}}</div>
+
+				<div class="fw-semibold mb-1">{{.T "cdn64.acl.satisfy"}}</div>
+				<div class="form-check"><input class="form-check-input" type="radio" name="satisfy_any" id="sat-all" value="0"{{if not $a.SatisfyAny}} checked{{end}}><label class="form-check-label" for="sat-all">{{.T "cdn64.acl.all_long"}}</label></div>
+				<div class="form-check mb-3"><input class="form-check-input" type="radio" name="satisfy_any" id="sat-any" value="1"{{if $a.SatisfyAny}} checked{{end}}><label class="form-check-label" for="sat-any">{{.T "cdn64.acl.any_long"}}</label></div>
+				<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="pass_auth" id="pass_auth"{{if $a.PassAuth}} checked{{end}}><label class="form-check-label" for="pass_auth">{{.T "cdn64.acl.pass_auth"}}</label>
+					<div class="form-text">{{.T "cdn64.acl.pass_auth_hint"}}</div></div>
+			</div>
+			<div class="card-footer d-flex gap-2">
+				<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>
+				<a class="btn btn-outline-secondary btn-sm" href="/cdn64/access">{{.T "common.cancel"}}</a>
+			</div>
+		</form>
+	</div>
+	<div class="col-xl-4"><div class="card"><div class="card-body small">
+		<div class="fw-semibold mb-1"><i class="bi bi-info-circle text-info"></i> {{.T "cdn64.help_title"}}</div>
+		<p class="mb-0">{{.T "cdn64.acl.help"}}</p>
+	</div></div></div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}

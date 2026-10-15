@@ -64,6 +64,17 @@
 	modes.forEach(function (r) { r.addEventListener("change", modeSync); });
 	if (modes.length) { modeSync(); }
 
+	// Erweitert: Cloudflare-Netze als vertrauenswuerdige Proxys einfuegen
+	document.querySelectorAll("[data-cf-nets]").forEach(function (btn) {
+		btn.addEventListener("click", function () {
+			var ta = document.querySelector("[data-trusted]");
+			if (!ta) { return; }
+			var have = ta.value.split(/\s+/).filter(Boolean);
+			btn.getAttribute("data-cf-nets").split("\n").forEach(function (n) { if (have.indexOf(n) < 0) { have.push(n); } });
+			ta.value = have.join("\n");
+		});
+	});
+
 	// Waehrend ein Zertifikat geholt wird: Seite alle paar Sekunden neu laden
 	var reload = document.querySelector("[data-reload]");
 	if (reload) {

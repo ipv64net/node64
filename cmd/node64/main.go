@@ -190,6 +190,13 @@ func run() error {
 	// Reverse-Proxy ueber den gemeinsamen Eingang
 	cdnModule := cdn64.New(st, logger.Slog(), edgeSrv, certMgr, Version)
 	cdnModule.SetPorts(portReg) // Streams pruefen ihre Ports
+	cdnModule.SetDataDir(cfg.DataDir)
+	cdnModule.SetCheckCreator(func(r *http.Request, body []byte) (string, error) { // "Healthcheck fuer dieses Ziel"
+		if !modules.IsRunning(healthchecks.Name) {
+			return "", errors.New("healthchecks module is switched off")
+		}
+		return hcModule.CreateFromJSON(r, body)
+	})
 	portReg.Provide(cdn64.Name, cdnModule.Claims)
 	modules.Register(cdnModule)
 	portReg.Provide(dns64.Name, func(ctx context.Context) []ports.Claim { // nur eingeschaltet; aktiv, solange es laeuft

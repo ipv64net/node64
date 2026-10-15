@@ -399,6 +399,11 @@ Encrypt ist noch nicht gemacht (erst nach Dennis' OK).
 - Standardseite einstellbar.
 
 ### C4 Erweitert
+**Fertig (2026-10-15, CDN64 1.3.0):** Custom Locations (JSON am Host), Zugriffslisten (`cdn_access_lists`, bcrypt, Sperre
+nach Fehlversuchen), Erweitert (`advanced` JSON: Kopfzeilen, Host-Kopf, Timeout, Upload-Grenze, Puffern, gzip,
+vertrauenswürdige Proxys mit Cloudflare-Vorlage), Statistik und Zugriffs-Log in `cdn64.db`, „Healthcheck dafür
+anlegen“ über `healthchecks.CreateFromJSON` (Healthchecks 2.10.0).
+
 - Custom Locations.
 - Access Lists.
 - Reiter „Erweitert“: Kopfzeilen, Timeouts, Body-Limit, Ziel-Zertifikat, echte Client-IP, gzip.

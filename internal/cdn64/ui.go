@@ -33,6 +33,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /cdn64/hosts/{id}/disable", page(m.pageToggle))
 	m.certRoutes(mux, page)
 	m.streamRoutes(mux, page)
+	m.c4Routes(mux, page)
 }
 
 // listPath: Liste der Hosts einer Art.
@@ -59,7 +60,9 @@ func tabs(active string) []tab {
 		{Path: "/cdn64/redirects", Icon: "bi-signpost-split", TitleKey: "cdn64.tab.redirects"},
 		{Path: "/cdn64/dead", Icon: "bi-sign-stop", TitleKey: "cdn64.tab.dead"},
 		{Path: "/cdn64/streams", Icon: "bi-ethernet", TitleKey: "cdn64.tab.streams"},
+		{Path: "/cdn64/access", Icon: "bi-person-lock", TitleKey: "cdn64.tab.access"},
 		{Path: "/cdn64/certificates", Icon: "bi-shield-lock", TitleKey: "cdn64.tab.certs"},
+		{Path: "/cdn64/log", Icon: "bi-list-columns", TitleKey: "cdn64.tab.log"},
 		{Path: "/cdn64/default", Icon: "bi-question-square", TitleKey: "cdn64.tab.default"}}
 	for i := range t {
 		t[i].Active = t[i].Path == active
@@ -125,6 +128,8 @@ type hostRow struct {
 	URL      string
 	Cert     certInfo
 	RouteErr string
+	Day      HostStat // letzte 24 Stunden (aus cdn64.db)
+	ACLName  string
 }
 
 type listData struct {
@@ -155,11 +160,21 @@ func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
 	m.mu.Lock()
 	routeErr := m.routeErr
 	m.mu.Unlock()
+	var day map[int64]HostStat
+	if sdb := m.stats2.Load(); sdb != nil {
+		day, _ = sdb.sums(ctx, time.Now().Add(-24*time.Hour))
+	}
+	acls := map[int64]string{}
+	if al, err := m.accessLists(ctx); err == nil {
+		for _, a := range al {
+			acls[a.ID] = a.Name
+		}
+	}
 	out := make([]hostRow, 0, len(list))
 	for _, h := range list {
 		st := m.statsOf(h.ID)
 		out = append(out, hostRow{Host: h, Reach: m.reach.get(h.ID), Requests: st.requests.Load(), Errors: st.errors.Load(), Blocked: st.blocked.Load(),
-			URL: firstURL(h), Cert: m.certFor(ctx, h, all), RouteErr: routeErr[h.ID]})
+			URL: firstURL(h), Cert: m.certFor(ctx, h, all), RouteErr: routeErr[h.ID], Day: day[h.ID], ACLName: acls[h.AccessListID]})
 	}
 	return out, nil
 }
@@ -223,6 +238,46 @@ type formData struct {
 	Back    string // Liste dieser Art
 	NewCert bool   // "Zertifikat gleich mit anfordern" gewaehlt (nach einem Fehler im Formular)
 	Errors  map[string]string
+	ACLs    []*AccessList
+	Locs    []Location // vorhandene Locations und zwei leere Zeilen
+	Adv     advText
+	CFNets  string
+}
+
+// advText: die weiteren Optionen als Text fuer das Formular.
+type advText struct {
+	ReqSet, ReqDel, RespSet, RespDel, Trusted string
+	HostMode, HostValue                       string
+}
+
+func headersText(list []Header) string {
+	var b strings.Builder
+	for _, x := range list {
+		b.WriteString(x.Name + ": " + x.Value + "\n")
+	}
+	return b.String()
+}
+
+func parseHeaders(text string) []Header {
+	var out []Header
+	for _, line := range strings.Split(text, "\n") {
+		name, val, ok := strings.Cut(strings.TrimRight(line, "\r"), ":")
+		if !ok || strings.TrimSpace(name) == "" {
+			continue
+		}
+		out = append(out, Header{Name: strings.TrimSpace(name), Value: strings.TrimSpace(val)})
+	}
+	return out
+}
+
+func lines(text string) []string {
+	var out []string
+	for _, l := range strings.FieldsFunc(text, func(r rune) bool { return r == '\n' || r == '\r' || r == ',' || r == ' ' }) {
+		if l = strings.TrimSpace(l); l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 func (m *Module) form(ctx context.Context, h *Host, isNew bool) formData {
@@ -230,6 +285,18 @@ func (m *Module) form(ctx context.Context, h *Host, isNew bool) formData {
 	if m.certs != nil {
 		d.Certs, _ = m.certs.List(ctx)
 	}
+	d.ACLs, _ = m.accessLists(ctx)
+	d.Locs = append(append([]Location{}, h.Locations...), Location{Scheme: "http", WebSockets: true}, Location{Scheme: "http", WebSockets: true})
+	a := h.Advanced
+	d.Adv = advText{ReqSet: headersText(a.RequestHeaders), ReqDel: strings.Join(a.RequestRemove, "\n"), RespSet: headersText(a.ResponseHeaders),
+		RespDel: strings.Join(a.ResponseRemove, "\n"), Trusted: strings.Join(a.TrustedProxies, "\n")}
+	switch a.HostHeader {
+	case "", "target":
+		d.Adv.HostMode = a.HostHeader
+	default:
+		d.Adv.HostMode, d.Adv.HostValue = "custom", a.HostHeader
+	}
+	d.CFNets = strings.Join(CloudflareNets, "\n")
 	return d
 }
 
@@ -273,6 +340,39 @@ func hostFromForm(r *http.Request, h *Host) {
 	h.MinTLS, h.VerifyTarget = r.PostFormValue("min_tls"), on("verify_target")
 	h.RedirectTarget, h.RedirectScheme, h.PreservePath = strings.TrimSpace(r.PostFormValue("redirect_target")), r.PostFormValue("redirect_scheme"), on("preserve_path")
 	h.RedirectCode, _ = strconv.Atoi(r.PostFormValue("redirect_code"))
+	h.AccessListID, _ = strconv.ParseInt(r.PostFormValue("access_list_id"), 10, 64)
+	if r.PostFormValue("has_locations") == "1" { // Reiter Locations war im Formular
+		n, _ := strconv.Atoi(r.PostFormValue("loc_count"))
+		h.Locations = []Location{}
+		for i := 0; i < n && i < 50; i++ {
+			k := "loc_" + strconv.Itoa(i) + "_"
+			path := strings.TrimSpace(r.PostFormValue(k + "path"))
+			if path == "" {
+				continue
+			}
+			port, _ := strconv.Atoi(strings.TrimSpace(r.PostFormValue(k + "port")))
+			acl, _ := strconv.ParseInt(r.PostFormValue(k+"acl"), 10, 64)
+			h.Locations = append(h.Locations, Location{Path: path, Scheme: r.PostFormValue(k + "scheme"), TargetHost: strings.TrimSpace(r.PostFormValue(k + "host")),
+				TargetPort: port, ForwardPath: r.PostFormValue(k + "forward"), WebSockets: on(k + "ws"), AccessListID: acl})
+		}
+	}
+	if r.PostFormValue("has_advanced") == "1" { // Reiter Erweitert war im Formular
+		a := &h.Advanced
+		a.RequestHeaders, a.RequestRemove = parseHeaders(r.PostFormValue("adv_req_set")), lines(r.PostFormValue("adv_req_del"))
+		a.ResponseHeaders, a.ResponseRemove = parseHeaders(r.PostFormValue("adv_resp_set")), lines(r.PostFormValue("adv_resp_del"))
+		switch r.PostFormValue("adv_host_mode") {
+		case "target":
+			a.HostHeader = "target"
+		case "custom":
+			a.HostHeader = strings.TrimSpace(r.PostFormValue("adv_host_value"))
+		default:
+			a.HostHeader = ""
+		}
+		a.TimeoutSeconds, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_timeout")))
+		a.MaxBodyMB, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_max_body")))
+		a.NoBuffering, a.Gzip, a.AccessLog = on("adv_no_buffering"), on("adv_gzip"), on("adv_access_log")
+		a.TrustedProxies = lines(r.PostFormValue("adv_trusted"))
+	}
 	if h.Kind == KindPass {
 		h.CertID = CertNone
 	}

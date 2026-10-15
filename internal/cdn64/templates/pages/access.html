@@ -1,0 +1,41 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{.T "cdn64.title"}}</h1>
+	<div class="ms-auto"><a class="btn btn-sm btn-primary" href="/cdn64/access/new"><i class="bi bi-plus-lg"></i> {{.T "cdn64.acl.new"}}</a></div>
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+<div class="card">
+	{{if not $d.Rows}}<div class="card-body text-center text-body-secondary py-5">
+		<div class="mb-2"><i class="bi bi-person-lock fs-2"></i></div>
+		<p class="mb-3">{{.T "cdn64.acl.empty"}}</p>
+		<a class="btn btn-primary btn-sm" href="/cdn64/access/new"><i class="bi bi-plus-lg"></i> {{.T "cdn64.acl.new"}}</a></div>
+	{{else}}
+	<div class="table-responsive">
+	<table class="table table-hover align-middle mb-0 small">
+		<thead><tr><th class="ps-3">{{.T "cdn64.acl.name"}}</th><th>{{.T "cdn64.acl.users"}}</th><th>{{.T "cdn64.acl.rules"}}</th><th>{{.T "cdn64.acl.satisfy"}}</th><th>{{.T "cdn64.certs.col.used"}}</th><th class="text-end pe-3"></th></tr></thead>
+		<tbody>
+		{{range $d.Rows}}
+		<tr>
+			<td class="ps-3 fw-semibold">{{.Name}}</td>
+			<td>{{len .Users}}</td>
+			<td>{{len .Rules}}</td>
+			<td>{{if .SatisfyAny}}{{$.T "cdn64.acl.any"}}{{else}}{{$.T "cdn64.acl.all"}}{{end}}{{if .PassAuth}} · {{$.T "cdn64.acl.pass_auth_short"}}{{end}}</td>
+			<td>{{if .UsedBy}}{{range $i, $u := .UsedBy}}{{if $i}}, {{end}}<span class="font-monospace">{{$u}}</span>{{end}}{{else}}<span class="text-body-secondary">–</span>{{end}}</td>
+			<td class="text-end pe-3 text-nowrap">
+				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/access/{{.ID}}" title="{{$.T "cdn64.acl.edit"}}"><i class="bi bi-pencil"></i></a>
+				<form method="post" action="/cdn64/access/{{.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<button class="btn btn-sm btn-outline-danger py-0" type="submit" data-confirm="{{$.T "cdn64.acl.delete_confirm" "name" .Name}}" title="{{$.T "common.delete"}}"{{if .UsedBy}} disabled{{end}}><i class="bi bi-trash"></i></button></form>
+			</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table>
+	</div>
+	{{end}}
+</div>
+<p class="small text-body-secondary mt-2">{{.T "cdn64.acl.hint"}}</p>
+{{end}}
+{{define "scripts"}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}
