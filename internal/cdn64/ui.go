@@ -239,7 +239,10 @@ type formData struct {
 	NewCert bool   // "Zertifikat gleich mit anfordern" gewaehlt (nach einem Fehler im Formular)
 	Errors  map[string]string
 	ACLs    []*AccessList
-	Locs    []Location // vorhandene Locations und zwei leere Zeilen
+	DNS     []*certs.DNSAccount // Zugaenge fuer "Zertifikat gleich mit anfordern"
+	IPv64   bool                // DNS-Eintrag bei ipv64 moeglich (API-Key)
+	Zones   []string            // ipv64-Domains (Ziel fuer CNAME)
+	Locs    []Location          // vorhandene Locations und zwei leere Zeilen
 	Adv     advText
 	CFNets  string
 }
@@ -286,6 +289,15 @@ func (m *Module) form(ctx context.Context, h *Host, isNew bool) formData {
 		d.Certs, _ = m.certs.List(ctx)
 	}
 	d.ACLs, _ = m.accessLists(ctx)
+	if m.certs != nil {
+		d.DNS, _ = m.certs.DNSAccounts(ctx)
+	}
+	if isNew && m.dnsrec != nil && m.dnsrec.Ready(ctx) {
+		d.IPv64 = true
+		dctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		d.Zones, _ = m.dnsrec.Domains(dctx)
+		cancel()
+	}
 	d.Locs = append(append([]Location{}, h.Locations...), Location{Scheme: "http", WebSockets: true}, Location{Scheme: "http", WebSockets: true})
 	a := h.Advanced
 	d.Adv = advText{ReqSet: headersText(a.RequestHeaders), ReqDel: strings.Join(a.RequestRemove, "\n"), RespSet: headersText(a.ResponseHeaders),
@@ -422,8 +434,28 @@ func (m *Module) saveForm(w http.ResponseWriter, r *http.Request, h *Host, isNew
 		action = "cdn64.host.create"
 	}
 	m.g.Audit(r, action, strings.Join(h.Names, ","), h.summary())
+	if r.PostFormValue("dns_create") == "on" { // DNS-Eintrag bei ipv64
+		res, err := m.createRecords(ctx, h.Names, DNSRequest{Type: r.PostFormValue("dns_type"), Content: r.PostFormValue("dns_content")})
+		if err != nil {
+			var fe *FieldError
+			msg := err.Error()
+			if errors.As(err, &fe) {
+				msg = m.g.T(r, fe.Key)
+			}
+			m.g.Flash(w, r, "warning", m.g.T(r, "cdn64.dnsrec.failed", "error", msg))
+		} else {
+			n, text := dnsSummary(res)
+			m.g.Audit(r, "cdn64.dns.create", strings.Join(h.Names, ","), text)
+			m.g.Flash(w, r, "info", m.g.T(r, "cdn64.dnsrec.result", "n", n, "details", text))
+		}
+	}
 	if r.PostFormValue("cert_id") == "new" && m.certs != nil { // Zertifikat gleich mit anfordern
-		c, err := m.requestCert(ctx, h.Names, r.PostFormValue("cert_source"), "", "", false)
+		src, dnsAcc := r.PostFormValue("cert_source"), int64(0)
+		if v, ok := strings.CutPrefix(src, "dns:"); ok { // "dns:<Zugang>"
+			src = "dns"
+			dnsAcc, _ = strconv.ParseInt(v, 10, 64)
+		}
+		c, err := m.requestCert(ctx, h.Names, src, "", "", dnsAcc, false)
 		if err != nil {
 			m.g.Flash(w, r, "warning", m.g.T(r, "cdn64.certs.host_saved_no_cert", "error", m.certError(r, err)))
 			http.Redirect(w, r, listPath(h.Kind), http.StatusSeeOther)

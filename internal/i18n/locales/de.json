@@ -345,7 +345,9 @@
       "acl_empty": "Mindestens ein Benutzer oder eine IP-Regel.",
       "acl_in_use": "Noch benutzt von: {name}",
       "log_days": "Aufbewahrung 1–90 Tage.",
-      "no_target": "Dieser Host hat kein Ziel zum Prüfen."
+      "no_target": "Dieser Host hat kein Ziel zum Prüfen.",
+      "dns_content": "Ziel ungültig (Domain für CNAME, IPv4 für A, IPv6 für AAAA).",
+      "dns_type": "Typ CNAME, A oder AAAA."
     },
     "help_title": "So funktioniert es",
     "help_ports": "Der Router leitet 80 und 443 (TCP, für HTTP/3 auch 443/UDP) auf diese Node weiter. Den Rest verteilt Node64 nach dem Domainnamen – auch zusammen mit DNS64 im selben Container.",
@@ -372,7 +374,8 @@
         "ipv64": "ipv64 DNS",
         "alias": "Alias (CNAME)",
         "http": "HTTP-01",
-        "upload": "eigenes"
+        "upload": "eigenes",
+        "dns": "DNS-Anbieter"
       },
       "step": {
         "queued": "wartet …",
@@ -413,13 +416,15 @@
         "auto": "Automatisch",
         "ipv64": "ipv64 DNS-01",
         "alias": "Alias über ipv64",
-        "http": "HTTP-01"
+        "http": "HTTP-01",
+        "dns": "Anderer DNS-Anbieter"
       },
       "src_hint": {
         "auto": "ipv64 DNS-01, wenn alle Namen im ipv64-Account liegen, sonst HTTP-01.",
         "ipv64": "für Domains im ipv64-Account; auch Wildcards, Port 80 muss nicht offen sein.",
         "alias": "für Domains bei anderen Anbietern: einmal einen CNAME setzen, danach erledigt ipv64 den Rest – ohne Zugangsdaten des Anbieters.",
-        "http": "Port 80 muss von außen auf diese Node zeigen; keine Wildcards."
+        "http": "Port 80 muss von außen auf diese Node zeigen; keine Wildcards.",
+        "dns": "für Domains bei Cloudflare, Hetzner, netcup, INWX, IONOS u. a.: Node64 setzt den TXT-Record über deren API (Zugang hinterlegen)."
       },
       "your_domains": "Deine ipv64-Domains:",
       "alias_zone": "Ziel-Domain bei ipv64",
@@ -451,7 +456,11 @@
         "in_use": "Das Zertifikat wird noch benutzt.",
         "busy": "Für dieses Zertifikat läuft gerade ein Abruf.",
         "upload_renew": "Eigene Zertifikate lassen sich nicht erneuern.",
-        "email": "Ungültige Mail-Adresse."
+        "email": "Ungültige Mail-Adresse.",
+        "dns_account": "DNS-Zugang prüfen",
+        "provider": "Anbieter prüfen",
+        "fields": "Zugangsdaten prüfen",
+        "name": "Name prüfen"
       }
     },
     "kind_new": {
@@ -567,6 +576,32 @@
       "days": "Zugriffs-Log (Tage)",
       "anonymize": "Client-IPs kürzen (IPv4 /24, IPv6 /48)",
       "settings_hint": "Die Zähler je Stunde bleiben 90 Tage. Gespeichert in cdn64.db, nicht im Backup der Node."
+    },
+    "dns": {
+      "title": "DNS-Zugänge",
+      "new": "DNS-Zugang anlegen",
+      "edit": "DNS-Zugang bearbeiten",
+      "name": "Name",
+      "provider": "Anbieter",
+      "optional": "optional",
+      "unchanged": "unverändert lassen",
+      "docs": "Schlüssel gibt es unter:",
+      "hint": "Die Zugangsdaten werden verschlüsselt gespeichert und nur für TXT-Records von Let's Encrypt benutzt. Am besten einen Schlüssel nur mit DNS-Rechten anlegen.",
+      "empty": "Für Domains bei anderen Anbietern: Zugang hinterlegen, dann geht DNS-01 auch dort (Wildcards inklusive).",
+      "certs": "Zertifikate",
+      "delete_confirm": "DNS-Zugang „{name}“ löschen?",
+      "account": "DNS-Zugang",
+      "account_hint": "Der Anbieter muss die Domain verwalten.",
+      "add_first": "Zuerst einen DNS-Zugang anlegen"
+    },
+    "dnsrec": {
+      "create": "DNS-Eintrag bei ipv64 anlegen",
+      "type": "Typ",
+      "content": "Ziel",
+      "content_ph": "deine-dyndns.ipv64.de oder IP",
+      "hint": "Für jede Domain dieses Hosts, die in deinem ipv64-Account liegt. Empfohlen: CNAME auf deine DynDNS-Domain, die der Updater aktuell hält. Vorhandene Einträge bleiben unverändert; für die Domain selbst geht kein CNAME.",
+      "result": "DNS bei ipv64: {n} Einträge angelegt ({details}).",
+      "failed": "DNS-Eintrag nicht angelegt: {error}"
     }
   },
   "ports": {

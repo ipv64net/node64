@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"math/big"
+	mrand "math/rand/v2"
 	"net"
 	"net/http"
 	"net/netip"
@@ -46,12 +47,14 @@ func selfSigned(t *testing.T, names ...string) *tls.Certificate {
 // freePort sucht einen Port, der fuer TCP und UDP frei ist.
 func freePort(t *testing.T) int {
 	t.Helper()
-	for i := 0; i < 20; i++ {
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
+	// eigener Bereich unterhalb der Ports, die das System fuer ":0" vergibt: so greifen parallel laufende
+	// Testpakete (z. B. DNS64) nicht nach denselben gerade freigegebenen Ports
+	for i := 0; i < 200; i++ {
+		p := 20000 + mrand.IntN(10000)
+		ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(p))
 		if err != nil {
-			t.Fatal(err)
+			continue
 		}
-		p := ln.Addr().(*net.TCPAddr).Port
 		ln.Close()
 		if pc, err := net.ListenPacket("udp", "127.0.0.1:"+strconv.Itoa(p)); err == nil {
 			pc.Close()

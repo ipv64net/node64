@@ -32,10 +32,12 @@
 	var prefix = document.querySelector("[data-alias-prefix]");
 	var preview = document.querySelector("[data-alias-preview]");
 	var srcs = document.querySelectorAll("[data-cert-source]");
+	var dnsBox = document.querySelector("[data-dns-box]");
 	var aliasSync = function () {
 		var src = "";
 		srcs.forEach(function (r) { if (r.checked) { src = r.value; } });
 		if (aliasBox) { aliasBox.classList.toggle("d-none", src !== "alias"); }
+		if (dnsBox) { dnsBox.classList.toggle("d-none", src !== "dns"); }
 		if (!preview || !names || !zone) { return; }
 		var z = (zone.value || "").trim().toLowerCase().replace(/\.$/, "");
 		var p = prefix ? (prefix.value || "").trim().toLowerCase().replace(/^\.+|\.+$/g, "") : "";
@@ -74,6 +76,20 @@
 			ta.value = have.join("\n");
 		});
 	});
+
+	// DNS-Zugang: nur die Felder des gewaehlten Anbieters
+	var prov = document.querySelector("[data-provider-select]");
+	if (prov) {
+		var provSync = function () {
+			document.querySelectorAll("[data-provider-fields]").forEach(function (el) {
+				var on = el.getAttribute("data-provider-fields") === prov.value;
+				el.classList.toggle("d-none", !on);
+				el.querySelectorAll("input").forEach(function (i) { i.disabled = !on; });
+			});
+		};
+		prov.addEventListener("change", provSync);
+		provSync();
+	}
 
 	// Waehrend ein Zertifikat geholt wird: Seite alle paar Sekunden neu laden
 	var reload = document.querySelector("[data-reload]");

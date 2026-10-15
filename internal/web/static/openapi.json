@@ -1747,6 +1747,7 @@
               "ipv64",
               "alias",
               "http",
+              "dns",
               "upload"
             ]
           },
@@ -1806,6 +1807,10 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "dns_account": {
+            "type": "integer",
+            "description": "source dns: DNS-Zugang"
           }
         }
       },
@@ -1904,9 +1909,9 @@
                   "auto",
                   "ipv64",
                   "alias",
-                  "http"
-                ],
-                "description": "auto: ipv64, wenn alle Namen im Account liegen, sonst http"
+                  "http",
+                  "dns"
+                ]
               },
               "alias_zone": {
                 "type": "string"
@@ -1916,6 +1921,9 @@
               },
               "staging": {
                 "type": "boolean"
+              },
+              "dns_account": {
+                "type": "integer"
               }
             }
           },
@@ -1967,6 +1975,24 @@
           },
           "advanced": {
             "$ref": "#/components/schemas/CDNAdvanced"
+          },
+          "create_dns_record": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "CNAME",
+                  "A",
+                  "AAAA"
+                ]
+              },
+              "content": {
+                "type": "string",
+                "description": "Ziel-Domain bzw. IP"
+              }
+            },
+            "description": "Optional: für jede Domain im ipv64-Account einen Eintrag anlegen (vorhandene bleiben). Ergebnis in dns_records bzw. dns_error."
           }
         },
         "description": "Fehlende Felder: beim Anlegen Standardwerte (eingeschaltet, http, Port 80, WebSockets, HTTP/2, HTTP/3, TLS 1.2), beim Ändern bleiben sie."
@@ -2173,6 +2199,34 @@
           },
           "advanced": {
             "$ref": "#/components/schemas/CDNAdvanced"
+          },
+          "dns_records": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "string",
+                  "enum": [
+                    "created",
+                    "exists",
+                    "not_ipv64",
+                    "apex_cname",
+                    "error"
+                  ]
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "nur nach create_dns_record"
+          },
+          "dns_error": {
+            "type": "string"
           }
         }
       },
@@ -2483,6 +2537,44 @@
                 }
               }
             }
+          }
+        }
+      },
+      "DNSAccount": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "provider_name": {
+            "type": "string"
+          },
+          "values": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "nicht geheime Felder; geheime nur als \"set\""
+          },
+          "used_by": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }
@@ -8040,7 +8132,7 @@
           "Ports & Zertifikate"
         ],
         "summary": "Zertifikat bei Let's Encrypt anfordern (läuft im Hintergrund)",
-        "description": "source ipv64: alle Namen liegen im ipv64-Account (DNS-01 über den zentralen API-Key, auch Wildcards). alias: fremde Domain; vorher bei deren Anbieter den CNAME _acme-challenge.<name> → _acme-challenge.<alias_prefix>.<alias_zone> anlegen. http: HTTP-01, Port 80 muss von außen auf die Node zeigen (keine Wildcards). Vorher die Nutzungsbedingungen annehmen (PUT /certs/account).",
+        "description": "source ipv64: alle Namen liegen im ipv64-Account (DNS-01 über den zentralen API-Key, auch Wildcards). alias: fremde Domain; vorher bei deren Anbieter den CNAME _acme-challenge.<name> → _acme-challenge.<alias_prefix>.<alias_zone> anlegen. http: HTTP-01, Port 80 muss von außen auf die Node zeigen (keine Wildcards). Vorher die Nutzungsbedingungen annehmen (PUT /certs/account). dns: anderer DNS-Anbieter über einen DNS-Zugang (GET /certs/dns-accounts).",
         "requestBody": {
           "required": true,
           "content": {
@@ -8059,7 +8151,8 @@
                     "enum": [
                       "ipv64",
                       "alias",
-                      "http"
+                      "http",
+                      "dns"
                     ]
                   },
                   "alias_zone": {
@@ -8075,6 +8168,10 @@
                   "auto_renew": {
                     "type": "boolean",
                     "description": "Standard an"
+                  },
+                  "dns_account": {
+                    "type": "integer",
+                    "description": "bei source dns"
                   }
                 }
               }
@@ -9762,6 +9859,247 @@
           },
           "422": {
             "description": "kein Ziel oder Healthchecks aus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/certs/dns-providers": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "DNS-Anbieter mit ihren Feldern",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "docs": {
+                        "type": "string"
+                      },
+                      "fields": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "secret": {
+                              "type": "boolean"
+                            },
+                            "optional": {
+                              "type": "boolean"
+                            },
+                            "default": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/certs/dns-accounts": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "DNS-Zugänge (ohne geheime Werte)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DNSAccount"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "DNS-Zugang anlegen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string",
+                    "description": "nur beim Anlegen"
+                  },
+                  "values": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Felder des Anbieters (GET /certs/dns-providers); leere geheime Felder bleiben beim Ändern"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNSAccount"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Anbieter unbekannt oder Felder fehlen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/certs/dns-accounts/{id}": {
+      "put": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "DNS-Zugang ändern",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "provider": {
+                    "type": "string",
+                    "description": "nur beim Anlegen"
+                  },
+                  "values": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Felder des Anbieters (GET /certs/dns-providers); leere geheime Felder bleiben beim Ändern"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNSAccount"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Felder ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "DNS-Zugang löschen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "409": {
+            "description": "von einem Zertifikat benutzt",
             "content": {
               "application/json": {
                 "schema": {

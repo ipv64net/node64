@@ -69,6 +69,17 @@
 						<div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="websockets" id="websockets"{{if $h.WebSockets}} checked{{end}}><label class="form-check-label" for="websockets">{{.T "cdn64.f.websockets"}}</label></div><div class="form-text">{{.T "cdn64.f.websockets_hint"}}</div></div>
 					</div>
 					{{end}}
+					{{if $d.IPv64}}
+					<div class="border rounded p-2 mt-3">
+						<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="dns_create" id="dns_create"><label class="form-check-label fw-semibold" for="dns_create">{{.T "cdn64.dnsrec.create"}}</label></div>
+						<div class="row g-2 mt-1">
+							<div class="col-sm-3"><select class="form-select form-select-sm" name="dns_type" aria-label="{{.T "cdn64.dnsrec.type"}}"><option value="CNAME">CNAME</option><option value="A">A</option><option value="AAAA">AAAA</option></select></div>
+							<div class="col-sm-9"><input class="form-control form-control-sm font-monospace" name="dns_content" list="dns-zones" placeholder="{{.T "cdn64.dnsrec.content_ph"}}" maxlength="253" aria-label="{{.T "cdn64.dnsrec.content"}}">
+								<datalist id="dns-zones">{{range $d.Zones}}<option value="{{.}}">{{end}}</datalist></div>
+						</div>
+						<div class="form-text">{{.T "cdn64.dnsrec.hint"}}</div>
+					</div>
+					{{end}}
 					{{if or (eq $h.Kind "proxy") (eq $h.Kind "redirect")}}
 					<label class="form-label fw-semibold mt-3" for="access_list_id">{{.T "cdn64.f.access_list"}}</label>
 					<select class="form-select form-select-sm{{if index $d.Errors "access_list_id"}} is-invalid{{end}}" id="access_list_id" name="access_list_id">
@@ -156,6 +167,7 @@
 							<option value="auto">{{.T "cdn64.certs.src.auto"}}</option>
 							<option value="ipv64">{{.T "cdn64.certs.src.ipv64"}}</option>
 							<option value="http">{{.T "cdn64.certs.src.http"}}</option>
+							{{range $d.DNS}}<option value="dns:{{.ID}}">{{$.T "cdn64.certs.src.dns"}}: {{.Name}}</option>{{end}}
 						</select>
 						<div class="form-text">{{.T "cdn64.f.cert_new_hint"}}</div>
 					</div>

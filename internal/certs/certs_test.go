@@ -5,13 +5,16 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"io"
 	"log/slog"
 	"math/big"
+	mrand "math/rand/v2"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -20,6 +23,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/go-acme/lego/v4/challenge"
 
 	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/notify"
@@ -261,13 +266,12 @@ func TestAliasNeedsCNAME(t *testing.T) {
 func TestHTTP01ThroughEdge(t *testing.T) {
 	ctx := context.Background()
 	port := 0
-	for port == 0 {
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
+	for i := 0; i < 200 && port == 0; i++ { // eigener Bereich, siehe edge_test.go freePort
+		p := 20000 + mrand.IntN(10000)
+		if ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(p)); err == nil {
+			ln.Close()
+			port = p
 		}
-		port = ln.Addr().(*net.TCPAddr).Port
-		ln.Close()
 	}
 	eg, err := edge.New(edge.Config{Bind: "127.0.0.1", HTTPPort: port, HTTPSPort: 0, Default: edge.DefaultNotFound}, nil, nil,
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -406,5 +410,85 @@ func TestNeedsRenewalBackoff(t *testing.T) {
 	c = &Cert{Status: StatusValid, hasCert: true, NotAfter: time.Now().Add(60 * 24 * time.Hour)}
 	if needsRenewal(c) {
 		t.Fatal("not due yet")
+	}
+}
+
+// fakeLego setzt TXT-Records wie ein lego-Anbieter (Wert aus der Key-Authorization).
+type fakeLego struct{ dns *fakeDNS }
+
+func (f fakeLego) Present(domain, _, keyAuth string) error {
+	h := sha256.Sum256([]byte(keyAuth))
+	f.dns.mu.Lock()
+	defer f.dns.mu.Unlock()
+	fq := "_acme-challenge." + domain
+	f.dns.txt[fq] = append(f.dns.txt[fq], base64.RawURLEncoding.EncodeToString(h[:]))
+	f.dns.added++
+	return nil
+}
+
+func (f fakeLego) CleanUp(domain, _, _ string) error {
+	f.dns.mu.Lock()
+	defer f.dns.mu.Unlock()
+	delete(f.dns.txt, "_acme-challenge."+domain)
+	return nil
+}
+
+func TestIssueViaDNSProvider(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, nil)
+	_ = e.m.SetAccount(ctx, "", true)
+	var gotProvider string
+	e.m.provider = func(id string, vals map[string]string) (challenge.Provider, error) {
+		gotProvider = id + ":" + vals["token"]
+		return fakeLego{dns: e.dns}, nil
+	}
+	var ve *ValidationError
+	if err := e.m.SaveDNSAccount(ctx, &DNSAccount{Name: "CF", Provider: "cloudflare"}, map[string]string{}); !errors.As(err, &ve) {
+		t.Fatalf("missing token: %v", err)
+	}
+	if err := e.m.SaveDNSAccount(ctx, &DNSAccount{Name: "x", Provider: "unknown"}, map[string]string{"token": "a"}); !errors.As(err, &ve) {
+		t.Fatalf("unknown provider: %v", err)
+	}
+	acc := &DNSAccount{Name: "Cloudflare privat", Provider: "cloudflare"}
+	if err := e.m.SaveDNSAccount(ctx, acc, map[string]string{"token": "cf-secret"}); err != nil {
+		t.Fatal(err)
+	}
+	// aendern ohne Token: bisheriger bleibt
+	acc.Name = "Cloudflare"
+	if err := e.m.SaveDNSAccount(ctx, acc, map[string]string{"token": ""}); err != nil {
+		t.Fatal(err)
+	}
+	pub, _ := e.m.DNSAccount(ctx, acc.ID)
+	if pub.Values["token"] != "set" || pub.Name != "Cloudflare" || pub.ProviderName != "Cloudflare" {
+		t.Fatalf("public: %+v", pub)
+	}
+	var raw string
+	_ = e.st.Reader().QueryRowContext(ctx, `SELECT config FROM cert_dns_accounts WHERE id = ?`, acc.ID).Scan(&raw)
+	if !secrets.IsEncrypted(raw) || strings.Contains(raw, "cf-secret") {
+		t.Fatal("credentials must be stored encrypted")
+	}
+	c, err := e.m.Create(ctx, Request{Names: []string{"www.fremd.example", "*.fremd.example"}, Source: SourceDNS, DNSAccount: acc.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c = wait(t, e.m, c.ID)
+	if c.Status != StatusValid || e.m.ForName("api.fremd.example") == nil || gotProvider != "cloudflare:cf-secret" {
+		t.Fatalf("dns provider issue: %+v %q", c, gotProvider)
+	}
+	if e.dns.records() != 0 {
+		t.Fatal("TXT records must be cleaned up")
+	}
+	if err := e.m.DeleteDNSAccount(ctx, acc.ID); !errors.Is(err, ErrInUse) {
+		t.Fatalf("delete in use: %v", err)
+	}
+	list, _ := e.m.DNSAccounts(ctx)
+	if len(list) != 1 || len(list[0].UsedBy) != 1 {
+		t.Fatalf("used by: %+v", list)
+	}
+	if _, err := e.m.Create(ctx, Request{Names: []string{"a.example"}, Source: SourceDNS, DNSAccount: 999}); !errors.As(err, &ve) {
+		t.Fatalf("unknown account: %v", err)
+	}
+	if len(Providers()) < 10 {
+		t.Fatal("providers missing")
 	}
 }

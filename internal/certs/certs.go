@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-acme/lego/v4/challenge"
+
 	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/secrets"
@@ -40,6 +42,7 @@ const (
 	SourceIPv64  = "ipv64"  // DNS-01, die Namen liegen im ipv64-Account
 	SourceAlias  = "alias"  // DNS-01 ueber CNAME _acme-challenge.<name> -> ipv64-Domain (fremde Domains)
 	SourceHTTP   = "http"   // HTTP-01 ueber Port 80 des Eingangs
+	SourceDNS    = "dns"    // DNS-01 ueber einen anderen DNS-Anbieter (lego, Zugang in cert_dns_accounts)
 	SourceUpload = "upload" // eigenes Zertifikat
 )
 
@@ -77,6 +80,7 @@ type Cert struct {
 	Source      string    `json:"source"`
 	AliasZone   string    `json:"alias_zone,omitempty"`
 	AliasPrefix string    `json:"alias_prefix,omitempty"`
+	DNSAccount  int64     `json:"dns_account,omitempty"` // source dns
 	Staging     bool      `json:"staging"`
 	AutoRenew   bool      `json:"auto_renew"`
 	Status      string    `json:"status"`
@@ -153,6 +157,7 @@ type Manager struct {
 	// austauschbar fuer Tests
 	txtVisible func(ctx context.Context, zone, fqdn, value string) error
 	cnameOf    func(ctx context.Context, name string) (string, error)
+	provider   func(id string, values map[string]string) (challenge.Provider, error) // nil = lego
 	loopFirst  time.Duration
 	loopEvery  time.Duration
 }
@@ -198,12 +203,13 @@ func (m *Manager) Close() {
 
 // ---------------------------------------------------------------- Lesen
 
-const cols = `id, names, source, alias_zone, alias_prefix, staging, auto_renew, cert_pem != '', not_before, not_after, issuer, status, last_error, last_attempt, warned, created_at, updated_at`
+const cols = `id, names, source, alias_zone, alias_prefix, dns_account, staging, auto_renew, cert_pem != '', not_before, not_after, issuer, status, last_error,
+	last_attempt, warned, created_at, updated_at`
 
 func (m *Manager) scan(row interface{ Scan(...any) error }) (*Cert, error) {
 	var c Cert
 	var names, nb, na, la, ca, ua string
-	if err := row.Scan(&c.ID, &names, &c.Source, &c.AliasZone, &c.AliasPrefix, &c.Staging, &c.AutoRenew, &c.hasCert, &nb, &na, &c.Issuer,
+	if err := row.Scan(&c.ID, &names, &c.Source, &c.AliasZone, &c.AliasPrefix, &c.DNSAccount, &c.Staging, &c.AutoRenew, &c.hasCert, &nb, &na, &c.Issuer,
 		&c.Status, &c.LastError, &la, &c.warned, &ca, &ua); err != nil {
 		return nil, err
 	}
@@ -430,6 +436,7 @@ type Request struct {
 	Source      string   `json:"source"`       // ipv64, alias, http
 	AliasZone   string   `json:"alias_zone"`   // alias
 	AliasPrefix string   `json:"alias_prefix"` // alias, optional
+	DNSAccount  int64    `json:"dns_account"`  // dns: Zugang
 	Staging     bool     `json:"staging"`
 	AutoRenew   *bool    `json:"auto_renew"` // Standard an
 }
@@ -491,6 +498,10 @@ func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
 		} else if err := m.checkAliasZone(ctx, req.AliasZone, req.AliasPrefix); err != nil {
 			return nil, err
 		}
+	case SourceDNS:
+		if _, _, err := m.dnsAccountRaw(ctx, req.DNSAccount); err != nil {
+			return nil, invalid("dns_account", "unknown dns account")
+		}
 	case SourceHTTP:
 		if m.d.HTTP == nil {
 			return nil, invalid("source", "http-01 not available")
@@ -506,13 +517,17 @@ func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
 	if req.Source != SourceAlias {
 		req.AliasZone, req.AliasPrefix = "", ""
 	}
+	if req.Source != SourceDNS {
+		req.DNSAccount = 0
+	}
 	if !m.Account(ctx).TOSAccepted {
 		return nil, ErrTOS
 	}
 	auto := req.AutoRenew == nil || *req.AutoRenew
 	now := store.Now()
-	res, err := m.w.ExecContext(ctx, `INSERT INTO certs (names, source, alias_zone, alias_prefix, staging, auto_renew, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, strings.Join(names, ","), req.Source, req.AliasZone, req.AliasPrefix, req.Staging, auto, StatusPending, now, now)
+	res, err := m.w.ExecContext(ctx, `INSERT INTO certs (names, source, alias_zone, alias_prefix, dns_account, staging, auto_renew, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, strings.Join(names, ","), req.Source, req.AliasZone, req.AliasPrefix, req.DNSAccount, req.Staging, auto, StatusPending,
+		now, now)
 	if err != nil {
 		return nil, err
 	}

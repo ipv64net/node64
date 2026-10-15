@@ -1,5 +1,20 @@
 # Änderungen – CDN64
 
+## 1.4.0 – 2026-10-15
+
+Zertifikate auch bei anderen DNS-Anbietern, DNS-Einträge bei ipv64 beim Anlegen.
+
+### Neu
+- DNS-Zugänge für Let's Encrypt per DNS-01 bei anderen Anbietern, auch für Wildcards:
+  - Anbieter: Cloudflare, Hetzner, netcup, INWX, IONOS, deSEC, Duck DNS, Porkbun, GoDaddy, DigitalOcean, Gandi, OVHcloud.
+  - Die Zugangsdaten liegen verschlüsselt und werden nie wieder angezeigt; beim Bearbeiten bleiben leere Felder unverändert.
+  - Ein Zugang, den ein Zertifikat benutzt, lässt sich nicht löschen.
+- Neuer Weg „Anderer DNS-Anbieter“ beim Anfordern; ebenso im Host-Formular bei „Zertifikat gleich mit anfordern“.
+- DNS-Eintrag bei ipv64 beim Anlegen eines Hosts:
+  - CNAME (z. B. auf die DynDNS-Domain) oder A/AAAA, für jede Domain des Hosts im ipv64-Account;
+  - vorhandene Einträge bleiben unverändert;
+  - in der API über `create_dns_record`.
+
 ## 1.3.0 – 2026-10-15
 
 Custom Locations, Zugriffslisten, erweiterte Optionen, Statistik und Zugriffs-Log.

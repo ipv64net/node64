@@ -25,6 +25,11 @@ func (s *Server) certRoutes() {
 	s.mux.Handle("GET /api/certs/account", s.auth(s.apiCertAccountGet))
 	s.mux.Handle("PUT /api/certs/account", s.auth(s.apiCertAccountPut))
 	s.mux.Handle("GET /api/certs/domains", s.auth(s.apiCertDomains))
+	s.mux.Handle("GET /api/certs/dns-providers", s.auth(s.apiDNSProviders))
+	s.mux.Handle("GET /api/certs/dns-accounts", s.auth(s.apiDNSAccounts))
+	s.mux.Handle("POST /api/certs/dns-accounts", s.auth(s.apiDNSAccountSave))
+	s.mux.Handle("PUT /api/certs/dns-accounts/{id}", s.auth(s.apiDNSAccountSave))
+	s.mux.Handle("DELETE /api/certs/dns-accounts/{id}", s.auth(s.apiDNSAccountDelete))
 	s.mux.Handle("GET /api/certs/{id}", s.auth(s.apiCertGet))
 	s.mux.Handle("PUT /api/certs/{id}", s.auth(s.apiCertUpdate))
 	s.mux.Handle("DELETE /api/certs/{id}", s.auth(s.apiCertDelete))
@@ -241,4 +246,82 @@ func (s *Server) apiCertDomains(w http.ResponseWriter, r *http.Request) {
 		list = []string{}
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+// ---------------------------------------------------------------- DNS-Zugaenge (andere DNS-Anbieter, lego)
+
+func (s *Server) apiDNSProviders(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, certs.Providers())
+}
+
+func (s *Server) apiDNSAccounts(w http.ResponseWriter, r *http.Request) {
+	list, err := s.Certs.DNSAccounts(r.Context())
+	if err != nil {
+		certErr(w, err)
+		return
+	}
+	if list == nil {
+		list = []*certs.DNSAccount{}
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+// apiDNSAccountSave legt an (POST) oder aendert (PUT). values: Felder des Anbieters; leere geheime Felder bleiben.
+func (s *Server) apiDNSAccountSave(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name     string            `json:"name"`
+		Provider string            `json:"provider"`
+		Values   map[string]string `json:"values"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	a := &certs.DNSAccount{Name: in.Name, Provider: in.Provider}
+	status, action := http.StatusCreated, "cert.dns.create"
+	if r.Method == http.MethodPut {
+		id, ok := certID(r)
+		if !ok {
+			writeErr(w, http.StatusNotFound, "dns account not found")
+			return
+		}
+		old, err := s.Certs.DNSAccount(r.Context(), id)
+		if err != nil {
+			certErr(w, err)
+			return
+		}
+		a.ID, status, action = id, http.StatusOK, "cert.dns.update"
+		if a.Name == "" {
+			a.Name = old.Name
+		}
+	}
+	if err := s.Certs.SaveDNSAccount(r.Context(), a, in.Values); err != nil {
+		certErr(w, err)
+		return
+	}
+	s.audit(r, action, strconv.FormatInt(a.ID, 10), "name="+a.Name+" provider="+a.Provider)
+	out, err := s.Certs.DNSAccount(r.Context(), a.ID)
+	if err != nil {
+		certErr(w, err)
+		return
+	}
+	writeJSON(w, status, out)
+}
+
+func (s *Server) apiDNSAccountDelete(w http.ResponseWriter, r *http.Request) {
+	id, ok := certID(r)
+	if !ok {
+		writeErr(w, http.StatusNotFound, "dns account not found")
+		return
+	}
+	a, err := s.Certs.DNSAccount(r.Context(), id)
+	if err != nil {
+		certErr(w, err)
+		return
+	}
+	if err := s.Certs.DeleteDNSAccount(r.Context(), id); err != nil {
+		certErr(w, err)
+		return
+	}
+	s.audit(r, "cert.dns.delete", strconv.FormatInt(id, 10), "name="+a.Name)
+	w.WriteHeader(http.StatusNoContent)
 }

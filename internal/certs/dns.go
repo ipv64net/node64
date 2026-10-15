@@ -129,7 +129,7 @@ func lookupCNAME(ctx context.Context, name string) (string, error) {
 	return "", lastErr
 }
 
-const waitDNS = 3 * time.Minute
+const waitDNS = 8 * time.Minute // ipv64 meist Sekunden, manche Anbieter (netcup) Minuten
 
 // lookupNS findet die Nameserver der Zone (Domain oder eine Ebene darueber), als ip:53.
 var lookupNS = func(ctx context.Context, domain string) ([]string, error) {

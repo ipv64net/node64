@@ -99,9 +99,9 @@ func (m *Module) apiRow(w http.ResponseWriter, r *http.Request, id int64, status
 	writeErr(w, http.StatusNotFound, "host not found")
 }
 
-// apiRowCert: wie apiRow, dazu der Fehler beim Anfordern des Zertifikats (Host ist trotzdem gespeichert).
-func (m *Module) apiRowCert(w http.ResponseWriter, r *http.Request, id int64, status int, certErr string) {
-	if certErr == "" {
+// apiRowExtra: wie apiRow, dazu Ergebnisse von Zertifikat und DNS-Eintrag (Host ist trotzdem gespeichert).
+func (m *Module) apiRowExtra(w http.ResponseWriter, r *http.Request, id int64, status int, extra map[string]any) {
+	if len(extra) == 0 {
 		m.apiRow(w, r, id, status)
 		return
 	}
@@ -112,10 +112,13 @@ func (m *Module) apiRowCert(w http.ResponseWriter, r *http.Request, id int64, st
 	}
 	for _, x := range rows {
 		if x.ID == id {
-			writeJSON(w, status, struct {
-				apiHost
-				CertificateError string `json:"certificate_error"`
-			}{toAPI(x), certErr})
+			b, _ := json.Marshal(toAPI(x))
+			var merged map[string]any
+			_ = json.Unmarshal(b, &merged)
+			for k, v := range extra {
+				merged[k] = v
+			}
+			writeJSON(w, status, merged)
 			return
 		}
 	}
@@ -136,20 +139,47 @@ type certRequest struct {
 	Source      string `json:"source"` // auto (Standard), ipv64, alias, http
 	AliasZone   string `json:"alias_zone"`
 	AliasPrefix string `json:"alias_prefix"`
+	DNSAccount  int64  `json:"dns_account"`
 	Staging     bool   `json:"staging"`
 }
 
-// decode liest JSON in h (fehlende Felder behalten ihren Wert), dazu request_certificate.
-func decode(w http.ResponseWriter, r *http.Request, h *Host) (*certRequest, bool) {
+// extras: was beim Speichern zusaetzlich passieren soll.
+type extras struct {
+	cert *certRequest
+	dns  *DNSRequest
+}
+
+// decode liest JSON in h (fehlende Felder behalten ihren Wert), dazu request_certificate und create_dns_record.
+func decode(w http.ResponseWriter, r *http.Request, h *Host) (extras, bool) {
 	in := struct {
 		*Host
 		RequestCertificate *certRequest `json:"request_certificate"`
+		CreateDNSRecord    *DNSRequest  `json:"create_dns_record"`
 	}{Host: h}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&in); err != nil && !errors.Is(err, io.EOF) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
-		return nil, false
+		return extras{}, false
 	}
-	return in.RequestCertificate, true
+	return extras{cert: in.RequestCertificate, dns: in.CreateDNSRecord}, true
+}
+
+// afterSaveAll: Zertifikat und DNS-Eintrag (Fehler stehen in der Antwort, der Host ist gespeichert).
+func (m *Module) afterSaveAll(r *http.Request, h *Host, x extras) map[string]any {
+	out := map[string]any{}
+	if e := m.afterSave(r, h, x.cert); e != "" {
+		out["certificate_error"] = e
+	}
+	if x.dns != nil {
+		res, err := m.createRecords(r.Context(), h.Names, *x.dns)
+		if err != nil {
+			out["dns_error"] = err.Error()
+		} else {
+			_, text := dnsSummary(res)
+			m.g.Audit(r, "cdn64.dns.create", strings.Join(h.Names, ","), text)
+			out["dns_records"] = res
+		}
+	}
+	return out
 }
 
 // afterSave fordert ein Zertifikat an, wenn gewuenscht; Fehler stehen in der Antwort (der Host ist gespeichert).
@@ -157,7 +187,7 @@ func (m *Module) afterSave(r *http.Request, h *Host, req *certRequest) string {
 	if req == nil || m.certs == nil {
 		return ""
 	}
-	c, err := m.requestCert(r.Context(), h.Names, req.Source, req.AliasZone, req.AliasPrefix, req.Staging)
+	c, err := m.requestCert(r.Context(), h.Names, req.Source, req.AliasZone, req.AliasPrefix, req.DNSAccount, req.Staging)
 	if err != nil {
 		return certErrText(err)
 	}
@@ -219,7 +249,7 @@ func (m *Module) apiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.g.Audit(r, "cdn64.host.create", strings.Join(h.Names, ","), h.summary())
-	m.apiRowCert(w, r, h.ID, http.StatusCreated, m.afterSave(r, h, req))
+	m.apiRowExtra(w, r, h.ID, http.StatusCreated, m.afterSaveAll(r, h, req))
 }
 
 func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
@@ -239,7 +269,7 @@ func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.g.Audit(r, "cdn64.host.update", strings.Join(h.Names, ","), h.summary())
-	m.apiRowCert(w, r, h.ID, http.StatusOK, m.afterSave(r, h, req))
+	m.apiRowExtra(w, r, h.ID, http.StatusOK, m.afterSaveAll(r, h, req))
 }
 
 func (m *Module) apiDelete(w http.ResponseWriter, r *http.Request) {

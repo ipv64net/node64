@@ -42,7 +42,7 @@ var changelog string
 
 const (
 	Name    = "cdn64"
-	Version = "1.3.0"
+	Version = "1.4.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -76,6 +76,7 @@ type Module struct {
 	authFail   *failLimiter
 	hostTr     map[int64]*http.Transport
 	checks     CheckCreator // Healthcheck anlegen (nil = nicht verfuegbar)
+	dnsrec     DNSRecords   // DNS-Records bei ipv64 (nil = nicht verfuegbar)
 
 	sapply sync.Mutex // ein Abgleich der Streams gleichzeitig
 	smu    sync.Mutex // Streams (nur kurz halten)

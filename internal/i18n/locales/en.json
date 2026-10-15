@@ -345,7 +345,9 @@
       "acl_empty": "At least one user or IP rule.",
       "acl_in_use": "Still used by: {name}",
       "log_days": "Retention 1–90 days.",
-      "no_target": "This host has no target to check."
+      "no_target": "This host has no target to check.",
+      "dns_content": "Invalid target (domain for CNAME, IPv4 for A, IPv6 for AAAA).",
+      "dns_type": "Type CNAME, A or AAAA."
     },
     "help_title": "How it works",
     "help_ports": "The router forwards 80 and 443 (TCP, for HTTP/3 also 443/UDP) to this node. Node64 distributes the rest by domain name – also together with DNS64 in the same container.",
@@ -372,7 +374,8 @@
         "ipv64": "ipv64 DNS",
         "alias": "Alias (CNAME)",
         "http": "HTTP-01",
-        "upload": "own"
+        "upload": "own",
+        "dns": "DNS provider"
       },
       "step": {
         "queued": "waiting …",
@@ -413,13 +416,15 @@
         "auto": "Automatic",
         "ipv64": "ipv64 DNS-01",
         "alias": "Alias via ipv64",
-        "http": "HTTP-01"
+        "http": "HTTP-01",
+        "dns": "Other DNS provider"
       },
       "src_hint": {
         "auto": "ipv64 DNS-01 if all names are in the ipv64 account, otherwise HTTP-01.",
         "ipv64": "for domains in the ipv64 account; wildcards too, port 80 need not be open.",
         "alias": "for domains at other providers: set a CNAME once, ipv64 does the rest – no provider credentials needed.",
-        "http": "port 80 must reach this node from outside; no wildcards."
+        "http": "port 80 must reach this node from outside; no wildcards.",
+        "dns": "for domains at Cloudflare, Hetzner, netcup, INWX, IONOS and others: Node64 sets the TXT record via their API (store an account)."
       },
       "your_domains": "Your ipv64 domains:",
       "alias_zone": "Target domain at ipv64",
@@ -451,7 +456,11 @@
         "in_use": "The certificate is still in use.",
         "busy": "This certificate is being requested right now.",
         "upload_renew": "Own certificates cannot be renewed.",
-        "email": "Invalid email address."
+        "email": "Invalid email address.",
+        "dns_account": "Check the DNS account",
+        "provider": "Check the provider",
+        "fields": "Check the credentials",
+        "name": "Check the name"
       }
     },
     "kind_new": {
@@ -567,6 +576,32 @@
       "days": "Access log (days)",
       "anonymize": "Shorten client IPs (IPv4 /24, IPv6 /48)",
       "settings_hint": "Hourly counters are kept for 90 days. Stored in cdn64.db, not in the node backup."
+    },
+    "dns": {
+      "title": "DNS accounts",
+      "new": "Add DNS account",
+      "edit": "Edit DNS account",
+      "name": "Name",
+      "provider": "Provider",
+      "optional": "optional",
+      "unchanged": "leave unchanged",
+      "docs": "Get the key at:",
+      "hint": "Credentials are stored encrypted and only used for Let's Encrypt TXT records. Ideally create a key with DNS rights only.",
+      "empty": "For domains at other providers: store an account, then DNS-01 works there too (wildcards included).",
+      "certs": "certificates",
+      "delete_confirm": "Delete DNS account \"{name}\"?",
+      "account": "DNS account",
+      "account_hint": "The provider must manage the domain.",
+      "add_first": "Add a DNS account first"
+    },
+    "dnsrec": {
+      "create": "Create DNS record at ipv64",
+      "type": "Type",
+      "content": "Target",
+      "content_ph": "your-dyndns.ipv64.de or IP",
+      "hint": "For every domain of this host that is in your ipv64 account. Recommended: CNAME to your DynDNS domain kept current by the updater. Existing records stay unchanged; no CNAME for the domain itself.",
+      "result": "DNS at ipv64: {n} records created ({details}).",
+      "failed": "DNS record not created: {error}"
     }
   },
   "ports": {

@@ -73,6 +73,17 @@
 				<div>{{if $d.HTTPReady}}<i class="bi bi-check-circle text-success"></i>{{else}}<i class="bi bi-x-circle text-danger"></i>{{end}} {{.T "cdn64.certs.http_ready"}}</div>
 			</div>
 		</div>
+		<div class="card mt-3"><div class="card-header d-flex align-items-center"><span><i class="bi bi-key text-primary"></i> {{.T "cdn64.dns.title"}}</span>
+			<a class="btn btn-sm btn-outline-primary py-0 ms-auto" href="/cdn64/dns-accounts/new"><i class="bi bi-plus-lg"></i></a></div>
+			<div class="card-body small">
+				{{if not $d.DNS}}<p class="text-body-secondary mb-0">{{.T "cdn64.dns.empty"}}</p>{{end}}
+				{{range $d.DNS}}<div class="d-flex align-items-center gap-2 mb-2">
+					<div class="flex-grow-1"><div class="fw-semibold">{{.Name}}</div><div class="text-body-secondary">{{.ProviderName}}{{if .UsedBy}} · {{len .UsedBy}} {{$.T "cdn64.dns.certs"}}{{end}}</div></div>
+					<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/dns-accounts/{{.ID}}" title="{{$.T "cdn64.dns.edit"}}"><i class="bi bi-pencil"></i></a>
+					<form method="post" action="/cdn64/dns-accounts/{{.ID}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger py-0" type="submit"{{if .UsedBy}} disabled{{end}} data-confirm="{{$.T "cdn64.dns.delete_confirm" "name" .Name}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button></form>
+				</div>{{end}}
+			</div>
+		</div>
 	</div>
 </div>
 {{end}}

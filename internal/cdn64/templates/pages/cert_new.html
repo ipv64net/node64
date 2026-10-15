@@ -13,10 +13,10 @@
 				<div class="form-text mb-3">{{.T "cdn64.certs.names_hint"}}</div>
 
 				<div class="fw-semibold mb-1">{{.T "cdn64.certs.method"}}</div>
-				{{range $s := (split "auto ipv64 alias http")}}
+				{{range $s := (split "auto ipv64 alias dns http")}}
 				<div class="form-check mb-1">
 					<input class="form-check-input" type="radio" name="source" id="src-{{$s}}" value="{{$s}}"{{if eq $s $d.Source}} checked{{end}}
-						{{if and (or (eq $s "ipv64") (eq $s "alias")) (not $d.DNSReady)}} disabled{{end}}{{if and (eq $s "http") (not $d.HTTPReady)}} disabled{{end}} data-cert-source>
+						{{if and (or (eq $s "ipv64") (eq $s "alias")) (not $d.DNSReady)}} disabled{{end}}{{if and (eq $s "http") (not $d.HTTPReady)}} disabled{{end}}{{if and (eq $s "dns") (not $d.DNS)}} disabled{{end}} data-cert-source>
 					<label class="form-check-label" for="src-{{$s}}"><strong>{{$.T (print "cdn64.certs.src." $s)}}</strong> – {{$.T (print "cdn64.certs.src_hint." $s)}}</label>
 				</div>
 				{{end}}
@@ -24,6 +24,12 @@
 				{{if $d.DomainsErr}}<div class="text-danger mb-2">{{$d.DomainsErr}}</div>{{end}}
 				{{if $d.Domains}}<div class="form-text mb-2">{{.T "cdn64.certs.your_domains"}} {{range $i, $x := $d.Domains}}{{if $i}}, {{end}}<code>{{$x}}</code>{{end}}</div>{{end}}
 
+				<div class="border rounded p-2 mb-3" data-dns-box>
+					<label class="form-label" for="dns_account">{{.T "cdn64.dns.account"}}</label>
+					<select class="form-select form-select-sm" id="dns_account" name="dns_account">{{range $d.DNS}}<option value="{{.ID}}"{{if eq .ID $d.DNSAccount}} selected{{end}}>{{.Name}} ({{.ProviderName}})</option>{{end}}</select>
+					<div class="form-text">{{.T "cdn64.dns.account_hint"}} <a href="/cdn64/dns-accounts/new">{{.T "cdn64.dns.new"}}</a></div>
+				</div>
+				{{if not $d.DNS}}<div class="form-text mb-2"><a href="/cdn64/dns-accounts/new">{{.T "cdn64.dns.add_first"}}</a></div>{{end}}
 				<div class="border rounded p-2 mb-3" data-alias-box>
 					<div class="row g-2">
 						<div class="col-sm-7"><label class="form-label" for="alias_zone">{{.T "cdn64.certs.alias_zone"}}</label>

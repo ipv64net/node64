@@ -47,7 +47,7 @@ func (m *Manager) start(id int64, reason string) error {
 		}()
 		m.acme.Lock() // nacheinander: schont die Rate-Limits und die ipv64-API
 		defer m.acme.Unlock()
-		ctx, cancel := context.WithTimeout(m.base, 10*time.Minute)
+		ctx, cancel := context.WithTimeout(m.base, 20*time.Minute) // manche Anbieter brauchen Minuten, bis TXT sichtbar ist
 		defer cancel()
 		m.issue(ctx, id, reason)
 	}()
@@ -178,6 +178,7 @@ func (m *Manager) obtain(ctx context.Context, c *Cert) error {
 		if m.d.HTTP == nil {
 			return errors.New("http-01 not available")
 		}
+	case SourceDNS:
 	default:
 		return ErrUpload
 	}
@@ -270,7 +271,36 @@ func (m *Manager) authorize(ctx context.Context, cl *acme.Client, c *Cert, z *ac
 		return fmt.Errorf("%s: no %s challenge offered", name, want)
 	}
 	var cleanup func()
-	if want == "http-01" {
+	if c.Source == SourceDNS { // anderer Anbieter ueber lego: der Anbieter setzt und loescht den TXT-Record selbst
+		prov, err := m.dnsProvider(ctx, c.DNSAccount)
+		if err != nil {
+			return err
+		}
+		ka, err := cl.HTTP01ChallengeResponse(chal.Token) // Key-Authorization (Token.Fingerabdruck)
+		if err != nil {
+			return err
+		}
+		base := strings.TrimPrefix(name, "*.")
+		m.step(c.ID, "txt")
+		if err := prov.Present(base, chal.Token, ka); err != nil {
+			return fmt.Errorf("%s: dns provider: %w", name, err)
+		}
+		cleanup = func() {
+			if err := prov.CleanUp(base, chal.Token, ka); err != nil {
+				m.log.Warn("acme TXT record not removed", "name", base, "err", err)
+			}
+		}
+		val, err := cl.DNS01ChallengeRecord(chal.Token)
+		if err != nil {
+			cleanup()
+			return err
+		}
+		m.step(c.ID, "dns")
+		if err := m.txtVisible(ctx, base, "_acme-challenge."+base, val); err != nil {
+			cleanup()
+			return fmt.Errorf("%s: %w", name, err)
+		}
+	} else if want == "http-01" {
 		ka, err := cl.HTTP01ChallengeResponse(chal.Token)
 		if err != nil {
 			return err

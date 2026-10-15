@@ -411,6 +411,12 @@ anlegen“ über `healthchecks.CreateFromJSON` (Healthchecks 2.10.0).
 - Option „Healthcheck dafür anlegen“.
 
 ### C5 Fremde DNS-Anbieter und ipv64-Einträge
+**Fertig (2026-10-15, CDN64 1.4.0):**
+- Zwölf DNS-Anbieter aus lego v4.35.2 (`certs/providers.go`), Zugänge verschlüsselt in `cert_dns_accounts`, Weg
+  `dns` beim Abruf (Present/CleanUp von lego, Warten auf die Nameserver wie bisher).
+- Das Binary wird dadurch etwa 2 MB größer, `miekg/dns` steigt auf 1.1.72 (DNS64-Tests grün).
+- DNS-Eintrag bei ipv64 beim Anlegen eines Hosts (`cdn64/dnsrec.go`, `create_dns_record`).
+
 - DNS-Anbieter über lego (Auswahl siehe oben, verschlüsselte Zugangsdaten).
 - DNS-Eintrag bei ipv64 beim Anlegen eines Hosts.
 
