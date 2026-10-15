@@ -1,6 +1,6 @@
 # Plan: Modul CDN64 (Reverse-Proxy) in Node64
 
-Stand 2026-10-15, **Entwurf zur Abstimmung** – noch nichts umgesetzt. Ziel: ein Reverse-Proxy-Manager im Funktionsumfang
+Stand 2026-10-15, Grundsatzfragen entschieden (siehe „Entscheidungen“) – noch nichts umgesetzt. Ziel: ein Reverse-Proxy-Manager im Funktionsumfang
 des Nginx Proxy Manager (NPM), als Modul von Node64, leichter und mit ipv64 als bevorzugtem Weg zu Zertifikaten.
 Ist das Modul aus, laufen keine Goroutinen, kein Port ist offen und es wird nichts erneuert.
 
@@ -28,7 +28,6 @@ das Modul ersetzt.
 | Audit-Log | ✔ | über den Audit des Kerns (`g.Audit`), auch für die API |
 | Zugriffs-Logs je Host | ✔ | Zähler immer; Einzel-Log abschaltbar, 7 Tage |
 | – | **neu: Erreichbarkeit der Ziele** | Prüfung je Ziel, Anzeige in der Liste |
-| – | **neu: Import aus dem NPM** | Umstieg mit einem Klick (Vorschlag, Phase C5) |
 | – | **neu: DNS-Eintrag bei ipv64** | beim Anlegen eines Hosts auf Wunsch A/AAAA bzw. CNAME bei ipv64 setzen |
 
 ## Grundsätze
@@ -61,7 +60,7 @@ das Modul ersetzt.
 Heute öffnet DNS64 für DoH einen eigenen Listener auf 443. Ein Reverse-Proxy braucht 80 und 443 (TCP), für
 HTTP/3 auch 443/UDP. Zwei Listener auf demselben Port gehen nicht.
 
-**Vorschlag:** Die Ports 80 und 443 gehören dem **Kern**, keinem Modul. Ein neues Kern-Paket `internal/edge` hält
+**Entschieden:** Die Ports 80 und 443 gehören dem **Kern**, keinem Modul. Ein neues Kern-Paket `internal/edge` hält
 einen gemeinsamen Eingang. Module melden sich dort an:
 
 ```
@@ -102,7 +101,7 @@ Damit funktionieren DNS64 mit DoH, CDN64 und die Oberfläche in **einem** Contai
 ### Zertifikatsspeicher im Kern
 
 Zertifikate braucht nicht nur CDN64. DNS64 hat heute einen eigenen Let's-Encrypt-Weg (`internal/dns64/acme.go`),
-und die Oberfläche könnte auch eines nutzen. **Vorschlag:**
+und die Oberfläche könnte auch eines nutzen. **Entschieden:**
 
 - Neues Kern-Paket `internal/certs` mit Speicher, ACME-Client und Erneuerung.
 - Den ACME-Teil aus DNS64 dorthin herauslösen. Der Client ist `golang.org/x/crypto/acme`, wie heute.
@@ -117,7 +116,7 @@ und die Oberfläche könnte auch eines nutzen. **Vorschlag:**
    - CDN64 erkennt per API, welche Domains im Account sind, und schlägt diesen Weg automatisch vor.
    - Wildcards (`*.name.ipv64.de`) sind möglich.
    - Port 80/443 muss dafür nicht von außen erreichbar sein.
-2. **ipv64 Alias (für fremde Domains, Vorschlag):** Für `example.com` bei einem beliebigen Anbieter legt der
+2. **ipv64 Alias (für fremde Domains):** Für `example.com` bei einem beliebigen Anbieter legt der
    Nutzer einmal den CNAME `_acme-challenge.example.com` → `_acme-challenge.<seine-ipv64-domain>` an. Danach
    setzt Node64 den TXT-Record immer bei ipv64.
    - Let's Encrypt folgt dem CNAME; dasselbe Verfahren nennt acme.sh „DNS alias mode“.
@@ -128,7 +127,7 @@ und die Oberfläche könnte auch eines nutzen. **Vorschlag:**
    Challenge selbst.
 4. **Andere DNS-Anbieter mit API-Zugang:** acme.sh und certbot sind Shell- bzw. Python-Programme und laufen im
    `scratch`-Image nicht.
-   - Vorschlag: die DNS-Anbieter der Go-Bibliothek **lego** (dieselben wie bei Traefik und Caddy), aber nur eine
+   - Daher: die DNS-Anbieter der Go-Bibliothek **lego** (dieselben wie bei Traefik und Caddy), aber nur eine
      Auswahl. Damit bleibt das Binary klein; jeder Anbieter bringt eigene Abhängigkeiten mit.
    - Startliste, gängig in Deutschland: Cloudflare, Hetzner, netcup, INWX, IONOS, deSEC, DuckDNS, OVH,
      Porkbun, GoDaddy, DigitalOcean, Gandi.
@@ -238,11 +237,11 @@ und die Oberfläche könnte auch eines nutzen. **Vorschlag:**
 ## Audit, API, Doku
 
 - **Audit:** Jede Änderung geht in den Audit des Kerns: Host, Location, Access List, Stream, Zertifikat
-  (anfordern, erneuern, hochladen, löschen), Einstellungen, Import. Gilt für Oberfläche und API; der Kern setzt die
+  (anfordern, erneuern, hochladen, löschen), Einstellungen. Gilt für Oberfläche und API; der Kern setzt die
   Herkunft.
 - **Lokale API (`/api/cdn64/…`):**
   - Objekte: Proxy-, Redirect- und 404-Hosts, Streams, Access Lists, Zertifikate.
-  - Dazu Erreichbarkeit, Statistik, Log, Einstellungen, Import, Ports.
+  - Dazu Erreichbarkeit, Statistik, Log, Einstellungen, Ports.
   - Gleichstand mit der Oberfläche: Alles, was die Oberfläche kann, kann auch die API. Alles steht in OpenAPI mit
     Schemas.
 - **Doku:**
@@ -310,13 +309,9 @@ der nächsten Phase. Ausgerollt auf der Box wird nur mit Dennis' Go.
 - Statistik und Zugriffs-Log (`cdn64.db`).
 - Option „Healthcheck dafür anlegen“.
 
-### C5 Fremde Anbieter und Umstieg
+### C5 Fremde DNS-Anbieter und ipv64-Einträge
 - DNS-Anbieter über lego (Auswahl siehe oben, verschlüsselte Zugangsdaten).
 - DNS-Eintrag bei ipv64 beim Anlegen eines Hosts.
-- **Import aus dem NPM:**
-  - Hochladen der `database.sqlite` (oder eines Exports).
-  - Übernommen werden Proxy-, Redirect- und 404-Hosts, Streams, Access Lists und eigene Zertifikate.
-  - Let's-Encrypt-Zertifikate werden neu angefordert; Vorschau vor dem Übernehmen.
 
 ### C6 Zusammenführung und Abschluss
 - **DNS64:**
@@ -341,12 +336,16 @@ der nächsten Phase. Ausgerollt auf der Box wird nur mit Dennis' Go.
 - **Echte Zertifikate:** zuerst Staging. Ein echter Abruf mit Dennis' Domain (TXT-Records im Account, Annahme der
   Nutzungsbedingungen) geschieht erst nach seinem OK.
 
-## Offene Fragen an Dennis
+## Entscheidungen (Dennis, 2026-10-15)
 
-1. **Warum „CDN64“?** Die angekündigte Erklärung fehlt noch. Davon hängt ab, ob z. B. Caching, mehrere Nodes oder
-   ein Zusammenspiel mit ipv64 schon im Grundgerüst berücksichtigt werden müssen.
-2. **Fremde DNS-Anbieter:** ipv64-Alias + HTTP-01 + lego-Auswahl in Go (Vorschlag) – oder acme.sh/certbot? Diese
-   bräuchten ein größeres Image mit Shell bzw. Python.
-3. **Zertifikate zentral im Kern** (auch für DNS64 und die Oberfläche, Vorschlag) – oder nur innerhalb von CDN64?
-4. **Port 443 gemeinsam über Edge** (Vorschlag) – oder feste Trennung (DoH auf anderem Port)?
-5. **NPM-Import** (C5) gewünscht?
+- **Fremde DNS-Anbieter:** ipv64-Alias (CNAME) + HTTP-01 + eine Auswahl DNS-Anbieter über lego in Go. Kein
+  acme.sh/certbot; das Image bleibt `scratch`.
+- **Zertifikate zentral im Kern** (`internal/certs`) für CDN64, DNS64 und die Oberfläche; die Seite ist ein Reiter
+  von CDN64.
+- **Port 443 gemeinsam über Edge** im Kern, mit Port-Übersicht und Konfliktprüfung.
+- **Kein Import aus dem NPM.**
+
+## Offene Frage
+
+- **Warum „CDN64“?** Die angekündigte Erklärung fehlt noch. Davon hängt ab, ob z. B. Caching, mehrere Nodes oder
+  ein Zusammenspiel mit ipv64 schon im Grundgerüst berücksichtigt werden müssen.
