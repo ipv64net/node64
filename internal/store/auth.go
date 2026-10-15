@@ -120,7 +120,12 @@ func (s *Store) TouchAPIKey(ctx context.Context, id int64) error {
 	return err
 }
 
-func (s *Store) DeleteAPIKey(ctx context.Context, userID, id int64) error {
-	_, err := s.w.ExecContext(ctx, `DELETE FROM api_keys WHERE id = ? AND user_id = ?`, id, userID)
-	return err
+// DeleteAPIKey loescht einen Key des Benutzers; deleted = es gab ihn.
+func (s *Store) DeleteAPIKey(ctx context.Context, userID, id int64) (deleted bool, err error) {
+	res, err := s.w.ExecContext(ctx, `DELETE FROM api_keys WHERE id = ? AND user_id = ?`, id, userID)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
 }

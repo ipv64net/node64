@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/url"
 	"strings"
@@ -313,6 +314,14 @@ func (s *Server) errorPage(w http.ResponseWriter, r *http.Request, status int, m
 
 func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 	s.errorPage(w, r, http.StatusNotFound, "errors.not_found")
+}
+
+// auditEntry schreibt einen fertigen Eintrag (z. B. beim Login, wenn noch niemand angemeldet ist) und loggt
+// einen Schreibfehler, statt ihn zu verschlucken.
+func (s *Server) auditEntry(ctx context.Context, e store.AuditEntry) {
+	if err := s.Store.Audit(ctx, e); err != nil {
+		s.log.Error("audit write failed", "action", e.Action, "err", err)
+	}
 }
 
 // audit schreibt einen Eintrag ins Audit-Log mit dem angemeldeten Benutzer.

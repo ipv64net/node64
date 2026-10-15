@@ -70,14 +70,18 @@ func (s *Server) loginTOTPSubmit(w http.ResponseWriter, r *http.Request) {
 		rec, _ := s.Store.UserTOTPRecovery(ctx, u.ID)
 		hashes := strings.Split(rec, ",")
 		if rest, used := totp.UseRecovery(code, hashes); used {
+			// nur anmelden, wenn der verbrauchte Code auch gespeichert ist (sonst waere er wiederverwendbar)
+			if err := s.Store.SetUserTOTP(ctx, u.ID, u.TOTPSecret, strings.Join(rest, ",")); err != nil {
+				s.fail(w, r, err)
+				return
+			}
 			ok = true
-			_ = s.Store.SetUserTOTP(ctx, u.ID, u.TOTPSecret, strings.Join(rest, ","))
-			_ = s.Store.Audit(ctx, store.AuditEntry{Actor: u.Username, Action: "login.recovery_code", IP: ip})
+			s.auditEntry(ctx, store.AuditEntry{Actor: u.Username, Action: "login.recovery_code", IP: ip})
 		}
 	}
 	if !ok {
 		s.limiter.fail(keys...)
-		_ = s.Store.Audit(ctx, store.AuditEntry{Actor: u.Username, Action: "login.totp_failed", IP: ip})
+		s.auditEntry(ctx, store.AuditEntry{Actor: u.Username, Action: "login.totp_failed", IP: ip})
 		v.Flash = &Flash{Kind: "danger", Text: v.T("login.totp_failed")}
 		s.render(w, r, http.StatusUnauthorized, "login_totp", v)
 		return
@@ -87,7 +91,7 @@ func (s *Server) loginTOTPSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.Store.TouchUserLogin(ctx, u.ID)
-	_ = s.Store.Audit(ctx, store.AuditEntry{Actor: u.Username, Action: "login", Details: "2fa", IP: ip})
+	s.auditEntry(ctx, store.AuditEntry{Actor: u.Username, Action: "login", Details: "2fa", IP: ip})
 	http.Redirect(w, r, v.Form["next"], http.StatusSeeOther)
 }
 
@@ -193,12 +197,18 @@ func (s *Server) apiKeyCreate(w http.ResponseWriter, r *http.Request) {
 func (s *Server) apiKeyDelete(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err := s.Store.DeleteAPIKey(r.Context(), u.ID, id); err != nil {
+	deleted, err := s.Store.DeleteAPIKey(r.Context(), u.ID, id)
+	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	s.audit(r, "apikey.delete", strconv.FormatInt(id, 10), "")
 	v := s.view(r, "settings.title")
+	if !deleted { // gab es nicht (z. B. schon geloescht): kein Audit-Eintrag
+		s.flash(w, r, "warning", v.T("apikey.not_found"))
+		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		return
+	}
+	s.audit(r, "apikey.delete", strconv.FormatInt(id, 10), "")
 	s.flash(w, r, "success", v.T("apikey.deleted"))
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)
 }

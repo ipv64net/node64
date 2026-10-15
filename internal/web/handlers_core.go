@@ -107,7 +107,7 @@ func (s *Server) setupSubmit(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	_ = s.Store.Audit(ctx, store.AuditEntry{Actor: u.Username, Action: "setup", Details: "initial setup completed", IP: s.clientIP(r)})
+	s.auditEntry(ctx, store.AuditEntry{Actor: u.Username, Action: "setup", Details: "initial setup completed", IP: s.clientIP(r)})
 	s.setCookie(w, r, langCookie, v.Lang, 365*24*3600)
 	if err := s.startSession(w, r, u.ID, false); err != nil {
 		s.fail(w, r, err)
@@ -172,7 +172,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 			VerifyPassword("$argon2id$v=19$m=65536,t=3,p=2$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", f["password"])
 		}
 		s.limiter.fail(keys...)
-		_ = s.Store.Audit(ctx, store.AuditEntry{Actor: truncate(f["username"], 64), Action: "login.failed", IP: ip})
+		s.auditEntry(ctx, store.AuditEntry{Actor: truncate(f["username"], 64), Action: "login.failed", IP: ip})
 		s.log.Warn("login failed", "user", f["username"], "ip", ip)
 		v.Flash = &Flash{Kind: "danger", Text: v.T("login.failed")}
 		s.render(w, r, http.StatusUnauthorized, "login", v)
@@ -191,7 +191,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.Store.TouchUserLogin(ctx, u.ID)
-	_ = s.Store.Audit(ctx, store.AuditEntry{Actor: u.Username, Action: "login", IP: ip})
+	s.auditEntry(ctx, store.AuditEntry{Actor: u.Username, Action: "login", IP: ip})
 	s.log.Info("login", "user", u.Username, "ip", ip)
 	http.Redirect(w, r, v.Form["next"], http.StatusSeeOther)
 }

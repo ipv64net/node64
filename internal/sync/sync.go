@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ipv64net/node64/internal/checks"
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/scheduler"
@@ -863,7 +864,7 @@ func (c *Live) applyChanges(ctx context.Context, changes []wire.Change, revision
 			}
 		}
 		if err != nil {
-			c.log.Warn("apply change failed", "entity", ch.Entity, "id", ch.ID, "op", ch.Op, "err", err)
+			c.log.Warn("apply change failed", "entity", ch.Entity, "id", checks.TokenHint(ch.ID), "op", ch.Op, "err", err)
 		}
 		if ch.Revision > c.getInt(SetRevision) {
 			c.setInt(SetRevision, ch.Revision)
@@ -931,7 +932,7 @@ func (c *Live) conflict(ctx context.Context, entity, localID string, ch wire.Cha
 			return false
 		}
 	}
-	c.log.Info("sync: local change pending, hub decides by change time", "entity", entity, "id", localID)
+	c.log.Info("sync: local change pending, hub decides by change time", "entity", entity, "id", checks.TokenHint(localID))
 	c.poke()
 	return true
 }

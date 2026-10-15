@@ -14,6 +14,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/ipv64net/node64/internal/checks"
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/wire"
@@ -449,7 +450,7 @@ func (s *session) replayOutbox() {
 		}
 		m, err := s.request("propose", p)
 		if err != nil {
-			c.log.Warn("propose failed", "entity", o.Entity, "id", o.EntityID, "err", err)
+			c.log.Warn("propose failed", "entity", o.Entity, "id", checks.TokenHint(o.EntityID), "err", err)
 			return
 		}
 		var res wire.ProposeResult
@@ -460,10 +461,10 @@ func (s *session) replayOutbox() {
 			// also die Server-Fassung uebernehmen und die lokale verwerfen
 			_ = c.d.HC.OutboxDelete(ctx, o.ID)
 			c.adoptServer(ctx, o.Entity, p.ID, res)
-			c.log.Info("sync: newer server version adopted", "entity", o.Entity, "id", o.EntityID)
+			c.log.Info("sync: newer server version adopted", "entity", o.Entity, "id", checks.TokenHint(o.EntityID))
 		case res.Error != "":
 			_ = c.d.HC.OutboxSetError(ctx, o.ID, "pending", res.Error)
-			c.log.Warn("server rejected change", "entity", o.Entity, "id", o.EntityID, "err", res.Error)
+			c.log.Warn("server rejected change", "entity", o.Entity, "id", checks.TokenHint(o.EntityID), "err", res.Error)
 			// Ablehnung (z. B. Limit): Eintrag bleibt mit Fehler stehen, blockiert aber nichts anderes
 			_ = c.d.HC.OutboxSetError(ctx, o.ID, "conflict", res.Error)
 			_ = c.d.HC.ConflictAdd(ctx, healthchecks.Conflict{Entity: o.Entity, EntityID: o.EntityID, LocalOp: o.Op, LocalPayload: o.Payload, ServerPayload: "", ServerRevision: 0})

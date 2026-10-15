@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.7.2 – 2026-10-15
+
+### Behoben
+- Der Check-Token (zugleich Berechtigung der Push-Adresse) steht in Audit und Logs nur noch gekürzt
+  (erste 6 Zeichen), nicht mehr vollständig.
+
 ## 2.7.1 – 2026-10-15
 
 ### Behoben

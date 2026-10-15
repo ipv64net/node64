@@ -179,14 +179,14 @@ func (m *Module) onlineSave(ctx context.Context, key string, cl *ipv64api.Client
 // (damit spaetere Eintraege zu pause/resume/delete zuzuordnen sind).
 func (m *Module) auditOnlineSave(r *http.Request, token, name string, saved json.RawMessage) {
 	if token != "" {
-		m.auditText(r, "check.online_update", name+" ("+token+")")
+		m.auditText(r, "check.online_update", name+" ("+checks.TokenHint(token)+")")
 		return
 	}
 	var out struct {
 		Token string `json:"token"`
 	}
 	if json.Unmarshal(saved, &out) == nil && out.Token != "" {
-		name += " (" + out.Token + ")"
+		name += " (" + checks.TokenHint(out.Token) + ")"
 	}
 	m.auditText(r, "check.online_create", name)
 }
@@ -206,7 +206,7 @@ func (m *Module) onlineSubmit(w http.ResponseWriter, r *http.Request) {
 		saved, err = m.onlineSave(ctx, key, cl, token, in)
 	}
 	if err != nil {
-		m.log.Warn("online check not saved via ipv64 API", "token", token, "err", err)
+		m.log.Warn("online check not saved via ipv64 API", "token", checks.TokenHint(token), "err", err)
 		_ = r.ParseForm()
 		d := formData{Form: formDefaults(), APIMode: true, Edit: token != "", Token: token, Error: err.Error()}
 		for k := range r.PostForm {
@@ -241,10 +241,10 @@ func (m *Module) onlineAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		m.log.Warn("online check action via ipv64 API failed", "token", token, "action", action, "err", err)
+		m.log.Warn("online check action via ipv64 API failed", "token", checks.TokenHint(token), "action", action, "err", err)
 		m.g.Flash(w, r, "danger", m.g.T(r, "hc.api.error")+": "+err.Error())
 	} else {
-		m.auditText(r, "check.online_"+action, token)
+		m.auditText(r, "check.online_"+action, checks.TokenHint(token))
 		m.onlineInvalidate()
 		m.g.Flash(w, r, "success", m.g.T(r, "hc.api.done_"+action))
 	}
@@ -362,7 +362,7 @@ func (m *Module) apiOnlineDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.onlineInvalidate()
-	m.auditText(r, "check.online_delete", token)
+	m.auditText(r, "check.online_delete", checks.TokenHint(token))
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -381,6 +381,6 @@ func (m *Module) apiOnlineAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.onlineInvalidate()
-	m.auditText(r, "check.online_"+action, token)
+	m.auditText(r, "check.online_"+action, checks.TokenHint(token))
 	w.WriteHeader(http.StatusAccepted)
 }

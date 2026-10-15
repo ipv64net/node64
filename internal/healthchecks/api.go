@@ -864,7 +864,7 @@ func (m *Module) apiPush(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if !tokenRe.MatchString(token) || !m.push.allow(token) {
 		if tokenRe.MatchString(token) {
-			m.log.Debug("push rate limited", "token", token)
+			m.log.Debug("push rate limited", "token", checks.TokenHint(token))
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		}
@@ -914,7 +914,7 @@ func (m *Module) apiPush(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !measured {
-		m.log.Debug("push not measured here", "token", token)
+		m.log.Debug("push not measured here", "token", checks.TokenHint(token))
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -922,7 +922,7 @@ func (m *Module) apiPush(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------- Audit
 
 func (m *Module) audit(r *http.Request, action string, c *Check) {
-	m.auditText(r, action, c.Name+" ("+c.Token+")")
+	m.auditText(r, action, c.Name+" ("+checks.TokenHint(c.Token)+")")
 }
 
 func (m *Module) auditText(r *http.Request, action, target string) {

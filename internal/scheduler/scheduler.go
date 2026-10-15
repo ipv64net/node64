@@ -482,7 +482,7 @@ func (s *Scheduler) record(ctx context.Context, e *entry, m Measurement) {
 	e.mu.Unlock()
 
 	if err := s.st.SaveMeasurement(ctx, m); err != nil {
-		s.log.Error("measurement not saved", "token", e.check.Token, "err", err)
+		s.log.Error("measurement not saved", "token", checks.TokenHint(e.check.Token), "err", err)
 	}
 	for i := range events {
 		ev := &events[i]
@@ -506,17 +506,17 @@ func (s *Scheduler) record(ctx context.Context, e *entry, m Measurement) {
 			}
 		}
 		if err := s.st.SaveEvent(ctx, *ev); err != nil {
-			s.log.Error("event not saved", "token", e.check.Token, "err", err)
+			s.log.Error("event not saved", "token", checks.TokenHint(e.check.Token), "err", err)
 		}
-		s.log.Info("check state changed", "token", e.check.Token, "name", e.check.Name, "from", ev.From, "to", ev.To, "kind", ev.Kind, "reason", ev.Reason, "silent", ev.Silent)
+		s.log.Info("check state changed", "token", checks.TokenHint(e.check.Token), "name", e.check.Name, "from", ev.From, "to", ev.To, "kind", ev.Kind, "reason", ev.Reason, "silent", ev.Silent)
 		if s.notifier != nil {
 			s.notifier.Notify(ctx, *ev, e.check)
 		}
 	}
 	if err := s.st.SaveRuntime(ctx, e.check.Token, rt); err != nil {
-		s.log.Error("runtime not saved", "token", e.check.Token, "err", err)
+		s.log.Error("runtime not saved", "token", checks.TokenHint(e.check.Token), "err", err)
 	}
-	s.log.Debug("check measured", "token", e.check.Token, "status", m.Status, "latency_ms", m.Latency.Milliseconds(), "reason", m.Reason, "state", rt.State)
+	s.log.Debug("check measured", "token", checks.TokenHint(e.check.Token), "status", m.Status, "latency_ms", m.Latency.Milliseconds(), "reason", m.Reason, "state", rt.State)
 }
 
 // transition ist der Zustandsautomat; e.mu ist gehalten.

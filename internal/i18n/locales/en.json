@@ -1055,6 +1055,7 @@
     "name": "Name, e.g. backup script",
     "create": "Create",
     "created": "API key created.",
+    "not_found": "This API key does not exist (anymore).",
     "deleted": "API key deleted.",
     "show_once": "The key is shown only now:"
   },

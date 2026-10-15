@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ipv64net/node64/internal/checks"
 	"github.com/ipv64net/node64/internal/healthchecks"
 )
 
@@ -43,7 +44,7 @@ func (c *Live) backfill(gaps map[string]time.Time) {
 		for page := 0; page < 50; page++ {
 			pts, err := c.history(ctx, hub, tok, token, "raw", since, until)
 			if err != nil {
-				c.log.Debug("history", "token", token, "err", err)
+				c.log.Debug("history", "token", checks.TokenHint(token), "err", err)
 				return false
 			}
 			raw += c.d.HC.StoreHistory(ctx, token, pts)

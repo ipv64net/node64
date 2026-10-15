@@ -1055,6 +1055,7 @@
     "name": "Name, z. B. Backup-Skript",
     "create": "Erzeugen",
     "created": "API-Key erzeugt.",
+    "not_found": "Diesen API-Key gibt es nicht (mehr).",
     "deleted": "API-Key gelöscht.",
     "show_once": "Der Key wird nur jetzt angezeigt:"
   },

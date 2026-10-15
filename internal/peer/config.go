@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipv64net/node64/internal/checks"
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/wire"
 )
@@ -345,7 +346,7 @@ func (m *Manager) applyMaint(ctx context.Context, x Member, c change) int {
 		}
 	}
 	if err != nil {
-		m.d.Log.Warn("peer maintenance not applied", "from", x.Name, "id", c.ID, "err", err)
+		m.d.Log.Warn("peer maintenance not applied", "from", x.Name, "id", checks.TokenHint(c.ID), "err", err)
 	}
 	if ok {
 		return 1
@@ -447,7 +448,7 @@ func (m *Manager) pullFrom(ctx context.Context, x Member) error {
 				ok, err = hc.DeletePeerCheck(ctx, c.ID, c.ChangedAt, c.Origin)
 			}
 			if err != nil {
-				m.d.Log.Warn("peer change not applied", "from", x.Name, "id", c.ID, "err", err)
+				m.d.Log.Warn("peer change not applied", "from", x.Name, "id", checks.TokenHint(c.ID), "err", err)
 			}
 			if ok {
 				applied++
