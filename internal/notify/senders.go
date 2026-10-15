@@ -44,6 +44,10 @@ const (
 	KindDNS64Up    Kind = "dns64_upstream_ok" // Upstream-Server antwortet wieder
 	KindDNS64Lists Kind = "dns64_lists"       // Blockliste laesst sich nicht aktualisieren
 	KindDNS64Cert  Kind = "dns64_cert"        // Zertifikat (Let's Encrypt) laesst sich nicht holen/verlaengern
+	// Zertifikatsverwaltung des Kerns (ebenfalls nur lokal)
+	KindCertFail   Kind = "cert_fail"   // Zertifikat laesst sich nicht holen bzw. verlaengern
+	KindCertExpiry Kind = "cert_expiry" // Zertifikat laeuft bald ab
+	KindCertOK     Kind = "cert_ok"     // Entwarnung: Zertifikat wieder geholt
 
 	KindQuota Kind = "quota" // Tageskontingent der Online-Checks erreicht (Account, vom hub)
 )
@@ -73,8 +77,11 @@ func IsDNS64(k Kind) bool {
 	return k == KindDNS64Down || k == KindDNS64Up || k == KindDNS64Lists || k == KindDNS64Cert
 }
 
-// IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64).
-func IsModule(k Kind) bool { return IsDynDNS(k) || IsDNS64(k) }
+// IsCert: Meldung der Zertifikatsverwaltung.
+func IsCert(k Kind) bool { return k == KindCertFail || k == KindCertExpiry || k == KindCertOK }
+
+// IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64, Zertifikate).
+func IsModule(k Kind) bool { return IsDynDNS(k) || IsDNS64(k) || IsCert(k) }
 
 // Message ist die fertig formulierte Nachricht fuer einen Sender.
 type Message struct {

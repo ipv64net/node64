@@ -15,6 +15,10 @@
       "name": "Node"
     },
     {
+      "name": "Ports & Zertifikate",
+      "description": "Kern: belegte Ports, gemeinsamer Eingang für HTTP/HTTPS (80/443, HTTP/3) und die Zertifikatsverwaltung (Let's Encrypt über ipv64, Alias per CNAME, HTTP-01, eigene Zertifikate)."
+    },
+    {
       "name": "Lokale Gruppe",
       "description": "Nodes desselben ipv64-Accounts im lokalen Netz"
     },
@@ -1581,6 +1585,233 @@
           "last_used_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "PortClaim": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "web, edge, dns64, cdn64 …"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "proto": {
+            "type": "string",
+            "enum": [
+              "tcp",
+              "udp"
+            ]
+          },
+          "port": {
+            "type": "integer"
+          },
+          "bind": {
+            "type": "string",
+            "description": "Adresse, fehlt = alle"
+          },
+          "active": {
+            "type": "boolean",
+            "description": "offen bzw. eingeschaltet"
+          },
+          "conflicts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "anderer Teil mit demselben Port, z. B. \"dns64 (DoH)\""
+            }
+          }
+        }
+      },
+      "EdgeConfig": {
+        "type": "object",
+        "properties": {
+          "bind": {
+            "type": "string",
+            "description": "\"\" = alle Adressen"
+          },
+          "http_port": {
+            "type": "integer",
+            "description": "0 = aus, Standard 80"
+          },
+          "https_port": {
+            "type": "integer",
+            "description": "0 = aus, Standard 443"
+          },
+          "public_port": {
+            "type": "integer",
+            "description": "HTTPS-Port aus Sicht der Besucher (Weiterleitung, Alt-Svc), 0 = https_port"
+          },
+          "http3": {
+            "type": "boolean",
+            "description": "HTTP/3 (QUIC) auf https_port/UDP"
+          },
+          "default": {
+            "type": "string",
+            "enum": [
+              "404",
+              "close"
+            ],
+            "description": "Antwort für unbekannte Namen"
+          }
+        }
+      },
+      "EdgeStatus": {
+        "type": "object",
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/EdgeConfig"
+          },
+          "listeners": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "enum": [
+                    "http",
+                    "https",
+                    "http3"
+                  ]
+                },
+                "proto": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "integer"
+                },
+                "needed": {
+                  "type": "boolean"
+                },
+                "running": {
+                  "type": "boolean"
+                },
+                "addr": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Certificate": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "ipv64",
+              "alias",
+              "http",
+              "upload"
+            ]
+          },
+          "alias_zone": {
+            "type": "string"
+          },
+          "alias_prefix": {
+            "type": "string"
+          },
+          "staging": {
+            "type": "boolean"
+          },
+          "auto_renew": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "valid",
+              "error",
+              "expired"
+            ]
+          },
+          "step": {
+            "type": "string",
+            "description": "laufender Schritt beim Abruf"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "not_before": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "not_after": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_error": {
+            "type": "string"
+          },
+          "last_attempt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "used_by": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CertAccount": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "tos_accepted": {
+            "type": "boolean"
+          },
+          "tos_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tos_url": {
+            "type": "string"
           }
         }
       }
@@ -6936,6 +7167,661 @@
           },
           "422": {
             "description": "unbekannte Aktion oder keine/zu viele Tokens (1–1000)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ports": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Belegte Ports aller Teile mit Überschneidungen, dazu der Zustand des gemeinsamen Eingangs",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ports": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PortClaim"
+                      }
+                    },
+                    "edge": {
+                      "$ref": "#/components/schemas/EdgeStatus"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ports/probe": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Prüfen, ob ein Port auf dem Host frei ist",
+        "parameters": [
+          {
+            "name": "proto",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "tcp",
+                "udp"
+              ]
+            }
+          },
+          {
+            "name": "port",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "bind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "free": {
+                      "type": "boolean"
+                    },
+                    "used_by": {
+                      "type": "string"
+                    },
+                    "purpose": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "proto oder port ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/edge": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Gemeinsamer Eingang: Einstellungen, offene Ports, angemeldete Namen",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EdgeStatus"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Einstellungen des Eingangs ändern (fehlende Felder bleiben)",
+        "description": "Offene Ports werden dafür kurz geschlossen und neu geöffnet. Die Ports öffnen sich nur, solange ein Modul sie braucht.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EdgeConfig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EdgeStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Port ungültig oder doppelt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/certs": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Zertifikate (ohne Schlüssel), bald ablaufende zuerst",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Certificate"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Zertifikat bei Let's Encrypt anfordern (läuft im Hintergrund)",
+        "description": "source ipv64: alle Namen liegen im ipv64-Account (DNS-01 über den zentralen API-Key, auch Wildcards). alias: fremde Domain; vorher bei deren Anbieter den CNAME _acme-challenge.<name> → _acme-challenge.<alias_prefix>.<alias_zone> anlegen. http: HTTP-01, Port 80 muss von außen auf die Node zeigen (keine Wildcards). Vorher die Nutzungsbedingungen annehmen (PUT /certs/account).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "names": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "ipv64",
+                      "alias",
+                      "http"
+                    ]
+                  },
+                  "alias_zone": {
+                    "type": "string"
+                  },
+                  "alias_prefix": {
+                    "type": "string"
+                  },
+                  "staging": {
+                    "type": "boolean",
+                    "description": "Testumgebung von Let's Encrypt"
+                  },
+                  "auto_renew": {
+                    "type": "boolean",
+                    "description": "Standard an"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "angelegt, Abruf läuft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Certificate"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Nutzungsbedingungen nicht angenommen oder kein ipv64-API-Key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Namen, Weg oder Alias-Ziel ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/certs/upload": {
+      "post": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Eigenes Zertifikat hochladen",
+        "description": "JSON {cert, key} (PEM, Zertifikat mit Kette) oder multipart mit cert_file und key_file. Höchstens 1 MB.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cert": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cert_file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "key_file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Certificate"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "passt nicht zum Schlüssel, abgelaufen oder ohne DNS-Namen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/certs/account": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "ACME-Konto: Mail und Nutzungsbedingungen",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertAccount"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Mail setzen und Nutzungsbedingungen von Let's Encrypt annehmen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "accept_tos": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertAccount"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Mail ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/certs/domains": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "ipv64-Domains des Accounts (für DNS-01 und als Alias-Ziel)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-API-Key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/certs/{id}": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Ein Zertifikat",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Certificate"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Automatische Erneuerung schalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "auto_renew": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Certificate"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "hochgeladenes Zertifikat",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Zertifikat löschen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "auch wenn es benutzt wird"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "409": {
+            "description": "benutzt oder Abruf läuft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/certs/{id}/renew": {
+      "post": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Jetzt erneuern (Let's Encrypt)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Abruf läuft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Certificate"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "läuft schon, hochgeladen oder Nutzungsbedingungen fehlen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/certs/{id}/chain": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Zertifikat mit Kette als PEM (ohne Schlüssel)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PEM",
+            "content": {
+              "application/pem-certificate-chain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt oder noch nicht geholt",
             "content": {
               "application/json": {
                 "schema": {

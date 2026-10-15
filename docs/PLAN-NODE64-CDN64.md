@@ -330,6 +330,14 @@ Jede Phase endet mit Build, Tests (`go test -race`), Version und CHANGELOG, kurz
 der nächsten Phase. Ausgerollt auf der Box wird nur mit Dennis' Go.
 
 ### C0 Kern: Ports, Edge, Zertifikatsspeicher
+**Fertig (2026-10-15):**
+- `internal/ports` (Port-Verwaltung mit Probe-Bind), `internal/edge` (Eingang mit SNI/Host, HTTP/2, HTTP/3, DNS-Schutz)
+  und `internal/certs` (Speicher, ACME-Konto, ipv64 DNS-01, Alias mit CNAME-Prüfung, HTTP-01, Hochladen, Erneuerung
+  nur mit Abnehmer, Meldungen `cert_fail`/`cert_expiry`/`cert_ok`).
+- Karte „Ports“ in den Einstellungen; API `/api/ports`, `/api/edge`, `/api/certs…`, alles in OpenAPI und README.
+- Edge hat in C0 noch keinen Abnehmer, seine Ports bleiben also zu. DNS64 ist unverändert (nur `ports.go` liest die
+  Ports für die Übersicht).
+
 - `internal/edge`:
   - gemeinsamer Eingang 80/443 (TCP) und 443/UDP (HTTP/3);
   - An- und Abmelden von Abnehmern, Routing nach SNI und Host;

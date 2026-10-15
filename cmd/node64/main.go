@@ -29,9 +29,11 @@ import (
 	_ "time/tzdata" // Zeitzonen im Binary, das Laufzeit-Image hat keine
 
 	"github.com/ipv64net/node64/internal/caps"
+	"github.com/ipv64net/node64/internal/certs"
 	"github.com/ipv64net/node64/internal/config"
 	"github.com/ipv64net/node64/internal/dns64"
 	"github.com/ipv64net/node64/internal/dyndns"
+	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/i18n"
 	"github.com/ipv64net/node64/internal/ipv64api"
@@ -39,6 +41,7 @@ import (
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/peer"
+	"github.com/ipv64net/node64/internal/ports"
 	"github.com/ipv64net/node64/internal/secrets"
 	"github.com/ipv64net/node64/internal/store"
 	nodesync "github.com/ipv64net/node64/internal/sync"
@@ -137,6 +140,40 @@ func run() error {
 	hcModule := healthchecks.New(st, logger.Slog(), dispatcher, nfStore, Version)
 	modules.Register(hcModule)
 	ipv64Key := ipv64api.NewKey(st, box, ipv64api.NewClient(os.Getenv("NODE64_IPV64_API"), "node64/"+Version), logger.Slog()) // leer = ipv64.net (Env nur fuer Tests)
+
+	// Kern: Port-Verwaltung, Zertifikate und der gemeinsame Eingang 80/443 (offen nur, solange ein Abnehmer ihn
+	// braucht). Vor den Modulen angelegt und nach ihnen geschlossen (defer).
+	portReg := ports.New()
+	portReg.Provide("web", func(context.Context) []ports.Claim {
+		var out []ports.Claim
+		if cfg.HTTPPort > 0 {
+			out = append(out, ports.Claim{Purpose: "HTTP", Proto: ports.TCP, Port: cfg.HTTPPort, Bind: cfg.BindAddr, Active: true})
+		}
+		if cfg.HTTPSPort > 0 {
+			out = append(out, ports.Claim{Purpose: "HTTPS", Proto: ports.TCP, Port: cfg.HTTPSPort, Bind: cfg.BindAddr, Active: true})
+		}
+		return out
+	})
+	certMigrations, err := certs.Migrations()
+	if err != nil {
+		return err
+	}
+	if err := st.Migrate(ctx, "certs", certMigrations); err != nil {
+		return err
+	}
+	certMgr, err := certs.New(ctx, certs.Deps{Store: st, Box: box, DNS: certs.IPv64(ipv64Key), Notify: dispatcher.Dispatch, Log: logger.Slog(), Version: Version})
+	if err != nil {
+		return err
+	}
+	edgeSrv, err := edge.New(edge.LoadConfig(func(k, def string) string { return st.SettingOr(ctx, k, def) }), certMgr,
+		func(ctx context.Context, want []ports.Claim) error { return portReg.Check(ctx, edge.Owner, want) }, logger.Slog())
+	if err != nil {
+		return err
+	}
+	defer edgeSrv.Close(context.Background())
+	certMgr.SetHTTP(edgeSrv) // HTTP-01 ueber Port 80 des Eingangs
+	defer certMgr.Close()
+	portReg.Provide(edge.Owner, edgeSrv.Claims)
 	dynModule := dyndns.New(st, logger.Slog(), box, dispatcher, Version)
 	dynModule.SetKey(ipv64Key)
 	modules.Register(dynModule)
@@ -149,6 +186,12 @@ func run() error {
 	dnsModule.SetNotifier(dispatcher.Dispatch) // Upstream gestoert, Blockliste nicht ladbar
 	dnsModule.SetKey(ipv64Key)                 // Let's Encrypt per DNS-01 ueber die ipv64-API
 	modules.Register(dnsModule)
+	portReg.Provide(dns64.Name, func(ctx context.Context) []ports.Claim { // nur eingeschaltet; aktiv, solange es laeuft
+		if on, _ := st.ModuleEnabled(ctx, dns64.Name); !on {
+			return nil
+		}
+		return dnsModule.Ports(ctx, modules.IsRunning(dns64.Name))
+	})
 	registerModules(modules)
 	modules.StartEnabled(ctx)
 	defer modules.StopAll()
@@ -257,6 +300,7 @@ func run() error {
 	srv, err := web.New(web.Deps{
 		Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: modules, Notify: nfStore, Dispatcher: dispatcher,
 		Sync: syncClient, Linker: syncClient, HC: hcModule, IPv64: ipv64Key, Peer: peerMgr, Version: Version, StartedAt: time.Now(), Restart: stop,
+		Ports: portReg, Edge: edgeSrv, Certs: certMgr,
 	})
 	if err != nil {
 		return err

@@ -20,7 +20,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipv64net/node64/internal/certs"
 	"github.com/ipv64net/node64/internal/config"
+	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/i18n"
 	"github.com/ipv64net/node64/internal/ipv64api"
@@ -28,6 +30,7 @@ import (
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/peer"
+	"github.com/ipv64net/node64/internal/ports"
 	"github.com/ipv64net/node64/internal/store"
 	nodesync "github.com/ipv64net/node64/internal/sync"
 )
@@ -46,6 +49,9 @@ type Deps struct {
 	HC         *healthchecks.Module // fuer Konflikte auf der Verknuepfungsseite
 	IPv64      *ipv64api.Key        // zentraler ipv64-API-Key (nil = nicht verfuegbar)
 	Peer       *peer.Manager        // lokale Gruppe (nil = nicht verfuegbar)
+	Ports      *ports.Registry      // belegte Ports (nil = keine Uebersicht)
+	Edge       *edge.Edge           // gemeinsamer Eingang 80/443 (nil = nicht verfuegbar)
+	Certs      *certs.Manager       // Zertifikatsverwaltung (nil = nicht verfuegbar)
 	Version    string
 	StartedAt  time.Time
 	// Restart beendet den Node kontrolliert (Docker startet ihn neu), z. B.
@@ -155,6 +161,8 @@ func (s *Server) routes() {
 	s.apiAdminRoutes()
 	s.syncRoutes()
 	s.peerRoutes()
+	s.portRoutes()
+	s.certRoutes()
 
 	s.mux.Handle("GET /{$}", s.auth(s.dashboard))
 	s.mux.Handle("GET /settings", s.auth(s.settings))

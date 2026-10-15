@@ -191,6 +191,33 @@
     "no_incidents": "No incidents.",
     "other": "Other"
   },
+  "ports": {
+    "title": "Ports",
+    "hint": "Which ports Node64 uses or wants to use. A port can only be opened once per address; modules share 80 and 443 through the common entrance.",
+    "port": "Port",
+    "owner": "Part",
+    "state": "State",
+    "active": "open",
+    "idle": "configured",
+    "conflict": "conflicts with {with}",
+    "owner_web": "Web interface",
+    "owner_edge": "Common entrance",
+    "owner_dns64": "DNS64",
+    "owner_cdn64": "CDN64",
+    "edge_title": "Common entrance (HTTP/HTTPS)",
+    "edge_hint": "Opens the ports only while a module needs them (e.g. CDN64 or Let's Encrypt via HTTP-01). Forward 80 and 443 (TCP, for HTTP/3 also 443/UDP) on the router to this node.",
+    "edge_http": "HTTP port",
+    "edge_https": "HTTPS port",
+    "edge_public": "HTTPS port from outside",
+    "edge_public_hint": "Only needed if the router forwards a different port (e.g. 443 → 8443). Empty = same as HTTPS port.",
+    "edge_http3": "Offer HTTP/3 (QUIC)",
+    "edge_default": "Unknown names",
+    "edge_default_404": "Neutral \"404\" page",
+    "edge_default_close": "Close connection",
+    "edge_off": "Currently closed (no module needs it).",
+    "err_port": "Ports must be between 0 and 65535 (0 = off).",
+    "err_save": "Not saved: {error}"
+  },
   "settings": {
     "appearance": "Appearance",
     "font_size": "Font size",
@@ -893,7 +920,10 @@
       "dns64_upstream": "⚠️ DNS64: upstream server {name} failing",
       "dns64_upstream_ok": "✅ DNS64: upstream server {name} answers again",
       "dns64_lists": "⚠️ DNS64: blocklist {name} cannot be updated",
-      "dns64_cert": "⚠️ DNS64: certificate for {name} cannot be obtained"
+      "dns64_cert": "⚠️ DNS64: certificate for {name} cannot be obtained",
+      "cert_fail": "⚠️ Certificate for {name} cannot be obtained",
+      "cert_expiry": "⚠️ Certificate for {name} expires soon",
+      "cert_ok": "✅ Certificate for {name} valid again"
     },
     "body": {
       "quota_used": "Used: {used} of {limit} online checks today",

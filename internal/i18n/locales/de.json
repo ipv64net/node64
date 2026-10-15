@@ -191,6 +191,33 @@
     "no_incidents": "Keine Störungen.",
     "other": "Sonstige"
   },
+  "ports": {
+    "title": "Ports",
+    "hint": "Welche Ports Node64 belegt bzw. belegen will. Ein Port lässt sich je Adresse nur einmal öffnen; 80 und 443 teilen sich die Module über den gemeinsamen Eingang.",
+    "port": "Port",
+    "owner": "Teil",
+    "state": "Zustand",
+    "active": "offen",
+    "idle": "eingestellt",
+    "conflict": "Konflikt mit {with}",
+    "owner_web": "Oberfläche",
+    "owner_edge": "Gemeinsamer Eingang",
+    "owner_dns64": "DNS64",
+    "owner_cdn64": "CDN64",
+    "edge_title": "Gemeinsamer Eingang (HTTP/HTTPS)",
+    "edge_hint": "Öffnet die Ports nur, solange ein Modul sie braucht (z. B. CDN64 oder Let's Encrypt per HTTP-01). Im Router 80 und 443 (TCP, für HTTP/3 auch 443/UDP) auf diese Node weiterleiten.",
+    "edge_http": "HTTP-Port",
+    "edge_https": "HTTPS-Port",
+    "edge_public": "HTTPS-Port von außen",
+    "edge_public_hint": "Nur nötig, wenn der Router einen anderen Port weiterleitet (z. B. 443 → 8443). Leer = wie HTTPS-Port.",
+    "edge_http3": "HTTP/3 (QUIC) anbieten",
+    "edge_default": "Unbekannte Namen",
+    "edge_default_404": "Neutrale Seite „404“",
+    "edge_default_close": "Verbindung schließen",
+    "edge_off": "Derzeit geschlossen (kein Modul braucht ihn).",
+    "err_port": "Ports müssen zwischen 0 und 65535 liegen (0 = aus).",
+    "err_save": "Nicht gespeichert: {error}"
+  },
   "settings": {
     "appearance": "Darstellung",
     "font_size": "Schriftgröße",
@@ -893,7 +920,10 @@
       "dns64_upstream": "⚠️ DNS64: Upstream-Server {name} gestört",
       "dns64_upstream_ok": "✅ DNS64: Upstream-Server {name} antwortet wieder",
       "dns64_lists": "⚠️ DNS64: Blockliste {name} lässt sich nicht aktualisieren",
-      "dns64_cert": "⚠️ DNS64: Zertifikat für {name} lässt sich nicht holen"
+      "dns64_cert": "⚠️ DNS64: Zertifikat für {name} lässt sich nicht holen",
+      "cert_fail": "⚠️ Zertifikat für {name} lässt sich nicht holen",
+      "cert_expiry": "⚠️ Zertifikat für {name} läuft bald ab",
+      "cert_ok": "✅ Zertifikat für {name} wieder gültig"
     },
     "body": {
       "quota_used": "Verbraucht: {used} von {limit} Online-Messungen heute",

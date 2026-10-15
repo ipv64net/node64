@@ -359,6 +359,7 @@ type settingsData struct {
 	LogModules map[string]string
 	Modules2   []string
 	HTTPSPort  int
+	Ports      *portsView // Karte Ports (nil = nicht verfuegbar)
 	// lokale Datenhaltung (Healthchecks)
 	RawDays, HourlyDays       int
 	ChartDetail               string
@@ -406,6 +407,7 @@ func (s *Server) settingsView(r *http.Request) *View {
 		d.LogModules[k] = logging.LevelName(l)
 	}
 	d.Modules2 = logModuleNames
+	d.Ports = s.portsData(ctx)
 	v.Data = d
 	v.Form = map[string]string{"node_name": d.NodeName, "location": d.Location, "lang": v.User.Lang, "timezone": v.User.Timezone, "level": d.LogLevel}
 	if v.Form["lang"] == "" {

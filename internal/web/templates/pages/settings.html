@@ -206,6 +206,44 @@
 				</ul>
 			</div>
 		</div>
+		{{with $d.Ports}}<div class="card" id="ports">
+			<div class="card-header"><i class="bi bi-ethernet text-primary"></i> {{$.T "ports.title"}}</div>
+			<div class="card-body">
+				<p class="text-body-secondary small">{{$.T "ports.hint"}}</p>
+				<div class="table-responsive"><table class="table table-sm align-middle small mb-3">
+					<thead><tr><th>{{$.T "ports.port"}}</th><th>{{$.T "ports.owner"}}</th><th>{{$.T "ports.state"}}</th></tr></thead>
+					<tbody>{{range .Entries}}<tr>
+						<td class="font-monospace text-nowrap">{{.Port}}/{{.Proto}}{{if .Bind}} <span class="text-body-secondary">{{.Bind}}</span>{{end}}</td>
+						<td>{{$.T (print "ports.owner_" .Owner)}} <span class="text-body-secondary">· {{.Purpose}}</span></td>
+						<td>{{if .Conflicts}}<span class="badge text-bg-danger">{{$.T "ports.conflict" "with" (index .Conflicts 0)}}</span>{{else if .Active}}<span class="badge text-bg-success">{{$.T "ports.active"}}</span>{{else}}<span class="badge text-bg-light">{{$.T "ports.idle"}}</span>{{end}}</td>
+					</tr>{{end}}</tbody>
+				</table></div>
+				<h2 class="h6">{{$.T "ports.edge_title"}}</h2>
+				{{$open := false}}{{range .Edge.Listeners}}{{if .Running}}{{$open = true}}{{end}}{{if .Error}}<div class="text-danger small mb-1">{{.Name}}: {{.Error}}</div>{{end}}{{end}}
+				{{if not $open}}<div class="text-body-secondary small mb-2">{{$.T "ports.edge_off"}}</div>{{end}}
+				<form method="post" action="/settings/edge">
+					<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<div class="row g-2 mb-2">
+						<div class="col-sm-4"><label class="form-label" for="edge_http">{{$.T "ports.edge_http"}}</label>
+							<input class="form-control form-control-sm" type="number" min="0" max="65535" id="edge_http" name="http_port" value="{{.Edge.Config.HTTPPort}}"></div>
+						<div class="col-sm-4"><label class="form-label" for="edge_https">{{$.T "ports.edge_https"}}</label>
+							<input class="form-control form-control-sm" type="number" min="0" max="65535" id="edge_https" name="https_port" value="{{.Edge.Config.HTTPSPort}}"></div>
+						<div class="col-sm-4"><label class="form-label" for="edge_public">{{$.T "ports.edge_public"}}</label>
+							<input class="form-control form-control-sm" type="number" min="0" max="65535" id="edge_public" name="public_port" value="{{if .Edge.Config.PublicPort}}{{.Edge.Config.PublicPort}}{{end}}" placeholder="{{.Edge.Config.HTTPSPort}}"></div>
+					</div>
+					<div class="form-text mb-2">{{$.T "ports.edge_public_hint"}}</div>
+					<div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="edge_h3" name="http3"{{if .Edge.Config.HTTP3}} checked{{end}}>
+						<label class="form-check-label" for="edge_h3">{{$.T "ports.edge_http3"}}</label></div>
+					<label class="form-label" for="edge_default">{{$.T "ports.edge_default"}}</label>
+					<select class="form-select form-select-sm mb-2" id="edge_default" name="default">
+						<option value="404"{{if eq .Edge.Config.Default "404"}} selected{{end}}>{{$.T "ports.edge_default_404"}}</option>
+						<option value="close"{{if eq .Edge.Config.Default "close"}} selected{{end}}>{{$.T "ports.edge_default_close"}}</option>
+					</select>
+					<div class="form-text mb-2">{{$.T "ports.edge_hint"}}</div>
+					<button class="btn btn-primary btn-sm" type="submit">{{$.T "common.save"}}</button>
+				</form>
+			</div>
+		</div>{{end}}
 		<div class="card" id="data">
 			<div class="card-header"><i class="bi bi-bar-chart-line text-info"></i> {{.T "settings.data"}}</div>
 			<div class="card-body">
