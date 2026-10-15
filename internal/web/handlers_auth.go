@@ -173,11 +173,15 @@ func (s *Server) twoFADisable(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiKeyCreate(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(r)
-	v := s.settingsView(r)
+	v, err := s.apiDocsView(r)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
 	name := strings.TrimSpace(r.PostFormValue("name"))
 	if name == "" || len(name) > 100 {
 		s.flash(w, r, "danger", v.T("errors.validation"))
-		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		http.Redirect(w, r, "/api/docs#keys", http.StatusSeeOther)
 		return
 	}
 	key, k, err := s.Store.NewAPIKey(r.Context(), u.ID, name)
@@ -186,12 +190,11 @@ func (s *Server) apiKeyCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "apikey.create", name, k.Hint)
-	d := v.Data.(settingsData)
-	d.NewAPIKey = key
-	d.APIKeys, _ = s.Store.APIKeys(r.Context(), u.ID)
-	v.Data = d
+	d := v.Data.(map[string]any)
+	d["NewAPIKey"] = key // nur in dieser Antwort sichtbar
+	d["APIKeys"], _ = s.Store.APIKeys(r.Context(), u.ID)
 	v.Flash = &Flash{Kind: "success", Text: v.T("apikey.created")}
-	s.render(w, r, http.StatusOK, "settings", v)
+	s.render(w, r, http.StatusOK, "api_docs", v)
 }
 
 func (s *Server) apiKeyDelete(w http.ResponseWriter, r *http.Request) {
@@ -202,15 +205,15 @@ func (s *Server) apiKeyDelete(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	v := s.view(r, "settings.title")
+	v := s.view(r, "api.title")
 	if !deleted { // gab es nicht (z. B. schon geloescht): kein Audit-Eintrag
 		s.flash(w, r, "warning", v.T("apikey.not_found"))
-		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		http.Redirect(w, r, "/api/docs#keys", http.StatusSeeOther)
 		return
 	}
 	s.audit(r, "apikey.delete", strconv.FormatInt(id, 10), "")
 	s.flash(w, r, "success", v.T("apikey.deleted"))
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/api/docs#keys", http.StatusSeeOther)
 }
 
 // certificateDownload liefert das selbstsignierte Zertifikat zum Import.

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -238,5 +239,39 @@ func TestBackupExportImport(t *testing.T) {
 	resp, page = b.get(t, "/settings")
 	if !strings.Contains(page, "Passwort") {
 		t.Fatal("expected password-needed flash")
+	}
+}
+
+// Die API-Keys verwaltet die Seite "API", nicht mehr die Einstellungen; der neue Key steht nur in der Antwort.
+func TestAPIKeysOnAPIPage(t *testing.T) {
+	a := newTestApp(t)
+	ctx := context.Background()
+	u := loginAs(t, a, "admin", "sehr geheimes passwort")
+	_, body := a.get(t, "/settings")
+	if strings.Contains(body, `action="/settings/api-keys"`) {
+		t.Fatal("api key card still in settings")
+	}
+	resp, body := a.get(t, "/api/docs")
+	if resp.StatusCode != 200 || !strings.Contains(body, `id="keys"`) {
+		t.Fatalf("api page: %d", resp.StatusCode)
+	}
+	resp, body = a.post(t, "/settings/api-keys", url.Values{"_csrf": {csrfOf(t, body)}, "name": {"skript"}})
+	if resp.StatusCode != 200 || !strings.Contains(body, `id="new-api-key" value="node64_`) || !strings.Contains(body, "skript") {
+		t.Fatalf("create: %d", resp.StatusCode)
+	}
+	keys, _ := a.store.APIKeys(ctx, u.ID)
+	if len(keys) != 1 {
+		t.Fatalf("keys: %+v", keys)
+	}
+	_, body = a.get(t, "/api/docs")
+	if strings.Contains(body, `id="new-api-key"`) {
+		t.Fatal("key shown again")
+	}
+	resp, _ = a.post(t, "/settings/api-keys/"+strconv.FormatInt(keys[0].ID, 10)+"/delete", url.Values{"_csrf": {csrfOf(t, body)}})
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/api/docs#keys" {
+		t.Fatalf("delete: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if keys, _ = a.store.APIKeys(ctx, u.ID); len(keys) != 0 {
+		t.Fatalf("not deleted: %+v", keys)
 	}
 }

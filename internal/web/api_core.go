@@ -456,10 +456,19 @@ func (s *Server) apiOpenAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiDocs(w http.ResponseWriter, r *http.Request) {
-	b, err := staticFS.ReadFile("static/openapi.json")
+	v, err := s.apiDocsView(r)
 	if err != nil {
 		s.fail(w, r, err)
 		return
+	}
+	s.render(w, r, http.StatusOK, "api_docs", v)
+}
+
+// apiDocsView baut die Seite "API": Verwaltung der lokalen API-Keys und die Dokumentation aus openapi.json.
+func (s *Server) apiDocsView(r *http.Request) (*View, error) {
+	b, err := staticFS.ReadFile("static/openapi.json")
+	if err != nil {
+		return nil, err
 	}
 	var spec struct {
 		Info  map[string]any            `json:"info"`
@@ -467,8 +476,7 @@ func (s *Server) apiDocs(w http.ResponseWriter, r *http.Request) {
 		Paths map[string]map[string]any `json:"paths"`
 	}
 	if err := json.Unmarshal(b, &spec); err != nil {
-		s.fail(w, r, err)
-		return
+		return nil, err
 	}
 	type op struct {
 		Method, Path, Summary, Description string
@@ -514,6 +522,10 @@ func (s *Server) apiDocs(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	v := s.view(r, "api.title")
-	v.Data = map[string]any{"Groups": groups, "Order": order, "Info": spec.Info}
-	s.render(w, r, http.StatusOK, "api_docs", v)
+	keys, err := s.Store.APIKeys(r.Context(), v.User.ID)
+	if err != nil {
+		return nil, err
+	}
+	v.Data = map[string]any{"Groups": groups, "Order": order, "Info": spec.Info, "APIKeys": keys, "NewAPIKey": ""}
+	return v, nil
 }

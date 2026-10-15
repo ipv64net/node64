@@ -358,8 +358,6 @@ type settingsData struct {
 	Update     map[string]any
 	LogModules map[string]string
 	Modules2   []string
-	APIKeys    []store.APIKey
-	NewAPIKey  string
 	HTTPSPort  int
 	// lokale Datenhaltung (Healthchecks)
 	RawDays, HourlyDays       int
@@ -384,7 +382,6 @@ func (s *Server) settingsView(r *http.Request) *View {
 		TOTP:       v.User.TOTPSecret != "",
 		HTTPSPort:  s.Cfg.HTTPSPort,
 	}
-	d.APIKeys, _ = s.Store.APIKeys(ctx, v.User.ID)
 	d.RawDays, d.HourlyDays, d.ChartDetail = healthchecks.RawDays(s.Store), healthchecks.HourlyDays(s.Store), healthchecks.ChartDetail(s.Store)
 	d.RawOptions, d.HourlyOptions, d.ChartOptions = healthchecks.RawDayOptions, healthchecks.HourlyDayOptions, healthchecks.ChartDetailOptions
 	d.UpdateOn = s.Store.SettingOr(ctx, "updates.check", "0") == "1"

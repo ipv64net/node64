@@ -5,6 +5,28 @@
 	<a class="btn btn-outline-secondary btn-sm" href="/api/openapi.json" target="_blank"><i class="bi bi-filetype-json"></i> openapi.json</a>
 </div>
 <p class="text-body-secondary">{{index $d.Info "description"}}</p>
+<div class="card mb-3" id="keys">
+	<div class="card-header"><i class="bi bi-key text-warning"></i> {{.T "apikey.title"}}</div>
+	<div class="card-body">
+		<p class="small text-body-secondary">{{.T "apikey.hint"}}</p>
+		{{if $d.NewAPIKey}}<div class="alert alert-warning small"><strong>{{.T "apikey.show_once"}}</strong><br><div class="input-group input-group-sm mt-1"><span class="input-group-text"><i class="bi bi-key"></i></span><input class="form-control font-monospace" id="new-api-key" value="{{$d.NewAPIKey}}" readonly><button class="btn btn-outline-secondary btn-copy" type="button" data-copy-target="#new-api-key" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div></div>{{end}}
+		{{if $d.APIKeys}}
+		<ul class="list-group list-group-flush mb-3">
+		{{range $d.APIKeys}}
+			<li class="list-group-item d-flex justify-content-between align-items-center px-0 small">
+				<span><strong>{{.Name}}</strong> <code>{{.Hint}}</code><br><span class="text-body-secondary">{{$.T "nf.last_used"}}: {{$.Ago .LastUsedAt}}</span></span>
+				<form method="post" action="/settings/api-keys/{{.ID}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{$.T "common.confirm"}}"><i class="bi bi-trash"></i></button></form>
+			</li>
+		{{end}}
+		</ul>
+		{{end}}
+		<form method="post" action="/settings/api-keys" class="d-flex gap-2">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<input class="form-control form-control-sm" name="name" placeholder="{{.T "apikey.name"}}" maxlength="100" required>
+			<button class="btn btn-sm btn-primary text-nowrap" type="submit">{{.T "apikey.create"}}</button>
+		</form>
+	</div>
+</div>
 <div class="card mb-3"><div class="card-body">
 <pre class="mb-0 small">curl -H "Authorization: Bearer node64_…" {{.Scheme}}://{{.Host}}/api/checks
 curl -X POST -H "Authorization: Bearer node64_…" -H "Content-Type: application/json" \
