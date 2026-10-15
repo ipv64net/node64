@@ -2,6 +2,7 @@ package peer
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"sync"
@@ -64,7 +65,10 @@ type pullState struct {
 	kick  chan string // Node, bei der es Neues gibt ("" = alle)
 	busy  map[string]*sync.Mutex
 	timer *time.Timer
+	idle  map[string]time.Time // Node mit abgeschaltetem Healthchecks: bis dahin nicht abholen
 }
+
+const idleBackoff = 5 * time.Minute // Healthchecks bei einer anderen Node aus: so lange Ruhe statt alle 15 s
 
 // LogChange haengt eine Aenderung an das Protokoll (Hook des Healthchecks-Stores, auch fuer Aenderungen vom hub
 // und von anderen Nodes) und stoesst die Gruppe an.
@@ -283,7 +287,21 @@ func (m *Manager) pullAll(ctx context.Context, only string) {
 		if only != "" && x.NodeID != only {
 			continue
 		}
+		m.pull.mu.Lock()
+		until := m.pull.idle[x.NodeID]
+		m.pull.mu.Unlock()
+		if only == "" && time.Now().Before(until) {
+			continue // dort ist Healthchecks aus (ein Anstoss von ihr holt trotzdem gleich ab)
+		}
 		if err := m.pullFrom(ctx, x); err != nil {
+			if errors.Is(err, errPeerHCOff) {
+				m.pull.mu.Lock()
+				if m.pull.idle == nil {
+					m.pull.idle = map[string]time.Time{}
+				}
+				m.pull.idle[x.NodeID] = time.Now().Add(idleBackoff)
+				m.pull.mu.Unlock()
+			}
 			m.d.Log.Debug("peer pull", "from", x.Name, "err", err)
 			continue
 		}

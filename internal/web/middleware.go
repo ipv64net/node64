@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -102,6 +103,12 @@ func (s *Server) session(next http.Handler) http.Handler {
 		// API-Key: Authorization: Bearer node64_... (nur fuer /api/)
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer node64_") {
+				lk := "apikey:" + ipKey(s.clientIP(r))
+				if wait := s.limiter.retryAfter(lk); wait > 0 { // zu viele Fehlversuche: ohne Abfrage und ohne Log abweisen
+					w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+					http.Error(w, `{"error":"too many invalid api keys, try again later"}`, http.StatusTooManyRequests)
+					return
+				}
 				key, err := s.Store.APIKeyByValue(ctx, strings.TrimSpace(strings.TrimPrefix(h, "Bearer ")))
 				if err == nil && key != nil {
 					if u, err := s.Store.UserByID(ctx, key.UserID); err == nil && u != nil {
@@ -112,8 +119,8 @@ func (s *Server) session(next http.Handler) http.Handler {
 						return
 					}
 				}
-				s.limiter.fail("apikey:" + ipKey(s.clientIP(r)))
-				s.log.Warn("invalid api key", "ip", s.clientIP(r), "path", r.URL.Path)
+				s.limiter.fail(lk)
+				s.log.Warn("invalid api key", "ip", s.clientIP(r), "path", r.URL.Path) // hoechstens ~5 + 2/min je IP
 				w.Header().Set("WWW-Authenticate", "Bearer")
 				http.Error(w, `{"error":"invalid api key"}`, http.StatusUnauthorized)
 				return

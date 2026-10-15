@@ -3,7 +3,7 @@
   "info": {
     "title": "Node64 – lokale API",
     "version": "1.2.0",
-    "description": "JSON-API des Nodes im eigenen Netz. Anmeldung mit API-Key (Einstellungen > API-Keys) als `Authorization: Bearer node64_...` oder mit der Browser-Sitzung (dann `X-CSRF-Token` bei POST/PUT/DELETE). Zeiten sind ISO 8601 in UTC. Dieselbe API nutzt die Oberfläche.\n\n**Fehler:** JSON `{\"error\": \"...\"}`. 401 `authentication required` bzw. `invalid api key`; 403 bei fehlendem CSRF-Token (Sitzung ohne API-Key); 404 auch, wenn das jeweilige Modul (Healthchecks, DynDNS) ausgeschaltet ist; 429 `too many requests` mit `Retry-After: 10` (Begrenzung je IP).\n\n**Mit ipv64.net verknüpft:** Alle Nodes des Accounts bilden ein System. Checks, Wartungsfenster und Kanäle lassen sich von jeder Node aus ändern, pausieren, löschen und messen lassen, auch wenn sie einer anderen Node gehören (`owner: other`). Änderungen gehen über ipv64.net an das Portal und alle Nodes; ohne Verbindung werden sie gepuffert und nachgeliefert, bei gleichzeitigen Änderungen gewinnt die jüngere. Nur die Messstelle eines Docker-Checks bleibt bei der Node, die den Container steuert. Optionaler Kopf `X-Agent-Actor` setzt den Namen im Audit-Log."
+    "description": "JSON-API des Nodes im eigenen Netz. Anmeldung mit API-Key (Einstellungen > API-Keys) als `Authorization: Bearer node64_...` oder mit der Browser-Sitzung (dann `X-CSRF-Token` bei POST/PUT/DELETE). Zeiten sind ISO 8601 in UTC. Dieselbe API nutzt die Oberfläche.\n\n**Fehler:** JSON `{\"error\": \"...\"}`. 401 `authentication required` bzw. `invalid api key`; 403 bei fehlendem CSRF-Token (Sitzung ohne API-Key); 404 auch, wenn das jeweilige Modul (Healthchecks, DynDNS) ausgeschaltet ist; 429 `too many requests` mit `Retry-After: 10` (Begrenzung je IP).\n\n**Mit ipv64.net verknüpft:** Alle Nodes des Accounts bilden ein System. Checks, Wartungsfenster und Kanäle lassen sich von jeder Node aus ändern, pausieren, löschen und messen lassen, auch wenn sie einer anderen Node gehören (`owner: other`). Änderungen gehen über ipv64.net an das Portal und alle Nodes; ohne Verbindung werden sie gepuffert und nachgeliefert, bei gleichzeitigen Änderungen gewinnt die jüngere. Nur die Messstelle eines Docker-Checks bleibt bei der Node, die den Container steuert. Optionaler Kopf `X-Agent-Actor` setzt den Namen im Audit-Log.\n\nZu viele ungültige API-Keys von einer Adresse: 429 mit Retry-After (5 Versuche, dann einer je 30 s). Audit-Einträge per API-Key tragen die Herkunft api:<Key-Name>."
   },
   "servers": [
     {
@@ -4995,7 +4995,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Wirkt sofort (kein Neustart nötig)."
       }
     },
     "/ipv64": {
@@ -5474,6 +5475,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Datenbankfehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       },
@@ -5535,6 +5546,12 @@
                     "modules": {
                       "type": "object",
                       "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "known_modules": {
+                      "type": "array",
+                      "items": {
                         "type": "string"
                       }
                     }
@@ -5611,7 +5628,7 @@
             }
           },
           "422": {
-            "description": "ungültiges Level",
+            "description": "ungültiges Level oder unbekanntes Modul (siehe known_modules)",
             "content": {
               "application/json": {
                 "schema": {

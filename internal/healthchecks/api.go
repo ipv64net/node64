@@ -926,6 +926,10 @@ func (m *Module) audit(r *http.Request, action string, c *Check) {
 }
 
 func (m *Module) auditText(r *http.Request, action, target string) {
+	if m.g.Audit != nil {
+		m.g.Audit(r, action, target, "") // Benutzer, IP und Herkunft (Oberflaeche oder welcher API-Key) wie im Kern
+		return
+	}
 	ip := r.RemoteAddr
 	if m.g.ClientIP != nil {
 		ip = m.g.ClientIP(r)

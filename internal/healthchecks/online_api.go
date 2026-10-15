@@ -175,6 +175,22 @@ func (m *Module) onlineSave(ctx context.Context, key string, cl *ipv64api.Client
 	return cl.HC2SaveCheck(ctx, key, token, body)
 }
 
+// auditOnlineSave schreibt Anlegen/Aendern eines Online-Checks ins Audit, beim Anlegen mit dem Token von ipv64
+// (damit spaetere Eintraege zu pause/resume/delete zuzuordnen sind).
+func (m *Module) auditOnlineSave(r *http.Request, token, name string, saved json.RawMessage) {
+	if token != "" {
+		m.auditText(r, "check.online_update", name+" ("+token+")")
+		return
+	}
+	var out struct {
+		Token string `json:"token"`
+	}
+	if json.Unmarshal(saved, &out) == nil && out.Token != "" {
+		name += " (" + out.Token + ")"
+	}
+	m.auditText(r, "check.online_create", name)
+}
+
 // onlineSubmit prueft die Eingaben wie bei lokalen Checks und speichert sie bei ipv64.
 func (m *Module) onlineSubmit(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -185,8 +201,9 @@ func (m *Module) onlineSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	token := r.PathValue("token")
 	in, err := checkFromForm(r)
+	var saved json.RawMessage
 	if err == nil {
-		_, err = m.onlineSave(ctx, key, cl, token, in)
+		saved, err = m.onlineSave(ctx, key, cl, token, in)
 	}
 	if err != nil {
 		m.log.Warn("online check not saved via ipv64 API", "token", token, "err", err)
@@ -199,11 +216,7 @@ func (m *Module) onlineSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.onlineInvalidate()
-	if token == "" {
-		m.auditText(r, "check.online_create", in.Name)
-	} else {
-		m.auditText(r, "check.online_update", in.Name+" ("+token+")")
-	}
+	m.auditOnlineSave(r, token, in.Name, saved)
 	m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
 	http.Redirect(w, r, "/healthchecks#online", http.StatusSeeOther)
 }
@@ -295,12 +308,33 @@ func (m *Module) apiOnlineSave(w http.ResponseWriter, r *http.Request) {
 	if key == "" {
 		return
 	}
-	var in checkJSON
-	if err := readJSON(r, &in); err != nil {
+	token := r.PathValue("token")
+	var body map[string]json.RawMessage
+	if err := readJSON(r, &body); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json: "+err.Error())
 		return
 	}
-	token := r.PathValue("token")
+	if token != "" { // Aendern: nicht genannte Felder behalten den Wert bei ipv64 (wie PUT /api/checks)
+		old, err := cl.HC2Check(r.Context(), key, token)
+		if err != nil {
+			writeErr(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		merged := map[string]json.RawMessage{}
+		if err := json.Unmarshal(old, &merged); err != nil {
+			writeErr(w, http.StatusBadGateway, "unexpected answer from ipv64")
+			return
+		}
+		for k, v := range body {
+			merged[k] = v
+		}
+		body = merged
+	}
+	var in checkJSON
+	if b, err := json.Marshal(body); err != nil || json.Unmarshal(b, &in) != nil {
+		writeErr(w, http.StatusBadRequest, "invalid check")
+		return
+	}
 	raw, err := m.onlineSave(r.Context(), key, cl, token, in)
 	if err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
@@ -310,10 +344,8 @@ func (m *Module) apiOnlineSave(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusOK
 	if token == "" {
 		status = http.StatusCreated
-		m.auditText(r, "check.online_create", in.Name+" (api)")
-	} else {
-		m.auditText(r, "check.online_update", in.Name+" ("+token+") (api)")
 	}
+	m.auditOnlineSave(r, token, in.Name, raw)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write(raw)
@@ -330,7 +362,7 @@ func (m *Module) apiOnlineDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.onlineInvalidate()
-	m.auditText(r, "check.online_delete", token+" (api)")
+	m.auditText(r, "check.online_delete", token)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -349,6 +381,6 @@ func (m *Module) apiOnlineAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.onlineInvalidate()
-	m.auditText(r, "check.online_"+action, token+" (api)")
+	m.auditText(r, "check.online_"+action, token)
 	w.WriteHeader(http.StatusAccepted)
 }

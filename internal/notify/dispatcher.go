@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ipv64net/node64/internal/i18n"
@@ -78,7 +79,7 @@ type Dispatcher struct {
 	// Hooks fuer Tests
 	now func() time.Time
 	// sendServerChannels: Server-Kanaele trotzdem lokal senden (Node-Einstellung)
-	sendServerChannels bool
+	sendServerChannels atomic.Bool
 	// Pfade fuer Links (nil = Seiten des Nodes)
 	checkPath   func(string) string
 	listPath    func(string) string
@@ -91,7 +92,7 @@ type Dispatcher struct {
 }
 
 // SetSendServerChannels schaltet den lokalen Versand ueber Server-Kanaele.
-func (d *Dispatcher) SetSendServerChannels(on bool) { d.sendServerChannels = on }
+func (d *Dispatcher) SetSendServerChannels(on bool) { d.sendServerChannels.Store(on) }
 
 // SetServerSends meldet, ob gerade der ipv64-hub die Benachrichtigungen uebernimmt (verknuepft und verbunden).
 // Dann sendet die Node ihre eigenen Kanaele nicht selbst, sondern erhaelt Sendeauftraege vom hub.
@@ -126,7 +127,7 @@ func (d *Dispatcher) hooks() (send func(context.Context, *Channel, Message) erro
 // viaAPI: Server-Kanaele dieses Alerts gehen direkt ueber die API.
 func (d *Dispatcher) viaAPI(c CheckInfo) bool {
 	send, ready, _ := d.hooks()
-	return c.Local && !d.sendServerChannels && send != nil && ready != nil && ready()
+	return c.Local && !d.sendServerChannels.Load() && send != nil && ready != nil && ready()
 }
 
 type bucket struct {
@@ -210,7 +211,23 @@ func (d *Dispatcher) run() {
 			return
 		case a := <-d.queue:
 			d.enqueue(a)
-			d.flushDue(d.ctx, false) // ohne Sammelfenster sofort, nicht erst beim naechsten Takt
+			// was gleichzeitig ankommt (z. B. viele Checks bei einem Netzausfall), 100 ms mitnehmen: so greift die
+			// Sammelmeldung auch ohne Sammelfenster; danach Faelliges sofort, nicht erst beim naechsten Takt
+			gather := time.NewTimer(100 * time.Millisecond)
+		collect:
+			for {
+				select {
+				case a := <-d.queue:
+					d.enqueue(a)
+				case <-gather.C:
+					break collect
+				case <-d.ctx.Done():
+					gather.Stop()
+					d.flushDue(context.Background(), true)
+					return
+				}
+			}
+			d.flushDue(d.ctx, false)
 		case <-tick.C:
 			d.flushDue(d.ctx, false)
 			if now := d.now(); now.Sub(lastHeld) >= 30*time.Second || now.Before(lastHeld) {
@@ -303,10 +320,10 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 		if !ch.Enabled {
 			continue
 		}
-		if ch.Execution == "server" && !d.sendServerChannels && !d.viaAPI(c) {
+		if ch.Execution == "server" && !d.sendServerChannels.Load() && !d.viaAPI(c) {
 			continue // vom ipv64-hub gesendet
 		}
-		if !c.Local && !d.sendServerChannels && d.serverSends != nil && d.serverSends() {
+		if !c.Local && !d.sendServerChannels.Load() && d.serverSends != nil && d.serverSends() {
 			continue // verknuepft und verbunden: der hub sendet (eigene Kanaele per Sendeauftrag), sonst kaeme alles doppelt
 		}
 		if len(want) > 0 {
@@ -752,7 +769,7 @@ func (d *Dispatcher) composeQuota(lang string, a Alert, m Message) Message {
 func (d *Dispatcher) send(ctx context.Context, ch *Channel, m Message) {
 	var s Sender
 	ok := false
-	if send, _, _ := d.hooks(); ch.Execution == "server" && !d.sendServerChannels && send != nil {
+	if send, _, _ := d.hooks(); ch.Execution == "server" && !d.sendServerChannels.Load() && send != nil {
 		s, ok = apiSender(send), true // Server-Kanal direkt ueber die ipv64-API (nur Local-Alerts kommen hier an)
 	} else {
 		s, ok = d.senders[ch.Type]
@@ -780,7 +797,7 @@ func (f apiSender) Send(ctx context.Context, ch *Channel, m Message) error { ret
 
 func (d *Dispatcher) record(ctx context.Context, ch *Channel, m Message, err error) {
 	if errors.Is(err, ErrUnavailable) { // nicht der Kanal ist gestoert, der Weg fehlt noch
-		d.log.Info("notification not sent, path not available", "channel", ch.Name, "kind", m.Kind, "err", err)
+		d.log.Info("notification not sent, path not available", "channel", ch.Name, "kind", m.Kind, "err", RedactURLs(err.Error()))
 		_ = d.st.AddDelivery(ctx, Delivery{EventID: m.EventID, ChannelID: ch.ID, Channel: ch.Name, Kind: string(m.Kind), CheckToken: m.Check.Token, Subject: m.Title, OK: false, Error: RedactURLs(err.Error())})
 		return
 	}
@@ -827,5 +844,14 @@ func (d *Dispatcher) Test(ctx context.Context, ch *Channel) error {
 	defer cancel()
 	err := s.Send(sctx, ch, m)
 	d.record(ctx, ch, m, err)
-	return err
+	if err != nil {
+		return redactedErr{err} // fuer Anzeige und API ohne Tokens aus der Kanal-URL
+	}
+	return nil
 }
+
+// redactedErr gibt den Fehlertext ohne Tokens in Adressen aus; errors.Is/As sehen weiter den Originalfehler.
+type redactedErr struct{ err error }
+
+func (e redactedErr) Error() string { return RedactURLs(e.err.Error()) }
+func (e redactedErr) Unwrap() error { return e.err }

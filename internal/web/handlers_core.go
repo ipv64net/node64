@@ -408,7 +408,7 @@ func (s *Server) settingsView(r *http.Request) *View {
 	for k, l := range s.Log.ModuleLevels() {
 		d.LogModules[k] = logging.LevelName(l)
 	}
-	d.Modules2 = []string{"core", "web", "store", "scheduler", "notify", "healthchecks", "dyndns"}
+	d.Modules2 = logModuleNames
 	v.Data = d
 	v.Form = map[string]string{"node_name": d.NodeName, "location": d.Location, "lang": v.User.Lang, "timezone": v.User.Timezone, "level": d.LogLevel}
 	if v.Form["lang"] == "" {
@@ -572,6 +572,9 @@ func (s *Server) settingsData(w http.ResponseWriter, r *http.Request) {
 	s.flash(w, r, "success", v.T("common.saved"))
 	http.Redirect(w, r, "/settings#data", http.StatusSeeOther)
 }
+
+// logModuleNames: Module mit eigenem Log-Level (Oberflaeche und API).
+var logModuleNames = []string{"core", "web", "store", "scheduler", "notify", "healthchecks", "dyndns", "dns64", "sync", "peer"}
 
 func (s *Server) settingsLogging(w http.ResponseWriter, r *http.Request) {
 	f := s.formValues(r, "level", "reset_minutes", "module")

@@ -321,7 +321,14 @@ func (s *Server) audit(r *http.Request, action, target, details string) {
 	if u := currentUser(r); u != nil {
 		actor = u.Username
 	}
-	if err := s.Store.Audit(r.Context(), store.AuditEntry{Actor: actor, Action: action, Target: target, Details: details, IP: s.clientIP(r)}); err != nil {
+	origin := "local"
+	if k, _ := r.Context().Value(ctxAPIKey).(*store.APIKey); k != nil { // per API-Key: welcher Key
+		origin = "api:" + k.Name
+		if k.Hint != "" {
+			origin += " (" + k.Hint + ")"
+		}
+	}
+	if err := s.Store.Audit(r.Context(), store.AuditEntry{Actor: actor, Action: action, Target: target, Details: details, IP: s.clientIP(r), Origin: origin}); err != nil {
 		s.log.Error("audit write failed", "err", err)
 	}
 }

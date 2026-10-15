@@ -1144,6 +1144,7 @@
     "key_invalid": "ipv64 rejected the API key (invalid or expired). Please check it in the settings.",
     "key_failed": "Linking with the API key failed: {err}",
     "key_done": "Linked with {account}.",
+    "already_linked": "This node is already linked to ipv64.",
     "key_pending": "Code redeemed. The connection follows in a few seconds.",
     "key_mismatch": "The ipv64 API key in the settings belongs to a different account ({account}, #{key}) than this link (#{link}). DynDNS and healthchecks then run under different accounts.",
     "quota": "Online checks today",

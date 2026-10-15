@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -49,11 +50,11 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	if r.ContentLength == 0 {
 		return true // leerer Body = Standardwerte
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(v); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(v); err != nil && !errors.Is(err, io.EOF) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return false
 	}
-	return true
+	return true // io.EOF: leerer Body ohne Laenge (chunked) = Standardwerte
 }
 
 // ---------------------------------------------------------------- Healthchecks-Sync
@@ -79,7 +80,7 @@ func (s *Server) apiLinkGet(w http.ResponseWriter, r *http.Request) {
 
 // apiLinkAPIKey verknuepft mit einem Klick ueber den zentralen ipv64-API-Key (wie /link/apikey).
 func (s *Server) apiLinkAPIKey(w http.ResponseWriter, r *http.Request) {
-	if s.Linker == nil || s.IPv64 == nil || s.Sync == nil {
+	if s.Sync == nil {
 		writeErr(w, http.StatusServiceUnavailable, "linking not available")
 		return
 	}
@@ -90,52 +91,25 @@ func (s *Server) apiLinkAPIKey(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	if s.Sync.State().Linked {
-		writeErr(w, http.StatusConflict, "already linked")
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
 	defer cancel()
-	key := s.IPv64.Get(ctx)
-	if key == "" {
+	linked, err := s.linkViaAPIKey(ctx, r, in.Location, in.RemoteMgmt) // gleicher Weg wie die Oberflaeche
+	switch {
+	case errors.Is(err, errLinkUnavailable):
+		writeErr(w, http.StatusServiceUnavailable, err.Error())
+	case errors.Is(err, errAlreadyLinked):
+		writeErr(w, http.StatusConflict, err.Error())
+	case errors.Is(err, errNoIPv64Key):
 		writeErr(w, http.StatusConflict, "no ipv64 api key stored (PUT /api/ipv64/key)")
-		return
+	case errors.Is(err, ipv64api.ErrUnauthorized):
+		writeErr(w, http.StatusUnauthorized, "ipv64 rejected the api key")
+	case err != nil:
+		writeErr(w, http.StatusBadGateway, err.Error())
+	case linked:
+		writeJSON(w, 200, s.linkJSON(r.Context()))
+	default:
+		writeJSON(w, http.StatusAccepted, s.linkJSON(r.Context())) // Token kommt im Hintergrund
 	}
-	loc := strings.TrimSpace(in.Location)
-	if len(loc) > 100 {
-		loc = loc[:100]
-	}
-	rm := in.RemoteMgmt
-	if rm != "off" && rm != "read" {
-		rm = "full"
-	}
-	code, _, err := s.Linker.LinkStart(ctx)
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, "link start failed: "+err.Error())
-		return
-	}
-	if err := s.IPv64.Client().LinkNode(ctx, key, code, loc, rm); err != nil {
-		s.Linker.LinkCancel()
-		if errors.Is(err, ipv64api.ErrUnauthorized) {
-			writeErr(w, http.StatusUnauthorized, "ipv64 rejected the api key")
-		} else {
-			writeErr(w, http.StatusBadGateway, "linking failed: "+err.Error())
-		}
-		return
-	}
-	s.audit(r, "sync.link_apikey", "", "remote_mgmt="+rm+" (api)")
-	for i := 0; i < 20; i++ {
-		if ok, _ := s.Linker.LinkPoll(ctx); ok {
-			s.audit(r, "sync.linked", "", "")
-			writeJSON(w, 200, s.linkJSON(r.Context()))
-			return
-		}
-		select {
-		case <-ctx.Done():
-		case <-time.After(500 * time.Millisecond):
-		}
-	}
-	writeJSON(w, http.StatusAccepted, s.linkJSON(r.Context())) // Token kommt im Hintergrund
 }
 
 func (s *Server) apiLinkUnlink(w http.ResponseWriter, r *http.Request) {
@@ -154,7 +128,7 @@ func (s *Server) apiLinkUnlink(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	s.audit(r, "sync.unlink", "", "keep_checks="+strconv.FormatBool(in.KeepChecks)+" (api)")
+	s.audit(r, "sync.unlink", "", "keep_checks="+strconv.FormatBool(in.KeepChecks))
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -204,7 +178,7 @@ func (s *Server) apiConflictResolve(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
-	s.audit(r, "sync.conflict_resolved", r.PathValue("id"), "keep="+in.Keep+" (api)")
+	s.audit(r, "sync.conflict_resolved", r.PathValue("id"), "keep="+in.Keep)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -225,7 +199,10 @@ func (s *Server) apiLinkSettings(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, 500, "database error")
 			return
 		}
-		s.audit(r, "sync.local_notifications", "", v+" (api)")
+		if s.Dispatcher != nil {
+			s.Dispatcher.SetSendServerChannels(v == "1") // sofort wirksam
+		}
+		s.audit(r, "sync.local_notifications", "", v)
 	}
 	writeJSON(w, 200, map[string]any{"local_notifications": s.Store.SettingOr(r.Context(), nodesync.SetLocalNotif, "0") == "1"})
 }
@@ -272,7 +249,7 @@ func (s *Server) apiIPv64KeyPut(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	s.audit(r, "settings.ipv64_key", "", "account="+me.Account()+" (api)")
+	s.audit(r, "settings.ipv64_key", "", "account="+me.Account())
 	s.apiIPv64Get(w, r)
 }
 
@@ -286,7 +263,7 @@ func (s *Server) apiIPv64KeyDelete(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, "database error")
 		return
 	}
-	s.audit(r, "settings.ipv64_key_removed", "", "(api)")
+	s.audit(r, "settings.ipv64_key_removed", "", "")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -334,7 +311,7 @@ func (s *Server) apiGroupCode(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, s.groupErrStatus(err), err.Error())
 		return
 	}
-	s.audit(r, "peer.code", "", "(api)")
+	s.audit(r, "peer.code", "", "")
 	writeJSON(w, 201, map[string]any{"code": code, "expires": exp})
 }
 
@@ -344,7 +321,7 @@ func (s *Server) apiGroupCodeCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Peer.CancelPairing()
-	s.audit(r, "peer.code_cancel", "", "(api)")
+	s.audit(r, "peer.code_cancel", "", "")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -376,7 +353,7 @@ func (s *Server) apiGroupJoin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, s.groupErrStatus(err), err.Error())
 		return
 	}
-	s.audit(r, "peer.join", in.Addr, "(api)")
+	s.audit(r, "peer.join", in.Addr, "")
 	s.apiGroupGet(w, r)
 }
 
@@ -391,7 +368,7 @@ func (s *Server) apiGroupLeave(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	s.audit(r, "peer.leave", "", "(api)")
+	s.audit(r, "peer.leave", "", "")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -412,10 +389,15 @@ func (s *Server) apiGroupMemberURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Peer.SetURL(r.Context(), r.PathValue("id"), in.URL); err != nil {
-		writeErr(w, http.StatusNotFound, err.Error())
+		if errors.Is(err, peer.ErrUnknownMember) {
+			writeErr(w, http.StatusNotFound, err.Error())
+			return
+		}
+		s.log.Error("peer url", "err", err)
+		writeErr(w, 500, "database error")
 		return
 	}
-	s.audit(r, "peer.url", r.PathValue("id"), in.URL+" (api)")
+	s.audit(r, "peer.url", r.PathValue("id"), in.URL)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -430,7 +412,7 @@ func (s *Server) apiGroupMemberRemove(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	s.audit(r, "peer.remove", r.PathValue("id"), "(api)")
+	s.audit(r, "peer.remove", r.PathValue("id"), "")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -441,7 +423,7 @@ func (s *Server) apiLoggingGet(w http.ResponseWriter, r *http.Request) {
 	for name, lvl := range s.Log.ModuleLevels() {
 		mods[name] = logging.LevelName(lvl)
 	}
-	writeJSON(w, 200, map[string]any{"level": logging.LevelName(s.Log.Level()), "modules": mods})
+	writeJSON(w, 200, map[string]any{"level": logging.LevelName(s.Log.Level()), "modules": mods, "known_modules": logModuleNames})
 }
 
 func (s *Server) apiLoggingPut(w http.ResponseWriter, r *http.Request) {
@@ -465,6 +447,14 @@ func (s *Server) apiLoggingPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for mod, l := range in.Modules {
+		known := false
+		for _, x := range logModuleNames {
+			known = known || x == mod
+		}
+		if !known {
+			writeErr(w, http.StatusUnprocessableEntity, fmt.Sprintf("unknown module %q (known: %s)", mod, strings.Join(logModuleNames, ", ")))
+			return
+		}
 		if l != "inherit" && !valid(l) {
 			writeErr(w, http.StatusUnprocessableEntity, "invalid level for module "+mod)
 			return
@@ -477,7 +467,7 @@ func (s *Server) apiLoggingPut(w http.ResponseWriter, r *http.Request) {
 			reset = time.Duration(in.ResetMinutes) * time.Minute
 		}
 		s.Log.SetLevel(lvl, reset)
-		s.audit(r, "logging.level", logging.LevelName(lvl), fmt.Sprintf("reset_minutes=%d (api)", in.ResetMinutes))
+		s.audit(r, "logging.level", logging.LevelName(lvl), fmt.Sprintf("reset_minutes=%d", in.ResetMinutes))
 	}
 	for mod, l := range in.Modules {
 		if l == "inherit" {
@@ -486,7 +476,7 @@ func (s *Server) apiLoggingPut(w http.ResponseWriter, r *http.Request) {
 			lvl := logging.ParseLevel(l)
 			s.Log.SetModuleLevel(mod, &lvl)
 		}
-		s.audit(r, "logging.module", mod, l+" (api)")
+		s.audit(r, "logging.module", mod, l)
 	}
 	s.apiLoggingGet(w, r)
 }
@@ -552,7 +542,7 @@ func (s *Server) apiRetentionPut(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(set) > 0 {
-		s.audit(r, "settings.data", "", fmt.Sprintf("%v (api)", set))
+		s.audit(r, "settings.data", "", fmt.Sprintf("%v", set))
 	}
 	s.apiRetentionGet(w, r)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -128,59 +129,85 @@ func (s *Server) linkStatus(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// linkAPIKey verknuepft mit einem Klick: Code beim hub holen, direkt mit dem zentralen API-Key ueber die
-// API v2 einloesen und gleich den Node-Token abholen (ohne Umweg ueber die Webseite).
-func (s *Server) linkAPIKey(w http.ResponseWriter, r *http.Request) {
-	back := func(kind, msg string) {
-		s.flash(w, r, kind, msg)
-		http.Redirect(w, r, "/link", http.StatusSeeOther)
-	}
+var (
+	errLinkUnavailable = errors.New("linking not available")
+	errAlreadyLinked   = errors.New("already linked")
+	errNoIPv64Key      = errors.New("no ipv64 api key stored")
+	errLinkStart       = errors.New("link start failed")
+)
+
+// linkViaAPIKey verknuepft mit einem Klick (Oberflaeche und API): Code beim hub holen, direkt mit dem zentralen
+// API-Key ueber die API v2 einloesen und den Node-Token kurz abwarten. linked = Token schon da (sonst kommt er im
+// Hintergrund). Fehler: errLinkUnavailable, errAlreadyLinked, errNoIPv64Key, errLinkStart (umhuellt),
+// ipv64api.ErrUnauthorized oder der Fehler beim Einloesen.
+func (s *Server) linkViaAPIKey(ctx context.Context, r *http.Request, loc, rm string) (linked bool, err error) {
 	if s.Linker == nil || s.IPv64 == nil {
-		back("danger", s.tr(r, "link.unavailable"))
-		return
+		return false, errLinkUnavailable
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
-	defer cancel()
+	if s.Sync != nil && s.Sync.State().Linked {
+		return false, errAlreadyLinked
+	}
 	key := s.IPv64.Get(ctx)
 	if key == "" {
-		back("warning", s.tr(r, "link.key_missing"))
-		return
+		return false, errNoIPv64Key
 	}
-	loc := strings.TrimSpace(r.PostFormValue("location"))
+	loc = strings.TrimSpace(loc)
 	if len(loc) > 100 {
 		loc = loc[:100]
 	}
-	rm := r.PostFormValue("remote_mgmt")
 	if rm != "off" && rm != "read" {
 		rm = "full"
 	}
 	code, _, err := s.Linker.LinkStart(ctx)
 	if err != nil {
-		back("danger", s.tr(r, "link.start_failed")+": "+err.Error())
-		return
+		return false, fmt.Errorf("%w: %v", errLinkStart, err)
 	}
 	if err := s.IPv64.Client().LinkNode(ctx, key, code, loc, rm); err != nil {
 		s.Linker.LinkCancel()
-		if errors.Is(err, ipv64api.ErrUnauthorized) {
-			back("danger", s.tr(r, "link.key_invalid"))
-		} else {
-			back("danger", s.tr(r, "link.key_failed", "err", err.Error()))
-		}
-		return
+		return false, err
 	}
 	s.audit(r, "sync.link_apikey", "", "remote_mgmt="+rm)
 	for i := 0; i < 20; i++ { // Token sofort abholen (der Hintergrund-Poll fragt zusaetzlich)
 		if ok, _ := s.Linker.LinkPoll(ctx); ok {
 			s.audit(r, "sync.linked", "", "")
-			back("success", s.tr(r, "link.key_done", "account", s.IPv64.Info(ctx).Account))
-			return
+			return true, nil
 		}
 		select {
 		case <-ctx.Done():
+			return false, nil
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
-	back("info", s.tr(r, "link.key_pending"))
+	return false, nil
+}
+
+// linkAPIKey verknuepft mit einem Klick (ohne Umweg ueber die Webseite).
+func (s *Server) linkAPIKey(w http.ResponseWriter, r *http.Request) {
+	back := func(kind, msg string) {
+		s.flash(w, r, kind, msg)
+		http.Redirect(w, r, "/link", http.StatusSeeOther)
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	linked, err := s.linkViaAPIKey(ctx, r, r.PostFormValue("location"), r.PostFormValue("remote_mgmt"))
+	switch {
+	case errors.Is(err, errLinkUnavailable):
+		back("danger", s.tr(r, "link.unavailable"))
+	case errors.Is(err, errAlreadyLinked):
+		back("info", s.tr(r, "link.already_linked"))
+	case errors.Is(err, errNoIPv64Key):
+		back("warning", s.tr(r, "link.key_missing"))
+	case errors.Is(err, errLinkStart):
+		back("danger", s.tr(r, "link.start_failed")+": "+strings.TrimPrefix(err.Error(), errLinkStart.Error()+": "))
+	case errors.Is(err, ipv64api.ErrUnauthorized):
+		back("danger", s.tr(r, "link.key_invalid"))
+	case err != nil:
+		back("danger", s.tr(r, "link.key_failed", "err", err.Error()))
+	case linked:
+		back("success", s.tr(r, "link.key_done", "account", s.IPv64.Info(ctx).Account))
+	default:
+		back("info", s.tr(r, "link.key_pending"))
+	}
 }
 
 func (s *Server) linkCancel(w http.ResponseWriter, r *http.Request) {
@@ -230,6 +257,9 @@ func (s *Server) linkSettings(w http.ResponseWriter, r *http.Request) {
 	if err := s.Store.SetSetting(r.Context(), nodesync.SetLocalNotif, v); err != nil {
 		s.fail(w, r, err)
 		return
+	}
+	if s.Dispatcher != nil {
+		s.Dispatcher.SetSendServerChannels(v == "1") // sofort wirksam, nicht erst nach einem Neustart
 	}
 	s.audit(r, "sync.local_notifications", "", v)
 	s.flash(w, r, "success", s.tr(r, "common.saved"))

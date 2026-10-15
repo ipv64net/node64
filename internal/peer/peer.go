@@ -46,6 +46,10 @@ var (
 	ErrAccountMismatch = errors.New("account mismatch")
 	ErrCode            = errors.New("code wrong or expired")
 	ErrSelf            = errors.New("cannot pair with itself")
+	// ErrUnknownMember: keine Node mit dieser Kennung in der Gruppe.
+	ErrUnknownMember = errors.New("unknown group member")
+	// errPeerHCOff: bei der anderen Node ist Healthchecks aus (dort nichts abzuholen).
+	errPeerHCOff = errors.New("healthchecks not running on that node")
 )
 
 // Member ist eine andere Node der Gruppe.
@@ -187,8 +191,14 @@ func (m *Manager) remove(ctx context.Context, nodeID string) error {
 
 // SetURL aendert die Adresse einer Node (falls sie umgezogen ist).
 func (m *Manager) SetURL(ctx context.Context, nodeID, url string) error {
-	_, err := m.db.ExecContext(ctx, `UPDATE peer_members SET url = ? WHERE node_id = ?`, trunc(strings.TrimRight(strings.TrimSpace(url), "/"), 300), nodeID)
-	return err
+	res, err := m.db.ExecContext(ctx, `UPDATE peer_members SET url = ? WHERE node_id = ?`, trunc(strings.TrimRight(strings.TrimSpace(url), "/"), 300), nodeID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrUnknownMember
+	}
+	return nil
 }
 
 func (m *Manager) seen(ctx context.Context, nodeID string, info pingInfo, err error) {
@@ -237,9 +247,6 @@ func (m *Manager) Run(ctx context.Context) {
 }
 
 func (m *Manager) pingAll(ctx context.Context) {
-	if m.checks() == nil {
-		return // Healthchecks aus: die Gruppe hat nichts abzugleichen
-	}
 	list, err := m.Members(ctx)
 	if err != nil {
 		return

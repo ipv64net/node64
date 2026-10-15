@@ -72,6 +72,9 @@ func (m *Manager) call(ctx context.Context, x Member, method, path string, in, o
 		if resp.StatusCode == http.StatusForbidden && e.Error == "account mismatch" {
 			return ErrAccountMismatch
 		}
+		if resp.StatusCode == http.StatusServiceUnavailable && e.Error == "healthchecks not running" {
+			return errPeerHCOff
+		}
 		return fmt.Errorf("HTTP %d %s", resp.StatusCode, e.Error)
 	}
 	if out != nil {
@@ -386,6 +389,9 @@ func (m *Manager) handleMembers(w http.ResponseWriter, r *http.Request, from *Me
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "account mismatch"})
 			return
 		}
+		if known, _ := m.member(ctx, op.Member.NodeID); known == nil && op.Member.NodeID != m.d.NodeID() {
+			m.auditPeer(ctx, from.Name, "peer.member_added", op.Member.Name, op.Member.URL)
+		}
 		_ = m.upsert(ctx, op.Member, from.NodeID)
 	case "remove":
 		if op.Member.NodeID == m.d.NodeID() { // diese Node wurde entfernt: Gruppe verlassen
@@ -393,6 +399,9 @@ func (m *Manager) handleMembers(w http.ResponseWriter, r *http.Request, from *Me
 			m.d.Log.Warn("removed from local group", "by", from.Name)
 			m.auditPeer(r.Context(), from.Name, "peer.removed_by", from.Name, "")
 		} else {
+			if known, _ := m.member(ctx, op.Member.NodeID); known != nil {
+				m.auditPeer(ctx, from.Name, "peer.member_removed", known.Name, "")
+			}
 			_ = m.remove(ctx, op.Member.NodeID)
 		}
 	default:

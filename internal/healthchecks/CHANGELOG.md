@@ -1,5 +1,13 @@
 # Änderungen – Healthchecks
 
+## 2.7.1 – 2026-10-15
+
+### Behoben
+- `PUT /api/online-checks/{token}`: nicht genannte Felder behalten ihren Wert bei ipv64 (wie `PUT /api/checks`),
+  statt weggelassen zu werden.
+- Audit: Einträge von Healthchecks laufen über den Kern und zeigen die Herkunft (Oberfläche oder welcher API-Key);
+  das Anlegen eines Online-Checks nennt den Token, damit spätere Einträge zuzuordnen sind.
+
 ## 2.7.0 – 2026-10-14
 
 ### Neu

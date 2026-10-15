@@ -228,7 +228,16 @@ func run() error {
 	hcModule.SetAPI(ipv64Key) // Online-Checks direkt ueber die API v2, solange kein Sync besteht
 	hcModule.SetPushForward(syncClient.ForwardPush)
 	hcModule.SetRunRemote(syncClient.RunRemote)
-	go netstat.Loop(ctx, st) // Datenverkehr des Containers fuer das Dashboard
+	netDone := make(chan struct{})
+	// Datenverkehr des Containers fuer das Dashboard; vor dem Schliessen der Datenbank (defer weiter oben) die
+	// letzte Summe schreiben lassen
+	go func() { netstat.Loop(ctx, st); close(netDone) }()
+	defer func() {
+		select {
+		case <-netDone:
+		case <-time.After(3 * time.Second):
+		}
+	}()
 	if err := syncClient.Start(ctx); err != nil {
 		log.Warn("sync start failed", "err", err)
 	}
