@@ -131,6 +131,15 @@ type Route struct {
 	// Handler bleibt nil). Count zaehlt durchgereichte Verbindungen (optional).
 	Passthrough string
 	Count       func()
+	// GetCert liefert das Zertifikat fuer diese Route bei jedem Handshake (z. B. die eigene CA von DNS64, Wechsel
+	// ohne Neuanmeldung); nil = CertID bzw. passendes Zertifikat nach Namen.
+	GetCert func(*tls.ClientHelloInfo) (*tls.Certificate, error)
+	// Fallback: die Route gilt auch fuer Anfragen, deren Name zu keiner Route gehoert (Aufruf per IP, ohne SNI),
+	// z. B. DoH unter https://<node-ip>/dns-query. Das Zertifikat dieser Route gilt dann fuer alle Aufrufe per IP
+	// (andere Pfade bekommen die Standardseite). Hoechstens ein Abnehmer darf Fallback setzen.
+	Fallback bool
+	// NoHTTP: kein Port 80 fuer diese Route (keine Weiterleitung). Gibt es nur solche Routen, bleibt 80 zu.
+	NoHTTP bool
 	// Allow begrenzt auf bestimmte Clients (echte Gegenstelle der Verbindung); alle anderen bekommen eine
 	// neutrale 404, als gaebe es den Namen nicht. nil = alle.
 	Allow func(ip netip.Addr) bool
@@ -205,8 +214,11 @@ func (e *Edge) Set(owner string, routes []Route) error {
 			}
 			names = append(names, nn)
 		}
-		if len(names) == 0 {
+		if len(names) == 0 && !rt.Fallback {
 			return errors.New("route without names")
+		}
+		if rt.Fallback && (rt.Handler == nil || rt.Passthrough != "") {
+			return errors.New("fallback route needs a handler")
 		}
 		if rt.Path != "" && !strings.HasPrefix(rt.Path, "/") {
 			return fmt.Errorf("path %q must start with /", rt.Path)
@@ -227,6 +239,12 @@ func (e *Edge) Set(owner string, routes []Route) error {
 			continue
 		}
 		for _, rt := range list {
+			for _, want := range norm {
+				if rt.Fallback && want.Fallback {
+					e.mu.Unlock()
+					return &NameTakenError{Name: "*", Owner: o} // Ersatz-Route hat schon ein anderer Abnehmer
+				}
+			}
 			for _, n := range rt.Names {
 				for _, want := range norm {
 					for _, w := range want.Names {
@@ -401,6 +419,9 @@ func (e *Edge) Status() Status {
 			for _, n := range rt.Names {
 				st.Names = append(st.Names, NameStatus{Name: n, Path: rt.Path, Owner: o})
 			}
+			if rt.Fallback {
+				st.Names = append(st.Names, NameStatus{Name: "*", Path: rt.Path, Owner: o}) // jeder andere Name, IP
+			}
 		}
 	}
 	sort.Slice(st.Names, func(i, j int) bool {
@@ -419,7 +440,7 @@ func (e *Edge) needLocked() map[string]bool {
 	anyRoute, https, h3 := len(e.tokens) > 0, false, false
 	for _, list := range e.owners {
 		for _, rt := range list {
-			anyRoute = true
+			anyRoute = anyRoute || !rt.NoHTTP
 			if rt.Handler != nil {
 				https = true
 				h3 = h3 || rt.HTTP3
@@ -575,8 +596,12 @@ func (e *Edge) quicConfig(hello *tls.ClientHelloInfo) (*tls.Config, error) {
 
 func (e *Edge) configFor(hello *tls.ClientHelloInfo, quic bool) (*tls.Config, error) {
 	name, _ := NormalizeName(hello.ServerName)
-	_, routes := e.table.Load().lookup(name)
+	t := e.table.Load()
+	_, routes := t.lookup(name)
 	rt := tlsRoute(routes)
+	if rt == nil {
+		rt = tlsRoute(t.fallback) // per IP bzw. unbekannter Name: Zertifikat der Ersatz-Route
+	}
 	if rt == nil {
 		if e.defClose.Load() {
 			return nil, errUnknownName
@@ -595,6 +620,16 @@ func (e *Edge) configFor(hello *tls.ClientHelloInfo, quic bool) (*tls.Config, er
 			return nil, errors.New("http/3 not enabled for " + name)
 		}
 		cfg.MinVersion = tls.VersionTLS13
+	}
+	if rt.GetCert != nil { // je Handshake (Zertifikat kann wechseln); ohne Ergebnis das Ersatz-Zertifikat
+		get := rt.GetCert
+		cfg.GetCertificate = func(h *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			if c, err := get(h); err == nil && c != nil {
+				return c, nil
+			}
+			return e.fallbackCert(), nil
+		}
+		return cfg, nil
 	}
 	crt := e.certFor(rt, name)
 	cfg.GetCertificate = func(*tls.ClientHelloInfo) (*tls.Certificate, error) { return crt, nil }
@@ -646,6 +681,9 @@ func (e *Edge) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	rt := pick(routes, r.URL.Path, true)
+	if rt == nil && key == "" {
+		rt = pick(t.fallback, r.URL.Path, true) // per IP bzw. unbekannter Name
+	}
 	if rt == nil {
 		e.unknown(w, r)
 		return

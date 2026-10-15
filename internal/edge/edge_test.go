@@ -424,3 +424,64 @@ func TestEdgeStopBeforeServe(t *testing.T) {
 		}
 	}
 }
+
+// Ersatz-Route (DoH per IP) mit eigenem Zertifikat; fremde Clients sehen nur 404.
+func TestEdgeFallbackAndOwnCert(t *testing.T) {
+	e, cfg := newEdge(t, nil)
+	own := selfSigned(t, "dns.lan")
+	doh := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "doh") })
+	allowLocal := true
+	if err := e.Set("dns64", []Route{{Names: []string{"dns.lan"}, Path: "/dns-query", Handler: doh, Fallback: true, NoHTTP: true, HTTP3: true,
+		GetCert: func(*tls.ClientHelloInfo) (*tls.Certificate, error) { return own, nil }, Allow: func(netip.Addr) bool { return allowLocal }}}); err != nil {
+		t.Fatal(err)
+	}
+	if running(e, "http") || !running(e, "https") || !running(e, "http3") {
+		t.Fatalf("only DoH: 443 (TCP+UDP) open, 80 closed: %+v", e.Status().Listeners)
+	}
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "app") })
+	if err := e.Set("cdn64", []Route{{Names: []string{"app.test"}, Handler: app}}); err != nil {
+		t.Fatal(err)
+	}
+	var taken *NameTakenError
+	if err := e.Set("other", []Route{{Path: "/other", Handler: doh, Fallback: true}}); !errors.As(err, &taken) || taken.Owner != "dns64" {
+		t.Fatalf("second fallback owner: %v", err)
+	}
+	if code, _, _, _ := get(t, client(cfg, false), "http://dns.lan/dns-query"); code != 404 {
+		t.Fatalf("NoHTTP route must not answer on port 80: %d", code)
+	}
+	// Aufruf per IP (kein SNI): Zertifikat der Ersatz-Route, DoH antwortet
+	conn, err := tls.Dial("tcp", "127.0.0.1:"+strconv.Itoa(cfg.HTTPSPort), &tls.Config{InsecureSkipVerify: true}) //nolint:gosec // Test
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cn := conn.ConnectionState().PeerCertificates[0].Subject.CommonName; cn != "dns.lan" {
+		t.Fatalf("fallback certificate: %q", cn)
+	}
+	conn.Close()
+	ipc := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, Timeout: 5 * time.Second} //nolint:gosec // Test
+	base := "https://127.0.0.1:" + strconv.Itoa(cfg.HTTPSPort)
+	if code, body, _, _ := get(t, ipc, base+"/dns-query"); code != 200 || body != "doh" {
+		t.Fatalf("doh via ip: %d %q", code, body)
+	}
+	if code, _, _, _ := get(t, ipc, base+"/admin"); code != 404 {
+		t.Fatalf("other path via ip: %d", code)
+	}
+	// ueber den Namen eines anderen Hosts gibt es kein DoH
+	if code, body, _, _ := get(t, client(cfg, true), "https://app.test/dns-query"); code != 200 || body != "app" {
+		t.Fatalf("proxy host keeps its path: %d %q", code, body)
+	}
+	if code, body, _, _ := get(t, client(cfg, true), "https://dns.lan/dns-query"); code != 200 || body != "doh" {
+		t.Fatalf("doh via name: %d %q", code, body)
+	}
+	allowLocal = false
+	if code, _, _, _ := get(t, ipc, base+"/dns-query"); code != 404 {
+		t.Fatalf("not allowed client: %d", code)
+	}
+	names := map[string]string{}
+	for _, n := range e.Status().Names {
+		names[n.Name+n.Path] = n.Owner
+	}
+	if names["*/dns-query"] != "dns64" {
+		t.Fatalf("status: %v", names)
+	}
+}

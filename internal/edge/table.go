@@ -17,8 +17,9 @@ import (
 
 // table ist der Stand der angemeldeten Namen zum schnellen Nachschlagen (wird bei jeder Aenderung neu gebaut).
 type table struct {
-	exact map[string][]*Route // Name -> Routen, laengster Pfad zuerst
-	wild  map[string][]*Route // Elternname ("example.com" fuer "*.example.com")
+	exact    map[string][]*Route // Name -> Routen, laengster Pfad zuerst
+	wild     map[string][]*Route // Elternname ("example.com" fuer "*.example.com")
+	fallback []*Route            // fuer Namen ohne Route (IP, kein SNI)
 }
 
 func buildTable(owners map[string][]Route) *table {
@@ -26,6 +27,9 @@ func buildTable(owners map[string][]Route) *table {
 	for _, list := range owners {
 		for i := range list {
 			rt := &list[i]
+			if rt.Fallback {
+				t.fallback = append(t.fallback, rt)
+			}
 			for _, n := range rt.Names {
 				if parent, ok := strings.CutPrefix(n, "*."); ok {
 					t.wild[parent] = append(t.wild[parent], rt)
@@ -40,6 +44,7 @@ func buildTable(owners map[string][]Route) *table {
 			sort.SliceStable(list, func(i, j int) bool { return len(list[i].Path) > len(list[j].Path) })
 		}
 	}
+	sort.SliceStable(t.fallback, func(i, j int) bool { return len(t.fallback[i].Path) > len(t.fallback[j].Path) })
 	return t
 }
 
@@ -63,7 +68,7 @@ func (t *table) lookup(name string) (key string, routes []*Route) {
 // pick waehlt die Route mit dem laengsten passenden Pfad (https: nur Routen mit HTTPS-Handler).
 func pick(routes []*Route, path string, https bool) *Route {
 	for _, rt := range routes {
-		if https && rt.Handler == nil {
+		if https && rt.Handler == nil || !https && rt.NoHTTP {
 			continue
 		}
 		if rt.Path == "" || path == rt.Path || strings.HasPrefix(path, strings.TrimSuffix(rt.Path, "/")+"/") {

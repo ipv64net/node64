@@ -421,6 +421,16 @@ anlegen“ über `healthchecks.CreateFromJSON` (Healthchecks 2.10.0).
 - DNS-Eintrag bei ipv64 beim Anlegen eines Hosts.
 
 ### C6 Zusammenführung und Abschluss
+**Absprache mit der DNS64-Sitzung (2026-10-15):**
+- Der Eingang ist von mir.
+  - Route-Felder `GetCert` (je Handshake), `Fallback` (Aufruf per IP bzw. ohne SNI; höchstens ein Abnehmer),
+    `NoHTTP` (kein Port 80) und `Allow` (echte Gegenstelle, sonst neutrale 404, für TCP, HTTP/3 und 80).
+  - Per IP liefert der Eingang das Zertifikat der Ersatz-Route, also von DNS64. Andere Pfade bekommen per IP die
+    Standardseite.
+  - Fehler beim späteren Öffnen eines Ports stehen in `Status().Listeners[].Error`.
+- DNS64 1.8.0 baut die DNS64-Sitzung selbst: `SetEdge`, DoH über den Eingang bei DoH-Port = HTTPS-Port des
+  Eingangs, Härtung der Freigabeliste, `ports.go`.
+
 - **DNS64:**
   - DoH über Edge statt eigenem Listener (DNS64 1.8.0);
   - Zertifikatsmodus „aus der Zertifikatsverwaltung“;
