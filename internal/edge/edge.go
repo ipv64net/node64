@@ -519,7 +519,12 @@ func (e *Edge) startLocked(name string) error {
 		if name == "http" {
 			srv.Handler = http.HandlerFunc(e.serveHTTP)
 			go func() { _ = srv.Serve(ln) }()
-			l.addr, l.err, l.stop = ln.Addr().String(), "", srv.Shutdown
+			l.addr, l.err = ln.Addr().String(), ""
+			l.stop = func(ctx context.Context) error {
+				err := srv.Shutdown(ctx)
+				_ = ln.Close() // Shutdown vor dem Anlaufen von Serve kennt den Listener noch nicht: Port sonst belegt
+				return err
+			}
 		} else {
 			// erst den Namen lesen (TLS durchreichen), dann an den TLS-Server
 			srv.Handler = http.HandlerFunc(e.serveHTTPS)

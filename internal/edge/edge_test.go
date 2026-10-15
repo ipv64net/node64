@@ -405,3 +405,22 @@ func TestEdgeDefaultPages(t *testing.T) {
 		t.Fatalf("load config: %+v", got)
 	}
 }
+
+// Sofort wieder abmelden (Stop, bevor Serve laeuft): der Port muss danach frei sein.
+func TestEdgeStopBeforeServe(t *testing.T) {
+	e, cfg := newEdge(t, nil)
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	for i := 0; i < 50; i++ {
+		if err := e.Set("cdn64", []Route{{Names: []string{"app.test"}, Handler: app}}); err != nil {
+			t.Fatal(err)
+		}
+		e.Remove("cdn64")
+		e.stopping.Wait()
+		if err := ports.Probe(ports.TCP, "127.0.0.1", cfg.HTTPPort); err != nil {
+			t.Fatalf("round %d: http port still bound: %v", i, err)
+		}
+		if err := ports.Probe(ports.TCP, "127.0.0.1", cfg.HTTPSPort); err != nil {
+			t.Fatalf("round %d: https port still bound: %v", i, err)
+		}
+	}
+}
