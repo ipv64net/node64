@@ -1,5 +1,14 @@
 # Änderungen – Healthchecks
 
+## 2.9.1 – 2026-10-15
+
+### Behoben
+- Lokale Gruppe: Nach „gestört“ → „teilweise gestört“ → „OK“ meldet die Gruppe „wieder erreichbar“ wie der hub
+  (die Störung bleibt bis „OK“ offen, Merker `group_open`, wird in der Gruppe ausgetauscht). Bisher kam nur
+  „teilweise Störung beendet“, das ohne „teilweise gestört melden“ unterdrückt wurde – das Ende fehlte.
+- Meldungen, die die Node selbst schickt (Gruppe, Module): Portal-Kanäle wie Webhook oder Telegram sendet die
+  Node selbst; über die ipv64-API gehen nur Mail, SMS und App (bisher Fehler 422).
+
 ## 2.9.0 – 2026-10-15
 
 ### Neu

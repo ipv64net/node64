@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/scheduler"
 	"github.com/ipv64net/node64/internal/wire"
 )
@@ -90,4 +91,30 @@ func TestGroupVerdict(t *testing.T) {
 	if got() != scheduler.StateUp {
 		t.Fatalf("no group: %s", got())
 	}
+}
+
+// Meldungen der Gruppe wie am hub: nach down -> teilweise gestoert -> up kommt "wieder erreichbar".
+func TestGroupKind(t *testing.T) {
+	type step struct {
+		to   scheduler.State
+		kind notify.Kind
+	}
+	run := func(name string, steps ...step) {
+		old, open := scheduler.StatePending, false
+		for i, s := range steps {
+			kind, o, ok := groupKind(old, s.to, open)
+			if !ok {
+				kind = ""
+			}
+			if kind != s.kind {
+				t.Errorf("%s step %d (%s -> %s): got %q want %q", name, i, old, s.to, kind, s.kind)
+			}
+			old, open = s.to, o
+		}
+	}
+	run("down degraded up", step{scheduler.StateUp, ""}, step{scheduler.StateDown, notify.KindDown}, step{scheduler.StateDegraded, notify.KindDegraded}, step{scheduler.StateUp, notify.KindUp})
+	run("degraded only", step{scheduler.StateUp, ""}, step{scheduler.StateDegraded, notify.KindDegraded}, step{scheduler.StateUp, notify.KindDegradedEnd})
+	run("down up", step{scheduler.StateUp, ""}, step{scheduler.StateDown, notify.KindDown}, step{scheduler.StateUp, notify.KindUp})
+	run("down paused up", step{scheduler.StateDown, notify.KindDown}, step{scheduler.StatePaused, ""}, step{scheduler.StateUp, notify.KindUp})
+	run("flapping", step{scheduler.StateUp, ""}, step{scheduler.StateFlapping, notify.KindFlappingStart}, step{scheduler.StateUp, notify.KindFlappingEnd})
 }

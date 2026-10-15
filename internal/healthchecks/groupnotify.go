@@ -26,6 +26,7 @@ type GroupState struct {
 	Token string    `json:"token"`
 	State string    `json:"state"`
 	Since time.Time `json:"since"`
+	Open  bool      `json:"open,omitempty"` // Stoerung offen (seit down/flapping, bis up)
 }
 
 // SetGroupRole haengt die lokale Gruppe an (nil = keine Gruppe).
@@ -55,7 +56,7 @@ func (m *Module) role(ctx context.Context, c *Check) (group, me, ready bool) {
 
 // PeerGroups liefert den Gesamtzustand der Gruppe fuer alle Checks, die diese Node mitmisst.
 func (m *Module) PeerGroups(ctx context.Context) []GroupState {
-	rows, err := m.st.r.QueryContext(ctx, `SELECT token, group_state, group_since FROM hc_checks WHERE group_state != ''`)
+	rows, err := m.st.r.QueryContext(ctx, `SELECT token, group_state, group_since, group_open FROM hc_checks WHERE group_state != ''`)
 	if err != nil {
 		return nil
 	}
@@ -64,7 +65,7 @@ func (m *Module) PeerGroups(ctx context.Context) []GroupState {
 	for rows.Next() {
 		var g GroupState
 		var since string
-		if rows.Scan(&g.Token, &g.State, &since) == nil {
+		if rows.Scan(&g.Token, &g.State, &since, &g.Open) == nil {
 			g.Since = pt(since)
 			out = append(out, g)
 		}
@@ -79,8 +80,8 @@ func (m *Module) ApplyPeerGroups(ctx context.Context, list []GroupState) {
 		if g.State == "" || g.Since.IsZero() {
 			continue
 		}
-		_, _ = m.st.w.ExecContext(ctx, `UPDATE hc_checks SET group_state = ?, group_since = ? WHERE token = ? AND (group_since = '' OR group_since < ?)`,
-			g.State, ft(g.Since), g.Token, ft(g.Since))
+		_, _ = m.st.w.ExecContext(ctx, `UPDATE hc_checks SET group_state = ?, group_since = ?, group_open = ? WHERE token = ? AND (group_since = '' OR group_since < ?)`,
+			g.State, ft(g.Since), g.Open, g.Token, ft(g.Since))
 	}
 }
 
@@ -171,8 +172,11 @@ func (m *Module) groupVerdict(ctx context.Context, c *Check) {
 	if overall == old || overall == scheduler.StatePending {
 		return // unveraendert bzw. noch keine Messung
 	}
+	var wasOpen bool
+	_ = m.st.r.QueryRowContext(ctx, `SELECT group_open FROM hc_checks WHERE token = ?`, c.Token).Scan(&wasOpen)
+	kind, open, send := groupKind(old, overall, wasOpen)
 	now := time.Now().UTC()
-	_, _ = m.st.w.ExecContext(ctx, `UPDATE hc_checks SET group_state = ?, group_since = ? WHERE token = ?`, string(overall), ft(now), c.Token)
+	_, _ = m.st.w.ExecContext(ctx, `UPDATE hc_checks SET group_state = ?, group_since = ?, group_open = ? WHERE token = ?`, string(overall), ft(now), open, c.Token)
 	if overall == scheduler.StateUp {
 		m.mu.Lock()
 		delete(m.reminders, c.Token)
@@ -182,21 +186,7 @@ func (m *Module) groupVerdict(ctx context.Context, c *Check) {
 	if m.dispatcher == nil {
 		return
 	}
-	var kind notify.Kind
-	switch {
-	case overall == scheduler.StateDown:
-		kind = notify.KindDown
-	case overall == scheduler.StateFlapping:
-		kind = notify.KindFlappingStart
-	case overall == scheduler.StateDegraded:
-		kind = notify.KindDegraded
-	case overall == scheduler.StateUp && old == scheduler.StateFlapping:
-		kind = notify.KindFlappingEnd
-	case overall == scheduler.StateUp && old == scheduler.StateDown:
-		kind = notify.KindUp
-	case overall == scheduler.StateUp && old == scheduler.StateDegraded:
-		kind = notify.KindDegradedEnd
-	default:
+	if !send {
 		return // erster Zustand, aus Pause usw.: kein Anlass
 	}
 	// bestimmende Messstelle: bei Stoerung eine gestoerte, sonst die zuletzt gemessene
@@ -222,4 +212,33 @@ func (m *Module) groupVerdict(ctx context.Context, c *Check) {
 		a.Duration = now.Sub(oldSince)
 	}
 	m.dispatcher.Dispatch(a)
+}
+
+// groupKind leitet aus dem Wechsel des Gesamtzustands die Meldung ab, wie der hub (eventKind): "down" und
+// "flapping" oeffnen eine Stoerung, "teilweise gestoert" und Pause halten sie offen, erst "up" beendet sie und
+// wird dann als "wieder erreichbar" gemeldet (auch nach down -> teilweise gestoert -> up).
+func groupKind(old, overall scheduler.State, wasOpen bool) (kind notify.Kind, open, ok bool) {
+	open = wasOpen
+	switch overall {
+	case scheduler.StateDown, scheduler.StateFlapping:
+		open = true
+	case scheduler.StateDegraded, scheduler.StatePaused:
+	default:
+		open = false
+	}
+	switch {
+	case overall == scheduler.StateDown:
+		return notify.KindDown, open, true
+	case overall == scheduler.StateFlapping:
+		return notify.KindFlappingStart, open, true
+	case overall == scheduler.StateDegraded:
+		return notify.KindDegraded, open, true
+	case overall == scheduler.StateUp && old == scheduler.StateFlapping:
+		return notify.KindFlappingEnd, open, true
+	case overall == scheduler.StateUp && (old == scheduler.StateDown || wasOpen):
+		return notify.KindUp, open, true
+	case overall == scheduler.StateUp && old == scheduler.StateDegraded:
+		return notify.KindDegradedEnd, open, true
+	}
+	return "", open, false
 }
