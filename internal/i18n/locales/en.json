@@ -194,7 +194,8 @@
   "cdn64": {
     "title": "CDN64 · Reverse proxy",
     "tab": {
-      "hosts": "Proxy hosts"
+      "hosts": "Proxy hosts",
+      "certs": "SSL certificates"
     },
     "new": "Add proxy host",
     "edit": "Edit proxy host",
@@ -262,7 +263,9 @@
       "http3": "HTTP/3 (QUIC)",
       "http3_hint": "Needs 443/UDP on the router and the switch in the common entrance.",
       "min_tls": "Minimum",
-      "min_tls_hint": "TLS 1.3 is current; 1.2 for older devices."
+      "min_tls_hint": "TLS 1.3 is current; 1.2 for older devices.",
+      "cert_new": "Request a new certificate right away",
+      "cert_new_hint": "For all domains of this host; the request runs in the background after saving."
     },
     "err": {
       "name": "Invalid domain name.",
@@ -283,6 +286,103 @@
       "down": "Targets not reachable",
       "requests": "Requests since start",
       "certs_soon": "Certificates < 14 days"
+    },
+    "certs": {
+      "title": "SSL certificates",
+      "new": "Add certificate",
+      "empty": "No certificates yet. For domains at ipv64, Node64 gets them from Let's Encrypt via the API key.",
+      "col": {
+        "names": "Names",
+        "source": "Method",
+        "valid": "Valid until",
+        "used": "Used by",
+        "renew": "Renewal"
+      },
+      "source": {
+        "ipv64": "ipv64 DNS",
+        "alias": "Alias (CNAME)",
+        "http": "HTTP-01",
+        "upload": "own"
+      },
+      "step": {
+        "queued": "waiting …",
+        "cname": "checking CNAME …",
+        "account": "account …",
+        "order": "order …",
+        "txt": "TXT record at ipv64 …",
+        "dns": "waiting for the name servers …",
+        "http": "HTTP check …",
+        "validate": "Let's Encrypt validates …",
+        "certificate": "issuing …"
+      },
+      "none_yet": "none yet",
+      "manual": "manual",
+      "auto": "automatic",
+      "off": "off",
+      "toggle_renew": "Toggle automatic renewal",
+      "renew": "Renew now",
+      "download": "Download certificate with chain (without key)",
+      "delete_confirm": "Delete certificate \"{name}\"?",
+      "delete_used": "Certificate \"{name}\" is used by: {hosts}. Delete anyway? These hosts will no longer have a valid certificate.",
+      "deleted": "Certificate \"{name}\" deleted.",
+      "cname_needed": "Required CNAME records at the domain's provider",
+      "hint": "Renewal is automatic 30 days before expiry; on errors and 14 or 3 days before expiry the default channels get a message. Keys are stored encrypted in the database.",
+      "account": "Let's Encrypt account",
+      "email": "Email (optional)",
+      "email_hint": "Let's Encrypt only writes about problems with certificates.",
+      "tos_accept": "I accept the Let's Encrypt terms of service",
+      "tos_link": "(read)",
+      "tos_accepted": "Terms of service accepted on {date}",
+      "dns_ready": "ipv64 API key set (DNS-01 possible)",
+      "dns_missing": "No ipv64 API key: DNS-01 via ipv64 needs a key.",
+      "http_ready": "HTTP-01 via port 80 of the common entrance",
+      "le_title": "Let's Encrypt",
+      "names_hint": "One per line, wildcards too (*.example.ipv64.de, DNS only). At most 100 names.",
+      "method": "How to get the certificate",
+      "src": {
+        "auto": "Automatic",
+        "ipv64": "ipv64 DNS-01",
+        "alias": "Alias via ipv64",
+        "http": "HTTP-01"
+      },
+      "src_hint": {
+        "auto": "ipv64 DNS-01 if all names are in the ipv64 account, otherwise HTTP-01.",
+        "ipv64": "for domains in the ipv64 account; wildcards too, port 80 need not be open.",
+        "alias": "for domains at other providers: set a CNAME once, ipv64 does the rest – no provider credentials needed.",
+        "http": "port 80 must reach this node from outside; no wildcards."
+      },
+      "your_domains": "Your ipv64 domains:",
+      "alias_zone": "Target domain at ipv64",
+      "alias_prefix": "Prefix (optional)",
+      "alias_hint": "Create this CNAME for each name at your provider. Node64 checks it before the request.",
+      "staging": "Test environment (staging)",
+      "staging_hint": "For trying things out without rate limits; no browser trusts such certificates.",
+      "request": "Request certificate",
+      "upload_title": "Upload own certificate",
+      "upload_hint": "Certificate with chain and the matching private key, as PEM (file or pasted).",
+      "upload_cert": "Certificate (with chain)",
+      "upload_key": "Private key",
+      "upload_safe": "The key is stored encrypted and never shown again.",
+      "upload": "Upload",
+      "requested": "Certificate for {name} is being requested.",
+      "uploaded": "Certificate for {name} saved.",
+      "renewing": "Certificate for {name} is being renewed.",
+      "host_saved_cert": "Saved. Certificate for {name} is being requested.",
+      "host_saved_no_cert": "Host saved, but no certificate requested: {error}",
+      "err": {
+        "names": "Check the names",
+        "source": "Check the method",
+        "alias_zone": "Check the target domain",
+        "alias_prefix": "Check the prefix",
+        "cert": "Check the certificate",
+        "key": "Check the key",
+        "tos": "Please accept the Let's Encrypt terms of service first.",
+        "nokey": "This method needs the ipv64 API key (settings).",
+        "in_use": "The certificate is still in use.",
+        "busy": "This certificate is being requested right now.",
+        "upload_renew": "Own certificates cannot be renewed.",
+        "email": "Invalid email address."
+      }
     }
   },
   "ports": {

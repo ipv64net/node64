@@ -192,6 +192,7 @@ Das Modul *CDN64* (in den Einstellungen einschalten) ersetzt den Nginx Proxy Man
 - **SSL:**
   - Zertifikat aus der Zertifikatsverwaltung, passend nach Namen oder fest gewählt, oder nur HTTP;
   - HTTPS erzwingen, HSTS (auch für Subdomains), HTTP/2, HTTP/3, mindestens TLS 1.2 oder 1.3.
+- **SSL-Zertifikate (Reiter):** Liste mit Ablauf, „benutzt von“ und automatischer Erneuerung; anfordern bei Let's Encrypt automatisch, per ipv64 DNS-01, Alias über ipv64 (die Seite zeigt die nötigen CNAMEs) oder HTTP-01; eigene Zertifikate hochladen; Mail und Nutzungsbedingungen von Let's Encrypt. Im Host-Formular lässt sich ein Zertifikat gleich mit anfordern (API: `request_certificate`).
 - **Erreichbarkeit:** Jedes Ziel wird jede Minute geprüft (TCP und eine kurze HEAD-Anfrage), die Liste zeigt die Antwortzeit bzw. „nicht erreichbar seit …“. Besucher eines nicht erreichbaren Ziels bekommen eine neutrale Seite 502. Ein Ziel, das auf den Proxy selbst zeigt, beantwortet er mit 508.
 - **API:** `GET /api/cdn64/status`, `POST /api/cdn64/check`, `GET|POST /api/cdn64/hosts`, `GET|PUT|DELETE /api/cdn64/hosts/{id}`, `POST /api/cdn64/hosts/{id}/enable|disable`.
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/certs"
 	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/module"
 )
@@ -93,6 +94,29 @@ func (m *Module) apiRow(w http.ResponseWriter, r *http.Request, id int64, status
 	writeErr(w, http.StatusNotFound, "host not found")
 }
 
+// apiRowCert: wie apiRow, dazu der Fehler beim Anfordern des Zertifikats (Host ist trotzdem gespeichert).
+func (m *Module) apiRowCert(w http.ResponseWriter, r *http.Request, id int64, status int, certErr string) {
+	if certErr == "" {
+		m.apiRow(w, r, id, status)
+		return
+	}
+	rows, err := m.rows(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	for _, x := range rows {
+		if x.ID == id {
+			writeJSON(w, status, struct {
+				apiHost
+				CertificateError string `json:"certificate_error"`
+			}{toAPI(x), certErr})
+			return
+		}
+	}
+	writeErr(w, http.StatusNotFound, "host not found")
+}
+
 func pathID(r *http.Request) int64 {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	return id
@@ -102,13 +126,46 @@ func (m *Module) apiGet(w http.ResponseWriter, r *http.Request) {
 	m.apiRow(w, r, pathID(r), http.StatusOK)
 }
 
-// decode liest JSON in h (fehlende Felder behalten ihren Wert).
-func decode(w http.ResponseWriter, r *http.Request, h *Host) bool {
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(h); err != nil && !errors.Is(err, io.EOF) {
+// certRequest: Zertifikat beim Speichern gleich mit anfordern (optional).
+type certRequest struct {
+	Source      string `json:"source"` // auto (Standard), ipv64, alias, http
+	AliasZone   string `json:"alias_zone"`
+	AliasPrefix string `json:"alias_prefix"`
+	Staging     bool   `json:"staging"`
+}
+
+// decode liest JSON in h (fehlende Felder behalten ihren Wert), dazu request_certificate.
+func decode(w http.ResponseWriter, r *http.Request, h *Host) (*certRequest, bool) {
+	in := struct {
+		*Host
+		RequestCertificate *certRequest `json:"request_certificate"`
+	}{Host: h}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&in); err != nil && !errors.Is(err, io.EOF) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
-		return false
+		return nil, false
 	}
-	return true
+	return in.RequestCertificate, true
+}
+
+// afterSave fordert ein Zertifikat an, wenn gewuenscht; Fehler stehen in der Antwort (der Host ist gespeichert).
+func (m *Module) afterSave(r *http.Request, h *Host, req *certRequest) string {
+	if req == nil || m.certs == nil {
+		return ""
+	}
+	c, err := m.requestCert(r.Context(), h.Names, req.Source, req.AliasZone, req.AliasPrefix, req.Staging)
+	if err != nil {
+		return certErrText(err)
+	}
+	m.auditCert(r, c)
+	return ""
+}
+
+func certErrText(err error) string {
+	var ve *certs.ValidationError
+	if errors.As(err, &ve) {
+		return ve.Field + ": " + ve.Msg
+	}
+	return err.Error()
 }
 
 func (m *Module) apiFail(w http.ResponseWriter, err error) {
@@ -129,7 +186,8 @@ func (m *Module) apiFail(w http.ResponseWriter, err error) {
 
 func (m *Module) apiCreate(w http.ResponseWriter, r *http.Request) {
 	h := newHost()
-	if !decode(w, r, h) {
+	req, ok := decode(w, r, h)
+	if !ok {
 		return
 	}
 	h.ID = 0
@@ -138,7 +196,7 @@ func (m *Module) apiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.g.Audit(r, "cdn64.host.create", strings.Join(h.Names, ","), h.summary())
-	m.apiRow(w, r, h.ID, http.StatusCreated)
+	m.apiRowCert(w, r, h.ID, http.StatusCreated, m.afterSave(r, h, req))
 }
 
 func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
@@ -148,7 +206,8 @@ func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := h.ID
-	if !decode(w, r, h) {
+	req, ok := decode(w, r, h)
+	if !ok {
 		return
 	}
 	h.ID = id
@@ -157,7 +216,7 @@ func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.g.Audit(r, "cdn64.host.update", strings.Join(h.Names, ","), h.summary())
-	m.apiRow(w, r, h.ID, http.StatusOK)
+	m.apiRowCert(w, r, h.ID, http.StatusOK, m.afterSave(r, h, req))
 }
 
 func (m *Module) apiDelete(w http.ResponseWriter, r *http.Request) {

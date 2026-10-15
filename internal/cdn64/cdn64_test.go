@@ -35,6 +35,7 @@ import (
 )
 
 type env struct {
+	mux  *http.ServeMux
 	m    *Module
 	reg  *module.Registry
 	edge *edge.Edge
@@ -102,7 +103,7 @@ func newEnv(t *testing.T) *env {
 		Translate: func(_, key string, _ ...any) string { return key }})
 	reg.StartEnabled(ctx)
 	t.Cleanup(reg.StopAll)
-	return &env{m: m, reg: reg, edge: e, cfg: cfg, crt: cm2, st: st}
+	return &env{mux: mux, m: m, reg: reg, edge: e, cfg: cfg, crt: cm2, st: st}
 }
 
 func (e *env) enable(t *testing.T) {
@@ -407,5 +408,39 @@ func TestExploitRules(t *testing.T) {
 	r.Header.Set("User-Agent", "libwww-perl/6.0")
 	if !blocked(r) {
 		t.Error("bad user agent must be blocked")
+	}
+}
+
+// Host per API mit "Zertifikat gleich mit anfordern": der Host wird gespeichert, ein Fehler beim Anfordern steht
+// in der Antwort (hier: ohne Eingang fuer HTTP-01 und ohne ipv64-Key).
+func TestHostAPIRequestCertificate(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.enable(t)
+	post := func(body string) (int, map[string]any) {
+		req := httptest.NewRequest("POST", "/api/cdn64/hosts", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+		e.mux.ServeHTTP(rec, req)
+		var out map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return rec.Code, out
+	}
+	code, out := post(`{"names":["a.test"],"target_host":"127.0.0.1","target_port":9,"request_certificate":{"source":"http"}}`)
+	if ce, _ := out["certificate_error"].(string); code != 201 || !strings.Contains(ce, "http-01 not available") {
+		t.Fatalf("http-01 without entrance: %d %v", code, out)
+	}
+	if err := e.crt.SetAccount(ctx, "", true); err != nil {
+		t.Fatal(err)
+	}
+	code, out = post(`{"names":["b.test"],"target_host":"127.0.0.1","target_port":9,"request_certificate":{"source":"auto"}}`)
+	if ce, _ := out["certificate_error"].(string); code != 201 || !strings.Contains(ce, "http-01") {
+		t.Fatalf("auto without ipv64 key and without http-01: %d %v", code, out)
+	}
+	code, out = post(`{"names":["c.test"],"target_host":"127.0.0.1","target_port":9}`)
+	if _, has := out["certificate_error"]; code != 201 || has {
+		t.Fatalf("plain create: %d %v", code, out)
+	}
+	if e.m.autoSource(ctx, []string{"x.test"}) != certs.SourceHTTP {
+		t.Fatal("without ipv64 key: http-01")
 	}
 }

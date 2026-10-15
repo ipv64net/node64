@@ -1,5 +1,25 @@
 # Änderungen – CDN64
 
+## 1.1.0 – 2026-10-15
+
+Reiter SSL-Zertifikate.
+
+### Neu
+- Liste aller Zertifikate:
+  - Namen, Weg, Aussteller;
+  - Ablauf als Pille (grün, ab 30 Tagen vor Ablauf gelb, ab 7 Tagen rot) mit Datum;
+  - benutzt von welchen Hosts, automatische Erneuerung an/aus;
+  - Erneuern, Herunterladen (ohne Schlüssel), Löschen (benutzte nur nach Rückfrage);
+  - der laufende Schritt beim Abruf, die Seite lädt dabei selbst neu.
+- Zertifikat anfordern bei Let's Encrypt:
+  - automatisch (ipv64, wenn alle Namen im Account liegen, sonst HTTP-01) oder gezielt per ipv64 DNS-01 (auch Wildcards);
+  - Alias über ipv64 für fremde Domains, mit Vorschau der nötigen CNAME-Einträge;
+  - per HTTP-01;
+  - Testumgebung wählbar.
+- Eigenes Zertifikat hochladen (Datei oder hineinkopieren).
+- Let's-Encrypt-Konto: Mail und Zustimmung zu den Nutzungsbedingungen.
+- Host-Formular: „Neues Zertifikat gleich mit anfordern“; in der API über `request_certificate` beim Anlegen oder Ändern eines Hosts.
+
 ## 1.0.0 – 2026-10-15
 
 Erste Version des Reverse-Proxys, angelehnt an den Nginx Proxy Manager.

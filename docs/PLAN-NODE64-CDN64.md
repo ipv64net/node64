@@ -370,6 +370,11 @@ beim Öffnen eines Ports (die Prüfung fragt den eigenen Teil nicht mehr ab).
 - Audit und API für alles Obige.
 
 ### C2 Reiter SSL-Zertifikate
+**Fertig (2026-10-15, CDN64 1.1.0):** Seiten `/cdn64/certificates` (Liste, Konto), `/cdn64/certificates/new` (Let's Encrypt
+mit Weg „automatisch“, ipv64, Alias mit CNAME-Vorschau, HTTP-01, Staging; Hochladen), Erneuern/Herunterladen/Löschen,
+„Zertifikat gleich mit anfordern“ im Host-Formular und per API (`request_certificate`). Ein echter Abruf bei Let's
+Encrypt ist noch nicht gemacht (erst nach Dennis' OK).
+
 - **Seite:**
   - Liste mit Ablauf-Pillen und „benutzt von“;
   - Anfordern (ipv64 DNS-01 mit automatischer Erkennung, ipv64 Alias mit CNAME-Prüfung, HTTP-01), Hochladen,

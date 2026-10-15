@@ -631,6 +631,12 @@ func (m *Manager) Renew(ctx context.Context, id int64) error {
 	return m.start(id, "manual")
 }
 
+// DNSReady: DNS-01 ueber ipv64 ist moeglich (API-Key eingetragen), ohne Abruf bei ipv64.
+func (m *Manager) DNSReady(ctx context.Context) bool { return m.d.DNS != nil && m.d.DNS.Ready(ctx) }
+
+// HTTPReady: HTTP-01 ueber den gemeinsamen Eingang ist moeglich.
+func (m *Manager) HTTPReady() bool { return m.d.HTTP != nil }
+
 // Domains: ipv64-Domains des Accounts (Auswahl in der Oberflaeche).
 func (m *Manager) Domains(ctx context.Context) ([]string, error) {
 	if m.d.DNS == nil || !m.d.DNS.Ready(ctx) {

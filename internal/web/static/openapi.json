@@ -1885,6 +1885,31 @@
           "verify_target": {
             "type": "boolean",
             "description": "Zertifikat eines https-Ziels prüfen (Standard aus)"
+          },
+          "request_certificate": {
+            "type": "object",
+            "description": "Optional: gleich ein Zertifikat für alle Domains anfordern (läuft im Hintergrund). Scheitert das, ist der Host trotzdem gespeichert und die Antwort enthält certificate_error.",
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "ipv64",
+                  "alias",
+                  "http"
+                ],
+                "description": "auto: ipv64, wenn alle Namen im Account liegen, sonst http"
+              },
+              "alias_zone": {
+                "type": "string"
+              },
+              "alias_prefix": {
+                "type": "string"
+              },
+              "staging": {
+                "type": "boolean"
+              }
+            }
           }
         },
         "description": "Fehlende Felder: beim Anlegen Standardwerte (eingeschaltet, http, Port 80, WebSockets, HTTP/2, HTTP/3, TLS 1.2), beim Ändern bleiben sie."
@@ -2044,6 +2069,10 @@
           "route_error": {
             "type": "string",
             "description": "Name gehört einem anderen Teil (z. B. DNS64)"
+          },
+          "certificate_error": {
+            "type": "string",
+            "description": "nur nach request_certificate, wenn das Anfordern nicht ging"
           }
         }
       }

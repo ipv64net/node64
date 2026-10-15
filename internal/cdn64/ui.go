@@ -27,6 +27,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /cdn64/hosts/{id}/delete", page(m.pageDelete))
 	mux.Handle("POST /cdn64/hosts/{id}/enable", page(m.pageToggle))
 	mux.Handle("POST /cdn64/hosts/{id}/disable", page(m.pageToggle))
+	m.certRoutes(mux, page)
 }
 
 // tab ist ein Reiter des Moduls.
@@ -36,7 +37,8 @@ type tab struct {
 }
 
 func tabs(active string) []tab {
-	t := []tab{{Path: "/cdn64", Icon: "bi-arrow-left-right", TitleKey: "cdn64.tab.hosts"}}
+	t := []tab{{Path: "/cdn64", Icon: "bi-arrow-left-right", TitleKey: "cdn64.tab.hosts"},
+		{Path: "/cdn64/certificates", Icon: "bi-shield-lock", TitleKey: "cdn64.tab.certs"}}
 	for i := range t {
 		t[i].Active = t[i].Path == active
 	}
@@ -164,12 +166,13 @@ func (m *Module) pageCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 type formData struct {
-	Tabs   []tab
-	Host   *Host
-	Names  string
-	Certs  []*certs.Cert
-	New    bool
-	Errors map[string]string
+	Tabs    []tab
+	Host    *Host
+	Names   string
+	Certs   []*certs.Cert
+	New     bool
+	NewCert bool // "Zertifikat gleich mit anfordern" gewaehlt (nach einem Fehler im Formular)
+	Errors  map[string]string
 }
 
 func (m *Module) form(ctx context.Context, h *Host, isNew bool) formData {
@@ -237,6 +240,7 @@ func (m *Module) saveForm(w http.ResponseWriter, r *http.Request, h *Host, isNew
 	if err := m.saveHost(ctx, h); err != nil {
 		d := m.form(ctx, h, isNew)
 		d.Names = strings.Join(names, "\n")
+		d.NewCert = r.PostFormValue("cert_id") == "new"
 		var fe *FieldError
 		if errors.As(err, &fe) {
 			d.Errors[fe.Field] = m.g.T(r, fe.Key, "name", fe.Name)
@@ -255,6 +259,18 @@ func (m *Module) saveForm(w http.ResponseWriter, r *http.Request, h *Host, isNew
 		action = "cdn64.host.create"
 	}
 	m.g.Audit(r, action, strings.Join(h.Names, ","), h.summary())
+	if r.PostFormValue("cert_id") == "new" && m.certs != nil { // Zertifikat gleich mit anfordern
+		c, err := m.requestCert(ctx, h.Names, r.PostFormValue("cert_source"), "", "", false)
+		if err != nil {
+			m.g.Flash(w, r, "warning", m.g.T(r, "cdn64.certs.host_saved_no_cert", "error", m.certError(r, err)))
+			http.Redirect(w, r, "/cdn64", http.StatusSeeOther)
+			return
+		}
+		m.auditCert(r, c)
+		m.g.Flash(w, r, "success", m.g.T(r, "cdn64.certs.host_saved_cert", "name", c.Title()))
+		http.Redirect(w, r, "/cdn64", http.StatusSeeOther)
+		return
+	}
 	m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
 	http.Redirect(w, r, "/cdn64", http.StatusSeeOther)
 }
