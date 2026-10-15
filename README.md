@@ -168,12 +168,32 @@ Das Modul *DNS64* (in den Einstellungen einschalten) ist ein cachender DNS-Serve
 
 ## Ports, gemeinsamer Eingang und Zertifikate
 
-Diese Teile gehören zum Kern und werden von Modulen genutzt, zuerst vom kommenden Reverse-Proxy CDN64.
+Diese Teile gehören zum Kern und werden von Modulen genutzt, zuerst vom Reverse-Proxy CDN64.
 
 - **Ports:** *Einstellungen → Ports* zeigt, welche Ports die Oberfläche, DNS64 und der Eingang belegen bzw. belegen wollen, und meldet Überschneidungen. `GET /api/ports/probe?proto=tcp&port=443` prüft, ob ein Port auf dem Host frei ist.
 - **Gemeinsamer Eingang:** HTTP (80) und HTTPS (443, auch HTTP/3 über 443/UDP) öffnet nur der Kern, und nur solange ein Modul sie braucht. Module melden dort ihre Namen an; verteilt wird nach dem Namen der TLS-Verbindung (SNI) und dem Host-Kopf, unbekannte Namen bekommen eine neutrale 404 (oder die Verbindung wird geschlossen). So teilen sich mehrere Module die Ports 80/443 in einem Container. Die Ports sind einstellbar, z. B. wenn der Router 443 auf 8443 weiterleitet (dann „HTTPS-Port von außen“ = 443).
 - **Zertifikate:** Let's Encrypt für Namen im ipv64-Account per DNS-01 über den API-Key (auch Wildcards, Port 80 muss nicht offen sein), für fremde Domains per CNAME `_acme-challenge.<name>` → `_acme-challenge.<präfix>.<ipv64-domain>` (keine Zugangsdaten des fremden Anbieters nötig), per HTTP-01 über Port 80 oder als eigenes Zertifikat zum Hochladen. Schlüssel liegen verschlüsselt in der Datenbank (im Backup enthalten). Erneuert wird 30 Tage vor Ablauf, solange ein Modul die Zertifikate nutzt; bei Fehlern und 14 bzw. 3 Tage vor Ablauf gibt es eine Meldung an die Standardkanäle.
 - **API:** `GET /api/ports`, `GET|PUT /api/edge`, `GET|POST /api/certs`, `POST /api/certs/upload`, `GET|PUT /api/certs/account`, `GET /api/certs/domains`, `GET|PUT|DELETE /api/certs/{id}`, `POST /api/certs/{id}/renew`, `GET /api/certs/{id}/chain`.
+
+## CDN64 (Reverse-Proxy)
+
+Das Modul *CDN64* (in den Einstellungen einschalten) ersetzt den Nginx Proxy Manager: Proxy-Hosts leiten Anfragen für eine Domain an einen Dienst im Heimnetz weiter. Es braucht kein nginx, Node64 macht das selbst (HTTP/1.1, HTTP/2, HTTP/3). Ausgeschaltet läuft nichts und der gemeinsame Eingang schließt seine Ports.
+
+- **Einrichten:** Im Router 80 und 443 (TCP, für HTTP/3 auch 443/UDP) auf die Node weiterleiten; die Domain per DNS auf den Anschluss zeigen lassen (z. B. CNAME auf die DynDNS-Domain). Die Ports teilt sich CDN64 über den gemeinsamen Eingang mit anderen Modulen (siehe oben).
+- **Proxy-Hosts:**
+  - mehrere Domains je Host, auch Wildcards;
+  - Ziel per http oder https, als Name oder IP mit Port;
+  - das Ziel bekommt den ursprünglichen Host-Namen sowie `X-Forwarded-For/-Proto/-Host` und `X-Real-IP`, und zwar nur von der echten Gegenstelle;
+  - das Zertifikat eines https-Ziels wird wie beim NPM nicht geprüft (je Host einschaltbar).
+- **Optionen:**
+  - WebSockets;
+  - Block Common Exploits: Regeln wie beim NPM, dazu `.git`/`.env`, Antwort 403;
+  - Cache Assets: Bilder, CSS, JS und Schriften im Speicher, zusammen höchstens 64 MB.
+- **SSL:**
+  - Zertifikat aus der Zertifikatsverwaltung, passend nach Namen oder fest gewählt, oder nur HTTP;
+  - HTTPS erzwingen, HSTS (auch für Subdomains), HTTP/2, HTTP/3, mindestens TLS 1.2 oder 1.3.
+- **Erreichbarkeit:** Jedes Ziel wird jede Minute geprüft (TCP und eine kurze HEAD-Anfrage), die Liste zeigt die Antwortzeit bzw. „nicht erreichbar seit …“. Besucher eines nicht erreichbaren Ziels bekommen eine neutrale Seite 502. Ein Ziel, das auf den Proxy selbst zeigt, beantwortet er mit 508.
+- **API:** `GET /api/cdn64/status`, `POST /api/cdn64/check`, `GET|POST /api/cdn64/hosts`, `GET|PUT|DELETE /api/cdn64/hosts/{id}`, `POST /api/cdn64/hosts/{id}/enable|disable`.
 
 ## Betrieb
 

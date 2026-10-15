@@ -39,6 +39,10 @@
     {
       "name": "DNS64",
       "description": "Lokaler DNS-Resolver mit Blocklisten (Modul DNS64). Ist das Modul aus: 404; laeuft der DNS-Dienst nicht (z. B. Port belegt): 503."
+    },
+    {
+      "name": "CDN64",
+      "description": "Reverse-Proxy (Modul CDN64): Proxy-Hosts über den gemeinsamen Eingang, Erreichbarkeit der Ziele. Nur bei eingeschaltetem Modul."
     }
   ],
   "security": [
@@ -1812,6 +1816,234 @@
           },
           "tos_url": {
             "type": "string"
+          }
+        }
+      },
+      "ProxyHostInput": {
+        "type": "object",
+        "properties": {
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Domain, auch *.domain"
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "scheme": {
+            "type": "string",
+            "enum": [
+              "http",
+              "https"
+            ],
+            "description": "Schema des Ziels"
+          },
+          "target_host": {
+            "type": "string",
+            "description": "Name oder IP des Ziels"
+          },
+          "target_port": {
+            "type": "integer"
+          },
+          "websockets": {
+            "type": "boolean"
+          },
+          "block_exploits": {
+            "type": "boolean"
+          },
+          "cache_assets": {
+            "type": "boolean"
+          },
+          "cert_id": {
+            "type": "integer",
+            "description": "0 = passendes Zertifikat nach Namen, -1 = nur HTTP, sonst Kennung aus /certs"
+          },
+          "force_ssl": {
+            "type": "boolean"
+          },
+          "http2": {
+            "type": "boolean"
+          },
+          "http3": {
+            "type": "boolean"
+          },
+          "hsts": {
+            "type": "boolean"
+          },
+          "hsts_subdomains": {
+            "type": "boolean"
+          },
+          "min_tls": {
+            "type": "string",
+            "enum": [
+              "1.2",
+              "1.3"
+            ]
+          },
+          "verify_target": {
+            "type": "boolean",
+            "description": "Zertifikat eines https-Ziels prüfen (Standard aus)"
+          }
+        },
+        "description": "Fehlende Felder: beim Anlegen Standardwerte (eingeschaltet, http, Port 80, WebSockets, HTTP/2, HTTP/3, TLS 1.2), beim Ändern bleiben sie."
+      },
+      "ProxyHost": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "proxy"
+            ]
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Domain, auch *.domain"
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "scheme": {
+            "type": "string",
+            "enum": [
+              "http",
+              "https"
+            ],
+            "description": "Schema des Ziels"
+          },
+          "target_host": {
+            "type": "string",
+            "description": "Name oder IP des Ziels"
+          },
+          "target_port": {
+            "type": "integer"
+          },
+          "websockets": {
+            "type": "boolean"
+          },
+          "block_exploits": {
+            "type": "boolean"
+          },
+          "cache_assets": {
+            "type": "boolean"
+          },
+          "cert_id": {
+            "type": "integer",
+            "description": "0 = passendes Zertifikat nach Namen, -1 = nur HTTP, sonst Kennung aus /certs"
+          },
+          "force_ssl": {
+            "type": "boolean"
+          },
+          "http2": {
+            "type": "boolean"
+          },
+          "http3": {
+            "type": "boolean"
+          },
+          "hsts": {
+            "type": "boolean"
+          },
+          "hsts_subdomains": {
+            "type": "boolean"
+          },
+          "min_tls": {
+            "type": "string",
+            "enum": [
+              "1.2",
+              "1.3"
+            ]
+          },
+          "verify_target": {
+            "type": "boolean",
+            "description": "Zertifikat eines https-Ziels prüfen (Standard aus)"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reach": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "unknown",
+                  "up",
+                  "slow",
+                  "down"
+                ]
+              },
+              "ms": {
+                "type": "integer"
+              },
+              "error": {
+                "type": "string"
+              },
+              "checked_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "since": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "requests": {
+                "type": "integer"
+              },
+              "errors": {
+                "type": "integer"
+              },
+              "blocked": {
+                "type": "integer"
+              }
+            },
+            "description": "seit dem Start des Moduls"
+          },
+          "certificate": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "http",
+                  "ok",
+                  "soon",
+                  "expired",
+                  "missing"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "days_left": {
+                "type": "integer"
+              },
+              "missing": {
+                "type": "string",
+                "description": "Name ohne passendes Zertifikat"
+              }
+            }
+          },
+          "route_error": {
+            "type": "string",
+            "description": "Name gehört einem anderen Teil (z. B. DNS64)"
           }
         }
       }
@@ -7822,6 +8054,321 @@
           },
           "404": {
             "description": "unbekannt oder noch nicht geholt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/status": {
+      "get": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Zustand: Ports des Eingangs, Zahl der Hosts, Cache",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/check": {
+      "post": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Erreichbarkeit aller Ziele jetzt prüfen",
+        "responses": {
+          "202": {
+            "description": "Prüfung läuft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "checking": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/hosts": {
+      "get": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Proxy-Hosts mit Erreichbarkeit, Zählern und Zertifikat",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProxyHost"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Proxy-Host anlegen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProxyHostInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyHost"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Feld ungültig (field nennt es), z. B. Name schon vergeben",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/hosts/{id}": {
+      "get": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Ein Proxy-Host",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyHost"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Proxy-Host ändern (fehlende Felder bleiben)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProxyHostInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyHost"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Feld ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Proxy-Host löschen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/hosts/{id}/enable": {
+      "post": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Proxy-Host einschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyHost"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/hosts/{id}/disable": {
+      "post": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Proxy-Host ausschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyHost"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
             "content": {
               "application/json": {
                 "schema": {

@@ -283,3 +283,32 @@ func TestNormalizeName(t *testing.T) {
 		}
 	}
 }
+
+// Mit der echten Port-Verwaltung, bei der Edge selbst seine Ports meldet: das Oeffnen darf nicht haengen.
+func TestEdgeWithRegistry(t *testing.T) {
+	reg := ports.New()
+	var e *Edge
+	e, cfg := newEdge(t, func(ctx context.Context, want []ports.Claim) error { return reg.Check(ctx, Owner, want) })
+	reg.Provide(Owner, e.Claims)
+	reg.Provide("dns64", func(context.Context) []ports.Claim {
+		return []ports.Claim{{Purpose: "DoH", Proto: ports.TCP, Port: cfg.HTTPSPort, Active: true}}
+	})
+	done := make(chan error, 1)
+	go func() {
+		done <- e.Set("cdn64", []Route{{Names: []string{"app.test"}, Handler: http.NotFoundHandler()}})
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Set hangs (edge asks the registry, the registry asks the edge)")
+	}
+	if running(e, "https") || !running(e, "http") {
+		t.Fatalf("https must be refused (DoH has the port), http open: %+v", e.Status().Listeners)
+	}
+	if ov := reg.Overview(context.Background()); len(ov) == 0 {
+		t.Fatal("overview empty")
+	}
+}

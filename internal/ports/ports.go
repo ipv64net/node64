@@ -61,11 +61,18 @@ func (r *Registry) Provide(owner string, p Provider) {
 }
 
 // All liefert alle Ports, sortiert nach Nummer und Protokoll.
-func (r *Registry) All(ctx context.Context) []Claim {
+func (r *Registry) All(ctx context.Context) []Claim { return r.collect(ctx, "") }
+
+// collect fragt alle Teile ausser skip (der eigene Teil bei Check: er kann dabei gesperrt sein).
+func (r *Registry) collect(ctx context.Context, skip string) []Claim {
 	r.mu.Lock()
-	owners := append([]string(nil), r.owners...)
-	providers := make([]Provider, 0, len(owners))
-	for _, o := range owners {
+	var owners []string
+	var providers []Provider
+	for _, o := range r.owners {
+		if skip != "" && o == skip {
+			continue
+		}
+		owners = append(owners, o)
 		providers = append(providers, r.providers[o])
 	}
 	r.mu.Unlock()
@@ -97,9 +104,9 @@ func (e *ConflictError) Error() string {
 }
 
 // Check prueft gewuenschte Ports eines Teils gegen die aktiven Ports der anderen Teile (der eigene Stand zaehlt
-// nicht, er wird ja ersetzt). Liefert den ersten Konflikt als *ConflictError.
+// nicht, er wird ja ersetzt, und wird auch nicht abgefragt). Liefert den ersten Konflikt als *ConflictError.
 func (r *Registry) Check(ctx context.Context, owner string, want []Claim) error {
-	all := r.All(ctx)
+	all := r.collect(ctx, owner)
 	for _, w := range want {
 		for _, c := range all {
 			if c.Owner != owner && c.Active && Overlap(w, c) {

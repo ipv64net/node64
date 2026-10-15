@@ -29,6 +29,7 @@ import (
 	_ "time/tzdata" // Zeitzonen im Binary, das Laufzeit-Image hat keine
 
 	"github.com/ipv64net/node64/internal/caps"
+	"github.com/ipv64net/node64/internal/cdn64"
 	"github.com/ipv64net/node64/internal/certs"
 	"github.com/ipv64net/node64/internal/config"
 	"github.com/ipv64net/node64/internal/dns64"
@@ -186,13 +187,14 @@ func run() error {
 	dnsModule.SetNotifier(dispatcher.Dispatch) // Upstream gestoert, Blockliste nicht ladbar
 	dnsModule.SetKey(ipv64Key)                 // Let's Encrypt per DNS-01 ueber die ipv64-API
 	modules.Register(dnsModule)
+	// Reverse-Proxy ueber den gemeinsamen Eingang
+	modules.Register(cdn64.New(st, logger.Slog(), edgeSrv, certMgr, Version))
 	portReg.Provide(dns64.Name, func(ctx context.Context) []ports.Claim { // nur eingeschaltet; aktiv, solange es laeuft
 		if on, _ := st.ModuleEnabled(ctx, dns64.Name); !on {
 			return nil
 		}
 		return dnsModule.Ports(ctx, modules.IsRunning(dns64.Name))
 	})
-	registerModules(modules)
 	modules.StartEnabled(ctx)
 	defer modules.StopAll()
 
@@ -308,11 +310,6 @@ func run() error {
 	err = srv.Run(ctx)
 	log.Info("node64 stopped")
 	return err
-}
-
-// registerModules meldet die Platzhalter an, die erst spaeter kommen.
-func registerModules(r *module.Registry) {
-	r.Register(module.Placeholder{I: module.Info{Name: "proxy", TitleKey: "nav.proxy", Icon: "bi-diagram-3", Image: "cdn64.webp", Path: "/proxy", Order: 30}})
 }
 
 // updateLoop prueft taeglich auf neue Versionen, aber nur wenn der Nutzer es

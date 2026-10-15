@@ -745,7 +745,7 @@ func (d *Dispatcher) composeDynDNS(lang string, a Alert, m Message) Message {
 		m.URL = d.baseURL(uid, "/dns64")
 	}
 	if IsCert(a.Kind) {
-		m.URL = d.baseURL(uid, "/proxy")
+		m.URL = d.baseURL(uid, "/cdn64")
 	}
 	m.Title, m.Priority = t("notify.subject."+string(a.Kind), "name", a.Check.Name), 4
 	if a.Kind == KindDynIP || a.Kind == KindDynOK || a.Kind == KindDNS64Up || a.Kind == KindCertOK {

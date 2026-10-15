@@ -1,0 +1,76 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{.T "cdn64.title"}}</h1>
+	<div class="ms-auto d-flex gap-2">
+		<form method="post" action="/cdn64/check" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-arrow-repeat"></i> {{.T "cdn64.check_now"}}</button></form>
+		<a class="btn btn-sm btn-primary" href="/cdn64/hosts/new"><i class="bi bi-plus-lg"></i> {{.T "cdn64.new"}}</a>
+	</div>
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+{{if $d.EdgeErr}}<div class="alert alert-danger small"><i class="bi bi-exclamation-triangle"></i> {{.T "cdn64.edge_error"}} <span class="font-monospace">{{$d.EdgeErr}}</span> · <a href="/settings#ports">{{.T "cdn64.edge_settings"}}</a></div>{{end}}
+<div class="card">
+	{{if not $d.Rows}}
+	<div class="card-body text-center text-body-secondary py-5">
+		<div class="mb-2"><i class="bi bi-arrow-left-right fs-2"></i></div>
+		<p class="mb-3">{{.T "cdn64.empty"}}</p>
+		<a class="btn btn-primary btn-sm" href="/cdn64/hosts/new"><i class="bi bi-plus-lg"></i> {{.T "cdn64.new"}}</a>
+	</div>
+	{{else}}
+	<div class="table-responsive">
+	<table class="table table-hover align-middle mb-0 small">
+		<thead><tr>
+			<th class="ps-3">{{.T "cdn64.col.names"}}</th><th>{{.T "cdn64.col.target"}}</th><th>{{.T "cdn64.col.ssl"}}</th><th>{{.T "cdn64.col.options"}}</th>
+			<th>{{.T "cdn64.col.reach"}}</th><th class="text-end">{{.T "cdn64.col.requests"}}</th><th class="text-end pe-3"></th>
+		</tr></thead>
+		<tbody>
+		{{range $d.Rows}}
+		<tr{{if not .Enabled}} class="opacity-50"{{end}}>
+			<td class="ps-3">
+				{{range $i, $n := .Names}}{{if $i}}<br>{{end}}<span class="font-monospace text-break">{{$n}}</span>{{end}}
+				{{if not .Enabled}}<div><span class="badge text-bg-secondary">{{$.T "cdn64.disabled"}}</span></div>{{end}}
+				{{if .RouteErr}}<div class="text-danger">{{.RouteErr}}</div>{{end}}
+			</td>
+			<td class="font-monospace text-break">{{.Target}}</td>
+			<td>{{with .Cert}}
+				{{if eq .State "http"}}<span class="badge text-bg-light">HTTP</span>
+				{{else if eq .State "ok"}}<span class="badge text-bg-success" title="{{.Name}}"><i class="bi bi-lock-fill"></i> {{$.T "cdn64.cert.days" "days" .Days}}</span>
+				{{else if eq .State "soon"}}<span class="badge text-bg-warning" title="{{.Name}}"><i class="bi bi-lock-fill"></i> {{$.T "cdn64.cert.days" "days" .Days}}</span>
+				{{else if eq .State "expired"}}<span class="badge text-bg-danger" title="{{.Name}}"><i class="bi bi-unlock"></i> {{$.T "cdn64.cert.expired"}}</span>
+				{{else}}<span class="badge text-bg-danger" title="{{.Miss}}"><i class="bi bi-unlock"></i> {{$.T "cdn64.cert.missing"}}</span>{{end}}
+			{{end}}</td>
+			<td class="text-nowrap">
+				{{if .WebSockets}}<i class="bi bi-plug me-1" title="{{$.T "cdn64.f.websockets"}}"></i>{{end}}
+				{{if .BlockExploits}}<i class="bi bi-shield-check me-1" title="{{$.T "cdn64.f.block_exploits"}}"></i>{{end}}
+				{{if .CacheAssets}}<i class="bi bi-lightning-charge me-1" title="{{$.T "cdn64.f.cache_assets"}}"></i>{{end}}
+				{{if .ForceSSL}}<i class="bi bi-arrow-up-right-square me-1" title="{{$.T "cdn64.f.force_ssl"}}"></i>{{end}}
+				{{if .HSTS}}<i class="bi bi-shield-lock me-1" title="HSTS"></i>{{end}}
+				{{if and .HTTPS .HTTP3}}<span class="badge text-bg-light" title="{{$.T "cdn64.f.http3"}}">H3</span>{{end}}
+			</td>
+			<td>{{if .Enabled}}{{with .Reach}}
+				{{if eq .State "up"}}<span class="badge text-bg-success" title="{{$.T "cdn64.reach.checked" "time" ($.Time .Checked)}}">{{$.T "cdn64.reach.up" "ms" .Ms}}</span>
+				{{else if eq .State "slow"}}<span class="badge text-bg-warning" title="{{$.T "cdn64.reach.checked" "time" ($.Time .Checked)}}">{{$.T "cdn64.reach.slow" "ms" .Ms}}</span>
+				{{else if eq .State "down"}}<span class="badge text-bg-danger" title="{{.Error}}">{{$.T "cdn64.reach.down"}}</span><div class="text-body-secondary">{{$.T "cdn64.reach.since" "ago" ($.Ago .Since)}}</div>
+				{{else}}<span class="badge text-bg-light">{{$.T "cdn64.reach.unknown"}}</span>{{end}}
+			{{end}}{{end}}</td>
+			<td class="text-end font-monospace">{{$.Int .Requests}}{{if .Errors}}<div class="text-danger">{{$.T "cdn64.errors" "n" .Errors}}</div>{{end}}{{if .Blocked}}<div class="text-body-secondary">{{$.T "cdn64.blocked" "n" .Blocked}}</div>{{end}}</td>
+			<td class="text-end pe-3 text-nowrap">
+				{{if .URL}}<a class="btn btn-sm btn-outline-secondary py-0" href="{{.URL}}" target="_blank" rel="noopener" title="{{$.T "cdn64.open"}}"><i class="bi bi-box-arrow-up-right"></i></a>{{end}}
+				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/hosts/{{.ID}}" title="{{$.T "cdn64.edit"}}"><i class="bi bi-pencil"></i></a>
+				<form method="post" action="/cdn64/hosts/{{.ID}}/{{if .Enabled}}disable{{else}}enable{{end}}" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<button class="btn btn-sm {{if .Enabled}}btn-outline-warning{{else}}btn-outline-success{{end}} py-0" type="submit" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause-fill{{else}}bi-play-fill{{end}}"></i></button></form>
+				<form method="post" action="/cdn64/hosts/{{.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<button class="btn btn-sm btn-outline-danger py-0" type="submit" data-confirm="{{$.T "cdn64.delete_confirm" "name" (index .Names 0)}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button></form>
+			</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table>
+	</div>
+	{{end}}
+</div>
+<p class="small text-body-secondary mt-2">{{.T "cdn64.list_hint"}}{{if $d.CacheN}} · {{.T "cdn64.cache_info" "n" $d.CacheN "size" (.Bytes $d.CacheB)}}{{end}}</p>
+{{end}}
+{{define "scripts"}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}

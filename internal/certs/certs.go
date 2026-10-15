@@ -313,22 +313,28 @@ func (m *Manager) usedBy(ctx context.Context) map[int64][]string {
 // ForName liefert ein gueltiges Zertifikat fuer den Namen (auch ueber Wildcard): echte vor Test-Zertifikaten,
 // sonst das am laengsten gueltige.
 func (m *Manager) ForName(name string) *tls.Certificate {
+	if id := m.MatchID(name); id > 0 {
+		return m.ByID(id)
+	}
+	return nil
+}
+
+// MatchID: Kennung des Zertifikats, das ForName fuer den Namen liefern wuerde (0 = keins).
+func (m *Manager) MatchID(name string) int64 {
 	now := time.Now()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var best *loadedCert
-	for _, l := range m.loaded {
+	var id int64
+	for i, l := range m.loaded {
 		if now.Before(l.leaf.NotBefore) || now.After(l.leaf.NotAfter) || l.leaf.VerifyHostname(name) != nil {
 			continue
 		}
 		if best == nil || (best.staging && !l.staging) || (best.staging == l.staging && l.leaf.NotAfter.After(best.leaf.NotAfter)) {
-			best = l
+			best, id = l, i
 		}
 	}
-	if best == nil {
-		return nil
-	}
-	return best.crt
+	return id
 }
 
 // ByID liefert ein bestimmtes gueltiges Zertifikat.

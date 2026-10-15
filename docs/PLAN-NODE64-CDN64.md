@@ -355,6 +355,12 @@ der nächsten Phase. Ausgerollt auf der Box wird nur mit Dennis' Go.
   - Erneuerung mit ACME-Testserver (Pebble-artiger Fake).
 
 ### C1 Modul-Gerüst und Proxy-Hosts
+**Fertig (2026-10-15, CDN64 1.0.0):** Modul `internal/cdn64` ersetzt den Platzhalter (Menü „CDN64“, Pfad `/cdn64`, alter
+Pfad `/proxy` leitet um). Proxy-Hosts mit allen Optionen dieser Phase, Erreichbarkeit, Zähler, Dashboard-Karte,
+Export/Import, Audit, API `/api/cdn64/…` (OpenAPI, README). Gehört ein Name schon einem anderen Teil (z. B. DNS64),
+bleibt nur dieser Host draußen und zeigt den Grund. Dabei behoben: Verklemmung zwischen Eingang und Port-Verwaltung
+beim Öffnen eines Ports (die Prüfung fragt den eigenen Teil nicht mehr ab).
+
 - Modul `cdn64` ersetzt den Platzhalter. Dazu Menü, Dashboard-Kachel, Migrationen und Version 1.0.0.
 - **Proxy-Hosts:**
   - Anlegen, Bearbeiten, Löschen, an/aus;

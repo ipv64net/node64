@@ -1,0 +1,86 @@
+{{define "content"}}
+{{$d := .Data}}
+{{$h := $d.Host}}
+<h1 class="h4 mb-3"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{if $d.New}}{{.T "cdn64.new"}}{{else}}<span class="text-break">{{index $h.Names 0}}</span>{{end}}</h1>
+{{with index $d.Errors "_"}}<div class="alert alert-danger small">{{.}}</div>{{end}}
+<div class="row g-3">
+	<div class="col-xl-8">
+		<form method="post" action="{{if $d.New}}/cdn64/hosts{{else}}/cdn64/hosts/{{$h.ID}}{{end}}" class="card" id="host-form">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-header pb-0 border-bottom-0">
+				<ul class="nav nav-tabs card-header-tabs" role="tablist">
+					<li class="nav-item" role="presentation"><button class="nav-link active" type="button" data-bs-toggle="tab" data-bs-target="#tab-details" role="tab"><i class="bi bi-sliders"></i> {{.T "cdn64.tab_details"}}</button></li>
+					<li class="nav-item" role="presentation"><button class="nav-link{{if or (index $d.Errors "cert_id") (index $d.Errors "min_tls")}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-ssl" role="tab"><i class="bi bi-lock"></i> SSL</button></li>
+				</ul>
+			</div>
+			<div class="card-body small tab-content">
+				<div class="tab-pane fade show active" id="tab-details" role="tabpanel">
+					<label class="form-label fw-semibold" for="names">{{.T "cdn64.f.names"}}</label>
+					<textarea class="form-control form-control-sm font-monospace{{if index $d.Errors "names"}} is-invalid{{end}}" id="names" name="names" rows="3" required placeholder="nas.example.ipv64.de">{{$d.Names}}</textarea>
+					{{with index $d.Errors "names"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					<div class="form-text mb-3">{{.T "cdn64.f.names_hint"}}</div>
+
+					<div class="row g-2 mb-1">
+						<div class="col-sm-3"><label class="form-label fw-semibold" for="scheme">{{.T "cdn64.f.scheme"}}</label>
+							<select class="form-select form-select-sm" id="scheme" name="scheme"><option value="http"{{if eq $h.Scheme "http"}} selected{{end}}>http</option><option value="https"{{if eq $h.Scheme "https"}} selected{{end}}>https</option></select></div>
+						<div class="col-sm-6"><label class="form-label fw-semibold" for="target_host">{{.T "cdn64.f.target_host"}}</label>
+							<input class="form-control form-control-sm font-monospace{{if index $d.Errors "target_host"}} is-invalid{{end}}" id="target_host" name="target_host" value="{{$h.TargetHost}}" required placeholder="192.168.1.20" maxlength="253">
+							{{with index $d.Errors "target_host"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
+						<div class="col-sm-3"><label class="form-label fw-semibold" for="target_port">{{.T "cdn64.f.target_port"}}</label>
+							<input class="form-control form-control-sm font-monospace{{if index $d.Errors "target_port"}} is-invalid{{end}}" type="number" min="1" max="65535" id="target_port" name="target_port" value="{{$h.TargetPort}}" required>
+							{{with index $d.Errors "target_port"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
+					</div>
+					<div class="form-text mb-3">{{.T "cdn64.f.target_hint"}}</div>
+					<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" name="verify_target" id="verify_target"{{if $h.VerifyTarget}} checked{{end}}><label class="form-check-label" for="verify_target">{{.T "cdn64.f.verify_target"}}</label>
+						<div class="form-text">{{.T "cdn64.f.verify_target_hint"}}</div></div>
+
+					<div class="row g-2 mt-1">
+						<div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="cache_assets" id="cache_assets"{{if $h.CacheAssets}} checked{{end}}><label class="form-check-label" for="cache_assets">{{.T "cdn64.f.cache_assets"}}</label></div><div class="form-text">{{.T "cdn64.f.cache_assets_hint"}}</div></div>
+						<div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="block_exploits" id="block_exploits"{{if $h.BlockExploits}} checked{{end}}><label class="form-check-label" for="block_exploits">{{.T "cdn64.f.block_exploits"}}</label></div><div class="form-text">{{.T "cdn64.f.block_exploits_hint"}}</div></div>
+						<div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="websockets" id="websockets"{{if $h.WebSockets}} checked{{end}}><label class="form-check-label" for="websockets">{{.T "cdn64.f.websockets"}}</label></div><div class="form-text">{{.T "cdn64.f.websockets_hint"}}</div></div>
+					</div>
+					<hr>
+					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="enabled" id="enabled"{{if $h.Enabled}} checked{{end}}><label class="form-check-label" for="enabled">{{.T "cdn64.f.enabled"}}</label></div>
+				</div>
+
+				<div class="tab-pane fade" id="tab-ssl" role="tabpanel">
+					<label class="form-label fw-semibold" for="cert_id">{{.T "cdn64.f.cert"}}</label>
+					<select class="form-select form-select-sm{{if index $d.Errors "cert_id"}} is-invalid{{end}}" id="cert_id" name="cert_id" data-cert-select>
+						<option value="0"{{if eq $h.CertID 0}} selected{{end}}>{{.T "cdn64.f.cert_auto"}}</option>
+						<option value="-1"{{if eq $h.CertID -1}} selected{{end}}>{{.T "cdn64.f.cert_none"}}</option>
+						{{range $d.Certs}}<option value="{{.ID}}"{{if eq $h.CertID .ID}} selected{{end}}>{{join .Names ", "}}{{if .Staging}} (Staging){{end}}{{if not .NotAfter.IsZero}} · {{$.T "cdn64.cert.days" "days" .DaysLeft}}{{end}}</option>{{end}}
+					</select>
+					{{with index $d.Errors "cert_id"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					<div class="form-text mb-3">{{.T "cdn64.f.cert_hint"}}</div>
+					<fieldset data-ssl-options>
+						<div class="row g-2">
+							<div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="force_ssl" id="force_ssl"{{if $h.ForceSSL}} checked{{end}}><label class="form-check-label" for="force_ssl">{{.T "cdn64.f.force_ssl"}}</label></div><div class="form-text">{{.T "cdn64.f.force_ssl_hint"}}</div></div>
+							<div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="hsts" id="hsts"{{if $h.HSTS}} checked{{end}}><label class="form-check-label" for="hsts">{{.T "cdn64.f.hsts"}}</label></div><div class="form-text">{{.T "cdn64.f.hsts_hint"}}</div></div>
+							<div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="http2" id="http2"{{if $h.HTTP2}} checked{{end}}><label class="form-check-label" for="http2">{{.T "cdn64.f.http2"}}</label></div></div>
+							<div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="hsts_subdomains" id="hsts_subdomains"{{if $h.HSTSSubdomains}} checked{{end}}><label class="form-check-label" for="hsts_subdomains">{{.T "cdn64.f.hsts_subdomains"}}</label></div></div>
+							<div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="http3" id="http3"{{if $h.HTTP3}} checked{{end}}><label class="form-check-label" for="http3">{{.T "cdn64.f.http3"}}</label></div><div class="form-text">{{.T "cdn64.f.http3_hint"}}</div></div>
+							<div class="col-md-6"><label class="form-label" for="min_tls">{{.T "cdn64.f.min_tls"}}</label>
+								<select class="form-select form-select-sm" id="min_tls" name="min_tls"><option value="1.2"{{if eq $h.MinTLS "1.2"}} selected{{end}}>TLS 1.2</option><option value="1.3"{{if eq $h.MinTLS "1.3"}} selected{{end}}>TLS 1.3</option></select>
+								<div class="form-text">{{.T "cdn64.f.min_tls_hint"}}</div></div>
+						</div>
+					</fieldset>
+				</div>
+			</div>
+			<div class="card-footer d-flex gap-2">
+				<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>
+				<a class="btn btn-outline-secondary btn-sm" href="/cdn64">{{.T "common.cancel"}}</a>
+			</div>
+		</form>
+		{{if not $d.New}}<form method="post" action="/cdn64/hosts/{{$h.ID}}/delete" class="mt-2"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="{{.T "cdn64.delete_confirm" "name" (index $h.Names 0)}}"><i class="bi bi-trash"></i> {{.T "common.delete"}}</button></form>{{end}}
+	</div>
+	<div class="col-xl-4">
+		<div class="card"><div class="card-body small">
+			<div class="fw-semibold mb-1"><i class="bi bi-info-circle text-info"></i> {{.T "cdn64.help_title"}}</div>
+			<p class="mb-2">{{.T "cdn64.help_ports"}}</p>
+			<p class="mb-2">{{.T "cdn64.help_certs"}}</p>
+			<p class="mb-0">{{.T "cdn64.help_dns"}}</p>
+		</div></div>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}
