@@ -25,6 +25,7 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("DELETE /api/cdn64/hosts/{id}", api(m.apiDelete))
 	mux.Handle("POST /api/cdn64/hosts/{id}/enable", api(m.apiToggle))
 	mux.Handle("POST /api/cdn64/hosts/{id}/disable", api(m.apiToggle))
+	m.streamAPIRoutes(mux, api)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -68,6 +69,9 @@ func toAPI(r hostRow) apiHost {
 
 func (m *Module) apiHosts(w http.ResponseWriter, r *http.Request) {
 	rows, err := m.rows(r.Context())
+	if k := r.URL.Query().Get("kind"); k != "" && err == nil {
+		rows, err = m.rowsOf(r.Context(), k)
+	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -185,7 +189,25 @@ func (m *Module) apiFail(w http.ResponseWriter, err error) {
 }
 
 func (m *Module) apiCreate(w http.ResponseWriter, r *http.Request) {
-	h := newHost()
+	var probe struct {
+		Kind string `json:"kind"`
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<16))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "request too large")
+		return
+	}
+	_ = json.Unmarshal(body, &probe)
+	kind := probe.Kind
+	if kind == "" {
+		kind = KindProxy
+	}
+	if !validKind(kind) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "kind must be proxy, redirect, dead or passthrough", "field": "kind"})
+		return
+	}
+	h := newHostKind(kind)
+	r.Body = io.NopCloser(strings.NewReader(string(body)))
 	req, ok := decode(w, r, h)
 	if !ok {
 		return
@@ -205,12 +227,12 @@ func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
 		m.apiFail(w, err)
 		return
 	}
-	id := h.ID
+	id, kind := h.ID, h.Kind
 	req, ok := decode(w, r, h)
 	if !ok {
 		return
 	}
-	h.ID = id
+	h.ID, h.Kind = id, kind // die Art bleibt
 	if err := m.saveHost(r.Context(), h); err != nil {
 		m.apiFail(w, err)
 		return

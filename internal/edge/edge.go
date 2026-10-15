@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,9 +38,13 @@ const Owner = "edge"
 
 // Antwort bei unbekanntem Namen.
 const (
-	DefaultNotFound = "404"   // neutrale Seite "404 Not Found"
-	DefaultClose    = "close" // Verbindung ohne Antwort schliessen (wie nginx 444)
+	DefaultNotFound = "404"      // neutrale Seite "404 Not Found"
+	DefaultClose    = "close"    // Verbindung ohne Antwort schliessen (wie nginx 444)
+	DefaultRedirect = "redirect" // Weiterleitung auf DefaultURL
+	DefaultHTML     = "html"     // eigene Seite (DefaultHTML)
 )
+
+const maxDefaultHTML = 64 << 10
 
 // Config sind die Einstellungen des Eingangs.
 type Config struct {
@@ -48,13 +53,19 @@ type Config struct {
 	HTTPSPort  int    `json:"https_port"`  // 0 = aus
 	PublicPort int    `json:"public_port"` // HTTPS-Port aus Sicht der Besucher (Weiterleitung, Alt-Svc), 0 = HTTPSPort
 	HTTP3      bool   `json:"http3"`       // HTTP/3 (QUIC) auf HTTPSPort/UDP
-	Default    string `json:"default"`     // DefaultNotFound oder DefaultClose
+	Default    string `json:"default"`     // DefaultNotFound, DefaultClose, DefaultRedirect, DefaultHTML
+	DefaultURL string `json:"default_url"` // Ziel bei DefaultRedirect (http/https)
+	// DefaultHTML: eigene Seite bei DefaultHTML (hoechstens 64 KB)
+	DefaultPage string `json:"default_html"`
 }
 
 // DefaultConfig: 80/443 auf allen Adressen, HTTP/3 an, unbekannte Namen bekommen 404.
 func DefaultConfig() Config {
 	return Config{HTTPPort: 80, HTTPSPort: 443, HTTP3: true, Default: DefaultNotFound}
 }
+
+// Public: HTTPS-Port aus Sicht der Besucher.
+func (c Config) Public() int { return c.publicPort() }
 
 func (c Config) publicPort() int {
 	if c.PublicPort > 0 {
@@ -82,8 +93,20 @@ func (c *Config) Validate() error {
 	case "":
 		c.Default = DefaultNotFound
 	case DefaultNotFound, DefaultClose:
+	case DefaultRedirect:
+		u, err := url.Parse(c.DefaultURL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return errors.New("default_url must be an http or https address")
+		}
+	case DefaultHTML:
+		if strings.TrimSpace(c.DefaultPage) == "" {
+			return errors.New("default_html must not be empty")
+		}
 	default:
 		return fmt.Errorf("default %q unknown", c.Default)
+	}
+	if len(c.DefaultPage) > maxDefaultHTML {
+		return errors.New("default_html larger than 64 KB")
 	}
 	return nil
 }
@@ -104,6 +127,10 @@ type Route struct {
 	MinTLS  uint16       // tls.VersionTLS12 (Standard) oder tls.VersionTLS13
 	NoHTTP2 bool         // nur HTTP/1.1 ueber TCP
 	HTTP3   bool         // auch ueber HTTP/3 (wenn der Eingang es anbietet)
+	// Passthrough: TLS nicht hier beenden, sondern die Verbindung roh an dieses Ziel (host:port) geben (nur TCP,
+	// Handler bleibt nil). Count zaehlt durchgereichte Verbindungen (optional).
+	Passthrough string
+	Count       func()
 	// Allow begrenzt auf bestimmte Clients (echte Gegenstelle der Verbindung); alle anderen bekommen eine
 	// neutrale 404, als gaebe es den Namen nicht. nil = alle.
 	Allow func(ip netip.Addr) bool
@@ -133,6 +160,10 @@ type Edge struct {
 	closed   bool
 	stopping sync.WaitGroup
 
+	passMu     sync.Mutex
+	pass       map[net.Conn]struct{} // durchgereichte Verbindungen
+	passClosed bool
+
 	table    atomic.Pointer[table]
 	h3On     atomic.Bool
 	defClose atomic.Bool
@@ -156,7 +187,7 @@ func New(cfg Config, certs Certs, check func(ctx context.Context, want []ports.C
 		return nil, err
 	}
 	e := &Edge{log: log.With("module", "edge"), certs: certs, check: check, cfg: cfg, owners: map[string][]Route{}, tokens: map[string]string{},
-		lst: map[string]*listener{"http": {}, "https": {}, "http3": {}}}
+		lst: map[string]*listener{"http": {}, "https": {}, "http3": {}}, pass: map[net.Conn]struct{}{}}
 	e.defClose.Store(cfg.Default == DefaultClose)
 	e.table.Store(buildTable(nil))
 	return e, nil
@@ -179,6 +210,9 @@ func (e *Edge) Set(owner string, routes []Route) error {
 		}
 		if rt.Path != "" && !strings.HasPrefix(rt.Path, "/") {
 			return fmt.Errorf("path %q must start with /", rt.Path)
+		}
+		if rt.Passthrough != "" && (rt.Handler != nil || rt.Path != "") {
+			return errors.New("passthrough route without handler and path")
 		}
 		rt.Names = names
 		norm = append(norm, rt)
@@ -294,6 +328,7 @@ func (e *Edge) Close(ctx context.Context) {
 	for _, s := range stops {
 		_ = s(ctx)
 	}
+	e.closePassthrough(true)
 	e.stopping.Wait()
 }
 
@@ -389,6 +424,9 @@ func (e *Edge) needLocked() map[string]bool {
 				https = true
 				h3 = h3 || rt.HTTP3
 			}
+			if rt.Passthrough != "" {
+				https = true
+			}
 		}
 	}
 	return map[string]bool{
@@ -481,12 +519,23 @@ func (e *Edge) startLocked(name string) error {
 		if name == "http" {
 			srv.Handler = http.HandlerFunc(e.serveHTTP)
 			go func() { _ = srv.Serve(ln) }()
+			l.addr, l.err, l.stop = ln.Addr().String(), "", srv.Shutdown
 		} else {
+			// erst den Namen lesen (TLS durchreichen), dann an den TLS-Server
 			srv.Handler = http.HandlerFunc(e.serveHTTPS)
 			srv.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12, NextProtos: []string{"h2", "http/1.1"}, GetConfigForClient: e.tcpConfig}
-			go func() { _ = srv.ServeTLS(ln, "", "") }()
+			tlsLn := newChanListener(ln.Addr())
+			go func() { _ = srv.ServeTLS(tlsLn, "", "") }()
+			go e.acceptSNI(ln, tlsLn)
+			l.addr, l.err = ln.Addr().String(), ""
+			l.stop = func(ctx context.Context) error {
+				_ = ln.Close()
+				err := srv.Shutdown(ctx)
+				_ = tlsLn.Close()
+				e.closePassthrough(false)
+				return err
+			}
 		}
-		l.addr, l.err, l.stop = ln.Addr().String(), "", srv.Shutdown
 	case "http3":
 		pc, err := net.ListenPacket("udp", addr)
 		if err != nil {
@@ -645,11 +694,21 @@ func (e *Edge) serveHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // unknown: Antwort fuer unbekannte Namen.
-func (e *Edge) unknown(w http.ResponseWriter, _ *http.Request) {
+func (e *Edge) unknown(w http.ResponseWriter, r *http.Request) {
 	if e.defClose.Load() {
 		panic(http.ErrAbortHandler) // Verbindung ohne Antwort beenden
 	}
-	notFound(w)
+	cfg := e.Config()
+	switch cfg.Default {
+	case DefaultRedirect:
+		http.Redirect(w, r, cfg.DefaultURL, http.StatusFound)
+	case DefaultHTML:
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = io.WriteString(w, cfg.DefaultPage)
+	default:
+		notFound(w)
+	}
 }
 
 const notFoundPage = "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>404 Not Found</title></head>" +
@@ -661,6 +720,13 @@ func notFound(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNotFound)
 	_, _ = io.WriteString(w, notFoundPage)
+}
+
+func addrIP(a net.Addr) netip.Addr {
+	if ap, err := netip.ParseAddrPort(a.String()); err == nil {
+		return ap.Addr().Unmap()
+	}
+	return netip.Addr{}
 }
 
 // peerIP ist die echte Gegenstelle der Verbindung.

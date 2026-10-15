@@ -188,7 +188,10 @@ func run() error {
 	dnsModule.SetKey(ipv64Key)                 // Let's Encrypt per DNS-01 ueber die ipv64-API
 	modules.Register(dnsModule)
 	// Reverse-Proxy ueber den gemeinsamen Eingang
-	modules.Register(cdn64.New(st, logger.Slog(), edgeSrv, certMgr, Version))
+	cdnModule := cdn64.New(st, logger.Slog(), edgeSrv, certMgr, Version)
+	cdnModule.SetPorts(portReg) // Streams pruefen ihre Ports
+	portReg.Provide(cdn64.Name, cdnModule.Claims)
+	modules.Register(cdnModule)
 	portReg.Provide(dns64.Name, func(ctx context.Context) []ports.Claim { // nur eingeschaltet; aktiv, solange es laeuft
 		if on, _ := st.ModuleEnabled(ctx, dns64.Name); !on {
 			return nil

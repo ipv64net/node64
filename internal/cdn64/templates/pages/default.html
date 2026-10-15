@@ -1,0 +1,32 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{.T "cdn64.title"}}</h1>
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+<div class="row g-3">
+	<div class="col-xl-8">
+		<form method="post" action="/cdn64/default" class="card">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-header"><i class="bi bi-question-square text-primary"></i> {{.T "cdn64.default.title"}}</div>
+			<div class="card-body small">
+				{{if $d.Error}}<div class="alert alert-danger py-2">{{$d.Error}}</div>{{end}}
+				<p class="text-body-secondary">{{.T "cdn64.default.hint"}}</p>
+				{{range $m := (split "404 close redirect html")}}
+				<div class="form-check mb-1"><input class="form-check-input" type="radio" name="default" id="def-{{$m}}" value="{{$m}}"{{if eq $m $d.Cfg.Default}} checked{{end}} data-default-mode>
+					<label class="form-check-label" for="def-{{$m}}"><strong>{{$.T (print "cdn64.default.mode_" $m)}}</strong> – {{$.T (print "cdn64.default.mode_hint_" $m)}}</label></div>
+				{{end}}
+				<div class="mt-3" data-default-of="redirect"><label class="form-label fw-semibold" for="default_url">{{.T "cdn64.default.url"}}</label>
+					<input class="form-control form-control-sm font-monospace" type="url" id="default_url" name="default_url" value="{{$d.Cfg.DefaultURL}}" placeholder="https://www.example.com/" maxlength="500"></div>
+				<div class="mt-3" data-default-of="html"><label class="form-label fw-semibold" for="default_html">{{.T "cdn64.default.html"}}</label>
+					<textarea class="form-control form-control-sm font-monospace" id="default_html" name="default_html" rows="10" maxlength="65536" placeholder="&lt;!doctype html&gt;&lt;title&gt;Hallo&lt;/title&gt;&lt;h1&gt;Hallo&lt;/h1&gt;">{{$d.Cfg.DefaultPage}}</textarea>
+					<div class="form-text">{{.T "cdn64.default.html_hint"}}</div></div>
+			</div>
+			<div class="card-footer"><button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button></div>
+		</form>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}

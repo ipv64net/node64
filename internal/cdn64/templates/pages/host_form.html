@@ -1,16 +1,17 @@
 {{define "content"}}
 {{$d := .Data}}
 {{$h := $d.Host}}
-<h1 class="h4 mb-3"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{if $d.New}}{{.T "cdn64.new"}}{{else}}<span class="text-break">{{index $h.Names 0}}</span>{{end}}</h1>
+<h1 class="h4 mb-3"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{if $d.New}}{{.T (print "cdn64.kind_new." $h.Kind)}}{{else}}<span class="text-break">{{index $h.Names 0}}</span>{{end}}</h1>
 {{with index $d.Errors "_"}}<div class="alert alert-danger small">{{.}}</div>{{end}}
 <div class="row g-3">
 	<div class="col-xl-8">
 		<form method="post" action="{{if $d.New}}/cdn64/hosts{{else}}/cdn64/hosts/{{$h.ID}}{{end}}" class="card" id="host-form">
 			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<input type="hidden" name="kind" value="{{$h.Kind}}">
 			<div class="card-header pb-0 border-bottom-0">
 				<ul class="nav nav-tabs card-header-tabs" role="tablist">
 					<li class="nav-item" role="presentation"><button class="nav-link active" type="button" data-bs-toggle="tab" data-bs-target="#tab-details" role="tab"><i class="bi bi-sliders"></i> {{.T "cdn64.tab_details"}}</button></li>
-					<li class="nav-item" role="presentation"><button class="nav-link{{if or (index $d.Errors "cert_id") (index $d.Errors "min_tls")}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-ssl" role="tab"><i class="bi bi-lock"></i> SSL</button></li>
+					{{if ne $h.Kind "passthrough"}}<li class="nav-item" role="presentation"><button class="nav-link{{if or (index $d.Errors "cert_id") (index $d.Errors "min_tls")}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-ssl" role="tab"><i class="bi bi-lock"></i> SSL</button></li>{{end}}
 				</ul>
 			</div>
 			<div class="card-body small tab-content">
@@ -19,7 +20,33 @@
 					<textarea class="form-control form-control-sm font-monospace{{if index $d.Errors "names"}} is-invalid{{end}}" id="names" name="names" rows="3" required placeholder="nas.example.ipv64.de">{{$d.Names}}</textarea>
 					{{with index $d.Errors "names"}}<div class="invalid-feedback">{{.}}</div>{{end}}
 					<div class="form-text mb-3">{{.T "cdn64.f.names_hint"}}</div>
-
+					{{if eq $h.Kind "redirect"}}
+					<div class="row g-2 mb-1">
+						<div class="col-sm-3"><label class="form-label fw-semibold" for="redirect_scheme">{{.T "cdn64.f.scheme"}}</label>
+							<select class="form-select form-select-sm" id="redirect_scheme" name="redirect_scheme">{{range (split "auto https http")}}<option value="{{.}}"{{if eq . $h.RedirectScheme}} selected{{end}}>{{if eq . "auto"}}{{$.T "cdn64.redirect.auto"}}{{else}}{{.}}{{end}}</option>{{end}}</select></div>
+						<div class="col-sm-6"><label class="form-label fw-semibold" for="redirect_target">{{.T "cdn64.f.redirect_target"}}</label>
+							<input class="form-control form-control-sm font-monospace{{if index $d.Errors "redirect_target"}} is-invalid{{end}}" id="redirect_target" name="redirect_target" value="{{$h.RedirectTarget}}" required placeholder="www.example.com" maxlength="500">
+							{{with index $d.Errors "redirect_target"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
+						<div class="col-sm-3"><label class="form-label fw-semibold" for="redirect_code">{{.T "cdn64.f.redirect_code"}}</label>
+							<select class="form-select form-select-sm{{if index $d.Errors "redirect_code"}} is-invalid{{end}}" id="redirect_code" name="redirect_code">{{range (split "301 302 307 308 303 300")}}<option value="{{.}}"{{if eq . (print $h.RedirectCode)}} selected{{end}}>{{.}} – {{$.T (print "cdn64.redirect.code_" .)}}</option>{{end}}</select></div>
+					</div>
+					<div class="form-text mb-2">{{.T "cdn64.f.redirect_hint"}}</div>
+					<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" name="preserve_path" id="preserve_path"{{if $h.PreservePath}} checked{{end}}><label class="form-check-label" for="preserve_path">{{.T "cdn64.f.preserve_path"}}</label></div>
+					<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" name="block_exploits" id="block_exploits"{{if $h.BlockExploits}} checked{{end}}><label class="form-check-label" for="block_exploits">{{.T "cdn64.f.block_exploits"}}</label></div>
+					{{else if eq $h.Kind "dead"}}
+					<p class="text-body-secondary">{{.T "cdn64.f.dead_hint"}}</p>
+					{{else if eq $h.Kind "passthrough"}}
+					<div class="row g-2 mb-1">
+						<div class="col-sm-9"><label class="form-label fw-semibold" for="target_host">{{.T "cdn64.f.target_host"}}</label>
+							<input class="form-control form-control-sm font-monospace{{if index $d.Errors "target_host"}} is-invalid{{end}}" id="target_host" name="target_host" value="{{$h.TargetHost}}" required placeholder="192.168.1.30" maxlength="253">
+							{{with index $d.Errors "target_host"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
+						<div class="col-sm-3"><label class="form-label fw-semibold" for="target_port">{{.T "cdn64.f.target_port"}}</label>
+							<input class="form-control form-control-sm font-monospace{{if index $d.Errors "target_port"}} is-invalid{{end}}" type="number" min="1" max="65535" id="target_port" name="target_port" value="{{$h.TargetPort}}" required>
+							{{with index $d.Errors "target_port"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
+					</div>
+					<input type="hidden" name="scheme" value="https"><input type="hidden" name="cert_id" value="-1">
+					<div class="form-text mb-3">{{.T "cdn64.f.pass_hint"}}</div>
+					{{else}}
 					<div class="row g-2 mb-1">
 						<div class="col-sm-3"><label class="form-label fw-semibold" for="scheme">{{.T "cdn64.f.scheme"}}</label>
 							<select class="form-select form-select-sm" id="scheme" name="scheme"><option value="http"{{if eq $h.Scheme "http"}} selected{{end}}>http</option><option value="https"{{if eq $h.Scheme "https"}} selected{{end}}>https</option></select></div>
@@ -39,11 +66,12 @@
 						<div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="block_exploits" id="block_exploits"{{if $h.BlockExploits}} checked{{end}}><label class="form-check-label" for="block_exploits">{{.T "cdn64.f.block_exploits"}}</label></div><div class="form-text">{{.T "cdn64.f.block_exploits_hint"}}</div></div>
 						<div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="websockets" id="websockets"{{if $h.WebSockets}} checked{{end}}><label class="form-check-label" for="websockets">{{.T "cdn64.f.websockets"}}</label></div><div class="form-text">{{.T "cdn64.f.websockets_hint"}}</div></div>
 					</div>
+					{{end}}
 					<hr>
 					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="enabled" id="enabled"{{if $h.Enabled}} checked{{end}}><label class="form-check-label" for="enabled">{{.T "cdn64.f.enabled"}}</label></div>
 				</div>
 
-				<div class="tab-pane fade" id="tab-ssl" role="tabpanel">
+				{{if ne $h.Kind "passthrough"}}<div class="tab-pane fade" id="tab-ssl" role="tabpanel">
 					<label class="form-label fw-semibold" for="cert_id">{{.T "cdn64.f.cert"}}</label>
 					<select class="form-select form-select-sm{{if index $d.Errors "cert_id"}} is-invalid{{end}}" id="cert_id" name="cert_id" data-cert-select>
 						<option value="0"{{if eq $h.CertID 0}} selected{{end}}>{{.T "cdn64.f.cert_auto"}}</option>
@@ -74,11 +102,11 @@
 								<div class="form-text">{{.T "cdn64.f.min_tls_hint"}}</div></div>
 						</div>
 					</fieldset>
-				</div>
+				</div>{{end}}
 			</div>
 			<div class="card-footer d-flex gap-2">
 				<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>
-				<a class="btn btn-outline-secondary btn-sm" href="/cdn64">{{.T "common.cancel"}}</a>
+				<a class="btn btn-outline-secondary btn-sm" href="{{$d.Back}}">{{.T "common.cancel"}}</a>
 			</div>
 		</form>
 		{{if not $d.New}}<form method="post" action="/cdn64/hosts/{{$h.ID}}/delete" class="mt-2"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="{{.T "cdn64.delete_confirm" "name" (index $h.Names 0)}}"><i class="bi bi-trash"></i> {{.T "common.delete"}}</button></form>{{end}}

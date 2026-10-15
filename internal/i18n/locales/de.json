@@ -195,7 +195,11 @@
     "title": "CDN64 · Reverse-Proxy",
     "tab": {
       "hosts": "Proxy-Hosts",
-      "certs": "SSL-Zertifikate"
+      "certs": "SSL-Zertifikate",
+      "redirects": "Weiterleitungen",
+      "dead": "404-Hosts",
+      "streams": "Streams",
+      "default": "Standardseite"
     },
     "new": "Proxy-Host anlegen",
     "edit": "Proxy-Host bearbeiten",
@@ -231,6 +235,7 @@
     "delete_confirm": "Proxy-Host „{name}“ löschen?",
     "deleted": "„{name}“ gelöscht.",
     "list_hint": "Erreichbarkeit: jede Minute geprüft. Anfragen: seit dem Start des Moduls.",
+    "list_hint_other": "Anfragen: seit dem Start des Moduls.",
     "cache_info": "Cache: {n} Dateien, {size}",
     "edge_error": "Der gemeinsame Eingang kann einen Port nicht öffnen:",
     "edge_settings": "Ports einstellen",
@@ -265,7 +270,13 @@
       "min_tls": "Mindestens",
       "min_tls_hint": "TLS 1.3 ist aktuell; 1.2 für ältere Geräte.",
       "cert_new": "Neues Zertifikat gleich mit anfordern",
-      "cert_new_hint": "Für alle Domains dieses Hosts; der Abruf läuft nach dem Speichern im Hintergrund."
+      "cert_new_hint": "Für alle Domains dieses Hosts; der Abruf läuft nach dem Speichern im Hintergrund.",
+      "redirect_target": "Ziel-Domain",
+      "redirect_code": "HTTP-Code",
+      "redirect_hint": "Domain, optional mit Port und Pfad (z. B. www.example.com/neu). „Wie die Anfrage“ nimmt http oder https so, wie der Besucher kam.",
+      "preserve_path": "Pfad und Abfrage mitnehmen",
+      "dead_hint": "Dieser Host antwortet auf alle Anfragen mit einer neutralen Seite „404“. Mit Zertifikat auch per HTTPS.",
+      "pass_hint": "Die Verbindung wird nach dem Namen roh an dieses Ziel gegeben, ohne sie hier zu entschlüsseln – das Ziel braucht ein eigenes Zertifikat. Auf Port 80 gibt es eine Weiterleitung auf HTTPS."
     },
     "err": {
       "name": "Ungültiger Domainname.",
@@ -275,7 +286,17 @@
       "scheme": "Schema http oder https.",
       "target_host": "Ungültiges Ziel (Name oder IP).",
       "port": "Port zwischen 1 und 65535.",
-      "cert": "Unbekanntes Zertifikat."
+      "cert": "Unbekanntes Zertifikat.",
+      "kind": "Unbekannte Art.",
+      "redirect_target": "Ungültige Ziel-Domain.",
+      "redirect_code": "Unbekannter HTTP-Code.",
+      "redirect_self": "Eine Weiterleitung auf sich selbst wäre eine Schleife.",
+      "pass_wildcard": "Beim Durchreichen geht keine Wildcard.",
+      "stream_name": "Name höchstens 100 Zeichen.",
+      "stream_proto": "TCP und/oder UDP wählen.",
+      "stream_tls": "TLS geht nur bei TCP.",
+      "stream_port_taken": "Port {name} hat schon ein anderer Stream.",
+      "stream_port_edge": "Port {name} gehört dem gemeinsamen Eingang (HTTP/HTTPS). Für Dienste auf 443 nach Namen: „TLS durchreichen“."
     },
     "help_title": "So funktioniert es",
     "help_ports": "Der Router leitet 80 und 443 (TCP, für HTTP/3 auch 443/UDP) auf diese Node weiter. Den Rest verteilt Node64 nach dem Domainnamen – auch zusammen mit DNS64 im selben Container.",
@@ -383,6 +404,72 @@
         "upload_renew": "Eigene Zertifikate lassen sich nicht erneuern.",
         "email": "Ungültige Mail-Adresse."
       }
+    },
+    "kind_new": {
+      "proxy": "Proxy-Host anlegen",
+      "redirect": "Weiterleitung anlegen",
+      "dead": "404-Host anlegen",
+      "passthrough": "TLS durchreichen"
+    },
+    "kind_empty": {
+      "proxy": "Noch keine Proxy-Hosts. Ein Proxy-Host leitet Anfragen für eine Domain an einen Dienst im Heimnetz weiter.",
+      "redirect": "Noch keine Weiterleitungen. Eine Weiterleitung schickt Besucher einer Domain auf eine andere (z. B. alte Domain auf neue).",
+      "dead": "Noch keine 404-Hosts. Ein 404-Host beantwortet eine Domain bewusst mit „nicht gefunden“, z. B. für stillgelegte Namen.",
+      "passthrough": "Noch nichts durchgereicht."
+    },
+    "redirect": {
+      "auto": "wie die Anfrage",
+      "auto_scheme": "(wie Anfrage)://",
+      "code_301": "dauerhaft",
+      "code_302": "vorübergehend",
+      "code_307": "vorübergehend, Methode bleibt",
+      "code_308": "dauerhaft, Methode bleibt",
+      "code_303": "siehe andere",
+      "code_300": "Auswahl"
+    },
+    "streams": {
+      "title": "Streams (TCP/UDP)",
+      "new": "Stream anlegen",
+      "edit": "Stream bearbeiten",
+      "empty": "Noch keine Streams. Ein Stream reicht einen Port roh an einen Dienst weiter, z. B. für Spiele-Server, MQTT oder WireGuard.",
+      "col": {
+        "port": "Port",
+        "conns": "Verbindungen",
+        "traffic": "Daten ein/aus"
+      },
+      "active": "{n} aktiv",
+      "delete_confirm": "Stream auf Port {port} löschen?",
+      "not_open": "Gespeichert, aber {proto} nicht geöffnet: {error}",
+      "hint": "Streams belegen ihren Port je Protokoll; die Übersicht unter Einstellungen → Ports zeigt Überschneidungen. UDP-Sitzungen enden nach 60 s ohne Pakete.",
+      "f": {
+        "name": "Name (optional)",
+        "listen_port": "Port",
+        "hint": "Ziel im Heimnetz. Ein Port lässt sich je Protokoll nur einmal öffnen.",
+        "tls": "TLS hier beenden (nur TCP)",
+        "tls_none": "Nein – roh weiterreichen",
+        "tls_hint": "Mit Zertifikat nimmt der Stream TLS an und reicht unverschlüsselt an das Ziel weiter."
+      },
+      "help_ports": "Im Router den Port (TCP und/oder UDP) auf diese Node weiterleiten. Ports unter 1024 gehen dank der Rechte im Image auch ohne Root.",
+      "help_docker": "Mit Host-Netzwerk öffnet Node64 den Port direkt. Im Bridge-Modus muss der Port zusätzlich beim Container freigegeben sein (-p)."
+    },
+    "pass": {
+      "title": "TLS durchreichen (Port 443 nach Namen)",
+      "hint": "Für Dienste, die TLS selbst machen sollen (eigenes Zertifikat, z. B. ein zweiter Proxy oder ein Mailserver-Webmail): die Verbindung geht roh nach dem Namen weiter, alles andere auf 443 bleibt bei Node64."
+    },
+    "default": {
+      "title": "Standardseite für unbekannte Namen",
+      "hint": "Was Node64 auf Port 80/443 antwortet, wenn ein Name zu keinem Host gehört oder jemand die IP direkt aufruft.",
+      "mode_404": "404",
+      "mode_hint_404": "neutrale Seite „nicht gefunden“ (Standard)",
+      "mode_close": "Verbindung schließen",
+      "mode_hint_close": "keine Antwort, wie nginx 444; verrät am wenigsten",
+      "mode_redirect": "Weiterleitung",
+      "mode_hint_redirect": "auf eine feste Adresse",
+      "mode_html": "Eigene Seite",
+      "mode_hint_html": "eigenes HTML (höchstens 64 KB)",
+      "url": "Ziel der Weiterleitung",
+      "html": "HTML der Seite",
+      "html_hint": "Wird mit Status 200 ausgeliefert, ohne Skripte von außen nachzuladen ist sie am schnellsten."
     }
   },
   "ports": {
@@ -410,7 +497,9 @@
     "edge_default_close": "Verbindung schließen",
     "edge_off": "Derzeit geschlossen (kein Modul braucht ihn).",
     "err_port": "Ports müssen zwischen 0 und 65535 liegen (0 = aus).",
-    "err_save": "Nicht gespeichert: {error}"
+    "err_save": "Nicht gespeichert: {error}",
+    "edge_default_redirect": "Weiterleitung (unter CDN64 → Standardseite)",
+    "edge_default_html": "Eigene Seite (unter CDN64 → Standardseite)"
   },
   "settings": {
     "appearance": "Darstellung",

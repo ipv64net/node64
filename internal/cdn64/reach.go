@@ -89,10 +89,11 @@ func (m *Module) reachLoop(ctx context.Context) {
 			return
 		case <-t.C:
 			m.checkAll(ctx)
+			m.applyStreams(ctx) // Streams, deren Port belegt war, noch einmal versuchen
 		case id := <-m.reach.kick:
 			if id == 0 {
 				m.checkAll(ctx)
-			} else if h, err := m.host(ctx, id); err == nil && h.Enabled {
+			} else if h, err := m.host(ctx, id); err == nil && h.Enabled && h.probed() {
 				m.reach.set(id, m.probe(ctx, h))
 			}
 		}
@@ -107,7 +108,7 @@ func (m *Module) checkAll(ctx context.Context) {
 	sem := make(chan struct{}, reachWorkers)
 	var wg sync.WaitGroup
 	for _, h := range list {
-		if !h.Enabled {
+		if !h.Enabled || !h.probed() {
 			continue
 		}
 		wg.Add(1)
@@ -117,6 +118,20 @@ func (m *Module) checkAll(ctx context.Context) {
 			defer func() { <-sem }()
 			m.reach.set(h.ID, m.probe(ctx, h))
 		}(h)
+	}
+	if streams, err := m.streams(ctx); err == nil {
+		for _, s := range streams {
+			if !s.Enabled {
+				continue
+			}
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(s *Stream) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				m.sreach.set(s.ID, m.probeStream(ctx, s))
+			}(s)
+		}
 	}
 	wg.Wait()
 }
@@ -133,7 +148,7 @@ func (m *Module) probe(ctx context.Context, h *Host) Reach {
 	}
 	_ = conn.Close()
 	req, err := http.NewRequestWithContext(cctx, http.MethodHead, h.Target()+"/", nil)
-	if err == nil {
+	if err == nil && h.Kind == KindProxy { // beim Durchreichen genuegt die Verbindung
 		req.Host = h.Names[0]
 		req.Header.Set("User-Agent", "Node64-CDN64-Check")
 		req.Header.Set(loopHeader, "check")

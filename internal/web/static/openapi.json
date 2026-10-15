@@ -1656,9 +1656,17 @@
             "type": "string",
             "enum": [
               "404",
-              "close"
+              "close",
+              "redirect",
+              "html"
             ],
             "description": "Antwort für unbekannte Namen"
+          },
+          "default_url": {
+            "type": "string"
+          },
+          "default_html": {
+            "type": "string"
           }
         }
       },
@@ -1910,6 +1918,42 @@
                 "type": "boolean"
               }
             }
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "proxy",
+              "redirect",
+              "dead",
+              "passthrough"
+            ],
+            "description": "Art; nur beim Anlegen, Standard proxy"
+          },
+          "redirect_target": {
+            "type": "string",
+            "description": "redirect: Domain[:Port][/Pfad]"
+          },
+          "redirect_scheme": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "http",
+              "https"
+            ]
+          },
+          "redirect_code": {
+            "type": "integer",
+            "enum": [
+              300,
+              301,
+              302,
+              303,
+              307,
+              308
+            ]
+          },
+          "preserve_path": {
+            "type": "boolean"
           }
         },
         "description": "Fehlende Felder: beim Anlegen Standardwerte (eingeschaltet, http, Port 80, WebSockets, HTTP/2, HTTP/3, TLS 1.2), beim Ändern bleiben sie."
@@ -1923,8 +1967,12 @@
           "kind": {
             "type": "string",
             "enum": [
-              "proxy"
-            ]
+              "proxy",
+              "redirect",
+              "dead",
+              "passthrough"
+            ],
+            "description": "Art; nur beim Anlegen, Standard proxy"
           },
           "names": {
             "type": "array",
@@ -2073,6 +2121,136 @@
           "certificate_error": {
             "type": "string",
             "description": "nur nach request_certificate, wenn das Anfordern nicht ging"
+          },
+          "redirect_target": {
+            "type": "string",
+            "description": "redirect: Domain[:Port][/Pfad]"
+          },
+          "redirect_scheme": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "http",
+              "https"
+            ]
+          },
+          "redirect_code": {
+            "type": "integer",
+            "enum": [
+              300,
+              301,
+              302,
+              303,
+              307,
+              308
+            ]
+          },
+          "preserve_path": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StreamInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "listen_port": {
+            "type": "integer"
+          },
+          "tcp": {
+            "type": "boolean"
+          },
+          "udp": {
+            "type": "boolean"
+          },
+          "target_host": {
+            "type": "string"
+          },
+          "target_port": {
+            "type": "integer"
+          },
+          "tls_cert_id": {
+            "type": "integer",
+            "description": "TCP: TLS hier beenden mit diesem Zertifikat, 0 = roh"
+          }
+        }
+      },
+      "Stream": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "listen_port": {
+            "type": "integer"
+          },
+          "tcp": {
+            "type": "boolean"
+          },
+          "udp": {
+            "type": "boolean"
+          },
+          "target_host": {
+            "type": "string"
+          },
+          "target_port": {
+            "type": "integer"
+          },
+          "tls_cert_id": {
+            "type": "integer",
+            "description": "TCP: TLS hier beenden mit diesem Zertifikat, 0 = roh"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "reach": {
+            "type": "object"
+          },
+          "listen_errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "tcp/udp: warum der Port nicht offen ist"
+          },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "connections": {
+                "type": "integer"
+              },
+              "active": {
+                "type": "integer"
+              },
+              "bytes_in": {
+                "type": "integer"
+              },
+              "bytes_out": {
+                "type": "integer"
+              }
+            }
+          },
+          "cert_name": {
+            "type": "string"
           }
         }
       }
@@ -8144,7 +8322,7 @@
         "tags": [
           "CDN64"
         ],
-        "summary": "Proxy-Hosts mit Erreichbarkeit, Zählern und Zertifikat",
+        "summary": "Hosts (Proxy, Weiterleitung, 404, TLS durchreichen) mit Erreichbarkeit, Zählern und Zertifikat",
         "responses": {
           "200": {
             "description": "OK",
@@ -8159,7 +8337,23 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "proxy",
+                "redirect",
+                "dead",
+                "passthrough"
+              ]
+            }
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -8398,6 +8592,388 @@
           },
           "404": {
             "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/streams": {
+      "get": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Streams (TCP/UDP)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Stream"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Stream anlegen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StreamInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Feld ungültig, Port doppelt oder Port des gemeinsamen Eingangs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/streams/{id}": {
+      "get": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Ein Stream",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Stream ändern (fehlende Felder bleiben)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StreamInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Feld ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Stream löschen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/streams/{id}/enable": {
+      "post": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Stream einschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/streams/{id}/disable": {
+      "post": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Stream ausschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/default": {
+      "get": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Standardseite für unbekannte Namen",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "default": {
+                      "type": "string",
+                      "enum": [
+                        "404",
+                        "close",
+                        "redirect",
+                        "html"
+                      ]
+                    },
+                    "default_url": {
+                      "type": "string"
+                    },
+                    "default_html": {
+                      "type": "string",
+                      "description": "höchstens 64 KB"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Standardseite ändern (fehlende Felder bleiben)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "default": {
+                    "type": "string",
+                    "enum": [
+                      "404",
+                      "close",
+                      "redirect",
+                      "html"
+                    ]
+                  },
+                  "default_url": {
+                    "type": "string"
+                  },
+                  "default_html": {
+                    "type": "string",
+                    "description": "höchstens 64 KB"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "default": {
+                      "type": "string",
+                      "enum": [
+                        "404",
+                        "close",
+                        "redirect",
+                        "html"
+                      ]
+                    },
+                    "default_url": {
+                      "type": "string"
+                    },
+                    "default_html": {
+                      "type": "string",
+                      "description": "höchstens 64 KB"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Adresse fehlt/ungültig oder Seite leer/zu groß",
             "content": {
               "application/json": {
                 "schema": {

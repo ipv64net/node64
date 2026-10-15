@@ -385,6 +385,14 @@ Encrypt ist noch nicht gemacht (erst nach Dennis' OK).
 - Benachrichtigungen bei Fehlschlag und nahendem Ablauf.
 
 ### C3 Redirection Hosts, 404 Hosts, Streams, Standardseite
+**Fertig (2026-10-15, CDN64 1.2.0):**
+- Weiterleitungen und 404-Hosts (Host-Art `redirect`/`dead`).
+- TLS durchreichen (Art `passthrough`: Edge liest das ClientHello und reicht roh weiter).
+- Streams TCP/UDP mit optionalem TLS-Abschluss und Port-Prüfung.
+- Standardseite (404, schließen, Weiterleitung, eigenes HTML) als Einstellung des Eingangs.
+- Reiter, API und OpenAPI dazu.
+- Verklemmung vermieden: der Abgleich der Streams fragt die Port-Verwaltung ohne gehaltene Sperre.
+
 - Die drei Host-Typen mit SSL.
 - Streams TCP/UDP mit Port-Verwaltung und optionalem TLS.
 - **TLS durchreichen:** Host-Typ, der einen Namen auf 443 roh (nach SNI) an ein Ziel im LAN weitergibt.

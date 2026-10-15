@@ -64,8 +64,39 @@ func (m *Module) transport(verify bool) http.RoundTripper {
 	return m.trInsecure
 }
 
-// handlerFor baut den Proxy eines Hosts.
-func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
+// inner: was ein Host tut (Proxy, Weiterleitung, 404).
+func (m *Module) inner(h *Host, st *hostStats) http.Handler {
+	switch h.Kind {
+	case KindRedirect:
+		return redirectHandler(h)
+	case KindDead:
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { page(w, http.StatusNotFound) })
+	}
+	return m.proxyHandler(h, st)
+}
+
+// redirectHandler leitet weiter (Schema "auto" = wie die Anfrage).
+func redirectHandler(h *Host) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		scheme := h.RedirectScheme
+		if scheme != "http" && scheme != "https" {
+			scheme = "http"
+			if r.TLS != nil {
+				scheme = "https"
+			}
+		}
+		target := scheme + "://" + h.RedirectTarget
+		if h.PreservePath {
+			target += r.URL.RequestURI()
+		} else if !strings.Contains(h.RedirectTarget, "/") {
+			target += "/"
+		}
+		http.Redirect(w, r, target, h.RedirectCode)
+	})
+}
+
+// proxyHandler baut den Reverse-Proxy eines Hosts.
+func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 	target := &url.URL{Scheme: h.Scheme, Host: net.JoinHostPort(h.TargetHost, strconv.Itoa(h.TargetPort))}
 	token := m.loopToken
 	rp := &httputil.ReverseProxy{
@@ -88,10 +119,16 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			page(w, http.StatusBadGateway)
 		},
 	}
-	var next http.Handler = rp
 	if h.CacheAssets {
-		next = m.cache.cached(h.ID, rp)
+		return m.cache.cached(h.ID, rp)
 	}
+	return rp
+}
+
+// handlerFor: was ein Host tut, mit Zaehlern, Schleifenschutz, Exploit-Sperre, WebSocket-Schalter und HSTS.
+func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
+	next := m.inner(h, st)
+	token := m.loopToken
 	hsts := ""
 	if h.HSTS {
 		hsts = "max-age=63072000"
@@ -233,6 +270,11 @@ func (m *Module) apply(ctx context.Context) {
 
 func (m *Module) routeFor(h *Host) edge.Route {
 	handler := m.handlerFor(h, m.statsOf(h.ID))
+	if h.Kind == KindPass { // TLS durchreichen: auf Port 80 nur Weiterleitung auf HTTPS
+		st := m.statsOf(h.ID)
+		return edge.Route{Names: h.Names, Passthrough: net.JoinHostPort(h.TargetHost, strconv.Itoa(h.TargetPort)), Count: func() { st.requests.Add(1) },
+			HTTP: http.HandlerFunc(m.toHTTPS)}
+	}
 	rt := edge.Route{Names: h.Names, NoHTTP2: !h.HTTP2, HTTP3: h.HTTP3, MinTLS: tls.VersionTLS12}
 	if h.MinTLS == "1.3" {
 		rt.MinTLS = tls.VersionTLS13
@@ -298,4 +340,21 @@ func firstURL(h *Host) string {
 		return "https://" + h.Names[0]
 	}
 	return "http://" + h.Names[0]
+}
+
+// toHTTPS leitet auf HTTPS um (Port aus Sicht der Besucher).
+func (m *Module) toHTTPS(w http.ResponseWriter, r *http.Request) {
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if m.edge != nil {
+		if p := m.edge.Config().Public(); p != 443 {
+			host += ":" + strconv.Itoa(p)
+		}
+	}
+	http.Redirect(w, r, "https://"+host+r.URL.RequestURI(), http.StatusMovedPermanently)
 }

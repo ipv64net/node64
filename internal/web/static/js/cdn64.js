@@ -52,6 +52,18 @@
 	[names, zone, prefix].forEach(function (el) { if (el) { el.addEventListener("input", aliasSync); el.addEventListener("change", aliasSync); } });
 	aliasSync();
 
+	// Standardseite: Felder nur fuer den gewaehlten Modus
+	var modes = document.querySelectorAll("[data-default-mode]");
+	var modeSync = function () {
+		var cur = "";
+		modes.forEach(function (r) { if (r.checked) { cur = r.value; } });
+		document.querySelectorAll("[data-default-of]").forEach(function (el) {
+			el.classList.toggle("d-none", el.getAttribute("data-default-of") !== cur);
+		});
+	};
+	modes.forEach(function (r) { r.addEventListener("change", modeSync); });
+	if (modes.length) { modeSync(); }
+
 	// Waehrend ein Zertifikat geholt wird: Seite alle paar Sekunden neu laden
 	var reload = document.querySelector("[data-reload]");
 	if (reload) {

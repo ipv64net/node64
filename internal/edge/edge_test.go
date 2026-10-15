@@ -17,6 +17,7 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -310,5 +311,94 @@ func TestEdgeWithRegistry(t *testing.T) {
 	}
 	if ov := reg.Overview(context.Background()); len(ov) == 0 {
 		t.Fatal("overview empty")
+	}
+}
+
+// TLS durchreichen: das Ziel beendet TLS mit seinem eigenen Zertifikat, Edge sieht nur den Namen.
+func TestEdgePassthrough(t *testing.T) {
+	e, cfg := newEdge(t, nil)
+	backendCert := selfSigned(t, "pass.test")
+	backend := httptestTLS(t, backendCert, "from backend")
+	var count atomic.Int32
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "app") })
+	if err := e.Set("cdn64", []Route{
+		{Names: []string{"pass.test"}, Passthrough: backend, Count: func() { count.Add(1) }},
+		{Names: []string{"app.test"}, Handler: app},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := tls.Dial("tcp", "127.0.0.1:"+strconv.Itoa(cfg.HTTPSPort), &tls.Config{ServerName: "pass.test", InsecureSkipVerify: true}) //nolint:gosec // Test
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := conn.ConnectionState().PeerCertificates[0].Subject.CommonName; got != "pass.test" {
+		t.Fatalf("certificate must come from the backend: %q", got)
+	}
+	_, _ = io.WriteString(conn, "GET / HTTP/1.1\r\nHost: pass.test\r\nConnection: close\r\n\r\n")
+	b, _ := io.ReadAll(conn)
+	conn.Close()
+	if !strings.Contains(string(b), "from backend") || count.Load() != 1 {
+		t.Fatalf("passthrough: %q count=%d", b, count.Load())
+	}
+	// andere Namen weiter ueber den TLS-Server von Edge
+	if code, body, _, _ := get(t, client(cfg, true), "https://app.test/"); code != 200 || body != "app" {
+		t.Fatalf("normal host next to passthrough: %d %q", code, body)
+	}
+	if err := e.Set("bad", []Route{{Names: []string{"x.test"}, Passthrough: backend, Handler: app}}); err == nil {
+		t.Fatal("passthrough with handler must be refused")
+	}
+}
+
+// httptestTLS startet einen TLS-Server mit eigenem Zertifikat und liefert host:port.
+func httptestTLS(t *testing.T, crt *tls.Certificate, text string) string {
+	t.Helper()
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{*crt}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, text) })}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close() })
+	return ln.Addr().String()
+}
+
+func TestEdgeDefaultPages(t *testing.T) {
+	e, cfg := newEdge(t, nil)
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	if err := e.Set("cdn64", []Route{{Names: []string{"app.test"}, Handler: app}}); err != nil {
+		t.Fatal(err)
+	}
+	bad := cfg
+	bad.Default = DefaultRedirect
+	if err := e.Configure(bad); err == nil {
+		t.Fatal("redirect without url must be refused")
+	}
+	cfg.Default, cfg.DefaultURL = DefaultRedirect, "https://www.ipv64.net/"
+	if err := e.Configure(cfg); err != nil {
+		t.Fatal(err)
+	}
+	c := client(cfg, true)
+	if code, _, hdr, _ := get(t, c, "https://unknown.test/x"); code != http.StatusFound || hdr.Get("Location") != "https://www.ipv64.net/" {
+		t.Fatalf("redirect: %d %q", code, hdr.Get("Location"))
+	}
+	cfg.Default, cfg.DefaultPage = DefaultHTML, "<h1>Willkommen</h1>"
+	if err := e.Configure(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if code, body, _, _ := get(t, c, "http://unknown.test/"); code != 200 || body != "<h1>Willkommen</h1>" {
+		t.Fatalf("html: %d %q", code, body)
+	}
+	// ungueltige gespeicherte Standardseite setzt nicht die Ports zurueck
+	got := LoadConfig(func(k, def string) string {
+		switch k {
+		case SetHTTPSPort:
+			return "8443"
+		case SetDefault:
+			return DefaultRedirect
+		}
+		return def
+	})
+	if got.HTTPSPort != 8443 || got.Default != DefaultNotFound {
+		t.Fatalf("load config: %+v", got)
 	}
 }

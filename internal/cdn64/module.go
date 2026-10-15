@@ -22,6 +22,7 @@ import (
 	"github.com/ipv64net/node64/internal/certs"
 	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/ports"
 	"github.com/ipv64net/node64/internal/store"
 )
 
@@ -38,7 +39,7 @@ var changelog string
 
 const (
 	Name    = "cdn64"
-	Version = "1.1.0"
+	Version = "1.2.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -65,6 +66,13 @@ type Module struct {
 	trInsecure *http.Transport
 	cache      *assetCache
 	reach      *reacher
+	ports      *ports.Registry // Pruefung der Stream-Ports (nil = keine)
+
+	sapply sync.Mutex // ein Abgleich der Streams gleichzeitig
+	smu    sync.Mutex // Streams (nur kurz halten)
+	runs   map[int64]*streamRun
+	sstats map[int64]*streamStats
+	sreach *reacher
 }
 
 // New erzeugt das Modul. edge und certs kommen aus dem Kern (nil nur in Tests ohne Eingang).
@@ -73,8 +81,11 @@ func New(core *store.Store, log *slog.Logger, e *edge.Edge, c *certs.Manager, ve
 	_, _ = rand.Read(b)
 	return &Module{core: core, log: log.With("module", Name), edge: e, certs: c, version: version, stats: map[int64]*hostStats{},
 		routeErr: map[int64]string{}, loopToken: hex.EncodeToString(b), trVerify: newTransport(true), trInsecure: newTransport(false),
-		cache: newAssetCache(cacheLimit), reach: newReacher()}
+		cache: newAssetCache(cacheLimit), reach: newReacher(), runs: map[int64]*streamRun{}, sstats: map[int64]*streamStats{}, sreach: newReacher()}
 }
+
+// SetPorts haengt die Port-Verwaltung an (Streams pruefen ihre Ports vor dem Oeffnen).
+func (m *Module) SetPorts(r *ports.Registry) { m.ports = r }
 
 func (m *Module) Info() module.Info {
 	return module.Info{Name: Name, TitleKey: "nav.proxy", Icon: "bi-diagram-3", Image: "cdn64.webp", Path: "/cdn64", Available: true, Order: 30,
@@ -117,6 +128,7 @@ func (m *Module) Start(ctx context.Context) error {
 		m.certs.Acquire(Name)
 	}
 	m.apply(ctx)
+	m.applyStreams(ctx)
 	go func() { defer m.wg.Done(); m.reachLoop(ctx) }()
 	m.log.Info("cdn64 started")
 	return nil
@@ -138,6 +150,7 @@ func (m *Module) Stop(ctx context.Context) error {
 		m.edge.Remove(Name)
 	}
 	m.applyMu.Unlock()
+	m.stopStreams()
 	if m.certs != nil {
 		m.certs.Release(Name)
 		m.certs.SetUsers(Name, nil)
@@ -219,7 +232,8 @@ func (m *Module) edgeError() string {
 // ---------------------------------------------------------------- Export / Import (module.Exporter)
 
 type exportFile struct {
-	Hosts []*Host `json:"hosts"`
+	Hosts   []*Host   `json:"hosts"`
+	Streams []*Stream `json:"streams,omitempty"`
 }
 
 func (m *Module) Export(ctx context.Context) (any, error) {
@@ -232,10 +246,18 @@ func (m *Module) Export(ctx context.Context) (any, error) {
 			h.CertID = CertAuto
 		}
 	}
-	return exportFile{Hosts: list}, nil
+	streams, err := m.streams(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range streams {
+		s.TLSCertID = 0 // Zertifikate gehoeren nicht zum Export
+	}
+	return exportFile{Hosts: list, Streams: streams}, nil
 }
 
-// Import legt Hosts an, deren Namen es hier noch nicht gibt (nichts wird geaendert oder geloescht).
+// Import legt Hosts und Streams an, deren Namen bzw. Ports es hier noch nicht gibt (nichts wird geaendert oder
+// geloescht).
 func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	var f exportFile
 	if err := json.Unmarshal(raw, &f); err != nil {
@@ -248,6 +270,20 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		if err := m.saveHost(ctx, h); err != nil {
 			var fe *FieldError
 			if errors.As(err, &fe) && fe.Key == "cdn64.err.name_taken" {
+				continue // gibt es schon
+			}
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		n++
+	}
+	for _, s := range f.Streams {
+		s.ID = 0
+		if err := m.saveStream(ctx, s); err != nil {
+			var fe *FieldError
+			if errors.As(err, &fe) && fe.Key == "cdn64.err.stream_port_taken" {
 				continue // gibt es schon
 			}
 			if firstErr == nil {

@@ -1,5 +1,26 @@
 # Änderungen – CDN64
 
+## 1.2.0 – 2026-10-15
+
+Weiterleitungen, 404-Hosts, Streams, TLS durchreichen und die Standardseite.
+
+### Neu
+- Weiterleitungen (Redirection Hosts):
+  - Domains auf eine andere Domain, optional mit Port und Pfad;
+  - Code 301, 302, 303, 307, 308 oder 300;
+  - Schema wie die Anfrage oder fest;
+  - Pfad und Abfrage mitnehmen;
+  - SSL-Optionen wie bei Proxy-Hosts.
+- 404-Hosts: Domains, die bewusst mit „nicht gefunden“ antworten, auch per HTTPS.
+- Streams:
+  - ein Port (TCP und/oder UDP) wird roh an ein Ziel weitergereicht;
+  - bei TCP optional mit TLS-Abschluss über ein Zertifikat der Verwaltung;
+  - Ports werden gegen die anderen Teile geprüft; ist einer belegt, steht der Grund am Stream;
+  - Zähler für Verbindungen und Datenmenge, Erreichbarkeit des Ziels.
+- TLS durchreichen: Ein Name auf Port 443 geht roh an einen Dienst mit eigenem Zertifikat, ohne Entschlüsselung hier. Alle anderen Namen auf 443 bleiben bei Node64.
+- Standardseite für unbekannte Namen: 404, Verbindung schließen, Weiterleitung oder eigene HTML-Seite.
+- Export/Import enthält jetzt auch die Streams.
+
 ## 1.1.0 – 2026-10-15
 
 Reiter SSL-Zertifikate.

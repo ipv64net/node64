@@ -15,7 +15,11 @@ import (
 
 func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	page := func(h http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(h)) }
-	mux.Handle("GET /cdn64", page(m.pageHosts))
+	mux.Handle("GET /cdn64", page(m.listOf(KindProxy)))
+	mux.Handle("GET /cdn64/redirects", page(m.listOf(KindRedirect)))
+	mux.Handle("GET /cdn64/dead", page(m.listOf(KindDead)))
+	mux.Handle("GET /cdn64/default", page(m.pageDefault))
+	mux.Handle("POST /cdn64/default", page(m.pageDefaultSave))
 	mux.Handle("GET /proxy", page(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/cdn64", http.StatusMovedPermanently)
 	}))
@@ -28,6 +32,20 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /cdn64/hosts/{id}/enable", page(m.pageToggle))
 	mux.Handle("POST /cdn64/hosts/{id}/disable", page(m.pageToggle))
 	m.certRoutes(mux, page)
+	m.streamRoutes(mux, page)
+}
+
+// listPath: Liste der Hosts einer Art.
+func listPath(kind string) string {
+	switch kind {
+	case KindRedirect:
+		return "/cdn64/redirects"
+	case KindDead:
+		return "/cdn64/dead"
+	case KindPass:
+		return "/cdn64/streams"
+	}
+	return "/cdn64"
 }
 
 // tab ist ein Reiter des Moduls.
@@ -38,7 +56,11 @@ type tab struct {
 
 func tabs(active string) []tab {
 	t := []tab{{Path: "/cdn64", Icon: "bi-arrow-left-right", TitleKey: "cdn64.tab.hosts"},
-		{Path: "/cdn64/certificates", Icon: "bi-shield-lock", TitleKey: "cdn64.tab.certs"}}
+		{Path: "/cdn64/redirects", Icon: "bi-signpost-split", TitleKey: "cdn64.tab.redirects"},
+		{Path: "/cdn64/dead", Icon: "bi-sign-stop", TitleKey: "cdn64.tab.dead"},
+		{Path: "/cdn64/streams", Icon: "bi-ethernet", TitleKey: "cdn64.tab.streams"},
+		{Path: "/cdn64/certificates", Icon: "bi-shield-lock", TitleKey: "cdn64.tab.certs"},
+		{Path: "/cdn64/default", Icon: "bi-question-square", TitleKey: "cdn64.tab.default"}}
 	for i := range t {
 		t[i].Active = t[i].Path == active
 	}
@@ -54,6 +76,9 @@ type certInfo struct {
 }
 
 func (m *Module) certFor(ctx context.Context, h *Host, all map[int64]*certs.Cert) certInfo {
+	if h.Kind == KindPass {
+		return certInfo{State: "pass"}
+	}
 	if !h.HTTPS() {
 		return certInfo{State: "http"}
 	}
@@ -103,6 +128,7 @@ type hostRow struct {
 }
 
 type listData struct {
+	Kind      string
 	Tabs      []tab
 	Rows      []hostRow
 	EdgeErr   string
@@ -138,13 +164,32 @@ func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
 	return out, nil
 }
 
-func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request) {
-	rows, err := m.rows(r.Context())
+// rowsOf: Hosts einer Art.
+func (m *Module) rowsOf(ctx context.Context, kind string) ([]hostRow, error) {
+	all, err := m.rows(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := all[:0]
+	for _, r := range all {
+		if r.Kind == kind {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+func (m *Module) listOf(kind string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) { m.pageHosts(w, r, kind) }
+}
+
+func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) {
+	rows, err := m.rowsOf(r.Context(), kind)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	d := listData{Tabs: tabs("/cdn64"), Rows: rows, EdgeErr: m.edgeError()}
+	d := listData{Kind: kind, Tabs: tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError()}
 	if m.edge != nil {
 		d.Listeners = m.edge.Status().Listeners
 		for _, l := range d.Listeners {
@@ -162,7 +207,11 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request) {
 func (m *Module) pageCheck(w http.ResponseWriter, r *http.Request) {
 	m.checkSoon(0)
 	m.g.Flash(w, r, "success", m.g.T(r, "cdn64.checking"))
-	http.Redirect(w, r, "/cdn64", http.StatusSeeOther)
+	back := r.PostFormValue("back")
+	if !strings.HasPrefix(back, "/cdn64") {
+		back = "/cdn64"
+	}
+	http.Redirect(w, r, back, http.StatusSeeOther)
 }
 
 type formData struct {
@@ -171,12 +220,13 @@ type formData struct {
 	Names   string
 	Certs   []*certs.Cert
 	New     bool
-	NewCert bool // "Zertifikat gleich mit anfordern" gewaehlt (nach einem Fehler im Formular)
+	Back    string // Liste dieser Art
+	NewCert bool   // "Zertifikat gleich mit anfordern" gewaehlt (nach einem Fehler im Formular)
 	Errors  map[string]string
 }
 
 func (m *Module) form(ctx context.Context, h *Host, isNew bool) formData {
-	d := formData{Tabs: tabs("/cdn64"), Host: h, Names: strings.Join(h.Names, "\n"), New: isNew, Errors: map[string]string{}}
+	d := formData{Tabs: tabs(listPath(h.Kind)), Back: listPath(h.Kind), Host: h, Names: strings.Join(h.Names, "\n"), New: isNew, Errors: map[string]string{}}
 	if m.certs != nil {
 		d.Certs, _ = m.certs.List(ctx)
 	}
@@ -184,7 +234,11 @@ func (m *Module) form(ctx context.Context, h *Host, isNew bool) formData {
 }
 
 func (m *Module) pageNew(w http.ResponseWriter, r *http.Request) {
-	m.g.Render(w, r, http.StatusOK, Name+"/host_form", "cdn64.new", m.form(r.Context(), newHost(), true))
+	kind := r.URL.Query().Get("kind")
+	if !validKind(kind) {
+		kind = KindProxy
+	}
+	m.g.Render(w, r, http.StatusOK, Name+"/host_form", "cdn64.new", m.form(r.Context(), newHostKind(kind), true))
 }
 
 func (m *Module) pageEdit(w http.ResponseWriter, r *http.Request) {
@@ -217,10 +271,19 @@ func hostFromForm(r *http.Request, h *Host) {
 	h.CertID, _ = strconv.ParseInt(r.PostFormValue("cert_id"), 10, 64)
 	h.ForceSSL, h.HTTP2, h.HTTP3, h.HSTS, h.HSTSSubdomains = on("force_ssl"), on("http2"), on("http3"), on("hsts"), on("hsts_subdomains")
 	h.MinTLS, h.VerifyTarget = r.PostFormValue("min_tls"), on("verify_target")
+	h.RedirectTarget, h.RedirectScheme, h.PreservePath = strings.TrimSpace(r.PostFormValue("redirect_target")), r.PostFormValue("redirect_scheme"), on("preserve_path")
+	h.RedirectCode, _ = strconv.Atoi(r.PostFormValue("redirect_code"))
+	if h.Kind == KindPass {
+		h.CertID = CertNone
+	}
 }
 
 func (m *Module) pageCreate(w http.ResponseWriter, r *http.Request) {
-	h := newHost()
+	kind := r.PostFormValue("kind")
+	if !validKind(kind) {
+		kind = KindProxy
+	}
+	h := newHostKind(kind)
 	hostFromForm(r, h)
 	m.saveForm(w, r, h, true)
 }
@@ -263,16 +326,16 @@ func (m *Module) saveForm(w http.ResponseWriter, r *http.Request, h *Host, isNew
 		c, err := m.requestCert(ctx, h.Names, r.PostFormValue("cert_source"), "", "", false)
 		if err != nil {
 			m.g.Flash(w, r, "warning", m.g.T(r, "cdn64.certs.host_saved_no_cert", "error", m.certError(r, err)))
-			http.Redirect(w, r, "/cdn64", http.StatusSeeOther)
+			http.Redirect(w, r, listPath(h.Kind), http.StatusSeeOther)
 			return
 		}
 		m.auditCert(r, c)
 		m.g.Flash(w, r, "success", m.g.T(r, "cdn64.certs.host_saved_cert", "name", c.Title()))
-		http.Redirect(w, r, "/cdn64", http.StatusSeeOther)
+		http.Redirect(w, r, listPath(h.Kind), http.StatusSeeOther)
 		return
 	}
 	m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
-	http.Redirect(w, r, "/cdn64", http.StatusSeeOther)
+	http.Redirect(w, r, listPath(h.Kind), http.StatusSeeOther)
 }
 
 func (m *Module) pageDelete(w http.ResponseWriter, r *http.Request) {
@@ -286,7 +349,7 @@ func (m *Module) pageDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	m.g.Audit(r, "cdn64.host.delete", strings.Join(h.Names, ","), "target="+h.Target())
 	m.g.Flash(w, r, "success", m.g.T(r, "cdn64.deleted", "name", h.Names[0]))
-	http.Redirect(w, r, "/cdn64", http.StatusSeeOther)
+	http.Redirect(w, r, listPath(h.Kind), http.StatusSeeOther)
 }
 
 func (m *Module) pageToggle(w http.ResponseWriter, r *http.Request) {
@@ -304,7 +367,7 @@ func (m *Module) pageToggle(w http.ResponseWriter, r *http.Request) {
 		action = "cdn64.host.enable"
 	}
 	m.g.Audit(r, action, strings.Join(h.Names, ","), "")
-	http.Redirect(w, r, "/cdn64", http.StatusSeeOther)
+	http.Redirect(w, r, listPath(h.Kind), http.StatusSeeOther)
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }

@@ -1,0 +1,56 @@
+{{define "content"}}
+{{$d := .Data}}
+{{$s := $d.S}}
+<h1 class="h4 mb-3"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{if $d.New}}{{.T "cdn64.streams.new"}}{{else}}{{.T "cdn64.streams.edit"}} <span class="font-monospace">{{$s.ListenPort}}</span>{{end}}</h1>
+{{with index $d.Errors "_"}}<div class="alert alert-danger small">{{.}}</div>{{end}}
+<div class="row g-3">
+	<div class="col-xl-7">
+		<form method="post" action="{{if $d.New}}/cdn64/streams{{else}}/cdn64/streams/{{$s.ID}}{{end}}" class="card">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-body small">
+				<label class="form-label fw-semibold" for="name">{{.T "cdn64.streams.f.name"}}</label>
+				<input class="form-control form-control-sm mb-3{{if index $d.Errors "name"}} is-invalid{{end}}" id="name" name="name" value="{{$s.Name}}" maxlength="100" placeholder="Minecraft">
+				<div class="row g-2 mb-1">
+					<div class="col-sm-4"><label class="form-label fw-semibold" for="listen_port">{{.T "cdn64.streams.f.listen_port"}}</label>
+						<input class="form-control form-control-sm font-monospace{{if index $d.Errors "listen_port"}} is-invalid{{end}}" type="number" min="1" max="65535" id="listen_port" name="listen_port" value="{{if $s.ListenPort}}{{$s.ListenPort}}{{end}}" required>
+						{{with index $d.Errors "listen_port"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
+					<div class="col-sm-8 d-flex align-items-end gap-3 pb-1">
+						<div class="form-check"><input class="form-check-input{{if index $d.Errors "tcp"}} is-invalid{{end}}" type="checkbox" name="tcp" id="tcp"{{if $s.TCP}} checked{{end}}><label class="form-check-label" for="tcp">TCP</label></div>
+						<div class="form-check"><input class="form-check-input" type="checkbox" name="udp" id="udp"{{if $s.UDP}} checked{{end}}><label class="form-check-label" for="udp">UDP</label></div>
+						{{with index $d.Errors "tcp"}}<span class="text-danger">{{.}}</span>{{end}}
+					</div>
+				</div>
+				<div class="row g-2 mb-1 mt-1">
+					<div class="col-sm-8"><label class="form-label fw-semibold" for="target_host">{{.T "cdn64.f.target_host"}}</label>
+						<input class="form-control form-control-sm font-monospace{{if index $d.Errors "target_host"}} is-invalid{{end}}" id="target_host" name="target_host" value="{{$s.TargetHost}}" required placeholder="192.168.1.40" maxlength="253">
+						{{with index $d.Errors "target_host"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
+					<div class="col-sm-4"><label class="form-label fw-semibold" for="target_port">{{.T "cdn64.f.target_port"}}</label>
+						<input class="form-control form-control-sm font-monospace{{if index $d.Errors "target_port"}} is-invalid{{end}}" type="number" min="1" max="65535" id="target_port" name="target_port" value="{{if $s.TargetPort}}{{$s.TargetPort}}{{end}}" required>
+						{{with index $d.Errors "target_port"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
+				</div>
+				<div class="form-text mb-3">{{.T "cdn64.streams.f.hint"}}</div>
+				<label class="form-label fw-semibold" for="tls_cert_id">{{.T "cdn64.streams.f.tls"}}</label>
+				<select class="form-select form-select-sm mb-1{{if index $d.Errors "tls_cert_id"}} is-invalid{{end}}" id="tls_cert_id" name="tls_cert_id">
+					<option value="0">{{.T "cdn64.streams.f.tls_none"}}</option>
+					{{range $d.Certs}}{{if not .NotAfter.IsZero}}<option value="{{.ID}}"{{if eq $s.TLSCertID .ID}} selected{{end}}>{{join .Names ", "}}</option>{{end}}{{end}}
+				</select>
+				{{with index $d.Errors "tls_cert_id"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+				<div class="form-text mb-3">{{.T "cdn64.streams.f.tls_hint"}}</div>
+				<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="enabled" id="enabled"{{if $s.Enabled}} checked{{end}}><label class="form-check-label" for="enabled">{{.T "cdn64.f.enabled"}}</label></div>
+			</div>
+			<div class="card-footer d-flex gap-2">
+				<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>
+				<a class="btn btn-outline-secondary btn-sm" href="/cdn64/streams">{{.T "common.cancel"}}</a>
+			</div>
+		</form>
+	</div>
+	<div class="col-xl-5">
+		<div class="card"><div class="card-body small">
+			<div class="fw-semibold mb-1"><i class="bi bi-info-circle text-info"></i> {{.T "cdn64.help_title"}}</div>
+			<p class="mb-2">{{.T "cdn64.streams.help_ports"}}</p>
+			<p class="mb-0">{{.T "cdn64.streams.help_docker"}}</p>
+		</div></div>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}

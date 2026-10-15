@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,16 @@ const (
 )
 
 const maxNames = 50
+
+// Arten von Hosts.
+const (
+	KindProxy    = "proxy"       // Reverse-Proxy auf ein Ziel
+	KindRedirect = "redirect"    // Weiterleitung auf eine andere Domain
+	KindDead     = "dead"        // antwortet immer mit 404
+	KindPass     = "passthrough" // TLS durchreichen (das Ziel beendet TLS selbst)
+)
+
+var redirectCodes = map[int]bool{300: true, 301: true, 302: true, 303: true, 307: true, 308: true}
 
 // Host ist ein Proxy-Host.
 type Host struct {
@@ -41,8 +52,12 @@ type Host struct {
 	HTTP3          bool      `json:"http3"`
 	HSTS           bool      `json:"hsts"`
 	HSTSSubdomains bool      `json:"hsts_subdomains"`
-	MinTLS         string    `json:"min_tls"`       // 1.2 | 1.3
-	VerifyTarget   bool      `json:"verify_target"` // Zertifikat eines https-Ziels pruefen
+	MinTLS         string    `json:"min_tls"`                   // 1.2 | 1.3
+	VerifyTarget   bool      `json:"verify_target"`             // Zertifikat eines https-Ziels pruefen
+	RedirectTarget string    `json:"redirect_target,omitempty"` // Weiterleitung: Domain[:Port][/Pfad]
+	RedirectScheme string    `json:"redirect_scheme,omitempty"` // auto | http | https
+	RedirectCode   int       `json:"redirect_code,omitempty"`   // 301, 302, 307, 308 …
+	PreservePath   bool      `json:"preserve_path"`             // Pfad und Abfrage mitnehmen
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
@@ -52,12 +67,26 @@ func (h *Host) Target() string {
 	return h.Scheme + "://" + net.JoinHostPort(h.TargetHost, strconv.Itoa(h.TargetPort))
 }
 
-// HTTPS: der Host nimmt HTTPS an.
-func (h *Host) HTTPS() bool { return h.CertID != CertNone }
+// HTTPS: der Host beendet HTTPS hier (beim Durchreichen macht das das Ziel).
+func (h *Host) HTTPS() bool { return h.CertID != CertNone && h.Kind != KindPass }
+
+// probed: das Ziel wird auf Erreichbarkeit geprueft.
+func (h *Host) probed() bool { return h.Kind == KindProxy || h.Kind == KindPass }
 
 // newHost: Standardwerte eines neuen Hosts.
-func newHost() *Host {
-	return &Host{Kind: "proxy", Enabled: true, Scheme: "http", TargetPort: 80, WebSockets: true, HTTP2: true, HTTP3: true, MinTLS: "1.2"}
+func newHost() *Host { return newHostKind(KindProxy) }
+
+func newHostKind(kind string) *Host {
+	h := &Host{Kind: kind, Enabled: true, Scheme: "http", TargetPort: 80, WebSockets: true, HTTP2: true, HTTP3: true, MinTLS: "1.2",
+		RedirectScheme: "auto", RedirectCode: 301, PreservePath: true}
+	if kind == KindPass {
+		h.Scheme, h.TargetPort, h.CertID = "https", 443, CertNone
+	}
+	return h
+}
+
+func validKind(k string) bool {
+	return k == KindProxy || k == KindRedirect || k == KindDead || k == KindPass
 }
 
 // FieldError ist ein Fehler in einem Feld (Formular, API 422); Key ist der Text, Name ein Wert dazu.
@@ -99,7 +128,32 @@ func (h *Host) normalize() error {
 	}
 	h.Names = names
 	if h.Kind == "" {
-		h.Kind = "proxy"
+		h.Kind = KindProxy
+	}
+	if !validKind(h.Kind) {
+		return ferr("kind", "cdn64.err.kind")
+	}
+	if h.MinTLS != "1.3" {
+		h.MinTLS = "1.2"
+	}
+	switch h.Kind {
+	case KindRedirect:
+		if err := h.normalizeRedirect(); err != nil {
+			return err
+		}
+		h.TargetHost, h.TargetPort, h.WebSockets, h.CacheAssets = "", 0, false, false
+		return h.normalizeTLS()
+	case KindDead:
+		h.TargetHost, h.TargetPort, h.WebSockets, h.CacheAssets, h.BlockExploits = "", 0, false, false, false
+		return h.normalizeTLS()
+	case KindPass:
+		h.Scheme, h.CertID, h.WebSockets, h.CacheAssets, h.BlockExploits = "https", CertNone, false, false, false
+		h.ForceSSL, h.HSTS, h.HSTSSubdomains, h.HTTP3 = false, false, false, false
+		for _, n := range h.Names {
+			if strings.HasPrefix(n, "*.") {
+				return ferr("names", "cdn64.err.pass_wildcard")
+			}
+		}
 	}
 	if h.Scheme != "http" && h.Scheme != "https" {
 		return ferr("scheme", "cdn64.err.scheme")
@@ -117,9 +171,11 @@ func (h *Host) normalize() error {
 	if h.TargetPort < 1 || h.TargetPort > 65535 {
 		return ferr("target_port", "cdn64.err.port")
 	}
-	if h.MinTLS != "1.3" {
-		h.MinTLS = "1.2"
-	}
+	return h.normalizeTLS()
+}
+
+// normalizeTLS: Zertifikat und HTTPS-Optionen.
+func (h *Host) normalizeTLS() error {
 	if h.CertID < CertNone {
 		return ferr("cert_id", "cdn64.err.cert")
 	}
@@ -128,6 +184,52 @@ func (h *Host) normalize() error {
 	}
 	if !h.HSTS {
 		h.HSTSSubdomains = false
+	}
+	return nil
+}
+
+// normalizeRedirect prueft Ziel, Schema und Code einer Weiterleitung.
+func (h *Host) normalizeRedirect() error {
+	t := strings.TrimSpace(h.RedirectTarget)
+	for _, p := range []string{"https://", "http://"} {
+		t = strings.TrimPrefix(t, p)
+	}
+	u, err := url.Parse("http://" + t)
+	if err != nil || u.Host == "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+		return ferr("redirect_target", "cdn64.err.redirect_target")
+	}
+	host := u.Hostname()
+	if a, err := netip.ParseAddr(host); err == nil {
+		host = a.String()
+	} else if nn, err := edge.NormalizeName(host); err != nil || strings.HasPrefix(nn, "*") {
+		return ferr("redirect_target", "cdn64.err.redirect_target")
+	} else {
+		host = nn
+	}
+	hp := host
+	if strings.Contains(host, ":") {
+		hp = "[" + host + "]"
+	}
+	if p := u.Port(); p != "" {
+		if n, err := strconv.Atoi(p); err != nil || n < 1 || n > 65535 {
+			return ferr("redirect_target", "cdn64.err.redirect_target")
+		}
+		hp += ":" + p
+	}
+	h.RedirectTarget = hp + strings.TrimSuffix(u.EscapedPath(), "/")
+	if h.RedirectScheme != "http" && h.RedirectScheme != "https" {
+		h.RedirectScheme = "auto"
+	}
+	if h.RedirectCode == 0 {
+		h.RedirectCode = 301
+	}
+	if !redirectCodes[h.RedirectCode] {
+		return ferr("redirect_code", "cdn64.err.redirect_code")
+	}
+	for _, n := range h.Names { // Weiterleitung auf sich selbst
+		if hp == n {
+			return ferr("redirect_target", "cdn64.err.redirect_self")
+		}
 	}
 	return nil
 }
@@ -148,13 +250,14 @@ func isSingleLabel(s string) bool {
 // ---------------------------------------------------------------- Datenbank
 
 const hostCols = `id, kind, names, enabled, scheme, target_host, target_port, websockets, block_exploits, cache_assets, cert_id, force_ssl, http2,
-	http3, hsts, hsts_subdomains, min_tls, verify_target, created_at, updated_at`
+	http3, hsts, hsts_subdomains, min_tls, verify_target, redirect_target, redirect_scheme, redirect_code, preserve_path, created_at, updated_at`
 
 func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
 	var h Host
 	var names, ca, ua string
 	if err := row.Scan(&h.ID, &h.Kind, &names, &h.Enabled, &h.Scheme, &h.TargetHost, &h.TargetPort, &h.WebSockets, &h.BlockExploits, &h.CacheAssets,
-		&h.CertID, &h.ForceSSL, &h.HTTP2, &h.HTTP3, &h.HSTS, &h.HSTSSubdomains, &h.MinTLS, &h.VerifyTarget, &ca, &ua); err != nil {
+		&h.CertID, &h.ForceSSL, &h.HTTP2, &h.HTTP3, &h.HSTS, &h.HSTSSubdomains, &h.MinTLS, &h.VerifyTarget, &h.RedirectTarget, &h.RedirectScheme,
+		&h.RedirectCode, &h.PreservePath, &ca, &ua); err != nil {
 		return nil, err
 	}
 	h.Names = strings.Split(names, ",")
@@ -224,11 +327,13 @@ func (m *Module) saveHost(ctx context.Context, h *Host) error {
 	now := store.Now()
 	w := m.core.Writer()
 	args := []any{h.Kind, strings.Join(h.Names, ","), h.Enabled, h.Scheme, h.TargetHost, h.TargetPort, h.WebSockets, h.BlockExploits, h.CacheAssets,
-		h.CertID, h.ForceSSL, h.HTTP2, h.HTTP3, h.HSTS, h.HSTSSubdomains, h.MinTLS, h.VerifyTarget}
+		h.CertID, h.ForceSSL, h.HTTP2, h.HTTP3, h.HSTS, h.HSTSSubdomains, h.MinTLS, h.VerifyTarget, h.RedirectTarget, h.RedirectScheme, h.RedirectCode,
+		h.PreservePath}
 	if h.ID == 0 {
 		res, err := w.ExecContext(ctx, `INSERT INTO cdn_hosts (kind, names, enabled, scheme, target_host, target_port, websockets, block_exploits, cache_assets,
-			cert_id, force_ssl, http2, http3, hsts, hsts_subdomains, min_tls, verify_target, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
+			cert_id, force_ssl, http2, http3, hsts, hsts_subdomains, min_tls, verify_target, redirect_target, redirect_scheme, redirect_code, preserve_path,
+			created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
 		if err != nil {
 			return err
 		}
@@ -236,7 +341,8 @@ func (m *Module) saveHost(ctx context.Context, h *Host) error {
 	} else {
 		res, err := w.ExecContext(ctx, `UPDATE cdn_hosts SET kind = ?, names = ?, enabled = ?, scheme = ?, target_host = ?, target_port = ?, websockets = ?,
 			block_exploits = ?, cache_assets = ?, cert_id = ?, force_ssl = ?, http2 = ?, http3 = ?, hsts = ?, hsts_subdomains = ?, min_tls = ?,
-			verify_target = ?, updated_at = ? WHERE id = ?`, append(args, now, h.ID)...)
+			verify_target = ?, redirect_target = ?, redirect_scheme = ?, redirect_code = ?, preserve_path = ?, updated_at = ? WHERE id = ?`,
+			append(args, now, h.ID)...)
 		if err != nil {
 			return err
 		}
@@ -281,6 +387,15 @@ func (m *Module) deleteHost(ctx context.Context, id int64) error {
 
 // summary: kurze Beschreibung fuer das Audit.
 func (h *Host) summary() string {
+	switch h.Kind {
+	case KindRedirect:
+		return fmt.Sprintf("kind=redirect to=%s://%s code=%d preserve_path=%v enabled=%v cert=%d force_ssl=%v", h.RedirectScheme, h.RedirectTarget,
+			h.RedirectCode, h.PreservePath, h.Enabled, h.CertID, h.ForceSSL)
+	case KindDead:
+		return fmt.Sprintf("kind=dead enabled=%v cert=%d force_ssl=%v", h.Enabled, h.CertID, h.ForceSSL)
+	case KindPass:
+		return fmt.Sprintf("kind=passthrough target=%s enabled=%v", net.JoinHostPort(h.TargetHost, strconv.Itoa(h.TargetPort)), h.Enabled)
+	}
 	return fmt.Sprintf("target=%s enabled=%v ws=%v exploits=%v cache=%v cert=%d force_ssl=%v http2=%v http3=%v hsts=%v tls=%s", h.Target(), h.Enabled,
 		h.WebSockets, h.BlockExploits, h.CacheAssets, h.CertID, h.ForceSSL, h.HTTP2, h.HTTP3, h.HSTS, h.MinTLS)
 }

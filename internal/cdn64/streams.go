@@ -1,0 +1,568 @@
+package cdn64
+
+import (
+	"context"
+	"crypto/tls"
+	"database/sql"
+	"errors"
+	"fmt"
+	"net"
+	"net/netip"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/ipv64net/node64/internal/edge"
+	"github.com/ipv64net/node64/internal/ports"
+	"github.com/ipv64net/node64/internal/store"
+)
+
+// Streams: ein Port (TCP und/oder UDP) wird roh an ein Ziel weitergereicht, wie die Streams im NPM; bei TCP
+// optional mit TLS-Abschluss hier. Jeder Stream belegt seinen Port in der Port-Verwaltung; ein Port, den ein
+// anderer Teil schon offen hat, wird nicht geoeffnet und der Grund angezeigt.
+
+const (
+	udpIdle        = 60 * time.Second
+	udpMaxSessions = 1024
+	tcpDialTimeout = 10 * time.Second
+)
+
+// Stream ist ein weitergereichter Port.
+type Stream struct {
+	ID         int64     `json:"id"`
+	Name       string    `json:"name"`
+	Enabled    bool      `json:"enabled"`
+	ListenPort int       `json:"listen_port"`
+	TCP        bool      `json:"tcp"`
+	UDP        bool      `json:"udp"`
+	TargetHost string    `json:"target_host"`
+	TargetPort int       `json:"target_port"`
+	TLSCertID  int64     `json:"tls_cert_id"` // TCP: TLS hier beenden mit diesem Zertifikat (0 = nein)
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+func (s *Stream) target() string { return net.JoinHostPort(s.TargetHost, strconv.Itoa(s.TargetPort)) }
+
+// key: alles, was einen Neustart des Streams verlangt.
+func (s *Stream) key() string {
+	return fmt.Sprintf("%d|%v|%v|%s|%d", s.ListenPort, s.TCP, s.UDP, s.target(), s.TLSCertID)
+}
+
+func newStream() *Stream { return &Stream{Enabled: true, TCP: true} }
+
+func (s *Stream) normalize() error {
+	s.Name = strings.TrimSpace(s.Name)
+	if len(s.Name) > 100 {
+		return ferr("name", "cdn64.err.stream_name")
+	}
+	if s.ListenPort < 1 || s.ListenPort > 65535 {
+		return ferr("listen_port", "cdn64.err.port")
+	}
+	if !s.TCP && !s.UDP {
+		return ferr("tcp", "cdn64.err.stream_proto")
+	}
+	t := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(s.TargetHost), "["), "]")
+	if a, err := netip.ParseAddr(t); err == nil {
+		t = a.String()
+	} else if nn, err := edge.NormalizeName(t); err == nil && !strings.HasPrefix(nn, "*") {
+		t = nn
+	} else if !isSingleLabel(t) {
+		return ferr("target_host", "cdn64.err.target_host")
+	}
+	s.TargetHost = strings.ToLower(t)
+	if s.TargetPort < 1 || s.TargetPort > 65535 {
+		return ferr("target_port", "cdn64.err.port")
+	}
+	if s.TLSCertID < 0 || (s.TLSCertID > 0 && !s.TCP) {
+		return ferr("tls_cert_id", "cdn64.err.stream_tls")
+	}
+	return nil
+}
+
+// claims: die Ports eines Streams.
+func (s *Stream) claims(active map[string]bool) []ports.Claim {
+	purpose := "Stream"
+	if s.Name != "" {
+		purpose += " " + s.Name
+	}
+	var out []ports.Claim
+	if s.TCP {
+		out = append(out, ports.Claim{Owner: Name, Purpose: purpose, Proto: ports.TCP, Port: s.ListenPort, Active: active["tcp"]})
+	}
+	if s.UDP {
+		out = append(out, ports.Claim{Owner: Name, Purpose: purpose, Proto: ports.UDP, Port: s.ListenPort, Active: active["udp"]})
+	}
+	return out
+}
+
+// ---------------------------------------------------------------- Datenbank
+
+const streamCols = `id, name, enabled, listen_port, tcp, udp, target_host, target_port, tls_cert_id, created_at, updated_at`
+
+func scanStream(row interface{ Scan(...any) error }) (*Stream, error) {
+	var s Stream
+	var ca, ua string
+	if err := row.Scan(&s.ID, &s.Name, &s.Enabled, &s.ListenPort, &s.TCP, &s.UDP, &s.TargetHost, &s.TargetPort, &s.TLSCertID, &ca, &ua); err != nil {
+		return nil, err
+	}
+	s.CreatedAt, s.UpdatedAt = store.ParseTime(ca), store.ParseTime(ua)
+	return &s, nil
+}
+
+func (m *Module) streams(ctx context.Context) ([]*Stream, error) {
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT `+streamCols+` FROM cdn_streams ORDER BY listen_port`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Stream
+	for rows.Next() {
+		s, err := scanStream(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+func (m *Module) stream(ctx context.Context, id int64) (*Stream, error) {
+	s, err := scanStream(m.core.Reader().QueryRowContext(ctx, `SELECT `+streamCols+` FROM cdn_streams WHERE id = ?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, errNotFound
+	}
+	return s, err
+}
+
+func (m *Module) saveStream(ctx context.Context, s *Stream) error {
+	if err := s.normalize(); err != nil {
+		return err
+	}
+	if s.TLSCertID > 0 && m.certs != nil {
+		if _, err := m.certs.Get(ctx, s.TLSCertID); err != nil {
+			return ferr("tls_cert_id", "cdn64.err.cert")
+		}
+	}
+	list, err := m.streams(ctx)
+	if err != nil {
+		return err
+	}
+	for _, o := range list {
+		if o.ID != s.ID && o.ListenPort == s.ListenPort && ((o.TCP && s.TCP) || (o.UDP && s.UDP)) {
+			return &FieldError{Field: "listen_port", Key: "cdn64.err.stream_port_taken", Name: strconv.Itoa(s.ListenPort)}
+		}
+	}
+	if m.edge != nil { // die Ports des gemeinsamen Eingangs bleiben frei, auch wenn er gerade zu ist
+		c := m.edge.Config()
+		if s.TCP && (s.ListenPort == c.HTTPPort || s.ListenPort == c.HTTPSPort) || s.UDP && c.HTTP3 && s.ListenPort == c.HTTPSPort {
+			return &FieldError{Field: "listen_port", Key: "cdn64.err.stream_port_edge", Name: strconv.Itoa(s.ListenPort)}
+		}
+	}
+	now := store.Now()
+	w := m.core.Writer()
+	args := []any{s.Name, s.Enabled, s.ListenPort, s.TCP, s.UDP, s.TargetHost, s.TargetPort, s.TLSCertID}
+	if s.ID == 0 {
+		res, err := w.ExecContext(ctx, `INSERT INTO cdn_streams (name, enabled, listen_port, tcp, udp, target_host, target_port, tls_cert_id, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
+		if err != nil {
+			return err
+		}
+		s.ID, _ = res.LastInsertId()
+	} else {
+		res, err := w.ExecContext(ctx, `UPDATE cdn_streams SET name = ?, enabled = ?, listen_port = ?, tcp = ?, udp = ?, target_host = ?, target_port = ?,
+			tls_cert_id = ?, updated_at = ? WHERE id = ?`, append(args, now, s.ID)...)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return errNotFound
+		}
+	}
+	m.applyStreams(ctx)
+	m.checkSoon(0) // Ziel gleich pruefen
+	return nil
+}
+
+func (m *Module) setStreamEnabled(ctx context.Context, id int64, on bool) error {
+	res, err := m.core.Writer().ExecContext(ctx, `UPDATE cdn_streams SET enabled = ?, updated_at = ? WHERE id = ?`, on, store.Now(), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	m.applyStreams(ctx)
+	return nil
+}
+
+func (m *Module) deleteStream(ctx context.Context, id int64) error {
+	res, err := m.core.Writer().ExecContext(ctx, `DELETE FROM cdn_streams WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	m.applyStreams(ctx)
+	m.sreach.forget(id)
+	return nil
+}
+
+// ---------------------------------------------------------------- Betrieb
+
+type streamStats struct {
+	conns   atomic.Int64 // TCP-Verbindungen bzw. UDP-Sitzungen
+	active  atomic.Int64
+	bytesIn atomic.Int64 // vom Client
+	bytesUp atomic.Int64 // vom Ziel
+}
+
+type streamRun struct {
+	key    string
+	tcp    net.Listener
+	udp    net.PacketConn
+	errs   map[string]string // tcp/udp -> Fehler beim Oeffnen
+	stats  *streamStats
+	mu     sync.Mutex
+	conns  map[net.Conn]struct{}
+	closed bool
+	wg     sync.WaitGroup
+}
+
+func (r *streamRun) track(c net.Conn) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return false
+	}
+	r.conns[c] = struct{}{}
+	return true
+}
+
+func (r *streamRun) untrack(c net.Conn) {
+	r.mu.Lock()
+	delete(r.conns, c)
+	r.mu.Unlock()
+}
+
+func (r *streamRun) stop() {
+	r.mu.Lock()
+	r.closed = true
+	if r.tcp != nil {
+		_ = r.tcp.Close()
+	}
+	if r.udp != nil {
+		_ = r.udp.Close()
+	}
+	for c := range r.conns {
+		_ = c.Close()
+	}
+	r.mu.Unlock()
+	r.wg.Wait()
+}
+
+func (m *Module) streamStatsOf(id int64) *streamStats {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	st := m.sstats[id]
+	if st == nil {
+		st = &streamStats{}
+		m.sstats[id] = st
+	}
+	return st
+}
+
+// applyStreams oeffnet und schliesst Streams nach der Datenbank (nur, solange das Modul laeuft). m.smu wird nur
+// kurz gehalten: die Pruefung der Ports fragt andere Teile, und der Eingang fragt dabei ueber die
+// Port-Verwaltung die Streams (Claims) ab.
+func (m *Module) applyStreams(ctx context.Context) {
+	m.sapply.Lock()
+	defer m.sapply.Unlock()
+	m.mu.Lock()
+	on := m.running
+	m.mu.Unlock()
+	want := map[int64]*Stream{}
+	if on {
+		list, err := m.streams(ctx)
+		if err != nil {
+			m.log.Error("streams not readable", "err", err)
+			return
+		}
+		for _, s := range list {
+			if s.Enabled {
+				want[s.ID] = s
+			}
+		}
+	}
+	m.smu.Lock()
+	var stop []*streamRun
+	for id, r := range m.runs {
+		if s, ok := want[id]; !ok || s.key() != r.key || len(r.errs) > 0 {
+			stop = append(stop, r)
+			delete(m.runs, id)
+		}
+	}
+	var start []*Stream
+	for id, s := range want {
+		if _, ok := m.runs[id]; !ok {
+			start = append(start, s)
+		}
+	}
+	m.smu.Unlock()
+	for _, r := range stop {
+		r.stop()
+	}
+	for _, s := range start {
+		r := m.startStream(ctx, s)
+		m.smu.Lock()
+		m.runs[s.ID] = r
+		m.smu.Unlock()
+	}
+}
+
+// startStream oeffnet die Ports eines Streams (Fehler je Protokoll, der Rest laeuft).
+func (m *Module) startStream(ctx context.Context, s *Stream) *streamRun {
+	r := &streamRun{key: s.key(), errs: map[string]string{}, stats: m.streamStatsOf(s.ID), conns: map[net.Conn]struct{}{}}
+	addr := ":" + strconv.Itoa(s.ListenPort)
+	check := func(p ports.Proto) error {
+		if m.ports == nil {
+			return nil
+		}
+		return m.ports.Check(ctx, Name, []ports.Claim{{Owner: Name, Purpose: "Stream", Proto: p, Port: s.ListenPort, Active: true}})
+	}
+	if s.TCP {
+		if err := check(ports.TCP); err != nil {
+			r.errs["tcp"] = err.Error()
+		} else if ln, err := net.Listen("tcp", addr); err != nil {
+			r.errs["tcp"] = err.Error()
+		} else {
+			if s.TLSCertID > 0 && m.certs != nil {
+				id := s.TLSCertID
+				ln = tls.NewListener(ln, &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+					if c := m.certs.ByID(id); c != nil {
+						return c, nil
+					}
+					return nil, errors.New("certificate not available")
+				}})
+			}
+			r.tcp = ln
+			r.wg.Add(1)
+			go func() { defer r.wg.Done(); m.serveTCP(r, s.target()) }()
+		}
+	}
+	if s.UDP {
+		if err := check(ports.UDP); err != nil {
+			r.errs["udp"] = err.Error()
+		} else if pc, err := net.ListenPacket("udp", addr); err != nil {
+			r.errs["udp"] = err.Error()
+		} else {
+			r.udp = pc
+			r.wg.Add(1)
+			go func() { defer r.wg.Done(); m.serveUDP(r, s.target()) }()
+		}
+	}
+	for p, e := range r.errs {
+		m.log.Warn("stream port not opened", "port", s.ListenPort, "proto", p, "err", e)
+	}
+	return r
+}
+
+func (m *Module) serveTCP(r *streamRun, target string) {
+	for {
+		c, err := r.tcp.Accept()
+		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		r.wg.Add(1)
+		go func() {
+			defer r.wg.Done()
+			up, err := net.DialTimeout("tcp", target, tcpDialTimeout)
+			if err != nil {
+				_ = c.Close()
+				return
+			}
+			if !r.track(c) || !r.track(up) {
+				_ = c.Close()
+				_ = up.Close()
+				return
+			}
+			r.stats.conns.Add(1)
+			r.stats.active.Add(1)
+			in, out := edge.Pipe(c, up)
+			r.stats.active.Add(-1)
+			r.stats.bytesIn.Add(in)
+			r.stats.bytesUp.Add(out)
+			r.untrack(c)
+			r.untrack(up)
+		}()
+	}
+}
+
+// serveUDP: je Client eine Sitzung mit eigenem Socket zum Ziel; nach 60 s ohne Pakete faellt sie weg.
+func (m *Module) serveUDP(r *streamRun, target string) {
+	type session struct {
+		up   net.Conn
+		last atomic.Int64
+	}
+	var mu sync.Mutex
+	sessions := map[string]*session{}
+	done := make(chan struct{})
+	defer close(done)
+	r.wg.Add(1)
+	go func() { // aufraeumen
+		defer r.wg.Done()
+		t := time.NewTicker(udpIdle / 4)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				mu.Lock()
+				for k, s := range sessions {
+					_ = s.up.Close()
+					delete(sessions, k)
+				}
+				mu.Unlock()
+				return
+			case <-t.C:
+				limit := time.Now().Add(-udpIdle).UnixNano()
+				mu.Lock()
+				for k, s := range sessions {
+					if s.last.Load() < limit {
+						_ = s.up.Close()
+						delete(sessions, k)
+					}
+				}
+				mu.Unlock()
+			}
+		}
+	}()
+	buf := make([]byte, 64<<10)
+	for {
+		n, addr, err := r.udp.ReadFrom(buf)
+		if err != nil {
+			return
+		}
+		key := addr.String()
+		mu.Lock()
+		s := sessions[key]
+		if s == nil {
+			if len(sessions) >= udpMaxSessions {
+				mu.Unlock()
+				continue
+			}
+			up, err := net.Dial("udp", target)
+			if err != nil {
+				mu.Unlock()
+				continue
+			}
+			s = &session{up: up}
+			sessions[key] = s
+			r.stats.conns.Add(1)
+			r.stats.active.Add(1)
+			r.wg.Add(1)
+			go func(s *session, client net.Addr) { // Antworten des Ziels zurueck
+				defer r.wg.Done()
+				defer r.stats.active.Add(-1)
+				b := make([]byte, 64<<10)
+				for {
+					k, err := s.up.Read(b)
+					if err != nil {
+						return
+					}
+					s.last.Store(time.Now().UnixNano())
+					r.stats.bytesUp.Add(int64(k))
+					if _, err := r.udp.WriteTo(b[:k], client); err != nil {
+						return
+					}
+				}
+			}(s, addr)
+		}
+		mu.Unlock()
+		s.last.Store(time.Now().UnixNano())
+		r.stats.bytesIn.Add(int64(n))
+		_, _ = s.up.Write(buf[:n])
+	}
+}
+
+// stopStreams schliesst alle Streams (Modul aus).
+func (m *Module) stopStreams() {
+	m.sapply.Lock()
+	defer m.sapply.Unlock()
+	m.smu.Lock()
+	runs := m.runs
+	m.runs = map[int64]*streamRun{}
+	m.smu.Unlock()
+	for _, r := range runs {
+		r.stop()
+	}
+}
+
+// Claims: Ports der Streams fuer die Port-Verwaltung (nur bei laufendem Modul).
+func (m *Module) Claims(ctx context.Context) []ports.Claim {
+	m.mu.Lock()
+	on := m.running
+	m.mu.Unlock()
+	if !on {
+		return nil
+	}
+	list, err := m.streams(ctx)
+	if err != nil {
+		return nil
+	}
+	m.smu.Lock()
+	defer m.smu.Unlock()
+	var out []ports.Claim
+	for _, s := range list {
+		if !s.Enabled {
+			continue
+		}
+		active := map[string]bool{}
+		if r := m.runs[s.ID]; r != nil {
+			active["tcp"], active["udp"] = r.tcp != nil, r.udp != nil
+		}
+		out = append(out, s.claims(active)...)
+	}
+	return out
+}
+
+// streamErrs: Fehler beim Oeffnen je Stream (Anzeige).
+func (m *Module) streamErrs(id int64) map[string]string {
+	m.smu.Lock()
+	defer m.smu.Unlock()
+	if r := m.runs[id]; r != nil && len(r.errs) > 0 {
+		out := map[string]string{}
+		for k, v := range r.errs {
+			out[k] = v
+		}
+		return out
+	}
+	return nil
+}
+
+// probeStream prueft das Ziel eines TCP-Streams (UDP laesst sich nicht pruefen).
+func (m *Module) probeStream(ctx context.Context, s *Stream) Reach {
+	if !s.TCP {
+		return Reach{State: ReachUnknown}
+	}
+	cctx, cancel := context.WithTimeout(ctx, reachTimeout)
+	defer cancel()
+	start := time.Now()
+	c, err := (&net.Dialer{}).DialContext(cctx, "tcp", s.target())
+	if err != nil {
+		return Reach{State: ReachDown, Error: shortErr(err), Checked: time.Now()}
+	}
+	_ = c.Close()
+	d := time.Since(start)
+	st := Reach{State: ReachUp, Ms: d.Milliseconds(), Checked: time.Now()}
+	if d > reachSlow {
+		st.State = ReachSlow
+	}
+	return st
+}

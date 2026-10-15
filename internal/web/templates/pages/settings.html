@@ -238,6 +238,8 @@
 					<select class="form-select form-select-sm mb-2" id="edge_default" name="default">
 						<option value="404"{{if eq .Edge.Config.Default "404"}} selected{{end}}>{{$.T "ports.edge_default_404"}}</option>
 						<option value="close"{{if eq .Edge.Config.Default "close"}} selected{{end}}>{{$.T "ports.edge_default_close"}}</option>
+						{{if .Edge.Config.DefaultURL}}<option value="redirect"{{if eq .Edge.Config.Default "redirect"}} selected{{end}}>{{$.T "ports.edge_default_redirect"}}</option>{{end}}
+						{{if .Edge.Config.DefaultPage}}<option value="html"{{if eq .Edge.Config.Default "html"}} selected{{end}}>{{$.T "ports.edge_default_html"}}</option>{{end}}
 					</select>
 					<div class="form-text mb-2">{{$.T "ports.edge_hint"}}</div>
 					<button class="btn btn-primary btn-sm" type="submit">{{$.T "common.save"}}</button>

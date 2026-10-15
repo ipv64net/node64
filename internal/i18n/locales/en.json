@@ -195,7 +195,11 @@
     "title": "CDN64 · Reverse proxy",
     "tab": {
       "hosts": "Proxy hosts",
-      "certs": "SSL certificates"
+      "certs": "SSL certificates",
+      "redirects": "Redirections",
+      "dead": "404 hosts",
+      "streams": "Streams",
+      "default": "Default page"
     },
     "new": "Add proxy host",
     "edit": "Edit proxy host",
@@ -231,6 +235,7 @@
     "delete_confirm": "Delete proxy host \"{name}\"?",
     "deleted": "\"{name}\" deleted.",
     "list_hint": "Reachability: checked every minute. Requests: since the module started.",
+    "list_hint_other": "Requests: since the module started.",
     "cache_info": "Cache: {n} files, {size}",
     "edge_error": "The common entrance cannot open a port:",
     "edge_settings": "Port settings",
@@ -265,7 +270,13 @@
       "min_tls": "Minimum",
       "min_tls_hint": "TLS 1.3 is current; 1.2 for older devices.",
       "cert_new": "Request a new certificate right away",
-      "cert_new_hint": "For all domains of this host; the request runs in the background after saving."
+      "cert_new_hint": "For all domains of this host; the request runs in the background after saving.",
+      "redirect_target": "Target domain",
+      "redirect_code": "HTTP code",
+      "redirect_hint": "Domain, optionally with port and path (e.g. www.example.com/new). \"Same as request\" uses http or https as the visitor came.",
+      "preserve_path": "Keep path and query",
+      "dead_hint": "This host answers every request with a neutral \"404\" page. With a certificate also via HTTPS.",
+      "pass_hint": "The connection is handed raw to this target by name, without decrypting it here – the target needs its own certificate. Port 80 redirects to HTTPS."
     },
     "err": {
       "name": "Invalid domain name.",
@@ -275,7 +286,17 @@
       "scheme": "Scheme must be http or https.",
       "target_host": "Invalid target (name or IP).",
       "port": "Port between 1 and 65535.",
-      "cert": "Unknown certificate."
+      "cert": "Unknown certificate.",
+      "kind": "Unknown kind.",
+      "redirect_target": "Invalid target domain.",
+      "redirect_code": "Unknown HTTP code.",
+      "redirect_self": "A redirection to itself would loop.",
+      "pass_wildcard": "Passthrough does not support wildcards.",
+      "stream_name": "Name at most 100 characters.",
+      "stream_proto": "Choose TCP and/or UDP.",
+      "stream_tls": "TLS only works with TCP.",
+      "stream_port_taken": "Another stream already uses port {name}.",
+      "stream_port_edge": "Port {name} belongs to the common entrance (HTTP/HTTPS). For services on 443 by name: \"TLS passthrough\"."
     },
     "help_title": "How it works",
     "help_ports": "The router forwards 80 and 443 (TCP, for HTTP/3 also 443/UDP) to this node. Node64 distributes the rest by domain name – also together with DNS64 in the same container.",
@@ -383,6 +404,72 @@
         "upload_renew": "Own certificates cannot be renewed.",
         "email": "Invalid email address."
       }
+    },
+    "kind_new": {
+      "proxy": "Add proxy host",
+      "redirect": "Add redirection",
+      "dead": "Add 404 host",
+      "passthrough": "TLS passthrough"
+    },
+    "kind_empty": {
+      "proxy": "No proxy hosts yet. A proxy host forwards requests for a domain to a service in your home network.",
+      "redirect": "No redirections yet. A redirection sends visitors of one domain to another (e.g. old domain to new).",
+      "dead": "No 404 hosts yet. A 404 host deliberately answers a domain with \"not found\", e.g. for retired names.",
+      "passthrough": "Nothing passed through yet."
+    },
+    "redirect": {
+      "auto": "same as request",
+      "auto_scheme": "(as request)://",
+      "code_301": "permanent",
+      "code_302": "temporary",
+      "code_307": "temporary, keeps method",
+      "code_308": "permanent, keeps method",
+      "code_303": "see other",
+      "code_300": "multiple choices"
+    },
+    "streams": {
+      "title": "Streams (TCP/UDP)",
+      "new": "Add stream",
+      "edit": "Edit stream",
+      "empty": "No streams yet. A stream forwards a port raw to a service, e.g. for game servers, MQTT or WireGuard.",
+      "col": {
+        "port": "Port",
+        "conns": "Connections",
+        "traffic": "Data in/out"
+      },
+      "active": "{n} active",
+      "delete_confirm": "Delete the stream on port {port}?",
+      "not_open": "Saved, but {proto} not opened: {error}",
+      "hint": "Streams occupy their port per protocol; Settings → Ports shows overlaps. UDP sessions end after 60 s without packets.",
+      "f": {
+        "name": "Name (optional)",
+        "listen_port": "Port",
+        "hint": "Target in the home network. A port can only be opened once per protocol.",
+        "tls": "Terminate TLS here (TCP only)",
+        "tls_none": "No – forward raw",
+        "tls_hint": "With a certificate the stream accepts TLS and forwards unencrypted to the target."
+      },
+      "help_ports": "Forward the port (TCP and/or UDP) on the router to this node. Ports below 1024 work without root thanks to the image's capabilities.",
+      "help_docker": "With host networking Node64 opens the port directly. In bridge mode the port must also be published on the container (-p)."
+    },
+    "pass": {
+      "title": "TLS passthrough (port 443 by name)",
+      "hint": "For services that should do TLS themselves (own certificate, e.g. a second proxy): the connection is passed on raw by name, everything else on 443 stays with Node64."
+    },
+    "default": {
+      "title": "Default page for unknown names",
+      "hint": "What Node64 answers on port 80/443 when a name belongs to no host or someone calls the IP directly.",
+      "mode_404": "404",
+      "mode_hint_404": "neutral \"not found\" page (default)",
+      "mode_close": "Close connection",
+      "mode_hint_close": "no answer, like nginx 444; reveals the least",
+      "mode_redirect": "Redirect",
+      "mode_hint_redirect": "to a fixed address",
+      "mode_html": "Own page",
+      "mode_hint_html": "own HTML (at most 64 KB)",
+      "url": "Redirect target",
+      "html": "Page HTML",
+      "html_hint": "Served with status 200; without external scripts it loads fastest."
     }
   },
   "ports": {
@@ -410,7 +497,9 @@
     "edge_default_close": "Close connection",
     "edge_off": "Currently closed (no module needs it).",
     "err_port": "Ports must be between 0 and 65535 (0 = off).",
-    "err_save": "Not saved: {error}"
+    "err_save": "Not saved: {error}",
+    "edge_default_redirect": "Redirect (see CDN64 → Default page)",
+    "edge_default_html": "Own page (see CDN64 → Default page)"
   },
   "settings": {
     "appearance": "Appearance",

@@ -194,7 +194,11 @@ Das Modul *CDN64* (in den Einstellungen einschalten) ersetzt den Nginx Proxy Man
   - HTTPS erzwingen, HSTS (auch für Subdomains), HTTP/2, HTTP/3, mindestens TLS 1.2 oder 1.3.
 - **SSL-Zertifikate (Reiter):** Liste mit Ablauf, „benutzt von“ und automatischer Erneuerung; anfordern bei Let's Encrypt automatisch, per ipv64 DNS-01, Alias über ipv64 (die Seite zeigt die nötigen CNAMEs) oder HTTP-01; eigene Zertifikate hochladen; Mail und Nutzungsbedingungen von Let's Encrypt. Im Host-Formular lässt sich ein Zertifikat gleich mit anfordern (API: `request_certificate`).
 - **Erreichbarkeit:** Jedes Ziel wird jede Minute geprüft (TCP und eine kurze HEAD-Anfrage), die Liste zeigt die Antwortzeit bzw. „nicht erreichbar seit …“. Besucher eines nicht erreichbaren Ziels bekommen eine neutrale Seite 502. Ein Ziel, das auf den Proxy selbst zeigt, beantwortet er mit 508.
-- **API:** `GET /api/cdn64/status`, `POST /api/cdn64/check`, `GET|POST /api/cdn64/hosts`, `GET|PUT|DELETE /api/cdn64/hosts/{id}`, `POST /api/cdn64/hosts/{id}/enable|disable`.
+- **Weiterleitungen und 404-Hosts:** Weiterleitungen gehen auf eine andere Domain (Code 301/302/303/307/308, Pfad mitnehmen, Schema wie die Anfrage oder fest). 404-Hosts antworten bewusst mit „nicht gefunden“. Beide mit denselben SSL-Optionen.
+- **Streams:** Ein Port (TCP und/oder UDP) wird roh an ein Ziel weitergereicht, z. B. für Spiele-Server, MQTT oder WireGuard. Bei TCP geht optional ein TLS-Abschluss mit einem Zertifikat der Verwaltung. Belegte Ports werden erkannt und am Stream angezeigt. Im Bridge-Modus muss der Port zusätzlich am Container freigegeben sein.
+- **TLS durchreichen:** Ein Name auf Port 443 geht ohne Entschlüsselung an einen Dienst mit eigenem Zertifikat. Die übrigen Namen auf 443 bleiben bei Node64.
+- **Standardseite:** Für unbekannte Namen oder den Aufruf per IP antwortet Node64 mit 404, schließt die Verbindung, leitet weiter oder zeigt eine eigene HTML-Seite.
+- **API:** `GET /api/cdn64/status`, `POST /api/cdn64/check`, `GET|POST /api/cdn64/hosts` (`kind`: proxy, redirect, dead, passthrough), `GET|PUT|DELETE /api/cdn64/hosts/{id}`, `POST /api/cdn64/hosts/{id}/enable|disable`, `GET|POST /api/cdn64/streams`, `GET|PUT|DELETE /api/cdn64/streams/{id}`, `POST /api/cdn64/streams/{id}/enable|disable`, `GET|PUT /api/cdn64/default`.
 
 ## Betrieb
 

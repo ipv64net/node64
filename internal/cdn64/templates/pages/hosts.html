@@ -3,8 +3,8 @@
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
 	<h1 class="h4 mb-0"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{.T "cdn64.title"}}</h1>
 	<div class="ms-auto d-flex gap-2">
-		<form method="post" action="/cdn64/check" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-arrow-repeat"></i> {{.T "cdn64.check_now"}}</button></form>
-		<a class="btn btn-sm btn-primary" href="/cdn64/hosts/new"><i class="bi bi-plus-lg"></i> {{.T "cdn64.new"}}</a>
+		{{if eq $d.Kind "proxy"}}<form method="post" action="/cdn64/check" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="back" value="/cdn64"><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-arrow-repeat"></i> {{.T "cdn64.check_now"}}</button></form>{{end}}
+		<a class="btn btn-sm btn-primary" href="/cdn64/hosts/new?kind={{$d.Kind}}"><i class="bi bi-plus-lg"></i> {{.T (print "cdn64.kind_new." $d.Kind)}}</a>
 	</div>
 </div>
 <ul class="nav nav-tabs mb-3">
@@ -15,15 +15,15 @@
 	{{if not $d.Rows}}
 	<div class="card-body text-center text-body-secondary py-5">
 		<div class="mb-2"><i class="bi bi-arrow-left-right fs-2"></i></div>
-		<p class="mb-3">{{.T "cdn64.empty"}}</p>
-		<a class="btn btn-primary btn-sm" href="/cdn64/hosts/new"><i class="bi bi-plus-lg"></i> {{.T "cdn64.new"}}</a>
+		<p class="mb-3">{{.T (print "cdn64.kind_empty." $d.Kind)}}</p>
+		<a class="btn btn-primary btn-sm" href="/cdn64/hosts/new?kind={{$d.Kind}}"><i class="bi bi-plus-lg"></i> {{.T (print "cdn64.kind_new." $d.Kind)}}</a>
 	</div>
 	{{else}}
 	<div class="table-responsive">
 	<table class="table table-hover align-middle mb-0 small">
 		<thead><tr>
-			<th class="ps-3">{{.T "cdn64.col.names"}}</th><th>{{.T "cdn64.col.target"}}</th><th>{{.T "cdn64.col.ssl"}}</th><th>{{.T "cdn64.col.options"}}</th>
-			<th>{{.T "cdn64.col.reach"}}</th><th class="text-end">{{.T "cdn64.col.requests"}}</th><th class="text-end pe-3"></th>
+			<th class="ps-3">{{.T "cdn64.col.names"}}</th>{{if ne $d.Kind "dead"}}<th>{{.T "cdn64.col.target"}}</th>{{end}}<th>{{.T "cdn64.col.ssl"}}</th><th>{{.T "cdn64.col.options"}}</th>
+			{{if eq $d.Kind "proxy"}}<th>{{.T "cdn64.col.reach"}}</th>{{end}}<th class="text-end">{{.T "cdn64.col.requests"}}</th><th class="text-end pe-3"></th>
 		</tr></thead>
 		<tbody>
 		{{range $d.Rows}}
@@ -33,7 +33,8 @@
 				{{if not .Enabled}}<div><span class="badge text-bg-secondary">{{$.T "cdn64.disabled"}}</span></div>{{end}}
 				{{if .RouteErr}}<div class="text-danger">{{.RouteErr}}</div>{{end}}
 			</td>
-			<td class="font-monospace text-break">{{.Target}}</td>
+			{{if eq .Kind "proxy"}}<td class="font-monospace text-break">{{.Target}}</td>
+			{{else if eq .Kind "redirect"}}<td class="text-break"><span class="badge text-bg-light">{{.RedirectCode}}</span> <span class="font-monospace">{{if eq .RedirectScheme "auto"}}{{$.T "cdn64.redirect.auto_scheme"}}{{else}}{{.RedirectScheme}}://{{end}}{{.RedirectTarget}}{{if .PreservePath}}/…{{end}}</span></td>{{end}}
 			<td>{{with .Cert}}
 				{{if eq .State "http"}}<span class="badge text-bg-light">HTTP</span>
 				{{else if eq .State "ok"}}<span class="badge text-bg-success" title="{{.Name}}"><i class="bi bi-lock-fill"></i> {{$.T "cdn64.cert.days" "days" .Days}}</span>
@@ -49,12 +50,12 @@
 				{{if .HSTS}}<i class="bi bi-shield-lock me-1" title="HSTS"></i>{{end}}
 				{{if and .HTTPS .HTTP3}}<span class="badge text-bg-light" title="{{$.T "cdn64.f.http3"}}">H3</span>{{end}}
 			</td>
-			<td>{{if .Enabled}}{{with .Reach}}
+			{{if eq .Kind "proxy"}}<td>{{if .Enabled}}{{with .Reach}}
 				{{if eq .State "up"}}<span class="badge text-bg-success" title="{{$.T "cdn64.reach.checked" "time" ($.Time .Checked)}}">{{$.T "cdn64.reach.up" "ms" .Ms}}</span>
 				{{else if eq .State "slow"}}<span class="badge text-bg-warning" title="{{$.T "cdn64.reach.checked" "time" ($.Time .Checked)}}">{{$.T "cdn64.reach.slow" "ms" .Ms}}</span>
 				{{else if eq .State "down"}}<span class="badge text-bg-danger" title="{{.Error}}">{{$.T "cdn64.reach.down"}}</span><div class="text-body-secondary">{{$.T "cdn64.reach.since" "ago" ($.Ago .Since)}}</div>
 				{{else}}<span class="badge text-bg-light">{{$.T "cdn64.reach.unknown"}}</span>{{end}}
-			{{end}}{{end}}</td>
+			{{end}}{{end}}</td>{{end}}
 			<td class="text-end font-monospace">{{$.Int .Requests}}{{if .Errors}}<div class="text-danger">{{$.T "cdn64.errors" "n" .Errors}}</div>{{end}}{{if .Blocked}}<div class="text-body-secondary">{{$.T "cdn64.blocked" "n" .Blocked}}</div>{{end}}</td>
 			<td class="text-end pe-3 text-nowrap">
 				{{if .URL}}<a class="btn btn-sm btn-outline-secondary py-0" href="{{.URL}}" target="_blank" rel="noopener" title="{{$.T "cdn64.open"}}"><i class="bi bi-box-arrow-up-right"></i></a>{{end}}
@@ -71,6 +72,6 @@
 	</div>
 	{{end}}
 </div>
-<p class="small text-body-secondary mt-2">{{.T "cdn64.list_hint"}}{{if $d.CacheN}} · {{.T "cdn64.cache_info" "n" $d.CacheN "size" (.Bytes $d.CacheB)}}{{end}}</p>
+<p class="small text-body-secondary mt-2">{{if eq $d.Kind "proxy"}}{{.T "cdn64.list_hint"}}{{else}}{{.T "cdn64.list_hint_other"}}{{end}}{{if $d.CacheN}} · {{.T "cdn64.cache_info" "n" $d.CacheN "size" (.Bytes $d.CacheB)}}{{end}}</p>
 {{end}}
 {{define "scripts"}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}

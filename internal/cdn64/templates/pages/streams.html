@@ -1,0 +1,87 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom"> {{.T "cdn64.title"}}</h1>
+	<div class="ms-auto d-flex gap-2">
+		<a class="btn btn-sm btn-outline-primary" href="/cdn64/hosts/new?kind=passthrough"><i class="bi bi-plus-lg"></i> {{.T "cdn64.kind_new.passthrough"}}</a>
+		<a class="btn btn-sm btn-primary" href="/cdn64/streams/new"><i class="bi bi-plus-lg"></i> {{.T "cdn64.streams.new"}}</a>
+	</div>
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+<div class="card mb-3">
+	<div class="card-header"><i class="bi bi-ethernet text-primary"></i> {{.T "cdn64.streams.title"}}</div>
+	{{if not $d.Streams}}<div class="card-body text-body-secondary small">{{.T "cdn64.streams.empty"}}</div>
+	{{else}}
+	<div class="table-responsive">
+	<table class="table table-hover align-middle mb-0 small">
+		<thead><tr><th class="ps-3">{{.T "cdn64.streams.col.port"}}</th><th>{{.T "cdn64.col.target"}}</th><th>TLS</th><th>{{.T "cdn64.col.reach"}}</th>
+			<th class="text-end">{{.T "cdn64.streams.col.conns"}}</th><th class="text-end">{{.T "cdn64.streams.col.traffic"}}</th><th class="text-end pe-3"></th></tr></thead>
+		<tbody>
+		{{range $d.Streams}}
+		<tr{{if not .Enabled}} class="opacity-50"{{end}}>
+			<td class="ps-3"><span class="font-monospace">{{.ListenPort}}</span>
+				{{if .TCP}}<span class="badge text-bg-light">TCP</span>{{end}}{{if .UDP}}<span class="badge text-bg-light">UDP</span>{{end}}
+				{{if .Name}}<div class="text-body-secondary">{{.Name}}</div>{{end}}
+				{{if not .Enabled}}<div><span class="badge text-bg-secondary">{{$.T "cdn64.disabled"}}</span></div>{{end}}
+				{{range $p, $e := .Errors}}<div class="text-danger text-break">{{$p}}: {{$e}}</div>{{end}}</td>
+			<td class="font-monospace text-break">{{.TargetHost}}:{{.TargetPort}}</td>
+			<td>{{if .TLSCertID}}<span class="badge text-bg-success" title="{{.CertName}}"><i class="bi bi-lock-fill"></i></span>{{else}}<span class="text-body-secondary">–</span>{{end}}</td>
+			<td>{{if .Enabled}}{{with .Reach}}
+				{{if eq .State "up"}}<span class="badge text-bg-success">{{$.T "cdn64.reach.up" "ms" .Ms}}</span>
+				{{else if eq .State "slow"}}<span class="badge text-bg-warning">{{$.T "cdn64.reach.slow" "ms" .Ms}}</span>
+				{{else if eq .State "down"}}<span class="badge text-bg-danger" title="{{.Error}}">{{$.T "cdn64.reach.down"}}</span>
+				{{else}}<span class="badge text-bg-light">{{$.T "cdn64.reach.unknown"}}</span>{{end}}{{end}}{{end}}</td>
+			<td class="text-end font-monospace">{{$.Int .Stats.Conns}}{{if .Stats.Active}}<div class="text-body-secondary">{{$.T "cdn64.streams.active" "n" .Stats.Active}}</div>{{end}}</td>
+			<td class="text-end font-monospace">{{$.Bytes .Stats.BytesIn}} / {{$.Bytes .Stats.BytesUp}}</td>
+			<td class="text-end pe-3 text-nowrap">
+				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/streams/{{.ID}}" title="{{$.T "cdn64.streams.edit"}}"><i class="bi bi-pencil"></i></a>
+				<form method="post" action="/cdn64/streams/{{.ID}}/{{if .Enabled}}disable{{else}}enable{{end}}" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<button class="btn btn-sm {{if .Enabled}}btn-outline-warning{{else}}btn-outline-success{{end}} py-0" type="submit" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause-fill{{else}}bi-play-fill{{end}}"></i></button></form>
+				<form method="post" action="/cdn64/streams/{{.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<button class="btn btn-sm btn-outline-danger py-0" type="submit" data-confirm="{{$.T "cdn64.streams.delete_confirm" "port" .ListenPort}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button></form>
+			</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table>
+	</div>
+	{{end}}
+</div>
+<div class="card">
+	<div class="card-header"><i class="bi bi-shuffle text-primary"></i> {{.T "cdn64.pass.title"}}</div>
+	<div class="card-body small text-body-secondary pb-0">{{.T "cdn64.pass.hint"}}</div>
+	{{if not $d.Pass}}<div class="card-body text-body-secondary small">{{.T "cdn64.kind_empty.passthrough"}}</div>
+	{{else}}
+	<div class="table-responsive">
+	<table class="table table-hover align-middle mb-0 small">
+		<thead><tr><th class="ps-3">{{.T "cdn64.col.names"}}</th><th>{{.T "cdn64.col.target"}}</th><th>{{.T "cdn64.col.reach"}}</th><th class="text-end">{{.T "cdn64.streams.col.conns"}}</th><th class="text-end pe-3"></th></tr></thead>
+		<tbody>
+		{{range $d.Pass}}
+		<tr{{if not .Enabled}} class="opacity-50"{{end}}>
+			<td class="ps-3">{{range $i, $n := .Names}}{{if $i}}<br>{{end}}<span class="font-monospace text-break">{{$n}}</span>{{end}}{{if .RouteErr}}<div class="text-danger">{{.RouteErr}}</div>{{end}}</td>
+			<td class="font-monospace text-break">{{.TargetHost}}:{{.TargetPort}}</td>
+			<td>{{if .Enabled}}{{with .Reach}}
+				{{if eq .State "up"}}<span class="badge text-bg-success">{{$.T "cdn64.reach.up" "ms" .Ms}}</span>
+				{{else if eq .State "slow"}}<span class="badge text-bg-warning">{{$.T "cdn64.reach.slow" "ms" .Ms}}</span>
+				{{else if eq .State "down"}}<span class="badge text-bg-danger" title="{{.Error}}">{{$.T "cdn64.reach.down"}}</span>
+				{{else}}<span class="badge text-bg-light">{{$.T "cdn64.reach.unknown"}}</span>{{end}}{{end}}{{end}}</td>
+			<td class="text-end font-monospace">{{$.Int .Requests}}</td>
+			<td class="text-end pe-3 text-nowrap">
+				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/hosts/{{.ID}}" title="{{$.T "cdn64.edit"}}"><i class="bi bi-pencil"></i></a>
+				<form method="post" action="/cdn64/hosts/{{.ID}}/{{if .Enabled}}disable{{else}}enable{{end}}" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<button class="btn btn-sm {{if .Enabled}}btn-outline-warning{{else}}btn-outline-success{{end}} py-0" type="submit"><i class="bi {{if .Enabled}}bi-pause-fill{{else}}bi-play-fill{{end}}"></i></button></form>
+				<form method="post" action="/cdn64/hosts/{{.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<button class="btn btn-sm btn-outline-danger py-0" type="submit" data-confirm="{{$.T "cdn64.delete_confirm" "name" (index .Names 0)}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button></form>
+			</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table>
+	</div>
+	{{end}}
+</div>
+<p class="small text-body-secondary mt-2">{{.T "cdn64.streams.hint"}}</p>
+{{end}}
+{{define "scripts"}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}
