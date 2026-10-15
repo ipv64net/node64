@@ -38,7 +38,9 @@ func TestNotifyRole(t *testing.T) {
 	if r := role("node-a", "box-elsewhere"); r != [2]bool{false, false} {
 		t.Fatalf("no group member measures: %v", r)
 	}
-	// B faellt aus: A uebernimmt
+	// B faellt aus: A uebernimmt. Vorher die Hintergrund-Anfragen von B nach dem Beitritt abwarten (Ping, Abholen,
+	// Anstoss nach 500 ms) - jede gueltige Anfrage von B setzt sonst last_seen wieder auf jetzt.
+	time.Sleep(900 * time.Millisecond)
 	_, _ = a.m.db.ExecContext(ctx, `UPDATE peer_members SET last_seen = ? WHERE node_id = 'node-b'`, fmtTime(time.Now().Add(-time.Hour)))
 	if r := role("node-b", "node-a"); r != [2]bool{true, true} {
 		t.Fatalf("B offline: %v", r)
