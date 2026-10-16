@@ -1779,6 +1779,8 @@
       "up_ips": "Bootstrap-IPs",
       "up_remove_confirm": "Server „{name}“ entfernen?",
       "up_mode": "Betriebsart",
+      "up_count": "gleichzeitig",
+      "up_mode_hint": "Schnellste: misst die angehakten Server laufend und fragt nur die schnellsten (1–3) gleichzeitig; die übrigen werden alle 30 s kurz nachgemessen und springen ein, wenn einer hängt oder ausfällt. Parallel: jede Anfrage an alle (schnell, aber viel Verkehr). Der Reihe nach: immer der erste, der nächste nur bei Fehler.",
       "up_add": "Eigener Server",
       "up_ips_ph": "Bootstrap-IPs, z. B. 9.9.9.9, 149.112.112.112",
       "up_add_hint": "https://…/dns-query für DoH, tls://name[:853] für DoT, quic://name[:853] für DoQ. Die Bootstrap-IPs braucht DNS64, um den Server ohne DNS zu erreichen (Pflicht, wenn in der Adresse ein Name steht); geprüft wird das Zertifikat auf den Namen.",
@@ -1856,6 +1858,8 @@
       "reason_released": "freigegeben (sonst: {list})",
       "mode_parallel": "Parallel (schnellste Antwort)",
       "mode_ordered": "Der Reihe nach (Ausweichen bei Fehler)",
+      "mode_fastest": "Schnellste (automatisch)",
+      "in_use": "wird gefragt",
       "off": "aus",
       "proto": {
         "udp": "UDP",

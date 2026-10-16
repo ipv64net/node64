@@ -149,7 +149,7 @@
 		return api("upstreams").then(function (d) {
 			var box = $("upstreams");
 			box.replaceChildren();
-			$("up-mode").textContent = t("mode_" + d.mode);
+			$("up-mode").textContent = t("mode_" + d.mode) + (d.mode === "fastest" ? " · " + d.count : "");
 			var wins = d.servers.reduce(function (a, s) { return a + s.wins; }, 0);
 			var avgs = d.servers.map(function (s) { return s.avgMs; }).filter(Boolean);
 			upstreamAvgMs = avgs.length ? Math.min.apply(null, avgs) : 0;
@@ -160,6 +160,7 @@
 				var title = el("div", { "class": "d-flex align-items-center gap-2" });
 				title.append(el("b", {}, s.name), el("span", { "class": "badge text-bg-info" }, { doh: "DoH", dot: "DoT", doq: "DoQ" }[s.proto] || s.proto),
 					el("span", { "class": "badge " + (ok ? "text-bg-success" : "text-bg-danger") }, s.requests === 0 ? t("ready") : ok ? t("online") : t("disturbed")),
+					s.active ? el("span", { "class": "badge text-bg-primary" }, t("in_use")) : "",
 					el("span", { "class": "text-body-secondary ms-auto font-monospace" }, s.ips.join(", ")));
 				var stats = el("div", { "class": "d-flex flex-wrap gap-3 mt-1" });
 				[[t("avg"), s.avgMs ? pf.format(s.avgMs) + " ms" : "–"], [t("fastest"), pf.format(share) + " %"], [t("requests"), nf.format(s.requests)], [t("errors"), nf.format(s.errors)]].forEach(function (p) {

@@ -61,10 +61,12 @@ func Proto(raw string) string {
 	return ""
 }
 
-// Modes: parallel = all at once, fastest valid answer wins; ordered = one after another, next on error.
+// Modes: parallel = all at once, fastest valid answer wins; ordered = one after another, next on error;
+// fastest = only the currently fastest few at once (measured continuously, see fastest.go).
 const (
 	ModeParallel = "parallel"
 	ModeOrdered  = "ordered"
+	ModeFastest  = "fastest"
 )
 
 const attemptTimeout = 3 * time.Second
@@ -83,6 +85,8 @@ type doh struct {
 	wins      uint64
 	errors    uint64
 	avgMs     float64 // exponentially weighted moving average
+	recentMs  float64 // faster moving average for the ranking (fastest mode)
+	lastUsed  time.Time
 	lastErr   string
 	lastErrAt time.Time
 	lastOKAt  time.Time
@@ -94,13 +98,14 @@ type doh struct {
 type Resolver struct {
 	ups  []*doh
 	mode string
+	top  int // fastest mode: how many upstreams are asked at once
 }
 
 func New(servers []Server, mode string) *Resolver {
-	if mode != ModeOrdered {
+	if mode != ModeOrdered && mode != ModeFastest {
 		mode = ModeParallel
 	}
-	r := &Resolver{mode: mode}
+	r := &Resolver{mode: mode, top: DefaultTop}
 	for _, s := range servers {
 		u := &doh{Server: s}
 		pu, _ := url.Parse(s.URL)
@@ -167,34 +172,56 @@ func (r *Resolver) Close() {
 // upstream that answered first. A SERVFAIL is only used if no upstream
 // has anything better.
 func (r *Resolver) Exchange(ctx context.Context, req *dns.Msg) (*dns.Msg, string, error) {
-	if r.mode == ModeOrdered {
+	switch r.mode {
+	case ModeOrdered:
 		return r.exchangeOrdered(ctx, req)
+	case ModeFastest:
+		return r.exchangeFastest(ctx, req)
 	}
+	return r.race(ctx, req, r.ups, nil, 0)
+}
+
+// race asks first at once; rest are reserves: after hedge (0 = never) the next one joins, and when everything
+// started so far failed (error or SERVFAIL), all remaining ones are asked.
+func (r *Resolver) race(ctx context.Context, req *dns.Msg, first, rest []*doh, hedge time.Duration) (*dns.Msg, string, error) {
 	type result struct {
 		resp *dns.Msg
 		u    *doh
 		err  error
 	}
-	ch := make(chan result, len(r.ups))
-	for _, u := range r.ups {
-		q := req.Copy()
-		go func() {
-			// Losers keep running to completion so their latency is measured;
-			// the buffered channel lets them finish without a reader.
-			actx, cancel := context.WithTimeout(context.Background(), attemptTimeout)
-			defer cancel()
-			start := time.Now()
-			resp, err := u.exchange(actx, q)
-			u.record(time.Since(start), err)
-			ch <- result{resp, u, err}
-		}()
+	ch := make(chan result, len(first)+len(rest))
+	pending := 0
+	launch := func(ups []*doh) {
+		for _, u := range ups {
+			q := req.Copy()
+			pending++
+			u.use()
+			go func() {
+				// Losers keep running to completion so their latency is measured;
+				// the buffered channel lets them finish without a reader.
+				actx, cancel := context.WithTimeout(context.Background(), attemptTimeout)
+				defer cancel()
+				start := time.Now()
+				resp, err := u.exchange(actx, q)
+				u.record(time.Since(start), err, false)
+				ch <- result{resp, u, err}
+			}()
+		}
+	}
+	launch(first)
+	var timer <-chan time.Time
+	if hedge > 0 && len(rest) > 0 {
+		t := time.NewTimer(hedge)
+		defer t.Stop()
+		timer = t.C
 	}
 
 	var errs []error
 	var fallback *result
-	for range r.ups {
+	for pending > 0 {
 		select {
 		case res := <-ch:
+			pending--
 			switch {
 			case res.err != nil:
 				errs = append(errs, fmt.Errorf("%s: %w", res.u.Name, res.err))
@@ -206,6 +233,13 @@ func (r *Resolver) Exchange(ctx context.Context, req *dns.Msg) (*dns.Msg, string
 				res.u.win()
 				return res.resp, res.u.Name, nil
 			}
+			if pending == 0 && len(rest) > 0 { // alle bisherigen gescheitert: alle Reserven
+				launch(rest)
+				rest, timer = nil, nil
+			}
+		case <-timer: // langsam: die naechste Reserve dazu
+			launch(rest[:1])
+			rest, timer = rest[1:], nil
 		case <-ctx.Done():
 			return nil, "", ctx.Err()
 		}
@@ -233,7 +267,7 @@ func (r *Resolver) exchangeOrdered(ctx context.Context, req *dns.Msg) (*dns.Msg,
 		start := time.Now()
 		resp, err := u.exchange(actx, req.Copy())
 		cancel()
-		u.record(time.Since(start), err)
+		u.record(time.Since(start), err, false)
 		switch {
 		case err != nil:
 			errs = append(errs, fmt.Errorf("%s: %w", u.Name, err))
@@ -256,23 +290,35 @@ func (r *Resolver) exchangeOrdered(ctx context.Context, req *dns.Msg) (*dns.Msg,
 	return nil, "", errors.Join(errs...)
 }
 
-func (u *doh) record(d time.Duration, err error) {
+// record notes one answer time; probes (fastest mode) only update the times and the health, not the counters.
+func (u *doh) record(d time.Duration, err error, probe bool) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	u.requests++
+	if !probe {
+		u.requests++
+	}
 	if err != nil {
-		u.errors++
+		if !probe {
+			u.errors++
+		}
 		u.lastErr = err.Error()
 		u.lastErrAt = time.Now()
 		return
 	}
 	ms := float64(d.Microseconds()) / 1000
 	if u.avgMs == 0 {
-		u.avgMs = ms
+		u.avgMs, u.recentMs = ms, ms
 	} else {
 		u.avgMs = 0.9*u.avgMs + 0.1*ms
+		u.recentMs = 0.7*u.recentMs + 0.3*ms
 	}
 	u.lastOKAt = time.Now()
+}
+
+func (u *doh) use() {
+	u.mu.Lock()
+	u.lastUsed = time.Now()
+	u.mu.Unlock()
 }
 
 func (u *doh) win() {
@@ -291,12 +337,19 @@ type Stats struct {
 	Errors    uint64    `json:"errors"`
 	AvgMs     float64   `json:"avgMs"`
 	Healthy   bool      `json:"healthy"`
+	Active    bool      `json:"active"` // fastest mode: currently among the ones asked first
 	LastError string    `json:"lastError,omitempty"`
 	LastErrAt time.Time `json:"lastErrorAt"`
 }
 
 func (r *Resolver) Stats() []Stats {
 	out := make([]Stats, 0, len(r.ups))
+	active := map[*doh]bool{}
+	if r.mode == ModeFastest {
+		for _, u := range r.first() {
+			active[u] = true
+		}
+	}
 	for _, u := range r.ups {
 		u.mu.Lock()
 		out = append(out, Stats{
@@ -304,7 +357,7 @@ func (r *Resolver) Stats() []Stats {
 			Requests: u.requests, Wins: u.wins, Errors: u.errors, AvgMs: u.avgMs,
 			// healthy until an error is newer than the last success
 			Healthy:   u.lastErrAt.IsZero() || u.lastOKAt.After(u.lastErrAt),
-			LastError: u.lastErr, LastErrAt: u.lastErrAt,
+			LastError: u.lastErr, LastErrAt: u.lastErrAt, Active: active[u],
 		})
 		u.mu.Unlock()
 	}

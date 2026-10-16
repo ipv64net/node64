@@ -257,6 +257,7 @@ func (m *Module) apiLists(w http.ResponseWriter, r *http.Request, e *engine) {
 func (m *Module) apiUpstreams(w http.ResponseWriter, r *http.Request, e *engine) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"mode":        e.up.Mode(),
+		"count":       e.up.Top(),
 		"servers":     e.up.Stats(),
 		"localDNS":    e.local.Addr(),
 		"localSource": e.local.Source(),
@@ -318,7 +319,7 @@ func (m *Module) apiAllowRemove(w http.ResponseWriter, r *http.Request, e *engin
 
 // ---- Export/Import (module.Exporter) ----
 
-var exportSettings = []string{setPort, setBind, setRouter, setRetention, setUpstreams, setUpMode, setLists, setListHours,
+var exportSettings = []string{setPort, setBind, setRouter, setRetention, setUpstreams, setUpMode, setUpCount, setLists, setListHours,
 	setBlockMode, setCacheSize, setAnonymize, setAllowNets, setDoH, setDoT, setDoQ, setDoHPort, setDoTPort, setNames, setCertMode,
 	setNotifyUpstream, setNotifyLists, setACMEDom, setACMEPre, setACMEMail, setACMEStage}
 

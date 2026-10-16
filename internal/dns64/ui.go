@@ -116,7 +116,7 @@ var jsKeys = []string{"status.allowed", "status.blocked", "status.cached", "stat
 	"no_releases", "ready", "online", "disturbed", "avg", "fastest", "requests", "errors", "last_error", "router_auto", "router_config", "router_none",
 	"of", "failed", "just_now", "min_ago", "hours_ago", "days_ago", "per_hour", "pct_all", "pct_cache", "loaded", "no_data", "empty_chart",
 	"blocked_n", "no_entries", "via", "entries", "page", "live_paused", "flush_confirm", "flushed", "error", "active", "loading",
-	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_released", "mode_parallel", "mode_ordered", "off",
+	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_released", "mode_parallel", "mode_ordered", "mode_fastest", "in_use", "off",
 	"proto.udp", "proto.tcp", "proto.doh", "proto.dot", "proto.doq", "reason_paused"}
 
 func (m *Module) jsTexts(r *http.Request) map[string]string {
@@ -183,6 +183,9 @@ func (m *Module) pageUpstreamsSave(w http.ResponseWriter, r *http.Request) {
 		c.Upstreams[i].Enabled = r.PostFormValue("on_"+strconv.Itoa(i)) != ""
 	}
 	c.UpMode = r.PostFormValue("mode")
+	if n := formInt(r, "count"); n > 0 {
+		c.UpCount = n
+	}
 	m.apply(w, r, "/dns64/settings#upstreams", c, "dns64.upstreams", c.UpMode)
 }
 

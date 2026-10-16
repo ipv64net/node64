@@ -1,5 +1,14 @@
 # Änderungen – DNS64
 
+## 1.9.0 – 2026-10-16
+
+### Neu
+- Upstream-Betriebsart „Schnellste (automatisch)“: Jede Anfrage geht nur an die gerade schnellsten Server (einstellbar 1–3, Standard 2) gleichzeitig, die erste gute Antwort gewinnt. Die Rangfolge ergibt sich laufend aus den echten Antwortzeiten; Server, die gerade nicht gefragt werden, werden alle 30 s mit einer kleinen Anfrage nachgemessen (hält auch ihre Verbindung warm). Antworten die ersten nicht rechtzeitig (das Vierfache ihrer üblichen Zeit, 0,3–1,5 s), kommt der nächste dazu; scheitern alle, werden die übrigen gefragt. Statt 5–6 Anfragen nach draußen wie bei „Parallel“ sind es so meist 2.
+- Übersicht: Die gerade genutzten Server tragen „wird gefragt“; API `GET /api/dns64/upstreams` liefert `count` und je Server `active`, Einstellungen `upstream_count`.
+
+### Geändert
+- Neue Installationen starten mit „Schnellste (automatisch)“; gespeicherte Einstellungen bleiben, wie sie sind.
+
 ## 1.8.0 – 2026-10-15
 
 ### Geändert

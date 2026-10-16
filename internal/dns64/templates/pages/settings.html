@@ -111,9 +111,13 @@
 				<div class="card-footer d-flex flex-wrap align-items-center gap-2">
 					<label class="small" for="mode">{{.T "dns64.settings.up_mode"}}</label>
 					<select class="form-select form-select-sm w-auto" id="mode" name="mode">
+						<option value="fastest"{{if eq $d.Cfg.UpMode "fastest"}} selected{{end}}>{{.T "dns64.js.mode_fastest"}}</option>
 						<option value="parallel"{{if eq $d.Cfg.UpMode "parallel"}} selected{{end}}>{{.T "dns64.js.mode_parallel"}}</option>
 						<option value="ordered"{{if eq $d.Cfg.UpMode "ordered"}} selected{{end}}>{{.T "dns64.js.mode_ordered"}}</option>
 					</select>
+					<label class="small" for="count">{{.T "dns64.settings.up_count"}}</label>
+					<select class="form-select form-select-sm w-auto" id="count" name="count"><option value="1"{{if eq $d.Cfg.UpCount 1}} selected{{end}}>1</option><option value="2"{{if eq $d.Cfg.UpCount 2}} selected{{end}}>2</option><option value="3"{{if eq $d.Cfg.UpCount 3}} selected{{end}}>3</option></select>
+					<div class="form-text w-100 mt-0">{{.T "dns64.settings.up_mode_hint"}}</div>
 					<button class="btn btn-sm btn-primary ms-auto" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>
 				</div>
 			</form>

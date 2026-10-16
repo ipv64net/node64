@@ -896,6 +896,7 @@
           "upstream_mode": {
             "type": "string",
             "enum": [
+              "fastest",
               "parallel",
               "ordered"
             ]
@@ -985,6 +986,13 @@
           },
           "acme_staging": {
             "type": "boolean"
+          },
+          "upstream_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "default": 2,
+            "description": "fastest: so viele Upstreams gleichzeitig"
           }
         }
       },
@@ -1224,6 +1232,10 @@
           "lastErrorAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "active": {
+            "type": "boolean",
+            "description": "fastest: gehoert gerade zu den zuerst gefragten"
           }
         }
       },
@@ -4949,6 +4961,9 @@
                     },
                     "localSource": {
                       "type": "string"
+                    },
+                    "count": {
+                      "type": "integer"
                     }
                   }
                 }

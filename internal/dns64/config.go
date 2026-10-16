@@ -19,11 +19,12 @@ import (
 // Vorlagen erscheinen automatisch (aus).
 
 const (
-	setUpstreams = "dns64.upstreams"     // JSON []upstreamSetting
-	setUpMode    = "dns64.upstream_mode" // parallel | ordered
-	setLists     = "dns64.lists"         // JSON []listSetting
-	setListHours = "dns64.list_hours"    // Aktualisierung der Blocklisten
-	setBlockMode = "dns64.block_mode"    // zero | nxdomain
+	setUpstreams = "dns64.upstreams"      // JSON []upstreamSetting
+	setUpMode    = "dns64.upstream_mode"  // fastest | parallel | ordered
+	setUpCount   = "dns64.upstream_count" // fastest: so viele Upstreams gleichzeitig
+	setLists     = "dns64.lists"          // JSON []listSetting
+	setListHours = "dns64.list_hours"     // Aktualisierung der Blocklisten
+	setBlockMode = "dns64.block_mode"     // zero | nxdomain
 	setCacheSize = "dns64.cache_size"
 	setAnonymize = "dns64.anonymize"  // off | mask | hide
 	setAllowNets = "dns64.allow_nets" // weitere Client-Netze, eins je Zeile
@@ -72,6 +73,7 @@ type config struct {
 	Router    string            `json:"router"`
 	Retention int               `json:"retention_days"`
 	UpMode    string            `json:"upstream_mode"`
+	UpCount   int               `json:"upstream_count"` // fastest: 1..3 gleichzeitig
 	Upstreams []upstreamSetting `json:"upstreams"`
 	Lists     []listSetting     `json:"lists"`
 	ListHours int               `json:"list_hours"`
@@ -119,7 +121,8 @@ func (m *Module) loadConfig(ctx context.Context) config {
 		Bind:        m.core.SettingOr(ctx, setBind, ""),
 		Router:      m.core.SettingOr(ctx, setRouter, ""),
 		Retention:   m.retention(ctx),
-		UpMode:      oneOf(m.core.SettingOr(ctx, setUpMode, ""), upstream.ModeParallel, upstream.ModeParallel, upstream.ModeOrdered),
+		UpMode:      oneOf(m.core.SettingOr(ctx, setUpMode, ""), upstream.ModeFastest, upstream.ModeFastest, upstream.ModeParallel, upstream.ModeOrdered),
+		UpCount:     m.intSetting(ctx, setUpCount, upstream.DefaultTop, 1, upstream.MaxTop),
 		ListHours:   m.intSetting(ctx, setListHours, 24, 1, 168),
 		BlockMode:   oneOf(m.core.SettingOr(ctx, setBlockMode, ""), blockZero, blockZero, blockNX),
 		CacheSize:   m.intSetting(ctx, setCacheSize, cacheSize, 1000, 200000),
@@ -257,7 +260,7 @@ func (m *Module) saveConfig(ctx context.Context, c config) error {
 	lists, _ := json.Marshal(c.Lists)
 	for k, v := range map[string]string{
 		setPort: strconv.Itoa(c.Port), setBind: c.Bind, setRouter: c.Router, setRetention: strconv.Itoa(c.Retention),
-		setUpMode: c.UpMode, setUpstreams: string(ups), setLists: string(lists), setListHours: strconv.Itoa(c.ListHours),
+		setUpMode: c.UpMode, setUpCount: strconv.Itoa(c.UpCount), setUpstreams: string(ups), setLists: string(lists), setListHours: strconv.Itoa(c.ListHours),
 		setBlockMode: c.BlockMode, setCacheSize: strconv.Itoa(c.CacheSize), setAnonymize: c.Anonymize,
 		setAllowNets: strings.Join(c.AllowNets, "\n"),
 		setDoH:       b2s(c.DoH), setDoT: b2s(c.DoT), setDoQ: b2s(c.DoQ), setDoHPort: strconv.Itoa(c.DoHPort), setDoTPort: strconv.Itoa(c.DoTPort),
@@ -348,7 +351,10 @@ func (c *config) validate() error {
 	if c.CertMode == certACME && c.ACMEDomain == "" {
 		return errCfg("err_acme_domain")
 	}
-	c.UpMode = oneOf(c.UpMode, upstream.ModeParallel, upstream.ModeParallel, upstream.ModeOrdered)
+	c.UpMode = oneOf(c.UpMode, upstream.ModeFastest, upstream.ModeFastest, upstream.ModeParallel, upstream.ModeOrdered)
+	if c.UpCount < 1 || c.UpCount > upstream.MaxTop {
+		c.UpCount = upstream.DefaultTop
+	}
 	c.BlockMode = oneOf(c.BlockMode, blockZero, blockZero, blockNX)
 	c.Anonymize = oneOf(c.Anonymize, anonOff, anonOff, anonMask, anonHide)
 	var nets []string
