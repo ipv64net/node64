@@ -144,3 +144,21 @@ func TestStale(t *testing.T) {
 		t.Error("window must follow the interval")
 	}
 }
+
+// Zeilenfarbe der Liste: nicht geprueft vor gestoert vor instabil/teilweise gestoert.
+func TestRowClass(t *testing.T) {
+	cases := map[string]row{
+		"hc-row-stale": {State: "down", Stale: true},
+		"hc-row-down":  {State: "down"},
+		"hc-row-warn":  {State: "flapping"},
+		"":             {State: "up"},
+	}
+	for want, r := range cases {
+		if got := r.RowClass(); got != want {
+			t.Errorf("%+v: got %q want %q", r.State, got, want)
+		}
+	}
+	if (row{State: "degraded"}).RowClass() != "hc-row-warn" {
+		t.Error("degraded")
+	}
+}

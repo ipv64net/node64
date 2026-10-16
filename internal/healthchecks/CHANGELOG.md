@@ -8,6 +8,7 @@
 - ipv64 (hub) erkennt das selbst: Der Check geht auf „ausstehend“, und es kommt die Meldung „wird nicht mehr geprüft“
   mit den nicht erreichbaren Nodes; misst wieder jemand, „wird wieder geprüft“. Eine offene Störung bleibt dabei offen.
   Kurze Verbindungsabbrüche lösen nichts aus; nach einem Neustart oder Datenbankfehler des hub wartet die Prüfung 10 Minuten.
+- Liste: Zeilen sind leicht eingefärbt – gestört rot, instabil oder teilweise gestört orange, nicht geprüft gelb.
 
 ## 2.10.0 – 2026-10-15
 

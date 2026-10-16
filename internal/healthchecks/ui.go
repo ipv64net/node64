@@ -76,6 +76,20 @@ type row struct {
 	CertTill time.Time // Ablaufdatum
 }
 
+// RowClass: leichte Farbe der Zeile – nicht geprueft (gelb) vor gestoert (rot) vor instabil bzw. teilweise
+// gestoert (orange); sonst keine.
+func (r row) RowClass() string {
+	switch {
+	case r.Stale:
+		return "hc-row-stale"
+	case r.State == "down":
+		return "hc-row-down"
+	case r.State == "flapping" || r.State == "degraded":
+		return "hc-row-warn"
+	}
+	return ""
+}
+
 // CertClass: Farbe fuer die Restlaufzeit.
 func (r row) CertClass() string {
 	switch {

@@ -170,6 +170,10 @@ a { color: var(--bs-primary); }
 .hc-state-down, .hc-state-flapping { background: var(--bs-danger) !important; color: #fff; }
 .hc-state-stabilizing, .hc-state-dependent { background: var(--bs-info) !important; color: #fff; }
 .hc-state-degraded { background: var(--bs-warning) !important; color: #212529; }
+/* Zeilen der Check-Liste leicht einfaerben: gestoert, instabil/teilweise gestoert, nicht geprueft */
+.hc-table tr.hc-row-down > * { --bs-table-bg: rgba(var(--bs-danger-rgb), .09); }
+.hc-table tr.hc-row-warn > * { --bs-table-bg: rgba(var(--bs-warning-rgb), .12); }
+.hc-table tr.hc-row-stale > * { --bs-table-bg: rgba(var(--bs-warning-rgb), .28); }
 .hc-state-pending, .hc-state-paused { background: var(--bs-secondary) !important; color: #fff; }
 .hc-chart-wrap { position: relative; height: 280px; }
 .hc-json { max-height: 320px; overflow: auto; font-size: .8rem; background: var(--bs-tertiary-bg); }

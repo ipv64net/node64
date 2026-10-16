@@ -85,7 +85,7 @@
 		<span class="ms-2 small">{{if $g.Up}}<span class="badge text-bg-success">{{$g.Up}}</span> {{end}}{{if $g.Down}}<span class="badge text-bg-danger">{{$g.Down}}</span> {{end}}{{if $g.Others}}<span class="badge text-bg-secondary">{{$g.Others}}</span>{{end}}</span></td></tr>{{end}}
 	{{range $g.Rows}}
 	{{$c := .Check}}
-	<tr data-group-row="{{$g.Key}}"{{if .Stale}} class="table-warning"{{end}}>
+	<tr data-group-row="{{$g.Key}}"{{with .RowClass}} class="{{.}}"{{end}}>
 		<td data-label="" class="d-none d-md-table-cell"><input type="checkbox" class="form-check-input" name="tokens" value="{{$c.Token}}"></td>
 		<td data-label="{{$.T "common.status"}}" class="hc-c-status">
 			<span class="badge hc-state-{{.State}}">{{$.T (print "hc.state." .State)}}</span>
@@ -158,7 +158,7 @@
 		<thead><tr><th style="width:1%" class="ps-3 d-none d-md-table-cell"><input type="checkbox" class="form-check-input" data-select-all aria-label="all"></th><th>{{.T "common.status"}}</th><th>{{.T "hc.docker.container"}}</th><th class="d-none d-md-table-cell">{{.T "hc.docker.state"}}</th><th>{{.T "hc.recent"}}</th><th class="d-none d-md-table-cell">{{.T "hc.next"}}</th><th class="text-end pe-3">{{.T "common.actions"}}</th></tr></thead>
 		<tbody>
 		{{range $d.Docker}}{{$c := .Check}}
-		<tr{{if .Stale}} class="table-warning"{{end}}>
+		<tr{{with .RowClass}} class="{{.}}"{{end}}>
 			<td data-label="" class="ps-3 d-none d-md-table-cell"><input type="checkbox" class="form-check-input" name="tokens" value="{{$c.Token}}"></td>
 			<td data-label="{{$.T "common.status"}}" class="hc-c-status"><span class="badge hc-state-{{.State}}">{{$.T (print "hc.state." .State)}}</span>{{if .Stale}} <i class="bi bi-hourglass-split text-warning-emphasis" title="{{$.T "hc.unchecked" "ago" ($.Ago .LastAt)}}"></i>{{end}}</td>
 			<td data-label="{{$.T "hc.docker.container"}}" class="hc-c-name"><a href="/healthchecks/{{$c.Token}}" class="fw-semibold">{{$c.Name}}</a>
