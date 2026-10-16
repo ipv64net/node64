@@ -1,6 +1,6 @@
 # Zertifikate in Node64
 
-Stand 2026-10-16 (Z3). Die Zertifikatsverwaltung gehört zum Kern von Node64. Menüpunkt *Zertifikate*, Pfad
+Stand 2026-10-16 (Z0–Z5 fertig). Die Zertifikatsverwaltung gehört zum Kern von Node64. Menüpunkt *Zertifikate*, Pfad
 `/certificates`. Sie arbeitet unabhängig davon, welche Module laufen. Plan und Entscheidungen:
 [PLAN-NODE64-ZERTIFIKATE.md](PLAN-NODE64-ZERTIFIKATE.md).
 
@@ -46,6 +46,23 @@ Namen am Eingang. Ein Wechsel greift sofort, ohne Neustart.
 - Ist `NODE64_TLS_CERT` gesetzt, nutzt der HTTPS-Port weiter diese Datei.
 - Ein gewähltes Zertifikat steht bei „benutzt von“ als „Node64-Oberfläche“ und ist damit vor versehentlichem
   Löschen geschützt.
+
+## Wer die Zentrale nutzt
+
+| Abnehmer | Wie | „benutzt von“ |
+|---|---|---|
+| CDN64 | Proxy-Hosts und Streams wählen ein Zertifikat oder nehmen das passende zum Namen; im Host-Formular lässt sich gleich eins anfordern | Namen der Hosts |
+| DNS64 (ab 1.10.0) | DoH, DoT, DoQ; Modus „Zertifikat aus der Zentrale“ oder Server-Zertifikat der eigenen CA (Namen und IPs der Node) | DNS64 |
+| Oberfläche | HTTPS-Port und Name am Eingang | Node64-Oberfläche |
+| andere Geräte | Download oder API | – |
+
+**Umzug von DNS64 (einmal beim Update auf DNS64 1.10.0):**
+- Die eigene CA von DNS64 kommt als „DNS64 Heimnetz-CA“ in die Zentrale, mit gleichem Schlüssel. Geräte, die ihr
+  vertrauen, merken nichts.
+- Ein vorhandenes Let's-Encrypt-Zertifikat (Modus `acme`) wird samt Schlüssel übernommen und ab dann von der
+  Zentrale erneuert. Voraussetzung: Die Nutzungsbedingungen wurden in DNS64 angenommen.
+- Scheitert etwas, bleibt der alte Modus, und beim nächsten Start gibt es einen neuen Versuch.
+- Die alten Dateien unter `dns64/tls` und `dns64/acme` bleiben als Rückfall liegen.
 
 ## Eigene CA
 
@@ -177,3 +194,49 @@ Import-PfxCertificate -FilePath cert.p12 -CertStoreLocation Cert:\LocalMachine\M
 
 *Systemsteuerung → Sicherheit → Zertifikat → Hinzufügen → Importieren*. Dort `privkey.pem`, `cert.pem` und
 `chain.pem` aus dem ZIP angeben.
+
+## Sicherung und Umzug
+
+- **Speicherung:** Zertifikate, Schlüssel, CAs, DNS-Zugänge und EAB-Daten liegen in `node64.db`. Die
+  Schlüssel sind dort mit `/data/secret.key` verschlüsselt.
+- **Backup:** Beide Dateien gehören zusammen. Ohne `secret.key` lassen sich die Schlüssel nicht mehr lesen.
+- **Neuer Rechner:** Das ganze Volume `/data` umziehen. Die Zertifikate gelten dort sofort weiter.
+
+## Leistung
+
+Lasttest mit 500 Zertifikaten der eigenen CA auf der Testbox (4 Kerne, `go test -tags loadtest -run TestLoadCerts
+-v ./internal/certs/`):
+
+| Messung | Ergebnis |
+|---|---|
+| ausstellen | 3,9 s für 500 (8 ms je Zertifikat) |
+| Liste mit 500 Einträgen | 2,4 ms |
+| Suche beim Verbindungsaufbau (`ForName`) | 0,15 ms je Handshake |
+| Erneuerung von 250 fälligen in einem Lauf | 3,5 s, Heap 2 MB, keine übrigen Goroutinen |
+
+Ohne Zertifikate und ohne Abnehmer läuft keine Erneuerung im Hintergrund.
+
+## Grenzen
+
+- **Let's Encrypt:**
+  - Rate-Limits wie üblich: 50 Zertifikate je registrierter Domain und Woche, 5 gleiche Zertifikate je Woche.
+  - Für Tests die Testumgebung (Staging) nutzen.
+- **IP-Adressen** im Zertifikat gibt es nur mit der eigenen CA, nicht über ACME.
+- **Keine Sperrlisten (CRL/OCSP)** für die eigene CA. Ein kompromittiertes Zertifikat löschen und neu ausstellen.
+  Bei Verdacht auf die CA selbst: neue CA anlegen und auf den Geräten tauschen.
+- **Live getestet:** ipv64 DNS-01 (blog.ipv64.net, pfsense.ipv64.de). Alias, die lego-Anbieter (v4.35.2, wie
+  bei Traefik und Caddy) und die weiteren ACME-Stellen sind gegen Test-Server und die echten Verzeichnisse
+  geprüft, aber noch nicht mit echten Zugangsdaten.
+
+## Fehlerbehebung
+
+| Meldung / Zustand | Ursache und Abhilfe |
+|---|---|
+| „Nutzungsbedingungen … annehmen“ | Karte *Let's-Encrypt-Konto*: Haken setzen (für weitere ACME-Stellen beim Anlegen der Stelle) |
+| „Für diesen Weg fehlt der ipv64-API-Key“ | *Einstellungen → ipv64*: API-Key eintragen |
+| hängt bei „wartet auf die Nameserver“ | TXT-Record noch nicht sichtbar; bis 8 Minuten normal, bei netcup länger. Danach Fehler und neuer Versuch in 6 Stunden |
+| Alias: „CNAME fehlt“ | Beim Anbieter der fremden Domain den angezeigten CNAME `_acme-challenge.<name>` anlegen |
+| HTTP-01 scheitert | Port 80 von außen muss auf die Node zeigen (Router), und der Name muss per DNS auf den Anschluss zeigen |
+| eigene CA: „… is not allowed by the CA“ | Name oder IP liegt außerhalb der Einschränkung; Domain bei einer neuen CA erlauben oder eine CA ohne Einschränkung nutzen |
+| Browser warnt bei der eigenen CA | CA auf dem Gerät installieren (Karte *Eigene CAs*); bei iOS zusätzlich Zertifikatsvertrauen einschalten |
+| Zertifikat lässt sich nicht löschen | Es wird benutzt (siehe „benutzt von“); erst dort umstellen oder bewusst trotzdem löschen |

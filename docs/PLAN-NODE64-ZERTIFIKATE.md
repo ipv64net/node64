@@ -1,6 +1,6 @@
 # Plan: Zentrale Zertifikatsverwaltung in Node64
 
-Stand 2026-10-16, Wunsch von Dennis, Entscheidungen getroffen, noch nichts umgesetzt. Ziel: eine Zertifikatsstelle im Kern von Node64, mit
+Stand 2026-10-16: Z0–Z5 umgesetzt, auf node64-test als 0.11.86-dev im Einsatz. Ziel: eine Zertifikatsstelle im Kern von Node64, mit
 eigenem Menüpunkt links, aus der sich CDN64, DNS64 und die Oberfläche von Node64 bedienen. Alles lässt sich
 herunterladen und per API abholen, damit Zertifikate auch woanders genutzt werden können (NAS, Router, andere Server).
 
@@ -128,6 +128,20 @@ Für Skripte auf anderen Geräten, mit einem normalen API-Key (`Authorization: B
     - Einmalige Übernahme beim Start; der Merker `dns64.central_migrated` wird erst nach vollem Erfolg gesetzt.
     - `tls/` und `acme/` bleiben eine Version als Rückfall.
     - `SetCerts` in `main.go`.
+
+- **Z4 auf node64-test (0.11.86-dev, 2026-10-16):**
+  - pfsense.ipv64.de ist übernommen (Fingerabdruck auf 443/853 unverändert), ebenso die DNS64 Heimnetz-CA.
+  - Vorher ist die Datenbank gesichert worden.
+- **Z5 (2026-10-16):**
+  - Betriebsdoku [ZERTIFIKATE.md](ZERTIFIKATE.md) vollständig: Abnehmer, Umzug von DNS64, Sicherung, Leistung,
+    Grenzen, Fehlerbehebung.
+  - README im Kern-Abschnitt; Hinweis in MODUL-VERSIONEN.
+  - Lasttest `TestLoadCerts` (Tag `loadtest`).
+
+**Offen:**
+- Die alte ACME-Anbindung von DNS64 (`internal/dns64/acme.go`) nach einer Version entfernen (DNS64-Sitzung).
+- Echte Ausstellung über einen der neuen DNS-Anbieter oder eine weitere ACME-Stelle, sobald Zugangsdaten
+  vorliegen.
 
 ## Phasen
 

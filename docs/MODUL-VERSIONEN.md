@@ -25,6 +25,10 @@ von Node64 selbst (Kern, z. B. `0.11.66-dev`). So ist sichtbar, welches Modul si
 - **Minor** (`1.3.0`): neue Funktion, neue Einstellung, neuer API-Endpunkt, neue Seite.
 - **Patch** (`1.2.1`): Fehlerbehebung, Textänderung, Optik ohne neue Funktion.
 
+Die Zertifikatsverwaltung (`internal/certs`, Seite `internal/certsui`), der gemeinsame Eingang (`internal/edge`)
+und die Port-Verwaltung (`internal/ports`) gehören zum Kern und haben keine eigene Modulversion. Ihre Änderungen
+stehen in [ZERTIFIKATE.md](ZERTIFIKATE.md) bzw. [CDN64.md](CDN64.md) und laufen mit der Version von Node64.
+
 Die Version wird mit der Änderung im selben Commit erhöht. Mehrere Änderungen bis zum nächsten Ausrollen dürfen
 in einer Version zusammenkommen. Änderungen nur am Kern (Menü, Einstellungen, Sync) ändern keine Modulversion.
 
