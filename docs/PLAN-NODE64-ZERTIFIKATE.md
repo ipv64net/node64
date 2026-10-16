@@ -1,6 +1,6 @@
 # Plan: Zentrale Zertifikatsverwaltung in Node64
 
-Stand 2026-10-16, Wunsch von Dennis, noch nichts umgesetzt. Ziel: eine Zertifikatsstelle im Kern von Node64, mit
+Stand 2026-10-16, Wunsch von Dennis, Entscheidungen getroffen, noch nichts umgesetzt. Ziel: eine Zertifikatsstelle im Kern von Node64, mit
 eigenem Menüpunkt links, aus der sich CDN64, DNS64 und die Oberfläche von Node64 bedienen. Alles lässt sich
 herunterladen und per API abholen, damit Zertifikate auch woanders genutzt werden können (NAS, Router, andere Server).
 
@@ -33,9 +33,7 @@ herunterladen und per API abholen, damit Zertifikate auch woanders genutzt werde
   - Ohne Zertifikate kostet sie nichts.
 - **ipv64 zuerst.** Liegt ein Name im ipv64-Account (oder ist eine eigene Domain dort per API erreichbar), wird
   automatisch DNS-01 über ipv64 gewählt. Sonst Alias, DNS-Anbieter oder HTTP-01.
-- **Schlüssel verlassen Node64 nur bewusst:**
-  - Download des privaten Schlüssels nur nach erneuter Eingabe von Passwort bzw. 2FA;
-  - jeder Abruf steht im Audit.
+- **Jeder Download eines Schlüssels steht im Audit.**
 - **Bestehendes bleibt gültig.** Geräte, die heute der DNS64-CA vertrauen, müssen das weiter tun können. Die CA wird
   übernommen, nicht neu erzeugt.
 
@@ -50,22 +48,17 @@ herunterladen und per API abholen, damit Zertifikate auch woanders genutzt werde
 | Eigene CA | Node64-CA erzeugen oder vorhandene CA (auch Zwischen-CA) importieren; Zertifikate mit Namen **und IPs** ausstellen |
 | Upload | fremdes Zertifikat mit Schlüssel (wie heute), nicht erneuerbar, Warnung vor Ablauf |
 | Download | `fullchain.pem`, `cert.pem`, `chain.pem`, `privkey.pem`, PKCS#12 (`.p12` mit Passwort) für Windows/Fritzbox/NAS, alles als ZIP; CA als PEM/`.crt` und als iOS/macOS-Profil |
-| API | alles aus der Oberfläche, dazu Abruf je Zertifikat mit eigenem Abruf-Schlüssel (siehe unten) |
+| API | alles aus der Oberfläche, Abruf mit den normalen API-Keys (siehe unten) |
 | Einhängen | CDN64 (Proxy-Hosts, Streams), DNS64 (DoH/DoT/DoQ), Oberfläche von Node64 (HTTPS-Port und Name am Eingang) |
 | Meldungen | Fehler, Ablauf (14/3 Tage), Entwarnung, erfolgreich erneuert (optional), an die Standardkanäle |
 
 ### Abruf per API
 
-Für Skripte auf anderen Geräten:
-- **Abruf-Schlüssel je Zertifikat** (`node64c_…`, nur lesend, nur dieses eine Zertifikat, widerrufbar, letzte
-  Nutzung sichtbar).
-  - Ein normaler API-Key hätte Vollzugriff auf Node64 und gehört nicht auf ein NAS.
-- **Endpunkte:**
-  - `GET /api/certs/{id}/bundle?format=pem|p12|zip` (mit Abruf-Schlüssel oder API-Key);
-  - `GET /api/certs/{id}/meta` (gültig bis, Fingerabdruck).
-  - `ETag`/`If-None-Match`, damit ein Cron-Skript nur bei Änderung neu lädt.
-- **Doku:** Beispiel-Skripte (curl + Neustart des Dienstes) für Synology, Proxmox, OPNsense/pfSense und
-  allgemeines Linux.
+Für Skripte auf anderen Geräten, mit einem normalen API-Key (`Authorization: Bearer node64_…`):
+- `GET /api/certs/{id}/bundle?format=pem|p12|zip`;
+- `GET /api/certs/{id}/meta` (gültig bis, Fingerabdruck);
+- `ETag`/`If-None-Match`, damit ein Cron-Skript nur bei Änderung neu lädt;
+- Beispiel-Skripte (curl + Neustart des Dienstes) für Synology, Proxmox, OPNsense/pfSense und allgemeines Linux.
 
 ### Eigene CA
 
@@ -82,25 +75,25 @@ Für Skripte auf anderen Geräten:
 | Phase | Inhalt |
 |---|---|
 | **Z0** Eigene Seite | Menüpunkt „Zertifikate“ links (Kern). Die Seiten aus CDN64 ziehen um (`/certificates`, alte Pfade leiten weiter). Erneuerung ohne Halter für alle mit „automatisch erneuern“. CDN64 verlinkt nur noch. |
-| **Z1** Download und API | Downloads (PEM, P12, ZIP) mit erneuter Anmeldung für den Schlüssel, Audit. Abruf-Schlüssel je Zertifikat, `bundle`/`meta` mit ETag, Beispiel-Skripte. |
+| **Z1** Download und API | Downloads (PEM, P12, ZIP) mit Audit. `bundle`/`meta` mit ETag über API-Key, Beispiel-Skripte. lego auf ~25 Anbieter. |
 | **Z2** Eigene CA und andere ACME-Stellen | CA erzeugen/importieren, ausstellen mit IPs, CA-Download inkl. iOS-Profil. ACME-Stellen mit EAB, Konto je Stelle. |
 | **Z3** Oberfläche von Node64 | Auswahl des Zertifikats für den HTTPS-Port und den Namen am Eingang, Wechsel ohne Neustart. Reihenfolge: `NODE64_TLS_CERT` (falls gesetzt) → Auswahl → selbst erzeugt. |
-| **Z4** DNS64 (mit der DNS64-Sitzung) | Modus „Zertifikat aus der Zentrale“ mit Auswahl. Übernahme des Let's-Encrypt-Zertifikats (pfsense.ipv64.de) samt Schlüssel und der DNS64-CA in die Zentrale, Geräte vertrauen weiter. Danach entfällt die eigene ACME-Anbindung von DNS64. |
+| **Z4** DNS64 (mit der DNS64-Sitzung) | Modus „Zertifikat aus der Zentrale“ mit Auswahl. Automatische Übernahme beim ersten Start: Let's-Encrypt-Zertifikat (pfsense.ipv64.de) samt Schlüssel und die DNS64-CA, Geräte vertrauen weiter. Danach entfällt die eigene ACME-Anbindung von DNS64. |
 | **Z5** Abschluss | Doku (`docs/ZERTIFIKATE.md`), i18n, OpenAPI, Lasttest der Erneuerung, Test auf der Box (Staging zuerst), Versionen. |
 
 Reihenfolge Z0 → Z1 → Z3 → Z2 → Z4 → Z5 ist auch möglich, falls Download und Oberfläche wichtiger sind als die CA.
 
-## Entscheidungen (Empfehlung in Klammern)
+## Entscheidungen (Dennis, 2026-10-16)
 
-1. Schlüssel-Download nur nach erneuter Passwort-/2FA-Eingabe? (ja)
-2. Abruf-Schlüssel je Zertifikat statt normaler API-Keys? (ja, normale API-Keys gehen zusätzlich)
-3. Jedes Zertifikat mit „automatisch erneuern“ erneuern, auch unbenutzte? (ja)
-4. Eigene CA standardmäßig nur für private Namen/IPs (Name Constraints)? (ja, abschaltbar)
-5. Mehr lego-Anbieter? Jeder Anbieter bringt seine Bibliothek mit; große Cloud-SDKs (AWS Route 53, Azure, Google
-   Cloud) machen das Image um je ~5–15 MB größer. (gezielt erweitern auf ~25 verbreitete Anbieter, Cloud-SDKs nur
-   auf Nachfrage)
-6. Übernahme bei DNS64 (Z4) automatisch beim Update oder per Knopf? (per Knopf mit Vorschau, Abstimmung mit der
-   DNS64-Sitzung)
+1. **Schlüssel-Download direkt**, ohne erneute Anmeldung. Jeder Abruf steht im Audit.
+2. **Abruf per API mit den normalen API-Keys**, keine eigenen Abruf-Schlüssel je Zertifikat.
+3. **Jedes Zertifikat mit „automatisch erneuern“ wird erneuert**, auch unbenutzte (Empfehlung übernommen).
+4. **Eigene CA standardmäßig nur für private Namen/IPs** (Name Constraints), abschaltbar (Empfehlung übernommen).
+5. **lego gezielt auf etwa 25 verbreitete Anbieter erweitern.** Große Cloud-SDKs (AWS, Azure, Google) nur auf
+   Nachfrage.
+6. **DNS64 zieht automatisch beim Update um.** Das Let's-Encrypt-Zertifikat und die DNS64-CA werden beim ersten
+   Start der neuen Version in die Zentrale übernommen. Geräte vertrauen weiter, weil die CA mit ihrem Schlüssel
+   übernommen wird.
 
 ## Abstimmung
 
