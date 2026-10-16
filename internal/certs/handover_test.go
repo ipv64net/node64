@@ -80,6 +80,22 @@ func TestHandoverCAAndOwned(t *testing.T) {
 	if err != nil || c4.ID != c.ID || b4.Fingerprint == b1.Fingerprint || len(b4.Leaf.IPAddresses) != 3 {
 		t.Fatalf("reissue on new IP: %v", err)
 	}
+	// ein laufender ACME-Abruf (Sperre gehalten) blockiert die eigene CA nicht
+	e.m.acme.Lock()
+	done := make(chan error, 1)
+	go func() {
+		_, err := e.m.EnsureIssued(ctx, "dns64", ca.ID, append(names, "192.168.30.1"), 800)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("EnsureIssued waits for the ACME lock")
+	}
+	e.m.acme.Unlock()
 	if own, err := e.m.Owned(ctx, "dns64"); err != nil || own.ID != c.ID {
 		t.Fatalf("owned: %v", err)
 	}

@@ -156,15 +156,25 @@ func (m *Manager) EnsureIssued(ctx context.Context, owner string, caID int64, na
 	return m.issueNow(ctx, id)
 }
 
-// issueNow stellt ein Zertifikat der eigenen CA sofort aus (statt im Hintergrund).
+// issueNow stellt ein Zertifikat der eigenen CA sofort aus (statt im Hintergrund). Ohne die ACME-Sperre: ein
+// laufender Abruf bei Let's Encrypt (bis zu 20 Minuten) haelt den Abnehmer nicht auf. Gegen einen gleichzeitigen
+// Lauf fuer dasselbe Zertifikat schuetzt der Eintrag in steps.
 func (m *Manager) issueNow(ctx context.Context, id int64) (*Cert, error) {
 	c, err := m.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	m.acme.Lock()
+	m.mu.Lock()
+	if m.steps[id] != "" {
+		m.mu.Unlock()
+		return nil, ErrBusy
+	}
+	m.steps[id] = "certificate"
+	m.mu.Unlock()
 	err = m.issueFromCA(ctx, c)
-	m.acme.Unlock()
+	m.mu.Lock()
+	delete(m.steps, id)
+	m.mu.Unlock()
 	if err != nil {
 		now := store.Now()
 		_, _ = m.w.ExecContext(ctx, `UPDATE certs SET status = ?, last_error = ?, last_attempt = ?, updated_at = ? WHERE id = ?`, StatusError, err.Error(), now, now, id)
