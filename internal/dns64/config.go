@@ -303,7 +303,7 @@ func (c *config) validate() error {
 			}
 			host = h
 		}
-		if net.ParseIP(strings.Trim(host, "[]")) == nil {
+		if _, err := netip.ParseAddr(strings.Trim(host, "[]")); err != nil { // IPv4, IPv6, auch fe80::1%eth0
 			return errCfg("err_router")
 		}
 	}

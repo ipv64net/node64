@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/miekg/dns"
@@ -128,6 +129,7 @@ func New(servers []Server, mode string) *Resolver {
 
 func newClient(ips []string) *http.Client {
 	dialer := &net.Dialer{Timeout: 2 * time.Second, KeepAlive: 30 * time.Second}
+	var pref atomic.Int32 // Familie der letzten erfolgreichen Verbindung (Happy Eyeballs)
 	tr := &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			_, port, err := net.SplitHostPort(addr)
@@ -137,15 +139,13 @@ func newClient(ips []string) *http.Client {
 			if len(ips) == 0 { // URL with an IP as host
 				return dialer.DialContext(ctx, network, addr)
 			}
-			var lastErr error
+			addrs := make([]string, 0, len(ips))
 			for _, ip := range ips {
-				c, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip, port))
-				if err == nil {
-					return c, nil
-				}
-				lastErr = err
+				addrs = append(addrs, net.JoinHostPort(ip, port))
 			}
-			return nil, lastErr
+			return happyDial(ctx, addrs, &pref, func(ctx context.Context, a string) (net.Conn, error) {
+				return dialer.DialContext(ctx, network, a)
+			}, func(c net.Conn) { _ = c.Close() })
 		},
 		ForceAttemptHTTP2:   true,
 		MaxIdleConns:        16,

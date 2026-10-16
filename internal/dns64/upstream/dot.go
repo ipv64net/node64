@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/miekg/dns"
@@ -24,6 +25,7 @@ type dot struct {
 	host  string   // name for the certificate check
 	addrs []string // ip:port to dial (bootstrap IPs, else the host)
 	tls   *tls.Config
+	pref  atomic.Int32 // Familie der letzten erfolgreichen Verbindung (Happy Eyeballs)
 
 	mu     sync.Mutex
 	idle   []*dns.Conn
@@ -47,16 +49,14 @@ func dialAddrs(host, port string, ips []string) []string {
 }
 
 func (d *dot) dial(ctx context.Context) (*dns.Conn, error) {
-	var lastErr error
-	for _, addr := range d.addrs {
-		dialer := &tls.Dialer{NetDialer: &net.Dialer{Timeout: 2 * time.Second}, Config: d.tls}
-		c, err := dialer.DialContext(ctx, "tcp", addr)
-		if err == nil {
-			return &dns.Conn{Conn: c}, nil
-		}
-		lastErr = err
+	dialer := &tls.Dialer{NetDialer: &net.Dialer{Timeout: 2 * time.Second}, Config: d.tls}
+	c, err := happyDial(ctx, d.addrs, &d.pref, func(ctx context.Context, addr string) (net.Conn, error) {
+		return dialer.DialContext(ctx, "tcp", addr)
+	}, func(c net.Conn) { _ = c.Close() })
+	if err != nil {
+		return nil, err
 	}
-	return nil, lastErr
+	return &dns.Conn{Conn: c}, nil
 }
 
 func (d *dot) get() *dns.Conn {

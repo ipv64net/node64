@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/miekg/dns"
@@ -18,6 +19,7 @@ type doq struct {
 	addrs []string
 	tls   *tls.Config
 	conf  *quic.Config
+	pref  atomic.Int32 // Familie der letzten erfolgreichen Verbindung (Happy Eyeballs)
 
 	mu     sync.Mutex
 	conn   *quic.Conn
@@ -42,16 +44,14 @@ func (d *doq) connection(ctx context.Context) (*quic.Conn, error) {
 	if d.conn != nil && d.conn.Context().Err() == nil {
 		return d.conn, nil
 	}
-	var lastErr error
-	for _, addr := range d.addrs {
-		c, err := quic.DialAddr(ctx, addr, d.tls, d.conf)
-		if err == nil {
-			d.conn = c
-			return c, nil
-		}
-		lastErr = err
+	c, err := happyDial(ctx, d.addrs, &d.pref, func(ctx context.Context, addr string) (*quic.Conn, error) {
+		return quic.DialAddr(ctx, addr, d.tls, d.conf)
+	}, func(c *quic.Conn) { _ = c.CloseWithError(0, "") })
+	if err != nil {
+		return nil, err
 	}
-	return nil, lastErr
+	d.conn = c
+	return c, nil
 }
 
 // drop forgets a broken connection so the next query dials anew.

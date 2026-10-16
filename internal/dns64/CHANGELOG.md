@@ -1,5 +1,15 @@
 # Änderungen – DNS64
 
+## 1.12.0 – 2026-10-16
+
+### Neu
+- Happy Eyeballs zu den Upstream-Servern (DoH, DoT, DoQ): IPv6- und IPv4-Bootstrap-Adressen abwechselnd, der nächste Versuch startet nach 250 ms oder sofort bei einem Fehler, die zuletzt erfolgreiche Familie zuerst. Eine hängende Adresse (IPv6 ohne Route, gesperrtes IPv4) kostet so höchstens 250 ms statt 2 s je Verbindung.
+- Router für lokale Namen auch über IPv6: Gibt es kein IPv4-Gateway mit DNS, nimmt DNS64 das IPv6-Default-Gateway (Link-local mit Schnittstelle, z. B. `fe80::1%eth0`). Eintragen lässt sich der Router jetzt auch als IPv6-Adresse mit Zone bzw. `[IPv6]:Port`.
+
+### Geändert
+- Hinweise unter Einstellungen nennen IPv4 und IPv6 (Adresse „alle Adressen (IPv4 und IPv6)“, Router).
+- Test: DNS über UDP, TCP und DoT antwortet über 127.0.0.1 und ::1, auch für AAAA.
+
 ## 1.11.0 – 2026-10-16
 
 ### Entfernt

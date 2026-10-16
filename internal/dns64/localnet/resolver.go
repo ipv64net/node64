@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"io"
 	"log/slog"
 	"net"
 	"net/netip"
@@ -68,12 +69,12 @@ func (r *Resolver) Run(ctx context.Context) {
 }
 
 func (r *Resolver) detect(ctx context.Context) {
-	gw := defaultGateway()
+	gws := gateways()
 	found := ""
-	if gw.IsValid() {
-		addr := net.JoinHostPort(gw.String(), "53")
-		if probe(ctx, addr) {
+	for _, gw := range gws {
+		if addr := net.JoinHostPort(gw, "53"); probe(ctx, addr) {
 			found = addr
+			break
 		}
 	}
 	r.mu.Lock()
@@ -84,7 +85,7 @@ func (r *Resolver) detect(ctx context.Context) {
 		if found != "" {
 			r.log.Info("router DNS detected", "addr", found)
 		} else {
-			r.log.Info("no router DNS found; local names will answer NXDOMAIN", "gateway", gw)
+			r.log.Info("no router DNS found; local names will answer NXDOMAIN", "gateways", strings.Join(gws, ", "))
 		}
 	}
 }
@@ -201,6 +202,50 @@ func probe(ctx context.Context, addr string) bool {
 	c := &dns.Client{Net: "udp", Timeout: time.Second}
 	resp, _, err := c.ExchangeContext(ctx, req, addr)
 	return err == nil && resp.Rcode != dns.RcodeRefused
+}
+
+// gateways lists the default gateways to try for the router's DNS: IPv4 first, then IPv6 (a link-local
+// gateway carries its interface as zone, e.g. fe80::1%eth0).
+func gateways() []string {
+	var out []string
+	if gw := defaultGateway(); gw.IsValid() {
+		out = append(out, gw.String())
+	}
+	if f, err := os.Open("/proc/net/ipv6_route"); err == nil {
+		out = append(out, ipv6Gateways(f)...)
+		f.Close()
+	}
+	return out
+}
+
+// ipv6Gateways reads the next hops of the IPv6 default routes from /proc/net/ipv6_route
+// (dest destlen src srclen nexthop metric refcnt use flags iface).
+func ipv6Gateways(r io.Reader) []string {
+	var out []string
+	seen := map[string]bool{}
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		f := strings.Fields(sc.Text())
+		if len(f) < 10 || f[1] != "00" || strings.Trim(f[0], "0") != "" {
+			continue
+		}
+		b, err := hex.DecodeString(f[4])
+		if err != nil || len(b) != 16 {
+			continue
+		}
+		a := netip.AddrFrom16([16]byte(b))
+		if a.IsUnspecified() || a.IsLoopback() {
+			continue
+		}
+		if a.IsLinkLocalUnicast() {
+			a = a.WithZone(f[9])
+		}
+		if s := a.String(); !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // defaultGateway reads the IPv4 default route from /proc/net/route. With
