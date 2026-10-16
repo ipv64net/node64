@@ -118,6 +118,7 @@
 				<a class="btn btn-outline-secondary btn-sm" href="/settings/2fa">{{.T "twofa.manage"}}</a>
 				{{else}}<p class="small text-body-secondary">{{.T "twofa.hint"}}</p>
 				<a class="btn btn-primary btn-sm" href="/settings/2fa">{{.T "twofa.setup"}}</a>{{end}}
+				<hr class="my-2"><div class="small"><i class="bi bi-person-badge"></i> {{.T "sso.settings_hint"}} <a href="/settings/login">{{.T "sso.title"}}</a></div>
 			</div>
 		</div>
 		<div class="card">

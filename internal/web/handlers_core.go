@@ -144,6 +144,7 @@ func (s *Server) loginForm(w http.ResponseWriter, r *http.Request) {
 	}
 	v := s.view(r, "login.title")
 	v.Form["next"] = safeNext(r.URL.Query().Get("next"))
+	s.loginOptions(r, v)
 	s.render(w, r, http.StatusOK, "login", v)
 }
 
@@ -152,6 +153,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	v := s.view(r, "login.title")
 	f := s.formValues(r, "username", "password", "next")
 	v.Form = map[string]string{"username": f["username"], "next": safeNext(f["next"])}
+	s.loginOptions(r, v)
 	ip := s.clientIP(r)
 	keys := []string{"ip:" + ipKey(ip), "user:" + strings.ToLower(f["username"])}
 	if wait := s.limiter.retryAfter(keys...); wait > 0 {

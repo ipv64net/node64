@@ -194,4 +194,12 @@
 			if (window.bootstrap && bootstrap.Alert.getOrCreateInstance) { bootstrap.Alert.getOrCreateInstance(el).close(); }
 		}, 6000);
 	});
+
+	// Rueckfrage vor Loeschen (data-confirm) auf den Kernseiten; Modulseiten mit eigenem Skript fragen selbst
+	// (geprueft beim Klick: die Modulskripte stehen erst nach app.js im Dokument)
+	document.addEventListener("click", function (e) {
+		var b = e.target.closest("[data-confirm]");
+		if (!b || document.querySelector('script[src*="/static/js/dns64.js"], script[src*="/static/js/cdn64.js"], script[src*="/static/js/certs.js"]')) { return; }
+		if (!window.confirm(b.getAttribute("data-confirm"))) { e.preventDefault(); }
+	});
 })();

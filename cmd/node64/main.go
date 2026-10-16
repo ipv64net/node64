@@ -314,7 +314,7 @@ func run() error {
 	srv, err := web.New(web.Deps{
 		Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: modules, Notify: nfStore, Dispatcher: dispatcher,
 		Sync: syncClient, Linker: syncClient, HC: hcModule, IPv64: ipv64Key, Peer: peerMgr, Version: Version, StartedAt: time.Now(), Restart: stop,
-		Ports: portReg, Edge: edgeSrv, Certs: certMgr,
+		Ports: portReg, Edge: edgeSrv, Certs: certMgr, Box: box,
 	})
 	if err != nil {
 		return err

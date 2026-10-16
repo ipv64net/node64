@@ -13,4 +13,8 @@
 	</div>
 	<button class="btn btn-primary w-100" type="submit">{{.T "login.submit"}}</button>
 </form>
+{{if .Val "sso"}}
+<div class="text-center text-body-secondary small my-2">{{.T "login.or"}}</div>
+<a class="btn btn-outline-secondary w-100" href="/login/oidc?next={{.Val "next"}}"><i class="bi bi-box-arrow-in-right"></i> {{.T "login.with" "name" (.Val "sso")}}</a>
+{{end}}
 {{end}}

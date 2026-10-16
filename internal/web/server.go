@@ -33,6 +33,7 @@ import (
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/peer"
 	"github.com/ipv64net/node64/internal/ports"
+	"github.com/ipv64net/node64/internal/secrets"
 	"github.com/ipv64net/node64/internal/store"
 	nodesync "github.com/ipv64net/node64/internal/sync"
 )
@@ -54,6 +55,7 @@ type Deps struct {
 	Ports      *ports.Registry      // belegte Ports (nil = keine Uebersicht)
 	Edge       *edge.Edge           // gemeinsamer Eingang 80/443 (nil = nicht verfuegbar)
 	Certs      *certs.Manager       // Zertifikatsverwaltung (nil = nicht verfuegbar)
+	Box        *secrets.Box         // Verschluesselung von Geheimnissen (z. B. OIDC-Client-Secret)
 	Version    string
 	StartedAt  time.Time
 	// Restart beendet den Node kontrolliert (Docker startet ihn neu), z. B.

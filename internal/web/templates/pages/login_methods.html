@@ -1,0 +1,59 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex align-items-center mb-3">
+	<h1 class="h4 mb-0"><i class="bi bi-person-badge text-primary me-1"></i> {{.T "sso.title"}}</h1>
+	<a class="btn btn-sm btn-outline-secondary ms-auto" href="/settings"><i class="bi bi-arrow-left"></i> {{.T "nav.settings"}}</a>
+</div>
+<p class="text-body-secondary small">{{.T "sso.intro"}}</p>
+<div class="row g-3">
+<div class="col-lg-6">
+	<div class="card h-100" id="oidc">
+		<div class="card-header"><i class="bi bi-box-arrow-in-right text-primary"></i> {{.T "sso.oidc_title"}}</div>
+		<div class="card-body">
+			<p class="small text-body-secondary">{{.T "sso.oidc_hint"}}</p>
+			<form method="post" action="/settings/login/oidc">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="mb-2"><label class="form-label" for="issuer">{{.T "sso.issuer"}}</label><input class="form-control form-control-sm font-monospace" id="issuer" name="issuer" value="{{$d.OIDC.Issuer}}" placeholder="https://auth.example.com" autocomplete="off">
+					<div class="form-text">{{.T "sso.issuer_hint"}}</div></div>
+				<div class="row g-2 mb-2">
+					<div class="col-sm-6"><label class="form-label" for="client_id">{{.T "sso.client_id"}}</label><input class="form-control form-control-sm font-monospace" id="client_id" name="client_id" value="{{$d.OIDC.ClientID}}" autocomplete="off"></div>
+					<div class="col-sm-6"><label class="form-label" for="client_secret">{{.T "sso.client_secret"}}</label><input class="form-control form-control-sm" type="password" id="client_secret" name="client_secret" placeholder="{{if $d.SecretSet}}{{.T "sso.secret_unchanged"}}{{end}}" autocomplete="new-password"></div>
+				</div>
+				<div class="row g-2 mb-2">
+					<div class="col-sm-6"><label class="form-label" for="label">{{.T "sso.label"}}</label><input class="form-control form-control-sm" id="label" name="label" value="{{$d.OIDC.Label}}" placeholder="Authelia" maxlength="60"></div>
+					<div class="col-sm-6"><label class="form-label" for="scopes">{{.T "sso.scopes"}}</label><input class="form-control form-control-sm font-monospace" id="scopes" name="scopes" value="{{$d.OIDC.Scopes}}"></div>
+				</div>
+				<div class="mb-2"><label class="form-label" for="base_url">{{.T "sso.base_url"}}</label><input class="form-control form-control-sm font-monospace" id="base_url" name="base_url" value="{{$d.OIDC.BaseURL}}" placeholder="https://node64.example.com">
+					<div class="form-text">{{.T "sso.base_url_hint"}}</div></div>
+				<div class="alert alert-light border small py-2 mb-2"><div class="fw-semibold">{{.T "sso.callback"}}</div><code class="text-break">{{$d.Callback}}</code></div>
+				<div class="d-flex gap-2">
+					<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>
+					{{if $d.OIDC.Enabled}}<button class="btn btn-sm btn-outline-danger ms-auto" type="submit" name="clear" value="1" data-confirm="{{.T "sso.clear_confirm"}}"><i class="bi bi-x-lg"></i> {{.T "sso.clear"}}</button>{{end}}
+				</div>
+			</form>
+		</div>
+	</div>
+</div>
+<div class="col-lg-6">
+	<div class="card h-100" id="identities">
+		<div class="card-header"><i class="bi bi-link-45deg text-primary"></i> {{.T "sso.identities"}}</div>
+		<div class="card-body">
+			<p class="small text-body-secondary">{{.T "sso.identities_hint"}}</p>
+			{{if $d.Identities}}
+			<ul class="list-group list-group-flush mb-3 small">
+			{{range $d.Identities}}
+				<li class="list-group-item d-flex justify-content-between align-items-center px-0">
+					<span><strong>{{if .Label}}{{.Label}}{{else}}{{.Subject}}{{end}}</strong><br><span class="text-body-secondary">{{.Provider}} · {{$.T "nf.last_used"}}: {{$.Ago .LastUsedAt}}</span></span>
+					<form method="post" action="/settings/login/identities/{{.ID}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{$.T "common.confirm"}}" title="{{$.T "sso.unlink"}}"><i class="bi bi-x-lg"></i></button></form>
+				</li>
+			{{end}}
+			</ul>
+			{{else}}<p class="small">{{.T "sso.no_identities"}}</p>{{end}}
+			{{if $d.OIDC.Enabled}}
+			<form method="post" action="/settings/login/oidc/link"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-link"></i> {{.T "sso.link" "name" $d.OIDC.ButtonLabel}}</button></form>
+			{{else}}<p class="small text-body-secondary mb-0">{{.T "sso.link_first"}}</p>{{end}}
+		</div>
+	</div>
+</div>
+</div>
+{{end}}
