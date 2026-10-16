@@ -85,7 +85,8 @@ type Cert struct {
 	AliasPrefix string    `json:"alias_prefix,omitempty"`
 	DNSAccount  int64     `json:"dns_account,omitempty"` // source dns
 	CAID        int64     `json:"ca_id,omitempty"`       // source ca
-	Days        int       `json:"days,omitempty"`        // source ca: Laufzeit
+	Days        int       `json:"days,omitempty"`        // source ca/self: Laufzeit
+	KeyType     string    `json:"key_type,omitempty"`    // source self: ecdsa oder rsa
 	ACMECA      int64     `json:"acme_ca,omitempty"`     // 0 = Let's Encrypt, sonst weitere ACME-Stelle
 	Staging     bool      `json:"staging"`
 	AutoRenew   bool      `json:"auto_renew"`
@@ -231,13 +232,13 @@ func (m *Manager) Close() {
 // ---------------------------------------------------------------- Lesen
 
 const cols = `id, names, source, alias_zone, alias_prefix, dns_account, staging, auto_renew, cert_pem != '', not_before, not_after, issuer, status, last_error,
-	last_attempt, warned, created_at, updated_at, ca_id, days, acme_ca`
+	last_attempt, warned, created_at, updated_at, ca_id, days, acme_ca, key_type`
 
 func (m *Manager) scan(row interface{ Scan(...any) error }) (*Cert, error) {
 	var c Cert
 	var names, nb, na, la, ca, ua string
 	if err := row.Scan(&c.ID, &names, &c.Source, &c.AliasZone, &c.AliasPrefix, &c.DNSAccount, &c.Staging, &c.AutoRenew, &c.hasCert, &nb, &na, &c.Issuer,
-		&c.Status, &c.LastError, &la, &c.warned, &ca, &ua, &c.CAID, &c.Days, &c.ACMECA); err != nil {
+		&c.Status, &c.LastError, &la, &c.warned, &ca, &ua, &c.CAID, &c.Days, &c.ACMECA, &c.KeyType); err != nil {
 		return nil, err
 	}
 	c.Names = strings.Split(names, ",")
@@ -465,7 +466,8 @@ type Request struct {
 	AliasPrefix string   `json:"alias_prefix"` // alias, optional
 	DNSAccount  int64    `json:"dns_account"`  // dns: Zugang
 	CAID        int64    `json:"ca_id"`        // ca: eigene CA
-	Days        int      `json:"days"`         // ca: Laufzeit (Standard 397, hoechstens 825)
+	Days        int      `json:"days"`         // ca/self: Laufzeit (Standard 397, hoechstens 825)
+	KeyType     string   `json:"key_type"`     // self: ecdsa (Standard) oder rsa
 	ACMECA      int64    `json:"acme_ca"`      // weitere ACME-Stelle statt Let's Encrypt (0)
 	Staging     bool     `json:"staging"`
 	AutoRenew   *bool    `json:"auto_renew"` // Standard an
@@ -518,7 +520,7 @@ func normNamesIP(in []string, allowIP bool) ([]string, error) {
 
 // Create legt ein Zertifikat an und startet den Abruf im Hintergrund.
 func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
-	names, err := normNamesIP(req.Names, req.Source == SourceCA)
+	names, err := normNamesIP(req.Names, req.Source == SourceCA || req.Source == SourceSelf)
 	if err != nil {
 		return nil, err
 	}
@@ -566,8 +568,26 @@ func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
 			return nil, invalid("names", "%v", err)
 		}
 		req.ACMECA, req.Staging = 0, false
+	case SourceSelf: // ohne Voraussetzung
+		if req.Days == 0 {
+			req.Days = defaultCADays
+		}
+		if req.Days < 1 || req.Days > maxCADays {
+			return nil, invalid("days", "1 to %d days", maxCADays)
+		}
+		switch req.KeyType {
+		case "":
+			req.KeyType = KeyECDSA
+		case KeyECDSA, KeyRSA:
+		default:
+			return nil, invalid("key_type", "ecdsa or rsa")
+		}
+		req.ACMECA, req.Staging = 0, false
 	default:
 		return nil, invalid("source", "unknown source %q", req.Source)
+	}
+	if req.Source != SourceSelf {
+		req.KeyType = ""
 	}
 	if req.Source != SourceAlias {
 		req.AliasZone, req.AliasPrefix = "", ""
@@ -576,7 +596,10 @@ func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
 		req.DNSAccount = 0
 	}
 	if req.Source != SourceCA {
-		req.CAID, req.Days = 0, 0
+		req.CAID = 0
+	}
+	if req.Source != SourceCA && req.Source != SourceSelf {
+		req.Days = 0
 		if req.ACMECA != 0 {
 			if _, err := m.ACMECA(ctx, req.ACMECA); err != nil {
 				return nil, invalid("acme_ca", "unknown ACME CA")
@@ -588,9 +611,9 @@ func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
 	}
 	auto := req.AutoRenew == nil || *req.AutoRenew
 	now := store.Now()
-	res, err := m.w.ExecContext(ctx, `INSERT INTO certs (names, source, alias_zone, alias_prefix, dns_account, ca_id, days, acme_ca, staging, auto_renew, status,
-		created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, strings.Join(names, ","), req.Source, req.AliasZone, req.AliasPrefix, req.DNSAccount,
-		req.CAID, req.Days, req.ACMECA, req.Staging, auto, StatusPending, now, now)
+	res, err := m.w.ExecContext(ctx, `INSERT INTO certs (names, source, alias_zone, alias_prefix, dns_account, ca_id, days, acme_ca, key_type, staging, auto_renew,
+		status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, strings.Join(names, ","), req.Source, req.AliasZone, req.AliasPrefix,
+		req.DNSAccount, req.CAID, req.Days, req.ACMECA, req.KeyType, req.Staging, auto, StatusPending, now, now)
 	if err != nil {
 		return nil, err
 	}
@@ -706,7 +729,7 @@ func (m *Manager) Renew(ctx context.Context, id int64) error {
 	if c.Source == SourceUpload {
 		return ErrUpload
 	}
-	if c.Source != SourceCA && c.ACMECA == 0 && !m.Account(ctx).TOSAccepted {
+	if c.Source != SourceCA && c.Source != SourceSelf && c.ACMECA == 0 && !m.Account(ctx).TOSAccepted {
 		return ErrTOS
 	}
 	return m.start(id, "manual")

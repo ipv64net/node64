@@ -64,6 +64,10 @@ func TestCertificatesPage(t *testing.T) {
 	if resp.StatusCode != 200 || !strings.Contains(body, `action="/certificates/upload"`) {
 		t.Fatalf("new page: %d", resp.StatusCode)
 	}
+	// selbst signiert: immer waehlbar, ohne Voraussetzung
+	if !strings.Contains(body, `id="src-self" value="self"`) || strings.Contains(body, `data-why="self"`) || !strings.Contains(body, `name="self_days"`) {
+		t.Fatal("self-signed option missing or disabled")
+	}
 	// ausgegraute Wege nennen direkt den Grund samt Link (ohne API-Key, DNS-Zugang, CA)
 	for _, why := range []string{`data-why="ipv64"`, `data-why="alias"`, `data-why="dns"`, `data-why="ca"`, `data-why="http"`} {
 		if !strings.Contains(body, why) {
@@ -170,6 +174,25 @@ func TestCertificatesPage(t *testing.T) {
 	if resp, _ = a.get(t, "/certificates/dns-accounts/99/edit"); resp.StatusCode != 404 {
 		t.Fatalf("dns unknown: %d", resp.StatusCode)
 	}
+	_, body = a.get(t, "/certificates/new")
+	resp, _ = a.post(t, "/certificates", url.Values{"_csrf": {csrfOf(t, body)}, "names": {"node64.home.local 192.168.10.30"}, "source": {"self"},
+		"self_days": {"100"}, "days": {"397"}, "key_type": {"rsa"}})
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("self-signed via form: %d", resp.StatusCode)
+	}
+	for i := 0; i < 100; i++ {
+		l, _ := mgr.List(ctx)
+		for _, c := range l {
+			if c.Source == certs.SourceSelf && c.Status == certs.StatusValid {
+				if c.Days != 100 || c.KeyType != certs.KeyRSA || strings.Join(c.Names, ",") != "node64.home.local,192.168.10.30" {
+					t.Fatalf("self-signed: %+v", c)
+				}
+				return
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("self-signed certificate not issued")
 }
 
 func testCertPEM(t *testing.T, name string) (string, string) {

@@ -167,6 +167,9 @@ func (m *Manager) obtain(ctx context.Context, c *Cert) error {
 	if c.Source == SourceCA { // eigene CA: sofort, nicht hinter einem laufenden ACME-Abruf
 		return m.issueFromCA(ctx, c)
 	}
+	if c.Source == SourceSelf {
+		return m.issueSelfSigned(ctx, c)
+	}
 	m.acme.Lock() // ACME nacheinander: schont die Rate-Limits und die ipv64-API
 	defer m.acme.Unlock()
 	if c.ACMECA == 0 && !m.Account(ctx).TOSAccepted {
@@ -411,7 +414,7 @@ func needsRenewal(c *Cert) bool {
 		return false // nach einem Fehler erst in 6 Stunden wieder
 	}
 	before := renewBefore
-	if c.Source == SourceCA {
+	if c.Source == SourceCA || c.Source == SourceSelf {
 		before = caRenewBefore(c.Days)
 	}
 	return !c.hasCert || time.Until(c.NotAfter) < before

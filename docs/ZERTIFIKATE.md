@@ -14,6 +14,7 @@ Stand 2026-10-16 (Z0–Z5 fertig). Die Zertifikatsverwaltung gehört zum Kern vo
 | HTTP-01 | Name zeigt per DNS auf den Anschluss, Port 80 des Eingangs |
 | Eigenes Zertifikat | PEM oder .pfx/.p12 hochladen, auch mit Passwort geschützter Schlüssel (nicht erneuerbar, Warnung vor Ablauf) |
 | Eigene CA | Geräte im eigenen Netz: Namen wie `nas.lan` und IP-Adressen; Geräte vertrauen der CA einmal |
+| Selbst signiert | ohne Voraussetzung, sofort, auch für IPs (z. B. `node64.home.local`, `192.168.10.30`); ECDSA P-256 oder RSA 2048, Standard 397 Tage. Browser warnen, bis man dem Zertifikat vertraut, und nach jeder Erneuerung erneut. Für mehrere Geräte ist eine eigene CA bequemer |
 
 **Ausstellende Stelle bei ACME:**
 - Standard ist Let's Encrypt.

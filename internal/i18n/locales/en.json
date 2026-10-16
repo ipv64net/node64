@@ -581,7 +581,8 @@
       "http": "HTTP-01",
       "upload": "own",
       "dns": "DNS provider",
-      "ca": "own CA"
+      "ca": "own CA",
+      "self": "self-signed"
     },
     "step": {
       "queued": "waiting …",
@@ -624,7 +625,8 @@
       "alias": "Alias via ipv64",
       "http": "HTTP-01",
       "dns": "Other DNS provider",
-      "ca": "Own CA"
+      "ca": "Own CA",
+      "self": "Self-signed"
     },
     "src_hint": {
       "auto": "ipv64 DNS-01 if all names are in the ipv64 account, otherwise HTTP-01.",
@@ -632,7 +634,8 @@
       "alias": "for domains at other providers: set a CNAME once, ipv64 does the rest – no provider credentials needed.",
       "http": "port 80 must reach this node from outside; no wildcards.",
       "dns": "for domains at Cloudflare, Hetzner, netcup, INWX, IONOS and others: Node64 sets the TXT record via their API (store an account).",
-      "ca": "for devices in your own network, also for IP addresses and names like nas.lan; devices have to trust the CA once."
+      "ca": "for devices in your own network, also for IP addresses and names like nas.lan; devices have to trust the CA once.",
+      "self": "without Let's Encrypt and without an own CA, immediately, also for IP addresses (e.g. node64.home.local, 192.168.10.30). Browsers warn until you trust the certificate; for several devices an own CA is more convenient."
     },
     "your_domains": "Your ipv64 domains:",
     "alias_zone": "Target domain at ipv64",
@@ -785,7 +788,11 @@
       "noca_link": "add CA"
     },
     "upload_password": "Password of the key or the .pfx/.p12 file (only if encrypted)",
-    "upload_password_hint": "Purchased certificates often come with an encrypted key (ENCRYPTED PRIVATE KEY, DEK-Info) or as .pfx/.p12. Instead of certificate and key you can also put a .pfx/.p12 file into the certificate field. Only the decrypted key is stored (encrypted in the database), the password is not."
+    "upload_password_hint": "Purchased certificates often come with an encrypted key (ENCRYPTED PRIVATE KEY, DEK-Info) or as .pfx/.p12. Instead of certificate and key you can also put a .pfx/.p12 file into the certificate field. Only the decrypted key is stored (encrypted in the database), the password is not.",
+    "self": {
+      "key_type": "Key",
+      "hint": "Names and IP addresses one per line, wildcards too. 397 days are accepted by Apple and Chrome as well. It is renewed automatically before expiry – you then have to trust the new certificate again. With several devices an own CA is better: you trust the CA only once."
+    }
   },
   "ports": {
     "title": "Ports",

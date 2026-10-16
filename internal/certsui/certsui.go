@@ -149,6 +149,7 @@ type certNewData struct {
 	CAID       int64
 	Days       int
 	ACMECA     int64
+	KeyType    string
 }
 
 func (u *UI) certNewData(ctx context.Context) certNewData {
@@ -227,13 +228,17 @@ func (u *UI) pageCertCreate(w http.ResponseWriter, r *http.Request) {
 	d.CAID, _ = strconv.ParseInt(r.PostFormValue("ca_id"), 10, 64)
 	d.ACMECA, _ = strconv.ParseInt(r.PostFormValue("acme_ca"), 10, 64)
 	d.Days, _ = strconv.Atoi(r.PostFormValue("days"))
+	if d.Source == certs.SourceSelf { // eigenes Feld, damit es nicht mit der Laufzeit der CA kollidiert
+		d.Days, _ = strconv.Atoi(r.PostFormValue("self_days"))
+	}
+	d.KeyType = r.PostFormValue("key_type")
 	names := ParseNames(d.Names)
 	source := d.Source
 	if source == "" || source == "auto" {
 		source = u.m.AutoSource(ctx, names)
 	}
 	c, err := u.m.Create(ctx, certs.Request{Names: names, Source: source, AliasZone: d.AliasZone, AliasPrefix: d.AliasPref, DNSAccount: d.DNSAccount, Staging: d.Staging,
-		CAID: d.CAID, Days: d.Days, ACMECA: d.ACMECA})
+		CAID: d.CAID, Days: d.Days, ACMECA: d.ACMECA, KeyType: d.KeyType})
 	if err != nil {
 		d.Error = u.certError(r, err)
 		u.g.Render(w, r, http.StatusUnprocessableEntity, Name+"/cert_new", "certs.new", d)

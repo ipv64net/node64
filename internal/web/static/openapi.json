@@ -1729,7 +1729,8 @@
               "http",
               "dns",
               "upload",
-              "ca"
+              "ca",
+              "self"
             ]
           },
           "alias_zone": {
@@ -1802,6 +1803,9 @@
           "acme_ca": {
             "type": "integer",
             "description": "0 = Let's Encrypt"
+          },
+          "key_type": {
+            "type": "string"
           }
         }
       },
@@ -8138,7 +8142,7 @@
           "Ports & Zertifikate"
         ],
         "summary": "Zertifikat anfordern oder mit eigener CA ausstellen (läuft im Hintergrund)",
-        "description": "source ipv64: alle Namen liegen im ipv64-Account (DNS-01 über den zentralen API-Key, auch Wildcards). alias: fremde Domain; vorher bei deren Anbieter den CNAME _acme-challenge.<name> → _acme-challenge.<alias_prefix>.<alias_zone> anlegen. http: HTTP-01, Port 80 muss von außen auf die Node zeigen (keine Wildcards). Vorher die Nutzungsbedingungen annehmen (PUT /certs/account). dns: anderer DNS-Anbieter über einen DNS-Zugang (GET /certs/dns-accounts). ca: mit einer eigenen CA (ca_id, days), auch für IP-Adressen. acme_ca: statt Let's Encrypt eine weitere ACME-Stelle (GET /acme-cas).",
+        "description": "source ipv64: alle Namen liegen im ipv64-Account (DNS-01 über den zentralen API-Key, auch Wildcards). alias: fremde Domain; vorher bei deren Anbieter den CNAME _acme-challenge.<name> → _acme-challenge.<alias_prefix>.<alias_zone> anlegen. http: HTTP-01, Port 80 muss von außen auf die Node zeigen (keine Wildcards). Vorher die Nutzungsbedingungen annehmen (PUT /certs/account). dns: anderer DNS-Anbieter über einen DNS-Zugang (GET /certs/dns-accounts). ca: mit einer eigenen CA (ca_id, days), auch für IP-Adressen. acme_ca: statt Let's Encrypt eine weitere ACME-Stelle (GET /acme-cas). self: selbst signiert, ohne Voraussetzung, auch für IP-Adressen (days, key_type ecdsa|rsa).",
         "requestBody": {
           "required": true,
           "content": {
@@ -8159,7 +8163,8 @@
                       "alias",
                       "http",
                       "dns",
-                      "ca"
+                      "ca",
+                      "self"
                     ]
                   },
                   "alias_zone": {
@@ -8186,11 +8191,20 @@
                   },
                   "days": {
                     "type": "integer",
-                    "description": "bei source ca: Laufzeit, Standard 397, höchstens 825"
+                    "description": "bei source ca oder self: Laufzeit, Standard 397, höchstens 825"
                   },
                   "acme_ca": {
                     "type": "integer",
                     "description": "weitere ACME-Stelle statt Let's Encrypt (0)"
+                  },
+                  "key_type": {
+                    "type": "string",
+                    "enum": [
+                      "ecdsa",
+                      "rsa"
+                    ],
+                    "default": "ecdsa",
+                    "description": "bei source self: ECDSA P-256 oder RSA 2048"
                   }
                 }
               }

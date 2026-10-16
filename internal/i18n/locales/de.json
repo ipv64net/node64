@@ -581,7 +581,8 @@
       "http": "HTTP-01",
       "upload": "eigenes",
       "dns": "DNS-Anbieter",
-      "ca": "eigene CA"
+      "ca": "eigene CA",
+      "self": "selbst signiert"
     },
     "step": {
       "queued": "wartet …",
@@ -624,7 +625,8 @@
       "alias": "Alias über ipv64",
       "http": "HTTP-01",
       "dns": "Anderer DNS-Anbieter",
-      "ca": "Eigene CA"
+      "ca": "Eigene CA",
+      "self": "Selbst signiert"
     },
     "src_hint": {
       "auto": "ipv64 DNS-01, wenn alle Namen im ipv64-Account liegen, sonst HTTP-01.",
@@ -632,7 +634,8 @@
       "alias": "für Domains bei anderen Anbietern: einmal einen CNAME setzen, danach erledigt ipv64 den Rest – ohne Zugangsdaten des Anbieters.",
       "http": "Port 80 muss von außen auf diese Node zeigen; keine Wildcards.",
       "dns": "für Domains bei Cloudflare, Hetzner, netcup, INWX, IONOS u. a.: Node64 setzt den TXT-Record über deren API (Zugang hinterlegen).",
-      "ca": "für Geräte im eigenen Netz, auch für IP-Adressen und Namen wie nas.lan; Geräte müssen der CA einmal vertrauen."
+      "ca": "für Geräte im eigenen Netz, auch für IP-Adressen und Namen wie nas.lan; Geräte müssen der CA einmal vertrauen.",
+      "self": "ohne Let's Encrypt und ohne eigene CA, sofort, auch für IP-Adressen (z. B. node64.home.local, 192.168.10.30). Browser warnen, bis man dem Zertifikat vertraut; für mehrere Geräte ist eine eigene CA bequemer."
     },
     "your_domains": "Deine ipv64-Domains:",
     "alias_zone": "Ziel-Domain bei ipv64",
@@ -785,7 +788,11 @@
       "noca_link": "CA anlegen"
     },
     "upload_password": "Passwort des Schlüssels bzw. der .pfx/.p12-Datei (nur falls verschlüsselt)",
-    "upload_password_hint": "Gekaufte Zertifikate kommen oft mit verschlüsseltem Schlüssel (ENCRYPTED PRIVATE KEY, DEK-Info) oder als .pfx/.p12. Statt Zertifikat und Schlüssel einzeln geht auch eine .pfx/.p12-Datei im Feld Zertifikat. Gespeichert wird nur der entschlüsselte Schlüssel (verschlüsselt in der Datenbank), das Passwort nicht."
+    "upload_password_hint": "Gekaufte Zertifikate kommen oft mit verschlüsseltem Schlüssel (ENCRYPTED PRIVATE KEY, DEK-Info) oder als .pfx/.p12. Statt Zertifikat und Schlüssel einzeln geht auch eine .pfx/.p12-Datei im Feld Zertifikat. Gespeichert wird nur der entschlüsselte Schlüssel (verschlüsselt in der Datenbank), das Passwort nicht.",
+    "self": {
+      "key_type": "Schlüssel",
+      "hint": "Namen und IP-Adressen je Zeile, auch Wildcards. 397 Tage akzeptieren auch Apple und Chrome. Erneuert wird automatisch vor Ablauf – danach muss man dem neuen Zertifikat erneut vertrauen. Wer mehrere Geräte hat, legt besser eine eigene CA an: dann vertraut man nur einmal der CA."
+    }
   },
   "ports": {
     "title": "Ports",

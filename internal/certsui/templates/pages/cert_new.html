@@ -13,7 +13,7 @@
 				<div class="form-text mb-3">{{.T "certs.names_hint"}}</div>
 
 				<div class="fw-semibold mb-1">{{.T "certs.method"}}</div>
-				{{range $s := (split "auto ipv64 alias dns http ca")}}
+				{{range $s := (split "auto ipv64 alias dns http ca self")}}
 				<div class="form-check mb-1">
 					<input class="form-check-input" type="radio" name="source" id="src-{{$s}}" value="{{$s}}"{{if eq $s $d.Source}} checked{{end}}
 						{{if and (or (eq $s "ipv64") (eq $s "alias")) (not $d.DNSReady)}} disabled{{end}}{{if and (eq $s "http") (not $d.HTTPReady)}} disabled{{end}}{{if and (eq $s "dns") (not $d.DNS)}} disabled{{end}}{{if and (eq $s "ca") (not $d.CAs)}} disabled{{end}} data-cert-source>
@@ -35,6 +35,18 @@
 							<input class="form-control form-control-sm" type="number" id="days" name="days" min="1" max="825" value="{{$d.Days}}"></div>
 					</div>
 					<div class="form-text">{{.T "certs.ca.names_hint"}}</div>
+				</div>
+				<div class="border rounded p-2 mb-3" data-self-box>
+					<div class="row g-2">
+						<div class="col-sm-8"><label class="form-label" for="key_type">{{.T "certs.self.key_type"}}</label>
+							<select class="form-select form-select-sm" id="key_type" name="key_type">
+								<option value="ecdsa"{{if ne $d.KeyType "rsa"}} selected{{end}}>ECDSA P-256</option>
+								<option value="rsa"{{if eq $d.KeyType "rsa"}} selected{{end}}>RSA 2048 ({{.T "certs.ca.rsa_hint"}})</option>
+							</select></div>
+						<div class="col-sm-4"><label class="form-label" for="self_days">{{.T "certs.ca.days"}}</label>
+							<input class="form-control form-control-sm" type="number" id="self_days" name="self_days" min="1" max="825" value="{{$d.Days}}"></div>
+					</div>
+					<div class="form-text">{{.T "certs.self.hint"}}</div>
 				</div>
 				<div class="border rounded p-2 mb-3" data-acme-box>
 					<label class="form-label" for="acme_ca">{{.T "certs.acme.which"}}</label>
