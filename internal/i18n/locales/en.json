@@ -1184,6 +1184,9 @@
     "changed": "Last change",
     "retrying": "Failed attempt, retrying",
     "unchecked": "Not being checked – last measurement {ago}",
+    "unchecked_title": "Not being monitored.",
+    "unchecked_detail": "No measurement for {ago} – whether the service is reachable right now is unknown. All values on this page are from the last measurement ({time}, state then: {state}).",
+    "unchecked_nodes": "Measuring nodes: {nodes} – probably unreachable.",
     "maintenance": "Maintenance",
     "silent": "no notification",
     "events": "Events",
@@ -1267,7 +1270,8 @@
       "pending": "Pending",
       "paused": "Paused",
       "unstable": "Unstable",
-      "degraded": "Partially down"
+      "degraded": "Partially down",
+      "unchecked": "Not monitored"
     },
     "type": {
       "http": "HTTP(S)",

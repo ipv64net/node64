@@ -1184,6 +1184,9 @@
     "changed": "Letzte Änderung",
     "retrying": "Fehlversuch, wird wiederholt",
     "unchecked": "Wird nicht geprüft – letzte Messung {ago}",
+    "unchecked_title": "Wird nicht überwacht.",
+    "unchecked_detail": "Seit {ago} keine Messung mehr – ob der Dienst gerade erreichbar ist, ist unbekannt. Alle Werte auf dieser Seite stammen von der letzten Messung ({time}, Zustand damals: {state}).",
+    "unchecked_nodes": "Messende Nodes: {nodes} – vermutlich nicht erreichbar.",
     "maintenance": "Wartung",
     "silent": "ohne Benachrichtigung",
     "events": "Ereignisse",
@@ -1267,7 +1270,8 @@
       "pending": "Wartet",
       "paused": "Pausiert",
       "unstable": "Instabil",
-      "degraded": "Teilweise gestört"
+      "degraded": "Teilweise gestört",
+      "unchecked": "Nicht überwacht"
     },
     "type": {
       "http": "HTTP(S)",

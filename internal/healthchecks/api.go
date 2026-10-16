@@ -75,6 +75,8 @@ type stateJSON struct {
 	DownSince       time.Time `json:"down_since"`
 	IncidentID      int64     `json:"incident_id,omitempty"`
 	Maintenance     bool      `json:"maintenance"`
+	// Unchecked: seit 3 Intervallen (mind. 5 min) nicht gemessen; state ist dann der Zustand der letzten Messung
+	Unchecked bool `json:"unchecked,omitempty"`
 }
 
 func (m *Module) toJSON(c *Check, r *http.Request) checkJSON {
@@ -99,6 +101,7 @@ func (m *Module) toJSON(c *Check, r *http.Request) checkJSON {
 			LastLatencyMS: msf(rt.LastLatency), LastReason: string(rt.LastReason), LastMessage: rt.LastMessage, ConsecutiveFail: rt.ConsecutiveFail,
 			ConsecutiveOK: rt.ConsecutiveOK, LastPushAt: rt.LastPush, DownSince: rt.DownSince, IncidentID: rt.Incident,
 			Maintenance: m.st.InMaintenance(r.Context(), c.Token, time.Now())}}
+	out.State.Unchecked = stale(c, rt.LastCheck, string(rt.State))
 	if out.Tags == nil {
 		out.Tags = []string{}
 	}

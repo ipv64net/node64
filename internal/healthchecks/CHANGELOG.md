@@ -1,5 +1,13 @@
 # Änderungen – Healthchecks
 
+## 2.12.0 – 2026-10-16
+
+### Neu
+- Eigener Zustand „Nicht überwacht“: Ein Check ohne Messung seit 3 Intervallen (mindestens 5 Minuten) steht nicht mehr
+  als „OK“ da, sondern als „Nicht überwacht“ (gelb gestreift) – in Liste, Filter und Kopf der Detailseite. Die
+  Detailseite sagt dazu, dass alle Werte von der letzten Messung stammen (mit Zeit und damaligem Zustand) und welche
+  Nodes messen. API: `state.unchecked: true` (`state.state` bleibt der Zustand der letzten Messung).
+
 ## 2.11.0 – 2026-10-16
 
 ### Neu

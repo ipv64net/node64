@@ -72,6 +72,7 @@ type row struct {
 	Retrying bool
 	Stale    bool      // seit 3 Intervallen (mind. 5 min) nicht gemessen, z. B. messende Node offline
 	LastAt   time.Time // letzte Messung
+	LastSeen string    // Zustand bei der letzten Messung (bei Stale steht in State "unchecked")
 	CertDays int       // Restlaufzeit des Zertifikats (HTTPS), -1 = unbekannt
 	CertTill time.Time // Ablaufdatum
 }
@@ -134,7 +135,7 @@ type listData struct {
 	Total     int
 }
 
-var listStates = []string{"up", "down", "stabilizing", "flapping", "dependent", "pending", "paused"}
+var listStates = []string{"up", "down", "stabilizing", "flapping", "dependent", "unchecked", "pending", "paused"}
 
 func (m *Module) liveRuntime(c *Check) scheduler.Runtime {
 	if s := m.scheduler(); s != nil {
@@ -154,6 +155,9 @@ func (m *Module) rowOf(ctx context.Context, lang string, c *Check, pills map[str
 		r.State = "pending"
 	}
 	r.LastAt, r.Stale = rt.LastCheck, stale(c, rt.LastCheck, r.State)
+	if r.Stale { // nicht ueberwacht: der letzte Zustand ist unbekannt geworden, nicht mehr "OK"
+		r.LastSeen, r.State = r.State, "unchecked"
+	}
 	switch {
 	case c.Type == checks.TypePush:
 		r.NextAt, r.NextPush = time.Time{}, true
@@ -402,6 +406,7 @@ type rangeStat struct {
 }
 
 type detailData struct {
+	StaleNodes string // nicht ueberwacht: die messenden Nodes (Hinweis auf der Detailseite)
 	Channels   []channelOpt
 	Row        row
 	JSON       checkJSON
@@ -454,6 +459,9 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := detailData{Row: m.rowOf(ctx, lang, c, pills), JSON: m.toJSON(c, r), Pills: pills[c.Token], PushURL: ""}
+	if d.Row.Stale && c.Execution != "online" {
+		d.StaleNodes = strings.Join(m.nodeNames(ctx, c.Nodes), ", ")
+	}
 	d.Row.SyncErr = m.OutboxErrors(ctx)[c.Token]
 	d.Row.CertDays = -1
 	if t, ok := m.st.CertExpiries(ctx)[c.Token]; ok {
