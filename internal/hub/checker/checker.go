@@ -79,7 +79,7 @@ func (c *Checker) quotaReached(userID int64, today, limit int) {
 func (c *Checker) onOverall(e store.OverallEvent) {
 	kind := notify.Kind(e.Kind)
 	switch kind {
-	case notify.KindDown, notify.KindUp, notify.KindFlappingStart, notify.KindFlappingEnd, notify.KindDegraded, notify.KindDegradedEnd:
+	case notify.KindDown, notify.KindUp, notify.KindFlappingStart, notify.KindFlappingEnd, notify.KindDegraded, notify.KindDegradedEnd, notify.KindUnchecked, notify.KindRechecked:
 	default:
 		return
 	}
@@ -511,6 +511,9 @@ func (c *Checker) housekeepingLoop(ctx context.Context) {
 	five := time.NewTicker(5 * time.Minute)
 	defer five.Stop()
 	lastDaily := ""
+	// "nicht geprueft" erst 10 min nach dem Start und nach dem letzten Datenbankfehler: vorher sind die Zustaende
+	// der Nodes noch nicht wieder gemeldet (sonst kaeme fuer jeden Check eine Meldung)
+	started, dbErrAt, dbErrs := time.Now(), time.Time{}, c.st.Metrics.DBErrorCount()
 	for {
 		select {
 		case <-ctx.Done():
@@ -521,6 +524,16 @@ func (c *Checker) housekeepingLoop(ctx context.Context) {
 			}
 			if nodes, err := c.st.LiveNodes(ctx); err == nil && c.st.IsHousekeeper(nodes) {
 				c.remind(ctx)
+				if e := c.st.Metrics.DBErrorCount(); e != dbErrs {
+					dbErrs, dbErrAt = e, time.Now()
+				}
+				if time.Since(started) < 10*time.Minute || time.Since(dbErrAt) < 10*time.Minute {
+					// noch in der Anlaufzeit bzw. kurz nach einem Datenbankfehler
+				} else if n, err := c.st.UncheckedSweep(ctx); err != nil {
+					c.log.Warn("unchecked sweep failed", "err", err)
+				} else if n > 0 {
+					c.log.Info("checks without measurements re-evaluated", "count", n)
+				}
 			}
 		case <-five.C:
 			now := time.Now().UTC()

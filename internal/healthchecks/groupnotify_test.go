@@ -118,3 +118,29 @@ func TestGroupKind(t *testing.T) {
 	run("down paused up", step{scheduler.StateDown, notify.KindDown}, step{scheduler.StatePaused, ""}, step{scheduler.StateUp, notify.KindUp})
 	run("flapping", step{scheduler.StateUp, ""}, step{scheduler.StateFlapping, notify.KindFlappingStart}, step{scheduler.StateUp, notify.KindFlappingEnd})
 }
+
+// Nicht geprueft: letzte Messung aelter als 3 Intervalle (mind. 5 min); pausiert und nie gemessen zaehlen nicht.
+func TestStale(t *testing.T) {
+	c := &Check{Interval: time.Minute}
+	now := time.Now()
+	cases := []struct {
+		last  time.Time
+		state string
+		want  bool
+	}{
+		{now.Add(-4 * time.Minute), "up", false}, // unter 5 min
+		{now.Add(-6 * time.Minute), "up", true},
+		{now.Add(-16 * time.Hour), "up", true},
+		{time.Time{}, "pending", false},
+		{now.Add(-6 * time.Minute), "paused", false},
+	}
+	for i, k := range cases {
+		if got := stale(c, k.last, k.state); got != k.want {
+			t.Errorf("case %d: got %v want %v", i, got, k.want)
+		}
+	}
+	c.Interval = time.Hour // 3 h Fenster
+	if stale(c, now.Add(-2*time.Hour), "up") || !stale(c, now.Add(-4*time.Hour), "up") {
+		t.Error("window must follow the interval")
+	}
+}

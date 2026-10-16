@@ -359,7 +359,7 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 
 // isDownKind: Stoerungsmeldungen (Sammelmeldung der Entwarnungen zaehlt als Entwarnung).
 func isDownKind(k Kind) bool {
-	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded || k == KindDynFail || k == KindDynLimit || k == KindQuota ||
+	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded || k == KindUnchecked || k == KindDynFail || k == KindDynLimit || k == KindQuota ||
 		k == KindDNS64Down || k == KindDNS64Lists || k == KindDNS64Cert || k == KindCertFail || k == KindCertExpiry
 }
 
@@ -692,6 +692,10 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 		m.Title, m.Priority = t("notify.subject.degraded", "name", a.Check.Name), 4
 	case KindDegradedEnd:
 		m.Title, m.Priority = t("notify.subject.degraded_end", "name", a.Check.Name), 3
+	case KindUnchecked:
+		m.Title, m.Priority = t("notify.subject.unchecked", "name", a.Check.Name), 4
+	case KindRechecked:
+		m.Title, m.Priority = t("notify.subject.rechecked", "name", a.Check.Name), 3
 	case KindTest:
 		m.Title, m.Priority = t("notify.subject.test"), 2
 		m.Text = t("notify.body.test", "channel", a.Check.Name) + "\n" + d.nodeLine(uid, lang)
@@ -704,7 +708,7 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 	if a.Check.Target != "" {
 		lines = append(lines, t("notify.body.target", "target", a.Check.Target))
 	}
-	if a.Reason != "" && a.Kind != KindUp && a.Kind != KindFlappingEnd {
+	if a.Reason != "" && a.Kind != KindUp && a.Kind != KindFlappingEnd && a.Kind != KindUnchecked && a.Kind != KindRechecked {
 		lines = append(lines, t("notify.body.reason", "reason", a.Reason))
 	}
 	if a.Message != "" {
@@ -719,11 +723,14 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 	lines = append(lines, t("notify.body.time", "time", d.i18n.FormatDateTime(lang, m.Time, d.location(uid))), d.nodeLine(uid, lang))
 	m.Text = strings.Join(lines, "\n")
 	status := "down"
-	if a.Kind == KindUp || a.Kind == KindFlappingEnd || a.Kind == KindDegradedEnd {
+	if a.Kind == KindUp || a.Kind == KindFlappingEnd || a.Kind == KindDegradedEnd || a.Kind == KindRechecked {
 		status = "up"
 	}
 	if a.Kind == KindDegraded {
 		status = "degraded"
+	}
+	if a.Kind == KindUnchecked {
+		status = "unchecked"
 	}
 	m.Payload = map[string]any{
 		"event_id": a.EventID, "kind": string(a.Kind), "status": status, "time": m.Time.UTC().Format(time.RFC3339),

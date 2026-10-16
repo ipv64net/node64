@@ -157,6 +157,13 @@ type Metrics struct {
 
 func NewMetrics() *Metrics { return &Metrics{} }
 
+// DBErrorCount liefert die Zahl der Datenbankfehler seit dem Start.
+func (m *Metrics) DBErrorCount() int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.DBErrors
+}
+
 func (m *Metrics) add(field *int64, n int64) {
 	m.mu.Lock()
 	*field += n

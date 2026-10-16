@@ -30,6 +30,8 @@ const (
 	KindFlappingEnd   Kind = "flapping_end"
 	KindDegraded      Kind = "degraded" // teilweise gestoert (mehrere Messstellen)
 	KindDegradedEnd   Kind = "degraded_end"
+	KindUnchecked     Kind = "unchecked" // keine Messstelle meldet mehr (z. B. einzige messende Node offline)
+	KindRechecked     Kind = "rechecked" // nach "unchecked" wieder gemessen
 	KindReminder      Kind = "reminder"
 	KindSummary       Kind = "summary"
 	KindSummaryUp     Kind = "summary_up" // gesammelte Entwarnungen
@@ -120,7 +122,7 @@ type pushoverSender struct{ ua string }
 
 func (p pushoverSender) Send(ctx context.Context, ch *Channel, m Message) error {
 	prio := ch.Config["priority_up"]
-	if m.Kind == KindDown || m.Kind == KindReminder || m.Kind == KindFlappingStart || m.Kind == KindSummary || m.Kind == KindDegraded {
+	if m.Kind == KindDown || m.Kind == KindReminder || m.Kind == KindFlappingStart || m.Kind == KindSummary || m.Kind == KindDegraded || m.Kind == KindUnchecked {
 		prio = ch.Config["priority_down"]
 	}
 	if prio == "" {

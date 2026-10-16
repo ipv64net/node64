@@ -91,9 +91,9 @@ func (b *Bridge) Send(ctx context.Context, req bridgeRequest) error {
 
 func updown(k notify.Kind) string {
 	switch k {
-	case notify.KindDown, notify.KindReminder, notify.KindFlappingStart, notify.KindSummary, notify.KindDegraded:
+	case notify.KindDown, notify.KindReminder, notify.KindFlappingStart, notify.KindSummary, notify.KindDegraded, notify.KindUnchecked:
 		return "0"
-	case notify.KindUp, notify.KindFlappingEnd, notify.KindDegradedEnd:
+	case notify.KindUp, notify.KindFlappingEnd, notify.KindDegradedEnd, notify.KindRechecked:
 		return "1"
 	}
 	return ""

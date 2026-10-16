@@ -70,6 +70,8 @@ type row struct {
 	Message  string
 	Maint    bool
 	Retrying bool
+	Stale    bool      // seit 3 Intervallen (mind. 5 min) nicht gemessen, z. B. messende Node offline
+	LastAt   time.Time // letzte Messung
 	CertDays int       // Restlaufzeit des Zertifikats (HTTPS), -1 = unbekannt
 	CertTill time.Time // Ablaufdatum
 }
@@ -137,6 +139,7 @@ func (m *Module) rowOf(ctx context.Context, lang string, c *Check, pills map[str
 	if r.State == "" {
 		r.State = "pending"
 	}
+	r.LastAt, r.Stale = rt.LastCheck, stale(c, rt.LastCheck, r.State)
 	switch {
 	case c.Type == checks.TypePush:
 		r.NextAt, r.NextPush = time.Time{}, true
@@ -1242,4 +1245,22 @@ func (m *Module) bulkTag(r *http.Request, c *Check, add bool, tag string) bool {
 	}
 	m.audit(r, "check.update", c)
 	return true
+}
+
+// stale: der Check wird nicht mehr gemessen – die letzte Messung ist aelter als 3 Intervalle (mind. 5 min), etwa
+// weil die einzige messende Node offline ist. Pausierte und noch nie gemessene Checks zaehlen nicht.
+func stale(c *Check, last time.Time, state string) bool {
+	if c.Paused || state == "paused" || last.IsZero() {
+		return false
+	}
+	every := c.Interval
+	if c.Type == checks.TypePush {
+		period, grace := checks.PushWindow(c.Params)
+		every = time.Duration(period+grace) * time.Second
+	}
+	window := 3 * every
+	if window < 5*time.Minute {
+		window = 5 * time.Minute
+	}
+	return time.Since(last) > window
 }

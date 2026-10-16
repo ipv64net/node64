@@ -74,9 +74,10 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		if isNode && !inList(measuringNodes(splitList(nodesCol), ownerNode.String), strings.TrimPrefix(x.Source, "node:")) {
 			continue // Node misst den Check nicht (mehr)
 		}
-		// Node-Messstellen sind frisch, solange die Node online ist; Standorte nach Alter des Zustands
+		// Node-Messstellen sind frisch, solange die Node online ist und den Check noch misst (Zustand nicht aelter
+		// als 3 Intervalle, mind. 5 min); Standorte nach Alter des Zustands
 		if strings.HasPrefix(x.Source, "node:") {
-			x.Fresh = !x.updated.IsZero() && s.NodeIsOnline(ctx, strings.TrimPrefix(x.Source, "node:"))
+			x.Fresh = !x.updated.IsZero() && now.Sub(x.updated) <= fresh && s.NodeIsOnline(ctx, strings.TrimPrefix(x.Source, "node:"))
 		} else {
 			x.Fresh = !x.updated.IsZero() && now.Sub(x.updated) <= fresh
 		}
@@ -91,6 +92,19 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 	overall := scheduler.Overall(policy, states)
 	if paused != 0 {
 		overall = scheduler.StatePaused // pausiert statt "pending" (pausierte Messstellen zaehlen nicht)
+	}
+	// keine aktuelle Messstelle mehr: erst nach dem Fenster (3 Intervalle, mind. 5 min) als "nicht geprueft" werten,
+	// bis dahin bleibt der Zustand stehen (ein kurzer Verbindungsabbruch einer Node aendert nichts)
+	var newest time.Time
+	anyFresh := false
+	for _, x := range srcs {
+		anyFresh = anyFresh || x.Fresh
+		if x.updated.After(newest) {
+			newest = x.updated
+		}
+	}
+	if overall == scheduler.StatePending && paused == 0 && len(srcs) > 0 && !anyFresh && now.Sub(newest) <= fresh {
+		return tx.Commit()
 	}
 	if string(overall) == state {
 		return tx.Commit()
@@ -136,6 +150,32 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 	old := scheduler.State(state)
 	incidentOpen := incident.Valid && incident.Int64 > 0
 	kind, silent := eventKind(old, overall, incidentOpen)
+	// Keine Messstelle meldet mehr (z. B. die einzige messende Node ist offline): "wird nicht geprueft" melden statt
+	// still auf "ausstehend" zu gehen; kommt wieder eine Messung, "wird wieder geprueft".
+	lastCheck := nowStr()
+	unchecked := overall == scheduler.StatePending && paused == 0 && len(srcs) > 0 && lead == nil
+	if unchecked && old != scheduler.StatePending {
+		kind, silent = "unchecked", false
+		var nodeIDs []string
+		for _, x := range srcs {
+			if strings.HasPrefix(x.Source, "node:") {
+				nodeIDs = append(nodeIDs, strings.TrimPrefix(x.Source, "node:"))
+			}
+		}
+		reason, message = "unchecked", "keine Messung mehr seit "+newest.UTC().Format("02.01. 15:04")+" UTC"
+		if names := nodeNames(ctx, tx, nodeIDs); len(names) > 0 {
+			message += " – nicht erreichbar: " + strings.Join(names, ", ")
+		}
+		if !newest.IsZero() {
+			lastCheck = newest.UTC().Format(TimeFormat)
+		}
+	} else if old == scheduler.StatePending && overall == scheduler.StateUp {
+		var last string
+		_ = tx.QueryRowContext(ctx, `SELECT kind FROM hc2_events WHERE token = ? ORDER BY time DESC LIMIT 1`, token).Scan(&last)
+		if last == "unchecked" {
+			kind, silent = "rechecked", false
+		}
+	}
 	// Verspaetet gemeldeter Zustand einer Node (Node war offline oder der hub ohne Datenbank):
 	// die Node hat in der Zeit selbst benachrichtigt, also hier still nachtragen statt doppelt melden.
 	if lead != nil && strings.HasPrefix(lead.Source, "node:") && now.Sub(lead.updated) < 15*time.Second && !lead.since.IsZero() && now.Sub(lead.since) > 5*time.Minute {
@@ -170,8 +210,9 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		}
 		id, _ := res.LastInsertId()
 		incidentID = id
-	case incidentID != nil && overall != scheduler.StateDown && overall != scheduler.StateFlapping && overall != scheduler.StateDegraded && overall != scheduler.StatePaused:
-		// degraded nach down laesst die Stoerung offen: erst "up" beendet sie
+	case incidentID != nil && overall != scheduler.StateDown && overall != scheduler.StateFlapping && overall != scheduler.StateDegraded && overall != scheduler.StatePaused &&
+		overall != scheduler.StatePending:
+		// degraded nach down laesst die Stoerung offen: erst "up" beendet sie (ohne Messung bleibt sie offen)
 		if _, err := tx.ExecContext(ctx, `UPDATE hc2_incidents SET ended_at = ? WHERE id = ? AND ended_at IS NULL`, nowS, incidentID); err != nil {
 			return err
 		}
@@ -193,7 +234,7 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE hc2_checks SET state = ?, state_since = ?, last_check_at = ?, last_status = ?, last_latency_ms = ?, last_reason = ?, last_message = ?,
 			down_since = ?, incident_id = ? WHERE token = ?`,
-		string(overall), nowS, nowS, nullStr(lastStatus), latency, nullStr(reason), truncate(message, 500), newDownSince, incidentID, token); err != nil {
+		string(overall), nowS, lastCheck, nullStr(lastStatus), latency, nullStr(reason), truncate(message, 500), newDownSince, incidentID, token); err != nil {
 		return err
 	}
 	flags := 0
@@ -344,4 +385,59 @@ func inList(list []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// UncheckedSweep bewertet Checks neu, fuer die seit mehr als 3 Intervallen (mind. 5 min) keine Messstelle mehr
+// gemeldet hat, z. B. weil die einzige messende Node offline ist. Ohne neue Messungen liefe sonst keine Bewertung,
+// und der Check bliebe beim letzten Zustand stehen. Nur der Housekeeper, einmal je Minute.
+func (s *Store) UncheckedSweep(ctx context.Context) (int, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT c.token FROM hc2_checks c WHERE c.deleted_at IS NULL AND c.paused = 0 AND c.execution IN ('local','both')
+		AND c.state NOT IN ('pending','paused')
+		AND NOT EXISTS (SELECT 1 FROM hc2_check_states st WHERE st.token = c.token AND st.updated_at > UTC_TIMESTAMP(3) - INTERVAL GREATEST(3 * c.interval_sec, 300) SECOND)
+		LIMIT 500`)
+	if err != nil {
+		s.Metrics.add(&s.Metrics.DBErrors, 1)
+		return 0, err
+	}
+	var tokens []string
+	for rows.Next() {
+		var t string
+		if rows.Scan(&t) == nil {
+			tokens = append(tokens, t)
+		}
+	}
+	rows.Close()
+	n := 0
+	for _, t := range tokens {
+		if err := s.Reverdict(ctx, t); err != nil {
+			s.log.Warn("verdict of unchecked check failed", "token", t[:min(6, len(t))]+"…", "err", err)
+			continue
+		}
+		n++
+	}
+	return n, rows.Err()
+}
+
+// nodeNames liefert die Namen der Nodes (fuer Meldungstexte).
+func nodeNames(ctx context.Context, q rowQuerier, ids []string) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	args := make([]any, 0, len(ids))
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	rows, err := q.QueryContext(ctx, `SELECT name FROM hc2_nodes WHERE node_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`) ORDER BY name`, args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var n string
+		if rows.Scan(&n) == nil {
+			out = append(out, n)
+		}
+	}
+	return out
 }

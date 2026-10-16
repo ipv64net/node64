@@ -1,5 +1,14 @@
 # Änderungen – Healthchecks
 
+## 2.11.0 – 2026-10-16
+
+### Neu
+- „Wird nicht geprüft“: Misst seit 3 Intervallen (mindestens 5 Minuten) keine Messstelle einen Check mehr, etwa weil
+  die einzige messende Node offline ist, ist seine Zeile in der Liste gelb markiert (Sanduhr mit der letzten Messung).
+- ipv64 (hub) erkennt das selbst: Der Check geht auf „ausstehend“, und es kommt die Meldung „wird nicht mehr geprüft“
+  mit den nicht erreichbaren Nodes; misst wieder jemand, „wird wieder geprüft“. Eine offene Störung bleibt dabei offen.
+  Kurze Verbindungsabbrüche lösen nichts aus; nach einem Neustart oder Datenbankfehler des hub wartet die Prüfung 10 Minuten.
+
 ## 2.10.0 – 2026-10-15
 
 ### Neu
