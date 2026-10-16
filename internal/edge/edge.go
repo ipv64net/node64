@@ -176,6 +176,7 @@ type Edge struct {
 	table    atomic.Pointer[table]
 	cfgNow   atomic.Pointer[Config] // Kopie von cfg fuer Config(): Abnehmer fragen sie auch waehrend e.mu (Port-Pruefung)
 	h3On     atomic.Bool
+	block    atomic.Pointer[BlockFunc] // Sperrliste (z. B. ipv64-Blocklisten von CDN64), vor TLS geprueft
 	defClose atomic.Bool
 	fallback struct {
 		once sync.Once
@@ -296,6 +297,40 @@ func (e *Edge) Configure(cfg Config) error {
 	e.mu.Unlock()
 	e.runStops(stops)
 	return nil
+}
+
+// BlockFunc meldet, ob eine Gegenstelle abgewiesen wird.
+type BlockFunc func(netip.Addr) bool
+
+// SetBlocker setzt die Sperrliste (nil = keine). Gesperrte Gegenstellen werden gleich nach dem Annehmen der
+// Verbindung getrennt (HTTP, HTTPS, durchgereichtes TLS) bzw. bei HTTP/3 mit 403 abgewiesen, vor jeder Verteilung.
+func (e *Edge) SetBlocker(f BlockFunc) {
+	if f == nil {
+		e.block.Store(nil)
+		return
+	}
+	e.block.Store(&f)
+}
+
+func (e *Edge) blocked(a net.Addr) bool {
+	f := e.block.Load()
+	return f != nil && (*f)(addrIP(a))
+}
+
+// blockListener trennt gesperrte Gegenstellen beim Annehmen (Port 80).
+type blockListener struct {
+	net.Listener
+	e *Edge
+}
+
+func (l blockListener) Accept() (net.Conn, error) {
+	for {
+		c, err := l.Listener.Accept()
+		if err != nil || !l.e.blocked(c.RemoteAddr()) {
+			return c, err
+		}
+		_ = c.Close()
+	}
 }
 
 // Config liefert die aktuellen Einstellungen. Ohne Sperre: die Port-Pruefung beim Oeffnen laeuft unter e.mu und
@@ -541,7 +576,7 @@ func (e *Edge) startLocked(name string) error {
 		srv := &http.Server{ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 64 << 10, ErrorLog: errLog}
 		if name == "http" {
 			srv.Handler = http.HandlerFunc(e.serveHTTP)
-			go func() { _ = srv.Serve(ln) }()
+			go func() { _ = srv.Serve(blockListener{ln, e}) }()
 			l.addr, l.err = ln.Addr().String(), ""
 			l.stop = func(ctx context.Context) error {
 				err := srv.Shutdown(ctx)
@@ -672,6 +707,14 @@ func (e *Edge) certFor(rt *Route, name string) *tls.Certificate {
 
 // serveHTTPS verteilt HTTPS-Anfragen (TCP und HTTP/3).
 func (e *Edge) serveHTTPS(w http.ResponseWriter, r *http.Request) {
+	if r.ProtoMajor == 3 { // TCP ist schon beim Annehmen geprueft
+		if ap, err := netip.ParseAddrPort(r.RemoteAddr); err == nil {
+			if f := e.block.Load(); f != nil && (*f)(ap.Addr().Unmap()) {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+		}
+	}
 	t := e.table.Load()
 	host := hostOf(r.Host)
 	key, routes := t.lookup(host)

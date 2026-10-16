@@ -7,6 +7,35 @@
 <ul class="nav nav-tabs mb-3">
 	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
 </ul>
+<form method="post" action="/cdn64/blocklists" class="card mb-3" id="blocklists">
+	<input type="hidden" name="_csrf" value="{{.CSRF}}">
+	<div class="card-header d-flex flex-wrap align-items-center gap-2">
+		<span><img src="/static/img/ipv64_logo.svg" alt="" height="16" class="logo logo-light me-1 align-text-bottom"><img src="/static/img/ipv64_logo_white.svg" alt="" height="16" class="logo logo-dark me-1 align-text-bottom"> {{.T "cdn64.bl.title"}}</span>
+		{{if $d.BL.Active}}<span class="badge text-bg-success"><i class="bi bi-shield-check"></i> {{.T "cdn64.bl.active"}}</span>{{else}}<span class="badge text-bg-light">{{.T "cdn64.bl.off"}}</span>{{end}}
+		<span class="ms-auto small text-body-secondary" title="{{.T "cdn64.bl.blocked_hint"}}"><i class="bi bi-slash-circle"></i> {{.T "cdn64.bl.blocked" "n" ($.Int $d.BL.Blocked)}}</span>
+	</div>
+	<div class="card-body small">
+		<p class="text-body-secondary">{{.T "cdn64.bl.hint"}}</p>
+		<div class="row g-2">
+		{{range $d.BL.Lists}}
+			<div class="col-md-6 col-xl-4"><div class="border rounded p-2 h-100">
+				<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" role="switch" name="list" value="{{.ID}}" id="bl-{{.ID}}"{{if .Enabled}} checked{{end}}>
+					<label class="form-check-label fw-semibold" for="bl-{{.ID}}">{{.Name}}</label></div>
+				<div class="text-body-secondary">{{$.T (print "cdn64.bl.desc." .ID)}}</div>
+				<div class="mt-1">{{if .Error}}<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> {{.Error}}</span>{{else if .Entries}}<span class="font-monospace">{{$.Int .Entries}}</span> {{$.T "cdn64.bl.entries"}}{{if not .Updated.IsZero}} · {{$.T "cdn64.bl.updated" "ago" ($.Ago .Updated)}}{{end}}{{else if .Enabled}}<span class="text-body-secondary">{{$.T "cdn64.bl.loading"}}</span>{{end}}</div>
+			</div></div>
+		{{end}}
+		</div>
+		<label class="form-label mt-3" for="bl-allow">{{.T "cdn64.bl.allow"}}</label>
+		<textarea class="form-control form-control-sm font-monospace" id="bl-allow" name="allow" rows="2" placeholder="203.0.113.7&#10;2001:db8::/48">{{join $d.BL.Allow "\n"}}</textarea>
+		<div class="form-text">{{.T "cdn64.bl.allow_hint"}}</div>
+	</div>
+	<div class="card-footer d-flex gap-2">
+		<button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-shield-check"></i> {{.T "common.save"}}</button>
+		<button class="btn btn-outline-secondary btn-sm" type="submit" formaction="/cdn64/blocklists/refresh"><i class="bi bi-arrow-repeat"></i> {{.T "cdn64.bl.refresh"}}</button>
+		<a class="btn btn-link btn-sm ms-auto" href="https://ipv64.net/v64_blocklists" target="_blank" rel="noopener">{{.T "cdn64.bl.about"}} <i class="bi bi-box-arrow-up-right"></i></a>
+	</div>
+</form>
 <div class="card">
 	{{if not $d.Rows}}<div class="card-body text-center text-body-secondary py-5">
 		<div class="mb-2"><i class="bi bi-person-lock fs-2"></i></div>

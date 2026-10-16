@@ -25,6 +25,8 @@ func (m *Module) c4Routes(mux *http.ServeMux, page func(http.HandlerFunc) http.H
 	mux.Handle("POST /cdn64/log/settings", page(m.pageLogSettings))
 	mux.Handle("POST /cdn64/hosts/{id}/healthcheck", page(m.pageHostCheck))
 	mux.Handle("POST /cdn64/streams/{id}/healthcheck", page(m.pageStreamCheck))
+	mux.Handle("POST /cdn64/blocklists", page(m.pageBlocklistsSave))
+	mux.Handle("POST /cdn64/blocklists/refresh", page(m.pageBlocklistsRefresh))
 }
 
 func (m *Module) c4APIRoutes(mux *http.ServeMux, api func(http.HandlerFunc) http.Handler) {
@@ -35,6 +37,9 @@ func (m *Module) c4APIRoutes(mux *http.ServeMux, api func(http.HandlerFunc) http
 	mux.Handle("DELETE /api/cdn64/access-lists/{id}", api(m.apiACLDelete))
 	mux.Handle("GET /api/cdn64/log", api(m.apiLog))
 	mux.Handle("GET /api/cdn64/stats", api(m.apiStats))
+	mux.Handle("GET /api/cdn64/blocklists", api(m.apiBlocklistsGet))
+	mux.Handle("PUT /api/cdn64/blocklists", api(m.apiBlocklistsPut))
+	mux.Handle("POST /api/cdn64/blocklists/refresh", api(m.apiBlocklistsRefresh))
 	mux.Handle("GET /api/cdn64/settings", api(m.apiSettingsGet))
 	mux.Handle("PUT /api/cdn64/settings", api(m.apiSettingsPut))
 	mux.Handle("POST /api/cdn64/hosts/{id}/healthcheck", api(m.apiHostCheck))
@@ -51,6 +56,7 @@ type aclRow struct {
 type aclsData struct {
 	Tabs []tab
 	Rows []aclRow
+	BL   blocklistsView
 }
 
 func (m *Module) pageACLs(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +65,7 @@ func (m *Module) pageACLs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	d := aclsData{Tabs: tabs("/cdn64/access")}
+	d := aclsData{Tabs: tabs("/cdn64/access"), BL: m.blView(r)}
 	for _, a := range list {
 		d.Rows = append(d.Rows, aclRow{AccessList: a.public(), UsedBy: m.aclInUse(r.Context(), a.ID)})
 	}

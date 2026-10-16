@@ -325,6 +325,11 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 					status: sw.code(), bytes: sw.bytes, ms: time.Since(start).Milliseconds(), ua: trunc(r.UserAgent(), 200), log: h.Advanced.AccessLog})
 			}
 		}()
+		if m.bl.Blocked(client) { // ipv64-Blocklisten (echte Client-IP hinter vertrauenswuerdigen Proxys)
+			st.blocked.Add(1)
+			page(sw, http.StatusForbidden)
+			return
+		}
 		if r.Header.Get(loopHeader) == token { // Ziel zeigt auf diesen Proxy selbst
 			st.errors.Add(1)
 			page(sw, http.StatusLoopDetected)

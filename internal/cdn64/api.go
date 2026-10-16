@@ -55,11 +55,12 @@ type apiHost struct {
 		DaysLeft int    `json:"days_left,omitempty"`
 		Missing  string `json:"missing,omitempty"` // Name ohne passendes Zertifikat
 	} `json:"certificate"`
-	RouteError string `json:"route_error,omitempty"`
+	RouteError   string  `json:"route_error,omitempty"`
+	Healthchecks []Watch `json:"healthchecks,omitempty"` // Checks auf genau dieses Ziel
 }
 
 func toAPI(r hostRow) apiHost {
-	a := apiHost{Host: r.Host, Reach: r.Reach, RouteError: r.RouteErr}
+	a := apiHost{Host: r.Host, Reach: r.Reach, RouteError: r.RouteErr, Healthchecks: r.Watch}
 	a.Stats.Requests, a.Stats.Errors, a.Stats.Blocked = r.Requests, r.Errors, r.Blocked
 	a.Cert.State, a.Cert.Name, a.Cert.Missing = r.Cert.State, r.Cert.Name, r.Cert.Miss
 	if r.Cert.State != "http" && r.Cert.State != "missing" {

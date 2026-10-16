@@ -76,6 +76,8 @@ type Module struct {
 	authFail   *failLimiter
 	hostTr     map[int64]*http.Transport
 	checks     CheckCreator // Healthcheck anlegen (nil = nicht verfuegbar)
+	findChecks CheckFinder  // Healthchecks lesen ("ueberwacht" in der Liste; nil = nicht verfuegbar)
+	bl         *blocklists  // ipv64-Blocklisten
 	dnsrec     DNSRecords   // DNS-Records bei ipv64 (nil = nicht verfuegbar)
 
 	sapply sync.Mutex // ein Abgleich der Streams gleichzeitig
@@ -92,7 +94,7 @@ func New(core *store.Store, log *slog.Logger, e *edge.Edge, c *certs.Manager, ve
 	return &Module{core: core, log: log.With("module", Name), edge: e, certs: c, version: version, stats: map[int64]*hostStats{},
 		routeErr: map[int64]string{}, loopToken: hex.EncodeToString(b), trVerify: newTransport(true), trInsecure: newTransport(false),
 		cache: newAssetCache(cacheLimit), reach: newReacher(), runs: map[int64]*streamRun{}, sstats: map[int64]*streamStats{}, sreach: newReacher(),
-		acl: map[int64]*guard{}, authFail: newFailLimiter(), hostTr: map[int64]*http.Transport{}}
+		acl: map[int64]*guard{}, authFail: newFailLimiter(), hostTr: map[int64]*http.Transport{}, bl: newBlocklists()}
 }
 
 // SetDataDir legt fest, wo cdn64.db liegt (Statistik, Zugriffs-Log).
@@ -159,6 +161,11 @@ func (m *Module) Start(ctx context.Context) error {
 	m.apply(ctx)
 	m.applyStreams(ctx)
 	go func() { defer m.wg.Done(); m.reachLoop(ctx) }()
+	m.wg.Add(1)
+	go func() { defer m.wg.Done(); m.blLoop(ctx) }()
+	if m.edge != nil {
+		m.edge.SetBlocker(m.bl.Blocked)
+	}
 	m.log.Info("cdn64 started")
 	return nil
 }
@@ -177,6 +184,7 @@ func (m *Module) Stop(ctx context.Context) error {
 	m.applyMu.Lock() // laufendes apply abwarten, danach meldet keins mehr an
 	if m.edge != nil {
 		m.edge.Remove(Name)
+		m.edge.SetBlocker(nil)
 	}
 	m.applyMu.Unlock()
 	m.stopStreams()

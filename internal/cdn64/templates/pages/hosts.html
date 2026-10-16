@@ -10,6 +10,27 @@
 <ul class="nav nav-tabs mb-3">
 	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
 </ul>
+{{if and (eq $d.Kind "proxy") $d.StatsOn}}<div class="card mb-3" data-cdn64-stats data-l-requests="{{.T "cdn64.stats.requests"}}" data-l-bytes="{{.T "cdn64.stats.bytes"}}">
+	<div class="card-header d-flex flex-wrap align-items-center gap-2">
+		<span><i class="bi bi-bar-chart-line text-primary"></i> {{.T "cdn64.stats.title"}}</span>
+		<select class="form-select form-select-sm w-auto ms-auto" data-stats-host aria-label="{{.T "cdn64.stats.host"}}"><option value="0">{{.T "cdn64.stats.all"}}</option>{{range $d.Rows}}<option value="{{.ID}}">{{index .Names 0}}</option>{{end}}</select>
+		<div class="btn-group btn-group-sm" role="group">
+			<button type="button" class="btn btn-outline-secondary active" data-stats-range="24">{{.T "cdn64.stats.h24"}}</button>
+			<button type="button" class="btn btn-outline-secondary" data-stats-range="168">{{.T "cdn64.stats.d7"}}</button>
+			<button type="button" class="btn btn-outline-secondary" data-stats-range="720">{{.T "cdn64.stats.d30"}}</button>
+		</div>
+	</div>
+	<div class="card-body">
+		<div class="row g-2 small mb-2">
+			<div class="col-6 col-md-3"><div class="text-body-secondary">{{.T "cdn64.stats.requests"}}</div><div class="fs-5 font-monospace" data-kpi="requests">–</div></div>
+			<div class="col-6 col-md-3"><div class="text-body-secondary">{{.T "cdn64.stats.bytes"}}</div><div class="fs-5 font-monospace" data-kpi="bytes">–</div></div>
+			<div class="col-6 col-md-3"><div class="text-body-secondary">{{.T "cdn64.stats.errors"}}</div><div class="fs-5 font-monospace" data-kpi="errors">–</div></div>
+			<div class="col-6 col-md-3"><div class="text-body-secondary">{{.T "cdn64.stats.blocked"}}</div><div class="fs-5 font-monospace" title="{{.T "cdn64.stats.blocked_hint"}}">{{$.Int $d.BlockedTotal}}</div></div>
+		</div>
+		<div style="position:relative;height:240px"><canvas data-stats-chart></canvas></div>
+		<div class="small text-body-secondary d-none" data-stats-empty>{{.T "cdn64.stats.empty"}}</div>
+	</div>
+</div>{{end}}
 {{if $d.EdgeErr}}<div class="alert alert-danger small"><i class="bi bi-exclamation-triangle"></i> {{.T "cdn64.edge_error"}} <span class="font-monospace">{{$d.EdgeErr}}</span> · <a href="/settings#ports">{{.T "cdn64.edge_settings"}}</a></div>{{end}}
 <div class="card">
 	{{if not $d.Rows}}
@@ -58,11 +79,12 @@
 				{{else if eq .State "slow"}}<span class="badge text-bg-warning" title="{{$.T "cdn64.reach.checked" "time" ($.Time .Checked)}}">{{$.T "cdn64.reach.slow" "ms" .Ms}}</span>
 				{{else if eq .State "down"}}<span class="badge text-bg-danger" title="{{.Error}}">{{$.T "cdn64.reach.down"}}</span><div class="text-body-secondary">{{$.T "cdn64.reach.since" "ago" ($.Ago .Since)}}</div>
 				{{else}}<span class="badge text-bg-light">{{$.T "cdn64.reach.unknown"}}</span>{{end}}
-			{{end}}{{end}}</td>{{end}}
+			{{end}}{{range .Watch}}<div class="mt-1" data-watch><a class="badge text-decoration-none {{if .Paused}}text-bg-secondary{{else if eq .State "up"}}text-bg-success{{else if eq .State "down"}}text-bg-danger{{else if .State}}text-bg-warning{{else}}text-bg-light{{end}}" href="/healthchecks/{{.Token}}"
+				title="{{$.T "cdn64.watch.title" "name" .Name}}{{if not .LastCheck.IsZero}} · {{$.T "cdn64.reach.checked" "time" ($.Time .LastCheck)}}{{end}}"><i class="bi bi-heart-pulse-fill"></i> {{if .Local}}{{$.T "cdn64.watch.local"}}{{else}}{{$.T "cdn64.watch.remote"}}{{end}}{{if .Paused}} · {{$.T "cdn64.watch.paused"}}{{else if eq .State "up"}} · {{$.T "cdn64.watch.up"}}{{else if eq .State "down"}} · {{$.T "cdn64.watch.down"}}{{end}}{{if .HostOnly}} (Ping){{end}}</a></div>{{end}}{{end}}</td>{{end}}
 			<td class="text-end font-monospace" title="{{$.T "cdn64.since_start" "n" .Requests}}">{{$.Int .Day.Requests}}{{if .Errors}}<div class="text-danger">{{$.T "cdn64.errors" "n" .Errors}}</div>{{end}}{{if .Blocked}}<div class="text-body-secondary">{{$.T "cdn64.blocked" "n" .Blocked}}</div>{{end}}</td>
 			<td class="text-end pe-3 text-nowrap">
 				{{if .URL}}<a class="btn btn-sm btn-outline-secondary py-0" href="{{.URL}}" target="_blank" rel="noopener" title="{{$.T "cdn64.open"}}"><i class="bi bi-box-arrow-up-right"></i></a>{{end}}
-				{{if eq .Kind "proxy"}}<form method="post" action="/cdn64/hosts/{{.ID}}/healthcheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "cdn64.create_check"}}"><i class="bi bi-heart-pulse"></i></button></form>{{end}}
+				{{if eq .Kind "proxy"}}{{if .Watch}}<a class="btn btn-sm btn-outline-success py-0" href="/healthchecks/{{(index .Watch 0).Token}}" title="{{$.T "cdn64.watch.open"}}"><i class="bi bi-heart-pulse-fill"></i></a>{{else}}<form method="post" action="/cdn64/hosts/{{.ID}}/healthcheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "cdn64.create_check"}}"><i class="bi bi-heart-pulse"></i></button></form>{{end}}{{end}}
 				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/hosts/{{.ID}}" title="{{$.T "cdn64.edit"}}"><i class="bi bi-pencil"></i></a>
 				<form method="post" action="/cdn64/hosts/{{.ID}}/{{if .Enabled}}disable{{else}}enable{{end}}" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
 					<button class="btn btn-sm {{if .Enabled}}btn-outline-warning{{else}}btn-outline-success{{end}} py-0" type="submit" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause-fill{{else}}bi-play-fill{{end}}"></i></button></form>
@@ -78,4 +100,4 @@
 </div>
 <p class="small text-body-secondary mt-2">{{if eq $d.Kind "proxy"}}{{.T "cdn64.list_hint"}}{{else}}{{.T "cdn64.list_hint_other"}}{{end}}{{if $d.CacheN}} · {{.T "cdn64.cache_info" "n" $d.CacheN "size" (.Bytes $d.CacheB)}}{{end}}</p>
 {{end}}
-{{define "scripts"}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}
+{{define "scripts"}}{{if and (eq .Data.Kind "proxy") .Data.StatsOn}}<script src="/static/js/chart.umd.js"></script><script src="/static/js/cdn64-stats.js?v={{.Version}}"></script>{{end}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}

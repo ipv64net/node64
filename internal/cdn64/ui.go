@@ -130,18 +130,21 @@ type hostRow struct {
 	RouteErr string
 	Day      HostStat // letzte 24 Stunden (aus cdn64.db)
 	ACLName  string
+	Watch    []Watch // Healthchecks auf genau dieses Ziel
 }
 
 type listData struct {
-	Kind      string
-	Tabs      []tab
-	Rows      []hostRow
-	EdgeErr   string
-	EdgeOpen  bool
-	Listeners []edge.ListenerStatus
-	CacheN    int
-	CacheB    int64
-	StartedAt time.Time
+	Kind         string
+	Tabs         []tab
+	Rows         []hostRow
+	EdgeErr      string
+	EdgeOpen     bool
+	Listeners    []edge.ListenerStatus
+	CacheN       int
+	CacheB       int64
+	StartedAt    time.Time
+	StatsOn      bool  // cdn64.db verfuegbar (Statistik-Karte)
+	BlockedTotal int64 // abgewiesen seit dem Start: Exploits, Zugriffslisten, Blocklisten
 }
 
 func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
@@ -170,11 +173,16 @@ func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
 			acls[a.ID] = a.Name
 		}
 	}
+	watch := m.watchIndex(ctx)
 	out := make([]hostRow, 0, len(list))
 	for _, h := range list {
 		st := m.statsOf(h.ID)
-		out = append(out, hostRow{Host: h, Reach: m.reach.get(h.ID), Requests: st.requests.Load(), Errors: st.errors.Load(), Blocked: st.blocked.Load(),
-			URL: firstURL(h), Cert: m.certFor(ctx, h, all), RouteErr: routeErr[h.ID], Day: day[h.ID], ACLName: acls[h.AccessListID]})
+		row := hostRow{Host: h, Reach: m.reach.get(h.ID), Requests: st.requests.Load(), Errors: st.errors.Load(), Blocked: st.blocked.Load(),
+			URL: firstURL(h), Cert: m.certFor(ctx, h, all), RouteErr: routeErr[h.ID], Day: day[h.ID], ACLName: acls[h.AccessListID]}
+		if h.probed() {
+			row.Watch = watch.of(h.TargetHost, h.TargetPort)
+		}
+		out = append(out, row)
 	}
 	return out, nil
 }
@@ -204,7 +212,10 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	d := listData{Kind: kind, Tabs: tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError()}
+	d := listData{Kind: kind, Tabs: tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError(), StatsOn: m.stats2.Load() != nil, BlockedTotal: m.bl.blocked.Load()}
+	for _, row := range rows {
+		d.BlockedTotal += row.Blocked
+	}
 	if m.edge != nil {
 		d.Listeners = m.edge.Status().Listeners
 		for _, l := range d.Listeners {

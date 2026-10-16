@@ -2222,6 +2222,14 @@
           },
           "dns_error": {
             "type": "string"
+          },
+          "healthchecks": {
+            "type": "array",
+            "readOnly": true,
+            "items": {
+              "$ref": "#/components/schemas/CDNHostWatch"
+            },
+            "description": "Healthchecks auf dieses Ziel (nur wenn das Modul Healthchecks läuft)"
           }
         }
       },
@@ -2684,6 +2692,102 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "CDNHostWatch": {
+        "type": "object",
+        "description": "Healthcheck, der genau dieses Ziel überwacht (gleicher Host und Port; Ping nur Host)",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "description": "up, down, new …"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "local": {
+            "type": "boolean",
+            "description": "läuft auf dieser Node (nicht ipv64.net oder eine andere Node)"
+          },
+          "host_only": {
+            "type": "boolean",
+            "description": "Ping: nur der Host stimmt überein"
+          },
+          "last_check": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CDNBlocklists": {
+        "type": "object",
+        "properties": {
+          "lists": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "all",
+                    "spamhaus_drop",
+                    "firehole_l1",
+                    "blocklistde_all",
+                    "dshield1",
+                    "tor_exit"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "entries": {
+                  "type": "integer",
+                  "description": "geladene Netze"
+                },
+                "updated": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "zuletzt geprüft"
+                },
+                "changed": {
+                  "type": "string",
+                  "format": "date-time",
+                  "description": "zuletzt geändert"
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "allow": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Ausnahmen: IP-Adressen oder Netze"
+          },
+          "blocked": {
+            "type": "integer",
+            "description": "abgewiesen seit dem Start"
+          },
+          "active": {
+            "type": "boolean",
+            "description": "mindestens eine Liste geladen und eingeschaltet"
           }
         }
       }
@@ -11139,6 +11243,129 @@
         "responses": {
           "204": {
             "description": "zurückgesetzt"
+          }
+        }
+      }
+    },
+    "/cdn64/blocklists": {
+      "get": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "ipv64-Blocklisten: Zustand",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNBlocklists"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Modul läuft nicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "ipv64-Blocklisten ein-/ausschalten, Ausnahmen setzen",
+        "description": "Abgewiesen wird am Eingang vor TLS und vor jeder Zugriffsliste, für Proxy-Hosts, Durchreich-Hosts und Streams. Die Listen kommen von ipv64.net und werden alle 30 Minuten aktualisiert.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "allow": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNBlocklists"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "unbekannte Liste oder ungültige Ausnahme",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Modul läuft nicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/blocklists/refresh": {
+      "post": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "ipv64-Blocklisten jetzt neu laden",
+        "responses": {
+          "202": {
+            "description": "angestoßen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNBlocklists"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Modul läuft nicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }

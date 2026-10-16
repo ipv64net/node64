@@ -608,6 +608,56 @@
       "hint": "Für jede Domain dieses Hosts, die in deinem ipv64-Account liegt. Empfohlen: CNAME auf deine DynDNS-Domain, die der Updater aktuell hält. Vorhandene Einträge bleiben unverändert; für die Domain selbst geht kein CNAME.",
       "result": "DNS bei ipv64: {n} Einträge angelegt ({details}).",
       "failed": "DNS-Eintrag nicht angelegt: {error}"
+    },
+    "watch": {
+      "local": "Healthcheck (lokal)",
+      "remote": "Healthcheck (ipv64/andere Node)",
+      "up": "erreichbar",
+      "down": "gestört",
+      "paused": "pausiert",
+      "title": "Überwacht vom Healthcheck „{name}“ – Klick öffnet den Check",
+      "open": "Healthcheck öffnen (überwacht dieses Ziel)"
+    },
+    "stats": {
+      "title": "Verkehr",
+      "host": "Host",
+      "all": "alle Hosts",
+      "h24": "24 Std.",
+      "d7": "7 Tage",
+      "d30": "30 Tage",
+      "requests": "Anfragen",
+      "bytes": "Datenmenge",
+      "errors": "Fehler (4xx/5xx)",
+      "blocked": "Abgewiesen (Schutz)",
+      "blocked_hint": "Seit dem Start: Block Common Exploits, Zugriffslisten und ipv64-Blocklisten",
+      "empty": "Noch keine Anfragen im Zeitraum."
+    },
+    "bl": {
+      "title": "ipv64-Blocklisten",
+      "active": "aktiv",
+      "off": "aus",
+      "hint": "Gepflegte Listen schadhafter IP-Adressen von ipv64.net, per Klick für alle Proxy-Hosts und Streams. Abgewiesen wird an erster Stelle: gleich beim Verbindungsaufbau, noch vor TLS und vor jeder Zugriffsliste; hinter Cloudflare o. ä. zusätzlich nach der echten Client-IP. Die Listen werden alle 30 Minuten aktualisiert und lokal zwischengespeichert; private Netze stehen nie darin.",
+      "blocked": "{n} abgewiesen",
+      "blocked_hint": "Verbindungen und Anfragen seit dem Start von CDN64",
+      "entries": "Netze",
+      "updated": "geprüft vor {ago}",
+      "loading": "wird geladen …",
+      "allow": "Ausnahmen (nie sperren)",
+      "allow_hint": "IP-Adressen oder Netze je Zeile, z. B. die eigene feste IP oder ein Partner, der in einer Liste auftaucht.",
+      "refresh": "Jetzt aktualisieren",
+      "about": "Über die Blocklisten",
+      "saved": "Blocklisten gespeichert.",
+      "refreshing": "Blocklisten werden aktualisiert.",
+      "err_allow": "Ausnahmen prüfen: nur IP-Adressen oder Netze (z. B. 203.0.113.0/24).",
+      "err_list": "Unbekannte Blockliste.",
+      "desc": {
+        "all": "alle Quellen zusammengefasst und bereinigt (empfohlen)",
+        "spamhaus_drop": "von Kriminellen übernommene Netze (Spamhaus DROP)",
+        "firehole_l1": "FireHOL Level 1: Angreifer und Botnetze, wenige Fehlalarme",
+        "blocklistde_all": "Angreifer auf SSH, Mail, Web u. a. der letzten 48 Stunden",
+        "dshield1": "die aktivsten angreifenden Netze (SANS DShield)",
+        "tor_exit": "Ausgänge des Tor-Netzes (sperrt auch legitime anonyme Besucher)"
+      }
     }
   },
   "certs": {

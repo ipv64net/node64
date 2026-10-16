@@ -106,6 +106,10 @@ func (e *Edge) acceptSNI(ln net.Listener, tlsLn *chanListener) {
 			time.Sleep(50 * time.Millisecond) // z. B. zu viele offene Dateien
 			continue
 		}
+		if e.blocked(conn.RemoteAddr()) { // Sperrliste: vor TLS und vor der Verteilung
+			_ = conn.Close()
+			continue
+		}
 		go e.dispatch(conn, tlsLn)
 	}
 }

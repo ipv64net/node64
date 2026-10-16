@@ -64,6 +64,9 @@ und keinem Modul:
 **Erreichbarkeit:**
 - Ziele von Proxy-Hosts, Durchreich-Hosts und TCP-Streams werden jede Minute geprüft: TCP, bei HTTP dazu `HEAD /`.
 - „Healthcheck dafür anlegen“ übernimmt das in das Modul Healthchecks, mit Benachrichtigungen.
+- Überwacht ein Healthcheck genau dieses Ziel (gleicher Host und Port, Ping nur Host), zeigt die Tabelle ihn
+  mit Zustand und Link an: „Healthcheck (lokal)“ für Checks dieser Node, sonst „ipv64/andere Node“. Das gilt
+  auch für Checks, die von Hand angelegt wurden. API: Feld `healthchecks` am Host.
 
 ## Zertifikate
 
@@ -90,6 +93,16 @@ und keinem Modul:
   - Benutzer (bcrypt) und IP-Regeln (erster Treffer gilt, ohne Treffer gesperrt).
   - „Beides nötig“ oder „eine Bedingung genügt“.
   - Nach 10 Fehlversuchen in 5 Minuten ist die IP 15 Minuten gesperrt; die Sperre steht im Audit.
+- **ipv64-Blocklisten (Reiter *Zugriffslisten*):**
+  - Listen schadhafter IPs von ipv64.net per Schalter: Gesamtliste (empfohlen), Spamhaus DROP, FireHOL Level 1,
+    blocklist.de, DShield und Tor-Exits; IPv4 und IPv6.
+  - Gilt für alle Proxy-Hosts, Durchreich-Hosts und Streams. Abgewiesen wird an erster Stelle: beim
+    Verbindungsaufbau, vor TLS und vor jeder Zugriffsliste. HTTP/3 bekommt 403. Hinter einem vertrauenswürdigen
+    Proxy (Cloudflare) zählt zusätzlich die echte Client-IP.
+  - Aktualisierung alle 30 Minuten (ETag), Zwischenspeicher in `/data/cdn64/blocklists`; ist ipv64.net nicht
+    erreichbar, gilt der letzte Stand weiter.
+  - Ausnahmen (IPs oder Netze) werden nie gesperrt. Der Zähler „abgewiesen“ steht auf der Karte und in der
+    Statistik.
 - **Block Common Exploits:** Regeln wie im NPM, dazu `.git`, `.env` und `wp-config.php`.
 - **Fehlerseiten:** Neutrale Seiten (404, 403, 502, 508) verraten nichts über Node64 oder das Ziel. Unbekannte
   Namen bekommen die Standardseite: 404, Verbindung schließen, Weiterleitung oder eigenes HTML.
@@ -103,6 +116,9 @@ und keinem Modul:
 
 - **Anfragen je Host und Stunde** (2xx–5xx, Datenmenge) werden 90 Tage gehalten. Die Liste zeigt die letzten
   24 Stunden.
+- **Verkehr in der Übersicht** (Reiter *Proxy-Hosts*): Diagramm mit Anfragen nach 2xx–5xx und Datenmenge
+  für 24 Stunden, 7 Tage oder 30 Tage (dann je Tag), für alle Hosts oder einen. Dazu die Kennzahlen Anfragen,
+  Datenmenge, Fehler und „abgewiesen“ (Exploits, Zugriffslisten, Blocklisten).
 - **Zugriffs-Log** je Host einschaltbar (Reiter *Zugriffe*), 1–90 Tage, Client-IPs auf Wunsch gekürzt.
 - **Ablage:** `/data/cdn64/cdn64.db`, nicht im Node-Backup.
 - **Audit:** Alle Änderungen aus Oberfläche und API.
@@ -149,6 +165,7 @@ Einen Import gibt es nicht (Entscheidung). Hosts werden neu angelegt; Zertifikat
 |---|---|
 | Hosts, Streams, Standardseite | `/api/cdn64/hosts`, `/api/cdn64/streams`, `/api/cdn64/default` |
 | Zugriffslisten, Log, Statistik, Einstellungen | `/api/cdn64/access-lists`, `/api/cdn64/log`, `/api/cdn64/stats`, `/api/cdn64/settings` |
+| ipv64-Blocklisten | `GET\|PUT /api/cdn64/blocklists`, `POST /api/cdn64/blocklists/refresh` |
 | Zertifikate (Kern) | `/api/certs`, `/api/certs/account`, `/api/certs/dns-accounts`, `/api/certs/dns-providers` |
 | Ports und Eingang (Kern) | `/api/ports`, `/api/edge`, `/api/edge/ui` |
 

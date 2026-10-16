@@ -380,6 +380,10 @@ func (m *Module) serveTCP(r *streamRun, target string) {
 			time.Sleep(50 * time.Millisecond)
 			continue
 		}
+		if m.bl.blockedAddr(c.RemoteAddr()) { // ipv64-Blocklisten
+			_ = c.Close()
+			continue
+		}
 		r.wg.Add(1)
 		go func() {
 			defer r.wg.Done()
@@ -452,6 +456,10 @@ func (m *Module) serveUDP(r *streamRun, target string) {
 		key := addr.String()
 		mu.Lock()
 		s := sessions[key]
+		if s == nil && m.bl.blockedAddr(addr) { // ipv64-Blocklisten: keine Sitzung
+			mu.Unlock()
+			continue
+		}
 		if s == nil {
 			if len(sessions) >= udpMaxSessions {
 				mu.Unlock()

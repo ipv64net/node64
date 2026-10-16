@@ -199,6 +199,21 @@ func run() error {
 		}
 		return hcModule.CreateFromJSON(r, body)
 	})
+	cdnModule.SetCheckFinder(func(ctx context.Context) []cdn64.CheckRef { // Liste: "von Healthchecks ueberwacht"
+		if !modules.IsRunning(healthchecks.Name) {
+			return nil
+		}
+		list, err := hcModule.Store().Checks(ctx)
+		if err != nil {
+			return nil
+		}
+		out := make([]cdn64.CheckRef, 0, len(list))
+		for _, c := range list {
+			out = append(out, cdn64.CheckRef{Token: c.Token, Name: c.Name, Type: string(c.Type), Target: c.Target, Params: c.Params, State: string(c.Runtime.State),
+				Paused: c.Paused, Local: c.Owner != "online" && c.Owner != "other" && c.Execution != "online", LastCheck: c.Runtime.LastCheck})
+		}
+		return out
+	})
 	portReg.Provide(cdn64.Name, cdnModule.Claims)
 	modules.Register(cdnModule)
 	portReg.Provide(dns64.Name, func(ctx context.Context) []ports.Claim { // nur eingeschaltet; aktiv, solange es laeuft

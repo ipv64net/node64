@@ -608,6 +608,56 @@
       "hint": "For every domain of this host that is in your ipv64 account. Recommended: CNAME to your DynDNS domain kept current by the updater. Existing records stay unchanged; no CNAME for the domain itself.",
       "result": "DNS at ipv64: {n} records created ({details}).",
       "failed": "DNS record not created: {error}"
+    },
+    "watch": {
+      "local": "Healthcheck (local)",
+      "remote": "Healthcheck (ipv64/other node)",
+      "up": "up",
+      "down": "down",
+      "paused": "paused",
+      "title": "Monitored by the healthcheck “{name}” – click to open the check",
+      "open": "Open healthcheck (monitors this target)"
+    },
+    "stats": {
+      "title": "Traffic",
+      "host": "Host",
+      "all": "all hosts",
+      "h24": "24 h",
+      "d7": "7 days",
+      "d30": "30 days",
+      "requests": "Requests",
+      "bytes": "Traffic",
+      "errors": "Errors (4xx/5xx)",
+      "blocked": "Rejected (protection)",
+      "blocked_hint": "Since start: Block Common Exploits, access lists and ipv64 blocklists",
+      "empty": "No requests in this period yet."
+    },
+    "bl": {
+      "title": "ipv64 blocklists",
+      "active": "active",
+      "off": "off",
+      "hint": "Maintained lists of malicious IP addresses from ipv64.net, enabled with one click for all proxy hosts and streams. Rejected at the very first step: right when the connection is accepted, before TLS and before any access list; behind Cloudflare and similar also by the real client IP. The lists are refreshed every 30 minutes and cached locally; private networks are never listed.",
+      "blocked": "{n} rejected",
+      "blocked_hint": "Connections and requests since CDN64 started",
+      "entries": "networks",
+      "updated": "checked {ago} ago",
+      "loading": "loading …",
+      "allow": "Exceptions (never block)",
+      "allow_hint": "IP addresses or networks one per line, e.g. your own static IP or a partner that shows up in a list.",
+      "refresh": "Refresh now",
+      "about": "About the blocklists",
+      "saved": "Blocklists saved.",
+      "refreshing": "Blocklists are being refreshed.",
+      "err_allow": "Check the exceptions: only IP addresses or networks (e.g. 203.0.113.0/24).",
+      "err_list": "Unknown blocklist.",
+      "desc": {
+        "all": "all sources merged and cleaned (recommended)",
+        "spamhaus_drop": "networks hijacked by criminals (Spamhaus DROP)",
+        "firehole_l1": "FireHOL level 1: attackers and botnets, few false positives",
+        "blocklistde_all": "attackers on SSH, mail, web etc. of the last 48 hours",
+        "dshield1": "the most active attacking networks (SANS DShield)",
+        "tor_exit": "exits of the Tor network (also blocks legitimate anonymous visitors)"
+      }
     }
   },
   "certs": {
