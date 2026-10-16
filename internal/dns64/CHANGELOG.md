@@ -1,5 +1,15 @@
 # Änderungen – DNS64
 
+## 1.10.0 – 2026-10-16
+
+### Neu
+- Zertifikate aus der zentralen Zertifikatsverwaltung: Unter *Verschlüsselung → Zertifikat* lässt sich jedes gültige Zertifikat der Verwaltung wählen („Aus der Zertifikatsverwaltung“). Erneuert die Verwaltung es, übernimmt DNS64 es sofort ohne Neustart; die Liste dort zeigt „benutzt von: DNS64“.
+- Die Heimnetz-CA liegt in der Verwaltung; das Server-Zertifikat stellt sie für DNS64 aus und neu aus, wenn sich Namen oder private IPs ändern.
+
+### Geändert
+- Einmaliger Umzug beim ersten Start: die eigene Heimnetz-CA (gleicher Schlüssel, Geräte vertrauen ihr weiter) und ein vorhandenes Let's-Encrypt-Zertifikat samt Schlüssel gehen in die Verwaltung, die ab dann erneuert; die Zustimmung zu den Nutzungsbedingungen wird übernommen. Danach steht der Modus auf „Aus der Zertifikatsverwaltung“. Scheitert etwas, bleibt alles wie bisher und der Umzug wird beim nächsten Start wieder versucht. Die bisherigen Dateien bleiben als Rückfall liegen.
+- Neue Let's-Encrypt-Zertifikate legt man in der Zertifikatsverwaltung an; der eigene Abruf in DNS64 bleibt nur noch als Rückfall für nicht umgezogene Installationen und entfällt in einer späteren Version.
+
 ## 1.9.0 – 2026-10-16
 
 ### Neu

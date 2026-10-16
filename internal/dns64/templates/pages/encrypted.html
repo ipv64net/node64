@@ -62,9 +62,15 @@
 							<select class="form-select" id="cert_mode" name="cert_mode">
 								<option value="self"{{if eq $d.Cfg.CertMode "self"}} selected{{end}}>{{.T "dns64.enc.cert_self"}}</option>
 								<option value="node64"{{if eq $d.Cfg.CertMode "node64"}} selected{{end}}>{{.T "dns64.enc.cert_node64"}}</option>
-								{{if $d.Cfg.ACMEDomain}}<option value="acme"{{if eq $d.Cfg.CertMode "acme"}} selected{{end}}>{{.T "dns64.enc.cert_acme"}}</option>{{end}}
+								{{if and $d.Cfg.ACMEDomain (or (not $e.Central) (eq $d.Cfg.CertMode "acme"))}}<option value="acme"{{if eq $d.Cfg.CertMode "acme"}} selected{{end}}>{{.T "dns64.enc.cert_acme"}}</option>{{end}}
+								{{if $e.Central}}<option value="central"{{if eq $d.Cfg.CertMode "central"}} selected{{end}}>{{.T "dns64.enc.cert_central"}}</option>{{end}}
 							</select>
-							<div class="form-text">{{.T "dns64.enc.cert_hint"}}</div>
+							{{if $e.Central}}<label class="form-label mt-2" for="cert_id">{{.T "dns64.enc.cert_id"}}</label>
+							<select class="form-select" id="cert_id" name="cert_id">
+								<option value="0">–</option>
+								{{range $e.Certs}}<option value="{{.ID}}"{{if eq .ID $d.Cfg.CertID}} selected{{end}}>{{.Title}}{{if .Issuer}} · {{.Issuer}}{{end}} · {{$.Date .NotAfter}}</option>{{end}}
+							</select>{{end}}
+							<div class="form-text">{{.T "dns64.enc.cert_hint"}}{{if $e.Central}} {{.T "dns64.enc.cert_central_hint"}} <a href="/certificates">{{.T "dns64.enc.cert_manage"}}</a>{{end}}</div>
 						</div>
 					</div>
 					<button class="btn btn-primary mt-3" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>
@@ -76,6 +82,11 @@
 		<div class="card" id="acme">
 			<div class="card-header"><i class="bi bi-patch-check text-success"></i> {{.T "dns64.acme.title"}}</div>
 			<div class="card-body small"{{if $e.ACME.Running}} data-dns64-reload="3"{{end}}>
+				{{if and $e.Central (ne $d.Cfg.CertMode "acme")}}
+				{{with $e.Current}}<div class="alert alert-success py-2"><i class="bi bi-patch-check"></i> {{$.T "dns64.enc.central_have" "name" .Title "issuer" .Issuer "date" ($.Date .NotAfter)}}</div>{{end}}
+				<p class="text-body-secondary mb-2">{{.T "dns64.acme.moved"}}</p>
+				<a class="btn btn-sm btn-outline-primary" href="/certificates"><i class="bi bi-shield-lock"></i> {{.T "dns64.enc.cert_manage"}}</a>
+				{{else}}
 				<p class="text-body-secondary">{{.T "dns64.acme.hint"}}</p>
 				{{if $e.ACME.Issuer}}<div class="alert alert-success py-2"><i class="bi bi-patch-check"></i> {{.T "dns64.acme.have" "name" $e.ACME.Name "issuer" $e.ACME.Issuer "date" (.Date $e.ACME.NotAfter)}}{{if $e.ACME.Staging}} <span class="badge text-bg-warning">{{.T "dns64.acme.staging_badge"}}</span>{{end}}</div>{{end}}
 				{{if $e.ACME.Running}}<div class="alert alert-info py-2"><span class="spinner-border spinner-border-sm"></span> {{.T "dns64.acme.running"}} <span class="font-monospace">{{.T (print "dns64.acme.step." $e.ACME.Step)}}</span></div>
@@ -113,6 +124,7 @@
 						{{if $e.ACME.Issuer}}<button class="btn btn-outline-secondary" type="submit" formaction="/dns64/acme/renew" formnovalidate{{if $e.ACME.Running}} disabled{{end}}><i class="bi bi-arrow-repeat"></i> {{.T "dns64.acme.renew"}}</button>{{end}}
 					</div>
 				</form>{{end}}
+				{{end}}
 			</div>
 		</div>
 		<div class="card">

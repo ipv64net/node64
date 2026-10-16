@@ -88,6 +88,7 @@ type config struct {
 	DoTPort   int               `json:"dot_port"`
 	Names     []string          `json:"names"`
 	CertMode  string            `json:"cert_mode"`
+	CertID    int64             `json:"cert_id,omitempty"` // central: Zertifikat der Verwaltung
 	NotifyUp  bool              `json:"notify_upstream"`
 	NotifyLst bool              `json:"notify_lists"`
 	// Let's Encrypt (cert_mode acme)
@@ -134,7 +135,8 @@ func (m *Module) loadConfig(ctx context.Context) config {
 		DoHPort:     m.intSetting(ctx, setDoHPort, 443, 1, 65535),
 		DoTPort:     m.intSetting(ctx, setDoTPort, 853, 1, 65535),
 		Names:       splitLines(m.core.SettingOr(ctx, setNames, "")),
-		CertMode:    oneOf(m.core.SettingOr(ctx, setCertMode, ""), certSelf, certSelf, certNode64, certACME),
+		CertMode:    oneOf(m.core.SettingOr(ctx, setCertMode, ""), certSelf, certSelf, certNode64, certACME, certCentral),
+		CertID:      int64(m.intSetting(ctx, setCertID, 0, 0, 1<<31-1)),
 		NotifyUp:    m.core.SettingOr(ctx, setNotifyUpstream, "1") == "1",
 		NotifyLst:   m.core.SettingOr(ctx, setNotifyLists, "1") == "1",
 		ACMEDomain:  m.core.SettingOr(ctx, setACMEDom, ""),
@@ -264,7 +266,7 @@ func (m *Module) saveConfig(ctx context.Context, c config) error {
 		setBlockMode: c.BlockMode, setCacheSize: strconv.Itoa(c.CacheSize), setAnonymize: c.Anonymize,
 		setAllowNets: strings.Join(c.AllowNets, "\n"),
 		setDoH:       b2s(c.DoH), setDoT: b2s(c.DoT), setDoQ: b2s(c.DoQ), setDoHPort: strconv.Itoa(c.DoHPort), setDoTPort: strconv.Itoa(c.DoTPort),
-		setNames: strings.Join(c.Names, "\n"), setCertMode: c.CertMode, setNotifyUpstream: b2s(c.NotifyUp), setNotifyLists: b2s(c.NotifyLst),
+		setNames: strings.Join(c.Names, "\n"), setCertMode: c.CertMode, setCertID: strconv.FormatInt(c.CertID, 10), setNotifyUpstream: b2s(c.NotifyUp), setNotifyLists: b2s(c.NotifyLst),
 		setACMEDom: c.ACMEDomain, setACMEPre: c.ACMEPrefix, setACMEMail: c.ACMEEmail, setACMEStage: b2s(c.ACMEStaging),
 	} {
 		if err := m.core.SetSetting(ctx, k, v); err != nil {
@@ -335,7 +337,10 @@ func (c *config) validate() error {
 		names = append(names, n)
 	}
 	c.Names = names
-	c.CertMode = oneOf(c.CertMode, certSelf, certSelf, certNode64, certACME)
+	c.CertMode = oneOf(c.CertMode, certSelf, certSelf, certNode64, certACME, certCentral)
+	if c.CertMode == certCentral && c.CertID <= 0 {
+		return errCfg("err_cert_id")
+	}
 	c.ACMEDomain = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(c.ACMEDomain)), ".")
 	c.ACMEPrefix = strings.Trim(strings.ToLower(strings.TrimSpace(c.ACMEPrefix)), ".")
 	c.ACMEEmail = strings.TrimSpace(c.ACMEEmail)

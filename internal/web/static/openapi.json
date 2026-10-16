@@ -966,7 +966,8 @@
             "enum": [
               "self",
               "node64",
-              "acme"
+              "acme",
+              "central"
             ]
           },
           "notify_upstream": {
@@ -993,6 +994,10 @@
             "maximum": 3,
             "default": 2,
             "description": "fastest: so viele Upstreams gleichzeitig"
+          },
+          "cert_id": {
+            "type": "integer",
+            "description": "central: Kennung des Zertifikats aus der Zertifikatsverwaltung (/api/certs)"
           }
         }
       },

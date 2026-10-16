@@ -39,10 +39,21 @@ type encView struct {
 	DoHURL   string
 	DoQURL   string
 	CA       bool // eigene CA (zum Herunterladen)
+	Central  bool // zentrale Zertifikatsverwaltung vorhanden
+	Certs    []centralOpt
+	Current  *centralOpt // central: das gewaehlte Zertifikat
 }
 
 func (m *Module) encView(r *http.Request, c config) encView {
-	v := encView{CA: c.CertMode == certSelf}
+	v := encView{CA: c.CertMode == certSelf, Central: m.certs != nil}
+	if v.Central {
+		v.Certs = m.centralList(r.Context())
+		for i := range v.Certs {
+			if v.Certs[i].ID == c.CertID {
+				v.Current = &v.Certs[i]
+			}
+		}
+	}
 	e := m.running()
 	for _, p := range []struct {
 		proto, label string
@@ -195,6 +206,9 @@ func (m *Module) pageEncryptedSave(w http.ResponseWriter, r *http.Request) {
 	c.DoHPort, c.DoTPort = formInt(r, "doh_port"), formInt(r, "dot_port")
 	c.Names = splitLines(r.PostFormValue("names"))
 	c.CertMode = r.PostFormValue("cert_mode")
+	if id, err := strconv.ParseInt(r.PostFormValue("cert_id"), 10, 64); err == nil {
+		c.CertID = id
+	}
 	m.apply(w, r, "/dns64/encrypted", c, "dns64.encrypted", "doh="+b2s(c.DoH)+" dot="+b2s(c.DoT)+" doq="+b2s(c.DoQ)+" cert="+c.CertMode)
 }
 

@@ -1,6 +1,7 @@
 package dns64
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -41,6 +42,19 @@ func (m *Module) caFile() string { return filepath.Join(m.tlsDir(), "ca.pem") }
 
 // serverCert liefert das Zertifikat fuer DoH/DoT/DoQ und die Namen, auf die es lautet.
 func (m *Module) serverCert(c config) (tls.Certificate, []string, error) {
+	m.certInUse.Store(0)
+	var pending int64 // "central", aber noch nicht ausgestellt: kommt per OnChange
+	if c.CertMode == certCentral {
+		if m.certs != nil {
+			if crt := m.certs.ByID(c.CertID); crt != nil {
+				m.certInUse.Store(c.CertID)
+				return *crt, certNames(crt.Leaf), nil
+			}
+			pending = c.CertID
+			m.certInUse.Store(c.CertID)
+		}
+		c.CertMode = certSelf // bis dahin mit der Heimnetz-CA
+	}
 	if c.CertMode == certACME {
 		if crt, leaf := m.acmeCert(acmeName(c)); crt != nil {
 			return *crt, certNames(leaf), nil
@@ -64,6 +78,18 @@ func (m *Module) serverCert(c config) (tls.Certificate, []string, error) {
 			return crt, nil, err
 		}
 		return crt, certNames(leaf), nil
+	}
+	if m.certs != nil { // Heimnetz-CA in der Verwaltung
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		crt, id, err := m.centralSelf(ctx, c)
+		cancel()
+		if err == nil {
+			if pending == 0 {
+				m.certInUse.Store(id)
+			}
+			return *crt, certNames(crt.Leaf), nil
+		}
+		m.log.Warn("dns64 certificate from the certificate management failed, using the local CA", "err", err)
 	}
 	ca, caKey, err := m.loadOrCreateCA()
 	if err != nil {

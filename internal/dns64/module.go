@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ipv64net/node64/internal/certs"
 	"github.com/ipv64net/node64/internal/dns64/cache"
 	"github.com/ipv64net/node64/internal/dns64/dnsserver"
 	"github.com/ipv64net/node64/internal/dns64/filter"
@@ -47,7 +48,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.9.0"
+	version   = "1.10.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -69,9 +70,10 @@ type Module struct {
 	mu      sync.Mutex
 	life    context.CancelFunc // nil = Modul aus
 	retryWG sync.WaitGroup
-	eng     *engine    // nil = DNS-Dienst laeuft nicht
-	ingress *edge.Edge // gemeinsamer Eingang des Kerns (DoH auf dem HTTPS-Port), nil = keiner
-	lastErr string     // letzter Fehler beim Start (z. B. Port belegt)
+	eng     *engine        // nil = DNS-Dienst laeuft nicht
+	ingress *edge.Edge     // gemeinsamer Eingang des Kerns (DoH auf dem HTTPS-Port), nil = keiner
+	certs   *certs.Manager // zentrale Zertifikatsverwaltung, nil = keine (Tests)
+	lastErr string         // letzter Fehler beim Start (z. B. Port belegt)
 
 	recs atomic.Pointer[recordTable] // eigene DNS-Eintraege (records.go)
 
@@ -79,11 +81,13 @@ type Module struct {
 
 	notifier func(notify.Alert) // Meldungen (nil = keine)
 
-	key   *ipv64api.Key                   // zentraler ipv64-API-Key (Let's Encrypt per DNS-01)
-	acme  acmeState                       // Stand des letzten Zertifikatsabrufs
-	cur   atomic.Pointer[tls.Certificate] // aktuelles Zertifikat fuer DoH/DoT/DoQ (wechselt ohne Neustart)
-	bg    sync.WaitGroup                  // Hintergrundlaeufe (Zertifikatsabruf)
-	bgCtx context.Context                 // endet mit dem Modul
+	key  *ipv64api.Key                   // zentraler ipv64-API-Key (Let's Encrypt per DNS-01)
+	acme acmeState                       // Stand des letzten Zertifikatsabrufs
+	cur  atomic.Pointer[tls.Certificate] // aktuelles Zertifikat fuer DoH/DoT/DoQ (wechselt ohne Neustart)
+	// certInUse: Kennung des Zertifikats aus der Verwaltung, das DNS64 gerade nutzt (0 = keins)
+	certInUse atomic.Int64
+	bg        sync.WaitGroup  // Hintergrundlaeufe (Zertifikatsabruf)
+	bgCtx     context.Context // endet mit dem Modul
 
 	pauseUntil atomic.Int64 // Blockieren aus bis (UnixNano), -1 = bis zum Wiedereinschalten, 0 = aktiv (pause.go)
 
@@ -245,6 +249,7 @@ func (m *Module) start(ctx context.Context) error {
 		return fmt.Errorf("load records: %w", err)
 	}
 	cfg := m.loadConfig(ctx)
+	m.migrateCentral(ctx, &cfg)
 	m.loadPause(ctx)
 	e := &engine{addr: m.listenAddr(ctx), started: time.Now()}
 	st, err := querylog.Open(filepath.Join(m.dir(), "dns64.db"), time.Duration(cfg.Retention)*24*time.Hour, m.log)
