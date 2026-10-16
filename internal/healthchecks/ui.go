@@ -1202,7 +1202,12 @@ func (m *Module) Dashboard(ctx context.Context) (*module.DashboardInfo, error) {
 	names := map[string]string{}
 	for _, c := range list {
 		names[c.Token] = c.Name
-		switch m.liveRuntime(c).State {
+		rt := m.liveRuntime(c)
+		if stale(c, rt.LastCheck, string(rt.State)) {
+			info.Unchecked++ // nicht "OK": ob der Dienst erreichbar ist, ist unbekannt
+			continue
+		}
+		switch rt.State {
 		case scheduler.StateUp:
 			info.OK++
 		case scheduler.StateDown, scheduler.StateFlapping, scheduler.StateDependent:

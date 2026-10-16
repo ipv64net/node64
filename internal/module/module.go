@@ -138,6 +138,7 @@ type DashboardInfo struct {
 	Down      int
 	Paused    int
 	Other     int
+	Unchecked int // nicht ueberwacht (seit 3 Intervallen keine Messung)
 	Incidents []IncidentInfo
 }
 

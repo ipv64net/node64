@@ -240,8 +240,9 @@ type dashboardData struct {
 	API                             *ipv64api.Overview
 	Mismatch                        bool // API-Key gehoert zu einem anderen Account als der Healthchecks-Sync
 	ConnectedAt, LastSync, LinkedAt time.Time
-	Peers, PeersOnline              int // Nodes dieser Verknuepfung
-	Cards                           []module.Card
+	Peers, PeersOnline              int            // Nodes dieser Verknuepfung
+	Layout                          []dashItem     // Kacheln in der Reihenfolge des Benutzers (dashboard_layout.go)
+	JS                              map[string]any // Daten fuer dashboard.js (CSRF, Sprache, Texte)
 }
 
 func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
@@ -320,6 +321,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 			d.Boards = append(d.Boards, *info)
 		}
 	}
+	var cards []namedCard
 	for _, m := range s.Modules.Modules() {
 		p, ok := m.(module.CardProvider)
 		if !ok || !s.Modules.IsRunning(m.Info().Name) {
@@ -328,9 +330,16 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 		if c, err := p.Card(ctx); err != nil {
 			s.log.Error("dashboard card", "module", m.Info().Name, "err", err)
 		} else if c != nil {
-			d.Cards = append(d.Cards, *c)
+			cards = append(cards, namedCard{Module: m.Info().Name, Card: *c})
 		}
 	}
+	avail := dashAvailable(d.Boards, cards, s.Modules.IsRunning("dns64"), s.Modules.IsRunning("cdn64"))
+	d.Layout = dashMerge(avail, s.dashSaved(ctx, v.User.ID))
+	texts := map[string]string{}
+	for _, k := range []string{"saved", "save_err", "allowed", "blocked", "requests", "bytes", "no_data", "size", "hide", "show", "up", "down"} {
+		texts[k] = v.T("dashboard.js." + k)
+	}
+	d.JS = map[string]any{"csrf": v.CSRF, "lang": v.Lang, "t": texts}
 	v.Data = d
 	s.render(w, r, http.StatusOK, "dashboard", v)
 }

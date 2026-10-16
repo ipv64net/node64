@@ -111,6 +111,27 @@
     "totp_failed": "Der Code ist falsch oder abgelaufen."
   },
   "dashboard": {
+    "customize": "Anpassen",
+    "done": "Fertig",
+    "reset": "Zurücksetzen",
+    "drag": "Ziehen zum Verschieben",
+    "edit_hint": "Kacheln mit der Maus verschieben (oder mit den Pfeilen), Breite mit s/m/l/xl ändern, mit dem Auge ein- oder ausblenden. Ausgeblendete Kacheln erscheinen hier blass. „Fertig“ speichert für deinen Benutzer.",
+    "chart_dns64": "DNS64 – Anfragen im Zeitverlauf",
+    "chart_cdn64": "CDN64 – Anfragen und Datenverkehr",
+    "js": {
+      "saved": "Gespeichert",
+      "save_err": "Speichern fehlgeschlagen",
+      "allowed": "Erlaubt",
+      "blocked": "Blockiert",
+      "requests": "Anfragen",
+      "bytes": "Datenverkehr",
+      "no_data": "Noch keine Daten.",
+      "size": "Breite (s, m, l, xl)",
+      "hide": "Ausblenden",
+      "show": "Einblenden",
+      "up": "Nach vorn",
+      "down": "Nach hinten"
+    },
     "account": "ipv64-Account",
     "api_ok": "API verbunden",
     "plan_until": "Tarif gültig bis {date}",

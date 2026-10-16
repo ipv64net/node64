@@ -25,6 +25,9 @@ func (s *Server) apiAdminRoutes() {
 	s.mux.Handle("POST /api/import", s.auth(s.apiImport))
 	s.mux.Handle("POST /api/reset", s.auth(s.apiReset))
 	s.mux.Handle("GET /api/overview", s.auth(s.apiOverview))
+	s.mux.Handle("GET /api/dashboard/layout", s.auth(s.apiDashLayoutGet))
+	s.mux.Handle("PUT /api/dashboard/layout", s.auth(s.apiDashLayoutPut))
+	s.mux.Handle("DELETE /api/dashboard/layout", s.auth(s.apiDashLayoutDelete))
 }
 
 // ---------------------------------------------------------------- API-Keys

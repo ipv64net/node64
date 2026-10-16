@@ -111,6 +111,27 @@
     "totp_failed": "The code is wrong or expired."
   },
   "dashboard": {
+    "customize": "Customize",
+    "done": "Done",
+    "reset": "Reset",
+    "drag": "Drag to move",
+    "edit_hint": "Move tiles with the mouse (or the arrows), change the width with s/m/l/xl, show or hide with the eye. Hidden tiles appear faded here. “Done” saves for your user.",
+    "chart_dns64": "DNS64 – queries over time",
+    "chart_cdn64": "CDN64 – requests and traffic",
+    "js": {
+      "saved": "Saved",
+      "save_err": "Saving failed",
+      "allowed": "Allowed",
+      "blocked": "Blocked",
+      "requests": "Requests",
+      "bytes": "Traffic",
+      "no_data": "No data yet.",
+      "size": "Width (s, m, l, xl)",
+      "hide": "Hide",
+      "show": "Show",
+      "up": "Move earlier",
+      "down": "Move later"
+    },
     "account": "ipv64 account",
     "api_ok": "API connected",
     "plan_until": "Plan valid until {date}",

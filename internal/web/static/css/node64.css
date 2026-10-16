@@ -126,6 +126,22 @@ a { color: var(--bs-primary); }
 .tile-down { border-left-color: var(--bs-danger); }
 .tile-paused { border-left-color: var(--bs-secondary); }
 .tile-other { border-left-color: var(--bs-info); }
+.tile-unchecked { border-left-color: var(--bs-warning); }
+/* Dashboard anpassen: Werkzeuge nur im Bearbeitungsmodus, ausgeblendete Kacheln dort blass */
+.dash-item { position: relative; }
+.dash-tools { display: none; position: absolute; top: .35rem; right: 1.1rem; z-index: 5; gap: .25rem; align-items: center; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: .375rem; padding: .1rem .25rem; }
+.dash-handle { cursor: grab; color: var(--bs-secondary-color); padding: 0 .15rem; }
+.dash-editing .dash-tools { display: flex; }
+.dash-editing .dash-item > .card { outline: 2px dashed var(--bs-border-color); outline-offset: 2px; }
+.dash-editing .dash-item { cursor: grab; }
+.dash-item.dash-hidden { display: none; }
+.dash-editing .dash-item.dash-hidden { display: block; opacity: .45; }
+.dash-item.dash-dragging { opacity: .4; }
+.dash-edit-show { display: none !important; }
+.dash-editing .dash-edit-show { display: inline-block !important; }
+.dash-editing .alert.dash-edit-show { display: block !important; }
+.dash-editing .dash-edit-hide { display: none !important; }
+.dash-chart { position: relative; height: 240px; }
 
 /* Healthchecks */
 .hc-lg { display: inline-block; width: .8rem; height: .8rem; border-radius: .2rem; vertical-align: -.1rem; margin-right: .2rem; }

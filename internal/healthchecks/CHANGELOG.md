@@ -7,6 +7,7 @@
   als „OK“ da, sondern als „Nicht überwacht“ (gelb gestreift) – in Liste, Filter und Kopf der Detailseite. Die
   Detailseite sagt dazu, dass alle Werte von der letzten Messung stammen (mit Zeit und damaligem Zustand) und welche
   Nodes messen. API: `state.unchecked: true` (`state.state` bleibt der Zustand der letzten Messung).
+- Dashboard: nicht überwachte Checks zählen nicht mehr als „OK“, sondern in einer eigenen Kachel „Nicht überwacht“.
 
 ## 2.11.0 – 2026-10-16
 

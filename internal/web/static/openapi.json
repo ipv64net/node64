@@ -10980,6 +10980,154 @@
           }
         }
       }
+    },
+    "/dashboard/layout": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Dashboard des angemeldeten Benutzers: Reihenfolge, Breite und ausgeblendete Kacheln",
+        "responses": {
+          "200": {
+            "description": "gespeicherte Einstellung (leer = Voreinstellung)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "description": "Kachel, z. B. board:healthchecks, incidents:healthchecks, card:dns64, chart:dns64, chart:cdn64, node, storage, modules, account, link"
+                          },
+                          "size": {
+                            "type": "string",
+                            "enum": [
+                              "s",
+                              "m",
+                              "l",
+                              "xl"
+                            ]
+                          },
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Dashboard speichern (je Benutzer)",
+        "description": "Unbekannte Kacheln werden beim Anzeigen ignoriert, neue erscheinen hinten.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "description": "Kachel, z. B. board:healthchecks, incidents:healthchecks, card:dns64, chart:dns64, chart:cdn64, node, storage, modules, account, link"
+                        },
+                        "size": {
+                          "type": "string",
+                          "enum": [
+                            "s",
+                            "m",
+                            "l",
+                            "xl"
+                          ]
+                        },
+                        "hidden": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "description": "Kachel, z. B. board:healthchecks, incidents:healthchecks, card:dns64, chart:dns64, chart:cdn64, node, storage, modules, account, link"
+                          },
+                          "size": {
+                            "type": "string",
+                            "enum": [
+                              "s",
+                              "m",
+                              "l",
+                              "xl"
+                            ]
+                          },
+                          "hidden": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültige Kennung oder Größe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Dashboard auf die Voreinstellung zurücksetzen",
+        "responses": {
+          "204": {
+            "description": "zurückgesetzt"
+          }
+        }
+      }
     }
   }
 }
