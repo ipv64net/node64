@@ -52,8 +52,11 @@ func (u *UI) pageCACreate(w http.ResponseWriter, r *http.Request) {
 func (u *UI) pageCAImport(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	name := r.PostFormValue("import_name")
-	certPEM, keyPEM := readPEMFields(r)
-	ca, err := u.m.ImportCA(r.Context(), name, certPEM, keyPEM)
+	certPEM, keyPEM, err := certs.PrepareUpload(readPEMFields(r, r.PostFormValue("key_password")))
+	var ca *certs.CA
+	if err == nil {
+		ca, err = u.m.ImportCA(r.Context(), name, certPEM, keyPEM)
+	}
 	if err != nil {
 		u.g.Render(w, r, http.StatusUnprocessableEntity, Name+"/ca_new", "certs.ca.new", caForm{KeyType: "ecdsa", Constrained: true, ImportName: name,
 			ImportErr: u.certError(r, err)})
@@ -137,8 +140,14 @@ func (u *UI) pageACMEDelete(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, Base, http.StatusSeeOther)
 }
 
-// readPEMFields liest Zertifikat und Schluessel aus Datei-Feldern (cert_file, key_file) oder Textfeldern.
-func readPEMFields(r *http.Request) (certPEM, keyPEM string) {
+// readPEMFields liest Zertifikat und Schluessel aus Datei-Feldern (cert_file, key_file) oder Textfeldern; die
+// Zertifikatsdatei darf auch PKCS#12 (.pfx/.p12) sein. Ergebnis passend fuer certs.PrepareUpload.
+func readPEMFields(r *http.Request, password string) (certData, keyData []byte, pw string) {
+	certPEM, keyPEM := readFields(r)
+	return []byte(certPEM), []byte(keyPEM), password
+}
+
+func readFields(r *http.Request) (certPEM, keyPEM string) {
 	certPEM, keyPEM = r.PostFormValue("cert"), r.PostFormValue("key")
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
 		if err := r.ParseMultipartForm(1 << 20); err == nil {

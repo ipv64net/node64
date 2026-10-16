@@ -54,11 +54,21 @@ func (s *Server) apiCACreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiCAImport(w http.ResponseWriter, r *http.Request) {
-	in := struct{ Name, Cert, Key string }{}
+	in := struct {
+		Name, Cert, Key, Password string
+		P12                       []byte // Base64
+	}{}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	ca, err := s.Certs.ImportCA(r.Context(), in.Name, in.Cert, in.Key)
+	if len(in.P12) > 0 {
+		in.Cert, in.Key = string(in.P12), ""
+	}
+	certPEM, keyPEM, err := certs.PrepareUpload([]byte(in.Cert), []byte(in.Key), in.Password)
+	var ca *certs.CA
+	if err == nil {
+		ca, err = s.Certs.ImportCA(r.Context(), in.Name, certPEM, keyPEM)
+	}
 	if err != nil {
 		certErr(w, err)
 		return

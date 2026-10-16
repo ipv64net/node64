@@ -197,6 +197,8 @@ func ErrorText(t func(key string, args ...any) string, err error) string {
 		return t("certs.err.upload_renew")
 	case errors.Is(err, certs.ErrNoCert):
 		return t("certs.err.no_cert")
+	case errors.Is(err, certs.ErrKeyPassword):
+		return t("certs.err.key_password")
 	}
 	return err.Error()
 }
@@ -245,8 +247,11 @@ func (u *UI) pageCertCreate(w http.ResponseWriter, r *http.Request) {
 func (u *UI) pageCertUpload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	certPEM, keyPEM := readPEMFields(r)
-	c, err := u.m.Upload(ctx, certPEM, keyPEM)
+	certPEM, keyPEM, err := certs.PrepareUpload(readPEMFields(r, r.PostFormValue("key_password")))
+	var c *certs.Cert
+	if err == nil {
+		c, err = u.m.Upload(ctx, certPEM, keyPEM)
+	}
 	if err != nil {
 		d := u.certNewData(ctx)
 		d.UploadErr = u.certError(r, err)

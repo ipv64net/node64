@@ -8237,7 +8237,7 @@
           "Ports & Zertifikate"
         ],
         "summary": "Eigenes Zertifikat hochladen",
-        "description": "JSON {cert, key} (PEM, Zertifikat mit Kette) oder multipart mit cert_file und key_file. Höchstens 1 MB.",
+        "description": "JSON {cert, key, password} (PEM, Zertifikat mit Kette; Schlüssel auch verschlüsselt: ENCRYPTED PRIVATE KEY oder PEM mit DEK-Info) oder {p12, password}, oder multipart mit cert_file (PEM oder .pfx/.p12), key_file und key_password. Falsches oder fehlendes Passwort: 422 mit field=password. Höchstens 1 MB.",
         "requestBody": {
           "required": true,
           "content": {
@@ -8250,6 +8250,15 @@
                   },
                   "key": {
                     "type": "string"
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "Passwort, falls der Schlüssel bzw. die PKCS#12-Datei verschlüsselt ist (wird nicht gespeichert)"
+                  },
+                  "p12": {
+                    "type": "string",
+                    "format": "byte",
+                    "description": "PKCS#12 (.pfx/.p12) als Base64 statt cert/key"
                   }
                 }
               }
@@ -8265,6 +8274,10 @@
                   "key_file": {
                     "type": "string",
                     "format": "binary"
+                  },
+                  "key_password": {
+                    "type": "string",
+                    "description": "Passwort, falls der Schlüssel bzw. die PKCS#12-Datei verschlüsselt ist (wird nicht gespeichert)"
                   }
                 }
               }
@@ -10469,10 +10482,6 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "cert",
-                  "key"
-                ],
                 "properties": {
                   "name": {
                     "type": "string",
@@ -10485,6 +10494,15 @@
                   "key": {
                     "type": "string",
                     "description": "PEM"
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "Passwort, falls der Schlüssel bzw. die PKCS#12-Datei verschlüsselt ist (wird nicht gespeichert)"
+                  },
+                  "p12": {
+                    "type": "string",
+                    "format": "byte",
+                    "description": "PKCS#12 (.pfx/.p12) als Base64 statt cert/key"
                   }
                 }
               }

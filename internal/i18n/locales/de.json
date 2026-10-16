@@ -591,7 +591,7 @@
       "name": "Name prüfen",
       "no_cert": "Das Zertifikat ist noch nicht ausgestellt.",
       "format": "Unbekanntes Format",
-      "password": "Passwort für PKCS#12",
+      "password": "Passwort prüfen",
       "ca_id": "CA prüfen",
       "days": "Laufzeit prüfen",
       "acme_ca": "ACME-Stelle prüfen",
@@ -601,7 +601,8 @@
       "eab_hmac": "EAB HMAC prüfen",
       "root_pem": "Root-Zertifikat prüfen",
       "key_type": "Schlüssel prüfen",
-      "domains": "Domains prüfen"
+      "domains": "Domains prüfen",
+      "key_password": "Der Schlüssel ist mit einem Passwort geschützt. Bitte das Passwort eingeben."
     },
     "expired": "abgelaufen",
     "days": "{days} Tage",
@@ -702,7 +703,9 @@
       "nohttp": "der gemeinsame Eingang (Port 80) ist nicht verfügbar",
       "noca": "noch keine eigene CA",
       "noca_link": "CA anlegen"
-    }
+    },
+    "upload_password": "Passwort des Schlüssels bzw. der .pfx/.p12-Datei (nur falls verschlüsselt)",
+    "upload_password_hint": "Gekaufte Zertifikate kommen oft mit verschlüsseltem Schlüssel (ENCRYPTED PRIVATE KEY, DEK-Info) oder als .pfx/.p12. Statt Zertifikat und Schlüssel einzeln geht auch eine .pfx/.p12-Datei im Feld Zertifikat. Gespeichert wird nur der entschlüsselte Schlüssel (verschlüsselt in der Datenbank), das Passwort nicht."
   },
   "ports": {
     "title": "Ports",

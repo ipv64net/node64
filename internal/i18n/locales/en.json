@@ -591,7 +591,7 @@
       "name": "Check the name",
       "no_cert": "The certificate has not been issued yet.",
       "format": "Unknown format",
-      "password": "Password for PKCS#12",
+      "password": "Check the password",
       "ca_id": "Check the CA",
       "days": "Check the validity",
       "acme_ca": "Check the ACME CA",
@@ -601,7 +601,8 @@
       "eab_hmac": "Check the EAB HMAC",
       "root_pem": "Check the root certificate",
       "key_type": "Check the key",
-      "domains": "Check the domains"
+      "domains": "Check the domains",
+      "key_password": "The key is protected by a password. Please enter the password."
     },
     "expired": "expired",
     "days": "{days} days",
@@ -702,7 +703,9 @@
       "nohttp": "the shared entrance (port 80) is not available",
       "noca": "no own CA yet",
       "noca_link": "add CA"
-    }
+    },
+    "upload_password": "Password of the key or the .pfx/.p12 file (only if encrypted)",
+    "upload_password_hint": "Purchased certificates often come with an encrypted key (ENCRYPTED PRIVATE KEY, DEK-Info) or as .pfx/.p12. Instead of certificate and key you can also put a .pfx/.p12 file into the certificate field. Only the decrypted key is stored (encrypted in the database), the password is not."
   },
   "ports": {
     "title": "Ports",

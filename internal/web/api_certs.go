@@ -47,6 +47,8 @@ func certErr(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": ve.Msg, "field": ve.Field})
 	case errors.Is(err, certs.ErrNotFound):
 		writeErr(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, certs.ErrKeyPassword):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error(), "field": "password"})
 	case errors.Is(err, certs.ErrInUse), errors.Is(err, certs.ErrBusy), errors.Is(err, certs.ErrTOS), errors.Is(err, certs.ErrNoKey), errors.Is(err, certs.ErrUpload),
 		errors.Is(err, certs.ErrNoCert):
 		writeErr(w, http.StatusConflict, err.Error())
@@ -100,12 +102,15 @@ func (s *Server) apiCertCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, c) // der Abruf laeuft im Hintergrund
 }
 
-// apiCertUpload nimmt JSON {cert, key} oder multipart (cert_file, key_file) an.
+// apiCertUpload nimmt JSON {cert, key, password, p12} oder multipart (cert_file, key_file, key_password) an. Der
+// Schluessel darf verschluesselt sein (PKCS#8, PEM mit DEK-Info), cert_file bzw. p12 (Base64) auch PKCS#12.
 func (s *Server) apiCertUpload(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var in struct {
-		Cert string `json:"cert"`
-		Key  string `json:"key"`
+		Cert     string `json:"cert"`
+		Key      string `json:"key"`
+		Password string `json:"password"`
+		P12      []byte `json:"p12"` // Base64
 	}
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
 		if err := r.ParseMultipartForm(1 << 20); err != nil {
@@ -121,12 +126,19 @@ func (s *Server) apiCertUpload(w http.ResponseWriter, r *http.Request) {
 			b, _ := io.ReadAll(f)
 			return string(b)
 		}
-		in.Cert, in.Key = read("cert_file"), read("key_file")
+		in.Cert, in.Key, in.Password = read("cert_file"), read("key_file"), r.FormValue("key_password")
 	} else if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	c, err := s.Certs.Upload(r.Context(), in.Cert, in.Key)
+	if len(in.P12) > 0 {
+		in.Cert, in.Key = string(in.P12), ""
+	}
+	certPEM, keyPEM, err := certs.PrepareUpload([]byte(in.Cert), []byte(in.Key), in.Password)
+	var c *certs.Cert
+	if err == nil {
+		c, err = s.Certs.Upload(r.Context(), certPEM, keyPEM)
+	}
 	if err != nil {
 		certErr(w, err)
 		return

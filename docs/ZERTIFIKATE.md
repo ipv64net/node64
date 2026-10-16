@@ -12,7 +12,7 @@ Stand 2026-10-16 (Z0–Z5 fertig). Die Zertifikatsverwaltung gehört zum Kern vo
 | Alias über ipv64 | Fremde Domain; einmal CNAME `_acme-challenge.<name>` → `_acme-challenge.<präfix>.<ipv64-domain>` |
 | Anderer DNS-Anbieter | DNS-Zugang mit den Feldern des Anbieters (Token, Key …), verschlüsselt gespeichert |
 | HTTP-01 | Name zeigt per DNS auf den Anschluss, Port 80 des Eingangs |
-| Eigenes Zertifikat | PEM hochladen (nicht erneuerbar, Warnung vor Ablauf) |
+| Eigenes Zertifikat | PEM oder .pfx/.p12 hochladen, auch mit Passwort geschützter Schlüssel (nicht erneuerbar, Warnung vor Ablauf) |
 | Eigene CA | Geräte im eigenen Netz: Namen wie `nas.lan` und IP-Adressen; Geräte vertrauen der CA einmal |
 
 **Ausstellende Stelle bei ACME:**
@@ -46,6 +46,30 @@ Namen am Eingang. Ein Wechsel greift sofort, ohne Neustart.
 - Ist `NODE64_TLS_CERT` gesetzt, nutzt der HTTPS-Port weiter diese Datei.
 - Ein gewähltes Zertifikat steht bei „benutzt von“ als „Node64-Oberfläche“ und ist damit vor versehentlichem
   Löschen geschützt.
+
+## Gekaufte Zertifikate hochladen
+
+Gekaufte Zertifikate kommen oft mit einem Schlüssel, der durch ein Passwort geschützt ist.
+
+**Unterstützte Formate:**
+
+| Format | Erkennbar an | Felder |
+|---|---|---|
+| PKCS#8 verschlüsselt | `-----BEGIN ENCRYPTED PRIVATE KEY-----` | Zertifikat + Schlüssel + Passwort |
+| PEM verschlüsselt (klassisch) | `Proc-Type: 4,ENCRYPTED` und `DEK-Info: …` | Zertifikat + Schlüssel + Passwort |
+| PKCS#12 | Datei `.pfx` oder `.p12` (z. B. Export aus Windows/IIS) | Datei im Feld *Zertifikat* + Passwort |
+| eine PEM-Datei mit Zertifikat und Schlüssel | beide Blöcke in einer Datei | nur Feld *Zertifikat* (+ Passwort, falls verschlüsselt) |
+
+Getestet mit Dateien aus OpenSSL 3:
+- `pkcs8 -topk8 -v2 aes-256-cbc`
+- `rsa -aes256 -traditional`
+- `pkcs12 -export` (AES/PBKDF2) und `pkcs12 -export -legacy` (3DES/RC2)
+
+**Verhalten:**
+- Ist das Passwort falsch oder fehlt es, sagt die Seite das ausdrücklich (API: 422 mit `field: password`).
+- Gespeichert wird der entschlüsselte Schlüssel, verschlüsselt mit `secret.key` in der Datenbank.
+- Das Passwort selbst wird nicht gespeichert und steht nicht im Audit.
+- Dasselbe gilt beim Import einer eigenen CA.
 
 ## Wer die Zentrale nutzt
 

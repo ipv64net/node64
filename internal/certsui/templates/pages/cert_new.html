@@ -77,11 +77,14 @@
 				{{if $d.UploadErr}}<div class="alert alert-danger py-2">{{$d.UploadErr}}</div>{{end}}
 				<p class="text-body-secondary">{{.T "certs.upload_hint"}}</p>
 				<label class="form-label fw-semibold" for="cert_file">{{.T "certs.upload_cert"}}</label>
-				<input class="form-control form-control-sm mb-1" type="file" id="cert_file" name="cert_file" accept=".pem,.crt,.cer">
+				<input class="form-control form-control-sm mb-1" type="file" id="cert_file" name="cert_file" accept=".pem,.crt,.cer,.pfx,.p12">
 				<textarea class="form-control form-control-sm font-monospace mb-2" name="cert" rows="3" placeholder="-----BEGIN CERTIFICATE-----" aria-label="{{.T "certs.upload_cert"}}"></textarea>
 				<label class="form-label fw-semibold" for="key_file">{{.T "certs.upload_key"}}</label>
 				<input class="form-control form-control-sm mb-1" type="file" id="key_file" name="key_file" accept=".pem,.key">
 				<textarea class="form-control form-control-sm font-monospace mb-2" name="key" rows="3" placeholder="-----BEGIN PRIVATE KEY-----" aria-label="{{.T "certs.upload_key"}}" autocomplete="off"></textarea>
+				<label class="form-label" for="key_password">{{.T "certs.upload_password"}}</label>
+				<input class="form-control form-control-sm mb-1" type="password" id="key_password" name="key_password" autocomplete="off" maxlength="256">
+				<div class="form-text mb-2">{{.T "certs.upload_password_hint"}}</div>
 				<div class="form-text mb-2">{{.T "certs.upload_safe"}}</div>
 				<button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-upload"></i> {{.T "certs.upload"}}</button>
 			</div>
