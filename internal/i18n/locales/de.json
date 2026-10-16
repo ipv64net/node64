@@ -2005,7 +2005,6 @@
       "enc_port": "Die Ports für DoH und DoT/DoQ müssen zwischen 1 und 65535 liegen und sich vom DNS-Port unterscheiden (DoH auch von DoT).",
       "enc_name": "„{name}“ ist kein gültiger Name (IPs stehen automatisch im Zertifikat).",
       "cert_id": "Bitte ein Zertifikat aus der Zertifikatsverwaltung wählen.",
-      "acme_tos": "Bitte die Nutzungsbedingungen von Let's Encrypt akzeptieren.",
       "acme_domain": "Bitte eine gültige ipv64-Domain wählen.",
       "acme_prefix": "Ungültiger Name vor der Domain (z. B. dns).",
       "acme_email": "Ungültige E-Mail-Adresse.",
@@ -2047,34 +2046,7 @@
     "acme": {
       "title": "Let's Encrypt",
       "moved": "Let's-Encrypt-Zertifikate legst du jetzt in der Zertifikatsverwaltung an (auch mit dem ipv64-API-Key per DNS-01) und wählst sie links unter „Zertifikat“ aus. Ein vorhandenes Zertifikat von DNS64 wurde beim Update dorthin übernommen.",
-      "hint": "Öffentlich gültiges Zertifikat für einen Namen unter einer deiner ipv64-Domains. Bestätigt wird per DNS (TXT-Record über die ipv64-API mit dem zentralen API-Key), der Name muss im Internet nicht erreichbar sein. Damit akzeptieren alle Geräte die verschlüsselten Dienste ohne CA-Installation, auch Android „Privates DNS“. Verlängert wird automatisch 30 Tage vor Ablauf.",
-      "prefix": "Name",
-      "domain": "ipv64-Domain",
-      "email": "E-Mail für Let's Encrypt",
-      "lan_ip": "IP der Node im Heimnetz",
-      "lan_hint": "Für die IP legt DNS64 den Namen als eigenen Eintrag an, damit Geräte im Heimnetz die Node darunter finden (leer = selbst anlegen).",
-      "staging": "Testumgebung von Let's Encrypt (Zertifikat ohne Vertrauen, zum Ausprobieren)",
-      "tos": "Ich akzeptiere die Nutzungsbedingungen von Let's Encrypt:",
-      "issue": "Speichern und Zertifikat holen",
-      "renew": "Jetzt erneuern",
-      "started": "Zertifikat für {name} wird geholt, das dauert etwa eine Minute.",
-      "running": "Zertifikat wird geholt:",
-      "failed": "Letzter Abruf fehlgeschlagen:",
-      "have": "Zertifikat für {name} von {issuer}, gültig bis {date}.",
-      "staging_badge": "Testumgebung",
-      "no_key": "Für Let's Encrypt wird der zentrale ipv64-API-Key gebraucht:",
-      "step": {
-        "issue": "Start",
-        "renew": "Verlängerung",
-        "manual": "Start",
-        "account": "Konto bei Let's Encrypt",
-        "order": "Auftrag",
-        "txt": "TXT-Record bei ipv64 anlegen",
-        "dns": "warten auf die ipv64-Nameserver",
-        "validate": "Prüfung durch Let's Encrypt",
-        "certificate": "Zertifikat ausstellen",
-        "ok": "fertig"
-      }
+      "mig_failed": "Der Umzug in die Zertifikatsverwaltung steht noch aus ({err}); bis dahin liefert DNS64 das bisherige Zertifikat weiter aus, erneuert es aber nicht. Neuer Versuch beim nächsten Start."
     },
     "pause": {
       "button": "Blockieren pausieren",

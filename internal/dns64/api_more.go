@@ -1,14 +1,11 @@
 package dns64
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/ipv64net/node64/internal/dns64/filter"
 	"github.com/ipv64net/node64/internal/dns64/upstream"
@@ -17,42 +14,6 @@ import (
 
 // Weitere Endpunkte der lokalen API (alles, was die Oberflaeche kann) und die Logik, die Oberflaeche und API
 // gemeinsam nutzen.
-
-// acmeInput sind die Angaben fuer Let's Encrypt (Oberflaeche und API).
-type acmeInput struct {
-	Domain    string `json:"domain"`
-	Prefix    string `json:"prefix"`
-	Email     string `json:"email"`
-	Staging   bool   `json:"staging"`
-	AcceptTOS bool   `json:"accept_tos"` // Nutzungsbedingungen von Let's Encrypt akzeptiert
-	LANIP     string `json:"lan_ip"`     // optional: Name im Heimnetz auf diese IP legen
-}
-
-// configureACME speichert die Angaben, merkt die Zustimmung und legt den eigenen Eintrag an; gibt den Namen zurueck.
-func (m *Module) configureACME(ctx context.Context, in acmeInput) (string, error) {
-	if !in.AcceptTOS {
-		return "", errCfg("err_acme_tos")
-	}
-	c := m.loadConfig(ctx)
-	c.CertMode, c.ACMEDomain, c.ACMEPrefix, c.ACMEEmail, c.ACMEStaging = certACME, in.Domain, in.Prefix, in.Email, in.Staging
-	if err := m.saveConfig(ctx, c); err != nil {
-		return "", err
-	}
-	if err := m.core.SetSetting(ctx, setACMETOS, time.Now().UTC().Format(time.RFC3339)); err != nil {
-		return "", err
-	}
-	name := acmeName(m.loadConfig(ctx))
-	if ip := strings.TrimSpace(in.LANIP); ip != "" { // Name zeigt im Heimnetz auf die Node
-		typ := "A"
-		if a := net.ParseIP(ip); a != nil && a.To4() == nil {
-			typ = "AAAA"
-		}
-		if _, err := m.AddRecord(ctx, Record{Name: name, Type: typ, Value: ip}); err != nil && !isDup(err) {
-			return name, err
-		}
-	}
-	return name, nil
-}
 
 // importAllow uebernimmt Freigaben (eine Domain je Zeile; Kommentare und Zeitstempel werden ignoriert).
 func (m *Module) importAllow(lines []string) (n, bad int, err error) {
@@ -125,9 +86,6 @@ func (c *config) removeCustom(url string) bool {
 
 func (m *Module) apiMoreRoutes(mux *http.ServeMux, g module.Guards) {
 	plain := func(h http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(h)) }
-	mux.Handle("GET /api/dns64/acme", plain(m.apiACME))
-	mux.Handle("POST /api/dns64/acme", plain(m.apiACMEIssue))
-	mux.Handle("POST /api/dns64/acme/renew", plain(m.apiACMERenew))
 	mux.Handle("POST /api/dns64/records/{id}/enable", plain(m.apiRecordToggle(true)))
 	mux.Handle("POST /api/dns64/records/{id}/disable", plain(m.apiRecordToggle(false)))
 	mux.Handle("POST /api/dns64/allowlist/import", plain(m.apiAllowImport))
@@ -151,62 +109,6 @@ func (m *Module) apiSave(w http.ResponseWriter, r *http.Request, c config, statu
 		return
 	}
 	writeJSON(w, status, m.loadConfig(ctx))
-}
-
-func (m *Module) acmeJSON(ctx context.Context) map[string]any {
-	c := m.loadConfig(ctx)
-	v := m.acmeView(c)
-	out := map[string]any{"name": v.Name, "cert_mode": c.CertMode, "staging": v.Staging, "running": v.Running, "step": v.Step,
-		"error": v.Err, "tos_accepted": m.core.SettingOr(ctx, setACMETOS, "") != "", "issuer": v.Issuer}
-	if !v.NotAfter.IsZero() {
-		out["not_after"] = v.NotAfter.UTC()
-	}
-	if !v.At.IsZero() {
-		out["last_run"] = v.At.UTC()
-	}
-	return out
-}
-
-func (m *Module) apiACME(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, m.acmeJSON(r.Context()))
-}
-
-func (m *Module) apiACMEIssue(w http.ResponseWriter, r *http.Request) {
-	var in acmeInput
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&in); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON")
-		return
-	}
-	name, err := m.configureACME(r.Context(), in)
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, m.errText(r, err))
-		return
-	}
-	m.audit(r, "dns64.acme_tos", name, "staging="+strconv.FormatBool(in.Staging))
-	if err := m.restart(r.Context()); err != nil {
-		writeErr(w, http.StatusConflict, m.g.T(r, "dns64.err.restart", "err", err.Error()))
-		return
-	}
-	if !m.startACME("issue") {
-		writeErr(w, http.StatusConflict, "certificate request already running or module off")
-		return
-	}
-	m.audit(r, "dns64.acme_issue", name, "")
-	writeJSON(w, http.StatusAccepted, m.acmeJSON(r.Context()))
-}
-
-func (m *Module) apiACMERenew(w http.ResponseWriter, r *http.Request) {
-	c := m.loadConfig(r.Context())
-	if c.CertMode != certACME || acmeName(c) == "" {
-		writeErr(w, http.StatusConflict, "let's encrypt is not configured")
-		return
-	}
-	if !m.startACME("manual") {
-		writeErr(w, http.StatusConflict, "certificate request already running or module off")
-		return
-	}
-	m.audit(r, "dns64.acme_renew", acmeName(c), "")
-	writeJSON(w, http.StatusAccepted, m.acmeJSON(r.Context()))
 }
 
 func (m *Module) apiRecordToggle(on bool) http.HandlerFunc {

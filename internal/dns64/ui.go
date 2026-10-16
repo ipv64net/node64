@@ -33,8 +33,6 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /dns64/encrypted", page(m.pageTab("encrypted", "dns64.enc.title")))
 	mux.Handle("POST /dns64/encrypted", page(m.pageEncryptedSave))
 	mux.Handle("GET /dns64/ca.crt", page(m.pageCA))
-	mux.Handle("POST /dns64/acme", page(m.pageACME))
-	mux.Handle("POST /dns64/acme/renew", page(m.pageACMERenew))
 	mux.Handle("GET /dns64/dns64.mobileconfig", page(m.pageProfile))
 	mux.Handle("GET /dns64/settings", page(m.pageTab("settings", "dns64.settings.title")))
 	mux.Handle("POST /dns64/settings", page(m.pageSettingsSave))

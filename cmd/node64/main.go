@@ -187,7 +187,6 @@ func run() error {
 		dnsModule.SetWebCert(filepath.Join(cfg.TLSDir(), "cert.pem"), filepath.Join(cfg.TLSDir(), "key.pem"))
 	}
 	dnsModule.SetNotifier(dispatcher.Dispatch) // Upstream gestoert, Blockliste nicht ladbar
-	dnsModule.SetKey(ipv64Key)                 // Let's Encrypt per DNS-01 ueber die ipv64-API
 	modules.Register(dnsModule)
 	// Reverse-Proxy ueber den gemeinsamen Eingang
 	cdnModule := cdn64.New(st, logger.Slog(), edgeSrv, certMgr, Version)

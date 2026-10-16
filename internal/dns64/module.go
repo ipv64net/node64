@@ -32,7 +32,6 @@ import (
 	"github.com/ipv64net/node64/internal/dns64/querylog"
 	"github.com/ipv64net/node64/internal/dns64/upstream"
 	"github.com/ipv64net/node64/internal/edge"
-	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/store"
@@ -48,7 +47,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.10.0"
+	version   = "1.11.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -81,19 +80,12 @@ type Module struct {
 
 	notifier func(notify.Alert) // Meldungen (nil = keine)
 
-	key  *ipv64api.Key                   // zentraler ipv64-API-Key (Let's Encrypt per DNS-01)
-	acme acmeState                       // Stand des letzten Zertifikatsabrufs
-	cur  atomic.Pointer[tls.Certificate] // aktuelles Zertifikat fuer DoH/DoT/DoQ (wechselt ohne Neustart)
+	cur atomic.Pointer[tls.Certificate] // aktuelles Zertifikat fuer DoH/DoT/DoQ (wechselt ohne Neustart)
 	// certInUse: Kennung des Zertifikats aus der Verwaltung, das DNS64 gerade nutzt (0 = keins)
 	certInUse atomic.Int64
-	bg        sync.WaitGroup  // Hintergrundlaeufe (Zertifikatsabruf)
-	bgCtx     context.Context // endet mit dem Modul
+	migErr    string // Umzug in die Verwaltung noch nicht erledigt: letzter Fehler (m.mu)
 
 	pauseUntil atomic.Int64 // Blockieren aus bis (UnixNano), -1 = bis zum Wiedereinschalten, 0 = aktiv (pause.go)
-
-	domMu   sync.Mutex // Domains des Accounts (Seite Verschluesselung)
-	domList []string
-	domAt   time.Time
 }
 
 const retryEvery = time.Minute
@@ -199,7 +191,7 @@ func (m *Module) startLocked() error {
 		return nil
 	}
 	lctx, cancel := context.WithCancel(context.Background())
-	m.life, m.bgCtx = cancel, lctx
+	m.life = cancel
 	if m.tryStart(lctx) != nil {
 		m.retryWG.Add(1)
 		go m.retry(lctx)
@@ -307,7 +299,6 @@ func (m *Module) stopLocked(ctx context.Context) error {
 	m.life, m.eng, m.lastErr = nil, nil, ""
 	m.mu.Unlock()
 	m.retryWG.Wait()
-	m.bg.Wait() // laufender Zertifikatsabruf endet mit dem Kontext
 	if e == nil {
 		return nil
 	}

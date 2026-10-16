@@ -52,8 +52,10 @@ func (m *Module) migrateCentral(ctx context.Context, c *config) {
 	}
 	if err := m.doMigrate(ctx, c); err != nil {
 		m.log.Warn("dns64 certificates not moved to the certificate management yet", "err", err)
+		m.migErr = err.Error()
 		return
 	}
+	m.migErr = ""
 	_ = m.core.SetSetting(ctx, setCentralDone, time.Now().UTC().Format(time.RFC3339))
 }
 
@@ -196,6 +198,7 @@ func sorted(s []string) []string {
 // centralOpt: ein Zertifikat der Verwaltung zur Auswahl auf der Seite.
 type centralOpt struct {
 	ID       int64
+	Name     string // erster Name (fuer die Geraete)
 	Title    string
 	Issuer   string
 	NotAfter time.Time
@@ -216,7 +219,7 @@ func (m *Module) centralList(ctx context.Context) []centralOpt {
 		if c.Status != certs.StatusValid || (owned != nil && c.ID == owned.ID) {
 			continue
 		}
-		out = append(out, centralOpt{ID: c.ID, Title: strings.Join(c.Names, ", "), Issuer: c.Issuer, NotAfter: c.NotAfter})
+		out = append(out, centralOpt{ID: c.ID, Name: firstOr(c.Names, ""), Title: strings.Join(c.Names, ", "), Issuer: c.Issuer, NotAfter: c.NotAfter})
 	}
 	return out
 }

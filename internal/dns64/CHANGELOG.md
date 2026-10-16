@@ -1,5 +1,13 @@
 # Änderungen – DNS64
 
+## 1.11.0 – 2026-10-16
+
+### Entfernt
+- Eigene Let's-Encrypt-Anbindung von DNS64 (Abruf und Erneuerung per DNS-01, Formular auf der Seite Verschlüsselung, `GET|POST /api/dns64/acme`, `POST /api/dns64/acme/renew`, Meldung „DNS64-Zertifikat“). Zertifikate holt und erneuert die zentrale Zertifikatsverwaltung, Fehler und Ablauf meldet sie. Der ipv64-API-Key wird in DNS64 nicht mehr gebraucht.
+
+### Geändert
+- Nicht umgezogene Installationen (z. B. fehlende Zustimmung zu den Nutzungsbedingungen) liefern das bisherige Let's-Encrypt-Zertifikat weiter aus, bis der Umzug klappt; die Seite Verschlüsselung zeigt den Grund. Der Umzug liest dafür weiter `acme/` und die Einstellungen `dns64.acme_*`.
+
 ## 1.10.0 – 2026-10-16
 
 ### Neu

@@ -62,7 +62,7 @@
 							<select class="form-select" id="cert_mode" name="cert_mode">
 								<option value="self"{{if eq $d.Cfg.CertMode "self"}} selected{{end}}>{{.T "dns64.enc.cert_self"}}</option>
 								<option value="node64"{{if eq $d.Cfg.CertMode "node64"}} selected{{end}}>{{.T "dns64.enc.cert_node64"}}</option>
-								{{if and $d.Cfg.ACMEDomain (or (not $e.Central) (eq $d.Cfg.CertMode "acme"))}}<option value="acme"{{if eq $d.Cfg.CertMode "acme"}} selected{{end}}>{{.T "dns64.enc.cert_acme"}}</option>{{end}}
+								{{if eq $d.Cfg.CertMode "acme"}}<option value="acme" selected>{{.T "dns64.enc.cert_acme"}}</option>{{end}}
 								{{if $e.Central}}<option value="central"{{if eq $d.Cfg.CertMode "central"}} selected{{end}}>{{.T "dns64.enc.cert_central"}}</option>{{end}}
 							</select>
 							{{if $e.Central}}<label class="form-label mt-2" for="cert_id">{{.T "dns64.enc.cert_id"}}</label>
@@ -81,50 +81,11 @@
 	<div class="col-xl-6 d-flex flex-column gap-3">
 		<div class="card" id="acme">
 			<div class="card-header"><i class="bi bi-patch-check text-success"></i> {{.T "dns64.acme.title"}}</div>
-			<div class="card-body small"{{if $e.ACME.Running}} data-dns64-reload="3"{{end}}>
-				{{if and $e.Central (ne $d.Cfg.CertMode "acme")}}
+			<div class="card-body small">
+				{{if $e.MigErr}}<div class="alert alert-warning py-2"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.acme.mig_failed" "err" $e.MigErr}}</div>{{end}}
 				{{with $e.Current}}<div class="alert alert-success py-2"><i class="bi bi-patch-check"></i> {{$.T "dns64.enc.central_have" "name" .Title "issuer" .Issuer "date" ($.Date .NotAfter)}}</div>{{end}}
 				<p class="text-body-secondary mb-2">{{.T "dns64.acme.moved"}}</p>
 				<a class="btn btn-sm btn-outline-primary" href="/certificates"><i class="bi bi-shield-lock"></i> {{.T "dns64.enc.cert_manage"}}</a>
-				{{else}}
-				<p class="text-body-secondary">{{.T "dns64.acme.hint"}}</p>
-				{{if $e.ACME.Issuer}}<div class="alert alert-success py-2"><i class="bi bi-patch-check"></i> {{.T "dns64.acme.have" "name" $e.ACME.Name "issuer" $e.ACME.Issuer "date" (.Date $e.ACME.NotAfter)}}{{if $e.ACME.Staging}} <span class="badge text-bg-warning">{{.T "dns64.acme.staging_badge"}}</span>{{end}}</div>{{end}}
-				{{if $e.ACME.Running}}<div class="alert alert-info py-2"><span class="spinner-border spinner-border-sm"></span> {{.T "dns64.acme.running"}} <span class="font-monospace">{{.T (print "dns64.acme.step." $e.ACME.Step)}}</span></div>
-				{{else if $e.ACME.Err}}<div class="alert alert-danger py-2">{{.T "dns64.acme.failed"}} <span class="font-monospace text-break">{{$e.ACME.Err}}</span></div>{{end}}
-				{{if not $e.KeyOK}}<div class="alert alert-warning py-2 mb-0">{{.T "dns64.acme.no_key"}} <a href="/settings#ipv64">{{.T "nav.settings"}}</a></div>
-				{{else}}<form method="post" action="/dns64/acme">
-					<input type="hidden" name="_csrf" value="{{.CSRF}}">
-					<div class="row g-2">
-						<div class="col-sm-4">
-							<label class="form-label" for="prefix">{{.T "dns64.acme.prefix"}}</label>
-							<input type="text" class="form-control font-monospace" id="prefix" name="prefix" value="{{$d.Cfg.ACMEPrefix}}" placeholder="dns" maxlength="60">
-						</div>
-						<div class="col-sm-8">
-							<label class="form-label" for="domain">{{.T "dns64.acme.domain"}}</label>
-							<select class="form-select font-monospace" id="domain" name="domain" required>
-								{{range $e.Domains}}<option{{if eq . $d.Cfg.ACMEDomain}} selected{{end}}>{{.}}</option>{{end}}
-							</select>
-						</div>
-						<div class="col-sm-6">
-							<label class="form-label" for="lan_ip">{{.T "dns64.acme.lan_ip"}}</label>
-							<input type="text" class="form-control font-monospace" id="lan_ip" name="lan_ip" value="{{$e.LANIP}}">
-						</div>
-						<div class="col-sm-6">
-							<label class="form-label" for="email">{{.T "dns64.acme.email"}}</label>
-							<input type="email" class="form-control" id="email" name="email" value="{{$d.Cfg.ACMEEmail}}" placeholder="{{.T "common.optional"}}">
-						</div>
-						<div class="col-12 form-text mt-1">{{.T "dns64.acme.lan_hint"}}</div>
-						<div class="col-12">
-							<div class="form-check"><input class="form-check-input" type="checkbox" id="staging" name="staging" value="1"{{if $d.Cfg.ACMEStaging}} checked{{end}}><label class="form-check-label" for="staging">{{.T "dns64.acme.staging"}}</label></div>
-							<div class="form-check"><input class="form-check-input" type="checkbox" id="tos" name="tos" value="1"{{if $e.TOS}} checked{{end}} required><label class="form-check-label" for="tos">{{.T "dns64.acme.tos"}} <a href="https://letsencrypt.org/repository/" target="_blank" rel="noopener">letsencrypt.org/repository</a></label></div>
-						</div>
-					</div>
-					<div class="d-flex flex-wrap gap-2 mt-3">
-						<button class="btn btn-success" type="submit"{{if $e.ACME.Running}} disabled{{end}}><i class="bi bi-patch-check"></i> {{.T "dns64.acme.issue"}}</button>
-						{{if $e.ACME.Issuer}}<button class="btn btn-outline-secondary" type="submit" formaction="/dns64/acme/renew" formnovalidate{{if $e.ACME.Running}} disabled{{end}}><i class="bi bi-arrow-repeat"></i> {{.T "dns64.acme.renew"}}</button>{{end}}
-					</div>
-				</form>{{end}}
-				{{end}}
 			</div>
 		</div>
 		<div class="card">

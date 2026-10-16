@@ -2005,7 +2005,6 @@
       "enc_port": "The ports for DoH and DoT/DoQ must be between 1 and 65535 and differ from the DNS port (DoH also from DoT).",
       "enc_name": "“{name}” is not a valid name (IPs are added to the certificate automatically).",
       "cert_id": "Please select a certificate from the certificate management.",
-      "acme_tos": "Please accept the Let's Encrypt terms of service.",
       "acme_domain": "Please choose a valid ipv64 domain.",
       "acme_prefix": "Invalid name in front of the domain (e.g. dns).",
       "acme_email": "Invalid e-mail address.",
@@ -2047,34 +2046,7 @@
     "acme": {
       "title": "Let's Encrypt",
       "moved": "Let's Encrypt certificates are now created in the certificate management (also via DNS-01 with the ipv64 API key) and selected on the left under “Certificate”. An existing DNS64 certificate was moved there during the update.",
-      "hint": "Publicly valid certificate for a name under one of your ipv64 domains. Validated via DNS (TXT record through the ipv64 API with the central API key); the name does not need to be reachable from the internet. All devices then accept the encrypted services without installing a CA, including Android “Private DNS”. Renewed automatically 30 days before expiry.",
-      "prefix": "Name",
-      "domain": "ipv64 domain",
-      "email": "E-mail for Let's Encrypt",
-      "lan_ip": "Node IP on the home network",
-      "lan_hint": "DNS64 adds the name as a custom record for this IP so devices on the home network find the node under it (empty = add it yourself).",
-      "staging": "Let's Encrypt staging (untrusted certificate, for trying out)",
-      "tos": "I accept the Let's Encrypt terms of service:",
-      "issue": "Save and get certificate",
-      "renew": "Renew now",
-      "started": "Getting the certificate for {name}, this takes about a minute.",
-      "running": "Getting certificate:",
-      "failed": "Last attempt failed:",
-      "have": "Certificate for {name} from {issuer}, valid until {date}.",
-      "staging_badge": "staging",
-      "no_key": "Let's Encrypt needs the central ipv64 API key:",
-      "step": {
-        "issue": "start",
-        "renew": "renewal",
-        "manual": "start",
-        "account": "Let's Encrypt account",
-        "order": "order",
-        "txt": "creating TXT record at ipv64",
-        "dns": "waiting for the ipv64 nameservers",
-        "validate": "validation by Let's Encrypt",
-        "certificate": "issuing certificate",
-        "ok": "done"
-      }
+      "mig_failed": "The move to the certificate management is still pending ({err}); until then DNS64 keeps serving the previous certificate but does not renew it. Next attempt at the next start."
     },
     "pause": {
       "button": "Pause blocking",
