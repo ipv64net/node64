@@ -236,6 +236,14 @@ Das Modul *CDN64* (in den Einstellungen einschalten) ersetzt den Nginx Proxy Man
 
 Der Node ist durchgehend Dual-Stack: die Oberfläche lauscht auf IPv4 und IPv6, jeder Check hat einen Modus (`auto`, `ipv4`, `ipv6`, `both` = zwei getrennte Ergebnisse), ICMP pingt v4 und v6, Benachrichtigungen und die spätere ipv64-Verknüpfung nutzen beides. Vor jedem Check prüft der Node, ob die jeweilige Adressfamilie im Container überhaupt erreichbar ist, damit ein fehlendes IPv6 im Docker-Netz nicht als Störung des Ziels gemeldet wird.
 
+Dasselbe gilt für die übrigen Teile:
+- **Gemeinsamer Eingang:** 80/443 inklusive HTTP/3.
+- **CDN64:** Proxy-Hosts, TLS durchreichen und Streams (TCP/UDP), jeweils auch mit IPv6-Ziel wie `[fd00::5]:8080`. Zugriffslisten nehmen auch IPv6-Netze. Die echte Client-IP wird erkannt, auch bei IPv4-Clients über Dual-Stack-Sockets.
+- **DNS64:** DNS, DoH, DoT und DoQ.
+- **Zertifikate:** Die eigene CA stellt auch für IPv6-Adressen aus. Die Let's-Encrypt-Prüfung erreicht die Nameserver über IPv4 oder IPv6.
+
+Live geprüft über `::1` und `127.0.0.1`.
+
 Docker gibt Containern standardmäßig **kein IPv6**. Damit Checks per IPv6 laufen, dem Netz IPv6 geben (Docker 27+, compose):
 
 ```yaml
