@@ -52,15 +52,20 @@ Namen am Eingang. Ein Wechsel greift sofort, ohne Neustart.
 | Abnehmer | Wie | „benutzt von“ |
 |---|---|---|
 | CDN64 | Proxy-Hosts und Streams wählen ein Zertifikat oder nehmen das passende zum Namen; im Host-Formular lässt sich gleich eins anfordern | Namen der Hosts |
-| DNS64 (ab 1.10.0) | DoH, DoT, DoQ; Modus „Zertifikat aus der Zentrale“ oder Server-Zertifikat der eigenen CA (Namen und IPs der Node) | DNS64 |
+| DNS64 (ab 1.10.0) | DoH, DoT, DoQ; Modus „Aus der Zertifikatsverwaltung“ (`central`) oder Server-Zertifikat der eigenen CA (Namen und private IPs der Node, 800 Tage; neu ausgestellt, wenn sich Namen oder IPs ändern) | DNS64 |
 | Oberfläche | HTTPS-Port und Name am Eingang | Node64-Oberfläche |
 | andere Geräte | Download oder API | – |
 
 **Umzug von DNS64 (einmal beim Update auf DNS64 1.10.0):**
 - Die eigene CA von DNS64 kommt als „DNS64 Heimnetz-CA“ in die Zentrale, mit gleichem Schlüssel. Geräte, die ihr
   vertrauen, merken nichts.
-- Ein vorhandenes Let's-Encrypt-Zertifikat (Modus `acme`) wird samt Schlüssel übernommen und ab dann von der
-  Zentrale erneuert. Voraussetzung: Die Nutzungsbedingungen wurden in DNS64 angenommen.
+- **Modus `acme`:**
+  - Ein vorhandenes Let's-Encrypt-Zertifikat wird samt Schlüssel übernommen und ab dann von der Zentrale
+    erneuert.
+  - Gibt es noch keins, legt der Umzug es in der Zentrale neu an (ipv64, gleicher Name, gleicher
+    Staging-Schalter).
+  - In beiden Fällen steht DNS64 danach auf `central` mit der Kennung des Zertifikats.
+  - Voraussetzung: Die Nutzungsbedingungen wurden in DNS64 angenommen.
 - Scheitert etwas, bleibt der alte Modus, und beim nächsten Start gibt es einen neuen Versuch.
 - Die alten Dateien unter `dns64/tls` und `dns64/acme` bleiben als Rückfall liegen.
 
