@@ -320,6 +320,7 @@ func selfSignedPEM(t *testing.T, days int, names ...string) (string, string) {
 func TestUploadInUseAndExpiryWarning(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, nil)
+	e.m.loopFirst, e.m.loopEvery = 10*time.Millisecond, 20*time.Millisecond // vor dem ersten Zertifikat (startet die Schleife)
 	certPEM, keyPEM := selfSignedPEM(t, 10, "files.example.org")
 	_, otherKey := selfSignedPEM(t, 10, "x.example.org")
 	var ve *ValidationError
@@ -344,11 +345,8 @@ func TestUploadInUseAndExpiryWarning(t *testing.T) {
 	if err := e.m.Delete(ctx, c.ID, false); !errors.Is(err, ErrInUse) {
 		t.Fatalf("delete in use: %v", err)
 	}
-	// Erneuerung/Warnung laeuft nur, solange ein Abnehmer die Verwaltung haelt
-	e.m.loopFirst, e.m.loopEvery = 10*time.Millisecond, 20*time.Millisecond
-	e.m.Acquire("cdn64")
+	// Warnung auch ohne Abnehmer: die Verwaltung haelt sich, solange es Zertifikate gibt
 	time.Sleep(150 * time.Millisecond)
-	e.m.Release("cdn64")
 	if k := e.kinds(); len(k) != 1 || k[0] != notify.KindCertExpiry {
 		t.Fatalf("one expiry warning expected: %v", k)
 	}
@@ -364,7 +362,8 @@ func TestRenewalDue(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, nil)
 	_ = e.m.SetAccount(ctx, "", true)
-	e.ca.validity = 20 * 24 * time.Hour // unter 30 Tagen: faellig
+	e.m.loopFirst, e.m.loopEvery = 10*time.Millisecond, 20*time.Millisecond // vor dem ersten Zertifikat (startet die Schleife)
+	e.ca.validity = 20 * 24 * time.Hour                                     // unter 30 Tagen: faellig
 	c, err := e.m.Create(ctx, Request{Names: []string{"a.home.ipv64.de"}, Source: SourceIPv64})
 	if err != nil {
 		t.Fatal(err)
@@ -373,23 +372,23 @@ func TestRenewalDue(t *testing.T) {
 	e.ca.mu.Lock()
 	e.ca.validity = 90 * 24 * time.Hour
 	e.ca.mu.Unlock()
-	time.Sleep(50 * time.Millisecond) // ohne Abnehmer: keine Erneuerung
-	e.ca.mu.Lock()
-	issued := e.ca.issued
-	e.ca.mu.Unlock()
-	if issued != 1 {
-		t.Fatalf("no renewal without consumer: %d", issued)
-	}
-	e.m.loopFirst, e.m.loopEvery = 10*time.Millisecond, 20*time.Millisecond
-	e.m.Acquire("cdn64")
-	defer e.m.Release("cdn64")
+	// ohne Abnehmer: die Verwaltung erneuert selbst, weil es ein Zertifikat gibt
 	for i := 0; i < 100; i++ {
 		if c, _ := e.m.Get(ctx, c.ID); c.DaysLeft() > 80 {
 			e.ca.mu.Lock()
-			issued = e.ca.issued
+			issued := e.ca.issued
 			e.ca.mu.Unlock()
-			if issued != 2 {
-				t.Fatalf("renewed once expected: %d", issued)
+			if issued < 2 {
+				t.Fatalf("renewal expected: %d", issued)
+			}
+			if err := e.m.Delete(ctx, c.ID, false); err != nil {
+				t.Fatal(err)
+			}
+			e.m.mu.Lock()
+			running := e.m.stopLp != nil
+			e.m.mu.Unlock()
+			if running {
+				t.Fatal("renewal loop must stop without certificates and consumers")
 			}
 			return
 		}

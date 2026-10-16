@@ -61,7 +61,7 @@ func tabs(active string) []tab {
 		{Path: "/cdn64/dead", Icon: "bi-sign-stop", TitleKey: "cdn64.tab.dead"},
 		{Path: "/cdn64/streams", Icon: "bi-ethernet", TitleKey: "cdn64.tab.streams"},
 		{Path: "/cdn64/access", Icon: "bi-person-lock", TitleKey: "cdn64.tab.access"},
-		{Path: "/cdn64/certificates", Icon: "bi-shield-lock", TitleKey: "cdn64.tab.certs"},
+		{Path: "/certificates", Icon: "bi-shield-lock", TitleKey: "cdn64.tab.certs"}, // Kernseite
 		{Path: "/cdn64/log", Icon: "bi-list-columns", TitleKey: "cdn64.tab.log"},
 		{Path: "/cdn64/default", Icon: "bi-question-square", TitleKey: "cdn64.tab.default"}}
 	for i := range t {
@@ -445,7 +445,7 @@ func (m *Module) saveForm(w http.ResponseWriter, r *http.Request, h *Host, isNew
 			m.g.Flash(w, r, "warning", m.g.T(r, "cdn64.dnsrec.failed", "error", msg))
 		} else {
 			n, text := dnsSummary(res)
-			m.g.Audit(r, "cdn64.dns.create", strings.Join(h.Names, ","), text)
+			m.g.Audit(r, "certs.dns.create", strings.Join(h.Names, ","), text)
 			m.g.Flash(w, r, "info", m.g.T(r, "cdn64.dnsrec.result", "n", n, "details", text))
 		}
 	}
@@ -457,12 +457,12 @@ func (m *Module) saveForm(w http.ResponseWriter, r *http.Request, h *Host, isNew
 		}
 		c, err := m.requestCert(ctx, h.Names, src, "", "", dnsAcc, false)
 		if err != nil {
-			m.g.Flash(w, r, "warning", m.g.T(r, "cdn64.certs.host_saved_no_cert", "error", m.certError(r, err)))
+			m.g.Flash(w, r, "warning", m.g.T(r, "certs.host_saved_no_cert", "error", m.certError(r, err)))
 			http.Redirect(w, r, listPath(h.Kind), http.StatusSeeOther)
 			return
 		}
 		m.auditCert(r, c)
-		m.g.Flash(w, r, "success", m.g.T(r, "cdn64.certs.host_saved_cert", "name", c.Title()))
+		m.g.Flash(w, r, "success", m.g.T(r, "certs.host_saved_cert", "name", c.Title()))
 		http.Redirect(w, r, listPath(h.Kind), http.StatusSeeOther)
 		return
 	}

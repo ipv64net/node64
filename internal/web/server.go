@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/certs"
+	"github.com/ipv64net/node64/internal/certsui"
 	"github.com/ipv64net/node64/internal/config"
 	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/healthchecks"
@@ -65,6 +66,7 @@ type Server struct {
 	mux     *http.ServeMux
 	handler http.Handler
 	pages   map[string]*template.Template
+	certsUI *certsui.UI // Seite „Zertifikate“ (nil ohne Verwaltung)
 	limiter *loginLimiter
 	ipLimit *ipLimiter
 
@@ -77,6 +79,9 @@ const maxBody = 1 << 20 // 1 MB fuer Formulare und JSON
 // New baut Router und Templates.
 func New(d Deps) (*Server, error) {
 	s := &Server{Deps: d, log: d.Log.Slog().With("module", "web"), mux: http.NewServeMux(), limiter: newLoginLimiter(), ipLimit: newIPLimiter(300, 600)}
+	if d.Certs != nil {
+		s.certsUI = certsui.New(d.Certs)
+	}
 	if err := s.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -121,19 +126,28 @@ func (s *Server) parseTemplates() error {
 		}
 		s.pages[name] = t
 	}
-	// Seiten der Module: "<modul>/<name>" mit demselben Layout
+	// Seiten der Module: "<modul>/<name>" mit demselben Layout; die Zertifikatsseite des Kerns ebenso ("certs/<name>")
+	type named struct {
+		name string
+		tp   module.Templater
+	}
+	var parts []named
 	for _, m := range s.Modules.Modules() {
-		tp, ok := m.(module.Templater)
-		if !ok {
-			continue
+		if tp, ok := m.(module.Templater); ok {
+			parts = append(parts, named{m.Info().Name, tp})
 		}
-		mfs := tp.Templates()
+	}
+	if s.certsUI != nil {
+		parts = append(parts, named{certsui.Name, s.certsUI})
+	}
+	for _, part := range parts {
+		mfs := part.tp.Templates()
 		mpages, err := fs.Glob(mfs, "pages/*.html")
 		if err != nil {
 			return err
 		}
 		for _, p := range mpages {
-			name := m.Info().Name + "/" + p[len("pages/"):len(p)-len(".html")]
+			name := part.name + "/" + p[len("pages/"):len(p)-len(".html")]
 			t, err := template.New("layout.html").Funcs(funcs).ParseFS(templateFS, "templates/layout.html", "templates/partials/*.html")
 			if err != nil {
 				return err
@@ -185,10 +199,14 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /logs/download", s.auth(s.logsDownload))
 
 	// Module registrieren ihre Pfade selbst; deaktiviert = 404
-	s.Modules.Routes(s.mux, http.HandlerFunc(s.notFound), module.Guards{
+	guards := module.Guards{
 		Auth: s.authHandler, Render: s.renderModule, T: s.tr, Flash: s.flash, Actor: s.actor, ClientIP: s.clientIP, Audit: s.audit, CSRF: csrfToken, Lang: s.lang, Timezone: s.location,
 		Translate: s.I18n.T,
-	})
+	}
+	s.Modules.Routes(s.mux, http.HandlerFunc(s.notFound), guards)
+	if s.certsUI != nil { // Kern: immer da, unabhaengig von den Modulen
+		s.certsUI.Routes(s.mux, guards)
+	}
 	s.mux.HandleFunc("/", s.notFound)
 }
 

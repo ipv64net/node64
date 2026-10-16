@@ -1,0 +1,37 @@
+{{define "content"}}
+{{$d := .Data}}
+{{$a := $d.A}}
+<h1 class="h4 mb-3"><i class="bi bi-shield-lock text-primary"></i> {{if $d.New}}{{.T "certs.dns.new"}}{{else}}{{$a.Name}}{{end}}</h1>
+<div class="row g-3">
+	<div class="col-xl-7">
+		<form method="post" action="{{if $d.New}}/certificates/dns-accounts{{else}}/certificates/dns-accounts/{{$a.ID}}/edit{{end}}" class="card">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-body small">
+				{{if $d.Error}}<div class="alert alert-danger py-2">{{$d.Error}}</div>{{end}}
+				<label class="form-label fw-semibold" for="name">{{.T "certs.dns.name"}}</label>
+				<input class="form-control form-control-sm mb-3" id="name" name="name" value="{{$a.Name}}" required maxlength="100" placeholder="Cloudflare privat">
+				<label class="form-label fw-semibold" for="provider">{{.T "certs.dns.provider"}}</label>
+				<select class="form-select form-select-sm mb-3" id="provider" name="provider" data-provider-select{{if not $d.New}} disabled{{end}}>
+					{{range $d.Providers}}<option value="{{.ID}}"{{if eq .ID $a.Provider}} selected{{end}}>{{.Name}}</option>{{end}}
+				</select>
+				{{range $p := $d.Providers}}
+				<div data-provider-fields="{{$p.ID}}"{{if ne $p.ID $a.Provider}} class="d-none"{{end}}>
+					{{range $p.Fields}}
+					<label class="form-label" for="f_{{$p.ID}}_{{.Key}}">{{.Label}}{{if .Optional}} <span class="text-body-secondary">({{$.T "certs.dns.optional"}})</span>{{end}}</label>
+					<input class="form-control form-control-sm font-monospace mb-2" id="f_{{$p.ID}}_{{.Key}}" name="f_{{$p.ID}}_{{.Key}}" autocomplete="off" maxlength="500"
+						{{if .Secret}}type="password"{{if and (eq $p.ID $a.Provider) (index $a.Values .Key)}} placeholder="{{$.T "certs.dns.unchanged"}}"{{end}}{{else}}value="{{if eq $p.ID $a.Provider}}{{index $a.Values .Key}}{{end}}" placeholder="{{.Default}}"{{end}}>
+					{{end}}
+					<div class="form-text mb-2">{{$.T "certs.dns.docs"}} <span class="font-monospace">{{$p.Docs}}</span></div>
+				</div>
+				{{end}}
+				<div class="form-text">{{.T "certs.dns.hint"}}</div>
+			</div>
+			<div class="card-footer d-flex gap-2">
+				<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>
+				<a class="btn btn-outline-secondary btn-sm" href="/certificates">{{.T "common.cancel"}}</a>
+			</div>
+		</form>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/certs.js?v={{.Version}}"></script>{{end}}

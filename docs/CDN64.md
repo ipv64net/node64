@@ -17,7 +17,8 @@ HTTP/1.1, HTTP/2 und HTTP/3 selbst. Code: `internal/cdn64` (Modul), `internal/ed
    - Die Domain muss auf den Anschluss zeigen, am besten als CNAME auf die DynDNS-Domain.
    - Für Domains bei ipv64 legt CDN64 den Eintrag beim Anlegen des Hosts auf Wunsch selbst an.
 4. **Zertifikat:**
-   - Reiter *SSL-Zertifikate*: Nutzungsbedingungen von Let's Encrypt annehmen, dann anfordern. Oder im
+   - Menüpunkt *Zertifikate* (Kern, auch über den Reiter *SSL-Zertifikate*): Nutzungsbedingungen von Let's
+     Encrypt annehmen, dann anfordern. Oder im
      Host-Formular „Neues Zertifikat gleich mit anfordern“.
 5. **Docker:**
    - Empfohlen ist das Host-Netzwerk (`network_mode: host`), weil Streams beliebige Ports öffnen.
@@ -77,7 +78,7 @@ und keinem Modul:
 - **Speicherung:** Schlüssel und Zugangsdaten liegen mit `secret.key` verschlüsselt in der Datenbank und sind
   damit im Backup.
 - **Erneuerung:**
-  - automatisch 30 Tage vor Ablauf, solange CDN64 läuft;
+  - automatisch 30 Tage vor Ablauf, auch wenn CDN64 aus ist;
   - nach einem Fehler erst wieder nach 6 Stunden;
   - Meldungen an die Standardkanäle bei Fehlschlag (einmal je Störung), bei Entwarnung und 14 bzw. 3 Tage vor
     Ablauf.
@@ -127,7 +128,7 @@ Wiederholen: `go test -tags loadtest -run TestLoad -v ./internal/cdn64/`
 | Advanced (nginx-Konfiguration) | Erweitert: Kopfzeilen, Host-Kopf, Timeout, Upload-Grenze, Puffern, gzip, vertrauenswürdige Proxys |
 | Redirection Hosts / Streams / 404 Hosts | Weiterleitungen / Streams / 404-Hosts |
 | Access Lists | Zugriffslisten |
-| SSL Certificates (certbot-Plugins) | SSL-Zertifikate (ipv64, Alias, DNS-Anbieter, HTTP-01, eigene) |
+| SSL Certificates (certbot-Plugins) | Zertifikate im Kern (ipv64, Alias, DNS-Anbieter, HTTP-01, eigene) |
 | Default Site | Standardseite |
 | – | TLS durchreichen, Erreichbarkeit, Healthcheck anlegen, DNS-Eintrag bei ipv64, HTTP/3 |
 

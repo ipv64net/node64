@@ -175,7 +175,7 @@ func (m *Module) afterSaveAll(r *http.Request, h *Host, x extras) map[string]any
 			out["dns_error"] = err.Error()
 		} else {
 			_, text := dnsSummary(res)
-			m.g.Audit(r, "cdn64.dns.create", strings.Join(h.Names, ","), text)
+			m.g.Audit(r, "certs.dns.create", strings.Join(h.Names, ","), text)
 			out["dns_records"] = res
 		}
 	}

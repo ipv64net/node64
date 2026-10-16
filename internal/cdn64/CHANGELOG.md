@@ -1,5 +1,13 @@
 # Änderungen – CDN64
 
+## 1.4.1 – 2026-10-16
+
+### Geändert
+- Die Zertifikate haben einen eigenen Menüpunkt *Zertifikate* im Kern und gehören nicht mehr zu CDN64.
+  - Der Reiter *SSL-Zertifikate* führt dorthin.
+  - Die alten Adressen unter `/cdn64/certificates` und `/cdn64/dns-accounts` leiten weiter.
+- Zertifikate werden auch erneuert, wenn CDN64 aus ist.
+
 ## 1.4.0 – 2026-10-15
 
 Zertifikate auch bei anderen DNS-Anbietern, DNS-Einträge bei ipv64 beim Anlegen.

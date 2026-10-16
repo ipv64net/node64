@@ -70,6 +70,19 @@ Für Skripte auf anderen Geräten, mit einem normalen API-Key (`Authorization: B
   30 Tage vor Ablauf.
 - **Mehrere CAs** sind möglich, z. B. die übernommene DNS64-CA und eine eigene.
 
+## Fertig
+
+- **Z0 (2026-10-16):**
+  - Seite im Kern: Paket `internal/certsui`, Pfad `/certificates`, Menüpunkt „Zertifikate“ (`nav.certificates`).
+  - Die Texte stehen im eigenen i18n-Block `certs`.
+  - Die alten Pfade unter `/cdn64/certificates` und `/cdn64/dns-accounts` leiten mit 301 weiter. DNS-Zugänge
+    bearbeiten heißt jetzt `/certificates/dns-accounts/{id}/edit`.
+  - Die Verwaltung hält sich selbst (`holdSelf`), solange es Zertifikate gibt. Ohne Zertifikate und Abnehmer
+    läuft keine Schleife.
+  - Ablauf-Warnungen auch für hochgeladene Zertifikate.
+  - Meldungen verlinken auf `/certificates`.
+  - CDN64 1.4.1.
+
 ## Phasen
 
 | Phase | Inhalt |

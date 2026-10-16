@@ -162,12 +162,12 @@
 					{{with index $d.Errors "cert_id"}}<div class="invalid-feedback">{{.}}</div>{{end}}
 					<div class="form-text mb-3">{{.T "cdn64.f.cert_hint"}}</div>
 					<div class="border rounded p-2 mb-3 d-none" data-new-cert>
-						<label class="form-label" for="cert_source">{{.T "cdn64.certs.method"}}</label>
+						<label class="form-label" for="cert_source">{{.T "certs.method"}}</label>
 						<select class="form-select form-select-sm mb-1" id="cert_source" name="cert_source">
-							<option value="auto">{{.T "cdn64.certs.src.auto"}}</option>
-							<option value="ipv64">{{.T "cdn64.certs.src.ipv64"}}</option>
-							<option value="http">{{.T "cdn64.certs.src.http"}}</option>
-							{{range $d.DNS}}<option value="dns:{{.ID}}">{{$.T "cdn64.certs.src.dns"}}: {{.Name}}</option>{{end}}
+							<option value="auto">{{.T "certs.src.auto"}}</option>
+							<option value="ipv64">{{.T "certs.src.ipv64"}}</option>
+							<option value="http">{{.T "certs.src.http"}}</option>
+							{{range $d.DNS}}<option value="dns:{{.ID}}">{{$.T "certs.src.dns"}}: {{.Name}}</option>{{end}}
 						</select>
 						<div class="form-text">{{.T "cdn64.f.cert_new_hint"}}</div>
 					</div>

@@ -36,6 +36,11 @@ type testApp struct {
 func newTestApp(t *testing.T) *testApp { return newTestAppWith(t) }
 
 func newTestAppWith(t *testing.T, mods ...module.Module) *testApp {
+	return newTestAppDeps(t, nil, mods...)
+}
+
+// newTestAppDeps: wie newTestAppWith, adjust ergaenzt die Abhaengigkeiten vor New (z. B. Certs).
+func newTestAppDeps(t *testing.T, adjust func(*Deps), mods ...module.Module) *testApp {
 	t.Helper()
 	dir := t.TempDir()
 	logger := logging.New("debug", "text", io.Discard)
@@ -58,7 +63,11 @@ func newTestAppWith(t *testing.T, mods ...module.Module) *testApp {
 		reg.Register(m)
 	}
 	cfg := &config.Config{DataDir: dir, HTTPPort: 8080, LogLevel: "info"}
-	s, err := New(Deps{Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: reg, Sync: nodesync.NoOp{}, Version: "test", StartedAt: time.Now()})
+	d := Deps{Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: reg, Sync: nodesync.NoOp{}, Version: "test", StartedAt: time.Now()}
+	if adjust != nil {
+		adjust(&d)
+	}
+	s, err := New(d)
 	if err != nil {
 		t.Fatal(err)
 	}

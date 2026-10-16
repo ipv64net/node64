@@ -420,9 +420,10 @@ func needsRenewal(c *Cert) bool {
 	return !c.hasCert || time.Until(c.NotAfter) < renewBefore
 }
 
-// warnExpiry meldet einmal 14 und einmal 3 Tage vor Ablauf (benutzte oder automatisch erneuerte Zertifikate).
+// warnExpiry meldet einmal 14 und einmal 3 Tage vor Ablauf (benutzte, automatisch erneuerte und hochgeladene
+// Zertifikate).
 func (m *Manager) warnExpiry(ctx context.Context, c *Cert) {
-	if !c.hasCert || (len(c.UsedBy) == 0 && !c.AutoRenew) {
+	if !c.hasCert || (len(c.UsedBy) == 0 && !c.AutoRenew && c.Source != SourceUpload) {
 		return
 	}
 	days, stage := c.DaysLeft(), ""

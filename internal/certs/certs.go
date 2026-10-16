@@ -3,7 +3,8 @@
 // und die Oberflaeche. Der private Schluessel liegt mit secret.key verschluesselt in der Datenbank; damit sind die
 // Zertifikate im Backup.
 //
-// Erneuert wird 30 Tage vor Ablauf, aber nur, solange ein Abnehmer die Verwaltung haelt (Acquire), damit im
+// Erneuert wird 30 Tage vor Ablauf, solange es Zertifikate gibt (die Verwaltung haelt sich dann selbst) oder ein
+// Abnehmer die Verwaltung haelt (Acquire). Ohne Zertifikate und Abnehmer laeuft keine Schleife, damit im
 // Leerlauf nichts laeuft. Ein Abruf von Hand geht immer.
 package certs
 
@@ -181,7 +182,24 @@ func New(ctx context.Context, d Deps) (*Manager, error) {
 		cancel()
 		return nil, err
 	}
+	m.refreshHold(ctx)
 	return m, nil
+}
+
+// holdSelf: die Verwaltung haelt sich selbst, solange es Zertifikate gibt (Erneuerung und Ablauf-Warnungen auch
+// fuer Zertifikate, die kein Modul benutzt, z. B. nur zum Herunterladen). Ohne Zertifikate laeuft nichts.
+const holdSelf = "certs"
+
+func (m *Manager) refreshHold(ctx context.Context) {
+	var n int
+	if err := m.r.QueryRowContext(ctx, `SELECT COUNT(*) FROM certs`).Scan(&n); err != nil {
+		return
+	}
+	if n > 0 {
+		m.Acquire(holdSelf)
+	} else {
+		m.Release(holdSelf)
+	}
 }
 
 // SetHTTP haengt den Eingang fuer HTTP-01 an (beim Start, vor dem ersten Abruf).
@@ -533,6 +551,7 @@ func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
 	}
 	id, _ := res.LastInsertId()
 	_ = m.start(id, "new")
+	m.refreshHold(ctx)
 	return m.Get(ctx, id)
 }
 
@@ -591,6 +610,7 @@ func (m *Manager) Upload(ctx context.Context, certPEM, keyPEM string) (*Cert, er
 	if err := m.reload(ctx); err != nil {
 		return nil, err
 	}
+	m.refreshHold(ctx)
 	return m.Get(ctx, id)
 }
 
@@ -628,6 +648,7 @@ func (m *Manager) Delete(ctx context.Context, id int64, force bool) error {
 	m.mu.Lock()
 	delete(m.loaded, id)
 	m.mu.Unlock()
+	m.refreshHold(ctx)
 	return nil
 }
 
@@ -644,6 +665,32 @@ func (m *Manager) Renew(ctx context.Context, id int64) error {
 		return ErrTOS
 	}
 	return m.start(id, "manual")
+}
+
+// AutoSource waehlt den Weg fuer neue Namen: ipv64 DNS-01, wenn alle Namen in Domains des ipv64-Accounts liegen,
+// sonst HTTP-01.
+func (m *Manager) AutoSource(ctx context.Context, names []string) string {
+	if !m.DNSReady(ctx) {
+		return SourceHTTP
+	}
+	domains, err := m.Domains(ctx)
+	if err != nil {
+		return SourceHTTP
+	}
+	for _, n := range names {
+		base := strings.TrimPrefix(strings.ToLower(strings.TrimSuffix(n, ".")), "*.")
+		found := false
+		for _, d := range domains {
+			if base == d || strings.HasSuffix(base, "."+d) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return SourceHTTP
+		}
+	}
+	return SourceIPv64
 }
 
 // DNSReady: DNS-01 ueber ipv64 ist moeglich (API-Key eingetragen), ohne Abruf bei ipv64.
