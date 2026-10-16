@@ -131,8 +131,9 @@ func lookupCNAME(ctx context.Context, name string) (string, error) {
 
 const waitDNS = 8 * time.Minute // ipv64 meist Sekunden, manche Anbieter (netcup) Minuten
 
-// lookupNS findet die Nameserver der Zone (Domain oder eine Ebene darueber), als ip:53.
-var lookupNS = func(ctx context.Context, domain string) ([]string, error) {
+// lookupNS findet die Nameserver der Zone (Domain oder eine Ebene darueber): je Nameserver seine Adressen als
+// ip:53, IPv4 und IPv6 (wer nur eine Familie nach aussen hat, erreicht ihn trotzdem).
+var lookupNS = func(ctx context.Context, domain string) ([][]string, error) {
 	name := domain
 	var hosts []string
 	for strings.Count(name, ".") >= 1 {
@@ -144,13 +145,16 @@ var lookupNS = func(ctx context.Context, domain string) ([]string, error) {
 		}
 		name = name[strings.Index(name, ".")+1:]
 	}
-	var out []string
+	var out [][]string
 	for _, h := range hosts {
+		var addrs []string
 		for _, fam := range []string{"ip4", "ip6"} { // IPv4 zuerst: Docker-Bridges haben oft kein IPv6
 			if ips, err := net.DefaultResolver.LookupNetIP(ctx, fam, h); err == nil && len(ips) > 0 {
-				out = append(out, net.JoinHostPort(ips[0].Unmap().String(), "53"))
-				break
+				addrs = append(addrs, net.JoinHostPort(ips[0].Unmap().String(), "53"))
 			}
+		}
+		if len(addrs) > 0 {
+			out = append(out, addrs)
 		}
 	}
 	if len(out) == 0 {
@@ -168,9 +172,12 @@ func waitTXT(ctx context.Context, zone, fqdn, want string) error {
 	deadline := time.Now().Add(waitDNS)
 	for {
 		ok := 0
-		for _, s := range servers {
-			if hasTXT(ctx, s, fqdn, want) {
-				ok++
+		for _, addrs := range servers { // ein Nameserver gilt, sobald eine seiner Adressen (v4 oder v6) liefert
+			for _, a := range addrs {
+				if hasTXT(ctx, a, fqdn, want) {
+					ok++
+					break
+				}
 			}
 		}
 		if ok == len(servers) {
