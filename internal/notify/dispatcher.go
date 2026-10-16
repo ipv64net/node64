@@ -822,7 +822,10 @@ func (d *Dispatcher) send(ctx context.Context, ch *Channel, m Message) {
 	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	err := s.Send(sctx, ch, m)
-	d.record(ctx, ch, m, err)
+	d.record(ctx, ch, m, retryNote(err, 0))
+	if IsTemporary(err) {
+		d.retry(ch, s, m, 0) // voruebergehender Fehler: spaeter erneut (retry.go)
+	}
 }
 
 // apiType: Kanaltypen, die die ipv64-API zustellt (die anderen Portal-Kanaele sendet die Node selbst).

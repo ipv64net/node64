@@ -67,7 +67,7 @@ func (b *Bridge) Send(ctx context.Context, req bridgeRequest) error {
 	r.Header.Set("X-HC2-Signature", hex.EncodeToString(mac.Sum(nil)))
 	resp, err := b.client.Do(r)
 	if err != nil {
-		return err
+		return notify.Temporary(err) // Netzwerk oder Zeitueberschreitung: spaeter erneut
 	}
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
@@ -84,7 +84,11 @@ func (b *Bridge) Send(ctx context.Context, req bridgeRequest) error {
 				msg = msg[:200]
 			}
 		}
-		return fmt.Errorf("bridge HTTP %d: %s", resp.StatusCode, msg)
+		err := fmt.Errorf("bridge HTTP %d: %s", resp.StatusCode, msg)
+		if resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusRequestTimeout {
+			return notify.Temporary(err) // Portal ueberlastet oder gestoert: spaeter erneut
+		}
+		return err
 	}
 	return nil
 }
