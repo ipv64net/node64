@@ -1,6 +1,7 @@
 package certsui
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -82,7 +83,9 @@ func (u *UI) pageCADelete(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if err := u.m.DeleteCA(r.Context(), id); err != nil {
+	if err := u.m.DeleteCA(r.Context(), id); errors.Is(err, certs.ErrInUse) {
+		u.g.Flash(w, r, "danger", u.g.T(r, "certs.ca.in_use", "name", ca.Name))
+	} else if err != nil {
 		u.g.Flash(w, r, "danger", u.certError(r, err))
 	} else {
 		u.g.Audit(r, "cert.ca.delete", strconv.FormatInt(id, 10), "name="+ca.Name)
@@ -123,7 +126,9 @@ func (u *UI) pageACMEDelete(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if err := u.m.DeleteACMECA(r.Context(), id); err != nil {
+	if err := u.m.DeleteACMECA(r.Context(), id); errors.Is(err, certs.ErrInUse) {
+		u.g.Flash(w, r, "danger", u.g.T(r, "certs.acme.in_use", "name", a.Name))
+	} else if err != nil {
 		u.g.Flash(w, r, "danger", u.certError(r, err))
 	} else {
 		u.g.Audit(r, "cert.acme_ca.delete", strconv.FormatInt(id, 10), "name="+a.Name)

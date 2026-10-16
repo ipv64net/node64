@@ -106,10 +106,7 @@ func (s *Server) saveUICertForm(r *http.Request) error {
 // uiCertUsers: fuer „benutzt von“ in der Verwaltung (Schutz beim Loeschen).
 func (s *Server) uiCertUsers(ctx context.Context) map[int64][]string {
 	out := map[int64][]string{}
-	if s.Cfg.TLSCertFile != "" {
-		return out
-	}
-	id := s.uiCertSel.Load()
+	id := s.uiCertSel.Load() // gilt fuer den Namen am Eingang auch, wenn NODE64_TLS_CERT den HTTPS-Port bedient
 	if id == 0 {
 		if name := s.Store.SettingOr(ctx, setUIName, ""); name != "" && s.Certs != nil {
 			id = s.Certs.MatchID(name)

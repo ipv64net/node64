@@ -673,7 +673,8 @@
       "import": "Import",
       "created": "CA “{name}” created.",
       "imported": "CA “{name}” imported.",
-      "deleted": "CA “{name}” deleted."
+      "deleted": "CA “{name}” deleted.",
+      "in_use": "CA “{name}” still has issued certificates. Delete them or move them to another CA first."
     },
     "acme": {
       "title": "ACME CAs",
@@ -690,7 +691,8 @@
       "root_hint": "Only for your own CA such as step-ca whose certificate is not publicly trusted.",
       "tos": "I accept the terms of service of this CA.",
       "created": "ACME CA “{name}” added.",
-      "deleted": "ACME CA “{name}” removed."
+      "deleted": "ACME CA “{name}” removed.",
+      "in_use": "Certificates still use the ACME CA “{name}”. Delete or move them first."
     },
     "why": {
       "nokey": "no ipv64 API key yet",

@@ -673,7 +673,8 @@
       "import": "Importieren",
       "created": "CA „{name}“ erzeugt.",
       "imported": "CA „{name}“ importiert.",
-      "deleted": "CA „{name}“ gelöscht."
+      "deleted": "CA „{name}“ gelöscht.",
+      "in_use": "CA „{name}“ stellt noch Zertifikate aus. Erst diese löschen oder auf eine andere CA umstellen."
     },
     "acme": {
       "title": "ACME-Stellen",
@@ -690,7 +691,8 @@
       "root_hint": "Nur für eine eigene Stelle wie step-ca, deren Zertifikat nicht öffentlich vertraut wird.",
       "tos": "Ich nehme die Nutzungsbedingungen dieser Stelle an.",
       "created": "ACME-Stelle „{name}“ hinzugefügt.",
-      "deleted": "ACME-Stelle „{name}“ entfernt."
+      "deleted": "ACME-Stelle „{name}“ entfernt.",
+      "in_use": "Über die ACME-Stelle „{name}“ laufen noch Zertifikate. Erst diese löschen oder umstellen."
     },
     "why": {
       "nokey": "noch kein ipv64-API-Key",

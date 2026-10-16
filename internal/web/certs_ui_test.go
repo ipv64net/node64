@@ -249,6 +249,12 @@ func TestCertificatesCA(t *testing.T) {
 	if cas, _ := mgr.CAs(ctx); len(cas) != 1 { // benutzt: bleibt
 		t.Fatal("used CA must stay")
 	}
+	if _, body = a.get(t, "/certificates"); !strings.Contains(body, "stellt noch Zertifikate aus") {
+		t.Fatal("in-use message for the CA missing")
+	}
+	if !strings.Contains(body, `data-bs-popper-config='{"strategy":"fixed"}'`) && !strings.Contains(body, `data-bs-popper-config="{&#34;strategy&#34;:&#34;fixed&#34;}"`) {
+		t.Fatal("dropdown would be clipped by the table")
+	}
 }
 
 // Zertifikat der Oberflaeche: automatisch nach Namen, fest gewaehlt, selbst signiert; NODE64_TLS_CERT gewinnt.
@@ -294,6 +300,14 @@ func TestUICertificate(t *testing.T) {
 	if hello("node.test") != fallback {
 		t.Fatal("NODE64_TLS_CERT must win")
 	}
+	// fest gewaehlt bleibt es fuer den Namen am Eingang benutzt, auch mit NODE64_TLS_CERT
+	if err := s.saveUICert(req, strconv.FormatInt(c.ID, 10)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := mgr.Get(ctx, c.ID); len(got.UsedBy) != 1 {
+		t.Fatalf("used by with NODE64_TLS_CERT: %v", got.UsedBy)
+	}
+	_ = s.saveUICert(req, "auto")
 	s.Cfg.TLSCertFile = ""
 	s.loadUICert(ctx) // nach Neustart: gespeicherter Wert
 	if s.uiCertSel.Load() != 0 {

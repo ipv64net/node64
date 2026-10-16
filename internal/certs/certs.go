@@ -151,6 +151,7 @@ type Manager struct {
 	steps  map[int64]string // laufende Abrufe
 	users  map[string]func(ctx context.Context) map[int64][]string
 	holds  map[string]bool
+	holdMu sync.Mutex       // refreshHold: Zaehlen und Halten/Loslassen zusammen (sonst Release trotz Zertifikat)
 	onChg  []func(id int64) // nach jeder neuen Ausstellung
 	stopLp context.CancelFunc
 	lpDone chan struct{}
@@ -197,6 +198,8 @@ func New(ctx context.Context, d Deps) (*Manager, error) {
 const holdSelf = "certs"
 
 func (m *Manager) refreshHold(ctx context.Context) {
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
 	var n int
 	if err := m.r.QueryRowContext(ctx, `SELECT COUNT(*) FROM certs`).Scan(&n); err != nil {
 		return
@@ -549,7 +552,7 @@ func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
 			}
 		}
 	case SourceCA:
-		ca, err := m.loadCA(ctx, req.CAID)
+		ca, err := m.loadCA(ctx, req.CAID, false)
 		if err != nil {
 			return nil, invalid("ca_id", "unknown CA")
 		}

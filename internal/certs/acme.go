@@ -45,8 +45,6 @@ func (m *Manager) start(id int64, reason string) error {
 			delete(m.steps, id)
 			m.mu.Unlock()
 		}()
-		m.acme.Lock() // nacheinander: schont die Rate-Limits und die ipv64-API
-		defer m.acme.Unlock()
 		ctx, cancel := context.WithTimeout(m.base, 20*time.Minute) // manche Anbieter brauchen Minuten, bis TXT sichtbar ist
 		defer cancel()
 		m.issue(ctx, id, reason)
@@ -166,9 +164,11 @@ func (m *Manager) accountKey(ctx context.Context) (crypto.Signer, error) {
 
 // obtain: Auftrag, Pruefungen je Name, Zertifikat.
 func (m *Manager) obtain(ctx context.Context, c *Cert) error {
-	if c.Source == SourceCA {
+	if c.Source == SourceCA { // eigene CA: sofort, nicht hinter einem laufenden ACME-Abruf
 		return m.issueFromCA(ctx, c)
 	}
+	m.acme.Lock() // ACME nacheinander: schont die Rate-Limits und die ipv64-API
+	defer m.acme.Unlock()
 	if c.ACMECA == 0 && !m.Account(ctx).TOSAccepted {
 		return ErrTOS
 	}
@@ -241,7 +241,7 @@ func (m *Manager) obtain(ctx context.Context, c *Cert) error {
 	for _, d := range ders {
 		chain = append(chain, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: d})...)
 	}
-	return m.storeIssued(ctx, c.ID, string(chain), leaf, key)
+	return m.storeIssued(ctx, c.ID, c.Names, string(chain), leaf, key)
 }
 
 // authorize beantwortet die Pruefung fuer einen Namen.
@@ -411,10 +411,19 @@ func needsRenewal(c *Cert) bool {
 		return false // nach einem Fehler erst in 6 Stunden wieder
 	}
 	before := renewBefore
-	if c.Source == SourceCA && c.Days > 0 && time.Duration(c.Days)*24*time.Hour/3 < before {
-		before = time.Duration(c.Days) * 24 * time.Hour / 3 // kurze Laufzeit der eigenen CA: im letzten Drittel
+	if c.Source == SourceCA {
+		before = caRenewBefore(c.Days)
 	}
 	return !c.hasCert || time.Until(c.NotAfter) < before
+}
+
+// caRenewBefore: Zertifikate der eigenen CA werden 30 Tage vor Ablauf erneuert, bei kurzer Laufzeit im letzten
+// Drittel (sonst waere ein Zertifikat mit hoechstens 30 Tagen sofort wieder faellig).
+func caRenewBefore(days int) time.Duration {
+	if d := time.Duration(days) * 24 * time.Hour / 3; days > 0 && d < renewBefore {
+		return d
+	}
+	return renewBefore
 }
 
 // warnExpiry meldet einmal 14 und einmal 3 Tage vor Ablauf (benutzte, automatisch erneuerte und hochgeladene

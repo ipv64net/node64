@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -97,7 +98,10 @@ func (s *Server) apiCADelete(w http.ResponseWriter, r *http.Request) {
 		certErr(w, err)
 		return
 	}
-	if err := s.Certs.DeleteCA(r.Context(), id); err != nil {
+	if err := s.Certs.DeleteCA(r.Context(), id); errors.Is(err, certs.ErrInUse) {
+		writeErr(w, http.StatusConflict, "CA still has issued certificates")
+		return
+	} else if err != nil {
 		certErr(w, err)
 		return
 	}
@@ -150,7 +154,10 @@ func (s *Server) apiACMECADelete(w http.ResponseWriter, r *http.Request) {
 		certErr(w, err)
 		return
 	}
-	if err := s.Certs.DeleteACMECA(r.Context(), id); err != nil {
+	if err := s.Certs.DeleteACMECA(r.Context(), id); errors.Is(err, certs.ErrInUse) {
+		writeErr(w, http.StatusConflict, "ACME CA still has certificates")
+		return
+	} else if err != nil {
 		certErr(w, err)
 		return
 	}

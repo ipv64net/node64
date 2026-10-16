@@ -65,9 +65,10 @@ type CA struct {
 	Certificates int       `json:"certificates"` // davon ausgestellte Zertifikate
 	CreatedAt    time.Time `json:"created_at"`
 	cert         *x509.Certificate
-	chainPEM     string // CA mit uebergeordneten (ohne selbst signierte Root, fuer die Kette der Zertifikate)
+	chain        []*x509.Certificate // die CA und ihre uebergeordneten (wie gespeichert)
+	chainPEM     string              // CA mit uebergeordneten (ohne selbst signierte Root, fuer die Kette der Zertifikate)
 	allPEM       string
-	key          crypto.Signer
+	key          crypto.Signer // nur nach loadCA(..., true)
 }
 
 // CAInput: neue CA.
@@ -78,40 +79,64 @@ type CAInput struct {
 	Domains     []string `json:"domains"`     // zusaetzlich erlaubte Domains bei Einschraenkung
 }
 
-func parseCA(id int64, name, certPEM, keySealed string, imported bool, created string, box interface {
-	Decrypt(string) (string, error)
-}) (*CA, error) {
-	keyPEM, err := box.Decrypt(keySealed)
-	if err != nil {
-		return nil, err
-	}
-	pair, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
-	if err != nil {
-		return nil, err
-	}
-	signer, ok := pair.PrivateKey.(crypto.Signer)
-	if !ok {
-		return nil, errors.New("CA key cannot sign")
-	}
-	ca := &CA{ID: id, Name: name, Imported: imported, CreatedAt: store.ParseTime(created), cert: pair.Leaf, key: signer, allPEM: certPEM}
-	ca.fill()
-	for _, der := range pair.Certificate {
-		c, err := x509.ParseCertificate(der)
+func selfSigned(c *x509.Certificate) bool {
+	return c.Subject.String() == c.Issuer.String() && c.CheckSignatureFrom(c) == nil
+}
+
+// parseCAInfo liest das CA-Zertifikat samt Kette, ohne den Schluessel zu entschluesseln (Listen, Pruefungen,
+// Download).
+func parseCAInfo(id int64, name, certPEM string, imported bool, created string) (*CA, error) {
+	ca := &CA{ID: id, Name: name, Imported: imported, CreatedAt: store.ParseTime(created), allPEM: certPEM}
+	rest := []byte(certPEM)
+	for {
+		var b *pem.Block
+		if b, rest = pem.Decode(rest); b == nil {
+			break
+		}
+		if b.Type != "CERTIFICATE" {
+			continue
+		}
+		c, err := x509.ParseCertificate(b.Bytes)
 		if err != nil {
 			return nil, err
 		}
-		if c.CheckSignatureFrom(c) == nil && c.Subject.String() == c.Issuer.String() {
-			continue // Root gehoert nicht in die Kette des Servers
+		ca.chain = append(ca.chain, c)
+		if !selfSigned(c) { // Root gehoert nicht in die Kette des Servers
+			ca.chainPEM += string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: c.Raw}))
 		}
-		ca.chainPEM += string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
 	}
+	if len(ca.chain) == 0 {
+		return nil, errors.New("CA certificate not readable")
+	}
+	ca.cert = ca.chain[0]
+	ca.fill()
 	return ca, nil
+}
+
+// attachKey entschluesselt den Schluessel (nur zum Ausstellen).
+func (ca *CA) attachKey(keySealed string, box interface {
+	Decrypt(string) (string, error)
+}) error {
+	keyPEM, err := box.Decrypt(keySealed)
+	if err != nil {
+		return err
+	}
+	pair, err := tls.X509KeyPair([]byte(ca.allPEM), []byte(keyPEM))
+	if err != nil {
+		return err
+	}
+	signer, ok := pair.PrivateKey.(crypto.Signer)
+	if !ok {
+		return errors.New("CA key cannot sign")
+	}
+	ca.key = signer
+	return nil
 }
 
 func (ca *CA) fill() {
 	c := ca.cert
 	ca.Subject, ca.NotAfter = c.Subject.CommonName, c.NotAfter.UTC()
-	ca.Root = c.Subject.String() == c.Issuer.String() && c.CheckSignatureFrom(c) == nil
+	ca.Root = selfSigned(c)
 	ca.PermittedDNS = c.PermittedDNSDomains
 	ca.PermittedIP = nil
 	for _, n := range c.PermittedIPRanges {
@@ -121,38 +146,62 @@ func (ca *CA) fill() {
 	ca.Fingerprint = hex.EncodeToString(sum[:])
 }
 
-// permits prueft Namen und IPs gegen die Name Constraints der CA.
+// anchor: das Zertifikat, dem Geraete vertrauen sollen (die Root der Kette, falls mit importiert, sonst die CA).
+func (ca *CA) anchor() *x509.Certificate {
+	for i := len(ca.chain) - 1; i >= 0; i-- {
+		if selfSigned(ca.chain[i]) {
+			return ca.chain[i]
+		}
+	}
+	return ca.cert
+}
+
+func matchDomain(name, constraint string) bool {
+	constraint = strings.ToLower(constraint)
+	if strings.HasPrefix(constraint, ".") {
+		return strings.HasSuffix(name, constraint)
+	}
+	return name == constraint || strings.HasSuffix(name, "."+constraint)
+}
+
+// permits prueft Namen und IPs gegen die Name Constraints der CA und ihrer uebergeordneten CAs (erlaubt und
+// ausgeschlossen), wie es die Clients beim Pruefen tun.
 func (ca *CA) permits(names []string) error {
-	c := ca.cert
 	for _, n := range names {
-		if ip := net.ParseIP(n); ip != nil {
-			if len(c.PermittedIPRanges) == 0 {
+		ip := net.ParseIP(n)
+		base := strings.TrimPrefix(n, "*.")
+		for _, c := range ca.chain {
+			if ip != nil {
+				for _, r := range c.ExcludedIPRanges {
+					if r.Contains(ip) {
+						return fmt.Errorf("%s is excluded by %s", n, c.Subject.CommonName)
+					}
+				}
+				if len(c.PermittedIPRanges) > 0 {
+					ok := false
+					for _, r := range c.PermittedIPRanges {
+						ok = ok || r.Contains(ip)
+					}
+					if !ok {
+						return fmt.Errorf("%s is not allowed by the CA %s (only private addresses)", n, c.Subject.CommonName)
+					}
+				}
 				continue
 			}
-			ok := false
-			for _, r := range c.PermittedIPRanges {
-				ok = ok || r.Contains(ip)
+			for _, d := range c.ExcludedDNSDomains {
+				if matchDomain(base, d) {
+					return fmt.Errorf("%s is excluded by %s", n, c.Subject.CommonName)
+				}
 			}
-			if !ok {
-				return fmt.Errorf("%s is not allowed by the CA (only private addresses)", n)
+			if len(c.PermittedDNSDomains) > 0 {
+				ok := false
+				for _, d := range c.PermittedDNSDomains {
+					ok = ok || matchDomain(base, d)
+				}
+				if !ok {
+					return fmt.Errorf("%s is not allowed by the CA %s (allowed: %s)", n, c.Subject.CommonName, strings.Join(c.PermittedDNSDomains, ", "))
+				}
 			}
-			continue
-		}
-		if len(c.PermittedDNSDomains) == 0 {
-			continue
-		}
-		base := strings.TrimPrefix(n, "*.")
-		ok := false
-		for _, d := range c.PermittedDNSDomains {
-			d = strings.ToLower(d)
-			if strings.HasPrefix(d, ".") {
-				ok = ok || strings.HasSuffix(base, d)
-			} else {
-				ok = ok || base == d || strings.HasSuffix(base, "."+d)
-			}
-		}
-		if !ok {
-			return fmt.Errorf("%s is not allowed by the CA (allowed: %s)", n, strings.Join(c.PermittedDNSDomains, ", "))
 		}
 	}
 	return nil
@@ -160,7 +209,8 @@ func (ca *CA) permits(names []string) error {
 
 const caCols = `id, name, cert_pem, key_pem, imported, created_at`
 
-func (m *Manager) loadCA(ctx context.Context, id int64) (*CA, error) {
+// loadCA liest eine CA; withKey entschluesselt den Schluessel (nur zum Ausstellen).
+func (m *Manager) loadCA(ctx context.Context, id int64, withKey bool) (*CA, error) {
 	var name, certPEM, key, created string
 	var imported bool
 	err := m.r.QueryRowContext(ctx, `SELECT `+caCols+` FROM cert_cas WHERE id = ?`, id).Scan(&id, &name, &certPEM, &key, &imported, &created)
@@ -170,12 +220,39 @@ func (m *Manager) loadCA(ctx context.Context, id int64) (*CA, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseCA(id, name, certPEM, key, imported, created, m.d.Box)
+	ca, err := parseCAInfo(id, name, certPEM, imported, created)
+	if err != nil {
+		return nil, err
+	}
+	if withKey {
+		if err := ca.attachKey(key, m.d.Box); err != nil {
+			return nil, err
+		}
+	}
+	return ca, nil
+}
+
+// caCounts: ausgestellte Zertifikate je CA (eine Abfrage fuer alle).
+func (m *Manager) caCounts(ctx context.Context) map[int64]int {
+	out := map[int64]int{}
+	rows, err := m.r.QueryContext(ctx, `SELECT ca_id, COUNT(*) FROM certs WHERE source = ? GROUP BY ca_id`, SourceCA)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var n int
+		if rows.Scan(&id, &n) == nil {
+			out[id] = n
+		}
+	}
+	return out
 }
 
 // CAs liefert alle eigenen CAs.
 func (m *Manager) CAs(ctx context.Context) ([]*CA, error) {
-	rows, err := m.r.QueryContext(ctx, `SELECT `+caCols+` FROM cert_cas ORDER BY name`)
+	rows, err := m.r.QueryContext(ctx, `SELECT id, name, cert_pem, imported, created_at FROM cert_cas ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -183,12 +260,12 @@ func (m *Manager) CAs(ctx context.Context) ([]*CA, error) {
 	var out []*CA
 	for rows.Next() {
 		var id int64
-		var name, certPEM, key, created string
+		var name, certPEM, created string
 		var imported bool
-		if err := rows.Scan(&id, &name, &certPEM, &key, &imported, &created); err != nil {
+		if err := rows.Scan(&id, &name, &certPEM, &imported, &created); err != nil {
 			return nil, err
 		}
-		ca, err := parseCA(id, name, certPEM, key, imported, created, m.d.Box)
+		ca, err := parseCAInfo(id, name, certPEM, imported, created)
 		if err != nil {
 			m.log.Error("CA not readable", "id", id, "err", err)
 			continue
@@ -198,15 +275,16 @@ func (m *Manager) CAs(ctx context.Context) ([]*CA, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	counts := m.caCounts(ctx)
 	for _, ca := range out {
-		_ = m.r.QueryRowContext(ctx, `SELECT COUNT(*) FROM certs WHERE source = ? AND ca_id = ?`, SourceCA, ca.ID).Scan(&ca.Certificates)
+		ca.Certificates = counts[ca.ID]
 	}
 	return out, nil
 }
 
 // GetCA liefert eine CA.
 func (m *Manager) GetCA(ctx context.Context, id int64) (*CA, error) {
-	ca, err := m.loadCA(ctx, id)
+	ca, err := m.loadCA(ctx, id, false)
 	if err != nil {
 		return nil, err
 	}
@@ -369,7 +447,7 @@ func (m *Manager) DeleteCA(ctx context.Context, id int64) error {
 // CAFile liefert das CA-Zertifikat zum Verteilen: pem (mit Kette), crt (DER, Windows/Android) oder mobileconfig
 // (iOS/macOS).
 func (m *Manager) CAFile(ctx context.Context, id int64, format string) (data []byte, filename, contentType string, err error) {
-	ca, err := m.loadCA(ctx, id)
+	ca, err := m.loadCA(ctx, id, false)
 	if err != nil {
 		return nil, "", "", err
 	}
@@ -382,8 +460,8 @@ func (m *Manager) CAFile(ctx context.Context, id int64, format string) (data []b
 	switch format {
 	case "", "pem":
 		return []byte(ca.allPEM), base + ".pem", "application/x-pem-file", nil
-	case "crt":
-		return ca.cert.Raw, base + ".crt", "application/x-x509-ca-cert", nil
+	case "crt": // Vertrauensanker: bei einer Zwischen-CA die mit importierte Root
+		return ca.anchor().Raw, base + ".crt", "application/x-x509-ca-cert", nil
 	case "mobileconfig":
 		return []byte(caProfile(ca)), base + ".mobileconfig", "application/x-apple-aspen-config", nil
 	}
@@ -392,8 +470,11 @@ func (m *Manager) CAFile(ctx context.Context, id int64, format string) (data []b
 
 func caProfile(ca *CA) string {
 	x := html.EscapeString
+	root := ca.anchor()
+	sum := sha256.Sum256(root.Raw)
+	fp := hex.EncodeToString(sum[:])
 	uid := func(kind string) string {
-		h := sha256.Sum256([]byte(kind + ca.Fingerprint))
+		h := sha256.Sum256([]byte(kind + fp))
 		s := strings.ToUpper(hex.EncodeToString(h[:16]))
 		return s[0:8] + "-" + s[8:12] + "-" + s[12:16] + "-" + s[16:20] + "-" + s[20:32]
 	}
@@ -422,7 +503,7 @@ func caProfile(ca *CA) string {
 	<key>PayloadVersion</key><integer>1</integer>
 </dict>
 </plist>
-`, x(ca.Name), base64.StdEncoding.EncodeToString(ca.cert.Raw), x(ca.Name), ca.Fingerprint[:16], uid("ca"), x(ca.Name), ca.Fingerprint[:16], uid("profile"))
+`, x(ca.Name), base64.StdEncoding.EncodeToString(root.Raw), x(ca.Name), fp[:16], uid("ca"), x(ca.Name), fp[:16], uid("profile"))
 }
 
 func serialNumber() *big.Int {
@@ -433,7 +514,7 @@ func serialNumber() *big.Int {
 // issueFromCA stellt ein Zertifikat mit der eigenen CA aus (statt ACME).
 func (m *Manager) issueFromCA(ctx context.Context, c *Cert) error {
 	m.step(c.ID, "certificate")
-	ca, err := m.loadCA(ctx, c.CAID)
+	ca, err := m.loadCA(ctx, c.CAID, true)
 	if err != nil {
 		return fmt.Errorf("CA: %w", err)
 	}
@@ -475,18 +556,18 @@ func (m *Manager) issueFromCA(ctx context.Context, c *Cert) error {
 		return err
 	}
 	chain := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})) + ca.chainPEM
-	return m.storeIssued(ctx, c.ID, chain, leaf, key)
+	return m.storeIssued(ctx, c.ID, c.Names, chain, leaf, key)
 }
 
-// storeIssued speichert ein neues Zertifikat und laedt es sofort.
-func (m *Manager) storeIssued(ctx context.Context, id int64, chain string, leaf *x509.Certificate, key crypto.PrivateKey) error {
+// storeIssued speichert ein neues Zertifikat samt den Namen, auf die es ausgestellt ist, und laedt es sofort.
+func (m *Manager) storeIssued(ctx context.Context, id int64, names []string, chain string, leaf *x509.Certificate, key crypto.PrivateKey) error {
 	keyPEM, err := marshalKey(key)
 	if err != nil {
 		return err
 	}
 	now := store.Now()
-	if _, err := m.w.ExecContext(ctx, `UPDATE certs SET cert_pem = ?, key_pem = ?, not_before = ?, not_after = ?, issuer = ?, status = ?, last_error = '',
-		last_attempt = ?, warned = '', updated_at = ? WHERE id = ?`, chain, m.d.Box.Encrypt(keyPEM), store.FormatTime(leaf.NotBefore),
+	if _, err := m.w.ExecContext(ctx, `UPDATE certs SET names = ?, cert_pem = ?, key_pem = ?, not_before = ?, not_after = ?, issuer = ?, status = ?, last_error = '',
+		last_attempt = ?, warned = '', updated_at = ? WHERE id = ?`, strings.Join(names, ","), chain, m.d.Box.Encrypt(keyPEM), store.FormatTime(leaf.NotBefore),
 		store.FormatTime(leaf.NotAfter), issuerName(leaf), StatusValid, now, now, id); err != nil {
 		return err
 	}

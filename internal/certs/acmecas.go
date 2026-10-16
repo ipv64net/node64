@@ -92,27 +92,35 @@ func (m *Manager) ACMECA(ctx context.Context, id int64) (*ACMECA, error) {
 	return m.loadACMECA(ctx, id)
 }
 
-// ACMECAs liefert alle weiteren Stellen.
+// ACMECAs liefert alle weiteren Stellen (ohne HMAC zu entschluesseln, Zaehler in einer Abfrage).
 func (m *Manager) ACMECAs(ctx context.Context) ([]*ACMECA, error) {
-	rows, err := m.r.QueryContext(ctx, `SELECT id FROM cert_acme_cas ORDER BY name`)
+	counts := map[int64]int{}
+	if rows, err := m.r.QueryContext(ctx, `SELECT acme_ca, COUNT(*) FROM certs WHERE acme_ca != 0 GROUP BY acme_ca`); err == nil {
+		for rows.Next() {
+			var id int64
+			var n int
+			if rows.Scan(&id, &n) == nil {
+				counts[id] = n
+			}
+		}
+		rows.Close()
+	}
+	rows, err := m.r.QueryContext(ctx, `SELECT id, name, directory, eab_kid, root_pem, created_at FROM cert_acme_cas ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err == nil {
-			ids = append(ids, id)
-		}
-	}
-	rows.Close()
+	defer rows.Close()
 	var out []*ACMECA
-	for _, id := range ids {
-		if a, err := m.loadACMECA(ctx, id); err == nil {
-			out = append(out, a)
+	for rows.Next() {
+		var a ACMECA
+		var created string
+		if err := rows.Scan(&a.ID, &a.Name, &a.Directory, &a.EABKID, &a.root, &created); err != nil {
+			return nil, err
 		}
+		a.CreatedAt, a.HasEAB, a.CustomRoot, a.Certificates = store.ParseTime(created), a.EABKID != "", a.root != "", counts[a.ID]
+		out = append(out, &a)
 	}
-	return out, nil
+	return out, rows.Err()
 }
 
 func decodeHMAC(s string) ([]byte, error) {

@@ -40,7 +40,7 @@
 						{{if ne .Source "upload"}}<form method="post" action="/certificates/{{.ID}}/renew" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
 							<button class="btn btn-sm btn-outline-primary py-0" type="submit" title="{{$.T "certs.renew"}}"{{if .Step}} disabled{{end}}><i class="bi bi-arrow-clockwise"></i></button></form>{{end}}
 						{{if ne .Pill "none"}}{{$id := .ID}}<div class="dropdown d-inline-block">
-							<button class="btn btn-sm btn-outline-secondary py-0 dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="{{$.T "certs.dl.title"}}"><i class="bi bi-download"></i></button>
+							<button class="btn btn-sm btn-outline-secondary py-0 dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false" title="{{$.T "certs.dl.title"}}"><i class="bi bi-download"></i></button>
 							<ul class="dropdown-menu dropdown-menu-end small">
 								<li><h6 class="dropdown-header">{{$.T "certs.dl.public"}}</h6></li>
 								{{range $f := (split "fullchain cert chain")}}<li><a class="dropdown-item" href="/certificates/{{$id}}/download?f={{$f}}">{{$.T (print "certs.dl." $f)}}</a></li>{{end}}

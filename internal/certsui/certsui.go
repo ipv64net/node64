@@ -84,7 +84,6 @@ type certsData struct {
 	DNS       []*certs.DNSAccount
 	CAs       []*certs.CA
 	ACME      []*certs.ACMECA
-	CANames   map[int64]string
 	ACMENames map[int64]string
 }
 
@@ -109,13 +108,10 @@ func (u *UI) pageCerts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	d := certsData{Account: u.m.Account(ctx), DNSReady: u.m.DNSReady(ctx), HTTPReady: u.m.HTTPReady(), CANames: map[int64]string{}, ACMENames: map[int64]string{}}
+	d := certsData{Account: u.m.Account(ctx), DNSReady: u.m.DNSReady(ctx), HTTPReady: u.m.HTTPReady(), ACMENames: map[int64]string{}}
 	d.DNS, _ = u.m.DNSAccounts(ctx)
 	d.CAs, _ = u.m.CAs(ctx)
 	d.ACME, _ = u.m.ACMECAs(ctx)
-	for _, ca := range d.CAs {
-		d.CANames[ca.ID] = ca.Name
-	}
 	for _, a := range d.ACME {
 		d.ACMENames[a.ID] = a.Name
 	}
@@ -249,24 +245,7 @@ func (u *UI) pageCertCreate(w http.ResponseWriter, r *http.Request) {
 func (u *UI) pageCertUpload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	certPEM, keyPEM := r.PostFormValue("cert"), r.PostFormValue("key")
-	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
-		if err := r.ParseMultipartForm(1 << 20); err == nil {
-			read := func(name, fallback string) string {
-				f, _, err := r.FormFile(name)
-				if err != nil {
-					return r.FormValue(fallback)
-				}
-				defer f.Close()
-				b, _ := io.ReadAll(f)
-				if len(strings.TrimSpace(string(b))) == 0 {
-					return r.FormValue(fallback)
-				}
-				return string(b)
-			}
-			certPEM, keyPEM = read("cert_file", "cert"), read("key_file", "key")
-		}
-	}
+	certPEM, keyPEM := readPEMFields(r)
 	c, err := u.m.Upload(ctx, certPEM, keyPEM)
 	if err != nil {
 		d := u.certNewData(ctx)
