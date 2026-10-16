@@ -246,6 +246,13 @@
 					<input class="form-control form-control-sm font-monospace mb-1" id="ui_name" name="ui_name" value="{{.UIName}}" placeholder="node64.example.ipv64.de" maxlength="253">
 					<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" id="ui_public" name="ui_public"{{if .UIPublic}} checked{{end}}><label class="form-check-label" for="ui_public">{{$.T "ports.ui_public"}}</label></div>
 					<div class="form-text mb-2">{{$.T "ports.ui_hint"}}</div>
+					<label class="form-label" for="ui_cert">{{$.T "ports.ui_cert"}}</label>
+					<select class="form-select form-select-sm mb-1" id="ui_cert" name="ui_cert">
+						<option value="auto"{{if eq .UICert.Value "auto"}} selected{{end}}>{{$.T "ports.ui_cert_auto"}}</option>
+						<option value="self"{{if eq .UICert.Value "self"}} selected{{end}}>{{$.T "ports.ui_cert_self"}}</option>
+						{{range .UICert.Certs}}<option value="{{.ID}}"{{if eq (print .ID) $.Data.Ports.UICert.Value}} selected{{end}}>{{.Title}} ({{$.Date .NotAfter}})</option>{{end}}
+					</select>
+					<div class="form-text mb-2">{{if .UICert.EnvFile}}<i class="bi bi-info-circle"></i> {{$.T "ports.ui_cert_env"}}{{else}}{{$.T "ports.ui_cert_hint"}}{{end}} <a href="/certificates">{{$.T "nav.certificates"}}</a></div>
 					<button class="btn btn-primary btn-sm" type="submit">{{$.T "common.save"}}</button>
 				</form>
 			</div>

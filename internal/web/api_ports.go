@@ -110,6 +110,8 @@ func (s *Server) settingsEdge(w http.ResponseWriter, r *http.Request) {
 		s.flash(w, r, "danger", v.T("ports.err_port"))
 	} else if err := s.saveEdge(r, cfg); err != nil {
 		s.flash(w, r, "danger", v.T("ports.err_save", "error", err.Error()))
+	} else if err := s.saveUICertForm(r); err != nil {
+		s.flash(w, r, "danger", v.T("ports.err_save", "error", err.Error()))
 	} else if err := s.saveUIRoute(r, r.PostFormValue("ui_name"), r.PostFormValue("ui_public") == "on"); err != nil {
 		s.flash(w, r, "danger", v.T("ports.err_save", "error", err.Error()))
 	} else {
@@ -124,6 +126,7 @@ type portsView struct {
 	Edge     edge.Status
 	UIName   string
 	UIPublic bool
+	UICert   uiCertView
 }
 
 func (s *Server) portsData(ctx context.Context) *portsView {
@@ -131,5 +134,5 @@ func (s *Server) portsData(ctx context.Context) *portsView {
 		return nil
 	}
 	return &portsView{Entries: s.Ports.Overview(ctx), Edge: s.Edge.Status(), UIName: s.Store.SettingOr(ctx, setUIName, ""),
-		UIPublic: s.Store.SettingOr(ctx, setUIPublic, "0") == "1"}
+		UIPublic: s.Store.SettingOr(ctx, setUIPublic, "0") == "1", UICert: s.uiCertData(ctx)}
 }

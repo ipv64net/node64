@@ -5,13 +5,16 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"io"
 	"math/big"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -239,5 +242,55 @@ func TestCertificatesCA(t *testing.T) {
 	}
 	if cas, _ := mgr.CAs(ctx); len(cas) != 1 { // benutzt: bleibt
 		t.Fatal("used CA must stay")
+	}
+}
+
+// Zertifikat der Oberflaeche: automatisch nach Namen, fest gewaehlt, selbst signiert; NODE64_TLS_CERT gewinnt.
+func TestUICertificate(t *testing.T) {
+	ctx := context.Background()
+	a, mgr := newCertsApp(t)
+	s := a.s
+	fallback := &tls.Certificate{}
+	s.fallbackCert = fallback
+	certPEM, keyPEM := testCertPEM(t, "node.test")
+	c, err := mgr.Upload(ctx, certPEM, keyPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hello := func(name string) *tls.Certificate {
+		crt, err := s.uiCertificate(&tls.ClientHelloInfo{ServerName: name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return crt
+	}
+	if hello("node.test") == fallback || hello("other.test") != fallback || hello("") != fallback {
+		t.Fatal("auto: matching name only")
+	}
+	req := httptest.NewRequest("POST", "/", nil).WithContext(ctx)
+	if err := s.saveUICert(req, strconv.FormatInt(c.ID, 10)); err != nil {
+		t.Fatal(err)
+	}
+	if hello("other.test") == fallback || s.Store.SettingOr(ctx, setUICert, "") != strconv.FormatInt(c.ID, 10) {
+		t.Fatal("fixed certificate not used")
+	}
+	if got, _ := mgr.Get(ctx, c.ID); len(got.UsedBy) != 1 || got.UsedBy[0] != "Node64-Oberfläche" {
+		t.Fatalf("used by: %v", got.UsedBy)
+	}
+	if err := s.saveUICert(req, "999"); err == nil {
+		t.Fatal("unknown certificate must be refused")
+	}
+	if err := s.saveUICert(req, "self"); err != nil || hello("node.test") != fallback {
+		t.Fatalf("self: %v", err)
+	}
+	_ = s.saveUICert(req, "auto")
+	s.Cfg.TLSCertFile = "/data/own.pem"
+	if hello("node.test") != fallback {
+		t.Fatal("NODE64_TLS_CERT must win")
+	}
+	s.Cfg.TLSCertFile = ""
+	s.loadUICert(ctx) // nach Neustart: gespeicherter Wert
+	if s.uiCertSel.Load() != 0 {
+		t.Fatal("reload")
 	}
 }

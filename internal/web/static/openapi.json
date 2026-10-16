@@ -11018,6 +11018,14 @@
                     "public": {
                       "type": "boolean",
                       "description": "auch aus dem Internet (Standard: nur eigenes Netz)"
+                    },
+                    "cert": {
+                      "type": "string",
+                      "description": "Zertifikat der Oberfläche (HTTPS-Port und Name am Eingang): auto (passend zum Namen, sonst selbst signiert), self oder Kennung aus /certs"
+                    },
+                    "cert_from_env": {
+                      "type": "boolean",
+                      "description": "NODE64_TLS_CERT gesetzt: der HTTPS-Port nutzt diese Datei"
                     }
                   }
                 }
@@ -11030,7 +11038,7 @@
         "tags": [
           "Ports & Zertifikate"
         ],
-        "summary": "Name/Freigabe der Oberfläche ändern",
+        "summary": "Name, Freigabe und Zertifikat der Oberfläche ändern (ohne Neustart)",
         "requestBody": {
           "required": true,
           "content": {
@@ -11045,6 +11053,10 @@
                   "public": {
                     "type": "boolean",
                     "description": "auch aus dem Internet (Standard: nur eigenes Netz)"
+                  },
+                  "cert": {
+                    "type": "string",
+                    "description": "Zertifikat der Oberfläche (HTTPS-Port und Name am Eingang): auto (passend zum Namen, sonst selbst signiert), self oder Kennung aus /certs"
                   }
                 }
               }

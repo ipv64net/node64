@@ -105,6 +105,17 @@ Für Skripte auf anderen Geräten, mit einem normalen API-Key (`Authorization: B
     für Let's Encrypt nötig.
   - API `/api/cas…` und `/api/acme-cas…`. Eigene Pfade, weil sich `/api/certs/cas/{id}` mit
     `/api/certs/{id}/chain` überschneiden würde.
+- **Z3 (2026-10-16):**
+  - Zertifikat der Oberfläche: Einstellung `web.tls_cert` (`auto` | `self` | Kennung), Auswahl in der Karte
+    *Ports*.
+  - API: Feld `cert` in `GET`/`PUT /api/edge/ui`.
+  - Der HTTPS-Port wählt je Handshake (`GetCertificate`), ohne Neustart:
+    1. `NODE64_TLS_CERT`, falls gesetzt;
+    2. das gewählte Zertifikat;
+    3. bei „automatisch“ das passende Zertifikat zum Namen (SNI);
+    4. sonst selbst signiert.
+  - Der Name am Eingang nutzt ein gewähltes Zertifikat (`CertID`), sonst das passende.
+  - „Benutzt von: Node64-Oberfläche“ über `SetUsers("web")`.
 
 ## Phasen
 

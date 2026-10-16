@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ipv64net/node64/internal/certs"
@@ -67,8 +68,11 @@ type Server struct {
 	handler http.Handler
 	pages   map[string]*template.Template
 	certsUI *certsui.UI // Seite „Zertifikate“ (nil ohne Verwaltung)
-	limiter *loginLimiter
-	ipLimit *ipLimiter
+
+	uiCertSel    atomic.Int64     // Zertifikat der Oberflaeche: -1 selbst signiert, 0 automatisch, sonst Kennung
+	fallbackCert *tls.Certificate // NODE64_TLS_CERT bzw. selbst signiert
+	limiter      *loginLimiter
+	ipLimit      *ipLimiter
 
 	mu      sync.Mutex
 	servers []*http.Server
@@ -81,7 +85,9 @@ func New(d Deps) (*Server, error) {
 	s := &Server{Deps: d, log: d.Log.Slog().With("module", "web"), mux: http.NewServeMux(), limiter: newLoginLimiter(), ipLimit: newIPLimiter(300, 600)}
 	if d.Certs != nil {
 		s.certsUI = certsui.New(d.Certs)
+		d.Certs.SetUsers("web", s.uiCertUsers)
 	}
+	s.loadUICert(context.Background())
 	if err := s.parseTemplates(); err != nil {
 		return nil, err
 	}
@@ -256,7 +262,8 @@ func (s *Server) Run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
+		s.fallbackCert = &cert
+		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: s.uiCertificate} // Zentrale, sonst cert
 		srv, ln, err := newServer(s.Cfg.HTTPSPort, tlsCfg)
 		if err != nil {
 			return err

@@ -1,6 +1,6 @@
 # Zertifikate in Node64
 
-Stand 2026-10-16 (Z2). Die Zertifikatsverwaltung gehört zum Kern von Node64. Menüpunkt *Zertifikate*, Pfad
+Stand 2026-10-16 (Z3). Die Zertifikatsverwaltung gehört zum Kern von Node64. Menüpunkt *Zertifikate*, Pfad
 `/certificates`. Sie arbeitet unabhängig davon, welche Module laufen. Plan und Entscheidungen:
 [PLAN-NODE64-ZERTIFIKATE.md](PLAN-NODE64-ZERTIFIKATE.md).
 
@@ -31,6 +31,21 @@ Stand 2026-10-16 (Z2). Die Zertifikatsverwaltung gehört zum Kern von Node64. Me
 - Jedes Zertifikat mit „automatisch“ wird 30 Tage vor Ablauf erneuert, auch wenn kein Modul es benutzt.
 - Nach einem Fehler erst wieder nach 6 Stunden.
 - Meldungen an die Standardkanäle: bei Fehlschlag, Entwarnung und 14 bzw. 3 Tage vor Ablauf.
+
+## Zertifikat der Oberfläche
+
+*Einstellungen → Ports → Zertifikat der Oberfläche* gilt für den HTTPS-Port (`NODE64_HTTPS_PORT`) und für den
+Namen am Eingang. Ein Wechsel greift sofort, ohne Neustart.
+
+| Auswahl | Verhalten |
+|---|---|
+| Automatisch (Standard) | Zertifikat der Zentrale, das zum aufgerufenen Namen passt, sonst selbst signiert |
+| fest gewähltes Zertifikat | immer dieses (z. B. Wildcard von Let's Encrypt oder eins der eigenen CA mit IP) |
+| Selbst signiert | wie früher |
+
+- Ist `NODE64_TLS_CERT` gesetzt, nutzt der HTTPS-Port weiter diese Datei.
+- Ein gewähltes Zertifikat steht bei „benutzt von“ als „Node64-Oberfläche“ und ist damit vor versehentlichem
+  Löschen geschützt.
 
 ## Eigene CA
 
@@ -112,6 +127,7 @@ Mit einem normalen API-Key (*Einstellungen → API-Keys*):
 | `GET/POST /api/cas`, `POST /api/cas/import`, `GET /api/cas/{id}/file?format=pem\|crt\|mobileconfig` | eigene CAs |
 | `GET/POST /api/acme-cas`, `GET /api/acme-cas/presets` | weitere ACME-Stellen |
 | `POST /api/certs` mit `"source": "ca", "ca_id": 1, "days": 397` bzw. `"acme_ca": 2` | ausstellen mit eigener CA bzw. anderer Stelle |
+| `PUT /api/edge/ui` mit `{"cert": "auto"\|"self"\|"<id>"}` | Zertifikat der Oberfläche |
 
 **Sicherheit:**
 - Der Schlüssel geht im Klartext über die Leitung, wenn die Oberfläche nur per HTTP läuft. Abruf nur im eigenen

@@ -38,6 +38,9 @@ func (s *Server) uiRoute(ctx context.Context) error {
 		return nil
 	}
 	rt := edge.Route{Names: []string{name}, Handler: s.handler, HTTP3: true}
+	if id := s.uiCertSel.Load(); id > 0 { // gewaehltes Zertifikat, sonst passendes nach Namen
+		rt.CertID = id
+	}
 	if s.Store.SettingOr(ctx, setUIPublic, "0") != "1" {
 		rt.Allow = lanOnly
 	}
@@ -81,16 +84,23 @@ func (s *Server) saveUIRoute(r *http.Request, name string, public bool) error {
 // apiEdgeUI: GET/PUT /api/edge/ui {name, public}.
 func (s *Server) apiEdgeUIGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"name": s.Store.SettingOr(r.Context(), setUIName, ""),
-		"public": s.Store.SettingOr(r.Context(), setUIPublic, "0") == "1"})
+		"public": s.Store.SettingOr(r.Context(), setUIPublic, "0") == "1", "cert": uiCertString(s.uiCertSel.Load()), "cert_from_env": s.Cfg.TLSCertFile != ""})
 }
 
 func (s *Server) apiEdgeUIPut(w http.ResponseWriter, r *http.Request) {
 	in := struct {
 		Name   *string `json:"name"`
 		Public *bool   `json:"public"`
+		Cert   *string `json:"cert"` // auto, self oder Kennung
 	}{}
 	if !decodeJSON(w, r, &in) {
 		return
+	}
+	if in.Cert != nil {
+		if err := s.saveUICert(r, *in.Cert); err != nil {
+			writeErr(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
 	}
 	name, pub := s.Store.SettingOr(r.Context(), setUIName, ""), s.Store.SettingOr(r.Context(), setUIPublic, "0") == "1"
 	if in.Name != nil {

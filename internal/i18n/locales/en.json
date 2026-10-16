@@ -723,7 +723,12 @@
     "edge_default_html": "Own page (see CDN64 → Default page)",
     "ui_name": "Web interface under this name (optional)",
     "ui_public": "Also reachable from the internet (not recommended)",
-    "ui_hint": "The Node64 interface is then also reachable at https://<name>, with a certificate from the manager. Default: only from your own network (private networks, Tailscale); everyone else gets a neutral 404."
+    "ui_hint": "The Node64 interface is then also reachable at https://<name>, with a certificate from the manager. Default: only from your own network (private networks, Tailscale); everyone else gets a neutral 404.",
+    "ui_cert": "Certificate of the web interface (HTTPS port and name at the entrance)",
+    "ui_cert_auto": "Automatic: matching certificate for the requested name, otherwise self-signed",
+    "ui_cert_self": "Self-signed",
+    "ui_cert_env": "NODE64_TLS_CERT is set: the HTTPS port uses this file, the choice only applies to the name at the entrance.",
+    "ui_cert_hint": "Changes apply without restart. Certificates come from the central manager:"
   },
   "settings": {
     "appearance": "Appearance",

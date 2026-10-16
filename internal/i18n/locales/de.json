@@ -723,7 +723,12 @@
     "edge_default_html": "Eigene Seite (unter CDN64 → Standardseite)",
     "ui_name": "Oberfläche unter diesem Namen (optional)",
     "ui_public": "Auch aus dem Internet erreichbar (nicht empfohlen)",
-    "ui_hint": "Die Node64-Oberfläche ist dann auch unter https://<Name> erreichbar, mit Zertifikat aus der Verwaltung. Standard: nur aus dem eigenen Netz (private Netze, Tailscale); alle anderen bekommen eine neutrale 404."
+    "ui_hint": "Die Node64-Oberfläche ist dann auch unter https://<Name> erreichbar, mit Zertifikat aus der Verwaltung. Standard: nur aus dem eigenen Netz (private Netze, Tailscale); alle anderen bekommen eine neutrale 404.",
+    "ui_cert": "Zertifikat der Oberfläche (HTTPS-Port und Name am Eingang)",
+    "ui_cert_auto": "Automatisch: passendes Zertifikat zum aufgerufenen Namen, sonst selbst signiert",
+    "ui_cert_self": "Selbst signiert",
+    "ui_cert_env": "NODE64_TLS_CERT ist gesetzt: Der HTTPS-Port nutzt diese Datei, die Auswahl gilt nur für den Namen am Eingang.",
+    "ui_cert_hint": "Wechsel ohne Neustart. Zertifikate kommen aus der zentralen Verwaltung:"
   },
   "settings": {
     "appearance": "Darstellung",
