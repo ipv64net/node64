@@ -691,6 +691,15 @@
       "tos": "I accept the terms of service of this CA.",
       "created": "ACME CA “{name}” added.",
       "deleted": "ACME CA “{name}” removed."
+    },
+    "why": {
+      "nokey": "no ipv64 API key yet",
+      "nokey_link": "enter API key",
+      "nodns": "no DNS account yet",
+      "nodns_link": "add DNS account",
+      "nohttp": "the shared entrance (port 80) is not available",
+      "noca": "no own CA yet",
+      "noca_link": "add CA"
     }
   },
   "ports": {

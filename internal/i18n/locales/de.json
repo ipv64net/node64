@@ -691,6 +691,15 @@
       "tos": "Ich nehme die Nutzungsbedingungen dieser Stelle an.",
       "created": "ACME-Stelle „{name}“ hinzugefügt.",
       "deleted": "ACME-Stelle „{name}“ entfernt."
+    },
+    "why": {
+      "nokey": "noch kein ipv64-API-Key",
+      "nokey_link": "API-Key eintragen",
+      "nodns": "noch kein DNS-Zugang",
+      "nodns_link": "DNS-Zugang anlegen",
+      "nohttp": "der gemeinsame Eingang (Port 80) ist nicht verfügbar",
+      "noca": "noch keine eigene CA",
+      "noca_link": "CA anlegen"
     }
   },
   "ports": {

@@ -18,13 +18,15 @@
 					<input class="form-check-input" type="radio" name="source" id="src-{{$s}}" value="{{$s}}"{{if eq $s $d.Source}} checked{{end}}
 						{{if and (or (eq $s "ipv64") (eq $s "alias")) (not $d.DNSReady)}} disabled{{end}}{{if and (eq $s "http") (not $d.HTTPReady)}} disabled{{end}}{{if and (eq $s "dns") (not $d.DNS)}} disabled{{end}}{{if and (eq $s "ca") (not $d.CAs)}} disabled{{end}} data-cert-source>
 					<label class="form-check-label" for="src-{{$s}}"><strong>{{$.T (print "certs.src." $s)}}</strong> – {{$.T (print "certs.src_hint." $s)}}</label>
+					{{if and (or (eq $s "ipv64") (eq $s "alias")) (not $d.DNSReady)}}<div class="text-warning-emphasis" data-why="{{$s}}"><i class="bi bi-lock"></i> {{$.T "certs.why.nokey"}}: <a href="/settings#ipv64">{{$.T "certs.why.nokey_link"}}</a></div>{{end}}
+					{{if and (eq $s "dns") (not $d.DNS)}}<div class="text-warning-emphasis" data-why="dns"><i class="bi bi-lock"></i> {{$.T "certs.why.nodns"}}: <a href="/certificates/dns-accounts/new">{{$.T "certs.why.nodns_link"}}</a></div>{{end}}
+					{{if and (eq $s "http") (not $d.HTTPReady)}}<div class="text-warning-emphasis" data-why="http"><i class="bi bi-lock"></i> {{$.T "certs.why.nohttp"}}</div>{{end}}
+					{{if and (eq $s "ca") (not $d.CAs)}}<div class="text-warning-emphasis" data-why="ca"><i class="bi bi-lock"></i> {{$.T "certs.why.noca"}}: <a href="/certificates/ca/new">{{$.T "certs.why.noca_link"}}</a></div>{{end}}
 				</div>
 				{{end}}
-				{{if not $d.DNSReady}}<div class="text-warning-emphasis mb-2"><i class="bi bi-info-circle"></i> {{.T "certs.dns_missing"}} <a href="/settings">{{.T "nav.settings"}}</a></div>{{end}}
 				{{if $d.DomainsErr}}<div class="text-danger mb-2">{{$d.DomainsErr}}</div>{{end}}
 				{{if $d.Domains}}<div class="form-text mb-2">{{.T "certs.your_domains"}} {{range $i, $x := $d.Domains}}{{if $i}}, {{end}}<code>{{$x}}</code>{{end}}</div>{{end}}
 
-				{{if not $d.CAs}}<div class="form-text mb-2"><a href="/certificates/ca/new">{{.T "certs.ca.add_first"}}</a></div>{{end}}
 				<div class="border rounded p-2 mb-3" data-ca-box>
 					<div class="row g-2">
 						<div class="col-sm-8"><label class="form-label" for="ca_id">{{.T "certs.ca.which"}}</label>
@@ -44,7 +46,6 @@
 					<select class="form-select form-select-sm" id="dns_account" name="dns_account">{{range $d.DNS}}<option value="{{.ID}}"{{if eq .ID $d.DNSAccount}} selected{{end}}>{{.Name}} ({{.ProviderName}})</option>{{end}}</select>
 					<div class="form-text">{{.T "certs.dns.account_hint"}} <a href="/certificates/dns-accounts/new">{{.T "certs.dns.new"}}</a></div>
 				</div>
-				{{if not $d.DNS}}<div class="form-text mb-2"><a href="/certificates/dns-accounts/new">{{.T "certs.dns.add_first"}}</a></div>{{end}}
 				<div class="border rounded p-2 mb-3" data-alias-box>
 					<div class="row g-2">
 						<div class="col-sm-7"><label class="form-label" for="alias_zone">{{.T "certs.alias_zone"}}</label>

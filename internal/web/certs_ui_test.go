@@ -64,6 +64,12 @@ func TestCertificatesPage(t *testing.T) {
 	if resp.StatusCode != 200 || !strings.Contains(body, `action="/certificates/upload"`) {
 		t.Fatalf("new page: %d", resp.StatusCode)
 	}
+	// ausgegraute Wege nennen direkt den Grund samt Link (ohne API-Key, DNS-Zugang, CA)
+	for _, why := range []string{`data-why="ipv64"`, `data-why="alias"`, `data-why="dns"`, `data-why="ca"`, `data-why="http"`} {
+		if !strings.Contains(body, why) {
+			t.Fatalf("reason missing: %s", why)
+		}
+	}
 	certPEM, keyPEM := testCertPEM(t, "files.example.org")
 	resp, _ = a.post(t, "/certificates/upload", url.Values{"_csrf": {csrfOf(t, body)}, "cert": {certPEM}, "key": {keyPEM}})
 	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/certificates" {
