@@ -64,6 +64,7 @@ func (u *UI) Routes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET "+Base+"/dns-accounts/{id}/edit", page(u.pageDNSEdit))
 	mux.Handle("POST "+Base+"/dns-accounts/{id}/edit", page(u.pageDNSSave))
 	mux.Handle("POST "+Base+"/dns-accounts/{id}/delete", page(u.pageDNSDelete))
+	u.caRoutes(mux, page)
 }
 
 type cnamePair struct{ From, To string }
@@ -81,6 +82,10 @@ type certsData struct {
 	HTTPReady bool
 	Issuing   bool
 	DNS       []*certs.DNSAccount
+	CAs       []*certs.CA
+	ACME      []*certs.ACMECA
+	CANames   map[int64]string
+	ACMENames map[int64]string
 }
 
 func certPill(c *certs.Cert) string {
@@ -104,8 +109,16 @@ func (u *UI) pageCerts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	d := certsData{Account: u.m.Account(ctx), DNSReady: u.m.DNSReady(ctx), HTTPReady: u.m.HTTPReady()}
+	d := certsData{Account: u.m.Account(ctx), DNSReady: u.m.DNSReady(ctx), HTTPReady: u.m.HTTPReady(), CANames: map[int64]string{}, ACMENames: map[int64]string{}}
 	d.DNS, _ = u.m.DNSAccounts(ctx)
+	d.CAs, _ = u.m.CAs(ctx)
+	d.ACME, _ = u.m.ACMECAs(ctx)
+	for _, ca := range d.CAs {
+		d.CANames[ca.ID] = ca.Name
+	}
+	for _, a := range d.ACME {
+		d.ACMENames[a.ID] = a.Name
+	}
 	for _, c := range list {
 		row := certRow{Cert: c, Pill: certPill(c)}
 		if c.Source == certs.SourceAlias {
@@ -135,11 +148,18 @@ type certNewData struct {
 	UploadErr  string
 	DNS        []*certs.DNSAccount
 	DNSAccount int64
+	CAs        []*certs.CA
+	ACME       []*certs.ACMECA
+	CAID       int64
+	Days       int
+	ACMECA     int64
 }
 
 func (u *UI) certNewData(ctx context.Context) certNewData {
-	d := certNewData{Account: u.m.Account(ctx), DNSReady: u.m.DNSReady(ctx), HTTPReady: u.m.HTTPReady(), Source: "auto"}
+	d := certNewData{Account: u.m.Account(ctx), DNSReady: u.m.DNSReady(ctx), HTTPReady: u.m.HTTPReady(), Source: "auto", Days: 397}
 	d.DNS, _ = u.m.DNSAccounts(ctx)
+	d.CAs, _ = u.m.CAs(ctx)
+	d.ACME, _ = u.m.ACMECAs(ctx)
 	if d.DNSReady {
 		dctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 		defer cancel()
@@ -206,12 +226,16 @@ func (u *UI) pageCertCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	d.DNSAccount, _ = strconv.ParseInt(r.PostFormValue("dns_account"), 10, 64)
+	d.CAID, _ = strconv.ParseInt(r.PostFormValue("ca_id"), 10, 64)
+	d.ACMECA, _ = strconv.ParseInt(r.PostFormValue("acme_ca"), 10, 64)
+	d.Days, _ = strconv.Atoi(r.PostFormValue("days"))
 	names := ParseNames(d.Names)
 	source := d.Source
 	if source == "" || source == "auto" {
 		source = u.m.AutoSource(ctx, names)
 	}
-	c, err := u.m.Create(ctx, certs.Request{Names: names, Source: source, AliasZone: d.AliasZone, AliasPrefix: d.AliasPref, DNSAccount: d.DNSAccount, Staging: d.Staging})
+	c, err := u.m.Create(ctx, certs.Request{Names: names, Source: source, AliasZone: d.AliasZone, AliasPrefix: d.AliasPref, DNSAccount: d.DNSAccount, Staging: d.Staging,
+		CAID: d.CAID, Days: d.Days, ACMECA: d.ACMECA})
 	if err != nil {
 		d.Error = u.certError(r, err)
 		u.g.Render(w, r, http.StatusUnprocessableEntity, Name+"/cert_new", "certs.new", d)

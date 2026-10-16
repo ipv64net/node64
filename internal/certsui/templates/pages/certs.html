@@ -28,7 +28,7 @@
 						{{if and .CNAMEs (ne .Status "valid")}}<details class="mt-1"><summary class="text-body-secondary">{{$.T "certs.cname_needed"}}</summary>
 							{{range .CNAMEs}}<div class="font-monospace text-break">{{.From}} <span class="text-body-secondary">CNAME</span> {{.To}}</div>{{end}}</details>{{end}}
 					</td>
-					<td><span class="badge text-bg-light">{{$.T (print "certs.source." .Source)}}</span>{{if .Issuer}}<div class="text-body-secondary">{{.Issuer}}</div>{{end}}</td>
+					<td><span class="badge text-bg-light">{{$.T (print "certs.source." .Source)}}</span>{{if .ACMECA}}<div class="text-body-secondary">{{index $d.ACMENames .ACMECA}}</div>{{end}}{{if .Issuer}}<div class="text-body-secondary">{{.Issuer}}</div>{{end}}</td>
 					<td>{{if eq .Pill "none"}}<span class="badge text-bg-light">{{$.T "certs.none_yet"}}</span>
 						{{else}}<span class="badge {{if eq .Pill "ok"}}text-bg-success{{else if eq .Pill "soon"}}text-bg-warning{{else}}text-bg-danger{{end}}">{{if lt .DaysLeft 0}}{{$.T "certs.expired"}}{{else}}{{$.T "certs.days" "days" .DaysLeft}}{{end}}</span>
 						<div class="text-body-secondary">{{$.Date .NotAfter}}</div>{{end}}</td>
@@ -78,6 +78,31 @@
 				<hr>
 				<div class="mb-1">{{if $d.DNSReady}}<i class="bi bi-check-circle text-success"></i> {{.T "certs.dns_ready"}}{{else}}<i class="bi bi-x-circle text-danger"></i> {{.T "certs.dns_missing"}} <a href="/settings">{{.T "nav.settings"}}</a>{{end}}</div>
 				<div>{{if $d.HTTPReady}}<i class="bi bi-check-circle text-success"></i>{{else}}<i class="bi bi-x-circle text-danger"></i>{{end}} {{.T "certs.http_ready"}}</div>
+			</div>
+		</div>
+		<div class="card mt-3"><div class="card-header d-flex align-items-center"><span><i class="bi bi-patch-check text-primary"></i> {{.T "certs.ca.title"}}</span>
+			<a class="btn btn-sm btn-outline-primary py-0 ms-auto" href="/certificates/ca/new" title="{{.T "certs.ca.new"}}"><i class="bi bi-plus-lg"></i></a></div>
+			<div class="card-body small">
+				{{if not $d.CAs}}<p class="text-body-secondary mb-0">{{.T "certs.ca.empty"}}</p>{{end}}
+				{{range $d.CAs}}<div class="mb-2">
+					<div class="d-flex align-items-center gap-2">
+						<div class="flex-grow-1"><div class="fw-semibold">{{.Name}}</div>
+							<div class="text-body-secondary">{{if .Root}}{{$.T "certs.ca.root"}}{{else}}{{$.T "certs.ca.intermediate"}}{{end}}{{if .Imported}} · {{$.T "certs.ca.imported_flag"}}{{end}} · {{$.T "certs.ca.until" "date" ($.Date .NotAfter)}}{{if .Certificates}} · {{.Certificates}} {{$.T "certs.dns.certs"}}{{end}}</div>
+							<div class="text-body-secondary">{{if or .PermittedDNS .PermittedIP}}<i class="bi bi-lock"></i> {{$.T "certs.ca.constrained"}}{{else}}<i class="bi bi-unlock"></i> {{$.T "certs.ca.unconstrained"}}{{end}}</div></div>
+						<form method="post" action="/certificates/ca/{{.ID}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger py-0" type="submit"{{if .Certificates}} disabled{{end}} data-confirm="{{$.T "certs.ca.delete_confirm" "name" .Name}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button></form>
+					</div>
+					<div class="mt-1">{{$.T "certs.ca.install"}} <a href="/certificates/ca/{{.ID}}/file?f=pem">PEM</a> · <a href="/certificates/ca/{{.ID}}/file?f=crt">.crt</a> · <a href="/certificates/ca/{{.ID}}/file?f=mobileconfig">iOS/macOS</a></div>
+				</div>{{end}}
+			</div>
+		</div>
+		<div class="card mt-3"><div class="card-header d-flex align-items-center"><span><i class="bi bi-globe2 text-primary"></i> {{.T "certs.acme.title"}}</span>
+			<a class="btn btn-sm btn-outline-primary py-0 ms-auto" href="/certificates/acme/new" title="{{.T "certs.acme.new"}}"><i class="bi bi-plus-lg"></i></a></div>
+			<div class="card-body small">
+				<div class="mb-2"><span class="fw-semibold">Let's Encrypt</span> <span class="text-body-secondary">({{.T "certs.acme.default"}})</span></div>
+				{{range $d.ACME}}<div class="d-flex align-items-center gap-2 mb-2">
+					<div class="flex-grow-1"><div class="fw-semibold">{{.Name}}</div><div class="text-body-secondary text-break">{{.Directory}}{{if .HasEAB}} · EAB{{end}}{{if .Certificates}} · {{.Certificates}} {{$.T "certs.dns.certs"}}{{end}}</div></div>
+					<form method="post" action="/certificates/acme/{{.ID}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger py-0" type="submit"{{if .Certificates}} disabled{{end}} data-confirm="{{$.T "certs.acme.delete_confirm" "name" .Name}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button></form>
+				</div>{{end}}
 			</div>
 		</div>
 		<div class="card mt-3"><div class="card-header d-flex align-items-center"><span><i class="bi bi-key text-primary"></i> {{.T "certs.dns.title"}}</span>

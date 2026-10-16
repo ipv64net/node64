@@ -1,6 +1,6 @@
 # Zertifikate in Node64
 
-Stand 2026-10-16 (Z1). Die Zertifikatsverwaltung gehört zum Kern von Node64. Menüpunkt *Zertifikate*, Pfad
+Stand 2026-10-16 (Z2). Die Zertifikatsverwaltung gehört zum Kern von Node64. Menüpunkt *Zertifikate*, Pfad
 `/certificates`. Sie arbeitet unabhängig davon, welche Module laufen. Plan und Entscheidungen:
 [PLAN-NODE64-ZERTIFIKATE.md](PLAN-NODE64-ZERTIFIKATE.md).
 
@@ -13,6 +13,11 @@ Stand 2026-10-16 (Z1). Die Zertifikatsverwaltung gehört zum Kern von Node64. Me
 | Anderer DNS-Anbieter | DNS-Zugang mit den Feldern des Anbieters (Token, Key …), verschlüsselt gespeichert |
 | HTTP-01 | Name zeigt per DNS auf den Anschluss, Port 80 des Eingangs |
 | Eigenes Zertifikat | PEM hochladen (nicht erneuerbar, Warnung vor Ablauf) |
+| Eigene CA | Geräte im eigenen Netz: Namen wie `nas.lan` und IP-Adressen; Geräte vertrauen der CA einmal |
+
+**Ausstellende Stelle bei ACME:**
+- Standard ist Let's Encrypt.
+- Weitere Stellen lassen sich unter *ACME-Stellen* hinzufügen, siehe unten.
 
 **DNS-Anbieter (26):**
 - **Deutschsprachiger Raum:** ALL-INKL.COM, AutoDNS (InterNetX), checkdomain, Hetzner, INWX, IONOS, netcup,
@@ -26,6 +31,58 @@ Stand 2026-10-16 (Z1). Die Zertifikatsverwaltung gehört zum Kern von Node64. Me
 - Jedes Zertifikat mit „automatisch“ wird 30 Tage vor Ablauf erneuert, auch wenn kein Modul es benutzt.
 - Nach einem Fehler erst wieder nach 6 Stunden.
 - Meldungen an die Standardkanäle: bei Fehlschlag, Entwarnung und 14 bzw. 3 Tage vor Ablauf.
+
+## Eigene CA
+
+Für Geräte im eigenen Netz, die kein öffentliches Zertifikat bekommen können (`nas.lan`, `192.168.1.5`,
+`drucker.home.arpa`).
+
+**Erzeugen:**
+- ECDSA P-256 oder RSA 3072, 10 Jahre gültig.
+- Standard ist „nur private Namen und Adressen“: `*.lan`, `*.home.arpa`, `*.internal`, `*.local`, `*.home` u. a.
+  sowie private IPv4/IPv6. Auf Wunsch kommen eigene Domains dazu, z. B. `home.example.ipv64.de`.
+- Wird der Schlüssel gestohlen, lassen sich damit keine Internet-Domains fälschen (Name Constraints).
+
+**Importieren:**
+- Vorhandene CA mit Schlüssel als PEM, auch eine Zwischen-CA unter einer Offline-Root (step-ca, OpenSSL, XCA).
+- Die Kette der ausgestellten Zertifikate enthält die Zwischen-CA, die Root nicht.
+
+**Ausstellen:**
+- Im Formular „Zertifikat hinzufügen“ den Weg „Eigene CA“ wählen. Namen und IPs stehen je Zeile.
+- Laufzeit 1–825 Tage, Standard 397. 825 ist die Grenze von Apple.
+- Erneuert wird automatisch im letzten Drittel der Laufzeit, höchstens 30 Tage vor Ablauf.
+
+**Auf Geräten installieren:** In der Karte *Eigene CAs* gibt es drei Formate.
+
+| Datei | Gerät |
+|---|---|
+| PEM | Linux (`/usr/local/share/ca-certificates/` + `update-ca-certificates`), Firefox |
+| `.crt` | Windows (Doppelklick → „Vertrauenswürdige Stammzertifizierungsstellen“), Android |
+| iOS/macOS-Profil | iPhone/iPad: Profil laden, installieren, dann unter *Einstellungen → Allgemein → Info → Zertifikatsvertrauen* einschalten |
+
+Eine CA lässt sich erst löschen, wenn sie kein Zertifikat mehr ausstellt.
+
+## Weitere ACME-Stellen
+
+Neben Let's Encrypt lassen sich andere Stellen nutzen, die ACME sprechen. Vorlagen gibt es für:
+
+| Stelle | Verzeichnis | External Account Binding |
+|---|---|---|
+| ZeroSSL | `https://acme.zerossl.com/v2/DV90` | ja, im ZeroSSL-Konto unter *Developer* |
+| Google Trust Services | `https://dv.acme-v02.api.pki.goog/directory` | ja, `gcloud publicca external-account-keys create` |
+| SSL.com | `https://acme.ssl.com/sslcom-dv-ecc` | ja |
+| step-ca im eigenen Netz | eigene URL | nein; Root-Zertifikat der step-ca angeben |
+
+Buypass fehlt in den Vorlagen, weil es seinen kostenlosen ACME-Dienst eingestellt hat.
+
+**Beim Hinzufügen:**
+- Node64 fragt das Verzeichnis ab und meldet, wenn die Stelle EAB verlangt.
+- Die Nutzungsbedingungen der Stelle werden dabei angenommen.
+- Der HMAC liegt verschlüsselt in der Datenbank.
+- Das Konto nutzt denselben Schlüssel wie bei Let's Encrypt.
+
+Beim Anfordern wählt man die Stelle unter „Ausstellende Stelle“. Die Wege (ipv64, Alias, DNS-Anbieter, HTTP-01)
+gelten für jede Stelle.
 
 ## Herunterladen
 
@@ -52,6 +109,9 @@ Mit einem normalen API-Key (*Einstellungen → API-Keys*):
 | `GET /api/certs/{id}/meta` | gültig bis, Tage übrig, Fingerabdruck (= ETag) |
 | `GET /api/certs/{id}/bundle?format=zip\|fullchain\|cert\|chain\|key\|pem` | Datei; mit `If-None-Match` kommt 304, solange sich nichts geändert hat |
 | `POST /api/certs/{id}/p12` mit `{"password": "…", "legacy": false}` | PKCS#12 |
+| `GET/POST /api/cas`, `POST /api/cas/import`, `GET /api/cas/{id}/file?format=pem\|crt\|mobileconfig` | eigene CAs |
+| `GET/POST /api/acme-cas`, `GET /api/acme-cas/presets` | weitere ACME-Stellen |
+| `POST /api/certs` mit `"source": "ca", "ca_id": 1, "days": 397` bzw. `"acme_ca": 2` | ausstellen mit eigener CA bzw. anderer Stelle |
 
 **Sicherheit:**
 - Der Schlüssel geht im Klartext über die Leitung, wenn die Oberfläche nur per HTTP läuft. Abruf nur im eigenen

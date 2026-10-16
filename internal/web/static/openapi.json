@@ -1760,7 +1760,8 @@
               "alias",
               "http",
               "dns",
-              "upload"
+              "upload",
+              "ca"
             ]
           },
           "alias_zone": {
@@ -1823,6 +1824,16 @@
           "dns_account": {
             "type": "integer",
             "description": "source dns: DNS-Zugang"
+          },
+          "ca_id": {
+            "type": "integer"
+          },
+          "days": {
+            "type": "integer"
+          },
+          "acme_ca": {
+            "type": "integer",
+            "description": "0 = Let's Encrypt"
           }
         }
       },
@@ -2623,6 +2634,84 @@
           "fingerprint_sha256": {
             "type": "string",
             "description": "SHA-256 des Zertifikats (hex), gleich dem ETag"
+          }
+        }
+      },
+      "CA": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "not_after": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "imported": {
+            "type": "boolean"
+          },
+          "root": {
+            "type": "boolean",
+            "description": "selbst signiert, sonst Zwischen-CA"
+          },
+          "permitted_dns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "permitted_ip": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fingerprint_sha256": {
+            "type": "string"
+          },
+          "certificates": {
+            "type": "integer",
+            "description": "damit ausgestellte Zertifikate"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ACMECA": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "eab": {
+            "type": "boolean"
+          },
+          "eab_kid": {
+            "type": "string"
+          },
+          "custom_root": {
+            "type": "boolean"
+          },
+          "certificates": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }
@@ -8182,8 +8271,8 @@
         "tags": [
           "Ports & Zertifikate"
         ],
-        "summary": "Zertifikat bei Let's Encrypt anfordern (läuft im Hintergrund)",
-        "description": "source ipv64: alle Namen liegen im ipv64-Account (DNS-01 über den zentralen API-Key, auch Wildcards). alias: fremde Domain; vorher bei deren Anbieter den CNAME _acme-challenge.<name> → _acme-challenge.<alias_prefix>.<alias_zone> anlegen. http: HTTP-01, Port 80 muss von außen auf die Node zeigen (keine Wildcards). Vorher die Nutzungsbedingungen annehmen (PUT /certs/account). dns: anderer DNS-Anbieter über einen DNS-Zugang (GET /certs/dns-accounts).",
+        "summary": "Zertifikat anfordern oder mit eigener CA ausstellen (läuft im Hintergrund)",
+        "description": "source ipv64: alle Namen liegen im ipv64-Account (DNS-01 über den zentralen API-Key, auch Wildcards). alias: fremde Domain; vorher bei deren Anbieter den CNAME _acme-challenge.<name> → _acme-challenge.<alias_prefix>.<alias_zone> anlegen. http: HTTP-01, Port 80 muss von außen auf die Node zeigen (keine Wildcards). Vorher die Nutzungsbedingungen annehmen (PUT /certs/account). dns: anderer DNS-Anbieter über einen DNS-Zugang (GET /certs/dns-accounts). ca: mit einer eigenen CA (ca_id, days), auch für IP-Adressen. acme_ca: statt Let's Encrypt eine weitere ACME-Stelle (GET /acme-cas).",
         "requestBody": {
           "required": true,
           "content": {
@@ -8203,7 +8292,8 @@
                       "ipv64",
                       "alias",
                       "http",
-                      "dns"
+                      "dns",
+                      "ca"
                     ]
                   },
                   "alias_zone": {
@@ -8223,6 +8313,18 @@
                   "dns_account": {
                     "type": "integer",
                     "description": "bei source dns"
+                  },
+                  "ca_id": {
+                    "type": "integer",
+                    "description": "bei source ca: eigene CA"
+                  },
+                  "days": {
+                    "type": "integer",
+                    "description": "bei source ca: Laufzeit, Standard 397, höchstens 825"
+                  },
+                  "acme_ca": {
+                    "type": "integer",
+                    "description": "weitere ACME-Stelle statt Let's Encrypt (0)"
                   }
                 }
               }
@@ -10389,6 +10491,501 @@
           },
           "409": {
             "description": "von einem Zertifikat benutzt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cas": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Eigene CAs",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CA"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Eigene CA erzeugen (10 Jahre)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "key_type": {
+                    "type": "string",
+                    "enum": [
+                      "ecdsa",
+                      "rsa"
+                    ],
+                    "default": "ecdsa"
+                  },
+                  "constrained": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "nur private Namen (*.lan, *.home.arpa, *.internal …) und private IPs"
+                  },
+                  "domains": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "description": "zusätzlich erlaubte Domains"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CA"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Feld ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cas/import": {
+      "post": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Vorhandene CA importieren (auch Zwischen-CA mit Kette)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "cert",
+                  "key"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "leer = CN"
+                  },
+                  "cert": {
+                    "type": "string",
+                    "description": "PEM"
+                  },
+                  "key": {
+                    "type": "string",
+                    "description": "PEM"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "importiert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CA"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "kein CA-Zertifikat, Schlüssel passt nicht oder schon vorhanden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cas/{id}": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Eine CA",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CA"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "CA umbenennen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CA"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Name ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "CA löschen (nur ohne ausgestellte Zertifikate)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "noch benutzt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cas/{id}/file": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "CA-Zertifikat zum Installieren auf Geräten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pem",
+                "crt",
+                "mobileconfig"
+              ],
+              "default": "pem"
+            },
+            "description": "crt: DER für Windows/Android; mobileconfig: Profil für iOS/macOS"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Datei"
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/acme-cas": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Weitere ACME-Stellen (neben Let's Encrypt)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ACMECA"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "ACME-Stelle hinzufügen (ZeroSSL, Google, SSL.com, step-ca …)",
+        "description": "Das Verzeichnis wird dabei abgefragt; verlangt die Stelle External Account Binding, sind eab_kid und eab_hmac Pflicht.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "directory",
+                  "accept_tos"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "directory": {
+                    "type": "string"
+                  },
+                  "eab_kid": {
+                    "type": "string"
+                  },
+                  "eab_hmac": {
+                    "type": "string",
+                    "description": "Base64"
+                  },
+                  "root_pem": {
+                    "type": "string",
+                    "description": "Root der Stelle, z. B. step-ca"
+                  },
+                  "accept_tos": {
+                    "type": "boolean",
+                    "description": "Nutzungsbedingungen der Stelle annehmen"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ACMECA"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Feld ungültig oder Verzeichnis nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/acme-cas/presets": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Vorlagen bekannter Stellen",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/acme-cas/{id}": {
+      "delete": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "ACME-Stelle entfernen (nur ohne Zertifikate)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "entfernt"
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "noch benutzt",
             "content": {
               "application/json": {
                 "schema": {

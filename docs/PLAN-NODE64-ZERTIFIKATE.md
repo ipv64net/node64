@@ -92,6 +92,19 @@ Für Skripte auf anderen Geräten, mit einem normalen API-Key (`Authorization: B
     HTTP-Request, Hurricane Electric, Infomaniak, Namecheap, PowerDNS, RFC 2136, Technitium. Das Binary wird
     dadurch 1,8 MB größer.
   - Betriebsdoku mit Beispiel-Skripten: [ZERTIFIKATE.md](ZERTIFIKATE.md).
+- **Z2 (2026-10-16):**
+  - Eigene CAs: Tabelle `cert_cas`, erzeugen (ECDSA/RSA, 10 Jahre, standardmäßig Name Constraints auf private
+    Namen und IPs plus eigene Domains) oder importieren (auch Zwischen-CA mit Kette, ohne Root in der Kette der
+    Server).
+  - Weg `ca` mit `ca_id` und `days` (1–825, Standard 397), auch für IP-Adressen. Erneuerung im letzten Drittel,
+    höchstens 30 Tage vor Ablauf.
+  - CA-Download als PEM, `.crt` und iOS/macOS-Profil.
+  - Weitere ACME-Stellen: Tabelle `cert_acme_cas` mit EAB (HMAC verschlüsselt) und eigener Root. Vorlagen
+    ZeroSSL, Google, SSL.com und step-ca. Das Verzeichnis wird beim Anlegen abgefragt.
+  - `certs.acme_ca` wählt die Stelle (0 = Let's Encrypt). Die Nutzungsbedingungen von Let's Encrypt sind nur
+    für Let's Encrypt nötig.
+  - API `/api/cas…` und `/api/acme-cas…`. Eigene Pfade, weil sich `/api/certs/cas/{id}` mit
+    `/api/certs/{id}/chain` überschneiden würde.
 
 ## Phasen
 

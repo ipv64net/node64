@@ -500,7 +500,8 @@
       "alias": "Alias (CNAME)",
       "http": "HTTP-01",
       "upload": "eigenes",
-      "dns": "DNS-Anbieter"
+      "dns": "DNS-Anbieter",
+      "ca": "eigene CA"
     },
     "step": {
       "queued": "wartet …",
@@ -542,14 +543,16 @@
       "ipv64": "ipv64 DNS-01",
       "alias": "Alias über ipv64",
       "http": "HTTP-01",
-      "dns": "Anderer DNS-Anbieter"
+      "dns": "Anderer DNS-Anbieter",
+      "ca": "Eigene CA"
     },
     "src_hint": {
       "auto": "ipv64 DNS-01, wenn alle Namen im ipv64-Account liegen, sonst HTTP-01.",
       "ipv64": "für Domains im ipv64-Account; auch Wildcards, Port 80 muss nicht offen sein.",
       "alias": "für Domains bei anderen Anbietern: einmal einen CNAME setzen, danach erledigt ipv64 den Rest – ohne Zugangsdaten des Anbieters.",
       "http": "Port 80 muss von außen auf diese Node zeigen; keine Wildcards.",
-      "dns": "für Domains bei Cloudflare, Hetzner, netcup, INWX, IONOS u. a.: Node64 setzt den TXT-Record über deren API (Zugang hinterlegen)."
+      "dns": "für Domains bei Cloudflare, Hetzner, netcup, INWX, IONOS u. a.: Node64 setzt den TXT-Record über deren API (Zugang hinterlegen).",
+      "ca": "für Geräte im eigenen Netz, auch für IP-Adressen und Namen wie nas.lan; Geräte müssen der CA einmal vertrauen."
     },
     "your_domains": "Deine ipv64-Domains:",
     "alias_zone": "Ziel-Domain bei ipv64",
@@ -588,7 +591,17 @@
       "name": "Name prüfen",
       "no_cert": "Das Zertifikat ist noch nicht ausgestellt.",
       "format": "Unbekanntes Format",
-      "password": "Passwort für PKCS#12"
+      "password": "Passwort für PKCS#12",
+      "ca_id": "CA prüfen",
+      "days": "Laufzeit prüfen",
+      "acme_ca": "ACME-Stelle prüfen",
+      "directory": "Verzeichnis prüfen",
+      "accept_tos": "Nutzungsbedingungen annehmen",
+      "eab_kid": "EAB Key-ID prüfen",
+      "eab_hmac": "EAB HMAC prüfen",
+      "root_pem": "Root-Zertifikat prüfen",
+      "key_type": "Schlüssel prüfen",
+      "domains": "Domains prüfen"
     },
     "expired": "abgelaufen",
     "days": "{days} Tage",
@@ -628,6 +641,56 @@
       "p12_legacy": "Alte Verschlüsselung (3DES) für ältere Geräte und Windows-Versionen",
       "p12_download": "Herunterladen",
       "api_hint": "Für Skripte auf anderen Geräten: GET /api/certs/{id}/bundle?format=zip|fullchain|key|pem mit API-Key; ETag und If-None-Match laden nur bei Änderung neu. Jeder Abruf mit Schlüssel steht im Audit."
+    },
+    "ca": {
+      "title": "Eigene CAs",
+      "new": "Eigene CA anlegen",
+      "empty": "Für Geräte im eigenen Netz (nas.lan, 192.168.x.x): eine CA erzeugen oder importieren, dann Zertifikate damit ausstellen.",
+      "root": "Root-CA",
+      "intermediate": "Zwischen-CA",
+      "imported_flag": "importiert",
+      "until": "gültig bis {date}",
+      "constrained": "nur private Namen und Adressen",
+      "unconstrained": "ohne Einschränkung",
+      "delete_confirm": "CA „{name}“ löschen? Geräte, die ihr vertrauen, behalten sie, bis sie dort entfernt wird.",
+      "install": "Auf Geräten installieren:",
+      "add_first": "Zuerst eine eigene CA anlegen",
+      "which": "CA",
+      "days": "Laufzeit (Tage)",
+      "names_hint": "Namen und IP-Adressen (eine je Zeile). Bis 825 Tage (Grenze von Apple); erneuert wird im letzten Drittel, höchstens 30 Tage vor Ablauf.",
+      "create_title": "Neue CA erzeugen",
+      "create_hint": "Node64 erzeugt Schlüssel und CA-Zertifikat (10 Jahre). Der Schlüssel bleibt verschlüsselt in der Datenbank und ist im Backup.",
+      "name": "Name",
+      "key_type": "Schlüssel",
+      "rsa_hint": "für sehr alte Geräte",
+      "constrain": "Nur private Namen und Adressen (empfohlen)",
+      "constrain_hint": "Die CA darf dann nur Namen wie *.lan, *.home.arpa, *.internal, *.local und private IPs bestätigen. Selbst wenn ihr Schlüssel gestohlen wird, lassen sich damit keine Internet-Domains fälschen.",
+      "domains": "Zusätzlich erlaubte Domains (optional, eine je Zeile)",
+      "create": "CA erzeugen",
+      "import_title": "Vorhandene CA importieren",
+      "import_hint": "Zertifikat der CA (bei einer Zwischen-CA mit Kette) und ihr privater Schlüssel als PEM, z. B. aus step-ca, OpenSSL oder XCA.",
+      "import_cert": "CA-Zertifikat (PEM)",
+      "import": "Importieren",
+      "created": "CA „{name}“ erzeugt.",
+      "imported": "CA „{name}“ importiert.",
+      "deleted": "CA „{name}“ gelöscht."
+    },
+    "acme": {
+      "title": "ACME-Stellen",
+      "new": "ACME-Stelle hinzufügen",
+      "default": "Standard",
+      "delete_confirm": "ACME-Stelle „{name}“ entfernen?",
+      "which": "Ausstellende Stelle",
+      "hint": "Neben Let's Encrypt lassen sich andere Stellen nutzen, die ACME sprechen: ZeroSSL, Google Trust Services, SSL.com oder eine eigene step-ca im Netz.",
+      "preset": "Vorlage",
+      "custom": "eigene Angaben",
+      "directory": "ACME-Verzeichnis (URL)",
+      "eab_hint": "External Account Binding: bei ZeroSSL, Google und SSL.com Pflicht, im Konto der Stelle erzeugen. Der HMAC wird verschlüsselt gespeichert.",
+      "root": "Root-Zertifikat der Stelle (PEM)",
+      "root_hint": "Nur für eine eigene Stelle wie step-ca, deren Zertifikat nicht öffentlich vertraut wird.",
+      "tos": "Ich nehme die Nutzungsbedingungen dieser Stelle an.",
+      "created": "ACME-Stelle „{name}“ hinzugefügt.",
+      "deleted": "ACME-Stelle „{name}“ entfernt."
     }
   },
   "ports": {

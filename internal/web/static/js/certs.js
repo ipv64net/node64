@@ -18,11 +18,15 @@
 	var preview = document.querySelector("[data-alias-preview]");
 	var srcs = document.querySelectorAll("[data-cert-source]");
 	var dnsBox = document.querySelector("[data-dns-box]");
+	var caBox = document.querySelector("[data-ca-box]");
+	var acmeBox = document.querySelector("[data-acme-box]");
 	var aliasSync = function () {
 		var src = "";
 		srcs.forEach(function (r) { if (r.checked) { src = r.value; } });
 		if (aliasBox) { aliasBox.classList.toggle("d-none", src !== "alias"); }
 		if (dnsBox) { dnsBox.classList.toggle("d-none", src !== "dns"); }
+		if (caBox) { caBox.classList.toggle("d-none", src !== "ca"); }
+		if (acmeBox) { acmeBox.classList.toggle("d-none", src === "ca"); }
 		if (!preview || !names || !zone) { return; }
 		var z = (zone.value || "").trim().toLowerCase().replace(/\.$/, "");
 		var p = prefix ? (prefix.value || "").trim().toLowerCase().replace(/^\.+|\.+$/g, "") : "";
@@ -65,6 +69,18 @@
 				var m = window.bootstrap && window.bootstrap.Modal.getInstance(document.getElementById("p12modal"));
 				if (m) { m.hide(); }
 			}, 300);
+		});
+	}
+
+	// Weitere ACME-Stelle: Vorlage fuellt Name und Verzeichnis, zeigt, wo es die EAB-Daten gibt
+	var preset = document.querySelector("[data-acme-preset]");
+	if (preset) {
+		preset.addEventListener("change", function () {
+			var o = preset.options[preset.selectedIndex];
+			if (!o.value) { return; }
+			document.querySelector("[data-acme-name]").value = o.getAttribute("data-name");
+			document.querySelector("[data-acme-directory]").value = o.getAttribute("data-directory");
+			document.querySelector("[data-acme-docs]").textContent = o.getAttribute("data-docs");
 		});
 	}
 

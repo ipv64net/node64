@@ -166,7 +166,10 @@ func (m *Manager) accountKey(ctx context.Context) (crypto.Signer, error) {
 
 // obtain: Auftrag, Pruefungen je Name, Zertifikat.
 func (m *Manager) obtain(ctx context.Context, c *Cert) error {
-	if !m.Account(ctx).TOSAccepted {
+	if c.Source == SourceCA {
+		return m.issueFromCA(ctx, c)
+	}
+	if c.ACMECA == 0 && !m.Account(ctx).TOSAccepted {
 		return ErrTOS
 	}
 	switch c.Source {
@@ -189,7 +192,7 @@ func (m *Manager) obtain(ctx context.Context, c *Cert) error {
 		}
 	}
 	m.step(c.ID, "account")
-	cl, err := m.client(ctx, c.Staging)
+	cl, err := m.clientFor(ctx, c)
 	if err != nil {
 		return err
 	}
@@ -238,17 +241,7 @@ func (m *Manager) obtain(ctx context.Context, c *Cert) error {
 	for _, d := range ders {
 		chain = append(chain, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: d})...)
 	}
-	keyPEM, err := marshalKey(key)
-	if err != nil {
-		return err
-	}
-	now := store.Now()
-	if _, err := m.w.ExecContext(ctx, `UPDATE certs SET cert_pem = ?, key_pem = ?, not_before = ?, not_after = ?, issuer = ?, status = ?, last_error = '',
-		last_attempt = ?, warned = '', updated_at = ? WHERE id = ?`, string(chain), m.d.Box.Encrypt(keyPEM), store.FormatTime(leaf.NotBefore),
-		store.FormatTime(leaf.NotAfter), issuerName(leaf), StatusValid, now, now, c.ID); err != nil {
-		return err
-	}
-	return m.reload(ctx) // gilt sofort, ohne Neustart
+	return m.storeIssued(ctx, c.ID, string(chain), leaf, key)
 }
 
 // authorize beantwortet die Pruefung fuer einen Namen.
@@ -417,7 +410,11 @@ func needsRenewal(c *Cert) bool {
 	if c.Status == StatusError && time.Since(c.LastAttempt) < retryAfter {
 		return false // nach einem Fehler erst in 6 Stunden wieder
 	}
-	return !c.hasCert || time.Until(c.NotAfter) < renewBefore
+	before := renewBefore
+	if c.Source == SourceCA && c.Days > 0 && time.Duration(c.Days)*24*time.Hour/3 < before {
+		before = time.Duration(c.Days) * 24 * time.Hour / 3 // kurze Laufzeit der eigenen CA: im letzten Drittel
+	}
+	return !c.hasCert || time.Until(c.NotAfter) < before
 }
 
 // warnExpiry meldet einmal 14 und einmal 3 Tage vor Ablauf (benutzte, automatisch erneuerte und hochgeladene

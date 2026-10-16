@@ -1,0 +1,50 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1 class="h4 mb-3"><i class="bi bi-shield-lock text-primary"></i> {{.T "certs.ca.new"}}</h1>
+<div class="row g-3">
+	<div class="col-xl-6">
+		<form method="post" action="/certificates/ca" class="card">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-header"><i class="bi bi-patch-plus text-primary"></i> {{.T "certs.ca.create_title"}}</div>
+			<div class="card-body small">
+				{{if $d.Error}}<div class="alert alert-danger py-2">{{$d.Error}}</div>{{end}}
+				<p class="text-body-secondary">{{.T "certs.ca.create_hint"}}</p>
+				<label class="form-label fw-semibold" for="name">{{.T "certs.ca.name"}}</label>
+				<input class="form-control form-control-sm mb-3" id="name" name="name" value="{{$d.Name}}" required maxlength="100" placeholder="Heimnetz-CA">
+				<div class="fw-semibold mb-1">{{.T "certs.ca.key_type"}}</div>
+				<div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="key_type" id="kt-ecdsa" value="ecdsa"{{if ne $d.KeyType "rsa"}} checked{{end}}><label class="form-check-label" for="kt-ecdsa">ECDSA P-256</label></div>
+				<div class="form-check form-check-inline mb-3"><input class="form-check-input" type="radio" name="key_type" id="kt-rsa" value="rsa"{{if eq $d.KeyType "rsa"}} checked{{end}}><label class="form-check-label" for="kt-rsa">RSA 3072 ({{.T "certs.ca.rsa_hint"}})</label></div>
+				<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" name="constrained" id="constrained"{{if $d.Constrained}} checked{{end}}>
+					<label class="form-check-label" for="constrained">{{.T "certs.ca.constrain"}}</label></div>
+				<div class="form-text mb-2">{{.T "certs.ca.constrain_hint"}}</div>
+				<label class="form-label" for="domains">{{.T "certs.ca.domains"}}</label>
+				<textarea class="form-control form-control-sm font-monospace" id="domains" name="domains" rows="2" placeholder="home.example.ipv64.de">{{$d.Domains}}</textarea>
+			</div>
+			<div class="card-footer d-flex gap-2">
+				<button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-patch-check"></i> {{.T "certs.ca.create"}}</button>
+				<a class="btn btn-outline-secondary btn-sm" href="/certificates">{{.T "common.cancel"}}</a>
+			</div>
+		</form>
+	</div>
+	<div class="col-xl-6">
+		<form method="post" action="/certificates/ca/import" enctype="multipart/form-data" class="card">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-header"><i class="bi bi-upload text-primary"></i> {{.T "certs.ca.import_title"}}</div>
+			<div class="card-body small">
+				{{if $d.ImportErr}}<div class="alert alert-danger py-2">{{$d.ImportErr}}</div>{{end}}
+				<p class="text-body-secondary">{{.T "certs.ca.import_hint"}}</p>
+				<label class="form-label" for="import_name">{{.T "certs.ca.name"}} <span class="text-body-secondary">({{.T "certs.dns.optional"}})</span></label>
+				<input class="form-control form-control-sm mb-2" id="import_name" name="import_name" value="{{$d.ImportName}}" maxlength="100">
+				<label class="form-label fw-semibold" for="cert_file">{{.T "certs.ca.import_cert"}}</label>
+				<input class="form-control form-control-sm mb-1" type="file" id="cert_file" name="cert_file" accept=".pem,.crt,.cer">
+				<textarea class="form-control form-control-sm font-monospace mb-2" name="cert" rows="3" placeholder="-----BEGIN CERTIFICATE-----" aria-label="{{.T "certs.ca.import_cert"}}"></textarea>
+				<label class="form-label fw-semibold" for="key_file">{{.T "certs.upload_key"}}</label>
+				<input class="form-control form-control-sm mb-1" type="file" id="key_file" name="key_file" accept=".pem,.key">
+				<textarea class="form-control form-control-sm font-monospace mb-2" name="key" rows="3" placeholder="-----BEGIN PRIVATE KEY-----" aria-label="{{.T "certs.upload_key"}}" autocomplete="off"></textarea>
+				<button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-upload"></i> {{.T "certs.ca.import"}}</button>
+			</div>
+		</form>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/certs.js?v={{.Version}}"></script>{{end}}

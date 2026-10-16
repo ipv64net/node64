@@ -36,6 +36,8 @@ type fakeCA struct {
 	caCert   *x509.Certificate
 	validity time.Duration
 	issued   int
+	eab      bool   // External Account Binding verlangen
+	eabKID   string // zuletzt gesehene KID
 
 	txt     func(fqdn string) []string               // sichtbare TXT-Werte (folgt CNAMEs selbst)
 	httpGet func(name, token string) (string, error) // Abruf von http://<name>/.well-known/acme-challenge/<token>
@@ -88,7 +90,8 @@ func (ca *fakeCA) serve(w http.ResponseWriter, r *http.Request) {
 	defer ca.mu.Unlock()
 	if r.URL.Path == "/dir" {
 		ca.reply(w, 200, "", map[string]any{"newNonce": ca.url("/nonce"), "newAccount": ca.url("/acct"), "newOrder": ca.url("/order"),
-			"revokeCert": ca.url("/revoke"), "keyChange": ca.url("/kc"), "meta": map[string]any{"termsOfService": "https://example.test/tos"}})
+			"revokeCert": ca.url("/revoke"), "keyChange": ca.url("/kc"), "meta": map[string]any{"termsOfService": "https://example.test/tos",
+				"externalAccountRequired": ca.eab}})
 		return
 	}
 	if r.URL.Path == "/nonce" {
@@ -112,6 +115,22 @@ func (ca *fakeCA) serve(w http.ResponseWriter, r *http.Request) {
 			_ = json.Unmarshal(prot.JWK, &jwk)
 			h := sha256.Sum256([]byte(fmt.Sprintf(`{"crv":"%s","kty":"%s","x":"%s","y":"%s"}`, jwk.Crv, jwk.Kty, jwk.X, jwk.Y)))
 			ca.thumb = base64.RawURLEncoding.EncodeToString(h[:])
+			var acct struct {
+				EAB *struct{ Protected string } `json:"externalAccountBinding"`
+			}
+			_ = json.Unmarshal(payload, &acct)
+			if acct.EAB != nil {
+				var p struct{ KID string }
+				pb, _ := base64.RawURLEncoding.DecodeString(acct.EAB.Protected)
+				_ = json.Unmarshal(pb, &p)
+				ca.eabKID = p.KID
+			}
+			if ca.eab && ca.eabKID == "" {
+				w.Header().Set("Content-Type", "application/problem+json")
+				w.WriteHeader(400)
+				_, _ = w.Write([]byte(`{"type":"urn:ietf:params:acme:error:externalAccountRequired","detail":"eab required"}`))
+				return
+			}
 			ca.accounts++
 			status := 201
 			if ca.accounts > 1 {

@@ -21,7 +21,9 @@ import (
 )
 
 // Die Seite „Zertifikate“ gehoert zum Kern: eigener Menuepunkt, ohne CDN64 erreichbar.
-func TestCertificatesPage(t *testing.T) {
+// newCertsApp: Testserver mit Zertifikatsverwaltung, angemeldet als admin.
+func newCertsApp(t *testing.T) (*testApp, *certs.Manager) {
+	t.Helper()
 	ctx := context.Background()
 	var mgr *certs.Manager
 	a := newTestAppDeps(t, func(d *Deps) {
@@ -40,6 +42,12 @@ func TestCertificatesPage(t *testing.T) {
 		d.Certs, mgr = m, m
 	})
 	loginAs(t, a, "admin", "sehr geheimes passwort")
+	return a, mgr
+}
+
+func TestCertificatesPage(t *testing.T) {
+	ctx := context.Background()
+	a, mgr := newCertsApp(t)
 
 	resp, body := a.get(t, "/")
 	if resp.StatusCode != 200 || !strings.Contains(body, `href="/certificates"`) {
@@ -163,4 +171,73 @@ func testCertPEM(t *testing.T, name string) (string, string) {
 	der, _ := x509.CreateCertificate(rand.Reader, tpl, tpl, &key.PublicKey, key)
 	kd, _ := x509.MarshalECPrivateKey(key)
 	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kd}))
+}
+
+// Eigene CA: anlegen, Zertifikat fuer Name und IP ausstellen, CA verteilen; ACME-Stellen-Formular.
+func TestCertificatesCA(t *testing.T) {
+	ctx := context.Background()
+	a, mgr := newCertsApp(t)
+	resp, body := a.get(t, "/certificates/ca/new")
+	if resp.StatusCode != 200 || !strings.Contains(body, `action="/certificates/ca/import"`) {
+		t.Fatalf("ca new: %d", resp.StatusCode)
+	}
+	resp, _ = a.post(t, "/certificates/ca", url.Values{"_csrf": {csrfOf(t, body)}, "name": {"Heimnetz"}, "key_type": {"ecdsa"}, "constrained": {"on"}})
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("ca create: %d", resp.StatusCode)
+	}
+	cas, _ := mgr.CAs(ctx)
+	if len(cas) != 1 || len(cas[0].PermittedIP) == 0 {
+		t.Fatalf("cas: %+v", cas)
+	}
+	_, body = a.get(t, "/certificates")
+	if !strings.Contains(body, "Heimnetz") || !strings.Contains(body, "/certificates/ca/1/file?f=mobileconfig") {
+		t.Fatal("CA card missing")
+	}
+	resp, body = a.get(t, "/certificates/new")
+	if !strings.Contains(body, `value="ca"`) || !strings.Contains(body, `name="ca_id"`) || !strings.Contains(body, `name="acme_ca"`) {
+		t.Fatal("ca source missing in form")
+	}
+	resp, _ = a.post(t, "/certificates", url.Values{"_csrf": {csrfOf(t, body)}, "names": {"nas.lan\n192.168.1.5"}, "source": {"ca"}, "ca_id": {"1"}, "days": {"100"}})
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("issue: %d", resp.StatusCode)
+	}
+	var c *certs.Cert
+	for i := 0; i < 100; i++ {
+		list, _ := mgr.List(ctx)
+		if len(list) == 1 && list[0].Status == certs.StatusValid {
+			c = list[0]
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if c == nil || c.Source != certs.SourceCA || c.Days != 100 || strings.Join(c.Names, ",") != "nas.lan,192.168.1.5" {
+		t.Fatalf("issued: %+v", c)
+	}
+	// oeffentlicher Name: abgelehnt, Formular zeigt den Fehler
+	_, body = a.get(t, "/certificates/new")
+	if resp, body = a.post(t, "/certificates", url.Values{"_csrf": {csrfOf(t, body)}, "names": {"example.com"}, "source": {"ca"}, "ca_id": {"1"}}); resp.StatusCode != 422 ||
+		!strings.Contains(body, "alert-danger") {
+		t.Fatalf("public name: %d", resp.StatusCode)
+	}
+	for _, f := range []string{"pem", "crt", "mobileconfig"} {
+		if resp, _ = a.get(t, "/certificates/ca/1/file?f="+f); resp.StatusCode != 200 {
+			t.Fatalf("ca file %s: %d", f, resp.StatusCode)
+		}
+	}
+	if resp, body = a.get(t, "/api/cas"); resp.StatusCode != 200 || !strings.Contains(body, `"certificates":1`) {
+		t.Fatalf("api cas: %d %s", resp.StatusCode, body)
+	}
+	if resp, body = a.get(t, "/certificates/acme/new"); resp.StatusCode != 200 || !strings.Contains(body, "acme.zerossl.com") {
+		t.Fatalf("acme new: %d", resp.StatusCode)
+	}
+	if resp, body = a.get(t, "/api/acme-cas/presets"); resp.StatusCode != 200 || !strings.Contains(body, "zerossl") {
+		t.Fatalf("presets: %d", resp.StatusCode)
+	}
+	_, body = a.get(t, "/certificates")
+	if resp, _ = a.post(t, "/certificates/ca/1/delete", url.Values{"_csrf": {csrfOf(t, body)}}); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("delete: %d", resp.StatusCode)
+	}
+	if cas, _ := mgr.CAs(ctx); len(cas) != 1 { // benutzt: bleibt
+		t.Fatal("used CA must stay")
+	}
 }

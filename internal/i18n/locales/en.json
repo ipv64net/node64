@@ -500,7 +500,8 @@
       "alias": "Alias (CNAME)",
       "http": "HTTP-01",
       "upload": "own",
-      "dns": "DNS provider"
+      "dns": "DNS provider",
+      "ca": "own CA"
     },
     "step": {
       "queued": "waiting …",
@@ -542,14 +543,16 @@
       "ipv64": "ipv64 DNS-01",
       "alias": "Alias via ipv64",
       "http": "HTTP-01",
-      "dns": "Other DNS provider"
+      "dns": "Other DNS provider",
+      "ca": "Own CA"
     },
     "src_hint": {
       "auto": "ipv64 DNS-01 if all names are in the ipv64 account, otherwise HTTP-01.",
       "ipv64": "for domains in the ipv64 account; wildcards too, port 80 need not be open.",
       "alias": "for domains at other providers: set a CNAME once, ipv64 does the rest – no provider credentials needed.",
       "http": "port 80 must reach this node from outside; no wildcards.",
-      "dns": "for domains at Cloudflare, Hetzner, netcup, INWX, IONOS and others: Node64 sets the TXT record via their API (store an account)."
+      "dns": "for domains at Cloudflare, Hetzner, netcup, INWX, IONOS and others: Node64 sets the TXT record via their API (store an account).",
+      "ca": "for devices in your own network, also for IP addresses and names like nas.lan; devices have to trust the CA once."
     },
     "your_domains": "Your ipv64 domains:",
     "alias_zone": "Target domain at ipv64",
@@ -588,7 +591,17 @@
       "name": "Check the name",
       "no_cert": "The certificate has not been issued yet.",
       "format": "Unknown format",
-      "password": "Password for PKCS#12"
+      "password": "Password for PKCS#12",
+      "ca_id": "Check the CA",
+      "days": "Check the validity",
+      "acme_ca": "Check the ACME CA",
+      "directory": "Check the directory",
+      "accept_tos": "Accept the terms of service",
+      "eab_kid": "Check the EAB key ID",
+      "eab_hmac": "Check the EAB HMAC",
+      "root_pem": "Check the root certificate",
+      "key_type": "Check the key",
+      "domains": "Check the domains"
     },
     "expired": "expired",
     "days": "{days} days",
@@ -628,6 +641,56 @@
       "p12_legacy": "Old encryption (3DES) for older devices and Windows versions",
       "p12_download": "Download",
       "api_hint": "For scripts on other devices: GET /api/certs/{id}/bundle?format=zip|fullchain|key|pem with an API key; ETag and If-None-Match only reload on change. Every download with key is in the audit log."
+    },
+    "ca": {
+      "title": "Own CAs",
+      "new": "Add own CA",
+      "empty": "For devices in your own network (nas.lan, 192.168.x.x): create or import a CA, then issue certificates with it.",
+      "root": "root CA",
+      "intermediate": "intermediate CA",
+      "imported_flag": "imported",
+      "until": "valid until {date}",
+      "constrained": "private names and addresses only",
+      "unconstrained": "unconstrained",
+      "delete_confirm": "Delete CA “{name}”? Devices that trust it keep it until it is removed there.",
+      "install": "Install on devices:",
+      "add_first": "Add an own CA first",
+      "which": "CA",
+      "days": "Validity (days)",
+      "names_hint": "Names and IP addresses (one per line). Up to 825 days (Apple's limit); renewed in the last third, at most 30 days before expiry.",
+      "create_title": "Create a new CA",
+      "create_hint": "Node64 creates key and CA certificate (10 years). The key stays encrypted in the database and is part of the backup.",
+      "name": "Name",
+      "key_type": "Key",
+      "rsa_hint": "for very old devices",
+      "constrain": "Private names and addresses only (recommended)",
+      "constrain_hint": "The CA may then only confirm names like *.lan, *.home.arpa, *.internal, *.local and private IPs. Even if its key is stolen, no internet domains can be forged with it.",
+      "domains": "Additionally allowed domains (optional, one per line)",
+      "create": "Create CA",
+      "import_title": "Import an existing CA",
+      "import_hint": "The CA certificate (with chain for an intermediate CA) and its private key as PEM, e.g. from step-ca, OpenSSL or XCA.",
+      "import_cert": "CA certificate (PEM)",
+      "import": "Import",
+      "created": "CA “{name}” created.",
+      "imported": "CA “{name}” imported.",
+      "deleted": "CA “{name}” deleted."
+    },
+    "acme": {
+      "title": "ACME CAs",
+      "new": "Add ACME CA",
+      "default": "default",
+      "delete_confirm": "Remove ACME CA “{name}”?",
+      "which": "Issuing CA",
+      "hint": "Besides Let's Encrypt you can use other CAs that speak ACME: ZeroSSL, Google Trust Services, SSL.com or your own step-ca.",
+      "preset": "Preset",
+      "custom": "custom",
+      "directory": "ACME directory (URL)",
+      "eab_hint": "External Account Binding: required by ZeroSSL, Google and SSL.com, created in the CA's account. The HMAC is stored encrypted.",
+      "root": "Root certificate of the CA (PEM)",
+      "root_hint": "Only for your own CA such as step-ca whose certificate is not publicly trusted.",
+      "tos": "I accept the terms of service of this CA.",
+      "created": "ACME CA “{name}” added.",
+      "deleted": "ACME CA “{name}” removed."
     }
   },
   "ports": {

@@ -1,0 +1,42 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1 class="h4 mb-3"><i class="bi bi-shield-lock text-primary"></i> {{.T "certs.acme.new"}}</h1>
+<div class="row g-3">
+	<div class="col-xl-7">
+		<form method="post" action="/certificates/acme" class="card">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-body small">
+				{{if $d.Error}}<div class="alert alert-danger py-2">{{$d.Error}}</div>{{end}}
+				<p class="text-body-secondary">{{.T "certs.acme.hint"}}</p>
+				<label class="form-label fw-semibold" for="preset">{{.T "certs.acme.preset"}}</label>
+				<select class="form-select form-select-sm mb-3" id="preset" data-acme-preset>
+					<option value="">{{.T "certs.acme.custom"}}</option>
+					{{range $d.Presets}}<option value="{{.ID}}" data-name="{{.Name}}" data-directory="{{.Directory}}" data-eab="{{.EAB}}" data-docs="{{.Docs}}">{{.Name}}</option>{{end}}
+				</select>
+				<label class="form-label fw-semibold" for="name">{{.T "certs.ca.name"}}</label>
+				<input class="form-control form-control-sm mb-2" id="name" name="name" value="{{$d.Name}}" required maxlength="100" data-acme-name>
+				<label class="form-label fw-semibold" for="directory">{{.T "certs.acme.directory"}}</label>
+				<input class="form-control form-control-sm font-monospace mb-1" id="directory" name="directory" value="{{$d.Directory}}" required placeholder="https://…/directory" data-acme-directory>
+				<div class="form-text mb-3" data-acme-docs></div>
+				<div class="row g-2 mb-1">
+					<div class="col-sm-6"><label class="form-label" for="eab_kid">EAB Key-ID</label>
+						<input class="form-control form-control-sm font-monospace" id="eab_kid" name="eab_kid" value="{{$d.KID}}" autocomplete="off"></div>
+					<div class="col-sm-6"><label class="form-label" for="eab_hmac">EAB HMAC</label>
+						<input class="form-control form-control-sm font-monospace" type="password" id="eab_hmac" name="eab_hmac" autocomplete="off"></div>
+				</div>
+				<div class="form-text mb-3">{{.T "certs.acme.eab_hint"}}</div>
+				<label class="form-label" for="root_pem">{{.T "certs.acme.root"}} <span class="text-body-secondary">({{.T "certs.dns.optional"}})</span></label>
+				<textarea class="form-control form-control-sm font-monospace mb-1" id="root_pem" name="root_pem" rows="3" placeholder="-----BEGIN CERTIFICATE-----">{{$d.RootPEM}}</textarea>
+				<div class="form-text mb-3">{{.T "certs.acme.root_hint"}}</div>
+				<div class="form-check"><input class="form-check-input" type="checkbox" id="accept_tos" name="accept_tos" required>
+					<label class="form-check-label" for="accept_tos">{{.T "certs.acme.tos"}}</label></div>
+			</div>
+			<div class="card-footer d-flex gap-2">
+				<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>
+				<a class="btn btn-outline-secondary btn-sm" href="/certificates">{{.T "common.cancel"}}</a>
+			</div>
+		</form>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/certs.js?v={{.Version}}"></script>{{end}}

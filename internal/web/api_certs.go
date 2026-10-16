@@ -36,6 +36,7 @@ func (s *Server) certRoutes() {
 	s.mux.Handle("POST /api/certs/{id}/renew", s.auth(s.apiCertRenew))
 	s.mux.Handle("GET /api/certs/{id}/chain", s.auth(s.apiCertChain))
 	s.certExportRoutes()
+	s.certCARoutes()
 }
 
 // certErr bildet Fehler der Verwaltung auf Statuscodes ab.

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/mail"
 	"sort"
 	"strings"
@@ -45,6 +46,7 @@ const (
 	SourceHTTP   = "http"   // HTTP-01 ueber Port 80 des Eingangs
 	SourceDNS    = "dns"    // DNS-01 ueber einen anderen DNS-Anbieter (lego, Zugang in cert_dns_accounts)
 	SourceUpload = "upload" // eigenes Zertifikat
+	SourceCA     = "ca"     // von einer eigenen CA der Verwaltung ausgestellt (auch fuer IPs)
 )
 
 // Zustaende.
@@ -82,6 +84,9 @@ type Cert struct {
 	AliasZone   string    `json:"alias_zone,omitempty"`
 	AliasPrefix string    `json:"alias_prefix,omitempty"`
 	DNSAccount  int64     `json:"dns_account,omitempty"` // source dns
+	CAID        int64     `json:"ca_id,omitempty"`       // source ca
+	Days        int       `json:"days,omitempty"`        // source ca: Laufzeit
+	ACMECA      int64     `json:"acme_ca,omitempty"`     // 0 = Let's Encrypt, sonst weitere ACME-Stelle
 	Staging     bool      `json:"staging"`
 	AutoRenew   bool      `json:"auto_renew"`
 	Status      string    `json:"status"`
@@ -222,13 +227,13 @@ func (m *Manager) Close() {
 // ---------------------------------------------------------------- Lesen
 
 const cols = `id, names, source, alias_zone, alias_prefix, dns_account, staging, auto_renew, cert_pem != '', not_before, not_after, issuer, status, last_error,
-	last_attempt, warned, created_at, updated_at`
+	last_attempt, warned, created_at, updated_at, ca_id, days, acme_ca`
 
 func (m *Manager) scan(row interface{ Scan(...any) error }) (*Cert, error) {
 	var c Cert
 	var names, nb, na, la, ca, ua string
 	if err := row.Scan(&c.ID, &names, &c.Source, &c.AliasZone, &c.AliasPrefix, &c.DNSAccount, &c.Staging, &c.AutoRenew, &c.hasCert, &nb, &na, &c.Issuer,
-		&c.Status, &c.LastError, &la, &c.warned, &ca, &ua); err != nil {
+		&c.Status, &c.LastError, &la, &c.warned, &ca, &ua, &c.CAID, &c.Days, &c.ACMECA); err != nil {
 		return nil, err
 	}
 	c.Names = strings.Split(names, ",")
@@ -448,13 +453,16 @@ func (m *Manager) SetAccount(ctx context.Context, email string, acceptTOS bool) 
 
 // ---------------------------------------------------------------- Anlegen, Hochladen, Loeschen
 
-// Request ist ein neues Zertifikat von Let's Encrypt.
+// Request ist ein neues Zertifikat (Let's Encrypt, andere ACME-Stelle oder eigene CA).
 type Request struct {
 	Names       []string `json:"names"`
 	Source      string   `json:"source"`       // ipv64, alias, http
 	AliasZone   string   `json:"alias_zone"`   // alias
 	AliasPrefix string   `json:"alias_prefix"` // alias, optional
 	DNSAccount  int64    `json:"dns_account"`  // dns: Zugang
+	CAID        int64    `json:"ca_id"`        // ca: eigene CA
+	Days        int      `json:"days"`         // ca: Laufzeit (Standard 397, hoechstens 825)
+	ACMECA      int64    `json:"acme_ca"`      // weitere ACME-Stelle statt Let's Encrypt (0)
 	Staging     bool     `json:"staging"`
 	AutoRenew   *bool    `json:"auto_renew"` // Standard an
 }
@@ -469,11 +477,21 @@ func invalid(field, format string, args ...any) error {
 }
 
 // normNames prueft und vereinheitlicht die Namen.
-func normNames(in []string) ([]string, error) {
+func normNames(in []string) ([]string, error) { return normNamesIP(in, false) }
+
+// normNamesIP: wie normNames, mit allowIP auch IP-Adressen (eigene CA).
+func normNamesIP(in []string, allowIP bool) ([]string, error) {
 	var out []string
 	seen := map[string]bool{}
 	for _, n := range in {
 		if strings.TrimSpace(n) == "" {
+			continue
+		}
+		if ip := net.ParseIP(strings.Trim(strings.TrimSpace(n), "[]")); ip != nil && allowIP {
+			if s := ip.String(); !seen[s] {
+				seen[s] = true
+				out = append(out, s)
+			}
 			continue
 		}
 		nn, err := edge.NormalizeName(n)
@@ -496,7 +514,7 @@ func normNames(in []string) ([]string, error) {
 
 // Create legt ein Zertifikat an und startet den Abruf im Hintergrund.
 func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
-	names, err := normNames(req.Names)
+	names, err := normNamesIP(req.Names, req.Source == SourceCA)
 	if err != nil {
 		return nil, err
 	}
@@ -529,6 +547,21 @@ func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
 				return nil, invalid("names", "wildcard %s needs a dns challenge (ipv64 or alias)", n)
 			}
 		}
+	case SourceCA:
+		ca, err := m.loadCA(ctx, req.CAID)
+		if err != nil {
+			return nil, invalid("ca_id", "unknown CA")
+		}
+		if req.Days == 0 {
+			req.Days = defaultCADays
+		}
+		if req.Days < 1 || req.Days > maxCADays {
+			return nil, invalid("days", "1 to %d days", maxCADays)
+		}
+		if err := ca.permits(names); err != nil {
+			return nil, invalid("names", "%v", err)
+		}
+		req.ACMECA, req.Staging = 0, false
 	default:
 		return nil, invalid("source", "unknown source %q", req.Source)
 	}
@@ -538,14 +571,22 @@ func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
 	if req.Source != SourceDNS {
 		req.DNSAccount = 0
 	}
-	if !m.Account(ctx).TOSAccepted {
-		return nil, ErrTOS
+	if req.Source != SourceCA {
+		req.CAID, req.Days = 0, 0
+		if req.ACMECA != 0 {
+			if _, err := m.ACMECA(ctx, req.ACMECA); err != nil {
+				return nil, invalid("acme_ca", "unknown ACME CA")
+			}
+			req.Staging = false // Staging gibt es nur bei Let's Encrypt
+		} else if !m.Account(ctx).TOSAccepted {
+			return nil, ErrTOS
+		}
 	}
 	auto := req.AutoRenew == nil || *req.AutoRenew
 	now := store.Now()
-	res, err := m.w.ExecContext(ctx, `INSERT INTO certs (names, source, alias_zone, alias_prefix, dns_account, staging, auto_renew, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, strings.Join(names, ","), req.Source, req.AliasZone, req.AliasPrefix, req.DNSAccount, req.Staging, auto, StatusPending,
-		now, now)
+	res, err := m.w.ExecContext(ctx, `INSERT INTO certs (names, source, alias_zone, alias_prefix, dns_account, ca_id, days, acme_ca, staging, auto_renew, status,
+		created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, strings.Join(names, ","), req.Source, req.AliasZone, req.AliasPrefix, req.DNSAccount,
+		req.CAID, req.Days, req.ACMECA, req.Staging, auto, StatusPending, now, now)
 	if err != nil {
 		return nil, err
 	}
@@ -661,7 +702,7 @@ func (m *Manager) Renew(ctx context.Context, id int64) error {
 	if c.Source == SourceUpload {
 		return ErrUpload
 	}
-	if !m.Account(ctx).TOSAccepted {
+	if c.Source != SourceCA && c.ACMECA == 0 && !m.Account(ctx).TOSAccepted {
 		return ErrTOS
 	}
 	return m.start(id, "manual")
@@ -720,6 +761,9 @@ func certNames(leaf *x509.Certificate) []string {
 		if nn, err := edge.NormalizeName(leaf.Subject.CommonName); err == nil {
 			out = append(out, nn)
 		}
+	}
+	for _, ip := range leaf.IPAddresses { // eigene CA: auch fuer IPs
+		out = append(out, ip.String())
 	}
 	return out
 }
