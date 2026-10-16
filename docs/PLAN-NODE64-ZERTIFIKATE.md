@@ -116,6 +116,18 @@ Für Skripte auf anderen Geräten, mit einem normalen API-Key (`Authorization: B
     4. sonst selbst signiert.
   - Der Name am Eingang nutzt ein gewähltes Zertifikat (`CertID`), sonst das passende.
   - „Benutzt von: Node64-Oberfläche“ über `SetUsers("web")`.
+- **Z4, Teil Kern (2026-10-16, mit der DNS64-Sitzung abgestimmt):**
+  - `EnsureCA`: DNS64-CA mit gleichem Schlüssel und gleichen Einschränkungen übernehmen, idempotent.
+  - `ImportIssued`: pfsense.ipv64.de samt Schlüssel als ipv64-DNS-01-Zertifikat übernehmen, ab dann erneuert die
+    Zentrale.
+  - `EnsureIssued(owner, caID, names+IPs, days)`: Server-Zertifikat der CA für DNS64. Neu ausgestellt wird, wenn
+    Namen fehlen, sich die IPs ändern oder es noch höchstens 30 Tage gilt.
+  - `Owned(owner)` und `OnChange(func(id))`: DNS64 tauscht `m.cur` ohne Neustart.
+  - **DNS64-Teil (DNS64-Sitzung):**
+    - Modus `central` mit `dns64.cert_id`.
+    - Einmalige Übernahme beim Start; der Merker `dns64.central_migrated` wird erst nach vollem Erfolg gesetzt.
+    - `tls/` und `acme/` bleiben eine Version als Rückfall.
+    - `SetCerts` in `main.go`.
 
 ## Phasen
 
