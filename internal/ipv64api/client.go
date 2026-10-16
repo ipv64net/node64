@@ -127,7 +127,9 @@ func (c *Client) do(ctx context.Context, method, key, path string, in any, out a
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("Authorization", "Bearer "+key)
+	if key != "" { // oeffentliche Endpunkte (z. B. /plans) ohne Key
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.ua)
 	resp, err := c.http.Do(req)

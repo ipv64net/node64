@@ -8,7 +8,53 @@
     "name": "Node64",
     "tagline": "Healthchecks, DynDNS und mehr im eigenen Netz"
   },
+  "plans": {
+    "title": "Account-Klassen",
+    "pricing": "Preisseite bei ipv64.net",
+    "intro": "Was die Account-Klassen von ipv64.net umfassen. Die Grenzen gelten für alles, was über ipv64 läuft (Online-Checks, DynDNS, CDN, VPN); lokale Messungen und Dienste dieser Node zählen nicht dagegen.",
+    "yours": "Deine Account-Klasse: {name}.",
+    "legacy": "Sie wird nicht mehr angeboten; die Grenzen stehen im ipv64-Account.",
+    "not_connected": "Diese Node ist nicht mit ipv64 verbunden. Mit API-Key oder Healthchecks-Sync siehst du hier deine Klasse.",
+    "year": "Jahr",
+    "free": "kostenlos",
+    "current": "deine Klasse",
+    "upgrade": "Wechseln",
+    "note": "Preise inkl. MwSt.; Wechsel und Bezahlung bei ipv64.net. ∞ = unbegrenzt.",
+    "builtin": "Die Werte sind ein eingebauter Stand – die aktuelle Übersicht steht auf der Preisseite.",
+    "group": {
+      "dyndns": "DynDNS und DNS",
+      "healthchecks": "Healthchecks (online bei ipv64)",
+      "failover": "DNS-Failover und Offline-Seiten",
+      "cdn": "CDN",
+      "vpn": "Cloud-Router und VPN",
+      "other": "Weiteres"
+    },
+    "limit": {
+      "dyndns_domains": "DynDNS-Domains",
+      "own_domains": "Eigene Domains (DNS)",
+      "dyndns_updates_24h": "DynDNS-Updates je Tag",
+      "dyndns_ttl_s": "DynDNS-TTL (Sekunden)",
+      "healthchecks": "Online-Messstellen (Checks × Standorte)",
+      "healthcheck_pings_24h": "Healthcheck-Messungen/Pings je Tag",
+      "sms_24h": "SMS je Tag",
+      "failover_policies": "Failover-Policies",
+      "failover_monitors": "Failover-Monitore",
+      "failover_rules": "Failover-Regeln",
+      "offline_pages": "Offline-Seiten",
+      "cdn_domains": "CDN-Domains",
+      "cdn_traffic_gb": "CDN-Datenverkehr (GB)",
+      "cdn_mappings": "CDN-Mappings",
+      "cloud_routers": "Cloud-Router",
+      "vpn_gateways": "VPN-Gateways",
+      "vpn_peers": "VPN-Peers",
+      "vpn_traffic_gb": "VPN-Datenverkehr (GB)",
+      "dns64_clients": "DNS64-Clients (online)",
+      "statistics_days": "Statistik (Tage)",
+      "log_days": "Logs (Tage)"
+    }
+  },
   "nav": {
+    "plan": "Account-Klasse: {name}",
     "api_ok": "ipv64-API verbunden",
     "api_none": "ipv64-API nicht eingerichtet",
     "api_expired": "ipv64-API-Key abgelaufen",
@@ -1180,6 +1226,7 @@
     }
   },
   "hc": {
+    "plans_link": "Mehr Online-Messungen gibt es mit einer höheren Account-Klasse.",
     "where": {
       "online": "Online",
       "online_hint": "Wird nur von ipv64 an den gewählten Standorten gemessen",

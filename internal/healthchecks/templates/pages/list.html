@@ -46,8 +46,8 @@
 	{{if $d.Sort}}<input type="hidden" name="sort" value="{{$d.Sort}}"><input type="hidden" name="dir" value="{{$d.Dir}}">{{end}}
 </form>
 
-{{if gt $d.QuotaLimit 0}}{{if ge $d.QuotaToday $d.QuotaLimit}}<div class="alert alert-warning py-2 small"><i class="bi bi-hourglass-split"></i> {{.T "hc.quota.reached" "today" $d.QuotaToday "limit" $d.QuotaLimit}}</div>
-{{else if $d.QuotaNear}}<div class="alert alert-info py-2 small"><i class="bi bi-hourglass-top"></i> {{.T "hc.quota.near" "today" $d.QuotaToday "limit" $d.QuotaLimit}}</div>{{end}}{{end}}
+{{if gt $d.QuotaLimit 0}}{{if ge $d.QuotaToday $d.QuotaLimit}}<div class="alert alert-warning py-2 small"><i class="bi bi-hourglass-split"></i> {{.T "hc.quota.reached" "today" $d.QuotaToday "limit" $d.QuotaLimit}} <a href="/plans">{{.T "hc.plans_link"}}</a></div>
+{{else if $d.QuotaNear}}<div class="alert alert-info py-2 small"><i class="bi bi-hourglass-top"></i> {{.T "hc.quota.near" "today" $d.QuotaToday "limit" $d.QuotaLimit}} <a href="/plans">{{.T "hc.plans_link"}}</a></div>{{end}}{{end}}
 <div id="hc-live" data-t-in="{{.T "hc.next_in"}}" data-t-now="{{.T "hc.next_now"}}" data-t-push="{{.T "hc.next_push_until"}}" data-t-overdue="{{.T "hc.next_overdue"}}">
 {{if and (not $d.Rows) $d.Docker}}
 {{else if not $d.Rows}}

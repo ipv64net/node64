@@ -27,7 +27,8 @@ func (s *Server) authRoutes() {
 	s.mux.Handle("POST /settings/api-keys", s.auth(s.apiKeyCreate))
 	s.mux.Handle("POST /settings/api-keys/{id}/delete", s.auth(s.apiKeyDelete))
 	s.mux.Handle("GET /settings/certificate", s.auth(s.certificateDownload))
-	s.ssoRoutes() // SSO, Forward-Auth, Passkeys (auth_page.go)
+	s.ssoRoutes()                                   // SSO, Forward-Auth, Passkeys (auth_page.go)
+	s.mux.Handle("GET /plans", s.auth(s.plansPage)) // Account-Klassen von ipv64 (plans.go)
 }
 
 // ---------------------------------------------------------------- Login, zweite Stufe

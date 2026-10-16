@@ -205,7 +205,7 @@
 				{{end}}
 				<div class="col-12"><label class="form-label">{{.T "hc.form.locations"}}</label>
 					{{range $d.Locations}}<div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="locations" value="{{.}}" id="loc_{{.}}"{{if contains (index $f "locations") .}} checked{{end}}{{if and (not $d.Linked) (not $d.APIMode)}} disabled{{end}}><label class="form-check-label" for="loc_{{.}}">{{$.T (print "hc.location." .)}}</label></div>{{end}}
-					<div class="form-text">{{.T "hc.form.locations_hint"}}</div>
+					<div class="form-text">{{.T "hc.form.locations_hint"}} <a href="/plans">{{.T "plans.title"}}</a></div>
 					{{if and $d.Linked $d.QuotaLimit}}<div class="small mt-1" id="hc-proj" data-other="{{$d.ProjOther}}" data-today="{{$d.QuotaToday}}" data-limit="{{$d.QuotaLimit}}" data-acclocs="{{$d.AccLocs}}"
 						data-t-check="{{.T "hc.proj.check"}}" data-t-local="{{.T "hc.proj.local"}}" data-t-total="{{.T "hc.proj.total"}}" data-t-over="{{.T "hc.proj.over"}}" data-t-runout="{{.T "hc.proj.runout"}}"></div>{{end}}</div>
 				<div class="col-12"><label class="form-label" for="policy">{{.T "hc.form.policy"}}</label>

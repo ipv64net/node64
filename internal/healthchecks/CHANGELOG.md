@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.12.1 – 2026-10-16
+
+### Neu
+- Hinweise auf Grenzen (Tageskontingent, vom hub abgelehnte Änderung wegen Online-Limit, Standorte im Formular)
+  verlinken die neue Übersicht der Account-Klassen.
+
 ## 2.12.0 – 2026-10-16
 
 ### Neu

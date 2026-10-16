@@ -8,7 +8,53 @@
     "name": "Node64",
     "tagline": "Health checks, DynDNS and more in your own network"
   },
+  "plans": {
+    "title": "Account classes",
+    "pricing": "Pricing page at ipv64.net",
+    "intro": "What the account classes of ipv64.net include. The limits apply to everything running via ipv64 (online checks, DynDNS, CDN, VPN); local measurements and services of this node do not count against them.",
+    "yours": "Your account class: {name}.",
+    "legacy": "It is no longer offered; the limits are shown in your ipv64 account.",
+    "not_connected": "This node is not connected to ipv64. With an API key or Healthchecks sync you see your class here.",
+    "year": "year",
+    "free": "free",
+    "current": "your class",
+    "upgrade": "Switch",
+    "note": "Prices incl. VAT; switching and payment at ipv64.net. ∞ = unlimited.",
+    "builtin": "The values are a built-in snapshot – the current overview is on the pricing page.",
+    "group": {
+      "dyndns": "DynDNS and DNS",
+      "healthchecks": "Healthchecks (online at ipv64)",
+      "failover": "DNS failover and offline pages",
+      "cdn": "CDN",
+      "vpn": "Cloud routers and VPN",
+      "other": "More"
+    },
+    "limit": {
+      "dyndns_domains": "DynDNS domains",
+      "own_domains": "Own domains (DNS)",
+      "dyndns_updates_24h": "DynDNS updates per day",
+      "dyndns_ttl_s": "DynDNS TTL (seconds)",
+      "healthchecks": "Online measuring points (checks × locations)",
+      "healthcheck_pings_24h": "Healthcheck measurements/pings per day",
+      "sms_24h": "SMS per day",
+      "failover_policies": "Failover policies",
+      "failover_monitors": "Failover monitors",
+      "failover_rules": "Failover rules",
+      "offline_pages": "Offline pages",
+      "cdn_domains": "CDN domains",
+      "cdn_traffic_gb": "CDN traffic (GB)",
+      "cdn_mappings": "CDN mappings",
+      "cloud_routers": "Cloud routers",
+      "vpn_gateways": "VPN gateways",
+      "vpn_peers": "VPN peers",
+      "vpn_traffic_gb": "VPN traffic (GB)",
+      "dns64_clients": "DNS64 clients (online)",
+      "statistics_days": "Statistics (days)",
+      "log_days": "Logs (days)"
+    }
+  },
   "nav": {
+    "plan": "Account class: {name}",
     "api_ok": "ipv64 API connected",
     "api_none": "ipv64 API not set up",
     "api_expired": "ipv64 API key expired",
@@ -1180,6 +1226,7 @@
     }
   },
   "hc": {
+    "plans_link": "A higher account class allows more online measurements.",
     "where": {
       "online": "Online",
       "online_hint": "Measured only by ipv64 at the selected locations",
