@@ -251,22 +251,25 @@ func (s *Server) Run(ctx context.Context) error {
 		return srv, ln, nil
 	}
 
+	// Zertifikat der Oberflaeche: gewaehltes aus der Verwaltung, sonst passendes nach Namen, sonst selbst signiert
+	cert, err := loadOrCreateCertificate(s.Cfg, s.log)
+	if err != nil {
+		return err
+	}
+	s.fallbackCert = &cert
+	tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: s.uiCertificate}
 	if s.Cfg.HTTPPort > 0 {
 		srv, ln, err := newServer(s.Cfg.HTTPPort, nil)
 		if err != nil {
 			return err
 		}
 		s.track(srv)
-		s.log.Info("http listening", "addr", ln.Addr().String())
-		go func() { errc <- srv.Serve(ln) }()
+		// HTTP und HTTPS auf demselben Port (dualport.go): https://<node>:<port> geht ohne eigenen HTTPS-Port
+		dl := newDualListener(ln, &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: s.uiCertificate, NextProtos: []string{"http/1.1"}})
+		s.log.Info("http listening", "addr", ln.Addr().String(), "https", "same port")
+		go func() { errc <- srv.Serve(dl) }()
 	}
 	if s.Cfg.HTTPSPort > 0 {
-		cert, err := loadOrCreateCertificate(s.Cfg, s.log)
-		if err != nil {
-			return err
-		}
-		s.fallbackCert = &cert
-		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: s.uiCertificate} // Zentrale, sonst cert
 		srv, ln, err := newServer(s.Cfg.HTTPSPort, tlsCfg)
 		if err != nil {
 			return err
