@@ -54,6 +54,7 @@
 			{{else}}<p class="small text-body-secondary mb-0">{{.T "sso.link_first"}}</p>{{end}}
 		</div>
 	</div>
+</div>
 <div class="col-lg-6">
 	<div class="card h-100" id="forward">
 		<div class="card-header"><i class="bi bi-signpost-split text-primary"></i> {{.T "sso.fwd_title"}} {{if $d.Fwd.Enabled}}<span class="badge text-bg-success">{{.T "common.running"}}</span>{{else}}<span class="badge text-bg-secondary">{{.T "common.disabled"}}</span>{{end}}</div>
@@ -97,7 +98,6 @@
 			{{else}}<div class="alert alert-warning small py-2 mb-0">{{.T "sso.pk_host" "host" $d.PKHost}}</div>{{end}}
 		</div>
 	</div>
-</div>
 </div>
 </div>
 {{end}}
