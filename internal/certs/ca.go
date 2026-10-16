@@ -490,5 +490,22 @@ func (m *Manager) storeIssued(ctx context.Context, id int64, chain string, leaf 
 		store.FormatTime(leaf.NotAfter), issuerName(leaf), StatusValid, now, now, id); err != nil {
 		return err
 	}
-	return m.reload(ctx) // gilt sofort, ohne Neustart
+	if err := m.reload(ctx); err != nil { // gilt sofort, ohne Neustart
+		return err
+	}
+	m.mu.Lock()
+	fs := append([]func(int64){}, m.onChg...)
+	m.mu.Unlock()
+	for _, f := range fs {
+		go f(id)
+	}
+	return nil
+}
+
+// OnChange meldet jede neue Ausstellung bzw. Erneuerung (Kennung) an f, ausserhalb aller Sperren. Abnehmer, die
+// das Zertifikat zwischenspeichern (DNS64: m.cur), tauschen es damit ohne Neustart.
+func (m *Manager) OnChange(f func(id int64)) {
+	m.mu.Lock()
+	m.onChg = append(m.onChg, f)
+	m.mu.Unlock()
 }

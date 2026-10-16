@@ -151,6 +151,7 @@ type Manager struct {
 	steps  map[int64]string // laufende Abrufe
 	users  map[string]func(ctx context.Context) map[int64][]string
 	holds  map[string]bool
+	onChg  []func(id int64) // nach jeder neuen Ausstellung
 	stopLp context.CancelFunc
 	lpDone chan struct{}
 	reg    map[string]bool // ACME-Konto bei der Stelle angemeldet (je Verzeichnis)
