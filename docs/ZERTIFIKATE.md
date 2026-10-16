@@ -67,7 +67,10 @@ Namen am Eingang. Ein Wechsel greift sofort, ohne Neustart.
   - In beiden Fällen steht DNS64 danach auf `central` mit der Kennung des Zertifikats.
   - Voraussetzung: Die Nutzungsbedingungen wurden in DNS64 angenommen.
 - Scheitert etwas, bleibt der alte Modus, und beim nächsten Start gibt es einen neuen Versuch.
-- Die alten Dateien unter `dns64/tls` und `dns64/acme` bleiben als Rückfall liegen.
+- Die alten Dateien unter `dns64/tls` und `dns64/acme` bleiben liegen. DNS64 liest sie nur noch für den Umzug.
+- Seit DNS64 1.11.0 holt und erneuert DNS64 selbst nichts mehr bei Let's Encrypt, das macht die Zentrale.
+- Ist eine Node noch nicht umgezogen, zeigt die Seite *Verschlüsselung* den Grund. Ausgeliefert wird dann das
+  bisherige Zertifikat.
 
 ## Eigene CA
 

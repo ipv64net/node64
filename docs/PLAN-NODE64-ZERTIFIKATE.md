@@ -139,7 +139,7 @@ Für Skripte auf anderen Geräten, mit einem normalen API-Key (`Authorization: B
   - Lasttest `TestLoadCerts` (Tag `loadtest`).
 
 **Offen:**
-- Die alte ACME-Anbindung von DNS64 (`internal/dns64/acme.go`) nach einer Version entfernen (DNS64-Sitzung).
+- ~~Die alte ACME-Anbindung von DNS64 entfernen~~: erledigt in DNS64 1.11.0 (e25040f, DNS64-Sitzung). Das Lesen von `acme/` bleibt für den Umzug.
 - Echte Ausstellung über einen der neuen DNS-Anbieter oder eine weitere ACME-Stelle, sobald Zugangsdaten
   vorliegen.
 
