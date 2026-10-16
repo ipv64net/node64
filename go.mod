@@ -5,9 +5,11 @@ go 1.27.0
 require (
 	github.com/coder/websocket v1.8.13
 	github.com/coreos/go-oidc/v3 v3.17.0
+	github.com/fxamacker/cbor/v2 v2.9.4
 	github.com/go-acme/lego/v4 v4.35.2
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/go-sql-driver/mysql v1.9.3
+	github.com/go-webauthn/webauthn v0.18.2
 	github.com/miekg/dns v1.1.72
 	github.com/prometheus-community/pro-bing v0.9.1
 	github.com/quic-go/quic-go v0.63.0
@@ -32,7 +34,10 @@ require (
 	github.com/fatih/structs v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
+	github.com/go-webauthn/x v0.3.1 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
+	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
@@ -56,10 +61,12 @@ require (
 	github.com/openshift/gssapi v0.0.0-20161010215902-5fb4217df13b // indirect
 	github.com/ovh/go-ovh v1.9.0 // indirect
 	github.com/peterhellberg/link v1.2.0 // indirect
+	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pquerna/otp v1.5.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	go.uber.org/mock v0.6.0 // indirect
+	github.com/tinylib/msgp v1.6.4 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect

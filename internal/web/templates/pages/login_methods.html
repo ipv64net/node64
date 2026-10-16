@@ -71,6 +71,34 @@
 		</div>
 	</div>
 </div>
+<div class="col-lg-6">
+	<div class="card h-100" id="passkeys">
+		<div class="card-header"><i class="bi bi-fingerprint text-primary"></i> {{.T "sso.pk_title"}}</div>
+		<div class="card-body">
+			<p class="small text-body-secondary">{{.T "sso.pk_hint"}}</p>
+			{{if $d.Passkeys}}
+			<ul class="list-group list-group-flush mb-3 small">
+			{{range $d.Passkeys}}
+				<li class="list-group-item d-flex justify-content-between align-items-center px-0">
+					<span><strong>{{.Name}}</strong> <code>{{.RPID}}</code><br><span class="text-body-secondary">{{$.T "nf.last_used"}}: {{$.Ago .LastUsedAt}}</span></span>
+					<form method="post" action="/settings/login/passkeys/{{.ID}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{$.T "common.confirm"}}"><i class="bi bi-trash"></i></button></form>
+				</li>
+			{{end}}
+			</ul>
+			{{else}}<p class="small">{{.T "sso.pk_none"}}</p>{{end}}
+			{{if $d.PKOK}}
+			<form id="passkey-add" class="d-none" data-pk-needs data-csrf="{{.CSRF}}" data-err="{{.T "sso.pk_failed"}}">
+				<div class="input-group input-group-sm"><input class="form-control" name="name" placeholder="{{.T "sso.pk_name"}}" maxlength="60" required>
+				<button class="btn btn-primary" type="submit"><i class="bi bi-plus-lg"></i> {{.T "sso.pk_add"}}</button></div>
+				<div class="form-text">{{.T "sso.pk_for" "host" $d.PKHost}}</div>
+				<div class="text-danger small mt-1 d-none" data-pk-error></div>
+			</form>
+			<div class="alert alert-warning small py-2 mb-0 d-none" data-pk-unsupported>{{.T "sso.pk_browser"}}</div>
+			{{else}}<div class="alert alert-warning small py-2 mb-0">{{.T "sso.pk_host" "host" $d.PKHost}}</div>{{end}}
+		</div>
+	</div>
+</div>
 </div>
 </div>
 {{end}}
+{{define "scripts"}}<script src="/static/js/passkey.js?v={{.Version}}"></script>{{end}}

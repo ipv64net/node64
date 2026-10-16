@@ -17,6 +17,11 @@ func (s *Server) ssoRoutes() {
 	s.mux.Handle("POST /settings/login/oidc/link", s.auth(s.oidcLink))
 	s.mux.Handle("POST /settings/login/identities/{id}/delete", s.auth(s.ssoUnlink))
 	s.mux.Handle("POST /settings/login/forward", s.auth(s.loginMethodsForward))
+	s.mux.Handle("POST /settings/login/passkeys/begin", s.auth(s.passkeyRegisterBegin))
+	s.mux.Handle("POST /settings/login/passkeys/finish", s.auth(s.passkeyRegisterFinish))
+	s.mux.Handle("POST /settings/login/passkeys/{id}/delete", s.auth(s.passkeyDelete))
+	s.mux.HandleFunc("POST /login/passkey/begin", s.passkeyLoginBegin)
+	s.mux.HandleFunc("POST /login/passkey/finish", s.passkeyLoginFinish)
 }
 
 type loginMethodsData struct {
@@ -28,6 +33,9 @@ type loginMethodsData struct {
 	FwdIP      string // Adresse dieser Anfrage (Hilfe beim Eintragen des Proxys)
 	FwdHeader  string // Wert des Kopfs in dieser Anfrage
 	FwdTrusted bool   // diese Anfrage kommt von einem eingetragenen Proxy
+	Passkeys   []store.Passkey
+	PKHost     string // Hostname dieser Anfrage (Passkeys gelten nur dafuer)
+	PKOK       bool   // Passkeys sind unter dieser Adresse moeglich (Name statt IP, HTTPS)
 }
 
 func (s *Server) loginMethodsView(r *http.Request) *View {
@@ -41,6 +49,9 @@ func (s *Server) loginMethodsView(r *http.Request) *View {
 	d.FwdIP = remoteIP(r).String()
 	d.FwdHeader = truncate(r.Header.Get(d.Fwd.Header), 64)
 	d.FwdTrusted = d.Fwd.trusts(remoteIP(r))
+	d.Passkeys, _ = s.Store.Passkeys(ctx, v.User.ID, "")
+	_, host, pkErr := s.relyingParty(r)
+	d.PKHost, d.PKOK = host, pkErr == nil
 	v.Data = d
 	return v
 }
@@ -76,6 +87,9 @@ func (s *Server) loginMethodsOIDC(w http.ResponseWriter, r *http.Request) {
 func (s *Server) loginOptions(r *http.Request, v *View) {
 	if o := s.oidcSettings(r.Context()); o.Enabled() {
 		v.Form["sso"] = o.ButtonLabel()
+	}
+	if _, host, err := s.relyingParty(r); err == nil && s.Store.PasskeyCount(r.Context(), host) > 0 {
+		v.Form["passkey"] = "1"
 	}
 }
 

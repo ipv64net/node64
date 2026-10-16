@@ -297,10 +297,18 @@ func (s *Server) loginOIDCCallback(w http.ResponseWriter, r *http.Request) {
 // finishLogin startet nach einer Anmeldung ohne Passwort (SSO, Passkey) die Sitzung; den zweiten Faktor hat der
 // Anbieter bzw. der Passkey schon geprueft.
 func (s *Server) finishLogin(w http.ResponseWriter, r *http.Request, u *store.User, how, next string) {
-	ctx := r.Context()
-	if err := s.startSession(w, r, u.ID, false); err != nil {
+	if err := s.completeLogin(w, r, u, how); err != nil {
 		s.fail(w, r, err)
 		return
+	}
+	http.Redirect(w, r, safeNext(next), http.StatusSeeOther)
+}
+
+// completeLogin: Sitzung, Sprache, letzte Anmeldung und Audit nach einer Anmeldung ohne Passwort.
+func (s *Server) completeLogin(w http.ResponseWriter, r *http.Request, u *store.User, how string) error {
+	ctx := r.Context()
+	if err := s.startSession(w, r, u.ID, false); err != nil {
+		return err
 	}
 	if s.I18n.Has(u.Lang) {
 		s.setCookie(w, r, langCookie, u.Lang, 365*24*3600)
@@ -309,7 +317,7 @@ func (s *Server) finishLogin(w http.ResponseWriter, r *http.Request, u *store.Us
 	ip := s.clientIP(r)
 	s.auditEntry(ctx, store.AuditEntry{Actor: u.Username, Action: "login", Details: how, IP: ip})
 	s.log.Info("login", "user", u.Username, "ip", ip, "via", how)
-	http.Redirect(w, r, safeNext(next), http.StatusSeeOther)
+	return nil
 }
 
 // ---------------------------------------------------------------- Einstellungen

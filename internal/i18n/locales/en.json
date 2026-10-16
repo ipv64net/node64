@@ -98,6 +98,16 @@
     "done": "The node is set up. You can sign in now."
   },
   "sso": {
+    "pk_title": "Passkeys",
+    "pk_hint": "Sign in without a password using fingerprint, Face ID, device PIN or a security key. A passkey only works for the address it was created on and needs HTTPS with a name (not an IP address).",
+    "pk_none": "No passkey yet.",
+    "pk_name": "Name, e.g. iPhone or YubiKey",
+    "pk_add": "Add passkey",
+    "pk_for": "Valid for {host}.",
+    "pk_failed": "Passkey could not be created",
+    "pk_deleted": "Passkey deleted.",
+    "pk_browser": "This browser does not support passkeys here.",
+    "pk_host": "Passkeys do not work under “{host}”: open the node via HTTPS with its name (e.g. https://node64.example.com), not via an IP address.",
     "fwd_title": "Forward auth via the reverse proxy",
     "fwd_hint": "For Authelia, Authentik etc. in front of Traefik, Caddy or Nginx: the proxy reports the signed-in user in the “Remote-User” header. Node64 only trusts requests whose connection comes from one of the listed proxy addresses, and only for local users with exactly that name. The proxy must set the header itself and overwrite one sent by the browser.",
     "fwd_enable": "Enable forward auth",

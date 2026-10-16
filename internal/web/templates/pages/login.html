@@ -13,8 +13,11 @@
 	</div>
 	<button class="btn btn-primary w-100" type="submit">{{.T "login.submit"}}</button>
 </form>
-{{if .Val "sso"}}
-<div class="text-center text-body-secondary small my-2">{{.T "login.or"}}</div>
-<a class="btn btn-outline-secondary w-100" href="/login/oidc?next={{.Val "next"}}"><i class="bi bi-box-arrow-in-right"></i> {{.T "login.with" "name" (.Val "sso")}}</a>
+{{if or (.Val "sso") (.Val "passkey")}}<div class="text-center text-body-secondary small my-2">{{.T "login.or"}}</div>{{end}}
+{{if .Val "passkey"}}<div class="mb-2 d-none" data-pk-needs>
+<button type="button" class="btn btn-outline-secondary w-100" id="passkey-login" data-csrf="{{.CSRF}}" data-next="{{.Val "next"}}" data-err="{{.T "login.passkey_failed"}}"><i class="bi bi-fingerprint"></i> {{.T "login.passkey"}}</button>
+<div class="text-danger small mt-1 d-none" data-pk-error></div></div>{{end}}
+{{if .Val "sso"}}<a class="btn btn-outline-secondary w-100" href="/login/oidc?next={{.Val "next"}}"><i class="bi bi-box-arrow-in-right"></i> {{.T "login.with" "name" (.Val "sso")}}</a>{{end}}
 {{end}}
+{{define "scripts"}}<script src="/static/js/passkey.js?v={{.Version}}"></script>
 {{end}}
