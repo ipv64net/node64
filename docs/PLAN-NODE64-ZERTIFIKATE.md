@@ -82,6 +82,16 @@ Für Skripte auf anderen Geräten, mit einem normalen API-Key (`Authorization: B
   - Ablauf-Warnungen auch für hochgeladene Zertifikate.
   - Meldungen verlinken auf `/certificates`.
   - CDN64 1.4.1.
+- **Z1 (2026-10-16):**
+  - Downloads im Menü jeder Zeile: fullchain, cert, chain, privkey, alles in einer `.pem`, ZIP, PKCS#12 mit
+    Passwort (AES-256 oder „alt“ 3DES, `go-pkcs12`).
+  - Schlüssel-Downloads stehen im Audit (nicht bei 304).
+  - API mit API-Key: `GET /api/certs/{id}/meta`, `GET /api/certs/{id}/bundle?format=…` (ETag = Fingerabdruck,
+    If-None-Match → 304), `POST /api/certs/{id}/p12`.
+  - 14 weitere lego-Anbieter (jetzt 26): ALL-INKL, AutoDNS, Bunny, checkdomain, ClouDNS, Dynu, Hostinger,
+    HTTP-Request, Hurricane Electric, Infomaniak, Namecheap, PowerDNS, RFC 2136, Technitium. Das Binary wird
+    dadurch 1,8 MB größer.
+  - Betriebsdoku mit Beispiel-Skripten: [ZERTIFIKATE.md](ZERTIFIKATE.md).
 
 ## Phasen
 

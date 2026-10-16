@@ -12,8 +12,8 @@ import (
 	"github.com/ipv64net/node64/internal/certs"
 )
 
-// Zertifikatsverwaltung des Kerns (Let's Encrypt, eigene Zertifikate). Die Seite dazu kommt mit CDN64 (Reiter
-// SSL-Zertifikate); die API steht schon.
+// Zertifikatsverwaltung des Kerns (Let's Encrypt, eigene Zertifikate). Die Seite dazu ist /certificates
+// (internal/certsui), Downloads und Abruf fuer andere Geraete in api_certs_export.go.
 
 func (s *Server) certRoutes() {
 	if s.Certs == nil {
@@ -35,6 +35,7 @@ func (s *Server) certRoutes() {
 	s.mux.Handle("DELETE /api/certs/{id}", s.auth(s.apiCertDelete))
 	s.mux.Handle("POST /api/certs/{id}/renew", s.auth(s.apiCertRenew))
 	s.mux.Handle("GET /api/certs/{id}/chain", s.auth(s.apiCertChain))
+	s.certExportRoutes()
 }
 
 // certErr bildet Fehler der Verwaltung auf Statuscodes ab.
@@ -45,7 +46,8 @@ func certErr(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": ve.Msg, "field": ve.Field})
 	case errors.Is(err, certs.ErrNotFound):
 		writeErr(w, http.StatusNotFound, err.Error())
-	case errors.Is(err, certs.ErrInUse), errors.Is(err, certs.ErrBusy), errors.Is(err, certs.ErrTOS), errors.Is(err, certs.ErrNoKey), errors.Is(err, certs.ErrUpload):
+	case errors.Is(err, certs.ErrInUse), errors.Is(err, certs.ErrBusy), errors.Is(err, certs.ErrTOS), errors.Is(err, certs.ErrNoKey), errors.Is(err, certs.ErrUpload),
+		errors.Is(err, certs.ErrNoCert):
 		writeErr(w, http.StatusConflict, err.Error())
 	default:
 		writeErr(w, http.StatusInternalServerError, err.Error())

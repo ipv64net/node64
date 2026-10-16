@@ -71,7 +71,7 @@ und keinem Modul:
 |---|---|---|
 | ipv64 DNS-01 | Domain liegt im ipv64-Account (API-Key in den Einstellungen) | nein; auch Wildcards |
 | Alias über ipv64 | fremde Domain; einmal CNAME `_acme-challenge.<name>` → `_acme-challenge.<präfix>.<ipv64-domain>` | nein; keine Zugangsdaten des Anbieters |
-| Anderer DNS-Anbieter | Cloudflare, Hetzner, netcup, INWX, IONOS, deSEC, Duck DNS, Porkbun, GoDaddy, DigitalOcean, Gandi, OVHcloud | nein; DNS-Zugang hinterlegen |
+| Anderer DNS-Anbieter | 26 Anbieter, Liste in [ZERTIFIKATE.md](ZERTIFIKATE.md) | nein; DNS-Zugang hinterlegen |
 | HTTP-01 | jede Domain, die per DNS auf den Anschluss zeigt | Port 80 |
 | Eigenes Zertifikat | PEM hochladen | – |
 

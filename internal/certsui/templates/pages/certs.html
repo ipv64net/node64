@@ -39,7 +39,16 @@
 					<td class="text-end pe-3 text-nowrap">
 						{{if ne .Source "upload"}}<form method="post" action="/certificates/{{.ID}}/renew" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
 							<button class="btn btn-sm btn-outline-primary py-0" type="submit" title="{{$.T "certs.renew"}}"{{if .Step}} disabled{{end}}><i class="bi bi-arrow-clockwise"></i></button></form>{{end}}
-						{{if ne .Pill "none"}}<a class="btn btn-sm btn-outline-secondary py-0" href="/certificates/{{.ID}}/chain.pem" title="{{$.T "certs.download"}}"><i class="bi bi-download"></i></a>{{end}}
+						{{if ne .Pill "none"}}{{$id := .ID}}<div class="dropdown d-inline-block">
+							<button class="btn btn-sm btn-outline-secondary py-0 dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="{{$.T "certs.dl.title"}}"><i class="bi bi-download"></i></button>
+							<ul class="dropdown-menu dropdown-menu-end small">
+								<li><h6 class="dropdown-header">{{$.T "certs.dl.public"}}</h6></li>
+								{{range $f := (split "fullchain cert chain")}}<li><a class="dropdown-item" href="/certificates/{{$id}}/download?f={{$f}}">{{$.T (print "certs.dl." $f)}}</a></li>{{end}}
+								<li><hr class="dropdown-divider"></li>
+								<li><h6 class="dropdown-header">{{$.T "certs.dl.with_key"}}</h6></li>
+								{{range $f := (split "key pem zip")}}<li><a class="dropdown-item" href="/certificates/{{$id}}/download?f={{$f}}">{{$.T (print "certs.dl." $f)}}</a></li>{{end}}
+								<li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#p12modal" data-p12="{{.ID}}">{{$.T "certs.dl.p12"}}</button></li>
+							</ul></div>{{end}}
 						<form method="post" action="/certificates/{{.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">{{if .UsedBy}}<input type="hidden" name="force" value="1">{{end}}
 							<button class="btn btn-sm btn-outline-danger py-0" type="submit" title="{{$.T "common.delete"}}"{{if .Step}} disabled{{end}}
 								data-confirm="{{if .UsedBy}}{{$.T "certs.delete_used" "name" (index .Names 0) "hosts" (join .UsedBy ", ")}}{{else}}{{$.T "certs.delete_confirm" "name" (index .Names 0)}}{{end}}"><i class="bi bi-trash"></i></button></form>
@@ -52,6 +61,7 @@
 			{{end}}
 		</div>
 		<p class="small text-body-secondary mt-2">{{.T "certs.hint"}}</p>
+		<p class="small text-body-secondary">{{.T "certs.dl.api_hint"}}</p>
 	</div>
 	<div class="col-xl-3">
 		<div class="card"><div class="card-header"><i class="bi bi-person-badge text-primary"></i> {{.T "certs.account"}}</div>
@@ -82,6 +92,20 @@
 			</div>
 		</div>
 	</div>
+</div>
+<div class="modal fade" id="p12modal" tabindex="-1" aria-labelledby="p12title" aria-hidden="true">
+	<div class="modal-dialog"><form class="modal-content" method="post" action="/certificates" data-p12-form>
+		<input type="hidden" name="_csrf" value="{{.CSRF}}">
+		<div class="modal-header"><h2 class="modal-title h6" id="p12title"><i class="bi bi-file-earmark-lock text-primary"></i> {{.T "certs.dl.p12_title"}}</h2>
+			<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{.T "common.cancel"}}"></button></div>
+		<div class="modal-body small">
+			<label class="form-label" for="p12pw">{{.T "certs.dl.p12_password"}}</label>
+			<input class="form-control form-control-sm mb-1" type="password" id="p12pw" name="password" minlength="4" maxlength="128" required autocomplete="new-password">
+			<div class="form-text mb-2">{{.T "certs.dl.p12_password_hint"}}</div>
+			<div class="form-check"><input class="form-check-input" type="checkbox" id="p12legacy" name="legacy"><label class="form-check-label" for="p12legacy">{{.T "certs.dl.p12_legacy"}}</label></div>
+		</div>
+		<div class="modal-footer"><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-download"></i> {{.T "certs.dl.p12_download"}}</button></div>
+	</form></div>
 </div>
 {{end}}
 {{define "scripts"}}<script src="/static/js/certs.js?v={{.Version}}"></script>{{end}}

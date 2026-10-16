@@ -53,6 +53,21 @@
 		provSync();
 	}
 
+	// PKCS#12: Fenster fuer das gewaehlte Zertifikat; nach dem Absenden schliessen und Passwort leeren
+	var p12form = document.querySelector("[data-p12-form]");
+	if (p12form) {
+		document.querySelectorAll("[data-p12]").forEach(function (b) {
+			b.addEventListener("click", function () { p12form.setAttribute("action", "/certificates/" + b.getAttribute("data-p12") + "/p12"); });
+		});
+		p12form.addEventListener("submit", function () {
+			setTimeout(function () {
+				p12form.reset();
+				var m = window.bootstrap && window.bootstrap.Modal.getInstance(document.getElementById("p12modal"));
+				if (m) { m.hide(); }
+			}, 300);
+		});
+	}
+
 	// Waehrend ein Zertifikat geholt wird: Seite alle paar Sekunden neu laden
 	var reload = document.querySelector("[data-reload]");
 	if (reload) {

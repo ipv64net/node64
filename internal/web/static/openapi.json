@@ -2589,6 +2589,42 @@
             "format": "date-time"
           }
         }
+      },
+      "CertMeta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "serial": {
+            "type": "string",
+            "description": "hex"
+          },
+          "not_before": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "not_after": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "days_left": {
+            "type": "integer"
+          },
+          "fingerprint_sha256": {
+            "type": "string",
+            "description": "SHA-256 des Zertifikats (hex), gleich dem ETag"
+          }
+        }
       }
     }
   },
@@ -8605,6 +8641,244 @@
           },
           "404": {
             "description": "unbekannt oder noch nicht geholt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/certs/{id}/meta": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Angaben zum ausgestellten Zertifikat (für Skripte: gültig bis, Fingerabdruck)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK (Header ETag = Fingerabdruck)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertMeta"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "noch nicht ausgestellt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/certs/{id}/bundle": {
+      "get": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "Zertifikat als Datei abholen (mit API-Key, z. B. per Cron auf NAS/Router)",
+        "description": "Formate mit privatem Schlüssel (key, pem, zip) stehen im Audit. ETag = Fingerabdruck; mit If-None-Match kommt 304, solange sich nichts geändert hat. Header X-Cert-Not-After nennt das Ablaufdatum.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "zip",
+                "fullchain",
+                "cert",
+                "chain",
+                "key",
+                "pem"
+              ],
+              "default": "zip"
+            },
+            "description": "zip: fullchain.pem, cert.pem, chain.pem, privkey.pem; pem: fullchain und Schlüssel in einer Datei"
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ETag eines früheren Abrufs: 304, solange sich das Zertifikat nicht geändert hat"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Datei",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/x-pem-file": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/pem-certificate-chain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "unverändert"
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "noch nicht ausgestellt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "unbekanntes Format",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/certs/{id}/p12": {
+      "post": {
+        "tags": [
+          "Ports & Zertifikate"
+        ],
+        "summary": "PKCS#12-Datei (.p12) mit Passwort (Windows, NAS, Router)",
+        "description": "Steht im Audit. legacy = alte Verschlüsselung (3DES) für ältere Geräte, sonst AES-256.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "password"
+                ],
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "minLength": 4,
+                    "maxLength": 128
+                  },
+                  "legacy": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Datei",
+            "content": {
+              "application/x-pkcs12": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "noch nicht ausgestellt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Passwort ungültig",
             "content": {
               "application/json": {
                 "schema": {

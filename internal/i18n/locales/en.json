@@ -585,7 +585,10 @@
       "dns_account": "Check the DNS account",
       "provider": "Check the provider",
       "fields": "Check the credentials",
-      "name": "Check the name"
+      "name": "Check the name",
+      "no_cert": "The certificate has not been issued yet.",
+      "format": "Unknown format",
+      "password": "Password for PKCS#12"
     },
     "expired": "expired",
     "days": "{days} days",
@@ -607,7 +610,25 @@
       "add_first": "Add a DNS account first",
       "deleted": "\"{name}\" deleted."
     },
-    "names": "Domains"
+    "names": "Domains",
+    "dl": {
+      "title": "Download",
+      "public": "Without key",
+      "with_key": "With private key",
+      "fullchain": "Certificate with chain (fullchain.pem)",
+      "cert": "Certificate only (cert.pem)",
+      "chain": "Intermediates only (chain.pem)",
+      "key": "Private key (privkey.pem)",
+      "pem": "Everything in one file (.pem, e.g. HAProxy, Fritzbox)",
+      "zip": "All files (ZIP)",
+      "p12": "PKCS#12 for Windows, NAS, routers (.p12) …",
+      "p12_title": "Download PKCS#12",
+      "p12_password": "Password for the file",
+      "p12_password_hint": "4 to 128 characters. It is asked for on import and not stored.",
+      "p12_legacy": "Old encryption (3DES) for older devices and Windows versions",
+      "p12_download": "Download",
+      "api_hint": "For scripts on other devices: GET /api/certs/{id}/bundle?format=zip|fullchain|key|pem with an API key; ETag and If-None-Match only reload on change. Every download with key is in the audit log."
+    }
   },
   "ports": {
     "title": "Ports",

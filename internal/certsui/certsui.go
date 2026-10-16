@@ -56,6 +56,8 @@ func (u *UI) Routes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST "+Base+"/{id}/autorenew", page(u.pageCertAutoRenew))
 	mux.Handle("POST "+Base+"/{id}/delete", page(u.pageCertDelete))
 	mux.Handle("GET "+Base+"/{id}/chain.pem", page(u.pageCertChain))
+	mux.Handle("GET "+Base+"/{id}/download", page(u.pageCertDownload))
+	mux.Handle("POST "+Base+"/{id}/p12", page(u.pageCertP12))
 	// DNS-Zugaenge: vier Stufen, damit sich die Pfade nicht mit /certificates/{id}/... ueberschneiden
 	mux.Handle("GET "+Base+"/dns-accounts/new", page(u.pageDNSNew))
 	mux.Handle("POST "+Base+"/dns-accounts", page(u.pageDNSSave))
@@ -177,6 +179,8 @@ func ErrorText(t func(key string, args ...any) string, err error) string {
 		return t("certs.err.busy")
 	case errors.Is(err, certs.ErrUpload):
 		return t("certs.err.upload_renew")
+	case errors.Is(err, certs.ErrNoCert):
+		return t("certs.err.no_cert")
 	}
 	return err.Error()
 }

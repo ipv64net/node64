@@ -585,7 +585,10 @@
       "dns_account": "DNS-Zugang prüfen",
       "provider": "Anbieter prüfen",
       "fields": "Zugangsdaten prüfen",
-      "name": "Name prüfen"
+      "name": "Name prüfen",
+      "no_cert": "Das Zertifikat ist noch nicht ausgestellt.",
+      "format": "Unbekanntes Format",
+      "password": "Passwort für PKCS#12"
     },
     "expired": "abgelaufen",
     "days": "{days} Tage",
@@ -607,7 +610,25 @@
       "add_first": "Zuerst einen DNS-Zugang anlegen",
       "deleted": "„{name}“ gelöscht."
     },
-    "names": "Domains"
+    "names": "Domains",
+    "dl": {
+      "title": "Herunterladen",
+      "public": "Ohne Schlüssel",
+      "with_key": "Mit privatem Schlüssel",
+      "fullchain": "Zertifikat mit Kette (fullchain.pem)",
+      "cert": "Nur Zertifikat (cert.pem)",
+      "chain": "Nur Zwischenzertifikate (chain.pem)",
+      "key": "Privater Schlüssel (privkey.pem)",
+      "pem": "Alles in einer Datei (.pem, z. B. HAProxy, Fritzbox)",
+      "zip": "Alle Dateien (ZIP)",
+      "p12": "PKCS#12 für Windows, NAS, Router (.p12) …",
+      "p12_title": "PKCS#12 herunterladen",
+      "p12_password": "Passwort für die Datei",
+      "p12_password_hint": "4 bis 128 Zeichen. Es wird beim Import abgefragt und nicht gespeichert.",
+      "p12_legacy": "Alte Verschlüsselung (3DES) für ältere Geräte und Windows-Versionen",
+      "p12_download": "Herunterladen",
+      "api_hint": "Für Skripte auf anderen Geräten: GET /api/certs/{id}/bundle?format=zip|fullchain|key|pem mit API-Key; ETag und If-None-Match laden nur bei Änderung neu. Jeder Abruf mit Schlüssel steht im Audit."
+    }
   },
   "ports": {
     "title": "Ports",
