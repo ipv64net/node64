@@ -75,6 +75,7 @@ type Server struct {
 	fallbackCert *tls.Certificate // NODE64_TLS_CERT bzw. selbst signiert
 	limiter      *loginLimiter
 	ipLimit      *ipLimiter
+	fwd          fwdCache // Forward-Auth: Einrichtung und letzte Audit-Eintraege (auth_forward.go)
 
 	mu      sync.Mutex
 	servers []*http.Server

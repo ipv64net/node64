@@ -98,6 +98,15 @@
     "done": "The node is set up. You can sign in now."
   },
   "sso": {
+    "fwd_title": "Forward auth via the reverse proxy",
+    "fwd_hint": "For Authelia, Authentik etc. in front of Traefik, Caddy or Nginx: the proxy reports the signed-in user in the “Remote-User” header. Node64 only trusts requests whose connection comes from one of the listed proxy addresses, and only for local users with exactly that name. The proxy must set the header itself and overwrite one sent by the browser.",
+    "fwd_enable": "Enable forward auth",
+    "fwd_trusted": "Proxy addresses",
+    "fwd_trusted_hint": "Single IPs or networks (CIDR), separated by commas. Never enter a whole public network; “all addresses” is blocked.",
+    "fwd_header": "Header with the user name",
+    "fwd_now": "This request comes from {ip}.",
+    "fwd_trusted_yes": "listed proxy",
+    "fwd_trusted_no": "not a listed proxy",
     "title": "Sign-in",
     "intro": "In addition to the local user: sign in via an SSO provider (OpenID Connect), via a reverse proxy in front (forward auth) or with a passkey. Local users with a password always remain possible.",
     "settings_hint": "SSO (Authelia, Authentik, …), forward auth and passkeys:",

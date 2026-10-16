@@ -54,6 +54,23 @@
 			{{else}}<p class="small text-body-secondary mb-0">{{.T "sso.link_first"}}</p>{{end}}
 		</div>
 	</div>
+<div class="col-lg-6">
+	<div class="card h-100" id="forward">
+		<div class="card-header"><i class="bi bi-signpost-split text-primary"></i> {{.T "sso.fwd_title"}} {{if $d.Fwd.Enabled}}<span class="badge text-bg-success">{{.T "common.running"}}</span>{{else}}<span class="badge text-bg-secondary">{{.T "common.disabled"}}</span>{{end}}</div>
+		<div class="card-body">
+			<p class="small text-body-secondary">{{.T "sso.fwd_hint"}}</p>
+			<form method="post" action="/settings/login/forward">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" id="fwd_enabled" name="enabled" value="1"{{if $d.Fwd.Enabled}} checked{{end}}><label class="form-check-label" for="fwd_enabled">{{.T "sso.fwd_enable"}}</label></div>
+				<div class="mb-2"><label class="form-label" for="trusted">{{.T "sso.fwd_trusted"}}</label><input class="form-control form-control-sm font-monospace" id="trusted" name="trusted" value="{{$d.Fwd.Raw}}" placeholder="192.168.10.5, 172.18.0.0/16">
+					<div class="form-text">{{.T "sso.fwd_trusted_hint"}}</div></div>
+				<div class="mb-2"><label class="form-label" for="header">{{.T "sso.fwd_header"}}</label><input class="form-control form-control-sm font-monospace" id="header" name="header" value="{{$d.Fwd.Header}}" maxlength="64"></div>
+				<div class="alert alert-light border small py-2 mb-2">{{.T "sso.fwd_now" "ip" $d.FwdIP}} {{if $d.FwdTrusted}}<span class="badge text-bg-success">{{.T "sso.fwd_trusted_yes"}}</span>{{else}}<span class="badge text-bg-secondary">{{.T "sso.fwd_trusted_no"}}</span>{{end}}{{if $d.FwdHeader}}<br>{{$d.Fwd.Header}}: <code>{{$d.FwdHeader}}</code>{{end}}</div>
+				<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>
+			</form>
+		</div>
+	</div>
+</div>
 </div>
 </div>
 {{end}}

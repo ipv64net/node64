@@ -98,6 +98,15 @@
     "done": "Die Node ist eingerichtet. Du kannst dich jetzt anmelden."
   },
   "sso": {
+    "fwd_title": "Forward-Auth über den Reverse-Proxy",
+    "fwd_hint": "Für Authelia, Authentik u. a. vor Traefik, Caddy oder Nginx: Der Proxy meldet den angemeldeten Benutzer im Kopf „Remote-User“. Node64 glaubt das nur Anfragen, deren Verbindung von einer der eingetragenen Proxy-Adressen kommt, und nur für lokale Benutzer mit genau diesem Namen. Der Proxy muss den Kopf selbst setzen und einen vom Browser mitgeschickten überschreiben.",
+    "fwd_enable": "Forward-Auth einschalten",
+    "fwd_trusted": "Adressen des Proxys",
+    "fwd_trusted_hint": "Einzelne IPs oder Netze (CIDR), durch Komma getrennt. Nie ein ganzes öffentliches Netz eintragen; „alle Adressen“ ist gesperrt.",
+    "fwd_header": "Kopf mit dem Benutzernamen",
+    "fwd_now": "Diese Anfrage kommt von {ip}.",
+    "fwd_trusted_yes": "eingetragener Proxy",
+    "fwd_trusted_no": "kein eingetragener Proxy",
     "title": "Anmeldung",
     "intro": "Zusätzlich zum lokalen Benutzer: Anmeldung über einen SSO-Anbieter (OpenID Connect), über einen vorgeschalteten Reverse-Proxy (Forward-Auth) oder per Passkey. Lokale Benutzer mit Passwort bleiben immer möglich.",
     "settings_hint": "SSO (Authelia, Authentik, …), Forward-Auth und Passkeys:",

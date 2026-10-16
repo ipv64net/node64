@@ -149,6 +149,11 @@ func (s *Server) session(next http.Handler) http.Handler {
 				}
 			}
 		}
+		if sess == nil && ctx.Value(ctxPending) == nil {
+			if u := s.forwardUser(r); u != nil { // Benutzer vom vorgeschalteten Proxy (auth_forward.go)
+				ctx = context.WithValue(ctx, ctxUser, u)
+			}
+		}
 		if sess == nil {
 			if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
 				s.clearCookie(w, r, sessionCookie)

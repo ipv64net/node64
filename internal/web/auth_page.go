@@ -16,6 +16,7 @@ func (s *Server) ssoRoutes() {
 	s.mux.Handle("POST /settings/login/oidc", s.auth(s.loginMethodsOIDC))
 	s.mux.Handle("POST /settings/login/oidc/link", s.auth(s.oidcLink))
 	s.mux.Handle("POST /settings/login/identities/{id}/delete", s.auth(s.ssoUnlink))
+	s.mux.Handle("POST /settings/login/forward", s.auth(s.loginMethodsForward))
 }
 
 type loginMethodsData struct {
@@ -23,6 +24,10 @@ type loginMethodsData struct {
 	SecretSet  bool
 	Callback   string
 	Identities []store.Identity
+	Fwd        fwdSettings
+	FwdIP      string // Adresse dieser Anfrage (Hilfe beim Eintragen des Proxys)
+	FwdHeader  string // Wert des Kopfs in dieser Anfrage
+	FwdTrusted bool   // diese Anfrage kommt von einem eingetragenen Proxy
 }
 
 func (s *Server) loginMethodsView(r *http.Request) *View {
@@ -32,6 +37,10 @@ func (s *Server) loginMethodsView(r *http.Request) *View {
 	d := loginMethodsData{OIDC: o, SecretSet: o.Secret != "", Callback: s.oidcCallbackURL(r, o)}
 	d.OIDC.Secret = ""
 	d.Identities, _ = s.Store.Identities(ctx, v.User.ID)
+	d.Fwd = s.fwdSettings(ctx)
+	d.FwdIP = remoteIP(r).String()
+	d.FwdHeader = truncate(r.Header.Get(d.Fwd.Header), 64)
+	d.FwdTrusted = d.Fwd.trusts(remoteIP(r))
 	v.Data = d
 	return v
 }
@@ -68,4 +77,19 @@ func (s *Server) loginOptions(r *http.Request, v *View) {
 	if o := s.oidcSettings(r.Context()); o.Enabled() {
 		v.Form["sso"] = o.ButtonLabel()
 	}
+}
+
+func (s *Server) loginMethodsForward(w http.ResponseWriter, r *http.Request) {
+	f := s.formValues(r, "enabled", "trusted", "header")
+	err := s.fwdSave(r.Context(), f["enabled"] == "1", f["trusted"], f["header"])
+	if err != nil {
+		v := s.loginMethodsView(r)
+		v.Flash = &Flash{Kind: "danger", Text: v.T("sso.invalid", "error", err.Error())}
+		s.render(w, r, http.StatusUnprocessableEntity, "login_methods", v)
+		return
+	}
+	s.audit(r, "sso.forward", f["trusted"], "enabled="+f["enabled"])
+	v := s.view(r, "sso.title")
+	s.flash(w, r, "success", v.T("sso.saved"))
+	http.Redirect(w, r, "/settings/login#forward", http.StatusSeeOther)
 }
