@@ -43,7 +43,7 @@ var changelog string
 
 const (
 	Name    = "cdn64"
-	Version = "1.5.0"
+	Version = "1.6.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -174,7 +174,7 @@ func (m *Module) Start(ctx context.Context) error {
 	go func() { defer m.wg.Done(); m.limLoop(ctx) }()
 	if m.edge != nil {
 		m.edge.SetBlocker(m.blockedAny)
-		m.edge.SetGate(m.lim.open)
+		m.edge.SetGate(m.gateOpen)
 	}
 	m.log.Info("cdn64 started")
 	return nil

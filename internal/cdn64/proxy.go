@@ -30,7 +30,6 @@ type hostStats struct {
 	requests atomic.Int64
 	errors   atomic.Int64 // 5xx und nicht erreichbar
 	blocked  atomic.Int64 // Block Common Exploits, Blocklisten, Limits
-	shielded atomic.Int64 // davon Blocklisten und Limits (zaehlen dort auch insgesamt)
 }
 
 func (m *Module) statsOf(id int64) *hostStats {
@@ -256,6 +255,7 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 	}
 	ip := clientOf(r)
 	if m.authFail.blocked(ip) {
+		setReject(r, rejACL)
 		w.Header().Set("Retry-After", strconv.Itoa(int(authBlockFor.Seconds())))
 		page(w, http.StatusTooManyRequests)
 		return false
@@ -273,6 +273,9 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 			m.g.Audit(r, "cdn64.access.blocked", h.Names[0], "ip="+ip.String())
 		}
 	}
+	if status != http.StatusUnauthorized { // 401 ist die normale Passwortabfrage
+		setReject(r, rejACL)
+	}
 	if status == http.StatusUnauthorized {
 		w.Header().Set("WWW-Authenticate", `Basic realm="`+strings.ReplaceAll(g.list.Name, `"`, "")+`", charset="UTF-8"`)
 	}
@@ -282,6 +285,15 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 
 // ctxClient: echte Client-IP (nach den vertrauenswuerdigen Proxys des Hosts), im Kontext der Anfrage.
 type ctxClientKey struct{}
+
+// ctxRejectKey: Grund, falls die Anfrage abgewiesen wird (fuer Statistik und Log).
+type ctxRejectKey struct{}
+
+func setReject(r *http.Request, reason string) {
+	if p, ok := r.Context().Value(ctxRejectKey{}).(*string); ok {
+		*p = reason
+	}
+}
 
 func clientOf(r *http.Request) netip.Addr {
 	if ip, ok := r.Context().Value(ctxClientKey{}).(netip.Addr); ok {
@@ -323,23 +335,31 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		start := time.Now()
 		st.requests.Add(1)
 		client := h.Advanced.clientIP(r)
-		r = r.WithContext(context.WithValue(r.Context(), ctxClientKey{}, client))
+		reject := new(string)
+		r = r.WithContext(context.WithValue(context.WithValue(r.Context(), ctxClientKey{}, client), ctxRejectKey{}, reject))
 		sw := &statusWriter{ResponseWriter: w}
 		defer func() {
 			if sdb := m.stats2.Load(); sdb != nil {
 				sdb.add(hit{time: start, hostID: h.ID, client: client, method: r.Method, host: hostOnly(r.Host), path: trunc(r.URL.RequestURI(), 500),
-					status: sw.code(), bytes: sw.bytes, ms: time.Since(start).Milliseconds(), ua: trunc(r.UserAgent(), 200), log: h.Advanced.AccessLog})
+					status: sw.code(), bytes: sw.bytes, ms: time.Since(start).Milliseconds(), ua: trunc(r.UserAgent(), 200), log: h.Advanced.AccessLog,
+					reason: *reject})
 			}
 		}()
-		if m.bl.Blocked(client) || m.lim.banned(client) { // ipv64-Blocklisten, Sperre (echte Client-IP hinter vertrauenswuerdigen Proxys)
+		if m.bl.Blocked(client) { // ipv64-Blocklisten (echte Client-IP hinter vertrauenswuerdigen Proxys)
+			*reject = rejBlocklist
 			st.blocked.Add(1)
-			st.shielded.Add(1)
+			page(sw, http.StatusForbidden)
+			return
+		}
+		if m.lim.banned(client) { // gesperrt wegen Ueberlastung
+			*reject = rejBan
+			st.blocked.Add(1)
 			page(sw, http.StatusForbidden)
 			return
 		}
 		if limited && !m.lim.request(client) { // zu viele Anfragen von dieser Adresse
+			*reject = rejReqRate
 			st.blocked.Add(1)
-			st.shielded.Add(1)
 			sw.Header().Set("Retry-After", "10")
 			page(sw, http.StatusTooManyRequests)
 			return
@@ -350,6 +370,7 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			return
 		}
 		if h.BlockExploits && blocked(r) {
+			*reject = rejExploit
 			st.blocked.Add(1)
 			page(sw, http.StatusForbidden)
 			return
@@ -367,9 +388,10 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		if sl != nil && r.Header.Get("Upgrade") == "" { // WebSockets laufen lange und zaehlen nicht
 			if !sl.acquire(r.Context(), limQueueWait) {
 				if r.Context().Err() == nil {
+					*reject = rejTarget
+					m.overload("target", h.Names[0])
 					m.lim.rejected.Add(1)
 					st.blocked.Add(1)
-					st.shielded.Add(1)
 					sw.Header().Set("Retry-After", "10")
 					page(sw, http.StatusServiceUnavailable)
 				}

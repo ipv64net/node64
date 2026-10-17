@@ -10,14 +10,14 @@
 <ul class="nav nav-tabs mb-3">
 	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
 </ul>
-{{if and (eq $d.Kind "proxy") $d.StatsOn}}<div class="card mb-3" data-cdn64-stats data-l-requests="{{.T "cdn64.stats.requests"}}" data-l-bytes="{{.T "cdn64.stats.bytes"}}">
+{{if and (eq $d.Kind "proxy") $d.StatsOn}}<div class="card mb-3" data-cdn64-stats data-l-requests="{{.T "dashboard.js.requests"}}" data-l-blocked="{{.T "dashboard.js.rejected"}}" data-l-bytes="{{.T "dashboard.js.bytes"}}">
 	<div class="card-header d-flex flex-wrap align-items-center gap-2">
-		<span><i class="bi bi-bar-chart-line text-primary"></i> {{.T "cdn64.stats.title"}}</span>
-		<select class="form-select form-select-sm w-auto ms-auto" data-stats-host aria-label="{{.T "cdn64.stats.host"}}"><option value="0">{{.T "cdn64.stats.all"}}</option>{{range $d.Rows}}<option value="{{.ID}}">{{index .Names 0}}</option>{{end}}</select>
+		<span><i class="bi bi-diagram-3 text-primary"></i> {{.T "dashboard.chart_cdn64"}}</span>
+		<select class="form-select form-select-sm w-auto ms-auto py-0" data-stats-host aria-label="{{.T "cdn64.stats.host"}}"><option value="0">{{.T "cdn64.stats.all"}}</option>{{range $d.Rows}}<option value="{{.ID}}">{{index .Names 0}}</option>{{end}}</select>
 		<div class="btn-group btn-group-sm" role="group">
-			<button type="button" class="btn btn-outline-secondary active" data-stats-range="24">{{.T "cdn64.stats.h24"}}</button>
-			<button type="button" class="btn btn-outline-secondary" data-stats-range="168">{{.T "cdn64.stats.d7"}}</button>
-			<button type="button" class="btn btn-outline-secondary" data-stats-range="720">{{.T "cdn64.stats.d30"}}</button>
+			<button type="button" class="btn btn-outline-secondary py-0 active" data-stats-range="24">24 h</button>
+			<button type="button" class="btn btn-outline-secondary py-0" data-stats-range="168">7 d</button>
+			<button type="button" class="btn btn-outline-secondary py-0" data-stats-range="720">30 d</button>
 		</div>
 	</div>
 	<div class="card-body">
@@ -25,9 +25,9 @@
 			<div class="col-6 col-md-3"><div class="text-body-secondary">{{.T "cdn64.stats.requests"}}</div><div class="fs-5 font-monospace" data-kpi="requests">–</div></div>
 			<div class="col-6 col-md-3"><div class="text-body-secondary">{{.T "cdn64.stats.bytes"}}</div><div class="fs-5 font-monospace" data-kpi="bytes">–</div></div>
 			<div class="col-6 col-md-3"><div class="text-body-secondary">{{.T "cdn64.stats.errors"}}</div><div class="fs-5 font-monospace" data-kpi="errors">–</div></div>
-			<div class="col-6 col-md-3"><div class="text-body-secondary">{{.T "cdn64.stats.blocked"}}</div><div class="fs-5 font-monospace" title="{{.T "cdn64.stats.blocked_hint"}}">{{$.Int $d.BlockedTotal}}</div></div>
+			<div class="col-6 col-md-3"><div class="text-body-secondary">{{.T "cdn64.stats.blocked"}}</div><div class="fs-5 font-monospace text-danger" title="{{.T "cdn64.stats.blocked_hint"}}" data-kpi="blocked">–</div></div>
 		</div>
-		<div style="position:relative;height:240px"><canvas data-stats-chart></canvas></div>
+		<div class="dash-chart"><canvas data-stats-chart></canvas></div>
 		<div class="small text-body-secondary d-none" data-stats-empty>{{.T "cdn64.stats.empty"}}</div>
 	</div>
 </div>{{end}}
@@ -100,4 +100,4 @@
 </div>
 <p class="small text-body-secondary mt-2">{{if eq $d.Kind "proxy"}}{{.T "cdn64.list_hint"}}{{else}}{{.T "cdn64.list_hint_other"}}{{end}}{{if $d.CacheN}} · {{.T "cdn64.cache_info" "n" $d.CacheN "size" (.Bytes $d.CacheB)}}{{end}}</p>
 {{end}}
-{{define "scripts"}}{{if and (eq .Data.Kind "proxy") .Data.StatsOn}}<script src="/static/js/chart.umd.js"></script><script src="/static/js/cdn64-stats.js?v={{.Version}}"></script>{{end}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}
+{{define "scripts"}}{{if and (eq .Data.Kind "proxy") .Data.StatsOn}}<script src="/static/js/chart.umd.js"></script><script src="/static/js/cdn64-chart.js?v={{.Version}}"></script><script src="/static/js/cdn64-stats.js?v={{.Version}}"></script>{{end}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}

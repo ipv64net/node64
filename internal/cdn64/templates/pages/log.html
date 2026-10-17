@@ -14,6 +14,7 @@
 	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">4xx</div><div class="fs-5 font-monospace text-warning-emphasis">{{.Int $d.Total.S4}}</div></div></div></div>
 	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">5xx</div><div class="fs-5 font-monospace text-danger">{{.Int $d.Total.S5}}</div></div></div></div>
 	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">{{.T "cdn64.log.traffic"}}</div><div class="fs-5 font-monospace">{{.Bytes $d.Total.Bytes}}</div></div></div></div>
+	<div class="col-6 col-md"><a class="card text-decoration-none" href="/cdn64/log?status=r" title="{{.T "cdn64.log.rejected_hint"}}"><div class="card-body py-2"><div class="small text-body-secondary">{{.T "cdn64.log.rejected"}}</div><div class="fs-5 font-monospace text-danger">{{.Int $d.Total.Blocked}}</div></div></a></div>
 </div>
 {{end}}
 <div class="row g-3">
@@ -24,7 +25,8 @@
 					<div class="col-sm-4"><select class="form-select form-select-sm" name="host" aria-label="{{.T "cdn64.col.names"}}"><option value="0">{{.T "cdn64.log.all_hosts"}}</option>
 						{{range $d.Hosts}}<option value="{{.ID}}"{{if eq .ID $d.Filter.HostID}} selected{{end}}>{{index .Names 0}}{{if not .Advanced.AccessLog}} ({{$.T "cdn64.log.not_logged"}}){{end}}</option>{{end}}</select></div>
 					<div class="col-sm-2"><select class="form-select form-select-sm" name="status" aria-label="Status"><option value="0">{{.T "cdn64.log.all_status"}}</option>
-						{{range (split "2 3 4 5")}}<option value="{{.}}"{{if eq . (print $d.Filter.Status)}} selected{{end}}>{{.}}xx</option>{{end}}</select></div>
+						{{range (split "2 3 4 5")}}<option value="{{.}}"{{if eq . (print $d.Filter.Status)}} selected{{end}}>{{.}}xx</option>{{end}}
+						<option value="r"{{if $d.Filter.Rejected}} selected{{end}}>{{.T "cdn64.log.rejected"}}</option></select></div>
 					<div class="col-sm-4"><input class="form-control form-control-sm" name="q" value="{{$d.Filter.Query}}" placeholder="{{.T "cdn64.log.search"}}" maxlength="200"></div>
 					<div class="col-sm-2"><button class="btn btn-sm btn-outline-primary w-100" type="submit"><i class="bi bi-search"></i> {{.T "cdn64.log.filter"}}</button></div>
 				</form>
@@ -39,8 +41,10 @@
 				<tr>
 					<td class="ps-3 text-nowrap">{{$.Time .Time}}</td>
 					<td class="font-monospace">{{.Client}}</td>
-					<td class="text-break" title="{{.UA}}"><span class="badge text-bg-light">{{.Method}}</span> <span class="font-monospace">{{.Host}}{{.Path}}</span></td>
-					<td><span class="badge {{if lt .Status 300}}text-bg-success{{else if lt .Status 400}}text-bg-light{{else if lt .Status 500}}text-bg-warning{{else}}text-bg-danger{{end}}">{{.Status}}</span></td>
+					{{if eq .Status 0}}<td class="text-body-secondary"><i class="bi bi-plug"></i> {{$.T "cdn64.log.conn"}}{{with .Host}} · <span class="font-monospace">{{.}}</span>{{end}}</td>
+					<td><span class="badge text-bg-danger">{{$.T (print "cdn64.reject." .Reason)}}</span></td>
+					{{else}}<td class="text-break" title="{{.UA}}"><span class="badge text-bg-light">{{.Method}}</span> <span class="font-monospace">{{.Host}}{{.Path}}</span></td>
+					<td class="text-nowrap"><span class="badge {{if lt .Status 300}}text-bg-success{{else if lt .Status 400}}text-bg-light{{else if lt .Status 500}}text-bg-warning{{else}}text-bg-danger{{end}}">{{.Status}}</span>{{if .Reason}} <span class="badge text-bg-danger">{{$.T (print "cdn64.reject." .Reason)}}</span>{{end}}</td>{{end}}
 					<td class="text-end font-monospace">{{$.Bytes .Bytes}}</td>
 					<td class="text-end pe-3 font-monospace">{{.Ms}}</td>
 				</tr>
@@ -48,7 +52,7 @@
 				</tbody>
 			</table>
 			</div>
-			{{if $d.Next}}<div class="card-footer text-end"><a class="btn btn-sm btn-outline-secondary" href="/cdn64/log?host={{$d.Filter.HostID}}&amp;status={{$d.Filter.Status}}&amp;q={{$d.Filter.Query}}&amp;before={{$d.Next}}">{{.T "cdn64.log.older"}} <i class="bi bi-chevron-right"></i></a></div>{{end}}
+			{{if $d.Next}}<div class="card-footer text-end"><a class="btn btn-sm btn-outline-secondary" href="/cdn64/log?host={{$d.Filter.HostID}}&amp;status={{if $d.Filter.Rejected}}r{{else}}{{$d.Filter.Status}}{{end}}&amp;q={{$d.Filter.Query}}&amp;before={{$d.Next}}">{{.T "cdn64.log.older"}} <i class="bi bi-chevron-right"></i></a></div>{{end}}
 			{{end}}
 		</div>
 	</div>

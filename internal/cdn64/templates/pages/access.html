@@ -7,7 +7,9 @@
 <ul class="nav nav-tabs mb-3">
 	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
 </ul>
-<form method="post" action="/cdn64/blocklists" class="card mb-3" id="blocklists">
+<div class="row g-3 mb-3">
+<div class="col-lg-6">
+<form method="post" action="/cdn64/blocklists" class="card h-100" id="blocklists">
 	<input type="hidden" name="_csrf" value="{{.CSRF}}">
 	<div class="card-header d-flex flex-wrap align-items-center gap-2">
 		<span><img src="/static/img/ipv64_logo.svg" alt="" height="16" class="logo logo-light me-1 align-text-bottom"><img src="/static/img/ipv64_logo_white.svg" alt="" height="16" class="logo logo-dark me-1 align-text-bottom"> {{.T "cdn64.bl.title"}}</span>
@@ -18,7 +20,7 @@
 		<p class="text-body-secondary">{{.T "cdn64.bl.hint"}}</p>
 		<div class="row g-2">
 		{{range $d.BL.Lists}}
-			<div class="col-md-6 col-xl-4"><div class="border rounded p-2 h-100">
+			<div class="col-sm-6"><div class="border rounded p-2 h-100">
 				<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" role="switch" name="list" value="{{.ID}}" id="bl-{{.ID}}"{{if .Enabled}} checked{{end}}>
 					<label class="form-check-label fw-semibold" for="bl-{{.ID}}">{{.Name}}</label></div>
 				<div class="text-body-secondary">{{$.T (print "cdn64.bl.desc." .ID)}}</div>
@@ -36,7 +38,9 @@
 		<a class="btn btn-link btn-sm ms-auto" href="https://ipv64.net/v64_blocklists" target="_blank" rel="noopener">{{.T "cdn64.bl.about"}} <i class="bi bi-box-arrow-up-right"></i></a>
 	</div>
 </form>
-<form method="post" action="/cdn64/limits" class="card mb-3" id="limits">
+</div>
+<div class="col-lg-6">
+<form method="post" action="/cdn64/limits" class="card h-100" id="limits">
 	<input type="hidden" name="_csrf" value="{{.CSRF}}">
 	<div class="card-header d-flex flex-wrap align-items-center gap-2">
 		<span><i class="bi bi-speedometer2 text-primary"></i> {{.T "cdn64.lim.title"}}</span>
@@ -52,28 +56,28 @@
 				<label class="form-check-label" for="lim-exempt-lan">{{.T "cdn64.lim.exempt_lan"}}</label></div>
 		</div>
 		<div class="row g-3">
-			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-conns_per_ip">{{.T "cdn64.lim.conns_per_ip"}}</label>
+			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-conns_per_ip">{{.T "cdn64.lim.conns_per_ip"}}</label>
 				<input class="form-control form-control-sm" type="number" min="0" id="lim-conns_per_ip" name="lim_conns_per_ip" value="{{$d.Lim.Limits.ConnsPerIP}}">
 				<div class="form-text">{{.T "cdn64.lim.conns_per_ip_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.ConnsPerIP}}</div></div>
-			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-conn_rate">{{.T "cdn64.lim.conn_rate"}}</label>
+			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-conn_rate">{{.T "cdn64.lim.conn_rate"}}</label>
 				<input class="form-control form-control-sm" type="number" min="0" id="lim-conn_rate" name="lim_conn_rate" value="{{$d.Lim.Limits.ConnRate}}">
 				<div class="form-text">{{.T "cdn64.lim.conn_rate_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.ConnRate}}</div></div>
-			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-req_rate">{{.T "cdn64.lim.req_rate"}}</label>
+			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-req_rate">{{.T "cdn64.lim.req_rate"}}</label>
 				<input class="form-control form-control-sm" type="number" min="0" id="lim-req_rate" name="lim_req_rate" value="{{$d.Lim.Limits.ReqRate}}">
 				<div class="form-text">{{.T "cdn64.lim.req_rate_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.ReqRate}}</div></div>
-			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-req_burst">{{.T "cdn64.lim.req_burst"}}</label>
+			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-req_burst">{{.T "cdn64.lim.req_burst"}}</label>
 				<input class="form-control form-control-sm" type="number" min="0" id="lim-req_burst" name="lim_req_burst" value="{{$d.Lim.Limits.ReqBurst}}">
 				<div class="form-text">{{.T "cdn64.lim.req_burst_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.ReqBurst}}</div></div>
-			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-target_conns">{{.T "cdn64.lim.target_conns"}}</label>
+			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-target_conns">{{.T "cdn64.lim.target_conns"}}</label>
 				<input class="form-control form-control-sm" type="number" min="0" id="lim-target_conns" name="lim_target_conns" value="{{$d.Lim.Limits.TargetConns}}">
 				<div class="form-text">{{.T "cdn64.lim.target_conns_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.TargetConns}}</div></div>
-			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-max_conns">{{.T "cdn64.lim.max_conns"}}</label>
+			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-max_conns">{{.T "cdn64.lim.max_conns"}}</label>
 				<input class="form-control form-control-sm" type="number" min="0" id="lim-max_conns" name="lim_max_conns" value="{{$d.Lim.Limits.MaxConns}}">
 				<div class="form-text">{{.T "cdn64.lim.max_conns_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.MaxConns}}</div></div>
-			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-ban_after">{{.T "cdn64.lim.ban_after"}}</label>
+			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-ban_after">{{.T "cdn64.lim.ban_after"}}</label>
 				<input class="form-control form-control-sm" type="number" min="0" id="lim-ban_after" name="lim_ban_after" value="{{$d.Lim.Limits.BanAfter}}">
 				<div class="form-text">{{.T "cdn64.lim.ban_after_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.BanAfter}}</div></div>
-			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-ban_minutes">{{.T "cdn64.lim.ban_minutes"}}</label>
+			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-ban_minutes">{{.T "cdn64.lim.ban_minutes"}}</label>
 				<input class="form-control form-control-sm" type="number" min="0" id="lim-ban_minutes" name="lim_ban_minutes" value="{{$d.Lim.Limits.BanMinutes}}">
 				<div class="form-text">{{.T "cdn64.lim.ban_minutes_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.BanMinutes}}</div></div>
 		</div>
@@ -91,6 +95,8 @@
 		<button class="btn btn-outline-secondary btn-sm" type="submit" name="reset" value="1" data-confirm="{{.T "cdn64.lim.reset_confirm"}}"><i class="bi bi-arrow-counterclockwise"></i> {{.T "cdn64.lim.reset"}}</button>
 	</div>
 </form>
+</div>
+</div>
 <div class="card">
 	{{if not $d.Rows}}<div class="card-body text-center text-body-secondary py-5">
 		<div class="mb-2"><i class="bi bi-person-lock fs-2"></i></div>

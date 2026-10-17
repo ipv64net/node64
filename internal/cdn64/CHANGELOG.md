@@ -1,5 +1,20 @@
 # Änderungen – CDN64
 
+## 1.6.0 – 2026-10-17
+
+Abweisungen in Statistik und Log, gleiches Diagramm wie auf dem Dashboard.
+
+### Neu
+- Jede Abweisung wird erfasst: Blocklisten, Sperren, Limits, Zugriffslisten und Exploit-Sperre.
+  - Sie steht immer im Zugriffs-Log (Reiter *Zugriffe*), mit Grund und Filter „Abgewiesen“, auch ohne eingeschaltetes Zugriffs-Log; gebremst auf einen Eintrag je Adresse und Grund alle 10 Sekunden.
+  - Verbindungen, die vor der ersten Anfrage getrennt werden, erscheinen als „Verbindung abgewiesen“.
+  - Überlastung (Verbindungen insgesamt voll, Ziel ausgelastet) und Sperren stehen als Warnung im Log der Node.
+- Kachel „Abgewiesen“ (24 Stunden) auf dem Reiter *Zugriffe*.
+
+### Geändert
+- Das Diagramm in der Übersicht der Proxy-Hosts und das auf dem Dashboard sind jetzt dasselbe: Anfragen und Abgewiesene gestapelt, Datenverkehr als Linie.
+- Reiter *Zugriffslisten*: ipv64-Blocklisten und Schutz vor Überlastung nebeneinander, die eigenen Zugriffslisten darunter.
+
 ## 1.5.0 – 2026-10-17
 
 Schutz vor Überlastung, ipv64-Blocklisten, Verkehr in der Übersicht.

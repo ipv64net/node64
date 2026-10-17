@@ -8,7 +8,6 @@
 	var cfg = JSON.parse(dataEl.textContent || "{}");
 	var T = cfg.t || {};
 	var locale = cfg.lang === "en" ? "en-GB" : "de-DE";
-	var nf = new Intl.NumberFormat(locale);
 	var SIZES = ["s", "m", "l", "xl"];
 	var COLS = { s: "col-md-6 col-xl-3", m: "col-md-6 col-xl-4", l: "col-lg-6", xl: "col-12" };
 	var ALLCOLS = "col-md-6 col-xl-3 col-xl-4 col-lg-6 col-12".split(" ");
@@ -141,12 +140,6 @@
 		return new Date(ts).toLocaleString(locale, opts);
 	}
 
-	function bytes(n) {
-		var u = ["B", "KB", "MB", "GB", "TB"], i = 0;
-		while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
-		return (i ? n.toFixed(1) : n) + " " + u[i];
-	}
-
 	function draw(canvas, kind, cfgChart) {
 		var key = kind;
 		if (charts[key]) { charts[key].destroy(); }
@@ -179,30 +172,14 @@
 		});
 	}
 
+	// gleiches Diagramm wie in der Uebersicht der Proxy-Hosts (cdn64-chart.js)
 	function loadCDN64(card, canvas, range) {
 		var hours = range === "7d" ? 168 : 24;
 		return fetch("/api/cdn64/stats?hours=" + hours, { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
-			var pts = d.timeline || [];
-			var c = colors();
-			empty(card, !pts.length);
-			draw(canvas, "cdn64", {
-				type: "bar",
-				data: { labels: pts.map(function (p) { return fmtTime(p.hour, hours > 24); }), datasets: [
-					{ type: "bar", label: t("requests"), data: pts.map(function (p) { return p.requests; }), backgroundColor: c.pri, borderRadius: 3, yAxisID: "y" },
-					{ type: "line", label: t("bytes"), data: pts.map(function (p) { return p.bytes; }), borderColor: c.info, backgroundColor: c.info, pointRadius: 0, tension: 0.3, yAxisID: "y1" }
-				] },
-				options: {
-					responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: "index", intersect: false },
-					scales: {
-						x: { grid: { display: false }, ticks: { autoSkip: true, maxRotation: 0 } },
-						y: { beginAtZero: true, ticks: { precision: 0, callback: function (v) { return nf.format(v); } } },
-						y1: { beginAtZero: true, position: "right", grid: { drawOnChartArea: false }, ticks: { callback: function (v) { return bytes(v); } } }
-					},
-					plugins: { legend: { position: "bottom" }, tooltip: { callbacks: { label: function (ctx) {
-						return ctx.dataset.label + ": " + (ctx.dataset.yAxisID === "y1" ? bytes(ctx.parsed.y) : nf.format(ctx.parsed.y));
-					} } } }
-				}
-			});
+			var C = window.Node64CDNChart;
+			var s = C.series(d.timeline, hours);
+			empty(card, !s.pts.some(function (p) { return p.req || p.blocked; }));
+			draw(canvas, "cdn64", C.config(s, { requests: t("requests"), blocked: t("rejected"), bytes: t("bytes") }));
 		});
 	}
 

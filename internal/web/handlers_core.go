@@ -338,7 +338,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	avail := dashAvailable(d.Boards, cards, s.Modules.IsRunning("dns64"), s.Modules.IsRunning("cdn64"))
 	d.Layout = dashMerge(avail, s.dashSaved(ctx, v.User.ID))
 	texts := map[string]string{}
-	for _, k := range []string{"saved", "save_err", "allowed", "blocked", "requests", "bytes", "no_data", "size", "hide", "show", "up", "down"} {
+	for _, k := range []string{"saved", "save_err", "allowed", "blocked", "rejected", "requests", "bytes", "no_data", "size", "hide", "show", "up", "down"} {
 		texts[k] = v.T("dashboard.js." + k)
 	}
 	d.JS = map[string]any{"csrf": v.CSRF, "lang": v.Lang, "t": texts}

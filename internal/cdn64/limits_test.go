@@ -2,11 +2,15 @@ package cdn64
 
 import (
 	"context"
+	"database/sql"
+	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
@@ -20,18 +24,19 @@ func TestLimiter(t *testing.T) {
 	c := Limits{Enabled: true, ConnsPerIP: 2, ConnRate: 1, ReqRate: 2, ReqBurst: 4, MaxConns: 5, BanAfter: 3, BanMinutes: 10, ExemptLAN: true}
 	l.cfg.Store(&c)
 	a := netip.MustParseAddr("203.0.113.5")
+	open := func(a netip.Addr) (func(), bool) { r, why := l.open(a); return r, why == "" }
 
 	// gleichzeitige Verbindungen je IP
-	r1, ok1 := l.open(a)
-	r2, ok2 := l.open(a)
+	r1, ok1 := open(a)
+	r2, ok2 := open(a)
 	if !ok1 || !ok2 {
 		t.Fatal("first two connections must pass")
 	}
-	if _, ok := l.open(a); ok {
-		t.Fatal("third concurrent connection must be rejected")
+	if _, why := l.open(a); why != rejConns {
+		t.Fatalf("third concurrent connection must be rejected: %q", why)
 	}
 	r1()
-	r3, ok3 := l.open(a)
+	r3, ok3 := open(a)
 	if !ok3 {
 		t.Fatal("after release a slot is free again")
 	}
@@ -39,7 +44,7 @@ func TestLimiter(t *testing.T) {
 	r3()
 	// Heimnetz ausgenommen, IPv6 je /64
 	for i := 0; i < 50; i++ {
-		if _, ok := l.open(netip.MustParseAddr("192.168.1.10")); !ok {
+		if _, ok := open(netip.MustParseAddr("192.168.1.10")); !ok {
 			t.Fatal("LAN must be exempt")
 		}
 	}
@@ -88,14 +93,14 @@ func TestLimiter(t *testing.T) {
 	var rel []func()
 	for i := 0; i < 5; i++ {
 		now = now.Add(2 * time.Second)
-		r, ok := l.open(netip.MustParseAddr("198.51.100." + strconv.Itoa(i+1)))
+		r, ok := open(netip.MustParseAddr("198.51.100." + strconv.Itoa(i+1)))
 		if !ok {
 			t.Fatalf("conn %d", i)
 		}
 		rel = append(rel, r)
 	}
-	if _, ok := l.open(netip.MustParseAddr("198.51.100.99")); ok {
-		t.Fatal("max conns in total")
+	if _, why := l.open(netip.MustParseAddr("198.51.100.99")); why != rejMaxConns {
+		t.Fatalf("max conns in total: %q", why)
 	}
 	for _, r := range rel {
 		r()
@@ -110,19 +115,19 @@ func TestLimiter(t *testing.T) {
 	l.cfg.Store(&c2)
 	n := 0
 	for i := 0; i < 20; i++ {
-		if r, ok := l.open(d); ok {
+		if r, ok := open(d); ok {
 			n++
 			r()
 		}
 	}
-	if n != 10 {
-		t.Fatalf("conn rate: %d", n)
+	if _, why := l.open(d); n != 10 || why != rejConnRate {
+		t.Fatalf("conn rate: %d %q", n, why)
 	}
 	// ausgeschaltet: nichts begrenzt, Sperren ruhen
 	off := c2
 	off.Enabled = false
 	l.cfg.Store(&off)
-	if _, ok := l.open(d); !ok || !l.request(d) {
+	if _, ok := open(d); !ok || !l.request(d) {
 		t.Fatal("disabled")
 	}
 	// aufraeumen
@@ -157,6 +162,7 @@ func TestLimitsEnforced(t *testing.T) {
 	if _, err := e.crt.Upload(ctx, certPEM, keyPEM); err != nil {
 		t.Fatal(err)
 	}
+	e.m.SetDataDir(t.TempDir()) // Statistik und Log der Abweisungen
 	e.enable(t)
 	h := newHost()
 	h.Names, h.TargetHost, h.TargetPort = []string{"app.test"}, "127.0.0.1", bport
@@ -273,5 +279,80 @@ func TestLimitsEnforced(t *testing.T) {
 	}
 	if e.m.lim.rejected.Load() == 0 {
 		t.Fatal("not counted")
+	}
+	// Statistik und Log: jeder Grund steht im Log (auch ohne Zugriffs-Log am Host), Verbindungen unter Host 0
+	sdb := e.m.stats2.Load()
+	want := map[string]bool{rejReqRate: false, rejBan: false, rejTarget: false, rejConns: false}
+	var list []LogEntry
+	for i := 0; i < 50; i++ {
+		list, _ = sdb.entries(ctx, LogFilter{Rejected: true, Limit: 500})
+		for _, x := range list {
+			if _, ok := want[x.Reason]; ok {
+				want[x.Reason] = true
+			}
+		}
+		if want[rejReqRate] && want[rejBan] && want[rejTarget] && want[rejConns] {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for r, ok := range want {
+		if !ok {
+			t.Fatalf("reason %s not in log: %+v", r, list)
+		}
+	}
+	for _, x := range list {
+		switch x.Reason {
+		case rejConns: // vor der ersten Anfrage
+			if x.Status != 0 || x.HostID != 0 {
+				t.Fatalf("connection rejection must be logged under host 0 without status: %+v", x)
+			}
+		case rejReqRate, rejTarget:
+			if x.HostID != h.ID || x.Status != map[string]int{rejReqRate: 429, rejTarget: 503}[x.Reason] {
+				t.Fatalf("request rejection: %+v", x)
+			}
+		}
+	}
+	if all, _ := sdb.entries(ctx, LogFilter{Limit: 500}); len(all) != len(list) {
+		t.Fatalf("normal requests must not be logged without access log: %d vs %d", len(all), len(list))
+	}
+	pts, _ := sdb.hours(ctx, 0, time.Now().Add(-time.Hour))
+	var blocked, conn, req int64
+	for _, p := range pts {
+		blocked, conn, req = blocked+p.Blocked, conn+p.ConnBlocked, req+p.Requests
+	}
+	if blocked < 5 || conn < 1 || conn >= blocked || req == 0 {
+		t.Fatalf("hourly: blocked=%d conn=%d requests=%d", blocked, conn, req)
+	}
+}
+
+// Aeltere cdn64.db (ohne blocked/reason) bekommt die Spalten beim Oeffnen, alte Zahlen bleiben.
+func TestStatsAddColumns(t *testing.T) {
+	dir := t.TempDir()
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, "cdn64.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE hourly (host_id INTEGER NOT NULL, hour TEXT NOT NULL, requests INTEGER NOT NULL DEFAULT 0, s2 INTEGER NOT NULL DEFAULT 0,
+		s3 INTEGER NOT NULL DEFAULT 0, s4 INTEGER NOT NULL DEFAULT 0, s5 INTEGER NOT NULL DEFAULT 0, bytes INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (host_id, hour));
+		CREATE TABLE access (id INTEGER PRIMARY KEY AUTOINCREMENT, time TEXT NOT NULL, host_id INTEGER NOT NULL, client TEXT NOT NULL,
+		method TEXT NOT NULL, host TEXT NOT NULL, path TEXT NOT NULL, status INTEGER NOT NULL, bytes INTEGER NOT NULL, ms INTEGER NOT NULL, ua TEXT NOT NULL);
+		INSERT INTO hourly (host_id, hour, requests, s2) VALUES (1, ?, 7, 7);
+		INSERT INTO access (time, host_id, client, method, host, path, status, bytes, ms, ua) VALUES (?, 1, '1.2.3.4', 'GET', 'a.test', '/', 200, 1, 1, 'x')`,
+		time.Now().UTC().Truncate(time.Hour).Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	s, err := openStats(dir, slog.New(slog.NewTextHandler(io.Discard, nil)), func() int { return 7 }, func() bool { return false })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.close()
+	pts, err := s.hours(context.Background(), 0, time.Now().Add(-2*time.Hour))
+	if err != nil || len(pts) != 1 || pts[0].Requests != 7 || pts[0].Blocked != 0 {
+		t.Fatalf("hours: %+v %v", pts, err)
+	}
+	if l, err := s.entries(context.Background(), LogFilter{}); err != nil || len(l) != 1 || l[0].Reason != "" {
+		t.Fatalf("entries: %+v %v", l, err)
 	}
 }

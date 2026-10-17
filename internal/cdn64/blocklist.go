@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/netip"
 	"os"
@@ -220,13 +219,6 @@ func (b *blocklists) Blocked(a netip.Addr) bool {
 	if b.set.Load().has(a) {
 		b.blocked.Add(1)
 		return true
-	}
-	return false
-}
-
-func (b *blocklists) blockedAddr(a net.Addr) bool {
-	if ap, err := netip.ParseAddrPort(a.String()); err == nil {
-		return b.Blocked(ap.Addr())
 	}
 	return false
 }

@@ -237,7 +237,7 @@ type logData struct {
 func (m *Module) pageLog(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
-	f := LogFilter{Query: q.Get("q"), Limit: 100}
+	f := LogFilter{Query: q.Get("q"), Limit: 100, Rejected: q.Get("status") == "r"}
 	f.HostID, _ = strconv.ParseInt(q.Get("host"), 10, 64)
 	f.Status, _ = strconv.Atoi(q.Get("status"))
 	f.Before, _ = strconv.ParseInt(q.Get("before"), 10, 64)
@@ -274,6 +274,7 @@ func (m *Module) pageLog(w http.ResponseWriter, r *http.Request) {
 			d.Total.S4 += s.S4
 			d.Total.S5 += s.S5
 			d.Total.Bytes += s.Bytes
+			d.Total.Blocked += s.Blocked
 		}
 	}
 	m.g.Render(w, r, http.StatusOK, Name+"/log", "cdn64.title", d)
@@ -486,7 +487,7 @@ func (m *Module) apiLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	f := LogFilter{Query: q.Get("q")}
+	f := LogFilter{Query: q.Get("q"), Rejected: q.Get("rejected") == "1" || q.Get("status") == "r"}
 	f.HostID, _ = strconv.ParseInt(q.Get("host"), 10, 64)
 	f.Status, _ = strconv.Atoi(q.Get("status"))
 	f.Before, _ = strconv.ParseInt(q.Get("before"), 10, 64)

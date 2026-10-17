@@ -10006,15 +10006,9 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "integer",
-              "enum": [
-                2,
-                3,
-                4,
-                5
-              ]
+              "type": "string"
             },
-            "description": "Klasse"
+            "description": "2–5 = Statusklasse, r = nur abgewiesene"
           },
           {
             "name": "q",
@@ -10042,6 +10036,18 @@
               "type": "integer"
             },
             "description": "1–500, Standard 100"
+          },
+          {
+            "name": "rejected",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "nur abgewiesene (wie status=r)"
           }
         ],
         "responses": {
@@ -10104,7 +10110,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Einträge mit reason sind abgewiesen (blocklist, ban, conns, conn_rate, max_conns, req_rate, target, exploit, acl); status 0 und host_id 0 = Verbindung vor der ersten Anfrage getrennt. Abgewiesene stehen immer im Log (gebremst), normale Anfragen nur bei eingeschaltetem Zugriffs-Log."
       }
     },
     "/cdn64/stats": {
@@ -10153,7 +10160,8 @@
               }
             }
           }
-        }
+        },
+        "description": "timeline je Stunde: requests, 2xx–5xx, bytes, blocked (abgewiesen) und conn_blocked (davon Verbindungen vor der ersten Anfrage, nur ohne host; zählen nicht in requests). hosts: Summen je Host-ID, 0 = abgewiesene Verbindungen ohne Host."
       }
     },
     "/cdn64/settings": {

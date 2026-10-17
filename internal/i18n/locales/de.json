@@ -235,7 +235,8 @@
       "hide": "Ausblenden",
       "show": "Einblenden",
       "up": "Nach vorn",
-      "down": "Nach hinten"
+      "down": "Nach hinten",
+      "rejected": "Abgewiesen"
     },
     "account": "ipv64-Account",
     "api_ok": "API verbunden",
@@ -600,7 +601,10 @@
       "settings": "Aufbewahrung",
       "days": "Zugriffs-Log (Tage)",
       "anonymize": "Client-IPs kürzen (IPv4 /24, IPv6 /48)",
-      "settings_hint": "Die Zähler je Stunde bleiben 90 Tage. Gespeichert in cdn64.db, nicht im Backup der Node."
+      "settings_hint": "Die Zähler je Stunde bleiben 90 Tage. Abweisungen (Blocklisten, Limits, Sperren, Zugriffslisten, Exploits) stehen immer im Log, auch ohne eingeschaltetes Zugriffs-Log; je Adresse und Grund höchstens ein Eintrag alle 10 Sekunden, gezählt wird jede. Gespeichert in cdn64.db, nicht im Backup der Node.",
+      "conn": "Verbindung abgewiesen",
+      "rejected": "Abgewiesen",
+      "rejected_hint": "Abgewiesen in 24 Stunden: Blocklisten, Limits, Sperren, Zugriffslisten und Exploit-Sperre. Klick zeigt nur diese Einträge."
     },
     "dnsrec": {
       "create": "DNS-Eintrag bei ipv64 anlegen",
@@ -621,17 +625,13 @@
       "open": "Healthcheck öffnen (überwacht dieses Ziel)"
     },
     "stats": {
-      "title": "Verkehr",
       "host": "Host",
       "all": "alle Hosts",
-      "h24": "24 Std.",
-      "d7": "7 Tage",
-      "d30": "30 Tage",
       "requests": "Anfragen",
-      "bytes": "Datenmenge",
+      "bytes": "Datenverkehr",
       "errors": "Fehler (4xx/5xx)",
-      "blocked": "Abgewiesen (Schutz)",
-      "blocked_hint": "Seit dem Start: Block Common Exploits, Zugriffslisten und ipv64-Blocklisten",
+      "blocked": "Abgewiesen",
+      "blocked_hint": "Im Zeitraum: Blocklisten, Limits, Sperren, Zugriffslisten und Exploit-Sperre, auch Verbindungen, die vor der ersten Anfrage getrennt wurden (nur bei „alle Hosts“). Einzeln unter Zugriffe.",
       "empty": "Noch keine Anfragen im Zeitraum."
     },
     "bl": {
@@ -694,6 +694,17 @@
       "reset_confirm": "Alle Limits auf die Standardwerte setzen?",
       "saved": "Schutz vor Überlastung gespeichert.",
       "err_range": "Werte prüfen: nur ganze Zahlen ab 0 (Sperre höchstens 7 Tage)."
+    },
+    "reject": {
+      "blocklist": "ipv64-Blockliste",
+      "ban": "gesperrt (Überlastung)",
+      "conns": "zu viele Verbindungen",
+      "conn_rate": "zu viele neue Verbindungen",
+      "max_conns": "Verbindungen insgesamt voll",
+      "req_rate": "zu viele Anfragen",
+      "target": "Ziel ausgelastet",
+      "exploit": "Exploit-Sperre",
+      "acl": "Zugriffsliste"
     }
   },
   "certs": {

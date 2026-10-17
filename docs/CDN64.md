@@ -132,11 +132,22 @@ und keinem Modul:
 
 ## Statistik und Protokoll
 
-- **Anfragen je Host und Stunde** (2xx–5xx, Datenmenge) werden 90 Tage gehalten. Die Liste zeigt die letzten
-  24 Stunden.
-- **Verkehr in der Übersicht** (Reiter *Proxy-Hosts*): Diagramm mit Anfragen nach 2xx–5xx und Datenmenge
-  für 24 Stunden, 7 Tage oder 30 Tage (dann je Tag), für alle Hosts oder einen. Dazu die Kennzahlen Anfragen,
-  Datenmenge, Fehler und „abgewiesen“ (Exploits, Zugriffslisten, Blocklisten).
+- **Anfragen je Host und Stunde** (2xx–5xx, Datenmenge, abgewiesen) werden 90 Tage gehalten. Die Liste zeigt
+  die letzten 24 Stunden.
+- **Verkehr in der Übersicht** (Reiter *Proxy-Hosts*): dasselbe Diagramm wie auf dem Dashboard (gemeinsames
+  Skript `cdn64-chart.js`): Anfragen (blau) und Abgewiesene (rot) gestapelt, Datenverkehr als Linie; 24 Stunden,
+  7 oder 30 Tage (dann je Tag), alle Hosts oder einer. Dazu die Kennzahlen Anfragen, Datenverkehr, Fehler und
+  Abgewiesen im Zeitraum.
+- **Abweisungen** werden immer erfasst und protokolliert, auch ohne Zugriffs-Log am Host:
+  - Gründe: ipv64-Blockliste, Sperre (Überlastung), zu viele Verbindungen, zu viele neue Verbindungen,
+    Verbindungen insgesamt voll, zu viele Anfragen (429), Ziel ausgelastet (503), Exploit-Sperre, Zugriffsliste
+    (403/429; die normale Passwortabfrage 401 zählt nicht).
+  - Verbindungen, die schon vor der ersten Anfrage getrennt werden (am Eingang oder bei Streams), stehen als
+    „Verbindung abgewiesen“ ohne Host; im Diagramm nur bei „alle Hosts“.
+  - Im Log je Adresse, Grund und Host höchstens ein Eintrag alle 10 Sekunden und höchstens 600 je Minute; gezählt
+    wird jede Abweisung. Filter „Abgewiesen“ auf dem Reiter *Zugriffe*.
+  - Sperren, „Verbindungen insgesamt voll“ und „Ziel ausgelastet“ stehen zusätzlich als Warnung im Log der Node
+    (*Logs*, je Art höchstens einmal pro Minute).
 - **Zugriffs-Log** je Host einschaltbar (Reiter *Zugriffe*), 1–90 Tage, Client-IPs auf Wunsch gekürzt.
 - **Ablage:** `/data/cdn64/cdn64.db`, nicht im Node-Backup.
 - **Audit:** Alle Änderungen aus Oberfläche und API.

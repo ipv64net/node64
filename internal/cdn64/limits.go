@@ -23,6 +23,19 @@ const (
 
 var limQueueWait = 10 * time.Second // so lange wartet eine Anfrage auf einen freien Platz beim Ziel (Tests kuerzer)
 
+// Gruende fuer Abweisungen (Statistik, Zugriffs-Log; Texte unter cdn64.reject.*).
+const (
+	rejBlocklist = "blocklist" // ipv64-Blocklisten
+	rejBan       = "ban"       // gesperrt wegen Ueberlastung
+	rejConns     = "conns"     // zu viele Verbindungen je IP
+	rejConnRate  = "conn_rate" // zu viele neue Verbindungen je IP
+	rejMaxConns  = "max_conns" // Verbindungen insgesamt erreicht
+	rejReqRate   = "req_rate"  // zu viele Anfragen je IP (429)
+	rejTarget    = "target"    // Ziel ausgelastet (503)
+	rejExploit   = "exploit"   // Block Common Exploits
+	rejACL       = "acl"       // Zugriffsliste
+)
+
 // Limits sind die Einstellungen (0 = ohne dieses Limit).
 type Limits struct {
 	Enabled     bool `json:"enabled"`
@@ -85,10 +98,12 @@ type limiter struct {
 	rejected atomic.Int64 // abgewiesen seit dem Start
 	now      func() time.Time
 	onBan    func(ip netip.Addr, until time.Time)
+	wmu      sync.Mutex
+	warned   map[string]time.Time // Warnungen im Log: hoechstens einmal je Minute
 }
 
 func newLimiter() *limiter {
-	l := &limiter{ips: map[netip.Addr]*ipState{}, bans: map[netip.Addr]time.Time{}, now: time.Now}
+	l := &limiter{ips: map[netip.Addr]*ipState{}, bans: map[netip.Addr]time.Time{}, now: time.Now, warned: map[string]time.Time{}}
 	d := DefaultLimits()
 	l.cfg.Store(&d)
 	return l
@@ -170,15 +185,15 @@ func (l *limiter) strikeLocked(c *Limits, k netip.Addr, st *ipState, now time.Ti
 	}
 }
 
-// open: neue Verbindung (Eingang, Streams). release gibt den Platz wieder frei.
-func (l *limiter) open(a netip.Addr) (release func(), ok bool) {
+// open: neue Verbindung (Eingang, Streams). release gibt den Platz wieder frei; reason != "" = abgewiesen.
+func (l *limiter) open(a netip.Addr) (release func(), reason string) {
 	c := l.cfg.Load()
 	if !c.Enabled || l.exempted(c, a) {
-		return nil, true
+		return nil, ""
 	}
 	if c.MaxConns > 0 && l.conns.Load() >= int64(c.MaxConns) {
 		l.rejected.Add(1)
-		return nil, false
+		return nil, rejMaxConns
 	}
 	k, now := limKey(a), l.now()
 	l.mu.Lock()
@@ -186,11 +201,15 @@ func (l *limiter) open(a netip.Addr) (release func(), ok bool) {
 	st := l.stateLocked(c, k, now)
 	if st == nil {
 		l.conns.Add(1)
-		return func() { l.conns.Add(-1) }, true
+		return func() { l.conns.Add(-1) }, ""
 	}
-	if c.ConnsPerIP > 0 && st.conns >= c.ConnsPerIP || c.ConnRate > 0 && st.connTok < 1 {
+	if c.ConnsPerIP > 0 && st.conns >= c.ConnsPerIP {
 		l.strikeLocked(c, k, st, now)
-		return nil, false
+		return nil, rejConns
+	}
+	if c.ConnRate > 0 && st.connTok < 1 {
+		l.strikeLocked(c, k, st, now)
+		return nil, rejConnRate
 	}
 	if c.ConnRate > 0 {
 		st.connTok--
@@ -202,14 +221,22 @@ func (l *limiter) open(a netip.Addr) (release func(), ok bool) {
 		st.conns--
 		l.mu.Unlock()
 		l.conns.Add(-1)
-	}, true
+	}, ""
 }
 
-func (l *limiter) openAddr(a net.Addr) (release func(), ok bool) {
-	if ap, err := netip.ParseAddrPort(a.String()); err == nil {
-		return l.open(ap.Addr())
+// warn: true, wenn zu diesem Schluessel seit einer Minute nichts im Log stand.
+func (l *limiter) warn(key string) bool {
+	now := l.now()
+	l.wmu.Lock()
+	defer l.wmu.Unlock()
+	if now.Sub(l.warned[key]) < time.Minute {
+		return false
 	}
-	return nil, true
+	if len(l.warned) > 1000 {
+		l.warned = map[string]time.Time{}
+	}
+	l.warned[key] = now
+	return true
 }
 
 // request: eine Anfrage der (echten) Client-IP; false = zu viele (429).
@@ -255,13 +282,6 @@ func (l *limiter) banned(a netip.Addr) bool {
 		l.rejected.Add(1)
 	}
 	return ok
-}
-
-func (l *limiter) bannedAddr(a net.Addr) bool {
-	if ap, err := netip.ParseAddrPort(a.String()); err == nil {
-		return l.banned(ap.Addr())
-	}
-	return false
 }
 
 // unban hebt eine Sperre auf (IP oder /64).
@@ -395,7 +415,65 @@ func (m *Module) limLoop(ctx context.Context) {
 	}
 }
 
+// rejectConn: Verbindung vor der ersten Anfrage abgewiesen (Statistik unter Host 0, Zugriffs-Log gebremst).
+// where ist "" fuer den gemeinsamen Eingang, sonst z. B. "stream :25565".
+func (m *Module) rejectConn(a netip.Addr, reason, where string) {
+	if reason == rejMaxConns {
+		m.overload(rejMaxConns, "")
+	}
+	if sdb := m.stats2.Load(); sdb != nil {
+		sdb.add(hit{time: time.Now(), client: a.Unmap(), method: "-", host: where, reason: reason, conn: true})
+	}
+}
+
+// overload schreibt eine Warnung ins Log (je Art und Host hoechstens einmal je Minute).
+func (m *Module) overload(kind, host string) {
+	if !m.lim.warn(kind + "|" + host) {
+		return
+	}
+	c := m.lim.config()
+	switch kind {
+	case rejMaxConns:
+		m.log.Warn("cdn64 overload: connection limit in total reached, new connections are rejected", "max_conns", c.MaxConns)
+	case rejTarget:
+		m.log.Warn("cdn64 overload: target busy, requests answered with 503", "host", host, "target_conns", c.TargetConns)
+	}
+}
+
 // blockedAny: ipv64-Blocklisten oder gesperrt wegen Ueberlastung (am Eingang vor TLS).
 func (m *Module) blockedAny(a netip.Addr) bool {
-	return m.bl.Blocked(a) || m.lim.banned(a)
+	return m.connBlocked(a, "")
+}
+
+func (m *Module) connBlocked(a netip.Addr, where string) bool {
+	switch {
+	case m.bl.Blocked(a):
+		m.rejectConn(a, rejBlocklist, where)
+	case m.lim.banned(a):
+		m.rejectConn(a, rejBan, where)
+	default:
+		return false
+	}
+	return true
+}
+
+// gateOpen: Limits beim Annehmen einer Verbindung (Edge.SetGate).
+func (m *Module) gateOpen(a netip.Addr) (func(), bool) {
+	return m.connOpen(a, "")
+}
+
+func (m *Module) connOpen(a netip.Addr, where string) (func(), bool) {
+	release, reason := m.lim.open(a)
+	if reason != "" {
+		m.rejectConn(a, reason, where)
+		return nil, false
+	}
+	return release, true
+}
+
+func netAddr(a net.Addr) netip.Addr {
+	if ap, err := netip.ParseAddrPort(a.String()); err == nil {
+		return ap.Addr().Unmap()
+	}
+	return netip.Addr{}
 }

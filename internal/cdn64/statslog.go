@@ -37,6 +37,19 @@ CREATE INDEX IF NOT EXISTS access_time ON access(time);
 CREATE INDEX IF NOT EXISTS access_host ON access(host_id, time);
 `
 
+// statsColumns: spaeter dazugekommene Spalten (fehlen in aelteren cdn64.db).
+var statsColumns = []struct{ table, col, def string }{
+	{"hourly", "blocked", "INTEGER NOT NULL DEFAULT 0"}, // abgewiesen (Blocklisten, Limits, Sperren, Zugriffslisten, Exploits)
+	{"access", "reason", "TEXT NOT NULL DEFAULT ''"},    // Grund der Abweisung ("" = normal beantwortet)
+}
+
+// rejectLogEvery: je Adresse, Grund und Host hoechstens ein Log-Eintrag in diesem Abstand (Flut bleibt lesbar,
+// gezaehlt wird jede Abweisung); dazu hoechstens rejectLogMax Eintraege je Minute insgesamt.
+const (
+	rejectLogEvery = 10 * time.Second
+	rejectLogMax   = 600
+)
+
 // hit ist eine beantwortete Anfrage.
 type hit struct {
 	time   time.Time
@@ -49,7 +62,9 @@ type hit struct {
 	bytes  int64
 	ms     int64
 	ua     string
-	log    bool // ins Einzel-Log
+	log    bool   // ins Einzel-Log
+	reason string // abgewiesen: Grund (immer ins Log, gebremst)
+	conn   bool   // Verbindung vor der ersten Anfrage abgewiesen (zaehlt nicht als Anfrage)
 }
 
 type hourKey struct {
@@ -57,7 +72,7 @@ type hourKey struct {
 	hour string
 }
 
-type hourAgg struct{ requests, s2, s3, s4, s5, bytes int64 }
+type hourAgg struct{ requests, s2, s3, s4, s5, bytes, blocked int64 }
 
 // statsDB ist die Datei cdn64.db mit Schreiber.
 type statsDB struct {
@@ -84,6 +99,19 @@ func openStats(dir string, log *slog.Logger, days func() int, anon func() bool) 
 	if _, err := db.Exec(statsSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("cdn64.db: %w", err)
+	}
+	for _, c := range statsColumns {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, c.table, c.col).Scan(&n); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("cdn64.db: %w", err)
+		}
+		if n == 0 {
+			if _, err := db.Exec(`ALTER TABLE ` + c.table + ` ADD COLUMN ` + c.col + ` ` + c.def); err != nil {
+				db.Close()
+				return nil, fmt.Errorf("cdn64.db: %w", err)
+			}
+		}
 	}
 	s := &statsDB{db: db, log: log, ch: make(chan hit, 8192), done: make(chan struct{}), days: days, anon: anon}
 	s.wg.Add(1)
@@ -114,6 +142,9 @@ func (s *statsDB) writer() {
 	defer prune.Stop()
 	agg := map[hourKey]*hourAgg{}
 	var logs []hit
+	lastRej := map[string]time.Time{} // Bremse fuer abgewiesene im Log
+	var rejMinute time.Time
+	rejN := 0
 	flush := func() {
 		if len(agg) == 0 && len(logs) == 0 {
 			return
@@ -130,19 +161,37 @@ func (s *statsDB) writer() {
 			a = &hourAgg{}
 			agg[k] = a
 		}
-		a.requests++
-		a.bytes += h.bytes
-		switch h.status / 100 {
-		case 1, 2:
-			a.s2++
-		case 3:
-			a.s3++
-		case 4:
-			a.s4++
-		default:
-			a.s5++
+		if h.reason != "" {
+			a.blocked++
 		}
-		if h.log {
+		if !h.conn {
+			a.requests++
+			a.bytes += h.bytes
+			switch h.status / 100 {
+			case 1, 2:
+				a.s2++
+			case 3:
+				a.s3++
+			case 4:
+				a.s4++
+			default:
+				a.s5++
+			}
+		}
+		if h.reason != "" { // immer ins Log, aber gebremst
+			key := h.client.String() + "|" + h.reason + "|" + strconv.FormatInt(h.hostID, 10)
+			if m := h.time.Truncate(time.Minute); !m.Equal(rejMinute) {
+				rejMinute, rejN = m, 0
+				if len(lastRej) > 10000 {
+					lastRej = map[string]time.Time{}
+				}
+			}
+			if h.time.Sub(lastRej[key]) >= rejectLogEvery && rejN < rejectLogMax {
+				lastRej[key] = h.time
+				rejN++
+				logs = append(logs, h)
+			}
+		} else if h.log {
 			logs = append(logs, h)
 		}
 		if len(logs) >= 500 {
@@ -181,9 +230,10 @@ func (s *statsDB) write(agg map[hourKey]*hourAgg, logs []hit) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	for k, a := range agg {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO hourly (host_id, hour, requests, s2, s3, s4, s5, bytes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO hourly (host_id, hour, requests, s2, s3, s4, s5, bytes, blocked) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(host_id, hour) DO UPDATE SET requests = requests + excluded.requests, s2 = s2 + excluded.s2, s3 = s3 + excluded.s3,
-			s4 = s4 + excluded.s4, s5 = s5 + excluded.s5, bytes = bytes + excluded.bytes`, k.host, k.hour, a.requests, a.s2, a.s3, a.s4, a.s5, a.bytes); err != nil {
+			s4 = s4 + excluded.s4, s5 = s5 + excluded.s5, bytes = bytes + excluded.bytes, blocked = blocked + excluded.blocked`,
+			k.host, k.hour, a.requests, a.s2, a.s3, a.s4, a.s5, a.bytes, a.blocked); err != nil {
 			return err
 		}
 	}
@@ -193,8 +243,8 @@ func (s *statsDB) write(agg map[hourKey]*hourAgg, logs []hit) error {
 		if anon {
 			client = maskIP(h.client)
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO access (time, host_id, client, method, host, path, status, bytes, ms, ua) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			h.time.UTC().Format(time.RFC3339Nano), h.hostID, client, h.method, h.host, h.path, h.status, h.bytes, h.ms, h.ua); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO access (time, host_id, client, method, host, path, status, bytes, ms, ua, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			h.time.UTC().Format(time.RFC3339Nano), h.hostID, client, h.method, h.host, h.path, h.status, h.bytes, h.ms, h.ua, h.reason); err != nil {
 			return err
 		}
 	}
@@ -231,11 +281,12 @@ type HostStat struct {
 	S4       int64 `json:"4xx"`
 	S5       int64 `json:"5xx"`
 	Bytes    int64 `json:"bytes"`
+	Blocked  int64 `json:"blocked"` // abgewiesen; bei Host 0 Verbindungen vor der ersten Anfrage
 }
 
 // sums: Zahlen je Host seit since.
 func (s *statsDB) sums(ctx context.Context, since time.Time) (map[int64]HostStat, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT host_id, SUM(requests), SUM(s2), SUM(s3), SUM(s4), SUM(s5), SUM(bytes) FROM hourly WHERE hour >= ? GROUP BY host_id`,
+	rows, err := s.db.QueryContext(ctx, `SELECT host_id, SUM(requests), SUM(s2), SUM(s3), SUM(s4), SUM(s5), SUM(bytes), SUM(blocked) FROM hourly WHERE hour >= ? GROUP BY host_id`,
 		since.UTC().Truncate(time.Hour).Format(time.RFC3339))
 	if err != nil {
 		return nil, err
@@ -245,7 +296,7 @@ func (s *statsDB) sums(ctx context.Context, since time.Time) (map[int64]HostStat
 	for rows.Next() {
 		var id int64
 		var h HostStat
-		if err := rows.Scan(&id, &h.Requests, &h.S2, &h.S3, &h.S4, &h.S5, &h.Bytes); err != nil {
+		if err := rows.Scan(&id, &h.Requests, &h.S2, &h.S3, &h.S4, &h.S5, &h.Bytes, &h.Blocked); err != nil {
 			return nil, err
 		}
 		out[id] = h
@@ -257,11 +308,13 @@ func (s *statsDB) sums(ctx context.Context, since time.Time) (map[int64]HostStat
 type HourPoint struct {
 	Hour time.Time `json:"hour"`
 	HostStat
+	ConnBlocked int64 `json:"conn_blocked"` // davon Verbindungen vor der ersten Anfrage (nicht in requests)
 }
 
 // hours: Verlauf je Stunde (alle Hosts oder einer).
 func (s *statsDB) hours(ctx context.Context, hostID int64, since time.Time) ([]HourPoint, error) {
-	q := `SELECT hour, SUM(requests), SUM(s2), SUM(s3), SUM(s4), SUM(s5), SUM(bytes) FROM hourly WHERE hour >= ?`
+	q := `SELECT hour, SUM(requests), SUM(s2), SUM(s3), SUM(s4), SUM(s5), SUM(bytes), SUM(blocked),
+		SUM(CASE WHEN host_id = 0 THEN blocked ELSE 0 END) FROM hourly WHERE hour >= ?`
 	args := []any{since.UTC().Truncate(time.Hour).Format(time.RFC3339)}
 	if hostID > 0 {
 		q += ` AND host_id = ?`
@@ -276,7 +329,7 @@ func (s *statsDB) hours(ctx context.Context, hostID int64, since time.Time) ([]H
 	for rows.Next() {
 		var p HourPoint
 		var hour string
-		if err := rows.Scan(&hour, &p.Requests, &p.S2, &p.S3, &p.S4, &p.S5, &p.Bytes); err != nil {
+		if err := rows.Scan(&hour, &p.Requests, &p.S2, &p.S3, &p.S4, &p.S5, &p.Bytes, &p.Blocked, &p.ConnBlocked); err != nil {
 			return nil, err
 		}
 		p.Hour, _ = time.Parse(time.RFC3339, hour)
@@ -298,23 +351,28 @@ type LogEntry struct {
 	Bytes  int64     `json:"bytes"`
 	Ms     int64     `json:"ms"`
 	UA     string    `json:"user_agent"`
+	Reason string    `json:"reason,omitempty"` // abgewiesen: blocklist, ban, conns, conn_rate, max_conns, req_rate, target, exploit, acl
 }
 
 // LogFilter waehlt Eintraege aus.
 type LogFilter struct {
-	HostID int64
-	Status int    // 2, 3, 4, 5 = Klasse, 0 = alle
-	Query  string // in Pfad, Client oder User-Agent
-	Before int64  // Seiten: Eintraege mit kleinerer ID
-	Limit  int
+	HostID   int64
+	Status   int    // 2, 3, 4, 5 = Klasse, 0 = alle
+	Rejected bool   // nur abgewiesene
+	Query    string // in Pfad, Client oder User-Agent
+	Before   int64  // Seiten: Eintraege mit kleinerer ID
+	Limit    int
 }
 
 func (s *statsDB) entries(ctx context.Context, f LogFilter) ([]LogEntry, error) {
-	q := `SELECT id, time, host_id, client, method, host, path, status, bytes, ms, ua FROM access WHERE 1 = 1`
+	q := `SELECT id, time, host_id, client, method, host, path, status, bytes, ms, ua, reason FROM access WHERE 1 = 1`
 	var args []any
 	if f.HostID > 0 {
 		q += ` AND host_id = ?`
 		args = append(args, f.HostID)
+	}
+	if f.Rejected {
+		q += ` AND reason <> ''`
 	}
 	if f.Status >= 1 && f.Status <= 5 {
 		q += ` AND status >= ? AND status < ?`
@@ -342,7 +400,7 @@ func (s *statsDB) entries(ctx context.Context, f LogFilter) ([]LogEntry, error) 
 	for rows.Next() {
 		var e LogEntry
 		var t string
-		if err := rows.Scan(&e.ID, &t, &e.HostID, &e.Client, &e.Method, &e.Host, &e.Path, &e.Status, &e.Bytes, &e.Ms, &e.UA); err != nil {
+		if err := rows.Scan(&e.ID, &t, &e.HostID, &e.Client, &e.Method, &e.Host, &e.Path, &e.Status, &e.Bytes, &e.Ms, &e.UA, &e.Reason); err != nil {
 			return nil, err
 		}
 		e.Time, _ = time.Parse(time.RFC3339Nano, t)

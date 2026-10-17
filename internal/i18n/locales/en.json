@@ -235,7 +235,8 @@
       "hide": "Hide",
       "show": "Show",
       "up": "Move earlier",
-      "down": "Move later"
+      "down": "Move later",
+      "rejected": "Rejected"
     },
     "account": "ipv64 account",
     "api_ok": "API connected",
@@ -600,7 +601,10 @@
       "settings": "Retention",
       "days": "Access log (days)",
       "anonymize": "Shorten client IPs (IPv4 /24, IPv6 /48)",
-      "settings_hint": "Hourly counters are kept for 90 days. Stored in cdn64.db, not in the node backup."
+      "settings_hint": "Hourly counters are kept for 90 days. Rejections (blocklists, limits, bans, access lists, exploits) are always logged, even without the access log switched on; at most one entry per address and reason every 10 seconds, every one is counted. Stored in cdn64.db, not in the node backup.",
+      "conn": "connection rejected",
+      "rejected": "Rejected",
+      "rejected_hint": "Rejected in 24 hours: blocklists, limits, bans, access lists and exploit block. Click to show only these entries."
     },
     "dnsrec": {
       "create": "Create DNS record at ipv64",
@@ -621,17 +625,13 @@
       "open": "Open healthcheck (monitors this target)"
     },
     "stats": {
-      "title": "Traffic",
       "host": "Host",
       "all": "all hosts",
-      "h24": "24 h",
-      "d7": "7 days",
-      "d30": "30 days",
       "requests": "Requests",
       "bytes": "Traffic",
       "errors": "Errors (4xx/5xx)",
-      "blocked": "Rejected (protection)",
-      "blocked_hint": "Since start: Block Common Exploits, access lists and ipv64 blocklists",
+      "blocked": "Rejected",
+      "blocked_hint": "In this period: blocklists, limits, bans, access lists and exploit block, including connections cut before the first request (only with “all hosts”). Details under Accesses.",
       "empty": "No requests in this period yet."
     },
     "bl": {
@@ -694,6 +694,17 @@
       "reset_confirm": "Set all limits to their defaults?",
       "saved": "Overload protection saved.",
       "err_range": "Check the values: whole numbers from 0 only (ban at most 7 days)."
+    },
+    "reject": {
+      "blocklist": "ipv64 blocklist",
+      "ban": "banned (overload)",
+      "conns": "too many connections",
+      "conn_rate": "too many new connections",
+      "max_conns": "connections in total full",
+      "req_rate": "too many requests",
+      "target": "target busy",
+      "exploit": "exploit block",
+      "acl": "access list"
     }
   },
   "certs": {
