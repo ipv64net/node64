@@ -1,6 +1,6 @@
 # CDN64 online – Planung (Tunnel zu srv07/srv08)
 
-Stand: 2026-10-17 · Status: **Planung, nichts umgesetzt** · Phasen T0–T6
+Stand: 2026-10-17 · Status: **Planung, nichts umgesetzt** · Phasen T0–T8
 
 Der lokale Reverse-Proxy CDN64 in Node64 wird mit einem neuen Online-CDN verbunden – so wie Cloudflare Tunnel:
 die Node baut von zu Hause eine dauerhafte, verschlüsselte QUIC-Verbindung zu den CDN-Servern **srv07.cdn64.de**
@@ -9,8 +9,9 @@ werden durch die offene Verbindung zur Node durchgereicht. Zu Hause muss kein Po
 
 Inhalt: [1 Ziel](#1-ziel) · [2 Entscheidungen](#2-entscheidungen) · [3 Architektur](#3-architektur) ·
 [4 Tunnel](#4-tunnel) · [5 Modus 1](#5-modus-1-durchreichen) · [6 Modus 2](#6-modus-2-terminieren) ·
-[7 Steuerung bei ipv64](#7-steuerung-bei-ipv64) · [8 Node64](#8-node64) · [9 Edge-Dienst](#9-edge-dienst-auf-srv07srv08) ·
-[10 Sicherheit](#10-sicherheit) · [11 Phasen](#11-phasen) · [12 Risiken und offene Punkte](#12-risiken-und-offene-punkte)
+[7 Modus 3](#7-modus-3-direkt-zum-ziel-ohne-tunnel) · [8 Steuerung bei ipv64](#8-steuerung-bei-ipv64) · [9 Node64](#9-node64) ·
+[10 Edge-Dienst](#10-edge-dienst-auf-srv07srv08) · [11 Sicherheit](#11-sicherheit) · [12 Phasen](#12-phasen) ·
+[13 Risiken und offene Punkte](#13-risiken-und-offene-punkte)
 
 ---
 
@@ -20,12 +21,18 @@ Inhalt: [1 Ziel](#1-ziel) · [2 Entscheidungen](#2-entscheidungen) · [3 Archite
 - **Privatsphäre:** Die Heim-IP bleibt verborgen; im DNS stehen nur srv07/srv08.
 - **Ein Klick:** In der Node je Proxy-Host „CDN64 online“ einschalten; DNS, Server, Zertifikat und Tunnel richten
   sich im Hintergrund ein. Der Nutzer sieht den Fortschritt.
-- **Zwei Modi:**
-  - **Modus 1 – durchreichen:** Die Server entschlüsseln nichts. TLS und Zertifikat bleiben zu Hause.
-  - **Modus 2 – terminieren:** TLS endet auf den Servern. Dort greifen schon Schutz (Blocklisten, Limits, Sperren)
-    und HTTP/3; danach geht es über denselben Tunnel zur Node.
-- **Abgrenzung:** Das bestehende CDN (srv01–srv06, nginx, `cdn_domains`) bleibt unverändert in Betrieb. Es kann ohne
-  Tunnel auf frei definierte IP-Adressen zeigen. Beide Systeme werden in der Datenbank strikt getrennt.
+- **Drei Modi:**
+  - **Modus 1 – durchreichen (Tunnel):** Die Server entschlüsseln nichts. TLS und Zertifikat bleiben zu Hause.
+  - **Modus 2 – terminieren (Tunnel):** TLS endet auf den Servern. Dort greifen schon Schutz (Blocklisten, Limits,
+    Sperren) und HTTP/3; danach geht es über denselben Tunnel zur Node.
+  - **Modus 3 – direkt zum Ziel (ohne Tunnel):** wie das heutige CDN. Der Nutzer gibt ein Ziel an (z. B. die per
+    DynDNS gepflegte IPv6 seines Anschlusses, Port, HTTP oder HTTPS); die Server terminieren TLS und verbinden sich
+    selbst mit dem Ziel. Keine Node nötig – einrichtbar auf der **ipv64-Webseite** und auch aus der Node.
+- **Modus 1 und 2** sind die besseren und werden auf der Webseite so beworben (keine offenen Ports, Heim-IP verborgen,
+  Ende-zu-Ende verschlüsselt); sie gehen nur mit einer Node64. **Modus 3** ist der einfache Weg ohne Node.
+- **Abgrenzung und Ziel:** Das bestehende CDN (srv01–srv06, nginx, `cdn_domains`) läuft vorerst unverändert weiter.
+  Ziel ist **kein dauerhafter Parallelbetrieb**: Modus 3 übernimmt alles, was das alte CDN kann, danach ziehen die
+  Domains um (Phase T8) und srv01–srv06 werden abgeschaltet. Beide Systeme bleiben in der Datenbank strikt getrennt.
 
 ## 2. Entscheidungen
 
@@ -40,7 +47,8 @@ Inhalt: [1 Ziel](#1-ziel) · [2 Entscheidungen](#2-entscheidungen) · [3 Archite
 | Domains | v1 nur Domains im ipv64-Account (DNS automatisch). Fremde Domains später mit TXT-Nachweis |
 | Zertifikate Modus 2 | **DNS-01 mit Wildcard** (`domain` + `*.domain`) bevorzugt, HTTP-01 nur als Ausweg |
 | Zertifikate Modus 1 | Bleiben in der Node (zentrale Zertifikatsverwaltung, ipv64 DNS-01, auch Wildcard) |
-| Altes CDN | Bleibt bestehen (Dennis' Satz „man sollte dann das CDN irgendwann mal …“ war abgeschnitten – nachfragen) |
+| Modus 3 | Wie das alte CDN: Ziel (IP/Name aus DynDNS oder fest, Port, HTTP/HTTPS) ohne Tunnel; über die Webseite und die Node einrichtbar |
+| Altes CDN | Läuft vorerst weiter; kein Dauer-Parallelbetrieb – Umzug auf Modus 3 (T8), danach srv01–srv06 abschalten |
 
 ## 3. Architektur
 
@@ -73,6 +81,7 @@ Besucher ───────────────────────�
 Drei Bausteine:
 
 1. **cdn64-edge** – neuer Go-Dienst auf srv07 und srv08 (Quelle im Repo `ipv64_container`, `cmd/cdn64-edge`).
+   In Modus 3 verbindet er sich selbst mit dem Ziel des Nutzers (statt durch den Tunnel).
 2. **Tunnel-Client in Node64** – Teil des Moduls CDN64; speist Tunnel-Verbindungen direkt in den gemeinsamen Eingang.
 3. **Steuerung bei ipv64** – neue Tabellen, API-v2-Endpunkte für Nodes, eigene Endpunkte für die Server (PHP von mir,
    eingespielt von Dennis).
@@ -156,14 +165,49 @@ umgestellt werden.
 - **Weitere Namen:** Mit dem Wildcard-Zertifikat lassen sich weitere Namen unter der Domain hinter derselben Node
   aufschalten (einzeln oder `*.domain.de`), DNS zeigt ebenfalls auf die Server.
 
-## 7. Steuerung bei ipv64
+## 7. Modus 3: direkt zum Ziel (ohne Tunnel)
 
-### 7.1 Neue Tabellen (Präfix `cdn64o_`, getrennt vom alten CDN)
+So wie das heutige CDN, nur auf srv07/srv08 mit dem neuen Dienst:
+
+```
+Besucher ──► srv07/srv08 (TLS endet hier, Schutz) ──► Ziel des Nutzers (IPv6/IPv4, Port, http/https)
+```
+
+- **Ziel angeben:**
+  - **aus dem DNS-Eintrag** (Standard, wie heute): die bisherigen A/AAAA des Namens, die beim Einschalten
+    deaktiviert werden und per DynDNS weiter aktualisiert werden. ipv64 gibt den Servern bei jeder Änderung die
+    aktuelle Adresse mit (Konfiguration per Long-Poll, wirkt in Sekunden);
+  - **fest:** eine IP-Adresse oder ein Hostname, den die Server selbst auflösen.
+  - Dazu **Port** (Standard 443 bzw. 80), **Schema** HTTP oder HTTPS, Zertifikat des Ziels prüfen ja/nein
+    (Standard nein, wie beim alten CDN und beim NPM), **IPv6 bevorzugt** (dann IPv4).
+- **Vorne:** TLS auf den Servern mit Wildcard-Zertifikat per DNS-01 (wie Modus 2), HTTP/1–3; optional „nur HTTP“
+  wie beim alten CDN (`frontend`).
+- **Funktionen wie beim alten CDN** (Gleichstand ist Voraussetzung für den Umzug):
+  - WebSockets;
+  - Erlauben-/Sperrliste je Domain (`cdn_block_ips` heute) – jetzt zusätzlich ipv64-Blocklisten, Limits je IP, Sperren;
+  - Cache für statische Dateien mit Größen-Limit der Klasse (`cdn_cache_size`);
+  - **Portmapper** (TCP/UDP-Ports roh an das Ziel, Limits `cdn_portmapper`/`cdn_mappings`) – eigene Phase, weil je
+    Mapping ein Port auf den Servern belegt wird;
+  - Traffic-Zählung gegen `cdn_traffic`.
+- **Echte Client-IP** an das Ziel per `X-Forwarded-For`/`X-Real-IP` (wie heute).
+- **Schutz gegen Missbrauch:** Ziele nur mit öffentlicher Adresse – keine privaten, Loopback-, Link-Local- oder
+  eigenen Server-Adressen, auch nicht nach Auflösung eines Hostnamens (sonst könnte man über die Server interne
+  Netze erreichen). Prüfung bei jeder Verbindung.
+- **Einrichtung:** auf der ipv64-Webseite (neue Seite, siehe 8.6) und in der Node (Proxy-Host oder eigener Eintrag
+  „nur online“). Beide nutzen dieselben PHP-Funktionen.
+- **Hinweis im Formular:** Modus 1/2 werden angeboten und empfohlen; ohne Node ist Modus 3 der Weg.
+
+## 8. Steuerung bei ipv64
+
+### 8.1 Neue Tabellen (Präfix `cdn64o_`, getrennt vom alten CDN)
 
 | Tabelle | Inhalt |
 |---|---|
 | `cdn64o_tunnels` | je Node: `id`, `userid`, `node_id`, `name`, `token_hash`, `created`, `last_seen_srv07/08`, `node_version`, `status` (aktiv/gesperrt) |
-| `cdn64o_hosts` | je Name: `id`, `userid`, `tunnel_id`, `fqdn`, `subdomain_id` (→ `subdomains.id`), `wildcard`, `mode` (1/2), `status` (pending, dns, edge, cert, active, error, disabling, blocked), `error`, `created`, `updated` |
+| `cdn64o_hosts` | je Name: `id`, `userid`, `tunnel_id` (leer bei Modus 3), `fqdn`, `subdomain_id` (→ `subdomains.id`), `wildcard`, `mode` (1/2/3), `status` (pending, dns, edge, cert, active, error, disabling, blocked), `error`, `created`, `updated`, `created_via` (node/web) |
+| `cdn64o_targets` | nur Modus 3: `host_id`, `source` (records/fest), `target` (IP oder Hostname), `port`, `scheme` (http/https), `verify_tls`, `prefer_ipv6`, `frontend` (https/nur http), `websocket`, `cache_mb` |
+| `cdn64o_acl` | Erlauben-/Sperrliste je Host (alle Modi auf den Servern; Modus 1 nur IP-basiert) |
+| `cdn64o_mappings` | Portmapper (Modus 3): `host_id`, `listen_port`, `transport` (tcp/udp), `target_port`, Server-Zuteilung |
 | `cdn64o_records` | DNS-Umstellung: `host_id`, `record_id` (→ `subdomain_records.id`), `role` (angelegt für Server / Original deaktiviert) – statt der Spalten `cdn_tmp`/`cdn_token` des alten CDN |
 | `cdn64o_edges` | `id`, `name`, `hostname`, `ipv4`, `ipv6`, `secret_hash`, `last_seen`, `version`, `disabled` |
 | `cdn64o_certs` | `fqdn`, `blob` (verschlüsselt durch die Server), `not_after`, `issued_by`, `updated` |
@@ -173,7 +217,7 @@ umgestellt werden.
 `subdomain_records` ist die DNS-Tabelle selbst und wird zwangsläufig genutzt (neue A/AAAA-Zeilen, Original
 deaktivieren) – die Zuordnung steht aber nur in `cdn64o_records`, nie in den Spalten des alten CDN.
 
-### 7.2 Limits und Kontingent
+### 8.2 Limits und Kontingent
 
 - **Domains:** `aktive Domains im alten CDN (cdn_domains)` + `Einträge in cdn64o_hosts` ≤ `user_class.cdn_domains`
   der aktuellen Klasse des Accounts. Frisch gelesen bei jeder Prüfung.
@@ -183,25 +227,27 @@ deaktivieren) – die Zuordnung steht aber nur in `cdn64o_records`, nie in den S
 - **Klasse abgelaufen / Limit überschritten:** Host geht auf `blocked`; Server weisen ab (neutrale Seite), DNS bleibt
   bis zum Ausschalten. Nutzer sieht den Grund in der Node.
 
-### 7.3 API v2 für Nodes (API-Key des Containers)
+### 8.3 API v2 für Nodes (API-Key des Containers)
 
 | Methode | Pfad | Zweck |
 |---|---|---|
 | GET | `/cdn64o` | Kontingent (Domains, Traffic, Klasse), Tunnel und Hosts des Accounts |
 | POST | `/cdn64o/tunnels` | Node anmelden → `tunnel_id` + Token (nur einmal sichtbar), Server-Liste |
 | DELETE | `/cdn64o/tunnels/{id}` | Tunnel entfernen (Hosts werden ausgeschaltet) |
-| POST | `/cdn64o/hosts` | `{fqdn, mode, wildcard, tunnel_id}` einschalten: Klasse/Kontingent prüfen, Domain gehört dem Account, nicht im alten CDN, DNS umstellen |
+| POST | `/cdn64o/hosts` | `{fqdn, mode, wildcard, tunnel_id}` bzw. bei Modus 3 `{fqdn, mode: 3, target…}` einschalten: Klasse/Kontingent prüfen, Domain gehört dem Account, nicht im alten CDN, DNS umstellen |
+| PUT | `/cdn64o/hosts/{id}/target` | Modus 3: Ziel, Port, Schema, Optionen ändern |
+| GET/PUT | `/cdn64o/hosts/{id}/acl` | Erlauben-/Sperrliste |
 | GET | `/cdn64o/hosts/{id}` | Status mit Schritten |
 | PATCH | `/cdn64o/hosts/{id}` | Modus wechseln |
 | DELETE | `/cdn64o/hosts/{id}` | ausschalten: DNS zurück, Zertifikat auf den Servern löschen |
 
 Umsetzung als eigene Datei `deploy/web/api_v2_cdn64o.php`, eingebunden wie `api_v2_hc2.php`; OpenAPI ergänzen.
 
-### 7.4 Endpunkte für die Server (Server-Geheimnis, eigene Datei)
+### 8.4 Endpunkte für die Server (Server-Geheimnis, eigene Datei)
 
 | Methode | Pfad | Zweck |
 |---|---|---|
-| GET | `/cdn64o/edge/config` | Tunnels (Token-Hashes) und Hosts (Name, Modus, Tunnel, gesperrt); ETag, Long-Poll bis 25 s |
+| GET | `/cdn64o/edge/config` | Tunnels (Token-Hashes) und Hosts (Name, Modus, Tunnel, gesperrt; bei Modus 3 Ziel mit aktueller DynDNS-Adresse, Liste, Mappings); ETag, Long-Poll bis 25 s |
 | POST | `/cdn64o/edge/report` | verbundene Tunnels, Traffic-Deltas je Host, Abweisungen, Version |
 | POST/DELETE | `/cdn64o/edge/acme-txt` | TXT für DNS-01 setzen/löschen (nur für eingetragene Modus-2-Hosts) |
 | GET/PUT | `/cdn64o/edge/certs/{fqdn}` | verschlüsseltes Zertifikat ablegen/holen |
@@ -209,7 +255,7 @@ Umsetzung als eigene Datei `deploy/web/api_v2_cdn64o.php`, eingebunden wie `api_
 Die Server speichern die letzte Konfiguration lokal: **fällt ipv64 aus, laufen alle Tunnels weiter**, nur Änderungen
 warten.
 
-### 7.5 DNS-Umstellung
+### 8.5 DNS-Umstellung
 
 - Einschalten: für `fqdn` (und bei Wildcard `*.fqdn`) A = IPv4 von srv07 und srv08, AAAA = IPv6 von beiden, TTL 10;
   vorhandene A/AAAA des Namens deaktivieren; `do_zone_update`. Gleiches Verfahren wie das alte CDN, eigene Zuordnung.
@@ -217,8 +263,21 @@ warten.
 - DynDNS: Updates landen weiter auf dem deaktivierten Original (Verhalten des Update-Skripts in T3 prüfen) und
   greifen erst nach dem Ausschalten wieder.
 - Konflikt: Name schon im alten CDN oder bei einem anderen Account → ablehnen.
+- Modus 3 mit Ziel „aus dem DNS-Eintrag“: Ändert DynDNS das deaktivierte Original, schreibt ipv64 die neue Adresse in
+  die Server-Konfiguration (Hook im DynDNS-Update oder Abgleich im Config-Endpunkt).
 
-## 8. Node64
+### 8.6 Webseite ipv64.net
+
+- **Neue Seite** (z. B. `cdn64.php`, Menü „CDN64“), getrennt von `cdn.php`:
+  - Kontingent (gemeinsam mit dem alten CDN), alle Hosts des Accounts mit Modus, Status, Traffic, Servern;
+  - **Modus 3 anlegen und verwalten** (Ziel, Port, HTTP/HTTPS, WebSockets, Liste, Cache, Portmapper);
+  - **Modus 1/2** werden angezeigt (Status, Traffic, Ausschalten, Tunnel der Nodes) und beworben, eingerichtet aber in
+    der Node – mit Erklärung und Link zu Node64;
+  - Umzug vom alten CDN (Phase T8): Knopf „Auf CDN64 umziehen“ je Domain.
+- Gleiche PHP-Funktionen wie API v2 (`cdn64o_lib.php`), damit Webseite, API und Node nie auseinanderlaufen.
+- Werbeseite (`reverse_proxy.php`) später auf die drei Modi umschreiben.
+
+## 9. Node64
 
 - **Voraussetzung:** ipv64-API verbunden (zentraler API-Key). Ohne Key oder ohne Kontingent ist der Schalter
   ausgegraut mit Begründung und Link zu `/plans`.
@@ -236,10 +295,12 @@ warten.
   Abweisungen auf den Servern (Modus 2) im Verkehr-Diagramm.
 - **Ohne Portfreigabe:** Hosts, die nur über CDN64 online laufen, brauchen keine offenen Ports 80/443 im Router. Im
   Heimnetz bleibt der direkte Zugriff wie bisher.
+- **Modus 3 aus der Node:** zusätzlich wählbar, wenn jemand bewusst ohne Tunnel arbeiten will (z. B. Ziel ist ein
+  anderes Gerät mit eigener öffentlicher IPv6). Die Node legt es per API an; Modus 1/2 werden im Formular empfohlen.
 - **Code:** `internal/tunnel` (Protokoll, Client), `internal/cdn64/online.go` (API, Fortschritt, UI), Eingang:
   neue Methode, die eine fertige Verbindung annimmt (`ServeConn(conn, port)`).
 
-## 9. Edge-Dienst auf srv07/srv08
+## 10. Edge-Dienst auf srv07/srv08
 
 - **Server:** Debian 13, 2 vCPU, 3,8 GB RAM, 38 GB (Hetzner Cloud).
   srv07 = 91.99.98.96 / 2a01:4f8:1c18:5887::1, srv08 = 2.28.6.30 / 2a01:4f8:c015:bca8::1.
@@ -258,7 +319,7 @@ warten.
 - **Überwachung:** `/health` (Version, verbundene Tunnels, Hosts, letzte Konfiguration), Healthchecks auf beide
   Server, Warnung bei Konfiguration älter als 5 Minuten.
 
-## 10. Sicherheit
+## 11. Sicherheit
 
 - Tunnel-Token zufällig (32 Byte), bei ipv64 und auf den Servern nur als Hash; je Node widerrufbar und erneuerbar.
 - API-Key bleibt in der Node; die Server bekommen ihn nie. Server-Geheimnis je Server, bei ipv64 als Hash.
@@ -269,8 +330,10 @@ warten.
 - Schutz der Server: nicht angemeldete Tunnel-Verbindungen nach 5 s zu, Limits je IP, ipv64-Blocklisten, Sperre
   je Account/Host von ipv64 aus (Missbrauch).
 - Logs auf den Servern ohne Inhalte, IPs nur für Limits/Statistik, kurze Aufbewahrung.
+- Modus 3: Ziele nur öffentlich erreichbare Adressen (Prüfung nach jeder Namensauflösung), keine Server-eigenen
+  Adressen und Ports; Portmapper nur auf freigegebenen Port-Bereichen.
 
-## 11. Phasen
+## 12. Phasen
 
 Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigabe, PHP/SQL spielt Dennis ein.
 
@@ -297,8 +360,8 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   sieht die echte Besucher-IP, Ausfall eines Servers ohne Unterbrechung neuer Verbindungen, Lasttest dokumentiert.
 
 ### T3 – Steuerung bei ipv64
-- SQL `deploy/sql/cdn64_online.sql` (Tabellen aus 7.1; in MariaDB auf der Box geprüft).
-- PHP: API v2 für Nodes (7.3), Server-Endpunkte (7.4), Limits/Kontingent (7.2), DNS-Umstellung (7.5).
+- SQL `deploy/sql/cdn64_online.sql` (Tabellen aus 8.1; in MariaDB auf der Box geprüft).
+- PHP: API v2 für Nodes (8.3), Server-Endpunkte (8.4), Limits/Kontingent (8.2), DNS-Umstellung (8.5).
 - Server holen ihre Konfiguration von ipv64 statt aus der Testdatei.
 - **Fertig, wenn:** Ein-/Ausschalten per API mit Testaccount 522 inklusive DNS hin und zurück, Kontingent mit altem
   CDN zusammen gezählt, Server übernehmen Änderungen in < 30 s, ipv64-Ausfall unterbricht keine Tunnels.
@@ -314,12 +377,28 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 - **Fertig, wenn:** Wildcard-Zertifikat ausgestellt (nach OK), WebSockets und große Uploads gehen, Modus-Wechsel
   1 ↔ 2 ohne DNS-Änderung, Schutz greift auf dem Server.
 
-### T6 – Betrieb und Start
+### T6 – Betrieb und Start (Modus 1/2)
 - Traffic je Host an ipv64 (`cdn64o_traffic`), Kontingent-Sperre, Statistik „über CDN64“ in der Node.
 - Last- und Ausfalltests, Sicherheitsprüfung (Code-Review), Überwachung, Doku für Kunden, Beta mit wenigen Accounts,
   dann Freigabe.
 
-## 12. Risiken und offene Punkte
+### T7 – Modus 3 direkt zum Ziel + Webseite
+- Server: Weiterleitung an das Ziel (http/https, Port, IPv6 bevorzugt), Ziel aus DNS-Eintrag oder fest, SSRF-Schutz,
+  WebSockets, Erlauben-/Sperrliste, Cache.
+- ipv64: Tabellen `cdn64o_targets`/`cdn64o_acl`, DynDNS-Änderungen an die Server, neue Seite `cdn64.php`,
+  API-Endpunkte für Modus 3; Node: Modus 3 im Formular.
+- **Fertig, wenn:** ein Host mit Ziel = DynDNS-IPv6 eines Testanschlusses über IPv4 erreichbar ist, eine
+  Adressänderung per DynDNS in < 30 s greift, private Ziele abgelehnt werden.
+
+### T8 – Portmapper und Umzug vom alten CDN
+- Portmapper (TCP/UDP) auf den Servern mit Limits der Klasse.
+- Umzugswerkzeug: Domain aus `cdn_domains` in Modus 3 übernehmen (Ziel, Optionen, Liste, Mappings), DNS umstellen,
+  alten Eintrag sauber abbauen – je Domain per Knopf und als Sammelumzug durch Dennis.
+- Abschaltplan srv01–srv06: Ankündigung an Kunden, Frist, dann `cdn.php` auf die neue Seite umleiten.
+- **Fertig, wenn:** jede Funktion des alten CDN ist in Modus 3 vorhanden, Testumzüge laufen ohne Ausfall, Dennis
+  gibt den Sammelumzug frei.
+
+## 13. Risiken und offene Punkte
 
 - **Let's-Encrypt-Limits:** 50 Zertifikate je registrierter Domain und Woche. Viele Kunden-Namen liegen unter
   ipv64-Domains (DynDNS) – prüfen, ob diese auf der Public Suffix List stehen; sonst Wildcards bündeln/Staffeln
@@ -330,4 +409,7 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 - **Durchsatz:** 2 vCPU je Server; Modus 2 (TLS + HTTP/3) kostet mehr CPU – in T2/T5 messen, ggf. größere Server.
 - **Hetzner-Traffic:** inklusiver Traffic der Cloud-Server im Blick behalten (Kontingente der Klassen).
 - **HTTP/3 in Modus 1, TCP-/UDP-Streams, fremde Domains:** bewusst später.
-- **Offene Frage an Dennis:** Satz „man sollte dann das CDN irgendwann mal …“ war abgeschnitten.
+- **Modus 3 und Missbrauch:** offene Weiterleitung ins Internet ist anfällig (Angriffe über unsere IPs); SSRF-Schutz,
+  Limits und Sperre je Account sind Pflicht, Abuse-Kontakt klären.
+- **Portmapper:** Port-Bereiche und Kollisionen zwischen Kunden auf zwei Servern planen (T8).
+- **Umzug:** Kunden mit Sonderfällen (Caching, viele Mappings) einzeln prüfen; Kommunikation und Frist mit Dennis.
