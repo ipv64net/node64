@@ -31,8 +31,9 @@ Inhalt: [1 Ziel](#1-ziel) · [2 Entscheidungen](#2-entscheidungen) · [3 Archite
 - **Modus 1 und 2** sind die besseren und werden auf der Webseite so beworben (keine offenen Ports, Heim-IP verborgen,
   Ende-zu-Ende verschlüsselt); sie gehen nur mit einer Node64. **Modus 3** ist der einfache Weg ohne Node.
 - **Abgrenzung und Ziel:** Das bestehende CDN (srv01–srv06, nginx, `cdn_domains`) läuft vorerst unverändert weiter.
-  Ziel ist **kein dauerhafter Parallelbetrieb**: Modus 3 übernimmt alles, was das alte CDN kann, danach ziehen die
-  Domains um (Phase T8) und srv01–srv06 werden abgeschaltet. Beide Systeme bleiben in der Datenbank strikt getrennt.
+  Ziel ist **kein dauerhafter Parallelbetrieb**: Modus 3 bietet alles, was das alte CDN kann. **Es gibt keine
+  Migration** – Dennis kündigt die Abschaltung an, die Kunden richten ihre Domains auf dem neuen CDN selbst neu ein,
+  danach werden srv01–srv06 abgeschaltet. Beide Systeme bleiben in der Datenbank strikt getrennt.
 
 ## 2. Entscheidungen
 
@@ -41,6 +42,8 @@ Inhalt: [1 Ziel](#1-ziel) · [2 Entscheidungen](#2-entscheidungen) · [3 Archite
 | Wer darf es nutzen | Jede Klasse mit `user_class.cdn_domains > 0`, rein dynamisch (Free raus = Standard auf 0 setzen) |
 | Limits | Bestehende Spalten `user_class.cdn_domains` und `user_class.cdn_traffic`, bei jeder Prüfung frisch gelesen, keine neue Spalte |
 | Kontingent | **Gemeinsam** mit dem alten CDN: Domains und Traffic von alt + neu zählen zusammen (alte Tabellen nur lesen) |
+| Traffic | Wird in **allen drei Modi** gezählt und fließt in den Account; `cdn_traffic` ist das harte Limit – darüber wird gesperrt |
+| Bandbreite | Limit je Account aus einer neuen Spalte `user_class.cdn_bandwidth` (Mbit/s, 0 = frei): Supporter begrenzt, Business und Company frei – Werte setzt Dennis, dynamisch gelesen |
 | Tabellen | **Eigene neue Tabellen**, nichts mit dem alten CDN vermischen, nie in alte CDN-Tabellen schreiben |
 | Konfiguration auf den Servern | ipv64-DB + API v2 sind die Wahrheit; srv07/srv08 holen ihre Konfiguration selbst per HTTPS (kein SSH-Push, kein MySQL auf den Servern) |
 | DNS | A/AAAA beider Server mit TTL 10, wie beim alten CDN; der ursprüngliche Eintrag bleibt deaktiviert erhalten |
@@ -48,7 +51,7 @@ Inhalt: [1 Ziel](#1-ziel) · [2 Entscheidungen](#2-entscheidungen) · [3 Archite
 | Zertifikate Modus 2 | **DNS-01 mit Wildcard** (`domain` + `*.domain`) bevorzugt, HTTP-01 nur als Ausweg |
 | Zertifikate Modus 1 | Bleiben in der Node (zentrale Zertifikatsverwaltung, ipv64 DNS-01, auch Wildcard) |
 | Modus 3 | Wie das alte CDN: Ziel (IP/Name aus DynDNS oder fest, Port, HTTP/HTTPS) ohne Tunnel; über die Webseite und die Node einrichtbar |
-| Altes CDN | Läuft vorerst weiter; kein Dauer-Parallelbetrieb – Umzug auf Modus 3 (T8), danach srv01–srv06 abschalten |
+| Altes CDN | Läuft vorerst weiter; kein Dauer-Parallelbetrieb. **Keine Migration:** Abschaltung wird angekündigt, Kunden richten neu ein |
 
 ## 3. Architektur
 
@@ -182,7 +185,7 @@ Besucher ──► srv07/srv08 (TLS endet hier, Schutz) ──► Ziel des Nutze
     (Standard nein, wie beim alten CDN und beim NPM), **IPv6 bevorzugt** (dann IPv4).
 - **Vorne:** TLS auf den Servern mit Wildcard-Zertifikat per DNS-01 (wie Modus 2), HTTP/1–3; optional „nur HTTP“
   wie beim alten CDN (`frontend`).
-- **Funktionen wie beim alten CDN** (Gleichstand ist Voraussetzung für den Umzug):
+- **Funktionen wie beim alten CDN** (damit Kunden alles auf dem neuen CDN neu einrichten können):
   - WebSockets;
   - Erlauben-/Sperrliste je Domain (`cdn_block_ips` heute) – jetzt zusätzlich ipv64-Blocklisten, Limits je IP, Sperren;
   - Cache für statische Dateien mit Größen-Limit der Klasse (`cdn_cache_size`);
@@ -211,7 +214,7 @@ Besucher ──► srv07/srv08 (TLS endet hier, Schutz) ──► Ziel des Nutze
 | `cdn64o_records` | DNS-Umstellung: `host_id`, `record_id` (→ `subdomain_records.id`), `role` (angelegt für Server / Original deaktiviert) – statt der Spalten `cdn_tmp`/`cdn_token` des alten CDN |
 | `cdn64o_edges` | `id`, `name`, `hostname`, `ipv4`, `ipv6`, `secret_hash`, `last_seen`, `version`, `disabled` |
 | `cdn64o_certs` | `fqdn`, `blob` (verschlüsselt durch die Server), `not_after`, `issued_by`, `updated` |
-| `cdn64o_traffic` | `host_id`, `day`, `bytes_in`, `bytes_out`, `requests`, `rejected` (gemeldet von den Servern) |
+| `cdn64o_traffic` | `host_id`, `userid`, `day`, `bytes_in`, `bytes_out`, `requests`, `rejected` – alle Modi, gemeldet von den Servern |
 | `cdn64o_events` | Verlauf je Host für Anzeige und Support (Schritte, Fehler) |
 
 `subdomain_records` ist die DNS-Tabelle selbst und wird zwangsläufig genutzt (neue A/AAAA-Zeilen, Original
@@ -224,6 +227,16 @@ deaktivieren) – die Zuordnung steht aber nur in `cdn64o_records`, nie in den S
 - **Traffic:** Verbrauch altes CDN (bestehende Zähler, nur lesen) + Summe `cdn64o_traffic` im gleichen Zeitraum ≤
   `user_class.cdn_traffic` (GB). Zeitraum/Rücksetzung wie beim alten CDN – in T3 im Code des alten CDN genau
   nachlesen (`cdn_traffic_gate`).
+- **Gezählt wird überall:** Modus 1 (rohe Bytes durch den Server, in beide Richtungen), Modus 2 und 3 (Anfragen und
+  Antworten). Die Server zählen je Host und melden alle 60 s an ipv64 (`/cdn64o/edge/report`); ipv64 summiert je
+  Account. Fällt die Meldung aus, puffern die Server und melden nach.
+- **Hartes Limit:** Ist `cdn_traffic` des Accounts erreicht, setzt ipv64 alle Hosts des Accounts auf `blocked`
+  (Server weisen mit neutraler Seite ab bzw. trennen in Modus 1), die Node und die Webseite zeigen den Grund.
+  Warnung vorher bei 80 % und 95 % (Mail/Benachrichtigung). Neuer Zeitraum oder höhere Klasse → automatisch frei.
+- **Bandbreite:** neue Spalte `user_class.cdn_bandwidth` (Mbit/s, 0 = unbegrenzt), frisch gelesen wie die anderen
+  Limits. Supporter bekommt einen Wert, Business und Company 0. Die Server begrenzen je **Account** (alle Hosts
+  zusammen, beide Richtungen, Token-Bucket); die beiden Server gleichen ihren Verbrauch über die Nachbar-Verbindung
+  ab, damit das Limit insgesamt gilt und nicht je Server.
 - **Klasse abgelaufen / Limit überschritten:** Host geht auf `blocked`; Server weisen ab (neutrale Seite), DNS bleibt
   bis zum Ausschalten. Nutzer sieht den Grund in der Node.
 
@@ -273,7 +286,6 @@ warten.
   - **Modus 3 anlegen und verwalten** (Ziel, Port, HTTP/HTTPS, WebSockets, Liste, Cache, Portmapper);
   - **Modus 1/2** werden angezeigt (Status, Traffic, Ausschalten, Tunnel der Nodes) und beworben, eingerichtet aber in
     der Node – mit Erklärung und Link zu Node64;
-  - Umzug vom alten CDN (Phase T8): Knopf „Auf CDN64 umziehen“ je Domain.
 - Gleiche PHP-Funktionen wie API v2 (`cdn64o_lib.php`), damit Webseite, API und Node nie auseinanderlaufen.
 - Werbeseite (`reverse_proxy.php`) später auf die drei Modi umschreiben.
 
@@ -318,6 +330,8 @@ warten.
   zurück auf die vorige Version (wie beim hub).
 - **Überwachung:** `/health` (Version, verbundene Tunnels, Hosts, letzte Konfiguration), Healthchecks auf beide
   Server, Warnung bei Konfiguration älter als 5 Minuten.
+- **Traffic und Bandbreite:** Zähler je Host im Speicher, alle 60 s an ipv64, bei Ausfall lokal gepuffert
+  (`/var/lib/cdn64-edge/traffic`). Bandbreiten-Limit je Account mit Abgleich zum Nachbarserver.
 
 ## 11. Sicherheit
 
@@ -356,15 +370,20 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 ### T2 – Modus 1 durchreichen
 - SNI-Router (443) und Host-Router (80) auf den Servern, Stream-Kopf mit Besucher-IP, Ausweichweg über den Nachbarn,
   grober Schutz (Blocklisten, Verbindungs-Limits).
+- Traffic-Zählung je Host auf den Servern ab hier (zuerst nur lokal und in `/health`).
 - **Fertig, wenn:** ein Test-Host auf node64-cdn ist per IPv4 und IPv6 über srv07 und srv08 erreichbar, die Node
-  sieht die echte Besucher-IP, Ausfall eines Servers ohne Unterbrechung neuer Verbindungen, Lasttest dokumentiert.
+  sieht die echte Besucher-IP, Ausfall eines Servers ohne Unterbrechung neuer Verbindungen, Lasttest dokumentiert,
+  gezählte Bytes stimmen mit einer Messung auf der Node überein.
 
 ### T3 – Steuerung bei ipv64
 - SQL `deploy/sql/cdn64_online.sql` (Tabellen aus 8.1; in MariaDB auf der Box geprüft).
 - PHP: API v2 für Nodes (8.3), Server-Endpunkte (8.4), Limits/Kontingent (8.2), DNS-Umstellung (8.5).
 - Server holen ihre Konfiguration von ipv64 statt aus der Testdatei.
+- Traffic-Meldung an ipv64, Summe je Account, hartes Limit (`blocked`) und Warnungen; Spalte
+  `user_class.cdn_bandwidth` (SQL für Dennis) und Bandbreiten-Limit auf den Servern.
 - **Fertig, wenn:** Ein-/Ausschalten per API mit Testaccount 522 inklusive DNS hin und zurück, Kontingent mit altem
-  CDN zusammen gezählt, Server übernehmen Änderungen in < 30 s, ipv64-Ausfall unterbricht keine Tunnels.
+  CDN zusammen gezählt, Server übernehmen Änderungen in < 30 s, ipv64-Ausfall unterbricht keine Tunnels, ein
+  künstlich kleines Traffic-Limit sperrt den Test-Host, ein Bandbreiten-Limit greift über beide Server.
 
 ### T4 – Ein Klick in der Node
 - Schalter, Fortschritt, Selbsttest, Badges, Fehlertexte, Doku (`docs/CDN64.md`, README), OpenAPI der Node.
@@ -378,7 +397,7 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   1 ↔ 2 ohne DNS-Änderung, Schutz greift auf dem Server.
 
 ### T6 – Betrieb und Start (Modus 1/2)
-- Traffic je Host an ipv64 (`cdn64o_traffic`), Kontingent-Sperre, Statistik „über CDN64“ in der Node.
+- Statistik „über CDN64“ in der Node (Traffic, Anfragen, Abweisungen auf den Servern) aus den Zahlen bei ipv64.
 - Last- und Ausfalltests, Sicherheitsprüfung (Code-Review), Überwachung, Doku für Kunden, Beta mit wenigen Accounts,
   dann Freigabe.
 
@@ -390,13 +409,13 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 - **Fertig, wenn:** ein Host mit Ziel = DynDNS-IPv6 eines Testanschlusses über IPv4 erreichbar ist, eine
   Adressänderung per DynDNS in < 30 s greift, private Ziele abgelehnt werden.
 
-### T8 – Portmapper und Umzug vom alten CDN
-- Portmapper (TCP/UDP) auf den Servern mit Limits der Klasse.
-- Umzugswerkzeug: Domain aus `cdn_domains` in Modus 3 übernehmen (Ziel, Optionen, Liste, Mappings), DNS umstellen,
-  alten Eintrag sauber abbauen – je Domain per Knopf und als Sammelumzug durch Dennis.
-- Abschaltplan srv01–srv06: Ankündigung an Kunden, Frist, dann `cdn.php` auf die neue Seite umleiten.
-- **Fertig, wenn:** jede Funktion des alten CDN ist in Modus 3 vorhanden, Testumzüge laufen ohne Ausfall, Dennis
-  gibt den Sammelumzug frei.
+### T8 – Portmapper und Abschaltung des alten CDN
+- Portmapper (TCP/UDP) auf den Servern mit Limits der Klasse (`cdn_portmapper`, `cdn_mappings`), Traffic zählt mit.
+- **Keine Migration:** Dennis kündigt die Abschaltung an; Kunden richten auf `cdn64.php` bzw. in der Node neu ein.
+  Hinweis auf `cdn.php`, Frist nach Dennis, danach `cdn.php` auf die neue Seite umleiten und srv01–srv06 abschalten;
+  das gemeinsame Kontingent zählt dann nur noch das neue CDN.
+- **Fertig, wenn:** jede Funktion des alten CDN ist in Modus 3 vorhanden und dokumentiert, Dennis gibt die
+  Abschaltung frei.
 
 ## 13. Risiken und offene Punkte
 
@@ -412,4 +431,6 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 - **Modus 3 und Missbrauch:** offene Weiterleitung ins Internet ist anfällig (Angriffe über unsere IPs); SSRF-Schutz,
   Limits und Sperre je Account sind Pflicht, Abuse-Kontakt klären.
 - **Portmapper:** Port-Bereiche und Kollisionen zwischen Kunden auf zwei Servern planen (T8).
-- **Umzug:** Kunden mit Sonderfällen (Caching, viele Mappings) einzeln prüfen; Kommunikation und Frist mit Dennis.
+- **Bandbreite über zwei Server:** Der Abgleich zwischen srv07 und srv08 erlaubt kurz höhere Spitzen; Genauigkeit in
+  T3 messen. In Modus 1/2 begrenzt ohnehin auch der Upload zu Hause.
+- **Werte für `cdn_bandwidth`:** Supporter-Wert legt Dennis fest (Business/Company 0 = frei).
