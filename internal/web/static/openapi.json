@@ -2436,6 +2436,10 @@
           },
           "access_log": {
             "type": "boolean"
+          },
+          "no_limits": {
+            "type": "boolean",
+            "description": "ohne Anfrage-Limit je IP und ohne Grenze je Ziel (Verbindungs-Limits und Sperren gelten weiter)"
           }
         }
       },
@@ -2788,6 +2792,95 @@
           "active": {
             "type": "boolean",
             "description": "mindestens eine Liste geladen und eingeschaltet"
+          }
+        }
+      },
+      "CDNLimits": {
+        "type": "object",
+        "description": "Schutz vor Überlastung; je IPv4-Adresse bzw. IPv6-/64; 0 = dieses Limit aus",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "conns_per_ip": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "gleichzeitige Verbindungen je IP (Standard 200)"
+          },
+          "conn_rate": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "neue Verbindungen je IP und Sekunde, kurzzeitig das Zehnfache (Standard 20)"
+          },
+          "req_rate": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Anfragen je IP und Sekunde, darüber 429 (Standard 50)"
+          },
+          "req_burst": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Anfragen am Stück (Standard 500, mindestens req_rate)"
+          },
+          "max_conns": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "offene Verbindungen insgesamt (Standard 10000)"
+          },
+          "target_conns": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "gleichzeitige Anfragen je Proxy-Host an sein Ziel; weitere warten bis 10 s, dann 503 (Standard 200)"
+          },
+          "ban_after": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "so oft in einer Minute abgewiesen: gesperrt (Standard 300)"
+          },
+          "ban_minutes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10080,
+            "description": "Dauer der Sperre (Standard 10)"
+          },
+          "exempt_lan": {
+            "type": "boolean",
+            "description": "private Adressen nie begrenzen (Standard true)"
+          }
+        }
+      },
+      "CDNLimitsView": {
+        "type": "object",
+        "properties": {
+          "limits": {
+            "$ref": "#/components/schemas/CDNLimits"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/CDNLimits"
+          },
+          "bans": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ip": {
+                  "type": "string",
+                  "description": "IPv4 bzw. IPv6-/64"
+                },
+                "until": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "rejected": {
+            "type": "integer",
+            "description": "abgewiesen seit dem Start"
+          },
+          "conns": {
+            "type": "integer",
+            "description": "gezählte offene Verbindungen"
           }
         }
       }
@@ -11353,6 +11446,129 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CDNBlocklists"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Modul läuft nicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/limits": {
+      "get": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Schutz vor Überlastung: Einstellungen, Sperren, Zähler",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNLimitsView"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Modul läuft nicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Schutz vor Überlastung einstellen",
+        "description": "Fehlende Felder bleiben unverändert.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CDNLimits"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNLimitsView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Wert außerhalb des Bereichs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Modul läuft nicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/limits/bans/{ip}": {
+      "delete": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Gesperrte Adresse freigeben",
+        "parameters": [
+          {
+            "name": "ip",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "IPv4 oder IPv6-/64 wie in bans"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "freigegeben"
+          },
+          "404": {
+            "description": "nicht gesperrt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

@@ -461,5 +461,8 @@ func (m *Module) blSave(ctx context.Context, enabled []string, allow string) err
 		return err
 	}
 	m.blKick(ctx)
+	if list, err := m.hosts(ctx); err == nil { // Ausnahmen gelten auch fuer die Limits
+		m.limExempt(ctx, list)
+	}
 	return nil
 }

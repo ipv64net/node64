@@ -436,7 +436,9 @@
       "adv_cloudflare": "Insert Cloudflare networks",
       "adv_trusted_hint": "If a request comes from these networks, the IP from CF-Connecting-IP or X-Forwarded-For counts as the real client IP (for target, access lists and log). Otherwise the connection's peer always counts.",
       "adv_access_log": "Access log for this host",
-      "adv_access_log_hint": "Every request individually under \"Requests\". The hourly counters always run."
+      "adv_access_log_hint": "Every request individually under \"Requests\". The hourly counters always run.",
+      "adv_no_limits": "No per-IP limits",
+      "adv_no_limits_hint": "The per-IP request limit and the per-target limit do not apply to this host (e.g. an API used by many devices behind one address). Connection limits and bans still apply."
     },
     "err": {
       "name": "Invalid domain name.",
@@ -658,6 +660,40 @@
         "dshield1": "the most active attacking networks (SANS DShield)",
         "tor_exit": "exits of the Tor network (also blocks legitimate anonymous visitors)"
       }
+    },
+    "lim": {
+      "title": "Overload protection",
+      "hint": "Limits connections and requests per IP address (IPv6 per /64), like HAProxy. Protects the node and every service behind the proxy against request flooding and many connections from one address. Addresses that hit the limits too often are rejected for a few minutes right when they connect. Exempt are the home network (if enabled), the trusted proxies of the hosts (e.g. Cloudflare; the real client IP counts there) and the blocklist exceptions. The defaults are fine for browsers, apps and sync clients.",
+      "enabled": "Protection enabled",
+      "exempt_lan": "Never limit the home network (private addresses)",
+      "conns_per_ip": "Connections per IP",
+      "conns_per_ip_hint": "open at the same time.",
+      "conn_rate": "New connections per IP/s",
+      "conn_rate_hint": "ten times as many for a short while, checked before TLS.",
+      "req_rate": "Requests per IP/s",
+      "req_rate_hint": "sustained; above that the answer is 429.",
+      "req_burst": "Request burst",
+      "req_burst_hint": "allowed for a short while, e.g. when loading many images.",
+      "target_conns": "Concurrent per target",
+      "target_conns_hint": "requests to the service behind a proxy host; more wait up to 10 s, then 503. WebSockets do not count.",
+      "max_conns": "Connections in total",
+      "max_conns_hint": "protects the node itself.",
+      "ban_after": "Ban after",
+      "ban_after_hint": "rejections within one minute.",
+      "ban_minutes": "Ban (minutes)",
+      "ban_minutes_hint": "free again afterwards.",
+      "default": "Default: {n}",
+      "zero_hint": "0 = this limit off. Single hosts can be exempted under Advanced (e.g. an API used by many devices behind one address).",
+      "open": "{n} connections open",
+      "rejected_hint": "Connections and requests since CDN64 started that hit limits or bans",
+      "bans": "Banned right now",
+      "until": "until {time}",
+      "unban": "Unban",
+      "unbanned": "{ip} unbanned.",
+      "reset": "Defaults",
+      "reset_confirm": "Set all limits to their defaults?",
+      "saved": "Overload protection saved.",
+      "err_range": "Check the values: whole numbers from 0 only (ban at most 7 days)."
     }
   },
   "certs": {

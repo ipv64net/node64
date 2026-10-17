@@ -36,6 +36,61 @@
 		<a class="btn btn-link btn-sm ms-auto" href="https://ipv64.net/v64_blocklists" target="_blank" rel="noopener">{{.T "cdn64.bl.about"}} <i class="bi bi-box-arrow-up-right"></i></a>
 	</div>
 </form>
+<form method="post" action="/cdn64/limits" class="card mb-3" id="limits">
+	<input type="hidden" name="_csrf" value="{{.CSRF}}">
+	<div class="card-header d-flex flex-wrap align-items-center gap-2">
+		<span><i class="bi bi-speedometer2 text-primary"></i> {{.T "cdn64.lim.title"}}</span>
+		{{if $d.Lim.Limits.Enabled}}<span class="badge text-bg-success"><i class="bi bi-shield-check"></i> {{.T "cdn64.bl.active"}}</span>{{else}}<span class="badge text-bg-light">{{.T "cdn64.bl.off"}}</span>{{end}}
+		<span class="ms-auto small text-body-secondary" title="{{.T "cdn64.lim.rejected_hint"}}"><i class="bi bi-slash-circle"></i> {{.T "cdn64.bl.blocked" "n" ($.Int $d.Lim.Rejected)}} · {{.T "cdn64.lim.open" "n" ($.Int $d.Lim.Conns)}}</span>
+	</div>
+	<div class="card-body small">
+		<p class="text-body-secondary">{{.T "cdn64.lim.hint"}}</p>
+		<div class="d-flex flex-wrap gap-4 mb-3">
+			<div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="lim_enabled" id="lim-enabled"{{if $d.Lim.Limits.Enabled}} checked{{end}}>
+				<label class="form-check-label fw-semibold" for="lim-enabled">{{.T "cdn64.lim.enabled"}}</label></div>
+			<div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="lim_exempt_lan" id="lim-exempt-lan"{{if $d.Lim.Limits.ExemptLAN}} checked{{end}}>
+				<label class="form-check-label" for="lim-exempt-lan">{{.T "cdn64.lim.exempt_lan"}}</label></div>
+		</div>
+		<div class="row g-3">
+			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-conns_per_ip">{{.T "cdn64.lim.conns_per_ip"}}</label>
+				<input class="form-control form-control-sm" type="number" min="0" id="lim-conns_per_ip" name="lim_conns_per_ip" value="{{$d.Lim.Limits.ConnsPerIP}}">
+				<div class="form-text">{{.T "cdn64.lim.conns_per_ip_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.ConnsPerIP}}</div></div>
+			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-conn_rate">{{.T "cdn64.lim.conn_rate"}}</label>
+				<input class="form-control form-control-sm" type="number" min="0" id="lim-conn_rate" name="lim_conn_rate" value="{{$d.Lim.Limits.ConnRate}}">
+				<div class="form-text">{{.T "cdn64.lim.conn_rate_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.ConnRate}}</div></div>
+			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-req_rate">{{.T "cdn64.lim.req_rate"}}</label>
+				<input class="form-control form-control-sm" type="number" min="0" id="lim-req_rate" name="lim_req_rate" value="{{$d.Lim.Limits.ReqRate}}">
+				<div class="form-text">{{.T "cdn64.lim.req_rate_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.ReqRate}}</div></div>
+			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-req_burst">{{.T "cdn64.lim.req_burst"}}</label>
+				<input class="form-control form-control-sm" type="number" min="0" id="lim-req_burst" name="lim_req_burst" value="{{$d.Lim.Limits.ReqBurst}}">
+				<div class="form-text">{{.T "cdn64.lim.req_burst_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.ReqBurst}}</div></div>
+			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-target_conns">{{.T "cdn64.lim.target_conns"}}</label>
+				<input class="form-control form-control-sm" type="number" min="0" id="lim-target_conns" name="lim_target_conns" value="{{$d.Lim.Limits.TargetConns}}">
+				<div class="form-text">{{.T "cdn64.lim.target_conns_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.TargetConns}}</div></div>
+			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-max_conns">{{.T "cdn64.lim.max_conns"}}</label>
+				<input class="form-control form-control-sm" type="number" min="0" id="lim-max_conns" name="lim_max_conns" value="{{$d.Lim.Limits.MaxConns}}">
+				<div class="form-text">{{.T "cdn64.lim.max_conns_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.MaxConns}}</div></div>
+			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-ban_after">{{.T "cdn64.lim.ban_after"}}</label>
+				<input class="form-control form-control-sm" type="number" min="0" id="lim-ban_after" name="lim_ban_after" value="{{$d.Lim.Limits.BanAfter}}">
+				<div class="form-text">{{.T "cdn64.lim.ban_after_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.BanAfter}}</div></div>
+			<div class="col-sm-6 col-xl-3"><label class="form-label fw-semibold" for="lim-ban_minutes">{{.T "cdn64.lim.ban_minutes"}}</label>
+				<input class="form-control form-control-sm" type="number" min="0" id="lim-ban_minutes" name="lim_ban_minutes" value="{{$d.Lim.Limits.BanMinutes}}">
+				<div class="form-text">{{.T "cdn64.lim.ban_minutes_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.BanMinutes}}</div></div>
+		</div>
+		<div class="form-text mt-2">{{.T "cdn64.lim.zero_hint"}}</div>
+		{{if $d.Lim.Bans}}
+		<h3 class="h6 mt-3">{{.T "cdn64.lim.bans"}}</h3>
+		<table class="table table-sm align-middle mb-0"><tbody>
+		{{range $d.Lim.Bans}}<tr><td class="font-monospace">{{.IP}}</td><td class="text-body-secondary">{{$.T "cdn64.lim.until" "time" ($.Time .Until)}}</td>
+			<td class="text-end"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" formaction="/cdn64/limits/unban" name="ip" value="{{.IP}}"><i class="bi bi-unlock"></i> {{$.T "cdn64.lim.unban"}}</button></td></tr>{{end}}
+		</tbody></table>
+		{{end}}
+	</div>
+	<div class="card-footer d-flex gap-2">
+		<button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-shield-check"></i> {{.T "common.save"}}</button>
+		<button class="btn btn-outline-secondary btn-sm" type="submit" name="reset" value="1" data-confirm="{{.T "cdn64.lim.reset_confirm"}}"><i class="bi bi-arrow-counterclockwise"></i> {{.T "cdn64.lim.reset"}}</button>
+	</div>
+</form>
 <div class="card">
 	{{if not $d.Rows}}<div class="card-body text-center text-body-secondary py-5">
 		<div class="mb-2"><i class="bi bi-person-lock fs-2"></i></div>

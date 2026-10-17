@@ -29,7 +29,8 @@ const loopHeader = "X-Node64-Proxy"
 type hostStats struct {
 	requests atomic.Int64
 	errors   atomic.Int64 // 5xx und nicht erreichbar
-	blocked  atomic.Int64 // Block Common Exploits
+	blocked  atomic.Int64 // Block Common Exploits, Blocklisten, Limits
+	shielded atomic.Int64 // davon Blocklisten und Limits (zaehlen dort auch insgesamt)
 }
 
 func (m *Module) statsOf(id int64) *hostStats {
@@ -302,6 +303,11 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		}
 	}
 	maxBody := int64(h.Advanced.MaxBodyMB) << 20
+	limited := !h.Advanced.NoLimits
+	var sl slots // gleichzeitige Anfragen an das Ziel
+	if c := m.lim.config(); h.Kind == KindProxy && limited && c.Enabled && c.TargetConns > 0 {
+		sl = make(slots, c.TargetConns)
+	}
 	if h.Kind == KindProxy && !h.WebSockets && len(h.Locations) == 0 {
 		next = stripUpgrade(next)
 	}
@@ -325,9 +331,17 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 					status: sw.code(), bytes: sw.bytes, ms: time.Since(start).Milliseconds(), ua: trunc(r.UserAgent(), 200), log: h.Advanced.AccessLog})
 			}
 		}()
-		if m.bl.Blocked(client) { // ipv64-Blocklisten (echte Client-IP hinter vertrauenswuerdigen Proxys)
+		if m.bl.Blocked(client) || m.lim.banned(client) { // ipv64-Blocklisten, Sperre (echte Client-IP hinter vertrauenswuerdigen Proxys)
 			st.blocked.Add(1)
+			st.shielded.Add(1)
 			page(sw, http.StatusForbidden)
+			return
+		}
+		if limited && !m.lim.request(client) { // zu viele Anfragen von dieser Adresse
+			st.blocked.Add(1)
+			st.shielded.Add(1)
+			sw.Header().Set("Retry-After", "10")
+			page(sw, http.StatusTooManyRequests)
 			return
 		}
 		if r.Header.Get(loopHeader) == token { // Ziel zeigt auf diesen Proxy selbst
@@ -349,6 +363,19 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		}
 		if hsts != "" && r.TLS != nil {
 			sw.Header().Set("Strict-Transport-Security", hsts)
+		}
+		if sl != nil && r.Header.Get("Upgrade") == "" { // WebSockets laufen lange und zaehlen nicht
+			if !sl.acquire(r.Context(), limQueueWait) {
+				if r.Context().Err() == nil {
+					m.lim.rejected.Add(1)
+					st.blocked.Add(1)
+					st.shielded.Add(1)
+					sw.Header().Set("Retry-After", "10")
+					page(sw, http.StatusServiceUnavailable)
+				}
+				return
+			}
+			defer sl.release()
 		}
 		next.ServeHTTP(sw, r)
 		if sw.status >= 500 && sw.status != http.StatusBadGateway { // 502 zaehlt der ErrorHandler schon
@@ -463,6 +490,7 @@ func (m *Module) apply(ctx context.Context) {
 		return
 	}
 	guards := m.guards(ctx)
+	m.limExempt(ctx, list)
 	m.mu.Lock()
 	m.acl = guards
 	m.mu.Unlock()

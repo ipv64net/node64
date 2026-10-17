@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -42,7 +43,7 @@ var changelog string
 
 const (
 	Name    = "cdn64"
-	Version = "1.4.1"
+	Version = "1.5.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -78,6 +79,7 @@ type Module struct {
 	checks     CheckCreator // Healthcheck anlegen (nil = nicht verfuegbar)
 	findChecks CheckFinder  // Healthchecks lesen ("ueberwacht" in der Liste; nil = nicht verfuegbar)
 	bl         *blocklists  // ipv64-Blocklisten
+	lim        *limiter     // Schutz vor Ueberlastung
 	dnsrec     DNSRecords   // DNS-Records bei ipv64 (nil = nicht verfuegbar)
 
 	sapply sync.Mutex // ein Abgleich der Streams gleichzeitig
@@ -91,10 +93,14 @@ type Module struct {
 func New(core *store.Store, log *slog.Logger, e *edge.Edge, c *certs.Manager, version string) *Module {
 	b := make([]byte, 12)
 	_, _ = rand.Read(b)
-	return &Module{core: core, log: log.With("module", Name), edge: e, certs: c, version: version, stats: map[int64]*hostStats{},
+	m := &Module{core: core, log: log.With("module", Name), edge: e, certs: c, version: version, stats: map[int64]*hostStats{},
 		routeErr: map[int64]string{}, loopToken: hex.EncodeToString(b), trVerify: newTransport(true), trInsecure: newTransport(false),
 		cache: newAssetCache(cacheLimit), reach: newReacher(), runs: map[int64]*streamRun{}, sstats: map[int64]*streamStats{}, sreach: newReacher(),
-		acl: map[int64]*guard{}, authFail: newFailLimiter(), hostTr: map[int64]*http.Transport{}, bl: newBlocklists()}
+		acl: map[int64]*guard{}, authFail: newFailLimiter(), hostTr: map[int64]*http.Transport{}, bl: newBlocklists(), lim: newLimiter()}
+	m.lim.onBan = func(ip netip.Addr, until time.Time) {
+		m.log.Warn("cdn64 limits: address banned", "ip", limShow(ip), "until", until.Format(time.RFC3339))
+	}
+	return m
 }
 
 // SetDataDir legt fest, wo cdn64.db liegt (Statistik, Zugriffs-Log).
@@ -158,13 +164,17 @@ func (m *Module) Start(ctx context.Context) error {
 		m.certs.SetUsers(Name, m.certUsers)
 		m.certs.Acquire(Name)
 	}
+	m.limLoad(ctx)
 	m.apply(ctx)
 	m.applyStreams(ctx)
 	go func() { defer m.wg.Done(); m.reachLoop(ctx) }()
 	m.wg.Add(1)
 	go func() { defer m.wg.Done(); m.blLoop(ctx) }()
+	m.wg.Add(1)
+	go func() { defer m.wg.Done(); m.limLoop(ctx) }()
 	if m.edge != nil {
-		m.edge.SetBlocker(m.bl.Blocked)
+		m.edge.SetBlocker(m.blockedAny)
+		m.edge.SetGate(m.lim.open)
 	}
 	m.log.Info("cdn64 started")
 	return nil
@@ -185,6 +195,7 @@ func (m *Module) Stop(ctx context.Context) error {
 	if m.edge != nil {
 		m.edge.Remove(Name)
 		m.edge.SetBlocker(nil)
+		m.edge.SetGate(nil)
 	}
 	m.applyMu.Unlock()
 	m.stopStreams()

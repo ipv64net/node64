@@ -125,6 +125,7 @@ type hostRow struct {
 	Requests int64
 	Errors   int64
 	Blocked  int64
+	shielded int64 // davon Blocklisten und Limits
 	URL      string
 	Cert     certInfo
 	RouteErr string
@@ -178,7 +179,7 @@ func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
 	for _, h := range list {
 		st := m.statsOf(h.ID)
 		row := hostRow{Host: h, Reach: m.reach.get(h.ID), Requests: st.requests.Load(), Errors: st.errors.Load(), Blocked: st.blocked.Load(),
-			URL: firstURL(h), Cert: m.certFor(ctx, h, all), RouteErr: routeErr[h.ID], Day: day[h.ID], ACLName: acls[h.AccessListID]}
+			shielded: st.shielded.Load(), URL: firstURL(h), Cert: m.certFor(ctx, h, all), RouteErr: routeErr[h.ID], Day: day[h.ID], ACLName: acls[h.AccessListID]}
 		if h.probed() {
 			row.Watch = watch.of(h.TargetHost, h.TargetPort)
 		}
@@ -212,9 +213,9 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	d := listData{Kind: kind, Tabs: tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError(), StatsOn: m.stats2.Load() != nil, BlockedTotal: m.bl.blocked.Load()}
+	d := listData{Kind: kind, Tabs: tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError(), StatsOn: m.stats2.Load() != nil, BlockedTotal: m.bl.blocked.Load() + m.lim.rejected.Load()}
 	for _, row := range rows {
-		d.BlockedTotal += row.Blocked
+		d.BlockedTotal += row.Blocked - row.shielded // Blocklisten und Limits sind oben schon insgesamt gezaehlt
 	}
 	if m.edge != nil {
 		d.Listeners = m.edge.Status().Listeners
@@ -393,7 +394,7 @@ func hostFromForm(r *http.Request, h *Host) {
 		}
 		a.TimeoutSeconds, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_timeout")))
 		a.MaxBodyMB, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_max_body")))
-		a.NoBuffering, a.Gzip, a.AccessLog = on("adv_no_buffering"), on("adv_gzip"), on("adv_access_log")
+		a.NoBuffering, a.Gzip, a.AccessLog, a.NoLimits = on("adv_no_buffering"), on("adv_gzip"), on("adv_access_log"), on("adv_no_limits")
 		a.TrustedProxies = lines(r.PostFormValue("adv_trusted"))
 	}
 	if h.Kind == KindPass {

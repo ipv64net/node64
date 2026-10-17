@@ -1,5 +1,24 @@
 # Änderungen – CDN64
 
+## 1.5.0 – 2026-10-17
+
+Schutz vor Überlastung, ipv64-Blocklisten, Verkehr in der Übersicht.
+
+### Neu
+- Schutz vor Überlastung (Reiter *Zugriffslisten*), wie beim HAProxy, mit Standardwerten eingeschaltet:
+  - je IP (IPv6 je /64): 200 gleichzeitige Verbindungen, 20 neue Verbindungen je Sekunde (kurzzeitig 200),
+    50 Anfragen je Sekunde (kurzzeitig 500, darüber 429);
+  - insgesamt 10.000 Verbindungen; je Proxy-Host 200 gleichzeitige Anfragen an das Ziel, weitere warten bis
+    10 Sekunden, dann 503 (WebSockets zählen nicht);
+  - wer in einer Minute 300-mal abprallt, wird 10 Minuten schon beim Verbindungsaufbau abgewiesen; gesperrte
+    Adressen stehen in der Karte und lassen sich freigeben;
+  - ausgenommen: Heimnetz (abschaltbar), vertrauenswürdige Proxys der Hosts und die Ausnahmen der Blocklisten;
+    je Host unter *Erweitert* „Ohne Limits je IP“;
+  - gilt auch für TCP-Streams; API `/api/cdn64/limits`.
+- ipv64-Blocklisten per Schalter, abgewiesen vor TLS; API `/api/cdn64/blocklists`.
+- Karte *Verkehr* in der Übersicht der Proxy-Hosts (Anfragen nach 2xx–5xx, Datenmenge, 24 Stunden bis 30 Tage).
+- Die Tabelle zeigt, ob ein Healthcheck genau dieses Ziel überwacht (lokal oder ipv64/andere Node).
+
 ## 1.4.1 – 2026-10-16
 
 ### Geändert

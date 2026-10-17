@@ -30,6 +30,7 @@ type Advanced struct {
 	Gzip            bool     `json:"gzip,omitempty"`             // Text-Antworten komprimieren
 	TrustedProxies  []string `json:"trusted_proxies,omitempty"`  // echte Client-IP aus diesen Proxys (z. B. Cloudflare)
 	AccessLog       bool     `json:"access_log,omitempty"`       // jede Anfrage protokollieren
+	NoLimits        bool     `json:"no_limits,omitempty"`        // ohne Anfrage-Limit je IP und ohne Platzgrenze beim Ziel
 	trusted         []netip.Prefix
 }
 

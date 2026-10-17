@@ -177,6 +177,7 @@ type Edge struct {
 	cfgNow   atomic.Pointer[Config] // Kopie von cfg fuer Config(): Abnehmer fragen sie auch waehrend e.mu (Port-Pruefung)
 	h3On     atomic.Bool
 	block    atomic.Pointer[BlockFunc] // Sperrliste (z. B. ipv64-Blocklisten von CDN64), vor TLS geprueft
+	gate     atomic.Pointer[ConnGate]  // Verbindungs-Limits (z. B. Schutz vor Ueberlastung von CDN64), nach der Sperrliste
 	defClose atomic.Bool
 	fallback struct {
 		once sync.Once
@@ -317,6 +318,59 @@ func (e *Edge) blocked(a net.Addr) bool {
 	return f != nil && (*f)(addrIP(a))
 }
 
+// ConnGate entscheidet beim Annehmen einer Verbindung (z. B. Limits je IP). ok=false trennt sofort; release
+// (darf nil sein) wird genau einmal gerufen, wenn die Verbindung endet.
+type ConnGate func(netip.Addr) (release func(), ok bool)
+
+// SetGate setzt die Verbindungs-Limits (nil = keine). Geprueft wird nach der Sperrliste, vor TLS.
+func (e *Edge) SetGate(g ConnGate) {
+	if g == nil {
+		e.gate.Store(nil)
+		return
+	}
+	e.gate.Store(&g)
+}
+
+// admit: Sperrliste und Limits beim Annehmen; nil = getrennt.
+func (e *Edge) admit(c net.Conn) net.Conn {
+	if e.blocked(c.RemoteAddr()) {
+		_ = c.Close()
+		return nil
+	}
+	if g := e.gate.Load(); g != nil {
+		release, ok := (*g)(addrIP(c.RemoteAddr()))
+		if !ok {
+			_ = c.Close()
+			return nil
+		}
+		if release != nil {
+			return &gateConn{Conn: c, release: release}
+		}
+	}
+	return c
+}
+
+// gateConn gibt den Platz beim Limit frei, sobald die Verbindung geschlossen wird.
+type gateConn struct {
+	net.Conn
+	once    sync.Once
+	release func()
+}
+
+func (c *gateConn) Close() error {
+	err := c.Conn.Close()
+	c.once.Do(c.release)
+	return err
+}
+
+// CloseWrite: halb schliessen wie die TCP-Verbindung darunter (TLS durchreichen).
+func (c *gateConn) CloseWrite() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return c.Close()
+}
+
 // blockListener trennt gesperrte Gegenstellen beim Annehmen (Port 80).
 type blockListener struct {
 	net.Listener
@@ -326,10 +380,12 @@ type blockListener struct {
 func (l blockListener) Accept() (net.Conn, error) {
 	for {
 		c, err := l.Listener.Accept()
-		if err != nil || !l.e.blocked(c.RemoteAddr()) {
+		if err != nil {
 			return c, err
 		}
-		_ = c.Close()
+		if c = l.e.admit(c); c != nil {
+			return c, nil
+		}
 	}
 }
 

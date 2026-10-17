@@ -380,13 +380,21 @@ func (m *Module) serveTCP(r *streamRun, target string) {
 			time.Sleep(50 * time.Millisecond)
 			continue
 		}
-		if m.bl.blockedAddr(c.RemoteAddr()) { // ipv64-Blocklisten
+		if m.bl.blockedAddr(c.RemoteAddr()) || m.lim.bannedAddr(c.RemoteAddr()) { // ipv64-Blocklisten, Sperre
+			_ = c.Close()
+			continue
+		}
+		release, ok := m.lim.openAddr(c.RemoteAddr()) // Limits je IP
+		if !ok {
 			_ = c.Close()
 			continue
 		}
 		r.wg.Add(1)
 		go func() {
 			defer r.wg.Done()
+			if release != nil {
+				defer release()
+			}
 			up, err := net.DialTimeout("tcp", target, tcpDialTimeout)
 			if err != nil {
 				_ = c.Close()
@@ -456,7 +464,7 @@ func (m *Module) serveUDP(r *streamRun, target string) {
 		key := addr.String()
 		mu.Lock()
 		s := sessions[key]
-		if s == nil && m.bl.blockedAddr(addr) { // ipv64-Blocklisten: keine Sitzung
+		if s == nil && (m.bl.blockedAddr(addr) || m.lim.bannedAddr(addr)) { // ipv64-Blocklisten, Sperre: keine Sitzung
 			mu.Unlock()
 			continue
 		}

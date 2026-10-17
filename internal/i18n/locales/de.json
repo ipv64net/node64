@@ -436,7 +436,9 @@
       "adv_cloudflare": "Cloudflare-Netze einfügen",
       "adv_trusted_hint": "Kommt eine Anfrage aus diesen Netzen, gilt die IP aus CF-Connecting-IP bzw. X-Forwarded-For als echte Client-IP (für Ziel, Zugriffslisten und Log). Sonst zählt immer die Gegenstelle der Verbindung.",
       "adv_access_log": "Zugriffs-Log für diesen Host",
-      "adv_access_log_hint": "Jede Anfrage einzeln unter „Zugriffe“. Die Zähler je Stunde laufen immer."
+      "adv_access_log_hint": "Jede Anfrage einzeln unter „Zugriffe“. Die Zähler je Stunde laufen immer.",
+      "adv_no_limits": "Ohne Limits je IP",
+      "adv_no_limits_hint": "Für diesen Host gelten das Anfrage-Limit je IP und die Grenze je Ziel nicht (z. B. API für viele Geräte hinter einer Adresse). Verbindungs-Limits und Sperren gelten weiter."
     },
     "err": {
       "name": "Ungültiger Domainname.",
@@ -658,6 +660,40 @@
         "dshield1": "die aktivsten angreifenden Netze (SANS DShield)",
         "tor_exit": "Ausgänge des Tor-Netzes (sperrt auch legitime anonyme Besucher)"
       }
+    },
+    "lim": {
+      "title": "Schutz vor Überlastung",
+      "hint": "Begrenzt Verbindungen und Anfragen je IP-Adresse (IPv6 je /64), wie beim HAProxy. Schützt die Node und alle Dienste hinter dem Proxy vor Request-Flooding und vielen Verbindungen von einer Adresse. Wer zu oft abprallt, wird für einige Minuten schon beim Verbindungsaufbau abgewiesen. Ausgenommen sind das Heimnetz (wenn eingeschaltet), die vertrauenswürdigen Proxys der Hosts (z. B. Cloudflare; dort zählt die echte Client-IP) und die Ausnahmen der Blocklisten. Die Standardwerte reichen für Browser, Apps und Sync-Clients.",
+      "enabled": "Schutz eingeschaltet",
+      "exempt_lan": "Heimnetz (private Adressen) nie begrenzen",
+      "conns_per_ip": "Verbindungen je IP",
+      "conns_per_ip_hint": "gleichzeitig offen.",
+      "conn_rate": "Neue Verbindungen je IP/s",
+      "conn_rate_hint": "kurzzeitig das Zehnfache, vor TLS geprüft.",
+      "req_rate": "Anfragen je IP/s",
+      "req_rate_hint": "auf Dauer; darüber Antwort 429.",
+      "req_burst": "Anfragen am Stück",
+      "req_burst_hint": "kurzzeitig erlaubt, z. B. beim Laden vieler Bilder.",
+      "target_conns": "Gleichzeitig je Ziel",
+      "target_conns_hint": "Anfragen an den Dienst hinter einem Proxy-Host; weitere warten bis 10 s, dann 503. WebSockets zählen nicht.",
+      "max_conns": "Verbindungen insgesamt",
+      "max_conns_hint": "schützt die Node selbst.",
+      "ban_after": "Sperren nach",
+      "ban_after_hint": "Abweisungen in einer Minute.",
+      "ban_minutes": "Sperre (Minuten)",
+      "ban_minutes_hint": "danach wieder frei.",
+      "default": "Standard: {n}",
+      "zero_hint": "0 = dieses Limit aus. Einzelne Hosts lassen sich unter Erweitert ausnehmen (z. B. eine API, die viele Geräte hinter einer Adresse nutzen).",
+      "open": "{n} Verbindungen offen",
+      "rejected_hint": "Verbindungen und Anfragen seit dem Start von CDN64, die an Limits oder Sperren scheiterten",
+      "bans": "Gerade gesperrt",
+      "until": "bis {time}",
+      "unban": "Freigeben",
+      "unbanned": "{ip} freigegeben.",
+      "reset": "Standardwerte",
+      "reset_confirm": "Alle Limits auf die Standardwerte setzen?",
+      "saved": "Schutz vor Überlastung gespeichert.",
+      "err_range": "Werte prüfen: nur ganze Zahlen ab 0 (Sperre höchstens 7 Tage)."
     }
   },
   "certs": {

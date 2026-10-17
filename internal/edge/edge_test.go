@@ -320,6 +320,8 @@ func TestEdgeWithRegistry(t *testing.T) {
 // TLS durchreichen: das Ziel beendet TLS mit seinem eigenen Zertifikat, Edge sieht nur den Namen.
 func TestEdgePassthrough(t *testing.T) {
 	e, cfg := newEdge(t, nil)
+	var opened, released atomic.Int32 // Limits am Eingang: jede Verbindung wird eingehuellt und wieder freigegeben
+	e.SetGate(func(netip.Addr) (func(), bool) { opened.Add(1); return func() { released.Add(1) }, true })
 	backendCert := selfSigned(t, "pass.test")
 	backend := httptestTLS(t, backendCert, "from backend")
 	var count atomic.Int32
@@ -349,6 +351,56 @@ func TestEdgePassthrough(t *testing.T) {
 	}
 	if err := e.Set("bad", []Route{{Names: []string{"x.test"}, Passthrough: backend, Handler: app}}); err == nil {
 		t.Fatal("passthrough with handler must be refused")
+	}
+	if opened.Load() == 0 {
+		t.Fatal("gate not asked")
+	}
+	for i := 0; i < 50 && released.Load() < 1; i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if released.Load() < 1 {
+		t.Fatal("passthrough connection not released")
+	}
+	e.SetGate(func(netip.Addr) (func(), bool) { return nil, false })
+	if c, err := tls.Dial("tcp", "127.0.0.1:"+strconv.Itoa(cfg.HTTPSPort), &tls.Config{ServerName: "pass.test", InsecureSkipVerify: true}); err == nil { //nolint:gosec // Test
+		c.Close()
+		t.Fatal("gate refused, connection must be closed")
+	}
+}
+
+// gateConn reicht das halbe Schliessen an TCP weiter: die Gegenseite liest EOF, die Antwort kommt noch an.
+func TestGateConnCloseWrite(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		b, _ := io.ReadAll(c) // bis EOF
+		_, _ = c.Write(append([]byte("got "), b...))
+		c.Close()
+	}()
+	raw, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var released atomic.Int32
+	c := &gateConn{Conn: raw, release: func() { released.Add(1) }}
+	_, _ = io.WriteString(c, "ping")
+	closeWrite(c)
+	_ = c.SetReadDeadline(time.Now().Add(2 * time.Second))
+	b, _ := io.ReadAll(c)
+	if string(b) != "got ping" {
+		t.Fatalf("half close: %q", b)
+	}
+	c.Close()
+	c.Close()
+	if released.Load() != 1 {
+		t.Fatalf("released %d times", released.Load())
 	}
 }
 

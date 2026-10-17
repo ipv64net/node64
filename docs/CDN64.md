@@ -103,6 +103,24 @@ und keinem Modul:
     erreichbar, gilt der letzte Stand weiter.
   - Ausnahmen (IPs oder Netze) werden nie gesperrt. Der Zähler „abgewiesen“ steht auf der Karte und in der
     Statistik.
+- **Schutz vor Überlastung (Reiter *Zugriffslisten*):** wie Stick-Tables und `maxconn` beim HAProxy, ab Werk
+  eingeschaltet. Gezählt wird je IPv4-Adresse bzw. je IPv6-/64.
+
+  | Limit | Standard | Wirkung |
+  |---|---|---|
+  | Verbindungen je IP | 200 gleichzeitig | weitere werden vor TLS getrennt |
+  | Neue Verbindungen je IP | 20/s, kurzzeitig 200 | weitere werden vor TLS getrennt |
+  | Anfragen je IP | 50/s, kurzzeitig 500 | Antwort 429 mit `Retry-After` |
+  | Gleichzeitig je Ziel | 200 je Proxy-Host | weitere warten bis 10 s, dann 503; WebSockets zählen nicht |
+  | Verbindungen insgesamt | 10.000 | schützt die Node selbst |
+  | Sperre | nach 300 Abweisungen in 1 Minute | 10 Minuten schon beim Verbindungsaufbau abgewiesen |
+
+  - Ausgenommen: das Heimnetz (private Adressen, abschaltbar), die vertrauenswürdigen Proxys aller Hosts (dort
+    zählt die echte Client-IP) und die Ausnahmen der Blocklisten. Je Host unter *Erweitert* „Ohne Limits je IP“
+    (Anfrage-Limit und Grenze je Ziel entfallen, Verbindungs-Limits und Sperren bleiben).
+  - Gilt für Proxy-Hosts, Weiterleitungen, 404-Hosts, durchgereichtes TLS (nur Verbindungen) und TCP-Streams.
+  - 0 schaltet ein einzelnes Limit ab. Gesperrte Adressen stehen in der Karte und lassen sich freigeben; jede
+    Sperre steht im Log. Der Zähler „abgewiesen“ geht in die Statistik ein.
 - **Block Common Exploits:** Regeln wie im NPM, dazu `.git`, `.env` und `wp-config.php`.
 - **Fehlerseiten:** Neutrale Seiten (404, 403, 502, 508) verraten nichts über Node64 oder das Ziel. Unbekannte
   Namen bekommen die Standardseite: 404, Verbindung schließen, Weiterleitung oder eigenes HTML.
@@ -166,6 +184,7 @@ Einen Import gibt es nicht (Entscheidung). Hosts werden neu angelegt; Zertifikat
 | Hosts, Streams, Standardseite | `/api/cdn64/hosts`, `/api/cdn64/streams`, `/api/cdn64/default` |
 | Zugriffslisten, Log, Statistik, Einstellungen | `/api/cdn64/access-lists`, `/api/cdn64/log`, `/api/cdn64/stats`, `/api/cdn64/settings` |
 | ipv64-Blocklisten | `GET\|PUT /api/cdn64/blocklists`, `POST /api/cdn64/blocklists/refresh` |
+| Schutz vor Überlastung | `GET\|PUT /api/cdn64/limits`, `DELETE /api/cdn64/limits/bans/{ip}` |
 | Zertifikate (Kern) | `/api/certs`, `/api/certs/account`, `/api/certs/dns-accounts`, `/api/certs/dns-providers` |
 | Ports und Eingang (Kern) | `/api/ports`, `/api/edge`, `/api/edge/ui` |
 
