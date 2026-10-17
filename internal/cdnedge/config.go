@@ -25,6 +25,33 @@ type Config struct {
 	Tunnels      []TunnelEntry `yaml:"tunnels"`      // T1: feste Testkonfiguration; ab T3 von ipv64
 	DebugListen  string        `yaml:"debug_listen"` // T1: nur lokal, je Verbindung ein Stream "http80" in DebugTunnel
 	DebugTunnel  string        `yaml:"debug_tunnel"`
+	ListenHTTPS  string        `yaml:"listen_https"` // Besucher Port 443 (Modus 1, nach SNI); leer = aus
+	Hosts        []HostEntry   `yaml:"hosts"`        // T2: feste Zuordnung Name -> Tunnel; ab T3 von ipv64
+	PeerListen   string        `yaml:"peer_listen"`  // Nachbar-Port (TLS), z. B. :7845; leer = aus
+	PeerSecret   string        `yaml:"peer_secret"`  // gemeinsames Geheimnis der Server
+	Peers        []PeerEntry   `yaml:"peers"`        // Nachbarserver fuer den Ausweichweg
+	Shield       ShieldConfig  `yaml:"shield"`       // grober Schutz vor der Weitergabe
+}
+
+// HostEntry: ein Name (auch *.domain) und der Tunnel, der ihn bedient.
+type HostEntry struct {
+	Name   string `yaml:"name"`
+	Tunnel string `yaml:"tunnel"`
+}
+
+// PeerEntry: Nachbarserver (host:port des Nachbar-Ports; Zertifikat auf den Namen).
+type PeerEntry struct {
+	Name string `yaml:"name"`
+	Addr string `yaml:"addr"`
+}
+
+// ShieldConfig: Grenzen je IP (IPv6 je /64) und ipv64-Blocklisten auf dem Server (0 = Standard, -1 = aus).
+type ShieldConfig struct {
+	ConnsPerIP    int      `yaml:"conns_per_ip"`   // gleichzeitig, Standard 256
+	ConnRate      int      `yaml:"conn_rate"`      // neue je Sekunde, kurzzeitig das Zehnfache, Standard 50
+	MaxConns      int      `yaml:"max_conns"`      // insgesamt, Standard 50000
+	Blocklists    []string `yaml:"blocklists"`     // z. B. [spamhaus_drop]; leer = keine
+	BlocklistBase string   `yaml:"blocklist_base"` // Standard https://ipv64.net/blocklists/
 }
 
 // TunnelEntry: erlaubter Tunnel (Token nur als SHA-256 in Hex).
@@ -55,6 +82,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if c.TunnelListen != "" && c.TLSCert == "" && c.PublicHost == "" {
 		return nil, errors.New("config: public_host fehlt (Zertifikat fuer den Tunnel)")
+	}
+	if c.PeerListen != "" && len(c.PeerSecret) < 32 {
+		return nil, errors.New("config: peer_secret fehlt oder zu kurz (mindestens 32 Zeichen)")
 	}
 	if strings.HasPrefix(c.DebugListen, ":") || strings.HasPrefix(c.DebugListen, "0.0.0.0") || strings.HasPrefix(c.DebugListen, "[::]") {
 		return nil, errors.New("config: debug_listen nur auf 127.0.0.1")

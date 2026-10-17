@@ -400,6 +400,24 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 - **Fertig, wenn:** ein Test-Host auf node64-cdn ist per IPv4 und IPv6 über srv07 und srv08 erreichbar, die Node
   sieht die echte Besucher-IP, Ausfall eines Servers ohne Unterbrechung neuer Verbindungen, Lasttest dokumentiert,
   gezählte Bytes stimmen mit einer Messung auf der Node überein.
+- **Stand 2026-10-17:** umgesetzt (cdn64-edge 0.3.1), live gemessen mit dem Test-Host `t2.node64.test` auf node64-cdn
+  (Box: NAT, kein IPv6, kein offener Port); Aufruf per `curl --resolve` (für einen Namen im DNS fehlt noch T3).
+
+  | Messung | Ergebnis |
+  |---|---|
+  | Besucher über srv07/srv08 × IPv4/IPv6, Port 443 und 80 | alle 8 Wege ok; beim Ziel kommt die echte Besucher-IP an (IPv6-Besucher bei einer Box ganz ohne IPv6) |
+  | Aus fremdem Netz (hub1), komplette TLS-Anfrage bis zum Dienst | 65–75 ms |
+  | Unbekannter Name | Verbindung getrennt |
+  | Tunnel zu srv08 gekappt | Besucher an srv08 laufen über srv07 (Nachbar-Port 7845, + ca. 20 ms); srv08 merkt den Wegfall nach 25 s (vorher 68 s; Wachhalten 10 s, Zeitlimit 30 s) |
+  | 2.000 Anfragen, 50 gleichzeitig, je eigener TLS-Handshake bis zur Node | 2.000 × 200 in 29,5 s; srv07 Load 0,5 |
+  | 100 MB über srv07 | 6,0 MB/s = Upload des Anschlusses; srv07 zählt 105 MB (Nutzdaten + TLS + Anfragen) |
+  | Schutz | ohne Ausnahme greifen srv07 (Rate je IP) **und** die Node (sieht die echte IP von hub1, begrenzt und sperrt) |
+
+  Umsetzung: `internal/cdnedge/route.go` (SNI/Host-Routing inkl. `*.domain`, Nachbar-Port mit gemeinsamem
+  Geheimnis, Zähler je Name in `/health`), `guard.go` (Verbindungen je IP/64, Rate, insgesamt, ipv64-Blocklisten –
+  auf den Servern vorerst nur `spamhaus_drop`), gemeinsamer Blocklisten-Kern `internal/shield` (Node und Server).
+  Port 80: Verteilung je Verbindung nach dem Host der ersten Anfrage; die eigene Seite (/health, ACME) ohne Keep-Alive.
+  Offen für später: Tunnel-Ausfall noch schneller erkennen (eigene Pings, Retry über den Nachbarn beim Öffnen).
 
 ### T3 – Steuerung bei ipv64
 - SQL `deploy/sql/cdn64_online.sql` (Tabellen aus 8.1; in MariaDB auf der Box geprüft).

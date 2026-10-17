@@ -30,18 +30,19 @@ type Session interface {
 	Done() <-chan struct{}
 }
 
-// QUICConfig: Wachhalten alle 15 s (Router-Zeitlimits fuer UDP oft 30 s), nach 60 s ohne Antwort tot; kleine
-// Startpakete mit Path-MTU-Discovery (DS-Lite, PPPoE, IPv6-Tunnel; G4); Fenster fuer hohen Durchsatz.
+// QUICConfig: Wachhalten alle 10 s (Router-Zeitlimits fuer UDP oft 30 s), nach 30 s ohne Antwort tot - so merkt
+// der Server einen weggefallenen Tunnel schnell und nimmt den Nachbarn; kleine Startpakete mit Path-MTU-Discovery
+// (DS-Lite, PPPoE, IPv6-Tunnel; G4); Fenster fuer hohen Durchsatz.
 func QUICConfig() *quic.Config {
-	return &quic.Config{KeepAlivePeriod: 15 * time.Second, MaxIdleTimeout: 60 * time.Second, HandshakeIdleTimeout: 10 * time.Second,
+	return &quic.Config{KeepAlivePeriod: 10 * time.Second, MaxIdleTimeout: 30 * time.Second, HandshakeIdleTimeout: 10 * time.Second,
 		MaxIncomingStreams: 10000, InitialStreamReceiveWindow: 512 << 10, MaxStreamReceiveWindow: 6 << 20, MaxConnectionReceiveWindow: 15 << 20}
 }
 
 func yamuxConfig() *yamux.Config {
 	c := yamux.DefaultConfig()
 	c.AcceptBacklog = 1024
-	c.KeepAliveInterval = 15 * time.Second
-	c.ConnectionWriteTimeout = 30 * time.Second
+	c.KeepAliveInterval = 10 * time.Second
+	c.ConnectionWriteTimeout = 15 * time.Second
 	c.MaxStreamWindowSize = 6 << 20
 	c.StreamOpenTimeout = 30 * time.Second
 	c.StreamCloseTimeout = 5 * time.Minute

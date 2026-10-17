@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -39,11 +40,21 @@ type Server struct {
 	peers   map[string][]*tunnel.Peer // je Tunnel die angemeldeten Verbindungen (neueste zuletzt)
 	streams atomic.Int64              // offene Daten-Streams
 	total   atomic.Int64
+
+	tlsConf   *tls.Config            // Zertifikat fuer Tunnel- und Nachbar-Port
+	routes    atomic.Pointer[routes] // Name -> Tunnel
+	stats     *stats                 // je Name
+	guard     *guard                 // grober Schutz
+	local     *chanListener          // Port 80 ohne bekannten Namen -> eigene Seite
+	peerRoots *x509.CertPool         // Tests: CA der Nachbarn (sonst System)
+	lns       []net.Listener         // offene Besucher-/Nachbar-Ports
 }
 
 // New legt den Dienst an.
 func New(cfg *Config, log *slog.Logger, version string) *Server {
-	s := &Server{cfg: cfg, log: log, version: version, started: time.Now(), peers: map[string][]*tunnel.Peer{}}
+	s := &Server{cfg: cfg, log: log, version: version, started: time.Now(), peers: map[string][]*tunnel.Peer{},
+		stats: &stats{m: map[string]*hostStat{}}, guard: newGuard(cfg.Shield), local: newChanListener(&net.TCPAddr{})}
+	s.routes.Store(newRoutes(cfg.Hosts))
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("/", notFound)
@@ -54,6 +65,9 @@ func New(cfg *Config, log *slog.Logger, version string) *Server {
 		h = s.acme.HTTPHandler(mux) // HTTP-01 fuer den eigenen Namen, sonst unveraendert
 	}
 	s.http = &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
+	// Port 80 wird je Verbindung nach dem Host der ersten Anfrage verteilt: die eigene Seite ohne Keep-Alive, damit
+	// eine Folgeanfrage fuer einen Kunden-Namen auf einer neuen (richtig verteilten) Verbindung kommt.
+	s.http.SetKeepAlivesEnabled(false)
 	return s
 }
 
@@ -64,14 +78,55 @@ func (s *Server) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	s.lns = append(s.lns, ln)
 	s.log.Info("cdn64-edge listening", "http", ln.Addr().String(), "name", s.cfg.Name, "version", s.version)
 	errc := make(chan error, 2)
-	go func() { errc <- s.http.Serve(ln) }()
+	go func() { errc <- s.http.Serve(s.local) }()
+	go s.acceptLoop(ln, s.handle80)
+	bctx, bcancel := context.WithCancel(ctx)
+	defer bcancel()
+	go s.blocklistLoop(bctx)
+	go func() {
+		t := time.NewTicker(time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-bctx.Done():
+				return
+			case <-t.C:
+				s.guard.sweep()
+			}
+		}
+	}()
+	if s.cfg.TunnelListen != "" || s.cfg.PeerListen != "" {
+		if s.tlsConf, err = s.tlsConfig(); err != nil {
+			_ = s.http.Close()
+			return err
+		}
+	}
 	if s.cfg.TunnelListen != "" {
 		if err := s.startTunnel(); err != nil {
 			_ = s.http.Close()
 			return err
 		}
+	}
+	if s.cfg.ListenHTTPS != "" {
+		l, err := net.Listen("tcp", s.cfg.ListenHTTPS)
+		if err != nil {
+			return err
+		}
+		s.lns = append(s.lns, l)
+		go s.acceptLoop(l, s.handle443)
+		s.log.Info("visitors listening", "https", l.Addr().String(), "hosts", len(s.cfg.Hosts))
+	}
+	if s.cfg.PeerListen != "" {
+		l, err := tls.Listen("tcp", s.cfg.PeerListen, &tls.Config{GetCertificate: s.tlsConf.GetCertificate, Certificates: s.tlsConf.Certificates,
+			MinVersion: tls.VersionTLS13})
+		if err != nil {
+			return err
+		}
+		s.lns = append(s.lns, l)
+		go s.servePeer(l)
 	}
 	if s.cfg.DebugListen != "" {
 		dl, err := net.Listen("tcp", s.cfg.DebugListen)
@@ -85,6 +140,9 @@ func (s *Server) Run(ctx context.Context) error {
 	case err := <-errc:
 		return err
 	case <-ctx.Done():
+	}
+	for _, l := range s.lns { // keine neuen Besucher; laufende duerfen enden
+		_ = l.Close()
 	}
 	s.shutdown()
 	sctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -119,11 +177,7 @@ func (s *Server) tlsConfig() (*tls.Config, error) {
 }
 
 func (s *Server) startTunnel() error {
-	conf, err := s.tlsConfig()
-	if err != nil {
-		return err
-	}
-	s.tun = &tunnel.Server{Name: s.cfg.Name, TLS: conf, Log: s.log, Auth: s.auth, Up: s.up, Down: s.down}
+	s.tun = &tunnel.Server{Name: s.cfg.Name, TLS: s.tlsConf, Log: s.log, Auth: s.auth, Up: s.up, Down: s.down}
 	if _, err := s.tun.ServeQUIC(s.cfg.TunnelListen); err != nil {
 		return err
 	}
@@ -265,16 +319,29 @@ func (s *Server) shutdown() {
 
 // Health ist die Antwort von /health. Von aussen nur Status, Name und Version; Einzelheiten nur lokal.
 type Health struct {
-	Status   string       `json:"status"`
-	Name     string       `json:"name"`
-	Version  string       `json:"version"`
-	Location string       `json:"location,omitempty"`
-	Started  string       `json:"started,omitempty"`
-	UptimeS  int64        `json:"uptime_s,omitempty"`
-	Go       string       `json:"go,omitempty"`
-	Tunnels  []TunnelInfo `json:"tunnels,omitempty"`
-	Streams  int64        `json:"streams,omitempty"`
-	Total    int64        `json:"streams_total,omitempty"`
+	Status   string              `json:"status"`
+	Name     string              `json:"name"`
+	Version  string              `json:"version"`
+	Location string              `json:"location,omitempty"`
+	Started  string              `json:"started,omitempty"`
+	UptimeS  int64               `json:"uptime_s,omitempty"`
+	Go       string              `json:"go,omitempty"`
+	Tunnels  []TunnelInfo        `json:"tunnels,omitempty"`
+	Streams  int64               `json:"streams,omitempty"`
+	Total    int64               `json:"streams_total,omitempty"`
+	Hosts    map[string]HostInfo `json:"hosts,omitempty"`
+	Open     int64               `json:"conns_open,omitempty"` // Besucher-Verbindungen gerade
+	Rejected int64               `json:"rejected,omitempty"`   // vom Schutz abgewiesen seit dem Start
+	Blocked  int                 `json:"blocklist_entries,omitempty"`
+}
+
+// HostInfo: Zaehler eines Namens seit dem Start (nur lokal sichtbar).
+type HostInfo struct {
+	Conns    int64 `json:"conns"`
+	BytesIn  int64 `json:"bytes_in"`
+	BytesOut int64 `json:"bytes_out"`
+	ViaPeer  int64 `json:"via_peer,omitempty"`
+	NoTunnel int64 `json:"no_tunnel,omitempty"`
 }
 
 // TunnelInfo: eine angemeldete Verbindung (nur lokal sichtbar).
@@ -301,6 +368,16 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		s.mu.Unlock()
+		h.Open, h.Rejected, h.Blocked = s.guard.open.Load(), s.guard.rejected.Load(), s.guard.set.Load().Total()
+		s.stats.mu.Lock()
+		if len(s.stats.m) > 0 {
+			h.Hosts = map[string]HostInfo{}
+		}
+		for n, st := range s.stats.m {
+			h.Hosts[n] = HostInfo{Conns: st.Conns.Load(), BytesIn: st.BytesIn.Load(), BytesOut: st.BytesOut.Load(), ViaPeer: st.ViaPeer.Load(),
+				NoTunnel: st.NoTunnel.Load()}
+		}
+		s.stats.mu.Unlock()
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")

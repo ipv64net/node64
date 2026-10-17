@@ -35,6 +35,10 @@ func peekHello(conn net.Conn) (sni string, data []byte, ok bool) {
 	return hello.ServerName, buf.Bytes(), true
 }
 
+// PeekSNI liest das TLS-ClientHello einer Verbindung, ohne zu antworten: Name (SNI) und die gelesenen Bytes, die
+// beim Weiterreichen zuerst gesendet werden muessen (auch fuer die CDN64-Server).
+func PeekSNI(conn net.Conn) (sni string, data []byte, ok bool) { return peekHello(conn) }
+
 // readOnlyConn liest aus r und verwirft alles Geschriebene (die Antwort des Handshakes geht nie raus).
 type readOnlyConn struct {
 	r io.Reader

@@ -1,7 +1,6 @@
 package cdn64
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -16,6 +15,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ipv64net/node64/internal/shield"
 )
 
 // ipv64-Blocklisten: gepflegte Listen schadhafter IPs von ipv64.net (Spamhaus, FireHOL, DShield, Tor, blocklist.de
@@ -70,136 +71,10 @@ type BlocklistState struct {
 	Error   string    `json:"error,omitempty"`
 }
 
-type v4Range struct{ lo, hi uint32 }
-
-// blockSet ist die zusammengefasste Sperrliste (nur lesend nach dem Bau).
-type blockSet struct {
-	v4    []v4Range      // sortiert, zusammengefasst
-	v6    []netip.Prefix // sortiert
-	allow []netip.Prefix // Ausnahmen
-	total int            // Eintraege vor dem Zusammenfassen
-}
-
-func v4u(a netip.Addr) uint32 {
-	b := a.As4()
-	return uint32(b[0])<<24 | uint32(b[1])<<16 | uint32(b[2])<<8 | uint32(b[3])
-}
-
-func (s *blockSet) has(a netip.Addr) bool {
-	if s == nil || !a.IsValid() {
-		return false
-	}
-	a = a.Unmap()
-	for _, p := range s.allow {
-		if p.Contains(a) {
-			return false
-		}
-	}
-	if a.Is4() {
-		x := v4u(a)
-		i, _ := slices.BinarySearchFunc(s.v4, x, func(r v4Range, x uint32) int {
-			switch {
-			case r.hi < x:
-				return -1
-			case r.lo > x:
-				return 1
-			}
-			return 0
-		})
-		return i < len(s.v4) && s.v4[i].lo <= x && x <= s.v4[i].hi
-	}
-	// IPv6: wenige Netze; das letzte Netz mit Startadresse <= a pruefen (enthaltene sind beim Bau entfernt)
-	i, _ := slices.BinarySearchFunc(s.v6, a, func(p netip.Prefix, a netip.Addr) int { return p.Addr().Compare(a) })
-	if i < len(s.v6) && s.v6[i].Contains(a) {
-		return true
-	}
-	return i > 0 && s.v6[i-1].Contains(a)
-}
-
-// buildSet fasst die Netze aller Listen zusammen.
-func buildSet(lists [][]netip.Prefix, allow []netip.Prefix) *blockSet {
-	s := &blockSet{allow: allow}
-	var v4 []v4Range
-	var v6 []netip.Prefix
-	for _, l := range lists {
-		s.total += len(l)
-		for _, p := range l {
-			p = p.Masked()
-			if p.Addr().Is4() {
-				lo := v4u(p.Addr())
-				hi := lo | (uint32(1)<<(32-p.Bits()) - 1)
-				if p.Bits() == 0 {
-					hi = ^uint32(0)
-				}
-				v4 = append(v4, v4Range{lo, hi})
-			} else {
-				v6 = append(v6, p)
-			}
-		}
-	}
-	slices.SortFunc(v4, func(a, b v4Range) int {
-		if a.lo != b.lo {
-			if a.lo < b.lo {
-				return -1
-			}
-			return 1
-		}
-		return 0
-	})
-	for _, r := range v4 {
-		if n := len(s.v4); n > 0 && r.lo <= s.v4[n-1].hi+1 && s.v4[n-1].hi != ^uint32(0) {
-			if r.hi > s.v4[n-1].hi {
-				s.v4[n-1].hi = r.hi
-			}
-			continue
-		}
-		s.v4 = append(s.v4, r)
-	}
-	slices.SortFunc(v6, func(a, b netip.Prefix) int {
-		if c := a.Addr().Compare(b.Addr()); c != 0 {
-			return c
-		}
-		return a.Bits() - b.Bits()
-	})
-	for _, p := range v6 { // enthaltene Netze weglassen
-		if n := len(s.v6); n > 0 && s.v6[n-1].Contains(p.Addr()) && s.v6[n-1].Bits() <= p.Bits() {
-			continue
-		}
-		s.v6 = append(s.v6, p)
-	}
-	return s
-}
-
-// parseList liest eine Liste (ein Netz bzw. eine IP je Zeile, # Kommentare).
-func parseList(r io.Reader) ([]netip.Prefix, error) {
-	var out []netip.Prefix
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 64<<10), 64<<10)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if i := strings.IndexAny(line, "#;"); i >= 0 {
-			line = strings.TrimSpace(line[:i])
-		}
-		if line == "" {
-			continue
-		}
-		if f := strings.Fields(line); len(f) > 0 {
-			line = f[0]
-		}
-		if p, err := netip.ParsePrefix(line); err == nil {
-			out = append(out, p.Masked())
-		} else if a, err := netip.ParseAddr(line); err == nil {
-			a = a.Unmap()
-			out = append(out, netip.PrefixFrom(a, a.BitLen()))
-		}
-	}
-	return out, sc.Err()
-}
-
 // blocklists ist der Zustand im Modul.
 type blocklists struct {
 	mu      sync.Mutex
-	set     atomic.Pointer[blockSet]
+	set     atomic.Pointer[shield.Set]
 	nets    map[string][]netip.Prefix // je Liste (geladen)
 	state   map[string]*BlocklistState
 	etag    map[string]string
@@ -216,7 +91,7 @@ func newBlocklists() *blocklists {
 
 // Blocked: Adresse steht in einer eingeschalteten Liste (und nicht in den Ausnahmen); zaehlt mit.
 func (b *blocklists) Blocked(a netip.Addr) bool {
-	if b.set.Load().has(a) {
+	if b.set.Load().Has(a) {
 		b.blocked.Add(1)
 		return true
 	}
@@ -262,8 +137,8 @@ func (m *Module) blRebuild(ctx context.Context) {
 		lists = append(lists, b.nets[id])
 	}
 	b.mu.Unlock()
-	set := buildSet(lists, m.blAllow(ctx))
-	if set.total == 0 { // nichts eingeschaltet oder noch nichts geladen: nicht "aktiv"
+	set := shield.BuildSet(lists, m.blAllow(ctx))
+	if set.Total() == 0 { // nichts eingeschaltet oder noch nichts geladen: nicht "aktiv"
 		set = nil
 	}
 	b.set.Store(set)
@@ -280,7 +155,7 @@ func (m *Module) blLoadCache(ctx context.Context) {
 		if err != nil {
 			continue
 		}
-		nets, err := parseList(io.LimitReader(f, blocklistMax))
+		nets, err := shield.ParseList(io.LimitReader(f, blocklistMax))
 		fi, _ := f.Stat()
 		f.Close()
 		if err != nil {
@@ -346,7 +221,7 @@ func (m *Module) blFetch(ctx context.Context, id string) error {
 	if len(raw) > blocklistMax {
 		return errors.New("list too large")
 	}
-	nets, err := parseList(bytes.NewReader(raw))
+	nets, err := shield.ParseList(bytes.NewReader(raw))
 	if err != nil {
 		return err
 	}
