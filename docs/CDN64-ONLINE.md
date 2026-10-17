@@ -11,7 +11,8 @@ Inhalt: [1 Ziel](#1-ziel) · [2 Entscheidungen](#2-entscheidungen) · [3 Archite
 [4 Tunnel](#4-tunnel) · [5 Modus 1](#5-modus-1-durchreichen) · [6 Modus 2](#6-modus-2-terminieren) ·
 [7 Modus 3](#7-modus-3-direkt-zum-ziel-ohne-tunnel) · [8 Steuerung bei ipv64](#8-steuerung-bei-ipv64) · [9 Node64](#9-node64) ·
 [10 Edge-Dienst](#10-edge-dienst-auf-srv07srv08) · [11 Sicherheit](#11-sicherheit) · [12 Phasen](#12-phasen) ·
-[13 Risiken und offene Punkte](#13-risiken-und-offene-punkte)
+[13 Risiken und offene Punkte](#13-risiken-und-offene-punkte) ·
+[14 Grundlagen-Check](#14-grundlagen-check-cloudflare-in-klein)
 
 ---
 
@@ -207,7 +208,8 @@ Besucher ──► srv07/srv08 (TLS endet hier, Schutz) ──► Ziel des Nutze
 | Tabelle | Inhalt |
 |---|---|
 | `cdn64o_tunnels` | je Node: `id`, `userid`, `node_id`, `name`, `token_hash`, `created`, `last_seen_srv07/08`, `node_version`, `status` (aktiv/gesperrt) |
-| `cdn64o_hosts` | je Name: `id`, `userid`, `tunnel_id` (leer bei Modus 3), `fqdn`, `subdomain_id` (→ `subdomains.id`), `wildcard`, `mode` (1/2/3), `status` (pending, dns, edge, cert, active, error, disabling, blocked), `error`, `created`, `updated`, `created_via` (node/web) |
+| `cdn64o_hosts` | je Name: `id`, `userid`, `fqdn`, `subdomain_id` (→ `subdomains.id`), `wildcard`, `mode` (1/2/3), `status` (pending, dns, edge, cert, active, error, disabling, blocked), `error`, `created`, `updated`, `created_via` (node/web) |
+| `cdn64o_host_tunnels` | Modus 1/2: welche Tunnels einen Host bedienen (`host_id`, `tunnel_id`, `priority`) – mehrere Nodes je Host möglich (G3) |
 | `cdn64o_targets` | nur Modus 3: `host_id`, `source` (records/fest), `target` (IP oder Hostname), `port`, `scheme` (http/https), `verify_tls`, `prefer_ipv6`, `frontend` (https/nur http), `websocket`, `cache_mb` |
 | `cdn64o_acl` | Erlauben-/Sperrliste je Host (alle Modi auf den Servern; Modus 1 nur IP-basiert) |
 | `cdn64o_mappings` | Portmapper (Modus 3): `host_id`, `listen_port`, `transport` (tcp/udp), `target_port`, Server-Zuteilung |
@@ -434,3 +436,50 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 - **Bandbreite über zwei Server:** Der Abgleich zwischen srv07 und srv08 erlaubt kurz höhere Spitzen; Genauigkeit in
   T3 messen. In Modus 1/2 begrenzt ohnehin auch der Upload zu Hause.
 - **Werte für `cdn_bandwidth`:** Supporter-Wert legt Dennis fest (Business/Company 0 = frei).
+
+## 14. Grundlagen-Check („Cloudflare in klein“)
+
+Prüfung vor dem Start (2026-10-17): Verbindungsaufbau, Sicherheit, Einfachheit. Funktionen kommen später; hier steht,
+was in die **Grundlage** gehört, weil es sich später nur schwer nachrüsten lässt.
+
+### 14.1 Zielgruppe nur IPv6 – funktioniert Modus 1?
+
+Ja. Der Besucher kommt per IPv4 an srv07/srv08 (dort IPv4 und IPv6), der Server reicht die Verbindung roh in den
+Tunnel, den die Node **über IPv6** geöffnet hat. Die Node braucht nur ausgehendes IPv6 (oder IPv4 über DS-Lite/CGNAT)
+und keinen offenen Port. Der Besucher sieht nur die Server-Adressen; TLS endet trotzdem erst zu Hause.
+
+### 14.2 In die Grundlage aufnehmen
+
+| # | Punkt | Warum | Phase |
+|---|---|---|---|
+| G1 | **Tunnel auch über Port 443** (UDP mit ALPN `cdn64-tunnel/1` neben HTTP/3, TCP+TLS mit eigener ALPN) zusätzlich zu 7844 | Manche Netze lassen nur 443 raus; QUIC trennt Tunnel und HTTP/3 sauber über ALPN auf demselben Port | T1 |
+| G2 | **Server-Liste aus der API** statt fest srv07/srv08, mit IPs als Rückfall und Schlüssel-Pin je Server | Später weitere Server ohne Node-Update; Tunnel geht auch, wenn der DNS der Node klemmt; Schutz gegen falsche Zertifikate | T1/T3 |
+| G3 | **Host an mehrere Tunnels** im Datenmodell (`cdn64o_host_tunnels` statt einer `tunnel_id`) | Zwei Nodes für denselben Dienst (Ausfallsicherheit, lokale Gruppe) später ohne Umbau | T3 |
+| G4 | **MTU und UDP-Puffer:** QUIC mit Path-MTU-Discovery und kleinem Start (DS-Lite, PPPoE, IPv6-Tunnel); Hinweis in der Node, wenn die UDP-Puffer des Docker-Hosts zu klein sind (`net.core.rmem_max` lässt sich nur auf dem Host setzen) | Sonst hängen Verbindungen oder der Durchsatz bricht ein | T1 |
+| G5 | **Sanftes Umschalten:** Server kündigt Neustart an (GOAWAY), Node baut zuerst zum anderen Server auf; Deploy immer ein Server nach dem anderen | Updates ohne Ausfall für Besucher | T1 |
+| G6 | **Ausgefallenen Server aus dem DNS nehmen:** ipv64 überwacht beide; ist einer > 60 s weg, entfernt ipv64 seine A/AAAA aus allen CDN64-Hosts und trägt sie danach wieder ein | Browser probieren nicht zuverlässig die zweite Adresse | T3/T6 |
+| G7 | **Schutz der Server selbst:** SYN-Cookies, QUIC-Adressprüfung (Retry) unter Last, Zeitlimit für nicht angemeldete Tunnels, Limits je IP vor TLS | Die Server sind ab Tag 1 öffentlich angreifbar | T0/T1 |
+| G8 | **Protokoll-Version** im HELLO, Server können Version N und N−1 | Node und Server lassen sich getrennt aktualisieren | T1 |
+| G9 | **Anfrage-ID** (`CDN64-Ray`) je Verbindung/Anfrage in den Logs von Server und Node | Support: eine ID zeigt den ganzen Weg | T2 |
+| G10 | **Host-Bindung:** Tunnel nur für Hosts desselben Accounts; in Modus 2/3 muss der Host-Kopf zum SNI-Namen passen (kein Domain-Fronting); HTTP über Go `net/http` normalisiert (kein Request-Smuggling) | Mandantentrennung zwischen Kunden | T2/T5 |
+| G11 | **Not-Aus und Missbrauch:** Sperre je Host und je Account von ipv64 aus (wirkt in Sekunden), Abuse-Kontakt, Nutzungsbedingungen | In Modus 1 sehen wir keine Inhalte, unsere IPs stehen aber im DNS | T3 (Technik), Dennis (Texte) |
+| G12 | **Datenschutz:** Besucher-IPs laufen über unsere Server – Hinweis in Datenschutzerklärung/AV, Logs kurz und ohne Inhalte | Pflicht bei „Cloudflare in klein“ | T6, Dennis |
+
+### 14.3 Einfacher für die Nutzer
+
+| # | Punkt | Phase |
+|---|---|---|
+| E1 | **Standard Modus 1** (Ende-zu-Ende, kein Zertifikat auf unseren Servern, wenig Fehlerquellen); Modus 2 als „mehr Schutz + HTTP/3“ wählbar | T4 |
+| E2 | **Kein API-Key verbunden?** Der Schalter führt direkt durch „Account verbinden“ und kommt danach zurück | T4 |
+| E3 | **Klare Fehlertexte** mit Abhilfe: „UDP gesperrt – TCP wird genutzt“, „Domain nicht im Account“, „Kontingent voll“, „Node offline“ | T4 |
+| E4 | **Node offline:** Server zeigen in Modus 2/3 eine verständliche Seite (in Modus 1 auf Port 80); auf Wunsch legt die Node beim Einschalten gleich einen **Healthcheck** für den CDN-Host an und meldet Ausfälle | T4/T5 |
+| E5 | **Im Heimnetz nicht über das Internet:** DNS64 der Node beantwortet CDN64-Hosts im LAN mit der lokalen Adresse (geteilter DNS), sonst ginge jeder Aufruf aus dem Heimnetz über srv07/srv08 und zurück | T4 |
+| E6 | **Webseite ohne Node:** Hinweis mit Docker-Befehl „Node64 installieren“, damit Modus 1/2 erreichbar sind | T7 |
+
+### 14.4 Zur Entscheidung vor T3
+
+- **Eigene IPv6 je Host:** Beide Server haben ein ganzes /64. Jeder Host könnte auf jedem Server eine eigene
+  IPv6-Adresse bekommen. Vorteile: Portmapper ohne Port-Kollisionen über IPv6, später HTTP/3 und andere Protokolle in
+  Modus 1 ohne SNI-Lesen, ein Angriff auf einen Kunden trifft nicht die Adresse aller. IPv4 bleibt geteilt. Muss vor
+  dem Datenmodell (T3) entschieden werden.
+- **Standard-Modus:** Modus 1 (Empfehlung) oder Modus 2.
