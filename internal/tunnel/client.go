@@ -211,13 +211,15 @@ func (c *Client) connect(ctx context.Context, e Edge, useTCP bool) (Session, err
 				sess = &quicSession{qc}
 			}
 		}
-		if err == nil {
-			err = c.hello(dctx, sess)
+		cancel()
+		if err == nil { // Anmeldung mit eigener Frist (der Handschlag darf die 5 s fast aufbrauchen)
+			hctx, hcancel := context.WithTimeout(ctx, 10*time.Second)
+			err = c.hello(hctx, sess)
+			hcancel()
 			if err != nil {
 				_ = sess.Close("hello")
 			}
 		}
-		cancel()
 		if err == nil {
 			return sess, nil
 		}

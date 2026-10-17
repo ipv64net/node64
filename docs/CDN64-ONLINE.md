@@ -375,6 +375,23 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 - **Messen:** Durchsatz, Latenz, Verhalten hinter NAT (node64-cdn auf der Box: NAT, ohne globales IPv6),
   Wiederverbinden bei Unterbrechung, UDP gesperrt → TCP.
 - **Fertig, wenn:** Tunnel steht stabil > 24 h, Wiederverbinden < 5 s, Messwerte dokumentiert.
+- **Stand 2026-10-17 (Commits 0254843 ff.):** umgesetzt und live gemessen; offen nur der 24-h-Lauf (läuft seit
+  2026-10-17 ~18:00 mit node64-cdn auf der Box).
+
+  | Messung | Ergebnis |
+  |---|---|
+  | Box (NAT, kein IPv6) → srv07/srv08 | beide per QUIC über IPv4 verbunden, kein offener Port |
+  | PC mit nativem IPv6 → srv07/srv08 | beide per QUIC **über IPv6** verbunden |
+  | Kleine Anfrage Server → Tunnel → Node → Dienst | ca. 28 ms (RTT 26–35 ms) |
+  | 200 MB durch den Tunnel (QUIC, IPv4) | 6,1 MB/s ≈ 49 Mbit/s = voller Upload des Anschlusses (SSH-Vergleich ohne Tunnel: 37 Mbit/s) |
+  | 100 MB durch den Tunnel (QUIC, IPv6) | 5,8–6,1 MB/s ≈ 47 Mbit/s |
+  | UDP gesperrt | nach ca. 20 s von selbst auf TCP (beide Server), 200 MB mit 5,4 MB/s ≈ 43 Mbit/s |
+  | Neustart eines Servers (GOAWAY) | Node nach 1,3 s wieder verbunden, Anfrage danach sofort ok |
+  | Let's Encrypt für srv07/srv08.cdn64.de | per HTTP-01 beim Start geholt |
+
+  Erkenntnis G4: Auf Docker-Hosts mit Standard-`rmem_max` (208 KiB) meldet quic-go zu kleine UDP-Puffer; bei 50 Mbit/s
+  ohne Folgen, bei schnelleren Anschlüssen bremst es → Hinweis mit Befehl in der Node (T4).
+  Gefunden und behoben: Anmeldung nach langem Handschlag lief in die 5-s-Frist des Verbindungsaufbaus (eigene Frist 10 s).
 
 ### T2 – Modus 1 durchreichen
 - SNI-Router (443) und Host-Router (80) auf den Servern, Stream-Kopf mit Besucher-IP, Ausweichweg über den Nachbarn,

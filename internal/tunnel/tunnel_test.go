@@ -157,13 +157,17 @@ func TestTunnelReconnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go c.Run(ctx)
-	p := <-f.peers
+	waitFor(t, "connected", func() bool { return c.Status()[0].Connected })
+	r0 := c.Status()[0].Reconnects
 	addr := f.addrQ.String()
-	p.GoAway()
-	_ = p.Session.Close("restart")
 	f.srv.Close()
+	for len(f.peers) > 0 { // alle Verbindungen des alten Servers trennen (wie beim Neustart)
+		p := <-f.peers
+		p.GoAway()
+		_ = p.Session.Close("restart")
+	}
 	waitFor(t, "disconnected", func() bool { return !c.Status()[0].Connected })
-	srv2 := &Server{Name: "e1", TLS: f.srv.TLS, Up: func(p *Peer) { f.peers <- p }}
+	srv2 := &Server{Name: "e1", TLS: f.srv.TLS}
 	var err error
 	for i := 0; i < 50; i++ { // quic-go gibt den UDP-Port erst frei, wenn die letzte Verbindung zu ist
 		if _, err = srv2.ServeQUIC(addr); err == nil {
@@ -175,12 +179,13 @@ func TestTunnelReconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer srv2.Close()
-	select {
-	case <-f.peers:
-	case <-time.After(8 * time.Second):
-		t.Fatal("no reconnect")
+	for i := 0; i < 400; i++ {
+		if s := c.Status()[0]; s.Connected && s.Reconnects > r0 {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
-	waitFor(t, "connected again", func() bool { s := c.Status()[0]; return s.Connected && s.Reconnects == 2 })
+	t.Fatalf("not connected again: %+v", c.Status()[0])
 }
 
 // Ohne Anmeldung wird nach der Frist getrennt (G7).
