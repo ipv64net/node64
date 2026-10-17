@@ -31,6 +31,8 @@ type Config struct {
 	PeerSecret   string        `yaml:"peer_secret"`  // gemeinsames Geheimnis der Server
 	Peers        []PeerEntry   `yaml:"peers"`        // Nachbarserver fuer den Ausweichweg
 	Shield       ShieldConfig  `yaml:"shield"`       // grober Schutz vor der Weitergabe
+	APIURL       string        `yaml:"api_url"`      // ipv64 API v2, z. B. https://ipv64.net/api/v2; leer = nur feste Konfiguration
+	APISecret    string        `yaml:"api_secret"`   // Server-Geheimnis (bei ipv64 als SHA-256 in cdn64o_edges)
 }
 
 // HostEntry: ein Name (auch *.domain) und der Tunnel, der ihn bedient.
@@ -82,6 +84,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if c.TunnelListen != "" && c.TLSCert == "" && c.PublicHost == "" {
 		return nil, errors.New("config: public_host fehlt (Zertifikat fuer den Tunnel)")
+	}
+	if c.APIURL != "" && len(c.APISecret) < 32 {
+		return nil, errors.New("config: api_secret fehlt oder zu kurz (mindestens 32 Zeichen)")
 	}
 	if c.PeerListen != "" && len(c.PeerSecret) < 32 {
 		return nil, errors.New("config: peer_secret fehlt oder zu kurz (mindestens 32 Zeichen)")

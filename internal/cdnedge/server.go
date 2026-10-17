@@ -41,20 +41,24 @@ type Server struct {
 	streams atomic.Int64              // offene Daten-Streams
 	total   atomic.Int64
 
-	tlsConf   *tls.Config            // Zertifikat fuer Tunnel- und Nachbar-Port
-	routes    atomic.Pointer[routes] // Name -> Tunnel
-	stats     *stats                 // je Name
-	guard     *guard                 // grober Schutz
-	local     *chanListener          // Port 80 ohne bekannten Namen -> eigene Seite
-	peerRoots *x509.CertPool         // Tests: CA der Nachbarn (sonst System)
-	lns       []net.Listener         // offene Besucher-/Nachbar-Ports
+	tlsConf   *tls.Config               // Zertifikat fuer Tunnel- und Nachbar-Port
+	routes    atomic.Pointer[routes]    // Name -> Tunnel
+	stats     *stats                    // je Name
+	guard     *guard                    // grober Schutz
+	local     *chanListener             // Port 80 ohne bekannten Namen -> eigene Seite
+	peerRoots *x509.CertPool            // Tests: CA der Nachbarn (sonst System)
+	apiCfg    atomic.Pointer[apiConfig] // letzter Stand von ipv64
+	apist     *apiState
+	bw        *bandwidth
+	lns       []net.Listener // offene Besucher-/Nachbar-Ports
 }
 
 // New legt den Dienst an.
 func New(cfg *Config, log *slog.Logger, version string) *Server {
 	s := &Server{cfg: cfg, log: log, version: version, started: time.Now(), peers: map[string][]*tunnel.Peer{},
-		stats: &stats{m: map[string]*hostStat{}}, guard: newGuard(cfg.Shield), local: newChanListener(&net.TCPAddr{})}
-	s.routes.Store(newRoutes(cfg.Hosts))
+		stats: &stats{m: map[string]*hostStat{}}, guard: newGuard(cfg.Shield), local: newChanListener(&net.TCPAddr{}),
+		apist: &apiState{sent: map[string][3]int64{}, client: &http.Client{Timeout: 30 * time.Second}}, bw: newBandwidth()}
+	s.routes.Store(newRoutes(cfg.Hosts, nil))
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("/", notFound)
@@ -86,6 +90,8 @@ func (s *Server) Run(ctx context.Context) error {
 	bctx, bcancel := context.WithCancel(ctx)
 	defer bcancel()
 	go s.blocklistLoop(bctx)
+	go s.apiLoop(bctx)
+	go s.rateLoop(bctx)
 	go func() {
 		t := time.NewTicker(time.Minute)
 		defer t.Stop()
@@ -188,13 +194,26 @@ func (s *Server) startTunnel() error {
 	return nil
 }
 
-// auth: Tunnel bekannt und Token passt (Vergleich der Hashes in konstanter Zeit).
+// auth: Tunnel bekannt (feste Konfiguration oder ipv64, nicht gesperrt) und Token passt (Hashes in konstanter Zeit).
 func (s *Server) auth(h tunnel.Hello) error {
 	sum := sha256.Sum256([]byte(h.Token))
+	match := func(id, hash string) bool {
+		want, err := hex.DecodeString(hash)
+		return id == h.Tunnel && err == nil && subtle.ConstantTimeCompare(want, sum[:]) == 1
+	}
 	for _, t := range s.cfg.Tunnels {
-		want, err := hex.DecodeString(t.TokenSHA256)
-		if t.ID == h.Tunnel && err == nil && subtle.ConstantTimeCompare(want, sum[:]) == 1 {
+		if match(t.ID, t.TokenSHA256) {
 			return nil
+		}
+	}
+	if c := s.apiCfg.Load(); c != nil {
+		for _, t := range c.Tunnels {
+			if match(t.ID, t.TokenSHA256) {
+				if t.Blocked {
+					return errors.New("tunnel blocked")
+				}
+				return nil
+			}
 		}
 	}
 	return errors.New("unknown tunnel or token")
@@ -239,9 +258,24 @@ func (s *Server) peer(id string) *tunnel.Peer {
 	return nil
 }
 
+// peerFor: erste verbundene Node aus einer Liste von Tunnels (Reihenfolge = Prioritaet).
+func (s *Server) peerFor(ids []string) *tunnel.Peer {
+	for _, id := range ids {
+		if id != "" {
+			if p := s.peer(id); p != nil {
+				return p
+			}
+		}
+	}
+	return nil
+}
+
 // open: Daten-Stream zu einem Tunnel mit Kopf; zaehlt offene Streams.
 func (s *Server) open(ctx context.Context, id string, h tunnel.Header) (net.Conn, error) {
-	p := s.peer(id)
+	return s.openPeer(ctx, s.peer(id), h)
+}
+
+func (s *Server) openPeer(ctx context.Context, p *tunnel.Peer, h tunnel.Header) (net.Conn, error) {
 	if p == nil {
 		return nil, errors.New("tunnel not connected")
 	}
@@ -333,6 +367,16 @@ type Health struct {
 	Open     int64               `json:"conns_open,omitempty"` // Besucher-Verbindungen gerade
 	Rejected int64               `json:"rejected,omitempty"`   // vom Schutz abgewiesen seit dem Start
 	Blocked  int                 `json:"blocklist_entries,omitempty"`
+	API      *APIInfo            `json:"api,omitempty"`
+}
+
+// APIInfo: Stand der Steuerung von ipv64 (nur lokal sichtbar).
+type APIInfo struct {
+	Version string `json:"config_version,omitempty"`
+	Hosts   int    `json:"hosts"`
+	Tunnels int    `json:"tunnels"`
+	LastOK  string `json:"last_ok,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 // HostInfo: Zaehler eines Namens seit dem Start (nur lokal sichtbar).
@@ -378,6 +422,19 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 				NoTunnel: st.NoTunnel.Load()}
 		}
 		s.stats.mu.Unlock()
+		if s.cfg.APIURL != "" {
+			ai := &APIInfo{}
+			if c := s.apiCfg.Load(); c != nil {
+				ai.Version, ai.Hosts, ai.Tunnels = c.Version, len(c.Hosts), len(c.Tunnels)
+			}
+			s.apist.mu.Lock()
+			if !s.apist.lastOK.IsZero() {
+				ai.LastOK = s.apist.lastOK.UTC().Format(time.RFC3339)
+			}
+			ai.Error = s.apist.lastErr
+			s.apist.mu.Unlock()
+			h.API = ai
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")

@@ -23,35 +23,60 @@ import (
 // Name gehoert. Ist die Node gerade nicht mit diesem Server verbunden, geht die Verbindung ueber den Nachbarserver
 // (Abschnitt 4.3 der Planung). Unbekannte Namen: 443 schliessen, 80 an die eigene Seite (/health, ACME, 404).
 
-// routes: Name -> Tunnel (exakt oder *.domain).
-type routes struct {
-	exact map[string]string
-	wild  map[string]string // "domain" fuer *.domain
+// route: ein Name hinter CDN64 online (aus ipv64 oder fest in der Konfiguration).
+type route struct {
+	Name    string   // wie bei ipv64 eingetragen (Zaehler und Meldung laufen auf diesen Namen)
+	Tunnels []string // Tunnels, die ihn bedienen (der erste verbundene gewinnt)
+	HostID  int      // cdn64o_hosts.id (0 = feste Testkonfiguration, wird nicht gemeldet)
+	UserID  int
+	Blocked string // gesetzt = abweisen (z. B. "traffic")
 }
 
-func newRoutes(list []HostEntry) *routes {
-	r := &routes{exact: map[string]string{}, wild: map[string]string{}}
-	for _, h := range list {
-		n := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(h.Name), "."))
+// routes: Name -> route (exakt oder *.domain).
+type routes struct {
+	exact map[string]*route
+	wild  map[string]*route // "domain" fuer *.domain
+}
+
+func normName(n string) string { return strings.ToLower(strings.TrimSuffix(strings.TrimSpace(n), ".")) }
+
+// newRoutes: feste Eintraege und die Hosts von ipv64 (Wildcard-Domains bekommen *.name dazu, wie im DNS).
+func newRoutes(static []HostEntry, api *apiConfig) *routes {
+	r := &routes{exact: map[string]*route{}, wild: map[string]*route{}}
+	for _, h := range static {
+		n := normName(h.Name)
 		if d, ok := strings.CutPrefix(n, "*."); ok {
-			r.wild[d] = h.Tunnel
+			r.wild[d] = &route{Name: n, Tunnels: []string{h.Tunnel}}
 		} else if n != "" {
-			r.exact[n] = h.Tunnel
+			r.exact[n] = &route{Name: n, Tunnels: []string{h.Tunnel}}
+		}
+	}
+	if api != nil {
+		for _, h := range api.Hosts {
+			n := normName(h.Name)
+			if n == "" || h.Mode != 1 { // T3: nur durchreichen
+				continue
+			}
+			e := &route{Name: n, Tunnels: h.Tunnels, HostID: h.ID, UserID: h.UserID, Blocked: h.Blocked}
+			r.exact[n] = e
+			if h.Wildcard {
+				r.wild[n] = e
+			}
 		}
 	}
 	return r
 }
 
-// lookup: Tunnel fuer einen Namen ("" = unbekannt).
-func (r *routes) lookup(name string) string {
-	name = strings.ToLower(strings.TrimSuffix(name, "."))
-	if t, ok := r.exact[name]; ok {
-		return t
+// lookup: route fuer einen Namen (nil = unbekannt).
+func (r *routes) lookup(name string) *route {
+	name = normName(name)
+	if e, ok := r.exact[name]; ok {
+		return e
 	}
 	if i := strings.IndexByte(name, '.'); i > 0 {
 		return r.wild[name[i+1:]]
 	}
-	return ""
+	return nil
 }
 
 // hostStat: Zaehler je Name (lokal in /health; ab T3 an ipv64).
@@ -119,7 +144,7 @@ func (s *Server) handle80(c net.Conn) {
 	_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
 	host, data := peekHTTPHost(c)
 	_ = c.SetReadDeadline(time.Time{})
-	if host != "" && s.routes.Load().lookup(host) != "" {
+	if host != "" && s.routes.Load().lookup(host) != nil {
 		s.forward(c, tunnel.KindHTTP80, host, 80, data, c.RemoteAddr().String(), false)
 		return
 	}
@@ -153,14 +178,20 @@ func peekHTTPHost(c net.Conn) (string, []byte) {
 }
 
 // forward: Verbindung in den Tunnel des Namens; ohne Tunnel hier ueber den Nachbarn (nie zurueck, fromPeer).
+// Gezaehlt und begrenzt (Bandbreite je Account) wird nur hier, beim Server mit dem Tunnel.
 func (s *Server) forward(c net.Conn, kind, host string, port int, data []byte, client string, fromPeer bool) {
-	tid := s.routes.Load().lookup(host)
-	if tid == "" {
+	re := s.routes.Load().lookup(host)
+	if re == nil {
 		_ = c.Close()
 		return
 	}
-	st := s.stats.of(host)
-	if s.peer(tid) == nil {
+	if re.Blocked != "" {
+		blockedReply(c, kind)
+		return
+	}
+	st := s.stats.of(re.Name)
+	p := s.peerFor(re.Tunnels)
+	if p == nil {
 		if !fromPeer && s.viaPeer(c, kind, host, port, data, client, st) {
 			return
 		}
@@ -169,7 +200,7 @@ func (s *Server) forward(c net.Conn, kind, host string, port int, data []byte, c
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	ts, err := s.open(ctx, tid, tunnel.Header{Kind: kind, Client: client, Host: host, Port: port})
+	ts, err := s.openPeer(ctx, p, tunnel.Header{Kind: kind, Client: client, Host: host, Port: port})
 	cancel()
 	if err != nil {
 		st.NoTunnel.Add(1)
@@ -182,11 +213,44 @@ func (s *Server) forward(c net.Conn, kind, host string, port int, data []byte, c
 			_ = c.Close()
 			return
 		}
+		st.BytesIn.Add(int64(len(data)))
 	}
 	st.Conns.Add(1)
-	in, out := tunnel.Join(c, ts)
-	st.BytesIn.Add(in + int64(len(data)))
-	st.BytesOut.Add(out)
+	tunnel.Join(&meter{Conn: c, n: &st.BytesIn, bw: s.bw, uid: re.UserID}, &meter{Conn: ts, n: &st.BytesOut, bw: s.bw, uid: re.UserID})
+}
+
+// meter zaehlt gelesene Bytes laufend (Meldung jede Minute, auch bei langen Verbindungen) und haelt das
+// Bandbreiten-Limit des Accounts ein.
+type meter struct {
+	net.Conn
+	n   *atomic.Int64
+	bw  *bandwidth
+	uid int
+}
+
+func (m *meter) Read(p []byte) (int, error) {
+	n, err := m.Conn.Read(p)
+	if n > 0 {
+		m.n.Add(int64(n))
+		m.bw.take(m.uid, n)
+	}
+	return n, err
+}
+
+func (m *meter) CloseWrite() error {
+	if cw, ok := m.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return m.Conn.Close()
+}
+
+// blockedReply: gesperrter Name (z. B. Traffic aufgebraucht) - Port 80 bekommt eine neutrale 503, 443 wird getrennt.
+func blockedReply(c net.Conn, kind string) {
+	if kind == tunnel.KindHTTP80 {
+		_ = c.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		_, _ = io.WriteString(c, "HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 24\r\nConnection: close\r\n\r\n503 service unavailable\n")
+	}
+	_ = c.Close()
 }
 
 // ---------------------------------------------------------------- Nachbarserver
@@ -247,6 +311,11 @@ func (s *Server) servePeer(ln net.Listener) {
 				return
 			}
 			_ = c.SetReadDeadline(time.Time{})
+			if h.Kind == "rates" { // Bandbreite: Raten des Nachbarn
+				s.readRates(br)
+				_ = c.Close()
+				return
+			}
 			rest, _ := br.Peek(br.Buffered())
 			pc := &prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(append([]byte(nil), rest...)), c)}
 			s.forward(pc, h.Kind, h.Host, h.Port, nil, h.Client, true)

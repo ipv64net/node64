@@ -428,6 +428,21 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 - **Fertig, wenn:** Ein-/Ausschalten per API mit Testaccount 522 inklusive DNS hin und zurück, Kontingent mit altem
   CDN zusammen gezählt, Server übernehmen Änderungen in < 30 s, ipv64-Ausfall unterbricht keine Tunnels, ein
   künstlich kleines Traffic-Limit sperrt den Test-Host, ein Bandbreiten-Limit greift über beide Server.
+- **Stand 2026-10-17:** umgesetzt, wartet auf das Einspielen bei ipv64 (Anleitung
+  `deploy/web/T3-CDN64-ONLINE-VORHER-NACHHER.md`).
+  - SQL `deploy/sql/cdn64_online.sql` (Tabellen `cdn64o_*`, `user_class.cdn_bandwidth`, srv07/srv08 mit dem SHA-256
+    ihres Server-Geheimnisses), PHP `deploy/web/api_v2_cdn64o.php`.
+  - DNS-Einträge der Server mit `cdn_tmp = 3` in `subdomain_records`: `update.php` (nimmt bei gleichem Namen den
+    Eintrag mit kleinstem `cdn_tmp`) überspringt sie, API v2 schützt sie vor Änderungen; ohne diese Markierung könnte
+    ein DynDNS-Update bei Namen ohne eigenen A-Eintrag den Server-Eintrag überschreiben.
+  - Server: `api.go` (Konfiguration alle 10 s mit ETag, Zwischenspeicher `config.json`, Meldung jede Minute mit
+    laufend gezählten Bytes), `bandwidth.go` (Limit je Account, Raten jede Sekunde mit dem Nachbarn abgeglichen),
+    gesperrte Hosts: Port 80 → 503, 443 → getrennt; Tunnels, die bei ipv64 fehlen oder gesperrt sind, werden getrennt.
+  - Getestet: PHP in einer Testumgebung (MariaDB 10.5 + PHP 8.3, 37 Prüfungen: Kontingent mit altem CDN, Klasse,
+    DNS hin und zurück, Konflikte, PowerDNS-Fehler mit Rücknahme, ETag, Server-Anmeldung, Traffic-Sperre und Freigabe
+    im neuen Monat), Go-Tests (Fake-ipv64, Bandbreite) und Durchstich echter cdn64-edge + Test-Node gegen das PHP
+    (Weiterleitung inkl. Wildcard und Port 80, Meldung landet in `cdn64o_traffic`, Sperre → 503, Ausschalten wirkt
+    in 10 s). srv07/srv08 laufen mit 0.4.0 und warten auf die Endpunkte (bis dahin feste Konfiguration).
 
 ### T4 – Ein Klick in der Node
 - Schalter, Fortschritt, Selbsttest, Badges, Fehlertexte, Doku (`docs/CDN64.md`, README), OpenAPI der Node.

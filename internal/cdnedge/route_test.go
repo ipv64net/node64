@@ -146,7 +146,7 @@ func TestPassthroughAndPeer(t *testing.T) {
 	if got := get(cfgA.ListenHTTPS, "x.wild.test"); !strings.HasPrefix(got, "node tls x.wild.test 127.0.0.1:") {
 		t.Fatalf("via peer: %q", got)
 	}
-	if v := a.stats.of("x.wild.test").ViaPeer.Load(); v != 1 {
+	if v := a.stats.of("*.wild.test").ViaPeer.Load(); v != 1 {
 		t.Fatalf("via peer counter: %d", v)
 	}
 	if got := get(cfgB.ListenHTTPS, "unknown.test"); !strings.HasPrefix(got, "ERR") {
