@@ -80,6 +80,7 @@ type Module struct {
 	findChecks CheckFinder  // Healthchecks lesen ("ueberwacht" in der Liste; nil = nicht verfuegbar)
 	bl         *blocklists  // ipv64-Blocklisten
 	lim        *limiter     // Schutz vor Ueberlastung
+	online     onlineState  // CDN64 online (Tunnel zu srv07/srv08)
 	dnsrec     DNSRecords   // DNS-Records bei ipv64 (nil = nicht verfuegbar)
 
 	sapply sync.Mutex // ein Abgleich der Streams gleichzeitig
@@ -167,6 +168,7 @@ func (m *Module) Start(ctx context.Context) error {
 	m.limLoad(ctx)
 	m.apply(ctx)
 	m.applyStreams(ctx)
+	m.onlineStart(ctx)
 	go func() { defer m.wg.Done(); m.reachLoop(ctx) }()
 	m.wg.Add(1)
 	go func() { defer m.wg.Done(); m.blLoop(ctx) }()
@@ -191,6 +193,7 @@ func (m *Module) Stop(ctx context.Context) error {
 	cancel := m.cancel
 	m.cancel = nil
 	m.mu.Unlock()
+	m.onlineStop()
 	m.applyMu.Lock() // laufendes apply abwarten, danach meldet keins mehr an
 	if m.edge != nil {
 		m.edge.Remove(Name)

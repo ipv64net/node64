@@ -190,6 +190,7 @@ func run() error {
 	modules.Register(dnsModule)
 	// Reverse-Proxy ueber den gemeinsamen Eingang
 	cdnModule := cdn64.New(st, logger.Slog(), edgeSrv, certMgr, Version)
+	cdnModule.SetSecrets(box)   // Tunnel-Token (CDN64 online)
 	cdnModule.SetPorts(portReg) // Streams pruefen ihre Ports
 	cdnModule.SetDataDir(cfg.DataDir)
 	cdnModule.SetDNSRecords(cdn64.IPv64Records(ipv64Key))                          // DNS-Eintrag bei ipv64 beim Anlegen eines Hosts

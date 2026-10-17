@@ -705,6 +705,9 @@
       "target": "target busy",
       "exploit": "exploit block",
       "acl": "access list"
+    },
+    "online": {
+      "err_conf": "Check the tunnel settings: tunnel, token and at least one server (name, host)."
     }
   },
   "certs": {

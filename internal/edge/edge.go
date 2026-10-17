@@ -179,6 +179,8 @@ type Edge struct {
 	block    atomic.Pointer[BlockFunc] // Sperrliste (z. B. ipv64-Blocklisten von CDN64), vor TLS geprueft
 	gate     atomic.Pointer[ConnGate]  // Verbindungs-Limits (z. B. Schutz vor Ueberlastung von CDN64), nach der Sperrliste
 	defClose atomic.Bool
+	vonce    sync.Once // interne Server fuer ServeConn (conn.go)
+	virt     *virtual
 	fallback struct {
 		once sync.Once
 		crt  *tls.Certificate
@@ -440,6 +442,7 @@ func (e *Edge) Close(ctx context.Context) {
 		_ = s(ctx)
 	}
 	e.closePassthrough(true)
+	e.closeVirtual(ctx)
 	e.stopping.Wait()
 }
 
@@ -793,7 +796,7 @@ func (e *Edge) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 		notFound(w)
 		return
 	}
-	if rt.HTTP3 && r.ProtoMajor < 3 && e.h3On.Load() {
+	if rt.HTTP3 && r.ProtoMajor < 3 && e.h3On.Load() && !viaTunnel(r) {
 		w.Header().Set("Alt-Svc", `h3=":`+strconv.Itoa(e.Config().publicPort())+`"; ma=86400`)
 	}
 	rt.Handler.ServeHTTP(w, r)

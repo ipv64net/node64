@@ -705,6 +705,9 @@
       "target": "Ziel ausgelastet",
       "exploit": "Exploit-Sperre",
       "acl": "Zugriffsliste"
+    },
+    "online": {
+      "err_conf": "Tunnel-Daten prüfen: Tunnel, Token und mindestens ein Server (Name, Host)."
     }
   },
   "certs": {
