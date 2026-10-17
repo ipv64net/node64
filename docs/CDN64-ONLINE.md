@@ -359,6 +359,13 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 - Zertifikat für `srv07.cdn64.de`/`srv08.cdn64.de` (nach OK).
 - **Fertig, wenn:** beide Server liefern `/health` per IPv4 und IPv6, Deploy und Rollback getestet.
 - Betrifft nur srv07/srv08; Node, ipv64.net und altes CDN bleiben unberührt.
+- **Stand 2026-10-17:** erledigt bis auf Zertifikat und Überwachung (warten auf Dennis).
+  - Einrichtung: `deploy/server/setup-edge.sh` auf beiden Servern (Benutzer `cdn64-edge`, nftables, Sicherheitsupdates,
+    sysctl, systemd-Unit mit Härtung, `systemd-analyze security` 3.2).
+  - Dienst: `cdn64-edge` 0.1.0 mit `/health` auf Port 80 (von außen nur Status/Name/Version).
+  - Geprüft: von außen per IPv4 und IPv6, Rollback mit kaputtem Binary (srv08 kehrt zu 0.1.0 zurück), Neustart beider
+    Server (Dienst, Firewall, sysctl wieder aktiv).
+  - Deploy: `bash deploy/server/edge-deploy.sh <version> [cdn7 cdn8]`.
 
 ### T1 – Tunnel
 - Protokoll (`internal/tunnel`): QUIC-Verbindung, Anmeldung, Steuer-Stream, Keepalive, Wiederverbinden, beide Server,
@@ -476,10 +483,7 @@ und keinen offenen Port. Der Besucher sieht nur die Server-Adressen; TLS endet t
 | E5 | **Im Heimnetz nicht über das Internet:** DNS64 der Node beantwortet CDN64-Hosts im LAN mit der lokalen Adresse (geteilter DNS), sonst ginge jeder Aufruf aus dem Heimnetz über srv07/srv08 und zurück | T4 |
 | E6 | **Webseite ohne Node:** Hinweis mit Docker-Befehl „Node64 installieren“, damit Modus 1/2 erreichbar sind | T7 |
 
-### 14.4 Zur Entscheidung vor T3
+### 14.4 Entschieden (Dennis, 2026-10-17)
 
-- **Eigene IPv6 je Host:** Beide Server haben ein ganzes /64. Jeder Host könnte auf jedem Server eine eigene
-  IPv6-Adresse bekommen. Vorteile: Portmapper ohne Port-Kollisionen über IPv6, später HTTP/3 und andere Protokolle in
-  Modus 1 ohne SNI-Lesen, ein Angriff auf einen Kunden trifft nicht die Adresse aller. IPv4 bleibt geteilt. Muss vor
-  dem Datenmodell (T3) entschieden werden.
-- **Standard-Modus:** Modus 1 (Empfehlung) oder Modus 2.
+- **Keine eigene IPv6 je Host:** Die Adressen der Server bleiben für alle Hosts geteilt (IPv4 ohnehin).
+- **Standard-Modus in der Node: Modus 1** (durchreichen); Modus 2 und 3 wählbar.
