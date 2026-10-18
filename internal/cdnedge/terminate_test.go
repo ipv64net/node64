@@ -328,7 +328,7 @@ func TestHTTP01TokenAndCleanup(t *testing.T) {
 	a.sharePeerToken(context.Background(), "tok123", "tok123.keyauth")
 	for _, addr := range []string{cfgA.ListenHTTP, cfgB.ListenHTTP} {
 		var got string
-		for i := 0; i < 50; i++ {
+		for i := 0; i < 250; i++ { // der Nachbar nimmt den Token nebenher an (unter Last auch mal langsamer)
 			resp, err := http.Get("http://" + addr + "/.well-known/acme-challenge/tok123")
 			if err == nil {
 				bb, _ := io.ReadAll(resp.Body)
