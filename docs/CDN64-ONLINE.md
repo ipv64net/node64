@@ -447,8 +447,12 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 ### T4 – Ein Klick in der Node
 - Schalter, Fortschritt, Selbsttest, Badges, Fehlertexte, Doku (`docs/CDN64.md`, README), OpenAPI der Node.
 - **Fertig, wenn:** Ein Klick bis „aktiv“ ohne Handarbeit, Ausschalten stellt alles zurück, Rauchtest grün.
-- **Stand 2026-10-18 (CDN64 1.7.0, Node 0.11.96):** gebaut und getestet, offen ist nur der Rauchtest gegen das
-  echte ipv64 (braucht eine Node mit verbundenem Account einer Klasse mit CDN-Domains und einen Testnamen).
+- **Stand 2026-10-18 (CDN64 1.7.0, Node 0.11.96): fertig.** Rauchtest gegen das echte ipv64 grün (node64-test,
+  pfsense.ipv64.de, Ziel ein Echo-Dienst): ein Klick bis „aktiv“, DNS sofort auf srv07/srv08, Selbsttest ok,
+  Besucher von außen (hub1) erreichen das Ziel über alle vier Server-Adressen und über DNS, mit echter IPv4- bzw.
+  IPv6-Adresse am Ziel (die Box selbst hat kein IPv6); Ausschalten stellt den DNS zurück und meldet den Tunnel ab.
+  Gefunden und eingebaut: Selbsttest wiederholt direkt nach dem Einschalten (Server holen die Einstellung bis
+  10 s später) und meldet Namen, die in der Node ein anderes Modul belegt (dort war es DNS64/DoH).
   - Node: Spalte *CDN64 online* in den Host-Listen, Fenster mit vier Schritten (Account mit Kontingent, Tunnel,
     Namen, Selbsttest), Fehlertexte mit Abhilfe je Code von ipv64 (E2/E3), Hinweis bei TCP statt UDP und zu
     kleinem UDP-Puffer (G4), Online-Healthcheck auf Wunsch (E4), geteilter DNS über DNS64 (E5: Antwort mit der
