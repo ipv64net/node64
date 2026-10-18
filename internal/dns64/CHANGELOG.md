@@ -1,5 +1,13 @@
 # Änderungen – DNS64
 
+## 1.13.0 – 2026-10-18
+
+### Neu
+- Internationalisierte Domainnamen (IDN): Einträge wie `bücher.example` auf Blocklisten (hosts, Domain je Zeile, Adblock), in Freigaben und eigenen Einträgen werden in Punycode (`xn--bcher-kva.example`) umgewandelt und greifen; bisher wurden sie als ungültig übergangen.
+
+### Geändert
+- Abfrage-Log: Abgelaufene Einträge werden in Stücken zu 5.000 Zeilen gelöscht, dazwischen läuft das Schreiben weiter. Ein großer Rückstand (z. B. nach kürzerer Aufbewahrung) sperrt die Datenbank nicht mehr am Stück, und es gehen keine Log-Einträge verloren.
+
 ## 1.12.0 – 2026-10-16
 
 ### Neu

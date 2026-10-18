@@ -127,7 +127,9 @@ func (s *Store) Run(ctx context.Context) {
 	prune := time.NewTicker(time.Hour)
 	defer flush.Stop()
 	defer prune.Stop()
-	s.prune()
+	// Aufraeumen in Stuecken: zwischen zwei Stuecken laufen Schreiben und Abfragen weiter
+	pruneNext := time.After(0)
+	var pruned int64
 
 	batch := make([]Entry, 0, 1024)
 	for {
@@ -144,7 +146,20 @@ func (s *Store) Run(ctx context.Context) {
 				batch = batch[:0]
 			}
 		case <-prune.C:
-			s.prune()
+			if pruneNext == nil {
+				pruneNext = time.After(0)
+			}
+		case <-pruneNext:
+			n, more := s.pruneStep()
+			pruned += n
+			pruneNext = nil
+			if more {
+				pruneNext = time.After(pruneGap)
+			} else if pruned > 0 {
+				s.log.Info("querylog pruned", "rows", pruned)
+				s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
+				pruned = 0
+			}
 		case <-ctx.Done():
 			for {
 				select {
@@ -198,17 +213,23 @@ func (s *Store) write(batch []Entry) {
 	}
 }
 
-func (s *Store) prune() {
+// pruneBatch Zeilen je Stueck, pruneGap Pause dazwischen: ein grosser Rueckstand (z. B. nach kuerzerer
+// Aufbewahrung) sperrt die Datenbank nicht am Stueck.
+const (
+	pruneBatch = 5000
+	pruneGap   = 50 * time.Millisecond
+)
+
+// pruneStep loescht hoechstens pruneBatch abgelaufene Zeilen; more = es gibt vermutlich noch welche.
+func (s *Store) pruneStep() (n int64, more bool) {
 	cutoff := time.Now().Add(-s.retention).UnixMilli()
-	res, err := s.db.Exec(`DELETE FROM queries WHERE ts < ?`, cutoff)
+	res, err := s.db.Exec(`DELETE FROM queries WHERE rowid IN (SELECT rowid FROM queries WHERE ts < ? LIMIT ?)`, cutoff, pruneBatch)
 	if err != nil {
 		s.log.Error("querylog prune", "err", err)
-		return
+		return 0, false
 	}
-	if n, _ := res.RowsAffected(); n > 0 {
-		s.log.Info("querylog pruned", "rows", n)
-		s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
-	}
+	n, _ = res.RowsAffected()
+	return n, n == pruneBatch
 }
 
 // ---- statistics ----

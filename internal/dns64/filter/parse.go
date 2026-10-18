@@ -1,6 +1,10 @@
 package filter
 
-import "strings"
+import (
+	"strings"
+
+	"golang.org/x/net/idna"
+)
 
 type ruleKind uint8
 
@@ -104,10 +108,34 @@ func isSinkIP(s string) bool {
 	return false
 }
 
+// ToASCII wandelt internationalisierte Namen (IDN, z. B. "bücher.example") in Punycode ("xn--bcher-kva.example")
+// um, wie sie im DNS stehen; reine ASCII-Namen und ein fuehrendes "*." bleiben, wie sie sind. Ungueltige Namen
+// kommen unveraendert zurueck (die Pruefung danach lehnt sie ab).
+func ToASCII(s string) string {
+	ascii := true
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			ascii = false
+			break
+		}
+	}
+	if ascii {
+		return s
+	}
+	wild, rest := "", s
+	if strings.HasPrefix(s, "*.") {
+		wild, rest = "*.", s[2:]
+	}
+	if a, err := idna.Lookup.ToASCII(strings.TrimSuffix(rest, ".")); err == nil {
+		return wild + a
+	}
+	return s
+}
+
 // normalizeDomain lowercases and validates a hostname. It needs at least one
 // dot so a stray word in a list cannot block a whole TLD by accident.
 func normalizeDomain(s string) (string, bool) {
-	s = strings.TrimSuffix(strings.ToLower(s), ".")
+	s = strings.TrimSuffix(strings.ToLower(ToASCII(s)), ".")
 	if len(s) < 3 || len(s) > 253 || !strings.Contains(s, ".") {
 		return "", false
 	}

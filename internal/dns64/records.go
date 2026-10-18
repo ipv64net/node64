@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+
+	"github.com/ipv64net/node64/internal/dns64/filter"
 )
 
 // Eigene DNS-Eintraege (Tabelle dns64_records in node64.db, damit sie in Backup und Export sind). Der
@@ -124,7 +126,7 @@ func (m *Module) Records(ctx context.Context) ([]Record, error) {
 
 // normalizeRecord prueft einen Eintrag (Fehler mit i18n-Schluessel unter dns64.records.).
 func normalizeRecord(r *Record) error {
-	r.Name = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(r.Name)), ".")
+	r.Name = strings.TrimSuffix(strings.ToLower(filter.ToASCII(strings.TrimSpace(r.Name))), ".") // IDN als Punycode
 	r.Type = strings.ToUpper(strings.TrimSpace(r.Type))
 	r.Value = strings.TrimSpace(r.Value)
 	if r.TTL == 0 {
@@ -144,7 +146,7 @@ func normalizeRecord(r *Record) error {
 		}
 		r.Value = a.String()
 	case "CNAME":
-		r.Value = strings.TrimSuffix(strings.ToLower(r.Value), ".")
+		r.Value = strings.TrimSuffix(strings.ToLower(filter.ToASCII(r.Value)), ".")
 		if !validName(r.Value) || r.Value == r.Name {
 			return errCfg("err_target")
 		}
