@@ -475,7 +475,13 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
     ohne Fehlversuch auf beiden Servern (QUIC, 22–45 ms je Anfrage); die Wechsel davor waren eigene Deploys.
 
 ### T5 – Modus 2 terminieren
-- **Stand 2026-10-18 (cdn64-edge 0.5.0, CDN64 1.8.0):** gebaut und getestet, Einspielen und Live-Test offen.
+- **Stand 2026-10-18 (cdn64-edge 0.5.0, CDN64 1.8.0):** eingespielt (ipv64, srv07/srv08, node64-test 0.11.97) und
+  live mit dem **Staging** von Let's Encrypt getestet; offen: Umstellung auf echtes Let's Encrypt (nach OK),
+  HTTP-01-Ausweg, Aufräumen lokaler Zertifikate ausgeschalteter Namen, Anfragen/Abweisungen an ipv64 melden (T6).
+  - Live (pfsense.ipv64.de, Ziel Echo-Dienst): Einschalten im Modus 2 per Klick, srv07 hatte das Zertifikat
+    (Name + Wildcard) nach rund 40 s, srv08 übernahm es aus der Ablage, TXT danach wieder weg. Von hub1: HTTPS über
+    alle vier Adressen mit HTTP/2 und gültiger Kette (Staging-Root), HTTP/3 über QUIC, `Alt-Svc`, Wildcard-Name,
+    Port 80 → 301, fremder Host → 421, echte IPv4/IPv6 am Ziel. Ausschalten: DNS zurück, Ablage bei ipv64 gelöscht.
   - Server: TLS endet für Modus-2-Namen mit Zertifikat (sonst Durchreichen wie Modus 1), HTTP/1.1/2, HTTP/3 mit
     `http3: true`; je Anfrage ein Tunnel-Stream `http` mit der Besucher-Adresse im Kopf (statt
     `CDN64-Connecting-IP`: so gilt die Adresse je Anfrage und die Node braucht keinem Kopf zu trauen), auch über den
