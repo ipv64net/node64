@@ -476,8 +476,11 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 
 ### T5 – Modus 2 terminieren
 - **Stand 2026-10-18 (cdn64-edge 0.5.0, CDN64 1.8.0):** eingespielt (ipv64, srv07/srv08, node64-test 0.11.97) und
-  live mit dem **Staging** von Let's Encrypt getestet; offen: Umstellung auf echtes Let's Encrypt (nach OK),
-  HTTP-01-Ausweg, Aufräumen lokaler Zertifikate ausgeschalteter Namen, Anfragen/Abweisungen an ipv64 melden (T6).
+  live getestet, erst mit dem Staging, dann (OK von Dennis) mit **echtem Let's Encrypt**: Wildcard-Zertifikat
+  pfsense.ipv64.de + *.pfsense.ipv64.de (Aussteller YE2) nach rund 50 s auf srv07, srv08 aus der Ablage; von hub1
+  ohne eigene Root: HTTP/2 über alle vier Adressen und DNS, HTTP/3, echte IP; danach DNS zurück, keine TXT-Reste,
+  Ablage gelöscht. **T5 fertig.** Offen für T6: HTTP-01-Ausweg, Aufräumen lokaler Zertifikate ausgeschalteter Namen
+  (bleiben bis dahin und werden beim erneuten Einschalten wiederverwendet), Anfragen/Abweisungen an ipv64 melden.
   - Live (pfsense.ipv64.de, Ziel Echo-Dienst): Einschalten im Modus 2 per Klick, srv07 hatte das Zertifikat
     (Name + Wildcard) nach rund 40 s, srv08 übernahm es aus der Ablage, TXT danach wieder weg. Von hub1: HTTPS über
     alle vier Adressen mit HTTP/2 und gültiger Kette (Staging-Root), HTTP/3 über QUIC, `Alt-Svc`, Wildcard-Name,
