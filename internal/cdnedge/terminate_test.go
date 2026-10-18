@@ -238,7 +238,7 @@ func TestCertSealAndRound(t *testing.T) {
 	s.apiCfg.Store(&apiConfig{Hosts: []apiHost{{ID: 1, Name: "a.test", Mode: 2}, {ID: 2, Name: "m1.test", Mode: 1}}})
 	n := 0
 	s.obtainHook = func(_ context.Context, name string) ([]byte, []byte, error) { n++; return cp, kp, nil }
-	s.certRound(context.Background(), &certPlan{missingSince: map[string]time.Time{}, nextTry: map[string]time.Time{}, backoff: map[string]time.Duration{}})
+	s.certRound(context.Background(), newCertPlan())
 	if n != 1 || !s.certs.has("a.test") || s.certs.has("m1.test") {
 		t.Fatalf("round: obtained %d", n)
 	}
@@ -249,7 +249,7 @@ func TestCertSealAndRound(t *testing.T) {
 	s2 := New(&Config{Name: "B", DataDir: t.TempDir(), CertKey: strings.Repeat("ab", 32), APIURL: "http://127.0.0.1:1"}, slog.New(slog.DiscardHandler), "test")
 	s2.apiCfg.Store(s.apiCfg.Load())
 	s2.obtainHook = s.obtainHook
-	s2.certRound(context.Background(), &certPlan{missingSince: map[string]time.Time{}, nextTry: map[string]time.Time{}, backoff: map[string]time.Duration{}})
+	s2.certRound(context.Background(), newCertPlan())
 	if n != 1 || s2.certs.has("a.test") {
 		t.Fatal("secondary must wait")
 	}
@@ -312,5 +312,56 @@ func TestTunnelOn443(t *testing.T) {
 		for i := 0; i < 200 && s.peer("t1") != nil; i++ {
 			time.Sleep(25 * time.Millisecond)
 		}
+	}
+}
+
+// HTTP-01-Ausweg: Token des einen Servers beantwortet auch der Nachbar auf Port 80; alte Zertifikate gehen nach 7 Tagen.
+func TestHTTP01TokenAndCleanup(t *testing.T) {
+	cf, kf, pool, _ := testCA(t, "edge.test")
+	secret := strings.Repeat("s", 40)
+	cfgB := &Config{Name: "B", ListenHTTP: freeAddr(t), PeerListen: freeAddr(t), PeerSecret: secret, TLSCert: cf, TLSKey: kf, DataDir: t.TempDir()}
+	cfgA := &Config{Name: "A", ListenHTTP: freeAddr(t), PeerSecret: secret, TLSCert: cf, TLSKey: kf, DataDir: t.TempDir(),
+		Peers: []PeerEntry{{Name: "B", Addr: cfgB.PeerListen}}}
+	b := startEdge(t, cfgB, pool)
+	a := startEdge(t, cfgA, pool)
+	a.acmeTokens.set("tok123", "tok123.keyauth")
+	a.sharePeerToken(context.Background(), "tok123", "tok123.keyauth")
+	for _, addr := range []string{cfgA.ListenHTTP, cfgB.ListenHTTP} {
+		var got string
+		for i := 0; i < 50; i++ {
+			resp, err := http.Get("http://" + addr + "/.well-known/acme-challenge/tok123")
+			if err == nil {
+				bb, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if got = string(bb); resp.StatusCode == 200 {
+					break
+				}
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		if got != "tok123.keyauth" {
+			t.Fatalf("%s: token %q", addr, got)
+		}
+	}
+	if r, _ := http.Get("http://" + cfgB.ListenHTTP + "/.well-known/acme-challenge/other"); r == nil || r.StatusCode != 404 {
+		t.Fatal("unknown token must not be answered")
+	}
+	// Aufraeumen: Name nicht mehr in Modus 2 -> nach certKeep weg
+	c, k, _, _ := testCA(t, "old.test", "*.old.test")
+	cp, _ := os.ReadFile(c)
+	kp, _ := os.ReadFile(k)
+	if err := b.certs.put("old.test", cp, kp); err != nil {
+		t.Fatal(err)
+	}
+	b.apiCfg.Store(&apiConfig{})
+	p := newCertPlan()
+	b.certRound(context.Background(), p)
+	if !b.certs.has("old.test") {
+		t.Fatal("removed too early")
+	}
+	p.goneSince["old.test"] = time.Now().Add(-certKeep - time.Minute)
+	b.certRound(context.Background(), p)
+	if b.certs.has("old.test") || newCertStore(b.certs.dir).has("old.test") {
+		t.Fatal("old certificate not removed")
 	}
 }

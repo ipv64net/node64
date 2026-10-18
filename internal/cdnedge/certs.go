@@ -129,6 +129,16 @@ func (c *certStore) load() {
 	}
 }
 
+// remove loescht das Zertifikat eines Namens (Speicher und Datei).
+func (c *certStore) remove(name string) {
+	c.mu.Lock()
+	delete(c.m, name)
+	c.mu.Unlock()
+	if c.dir != "" {
+		_ = os.Remove(filepath.Join(c.dir, name+".pem"))
+	}
+}
+
 func (c *certStore) list() map[string]time.Time {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -234,7 +244,12 @@ func (s *Server) apiPutCert(ctx context.Context, name string, certPEM, keyPEM []
 
 // ---------------------------------------------------------------- Ablauf
 
+// certKeep: so lange bleibt das Zertifikat eines Namens, der nicht mehr in Modus 2 ist (erneutes Einschalten
+// braucht dann keine neue Bestellung, schont die Let's-Encrypt-Limits).
+const certKeep = 7 * 24 * time.Hour
+
 type certPlan struct {
+	goneSince    map[string]time.Time
 	missingSince map[string]time.Time
 	nextTry      map[string]time.Time
 	backoff      map[string]time.Duration
@@ -245,7 +260,7 @@ func (s *Server) certLoop(ctx context.Context) {
 	if s.cfg.APIURL == "" {
 		return
 	}
-	p := &certPlan{missingSince: map[string]time.Time{}, nextTry: map[string]time.Time{}, backoff: map[string]time.Duration{}}
+	p := newCertPlan()
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
 	for {
@@ -277,9 +292,33 @@ func (s *Server) certNames() []string {
 	return out
 }
 
+func newCertPlan() *certPlan {
+	return &certPlan{goneSince: map[string]time.Time{}, missingSince: map[string]time.Time{}, nextTry: map[string]time.Time{}, backoff: map[string]time.Duration{}}
+}
+
 func (s *Server) certRound(ctx context.Context, p *certPlan) {
 	now := time.Now()
-	for _, name := range s.certNames() {
+	names := s.certNames()
+	if s.apiCfg.Load() != nil { // ohne Konfiguration nichts loeschen
+		want := map[string]bool{}
+		for _, n := range names {
+			want[n] = true
+			delete(p.goneSince, n)
+		}
+		for n := range s.certs.list() {
+			if want[n] {
+				continue
+			}
+			if _, ok := p.goneSince[n]; !ok {
+				p.goneSince[n] = now
+			} else if now.Sub(p.goneSince[n]) > certKeep {
+				s.certs.remove(n)
+				delete(p.goneSince, n)
+				s.log.Info("certificate removed (name no longer in mode 2)", "name", n)
+			}
+		}
+	}
+	for _, name := range names {
 		if time.Until(s.certs.notAfter(name)) > certRenewBefore {
 			delete(p.missingSince, name)
 			continue

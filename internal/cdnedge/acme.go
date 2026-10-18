@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -15,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/miekg/dns"
@@ -24,12 +26,28 @@ import (
 // Bestellung bei Let's Encrypt (oder acme_directory) fuer "name" und "*.name" per DNS-01. Den TXT-Eintrag setzt
 // ipv64 (POST /cdn64o/edge/acme-txt, nur fuer Modus-2-Namen); auf den Servern liegt kein PowerDNS- und kein
 // API-Key eines Nutzers. Vor der Pruefung wartet der Server, bis alle Nameserver der Zone den Eintrag liefern.
+// Scheitert DNS-01, gibt es per HTTP-01 ein Zertifikat nur fuer "name" (der DNS des Namens zeigt auf die Server; den
+// Token bekommt auch der Nachbar, weil Let's Encrypt einen der beiden fragt). Die naechste Erneuerung versucht
+// wieder DNS-01.
 
-// obtain: Zertifikat und Schluessel (PEM) fuer name und *.name.
+// obtain: Zertifikat und Schluessel (PEM) fuer name und *.name, sonst nur name.
 func (s *Server) obtain(ctx context.Context, name string) ([]byte, []byte, error) {
 	if s.obtainHook != nil { // Tests
 		return s.obtainHook(ctx, name)
 	}
+	cp, kp, err := s.obtainDNS(ctx, name)
+	if err == nil {
+		return cp, kp, nil
+	}
+	s.log.Warn("dns-01 failed, trying http-01 (name only, no wildcard)", "name", name, "err", err)
+	cp, kp, herr := s.obtainHTTP(ctx, name)
+	if herr != nil {
+		return nil, nil, fmt.Errorf("dns-01: %v; http-01: %w", err, herr)
+	}
+	return cp, kp, nil
+}
+
+func (s *Server) obtainDNS(ctx context.Context, name string) ([]byte, []byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	cl, err := s.acmeClient(ctx)
@@ -99,7 +117,60 @@ func (s *Server) obtain(ctx context.Context, name string) ([]byte, []byte, error
 			return nil, nil, fmt.Errorf("validation: %w", err)
 		}
 	}
-	if order, err = cl.WaitOrder(ctx, order.URI); err != nil {
+	return finishOrder(ctx, cl, order, names)
+}
+
+// obtainHTTP: Ausweg ueber HTTP-01 fuer den Namen allein.
+func (s *Server) obtainHTTP(ctx context.Context, name string) ([]byte, []byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	cl, err := s.acmeClient(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	order, err := cl.AuthorizeOrder(ctx, acme.DomainIDs(name))
+	if err != nil {
+		return nil, nil, fmt.Errorf("order: %w", err)
+	}
+	for _, u := range order.AuthzURLs {
+		z, err := cl.GetAuthorization(ctx, u)
+		if err != nil {
+			return nil, nil, fmt.Errorf("authorization: %w", err)
+		}
+		if z.Status == acme.StatusValid {
+			continue
+		}
+		var ch *acme.Challenge
+		for _, c := range z.Challenges {
+			if c.Type == "http-01" {
+				ch = c
+			}
+		}
+		if ch == nil {
+			return nil, nil, errors.New("no http-01 challenge offered")
+		}
+		ka, err := cl.HTTP01ChallengeResponse(ch.Token)
+		if err != nil {
+			return nil, nil, err
+		}
+		s.acmeTokens.set(ch.Token, ka)
+		s.sharePeerToken(ctx, ch.Token, ka)
+		_, err = cl.Accept(ctx, ch)
+		if err == nil {
+			_, err = cl.WaitAuthorization(ctx, z.URI)
+		}
+		s.acmeTokens.del(ch.Token)
+		if err != nil {
+			return nil, nil, fmt.Errorf("http-01 validation: %w", err)
+		}
+	}
+	return finishOrder(ctx, cl, order, []string{name})
+}
+
+// finishOrder: Auftrag fertig, Schluessel erzeugen, Zertifikat abholen (PEM).
+func finishOrder(ctx context.Context, cl *acme.Client, order *acme.Order, names []string) ([]byte, []byte, error) {
+	order, err := cl.WaitOrder(ctx, order.URI)
+	if err != nil {
 		return nil, nil, fmt.Errorf("order: %w", err)
 	}
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -123,6 +194,90 @@ func (s *Server) obtain(ctx context.Context, name string) ([]byte, []byte, error
 		return nil, nil, err
 	}
 	return certPEM, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kb}), nil
+}
+
+// ---------------------------------------------------------------- HTTP-01-Token (hier und beim Nachbarn)
+
+type tokenStore struct {
+	mu sync.Mutex
+	m  map[string]tokenEntry
+}
+
+type tokenEntry struct {
+	ka  string
+	exp time.Time
+}
+
+func (t *tokenStore) set(tok, ka string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.m == nil {
+		t.m = map[string]tokenEntry{}
+	}
+	now := time.Now()
+	for k, e := range t.m {
+		if now.After(e.exp) {
+			delete(t.m, k)
+		}
+	}
+	if len(t.m) < 1000 {
+		t.m[tok] = tokenEntry{ka: ka, exp: now.Add(10 * time.Minute)}
+	}
+}
+
+func (t *tokenStore) del(tok string) {
+	t.mu.Lock()
+	delete(t.m, tok)
+	t.mu.Unlock()
+}
+
+func (t *tokenStore) get(tok string) (string, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	e, ok := t.m[tok]
+	if !ok || time.Now().After(e.exp) {
+		return "", false
+	}
+	return e.ka, true
+}
+
+// sharePeerToken gibt den Token an die Nachbarn (Let's Encrypt fragt einen der beiden Server).
+func (s *Server) sharePeerToken(ctx context.Context, tok, ka string) {
+	for _, p := range s.cfg.Peers {
+		h, _, _ := net.SplitHostPort(p.Addr)
+		d := &tls.Dialer{NetDialer: &net.Dialer{Timeout: 3 * time.Second}, Config: &tls.Config{ServerName: h, RootCAs: s.peerRoots, MinVersion: tls.VersionTLS13}}
+		dctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		pc, err := d.DialContext(dctx, "tcp", p.Addr)
+		cancel()
+		if err != nil {
+			s.log.Warn("acme token not shared", "peer", p.Name, "err", err)
+			continue
+		}
+		b, _ := json.Marshal(peerHello{Secret: s.cfg.PeerSecret, Kind: "acme", Host: tok, Client: ka, From: s.cfg.Name})
+		_, _ = pc.Write(append(b, '\n'))
+		_ = pc.Close()
+	}
+}
+
+// serveToken beantwortet /.well-known/acme-challenge/<token> auf Port 80, wenn der Token hier bekannt ist.
+func (s *Server) serveToken(c net.Conn, data []byte) bool {
+	line, _, _ := strings.Cut(string(data), "\r\n")
+	f := strings.Fields(line)
+	if len(f) < 2 || f[0] != http.MethodGet {
+		return false
+	}
+	tok, ok := strings.CutPrefix(f[1], "/.well-known/acme-challenge/")
+	if !ok {
+		return false
+	}
+	ka, found := s.acmeTokens.get(tok)
+	if !found {
+		return false
+	}
+	_ = c.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	_, _ = fmt.Fprintf(c, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", len(ka), ka)
+	_ = c.Close()
+	return true
 }
 
 // acmeClient: Konto des Servers (Schluessel in data_dir/acme-account.pem), einmal registriert.

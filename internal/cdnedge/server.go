@@ -41,18 +41,19 @@ type Server struct {
 	streams atomic.Int64              // offene Daten-Streams
 	total   atomic.Int64
 
-	tlsConf   *tls.Config               // Zertifikat fuer Tunnel- und Nachbar-Port
-	routes    atomic.Pointer[routes]    // Name -> Tunnel
-	stats     *stats                    // je Name
-	guard     *guard                    // grober Schutz
-	local     *chanListener             // Port 80 ohne bekannten Namen -> eigene Seite
-	peerRoots *x509.CertPool            // Tests: CA der Nachbarn (sonst System)
-	apiCfg    atomic.Pointer[apiConfig] // letzter Stand von ipv64
-	apist     *apiState
-	bw        *bandwidth
-	lns       []net.Listener // offene Besucher-/Nachbar-Ports
-	term      *terminator    // Modus 2: TLS endet hier
-	certs     *certStore     // Modus 2: Zertifikate je Name
+	tlsConf    *tls.Config               // Zertifikat fuer Tunnel- und Nachbar-Port
+	routes     atomic.Pointer[routes]    // Name -> Tunnel
+	stats      *stats                    // je Name
+	guard      *guard                    // grober Schutz
+	local      *chanListener             // Port 80 ohne bekannten Namen -> eigene Seite
+	peerRoots  *x509.CertPool            // Tests: CA der Nachbarn (sonst System)
+	apiCfg     atomic.Pointer[apiConfig] // letzter Stand von ipv64
+	apist      *apiState
+	bw         *bandwidth
+	lns        []net.Listener // offene Besucher-/Nachbar-Ports
+	term       *terminator    // Modus 2: TLS endet hier
+	certs      *certStore     // Modus 2: Zertifikate je Name
+	acmeTokens tokenStore     // HTTP-01 (Ausweg)
 	// Tests: Zertifikat ohne ACME
 	obtainHook func(ctx context.Context, name string) ([]byte, []byte, error)
 }

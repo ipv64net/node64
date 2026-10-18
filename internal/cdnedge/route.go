@@ -155,6 +155,9 @@ func (s *Server) handle80(c net.Conn) {
 	_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
 	host, data := peekHTTPHost(c)
 	_ = c.SetReadDeadline(time.Time{})
+	if s.serveToken(c, data) { // HTTP-01 fuer Modus-2-Zertifikate (auch die des Nachbarn)
+		return
+	}
 	if re := s.routes.Load().lookup(host); host != "" && re != nil {
 		if re.Mode == 2 && s.certs.has(re.Name) { // Modus 2: auf HTTPS umleiten
 			s.term.http.push(&prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)})
@@ -335,6 +338,13 @@ func (s *Server) servePeer(ln net.Listener) {
 				return
 			}
 			_ = c.SetReadDeadline(time.Time{})
+			if h.Kind == "acme" { // HTTP-01-Token des Nachbarn
+				if h.Host != "" && h.Client != "" {
+					s.acmeTokens.set(h.Host, h.Client)
+				}
+				_ = c.Close()
+				return
+			}
 			if h.Kind == "rates" { // Bandbreite: Raten des Nachbarn
 				s.readRates(br)
 				_ = c.Close()
