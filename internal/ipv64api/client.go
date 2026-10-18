@@ -27,6 +27,29 @@ var KeyRe = regexp.MustCompile(`^[A-Za-z0-9]{16,64}$`)
 // ErrUnauthorized: API-Key ungueltig, abgelaufen oder widerrufen.
 var ErrUnauthorized = errors.New("API key rejected by ipv64")
 
+// APIError ist eine Fehlerantwort der API (RFC 9457: code, detail).
+type APIError struct {
+	Status int
+	Code   string // z. B. limit_reached, domain_not_in_account
+	Detail string
+}
+
+func (e *APIError) Error() string {
+	if e.Detail != "" {
+		return fmt.Sprintf("ipv64: %s (%d)", e.Detail, e.Status)
+	}
+	return fmt.Sprintf("ipv64: HTTP %d", e.Status)
+}
+
+// ErrorCode liefert den Fehlercode der API ("" = kein API-Fehler).
+func ErrorCode(err error) string {
+	var e *APIError
+	if errors.As(err, &e) {
+		return e.Code
+	}
+	return ""
+}
+
 // Client spricht die API v2 an.
 type Client struct {
 	base string
@@ -149,13 +172,15 @@ func (c *Client) do(ctx context.Context, method, key, path string, in any, out a
 		return ErrUnauthorized
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		e := &APIError{Status: resp.StatusCode}
 		var p struct {
 			Detail string `json:"detail"`
+			Code   string `json:"code"`
 		}
-		if json.Unmarshal(body, &p) == nil && p.Detail != "" {
-			return fmt.Errorf("ipv64: %s (%d)", p.Detail, resp.StatusCode)
+		if json.Unmarshal(body, &p) == nil {
+			e.Detail, e.Code = p.Detail, p.Code
 		}
-		return fmt.Errorf("ipv64: HTTP %d", resp.StatusCode)
+		return e
 	}
 	if out == nil {
 		return nil // ohne Antwortdaten (z. B. 204 No Content)

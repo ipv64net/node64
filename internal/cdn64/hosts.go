@@ -441,6 +441,7 @@ func (m *Module) saveHost(ctx context.Context, h *Host) error {
 	m.cache.dropHost(h.ID)
 	m.apply(ctx)
 	m.checkSoon(h.ID)
+	m.onlineKick() // entfernte Namen auch bei CDN64 online ausschalten
 	return nil
 }
 
@@ -470,6 +471,7 @@ func (m *Module) deleteHost(ctx context.Context, id int64) error {
 	m.cache.dropHost(id)
 	m.reach.forget(id)
 	m.apply(ctx)
+	m.onlineKick() // Namen bei CDN64 online ausschalten
 	return nil
 }
 

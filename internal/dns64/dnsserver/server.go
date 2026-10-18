@@ -33,6 +33,10 @@ type Records interface {
 	Lookup(name string, qtype uint16) (rrs []dns.RR, ok bool)
 }
 
+// SplitFunc answers a name differently inside the home network (split DNS, e.g. CDN64 online names with the
+// node's own address); ok = answered (then the answer may be empty).
+type SplitFunc func(name string, qtype uint16, client netip.Addr) (rrs []dns.RR, ok bool)
+
 type Server struct {
 	Addr     string
 	Local    *localnet.Resolver // router DNS for local names
@@ -43,6 +47,7 @@ type Server struct {
 	Logger   *slog.Logger
 
 	Records   Records                 // nil = none
+	Split     SplitFunc               // answers for the home network before everything else (nil = none)
 	BlockNX   bool                    // blocked names answer NXDOMAIN instead of 0.0.0.0 / ::
 	ExtraNets []netip.Prefix          // further client networks besides private and attached ones
 	Anonymize func(netip.Addr) string // client as stored in the log, nil = full IP
@@ -152,7 +157,16 @@ func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg 
 		entry.QType = dns.Type(q.Qtype).String()
 	}
 
-	resp := s.resolve(r, name, &entry)
+	var resp *dns.Msg
+	if s.Split != nil {
+		if rrs, ok := s.Split(name, q.Qtype, clientIP); ok {
+			entry.Status = querylog.StatusCustom
+			resp = s.custom(r, rrs)
+		}
+	}
+	if resp == nil {
+		resp = s.resolve(r, name, &entry)
+	}
 	resp.Id = r.Id
 	entry.Rcode = dns.RcodeToString[resp.Rcode]
 	entry.Duration = time.Since(start)

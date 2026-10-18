@@ -43,7 +43,7 @@ var changelog string
 
 const (
 	Name    = "cdn64"
-	Version = "1.6.0"
+	Version = "1.7.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -98,6 +98,7 @@ func New(core *store.Store, log *slog.Logger, e *edge.Edge, c *certs.Manager, ve
 		routeErr: map[int64]string{}, loopToken: hex.EncodeToString(b), trVerify: newTransport(true), trInsecure: newTransport(false),
 		cache: newAssetCache(cacheLimit), reach: newReacher(), runs: map[int64]*streamRun{}, sstats: map[int64]*streamStats{}, sreach: newReacher(),
 		acl: map[int64]*guard{}, authFail: newFailLimiter(), hostTr: map[int64]*http.Transport{}, bl: newBlocklists(), lim: newLimiter()}
+	m.online.kick = make(chan struct{}, 1)
 	m.lim.onBan = func(ip netip.Addr, until time.Time) {
 		m.log.Warn("cdn64 limits: address banned", "ip", limShow(ip), "until", until.Format(time.RFC3339))
 	}
@@ -170,6 +171,8 @@ func (m *Module) Start(ctx context.Context) error {
 	m.applyStreams(ctx)
 	m.onlineStart(ctx)
 	go func() { defer m.wg.Done(); m.reachLoop(ctx) }()
+	m.wg.Add(1)
+	go func() { defer m.wg.Done(); m.onlineLoop(ctx) }()
 	m.wg.Add(1)
 	go func() { defer m.wg.Done(); m.blLoop(ctx) }()
 	m.wg.Add(1)

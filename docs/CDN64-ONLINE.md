@@ -447,6 +447,28 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 ### T4 – Ein Klick in der Node
 - Schalter, Fortschritt, Selbsttest, Badges, Fehlertexte, Doku (`docs/CDN64.md`, README), OpenAPI der Node.
 - **Fertig, wenn:** Ein Klick bis „aktiv“ ohne Handarbeit, Ausschalten stellt alles zurück, Rauchtest grün.
+- **Stand 2026-10-18 (CDN64 1.7.0, Node 0.11.96):** gebaut und getestet, offen ist nur der Rauchtest gegen das
+  echte ipv64 (braucht eine Node mit verbundenem Account einer Klasse mit CDN-Domains und einen Testnamen).
+  - Node: Spalte *CDN64 online* in den Host-Listen, Fenster mit vier Schritten (Account mit Kontingent, Tunnel,
+    Namen, Selbsttest), Fehlertexte mit Abhilfe je Code von ipv64 (E2/E3), Hinweis bei TCP statt UDP und zu
+    kleinem UDP-Puffer (G4), Online-Healthcheck auf Wunsch (E4), geteilter DNS über DNS64 (E5: Antwort mit der
+    Adresse der Node auf der Schnittstelle des Fragenden; Node im Bridge-Netz bleibt bei der normalen Antwort).
+  - Ablauf: `POST /api/cdn64/online/tunnel` (Tunnel bei ipv64 anlegen bzw. prüfen, Server-Liste übernehmen,
+    Token verschlüsselt), `POST /api/cdn64/hosts/{id}/online` (jeder Name einzeln; scheitern alle, wird der
+    Tunnel wieder abgemeldet), `POST …/online/test`, `DELETE …/online` (mit dem letzten Namen geht der Tunnel).
+    Abgleich jede Minute und nach Änderungen an Hosts: gelöschte Hosts und entfernte Namen werden bei ipv64
+    ausgeschaltet, auf der Webseite ausgeschaltete Namen hier ausgetragen, neue Server-Liste übernommen.
+  - Selbsttest: je Name über jeden Server und jede Adresse (IPv4/IPv6) TLS-Handschlag bzw. HTTP auf Port 80;
+    ok nur, wenn die Probe durch den Tunnel genau dieser Node ankam (Zähler je Name im Tunnel-Eingang). Meldet
+    auch „über eine andere Node“, fehlende Adressfamilie der Node, nicht vertrauenswürdiges Zertifikat und ob ein
+    öffentlicher Resolver schon die Server nennt.
+  - Getestet: Go-Ende-zu-Ende-Test mit echtem cdn64-edge und nachgebautem ipv64 (Einschalten, Fehlercodes,
+    Selbsttest durch den Tunnel, Ausschalten, Abgleich nach Löschen); Selbsttest live über srv07/srv08 von
+    node64-cdn (IPv4 ok in 75–81 ms, IPv6 dort nicht vorhanden → übersprungen); Oberfläche im Browser mit
+    lokaler Node, nachgebautem ipv64 und echtem Tunnel zu srv07/srv08 (alle Schritte, Fehler je Name, Selbsttest
+    aus der Liste, Ausschalten).
+  - 24-Stunden-Lauf des Tunnels (T1) ausgewertet: seit dem letzten Deploy (17.10. 18:18) 12 h ohne Abbruch und
+    ohne Fehlversuch auf beiden Servern (QUIC, 22–45 ms je Anfrage); die Wechsel davor waren eigene Deploys.
 
 ### T5 – Modus 2 terminieren
 - TLS/HTTP/1–3 auf den Servern, Weiterleitung als HTTP über den Tunnel, `CDN64-Connecting-IP`.

@@ -44,7 +44,7 @@
 	<table class="table table-hover align-middle mb-0 small">
 		<thead><tr>
 			<th class="ps-3">{{.T "cdn64.col.names"}}</th>{{if ne $d.Kind "dead"}}<th>{{.T "cdn64.col.target"}}</th>{{end}}<th>{{.T "cdn64.col.ssl"}}</th><th>{{.T "cdn64.col.options"}}</th>
-			{{if eq $d.Kind "proxy"}}<th>{{.T "cdn64.col.reach"}}</th>{{end}}<th class="text-end">{{.T "cdn64.col.requests24"}}</th><th class="text-end pe-3"></th>
+			{{if eq $d.Kind "proxy"}}<th>{{.T "cdn64.col.reach"}}</th>{{end}}{{if $d.OnlineOn}}<th>{{.T "cdn64.online.col"}}</th>{{end}}<th class="text-end">{{.T "cdn64.col.requests24"}}</th><th class="text-end pe-3"></th>
 		</tr></thead>
 		<tbody>
 		{{range $d.Rows}}
@@ -81,6 +81,15 @@
 				{{else}}<span class="badge text-bg-light">{{$.T "cdn64.reach.unknown"}}</span>{{end}}
 			{{end}}{{range .Watch}}<div class="mt-1" data-watch><a class="badge text-decoration-none {{if .Paused}}text-bg-secondary{{else if eq .State "up"}}text-bg-success{{else if eq .State "down"}}text-bg-danger{{else if .State}}text-bg-warning{{else}}text-bg-light{{end}}" href="/healthchecks/{{.Token}}"
 				title="{{$.T "cdn64.watch.title" "name" .Name}}{{if not .LastCheck.IsZero}} · {{$.T "cdn64.reach.checked" "time" ($.Time .LastCheck)}}{{end}}"><i class="bi bi-heart-pulse-fill"></i> {{if .Local}}{{$.T "cdn64.watch.local"}}{{else}}{{$.T "cdn64.watch.remote"}}{{end}}{{if .Paused}} · {{$.T "cdn64.watch.paused"}}{{else if eq .State "up"}} · {{$.T "cdn64.watch.up"}}{{else if eq .State "down"}} · {{$.T "cdn64.watch.down"}}{{end}}{{if .HostOnly}} (Ping){{end}}</a></div>{{end}}{{end}}</td>{{end}}
+			{{if $d.OnlineOn}}<td class="text-nowrap">{{if .Online}}
+				{{range .Online.Edges}}<span class="badge {{if eq .State "direct"}}text-bg-success{{else if eq .State "peer"}}text-bg-info{{else}}text-bg-danger{{end}} me-1" title="{{if eq .State "direct"}}{{$.T "cdn64.online.direct" "edge" .Name "transport" .Transport}}{{else if eq .State "peer"}}{{$.T "cdn64.online.peer" "edge" .Name}}{{else}}{{$.T "cdn64.online.down" "edge" .Name}}{{end}}">{{.Name}} <i class="bi {{if eq .State "down"}}bi-x-lg{{else}}bi-check-lg{{end}}"></i></span>{{end}}
+				{{if eq .Online.Status "blocked"}}<div><span class="badge text-bg-danger">{{$.T "cdn64.online.blocked"}}{{with .Online.Reason}}: {{.}}{{end}}</span></div>{{else if eq .Online.Status "pending"}}<div><span class="badge text-bg-warning">{{$.T "cdn64.online.pending"}}</span></div>{{end}}
+				<div class="mt-1">
+					<button type="button" class="btn btn-sm btn-outline-secondary py-0" data-c64o-test="{{.ID}}" title="{{$.T "cdn64.online.test"}}"><i class="bi bi-activity"></i></button>
+					{{if .Online.Missing}}<button type="button" class="btn btn-sm btn-outline-primary py-0" data-c64o-on="{{.ID}}" title="{{$.T "cdn64.online.more_title"}}">{{$.T "cdn64.online.more" "n" .Online.Missing}}</button>{{end}}
+					<button type="button" class="btn btn-sm btn-outline-danger py-0" data-c64o-off="{{.ID}}" data-name="{{index .Names 0}}" title="{{$.T "cdn64.online.off"}}"><i class="bi bi-cloud-slash"></i></button>
+				</div>
+			{{else}}<button type="button" class="btn btn-sm btn-outline-primary py-0" data-c64o-on="{{.ID}}" title="{{$.T "cdn64.online.on_title"}}"><i class="bi bi-cloud-arrow-up"></i> {{$.T "cdn64.online.on"}}</button>{{end}}</td>{{end}}
 			<td class="text-end font-monospace" title="{{$.T "cdn64.since_start" "n" .Requests}}">{{$.Int .Day.Requests}}{{if .Errors}}<div class="text-danger">{{$.T "cdn64.errors" "n" .Errors}}</div>{{end}}{{if .Blocked}}<div class="text-body-secondary">{{$.T "cdn64.blocked" "n" .Blocked}}</div>{{end}}</td>
 			<td class="text-end pe-3 text-nowrap">
 				{{if .URL}}<a class="btn btn-sm btn-outline-secondary py-0" href="{{.URL}}" target="_blank" rel="noopener" title="{{$.T "cdn64.open"}}"><i class="bi bi-box-arrow-up-right"></i></a>{{end}}
@@ -98,6 +107,21 @@
 	</div>
 	{{end}}
 </div>
+{{if $d.OnlineOn}}<div class="modal fade" id="cdn64-online" tabindex="-1" aria-labelledby="cdn64-online-title" aria-hidden="true" data-online-modal data-csrf="{{.CSRF}}" data-l="{{$d.OnlineL}}">
+	<div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
+		<div class="modal-header"><h2 class="modal-title h5" id="cdn64-online-title"><i class="bi bi-cloud-arrow-up text-primary"></i> {{.T "cdn64.online.col"}}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{.T "cdn64.online.close"}}"></button></div>
+		<div class="modal-body">
+			<div data-online-setup>
+				<p class="small">{{.T "cdn64.online.intro"}}</p>
+				<div class="mb-2"><label class="form-label small mb-1" for="online-mode">{{.T "cdn64.online.mode"}}</label>
+					<select class="form-select form-select-sm" id="online-mode" data-online-mode><option value="1" selected>{{.T "cdn64.online.mode1"}}</option><option value="2" disabled>{{.T "cdn64.online.mode2"}}</option></select></div>
+				<div class="form-check small mb-3"><input class="form-check-input" type="checkbox" id="online-hc" data-online-hc><label class="form-check-label" for="online-hc">{{.T "cdn64.online.hc"}}</label></div>
+			</div>
+			<ol class="list-unstyled mb-0 small" data-online-steps></ol>
+		</div>
+		<div class="modal-footer"><button type="button" class="btn btn-primary btn-sm" data-online-start>{{.T "cdn64.online.start"}}</button><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{{.T "cdn64.online.close"}}</button></div>
+	</div></div>
+</div>{{end}}
 <p class="small text-body-secondary mt-2">{{if eq $d.Kind "proxy"}}{{.T "cdn64.list_hint"}}{{else}}{{.T "cdn64.list_hint_other"}}{{end}}{{if $d.CacheN}} · {{.T "cdn64.cache_info" "n" $d.CacheN "size" (.Bytes $d.CacheB)}}{{end}}</p>
 {{end}}
-{{define "scripts"}}{{if and (eq .Data.Kind "proxy") .Data.StatsOn}}<script src="/static/js/chart.umd.js"></script><script src="/static/js/cdn64-chart.js?v={{.Version}}"></script><script src="/static/js/cdn64-stats.js?v={{.Version}}"></script>{{end}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}
+{{define "scripts"}}{{if and (eq .Data.Kind "proxy") .Data.StatsOn}}<script src="/static/js/chart.umd.js"></script><script src="/static/js/cdn64-chart.js?v={{.Version}}"></script><script src="/static/js/cdn64-stats.js?v={{.Version}}"></script>{{end}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{if .Data.OnlineOn}}<script src="/static/js/cdn64-online.js?v={{.Version}}"></script>{{end}}{{end}}

@@ -79,6 +79,7 @@ type Module struct {
 	webCert, webKey string // Zertifikat der Weboberflaeche (cert_mode node64)
 
 	notifier func(notify.Alert) // Meldungen (nil = keine)
+	splitFn  func(string) bool  // Namen, die im Heimnetz die Node meinen (CDN64 online), nil = keine
 
 	cur atomic.Pointer[tls.Certificate] // aktuelles Zertifikat fuer DoH/DoT/DoQ (wechselt ohne Neustart)
 	// certInUse: Kennung des Zertifikats aus der Verwaltung, das DNS64 gerade nutzt (0 = keins)
@@ -264,7 +265,7 @@ func (m *Module) start(ctx context.Context) error {
 	e.up.SetTop(cfg.UpCount)
 	e.local = localnet.New(m.routerAddr(ctx), m.log)
 	e.srv = &dnsserver.Server{Addr: e.addr, Local: e.local, Filter: e.lists, Upstream: e.up, Cache: e.cache, Log: st, Logger: m.log,
-		Records: m, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused}
+		Records: m, Split: m.split, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused}
 	if err := e.srv.Start(); err != nil {
 		st.CloseNow()
 		e.up.Close()

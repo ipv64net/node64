@@ -1,5 +1,25 @@
 # Änderungen – CDN64
 
+## 1.7.0 – 2026-10-18
+
+CDN64 online per Klick.
+
+### Neu
+- Spalte *CDN64 online* in den Host-Listen: *Einschalten* macht einen Host über srv07/srv08.cdn64.de aus dem
+  Internet erreichbar (IPv4 und IPv6, ohne offene Ports).
+  - Ablauf im Fenster: Account prüfen, Tunnel anmelden und aufbauen, Namen bei ipv64 einschalten (DNS), Selbsttest
+    über das Internet. Jeder Schritt mit Ergebnis und Fehlertext mit Abhilfe.
+  - Modus 1 (TLS wird durchgereicht, das Zertifikat bleibt in der Node); auf Wunsch gleich ein Online-Healthcheck.
+  - Abzeichen je Server (verbunden, über den anderen Server, kein Tunnel), „gesperrt“, Selbsttest, weitere Namen
+    einschalten, Ausschalten.
+  - Ausschalten stellt den DNS zurück; mit dem letzten Namen wird der Tunnel abgemeldet. Gelöschte Hosts und
+    entfernte Namen trägt der Abgleich (jede Minute) bei ipv64 aus.
+  - Hinweise bei gesperrtem UDP (Tunnel über TCP) und zu kleinem UDP-Puffer des Docker-Hosts.
+- Im Heimnetz beantwortet DNS64 eingeschaltete Namen mit der Adresse der Node (geteilter DNS).
+- API: `POST /api/cdn64/online/tunnel`, `POST|DELETE /api/cdn64/hosts/{id}/online`,
+  `POST /api/cdn64/hosts/{id}/online/test`; `GET /api/cdn64/online` zeigt zusätzlich Namen, Kontingent und
+  UDP-Puffer.
+
 ## 1.6.0 – 2026-10-17
 
 Abweisungen in Statistik und Log, gleiches Diagramm wie auf dem Dashboard.

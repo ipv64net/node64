@@ -2883,6 +2883,236 @@
             "description": "gezählte offene Verbindungen"
           }
         }
+      },
+      "CDNOnlineError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string",
+            "description": "z. B. no_api_key, api_key_rejected, ipv64_unreachable, plan_not_allowed, limit_reached, traffic_limit_reached, tunnel_blocked, not_configured"
+          },
+          "text": {
+            "type": "string",
+            "description": "Fehlertext mit Abhilfe in der Sprache der Anfrage"
+          }
+        }
+      },
+      "CDNOnlineStatus": {
+        "type": "object",
+        "properties": {
+          "configured": {
+            "type": "boolean",
+            "description": "Tunnel eingerichtet"
+          },
+          "tunnel": {
+            "type": "string",
+            "description": "Tunnel-ID bei ipv64 (tn_...)"
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "host": {
+                  "type": "string"
+                },
+                "connected": {
+                  "type": "boolean"
+                },
+                "transport": {
+                  "type": "string",
+                  "enum": [
+                    "quic",
+                    "tcp",
+                    ""
+                  ]
+                },
+                "total": {
+                  "type": "integer",
+                  "description": "Streams seit dem Start"
+                }
+              }
+            }
+          },
+          "api_ready": {
+            "type": "boolean",
+            "description": "ipv64-Account verbunden (zentraler API-Key)"
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "host_id": {
+                  "type": "integer"
+                },
+                "remote_id": {
+                  "type": "integer"
+                },
+                "mode": {
+                  "type": "integer"
+                },
+                "check": {
+                  "type": "string",
+                  "description": "Healthcheck vom Einschalten"
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "quota": {
+            "type": "object",
+            "description": "Kontingent bei ipv64 (altes und neues CDN zusammen)",
+            "properties": {
+              "domains": {
+                "type": "object",
+                "properties": {
+                  "used": {
+                    "type": "integer"
+                  },
+                  "old_cdn": {
+                    "type": "integer"
+                  },
+                  "limit": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "traffic_mb": {
+                "type": "object",
+                "properties": {
+                  "used": {
+                    "type": "number"
+                  },
+                  "old_cdn": {
+                    "type": "number"
+                  },
+                  "limit": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "bandwidth_mbit": {
+                "type": "integer",
+                "description": "0 = frei"
+              }
+            }
+          },
+          "synced": {
+            "type": "string",
+            "format": "date-time",
+            "description": "letzter Abgleich mit ipv64"
+          },
+          "sync_error": {
+            "type": "string"
+          },
+          "udp_buffer": {
+            "type": "integer",
+            "description": "net.core.rmem_max des Hosts"
+          },
+          "udp_buffer_low": {
+            "type": "boolean",
+            "description": "zu klein für volle QUIC-Geschwindigkeit"
+          }
+        }
+      },
+      "CDNOnlineResult": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "on",
+              "skipped",
+              "error"
+            ]
+          },
+          "code": {
+            "type": "string",
+            "description": "Fehlercode von ipv64 (z. B. domain_not_in_account, cname_exists, limit_reached) oder wildcard_name"
+          },
+          "error": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "CDNOnlineTest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "tls": {
+            "type": "boolean"
+          },
+          "probes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "edge": {
+                  "type": "string"
+                },
+                "addr": {
+                  "type": "string"
+                },
+                "family": {
+                  "type": "string",
+                  "enum": [
+                    "ipv4",
+                    "ipv6"
+                  ]
+                },
+                "ok": {
+                  "type": "boolean",
+                  "description": "Probe kam durch den Tunnel dieser Node an"
+                },
+                "skipped": {
+                  "type": "boolean",
+                  "description": "Node hat diese Adressfamilie nicht"
+                },
+                "ms": {
+                  "type": "integer"
+                },
+                "trusted": {
+                  "type": "boolean",
+                  "description": "Zertifikat für Besucher gueltig (nur TLS)"
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "dns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Antwort eines öffentlichen Resolvers"
+          },
+          "dns_ok": {
+            "type": "boolean"
+          }
+        }
       }
     }
   },
@@ -11587,6 +11817,360 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/online": {
+      "get": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "CDN64 online: Tunnel, Server, eingeschaltete Namen, Kontingent",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineStatus"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Tunnel von Hand setzen (Tests; sonst per Klick)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tunnel": {
+                    "type": "string"
+                  },
+                  "token": {
+                    "type": "string",
+                    "description": "leer = unverändert"
+                  },
+                  "edges": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "host": {
+                          "type": "string"
+                        },
+                        "port": {
+                          "type": "integer"
+                        },
+                        "ips": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Angaben unvollständig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Tunnel hier vergessen (bei ipv64 bleibt er)",
+        "responses": {
+          "204": {
+            "description": "entfernt"
+          }
+        }
+      }
+    },
+    "/cdn64/online/tunnel": {
+      "post": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Tunnel bei ipv64 anmelden bzw. prüfen und bis 25 s auf die Verbindung warten",
+        "description": "Legt den Tunnel an, wenn noch keiner besteht (Token verschlüsselt gespeichert), übernimmt die Server-Liste von ipv64.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineStatus"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-Account verbunden (no_api_key)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Key abgelehnt, Klasse ohne CDN, Tunnel gesperrt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/hosts/{id}/online": {
+      "post": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Namen des Hosts bei CDN64 online einschalten (DNS zeigt auf srv07/srv08)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "description": "Platzhalter-Namen werden übersprungen; jeder Name einzeln mit Ergebnis. Scheitern alle, wird der Tunnel wieder entfernt.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "integer",
+                    "enum": [
+                      1
+                    ],
+                    "description": "1 = durchreichen (Standard)"
+                  },
+                  "healthcheck": {
+                    "type": "boolean",
+                    "description": "Online-Healthcheck auf den ersten Namen anlegen"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CDNOnlineResult"
+                      }
+                    },
+                    "check": {
+                      "type": "string"
+                    },
+                    "check_error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein ipv64-Account verbunden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "nicht erlaubt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Alle Namen des Hosts ausschalten (DNS zurück); mit dem letzten Namen geht der Tunnel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "ausgeschaltet"
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/hosts/{id}/online/test": {
+      "post": {
+        "tags": [
+          "CDN64"
+        ],
+        "summary": "Selbsttest über das Internet: jeder Name über jeden Server und jede Adresse",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CDNOnlineTest"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "nicht eingeschaltet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNOnlineError"
                 }
               }
             }

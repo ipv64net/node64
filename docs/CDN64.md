@@ -130,6 +130,40 @@ und keinem Modul:
 - **Oberfläche über den Eingang:** standardmäßig nur aus dem eigenen Netz; „aus dem Internet“ muss ausdrücklich
   eingeschaltet werden.
 
+## CDN64 online (srv07/srv08)
+
+Ein Klick macht einen Host über **srv07.cdn64.de** (Nürnberg) und **srv08.cdn64.de** (Falkenstein) aus dem
+Internet erreichbar, per IPv4 und IPv6, auch an Anschlüssen nur mit IPv6 (DS-Lite) und ohne offene Ports zu Hause.
+Die Node baut dazu einen Tunnel nach außen auf (QUIC über UDP 7844, sonst TCP 7844). Planung und Betrieb:
+[CDN64-ONLINE.md](CDN64-ONLINE.md).
+
+- **Voraussetzung:** ipv64-Account verbunden (*Einstellungen › ipv64*) mit einer Account-Klasse, die CDN-Domains
+  enthält. Das Kontingent (Domains, Traffic im Monat) teilen sich altes CDN und CDN64 online.
+- **Einschalten:** In der Host-Liste in der Spalte *CDN64 online* auf *Einschalten*. Das Fenster zeigt vier
+  Schritte:
+  1. ipv64-Account prüfen; ohne Account geht es von dort zu *Account verbinden*.
+  2. Tunnel zu srv07/srv08 anmelden und aufbauen. Der Token liegt verschlüsselt in der Node. Ist UDP gesperrt,
+     läuft der Tunnel über TCP; ein zu kleiner UDP-Puffer des Docker-Hosts wird mit Befehl angezeigt.
+  3. Namen bei ipv64 einschalten: Jeder Name des Hosts einzeln. Ab dann zeigt DNS mit TTL 10 auf beide Server;
+     die bisherigen A/AAAA ruhen bei ipv64. Platzhalter-Namen (`*.`) werden übersprungen. Fehler kommen mit
+     Abhilfe, z. B. Name nicht im Account, CNAME vorhanden, Kontingent voll. Auf Wunsch legt die Node gleich
+     einen Online-Healthcheck auf den ersten Namen an.
+  4. Selbsttest über das Internet: Jeder Name über jeden Server und jede Adresse (IPv4, IPv6). Ok heißt: Die
+     Probe kam durch den Tunnel genau dieser Node an. Dazu der Hinweis, ob das Zertifikat für Besucher
+     vertrauenswürdig ist und ob DNS schon umgestellt ist.
+- **Modus 1 (Standard):** Die Server reichen TLS nur durch. Zertifikat und Schlüssel bleiben in der Node, die
+  Server sehen keine Inhalte. Die echte Besucher-IP kommt in der Node an (Zugriffslisten, Limits und Log wirken
+  wie gewohnt). Modus 2 (TLS auf den Servern, HTTP/3) folgt.
+- **Liste:** Je Server ein Abzeichen: grün = Tunnel verbunden, blau = über den anderen Server erreichbar,
+  rot = kein Tunnel. Dazu „gesperrt“ (z. B. Traffic aufgebraucht), *Selbsttest*, *+n einschalten* (neue Namen am
+  Host) und *Ausschalten*.
+- **Ausschalten** schaltet die Namen bei ipv64 aus (DNS zeigt wieder auf die alte Adresse); mit dem letzten Namen
+  wird auch der Tunnel abgemeldet. Wird ein Host gelöscht oder verliert er einen Namen, trägt der Abgleich (jede
+  Minute) ihn bei ipv64 aus. Ein angelegter Healthcheck bleibt bestehen.
+- **Im Heimnetz:** DNS64 dieser Node beantwortet eingeschaltete Namen mit ihrer eigenen Adresse im Netz des
+  Fragenden (geteilter DNS). Aufrufe von zu Hause gehen so nicht über srv07/srv08. Läuft die Node im
+  Docker-Bridge-Netz, bleibt es bei der normalen Antwort.
+
 ## Statistik und Protokoll
 
 - **Anfragen je Host und Stunde** (2xx–5xx, Datenmenge, abgewiesen) werden 90 Tage gehalten. Die Liste zeigt
@@ -185,8 +219,8 @@ Einen Import gibt es nicht (Entscheidung). Hosts werden neu angelegt; Zertifikat
 - **Keine Lastverteilung** auf mehrere Ziele, keine Rate-Limits je Host, keine GeoIP-Sperren (vorgemerkt).
 - **TLS durchreichen** geht nur über TCP, nicht über HTTP/3.
 - **Erreichbarkeit und Zähler „seit Start“** liegen im Speicher. Die Statistik in `cdn64.db` bleibt erhalten.
-- **Anbindung an die ipv64-CDN-Server** (mit und ohne TLS-Terminierung, Tunnel): eigener Plan,
-  [PLAN-NODE64-CDN64-ONLINE.md](PLAN-NODE64-CDN64-ONLINE.md).
+- **CDN64 online** kann bisher nur Modus 1 (durchreichen) und nur Namen in Domains des ipv64-Accounts; Modus 2
+  und 3 folgen ([CDN64-ONLINE.md](CDN64-ONLINE.md)).
 
 ## API (Auszug)
 
@@ -196,6 +230,7 @@ Einen Import gibt es nicht (Entscheidung). Hosts werden neu angelegt; Zertifikat
 | Zugriffslisten, Log, Statistik, Einstellungen | `/api/cdn64/access-lists`, `/api/cdn64/log`, `/api/cdn64/stats`, `/api/cdn64/settings` |
 | ipv64-Blocklisten | `GET\|PUT /api/cdn64/blocklists`, `POST /api/cdn64/blocklists/refresh` |
 | Schutz vor Überlastung | `GET\|PUT /api/cdn64/limits`, `DELETE /api/cdn64/limits/bans/{ip}` |
+| CDN64 online | `GET /api/cdn64/online`, `POST /api/cdn64/online/tunnel`, `POST\|DELETE /api/cdn64/hosts/{id}/online`, `POST /api/cdn64/hosts/{id}/online/test` |
 | Zertifikate (Kern) | `/api/certs`, `/api/certs/account`, `/api/certs/dns-accounts`, `/api/certs/dns-providers` |
 | Ports und Eingang (Kern) | `/api/ports`, `/api/edge`, `/api/edge/ui` |
 

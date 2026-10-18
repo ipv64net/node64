@@ -9,14 +9,18 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/secrets"
 	"github.com/ipv64net/node64/internal/tunnel"
 )
 
 // CDN64 online: Tunnel zu srv07/srv08.cdn64.de. Die Server reichen Besucher-Verbindungen durch den Tunnel, die
 // Node nimmt sie wie Verbindungen auf Port 443/80 an (Eingang.ServeConn) - ohne offene Ports zu Hause.
-// T1: Tunnel-Daten werden von Hand gesetzt (API); ab T3/T4 kommen sie per Klick von ipv64. Planung: docs/CDN64-ONLINE.md.
+// Tunnel-Daten kommen per Klick von ipv64 (online_click.go); von Hand setzen geht weiter (API, Tests). Planung:
+// docs/CDN64-ONLINE.md.
 
 const setOnline = "cdn64.online" // JSON onlineConf
 
@@ -33,6 +37,15 @@ type onlineState struct {
 	client *tunnel.Client
 	cancel context.CancelFunc
 	done   chan struct{}
+
+	api    OnlineAPI                       // ipv64 /cdn64o (nil = nicht verfuegbar)
+	op     sync.Mutex                      // ein Ein-/Ausschalten bzw. Abgleich gleichzeitig
+	remote atomic.Pointer[onlineRemote]    // letzter Stand von ipv64
+	names  atomic.Pointer[map[string]bool] // eingeschaltete Namen (geteilter DNS)
+	kick   chan struct{}                   // Abgleich bald
+	seenMu sync.Mutex                      // Selbsttest: Streams je Name
+	seen   map[string]int                  //
+	ports  [2]int                          // Tests: Besucher-Ports der Server (sonst 443, 80)
 }
 
 // SetSecrets gibt den Schluessel fuer verschluesselt gespeicherte Werte (Tunnel-Token).
@@ -99,6 +112,7 @@ func (m *Module) onlineHandle(st tunnel.Stream, h tunnel.Header) {
 		return
 	}
 	c := &tunnelConn{Stream: st, remote: ra}
+	m.onlineSeen(h.Host)
 	switch h.Kind {
 	case tunnel.KindTLS:
 		m.edge.ServeConn(c, 443)
@@ -117,17 +131,37 @@ type tunnelConn struct {
 
 func (c *tunnelConn) RemoteAddr() net.Addr { return c.remote }
 
-// ---------------------------------------------------------------- API (T1: von Hand; ab T4 per Klick)
+// ---------------------------------------------------------------- API (Status; Tunnel von Hand setzen)
 
 type onlineView struct {
-	Configured bool                `json:"configured"`
-	Tunnel     string              `json:"tunnel,omitempty"`
-	Edges      []tunnel.EdgeStatus `json:"edges"`
+	Configured bool                 `json:"configured"`
+	Tunnel     string               `json:"tunnel,omitempty"`
+	Edges      []tunnel.EdgeStatus  `json:"edges"`
+	APIReady   bool                 `json:"api_ready"` // ipv64-Account verbunden
+	Names      []onlineName         `json:"names"`
+	Quota      *ipv64api.CDN64Quota `json:"quota,omitempty"`
+	Synced     *time.Time           `json:"synced,omitempty"` // letzter Abgleich mit ipv64
+	SyncError  string               `json:"sync_error,omitempty"`
+	UDPBuffer  int                  `json:"udp_buffer,omitempty"` // net.core.rmem_max
+	UDPLow     bool                 `json:"udp_buffer_low"`       // zu klein fuer volle QUIC-Geschwindigkeit
 }
 
-func (m *Module) apiOnlineGet(w http.ResponseWriter, r *http.Request) {
-	v := onlineView{Edges: []tunnel.EdgeStatus{}}
-	if c, _, err := m.onlineConf(r.Context()); err == nil && c != nil {
+func (m *Module) onlineStatus(ctx context.Context) onlineView {
+	v := onlineView{Edges: []tunnel.EdgeStatus{}, Names: []onlineName{}}
+	v.APIReady = m.online.api != nil && m.online.api.Ready(ctx)
+	if list, err := m.onlineNames(ctx); err == nil {
+		v.Names = list
+	}
+	if rm := m.online.remote.Load(); rm != nil {
+		at := rm.At
+		v.Synced, v.SyncError = &at, rm.Err
+		if rm.Data != nil {
+			q := rm.Data.Quota
+			v.Quota = &q
+		}
+	}
+	v.UDPBuffer, v.UDPLow = udpBufferLow()
+	if c, _, err := m.onlineConf(ctx); err == nil && c != nil {
 		v.Configured, v.Tunnel = true, c.Tunnel
 		for _, e := range c.Edges {
 			v.Edges = append(v.Edges, tunnel.EdgeStatus{Name: e.Name, Host: e.Host})
@@ -139,7 +173,20 @@ func (m *Module) apiOnlineGet(w http.ResponseWriter, r *http.Request) {
 	if cl != nil {
 		v.Edges = cl.Status()
 	}
-	writeJSON(w, http.StatusOK, v)
+	return v
+}
+
+func (m *Module) apiOnlineGet(w http.ResponseWriter, r *http.Request) {
+	// Kontingent frisch, wenn noch keins da oder aelter als 5 Minuten (erster Schritt im Fenster)
+	if a := m.online.api; a != nil && a.Ready(r.Context()) {
+		if rm := m.online.remote.Load(); rm == nil || time.Since(rm.At) > 5*time.Minute {
+			ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+			ov, err := a.Overview(ctx)
+			cancel()
+			m.onlineSetRemote(ov, err)
+		}
+	}
+	writeJSON(w, http.StatusOK, m.onlineStatus(r.Context()))
 }
 
 func (m *Module) apiOnlinePut(w http.ResponseWriter, r *http.Request) {
@@ -174,12 +221,7 @@ func (m *Module) apiOnlinePut(w http.ResponseWriter, r *http.Request) {
 		}
 		tok = oldTok
 	}
-	stored := tok
-	if m.online.box != nil {
-		stored = m.online.box.Encrypt(tok)
-	}
-	b, _ := json.Marshal(onlineConf{Tunnel: in.Tunnel, Token: stored, Edges: in.Edges})
-	if err := m.core.SetSetting(r.Context(), setOnline, string(b)); err != nil {
+	if err := m.onlineSave(r.Context(), in.Tunnel, tok, in.Edges); err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
