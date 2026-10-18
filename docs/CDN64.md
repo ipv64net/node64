@@ -160,6 +160,9 @@ Die Node baut dazu einen Tunnel nach außen auf (QUIC über UDP 7844, sonst TCP 
   bei Let's Encrypt; bis es da ist, reichen sie wie in Modus 1 durch. Port 80 leitet auf HTTPS um, ist die Node
   nicht erreichbar, zeigen die Server eine verständliche Seite. Geht nicht für *TLS durchreichen*. Wechsel 1 ↔ 2
   über den Knopf *Modus wechseln* in der Liste, ohne DNS-Änderung.
+- **Modus 3:** ohne Tunnel – die Server gehen direkt zum Ziel des Proxy-Hosts. Nur, wenn das Ziel öffentlich
+  erreichbar ist (öffentliche IP oder Name); für Ziele im Heimnetz Modus 1 oder 2. Ohne Node64 lässt sich Modus 3
+  auf ipv64.net unter *CDN64* einrichten (Ziel aus den DNS-Einträgen oder fest, Frontend-Stufe, Cache, Liste).
 - **Liste:** Je Server ein Abzeichen: grün = Tunnel verbunden, blau = über den anderen Server erreichbar,
   rot = kein Tunnel. Dazu „gesperrt“ (z. B. Traffic aufgebraucht), *Selbsttest*, *+n einschalten* (neue Namen am
   Host) und *Ausschalten*.

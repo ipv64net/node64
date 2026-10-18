@@ -543,6 +543,18 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   dann Freigabe.
 
 ### T7 – Modus 3 direkt zum Ziel + Webseite
+- **Stand 2026-10-18 (cdn64-edge 0.7.0, CDN64 1.10.0):** gebaut und getestet, Einspielen und Live-Test offen.
+  - Server (`direct.go`, `cache.go`): Ziel aus `addrs` (DNS-Einträge, von ipv64 je Abruf aktuell) oder `host` (selbst
+    aufgelöst), http/https mit wählbarer Prüfung, IPv6 bevorzugt, Frontend-Stufen 1–3, WebSockets, `X-Forwarded-For`/
+    `X-Real-IP`; SSRF-Schutz bei jeder Verbindung (öffentlich, nicht die Server); eigener Verbindungspool je Stand
+    des Ziels (eine DynDNS-Änderung greift sofort); Cache nach den Köpfen des Ziels, Grenze je Name und gesamt
+    (`cache_total_mb`, Standard 4 GB); Erlauben-/Sperrliste für alle Modi (Modus 1 beim Verbindungsaufbau).
+  - ipv64: `cdn64o_targets`, `cdn64o_acl`, `acl_default`; Modus 3 anlegen/ändern, Liste; Ziele nur öffentlich.
+  - Node: Modus 3 für Proxy-Hosts mit öffentlichem Ziel.
+  - Webseite `cdn64.php`: Kontingent, alle Namen mit Modus/Ziel/Status/Traffic, Modus 3 anlegen und bearbeiten,
+    Liste, Ausschalten, Tunnels der Nodes, Werbung für Modus 1/2 mit Docker-Befehl (E6). Ruft die API v2 auf.
+  - Getestet: Go (Modus 3, SSRF, Frontend-Stufen, Zertifikatsprüfung, Cache, Listen, Zielwechsel), PHP 86/86,
+    Seite 10/10.
 - Server: Weiterleitung an das Ziel (http/https, Port, IPv6 bevorzugt), Ziel aus DNS-Eintrag oder fest, SSRF-Schutz,
   WebSockets, Erlauben-/Sperrliste, Cache.
 - ipv64: Tabellen `cdn64o_targets`/`cdn64o_acl`, DynDNS-Änderungen an die Server, neue Seite `cdn64.php`,

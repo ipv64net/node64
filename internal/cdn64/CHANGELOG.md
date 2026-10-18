@@ -1,5 +1,13 @@
 # Änderungen – CDN64
 
+## 1.10.0 – 2026-10-18
+
+CDN64 online Modus 3.
+
+### Neu
+- Modus 3 wählbar: srv07/srv08 gehen ohne Tunnel direkt zum Ziel des Proxy-Hosts (nur, wenn das Ziel öffentlich
+  erreichbar ist; sonst Modus 1 oder 2). Wechsel zwischen Modus 3 und 1/2 schaltet den Namen bei ipv64 aus und neu ein.
+
 ## 1.9.0 – 2026-10-18
 
 CDN64 online im Betrieb.
