@@ -195,6 +195,7 @@ func run() error {
 	cdnModule.SetDataDir(cfg.DataDir)
 	cdnModule.SetDNSRecords(cdn64.IPv64Records(ipv64Key))                          // DNS-Eintrag bei ipv64 beim Anlegen eines Hosts
 	cdnModule.SetOnlineAPI(cdn64.IPv64Online(ipv64Key))                            // CDN64 online per Klick (Tunnel, Namen bei ipv64)
+	cdnModule.SetNotifier(dispatcher.Dispatch)                                     // CDN64 online: Tunnel weg/wieder da, Sperre
 	dnsModule.SetSplit(cdnModule.OnlineName)                                       // im Heimnetz: CDN64-online-Namen direkt zur Node
 	cdnModule.SetCheckCreator(func(r *http.Request, body []byte) (string, error) { // "Healthcheck fuer dieses Ziel"
 		if !modules.IsRunning(healthchecks.Name) {

@@ -174,6 +174,8 @@ func (m *Module) Start(ctx context.Context) error {
 	m.wg.Add(1)
 	go func() { defer m.wg.Done(); m.onlineLoop(ctx) }()
 	m.wg.Add(1)
+	go func() { defer m.wg.Done(); m.onlineMonitor(ctx) }()
+	m.wg.Add(1)
 	go func() { defer m.wg.Done(); m.blLoop(ctx) }()
 	m.wg.Add(1)
 	go func() { defer m.wg.Done(); m.limLoop(ctx) }()

@@ -23,6 +23,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/cdnedge"
 	"github.com/ipv64net/node64/internal/ipv64api"
+	"github.com/ipv64net/node64/internal/notify"
 )
 
 // fakeOnline spielt ipv64 /cdn64o fuer die Node.
@@ -255,5 +256,31 @@ func TestOnlineOneClick(t *testing.T) {
 	}
 	if nt, nh := f.counts(); nt != 0 || nh != 0 || e.m.OnlineName("app.test") {
 		t.Fatalf("after host delete: tunnels %d hosts %d", nt, nh)
+	}
+}
+
+// Meldungen: Tunnel zu keinem Server -> erst nach der Schonfrist, einmal; Sperre bei ipv64 einmal je Name.
+func TestOnlineAlarm(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.enable(t)
+	var got []notify.Alert
+	e.m.SetNotifier(func(a notify.Alert) { got = append(got, a) })
+	if _, err := e.m.core.Writer().ExecContext(ctx, `INSERT INTO cdn_online (name, host_id, remote_id, mode, created_at) VALUES ('a.test', 1, 9, 1, '2026-01-01T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	reason := "traffic"
+	e.m.online.remote.Store(&onlineRemote{At: time.Now(), Data: &ipv64api.CDN64Overview{Hosts: []ipv64api.CDN64Host{{ID: 9, FQDN: "a.test", Status: "blocked", BlockedReason: &reason}}}})
+	a := &onlineAlarm{blocked: map[string]bool{}}
+	t0 := time.Now()
+	e.m.onlineCheckAlarm(ctx, a, t0)
+	e.m.onlineCheckAlarm(ctx, a, t0.Add(time.Minute))
+	if len(got) != 1 || got[0].Kind != notify.KindCDNOnlineBlocked || got[0].Reason != "traffic" {
+		t.Fatalf("blocked: %+v", got)
+	}
+	e.m.onlineCheckAlarm(ctx, a, t0.Add(onlineGrace+time.Second))
+	e.m.onlineCheckAlarm(ctx, a, t0.Add(onlineGrace+time.Minute))
+	if len(got) != 2 || got[1].Kind != notify.KindCDNOnlineDown || got[1].Check.Name != "a.test" || !got[1].Check.Local {
+		t.Fatalf("down: %+v", got)
 	}
 }

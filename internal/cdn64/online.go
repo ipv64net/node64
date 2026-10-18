@@ -14,6 +14,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/ipv64api"
+	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/secrets"
 	"github.com/ipv64net/node64/internal/tunnel"
 )
@@ -47,6 +48,7 @@ type onlineState struct {
 	seenMu sync.Mutex                      // Selbsttest: Streams je Name
 	seen   map[string]int                  //
 	ports  [2]int                          // Tests: Besucher-Ports der Server (sonst 443, 80)
+	notify func(notify.Alert)              // Meldungen (nil = keine)
 }
 
 // SetSecrets gibt den Schluessel fuer verschluesselt gespeicherte Werte (Tunnel-Token).

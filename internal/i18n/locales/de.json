@@ -1764,7 +1764,10 @@
       "dns64_cert": "⚠️ DNS64: Zertifikat für {name} lässt sich nicht holen",
       "cert_fail": "⚠️ Zertifikat für {name} lässt sich nicht holen",
       "cert_expiry": "⚠️ Zertifikat für {name} läuft bald ab",
-      "cert_ok": "✅ Zertifikat für {name} wieder gültig"
+      "cert_ok": "✅ Zertifikat für {name} wieder gültig",
+      "cdn64_online_down": "🔴 CDN64 online: Tunnel zu srv07/srv08 getrennt ({name})",
+      "cdn64_online_up": "🟢 CDN64 online: Tunnel wieder verbunden ({name})",
+      "cdn64_online_blocked": "🟠 CDN64 online: {name} bei ipv64 gesperrt"
     },
     "body": {
       "quota_used": "Verbraucht: {used} von {limit} Online-Messungen heute",

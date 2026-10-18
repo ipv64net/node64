@@ -50,6 +50,10 @@ const (
 	KindCertFail   Kind = "cert_fail"   // Zertifikat laesst sich nicht holen bzw. verlaengern
 	KindCertExpiry Kind = "cert_expiry" // Zertifikat laeuft bald ab
 	KindCertOK     Kind = "cert_ok"     // Entwarnung: Zertifikat wieder geholt
+	// CDN64 online (ebenfalls nur lokal)
+	KindCDNOnlineDown    Kind = "cdn64_online_down"    // Tunnel zu keinem Server mehr (Namen eingeschaltet)
+	KindCDNOnlineUp      Kind = "cdn64_online_up"      // Tunnel wieder verbunden
+	KindCDNOnlineBlocked Kind = "cdn64_online_blocked" // Namen bei ipv64 gesperrt (z. B. Traffic aufgebraucht)
 
 	KindQuota Kind = "quota" // Tageskontingent der Online-Checks erreicht (Account, vom hub)
 )
@@ -82,8 +86,13 @@ func IsDNS64(k Kind) bool {
 // IsCert: Meldung der Zertifikatsverwaltung.
 func IsCert(k Kind) bool { return k == KindCertFail || k == KindCertExpiry || k == KindCertOK }
 
-// IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64, Zertifikate).
-func IsModule(k Kind) bool { return IsDynDNS(k) || IsDNS64(k) || IsCert(k) }
+// IsCDN64: Meldung von CDN64 online.
+func IsCDN64(k Kind) bool {
+	return k == KindCDNOnlineDown || k == KindCDNOnlineUp || k == KindCDNOnlineBlocked
+}
+
+// IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64, Zertifikate, CDN64 online).
+func IsModule(k Kind) bool { return IsDynDNS(k) || IsDNS64(k) || IsCert(k) || IsCDN64(k) }
 
 // Message ist die fertig formulierte Nachricht fuer einen Sender.
 type Message struct {

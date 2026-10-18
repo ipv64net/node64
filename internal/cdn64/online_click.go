@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/ipv64api"
+	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/store"
 	"github.com/ipv64net/node64/internal/tunnel"
 )
@@ -937,6 +938,106 @@ func (m *Module) onlineStrings(r *http.Request) string {
 	}
 	b, _ := json.Marshal(out)
 	return string(b)
+}
+
+// ---------------------------------------------------------------- Meldungen
+
+// onlineGrace: so lange darf der Tunnel weg sein, bevor gemeldet wird (Neustarts der Server, kurze Netzaussetzer).
+const onlineGrace = 3 * time.Minute
+
+// SetNotifier haengt den Versand an (Dispatcher des Kerns; nil = keine Meldungen).
+func (m *Module) SetNotifier(f func(notify.Alert)) { m.online.notify = f }
+
+// onlineAlarm merkt sich, was gemeldet wurde.
+type onlineAlarm struct {
+	downSince time.Time
+	downSent  bool
+	blocked   map[string]bool // Name -> Sperre gemeldet
+}
+
+// onlineMonitor prueft alle 30 s: eingeschaltete Namen, aber zu keinem Server ein Tunnel -> nach onlineGrace melden,
+// bei Rueckkehr Entwarnung; von ipv64 gesperrte Namen einmal melden.
+func (m *Module) onlineMonitor(ctx context.Context) {
+	a := &onlineAlarm{blocked: map[string]bool{}}
+	t := time.NewTicker(30 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		m.onlineCheckAlarm(ctx, a, time.Now())
+	}
+}
+
+func (m *Module) onlineCheckAlarm(ctx context.Context, a *onlineAlarm, now time.Time) {
+	list, err := m.onlineNames(ctx)
+	if err != nil {
+		return
+	}
+	if len(list) == 0 {
+		a.downSince, a.downSent = time.Time{}, false
+		return
+	}
+	names := make([]string, 0, len(list))
+	for _, x := range list {
+		names = append(names, x.Name)
+	}
+	label := strings.Join(names, ", ")
+	up := false
+	m.online.mu.Lock()
+	cl := m.online.client
+	m.online.mu.Unlock()
+	if cl != nil {
+		for _, e := range cl.Status() {
+			up = up || e.Connected
+		}
+	}
+	switch {
+	case !up && a.downSince.IsZero():
+		a.downSince = now
+	case !up && !a.downSent && now.Sub(a.downSince) >= onlineGrace:
+		a.downSent = true
+		m.onlineSend(notify.KindCDNOnlineDown, label, "", "")
+	case up:
+		if a.downSent {
+			m.onlineSend(notify.KindCDNOnlineUp, label, "", "")
+		}
+		a.downSince, a.downSent = time.Time{}, false
+	}
+	if rm := m.online.remote.Load(); rm != nil && rm.Data != nil {
+		ids := map[int64]bool{}
+		for _, x := range list {
+			ids[x.RemoteID] = true
+		}
+		for _, h := range rm.Data.Hosts {
+			if !ids[h.ID] {
+				continue
+			}
+			switch {
+			case h.Status == "blocked" && !a.blocked[h.FQDN]:
+				a.blocked[h.FQDN] = true
+				reason := ""
+				if h.BlockedReason != nil {
+					reason = *h.BlockedReason
+				}
+				m.onlineSend(notify.KindCDNOnlineBlocked, h.FQDN, reason, "")
+			case h.Status != "blocked":
+				delete(a.blocked, h.FQDN)
+			}
+		}
+	}
+}
+
+func (m *Module) onlineSend(kind notify.Kind, name, reason, msg string) {
+	if m.online.notify == nil {
+		return
+	}
+	now := time.Now().UTC()
+	m.log.Info("notification", "kind", kind, "name", name, "reason", reason)
+	m.online.notify(notify.Alert{EventID: "cdn64-" + string(kind) + "-" + strconv.FormatInt(now.UnixNano(), 36), Kind: kind, Time: now,
+		Check: notify.CheckInfo{Name: name, NotifyDown: true, NotifyUp: true, Local: true}, Reason: reason, Message: msg})
 }
 
 // ---------------------------------------------------------------- Hinweise

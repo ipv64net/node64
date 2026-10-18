@@ -360,7 +360,8 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 // isDownKind: Stoerungsmeldungen (Sammelmeldung der Entwarnungen zaehlt als Entwarnung).
 func isDownKind(k Kind) bool {
 	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded || k == KindUnchecked || k == KindDynFail || k == KindDynLimit || k == KindQuota ||
-		k == KindDNS64Down || k == KindDNS64Lists || k == KindDNS64Cert || k == KindCertFail || k == KindCertExpiry
+		k == KindDNS64Down || k == KindDNS64Lists || k == KindDNS64Cert || k == KindCertFail || k == KindCertExpiry || k == KindCDNOnlineDown ||
+		k == KindCDNOnlineBlocked
 }
 
 // flagsOK prueft die Schalter von Check und Kanal (Stoerung/Entwarnung/teilweise gestoert).
@@ -754,8 +755,11 @@ func (d *Dispatcher) composeDynDNS(lang string, a Alert, m Message) Message {
 	if IsCert(a.Kind) {
 		m.URL = d.baseURL(uid, "/certificates")
 	}
+	if IsCDN64(a.Kind) {
+		m.URL = d.baseURL(uid, "/cdn64")
+	}
 	m.Title, m.Priority = t("notify.subject."+string(a.Kind), "name", a.Check.Name), 4
-	if a.Kind == KindDynIP || a.Kind == KindDynOK || a.Kind == KindDNS64Up || a.Kind == KindCertOK {
+	if a.Kind == KindDynIP || a.Kind == KindDynOK || a.Kind == KindDNS64Up || a.Kind == KindCertOK || a.Kind == KindCDNOnlineUp {
 		m.Priority = 2
 	}
 	var lines []string
