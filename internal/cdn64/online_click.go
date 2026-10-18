@@ -539,8 +539,9 @@ type onlineTest struct {
 	Name   string        `json:"name"`
 	TLS    bool          `json:"tls"`
 	Probes []onlineProbe `json:"probes"`
-	DNS    []string      `json:"dns"`    // Antwort eines oeffentlichen Resolvers
-	DNSOK  bool          `json:"dns_ok"` // zeigt auf die Server
+	DNS    []string      `json:"dns"`                   // Antwort eines oeffentlichen Resolvers
+	DNSOK  bool          `json:"dns_ok"`                // zeigt auf die Server
+	Route  string        `json:"route_error,omitempty"` // Host hier nicht geroutet (z. B. Name von DNS64 belegt)
 }
 
 func (m *Module) onlinePorts() (int, int) {
@@ -561,12 +562,15 @@ func (m *Module) onlineSelfTest(ctx context.Context, h *Host) ([]onlineTest, err
 		return nil, err
 	}
 	useTLS := h.Kind == KindPass || h.HTTPS()
+	m.mu.Lock()
+	routeErr := m.routeErr[h.ID]
+	m.mu.Unlock()
 	var out []onlineTest
 	for _, x := range list {
 		if x.HostID != h.ID {
 			continue
 		}
-		t := onlineTest{Name: x.Name, TLS: useTLS, Probes: []onlineProbe{}}
+		t := onlineTest{Name: x.Name, TLS: useTLS, Probes: []onlineProbe{}, Route: routeErr}
 		allIPs := map[string]bool{}
 		for _, e := range c.Edges {
 			ips := e.IPs
@@ -885,7 +889,7 @@ func (m *Module) onlineStrings(r *http.Request) string {
 	}
 	keys := []string{"intro", "start", "retest", "close", "s_account", "s_tunnel", "s_names", "s_test", "quota", "connect", "tcp", "udp_buf",
 		"skipped", "untrusted", "dns_ok", "dns_wait", "done", "partial", "failed", "hint_lan", "check_created", "check_failed", "working",
-		"off_confirm", "direct", "peer", "down", "other_node"}
+		"off_confirm", "direct", "peer", "down", "other_node", "route_error", "wait_edges"}
 	out := map[string]string{}
 	for _, k := range keys {
 		out[k] = m.g.T(r, "cdn64.online."+k)

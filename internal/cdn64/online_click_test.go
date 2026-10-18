@@ -194,6 +194,20 @@ func TestOnlineOneClick(t *testing.T) {
 		tests[0].Probes[0].Trusted == nil || *tests[0].Probes[0].Trusted {
 		t.Fatalf("selftest: %d %s", rec.Code, rec.Body)
 	}
+	// Name in der Node von einem anderen Modul belegt: der Selbsttest sagt es
+	e.m.mu.Lock()
+	e.m.routeErr[h.ID] = "name app.test is used by dns64"
+	e.m.mu.Unlock()
+	rec = httptest.NewRecorder()
+	e.mux.ServeHTTP(rec, httptest.NewRequest("POST", hp+"/test", nil))
+	tests = nil
+	_ = json.Unmarshal(rec.Body.Bytes(), &tests)
+	if len(tests) != 1 || tests[0].Route == "" {
+		t.Fatalf("route error not reported: %s", rec.Body)
+	}
+	e.m.mu.Lock()
+	delete(e.m.routeErr, h.ID)
+	e.m.mu.Unlock()
 	// Ausschalten: Name und Tunnel bei ipv64 weg, Einstellung leer
 	if rec, _ := call("DELETE", hp, ""); rec.Code != http.StatusNoContent {
 		t.Fatalf("disable: %d %s", rec.Code, rec.Body)

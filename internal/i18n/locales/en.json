@@ -749,6 +749,8 @@
       "check_failed": "Health check not created: {error}",
       "working": "running …",
       "other_node": "The servers answer, but via another node: the name is switched on for CDN64 online there. Switch it off there or check this host.",
+      "route_error": "This node does not route the name to the host: {error}. Visitors end up elsewhere (e.g. DNS64/DoH). Remove the name there or use another name.",
+      "wait_edges": "The servers are picking up the new setting, testing again …",
       "e": {
         "no_api_key": "No ipv64 account connected. Enter the API key under Settings › ipv64, then continue here.",
         "api_key_rejected": "ipv64 rejects the API key (expired or revoked). Enter a valid key under Settings › ipv64.",

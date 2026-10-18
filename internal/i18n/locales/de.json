@@ -749,6 +749,8 @@
       "check_failed": "Healthcheck nicht angelegt: {error}",
       "working": "läuft …",
       "other_node": "Die Server antworten, aber über eine andere Node: Der Name ist dort für CDN64 online eingeschaltet. Dort ausschalten oder diesen Host prüfen.",
+      "route_error": "Der Name wird in dieser Node nicht an den Host gegeben: {error}. Besucher landen woanders (z. B. bei DNS64/DoH). Den Namen dort entfernen oder einen anderen Namen nehmen.",
+      "wait_edges": "Die Server übernehmen die neue Einstellung, Test wird wiederholt …",
       "e": {
         "no_api_key": "Kein ipv64-Account verbunden. Unter Einstellungen › ipv64 den API-Key eintragen und danach hier weitermachen.",
         "api_key_rejected": "ipv64 lehnt den API-Key ab (abgelaufen oder widerrufen). Unter Einstellungen › ipv64 einen gültigen Key eintragen.",

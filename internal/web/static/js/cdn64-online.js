@@ -159,9 +159,23 @@
 		}, s.failed);
 	}
 
-	function selftest() {
+	// Selbsttest; direkt nach dem Einschalten holen die Server die Einstellung erst (bis 10 s): dann bis zu
+	// dreimal im Abstand von 6 s wiederholen, bevor ein Fehler angezeigt wird
+	function selftest(retries) {
 		var s = step(t("s_test"));
-		return api("POST", "/api/cdn64/hosts/" + hostID + "/online/test").then(function (list) {
+		var wait = null;
+		var attempt = function (left) {
+			return api("POST", "/api/cdn64/hosts/" + hostID + "/online/test").then(function (list) {
+				var bad = (list || []).some(function (n) { return n.probes.some(function (p) { return !p.ok && !p.skipped; }); });
+				if (bad && left > 0) {
+					if (!wait) { wait = s.line(t("wait_edges")); }
+					return new Promise(function (r) { setTimeout(r, 6000); }).then(function () { return attempt(left - 1); });
+				}
+				if (wait) { wait.remove(); }
+				return list;
+			});
+		};
+		return attempt(retries || 0).then(function (list) {
 			var okAny = false, okAll = true, url = "";
 			(list || []).forEach(function (n) {
 				var row = s.line("", "mt-1");
@@ -174,6 +188,10 @@
 					row.appendChild(b);
 					if (p.ok) { okAny = true; } else if (!p.skipped) { okAll = false; }
 				});
+				if (n.route_error) {
+					okAll = false;
+					s.line(t("route_error", { error: n.route_error }), "text-danger");
+				}
 				if (n.probes.some(function (p) { return p.other_node; })) { s.line(t("other_node"), "text-danger"); }
 				if (n.probes.some(function (p) { return p.trusted === false; })) { s.line(t("untrusted"), "text-warning-emphasis"); }
 				s.line(n.dns_ok ? t("dns_ok") : t("dns_wait"));
@@ -197,7 +215,7 @@
 		setup.classList.add("d-none");
 		stepsEl.textContent = "";
 		var chain = onlyTest ? Promise.resolve() : account().then(tunnel).then(names);
-		chain.then(selftest).catch(function () { return null; }).then(function () {
+		chain.then(function () { return selftest(onlyTest ? 0 : 3); }).catch(function () { return null; }).then(function () {
 			busy = false;
 			onlyTest = true; // danach: erneut testen
 			startBtn.disabled = false;
