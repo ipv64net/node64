@@ -27,11 +27,14 @@ Node. Fällt ein Server aus, nimmt ipv64 ihn nach rund einer Minute aus dem DNS;
      „TLS durchreichen“.
    - **Modus 3 – direkt zum Ziel:** ohne Tunnel; die Server gehen selbst zu deinem Ziel. Geht in Node64 für Hosts mit
      öffentlichem Ziel und **ohne Node64** auf ipv64.net unter *CDN64*: Ziel aus den DNS-Einträgen (DynDNS hält sie
-     aktuell) oder fest, Frontend nur HTTP / HTTPS mit Umleitung / nur HTTPS, Cache, Erlauben-/Sperrliste.
+     aktuell) oder fest, Frontend nur HTTP / HTTPS mit Umleitung / nur HTTPS, Cache (an/aus; Größe nach Account-Klasse,
+     richtet sich nach `Cache-Control` des Ziels), Erlauben-/Sperrliste.
 3. Die Node prüft den Account, baut den Tunnel auf, schaltet den Namen bei ipv64 ein und testet den Weg über das
    Internet. Fertig, wenn alle Schritte grün sind.
 
-Ausschalten stellt den DNS-Eintrag wieder auf die bisherige Adresse zurück.
+Ausschalten stellt den DNS-Eintrag wieder auf die bisherige Adresse zurück. Namen in Modus 1/2 zeigt ipv64.net unter
+*CDN64* nur an (verwaltet werden sie in Node64); ausschalten lassen sie sich dort aber auch – etwa im Notfall, wenn die
+Node nicht erreichbar ist. Die Node nimmt den Namen dann bei sich ebenfalls heraus.
 
 ## Gut zu wissen
 
