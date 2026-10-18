@@ -508,7 +508,25 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   1 ↔ 2 ohne DNS-Änderung, Schutz greift auf dem Server.
 
 ### T6 – Betrieb und Start (Modus 1/2)
-- **Stand 2026-10-18 (cdn64-edge 0.6.0, CDN64 1.9.0):** gebaut und getestet, Einspielen und Live-Tests offen.
+- **Stand 2026-10-18 (cdn64-edge 0.6.0, CDN64 1.9.0):** eingespielt (ipv64, srv07/srv08 ohne die feste
+  Testkonfiguration aus T1/T2, node64-test 0.11.98) und live getestet. Offen nur noch: Datenschutz-Hinweis (G12),
+  Beta und Freigabe (Dennis).
+  - Last (von hub1, pfsense.ipv64.de, Ziel ein einfacher Python-Echo-Dienst hinter der Node, `cmd/cdn64-load`):
+
+    | Test | Ergebnis |
+    |---|---|
+    | Modus 1, HTTP/2, 40/s, 30 s | 1.200 × 200, p50 26 ms, p99 42 ms |
+    | Modus 1, je Anfrage neue TLS-Verbindung (IPv6), 15/s | p50 66 ms, p99 84 ms |
+    | Modus 1, Vollgas 600 Anfragen | 179/s, 573 × 200, 27 × 429 (Limit der Node) |
+    | Modus 2, HTTP/2, 40/s, 30 s | 1.200 × 200, p50 30 ms, p99 42 ms |
+    | Modus 2, HTTP/3, 40/s, 20 s | 800 × 200, p50 30 ms, p99 38 ms |
+    | Modus 2, je Anfrage neue TLS-Verbindung (IPv6), 15/s | p50 45 ms, p99 64 ms (TLS endet näher) |
+    | Modus 2, Vollgas 700 Anfragen | 280/s, 561 × 200, 139 × 429 (Anfrage-Limit des Servers) |
+
+    Die Grenze setzt der Heimanschluss bzw. der Echo-Dienst; die Server waren nicht ausgelastet.
+  - Ausfall: cdn64-edge auf srv07 gestoppt (16:01:39) → nach rund 55 s nicht mehr im DNS; Abrufe über den Namen
+    durchgehend 200 (srv08); srv07 wieder gestartet (16:04:10) → Node nach < 5 s wieder verbunden, nach rund 40 s
+    wieder im DNS. Keine Meldung in der Node (Tunnel zu srv08 stand durchgehend).
   - Statistik: Server melden Anfragen/Abweisungen, `GET /cdn64o/stats`, Monatszeile je Host und Kontingent in der Node.
   - G6: Lebenszeichen je Konfigurationsabruf (10 s), Austragen nach 45 s (nur wenn der rufende Server selbst ohne
     Pause da war und `/health` des anderen nicht antwortet), Wiedereintrag nach 30 s.
