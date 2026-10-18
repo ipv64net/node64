@@ -39,6 +39,12 @@ type Config struct {
 	ACMEPrimary bool   `yaml:"acme_primary"`   // dieser Server bestellt (der andere erst, wenn eins 10 Minuten fehlt)
 	ACMEDir     string `yaml:"acme_directory"` // leer = Let's Encrypt; z. B. Staging zum Ausprobieren
 	ACMEEmail   string `yaml:"acme_email"`
+	// Ausweg ZeroSSL (acmeca.go): Standard an, wenn EAB oder acme_email gesetzt; "off" = aus
+	ACMEFallback        string `yaml:"acme_fallback"`
+	ACMEFallbackDir     string `yaml:"acme_fallback_directory"` // Standard ZeroSSL
+	ACMEFallbackEABKID  string `yaml:"acme_fallback_eab_kid"`
+	ACMEFallbackEABHMAC string `yaml:"acme_fallback_eab_hmac"`
+	ACMELEWeekLimit     int    `yaml:"acme_le_week_limit"` // neue Zertifikate je Domain und Woche bei Let's Encrypt, Standard 40 (Grenze 50); -1 = nur Ausweg
 	// Modus 3: Cache aller Namen zusammen auf der Platte (MB, Standard 4096)
 	CacheTotalMB int    `yaml:"cache_total_mb"`
 	PortRange    string `yaml:"port_range"` // Portmapper (Modus 3): Standard "50000-62000", "off" = aus

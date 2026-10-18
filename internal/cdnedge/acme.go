@@ -12,8 +12,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -29,30 +27,79 @@ import (
 // Token bekommt auch der Nachbar, weil Let's Encrypt einen der beiden fragt). Die naechste Erneuerung versucht
 // wieder DNS-01.
 
-// obtain: Zertifikat und Schluessel (PEM) fuer name und *.name, sonst nur name.
+// obtain: Zertifikat und Schluessel (PEM) fuer name und *.name, sonst nur name. Zertifizierungsstelle nach
+// acmeca.go (Let's Encrypt, an der Grenze bzw. nach "rateLimited" ZeroSSL).
 func (s *Server) obtain(ctx context.Context, name string) ([]byte, []byte, error) {
-	if s.obtainHook != nil { // Tests
-		return s.obtainHook(ctx, name)
+	renewal := !s.certs.notAfter(name).IsZero()
+	ca, err := s.pickCA(name, renewal)
+	if err != nil {
+		return nil, nil, err
 	}
-	cp, kp, err := s.obtainDNS(ctx, name)
+	cp, kp, err := s.obtainWith(ctx, ca, name)
+	if err != nil && ca == caLE && rateLimited(err) {
+		d := regDomain(name)
+		s.ca.mu.Lock()
+		s.ca.cooldown[d] = time.Now().Add(leCooldown)
+		s.ca.mu.Unlock()
+		s.log.Warn("let's encrypt rate limit reached", "domain", d, "fallback", s.fallbackName(), "err", err)
+		if s.fallbackName() == caZeroSSL {
+			ca = caZeroSSL
+			cp, kp, err = s.obtainWith(ctx, ca, name)
+		}
+	}
+	s.ca.mu.Lock()
+	if err != nil {
+		s.ca.lastErr[ca] = time.Now().UTC().Format(time.RFC3339) + " " + name + ": " + err.Error()
+	} else {
+		delete(s.ca.lastErr, ca)
+	}
+	s.ca.mu.Unlock()
+	if err != nil {
+		return nil, nil, err
+	}
+	d, now := regDomain(name), time.Now()
+	s.ca.record(issuance{Name: name, Domain: d, CA: ca, At: now, Renewal: renewal})
+	if ca == caLE && !renewal {
+		s.ca.mu.Lock()
+		n := s.ca.leCount(d, now)
+		s.ca.mu.Unlock()
+		if n*5 >= s.leLimit()*4 {
+			s.log.Warn("let's encrypt: domain close to the weekly limit", "domain", d, "count", n, "limit", s.leLimit(), "fallback", s.fallbackName())
+		}
+	}
+	if ca != caLE {
+		s.log.Info("certificate from fallback CA", "name", name, "ca", ca)
+	}
+	return cp, kp, nil
+}
+
+// obtainWith: bei einer Zertifizierungsstelle, DNS-01 und als Ausweg HTTP-01 (nicht nach "rateLimited").
+func (s *Server) obtainWith(ctx context.Context, ca, name string) ([]byte, []byte, error) {
+	if s.obtainHook != nil { // Tests
+		return s.obtainHook(ctx, ca+":"+name)
+	}
+	cl, err := s.acmeClientFor(ctx, ca)
+	if err != nil {
+		return nil, nil, err
+	}
+	cp, kp, err := s.obtainDNS(ctx, cl, name)
 	if err == nil {
 		return cp, kp, nil
 	}
-	s.log.Warn("dns-01 failed, trying http-01 (name only, no wildcard)", "name", name, "err", err)
-	cp, kp, herr := s.obtainHTTP(ctx, name)
+	if rateLimited(err) {
+		return nil, nil, err
+	}
+	s.log.Warn("dns-01 failed, trying http-01 (name only, no wildcard)", "name", name, "ca", ca, "err", err)
+	cp, kp, herr := s.obtainHTTP(ctx, cl, name)
 	if herr != nil {
 		return nil, nil, fmt.Errorf("dns-01: %v; http-01: %w", err, herr)
 	}
 	return cp, kp, nil
 }
 
-func (s *Server) obtainDNS(ctx context.Context, name string) ([]byte, []byte, error) {
+func (s *Server) obtainDNS(ctx context.Context, cl *acme.Client, name string) ([]byte, []byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	cl, err := s.acmeClient(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
 	names := []string{name, "*." + name}
 	order, err := cl.AuthorizeOrder(ctx, acme.DomainIDs(names...))
 	if err != nil {
@@ -120,13 +167,9 @@ func (s *Server) obtainDNS(ctx context.Context, name string) ([]byte, []byte, er
 }
 
 // obtainHTTP: Ausweg ueber HTTP-01 fuer den Namen allein.
-func (s *Server) obtainHTTP(ctx context.Context, name string) ([]byte, []byte, error) {
+func (s *Server) obtainHTTP(ctx context.Context, cl *acme.Client, name string) ([]byte, []byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
-	cl, err := s.acmeClient(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
 	order, err := cl.AuthorizeOrder(ctx, acme.DomainIDs(name))
 	if err != nil {
 		return nil, nil, fmt.Errorf("order: %w", err)
@@ -268,47 +311,6 @@ func (s *Server) serveToken(c net.Conn, data []byte) bool {
 	_, _ = fmt.Fprintf(c, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s", len(ka), ka)
 	_ = c.Close()
 	return true
-}
-
-// acmeClient: Konto des Servers (Schluessel in data_dir/acme-account.pem), einmal registriert und dann behalten.
-func (s *Server) acmeClient(ctx context.Context) (*acme.Client, error) {
-	s.acmeMu.Lock()
-	defer s.acmeMu.Unlock()
-	if s.acmeCl != nil {
-		return s.acmeCl, nil
-	}
-	path := filepath.Join(s.cfg.DataDir, "acme-account.pem")
-	var key *ecdsa.PrivateKey
-	if b, err := os.ReadFile(path); err == nil {
-		if blk, _ := pem.Decode(b); blk != nil {
-			key, _ = x509.ParseECPrivateKey(blk.Bytes)
-		}
-	}
-	if key == nil {
-		k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-		if err != nil {
-			return nil, err
-		}
-		kb, _ := x509.MarshalECPrivateKey(k)
-		if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kb}), 0o600); err != nil {
-			return nil, err
-		}
-		key = k
-	}
-	dir := s.cfg.ACMEDir
-	if dir == "" {
-		dir = acme.LetsEncryptURL
-	}
-	cl := &acme.Client{Key: key, DirectoryURL: dir, UserAgent: "cdn64-edge/" + s.version}
-	acct := &acme.Account{}
-	if s.cfg.ACMEEmail != "" {
-		acct.Contact = []string{"mailto:" + s.cfg.ACMEEmail}
-	}
-	if _, err := cl.Register(ctx, acct, acme.AcceptTOS); err != nil && !errors.Is(err, acme.ErrAccountAlreadyExists) {
-		return nil, fmt.Errorf("account: %w", err)
-	}
-	s.acmeCl = cl
-	return cl, nil
 }
 
 // acmeTXT setzt bzw. loescht den TXT-Eintrag ueber ipv64.

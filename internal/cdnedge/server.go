@@ -20,7 +20,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/ipv64net/node64/internal/tunnel"
@@ -58,7 +57,7 @@ type Server struct {
 	pm         *portmapper    // Modus 3: Portmapper
 	acmeTokens tokenStore     // HTTP-01 (Ausweg)
 	acmeMu     sync.Mutex
-	acmeCl     *acme.Client // Konto bei Let's Encrypt (einmal registriert)
+	ca         *caState // Zertifizierungsstellen: Konten, Zaehlung (acmeca.go)
 	// Tests: Zertifikat ohne ACME
 	obtainHook func(ctx context.Context, name string) ([]byte, []byte, error)
 	targetOK   func(netip.Addr) bool // Tests: Modus-3-Ziele auf 127.0.0.1 erlauben
@@ -73,6 +72,7 @@ func New(cfg *Config, log *slog.Logger, version string) *Server {
 	s.certs = newCertStore(filepath.Join(cfg.DataDir, "certs"))
 	s.cache = newRespCache(filepath.Join(cfg.DataDir, "cache"), cfg.CacheTotalMB)
 	s.pm = newPortmapper(s, cfg.PortRange)
+	s.ca = newCAState(cfg.DataDir)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("/", notFound)
@@ -389,6 +389,8 @@ type Health struct {
 	Blocked  int                 `json:"blocklist_entries,omitempty"`
 	API      *APIInfo            `json:"api,omitempty"`
 	Certs    map[string]string   `json:"certs,omitempty"` // Modus 2: Name -> gueltig bis
+	ACME     string              `json:"acme,omitempty"`  // ok | warn (Domain bei 80 % der Woche oder Grenze erreicht) | error (Ausweg fehlt)
+	CA       *caInfo             `json:"ca,omitempty"`    // Einzelheiten (nur lokal)
 }
 
 // APIInfo: Stand der Steuerung von ipv64 (nur lokal sichtbar).
@@ -424,6 +426,19 @@ type TunnelInfo struct {
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	h := Health{Status: "ok", Name: s.cfg.Name, Version: s.version}
+	if s.cfg.APIURL != "" { // auch von aussen sichtbar, z. B. fuer einen Healthcheck mit Stichwort
+		ci := s.caInfo()
+		h.ACME = "ok"
+		if len(ci.Warn) > 0 || len(ci.Cooldown) > 0 {
+			h.ACME = "warn"
+			if ci.Fallback == "off" || ci.LastErrors[caZeroSSL] != "" {
+				h.ACME = "error"
+			}
+		}
+		if local(r) {
+			h.CA = &ci
+		}
+	}
 	if local(r) {
 		h.Location, h.Started, h.UptimeS, h.Go = s.cfg.Location, s.started.UTC().Format(time.RFC3339), int64(time.Since(s.started).Seconds()), runtime.Version()
 		h.Streams, h.Total = s.streams.Load(), s.total.Load()
