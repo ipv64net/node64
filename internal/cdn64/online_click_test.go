@@ -67,13 +67,13 @@ func (f *fakeOnline) DeleteTunnel(_ context.Context, id string) error {
 	return nil
 }
 
-func (f *fakeOnline) AddHost(_ context.Context, fqdn, tunnelID string, mode int) (*ipv64api.CDN64Host, error) {
+func (f *fakeOnline) AddHost(_ context.Context, fqdn, tunnelID string, mode int, tgt *ipv64api.CDN64Target) (*ipv64api.CDN64Host, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if fqdn == "nope.test" {
 		return nil, &ipv64api.APIError{Status: 422, Code: "domain_not_in_account", Detail: "not in account"}
 	}
-	if !f.tunnels[tunnelID] || (mode != 1 && mode != 2) {
+	if mode == 3 && (tgt == nil || tunnelID != "") || mode != 3 && !f.tunnels[tunnelID] || mode < 1 || mode > 3 {
 		return nil, &ipv64api.APIError{Status: 404, Code: "cdn64o_tunnel_not_found"}
 	}
 	f.next++
@@ -303,5 +303,44 @@ func TestOnlineAlarm(t *testing.T) {
 	e.m.onlineCheckAlarm(ctx, a, t0.Add(onlineGrace+time.Minute))
 	if len(got) != 2 || got[1].Kind != notify.KindCDNOnlineDown || got[1].Check.Name != "a.test" || !got[1].Check.Local {
 		t.Fatalf("down: %+v", got)
+	}
+}
+
+// Modus 3 aus der Node: nur mit oeffentlichem Ziel, ohne Tunnel; Wechsel 3 <-> 1 schaltet bei ipv64 aus und neu ein.
+func TestOnlineMode3(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	f := &fakeOnline{ready: true, tunnels: map[string]bool{}, hosts: map[int64]string{}, modes: map[int64]int{},
+		edges: []ipv64api.CDN64Edge{{Name: "srv07", Host: "127.0.0.1", Port: 1, IPs: []string{"127.0.0.1"}}}}
+	e.m.SetOnlineAPI(f)
+	e.enable(t)
+	h := newHost()
+	h.Names, h.TargetHost, h.TargetPort = []string{"m3.test"}, "192.168.1.10", 8080
+	if err := e.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.m.onlineEnable(ctx, h, 3); onlineCode(err) != "target_not_public" {
+		t.Fatalf("private target: %v", err)
+	}
+	h.TargetHost = "93.184.216.34"
+	if err := e.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	res, err := e.m.onlineEnable(ctx, h, 3)
+	if err != nil || res[0].Result != "on" || len(f.tunnels) != 0 || f.modes[1] != 3 {
+		t.Fatalf("mode 3: %v %+v tunnels=%d modes=%v", err, res, len(f.tunnels), f.modes)
+	}
+	// auf Modus 1: aus und neu ein (jetzt mit Tunnel)
+	res, err = e.m.onlineEnable(ctx, h, 1)
+	if err != nil || res[0].Result != "on" || len(f.hosts) != 1 || f.modes[2] != 1 || len(f.tunnels) != 1 {
+		t.Fatalf("3 -> 1: %v %+v hosts=%v modes=%v", err, res, f.hosts, f.modes)
+	}
+	pass := newHostKind(KindPass)
+	pass.Names, pass.TargetHost = []string{"p.test"}, "93.184.216.35"
+	if err := e.m.saveHost(ctx, pass); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.m.onlineEnable(ctx, pass, 3); onlineCode(err) != "mode3_kind" {
+		t.Fatalf("passthrough mode 3: %v", err)
 	}
 }

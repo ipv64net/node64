@@ -96,10 +96,26 @@ func (c *Client) CDN64DeleteTunnel(ctx context.Context, key, id string) error {
 	return c.do(ctx, http.MethodDelete, key, "/cdn64o/tunnels/"+url.PathEscape(id), nil, nil)
 }
 
-// CDN64AddHost schaltet einen Namen ein (DNS zeigt danach auf die Server).
-func (c *Client) CDN64AddHost(ctx context.Context, key, fqdn, tunnelID string, mode int) (*CDN64Host, error) {
+// CDN64Target: Ziel in Modus 3 (direkt, ohne Tunnel).
+type CDN64Target struct {
+	Source    string `json:"source"` // records | fixed
+	Target    string `json:"target,omitempty"`
+	Port      int    `json:"port"`
+	Scheme    string `json:"scheme"` // http | https
+	VerifyTLS bool   `json:"verify_tls"`
+	Frontend  int    `json:"frontend,omitempty"` // 1 nur HTTP, 2 HTTPS mit Umleitung, 3 nur HTTPS
+}
+
+// CDN64AddHost schaltet einen Namen ein (DNS zeigt danach auf die Server); target nur fuer Modus 3.
+func (c *Client) CDN64AddHost(ctx context.Context, key, fqdn, tunnelID string, mode int, target *CDN64Target) (*CDN64Host, error) {
 	var out CDN64Host
 	in := map[string]any{"fqdn": fqdn, "tunnel_id": tunnelID, "mode": mode, "via": "node"}
+	if target != nil {
+		in["source"], in["target"], in["port"], in["scheme"], in["verify_tls"] = target.Source, target.Target, target.Port, target.Scheme, target.VerifyTLS
+		if target.Frontend > 0 {
+			in["frontend"] = target.Frontend
+		}
+	}
 	if err := c.do(ctx, http.MethodPost, key, "/cdn64o/hosts", in, &out); err != nil {
 		return nil, err
 	}

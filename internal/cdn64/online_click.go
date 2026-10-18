@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"slices"
 	"strconv"
@@ -35,7 +36,7 @@ type OnlineAPI interface {
 	Overview(ctx context.Context) (*ipv64api.CDN64Overview, error)
 	CreateTunnel(ctx context.Context, name string) (*ipv64api.CDN64Tunnel, error)
 	DeleteTunnel(ctx context.Context, id string) error
-	AddHost(ctx context.Context, fqdn, tunnelID string, mode int) (*ipv64api.CDN64Host, error)
+	AddHost(ctx context.Context, fqdn, tunnelID string, mode int, target *ipv64api.CDN64Target) (*ipv64api.CDN64Host, error)
 	SetMode(ctx context.Context, id int64, mode int) error
 	DeleteHost(ctx context.Context, id int64) error
 }
@@ -55,8 +56,8 @@ func (o ipv64Online) CreateTunnel(ctx context.Context, name string) (*ipv64api.C
 func (o ipv64Online) DeleteTunnel(ctx context.Context, id string) error {
 	return o.k.Client().CDN64DeleteTunnel(ctx, o.k.Get(ctx), id)
 }
-func (o ipv64Online) AddHost(ctx context.Context, fqdn, tunnelID string, mode int) (*ipv64api.CDN64Host, error) {
-	return o.k.Client().CDN64AddHost(ctx, o.k.Get(ctx), fqdn, tunnelID, mode)
+func (o ipv64Online) AddHost(ctx context.Context, fqdn, tunnelID string, mode int, target *ipv64api.CDN64Target) (*ipv64api.CDN64Host, error) {
+	return o.k.Client().CDN64AddHost(ctx, o.k.Get(ctx), fqdn, tunnelID, mode, target)
 }
 func (o ipv64Online) SetMode(ctx context.Context, id int64, mode int) error {
 	_, err := o.k.Client().CDN64SetMode(ctx, o.k.Get(ctx), id, mode)
@@ -316,15 +317,25 @@ func (m *Module) onlineEnable(ctx context.Context, h *Host, mode int) ([]onlineR
 	if mode == 0 {
 		mode = 1
 	}
-	if mode != 1 && mode != 2 {
+	if mode < 1 || mode > 3 {
 		return nil, errOnline("mode_not_available")
 	}
 	if mode == 2 && h.Kind == KindPass {
 		return nil, errOnline("mode2_passthrough")
 	}
-	c, err := m.onlineEnsureTunnel(ctx)
-	if err != nil {
-		return nil, err
+	var tgt *ipv64api.CDN64Target
+	tunnelID := ""
+	if mode == 3 { // direkt: die Server gehen selbst zum Ziel dieses Hosts - das muss oeffentlich erreichbar sein
+		var err error
+		if tgt, err = onlineTarget(h); err != nil {
+			return nil, err
+		}
+	} else {
+		c, err := m.onlineEnsureTunnel(ctx)
+		if err != nil {
+			return nil, err
+		}
+		tunnelID = c.Tunnel
 	}
 	have, err := m.onlineNames(ctx)
 	if err != nil {
@@ -341,6 +352,13 @@ func (m *Module) onlineEnable(ctx context.Context, h *Host, mode int) ([]onlineR
 			out = append(out, onlineResult{Name: n, Result: "skipped", Code: "wildcard_name"})
 			continue
 		}
+		if x, ok := on[n]; ok && (x.Mode == 3) != (mode == 3) { // Tunnel <-> direkt: bei ipv64 aus und neu ein
+			if err := m.onlineRemoteOff(ctx, x); err != nil {
+				out = append(out, onlineResult{Name: n, Result: "error", Code: onlineCode(err), Error: err.Error()})
+				continue
+			}
+			delete(on, n)
+		}
 		if x, ok := on[n]; ok {
 			if x.Mode != mode {
 				if err := m.online.api.SetMode(ctx, x.RemoteID, mode); err != nil {
@@ -352,7 +370,7 @@ func (m *Module) onlineEnable(ctx context.Context, h *Host, mode int) ([]onlineR
 			out = append(out, onlineResult{Name: n, Result: "on"})
 			continue
 		}
-		rh, err := m.online.api.AddHost(ctx, n, c.Tunnel, mode)
+		rh, err := m.online.api.AddHost(ctx, n, tunnelID, mode, tgt)
 		if err != nil {
 			out = append(out, onlineResult{Name: n, Result: "error", Code: onlineCode(err), Error: err.Error()})
 			continue
@@ -369,6 +387,24 @@ func (m *Module) onlineEnable(ctx context.Context, h *Host, mode int) ([]onlineR
 	m.onlineDropTunnel(ctx) // nichts eingeschaltet: Tunnel wieder weg
 	m.onlineKick()
 	return out, nil
+}
+
+// onlineTarget: Ziel fuer Modus 3 aus dem Host (nur Proxy-Hosts, Ziel oeffentlich: IP pruefen, Namen pruefen
+// ipv64 und die Server).
+func onlineTarget(h *Host) (*ipv64api.CDN64Target, error) {
+	if h.Kind != KindProxy {
+		return nil, errOnline("mode3_kind")
+	}
+	if a, err := netip.ParseAddr(strings.Trim(h.TargetHost, "[]")); err == nil {
+		a = a.Unmap()
+		if !a.IsGlobalUnicast() || a.IsPrivate() || netip.MustParsePrefix("100.64.0.0/10").Contains(a) {
+			return nil, errOnline("target_not_public")
+		}
+	} else if !strings.Contains(h.TargetHost, ".") || strings.HasSuffix(h.TargetHost, ".local") || strings.HasSuffix(h.TargetHost, ".lan") ||
+		strings.HasSuffix(h.TargetHost, ".home.arpa") || strings.HasSuffix(h.TargetHost, ".internal") {
+		return nil, errOnline("target_not_public")
+	}
+	return &ipv64api.CDN64Target{Source: "fixed", Target: strings.Trim(h.TargetHost, "[]"), Port: h.TargetPort, Scheme: h.Scheme, VerifyTLS: h.VerifyTarget, Frontend: 2}, nil
 }
 
 // onlineDisable schaltet alle Namen eines Hosts aus; mit dem letzten Namen geht der Tunnel.
@@ -590,7 +626,7 @@ func (m *Module) onlineSelfTest(ctx context.Context, h *Host) ([]onlineTest, err
 	}
 	useTLS := h.Kind == KindPass || h.HTTPS()
 	for _, x := range list {
-		useTLS = useTLS || (x.HostID == h.ID && x.Mode == 2) // Modus 2: TLS auf den Servern, auch fuer reine HTTP-Hosts
+		useTLS = useTLS || (x.HostID == h.ID && x.Mode >= 2) // Modus 2/3: TLS auf den Servern, auch fuer reine HTTP-Hosts
 	}
 	m.mu.Lock()
 	routeErr := m.routeErr[h.ID]
@@ -609,7 +645,7 @@ func (m *Module) onlineSelfTest(ctx context.Context, h *Host) ([]onlineTest, err
 			}
 			for _, ip := range ips {
 				allIPs[ip] = true
-				t.Probes = append(t.Probes, m.onlineProbeOne(ctx, e.Name, ip, x.Name, useTLS))
+				t.Probes = append(t.Probes, m.onlineProbeOne(ctx, e.Name, ip, x.Name, useTLS, x.Mode != 3))
 			}
 		}
 		t.DNS = publicLookup(ctx, x.Name)
@@ -621,7 +657,7 @@ func (m *Module) onlineSelfTest(ctx context.Context, h *Host) ([]onlineTest, err
 	return out, nil
 }
 
-func (m *Module) onlineProbeOne(ctx context.Context, edgeName, ip, name string, useTLS bool) onlineProbe {
+func (m *Module) onlineProbeOne(ctx context.Context, edgeName, ip, name string, useTLS, viaTunnel bool) onlineProbe {
 	p := onlineProbe{Edge: edgeName, Addr: ip, Family: "ipv4"}
 	if strings.Contains(ip, ":") {
 		p.Family = "ipv6"
@@ -674,6 +710,18 @@ func (m *Module) onlineProbeOne(ctx context.Context, edgeName, ip, name string, 
 	}
 	if resp != nil {
 		resp.Body.Close()
+	}
+	if !viaTunnel { // Modus 3: die Server gehen selbst zum Ziel - ok, wenn eine Antwort vom Ziel kommt
+		p.Ms = time.Since(start).Milliseconds()
+		switch {
+		case resp == nil:
+			p.Error = "no answer"
+		case resp.StatusCode == http.StatusBadGateway:
+			p.Error = "target not reachable from the servers"
+		default:
+			p.OK = true
+		}
+		return p
 	}
 	p.Ms = time.Since(start).Milliseconds()
 	for i := 0; i < 20 && m.onlineSeenCount(name) <= before; i++ { // der Stream kommt parallel zur Antwort an
