@@ -611,7 +611,8 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 - **Hetzner-Traffic:** inklusiver Traffic der Cloud-Server im Blick behalten (Kontingente der Klassen).
 - **HTTP/3 in Modus 1:** gebaut (467b117): die Server lesen den Namen aus dem QUIC-Initial (`internal/quicsni`) und
   reichen Modus-1-QUIC roh durch den Tunnel (Stream `quic`), TLS endet in der Node; Alt-Svc nur, wenn alle
-  verbundenen Server die Fähigkeit `quic` melden. Ausrollen offen.
+  verbundenen Server die Fähigkeit `quic` melden. Live seit 2026-10-18 (cdn64-edge 0.10.x, node64-test 0.11.100-h3):
+  pfsense.ipv64.de über alle vier Server-Adressen per HTTP/3 von hub2 (~90 ms), Zertifikat der Node (TLS endet dort).
 - **TCP-/UDP-Streams (Portmapper Modus 1/2), fremde Domains:** bewusst später.
 - **Modus 3 und Missbrauch:** offene Weiterleitung ins Internet ist anfällig (Angriffe über unsere IPs); SSRF-Schutz,
   Limits und Sperre je Account sind Pflicht, Abuse-Kontakt klären.

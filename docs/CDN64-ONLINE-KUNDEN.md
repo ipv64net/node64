@@ -21,7 +21,8 @@ Node. Fällt ein Server aus, nimmt ipv64 ihn nach rund einer Minute aus dem DNS;
 1. In Node64 unter *CDN64 › Proxy-Hosts* beim Host auf **Einschalten** (Spalte *CDN64 online*).
 2. Modus wählen:
    - **Modus 1 – durchreichen (Standard):** TLS endet in deiner Node, dein Zertifikat bleibt bei dir, die Server
-     sehen keine Inhalte. Für fast alle Fälle die richtige Wahl.
+     sehen keine Inhalte. Für fast alle Fälle die richtige Wahl. Auch HTTP/3 (QUIC) geht durch: Ist beim Proxy-Host
+     „HTTP/3“ an, reichen die Server QUIC nach dem Namen roh zur Node durch, TLS endet auch dabei bei dir.
    - **Modus 2 – auf den Servern beenden:** Die Server holen ein eigenes Zertifikat (Name und `*.Name`) und
      beenden TLS; dafür filtern sie schon dort (Blocklisten, Limits) und sprechen HTTP/3. Nicht für Hosts mit
      „TLS durchreichen“.
