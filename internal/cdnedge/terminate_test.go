@@ -324,11 +324,18 @@ func TestHTTP01TokenAndCleanup(t *testing.T) {
 		Peers: []PeerEntry{{Name: "B", Addr: cfgB.PeerListen}}}
 	b := startEdge(t, cfgB, pool)
 	a := startEdge(t, cfgA, pool)
+	for i := 0; i < 200; i++ { // startEdge wartet nur auf Port 80; der Nachbar-Port oeffnet etwas spaeter
+		if c, err := net.DialTimeout("tcp", cfgB.PeerListen, time.Second); err == nil {
+			c.Close()
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	a.acmeTokens.set("tok123", "tok123.keyauth")
 	a.sharePeerToken(context.Background(), "tok123", "tok123.keyauth")
 	for _, addr := range []string{cfgA.ListenHTTP, cfgB.ListenHTTP} {
 		var got string
-		for i := 0; i < 250; i++ { // der Nachbar nimmt den Token nebenher an (unter Last auch mal langsamer)
+		for i := 0; i < 250; i++ { // der Nachbar nimmt den Token nebenher an
 			resp, err := http.Get("http://" + addr + "/.well-known/acme-challenge/tok123")
 			if err == nil {
 				bb, _ := io.ReadAll(resp.Body)
