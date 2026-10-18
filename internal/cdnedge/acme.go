@@ -82,7 +82,11 @@ func (s *Server) obtainWith(ctx context.Context, ca, name string) ([]byte, []byt
 	if err != nil {
 		return nil, nil, err
 	}
-	cp, kp, err := s.obtainDNS(ctx, cl, name)
+	dnsT, httpT := 5*time.Minute, 3*time.Minute
+	if ca == caZeroSSL { // ZeroSSL stellt deutlich langsamer aus (Minuten im Zustand "processing")
+		dnsT, httpT = 15*time.Minute, 10*time.Minute
+	}
+	cp, kp, err := s.obtainDNS(ctx, cl, name, dnsT)
 	if err == nil {
 		return cp, kp, nil
 	}
@@ -90,15 +94,15 @@ func (s *Server) obtainWith(ctx context.Context, ca, name string) ([]byte, []byt
 		return nil, nil, err
 	}
 	s.log.Warn("dns-01 failed, trying http-01 (name only, no wildcard)", "name", name, "ca", ca, "err", err)
-	cp, kp, herr := s.obtainHTTP(ctx, cl, name)
+	cp, kp, herr := s.obtainHTTP(ctx, cl, name, httpT)
 	if herr != nil {
 		return nil, nil, fmt.Errorf("dns-01: %v; http-01: %w", err, herr)
 	}
 	return cp, kp, nil
 }
 
-func (s *Server) obtainDNS(ctx context.Context, cl *acme.Client, name string) ([]byte, []byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+func (s *Server) obtainDNS(ctx context.Context, cl *acme.Client, name string, limit time.Duration) ([]byte, []byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	names := []string{name, "*." + name}
 	order, err := cl.AuthorizeOrder(ctx, acme.DomainIDs(names...))
@@ -167,8 +171,8 @@ func (s *Server) obtainDNS(ctx context.Context, cl *acme.Client, name string) ([
 }
 
 // obtainHTTP: Ausweg ueber HTTP-01 fuer den Namen allein.
-func (s *Server) obtainHTTP(ctx context.Context, cl *acme.Client, name string) ([]byte, []byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+func (s *Server) obtainHTTP(ctx context.Context, cl *acme.Client, name string, limit time.Duration) ([]byte, []byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	order, err := cl.AuthorizeOrder(ctx, acme.DomainIDs(name))
 	if err != nil {
