@@ -578,7 +578,8 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   - Server (`portmap.go`): je Mapping ein TCP- bzw. UDP-Port (`port_range`, Standard 50000–62000, nur dort), auf- und
     abgebaut nach jedem Abruf; Ziel, Sperre und Liste bei jeder Verbindung aus dem aktuellen Stand des Namens,
     SSRF-Schutz wie HTTP, Schutz je IP (Blocklisten, Grenzen) auch für UDP-Sitzungen, Bandbreite und Traffic des
-    Accounts. UDP: eine Sitzung je Besucher, 2 Minuten ohne Verkehr = Ende, neue Sitzung bei Zielwechsel (DynDNS).
+    Accounts. UDP: eine Sitzung je Besucher, 2 Minuten ohne Verkehr = Ende, neue Sitzung bei Zielwechsel (DynDNS);
+    UDP nimmt immer IPv6 zuerst (0.8.1, ausgerollt), weil ein toter A-Eintrag (DS-Lite) bei UDP nicht auffällt.
   - Frontend-Stufe 0 = keine Webseite, nur Portmapper (kein Zertifikat, Port 80/443 zu).
   - ipv64: `cdn64o_mappings`, API `.../mappings`, Limit `cdn_mappings` (altes CDN zählt mit), Port-Vergabe wie beim
     alten CDN; Seite `cdn64.php` mit Karte „Port mappings“.
