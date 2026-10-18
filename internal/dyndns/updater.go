@@ -27,6 +27,15 @@ const (
 	flapWindow       = 2 * time.Hour
 	flapMax          = 3               // so oft in flapWindow von aussen geaendert -> Ziel pausieren
 	dnsGrace         = 3 * time.Minute // nach einem Update: alte DNS-Antwort heisst "wird uebernommen" (Bot bei ipv64)
+	redirectRecheck  = 24 * time.Hour  // umgeleiteter Name: so lange keine Nachmeldung allein wegen abweichendem DNS
+)
+
+// DNS-Zustand eines Ziels (Spalte dns_state)
+const (
+	dnsUnknown    = 0
+	dnsOK         = 1
+	dnsDiffers    = 2
+	dnsRedirected = 3 // ipv64 liefert fuer den Namen andere Adressen aus (Reverse-Proxy/CDN, Failover): gewollt
 )
 
 // callGap ist der Mindestabstand zwischen zwei Aufrufen (Variable nur fuer Tests).
@@ -270,17 +279,22 @@ func (m *Module) updateTarget(ctx context.Context, t *Target, force bool, trigge
 	p := m.planFor(t)
 	dns := m.lookupDNS(ctx, t)
 	now := time.Now()
+	redirected := t.DNSState == dnsRedirected
 	if dns.Known {
 		t.DNSAt = now
-		t.DNSState = 1
-		if !dns.matches(p) {
-			t.DNSState = 2
+		t.DNSState = dnsOK
+		if !dns.matches(p) && redirected {
+			t.DNSState = dnsRedirected
+		} else if !dns.matches(p) {
+			t.DNSState = dnsDiffers
 		}
 	}
-	// kurz nach einem Update liefern die Nameserver evtl. noch den alten Stand: dann nicht erneut melden
+	// kurz nach einem Update liefern die Nameserver evtl. noch den alten Stand: dann nicht erneut melden;
+	// bei einem umgeleiteten Namen (CDN) ist die Abweichung gewollt, nur einmal am Tag nachsehen
 	grace := !t.LastOKAt.IsZero() && now.Sub(t.LastOKAt) < max(dnsGrace, 2*m.interval())
-	diff4 := dns.Known && p.IP4 != "" && !dns.has(dns.A, p.IP4) && !(grace && p.IP4 == t.LastIP4)
-	diff6 := dns.Known && p.IP6 != "" && !dns.has(dns.AAAA, p.IP6) && !(grace && p.IP6 == t.LastIP6)
+	keep := t.DNSState == dnsRedirected && now.Sub(t.LastOKAt) < redirectRecheck
+	diff4 := dns.Known && p.IP4 != "" && !dns.has(dns.A, p.IP4) && !(grace && p.IP4 == t.LastIP4) && !keep
+	diff6 := dns.Known && p.IP6 != "" && !dns.has(dns.AAAA, p.IP6) && !(grace && p.IP6 == t.LastIP6) && !keep
 	need4 := p.IP4 != "" && (p.IP4 != t.LastIP4 || diff4)
 	need6 := p.IP6 != "" && (p.IP6 != t.LastIP6 || diff6)
 	needP := p.Prefix != "" && p.Prefix != t.LastPrefix
@@ -314,6 +328,13 @@ func (m *Module) updateTarget(ctx context.Context, t *Target, force bool, trigge
 			ip6 = p.IP6
 		}
 		r := m.call(ctx, t, ip4, ip6, "", trigger)
+		// ipv64 hat die Adresse schon (oder das CDN verwaltet die Familie), liefert aber andere aus: umgeleitet
+		if r.OK && (r.Redirected || strings.EqualFold(r.Info, "nochg") && dns.Known && !dns.matches(plan{IP4: ip4, IP6: ip6})) {
+			if t.DNSState != dnsRedirected {
+				m.log.Info("dns redirected by ipv64 (cdn/proxy or failover), difference accepted", "target", t.FQDN())
+			}
+			t.DNSState = dnsRedirected
+		}
 		if m.apply(ctx, t, r, ip4, ip6, "", trigger) {
 			return true
 		}
@@ -370,16 +391,17 @@ func (m *Module) flapped(id int64, now time.Time) bool {
 
 // updResult ist die ausgewertete Antwort von update.php.
 type updResult struct {
-	HTTP     int
-	Status   string
-	Info     string
-	Prefix   string
-	OK       bool
-	Pause    string // Grund fuer eine Pause des Ziels
-	Cooldown bool
-	Limit    bool
-	Err      string
-	Dur      time.Duration
+	HTTP       int
+	Status     string
+	Info       string
+	Prefix     string
+	OK         bool
+	Pause      string // Grund fuer eine Pause des Ziels
+	Cooldown   bool
+	Limit      bool
+	Redirected bool // eine Familie verwaltet das ipv64-CDN (Record nicht angefasst)
+	Err        string
+	Dur        time.Duration
 }
 
 // call ruft update.php mit dem Token im Header auf (nicht in der URL) und protokolliert den Aufruf.
@@ -500,8 +522,8 @@ func (m *Module) doCall(ctx context.Context, q url.Values, token string) updResu
 		switch strings.ToLower(x.got) {
 		case "ignore":
 			r.OK, r.Pause, r.Err = false, PauseIgnored, x.fam+" ignored by ipv64 (domain setting)"
-		case "cdn":
-			r.OK, r.Pause, r.Err = false, PauseConflict, x.fam+" managed by the ipv64 CDN"
+		case "cdn": // kein Fehler: das CDN verwaltet diese Familie, ipv64 laesst den Record in Ruhe
+			r.Redirected = true
 		}
 	}
 	return r

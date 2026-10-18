@@ -78,7 +78,7 @@ type targetJSON struct {
 	LastOKAt   *time.Time `json:"last_ok_at"`
 	LastError  string     `json:"last_error"`
 	LastErrAt  *time.Time `json:"last_error_at"`
-	DNSState   string     `json:"dns_state"` // unknown, ok, differs
+	DNSState   string     `json:"dns_state"` // unknown, ok, differs, redirected
 }
 
 func targetOut(t *Target) targetJSON {
@@ -86,7 +86,7 @@ func targetOut(t *Target) targetJSON {
 	return targetJSON{ID: t.ID, Domain: t.Domain, Host: t.Host, FQDN: t.FQDN(), RecordID: t.RecordID, TokenKind: t.TokenKind, TokenHint: t.TokenMasked(),
 		Mode4: t.Mode4, Fixed4: t.Fixed4, Mode6: t.Mode6, Fixed6: t.Fixed6, Suffix6: t.Suffix6, Iface: t.Iface, Enabled: &on, Paused: t.Paused, Status: t.Status(),
 		LastIP4: t.LastIP4, LastIP6: t.LastIP6, LastPrefix: t.LastPrefix, LastOKAt: ts(t.LastOKAt), LastError: t.LastError, LastErrAt: ts(t.LastErrAt),
-		DNSState: []string{"unknown", "ok", "differs"}[min(max(t.DNSState, 0), 2)]}
+		DNSState: []string{"unknown", "ok", "differs", "redirected"}[min(max(t.DNSState, 0), 3)]}
 }
 
 // apply uebertraegt eine Eingabe auf ein Ziel (Token leer = unveraendert).

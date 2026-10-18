@@ -29,7 +29,7 @@
 								<select class="form-select form-select-sm w-auto" name="m4:{{.Key}}" aria-label="IPv4 {{.FQDN}}">{{range $.Data.Modes4P}}<option value="{{.}}"{{if eq . $p.Def4}} selected{{end}}>IPv4: {{$.T (print "dyn.mode4." .)}}</option>{{end}}</select>
 								<select class="form-select form-select-sm w-auto" name="m6:{{.Key}}" aria-label="IPv6 {{.FQDN}}">{{range $.Data.Modes6P}}{{if or (ne . "suffix") $p.SuffixOf}}<option value="{{.}}"{{if eq . $p.Def6}} selected{{end}}>IPv6: {{$.T (print "dyn.mode6." .)}}{{if eq . "suffix"}} ({{$p.SuffixOf}}){{end}}</option>{{end}}{{end}}</select>
 							</div>{{end}}</td>
-						<td data-label="{{$.T "dyn.pick.note"}}">{{if .Exists}}<span class="badge text-bg-secondary">{{$.T "dyn.pick.exists"}}</span>{{else if .Blocked}}<span class="badge text-bg-warning">{{$.T "dyn.pick.blocked"}}: {{.Blocked}}</span>{{else if .Suffix}}<span class="badge text-bg-info">{{$.T "dyn.pick.suffix"}}</span>{{end}}{{if .Ignore}}{{if ne .Ignore "none"}} <span class="badge text-bg-light">{{$.T "dyn.pick.ignored" "family" .Ignore}}</span>{{end}}{{end}}</td>
+						<td data-label="{{$.T "dyn.pick.note"}}">{{if .Exists}}<span class="badge text-bg-secondary">{{$.T "dyn.pick.exists"}}</span>{{else if .Blocked}}<span class="badge text-bg-warning">{{$.T "dyn.pick.blocked"}}: {{.Blocked}}</span>{{else if .Suffix}}<span class="badge text-bg-info">{{$.T "dyn.pick.suffix"}}</span>{{end}}{{if and .CDN (not .Exists)}} <span class="badge text-bg-light" title="{{$.T "dyn.pick.cdn_hint"}}">{{$.T "dyn.pick.cdn"}}</span>{{end}}{{if .Ignore}}{{if ne .Ignore "none"}} <span class="badge text-bg-light">{{$.T "dyn.pick.ignored" "family" .Ignore}}</span>{{end}}{{end}}</td>
 					</tr>
 					{{end}}
 					</tbody>

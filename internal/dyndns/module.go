@@ -103,7 +103,7 @@ func (m *Module) adoptOldKey(ctx context.Context) {
 
 func (m *Module) Info() module.Info {
 	return module.Info{Name: Name, TitleKey: "nav.dyndns", Icon: "bi-globe", Image: "dyndns64.webp", Path: "/dyndns", Available: true, Order: 20,
-		Version: "1.1.0", Changelog: changelog}
+		Version: "1.2.0", Changelog: changelog}
 }
 
 func (m *Module) Migrations() []store.Migration {

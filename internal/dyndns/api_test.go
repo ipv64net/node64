@@ -140,8 +140,11 @@ func TestAPIAccountAndSettings(t *testing.T) {
 		t.Fatalf("from-account: %d %s", code, body)
 	}
 	list, _ := m.Targets(context.Background())
-	if len(list) != 1 || list[0].Token != tokA {
-		t.Fatalf("targets: %+v", list)
+	if len(list) == 2 && list[0].Host == "web" {
+		list[0], list[1] = list[1], list[0]
+	}
+	if len(list) != 2 || list[0].Token != tokA || list[1].Host != "web" || list[1].Token != tokOther || list[1].DNSState != dnsRedirected {
+		t.Fatalf("targets: %+v", list) // web laeuft ueber das CDN: waehlbar, Abweichung im DNS von Anfang an gewollt
 	}
 	_, _ = core.Writer().Exec(`UPDATE dyn_targets SET token = ?, paused = 'badauth' WHERE id = ?`, m.seal(tokOther), list[0].ID)
 	code, body = call(t, "POST", srv.URL+"/api/dyndns/targets/"+strconv.FormatInt(list[0].ID, 10)+"/token", nil)

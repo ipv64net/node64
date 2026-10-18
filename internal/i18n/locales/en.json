@@ -1297,6 +1297,8 @@
       "exists": "already set up",
       "blocked": "not possible",
       "suffix": "interface ID → prefix mode",
+      "cdn": "via ipv64 CDN",
+      "cdn_hint": "This name runs through the ipv64 reverse proxy/CDN. The updater only maintains the origin address; DNS returning the CDN addresses is intended.",
       "ignored": "{family} is ignored at ipv64",
       "hint": "The record token is used (safest level). IPv4 and IPv6 are preset from the existing records and can be changed per target afterwards.",
       "submit": "Add selection",
@@ -1341,7 +1343,8 @@
       "new": "not synced yet",
       "off": "off",
       "paused": "paused",
-      "pending": "being applied"
+      "pending": "being applied",
+      "cdn": "up to date · DNS via CDN/proxy"
     },
     "pause": {
       "badauth": "token rejected",

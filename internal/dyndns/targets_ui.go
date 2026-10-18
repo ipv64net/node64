@@ -45,7 +45,8 @@ type pickName struct {
 	A        []string
 	AAAA     []string
 	Suffix   bool   // AAAA mit Interface-ID (::...), wird ueber das Praefix aktualisiert
-	Blocked  string // Grund, warum der Name nicht waehlbar ist (CDN, Failover)
+	Blocked  string // Grund, warum der Name nicht waehlbar ist (Failover)
+	CDN      bool   // ueber das ipv64-CDN (Reverse-Proxy) geleitet: Updater pflegt die Ursprungsadresse
 	Exists   bool   // schon als Ziel eingerichtet
 	Kind     string // dyndns, own
 	Ignore   string // ipv4/ipv6: bei ipv64 fuer Updater ignoriert
@@ -105,7 +106,7 @@ func (m *Module) accountNames(ctx context.Context, key string) ([]*pickName, err
 		}
 		byHost := map[string]*pickName{}
 		for _, rec := range recs {
-			if rec.Type != "A" && rec.Type != "AAAA" {
+			if rec.Type != "A" && rec.Type != "AAAA" || rec.State == "cdn_record" { // Adressen des CDN selbst: nie anfassen
 				continue
 			}
 			p := byHost[rec.Prefix]
@@ -115,6 +116,8 @@ func (m *Module) accountNames(ctx context.Context, key string) ([]*pickName, err
 			}
 			switch rec.State {
 			case "active", "inactive":
+			case "cdn_proxied", "cdn_partial":
+				p.CDN = true
 			default:
 				p.Blocked = rec.State
 			}
@@ -333,7 +336,7 @@ func (m *Module) refreshToken(ctx context.Context, t *Target) error {
 	}
 	for i := range recs {
 		rec := &recs[i]
-		if rec.Prefix == t.Host && (rec.Type == "A" || rec.Type == "AAAA") && (best == nil || score(rec) > score(best)) {
+		if rec.Prefix == t.Host && (rec.Type == "A" || rec.Type == "AAAA") && rec.State != "cdn_record" && (best == nil || score(rec) > score(best)) {
 			best = rec
 		}
 	}

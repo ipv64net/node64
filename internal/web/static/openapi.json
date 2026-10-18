@@ -727,12 +727,14 @@
             "enum": [
               "new",
               "ok",
+              "cdn",
               "pending",
               "dns",
               "error",
               "paused",
               "off"
-            ]
+            ],
+            "description": "cdn = aktuell, DNS liefert gewollt andere Adressen (ipv64-Reverse-Proxy/CDN oder Failover)"
           },
           "last_ipv4": {
             "type": "string"
@@ -765,8 +767,10 @@
             "enum": [
               "unknown",
               "ok",
-              "differs"
-            ]
+              "differs",
+              "redirected"
+            ],
+            "description": "redirected: ipv64 liefert für den Namen andere Adressen aus (CDN/Failover); keine Nachmeldung allein deshalb, einmal am Tag nachgesehen"
           }
         }
       },

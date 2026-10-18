@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/ipv64net/node64/internal/notify"
 )
@@ -245,6 +246,68 @@ func TestUpdaterDNSGrace(t *testing.T) {
 	m.runUpdates(ctx)
 	if f.n() != 2 {
 		t.Fatalf("after grace: %d calls", f.n())
+	}
+}
+
+// Name ueber Reverse-Proxy/CDN: DNS liefert die CDN-Adressen, ipv64 hat die Ursprungsadresse (nochg).
+// Die Abweichung ist gewollt: keine Nachmeldung, kein Flattern, IP-Wechsel weiter melden, einmal am Tag nachsehen.
+func TestUpdaterRedirectedCDN(t *testing.T) {
+	ctx := context.Background()
+	m, f, dns := setupUpdater(t)
+	f.reply = func(string) (int, string) { return http.StatusOK, `{"status":"success","info":"nochg"}` }
+	dns.A = []string{"185.1.2.3", "185.1.2.4"}
+	tg := addTarget(t, m, "pfsense", Mode4Auto, Mode6Off, "")
+	age := func(d time.Duration) {
+		_, _ = m.core.Writer().Exec(`UPDATE dyn_targets SET last_ok_at = ? WHERE id = ?`, time.Now().Add(-d).UTC().Format(time.RFC3339Nano), tg.ID)
+	}
+	m.runUpdates(ctx)
+	if got := reload(t, m, tg.ID); f.n() != 1 || got.DNSState != dnsRedirected || got.Status() != "cdn" {
+		t.Fatalf("calls %d, dns %d, status %s", f.n(), got.DNSState, got.Status())
+	}
+	age(time.Hour) // nach der Schonfrist: weiterhin kein Aufruf
+	for i := 0; i < 5; i++ {
+		m.runUpdates(ctx)
+	}
+	if got := reload(t, m, tg.ID); f.n() != 1 || got.Paused != "" || got.Status() != "cdn" {
+		t.Fatalf("calls %d, paused %q, status %s", f.n(), got.Paused, got.Status())
+	}
+	f.reply = nil // neue Ursprungsadresse: good
+	m.stMu.Lock()
+	m.fam[0].IP = netip.MustParseAddr("93.184.216.35")
+	m.stMu.Unlock()
+	m.runUpdates(ctx)
+	if got := reload(t, m, tg.ID); f.n() != 2 || got.LastIP4 != "93.184.216.35" || got.DNSState != dnsRedirected {
+		t.Fatalf("ip change: calls %d, %+v", f.n(), got)
+	}
+	age(25 * time.Hour) // einmal am Tag nachsehen
+	f.reply = func(string) (int, string) { return http.StatusOK, `{"status":"success","info":"nochg"}` }
+	m.runUpdates(ctx)
+	m.runUpdates(ctx)
+	if got := reload(t, m, tg.ID); f.n() != 3 || got.DNSState != dnsRedirected {
+		t.Fatalf("recheck: calls %d, dns %d", f.n(), got.DNSState)
+	}
+	dns.A = []string{"93.184.216.35"} // CDN abgeschaltet: DNS stimmt wieder
+	m.runUpdates(ctx)
+	if got := reload(t, m, tg.ID); f.n() != 3 || got.DNSState != dnsOK || got.Status() != "ok" {
+		t.Fatalf("cdn off: calls %d, dns %d", f.n(), got.DNSState)
+	}
+}
+
+// update.php meldet fuer eine Familie "cdn" (Record gehoert dem CDN): kein Fehler, keine Pause, kein erneuter Aufruf.
+func TestUpdaterCDNManagedFamily(t *testing.T) {
+	ctx := context.Background()
+	m, f, dns := setupUpdater(t)
+	f.reply = func(string) (int, string) {
+		return http.StatusOK, `{"status":"success","info":"nochg","ip":{"ipv4":"cdn","ipv6":""}}`
+	}
+	dns.A = []string{"185.1.2.3"}
+	tg := addTarget(t, m, "web", Mode4Auto, Mode6Off, "")
+	m.runUpdates(ctx)
+	age := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano)
+	_, _ = m.core.Writer().Exec(`UPDATE dyn_targets SET last_ok_at = ? WHERE id = ?`, age, tg.ID)
+	m.runUpdates(ctx)
+	if got := reload(t, m, tg.ID); f.n() != 1 || got.Paused != "" || got.LastError != "" || got.Status() != "cdn" {
+		t.Fatalf("calls %d, %+v", f.n(), got)
 	}
 }
 

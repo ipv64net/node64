@@ -53,6 +53,7 @@ func fakeIPv64(t *testing.T) *httptest.Server {
 				{"id": 11, "prefix": "", "fqdn": "home.ipv64.net", "type": "AAAA", "content": "2a01:4f8::1", "state": "active", "token": tokAAAA},
 				{"id": 10, "prefix": "", "fqdn": "home.ipv64.net", "type": "A", "content": "93.184.216.34", "state": "active", "token": tokA},
 				{"id": 12, "prefix": "nas", "fqdn": "nas.home.ipv64.net", "type": "AAAA", "content": "::1:2:3:4", "state": "active", "token": tokSuf},
+				{"id": 15, "prefix": "web", "fqdn": "web.home.ipv64.net", "type": "A", "content": "185.1.2.3", "state": "cdn_record", "token": tokIgn},
 				{"id": 13, "prefix": "web", "fqdn": "web.home.ipv64.net", "type": "A", "content": "93.184.216.35", "state": "cdn_proxied", "token": tokOther},
 				{"id": 14, "prefix": "mail", "fqdn": "mail.home.ipv64.net", "type": "MX", "content": "x", "state": "active", "token": tokOther},
 			}})
@@ -98,7 +99,7 @@ func newTargetModule(t *testing.T, withBox bool) (*Module, *store.Store) {
 }
 
 // Auswahl: je Name zusammengefasst, A-Token bevorzugt, Interface-ID -> Praefix-Modus, ignorierte Familie aus,
-// CDN gesperrt, inaktive Domains und andere Record-Typen weggelassen.
+// ueber das CDN geleitete Namen waehlbar (nur die Ursprungsadresse, nie die CDN-Records), inaktive Domains und andere Record-Typen weggelassen.
 func TestAccountNames(t *testing.T) {
 	srv := fakeIPv64(t)
 	defer srv.Close()
@@ -134,8 +135,8 @@ func TestAccountNames(t *testing.T) {
 	if nas := m.defaultsFor(got["nas.home.ipv64.net"]); nas.Mode6 != Mode6Prefix || nas.Mode4 != Mode4Off || nas.Token != tokSuf {
 		t.Fatalf("nas: %+v", nas)
 	}
-	if got["web.home.ipv64.net"].Blocked != "cdn_proxied" {
-		t.Fatalf("web should be blocked: %+v", got["web.home.ipv64.net"])
+	if w := got["web.home.ipv64.net"]; w.Blocked != "" || !w.CDN || len(w.A) != 1 || w.A[0] != "93.184.216.35" || m.defaultsFor(w).Token != tokOther {
+		t.Fatalf("web (cdn): %+v", w)
 	}
 	if ds := m.defaultsFor(got["dslite.any64.de"]); ds.Mode4 != Mode4Off || ds.Mode6 != Mode6Host || ds.Token != tokIgn {
 		t.Fatalf("dslite: %+v", ds)

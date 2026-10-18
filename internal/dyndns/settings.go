@@ -88,6 +88,10 @@ func (m *Module) addPicked(ctx context.Context, key string, picks map[string]pic
 			failed = append(failed, p.FQDN)
 			continue
 		}
+		if p.CDN { // DNS zeigt aufs CDN: Abweichung von Anfang an gewollt
+			t.DNSState = dnsRedirected
+			m.saveRuntime(ctx, t)
+		}
 		added = append(added, t)
 	}
 	return added, failed, nil

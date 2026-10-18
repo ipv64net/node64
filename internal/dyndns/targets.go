@@ -72,7 +72,7 @@ func (t *Target) FQDN() string {
 	return t.Host + "." + t.Domain
 }
 
-// Status fasst den Zustand fuer die Anzeige zusammen: paused, off, error, dns, ok, new.
+// Status fasst den Zustand fuer die Anzeige zusammen: paused, off, error, pending, dns, cdn, ok, new.
 func (t *Target) Status() string {
 	switch {
 	case t.Paused != "":
@@ -85,6 +85,8 @@ func (t *Target) Status() string {
 		return "pending"
 	case t.DNSState == 2 && !t.LastOKAt.IsZero():
 		return "dns"
+	case t.DNSState == dnsRedirected:
+		return "cdn"
 	case !t.LastOKAt.IsZero() || t.DNSState == 1:
 		return "ok"
 	}
@@ -93,7 +95,7 @@ func (t *Target) Status() string {
 
 // StatusClass ist die Badge-Farbe zum Status.
 func (t *Target) StatusClass() string {
-	return map[string]string{"paused": "text-bg-warning", "off": "text-bg-secondary", "error": "text-bg-danger", "dns": "text-bg-warning", "pending": "text-bg-info", "ok": "text-bg-success", "new": "text-bg-light"}[t.Status()]
+	return map[string]string{"paused": "text-bg-warning", "off": "text-bg-secondary", "error": "text-bg-danger", "dns": "text-bg-warning", "pending": "text-bg-info", "cdn": "text-bg-success", "ok": "text-bg-success", "new": "text-bg-light"}[t.Status()]
 }
 
 // TokenMasked zeigt nur Anfang und Ende des Tokens.

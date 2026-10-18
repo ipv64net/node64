@@ -1,5 +1,12 @@
 # Änderungen – DynDNS-Updater
 
+## 1.2.0 – 2026-10-18
+
+### Geändert
+- Namen über den Reverse-Proxy/das CDN von ipv64: Liefert DNS die CDN-Adressen, ist das gewollt. Der Updater pflegt nur die Ursprungsadresse, meldet nicht mehr allein wegen der Abweichung nach (spart Update-Limit, kein „wird woanders geändert“) und zeigt „aktuell · DNS über CDN/Proxy“. Erkannt an der Antwort von ipv64 (Adresse schon bekannt bzw. Familie vom CDN verwaltet) oder schon bei der Auswahl aus dem Account; einmal am Tag wird nachgesehen, ob es dabei geblieben ist.
+- Antwort „vom CDN verwaltet“ für eine Familie pausiert das Ziel nicht mehr; die andere Familie wird weiter gemeldet.
+- Auswahl aus dem Account: Namen hinter dem CDN sind wählbar (Hinweis „über ipv64-CDN“); die Records des CDN selbst werden nie angefasst.
+
 ## 1.1.0 – 2026-10-14
 
 Prüfauftrag: Ergebnisse des Code-Reviews umgesetzt.
