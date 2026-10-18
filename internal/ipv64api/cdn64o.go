@@ -44,6 +44,9 @@ type CDN64Host struct {
 	TrafficMonth  struct {
 		BytesIn  int64 `json:"bytes_in"`
 		BytesOut int64 `json:"bytes_out"`
+		Conns    int64 `json:"conns"`
+		Requests int64 `json:"requests"` // Modus 2
+		Rejected int64 `json:"rejected"` // Modus 2: Anfrage-Limit der Server
 	} `json:"traffic_month"`
 }
 

@@ -53,7 +53,7 @@ type apiState struct {
 	etag    string
 	lastOK  time.Time
 	lastErr string
-	sent    map[string][3]int64 // je Name zuletzt gemeldet: in, out, conns
+	sent    map[string][5]int64 // je Name zuletzt gemeldet: in, out, conns, requests, rejected
 	client  *http.Client
 }
 
@@ -220,6 +220,8 @@ func (s *Server) apiReport(ctx context.Context) {
 		BytesIn  int64 `json:"bytes_in"`
 		BytesOut int64 `json:"bytes_out"`
 		Conns    int64 `json:"conns"`
+		Requests int64 `json:"requests,omitempty"` // Modus 2
+		Rejected int64 `json:"rejected,omitempty"` // Modus 2: Anfrage-Limit
 	}
 	type tun struct {
 		ID          string `json:"id"`
@@ -234,7 +236,7 @@ func (s *Server) apiReport(ctx context.Context) {
 			ids[e.Name] = e.HostID
 		}
 	}
-	now := map[string][3]int64{}
+	now := map[string][5]int64{}
 	var list []traffic
 	s.stats.mu.Lock()
 	s.apist.mu.Lock()
@@ -243,10 +245,14 @@ func (s *Server) apiReport(ctx context.Context) {
 		if id == 0 {
 			continue
 		}
-		cur := [3]int64{st.BytesIn.Load(), st.BytesOut.Load(), st.Conns.Load()}
+		cur := [5]int64{st.BytesIn.Load(), st.BytesOut.Load(), st.Conns.Load(), st.Requests.Load(), st.Rejected.Load()}
 		last := s.apist.sent[name]
-		if d := [3]int64{cur[0] - last[0], cur[1] - last[1], cur[2] - last[2]}; d != [3]int64{} {
-			list = append(list, traffic{HostID: id, BytesIn: d[0], BytesOut: d[1], Conns: d[2]})
+		var d [5]int64
+		for i := range cur {
+			d[i] = cur[i] - last[i]
+		}
+		if d != [5]int64{} {
+			list = append(list, traffic{HostID: id, BytesIn: d[0], BytesOut: d[1], Conns: d[2], Requests: d[3], Rejected: d[4]})
 		}
 		now[name] = cur
 	}

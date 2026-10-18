@@ -837,6 +837,13 @@ type onlineRow struct {
 	Edges   []onlineBadge
 	Status  string // active, blocked, pending ("" = noch kein Abgleich)
 	Reason  string
+	Month   onlineMonth // Zahlen der Server in diesem Monat (aus dem letzten Abgleich)
+}
+
+// onlineMonth: was srv07/srv08 fuer die Namen eines Hosts im laufenden Monat gezaehlt haben.
+type onlineMonth struct {
+	Bytes, Conns, Requests, Rejected int64
+	Known                            bool // Zahlen von ipv64 vorhanden
 }
 
 type onlineBadge struct {
@@ -886,10 +893,18 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 		}
 		r.Names = append(r.Names, x.Name)
 		r.Mode = max(r.Mode, x.Mode)
-		if rh, ok := remote[x.RemoteID]; ok && r.Status != "blocked" {
-			r.Status = rh.Status
-			if rh.BlockedReason != nil {
-				r.Reason = *rh.BlockedReason
+		if rh, ok := remote[x.RemoteID]; ok {
+			tm := rh.TrafficMonth
+			r.Month.Known = true
+			r.Month.Bytes += tm.BytesIn + tm.BytesOut
+			r.Month.Conns += tm.Conns
+			r.Month.Requests += tm.Requests
+			r.Month.Rejected += tm.Rejected
+			if r.Status != "blocked" {
+				r.Status = rh.Status
+				if rh.BlockedReason != nil {
+					r.Reason = *rh.BlockedReason
+				}
 			}
 		}
 	}

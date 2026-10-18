@@ -61,7 +61,7 @@ type Server struct {
 func New(cfg *Config, log *slog.Logger, version string) *Server {
 	s := &Server{cfg: cfg, log: log, version: version, started: time.Now(), peers: map[string][]*tunnel.Peer{},
 		stats: &stats{m: map[string]*hostStat{}}, guard: newGuard(cfg.Shield), local: newChanListener(&net.TCPAddr{}),
-		apist: &apiState{sent: map[string][3]int64{}, client: &http.Client{Timeout: 30 * time.Second}}, bw: newBandwidth()}
+		apist: &apiState{sent: map[string][5]int64{}, client: &http.Client{Timeout: 30 * time.Second}}, bw: newBandwidth()}
 	s.routes.Store(newRoutes(cfg.Hosts, nil))
 	s.certs = newCertStore(filepath.Join(cfg.DataDir, "certs"))
 	mux := http.NewServeMux()

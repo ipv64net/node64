@@ -134,6 +134,12 @@ type hostRow struct {
 	Online   *onlineRow // CDN64 online (nil = aus)
 }
 
+// onlineQuota: Kontingent fuer die Zeile unter der Liste (Traffic in Byte).
+type onlineQuota struct {
+	Used, Limit, Mbit     int
+	Traffic, TrafficLimit int64
+}
+
 type listData struct {
 	Kind      string
 	Tabs      []tab
@@ -144,9 +150,10 @@ type listData struct {
 	CacheN    int
 	CacheB    int64
 	StartedAt time.Time
-	StatsOn   bool   // cdn64.db verfuegbar (Statistik-Karte)
-	OnlineOn  bool   // CDN64 online verfuegbar (ipv64 angebunden)
-	OnlineL   string // Texte fuer cdn64-online.js (JSON)
+	StatsOn   bool         // cdn64.db verfuegbar (Statistik-Karte)
+	OnlineOn  bool         // CDN64 online verfuegbar (ipv64 angebunden)
+	Quota     *onlineQuota // Kontingent bei ipv64 (nur wenn Namen eingeschaltet sind)
+	OnlineL   string       // Texte fuer cdn64-online.js (JSON)
 }
 
 func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
@@ -217,6 +224,11 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 	}
 	d := listData{Kind: kind, Tabs: tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError(), StatsOn: m.stats2.Load() != nil,
 		OnlineOn: m.online.api != nil && m.edge != nil, OnlineL: m.onlineStrings(r)}
+	if rm := m.online.remote.Load(); rm != nil && rm.Data != nil && len(rm.Data.Hosts) > 0 {
+		q := rm.Data.Quota
+		d.Quota = &onlineQuota{Used: q.Domains.Used, Limit: q.Domains.Limit, Traffic: int64(q.TrafficMB.Used * (1 << 20)),
+			TrafficLimit: int64(q.TrafficMB.Limit) << 20, Mbit: q.BandwidthMbit}
+	}
 	if m.edge != nil {
 		d.Listeners = m.edge.Status().Listeners
 		for _, l := range d.Listeners {
