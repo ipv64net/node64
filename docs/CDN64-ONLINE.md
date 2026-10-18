@@ -569,7 +569,12 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   Adressänderung per DynDNS in < 30 s greift, private Ziele abgelehnt werden.
 
 ### T8 – Portmapper und Abschaltung des alten CDN
-- **Stand 2026-10-18 (cdn64-edge 0.8.0):** gebaut und getestet, Einspielen, Ausrollen und Live-Test offen.
+- **Stand 2026-10-18 (cdn64-edge 0.8.0):** Portmapper eingespielt, ausgerollt und live getestet. Hinweise im alten CDN
+  (Teil B) erst nach 1–2 Wochen Testbetrieb, danach Frist und Abschaltung (Teil C).
+  - Live mit `pm8.pfsense.ipv64.de` (Stufe 0, festes Ziel hub1 nur IPv6): TCP 50393 → 18081 und UDP 51999 → 51999
+    über alle vier Server-Adressen von hub2 (v4/v6, 9–18 ms) und vom Heimanschluss (nur IPv4, 40–64 ms); Port 80/443
+    zu; Liste „nur hub2“: Box abgewiesen (TCP getrennt, UDP verworfen); Traffic gemeldet; Ausschalten schließt die
+    Ports auf beiden Servern und stellt die DNS zurück.
   - Server (`portmap.go`): je Mapping ein TCP- bzw. UDP-Port (`port_range`, Standard 50000–62000, nur dort), auf- und
     abgebaut nach jedem Abruf; Ziel, Sperre und Liste bei jeder Verbindung aus dem aktuellen Stand des Namens,
     SSRF-Schutz wie HTTP, Schutz je IP (Blocklisten, Grenzen) auch für UDP-Sitzungen, Bandbreite und Traffic des
