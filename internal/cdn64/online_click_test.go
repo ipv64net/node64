@@ -48,7 +48,7 @@ func (f *fakeOnline) Overview(context.Context) (*ipv64api.CDN64Overview, error) 
 		ov.Tunnels = append(ov.Tunnels, ipv64api.CDN64Tunnel{ID: id, Status: "active"})
 	}
 	for id, n := range f.hosts {
-		ov.Hosts = append(ov.Hosts, ipv64api.CDN64Host{ID: id, FQDN: n, Status: "active"})
+		ov.Hosts = append(ov.Hosts, ipv64api.CDN64Host{ID: id, FQDN: n, Status: "active", Mode: max(f.modes[id], 1)})
 	}
 	return ov, nil
 }
@@ -78,6 +78,7 @@ func (f *fakeOnline) AddHost(_ context.Context, fqdn, tunnelID string, mode int)
 	}
 	f.next++
 	f.hosts[f.next] = fqdn
+	f.modes[f.next] = mode
 	return &ipv64api.CDN64Host{ID: f.next, FQDN: fqdn, Mode: mode, Status: "active"}, nil
 }
 
@@ -217,6 +218,26 @@ func TestOnlineOneClick(t *testing.T) {
 		t.Fatal("row mode")
 	}
 	_, _ = call("POST", hp, `{"mode":1}`)
+	// auf der Webseite gewechselt: der Abgleich uebernimmt den Modus
+	f.mu.Lock()
+	f.modes[1] = 2
+	f.mu.Unlock()
+	e.m.onlineSync(ctx)
+	if list, _ := e.m.onlineNames(ctx); len(list) != 1 || list[0].Mode != 2 {
+		t.Fatalf("remote mode not adopted: %+v", list)
+	}
+	// "TLS durchreichen" kann Modus 2 nicht: zurueck auf 1
+	if _, err := e.m.core.Writer().ExecContext(ctx, `UPDATE cdn_hosts SET kind = ? WHERE id = ?`, KindPass, h.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.m.onlineSync(ctx)
+	if f.modes[1] != 1 {
+		t.Fatalf("passthrough host left in mode 2: %v", f.modes)
+	}
+	if _, err := e.m.core.Writer().ExecContext(ctx, `UPDATE cdn_hosts SET kind = ? WHERE id = ?`, KindProxy, h.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.m.onlineSync(ctx)
 	// Name in der Node von einem anderen Modul belegt: der Selbsttest sagt es
 	e.m.mu.Lock()
 	e.m.routeErr[h.ID] = "name app.test is used by dns64"

@@ -91,7 +91,17 @@ func (s *Server) listenUDP443() {
 		}
 		return h3conf, nil
 	}}
-	ln, err := quic.ListenAddr(s.cfg.ListenHTTPS, conf, tunnel.QUICConfig())
+	qc := tunnel.QUICConfig()
+	qc.MaxIncomingStreams = 200 // Besucher (HTTP/3) und Tunnel teilen sich den Port; die Node oeffnet nur den Steuer-Stream
+	qc.KeepAlivePeriod = 0      // die Node haelt ihren Tunnel selbst wach
+	gq := newQUICGate(s.guard)
+	qc.GetConfigForClient = func(info *quic.ClientInfo) (*quic.Config, error) { // Sperrliste und Limits je IP vor dem Handschlag
+		if !gq.admit(info.RemoteAddr) {
+			return nil, errors.New("rejected")
+		}
+		return nil, nil
+	}
+	ln, err := quic.ListenAddr(s.cfg.ListenHTTPS, conf, qc)
 	if err != nil {
 		s.log.Warn("udp 443 not available (http3, tunnel)", "err", err)
 		return
@@ -103,6 +113,7 @@ func (s *Server) listenUDP443() {
 			if err != nil {
 				return
 			}
+			gq.hold(c)
 			switch c.ConnectionState().TLS.NegotiatedProtocol {
 			case tunnel.ALPN:
 				s.tun.ServeQUICConn(c)
@@ -117,6 +128,57 @@ func (s *Server) listenUDP443() {
 			}
 		}
 	}()
+}
+
+// quicGate: der grobe Schutz (guard) fuer QUIC auf 443 - beim ersten Paket (vor TLS) zaehlt die Verbindung, frei
+// wird sie mit ihrem Ende; kommt kein Handschlag zustande, nach 15 s.
+type quicGate struct {
+	g   *guard
+	mu  sync.Mutex
+	rel map[string]func()
+}
+
+func newQUICGate(g *guard) *quicGate { return &quicGate{g: g, rel: map[string]func(){}} }
+
+func (q *quicGate) admit(a net.Addr) bool {
+	release, why := q.g.admit(addrOf(a))
+	if why != "" {
+		return false
+	}
+	k := a.String()
+	q.mu.Lock()
+	if old := q.rel[k]; old != nil {
+		old()
+	}
+	q.rel[k] = release
+	q.mu.Unlock()
+	time.AfterFunc(15*time.Second, func() { q.take(k, nil) })
+	return true
+}
+
+// take: Platz der Adresse holen (nil = freigeben, wenn ihn noch niemand genommen hat).
+func (q *quicGate) take(k string, keep *func()) {
+	q.mu.Lock()
+	r := q.rel[k]
+	delete(q.rel, k)
+	q.mu.Unlock()
+	if r == nil {
+		return
+	}
+	if keep != nil {
+		*keep = r
+		return
+	}
+	r()
+}
+
+// hold: angenommene Verbindung haelt ihren Platz bis zum Ende.
+func (q *quicGate) hold(c *quic.Conn) {
+	var r func()
+	q.take(c.RemoteAddr().String(), &r)
+	if r != nil {
+		go func() { <-c.Context().Done(); r() }()
+	}
 }
 
 // isPublicName: der eigene Name des Servers (Tunnel auf 443 statt Besucher).

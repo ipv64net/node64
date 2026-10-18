@@ -471,9 +471,9 @@ func (m *Module) onlineSync(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	remote := map[int64]bool{}
+	remote := map[int64]ipv64api.CDN64Host{}
 	for _, rh := range ov.Hosts {
-		remote[rh.ID] = true
+		remote[rh.ID] = rh
 	}
 	hosts := map[int64]*Host{}
 	if hl, err := m.hosts(ctx); err == nil {
@@ -487,7 +487,7 @@ func (m *Module) onlineSync(ctx context.Context) {
 	for _, x := range list {
 		h := hosts[x.HostID]
 		switch {
-		case !remote[x.RemoteID]:
+		case remote[x.RemoteID].ID == 0:
 			m.onlineDrop(ctx, x.Name)
 			removed = true
 		case h == nil || !slices.Contains(h.Names, x.Name):
@@ -496,6 +496,15 @@ func (m *Module) onlineSync(ctx context.Context) {
 				continue
 			}
 			removed = true
+		case h.Kind == KindPass && remote[x.RemoteID].Mode == 2: // z. B. auf der Webseite gewechselt: geht hier nicht
+			if err := a.SetMode(ctx, x.RemoteID, 1); err != nil {
+				m.log.Warn("cdn64 online: mode 2 not reset for a passthrough host", "name", x.Name, "err", err)
+			} else {
+				m.log.Warn("cdn64 online: mode 2 is not possible for TLS passthrough, switched back to 1", "name", x.Name)
+				_, _ = m.core.Writer().ExecContext(ctx, `UPDATE cdn_online SET mode = 1 WHERE name = ?`, x.Name)
+			}
+		case remote[x.RemoteID].Mode != x.Mode && remote[x.RemoteID].Mode > 0: // anderswo gewechselt: hier uebernehmen
+			_, _ = m.core.Writer().ExecContext(ctx, `UPDATE cdn_online SET mode = ? WHERE name = ?`, remote[x.RemoteID].Mode, x.Name)
 		}
 	}
 	if removed {

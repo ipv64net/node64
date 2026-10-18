@@ -372,3 +372,17 @@ func TestHTTP01TokenAndCleanup(t *testing.T) {
 		t.Fatal("old certificate not removed")
 	}
 }
+
+// Wildcard-Namen gelten wie im DNS auch eine Ebene tiefer; ein naeherer Eintrag gewinnt.
+func TestWildcardDepth(t *testing.T) {
+	r := newRoutes(nil, &apiConfig{Hosts: []apiHost{{ID: 1, Name: "w.test", Wildcard: true, Mode: 1}, {ID: 2, Name: "b.w.test", Wildcard: true, Mode: 1}}})
+	for name, id := range map[string]int{"w.test": 1, "x.w.test": 1, "a.c.w.test": 1, "b.w.test": 2, "a.b.w.test": 2, "z.a.b.w.test": 2, "other.test": 0} {
+		got := 0
+		if e := r.lookup(name); e != nil {
+			got = e.HostID
+		}
+		if got != id {
+			t.Errorf("%s: host %d, want %d", name, got, id)
+		}
+	}
+}

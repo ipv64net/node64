@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -243,19 +242,10 @@ func (t *tokenStore) get(tok string) (string, bool) {
 
 // sharePeerToken gibt den Token an die Nachbarn (Let's Encrypt fragt einen der beiden Server).
 func (s *Server) sharePeerToken(ctx context.Context, tok, ka string) {
-	for _, p := range s.cfg.Peers {
-		h, _, _ := net.SplitHostPort(p.Addr)
-		d := &tls.Dialer{NetDialer: &net.Dialer{Timeout: 3 * time.Second}, Config: &tls.Config{ServerName: h, RootCAs: s.peerRoots, MinVersion: tls.VersionTLS13}}
-		dctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		pc, err := d.DialContext(dctx, "tcp", p.Addr)
-		cancel()
-		if err != nil {
-			s.log.Warn("acme token not shared", "peer", p.Name, "err", err)
-			continue
-		}
-		b, _ := json.Marshal(peerHello{Secret: s.cfg.PeerSecret, Kind: "acme", Host: tok, Client: ka, From: s.cfg.Name})
-		_, _ = pc.Write(append(b, '\n'))
+	if pc := s.dialPeer(ctx, "acme", tok, 0, ka, nil); pc != nil { // Host = Token, Client = Key-Authorization
 		_ = pc.Close()
+	} else if len(s.cfg.Peers) > 0 {
+		s.log.Warn("acme token not shared, no peer reachable")
 	}
 }
 
@@ -280,8 +270,13 @@ func (s *Server) serveToken(c net.Conn, data []byte) bool {
 	return true
 }
 
-// acmeClient: Konto des Servers (Schluessel in data_dir/acme-account.pem), einmal registriert.
+// acmeClient: Konto des Servers (Schluessel in data_dir/acme-account.pem), einmal registriert und dann behalten.
 func (s *Server) acmeClient(ctx context.Context) (*acme.Client, error) {
+	s.acmeMu.Lock()
+	defer s.acmeMu.Unlock()
+	if s.acmeCl != nil {
+		return s.acmeCl, nil
+	}
 	path := filepath.Join(s.cfg.DataDir, "acme-account.pem")
 	var key *ecdsa.PrivateKey
 	if b, err := os.ReadFile(path); err == nil {
@@ -312,6 +307,7 @@ func (s *Server) acmeClient(ctx context.Context) (*acme.Client, error) {
 	if _, err := cl.Register(ctx, acct, acme.AcceptTOS); err != nil && !errors.Is(err, acme.ErrAccountAlreadyExists) {
 		return nil, fmt.Errorf("account: %w", err)
 	}
+	s.acmeCl = cl
 	return cl, nil
 }
 

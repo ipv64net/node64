@@ -121,22 +121,30 @@ func TestOnlineTunnelEndToEnd(t *testing.T) {
 	if resp.StatusCode/100 != 2 && resp.StatusCode != http.StatusMovedPermanently && resp.StatusCode != http.StatusFound {
 		t.Fatalf("80: %d", resp.StatusCode)
 	}
-	// Modus 2: TLS endete auf dem Server, die Node bekommt HTTP und behandelt es als HTTPS (keine Umleitung)
-	st, err = tunnel.OpenStream(ctx, p, tunnel.Header{Kind: tunnel.KindHTTP, Client: "[2001:db8::51]:40002", Host: "app.test", Port: 443})
-	if err != nil {
-		t.Fatal(err)
+	// Modus 2: TLS endete auf dem Server, die Node bekommt HTTP und behandelt es als HTTPS (keine Umleitung); je
+	// Anfrage ein Stream - das Limit fuer neue Verbindungen (hier 1/s, kurz 10) darf das nicht bremsen
+	lim := DefaultLimits()
+	lim.ConnRate = 1
+	e.m.lim.cfg.Store(&lim)
+	for i := 0; i < 30; i++ {
+		st, err = tunnel.OpenStream(ctx, p, tunnel.Header{Kind: tunnel.KindHTTP, Client: "[2001:db8::51]:40002", Host: "app.test", Port: 443})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = st.SetDeadline(time.Now().Add(10 * time.Second))
+		_, _ = io.WriteString(st, "GET / HTTP/1.1\r\nHost: app.test\r\nConnection: close\r\n\r\n")
+		resp, err = http.ReadResponse(bufio.NewReader(st), nil)
+		if err != nil {
+			t.Fatalf("mode 2 request %d: %v", i, err)
+		}
+		body, _ = io.ReadAll(resp.Body)
+		st.Close()
+		if resp.StatusCode != 200 || string(body) != "hello via tunnel, xff=2001:db8::51" {
+			t.Fatalf("mode 2 request %d: %d %q", i, resp.StatusCode, body)
+		}
 	}
-	_ = st.SetDeadline(time.Now().Add(10 * time.Second))
-	_, _ = io.WriteString(st, "GET / HTTP/1.1\r\nHost: app.test\r\nConnection: close\r\n\r\n")
-	resp, err = http.ReadResponse(bufio.NewReader(st), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body, _ = io.ReadAll(resp.Body)
-	st.Close()
-	if resp.StatusCode != 200 || string(body) != "hello via tunnel, xff=2001:db8::51" {
-		t.Fatalf("mode 2: %d %q", resp.StatusCode, body)
-	}
+	def := DefaultLimits()
+	e.m.lim.cfg.Store(&def)
 	// Status in der API
 	var v onlineView
 	rec := httptest.NewRecorder()

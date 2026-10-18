@@ -74,10 +74,16 @@ func (r *routes) lookup(name string) *route {
 	if e, ok := r.exact[name]; ok {
 		return e
 	}
-	if i := strings.IndexByte(name, '.'); i > 0 {
-		return r.wild[name[i+1:]]
+	for s := name; ; { // *.domain gilt wie im DNS auch fuer tiefere Namen (a.b.domain)
+		i := strings.IndexByte(s, '.')
+		if i < 0 {
+			return nil
+		}
+		s = s[i+1:]
+		if e, ok := r.wild[s]; ok {
+			return e
+		}
 	}
-	return nil
 }
 
 // hostStat: Zaehler je Name (lokal in /health; ab T3 an ipv64).

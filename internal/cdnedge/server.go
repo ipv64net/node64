@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/ipv64net/node64/internal/tunnel"
@@ -54,6 +55,8 @@ type Server struct {
 	term       *terminator    // Modus 2: TLS endet hier
 	certs      *certStore     // Modus 2: Zertifikate je Name
 	acmeTokens tokenStore     // HTTP-01 (Ausweg)
+	acmeMu     sync.Mutex
+	acmeCl     *acme.Client // Konto bei Let's Encrypt (einmal registriert)
 	// Tests: Zertifikat ohne ACME
 	obtainHook func(ctx context.Context, name string) ([]byte, []byte, error)
 }

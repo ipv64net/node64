@@ -58,7 +58,12 @@ func (e *Edge) ServeConn(c net.Conn, port int) {
 		_ = c.Close()
 		return
 	}
-	if c = e.admit(c); c == nil {
+	if port == PortTerminated { // je Anfrage ein Stream: Verbindungs-Limits wuerden Anfragen zaehlen (die Anfrage-Limits gelten)
+		if e.blocked(c.RemoteAddr()) {
+			_ = c.Close()
+			return
+		}
+	} else if c = e.admit(c); c == nil {
 		return
 	}
 	v := e.virtualServers()
