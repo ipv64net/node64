@@ -1,5 +1,20 @@
 # Änderungen – CDN64
 
+## 1.9.0 – 2026-10-18
+
+CDN64 online im Betrieb.
+
+### Neu
+- Je eingeschaltetem Host die Zahlen der Server im Monat (Traffic, Anfragen, Abweisungen), darunter das
+  CDN-Kontingent des Accounts.
+- Meldungen über die Benachrichtigungskanäle: Tunnel 3 Minuten zu keinem Server, wieder verbunden, Name bei ipv64
+  gesperrt.
+- Der Tunnel nimmt Port 443, wenn 7844 gesperrt ist.
+
+### Geändert
+- Modus 2: Anfragen zählen nicht mehr als neue Verbindungen (das Verbindungs-Limit hat Besucher sonst gebremst).
+- Der Abgleich übernimmt anderswo gewechselte Modi und setzt Modus 2 bei „TLS durchreichen“ auf 1 zurück.
+
 ## 1.8.0 – 2026-10-18
 
 CDN64 online Modus 2.

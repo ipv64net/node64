@@ -508,6 +508,18 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   1 ↔ 2 ohne DNS-Änderung, Schutz greift auf dem Server.
 
 ### T6 – Betrieb und Start (Modus 1/2)
+- **Stand 2026-10-18 (cdn64-edge 0.6.0, CDN64 1.9.0):** gebaut und getestet, Einspielen und Live-Tests offen.
+  - Statistik: Server melden Anfragen/Abweisungen, `GET /cdn64o/stats`, Monatszeile je Host und Kontingent in der Node.
+  - G6: Lebenszeichen je Konfigurationsabruf (10 s), Austragen nach 45 s (nur wenn der rufende Server selbst ohne
+    Pause da war und `/health` des anderen nicht antwortet), Wiedereintrag nach 30 s.
+  - G1: Tunnel auch über 443 (TCP nach SNI = `public_host`, UDP mit HTTP/3 in einem QUIC-Listener nach ALPN);
+    Node probiert nach 7844 auch 443, der zuletzt erfolgreiche Port zuerst.
+  - Zertifikate: HTTP-01-Ausweg (nur der Name, Token auch beim Nachbarn), Aufräumen nach 7 Tagen.
+  - Meldungen in der Node (Tunnel weg/wieder da, Sperre).
+  - Sicherheitsprüfung (Code-Review) mit Korrekturen: Modus-2-Anfragen nicht als Verbindungen zählen, UDP 443 mit
+    Schutz vor dem Handschlag und eigenen Grenzen, G6 robust gegen ipv64-Ausfälle, Wildcard über mehrere Ebenen,
+    Modus 2 bei „TLS durchreichen“ zurücksetzen. Offen: feste Testkonfiguration (T1/T2) auf den Servern entfernen.
+  - Doku für Kunden: [CDN64-ONLINE-KUNDEN.md](CDN64-ONLINE-KUNDEN.md). Datenschutz-Hinweis (G12) und Freigabe: Dennis.
 - Statistik „über CDN64“ in der Node (Traffic, Anfragen, Abweisungen auf den Servern) aus den Zahlen bei ipv64.
 - Last- und Ausfalltests, Sicherheitsprüfung (Code-Review), Überwachung, Doku für Kunden, Beta mit wenigen Accounts,
   dann Freigabe.
