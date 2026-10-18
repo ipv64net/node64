@@ -39,6 +39,8 @@ type Config struct {
 	ACMEPrimary bool   `yaml:"acme_primary"`   // dieser Server bestellt (der andere erst, wenn eins 10 Minuten fehlt)
 	ACMEDir     string `yaml:"acme_directory"` // leer = Let's Encrypt; z. B. Staging zum Ausprobieren
 	ACMEEmail   string `yaml:"acme_email"`
+	// Modus 3: Cache aller Namen zusammen auf der Platte (MB, Standard 4096)
+	CacheTotalMB int `yaml:"cache_total_mb"`
 }
 
 // HostEntry: ein Name (auch *.domain) und der Tunnel, der ihn bedient.

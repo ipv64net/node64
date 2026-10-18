@@ -70,7 +70,7 @@ func New(cfg *Config, log *slog.Logger, version string) *Server {
 		apist: &apiState{sent: map[string][5]int64{}, client: &http.Client{Timeout: 30 * time.Second}}, bw: newBandwidth()}
 	s.routes.Store(newRoutes(cfg.Hosts, nil))
 	s.certs = newCertStore(filepath.Join(cfg.DataDir, "certs"))
-	s.cache = newRespCache(filepath.Join(cfg.DataDir, "cache"))
+	s.cache = newRespCache(filepath.Join(cfg.DataDir, "cache"), cfg.CacheTotalMB)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("/", notFound)

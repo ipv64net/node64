@@ -179,3 +179,33 @@ func TestPublicTarget(t *testing.T) {
 		}
 	}
 }
+
+// Cache: Grenze je Name und fuer alle Namen zusammen, die am laengsten ungenutzten gehen zuerst.
+func TestCacheLimits(t *testing.T) {
+	rc := newRespCache(t.TempDir(), 1) // 1 MB fuer alle
+	now := time.Now()
+	add := func(host int, key string, size int, used time.Time) {
+		f, _ := os.CreateTemp(rc.dir, "tmp-*")
+		_, _ = f.Write(make([]byte, size))
+		f.Close()
+		rc.put(host, key, &cacheItem{file: f.Name(), size: int64(size), expires: now.Add(time.Hour), used: used, header: http.Header{}}, 600<<10)
+	}
+	add(1, "a", 300<<10, now.Add(-3*time.Minute))
+	add(1, "b", 300<<10, now.Add(-2*time.Minute))
+	add(1, "c", 300<<10, now.Add(-time.Minute)) // Name 1 ueber 600 KB: a faellt
+	if it, _ := rc.get(1, "a", now); it != nil {
+		t.Fatal("per-name limit")
+	}
+	add(2, "x", 500<<10, now) // zusammen ueber 1 MB: der aelteste (b) faellt
+	if it, f := rc.get(1, "b", now); it != nil {
+		f.Close()
+		t.Fatal("total limit")
+	}
+	if rc.total > 1<<20 {
+		t.Fatalf("total %d", rc.total)
+	}
+	rc.sweep(now, map[int]time.Duration{2: time.Minute}) // Name 1 hat keinen Cache mehr
+	if len(rc.hosts) != 1 || rc.total != 500<<10 {
+		t.Fatalf("sweep: %d hosts, total %d", len(rc.hosts), rc.total)
+	}
+}

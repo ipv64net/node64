@@ -23,7 +23,9 @@ const cacheMaxObject = 8 << 20
 
 type respCache struct {
 	dir   string
+	max   int64 // alle Namen zusammen (cache_total_mb)
 	mu    sync.Mutex
+	total int64
 	hosts map[int]*hostCache
 }
 
@@ -40,12 +42,15 @@ type cacheItem struct {
 	header  http.Header
 }
 
-func newRespCache(dir string) *respCache {
+func newRespCache(dir string, maxMB int) *respCache {
 	if dir != "" {
 		_ = os.RemoveAll(dir)
 		_ = os.MkdirAll(dir, 0o700)
 	}
-	return &respCache{dir: dir, hosts: map[int]*hostCache{}}
+	if maxMB <= 0 {
+		maxMB = 4096
+	}
+	return &respCache{dir: dir, max: int64(maxMB) << 20, hosts: map[int]*hostCache{}}
 }
 
 func cacheKey(r *http.Request) string {
@@ -227,22 +232,43 @@ func (rc *respCache) put(host int, key string, it *cacheItem, limit int64) {
 	it.file = final
 	hc.items[key] = it
 	hc.size += it.size
+	rc.total += it.size
 	for hc.size > limit && len(hc.items) > 0 { // zuletzt genutzte bleiben
-		var oldK string
-		var old *cacheItem
-		for k, x := range hc.items {
-			if old == nil || x.used.Before(old.used) {
-				oldK, old = k, x
+		rc.dropOldestLocked(hc)
+	}
+	for rc.total > rc.max { // Grenze aller Namen: der am laengsten ungenutzte Eintrag gleich welchen Namens
+		var oldest *hostCache
+		var at time.Time
+		for _, h := range rc.hosts {
+			for _, x := range h.items {
+				if oldest == nil || x.used.Before(at) {
+					oldest, at = h, x.used
+				}
 			}
 		}
-		rc.dropLocked(hc, oldK)
+		if oldest == nil {
+			break
+		}
+		rc.dropOldestLocked(oldest)
 	}
+}
+
+func (rc *respCache) dropOldestLocked(hc *hostCache) {
+	var oldK string
+	var old *cacheItem
+	for k, x := range hc.items {
+		if old == nil || x.used.Before(old.used) {
+			oldK, old = k, x
+		}
+	}
+	rc.dropLocked(hc, oldK)
 }
 
 func (rc *respCache) dropLocked(hc *hostCache, key string) {
 	if it := hc.items[key]; it != nil {
 		_ = os.Remove(it.file)
 		hc.size -= it.size
+		rc.total -= it.size
 		delete(hc.items, key)
 	}
 }
