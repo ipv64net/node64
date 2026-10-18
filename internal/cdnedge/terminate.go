@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 
 	"github.com/ipv64net/node64/internal/tunnel"
@@ -41,6 +42,7 @@ type terminator struct {
 	http  *chanListener // Port 80 fuer Modus-2-Namen: Umleitung auf HTTPS
 	srvs  []*http.Server
 	h3    *http3.Server
+	udp   *quic.Listener // UDP 443: HTTP/3 und Tunnel (ALPN), gemeinsam
 	proxy *httputil.ReverseProxy
 	rl    *reqLimiter
 }
@@ -64,15 +66,62 @@ func (s *Server) termInit() {
 	go func() { _ = redir.Serve(t.http) }()
 	t.srvs = []*http.Server{hs, redir}
 	if s.cfg.HTTP3 && s.cfg.ListenHTTPS != "" {
-		t.h3 = &http3.Server{Addr: s.cfg.ListenHTTPS, Handler: http.HandlerFunc(s.serveTerm),
-			TLSConfig: http3.ConfigureTLSConfig(&tls.Config{MinVersion: tls.VersionTLS13, GetCertificate: s.termCert})}
-		go func() {
-			if err := t.h3.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				s.log.Warn("http3 not available", "err", err)
-			}
-		}()
+		t.h3 = &http3.Server{Handler: http.HandlerFunc(s.serveTerm)}
 	}
 	s.term = t
+}
+
+// listenUDP443: ein QUIC-Listener auf UDP listen_https fuer HTTP/3 (Modus 2) und den Tunnel (G1, Netze, die nur 443
+// hinauslassen). Getrennt wird nach dem Namen: der eigene Name (public_host) ist der Tunnel, alles andere HTTP/3.
+// Laeuft nach startTunnel.
+func (s *Server) listenUDP443() {
+	t := s.term
+	if s.cfg.ListenHTTPS == "" || (t.h3 == nil && s.tun == nil) {
+		return
+	}
+	h3conf := http3.ConfigureTLSConfig(&tls.Config{MinVersion: tls.VersionTLS13, GetCertificate: s.termCert})
+	conf := &tls.Config{MinVersion: tls.VersionTLS13, GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+		if s.tun != nil && s.isPublicName(hello.ServerName) {
+			c := s.tlsConf.Clone()
+			c.MinVersion, c.NextProtos = tls.VersionTLS13, []string{tunnel.ALPN}
+			return c, nil
+		}
+		if t.h3 == nil {
+			return nil, errors.New("http3 off")
+		}
+		return h3conf, nil
+	}}
+	ln, err := quic.ListenAddr(s.cfg.ListenHTTPS, conf, tunnel.QUICConfig())
+	if err != nil {
+		s.log.Warn("udp 443 not available (http3, tunnel)", "err", err)
+		return
+	}
+	t.udp = ln
+	go func() {
+		for {
+			c, err := ln.Accept(context.Background())
+			if err != nil {
+				return
+			}
+			switch c.ConnectionState().TLS.NegotiatedProtocol {
+			case tunnel.ALPN:
+				s.tun.ServeQUICConn(c)
+			case http3.NextProtoH3:
+				if t.h3 != nil {
+					go func() { _ = t.h3.ServeQUICConn(c) }()
+					continue
+				}
+				fallthrough
+			default:
+				_ = c.CloseWithError(0, "")
+			}
+		}
+	}()
+}
+
+// isPublicName: der eigene Name des Servers (Tunnel auf 443 statt Besucher).
+func (s *Server) isPublicName(n string) bool {
+	return s.cfg.PublicHost != "" && normName(n) == normName(s.cfg.PublicHost)
 }
 
 func (s *Server) termClose(ctx context.Context) {
@@ -84,6 +133,9 @@ func (s *Server) termClose(ctx context.Context) {
 	_ = t.http.Close()
 	if t.h3 != nil {
 		_ = t.h3.Close()
+	}
+	if t.udp != nil {
+		_ = t.udp.Close()
 	}
 	var wg sync.WaitGroup
 	for _, srv := range t.srvs {

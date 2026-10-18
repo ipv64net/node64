@@ -111,24 +111,33 @@ func (s *Server) ServeTCP(addr string) (net.Addr, error) {
 				time.Sleep(50 * time.Millisecond)
 				continue
 			}
-			go func() {
-				tc := c.(*tls.Conn)
-				_ = tc.SetDeadline(time.Now().Add(s.authTimeout()))
-				if err := tc.Handshake(); err != nil || tc.ConnectionState().NegotiatedProtocol != ALPN {
-					_ = c.Close()
-					return
-				}
-				_ = tc.SetDeadline(time.Time{})
-				ys, err := newYamux(c, true)
-				if err != nil {
-					_ = c.Close()
-					return
-				}
-				s.handshake(ys)
-			}()
+			go s.serveTLS(c.(*tls.Conn))
 		}
 	}()
 	return ln.Addr(), nil
+}
+
+// ServeTCPConn nimmt eine schon angenommene TCP-Verbindung als Tunnel an (G1: Port 443, nach dem SNI-Namen des
+// Servers vom Besucher-Eingang getrennt). Blockiert bis zum Ende der Sitzung.
+func (s *Server) ServeTCPConn(c net.Conn) { s.serveTLS(tls.Server(c, tlsConfigFor(s.TLS))) }
+
+// ServeQUICConn nimmt eine QUIC-Verbindung mit der ALPN des Tunnels an, die ein gemeinsamer Listener angenommen hat
+// (G1: UDP 443 neben HTTP/3). Kehrt sofort zurueck.
+func (s *Server) ServeQUICConn(c *quic.Conn) { go s.handshake(&quicSession{c}) }
+
+func (s *Server) serveTLS(tc *tls.Conn) {
+	_ = tc.SetDeadline(time.Now().Add(s.authTimeout()))
+	if err := tc.Handshake(); err != nil || tc.ConnectionState().NegotiatedProtocol != ALPN {
+		_ = tc.Close()
+		return
+	}
+	_ = tc.SetDeadline(time.Time{})
+	ys, err := newYamux(tc, true)
+	if err != nil {
+		_ = tc.Close()
+		return
+	}
+	s.handshake(ys)
 }
 
 // handshake: Steuer-Stream der Node annehmen, Hello pruefen, Welcome senden, dann bis zum Ende Steuer-Stream lesen.

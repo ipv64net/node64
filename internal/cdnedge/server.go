@@ -123,6 +123,7 @@ func (s *Server) Run(ctx context.Context) error {
 			return err
 		}
 	}
+	s.listenUDP443()
 	if s.cfg.ListenHTTPS != "" {
 		l, err := net.Listen("tcp", s.cfg.ListenHTTPS)
 		if err != nil {

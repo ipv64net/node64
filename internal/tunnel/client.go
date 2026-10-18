@@ -11,6 +11,7 @@ import (
 	"math/rand/v2"
 	"net"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,6 +37,8 @@ type ClientConfig struct {
 	Handler     func(st Stream, h Header) // je Daten-Stream (eigene Goroutine); muss den Stream schliessen (auch spaeter)
 	RootCAs     *x509.CertPool            // nil = System
 	Log         *slog.Logger
+	AltPort     int  // zweiter Port, wenn der Tunnel-Port nicht geht (0 = 443, -1 = keiner; G1)
+	TCPOnly     bool // nur TCP+TLS (Tests, Netze ohne UDP)
 }
 
 // EdgeStatus ist der Zustand des Tunnels zu einem Server (Anzeige in der Node).
@@ -75,7 +78,7 @@ func NewClient(cfg ClientConfig) *Client {
 	if cfg.Log == nil {
 		cfg.Log = slog.New(slog.DiscardHandler)
 	}
-	c := &Client{cfg: cfg, st: map[string]*edgeState{}, resolve: addrs}
+	c := &Client{cfg: cfg, st: map[string]*edgeState{}, resolve: addrs, forceTCP: cfg.TCPOnly}
 	for _, e := range cfg.Edges {
 		c.st[e.Name] = &edgeState{EdgeStatus: EdgeStatus{Name: e.Name, Host: e.Host}}
 	}
@@ -121,9 +124,15 @@ func (c *Client) loop(ctx context.Context, e Edge) {
 	backoff := time.Second
 	quicFails := 0
 	var lastQUIC time.Time
+	port := 0 // zuletzt erfolgreicher Port (0 = noch keiner)
 	for ctx.Err() == nil {
 		useTCP := c.forceTCP || quicFails >= 2 && time.Since(lastQUIC) < 5*time.Minute // alle 5 Minuten QUIC erneut versuchen
-		sess, err := c.connect(ctx, e, useTCP)
+		sess, err := c.connect(ctx, e, useTCP, port)
+		if err == nil {
+			if _, p, perr := net.SplitHostPort(sess.RemoteAddr().String()); perr == nil {
+				port, _ = strconv.Atoi(p)
+			}
+		}
 		if !useTCP {
 			lastQUIC = time.Now()
 			var rej errRejected
@@ -187,47 +196,60 @@ func (c *Client) tlsConfig(e Edge) *tls.Config {
 	return &tls.Config{ServerName: e.Host, RootCAs: c.cfg.RootCAs, MinVersion: tls.VersionTLS13, NextProtos: []string{ALPN}}
 }
 
-// connect: Verbindung aufbauen (je Adresse hoechstens 5 s) und anmelden.
-func (c *Client) connect(ctx context.Context, e Edge, useTCP bool) (Session, error) {
-	port := e.Port
-	if port == 0 {
-		port = 7844
+// connect: Verbindung aufbauen (je Adresse und Port hoechstens 5 s) und anmelden. Ports: der Tunnel-Port, sonst 443
+// (G1, Netze, die nur 443 hinauslassen); prefer zuerst.
+func (c *Client) connect(ctx context.Context, e Edge, useTCP bool, prefer int) (Session, error) {
+	alt := c.cfg.AltPort
+	if alt == 0 {
+		alt = 443
+	}
+	ports := []int{e.Port, alt}
+	if ports[0] == 0 {
+		ports[0] = 7844
+	}
+	if alt < 0 || ports[0] == alt {
+		ports = ports[:1]
+	}
+	if prefer == ports[len(ports)-1] && len(ports) > 1 {
+		ports[0], ports[1] = ports[1], ports[0]
 	}
 	ips := c.resolve(ctx, e)
 	if len(ips) == 0 {
 		return nil, fmt.Errorf("%s: no address", e.Host)
 	}
 	var lastErr error
-	for _, ip := range ips {
-		dctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		addr := hostPort(ip.String(), port)
-		var sess Session
-		var err error
-		if useTCP {
-			sess, err = dialTCP(dctx, addr, c.tlsConfig(e))
-		} else {
-			var qc *quic.Conn
-			if qc, err = quic.DialAddr(dctx, addr, c.tlsConfig(e), QUICConfig()); err == nil {
-				sess = &quicSession{qc}
+	for _, port := range ports {
+		for _, ip := range ips {
+			dctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			addr := hostPort(ip.String(), port)
+			var sess Session
+			var err error
+			if useTCP {
+				sess, err = dialTCP(dctx, addr, c.tlsConfig(e))
+			} else {
+				var qc *quic.Conn
+				if qc, err = quic.DialAddr(dctx, addr, c.tlsConfig(e), QUICConfig()); err == nil {
+					sess = &quicSession{qc}
+				}
 			}
-		}
-		cancel()
-		if err == nil { // Anmeldung mit eigener Frist (der Handschlag darf die 5 s fast aufbrauchen)
-			hctx, hcancel := context.WithTimeout(ctx, 10*time.Second)
-			err = c.hello(hctx, sess)
-			hcancel()
-			if err != nil {
-				_ = sess.Close("hello")
+			cancel()
+			if err == nil { // Anmeldung mit eigener Frist (der Handschlag darf die 5 s fast aufbrauchen)
+				hctx, hcancel := context.WithTimeout(ctx, 10*time.Second)
+				err = c.hello(hctx, sess)
+				hcancel()
+				if err != nil {
+					_ = sess.Close("hello")
+				}
 			}
+			if err == nil {
+				return sess, nil
+			}
+			var rej errRejected
+			if errors.As(err, &rej) {
+				return nil, err
+			}
+			lastErr = fmt.Errorf("%s: %w", addr, err)
 		}
-		if err == nil {
-			return sess, nil
-		}
-		var rej errRejected
-		if errors.As(err, &rej) {
-			return nil, err
-		}
-		lastErr = fmt.Errorf("%s: %w", addr, err)
 	}
 	return nil, lastErr
 }

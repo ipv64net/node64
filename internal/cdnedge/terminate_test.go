@@ -16,6 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
+
 	"github.com/ipv64net/node64/internal/tunnel"
 )
 
@@ -249,5 +252,65 @@ func TestCertSealAndRound(t *testing.T) {
 	s2.certRound(context.Background(), &certPlan{missingSince: map[string]time.Time{}, nextTry: map[string]time.Time{}, backoff: map[string]time.Duration{}})
 	if n != 1 || s2.certs.has("a.test") {
 		t.Fatal("secondary must wait")
+	}
+}
+
+// G1: Tunnel-Port gesperrt - die Node kommt ueber den Besucher-Port (UDP per ALPN neben HTTP/3, TCP nach dem
+// eigenen Namen des Servers); Besucher-HTTP/3 laeuft auf demselben UDP-Port weiter.
+func TestTunnelOn443(t *testing.T) {
+	cf, kf, pool, _ := testCA(t, "edge.test")
+	m2c, m2k, m2pool, _ := testCA(t, "m2.test", "*.m2.test")
+	tok := "node-token"
+	cfg := &Config{Name: "B", PublicHost: "edge.test", ListenHTTP: freeAddr(t), ListenHTTPS: freeAddr(t), TunnelListen: freeAddr(t),
+		TLSCert: cf, TLSKey: kf, Hosts: []HostEntry{{Name: "m2.test", Tunnel: "t1", Mode: 2}}, HTTP3: true,
+		Tunnels: []TunnelEntry{{ID: "t1", TokenSHA256: sha256hex(tok)}}, DataDir: t.TempDir()}
+	s := startEdge(t, cfg, pool)
+	cp, _ := os.ReadFile(m2c)
+	kp, _ := os.ReadFile(m2k)
+	if err := s.certs.put("m2.test", cp, kp); err != nil {
+		t.Fatal(err)
+	}
+	closed := freeAddr(t) // weder TCP noch UDP offen
+	for _, tcp := range []bool{false, true} {
+		node := tunnel.NewClient(tunnel.ClientConfig{Tunnel: "t1", Token: tok, RootCAs: pool, AltPort: port(cfg.ListenHTTPS), TCPOnly: tcp,
+			Edges: []tunnel.Edge{{Name: "B", Host: "edge.test", Port: port(closed), IPs: []string{"127.0.0.1"}}},
+			Handler: func(st tunnel.Stream, h tunnel.Header) {
+				srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "node "+r.Proto) })}
+				_ = srv.Serve(&oneConn{c: st, done: make(chan struct{})})
+			}})
+		ctx, cancel := context.WithCancel(context.Background())
+		go node.Run(ctx)
+		for i := 0; i < 600 && s.peer("t1") == nil; i++ {
+			time.Sleep(25 * time.Millisecond)
+		}
+		p := s.peer("t1")
+		if p == nil {
+			cancel()
+			t.Fatalf("tcp=%v: node did not connect via the visitor port", tcp)
+		}
+		if want := map[bool]string{false: "quic", true: "tcp"}[tcp]; p.Session.Transport() != want {
+			cancel()
+			t.Fatalf("transport %s, want %s", p.Session.Transport(), want)
+		}
+		// Besucher ueber HTTP/3 auf demselben UDP-Port
+		h3 := &http.Client{Timeout: 10 * time.Second, Transport: &http3.Transport{TLSClientConfig: &tls.Config{RootCAs: m2pool},
+			Dial: func(ctx context.Context, _ string, tc *tls.Config, qc *quic.Config) (*quic.Conn, error) {
+				return quic.DialAddr(ctx, cfg.ListenHTTPS, tc, qc)
+			}}}
+		resp, err := h3.Get("https://m2.test/")
+		if err != nil {
+			cancel()
+			t.Fatalf("http3 visitor: %v", err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.ProtoMajor != 3 || string(b) != "node HTTP/1.1" {
+			cancel()
+			t.Fatalf("http3 visitor: %s %q", resp.Proto, b)
+		}
+		cancel()
+		for i := 0; i < 200 && s.peer("t1") != nil; i++ {
+			time.Sleep(25 * time.Millisecond)
+		}
 	}
 }

@@ -139,6 +139,10 @@ func (s *Server) handle443(c net.Conn) {
 		_ = c.Close()
 		return
 	}
+	if s.tun != nil && s.isPublicName(sni) { // G1: Tunnel der Node ueber Port 443
+		s.tun.ServeTCPConn(&prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)})
+		return
+	}
 	if re := s.routes.Load().lookup(sni); re != nil && re.Mode == 2 && s.certs.has(re.Name) { // Modus 2: TLS endet hier
 		s.term.tls.push(&prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)})
 		return
