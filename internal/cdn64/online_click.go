@@ -35,6 +35,7 @@ type OnlineAPI interface {
 	CreateTunnel(ctx context.Context, name string) (*ipv64api.CDN64Tunnel, error)
 	DeleteTunnel(ctx context.Context, id string) error
 	AddHost(ctx context.Context, fqdn, tunnelID string, mode int) (*ipv64api.CDN64Host, error)
+	SetMode(ctx context.Context, id int64, mode int) error
 	DeleteHost(ctx context.Context, id int64) error
 }
 
@@ -55,6 +56,10 @@ func (o ipv64Online) DeleteTunnel(ctx context.Context, id string) error {
 }
 func (o ipv64Online) AddHost(ctx context.Context, fqdn, tunnelID string, mode int) (*ipv64api.CDN64Host, error) {
 	return o.k.Client().CDN64AddHost(ctx, o.k.Get(ctx), fqdn, tunnelID, mode)
+}
+func (o ipv64Online) SetMode(ctx context.Context, id int64, mode int) error {
+	_, err := o.k.Client().CDN64SetMode(ctx, o.k.Get(ctx), id, mode)
+	return err
 }
 func (o ipv64Online) DeleteHost(ctx context.Context, id int64) error {
 	return o.k.Client().CDN64DeleteHost(ctx, o.k.Get(ctx), id)
@@ -302,15 +307,19 @@ type onlineResult struct {
 	Text   string `json:"text,omitempty"` // Fehlertext mit Abhilfe (Sprache der Anfrage)
 }
 
-// onlineEnable schaltet die Namen eines Hosts ein (vorhandene bleiben). Scheitern alle, bleibt nichts zurueck.
+// onlineEnable schaltet die Namen eines Hosts ein; schon eingeschaltete wechseln auf mode (DNS bleibt). Scheitern
+// alle, bleibt nichts zurueck. Modus 2 (TLS endet auf den Servern) geht nicht fuer "TLS durchreichen".
 func (m *Module) onlineEnable(ctx context.Context, h *Host, mode int) ([]onlineResult, error) {
 	m.online.op.Lock()
 	defer m.online.op.Unlock()
 	if mode == 0 {
 		mode = 1
 	}
-	if mode != 1 {
+	if mode != 1 && mode != 2 {
 		return nil, errOnline("mode_not_available")
+	}
+	if mode == 2 && h.Kind == KindPass {
+		return nil, errOnline("mode2_passthrough")
 	}
 	c, err := m.onlineEnsureTunnel(ctx)
 	if err != nil {
@@ -320,9 +329,9 @@ func (m *Module) onlineEnable(ctx context.Context, h *Host, mode int) ([]onlineR
 	if err != nil {
 		return nil, err
 	}
-	on := map[string]bool{}
+	on := map[string]onlineName{}
 	for _, x := range have {
-		on[x.Name] = true
+		on[x.Name] = x
 	}
 	var out []onlineResult
 	for _, n := range h.Names {
@@ -330,7 +339,15 @@ func (m *Module) onlineEnable(ctx context.Context, h *Host, mode int) ([]onlineR
 		case strings.HasPrefix(n, "*."):
 			out = append(out, onlineResult{Name: n, Result: "skipped", Code: "wildcard_name"})
 			continue
-		case on[n]:
+		}
+		if x, ok := on[n]; ok {
+			if x.Mode != mode {
+				if err := m.online.api.SetMode(ctx, x.RemoteID, mode); err != nil {
+					out = append(out, onlineResult{Name: n, Result: "error", Code: onlineCode(err), Error: err.Error()})
+					continue
+				}
+				_, _ = m.core.Writer().ExecContext(ctx, `UPDATE cdn_online SET mode = ? WHERE name = ?`, mode, n)
+			}
 			out = append(out, onlineResult{Name: n, Result: "on"})
 			continue
 		}
@@ -562,6 +579,9 @@ func (m *Module) onlineSelfTest(ctx context.Context, h *Host) ([]onlineTest, err
 		return nil, err
 	}
 	useTLS := h.Kind == KindPass || h.HTTPS()
+	for _, x := range list {
+		useTLS = useTLS || (x.HostID == h.ID && x.Mode == 2) // Modus 2: TLS auf den Servern, auch fuer reine HTTP-Hosts
+	}
 	m.mu.Lock()
 	routeErr := m.routeErr[h.ID]
 	m.mu.Unlock()
@@ -634,14 +654,15 @@ func (m *Module) onlineProbeOne(ctx context.Context, edgeName, ip, name string, 
 			trusted = verr == nil
 		}
 		p.Trusted = &trusted
-		_ = tc.Close()
-	} else {
-		_, _ = io.WriteString(conn, "HEAD / HTTP/1.1\r\nHost: "+name+"\r\nUser-Agent: Node64-CDN64-Selftest\r\nConnection: close\r\n\r\n")
-		resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
-		if err != nil {
-			p.Error = err.Error()
-			return p
-		}
+		conn = tc // Modus 2 oeffnet den Stream erst mit der Anfrage
+	}
+	_, _ = io.WriteString(conn, "HEAD / HTTP/1.1\r\nHost: "+name+"\r\nUser-Agent: Node64-CDN64-Selftest\r\nConnection: close\r\n\r\n")
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil && !useTLS { // bei TLS genuegt der Handschlag (Durchreichen), die Antwort ist Sache des Ziels
+		p.Error = err.Error()
+		return p
+	}
+	if resp != nil {
 		resp.Body.Close()
 	}
 	p.Ms = time.Since(start).Milliseconds()
@@ -810,6 +831,7 @@ func (m *Module) apiOnlineTest(w http.ResponseWriter, r *http.Request) {
 
 // onlineRow: Zustand von CDN64 online fuer eine Zeile der Host-Liste.
 type onlineRow struct {
+	Mode    int // 1 oder 2 (gemischt: der hoechste)
 	Names   []string
 	Missing int // Namen des Hosts, die (noch) nicht eingeschaltet sind (ohne Platzhalter)
 	Edges   []onlineBadge
@@ -863,6 +885,7 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 			out[x.HostID] = r
 		}
 		r.Names = append(r.Names, x.Name)
+		r.Mode = max(r.Mode, x.Mode)
 		if rh, ok := remote[x.RemoteID]; ok && r.Status != "blocked" {
 			r.Status = rh.Status
 			if rh.BlockedReason != nil {
@@ -889,7 +912,7 @@ func (m *Module) onlineStrings(r *http.Request) string {
 	}
 	keys := []string{"intro", "start", "retest", "close", "s_account", "s_tunnel", "s_names", "s_test", "quota", "connect", "tcp", "udp_buf",
 		"skipped", "untrusted", "dns_ok", "dns_wait", "done", "partial", "failed", "hint_lan", "check_created", "check_failed", "working",
-		"off_confirm", "direct", "peer", "down", "other_node", "route_error", "wait_edges"}
+		"off_confirm", "direct", "peer", "down", "other_node", "route_error", "wait_edges", "mode2_hint"}
 	out := map[string]string{}
 	for _, k := range keys {
 		out[k] = m.g.T(r, "cdn64.online."+k)

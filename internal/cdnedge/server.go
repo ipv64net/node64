@@ -51,6 +51,10 @@ type Server struct {
 	apist     *apiState
 	bw        *bandwidth
 	lns       []net.Listener // offene Besucher-/Nachbar-Ports
+	term      *terminator    // Modus 2: TLS endet hier
+	certs     *certStore     // Modus 2: Zertifikate je Name
+	// Tests: Zertifikat ohne ACME
+	obtainHook func(ctx context.Context, name string) ([]byte, []byte, error)
 }
 
 // New legt den Dienst an.
@@ -59,6 +63,7 @@ func New(cfg *Config, log *slog.Logger, version string) *Server {
 		stats: &stats{m: map[string]*hostStat{}}, guard: newGuard(cfg.Shield), local: newChanListener(&net.TCPAddr{}),
 		apist: &apiState{sent: map[string][3]int64{}, client: &http.Client{Timeout: 30 * time.Second}}, bw: newBandwidth()}
 	s.routes.Store(newRoutes(cfg.Hosts, nil))
+	s.certs = newCertStore(filepath.Join(cfg.DataDir, "certs"))
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("/", notFound)
@@ -90,6 +95,8 @@ func (s *Server) Run(ctx context.Context) error {
 	bctx, bcancel := context.WithCancel(ctx)
 	defer bcancel()
 	go s.blocklistLoop(bctx)
+	s.termInit()
+	go s.certLoop(bctx)
 	go s.apiLoop(bctx)
 	go s.rateLoop(bctx)
 	go func() {
@@ -153,6 +160,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.shutdown()
 	sctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
+	s.termClose(sctx)
 	err = s.http.Shutdown(sctx)
 	if errors.Is(err, context.DeadlineExceeded) {
 		err = nil
@@ -368,6 +376,7 @@ type Health struct {
 	Rejected int64               `json:"rejected,omitempty"`   // vom Schutz abgewiesen seit dem Start
 	Blocked  int                 `json:"blocklist_entries,omitempty"`
 	API      *APIInfo            `json:"api,omitempty"`
+	Certs    map[string]string   `json:"certs,omitempty"` // Modus 2: Name -> gueltig bis
 }
 
 // APIInfo: Stand der Steuerung von ipv64 (nur lokal sichtbar).
@@ -386,6 +395,8 @@ type HostInfo struct {
 	BytesOut int64 `json:"bytes_out"`
 	ViaPeer  int64 `json:"via_peer,omitempty"`
 	NoTunnel int64 `json:"no_tunnel,omitempty"`
+	Requests int64 `json:"requests,omitempty"` // Modus 2
+	Rejected int64 `json:"rejected,omitempty"` // Modus 2: Anfrage-Limit
 }
 
 // TunnelInfo: eine angemeldete Verbindung (nur lokal sichtbar).
@@ -419,9 +430,15 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 		}
 		for n, st := range s.stats.m {
 			h.Hosts[n] = HostInfo{Conns: st.Conns.Load(), BytesIn: st.BytesIn.Load(), BytesOut: st.BytesOut.Load(), ViaPeer: st.ViaPeer.Load(),
-				NoTunnel: st.NoTunnel.Load()}
+				NoTunnel: st.NoTunnel.Load(), Requests: st.Requests.Load(), Rejected: st.Rejected.Load()}
 		}
 		s.stats.mu.Unlock()
+		for n, na := range s.certs.list() {
+			if h.Certs == nil {
+				h.Certs = map[string]string{}
+			}
+			h.Certs[n] = na.UTC().Format(time.RFC3339)
+		}
 		if s.cfg.APIURL != "" {
 			ai := &APIInfo{}
 			if c := s.apiCfg.Load(); c != nil {

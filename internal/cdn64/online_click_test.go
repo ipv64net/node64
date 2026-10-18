@@ -32,6 +32,7 @@ type fakeOnline struct {
 	edges   []ipv64api.CDN64Edge
 	tunnels map[string]bool
 	hosts   map[int64]string
+	modes   map[int64]int
 	next    int64
 }
 
@@ -71,12 +72,22 @@ func (f *fakeOnline) AddHost(_ context.Context, fqdn, tunnelID string, mode int)
 	if fqdn == "nope.test" {
 		return nil, &ipv64api.APIError{Status: 422, Code: "domain_not_in_account", Detail: "not in account"}
 	}
-	if !f.tunnels[tunnelID] || mode != 1 {
+	if !f.tunnels[tunnelID] || (mode != 1 && mode != 2) {
 		return nil, &ipv64api.APIError{Status: 404, Code: "cdn64o_tunnel_not_found"}
 	}
 	f.next++
 	f.hosts[f.next] = fqdn
 	return &ipv64api.CDN64Host{ID: f.next, FQDN: fqdn, Mode: mode, Status: "active"}, nil
+}
+
+func (f *fakeOnline) SetMode(_ context.Context, id int64, mode int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.hosts[id]; !ok {
+		return &ipv64api.APIError{Status: 404, Code: "cdn64o_host_not_found"}
+	}
+	f.modes[id] = mode
+	return nil
 }
 
 func (f *fakeOnline) DeleteHost(_ context.Context, id int64) error {
@@ -128,7 +139,7 @@ func TestOnlineOneClick(t *testing.T) {
 	go func() { _ = srv.Run(ectx); close(done) }()
 	defer func() { cancel(); <-done }()
 
-	f := &fakeOnline{tunnels: map[string]bool{}, hosts: map[int64]string{},
+	f := &fakeOnline{tunnels: map[string]bool{}, hosts: map[int64]string{}, modes: map[int64]int{},
 		edges: []ipv64api.CDN64Edge{{Name: "srv07", Host: "127.0.0.1", Port: pt, IPs: []string{"127.0.0.1"}}}}
 	e.m.SetOnlineAPI(f)
 	e.m.online.roots = pool
@@ -194,6 +205,17 @@ func TestOnlineOneClick(t *testing.T) {
 		tests[0].Probes[0].Trusted == nil || *tests[0].Probes[0].Trusted {
 		t.Fatalf("selftest: %d %s", rec.Code, rec.Body)
 	}
+	// Wechsel auf Modus 2: derselbe Name, nur der Modus bei ipv64 und hier
+	if rec, out := call("POST", hp, `{"mode":2}`); rec.Code != 200 || out["results"].([]any)[0].(map[string]any)["result"] != "on" {
+		t.Fatalf("mode 2: %d %v", rec.Code, out)
+	}
+	if f.modes[1] != 2 {
+		t.Fatalf("mode not switched at ipv64: %v", f.modes)
+	}
+	if rows, _ := e.m.rows(ctx); rows[0].Online.Mode != 2 {
+		t.Fatal("row mode")
+	}
+	_, _ = call("POST", hp, `{"mode":1}`)
 	// Name in der Node von einem anderen Modul belegt: der Selbsttest sagt es
 	e.m.mu.Lock()
 	e.m.routeErr[h.ID] = "name app.test is used by dns64"

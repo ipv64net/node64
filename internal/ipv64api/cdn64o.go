@@ -103,6 +103,15 @@ func (c *Client) CDN64AddHost(ctx context.Context, key, fqdn, tunnelID string, m
 	return &out, nil
 }
 
+// CDN64SetMode wechselt den Modus eines Namens (DNS bleibt).
+func (c *Client) CDN64SetMode(ctx context.Context, key string, id int64, mode int) (*CDN64Host, error) {
+	var out CDN64Host
+	if err := c.do(ctx, http.MethodPatch, key, "/cdn64o/hosts/"+strconv.FormatInt(id, 10), map[string]int{"mode": mode}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // CDN64DeleteHost schaltet einen Namen aus (DNS zurueck).
 func (c *Client) CDN64DeleteHost(ctx context.Context, key string, id int64) error {
 	return c.do(ctx, http.MethodDelete, key, "/cdn64o/hosts/"+strconv.FormatInt(id, 10), nil, nil)

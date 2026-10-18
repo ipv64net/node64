@@ -155,6 +155,7 @@
 				throw new Error("none");
 			}
 			if (on < want) { s.warn(); } else { s.ok(); }
+			if (body.mode === 2) { s.line(t("mode2_hint")); }
 			s.line(t("hint_lan"));
 		}, s.failed);
 	}
@@ -223,8 +224,9 @@
 		});
 	}
 
-	function open(id, test) {
+	function open(id, test, mode) {
 		hostID = id;
+		modeSel.value = mode === "2" ? "2" : "1";
 		onlyTest = test;
 		stepsEl.textContent = "";
 		setup.classList.toggle("d-none", test);
@@ -234,7 +236,7 @@
 	}
 
 	document.querySelectorAll("[data-c64o-on]").forEach(function (b) {
-		b.addEventListener("click", function () { open(b.getAttribute("data-c64o-on"), false); });
+		b.addEventListener("click", function () { open(b.getAttribute("data-c64o-on"), false, b.getAttribute("data-c64o-mode")); });
 	});
 	document.querySelectorAll("[data-c64o-test]").forEach(function (b) {
 		b.addEventListener("click", function () { open(b.getAttribute("data-c64o-test"), true); });

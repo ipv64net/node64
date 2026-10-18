@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/secrets"
 	"github.com/ipv64net/node64/internal/tunnel"
@@ -118,6 +119,8 @@ func (m *Module) onlineHandle(st tunnel.Stream, h tunnel.Header) {
 		m.edge.ServeConn(c, 443)
 	case tunnel.KindHTTP80:
 		m.edge.ServeConn(c, 80)
+	case tunnel.KindHTTP: // Modus 2: TLS endete auf dem Server
+		m.edge.ServeConn(c, edge.PortTerminated)
 	default:
 		_ = st.Close()
 	}

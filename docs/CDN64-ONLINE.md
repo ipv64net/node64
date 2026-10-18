@@ -475,6 +475,23 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
     ohne Fehlversuch auf beiden Servern (QUIC, 22–45 ms je Anfrage); die Wechsel davor waren eigene Deploys.
 
 ### T5 – Modus 2 terminieren
+- **Stand 2026-10-18 (cdn64-edge 0.5.0, CDN64 1.8.0):** gebaut und getestet, Einspielen und Live-Test offen.
+  - Server: TLS endet für Modus-2-Namen mit Zertifikat (sonst Durchreichen wie Modus 1), HTTP/1.1/2, HTTP/3 mit
+    `http3: true`; je Anfrage ein Tunnel-Stream `http` mit der Besucher-Adresse im Kopf (statt
+    `CDN64-Connecting-IP`: so gilt die Adresse je Anfrage und die Node braucht keinem Kopf zu trauen), auch über den
+    Nachbarn; X-Forwarded-* der Besucher werden entfernt; Host muss zum SNI passen (421); Anfrage-Limit je IP/64
+    (`shield.req_rate`, Standard 50/s, kurz 500, 429); Port 80 → 301 HTTPS; Node nicht erreichbar → Seite 502,
+    gesperrt → 503; WebSockets und große Uploads gestreamt; Traffic und Bandbreite wie Modus 1.
+  - Zertifikate: `certs.go`/`acme.go`, je Name `name` + `*.name` per DNS-01, TXT über
+    `POST /cdn64o/edge/acme-txt` (nur Modus-2-Namen, im Account des Hosts), Warten bis alle Nameserver liefern;
+    `acme_primary` bestellt, der andere erst nach 10 Minuten ohne Zertifikat; Ablage AES-256-GCM (`cert_key`, an
+    den Namen gebunden) über `PUT/GET /cdn64o/edge/certs`, älteres ersetzt nie neueres; lokal `data_dir/certs`;
+    Erneuerung 30 Tage vorher, Fehlversuche mit Pause 5 min bis 6 h. HTTP-01-Ausweg noch nicht.
+  - Node: Streams `http` laufen über einen eigenen internen Eingang und gelten als HTTPS; Modus wählbar, Wechsel
+    ohne DNS-Änderung (`PATCH /cdn64o/hosts/{id}`), nicht für *TLS durchreichen*.
+  - Getestet: Go-Test mit zwei Servern (TLS-Ende, HTTP/2, echte IP, 6 MB Upload über den Nachbarn, WebSocket,
+    301, 421, 429, Seite 502, Durchreichen ohne Zertifikat, Ablage verschlüsselt und namensgebunden, Primär/Sekundär),
+    Node-Test (Stream `http` als HTTPS, Moduswechsel), PHP-Testumgebung 53/53.
 - TLS/HTTP/1–3 auf den Servern, Weiterleitung als HTTP über den Tunnel, `CDN64-Connecting-IP`.
 - Zertifikate per DNS-01 Wildcard über ipv64, HTTP-01-Ausweg, verschlüsselte Ablage, Erneuerung.
 - Schutz auf den Servern (Blocklisten, Limits, Sperren) mit Meldung an ipv64.

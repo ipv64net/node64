@@ -153,7 +153,13 @@ Die Node baut dazu einen Tunnel nach außen auf (QUIC über UDP 7844, sonst TCP 
      vertrauenswürdig ist und ob DNS schon umgestellt ist.
 - **Modus 1 (Standard):** Die Server reichen TLS nur durch. Zertifikat und Schlüssel bleiben in der Node, die
   Server sehen keine Inhalte. Die echte Besucher-IP kommt in der Node an (Zugriffslisten, Limits und Log wirken
-  wie gewohnt). Modus 2 (TLS auf den Servern, HTTP/3) folgt.
+  wie gewohnt).
+- **Modus 2:** TLS endet auf den Servern (HTTP/1.1, HTTP/2, HTTP/3). Dort greifen schon Blocklisten, Verbindungs-
+  und Anfrage-Limits; jede Anfrage geht mit der echten Besucher-IP durch den Tunnel und gilt in der Node als HTTPS
+  (keine Umleitung, Zugriffslisten und Log wie gewohnt). Das Zertifikat (Name und `*.Name`) holen die Server selbst
+  bei Let's Encrypt; bis es da ist, reichen sie wie in Modus 1 durch. Port 80 leitet auf HTTPS um, ist die Node
+  nicht erreichbar, zeigen die Server eine verständliche Seite. Geht nicht für *TLS durchreichen*. Wechsel 1 ↔ 2
+  über den Knopf *Modus wechseln* in der Liste, ohne DNS-Änderung.
 - **Liste:** Je Server ein Abzeichen: grün = Tunnel verbunden, blau = über den anderen Server erreichbar,
   rot = kein Tunnel. Dazu „gesperrt“ (z. B. Traffic aufgebraucht), *Selbsttest*, *+n einschalten* (neue Namen am
   Host) und *Ausschalten*.

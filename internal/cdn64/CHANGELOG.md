@@ -1,5 +1,15 @@
 # Änderungen – CDN64
 
+## 1.8.0 – 2026-10-18
+
+CDN64 online Modus 2.
+
+### Neu
+- Modus 2 wählbar: TLS endet auf srv07/srv08 (HTTP/1.1, HTTP/2, HTTP/3), Schutz und Anfrage-Limits greifen schon
+  dort, die Anfragen kommen mit echter Besucher-IP als HTTPS in der Node an. Zertifikate holen die Server selbst;
+  bis dahin wird durchgereicht, ein Wechsel fällt nie aus.
+- Knopf *Modus wechseln* und Abzeichen „Modus 1/2“ in der Liste; der Selbsttest schickt eine echte Anfrage.
+
 ## 1.7.0 – 2026-10-18
 
 CDN64 online per Klick.

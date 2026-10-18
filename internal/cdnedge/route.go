@@ -30,6 +30,7 @@ type route struct {
 	HostID  int      // cdn64o_hosts.id (0 = feste Testkonfiguration, wird nicht gemeldet)
 	UserID  int
 	Blocked string // gesetzt = abweisen (z. B. "traffic")
+	Mode    int    // 1 = durchreichen, 2 = TLS endet hier (terminate.go)
 }
 
 // routes: Name -> route (exakt oder *.domain).
@@ -44,20 +45,20 @@ func normName(n string) string { return strings.ToLower(strings.TrimSuffix(strin
 func newRoutes(static []HostEntry, api *apiConfig) *routes {
 	r := &routes{exact: map[string]*route{}, wild: map[string]*route{}}
 	for _, h := range static {
-		n := normName(h.Name)
+		n, mode := normName(h.Name), max(h.Mode, 1)
 		if d, ok := strings.CutPrefix(n, "*."); ok {
-			r.wild[d] = &route{Name: n, Tunnels: []string{h.Tunnel}}
+			r.wild[d] = &route{Name: n, Tunnels: []string{h.Tunnel}, Mode: mode}
 		} else if n != "" {
-			r.exact[n] = &route{Name: n, Tunnels: []string{h.Tunnel}}
+			r.exact[n] = &route{Name: n, Tunnels: []string{h.Tunnel}, Mode: mode}
 		}
 	}
 	if api != nil {
 		for _, h := range api.Hosts {
 			n := normName(h.Name)
-			if n == "" || h.Mode != 1 { // T3: nur durchreichen
+			if n == "" || (h.Mode != 1 && h.Mode != 2) { // Modus 3 (direkt) folgt in T7
 				continue
 			}
-			e := &route{Name: n, Tunnels: h.Tunnels, HostID: h.ID, UserID: h.UserID, Blocked: h.Blocked}
+			e := &route{Name: n, Tunnels: h.Tunnels, HostID: h.ID, UserID: h.UserID, Blocked: h.Blocked, Mode: h.Mode}
 			r.exact[n] = e
 			if h.Wildcard {
 				r.wild[n] = e
@@ -86,6 +87,8 @@ type hostStat struct {
 	BytesOut atomic.Int64 // Node -> Besucher
 	ViaPeer  atomic.Int64 // ueber den Nachbarserver
 	NoTunnel atomic.Int64 // weder hier noch beim Nachbarn verbunden
+	Requests atomic.Int64 // Modus 2: Anfragen
+	Rejected atomic.Int64 // Modus 2: abgewiesen (Anfrage-Limit)
 }
 
 type stats struct {
@@ -136,6 +139,10 @@ func (s *Server) handle443(c net.Conn) {
 		_ = c.Close()
 		return
 	}
+	if re := s.routes.Load().lookup(sni); re != nil && re.Mode == 2 && s.certs.has(re.Name) { // Modus 2: TLS endet hier
+		s.term.tls.push(&prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)})
+		return
+	}
 	s.forward(c, tunnel.KindTLS, sni, 443, data, c.RemoteAddr().String(), false)
 }
 
@@ -144,7 +151,11 @@ func (s *Server) handle80(c net.Conn) {
 	_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
 	host, data := peekHTTPHost(c)
 	_ = c.SetReadDeadline(time.Time{})
-	if host != "" && s.routes.Load().lookup(host) != nil {
+	if re := s.routes.Load().lookup(host); host != "" && re != nil {
+		if re.Mode == 2 && s.certs.has(re.Name) { // Modus 2: auf HTTPS umleiten
+			s.term.http.push(&prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)})
+			return
+		}
 		s.forward(c, tunnel.KindHTTP80, host, 80, data, c.RemoteAddr().String(), false)
 		return
 	}
@@ -246,7 +257,7 @@ func (m *meter) CloseWrite() error {
 
 // blockedReply: gesperrter Name (z. B. Traffic aufgebraucht) - Port 80 bekommt eine neutrale 503, 443 wird getrennt.
 func blockedReply(c net.Conn, kind string) {
-	if kind == tunnel.KindHTTP80 {
+	if kind == tunnel.KindHTTP80 || kind == tunnel.KindHTTP {
 		_ = c.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		_, _ = io.WriteString(c, "HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 24\r\nConnection: close\r\n\r\n503 service unavailable\n")
 	}
@@ -267,11 +278,22 @@ type peerHello struct {
 
 // viaPeer reicht die Verbindung an einen Nachbarn, der den Tunnel hat (false = keiner erreichbar).
 func (s *Server) viaPeer(c net.Conn, kind, host string, port int, data []byte, client string, st *hostStat) bool {
+	pc := s.dialPeer(context.Background(), kind, host, port, client, data)
+	if pc == nil {
+		return false
+	}
+	st.ViaPeer.Add(1)
+	tunnel.Join(c, pc)
+	return true
+}
+
+// dialPeer: Verbindung zu einem Nachbarn, der die Daten in seinen Tunnel gibt (nil = keiner erreichbar).
+func (s *Server) dialPeer(ctx context.Context, kind, host string, port int, client string, data []byte) net.Conn {
 	for _, p := range s.cfg.Peers {
 		h, _, _ := net.SplitHostPort(p.Addr)
 		d := &tls.Dialer{NetDialer: &net.Dialer{Timeout: 3 * time.Second}, Config: &tls.Config{ServerName: h, RootCAs: s.peerRoots, MinVersion: tls.VersionTLS13}}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		pc, err := d.DialContext(ctx, "tcp", p.Addr)
+		dctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		pc, err := d.DialContext(dctx, "tcp", p.Addr)
 		cancel()
 		if err != nil {
 			s.log.Debug("peer not reachable", "peer", p.Name, "err", err)
@@ -282,11 +304,9 @@ func (s *Server) viaPeer(c net.Conn, kind, host string, port int, data []byte, c
 			_ = pc.Close()
 			continue
 		}
-		st.ViaPeer.Add(1)
-		tunnel.Join(c, pc)
-		return true
+		return pc
 	}
-	return false
+	return nil
 }
 
 // servePeer: Verbindungen vom Nachbarn annehmen (Geheimnis pruefen) und in den eigenen Tunnel geben.

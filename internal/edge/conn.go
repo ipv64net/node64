@@ -21,6 +21,7 @@ type virtualKey struct{}
 type virtual struct {
 	tls  *chanListener
 	http *chanListener
+	term *chanListener // HTTP, dessen TLS schon auf dem CDN64-Server endete (Modus 2)
 	srvs []*http.Server
 }
 
@@ -30,15 +31,18 @@ func (e *Edge) virtualServers() *virtual {
 		mark := func(ctx context.Context, _ net.Conn) context.Context {
 			return context.WithValue(ctx, virtualKey{}, true)
 		}
-		v := &virtual{tls: newChanListener(&net.TCPAddr{}), http: newChanListener(&net.TCPAddr{})}
+		v := &virtual{tls: newChanListener(&net.TCPAddr{}), http: newChanListener(&net.TCPAddr{}), term: newChanListener(&net.TCPAddr{})}
 		hs := &http.Server{Handler: http.HandlerFunc(e.serveHTTPS), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second,
 			MaxHeaderBytes: 64 << 10, ErrorLog: errLog, ConnContext: mark,
 			TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, NextProtos: []string{"h2", "http/1.1"}, GetConfigForClient: e.tcpConfig}}
 		h80 := &http.Server{Handler: http.HandlerFunc(e.serveHTTP), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second,
 			MaxHeaderBytes: 64 << 10, ErrorLog: errLog, ConnContext: mark}
+		ht := &http.Server{Handler: http.HandlerFunc(e.serveTerminated), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second,
+			MaxHeaderBytes: 64 << 10, ErrorLog: errLog, ConnContext: mark}
 		go func() { _ = hs.ServeTLS(v.tls, "", "") }()
 		go func() { _ = h80.Serve(v.http) }()
-		v.srvs = []*http.Server{hs, h80}
+		go func() { _ = ht.Serve(v.term) }()
+		v.srvs = []*http.Server{hs, h80, ht}
 		e.virt = v
 	})
 	return e.virt
@@ -62,11 +66,29 @@ func (e *Edge) ServeConn(c net.Conn, port int) {
 		_ = c.Close()
 		return
 	}
-	if port == 80 {
+	switch port {
+	case 80:
 		go v.http.push(c)
+		return
+	case PortTerminated:
+		go v.term.push(c)
 		return
 	}
 	go e.dispatch(c, v.tls)
+}
+
+// PortTerminated: ServeConn fuer HTTP, dessen TLS schon vorher endete (CDN64 online Modus 2). Die Anfragen gelten
+// als HTTPS fuer den Namen im Host-Kopf (Routen mit Zertifikat, keine Umleitung auf HTTPS).
+const PortTerminated = -443
+
+// serveTerminated: wie HTTPS, mit dem Host-Kopf als Namen der Verbindung.
+func (e *Edge) serveTerminated(w http.ResponseWriter, r *http.Request) {
+	r.TLS = &tls.ConnectionState{Version: tls.VersionTLS13, HandshakeComplete: true, ServerName: hostOf(r.Host)}
+	if _, routes := e.table.Load().lookup(hostOf(r.Host)); pick(routes, r.URL.Path, true) == nil {
+		e.serveHTTP(w, r) // Host nur mit HTTP (ohne Zertifikat in der Node)
+		return
+	}
+	e.serveHTTPS(w, r)
 }
 
 // viaTunnel: Anfrage kam ueber ServeConn (dann kein Alt-Svc fuer HTTP/3 - der Besucher erreicht hier nur TCP).
@@ -89,5 +111,6 @@ func (e *Edge) closeVirtual(ctx context.Context) {
 	}
 	_ = v.tls.Close()
 	_ = v.http.Close()
+	_ = v.term.Close()
 	wg.Wait()
 }

@@ -100,7 +100,7 @@ func (s *Server) apiRequest(ctx context.Context, method, path string, body []byt
 		req.Header.Set("Content-Type", "application/json")
 	}
 	s.apist.mu.Lock()
-	if method == http.MethodGet && s.apist.etag != "" {
+	if method == http.MethodGet && path == "/cdn64o/edge/config" && s.apist.etag != "" {
 		req.Header.Set("If-None-Match", s.apist.etag)
 	}
 	s.apist.mu.Unlock()
@@ -173,6 +173,7 @@ func (s *Server) apiOK() {
 func (s *Server) applyConfig(c *apiConfig) {
 	s.apiCfg.Store(c)
 	s.routes.Store(newRoutes(s.cfg.Hosts, c))
+	s.certs.kickLoop() // neue Modus-2-Namen: Zertifikat bald
 	bw := map[int]int{}
 	for k, v := range c.Bandwidth {
 		if uid, err := strconv.Atoi(k); err == nil {
