@@ -252,6 +252,20 @@ func TestOnlineOneClick(t *testing.T) {
 	e.m.mu.Lock()
 	delete(e.m.routeErr, h.ID)
 	e.m.mu.Unlock()
+	// auf der Webseite ausgeschaltet (Notfall ohne Zugriff auf die Node): der Abgleich nimmt den Namen hier heraus
+	f.mu.Lock()
+	delete(f.hosts, 1)
+	f.mu.Unlock()
+	e.m.onlineSync(ctx)
+	if list, _ := e.m.onlineNames(ctx); len(list) != 0 || e.m.OnlineName("app.test") {
+		t.Fatalf("name still on after switch-off on the website: %+v", list)
+	}
+	if nt, nh := f.counts(); nt != 0 || nh != 0 {
+		t.Fatalf("after switch-off on the website: tunnels %d hosts %d", nt, nh)
+	}
+	if rec, _ := call("POST", hp, `{"mode":1}`); rec.Code != 200 {
+		t.Fatalf("enable after website switch-off: %d %s", rec.Code, rec.Body)
+	}
 	// Ausschalten: Name und Tunnel bei ipv64 weg, Einstellung leer
 	if rec, _ := call("DELETE", hp, ""); rec.Code != http.StatusNoContent {
 		t.Fatalf("disable: %d %s", rec.Code, rec.Body)
