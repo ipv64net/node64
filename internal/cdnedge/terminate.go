@@ -46,6 +46,8 @@ type terminator struct {
 	srvs   []*http.Server
 	h3     *http3.Server
 	udp    *quic.Listener // UDP 443: HTTP/3 und Tunnel (ALPN), gemeinsam
+	qd     *quicDemux     // davor: QUIC fuer Modus-1-Namen roh in den Tunnel (quicpass.go)
+	qtr    *quic.Transport
 	proxy  *httputil.ReverseProxy
 	rl     *reqLimiter
 }
@@ -111,8 +113,21 @@ func (s *Server) listenUDP443() {
 		}
 		return nil, nil
 	}
-	ln, err := quic.ListenAddr(s.cfg.ListenHTTPS, conf, qc)
+	ua, err := net.ResolveUDPAddr("udp", s.cfg.ListenHTTPS)
+	var uc *net.UDPConn
+	if err == nil {
+		uc, err = net.ListenUDP("udp", ua)
+	}
 	if err != nil {
+		s.log.Warn("udp 443 not available (http3, tunnel)", "err", err)
+		return
+	}
+	t.qd = newQUICDemux(s, uc)
+	s.qd.Store(t.qd)
+	t.qtr = &quic.Transport{Conn: t.qd}
+	ln, err := t.qtr.Listen(conf, qc)
+	if err != nil {
+		_ = uc.Close()
 		s.log.Warn("udp 443 not available (http3, tunnel)", "err", err)
 		return
 	}
@@ -210,6 +225,8 @@ func (s *Server) termClose(ctx context.Context) {
 	}
 	if t.udp != nil {
 		_ = t.udp.Close()
+		_ = t.qtr.Close()
+		_ = t.qd.Close()
 	}
 	var wg sync.WaitGroup
 	for _, srv := range t.srvs {

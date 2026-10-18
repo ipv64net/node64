@@ -50,12 +50,13 @@ type Server struct {
 	apiCfg     atomic.Pointer[apiConfig] // letzter Stand von ipv64
 	apist      *apiState
 	bw         *bandwidth
-	lns        []net.Listener // offene Besucher-/Nachbar-Ports
-	term       *terminator    // Modus 2: TLS endet hier
-	certs      *certStore     // Modus 2: Zertifikate je Name
-	cache      *respCache     // Modus 3: Cache
-	pm         *portmapper    // Modus 3: Portmapper
-	acmeTokens tokenStore     // HTTP-01 (Ausweg)
+	lns        []net.Listener            // offene Besucher-/Nachbar-Ports
+	term       *terminator               // Modus 2: TLS endet hier
+	certs      *certStore                // Modus 2: Zertifikate je Name
+	cache      *respCache                // Modus 3: Cache
+	pm         *portmapper               // Modus 3: Portmapper
+	qd         atomic.Pointer[quicDemux] // Modus 1: QUIC durchreichen (fuer /health; gesetzt in listenUDP443)
+	acmeTokens tokenStore                // HTTP-01 (Ausweg)
 	acmeMu     sync.Mutex
 	ca         *caState // Zertifizierungsstellen: Konten, Zaehlung (acmeca.go)
 	// Tests: Zertifikat ohne ACME
@@ -204,6 +205,9 @@ func (s *Server) tlsConfig() (*tls.Config, error) {
 
 func (s *Server) startTunnel() error {
 	s.tun = &tunnel.Server{Name: s.cfg.Name, TLS: s.tlsConf, Log: s.log, Auth: s.auth, Up: s.up, Down: s.down}
+	if s.cfg.ListenHTTPS != "" { // QUIC (HTTP/3) fuer Modus 1 durchreichen (quicpass.go)
+		s.tun.Caps = []string{tunnel.CapQUIC}
+	}
 	if _, err := s.tun.ServeQUIC(s.cfg.TunnelListen); err != nil {
 		return err
 	}
@@ -388,9 +392,10 @@ type Health struct {
 	Rejected int64               `json:"rejected,omitempty"`   // vom Schutz abgewiesen seit dem Start
 	Blocked  int                 `json:"blocklist_entries,omitempty"`
 	API      *APIInfo            `json:"api,omitempty"`
-	Certs    map[string]string   `json:"certs,omitempty"` // Modus 2: Name -> gueltig bis
-	ACME     string              `json:"acme,omitempty"`  // ok | warn (Domain bei 80 % der Woche oder Grenze erreicht) | error (Ausweg fehlt)
-	CA       *caInfo             `json:"ca,omitempty"`    // Einzelheiten (nur lokal)
+	Certs    map[string]string   `json:"certs,omitempty"`     // Modus 2: Name -> gueltig bis
+	QUICPass int                 `json:"quic_pass,omitempty"` // Modus 1: durchgereichte QUIC-Besucher gerade
+	ACME     string              `json:"acme,omitempty"`      // ok | warn (Domain bei 80 % der Woche oder Grenze erreicht) | error (Ausweg fehlt)
+	CA       *caInfo             `json:"ca,omitempty"`        // Einzelheiten (nur lokal)
 }
 
 // APIInfo: Stand der Steuerung von ipv64 (nur lokal sichtbar).
@@ -451,6 +456,9 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 		}
 		s.mu.Unlock()
 		h.Open, h.Rejected, h.Blocked = s.guard.open.Load(), s.guard.rejected.Load(), s.guard.set.Load().Total()
+		if qd := s.qd.Load(); qd != nil {
+			h.QUICPass = qd.open()
+		}
 		s.stats.mu.Lock()
 		if len(s.stats.m) > 0 {
 			h.Hosts = map[string]HostInfo{}

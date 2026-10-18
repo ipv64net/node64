@@ -182,6 +182,7 @@ func (m *Module) Start(ctx context.Context) error {
 	if m.edge != nil {
 		m.edge.SetBlocker(m.blockedAny)
 		m.edge.SetGate(m.gateOpen)
+		m.edge.SetTunnelHTTP3(m.onlineHTTP3)
 	}
 	m.log.Info("cdn64 started")
 	return nil
@@ -204,6 +205,7 @@ func (m *Module) Stop(ctx context.Context) error {
 		m.edge.Remove(Name)
 		m.edge.SetBlocker(nil)
 		m.edge.SetGate(nil)
+		m.edge.SetTunnelHTTP3(nil)
 	}
 	m.applyMu.Unlock()
 	m.stopStreams()

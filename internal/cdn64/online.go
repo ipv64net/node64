@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"strings"
 	"sync"
@@ -86,7 +87,7 @@ func (m *Module) onlineStart(ctx context.Context) {
 	}
 	node, _ := os.Hostname()
 	cl := tunnel.NewClient(tunnel.ClientConfig{Tunnel: c.Tunnel, Token: tok, Node: node, NodeVersion: m.version, Edges: c.Edges,
-		Handler: m.onlineHandle, Log: m.log, RootCAs: m.online.roots})
+		Handler: m.onlineHandle, Log: m.log, RootCAs: m.online.roots, Caps: []string{tunnel.CapQUIC}})
 	rctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	done := make(chan struct{})
 	m.online.mu.Lock()
@@ -123,9 +124,24 @@ func (m *Module) onlineHandle(st tunnel.Stream, h tunnel.Header) {
 		m.edge.ServeConn(c, 80)
 	case tunnel.KindHTTP: // Modus 2: TLS endete auf dem Server
 		m.edge.ServeConn(c, edge.PortTerminated)
+	case tunnel.KindQUIC: // Modus 1, HTTP/3: QUIC-Datagramme des Besuchers
+		ap, err := netip.ParseAddrPort(h.Client)
+		if err != nil {
+			_ = st.Close()
+			return
+		}
+		m.edge.ServeQUICStream(c, netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port()))
 	default:
 		_ = st.Close()
 	}
+}
+
+// onlineHTTP3: geht HTTP/3 fuer Modus 1 ueber die Server (Tunnel laeuft, alle verbundenen Server reichen QUIC durch)?
+func (m *Module) onlineHTTP3() bool {
+	m.online.mu.Lock()
+	cl := m.online.client
+	m.online.mu.Unlock()
+	return cl != nil && cl.AllHave(tunnel.CapQUIC)
 }
 
 // tunnelConn: Stream mit der Besucher-Adresse als Gegenstelle.

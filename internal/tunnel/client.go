@@ -37,8 +37,9 @@ type ClientConfig struct {
 	Handler     func(st Stream, h Header) // je Daten-Stream (eigene Goroutine); muss den Stream schliessen (auch spaeter)
 	RootCAs     *x509.CertPool            // nil = System
 	Log         *slog.Logger
-	AltPort     int  // zweiter Port, wenn der Tunnel-Port nicht geht (0 = 443, -1 = keiner; G1)
-	TCPOnly     bool // nur TCP+TLS (Tests, Netze ohne UDP)
+	AltPort     int      // zweiter Port, wenn der Tunnel-Port nicht geht (0 = 443, -1 = keiner; G1)
+	TCPOnly     bool     // nur TCP+TLS (Tests, Netze ohne UDP)
+	Caps        []string // Faehigkeiten der Node im Hello (z. B. CapQUIC)
 }
 
 // EdgeStatus ist der Zustand des Tunnels zu einem Server (Anzeige in der Node).
@@ -55,6 +56,7 @@ type EdgeStatus struct {
 	Reconnects int       `json:"reconnects"` // Neuverbindungen seit dem Start
 	LastError  string    `json:"last_error,omitempty"`
 	UDPBlocked bool      `json:"udp_blocked,omitempty"` // QUIC scheitert, TCP genutzt
+	Caps       []string  `json:"caps,omitempty"`        // Faehigkeiten des Servers (Welcome)
 }
 
 // Client haelt die Tunnels zu allen Servern.
@@ -107,6 +109,23 @@ func (c *Client) Status() []EdgeStatus {
 		out = append(out, x)
 	}
 	return out
+}
+
+// AllHave: mindestens ein Server verbunden und alle verbundenen haben die Faehigkeit.
+func (c *Client) AllHave(capability string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	n := 0
+	for _, s := range c.st {
+		if !s.Connected {
+			continue
+		}
+		if !HasCap(s.Caps, capability) {
+			return false
+		}
+		n++
+	}
+	return n > 0
 }
 
 func (c *Client) update(name string, f func(s *edgeState)) {
@@ -235,7 +254,7 @@ func (c *Client) connect(ctx context.Context, e Edge, useTCP bool, prefer int) (
 			cancel()
 			if err == nil { // Anmeldung mit eigener Frist (der Handschlag darf die 5 s fast aufbrauchen)
 				hctx, hcancel := context.WithTimeout(ctx, 10*time.Second)
-				err = c.hello(hctx, sess)
+				err = c.hello(hctx, sess, e.Name)
 				hcancel()
 				if err != nil {
 					_ = sess.Close("hello")
@@ -273,14 +292,14 @@ func dialTCP(ctx context.Context, addr string, conf *tls.Config) (Session, error
 }
 
 // hello: Steuer-Stream oeffnen, anmelden, Welcome lesen. Der Steuer-Stream bleibt offen (GOAWAY vom Server).
-func (c *Client) hello(ctx context.Context, sess Session) error {
+func (c *Client) hello(ctx context.Context, sess Session, edge string) error {
 	ctrl, err := sess.OpenStream(ctx)
 	if err != nil {
 		return err
 	}
 	dl, _ := ctx.Deadline()
 	_ = ctrl.SetDeadline(dl)
-	if err := writeMsg(ctrl, Hello{Version: Version, Tunnel: c.cfg.Tunnel, Token: c.cfg.Token, Node: c.cfg.Node, NodeVersion: c.cfg.NodeVersion}); err != nil {
+	if err := writeMsg(ctrl, Hello{Version: Version, Tunnel: c.cfg.Tunnel, Token: c.cfg.Token, Node: c.cfg.Node, NodeVersion: c.cfg.NodeVersion, Caps: c.cfg.Caps}); err != nil {
 		return err
 	}
 	br := bufio.NewReaderSize(ctrl, 64<<10)
@@ -291,6 +310,7 @@ func (c *Client) hello(ctx context.Context, sess Session) error {
 	if w.Error != "" {
 		return errRejected{w.Error}
 	}
+	c.update(edge, func(s *edgeState) { s.Caps = w.Caps })
 	_ = ctrl.SetDeadline(time.Time{})
 	go func() { // Steuer-Nachrichten des Servers
 		var m Control

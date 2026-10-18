@@ -88,12 +88,21 @@ const PortTerminated = -443
 
 // serveTerminated: wie HTTPS, mit dem Host-Kopf als Namen der Verbindung.
 func (e *Edge) serveTerminated(w http.ResponseWriter, r *http.Request) {
+	r = r.WithContext(context.WithValue(r.Context(), terminatedKey{}, true))
 	r.TLS = &tls.ConnectionState{Version: tls.VersionTLS13, HandshakeComplete: true, ServerName: hostOf(r.Host)}
 	if _, routes := e.table.Load().lookup(hostOf(r.Host)); pick(routes, r.URL.Path, true) == nil {
 		e.serveHTTP(w, r) // Host nur mit HTTP (ohne Zertifikat in der Node)
 		return
 	}
 	e.serveHTTPS(w, r)
+}
+
+type terminatedKey struct{}
+
+// terminatedReq: TLS endete schon auf dem CDN64-Server (Modus 2) - dort gibt es eigenes HTTP/3.
+func terminatedReq(r *http.Request) bool {
+	v, _ := r.Context().Value(terminatedKey{}).(bool)
+	return v
 }
 
 // viaTunnel: Anfrage kam ueber ServeConn (dann kein Alt-Svc fuer HTTP/3 - der Besucher erreicht hier nur TCP).

@@ -181,6 +181,9 @@ type Edge struct {
 	defClose atomic.Bool
 	vonce    sync.Once // interne Server fuer ServeConn (conn.go)
 	virt     *virtual
+	qonce    sync.Once // HTTP/3 ueber den Tunnel (quictunnel.go)
+	vq       *virtQUIC
+	tunH3    atomic.Pointer[func() bool]
 	fallback struct {
 		once sync.Once
 		crt  *tls.Certificate
@@ -443,6 +446,7 @@ func (e *Edge) Close(ctx context.Context) {
 	}
 	e.closePassthrough(true)
 	e.closeVirtual(ctx)
+	e.closeVirtualQUIC(ctx)
 	e.stopping.Wait()
 }
 
@@ -798,6 +802,8 @@ func (e *Edge) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 	}
 	if rt.HTTP3 && r.ProtoMajor < 3 && e.h3On.Load() && !viaTunnel(r) {
 		w.Header().Set("Alt-Svc", `h3=":`+strconv.Itoa(e.Config().publicPort())+`"; ma=86400`)
+	} else if rt.HTTP3 && r.ProtoMajor < 3 && viaTunnel(r) && !terminatedReq(r) && e.tunnelHTTP3() { // Modus 1: HTTP/3 ueber die CDN64-Server
+		w.Header().Set("Alt-Svc", `h3=":443"; ma=86400`)
 	}
 	rt.Handler.ServeHTTP(w, r)
 }

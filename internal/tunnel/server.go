@@ -18,6 +18,7 @@ type Peer struct {
 	Tunnel  string
 	Node    string
 	Version string
+	Caps    []string // Faehigkeiten der Node (Hello)
 	Since   time.Time
 	Session Session
 	ctrl    Stream
@@ -35,6 +36,7 @@ func (p *Peer) GoAway() {
 // Server nimmt Tunnel-Verbindungen an (QUIC und TCP+TLS) und meldet angemeldete Nodes.
 type Server struct {
 	Name string              // eigener Name im Welcome (z. B. srv07)
+	Caps []string            // Faehigkeiten im Welcome (z. B. CapQUIC)
 	TLS  *tls.Config         // Zertifikat des Servers
 	Auth func(h Hello) error // nil = angenommen; Fehlertext geht an die Node
 	Up   func(p *Peer)       // Node angemeldet
@@ -170,12 +172,12 @@ func (s *Server) handshake(sess Session) {
 			return
 		}
 	}
-	if err := writeMsg(ctrl, Welcome{Version: Version, Edge: s.Name}); err != nil {
+	if err := writeMsg(ctrl, Welcome{Version: Version, Edge: s.Name, Caps: s.Caps}); err != nil {
 		_ = sess.Close("write")
 		return
 	}
 	_ = ctrl.SetDeadline(time.Time{})
-	p := &Peer{Tunnel: h.Tunnel, Node: h.Node, Version: h.NodeVersion, Since: time.Now(), Session: sess, ctrl: ctrl}
+	p := &Peer{Tunnel: h.Tunnel, Node: h.Node, Version: h.NodeVersion, Caps: h.Caps, Since: time.Now(), Session: sess, ctrl: ctrl}
 	s.log().Info("tunnel up", "tunnel", h.Tunnel, "node", h.Node, "transport", sess.Transport(), "from", sess.RemoteAddr().String())
 	if s.Up != nil {
 		s.Up(p)

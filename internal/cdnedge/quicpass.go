@@ -1,0 +1,306 @@
+package cdnedge
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"net"
+	"net/netip"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/ipv64net/node64/internal/quicsni"
+	"github.com/ipv64net/node64/internal/tunnel"
+)
+
+// HTTP/3 in Modus 1: vor dem QUIC-Listener auf UDP 443 sitzt eine Weiche. Sie liest aus den Initial-Paketen eines
+// neuen Besuchers den Namen (internal/quicsni, ohne TLS zu beenden). Gehoert er zu einem Modus-1-Namen, gehen alle
+// Datagramme dieses Besuchers (Adresse:Port) roh durch den Tunnel der Node (Stream "quic", Datagramme mit
+// Laengenpraefix) - TLS und HTTP/3 enden erst in der Node, wie bei TCP. Alles andere (HTTP/3 fuer Modus 2/3, der
+// Tunnel ueber 443) geht unveraendert an quic-go. Ohne Tunnel hier geht der Stream ueber den Nachbarn.
+
+const (
+	qpPendMax   = 4096             // Besucher, deren ClientHello gerade gelesen wird
+	qpPendPkts  = 8                // so viele Datagramme warten hoechstens auf den Namen
+	qpPendAge   = 3 * time.Second  // danach an quic-go
+	qpFlowIdle  = 60 * time.Second // ruhiger Fluss: Stream zu
+	qpFlowQueue = 512              // Datagramme in Richtung Node, die warten duerfen
+)
+
+// quicDemux ist die PacketConn fuer quic-go (ReadFrom ruft nur eine Goroutine von quic-go).
+type quicDemux struct {
+	s      *Server
+	c      *net.UDPConn
+	buf    []byte
+	ready  []qpkt // freigegeben fuer quic-go (in Reihenfolge)
+	pend   map[netip.AddrPort]*qpend
+	mu     sync.Mutex
+	flows  map[netip.AddrPort]*qflow
+	swept  time.Time
+	closed atomic.Bool
+}
+
+type qpkt struct {
+	data []byte
+	addr netip.AddrPort
+}
+
+type qpend struct {
+	pkts  [][]byte
+	asm   quicsni.Assembler
+	dcid  []byte
+	since time.Time
+}
+
+type qflow struct {
+	d    *quicDemux
+	addr netip.AddrPort
+	q    chan []byte
+	last atomic.Int64
+	once sync.Once
+	done chan struct{}
+}
+
+func newQUICDemux(s *Server, c *net.UDPConn) *quicDemux {
+	return &quicDemux{s: s, c: c, buf: make([]byte, 65536), pend: map[netip.AddrPort]*qpend{}, flows: map[netip.AddrPort]*qflow{}}
+}
+
+// ReadFrom liefert quic-go das naechste Datagramm, das nicht durchgereicht wird.
+func (d *quicDemux) ReadFrom(p []byte) (int, net.Addr, error) {
+	for {
+		if len(d.ready) > 0 {
+			pk := d.ready[0]
+			d.ready = d.ready[1:]
+			return copy(p, pk.data), net.UDPAddrFromAddrPort(pk.addr), nil
+		}
+		d.sweep()
+		n, ap, err := d.c.ReadFromUDPAddrPort(d.buf)
+		if err != nil {
+			return 0, nil, err
+		}
+		ap = netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port())
+		pkt := d.buf[:n]
+		d.mu.Lock()
+		f := d.flows[ap]
+		d.mu.Unlock()
+		if f != nil {
+			f.toNode(pkt)
+			continue
+		}
+		if d.pend[ap] != nil || quicsni.IsInitial(pkt) {
+			d.sniff(ap, append([]byte(nil), pkt...))
+			continue
+		}
+		return copy(p, pkt), net.UDPAddrFromAddrPort(ap), nil
+	}
+}
+
+// sniff sammelt die ersten Datagramme eines Besuchers, bis der Name feststeht.
+func (d *quicDemux) sniff(ap netip.AddrPort, pkt []byte) {
+	pe := d.pend[ap]
+	if pe == nil {
+		if len(d.pend) >= qpPendMax {
+			d.ready = append(d.ready, qpkt{pkt, ap})
+			return
+		}
+		pe = &qpend{since: time.Now()}
+		d.pend[ap] = pe
+	}
+	pe.pkts = append(pe.pkts, pkt)
+	if quicsni.IsInitial(pkt) {
+		dcid, chunks, err := quicsni.Parse(pkt)
+		if err != nil || (pe.dcid != nil && !bytes.Equal(dcid, pe.dcid)) {
+			d.release(ap)
+			return
+		}
+		pe.dcid = dcid
+		if pe.asm.Add(chunks) {
+			h, _ := pe.asm.Hello()
+			sni, _ := quicsni.ServerName(h)
+			d.decide(ap, sni)
+			return
+		}
+	}
+	if len(pe.pkts) >= qpPendPkts {
+		d.release(ap)
+	}
+}
+
+// release gibt die gesammelten Datagramme an quic-go.
+func (d *quicDemux) release(ap netip.AddrPort) {
+	pe := d.pend[ap]
+	delete(d.pend, ap)
+	if pe == nil {
+		return
+	}
+	for _, p := range pe.pkts {
+		d.ready = append(d.ready, qpkt{p, ap})
+	}
+}
+
+// decide: Modus-1-Name -> durchreichen, sonst quic-go.
+func (d *quicDemux) decide(ap netip.AddrPort, sni string) {
+	re := d.s.routes.Load().lookup(sni)
+	if sni == "" || d.s.isPublicName(sni) || re == nil || re.Mode != 1 {
+		d.release(ap)
+		return
+	}
+	pe := d.pend[ap]
+	delete(d.pend, ap)
+	f := &qflow{d: d, addr: ap, q: make(chan []byte, qpFlowQueue), done: make(chan struct{})}
+	f.last.Store(time.Now().UnixNano())
+	for _, p := range pe.pkts {
+		f.q <- p
+	}
+	d.mu.Lock()
+	d.flows[ap] = f
+	d.mu.Unlock()
+	go f.run(re, sni)
+}
+
+// sweep (hoechstens jede Sekunde): wartende Besucher nach qpPendAge an quic-go, ruhige Fluesse zu.
+func (d *quicDemux) sweep() {
+	now := time.Now()
+	if now.Sub(d.swept) < time.Second {
+		return
+	}
+	d.swept = now
+	for ap, pe := range d.pend {
+		if now.Sub(pe.since) > qpPendAge {
+			d.release(ap)
+		}
+	}
+	cut := now.Add(-qpFlowIdle).UnixNano()
+	d.mu.Lock()
+	var idle []*qflow
+	for _, f := range d.flows {
+		if f.last.Load() < cut {
+			idle = append(idle, f)
+		}
+	}
+	d.mu.Unlock()
+	for _, f := range idle {
+		f.close()
+	}
+}
+
+func (f *qflow) toNode(pkt []byte) {
+	f.last.Store(time.Now().UnixNano())
+	select {
+	case f.q <- append([]byte(nil), pkt...):
+	default: // Node kommt nicht hinterher: verwerfen (QUIC wiederholt)
+	}
+}
+
+func (f *qflow) close() {
+	f.once.Do(func() {
+		close(f.done)
+		f.d.mu.Lock()
+		if f.d.flows[f.addr] == f {
+			delete(f.d.flows, f.addr)
+		}
+		f.d.mu.Unlock()
+	})
+}
+
+// run: Stream zur Node (hier oder ueber den Nachbarn), dann Datagramme in beide Richtungen.
+func (f *qflow) run(re *route, sni string) {
+	defer f.close()
+	s := f.d.s
+	client := f.addr.String()
+	if re.Blocked != "" || !re.ACL.allows(f.addr.Addr()) {
+		return
+	}
+	release, why := s.guard.admit(f.addr.Addr())
+	if why != "" {
+		return
+	}
+	defer release()
+	st := s.stats.of(re.Name)
+	var conn net.Conn
+	counted := true // gezaehlt und begrenzt wird beim Server mit dem Tunnel
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if p := s.peerFor(re.Tunnels); p != nil && tunnel.HasCap(p.Caps, tunnel.CapQUIC) {
+		ts, err := s.openPeer(ctx, p, tunnel.Header{Kind: tunnel.KindQUIC, Client: client, Host: sni, Port: 443})
+		if err == nil {
+			conn = ts
+		}
+	} else if p == nil {
+		if pc := s.dialPeer(ctx, tunnel.KindQUIC, sni, 443, client, nil); pc != nil {
+			conn, counted = pc, false
+			st.ViaPeer.Add(1)
+		}
+	}
+	cancel()
+	if conn == nil {
+		st.NoTunnel.Add(1)
+		return
+	}
+	defer conn.Close()
+	if counted {
+		st.Conns.Add(1)
+	}
+	go func() { // Node -> Besucher
+		defer f.close()
+		buf := make([]byte, tunnel.MaxDatagram)
+		for {
+			n, err := tunnel.ReadDatagram(conn, buf)
+			if err != nil {
+				return
+			}
+			f.last.Store(time.Now().UnixNano())
+			if _, err := f.d.c.WriteToUDPAddrPort(buf[:n], f.addr); err != nil && errors.Is(err, net.ErrClosed) {
+				return
+			}
+			if counted {
+				st.BytesOut.Add(int64(n))
+				s.bw.take(re.UserID, n)
+			}
+		}
+	}()
+	for { // Besucher -> Node
+		select {
+		case <-f.done:
+			return
+		case p := <-f.q:
+			if err := tunnel.WriteDatagram(conn, p); err != nil {
+				return
+			}
+			if counted {
+				st.BytesIn.Add(int64(len(p)))
+				s.bw.take(re.UserID, len(p))
+			}
+		}
+	}
+}
+
+// open: Anzahl durchgereichter QUIC-Besucher (fuer /health).
+func (d *quicDemux) open() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return len(d.flows)
+}
+
+// --- net.PacketConn fuer quic-go
+
+func (d *quicDemux) WriteTo(p []byte, addr net.Addr) (int, error) { return d.c.WriteTo(p, addr) }
+func (d *quicDemux) Close() error {
+	d.closed.Store(true)
+	d.mu.Lock()
+	var all []*qflow
+	for _, f := range d.flows {
+		all = append(all, f)
+	}
+	d.mu.Unlock()
+	for _, f := range all {
+		f.close()
+	}
+	return d.c.Close()
+}
+func (d *quicDemux) LocalAddr() net.Addr                { return d.c.LocalAddr() }
+func (d *quicDemux) SetDeadline(t time.Time) error      { return d.c.SetDeadline(t) }
+func (d *quicDemux) SetReadDeadline(t time.Time) error  { return d.c.SetReadDeadline(t) }
+func (d *quicDemux) SetWriteDeadline(t time.Time) error { return d.c.SetWriteDeadline(t) }
+func (d *quicDemux) SetReadBuffer(n int) error          { return d.c.SetReadBuffer(n) }
+func (d *quicDemux) SetWriteBuffer(n int) error         { return d.c.SetWriteBuffer(n) }

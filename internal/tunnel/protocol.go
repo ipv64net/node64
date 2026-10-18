@@ -26,7 +26,21 @@ const (
 	KindTLS    = "tls"    // Port 443 roh (Modus 1)
 	KindHTTP80 = "http80" // Port 80 roh (Modus 1)
 	KindHTTP   = "http"   // HTTP vom Server, TLS dort beendet (Modus 2, ab T5)
+	KindQUIC   = "quic"   // QUIC eines Besuchers roh (Modus 1, HTTP/3): Datagramme mit Laengenpraefix (WriteDatagram)
 )
+
+// CapQUIC: Faehigkeit "QUIC durchreichen" (Hello der Node, Welcome des Servers).
+const CapQUIC = "quic"
+
+// HasCap: steht die Faehigkeit in der Liste?
+func HasCap(caps []string, c string) bool {
+	for _, x := range caps {
+		if x == c {
+			return true
+		}
+	}
+	return false
+}
 
 // Hello: erste Nachricht der Node auf dem Steuer-Stream.
 type Hello struct {
@@ -40,9 +54,10 @@ type Hello struct {
 
 // Welcome: Antwort des Servers (Error gesetzt = abgelehnt, danach wird getrennt).
 type Welcome struct {
-	Version int    `json:"v"`
-	Edge    string `json:"edge"`
-	Error   string `json:"error,omitempty"`
+	Version int      `json:"v"`
+	Edge    string   `json:"edge"`
+	Error   string   `json:"error,omitempty"`
+	Caps    []string `json:"caps,omitempty"` // Faehigkeiten des Servers (z. B. "quic")
 }
 
 // Control: weitere Nachrichten auf dem Steuer-Stream.
@@ -163,4 +178,38 @@ func closeWrite(c net.Conn) {
 		return
 	}
 	_ = c.Close()
+}
+
+// ---------------------------------------------------------------- Datagramme (KindQUIC)
+
+// MaxDatagram: groesstes UDP-Datagramm, das durch den Tunnel geht.
+const MaxDatagram = 65535
+
+// WriteDatagram schreibt ein Datagramm mit 2 Byte Laenge davor.
+func WriteDatagram(w io.Writer, p []byte) error {
+	if len(p) > MaxDatagram {
+		return errors.New("datagram too large")
+	}
+	var hdr [2]byte
+	hdr[0], hdr[1] = byte(len(p)>>8), byte(len(p))
+	if _, err := w.Write(append(hdr[:], p...)); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ReadDatagram liest ein Datagramm (buf muss MaxDatagram Bytes fassen).
+func ReadDatagram(r io.Reader, buf []byte) (int, error) {
+	var hdr [2]byte
+	if _, err := io.ReadFull(r, hdr[:]); err != nil {
+		return 0, err
+	}
+	n := int(hdr[0])<<8 | int(hdr[1])
+	if n > len(buf) {
+		return 0, errors.New("datagram too large")
+	}
+	if _, err := io.ReadFull(r, buf[:n]); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
