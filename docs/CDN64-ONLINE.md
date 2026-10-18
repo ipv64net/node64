@@ -543,7 +543,13 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   dann Freigabe.
 
 ### T7 – Modus 3 direkt zum Ziel + Webseite
-- **Stand 2026-10-18 (cdn64-edge 0.7.0, CDN64 1.10.0):** gebaut und getestet, Einspielen und Live-Test offen.
+- **Stand 2026-10-18 (cdn64-edge 0.7.0, CDN64 1.10.0):** eingespielt und live getestet (fertig bis auf den
+  Menüeintrag im Header, den Dennis später setzt).
+  - Live mit `m3test.pfsense.ipv64.de` → hub1 (nur IPv6, Port 18080): Besucher per IPv4 über srv07 mit HTTP/2 erreicht
+    das Ziel; privates Ziel (192.168.10.30) auf der Seite abgelehnt; Sperrliste (nur hub2 erlaubt) greift; DynDNS-
+    Änderung des Originals war nach ≤ 10 s auf beiden Servern aktiv (Abruf alle 10 s).
+  - Nachgezogen: `acme-txt`/`certs` auch für Modus 3 (23161c6); SSH-Bremse der Server je Absender statt global;
+    DynDNS-Seite schützt CDN64-Einträge und zeigt „CDN64“ (`deploy/web/T7-DYNDNS-CDN64-VORHER-NACHHER.md`).
   - Server (`direct.go`, `cache.go`): Ziel aus `addrs` (DNS-Einträge, von ipv64 je Abruf aktuell) oder `host` (selbst
     aufgelöst), http/https mit wählbarer Prüfung, IPv6 bevorzugt, Frontend-Stufen 1–3, WebSockets, `X-Forwarded-For`/
     `X-Real-IP`; SSRF-Schutz bei jeder Verbindung (öffentlich, nicht die Server); eigener Verbindungspool je Stand
@@ -577,7 +583,8 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   oder ZeroSSL als zweite Stelle. Gilt vor allem für Modus 2.
 - **Traffic-Zählung des alten CDN:** genauen Zeitraum und Rücksetzung in T3 nachlesen, damit das gemeinsame
   Kontingent stimmt.
-- **DynDNS und deaktivierte Einträge:** prüfen, dass das Update-Skript deaktivierte Originale nicht wieder aktiviert.
+- **DynDNS und deaktivierte Einträge:** geprüft (T7): `update.php` ändert das deaktivierte Original (Ziel in Modus 3),
+  nicht die Server-Einträge; die DynDNS-Seite darf Original und Server-Einträge nicht löschen (siehe T7).
 - **Durchsatz:** 2 vCPU je Server; Modus 2 (TLS + HTTP/3) kostet mehr CPU – in T2/T5 messen, ggf. größere Server.
 - **Hetzner-Traffic:** inklusiver Traffic der Cloud-Server im Blick behalten (Kontingente der Klassen).
 - **HTTP/3 in Modus 1, TCP-/UDP-Streams, fremde Domains:** bewusst später.
