@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -184,10 +185,15 @@ func (p *portmapper) resolve(k pmKey, client netip.Addr) (*route, int) {
 }
 
 // dial: Verbindung zum Ziel (wie directDial: oeffentliche Adressen, nach dem Verbinden noch einmal geprueft).
+// UDP merkt keinen Fehlschlag (nimmt die erste Adresse): dort immer IPv6 zuerst - eine A-Adresse, ueber die der
+// Anschluss nicht erreichbar ist (z. B. die geteilte IPv4 bei DS-Lite), soll nie gewinnen.
 func (p *portmapper) dial(ctx context.Context, network string, re *route, port int) (net.Conn, error) {
 	addrs, err := p.s.targetAddrs(ctx, re.Target)
 	if err != nil {
 		return nil, err
+	}
+	if network == "udp" {
+		sort.SliceStable(addrs, func(i, j int) bool { return addrs[i].Is6() && !addrs[j].Is6() })
 	}
 	var last error
 	for _, a := range addrs {

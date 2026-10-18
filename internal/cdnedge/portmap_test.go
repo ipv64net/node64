@@ -167,3 +167,50 @@ func TestPortRange(t *testing.T) {
 		}
 	}
 }
+
+// UDP nimmt immer IPv6 zuerst, auch wenn "IPv6 bevorzugen" aus ist (an der IPv4 lauscht hier nichts).
+func TestPortmapUDPIPv6First(t *testing.T) {
+	back, err := net.ListenUDP("udp6", &net.UDPAddr{IP: net.IPv6loopback})
+	if err != nil {
+		t.Skip("kein IPv6 auf dem Testrechner")
+	}
+	defer back.Close()
+	go func() {
+		b := make([]byte, 100)
+		for {
+			n, from, err := back.ReadFromUDP(b)
+			if err != nil {
+				return
+			}
+			_, _ = back.WriteToUDP(append([]byte("v6:"), b[:n]...), from)
+		}
+	}()
+	_, bp, _ := net.SplitHostPort(back.LocalAddr().String())
+	tport, _ := strconv.Atoi(bp)
+	pc, err := net.ListenPacket("udp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, lp, _ := net.SplitHostPort(pc.LocalAddr().String())
+	listen, _ := strconv.Atoi(lp)
+	pc.Close()
+	cf, kf, pool, _ := testCA(t, "edge.test")
+	cfg := &Config{Name: "B", ListenHTTP: freeAddr(t), TLSCert: cf, TLSKey: kf, DataDir: t.TempDir(), PortRange: "1024-65535"}
+	s := startEdge(t, cfg, pool)
+	s.targetOK = func(a netip.Addr) bool { return a.IsLoopback() }
+	s.applyConfig(&apiConfig{Hosts: []apiHost{{ID: 1, Name: "u.test", Mode: 3, UserID: 1,
+		Target:   &apiTarget{Addrs: []string{"127.0.0.1", "::1"}, Port: 80, Scheme: "http", PreferIPv6: false},
+		Mappings: []apiMapping{{Listen: listen, Transport: "udp", Port: tport}}}}})
+	c, err := net.DialUDP("udp", nil, &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: listen})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	_, _ = c.Write([]byte("x"))
+	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	b := make([]byte, 100)
+	n, err := c.Read(b)
+	if err != nil || string(b[:n]) != "v6:x" {
+		t.Fatalf("udp did not go to the IPv6 target: %q %v", b[:n], err)
+	}
+}
