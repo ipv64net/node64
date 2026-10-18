@@ -54,11 +54,13 @@ type Server struct {
 	lns        []net.Listener // offene Besucher-/Nachbar-Ports
 	term       *terminator    // Modus 2: TLS endet hier
 	certs      *certStore     // Modus 2: Zertifikate je Name
+	cache      *respCache     // Modus 3: Cache
 	acmeTokens tokenStore     // HTTP-01 (Ausweg)
 	acmeMu     sync.Mutex
 	acmeCl     *acme.Client // Konto bei Let's Encrypt (einmal registriert)
 	// Tests: Zertifikat ohne ACME
 	obtainHook func(ctx context.Context, name string) ([]byte, []byte, error)
+	targetOK   func(netip.Addr) bool // Tests: Modus-3-Ziele auf 127.0.0.1 erlauben
 }
 
 // New legt den Dienst an.
@@ -68,6 +70,7 @@ func New(cfg *Config, log *slog.Logger, version string) *Server {
 		apist: &apiState{sent: map[string][5]int64{}, client: &http.Client{Timeout: 30 * time.Second}}, bw: newBandwidth()}
 	s.routes.Store(newRoutes(cfg.Hosts, nil))
 	s.certs = newCertStore(filepath.Join(cfg.DataDir, "certs"))
+	s.cache = newRespCache(filepath.Join(cfg.DataDir, "cache"))
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("/", notFound)
@@ -112,6 +115,7 @@ func (s *Server) Run(ctx context.Context) error {
 				return
 			case <-t.C:
 				s.guard.sweep()
+				s.cacheSweep()
 			}
 		}
 	}()

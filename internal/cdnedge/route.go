@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/netip"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,7 +31,9 @@ type route struct {
 	HostID  int      // cdn64o_hosts.id (0 = feste Testkonfiguration, wird nicht gemeldet)
 	UserID  int
 	Blocked string // gesetzt = abweisen (z. B. "traffic")
-	Mode    int    // 1 = durchreichen, 2 = TLS endet hier (terminate.go)
+	Mode    int    // 1 = durchreichen, 2 = TLS endet hier (terminate.go), 3 = direkt zum Ziel (direct.go)
+	Target  *target
+	ACL     *acl
 }
 
 // routes: Name -> route (exakt oder *.domain).
@@ -55,10 +58,11 @@ func newRoutes(static []HostEntry, api *apiConfig) *routes {
 	if api != nil {
 		for _, h := range api.Hosts {
 			n := normName(h.Name)
-			if n == "" || (h.Mode != 1 && h.Mode != 2) { // Modus 3 (direkt) folgt in T7
+			if n == "" || h.Mode < 1 || h.Mode > 3 || (h.Mode == 3 && h.Target == nil) {
 				continue
 			}
-			e := &route{Name: n, Tunnels: h.Tunnels, HostID: h.ID, UserID: h.UserID, Blocked: h.Blocked, Mode: h.Mode}
+			e := &route{Name: n, Tunnels: h.Tunnels, HostID: h.ID, UserID: h.UserID, Blocked: h.Blocked, Mode: h.Mode,
+				Target: newTarget(h.Target), ACL: newACL(h.ACL)}
 			r.exact[n] = e
 			if h.Wildcard {
 				r.wild[n] = e
@@ -149,6 +153,14 @@ func (s *Server) handle443(c net.Conn) {
 		s.tun.ServeTCPConn(&prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)})
 		return
 	}
+	if re := s.routes.Load().lookup(sni); re != nil && re.Mode == 3 { // Modus 3: TLS endet hier (Stufe 1 = nur HTTP)
+		if re.Target.frontend == 1 || !s.certs.has(re.Name) || !re.ACL.allows(addrOf(c.RemoteAddr())) {
+			_ = c.Close()
+			return
+		}
+		s.term.tls.push(&prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)})
+		return
+	}
 	if re := s.routes.Load().lookup(sni); re != nil && re.Mode == 2 && s.certs.has(re.Name) { // Modus 2: TLS endet hier
 		s.term.tls.push(&prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)})
 		return
@@ -165,6 +177,18 @@ func (s *Server) handle80(c net.Conn) {
 		return
 	}
 	if re := s.routes.Load().lookup(host); host != "" && re != nil {
+		if re.Mode == 3 { // Modus 3: je nach Stufe bedienen, umleiten oder abweisen
+			pc := &prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)}
+			switch frontendPlain(re.Target, s.certs.has(re.Name)) {
+			case "serve":
+				s.term.plain.push(pc)
+			case "redirect":
+				s.term.http.push(pc)
+			default:
+				s.term.refuse.push(pc)
+			}
+			return
+		}
 		if re.Mode == 2 && s.certs.has(re.Name) { // Modus 2: auf HTTPS umleiten
 			s.term.http.push(&prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)})
 			return
@@ -210,6 +234,10 @@ func (s *Server) forward(c net.Conn, kind, host string, port int, data []byte, c
 		return
 	}
 	if re.Blocked != "" {
+		blockedReply(c, kind)
+		return
+	}
+	if ap, err := netip.ParseAddrPort(client); err == nil && !re.ACL.allows(ap.Addr()) { // Liste (Modus 1: nur nach IP)
 		blockedReply(c, kind)
 		return
 	}

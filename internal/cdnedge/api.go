@@ -29,6 +29,10 @@ type apiConfig struct {
 	Tunnels   []apiTunnel    `json:"tunnels"`
 	Hosts     []apiHost      `json:"hosts"`
 	Bandwidth map[string]int `json:"bandwidth_mbit"` // Account -> Mbit/s
+	Edges     []struct {
+		Name string   `json:"name"`
+		IPs  []string `json:"ips"`
+	} `json:"edges"` // die Server selbst (nie Ziel in Modus 3)
 }
 
 type apiTunnel struct {
@@ -39,13 +43,15 @@ type apiTunnel struct {
 }
 
 type apiHost struct {
-	ID       int      `json:"id"`
-	Name     string   `json:"name"`
-	Wildcard bool     `json:"wildcard"`
-	Mode     int      `json:"mode"`
-	UserID   int      `json:"userid"`
-	Tunnels  []string `json:"tunnels"`
-	Blocked  string   `json:"blocked"`
+	ID       int        `json:"id"`
+	Name     string     `json:"name"`
+	Wildcard bool       `json:"wildcard"`
+	Mode     int        `json:"mode"`
+	UserID   int        `json:"userid"`
+	Tunnels  []string   `json:"tunnels"`
+	Blocked  string     `json:"blocked"`
+	Target   *apiTarget `json:"target,omitempty"` // Modus 3
+	ACL      *apiACL    `json:"acl,omitempty"`    // Erlauben-/Sperrliste (alle Modi)
 }
 
 type apiState struct {

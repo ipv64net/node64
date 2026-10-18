@@ -38,17 +38,21 @@ type termReq struct {
 }
 
 type terminator struct {
-	tls   *chanListener // Modus-2-Verbindungen auf 443 (nach SNI) an den eigenen HTTPS-Server
-	http  *chanListener // Port 80 fuer Modus-2-Namen: Umleitung auf HTTPS
-	srvs  []*http.Server
-	h3    *http3.Server
-	udp   *quic.Listener // UDP 443: HTTP/3 und Tunnel (ALPN), gemeinsam
-	proxy *httputil.ReverseProxy
-	rl    *reqLimiter
+	tls    *chanListener          // Modus-2-Verbindungen auf 443 (nach SNI) an den eigenen HTTPS-Server
+	http   *chanListener          // Port 80 fuer Modus-2-Namen: Umleitung auf HTTPS
+	plain  *chanListener          // Port 80 fuer Modus-3-Namen mit "nur HTTP" (bzw. bis das Zertifikat da ist)
+	refuse *chanListener          // Port 80 fuer Modus-3-Namen mit "nur HTTPS"
+	direct *httputil.ReverseProxy // Modus 3: zum Ziel
+	srvs   []*http.Server
+	h3     *http3.Server
+	udp    *quic.Listener // UDP 443: HTTP/3 und Tunnel (ALPN), gemeinsam
+	proxy  *httputil.ReverseProxy
+	rl     *reqLimiter
 }
 
 func (s *Server) termInit() {
-	t := &terminator{tls: newChanListener(&net.TCPAddr{}), http: newChanListener(&net.TCPAddr{}), rl: newReqLimiter(s.cfg.Shield.ReqRate)}
+	t := &terminator{tls: newChanListener(&net.TCPAddr{}), http: newChanListener(&net.TCPAddr{}), plain: newChanListener(&net.TCPAddr{}),
+		refuse: newChanListener(&net.TCPAddr{}), rl: newReqLimiter(s.cfg.Shield.ReqRate), direct: s.directInit()}
 	discard := log.New(io.Discard, "", 0)
 	tr := &http.Transport{DialContext: s.termDial, DisableKeepAlives: true, MaxResponseHeaderBytes: 1 << 20, ExpectContinueTimeout: time.Second}
 	t.proxy = &httputil.ReverseProxy{Transport: tr, FlushInterval: -1, ErrorLog: discard, ErrorHandler: s.termError,
@@ -62,9 +66,15 @@ func (s *Server) termInit() {
 		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, NextProtos: []string{"h2", "http/1.1"}, GetCertificate: s.termCert}}
 	redir := &http.Server{Handler: http.HandlerFunc(termRedirect), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second,
 		MaxHeaderBytes: 16 << 10, ErrorLog: discard}
+	plain := &http.Server{Handler: http.HandlerFunc(s.serveTerm), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second,
+		MaxHeaderBytes: 64 << 10, ErrorLog: discard}
+	refuse := &http.Server{Handler: http.HandlerFunc(s.refuseHTTP), ReadHeaderTimeout: 10 * time.Second, MaxHeaderBytes: 16 << 10, ErrorLog: discard}
+	refuse.SetKeepAlivesEnabled(false)
 	go func() { _ = hs.ServeTLS(t.tls, "", "") }()
 	go func() { _ = redir.Serve(t.http) }()
-	t.srvs = []*http.Server{hs, redir}
+	go func() { _ = plain.Serve(t.plain) }()
+	go func() { _ = refuse.Serve(t.refuse) }()
+	t.srvs = []*http.Server{hs, redir, plain, refuse}
 	if s.cfg.HTTP3 && s.cfg.ListenHTTPS != "" {
 		t.h3 = &http3.Server{Handler: http.HandlerFunc(s.serveTerm)}
 	}
@@ -193,6 +203,8 @@ func (s *Server) termClose(ctx context.Context) {
 	}
 	_ = t.tls.Close()
 	_ = t.http.Close()
+	_ = t.plain.Close()
+	_ = t.refuse.Close()
 	if t.h3 != nil {
 		_ = t.h3.Close()
 	}
@@ -210,7 +222,7 @@ func (s *Server) termClose(ctx context.Context) {
 // termCert: Zertifikat fuer den SNI-Namen (nur Modus-2-Namen mit Zertifikat).
 func (s *Server) termCert(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	re := s.routes.Load().lookup(hello.ServerName)
-	if re == nil || re.Mode != 2 {
+	if re == nil || (re.Mode != 2 && re.Mode != 3) {
 		return nil, errors.New("unknown name")
 	}
 	if c := s.certs.get(re.Name); c != nil {
@@ -230,7 +242,8 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 	host := hostOnly(r.Host)
 	rs := s.routes.Load()
 	re := rs.lookup(host)
-	if re == nil || re.Mode != 2 || (r.TLS != nil && r.TLS.ServerName != "" && rs.lookup(r.TLS.ServerName) != re) {
+	if re == nil || (re.Mode != 2 && re.Mode != 3) || (r.TLS != nil && r.TLS.ServerName != "" && rs.lookup(r.TLS.ServerName) != re) ||
+		(r.TLS == nil && re.Mode != 3) {
 		http.Error(w, "misdirected request", http.StatusMisdirectedRequest)
 		return
 	}
@@ -239,6 +252,11 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 		st.Rejected.Add(1)
 		w.Header().Set("Retry-After", "1")
 		http.Error(w, "too many requests", http.StatusTooManyRequests)
+		return
+	}
+	if aerr == nil && !re.ACL.allows(ap.Addr()) {
+		st.Rejected.Add(1)
+		termPage(w, http.StatusForbidden, host, "Zugriff von dieser Adresse nicht erlaubt.", "Access from this address is not allowed.")
 		return
 	}
 	if re.Blocked != "" {
@@ -250,6 +268,10 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 	}
 	st.Requests.Add(1)
 	ctx := context.WithValue(r.Context(), termCtxKey{}, &termReq{re: re, host: host, client: r.RemoteAddr})
+	if re.Mode == 3 {
+		s.serveCached(w, r.WithContext(ctx), re, s.term.direct)
+		return
+	}
 	s.term.proxy.ServeHTTP(w, r.WithContext(ctx))
 }
 

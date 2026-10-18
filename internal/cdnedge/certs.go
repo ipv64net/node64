@@ -283,7 +283,7 @@ func (s *Server) certNames() []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, h := range c.Hosts {
-		if n := normName(h.Name); h.Mode == 2 && n != "" && !seen[n] {
+		if n := normName(h.Name); (h.Mode == 2 || (h.Mode == 3 && h.Target != nil && h.Target.Frontend != 1)) && n != "" && !seen[n] {
 			seen[n] = true
 			out = append(out, n)
 		}
