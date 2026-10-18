@@ -597,16 +597,22 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
 
 ## 13. Risiken und offene Punkte
 
-- **Let's-Encrypt-Limits:** 50 Zertifikate je registrierter Domain und Woche. Viele Kunden-Namen liegen unter
-  ipv64-Domains (DynDNS) – prüfen, ob diese auf der Public Suffix List stehen; sonst Wildcards bündeln/Staffeln
-  oder ZeroSSL als zweite Stelle. Gilt vor allem für Modus 2.
+- **Let's-Encrypt-Limits:** 50 Zertifikate je registrierter Domain und Woche. Nur ipv64.net, ipv64.de und home64.de
+  stehen auf der Public Suffix List (für die übrigen 15 DynDNS-Domains geht das noch nicht). Gelöst in cdn64-edge
+  0.9.0: die Server zählen neue Zertifikate je Domain (`/health`: `acme` ok/warn/error, Einzelheiten lokal unter `ca`),
+  ab 40 je Woche oder nach „rateLimited“ geht es zu ZeroSSL (Konto info@ipv64.net, EAB automatisch abgerufen);
+  `acme_le_week_limit: -1` = nur ZeroSSL. Konto bei ZeroSSL angelegt und gültig; Ausstellung über ZeroSSL live noch
+  nicht getestet (ZeroSSL war beim Test gestört).
 - **Traffic-Zählung des alten CDN:** genauen Zeitraum und Rücksetzung in T3 nachlesen, damit das gemeinsame
   Kontingent stimmt.
 - **DynDNS und deaktivierte Einträge:** geprüft (T7): `update.php` ändert das deaktivierte Original (Ziel in Modus 3),
   nicht die Server-Einträge; die DynDNS-Seite darf Original und Server-Einträge nicht löschen (siehe T7).
 - **Durchsatz:** 2 vCPU je Server; Modus 2 (TLS + HTTP/3) kostet mehr CPU – in T2/T5 messen, ggf. größere Server.
 - **Hetzner-Traffic:** inklusiver Traffic der Cloud-Server im Blick behalten (Kontingente der Klassen).
-- **HTTP/3 in Modus 1, TCP-/UDP-Streams, fremde Domains:** bewusst später.
+- **HTTP/3 in Modus 1:** gebaut (467b117): die Server lesen den Namen aus dem QUIC-Initial (`internal/quicsni`) und
+  reichen Modus-1-QUIC roh durch den Tunnel (Stream `quic`), TLS endet in der Node; Alt-Svc nur, wenn alle
+  verbundenen Server die Fähigkeit `quic` melden. Ausrollen offen.
+- **TCP-/UDP-Streams (Portmapper Modus 1/2), fremde Domains:** bewusst später.
 - **Modus 3 und Missbrauch:** offene Weiterleitung ins Internet ist anfällig (Angriffe über unsere IPs); SSRF-Schutz,
   Limits und Sperre je Account sind Pflicht, Abuse-Kontakt klären.
 - **Portmapper:** Port-Bereiche und Kollisionen zwischen Kunden auf zwei Servern planen (T8).
