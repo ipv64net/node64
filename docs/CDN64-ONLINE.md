@@ -569,6 +569,19 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   Adressänderung per DynDNS in < 30 s greift, private Ziele abgelehnt werden.
 
 ### T8 – Portmapper und Abschaltung des alten CDN
+- **Stand 2026-10-18 (cdn64-edge 0.8.0):** gebaut und getestet, Einspielen, Ausrollen und Live-Test offen.
+  - Server (`portmap.go`): je Mapping ein TCP- bzw. UDP-Port (`port_range`, Standard 50000–62000, nur dort), auf- und
+    abgebaut nach jedem Abruf; Ziel, Sperre und Liste bei jeder Verbindung aus dem aktuellen Stand des Namens,
+    SSRF-Schutz wie HTTP, Schutz je IP (Blocklisten, Grenzen) auch für UDP-Sitzungen, Bandbreite und Traffic des
+    Accounts. UDP: eine Sitzung je Besucher, 2 Minuten ohne Verkehr = Ende, neue Sitzung bei Zielwechsel (DynDNS).
+  - Frontend-Stufe 0 = keine Webseite, nur Portmapper (kein Zertifikat, Port 80/443 zu).
+  - ipv64: `cdn64o_mappings`, API `.../mappings`, Limit `cdn_mappings` (altes CDN zählt mit), Port-Vergabe wie beim
+    alten CDN; Seite `cdn64.php` mit Karte „Port mappings“.
+  - Altes CDN: Hinweis und Stopp neuer Domains in `cdn.php`, Abschalt-Skript `bots/cdn_alt_abschalten.php` (setzt
+    die DNS je Domain zurück, bevor `cdn_bot` löscht), Umleitung und Abgleich der Funktionen in
+    `deploy/web/T8-CDN64-ONLINE-VORHER-NACHHER.md`.
+  - Getestet: Go (TCP, UDP mit zwei Besuchern, Liste, SSRF, Zielwechsel, Bereich, Schließen, Stufe 0; Race auf
+    Linux), PHP 105/105, Seite 19/19, Abschalt-Skript in der Testumgebung.
 - Portmapper (TCP/UDP) auf den Servern mit Limits der Klasse (`cdn_portmapper`, `cdn_mappings`), Traffic zählt mit.
 - **Keine Migration:** Dennis kündigt die Abschaltung an; Kunden richten auf `cdn64.php` bzw. in der Node neu ein.
   Hinweis auf `cdn.php`, Frist nach Dennis, danach `cdn.php` auf die neue Seite umleiten und srv01–srv06 abschalten;

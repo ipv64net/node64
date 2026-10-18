@@ -55,6 +55,7 @@ type Server struct {
 	term       *terminator    // Modus 2: TLS endet hier
 	certs      *certStore     // Modus 2: Zertifikate je Name
 	cache      *respCache     // Modus 3: Cache
+	pm         *portmapper    // Modus 3: Portmapper
 	acmeTokens tokenStore     // HTTP-01 (Ausweg)
 	acmeMu     sync.Mutex
 	acmeCl     *acme.Client // Konto bei Let's Encrypt (einmal registriert)
@@ -71,6 +72,7 @@ func New(cfg *Config, log *slog.Logger, version string) *Server {
 	s.routes.Store(newRoutes(cfg.Hosts, nil))
 	s.certs = newCertStore(filepath.Join(cfg.DataDir, "certs"))
 	s.cache = newRespCache(filepath.Join(cfg.DataDir, "cache"), cfg.CacheTotalMB)
+	s.pm = newPortmapper(s, cfg.PortRange)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("/", notFound)
@@ -166,6 +168,7 @@ func (s *Server) Run(ctx context.Context) error {
 	for _, l := range s.lns { // keine neuen Besucher; laufende duerfen enden
 		_ = l.Close()
 	}
+	s.pm.close()
 	s.shutdown()
 	sctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

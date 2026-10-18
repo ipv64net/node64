@@ -43,15 +43,16 @@ type apiTunnel struct {
 }
 
 type apiHost struct {
-	ID       int        `json:"id"`
-	Name     string     `json:"name"`
-	Wildcard bool       `json:"wildcard"`
-	Mode     int        `json:"mode"`
-	UserID   int        `json:"userid"`
-	Tunnels  []string   `json:"tunnels"`
-	Blocked  string     `json:"blocked"`
-	Target   *apiTarget `json:"target,omitempty"` // Modus 3
-	ACL      *apiACL    `json:"acl,omitempty"`    // Erlauben-/Sperrliste (alle Modi)
+	ID       int          `json:"id"`
+	Name     string       `json:"name"`
+	Wildcard bool         `json:"wildcard"`
+	Mode     int          `json:"mode"`
+	UserID   int          `json:"userid"`
+	Tunnels  []string     `json:"tunnels"`
+	Blocked  string       `json:"blocked"`
+	Target   *apiTarget   `json:"target,omitempty"`   // Modus 3
+	ACL      *apiACL      `json:"acl,omitempty"`      // Erlauben-/Sperrliste (alle Modi)
+	Mappings []apiMapping `json:"mappings,omitempty"` // Portmapper (Modus 3)
 }
 
 type apiState struct {
@@ -179,6 +180,7 @@ func (s *Server) apiOK() {
 func (s *Server) applyConfig(c *apiConfig) {
 	s.apiCfg.Store(c)
 	s.routes.Store(newRoutes(s.cfg.Hosts, c))
+	s.pm.apply(c)
 	s.certs.kickLoop() // neue Modus-2-Namen: Zertifikat bald
 	bw := map[int]int{}
 	for k, v := range c.Bandwidth {

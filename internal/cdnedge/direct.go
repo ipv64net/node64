@@ -71,7 +71,7 @@ func newTarget(t *apiTarget) *target {
 	if x.port <= 0 || x.port > 65535 {
 		x.port = map[bool]int{true: 443, false: 80}[x.https]
 	}
-	if x.frontend < 1 || x.frontend > 3 {
+	if x.frontend < 0 || x.frontend > 3 { // 0 = keine Webseite (nur Portmapper)
 		x.frontend = 2
 	}
 	h := sha256.Sum256([]byte(fmt.Sprint(x.addrs, x.host, x.port, x.https, x.verify)))
@@ -264,6 +264,8 @@ func (s *Server) directError(w http.ResponseWriter, r *http.Request, err error) 
 // sonst umleiten (Stufe 2) bzw. abweisen (Stufe 3).
 func frontendPlain(t *target, haveCert bool) string {
 	switch {
+	case t.frontend == 0:
+		return "off"
 	case t.frontend == 1 || (t.frontend == 2 && !haveCert):
 		return "serve"
 	case t.frontend == 2:

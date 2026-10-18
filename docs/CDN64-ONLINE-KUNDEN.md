@@ -27,8 +27,13 @@ Node. Fällt ein Server aus, nimmt ipv64 ihn nach rund einer Minute aus dem DNS;
      „TLS durchreichen“.
    - **Modus 3 – direkt zum Ziel:** ohne Tunnel; die Server gehen selbst zu deinem Ziel. Geht in Node64 für Hosts mit
      öffentlichem Ziel und **ohne Node64** auf ipv64.net unter *CDN64*: Ziel aus den DNS-Einträgen (DynDNS hält sie
-     aktuell) oder fest, Frontend nur HTTP / HTTPS mit Umleitung / nur HTTPS, Cache (an/aus; Größe nach Account-Klasse,
-     richtet sich nach `Cache-Control` des Ziels), Erlauben-/Sperrliste.
+     aktuell) oder fest, Frontend aus / nur HTTP / HTTPS mit Umleitung / nur HTTPS, Cache (an/aus; Größe nach
+     Account-Klasse, richtet sich nach `Cache-Control` des Ziels), Erlauben-/Sperrliste, Portmapper.
+   - **Portmapper (Modus 3):** rohes TCP oder UDP an einen Port deines Ziels, z. B. WireGuard oder SSH. Der Port auf
+     den Servern liegt zwischen 50000 und 62000 (liegt dein Port dort und ist frei, bekommst du denselben) und ist auf
+     beiden Servern gleich: erreichbar unter `name:port`. Anzahl nach Account-Klasse (`cdn_mappings`, altes CDN zählt
+     mit). Die Liste gilt auch hier; das Ziel sieht die Adresse der Server, nicht die des Besuchers. Mit Frontend
+     „aus“ gibt es nur die Ports, keine Webseite.
 3. Die Node prüft den Account, baut den Tunnel auf, schaltet den Namen bei ipv64 ein und testet den Weg über das
    Internet. Fertig, wenn alle Schritte grün sind.
 

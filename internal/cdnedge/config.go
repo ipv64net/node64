@@ -40,7 +40,8 @@ type Config struct {
 	ACMEDir     string `yaml:"acme_directory"` // leer = Let's Encrypt; z. B. Staging zum Ausprobieren
 	ACMEEmail   string `yaml:"acme_email"`
 	// Modus 3: Cache aller Namen zusammen auf der Platte (MB, Standard 4096)
-	CacheTotalMB int `yaml:"cache_total_mb"`
+	CacheTotalMB int    `yaml:"cache_total_mb"`
+	PortRange    string `yaml:"port_range"` // Portmapper (Modus 3): Standard "50000-62000", "off" = aus
 }
 
 // HostEntry: ein Name (auch *.domain) und der Tunnel, der ihn bedient.

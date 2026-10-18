@@ -154,7 +154,7 @@ func (s *Server) handle443(c net.Conn) {
 		return
 	}
 	if re := s.routes.Load().lookup(sni); re != nil && re.Mode == 3 { // Modus 3: TLS endet hier (Stufe 1 = nur HTTP)
-		if re.Target.frontend == 1 || !s.certs.has(re.Name) || !re.ACL.allows(addrOf(c.RemoteAddr())) {
+		if re.Target.frontend <= 1 || !s.certs.has(re.Name) || !re.ACL.allows(addrOf(c.RemoteAddr())) {
 			_ = c.Close()
 			return
 		}
@@ -184,6 +184,8 @@ func (s *Server) handle80(c net.Conn) {
 				s.term.plain.push(pc)
 			case "redirect":
 				s.term.http.push(pc)
+			case "off": // nur Portmapper
+				_ = c.Close()
 			default:
 				s.term.refuse.push(pc)
 			}
