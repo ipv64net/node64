@@ -266,7 +266,7 @@ func (s *Server) apiCertDomains(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------- DNS-Zugaenge (andere DNS-Anbieter, lego)
 
 func (s *Server) apiDNSProviders(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, certs.Providers())
+	writeJSON(w, http.StatusOK, certs.ProvidersFor(s.lang(r)))
 }
 
 func (s *Server) apiDNSAccounts(w http.ResponseWriter, r *http.Request) {
