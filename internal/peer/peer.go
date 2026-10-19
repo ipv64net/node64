@@ -282,7 +282,7 @@ type pingInfo struct {
 	Version   string   `json:"version"`
 	AccountID int64    `json:"account_id"`
 	Linked    bool     `json:"linked"`
-	Sync      []string `json:"sync,omitempty"` // eingeschaltete Cluster-Bereiche (cluster.go)
+	Sync      []string `json:"sync"` // eingeschaltete Cluster-Bereiche (cluster.go; leer = nichts an, fehlt = aeltere Version)
 }
 
 func fmtTime(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05.000Z") }
