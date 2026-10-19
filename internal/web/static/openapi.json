@@ -41,8 +41,8 @@
       "description": "Lokaler DNS-Resolver mit Blocklisten (Modul DNS64). Ist das Modul aus: 404; laeuft der DNS-Dienst nicht (z. B. Port belegt): 503."
     },
     {
-      "name": "CDN64",
-      "description": "Reverse-Proxy (Modul CDN64): Proxy-Hosts über den gemeinsamen Eingang, Erreichbarkeit der Ziele. Nur bei eingeschaltetem Modul."
+      "name": "PROXY64",
+      "description": "PROXY64 – Reverse-Proxy (Modul-ID cdn64): Proxy-Hosts über den gemeinsamen Eingang, Erreichbarkeit der Ziele; dazu CDN64 (Veröffentlichen über srv07/srv08). Nur bei eingeschaltetem Modul."
     }
   ],
   "security": [
@@ -3887,7 +3887,7 @@
           "Node"
         ],
         "summary": "Vollständiges Backup als verschlüsseltes Archiv (.n64backup)",
-        "description": "Datenbank, Schlüssel der Node (secret.key), DNS64-Freigaben, Zertifikatsdateien; mit stats=true auch DNS64-Abfrage-Log und CDN64-Statistik. Verschlüsselt mit XChaCha20-Poly1305, Schlüssel per Argon2id aus dem Passwort.",
+        "description": "Datenbank, Schlüssel der Node (secret.key), DNS64-Freigaben, Zertifikatsdateien; mit stats=true auch DNS64-Abfrage-Log und PROXY64-Statistik. Verschlüsselt mit XChaCha20-Poly1305, Schlüssel per Argon2id aus dem Passwort.",
         "requestBody": {
           "required": true,
           "content": {
@@ -8555,7 +8555,7 @@
           "Node"
         ],
         "summary": "Werksreset (Node startet neu und leert das Datenverzeichnis)",
-        "description": "Wie in der Oberfläche nur mit dem Passwort des Benutzers, auch per API-Key. Vorher meldet sich die Node online ab (Verknüpfung mit ipv64, CDN64-online-Namen und Tunnel, lokale Gruppe); was dabei nicht klappt, steht in cleanup_problems, der Reset läuft trotzdem.",
+        "description": "Wie in der Oberfläche nur mit dem Passwort des Benutzers, auch per API-Key. Vorher meldet sich die Node online ab (Verknüpfung mit ipv64, CDN64-Namen und Tunnel, lokale Gruppe); was dabei nicht klappt, steht in cleanup_problems, der Reset läuft trotzdem.",
         "requestBody": {
           "required": true,
           "content": {
@@ -9788,7 +9788,7 @@
     "/cdn64/status": {
       "get": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Zustand: Ports des Eingangs, Zahl der Hosts, Cache",
         "responses": {
@@ -9808,7 +9808,7 @@
     "/cdn64/check": {
       "post": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Erreichbarkeit aller Ziele jetzt prüfen",
         "responses": {
@@ -9833,7 +9833,7 @@
     "/cdn64/hosts": {
       "get": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Hosts (Proxy, Weiterleitung, 404, TLS durchreichen) mit Erreichbarkeit, Zählern und Zertifikat",
         "responses": {
@@ -9870,7 +9870,7 @@
       },
       "post": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Proxy-Host anlegen",
         "requestBody": {
@@ -9910,7 +9910,7 @@
     "/cdn64/hosts/{id}": {
       "get": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Ein Proxy-Host",
         "parameters": [
@@ -9948,7 +9948,7 @@
       },
       "put": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Proxy-Host ändern (fehlende Felder bleiben)",
         "parameters": [
@@ -10006,7 +10006,7 @@
       },
       "delete": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Proxy-Host löschen",
         "parameters": [
@@ -10039,7 +10039,7 @@
     "/cdn64/hosts/{id}/enable": {
       "post": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Proxy-Host einschalten",
         "parameters": [
@@ -10079,7 +10079,7 @@
     "/cdn64/hosts/{id}/disable": {
       "post": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Proxy-Host ausschalten",
         "parameters": [
@@ -10119,7 +10119,7 @@
     "/cdn64/streams": {
       "get": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Streams (TCP/UDP)",
         "responses": {
@@ -10140,7 +10140,7 @@
       },
       "post": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Stream anlegen",
         "requestBody": {
@@ -10180,7 +10180,7 @@
     "/cdn64/streams/{id}": {
       "get": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Ein Stream",
         "parameters": [
@@ -10218,7 +10218,7 @@
       },
       "put": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Stream ändern (fehlende Felder bleiben)",
         "parameters": [
@@ -10276,7 +10276,7 @@
       },
       "delete": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Stream löschen",
         "parameters": [
@@ -10309,7 +10309,7 @@
     "/cdn64/streams/{id}/enable": {
       "post": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Stream einschalten",
         "parameters": [
@@ -10349,7 +10349,7 @@
     "/cdn64/streams/{id}/disable": {
       "post": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Stream ausschalten",
         "parameters": [
@@ -10389,7 +10389,7 @@
     "/cdn64/default": {
       "get": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Standardseite für unbekannte Namen",
         "responses": {
@@ -10425,7 +10425,7 @@
       },
       "put": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Standardseite ändern (fehlende Felder bleiben)",
         "requestBody": {
@@ -10501,7 +10501,7 @@
     "/cdn64/access-lists": {
       "get": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Zugriffslisten (ohne Passwörter) mit den Hosts, die sie benutzen",
         "responses": {
@@ -10533,7 +10533,7 @@
       },
       "post": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Zugriffsliste anlegen",
         "requestBody": {
@@ -10573,7 +10573,7 @@
     "/cdn64/access-lists/{id}": {
       "get": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Eine Zugriffsliste",
         "parameters": [
@@ -10611,7 +10611,7 @@
       },
       "put": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Zugriffsliste ändern",
         "parameters": [
@@ -10659,7 +10659,7 @@
       },
       "delete": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Zugriffsliste löschen",
         "parameters": [
@@ -10692,7 +10692,7 @@
     "/cdn64/log": {
       "get": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Zugriffs-Log (neueste zuerst)",
         "parameters": [
@@ -10820,7 +10820,7 @@
     "/cdn64/stats": {
       "get": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Anfragen je Host und Verlauf je Stunde",
         "parameters": [
@@ -10870,7 +10870,7 @@
     "/cdn64/settings": {
       "get": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Aufbewahrung des Zugriffs-Logs",
         "responses": {
@@ -10897,7 +10897,7 @@
       },
       "put": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Aufbewahrung ändern",
         "requestBody": {
@@ -10955,7 +10955,7 @@
     "/cdn64/hosts/{id}/healthcheck": {
       "post": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Healthcheck für das Ziel dieses Host anlegen (Modul Healthchecks)",
         "parameters": [
@@ -11010,7 +11010,7 @@
     "/cdn64/streams/{id}/healthcheck": {
       "post": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Healthcheck für das Ziel dieses Stream anlegen (Modul Healthchecks)",
         "parameters": [
@@ -12054,7 +12054,7 @@
     "/cdn64/blocklists": {
       "get": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "ipv64-Blocklisten: Zustand",
         "responses": {
@@ -12082,7 +12082,7 @@
       },
       "put": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "ipv64-Blocklisten ein-/ausschalten, Ausnahmen setzen",
         "description": "Abgewiesen wird am Eingang vor TLS und vor jeder Zugriffsliste, für Proxy-Hosts, Durchreich-Hosts und Streams. Die Listen kommen von ipv64.net und werden alle 30 Minuten aktualisiert.",
@@ -12147,7 +12147,7 @@
     "/cdn64/blocklists/refresh": {
       "post": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "ipv64-Blocklisten jetzt neu laden",
         "responses": {
@@ -12177,7 +12177,7 @@
     "/cdn64/limits": {
       "get": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Schutz vor Überlastung: Einstellungen, Sperren, Zähler",
         "responses": {
@@ -12205,7 +12205,7 @@
       },
       "put": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Schutz vor Überlastung einstellen",
         "description": "Fehlende Felder bleiben unverändert.",
@@ -12256,7 +12256,7 @@
     "/cdn64/limits/bans/{ip}": {
       "delete": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Gesperrte Adresse freigeben",
         "parameters": [
@@ -12300,9 +12300,9 @@
     "/cdn64/online": {
       "get": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
-        "summary": "CDN64 online: Tunnel, Server, eingeschaltete Namen, Kontingent",
+        "summary": "CDN64: Tunnel, Server, eingeschaltete Namen, Kontingent",
         "responses": {
           "200": {
             "description": "OK",
@@ -12318,7 +12318,7 @@
       },
       "put": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Tunnel von Hand setzen (Tests; sonst per Klick)",
         "requestBody": {
@@ -12388,7 +12388,7 @@
       },
       "delete": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Tunnel hier vergessen (bei ipv64 bleibt er)",
         "responses": {
@@ -12401,7 +12401,7 @@
     "/cdn64/online/tunnel": {
       "post": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Tunnel bei ipv64 anmelden bzw. prüfen und bis 25 s auf die Verbindung warten",
         "description": "Legt den Tunnel an, wenn noch keiner besteht (Token verschlüsselt gespeichert), übernimmt die Server-Liste von ipv64.",
@@ -12452,9 +12452,9 @@
     "/cdn64/hosts/{id}/online": {
       "post": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
-        "summary": "Namen des Hosts bei CDN64 online einschalten (DNS zeigt auf srv07/srv08)",
+        "summary": "Namen des Hosts bei CDN64 einschalten (DNS zeigt auf srv07/srv08)",
         "parameters": [
           {
             "name": "id",
@@ -12558,7 +12558,7 @@
       },
       "delete": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Alle Namen des Hosts ausschalten (DNS zurück); mit dem letzten Namen geht der Tunnel",
         "parameters": [
@@ -12601,7 +12601,7 @@
     "/cdn64/hosts/{id}/online/test": {
       "post": {
         "tags": [
-          "CDN64"
+          "PROXY64"
         ],
         "summary": "Selbsttest über das Internet: jeder Name über jeden Server und jede Adresse",
         "parameters": [
