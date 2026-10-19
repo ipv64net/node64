@@ -195,7 +195,8 @@ func TestOnlineOneClick(t *testing.T) {
 		t.Fatal("split names")
 	}
 	rows, _ := e.m.rows(ctx)
-	if len(rows) != 1 || rows[0].Online == nil || len(rows[0].Online.Names) != 1 || rows[0].Online.Missing != 1 || rows[0].Online.Edges[0].State != "direct" {
+	if len(rows) != 1 || rows[0].Online == nil || len(rows[0].Online.Names) != 1 || rows[0].Online.Missing != 1 || rows[0].Online.Edges[0].State != "direct" ||
+		rows[0].Online.Via == "" || rows[0].Online.Edges[0].Via != rows[0].Online.Via {
 		t.Fatalf("row: %+v", rows[0].Online)
 	}
 	// Selbsttest ueber den Server: kommt durch den Tunnel dieser Node an

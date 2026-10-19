@@ -1,5 +1,13 @@
 # Änderungen – PROXY64
 
+## 1.17.1 – 2026-10-19
+
+### Neu
+- Proxy-Hosts mit CDN64: ein kleines Icon zeigt, wie die Node mit den Servern srv07/srv08 verbunden ist – Blitz für
+  QUIC (gefüllt: eigener Port, umrandet: über Port 443), Schloss für den Rückfall HTTPS (TLS über TCP), Stecker, wenn
+  kein Server verbunden ist. Der Tooltip nennt den Weg je Server (z. B. „srv07: QUIC · srv08: HTTPS“); der Selbsttest im
+  CDN64-Dialog zeigt ihn ebenso. Die API liefert ihn je Server als `via` (`quic`, `quic443`, `tls`).
+
 ## 1.17.0 – 2026-10-19
 
 ### Geändert

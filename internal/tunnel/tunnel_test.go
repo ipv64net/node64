@@ -131,9 +131,27 @@ func TestTunnelBothTransports(t *testing.T) {
 			}
 			waitFor(t, "status", func() bool {
 				s := c.Status()[0]
-				return s.Connected && s.Transport == name && s.Total == 1 && s.Streams == 0
+				return s.Connected && s.Transport == name && s.Via == map[string]string{"quic": "quic", "tcp": "tls"}[name] && s.Total == 1 && s.Streams == 0
 			})
 		})
+	}
+}
+
+// Weg fuer die Anzeige: QUIC auf dem Tunnel-Port, QUIC ueber 443, TLS ueber TCP; getrennt leer.
+func TestVia(t *testing.T) {
+	for _, c := range []struct {
+		s    EdgeStatus
+		want string
+	}{
+		{EdgeStatus{Connected: true, Transport: "quic", Addr: "[2001:db8::1]:7844"}, "quic"},
+		{EdgeStatus{Connected: true, Transport: "quic", Addr: "192.0.2.1:443"}, "quic443"},
+		{EdgeStatus{Connected: true, Transport: "tcp", Addr: "192.0.2.1:443"}, "tls"},
+		{EdgeStatus{Connected: true, Transport: "tcp", Addr: "192.0.2.1:7844"}, "tls"},
+		{EdgeStatus{Transport: "quic", Addr: "192.0.2.1:7844"}, ""},
+	} {
+		if got := via(c.s); got != c.want {
+			t.Errorf("via(%+v) = %q, want %q", c.s, got, c.want)
+		}
 	}
 }
 

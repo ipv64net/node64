@@ -110,7 +110,7 @@
 			var tcp = up.some(function (e) { return e.transport === "tcp"; });
 			v.edges.forEach(function (e) {
 				if (e.connected) {
-					s.line(t("direct", { edge: e.name, transport: e.transport === "tcp" ? "TCP" : "QUIC" }), "text-success");
+					s.line(t("direct", { edge: e.name, transport: t("via_" + (e.via || (e.transport === "tcp" ? "tls" : "quic"))) }), "text-success");
 				} else {
 					s.line(up.length ? t("peer", { edge: e.name }) : t("down", { edge: e.name }));
 				}

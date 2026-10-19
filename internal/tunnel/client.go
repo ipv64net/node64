@@ -48,6 +48,7 @@ type EdgeStatus struct {
 	Host       string    `json:"host"`
 	Connected  bool      `json:"connected"`
 	Transport  string    `json:"transport,omitempty"` // quic | tcp
+	Via        string    `json:"via,omitempty"`       // quic | quic443 | tls (Weg zum Server, nur verbunden)
 	Addr       string    `json:"addr,omitempty"`      // Adresse des Servers
 	Since      time.Time `json:"since,omitzero"`      // verbunden seit bzw. getrennt seit
 	RTTms      float64   `json:"rtt_ms,omitempty"`
@@ -105,10 +106,24 @@ func (c *Client) Status() []EdgeStatus {
 	for _, e := range c.cfg.Edges {
 		s := c.st[e.Name]
 		x := s.EdgeStatus
-		x.Streams, x.Total = s.streams.Load(), s.total.Load()
+		x.Streams, x.Total, x.Via = s.streams.Load(), s.total.Load(), via(x)
 		out = append(out, x)
 	}
 	return out
+}
+
+// via: Verbindungsweg fuer die Anzeige – QUIC auf dem Tunnel-Port, QUIC ueber 443 (G1) oder TLS ueber TCP (Rueckfall).
+func via(s EdgeStatus) string {
+	if !s.Connected {
+		return ""
+	}
+	if s.Transport == "tcp" {
+		return "tls"
+	}
+	if _, p, err := net.SplitHostPort(s.Addr); err == nil && p == "443" {
+		return "quic443"
+	}
+	return "quic"
 }
 
 // AllHave: mindestens ein Server verbunden und alle verbundenen haben die Faehigkeit.

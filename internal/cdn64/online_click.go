@@ -889,6 +889,7 @@ type onlineRow struct {
 	Names   []string
 	Missing int // Namen des Hosts, die (noch) nicht eingeschaltet sind (ohne Platzhalter)
 	Edges   []onlineBadge
+	Via     string // schwaechster Weg der verbundenen Server: quic, quic443, tls ("" = keiner verbunden)
 	Status  string // active, blocked, pending ("" = noch kein Abgleich)
 	Reason  string
 	Month   onlineMonth // Zahlen der Server in diesem Monat (aus dem letzten Abgleich)
@@ -904,7 +905,11 @@ type onlineBadge struct {
 	Name      string
 	State     string // direct, peer, down
 	Transport string
+	Via       string // quic, quic443, tls ("" = nicht verbunden)
 }
+
+// viaOrder: Wege vom besten zum schwaechsten (die Zeile zeigt den schwaechsten verbundenen).
+var viaOrder = []string{"", "quic", "quic443", "tls"}
 
 // onlineIndex: Zustand je Host-ID (nur Hosts mit eingeschalteten Namen).
 func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onlineRow {
@@ -913,6 +918,7 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 		return nil
 	}
 	var badges []onlineBadge
+	via := ""
 	m.online.mu.Lock()
 	cl := m.online.client
 	m.online.mu.Unlock()
@@ -923,7 +929,10 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 			up = up || e.Connected
 		}
 		for _, e := range st {
-			b := onlineBadge{Name: e.Name, State: "down", Transport: e.Transport}
+			b := onlineBadge{Name: e.Name, State: "down", Transport: e.Transport, Via: e.Via}
+			if slices.Index(viaOrder, e.Via) > slices.Index(viaOrder, via) {
+				via = e.Via
+			}
 			if e.Connected {
 				b.State = "direct"
 			} else if up {
@@ -942,7 +951,7 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 	for _, x := range list {
 		r := out[x.HostID]
 		if r == nil {
-			r = &onlineRow{Edges: badges}
+			r = &onlineRow{Edges: badges, Via: via}
 			out[x.HostID] = r
 		}
 		r.Names = append(r.Names, x.Name)
@@ -981,7 +990,7 @@ func (m *Module) onlineStrings(r *http.Request) string {
 	}
 	keys := []string{"intro", "start", "retest", "close", "s_account", "s_tunnel", "s_names", "s_test", "quota", "connect", "tcp", "udp_buf",
 		"skipped", "untrusted", "dns_ok", "dns_wait", "done", "partial", "failed", "hint_lan", "check_created", "check_failed", "working",
-		"off_confirm", "direct", "peer", "down", "other_node", "route_error", "wait_edges", "mode2_hint"}
+		"off_confirm", "direct", "peer", "down", "other_node", "route_error", "wait_edges", "mode2_hint", "via_quic", "via_quic443", "via_tls"}
 	out := map[string]string{}
 	for _, k := range keys {
 		out[k] = m.g.T(r, "cdn64.online."+k)
