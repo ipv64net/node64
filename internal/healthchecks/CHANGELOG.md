@@ -1,5 +1,10 @@
 # Änderungen – Healthchecks
 
+## 2.12.2 – 2026-10-19
+
+### Behoben
+- Konfiguration importieren: Die Benachrichtigungskanäle der Checks zeigen auf die importierten Kanäle dieser Node. Bisher wurden die Kanal-Nummern der alten Node übernommen, sodass Checks auf einer anderen Node an falsche oder keine Kanäle meldeten (gilt für Exporte ab dieser Version).
+
 ## 2.12.1 – 2026-10-16
 
 ### Neu

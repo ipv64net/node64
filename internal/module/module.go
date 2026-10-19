@@ -102,6 +102,29 @@ type Exporter interface {
 	Import(ctx context.Context, raw json.RawMessage) (int, error)
 }
 
+type channelMapKey struct{}
+
+// WithChannelMap: beim Import die Zuordnung Kanal-ID der Datei -> Kanal-ID dieser Node (fuer Import).
+func WithChannelMap(ctx context.Context, m map[int64]int64) context.Context {
+	return context.WithValue(ctx, channelMapKey{}, m)
+}
+
+// MapChannels setzt Kanal-IDs aus einer importierten Datei auf die dieser Node um; unbekannte entfallen.
+// Ohne Zuordnung (aeltere Exporte ohne Kanal-IDs) bleiben die IDs unveraendert.
+func MapChannels(ctx context.Context, ids []int64) []int64 {
+	m, _ := ctx.Value(channelMapKey{}).(map[int64]int64)
+	if m == nil || ids == nil {
+		return ids
+	}
+	out := []int64{}
+	for _, id := range ids {
+		if n, ok := m[id]; ok {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 // DashboardProvider liefert Kacheln fuer das Dashboard des Kerns.
 type DashboardProvider interface {
 	Dashboard(ctx context.Context) (*DashboardInfo, error)

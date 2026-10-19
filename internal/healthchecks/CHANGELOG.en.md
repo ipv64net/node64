@@ -1,5 +1,10 @@
 # Changes – Healthchecks
 
+## 2.12.2 – 2026-10-19
+
+### Fixed
+- Configuration import: the notification channels of checks point to the imported channels of this node. Previously the channel numbers of the old node were kept, so on another node checks notified wrong channels or none (applies to exports from this version on).
+
 ## 2.12.1 – 2026-10-16
 
 ### New

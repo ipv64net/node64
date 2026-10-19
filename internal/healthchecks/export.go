@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/checks"
+	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/scheduler"
 )
 
@@ -78,6 +79,7 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 				}
 			}
 			c.UpdatedBy = "import"
+			j.Channels = module.MapChannels(ctx, j.Channels)
 			if err := m.apply(c, j, create); err != nil {
 				return n, fmt.Errorf("check %q: %w", j.Name, err)
 			}

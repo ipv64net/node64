@@ -186,7 +186,7 @@ func TestBackupExportImport(t *testing.T) {
 		t.Fatalf("export password: %d", resp.StatusCode)
 	}
 	var cf configFile
-	if err := json.Unmarshal([]byte(body), &cf); err != nil || cf.Settings[SettingNodeName] != "Pi" || len(cf.Channels) != 1 {
+	if err := json.Unmarshal([]byte(body), &cf); err != nil || cf.Settings[SettingNodeName] != "Pi" || len(cf.Channels) != 1 || cf.Channels[0].ID != ch.ID {
 		t.Fatalf("export content: %v %+v", err, cf)
 	}
 	// Import in eine frische Instanz

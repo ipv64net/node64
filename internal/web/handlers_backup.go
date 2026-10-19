@@ -222,6 +222,7 @@ type configSecrets struct {
 }
 
 type configChannel struct {
+	ID         int64             `json:"id,omitempty"` // fuer die Zuordnung der Kanaele von Checks beim Import
 	Name       string            `json:"name"`
 	Type       string            `json:"type"`
 	Enabled    bool              `json:"enabled"`
@@ -302,7 +303,7 @@ func (s *Server) buildExport(ctx context.Context, mode, password string) (*confi
 				}
 				cfg[k] = val
 			}
-			cf.Channels = append(cf.Channels, configChannel{Name: ch.Name, Type: string(ch.Type), Enabled: ch.Enabled, Default: ch.Default, Lang: ch.Lang, NotifyDown: ch.NotifyDown, NotifyUp: ch.NotifyUp, Config: cfg})
+			cf.Channels = append(cf.Channels, configChannel{ID: ch.ID, Name: ch.Name, Type: string(ch.Type), Enabled: ch.Enabled, Default: ch.Default, Lang: ch.Lang, NotifyDown: ch.NotifyDown, NotifyUp: ch.NotifyUp, Config: cfg})
 		}
 	}
 	for _, m := range s.Modules.Modules() {
@@ -406,6 +407,7 @@ func (s *Server) applyImport(ctx context.Context, raw []byte, password string) (
 			}
 		}
 	}
+	chMap := map[int64]int64{}
 	if s.Notify != nil {
 		existing, _ := s.Notify.Channels(ctx)
 		byName := map[string]*notify.Channel{}
@@ -423,6 +425,7 @@ func (s *Server) applyImport(ctx context.Context, raw []byte, password string) (
 			}
 			if err := ch.Validate(); err != nil {
 				s.log.Warn("import: channel skipped", "name", in.Name, "err", err)
+				problems = append(problems, in.Name+": "+err.Error())
 				continue
 			}
 			var err error
@@ -433,8 +436,14 @@ func (s *Server) applyImport(ctx context.Context, raw []byte, password string) (
 			}
 			if err == nil {
 				count++
+				if in.ID > 0 {
+					chMap[in.ID] = ch.ID
+				}
 			}
 		}
+	}
+	if len(chMap) > 0 {
+		ctx = module.WithChannelMap(ctx, chMap)
 	}
 	for _, m := range s.Modules.Modules() {
 		ex, ok := m.(module.Exporter)
