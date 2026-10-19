@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
-	<h1 class="h4 mb-0"><img src="/static/img/ipv64_logo.svg" alt="" height="22" class="logo logo-light align-text-bottom"><img src="/static/img/ipv64_logo_white.svg" alt="" height="22" class="logo logo-dark align-text-bottom"> {{.T "plans.title"}}</h1>
+	<h1 class="h4 mb-0"><img src="/static/img/ipv64_logo.svg" alt="" height="22" class="logo logo-light align-text-bottom"><img src="/static/img/ipv64_logo_white.svg" alt="" height="22" class="logo logo-dark align-text-bottom"> {{.T "plans.title"}}{{$.Doc "ipv64#account-klassen"}}</h1>
 	<a class="btn btn-sm btn-outline-secondary ms-auto" href="{{$d.PricingURL}}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> {{.T "plans.pricing"}}</a>
 </div>
 <p class="text-body-secondary small">{{.T "plans.intro"}}</p>

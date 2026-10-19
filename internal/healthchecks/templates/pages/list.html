@@ -2,7 +2,7 @@
 {{$d := .Data}}
 {{$f := $d.Filter}}
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-	<h1 class="h4 mb-0"><i class="bi bi-heart-pulse me-1"></i> {{.T "nav.healthchecks"}} <span class="text-body-secondary fs-6">{{$d.Total}}</span></h1>
+	<h1 class="h4 mb-0"><i class="bi bi-heart-pulse me-1"></i> {{.T "nav.healthchecks"}}{{$.Doc "healthchecks#overview"}} <span class="text-body-secondary fs-6">{{$d.Total}}</span></h1>
 	<div class="d-flex gap-2">
 		<a class="btn btn-outline-secondary btn-sm" href="/healthchecks{{if $f.q}}?q={{$f.q}}{{end}}" title="{{.T "logs.refresh"}}"><i class="bi bi-arrow-clockwise"></i></a>
 		<a class="btn btn-outline-danger btn-sm" href="/healthchecks/incidents"><i class="bi bi-exclamation-triangle"></i> {{.T "hc.incident_list.title"}}</a>
@@ -225,7 +225,7 @@
 {{end}}
 {{if $d.APIMode}}
 <div class="card mt-3" id="online">
-	<div class="card-header d-flex align-items-center flex-wrap gap-2"><span><i class="bi bi-cloud text-info"></i> {{.T "hc.api.title"}} <span class="text-body-secondary small">{{len $d.Online}}</span></span>
+	<div class="card-header d-flex align-items-center flex-wrap gap-2"><span><i class="bi bi-cloud text-info"></i> {{.T "hc.api.title"}}{{$.Doc "ipv64#api-key"}} <span class="text-body-secondary small">{{len $d.Online}}</span></span>
 		<a class="btn btn-primary btn-sm ms-auto" href="/healthchecks/online/new"><i class="bi bi-plus-lg"></i> {{.T "hc.api.new"}}</a></div>
 	<div class="card-body small pb-0"><div class="alert alert-info py-2"><i class="bi bi-info-circle"></i> {{.T "hc.api.hint"}} <a href="/link">{{.T "hc.api.sync_link"}}</a></div></div>
 	{{if $d.OnlineErr}}<div class="alert alert-warning mx-3 small">{{.T "hc.api.error"}}: {{$d.OnlineErr}}</div>{{end}}

@@ -1,14 +1,14 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="d-flex align-items-center mb-3">
-	<h1 class="h4 mb-0"><i class="bi bi-person-badge text-primary me-1"></i> {{.T "sso.title"}}</h1>
+	<h1 class="h4 mb-0"><i class="bi bi-person-badge text-primary me-1"></i> {{.T "sso.title"}}{{$.Doc "security#sso-oidc"}}</h1>
 	<a class="btn btn-sm btn-outline-secondary ms-auto" href="/settings"><i class="bi bi-arrow-left"></i> {{.T "nav.settings"}}</a>
 </div>
 <p class="text-body-secondary small">{{.T "sso.intro"}}</p>
 <div class="row g-3">
 <div class="col-lg-6">
 	<div class="card h-100" id="oidc">
-		<div class="card-header"><i class="bi bi-box-arrow-in-right text-primary"></i> {{.T "sso.oidc_title"}}</div>
+		<div class="card-header"><i class="bi bi-box-arrow-in-right text-primary"></i> {{.T "sso.oidc_title"}}{{$.Doc "security#sso-einrichten"}}</div>
 		<div class="card-body">
 			<p class="small text-body-secondary">{{.T "sso.oidc_hint"}}</p>
 			<form method="post" action="/settings/login/oidc">
@@ -57,7 +57,7 @@
 </div>
 <div class="col-lg-6">
 	<div class="card h-100" id="forward">
-		<div class="card-header"><i class="bi bi-signpost-split text-primary"></i> {{.T "sso.fwd_title"}} {{if $d.Fwd.Enabled}}<span class="badge text-bg-success">{{.T "common.running"}}</span>{{else}}<span class="badge text-bg-secondary">{{.T "common.disabled"}}</span>{{end}}</div>
+		<div class="card-header"><i class="bi bi-signpost-split text-primary"></i> {{.T "sso.fwd_title"}}{{$.Doc "security#forward-auth"}} {{if $d.Fwd.Enabled}}<span class="badge text-bg-success">{{.T "common.running"}}</span>{{else}}<span class="badge text-bg-secondary">{{.T "common.disabled"}}</span>{{end}}</div>
 		<div class="card-body">
 			<p class="small text-body-secondary">{{.T "sso.fwd_hint"}}</p>
 			<form method="post" action="/settings/login/forward">
@@ -74,7 +74,7 @@
 </div>
 <div class="col-lg-6">
 	<div class="card h-100" id="passkeys">
-		<div class="card-header"><i class="bi bi-fingerprint text-primary"></i> {{.T "sso.pk_title"}}</div>
+		<div class="card-header"><i class="bi bi-fingerprint text-primary"></i> {{.T "sso.pk_title"}}{{$.Doc "security#passkeys"}}</div>
 		<div class="card-body">
 			<p class="small text-body-secondary">{{.T "sso.pk_hint"}}</p>
 			{{if $d.Passkeys}}

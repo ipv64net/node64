@@ -1,12 +1,12 @@
 {{define "content"}}
 {{$d := .Data}}
 {{$st := $d.State}}
-<h1 class="h4 mb-3"><i class="bi bi-cloud-check text-info me-1"></i> {{.T "link.title"}}</h1>
+<h1 class="h4 mb-3"><i class="bi bi-cloud-check text-info me-1"></i> {{.T "link.title"}}{{$.Doc "ipv64#healthchecks-sync"}}</h1>
 
 <div class="row g-3">
 <div class="col-lg-7">
 	<div class="card mb-3">
-		<div class="card-header"><i class="bi bi-activity text-info"></i> {{.T "link.status"}}</div>
+		<div class="card-header"><i class="bi bi-activity text-info"></i> {{.T "link.status"}}{{$.Doc "ipv64#verbindungen"}}</div>
 		<div class="card-body">
 		{{if not $d.Available}}
 			<p class="text-body-secondary mb-0">{{.T "link.unavailable"}}</p>
@@ -82,7 +82,7 @@
 <div class="col-lg-5">
 	{{$g := $d.Group}}{{if $g.Available}}
 	<div class="card mb-3" id="group">
-		<div class="card-header"><i class="bi bi-share-fill text-primary"></i> {{.T "peer.title"}}{{if $g.Members}} <span class="badge text-bg-secondary">{{len $g.Members}}</span>{{end}}</div>
+		<div class="card-header"><i class="bi bi-share-fill text-primary"></i> {{.T "peer.title"}}{{$.Doc "local-group#wozu"}}{{if $g.Members}} <span class="badge text-bg-secondary">{{len $g.Members}}</span>{{end}}</div>
 		<div class="card-body small">
 		{{if not $g.Account}}
 			<p class="text-body-secondary mb-0">{{.T "peer.need_account"}}</p>
@@ -154,7 +154,7 @@
 	</div>
 	{{end}}
 	<div class="card mb-3">
-		<div class="card-header"><i class="bi bi-hdd-rack text-primary"></i> {{.T "link.endpoints"}}</div>
+		<div class="card-header"><i class="bi bi-hdd-rack text-primary"></i> {{.T "link.endpoints"}}{{$.Doc "ipv64#ausfallverhalten"}}</div>
 		<ul class="list-group list-group-flush small">
 			{{range $st.Endpoints}}<li class="list-group-item d-flex justify-content-between"><span>{{.Name}} <span class="text-body-secondary">({{.Location}})</span></span><code>{{.URL}}</code></li>{{end}}
 		</ul>

@@ -9,7 +9,7 @@
 <div class="row g-3">
 	<div class="col-lg-7">
 		<div class="card mb-3">
-			<div class="card-header"><i class="bi bi-card-text text-primary"></i> {{.T "hc.form.general"}}</div>
+			<div class="card-header"><i class="bi bi-card-text text-primary"></i> {{.T "hc.form.general"}}{{$.Doc "healthchecks#first-check"}}</div>
 			<div class="card-body">
 				<div class="row g-3">
 					<div class="col-md-8">
@@ -62,7 +62,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="http keyword json">
-			<div class="card-header"><i class="bi bi-globe2 text-info"></i> {{.T "hc.type.http"}}</div>
+			<div class="card-header"><i class="bi bi-globe2 text-info"></i> {{.T "hc.type.http"}}{{$.Doc "healthchecks#type-http"}}</div>
 			<div class="card-body">
 				<div class="row g-3">
 					<div class="col-md-3">
@@ -83,12 +83,12 @@
 						</div>
 					</div>
 					<div class="col-12" data-types="keyword">
-						<label class="form-label" for="keyword">{{.T "hc.form.keyword"}}</label>
+						<label class="form-label" for="keyword">{{.T "hc.form.keyword"}}{{$.Doc "healthchecks#type-keyword"}}</label>
 						<div class="input-group"><span class="input-group-text"><i class="bi bi-search"></i></span><input class="form-control" id="keyword" name="keyword" value="{{index $f "keyword"}}"></div>
 						<div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="keyword_absent" id="keyword_absent"{{if index $f "keyword_absent"}} checked{{end}}><label class="form-check-label" for="keyword_absent">{{.T "hc.form.keyword_absent"}}</label></div>
 					</div>
 					<div class="col-12" data-types="json">
-						<label class="form-label" for="json_rules">{{.T "hc.json.rules"}}</label>
+						<label class="form-label" for="json_rules">{{.T "hc.json.rules"}}{{$.Doc "healthchecks#type-json"}}</label>
 						<textarea class="form-control font-monospace" id="json_rules" name="json_rules" rows="4" placeholder="status == ok&#10;queue &lt; 100&#10;version exists">{{index $f "json_rules"}}</textarea>
 						<div class="form-text">{{.T "hc.json.rules_hint"}}</div>
 						<div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="json_any" id="json_any"{{if index $f "json_any"}} checked{{end}}><label class="form-check-label" for="json_any">{{.T "hc.json.any"}}</label></div>
@@ -122,7 +122,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="dns">
-			<div class="card-header"><i class="bi bi-signpost-split text-info"></i> {{.T "hc.type.dns"}}</div>
+			<div class="card-header"><i class="bi bi-signpost-split text-info"></i> {{.T "hc.type.dns"}}{{$.Doc "healthchecks#type-dns"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-md-4"><label class="form-label" for="dns_record_type">{{.T "hc.dns.record_type"}}</label>
 					<div class="input-group"><span class="input-group-text"><i class="bi bi-list-ul"></i></span><select class="form-select" id="dns_record_type" name="dns_record_type">{{range $d.DNSRecordTypes}}<option{{if eq . (index $f "dns_record_type")}} selected{{end}}>{{.}}</option>{{end}}</select></div></div>
@@ -142,7 +142,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="icmp">
-			<div class="card-header"><i class="bi bi-broadcast-pin text-info"></i> {{.T "hc.type.icmp"}}</div>
+			<div class="card-header"><i class="bi bi-broadcast-pin text-info"></i> {{.T "hc.type.icmp"}}{{$.Doc "healthchecks#type-icmp"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-md-4"><label class="form-label" for="count">{{.T "hc.form.count"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-hash"></i></span><input class="form-control" type="number" id="count" name="count" value="{{index $f "count"}}" min="1" max="20"></div></div>
 				<div class="col-md-4"><label class="form-label" for="max_loss_percent">{{.T "hc.form.max_loss"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-percent"></i></span><input class="form-control" type="number" id="max_loss_percent" name="max_loss_percent" value="{{index $f "max_loss_percent"}}" min="0" max="100"></div></div>
@@ -152,7 +152,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="tcp">
-			<div class="card-header"><i class="bi bi-ethernet text-info"></i> {{.T "hc.type.tcp"}}</div>
+			<div class="card-header"><i class="bi bi-ethernet text-info"></i> {{.T "hc.type.tcp"}}{{$.Doc "healthchecks#type-tcp"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-md-3"><label class="form-label" for="tcp_port">{{.T "hc.form.port"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-plug"></i></span><input class="form-control" type="number" id="tcp_port" name="tcp_port" value="{{index $f "tcp_port"}}" min="1" max="65535"></div></div>
 				<div class="col-md-4"><label class="form-label" for="send">{{.T "hc.form.send"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-send"></i></span><input class="form-control font-monospace" id="send" name="send" value="{{index $f "send"}}" placeholder="EHLO x\r\n"></div></div>
@@ -162,7 +162,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="port">
-			<div class="card-header"><i class="bi bi-plug text-info"></i> {{.T "hc.type.port"}}</div>
+			<div class="card-header"><i class="bi bi-plug text-info"></i> {{.T "hc.type.port"}}{{$.Doc "healthchecks#type-port"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-md-4"><label class="form-label" for="port_port">{{.T "hc.form.port"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-plug"></i></span><input class="form-control" type="number" id="port_port" name="port_port" value="{{index $f "port_port"}}" min="1" max="65535"></div></div>
 				<div class="col-md-8"><label class="form-label" for="port_expect">{{.T "hc.form.port_expect"}}</label>
@@ -171,7 +171,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="cert">
-			<div class="card-header"><i class="bi bi-patch-check text-success"></i> {{.T "hc.type.cert"}}</div>
+			<div class="card-header"><i class="bi bi-patch-check text-success"></i> {{.T "hc.type.cert"}}{{$.Doc "healthchecks#type-cert"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-md-3"><label class="form-label" for="cert_port">{{.T "hc.form.port"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-plug"></i></span><input class="form-control" type="number" id="cert_port" name="cert_port" value="{{index $f "cert_port"}}" min="1" max="65535"></div></div>
 				<div class="col-md-3"><label class="form-label" for="min_days">{{.T "hc.form.min_days"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-calendar-check"></i></span><input class="form-control" type="number" id="min_days" name="min_days" value="{{index $f "min_days"}}" min="0" max="3650"></div></div>
@@ -184,7 +184,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="docker">
-			<div class="card-header"><i class="bi bi-box-seam text-primary"></i> {{.T "hc.type.docker"}}</div>
+			<div class="card-header"><i class="bi bi-box-seam text-primary"></i> {{.T "hc.type.docker"}}{{$.Doc "healthchecks#docker"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-12"><label class="form-label" for="docker_host">{{.T "hc.docker.host"}}</label>
 					<div class="input-group"><span class="input-group-text"><i class="bi bi-hdd-stack"></i></span><input class="form-control font-monospace" id="docker_host" name="docker_host" value="{{index $f "docker_host"}}" placeholder="{{$d.DockerHost}}"></div>
@@ -196,7 +196,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="push">
-			<div class="card-header"><i class="bi bi-send-check text-info"></i> {{.T "hc.type.push"}}</div>
+			<div class="card-header"><i class="bi bi-send-check text-info"></i> {{.T "hc.type.push"}}{{$.Doc "healthchecks#type-push"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-md-6"><label class="form-label" for="period_seconds">{{.T "hc.form.period"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-arrow-repeat"></i></span><input class="form-control" type="number" id="period_seconds" name="period_seconds" value="{{index $f "period_seconds"}}" min="20"></div></div>
 				<div class="col-md-6"><label class="form-label" for="grace_seconds">{{.T "hc.form.grace"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-hourglass-split"></i></span><input class="form-control" type="number" id="grace_seconds" name="grace_seconds" value="{{index $f "grace_seconds"}}" min="0"></div></div>
@@ -206,7 +206,7 @@
 
 	<div class="col-lg-5">
 		<div class="card mb-3" data-types="http keyword json dns icmp tcp port cert docker">
-			<div class="card-header"><i class="bi bi-stopwatch text-secondary"></i> {{.T "hc.form.timing"}}</div>
+			<div class="card-header"><i class="bi bi-stopwatch text-secondary"></i> {{.T "hc.form.timing"}}{{$.Doc "healthchecks#timing"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-6"><label class="form-label" for="interval_seconds">{{.T "hc.form.interval"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-clock"></i></span><input class="form-control" type="number" id="interval_seconds" name="interval_seconds" value="{{index $f "interval_seconds"}}" min="20" max="86400"><span class="input-group-text">s</span></div></div>
 				<div class="col-6"><label class="form-label" for="retry_interval_seconds">{{.T "hc.form.retry_interval"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-arrow-clockwise"></i></span><input class="form-control" type="number" id="retry_interval_seconds" name="retry_interval_seconds" value="{{index $f "retry_interval_seconds"}}" min="5"><span class="input-group-text">s</span></div></div>
@@ -218,7 +218,7 @@
 		</div>
 
 		<div class="card mb-3">
-			<div class="card-header"><i class="bi bi-geo-alt-fill text-danger"></i> {{.T "hc.form.sources"}}</div>
+			<div class="card-header"><i class="bi bi-geo-alt-fill text-danger"></i> {{.T "hc.form.sources"}}{{$.Doc "healthchecks#execution"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-12"><label class="form-label" for="execution">{{.T "hc.form.execution"}}</label>
 					<div class="input-group"><span class="input-group-text"><i class="bi bi-geo"></i></span><select class="form-select" id="execution" name="execution">{{range $d.Executions}}<option value="{{.}}"{{if eq . (index $f "execution")}} selected{{end}}{{if and (ne . "local") (not $d.Linked) (not $d.APIMode)}} disabled{{end}}>{{$.T (print "hc.execution." .)}}</option>{{end}}</select></div>
@@ -230,14 +230,14 @@
 					<div class="form-text" data-types="http keyword json dns icmp tcp port cert push">{{.T "hc.form.nodes_hint"}}</div>
 					<div class="form-text text-warning-emphasis" data-types="docker">{{.T "hc.form.nodes_single"}}</div></div>
 				{{end}}
-				<div class="col-12"><label class="form-label">{{.T "hc.form.locations"}}</label>
+				<div class="col-12"><label class="form-label">{{.T "hc.form.locations"}}{{$.Doc "healthchecks#online-limits"}}</label>
 					{{range $i, $l := $d.Locations}}{{$over := and $d.Linked (gt $d.AccLocs 0) (ge $i $d.AccLocs)}}<div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="locations" value="{{$l}}" id="loc_{{$l}}"{{if and (contains (index $f "locations") $l) (not $over)}} checked{{end}}{{if or (and (not $d.Linked) (not $d.APIMode)) $over}} disabled{{end}}><label class="form-check-label" for="loc_{{$l}}">{{$.T (print "hc.location." $l)}}{{if $over}} <span class="badge text-bg-secondary">{{$.T "hc.form.loc_class"}}</span>{{end}}</label></div>{{end}}
 					<div class="form-text">{{.T "hc.form.locations_hint"}} <a href="/plans">{{.T "plans.title"}}</a></div>
 					{{if and $d.Linked $d.PointsLimit}}<div class="form-text{{if ge $d.PointsUsed $d.PointsLimit}} text-danger{{end}}">{{.T "hc.form.points_used" "used" $d.PointsUsed "limit" $d.PointsLimit}}</div>{{end}}
 					{{if and $d.Linked $d.QuotaLimit}}<div class="small mt-1" id="hc-proj" data-other="{{$d.ProjOther}}" data-today="{{$d.QuotaToday}}" data-limit="{{$d.QuotaLimit}}" data-acclocs="{{$d.AccLocs}}"
 						data-t-check="{{.T "hc.proj.check"}}" data-t-local="{{.T "hc.proj.local"}}" data-t-total="{{.T "hc.proj.total"}}" data-t-over="{{.T "hc.proj.over"}}" data-t-runout="{{.T "hc.proj.runout"}}"></div>{{end}}</div>
 				{{if and $d.Linked (not $d.APIMode)}}<div class="col-12" data-types="http keyword json dns icmp tcp port cert">
-					<button type="button" class="btn btn-outline-info btn-sm" id="hc-otest" data-token="{{$d.Token}}" data-t-running="{{.T "hc.otest.running"}}" data-t-ok="{{.T "hc.otest.ok"}}" data-t-failed="{{.T "hc.otest.failed"}}" data-t-expired="{{.T "hc.otest.expired"}}" data-t-error="{{.T "hc.otest.error"}}"{{range $d.Locations}} data-t-loc-{{.}}="{{$.T (print "hc.location." .)}}"{{end}}><i class="bi bi-cloud-check"></i> {{.T "hc.otest.button"}}</button>
+					<button type="button" class="btn btn-outline-info btn-sm" id="hc-otest" data-token="{{$d.Token}}" data-t-running="{{.T "hc.otest.running"}}" data-t-ok="{{.T "hc.otest.ok"}}" data-t-failed="{{.T "hc.otest.failed"}}" data-t-expired="{{.T "hc.otest.expired"}}" data-t-error="{{.T "hc.otest.error"}}"{{range $d.Locations}} data-t-loc-{{.}}="{{$.T (print "hc.location." .)}}"{{end}}><i class="bi bi-cloud-check"></i> {{.T "hc.otest.button"}}</button>{{$.Doc "healthchecks#execution"}}
 					<div class="form-text">{{.T "hc.otest.hint"}}</div>
 					<ul class="list-unstyled small mt-2 mb-0" id="hc-otest-out" aria-live="polite"></ul>
 				</div>{{end}}
@@ -249,7 +249,7 @@
 		</div>
 
 		<div class="card mb-3">
-			<div class="card-header"><i class="bi bi-bell-fill text-warning"></i> {{.T "hc.form.alerting"}}</div>
+			<div class="card-header"><i class="bi bi-bell-fill text-warning"></i> {{.T "hc.form.alerting"}}{{$.Doc "notifications#channels"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-6"><label class="form-label" for="retries">{{.T "hc.form.retries"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-arrow-repeat"></i></span><input class="form-control" type="number" id="retries" name="retries" value="{{index $f "retries"}}" min="0" max="10"></div><div class="form-text">{{.T "hc.form.retries_hint"}}</div></div>
 				<div class="col-6"><label class="form-label" for="stabilize">{{.T "hc.form.stabilize"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-graph-up"></i></span><input class="form-control" type="number" id="stabilize" name="stabilize" value="{{index $f "stabilize"}}" min="1" max="20"></div><div class="form-text">{{.T "hc.form.stabilize_hint"}}</div></div>

@@ -1,6 +1,6 @@
 {{define "content"}}
 {{$d := .Data}}
-<h1 class="h4 mb-3"><i class="bi bi-exclamation-triangle-fill text-danger me-1"></i> {{.T "hc.incident_list.title"}}</h1>
+<h1 class="h4 mb-3"><i class="bi bi-exclamation-triangle-fill text-danger me-1"></i> {{.T "hc.incident_list.title"}}{{$.Doc "healthchecks#states"}}</h1>
 <div class="card">
 	<div class="card-header d-flex flex-wrap align-items-center gap-2">
 		<span class="badge {{if $d.Open}}text-bg-danger{{else}}text-bg-success{{end}}">{{.T "hc.incident_list.open_count" "count" $d.Open}}</span>

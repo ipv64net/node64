@@ -72,7 +72,7 @@
 		</div>
 
 		<div class="card mb-3">
-			<div class="card-header"><i class="bi bi-clock-history text-primary"></i> {{.T "hc.events"}}</div>
+			<div class="card-header"><i class="bi bi-clock-history text-primary"></i> {{.T "hc.events"}}{{$.Doc "healthchecks#history"}}</div>
 			{{if $d.Events}}
 			<div class="table-responsive"><table class="table table-sm table-striped mb-0 table-cards">
 				{{$http := or (eq (print $c.Type) "http") (eq (print $c.Type) "keyword") (eq (print $c.Type) "json")}}
@@ -96,7 +96,7 @@
 	<div class="col-xl-4">
 		{{if $d.Sources}}
 		<div class="card mb-3 hc-sources">
-			<div class="card-header py-2 small"><i class="bi bi-geo-alt-fill text-primary"></i> {{.T "hc.sources.title"}} <span class="badge text-bg-secondary">{{len $d.Sources}}</span></div>
+			<div class="card-header py-2 small"><i class="bi bi-geo-alt-fill text-primary"></i> {{.T "hc.sources.title"}}{{$.Doc "healthchecks#sources"}} <span class="badge text-bg-secondary">{{len $d.Sources}}</span></div>
 			<ul class="list-group list-group-flush small">
 			{{range $d.Sources}}
 				<li class="list-group-item py-2{{if .Stale}} opacity-50{{end}}">
@@ -141,7 +141,7 @@
 
 		{{if or $d.PushURL $d.PushOnline}}
 		<div class="card mb-3">
-			<div class="card-header"><i class="bi bi-broadcast text-info"></i> {{.T "hc.push.title"}}</div>
+			<div class="card-header"><i class="bi bi-broadcast text-info"></i> {{.T "hc.push.title"}}{{$.Doc "healthchecks#type-push"}}</div>
 			<div class="card-body small">
 				<p>{{.T "hc.push.hint"}}</p>
 				{{if $d.PushURL}}
@@ -163,7 +163,7 @@ curl -fsS "{{$u}}{{if $d.PushURL}}?{{else}}&amp;{{end}}status=down&amp;msg=backu
 
 		{{if $d.Incidents}}
 		<div class="card mb-3">
-			<div class="card-header"><i class="bi bi-exclamation-triangle text-danger"></i> {{.T "hc.incidents"}}</div>
+			<div class="card-header"><i class="bi bi-exclamation-triangle text-danger"></i> {{.T "hc.incidents"}}{{$.Doc "healthchecks#states"}}</div>
 			<ul class="list-group list-group-flush small">
 			{{range $d.Incidents}}
 				<li class="list-group-item">
