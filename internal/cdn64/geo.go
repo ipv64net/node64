@@ -18,9 +18,9 @@ import (
 	"github.com/ipv64net/node64/internal/shield"
 )
 
-// Laendersperre je Host: Besucher aus bestimmten Laendern sperren oder nur sie zulassen. Die Laenderlisten kommen
+// Laendersperre je Host und Stream: Besucher aus bestimmten Laendern sperren oder nur sie zulassen. Die Laenderlisten kommen
 // von ipv64.net (taeglich aus den Daten der Registrierungsstellen) und werden nur fuer Laender geladen, die ein
-// eingeschalteter Host benutzt; Zwischenspeicher wie bei den Blocklisten. Private Netze, CGNAT und die Ausnahmen
+// eingeschalteter Host oder Stream benutzt; Zwischenspeicher wie bei den Blocklisten. Private Netze, CGNAT und die Ausnahmen
 // der Blocklisten werden nie gesperrt. "Nur zulassen" sperrt erst, wenn mindestens eine der Listen geladen ist.
 
 const (
@@ -51,19 +51,23 @@ type geoSets struct {
 	mu      sync.RWMutex
 	sets    map[string]*shield.Set
 	state   map[string]*GeoState
-	need    []string       // Laender der eingeschalteten Hosts
+	need    []string       // Laender der eingeschalteten Hosts und Streams
 	allow   []netip.Prefix // Ausnahmen der Blocklisten
 	blocked atomic.Int64   // abgewiesen seit dem Start
+
+	needBy map[string][]string // Laender je Quelle ("hosts", "streams")
 }
 
 // normalizeGeo prueft Modus und Laender (Grossbuchstaben, ohne Doppelte); ohne Modus keine Laender.
-func (a *Advanced) normalizeGeo() error {
-	if a.GeoMode != geoBlock && a.GeoMode != geoAllow {
-		a.GeoMode, a.GeoCountries = "", nil
+func (a *Advanced) normalizeGeo() error { return normalizeGeo(&a.GeoMode, &a.GeoCountries) }
+
+func normalizeGeo(mode *string, countries *[]string) error {
+	if *mode != geoBlock && *mode != geoAllow {
+		*mode, *countries = "", nil
 		return nil
 	}
 	var out []string
-	for _, c := range a.GeoCountries {
+	for _, c := range *countries {
 		c = strings.ToUpper(strings.TrimSpace(c))
 		if c == "" || slices.Contains(out, c) {
 			continue
@@ -79,13 +83,18 @@ func (a *Advanced) normalizeGeo() error {
 	if len(out) > geoMax {
 		return ferr("geo", "cdn64.err.geo_many")
 	}
-	a.GeoCountries = out
+	*countries = out
 	return nil
 }
 
 // geoBlocked: Besucher ip wird von der Laendersperre des Hosts abgewiesen (zaehlt mit).
 func (m *Module) geoBlocked(a *Advanced, ip netip.Addr) bool {
-	if a.GeoMode == "" {
+	return m.geoBlockedBy(a.GeoMode, a.GeoCountries, ip)
+}
+
+// geoBlockedBy: wie geoBlocked, fuer Modus und Laender eines Hosts oder Streams.
+func (m *Module) geoBlockedBy(mode string, countries []string, ip netip.Addr) bool {
+	if mode == "" {
 		return false
 	}
 	ip = ip.Unmap()
@@ -101,7 +110,7 @@ func (m *Module) geoBlocked(a *Advanced, ip netip.Addr) bool {
 		}
 	}
 	in, loaded := false, false
-	for _, c := range a.GeoCountries {
+	for _, c := range countries {
 		if s := g.sets[c]; s != nil {
 			loaded = true
 			if s.Has(ip) {
@@ -111,7 +120,7 @@ func (m *Module) geoBlocked(a *Advanced, ip netip.Addr) bool {
 		}
 	}
 	block := in
-	if a.GeoMode == geoAllow {
+	if mode == geoAllow {
 		block = loaded && !in
 	}
 	if block {
@@ -122,20 +131,42 @@ func (m *Module) geoBlocked(a *Advanced, ip netip.Addr) bool {
 
 // geoNeed merkt sich die Laender der eingeschalteten Hosts (bei jedem apply); fehlt eine Liste, wird geladen.
 func (m *Module) geoNeed(active []*Host) {
-	var need []string
+	var codes []string
 	for _, h := range active {
-		if h.Advanced.GeoMode == "" {
-			continue
+		if h.Advanced.GeoMode != "" {
+			codes = append(codes, h.Advanced.GeoCountries...)
 		}
-		for _, c := range h.Advanced.GeoCountries {
+	}
+	m.geoNeedFrom("hosts", codes)
+}
+
+// geoNeedStreams: dasselbe fuer die eingeschalteten Streams (bei jedem applyStreams).
+func (m *Module) geoNeedStreams(active []*Stream) {
+	var codes []string
+	for _, s := range active {
+		if s.GeoMode != "" {
+			codes = append(codes, s.GeoCountries...)
+		}
+	}
+	m.geoNeedFrom("streams", codes)
+}
+
+func (m *Module) geoNeedFrom(src string, codes []string) {
+	g := &m.bl.geo
+	g.mu.Lock()
+	if g.needBy == nil {
+		g.needBy = map[string][]string{}
+	}
+	g.needBy[src] = codes
+	var need []string
+	for _, list := range g.needBy {
+		for _, c := range list {
 			if !slices.Contains(need, c) {
 				need = append(need, c)
 			}
 		}
 	}
 	slices.Sort(need)
-	g := &m.bl.geo
-	g.mu.Lock()
 	g.need = need
 	missing := false
 	for _, c := range need {
@@ -183,6 +214,15 @@ func (m *Module) geoLoadCache(ctx context.Context) {
 			}
 		}
 		m.geoNeed(active)
+	}
+	if list, err := m.streams(ctx); err == nil {
+		var active []*Stream
+		for _, s := range list {
+			if s.Enabled {
+				active = append(active, s)
+			}
+		}
+		m.geoNeedStreams(active)
 	}
 	for _, c := range m.geoNeeded() {
 		p := filepath.Join(dir, "countries", c+".txt")

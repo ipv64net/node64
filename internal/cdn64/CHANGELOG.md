@@ -1,5 +1,11 @@
 # Änderungen – CDN64
 
+## 1.15.0 – 2026-10-19
+
+### Neu
+- Ländersperre auch für Streams (TCP und UDP): Länder sperren oder nur bestimmte zulassen, wie bei den Hosts. Eine
+  Änderung gilt sofort, ohne den Stream neu zu starten; bei UDP entscheidet das erste Paket eines Clients.
+
 ## 1.14.0 – 2026-10-19
 
 ### Neu

@@ -42,6 +42,10 @@ type Stream struct {
 	TLSCertID  int64     `json:"tls_cert_id"` // TCP: TLS hier beenden mit diesem Zertifikat (0 = nein)
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
+
+	// Laendersperre wie bei Hosts (geo.go): "" = aus, block, allow; aendern startet den Stream nicht neu
+	GeoMode      string   `json:"geo_mode,omitempty"`
+	GeoCountries []string `json:"geo_countries,omitempty"`
 }
 
 func (s *Stream) target() string { return net.JoinHostPort(s.TargetHost, strconv.Itoa(s.TargetPort)) }
@@ -79,7 +83,7 @@ func (s *Stream) normalize() error {
 	if s.TLSCertID < 0 || (s.TLSCertID > 0 && !s.TCP) {
 		return ferr("tls_cert_id", "cdn64.err.stream_tls")
 	}
-	return nil
+	return normalizeGeo(&s.GeoMode, &s.GeoCountries)
 }
 
 // claims: die Ports eines Streams.
@@ -100,13 +104,16 @@ func (s *Stream) claims(active map[string]bool) []ports.Claim {
 
 // ---------------------------------------------------------------- Datenbank
 
-const streamCols = `id, name, enabled, listen_port, tcp, udp, target_host, target_port, tls_cert_id, created_at, updated_at`
+const streamCols = `id, name, enabled, listen_port, tcp, udp, target_host, target_port, tls_cert_id, created_at, updated_at, geo_mode, geo_countries`
 
 func scanStream(row interface{ Scan(...any) error }) (*Stream, error) {
 	var s Stream
-	var ca, ua string
-	if err := row.Scan(&s.ID, &s.Name, &s.Enabled, &s.ListenPort, &s.TCP, &s.UDP, &s.TargetHost, &s.TargetPort, &s.TLSCertID, &ca, &ua); err != nil {
+	var ca, ua, geo string
+	if err := row.Scan(&s.ID, &s.Name, &s.Enabled, &s.ListenPort, &s.TCP, &s.UDP, &s.TargetHost, &s.TargetPort, &s.TLSCertID, &ca, &ua, &s.GeoMode, &geo); err != nil {
 		return nil, err
+	}
+	if geo != "" {
+		s.GeoCountries = strings.Split(geo, ",")
 	}
 	s.CreatedAt, s.UpdatedAt = store.ParseTime(ca), store.ParseTime(ua)
 	return &s, nil
@@ -163,17 +170,17 @@ func (m *Module) saveStream(ctx context.Context, s *Stream) error {
 	}
 	now := store.Now()
 	w := m.core.Writer()
-	args := []any{s.Name, s.Enabled, s.ListenPort, s.TCP, s.UDP, s.TargetHost, s.TargetPort, s.TLSCertID}
+	args := []any{s.Name, s.Enabled, s.ListenPort, s.TCP, s.UDP, s.TargetHost, s.TargetPort, s.TLSCertID, s.GeoMode, strings.Join(s.GeoCountries, ",")}
 	if s.ID == 0 {
-		res, err := w.ExecContext(ctx, `INSERT INTO cdn_streams (name, enabled, listen_port, tcp, udp, target_host, target_port, tls_cert_id, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
+		res, err := w.ExecContext(ctx, `INSERT INTO cdn_streams (name, enabled, listen_port, tcp, udp, target_host, target_port, tls_cert_id, geo_mode, geo_countries,
+			created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
 		if err != nil {
 			return err
 		}
 		s.ID, _ = res.LastInsertId()
 	} else {
 		res, err := w.ExecContext(ctx, `UPDATE cdn_streams SET name = ?, enabled = ?, listen_port = ?, tcp = ?, udp = ?, target_host = ?, target_port = ?,
-			tls_cert_id = ?, updated_at = ? WHERE id = ?`, append(args, now, s.ID)...)
+			tls_cert_id = ?, geo_mode = ?, geo_countries = ?, updated_at = ? WHERE id = ?`, append(args, now, s.ID)...)
 		if err != nil {
 			return err
 		}
@@ -230,6 +237,18 @@ type streamRun struct {
 	conns  map[net.Conn]struct{}
 	closed bool
 	wg     sync.WaitGroup
+
+	geo atomic.Pointer[Stream] // Laendersperre (GeoMode, GeoCountries), bei jedem Abgleich neu gesetzt
+}
+
+// streamGeoBlocked: Laendersperre des Streams; abgewiesen wird mit Statistik wie bei den Blocklisten.
+func (m *Module) streamGeoBlocked(r *streamRun, ip netip.Addr, where string) bool {
+	s := r.geo.Load()
+	if s == nil || !m.geoBlockedBy(s.GeoMode, s.GeoCountries, ip) {
+		return false
+	}
+	m.rejectConn(ip, rejGeo, where)
+	return true
 }
 
 func (r *streamRun) track(c net.Conn) bool {
@@ -291,13 +310,21 @@ func (m *Module) applyStreams(ctx context.Context) {
 			m.log.Error("streams not readable", "err", err)
 			return
 		}
+		var active []*Stream
 		for _, s := range list {
 			if s.Enabled {
 				want[s.ID] = s
+				active = append(active, s)
 			}
 		}
+		m.geoNeedStreams(active)
 	}
 	m.smu.Lock()
+	for id, r := range m.runs { // Laendersperre gilt ohne Neustart
+		if s, ok := want[id]; ok {
+			r.geo.Store(s)
+		}
+	}
 	var stop []*streamRun
 	for id, r := range m.runs {
 		if s, ok := want[id]; !ok || s.key() != r.key || len(r.errs) > 0 {
@@ -326,6 +353,7 @@ func (m *Module) applyStreams(ctx context.Context) {
 // startStream oeffnet die Ports eines Streams (Fehler je Protokoll, der Rest laeuft).
 func (m *Module) startStream(ctx context.Context, s *Stream) *streamRun {
 	r := &streamRun{key: s.key(), errs: map[string]string{}, stats: m.streamStatsOf(s.ID), conns: map[net.Conn]struct{}{}}
+	r.geo.Store(s)
 	addr := ":" + strconv.Itoa(s.ListenPort)
 	check := func(p ports.Proto) error {
 		if m.ports == nil {
@@ -382,7 +410,7 @@ func (m *Module) serveTCP(r *streamRun, target string) {
 		}
 		_, lport, _ := net.SplitHostPort(c.LocalAddr().String())
 		where := "stream :" + lport
-		if ip := netAddr(c.RemoteAddr()); m.connBlocked(ip, where) { // ipv64-Blocklisten, Sperre
+		if ip := netAddr(c.RemoteAddr()); m.connBlocked(ip, where) || m.streamGeoBlocked(r, ip, where) { // ipv64-Blocklisten, Sperre, Laender
 			_ = c.Close()
 			continue
 		}
@@ -466,7 +494,8 @@ func (m *Module) serveUDP(r *streamRun, target string) {
 		key := addr.String()
 		mu.Lock()
 		s := sessions[key]
-		if s == nil && m.connBlocked(netAddr(addr), "stream udp "+r.udp.LocalAddr().String()[strings.LastIndex(r.udp.LocalAddr().String(), ":"):]) { // ipv64-Blocklisten, Sperre: keine Sitzung
+		if where := "stream udp " + r.udp.LocalAddr().String()[strings.LastIndex(r.udp.LocalAddr().String(), ":"):]; s == nil &&
+			(m.connBlocked(netAddr(addr), where) || m.streamGeoBlocked(r, netAddr(addr), where)) { // ipv64-Blocklisten, Sperre, Laender: keine Sitzung
 			mu.Unlock()
 			continue
 		}

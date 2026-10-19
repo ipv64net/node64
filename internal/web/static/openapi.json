@@ -2274,6 +2274,24 @@
           "tls_cert_id": {
             "type": "integer",
             "description": "TCP: TLS hier beenden mit diesem Zertifikat, 0 = roh"
+          },
+          "geo_mode": {
+            "type": "string",
+            "enum": [
+              "",
+              "block",
+              "allow"
+            ],
+            "description": "Ländersperre wie bei Hosts (advanced.geo_mode); ändern startet den Stream nicht neu"
+          },
+          "geo_countries": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$"
+            },
+            "maxItems": 60,
+            "description": "ISO-Ländercodes, z. B. [\"DE\",\"AT\"]"
           }
         }
       },
@@ -2348,6 +2366,24 @@
           },
           "cert_name": {
             "type": "string"
+          },
+          "geo_mode": {
+            "type": "string",
+            "enum": [
+              "",
+              "block",
+              "allow"
+            ],
+            "description": "Ländersperre wie bei Hosts (advanced.geo_mode); ändern startet den Stream nicht neu"
+          },
+          "geo_countries": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$"
+            },
+            "maxItems": 60,
+            "description": "ISO-Ländercodes, z. B. [\"DE\",\"AT\"]"
           }
         }
       },

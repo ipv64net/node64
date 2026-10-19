@@ -108,10 +108,16 @@ type streamForm struct {
 	New    bool
 	Certs  []*certs.Cert
 	Errors map[string]string
+
+	GeoText   string       // Laender der Laendersperre (Komma)
+	Countries []geoCountry // Auswahl aus index.json
 }
 
 func (m *Module) streamFormData(ctx context.Context, s *Stream, isNew bool) streamForm {
-	d := streamForm{Tabs: tabs("/cdn64/streams"), S: s, New: isNew, Errors: map[string]string{}}
+	d := streamForm{Tabs: tabs("/cdn64/streams"), S: s, New: isNew, Errors: map[string]string{}, GeoText: strings.Join(s.GeoCountries, ", ")}
+	m.bl.mu.Lock()
+	d.Countries = m.bl.countries
+	m.bl.mu.Unlock()
 	if m.certs != nil {
 		d.Certs, _ = m.certs.List(ctx)
 	}
@@ -149,10 +155,14 @@ func streamFromForm(r *http.Request, s *Stream) {
 	s.TargetHost = strings.TrimSpace(r.PostFormValue("target_host"))
 	s.TargetPort, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("target_port")))
 	s.TLSCertID, _ = strconv.ParseInt(r.PostFormValue("tls_cert_id"), 10, 64)
+	if r.PostFormValue("has_geo") == "1" { // Laendersperre war im Formular
+		s.GeoMode, s.GeoCountries = r.PostFormValue("geo_mode"), lines(r.PostFormValue("geo_countries"))
+	}
 }
 
 func (s *Stream) summary() string {
-	return fmt.Sprintf("listen=%d tcp=%v udp=%v target=%s tls_cert=%d enabled=%v", s.ListenPort, s.TCP, s.UDP, s.target(), s.TLSCertID, s.Enabled)
+	return fmt.Sprintf("listen=%d tcp=%v udp=%v target=%s tls_cert=%d enabled=%v geo=%s:%s", s.ListenPort, s.TCP, s.UDP, s.target(), s.TLSCertID, s.Enabled,
+		s.GeoMode, strings.Join(s.GeoCountries, ","))
 }
 
 func (m *Module) pageStreamCreate(w http.ResponseWriter, r *http.Request) {

@@ -1,5 +1,11 @@
 # Changes – CDN64
 
+## 1.15.0 – 2026-10-19
+
+### New
+- Country block for streams too (TCP and UDP): block countries or allow only certain ones, as for hosts. A change
+  applies immediately without restarting the stream; for UDP the first packet of a client decides.
+
 ## 1.14.0 – 2026-10-19
 
 ### New

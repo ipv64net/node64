@@ -176,3 +176,53 @@ func TestIndexAndGeoLoaded(t *testing.T) {
 		t.Fatal("cache")
 	}
 }
+
+// Stream: Laendersperre gespeichert, beim Abgleich ohne Neustart uebernommen, abgewiesen nach Land.
+func TestStreamGeo(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.enable(t)
+	e.m.bl.geo.put("DE", []netip.Prefix{netip.MustParsePrefix("5.1.0.0/16")}, time.Now())
+	s := newStream()
+	s.ListenPort, s.TargetHost, s.TargetPort = freePort(t), "127.0.0.1", echoTCP(t)
+	s.GeoMode, s.GeoCountries = geoBlock, []string{"de", "DE"}
+	if err := e.m.saveStream(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.m.stream(ctx, s.ID)
+	if err != nil || got.GeoMode != geoBlock || !slices.Equal(got.GeoCountries, []string{"DE"}) {
+		t.Fatalf("saved: %+v %v", got, err)
+	}
+	e.m.smu.Lock()
+	r := e.m.runs[s.ID]
+	e.m.smu.Unlock()
+	if r == nil || r.tcp == nil {
+		t.Fatal("stream not running")
+	}
+	de, us := netip.MustParseAddr("5.1.2.3"), netip.MustParseAddr("8.8.8.8")
+	if !e.m.streamGeoBlocked(r, de, "stream") || e.m.streamGeoBlocked(r, us, "stream") || e.m.streamGeoBlocked(r, netip.MustParseAddr("127.0.0.1"), "stream") {
+		t.Fatal("block")
+	}
+	if !slices.Contains(e.m.geoNeeded(), "DE") {
+		t.Fatal("DE not needed")
+	}
+	// auf "nur DE" umstellen: gleicher Lauf, neue Regel
+	got.GeoMode = geoAllow
+	if err := e.m.saveStream(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	e.m.smu.Lock()
+	r2 := e.m.runs[s.ID]
+	e.m.smu.Unlock()
+	if r2 != r {
+		t.Fatal("stream restarted for a geo change")
+	}
+	if e.m.streamGeoBlocked(r, de, "stream") || !e.m.streamGeoBlocked(r, us, "stream") {
+		t.Fatal("allow")
+	}
+	bad := *got
+	bad.GeoCountries = []string{"Deutschland"}
+	if err := e.m.saveStream(ctx, &bad); err == nil {
+		t.Fatal("bad country accepted")
+	}
+}
