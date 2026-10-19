@@ -269,6 +269,9 @@ func (s *Server) nav(r *http.Request) []NavItem {
 	if s.Certs != nil {
 		items = append(items, NavItem{Key: "nav.certificates", Path: "/certificates", Icon: "bi-shield-lock", Available: true, Enabled: true})
 	}
+	if s.Peer != nil {
+		items = append(items, NavItem{Key: "nav.cluster", Path: "/cluster", Icon: "bi-hdd-network", Available: true, Enabled: true})
+	}
 	items = append(items,
 		NavItem{Key: "nav.notifications", Path: "/notifications", Icon: "bi-bell", Available: true, Enabled: s.Notify != nil},
 		NavItem{Key: "nav.settings", Path: "/settings", Icon: "bi-gear", Available: true, Enabled: true},

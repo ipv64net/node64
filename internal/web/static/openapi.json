@@ -19,8 +19,8 @@
       "description": "Kern: belegte Ports, gemeinsamer Eingang für HTTP/HTTPS (80/443, HTTP/3) und die Zertifikatsverwaltung (Let's Encrypt über ipv64, Alias per CNAME, HTTP-01, eigene Zertifikate)."
     },
     {
-      "name": "Lokale Gruppe",
-      "description": "Nodes desselben ipv64-Accounts im lokalen Netz"
+      "name": "Cluster",
+      "description": "Nodes mit demselben ipv64-Account oder alle ohne Account, Abgleich je Modul und Bereich über HTTPS (früher „Lokale Gruppe“)"
     },
     {
       "name": "Verknüpfung",
@@ -7358,9 +7358,9 @@
     "/group": {
       "get": {
         "tags": [
-          "Lokale Gruppe"
+          "Cluster"
         ],
-        "summary": "Mitglieder, weiterreichende Node, offener Code",
+        "summary": "Mitglieder mit Zustand, weiterreichende Node, offener Code, Schalter des Abgleichs",
         "responses": {
           "200": {
             "description": "Gruppe",
@@ -7424,9 +7424,75 @@
                           "added_at": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "suspended"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "description": "Grund der Aussetzung: account_changed, account_mismatch, identity_changed, tls_binding, version_too_old"
+                          },
+                          "sync": {
+                            "type": [
+                              "array",
+                              "null"
+                            ],
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "dort eingeschaltete Bereiche „modul/bereich“; null = ältere Version ohne Angabe"
                           }
                         }
                       }
+                    },
+                    "sync_modules": {
+                      "type": "array",
+                      "description": "abgleichbare Module mit Schaltern auf dieser Node",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "example": "healthchecks"
+                          },
+                          "title_key": {
+                            "type": "string"
+                          },
+                          "available": {
+                            "type": "boolean",
+                            "description": "Modul läuft auf dieser Node"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "title_key": {
+                                  "type": "string",
+                                  "description": "i18n-Schlüssel des Titels"
+                                },
+                                "enabled": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "https_port": {
+                      "type": "integer",
+                      "description": "HTTPS-Port dieser Node, 0 = aus (der Cluster läuft nur über HTTPS)"
                     }
                   }
                 }
@@ -7439,7 +7505,7 @@
     "/group/code": {
       "post": {
         "tags": [
-          "Lokale Gruppe"
+          "Cluster"
         ],
         "summary": "Kopplungscode für eine weitere Node (10 min, einmal gültig)",
         "responses": {
@@ -7476,7 +7542,7 @@
       },
       "delete": {
         "tags": [
-          "Lokale Gruppe"
+          "Cluster"
         ],
         "summary": "Offenen Code verwerfen",
         "responses": {
@@ -7489,7 +7555,7 @@
     "/group/join": {
       "post": {
         "tags": [
-          "Lokale Gruppe"
+          "Cluster"
         ],
         "summary": "Einer Gruppe beitreten",
         "requestBody": {
@@ -7578,9 +7644,75 @@
                           "added_at": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "suspended"
+                            ]
+                          },
+                          "reason": {
+                            "type": "string",
+                            "description": "Grund der Aussetzung: account_changed, account_mismatch, identity_changed, tls_binding, version_too_old"
+                          },
+                          "sync": {
+                            "type": [
+                              "array",
+                              "null"
+                            ],
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "dort eingeschaltete Bereiche „modul/bereich“; null = ältere Version ohne Angabe"
                           }
                         }
                       }
+                    },
+                    "sync_modules": {
+                      "type": "array",
+                      "description": "abgleichbare Module mit Schaltern auf dieser Node",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "example": "healthchecks"
+                          },
+                          "title_key": {
+                            "type": "string"
+                          },
+                          "available": {
+                            "type": "boolean",
+                            "description": "Modul läuft auf dieser Node"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "title_key": {
+                                  "type": "string",
+                                  "description": "i18n-Schlüssel des Titels"
+                                },
+                                "enabled": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "https_port": {
+                      "type": "integer",
+                      "description": "HTTPS-Port dieser Node, 0 = aus (der Cluster läuft nur über HTTPS)"
                     }
                   }
                 }
@@ -7633,7 +7765,7 @@
     "/group/leave": {
       "post": {
         "tags": [
-          "Lokale Gruppe"
+          "Cluster"
         ],
         "summary": "Gruppe verlassen (die anderen erfahren es)",
         "responses": {
@@ -7646,7 +7778,7 @@
     "/group/members/{id}": {
       "put": {
         "tags": [
-          "Lokale Gruppe"
+          "Cluster"
         ],
         "summary": "Adresse eines Mitglieds ändern",
         "parameters": [
@@ -7702,7 +7834,7 @@
       },
       "delete": {
         "tags": [
-          "Lokale Gruppe"
+          "Cluster"
         ],
         "summary": "Mitglied aus der Gruppe nehmen",
         "parameters": [
@@ -7721,6 +7853,170 @@
           },
           "502": {
             "description": "fehlgeschlagen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group/members/{id}/resume": {
+      "post": {
+        "tags": [
+          "Cluster"
+        ],
+        "summary": "Ausgesetztes Mitglied wieder aufnehmen (prüft erneut; passt es nicht, bleibt es ausgesetzt)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "wieder aufgenommen"
+          },
+          "404": {
+            "description": "unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "passt weiterhin nicht, bleibt ausgesetzt (Grund in GET /group)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Node nicht erreichbar oder Prüfung fehlgeschlagen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group/sync": {
+      "put": {
+        "tags": [
+          "Cluster"
+        ],
+        "summary": "Abgleich eines Moduls oder Bereichs ein-/ausschalten (gilt nur, wenn der Bereich auf beiden Nodes an ist)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "module",
+                  "enabled"
+                ],
+                "properties": {
+                  "module": {
+                    "type": "string",
+                    "example": "certs"
+                  },
+                  "item": {
+                    "type": "string",
+                    "example": "certificates",
+                    "description": "leer = das Modul"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "neue Schalter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sync_modules": {
+                      "type": "array",
+                      "description": "abgleichbare Module mit Schaltern auf dieser Node",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "example": "healthchecks"
+                          },
+                          "title_key": {
+                            "type": "string"
+                          },
+                          "available": {
+                            "type": "boolean",
+                            "description": "Modul läuft auf dieser Node"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "title_key": {
+                                  "type": "string",
+                                  "description": "i18n-Schlüssel des Titels"
+                                },
+                                "enabled": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Modul oder Bereich unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "module oder enabled fehlt",
             "content": {
               "application/json": {
                 "schema": {

@@ -40,6 +40,8 @@ func (s *Server) apiLinkRoutes() {
 	s.mux.Handle("POST /api/group/leave", s.auth(s.apiGroupLeave))
 	s.mux.Handle("PUT /api/group/members/{id}", s.auth(s.apiGroupMemberURL))
 	s.mux.Handle("DELETE /api/group/members/{id}", s.auth(s.apiGroupMemberRemove))
+	s.mux.Handle("POST /api/group/members/{id}/resume", s.auth(s.apiGroupMemberResume))
+	s.mux.Handle("PUT /api/group/sync", s.auth(s.apiGroupSync))
 	s.mux.Handle("GET /api/logging", s.auth(s.apiLoggingGet))
 	s.mux.Handle("PUT /api/logging", s.auth(s.apiLoggingPut))
 	s.mux.Handle("GET /api/retention", s.auth(s.apiRetentionGet))
@@ -267,7 +269,7 @@ func (s *Server) apiIPv64KeyDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ---------------------------------------------------------------- lokale Gruppe
+// ---------------------------------------------------------------- Cluster (frueher lokale Gruppe)
 
 func (s *Server) apiGroupGet(w http.ResponseWriter, r *http.Request) {
 	if s.Peer == nil {
@@ -278,11 +280,17 @@ func (s *Server) apiGroupGet(w http.ResponseWriter, r *http.Request) {
 	list, _ := s.Peer.Members(ctx)
 	members := make([]map[string]any, 0, len(list))
 	for _, x := range list {
+		state := x.State
+		if state == "" {
+			state = "active"
+		}
 		members = append(members, map[string]any{"node_id": x.NodeID, "name": x.Name, "url": x.URL, "online": x.Online(), "linked": x.Linked,
-			"version": x.Version, "last_seen": x.LastSeen, "last_error": x.LastError, "added_at": x.AddedAt})
+			"version": x.Version, "last_seen": x.LastSeen, "last_error": x.LastError, "added_at": x.AddedAt,
+			"state": state, "reason": x.Reason, "sync": x.Sync})
 	}
 	_, fwd, fwdSelf := s.Peer.Forwarder(ctx)
-	out := map[string]any{"account_id": s.Peer.Account(), "linked": s.Peer.LinkedSelf(), "members": members, "forwarder": fwd, "forwarder_self": fwdSelf}
+	out := map[string]any{"account_id": s.Peer.Account(), "linked": s.Peer.LinkedSelf(), "members": members, "forwarder": fwd, "forwarder_self": fwdSelf,
+		"sync_modules": s.Peer.SyncModules(ctx), "https_port": s.Cfg.HTTPSPort}
 	if code, exp := s.Peer.PairingCode(); code != "" {
 		out["code"], out["code_expires"] = code, exp
 	}
@@ -414,6 +422,61 @@ func (s *Server) apiGroupMemberRemove(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "peer.remove", r.PathValue("id"), "")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// apiGroupMemberResume nimmt ein ausgesetztes Mitglied wieder auf (passt es weiterhin nicht, bleibt es ausgesetzt).
+func (s *Server) apiGroupMemberResume(w http.ResponseWriter, r *http.Request) {
+	if s.Peer == nil {
+		writeErr(w, http.StatusServiceUnavailable, "not available")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	if err := s.Peer.Resume(ctx, r.PathValue("id")); err != nil {
+		if errors.Is(err, peer.ErrUnknownMember) {
+			writeErr(w, http.StatusNotFound, err.Error())
+			return
+		}
+		if s.suspendedMember(r.Context(), r.PathValue("id")) != nil { // passt weiterhin nicht
+			writeErr(w, http.StatusConflict, err.Error())
+			return
+		}
+		writeErr(w, s.groupErrStatus(err), err.Error())
+		return
+	}
+	s.audit(r, "peer.resume", r.PathValue("id"), "")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// apiGroupSync schaltet ein Modul (item leer) oder einen Bereich des Abgleichs.
+func (s *Server) apiGroupSync(w http.ResponseWriter, r *http.Request) {
+	if s.Peer == nil {
+		writeErr(w, http.StatusServiceUnavailable, "not available")
+		return
+	}
+	var in struct {
+		Module  string `json:"module"`
+		Item    string `json:"item"` // leer = das Modul
+		Enabled *bool  `json:"enabled"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if in.Module == "" || in.Enabled == nil {
+		writeErr(w, http.StatusUnprocessableEntity, "module and enabled are required")
+		return
+	}
+	if err := s.Peer.SetSync(r.Context(), in.Module, in.Item, *in.Enabled); err != nil {
+		if errors.Is(err, peer.ErrUnknownSync) {
+			writeErr(w, http.StatusNotFound, err.Error())
+			return
+		}
+		s.log.Error("cluster sync", "err", err)
+		writeErr(w, 500, "database error")
+		return
+	}
+	s.audit(r, "peer.sync", syncTarget(in.Module, in.Item), "enabled="+strconv.FormatBool(*in.Enabled))
+	writeJSON(w, 200, map[string]any{"sync_modules": s.Peer.SyncModules(r.Context())})
 }
 
 // ---------------------------------------------------------------- Log-Level und Datenhaltung

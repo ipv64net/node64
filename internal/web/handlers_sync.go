@@ -39,7 +39,14 @@ type linkData struct {
 	KeyOK      bool                   // Key hinterlegt: Verknuepfen mit einem Klick
 	Location   string                 // Vorgabe Standort
 	Mismatch   bool                   // Key gehoert zu einem anderen Account als die Verknuepfung
-	Group      groupData              // lokale Gruppe (handlers_peer.go)
+	Cluster    clusterHint            // Hinweis auf den Cluster (handlers_peer.go)
+}
+
+// clusterHint: Healthchecks auch ueber den Cluster abgleichen (Schalter), Mitglieder.
+type clusterHint struct {
+	Available bool
+	HC        bool
+	Members   int
 }
 
 type conflictRow struct {
@@ -71,7 +78,16 @@ func (s *Server) linkPage(w http.ResponseWriter, r *http.Request) {
 		d.Mismatch = d.State.Linked && d.Key.ID != 0 && d.State.AccountID != "" && d.State.AccountID != strconv.Itoa(d.Key.ID)
 	}
 	d.Location = s.Store.SettingOr(r.Context(), SettingNodeLocation, "")
-	d.Group = s.groupView(r)
+	if s.Peer != nil {
+		d.Cluster.Available = true
+		for _, m := range s.Peer.SyncModules(r.Context()) {
+			if m.ID == "healthchecks" {
+				d.Cluster.HC = m.Enabled
+			}
+		}
+		list, _ := s.Peer.Members(r.Context())
+		d.Cluster.Members = len(list)
+	}
 	if s.HC != nil && d.State.Linked {
 		d.Peers = s.HC.Peers(r.Context())
 		d.Own, d.Other = s.HC.LinkScope(r.Context())

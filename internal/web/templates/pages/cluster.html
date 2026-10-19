@@ -1,0 +1,102 @@
+{{define "content"}}
+{{$g := .Data}}
+<h1 class="h4 mb-3"><i class="bi bi-hdd-network text-primary me-1"></i> {{.T "cluster.title"}}{{$.Doc "cluster"}}</h1>
+<p class="text-body-secondary small">{{.T "cluster.intro"}}</p>
+{{if not $g.HTTPSPort}}<div class="alert alert-warning py-2 small"><i class="bi bi-exclamation-triangle"></i> {{.T "cluster.https_off"}} <a href="/settings#ports">{{.T "cluster.https_link"}}</a>{{$.Doc "cluster#https"}}</div>{{end}}
+
+<div class="row g-3">
+<div class="col-lg-7">
+	<div class="card mb-3" id="members">
+		<div class="card-header"><i class="bi bi-diagram-3 text-primary"></i> {{.T "cluster.members"}}{{$.Doc "cluster#mitglieder"}}{{if $g.Members}} <span class="badge text-bg-secondary">{{len $g.Members}}</span>{{end}}</div>
+		<div class="card-body small">
+			<p class="text-body-secondary mb-2"><i class="bi bi-person-badge"></i> {{if $g.Account}}{{.T "cluster.account_self" "account" $g.Account}}{{else}}{{.T "cluster.account_none"}}{{end}} {{.T "cluster.account_rule"}}</p>
+			{{if $g.Members}}
+			<ul class="list-unstyled mb-3">
+				<li><i class="bi bi-bell text-primary"></i> {{.T "cluster.how_notify"}}</li>
+				<li><i class="bi bi-cloud-arrow-up text-primary"></i> {{if not $g.Forwarder}}{{.T "cluster.fwd_none"}}{{else if $g.FwdSelf}}{{.T "cluster.fwd_self"}}{{else}}{{.T "cluster.fwd_other" "name" $g.Forwarder}}{{end}}</li>
+			</ul>
+			<ul class="list-group mb-0">{{range $g.Members}}
+				<li class="list-group-item">
+					<div class="d-flex align-items-center gap-2 flex-wrap">
+						{{if .Suspended}}<span class="badge text-bg-warning">{{$.T "cluster.suspended"}}</span>{{else if .Online}}<span class="badge text-bg-success">online</span>{{else if .LastError}}<span class="badge text-bg-danger">{{$.T "cluster.error"}}</span>{{else}}<span class="badge text-bg-secondary">offline</span>{{end}}
+						<span class="fw-semibold">{{.Name}}</span>{{if .Version}}<span class="text-body-secondary">{{.Version}}</span>{{end}}
+						{{if .Linked}}<span class="badge text-bg-light" title="{{$.T "cluster.linked_hint"}}"><i class="bi bi-cloud-check"></i> ipv64</span>{{end}}
+						<form method="post" action="/cluster/{{.NodeID}}/remove" class="ms-auto m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" data-confirm="{{$.T "cluster.remove_confirm" "name" .Name}}" title="{{$.T "cluster.remove"}}"><i class="bi bi-x-lg"></i></button></form>
+					</div>
+					{{if .Suspended}}
+					<div class="alert alert-warning py-2 mt-2 mb-1">
+						<div>{{if .Reason}}{{$.T (print "cluster.reason." .Reason)}}{{else}}{{$.T "cluster.reason_unknown"}}{{end}}{{$.Doc "cluster#aussetzen"}}</div>
+						<form method="post" action="/cluster/{{.NodeID}}/resume" class="mt-1"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-primary"><i class="bi bi-play-circle"></i> {{$.T "cluster.resume"}}</button></form>
+					</div>
+					{{end}}
+					<form method="post" action="/cluster/{{.NodeID}}/url" class="input-group input-group-sm mt-1"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input class="form-control font-monospace" name="url" value="{{.URL}}" aria-label="URL"><button class="btn btn-outline-secondary" title="{{$.T "common.save"}}"><i class="bi bi-check-lg"></i></button></form>
+					<div class="mt-1">{{if .NoSync}}<span class="text-body-secondary">{{$.T "cluster.areas_unknown"}}</span>{{else if not .Areas}}<span class="text-body-secondary">{{$.T "cluster.areas_none"}}</span>{{else}}<span class="text-body-secondary">{{$.T "cluster.areas"}}</span> {{range .Areas}}<span class="badge {{if .Both}}text-bg-success{{else}}text-bg-light{{end}}"{{if not .Both}} title="{{$.T "cluster.area_off_here"}}"{{end}}>{{$.T .Key}}</span> {{end}}{{end}}</div>
+					{{if .LastError}}<div class="text-danger mt-1">{{.LastError}}</div>{{else if not .LastSeen.IsZero}}<div class="text-body-secondary mt-1">{{$.T "cluster.seen"}} {{$.Ago .LastSeen}}</div>{{end}}
+				</li>{{end}}
+			</ul>
+			{{else}}
+			<p class="text-body-secondary mb-0">{{.T "cluster.empty"}}</p>
+			{{end}}
+		</div>
+	</div>
+
+	<div class="card mb-3" id="sync">
+		<div class="card-header"><i class="bi bi-arrow-left-right text-primary"></i> {{.T "cluster.sync_title"}}{{$.Doc "cluster#abgleich"}}</div>
+		<div class="card-body small">
+			<p class="text-body-secondary">{{.T "cluster.sync_hint"}}</p>
+			{{range $m := $g.Modules}}
+			<div class="border rounded p-2 mb-2{{if not $m.Available}} opacity-50{{end}}">
+				<form method="post" action="/cluster/sync" class="form-check form-switch mb-1">
+					<input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="module" value="{{$m.ID}}">
+					<input class="form-check-input" type="checkbox" role="switch" name="enabled" id="sync_{{$m.ID}}"{{if $m.Enabled}} checked{{end}}{{if not $m.Available}} disabled{{end}} data-autosubmit>
+					<label class="form-check-label fw-semibold" for="sync_{{$m.ID}}">{{$.T $m.TitleKey}}</label>
+					{{if not $m.Available}}<span class="text-body-secondary ms-1">{{$.T "cluster.mod_unavailable"}}</span>{{end}}
+				</form>
+				<div class="ms-4">{{range $m.Items}}
+					<form method="post" action="/cluster/sync" class="form-check form-switch mb-0">
+						<input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="module" value="{{$m.ID}}"><input type="hidden" name="item" value="{{.ID}}">
+						<input class="form-check-input" type="checkbox" role="switch" name="enabled" id="sync_{{$m.ID}}_{{.ID}}"{{if .Enabled}} checked{{end}}{{if or (not $m.Available) (not $m.Enabled)}} disabled{{end}} data-autosubmit>
+						<label class="form-check-label" for="sync_{{$m.ID}}_{{.ID}}">{{$.T .TitleKey}}</label>
+					</form>{{end}}
+				</div>
+			</div>
+			{{end}}
+		</div>
+	</div>
+</div>
+<div class="col-lg-5">
+	<div class="card mb-3" id="add">
+		<div class="card-header"><i class="bi bi-plus-circle text-primary"></i> {{.T "cluster.add_title"}}{{$.Doc "cluster#aufnehmen"}}</div>
+		<div class="card-body small">
+			{{if $g.Code}}
+			<div class="alert alert-info py-2 mb-2">{{.T "cluster.code_intro"}}
+				<div class="fs-3 font-monospace my-1">{{slice $g.Code 0 4}}-{{slice $g.Code 4}} <button class="btn btn-outline-secondary btn-sm btn-copy align-middle" type="button" data-copy-text="{{$g.Code}}" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
+				<div>{{.T "cluster.code_addr"}} <code>{{$g.SelfURL}}</code></div>
+				<div class="text-body-secondary">{{.T "cluster.code_valid"}} {{.Time $g.CodeExp}}</div></div>
+			<form method="post" action="/cluster/code"><input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="cancel" value="1"><button class="btn btn-outline-secondary btn-sm">{{.T "common.cancel"}}</button></form>
+			{{else}}
+			<p class="text-body-secondary mb-1">{{.T "cluster.add_hint"}}</p>
+			<form method="post" action="/cluster/code"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-primary btn-sm"><i class="bi bi-plus-lg"></i> {{.T "cluster.add"}}</button></form>
+			{{end}}
+		</div>
+	</div>
+	<div class="card mb-3" id="join">
+		<div class="card-header"><i class="bi bi-box-arrow-in-right text-primary"></i> {{.T "cluster.join_title"}}{{$.Doc "cluster#beitreten"}}</div>
+		<div class="card-body small">
+			<form method="post" action="/cluster/join">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<label class="form-label mb-0" for="g_addr">{{.T "cluster.addr"}}</label>
+				<input class="form-control form-control-sm font-monospace mb-1" id="g_addr" name="addr" placeholder="https://192.168.1.20:8443" required>
+				<label class="form-label mb-0" for="g_code">{{.T "cluster.code"}}</label>
+				<input class="form-control form-control-sm font-monospace mb-1" id="g_code" name="code" placeholder="ABCD-EFGH" autocomplete="off" required>
+				<label class="form-label mb-0" for="g_self">{{.T "cluster.self_url"}}</label>
+				<input class="form-control form-control-sm font-monospace mb-1" id="g_self" name="self_url" value="{{$g.SelfURL}}" required>
+				<div class="form-text mb-2">{{.T "cluster.self_url_hint"}}</div>
+				<button class="btn btn-primary btn-sm"><i class="bi bi-box-arrow-in-right"></i> {{.T "cluster.join"}}</button>
+			</form>
+		</div>
+	</div>
+	{{if $g.Members}}<form method="post" action="/cluster/leave" class="mb-3"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-danger btn-sm" data-confirm="{{.T "cluster.leave_confirm"}}"><i class="bi bi-box-arrow-right"></i> {{.T "cluster.leave"}}</button></form>{{end}}
+</div>
+</div>
+{{end}}
