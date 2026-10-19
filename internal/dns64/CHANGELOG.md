@@ -6,7 +6,10 @@
 - Prometheus: Anfragen je Ergebnis und Protokoll, Antwortzeiten, abgewiesene Anfragen, Cache, Blocklisten,
   Zustand und Fehler je Upstream sowie Pause unter `GET /api/metrics` (siehe docs/PROMETHEUS.md).
 
-## 1.13.1 – 2026-10-19
+## 1.14.0 – 2026-10-19
+
+### Neu
+- Konfiguration exportieren/importieren: Das Zertifikat aus der Zertifikatsverwaltung wird mitgenommen und auf der neuen Node zugeordnet (Export mit Passwort, der die Zertifikate enthält).
 
 ### Behoben
 - Übersicht: Zeitverlauf, Top-Clients und Top-Domains blieben leer (Fehler „disk I/O error“), sobald das Abfrage-Log groß genug war, dass SQLite beim Sortieren Zwischendateien anlegen wollte. Im Container gibt es dafür kein Verzeichnis; Zwischenergebnisse bleiben jetzt im Speicher.

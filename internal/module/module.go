@@ -110,6 +110,21 @@ type Resetter interface {
 
 type channelMapKey struct{}
 
+type certMapKey struct{}
+
+// WithCertMap: beim Import die Zuordnung Zertifikat-ID der Datei -> Zertifikat-ID dieser Node.
+func WithCertMap(ctx context.Context, m map[int64]int64) context.Context {
+	return context.WithValue(ctx, certMapKey{}, m)
+}
+
+// MapCert setzt eine Zertifikat-ID aus einer importierten Datei auf diese Node um; ok = false, wenn die Datei keine
+// Zertifikate enthielt oder die ID unbekannt ist (dann z. B. automatisch waehlen).
+func MapCert(ctx context.Context, id int64) (int64, bool) {
+	m, _ := ctx.Value(certMapKey{}).(map[int64]int64)
+	n, ok := m[id]
+	return n, ok && id != 0
+}
+
 // WithChannelMap: beim Import die Zuordnung Kanal-ID der Datei -> Kanal-ID dieser Node (fuer Import).
 func WithChannelMap(ctx context.Context, m map[int64]int64) context.Context {
 	return context.WithValue(ctx, channelMapKey{}, m)

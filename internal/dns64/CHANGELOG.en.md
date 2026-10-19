@@ -6,7 +6,10 @@
 - Prometheus: queries per result and protocol, response times, refused queries, cache, blocklists, state and
   errors per upstream, and pause at `GET /api/metrics` (see docs/PROMETHEUS.md).
 
-## 1.13.1 – 2026-10-19
+## 1.14.0 – 2026-10-19
+
+### New
+- Configuration export/import: the certificate from the certificate management is carried along and assigned on the new node (export with password, which contains the certificates).
 
 ### Fixed
 - Overview: timeline, top clients and top domains stayed empty (error "disk I/O error") once the query log was large enough for SQLite to want temporary files while sorting. The container has no directory for them; intermediate results now stay in memory.

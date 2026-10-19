@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/crypto/argon2"
 
+	"github.com/ipv64net/node64/internal/certs"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/secrets"
@@ -243,6 +244,7 @@ type configFile struct {
 	Secrets    *configSecrets             `json:"secrets,omitempty"`
 	Settings   map[string]string          `json:"settings"`
 	Channels   []configChannel            `json:"channels"`
+	Certs      string                     `json:"certs,omitempty"` // Zertifikatsverwaltung, nur mit Passwort (verschluesselt)
 	Modules    map[string]json.RawMessage `json:"modules"`
 }
 
@@ -316,6 +318,18 @@ func (s *Server) buildExport(ctx context.Context, mode, password string) (*confi
 		cf.Secrets = &configSecrets{Mode: "password", Salt: base64.StdEncoding.EncodeToString(salt)}
 	} else {
 		cf.Secrets = &configSecrets{Mode: "none"}
+	}
+	// Zertifikate mit Schluesseln nur verschluesselt (ohne Passwort fehlen sie im Export)
+	if box != nil && s.Certs != nil {
+		b, err := s.Certs.ExportAll(ctx)
+		if err != nil {
+			return nil, err
+		}
+		raw, err := json.Marshal(b)
+		if err != nil {
+			return nil, err
+		}
+		cf.Certs = box.Encrypt(string(raw))
 	}
 	if s.Notify != nil {
 		chans, err := s.Notify.Channels(ctx)
@@ -424,6 +438,14 @@ func (s *Server) applyImport(ctx context.Context, raw []byte, password string) (
 			plain[i][k] = val
 		}
 	}
+	plainCerts := ""
+	if cf.Certs != "" && box != nil {
+		p, err := box.Decrypt(cf.Certs)
+		if err != nil {
+			return 0, nil, errPasswordWrong
+		}
+		plainCerts = p
+	}
 	for k, val := range cf.Settings {
 		allowed := false
 		for _, x := range exportedSettings {
@@ -474,6 +496,30 @@ func (s *Server) applyImport(ctx context.Context, raw []byte, password string) (
 	}
 	if len(chMap) > 0 {
 		ctx = module.WithChannelMap(ctx, chMap)
+	}
+	if cf.Certs != "" {
+		switch {
+		case box == nil:
+			problems = append(problems, "certificates: "+errPasswordNeeded.Error())
+		case s.Certs == nil:
+			problems = append(problems, "certificates: not available on this node")
+		default:
+			var cb certs.Backup
+			if err := json.Unmarshal([]byte(plainCerts), &cb); err != nil {
+				problems = append(problems, "certificates: "+err.Error())
+				break
+			}
+			res, err := s.Certs.ImportAll(ctx, &cb)
+			if res != nil {
+				for _, n := range res.Added {
+					count += n
+				}
+				ctx = module.WithCertMap(ctx, res.CertIDs)
+			}
+			if err != nil {
+				problems = append(problems, "certificates: "+err.Error())
+			}
+		}
 	}
 	for _, m := range s.Modules.Modules() {
 		ex, ok := m.(module.Exporter)

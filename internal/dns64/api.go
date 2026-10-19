@@ -327,6 +327,7 @@ type exportData struct {
 	Settings  map[string]string `json:"settings"`
 	Allowlist []string          `json:"allowlist"`
 	Records   []Record          `json:"records"`
+	CertID    int64             `json:"cert_id,omitempty"` // Zertifikat aus der Verwaltung (bei "central")
 }
 
 // allowlist liefert die Freigaben: vom laufenden Resolver oder direkt aus der Datei.
@@ -361,6 +362,7 @@ func (m *Module) Export(ctx context.Context) (any, error) {
 	if out.Records == nil {
 		out.Records = []Record{}
 	}
+	out.CertID, _ = strconv.ParseInt(m.core.SettingOr(ctx, setCertID, "0"), 10, 64)
 	return out, nil
 }
 
@@ -375,6 +377,10 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		if v, ok := in.Settings[k]; ok && m.core.SetSetting(ctx, k, v) == nil {
 			n++
 		}
+	}
+	// Zertifikat: nur, wenn es mit importiert wurde (Export mit Passwort); sonst waehlt DNS64 selbst
+	if id, ok := module.MapCert(ctx, in.CertID); ok && m.core.SetSetting(ctx, setCertID, strconv.FormatInt(id, 10)) == nil {
+		n++
 	}
 	a, err := m.allowlist()
 	if err != nil {
