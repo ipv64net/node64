@@ -2,10 +2,12 @@ package dns64
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/ipv64net/node64/internal/dns64/filter"
 	"github.com/ipv64net/node64/internal/dns64/groups"
 )
 
@@ -13,7 +15,7 @@ import (
 
 // Groups liefert alle Gruppen mit Mitgliedern, nach Position.
 func (m *Module) Groups(ctx context.Context) ([]groups.Group, error) {
-	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, position FROM dns64_groups ORDER BY position, id`)
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, position, lists_mode, lists, cats FROM dns64_groups ORDER BY position, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -21,11 +23,15 @@ func (m *Module) Groups(ctx context.Context) ([]groups.Group, error) {
 	idx := map[int64]int{}
 	for rows.Next() {
 		var g groups.Group
-		if err := rows.Scan(&g.ID, &g.Name, &g.Position); err != nil {
+		var lists, cats string
+		if err := rows.Scan(&g.ID, &g.Name, &g.Position, &g.ListsMode, &lists, &cats); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		g.Members = []groups.Member{}
+		g.Members, g.Domains, g.Lists, g.Cats = []groups.Member{}, []groups.Domain{}, splitLines(lists), splitList(cats)
+		if g.Lists == nil {
+			g.Lists = []string{} // JSON: [] statt null
+		}
 		idx[g.ID] = len(out)
 		out = append(out, g)
 	}
@@ -47,7 +53,108 @@ func (m *Module) Groups(ctx context.Context) ([]groups.Group, error) {
 			out[i].Members = append(out[i].Members, x)
 		}
 	}
-	return out, mrows.Err()
+	if err := mrows.Err(); err != nil {
+		return nil, err
+	}
+	drows, err := m.core.Reader().QueryContext(ctx, `SELECT id, group_id, domain, action FROM dns64_group_domains ORDER BY action, domain`)
+	if err != nil {
+		return nil, err
+	}
+	defer drows.Close()
+	for drows.Next() {
+		var x groups.Domain
+		if err := drows.Scan(&x.ID, &x.GroupID, &x.Domain, &x.Action); err != nil {
+			return nil, err
+		}
+		if i, ok := idx[x.GroupID]; ok {
+			out[i].Domains = append(out[i].Domains, x)
+		}
+	}
+	return out, drows.Err()
+}
+
+func splitList(s string) []string {
+	out := []string{}
+	for _, x := range strings.Split(s, ",") {
+		if x = strings.TrimSpace(x); x != "" {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+// SetGroupRules setzt Listenauswahl und Kategorien einer Gruppe. lists sind URLs bekannter Listen (Vorlagen und
+// eigene); unbekannte fallen weg.
+func (m *Module) SetGroupRules(ctx context.Context, id int64, mode string, lists, cats []string) error {
+	if mode != groups.ListsCustom {
+		mode = groups.ListsGlobal
+	}
+	known := map[string]bool{}
+	for _, l := range m.loadConfig(ctx).Lists {
+		known[l.URL] = true
+	}
+	var keep []string
+	seen := map[string]bool{}
+	for _, u := range lists {
+		if u = strings.TrimSpace(u); known[u] && !seen[u] {
+			seen[u] = true
+			keep = append(keep, u)
+		}
+	}
+	var catKeep []string
+	for _, c := range filter.GroupCategories {
+		if slices.Contains(cats, c) {
+			catKeep = append(catKeep, c)
+		}
+	}
+	res, err := m.core.Writer().ExecContext(ctx, `UPDATE dns64_groups SET lists_mode = ?, lists = ?, cats = ? WHERE id = ?`,
+		mode, strings.Join(keep, "\n"), strings.Join(catKeep, ","), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	return m.groupsChanged(ctx)
+}
+
+// AddGroupDomain legt eine Freigabe oder Sperre der Gruppe an (ersetzt eine vorhandene fuer dieselbe Domain).
+func (m *Module) AddGroupDomain(ctx context.Context, x groups.Domain) (groups.Domain, error) {
+	d, ok := filter.NormalizeDomain(x.Domain)
+	if !ok || (x.Action != groups.ActionAllow && x.Action != groups.ActionBlock) {
+		return x, errCfg("err_group_domain")
+	}
+	x.Domain = d
+	var n int
+	if err := m.core.Reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM dns64_groups WHERE id = ?`, x.GroupID).Scan(&n); err != nil {
+		return x, err
+	}
+	if n == 0 {
+		return x, errNotFound
+	}
+	if _, err := m.core.Writer().ExecContext(ctx, `DELETE FROM dns64_group_domains WHERE group_id = ? AND domain = ?`, x.GroupID, x.Domain); err != nil {
+		return x, err
+	}
+	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_group_domains (group_id, domain, action, created_at) VALUES (?, ?, ?, ?)`,
+		x.GroupID, x.Domain, x.Action, time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return x, err
+	}
+	x.ID, _ = res.LastInsertId()
+	return x, m.groupsChanged(ctx)
+}
+
+// RemoveGroupDomain loescht eine Freigabe oder Sperre der Gruppe.
+func (m *Module) RemoveGroupDomain(ctx context.Context, id int64) (groups.Domain, error) {
+	var x groups.Domain
+	if err := m.core.Reader().QueryRowContext(ctx, `SELECT id, group_id, domain, action FROM dns64_group_domains WHERE id = ?`, id).
+		Scan(&x.ID, &x.GroupID, &x.Domain, &x.Action); err != nil {
+		return x, errNotFound
+	}
+	if _, err := m.core.Writer().ExecContext(ctx, `DELETE FROM dns64_group_domains WHERE id = ?`, id); err != nil {
+		return x, err
+	}
+	return x, m.groupsChanged(ctx)
 }
 
 // loadGroups gibt den Stand an den Resolver.
@@ -84,7 +191,7 @@ func (m *Module) AddGroup(ctx context.Context, name string) (groups.Group, error
 		return groups.Group{}, err
 	}
 	id, _ := res.LastInsertId()
-	return groups.Group{ID: id, Name: name, Position: pos, Members: []groups.Member{}}, m.loadGroups(ctx)
+	return groups.Group{ID: id, Name: name, Position: pos, Members: []groups.Member{}, ListsMode: groups.ListsGlobal, Lists: []string{}, Cats: []string{}, Domains: []groups.Domain{}}, m.groupsChanged(ctx)
 }
 
 // RenameGroup benennt eine Gruppe um.
@@ -103,7 +210,7 @@ func (m *Module) RenameGroup(ctx context.Context, id int64, name string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return errNotFound
 	}
-	return m.loadGroups(ctx)
+	return m.groupsChanged(ctx)
 }
 
 // DeleteGroup loescht eine Gruppe samt Mitgliedern.
@@ -118,7 +225,10 @@ func (m *Module) DeleteGroup(ctx context.Context, id int64) error {
 	if _, err := m.core.Writer().ExecContext(ctx, `DELETE FROM dns64_group_members WHERE group_id = ?`, id); err != nil {
 		return err
 	}
-	return m.loadGroups(ctx)
+	if _, err := m.core.Writer().ExecContext(ctx, `DELETE FROM dns64_group_domains WHERE group_id = ?`, id); err != nil {
+		return err
+	}
+	return m.groupsChanged(ctx)
 }
 
 // MoveGroup verschiebt eine Gruppe in der Reihenfolge (up = nach vorn, also hoeherer Vorrang).

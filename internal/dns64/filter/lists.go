@@ -127,7 +127,8 @@ type Manager struct {
 	Allow    *Allowlist
 
 	cur       atomic.Pointer[Matcher]
-	rebuildMu sync.Mutex // one rebuild at a time; parallel downloads trigger it
+	notGlobal atomic.Uint64 // complement of the lists for devices without a group (zero value = all lists)
+	rebuildMu sync.Mutex    // one rebuild at a time; parallel downloads trigger it
 
 	mu      sync.RWMutex
 	status  []ListStatus
@@ -146,6 +147,10 @@ func NewManager(dir string, lists []List, interval time.Duration, allow *Allowli
 	if interval <= 0 {
 		interval = defaultInterval
 	}
+	if len(lists) > MaxLists {
+		log.Warn("too many blocklists, the rest is ignored", "lists", len(lists), "max", MaxLists)
+		lists = lists[:MaxLists]
+	}
 	m := &Manager{dir: dir, lists: lists, interval: interval, client: client, log: log, Allow: allow}
 	m.migrateFiles()
 	m.status = make([]ListStatus, len(m.lists))
@@ -162,15 +167,39 @@ const ReleasedPrefix = "released:"
 
 func (m *Manager) Matcher() *Matcher { return m.cur.Load() }
 
-// Check decides whether name is blocked. reason names the blocking list, or
+// Check decides whether name is blocked for devices without a group. reason names the blocking list, or
 // notes that a released domain would otherwise have been blocked.
 func (m *Manager) Check(name string) (blocked bool, reason string) {
-	blocked, list := m.cur.Load().Match(name)
+	return m.CheckMask(name, m.Global())
+}
+
+// CheckMask is Check with the lists of a device group (Mask).
+func (m *Manager) CheckMask(name string, mask uint64) (blocked bool, reason string) {
+	blocked, list := m.cur.Load().MatchMask(name, mask)
 	if blocked && m.Allow.Contains(name) {
 		return false, ReleasedPrefix + list // UI: "freigegeben (sonst: <list>)"
 	}
 	return blocked, list
 }
+
+// Mask is the bit mask of the given lists (by URL) among the loaded ones; unknown URLs are skipped.
+func (m *Manager) Mask(urls []string) uint64 {
+	var mask uint64
+	for _, u := range urls {
+		for i, l := range m.lists {
+			if l.URL == u {
+				mask |= 1 << uint(i)
+			}
+		}
+	}
+	return mask
+}
+
+// SetGlobal sets the lists for devices without a group.
+func (m *Manager) SetGlobal(mask uint64) { m.notGlobal.Store(^mask) }
+
+// Global is the mask for devices without a group.
+func (m *Manager) Global() uint64 { return ^m.notGlobal.Load() }
 
 func (m *Manager) Status() ([]ListStatus, time.Time) {
 	m.mu.RLock()
@@ -303,7 +332,7 @@ func (m *Manager) rebuild() {
 		if fi, err := f.Stat(); err == nil {
 			mtimes[i] = fi.ModTime()
 		}
-		counts[i], err = mt.load(uint8(i), f)
+		counts[i], err = mt.load(i, f)
 		f.Close()
 		if err != nil {
 			m.log.Warn("blocklist parse error", "list", m.lists[i].Name, "err", err)

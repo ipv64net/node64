@@ -1,5 +1,20 @@
 # Änderungen – DNS64
 
+## 1.17.0 – 2026-10-19
+
+### Neu
+- Regeln je Gerätegruppe (Phase G2), unter *Gruppen → Regeln*:
+  - Blocklisten wie für alle Geräte oder eine eigene Auswahl aus allen Vorlagen und eigenen Listen;
+  - Kategorien sperren: Soziale Netzwerke, Spiele und Streaming (kleine, von Node64 gepflegte Listen, u. a. TikTok, Instagram, Roblox, Fortnite, YouTube, Netflix), Glücksspiel und Erwachseneninhalte (schalten HaGeZi Gambling bzw. HaGeZi NSFW für die Gruppe ein);
+  - eigene Freigaben und Sperren je Gruppe (samt Subdomains). Reihenfolge: Freigabe der Gruppe vor Sperre der Gruppe vor Kategorien vor Blocklisten.
+- Geladen werden die global eingeschalteten Listen plus die, die eine Gruppe zusätzlich nutzt – jede Liste nur einmal; welche für wen gilt, steht je Regel als Bitmaske (höchstens 64 Listen).
+- Abfrage-Log: Grund „Sperre der Gruppe“ bzw. „Kategorie …“.
+- API: `PUT /api/dns64/groups/{id}/rules`, `POST /api/dns64/groups/{id}/domains`, `DELETE /api/dns64/groups/domains/{id}`; `GET /api/dns64/groups` liefert die Regeln mit.
+
+### Geändert
+- Versteckte Tracker hinter CNAMEs werden auch bei Antworten aus dem Cache geprüft (der Cache ist für alle Gruppen gemeinsam).
+- Die globale Pause setzt Blocklisten und Kategorien aus, nicht die eigenen Sperren einer Gruppe.
+
 ## 1.16.0 – 2026-10-19
 
 ### Neu

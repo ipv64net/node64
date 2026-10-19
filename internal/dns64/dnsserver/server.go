@@ -28,6 +28,27 @@ const ReasonStale = "stale" // served from cache after expiry, refreshed in the 
 // ReasonPaused marks a query a list would have blocked while blocking was paused ("paused:<list>").
 const ReasonPaused = "paused:"
 
+// Reasons of device group rules: "group:<domain>" (own block of the group), "cat:<key>" (category).
+const (
+	ReasonGroup    = "group:"
+	ReasonCategory = "cat:"
+)
+
+// Category is a blocked category of a device group.
+type Category struct {
+	Key string
+	Set *filter.DomainSet
+}
+
+// Policy are the rules of a device group.
+type Policy struct {
+	Group string            // name (query log)
+	Mask  uint64            // blocklists of the group (bits as in the matcher)
+	Allow *filter.DomainSet // releases of the group (beat everything else)
+	Block *filter.DomainSet // own blocks of the group
+	Cats  []Category        // blocked categories
+}
+
 // Records are own DNS entries from the settings. ok = the name is known (then the answer may be empty).
 type Records interface {
 	Lookup(name string, qtype uint16) (rrs []dns.RR, ok bool)
@@ -46,13 +67,13 @@ type Server struct {
 	Log      *querylog.Store
 	Logger   *slog.Logger
 
-	Records   Records                 // nil = none
-	Split     SplitFunc               // answers for the home network before everything else (nil = none)
-	BlockNX   bool                    // blocked names answer NXDOMAIN instead of 0.0.0.0 / ::
-	ExtraNets []netip.Prefix          // further client networks besides private and attached ones
-	Anonymize func(netip.Addr) string // client as stored in the log, nil = full IP
-	Paused    func() bool             // blocking switched off for now (nil = never)
-	Group     func(netip.Addr) string // device group of a client ("" = none, nil = no groups)
+	Records   Records                  // nil = none
+	Split     SplitFunc                // answers for the home network before everything else (nil = none)
+	BlockNX   bool                     // blocked names answer NXDOMAIN instead of 0.0.0.0 / ::
+	ExtraNets []netip.Prefix           // further client networks besides private and attached ones
+	Anonymize func(netip.Addr) string  // client as stored in the log, nil = full IP
+	Paused    func() bool              // blocking switched off for now (nil = never)
+	Policy    func(netip.Addr) *Policy // rules of the client's device group (nil = none, global rules)
 
 	acl        *clientACL
 	srv        []*dns.Server
@@ -154,8 +175,11 @@ func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg 
 		QType:  dns.TypeToString[q.Qtype],
 		Proto:  proto,
 	}
-	if s.Group != nil {
-		entry.Group = s.Group(clientIP)
+	var pol *Policy
+	if s.Policy != nil {
+		if pol = s.Policy(clientIP); pol != nil {
+			entry.Group = pol.Group
+		}
 	}
 	if entry.QType == "" {
 		entry.QType = dns.Type(q.Qtype).String()
@@ -169,7 +193,7 @@ func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg 
 		}
 	}
 	if resp == nil {
-		resp = s.resolve(r, name, &entry)
+		resp = s.resolve(r, name, &entry, pol)
 	}
 	resp.Id = r.Id
 	entry.Rcode = dns.RcodeToString[resp.Rcode]
@@ -184,7 +208,7 @@ func (s *Server) Allowed(ip netip.Addr) bool { return s.acl.allowed(ip) }
 // Refused: queries from outside the allowed networks since start.
 func (s *Server) Refused() Refused { return s.acl.stats() }
 
-func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry) *dns.Msg {
+func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy) *dns.Msg {
 	q := r.Question[0]
 
 	if s.Records != nil {
@@ -208,18 +232,51 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry) *dns.Msg {
 		return errorMsg(r, dns.RcodeNameError)
 	}
 
-	blocked, reason := s.Filter.Check(name)
+	// Geraetegruppe: eigene Freigabe vor eigener Sperre vor Kategorien vor den Blocklisten der Gruppe. Die Pause
+	// setzt Kategorien und Blocklisten aus, nicht die Sperren der Gruppe.
+	mask, groupAllowed := s.Filter.Global(), false
+	if p != nil {
+		mask = p.Mask
+		if _, ok := p.Allow.Match(name); ok {
+			groupAllowed = true
+		} else if d, ok := p.Block.Match(name); ok {
+			e.Status, e.Reason = querylog.StatusBlocked, ReasonGroup+d
+			return s.blockedMsg(r)
+		}
+	}
+	var blocked bool
+	var reason string
 	pausedNow := s.Paused != nil && s.Paused()
-	if blocked && pausedNow {
-		blocked, reason = false, ReasonPaused+reason // wird nur protokolliert
+	if !groupAllowed {
+		if p != nil {
+			for _, c := range p.Cats {
+				if _, ok := c.Set.Match(name); ok {
+					blocked, reason = true, ReasonCategory+c.Key
+					break
+				}
+			}
+		}
+		if !blocked {
+			blocked, reason = s.Filter.CheckMask(name, mask)
+		}
+		if blocked && pausedNow {
+			blocked, reason = false, ReasonPaused+reason // wird nur protokolliert
+		}
+		if blocked {
+			e.Status, e.Reason = querylog.StatusBlocked, reason
+			return s.blockedMsg(r)
+		}
 	}
-	if blocked {
-		e.Status, e.Reason = querylog.StatusBlocked, reason
-		return s.blockedMsg(r)
-	}
-	released := reason != "" || s.Filter.Allow.Contains(name) || pausedNow
+	released := groupAllowed || reason != "" || s.Filter.Allow.Contains(name) || pausedNow
 
 	if resp, state, refresh := s.Cache.Get(r); resp != nil {
+		// CNAME-Tarnung auch im Cache pruefen: Antworten sind fuer alle Gruppen gemeinsam zwischengespeichert
+		if !released {
+			if blocked, why := s.cnameBlocked(resp, q.Qtype, mask); blocked {
+				e.Status, e.Reason = querylog.StatusBlocked, why
+				return s.blockedMsg(r)
+			}
+		}
 		e.Status = querylog.StatusCached
 		if state == cache.Stale {
 			e.Reason = ReasonStale
@@ -241,7 +298,7 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry) *dns.Msg {
 	e.Upstream = up
 
 	if !released {
-		if blocked, why := s.cnameBlocked(resp, q.Qtype); blocked {
+		if blocked, why := s.cnameBlocked(resp, q.Qtype, mask); blocked {
 			e.Status, e.Reason = querylog.StatusBlocked, why
 			return s.blockedMsg(r)
 		}
@@ -254,14 +311,14 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry) *dns.Msg {
 
 // cnameBlocked detects CNAME cloaking: trackers hide behind a first-party
 // name that points to a blocked domain.
-func (s *Server) cnameBlocked(resp *dns.Msg, qtype uint16) (bool, string) {
+func (s *Server) cnameBlocked(resp *dns.Msg, qtype uint16, mask uint64) (bool, string) {
 	if qtype == dns.TypeCNAME {
 		return false, ""
 	}
 	for _, rr := range resp.Answer {
 		if c, ok := rr.(*dns.CNAME); ok {
 			target := strings.TrimSuffix(strings.ToLower(c.Target), ".")
-			if blocked, list := s.Filter.Check(target); blocked {
+			if blocked, list := s.Filter.CheckMask(target, mask); blocked {
 				return true, list + " (CNAME " + target + ")"
 			}
 		}
@@ -289,7 +346,7 @@ func (s *Server) refresh(r *dns.Msg, released bool) {
 			s.Cache.RefreshDone(false)
 			return
 		}
-		if blocked, _ := s.cnameBlocked(resp, req.Question[0].Qtype); blocked && !released {
+		if blocked, _ := s.cnameBlocked(resp, req.Question[0].Qtype, s.Filter.Global()); blocked && !released {
 			s.Cache.Delete(req)
 			s.Cache.RefreshDone(true)
 			return
@@ -340,7 +397,7 @@ func (s *Server) custom(r *dns.Msg, rrs []dns.RR) *dns.Msg {
 		sub := new(dns.Msg)
 		sub.SetQuestion(dns.Fqdn(target), qtype)
 		sub.RecursionDesired = true
-		resp := s.resolve(sub, target, &querylog.Entry{})
+		resp := s.resolve(sub, target, &querylog.Entry{}, nil) // Ziel eines eigenen CNAME: globale Regeln
 		m.Answer = append(m.Answer, resp.Answer...)
 		m.Rcode = resp.Rcode
 		break

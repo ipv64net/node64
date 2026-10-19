@@ -15,7 +15,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/netip"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -52,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.16.0"
+	version   = "1.17.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -79,8 +78,9 @@ type Module struct {
 	certs   *certs.Manager // zentrale Zertifikatsverwaltung, nil = keine (Tests)
 	lastErr string         // letzter Fehler beim Start (z. B. Port belegt)
 
-	recs atomic.Pointer[recordTable] // eigene DNS-Eintraege (records.go)
-	grp  *groups.Resolver            // Geraetegruppen (groupstore.go)
+	recs atomic.Pointer[recordTable]                 // eigene DNS-Eintraege (records.go)
+	grp  *groups.Resolver                            // Geraetegruppen (groupstore.go)
+	pol  atomic.Pointer[map[int64]*dnsserver.Policy] // Regeln je Gruppe (policy.go)
 
 	webCert, webKey string // Zertifikat der Weboberflaeche (cert_mode node64)
 
@@ -267,17 +267,23 @@ func (m *Module) start(ctx context.Context) error {
 		return fmt.Errorf("load allowlist: %w", err)
 	}
 	lists := filepath.Join(m.dir(), "lists")
-	if e.lists, err = filter.NewManager(lists, cfg.activeLists(), time.Duration(cfg.ListHours)*time.Hour, allow, listClient(m.selfAddr(ctx)), m.log); err != nil {
+	glist, err := m.Groups(ctx)
+	if err != nil {
+		st.CloseNow()
+		return fmt.Errorf("load groups: %w", err)
+	}
+	if e.lists, err = filter.NewManager(lists, neededLists(cfg, glist), time.Duration(cfg.ListHours)*time.Hour, allow, listClient(m.selfAddr(ctx)), m.log); err != nil {
 		st.CloseNow()
 		return err
 	}
+	m.buildPolicies(e.lists, cfg, glist)
 	e.cache = cache.New(cfg.CacheSize)
 	e.up = upstream.New(cfg.activeUpstreams(), cfg.UpMode)
 	e.up.SetTop(cfg.UpCount)
 	e.local = localnet.New(m.routerAddr(ctx), m.log)
 	e.srv = &dnsserver.Server{Addr: e.addr, Local: e.local, Filter: e.lists, Upstream: e.up, Cache: e.cache, Log: st, Logger: m.log,
 		Records: m, Split: m.split, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused,
-		Group: func(ip netip.Addr) string { return m.grp.For(ip).Name }}
+		Policy: m.policy}
 	if err := e.srv.Start(); err != nil {
 		st.CloseNow()
 		e.up.Close()

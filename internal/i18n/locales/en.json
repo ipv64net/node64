@@ -2464,6 +2464,15 @@
       "later": "Encrypted queries from devices (DoH/DoT/DoQ) are on the “Encryption” tab."
     },
     "js": {
+      "reason_group": "blocked for group {group} ({domain})",
+      "reason_cat": "category {cat} (group {group})",
+      "cat": {
+        "social": "Social networks",
+        "games": "Games",
+        "streaming": "Streaming",
+        "gambling": "Gambling",
+        "adult": "Adult content"
+      },
       "status": {
         "allowed": "Allowed",
         "blocked": "Blocked",
@@ -2552,13 +2561,35 @@
       "deleted": "Record deleted."
     },
     "groups": {
+      "hint_rules": "Each group has its own rules (expand “Rules”): blocklists like for all devices or an own selection, blocked categories, own releases and blocks. Devices without a group use the settings under “Blocklists”.",
+      "rules": "Rules",
+      "rules_saved": "Rules saved.",
+      "lists_custom_n": "own lists: {n}",
+      "domains_n": "{n} domains",
+      "lists": "Blocklists",
+      "lists_global": "like all devices (page “Blocklists”)",
+      "lists_own": "own selection:",
+      "global_on": "on for all",
+      "cats": "Block categories",
+      "cats_hint": "Social networks, games and streaming are small lists maintained by Node64 (TikTok, Instagram, Roblox, Fortnite, YouTube, Netflix and more); gambling and adult content switch on the HaGeZi lists for the group. A release of the group always wins.",
+      "domains": "Releases and blocks",
+      "domains_none": "None.",
+      "action_allow": "allowed",
+      "action_block": "blocked",
+      "domains_hint": "Applies with subdomains. A release beats blocks, categories and blocklists, e.g. the school platform.",
+      "cat": {
+        "social": "Social networks",
+        "games": "Games",
+        "streaming": "Streaming",
+        "gambling": "Gambling",
+        "adult": "Adult content"
+      },
       "title": "Groups",
       "add": "New group",
       "add_btn": "Create",
       "name_ph": "e.g. Kids, Guests, Smart TV",
       "hint": "Groups bundle devices, e.g. “Kids” or “Guests”. A device belongs to at most one group; if it matches several (e.g. by MAC and by network), the upper one wins.",
       "hint_mac": "Devices are recognised by their MAC address first (the host’s neighbour table, IPv4 and IPv6), so they stay in their group even with a new IPv6 or IPv4 address. DNS64 only sees the MAC in the same network and with host networking; otherwise enter the IP address or a whole network (e.g. its own VLAN).",
-      "hint_g1": "For now all groups share the same rules; own lists, SafeSearch and schedules per group follow. The query log already shows the group and can be filtered by it.",
       "none": "No group yet.",
       "members_n": "{n} entries",
       "rename": "Rename",
@@ -2588,6 +2619,7 @@
       "deleted": "Group deleted."
     },
     "err": {
+      "group_domain": "Please enter a valid domain, e.g. tiktok.com.",
       "group_name": "Please enter a name (at most 40 characters).",
       "group_dup": "A group with this name already exists.",
       "member": "Invalid entry: MAC like aa:bb:cc:dd:ee:ff, IP address or network like 192.168.30.0/24 or fd00::/64.",

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/dns64/dnsserver"
+	"github.com/ipv64net/node64/internal/dns64/filter"
 	"github.com/ipv64net/node64/internal/dns64/groups"
 	"github.com/ipv64net/node64/internal/dns64/upstream"
 	"github.com/ipv64net/node64/internal/module"
@@ -71,6 +72,7 @@ type pageData struct {
 	Records []Record
 	Groups  []groups.Group // Seiten Gruppen und Log
 	Devices []deviceView   // Seite Gruppen: Geraete der letzten 24 Stunden
+	Cats    []string       // Seite Gruppen: Kategorien
 	Types   []string
 	Enc     encView
 	Pause   pauseView
@@ -107,6 +109,9 @@ func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 				m.g.Flash(w, r, "danger", err.Error())
 			}
 		}
+		if key == "groups" {
+			d.Cats = filter.GroupCategories
+		}
 		if e := m.running(); e != nil && key == "groups" {
 			var err error
 			if d.Devices, err = m.devices(ctx, e); err != nil {
@@ -131,7 +136,8 @@ var jsKeys = []string{"status.allowed", "status.blocked", "status.cached", "stat
 	"of", "failed", "just_now", "min_ago", "hours_ago", "days_ago", "per_hour", "pct_all", "pct_cache", "loaded", "no_data", "empty_chart",
 	"blocked_n", "no_entries", "via", "entries", "page", "live_paused", "flush_confirm", "flushed", "error", "active", "loading",
 	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_released", "mode_parallel", "mode_ordered", "mode_fastest", "in_use", "off",
-	"proto.udp", "proto.tcp", "proto.doh", "proto.dot", "proto.doq", "reason_paused"}
+	"proto.udp", "proto.tcp", "proto.doh", "proto.dot", "proto.doq", "reason_paused",
+	"reason_group", "reason_cat", "cat.social", "cat.games", "cat.streaming", "cat.gambling", "cat.adult"}
 
 func (m *Module) jsTexts(r *http.Request) map[string]string {
 	out := make(map[string]string, len(jsKeys))

@@ -22,13 +22,38 @@ const (
 	KindNet = "net"
 )
 
-// Group ist eine Gruppe mit ihren Mitgliedern (Reihenfolge = Vorrang: passt ein Geraet auf mehrere, gilt die erste).
+// Group ist eine Gruppe mit ihren Mitgliedern (Reihenfolge = Vorrang: passt ein Geraet auf mehrere, gilt die erste)
+// und ihren Regeln.
 type Group struct {
-	ID       int64    `json:"id"`
-	Name     string   `json:"name"`
-	Position int      `json:"position"`
-	Members  []Member `json:"members"`
+	ID        int64    `json:"id"`
+	Name      string   `json:"name"`
+	Position  int      `json:"position"`
+	Members   []Member `json:"members"`
+	ListsMode string   `json:"lists_mode"` // global = Auswahl wie fuer alle, custom = eigene Auswahl (Lists)
+	Lists     []string `json:"lists"`      // URLs der Blocklisten bei custom
+	Cats      []string `json:"categories"` // gesperrte Kategorien (social, games, streaming, gambling, adult)
+	Domains   []Domain `json:"domains"`    // Freigaben und Sperren der Gruppe
 }
+
+// Listenauswahl einer Gruppe.
+const (
+	ListsGlobal = "global"
+	ListsCustom = "custom"
+)
+
+// Domain ist eine Freigabe oder Sperre einer Gruppe (gilt samt Subdomains).
+type Domain struct {
+	ID      int64  `json:"id"`
+	GroupID int64  `json:"group_id"`
+	Domain  string `json:"domain"`
+	Action  string `json:"action"` // allow, block
+}
+
+// Aktionen einer Domain.
+const (
+	ActionAllow = "allow"
+	ActionBlock = "block"
+)
 
 // Member ist ein Geraet bzw. Netz einer Gruppe.
 type Member struct {
@@ -202,4 +227,24 @@ func (r *Resolver) Run(ctx context.Context) {
 			r.refresh(false) // auch ohne MAC-Regeln: die Seite Gruppen zeigt die MAC der Geraete
 		}
 	}
+}
+
+// HasList: die Gruppe hat diese Liste in ihrer eigenen Auswahl (Seite Gruppen).
+func (g Group) HasList(url string) bool {
+	for _, u := range g.Lists {
+		if u == url {
+			return true
+		}
+	}
+	return false
+}
+
+// HasCat: die Kategorie ist fuer die Gruppe gesperrt.
+func (g Group) HasCat(key string) bool {
+	for _, c := range g.Cats {
+		if c == key {
+			return true
+		}
+	}
+	return false
 }

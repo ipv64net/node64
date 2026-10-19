@@ -1152,7 +1152,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Liste; released:<liste>, paused:<liste>, stale"
+            "description": "Liste; released:<liste>, paused:<liste>, stale, group:<domain> (Sperre der Gruppe), cat:<kategorie>"
           },
           "rcode": {
             "type": "string"
@@ -3171,6 +3171,39 @@
             "items": {
               "$ref": "#/components/schemas/DNS64GroupMember"
             }
+          },
+          "lists_mode": {
+            "type": "string",
+            "enum": [
+              "global",
+              "custom"
+            ]
+          },
+          "lists": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "URLs bei custom"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "social",
+                "games",
+                "streaming",
+                "gambling",
+                "adult"
+              ]
+            }
+          },
+          "domains": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DNS64GroupDomain"
+            }
           }
         }
       },
@@ -3200,6 +3233,32 @@
             "format": "date-time"
           }
         }
+      },
+      "DNS64GroupDomain": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "group_id": {
+            "type": "integer"
+          },
+          "domain": {
+            "type": "string",
+            "example": "tiktok.com"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "block"
+            ]
+          }
+        },
+        "required": [
+          "domain",
+          "action"
+        ]
       }
     }
   },
@@ -12732,6 +12791,142 @@
           },
           "503": {
             "description": "DNS-Dienst läuft nicht"
+          }
+        }
+      }
+    },
+    "/dns64/groups/{id}/rules": {
+      "put": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Regeln der Gruppe: Blocklisten (global/custom) und Kategorien",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "lists_mode": {
+                    "type": "string",
+                    "enum": [
+                      "global",
+                      "custom"
+                    ]
+                  },
+                  "lists": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "categories": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "social",
+                        "games",
+                        "streaming",
+                        "gambling",
+                        "adult"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/groups/{id}/domains": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Freigabe oder Sperre der Gruppe (samt Subdomains)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNS64GroupDomain"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64GroupDomain"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/groups/domains/{id}": {
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Freigabe oder Sperre der Gruppe löschen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
           }
         }
       }

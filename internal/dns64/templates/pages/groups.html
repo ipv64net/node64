@@ -38,7 +38,7 @@
 			<div class="card-body small text-body-secondary">
 				<p class="mb-2">{{.T "dns64.groups.hint"}}</p>
 				<p class="mb-2">{{.T "dns64.groups.hint_mac"}}</p>
-				<p class="mb-0">{{.T "dns64.groups.hint_g1"}}</p>
+				<p class="mb-0">{{.T "dns64.groups.hint_rules"}}</p>
 			</div>
 		</div>
 	</div>
@@ -80,6 +80,48 @@
 					<div class="col-sm-2 d-grid"><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus"></i> {{$.T "dns64.groups.member_add"}}</button></div>
 				</form>
 			</div>
+			<details class="card-footer bg-body"{{if or $g.Domains $g.Cats (eq $g.ListsMode "custom")}} open{{end}}>
+				<summary class="small fw-semibold">{{$.T "dns64.groups.rules"}}{{$.Doc "dns64#gruppen"}}
+					{{if eq $g.ListsMode "custom"}}<span class="badge text-bg-light fw-normal">{{$.T "dns64.groups.lists_custom_n" "n" (len $g.Lists)}}</span>{{end}}
+					{{range $g.Cats}}<span class="badge text-bg-warning fw-normal">{{$.T (print "dns64.groups.cat." .)}}</span> {{end}}
+					{{with $g.Domains}}<span class="badge text-bg-light fw-normal">{{$.T "dns64.groups.domains_n" "n" (len .)}}</span>{{end}}</summary>
+				<div class="row g-3 mt-1 small">
+					<div class="col-lg-7">
+						<form method="post" action="/dns64/groups/{{$g.ID}}/rules">
+							<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+							<div class="fw-semibold mb-1">{{$.T "dns64.groups.lists"}}</div>
+							<div class="form-check"><input class="form-check-input" type="radio" name="lists_mode" value="global" id="lm-g-{{$g.ID}}"{{if ne $g.ListsMode "custom"}} checked{{end}}><label class="form-check-label" for="lm-g-{{$g.ID}}">{{$.T "dns64.groups.lists_global"}}</label></div>
+							<div class="form-check"><input class="form-check-input" type="radio" name="lists_mode" value="custom" id="lm-c-{{$g.ID}}"{{if eq $g.ListsMode "custom"}} checked{{end}}><label class="form-check-label" for="lm-c-{{$g.ID}}">{{$.T "dns64.groups.lists_own"}}</label></div>
+							<div class="border rounded p-2 mt-1 mb-2 overflow-auto" style="max-height:14rem">
+								{{range $l := $d.Cfg.Lists}}<div class="form-check"><input class="form-check-input" type="checkbox" name="lists" value="{{$l.URL}}" id="l-{{$g.ID}}-{{$l.URL}}"{{if $g.HasList $l.URL}} checked{{end}}><label class="form-check-label" for="l-{{$g.ID}}-{{$l.URL}}">{{$l.Name}}{{if $l.Enabled}} <span class="text-body-secondary">({{$.T "dns64.groups.global_on"}})</span>{{end}}</label></div>{{end}}
+							</div>
+							<div class="fw-semibold mb-1">{{$.T "dns64.groups.cats"}}</div>
+							<div class="d-flex flex-wrap gap-3 mb-1">
+								{{range $c := $d.Cats}}<div class="form-check"><input class="form-check-input" type="checkbox" name="cats" value="{{$c}}" id="c-{{$g.ID}}-{{$c}}"{{if $g.HasCat $c}} checked{{end}}><label class="form-check-label" for="c-{{$g.ID}}-{{$c}}">{{$.T (print "dns64.groups.cat." $c)}}</label></div>{{end}}
+							</div>
+							<div class="form-text mt-0 mb-2">{{$.T "dns64.groups.cats_hint"}}</div>
+							<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2"></i> {{$.T "common.save"}}</button>
+						</form>
+					</div>
+					<div class="col-lg-5">
+						<div class="fw-semibold mb-1">{{$.T "dns64.groups.domains"}}</div>
+						{{if $g.Domains}}<ul class="list-unstyled mb-2">
+							{{range $g.Domains}}<li class="d-flex align-items-center gap-2 mb-1">
+								<span class="badge text-bg-{{if eq .Action "allow"}}success{{else}}danger{{end}}">{{$.T (print "dns64.groups.action_" .Action)}}</span>
+								<span class="font-monospace text-break">{{.Domain}}</span>
+								<form method="post" action="/dns64/groups/domains/{{.ID}}/delete" class="ms-auto m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger py-0" type="submit" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-x-lg"></i></button></form>
+							</li>{{end}}
+						</ul>{{else}}<div class="text-body-secondary mb-2">{{$.T "dns64.groups.domains_none"}}</div>{{end}}
+						<form method="post" action="/dns64/groups/{{$g.ID}}/domains" class="d-flex gap-1">
+							<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+							<input type="text" class="form-control form-control-sm font-monospace" name="domain" placeholder="tiktok.com" aria-label="Domain" required maxlength="253">
+							<select class="form-select form-select-sm" style="width:auto" name="action" aria-label="{{$.T "dns64.groups.kind"}}"><option value="block">{{$.T "dns64.groups.action_block"}}</option><option value="allow">{{$.T "dns64.groups.action_allow"}}</option></select>
+							<button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus"></i></button>
+						</form>
+						<div class="form-text">{{$.T "dns64.groups.domains_hint"}}</div>
+					</div>
+				</div>
+			</details>
 		</div>
 		{{else}}<div class="card"><div class="card-body small text-body-secondary">{{.T "dns64.groups.none"}}</div></div>{{end}}
 	</div>

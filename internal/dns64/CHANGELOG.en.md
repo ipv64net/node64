@@ -1,5 +1,20 @@
 # Changes – DNS64
 
+## 1.17.0 – 2026-10-19
+
+### New
+- Rules per device group (phase G2), under *Groups → Rules*:
+  - blocklists like for all devices or an own selection from all presets and own lists;
+  - block categories: social networks, games and streaming (small lists maintained by Node64, e.g. TikTok, Instagram, Roblox, Fortnite, YouTube, Netflix), gambling and adult content (switch on HaGeZi Gambling or HaGeZi NSFW for the group);
+  - own releases and blocks per group (with subdomains). Order: release of the group before block of the group before categories before blocklists.
+- DNS64 loads the globally enabled lists plus those a group uses in addition – each list once; which one applies to whom is a bit mask per rule (at most 64 lists).
+- Query log: reason “blocked for group” or “category …”.
+- API: `PUT /api/dns64/groups/{id}/rules`, `POST /api/dns64/groups/{id}/domains`, `DELETE /api/dns64/groups/domains/{id}`; `GET /api/dns64/groups` includes the rules.
+
+### Changed
+- Trackers hidden behind CNAMEs are also checked for answers from the cache (the cache is shared by all groups).
+- The global pause suspends blocklists and categories, not a group's own blocks.
+
 ## 1.16.0 – 2026-10-19
 
 ### New

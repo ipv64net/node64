@@ -2464,6 +2464,15 @@
       "later": "Verschlüsselte Anfragen der Geräte (DoH/DoT/DoQ) gibt es im Reiter „Verschlüsselung“."
     },
     "js": {
+      "reason_group": "Sperre der Gruppe {group} ({domain})",
+      "reason_cat": "Kategorie {cat} (Gruppe {group})",
+      "cat": {
+        "social": "Soziale Netzwerke",
+        "games": "Spiele",
+        "streaming": "Streaming",
+        "gambling": "Glücksspiel",
+        "adult": "Erwachseneninhalte"
+      },
       "status": {
         "allowed": "Erlaubt",
         "blocked": "Blockiert",
@@ -2552,13 +2561,35 @@
       "deleted": "Eintrag gelöscht."
     },
     "groups": {
+      "hint_rules": "Jede Gruppe hat eigene Regeln (aufklappen unter „Regeln“): Blocklisten wie für alle oder eigene Auswahl, gesperrte Kategorien, eigene Freigaben und Sperren. Geräte ohne Gruppe nutzen die Einstellungen unter „Blocklisten“.",
+      "rules": "Regeln",
+      "rules_saved": "Regeln gespeichert.",
+      "lists_custom_n": "eigene Listen: {n}",
+      "domains_n": "{n} Domains",
+      "lists": "Blocklisten",
+      "lists_global": "wie für alle Geräte (Seite „Blocklisten“)",
+      "lists_own": "eigene Auswahl:",
+      "global_on": "für alle an",
+      "cats": "Kategorien sperren",
+      "cats_hint": "Soziale Netzwerke, Spiele und Streaming sind kleine, von Node64 gepflegte Listen (u. a. TikTok, Instagram, Roblox, Fortnite, YouTube, Netflix); Glücksspiel und Erwachseneninhalte schalten die Listen von HaGeZi für die Gruppe ein. Eine Freigabe der Gruppe geht immer vor.",
+      "domains": "Freigaben und Sperren",
+      "domains_none": "Keine.",
+      "action_allow": "frei",
+      "action_block": "gesperrt",
+      "domains_hint": "Gilt samt Subdomains. Eine Freigabe geht vor Sperren, Kategorien und Blocklisten, z. B. die Schulplattform.",
+      "cat": {
+        "social": "Soziale Netzwerke",
+        "games": "Spiele",
+        "streaming": "Streaming",
+        "gambling": "Glücksspiel",
+        "adult": "Erwachseneninhalte"
+      },
       "title": "Gruppen",
       "add": "Neue Gruppe",
       "add_btn": "Anlegen",
       "name_ph": "z. B. Kinder, Gäste, Smart-TV",
       "hint": "Gruppen fassen Geräte zusammen, z. B. „Kinder“ oder „Gäste“. Ein Gerät gehört zu höchstens einer Gruppe; passt es auf mehrere (z. B. per MAC und per Netz), gilt die obere.",
       "hint_mac": "Geräte werden zuerst über die MAC-Adresse erkannt (Nachbartabelle des Hosts, IPv4 und IPv6); so bleiben sie in ihrer Gruppe, auch wenn sie eine neue IPv6- oder IPv4-Adresse bekommen. Die MAC sieht DNS64 nur im selben Netz und im Host-Netzwerk; sonst IP-Adresse oder ein ganzes Netz (z. B. ein eigenes VLAN) eintragen.",
-      "hint_g1": "Noch gelten für alle Gruppen dieselben Regeln; eigene Listen, SafeSearch und Zeitpläne je Gruppe folgen. Schon jetzt zeigt das Abfrage-Log die Gruppe und lässt sich danach filtern.",
       "none": "Noch keine Gruppe angelegt.",
       "members_n": "{n} Einträge",
       "rename": "Umbenennen",
@@ -2588,6 +2619,7 @@
       "deleted": "Gruppe gelöscht."
     },
     "err": {
+      "group_domain": "Bitte eine gültige Domain eingeben, z. B. tiktok.com.",
       "group_name": "Bitte einen Namen (höchstens 40 Zeichen) eingeben.",
       "group_dup": "Eine Gruppe mit diesem Namen gibt es schon.",
       "member": "Ungültiger Eintrag: MAC wie aa:bb:cc:dd:ee:ff, IP-Adresse oder Netz wie 192.168.30.0/24 bzw. fd00::/64.",

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ipv64net/node64/internal/dns64/groups"
@@ -60,6 +61,9 @@ func (m *Module) groupRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /dns64/groups/{id}/members", page(m.pageMemberAdd))
 	mux.Handle("POST /dns64/groups/members/{id}/delete", page(m.pageMemberDelete))
 	mux.Handle("POST /dns64/groups/assign", page(m.pageAssign))
+	mux.Handle("POST /dns64/groups/{id}/rules", page(m.pageGroupRules))
+	mux.Handle("POST /dns64/groups/{id}/domains", page(m.pageGroupDomainAdd))
+	mux.Handle("POST /dns64/groups/domains/{id}/delete", page(m.pageGroupDomainDelete))
 
 	plain := func(h http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(h)) }
 	mux.Handle("GET /api/dns64/groups", plain(m.apiGroups))
@@ -70,6 +74,9 @@ func (m *Module) groupRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /api/dns64/groups/{id}/members", plain(m.apiMemberAdd))
 	mux.Handle("DELETE /api/dns64/groups/members/{id}", plain(m.apiMemberDelete))
 	mux.Handle("GET /api/dns64/devices", plain(m.apiDevices))
+	mux.Handle("PUT /api/dns64/groups/{id}/rules", plain(m.apiGroupRules))
+	mux.Handle("POST /api/dns64/groups/{id}/domains", plain(m.apiGroupDomainAdd))
+	mux.Handle("DELETE /api/dns64/groups/domains/{id}", plain(m.apiGroupDomainDelete))
 }
 
 // ---- Seite ----
@@ -276,4 +283,73 @@ func (m *Module) apiDevices(w http.ResponseWriter, r *http.Request) {
 	}
 	list, err := m.devices(r.Context(), e)
 	m.apiResult(w, r, err, http.StatusOK, list)
+}
+
+// ---- Regeln je Gruppe (G2) ----
+
+func (m *Module) pageGroupRules(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	mode, lists, cats := r.PostFormValue("lists_mode"), r.PostForm["lists"], r.PostForm["cats"]
+	err := m.SetGroupRules(r.Context(), pathID(r), mode, lists, cats)
+	if err == nil {
+		m.audit(r, "dns64.group.rules", r.PathValue("id"), rulesDetail(mode, lists, cats))
+	}
+	m.groupBack(w, r, err, "dns64.groups.rules_saved")
+}
+
+func rulesDetail(mode string, lists, cats []string) string {
+	return "lists=" + mode + " (" + strconv.Itoa(len(lists)) + ") cats=" + strings.Join(cats, ",")
+}
+
+func (m *Module) pageGroupDomainAdd(w http.ResponseWriter, r *http.Request) {
+	x, err := m.AddGroupDomain(r.Context(), groups.Domain{GroupID: pathID(r), Domain: r.PostFormValue("domain"), Action: r.PostFormValue("action")})
+	if err == nil {
+		m.audit(r, "dns64.group.domain.add", r.PathValue("id"), x.Action+" "+x.Domain)
+	}
+	m.groupBack(w, r, err, "")
+}
+
+func (m *Module) pageGroupDomainDelete(w http.ResponseWriter, r *http.Request) {
+	x, err := m.RemoveGroupDomain(r.Context(), pathID(r))
+	if err == nil {
+		m.audit(r, "dns64.group.domain.remove", strconv.FormatInt(x.GroupID, 10), x.Action+" "+x.Domain)
+	}
+	m.groupBack(w, r, err, "")
+}
+
+func (m *Module) apiGroupRules(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		ListsMode string   `json:"lists_mode"`
+		Lists     []string `json:"lists"`
+		Cats      []string `json:"categories"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	err := m.SetGroupRules(r.Context(), pathID(r), in.ListsMode, in.Lists, in.Cats)
+	if err == nil {
+		m.audit(r, "dns64.group.rules", r.PathValue("id"), rulesDetail(in.ListsMode, in.Lists, in.Cats))
+	}
+	m.apiResult(w, r, err, 0, nil)
+}
+
+func (m *Module) apiGroupDomainAdd(w http.ResponseWriter, r *http.Request) {
+	var in groups.Domain
+	if !decode(w, r, &in) {
+		return
+	}
+	in.GroupID = pathID(r)
+	x, err := m.AddGroupDomain(r.Context(), in)
+	if err == nil {
+		m.audit(r, "dns64.group.domain.add", r.PathValue("id"), x.Action+" "+x.Domain)
+	}
+	m.apiResult(w, r, err, http.StatusCreated, x)
+}
+
+func (m *Module) apiGroupDomainDelete(w http.ResponseWriter, r *http.Request) {
+	x, err := m.RemoveGroupDomain(r.Context(), pathID(r))
+	if err == nil {
+		m.audit(r, "dns64.group.domain.remove", strconv.FormatInt(x.GroupID, 10), x.Action+" "+x.Domain)
+	}
+	m.apiResult(w, r, err, 0, nil)
 }
