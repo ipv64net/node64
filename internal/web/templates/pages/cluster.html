@@ -2,7 +2,7 @@
 {{$g := .Data}}
 <h1 class="h4 mb-3"><i class="bi bi-hdd-network text-primary me-1"></i> {{.T "cluster.title"}}{{$.Doc "cluster"}}</h1>
 <p class="text-body-secondary small">{{.T "cluster.intro"}}</p>
-{{if not $g.HTTPSPort}}<div class="alert alert-warning py-2 small"><i class="bi bi-exclamation-triangle"></i> {{.T "cluster.https_off"}} <a href="/settings#ports">{{.T "cluster.https_link"}}</a>{{$.Doc "cluster#https"}}</div>{{end}}
+<p class="small"><i class="bi bi-lock text-success"></i> {{.T "cluster.tls_hint"}}{{$.Doc "cluster#https"}}</p>
 
 <div class="row g-3">
 <div class="col-lg-7">
@@ -86,7 +86,7 @@
 			<form method="post" action="/cluster/join">
 				<input type="hidden" name="_csrf" value="{{.CSRF}}">
 				<label class="form-label mb-0" for="g_addr">{{.T "cluster.addr"}}</label>
-				<input class="form-control form-control-sm font-monospace mb-1" id="g_addr" name="addr" placeholder="https://192.168.1.20:8443" required>
+				<input class="form-control form-control-sm font-monospace mb-1" id="g_addr" name="addr" placeholder="https://192.168.1.20:8080" required>
 				<label class="form-label mb-0" for="g_code">{{.T "cluster.code"}}</label>
 				<input class="form-control form-control-sm font-monospace mb-1" id="g_code" name="code" placeholder="ABCD-EFGH" autocomplete="off" required>
 				<label class="form-label mb-0" for="g_self">{{.T "cluster.self_url"}}</label>

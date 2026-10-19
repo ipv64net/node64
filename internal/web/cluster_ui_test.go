@@ -45,7 +45,7 @@ func TestClusterPageAndSwitches(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("cluster page: %d", resp.StatusCode)
 	}
-	for _, want := range []string{`href="/cluster"`, "Node B", "NODE64_HTTPS_PORT", `id="sync_healthchecks_checks"`, `action="/cluster/node-b/url"`,
+	for _, want := range []string{`href="/cluster"`, "Node B", "immer verschlüsselt", `id="sync_healthchecks_checks"`, `action="/cluster/node-b/url"`,
 		`title="Auf dieser Node aus – wird nicht abgeglichen.">Checks</span>`, `>certs/certificates</span>`, "/docs/cluster/", "Diese Node hat keinen ipv64-Account."} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("cluster page misses %q", want)
@@ -176,9 +176,6 @@ func TestClusterSuspendedMember(t *testing.T) {
 			t.Fatalf("suspended member misses %q", want)
 		}
 	}
-	if strings.Contains(body, "NODE64_HTTPS_PORT") {
-		t.Fatal("https warning shown although port set")
-	}
 }
 
 func TestClusterSelfURL(t *testing.T) {
@@ -190,7 +187,7 @@ func TestClusterSelfURL(t *testing.T) {
 		{"192.168.1.5:8080", 8443, "https://192.168.1.5:8443"},
 		{"[fd00::1]:8080", 8443, "https://[fd00::1]:8443"},
 		{"node.local", 8443, "https://node.local:8443"},
-		{"192.168.1.5:8080", 0, "http://192.168.1.5:8080"},
+		{"192.168.1.5:8080", 0, "https://192.168.1.5:8080"}, // HTTP-Port spricht auch TLS
 	} {
 		r := httptest.NewRequest("GET", "/cluster", nil)
 		r.Host = c.host

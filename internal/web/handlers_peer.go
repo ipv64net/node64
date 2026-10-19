@@ -26,7 +26,7 @@ type groupData struct {
 	Linked    bool   // diese Node ist mit ipv64 verknuepft
 	Forwarder string // Node, die Aenderungen der Nodes ohne Sync an ipv64 weiterreicht ("" = keine)
 	FwdSelf   bool   // das ist diese Node
-	HTTPSPort int    // 0 = aus, der Cluster laeuft nur ueber HTTPS
+	HTTPSPort int    // eigener HTTPS-Port, 0 = keiner (der HTTP-Port spricht auch TLS, dualport.go)
 	Modules   []peer.ModuleState
 }
 
@@ -97,15 +97,12 @@ func (s *Server) groupView(r *http.Request) groupData {
 	return g
 }
 
-// selfURL schlaegt die Adresse dieser Node vor: der Host, unter dem der Browser sie gerade erreicht, mit dem
-// HTTPS-Port (der Cluster laeuft nur ueber HTTPS); ohne HTTPS-Port die aktuelle Adresse.
+// selfURL schlaegt die Adresse dieser Node vor (der Cluster laeuft nur ueber HTTPS): der Host, unter dem der
+// Browser sie gerade erreicht, mit dem HTTPS-Port; ohne HTTPS-Port der aktuelle Port, der HTTP-Port spricht auch
+// TLS (dualport.go).
 func selfURL(r *http.Request, httpsPort int) string {
 	if httpsPort <= 0 {
-		scheme := "http"
-		if r.TLS != nil {
-			scheme = "https"
-		}
-		return scheme + "://" + r.Host
+		return "https://" + r.Host
 	}
 	host, _, err := net.SplitHostPort(r.Host)
 	if err != nil {

@@ -7492,7 +7492,7 @@
                     },
                     "https_port": {
                       "type": "integer",
-                      "description": "HTTPS-Port dieser Node, 0 = aus (der Cluster läuft nur über HTTPS)"
+                      "description": "eigener HTTPS-Port dieser Node, 0 = keiner (der Cluster nutzt dann den HTTP-Port, der auch TLS spricht)"
                     }
                   }
                 }
@@ -7712,7 +7712,7 @@
                     },
                     "https_port": {
                       "type": "integer",
-                      "description": "HTTPS-Port dieser Node, 0 = aus (der Cluster läuft nur über HTTPS)"
+                      "description": "eigener HTTPS-Port dieser Node, 0 = keiner (der Cluster nutzt dann den HTTP-Port, der auch TLS spricht)"
                     }
                   }
                 }
