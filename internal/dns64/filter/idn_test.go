@@ -19,6 +19,8 @@ func TestIDN(t *testing.T) {
 		{"@@||café.example^", "xn--caf-dma.example", ruleAllow},
 		{"xn--bcher-kva.example", "xn--bcher-kva.example", ruleExact},
 		{"bü cher.example", "", ruleNone},
+		{"*.101com.com", "101com.com", ruleWildcard},
+		{"*.com", "", ruleNone},
 	} {
 		if got, kind := parseLine(tt.in); got != tt.want || kind != tt.kind {
 			t.Errorf("parseLine(%q) = %q, %d; want %q, %d", tt.in, got, kind, tt.want, tt.kind)

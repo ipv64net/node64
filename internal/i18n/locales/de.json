@@ -2360,7 +2360,16 @@
       "remove_confirm": "Liste „{name}“ entfernen?",
       "add": "Eigene Blockliste",
       "add_btn": "Hinzufügen",
-      "add_hint": "Formate: hosts-Datei, eine Domain je Zeile oder Adblock-Syntax (||domain^, Ausnahmen @@||domain^)."
+      "add_hint": "Formate: hosts-Datei, eine Domain je Zeile oder Adblock-Syntax (||domain^, Ausnahmen @@||domain^).",
+      "hint_categories": "Listen mit „Kinderschutz“ und „Umgehen“ gelten für alle Geräte im Netz; „Umgehen“ sperrt fremde DoH-Server, VPNs und Proxys, über die Geräte DNS64 umgehen könnten. Die stärkeren Stufen (Pro++, Ultimate) sperren mehr, ab und zu auch Gewolltes: dann die Domain freigeben.",
+      "cat": {
+        "ads": "Werbung",
+        "privacy": "Tracking",
+        "security": "Sicherheit",
+        "device": "Geräte-Tracking",
+        "bypass": "Umgehen",
+        "kids": "Kinderschutz"
+      }
     },
     "allow": {
       "title": "Freigegebene Domains",

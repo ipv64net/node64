@@ -70,6 +70,12 @@ func parseLine(line string) (string, ruleKind) {
 	fields := strings.Fields(line)
 	switch len(fields) {
 	case 1:
+		if rest, wild := strings.CutPrefix(fields[0], "*."); wild { // "*.example.com" = Domain samt Subdomains
+			if d, ok := normalizeDomain(rest); ok {
+				return d, ruleWildcard
+			}
+			return "", ruleNone
+		}
 		if d, ok := normalizeDomain(fields[0]); ok {
 			return d, ruleExact
 		}

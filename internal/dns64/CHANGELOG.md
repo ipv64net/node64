@@ -1,5 +1,12 @@
 # Änderungen – DNS64
 
+## 1.15.0 – 2026-10-19
+
+### Neu
+- 19 weitere Blocklisten-Vorlagen (alle aus, am 19.10.2026 auf Pflege geprüft): HaGeZi Pro++, Ultimate und Pop-up Ads, Peter Lowe's Ad Servers; Sicherheit: HaGeZi Fake (Fake-Shops, Abo-Fallen), Phishing Army Extended; Umgehen: HaGeZi DoH/VPN/Proxy Bypass (fremde DoH-Server, VPNs, Proxys); Geräte-Tracking: HaGeZi Native Tracker für Samsung, LG webOS, Amazon, Apple, Windows/Office, Xiaomi, Huawei, TikTok und Roku; Kinderschutz: HaGeZi Gambling, HaGeZi NSFW, OISD NSFW.
+- Vorlagen tragen ein Kategorie-Abzeichen (Werbung, Tracking, Sicherheit, Geräte-Tracking, Umgehen, Kinderschutz).
+- Listen: Zeilen der Form `*.example.com` gelten für die Domain samt Subdomains (Peter Lowe nutzt sie); `*.com` allein sperrt nie eine ganze Endung.
+
 ## 1.14.1 – 2026-10-19
 
 ### Neu

@@ -1,5 +1,12 @@
 # Changes – DNS64
 
+## 1.15.0 – 2026-10-19
+
+### New
+- 19 more blocklist presets (all off, checked for maintenance on 2026-10-19): HaGeZi Pro++, Ultimate and Pop-up Ads, Peter Lowe's Ad Servers; security: HaGeZi Fake (fake shops, subscription traps), Phishing Army Extended; bypass: HaGeZi DoH/VPN/Proxy Bypass (foreign DoH servers, VPNs, proxies); device tracking: HaGeZi Native Tracker for Samsung, LG webOS, Amazon, Apple, Windows/Office, Xiaomi, Huawei, TikTok and Roku; child safety: HaGeZi Gambling, HaGeZi NSFW, OISD NSFW.
+- Presets carry a category badge (ads, tracking, security, device tracking, bypass, child safety).
+- Lists: lines like `*.example.com` apply to the domain and its subdomains (used by Peter Lowe); `*.com` alone never blocks a whole TLD.
+
 ## 1.14.1 – 2026-10-19
 
 ### New

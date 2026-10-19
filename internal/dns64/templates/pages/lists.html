@@ -28,14 +28,14 @@
 			<div class="card-header"><i class="bi bi-funnel text-danger"></i> {{.T "dns64.lists.title"}}{{.Doc "dns64#blocklisten"}}</div>
 			<form method="post" action="/dns64/lists">
 				<input type="hidden" name="_csrf" value="{{.CSRF}}">
-				<div class="card-body small pb-0"><p class="text-body-secondary">{{.T "dns64.lists.hint"}}</p></div>
+				<div class="card-body small pb-0"><p class="text-body-secondary mb-1">{{.T "dns64.lists.hint"}}</p><p class="text-body-secondary">{{.T "dns64.lists.hint_categories"}}</p></div>
 				<div class="table-responsive">
 					<table class="table table-sm align-middle mb-0 small">
 						<thead><tr><th class="ps-3">{{.T "dns64.lists.on"}}</th><th>{{.T "dns64.lists.list"}}</th><th class="text-end">{{.T "dns64.lists.domains"}}</th><th>{{.T "dns64.lists.updated"}}</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
 						<tbody>
 						{{range $i, $l := $d.Cfg.Lists}}<tr data-url="{{$l.URL}}">
 							<td class="ps-3"><input class="form-check-input" type="checkbox" name="on_{{$i}}" value="1"{{if $l.Enabled}} checked{{end}} aria-label="{{$l.Name}}"></td>
-							<td><a href="{{$l.URL}}" target="_blank" rel="noopener noreferrer">{{$l.Name}}</a>{{if $l.Custom}} <span class="badge text-bg-light">{{$.T "dns64.custom"}}</span>{{end}}</td>
+							<td><a href="{{$l.URL}}" target="_blank" rel="noopener noreferrer">{{$l.Name}}</a>{{if $l.Custom}} <span class="badge text-bg-light">{{$.T "dns64.custom"}}</span>{{else}}{{with $l.Cat}} <span class="badge text-bg-{{if eq . "kids"}}warning{{else if eq . "security"}}danger{{else if eq . "bypass"}}dark{{else}}secondary{{end}} fw-normal">{{$.T (print "dns64.lists.cat." .)}}</span>{{end}}{{end}}</td>
 							<td class="text-end l-rules">–</td><td class="text-nowrap l-updated">–</td>
 							<td class="l-status">{{if not $l.Enabled}}<span class="badge text-bg-light">{{$.T "dns64.js.off"}}</span>{{end}}</td>
 							<td class="text-end pe-3">{{if $l.Custom}}<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/lists/remove" name="remove" value="{{$i}}" data-confirm="{{$.T "dns64.lists.remove_confirm" "name" $l.Name}}" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-trash"></i></button>{{end}}</td>

@@ -190,6 +190,9 @@ func mergeLists(saved []listSetting) []listSetting {
 	return saved
 }
 
+// Cat ist die Kategorie einer Vorlage (Abzeichen auf der Seite Blocklisten, "" = eigene Liste).
+func (l listSetting) Cat() string { return filter.Category(l.URL) }
+
 func (c config) activeUpstreams() []upstream.Server {
 	var out []upstream.Server
 	for _, u := range c.Upstreams {

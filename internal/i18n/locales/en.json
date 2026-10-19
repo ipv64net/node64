@@ -2360,7 +2360,16 @@
       "remove_confirm": "Remove list “{name}”?",
       "add": "Custom blocklist",
       "add_btn": "Add",
-      "add_hint": "Formats: hosts file, one domain per line or Adblock syntax (||domain^, exceptions @@||domain^)."
+      "add_hint": "Formats: hosts file, one domain per line or Adblock syntax (||domain^, exceptions @@||domain^).",
+      "hint_categories": "Lists marked “Child safety” and “Bypass” apply to all devices in the network; “Bypass” blocks foreign DoH servers, VPNs and proxies that devices could use to get around DNS64. The stronger levels (Pro++, Ultimate) block more, now and then also something wanted: then release the domain.",
+      "cat": {
+        "ads": "Ads",
+        "privacy": "Tracking",
+        "security": "Security",
+        "device": "Device tracking",
+        "bypass": "Bypass",
+        "kids": "Child safety"
+      }
     },
     "allow": {
       "title": "Allowed domains",

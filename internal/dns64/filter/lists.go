@@ -32,12 +32,68 @@ var DefaultLists = []List{
 	{"URLhaus Malware", "https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-agh.txt"},
 }
 
-// MoreLists are offered in the settings but off by default.
+// MoreLists are offered in the settings but off by default (all checked for maintenance on 2026-10-19).
 var MoreLists = []List{
 	{"OISD Big", "https://big.oisd.nl/"},
 	{"HaGeZi Pro", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt"},
 	{"HaGeZi Threat Intelligence", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.txt"},
+	{"HaGeZi Pro++", hagezi + "pro.plus.txt"},
+	{"HaGeZi Ultimate", hagezi + "ultimate.txt"},
+	{"HaGeZi Pop-up Ads", hagezi + "popupads.txt"},
+	{"Peter Lowe's Ad Servers", "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblock&showintro=0&mimetype=plaintext"},
+	{"HaGeZi Fake (Fake-Shops, Abo-Fallen)", hagezi + "fake.txt"},
+	{"Phishing Army Extended", "https://phishing.army/download/phishing_army_blocklist_extended.txt"},
+	{"HaGeZi DoH/VPN/Proxy Bypass", hagezi + "doh-vpn-proxy-bypass.txt"},
+	{"HaGeZi Native Tracker Samsung", hagezi + "native.samsung.txt"},
+	{"HaGeZi Native Tracker LG webOS", hagezi + "native.lgwebos.txt"},
+	{"HaGeZi Native Tracker Amazon", hagezi + "native.amazon.txt"},
+	{"HaGeZi Native Tracker Apple", hagezi + "native.apple.txt"},
+	{"HaGeZi Native Tracker Windows/Office", hagezi + "native.winoffice.txt"},
+	{"HaGeZi Native Tracker Xiaomi", hagezi + "native.xiaomi.txt"},
+	{"HaGeZi Native Tracker Huawei", hagezi + "native.huawei.txt"},
+	{"HaGeZi Native Tracker TikTok", hagezi + "native.tiktok.txt"},
+	{"HaGeZi Native Tracker Roku", hagezi + "native.roku.txt"},
+	{"HaGeZi Gambling", hagezi + "gambling.txt"},
+	{"HaGeZi NSFW", hagezi + "nsfw.txt"},
+	{"OISD NSFW", "https://nsfw.oisd.nl/"},
 }
+
+const hagezi = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/"
+
+// Categories of the presets (for a badge in the settings): ads, privacy, security, device, bypass, kids.
+var categories = map[string]string{
+	"https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts":    "ads",
+	"https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt": "ads",
+	"https://small.oisd.nl/":                       "ads",
+	hagezi + "multi.txt":                           "ads",
+	"https://easylist.to/easylist/easyprivacy.txt": "privacy",
+	"https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-agh.txt": "security",
+	"https://big.oisd.nl/":  "ads",
+	hagezi + "pro.txt":      "ads",
+	hagezi + "tif.txt":      "security",
+	hagezi + "pro.plus.txt": "ads",
+	hagezi + "ultimate.txt": "ads",
+	hagezi + "popupads.txt": "ads",
+	"https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblock&showintro=0&mimetype=plaintext": "ads",
+	hagezi + "fake.txt": "security",
+	"https://phishing.army/download/phishing_army_blocklist_extended.txt": "security",
+	hagezi + "doh-vpn-proxy-bypass.txt":                                   "bypass",
+	hagezi + "native.samsung.txt":                                         "device",
+	hagezi + "native.lgwebos.txt":                                         "device",
+	hagezi + "native.amazon.txt":                                          "device",
+	hagezi + "native.apple.txt":                                           "device",
+	hagezi + "native.winoffice.txt":                                       "device",
+	hagezi + "native.xiaomi.txt":                                          "device",
+	hagezi + "native.huawei.txt":                                          "device",
+	hagezi + "native.tiktok.txt":                                          "device",
+	hagezi + "native.roku.txt":                                            "device",
+	hagezi + "gambling.txt":                                               "kids",
+	hagezi + "nsfw.txt":                                                   "kids",
+	"https://nsfw.oisd.nl/":                                               "kids",
+}
+
+// Category of a preset list ("" = own list).
+func Category(url string) string { return categories[url] }
 
 const (
 	defaultInterval = 24 * time.Hour
