@@ -7,6 +7,9 @@
   (nach Statusklasse, Bytes), Erreichbarkeit und Antwortzeit des Ziels; CDN64 online mit eingeschalteten Namen,
   Tunnel je Server (verbunden, Laufzeit, Streams), Zustand und Traffic je Name bei ipv64 und Kontingent.
 - Node zurücksetzen: CDN64-online-Namen und Tunnel werden vorher bei ipv64 ausgetragen.
+- Konfig-Export komplett: Zugriffslisten (mit Benutzern), Blocklisten, Ausnahmen, Limits und Einstellungen des
+  Zugriffs-Logs kommen mit; Hosts und Locations zeigen nach dem Import auf die Listen der neuen Node, feste
+  Zertifikate werden nach ihren Namen wiedergefunden. Vorhandene Einstellungen bleiben.
 
 ## 1.12.0 – 2026-10-19
 

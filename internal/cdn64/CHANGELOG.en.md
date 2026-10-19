@@ -7,6 +7,9 @@
   hours (by status class, bytes), target reachability and response time; CDN64 online with the names switched on,
   tunnel per server (connected, round trip time, streams), state and traffic per name at ipv64, and the quota.
 - Reset node: CDN64 online names and the tunnel are removed at ipv64 first.
+- Complete configuration export: access lists (with users), blocklists, exceptions, limits and access log
+  settings are included; after the import hosts and locations point to the lists of the new node, fixed
+  certificates are found again by their names. Existing settings are kept.
 
 ## 1.12.0 – 2026-10-19
 

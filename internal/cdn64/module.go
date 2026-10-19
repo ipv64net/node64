@@ -18,7 +18,9 @@ import (
 	"net/http"
 	"net/netip"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -341,32 +343,66 @@ func (m *Module) edgeError() string {
 // ---------------------------------------------------------------- Export / Import (module.Exporter)
 
 type exportFile struct {
-	Hosts   []*Host   `json:"hosts"`
-	Streams []*Stream `json:"streams,omitempty"`
+	Hosts       []*Host           `json:"hosts"`
+	Streams     []*Stream         `json:"streams,omitempty"`
+	AccessLists []*AccessList     `json:"access_lists,omitempty"` // mit Passwort-Hashes (Basic Auth)
+	Settings    map[string]string `json:"settings,omitempty"`     // Blocklisten, Ausnahmen, Limits, Zugriffs-Log
+	// Feste Zertifikate: Namen des Zertifikats je Host- bzw. Stream-ID der Quelle (IDs gelten nur dort). Beim
+	// Import wird das Zertifikat mit genau diesen Namen gesucht (Zertifikate kommen vorher mit dem Backup des Kerns).
+	HostCerts   map[int64][]string `json:"host_certs,omitempty"`
+	StreamCerts map[int64][]string `json:"stream_certs,omitempty"`
 }
+
+// exportSettings: Einstellungen, die zur Konfiguration gehoeren (nicht CDN64 online: Tunnel und Token gehoeren
+// zu dieser Node).
+var exportSettings = []string{setBlocklists, setBlockAllow, setLimits, setLogDays, setAnonymize}
 
 func (m *Module) Export(ctx context.Context) (any, error) {
 	list, err := m.hosts(ctx)
 	if err != nil {
 		return nil, err
 	}
+	f := exportFile{Hosts: list, HostCerts: map[int64][]string{}, StreamCerts: map[int64][]string{}, Settings: map[string]string{}}
+	certNames := func(id int64) []string {
+		if id <= 0 || m.certs == nil {
+			return nil
+		}
+		if c, err := m.certs.Get(ctx, id); err == nil {
+			return c.Names
+		}
+		return nil
+	}
 	for _, h := range list {
-		if h.CertID > 0 { // Kennungen gelten nur auf dieser Node: beim Import passendes nach Namen
+		if h.CertID > 0 { // Kennungen gelten nur auf dieser Node: Namen mitgeben, beim Import passendes suchen
+			if n := certNames(h.CertID); len(n) > 0 {
+				f.HostCerts[h.ID] = n
+			}
 			h.CertID = CertAuto
 		}
 	}
-	streams, err := m.streams(ctx)
-	if err != nil {
+	if f.Streams, err = m.streams(ctx); err != nil {
 		return nil, err
 	}
-	for _, s := range streams {
-		s.TLSCertID = 0 // Zertifikate gehoeren nicht zum Export
+	for _, s := range f.Streams {
+		if n := certNames(s.TLSCertID); len(n) > 0 {
+			f.StreamCerts[s.ID] = n
+		}
+		s.TLSCertID = 0
 	}
-	return exportFile{Hosts: list, Streams: streams}, nil
+	if f.AccessLists, err = m.accessLists(ctx); err != nil {
+		return nil, err
+	}
+	for _, k := range exportSettings {
+		if v := m.core.SettingOr(ctx, k, ""); v != "" {
+			f.Settings[k] = v
+		}
+	}
+	return f, nil
 }
 
-// Import legt Hosts und Streams an, deren Namen bzw. Ports es hier noch nicht gibt (nichts wird geaendert oder
-// geloescht).
+// Import legt Zugriffslisten, Hosts und Streams an, deren Namen bzw. Ports es hier noch nicht gibt, und setzt
+// Einstellungen, die hier noch leer sind (nichts wird geaendert oder geloescht). Verweise auf Zugriffslisten werden
+// auf die Listen dieser Node umgeschrieben, feste Zertifikate nach Namen gesucht.
 func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	var f exportFile
 	if err := json.Unmarshal(raw, &f); err != nil {
@@ -374,35 +410,128 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	}
 	n := 0
 	var firstErr error
+	keep := func(err error) {
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+	acl, err := m.importACLs(ctx, f.AccessLists)
+	if err != nil {
+		return 0, err
+	}
+	n += acl.added
+	certByNames := m.certIndex(ctx)
 	for _, h := range f.Hosts {
+		oldID := h.ID
 		h.ID = 0
+		h.AccessListID = acl.ids[h.AccessListID] // unbekannt -> 0 (keine)
+		for i := range h.Locations {
+			h.Locations[i].AccessListID = acl.ids[h.Locations[i].AccessListID]
+		}
+		if id := certByNames[nameKey(f.HostCerts[oldID])]; id > 0 {
+			h.CertID = id
+		}
 		if err := m.saveHost(ctx, h); err != nil {
 			var fe *FieldError
 			if errors.As(err, &fe) && fe.Key == "cdn64.err.name_taken" {
 				continue // gibt es schon
 			}
-			if firstErr == nil {
-				firstErr = err
-			}
+			keep(err)
 			continue
 		}
 		n++
 	}
 	for _, s := range f.Streams {
+		oldID := s.ID
 		s.ID = 0
+		s.TLSCertID = certByNames[nameKey(f.StreamCerts[oldID])]
 		if err := m.saveStream(ctx, s); err != nil {
 			var fe *FieldError
 			if errors.As(err, &fe) && fe.Key == "cdn64.err.stream_port_taken" {
 				continue // gibt es schon
 			}
-			if firstErr == nil {
-				firstErr = err
-			}
+			keep(err)
 			continue
 		}
 		n++
 	}
+	for _, k := range exportSettings {
+		if v, ok := f.Settings[k]; ok && v != "" && m.core.SettingOr(ctx, k, "") == "" {
+			if err := m.core.SetSetting(ctx, k, v); err != nil {
+				keep(err)
+			}
+		}
+	}
+	m.apply(ctx)
 	return n, firstErr
+}
+
+type aclImport struct {
+	ids   map[int64]int64 // ID der Quelle -> ID hier (0 bleibt 0)
+	added int
+}
+
+// importACLs: gleichnamige Liste hier wiederverwenden, sonst mit den Hashes der Quelle anlegen.
+func (m *Module) importACLs(ctx context.Context, lists []*AccessList) (aclImport, error) {
+	res := aclImport{ids: map[int64]int64{0: 0}}
+	have, err := m.accessLists(ctx)
+	if err != nil {
+		return res, err
+	}
+	byName := map[string]int64{}
+	for _, a := range have {
+		byName[a.Name] = a.ID
+	}
+	for _, a := range lists {
+		if a == nil || strings.TrimSpace(a.Name) == "" {
+			continue
+		}
+		if id, ok := byName[a.Name]; ok {
+			res.ids[a.ID] = id
+			continue
+		}
+		ub, _ := json.Marshal(a.Users)
+		rb, _ := json.Marshal(a.Rules)
+		now := store.Now()
+		r, err := m.core.Writer().ExecContext(ctx, `INSERT INTO cdn_access_lists (name, satisfy_any, pass_auth, users, rules, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			a.Name, a.SatisfyAny, a.PassAuth, string(ub), string(rb), now, now)
+		if err != nil {
+			return res, err
+		}
+		id, _ := r.LastInsertId()
+		res.ids[a.ID], byName[a.Name] = id, id
+		res.added++
+	}
+	return res, nil
+}
+
+// certIndex: Zertifikate dieser Node nach ihren Namen (sortiert, Komma).
+func (m *Module) certIndex(ctx context.Context) map[string]int64 {
+	out := map[string]int64{}
+	if m.certs == nil {
+		return out
+	}
+	list, err := m.certs.List(ctx)
+	if err != nil {
+		return out
+	}
+	for _, c := range list {
+		if k := nameKey(c.Names); k != "" {
+			if old, ok := out[k]; !ok || c.ID > old { // mehrere gleiche: das neueste
+				out[k] = c.ID
+			}
+		}
+	}
+	return out
+}
+
+func nameKey(names []string) string {
+	if len(names) == 0 {
+		return ""
+	}
+	s := slices.Clone(names)
+	slices.Sort(s)
+	return strings.Join(s, ",")
 }
 
 // logDays: Aufbewahrung des Zugriffs-Logs in Tagen (1-90, Standard 7).
