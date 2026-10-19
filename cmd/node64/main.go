@@ -280,7 +280,13 @@ func run() error {
 				f(context.WithoutCancel(ctx), entity, id, op)
 			}
 		},
-		Hub: syncClient}) // nicht verknuepfte Mitglieder als Stellvertreter-Nodes beim hub
+		Hub: syncClient, // nicht verknuepfte Mitglieder als Stellvertreter-Nodes beim hub
+		HTTPSPort: func() int { // Cluster nur HTTPS: HTTPS-Port, sonst der Web-Port (spricht auch TLS, dualport.go)
+			if cfg.HTTPSPort > 0 {
+				return cfg.HTTPSPort
+			}
+			return cfg.HTTPPort
+		}})
 	if err != nil {
 		return err
 	}

@@ -1,10 +1,12 @@
-// Package peer ist die lokale Gruppe: Nodes desselben ipv64-Accounts koppeln sich per Code und gleichen
-// Healthchecks direkt untereinander ab (im lokalen Netz, ueber den normalen Web-Port), zusaetzlich zum hub.
+// Package peer ist der Cluster (frueher lokale Gruppe): Nodes desselben ipv64-Accounts (oder alle ohne Account)
+// koppeln sich per Code und gleichen direkt untereinander ab (nur HTTPS, auch in verschiedenen Netzen),
+// zusaetzlich zum hub.
 //
 // Vertrauen: jede Node hat ein Ed25519-Schluesselpaar. Gekoppelt wird mit einem Code, den Node A zeigt und
 // der auf Node B eingegeben wird; beide beweisen per HMAC, dass sie den Code kennen (er geht nie im Klartext
-// ueber das Netz) und tauschen ihre Schluessel. Danach ist jede Anfrage signiert, und der ipv64-Account der
-// Absenderin muss bei jeder Anfrage mit dem eigenen uebereinstimmen.
+// ueber das Netz) und tauschen ihre Schluessel. Danach ist jede Anfrage und jede Antwort signiert und an die
+// TLS-Verbindung gebunden (transport.go), und der ipv64-Account der Absenderin muss bei jeder Anfrage mit dem
+// eigenen uebereinstimmen. Aendert sich etwas Grundlegendes, wird das Mitglied ausgesetzt (suspend.go).
 package peer
 
 import (
@@ -17,7 +19,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -42,10 +43,17 @@ const (
 
 // Errors der Kopplung (fuer verstaendliche Meldungen in der Oberflaeche).
 var (
+	// ErrNoAccount wird nicht mehr geliefert (Konto 0 = alle ohne ipv64 ist erlaubt), bleibt fuer die Oberflaeche.
 	ErrNoAccount       = errors.New("no ipv64 account")
 	ErrAccountMismatch = errors.New("account mismatch")
 	ErrCode            = errors.New("code wrong or expired")
 	ErrSelf            = errors.New("cannot pair with itself")
+	// ErrNoHTTPS: diese oder die andere Node hat keinen HTTPS-Port (der Cluster spricht nur HTTPS).
+	ErrNoHTTPS = errors.New("cluster needs https")
+	// ErrTLSBinding: die Verbindung ist nicht direkt (z. B. TLS-terminierender Proxy dazwischen).
+	ErrTLSBinding = errors.New("connection not bound to the pairing (proxy in between?)")
+	// ErrSuspended: das Mitglied ist ausgesetzt (keine Kommunikation, Grund in Member.Reason).
+	ErrSuspended = errors.New("cluster member suspended")
 	// ErrUnknownMember: keine Node mit dieser Kennung in der Gruppe.
 	ErrUnknownMember = errors.New("unknown group member")
 	// errPeerHCOff: bei der anderen Node ist Healthchecks aus (dort nichts abzuholen).
@@ -68,10 +76,14 @@ type Member struct {
 	Sync      []string  `json:"-"` // eingeschaltete Cluster-Bereiche "modul/bereich" laut Ping (nil = aeltere Version)
 	State     string    `json:"-"` // "" bzw. "active", "suspended" (suspend.go)
 	Reason    string    `json:"-"` // Grund der Aussetzung (Kennung, z. B. account_changed)
+	// SelfAccount: eigener Account zum Zeitpunkt der Kopplung (aendert er sich, wird das Mitglied ausgesetzt)
+	SelfAccount int64 `json:"-"`
 }
 
-// Online: in den letzten zwei Minuten erreicht.
-func (m Member) Online() bool { return !m.LastSeen.IsZero() && time.Since(m.LastSeen) < offline }
+// Online: in den letzten zwei Minuten erreicht (ausgesetzte nie).
+func (m Member) Online() bool {
+	return !m.Suspended() && !m.LastSeen.IsZero() && time.Since(m.LastSeen) < offline
+}
 
 // Deps sind die Anbindungen an den Rest der Node.
 type Deps struct {
@@ -92,6 +104,8 @@ type Deps struct {
 	Forward func(ctx context.Context, entity, id, op string)
 	// Hub meldet nicht verknuepfte Mitglieder als Stellvertreter-Nodes beim hub an (proxy.go), nil = nie
 	Hub Hub
+	// HTTPSPort, unter dem die anderen Nodes diese erreichen (der Cluster spricht nur HTTPS), 0 bzw. nil = keiner
+	HTTPSPort func() int
 }
 
 // Manager verwaltet Identitaet, Kopplung und Mitglieder.
@@ -99,7 +113,6 @@ type Manager struct {
 	d      Deps
 	db     *sql.DB
 	priv   ed25519.PrivateKey
-	hc     *http.Client
 	pull   pullState   // Abgleich der Konfiguration (config.go)
 	ready  atomic.Bool // erster Abgleich nach dem Start erledigt (notify.go)
 	seeded atomic.Bool // vorhandene Checks und Fenster im Protokoll (config.go)
@@ -110,11 +123,14 @@ type Manager struct {
 	code    string              // offener Kopplungscode
 	exp     time.Time
 	tries   int
+
+	nmu    sync.Mutex
+	nonces map[string]time.Time // gesehene Nonces der Anfragen (Wiederholungsschutz, transport.go)
 }
 
 // New laedt bzw. erzeugt den Schluessel.
 func New(ctx context.Context, d Deps) (*Manager, error) {
-	m := &Manager{d: d, db: d.Core.Writer(), hc: &http.Client{Timeout: 10 * time.Second}}
+	m := &Manager{d: d, db: d.Core.Writer()}
 	m.pull.kick, m.pull.busy = make(chan string, 16), map[string]*sync.Mutex{}
 	raw := d.Core.SettingOr(ctx, setKey, "")
 	if raw != "" && d.Box != nil {
@@ -138,7 +154,7 @@ func New(ctx context.Context, d Deps) (*Manager, error) {
 	return m, d.Core.SetSetting(ctx, setKey, v)
 }
 
-// Account ist der ipv64-Account dieser Node (0 = keiner, dann keine Gruppe).
+// Account ist der ipv64-Account dieser Node (0 = keiner, dann nur mit Nodes ohne Account).
 func (m *Manager) Account() int64 { return m.d.AccountID() }
 
 // PublicKey der eigenen Node (base64).
@@ -148,7 +164,8 @@ func (m *Manager) PublicKey() string {
 
 // Members liefert die Gruppe (ohne die eigene Node), nach Name sortiert.
 func (m *Manager) Members(ctx context.Context) ([]Member, error) {
-	rows, err := m.db.QueryContext(ctx, `SELECT node_id, name, url, pubkey, account_id, added_at, added_by, last_seen, last_error, version, linked, sync FROM peer_members ORDER BY name, node_id`)
+	rows, err := m.db.QueryContext(ctx, `SELECT node_id, name, url, pubkey, account_id, added_at, added_by, last_seen, last_error, version, linked, sync,
+		state, reason, self_account FROM peer_members ORDER BY name, node_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +175,8 @@ func (m *Manager) Members(ctx context.Context) ([]Member, error) {
 		var x Member
 		var added, seen string
 		var caps sql.NullString
-		if err := rows.Scan(&x.NodeID, &x.Name, &x.URL, &x.PubKey, &x.AccountID, &added, &x.AddedBy, &seen, &x.LastError, &x.Version, &x.Linked, &caps); err != nil {
+		if err := rows.Scan(&x.NodeID, &x.Name, &x.URL, &x.PubKey, &x.AccountID, &added, &x.AddedBy, &seen, &x.LastError, &x.Version, &x.Linked, &caps,
+			&x.State, &x.Reason, &x.SelfAccount); err != nil {
 			return nil, err
 		}
 		if caps.Valid {
@@ -183,15 +201,15 @@ func (m *Manager) member(ctx context.Context, nodeID string) (*Member, error) {
 	return nil, nil
 }
 
-// upsert nimmt eine Node auf oder aktualisiert Name, Adresse und Schluessel.
+// upsert nimmt eine Node auf oder aktualisiert Name, Adresse (immer https) und Schluessel.
 func (m *Manager) upsert(ctx context.Context, x Member, by string) error {
 	if x.NodeID == "" || x.NodeID == m.d.NodeID() || x.PubKey == "" {
 		return nil
 	}
-	_, err := m.db.ExecContext(ctx, `INSERT INTO peer_members (node_id, name, url, pubkey, account_id, added_at, added_by) VALUES (?,?,?,?,?,?,?)
+	_, err := m.db.ExecContext(ctx, `INSERT INTO peer_members (node_id, name, url, pubkey, account_id, added_at, added_by, self_account) VALUES (?,?,?,?,?,?,?,?)
 		ON CONFLICT(node_id) DO UPDATE SET name = excluded.name, url = CASE WHEN excluded.url != '' THEN excluded.url ELSE url END,
 		pubkey = excluded.pubkey, account_id = excluded.account_id`,
-		x.NodeID, trunc(x.Name, 100), trunc(strings.TrimRight(x.URL, "/"), 300), x.PubKey, x.AccountID, fmtTime(time.Now()), by)
+		x.NodeID, trunc(x.Name, 100), trunc(httpsURL(x.URL), 300), x.PubKey, x.AccountID, fmtTime(time.Now()), by, m.d.AccountID())
 	return err
 }
 
@@ -200,9 +218,9 @@ func (m *Manager) remove(ctx context.Context, nodeID string) error {
 	return err
 }
 
-// SetURL aendert die Adresse einer Node (falls sie umgezogen ist).
+// SetURL aendert die Adresse einer Node (falls sie umgezogen ist; immer https, ohne Schema wird es ergaenzt).
 func (m *Manager) SetURL(ctx context.Context, nodeID, url string) error {
-	res, err := m.db.ExecContext(ctx, `UPDATE peer_members SET url = ? WHERE node_id = ?`, trunc(strings.TrimRight(strings.TrimSpace(url), "/"), 300), nodeID)
+	res, err := m.db.ExecContext(ctx, `UPDATE peer_members SET url = ? WHERE node_id = ?`, trunc(httpsURL(url), 300), nodeID)
 	if err != nil {
 		return err
 	}
@@ -262,15 +280,19 @@ func (m *Manager) Run(ctx context.Context) {
 }
 
 func (m *Manager) pingAll(ctx context.Context) {
-	list, err := m.Members(ctx)
-	if err != nil {
-		return
-	}
-	for _, x := range list {
+	m.checkAccount(ctx) // eigener Account geaendert: Mitglieder der alten Kopplung aussetzen
+	for _, x := range m.activeMembers(ctx) {
 		var out pingInfo
 		err := m.call(ctx, x, http.MethodGet, "/peer/v1/ping", nil, &out)
-		if err == nil && out.NodeID != x.NodeID {
-			err = errors.New("other node at this address")
+		switch {
+		case errors.Is(err, ErrSuspended):
+			continue // eben ausgesetzt (Grund steht fest)
+		case err == nil && out.NodeID != x.NodeID:
+			m.suspend(ctx, x, ReasonIdentityChanged, "other node at this address")
+			continue
+		case err == nil && out.AccountID != m.d.AccountID():
+			m.suspend(ctx, x, ReasonAccountMismatch, "account of the other node does not match")
+			continue
 		}
 		m.seen(ctx, x.NodeID, out, err)
 	}

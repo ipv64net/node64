@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -22,8 +23,9 @@ import (
 	"github.com/ipv64net/node64/internal/store"
 )
 
-// Signierte Anfragen zwischen den Nodes der Gruppe: Kopfzeilen mit Absenderin, Zeit und Account, Signatur
-// ueber Methode, Pfad, Zeit, Account und SHA-256 des Bodys.
+// Signierte Anfragen zwischen den Nodes des Clusters: Kopfzeilen mit Absenderin, Zeit, Account und Nonce,
+// Signatur ueber Methode, Pfad, Zeit, Account, Nonce, Bindung an die TLS-Verbindung und SHA-256 des Bodys
+// (transport.go). Die Antworten sind ebenso signiert.
 const (
 	hdrNode = "X-Node64-Peer"
 	hdrTime = "X-Node64-Time"
@@ -32,50 +34,50 @@ const (
 	maxBody = 8 << 20
 )
 
-func sigMsg(method, path, ts, acc string, body []byte) []byte {
-	h := sha256.Sum256(body)
-	return []byte(method + "\n" + path + "\n" + ts + "\n" + acc + "\n" + hex.EncodeToString(h[:]))
+// errSuspendedThere: die andere Node hat diese ausgesetzt (dort wieder aufnehmen).
+var errSuspendedThere = errors.New("suspended by the other node")
+
+// call schickt eine signierte Anfrage an eine Node des Clusters (nur HTTPS, an die Kopplung gebunden).
+// Ausgesetzte Mitglieder bekommen nichts (ErrSuspended).
+func (m *Manager) call(ctx context.Context, x Member, method, path string, in, out any) error {
+	return m.callAny(ctx, x, method, path, in, out, false)
 }
 
-// call schickt eine signierte Anfrage an eine Node der Gruppe.
-func (m *Manager) call(ctx context.Context, x Member, method, path string, in, out any) error {
-	acc := m.d.AccountID()
-	if acc <= 0 {
-		return ErrNoAccount
+// callAny: anyState = auch an ausgesetzte Mitglieder (Pruefung beim Wiederaufnehmen, Abmeldung).
+func (m *Manager) callAny(ctx context.Context, x Member, method, path string, in, out any, anyState bool) error {
+	if !anyState && (x.Suspended() || m.accountChanged(ctx, x)) {
+		return ErrSuspended
 	}
 	var body []byte
 	if in != nil {
 		body, _ = json.Marshal(in)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(x.URL, "/")+path, bytes.NewReader(body))
+	status, b, err := m.exchange(ctx, x, method, path, body)
 	if err != nil {
+		var se *suspendErr
+		if errors.As(err, &se) {
+			m.suspend(ctx, x, se.reason, se.msg)
+		}
 		return err
 	}
-	ts, accS := strconv.FormatInt(time.Now().Unix(), 10), strconv.FormatInt(acc, 10)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "node64/"+m.d.Version)
-	req.Header.Set(hdrNode, m.d.NodeID())
-	req.Header.Set(hdrTime, ts)
-	req.Header.Set(hdrAcc, accS)
-	req.Header.Set(hdrSig, base64.StdEncoding.EncodeToString(ed25519.Sign(m.priv, sigMsg(method, path, ts, accS, body))))
-	resp, err := m.hc.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, maxBody))
-	if resp.StatusCode != http.StatusOK {
+	if status != http.StatusOK {
 		var e struct {
 			Error string `json:"error"`
 		}
 		_ = json.Unmarshal(b, &e)
-		if resp.StatusCode == http.StatusForbidden && e.Error == "account mismatch" {
+		switch {
+		case status == http.StatusForbidden && e.Error == ErrAccountMismatch.Error():
+			m.suspend(ctx, x, ReasonAccountMismatch, "account of the other node does not match")
 			return ErrAccountMismatch
-		}
-		if resp.StatusCode == http.StatusServiceUnavailable && e.Error == "healthchecks not running" {
+		case status == http.StatusForbidden && e.Error == ErrTLSBinding.Error():
+			m.suspend(ctx, x, ReasonTLSBinding, e.Error) // die Anfrage kam dort ueber eine andere Verbindung an
+			return ErrTLSBinding
+		case status == http.StatusForbidden && e.Error == errSuspendedThere.Error():
+			return errSuspendedThere
+		case status == http.StatusServiceUnavailable && e.Error == "healthchecks not running":
 			return errPeerHCOff
 		}
-		return fmt.Errorf("HTTP %d %s", resp.StatusCode, e.Error)
+		return fmt.Errorf("HTTP %d %s", status, e.Error)
 	}
 	if out != nil {
 		return json.Unmarshal(b, out)
@@ -83,9 +85,12 @@ func (m *Manager) call(ctx context.Context, x Member, method, path string, in, o
 	return nil
 }
 
-// verify prueft eine eingehende signierte Anfrage und liefert die Absenderin.
-func (m *Manager) verify(r *http.Request, body []byte) (*Member, int, error) {
-	x, err := m.member(r.Context(), r.Header.Get(hdrNode))
+// verify prueft eine eingehende signierte Anfrage (bind = Exporter der eigenen TLS-Verbindung) und liefert die
+// Absenderin. Passt der Account nicht, wird sie ausgesetzt; ausgesetzte Mitglieder duerfen nur noch pingen (fuer
+// das Wiederaufnehmen) und sich bzw. diese Node abmelden.
+func (m *Manager) verify(r *http.Request, body, bind []byte) (*Member, int, error) {
+	ctx := r.Context()
+	x, err := m.member(ctx, r.Header.Get(hdrNode))
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
 	}
@@ -97,32 +102,77 @@ func (m *Manager) verify(r *http.Request, body []byte) (*Member, int, error) {
 	if err != nil || time.Since(time.Unix(sec, 0)).Abs() > timeSkew {
 		return nil, http.StatusUnauthorized, errors.New("time skew")
 	}
-	accS := r.Header.Get(hdrAcc)
-	acc, _ := strconv.ParseInt(accS, 10, 64)
-	if own := m.d.AccountID(); own <= 0 || acc != own || x.AccountID != own {
-		return nil, http.StatusForbidden, ErrAccountMismatch
-	}
+	nonce, accS := r.Header.Get(hdrNonce), r.Header.Get(hdrAcc)
 	pub, err := base64.StdEncoding.DecodeString(x.PubKey)
 	sig, err2 := base64.StdEncoding.DecodeString(r.Header.Get(hdrSig))
-	if err != nil || err2 != nil || len(pub) != ed25519.PublicKeySize || !ed25519.Verify(ed25519.PublicKey(pub), sigMsg(r.Method, r.URL.RequestURI(), ts, accS, body), sig) {
+	if err != nil || err2 != nil || len(pub) != ed25519.PublicKeySize || len(nonce) < 16 || len(nonce) > 64 {
 		return nil, http.StatusUnauthorized, errors.New("bad signature")
+	}
+	if !ed25519.Verify(ed25519.PublicKey(pub), reqMsg(r.Method, r.URL.RequestURI(), ts, accS, nonce, bind, body), sig) {
+		// von der Absenderin signiert, aber fuer eine andere Verbindung: Mittelsmann, der TLS terminiert
+		if cb, err := hex.DecodeString(r.Header.Get(hdrBind)); err == nil && len(cb) == bindLen && !bytes.Equal(cb, bind) &&
+			ed25519.Verify(ed25519.PublicKey(pub), reqMsg(r.Method, r.URL.RequestURI(), ts, accS, nonce, cb, body), sig) {
+			return nil, http.StatusForbidden, ErrTLSBinding
+		}
+		return nil, http.StatusUnauthorized, errors.New("bad signature")
+	}
+	if !m.nonceFresh(nonce) {
+		return nil, http.StatusUnauthorized, errors.New("replayed request")
+	}
+	acc, _ := strconv.ParseInt(accS, 10, 64)
+	mismatch := false
+	if own := m.d.AccountID(); m.accountChanged(ctx, *x) {
+		x.State, mismatch = stateSuspended, true
+	} else if acc != own || x.AccountID != own {
+		m.suspend(ctx, *x, ReasonAccountMismatch, "account of the other node does not match")
+		x.State, mismatch = stateSuspended, true
+	}
+	if x.Suspended() && !suspendedMay(r, body, m.d.NodeID(), x.NodeID) {
+		if mismatch {
+			return nil, http.StatusForbidden, ErrAccountMismatch
+		}
+		return nil, http.StatusForbidden, errSuspendedThere
 	}
 	return x, 0, nil
 }
 
-// Handle prueft die Signatur und ruft h mit der Absenderin und dem Body auf.
+// suspendedMay: was ein ausgesetztes Mitglied noch darf (Ping fuer das Wiederaufnehmen, Abmelden).
+func suspendedMay(r *http.Request, body []byte, self, from string) bool {
+	switch r.URL.Path {
+	case "/peer/v1/ping":
+		return true
+	case "/peer/v1/members":
+		var op memberOp
+		return json.Unmarshal(body, &op) == nil && op.Op == "remove" && (op.Member.NodeID == self || op.Member.NodeID == from)
+	}
+	return false
+}
+
+// Handle prueft TLS, Bindung und Signatur und ruft h mit der Absenderin und dem Body auf. Die Antwort wird
+// signiert (gilt fuer alle /peer/v1/* und /peer/v2/*).
 func (m *Manager) Handle(h func(w http.ResponseWriter, r *http.Request, from *Member, body []byte)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS == nil {
+			rejectPlain(w)
+			return
+		}
+		bind, err := tlsBind(r.TLS)
+		sw := &sigWriter{hdr: http.Header{}}
+		defer m.sendSigned(w, sw, r, bind)
+		if err != nil {
+			writeJSON(sw, http.StatusForbidden, map[string]string{"error": ErrTLSBinding.Error()})
+			return
+		}
 		body, _ := io.ReadAll(io.LimitReader(r.Body, maxBody))
-		from, code, err := m.verify(r, body)
+		from, code, err := m.verify(r, body, bind)
 		if err != nil {
 			m.d.Log.Warn("peer request rejected", "node", r.Header.Get(hdrNode), "path", r.URL.Path, "err", err)
-			writeJSON(w, code, map[string]string{"error": err.Error()})
+			writeJSON(sw, code, map[string]string{"error": err.Error()})
 			return
 		}
 		// jede gueltige Anfrage ist ein Lebenszeichen (eine zurueckgekehrte Node gilt sofort wieder als erreichbar)
-		_, _ = m.db.ExecContext(r.Context(), `UPDATE peer_members SET last_seen = ?, last_error = '' WHERE node_id = ?`, fmtTime(time.Now()), from.NodeID)
-		h(w, r, from, body)
+		_, _ = m.db.ExecContext(r.Context(), `UPDATE peer_members SET last_seen = ?, last_error = '' WHERE node_id = ? AND state != ?`, fmtTime(time.Now()), from.NodeID, stateSuspended)
+		h(sw, r, from, body)
 	})
 }
 
@@ -137,6 +187,7 @@ func (m *Manager) Register(mux *http.ServeMux) {
 	mux.Handle("POST /peer/v1/poke", m.Handle(m.handlePoke))
 	mux.Handle("GET /peer/v1/measurements", m.Handle(m.handleMeasurements))
 	mux.Handle("GET /peer/v1/relay", m.Handle(m.handleRelay))
+	m.registerSync2(mux) // allgemeiner Abgleich der Module (sync2.go)
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -148,8 +199,8 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 
 // ---------------------------------------------------------------- Kopplung
 
-// pairMsg ist Anfrage und Antwort der Kopplung; MAC = HMAC-SHA256(Code, JSON ohne MAC), Nonce der Anfrage
-// auch in der Antwort (bindet beide aneinander).
+// pairMsg ist Anfrage und Antwort der Kopplung; MAC = HMAC-SHA256(Code, JSON ohne MAC und Bindung an die
+// TLS-Verbindung), Nonce der Anfrage auch in der Antwort (bindet beide aneinander).
 type pairMsg struct {
 	NodeID    string   `json:"node_id"`
 	Name      string   `json:"name"`
@@ -157,16 +208,19 @@ type pairMsg struct {
 	PubKey    string   `json:"pubkey"`
 	AccountID int64    `json:"account_id"`
 	Version   string   `json:"version"`
+	HTTPSPort int      `json:"https_port,omitempty"` // Rueckfall fuer die Adresse, wenn URL leer ist
 	Members   []Member `json:"members,omitempty"`
 	Nonce     string   `json:"nonce"`
 	MAC       string   `json:"mac"`
 }
 
-func (p pairMsg) mac(code string) string {
+func (p pairMsg) mac(code string, bind []byte) string {
 	p.MAC = ""
 	b, _ := json.Marshal(p)
 	h := hmac.New(sha256.New, []byte(normCode(code)))
 	h.Write(b)
+	h.Write([]byte{0})
+	h.Write(bind)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -178,8 +232,8 @@ const codeChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 // StartPairing erzeugt einen Code (10 Minuten, einmal gueltig), mit dem eine weitere Node beitreten kann.
 func (m *Manager) StartPairing() (string, time.Time, error) {
-	if m.d.AccountID() <= 0 {
-		return "", time.Time{}, ErrNoAccount
+	if m.httpsPort() <= 0 {
+		return "", time.Time{}, ErrNoHTTPS
 	}
 	b := make([]byte, 8)
 	if _, err := rand.Read(b); err != nil {
@@ -211,51 +265,60 @@ func (m *Manager) CancelPairing() {
 	m.mu.Unlock()
 }
 
-// Join tritt ueber eine Node der Gruppe bei (addr = deren Adresse, selfURL = Adresse dieser Node).
+// Join tritt ueber eine Node des Clusters bei (addr = deren Adresse, selfURL = Adresse dieser Node; beide werden
+// https, die eigene mit dem HTTPS-Port). Gleicher Account auf beiden Seiten, auch beide ohne (0).
 func (m *Manager) Join(ctx context.Context, addr, code, selfURL string) error {
+	port := m.httpsPort()
+	if port <= 0 {
+		return ErrNoHTTPS
+	}
 	acc := m.d.AccountID()
-	if acc <= 0 {
-		return ErrNoAccount
-	}
-	addr = strings.TrimRight(strings.TrimSpace(addr), "/")
-	if !strings.Contains(addr, "://") {
-		addr = "http://" + addr
-	}
+	addr = httpsURL(addr)
 	nonce := make([]byte, 16)
 	_, _ = rand.Read(nonce)
-	req := pairMsg{NodeID: m.d.NodeID(), Name: m.d.NodeName(), URL: strings.TrimRight(strings.TrimSpace(selfURL), "/"), PubKey: m.PublicKey(), AccountID: acc,
-		Version: m.d.Version, Nonce: hex.EncodeToString(nonce)}
-	req.MAC = req.mac(code)
+	req := pairMsg{NodeID: m.d.NodeID(), Name: m.d.NodeName(), URL: selfAddr(selfURL, port), PubKey: m.PublicKey(), AccountID: acc,
+		Version: m.d.Version, HTTPSPort: port, Nonce: hex.EncodeToString(nonce)}
+	p, err := dialPeer(ctx, addr)
+	if err != nil {
+		var se *suspendErr
+		if errors.As(err, &se) {
+			return ErrTLSBinding
+		}
+		return err
+	}
+	defer p.Close()
+	req.MAC = req.mac(code, p.bind)
 	body, _ := json.Marshal(req)
-	hr, err := http.NewRequestWithContext(ctx, http.MethodPost, addr+"/peer/v1/pair", bytes.NewReader(body))
+	hdr := http.Header{}
+	hdr.Set("Content-Type", "application/json")
+	hdr.Set("User-Agent", "node64/"+m.d.Version)
+	hdr.Set(hdrBind, hex.EncodeToString(p.bind))
+	status, _, b, err := p.do(ctx, http.MethodPost, "/peer/v1/pair", body, hdr)
 	if err != nil {
 		return err
 	}
-	hr.Header.Set("Content-Type", "application/json")
-	resp, err := m.hc.Do(hr)
-	if err != nil {
-		return err
+	var e struct {
+		Error string `json:"error"`
 	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+	_ = json.Unmarshal(b, &e)
 	var out pairMsg
 	switch {
-	case resp.StatusCode == http.StatusForbidden:
+	case status == http.StatusForbidden && e.Error == ErrTLSBinding.Error():
+		return ErrTLSBinding
+	case status == http.StatusForbidden:
 		return ErrAccountMismatch
-	case resp.StatusCode == http.StatusUnauthorized:
+	case status == http.StatusUnauthorized:
 		return ErrCode
-	case resp.StatusCode != http.StatusOK:
-		var e struct {
-			Error string `json:"error"`
-		}
-		_ = json.Unmarshal(b, &e)
-		return fmt.Errorf("HTTP %d %s", resp.StatusCode, e.Error)
+	case status == http.StatusConflict && e.Error == ErrNoHTTPS.Error():
+		return ErrNoHTTPS
+	case status != http.StatusOK:
+		return fmt.Errorf("HTTP %d %s", status, e.Error)
 	}
 	if err := json.Unmarshal(b, &out); err != nil {
 		return err
 	}
-	if out.Nonce != req.Nonce || subtle.ConstantTimeCompare([]byte(out.mac(code)), []byte(out.MAC)) != 1 {
-		return ErrCode // Antwort nicht von einer Node, die den Code kennt
+	if out.Nonce != req.Nonce || subtle.ConstantTimeCompare([]byte(out.mac(code, p.bind)), []byte(out.MAC)) != 1 {
+		return ErrCode // Antwort nicht von einer Node, die den Code kennt (oder nicht ueber diese Verbindung)
 	}
 	if out.AccountID != acc {
 		return ErrAccountMismatch
@@ -263,18 +326,16 @@ func (m *Manager) Join(ctx context.Context, addr, code, selfURL string) error {
 	if out.NodeID == m.d.NodeID() {
 		return ErrSelf
 	}
-	if out.URL == "" {
-		out.URL = addr
-	}
 	if err := m.upsert(ctx, Member{NodeID: out.NodeID, Name: out.Name, URL: addr, PubKey: out.PubKey, AccountID: out.AccountID}, m.d.NodeID()); err != nil {
 		return err
 	}
+	m.activate(ctx, out.NodeID, acc) // neu gekoppelt: auch ein vorher ausgesetztes Mitglied ist wieder aktiv
 	for _, x := range out.Members {
 		if x.AccountID == acc {
 			_ = m.upsert(ctx, x, out.NodeID)
 		}
 	}
-	m.d.Log.Info("joined local group", "via", out.Name, "members", len(out.Members)+1)
+	m.d.Log.Info("joined cluster", "via", out.Name, "members", len(out.Members)+1)
 	go func() {
 		m.pingAll(context.Background())
 		m.pullAll(context.Background(), "")
@@ -284,6 +345,15 @@ func (m *Manager) Join(ctx context.Context, addr, code, selfURL string) error {
 }
 
 func (m *Manager) handlePair(w http.ResponseWriter, r *http.Request) {
+	if r.TLS == nil {
+		rejectPlain(w)
+		return
+	}
+	bind, err := tlsBind(r.TLS)
+	if err != nil {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": ErrTLSBinding.Error()})
+		return
+	}
 	var in pairMsg
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
@@ -291,24 +361,32 @@ func (m *Manager) handlePair(w http.ResponseWriter, r *http.Request) {
 	}
 	m.mu.Lock()
 	code, valid := m.code, m.code != "" && time.Now().Before(m.exp)
-	ok := valid && subtle.ConstantTimeCompare([]byte(in.mac(code)), []byte(in.MAC)) == 1
-	if valid && !ok {
+	ok := valid && subtle.ConstantTimeCompare([]byte(in.mac(code, bind)), []byte(in.MAC)) == 1
+	// Code stimmt, aber fuer eine andere Verbindung: Mittelsmann (zaehlt nicht als Fehlversuch)
+	cb, _ := hex.DecodeString(r.Header.Get(hdrBind))
+	relayed := valid && !ok && len(cb) == bindLen && !bytes.Equal(cb, bind) && subtle.ConstantTimeCompare([]byte(in.mac(code, cb)), []byte(in.MAC)) == 1
+	if valid && !ok && !relayed {
 		if m.tries++; m.tries >= 5 {
 			m.code = "" // zu viele Fehlversuche: Code verworfen
 		}
 	}
 	m.mu.Unlock()
+	if relayed {
+		m.d.Log.Warn("peer pairing rejected (tls binding)", "ip", r.RemoteAddr)
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": ErrTLSBinding.Error()})
+		return
+	}
 	if !ok {
 		m.d.Log.Warn("peer pairing rejected (code)", "ip", r.RemoteAddr)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "code wrong or expired"})
 		return
 	}
-	own := m.d.AccountID()
+	own, port := m.d.AccountID(), m.httpsPort()
 	switch {
-	case own <= 0:
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "no ipv64 account on this node"})
+	case port <= 0:
+		writeJSON(w, http.StatusConflict, map[string]string{"error": ErrNoHTTPS.Error()})
 		return
-	case in.AccountID != own:
+	case in.AccountID != own: // gleicher Account oder beide ohne (0); gemischt geht nicht
 		m.d.Log.Warn("peer pairing rejected (account)", "node", in.Name, "account", in.AccountID)
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "account mismatch"})
 		return
@@ -325,27 +403,27 @@ func (m *Manager) handlePair(w http.ResponseWriter, r *http.Request) {
 	m.code = "" // einmal gueltig, erst nach allen Pruefungen verbraucht
 	m.mu.Unlock()
 	existing, _ := m.Members(r.Context())
-	url := in.URL
-	if url == "" {
-		url = "http://" + strings.Split(r.RemoteAddr, ":")[0]
+	url := httpsURL(in.URL)
+	if url == "" { // Rueckfall: Absender-Adresse mit ihrem HTTPS-Port
+		ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+		url = "https://" + net.JoinHostPort(ip, strconv.Itoa(in.HTTPSPort))
 	}
 	newcomer := Member{NodeID: in.NodeID, Name: in.Name, URL: url, PubKey: in.PubKey, AccountID: in.AccountID}
 	if err := m.upsert(r.Context(), newcomer, m.d.NodeID()); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
 		return
 	}
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	out := pairMsg{NodeID: m.d.NodeID(), Name: m.d.NodeName(), URL: scheme + "://" + r.Host, PubKey: m.PublicKey(), AccountID: own, Version: m.d.Version, Nonce: in.Nonce}
+	m.activate(r.Context(), in.NodeID, own)
+	// eigene Adresse: so, wie die neue Node diese gerade per TLS erreicht hat
+	out := pairMsg{NodeID: m.d.NodeID(), Name: m.d.NodeName(), URL: httpsURL(r.Host), PubKey: m.PublicKey(), AccountID: own,
+		Version: m.d.Version, HTTPSPort: port, Nonce: in.Nonce}
 	for _, x := range existing {
-		if x.NodeID != in.NodeID {
+		if x.NodeID != in.NodeID && !x.Suspended() {
 			out.Members = append(out.Members, Member{NodeID: x.NodeID, Name: x.Name, URL: x.URL, PubKey: x.PubKey, AccountID: x.AccountID})
 		}
 	}
-	out.MAC = out.mac(code)
-	m.d.Log.Info("node joined local group", "node", in.Name, "url", url)
+	out.MAC = out.mac(code, bind)
+	m.d.Log.Info("node joined cluster", "node", in.Name, "url", url)
 	m.auditPeer(r.Context(), in.Name, "peer.joined", in.Name, url)
 	go m.gossip(context.Background(), memberOp{Op: "add", Member: newcomer}, in.NodeID) // die anderen lernen die neue Node kennen
 	writeJSON(w, http.StatusOK, out)
@@ -358,18 +436,21 @@ type memberOp struct {
 	Member Member `json:"member"`
 }
 
-// gossip schickt eine Aenderung der Mitglieder an alle (ausser skip).
+// gossip schickt eine Aenderung der Mitglieder an alle (ausser skip). Ausgesetzte Mitglieder erfahren nur, dass
+// sie bzw. diese Node den Cluster verlassen.
 func (m *Manager) gossip(ctx context.Context, op memberOp, skip string) {
 	list, err := m.Members(ctx)
 	if err != nil {
 		return
 	}
+	self := m.d.NodeID()
 	for _, x := range list {
-		if x.NodeID == skip {
+		bye := op.Op == "remove" && (op.Member.NodeID == x.NodeID || op.Member.NodeID == self)
+		if x.NodeID == skip || x.Suspended() && !bye {
 			continue
 		}
 		cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		if err := m.call(cctx, x, http.MethodPost, "/peer/v1/members", op, nil); err != nil {
+		if err := m.callAny(cctx, x, http.MethodPost, "/peer/v1/members", op, nil, bye); err != nil {
 			m.d.Log.Warn("peer member update not delivered", "to", x.Name, "op", op.Op, "err", err)
 		}
 		cancel()

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -40,16 +41,19 @@ func newNode(t *testing.T, id, name string, acc int64) *testNode {
 	}
 	box, _ := secrets.Load(filepath.Join(dir, "secret.key"))
 	n := &testNode{acc: acc}
+	mux := http.NewServeMux()
+	n.srv = httptest.NewUnstartedServer(mux)
+	n.srv.StartTLS() // der Cluster spricht nur HTTPS (selbst signiert)
+	t.Cleanup(n.srv.Close)
+	port := n.srv.Listener.Addr().(*net.TCPAddr).Port
 	m, err := New(context.Background(), Deps{Core: core, Box: box, Log: log, Version: "test",
-		NodeID: func() string { return id }, NodeName: func() string { return name }, AccountID: func() int64 { return n.acc }})
+		NodeID: func() string { return id }, NodeName: func() string { return name }, AccountID: func() int64 { return n.acc },
+		HTTPSPort: func() int { return port }})
 	if err != nil {
 		t.Fatal(err)
 	}
 	n.m = m
-	mux := http.NewServeMux()
 	m.Register(mux)
-	n.srv = httptest.NewServer(mux)
-	t.Cleanup(n.srv.Close)
 	return n
 }
 
@@ -149,11 +153,4 @@ func TestGroupPairing(t *testing.T) {
 	waitMembers(t, a, "B")
 	waitMembers(t, b, "A")
 	waitMembers(t, c)
-}
-
-func TestNoAccountNoGroup(t *testing.T) {
-	a := newNode(t, "node-a", "A", 0)
-	if _, _, err := a.m.StartPairing(); !errors.Is(err, ErrNoAccount) {
-		t.Fatalf("pairing without account: %v", err)
-	}
 }
