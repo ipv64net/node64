@@ -226,7 +226,7 @@ func (e *Edge) Set(owner string, routes []Route) error {
 		if len(names) == 0 && !rt.Fallback {
 			return errors.New("route without names")
 		}
-		if rt.Fallback && (rt.Handler == nil || rt.Passthrough != "") {
+		if rt.Fallback && (rt.Handler == nil && rt.HTTP == nil || rt.Passthrough != "") {
 			return errors.New("fallback route needs a handler")
 		}
 		if rt.Path != "" && !strings.HasPrefix(rt.Path, "/") {
@@ -249,7 +249,8 @@ func (e *Edge) Set(owner string, routes []Route) error {
 		}
 		for _, rt := range list {
 			for _, want := range norm {
-				if rt.Fallback && want.Fallback {
+				// Ersatz-Routen teilen sich nur, wenn sie verschiedene Protokolle bedienen (HTTPS-Handler bzw. nur Port 80)
+				if rt.Fallback && want.Fallback && (rt.Handler != nil && want.Handler != nil || rt.HTTP != nil && want.HTTP != nil) {
 					e.mu.Unlock()
 					return &NameTakenError{Name: "*", Owner: o} // Ersatz-Route hat schon ein anderer Abnehmer
 				}
@@ -821,8 +822,12 @@ func (e *Edge) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	host := hostOf(r.Host)
-	_, routes := e.table.Load().lookup(host)
+	t := e.table.Load()
+	key, routes := t.lookup(host)
 	rt := pick(routes, r.URL.Path, false)
+	if rt == nil && key == "" && e.serveFallbackHTTP(t, w, r) {
+		return
+	}
 	if rt == nil {
 		e.unknown(w, r)
 		return
@@ -844,6 +849,23 @@ func (e *Edge) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		notFound(w)
 	}
+}
+
+// serveFallbackHTTP: unbekannter Name auf Port 80 - eine Ersatz-Route mit eigenem HTTP-Handler antwortet, wenn
+// ihr Allow die Gegenstelle zulaesst (z. B. die Hinweisseite von DNS64 fuer gesperrte Geraete); sonst false und
+// es bleibt bei der Standardseite.
+func (e *Edge) serveFallbackHTTP(t *table, w http.ResponseWriter, r *http.Request) bool {
+	for _, rt := range t.fallback {
+		if rt.HTTP == nil || rt.NoHTTP || !pathMatches(rt.Path, r.URL.Path) {
+			continue
+		}
+		if rt.Allow != nil && !rt.Allow(peerIP(r)) {
+			continue
+		}
+		rt.HTTP.ServeHTTP(w, r)
+		return true
+	}
+	return false
 }
 
 // unknown: Antwort fuer unbekannte Namen.

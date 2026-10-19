@@ -537,3 +537,52 @@ func TestEdgeFallbackAndOwnCert(t *testing.T) {
 		t.Fatalf("status: %v", names)
 	}
 }
+
+// Ersatz-Route nur fuer Port 80 (Hinweisseite von DNS64): antwortet bei unbekanntem Host nur Clients, die Allow
+// zulaesst, sonst bleibt die Standardseite; sie vertraegt sich mit einer HTTPS-Ersatz-Route eines anderen Abnehmers.
+func TestFallbackHTTPOnly(t *testing.T) {
+	e, cfg := newEdge(t, nil)
+	ok := func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "doh") }
+	if err := e.Set("dns", []Route{{Path: "/dns-query", Handler: http.HandlerFunc(ok), Fallback: true, NoHTTP: true}}); err != nil {
+		t.Fatal(err)
+	}
+	var blocked atomic.Bool
+	blocked.Store(true)
+	hint := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "gesperrt") })
+	if err := e.Set("hint", []Route{{HTTP: hint, Fallback: true, Allow: func(netip.Addr) bool { return blocked.Load() }}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Set("other", []Route{{HTTP: hint, Fallback: true}}); err == nil {
+		t.Fatal("second http fallback accepted")
+	}
+	if err := e.Set("bad", []Route{{Fallback: true}}); err == nil {
+		t.Fatal("fallback without handler accepted")
+	}
+	waitFor(t, func() bool {
+		c, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(cfg.HTTPPort))
+		if err == nil {
+			c.Close()
+		}
+		return err == nil
+	})
+	c := client(cfg, false)
+	defer c.CloseIdleConnections()
+	if code, body, _, _ := get(t, c, "http://gesperrt.example/x"); code != 200 || body != "gesperrt" {
+		t.Fatalf("blocked client: %d %q", code, body)
+	}
+	blocked.Store(false)
+	if code, body, _, _ := get(t, c, "http://frei.example/x"); code != http.StatusNotFound || body == "gesperrt" {
+		t.Fatalf("other client: %d %q", code, body)
+	}
+}
+
+func waitFor(t *testing.T, ok func() bool) {
+	t.Helper()
+	for i := 0; i < 200; i++ {
+		if ok() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("timeout")
+}

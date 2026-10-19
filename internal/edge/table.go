@@ -71,11 +71,16 @@ func pick(routes []*Route, path string, https bool) *Route {
 		if https && rt.Handler == nil || !https && rt.NoHTTP {
 			continue
 		}
-		if rt.Path == "" || path == rt.Path || strings.HasPrefix(path, strings.TrimSuffix(rt.Path, "/")+"/") {
+		if pathMatches(rt.Path, path) {
 			return rt
 		}
 	}
 	return nil
+}
+
+// pathMatches: Praefix-Pfad einer Route ("" = alles).
+func pathMatches(prefix, path string) bool {
+	return prefix == "" || path == prefix || strings.HasPrefix(path, strings.TrimSuffix(prefix, "/")+"/")
 }
 
 // NormalizeName prueft einen Namen und bringt ihn in die Grundform (klein, ohne Punkt am Ende). Erlaubt ist
