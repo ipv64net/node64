@@ -558,6 +558,8 @@ type formData struct {
 	// Tageskontingent: Vorschau im Formular (Verbrauch der uebrigen Checks, heute, Limit, Standorte je Check)
 	ProjOther, QuotaToday, QuotaLimit, AccLocs int
 	APIMode                                    bool // Online-Check direkt ueber die API v2 (online_api.go)
+	// DNS-Check: Auswahl im Formular
+	DNSRecordTypes, DNSExpects []string
 }
 
 type channelOpt struct {
@@ -625,7 +627,7 @@ func formFromCheck(c *Check) map[string]string {
 		}
 	}
 	switch c.Type {
-	case checks.TypeHTTP, checks.TypeKeyword:
+	case checks.TypeHTTP, checks.TypeKeyword, checks.TypeJSON:
 		set("method", "method")
 		set("accept_status", "accept_status")
 		if v, ok := p["follow_redirects"]; ok {
@@ -638,6 +640,11 @@ func formFromCheck(c *Check) map[string]string {
 		set("basic_password", "basic_password")
 		set("keyword", "keyword")
 		f["keyword_absent"] = str("keyword_absent")
+		var hp checks.HTTPParams
+		if json.Unmarshal(c.Params, &hp) == nil {
+			f["json_rules"] = checks.FormatJSONRules(hp.JSONRules)
+			f["json_any"] = onOff(hp.JSONAny)
+		}
 		f["cert_min_days"] = str("cert_min_days")
 		if f["cert_min_days"] == "" {
 			f["cert_min_days"] = "0"
@@ -672,6 +679,15 @@ func formFromCheck(c *Check) map[string]string {
 		set("grace_seconds", "grace_seconds")
 	case checks.TypeDocker:
 		set("docker_host", "host")
+	case checks.TypeDNS:
+		var dp checks.DNSParams
+		_ = json.Unmarshal(c.Params, &dp)
+		f["dns_record_type"], f["dns_resolver"], f["dns_server"], f["dns_expect"] = dp.RecordType, dp.Resolver, dp.Server, dp.Expect
+		f["dns_values"] = strings.Join(dp.Values, "\n")
+		f["dns_dnssec"] = onOff(dp.DNSSEC)
+		if dp.MinTTL > 0 {
+			f["dns_min_ttl"] = strconv.Itoa(dp.MinTTL)
+		}
 	}
 	return f
 }
@@ -774,7 +790,7 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 		return nil
 	}
 	switch checks.Type(in.Type) {
-	case checks.TypeHTTP, checks.TypeKeyword:
+	case checks.TypeHTTP, checks.TypeKeyword, checks.TypeJSON:
 		if s := v("method"); s != "" {
 			p["method"] = s
 		}
@@ -808,6 +824,16 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 			p["keyword"] = v("keyword")
 			if on("keyword_absent") {
 				p["keyword_absent"] = true
+			}
+		}
+		if checks.Type(in.Type) == checks.TypeJSON {
+			rules, err := checks.ParseJSONRules(r.PostFormValue("json_rules"))
+			if err != nil {
+				return in, fmt.Errorf("json_rules: %w", err)
+			}
+			p["json_rules"] = rules
+			if on("json_any") {
+				p["json_any"] = true
 			}
 		}
 		if n, err := strconv.Atoi(strings.TrimSpace(v("cert_min_days"))); err == nil && n > 0 {
@@ -857,6 +883,26 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 		if s := strings.TrimSpace(v("docker_host")); s != "" {
 			p["host"] = s
 		}
+	case checks.TypeDNS:
+		p["record_type"], p["resolver"], p["expect"] = v("dns_record_type"), v("dns_resolver"), v("dns_expect")
+		if v("dns_resolver") == "server" {
+			p["server"] = v("dns_server")
+		}
+		var vals []string
+		for _, line := range strings.Split(r.PostFormValue("dns_values"), "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				vals = append(vals, line)
+			}
+		}
+		if len(vals) > 0 {
+			p["values"] = vals
+		}
+		if on("dns_dnssec") {
+			p["dnssec"] = true
+		}
+		if err := num("min_ttl", "dns_min_ttl"); err != nil {
+			return in, err
+		}
 	case checks.TypePush:
 		if err := num("period_seconds", "period_seconds"); err != nil {
 			return in, err
@@ -891,6 +937,7 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 	cancel()
 	d.Types = checks.Types
 	d.IPModes = []string{"auto", "ipv4", "ipv6", "both"}
+	d.DNSRecordTypes, d.DNSExpects = checks.DNSRecordTypes, checks.DNSExpects
 	d.Policies, d.Locations, d.Executions = Policies, KnownLocations, []string{"local", "online", "both"}
 	d.Linked = m.linked != nil && m.linked()
 	if d.Linked && m.quota != nil {
@@ -1030,7 +1077,7 @@ func (c *Check) DisplayTarget() string { return checks.DisplayTarget(c.Definitio
 func (c *Check) TargetBadge() Badge {
 	t := c.DisplayTarget()
 	switch c.Type {
-	case checks.TypeHTTP, checks.TypeKeyword:
+	case checks.TypeHTTP, checks.TypeKeyword, checks.TypeJSON:
 		icon := "bi-lock-fill"
 		if strings.HasPrefix(strings.ToLower(t), "http://") {
 			icon = "bi-unlock"
@@ -1048,6 +1095,14 @@ func (c *Check) TargetBadge() Badge {
 		return Badge{Text: t, Class: "bi-shield-lock"}
 	case checks.TypeDocker:
 		return Badge{Text: t, Class: "bi-box"}
+	case checks.TypeDNS:
+		var p checks.DNSParams
+		_ = json.Unmarshal(c.Params, &p)
+		rt := strings.ToUpper(p.RecordType)
+		if rt == "" {
+			rt = "A"
+		}
+		return Badge{Text: rt + " " + strings.TrimSuffix(t, "."), Class: "bi-signpost-split"}
 	}
 	return Badge{Text: t, Class: "bi-bullseye"}
 }

@@ -1697,7 +1697,12 @@
       "docker_unavailable": "Docker nicht erreichbar",
       "dependency_down": "Abhängigkeit gestört",
       "invalid_definition": "Definition ungültig",
-      "internal_error": "Interner Fehler"
+      "internal_error": "Interner Fehler",
+      "json_invalid": "Keine gültige JSON-Antwort",
+      "json_mismatch": "JSON-Bedingung nicht erfüllt",
+      "dns_mismatch": "DNS-Antwort passt nicht",
+      "dns_nxdomain": "Name existiert nicht",
+      "dnssec_failed": "DNSSEC nicht validiert"
     },
     "reason": "Grund",
     "no_events": "Noch keine Ereignisse.",
@@ -1748,7 +1753,35 @@
       "port": "Port",
       "cert": "Zertifikat",
       "push": "Push / Heartbeat",
-      "docker": "Docker-Container"
+      "docker": "Docker-Container",
+      "json": "JSON (API)",
+      "dns": "DNS"
+    },
+    "json": {
+      "rules": "Bedingungen",
+      "rules_hint": "Eine je Zeile: Pfad Vergleich Wert, z. B. status == ok, queue < 100, items[0].up == true, tags contains web, version exists, name ~ ^web-[0-9]+$. Vergleiche: == != < <= > >= contains !contains ~ (Regex) exists !exists. Der Wert der ersten Bedingung erscheint in der Meldung.",
+      "any": "Eine erfüllte Bedingung genügt (sonst müssen alle erfüllt sein)"
+    },
+    "dns": {
+      "target_hint": "Der abzufragende Name, z. B. home.example.org. Bei PTR auch eine IP-Adresse.",
+      "record_type": "Eintragstyp",
+      "resolver": "Fragen über",
+      "server": "DNS-Server",
+      "resolver_system": "Standard-Resolver",
+      "resolver_server": "Bestimmten Server",
+      "resolver_authoritative": "Zuständige Nameserver der Zone",
+      "resolver_hint": "Bestimmter Server: IP, optional mit Port (z. B. 1.1.1.1 oder 192.168.10.30). Zuständige Nameserver umgehen Caches und zeigen Änderungen sofort. Ein Server im Heimnetz geht nur lokal.",
+      "expect": "Erwartung",
+      "expect_any": "Irgendeine Antwort",
+      "expect_contains": "Antwort enthält die Werte",
+      "expect_equals": "Antwort ist genau die Werte",
+      "expect_regex": "Ein Eintrag passt zum Muster (Regex)",
+      "expect_nxdomain": "Name existiert nicht (NXDOMAIN)",
+      "expect_public_ip": "Zeigt auf meine öffentliche IP (nur lokal)",
+      "values": "Werte",
+      "values_hint": "Einer je Zeile, so wie im Eintrag: IP, Name, „10 mail.example.org“ (MX), Text (TXT). Bei Regex nur das Muster. Groß-/Kleinschreibung und Punkt am Ende spielen keine Rolle.",
+      "min_ttl": "Mindest-TTL",
+      "dnssec": "Antwort muss per DNSSEC validiert sein (AD-Flag des Resolvers)"
     },
     "ipmode": {
       "auto": "Automatisch (nach DNS)",

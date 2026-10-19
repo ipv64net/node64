@@ -55,7 +55,7 @@ func normHost(h string) string {
 // checkEndpoint: Host und Port, die ein Check prueft (Port 0 = nur Host, z. B. Ping).
 func checkEndpoint(c CheckRef) (string, int, bool) {
 	switch c.Type {
-	case "http", "keyword":
+	case "http", "keyword", "json":
 		u, err := url.Parse(strings.TrimSpace(c.Target))
 		if err != nil || u.Hostname() == "" {
 			return "", 0, false

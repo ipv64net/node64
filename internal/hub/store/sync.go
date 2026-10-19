@@ -511,7 +511,7 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 			res.Error = "docker checks run only locally on a node and cannot be moved"
 			return nil
 		}
-		if isPrivateTarget(c.Type, c.Target) {
+		if isPrivateTarget(c.Type, c.Target) || (c.Type == "dns" && checks.DNSNeedsNode(c.Params)) {
 			res.Error = "online checks cannot target private addresses"
 			return nil
 		}
@@ -792,7 +792,7 @@ func orDefault(v, def string) string {
 
 func validateWireCheck(c *wire.Check) error {
 	switch c.Type {
-	case "http", "keyword", "icmp", "tcp", "port", "cert", "push", "docker":
+	case "http", "keyword", "json", "dns", "icmp", "tcp", "port", "cert", "push", "docker":
 	default:
 		return fmt.Errorf("unknown type %q", c.Type)
 	}

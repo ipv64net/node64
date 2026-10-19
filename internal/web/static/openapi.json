@@ -75,6 +75,8 @@
             "enum": [
               "http",
               "keyword",
+              "json",
+              "dns",
               "icmp",
               "tcp",
               "port",
@@ -85,11 +87,11 @@
           },
           "target": {
             "type": "string",
-            "description": "http/keyword: URL; icmp/tcp/port/cert: Host oder IP (Port in params.port; host:port wird beim Anlegen/Ändern ins Port-Feld übernommen); push: leer"
+            "description": "http/keyword/json: URL; dns: abzufragender Name (bei PTR auch IP); icmp/tcp/port/cert: Host oder IP (Port in params.port; host:port wird beim Anlegen/Ändern ins Port-Feld übernommen); push: leer"
           },
           "params": {
             "type": "object",
-            "description": "Typabhängig: http/keyword method, headers, body, basic_user, basic_password, accept_status, follow_redirects, max_redirects, insecure_tls, keyword, keyword_absent; icmp count, max_loss_percent, max_latency_ms; tcp port, send, expect, tls; port port, expect (open|closed); cert port, min_days, server_name, skip_chain, skip_hostname; push period_seconds, grace_seconds docker: host (unix://, tcp:// oder http(s)://, Standard unix:///var/run/docker.sock)."
+            "description": "Typabhängig: http/keyword/json method, headers, body, basic_user, basic_password, accept_status, follow_redirects, max_redirects, insecure_tls, keyword, keyword_absent; json zusätzlich json_rules (Liste aus {path, op, value}; op: eq, ne, lt, le, gt, ge, contains, not_contains, regex, exists, not_exists; Pfad z. B. data.items[0].status) und json_any (eine Bedingung genügt); dns record_type (A, AAAA, CNAME, MX, TXT, NS, SRV, CAA, PTR, SOA), resolver (system, server, authoritative), server (IP[:Port]), expect (any, contains, equals, regex, nxdomain, public_ip – nur lokal), values, dnssec, min_ttl; icmp count, max_loss_percent, max_latency_ms; tcp port, send, expect, tls; port port, expect (open|closed); cert port, min_days, server_name, skip_chain, skip_hostname; push period_seconds, grace_seconds docker: host (unix://, tcp:// oder http(s)://, Standard unix:///var/run/docker.sock)."
           },
           "interval_seconds": {
             "type": "integer",

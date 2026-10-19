@@ -318,7 +318,9 @@ func (m *Module) TestDefinition(ctx context.Context, w wire.Check) []checks.Resu
 	if err := checks.Validate(def); err != nil {
 		return []checks.Result{{Status: checks.Down, Reason: checks.ReasonInvalid, Message: err.Error(), Time: time.Now()}}
 	}
-	return checks.NewRunner().Run(ctx, def)
+	r := checks.NewRunner()
+	r.PublicIP = m.publicIP
+	return r.Run(ctx, def)
 }
 
 // ---------------------------------------------------------------- Messdaten-Export

@@ -234,6 +234,9 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 			if c.Type != checks.TypePush && checks.IsPrivateTarget(string(c.Type), c.Target) {
 				return errors.New("execution: ipv64 cannot check private targets (home network, localhost, .local) from outside – keep this check local")
 			}
+			if c.Type == checks.TypeDNS && checks.DNSNeedsNode(c.Params) {
+				return errors.New("execution: a DNS check against a private DNS server or the node's public address runs only locally")
+			}
 		default:
 			return errors.New("execution must be local, online or both")
 		}

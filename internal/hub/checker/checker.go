@@ -224,7 +224,7 @@ func (c *Checker) runTest(ctx context.Context, runner *checks.Runner, raw json.R
 		out.Error = err.Error()
 		return out
 	}
-	if store.PrivateTarget(string(def.Type), def.Target) {
+	if store.PrivateTarget(string(def.Type), def.Target) || (def.Type == checks.TypeDNS && checks.DNSNeedsNode(def.Params)) {
 		out.Error = "online checks cannot target private addresses"
 		return out
 	}

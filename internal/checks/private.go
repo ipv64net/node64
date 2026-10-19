@@ -12,7 +12,10 @@ func IsPrivateTarget(typ, target string) bool {
 		return true // Container der Node sind von aussen nie erreichbar
 	}
 	host := strings.ToLower(strings.TrimSpace(target))
-	if typ == "http" || typ == "keyword" {
+	if typ == "dns" {
+		host = strings.TrimSuffix(host, ".")
+	}
+	if typ == "http" || typ == "keyword" || typ == "json" {
 		if i := strings.Index(host, "://"); i >= 0 {
 			host = host[i+3:]
 		}

@@ -74,7 +74,7 @@
 			<div class="card-header"><i class="bi bi-clock-history text-primary"></i> {{.T "hc.events"}}</div>
 			{{if $d.Events}}
 			<div class="table-responsive"><table class="table table-sm table-striped mb-0 table-cards">
-				{{$http := or (eq (print $c.Type) "http") (eq (print $c.Type) "keyword")}}
+				{{$http := or (eq (print $c.Type) "http") (eq (print $c.Type) "keyword") (eq (print $c.Type) "json")}}
 				<thead><tr><th>{{.T "common.time"}}</th><th>{{.T "hc.event"}}</th><th>{{.T "hc.reason"}}</th>{{if $http}}<th>HTTP</th>{{end}}<th>{{.T "common.details"}}</th></tr></thead>
 				<tbody>
 				{{range $d.Events}}

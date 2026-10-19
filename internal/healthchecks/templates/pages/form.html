@@ -22,10 +22,11 @@
 							{{range $d.Types}}<option value="{{.}}"{{if eq (print .) (index $f "type")}} selected{{end}}>{{$.T (print "hc.type." .)}}</option>{{end}}
 						</select></div>
 					</div>
-					<div class="col-12" data-types="http keyword icmp tcp port cert docker">
+					<div class="col-12" data-types="http keyword json dns icmp tcp port cert docker">
 						<label class="form-label" for="target">{{.T "hc.form.target"}}</label>
 						<div class="input-group"><span class="input-group-text"><i class="bi bi-bullseye"></i></span><input class="form-control" id="target" name="target" value="{{index $f "target"}}" maxlength="500" list="hc-containers"></div>
-						<div class="form-text" data-types="http keyword">{{.T "hc.form.target_hint"}}</div>
+						<div class="form-text" data-types="http keyword json">{{.T "hc.form.target_hint"}}</div>
+						<div class="form-text" data-types="dns">{{.T "hc.dns.target_hint"}}</div>
 						<div class="form-text" data-types="icmp">{{.T "hc.form.target_hint_host"}}</div>
 						<div class="form-text" data-types="tcp port cert">{{.T "hc.form.target_hint_port"}}</div>
 						<div class="form-text" data-types="docker">{{.T "hc.docker.target_hint"}}</div>
@@ -60,7 +61,7 @@
 			</div>
 		</div>
 
-		<div class="card mb-3" data-types="http keyword">
+		<div class="card mb-3" data-types="http keyword json">
 			<div class="card-header"><i class="bi bi-globe2 text-info"></i> {{.T "hc.type.http"}}</div>
 			<div class="card-body">
 				<div class="row g-3">
@@ -85,6 +86,12 @@
 						<label class="form-label" for="keyword">{{.T "hc.form.keyword"}}</label>
 						<div class="input-group"><span class="input-group-text"><i class="bi bi-search"></i></span><input class="form-control" id="keyword" name="keyword" value="{{index $f "keyword"}}"></div>
 						<div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="keyword_absent" id="keyword_absent"{{if index $f "keyword_absent"}} checked{{end}}><label class="form-check-label" for="keyword_absent">{{.T "hc.form.keyword_absent"}}</label></div>
+					</div>
+					<div class="col-12" data-types="json">
+						<label class="form-label" for="json_rules">{{.T "hc.json.rules"}}</label>
+						<textarea class="form-control font-monospace" id="json_rules" name="json_rules" rows="4" placeholder="status == ok&#10;queue &lt; 100&#10;version exists">{{index $f "json_rules"}}</textarea>
+						<div class="form-text">{{.T "hc.json.rules_hint"}}</div>
+						<div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="json_any" id="json_any"{{if index $f "json_any"}} checked{{end}}><label class="form-check-label" for="json_any">{{.T "hc.json.any"}}</label></div>
 					</div>
 					<div class="col-md-6">
 						<label class="form-label" for="basic_user">{{.T "hc.form.basic_user"}}</label>
@@ -112,6 +119,26 @@
 					</div>
 				</div>
 			</div>
+		</div>
+
+		<div class="card mb-3" data-types="dns">
+			<div class="card-header"><i class="bi bi-signpost-split text-info"></i> {{.T "hc.type.dns"}}</div>
+			<div class="card-body"><div class="row g-3">
+				<div class="col-md-4"><label class="form-label" for="dns_record_type">{{.T "hc.dns.record_type"}}</label>
+					<div class="input-group"><span class="input-group-text"><i class="bi bi-list-ul"></i></span><select class="form-select" id="dns_record_type" name="dns_record_type">{{range $d.DNSRecordTypes}}<option{{if eq . (index $f "dns_record_type")}} selected{{end}}>{{.}}</option>{{end}}</select></div></div>
+				<div class="col-md-8"><label class="form-label" for="dns_resolver">{{.T "hc.dns.resolver"}}</label>
+					<div class="input-group"><select class="form-select" id="dns_resolver" name="dns_resolver">{{range $r := split "system server authoritative"}}<option value="{{$r}}"{{if eq $r (index $f "dns_resolver")}} selected{{end}}>{{$.T (print "hc.dns.resolver_" $r)}}</option>{{end}}</select>
+					<input class="form-control font-monospace" id="dns_server" name="dns_server" value="{{index $f "dns_server"}}" placeholder="1.1.1.1" aria-label="{{.T "hc.dns.server"}}"></div>
+					<div class="form-text">{{.T "hc.dns.resolver_hint"}}</div></div>
+				<div class="col-md-6"><label class="form-label" for="dns_expect">{{.T "hc.dns.expect"}}</label>
+					<div class="input-group"><span class="input-group-text"><i class="bi bi-check2-square"></i></span><select class="form-select" id="dns_expect" name="dns_expect">{{range $d.DNSExpects}}<option value="{{.}}"{{if eq . (index $f "dns_expect")}} selected{{end}}>{{$.T (print "hc.dns.expect_" .)}}</option>{{end}}</select></div></div>
+				<div class="col-md-6"><label class="form-label" for="dns_min_ttl">{{.T "hc.dns.min_ttl"}}</label>
+					<div class="input-group"><span class="input-group-text"><i class="bi bi-hourglass"></i></span><input class="form-control" type="number" id="dns_min_ttl" name="dns_min_ttl" value="{{index $f "dns_min_ttl"}}" min="0" max="604800"><span class="input-group-text">s</span></div></div>
+				<div class="col-12"><label class="form-label" for="dns_values">{{.T "hc.dns.values"}}</label>
+					<textarea class="form-control font-monospace" id="dns_values" name="dns_values" rows="2" placeholder="203.0.113.10">{{index $f "dns_values"}}</textarea>
+					<div class="form-text">{{.T "hc.dns.values_hint"}}</div></div>
+				<div class="col-12"><div class="form-check"><input class="form-check-input" type="checkbox" name="dns_dnssec" id="dns_dnssec"{{if index $f "dns_dnssec"}} checked{{end}}><label class="form-check-label" for="dns_dnssec">{{.T "hc.dns.dnssec"}}</label></div></div>
+			</div></div>
 		</div>
 
 		<div class="card mb-3" data-types="icmp">
@@ -178,14 +205,14 @@
 	</div>
 
 	<div class="col-lg-5">
-		<div class="card mb-3" data-types="http keyword icmp tcp port cert docker">
+		<div class="card mb-3" data-types="http keyword json dns icmp tcp port cert docker">
 			<div class="card-header"><i class="bi bi-stopwatch text-secondary"></i> {{.T "hc.form.timing"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-6"><label class="form-label" for="interval_seconds">{{.T "hc.form.interval"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-clock"></i></span><input class="form-control" type="number" id="interval_seconds" name="interval_seconds" value="{{index $f "interval_seconds"}}" min="20" max="86400"><span class="input-group-text">s</span></div></div>
 				<div class="col-6"><label class="form-label" for="retry_interval_seconds">{{.T "hc.form.retry_interval"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-arrow-clockwise"></i></span><input class="form-control" type="number" id="retry_interval_seconds" name="retry_interval_seconds" value="{{index $f "retry_interval_seconds"}}" min="5"><span class="input-group-text">s</span></div></div>
 				<div class="col-6"><label class="form-label" for="connect_timeout_seconds">{{.T "hc.form.connect_timeout"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-plug-fill"></i></span><input class="form-control" type="number" step="0.5" id="connect_timeout_seconds" name="connect_timeout_seconds" value="{{index $f "connect_timeout_seconds"}}" min="0.5" max="60"><span class="input-group-text">s</span></div></div>
 				<div class="col-6"><label class="form-label" for="timeout_seconds">{{.T "hc.form.timeout"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-stopwatch"></i></span><input class="form-control" type="number" step="0.5" id="timeout_seconds" name="timeout_seconds" value="{{index $f "timeout_seconds"}}" min="1" max="120"><span class="input-group-text">s</span></div></div>
-				<div class="col-12" data-types="http keyword icmp tcp port cert"><label class="form-label" for="ip_mode">{{.T "hc.form.ip_mode"}}</label>
+				<div class="col-12" data-types="http keyword json icmp tcp port cert"><label class="form-label" for="ip_mode">{{.T "hc.form.ip_mode"}}</label>
 					<div class="input-group"><span class="input-group-text"><i class="bi bi-diagram-3"></i></span><select class="form-select" id="ip_mode" name="ip_mode">{{range $d.IPModes}}<option value="{{.}}"{{if eq . (index $f "ip_mode")}} selected{{end}}>{{$.T (print "hc.ipmode." .)}}</option>{{end}}</select></div></div>
 			</div></div>
 		</div>
@@ -200,7 +227,7 @@
 				<div class="col-12" id="nodesbox"><label class="form-label">{{.T "hc.form.nodes"}}</label>
 					<input type="hidden" name="nodes_present" value="1">
 					{{range $d.Peers}}<div class="form-check"><input class="form-check-input" type="checkbox" name="nodes" value="{{.ID}}" id="node_{{.ID}}"{{if contains (index $f "nodes") .ID}} checked{{end}}><label class="form-check-label" for="node_{{.ID}}"><i class="bi bi-hdd-network text-primary"></i> {{.Name}}{{if .Self}} <span class="badge text-bg-success">{{$.T "hc.form.this_node"}}</span>{{end}}{{if .Location}} <span class="text-body-secondary small">· {{.Location}}</span>{{end}}{{if not .Online}} <span class="badge text-bg-secondary">offline</span>{{end}}</label></div>{{end}}
-					<div class="form-text" data-types="http keyword icmp tcp port cert push">{{.T "hc.form.nodes_hint"}}</div>
+					<div class="form-text" data-types="http keyword json dns icmp tcp port cert push">{{.T "hc.form.nodes_hint"}}</div>
 					<div class="form-text text-warning-emphasis" data-types="docker">{{.T "hc.form.nodes_single"}}</div></div>
 				{{end}}
 				<div class="col-12"><label class="form-label">{{.T "hc.form.locations"}}</label>

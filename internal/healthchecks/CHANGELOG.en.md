@@ -1,5 +1,12 @@
 # Changes – Healthchecks
 
+## 2.14.0 – 2026-10-19
+
+### New
+- Check type **JSON**: fetches a URL like HTTP and checks values in the JSON response, one condition per line, e.g. `status == ok`, `queue < 100`, `items[0].up == true`, `tags contains web`, `version exists`, `name ~ ^web-[0-9]+$`. All conditions must be met, optionally one is enough. The value of the first condition appears in the message, and as a number also in the measurement details.
+- Check type **DNS**: queries a name (A, AAAA, CNAME, MX, TXT, NS, SRV, CAA, PTR, SOA) via the default resolver, a specific server or directly the authoritative name servers of the zone. Expectation: any answer, contains values, exactly these values, regex, name does not exist (NXDOMAIN) or “points to my public IP” (for DynDNS domains). Optional DNSSEC validation and minimum TTL; the response time is measured.
+- Both run locally, online and hybrid. Local only: private targets, a DNS server in the home network and “points to my public IP”.
+
 ## 2.13.0 – 2026-10-19
 
 ### New

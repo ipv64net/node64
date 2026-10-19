@@ -32,10 +32,12 @@ const (
 	TypePort    Type = "port"
 	TypeCert    Type = "cert"
 	TypePush    Type = "push"
+	TypeJSON    Type = "json"
+	TypeDNS     Type = "dns"
 )
 
 // Types sind alle bekannten Typen in Anzeigereihenfolge.
-var Types = []Type{TypeHTTP, TypeKeyword, TypeICMP, TypeTCP, TypePort, TypeCert, TypePush, TypeDocker}
+var Types = []Type{TypeHTTP, TypeKeyword, TypeJSON, TypeDNS, TypeICMP, TypeTCP, TypePort, TypeCert, TypePush, TypeDocker}
 
 // IPMode bestimmt, welche Adressfamilie geprueft wird.
 type IPMode string
@@ -69,6 +71,11 @@ const (
 	ReasonTooManyRedirect Reason = "too_many_redirects"
 	ReasonKeywordMissing  Reason = "keyword_missing"
 	ReasonKeywordPresent  Reason = "keyword_present"
+	ReasonJSONInvalid     Reason = "json_invalid"
+	ReasonJSONMismatch    Reason = "json_mismatch"
+	ReasonDNSMismatch     Reason = "dns_mismatch"
+	ReasonDNSNXDomain     Reason = "dns_nxdomain"
+	ReasonDNSSEC          Reason = "dnssec_failed"
 	ReasonBannerMismatch  Reason = "banner_mismatch"
 	ReasonPortClosed      Reason = "port_closed"
 	ReasonPortOpen        Reason = "port_open"
@@ -144,6 +151,9 @@ type Runner struct {
 	checkers map[Type]Checker
 	Resolver Resolver
 	Now      func() time.Time
+	// PublicIP liefert die oeffentliche Adresse der Node je Familie (DNS-Check "public_ip"); nil auf den
+	// ipv64-Servern, dort laeuft so ein Check nicht.
+	PublicIP func(ctx context.Context, family string) (string, error)
 	// FamilyProbe sagt, ob der Node selbst ipv4 bzw. ipv6 erreichen kann.
 	// Im Modus auto werden nur verfuegbare Familien geprueft; austauschbar fuer Tests.
 	FamilyProbe func(family string) bool
@@ -161,7 +171,7 @@ type famState struct {
 func NewRunner() *Runner {
 	r := &Runner{checkers: map[Type]Checker{}, Resolver: net.DefaultResolver, Now: func() time.Time { return time.Now().UTC() }, famCache: map[string]famState{}}
 	r.FamilyProbe = probeFamily
-	for _, c := range []Checker{&httpChecker{}, &httpChecker{keyword: true}, &tcpChecker{}, &portChecker{}, &certChecker{}, &icmpChecker{}, dockerChecker{}} {
+	for _, c := range []Checker{&httpChecker{}, &httpChecker{keyword: true}, &httpChecker{json: true}, &dnsChecker{r: r}, &tcpChecker{}, &portChecker{}, &certChecker{}, &icmpChecker{}, dockerChecker{}} {
 		r.checkers[c.Type()] = c
 	}
 	return r
@@ -191,7 +201,7 @@ func (r *Runner) Run(ctx context.Context, def Definition) []Result {
 	if def.IPMode == "" {
 		def.IPMode = IPAuto
 	}
-	if def.Type == TypeDocker { // kein Netzwerkziel: direkt die Docker-API fragen
+	if def.Type == TypeDocker || def.Type == TypeDNS { // kein Ziel zum Aufloesen: Docker-API bzw. DNS-Abfrage selbst
 		cctx, cancel := context.WithTimeout(ctx, def.Timeouts.Total)
 		res := c.Check(cctx, def, nil)
 		cancel()
@@ -344,7 +354,7 @@ func family(ip net.IP) string {
 // TargetHost extrahiert den Hostnamen aus dem Ziel (URL oder Host[:Port]).
 func TargetHost(def Definition) string {
 	t := strings.TrimSpace(def.Target)
-	if def.Type == TypeHTTP || def.Type == TypeKeyword {
+	if def.Type == TypeHTTP || def.Type == TypeKeyword || def.Type == TypeJSON {
 		u, err := parseURL(t)
 		if err != nil {
 			return ""
@@ -360,7 +370,7 @@ func TargetHost(def Definition) string {
 // Validate prueft Typ, Ziel und Parameter einer Definition.
 func Validate(def Definition) error {
 	switch def.Type {
-	case TypeHTTP, TypeKeyword:
+	case TypeHTTP, TypeKeyword, TypeJSON:
 		u, err := parseURL(def.Target)
 		if err != nil {
 			return err
@@ -377,6 +387,11 @@ func Validate(def Definition) error {
 		}
 		if def.Type == TypeKeyword && strings.TrimSpace(p.Keyword) == "" {
 			return errors.New("keyword is required")
+		}
+		if def.Type == TypeJSON {
+			if err := validateJSONRules(p.JSONRules); err != nil {
+				return err
+			}
 		}
 		if p.CertMinDays < 0 || p.CertMinDays > 3650 {
 			return errors.New("cert_min_days must be between 0 and 3650")
@@ -431,6 +446,10 @@ func Validate(def Definition) error {
 		}
 		if !validDockerHost(p.Host) {
 			return errors.New("docker host must start with unix://, tcp:// or http(s)://")
+		}
+	case TypeDNS:
+		if err := validateDNS(def); err != nil {
+			return err
 		}
 	case TypePush:
 		var p PushParams

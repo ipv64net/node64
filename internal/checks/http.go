@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// HTTPParams gelten fuer die Typen http und keyword.
+// HTTPParams gelten fuer die Typen http, keyword und json.
 type HTTPParams struct {
 	Method          string            `json:"method,omitempty"` // Standard GET
 	Headers         map[string]string `json:"headers,omitempty"`
@@ -28,13 +28,18 @@ type HTTPParams struct {
 	Keyword         string            `json:"keyword,omitempty"`          // nur keyword
 	KeywordAbsent   bool              `json:"keyword_absent,omitempty"`   // true = Begriff darf NICHT vorkommen
 	CertMinDays     int               `json:"cert_min_days,omitempty"`    // HTTPS: gestoert, wenn das Zertifikat in weniger Tagen ablaeuft (0 = aus)
+	JSONRules       []JSONRule        `json:"json_rules,omitempty"`       // nur json: Bedingungen auf die Antwort
+	JSONAny         bool              `json:"json_any,omitempty"`         // nur json: eine erfuellte Bedingung genuegt (sonst alle)
 }
 
-type httpChecker struct{ keyword bool }
+type httpChecker struct{ keyword, json bool }
 
 func (c *httpChecker) Type() Type {
-	if c.keyword {
+	switch {
+	case c.keyword:
 		return TypeKeyword
+	case c.json:
+		return TypeJSON
 	}
 	return TypeHTTP
 }
@@ -160,9 +165,9 @@ func (c *httpChecker) Check(ctx context.Context, def Definition, ip net.IP) Resu
 		details["cert_days_left"] = int(time.Until(crt.NotAfter).Hours() / 24)
 		details["cert_issuer"] = crt.Issuer.CommonName
 	}
-	// Body nur lesen, wenn er gebraucht wird (Keyword), sonst nur Kopf
+	// Body nur lesen, wenn er gebraucht wird (Keyword, JSON), sonst nur Kopf
 	var text string
-	if c.keyword {
+	if c.keyword || c.json {
 		b, err := io.ReadAll(io.LimitReader(resp.Body, MaxBody))
 		lat = time.Since(start)
 		if err != nil && !isTimeout(err) {
@@ -189,7 +194,26 @@ func (c *httpChecker) Check(ctx context.Context, def Definition, ip net.IP) Resu
 			return fail(ReasonKeywordMissing, fmt.Sprintf("keyword %q not found", p.Keyword), lat, details)
 		}
 	}
+	if c.json {
+		pass, reason, jmsg, first := checkJSONBody([]byte(text), p.JSONRules, p.JSONAny)
+		if first != nil {
+			details["json_value"] = jsonText(first)
+			if f, ok := jsonNumber(first); ok {
+				details["value"] = f // Zahl der ersten Bedingung (Verlauf)
+			}
+		}
+		if !pass {
+			return fail(reason, jmsg, lat, details)
+		}
+	}
 	msg := "HTTP " + strconv.Itoa(resp.StatusCode)
+	if v, ok := details["json_value"]; ok && len(p.JSONRules) > 0 {
+		val := fmt.Sprint(v)
+		if len(val) > 80 {
+			val = val[:80] + "…"
+		}
+		msg += ", " + strings.TrimSpace(p.JSONRules[0].Path) + " = " + val
+	}
 	if resp.TLS != nil && len(resp.TLS.PeerCertificates) > 0 {
 		na := resp.TLS.PeerCertificates[0].NotAfter
 		days := int(time.Until(na).Hours() / 24)

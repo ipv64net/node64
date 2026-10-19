@@ -1697,7 +1697,12 @@
       "docker_unavailable": "Docker unavailable",
       "dependency_down": "Dependency down",
       "invalid_definition": "Invalid definition",
-      "internal_error": "Internal error"
+      "internal_error": "Internal error",
+      "json_invalid": "Not a valid JSON response",
+      "json_mismatch": "JSON condition not met",
+      "dns_mismatch": "DNS answer does not match",
+      "dns_nxdomain": "Name does not exist",
+      "dnssec_failed": "DNSSEC not validated"
     },
     "reason": "Reason",
     "no_events": "No events yet.",
@@ -1748,7 +1753,35 @@
       "port": "Port",
       "cert": "Certificate",
       "push": "Push / heartbeat",
-      "docker": "Docker container"
+      "docker": "Docker container",
+      "json": "JSON (API)",
+      "dns": "DNS"
+    },
+    "json": {
+      "rules": "Conditions",
+      "rules_hint": "One per line: path operator value, e.g. status == ok, queue < 100, items[0].up == true, tags contains web, version exists, name ~ ^web-[0-9]+$. Operators: == != < <= > >= contains !contains ~ (regex) exists !exists. The value of the first condition appears in the message.",
+      "any": "One fulfilled condition is enough (otherwise all must be fulfilled)"
+    },
+    "dns": {
+      "target_hint": "The name to query, e.g. home.example.org. For PTR also an IP address.",
+      "record_type": "Record type",
+      "resolver": "Ask via",
+      "server": "DNS server",
+      "resolver_system": "Default resolver",
+      "resolver_server": "Specific server",
+      "resolver_authoritative": "Authoritative name servers of the zone",
+      "resolver_hint": "Specific server: IP, optionally with port (e.g. 1.1.1.1 or 192.168.10.30). Authoritative name servers bypass caches and show changes immediately. A server in the home network works only locally.",
+      "expect": "Expectation",
+      "expect_any": "Any answer",
+      "expect_contains": "Answer contains the values",
+      "expect_equals": "Answer is exactly the values",
+      "expect_regex": "A record matches the pattern (regex)",
+      "expect_nxdomain": "Name does not exist (NXDOMAIN)",
+      "expect_public_ip": "Points to my public IP (local only)",
+      "values": "Values",
+      "values_hint": "One per line, as in the record: IP, name, “10 mail.example.org” (MX), text (TXT). For regex only the pattern. Case and a trailing dot do not matter.",
+      "min_ttl": "Minimum TTL",
+      "dnssec": "Answer must be DNSSEC validated (AD flag of the resolver)"
     },
     "ipmode": {
       "auto": "Automatic (by DNS)",

@@ -85,7 +85,7 @@ Anmeldung mit einem API-Key aus den Einstellungen (`Authorization: Bearer node64
 
 ### Healthchecks per API
 
-Das Modul wird in den Einstellungen aktiviert. Check-Typen: `http`, `keyword`, `icmp`, `tcp`, `port`, `cert`, `push`, `docker`.
+Das Modul wird in den Einstellungen aktiviert. Check-Typen: `http`, `keyword`, `json` (Bedingungen auf eine JSON-Antwort, z. B. `status == ok`, `queue < 100`), `dns` (A, AAAA, CNAME, MX, TXT, NS, SRV, CAA, PTR, SOA; Erwartung z. B. enthält Wert, Regex, NXDOMAIN oder „zeigt auf meine öffentliche IP“), `icmp`, `tcp`, `port`, `cert`, `push`, `docker`.
 
 Mit ipv64.net verknüpft bilden alle Nodes eines Accounts ein System: `nodes` legt fest, welche Nodes einen Check messen, `owner` zeigt, ob er dieser Node (`self`), einer anderen (`other`) oder nur ipv64 (`online`) gehört. Jede Node darf jeden Check ändern, pausieren, löschen und mit `run` sofort messen lassen. Misst sie ihn nicht selbst, geht der Auftrag über ipv64 an die messenden Nodes. Nur die Messstelle eines Docker-Checks bleibt bei der Node mit dem Container. Ohne Verbindung werden Änderungen gepuffert und nachgeliefert, bei gleichzeitigen Änderungen gewinnt die jüngere.
 

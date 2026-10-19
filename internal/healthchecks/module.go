@@ -31,6 +31,7 @@ const Name = "healthchecks"
 
 // Module implementiert module.Module.
 type Module struct {
+	publicIP    func(ctx context.Context, family string) (string, error) // DNS-Check "public_ip"
 	core        *store.Store
 	st          *Store
 	log         *slog.Logger
@@ -67,6 +68,7 @@ type Module struct {
 func New(core *store.Store, log *slog.Logger, dispatcher *notify.Dispatcher, notifyStore *notify.Store, version string) *Module {
 	m := &Module{core: core, st: NewStore(core), log: log.With("module", Name), dispatcher: dispatcher, notifyStore: notifyStore, version: version, push: newPushLimiter(), reminders: map[string]time.Time{}}
 	m.notifier = m
+	m.publicIP = newPublicIP()
 	setSelfStore(core)
 	return m
 }
@@ -177,7 +179,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.13.0", Changelog: changelog, ChangelogEN: changelogEN}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.14.0", Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {
@@ -195,6 +197,7 @@ func (m *Module) Start(ctx context.Context) error {
 	ctx, m.cancel = context.WithCancel(ctx)
 	m.st.reloadMaintenance(ctx)
 	runner := checks.NewRunner()
+	runner.PublicIP = m.publicIP
 	m.sched = scheduler.New(m.st, m.notifier, runner, m.log, scheduler.Options{})
 	list, err := m.st.Checks(ctx)
 	if err != nil {
