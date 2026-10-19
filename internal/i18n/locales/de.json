@@ -487,7 +487,12 @@
       "hosts": "Proxy-Hosts aktiv",
       "down": "Ziele nicht erreichbar",
       "requests": "Anfragen seit Start",
-      "certs_soon": "Zertifikate < 14 Tage"
+      "certs_soon": "Zertifikate < 14 Tage",
+      "streams": "TCP-Streams aktiv",
+      "requests_24h": "Anfragen (24 h)",
+      "traffic_24h": "Datenverkehr (24 h)",
+      "errors_24h": "Fehler 5xx (24 h)",
+      "blocked_24h": "Abgewiesen (24 h)"
     },
     "kind_new": {
       "proxy": "Proxy-Host anlegen",

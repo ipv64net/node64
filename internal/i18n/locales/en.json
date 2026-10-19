@@ -487,7 +487,12 @@
       "hosts": "Active proxy hosts",
       "down": "Targets not reachable",
       "requests": "Requests since start",
-      "certs_soon": "Certificates < 14 days"
+      "certs_soon": "Certificates < 14 days",
+      "streams": "Active TCP streams",
+      "requests_24h": "Requests (24 h)",
+      "traffic_24h": "Traffic (24 h)",
+      "errors_24h": "5xx errors (24 h)",
+      "blocked_24h": "Rejected (24 h)"
     },
     "kind_new": {
       "proxy": "Add proxy host",

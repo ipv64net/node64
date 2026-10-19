@@ -129,6 +129,7 @@ type CardStat struct {
 	Text     string
 	Pct      float64 // > 0: Anteil in Prozent hinter der Zahl
 	Class    string  // z. B. "text-danger"
+	Bytes    bool    // Value ist eine Datenmenge (lesbar formatiert)
 }
 
 // DashboardInfo sind die Zahlen eines Moduls fuer das Dashboard.

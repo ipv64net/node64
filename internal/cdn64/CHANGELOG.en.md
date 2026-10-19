@@ -1,6 +1,9 @@
 # Changes – CDN64
 
-## 1.11.1 – 2026-10-19
+## 1.12.0 – 2026-10-19
+
+### New
+- Dashboard card: requests, traffic, 5xx errors (with share) and rejected requests of the last 24 hours, plus active TCP streams.
 
 ### Fixed
 - Statistics: evaluations over long periods could fail with "disk I/O error" (no directory for SQLite temporary files in the container); intermediate results now stay in memory.

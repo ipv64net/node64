@@ -46,7 +46,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.11.1"
+	Version = "1.12.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -260,12 +260,50 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 		req += m.statsOf(h.ID).requests.Load()
 	}
 	c.Stats = []module.CardStat{{LabelKey: "cdn64.card.hosts", Value: on}}
+	if sl, err := m.streams(ctx); err == nil && len(sl) > 0 {
+		var son int64
+		for _, s := range sl {
+			if s.Enabled {
+				son++
+			}
+		}
+		c.Stats = append(c.Stats, module.CardStat{LabelKey: "cdn64.card.streams", Value: son})
+	}
 	if down > 0 {
 		c.Stats = append(c.Stats, module.CardStat{LabelKey: "cdn64.card.down", Value: down, Class: "text-danger"})
 	} else {
 		c.Stats = append(c.Stats, module.CardStat{LabelKey: "cdn64.card.down", Value: 0})
 	}
-	c.Stats = append(c.Stats, module.CardStat{LabelKey: "cdn64.card.requests", Value: req})
+	// Zahlen der letzten 24 Stunden aus der Statistik (sonst Anfragen seit Start)
+	if sdb := m.stats2.Load(); sdb != nil {
+		if sums, err := sdb.sums(ctx, time.Now().Add(-24*time.Hour)); err == nil {
+			var t HostStat
+			for _, s := range sums {
+				t.Requests += s.Requests
+				t.S5 += s.S5
+				t.Bytes += s.Bytes
+				t.Blocked += s.Blocked
+			}
+			c.Stats = append(c.Stats, module.CardStat{LabelKey: "cdn64.card.requests_24h", Value: t.Requests},
+				module.CardStat{LabelKey: "cdn64.card.traffic_24h", Value: t.Bytes, Bytes: true})
+			e5 := module.CardStat{LabelKey: "cdn64.card.errors_24h", Value: t.S5}
+			if t.Requests > 0 && t.S5 > 0 {
+				e5.Pct = float64(t.S5) * 100 / float64(t.Requests)
+				if e5.Pct >= 5 {
+					e5.Class = "text-danger"
+				}
+			}
+			bl := module.CardStat{LabelKey: "cdn64.card.blocked_24h", Value: t.Blocked}
+			if t.Blocked > 0 {
+				bl.Class = "text-warning-emphasis"
+			}
+			c.Stats = append(c.Stats, e5, bl)
+			req = -1
+		}
+	}
+	if req >= 0 {
+		c.Stats = append(c.Stats, module.CardStat{LabelKey: "cdn64.card.requests", Value: req})
+	}
 	if m.certs != nil {
 		var soon int64
 		if cl, err := m.certs.List(ctx); err == nil {
