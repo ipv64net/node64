@@ -134,3 +134,18 @@ func TestAllowNetsHardening(t *testing.T) {
 		t.Fatalf("public = %v", got)
 	}
 }
+
+// Entfernte Vorlagen verschwinden aus gespeicherten Einstellungen, als eigene Liste bleiben sie.
+func TestRetiredLists(t *testing.T) {
+	const pa = "https://phishing.army/download/phishing_army_blocklist_extended.txt"
+	got := mergeLists([]listSetting{{List: filter.List{Name: "Phishing Army", URL: pa}, Enabled: true}})
+	for _, l := range got {
+		if l.URL == pa {
+			t.Fatal("retired preset kept")
+		}
+	}
+	got = mergeLists([]listSetting{{List: filter.List{Name: "Phishing Army", URL: pa}, Enabled: true, Custom: true}})
+	if got[0].URL != pa || !got[0].Enabled {
+		t.Fatal("own list removed")
+	}
+}

@@ -42,7 +42,6 @@ var MoreLists = []List{
 	{"HaGeZi Pop-up Ads", hagezi + "popupads.txt"},
 	{"Peter Lowe's Ad Servers", "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblock&showintro=0&mimetype=plaintext"},
 	{"HaGeZi Fake (Fake-Shops, Abo-Fallen)", hagezi + "fake.txt"},
-	{"Phishing Army Extended", "https://phishing.army/download/phishing_army_blocklist_extended.txt"},
 	{"Phishing Filter (malware-filter)", "https://malware-filter.gitlab.io/malware-filter/phishing-filter-agh.txt"},
 	{"HaGeZi Badware Hoster", hagezi + "hoster.txt"},
 	{"HaGeZi DoH/VPN/Proxy Bypass", hagezi + "doh-vpn-proxy-bypass.txt"},
@@ -78,7 +77,6 @@ var categories = map[string]string{
 	hagezi + "popupads.txt": "ads",
 	"https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblock&showintro=0&mimetype=plaintext": "ads",
 	hagezi + "fake.txt": "security",
-	"https://phishing.army/download/phishing_army_blocklist_extended.txt":     "security",
 	"https://malware-filter.gitlab.io/malware-filter/phishing-filter-agh.txt": "security",
 	hagezi + "hoster.txt":               "security",
 	hagezi + "doh-vpn-proxy-bypass.txt": "bypass",
@@ -94,6 +92,12 @@ var categories = map[string]string{
 	hagezi + "gambling.txt":             "kids",
 	hagezi + "nsfw.txt":                 "kids",
 	"https://nsfw.oisd.nl/":             "kids",
+}
+
+// Retired are presets that were removed; saved settings drop them (unless added as an own list).
+// Phishing Army: licence CC BY-NC (non-commercial only), Phishing Filter (CC0) covers phishing instead.
+var Retired = map[string]bool{
+	"https://phishing.army/download/phishing_army_blocklist_extended.txt": true,
 }
 
 // Category of a preset list ("" = own list).

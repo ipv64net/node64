@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -173,6 +174,7 @@ func mergeUpstreams(saved []upstreamSetting) []upstreamSetting {
 
 func mergeLists(saved []listSetting) []listSetting {
 	fresh := len(saved) == 0
+	saved = slices.DeleteFunc(saved, func(l listSetting) bool { return !l.Custom && filter.Retired[l.URL] }) // entfernte Vorlagen
 	have := map[string]bool{}
 	for _, s := range saved {
 		have[s.URL] = true
