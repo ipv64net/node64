@@ -1,6 +1,6 @@
 # Änderungen – CDN64
 
-## 1.13.2 – 2026-10-19
+## 1.16.0 – 2026-10-19
 
 ### Neu
 - Proxy-Hosts: Icons zeigen den Schutz vor Überlastung – ein Tacho, wenn die lokalen Rate-Limits für den Host gelten

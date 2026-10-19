@@ -1,6 +1,6 @@
 # Changes – CDN64
 
-## 1.13.2 – 2026-10-19
+## 1.16.0 – 2026-10-19
 
 ### New
 - Proxy hosts: icons show the overload protection – a gauge when the local rate limits apply to the host (click leads
