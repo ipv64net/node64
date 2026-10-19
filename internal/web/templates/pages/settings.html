@@ -177,7 +177,7 @@
 							{{if .Info.Version}}<span class="badge text-bg-light font-monospace">v{{.Info.Version}}</span>{{end}}
 							{{with .Info.LastChange}}{{if not .IsZero}}<span class="text-body-secondary small">{{$.T "settings.module_changed" "date" ($.Date .)}}</span>{{end}}{{end}}
 							{{if .LastError}}<div class="text-danger small">{{.LastError}}</div>{{end}}
-							{{with .Info.Releases}}<details class="small mt-1 module-changelog">
+							{{with .Info.ReleasesFor $.Lang}}<details class="small mt-1 module-changelog">
 								<summary class="text-body-secondary">{{$.T "settings.module_changelog"}}</summary>
 								{{range .}}<div class="mt-2">
 									<div class="fw-semibold">v{{.Version}}{{if not .Date.IsZero}} <span class="fw-normal text-body-secondary">· {{$.Date .Date}}</span>{{end}}</div>

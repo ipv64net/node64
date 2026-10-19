@@ -22,6 +22,17 @@ type ChangeSection struct {
 // Releases zerlegt das Aenderungsprotokoll (Format siehe docs/MODUL-VERSIONEN.md), neueste Version zuerst.
 func (i Info) Releases() []Release { return ParseChangelog(i.Changelog) }
 
+// ReleasesFor: das Aenderungsprotokoll in der Sprache (englisch, wenn vorhanden; sonst deutsch).
+func (i Info) ReleasesFor(lang string) []Release { return ParseChangelog(i.ChangelogFor(lang)) }
+
+// ChangelogFor: Text des Aenderungsprotokolls in der Sprache (englisch, wenn vorhanden; sonst deutsch).
+func (i Info) ChangelogFor(lang string) string {
+	if lang == "en" && i.ChangelogEN != "" {
+		return i.ChangelogEN
+	}
+	return i.Changelog
+}
+
 // LastChange ist das Datum der neuesten Version im Aenderungsprotokoll (Null = unbekannt).
 func (i Info) LastChange() time.Time {
 	if r := ParseChangelog(i.Changelog); len(r) > 0 {

@@ -41,6 +41,9 @@ var templateFS embed.FS
 //go:embed CHANGELOG.md
 var changelog string
 
+//go:embed CHANGELOG.en.md
+var changelogEN string
+
 const (
 	Name    = "cdn64"
 	Version = "1.11.0"
@@ -119,7 +122,7 @@ func (m *Module) SetPorts(r *ports.Registry) { m.ports = r }
 
 func (m *Module) Info() module.Info {
 	return module.Info{Name: Name, TitleKey: "nav.proxy", Icon: "bi-diagram-3", Image: "cdn64.webp", Path: "/cdn64", Available: true, Order: 30,
-		Version: Version, Changelog: changelog}
+		Version: Version, Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {

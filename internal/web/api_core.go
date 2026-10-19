@@ -103,7 +103,11 @@ func (s *Server) apiModules(w http.ResponseWriter, r *http.Request) {
 			m["changed"] = d.Format("2006-01-02")
 		}
 		if r.URL.Query().Get("changelog") == "1" {
-			m["changelog"] = st.Info.Changelog
+			lang := r.URL.Query().Get("lang")
+			if lang == "" {
+				lang = s.lang(r)
+			}
+			m["changelog"] = st.Info.ChangelogFor(lang)
 		}
 		mods = append(mods, m)
 	}

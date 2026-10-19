@@ -42,6 +42,9 @@ import (
 //go:embed CHANGELOG.md
 var changelog string
 
+//go:embed CHANGELOG.en.md
+var changelogEN string
+
 //go:embed migrations/*.sql
 var migrationFS embed.FS
 
@@ -113,7 +116,7 @@ func New(core *store.Store, log *slog.Logger, dataDir, nodeVersion string) *Modu
 
 func (m *Module) Info() module.Info {
 	return module.Info{Name: Name, TitleKey: "nav.dns64", Icon: "bi-shield-check", Image: "dns64.webp", Path: "/dns64", Available: true, Order: 40,
-		Version: version, Changelog: changelog}
+		Version: version, Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 // Migrations: eigene DNS-Eintraege in node64.db (Abfrage-Log in eigener Datei, Einstellungen im Kern).

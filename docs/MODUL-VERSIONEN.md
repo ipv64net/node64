@@ -15,8 +15,11 @@ von Node64 selbst (Kern, z. B. `0.11.66-dev`). So ist sichtbar, welches Modul si
 - `module.Info.Version` im `Info()` des Moduls, z. B. `Version: "1.2.0"`.
 - `CHANGELOG.md` im Modulordner, eingebunden mit `//go:embed CHANGELOG.md` in `var changelog string` und als
   `module.Info.Changelog` übergeben.
-- Angezeigt in **Einstellungen → Module** (Version, Stand, Änderungen aufklappbar), im Dashboard (Karte Module) und
-  in `GET /api/modules` (`version`, `changed`; mit `?changelog=1` auch das Protokoll).
+- `CHANGELOG.en.md` daneben: die englische Fassung, eingebunden in `var changelogEN string` und als
+  `module.Info.ChangelogEN` übergeben. Jeder Eintrag in `CHANGELOG.md` kommt im selben Commit auch dort hinein.
+- Angezeigt in **Einstellungen → Module** (Version, Stand, Änderungen aufklappbar, in der Sprache des Benutzers), im
+  Dashboard (Karte Module) und in `GET /api/modules` (`version`, `changed`; mit `?changelog=1` auch das Protokoll,
+  Sprache des Benutzers oder `&lang=en`/`de`).
 
 ## Wann sich die Version ändert (SemVer)
 

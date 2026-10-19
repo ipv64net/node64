@@ -42,6 +42,8 @@ type Info struct {
 	Version string
 	// Changelog ist der Inhalt der CHANGELOG.md des Moduls (per go:embed), leer = keiner.
 	Changelog string
+	// ChangelogEN ist die englische Fassung (CHANGELOG.en.md), leer = nur deutsch.
+	ChangelogEN string
 }
 
 // Module ist das Interface, das jedes Modul erfuellt.
