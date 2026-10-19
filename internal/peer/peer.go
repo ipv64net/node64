@@ -281,6 +281,13 @@ func (m *Manager) Run(ctx context.Context) {
 
 func (m *Manager) pingAll(ctx context.Context) {
 	m.checkAccount(ctx) // eigener Account geaendert: Mitglieder der alten Kopplung aussetzen
+	if list, err := m.Members(ctx); err == nil {
+		for _, x := range list { // nur wegen alter Version ausgesetzt: nach deren Update von selbst wieder aktiv
+			if x.Suspended() && x.Reason == ReasonVersionTooOld {
+				_ = m.Resume(ctx, x.NodeID)
+			}
+		}
+	}
 	for _, x := range m.activeMembers(ctx) {
 		var out pingInfo
 		err := m.call(ctx, x, http.MethodGet, "/peer/v1/ping", nil, &out)

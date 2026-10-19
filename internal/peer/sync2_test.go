@@ -211,3 +211,29 @@ func TestHealthchecksSwitch(t *testing.T) {
 		t.Fatalf("after switching on: %q", fb.name("tok1"))
 	}
 }
+
+// Wegen alter Version ausgesetzt (gestaffeltes Update): nach dem Update der anderen Node von selbst wieder aktiv.
+func TestVersionSuspendAutoResume(t *testing.T) {
+	ctx := context.Background()
+	a, b := newNode(t, "node-a", "A", 522), newNode(t, "node-b", "B", 522)
+	code, _, _ := a.m.StartPairing()
+	if err := b.m.Join(ctx, a.srv.URL, code, b.srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	waitMembers(t, a, "B")
+	x, _ := a.m.member(ctx, "node-b")
+	a.m.suspend(ctx, *x, ReasonVersionTooOld, "test")
+	if x, _ = a.m.member(ctx, "node-b"); !x.Suspended() {
+		t.Fatal("must be suspended")
+	}
+	a.m.pingAll(ctx)
+	if x, _ = a.m.member(ctx, "node-b"); x.Suspended() {
+		t.Fatalf("version suspension must clear by itself, reason=%q", x.Reason)
+	}
+	// andere Gruende bleiben (nur von Hand wieder aufnehmen)
+	a.m.suspend(ctx, *x, ReasonIdentityChanged, "test")
+	a.m.pingAll(ctx)
+	if x, _ = a.m.member(ctx, "node-b"); !x.Suspended() {
+		t.Fatal("identity suspension must stay")
+	}
+}
