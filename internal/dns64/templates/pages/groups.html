@@ -81,7 +81,7 @@
 				</form>
 			</div>
 			<details class="card-footer bg-body"{{if or $g.Domains $g.Cats (eq $g.ListsMode "custom") $g.SafeSearch $g.Bypass}} open{{end}}>
-				<summary class="small fw-semibold">{{$.T "dns64.groups.rules"}}{{$.Doc "dns64#gruppen"}}
+				<summary class="small fw-semibold">{{$.T "dns64.groups.rules"}}{{$.Doc "dns64#gruppen-regeln"}}
 					{{if eq $g.ListsMode "custom"}}<span class="badge text-bg-light fw-normal">{{$.T "dns64.groups.lists_custom_n" "n" (len $g.Lists)}}</span>{{end}}
 					{{range $g.Cats}}<span class="badge text-bg-warning fw-normal">{{$.T (print "dns64.groups.cat." .)}}</span> {{end}}
 					{{with $g.Domains}}<span class="badge text-bg-light fw-normal">{{$.T "dns64.groups.domains_n" "n" (len .)}}</span>{{end}}
