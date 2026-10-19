@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dns64.title"}}</h1>
+	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dns64.title"}}{{.Doc "dns64#verschluesselung"}}</h1>
 	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "dns64.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "dns64.listening" "addr" $d.Listen}}</span>{{end}}
 	{{if $d.Running}}<div class="ms-auto d-flex align-items-center gap-2" id="dns64-pause">
 		{{if $d.Pause.Active}}<span class="badge text-bg-warning"><i class="bi bi-pause-circle"></i> {{if $d.Pause.Forever}}{{.T "dns64.pause.paused"}}{{else}}{{.T "dns64.pause.paused_until" "time" (.Time $d.Pause.Until)}}{{end}}</span>
@@ -26,7 +26,7 @@
 <div class="row g-3">
 	<div class="col-xl-6">
 		<div class="card">
-			<div class="card-header"><i class="bi bi-lock text-success"></i> {{.T "dns64.enc.title"}}</div>
+			<div class="card-header"><i class="bi bi-lock text-success"></i> {{.T "dns64.enc.title"}}{{.Doc "dns64#verschluesselung"}}</div>
 			<div class="card-body">
 				<p class="small text-body-secondary">{{.T "dns64.enc.hint"}}</p>
 				<form method="post" action="/dns64/encrypted">
@@ -80,7 +80,7 @@
 	</div>
 	<div class="col-xl-6 d-flex flex-column gap-3">
 		<div class="card" id="acme">
-			<div class="card-header"><i class="bi bi-patch-check text-success"></i> {{.T "dns64.acme.title"}}</div>
+			<div class="card-header"><i class="bi bi-patch-check text-success"></i> {{.T "dns64.acme.title"}}{{.Doc "dns64#zertifikat"}}</div>
 			<div class="card-body small">
 				{{if $e.MigErr}}<div class="alert alert-warning py-2"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.acme.mig_failed" "err" $e.MigErr}}</div>{{end}}
 				{{with $e.Current}}<div class="alert alert-success py-2"><i class="bi bi-patch-check"></i> {{$.T "dns64.enc.central_have" "name" .Title "issuer" .Issuer "date" ($.Date .NotAfter)}}</div>{{end}}
@@ -89,7 +89,7 @@
 			</div>
 		</div>
 		<div class="card">
-			<div class="card-header"><i class="bi bi-phone text-primary"></i> {{.T "dns64.enc.devices"}}</div>
+			<div class="card-header"><i class="bi bi-phone text-primary"></i> {{.T "dns64.enc.devices"}}{{.Doc "dns64#apple-profil"}}</div>
 			<div class="card-body small">
 				{{if $e.Names}}<div class="mb-2">{{.T "dns64.enc.host"}}
 					{{range $e.Names}}<a class="badge {{if eq . $e.Host}}text-bg-primary{{else}}text-bg-light{{end}} text-decoration-none font-monospace" href="?host={{.}}">{{.}}</a> {{end}}</div>{{end}}

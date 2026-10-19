@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dns64.title"}}</h1>
+	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dns64.title"}}{{.Doc "dns64#einschalten"}}</h1>
 	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "dns64.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "dns64.listening" "addr" $d.Listen}}</span>{{end}}
 	{{if $d.Running}}<div class="ms-auto d-flex align-items-center gap-2" id="dns64-pause">
 		{{if $d.Pause.Active}}<span class="badge text-bg-warning"><i class="bi bi-pause-circle"></i> {{if $d.Pause.Forever}}{{.T "dns64.pause.paused"}}{{else}}{{.T "dns64.pause.paused_until" "time" (.Time $d.Pause.Until)}}{{end}}</span>
@@ -25,7 +25,7 @@
 <div class="row g-3">
 	<div class="col-xl-6">
 		<div class="card">
-			<div class="card-header"><i class="bi bi-gear text-primary"></i> {{.T "dns64.settings.general"}}</div>
+			<div class="card-header"><i class="bi bi-gear text-primary"></i> {{.T "dns64.settings.general"}}{{.Doc "dns64#netzwerk-und-ports"}}</div>
 			<div class="card-body">
 				<form method="post" action="/dns64/settings">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
@@ -40,7 +40,7 @@
 						</div>
 						<div class="col-12 form-text mt-1">{{.T "dns64.settings.port_hint"}}</div>
 						<div class="col-12">
-							<label class="form-label" for="router">{{.T "dns64.settings.router"}}</label>
+							<label class="form-label" for="router">{{.T "dns64.settings.router"}}{{.Doc "dns64#lokale-namen"}}</label>
 							<div class="input-group"><span class="input-group-text"><i class="bi bi-router"></i></span><input type="text" class="form-control font-monospace" id="router" name="router" value="{{$d.Cfg.Router}}" placeholder="{{.T "dns64.settings.router_auto"}}"></div>
 							<div class="form-text">{{if and $d.Running $d.Router}}{{.T "dns64.settings.router_now" "addr" $d.Router}} {{else if $d.Running}}{{.T "dns64.settings.router_none"}} {{end}}{{.T "dns64.settings.router_hint"}}</div>
 						</div>
@@ -62,13 +62,13 @@
 						</div>
 						<div class="col-12 form-text mt-1">{{.T "dns64.settings.anonymize_hint"}}</div>
 						<div class="col-12">
-							<div class="form-label">{{.T "dns64.settings.notify"}}</div>
+							<div class="form-label">{{.T "dns64.settings.notify"}}{{.Doc "dns64#benachrichtigungen"}}</div>
 							<div class="form-check"><input class="form-check-input" type="checkbox" id="notify_upstream" name="notify_upstream" value="1"{{if $d.Cfg.NotifyUp}} checked{{end}}><label class="form-check-label" for="notify_upstream">{{.T "dns64.settings.notify_upstream"}}</label></div>
 							<div class="form-check"><input class="form-check-input" type="checkbox" id="notify_lists" name="notify_lists" value="1"{{if $d.Cfg.NotifyLst}} checked{{end}}><label class="form-check-label" for="notify_lists">{{.T "dns64.settings.notify_lists"}}</label></div>
 							<div class="form-text">{{.T "dns64.settings.notify_hint"}} <a href="/notifications">{{.T "nav.notifications"}}</a></div>
 						</div>
 						<div class="col-12">
-							<label class="form-label" for="allow_nets">{{.T "dns64.settings.allow_nets"}}</label>
+							<label class="form-label" for="allow_nets">{{.T "dns64.settings.allow_nets"}}{{.Doc "dns64#client-netze"}}</label>
 							<textarea class="form-control font-monospace" id="allow_nets" name="allow_nets" rows="2" placeholder="2001:db8:1234::/48">{{range $i, $n := $d.Cfg.AllowNets}}{{if $i}}
 {{end}}{{$n}}{{end}}</textarea>
 							<div class="form-text">{{.T "dns64.settings.allow_nets_hint"}}</div>
@@ -81,7 +81,7 @@
 			</div>
 		</div>
 		<div class="card mt-3">
-			<div class="card-header"><i class="bi bi-info-circle text-info"></i> {{.T "dns64.setup.title"}}</div>
+			<div class="card-header"><i class="bi bi-info-circle text-info"></i> {{.T "dns64.setup.title"}}{{.Doc "dns64#router"}}</div>
 			<div class="card-body small">
 				<p>{{.T "dns64.setup.router"}}</p>
 				<p>{{.T "dns64.setup.docker"}}</p>
@@ -91,7 +91,7 @@
 	</div>
 	<div class="col-xl-6">
 		<div class="card" id="upstreams">
-			<div class="card-header"><i class="bi bi-cloud-arrow-up text-info"></i> {{.T "dns64.up.title"}}</div>
+			<div class="card-header"><i class="bi bi-cloud-arrow-up text-info"></i> {{.T "dns64.up.title"}}{{.Doc "dns64#upstreams"}}</div>
 			<form method="post" action="/dns64/upstreams">
 				<input type="hidden" name="_csrf" value="{{.CSRF}}">
 				<div class="card-body small pb-0"><p class="text-body-secondary">{{.T "dns64.settings.up_hint"}}</p></div>
@@ -109,7 +109,7 @@
 					</table>
 				</div>
 				<div class="card-footer d-flex flex-wrap align-items-center gap-2">
-					<label class="small" for="mode">{{.T "dns64.settings.up_mode"}}</label>
+					<label class="small" for="mode">{{.T "dns64.settings.up_mode"}}{{.Doc "dns64#betriebsart"}}</label>
 					<select class="form-select form-select-sm w-auto" id="mode" name="mode">
 						<option value="fastest"{{if eq $d.Cfg.UpMode "fastest"}} selected{{end}}>{{.T "dns64.js.mode_fastest"}}</option>
 						<option value="parallel"{{if eq $d.Cfg.UpMode "parallel"}} selected{{end}}>{{.T "dns64.js.mode_parallel"}}</option>
@@ -123,7 +123,7 @@
 			</form>
 		</div>
 		<div class="card mt-3">
-			<div class="card-header"><i class="bi bi-plus-circle text-primary"></i> {{.T "dns64.settings.up_add"}}</div>
+			<div class="card-header"><i class="bi bi-plus-circle text-primary"></i> {{.T "dns64.settings.up_add"}}{{.Doc "dns64#eigener-upstream"}}</div>
 			<div class="card-body">
 				<form method="post" action="/dns64/upstreams/add" class="row g-2">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">

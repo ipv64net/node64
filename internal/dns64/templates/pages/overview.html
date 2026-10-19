@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dns64.title"}}</h1>
+	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dns64.title"}}{{.Doc "dns64"}}</h1>
 	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "dns64.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "dns64.listening" "addr" $d.Listen}}</span>{{end}}
 	{{if $d.Running}}<div class="ms-auto d-flex align-items-center gap-2" id="dns64-pause">
 		{{if $d.Pause.Active}}<span class="badge text-bg-warning"><i class="bi bi-pause-circle"></i> {{if $d.Pause.Forever}}{{.T "dns64.pause.paused"}}{{else}}{{.T "dns64.pause.paused_until" "time" (.Time $d.Pause.Until)}}{{end}}</span>
@@ -36,13 +36,13 @@
 	<div class="col-6 col-md-4 col-xl-2"><div class="card h-100"><div class="card-body py-2"><div class="small text-body-secondary">{{.T "dns64.kpi.lists"}}</div><div class="fs-4 fw-semibold" id="k-lists">–</div><div class="small text-body-secondary" id="k-lists-age"></div></div></div></div>
 </div>
 <div class="card mb-3">
-	<div class="card-header"><i class="bi bi-bar-chart text-primary"></i> {{.T "dns64.chart.title"}}</div>
+	<div class="card-header"><i class="bi bi-bar-chart text-primary"></i> {{.T "dns64.chart.title"}}{{.Doc "dns64#statistik"}}</div>
 	<div class="card-body"><div style="height:260px"><canvas id="dns64-chart" aria-label="{{.T "dns64.chart.title"}}"></canvas></div></div>
 </div>
 <div class="row g-3 mb-3">
 	<div class="col-lg-6">
 		<div class="card h-100">
-			<div class="card-header d-flex align-items-center"><span><i class="bi bi-cloud-arrow-up text-info"></i> {{.T "dns64.up.title"}}</span><span class="badge text-bg-light ms-auto" id="up-mode"></span></div>
+			<div class="card-header d-flex align-items-center"><span><i class="bi bi-cloud-arrow-up text-info"></i> {{.T "dns64.up.title"}}{{.Doc "dns64#upstreams"}}</span><span class="badge text-bg-light ms-auto" id="up-mode"></span></div>
 			<div class="card-body small">
 				<p class="text-body-secondary">{{.T "dns64.up.hint"}}</p>
 				<div id="upstreams" class="d-flex flex-column gap-2"></div>
@@ -52,7 +52,7 @@
 	</div>
 	<div class="col-lg-6">
 		<div class="card h-100">
-			<div class="card-header d-flex align-items-center"><span><i class="bi bi-lightning-charge text-warning"></i> {{.T "dns64.cache.title"}}</span><span class="badge text-bg-light ms-auto">{{.T "dns64.cache.optimistic"}}</span></div>
+			<div class="card-header d-flex align-items-center"><span><i class="bi bi-lightning-charge text-warning"></i> {{.T "dns64.cache.title"}}{{.Doc "dns64#cache"}}</span><span class="badge text-bg-light ms-auto">{{.T "dns64.cache.optimistic"}}</span></div>
 			<div class="card-body small">
 				<p class="text-body-secondary">{{.T "dns64.cache.hint"}}</p>
 				<div class="d-flex justify-content-between"><span>{{.T "dns64.cache.rate"}}</span><b id="c-rate">–</b></div>

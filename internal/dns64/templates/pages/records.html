@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dns64.title"}}</h1>
+	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dns64.title"}}{{.Doc "dns64#eigene-eintraege"}}</h1>
 	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "dns64.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "dns64.listening" "addr" $d.Listen}}</span>{{end}}
 	{{if $d.Running}}<div class="ms-auto d-flex align-items-center gap-2" id="dns64-pause">
 		{{if $d.Pause.Active}}<span class="badge text-bg-warning"><i class="bi bi-pause-circle"></i> {{if $d.Pause.Forever}}{{.T "dns64.pause.paused"}}{{else}}{{.T "dns64.pause.paused_until" "time" (.Time $d.Pause.Until)}}{{end}}</span>
@@ -25,7 +25,7 @@
 <div class="row g-3" data-dns64-page="records">
 	<div class="col-xl-4">
 		<div class="card">
-			<div class="card-header"><i class="bi bi-plus-circle text-primary"></i> {{.T "dns64.records.add"}}</div>
+			<div class="card-header"><i class="bi bi-plus-circle text-primary"></i> {{.T "dns64.records.add"}}{{.Doc "dns64#eigene-eintraege"}}</div>
 			<div class="card-body">
 				<form method="post" action="/dns64/records">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
