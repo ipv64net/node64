@@ -51,7 +51,7 @@
 	{{end}}
 </div>
 <div class="card">
-	<div class="card-header"><i class="bi bi-shuffle text-primary"></i> {{.T "cdn64.pass.title"}}</div>
+	<div class="card-header"><i class="bi bi-shuffle text-primary"></i> {{.T "cdn64.pass.title"}}{{$.Doc "cdn64#host-arten"}}</div>
 	<div class="card-body small text-body-secondary pb-0">{{.T "cdn64.pass.hint"}}</div>
 	{{if not $d.Pass}}<div class="card-body text-body-secondary small">{{.T "cdn64.kind_empty.passthrough"}}</div>
 	{{else}}

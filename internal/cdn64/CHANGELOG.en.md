@@ -1,5 +1,11 @@
 # Changes – CDN64
 
+## 1.13.1 – 2026-10-19
+
+### New
+- Help links: a question mark on pages and cards opens the matching place in the documentation on node64.de (proxy
+  hosts, options, access lists, blocklists, rate limits, default page, statistics, TLS passthrough, CDN64 online).
+
 ## 1.13.0 – 2026-10-19
 
 ### New

@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-	<h1 class="h4 mb-0"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/cdn64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "cdn64.title"}}</h1>
+	<h1 class="h4 mb-0"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/cdn64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "cdn64.title"}}{{$.Doc "cdn64"}}</h1>
 	<div class="ms-auto d-flex gap-2">
 		{{if eq $d.Kind "proxy"}}<form method="post" action="/cdn64/check" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="back" value="/cdn64"><button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi bi-arrow-repeat"></i> {{.T "cdn64.check_now"}}</button></form>{{end}}
 		<a class="btn btn-sm btn-primary" href="/cdn64/hosts/new?kind={{$d.Kind}}"><i class="bi bi-plus-lg"></i> {{.T (print "cdn64.kind_new." $d.Kind)}}</a>
@@ -112,11 +112,11 @@
 </div>
 {{if $d.OnlineOn}}<div class="modal fade" id="cdn64-online" tabindex="-1" aria-labelledby="cdn64-online-title" aria-hidden="true" data-online-modal data-csrf="{{.CSRF}}" data-l="{{$d.OnlineL}}">
 	<div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
-		<div class="modal-header"><h2 class="modal-title h5" id="cdn64-online-title"><i class="bi bi-cloud-arrow-up text-primary"></i> {{.T "cdn64.online.col"}}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{.T "cdn64.online.close"}}"></button></div>
+		<div class="modal-header"><h2 class="modal-title h5" id="cdn64-online-title"><i class="bi bi-cloud-arrow-up text-primary"></i> {{.T "cdn64.online.col"}}{{$.Doc "cdn64-online#einrichtung"}}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{.T "cdn64.online.close"}}"></button></div>
 		<div class="modal-body">
 			<div data-online-setup>
 				<p class="small">{{.T "cdn64.online.intro"}}</p>
-				<div class="mb-2"><label class="form-label small mb-1" for="online-mode">{{.T "cdn64.online.mode"}}</label>
+				<div class="mb-2"><label class="form-label small mb-1" for="online-mode">{{.T "cdn64.online.mode"}}{{$.Doc "cdn64-online#welcher-modus"}}</label>
 					<select class="form-select form-select-sm" id="online-mode" data-online-mode><option value="1" selected>{{.T "cdn64.online.mode1"}}</option><option value="2">{{.T "cdn64.online.mode2"}}</option></select>
 					<div class="form-text">{{.T "cdn64.online.mode3_web"}} <a href="https://ipv64.net/cdn64" target="_blank" rel="noopener">ipv64.net/cdn64 <i class="bi bi-box-arrow-up-right"></i></a></div></div>
 				<div class="form-check small mb-3"><input class="form-check-input" type="checkbox" id="online-hc" data-online-hc><label class="form-check-label" for="online-hc">{{.T "cdn64.online.hc"}}</label></div>

@@ -1,5 +1,11 @@
 # Änderungen – CDN64
 
+## 1.13.1 – 2026-10-19
+
+### Neu
+- Hilfe-Links: Ein Fragezeichen an Seiten und Karten öffnet die passende Stelle der Doku auf node64.de (Proxy-Hosts,
+  Optionen, Zugriffslisten, Blocklisten, Rate-Limits, Standardseite, Statistik, TLS durchreichen, CDN64 online).
+
 ## 1.13.0 – 2026-10-19
 
 ### Neu

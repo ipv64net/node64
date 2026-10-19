@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-	<h1 class="h4 mb-0"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/cdn64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "cdn64.title"}}</h1>
+	<h1 class="h4 mb-0"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/cdn64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "cdn64.title"}}{{$.Doc "cdn64#statistik"}}</h1>
 </div>
 <ul class="nav nav-tabs mb-3">
 	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
@@ -59,7 +59,7 @@
 	<div class="col-xl-3">
 		<form method="post" action="/cdn64/log/settings" class="card">
 			<input type="hidden" name="_csrf" value="{{.CSRF}}">
-			<div class="card-header"><i class="bi bi-sliders text-primary"></i> {{.T "cdn64.log.settings"}}</div>
+			<div class="card-header"><i class="bi bi-sliders text-primary"></i> {{.T "cdn64.log.settings"}}{{$.Doc "cdn64#statistik"}}</div>
 			<div class="card-body small">
 				<label class="form-label" for="days">{{.T "cdn64.log.days"}}</label>
 				<input class="form-control form-control-sm mb-2" type="number" min="1" max="90" id="days" name="days" value="{{$d.Days}}">

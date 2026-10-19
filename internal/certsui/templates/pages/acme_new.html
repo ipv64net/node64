@@ -1,6 +1,6 @@
 {{define "content"}}
 {{$d := .Data}}
-<h1 class="h4 mb-3"><i class="bi bi-shield-lock text-primary"></i> {{.T "certs.acme.new"}}</h1>
+<h1 class="h4 mb-3"><i class="bi bi-shield-lock text-primary"></i> {{.T "certs.acme.new"}}{{$.Doc "certificates#acme-stellen"}}</h1>
 <div class="row g-3">
 	<div class="col-xl-7">
 		<form method="post" action="/certificates/acme" class="card">

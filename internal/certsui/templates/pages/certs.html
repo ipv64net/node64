@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-	<h1 class="h4 mb-0"><i class="bi bi-shield-lock text-primary"></i> {{.T "certs.title"}}</h1>
+	<h1 class="h4 mb-0"><i class="bi bi-shield-lock text-primary"></i> {{.T "certs.title"}}{{$.Doc "certificates"}}</h1>
 	<div class="ms-auto"><a class="btn btn-sm btn-primary" href="/certificates/new"><i class="bi bi-plus-lg"></i> {{.T "certs.new"}}</a></div>
 </div>
 <div class="row g-3"{{if $d.Issuing}} data-reload="4"{{end}}>
@@ -80,7 +80,7 @@
 				<div>{{if $d.HTTPReady}}<i class="bi bi-check-circle text-success"></i>{{else}}<i class="bi bi-x-circle text-danger"></i>{{end}} {{.T "certs.http_ready"}}</div>
 			</div>
 		</div>
-		<div class="card mt-3"><div class="card-header d-flex align-items-center"><span><i class="bi bi-patch-check text-primary"></i> {{.T "certs.ca.title"}}</span>
+		<div class="card mt-3"><div class="card-header d-flex align-items-center"><span><i class="bi bi-patch-check text-primary"></i> {{.T "certs.ca.title"}}{{$.Doc "certificates#eigene-ca"}}</span>
 			<a class="btn btn-sm btn-outline-primary py-0 ms-auto" href="/certificates/ca/new" title="{{.T "certs.ca.new"}}"><i class="bi bi-plus-lg"></i></a></div>
 			<div class="card-body small">
 				{{if not $d.CAs}}<p class="text-body-secondary mb-0">{{.T "certs.ca.empty"}}</p>{{end}}
@@ -95,7 +95,7 @@
 				</div>{{end}}
 			</div>
 		</div>
-		<div class="card mt-3"><div class="card-header d-flex align-items-center"><span><i class="bi bi-globe2 text-primary"></i> {{.T "certs.acme.title"}}</span>
+		<div class="card mt-3"><div class="card-header d-flex align-items-center"><span><i class="bi bi-globe2 text-primary"></i> {{.T "certs.acme.title"}}{{$.Doc "certificates#acme-stellen"}}</span>
 			<a class="btn btn-sm btn-outline-primary py-0 ms-auto" href="/certificates/acme/new" title="{{.T "certs.acme.new"}}"><i class="bi bi-plus-lg"></i></a></div>
 			<div class="card-body small">
 				<div class="mb-2"><span class="fw-semibold">Let's Encrypt</span> <span class="text-body-secondary">({{.T "certs.acme.default"}})</span></div>
@@ -105,7 +105,7 @@
 				</div>{{end}}
 			</div>
 		</div>
-		<div class="card mt-3"><div class="card-header d-flex align-items-center"><span><i class="bi bi-key text-primary"></i> {{.T "certs.dns.title"}}</span>
+		<div class="card mt-3"><div class="card-header d-flex align-items-center"><span><i class="bi bi-key text-primary"></i> {{.T "certs.dns.title"}}{{$.Doc "certificates#dns-anbieter"}}</span>
 			<a class="btn btn-sm btn-outline-primary py-0 ms-auto" href="/certificates/dns-accounts/new"><i class="bi bi-plus-lg"></i></a></div>
 			<div class="card-body small">
 				{{if not $d.DNS}}<p class="text-body-secondary mb-0">{{.T "certs.dns.empty"}}</p>{{end}}
@@ -121,7 +121,7 @@
 <div class="modal fade" id="p12modal" tabindex="-1" aria-labelledby="p12title" aria-hidden="true">
 	<div class="modal-dialog"><form class="modal-content" method="post" action="/certificates" data-p12-form>
 		<input type="hidden" name="_csrf" value="{{.CSRF}}">
-		<div class="modal-header"><h2 class="modal-title h6" id="p12title"><i class="bi bi-file-earmark-lock text-primary"></i> {{.T "certs.dl.p12_title"}}</h2>
+		<div class="modal-header"><h2 class="modal-title h6" id="p12title"><i class="bi bi-file-earmark-lock text-primary"></i> {{.T "certs.dl.p12_title"}}{{$.Doc "certificates#download"}}</h2>
 			<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{.T "common.cancel"}}"></button></div>
 		<div class="modal-body small">
 			<label class="form-label" for="p12pw">{{.T "certs.dl.p12_password"}}</label>

@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-	<h1 class="h4 mb-0"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/cdn64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "cdn64.title"}}</h1>
+	<h1 class="h4 mb-0"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/cdn64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "cdn64.title"}}{{$.Doc "cdn64#zugriffslisten"}}</h1>
 	<div class="ms-auto"><a class="btn btn-sm btn-primary" href="/cdn64/access/new"><i class="bi bi-plus-lg"></i> {{.T "cdn64.acl.new"}}</a></div>
 </div>
 <ul class="nav nav-tabs mb-3">
@@ -12,7 +12,7 @@
 <form method="post" action="/cdn64/blocklists" class="card h-100" id="blocklists">
 	<input type="hidden" name="_csrf" value="{{.CSRF}}">
 	<div class="card-header d-flex flex-wrap align-items-center gap-2">
-		<span><img src="/static/img/ipv64_logo.svg" alt="" height="16" class="logo logo-light me-1 align-text-bottom"><img src="/static/img/ipv64_logo_white.svg" alt="" height="16" class="logo logo-dark me-1 align-text-bottom"> {{.T "cdn64.bl.title"}}</span>
+		<span><img src="/static/img/ipv64_logo.svg" alt="" height="16" class="logo logo-light me-1 align-text-bottom"><img src="/static/img/ipv64_logo_white.svg" alt="" height="16" class="logo logo-dark me-1 align-text-bottom"> {{.T "cdn64.bl.title"}}{{$.Doc "cdn64#blocklisten"}}</span>
 		{{if $d.BL.Active}}<span class="badge text-bg-success"><i class="bi bi-shield-check"></i> {{.T "cdn64.bl.active"}}</span>{{else}}<span class="badge text-bg-light">{{.T "cdn64.bl.off"}}</span>{{end}}
 		<span class="ms-auto small text-body-secondary" title="{{.T "cdn64.bl.blocked_hint"}}"><i class="bi bi-slash-circle"></i> {{.T "cdn64.bl.blocked" "n" ($.Int $d.BL.Blocked)}}</span>
 	</div>
@@ -43,7 +43,7 @@
 <form method="post" action="/cdn64/limits" class="card h-100" id="limits">
 	<input type="hidden" name="_csrf" value="{{.CSRF}}">
 	<div class="card-header d-flex flex-wrap align-items-center gap-2">
-		<span><i class="bi bi-speedometer2 text-primary"></i> {{.T "cdn64.lim.title"}}</span>
+		<span><i class="bi bi-speedometer2 text-primary"></i> {{.T "cdn64.lim.title"}}{{$.Doc "cdn64#rate-limits"}}</span>
 		{{if $d.Lim.Limits.Enabled}}<span class="badge text-bg-success"><i class="bi bi-shield-check"></i> {{.T "cdn64.bl.active"}}</span>{{else}}<span class="badge text-bg-light">{{.T "cdn64.bl.off"}}</span>{{end}}
 		<span class="ms-auto small text-body-secondary" title="{{.T "cdn64.lim.rejected_hint"}}"><i class="bi bi-slash-circle"></i> {{.T "cdn64.bl.blocked" "n" ($.Int $d.Lim.Rejected)}} · {{.T "cdn64.lim.open" "n" ($.Int $d.Lim.Conns)}}</span>
 	</div>
