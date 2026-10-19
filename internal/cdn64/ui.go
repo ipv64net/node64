@@ -152,6 +152,7 @@ type listData struct {
 	StartedAt time.Time
 	StatsOn   bool         // cdn64.db verfuegbar (Statistik-Karte)
 	OnlineOn  bool         // CDN64 online verfuegbar (ipv64 angebunden)
+	LimitsOn  bool         // Schutz vor Ueberlastung (Rate-Limits) eingeschaltet
 	Quota     *onlineQuota // Kontingent bei ipv64 (nur wenn Namen eingeschaltet sind)
 	OnlineL   string       // Texte fuer cdn64-online.js (JSON)
 }
@@ -223,7 +224,7 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 		return
 	}
 	d := listData{Kind: kind, Tabs: tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError(), StatsOn: m.stats2.Load() != nil,
-		OnlineOn: m.online.api != nil && m.edge != nil, OnlineL: m.onlineStrings(r)}
+		OnlineOn: m.online.api != nil && m.edge != nil, OnlineL: m.onlineStrings(r), LimitsOn: m.limLoad(r.Context()).Enabled}
 	if rm := m.online.remote.Load(); rm != nil && rm.Data != nil && len(rm.Data.Hosts) > 0 {
 		q := rm.Data.Quota
 		d.Quota = &onlineQuota{Used: q.Domains.Used, Limit: q.Domains.Limit, Traffic: int64(q.TrafficMB.Used * (1 << 20)),

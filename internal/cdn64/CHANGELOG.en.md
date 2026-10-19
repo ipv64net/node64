@@ -1,5 +1,12 @@
 # Changes – CDN64
 
+## 1.13.2 – 2026-10-19
+
+### New
+- Proxy hosts: icons show the overload protection – a gauge when the local rate limits apply to the host (click leads
+  to the settings), a green shield when the host runs through CDN64 online and is therefore also protected on the
+  servers (blocklist, limits per IP, fair throttling).
+
 ## 1.15.0 – 2026-10-19
 
 ### New

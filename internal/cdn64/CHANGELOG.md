@@ -1,5 +1,12 @@
 # Änderungen – CDN64
 
+## 1.13.2 – 2026-10-19
+
+### Neu
+- Proxy-Hosts: Icons zeigen den Schutz vor Überlastung – ein Tacho, wenn die lokalen Rate-Limits für den Host gelten
+  (Klick führt zu den Einstellungen), ein grünes Schild, wenn der Host über CDN64 online läuft und damit auch auf den
+  Servern geschützt ist (Blockliste, Grenzen je IP, faire Drossel).
+
 ## 1.15.0 – 2026-10-19
 
 ### Neu
