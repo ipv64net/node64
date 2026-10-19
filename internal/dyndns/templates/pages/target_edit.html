@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 {{$t := $d.T}}
-<h1 class="h4 mb-3"><img src="/static/img/dyndns64.webp" alt="" height="26" class="me-1 align-text-bottom"> <span class="text-break">{{$t.FQDN}}</span></h1>
+<h1 class="h4 mb-3"><img src="/static/img/dyndns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dyndns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> <span class="text-break">{{$t.FQDN}}</span></h1>
 <div class="row g-3">
 	<div class="col-lg-7">
 		<form method="post" action="/dyndns/targets/{{$t.ID}}" class="card">

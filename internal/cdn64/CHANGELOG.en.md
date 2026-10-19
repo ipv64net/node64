@@ -1,5 +1,11 @@
 # Changes – CDN64
 
+## 1.11.1 – 2026-10-19
+
+### Fixed
+- Statistics: evaluations over long periods could fail with "disk I/O error" (no directory for SQLite temporary files in the container); intermediate results now stay in memory.
+- Display: CDN64 logo is light in the dark theme.
+
 ## 1.11.0 – 2026-10-19
 
 CDN64 online: HTTP/3 in mode 1 too.

@@ -1,5 +1,11 @@
 # Änderungen – CDN64
 
+## 1.11.1 – 2026-10-19
+
+### Behoben
+- Statistik: Auswertungen über große Zeiträume konnten mit „disk I/O error“ scheitern (kein Verzeichnis für SQLite-Zwischendateien im Container); Zwischenergebnisse bleiben jetzt im Speicher.
+- Darstellung: CDN64-Logo im dunklen Design hell.
+
 ## 1.11.0 – 2026-10-19
 
 CDN64 online: HTTP/3 auch in Modus 1.

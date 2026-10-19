@@ -114,6 +114,7 @@ func (s *Server) parseTemplates() error {
 		"join":     strings.Join,
 		"split":    strings.Fields,
 		"contains": strings.Contains,
+		"darkimg":  darkImage,
 		"seq": func(n int) []int {
 			out := make([]int, n)
 			for i := range out {

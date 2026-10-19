@@ -1,5 +1,11 @@
 # Änderungen – DNS64
 
+## 1.13.1 – 2026-10-19
+
+### Behoben
+- Übersicht: Zeitverlauf, Top-Clients und Top-Domains blieben leer (Fehler „disk I/O error“), sobald das Abfrage-Log groß genug war, dass SQLite beim Sortieren Zwischendateien anlegen wollte. Im Container gibt es dafür kein Verzeichnis; Zwischenergebnisse bleiben jetzt im Speicher.
+- Darstellung: DNS64-Logo im dunklen Design hell.
+
 ## 1.13.0 – 2026-10-18
 
 ### Neu

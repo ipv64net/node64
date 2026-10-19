@@ -1,5 +1,10 @@
 # Changes – DynDNS updater
 
+## 1.2.1 – 2026-10-19
+
+### Fixed
+- Display: DynDNS64 logo is light in the dark theme.
+
 ## 1.2.0 – 2026-10-18
 
 ### Changed

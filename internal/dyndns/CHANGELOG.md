@@ -1,5 +1,10 @@
 # Änderungen – DynDNS-Updater
 
+## 1.2.1 – 2026-10-19
+
+### Behoben
+- Darstellung: DynDNS64-Logo im dunklen Design hell.
+
 ## 1.2.0 – 2026-10-18
 
 ### Geändert

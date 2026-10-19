@@ -49,6 +49,7 @@ type NavItem struct {
 	Enabled   bool
 	Sub       bool // Unterpunkt (eingerueckt)
 	Active    bool
+	Hidden    bool // Modul in den Einstellungen ausgeschaltet: nicht im Menue
 }
 
 // Crumb ist ein Element der Brotkrumen in der Kopfzeile (URL leer = aktuelle Seite).
@@ -255,8 +256,9 @@ func (s *Server) nav(r *http.Request) []NavItem {
 	link := NavItem{Key: "nav.link", Path: "/link", Icon: "bi-cloud", Available: true, Enabled: true, Sub: true}
 	placed := false
 	for _, m := range s.Modules.List(r.Context()) {
-		items = append(items, NavItem{Key: m.Info.TitleKey, Path: m.Info.Path, Icon: m.Info.Icon, Image: m.Info.Image, Available: m.Info.Available, Enabled: m.Running})
-		if m.Info.Path == "/healthchecks" { // Healthchecks-Sync gehoert zu den Healthchecks
+		items = append(items, NavItem{Key: m.Info.TitleKey, Path: m.Info.Path, Icon: m.Info.Icon, Image: m.Info.Image, Available: m.Info.Available, Enabled: m.Running,
+			Hidden: m.Info.Available && !m.Enabled})
+		if m.Info.Path == "/healthchecks" && m.Enabled { // Healthchecks-Sync gehoert zu den Healthchecks
 			items, placed = append(items, link), true
 		}
 	}
