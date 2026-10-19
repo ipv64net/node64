@@ -187,7 +187,7 @@ func validateSQLite(ctx context.Context, path string) error {
 	if !bytes.HasPrefix(head, []byte("SQLite format 3\x00")) {
 		return fmt.Errorf("not a SQLite database")
 	}
-	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?mode=ro&_pragma=busy_timeout(2000)")
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?mode=ro&_pragma=busy_timeout(2000)&_pragma=temp_store(MEMORY)")
 	if err != nil {
 		return err
 	}

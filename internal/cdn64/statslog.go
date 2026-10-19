@@ -91,7 +91,7 @@ func openStats(dir string, log *slog.Logger, days func() int, anon func() bool) 
 		return nil, err
 	}
 	path := filepath.Join(dir, "cdn64.db")
-	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)")
+	db, err := sql.Open("sqlite", "file:"+path+"?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)&_pragma=temp_store(MEMORY)")
 	if err != nil {
 		return nil, err
 	}
