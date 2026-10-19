@@ -16,6 +16,7 @@ import (
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/scheduler"
 	"github.com/ipv64net/node64/internal/store"
+	"github.com/ipv64net/node64/internal/wire"
 )
 
 //go:embed migrations/*.sql
@@ -55,6 +56,8 @@ type Module struct {
 	groupPeers func(ctx context.Context) []Peer // Nodes der lokalen Gruppe (Auswahl der Messstellen)
 	// Account-Klasse und Online-Messstellen-Limit, nil = standalone
 	account func() (plan string, onlineLimit int)
+	// Testlauf von ipv64 vor dem Umhaengen, nil = standalone
+	onlineTest func(ctx context.Context, def wire.Check, locations []string) (*OnlineTest, error)
 	// Ereignisse von ipv64 (Detailseite), nil = standalone
 	hubEvents func(ctx context.Context, token string) ([]Event, error)
 	// wer in der lokalen Gruppe benachrichtigt (Anzeige, groupnotify.go)
@@ -191,7 +194,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.14.1", Changelog: changelog, ChangelogEN: changelogEN}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.15.0", Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {
@@ -302,6 +305,7 @@ func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /api/checks/{token}/run", api(m.apiRun))
 	mux.Handle("POST /api/checks/{token}/clone", api(m.apiClone))
 	mux.Handle("POST /api/checks/bulk", api(m.apiBulk))
+	mux.Handle("POST /api/checks/online-test", api(m.apiOnlineTest))
 	mux.Handle("GET /api/checks/{token}/measurements", api(m.apiMeasurements))
 	mux.Handle("GET /api/checks/{token}/events", api(m.apiEvents))
 	mux.Handle("GET /api/checks/{token}/incidents", api(m.apiIncidents))

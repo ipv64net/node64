@@ -13,6 +13,39 @@
 				el.querySelectorAll("input, select, textarea").forEach(function (i) { i.disabled = !on; });
 			});
 		};
+		// Testlauf von ipv64 vor dem Umhaengen: die Standorte messen die Eingabe einmal (gespeichert wird nichts)
+		var ot = document.getElementById("hc-otest");
+		if (ot) {
+			var otx = function (k) { return ot.getAttribute("data-t-" + k) || k; };
+			var out = document.getElementById("hc-otest-out");
+			var add = function (icon, text) {
+				var li = document.createElement("li"), i = document.createElement("i");
+				i.className = "bi " + icon + " me-1";
+				li.appendChild(i);
+				li.appendChild(document.createTextNode(text));
+				out.appendChild(li);
+			};
+			ot.addEventListener("click", function () {
+				var form = document.getElementById("hc-form");
+				var body = new URLSearchParams(new FormData(form));
+				body.set("token", ot.getAttribute("data-token") || "");
+				ot.disabled = true;
+				out.textContent = "";
+				add("bi-hourglass-split text-body-secondary", otx("running"));
+				fetch("/healthchecks/online-test", { method: "POST", body: body, headers: { "Content-Type": "application/x-www-form-urlencoded" } })
+					.then(function (r) { return r.json(); })
+					.then(function (d) {
+						out.textContent = "";
+						if (d.error) { add("bi-x-circle text-danger", d.error); return; }
+						add(d.status === "ok" ? "bi-check-circle text-success" : "bi-exclamation-triangle text-warning", otx(d.status));
+						(d.results || []).forEach(function (r) {
+							add(r.ok ? "bi-check text-success" : "bi-x text-danger", (ot.getAttribute("data-t-loc-" + r.location) || r.location) + ": " + r.message);
+						});
+					})
+					.catch(function () { out.textContent = ""; add("bi-x-circle text-danger", otx("error")); })
+					.then(function () { ot.disabled = false; });
+			});
+		}
 		// Tageskontingent: Verbrauch dieses Checks und des Accounts pro Tag live hochrechnen (wie der hub zaehlt)
 		var proj = document.getElementById("hc-proj");
 		if (proj) {

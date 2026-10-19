@@ -1,5 +1,14 @@
 # Änderungen – Healthchecks
 
+## 2.15.0 – 2026-10-19
+
+### Neu
+- Formular: **Von ipv64 testen** – vor dem Umstellen auf online oder hybrid messen die Standorte von ipv64 die Eingabe einmal und zeigen das Ergebnis je Standort (API: `POST /api/checks/online-test`).
+- Formular: Online-Limit wie im Portal – Standorte über der Account-Klasse gesperrt, belegte Online-Messstellen angezeigt und beim Speichern geprüft.
+- Liste: Filter nach Ausführungsort und Node, Konto-Leiste mit Klasse, Online-Messstellen (belegt/Limit), Verteilung online/lokal/hybrid und Nodes online.
+- Detailseite: Ereignisse, die ipv64 selbst bewertet hat (z. B. nicht überwacht, wieder geprüft, teilweise gestört), erscheinen mit Wolken-Symbol neben den eigenen.
+- Ereignisarten als farbige, übersetzte Kennzeichnung; Dauer und Grund bei Störungen (Detailseite und Störungsliste).
+
 ## 2.14.1 – 2026-10-19
 
 ### Behoben

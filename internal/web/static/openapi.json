@@ -12291,6 +12291,89 @@
           }
         }
       }
+    },
+    "/checks/online-test": {
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Testlauf von ipv64 (vor dem Umstellen auf online/hybrid)",
+        "description": "Die Standorte von ipv64 messen die Definition einmal (bis ~70 s). Gespeichert wird nichts. Body wie beim Anlegen, optional token und locations. Nur mit ipv64-Verknüpfung.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Check"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "token": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ergebnis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "failed",
+                        "expired"
+                      ]
+                    },
+                    "error": {
+                      "type": "string"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "location": {
+                            "type": "string"
+                          },
+                          "ok": {
+                            "type": "boolean"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Eingabe ungültig oder nicht verknüpft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

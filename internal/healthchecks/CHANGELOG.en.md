@@ -1,5 +1,14 @@
 # Changes – Healthchecks
 
+## 2.15.0 – 2026-10-19
+
+### New
+- Form: **Test from ipv64** – before switching to online or hybrid, the ipv64 locations measure the input once and show the result per location (API: `POST /api/checks/online-test`).
+- Form: online limit as in the portal – locations above the account class are locked, used online measuring points are shown and checked on save.
+- List: filters by execution location and node, account bar with class, online measuring points (used/limit), split online/local/hybrid and nodes online.
+- Detail page: events rated by ipv64 itself (e.g. not monitored, monitored again, partially down) appear with a cloud icon next to the node's own events.
+- Event kinds as coloured, translated badges; duration and reason for incidents (detail page and incident list).
+
 ## 2.14.1 – 2026-10-19
 
 ### Fixed

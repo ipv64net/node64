@@ -18,6 +18,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/ipv64net/node64/internal/checks"
 	hubnotify "github.com/ipv64net/node64/internal/hub/notify"
 	"github.com/ipv64net/node64/internal/hub/store"
 	"github.com/ipv64net/node64/internal/notify"
@@ -68,6 +69,8 @@ func (g *Gateway) Register(mux *http.ServeMux) {
 	mux.Handle("POST /v1/nodes/me/measurements", g.auth(g.httpMeasurements))
 	mux.Handle("POST /v1/nodes/me/events", g.auth(g.httpEvents))
 	mux.Handle("GET /v1/nodes/me/events", g.auth(g.hubEvents))
+	mux.Handle("POST /v1/nodes/me/testruns", g.auth(g.createTestrun))
+	mux.Handle("GET /v1/nodes/me/testruns/{id}", g.auth(g.getTestrun))
 	mux.Handle("PUT /v1/nodes/me/checks/{token}", g.auth(g.httpProposeCheck))
 	mux.Handle("DELETE /v1/nodes/me/checks/{token}", g.auth(g.httpProposeCheck))
 	mux.Handle("GET /v1/ws", g.auth(g.ws))
@@ -366,6 +369,69 @@ func (g *Gateway) hubEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"events": evs})
+}
+
+// createTestrun: Online-Testlauf vor dem Umhaengen (Node). Die Standorte messen einmal; Ergebnis per getTestrun.
+//
+//	POST /v1/nodes/me/testruns {"definition": wire.Check, "locations": ["nbg","fsn"]} -> {"id": 1, "locations": [...]}
+func (g *Gateway) createTestrun(w http.ResponseWriter, r *http.Request) {
+	n := nodeOf(r)
+	var in struct {
+		Definition wire.Check `json:"definition"`
+		Locations  []string   `json:"locations"`
+	}
+	if err := readJSON(r, &in, 256<<10); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	if !g.limiter.allow("trun:"+n.ID, 20, time.Minute) {
+		writeErr(w, http.StatusTooManyRequests, "too many requests")
+		return
+	}
+	in.Definition.Execution = "online"
+	if err := checks.Validate(checks.Definition{Type: checks.Type(in.Definition.Type), Target: in.Definition.Target, Params: in.Definition.Params,
+		IPMode: checks.IPMode(in.Definition.IPMode)}); err != nil {
+		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	id, locs, err := g.st.CreateNodeTestrun(r.Context(), n.UserID, in.Definition, in.Locations)
+	if errors.Is(err, store.ErrTestrunPrivate) || errors.Is(err, store.ErrTestrunType) {
+		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	if err != nil {
+		g.log.Error("handler failed", "path", r.URL.Path, "err", err)
+		writeErr(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "locations": locs})
+}
+
+// getTestrun: Stand eines Testlaufs des Accounts.
+//
+//	GET /v1/nodes/me/testruns/{id} -> {"id", "status", "results": {"nbg": {ok, error, results, time}, ...}}
+func (g *Gateway) getTestrun(w http.ResponseWriter, r *http.Request) {
+	n := nodeOf(r)
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeErr(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if !g.limiter.allow("trget:"+n.ID, 300, time.Minute) {
+		writeErr(w, http.StatusTooManyRequests, "too many requests")
+		return
+	}
+	tr, err := g.st.NodeTestrun(r.Context(), n.UserID, id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "testrun not found")
+		return
+	}
+	if err != nil {
+		g.log.Error("handler failed", "path", r.URL.Path, "err", err)
+		writeErr(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	writeJSON(w, http.StatusOK, tr)
 }
 
 func (g *Gateway) unlink(w http.ResponseWriter, r *http.Request) {

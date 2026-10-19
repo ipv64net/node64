@@ -35,6 +35,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /healthchecks", page(m.pageList))
 	mux.Handle("GET /healthchecks/new", page(m.pageForm))
 	mux.Handle("POST /healthchecks/new", page(m.pageFormSubmit))
+	mux.Handle("POST /healthchecks/online-test", page(m.uiOnlineTest))
 	mux.Handle("POST /healthchecks/bulk", page(m.pageBulk))
 	mux.Handle("GET /healthchecks/{token}", page(m.pageDetail))
 	mux.Handle("GET /healthchecks/{token}/edit", page(m.pageForm))

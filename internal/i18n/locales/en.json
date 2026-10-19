@@ -1738,6 +1738,15 @@
       "reminder": "Reminder"
     },
     "event_hub": "Rated by ipv64 (overall state of all measuring points)",
+    "otest": {
+      "button": "Test from ipv64",
+      "hint": "Before switching to online or hybrid: the ipv64 locations measure the input once. Nothing is saved until you click “Save”.",
+      "running": "ipv64 is measuring … (up to a minute)",
+      "ok": "Test passed – reachable from outside.",
+      "failed": "Test failed:",
+      "expired": "No answer from ipv64 within a minute.",
+      "error": "Test run failed."
+    },
     "acct": {
       "points": "Online measuring points {used} / {limit}",
       "points_hint": "Online and hybrid checks × locations against the limit of your account class",

@@ -236,6 +236,11 @@
 					{{if and $d.Linked $d.PointsLimit}}<div class="form-text{{if ge $d.PointsUsed $d.PointsLimit}} text-danger{{end}}">{{.T "hc.form.points_used" "used" $d.PointsUsed "limit" $d.PointsLimit}}</div>{{end}}
 					{{if and $d.Linked $d.QuotaLimit}}<div class="small mt-1" id="hc-proj" data-other="{{$d.ProjOther}}" data-today="{{$d.QuotaToday}}" data-limit="{{$d.QuotaLimit}}" data-acclocs="{{$d.AccLocs}}"
 						data-t-check="{{.T "hc.proj.check"}}" data-t-local="{{.T "hc.proj.local"}}" data-t-total="{{.T "hc.proj.total"}}" data-t-over="{{.T "hc.proj.over"}}" data-t-runout="{{.T "hc.proj.runout"}}"></div>{{end}}</div>
+				{{if and $d.Linked (not $d.APIMode)}}<div class="col-12" data-types="http keyword json dns icmp tcp port cert">
+					<button type="button" class="btn btn-outline-info btn-sm" id="hc-otest" data-token="{{$d.Token}}" data-t-running="{{.T "hc.otest.running"}}" data-t-ok="{{.T "hc.otest.ok"}}" data-t-failed="{{.T "hc.otest.failed"}}" data-t-expired="{{.T "hc.otest.expired"}}" data-t-error="{{.T "hc.otest.error"}}"{{range $d.Locations}} data-t-loc-{{.}}="{{$.T (print "hc.location." .)}}"{{end}}><i class="bi bi-cloud-check"></i> {{.T "hc.otest.button"}}</button>
+					<div class="form-text">{{.T "hc.otest.hint"}}</div>
+					<ul class="list-unstyled small mt-2 mb-0" id="hc-otest-out" aria-live="polite"></ul>
+				</div>{{end}}
 				<div class="col-12"><label class="form-label" for="policy">{{.T "hc.form.policy"}}</label>
 					<div class="input-group"><span class="input-group-text"><i class="bi bi-sliders"></i></span><select class="form-select" id="policy" name="policy">{{range $d.Policies}}<option value="{{.}}"{{if eq . (index $f "policy")}} selected{{end}}>{{$.T (print "hc.policy." .)}}</option>{{end}}</select></div>
 					<div class="form-text">{{.T "hc.form.policy_hint"}}</div></div>

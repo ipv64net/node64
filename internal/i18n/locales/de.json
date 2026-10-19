@@ -1738,6 +1738,15 @@
       "reminder": "Erinnerung"
     },
     "event_hub": "Von ipv64 bewertet (Gesamtzustand aller Messstellen)",
+    "otest": {
+      "button": "Von ipv64 testen",
+      "hint": "Vor dem Umstellen auf online oder hybrid: Die Standorte von ipv64 messen die Eingabe einmal. Gespeichert wird erst mit „Speichern“.",
+      "running": "ipv64 misst … (bis zu einer Minute)",
+      "ok": "Test bestanden – von außen erreichbar.",
+      "failed": "Test nicht bestanden:",
+      "expired": "Keine Antwort von ipv64 innerhalb einer Minute.",
+      "error": "Testlauf fehlgeschlagen."
+    },
     "acct": {
       "points": "Online-Messstellen {used} / {limit}",
       "points_hint": "Online- und Hybrid-Checks × Standorte gegen das Limit deiner Account-Klasse",

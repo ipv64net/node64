@@ -311,6 +311,7 @@ func run() error {
 	hcModule.SetPushForward(syncClient.ForwardPush)
 	hcModule.SetRunRemote(syncClient.RunRemote)
 	hcModule.SetHubEvents(syncClient.HubEvents)
+	hcModule.SetOnlineTest(syncClient.OnlineTest)
 	netDone := make(chan struct{})
 	// Datenverkehr des Containers fuer das Dashboard; vor dem Schliessen der Datenbank (defer weiter oben) die
 	// letzte Summe schreiben lassen
