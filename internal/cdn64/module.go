@@ -48,7 +48,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.16.0"
+	Version = "1.17.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -123,7 +123,7 @@ func (m *Module) SetCheckCreator(f CheckCreator) { m.checks = f }
 func (m *Module) SetPorts(r *ports.Registry) { m.ports = r }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.proxy", Icon: "bi-diagram-3", Image: "cdn64.webp", Path: "/cdn64", Available: true, Order: 30,
+	return module.Info{Name: Name, TitleKey: "nav.proxy", Icon: "bi-diagram-3", Path: "/cdn64", Available: true, Order: 30,
 		Version: Version, Changelog: changelog, ChangelogEN: changelogEN}
 }
 
@@ -244,7 +244,7 @@ func (m *Module) Stop(ctx context.Context) error {
 
 // Card liefert die Dashboard-Karte (module.CardProvider).
 func (m *Module) Card(ctx context.Context) (*module.Card, error) {
-	c := &module.Card{TitleKey: "nav.proxy", Image: "cdn64.webp", Path: "/cdn64"}
+	c := &module.Card{TitleKey: "nav.proxy", Icon: "bi-diagram-3", Path: "/cdn64"} // PROXY64-Logo folgt
 	list, err := m.hosts(ctx)
 	if err != nil {
 		return nil, err

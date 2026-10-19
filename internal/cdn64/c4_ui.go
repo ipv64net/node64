@@ -317,7 +317,7 @@ func (m *Module) pageLogSettings(w http.ResponseWriter, r *http.Request) {
 
 // checkBody: JSON fuer einen Healthcheck auf ein Ziel (http fuer http-Ziele und gepruefte https-Ziele, sonst tcp).
 func checkBody(name, scheme, host string, port int, verify bool) []byte {
-	body := map[string]any{"name": trunc(name, 100), "tags": []string{"cdn64"}, "description": "CDN64"}
+	body := map[string]any{"name": trunc(name, 100), "tags": []string{"cdn64"}, "description": "PROXY64"}
 	if scheme == "http" || (scheme == "https" && verify) {
 		u := scheme + "://" + host
 		if strings.Contains(host, ":") {
@@ -335,7 +335,7 @@ func (m *Module) createCheck(r *http.Request, name, scheme, host string, port in
 	if m.checks == nil {
 		return "", errors.New("healthchecks not running")
 	}
-	return m.checks(r, checkBody("CDN64: "+name, scheme, host, port, verify))
+	return m.checks(r, checkBody("PROXY64: "+name, scheme, host, port, verify))
 }
 
 func (m *Module) hostCheck(r *http.Request) (*Host, string, error) {

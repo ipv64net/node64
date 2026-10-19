@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 {{$s := $d.S}}
-<h1 class="h4 mb-3"><img src="/static/img/cdn64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/cdn64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{if $d.New}}{{.T "cdn64.streams.new"}}{{else}}{{.T "cdn64.streams.edit"}} <span class="font-monospace">{{$s.ListenPort}}</span>{{end}}</h1>
+<h1 class="h4 mb-3"><i class="bi bi-diagram-3 text-primary me-1"></i> {{if $d.New}}{{.T "cdn64.streams.new"}}{{else}}{{.T "cdn64.streams.edit"}} <span class="font-monospace">{{$s.ListenPort}}</span>{{end}}</h1>
 {{with index $d.Errors "_"}}<div class="alert alert-danger small">{{.}}</div>{{end}}
 <div class="row g-3">
 	<div class="col-xl-7">

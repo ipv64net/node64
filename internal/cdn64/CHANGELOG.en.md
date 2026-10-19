@@ -1,4 +1,12 @@
-# Changes – CDN64
+# Changes – PROXY64
+
+## 1.17.0 – 2026-10-19
+
+### Changed
+- New name: the local reverse proxy is now called **PROXY64** (menu, pages, dashboard, ports, audit, backup).
+  **CDN64** now only means publishing through the servers srv07/srv08 (modes 1, 2, 3); “CDN64 online” becomes
+  “CDN64” (column, dialog, notifications, audit). Addresses, API, settings, export and Prometheus names stay the same.
+- Logo: until the PROXY64 logo is available, the module icon takes its place.
 
 ## 1.16.0 – 2026-10-19
 

@@ -841,8 +841,8 @@ func (m *Module) onlineCheck(r *http.Request, h *Host, name string) (string, err
 	if h.Kind == KindPass || h.HTTPS() {
 		scheme = "https"
 	}
-	body, _ := json.Marshal(map[string]any{"name": trunc("CDN64 online: "+name, 100), "type": "http", "target": scheme + "://" + name + "/",
-		"execution": "online", "tags": []string{"cdn64"}, "description": "CDN64 online"})
+	body, _ := json.Marshal(map[string]any{"name": trunc("CDN64: "+name, 100), "type": "http", "target": scheme + "://" + name + "/",
+		"execution": "online", "tags": []string{"cdn64"}, "description": "CDN64"})
 	tok, err := m.checks(r, body)
 	if err != nil {
 		return "", err

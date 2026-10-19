@@ -331,7 +331,7 @@ func TestHealthcheckForTarget(t *testing.T) {
 			t.Fatalf("create check: %d %s", rec.Code, rec.Body)
 		}
 	}
-	if bodies[0]["type"] != "http" || bodies[0]["target"] != "http://192.168.1.20:8123/" || bodies[0]["name"] != "CDN64: hc.test" {
+	if bodies[0]["type"] != "http" || bodies[0]["target"] != "http://192.168.1.20:8123/" || bodies[0]["name"] != "PROXY64: hc.test" {
 		t.Fatalf("http check: %v", bodies[0])
 	}
 	if bodies[1]["type"] != "tcp" || bodies[1]["target"] != "192.168.1.30" {
