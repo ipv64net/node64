@@ -22,7 +22,7 @@
 			<td data-label="{{$.T "hc.incident_list.start"}}" class="small text-nowrap">{{$.Time .StartedAt}}</td>
 			<td data-label="{{$.T "hc.incident_list.end"}}" class="small text-nowrap">{{if .Open}}<span class="badge text-bg-danger">{{$.T "hc.open"}}</span>{{else}}{{$.Time .EndedAt}}{{end}}</td>
 			<td data-label="{{$.T "hc.incident_list.duration"}}" class="small text-nowrap">{{$.Duration .Duration}}</td>
-			<td data-label="{{$.T "hc.incident_list.reason"}}" class="small">{{if .Reason}}<strong>{{.Reason}}</strong>{{end}}{{if .Message}} – {{.Message}}{{end}}</td>
+			<td data-label="{{$.T "hc.incident_list.reason"}}" class="small">{{if .Reason}}<strong>{{$.T (print "hc.reasons." .Reason)}}</strong>{{end}}{{if .Message}} – {{.Message}}{{end}}</td>
 		</tr>
 		{{end}}
 		</tbody>

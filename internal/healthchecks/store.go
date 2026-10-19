@@ -501,6 +501,7 @@ type Event struct {
 	Maintenance bool      `json:"maintenance"`
 	Silent      bool      `json:"silent"`
 	IncidentID  int64     `json:"incident_id,omitempty"`
+	Hub         bool      `json:"hub,omitempty"` // von ipv64 bewertet (nur Anzeige, nicht gespeichert)
 }
 
 // Badge ist eine farbige Kennzeichnung in Tabellen (Bootstrap-Klasse).
@@ -527,6 +528,22 @@ func (e Event) HTTPBadges() []Badge {
 }
 
 // ReasonClass: Farbe des Grund-Badges (OK gruen, Warnungen gelb, Fehler rot).
+// KindClass: Farbe des Ereignisses (wie im Portal).
+func (e Event) KindClass() string {
+	switch e.Kind {
+	case "down":
+		return "text-bg-danger"
+	case "up", "degraded_end", "flapping_end", "rechecked", "resumed":
+		return "text-bg-success"
+	case "degraded", "flapping_start", "unchecked", "unstable", "dependent":
+		return "text-bg-warning"
+	}
+	return "text-bg-secondary"
+}
+
+// Length: Dauer als time.Duration (Anzeige ueber die Uebersetzung).
+func (e Event) Length() time.Duration { return time.Duration(e.DurationSec) * time.Second }
+
 func (e Event) ReasonClass() string {
 	switch e.Reason {
 	case "", "ok":
@@ -582,6 +599,15 @@ type Incident struct {
 	Open      bool      `json:"open"`
 	Reason    string    `json:"reason"`
 	Message   string    `json:"message"`
+}
+
+// Length: Dauer der Stoerung (offen: bis jetzt).
+func (i Incident) Length() time.Duration {
+	end := i.EndedAt
+	if i.Open || end.IsZero() {
+		end = time.Now()
+	}
+	return end.Sub(i.StartedAt)
 }
 
 // Incidents liefert Stoerungen, neueste zuerst; token leer = alle.

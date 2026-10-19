@@ -55,6 +55,8 @@ type Module struct {
 	groupPeers func(ctx context.Context) []Peer // Nodes der lokalen Gruppe (Auswahl der Messstellen)
 	// Account-Klasse und Online-Messstellen-Limit, nil = standalone
 	account func() (plan string, onlineLimit int)
+	// Ereignisse von ipv64 (Detailseite), nil = standalone
+	hubEvents func(ctx context.Context, token string) ([]Event, error)
 	// wer in der lokalen Gruppe benachrichtigt (Anzeige, groupnotify.go)
 	groupNotifier func(ctx context.Context, nodes []string) (key, name string)
 	onl           onlineCache
@@ -177,6 +179,11 @@ func (m *Module) SetAccount(fn func() (plan string, onlineLimit int)) { m.accoun
 
 // SetRunRemote installiert "Jetzt pruefen" ueber den hub (andere messende Nodes).
 func (m *Module) SetRunRemote(fn func(token string) bool) { m.runRemote = fn }
+
+// SetHubEvents: Ereignisse, die ipv64 selbst bewertet hat (Detailseite, nur Anzeige).
+func (m *Module) SetHubEvents(fn func(ctx context.Context, token string) ([]Event, error)) {
+	m.hubEvents = fn
+}
 
 // SetPushForward installiert die Weitergabe lokal empfangener Pushes an den hub.
 func (m *Module) SetPushForward(fn func(token string, down bool, msg, from string) bool) {

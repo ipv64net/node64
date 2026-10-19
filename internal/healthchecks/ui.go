@@ -531,6 +531,13 @@ func (m *Module) pageDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	d.Notifier, d.NotifierBy = m.notifiedBy(ctx, c)
 	d.Events, _ = m.st.Events(ctx, c.Token, 50, 0)
+	if m.hubEvents != nil && m.linked != nil && m.linked() {
+		hctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		if hub, err := m.hubEvents(hctx, c.Token); err == nil {
+			d.Events = mergeEvents(d.Events, hub, 50)
+		}
+		cancel()
+	}
 	d.Incidents, _ = m.st.Incidents(ctx, c.Token, 10)
 	if ms, err := m.st.Measurements(ctx, c.Token, time.Time{}, time.Time{}, 1, 0); err == nil && len(ms) > 0 {
 		d.Last = &ms[0]
@@ -1420,4 +1427,22 @@ func stale(c *Check, last time.Time, state string) bool {
 		window = 5 * time.Minute
 	}
 	return time.Since(last) > window
+}
+
+// mergeEvents: lokale und von ipv64 bewertete Ereignisse nach Zeit (neueste zuerst), ohne doppelte Ereignis-IDs.
+func mergeEvents(local, hub []Event, limit int) []Event {
+	seen := map[string]bool{}
+	out := make([]Event, 0, len(local)+len(hub))
+	for _, e := range append(append([]Event{}, local...), hub...) {
+		if e.EventID != "" && seen[e.EventID] {
+			continue
+		}
+		seen[e.EventID] = true
+		out = append(out, e)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Time.After(out[j].Time) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
 }

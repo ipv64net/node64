@@ -310,6 +310,7 @@ func run() error {
 	hcModule.SetAPI(ipv64Key) // Online-Checks direkt ueber die API v2, solange kein Sync besteht
 	hcModule.SetPushForward(syncClient.ForwardPush)
 	hcModule.SetRunRemote(syncClient.RunRemote)
+	hcModule.SetHubEvents(syncClient.HubEvents)
 	netDone := make(chan struct{})
 	// Datenverkehr des Containers fuer das Dashboard; vor dem Schliessen der Datenbank (defer weiter oben) die
 	// letzte Summe schreiben lassen

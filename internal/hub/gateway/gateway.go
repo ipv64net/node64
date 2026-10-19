@@ -67,6 +67,7 @@ func (g *Gateway) Register(mux *http.ServeMux) {
 	mux.Handle("POST /v1/nodes/me/unlink", g.auth(g.unlink))
 	mux.Handle("POST /v1/nodes/me/measurements", g.auth(g.httpMeasurements))
 	mux.Handle("POST /v1/nodes/me/events", g.auth(g.httpEvents))
+	mux.Handle("GET /v1/nodes/me/events", g.auth(g.hubEvents))
 	mux.Handle("PUT /v1/nodes/me/checks/{token}", g.auth(g.httpProposeCheck))
 	mux.Handle("DELETE /v1/nodes/me/checks/{token}", g.auth(g.httpProposeCheck))
 	mux.Handle("GET /v1/ws", g.auth(g.ws))
@@ -339,6 +340,32 @@ func (g *Gateway) history(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"points": pts})
+}
+
+// hubEvents: Ereignisse, die der hub selbst bewertet hat (z. B. nicht ueberwacht), fuer die Detailseite der Node.
+//
+//	GET /v1/nodes/me/events?token=&limit= -> {"events": [...]}
+func (g *Gateway) hubEvents(w http.ResponseWriter, r *http.Request) {
+	n, q := nodeOf(r), r.URL.Query()
+	if q.Get("token") == "" {
+		writeErr(w, http.StatusBadRequest, "token required")
+		return
+	}
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if !g.limiter.allow("hev:"+n.ID, 120, time.Minute) {
+		writeErr(w, http.StatusTooManyRequests, "too many requests")
+		return
+	}
+	evs, err := g.st.HubEvents(r.Context(), n.UserID, q.Get("token"), limit)
+	if err != nil {
+		g.log.Error("handler failed", "path", r.URL.Path, "err", err)
+		writeErr(w, http.StatusInternalServerError, "database error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": evs})
 }
 
 func (g *Gateway) unlink(w http.ResponseWriter, r *http.Request) {

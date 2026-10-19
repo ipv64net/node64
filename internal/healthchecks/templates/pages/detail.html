@@ -81,10 +81,10 @@
 				{{range $d.Events}}
 				<tr>
 					<td data-label="{{$.T "common.time"}}" class="text-nowrap">{{$.Time .Time}}</td>
-					<td data-label="{{$.T "hc.event"}}"><span class="badge hc-state-{{.To}}">{{$.T (print "hc.state." .To)}}</span> <span class="small text-body-secondary">{{.Kind}}{{if .Silent}} · {{$.T "hc.silent"}}{{end}}{{if .Maintenance}} · {{$.T "hc.maintenance"}}{{end}}</span></td>
+					<td data-label="{{$.T "hc.event"}}"><span class="badge {{.KindClass}}">{{$.T (print "hc.event_kind." .Kind)}}</span>{{if .Hub}} <i class="bi bi-cloud text-info" title="{{$.T "hc.event_hub"}}"></i>{{end}} <span class="small text-body-secondary">{{if .Silent}}{{$.T "hc.silent"}}{{end}}{{if .Maintenance}}{{if .Silent}} · {{end}}{{$.T "hc.maintenance"}}{{end}}</span></td>
 					<td data-label="{{$.T "hc.reason"}}">{{if .Reason}}<span class="badge {{.ReasonClass}}" title="{{.Reason}}">{{$.T (print "hc.reasons." .Reason)}}</span>{{end}}</td>
 					{{if $http}}<td data-label="HTTP" class="text-nowrap">{{range .HTTPBadges}}<span class="badge {{.Class}} me-1">{{.Text}}</span>{{end}}</td>{{end}}
-					<td data-label="{{$.T "common.details"}}" class="small text-break">{{.Message}}{{if .DurationSec}} <span class="text-body-secondary">({{$.T "hc.downtime"}}: {{.DurationSec}} s)</span>{{end}}</td>
+					<td data-label="{{$.T "common.details"}}" class="small text-break">{{.Message}}{{if .DurationSec}} <span class="text-body-secondary">({{$.T "hc.downtime"}}: {{$.Duration .Length}})</span>{{end}}</td>
 				</tr>
 				{{end}}
 				</tbody>
@@ -168,8 +168,8 @@ curl -fsS "{{$u}}{{if $d.PushURL}}?{{else}}&amp;{{end}}status=down&amp;msg=backu
 			{{range $d.Incidents}}
 				<li class="list-group-item">
 					{{if .Open}}<span class="badge text-bg-danger">{{$.T "hc.open"}}</span>{{else}}<span class="badge text-bg-success">{{$.T "hc.closed"}}</span>{{end}}
-					{{$.Time .StartedAt}}{{if not .Open}} – {{$.Time .EndedAt}}{{end}}
-					<div class="text-body-secondary">{{.Message}}</div>
+					{{$.Time .StartedAt}}{{if not .Open}} – {{$.Time .EndedAt}}{{end}} <span class="text-body-secondary">({{$.Duration .Length}})</span>
+					<div class="text-body-secondary">{{if .Reason}}<strong>{{$.T (print "hc.reasons." .Reason)}}</strong>{{if .Message}} – {{end}}{{end}}{{.Message}}</div>
 				</li>
 			{{end}}
 			</ul>
