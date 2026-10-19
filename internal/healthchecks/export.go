@@ -27,7 +27,9 @@ func (m *Module) Export(ctx context.Context) (any, error) {
 	out := exportFile{Checks: []checkJSON{}, Maintenance: []Maintenance{}}
 	for _, c := range list {
 		j := checkJSON{Token: c.Token, Name: c.Name, Type: string(c.Type), Target: c.Target, Params: c.Params, Tags: c.Tags, Description: c.Description,
-			IPMode: string(c.IPMode), Execution: c.Execution, Policy: c.Policy, Locations: c.Locations, Channels: c.Channels}
+			IPMode: string(c.IPMode), Execution: c.Execution, Policy: c.Policy, Locations: c.Locations, Channels: c.Channels, Nodes: c.Nodes}
+		group := c.Group
+		j.Group = &group
 		iv, riv, re, st, rp := int(c.Interval.Seconds()), int(c.RetryInterval.Seconds()), c.Retries, c.Stabilize, c.RepeatMinutes
 		ct, tt := c.ConnectTimeout.Seconds(), c.TotalTimeout.Seconds()
 		inv, pa, cr, nd, nu, parent, ndeg := c.Invert, c.Paused, c.Critical, c.NotifyDown, c.NotifyUp, c.Parent, c.NotifyDegraded

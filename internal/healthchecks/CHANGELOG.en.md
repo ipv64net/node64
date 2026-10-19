@@ -6,6 +6,9 @@
 - Prometheus: state, response time, last measurement, consecutive failures, maintenance and certificate expiry per
   check, plus counts per state and open incidents at `GET /api/metrics` (see docs/PROMETHEUS.md).
 
+### Fixed
+- Configuration export: group and measuring nodes of checks were missing from the export.
+
 ## 2.12.2 – 2026-10-19
 
 ### Fixed

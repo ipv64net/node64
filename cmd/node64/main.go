@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ipv64net/node64/internal/netstat"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -410,7 +411,17 @@ func applyReset(cfg *config.Config, log *slog.Logger) error {
 			continue
 		}
 		if err := os.RemoveAll(p); err != nil {
-			return fmt.Errorf("reset %s: %w", p, err)
+			// z. B. ein eigener Mount unter /data: den Ordner nicht loeschen, nur leeren. Kein Abbruch, sonst
+			// startet die Node mit dem Merker immer wieder neu.
+			if inner, rerr := os.ReadDir(p); rerr == nil {
+				for _, x := range inner {
+					if err := os.RemoveAll(filepath.Join(p, x.Name())); err != nil {
+						log.Error("factory reset: could not delete", "path", filepath.Join(p, x.Name()), "err", err)
+					}
+				}
+			} else {
+				log.Error("factory reset: could not delete", "path", p, "err", err)
+			}
 		}
 	}
 	if err := os.Remove(filepath.Join(cfg.DataDir, web.ResetFileName)); err != nil {
@@ -487,7 +498,7 @@ func applyRestoreArchive(cfg *config.Config, log *slog.Logger) error {
 			if err := os.MkdirAll(filepath.Dir(filepath.Join(keep, rel)), 0o750); err != nil {
 				return err
 			}
-			if err := os.Rename(dst, filepath.Join(keep, rel)); err != nil {
+			if err := moveFile(dst, filepath.Join(keep, rel)); err != nil {
 				return fmt.Errorf("keep %s: %w", rel, err)
 			}
 		}
@@ -500,7 +511,7 @@ func applyRestoreArchive(cfg *config.Config, log *slog.Logger) error {
 			return err
 		}
 		n++
-		return os.Rename(p, dst)
+		return moveFile(p, dst)
 	})
 	if err != nil {
 		return fmt.Errorf("apply restore archive: %w", err)
@@ -510,6 +521,31 @@ func applyRestoreArchive(cfg *config.Config, log *slog.Logger) error {
 	}
 	log.Warn("backup archive restored", "files", n, "previous", keep)
 	return nil
+}
+
+// moveFile verschiebt eine Datei; ueber Mount-Grenzen (eigener Mount unter /data) per Kopie.
+func moveFile(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	in.Close()
+	return os.Remove(src)
 }
 
 // firstAdminFromEnv legt den Administrator aus NODE64_ADMIN_USER/PASSWORD an,

@@ -6,6 +6,9 @@
 - Prometheus: Zustand, Antwortzeit, letzte Messung, Fehlschläge in Folge, Wartung und Zertifikatsablauf je Check
   sowie Anzahl je Zustand und offene Störungen unter `GET /api/metrics` (siehe docs/PROMETHEUS.md).
 
+### Behoben
+- Konfiguration exportieren: Gruppe und messende Nodes der Checks fehlten im Export.
+
 ## 2.12.2 – 2026-10-19
 
 ### Behoben
