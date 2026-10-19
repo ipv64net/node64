@@ -33,6 +33,20 @@ type Group struct {
 	Lists     []string `json:"lists"`      // URLs der Blocklisten bei custom
 	Cats      []string `json:"categories"` // gesperrte Kategorien (social, games, streaming, gambling, adult)
 	Domains   []Domain `json:"domains"`    // Freigaben und Sperren der Gruppe
+
+	SafeSearch bool   `json:"safesearch"` // Google, Bing, DuckDuckGo, YouTube kinderfreundlich
+	YouTube    string `json:"youtube"`    // strict (Standard), moderate, off
+	Bypass     bool   `json:"bypass"`     // Schutz gegen Umgehen
+}
+
+// Rules sind die einstellbaren Regeln einer Gruppe (Seite und API).
+type Rules struct {
+	ListsMode  string   `json:"lists_mode"`
+	Lists      []string `json:"lists"`
+	Cats       []string `json:"categories"`
+	SafeSearch bool     `json:"safesearch"`
+	YouTube    string   `json:"youtube"`
+	Bypass     bool     `json:"bypass"`
 }
 
 // Listenauswahl einer Gruppe.

@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.17.0"
+	version   = "1.18.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -283,7 +283,7 @@ func (m *Module) start(ctx context.Context) error {
 	e.local = localnet.New(m.routerAddr(ctx), m.log)
 	e.srv = &dnsserver.Server{Addr: e.addr, Local: e.local, Filter: e.lists, Upstream: e.up, Cache: e.cache, Log: st, Logger: m.log,
 		Records: m, Split: m.split, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused,
-		Policy: m.policy}
+		Policy: m.policy, Canary: cfg.Canary}
 	if err := e.srv.Start(); err != nil {
 		st.CloseNow()
 		e.up.Close()

@@ -55,7 +55,7 @@ func TestGroupRules(t *testing.T) {
 	if _, err := m.AddMember(ctx, groups.Member{GroupID: g.ID, Kind: groups.KindIP, Value: "192.168.1.50"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.SetGroupRules(ctx, g.ID, groups.ListsCustom, []string{listB, "https://unbekannt.test/x"}, []string{"social", "kaputt"}); err != nil {
+	if err := m.SetGroupRules(ctx, g.ID, groups.Rules{ListsMode: groups.ListsCustom, Lists: []string{listB, "https://unbekannt.test/x"}, Cats: []string{"social", "kaputt"}}); err != nil {
 		t.Fatal(err)
 	}
 	for _, d := range []groups.Domain{{GroupID: g.ID, Domain: "evil.example", Action: groups.ActionBlock}, {GroupID: g.ID, Domain: "ok.game.example", Action: groups.ActionAllow}} {
@@ -87,7 +87,7 @@ func TestGroupRules(t *testing.T) {
 		}
 	}
 	// zurueck auf die globale Auswahl: Kinderliste aus, ads.example wieder gesperrt
-	if err := m.SetGroupRules(ctx, g.ID, groups.ListsGlobal, nil, nil); err != nil {
+	if err := m.SetGroupRules(ctx, g.ID, groups.Rules{ListsMode: groups.ListsGlobal}); err != nil {
 		t.Fatal(err)
 	}
 	if !blocked(kid, "ads.example") || blocked(kid, "x.game.example") || blocked(kid, "www.tiktok.com") {
@@ -95,7 +95,7 @@ func TestGroupRules(t *testing.T) {
 	}
 	// eine Kategorie mit Blockliste, die noch nicht geladen ist: Neustart laedt sie
 	old := m.running()
-	if err := m.SetGroupRules(ctx, g.ID, groups.ListsGlobal, nil, []string{"gambling"}); err != nil {
+	if err := m.SetGroupRules(ctx, g.ID, groups.Rules{ListsMode: groups.ListsGlobal, Cats: []string{"gambling"}}); err != nil {
 		t.Fatal(err)
 	}
 	if m.running() == old || m.running().lists.Mask([]string{"https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/gambling.txt"}) == 0 {

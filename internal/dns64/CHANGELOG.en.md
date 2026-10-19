@@ -1,5 +1,13 @@
 # Changes – DNS64
 
+## 1.18.0 – 2026-10-19
+
+### New
+- SafeSearch per device group (phase G3): one switch redirects Google (all country domains), Bing and DuckDuckGo to their SafeSearch addresses via CNAME and YouTube into restricted mode (strict, moderate or off). Also applies when the group released the domain; HTTPS stays untouched.
+- Protection against bypassing per group: switches on the HaGeZi DoH/VPN/Proxy Bypass list for the group and answers `mask.icloud.com`/`mask-h2.icloud.com` (iCloud Private Relay) and `use-application-dns.net` (Firefox DoH) with NXDOMAIN.
+- Firefox uses DNS64: `use-application-dns.net` is answered with NXDOMAIN globally so Firefox switches off its built-in DoH (like Pi-hole, on by default, can be switched off under *Settings*).
+- Query log: reasons “SafeSearch → …”, “Firefox DoH switched off”, “iCloud Private Relay off”. API: `safesearch`, `youtube`, `bypass` in `PUT /api/dns64/groups/{id}/rules`, `firefox_canary` in the settings.
+
 ## 1.17.0 – 2026-10-19
 
 ### New

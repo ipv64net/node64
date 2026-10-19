@@ -72,6 +72,8 @@
 							<textarea class="form-control font-monospace" id="allow_nets" name="allow_nets" rows="2" placeholder="2001:db8:1234::/48">{{range $i, $n := $d.Cfg.AllowNets}}{{if $i}}
 {{end}}{{$n}}{{end}}</textarea>
 							<div class="form-text">{{.T "dns64.settings.allow_nets_hint"}}</div>
+							<div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="firefox_canary" name="firefox_canary" value="1"{{if $d.Cfg.Canary}} checked{{end}}><label class="form-check-label" for="firefox_canary">{{.T "dns64.settings.firefox_canary"}}</label></div>
+							<div class="form-text mt-0">{{.T "dns64.settings.firefox_canary_hint"}}</div>
 							{{with $d.Cfg.PublicNets}}<div class="alert alert-warning small py-2 mt-2 mb-0"><i class="bi bi-exclamation-triangle"></i> {{$.T "dns64.settings.allow_nets_public" "nets" (join . ", ")}}</div>{{end}}
 							{{if $d.Refused.Count}}<div class="form-text text-warning-emphasis"><i class="bi bi-shield-exclamation"></i> {{.T "dns64.settings.refused" "n" $d.Refused.Count "ip" $d.Refused.LastIP.String "time" (.Time $d.Refused.LastAt)}}</div>{{end}}
 						</div>

@@ -289,16 +289,18 @@ func (m *Module) apiDevices(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) pageGroupRules(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
-	mode, lists, cats := r.PostFormValue("lists_mode"), r.PostForm["lists"], r.PostForm["cats"]
-	err := m.SetGroupRules(r.Context(), pathID(r), mode, lists, cats)
+	in := groups.Rules{ListsMode: r.PostFormValue("lists_mode"), Lists: r.PostForm["lists"], Cats: r.PostForm["cats"],
+		SafeSearch: r.PostFormValue("safesearch") != "", YouTube: r.PostFormValue("youtube"), Bypass: r.PostFormValue("bypass") != ""}
+	err := m.SetGroupRules(r.Context(), pathID(r), in)
 	if err == nil {
-		m.audit(r, "dns64.group.rules", r.PathValue("id"), rulesDetail(mode, lists, cats))
+		m.audit(r, "dns64.group.rules", r.PathValue("id"), rulesDetail(in))
 	}
 	m.groupBack(w, r, err, "dns64.groups.rules_saved")
 }
 
-func rulesDetail(mode string, lists, cats []string) string {
-	return "lists=" + mode + " (" + strconv.Itoa(len(lists)) + ") cats=" + strings.Join(cats, ",")
+func rulesDetail(in groups.Rules) string {
+	return "lists=" + in.ListsMode + " (" + strconv.Itoa(len(in.Lists)) + ") cats=" + strings.Join(in.Cats, ",") +
+		" safesearch=" + strconv.FormatBool(in.SafeSearch) + " youtube=" + in.YouTube + " bypass=" + strconv.FormatBool(in.Bypass)
 }
 
 func (m *Module) pageGroupDomainAdd(w http.ResponseWriter, r *http.Request) {
@@ -318,17 +320,13 @@ func (m *Module) pageGroupDomainDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) apiGroupRules(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		ListsMode string   `json:"lists_mode"`
-		Lists     []string `json:"lists"`
-		Cats      []string `json:"categories"`
-	}
+	var in groups.Rules
 	if !decode(w, r, &in) {
 		return
 	}
-	err := m.SetGroupRules(r.Context(), pathID(r), in.ListsMode, in.Lists, in.Cats)
+	err := m.SetGroupRules(r.Context(), pathID(r), in)
 	if err == nil {
-		m.audit(r, "dns64.group.rules", r.PathValue("id"), rulesDetail(in.ListsMode, in.Lists, in.Cats))
+		m.audit(r, "dns64.group.rules", r.PathValue("id"), rulesDetail(in))
 	}
 	m.apiResult(w, r, err, 0, nil)
 }

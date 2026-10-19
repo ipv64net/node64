@@ -1004,6 +1004,10 @@
           "cert_id": {
             "type": "integer",
             "description": "central: Kennung des Zertifikats aus der Zertifikatsverwaltung (/api/certs)"
+          },
+          "firefox_canary": {
+            "type": "boolean",
+            "description": "use-application-dns.net mit NXDOMAIN beantworten (Firefox schaltet sein DoH ab), Standard an"
           }
         }
       },
@@ -1152,7 +1156,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Liste; released:<liste>, paused:<liste>, stale, group:<domain> (Sperre der Gruppe), cat:<kategorie>"
+            "description": "Liste; released:<liste>, paused:<liste>, stale, group:<domain> (Sperre der Gruppe), cat:<kategorie>, safesearch:<ziel>, canary, bypass:icloud"
           },
           "rcode": {
             "type": "string"
@@ -3258,6 +3262,20 @@
             "items": {
               "$ref": "#/components/schemas/DNS64GroupDomain"
             }
+          },
+          "safesearch": {
+            "type": "boolean"
+          },
+          "youtube": {
+            "type": "string",
+            "enum": [
+              "strict",
+              "moderate",
+              "off"
+            ]
+          },
+          "bypass": {
+            "type": "boolean"
           }
         }
       },
@@ -12897,6 +12915,20 @@
                         "adult"
                       ]
                     }
+                  },
+                  "safesearch": {
+                    "type": "boolean"
+                  },
+                  "youtube": {
+                    "type": "string",
+                    "enum": [
+                      "strict",
+                      "moderate",
+                      "off"
+                    ]
+                  },
+                  "bypass": {
+                    "type": "boolean"
                   }
                 }
               }

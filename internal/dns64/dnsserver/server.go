@@ -47,6 +47,10 @@ type Policy struct {
 	Allow *filter.DomainSet // releases of the group (beat everything else)
 	Block *filter.DomainSet // own blocks of the group
 	Cats  []Category        // blocked categories
+
+	SafeSearch bool   // Google, Bing, DuckDuckGo, YouTube kinderfreundlich (CNAME)
+	YouTube    string // YouTubeStrict (Standard), YouTubeModerate, YouTubeOff
+	Bypass     bool   // Schutz gegen Umgehen: Firefox-DoH und iCloud Private Relay aus (dazu die Bypass-Liste)
 }
 
 // Records are own DNS entries from the settings. ok = the name is known (then the answer may be empty).
@@ -74,6 +78,7 @@ type Server struct {
 	Anonymize func(netip.Addr) string  // client as stored in the log, nil = full IP
 	Paused    func() bool              // blocking switched off for now (nil = never)
 	Policy    func(netip.Addr) *Policy // rules of the client's device group (nil = none, global rules)
+	Canary    bool                     // use-application-dns.net -> NXDOMAIN (Firefox schaltet sein DoH ab)
 
 	acl        *clientACL
 	srv        []*dns.Server
@@ -218,6 +223,15 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy) 
 		}
 	}
 
+	if name == canaryName && (s.Canary || p != nil && p.Bypass) {
+		e.Status, e.Reason = querylog.StatusBlocked, ReasonCanary
+		return errorMsg(r, dns.RcodeNameError)
+	}
+	if p != nil && p.Bypass && relayNames[name] {
+		e.Status, e.Reason = querylog.StatusBlocked, ReasonBypass+"icloud"
+		return errorMsg(r, dns.RcodeNameError)
+	}
+
 	if isLocalName(name) {
 		e.Status = querylog.StatusLocal
 		if s.Local.Addr() != "" {
@@ -268,6 +282,13 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy) 
 		}
 	}
 	released := groupAllowed || reason != "" || s.Filter.Allow.Contains(name) || pausedNow
+
+	if p != nil && p.SafeSearch { // Suchmaschinen und YouTube kinderfreundlich (auch bei Freigaben der Gruppe)
+		if target := safeTarget(name, p.YouTube); target != "" {
+			e.Status, e.Reason = querylog.StatusAllowed, ReasonSafeSearch+target
+			return s.custom(r, []dns.RR{&dns.CNAME{Hdr: dns.RR_Header{Name: dns.Fqdn(name), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300}, Target: dns.Fqdn(target)}})
+		}
+	}
 
 	if resp, state, refresh := s.Cache.Get(r); resp != nil {
 		// CNAME-Tarnung auch im Cache pruefen: Antworten sind fuer alle Gruppen gemeinsam zwischengespeichert

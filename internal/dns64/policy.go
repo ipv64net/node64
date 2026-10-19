@@ -25,6 +25,9 @@ func groupListURLs(g groups.Group, global []string) []string {
 			out = append(out, u)
 		}
 	}
+	if g.Bypass && !slices.Contains(out, filter.BypassList) { // fremde DoH-Server, VPNs, Proxys
+		out = append(out, filter.BypassList)
+	}
 	return out
 }
 
@@ -78,7 +81,8 @@ func (m *Module) buildPolicies(lists *filter.Manager, c config, list []groups.Gr
 				block = append(block, d.Domain)
 			}
 		}
-		p := &dnsserver.Policy{Group: g.Name, Mask: lists.Mask(groupListURLs(g, global)), Allow: filter.NewDomainSet(allow), Block: filter.NewDomainSet(block)}
+		p := &dnsserver.Policy{Group: g.Name, Mask: lists.Mask(groupListURLs(g, global)), Allow: filter.NewDomainSet(allow), Block: filter.NewDomainSet(block),
+			SafeSearch: g.SafeSearch, YouTube: g.YouTube, Bypass: g.Bypass}
 		for _, key := range g.Cats {
 			if set := filter.GroupCategory(key); set != nil {
 				p.Cats = append(p.Cats, dnsserver.Category{Key: key, Set: set})

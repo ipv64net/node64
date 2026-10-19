@@ -27,9 +27,10 @@ const (
 	setListHours = "dns64.list_hours"     // Aktualisierung der Blocklisten
 	setBlockMode = "dns64.block_mode"     // zero | nxdomain
 	setCacheSize = "dns64.cache_size"
-	setAnonymize = "dns64.anonymize"  // off | mask | hide
-	setAllowNets = "dns64.allow_nets" // weitere Client-Netze, eins je Zeile
-	setDoH       = "dns64.doh"        // 1 = DoH fuer Geraete
+	setAnonymize = "dns64.anonymize"      // off | mask | hide
+	setAllowNets = "dns64.allow_nets"     // weitere Client-Netze, eins je Zeile
+	setCanary    = "dns64.firefox_canary" // 1 = use-application-dns.net -> NXDOMAIN (Firefox schaltet sein DoH ab)
+	setDoH       = "dns64.doh"            // 1 = DoH fuer Geraete
 	setDoT       = "dns64.dot"
 	setDoQ       = "dns64.doq"
 	setDoHPort   = "dns64.doh_port"
@@ -82,6 +83,7 @@ type config struct {
 	CacheSize int               `json:"cache_size"`
 	Anonymize string            `json:"anonymize"`
 	AllowNets []string          `json:"allow_nets"`
+	Canary    bool              `json:"firefox_canary"` // Firefox nutzt DNS64 statt seines eigenen DoH
 	DoH       bool              `json:"doh"`
 	DoT       bool              `json:"dot"`
 	DoQ       bool              `json:"doq"`
@@ -130,6 +132,7 @@ func (m *Module) loadConfig(ctx context.Context) config {
 		CacheSize:   m.intSetting(ctx, setCacheSize, cacheSize, 1000, 200000),
 		Anonymize:   oneOf(m.core.SettingOr(ctx, setAnonymize, ""), anonOff, anonOff, anonMask, anonHide),
 		AllowNets:   splitLines(m.core.SettingOr(ctx, setAllowNets, "")),
+		Canary:      m.core.SettingOr(ctx, setCanary, "1") == "1",
 		DoH:         m.core.SettingOr(ctx, setDoH, "0") == "1",
 		DoT:         m.core.SettingOr(ctx, setDoT, "0") == "1",
 		DoQ:         m.core.SettingOr(ctx, setDoQ, "0") == "1",
@@ -269,8 +272,8 @@ func (m *Module) saveConfig(ctx context.Context, c config) error {
 		setPort: strconv.Itoa(c.Port), setBind: c.Bind, setRouter: c.Router, setRetention: strconv.Itoa(c.Retention),
 		setUpMode: c.UpMode, setUpCount: strconv.Itoa(c.UpCount), setUpstreams: string(ups), setLists: string(lists), setListHours: strconv.Itoa(c.ListHours),
 		setBlockMode: c.BlockMode, setCacheSize: strconv.Itoa(c.CacheSize), setAnonymize: c.Anonymize,
-		setAllowNets: strings.Join(c.AllowNets, "\n"),
-		setDoH:       b2s(c.DoH), setDoT: b2s(c.DoT), setDoQ: b2s(c.DoQ), setDoHPort: strconv.Itoa(c.DoHPort), setDoTPort: strconv.Itoa(c.DoTPort),
+		setAllowNets: strings.Join(c.AllowNets, "\n"), setCanary: b2s(c.Canary),
+		setDoH: b2s(c.DoH), setDoT: b2s(c.DoT), setDoQ: b2s(c.DoQ), setDoHPort: strconv.Itoa(c.DoHPort), setDoTPort: strconv.Itoa(c.DoTPort),
 		setNames: strings.Join(c.Names, "\n"), setCertMode: c.CertMode, setCertID: strconv.FormatInt(c.CertID, 10), setNotifyUpstream: b2s(c.NotifyUp), setNotifyLists: b2s(c.NotifyLst),
 		setACMEDom: c.ACMEDomain, setACMEPre: c.ACMEPrefix, setACMEMail: c.ACMEEmail, setACMEStage: b2s(c.ACMEStaging),
 	} {

@@ -2439,6 +2439,8 @@
       "clients": "Top Clients"
     },
     "settings": {
+      "firefox_canary": "Firefox nutzt DNS64 (eigenes DoH von Firefox abschalten)",
+      "firefox_canary_hint": "DNS64 beantwortet use-application-dns.net nicht; Firefox schaltet sein eingebautes DoH dann ab und fragt DNS64 – sonst umgeht Firefox Blocklisten und Gruppen. Wie bei Pi-hole standardmäßig an.",
       "title": "Einstellungen",
       "port": "DNS-Port",
       "bind": "Adresse",
@@ -2487,6 +2489,9 @@
       "later": "Verschlüsselte Anfragen der Geräte (DoH/DoT/DoQ) gibt es im Reiter „Verschlüsselung“."
     },
     "js": {
+      "reason_safesearch": "SafeSearch → {target} (Gruppe {group})",
+      "reason_canary": "Firefox-DoH abgeschaltet",
+      "reason_bypass_icloud": "iCloud Private Relay aus (Gruppe {group})",
       "reason_group": "Sperre der Gruppe {group} ({domain})",
       "reason_cat": "Kategorie {cat} (Gruppe {group})",
       "cat": {
@@ -2584,6 +2589,15 @@
       "deleted": "Eintrag gelöscht."
     },
     "groups": {
+      "protect": "Kinderschutz",
+      "safesearch": "SafeSearch (Google, Bing, DuckDuckGo, YouTube)",
+      "safesearch_hint": "Suchen nur mit SafeSearch, YouTube im eingeschränkten Modus; lässt sich am Gerät nicht abschalten. YouTube „aus“ = YouTube ohne Einschränkung (gesperrt wird es über die Kategorie Streaming).",
+      "youtube_strict": "streng",
+      "youtube_moderate": "mittel",
+      "youtube_off": "aus",
+      "bypass": "Schutz gegen Umgehen",
+      "bypass_short": "Umgehungsschutz",
+      "bypass_hint": "Sperrt fremde DoH-Server, VPNs und Proxys (HaGeZi-Liste), schaltet iCloud Private Relay und das eigene DoH von Firefox auf diesen Geräten ab. Über mobile Daten oder ein fest eingetragenes fremdes DNS kommt ein Gerät trotzdem vorbei.",
       "hint_rules": "Jede Gruppe hat eigene Regeln (aufklappen unter „Regeln“): Blocklisten wie für alle oder eigene Auswahl, gesperrte Kategorien, eigene Freigaben und Sperren. Geräte ohne Gruppe nutzen die Einstellungen unter „Blocklisten“.",
       "rules": "Regeln",
       "rules_saved": "Regeln gespeichert.",

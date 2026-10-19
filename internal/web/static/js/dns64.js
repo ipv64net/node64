@@ -340,6 +340,9 @@
 				else if (details.indexOf("released:") === 0) { details = t("reason_released", { list: details.slice(9) }); }
 				else if (details.indexOf("paused:") === 0) { details = t("reason_paused", { list: details.slice(7) }); }
 				else if (details.indexOf("group:") === 0) { details = t("reason_group", { domain: details.slice(6), group: r.group || "" }); }
+				else if (details.indexOf("safesearch:") === 0) { details = t("reason_safesearch", { target: details.slice(11), group: r.group || "" }); }
+				else if (details === "canary") { details = t("reason_canary"); }
+				else if (details === "bypass:icloud") { details = t("reason_bypass_icloud", { group: r.group || "" }); }
 				else if (details.indexOf("cat:") === 0) { details = t("reason_cat", { cat: t("cat." + details.slice(4)), group: r.group || "" }); }
 				if (!details && r.upstream) { details = t("via", { name: r.upstream }); }
 				if (r.rcode && r.rcode !== "NOERROR") { details = (details ? details + " · " : "") + r.rcode; }

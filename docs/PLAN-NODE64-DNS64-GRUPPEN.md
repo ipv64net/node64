@@ -1,7 +1,8 @@
 # Plan: Gerätegruppen und Kinderschutz in DNS64
 
-Stand 2026-10-19. Entschieden: Erkennung per MAC zuerst, IP/Netz als Ausweichweg. **G1 ist umgesetzt (DNS64 1.16.0), G2 auch (1.17.0).** Entschieden: Kategorien als eigene kleine Listen,
-Kinderschutz-Listen global und je Gruppe, YouTube standardmäßig streng.
+Stand 2026-10-19. Entschieden: Erkennung per MAC zuerst, IP/Netz als Ausweichweg. **Umgesetzt: G1 (DNS64 1.16.0), G2 (1.17.0), G3 (1.18.0).** Entschieden: Kategorien als eigene kleine Listen,
+Kinderschutz-Listen global und je Gruppe, YouTube standardmäßig streng, SafeSearch als ein Schalter,
+Firefox-Canary global standardmäßig an, „Internet aus“ mit Hinweisseite der Node, keine Benachrichtigungen bei Sperrversuchen.
 Grundlage ist DNS64 1.15.0. Heute gelten
 Blocklisten, Freigaben und die Pause für **alle** Geräte gleich. Ziel ist, einzelne Geräte zu Gruppen
 zusammenzufassen, etwa „Kinder“, „Gäste“ oder „Smart-TV“. Jede Gruppe bekommt eigene Regeln:

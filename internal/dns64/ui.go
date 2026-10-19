@@ -137,7 +137,7 @@ var jsKeys = []string{"status.allowed", "status.blocked", "status.cached", "stat
 	"blocked_n", "no_entries", "via", "entries", "page", "live_paused", "flush_confirm", "flushed", "error", "active", "loading",
 	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_released", "mode_parallel", "mode_ordered", "mode_fastest", "in_use", "off",
 	"proto.udp", "proto.tcp", "proto.doh", "proto.dot", "proto.doq", "reason_paused",
-	"reason_group", "reason_cat", "cat.social", "cat.games", "cat.streaming", "cat.gambling", "cat.adult"}
+	"reason_group", "reason_cat", "reason_safesearch", "reason_canary", "reason_bypass_icloud", "cat.social", "cat.games", "cat.streaming", "cat.gambling", "cat.adult"}
 
 func (m *Module) jsTexts(r *http.Request) map[string]string {
 	out := make(map[string]string, len(jsKeys))
@@ -193,6 +193,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	c.CacheSize, c.BlockMode, c.Anonymize = formInt(r, "cache_size"), r.PostFormValue("block_mode"), r.PostFormValue("anonymize")
 	c.NotifyUp, c.NotifyLst = r.PostFormValue("notify_upstream") != "", r.PostFormValue("notify_lists") != ""
 	c.AllowNets = splitLines(r.PostFormValue("allow_nets"))
+	c.Canary = r.PostFormValue("firefox_canary") != ""
 	m.apply(w, r, "/dns64/settings", c, "dns64.settings", "")
 }
 

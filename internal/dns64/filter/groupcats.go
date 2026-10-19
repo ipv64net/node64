@@ -15,6 +15,9 @@ var categoryFS embed.FS
 // GroupCategories sind alle Kategorien in Anzeigereihenfolge.
 var GroupCategories = []string{"social", "games", "streaming", "gambling", "adult"}
 
+// BypassList sperrt fremde DoH-Server, VPNs und Proxys (Schutz gegen Umgehen einer Gruppe).
+const BypassList = hagezi + "doh-vpn-proxy-bypass.txt"
+
 // GroupCategoryLists: Kategorien, die eine Vorlage aus MoreLists fuer die Gruppe einschalten.
 var GroupCategoryLists = map[string]string{
 	"gambling": hagezi + "gambling.txt",

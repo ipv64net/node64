@@ -80,11 +80,13 @@
 					<div class="col-sm-2 d-grid"><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus"></i> {{$.T "dns64.groups.member_add"}}</button></div>
 				</form>
 			</div>
-			<details class="card-footer bg-body"{{if or $g.Domains $g.Cats (eq $g.ListsMode "custom")}} open{{end}}>
+			<details class="card-footer bg-body"{{if or $g.Domains $g.Cats (eq $g.ListsMode "custom") $g.SafeSearch $g.Bypass}} open{{end}}>
 				<summary class="small fw-semibold">{{$.T "dns64.groups.rules"}}{{$.Doc "dns64#gruppen"}}
 					{{if eq $g.ListsMode "custom"}}<span class="badge text-bg-light fw-normal">{{$.T "dns64.groups.lists_custom_n" "n" (len $g.Lists)}}</span>{{end}}
 					{{range $g.Cats}}<span class="badge text-bg-warning fw-normal">{{$.T (print "dns64.groups.cat." .)}}</span> {{end}}
-					{{with $g.Domains}}<span class="badge text-bg-light fw-normal">{{$.T "dns64.groups.domains_n" "n" (len .)}}</span>{{end}}</summary>
+					{{with $g.Domains}}<span class="badge text-bg-light fw-normal">{{$.T "dns64.groups.domains_n" "n" (len .)}}</span>{{end}}
+					{{if $g.SafeSearch}}<span class="badge text-bg-info fw-normal">SafeSearch</span>{{end}}
+					{{if $g.Bypass}}<span class="badge text-bg-dark fw-normal">{{$.T "dns64.groups.bypass_short"}}</span>{{end}}</summary>
 				<div class="row g-3 mt-1 small">
 					<div class="col-lg-7">
 						<form method="post" action="/dns64/groups/{{$g.ID}}/rules">
@@ -100,6 +102,19 @@
 								{{range $c := $d.Cats}}<div class="form-check"><input class="form-check-input" type="checkbox" name="cats" value="{{$c}}" id="c-{{$g.ID}}-{{$c}}"{{if $g.HasCat $c}} checked{{end}}><label class="form-check-label" for="c-{{$g.ID}}-{{$c}}">{{$.T (print "dns64.groups.cat." $c)}}</label></div>{{end}}
 							</div>
 							<div class="form-text mt-0 mb-2">{{$.T "dns64.groups.cats_hint"}}</div>
+							<div class="fw-semibold mb-1">{{$.T "dns64.groups.protect"}}</div>
+							<div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+								<div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="safesearch" value="1" id="ss-{{$g.ID}}"{{if $g.SafeSearch}} checked{{end}}><label class="form-check-label" for="ss-{{$g.ID}}">{{$.T "dns64.groups.safesearch"}}</label></div>
+								<label class="small text-body-secondary" for="yt-{{$g.ID}}">YouTube</label>
+								<select class="form-select form-select-sm w-auto" name="youtube" id="yt-{{$g.ID}}">
+									<option value="strict"{{if eq $g.YouTube "strict"}} selected{{end}}>{{$.T "dns64.groups.youtube_strict"}}</option>
+									<option value="moderate"{{if eq $g.YouTube "moderate"}} selected{{end}}>{{$.T "dns64.groups.youtube_moderate"}}</option>
+									<option value="off"{{if eq $g.YouTube "off"}} selected{{end}}>{{$.T "dns64.groups.youtube_off"}}</option>
+								</select>
+							</div>
+							<div class="form-text mt-0 mb-1">{{$.T "dns64.groups.safesearch_hint"}}</div>
+							<div class="form-check"><input class="form-check-input" type="checkbox" name="bypass" value="1" id="bp-{{$g.ID}}"{{if $g.Bypass}} checked{{end}}><label class="form-check-label" for="bp-{{$g.ID}}">{{$.T "dns64.groups.bypass"}}</label></div>
+							<div class="form-text mt-0 mb-2">{{$.T "dns64.groups.bypass_hint"}}</div>
 							<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2"></i> {{$.T "common.save"}}</button>
 						</form>
 					</div>

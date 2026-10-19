@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ipv64net/node64/internal/dns64/dnsserver"
 	"github.com/ipv64net/node64/internal/dns64/filter"
 	"github.com/ipv64net/node64/internal/dns64/groups"
 )
@@ -15,7 +16,7 @@ import (
 
 // Groups liefert alle Gruppen mit Mitgliedern, nach Position.
 func (m *Module) Groups(ctx context.Context) ([]groups.Group, error) {
-	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, position, lists_mode, lists, cats FROM dns64_groups ORDER BY position, id`)
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, position, lists_mode, lists, cats, safesearch, youtube, bypass FROM dns64_groups ORDER BY position, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -24,7 +25,7 @@ func (m *Module) Groups(ctx context.Context) ([]groups.Group, error) {
 	for rows.Next() {
 		var g groups.Group
 		var lists, cats string
-		if err := rows.Scan(&g.ID, &g.Name, &g.Position, &g.ListsMode, &lists, &cats); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &g.Position, &g.ListsMode, &lists, &cats, &g.SafeSearch, &g.YouTube, &g.Bypass); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -83,9 +84,15 @@ func splitList(s string) []string {
 	return out
 }
 
-// SetGroupRules setzt Listenauswahl und Kategorien einer Gruppe. lists sind URLs bekannter Listen (Vorlagen und
-// eigene); unbekannte fallen weg.
-func (m *Module) SetGroupRules(ctx context.Context, id int64, mode string, lists, cats []string) error {
+// SetGroupRules setzt die Regeln einer Gruppe. Lists sind URLs bekannter Listen (Vorlagen und eigene);
+// unbekannte fallen weg.
+func (m *Module) SetGroupRules(ctx context.Context, id int64, in groups.Rules) error {
+	mode, lists, cats := in.ListsMode, in.Lists, in.Cats
+	switch in.YouTube {
+	case dnsserver.YouTubeModerate, dnsserver.YouTubeOff:
+	default:
+		in.YouTube = dnsserver.YouTubeStrict
+	}
 	if mode != groups.ListsCustom {
 		mode = groups.ListsGlobal
 	}
@@ -107,8 +114,8 @@ func (m *Module) SetGroupRules(ctx context.Context, id int64, mode string, lists
 			catKeep = append(catKeep, c)
 		}
 	}
-	res, err := m.core.Writer().ExecContext(ctx, `UPDATE dns64_groups SET lists_mode = ?, lists = ?, cats = ? WHERE id = ?`,
-		mode, strings.Join(keep, "\n"), strings.Join(catKeep, ","), id)
+	res, err := m.core.Writer().ExecContext(ctx, `UPDATE dns64_groups SET lists_mode = ?, lists = ?, cats = ?, safesearch = ?, youtube = ?, bypass = ? WHERE id = ?`,
+		mode, strings.Join(keep, "\n"), strings.Join(catKeep, ","), in.SafeSearch, in.YouTube, in.Bypass, id)
 	if err != nil {
 		return err
 	}
