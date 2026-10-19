@@ -184,8 +184,8 @@ func (s *Server) session(next http.Handler) http.Handler {
 			if strings.HasPrefix(r.URL.Path, "/api/push/") {
 				break // Push-URL: oeffentlich, der Token in der URL ist die Berechtigung (keine Sitzung)
 			}
-			if strings.HasPrefix(r.URL.Path, "/peer/v1/") {
-				break // lokale Gruppe: signierte Anfragen der anderen Nodes bzw. Kopplungscode (peer-Paket)
+			if strings.HasPrefix(r.URL.Path, "/peer/") {
+				break // Cluster: signierte Anfragen der anderen Nodes bzw. Kopplungscode (peer-Paket, alle Versionen)
 			}
 			tok := r.Header.Get("X-CSRF-Token")
 			if tok == "" {

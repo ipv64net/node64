@@ -1,5 +1,15 @@
 # Änderungen – Healthchecks
 
+## 2.16.0 – 2026-10-19
+
+### Neu
+- **Cluster** statt „lokale Gruppe“: eigener Menüpunkt, Nodes auch in verschiedenen Netzen. Healthchecks gleichen weiter über die hubs ab; über den Cluster ist es ein zusätzlicher, abschaltbarer Weg (Schalter auf der Healthchecks-Sync-Seite und unter Cluster, einzeln für Checks, Wartungsfenster und Benachrichtigungs-Einstellungen).
+- Cluster ganz ohne ipv64: Sind alle Nodes ohne ipv64-Account, laufen Checks, Messwerte, Bewertung und Benachrichtigungen rein lokal im Cluster.
+- Verbindung zwischen den Nodes immer verschlüsselt (HTTPS, auch über den normalen Web-Port); ein gültiges Zertifikat ist nicht nötig.
+
+### Geändert
+- Mitglieder ohne eingeschaltete Healthchecks zählen nicht mehr für Messwerte, Benachrichtigungen und das Weiterreichen an ipv64; ausgesetzte Nodes ebenso nicht.
+
 ## 2.15.0 – 2026-10-19
 
 ### Neu
