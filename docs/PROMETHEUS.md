@@ -103,6 +103,41 @@ Anteil blockierter Anfragen der letzten Stunde:
 sum(increase(node64_dns64_queries_total{status="blocked"}[1h])) / sum(increase(node64_dns64_queries_total[1h]))
 ```
 
+## CDN64
+
+Labels je Host: `host_id` (bleibt gleich), `host` (erster Name), `kind` (`proxy`, `redirect`, `dead`, `passthrough`).
+
+| Metrik | Labels | Bedeutung |
+|---|---|---|
+| `node64_cdn64_hosts` | | Anzahl Hosts |
+| `node64_cdn64_host_enabled` | Host | 1 eingeschaltet, 0 aus |
+| `node64_cdn64_host_requests_total`, `node64_cdn64_host_errors_total`, `node64_cdn64_host_blocked_total` | Host | Anfragen, Fehler (5xx, Ziel nicht erreichbar) und Abgewiesene seit dem Start der Node |
+| `node64_cdn64_host_requests_24h` | Host, `status` (`2xx` … `5xx`) | Anfragen der letzten 24 Stunden je Statusklasse |
+| `node64_cdn64_host_bytes_24h`, `node64_cdn64_host_blocked_24h` | Host | gesendete Bytes und Abgewiesene der letzten 24 Stunden |
+| `node64_cdn64_host_target_up`, `node64_cdn64_host_target_latency_seconds` | Host | Ziel erreichbar (letzte Prüfung) und Verbindungszeit; nur Proxy und TLS durchreichen |
+| `node64_cdn64_online_name` | `host_id`, `name`, `mode` | Name über srv07/srv08 eingeschaltet (immer 1) |
+| `node64_cdn64_online_edge_connected` | `edge` | Tunnel zum Server verbunden |
+| `node64_cdn64_online_edge_rtt_seconds` | `edge`, `transport` | Laufzeit des Tunnels |
+| `node64_cdn64_online_edge_streams`, `…_streams_total`, `…_reconnects_total` | `edge` | offene Besucher-Streams, Streams und Neuverbindungen seit dem Start |
+| `node64_cdn64_online_host_status` | `name`, `mode`, `status` | Zustand bei ipv64 (immer 1): `active`, `pending`, `blocked` |
+| `node64_cdn64_online_host_traffic_month_bytes` | `name` | Traffic über srv07/srv08 im Monat |
+| `node64_cdn64_online_domains_used`, `…_domains_limit` | | CDN-Domains des Accounts (altes CDN zählt mit) |
+| `node64_cdn64_online_traffic_used_bytes`, `…_traffic_limit_bytes` | | CDN-Traffic des Accounts im Monat |
+| `node64_cdn64_online_last_sync_seconds`, `node64_cdn64_online_sync_ok` | | letzter Abgleich mit ipv64 (Unix-Zeit) und ob er klappte |
+
+Die Werte von CDN64 online stammen aus dem letzten Abgleich der Node (jede Minute), nicht aus einer Abfrage bei
+ipv64.
+
+## Zertifikate
+
+| Metrik | Labels | Bedeutung |
+|---|---|---|
+| `node64_certs` | | Anzahl Zertifikate |
+| `node64_cert_expiry_seconds` | `cert_id`, `name`, `source` | Ablauf (Unix-Zeit) |
+| `node64_cert_status` | `cert_id`, `name`, `source`, `status` | immer 1, Zustand im Label |
+| `node64_cert_error` | `cert_id`, `name`, `source` | 1 letzter Abruf bzw. letzte Erneuerung gescheitert |
+| `node64_cert_auto_renew` | `cert_id`, `name`, `source` | 1 wird automatisch erneuert |
+
 ## Beispiele für Alarme
 
 ```yaml
@@ -124,6 +159,16 @@ groups:
       - alert: Node64DNSUpstreamDown
         expr: node64_dns64_upstream_up == 0
         for: 5m
+      - alert: Node64CertExpires
+        expr: node64_cert_expiry_seconds - time() < 14 * 86400 and on(cert_id) node64_cert_auto_renew == 1
+        annotations:
+          summary: "Zertifikat {{ $labels.name }} läuft in unter 14 Tagen ab (Erneuerung klappt nicht?)"
+      - alert: Node64CDN64TargetDown
+        expr: node64_cdn64_host_target_up == 0 and on(host_id) node64_cdn64_host_enabled == 1
+        for: 5m
+      - alert: Node64CDN64TunnelDown
+        expr: node64_cdn64_online_edge_connected == 0
+        for: 3m
       - alert: Node64HubDisconnected
         expr: node64_link_linked == 1 and node64_link_connected == 0
         for: 10m

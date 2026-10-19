@@ -1,5 +1,12 @@
 # Änderungen – CDN64
 
+## 1.13.0 – 2026-10-19
+
+### Neu
+- Prometheus (`/api/metrics`): je Host Anfragen, Fehler und Abgewiesene seit dem Start sowie der letzten 24 Stunden
+  (nach Statusklasse, Bytes), Erreichbarkeit und Antwortzeit des Ziels; CDN64 online mit eingeschalteten Namen,
+  Tunnel je Server (verbunden, Laufzeit, Streams), Zustand und Traffic je Name bei ipv64 und Kontingent.
+
 ## 1.12.0 – 2026-10-19
 
 ### Neu
