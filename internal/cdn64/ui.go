@@ -270,6 +270,9 @@ type formData struct {
 	Locs    []Location          // vorhandene Locations und zwei leere Zeilen
 	Adv     advText
 	CFNets  string
+
+	GeoText   string       // Laender der Laendersperre (Komma)
+	Countries []geoCountry // Auswahl aus index.json (leer, solange nicht geladen)
 }
 
 // advText: die weiteren Optionen als Text fuer das Formular.
@@ -334,6 +337,10 @@ func (m *Module) form(ctx context.Context, h *Host, isNew bool) formData {
 		d.Adv.HostMode, d.Adv.HostValue = "custom", a.HostHeader
 	}
 	d.CFNets = strings.Join(CloudflareNets, "\n")
+	d.GeoText = strings.Join(a.GeoCountries, ", ")
+	m.bl.mu.Lock()
+	d.Countries = m.bl.countries
+	m.bl.mu.Unlock()
 	return d
 }
 
@@ -409,6 +416,9 @@ func hostFromForm(r *http.Request, h *Host) {
 		a.MaxBodyMB, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_max_body")))
 		a.NoBuffering, a.Gzip, a.AccessLog, a.NoLimits = on("adv_no_buffering"), on("adv_gzip"), on("adv_access_log"), on("adv_no_limits")
 		a.TrustedProxies = lines(r.PostFormValue("adv_trusted"))
+	}
+	if r.PostFormValue("has_geo") == "1" { // Laendersperre war im Formular
+		h.Advanced.GeoMode, h.Advanced.GeoCountries = r.PostFormValue("geo_mode"), lines(r.PostFormValue("geo_countries"))
 	}
 	if h.Kind == KindPass {
 		h.CertID = CertNone

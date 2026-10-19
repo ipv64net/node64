@@ -2450,6 +2450,24 @@
           "no_limits": {
             "type": "boolean",
             "description": "ohne Anfrage-Limit je IP und ohne Grenze je Ziel (Verbindungs-Limits und Sperren gelten weiter)"
+          },
+          "geo_mode": {
+            "type": "string",
+            "enum": [
+              "",
+              "block",
+              "allow"
+            ],
+            "description": "Ländersperre: leer = aus, block = diese Länder sperren, allow = nur diese Länder zulassen. Private Netze und die Ausnahmen der Blocklisten werden nie gesperrt; allow greift erst, wenn eine der Länderlisten geladen ist."
+          },
+          "geo_countries": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$"
+            },
+            "maxItems": 60,
+            "description": "ISO-Ländercodes (Kleinschreibung wird umgewandelt), z. B. [\"DE\",\"AT\"]"
           }
         }
       },
@@ -2753,17 +2771,25 @@
               "properties": {
                 "id": {
                   "type": "string",
-                  "enum": [
-                    "all",
-                    "spamhaus_drop",
-                    "firehole_l1",
-                    "blocklistde_all",
-                    "dshield1",
-                    "tor_exit"
-                  ]
+                  "description": "Liste aus https://ipv64.net/blocklists/index.json (z. B. all, all_notor, spamhaus_drop, firehole_l1, feodo, tor_exit); bis die Datei geladen ist, nur die festen Listen all, spamhaus_drop, firehole_l1, blocklistde_all, dshield1, tor_exit"
                 },
                 "name": {
                   "type": "string"
+                },
+                "category": {
+                  "type": "string",
+                  "description": "aus index.json: attack, botnet, tor oder cloud"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "Beschreibung von ipv64.net (englisch)"
+                },
+                "license": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "description": "Projektseite der Quelle"
                 },
                 "enabled": {
                   "type": "boolean"
@@ -2802,6 +2828,34 @@
           "active": {
             "type": "boolean",
             "description": "mindestens eine Liste geladen und eingeschaltet"
+          },
+          "countries": {
+            "type": "array",
+            "description": "Länderlisten der Ländersperre (nur Länder, die ein eingeschalteter Host nutzt)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "description": "ISO-Ländercode"
+                },
+                "entries": {
+                  "type": "integer",
+                  "description": "geladene Netze"
+                },
+                "updated": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "geo_blocked": {
+            "type": "integer",
+            "description": "von der Ländersperre abgewiesen seit dem Start"
           }
         }
       },

@@ -89,6 +89,21 @@
 					{{with index $d.Errors "access_list_id"}}<div class="invalid-feedback">{{.}}</div>{{end}}
 					<div class="form-text">{{.T "cdn64.f.access_hint"}} <a href="/cdn64/access">{{.T "cdn64.tab.access"}}</a></div>
 					{{end}}
+					{{if ne $h.Kind "dead"}}
+					<input type="hidden" name="has_geo" value="1">
+					<label class="form-label fw-semibold mt-3" for="geo_mode">{{.T "cdn64.f.geo"}}{{$.Doc "cdn64#laendersperre"}}</label>
+					<div class="row g-2">
+						<div class="col-md-4"><select class="form-select form-select-sm" id="geo_mode" name="geo_mode">
+							<option value="">{{.T "cdn64.f.geo_off"}}</option>
+							<option value="block"{{if eq $h.Advanced.GeoMode "block"}} selected{{end}}>{{.T "cdn64.f.geo_block"}}</option>
+							<option value="allow"{{if eq $h.Advanced.GeoMode "allow"}} selected{{end}}>{{.T "cdn64.f.geo_allow"}}</option>
+						</select></div>
+						<div class="col-md-8"><input class="form-control form-control-sm font-monospace{{if index $d.Errors "geo"}} is-invalid{{end}}" id="geo_countries" name="geo_countries" value="{{$d.GeoText}}" placeholder="DE, AT, CH" maxlength="400" list="geo-cc" autocomplete="off">
+							{{with index $d.Errors "geo"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
+					</div>
+					{{if $d.Countries}}<datalist id="geo-cc">{{range $d.Countries}}<option value="{{.Code}}">{{.Name}}</option>{{end}}</datalist>{{end}}
+					<div class="form-text">{{.T "cdn64.f.geo_hint"}}</div>
+					{{end}}
 					<hr>
 					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="enabled" id="enabled"{{if $h.Enabled}} checked{{end}}><label class="form-check-label" for="enabled">{{.T "cdn64.f.enabled"}}</label></div>
 				</div>

@@ -31,11 +31,14 @@ type blocklistsView struct {
 	Allow   []string         `json:"allow"`
 	Blocked int64            `json:"blocked"` // abgewiesen seit dem Start
 	Active  bool             `json:"active"`  // mindestens eine Liste geladen und eingeschaltet
+
+	Countries  []GeoState `json:"countries"`   // Laenderlisten der Laendersperre (Hosts mit Laendersperre)
+	GeoBlocked int64      `json:"geo_blocked"` // von der Laendersperre abgewiesen seit dem Start
 }
 
 func (m *Module) blView(r *http.Request) blocklistsView {
 	v := blocklistsView{Lists: m.blStates(r.Context()), Allow: strings.Fields(m.core.SettingOr(r.Context(), setBlockAllow, "")), Blocked: m.bl.blocked.Load(),
-		Active: m.bl.set.Load() != nil}
+		Active: m.bl.set.Load() != nil, Countries: m.geoStates(), GeoBlocked: m.bl.geo.blocked.Load()}
 	if v.Allow == nil {
 		v.Allow = []string{}
 	}

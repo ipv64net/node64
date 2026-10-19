@@ -351,6 +351,12 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			page(sw, http.StatusForbidden)
 			return
 		}
+		if m.geoBlocked(&h.Advanced, client) { // Laendersperre des Hosts
+			*reject = rejGeo
+			st.blocked.Add(1)
+			page(sw, http.StatusForbidden)
+			return
+		}
 		if m.lim.banned(client) { // gesperrt wegen Ueberlastung
 			*reject = rejBan
 			st.blocked.Add(1)
@@ -523,6 +529,7 @@ func (m *Module) apply(ctx context.Context) {
 			active = append(active, h)
 		}
 	}
+	m.geoNeed(active)
 	for {
 		routes := make([]edge.Route, 0, len(active))
 		for _, h := range active {
@@ -555,8 +562,19 @@ func (m *Module) routeFor(h *Host) edge.Route {
 	handler := m.handlerFor(h, m.statsOf(h.ID))
 	if h.Kind == KindPass { // TLS durchreichen: auf Port 80 nur Weiterleitung auf HTTPS
 		st := m.statsOf(h.ID)
-		return edge.Route{Names: h.Names, Passthrough: net.JoinHostPort(h.TargetHost, strconv.Itoa(h.TargetPort)), Count: func() { st.requests.Add(1) },
+		rt := edge.Route{Names: h.Names, Passthrough: net.JoinHostPort(h.TargetHost, strconv.Itoa(h.TargetPort)), Count: func() { st.requests.Add(1) },
 			HTTP: http.HandlerFunc(m.toHTTPS)}
+		if h.Advanced.GeoMode != "" { // Laendersperre: Verbindung gleich nach dem ersten TLS-Paket schliessen
+			rt.Allow = func(ip netip.Addr) bool {
+				if m.geoBlocked(&h.Advanced, ip) {
+					st.blocked.Add(1)
+					m.rejectConn(ip, rejGeo, h.Names[0])
+					return false
+				}
+				return true
+			}
+		}
+		return rt
 	}
 	rt := edge.Route{Names: h.Names, NoHTTP2: !h.HTTP2, HTTP3: h.HTTP3, MinTLS: tls.VersionTLS12}
 	if h.MinTLS == "1.3" {

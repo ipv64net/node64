@@ -32,6 +32,10 @@ type Advanced struct {
 	AccessLog       bool     `json:"access_log,omitempty"`       // jede Anfrage protokollieren
 	NoLimits        bool     `json:"no_limits,omitempty"`        // ohne Anfrage-Limit je IP und ohne Platzgrenze beim Ziel
 	trusted         []netip.Prefix
+
+	// Laendersperre (geo.go): "" = aus, block = diese Laender sperren, allow = nur diese Laender zulassen
+	GeoMode      string   `json:"geo_mode,omitempty"`
+	GeoCountries []string `json:"geo_countries,omitempty"` // ISO-Laendercodes, z. B. DE
 }
 
 // Location ist ein Pfad mit eigenem Ziel (Custom Location).

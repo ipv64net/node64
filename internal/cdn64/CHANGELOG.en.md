@@ -1,5 +1,20 @@
 # Changes – CDN64
 
+## 1.14.0 – 2026-10-19
+
+### New
+- Country block per host (proxy, redirect, TLS passthrough): block visitors from certain countries or allow only
+  certain countries. The country lists come from ipv64.net daily and are loaded and cached only for countries in
+  use. Private networks, CGNAT and the blocklist exceptions are never blocked; behind Cloudflare or similar the real
+  client IP counts. Rejected visitors show up in statistics and access log as "country block".
+- Blocklists: the selection now comes from `index.json` on ipv64.net. New lists appear without a Node64 update, e.g.
+  all lists without Tor, abuse.ch Feodo Tracker, ET Compromised, CINS Army, IPsum, Tor (all relays) and the networks
+  of AWS, Google Cloud and Cloudflare. Each list shows its license and description.
+
+### Changed
+- "IPv64 Gesamtliste" (all lists) is no longer marked as recommended because it contains Tor; the combined list
+  without Tor is now recommended.
+
 ## 1.13.1 – 2026-10-19
 
 ### New

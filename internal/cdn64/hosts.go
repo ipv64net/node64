@@ -140,6 +140,12 @@ func (h *Host) normalize() error {
 	if err := h.Advanced.normalize(); err != nil {
 		return err
 	}
+	if h.Kind == KindDead { // 404-Host: nichts zu schuetzen
+		h.Advanced.GeoMode = ""
+	}
+	if err := h.Advanced.normalizeGeo(); err != nil {
+		return err
+	}
 	if h.Locations == nil {
 		h.Locations = []Location{}
 	}

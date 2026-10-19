@@ -414,6 +414,11 @@
       "access_list": "Zugriffsliste",
       "access_public": "Öffentlich (keine)",
       "access_hint": "Zugriff nur mit Passwort und/oder aus bestimmten Netzen.",
+      "geo": "Ländersperre",
+      "geo_off": "aus",
+      "geo_block": "diese Länder sperren",
+      "geo_allow": "nur diese Länder zulassen",
+      "geo_hint": "Ländercodes nach ISO, z. B. DE, AT, CH. Die Länderlisten kommen täglich von ipv64.net. Private Netze und die Ausnahmen der Blocklisten werden nie gesperrt; „nur zulassen“ greift erst, wenn die Listen geladen sind.",
       "locations_hint": "Pfade mit eigenem Ziel, z. B. /api auf einen anderen Dienst. Der längste passende Pfad gewinnt; alles andere geht an das Ziel des Hosts.",
       "locations_more": "Leere Zeilen werden ignoriert. Für mehr Locations speichern und erneut bearbeiten.",
       "loc_path": "Pfad",
@@ -478,7 +483,10 @@
       "log_days": "Aufbewahrung 1–90 Tage.",
       "no_target": "Dieser Host hat kein Ziel zum Prüfen.",
       "dns_content": "Ziel ungültig (Domain für CNAME, IPv4 für A, IPv6 für AAAA).",
-      "dns_type": "Typ CNAME, A oder AAAA."
+      "dns_type": "Typ CNAME, A oder AAAA.",
+      "geo_country": "Unbekannter Ländercode {name}: zwei Buchstaben nach ISO, z. B. DE.",
+      "geo_none": "Für die Ländersperre mindestens ein Land angeben.",
+      "geo_many": "Höchstens 60 Länder je Host."
     },
     "help_title": "So funktioniert es",
     "help_ports": "Der Router leitet 80 und 443 (TCP, für HTTP/3 auch 443/UDP) auf diese Node weiter. Den Rest verteilt Node64 nach dem Domainnamen – auch zusammen mit DNS64 im selben Container.",
@@ -658,13 +666,27 @@
       "refreshing": "Blocklisten werden aktualisiert.",
       "err_allow": "Ausnahmen prüfen: nur IP-Adressen oder Netze (z. B. 203.0.113.0/24).",
       "err_list": "Unbekannte Blockliste.",
+      "geo": "Ländersperre",
       "desc": {
-        "all": "alle Quellen zusammengefasst und bereinigt (empfohlen)",
+        "all": "alle Quellen zusammengefasst und bereinigt, mit Tor",
+        "all_notor": "alle Quellen zusammengefasst und bereinigt, ohne Tor (empfohlen)",
         "spamhaus_drop": "von Kriminellen übernommene Netze (Spamhaus DROP)",
         "firehole_l1": "FireHOL Level 1: Angreifer und Botnetze, wenige Fehlalarme",
         "blocklistde_all": "Angreifer auf SSH, Mail, Web u. a. der letzten 48 Stunden",
         "dshield1": "die aktivsten angreifenden Netze (SANS DShield)",
-        "tor_exit": "Ausgänge des Tor-Netzes (sperrt auch legitime anonyme Besucher)"
+        "tor_exit": "Ausgänge des Tor-Netzes (sperrt auch legitime anonyme Besucher)",
+        "tor_all": "alle Relays des Tor-Netzes (sperrt auch legitime anonyme Besucher)",
+        "feodo": "Steuerserver von Botnetzen (abuse.ch Feodo Tracker)",
+        "et_compromised": "bekannt kompromittierte Hosts (Emerging Threats)",
+        "cins_army": "Adressen mit schlechtem Ruf aus dem CINS-Netz, bis 15.000",
+        "ipsum_l3": "Adressen auf mindestens drei öffentlichen Sperrlisten (IPsum)",
+        "aws": "alle Netze von Amazon AWS: sperrt Bots und Scanner aus Rechenzentren",
+        "gcp": "Kundennetze von Google Cloud: sperrt Bots und Scanner aus Rechenzentren",
+        "cloudflare": "Netze von Cloudflare: nicht einschalten, wenn ein Host hinter Cloudflare liegt"
+      },
+      "cat": {
+        "tor": "Tor",
+        "cloud": "Rechenzentren"
       }
     },
     "lim": {
@@ -710,7 +732,8 @@
       "req_rate": "zu viele Anfragen",
       "target": "Ziel ausgelastet",
       "exploit": "Exploit-Sperre",
-      "acl": "Zugriffsliste"
+      "acl": "Zugriffsliste",
+      "geo": "Ländersperre"
     },
     "online": {
       "err_conf": "Tunnel-Daten prüfen: Tunnel, Token und mindestens ein Server (Name, Host).",

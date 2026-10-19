@@ -22,12 +22,13 @@
 		{{range $d.BL.Lists}}
 			<div class="col-sm-6"><div class="border rounded p-2 h-100">
 				<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" role="switch" name="list" value="{{.ID}}" id="bl-{{.ID}}"{{if .Enabled}} checked{{end}}>
-					<label class="form-check-label fw-semibold" for="bl-{{.ID}}">{{.Name}}</label></div>
-				<div class="text-body-secondary">{{$.T (print "cdn64.bl.desc." .ID)}}</div>
+					<label class="form-check-label fw-semibold" for="bl-{{.ID}}">{{.Name}}</label>{{if or (eq .Category "tor") (eq .Category "cloud")}} <span class="badge text-bg-light">{{$.T (print "cdn64.bl.cat." .Category)}}</span>{{end}}</div>
+				<div class="text-body-secondary">{{if .Desc}}{{$.T .Desc}}{{else if .Text}}{{.Text}}{{else}}{{$.T (print "cdn64.bl.desc." .ID)}}{{end}}{{if .License}} <span class="text-nowrap">· {{.License}}</span>{{end}}</div>
 				<div class="mt-1">{{if .Error}}<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> {{.Error}}</span>{{else if .Entries}}<span class="font-monospace">{{$.Int .Entries}}</span> {{$.T "cdn64.bl.entries"}}{{if not .Updated.IsZero}} · {{$.T "cdn64.bl.updated" "ago" ($.Ago .Updated)}}{{end}}{{else if .Enabled}}<span class="text-body-secondary">{{$.T "cdn64.bl.loading"}}</span>{{end}}</div>
 			</div></div>
 		{{end}}
 		</div>
+		{{if $d.BL.Countries}}<div class="mt-2 text-body-secondary"><i class="bi bi-globe2"></i> {{.T "cdn64.bl.geo"}}: {{range $i, $c := $d.BL.Countries}}{{if $i}} · {{end}}<span class="font-monospace">{{$c.Code}}</span> {{if $c.Error}}<span class="text-danger" title="{{$c.Error}}"><i class="bi bi-exclamation-triangle"></i></span>{{else if $c.Entries}}{{$.Int $c.Entries}}{{else}}…{{end}}{{end}} · {{.T "cdn64.bl.blocked" "n" ($.Int $d.BL.GeoBlocked)}}</div>{{end}}
 		<label class="form-label mt-3" for="bl-allow">{{.T "cdn64.bl.allow"}}</label>
 		<textarea class="form-control form-control-sm font-monospace" id="bl-allow" name="allow" rows="2" placeholder="203.0.113.7&#10;2001:db8::/48">{{join $d.BL.Allow "\n"}}</textarea>
 		<div class="form-text">{{.T "cdn64.bl.allow_hint"}}</div>

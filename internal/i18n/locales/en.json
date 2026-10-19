@@ -414,6 +414,11 @@
       "access_list": "Access list",
       "access_public": "Public (none)",
       "access_hint": "Access only with password and/or from certain networks.",
+      "geo": "Country block",
+      "geo_off": "off",
+      "geo_block": "block these countries",
+      "geo_allow": "allow only these countries",
+      "geo_hint": "ISO country codes, e.g. DE, AT, CH. The country lists come from ipv64.net daily. Private networks and the blocklist exceptions are never blocked; \"allow only\" takes effect once the lists are loaded.",
       "locations_hint": "Paths with their own target, e.g. /api to another service. The longest matching path wins; everything else goes to the host's target.",
       "locations_more": "Empty rows are ignored. For more locations save and edit again.",
       "loc_path": "Path",
@@ -478,7 +483,10 @@
       "log_days": "Retention 1–90 days.",
       "no_target": "This host has no target to check.",
       "dns_content": "Invalid target (domain for CNAME, IPv4 for A, IPv6 for AAAA).",
-      "dns_type": "Type CNAME, A or AAAA."
+      "dns_type": "Type CNAME, A or AAAA.",
+      "geo_country": "Unknown country code {name}: two letters per ISO, e.g. DE.",
+      "geo_none": "Enter at least one country for the country block.",
+      "geo_many": "At most 60 countries per host."
     },
     "help_title": "How it works",
     "help_ports": "The router forwards 80 and 443 (TCP, for HTTP/3 also 443/UDP) to this node. Node64 distributes the rest by domain name – also together with DNS64 in the same container.",
@@ -658,13 +666,27 @@
       "refreshing": "Blocklists are being refreshed.",
       "err_allow": "Check the exceptions: only IP addresses or networks (e.g. 203.0.113.0/24).",
       "err_list": "Unknown blocklist.",
+      "geo": "Country block",
       "desc": {
-        "all": "all sources merged and cleaned (recommended)",
+        "all": "all sources merged and cleaned, including Tor",
+        "all_notor": "all sources merged and cleaned, without Tor (recommended)",
         "spamhaus_drop": "networks hijacked by criminals (Spamhaus DROP)",
         "firehole_l1": "FireHOL level 1: attackers and botnets, few false positives",
         "blocklistde_all": "attackers on SSH, mail, web etc. of the last 48 hours",
         "dshield1": "the most active attacking networks (SANS DShield)",
-        "tor_exit": "exits of the Tor network (also blocks legitimate anonymous visitors)"
+        "tor_exit": "exits of the Tor network (also blocks legitimate anonymous visitors)",
+        "tor_all": "all relays of the Tor network (also blocks legitimate anonymous visitors)",
+        "feodo": "botnet command and control servers (abuse.ch Feodo Tracker)",
+        "et_compromised": "known compromised hosts (Emerging Threats)",
+        "cins_army": "addresses with a poor reputation from the CINS network, up to 15,000",
+        "ipsum_l3": "addresses on at least three public blocklists (IPsum)",
+        "aws": "all Amazon AWS networks: blocks bots and scanners from data centers",
+        "gcp": "Google Cloud customer networks: blocks bots and scanners from data centers",
+        "cloudflare": "Cloudflare networks: do not enable if a host is behind Cloudflare"
+      },
+      "cat": {
+        "tor": "Tor",
+        "cloud": "data centers"
       }
     },
     "lim": {
@@ -710,7 +732,8 @@
       "req_rate": "too many requests",
       "target": "target busy",
       "exploit": "exploit block",
-      "acl": "access list"
+      "acl": "access list",
+      "geo": "country block"
     },
     "online": {
       "err_conf": "Check the tunnel settings: tunnel, token and at least one server (name, host).",

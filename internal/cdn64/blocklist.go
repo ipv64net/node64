@@ -39,10 +39,16 @@ type BlocklistInfo struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	File string `json:"file"`
-	Desc string `json:"desc"` // i18n-Schluessel cdn64.bl.desc.<id>
+	Desc string `json:"desc"` // i18n-Schluessel cdn64.bl.desc.<id> (bekannte Listen), sonst leer
+	// aus index.json (leer, solange sie nicht geladen ist)
+	Category string `json:"category,omitempty"` // attack | botnet | tor | cloud
+	Text     string `json:"text,omitempty"`     // Beschreibung von ipv64.net (englisch), fuer Listen ohne Uebersetzung
+	License  string `json:"license,omitempty"`
+	Source   string `json:"source,omitempty"`
 }
 
-// Blocklists: die Listen auf ipv64.net (Dateinamen wie im Generator create_blocklists_v2.php).
+// Blocklists: die Listen auf ipv64.net (Dateinamen wie im Generator create_blocklists_v2.php). Gilt, bis
+// blocklists/index.json geladen ist; danach kommt die Auswahl von dort (neue Listen ohne Update von Node64).
 var Blocklists = []BlocklistInfo{
 	{ID: "all", Name: "IPv64 Gesamtliste", File: "ipv64_blocklist_all.txt"},
 	{ID: "spamhaus_drop", Name: "Spamhaus DROP", File: "ipv64_blocklist_spamhaus_drop.txt"},
@@ -52,13 +58,35 @@ var Blocklists = []BlocklistInfo{
 	{ID: "tor_exit", Name: "Tor Exit-Nodes", File: "ipv64_blocklist_tor_exit.txt"},
 }
 
-func blocklistByID(id string) (BlocklistInfo, bool) {
-	for _, b := range Blocklists {
-		if b.ID == id {
-			return b, true
+// blKnown: Listen mit eigenem Namen und Uebersetzung (cdn64.bl.desc.<id>); andere zeigen Name und Text aus index.json.
+var blKnown = map[string]string{"all": "IPv64 Gesamtliste", "all_notor": "IPv64 Gesamtliste ohne Tor", "spamhaus_drop": "Spamhaus DROP",
+	"firehole_l1": "FireHOL Level 1", "blocklistde_all": "blocklist.de (alle)", "dshield1": "DShield", "tor_exit": "Tor Exit-Nodes",
+	"tor_all": "Tor (alle Relays)", "feodo": "abuse.ch Feodo Tracker", "et_compromised": "ET Compromised", "cins_army": "CINS Army",
+	"ipsum_l3": "IPsum Level 3", "aws": "Amazon AWS", "gcp": "Google Cloud", "cloudflare": "Cloudflare"}
+
+// list: Auswahl aus index.json, sonst die feste Liste (b.mu gehalten).
+func (b *blocklists) list() []BlocklistInfo {
+	if len(b.catalog) > 0 {
+		return b.catalog
+	}
+	return Blocklists
+}
+
+// byID sucht eine Liste in der aktuellen Auswahl (b.mu gehalten).
+func (b *blocklists) byID(id string) (BlocklistInfo, bool) {
+	for _, x := range b.list() {
+		if x.ID == id {
+			return x, true
 		}
 	}
 	return BlocklistInfo{}, false
+}
+
+func (b *blocklists) known(id string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	_, ok := b.byID(id)
+	return ok
 }
 
 // BlocklistState ist der Stand einer Liste (fuer Seite und API).
@@ -82,6 +110,11 @@ type blocklists struct {
 	kick    chan struct{}
 	base    string // Basis-URL (Tests setzen einen eigenen Server)
 	client  *http.Client
+
+	// index.json und Laendersperre
+	catalog   []BlocklistInfo // aus index.json (leer = feste Liste)
+	countries []geoCountry    // Laender aus index.json (Auswahl im Formular)
+	geo       geoSets         // Laenderlisten fuer die Laendersperre je Host
 }
 
 func newBlocklists() *blocklists {
@@ -101,7 +134,7 @@ func (b *blocklists) Blocked(a netip.Addr) bool {
 func (m *Module) blEnabled(ctx context.Context) []string {
 	var out []string
 	for _, id := range strings.Split(m.core.SettingOr(ctx, setBlocklists, ""), ",") {
-		if _, ok := blocklistByID(strings.TrimSpace(id)); ok {
+		if m.bl.known(strings.TrimSpace(id)) {
 			out = append(out, strings.TrimSpace(id))
 		}
 	}
@@ -137,7 +170,11 @@ func (m *Module) blRebuild(ctx context.Context) {
 		lists = append(lists, b.nets[id])
 	}
 	b.mu.Unlock()
-	set := shield.BuildSet(lists, m.blAllow(ctx))
+	allow := m.blAllow(ctx)
+	b.geo.mu.Lock()
+	b.geo.allow = allow // Ausnahmen gelten auch fuer die Laendersperre
+	b.geo.mu.Unlock()
+	set := shield.BuildSet(lists, allow)
 	if set.Total() == 0 { // nichts eingeschaltet oder noch nichts geladen: nicht "aktiv"
 		set = nil
 	}
@@ -150,6 +187,8 @@ func (m *Module) blLoadCache(ctx context.Context) {
 	if dir == "" {
 		return
 	}
+	m.blLoadIndexCache()
+	m.geoLoadCache(ctx)
 	for _, id := range m.blEnabled(ctx) {
 		f, err := os.Open(filepath.Join(dir, id+".txt"))
 		if err != nil {
@@ -176,7 +215,7 @@ func (m *Module) blLoadCache(ctx context.Context) {
 func (b *blocklists) stateOf(id string) *BlocklistState {
 	st := b.state[id]
 	if st == nil {
-		info, _ := blocklistByID(id)
+		info, _ := b.byID(id)
 		st = &BlocklistState{BlocklistInfo: info}
 		b.state[id] = st
 	}
@@ -185,7 +224,9 @@ func (b *blocklists) stateOf(id string) *BlocklistState {
 
 // blFetch laedt eine Liste (nur bei Aenderung) und speichert sie zwischen.
 func (m *Module) blFetch(ctx context.Context, id string) error {
-	info, _ := blocklistByID(id)
+	m.bl.mu.Lock()
+	info, _ := m.bl.byID(id)
+	m.bl.mu.Unlock()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.bl.base+info.File, nil)
 	if err != nil {
 		return err
@@ -247,6 +288,9 @@ func (m *Module) blFetch(ctx context.Context, id string) error {
 
 // blRefresh laedt alle eingeschalteten Listen und baut die Sperrliste neu.
 func (m *Module) blRefresh(ctx context.Context) {
+	if err := m.blFetchIndex(ctx); err != nil && ctx.Err() == nil {
+		m.log.Warn("cdn64 blocklist index not loaded", "err", err)
+	}
 	for _, id := range m.blEnabled(ctx) {
 		if err := m.blFetch(ctx, id); err != nil && ctx.Err() == nil {
 			m.log.Warn("cdn64 blocklist not loaded", "list", id, "err", err)
@@ -255,6 +299,7 @@ func (m *Module) blRefresh(ctx context.Context) {
 			m.bl.mu.Unlock()
 		}
 	}
+	m.geoRefresh(ctx)
 	m.blRebuild(ctx)
 }
 
@@ -292,9 +337,10 @@ func (m *Module) blStates(ctx context.Context) []BlocklistState {
 	}
 	m.bl.mu.Lock()
 	defer m.bl.mu.Unlock()
-	out := make([]BlocklistState, 0, len(Blocklists))
-	for _, info := range Blocklists {
+	out := make([]BlocklistState, 0, len(m.bl.list()))
+	for _, info := range m.bl.list() {
 		st := *m.bl.stateOf(info.ID)
+		st.BlocklistInfo = info // Name und Text koennen sich mit index.json aendern
 		st.Enabled = on[info.ID]
 		out = append(out, st)
 	}
@@ -305,7 +351,7 @@ func (m *Module) blStates(ctx context.Context) []BlocklistState {
 func (m *Module) blSave(ctx context.Context, enabled []string, allow string) error {
 	var ids []string
 	for _, id := range enabled {
-		if _, ok := blocklistByID(id); !ok {
+		if !m.bl.known(id) {
 			return ferr("blocklists", "cdn64.bl.err_list")
 		}
 		if !slices.Contains(ids, id) {
