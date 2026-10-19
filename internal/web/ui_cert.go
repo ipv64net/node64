@@ -113,7 +113,7 @@ func (s *Server) uiCertUsers(ctx context.Context) map[int64][]string {
 		}
 	}
 	if id > 0 {
-		out[id] = []string{"Node64-Oberfläche"}
+		out[id] = []string{"Node64 UI"}
 	}
 	return out
 }

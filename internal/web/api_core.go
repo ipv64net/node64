@@ -134,7 +134,7 @@ func (s *Server) apiModuleToggle(w http.ResponseWriter, r *http.Request) {
 func (s *Server) apiAudit(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	before, _ := strconv.ParseInt(r.URL.Query().Get("before"), 10, 64)
-	list, err := s.Store.AuditList(r.Context(), limit, before)
+	list, err := s.Store.AuditListFiltered(r.Context(), limit, before, auditAreas[r.URL.Query().Get("area")])
 	if err != nil {
 		writeErr(w, 500, "database error")
 		return

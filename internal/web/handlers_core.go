@@ -620,7 +620,11 @@ func (s *Server) settingsLogging(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) auditLog(w http.ResponseWriter, r *http.Request) {
 	before, _ := strconv.ParseInt(r.URL.Query().Get("before"), 10, 64)
-	entries, err := s.Store.AuditList(r.Context(), 100, before)
+	area := r.URL.Query().Get("area")
+	if auditAreas[area] == nil {
+		area = ""
+	}
+	entries, err := s.Store.AuditListFiltered(r.Context(), 100, before, auditAreas[area])
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -630,7 +634,7 @@ func (s *Server) auditLog(w http.ResponseWriter, r *http.Request) {
 		next = entries[len(entries)-1].ID
 	}
 	v := s.view(r, "audit.title")
-	v.Data = map[string]any{"Entries": entries, "Next": next}
+	v.Data = map[string]any{"Entries": entries, "Next": next, "Area": area, "Areas": auditAreaOrder}
 	s.render(w, r, http.StatusOK, "audit", v)
 }
 

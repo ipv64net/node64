@@ -309,7 +309,7 @@ func TestUICertificate(t *testing.T) {
 	if hello("other.test") == fallback || s.Store.SettingOr(ctx, setUICert, "") != strconv.FormatInt(c.ID, 10) {
 		t.Fatal("fixed certificate not used")
 	}
-	if got, _ := mgr.Get(ctx, c.ID); len(got.UsedBy) != 1 || got.UsedBy[0] != "Node64-Oberfläche" {
+	if got, _ := mgr.Get(ctx, c.ID); len(got.UsedBy) != 1 || got.UsedBy[0] != "Node64 UI" {
 		t.Fatalf("used by: %v", got.UsedBy)
 	}
 	if err := s.saveUICert(req, "999"); err == nil {

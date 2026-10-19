@@ -72,6 +72,10 @@ func (s *Server) apiMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if s.Certs != nil {
+		s.Certs.Metrics(ctx, m)
+	}
+
 	for _, mod := range s.Modules.Modules() {
 		if p, ok := mod.(module.MetricsProvider); ok && s.Modules.IsRunning(mod.Info().Name) {
 			p.Metrics(ctx, m)

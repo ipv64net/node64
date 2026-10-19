@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -236,14 +237,25 @@ func (s *Store) Audit(ctx context.Context, e AuditEntry) error {
 
 // AuditList liefert die neuesten Eintraege, optional nur mit ID < before.
 func (s *Store) AuditList(ctx context.Context, limit int, before int64) ([]AuditEntry, error) {
+	return s.AuditListFiltered(ctx, limit, before, nil)
+}
+
+// AuditListFiltered wie AuditList, nur Aktionen, die mit einem der Praefixe beginnen (leer = alle).
+func (s *Store) AuditListFiltered(ctx context.Context, limit int, before int64, prefixes []string) ([]AuditEntry, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 100
 	}
-	q := `SELECT id, time, actor, action, target, details, ip, origin FROM audit_log`
+	q := `SELECT id, time, actor, action, target, details, ip, origin FROM audit_log WHERE 1=1`
 	args := []any{}
 	if before > 0 {
-		q += ` WHERE id < ?`
+		q += ` AND id < ?`
 		args = append(args, before)
+	}
+	if len(prefixes) > 0 {
+		q += ` AND (` + strings.TrimSuffix(strings.Repeat(`substr(action, 1, ?) = ? OR `, len(prefixes)), ` OR `) + `)`
+		for _, p := range prefixes {
+			args = append(args, len(p), p)
+		}
 	}
 	q += ` ORDER BY id DESC LIMIT ?`
 	args = append(args, limit)
