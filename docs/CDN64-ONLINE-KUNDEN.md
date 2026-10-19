@@ -8,7 +8,8 @@ Anschluss nur IPv6 hat (DS-Lite) oder du keine Ports freigeben kannst oder wills
 
 Node64 baut einen verschlüsselten Tunnel zu beiden Servern auf (QUIC, sonst TCP; Port 7844, sonst 443). Besucher
 rufen deinen Namen auf, das DNS zeigt auf die Server, die Server reichen die Verbindung durch den Tunnel zu deiner
-Node. Fällt ein Server aus, nimmt ipv64 ihn nach rund einer Minute aus dem DNS; der andere übernimmt.
+Node. Load-Balancing ist eingebaut: Das DNS nennt beide Server, die Besucher verteilen sich so automatisch auf
+Nürnberg und Falkenstein. Fällt ein Server aus, nimmt ipv64 ihn nach rund einer Minute aus dem DNS; der andere übernimmt.
 
 ## Voraussetzungen
 
