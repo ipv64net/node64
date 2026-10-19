@@ -22,6 +22,22 @@ func onlineLocs(c *Check, accLocs int) int {
 	return n
 }
 
+// OnlinePoints: belegte Online-Messstellen (Check x Standort) wie der hub zaehlt: alle Online- und Hybrid-Checks
+// des Accounts, auch pausierte; ohne exclude (der gerade bearbeitete Check).
+func (m *Module) OnlinePoints(ctx context.Context, exclude string, accLocs int) int {
+	list, err := m.st.Checks(ctx)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, c := range list {
+		if c.Token != exclude && (c.Execution == "online" || c.Execution == "both") {
+			n += onlineLocs(c, accLocs)
+		}
+	}
+	return n
+}
+
 // CheckDailyCost: Online-Messungen pro Tag fuer einen Check (0 = lokal, pausiert oder Push).
 func CheckDailyCost(c *Check, accLocs int) int {
 	if c.Execution == "local" || c.Execution == "" || c.Paused || c.Type == checks.TypePush || c.Interval <= 0 {

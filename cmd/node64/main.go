@@ -306,6 +306,7 @@ func run() error {
 	})
 	hcModule.SetLinked(syncClient.Linked)
 	hcModule.SetQuota(syncClient.Quota)
+	hcModule.SetAccount(func() (string, int) { st := syncClient.State(); return st.Plan, st.OnlineLimit })
 	hcModule.SetAPI(ipv64Key) // Online-Checks direkt ueber die API v2, solange kein Sync besteht
 	hcModule.SetPushForward(syncClient.ForwardPush)
 	hcModule.SetRunRemote(syncClient.RunRemote)

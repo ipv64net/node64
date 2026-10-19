@@ -1720,6 +1720,13 @@
     "closed": "resolved",
     "last_raw": "Last measurement in detail",
     "delete_confirm": "Delete check “{name}” with all its data?",
+    "acct": {
+      "points": "Online measuring points {used} / {limit}",
+      "points_hint": "Online and hybrid checks × locations against the limit of your account class",
+      "plan": "{plan} · up to {locs} location(s) per check",
+      "split": "online {online} · local {local} · hybrid {both}",
+      "nodes": "Nodes: {on} online / {all}"
+    },
     "execution": {
       "local": "Local on nodes",
       "online": "Online at ipv64 only",

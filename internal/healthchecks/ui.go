@@ -134,6 +134,17 @@ type listData struct {
 	Dir       string
 	Counts    map[string]int
 	Total     int
+	// Konto-Leiste (verknuepft) und Filter nach Ausfuehrungsort/Node
+	Acct  *acctBar
+	Peers []Peer
+}
+
+// acctBar: Klasse, belegte Online-Messstellen, Ausfuehrungsorte und Nodes (wie im Portal).
+type acctBar struct {
+	Plan                  string
+	Used, Limit, Locs     int
+	Online, Local, Hybrid int
+	NodesOn, NodesAll     int
 }
 
 var listStates = []string{"up", "down", "stabilizing", "flapping", "dependent", "unchecked", "quota", "pending", "paused"}
@@ -239,12 +250,40 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 	}
 	certs := m.st.CertExpiries(ctx)
 	q := r.URL.Query()
-	f := map[string]string{"state": q.Get("state"), "type": q.Get("type"), "tag": q.Get("tag"), "group": q.Get("group"), "q": strings.TrimSpace(q.Get("q"))}
+	f := map[string]string{"state": q.Get("state"), "type": q.Get("type"), "tag": q.Get("tag"), "group": q.Get("group"), "q": strings.TrimSpace(q.Get("q")),
+		"exec": q.Get("exec"), "node": q.Get("node")}
 	d := listData{Types: checks.Types, States: listStates, Filter: f, Sort: q.Get("sort"), Dir: q.Get("dir"), Counts: map[string]int{}}
 	tagSet, grpSet := map[string]bool{}, map[string]bool{}
 	if m.quota != nil {
 		d.QuotaToday, d.QuotaLimit, _ = m.quota()
 		d.QuotaNear = d.QuotaLimit > 0 && d.QuotaToday*10 >= d.QuotaLimit*9
+	}
+	if m.linked != nil && m.linked() {
+		d.Peers = m.peers(ctx)
+		a := &acctBar{NodesAll: len(d.Peers)}
+		for _, p := range d.Peers {
+			if p.Online || p.Self {
+				a.NodesOn++
+			}
+		}
+		if m.account != nil {
+			a.Plan, a.Limit = m.account()
+		}
+		if m.quota != nil {
+			_, _, a.Locs = m.quota()
+		}
+		a.Used = m.OnlinePoints(ctx, "", a.Locs)
+		for _, c := range list {
+			switch c.Execution {
+			case "online":
+				a.Online++
+			case "both":
+				a.Hybrid++
+			default:
+				a.Local++
+			}
+		}
+		d.Acct = a
 	}
 	syncErrs := m.OutboxErrors(ctx)
 	if key, cl := m.apiMode(ctx); key != "" {
@@ -282,6 +321,12 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if f["group"] != "" && c.Group != f["group"] {
+			continue
+		}
+		if f["exec"] != "" && c.Execution != f["exec"] {
+			continue
+		}
+		if f["node"] != "" && !measuredBy(c, f["node"]) {
 			continue
 		}
 		if f["q"] != "" && !strings.Contains(strings.ToLower(c.Name+" "+c.Target+" "+c.Group+" "+strings.Join(c.Tags, " ")), strings.ToLower(f["q"])) {
@@ -1331,6 +1376,17 @@ func (m *Module) bulkTag(r *http.Request, c *Check, add bool, tag string) bool {
 	}
 	m.audit(r, "check.update", c)
 	return true
+}
+
+// measuredBy: misst diese Node den Check (leere Node-Liste = der Besitzer)?
+func measuredBy(c *Check, node string) bool {
+	if c.Execution == "online" {
+		return false
+	}
+	if len(c.Nodes) == 0 {
+		return node == selfNodeID() && (c.Owner == "" || c.Owner == "self")
+	}
+	return contains(c.Nodes, node)
 }
 
 // quotaReached: Tageskontingent der Online-Messungen aufgebraucht (nur verknuepft).

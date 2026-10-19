@@ -53,6 +53,8 @@ type Module struct {
 	api        *ipv64api.Key                    // zentraler API-Key: Online-Checks ohne Sync (online_api.go)
 	groupRole  GroupRole                        // lokale Gruppe: wer benachrichtigt (groupnotify.go), nil = keine Gruppe
 	groupPeers func(ctx context.Context) []Peer // Nodes der lokalen Gruppe (Auswahl der Messstellen)
+	// Account-Klasse und Online-Messstellen-Limit, nil = standalone
+	account func() (plan string, onlineLimit int)
 	// wer in der lokalen Gruppe benachrichtigt (Anzeige, groupnotify.go)
 	groupNotifier func(ctx context.Context, nodes []string) (key, name string)
 	onl           onlineCache
@@ -169,6 +171,9 @@ func (m *Module) SetLinked(fn func() bool) { m.linked = fn }
 
 // SetQuota liefert das Tageskontingent der Online-Checks (Hinweis in der Uebersicht).
 func (m *Module) SetQuota(fn func() (today, limit, locs int)) { m.quota = fn }
+
+// SetAccount: Account-Klasse und Limit der Online-Messstellen (Check x Standort) aus dem Sync.
+func (m *Module) SetAccount(fn func() (plan string, onlineLimit int)) { m.account = fn }
 
 // SetRunRemote installiert "Jetzt pruefen" ueber den hub (andere messende Nodes).
 func (m *Module) SetRunRemote(fn func(token string) bool) { m.runRemote = fn }

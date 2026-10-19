@@ -11,6 +11,13 @@
 	</div>
 </div>
 
+{{with $d.Acct}}<div class="d-flex flex-wrap gap-2 mb-2 small" id="hc-acct">
+	<span class="badge {{if and (gt .Limit 0) (ge .Used .Limit)}}text-bg-danger{{else}}text-bg-success{{end}}" title="{{$.T "hc.acct.points_hint"}}">{{$.T "hc.acct.points" "used" .Used "limit" (or .Limit "∞")}}</span>
+	{{if .Plan}}<span class="badge text-bg-light">{{$.T "hc.acct.plan" "plan" .Plan "locs" .Locs}}</span>{{end}}
+	<span class="badge text-bg-light"><i class="bi bi-cloud"></i> {{$.T "hc.acct.split" "online" .Online "local" .Local "both" .Hybrid}}</span>
+	<span class="badge text-bg-light"><i class="bi bi-hdd-network"></i> {{$.T "hc.acct.nodes" "on" .NodesOn "all" .NodesAll}}</span>
+	<a class="ms-auto small" href="/plans">{{$.T "plans.title"}}</a>
+</div>{{end}}
 <form method="get" action="/healthchecks" class="row g-2 mb-3 align-items-end" data-autosubmit>
 	<div class="col-12 col-md-4">
 		<input class="form-control form-control-sm" type="search" name="q" value="{{$f.q}}" placeholder="{{.T "common.search"}} …">
@@ -27,6 +34,18 @@
 			{{range $d.Types}}<option value="{{.}}"{{if eq (print .) $f.type}} selected{{end}}>{{$.T (print "hc.type." .)}}</option>{{end}}
 		</select>
 	</div>
+	{{if $d.Acct}}<div class="col-6 col-md-2">
+		<select class="form-select form-select-sm" name="exec">
+			<option value="">{{.T "hc.form.execution"}}: {{.T "common.all"}}</option>
+			{{range $e := split "local online both"}}<option value="{{$e}}"{{if eq $e $f.exec}} selected{{end}}>{{$.T (print "hc.execution." $e)}}</option>{{end}}
+		</select>
+	</div>{{end}}
+	{{if gt (len $d.Peers) 1}}<div class="col-6 col-md-2">
+		<select class="form-select form-select-sm" name="node">
+			<option value="">{{.T "hc.form.nodes"}}: {{.T "common.all"}}</option>
+			{{range $d.Peers}}<option value="{{.ID}}"{{if eq .ID $f.node}} selected{{end}}>{{.Name}}</option>{{end}}
+		</select>
+	</div>{{end}}
 	{{if $d.AllGrps}}<div class="col-6 col-md-2">
 		<select class="form-select form-select-sm" name="group">
 			<option value="">{{.T "hc.group.label"}}: {{.T "common.all"}}</option>
@@ -41,7 +60,7 @@
 	</div>
 	<div class="col-6 col-md-2 d-flex gap-2">
 		<button class="btn btn-outline-secondary btn-sm" type="submit">{{.T "hc.filter"}}</button>
-		{{if or $f.q $f.state $f.type $f.tag $f.group}}<a class="btn btn-link btn-sm" href="/healthchecks">{{.T "hc.reset"}}</a>{{end}}
+		{{if or $f.q $f.state $f.type $f.tag $f.group $f.exec $f.node}}<a class="btn btn-link btn-sm" href="/healthchecks">{{.T "hc.reset"}}</a>{{end}}
 	</div>
 	{{if $d.Sort}}<input type="hidden" name="sort" value="{{$d.Sort}}"><input type="hidden" name="dir" value="{{$d.Dir}}">{{end}}
 </form>

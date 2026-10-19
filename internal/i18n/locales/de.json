@@ -1720,6 +1720,13 @@
     "closed": "beendet",
     "last_raw": "Letzte Messung im Detail",
     "delete_confirm": "Check „{name}“ mit allen Messdaten löschen?",
+    "acct": {
+      "points": "Online-Messstellen {used} / {limit}",
+      "points_hint": "Online- und Hybrid-Checks × Standorte gegen das Limit deiner Account-Klasse",
+      "plan": "{plan} · bis zu {locs} Standort(e) je Check",
+      "split": "online {online} · lokal {local} · hybrid {both}",
+      "nodes": "Nodes: {on} online / {all}"
+    },
     "execution": {
       "local": "Lokal auf Nodes",
       "online": "Nur online bei ipv64",
