@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"net/http"
 
 	"github.com/ipv64net/node64/internal/dns64/dnsserver"
 	"github.com/ipv64net/node64/internal/edge"
@@ -36,11 +37,17 @@ func (m *Module) startDoHEdge(x *encrypted, names []string, srv *dnsserver.Serve
 		}
 	}
 	for {
-		err := m.ingress.Set(Name, []edge.Route{rt})
+		m.edgeMu.Lock()
+		doh := rt
+		m.edgeDoH = &doh
+		m.edgeMu.Unlock()
+		err := m.pushEdge()
 		var taken *edge.NameTakenError
 		if !errors.As(err, &taken) {
 			if err == nil {
-				x.ingress = m.ingress
+				x.release = m.releaseDoH
+			} else {
+				m.releaseDoH()
 			}
 			return err
 		}
@@ -54,6 +61,36 @@ func (m *Module) startDoHEdge(x *encrypted, names []string, srv *dnsserver.Serve
 			return err
 		}
 	}
+}
+
+// pushEdge meldet die Routen von DNS64 beim Eingang an: DoH (falls ueber den Eingang) und die Hinweisseite bei
+// "Internet aus" (falls eine Gruppe gesperrt sein kann). Beide sind Ersatz-Routen desselben Abnehmers.
+func (m *Module) pushEdge() error {
+	if m.ingress == nil {
+		return nil
+	}
+	m.edgeMu.Lock()
+	defer m.edgeMu.Unlock()
+	var routes []edge.Route
+	if m.edgeDoH != nil {
+		routes = append(routes, *m.edgeDoH)
+	}
+	if m.edgeHint {
+		routes = append(routes, edge.Route{Fallback: true, HTTP: http.HandlerFunc(m.hintPage), Allow: m.offNow})
+	}
+	if len(routes) == 0 {
+		m.ingress.Remove(Name)
+		return nil
+	}
+	return m.ingress.Set(Name, routes)
+}
+
+// releaseDoH meldet DoH beim Eingang ab (Stopp der verschluesselten Dienste).
+func (m *Module) releaseDoH() {
+	m.edgeMu.Lock()
+	m.edgeDoH = nil
+	m.edgeMu.Unlock()
+	_ = m.pushEdge()
 }
 
 func dropName(names *[]string, n string) bool {

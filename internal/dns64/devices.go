@@ -58,7 +58,7 @@ func (m *Module) encView(r *http.Request, c config) encView {
 		row := encRow{Proto: p.proto, Label: p.label, On: p.on}
 		if e != nil && e.enc != nil {
 			row.Addr, row.Err = e.enc.addrs[p.proto], e.enc.errs[p.proto]
-			if p.proto == "doh" && e.enc.ingress != nil { // ueber den Eingang: dessen Port-Fehler zeigen
+			if p.proto == "doh" && e.enc.release != nil { // ueber den Eingang: dessen Port-Fehler zeigen
 				if _, er := m.edgeState(); er != "" {
 					row.Err = er
 				}

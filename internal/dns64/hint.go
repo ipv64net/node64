@@ -9,7 +9,6 @@ import (
 
 	"github.com/ipv64net/node64/internal/dns64/dnsserver"
 	"github.com/ipv64net/node64/internal/dns64/groups"
-	"github.com/ipv64net/node64/internal/edge"
 )
 
 // Hinweisseite bei "Internet aus" (Phase G4): Geraete einer gesperrten Gruppe bekommen fuer fremde Namen die
@@ -17,8 +16,6 @@ import (
 // Seite (Ersatz-Route nur fuer gesperrte Geraete, alle anderen bekommen die Standardseite). Bei https:// zeigt der
 // Browser nur einen Zertifikatsfehler, das laesst sich ohne Zertifikat fuer die fremde Domain nicht aendern.
 // Angemeldet wird die Route nur, solange eine Gruppe gesperrt sein kann (Knopf oder Zeitplan "Internet aus").
-
-const hintOwner = "dns64-hint"
 
 // offPossible: eine Gruppe hat einen aktiven Sperr-Knopf oder einen eingeschalteten Zeitplan "Internet aus".
 func offPossible(list []groups.Group) bool {
@@ -40,12 +37,10 @@ func (m *Module) syncHintRoute(list []groups.Group, running bool) {
 	if m.ingress == nil {
 		return
 	}
-	if !offPossible(list) || !running {
-		m.ingress.Remove(hintOwner)
-		return
-	}
-	err := m.ingress.Set(hintOwner, []edge.Route{{Fallback: true, HTTP: http.HandlerFunc(m.hintPage), Allow: m.offNow}})
-	if err != nil {
+	m.edgeMu.Lock()
+	m.edgeHint = running && offPossible(list)
+	m.edgeMu.Unlock()
+	if err := m.pushEdge(); err != nil {
 		m.log.Warn("dns64 hint page not registered at the edge", "err", err)
 	}
 }

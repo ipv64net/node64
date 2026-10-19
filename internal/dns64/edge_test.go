@@ -47,8 +47,8 @@ func TestDoHViaEdge(t *testing.T) {
 	if err := m.Start(ctx); err != nil || m.running() == nil {
 		t.Fatalf("start: %v %s", err, m.startError())
 	}
-	if x := m.running().enc; x.ingress == nil || x.doh != nil || x.errs["doh"] != "" {
-		t.Fatalf("doh not on the entrance: ingress=%v own=%v err=%q", x.ingress != nil, x.doh != nil, x.errs["doh"])
+	if x := m.running().enc; x.release == nil || x.doh != nil || x.errs["doh"] != "" {
+		t.Fatalf("doh not on the entrance: ingress=%v own=%v err=%q", x.release != nil, x.doh != nil, x.errs["doh"])
 	}
 	for _, cl := range m.Ports(ctx, true) {
 		if cl.Purpose == "DoH" {
@@ -141,7 +141,7 @@ func TestDoHEdgeNameTaken(t *testing.T) {
 	if err := m.Start(ctx); err != nil || m.running() == nil {
 		t.Fatalf("start: %v %s", err, m.startError())
 	}
-	if x := m.running().enc; x.ingress == nil || x.errs["doh"] != "" {
+	if x := m.running().enc; x.release == nil || x.errs["doh"] != "" {
 		t.Fatalf("doh not registered: %q", x.errs["doh"])
 	}
 	owner := map[string]string{}

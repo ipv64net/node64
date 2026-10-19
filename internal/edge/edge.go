@@ -249,8 +249,7 @@ func (e *Edge) Set(owner string, routes []Route) error {
 		}
 		for _, rt := range list {
 			for _, want := range norm {
-				// Ersatz-Routen teilen sich nur, wenn sie verschiedene Protokolle bedienen (HTTPS-Handler bzw. nur Port 80)
-				if rt.Fallback && want.Fallback && (rt.Handler != nil && want.Handler != nil || rt.HTTP != nil && want.HTTP != nil) {
+				if rt.Fallback && want.Fallback {
 					e.mu.Unlock()
 					return &NameTakenError{Name: "*", Owner: o} // Ersatz-Route hat schon ein anderer Abnehmer
 				}

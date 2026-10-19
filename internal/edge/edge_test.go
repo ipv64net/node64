@@ -539,21 +539,20 @@ func TestEdgeFallbackAndOwnCert(t *testing.T) {
 }
 
 // Ersatz-Route nur fuer Port 80 (Hinweisseite von DNS64): antwortet bei unbekanntem Host nur Clients, die Allow
-// zulaesst, sonst bleibt die Standardseite; sie vertraegt sich mit einer HTTPS-Ersatz-Route eines anderen Abnehmers.
+// zulaesst, sonst bleibt die Standardseite; neben der HTTPS-Ersatz-Route desselben Abnehmers, ein anderer Abnehmer
+// darf keine Ersatz-Route setzen.
 func TestFallbackHTTPOnly(t *testing.T) {
 	e, cfg := newEdge(t, nil)
 	ok := func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "doh") }
-	if err := e.Set("dns", []Route{{Path: "/dns-query", Handler: http.HandlerFunc(ok), Fallback: true, NoHTTP: true}}); err != nil {
-		t.Fatal(err)
-	}
 	var blocked atomic.Bool
 	blocked.Store(true)
 	hint := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "gesperrt") })
-	if err := e.Set("hint", []Route{{HTTP: hint, Fallback: true, Allow: func(netip.Addr) bool { return blocked.Load() }}}); err != nil {
+	if err := e.Set("dns", []Route{{Path: "/dns-query", Handler: http.HandlerFunc(ok), Fallback: true, NoHTTP: true},
+		{HTTP: hint, Fallback: true, Allow: func(netip.Addr) bool { return blocked.Load() }}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.Set("other", []Route{{HTTP: hint, Fallback: true}}); err == nil {
-		t.Fatal("second http fallback accepted")
+		t.Fatal("fallback of a second owner accepted")
 	}
 	if err := e.Set("bad", []Route{{Fallback: true}}); err == nil {
 		t.Fatal("fallback without handler accepted")

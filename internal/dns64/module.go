@@ -69,14 +69,17 @@ type Module struct {
 
 	g module.Guards
 
-	ctl     sync.Mutex // serialisiert Start, Stop und Neustart
-	mu      sync.Mutex
-	life    context.CancelFunc // nil = Modul aus
-	retryWG sync.WaitGroup
-	eng     *engine        // nil = DNS-Dienst laeuft nicht
-	ingress *edge.Edge     // gemeinsamer Eingang des Kerns (DoH auf dem HTTPS-Port), nil = keiner
-	certs   *certs.Manager // zentrale Zertifikatsverwaltung, nil = keine (Tests)
-	lastErr string         // letzter Fehler beim Start (z. B. Port belegt)
+	ctl      sync.Mutex // serialisiert Start, Stop und Neustart
+	mu       sync.Mutex
+	life     context.CancelFunc // nil = Modul aus
+	retryWG  sync.WaitGroup
+	eng      *engine        // nil = DNS-Dienst laeuft nicht
+	ingress  *edge.Edge     // gemeinsamer Eingang des Kerns (DoH auf dem HTTPS-Port), nil = keiner
+	edgeMu   sync.Mutex     // edgeDoH, edgeHint: Routen von DNS64 am Eingang (edge.go)
+	edgeDoH  *edge.Route    // DoH ueber den Eingang
+	edgeHint bool           // Hinweisseite bei "Internet aus"
+	certs    *certs.Manager // zentrale Zertifikatsverwaltung, nil = keine (Tests)
+	lastErr  string         // letzter Fehler beim Start (z. B. Port belegt)
 
 	recs atomic.Pointer[recordTable]                 // eigene DNS-Eintraege (records.go)
 	grp  *groups.Resolver                            // Geraetegruppen (groupstore.go)
@@ -319,9 +322,10 @@ func (m *Module) stopLocked(ctx context.Context) error {
 	e := m.eng
 	m.life, m.eng, m.lastErr = nil, nil, ""
 	m.mu.Unlock()
-	if m.ingress != nil {
-		m.ingress.Remove(hintOwner)
-	}
+	m.edgeMu.Lock()
+	m.edgeHint = false // DoH meldet encrypted.stop ab
+	m.edgeMu.Unlock()
+	_ = m.pushEdge()
 	m.retryWG.Wait()
 	if e == nil {
 		return nil

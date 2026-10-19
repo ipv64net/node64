@@ -20,7 +20,6 @@ import (
 	"github.com/quic-go/quic-go"
 
 	"github.com/ipv64net/node64/internal/dns64/dnsserver"
-	"github.com/ipv64net/node64/internal/edge"
 )
 
 // Verschluesselte Anfragen der Geraete im Heimnetz: DoH (RFC 8484, eigener HTTPS-Port), DoT (RFC 7858, 853/TCP)
@@ -39,7 +38,7 @@ type encrypted struct {
 
 	dot     *dns.Server
 	doh     *http.Server
-	ingress *edge.Edge // DoH beim gemeinsamen Eingang angemeldet
+	release func() // DoH beim gemeinsamen Eingang abmelden (nil = nicht angemeldet)
 	doq     *quic.Listener
 	mu      sync.Mutex
 	qcon    map[*quic.Conn]struct{}
@@ -130,8 +129,8 @@ func (x *encrypted) stop(ctx context.Context) {
 	if x.doh != nil {
 		_ = x.doh.Shutdown(ctx)
 	}
-	if x.ingress != nil {
-		x.ingress.Remove(Name)
+	if x.release != nil {
+		x.release()
 	}
 	if x.doq != nil {
 		_ = x.doq.Close()
