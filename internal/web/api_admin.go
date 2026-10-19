@@ -20,6 +20,7 @@ func (s *Server) apiAdminRoutes() {
 	s.mux.Handle("GET /api/keys", s.auth(s.apiKeysList))
 	s.mux.Handle("POST /api/keys", s.auth(s.apiKeysCreate))
 	s.mux.Handle("DELETE /api/keys/{id}", s.auth(s.apiKeysDelete))
+	s.mux.Handle("POST /api/backup", s.auth(s.apiBackupArchive))
 	s.mux.Handle("POST /api/backup/restore", s.auth(s.apiRestore))
 	s.mux.Handle("POST /api/export", s.auth(s.apiExport))
 	s.mux.Handle("POST /api/import", s.auth(s.apiImport))
@@ -90,9 +91,11 @@ func (s *Server) apiKeysDelete(w http.ResponseWriter, r *http.Request) {
 
 // ---------------------------------------------------------------- Wiederherstellen, Export, Import, Reset
 
-// apiRestore nimmt eine Datenbank (Body roh oder multipart-Feld "file") und startet neu.
+// apiRestore nimmt eine Datenbank oder ein Archiv (Body roh oder multipart-Feld "file"; Passwort des Archivs im
+// Feld "password" oder Header X-Backup-Password) und startet neu.
 func (s *Server) apiRestore(w http.ResponseWriter, r *http.Request) {
 	src := io.Reader(r.Body)
+	pw := r.Header.Get("X-Backup-Password")
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
 		f, _, err := r.FormFile("file")
 		if err != nil {
@@ -101,9 +104,18 @@ func (s *Server) apiRestore(w http.ResponseWriter, r *http.Request) {
 		}
 		defer f.Close()
 		src = f
+		if p := r.PostFormValue("password"); p != "" {
+			pw = p
+		}
 	}
-	n, err := s.restoreFrom(r.Context(), src)
+	n, err := s.restoreAny(r.Context(), src, pw)
 	switch {
+	case errors.Is(err, errPasswordNeeded):
+		writeErr(w, http.StatusUnauthorized, err.Error())
+		return
+	case errors.Is(err, errPasswordWrong):
+		writeErr(w, http.StatusForbidden, err.Error())
+		return
 	case errors.Is(err, errRestoreInvalid):
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return

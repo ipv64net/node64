@@ -277,16 +277,27 @@
 				</form>
 			</div>
 		</div>
-		<div class="card">
+		<div class="card" id="backup">
 			<div class="card-header"><i class="bi bi-database text-info"></i> {{.T "backup.title"}}</div>
 			<div class="card-body">
 				<p class="small text-body-secondary">{{.T "backup.hint"}}</p>
-				<a class="btn btn-outline-primary btn-sm mb-3" href="/settings/backup"><i class="bi bi-download"></i> {{.T "backup.download"}}</a>
+				<form method="post" action="/settings/backup" class="mb-1">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<label class="form-label" for="backup_pw">{{.T "backup.archive"}}</label>
+					<div class="input-group input-group-sm">
+						<input class="form-control" type="password" id="backup_pw" name="password" minlength="8" required placeholder="{{.T "backup.password"}}" autocomplete="new-password">
+						<button class="btn btn-outline-primary" type="submit"><i class="bi bi-download"></i> {{.T "backup.download"}}</button>
+					</div>
+					<div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="stats" id="backup_stats"><label class="form-check-label small" for="backup_stats">{{.T "backup.stats"}}</label></div>
+					<div class="form-text">{{.T "backup.archive_hint"}}</div>
+				</form>
+				<div class="small mb-3"><a href="/settings/backup">{{.T "backup.download_db"}}</a></div>
 				<form method="post" action="/settings/restore" enctype="multipart/form-data" class="mb-3">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<label class="form-label" for="restore_file">{{.T "backup.restore"}}</label>
 					<div class="input-group input-group-sm">
-						<input class="form-control" type="file" id="restore_file" name="file" accept=".db,.sqlite,.sqlite3" required>
+						<input class="form-control" type="file" id="restore_file" name="file" accept=".n64backup,.db,.sqlite,.sqlite3" required>
+						<input class="form-control" type="password" name="password" placeholder="{{.T "backup.password"}}" autocomplete="off">
 						<button class="btn btn-outline-danger" type="submit" data-confirm="{{.T "backup.restore_confirm"}}">{{.T "backup.restore_btn"}}</button>
 					</div>
 					<div class="form-text">{{.T "backup.restore_hint"}}</div>

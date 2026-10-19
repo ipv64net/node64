@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ipv64net/node64/internal/netstat"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -91,6 +92,11 @@ func run() error {
 	if err := applyReset(cfg, log); err != nil {
 		return err
 	}
+	ensureTempDir(cfg, log)
+	// vor secret.key: ein Archiv bringt seinen Schluessel mit
+	if err := applyRestore(cfg, log); err != nil {
+		return err
+	}
 	box, err := secrets.Load(cfg.SecretKeyPath())
 	if err != nil {
 		return fmt.Errorf("secret key: %w", err)
@@ -98,10 +104,6 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-
-	if err := applyRestore(cfg, log); err != nil {
-		return err
-	}
 
 	st, err := store.Open(ctx, cfg.DBPath(), cfg.BackupDir(), logger.Slog())
 	if err != nil {
@@ -418,9 +420,30 @@ func applyReset(cfg *config.Config, log *slog.Logger) error {
 	return nil
 }
 
-// applyRestore setzt eine hochgeladene Datenbank (node64.db.restore) ein und
-// sichert die bisherige vorher unter backups/.
+// ensureTempDir: Das Image hat kein /tmp (FROM scratch). Ohne nutzbares Temp-Verzeichnis scheitern grosse
+// Uploads (multipart) und SQLite-Zwischendateien; dann <DATA_DIR>/tmp nehmen (beim Start geleert).
+func ensureTempDir(cfg *config.Config, log *slog.Logger) {
+	if f, err := os.CreateTemp("", "probe-*"); err == nil {
+		f.Close()
+		os.Remove(f.Name())
+		return
+	}
+	dir := filepath.Join(cfg.DataDir, "tmp")
+	_ = os.RemoveAll(dir)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		log.Warn("temp dir", "err", err)
+		return
+	}
+	os.Setenv("TMPDIR", dir)
+	os.Setenv("SQLITE_TMPDIR", dir)
+}
+
+// applyRestore setzt eine Wiederherstellung ein: ein Archiv (restore.new) oder eine hochgeladene Datenbank
+// (node64.db.restore). Was ersetzt wird, bleibt vorher unter backups/ erhalten.
 func applyRestore(cfg *config.Config, log *slog.Logger) error {
+	if err := applyRestoreArchive(cfg, log); err != nil {
+		return err
+	}
 	restore := filepath.Join(cfg.DataDir, web.RestoreFileName)
 	if _, err := os.Stat(restore); err != nil {
 		return nil
@@ -442,6 +465,50 @@ func applyRestore(cfg *config.Config, log *slog.Logger) error {
 		return fmt.Errorf("apply restore: %w", err)
 	}
 	log.Warn("database restored from upload")
+	return nil
+}
+
+// applyRestoreArchive setzt den Inhalt von restore.new ein (Datenbank, secret.key, Dateien der Module); ersetzte
+// Dateien wandern nach backups/pre-restore-<Zeit>/.
+func applyRestoreArchive(cfg *config.Config, log *slog.Logger) error {
+	src := filepath.Join(cfg.DataDir, web.RestoreDirName)
+	if st, err := os.Stat(src); err != nil || !st.IsDir() {
+		return nil
+	}
+	keep := filepath.Join(cfg.BackupDir(), "pre-restore-"+time.Now().UTC().Format("20060102-150405"))
+	n := 0
+	err := filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		rel, _ := filepath.Rel(src, p)
+		dst := filepath.Join(cfg.DataDir, rel)
+		if _, err := os.Stat(dst); err == nil {
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(keep, rel)), 0o750); err != nil {
+				return err
+			}
+			if err := os.Rename(dst, filepath.Join(keep, rel)); err != nil {
+				return fmt.Errorf("keep %s: %w", rel, err)
+			}
+		}
+		if strings.HasSuffix(dst, ".db") {
+			for _, suffix := range []string{"-wal", "-shm"} {
+				_ = os.Remove(dst + suffix)
+			}
+		}
+		if err := os.MkdirAll(filepath.Dir(dst), 0o750); err != nil {
+			return err
+		}
+		n++
+		return os.Rename(p, dst)
+	})
+	if err != nil {
+		return fmt.Errorf("apply restore archive: %w", err)
+	}
+	if err := os.RemoveAll(src); err != nil {
+		return err
+	}
+	log.Warn("backup archive restored", "files", n, "previous", keep)
 	return nil
 }
 

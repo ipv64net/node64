@@ -35,6 +35,7 @@ const (
 
 func (s *Server) backupRoutes() {
 	s.mux.Handle("GET /settings/backup", s.auth(s.backupDownload))
+	s.mux.Handle("POST /settings/backup", s.auth(s.backupArchiveDownload))
 	s.mux.Handle("POST /settings/restore", s.auth(s.restoreUpload))
 	s.mux.Handle("POST /settings/export", s.auth(s.exportConfig))
 	s.mux.Handle("POST /settings/import", s.auth(s.importConfig))
@@ -54,7 +55,7 @@ func bodyLimitFor(path string) int64 {
 
 // backupDownload liefert eine konsistente Kopie der Datenbank.
 func (s *Server) backupDownload(w http.ResponseWriter, r *http.Request) {
-	tmp, err := os.CreateTemp("", "agent-backup-*.db")
+	tmp, err := os.CreateTemp(s.Cfg.DataDir, ".backup-*.db") // im Container gibt es kein /tmp
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -81,8 +82,16 @@ func (s *Server) restoreUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
-	n, err := s.restoreFrom(r.Context(), f)
+	n, err := s.restoreAny(r.Context(), f, r.PostFormValue("password"))
 	switch {
+	case errors.Is(err, errPasswordNeeded), errors.Is(err, errPasswordWrong):
+		key := "backup.password_needed"
+		if errors.Is(err, errPasswordWrong) {
+			key = "backup.password_wrong"
+		}
+		s.flash(w, r, "danger", v.T(key))
+		http.Redirect(w, r, "/settings#backup", http.StatusSeeOther)
+		return
 	case errors.Is(err, errRestoreInvalid):
 		msg := v.T("backup.invalid")
 		if detail := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(err.Error(), errRestoreInvalid.Error()), ":")); detail != "" {

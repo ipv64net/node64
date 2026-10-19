@@ -3521,10 +3521,56 @@
         "tags": [
           "Node"
         ],
-        "summary": "Konsistentes Backup der Datenbank (SQLite-Datei)",
+        "summary": "Nur die Datenbank (SQLite-Datei, ohne Schlüssel der Node)",
         "responses": {
           "200": {
             "description": "application/vnd.sqlite3"
+          }
+        },
+        "description": "Für ein vollständiges Backup, das auch auf einer neuen Node funktioniert, POST /backup mit Passwort nehmen."
+      },
+      "post": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Vollständiges Backup als verschlüsseltes Archiv (.n64backup)",
+        "description": "Datenbank, Schlüssel der Node (secret.key), DNS64-Freigaben, Zertifikatsdateien; mit stats=true auch DNS64-Abfrage-Log und CDN64-Statistik. Verschlüsselt mit XChaCha20-Poly1305, Schlüssel per Argon2id aus dem Passwort.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "password"
+                ],
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "minLength": 8
+                  },
+                  "stats": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "application/octet-stream (Archiv)"
+          },
+          "422": {
+            "description": "Passwort zu kurz",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -7935,8 +7981,8 @@
         "tags": [
           "Node"
         ],
-        "summary": "Datenbank wiederherstellen (Node startet neu)",
-        "description": "Body: die Datenbank roh (application/octet-stream) oder multipart mit Feld file. Höchstens 1 GB; die Datei wird vorher geprüft.",
+        "summary": "Backup wiederherstellen (Node startet neu)",
+        "description": "Body: Archiv (.n64backup) oder Datenbank, roh (application/octet-stream) oder multipart mit Feld file. Passwort des Archivs im Header X-Backup-Password oder im multipart-Feld password. Höchstens 1 GB; die Datei wird vorher geprüft. Was ersetzt wird, bleibt unter /data/backups.",
         "requestBody": {
           "required": true,
           "content": {
@@ -7953,6 +7999,9 @@
                   "file": {
                     "type": "string",
                     "format": "binary"
+                  },
+                  "password": {
+                    "type": "string"
                   }
                 }
               }
@@ -7971,7 +8020,8 @@
                       "type": "boolean"
                     },
                     "bytes": {
-                      "type": "integer"
+                      "type": "integer",
+                      "description": "Datenbank: Bytes; Archiv: Anzahl Dateien"
                     }
                   }
                 }
@@ -7987,8 +8037,39 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Archiv braucht ein Passwort",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Passwort passt nicht zum Archiv",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "X-Backup-Password",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Passwort des Archivs"
+          }
+        ]
       }
     },
     "/export": {
