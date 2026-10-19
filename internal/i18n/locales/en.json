@@ -1895,6 +1895,8 @@
       "sources_hint": "Online and hybrid checks at ipv64 need the healthchecks sync (connection to the hub servers).",
       "locations": "Online locations",
       "locations_hint": "Multiple locations from account class Supporter. Every online measuring point counts against the class's healthcheck limit, local measurements never do.",
+      "loc_class": "higher account class",
+      "points_used": "Online measuring points without this check: {used} of {limit} used.",
       "policy": "Down when …",
       "policy_hint": "With several measuring points (node, Nuremberg, Falkenstein) this rule decides when the check counts as down. If only some report a failure, the check is “partially down”.",
       "notify_degraded": "Also notify on \\u201cpartially down\\u201d",

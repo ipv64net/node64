@@ -1895,6 +1895,8 @@
       "sources_hint": "Online- und Hybrid-Messung bei ipv64 brauchen den Healthchecks-Sync (Verbindung zu den hub-Servern).",
       "locations": "Online-Standorte",
       "locations_hint": "Mehrere Standorte ab Account-Klasse Supporter. Jede Online-Messstelle zählt gegen das Healthcheck-Limit der Klasse, lokale Messungen nie.",
+      "loc_class": "höhere Account-Klasse",
+      "points_used": "Online-Messstellen ohne diesen Check: {used} von {limit} belegt.",
       "policy": "Gestört, wenn …",
       "policy_hint": "Mit mehreren Messstellen (Node, Nürnberg, Falkenstein) legt diese Regel fest, wann der Check als gestört gilt. Meldet nur ein Teil eine Störung, ist der Check „teilweise gestört“.",
       "notify_degraded": "Auch bei „teilweise gestört“ benachrichtigen",

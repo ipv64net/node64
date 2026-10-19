@@ -1,6 +1,7 @@
 package healthchecks
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -236,6 +237,9 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 			}
 			if c.Type == checks.TypeDNS && checks.DNSNeedsNode(c.Params) {
 				return errors.New("execution: a DNS check against a private DNS server or the node's public address runs only locally")
+			}
+			if err := m.checkOnlineLimit(c, in.Locations); err != nil {
+				return err
 			}
 		default:
 			return errors.New("execution must be local, online or both")
@@ -1009,4 +1013,33 @@ func (m *Module) auditBulk(r *http.Request, action, tag string, done, total int)
 		target = "tag " + tag + ": " + target
 	}
 	m.auditText(r, "check.bulk_"+action, target)
+}
+
+// checkOnlineLimit prueft Online-/Hybrid-Checks gegen die Account-Klasse wie das Portal: hoechstens so viele
+// Standorte je Check wie erlaubt und genug freie Online-Messstellen. Ohne Kontodaten (standalone, API-Modus) nichts.
+func (m *Module) checkOnlineLimit(c *Check, locations []string) error {
+	if m.quota == nil || m.account == nil {
+		return nil
+	}
+	_, _, accLocs := m.quota()
+	_, limit := m.account()
+	n := len(locations)
+	if n == 0 {
+		n = len(c.Locations)
+	}
+	if accLocs > 0 && n > accLocs {
+		return fmt.Errorf("locations: your account class allows %d location(s) per check", accLocs)
+	}
+	if limit <= 0 {
+		return nil
+	}
+	tmp := *c
+	if locations != nil {
+		tmp.Locations = locations
+	}
+	used := m.OnlinePoints(context.Background(), c.Token, accLocs)
+	if need := onlineLocs(&tmp, accLocs); used+need > limit {
+		return fmt.Errorf("online limit reached: %d of %d measuring points used, this check needs %d more – reduce locations or measure locally on a node", used, limit, need)
+	}
+	return nil
 }

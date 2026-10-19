@@ -609,6 +609,8 @@ type formData struct {
 	APIMode                                    bool // Online-Check direkt ueber die API v2 (online_api.go)
 	// DNS-Check: Auswahl im Formular
 	DNSRecordTypes, DNSExpects []string
+	// Online-Messstellen des Accounts ohne diesen Check und Limit der Klasse (0 = unbegrenzt/unbekannt)
+	PointsUsed, PointsLimit int
 }
 
 type channelOpt struct {
@@ -992,6 +994,10 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 	if d.Linked && m.quota != nil {
 		d.QuotaToday, d.QuotaLimit, d.AccLocs = m.quota()
 		d.ProjOther = m.DailyProjection(r.Context(), d.Token, d.AccLocs)
+		d.PointsUsed = m.OnlinePoints(r.Context(), d.Token, d.AccLocs)
+		if m.account != nil {
+			_, d.PointsLimit = m.account()
+		}
 	}
 	if d.Linked || (m.groupPeers != nil && len(m.groupPeers(r.Context())) > 0) { // auch in der lokalen Gruppe ohne hub
 		d.Peers = m.peers(r.Context())
