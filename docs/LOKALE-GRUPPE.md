@@ -1,5 +1,11 @@
 # Lokale Gruppe (Node64)
 
+> **Ab 2026-10-19 heißt die lokale Gruppe „Cluster“** (eigener Menüpunkt `/cluster`, Healthchecks 2.16.0). Neu:
+> Nodes auch in verschiedenen Netzen, nur HTTPS (mit Bindung an die Kopplung, Zertifikat muss nicht gültig sein),
+> gleicher ipv64-Account oder alle ohne (dann alles rein lokal), Aussetzen bei grundlegender Änderung, Schalter je
+> Modul und Bereich, Zertifikate als erstes weiteres Modul (`/peer/v2/sync`). Plan und Schnittstellen:
+> [PLAN-NODE64-CLUSTER.md](PLAN-NODE64-CLUSTER.md). Der Healthchecks-Ablauf unten gilt weiter.
+
 Stand 2026-10-14 (Healthchecks 2.6.0). Beschreibt, was im Betrieb wirklich passiert. Code: `internal/peer`
 (Protokoll, Abgleich, Rollen) und in `internal/healthchecks` die Dateien `peersync.go`, `peerdata.go`,
 `peermaint.go` und `groupnotify.go`.

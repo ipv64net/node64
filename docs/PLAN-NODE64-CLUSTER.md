@@ -62,6 +62,16 @@ Regeln für alle: nur eigene Dateien stagen (`git add -- <pfad>`), nie `-a/-A`, 
 deployen. i18n-Dateien nur mit kleinen Einfügungen (Edit-Werkzeug, vorher frisch lesen). Keine CHANGELOG-Einträge
 (sammelt die Hauptsitzung), außer PROXY64-Bonus (cdn64-CHANGELOG de+en).
 
+## Stand 2026-10-19 (gebaut, nicht deployt)
+
+- 8ab770d Schnittstellen · 655f056/602b1b1 v2-Abgleich + Healthchecks-Schalter · c72f709/c1936cf Transport
+  (HTTPS über HTTPS-Port oder Dualport, Konto 0, Aussetzen) · b9f9116/a5e5cdb Seite `/cluster` · 11c8890 Zertifikate ·
+  cbe4dc9 Healthchecks 2.16.0 · 5f792fd PROXY64 1.17.1 (Verbindungsweg, Bonus).
+- Live lokal getestet (zwei Nodes ohne ipv64, nur Web-Port per Dualport): Kopplung, http→https, Klartext an
+  `/peer/` = 426, Check-Abgleich, Healthchecks-Schalter aus/an (holt nach), Zertifikat übernommen und Löschen verteilt.
+- Zertifikate: erneuert die Node, die zuletzt ausgestellt hat; eine andere übernimmt erst bei einem Drittel der
+  Erneuerungsfrist (LE: 10 Tage). Löschen auf einer Node löscht überall.
+
 ## Später (nicht jetzt, aber nicht verbauen)
 
 - PROXY64 (Hosts, Zugriffslisten, Einstellungen) und DNS64 (Zonen, Einträge, Listen) als Provider.
