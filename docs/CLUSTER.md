@@ -84,8 +84,36 @@ Benachrichtigungskanäle werden nicht abgeglichen. Neue Module hängen sich als 
    wurde (auch Änderungen, die auf ihr selbst gemacht wurden); Messwerte ab dem letzten Stand. Dauerhaft
    entfernen nur mit „Aus dem Cluster nehmen“.
 
-Eine eigene Meldung „Cluster-Node nicht erreichbar“ gibt es (noch) nicht; sichtbar ist es in der Oberfläche, im
-Log und per Prometheus (`node64_group_member_up`).
+**Meldung:** Ist eine Node länger als **5 min** nicht erreichbar oder ausgesetzt, kommt die Benachrichtigung
+„🔴 Cluster: Node … nicht erreichbar“ (Grund: letzter Fehler bzw. `suspended: <grund>`), bei Rückkehr „🟢 … wieder
+erreichbar“ (Kanäle unter Benachrichtigungen, Link auf `/cluster`). Es meldet genau eine Node: die mit der
+kleinsten Kennung unter den erreichbaren; die Entwarnung schickt, wer gemeldet hat. Das Dashboard zeigt dann oben
+einen Hinweis und in der Kachel **Cluster** (nur mit Mitgliedern) den Zustand jeder Node.
+
+## Split-Brain (Verbindung zwischen Teilen des Clusters länger weg)
+
+Es gibt **keinen Anführer und keine Mehrheitsregel**: Jeder Teil arbeitet allein weiter, nichts wird gesperrt.
+Nach der Wiederverbindung holt jede Node ab ihrem letzten Stand alles nach (das Protokoll hält je Eintrag nur den
+letzten Stand, es läuft also nicht über), und alle landen beim selben Ergebnis:
+
+| Was | Während der Trennung | Nach der Wiederverbindung |
+|---|---|---|
+| Eintrag nur auf einer Seite geändert/neu | normal | kommt überall an |
+| derselbe Eintrag auf beiden Seiten geändert | jede Seite hat ihren Stand | **jüngere Änderung gewinnt, als Ganzes** (kein Zusammenführen einzelner Felder); die ältere geht verloren |
+| auf einer Seite gelöscht, auf der anderen geändert | – | jüngere gewinnt: Änderung nach dem Löschen holt den Eintrag zurück, sonst bleibt er gelöscht |
+| Löschvermerke | Checks/Wartungsfenster dauerhaft; Module über v2 (Zertifikate) 30 Tage | Trennung > 30 Tage: ein gelöschtes Zertifikat kann von der anderen Seite zurückkommen |
+| Messwerte | jede Node misst selbst | werden nachgeholt (Messwerte gehören je einer Node, kein Konflikt) |
+| Benachrichtigungen | **jede Seite meldet für sich** – Checks, die auf beiden Seiten gemessen werden, können doppelt gemeldet werden (verknüpft mit ipv64 bewertet und meldet der hub, dann nicht) | wieder genau eine Node |
+| Meldung „Node nicht erreichbar“ | jede Seite meldet die Nodes der anderen | Entwarnung von denselben Nodes |
+| Zertifikate | ist die zuständige Node auf der anderen Seite, erneuert diese Seite ab einem Drittel der Frist selbst | jüngeres Zertifikat gewinnt überall (höchstens einmal doppelt bestellt) |
+| Mitglieder entfernen/aufnehmen | erreicht nur die eigene Seite | nicht automatisch nachgeholt: entfernte Node auf der anderen Seite ggf. dort auch entfernen |
+
+**Beispiel drei Nodes, A+B getrennt von C:** A und B gleichen weiter untereinander ab und melden als Paar
+(A meldet „C nicht erreichbar“); C arbeitet allein und meldet „A“ und „B nicht erreichbar“. Checks, die nur C misst,
+meldet C; Checks, die A/B und C messen, melden beide Seiten. Nach der Wiederverbindung bekommt C alles von A und B,
+A und B alles von C; bei Änderungen am selben Eintrag gewinnt die jüngere – **auch wenn sie von C (der Minderheit)
+kommt**. Die Uhrzeit entscheidet, daher NTP auf allen Hosts (bei mehr als 5 min Abweichung sprechen die Nodes ohnehin
+nicht miteinander).
 
 ## Ausgesetzte Nodes
 
