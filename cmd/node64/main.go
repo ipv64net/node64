@@ -63,6 +63,8 @@ func main() {
 			return
 		case "healthcheck":
 			os.Exit(healthcheck())
+		case "reset-password":
+			os.Exit(resetPassword(os.Args[2:]))
 		}
 	}
 	if err := run(); err != nil {

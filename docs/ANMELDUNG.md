@@ -68,3 +68,20 @@ Login-Seite steht dann „Mit Passkey anmelden“, ohne Benutzernamen.
 - Anlegen unter **Einstellungen → Anmeldung → Passkeys**. Mehrere Passkeys je Benutzer sind möglich, z. B. Handy und
   YubiKey.
 - Passwort und App-2FA bleiben daneben bestehen. Der Passkey ersetzt sie nicht.
+
+## Passwort vergessen (Notfallzugang)
+
+Es gibt keinen Weg über die Oberfläche oder per E-Mail. Wer Zugriff auf den Docker-Host hat, setzt das Passwort per
+Befehl im laufenden Container neu (der Node muss nicht angehalten werden):
+
+```bash
+docker exec node64 /node64 reset-password
+```
+
+- Ohne Angaben erzeugt der Befehl ein zufälliges Passwort (20 Zeichen) und gibt es einmal aus. Eigenes Passwort:
+  `-password 'NEUES-PASSWORT'` (mindestens 10 Zeichen; landet dann aber in der Shell-History).
+- Mehrere Benutzer: `-user NAME`.
+- Authenticator-App und Wiederherstellungscodes verloren: `-disable-2fa` schaltet die Zwei-Faktor-Anmeldung ab.
+- Alle Sitzungen des Benutzers werden beendet; der Vorgang steht im Audit-Log (`settings.password`,
+  „reset-password (Kommandozeile)“).
+- Mit docker compose: `docker compose exec node /node64 reset-password` (Dienstname wie in der compose-Datei).
