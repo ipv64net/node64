@@ -96,6 +96,9 @@ func selfAddr(u string, port int) string {
 // HTTPSPort ist der Port, ueber den der Cluster diese Node erreicht (0 = keiner, dann kein Cluster: ErrNoHTTPS).
 func (m *Manager) HTTPSPort() int { return m.httpsPort() }
 
+// TLSAvailable: diese Node ist per TLS erreichbar (HTTPS-Port oder Web-Port per Dualport), der Cluster ist moeglich.
+func (m *Manager) TLSAvailable() bool { return m.httpsPort() > 0 }
+
 func (m *Manager) httpsPort() int {
 	if m.d.HTTPSPort == nil {
 		return 0
