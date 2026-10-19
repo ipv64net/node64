@@ -8,7 +8,8 @@
 			{{if $d.Row.Retrying}}<i class="bi bi-arrow-repeat text-warning fs-6" title="{{.T "hc.retrying"}}"></i>{{end}}
 			{{if $d.Row.Maint}}<span class="badge text-bg-secondary"><i class="bi bi-wrench"></i> {{.T "hc.maintenance"}}</span>{{end}}
 		</h1>
-		{{if $d.Row.Stale}}<div class="alert alert-warning py-2 small mb-2"><i class="bi bi-hourglass-split"></i> <strong>{{.T "hc.unchecked_title"}}</strong> {{.T "hc.unchecked_detail" "ago" (.Ago $d.Row.LastAt) "time" (.Time $d.Row.LastAt) "state" (.T (print "hc.state." $d.Row.LastSeen))}}{{if $d.StaleNodes}} {{.T "hc.unchecked_nodes" "nodes" $d.StaleNodes}}{{end}}</div>{{end}}
+		{{if $d.Row.Quota}}<div class="alert alert-secondary py-2 small mb-2"><i class="bi bi-hourglass-split"></i> <strong>{{.T "hc.quota.paused_title"}}</strong> {{.T "hc.quota.paused_detail" "time" (.Time $d.Row.LastAt) "state" (.T (print "hc.state." $d.Row.LastSeen))}} <a href="/plans">{{.T "hc.plans_link"}}</a></div>
+		{{else if $d.Row.Stale}}<div class="alert alert-warning py-2 small mb-2"><i class="bi bi-hourglass-split"></i> <strong>{{.T "hc.unchecked_title"}}</strong> {{.T "hc.unchecked_detail" "ago" (.Ago $d.Row.LastAt) "time" (.Time $d.Row.LastAt) "state" (.T (print "hc.state." $d.Row.LastSeen))}}{{if $d.StaleNodes}} {{.T "hc.unchecked_nodes" "nodes" $d.StaleNodes}}{{end}}</div>{{end}}
 		{{if $d.Row.SyncErr}}<div class="alert alert-danger py-2 small mb-2"><i class="bi bi-cloud-slash"></i> {{.T "hc.sync_rejected"}}: {{$d.Row.SyncErr}}<br>{{.T "hc.sync_rejected_hint"}}{{if contains $d.Row.SyncErr "limit"}} <a href="/plans">{{.T "hc.plans_link"}}</a>{{end}}</div>{{end}}
 		<div class="text-body-secondary small">
 			<span class="badge text-bg-light">{{.T (print "hc.type." $c.Type)}}</span>

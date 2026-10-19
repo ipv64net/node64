@@ -73,6 +73,7 @@ type row struct {
 	Stale    bool      // seit 3 Intervallen (mind. 5 min) nicht gemessen, z. B. messende Node offline
 	LastAt   time.Time // letzte Messung
 	LastSeen string    // Zustand bei der letzten Messung (bei Stale steht in State "unchecked")
+	Quota    bool      // Stale, weil das Tageskontingent aufgebraucht ist (Online-Check, State "quota")
 	CertDays int       // Restlaufzeit des Zertifikats (HTTPS), -1 = unbekannt
 	CertTill time.Time // Ablaufdatum
 }
@@ -135,7 +136,7 @@ type listData struct {
 	Total     int
 }
 
-var listStates = []string{"up", "down", "stabilizing", "flapping", "dependent", "unchecked", "pending", "paused"}
+var listStates = []string{"up", "down", "stabilizing", "flapping", "dependent", "unchecked", "quota", "pending", "paused"}
 
 func (m *Module) liveRuntime(c *Check) scheduler.Runtime {
 	if s := m.scheduler(); s != nil {
@@ -157,6 +158,9 @@ func (m *Module) rowOf(ctx context.Context, lang string, c *Check, pills map[str
 	r.LastAt, r.Stale = rt.LastCheck, stale(c, rt.LastCheck, r.State)
 	if r.Stale { // nicht ueberwacht: der letzte Zustand ist unbekannt geworden, nicht mehr "OK"
 		r.LastSeen, r.State = r.State, "unchecked"
+		if c.Execution == "online" && m.quotaReached() { // Online-Check: ipv64 misst bis Mitternacht nicht
+			r.State, r.Quota = "quota", true
+		}
 	}
 	switch {
 	case c.Type == checks.TypePush:
@@ -357,7 +361,7 @@ func groupRows(rows []row, names []string, none string) []group {
 	return res
 }
 
-var stateOrder = map[string]int{"down": 0, "flapping": 1, "dependent": 2, "stabilizing": 3, "pending": 4, "up": 5, "paused": 6}
+var stateOrder = map[string]int{"down": 0, "flapping": 1, "dependent": 2, "degraded": 2, "unchecked": 3, "stabilizing": 3, "quota": 4, "pending": 4, "up": 5, "paused": 6}
 
 func sortRows(rows []row, key string, desc bool) {
 	less := func(i, j int) bool {
@@ -1327,6 +1331,15 @@ func (m *Module) bulkTag(r *http.Request, c *Check, add bool, tag string) bool {
 	}
 	m.audit(r, "check.update", c)
 	return true
+}
+
+// quotaReached: Tageskontingent der Online-Messungen aufgebraucht (nur verknuepft).
+func (m *Module) quotaReached() bool {
+	if m.quota == nil {
+		return false
+	}
+	today, limit, _ := m.quota()
+	return limit > 0 && today >= limit
 }
 
 // stale: der Check wird nicht mehr gemessen – die letzte Messung ist aelter als 3 Intervalle (mind. 5 min), etwa

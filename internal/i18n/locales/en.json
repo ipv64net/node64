@@ -1597,7 +1597,9 @@
     },
     "quota": {
       "reached": "Daily quota for online checks reached ({today} of {limit}). Online checks and push evaluation at ipv64 pause until midnight; local checks of this node keep running.",
-      "near": "Daily quota for online checks almost reached: {today} of {limit} today. After that, online checks pause until midnight."
+      "near": "Daily quota for online checks almost reached: {today} of {limit} today. After that, online checks pause until midnight.",
+      "paused_title": "Daily quota used up.",
+      "paused_detail": "ipv64 does not measure this online check until midnight, then again automatically. Last measurement: {time}, state then: {state}. More measurements per day come with another account class."
     },
     "sync_rejected": "Rejected by ipv64",
     "sync_rejected_hint": "The change only applies locally. Reduce online measuring points (locations, online/hybrid) or upgrade the account class, then save again.",
@@ -1702,7 +1704,9 @@
       "json_mismatch": "JSON condition not met",
       "dns_mismatch": "DNS answer does not match",
       "dns_nxdomain": "Name does not exist",
-      "dnssec_failed": "DNSSEC not validated"
+      "dnssec_failed": "DNSSEC not validated",
+      "unchecked": "Not monitored",
+      "quota_exhausted": "Daily quota used up"
     },
     "reason": "Reason",
     "no_events": "No events yet.",
@@ -1743,7 +1747,8 @@
       "paused": "Paused",
       "unstable": "Unstable",
       "degraded": "Partially down",
-      "unchecked": "Not monitored"
+      "unchecked": "Not monitored",
+      "quota": "Quota used up"
     },
     "type": {
       "http": "HTTP(S)",

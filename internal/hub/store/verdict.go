@@ -165,15 +165,20 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		reason, message = "unchecked", "keine Messung mehr seit "+newest.UTC().Format("02.01. 15:04")+" UTC"
 		if names := nodeNames(ctx, tx, nodeIDs); len(names) > 0 {
 			message += " – nicht erreichbar: " + strings.Join(names, ", ")
+		} else if execution != "local" && s.DailyBlocked(userid) {
+			// Tageskontingent erschoepft: die Standorte messen bis Mitternacht nicht. Dafuer gibt es schon die eine
+			// Meldung "Kontingent erreicht", also hier still und mit dem eigentlichen Grund.
+			reason, message, silent = "quota_exhausted", "Tageskontingent aufgebraucht – Online-Messung pausiert bis Mitternacht", true
 		}
 		if !newest.IsZero() {
 			lastCheck = newest.UTC().Format(TimeFormat)
 		}
 	} else if old == scheduler.StatePending && overall == scheduler.StateUp {
 		var last string
-		_ = tx.QueryRowContext(ctx, `SELECT kind FROM hc2_events WHERE token = ? ORDER BY time DESC LIMIT 1`, token).Scan(&last)
+		var lastReason sql.NullString
+		_ = tx.QueryRowContext(ctx, `SELECT kind, reason FROM hc2_events WHERE token = ? ORDER BY time DESC LIMIT 1`, token).Scan(&last, &lastReason)
 		if last == "unchecked" {
-			kind, silent = "rechecked", false
+			kind, silent = "rechecked", lastReason.String == "quota_exhausted" // nach dem Kontingent-Wechsel um Mitternacht still
 		}
 	}
 	// Verspaetet gemeldeter Zustand einer Node (Node war offline oder der hub ohne Datenbank):
@@ -389,9 +394,10 @@ func inList(list []string, v string) bool {
 
 // UncheckedSweep bewertet Checks neu, fuer die seit mehr als 3 Intervallen (mind. 5 min) keine Messstelle mehr
 // gemeldet hat, z. B. weil die einzige messende Node offline ist. Ohne neue Messungen liefe sonst keine Bewertung,
-// und der Check bliebe beim letzten Zustand stehen. Nur der Housekeeper, einmal je Minute.
+// und der Check bliebe beim letzten Zustand stehen. Auch reine Online-Checks (ohne Push): misst ipv64 sie nicht mehr,
+// etwa weil das Tageskontingent aufgebraucht ist, steht das am Check. Nur der Housekeeper, einmal je Minute.
 func (s *Store) UncheckedSweep(ctx context.Context) (int, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT c.token FROM hc2_checks c WHERE c.deleted_at IS NULL AND c.paused = 0 AND c.execution IN ('local','both')
+	rows, err := s.db.QueryContext(ctx, `SELECT c.token FROM hc2_checks c WHERE c.deleted_at IS NULL AND c.paused = 0 AND (c.execution IN ('local','both') OR c.type <> 'push')
 		AND c.state NOT IN ('pending','paused')
 		AND NOT EXISTS (SELECT 1 FROM hc2_check_states st WHERE st.token = c.token AND st.updated_at > UTC_TIMESTAMP(3) - INTERVAL GREATEST(3 * c.interval_sec, 300) SECOND)
 		LIMIT 500`)

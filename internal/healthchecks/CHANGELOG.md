@@ -1,5 +1,12 @@
 # Änderungen – Healthchecks
 
+## 2.14.1 – 2026-10-19
+
+### Behoben
+- Tageskontingent aufgebraucht: Online-Checks zeigen „Kontingent aufgebraucht“ (Liste, Detailseite mit Hinweis bis Mitternacht) statt „Nicht überwacht“. Auch ipv64 bewertet sie so, still und ohne eigene Meldung je Check – die eine Meldung „Kontingent erreicht“ genügt; um Mitternacht geht es ebenso still weiter.
+- Erinnerungen bei Störung: bis zu 10080 Minuten (eine Woche) wie im Portal; bisher lehnte die Node Werte über 1440 ab.
+- Gründe „Nicht überwacht“ und „Tageskontingent aufgebraucht“ übersetzt; Sortierung nach Zustand kennt alle Zustände.
+
 ## 2.14.0 – 2026-10-19
 
 ### Neu

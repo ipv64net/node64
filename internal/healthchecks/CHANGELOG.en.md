@@ -1,5 +1,12 @@
 # Changes – Healthchecks
 
+## 2.14.1 – 2026-10-19
+
+### Fixed
+- Daily quota used up: online checks show “Quota used up” (list, detail page with a note until midnight) instead of “Not monitored”. ipv64 rates them the same way, silently and without a separate notification per check – the single “quota reached” notification is enough; at midnight it continues just as silently.
+- Reminders while down: up to 10080 minutes (one week) as in the portal; previously the node rejected values above 1440.
+- Reasons “Not monitored” and “Daily quota used up” translated; sorting by state knows all states.
+
 ## 2.14.0 – 2026-10-19
 
 ### New

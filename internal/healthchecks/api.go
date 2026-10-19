@@ -293,8 +293,8 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 	if c.TotalTimeout < c.ConnectTimeout || c.TotalTimeout > 120*time.Second {
 		return errors.New("timeout_seconds must be between connect_timeout_seconds and 120")
 	}
-	if c.RepeatMinutes < 0 || c.RepeatMinutes > 1440 {
-		return errors.New("repeat_minutes must be between 0 and 1440")
+	if c.RepeatMinutes < 0 || c.RepeatMinutes > 10080 { // wie im Portal: hoechstens eine Woche
+		return errors.New("repeat_minutes must be between 0 and 10080")
 	}
 	if len(c.Description) > 2000 {
 		return errors.New("description too long")

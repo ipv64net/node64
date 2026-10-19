@@ -263,7 +263,7 @@
 					<div class="form-text">{{.T "hc.form.channels_hint"}}</div>
 				</div>
 				{{end}}
-				<div class="col-6"><label class="form-label" for="repeat_minutes">{{.T "hc.form.repeat"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-bell"></i></span><input class="form-control" type="number" id="repeat_minutes" name="repeat_minutes" value="{{index $f "repeat_minutes"}}" min="0" max="1440"><span class="input-group-text">min</span></div><div class="form-text">{{.T "hc.form.repeat_hint"}}</div></div>
+				<div class="col-6"><label class="form-label" for="repeat_minutes">{{.T "hc.form.repeat"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-bell"></i></span><input class="form-control" type="number" id="repeat_minutes" name="repeat_minutes" value="{{index $f "repeat_minutes"}}" min="0" max="10080"><span class="input-group-text">min</span></div><div class="form-text">{{.T "hc.form.repeat_hint"}}</div></div>
 			</div></div>
 		</div>
 

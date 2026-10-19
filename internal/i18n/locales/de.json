@@ -1597,7 +1597,9 @@
     },
     "quota": {
       "reached": "Tageskontingent für Online-Messungen erreicht ({today} von {limit}). Online-Messungen und Push-Auswertung bei ipv64 pausieren bis Mitternacht; die lokalen Messungen dieser Node laufen weiter.",
-      "near": "Tageskontingent für Online-Messungen fast erreicht: {today} von {limit} heute. Danach pausieren die Online-Messungen bis Mitternacht."
+      "near": "Tageskontingent für Online-Messungen fast erreicht: {today} von {limit} heute. Danach pausieren die Online-Messungen bis Mitternacht.",
+      "paused_title": "Tageskontingent aufgebraucht.",
+      "paused_detail": "ipv64 misst diesen Online-Check bis Mitternacht nicht mehr, danach wieder automatisch. Letzte Messung: {time}, Zustand damals: {state}. Mehr Messungen pro Tag gibt es mit einer anderen Account-Klasse."
     },
     "sync_rejected": "Von ipv64 abgelehnt",
     "sync_rejected_hint": "Die Änderung gilt nur lokal. Online-Messstellen reduzieren (Standorte, Online/Hybrid) oder die Account-Klasse erhöhen, dann erneut speichern.",
@@ -1702,7 +1704,9 @@
       "json_mismatch": "JSON-Bedingung nicht erfüllt",
       "dns_mismatch": "DNS-Antwort passt nicht",
       "dns_nxdomain": "Name existiert nicht",
-      "dnssec_failed": "DNSSEC nicht validiert"
+      "dnssec_failed": "DNSSEC nicht validiert",
+      "unchecked": "Nicht überwacht",
+      "quota_exhausted": "Tageskontingent aufgebraucht"
     },
     "reason": "Grund",
     "no_events": "Noch keine Ereignisse.",
@@ -1743,7 +1747,8 @@
       "paused": "Pausiert",
       "unstable": "Instabil",
       "degraded": "Teilweise gestört",
-      "unchecked": "Nicht überwacht"
+      "unchecked": "Nicht überwacht",
+      "quota": "Kontingent aufgebraucht"
     },
     "type": {
       "http": "HTTP(S)",
