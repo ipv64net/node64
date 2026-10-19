@@ -147,7 +147,7 @@ func TestDirect(t *testing.T) {
 	s.targetOK = nil
 	s.applyConfig(s.apiCfg.Load()) // neuer Stand (wie nach einer Aenderung bei ipv64)
 	s.term.direct.Transport.(*http.Transport).CloseIdleConnections()
-	if code, body, _ := get(https, "https://d.test/other"); code != 502 || !strings.Contains(body, "keine öffentliche Adresse") {
+	if code, body, _ := get(https, "https://d.test/other"); code != 502 || !strings.Contains(body, "not a public address") {
 		t.Fatalf("ssrf: %d %q", code, body)
 	}
 	// Modus 1 mit Liste: abgewiesen schon beim Verbindungsaufbau (Port 80: 503)

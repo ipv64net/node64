@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/netip"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -273,11 +275,11 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 	}
 	if aerr == nil && !re.ACL.allows(ap.Addr()) {
 		st.Rejected.Add(1)
-		termPage(w, http.StatusForbidden, host, "Zugriff von dieser Adresse nicht erlaubt.", "Access from this address is not allowed.")
+		termPage(w, r, http.StatusForbidden, host, "Zugriff von dieser Adresse nicht erlaubt.", "Access from this address is not allowed.")
 		return
 	}
 	if re.Blocked != "" {
-		termPage(w, http.StatusServiceUnavailable, host, "Dieser Dienst ist vorübergehend nicht verfügbar.", "This service is temporarily unavailable.")
+		termPage(w, r, http.StatusServiceUnavailable, host, "Dieser Dienst ist vorübergehend nicht verfügbar.", "This service is temporarily unavailable.")
 		return
 	}
 	if s.term.h3 != nil && r.ProtoMajor < 3 {
@@ -323,7 +325,7 @@ func (s *Server) termError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, context.Canceled) {
 		return // Besucher hat abgebrochen
 	}
-	termPage(w, http.StatusBadGateway, hostOnly(r.Host), "Der Server hinter dieser Adresse ist gerade nicht erreichbar. Bitte später noch einmal versuchen.",
+	termPage(w, r, http.StatusBadGateway, hostOnly(r.Host), "Der Server hinter dieser Adresse ist gerade nicht erreichbar. Bitte später noch einmal versuchen.",
 		"The server behind this address is not reachable right now. Please try again later.")
 }
 
@@ -334,13 +336,37 @@ func termRedirect(w http.ResponseWriter, r *http.Request) {
 }
 
 // termPage: kleine Seite fuer Fehler (Deutsch und Englisch, ohne externe Quellen).
-func termPage(w http.ResponseWriter, code int, host, de, en string) {
+func termPage(w http.ResponseWriter, r *http.Request, code int, host, de, en string) {
+	lang, text := "en", en
+	if prefersGerman(r.Header.Get("Accept-Language")) {
+		lang, text = "de", de
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Language", lang)
+	w.Header().Set("Vary", "Accept-Language")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(code)
-	_, _ = fmt.Fprintf(w, `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+	_, _ = fmt.Fprintf(w, `<!doctype html><html lang="%s"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>%d</title><style>body{font-family:system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem;color:#222}@media(prefers-color-scheme:dark){body{background:#111;color:#ddd}}small{color:#888}</style></head>
-<body><h1>%d</h1><p>%s</p><p>%s</p><p><small>%s · CDN64</small></p></body></html>`, code, code, html.EscapeString(de), html.EscapeString(en), html.EscapeString(host))
+<body><h1>%d</h1><p>%s</p><p><small>%s · CDN64</small></p></body></html>`, lang, code, code, html.EscapeString(text), html.EscapeString(host))
+}
+
+// prefersGerman: steht Deutsch im Accept-Language vorn (hoechstes q, bei Gleichstand das erste)? Sonst Englisch.
+func prefersGerman(h string) bool {
+	best, bestQ := "", -1.0
+	for _, part := range strings.Split(h, ",") {
+		tag, params, _ := strings.Cut(strings.TrimSpace(part), ";")
+		q := 1.0
+		if v, ok := strings.CutPrefix(strings.TrimSpace(params), "q="); ok {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				q = f
+			}
+		}
+		if tag != "" && tag != "*" && q > bestQ {
+			best, bestQ = strings.ToLower(tag), q
+		}
+	}
+	return best == "de" || strings.HasPrefix(best, "de-")
 }
 
 func hostOnly(h string) string {

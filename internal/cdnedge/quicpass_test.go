@@ -81,7 +81,7 @@ func TestQUICPassthroughMode1(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go node.Run(ctx)
-	for i := 0; i < 400 && (s.peer("t1") == nil || !node.AllHave(tunnel.CapQUIC)); i++ {
+	for i := 0; i < 1200 && (s.peer("t1") == nil || !node.AllHave(tunnel.CapQUIC)); i++ { // bis 30 s (Windows unter Last)
 		time.Sleep(25 * time.Millisecond)
 	}
 	if p := s.peer("t1"); p == nil || !tunnel.HasCap(p.Caps, tunnel.CapQUIC) {
@@ -107,7 +107,7 @@ func TestQUICPassthroughMode1(t *testing.T) {
 	var local string
 	h3 := &http.Client{Timeout: 10 * time.Second, Transport: &http3.Transport{TLSClientConfig: &tls.Config{RootCAs: hpool},
 		Dial: func(ctx context.Context, _ string, tc *tls.Config, qc *quic.Config) (*quic.Conn, error) {
-			c, err := quic.DialAddr(ctx, cfg.ListenHTTPS, tc, qc)
+			c, err := quic.DialAddr(ctx, cfg.ListenHTTPS, tc, slowQUIC(qc))
 			if err == nil {
 				local = c.LocalAddr().String()
 			}
@@ -135,7 +135,7 @@ func TestQUICPassthroughMode1(t *testing.T) {
 	// ueber den Nachbarn: A hat keinen Tunnel, reicht an B
 	h3a := &http.Client{Timeout: 10 * time.Second, Transport: &http3.Transport{TLSClientConfig: &tls.Config{RootCAs: hpool},
 		Dial: func(ctx context.Context, _ string, tc *tls.Config, qc *quic.Config) (*quic.Conn, error) {
-			return quic.DialAddr(ctx, cfgA.ListenHTTPS, tc, qc)
+			return quic.DialAddr(ctx, cfgA.ListenHTTPS, tc, slowQUIC(qc))
 		}}}
 	resp, err = h3a.Get("https://h1.test/peer")
 	if err != nil {
@@ -152,7 +152,7 @@ func TestQUICPassthroughMode1(t *testing.T) {
 		ACL: &apiACL{Default: "deny", List: []string{"10.0.0.0/8"}}}}}))
 	h3b := &http.Client{Timeout: 3 * time.Second, Transport: &http3.Transport{TLSClientConfig: &tls.Config{RootCAs: hpool},
 		Dial: func(ctx context.Context, _ string, tc *tls.Config, qc *quic.Config) (*quic.Conn, error) {
-			return quic.DialAddr(ctx, cfg.ListenHTTPS, tc, qc)
+			return quic.DialAddr(ctx, cfg.ListenHTTPS, tc, slowQUIC(qc))
 		}}}
 	t0 := time.Now()
 	if resp, err := h3b.Get("https://h1.test/"); err == nil {
@@ -160,4 +160,14 @@ func TestQUICPassthroughMode1(t *testing.T) {
 		t.Fatal("http3 with deny list answered")
 	}
 	t.Logf("deny list: refused after %v", time.Since(t0))
+}
+
+// slowQUIC: laengere Fristen fuer Tests (UDP auf dem Loopback verliert unter Last Pakete, v. a. unter Windows).
+func slowQUIC(qc *quic.Config) *quic.Config {
+	c := &quic.Config{}
+	if qc != nil {
+		c = qc.Clone()
+	}
+	c.HandshakeIdleTimeout, c.MaxIdleTimeout = 20*time.Second, 30*time.Second
+	return c
 }

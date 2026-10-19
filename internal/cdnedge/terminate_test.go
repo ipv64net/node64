@@ -183,8 +183,19 @@ func TestTerminate(t *testing.T) {
 	co := client(cfgB.ListenHTTPS)
 	co.Transport.(*http.Transport).TLSClientConfig.RootCAs = offpool
 	resp, body = get(co, "GET", "https://off.test/", "", nil)
-	if resp.StatusCode != 502 || !strings.Contains(body, "nicht erreichbar") {
+	if resp.StatusCode != 502 || !strings.Contains(body, "not reachable") || !strings.Contains(body, `lang="en"`) { // Standard Englisch
 		t.Fatalf("offline: %d %q", resp.StatusCode, body)
+	}
+	dreq, _ := http.NewRequest("GET", "https://off.test/", nil)
+	dreq.Header.Set("Accept-Language", "fr;q=0.5, de-DE, en;q=0.8")
+	dresp, err := co.Do(dreq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, _ := io.ReadAll(dresp.Body)
+	dresp.Body.Close()
+	if dresp.StatusCode != 502 || !strings.Contains(string(db), "nicht erreichbar") || dresp.Header.Get("Content-Language") != "de" {
+		t.Fatalf("offline (de): %d %q", dresp.StatusCode, db)
 	}
 	// ohne Zertifikat: durchreichen wie Modus 1 (Stream "tls")
 	for len(kinds) > 0 {
@@ -383,6 +394,15 @@ func TestWildcardDepth(t *testing.T) {
 		}
 		if got != id {
 			t.Errorf("%s: host %d, want %d", name, got, id)
+		}
+	}
+}
+
+func TestPrefersGerman(t *testing.T) {
+	for h, want := range map[string]bool{"": false, "de": true, "de-AT,de;q=0.9": true, "en-US,en;q=0.9,de;q=0.8": false,
+		"fr;q=0.5, de-DE, en;q=0.8": true, "*": false, "DE-de": true, "deu": false} {
+		if got := prefersGerman(h); got != want {
+			t.Errorf("%q: %v", h, got)
 		}
 	}
 }

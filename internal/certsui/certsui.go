@@ -360,7 +360,7 @@ type dnsForm struct {
 
 func (u *UI) pageDNSNew(w http.ResponseWriter, r *http.Request) {
 	u.g.Render(w, r, http.StatusOK, Name+"/dns_form", "certs.dns.new", dnsForm{A: &certs.DNSAccount{Provider: "cloudflare", Values: map[string]string{}}, New: true,
-		Providers: certs.Providers()})
+		Providers: certs.ProvidersFor(u.g.Lang(r))})
 }
 
 func (u *UI) pageDNSEdit(w http.ResponseWriter, r *http.Request) {
@@ -370,7 +370,7 @@ func (u *UI) pageDNSEdit(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	u.g.Render(w, r, http.StatusOK, Name+"/dns_form", "certs.dns.edit", dnsForm{A: a, Providers: certs.Providers()})
+	u.g.Render(w, r, http.StatusOK, Name+"/dns_form", "certs.dns.edit", dnsForm{A: a, Providers: certs.ProvidersFor(u.g.Lang(r))})
 }
 
 func (u *UI) pageDNSSave(w http.ResponseWriter, r *http.Request) {
@@ -395,7 +395,7 @@ func (u *UI) pageDNSSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := u.m.SaveDNSAccount(ctx, a, values); err != nil {
 		a.Values = map[string]string{}
-		u.g.Render(w, r, http.StatusUnprocessableEntity, Name+"/dns_form", "certs.dns.new", dnsForm{A: a, New: isNew, Providers: certs.Providers(),
+		u.g.Render(w, r, http.StatusUnprocessableEntity, Name+"/dns_form", "certs.dns.new", dnsForm{A: a, New: isNew, Providers: certs.ProvidersFor(u.g.Lang(r)),
 			Error: u.certError(r, err)})
 		return
 	}

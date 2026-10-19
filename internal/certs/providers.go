@@ -169,10 +169,10 @@ func checkValues(id string, v map[string]string) (map[string]string, error) {
 			val = f.Default
 		}
 		if val == "" && !f.Optional {
-			return nil, invalid("fields", "%s missing", f.Label)
+			return nil, invalid("fields", "%s missing", textEN(f.Label))
 		}
 		if len(val) > 500 {
-			return nil, invalid("fields", "%s too long", f.Label)
+			return nil, invalid("fields", "%s too long", textEN(f.Label))
 		}
 		if val != "" {
 			out[f.Key] = val

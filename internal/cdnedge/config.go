@@ -98,19 +98,19 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	c.Name = strings.TrimSpace(c.Name)
 	if c.Name == "" {
-		return nil, errors.New("config: name fehlt")
+		return nil, errors.New("config: name missing")
 	}
 	if c.TunnelListen != "" && c.TLSCert == "" && c.PublicHost == "" {
-		return nil, errors.New("config: public_host fehlt (Zertifikat fuer den Tunnel)")
+		return nil, errors.New("config: public_host missing (certificate for the tunnel)")
 	}
 	if c.APIURL != "" && len(c.APISecret) < 32 {
-		return nil, errors.New("config: api_secret fehlt oder zu kurz (mindestens 32 Zeichen)")
+		return nil, errors.New("config: api_secret missing or too short (at least 32 characters)")
 	}
 	if c.PeerListen != "" && len(c.PeerSecret) < 32 {
-		return nil, errors.New("config: peer_secret fehlt oder zu kurz (mindestens 32 Zeichen)")
+		return nil, errors.New("config: peer_secret missing or too short (at least 32 characters)")
 	}
 	if strings.HasPrefix(c.DebugListen, ":") || strings.HasPrefix(c.DebugListen, "0.0.0.0") || strings.HasPrefix(c.DebugListen, "[::]") {
-		return nil, errors.New("config: debug_listen nur auf 127.0.0.1")
+		return nil, errors.New("config: debug_listen only on 127.0.0.1")
 	}
 	return c, nil
 }

@@ -253,10 +253,10 @@ func (s *Server) directError(w http.ResponseWriter, r *http.Request, err error) 
 		return
 	}
 	if errors.Is(err, errBadTarget) {
-		termPage(w, http.StatusBadGateway, hostOnly(r.Host), "Das eingetragene Ziel ist keine öffentliche Adresse.", "The configured target is not a public address.")
+		termPage(w, r, http.StatusBadGateway, hostOnly(r.Host), "Das eingetragene Ziel ist keine öffentliche Adresse.", "The configured target is not a public address.")
 		return
 	}
-	termPage(w, http.StatusBadGateway, hostOnly(r.Host), "Der Server hinter dieser Adresse ist gerade nicht erreichbar. Bitte später noch einmal versuchen.",
+	termPage(w, r, http.StatusBadGateway, hostOnly(r.Host), "Der Server hinter dieser Adresse ist gerade nicht erreichbar. Bitte später noch einmal versuchen.",
 		"The server behind this address is not reachable right now. Please try again later.")
 }
 
@@ -275,5 +275,5 @@ func frontendPlain(t *target, haveCert bool) string {
 }
 
 func (s *Server) refuseHTTP(w http.ResponseWriter, r *http.Request) {
-	termPage(w, http.StatusForbidden, hostOnly(r.Host), "Diese Adresse ist nur über HTTPS erreichbar.", "This address is only available via HTTPS.")
+	termPage(w, r, http.StatusForbidden, hostOnly(r.Host), "Diese Adresse ist nur über HTTPS erreichbar.", "This address is only available via HTTPS.")
 }
