@@ -102,6 +102,12 @@ type Exporter interface {
 	Import(ctx context.Context, raw json.RawMessage) (int, error)
 }
 
+// Resetter raeumt vor "Node zuruecksetzen" auf, was das Modul ausserhalb der Node angelegt hat (z. B. Namen
+// und Tunnel bei ipv64). Fehler halten den Reset nicht auf.
+type Resetter interface {
+	BeforeReset(ctx context.Context) error
+}
+
 type channelMapKey struct{}
 
 // WithChannelMap: beim Import die Zuordnung Kanal-ID der Datei -> Kanal-ID dieser Node (fuer Import).

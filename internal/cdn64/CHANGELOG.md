@@ -6,6 +6,7 @@
 - Prometheus (`/api/metrics`): je Host Anfragen, Fehler und Abgewiesene seit dem Start sowie der letzten 24 Stunden
   (nach Statusklasse, Bytes), Erreichbarkeit und Antwortzeit des Ziels; CDN64 online mit eingeschalteten Namen,
   Tunnel je Server (verbunden, Laufzeit, Streams), Zustand und Traffic je Name bei ipv64 und Kontingent.
+- Node zurücksetzen: CDN64-online-Namen und Tunnel werden vorher bei ipv64 ausgetragen.
 
 ## 1.12.0 – 2026-10-19
 

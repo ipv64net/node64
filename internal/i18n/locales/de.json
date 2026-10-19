@@ -2091,7 +2091,7 @@
   },
   "reset": {
     "title": "Node zurücksetzen",
-    "hint": "Löscht alle lokalen Daten: Checks, Messwerte, Kanäle, Benutzer, Einstellungen, Schlüssel und Backups. Die Node startet danach wie neu installiert. Eine Verknüpfung mit ipv64 wird vorher getrennt.",
+    "hint": "Löscht alle lokalen Daten: Checks, Messwerte, Kanäle, Benutzer, Einstellungen, Schlüssel und Backups. Die Node startet danach wie neu installiert. Vorher meldet sie sich online ab: Verknüpfung mit ipv64 trennen, CDN64-online-Namen und Tunnel bei ipv64 austragen, lokale Gruppe verlassen.",
     "password": "Dein Passwort",
     "button": "Zurücksetzen",
     "confirm": "Wirklich ALLE Daten dieser Node unwiderruflich löschen und neu starten?",

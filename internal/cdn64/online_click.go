@@ -407,6 +407,25 @@ func (m *Module) onlineDisable(ctx context.Context, hostID int64) error {
 	return first
 }
 
+// BeforeReset (module.Resetter): vor "Node zuruecksetzen" alle Namen bei ipv64 austragen und den Tunnel entfernen.
+func (m *Module) BeforeReset(ctx context.Context) error {
+	m.online.op.Lock()
+	defer m.online.op.Unlock()
+	list, err := m.onlineNames(ctx)
+	if err != nil {
+		return err
+	}
+	var first error
+	for _, x := range list {
+		if err := m.onlineRemoteOff(ctx, x); err != nil && first == nil {
+			first = err
+		}
+	}
+	m.onlineLoadNames(ctx)
+	m.onlineDropTunnel(ctx)
+	return first
+}
+
 // onlineRemoteOff: Name bei ipv64 ausschalten (schon weg zaehlt als erledigt) und hier austragen.
 func (m *Module) onlineRemoteOff(ctx context.Context, x onlineName) error {
 	if a := m.online.api; a != nil {

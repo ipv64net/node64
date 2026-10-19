@@ -2091,7 +2091,7 @@
   },
   "reset": {
     "title": "Reset node",
-    "hint": "Deletes all local data: checks, measurements, channels, users, settings, keys and backups. The node then starts like a fresh install. A link with ipv64 is removed first.",
+    "hint": "Deletes all local data: checks, measurements, channels, users, settings, keys and backups. The node then starts like a fresh install. Before that it signs off online: removes the link with ipv64, removes CDN64 online names and the tunnel at ipv64, leaves the local group.",
     "password": "Your password",
     "button": "Reset",
     "confirm": "Really delete ALL data of this node permanently and restart?",

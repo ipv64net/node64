@@ -191,14 +191,18 @@ func (s *Server) apiReset(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, "wrong password")
 		return
 	}
-	if err := s.requestReset(r.Context(), in.KeepChecks); err != nil {
+	problems, err := s.requestReset(r.Context(), in.KeepChecks)
+	if err != nil {
 		s.log.Error("reset", "err", err)
 		writeErr(w, 500, "reset could not be requested")
 		return
 	}
-	s.audit(r, "node.reset", "", "")
+	s.audit(r, "node.reset", "", strings.Join(problems, "; "))
 	s.log.Warn("factory reset requested", "user", u.Username)
-	writeJSON(w, http.StatusAccepted, map[string]any{"restarting": true})
+	if problems == nil {
+		problems = []string{}
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"restarting": true, "cleanup_problems": problems})
 	s.restartSoon("restarting for factory reset")
 }
 

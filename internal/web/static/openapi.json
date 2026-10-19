@@ -8194,7 +8194,7 @@
           "Node"
         ],
         "summary": "Werksreset (Node startet neu und leert das Datenverzeichnis)",
-        "description": "Wie in der Oberfläche nur mit dem Passwort des Benutzers, auch per API-Key. Eine Verknüpfung mit ipv64 wird vorher getrennt.",
+        "description": "Wie in der Oberfläche nur mit dem Passwort des Benutzers, auch per API-Key. Vorher meldet sich die Node online ab (Verknüpfung mit ipv64, CDN64-online-Namen und Tunnel, lokale Gruppe); was dabei nicht klappt, steht in cleanup_problems, der Reset läuft trotzdem.",
         "requestBody": {
           "required": true,
           "content": {
@@ -8224,6 +8224,12 @@
                   "properties": {
                     "restarting": {
                       "type": "boolean"
+                    },
+                    "cleanup_problems": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   }
                 }

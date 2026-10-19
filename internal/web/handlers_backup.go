@@ -162,26 +162,47 @@ func (s *Server) resetNode(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/settings#reset", http.StatusSeeOther)
 		return
 	}
-	if err := s.requestReset(r.Context(), r.PostFormValue("keep_checks") == "on"); err != nil {
+	problems, err := s.requestReset(r.Context(), r.PostFormValue("keep_checks") == "on")
+	if err != nil {
 		s.fail(w, r, err)
 		return
 	}
-	s.audit(r, "node.reset", "", "")
+	s.audit(r, "node.reset", "", strings.Join(problems, "; "))
 	s.log.Warn("factory reset requested", "user", v.User.Username)
 	s.flash(w, r, "warning", v.T("reset.restarting"))
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 	s.restartSoon("restarting for factory reset")
 }
 
-// requestReset trennt eine bestehende Verknuepfung und legt den Merker fuer den Werksreset beim naechsten Start ab
-// (Oberflaeche und API; das Passwort prueft der Aufrufer).
-func (s *Server) requestReset(ctx context.Context, keepChecks bool) error {
-	if s.Linker != nil && s.Store.SettingOr(ctx, nodesync.SetToken, "") != "" {
-		if err := s.Linker.Unlink(ctx, keepChecks); err != nil {
-			s.log.Warn("reset: unlink failed, resetting anyway", "err", err)
+// requestReset meldet die Node vorher online ab (Module mit module.Resetter, z. B. CDN64 online; lokale Gruppe;
+// Verknuepfung mit ipv64) und legt den Merker fuer den Werksreset beim naechsten Start ab (Oberflaeche und API; das
+// Passwort prueft der Aufrufer). problems = was online nicht aufgeraeumt werden konnte; der Reset laeuft trotzdem.
+func (s *Server) requestReset(ctx context.Context, keepChecks bool) (problems []string, err error) {
+	rctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+	for _, m := range s.Modules.Modules() {
+		rs, ok := m.(module.Resetter)
+		if !ok || !s.Modules.IsRunning(m.Info().Name) {
+			continue
+		}
+		if err := rs.BeforeReset(rctx); err != nil {
+			s.log.Warn("reset: module cleanup failed, resetting anyway", "module", m.Info().Name, "err", err)
+			problems = append(problems, m.Info().Name+": "+err.Error())
 		}
 	}
-	return os.WriteFile(filepath.Join(s.Cfg.DataDir, ResetFileName), []byte(time.Now().UTC().Format(time.RFC3339)), 0o600)
+	if s.Peer != nil {
+		if err := s.Peer.Leave(rctx); err != nil {
+			s.log.Warn("reset: leaving the local group failed, resetting anyway", "err", err)
+			problems = append(problems, "peer: "+err.Error())
+		}
+	}
+	if s.Linker != nil && s.Store.SettingOr(ctx, nodesync.SetToken, "") != "" {
+		if err := s.Linker.Unlink(rctx, keepChecks); err != nil {
+			s.log.Warn("reset: unlink failed, resetting anyway", "err", err)
+			problems = append(problems, "sync: "+err.Error())
+		}
+	}
+	return problems, os.WriteFile(filepath.Join(s.Cfg.DataDir, ResetFileName), []byte(time.Now().UTC().Format(time.RFC3339)), 0o600)
 }
 
 // validateSQLite prueft Kopf und Kernschema einer hochgeladenen Datenbank.
