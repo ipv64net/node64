@@ -9,8 +9,8 @@ import "context"
 // NotifyRole: group = die Gruppe benachrichtigt (nicht der hub), me = diese Node ist an der Reihe,
 // ready = der Stand der Gruppe ist nach dem Start abgeholt.
 func (m *Manager) NotifyRole(ctx context.Context, nodes []string) (group, me, ready bool) {
-	list, err := m.Members(ctx)
-	if err != nil || len(list) == 0 {
+	list := m.hcMembers(ctx)
+	if len(list) == 0 {
 		return false, false, false
 	}
 	byID := map[string]Member{}
@@ -55,7 +55,7 @@ func (m *Manager) hubSends(ctx context.Context, nodes []string) bool {
 // "hub", "self", "owner" (eine andere Node allein), "group_self"/"group_other" (Gruppe), "none"; leer = keine
 // Node der Gruppe beteiligt (dann entscheidet das Healthchecks-Modul wie bisher).
 func (m *Manager) NotifierOf(ctx context.Context, nodes []string) (key, name string) {
-	list, _ := m.Members(ctx)
+	list := m.hcMembers(ctx)
 	byID := map[string]Member{}
 	for _, x := range list {
 		byID[x.NodeID] = x

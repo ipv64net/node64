@@ -38,7 +38,7 @@ func (m *Manager) relay() Relay {
 // groupSource: Messstelle einer Node der Gruppe (oder dieser Node) – die kommt von ihr selbst.
 func (m *Manager) groupSource(ctx context.Context) func(source string) bool {
 	ids := map[string]bool{"node:" + m.d.NodeID(): true}
-	list, _ := m.Members(ctx)
+	list := m.hcMembers(ctx)
 	for _, x := range list {
 		ids["node:"+x.NodeID] = true
 	}
@@ -57,9 +57,9 @@ func (m *Manager) involved(ctx context.Context, nodes []string) bool {
 }
 
 // handleRelay liefert die hub-Daten dieser Node (nur verknuepft).
-func (m *Manager) handleRelay(w http.ResponseWriter, r *http.Request, _ *Member, _ []byte) {
+func (m *Manager) handleRelay(w http.ResponseWriter, r *http.Request, peer *Member, _ []byte) {
 	rl := m.relay()
-	if rl == nil || !m.linkedSelf() {
+	if rl == nil || !m.linkedSelf() || !m.both(r.Context(), *peer, "healthchecks", "checks") {
 		writeJSON(w, http.StatusOK, relayOut{Items: []healthchecks.RelayPoint{}})
 		return
 	}

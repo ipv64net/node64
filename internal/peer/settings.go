@@ -93,7 +93,7 @@ func (m *Manager) Forwarder(ctx context.Context) (id, name string, self bool) {
 	if m.linkedSelf() {
 		id, name, self = m.d.NodeID(), m.d.NodeName(), true
 	}
-	list, _ := m.Members(ctx)
+	list := m.hcMembers(ctx)
 	for _, x := range list {
 		if x.Linked && x.Online() && (id == "" || x.NodeID < id) {
 			id, name, self = x.NodeID, x.Name, false

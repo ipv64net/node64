@@ -247,3 +247,46 @@ func splitCaps(s string) []string {
 	}
 	return out
 }
+
+// wants: Bereiche, die hier (own = syncCaps) und beim Mitglied eingeschaltet sind – module "" = alle Module
+// ausser Healthchecks als "modul/bereich" (Weg v2), sonst nur die Bereiche dieses Moduls ohne Praefix. Sortiert.
+func (m *Manager) wants(own []string, x Member, module string) []string {
+	out := []string{}
+	for _, c := range own {
+		mod, item, _ := strings.Cut(c, "/")
+		if module == "" && mod == "healthchecks" || module != "" && mod != module || !memberSyncOn(x, mod, item) {
+			continue
+		}
+		if module != "" {
+			c = item
+		}
+		out = append(out, c)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func has(list []string, v string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+// hcMembers: Mitglieder, mit denen die Healthchecks abgeglichen werden (nicht ausgesetzt, Checks auf beiden
+// Seiten eingeschaltet) – nur diese zaehlen fuer Messwerte, Benachrichtigungen und das Weiterreichen an den hub.
+func (m *Manager) hcMembers(ctx context.Context) []Member {
+	if !m.syncOn(ctx, "healthchecks", "checks") {
+		return nil
+	}
+	list, _ := m.Members(ctx)
+	out := list[:0]
+	for _, x := range list {
+		if !x.Suspended() && memberSyncOn(x, "healthchecks", "checks") {
+			out = append(out, x)
+		}
+	}
+	return out
+}

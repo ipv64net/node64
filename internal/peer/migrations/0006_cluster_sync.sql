@@ -3,6 +3,9 @@
 -- letzte Stand; geloeschte bleiben 30 Tage als Vermerk.
 ALTER TABLE peer_members ADD COLUMN sync TEXT;
 ALTER TABLE peer_members ADD COLUMN cursor2 INTEGER NOT NULL DEFAULT 0;
+-- zuletzt gemeinsam eingeschaltete Bereiche je Weg (aendern sie sich, wird von vorn abgeholt)
+ALTER TABLE peer_members ADD COLUMN sync_seen TEXT NOT NULL DEFAULT '';
+ALTER TABLE peer_members ADD COLUMN sync_seen2 TEXT NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS cluster_log (
 	seq        INTEGER PRIMARY KEY AUTOINCREMENT,
 	module     TEXT NOT NULL,

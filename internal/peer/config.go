@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -67,6 +68,7 @@ type pullState struct {
 	busy  map[string]*sync.Mutex
 	timer *time.Timer
 	idle  map[string]time.Time // Node mit abgeschaltetem Healthchecks: bis dahin nicht abholen
+	s2    sync2State           // allgemeiner Abgleich (sync2.go)
 }
 
 const idleBackoff = 5 * time.Minute // Healthchecks bei einer anderen Node aus: so lange Ruhe statt alle 15 s
@@ -158,6 +160,9 @@ func (m *Manager) pokeSoon() {
 		p.mu.Unlock()
 		list, _ := m.Members(context.Background())
 		for _, x := range list {
+			if x.Suspended() {
+				continue
+			}
 			go func(x Member) {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
@@ -167,8 +172,17 @@ func (m *Manager) pokeSoon() {
 	})
 }
 
-// handleChanges liefert das Protokoll ab ?since (Checks im aktuellen Stand).
-func (m *Manager) handleChanges(w http.ResponseWriter, r *http.Request, _ *Member, _ []byte) {
+// hcItem: Bereich im Cluster-Modul Healthchecks fuer eine Eintragsart des Protokolls.
+func hcItem(entity string) string {
+	if entity == "check" {
+		return "checks"
+	}
+	return entity // maintenance, settings
+}
+
+// handleChanges liefert das Protokoll ab ?since (Checks im aktuellen Stand), nur Bereiche, die hier und bei der
+// abholenden Node an sind (?items, ohne Angabe laut ihrem letzten Ping).
+func (m *Manager) handleChanges(w http.ResponseWriter, r *http.Request, from *Member, _ []byte) {
 	hc := m.checks()
 	if hc == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "healthchecks not running"})
@@ -176,6 +190,16 @@ func (m *Manager) handleChanges(w http.ResponseWriter, r *http.Request, _ *Membe
 	}
 	ctx := r.Context()
 	since, _ := strconv.ParseInt(r.URL.Query().Get("since"), 10, 64)
+	want := m.wants(m.syncCaps(ctx), *from, "healthchecks")
+	if q, ok := r.URL.Query()["items"]; ok {
+		asked := splitCaps(strings.Join(q, ","))
+		for i := 0; i < len(want); i++ {
+			if !has(asked, want[i]) {
+				want = append(want[:i], want[i+1:]...)
+				i--
+			}
+		}
+	}
 	out := changesOut{Items: []change{}}
 	_ = m.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(seq), 0) FROM peer_log`).Scan(&out.Head)
 	rows, err := m.db.QueryContext(ctx, `SELECT seq, entity, entity_id, op, origin, changed_at FROM peer_log WHERE seq > ? ORDER BY seq LIMIT ?`, since, pageSize+1)
@@ -199,6 +223,9 @@ func (m *Manager) handleChanges(w http.ResponseWriter, r *http.Request, _ *Membe
 	self := m.d.NodeID()
 	for _, c := range list {
 		out.Last = c.Seq
+		if !has(want, hcItem(c.Entity)) {
+			continue
+		}
 		if c.Entity == "settings" {
 			if c.ChangedAt = m.settingsAt(ctx); !c.ChangedAt.IsZero() {
 				c.Settings = m.settingsBundle(ctx)
@@ -272,6 +299,9 @@ func (m *Manager) pullLoop(ctx context.Context) {
 }
 
 func (m *Manager) pullAll(ctx context.Context, only string) {
+	if all, err := m.Members(ctx); err == nil {
+		m.pullSync2(ctx, all, only) // allgemein abgeglichene Module (sync2.go)
+	}
 	if m.checks() == nil {
 		return
 	}
@@ -280,10 +310,7 @@ func (m *Manager) pullAll(ctx context.Context, only string) {
 		m.seeded.Store(true)
 	}
 	m.checkSettings(ctx)
-	list, err := m.Members(ctx)
-	if err != nil {
-		return
-	}
+	list := m.hcMembers(ctx) // Healthchecks nur mit Mitgliedern, bei denen es auf beiden Seiten an ist
 	for _, x := range list {
 		if only != "" && x.NodeID != only {
 			continue
@@ -441,12 +468,18 @@ func (m *Manager) pullFrom(ctx context.Context, x Member) error {
 	}
 	defer lock.Unlock()
 	var cursor int64
-	_ = m.db.QueryRowContext(ctx, `SELECT cursor FROM peer_members WHERE node_id = ?`, x.NodeID).Scan(&cursor)
+	var seen string
+	_ = m.db.QueryRowContext(ctx, `SELECT cursor, sync_seen FROM peer_members WHERE node_id = ?`, x.NodeID).Scan(&cursor, &seen)
+	want := m.wants(m.syncCaps(ctx), x, "healthchecks")
+	if items := joinCaps(want); seen != items { // Bereiche geaendert: von vorn (die juengere Aenderung gewinnt)
+		cursor = 0
+		_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET cursor = 0, sync_seen = ? WHERE node_id = ?`, items, x.NodeID)
+	}
 	self, applied := m.d.NodeID(), 0
 	for page := 0; page < 100; page++ {
 		var out changesOut
 		cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-		err := m.call(cctx, x, http.MethodGet, "/peer/v1/changes?since="+strconv.FormatInt(cursor, 10), nil, &out)
+		err := m.call(cctx, x, http.MethodGet, "/peer/v1/changes?since="+strconv.FormatInt(cursor, 10)+"&items="+joinCaps(want), nil, &out)
 		cancel()
 		if err != nil {
 			return err
@@ -456,6 +489,9 @@ func (m *Manager) pullFrom(ctx context.Context, x Member) error {
 			continue
 		}
 		for _, c := range out.Items {
+			if !has(want, hcItem(c.Entity)) {
+				continue // Bereich aus, oder eine Art, die diese Node nicht kennt (nie als Check behandeln)
+			}
 			if c.Entity == "maintenance" {
 				applied += m.applyMaint(ctx, x, c)
 				continue

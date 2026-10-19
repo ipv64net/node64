@@ -47,9 +47,9 @@ func (m *Manager) data() Data {
 }
 
 // handleMeasurements liefert eigene Messpunkte ab ?since (bei der ersten Seite auch die Zustaende).
-func (m *Manager) handleMeasurements(w http.ResponseWriter, r *http.Request, _ *Member, _ []byte) {
+func (m *Manager) handleMeasurements(w http.ResponseWriter, r *http.Request, from *Member, _ []byte) {
 	d := m.data()
-	if d == nil {
+	if d == nil || !m.both(r.Context(), *from, "healthchecks", "checks") {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "healthchecks not running"})
 		return
 	}
