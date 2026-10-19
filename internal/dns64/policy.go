@@ -2,8 +2,10 @@ package dns64
 
 import (
 	"context"
+	"net"
 	"net/netip"
 	"slices"
+	"time"
 
 	"github.com/ipv64net/node64/internal/dns64/dnsserver"
 	"github.com/ipv64net/node64/internal/dns64/filter"
@@ -82,7 +84,32 @@ func (m *Module) buildPolicies(lists *filter.Manager, c config, list []groups.Gr
 			}
 		}
 		p := &dnsserver.Policy{Group: g.Name, Mask: lists.Mask(groupListURLs(g, global)), Allow: filter.NewDomainSet(allow), Block: filter.NewDomainSet(block),
-			SafeSearch: g.SafeSearch, YouTube: g.YouTube, Bypass: g.Bypass}
+			SafeSearch: g.SafeSearch, YouTube: g.YouTube, Bypass: g.Bypass, Loc: m.location()}
+		switch until := holdUntil(g.HoldUntil); g.Hold {
+		case groups.HoldBlock:
+			p.BlockUntil = until
+		case groups.HoldFree:
+			p.FreeUntil = until
+		}
+		for _, s := range g.Schedules {
+			if !s.Enabled {
+				continue
+			}
+			start, _ := parseClock(s.Start)
+			end, _ := parseClock(s.End)
+			rule := dnsserver.TimeRule{Label: s.Label, Start: start, End: end, Off: s.Action == groups.ScheduleOff}
+			for _, d := range s.Days {
+				if d >= 1 && d <= 7 {
+					rule.Days |= 1 << uint(d-1)
+				}
+			}
+			for _, key := range s.Cats {
+				if set := filter.GroupCategory(key); set != nil {
+					rule.Cats = append(rule.Cats, dnsserver.Category{Key: key, Set: set})
+				}
+			}
+			p.Rules = append(p.Rules, rule)
+		}
 		for _, key := range g.Cats {
 			if set := filter.GroupCategory(key); set != nil {
 				p.Cats = append(p.Cats, dnsserver.Category{Key: key, Set: set})
@@ -91,6 +118,24 @@ func (m *Module) buildPolicies(lists *filter.Manager, c config, list []groups.Gr
 		pol[g.ID] = p
 	}
 	m.pol.Store(&pol)
+}
+
+// holdUntil: Ende eines Sofort-Knopfs ("" = bis zum Aufheben).
+func holdUntil(s string) time.Time {
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t
+	}
+	return dnsserver.Forever
+}
+
+// location ist die Zeitzone der Node (Einstellung des Kerns), sonst die des Containers.
+func (m *Module) location() *time.Location {
+	if tz := m.core.SettingOr(context.Background(), "node.timezone", ""); tz != "" {
+		if loc, err := time.LoadLocation(tz); err == nil {
+			return loc
+		}
+	}
+	return time.Local
 }
 
 // policy liefert die Regeln der Gruppe eines Clients (nil = keine Gruppe, es gilt die globale Auswahl).
@@ -114,12 +159,13 @@ func (m *Module) groupsChanged(ctx context.Context) error {
 		return err
 	}
 	e := m.running()
-	if e == nil {
-		return nil
-	}
 	list, err := m.Groups(ctx)
 	if err != nil {
 		return err
+	}
+	if e == nil {
+		m.syncHintRoute(list, false)
+		return nil
 	}
 	c := m.loadConfig(ctx)
 	for _, l := range neededLists(c, list) {
@@ -128,5 +174,33 @@ func (m *Module) groupsChanged(ctx context.Context) error {
 		}
 	}
 	m.buildPolicies(e.lists, c, list)
+	m.syncHintRoute(list, true)
 	return nil
+}
+
+// hintAddrs sind die Adressen der Node fuer die Hinweisseite bei "Internet aus": die feste Adresse aus den
+// Einstellungen, sonst die Absenderadresse der Standardroute (UDP-"Verbindung" ohne Pakete), je IPv4 und IPv6.
+func hintAddrs(bind string) (v4, v6 net.IP) {
+	if ip := net.ParseIP(bind); ip != nil && !ip.IsUnspecified() {
+		if ip.To4() != nil {
+			return ip.To4(), nil
+		}
+		return nil, ip
+	}
+	src := func(network, addr string) net.IP {
+		c, err := net.Dial(network, addr)
+		if err != nil {
+			return nil
+		}
+		defer c.Close()
+		if ua, ok := c.LocalAddr().(*net.UDPAddr); ok && !ua.IP.IsLoopback() && !ua.IP.IsLinkLocalUnicast() {
+			return ua.IP
+		}
+		return nil
+	}
+	v4 = src("udp4", "192.0.2.1:53") // Dokumentationsnetz: es geht kein Paket raus
+	if v4 != nil {
+		v4 = v4.To4()
+	}
+	return v4, src("udp6", "[2001:db8::1]:53")
 }

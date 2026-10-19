@@ -51,6 +51,11 @@ type Policy struct {
 	SafeSearch bool   // Google, Bing, DuckDuckGo, YouTube kinderfreundlich (CNAME)
 	YouTube    string // YouTubeStrict (Standard), YouTubeModerate, YouTubeOff
 	Bypass     bool   // Schutz gegen Umgehen: Firefox-DoH und iCloud Private Relay aus (dazu die Bypass-Liste)
+
+	Rules      []TimeRule     // Zeitplaene
+	BlockUntil time.Time      // Knopf Sperren bis (Forever = bis zum Aufheben)
+	FreeUntil  time.Time      // Knopf Frei bis
+	Loc        *time.Location // Zeitzone der Node fuer die Zeitplaene
 }
 
 // Records are own DNS entries from the settings. ok = the name is known (then the answer may be empty).
@@ -79,6 +84,8 @@ type Server struct {
 	Paused    func() bool              // blocking switched off for now (nil = never)
 	Policy    func(netip.Addr) *Policy // rules of the client's device group (nil = none, global rules)
 	Canary    bool                     // use-application-dns.net -> NXDOMAIN (Firefox schaltet sein DoH ab)
+	HintV4    net.IP                   // Adresse der Node fuer "Internet aus" (Hinweisseite)
+	HintV6    net.IP
 
 	acl        *clientACL
 	srv        []*dns.Server
@@ -249,10 +256,16 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy) 
 	// Geraetegruppe: eigene Freigabe vor eigener Sperre vor Kategorien vor den Blocklisten der Gruppe. Die Pause
 	// setzt Kategorien und Blocklisten aus, nicht die Sperren der Gruppe.
 	mask, groupAllowed := s.Filter.Global(), false
+	var cats []Category
 	if p != nil {
 		mask = p.Mask
+		st := p.State(time.Now())
+		cats = st.Cats
 		if _, ok := p.Allow.Match(name); ok {
 			groupAllowed = true
+		} else if st.Off { // Internet aus (Knopf oder Zeitplan): Adresse der Node mit Hinweisseite
+			e.Status, e.Reason = querylog.StatusBlocked, st.Why
+			return s.offMsg(r)
 		} else if d, ok := p.Block.Match(name); ok {
 			e.Status, e.Reason = querylog.StatusBlocked, ReasonGroup+d
 			return s.blockedMsg(r)
@@ -263,7 +276,7 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy) 
 	pausedNow := s.Paused != nil && s.Paused()
 	if !groupAllowed {
 		if p != nil {
-			for _, c := range p.Cats {
+			for _, c := range cats {
 				if _, ok := c.Set.Match(name); ok {
 					blocked, reason = true, ReasonCategory+c.Key
 					break

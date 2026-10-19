@@ -1,5 +1,13 @@
 # Änderungen – DNS64
 
+## 1.19.0 – 2026-10-19
+
+### Neu
+- Zeitpläne je Gerätegruppe (Phase G4): an gewählten Wochentagen von–bis (auch über Mitternacht oder ganztägig, in der Zeitzone der Node) entweder „Internet aus“ oder zusätzliche Kategorien sperren; einzeln an- und ausschaltbar.
+- Sofort-Knöpfe je Gruppe: „Sperren“ (30 Min., 1 oder 2 Std., bis morgen früh 7:00, bis zum Aufheben) wirkt wie „Internet aus“; „Frei“ (30 Min., 1 oder 2 Std.) setzt Zeitpläne und Kategorien aus, Blocklisten gelten weiter; „Aufheben“ beendet beides. Der Zustand steht im Kopf der Gruppe.
+- „Internet aus“: Es gehen nur lokale Namen, eigene Einträge und die Freigaben der Gruppe; alle anderen Namen bekommen die Adresse der Node (TTL 10 s). Ruft das Gerät eine Seite per http:// auf, zeigt der gemeinsame Eingang auf Port 80 eine Hinweisseite (Gruppe, Grund, bis wann); bei https:// zeigt der Browser nur einen Zertifikatsfehler. Port 80 wird dafür nur geöffnet, solange eine Gruppe gesperrt sein kann.
+- Abfrage-Log: Gründe „Internet aus“ bzw. „Zeitplan …: Internet aus“. API: `POST /api/dns64/groups/{id}/hold`, `POST /api/dns64/groups/{id}/schedules`, `POST /api/dns64/groups/schedules/{id}/enable|disable`, `DELETE /api/dns64/groups/schedules/{id}`.
+
 ## 1.18.0 – 2026-10-19
 
 ### Neu

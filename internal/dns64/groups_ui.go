@@ -64,6 +64,10 @@ func (m *Module) groupRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /dns64/groups/{id}/rules", page(m.pageGroupRules))
 	mux.Handle("POST /dns64/groups/{id}/domains", page(m.pageGroupDomainAdd))
 	mux.Handle("POST /dns64/groups/domains/{id}/delete", page(m.pageGroupDomainDelete))
+	mux.Handle("POST /dns64/groups/{id}/hold", page(m.pageHold))
+	mux.Handle("POST /dns64/groups/{id}/schedules", page(m.pageScheduleAdd))
+	mux.Handle("POST /dns64/groups/schedules/{id}/toggle", page(m.pageScheduleToggle))
+	mux.Handle("POST /dns64/groups/schedules/{id}/delete", page(m.pageScheduleDelete))
 
 	plain := func(h http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(h)) }
 	mux.Handle("GET /api/dns64/groups", plain(m.apiGroups))
@@ -77,6 +81,11 @@ func (m *Module) groupRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("PUT /api/dns64/groups/{id}/rules", plain(m.apiGroupRules))
 	mux.Handle("POST /api/dns64/groups/{id}/domains", plain(m.apiGroupDomainAdd))
 	mux.Handle("DELETE /api/dns64/groups/domains/{id}", plain(m.apiGroupDomainDelete))
+	mux.Handle("POST /api/dns64/groups/{id}/hold", plain(m.apiHold))
+	mux.Handle("POST /api/dns64/groups/{id}/schedules", plain(m.apiScheduleAdd))
+	mux.Handle("POST /api/dns64/groups/schedules/{id}/enable", plain(m.apiScheduleToggle(true)))
+	mux.Handle("POST /api/dns64/groups/schedules/{id}/disable", plain(m.apiScheduleToggle(false)))
+	mux.Handle("DELETE /api/dns64/groups/schedules/{id}", plain(m.apiScheduleDelete))
 }
 
 // ---- Seite ----
@@ -348,6 +357,118 @@ func (m *Module) apiGroupDomainDelete(w http.ResponseWriter, r *http.Request) {
 	x, err := m.RemoveGroupDomain(r.Context(), pathID(r))
 	if err == nil {
 		m.audit(r, "dns64.group.domain.remove", strconv.FormatInt(x.GroupID, 10), x.Action+" "+x.Domain)
+	}
+	m.apiResult(w, r, err, 0, nil)
+}
+
+// ---- Zeitplaene und Sofort-Knoepfe (G4) ----
+
+// hold setzt den Knopf einer Gruppe; morning = bis zum naechsten Morgen 07:00.
+func (m *Module) hold(r *http.Request, id int64, mode string, minutes int, morning bool) error {
+	var until time.Time
+	if morning {
+		until = m.nextMorning(time.Now())
+	}
+	err := m.SetHold(r.Context(), id, mode, minutes, until)
+	if err == nil {
+		detail := mode
+		switch {
+		case morning:
+			detail += " until " + until.Format(time.RFC3339)
+		case minutes > 0:
+			detail += " " + strconv.Itoa(minutes) + " min"
+		}
+		m.audit(r, "dns64.group.hold", strconv.FormatInt(id, 10), detail)
+	}
+	return err
+}
+
+func (m *Module) pageHold(w http.ResponseWriter, r *http.Request) {
+	minutes, _ := strconv.Atoi(r.PostFormValue("minutes"))
+	err := m.hold(r, pathID(r), r.PostFormValue("mode"), minutes, r.PostFormValue("until") == "morning")
+	m.groupBack(w, r, err, "")
+}
+
+func (m *Module) pageScheduleAdd(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	x := groups.Schedule{GroupID: pathID(r), Label: r.PostFormValue("label"), Start: r.PostFormValue("start"), End: r.PostFormValue("end"),
+		Action: r.PostFormValue("action"), Cats: r.PostForm["cats"]}
+	for _, d := range r.PostForm["days"] {
+		if n, err := strconv.Atoi(d); err == nil {
+			x.Days = append(x.Days, n)
+		}
+	}
+	x, err := m.AddSchedule(r.Context(), x)
+	if err == nil {
+		m.audit(r, "dns64.group.schedule.add", r.PathValue("id"), scheduleDetail(x))
+	}
+	m.groupBack(w, r, err, "")
+}
+
+func scheduleDetail(x groups.Schedule) string {
+	days := make([]string, 0, len(x.Days))
+	for _, d := range x.Days {
+		days = append(days, strconv.Itoa(d))
+	}
+	return x.Label + " " + strings.Join(days, ",") + " " + x.Start + "-" + x.End + " " + x.Action + " " + strings.Join(x.Cats, ",")
+}
+
+func (m *Module) pageScheduleToggle(w http.ResponseWriter, r *http.Request) {
+	on := r.PostFormValue("on") == "1"
+	err := m.SetScheduleEnabled(r.Context(), pathID(r), on)
+	if err == nil {
+		m.audit(r, "dns64.group.schedule."+map[bool]string{true: "enable", false: "disable"}[on], r.PathValue("id"), "")
+	}
+	m.groupBack(w, r, err, "")
+}
+
+func (m *Module) pageScheduleDelete(w http.ResponseWriter, r *http.Request) {
+	x, err := m.RemoveSchedule(r.Context(), pathID(r))
+	if err == nil {
+		m.audit(r, "dns64.group.schedule.remove", strconv.FormatInt(x.GroupID, 10), x.Label)
+	}
+	m.groupBack(w, r, err, "")
+}
+
+func (m *Module) apiHold(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Mode         string `json:"mode"` // block, free, "" = aufheben
+		Minutes      int    `json:"minutes"`
+		UntilMorning bool   `json:"until_morning"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	m.apiResult(w, r, m.hold(r, pathID(r), in.Mode, in.Minutes, in.UntilMorning), 0, nil)
+}
+
+func (m *Module) apiScheduleAdd(w http.ResponseWriter, r *http.Request) {
+	var in groups.Schedule
+	if !decode(w, r, &in) {
+		return
+	}
+	in.GroupID = pathID(r)
+	x, err := m.AddSchedule(r.Context(), in)
+	if err == nil {
+		m.audit(r, "dns64.group.schedule.add", r.PathValue("id"), scheduleDetail(x))
+	}
+	m.apiResult(w, r, err, http.StatusCreated, x)
+}
+
+func (m *Module) apiScheduleToggle(on bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		err := m.SetScheduleEnabled(r.Context(), pathID(r), on)
+		if err == nil {
+			m.audit(r, "dns64.group.schedule."+map[bool]string{true: "enable", false: "disable"}[on], r.PathValue("id"), "")
+		}
+		m.apiResult(w, r, err, 0, nil)
+	}
+}
+
+func (m *Module) apiScheduleDelete(w http.ResponseWriter, r *http.Request) {
+	x, err := m.RemoveSchedule(r.Context(), pathID(r))
+	if err == nil {
+		m.audit(r, "dns64.group.schedule.remove", strconv.FormatInt(x.GroupID, 10), x.Label)
 	}
 	m.apiResult(w, r, err, 0, nil)
 }

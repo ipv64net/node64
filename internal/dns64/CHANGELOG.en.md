@@ -1,5 +1,13 @@
 # Changes – DNS64
 
+## 1.19.0 – 2026-10-19
+
+### New
+- Schedules per device group (phase G4): on chosen weekdays from–to (also across midnight or all day, in the node’s time zone) either “internet off” or additional blocked categories; each can be switched on and off.
+- Instant buttons per group: “Block” (30 min, 1 or 2 h, until tomorrow 7:00, until released) acts like “internet off”; “Free” (30 min, 1 or 2 h) suspends schedules and categories, blocklists keep applying; “Release” ends both. The state is shown in the group header.
+- “Internet off”: only local names, custom records and the group’s releases work; all other names get the node’s address (TTL 10 s). If the device opens a page via http://, the shared entrance shows a notice on port 80 (group, reason, until when); for https:// the browser only shows a certificate error. Port 80 is only opened for this while a group can be blocked.
+- Query log: reasons “internet off” and “schedule …: internet off”. API: `POST /api/dns64/groups/{id}/hold`, `POST /api/dns64/groups/{id}/schedules`, `POST /api/dns64/groups/schedules/{id}/enable|disable`, `DELETE /api/dns64/groups/schedules/{id}`.
+
 ## 1.18.0 – 2026-10-19
 
 ### New

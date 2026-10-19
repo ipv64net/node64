@@ -2489,6 +2489,8 @@
       "later": "Verschlüsselte Anfragen der Geräte (DoH/DoT/DoQ) gibt es im Reiter „Verschlüsselung“."
     },
     "js": {
+      "reason_off_hold": "Internet aus (Gruppe {group})",
+      "reason_off_schedule": "Zeitplan {name}: Internet aus (Gruppe {group})",
       "reason_safesearch": "SafeSearch → {target} (Gruppe {group})",
       "reason_canary": "Firefox-DoH abgeschaltet",
       "reason_bypass_icloud": "iCloud Private Relay aus (Gruppe {group})",
@@ -2588,7 +2590,46 @@
       "added": "Eintrag angelegt, gilt sofort.",
       "deleted": "Eintrag gelöscht."
     },
+    "hint": {
+      "title": "Internet-Pause",
+      "until": "bis {time} Uhr",
+      "until_day": "bis {time} Uhr",
+      "until_forever": "bis sie aufgehoben wird",
+      "hold": "gesperrt",
+      "schedule": "Zeitplan „{name}“",
+      "note": "{host} ist gerade nicht erreichbar. Diese Seite zeigt Node64 (DNS64)."
+    },
     "groups": {
+      "off_hold": "Internet aus",
+      "off_schedule": "Zeitplan „{name}“: Internet aus",
+      "until": "bis {time}",
+      "free_on": "Frei",
+      "release": "Aufheben",
+      "block_btn": "Sperren",
+      "free_btn": "Frei",
+      "for_min": "{n} Minuten",
+      "for_hours": "{n} Std.",
+      "until_morning": "bis morgen früh (7:00)",
+      "until_release": "bis zum Aufheben",
+      "schedules": "Zeitpläne",
+      "schedules_none": "Keine.",
+      "sched_label_ph": "z. B. Schlafenszeit",
+      "from": "von",
+      "to": "bis",
+      "action_off": "Internet aus",
+      "action_cats": "Kategorien sperren",
+      "sched_off": "aus",
+      "sched_on": "an",
+      "schedules_hint": "Gilt in der Zeitzone der Node; Ende vor Start = über Mitternacht (z. B. 21:00–07:00), gleich = ganzer Tag. „Internet aus“: Es gehen nur lokale Namen, eigene Einträge und die Freigaben der Gruppe; Seiten zeigen einen Hinweis der Node (bei https:// nur einen Zertifikatsfehler). „Sperren“ wirkt sofort wie „Internet aus“, „Frei“ setzt Zeitpläne und Kategorien eine Weile aus, Blocklisten gelten weiter.",
+      "day": {
+        "1": "Mo",
+        "2": "Di",
+        "3": "Mi",
+        "4": "Do",
+        "5": "Fr",
+        "6": "Sa",
+        "7": "So"
+      },
       "protect": "Kinderschutz",
       "safesearch": "SafeSearch (Google, Bing, DuckDuckGo, YouTube)",
       "safesearch_hint": "Suchen nur mit SafeSearch, YouTube im eingeschränkten Modus; lässt sich am Gerät nicht abschalten. YouTube „aus“ = YouTube ohne Einschränkung (gesperrt wird es über die Kategorie Streaming).",
@@ -2656,6 +2697,8 @@
       "deleted": "Gruppe gelöscht."
     },
     "err": {
+      "schedule": "Zeitplan: mindestens ein Tag und Uhrzeiten wie 21:00 angeben (Name höchstens 40 Zeichen).",
+      "schedule_cats": "Zeitplan „Kategorien sperren“: bitte mindestens eine Kategorie wählen.",
       "group_domain": "Bitte eine gültige Domain eingeben, z. B. tiktok.com.",
       "group_name": "Bitte einen Namen (höchstens 40 Zeichen) eingeben.",
       "group_dup": "Eine Gruppe mit diesem Namen gibt es schon.",

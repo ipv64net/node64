@@ -48,7 +48,33 @@
 			<div class="card-header d-flex flex-wrap align-items-center gap-2">
 				<b>{{$g.Name}}</b>
 				<span class="text-body-secondary small">{{$.T "dns64.groups.members_n" "n" (len $g.Members)}}</span>
-				<form method="post" class="ms-auto d-flex flex-wrap gap-1 m-0">
+				{{$st := index $d.States $g.ID}}
+				{{if $st.Off}}<span class="badge text-bg-danger"><i class="bi bi-pause-circle"></i> {{if $st.Hold}}{{$.T "dns64.groups.off_hold"}}{{else}}{{$.T "dns64.groups.off_schedule" "name" $st.Schedule}}{{end}}{{if not $st.Forever}} · {{$.T "dns64.groups.until" "time" ($.Time $st.Until)}}{{end}}</span>
+				{{else if $st.Free}}<span class="badge text-bg-success"><i class="bi bi-play-circle"></i> {{$.T "dns64.groups.free_on"}}{{if not $st.Forever}} · {{$.T "dns64.groups.until" "time" ($.Time $st.Until)}}{{end}}</span>{{end}}
+				<div class="ms-auto d-flex flex-wrap gap-1">
+					{{if and $st.Hold (or $st.Off $st.Free)}}<form method="post" action="/dns64/groups/{{$g.ID}}/hold" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="mode" value=""><button class="btn btn-sm btn-success" type="submit"><i class="bi bi-arrow-counterclockwise"></i> {{$.T "dns64.groups.release"}}</button></form>
+					{{else}}<div class="dropdown">
+						<button class="btn btn-sm btn-outline-danger dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-pause-fill"></i> {{$.T "dns64.groups.block_btn"}}</button>
+						<form method="post" action="/dns64/groups/{{$g.ID}}/hold" class="dropdown-menu dropdown-menu-end">
+							<input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="mode" value="block">
+							<button class="dropdown-item" type="submit" name="minutes" value="30">{{$.T "dns64.groups.for_min" "n" 30}}</button>
+							<button class="dropdown-item" type="submit" name="minutes" value="60">{{$.T "dns64.groups.for_hours" "n" 1}}</button>
+							<button class="dropdown-item" type="submit" name="minutes" value="120">{{$.T "dns64.groups.for_hours" "n" 2}}</button>
+							<button class="dropdown-item" type="submit" name="until" value="morning">{{$.T "dns64.groups.until_morning"}}</button>
+							<button class="dropdown-item" type="submit" name="minutes" value="0">{{$.T "dns64.groups.until_release"}}</button>
+						</form>
+					</div>
+					{{if or $g.Schedules $g.Cats}}<div class="dropdown">
+						<button class="btn btn-sm btn-outline-success dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-play-fill"></i> {{$.T "dns64.groups.free_btn"}}</button>
+						<form method="post" action="/dns64/groups/{{$g.ID}}/hold" class="dropdown-menu dropdown-menu-end">
+							<input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="mode" value="free">
+							<button class="dropdown-item" type="submit" name="minutes" value="30">{{$.T "dns64.groups.for_min" "n" 30}}</button>
+							<button class="dropdown-item" type="submit" name="minutes" value="60">{{$.T "dns64.groups.for_hours" "n" 1}}</button>
+							<button class="dropdown-item" type="submit" name="minutes" value="120">{{$.T "dns64.groups.for_hours" "n" 2}}</button>
+						</form>
+					</div>{{end}}{{end}}
+				</div>
+				<form method="post" class="d-flex flex-wrap gap-1 m-0">
 					<input type="hidden" name="_csrf" value="{{$.CSRF}}">
 					<input type="text" class="form-control form-control-sm" style="width:10rem" name="name" value="{{$g.Name}}" aria-label="{{$.T "dns64.groups.rename"}}" maxlength="40">
 					<button class="btn btn-sm btn-outline-secondary" type="submit" formaction="/dns64/groups/{{$g.ID}}/rename" title="{{$.T "dns64.groups.rename"}}"><i class="bi bi-pencil"></i></button>
@@ -80,13 +106,14 @@
 					<div class="col-sm-2 d-grid"><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus"></i> {{$.T "dns64.groups.member_add"}}</button></div>
 				</form>
 			</div>
-			<details class="card-footer bg-body"{{if or $g.Domains $g.Cats (eq $g.ListsMode "custom") $g.SafeSearch $g.Bypass}} open{{end}}>
+			<details class="card-footer bg-body"{{if or $g.Domains $g.Cats (eq $g.ListsMode "custom") $g.SafeSearch $g.Bypass $g.Schedules}} open{{end}}>
 				<summary class="small fw-semibold">{{$.T "dns64.groups.rules"}}{{$.Doc "dns64#gruppen-regeln"}}
 					{{if eq $g.ListsMode "custom"}}<span class="badge text-bg-light fw-normal">{{$.T "dns64.groups.lists_custom_n" "n" (len $g.Lists)}}</span>{{end}}
 					{{range $g.Cats}}<span class="badge text-bg-warning fw-normal">{{$.T (print "dns64.groups.cat." .)}}</span> {{end}}
 					{{with $g.Domains}}<span class="badge text-bg-light fw-normal">{{$.T "dns64.groups.domains_n" "n" (len .)}}</span>{{end}}
 					{{if $g.SafeSearch}}<span class="badge text-bg-info fw-normal">SafeSearch</span>{{end}}
-					{{if $g.Bypass}}<span class="badge text-bg-dark fw-normal">{{$.T "dns64.groups.bypass_short"}}</span>{{end}}</summary>
+					{{if $g.Bypass}}<span class="badge text-bg-dark fw-normal">{{$.T "dns64.groups.bypass_short"}}</span>{{end}}
+					{{with $g.Schedules}}<span class="badge text-bg-light fw-normal"><i class="bi bi-clock"></i> {{len .}}</span>{{end}}</summary>
 				<div class="row g-3 mt-1 small">
 					<div class="col-lg-7">
 						<form method="post" action="/dns64/groups/{{$g.ID}}/rules">
@@ -134,6 +161,29 @@
 							<button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus"></i></button>
 						</form>
 						<div class="form-text">{{$.T "dns64.groups.domains_hint"}}</div>
+					</div>
+					<div class="col-12">
+						<div class="fw-semibold mb-1">{{$.T "dns64.groups.schedules"}}{{$.Doc "dns64#gruppen-zeitplaene"}}</div>
+						{{if $g.Schedules}}<ul class="list-unstyled mb-2">
+							{{range $g.Schedules}}<li class="d-flex flex-wrap align-items-center gap-2 mb-1{{if not .Enabled}} text-body-tertiary{{end}}">
+								<b>{{if .Label}}{{.Label}}{{else}}–{{end}}</b>
+								<span>{{$sc := .}}{{range $i, $day := $d.Week}}{{if $sc.HasDay $day}}<span class="badge text-bg-light fw-normal">{{$.T (print "dns64.groups.day." $day)}}</span> {{end}}{{end}}</span>
+								<span class="font-monospace">{{.Start}}–{{.End}}</span>
+								{{if eq .Action "off"}}<span class="badge text-bg-danger">{{$.T "dns64.groups.action_off"}}</span>{{else}}{{range .Cats}}<span class="badge text-bg-warning fw-normal">{{$.T (print "dns64.groups.cat." .)}}</span> {{end}}{{end}}
+								<form method="post" action="/dns64/groups/schedules/{{.ID}}/toggle" class="ms-auto m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="on" value="{{if .Enabled}}0{{else}}1{{end}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit">{{if .Enabled}}{{$.T "dns64.groups.sched_off"}}{{else}}{{$.T "dns64.groups.sched_on"}}{{end}}</button></form>
+								<form method="post" action="/dns64/groups/schedules/{{.ID}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger py-0" type="submit" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-x-lg"></i></button></form>
+							</li>{{end}}
+						</ul>{{else}}<div class="text-body-secondary mb-2">{{$.T "dns64.groups.schedules_none"}}</div>{{end}}
+						<form method="post" action="/dns64/groups/{{$g.ID}}/schedules" class="row g-2 align-items-center">
+							<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+							<div class="col-md-3"><input type="text" class="form-control form-control-sm" name="label" placeholder="{{$.T "dns64.groups.sched_label_ph"}}" aria-label="{{$.T "common.name"}}" maxlength="40"></div>
+							<div class="col-md-5 d-flex flex-wrap gap-2">{{range $day := $d.Week}}<div class="form-check form-check-inline me-0"><input class="form-check-input" type="checkbox" name="days" value="{{$day}}" id="d-{{$g.ID}}-{{$day}}"{{if le $day 5}} checked{{end}}><label class="form-check-label" for="d-{{$g.ID}}-{{$day}}">{{$.T (print "dns64.groups.day." $day)}}</label></div>{{end}}</div>
+							<div class="col-md-4 d-flex align-items-center gap-1"><input type="time" class="form-control form-control-sm" name="start" value="21:00" required aria-label="{{$.T "dns64.groups.from"}}"><span>–</span><input type="time" class="form-control form-control-sm" name="end" value="07:00" required aria-label="{{$.T "dns64.groups.to"}}"></div>
+							<div class="col-md-3"><select class="form-select form-select-sm" name="action" aria-label="{{$.T "dns64.groups.kind"}}"><option value="off">{{$.T "dns64.groups.action_off"}}</option><option value="cats">{{$.T "dns64.groups.action_cats"}}</option></select></div>
+							<div class="col-md-7 d-flex flex-wrap gap-2">{{range $c := $d.Cats}}<div class="form-check form-check-inline me-0"><input class="form-check-input" type="checkbox" name="cats" value="{{$c}}" id="sc-{{$g.ID}}-{{$c}}"><label class="form-check-label" for="sc-{{$g.ID}}-{{$c}}">{{$.T (print "dns64.groups.cat." $c)}}</label></div>{{end}}</div>
+							<div class="col-md-2 d-grid"><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus"></i> {{$.T "dns64.groups.member_add"}}</button></div>
+						</form>
+						<div class="form-text">{{$.T "dns64.groups.schedules_hint"}}</div>
 					</div>
 				</div>
 			</details>

@@ -37,6 +37,46 @@ type Group struct {
 	SafeSearch bool   `json:"safesearch"` // Google, Bing, DuckDuckGo, YouTube kinderfreundlich
 	YouTube    string `json:"youtube"`    // strict (Standard), moderate, off
 	Bypass     bool   `json:"bypass"`     // Schutz gegen Umgehen
+
+	Hold      string     `json:"hold"`       // "" = normal, block = Internet aus, free = Zeitplaene/Kategorien ausgesetzt
+	HoldUntil string     `json:"hold_until"` // RFC 3339, "" = bis zum Aufheben
+	Schedules []Schedule `json:"schedules"`
+}
+
+// Sofort-Knoepfe einer Gruppe.
+const (
+	HoldBlock = "block"
+	HoldFree  = "free"
+)
+
+// Schedule ist ein Zeitplan einer Gruppe: an den Tagen (1 = Montag ... 7 = Sonntag) von Start bis Ende (HH:MM,
+// Ende vor Start = ueber Mitternacht, gleich = ganzer Tag) gilt die Aktion.
+type Schedule struct {
+	ID      int64    `json:"id"`
+	GroupID int64    `json:"group_id"`
+	Label   string   `json:"label"`
+	Days    []int    `json:"days"`
+	Start   string   `json:"start"`
+	End     string   `json:"end"`
+	Action  string   `json:"action"`     // off = Internet aus, cats = Kategorien sperren
+	Cats    []string `json:"categories"` // bei cats
+	Enabled bool     `json:"enabled"`
+}
+
+// Aktionen eines Zeitplans.
+const (
+	ScheduleOff  = "off"
+	ScheduleCats = "cats"
+)
+
+// HasDay: der Zeitplan gilt an diesem Tag (1 = Montag).
+func (s Schedule) HasDay(d int) bool {
+	for _, x := range s.Days {
+		if x == d {
+			return true
+		}
+	}
+	return false
 }
 
 // Rules sind die einstellbaren Regeln einer Gruppe (Seite und API).

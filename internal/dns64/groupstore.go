@@ -2,7 +2,9 @@ package dns64
 
 import (
 	"context"
+	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -16,7 +18,7 @@ import (
 
 // Groups liefert alle Gruppen mit Mitgliedern, nach Position.
 func (m *Module) Groups(ctx context.Context) ([]groups.Group, error) {
-	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, position, lists_mode, lists, cats, safesearch, youtube, bypass FROM dns64_groups ORDER BY position, id`)
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, position, lists_mode, lists, cats, safesearch, youtube, bypass, hold, hold_until FROM dns64_groups ORDER BY position, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -25,11 +27,11 @@ func (m *Module) Groups(ctx context.Context) ([]groups.Group, error) {
 	for rows.Next() {
 		var g groups.Group
 		var lists, cats string
-		if err := rows.Scan(&g.ID, &g.Name, &g.Position, &g.ListsMode, &lists, &cats, &g.SafeSearch, &g.YouTube, &g.Bypass); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &g.Position, &g.ListsMode, &lists, &cats, &g.SafeSearch, &g.YouTube, &g.Bypass, &g.Hold, &g.HoldUntil); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		g.Members, g.Domains, g.Lists, g.Cats = []groups.Member{}, []groups.Domain{}, splitLines(lists), splitList(cats)
+		g.Members, g.Domains, g.Lists, g.Cats, g.Schedules = []groups.Member{}, []groups.Domain{}, splitLines(lists), splitList(cats), []groups.Schedule{}
 		if g.Lists == nil {
 			g.Lists = []string{} // JSON: [] statt null
 		}
@@ -71,7 +73,134 @@ func (m *Module) Groups(ctx context.Context) ([]groups.Group, error) {
 			out[i].Domains = append(out[i].Domains, x)
 		}
 	}
-	return out, drows.Err()
+	if err := drows.Err(); err != nil {
+		return nil, err
+	}
+	srows, err := m.core.Reader().QueryContext(ctx, `SELECT id, group_id, label, days, start, end, action, cats, enabled FROM dns64_group_schedules ORDER BY start, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer srows.Close()
+	for srows.Next() {
+		var x groups.Schedule
+		var days, cats string
+		if err := srows.Scan(&x.ID, &x.GroupID, &x.Label, &days, &x.Start, &x.End, &x.Action, &cats, &x.Enabled); err != nil {
+			return nil, err
+		}
+		for _, d := range splitList(days) {
+			if n, err := strconv.Atoi(d); err == nil {
+				x.Days = append(x.Days, n)
+			}
+		}
+		x.Cats = splitList(cats)
+		if i, ok := idx[x.GroupID]; ok {
+			out[i].Schedules = append(out[i].Schedules, x)
+		}
+	}
+	return out, srows.Err()
+}
+
+// SetHold setzt den Sofort-Knopf einer Gruppe: block = Internet aus, free = Zeitplaene und Kategorien aussetzen,
+// "" = aufheben. minutes > 0 = so lange, 0 = bis zum Aufheben; until (falls gesetzt) gilt statt minutes.
+func (m *Module) SetHold(ctx context.Context, id int64, mode string, minutes int, until time.Time) error {
+	end := ""
+	switch mode {
+	case groups.HoldBlock, groups.HoldFree:
+		switch {
+		case !until.IsZero():
+			end = until.UTC().Format(time.RFC3339)
+		case minutes > 0:
+			end = time.Now().Add(time.Duration(minutes) * time.Minute).UTC().Format(time.RFC3339)
+		}
+	default:
+		mode = ""
+	}
+	res, err := m.core.Writer().ExecContext(ctx, `UPDATE dns64_groups SET hold = ?, hold_until = ? WHERE id = ?`, mode, end, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	return m.groupsChanged(ctx)
+}
+
+// parseClock liest HH:MM in Minuten seit Mitternacht.
+func parseClock(s string) (int, bool) {
+	t, err := time.Parse("15:04", strings.TrimSpace(s))
+	if err != nil {
+		return 0, false
+	}
+	return t.Hour()*60 + t.Minute(), true
+}
+
+// AddSchedule legt einen Zeitplan der Gruppe an.
+func (m *Module) AddSchedule(ctx context.Context, x groups.Schedule) (groups.Schedule, error) {
+	x.Label = strings.TrimSpace(x.Label)
+	var days []string
+	for d := 1; d <= 7; d++ {
+		if slices.Contains(x.Days, d) {
+			days = append(days, strconv.Itoa(d))
+		}
+	}
+	start, ok1 := parseClock(x.Start)
+	end, ok2 := parseClock(x.End)
+	if len(days) == 0 || !ok1 || !ok2 || utf8.RuneCountInString(x.Label) > 40 {
+		return x, errCfg("err_schedule")
+	}
+	x.Start, x.End = fmt.Sprintf("%02d:%02d", start/60, start%60), fmt.Sprintf("%02d:%02d", end/60, end%60)
+	var cats []string
+	if x.Action == groups.ScheduleCats {
+		for _, c := range filter.GroupCategories {
+			if slices.Contains(x.Cats, c) {
+				cats = append(cats, c)
+			}
+		}
+		if len(cats) == 0 {
+			return x, errCfg("err_schedule_cats")
+		}
+	} else {
+		x.Action = groups.ScheduleOff
+	}
+	var n int
+	if err := m.core.Reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM dns64_groups WHERE id = ?`, x.GroupID).Scan(&n); err != nil {
+		return x, err
+	}
+	if n == 0 {
+		return x, errNotFound
+	}
+	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_group_schedules (group_id, label, days, start, end, action, cats, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+		x.GroupID, x.Label, strings.Join(days, ","), x.Start, x.End, x.Action, strings.Join(cats, ","), time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return x, err
+	}
+	x.ID, _ = res.LastInsertId()
+	x.Cats, x.Enabled = cats, true
+	return x, m.groupsChanged(ctx)
+}
+
+// SetScheduleEnabled schaltet einen Zeitplan an oder aus.
+func (m *Module) SetScheduleEnabled(ctx context.Context, id int64, on bool) error {
+	res, err := m.core.Writer().ExecContext(ctx, `UPDATE dns64_group_schedules SET enabled = ? WHERE id = ?`, on, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	return m.groupsChanged(ctx)
+}
+
+// RemoveSchedule loescht einen Zeitplan.
+func (m *Module) RemoveSchedule(ctx context.Context, id int64) (groups.Schedule, error) {
+	var x groups.Schedule
+	if err := m.core.Reader().QueryRowContext(ctx, `SELECT id, group_id, label FROM dns64_group_schedules WHERE id = ?`, id).Scan(&x.ID, &x.GroupID, &x.Label); err != nil {
+		return x, errNotFound
+	}
+	if _, err := m.core.Writer().ExecContext(ctx, `DELETE FROM dns64_group_schedules WHERE id = ?`, id); err != nil {
+		return x, err
+	}
+	return x, m.groupsChanged(ctx)
 }
 
 func splitList(s string) []string {
@@ -233,6 +362,9 @@ func (m *Module) DeleteGroup(ctx context.Context, id int64) error {
 		return err
 	}
 	if _, err := m.core.Writer().ExecContext(ctx, `DELETE FROM dns64_group_domains WHERE group_id = ?`, id); err != nil {
+		return err
+	}
+	if _, err := m.core.Writer().ExecContext(ctx, `DELETE FROM dns64_group_schedules WHERE group_id = ?`, id); err != nil {
 		return err
 	}
 	return m.groupsChanged(ctx)

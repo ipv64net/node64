@@ -2489,6 +2489,8 @@
       "later": "Encrypted queries from devices (DoH/DoT/DoQ) are on the “Encryption” tab."
     },
     "js": {
+      "reason_off_hold": "internet off (group {group})",
+      "reason_off_schedule": "schedule {name}: internet off (group {group})",
       "reason_safesearch": "SafeSearch → {target} (group {group})",
       "reason_canary": "Firefox DoH switched off",
       "reason_bypass_icloud": "iCloud Private Relay off (group {group})",
@@ -2588,7 +2590,46 @@
       "added": "Record added, active immediately.",
       "deleted": "Record deleted."
     },
+    "hint": {
+      "title": "Internet break",
+      "until": "until {time}",
+      "until_day": "until {time}",
+      "until_forever": "until it is released",
+      "hold": "blocked",
+      "schedule": "schedule “{name}”",
+      "note": "{host} is not reachable right now. This page is shown by Node64 (DNS64)."
+    },
     "groups": {
+      "off_hold": "Internet off",
+      "off_schedule": "Schedule “{name}”: internet off",
+      "until": "until {time}",
+      "free_on": "Free",
+      "release": "Release",
+      "block_btn": "Block",
+      "free_btn": "Free",
+      "for_min": "{n} minutes",
+      "for_hours": "{n} h",
+      "until_morning": "until tomorrow morning (7:00)",
+      "until_release": "until released",
+      "schedules": "Schedules",
+      "schedules_none": "None.",
+      "sched_label_ph": "e.g. Bedtime",
+      "from": "from",
+      "to": "to",
+      "action_off": "Internet off",
+      "action_cats": "Block categories",
+      "sched_off": "off",
+      "sched_on": "on",
+      "schedules_hint": "Uses the node’s time zone; end before start = across midnight (e.g. 21:00–07:00), equal = whole day. “Internet off”: only local names, custom records and the group’s releases work; pages show a notice from the node (for https:// only a certificate error). “Block” acts like “Internet off” at once, “Free” suspends schedules and categories for a while, blocklists keep applying.",
+      "day": {
+        "1": "Mon",
+        "2": "Tue",
+        "3": "Wed",
+        "4": "Thu",
+        "5": "Fri",
+        "6": "Sat",
+        "7": "Sun"
+      },
       "protect": "Child safety",
       "safesearch": "SafeSearch (Google, Bing, DuckDuckGo, YouTube)",
       "safesearch_hint": "Searches only with SafeSearch, YouTube in restricted mode; cannot be switched off on the device. YouTube “off” = YouTube without restriction (block it with the streaming category).",
@@ -2656,6 +2697,8 @@
       "deleted": "Group deleted."
     },
     "err": {
+      "schedule": "Schedule: choose at least one day and times like 21:00 (name at most 40 characters).",
+      "schedule_cats": "Schedule “Block categories”: please choose at least one category.",
       "group_domain": "Please enter a valid domain, e.g. tiktok.com.",
       "group_name": "Please enter a name (at most 40 characters).",
       "group_dup": "A group with this name already exists.",

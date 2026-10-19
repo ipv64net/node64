@@ -1156,7 +1156,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Liste; released:<liste>, paused:<liste>, stale, group:<domain> (Sperre der Gruppe), cat:<kategorie>, safesearch:<ziel>, canary, bypass:icloud"
+            "description": "Liste; released:<liste>, paused:<liste>, stale, group:<domain> (Sperre der Gruppe), cat:<kategorie>, safesearch:<ziel>, canary, bypass:icloud, off:hold, off:schedule:<name>"
           },
           "rcode": {
             "type": "string"
@@ -3312,6 +3312,24 @@
           },
           "bypass": {
             "type": "boolean"
+          },
+          "hold": {
+            "type": "string",
+            "enum": [
+              "",
+              "block",
+              "free"
+            ]
+          },
+          "hold_until": {
+            "type": "string",
+            "description": "RFC 3339, leer = bis zum Aufheben"
+          },
+          "schedules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DNS64Schedule"
+            }
           }
         }
       },
@@ -3365,6 +3383,66 @@
         },
         "required": [
           "domain",
+          "action"
+        ]
+      },
+      "DNS64Schedule": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "group_id": {
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 7
+            },
+            "description": "1 = Montag"
+          },
+          "start": {
+            "type": "string",
+            "example": "21:00"
+          },
+          "end": {
+            "type": "string",
+            "example": "07:00"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "off",
+              "cats"
+            ]
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "social",
+                "games",
+                "streaming",
+                "gambling",
+                "adult"
+              ]
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "days",
+          "start",
+          "end",
           "action"
         ]
       }
@@ -13033,6 +13111,184 @@
           "DNS64"
         ],
         "summary": "Freigabe oder Sperre der Gruppe löschen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/groups/{id}/hold": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Sofort-Knopf: Internet aus (block), Zeitpläne/Kategorien aussetzen (free) oder aufheben (leerer mode)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "block",
+                      "free",
+                      ""
+                    ]
+                  },
+                  "minutes": {
+                    "type": "integer",
+                    "description": "0 = bis zum Aufheben"
+                  },
+                  "until_morning": {
+                    "type": "boolean",
+                    "description": "bis zum nächsten Morgen 07:00 (Zeitzone der Node)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/groups/{id}/schedules": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Zeitplan anlegen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNS64Schedule"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Schedule"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/groups/schedules/{id}/enable": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Zeitplan einschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/groups/schedules/{id}/disable": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Zeitplan ausschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/groups/schedules/{id}": {
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Zeitplan löschen",
         "parameters": [
           {
             "name": "id",

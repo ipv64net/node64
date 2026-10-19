@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.18.0"
+	version   = "1.19.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -284,6 +284,7 @@ func (m *Module) start(ctx context.Context) error {
 	e.srv = &dnsserver.Server{Addr: e.addr, Local: e.local, Filter: e.lists, Upstream: e.up, Cache: e.cache, Log: st, Logger: m.log,
 		Records: m, Split: m.split, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused,
 		Policy: m.policy, Canary: cfg.Canary}
+	e.srv.HintV4, e.srv.HintV6 = hintAddrs(cfg.Bind)
 	if err := e.srv.Start(); err != nil {
 		st.CloseNow()
 		e.up.Close()
@@ -297,6 +298,7 @@ func (m *Module) start(ctx context.Context) error {
 		go func() { defer e.wg.Done(); run(ectx) }()
 	}
 	m.eng = e
+	m.syncHintRoute(glist, true) // Hinweisseite bei "Internet aus" (nur wenn eine Gruppe gesperrt sein kann)
 	m.log.Info("dns64 started", "dns", e.addr, "router", m.routerAddr(ctx))
 	return nil
 }
@@ -317,6 +319,9 @@ func (m *Module) stopLocked(ctx context.Context) error {
 	e := m.eng
 	m.life, m.eng, m.lastErr = nil, nil, ""
 	m.mu.Unlock()
+	if m.ingress != nil {
+		m.ingress.Remove(hintOwner)
+	}
 	m.retryWG.Wait()
 	if e == nil {
 		return nil
