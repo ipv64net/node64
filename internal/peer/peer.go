@@ -65,6 +65,9 @@ type Member struct {
 	LastError string    `json:"-"`
 	Version   string    `json:"-"`
 	Linked    bool      `json:"-"` // mit dem hub verknuepft
+	Sync      []string  `json:"-"` // eingeschaltete Cluster-Bereiche "modul/bereich" laut Ping (nil = aeltere Version)
+	State     string    `json:"-"` // "" bzw. "active", "suspended" (suspend.go)
+	Reason    string    `json:"-"` // Grund der Aussetzung (Kennung, z. B. account_changed)
 }
 
 // Online: in den letzten zwei Minuten erreicht.
@@ -102,8 +105,9 @@ type Manager struct {
 	seeded atomic.Bool // vorhandene Checks und Fenster im Protokoll (config.go)
 
 	mu      sync.Mutex
-	proxied map[string]bool // Mitglieder, deren zurueckgehaltene Checks schon an den hub gingen (proxy.go)
-	code    string          // offener Kopplungscode
+	prov    map[string]Provider // Module, die ueber den Cluster abgleichen (cluster.go)
+	proxied map[string]bool     // Mitglieder, deren zurueckgehaltene Checks schon an den hub gingen (proxy.go)
+	code    string              // offener Kopplungscode
 	exp     time.Time
 	tries   int
 }
@@ -144,7 +148,7 @@ func (m *Manager) PublicKey() string {
 
 // Members liefert die Gruppe (ohne die eigene Node), nach Name sortiert.
 func (m *Manager) Members(ctx context.Context) ([]Member, error) {
-	rows, err := m.db.QueryContext(ctx, `SELECT node_id, name, url, pubkey, account_id, added_at, added_by, last_seen, last_error, version, linked FROM peer_members ORDER BY name, node_id`)
+	rows, err := m.db.QueryContext(ctx, `SELECT node_id, name, url, pubkey, account_id, added_at, added_by, last_seen, last_error, version, linked, sync FROM peer_members ORDER BY name, node_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -153,8 +157,12 @@ func (m *Manager) Members(ctx context.Context) ([]Member, error) {
 	for rows.Next() {
 		var x Member
 		var added, seen string
-		if err := rows.Scan(&x.NodeID, &x.Name, &x.URL, &x.PubKey, &x.AccountID, &added, &x.AddedBy, &seen, &x.LastError, &x.Version, &x.Linked); err != nil {
+		var caps sql.NullString
+		if err := rows.Scan(&x.NodeID, &x.Name, &x.URL, &x.PubKey, &x.AccountID, &added, &x.AddedBy, &seen, &x.LastError, &x.Version, &x.Linked, &caps); err != nil {
 			return nil, err
+		}
+		if caps.Valid {
+			x.Sync = splitCaps(caps.String)
 		}
 		x.AddedAt, x.LastSeen = parseTime(added), parseTime(seen)
 		out = append(out, x)
@@ -209,8 +217,12 @@ func (m *Manager) seen(ctx context.Context, nodeID string, info pingInfo, err er
 		_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET last_error = ? WHERE node_id = ?`, trunc(err.Error(), 300), nodeID)
 		return
 	}
-	_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET last_seen = ?, last_error = '', version = ?, linked = ?, name = CASE WHEN ? != '' THEN ? ELSE name END WHERE node_id = ?`,
-		fmtTime(time.Now()), trunc(info.Version, 32), info.Linked, info.Name, trunc(info.Name, 100), nodeID)
+	var caps any // aeltere Version ohne Angabe: NULL (gleicht nur Healthchecks ab)
+	if info.Sync != nil {
+		caps = joinCaps(info.Sync)
+	}
+	_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET last_seen = ?, last_error = '', version = ?, linked = ?, sync = ?, name = CASE WHEN ? != '' THEN ? ELSE name END WHERE node_id = ?`,
+		fmtTime(time.Now()), trunc(info.Version, 32), info.Linked, caps, info.Name, trunc(info.Name, 100), nodeID)
 }
 
 // linkedSelf: diese Node ist mit dem hub verknuepft.
@@ -265,11 +277,12 @@ func (m *Manager) pingAll(ctx context.Context) {
 }
 
 type pingInfo struct {
-	NodeID    string `json:"node_id"`
-	Name      string `json:"name"`
-	Version   string `json:"version"`
-	AccountID int64  `json:"account_id"`
-	Linked    bool   `json:"linked"`
+	NodeID    string   `json:"node_id"`
+	Name      string   `json:"name"`
+	Version   string   `json:"version"`
+	AccountID int64    `json:"account_id"`
+	Linked    bool     `json:"linked"`
+	Sync      []string `json:"sync,omitempty"` // eingeschaltete Cluster-Bereiche (cluster.go)
 }
 
 func fmtTime(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05.000Z") }

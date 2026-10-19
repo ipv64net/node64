@@ -130,7 +130,7 @@ func (m *Manager) Handle(h func(w http.ResponseWriter, r *http.Request, from *Me
 func (m *Manager) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /peer/v1/pair", m.handlePair)
 	mux.Handle("GET /peer/v1/ping", m.Handle(func(w http.ResponseWriter, r *http.Request, _ *Member, _ []byte) {
-		writeJSON(w, http.StatusOK, pingInfo{NodeID: m.d.NodeID(), Name: m.d.NodeName(), Version: m.d.Version, AccountID: m.d.AccountID(), Linked: m.linkedSelf()})
+		writeJSON(w, http.StatusOK, pingInfo{NodeID: m.d.NodeID(), Name: m.d.NodeName(), Version: m.d.Version, AccountID: m.d.AccountID(), Linked: m.linkedSelf(), Sync: m.syncCaps(r.Context())})
 	}))
 	mux.Handle("POST /peer/v1/members", m.Handle(m.handleMembers))
 	mux.Handle("GET /peer/v1/changes", m.Handle(m.handleChanges))
