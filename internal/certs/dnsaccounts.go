@@ -158,9 +158,13 @@ func (m *Manager) SaveDNSAccount(ctx context.Context, a *DNSAccount, values map[
 			return err
 		}
 		a.ID, _ = res.LastInsertId()
+		m.changed(ctx, ItemDNSAccounts, a.ID)
 		return nil
 	}
 	_, err = m.w.ExecContext(ctx, `UPDATE cert_dns_accounts SET name = ?, provider = ?, config = ?, updated_at = ? WHERE id = ?`, a.Name, a.Provider, sealed, now, a.ID)
+	if err == nil {
+		m.changed(ctx, ItemDNSAccounts, a.ID)
+	}
 	return err
 }
 
@@ -173,6 +177,7 @@ func (m *Manager) DeleteDNSAccount(ctx context.Context, id int64) error {
 	if n > 0 {
 		return ErrInUse
 	}
+	uid := m.deleting(ctx, ItemDNSAccounts, id)
 	res, err := m.w.ExecContext(ctx, `DELETE FROM cert_dns_accounts WHERE id = ?`, id)
 	if err != nil {
 		return err
@@ -180,6 +185,7 @@ func (m *Manager) DeleteDNSAccount(ctx context.Context, id int64) error {
 	if k, _ := res.RowsAffected(); k == 0 {
 		return ErrNotFound
 	}
+	m.changedUID(ctx, ItemDNSAccounts, uid, true)
 	return nil
 }
 

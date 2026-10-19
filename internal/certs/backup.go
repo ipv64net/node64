@@ -97,6 +97,11 @@ func (m *Manager) ImportAll(ctx context.Context, b *Backup) (*ImportResult, erro
 	}
 	res := &ImportResult{Added: map[string]int{}, Skipped: map[string]int{}, CertIDs: map[int64]int64{}}
 	ids := map[string]map[int64]int64{} // Tabelle -> alte ID -> neue ID
+	type added struct {
+		item string
+		id   int64
+	}
+	var news []added // fuer den Cluster
 	for _, t := range backupTables {
 		cols, err := m.tableColumns(ctx, t.name)
 		if err != nil {
@@ -146,11 +151,19 @@ func (m *Manager) ImportAll(ctx context.Context, b *Backup) (*ImportResult, erro
 			id, _ := r.LastInsertId()
 			ids[t.name][old] = id
 			res.Added[t.name]++
+			for item, table := range itemTables {
+				if table == t.name {
+					news = append(news, added{item, id})
+				}
+			}
 		}
 	}
 	res.CertIDs = ids["certs"]
 	if err := m.reload(ctx); err != nil {
 		return res, err
+	}
+	for _, n := range news {
+		m.changed(ctx, n.item, n.id)
 	}
 	return res, nil
 }
@@ -158,6 +171,9 @@ func (m *Manager) ImportAll(ctx context.Context, b *Backup) (*ImportResult, erro
 // existingRow: gibt es den Eintrag hier schon (dann dessen ID)?
 func (m *Manager) existingRow(ctx context.Context, table string, row map[string]any) (int64, bool, error) {
 	s := func(k string) string { v, _ := row[k].(string); return v }
+	if id := m.idOf(ctx, table, s("uid")); id != 0 { // gleiche Kennung (Cluster, fruehere Sicherung)
+		return id, true, nil
+	}
 	var q string
 	var args []any
 	switch table {

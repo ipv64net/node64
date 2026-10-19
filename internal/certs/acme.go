@@ -81,6 +81,7 @@ func (m *Manager) issue(ctx context.Context, id int64, reason string) {
 		}
 		_, _ = m.w.ExecContext(context.WithoutCancel(ctx), `UPDATE certs SET status = ?, last_error = ?, last_attempt = ?, updated_at = ? WHERE id = ?`,
 			StatusError, msg, now, now, id)
+		m.changed(context.WithoutCancel(ctx), ItemCertificates, id)
 		m.log.Error("certificate not obtained", "cert", id, "names", c.Title(), "err", msg)
 		if prevStatus != StatusError { // einmal je Stoerung
 			m.alert(c, notify.KindCertFail, msg, "")
@@ -159,6 +160,7 @@ func (m *Manager) accountKey(ctx context.Context) (crypto.Signer, error) {
 	if err := m.d.Store.SetSetting(ctx, setKey, m.d.Box.Encrypt(string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})))); err != nil {
 		return nil, err
 	}
+	m.changedUID(ctx, ItemACME, clusterAccount, false)
 	return k, nil
 }
 
@@ -402,7 +404,7 @@ func (m *Manager) due(ctx context.Context) {
 		return
 	}
 	for _, c := range list {
-		if c.AutoRenew && c.Source != SourceUpload && c.Step == "" && needsRenewal(c) {
+		if c.AutoRenew && c.Source != SourceUpload && c.Step == "" && needsRenewal(c) && m.renewHere(ctx, c) { // im Cluster nur eine Node
 			_ = m.start(c.ID, "renew")
 		}
 		m.warnExpiry(ctx, c)
@@ -444,7 +446,7 @@ func (m *Manager) warnExpiry(ctx context.Context, c *Cert) {
 	case days <= 14:
 		stage = "14"
 	}
-	if stage == "" || c.warned == stage || (c.warned == "3" && stage == "14") {
+	if stage == "" || c.warned == stage || (c.warned == "3" && stage == "14") || (stage == "14" && c.RenewedBy != "") { // erneuert eine andere Node: erst kurz vor Ablauf
 		return
 	}
 	if _, err := m.w.ExecContext(ctx, `UPDATE certs SET warned = ? WHERE id = ?`, stage, c.ID); err != nil {

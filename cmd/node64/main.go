@@ -33,6 +33,7 @@ import (
 	"github.com/ipv64net/node64/internal/caps"
 	"github.com/ipv64net/node64/internal/cdn64"
 	"github.com/ipv64net/node64/internal/certs"
+	"github.com/ipv64net/node64/internal/certs/certcluster"
 	"github.com/ipv64net/node64/internal/config"
 	"github.com/ipv64net/node64/internal/dns64"
 	"github.com/ipv64net/node64/internal/dyndns"
@@ -295,6 +296,7 @@ func run() error {
 		}
 		return out
 	})
+	certcluster.Register(peerMgr, certMgr, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // Zertifikate ueber den Cluster
 	go peerMgr.Run(ctx)
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)

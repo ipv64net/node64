@@ -198,6 +198,7 @@ func (m *Manager) AddACMECA(ctx context.Context, in ACMECAInput) (*ACMECA, error
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
+	m.changed(ctx, ItemACME, id)
 	return m.loadACMECA(ctx, id)
 }
 
@@ -210,10 +211,14 @@ func (m *Manager) DeleteACMECA(ctx context.Context, id int64) error {
 	if a.Certificates > 0 {
 		return ErrInUse
 	}
+	uid := m.deleting(ctx, ItemACME, id)
 	_, err = m.w.ExecContext(ctx, `DELETE FROM cert_acme_cas WHERE id = ?`, id)
 	m.mu.Lock()
 	delete(m.reg, a.Directory)
 	m.mu.Unlock()
+	if err == nil {
+		m.changedUID(ctx, ItemACME, uid, true)
+	}
 	return err
 }
 

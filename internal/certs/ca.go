@@ -412,6 +412,7 @@ func (m *Manager) insertCA(ctx context.Context, name, certPEM, keyPEM string, im
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
+	m.changed(ctx, ItemCAs, id)
 	return m.GetCA(ctx, id)
 }
 
@@ -428,6 +429,7 @@ func (m *Manager) RenameCA(ctx context.Context, id int64, name string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
+	m.changed(ctx, ItemCAs, id)
 	return nil
 }
 
@@ -440,7 +442,10 @@ func (m *Manager) DeleteCA(ctx context.Context, id int64) error {
 	if ca.Certificates > 0 {
 		return ErrInUse
 	}
-	_, err = m.w.ExecContext(ctx, `DELETE FROM cert_cas WHERE id = ?`, id)
+	uid := m.deleting(ctx, ItemCAs, id)
+	if _, err = m.w.ExecContext(ctx, `DELETE FROM cert_cas WHERE id = ?`, id); err == nil {
+		m.changedUID(ctx, ItemCAs, uid, true)
+	}
 	return err
 }
 
@@ -567,20 +572,26 @@ func (m *Manager) storeIssued(ctx context.Context, id int64, names []string, cha
 	}
 	now := store.Now()
 	if _, err := m.w.ExecContext(ctx, `UPDATE certs SET names = ?, cert_pem = ?, key_pem = ?, not_before = ?, not_after = ?, issuer = ?, status = ?, last_error = '',
-		last_attempt = ?, warned = '', updated_at = ? WHERE id = ?`, strings.Join(names, ","), chain, m.d.Box.Encrypt(keyPEM), store.FormatTime(leaf.NotBefore),
+		last_attempt = ?, warned = '', renewer = '', updated_at = ? WHERE id = ?`, strings.Join(names, ","), chain, m.d.Box.Encrypt(keyPEM), store.FormatTime(leaf.NotBefore),
 		store.FormatTime(leaf.NotAfter), issuerName(leaf), StatusValid, now, now, id); err != nil {
 		return err
 	}
 	if err := m.reload(ctx); err != nil { // gilt sofort, ohne Neustart
 		return err
 	}
+	m.issued(id)
+	m.changed(ctx, ItemCertificates, id) // wer ausstellt, erneuert ab jetzt (renewer '')
+	return nil
+}
+
+// issued meldet ein neues Zertifikat an die Abnehmer (OnChange).
+func (m *Manager) issued(id int64) {
 	m.mu.Lock()
 	fs := append([]func(int64){}, m.onChg...)
 	m.mu.Unlock()
 	for _, f := range fs {
 		go f(id)
 	}
-	return nil
 }
 
 // OnChange meldet jede neue Ausstellung bzw. Erneuerung (Kennung) an f, ausserhalb aller Sperren. Abnehmer, die

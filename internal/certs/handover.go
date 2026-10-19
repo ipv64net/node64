@@ -128,6 +128,7 @@ func (m *Manager) ImportIssued(ctx context.Context, req ImportRequest) (*Cert, e
 		return nil, err
 	}
 	m.refreshHold(ctx)
+	m.changed(ctx, ItemCertificates, id)
 	return m.Get(ctx, id)
 }
 

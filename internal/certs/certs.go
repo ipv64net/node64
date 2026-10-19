@@ -98,6 +98,9 @@ type Cert struct {
 	LastError   string    `json:"last_error,omitempty"`
 	LastAttempt time.Time `json:"last_attempt,omitzero"`
 	UsedBy      []string  `json:"used_by,omitempty"`
+	UID         string    `json:"uid"`                   // stabile Kennung (Cluster)
+	RenewedBy   string    `json:"renewed_by,omitempty"`  // Cluster: Node, die erneuert ("" = diese)
+	RefMissing  bool      `json:"ref_missing,omitempty"` // Cluster: ACME-Stelle, DNS-Zugang oder CA fehlt hier (keine Erneuerung)
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 	hasCert     bool
@@ -169,6 +172,9 @@ type Manager struct {
 	provider   func(id string, values map[string]string) (challenge.Provider, error) // nil = lego
 	loopFirst  time.Duration
 	loopEvery  time.Duration
+
+	clSelf func() string // Cluster (cluster.go)
+	clHook ClusterHook
 }
 
 type loadedCert struct {
@@ -232,13 +238,14 @@ func (m *Manager) Close() {
 // ---------------------------------------------------------------- Lesen
 
 const cols = `id, names, source, alias_zone, alias_prefix, dns_account, staging, auto_renew, cert_pem != '', not_before, not_after, issuer, status, last_error,
-	last_attempt, warned, created_at, updated_at, ca_id, days, acme_ca, key_type`
+	last_attempt, warned, created_at, updated_at, ca_id, days, acme_ca, key_type, uid, renewer, (source = 'dns' AND dns_account = 0 AND ref_dns_account != '') OR
+	(source = 'ca' AND ca_id = 0 AND ref_ca != '') OR (acme_ca = 0 AND ref_acme_ca != '')`
 
 func (m *Manager) scan(row interface{ Scan(...any) error }) (*Cert, error) {
 	var c Cert
 	var names, nb, na, la, ca, ua string
 	if err := row.Scan(&c.ID, &names, &c.Source, &c.AliasZone, &c.AliasPrefix, &c.DNSAccount, &c.Staging, &c.AutoRenew, &c.hasCert, &nb, &na, &c.Issuer,
-		&c.Status, &c.LastError, &la, &c.warned, &ca, &ua, &c.CAID, &c.Days, &c.ACMECA, &c.KeyType); err != nil {
+		&c.Status, &c.LastError, &la, &c.warned, &ca, &ua, &c.CAID, &c.Days, &c.ACMECA, &c.KeyType, &c.UID, &c.RenewedBy, &c.RefMissing); err != nil {
 		return nil, err
 	}
 	c.Names = strings.Split(names, ",")
@@ -453,6 +460,9 @@ func (m *Manager) SetAccount(ctx context.Context, email string, acceptTOS bool) 
 	m.mu.Lock()
 	m.reg = map[string]bool{} // Kontaktadresse beim naechsten Abruf aktualisieren
 	m.mu.Unlock()
+	if m.d.Store.SettingOr(ctx, setKey, "") != "" { // ohne Kontoschluessel gibt es im Cluster noch kein Konto
+		m.changedUID(ctx, ItemACME, clusterAccount, false)
+	}
 	return nil
 }
 
@@ -618,6 +628,7 @@ func (m *Manager) Create(ctx context.Context, req Request) (*Cert, error) {
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
+	m.changed(ctx, ItemCertificates, id)
 	_ = m.start(id, "new")
 	m.refreshHold(ctx)
 	return m.Get(ctx, id)
@@ -679,6 +690,7 @@ func (m *Manager) Upload(ctx context.Context, certPEM, keyPEM string) (*Cert, er
 		return nil, err
 	}
 	m.refreshHold(ctx)
+	m.changed(ctx, ItemCertificates, id)
 	return m.Get(ctx, id)
 }
 
@@ -692,6 +704,9 @@ func (m *Manager) SetAutoRenew(ctx context.Context, id int64, on bool) error {
 		return ErrUpload
 	}
 	_, err = m.w.ExecContext(ctx, `UPDATE certs SET auto_renew = ?, updated_at = ? WHERE id = ?`, on, store.Now(), id)
+	if err == nil {
+		m.changed(ctx, ItemCertificates, id)
+	}
 	return err
 }
 
@@ -710,6 +725,7 @@ func (m *Manager) Delete(ctx context.Context, id int64, force bool) error {
 	if busy {
 		return ErrBusy
 	}
+	uid := m.deleting(ctx, ItemCertificates, id)
 	if _, err := m.w.ExecContext(ctx, `DELETE FROM certs WHERE id = ?`, id); err != nil {
 		return err
 	}
@@ -717,6 +733,7 @@ func (m *Manager) Delete(ctx context.Context, id int64, force bool) error {
 	delete(m.loaded, id)
 	m.mu.Unlock()
 	m.refreshHold(ctx)
+	m.changedUID(ctx, ItemCertificates, uid, true)
 	return nil
 }
 
@@ -728,6 +745,9 @@ func (m *Manager) Renew(ctx context.Context, id int64) error {
 	}
 	if c.Source == SourceUpload {
 		return ErrUpload
+	}
+	if c.RefMissing {
+		return invalid("cluster", "ACME CA, DNS account or CA of this certificate is not on this node")
 	}
 	if c.Source != SourceCA && c.Source != SourceSelf && c.ACMECA == 0 && !m.Account(ctx).TOSAccepted {
 		return ErrTOS
