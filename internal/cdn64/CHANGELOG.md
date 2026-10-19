@@ -11,6 +11,11 @@ CDN64 online: HTTP/3 auch in Modus 1.
 - Antworten über den Tunnel tragen den Hinweis auf HTTP/3 (Alt-Svc), sobald alle verbundenen Server das
   Durchreichen beherrschen.
 
+### Geändert
+- Modus 3 (direkt zum Ziel, ohne Tunnel) gibt es nur noch auf ipv64.net/cdn64; der Einschalt-Dialog zeigt dazu einen
+  Hinweis mit Link. Früher in der Node eingeschaltete Modus-3-Namen lassen sich auf Modus 1/2 umstellen oder
+  ausschalten.
+
 ## 1.10.0 – 2026-10-18
 
 CDN64 online Modus 3.

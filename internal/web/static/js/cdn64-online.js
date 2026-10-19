@@ -226,7 +226,7 @@
 
 	function open(id, test, mode) {
 		hostID = id;
-		modeSel.value = mode === "2" || mode === "3" ? mode : "1";
+		modeSel.value = mode === "2" ? "2" : "1"; // Modus 3 gibt es nur auf ipv64.net/cdn64
 		onlyTest = test;
 		stepsEl.textContent = "";
 		setup.classList.toggle("d-none", test);

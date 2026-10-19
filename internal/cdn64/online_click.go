@@ -10,7 +10,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/netip"
 	"os"
 	"slices"
 	"strconv"
@@ -310,33 +309,29 @@ type onlineResult struct {
 }
 
 // onlineEnable schaltet die Namen eines Hosts ein; schon eingeschaltete wechseln auf mode (DNS bleibt). Scheitern
-// alle, bleibt nichts zurueck. Modus 2 (TLS endet auf den Servern) geht nicht fuer "TLS durchreichen".
+// alle, bleibt nichts zurueck. Modus 2 (TLS endet auf den Servern) geht nicht fuer "TLS durchreichen". Modus 3
+// (direkt zum Ziel, ohne Tunnel) gibt es nur auf ipv64.net/cdn64; alte Modus-3-Namen lassen sich hier auf 1/2
+// umstellen (bei ipv64 aus und neu ein) oder ausschalten.
 func (m *Module) onlineEnable(ctx context.Context, h *Host, mode int) ([]onlineResult, error) {
 	m.online.op.Lock()
 	defer m.online.op.Unlock()
 	if mode == 0 {
 		mode = 1
 	}
-	if mode < 1 || mode > 3 {
+	if mode == 3 {
+		return nil, errOnline("mode3_web")
+	}
+	if mode < 1 || mode > 2 {
 		return nil, errOnline("mode_not_available")
 	}
 	if mode == 2 && h.Kind == KindPass {
 		return nil, errOnline("mode2_passthrough")
 	}
-	var tgt *ipv64api.CDN64Target
-	tunnelID := ""
-	if mode == 3 { // direkt: die Server gehen selbst zum Ziel dieses Hosts - das muss oeffentlich erreichbar sein
-		var err error
-		if tgt, err = onlineTarget(h); err != nil {
-			return nil, err
-		}
-	} else {
-		c, err := m.onlineEnsureTunnel(ctx)
-		if err != nil {
-			return nil, err
-		}
-		tunnelID = c.Tunnel
+	c, err := m.onlineEnsureTunnel(ctx)
+	if err != nil {
+		return nil, err
 	}
+	tunnelID := c.Tunnel
 	have, err := m.onlineNames(ctx)
 	if err != nil {
 		return nil, err
@@ -352,7 +347,7 @@ func (m *Module) onlineEnable(ctx context.Context, h *Host, mode int) ([]onlineR
 			out = append(out, onlineResult{Name: n, Result: "skipped", Code: "wildcard_name"})
 			continue
 		}
-		if x, ok := on[n]; ok && (x.Mode == 3) != (mode == 3) { // Tunnel <-> direkt: bei ipv64 aus und neu ein
+		if x, ok := on[n]; ok && x.Mode == 3 { // alter Modus-3-Name (direkt) -> Tunnel: bei ipv64 aus und neu ein
 			if err := m.onlineRemoteOff(ctx, x); err != nil {
 				out = append(out, onlineResult{Name: n, Result: "error", Code: onlineCode(err), Error: err.Error()})
 				continue
@@ -370,7 +365,7 @@ func (m *Module) onlineEnable(ctx context.Context, h *Host, mode int) ([]onlineR
 			out = append(out, onlineResult{Name: n, Result: "on"})
 			continue
 		}
-		rh, err := m.online.api.AddHost(ctx, n, tunnelID, mode, tgt)
+		rh, err := m.online.api.AddHost(ctx, n, tunnelID, mode, nil)
 		if err != nil {
 			out = append(out, onlineResult{Name: n, Result: "error", Code: onlineCode(err), Error: err.Error()})
 			continue
@@ -387,24 +382,6 @@ func (m *Module) onlineEnable(ctx context.Context, h *Host, mode int) ([]onlineR
 	m.onlineDropTunnel(ctx) // nichts eingeschaltet: Tunnel wieder weg
 	m.onlineKick()
 	return out, nil
-}
-
-// onlineTarget: Ziel fuer Modus 3 aus dem Host (nur Proxy-Hosts, Ziel oeffentlich: IP pruefen, Namen pruefen
-// ipv64 und die Server).
-func onlineTarget(h *Host) (*ipv64api.CDN64Target, error) {
-	if h.Kind != KindProxy {
-		return nil, errOnline("mode3_kind")
-	}
-	if a, err := netip.ParseAddr(strings.Trim(h.TargetHost, "[]")); err == nil {
-		a = a.Unmap()
-		if !a.IsGlobalUnicast() || a.IsPrivate() || netip.MustParsePrefix("100.64.0.0/10").Contains(a) {
-			return nil, errOnline("target_not_public")
-		}
-	} else if !strings.Contains(h.TargetHost, ".") || strings.HasSuffix(h.TargetHost, ".local") || strings.HasSuffix(h.TargetHost, ".lan") ||
-		strings.HasSuffix(h.TargetHost, ".home.arpa") || strings.HasSuffix(h.TargetHost, ".internal") {
-		return nil, errOnline("target_not_public")
-	}
-	return &ipv64api.CDN64Target{Source: "fixed", Target: strings.Trim(h.TargetHost, "[]"), Port: h.TargetPort, Scheme: h.Scheme, VerifyTLS: h.VerifyTarget, Frontend: 2}, nil
 }
 
 // onlineDisable schaltet alle Namen eines Hosts aus; mit dem letzten Namen geht der Tunnel.

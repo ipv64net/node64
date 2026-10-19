@@ -26,8 +26,8 @@ Node. Fällt ein Server aus, nimmt ipv64 ihn nach rund einer Minute aus dem DNS;
    - **Modus 2 – auf den Servern beenden:** Die Server holen ein eigenes Zertifikat (Name und `*.Name`) und
      beenden TLS; dafür filtern sie schon dort (Blocklisten, Limits) und sprechen HTTP/3. Nicht für Hosts mit
      „TLS durchreichen“.
-   - **Modus 3 – direkt zum Ziel:** ohne Tunnel; die Server gehen selbst zu deinem Ziel. Geht in Node64 für Hosts mit
-     öffentlichem Ziel und **ohne Node64** auf ipv64.net unter *CDN64*: Ziel aus den DNS-Einträgen (DynDNS hält sie
+   - **Modus 3 – direkt zum Ziel:** ohne Tunnel und ohne Node64; die Server gehen selbst zu deinem Ziel. Einrichten
+     nur auf ipv64.net unter *CDN64* (der Dialog in Node64 verlinkt dorthin): Ziel aus den DNS-Einträgen (DynDNS hält sie
      aktuell) oder fest, Frontend aus / nur HTTP / HTTPS mit Umleitung / nur HTTPS, Cache (an/aus; Größe nach
      Account-Klasse, richtet sich nach `Cache-Control` des Ziels), Erlauben-/Sperrliste, Portmapper.
    - **Portmapper (Modus 3):** rohes TCP oder UDP an einen Port deines Ziels, z. B. WireGuard oder SSH. Der Port auf
