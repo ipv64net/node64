@@ -1,11 +1,11 @@
 {{define "content"}}
 {{$d := .Data}}
-<h1 class="h4 mb-3"><img src="/static/img/dyndns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dyndns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dyn.title"}}</h1>
+<h1 class="h4 mb-3"><img src="/static/img/dyndns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dyndns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dyn.title"}}{{.Doc "dyndns"}}</h1>
 <p class="text-body-secondary small">{{.T "dyn.hint"}}</p>
 <div class="row g-3">
 	<div class="col-lg-5 d-flex flex-column gap-3">
 		<div class="card">
-			<div class="card-header"><i class="bi bi-router text-info"></i> {{.T "dyn.conn.title"}}</div>
+			<div class="card-header"><i class="bi bi-router text-info"></i> {{.T "dyn.conn.title"}}{{.Doc "dyndns#anschluss"}}</div>
 			<div class="card-body small">
 				{{if and $d.V4.CheckedAt.IsZero $d.V6.CheckedAt.IsZero}}<div class="text-body-secondary mb-2">{{.T "dyn.conn.none"}}</div>{{end}}
 				<dl class="row mb-0">
@@ -36,13 +36,13 @@
 			</div>
 		</div>
 		<div class="card" id="api">
-			<div class="card-header"><i class="bi bi-key text-warning"></i> {{.T "dyn.api.title"}}</div>
+			<div class="card-header"><i class="bi bi-key text-warning"></i> {{.T "dyn.api.title"}}{{.Doc "dyndns#api-key"}}</div>
 			<div class="card-body small">
 				{{if $d.HasKey}}<i class="bi bi-check-circle-fill text-success"></i> {{.T "dyn.api.connected" "account" $d.Account.Account}}{{if $d.Account.Plan}} <span class="badge text-bg-light">{{$d.Account.Plan}}</span>{{end}}
 				{{with $d.Limit}}{{if .Known}}
 				<div class="mt-2">{{if .Limit}}{{$.T "dyn.limit.used" "used" .Used "limit" .Limit}}{{else}}{{$.T "dyn.limit.unlimited" "used" .Used}}{{end}} <span class="text-body-secondary" title="{{$.Time .At}}">({{$.Ago .At}})</span></div>
 				{{if .Limit}}<div class="progress mt-1" style="height:.4rem" role="progressbar" aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{if .Warn}}bg-warning{{else}}bg-success{{end}}" style="width:{{.Pct}}%"></div></div>{{end}}
-				<div class="text-body-secondary">{{$.T "dyn.limit.own" "count" .Own24h}}</div>
+				<div class="text-body-secondary">{{$.T "dyn.limit.own" "count" .Own24h}}{{$.Doc "dyndns#limit"}}</div>
 				{{if .Warn}}<div class="alert alert-warning py-2 mt-2 mb-0">{{$.T "dyn.limit.warn"}}</div>{{end}}
 				{{else if .Err}}<div class="mt-2"><span class="badge text-bg-warning">{{$.T "dyn.limit.unknown"}}</span> <span class="text-body-secondary">{{.Err}}</span></div>{{end}}{{end}}
 				<div class="text-body-secondary mt-2">{{.T "dyn.api.central"}} <a href="/settings#ipv64">{{.T "dyn.api.to_settings"}}</a></div>
@@ -51,7 +51,7 @@
 			</div>
 		</div>
 		<div class="card" id="settings">
-			<div class="card-header"><i class="bi bi-sliders text-secondary"></i> {{.T "dyn.settings.title"}}</div>
+			<div class="card-header"><i class="bi bi-sliders text-secondary"></i> {{.T "dyn.settings.title"}}{{.Doc "dyndns#pruefung"}}</div>
 			<div class="card-body small">
 				<form method="post" action="/dyndns/settings">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
@@ -67,7 +67,7 @@
 						<div class="col-6"><label class="form-label" for="keep_checks">{{.T "dyn.settings.keep_checks"}}</label><select class="form-select form-select-sm" id="keep_checks" name="keep_checks">{{range $d.KeepCOpts}}<option value="{{.}}"{{if eq . $d.KeepC}} selected{{end}}>{{$.T "dyn.settings.days" "n" .}}</option>{{end}}</select></div>
 						<div class="col-6"><label class="form-label" for="keep_updates">{{.T "dyn.settings.keep_updates"}}</label><select class="form-select form-select-sm" id="keep_updates" name="keep_updates">{{range $d.KeepUOpts}}<option value="{{.}}"{{if eq . $d.KeepU}} selected{{end}}>{{if eq . 0}}{{$.T "dyn.settings.forever"}}{{else}}{{$.T "dyn.settings.days" "n" .}}{{end}}</option>{{end}}</select></div>
 					</div>
-					<div class="fw-semibold mb-1">{{.T "dyn.settings.notify"}}</div>
+					<div class="fw-semibold mb-1">{{.T "dyn.settings.notify"}}{{.Doc "dyndns#benachrichtigungen"}}</div>
 					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="notify_ip" id="notify_ip"{{if $d.NotifyIP}} checked{{end}}><label class="form-check-label" for="notify_ip">{{.T "dyn.settings.notify_ip"}}</label></div>
 					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="notify_fail" id="notify_fail"{{if $d.NotifyErr}} checked{{end}}><label class="form-check-label" for="notify_fail">{{.T "dyn.settings.notify_fail"}}</label></div>
 					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="notify_limit" id="notify_limit"{{if $d.NotifyLim}} checked{{end}}><label class="form-check-label" for="notify_limit">{{.T "dyn.settings.notify_limit"}}</label></div>
@@ -79,11 +79,11 @@
 	</div>
 	<div class="col-lg-7 d-flex flex-column gap-3">
 		<div class="card">
-			<div class="card-header d-flex align-items-center"><span><i class="bi bi-globe text-primary"></i> {{.T "dyn.targets.title"}}</span><a class="btn btn-primary btn-sm ms-auto" href="/dyndns/targets/new"><i class="bi bi-plus-lg"></i> {{.T "dyn.targets.add"}}</a></div>
+			<div class="card-header d-flex align-items-center"><span><i class="bi bi-globe text-primary"></i> {{.T "dyn.targets.title"}}{{.Doc "dyndns#ziele"}}</span><a class="btn btn-primary btn-sm ms-auto" href="/dyndns/targets/new"><i class="bi bi-plus-lg"></i> {{.T "dyn.targets.add"}}</a></div>
 			{{if not $d.Targets}}<div class="card-body small text-body-secondary">{{.T "dyn.targets.empty"}}</div>
 			{{else}}
 			<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards small">
-				<thead><tr><th>{{.T "dyn.targets.name"}}</th><th>IPv4</th><th>IPv6</th><th>{{.T "dyn.targets.status"}}</th><th class="d-none d-md-table-cell">{{.T "dyn.targets.token"}}</th><th class="text-end">{{.T "common.actions"}}</th></tr></thead>
+				<thead><tr><th>{{.T "dyn.targets.name"}}</th><th>IPv4</th><th>IPv6</th><th>{{.T "dyn.targets.status"}}{{.Doc "dyndns#status"}}</th><th class="d-none d-md-table-cell">{{.T "dyn.targets.token"}}</th><th class="text-end">{{.T "common.actions"}}</th></tr></thead>
 				<tbody>
 				{{range $g := $d.Groups}}
 				<tr class="dyn-domain-row"><td colspan="6"><i class="bi bi-globe2 text-primary"></i> <span class="fw-semibold">{{$g.Domain}}</span> <span class="text-body-secondary">({{len $g.Items}})</span></td></tr>
@@ -104,7 +104,7 @@
 			{{end}}
 		</div>
 		<div class="card">
-			<div class="card-header d-flex align-items-center"><span><i class="bi bi-clock-history text-secondary"></i> {{.T "dyn.checks.title"}}</span><a class="btn btn-outline-secondary btn-sm ms-auto" href="/dyndns/history"><i class="bi bi-list-ul"></i> {{.T "dyn.history.title"}}</a></div>
+			<div class="card-header d-flex align-items-center"><span><i class="bi bi-clock-history text-secondary"></i> {{.T "dyn.checks.title"}}{{.Doc "dyndns#verlauf"}}</span><a class="btn btn-outline-secondary btn-sm ms-auto" href="/dyndns/history"><i class="bi bi-list-ul"></i> {{.T "dyn.history.title"}}</a></div>
 			{{if not $d.Checks}}<div class="card-body small text-body-secondary">{{.T "dyn.checks.empty"}}</div>
 			{{else}}
 			<div class="table-responsive"><table class="table table-sm align-middle mb-0 table-cards small">

@@ -25,7 +25,7 @@
 		</div>
 		{{if $d.IPv64On}}
 		<div class="card" id="ipv64">
-			<div class="card-header"><img src="/static/img/ipv64_logo.svg" alt="" height="14" class="logo logo-light align-baseline"><img src="/static/img/ipv64_logo_white.svg" alt="" height="14" class="logo logo-dark align-baseline"> {{.T "ipv64key.title"}}</div>
+			<div class="card-header"><img src="/static/img/ipv64_logo.svg" alt="" height="14" class="logo logo-light align-baseline"><img src="/static/img/ipv64_logo_white.svg" alt="" height="14" class="logo logo-dark align-baseline"> {{.T "ipv64key.title"}}{{.Doc "ipv64#api-key"}}</div>
 			<div class="card-body small">
 				<p class="text-body-secondary">{{.T "ipv64key.hint"}}</p>
 				{{if $d.IPv64Set}}

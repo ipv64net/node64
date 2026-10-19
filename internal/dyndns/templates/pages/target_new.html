@@ -1,6 +1,6 @@
 {{define "content"}}
 {{$d := .Data}}
-<h1 class="h4 mb-3"><img src="/static/img/dyndns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dyndns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dyn.targets.add"}}</h1>
+<h1 class="h4 mb-3"><img src="/static/img/dyndns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dyndns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dyn.targets.add"}}{{.Doc "dyndns#ziele"}}</h1>
 <div class="row g-3">
 	<div class="col-lg-8">
 		<div class="card">
@@ -45,7 +45,7 @@
 	</div>
 	<div class="col-lg-4">
 		<div class="card" id="manual">
-			<div class="card-header"><i class="bi bi-pencil-square text-secondary"></i> {{.T "dyn.manual.title"}}</div>
+			<div class="card-header"><i class="bi bi-pencil-square text-secondary"></i> {{.T "dyn.manual.title"}}{{.Doc "dyndns#von-hand"}}</div>
 			<div class="card-body small">
 				<p class="text-body-secondary">{{.T "dyn.manual.hint"}}</p>
 				<form method="post" action="/dyndns/targets/manual">

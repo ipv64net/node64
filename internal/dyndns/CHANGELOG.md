@@ -11,6 +11,11 @@
 ### Behoben
 - Darstellung: DynDNS64-Logo im dunklen Design hell.
 
+## 1.2.1 – 2026-10-19
+
+### Geändert
+- Kleine Hilfe-Symbole an Karten und Seiten führen direkt zur passenden Stelle der Online-Dokumentation auf node64.de (Sprache der Oberfläche).
+
 ## 1.2.0 – 2026-10-18
 
 ### Geändert

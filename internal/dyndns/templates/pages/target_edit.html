@@ -6,10 +6,10 @@
 	<div class="col-lg-7">
 		<form method="post" action="/dyndns/targets/{{$t.ID}}" class="card">
 			<input type="hidden" name="_csrf" value="{{.CSRF}}">
-			<div class="card-header"><i class="bi bi-sliders text-primary"></i> {{.T "dyn.targets.edit"}}</div>
+			<div class="card-header"><i class="bi bi-sliders text-primary"></i> {{.T "dyn.targets.edit"}}{{.Doc "dyndns#modi"}}</div>
 			<div class="card-body small">
 				<div class="form-check form-switch mb-3"><input class="form-check-input" type="checkbox" name="enabled" id="enabled"{{if $t.Enabled}} checked{{end}}><label class="form-check-label" for="enabled">{{.T "dyn.targets.enabled"}}</label></div>
-				{{if $t.Paused}}<div class="alert alert-warning py-2"><strong>{{.T (print "dyn.pause." $t.Paused)}}</strong> – {{.T (print "dyn.pause_hint." $t.Paused)}}</div>{{end}}
+				{{if $t.Paused}}<div class="alert alert-warning py-2"><strong>{{.T (print "dyn.pause." $t.Paused)}}</strong> – {{.T (print "dyn.pause_hint." $t.Paused)}}{{.Doc "dyndns#pausen"}}</div>{{end}}
 
 				<label class="form-label fw-semibold" for="mode4">IPv4</label>
 				<select class="form-select form-select-sm mb-1" id="mode4" name="mode4" data-mode-select>{{range $d.Modes4}}<option value="{{.}}"{{if eq . $t.Mode4}} selected{{end}}>{{$.T (print "dyn.mode4." .)}}</option>{{end}}</select>
@@ -41,7 +41,7 @@
 	</div>
 	<div class="col-lg-5 d-flex flex-column gap-3">
 		<div class="card">
-			<div class="card-header"><i class="bi bi-info-circle text-info"></i> {{.T "dyn.edit.state"}}</div>
+			<div class="card-header"><i class="bi bi-info-circle text-info"></i> {{.T "dyn.edit.state"}}{{.Doc "dyndns#status"}}</div>
 			<div class="card-body small">
 				<dl class="row mb-0">
 					<dt class="col-5">{{.T "dyn.edit.last_ok"}}</dt><dd class="col-7">{{if $t.LastOKAt.IsZero}}–{{else}}<span title="{{.Time $t.LastOKAt}}">{{.Ago $t.LastOKAt}}</span>{{end}}</dd>

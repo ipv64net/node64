@@ -1,6 +1,6 @@
 {{define "content"}}
 {{$d := .Data}}
-<h1 class="h4 mb-3"><img src="/static/img/dyndns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dyndns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dyn.history.title"}}</h1>
+<h1 class="h4 mb-3"><img src="/static/img/dyndns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dyndns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dyn.history.title"}}{{.Doc "dyndns#verlauf"}}</h1>
 <ul class="nav nav-tabs mb-3">
 	<li class="nav-item"><a class="nav-link{{if eq $d.Tab "updates"}} active{{end}}" href="?tab=updates">{{.T "dyn.history.updates"}}</a></li>
 	<li class="nav-item"><a class="nav-link{{if eq $d.Tab "checks"}} active{{end}}" href="?tab=checks">{{.T "dyn.history.checks"}}</a></li>

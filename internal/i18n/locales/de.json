@@ -117,7 +117,8 @@
     "all": "Alle",
     "none": "Keine",
     "minutes": "Minuten",
-    "seconds": "Sekunden"
+    "seconds": "Sekunden",
+    "docs": "Dokumentation dazu auf node64.de"
   },
   "time": {
     "days": {
