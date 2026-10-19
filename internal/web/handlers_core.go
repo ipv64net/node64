@@ -7,6 +7,7 @@ import (
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/netstat"
+	"github.com/ipv64net/node64/internal/peer"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -221,6 +222,34 @@ func safeNext(next string) string {
 
 // ---------------------------------------------------------------- Dashboard
 
+// dashCluster: Kachel und Hinweis zum Cluster (nur mit Mitgliedern).
+type dashCluster struct {
+	Members []peer.Member
+	Online  int
+	Down    []string // Namen der Nodes, die laenger weg oder ausgesetzt sind
+}
+
+func (s *Server) dashClusterData(ctx context.Context) *dashCluster {
+	if s.Peer == nil {
+		return nil
+	}
+	list, err := s.Peer.Members(ctx)
+	if err != nil || len(list) == 0 {
+		return nil
+	}
+	c := &dashCluster{Members: list}
+	now := time.Now()
+	for _, x := range list {
+		if x.Online() {
+			c.Online++
+		}
+		if x.MemberDown(now) {
+			c.Down = append(c.Down, x.Name)
+		}
+	}
+	return c
+}
+
 type dashboardData struct {
 	NodeID    string
 	NodeName  string
@@ -243,6 +272,7 @@ type dashboardData struct {
 	Mismatch                        bool // API-Key gehoert zu einem anderen Account als der Healthchecks-Sync
 	ConnectedAt, LastSync, LinkedAt time.Time
 	Peers, PeersOnline              int            // Nodes dieser Verknuepfung
+	Cluster                         *dashCluster   // nil = kein Cluster (keine Mitglieder)
 	Layout                          []dashItem     // Kacheln in der Reihenfolge des Benutzers (dashboard_layout.go)
 	JS                              map[string]any // Daten fuer dashboard.js (CSRF, Sprache, Texte)
 }
@@ -336,6 +366,9 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	avail := dashAvailable(d.Boards, cards, s.Modules.IsRunning("dns64"), s.Modules.IsRunning("cdn64"))
+	if d.Cluster = s.dashClusterData(ctx); d.Cluster != nil {
+		avail = append(avail, dashItem{ID: "cluster", Size: "s", Kind: "cluster"})
+	}
 	d.Layout = dashMerge(avail, s.dashSaved(ctx, v.User.ID))
 	texts := map[string]string{}
 	for _, k := range []string{"saved", "save_err", "allowed", "blocked", "rejected", "requests", "bytes", "no_data", "size", "hide", "show", "up", "down"} {

@@ -55,6 +55,9 @@ const (
 	KindCDNOnlineUp      Kind = "cdn64_online_up"      // Tunnel wieder verbunden
 	KindCDNOnlineBlocked Kind = "cdn64_online_blocked" // Namen bei ipv64 gesperrt (z. B. Traffic aufgebraucht)
 
+	KindClusterDown Kind = "cluster_down" // Node des Clusters laenger nicht erreichbar oder ausgesetzt
+	KindClusterUp   Kind = "cluster_up"   // Node des Clusters wieder erreichbar
+
 	KindQuota Kind = "quota" // Tageskontingent der Online-Checks erreicht (Account, vom hub)
 )
 
@@ -91,8 +94,13 @@ func IsCDN64(k Kind) bool {
 	return k == KindCDNOnlineDown || k == KindCDNOnlineUp || k == KindCDNOnlineBlocked
 }
 
-// IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64, Zertifikate, CDN64 online).
-func IsModule(k Kind) bool { return IsDynDNS(k) || IsDNS64(k) || IsCert(k) || IsCDN64(k) }
+// IsCluster: Meldung des Clusters.
+func IsCluster(k Kind) bool { return k == KindClusterDown || k == KindClusterUp }
+
+// IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64, Zertifikate, CDN64 online, Cluster).
+func IsModule(k Kind) bool {
+	return IsDynDNS(k) || IsDNS64(k) || IsCert(k) || IsCDN64(k) || IsCluster(k)
+}
 
 // Message ist die fertig formulierte Nachricht fuer einen Sender.
 type Message struct {

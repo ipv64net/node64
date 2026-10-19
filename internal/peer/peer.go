@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/secrets"
 	"github.com/ipv64net/node64/internal/store"
 )
@@ -106,6 +107,8 @@ type Deps struct {
 	Hub Hub
 	// HTTPSPort, unter dem die anderen Nodes diese erreichen (der Cluster spricht nur HTTPS), 0 bzw. nil = keiner
 	HTTPSPort func() int
+	// Notify verschickt Meldungen (Mitglied nicht erreichbar/wieder da, watch.go), nil = keine
+	Notify func(notify.Alert)
 }
 
 // Manager verwaltet Identitaet, Kopplung und Mitglieder.
@@ -119,6 +122,7 @@ type Manager struct {
 
 	mu      sync.Mutex
 	prov    map[string]Provider // Module, die ueber den Cluster abgleichen (cluster.go)
+	watch   map[string]bool     // Mitglieder, deren Ausfall diese Node gemeldet hat (watch.go)
 	proxied map[string]bool     // Mitglieder, deren zurueckgehaltene Checks schon an den hub gingen (proxy.go)
 	code    string              // offener Kopplungscode
 	exp     time.Time
@@ -275,6 +279,7 @@ func (m *Manager) Run(ctx context.Context) {
 			return
 		case <-t.C:
 			m.pingAll(ctx)
+			m.watchMembers(ctx)
 		}
 	}
 }

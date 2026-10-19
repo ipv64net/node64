@@ -222,6 +222,8 @@
     "done": "Fertig",
     "reset": "Zurücksetzen",
     "drag": "Ziehen zum Verschieben",
+    "cluster_down": "Cluster: nicht erreichbar oder ausgesetzt – {names}.",
+    "cluster_count": "{online} von {n} Nodes erreichbar",
     "edit_hint": "Kacheln mit der Maus verschieben (oder mit den Pfeilen), Breite mit s/m/l/xl ändern, mit dem Auge ein- oder ausblenden. Ausgeblendete Kacheln erscheinen hier blass. „Fertig“ speichert für deinen Benutzer.",
     "chart_dns64": "DNS64 – Anfragen im Zeitverlauf",
     "chart_cdn64": "PROXY64 – Anfragen und Datenverkehr",
@@ -2029,7 +2031,9 @@
       "cert_ok": "✅ Zertifikat für {name} wieder gültig",
       "cdn64_online_down": "🔴 CDN64: Tunnel zu srv07/srv08 getrennt ({name})",
       "cdn64_online_up": "🟢 CDN64: Tunnel wieder verbunden ({name})",
-      "cdn64_online_blocked": "🟠 CDN64: {name} bei ipv64 gesperrt"
+      "cdn64_online_blocked": "🟠 CDN64: {name} bei ipv64 gesperrt",
+      "cluster_down": "🔴 Cluster: Node {name} nicht erreichbar",
+      "cluster_up": "🟢 Cluster: Node {name} wieder erreichbar"
     },
     "body": {
       "quota_used": "Verbraucht: {used} von {limit} Online-Messungen heute",

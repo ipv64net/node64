@@ -275,6 +275,7 @@ func run() error {
 			return hcModule
 		},
 		Linked: syncClient.Linked, HubNotifies: syncClient.ServerSends, SettingsToHub: syncClient.NotifySettingsChanged,
+		Notify: dispatcher.Dispatch, // Node des Clusters nicht erreichbar / wieder da
 		Forward: func(ctx context.Context, entity, id, op string) { // Aenderung einer nicht verknuepften Node an den hub
 			if f := hcModule.Store().OnChange; f != nil {
 				f(context.WithoutCancel(ctx), entity, id, op)

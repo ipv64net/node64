@@ -222,6 +222,8 @@
     "done": "Done",
     "reset": "Reset",
     "drag": "Drag to move",
+    "cluster_down": "Cluster: unreachable or suspended – {names}.",
+    "cluster_count": "{online} of {n} nodes reachable",
     "edit_hint": "Move tiles with the mouse (or the arrows), change the width with s/m/l/xl, show or hide with the eye. Hidden tiles appear faded here. “Done” saves for your user.",
     "chart_dns64": "DNS64 – queries over time",
     "chart_cdn64": "PROXY64 – requests and traffic",
@@ -2029,7 +2031,9 @@
       "cert_ok": "✅ Certificate for {name} valid again",
       "cdn64_online_down": "🔴 CDN64: tunnel to srv07/srv08 lost ({name})",
       "cdn64_online_up": "🟢 CDN64: tunnel connected again ({name})",
-      "cdn64_online_blocked": "🟠 CDN64: {name} blocked at ipv64"
+      "cdn64_online_blocked": "🟠 CDN64: {name} blocked at ipv64",
+      "cluster_down": "🔴 Cluster: node {name} unreachable",
+      "cluster_up": "🟢 Cluster: node {name} reachable again"
     },
     "body": {
       "quota_used": "Used: {used} of {limit} online checks today",
