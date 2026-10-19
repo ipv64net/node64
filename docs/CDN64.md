@@ -1,13 +1,17 @@
-# CDN64 – Reverse-Proxy in Node64
+# PROXY64 – Reverse-Proxy in Node64
 
-Stand 2026-10-15 (CDN64 1.4.0). CDN64 ersetzt den Nginx Proxy Manager (NPM) und kommt ohne nginx aus: Node64 macht
+Stand 2026-10-15 (PROXY64 1.4.0). PROXY64 ersetzt den Nginx Proxy Manager (NPM) und kommt ohne nginx aus: Node64 macht
 HTTP/1.1, HTTP/2 und HTTP/3 selbst. Code: `internal/cdn64` (Modul), `internal/edge` (gemeinsamer Eingang 80/443),
 `internal/certs` (Zertifikate), `internal/ports` (Port-Verwaltung). Plan und Entscheidungen:
 [PLAN-NODE64-CDN64.md](PLAN-NODE64-CDN64.md).
 
+**Namen:** PROXY64 ist der lokale Reverse-Proxy der Node. CDN64 heißt nur das Veröffentlichen über die Server
+srv07/srv08 (Abschnitt [CDN64](#cdn64-srv07srv08)). Technisch heißt das Modul weiter `cdn64`: Pfade `/cdn64/...`,
+API `/api/cdn64/...`, Einstellungen `cdn64.*`, Metriken `node64_cdn64_*` und Ablage `/data/cdn64` bleiben gleich.
+
 ## Einschalten und einrichten
 
-1. **Modul einschalten:** *Einstellungen → Module → CDN64*.
+1. **Modul einschalten:** *Einstellungen → Module → PROXY64*.
    - Ist es aus, läuft nichts: keine Routen, keine Prüfungen, kein Cache, keine Erneuerung, die Ports sind zu.
 2. **Router:**
    - Port 80 und 443 (TCP) auf die Node weiterleiten, für HTTP/3 zusätzlich 443/UDP.
@@ -15,7 +19,7 @@ HTTP/1.1, HTTP/2 und HTTP/3 selbst. Code: `internal/cdn64` (Modul), `internal/ed
      auf 8443 und „HTTPS-Port von außen“ auf 443 stellen.
 3. **DNS:**
    - Die Domain muss auf den Anschluss zeigen, am besten als CNAME auf die DynDNS-Domain.
-   - Für Domains bei ipv64 legt CDN64 den Eintrag beim Anlegen des Hosts auf Wunsch selbst an.
+   - Für Domains bei ipv64 legt PROXY64 den Eintrag beim Anlegen des Hosts auf Wunsch selbst an.
 4. **Zertifikat:**
    - Menüpunkt *Zertifikate* (Kern, auch über den Reiter *SSL-Zertifikate*): Nutzungsbedingungen von Let's
      Encrypt annehmen, dann anfordern. Oder im
@@ -33,7 +37,7 @@ und keinem Modul:
 - **Verteilung:** Bei TLS wählt der Eingang nach dem Namen in der ersten Nachricht des Browsers (SNI) Zertifikat
   und Ziel. Bei HTTP entscheidet der Host-Kopf.
 - **Abnehmer:**
-  - CDN64 (Proxy-Hosts, Weiterleitungen, 404-Hosts, TLS durchreichen);
+  - PROXY64 (Proxy-Hosts, Weiterleitungen, 404-Hosts, TLS durchreichen);
   - DNS64 (DoH unter `/dns-query`, auch per IP, ab DNS64 1.8.0);
   - Let's Encrypt (HTTP-01);
   - die Oberfläche von Node64 unter einem eigenen Namen.
@@ -81,7 +85,7 @@ und keinem Modul:
 - **Speicherung:** Schlüssel und Zugangsdaten liegen mit `secret.key` verschlüsselt in der Datenbank und sind
   damit im Backup.
 - **Erneuerung:**
-  - automatisch 30 Tage vor Ablauf, auch wenn CDN64 aus ist;
+  - automatisch 30 Tage vor Ablauf, auch wenn PROXY64 aus ist;
   - nach einem Fehler erst wieder nach 6 Stunden;
   - Meldungen an die Standardkanäle bei Fehlschlag (einmal je Störung), bei Entwarnung und 14 bzw. 3 Tage vor
     Ablauf.
@@ -130,7 +134,7 @@ und keinem Modul:
 - **Oberfläche über den Eingang:** standardmäßig nur aus dem eigenen Netz; „aus dem Internet“ muss ausdrücklich
   eingeschaltet werden.
 
-## CDN64 online (srv07/srv08)
+## CDN64 (srv07/srv08)
 
 Ein Klick macht einen Host über **srv07.cdn64.de** (Nürnberg) und **srv08.cdn64.de** (Falkenstein) aus dem
 Internet erreichbar, per IPv4 und IPv6, auch an Anschlüssen nur mit IPv6 (DS-Lite) und ohne offene Ports zu Hause.
@@ -138,8 +142,8 @@ Die Node baut dazu einen Tunnel nach außen auf (QUIC über UDP 7844, sonst TCP 
 [CDN64-ONLINE.md](CDN64-ONLINE.md).
 
 - **Voraussetzung:** ipv64-Account verbunden (*Einstellungen › ipv64*) mit einer Account-Klasse, die CDN-Domains
-  enthält. Das Kontingent (Domains, Traffic im Monat) teilen sich altes CDN und CDN64 online.
-- **Einschalten:** In der Host-Liste in der Spalte *CDN64 online* auf *Einschalten*. Das Fenster zeigt vier
+  enthält. Das Kontingent (Domains, Traffic im Monat) teilen sich altes CDN und CDN64.
+- **Einschalten:** In der Host-Liste in der Spalte *CDN64* auf *Einschalten*. Das Fenster zeigt vier
   Schritte:
   1. ipv64-Account prüfen; ohne Account geht es von dort zu *Account verbinden*.
   2. Tunnel zu srv07/srv08 anmelden und aufbauen. Der Token liegt verschlüsselt in der Node. Ist UDP gesperrt,
@@ -210,7 +214,7 @@ Wiederholen: `go test -tags loadtest -run TestLoad -v ./internal/cdn64/`
 
 ## Umstieg vom Nginx Proxy Manager
 
-| NPM | CDN64 |
+| NPM | PROXY64 |
 |---|---|
 | Proxy Hosts (Details, Custom Locations, SSL) | Proxy-Hosts mit Reitern Details, Locations, SSL, Erweitert |
 | Advanced (nginx-Konfiguration) | Erweitert: Kopfzeilen, Host-Kopf, Timeout, Upload-Grenze, Puffern, gzip, vertrauenswürdige Proxys |
@@ -220,7 +224,7 @@ Wiederholen: `go test -tags loadtest -run TestLoad -v ./internal/cdn64/`
 | Default Site | Standardseite |
 | – | TLS durchreichen, Erreichbarkeit, Healthcheck anlegen, DNS-Eintrag bei ipv64, HTTP/3 |
 
-Einen Import gibt es nicht (Entscheidung). Hosts werden neu angelegt; Zertifikate holt CDN64 neu.
+Einen Import gibt es nicht (Entscheidung). Hosts werden neu angelegt; Zertifikate holt PROXY64 neu.
 
 ## Grenzen
 
@@ -228,7 +232,7 @@ Einen Import gibt es nicht (Entscheidung). Hosts werden neu angelegt; Zertifikat
 - **Keine Lastverteilung** auf mehrere Ziele, keine Rate-Limits je Host, keine GeoIP-Sperren (vorgemerkt).
 - **TLS durchreichen** geht nur über TCP, nicht über HTTP/3.
 - **Erreichbarkeit und Zähler „seit Start“** liegen im Speicher. Die Statistik in `cdn64.db` bleibt erhalten.
-- **CDN64 online** kann bisher nur Modus 1 (durchreichen) und nur Namen in Domains des ipv64-Accounts; Modus 2
+- **CDN64** kann bisher nur Modus 1 (durchreichen) und nur Namen in Domains des ipv64-Accounts; Modus 2
   und 3 folgen ([CDN64-ONLINE.md](CDN64-ONLINE.md)).
 
 ## API (Auszug)
@@ -239,7 +243,7 @@ Einen Import gibt es nicht (Entscheidung). Hosts werden neu angelegt; Zertifikat
 | Zugriffslisten, Log, Statistik, Einstellungen | `/api/cdn64/access-lists`, `/api/cdn64/log`, `/api/cdn64/stats`, `/api/cdn64/settings` |
 | ipv64-Blocklisten | `GET\|PUT /api/cdn64/blocklists`, `POST /api/cdn64/blocklists/refresh` |
 | Schutz vor Überlastung | `GET\|PUT /api/cdn64/limits`, `DELETE /api/cdn64/limits/bans/{ip}` |
-| CDN64 online | `GET /api/cdn64/online`, `POST /api/cdn64/online/tunnel`, `POST\|DELETE /api/cdn64/hosts/{id}/online`, `POST /api/cdn64/hosts/{id}/online/test` |
+| CDN64 | `GET /api/cdn64/online`, `POST /api/cdn64/online/tunnel`, `POST\|DELETE /api/cdn64/hosts/{id}/online`, `POST /api/cdn64/hosts/{id}/online/test` |
 | Zertifikate (Kern) | `/api/certs`, `/api/certs/account`, `/api/certs/dns-accounts`, `/api/certs/dns-providers` |
 | Ports und Eingang (Kern) | `/api/ports`, `/api/edge`, `/api/edge/ui` |
 

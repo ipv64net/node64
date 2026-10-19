@@ -1,6 +1,6 @@
-# CDN64 online – dein Dienst im Internet, ohne offene Ports
+# CDN64 – dein Dienst im Internet, ohne offene Ports
 
-CDN64 online macht einen Dienst, der in deinem Heimnetz hinter Node64 läuft, über die Server **srv07.cdn64.de**
+CDN64 macht einen Dienst, der in deinem Heimnetz hinter Node64 läuft, über die Server **srv07.cdn64.de**
 (Nürnberg) und **srv08.cdn64.de** (Falkenstein) aus dem Internet erreichbar – per IPv4 und IPv6, auch wenn dein
 Anschluss nur IPv6 hat (DS-Lite) oder du keine Ports freigeben kannst oder willst.
 
@@ -13,13 +13,13 @@ Nürnberg und Falkenstein. Fällt ein Server aus, nimmt ipv64 ihn nach rund eine
 
 ## Voraussetzungen
 
-- Node64 ab Version 0.11.98 mit dem Modul CDN64 und einem Proxy-Host für den Namen.
+- Node64 ab Version 0.11.98 mit dem Reverse-Proxy PROXY64 und einem Proxy-Host für den Namen.
 - Ein verbundener ipv64-Account (*Einstellungen › ipv64*) mit einer Account-Klasse, die CDN-Domains enthält.
 - Der Name liegt in einer Domain deines ipv64-Accounts, ohne CNAME und ohne DNS-Failover.
 
 ## Einschalten
 
-1. In Node64 unter *CDN64 › Proxy-Hosts* beim Host auf **Einschalten** (Spalte *CDN64 online*).
+1. In Node64 unter *PROXY64 › Proxy-Hosts* beim Host auf **Einschalten** (Spalte *CDN64*).
 2. Modus wählen:
    - **Modus 1 – durchreichen (Standard):** TLS endet in deiner Node, dein Zertifikat bleibt bei dir, die Server
      sehen keine Inhalte. Für fast alle Fälle die richtige Wahl. Auch HTTP/3 (QUIC) geht durch: Ist beim Proxy-Host

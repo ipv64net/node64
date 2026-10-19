@@ -1,5 +1,8 @@
 # Plan: Modul CDN64 (Reverse-Proxy) in Node64
 
+> Seit 2026-10-19 heißt der lokale Reverse-Proxy sichtbar **PROXY64**; „CDN64“ ist nur noch das Veröffentlichen über
+> srv07/srv08. Technisch bleibt alles `cdn64`. Der Plan unten ist der Stand von damals.
+
 Stand 2026-10-15, Grundsatzfragen entschieden (siehe „Entscheidungen“) – noch nichts umgesetzt. Ziel: ein Reverse-Proxy-Manager im Funktionsumfang
 des Nginx Proxy Manager (NPM), als Modul von Node64, leichter und mit ipv64 als bevorzugtem Weg zu Zertifikaten.
 Ist das Modul aus, laufen keine Goroutinen, kein Port ist offen und es wird nichts erneuert.

@@ -107,7 +107,10 @@ Anteil blockierter Anfragen der letzten Stunde:
 sum(increase(node64_dns64_queries_total{status="blocked"}[1h])) / sum(increase(node64_dns64_queries_total[1h]))
 ```
 
-## CDN64
+## PROXY64 und CDN64
+
+Beide heißen technisch `cdn64`, daher beginnen die Metriken mit `node64_cdn64_` (PROXY64, der lokale
+Reverse-Proxy) bzw. `node64_cdn64_online_` (CDN64 über srv07/srv08).
 
 Labels je Host: `host_id` (bleibt gleich), `host` (erster Name), `kind` (`proxy`, `redirect`, `dead`, `passthrough`).
 
@@ -129,7 +132,7 @@ Labels je Host: `host_id` (bleibt gleich), `host` (erster Name), `kind` (`proxy`
 | `node64_cdn64_online_traffic_used_bytes`, `…_traffic_limit_bytes` | | CDN-Traffic des Accounts im Monat |
 | `node64_cdn64_online_last_sync_seconds`, `node64_cdn64_online_sync_ok` | | letzter Abgleich mit ipv64 (Unix-Zeit) und ob er klappte |
 
-Die Werte von CDN64 online stammen aus dem letzten Abgleich der Node (jede Minute), nicht aus einer Abfrage bei
+Die Werte von CDN64 (`node64_cdn64_online_*`) stammen aus dem letzten Abgleich der Node (jede Minute), nicht aus einer Abfrage bei
 ipv64.
 
 ## Zertifikate

@@ -1,11 +1,15 @@
-# CDN64 online – Planung (Tunnel zu srv07/srv08)
+# CDN64 – Planung (Tunnel zu srv07/srv08)
 
 Stand: 2026-10-17 · Status: **Planung, nichts umgesetzt** · Phasen T0–T8
 
-Der lokale Reverse-Proxy CDN64 in Node64 wird mit einem neuen Online-CDN verbunden – so wie Cloudflare Tunnel:
+Der lokale Reverse-Proxy PROXY64 in Node64 wird mit einem neuen Online-CDN verbunden – so wie Cloudflare Tunnel:
 die Node baut von zu Hause eine dauerhafte, verschlüsselte QUIC-Verbindung zu den CDN-Servern **srv07.cdn64.de**
 (Nürnberg) und **srv08.cdn64.de** (Falkenstein) auf. Besucher kommen über IPv4 und IPv6 an diesen Servern an und
 werden durch die offene Verbindung zur Node durchgereicht. Zu Hause muss kein Port offen sein.
+
+**Namen (seit 2026-10-19):** CDN64 heißt nur das Veröffentlichen über srv07/srv08 (früher „CDN64 online“), der
+lokale Reverse-Proxy heißt PROXY64. Technische Kennungen bleiben: Modul-ID `cdn64`, API `/api/cdn64/...` und
+`/cdn64o/...`, Tabellen `cdn64o_*`, Programm `cdn64-edge`. Die Phasen-Protokolle unten nennen die alten Namen.
 
 Inhalt: [1 Ziel](#1-ziel) · [2 Entscheidungen](#2-entscheidungen) · [3 Architektur](#3-architektur) ·
 [4 Tunnel](#4-tunnel) · [5 Modus 1](#5-modus-1-durchreichen) · [6 Modus 2](#6-modus-2-terminieren) ·
@@ -20,7 +24,7 @@ Inhalt: [1 Ziel](#1-ziel) · [2 Entscheidungen](#2-entscheidungen) · [3 Archite
 
 - **Erreichbarkeit:** Kunden hinter Glasfaser nur mit IPv6, DS-Lite oder CGNAT sind per IPv4 **und** IPv6 erreichbar.
 - **Privatsphäre:** Die Heim-IP bleibt verborgen; im DNS stehen nur srv07/srv08.
-- **Ein Klick:** In der Node je Proxy-Host „CDN64 online“ einschalten; DNS, Server, Zertifikat und Tunnel richten
+- **Ein Klick:** In der Node je Proxy-Host „CDN64“ einschalten; DNS, Server, Zertifikat und Tunnel richten
   sich im Hintergrund ein. Der Nutzer sieht den Fortschritt.
 - **Drei Modi:**
   - **Modus 1 – durchreichen (Tunnel):** Die Server entschlüsseln nichts. TLS und Zertifikat bleiben zu Hause.
@@ -76,7 +80,7 @@ Besucher ───────────────────────�
                      │ + PowerDNS         │◄── API-Key ──┐  │                │       │
                      └────────────────────┘              │  │                │       │
                                                      ┌───┴──┴────────────────┴───────┴──┐
-                                                     │ Node64 zu Hause (CDN64)          │
+                                                     │ Node64 zu Hause (PROXY64)        │
                                                      │ Tunnel-Client → Eingang → Proxy  │
                                                      │ → Dienst im Heimnetz             │
                                                      └──────────────────────────────────┘
@@ -86,7 +90,7 @@ Drei Bausteine:
 
 1. **cdn64-edge** – neuer Go-Dienst auf srv07 und srv08 (Quelle im Repo `ipv64_container`, `cmd/cdn64-edge`).
    In Modus 3 verbindet er sich selbst mit dem Ziel des Nutzers (statt durch den Tunnel).
-2. **Tunnel-Client in Node64** – Teil des Moduls CDN64; speist Tunnel-Verbindungen direkt in den gemeinsamen Eingang.
+2. **Tunnel-Client in Node64** – Teil des Moduls PROXY64 (`cdn64`); speist Tunnel-Verbindungen direkt in den gemeinsamen Eingang.
 3. **Steuerung bei ipv64** – neue Tabellen, API-v2-Endpunkte für Nodes, eigene Endpunkte für die Server (PHP von mir,
    eingespielt von Dennis).
 
@@ -158,7 +162,7 @@ umgestellt werden.
 - **Zertifikate – DNS-01 mit Wildcard (bevorzugt):**
   1. Ein Server bestellt bei Let's Encrypt `domain.de` + `*.domain.de`.
   2. Den TXT-Eintrag `_acme-challenge.domain.de` setzt er **nicht selbst**, sondern bittet ipv64 über den
-     Server-Endpunkt (Server-Geheimnis). ipv64 prüft: Domain ist als CDN64 online im Modus 2 eingetragen →
+     Server-Endpunkt (Server-Geheimnis). ipv64 prüft: Domain ist als CDN64 im Modus 2 eingetragen →
      setzt den TXT über `do_zone_update`/PowerDNS und löscht ihn danach.
   3. Auf den Servern liegt **kein** PowerDNS-Key und **kein** API-Key eines Nutzers.
 - **Ausweg HTTP-01:** wenn DNS-01 scheitert; der Server, der die Prüfung bekommt, aber die Bestellung nicht hält,
@@ -295,7 +299,7 @@ warten.
 
 - **Voraussetzung:** ipv64-API verbunden (zentraler API-Key). Ohne Key oder ohne Kontingent ist der Schalter
   ausgegraut mit Begründung und Link zu `/plans`.
-- **Proxy-Host-Formular / Liste:** Schalter **„CDN64 online“** mit Auswahl Modus 1 / Modus 2 und „Wildcard“.
+- **Proxy-Host-Formular / Liste:** Schalter **„CDN64“** mit Auswahl Modus 1 / Modus 2 und „Wildcard“.
 - **Ein Klick – Fortschritt** (live auf der Seite):
   1. Klasse und Kontingent geprüft
   2. Tunnel angemeldet (einmalig je Node)
@@ -305,9 +309,9 @@ warten.
   6. Zertifikat bereit (Modus 1: lokal; Modus 2: auf den Servern)
   7. **Selbsttest übers Internet:** Die Node ruft `https://domain/.well-known/cdn64-check/<zufall>` über die Server
      auf und beantwortet ihn selbst durch den Tunnel – beweist den ganzen Weg.
-- **Anzeige:** Badge „CDN64 online (srv07 ✓ srv08 ✓)“ in der Host-Tabelle, Modus, Traffic über CDN64,
+- **Anzeige:** Badge „CDN64 (srv07 ✓ srv08 ✓)“ in der Host-Tabelle, Modus, Traffic über CDN64,
   Abweisungen auf den Servern (Modus 2) im Verkehr-Diagramm.
-- **Ohne Portfreigabe:** Hosts, die nur über CDN64 online laufen, brauchen keine offenen Ports 80/443 im Router. Im
+- **Ohne Portfreigabe:** Hosts, die nur über CDN64 laufen, brauchen keine offenen Ports 80/443 im Router. Im
   Heimnetz bleibt der direkte Zugriff wie bisher.
 - **Modus 3 aus der Node:** zusätzlich wählbar, wenn jemand bewusst ohne Tunnel arbeiten will (z. B. Ziel ist ein
   anderes Gerät mit eigener öffentlicher IPv6). Die Node legt es per API an; Modus 1/2 werden im Formular empfohlen.

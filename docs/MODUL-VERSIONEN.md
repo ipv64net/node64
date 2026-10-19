@@ -8,7 +8,7 @@ von Node64 selbst (Kern, z. B. `0.11.66-dev`). So ist sichtbar, welches Modul si
 | Healthchecks | `internal/healthchecks` | 2.0.0 |
 | DynDNS | `internal/dyndns` | 1.0.0 |
 | DNS64 | `internal/dns64` | 1.0.0 |
-| CDN64 | `internal/cdn64` | 1.0.0 |
+| PROXY64 (ID `cdn64`) | `internal/cdn64` | 1.0.0 |
 
 ## Wo die Version steht
 

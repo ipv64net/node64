@@ -1,5 +1,8 @@
 # Plan (Merkzettel): CDN64 online über die ipv64-CDN-Server
 
+> Seit 2026-10-19 heißt diese Funktion nur noch **CDN64** (ohne „online“); der lokale Reverse-Proxy heißt **PROXY64**.
+> Der Merkzettel unten ist der Stand von damals.
+
 Stand 2026-10-15. **Noch kein Phasenplan.** Das hier ist nur festgehalten, damit nichts verloren geht. Dafür kommt
 später ein eigener Phasenplan, weil auch bei ipv64 (CDN-Server, API v2, Portal) einiges neu gebaut werden muss.
 Grundlage ist der lokale Reverse-Proxy aus [PLAN-NODE64-CDN64.md](PLAN-NODE64-CDN64.md), der zuerst fertig wird.

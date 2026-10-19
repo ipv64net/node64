@@ -76,7 +76,7 @@ Getestet mit Dateien aus OpenSSL 3:
 
 | Abnehmer | Wie | „benutzt von“ |
 |---|---|---|
-| CDN64 | Proxy-Hosts und Streams wählen ein Zertifikat oder nehmen das passende zum Namen; im Host-Formular lässt sich gleich eins anfordern | Namen der Hosts |
+| PROXY64 | Proxy-Hosts und Streams wählen ein Zertifikat oder nehmen das passende zum Namen; im Host-Formular lässt sich gleich eins anfordern | Namen der Hosts |
 | DNS64 (ab 1.10.0) | DoH, DoT, DoQ; Modus „Aus der Zertifikatsverwaltung“ (`central`) oder Server-Zertifikat der eigenen CA (Namen und private IPs der Node, 800 Tage; neu ausgestellt, wenn sich Namen oder IPs ändern) | DNS64 |
 | Oberfläche | HTTPS-Port und Name am Eingang | Node64-Oberfläche |
 | andere Geräte | Download oder API | – |
