@@ -1,5 +1,11 @@
 # Änderungen – DNS64
 
+## 1.14.0 – 2026-10-19
+
+### Neu
+- Prometheus: Anfragen je Ergebnis und Protokoll, Antwortzeiten, abgewiesene Anfragen, Cache, Blocklisten,
+  Zustand und Fehler je Upstream sowie Pause unter `GET /api/metrics` (siehe docs/PROMETHEUS.md).
+
 ## 1.13.1 – 2026-10-19
 
 ### Behoben

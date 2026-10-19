@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -82,6 +83,36 @@ type Store struct {
 	log       *slog.Logger
 	dropped   atomic.Uint64
 	done      chan struct{}
+
+	cmu      sync.Mutex // Zaehler seit dem Start (Prometheus), auch fuer verworfene Eintraege
+	counts   map[CountKey]uint64
+	durSum   time.Duration
+	durCount uint64
+}
+
+// CountKey: Anfragen je Ergebnis und Protokoll.
+type CountKey struct {
+	Status Status
+	Proto  string
+}
+
+// Counters sind die Zaehler seit dem Oeffnen des Logs.
+type Counters struct {
+	Queries  map[CountKey]uint64
+	Duration time.Duration // Summe der Antwortzeiten
+	Answered uint64        // Anzahl in Duration
+	Dropped  uint64        // nicht ins Log geschrieben (Puffer voll)
+}
+
+// Counters liefert eine Kopie der Zaehler.
+func (s *Store) Counters() Counters {
+	s.cmu.Lock()
+	defer s.cmu.Unlock()
+	q := make(map[CountKey]uint64, len(s.counts))
+	for k, v := range s.counts {
+		q[k] = v
+	}
+	return Counters{Queries: q, Duration: s.durSum, Answered: s.durCount, Dropped: s.dropped.Load()}
 }
 
 func Open(path string, retention time.Duration, log *slog.Logger) (*Store, error) {
@@ -113,6 +144,14 @@ func Open(path string, retention time.Duration, log *slog.Logger) (*Store, error
 // Add queues an entry. It never blocks the DNS path: if the writer falls
 // behind, entries are dropped and counted.
 func (s *Store) Add(e Entry) {
+	s.cmu.Lock()
+	if s.counts == nil {
+		s.counts = map[CountKey]uint64{}
+	}
+	s.counts[CountKey{e.Status, e.Proto}]++
+	s.durSum += e.Duration
+	s.durCount++
+	s.cmu.Unlock()
 	select {
 	case s.ch <- e:
 	default:

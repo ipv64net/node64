@@ -76,6 +76,33 @@ Labels je Check: `token` (bleibt gleich, auch wenn der Name sich ändert), `chec
 | `node64_dyndns_targets` | `status` | Anzahl je Zustand |
 | `node64_dyndns_updates_24h` | | Aufrufe bei ipv64.net in 24 Stunden |
 
+## DNS64
+
+Die Zähler laufen seit dem letzten Start des DNS-Servers. Eine Änderung der Einstellungen startet ihn neu; `rate()`
+und `increase()` kommen damit zurecht.
+
+| Metrik | Labels | Bedeutung |
+|---|---|---|
+| `node64_dns64_up` | | DNS-Server läuft |
+| `node64_dns64_start_time_seconds` | | Start des DNS-Servers (Unix-Zeit) |
+| `node64_dns64_blocking_paused` | | Blockieren pausiert |
+| `node64_dns64_queries_total` | `status`, `proto` | Anfragen; `status`: `allowed`, `cached`, `blocked`, `local`, `error`, `custom`; `proto`: `udp`, `tcp`, `doh`, `dot`, `doq` |
+| `node64_dns64_query_duration_seconds_sum`, `…_count` | | Summe und Anzahl der Antwortzeiten (Mittelwert über `rate(sum)/rate(count)`) |
+| `node64_dns64_querylog_dropped_total` | | nicht ins Abfrage-Log geschriebene Einträge |
+| `node64_dns64_refused_total` | | abgewiesen, weil von außerhalb der erlaubten Netze |
+| `node64_dns64_blocklist_domains` | | Domains in den Blocklisten |
+| `node64_dns64_cache_entries`, `node64_dns64_cache_max_entries` | | Cache |
+| `node64_dns64_cache_hits_total`, `…_misses_total`, `…_stale_served_total` | | Cache-Treffer |
+| `node64_dns64_upstream_up` | `upstream`, `proto` | Upstream gesund |
+| `node64_dns64_upstream_requests_total`, `node64_dns64_upstream_errors_total` | `upstream`, `proto` | Anfragen und Fehler |
+| `node64_dns64_upstream_latency_seconds` | `upstream`, `proto` | mittlere Antwortzeit |
+
+Anteil blockierter Anfragen der letzten Stunde:
+
+```promql
+sum(increase(node64_dns64_queries_total{status="blocked"}[1h])) / sum(increase(node64_dns64_queries_total[1h]))
+```
+
 ## Beispiele für Alarme
 
 ```yaml
@@ -94,6 +121,9 @@ groups:
       - alert: Node64DynDNSError
         expr: node64_dyndns_target_ok == 0
         for: 15m
+      - alert: Node64DNSUpstreamDown
+        expr: node64_dns64_upstream_up == 0
+        for: 5m
       - alert: Node64HubDisconnected
         expr: node64_link_linked == 1 and node64_link_connected == 0
         for: 10m
