@@ -43,7 +43,7 @@ var changelog string
 
 const (
 	Name    = "cdn64"
-	Version = "1.10.0"
+	Version = "1.11.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen

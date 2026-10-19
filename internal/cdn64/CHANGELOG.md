@@ -1,5 +1,16 @@
 # Änderungen – CDN64
 
+## 1.11.0 – 2026-10-19
+
+CDN64 online: HTTP/3 auch in Modus 1.
+
+### Neu
+- Modus 1 (durchreichen) kann HTTP/3: srv07/srv08 lesen den Namen aus dem ersten QUIC-Paket und reichen QUIC roh
+  durch den Tunnel zur Node. TLS und HTTP/3 enden wie bei TCP erst in der Node, mit der echten Besucher-Adresse.
+  Gilt für Proxy-Hosts mit „HTTP/3“ (Standard).
+- Antworten über den Tunnel tragen den Hinweis auf HTTP/3 (Alt-Svc), sobald alle verbundenen Server das
+  Durchreichen beherrschen.
+
 ## 1.10.0 – 2026-10-18
 
 CDN64 online Modus 3.
