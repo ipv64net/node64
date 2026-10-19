@@ -97,11 +97,12 @@ func (m *Module) hintPage(w http.ResponseWriter, r *http.Request) {
 
 // groupStateView ist der Zustand einer Gruppe fuer die Seite.
 type groupStateView struct {
-	Off, Free bool
-	Hold      bool      // per Knopf (sonst Zeitplan)
-	Forever   bool      // bis zum Aufheben
-	Until     time.Time // Ende
-	Schedule  string    // aktiver Zeitplan
+	Off      bool      `json:"internet_off"`
+	Free     bool      `json:"free"`
+	Hold     bool      `json:"by_button"` // per Knopf (sonst Zeitplan)
+	Forever  bool      `json:"until_released"`
+	Until    time.Time `json:"until,omitzero"`     // Ende
+	Schedule string    `json:"schedule,omitempty"` // aktiver Zeitplan
 }
 
 // groupStates liefert den Zustand jeder Gruppe (Seite Gruppen).
@@ -114,9 +115,14 @@ func (m *Module) groupStates() map[int64]groupStateView {
 	now := time.Now()
 	for id, p := range *pol {
 		st := p.State(now)
-		v := groupStateView{Off: st.Off, Free: st.Free, Until: st.Until, Forever: !st.Until.Before(dnsserver.Forever)}
+		v := groupStateView{Off: st.Off, Free: st.Free, Until: st.Until, Forever: (st.Off || st.Free) && !st.Until.Before(dnsserver.Forever)}
+		if v.Forever || !(st.Off || st.Free) {
+			v.Until = time.Time{}
+		}
 		v.Hold = st.Free || st.Why == dnsserver.ReasonOff+"hold"
-		v.Schedule, _ = strings.CutPrefix(st.Why, dnsserver.ReasonOff+"schedule:")
+		if label, ok := strings.CutPrefix(st.Why, dnsserver.ReasonOff+"schedule:"); ok {
+			v.Schedule = label
+		}
 		out[id] = v
 	}
 	return out

@@ -3330,6 +3330,31 @@
             "items": {
               "$ref": "#/components/schemas/DNS64Schedule"
             }
+          },
+          "state": {
+            "type": "object",
+            "description": "Zustand jetzt (nur GET)",
+            "properties": {
+              "internet_off": {
+                "type": "boolean"
+              },
+              "free": {
+                "type": "boolean"
+              },
+              "by_button": {
+                "type": "boolean"
+              },
+              "until_released": {
+                "type": "boolean"
+              },
+              "until": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "schedule": {
+                "type": "string"
+              }
+            }
           }
         }
       },

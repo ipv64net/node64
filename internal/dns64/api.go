@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/dns64/filter"
+	"github.com/ipv64net/node64/internal/dns64/groups"
 	"github.com/ipv64net/node64/internal/dns64/querylog"
 	"github.com/ipv64net/node64/internal/module"
 )
@@ -332,6 +333,7 @@ type exportData struct {
 	Allowlist []string          `json:"allowlist"`
 	Records   []Record          `json:"records"`
 	CertID    int64             `json:"cert_id,omitempty"` // Zertifikat aus der Verwaltung (bei "central")
+	Groups    []groups.Group    `json:"groups,omitempty"`  // Geraetegruppen samt Mitgliedern, Regeln und Zeitplaenen
 }
 
 // allowlist liefert die Freigaben: vom laufenden Resolver oder direkt aus der Datei.
@@ -367,6 +369,12 @@ func (m *Module) Export(ctx context.Context) (any, error) {
 		out.Records = []Record{}
 	}
 	out.CertID, _ = strconv.ParseInt(m.core.SettingOr(ctx, setCertID, "0"), 10, 64)
+	if out.Groups, err = m.Groups(ctx); err != nil && !m.noTable(err) {
+		return nil, err
+	}
+	for i := range out.Groups { // Knopf-Zustand bleibt auf der alten Node
+		out.Groups[i].Hold, out.Groups[i].HoldUntil = "", ""
+	}
 	return out, nil
 }
 
@@ -402,7 +410,44 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 			break
 		}
 	}
+	n += m.importGroups(ctx, in.Groups)
 	return n, m.restart(ctx)
+}
+
+// importGroups legt Gruppen mit Mitgliedern, Regeln, Freigaben/Sperren und Zeitplaenen an; eine Gruppe mit
+// demselben Namen gibt es schon -> sie bleibt, wie sie ist. Liefert die Zahl der uebernommenen Teile.
+func (m *Module) importGroups(ctx context.Context, list []groups.Group) int {
+	n := 0
+	for _, g := range list {
+		ng, err := m.AddGroup(ctx, g.Name)
+		if err != nil {
+			continue // vorhanden, ungueltig oder Tabelle fehlt
+		}
+		n++
+		_ = m.SetGroupRules(ctx, ng.ID, groups.Rules{ListsMode: g.ListsMode, Lists: g.Lists, Cats: g.Cats, SafeSearch: g.SafeSearch, YouTube: g.YouTube, Bypass: g.Bypass})
+		for _, x := range g.Members {
+			x.GroupID = ng.ID
+			if _, err := m.AddMember(ctx, x); err == nil {
+				n++
+			}
+		}
+		for _, d := range g.Domains {
+			d.GroupID = ng.ID
+			if _, err := m.AddGroupDomain(ctx, d); err == nil {
+				n++
+			}
+		}
+		for _, s := range g.Schedules {
+			s.GroupID = ng.ID
+			if x, err := m.AddSchedule(ctx, s); err == nil {
+				n++
+				if !s.Enabled {
+					_ = m.SetScheduleEnabled(ctx, x.ID, false)
+				}
+			}
+		}
+	}
+	return n
 }
 
 // noTable: das Modul war noch nie an, die Tabelle der eigenen Eintraege fehlt.

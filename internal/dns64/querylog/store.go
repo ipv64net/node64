@@ -87,6 +87,7 @@ type Store struct {
 
 	cmu      sync.Mutex // Zaehler seit dem Start (Prometheus), auch fuer verworfene Eintraege
 	counts   map[CountKey]uint64
+	groups   map[GroupCountKey]uint64 // Anfragen je Geraetegruppe und Ergebnis
 	durSum   time.Duration
 	durCount uint64
 }
@@ -97,9 +98,16 @@ type CountKey struct {
 	Proto  string
 }
 
+// GroupCountKey: Anfragen je Geraetegruppe und Ergebnis.
+type GroupCountKey struct {
+	Group  string
+	Status Status
+}
+
 // Counters sind die Zaehler seit dem Oeffnen des Logs.
 type Counters struct {
 	Queries  map[CountKey]uint64
+	Groups   map[GroupCountKey]uint64
 	Duration time.Duration // Summe der Antwortzeiten
 	Answered uint64        // Anzahl in Duration
 	Dropped  uint64        // nicht ins Log geschrieben (Puffer voll)
@@ -113,7 +121,11 @@ func (s *Store) Counters() Counters {
 	for k, v := range s.counts {
 		q[k] = v
 	}
-	return Counters{Queries: q, Duration: s.durSum, Answered: s.durCount, Dropped: s.dropped.Load()}
+	g := make(map[GroupCountKey]uint64, len(s.groups))
+	for k, v := range s.groups {
+		g[k] = v
+	}
+	return Counters{Queries: q, Groups: g, Duration: s.durSum, Answered: s.durCount, Dropped: s.dropped.Load()}
 }
 
 func Open(path string, retention time.Duration, log *slog.Logger) (*Store, error) {
@@ -150,6 +162,12 @@ func (s *Store) Add(e Entry) {
 		s.counts = map[CountKey]uint64{}
 	}
 	s.counts[CountKey{e.Status, e.Proto}]++
+	if e.Group != "" {
+		if s.groups == nil {
+			s.groups = map[GroupCountKey]uint64{}
+		}
+		s.groups[GroupCountKey{e.Group, e.Status}]++
+	}
 	s.durSum += e.Duration
 	s.durCount++
 	s.cmu.Unlock()

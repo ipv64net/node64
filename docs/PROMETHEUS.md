@@ -96,6 +96,10 @@ und `increase()` kommen damit zurecht.
 | `node64_dns64_upstream_up` | `upstream`, `proto` | Upstream gesund |
 | `node64_dns64_upstream_requests_total`, `node64_dns64_upstream_errors_total` | `upstream`, `proto` | Anfragen und Fehler |
 | `node64_dns64_upstream_latency_seconds` | `upstream`, `proto` | mittlere Antwortzeit |
+| `node64_dns64_group_queries_total` | `group`, `status` | Anfragen je Gerätegruppe und Ergebnis |
+| `node64_dns64_group_internet_off` | `group` | Internet aus für die Gruppe (Knopf oder Zeitplan) |
+| `node64_dns64_group_free` | `group` | Knopf „Frei“ aktiv (Zeitpläne und Kategorien ausgesetzt) |
+| `node64_dns64_group_members` | `group` | Einträge (MAC, IP, Netz) der Gruppe |
 
 Anteil blockierter Anfragen der letzten Stunde:
 

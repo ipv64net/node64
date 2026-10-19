@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.19.0"
+	version   = "1.20.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -429,6 +429,18 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 		{LabelKey: "dns64.card.cached", Value: sum.Cached},
 		{LabelKey: "dns64.card.clients", Value: sum.Clients},
 		{LabelKey: "dns64.card.lists", Value: int64(e.lists.Matcher().Size())},
+	}
+	if list, err := m.Groups(ctx); err == nil && len(list) > 0 { // Geraetegruppen: Zahl und davon gerade gesperrt
+		off := 0
+		for _, st := range m.groupStates() {
+			if st.Off {
+				off++
+			}
+		}
+		c.Stats = append(c.Stats, module.CardStat{LabelKey: "dns64.card.groups", Value: int64(len(list))})
+		if off > 0 {
+			c.Stats = append(c.Stats, module.CardStat{LabelKey: "dns64.card.groups_off", Value: int64(off), Class: "text-danger"})
+		}
 	}
 	if p := m.pauseState(); p.Active { // Blockieren pausiert: oben und gelb
 		until := "∞"

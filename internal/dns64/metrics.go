@@ -10,7 +10,7 @@ import (
 
 // Metrics: Kennzahlen fuer GET /api/metrics (Prometheus). Zaehler laufen seit dem letzten Start des
 // DNS-Servers (Aenderungen an den Einstellungen starten ihn neu, rate() kommt damit zurecht).
-func (m *Module) Metrics(_ context.Context, w *metrics.Writer) {
+func (m *Module) Metrics(ctx context.Context, w *metrics.Writer) {
 	e := m.running()
 	w.Gauge("node64_dns64_up", "DNS-Server laeuft.", metrics.Bool(e != nil))
 	if e == nil {
@@ -38,6 +38,28 @@ func (m *Module) Metrics(_ context.Context, w *metrics.Writer) {
 		}
 		w.Counter("node64_dns64_queries_total", "Anfragen je Ergebnis (allowed, cached, blocked, local, error, custom) und Protokoll.", float64(v),
 			"status", k.Status.String(), "proto", proto)
+	}
+	gkeys := make([]querylog.GroupCountKey, 0, len(c.Groups))
+	for k := range c.Groups {
+		gkeys = append(gkeys, k)
+	}
+	sort.Slice(gkeys, func(i, j int) bool {
+		if gkeys[i].Group != gkeys[j].Group {
+			return gkeys[i].Group < gkeys[j].Group
+		}
+		return gkeys[i].Status < gkeys[j].Status
+	})
+	for _, k := range gkeys {
+		w.Counter("node64_dns64_group_queries_total", "Anfragen je Geraetegruppe und Ergebnis.", float64(c.Groups[k]), "group", k.Group, "status", k.Status.String())
+	}
+	if list, err := m.Groups(ctx); err == nil {
+		states := m.groupStates()
+		for _, g := range list {
+			st := states[g.ID]
+			w.Gauge("node64_dns64_group_internet_off", "Internet aus fuer die Gruppe (Knopf oder Zeitplan).", metrics.Bool(st.Off), "group", g.Name)
+			w.Gauge("node64_dns64_group_free", "Knopf Frei aktiv (Zeitplaene und Kategorien ausgesetzt).", metrics.Bool(st.Free), "group", g.Name)
+			w.Gauge("node64_dns64_group_members", "Eintraege (MAC, IP, Netz) der Gruppe.", float64(len(g.Members)), "group", g.Name)
+		}
 	}
 	w.Counter("node64_dns64_query_duration_seconds_sum", "Summe der Antwortzeiten.", c.Duration.Seconds())
 	w.Counter("node64_dns64_query_duration_seconds_count", "Anzahl Antworten in der Summe.", float64(c.Answered))

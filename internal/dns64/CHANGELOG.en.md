@@ -1,5 +1,15 @@
 # Changes – DNS64
 
+## 1.20.0 – 2026-10-19
+
+### New
+- Device groups, phase G5:
+  - Prometheus: `node64_dns64_group_queries_total{group,status}`, `node64_dns64_group_internet_off{group}`, `node64_dns64_group_free{group}`, `node64_dns64_group_members{group}`.
+  - Configuration export/import carries the groups (members, rules, releases/blocks, schedules; without button state). A group of the same name on the new node stays as it is.
+  - Dashboard card: number of groups and how many are blocked right now.
+  - API: `GET /api/dns64/groups` returns the state of each group (`state`: internet_off, free, by_button, until_released, until, schedule), e.g. for Home Assistant.
+- This completes the plan device groups and child safety (G1–G5).
+
 ## 1.19.0 – 2026-10-19
 
 ### New

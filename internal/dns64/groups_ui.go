@@ -179,13 +179,24 @@ func (m *Module) pageAssign(w http.ResponseWriter, r *http.Request) {
 
 // ---- API ----
 
+// groupWithState: Gruppe mit ihrem Zustand jetzt (API).
+type groupWithState struct {
+	groups.Group
+	State groupStateView `json:"state"`
+}
+
 func (m *Module) apiGroups(w http.ResponseWriter, r *http.Request) {
 	list, err := m.Groups(r.Context())
 	if err != nil {
 		m.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+	states := m.groupStates()
+	out := make([]groupWithState, 0, len(list))
+	for _, g := range list {
+		out = append(out, groupWithState{Group: g, State: states[g.ID]})
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // apiResult beantwortet einen Aenderungsaufruf (Fehler mit Text in der Sprache der Anfrage).

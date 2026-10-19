@@ -2338,6 +2338,8 @@
   "dns64": {
     "title": "DNS64",
     "card": {
+      "groups": "Gerätegruppen",
+      "groups_off": "davon Internet aus",
       "listen": "DNS auf",
       "total": "Anfragen (24 Std.)",
       "blocked": "Blockiert",
