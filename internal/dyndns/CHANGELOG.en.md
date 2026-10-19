@@ -1,5 +1,10 @@
 # Changes – DynDNS updater
 
+## 1.3.1 – 2026-10-19
+
+### Changed
+- Small help icons on cards and pages link straight to the matching section of the online documentation at node64.de (in the interface language).
+
 ## 1.3.0 – 2026-10-19
 
 ### New
