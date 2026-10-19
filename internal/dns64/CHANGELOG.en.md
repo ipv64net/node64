@@ -1,14 +1,15 @@
 # Changes – DNS64
 
+## 1.14.1 – 2026-10-19
+
+### New
+- Help links: on all DNS64 pages and at the main cards and fields (upstreams, mode, blocklists, allowlist, custom records, encryption, certificate, devices, client networks, router, notifications) a question mark opens the matching place of the documentation on node64.de in the language of the interface.
+
 ## 1.14.0 – 2026-10-19
 
 ### New
 - Prometheus: queries per result and protocol, response times, refused queries, cache, blocklists, state and
   errors per upstream, and pause at `GET /api/metrics` (see docs/PROMETHEUS.md).
-
-## 1.14.0 – 2026-10-19
-
-### New
 - Configuration export/import: the certificate from the certificate management is carried along and assigned on the new node (export with password, which contains the certificates).
 
 ### Fixed
