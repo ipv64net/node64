@@ -165,14 +165,14 @@ func TestSyncModulesDefaults(t *testing.T) {
 	a := newNode(t, "node-a", "A", 522)
 	newProv(a)
 	mods := a.m.SyncModules(ctx)
-	if len(mods) != 2 || mods[0].ID != "healthchecks" || mods[1].ID != "demo" {
+	if len(mods) != 3 || mods[0].ID != "healthchecks" || mods[1].ID != "notifications" || mods[2].ID != "demo" {
 		t.Fatalf("modules: %+v", mods)
 	}
 	if mods[0].Available { // ohne Healthchecks-Modul nicht verfuegbar
 		t.Fatal("healthchecks must be unavailable without the module")
 	}
-	if !mods[0].Enabled || !mods[0].Items[0].Enabled || mods[1].Enabled {
-		t.Fatal("healthchecks on by default, others off")
+	if !mods[0].Enabled || !mods[0].Items[0].Enabled || !mods[1].Enabled || mods[2].Enabled {
+		t.Fatal("healthchecks and notifications on by default, others off")
 	}
 	newFake(a)
 	if caps := a.m.syncCaps(ctx); len(caps) != 3 {

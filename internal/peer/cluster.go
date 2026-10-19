@@ -58,12 +58,19 @@ type ModuleState struct {
 
 const setSync = "peer.sync" // {"module": {"enabled": true, "items": {"item": true}}}
 
-// Healthchecks ist fest eingebaut (eigener Weg), die Bereiche schalten die vorhandenen Eintragsarten.
+// Healthchecks und Benachrichtigungen sind fest eingebaut (eigener Weg /peer/v1/changes), die Bereiche schalten
+// die vorhandenen Eintragsarten (check, maintenance; settings = Benachrichtigungs-Einstellungen).
 var healthchecksModule = ModuleInfo{ID: "healthchecks", TitleKey: "cluster.mod.healthchecks", Items: []ItemInfo{
 	{ID: "checks", TitleKey: "cluster.item.checks", Default: true},
 	{ID: "maintenance", TitleKey: "cluster.item.maintenance", Default: true},
+}}
+
+var notificationsModule = ModuleInfo{ID: "notifications", TitleKey: "cluster.mod.notifications", Items: []ItemInfo{
 	{ID: "settings", TitleKey: "cluster.item.notify_settings", Default: true},
 }}
+
+// builtin: Module mit eigenem Weg (ohne Einstellung eingeschaltet, laufen mit dem Healthchecks-Modul).
+func builtin(id string) bool { return id == "healthchecks" || id == "notifications" }
 
 // ErrUnknownSync: Modul oder Bereich gibt es nicht.
 var ErrUnknownSync = errors.New("unknown cluster module or item")
@@ -96,7 +103,7 @@ func (m *Manager) syncCfg(ctx context.Context) map[string]syncModCfg {
 }
 
 func (m *Manager) modules() []ModuleInfo {
-	out := []ModuleInfo{healthchecksModule}
+	out := []ModuleInfo{healthchecksModule, notificationsModule}
 	m.mu.Lock()
 	ids := make([]string, 0, len(m.prov))
 	for id := range m.prov {
@@ -110,14 +117,14 @@ func (m *Manager) modules() []ModuleInfo {
 	return out
 }
 
-// SyncModules liefert alle abgleichbaren Module mit ihren Schaltern auf dieser Node. Healthchecks ist ohne
-// Einstellung eingeschaltet (wie bisher), alle anderen Module aus.
+// SyncModules liefert alle abgleichbaren Module mit ihren Schaltern auf dieser Node. Healthchecks und
+// Benachrichtigungen sind ohne Einstellung eingeschaltet (wie bisher), alle anderen Module aus.
 func (m *Manager) SyncModules(ctx context.Context) []ModuleState {
 	cfg := m.syncCfg(ctx)
 	var out []ModuleState
 	for _, mi := range m.modules() {
 		c := cfg[mi.ID]
-		st := ModuleState{ModuleInfo: mi, Available: mi.ID != "healthchecks" || m.checks() != nil, Enabled: mi.ID == "healthchecks", Items: []ItemState{}}
+		st := ModuleState{ModuleInfo: mi, Available: !builtin(mi.ID) || m.checks() != nil, Enabled: builtin(mi.ID), Items: []ItemState{}}
 		if c.Enabled != nil {
 			st.Enabled = *c.Enabled
 		}
@@ -254,7 +261,7 @@ func (m *Manager) wants(own []string, x Member, module string) []string {
 	out := []string{}
 	for _, c := range own {
 		mod, item, _ := strings.Cut(c, "/")
-		if module == "" && mod == "healthchecks" || module != "" && mod != module || !memberSyncOn(x, mod, item) {
+		if module == "" && builtin(mod) || module != "" && mod != module || !memberSyncOn(x, mod, item) {
 			continue
 		}
 		if module != "" {
@@ -273,6 +280,29 @@ func has(list []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// v1Wants: Eintragsbereiche des eigenen Wegs (checks, maintenance, settings), die hier und beim Mitglied an sind.
+func (m *Manager) v1Wants(own []string, x Member) []string {
+	out := m.wants(own, x, "healthchecks")
+	if has(own, "notifications/settings") && memberSyncOn(x, "notifications", "settings") {
+		out = append(out, "settings")
+	}
+	sort.Strings(out)
+	return out
+}
+
+// v1Members: Mitglieder, mit denen ueber den eigenen Weg etwas abzugleichen ist (nicht ausgesetzt).
+func (m *Manager) v1Members(ctx context.Context) []Member {
+	own := m.syncCaps(ctx)
+	list, _ := m.Members(ctx)
+	out := list[:0]
+	for _, x := range list {
+		if !x.Suspended() && len(m.v1Wants(own, x)) > 0 {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 // hcMembers: Mitglieder, mit denen die Healthchecks abgeglichen werden (nicht ausgesetzt, Checks auf beiden

@@ -190,7 +190,7 @@ func (m *Manager) handleChanges(w http.ResponseWriter, r *http.Request, from *Me
 	}
 	ctx := r.Context()
 	since, _ := strconv.ParseInt(r.URL.Query().Get("since"), 10, 64)
-	want := m.wants(m.syncCaps(ctx), *from, "healthchecks")
+	want := m.v1Wants(m.syncCaps(ctx), *from)
 	if q, ok := r.URL.Query()["items"]; ok {
 		asked := splitCaps(strings.Join(q, ","))
 		for i := 0; i < len(want); i++ {
@@ -310,8 +310,12 @@ func (m *Manager) pullAll(ctx context.Context, only string) {
 		m.seeded.Store(true)
 	}
 	m.checkSettings(ctx)
-	list := m.hcMembers(ctx) // Healthchecks nur mit Mitgliedern, bei denen es auf beiden Seiten an ist
-	for _, x := range list {
+	hc := m.hcMembers(ctx) // Messwerte, hub-Daten, Stellvertreter: nur wo die Checks auf beiden Seiten an sind
+	inHC := map[string]bool{}
+	for _, x := range hc {
+		inHC[x.NodeID] = true
+	}
+	for _, x := range m.v1Members(ctx) {
 		if only != "" && x.NodeID != only {
 			continue
 		}
@@ -333,6 +337,9 @@ func (m *Manager) pullAll(ctx context.Context, only string) {
 			m.d.Log.Debug("peer pull", "from", x.Name, "err", err)
 			continue
 		}
+		if !inHC[x.NodeID] {
+			continue
+		}
 		if err := m.pullData(ctx, x); err != nil {
 			m.d.Log.Debug("peer measurements", "from", x.Name, "err", err)
 		}
@@ -341,7 +348,7 @@ func (m *Manager) pullAll(ctx context.Context, only string) {
 		}
 	}
 	if only == "" {
-		m.pushProxies(ctx, list)
+		m.pushProxies(ctx, hc)
 	}
 	m.verdicts(ctx)
 }
@@ -470,7 +477,7 @@ func (m *Manager) pullFrom(ctx context.Context, x Member) error {
 	var cursor int64
 	var seen string
 	_ = m.db.QueryRowContext(ctx, `SELECT cursor, sync_seen FROM peer_members WHERE node_id = ?`, x.NodeID).Scan(&cursor, &seen)
-	want := m.wants(m.syncCaps(ctx), x, "healthchecks")
+	want := m.v1Wants(m.syncCaps(ctx), x)
 	if items := joinCaps(want); seen != items { // Bereiche geaendert: von vorn (die juengere Aenderung gewinnt)
 		cursor = 0
 		_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET cursor = 0, sync_seen = ? WHERE node_id = ?`, items, x.NodeID)

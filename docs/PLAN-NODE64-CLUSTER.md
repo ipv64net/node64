@@ -69,6 +69,8 @@ deployen. i18n-Dateien nur mit kleinen Einfügungen (Edit-Werkzeug, vorher frisc
   cbe4dc9 Healthchecks 2.16.0 · 5f792fd PROXY64 1.17.1 (Verbindungsweg, Bonus).
 - Live lokal getestet (zwei Nodes ohne ipv64, nur Web-Port per Dualport): Kopplung, http→https, Klartext an
   `/peer/` = 426, Check-Abgleich, Healthchecks-Schalter aus/an (holt nach), Zertifikat übernommen und Löschen verteilt.
+- Benachrichtigungen (Ruhezeiten, Drossel, Bündeln) sind ein eigenes Modul `notifications` unter „Was wird
+  abgeglichen“ (Dennis 2026-10-19), technisch weiter Eintragsart `settings` im eigenen Weg `/peer/v1/changes`.
 - Zertifikate: erneuert die Node, die zuletzt ausgestellt hat; eine andere übernimmt erst bei einem Drittel der
   Erneuerungsfrist (LE: 10 Tage). Löschen auf einer Node löscht überall.
 

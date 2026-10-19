@@ -2274,12 +2274,13 @@
     "mod_unavailable": "(auf dieser Node nicht aktiv)",
     "mod": {
       "healthchecks": "Healthchecks",
+      "notifications": "Benachrichtigungen",
       "certs": "Zertifikate"
     },
     "item": {
       "checks": "Checks",
       "maintenance": "Wartungsfenster",
-      "notify_settings": "Benachrichtigungs-Einstellungen",
+      "notify_settings": "Einstellungen (Ruhezeiten, Drossel, Bündeln)",
       "certificates": "Zertifikate",
       "acme": "ACME (Konto und CAs)",
       "dns_accounts": "DNS-Anbieter",

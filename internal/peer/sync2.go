@@ -158,7 +158,7 @@ func (m *Manager) handleSync2(w http.ResponseWriter, r *http.Request, _ *Member,
 	own := m.syncCaps(ctx)
 	allowed := map[string]bool{}
 	for _, c := range splitCaps(r.URL.Query().Get("items")) {
-		if mod, _, _ := strings.Cut(c, "/"); mod != "healthchecks" && has(own, c) && m.provider(mod) != nil {
+		if mod, _, _ := strings.Cut(c, "/"); !builtin(mod) && has(own, c) && m.provider(mod) != nil {
 			allowed[c] = true
 		}
 	}
