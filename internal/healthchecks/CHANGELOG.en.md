@@ -1,5 +1,11 @@
 # Changes – Healthchecks
 
+## 2.13.0 – 2026-10-19
+
+### New
+- Prometheus: state, response time, last measurement, consecutive failures, maintenance and certificate expiry per
+  check, plus counts per state and open incidents at `GET /api/metrics` (see docs/PROMETHEUS.md).
+
 ## 2.12.2 – 2026-10-19
 
 ### Fixed

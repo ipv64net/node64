@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.13.0 – 2026-10-19
+
+### Neu
+- Prometheus: Zustand, Antwortzeit, letzte Messung, Fehlschläge in Folge, Wartung und Zertifikatsablauf je Check
+  sowie Anzahl je Zustand und offene Störungen unter `GET /api/metrics` (siehe docs/PROMETHEUS.md).
+
 ## 2.12.2 – 2026-10-19
 
 ### Behoben

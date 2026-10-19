@@ -29,6 +29,7 @@ func (s *Server) apiRoutes() {
 	s.mux.Handle("GET /api/settings", s.auth(s.apiSettingsGet))
 	s.mux.Handle("PUT /api/settings", s.auth(s.apiSettingsPut))
 	s.mux.Handle("GET /api/modules", s.auth(s.apiModules))
+	s.mux.Handle("GET /api/metrics", s.auth(s.apiMetrics))
 	s.mux.Handle("POST /api/modules/{name}/enable", s.auth(s.apiModuleToggle))
 	s.mux.Handle("POST /api/modules/{name}/disable", s.auth(s.apiModuleToggle))
 	if s.Notify != nil {

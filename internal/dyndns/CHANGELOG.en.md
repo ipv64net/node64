@@ -1,5 +1,11 @@
 # Changes – DynDNS updater
 
+## 1.3.0 – 2026-10-19
+
+### New
+- Prometheus: state, last successful update and last error per target, counts per state and calls to ipv64.net in
+  the last 24 hours at `GET /api/metrics` (see docs/PROMETHEUS.md).
+
 ## 1.2.1 – 2026-10-19
 
 ### Fixed

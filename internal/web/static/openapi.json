@@ -3347,6 +3347,27 @@
         }
       }
     },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "Node"
+        ],
+        "summary": "Kennzahlen für Prometheus",
+        "description": "Kern (Version, Laufzeit, Datenbank, Module, Verknüpfung, lokale Gruppe) und alle laufenden Module im Textformat von Prometheus. Für den Abruf durch Prometheus einen eigenen API-Key anlegen und als Bearer-Token eintragen (siehe docs/PROMETHEUS.md).",
+        "responses": {
+          "200": {
+            "description": "Textformat 0.0.4",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/settings": {
       "get": {
         "tags": [
