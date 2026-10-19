@@ -122,7 +122,7 @@
 			</div>
 		</div>
 		<div class="card">
-			<div class="card-header"><i class="bi bi-terminal text-body-secondary"></i> {{.T "settings.logging"}}</div>
+			<div class="card-header"><i class="bi bi-terminal text-body-secondary"></i> {{.T "settings.logging"}}{{.Doc "configuration#logs"}}</div>
 			<div class="card-body">
 				<form method="post" action="/settings/logging">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
@@ -208,7 +208,7 @@
 			</div>
 		</div>
 		{{with $d.Ports}}<div class="card" id="ports">
-			<div class="card-header"><i class="bi bi-ethernet text-primary"></i> {{$.T "ports.title"}}</div>
+			<div class="card-header"><i class="bi bi-ethernet text-primary"></i> {{$.T "ports.title"}}{{$.Doc "configuration#ports"}}</div>
 			<div class="card-body">
 				<p class="text-body-secondary small">{{$.T "ports.hint"}}</p>
 				<div class="table-responsive"><table class="table table-sm align-middle small mb-3">
@@ -278,7 +278,7 @@
 			</div>
 		</div>
 		<div class="card" id="backup">
-			<div class="card-header"><i class="bi bi-database text-info"></i> {{.T "backup.title"}}</div>
+			<div class="card-header"><i class="bi bi-database text-info"></i> {{.T "backup.title"}}{{.Doc "update-backup#backup-wege"}}</div>
 			<div class="card-body">
 				<p class="small text-body-secondary">{{.T "backup.hint"}}</p>
 				<form method="post" action="/settings/backup" class="mb-1">

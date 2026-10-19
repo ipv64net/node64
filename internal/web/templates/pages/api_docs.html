@@ -1,12 +1,12 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-	<h1 class="h4 mb-0"><i class="bi bi-code-slash text-primary me-1"></i> {{.T "api.title"}}</h1>
+	<h1 class="h4 mb-0"><i class="bi bi-code-slash text-primary me-1"></i> {{.T "api.title"}}{{.Doc "api"}}</h1>
 	<a class="btn btn-outline-secondary btn-sm" href="/api/openapi.json" target="_blank"><i class="bi bi-filetype-json"></i> openapi.json</a>
 </div>
 <p class="text-body-secondary">{{index $d.Info "description"}}</p>
 <div class="card mb-3" id="keys">
-	<div class="card-header"><i class="bi bi-key text-warning"></i> {{.T "apikey.title"}}</div>
+	<div class="card-header"><i class="bi bi-key text-warning"></i> {{.T "apikey.title"}}{{.Doc "api#api-key-anlegen"}}</div>
 	<div class="card-body">
 		<p class="small text-body-secondary">{{.T "apikey.hint"}}</p>
 		{{if $d.NewAPIKey}}<div class="alert alert-warning small"><strong>{{.T "apikey.show_once"}}</strong><br><div class="input-group input-group-sm mt-1"><span class="input-group-text"><i class="bi bi-key"></i></span><input class="form-control font-monospace" id="new-api-key" value="{{$d.NewAPIKey}}" readonly><button class="btn btn-outline-secondary btn-copy" type="button" data-copy-target="#new-api-key" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div></div>{{end}}
@@ -30,7 +30,9 @@
 <div class="card mb-3"><div class="card-body">
 <pre class="mb-0 small">curl -H "Authorization: Bearer node64_…" {{.Scheme}}://{{.Host}}/api/checks
 curl -X POST -H "Authorization: Bearer node64_…" -H "Content-Type: application/json" \
-  -d '{"name":"Web","type":"http","target":"https://example.com/","interval_seconds":60}' {{.Scheme}}://{{.Host}}/api/checks</pre>
+  -d '{"name":"Web","type":"http","target":"https://example.com/","interval_seconds":60}' {{.Scheme}}://{{.Host}}/api/checks
+curl -H "Authorization: Bearer node64_…" {{.Scheme}}://{{.Host}}/api/metrics   # Prometheus</pre>
+<div class="small text-body-secondary mt-2">Prometheus: <code>GET /api/metrics</code>{{.Doc "prometheus#einrichten"}}</div>
 </div></div>
 {{range $tag := $d.Order}}
 <h2 class="h5 mt-4">{{$tag}}</h2>
