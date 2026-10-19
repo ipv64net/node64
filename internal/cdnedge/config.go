@@ -47,7 +47,8 @@ type Config struct {
 	ACMELEWeekLimit     int    `yaml:"acme_le_week_limit"` // neue Zertifikate je Domain und Woche bei Let's Encrypt, Standard 40 (Grenze 50); -1 = nur Ausweg
 	// Modus 3: Cache aller Namen zusammen auf der Platte (MB, Standard 4096)
 	CacheTotalMB int    `yaml:"cache_total_mb"`
-	PortRange    string `yaml:"port_range"` // Portmapper (Modus 3): Standard "50000-62000", "off" = aus
+	PortRange    string `yaml:"port_range"`
+	CapacityMbit int    `yaml:"capacity_mbit"` // faire Drossel ab 80 % davon (bandwidth.go); Standard 1000, -1 = aus // Portmapper (Modus 3): Standard "50000-62000", "off" = aus
 }
 
 // HostEntry: ein Name (auch *.domain) und der Tunnel, der ihn bedient.

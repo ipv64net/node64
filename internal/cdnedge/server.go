@@ -74,6 +74,11 @@ func New(cfg *Config, log *slog.Logger, version string) *Server {
 	s.cache = newRespCache(filepath.Join(cfg.DataDir, "cache"), cfg.CacheTotalMB)
 	s.pm = newPortmapper(s, cfg.PortRange)
 	s.ca = newCAState(cfg.DataDir)
+	capMbit := cfg.CapacityMbit
+	if capMbit == 0 {
+		capMbit = 1000
+	}
+	s.bw.setCapacity(capMbit)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("/", notFound)
@@ -119,6 +124,18 @@ func (s *Server) Run(ctx context.Context) error {
 			case <-t.C:
 				s.guard.sweep()
 				s.cacheSweep()
+			}
+		}
+	}()
+	go func() { // faire Drossel: jede Sekunde neu verteilen
+		t := time.NewTicker(time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-bctx.Done():
+				return
+			case <-t.C:
+				s.bw.fairRound()
 			}
 		}
 	}()
@@ -394,8 +411,11 @@ type Health struct {
 	API      *APIInfo            `json:"api,omitempty"`
 	Certs    map[string]string   `json:"certs,omitempty"`     // Modus 2: Name -> gueltig bis
 	QUICPass int                 `json:"quic_pass,omitempty"` // Modus 1: durchgereichte QUIC-Besucher gerade
-	ACME     string              `json:"acme,omitempty"`      // ok | warn (Domain bei 80 % der Woche oder Grenze erreicht) | error (Ausweg fehlt)
-	CA       *caInfo             `json:"ca,omitempty"`        // Einzelheiten (nur lokal)
+	LoadMbit float64             `json:"load_mbit,omitempty"` // Durchsatz gerade (alle Accounts)
+	CapMbit  float64             `json:"capacity_mbit,omitempty"`
+	Throttle map[int]float64     `json:"throttled_mbit,omitempty"` // faire Drossel: Account -> Mbit/s
+	ACME     string              `json:"acme,omitempty"`           // ok | warn (Domain bei 80 % der Woche oder Grenze erreicht) | error (Ausweg fehlt)
+	CA       *caInfo             `json:"ca,omitempty"`             // Einzelheiten (nur lokal)
 }
 
 // APIInfo: Stand der Steuerung von ipv64 (nur lokal sichtbar).
@@ -458,6 +478,10 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 		h.Open, h.Rejected, h.Blocked = s.guard.open.Load(), s.guard.rejected.Load(), s.guard.set.Load().Total()
 		if qd := s.qd.Load(); qd != nil {
 			h.QUICPass = qd.open()
+		}
+		h.LoadMbit, h.CapMbit, h.Throttle = s.bw.fairStatus()
+		if len(h.Throttle) == 0 {
+			h.Throttle = nil
 		}
 		s.stats.mu.Lock()
 		if len(s.stats.m) > 0 {
