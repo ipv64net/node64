@@ -1,0 +1,119 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dns64.title"}}{{.Doc "dns64"}}</h1>
+	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "dns64.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "dns64.listening" "addr" $d.Listen}}</span>{{end}}
+	{{if $d.Running}}<div class="ms-auto d-flex align-items-center gap-2" id="dns64-pause">
+		{{if $d.Pause.Active}}<span class="badge text-bg-warning"><i class="bi bi-pause-circle"></i> {{if $d.Pause.Forever}}{{.T "dns64.pause.paused"}}{{else}}{{.T "dns64.pause.paused_until" "time" (.Time $d.Pause.Until)}}{{end}}</span>
+		<form method="post" action="/dns64/resume" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-sm btn-success" type="submit"><i class="bi bi-play-fill"></i> {{.T "dns64.pause.resume"}}</button></form>
+		{{else}}<div class="dropdown">
+			<button class="btn btn-sm btn-outline-warning dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-pause-fill"></i> {{.T "dns64.pause.button"}}</button>
+			<form method="post" action="/dns64/pause" class="dropdown-menu dropdown-menu-end">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<button class="dropdown-item" type="submit" name="minutes" value="10"><i class="bi bi-clock"></i> {{.T "dns64.pause.ten"}}</button>
+				<button class="dropdown-item" type="submit" name="minutes" value="0"><i class="bi bi-pause-circle"></i> {{.T "dns64.pause.forever"}}</button>
+			</form>
+		</div>{{end}}
+	</div>{{end}}
+	
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+{{if not $d.Running}}<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.not_running"}}{{if $d.Err}}<div class="small mt-1 font-monospace">{{$d.Err}}</div><div class="small mt-1">{{.T "dns64.retrying"}}</div>{{end}}</div>{{end}}
+<script type="application/json" id="dns64-data">{{$d.JS}}</script>
+<div class="row g-3" data-dns64-page="groups">
+	<div class="col-xl-4 d-flex flex-column gap-3">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-plus-circle text-primary"></i> {{.T "dns64.groups.add"}}</div>
+			<div class="card-body">
+				<form method="post" action="/dns64/groups" class="d-flex gap-2">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<input type="text" class="form-control" name="name" placeholder="{{.T "dns64.groups.name_ph"}}" aria-label="{{.T "common.name"}}" required maxlength="40">
+					<button class="btn btn-primary text-nowrap" type="submit"><i class="bi bi-plus"></i> {{.T "dns64.groups.add_btn"}}</button>
+				</form>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-body small text-body-secondary">
+				<p class="mb-2">{{.T "dns64.groups.hint"}}</p>
+				<p class="mb-2">{{.T "dns64.groups.hint_mac"}}</p>
+				<p class="mb-0">{{.T "dns64.groups.hint_g1"}}</p>
+			</div>
+		</div>
+	</div>
+	<div class="col-xl-8 d-flex flex-column gap-3">
+		{{range $i, $g := $d.Groups}}
+		<div class="card">
+			<div class="card-header d-flex flex-wrap align-items-center gap-2">
+				<b>{{$g.Name}}</b>
+				<span class="text-body-secondary small">{{$.T "dns64.groups.members_n" "n" (len $g.Members)}}</span>
+				<form method="post" class="ms-auto d-flex flex-wrap gap-1 m-0">
+					<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<input type="text" class="form-control form-control-sm" style="width:10rem" name="name" value="{{$g.Name}}" aria-label="{{$.T "dns64.groups.rename"}}" maxlength="40">
+					<button class="btn btn-sm btn-outline-secondary" type="submit" formaction="/dns64/groups/{{$g.ID}}/rename" title="{{$.T "dns64.groups.rename"}}"><i class="bi bi-pencil"></i></button>
+					<button class="btn btn-sm btn-outline-secondary" type="submit" formaction="/dns64/groups/{{$g.ID}}/move" name="dir" value="up" title="{{$.T "dns64.groups.up"}}"{{if eq $i 0}} disabled{{end}}><i class="bi bi-arrow-up"></i></button>
+					<button class="btn btn-sm btn-outline-secondary" type="submit" formaction="/dns64/groups/{{$g.ID}}/move" name="dir" value="down" title="{{$.T "dns64.groups.down"}}"><i class="bi bi-arrow-down"></i></button>
+					<button class="btn btn-sm btn-outline-danger" type="submit" formaction="/dns64/groups/{{$g.ID}}/delete" formnovalidate data-confirm="{{$.T "dns64.groups.delete_confirm" "name" $g.Name}}" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-trash"></i></button>
+				</form>
+			</div>
+			{{if $g.Members}}<div class="table-responsive">
+				<table class="table table-sm align-middle mb-0 small">
+					<thead><tr><th class="ps-3">{{$.T "dns64.groups.kind"}}</th><th>{{$.T "dns64.groups.value"}}</th><th>{{$.T "dns64.groups.label"}}</th><th></th></tr></thead>
+					<tbody>
+					{{range $g.Members}}<tr>
+						<td class="ps-3"><span class="badge text-bg-{{if eq .Kind "mac"}}primary{{else if eq .Kind "net"}}secondary{{else}}info{{end}}">{{$.T (print "dns64.groups.kind_" .Kind)}}</span></td>
+						<td class="font-monospace text-break">{{.Value}}</td>
+						<td>{{.Label}}</td>
+						<td class="text-end pe-3"><form method="post" action="/dns64/groups/members/{{.ID}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger py-0" type="submit" title="{{$.T "dns64.js.remove"}}"><i class="bi bi-x-lg"></i></button></form></td>
+					</tr>{{end}}
+					</tbody>
+				</table>
+			</div>{{end}}
+			<div class="card-body">
+				<form method="post" action="/dns64/groups/{{$g.ID}}/members" class="row g-2">
+					<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<div class="col-sm-3"><select class="form-select form-select-sm" name="kind" aria-label="{{$.T "dns64.groups.kind"}}">
+						<option value="mac">{{$.T "dns64.groups.kind_mac"}}</option><option value="ip">{{$.T "dns64.groups.kind_ip"}}</option><option value="net">{{$.T "dns64.groups.kind_net"}}</option></select></div>
+					<div class="col-sm-4"><input type="text" class="form-control form-control-sm font-monospace" name="value" placeholder="aa:bb:cc:dd:ee:ff, 192.168.1.20, fd00::/64" aria-label="{{$.T "dns64.groups.value"}}" required maxlength="64"></div>
+					<div class="col-sm-3"><input type="text" class="form-control form-control-sm" name="label" placeholder="{{$.T "dns64.groups.label_ph"}}" aria-label="{{$.T "dns64.groups.label"}}" maxlength="60"></div>
+					<div class="col-sm-2 d-grid"><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus"></i> {{$.T "dns64.groups.member_add"}}</button></div>
+				</form>
+			</div>
+		</div>
+		{{else}}<div class="card"><div class="card-body small text-body-secondary">{{.T "dns64.groups.none"}}</div></div>{{end}}
+	</div>
+	<div class="col-12">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-laptop text-primary"></i> {{.T "dns64.groups.devices"}}</div>
+			{{if not $d.Running}}<div class="card-body small text-body-secondary">{{.T "dns64.not_running"}}</div>
+			{{else if $d.Devices}}
+			{{if ne $d.Cfg.Anonymize "off"}}<div class="card-body small pb-0"><div class="alert alert-warning py-2 mb-0">{{.T "dns64.groups.anon_hint"}}</div></div>{{end}}
+			<div class="table-responsive">
+				<table class="table table-sm table-hover align-middle mb-0 small">
+					<thead><tr><th class="ps-3">{{.T "common.name"}}</th><th>IP</th><th>MAC</th><th class="text-end">{{.T "dns64.groups.queries"}}</th><th>{{.T "dns64.groups.last_seen"}}</th><th>{{.T "dns64.groups.group"}}</th></tr></thead>
+					<tbody>
+					{{range $d.Devices}}<tr>
+						<td class="ps-3">{{if .Name}}{{.Name}}{{else}}<span class="text-body-tertiary">–</span>{{end}}</td>
+						<td class="font-monospace text-break">{{.IP}}</td>
+						<td class="font-monospace">{{if .MAC}}{{.MAC}}{{else}}<span class="text-body-tertiary" title="{{$.T "dns64.groups.no_mac"}}">–</span>{{end}}</td>
+						<td class="text-end">{{.Queries}}</td>
+						<td class="text-nowrap">{{$.Ago .Last}}</td>
+						<td>{{if $d.Groups}}<form method="post" action="/dns64/groups/assign" class="d-flex gap-1 m-0">
+							<input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="ip" value="{{.IP}}"><input type="hidden" name="mac" value="{{.MAC}}"><input type="hidden" name="label" value="{{.Name}}">
+							<select class="form-select form-select-sm" style="width:auto" name="group_id" aria-label="{{$.T "dns64.groups.group"}}">
+								<option value="0">{{$.T "dns64.groups.no_group"}}</option>
+								{{$cur := .GroupID}}{{range $d.Groups}}<option value="{{.ID}}"{{if eq .ID $cur}} selected{{end}}>{{.Name}}</option>{{end}}
+							</select>
+							<button class="btn btn-sm btn-outline-primary" type="submit" title="{{if .MAC}}{{$.T "dns64.groups.assign_mac"}}{{else}}{{$.T "dns64.groups.assign_ip"}}{{end}}"><i class="bi bi-check2"></i></button>
+						</form>{{else}}{{if .Group}}{{.Group}}{{else}}<span class="text-body-tertiary">–</span>{{end}}{{end}}</td>
+					</tr>{{end}}
+					</tbody>
+				</table>
+			</div>
+			{{else}}<div class="card-body small text-body-secondary">{{.T "dns64.groups.devices_none"}}</div>{{end}}
+		</div>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/dns64.js?v={{.Version}}"></script>{{end}}

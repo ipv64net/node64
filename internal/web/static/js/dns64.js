@@ -19,7 +19,7 @@
 	var nf = new Intl.NumberFormat(locale);
 	var pf = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
 	var PAGE_SIZE = 50;
-	var state = { range: "24h", status: "", search: "", live: true, page: 0, total: 0 };
+	var state = { range: "24h", status: "", search: "", group: "*", live: true, page: 0, total: 0 };
 	var allowed = new Set();
 	var $ = function (id) { return document.getElementById(id); };
 
@@ -308,6 +308,7 @@
 		var p = new URLSearchParams({ limit: PAGE_SIZE, offset: state.page * PAGE_SIZE });
 		if (state.status) { p.set("status", state.status); }
 		if (state.search) { p.set("q", state.search); }
+		if (state.group !== "*") { p.set("group", state.group); }
 		return api("log?" + p).then(function (d) {
 			state.total = d.total;
 			var pages = Math.max(1, Math.ceil(d.total / PAGE_SIZE));
@@ -330,6 +331,7 @@
 				var client = el("td", { "class": "text-nowrap", role: "button", title: r.client });
 				client.textContent = r.clientName ? r.clientName + " " : r.client;
 				if (r.clientName) { client.append(el("small", { "class": "text-body-secondary" }, r.client)); }
+				if (r.group) { client.append(" ", el("span", { "class": "badge text-bg-light fw-normal" }, r.group)); }
 				client.addEventListener("click", function () { searchFor(r.client); });
 				var domain = el("td", { "class": "font-monospace text-break", role: "button", title: r.domain }, r.domain);
 				domain.addEventListener("click", function () { searchFor(r.domain); });
@@ -421,6 +423,9 @@
 				loadLog();
 			});
 		});
+		if ($("log-group")) {
+			$("log-group").addEventListener("change", function (e) { state.group = e.target.value; state.page = 0; loadLog(); });
+		}
 		var searchTimer;
 		$("log-search").addEventListener("input", function (e) {
 			clearTimeout(searchTimer);

@@ -1172,6 +1172,10 @@
               "dot",
               "doq"
             ]
+          },
+          "group": {
+            "type": "string",
+            "description": "Gerätegruppe"
           }
         }
       },
@@ -3117,6 +3121,83 @@
           },
           "dns_ok": {
             "type": "boolean"
+          }
+        }
+      },
+      "DNS64GroupMember": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "group_id": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "mac",
+              "ip",
+              "net"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "example": "aa:bb:cc:dd:ee:ff"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ]
+      },
+      "DNS64Group": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DNS64GroupMember"
+            }
+          }
+        }
+      },
+      "DNS64Device": {
+        "type": "object",
+        "properties": {
+          "ip": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mac": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "group_id": {
+            "type": "integer"
+          },
+          "queries": {
+            "type": "integer"
+          },
+          "last_seen": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }
@@ -5406,6 +5487,14 @@
             "schema": {
               "type": "integer",
               "default": 0
+            }
+          },
+          {
+            "name": "group",
+            "in": "query",
+            "description": "nur diese Gruppe (leer = ohne Gruppe)",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -12371,6 +12460,278 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/dns64/groups": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Gerätegruppen mit Mitgliedern",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DNS64Group"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Gruppe anlegen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Group"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
+          }
+        }
+      }
+    },
+    "/dns64/groups/{id}": {
+      "put": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Gruppe umbenennen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Ungültig"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Gruppe mit Mitgliedern löschen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/groups/{id}/move": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Gruppe in der Reihenfolge verschieben (Vorrang)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "up": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/groups/{id}/members": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Gerät oder Netz zuordnen (wechselt aus einer anderen Gruppe)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNS64GroupMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Zugeordnet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64GroupMember"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/groups/members/{id}": {
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Mitglied entfernen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/devices": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Geräte der letzten 24 Stunden (Name vom Router, MAC aus der Nachbartabelle, Gruppe)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DNS64Device"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "DNS-Dienst läuft nicht"
           }
         }
       }

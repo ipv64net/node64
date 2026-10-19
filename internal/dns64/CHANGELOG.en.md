@@ -1,5 +1,14 @@
 # Changes – DNS64
 
+## 1.16.0 – 2026-10-19
+
+### New
+- Device groups (phase G1): new tab “Groups”. Create, rename and order groups (order = priority) and assign devices – by MAC address from the host’s neighbour table first (IPv4 and IPv6, via netlink), otherwise by IP address or network. A device thus stays in its group even with a new IPv6 or IPv4 address. A device belongs to at most one group.
+- Devices of the last 24 hours (from the query log, with name from the router and MAC) can be assigned to a group with one click.
+- Query log: group next to the client and filter by group (also “no group”); API `GET /api/dns64/log?group=`.
+- API: `GET|POST /api/dns64/groups`, `PUT|DELETE /api/dns64/groups/{id}`, `POST /api/dns64/groups/{id}/move`, `POST /api/dns64/groups/{id}/members`, `DELETE /api/dns64/groups/members/{id}`, `GET /api/dns64/devices`; every change in the audit log.
+- For now all groups share the same rules; lists, SafeSearch and schedules per group follow.
+
 ## 1.15.0 – 2026-10-19
 
 ### New

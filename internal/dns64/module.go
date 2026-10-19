@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -28,6 +29,7 @@ import (
 	"github.com/ipv64net/node64/internal/dns64/cache"
 	"github.com/ipv64net/node64/internal/dns64/dnsserver"
 	"github.com/ipv64net/node64/internal/dns64/filter"
+	"github.com/ipv64net/node64/internal/dns64/groups"
 	"github.com/ipv64net/node64/internal/dns64/localnet"
 	"github.com/ipv64net/node64/internal/dns64/querylog"
 	"github.com/ipv64net/node64/internal/dns64/upstream"
@@ -50,7 +52,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.15.0"
+	version   = "1.16.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -78,6 +80,7 @@ type Module struct {
 	lastErr string         // letzter Fehler beim Start (z. B. Port belegt)
 
 	recs atomic.Pointer[recordTable] // eigene DNS-Eintraege (records.go)
+	grp  *groups.Resolver            // Geraetegruppen (groupstore.go)
 
 	webCert, webKey string // Zertifikat der Weboberflaeche (cert_mode node64)
 
@@ -111,7 +114,8 @@ type engine struct {
 
 // New erzeugt das Modul. dataDir ist das Datenverzeichnis von Node64.
 func New(core *store.Store, log *slog.Logger, dataDir, nodeVersion string) *Module {
-	return &Module{core: core, log: log.With("module", Name), dataDir: dataDir, version: nodeVersion}
+	l := log.With("module", Name)
+	return &Module{core: core, log: l, dataDir: dataDir, version: nodeVersion, grp: groups.NewResolver(l)}
 }
 
 func (m *Module) Info() module.Info {
@@ -130,6 +134,7 @@ func (m *Module) Migrations() []store.Migration {
 
 func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	m.uiRoutes(mux, g)
+	m.groupRoutes(mux, g)
 	m.apiRoutes(mux, g)
 	m.apiMoreRoutes(mux, g)
 }
@@ -244,6 +249,9 @@ func (m *Module) start(ctx context.Context) error {
 	if err := m.loadRecords(ctx); err != nil {
 		return fmt.Errorf("load records: %w", err)
 	}
+	if err := m.loadGroups(ctx); err != nil {
+		return fmt.Errorf("load groups: %w", err)
+	}
 	cfg := m.loadConfig(ctx)
 	m.migrateCentral(ctx, &cfg)
 	m.loadPause(ctx)
@@ -268,7 +276,8 @@ func (m *Module) start(ctx context.Context) error {
 	e.up.SetTop(cfg.UpCount)
 	e.local = localnet.New(m.routerAddr(ctx), m.log)
 	e.srv = &dnsserver.Server{Addr: e.addr, Local: e.local, Filter: e.lists, Upstream: e.up, Cache: e.cache, Log: st, Logger: m.log,
-		Records: m, Split: m.split, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused}
+		Records: m, Split: m.split, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused,
+		Group: func(ip netip.Addr) string { return m.grp.For(ip).Name }}
 	if err := e.srv.Start(); err != nil {
 		st.CloseNow()
 		e.up.Close()
@@ -277,7 +286,7 @@ func (m *Module) start(ctx context.Context) error {
 	e.enc = m.startEncrypted(cfg, e.srv)
 	ectx, cancel := context.WithCancel(ctx)
 	e.cancel = cancel
-	for _, run := range []func(context.Context){st.Run, e.lists.Run, e.local.Run, e.up.RunProbes, func(ctx context.Context) { m.runMonitor(ctx, e) }} {
+	for _, run := range []func(context.Context){st.Run, e.lists.Run, e.local.Run, e.up.RunProbes, m.grp.Run, func(ctx context.Context) { m.runMonitor(ctx, e) }} {
 		e.wg.Add(1)
 		go func() { defer e.wg.Done(); run(ectx) }()
 	}

@@ -1,5 +1,14 @@
 # Änderungen – DNS64
 
+## 1.16.0 – 2026-10-19
+
+### Neu
+- Gerätegruppen (Phase G1): neuer Reiter „Gruppen“. Gruppen anlegen, umbenennen, sortieren (Reihenfolge = Vorrang) und Geräte zuordnen – zuerst per MAC-Adresse aus der Nachbartabelle des Hosts (IPv4 und IPv6, per Netlink), sonst per IP-Adresse oder Netz. So bleibt ein Gerät in seiner Gruppe, auch wenn es eine neue IPv6- oder IPv4-Adresse bekommt. Ein Gerät gehört zu höchstens einer Gruppe.
+- Geräte der letzten 24 Stunden (aus dem Abfrage-Log, mit Name vom Router und MAC) lassen sich per Klick einer Gruppe zuordnen.
+- Abfrage-Log: Gruppe am Client und Filter nach Gruppe (auch „ohne Gruppe“); API `GET /api/dns64/log?group=`.
+- API: `GET|POST /api/dns64/groups`, `PUT|DELETE /api/dns64/groups/{id}`, `POST /api/dns64/groups/{id}/move`, `POST /api/dns64/groups/{id}/members`, `DELETE /api/dns64/groups/members/{id}`, `GET /api/dns64/devices`; jede Änderung im Audit-Log.
+- Noch gelten für alle Gruppen dieselben Regeln; Listen, SafeSearch und Zeitpläne je Gruppe folgen (Plan: docs/PLAN-NODE64-DNS64-GRUPPEN.md).
+
 ## 1.15.0 – 2026-10-19
 
 ### Neu

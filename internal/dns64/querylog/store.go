@@ -55,6 +55,7 @@ type Entry struct {
 	Upstream string
 	Duration time.Duration
 	Proto    string // udp, tcp, doh, dot, doq
+	Group    string // Geraetegruppe ("" = keine)
 }
 
 const schema = `
@@ -74,7 +75,7 @@ CREATE INDEX IF NOT EXISTS idx_queries_ts ON queries(ts);
 `
 
 // columns added later (ALTER TABLE, skipped when present)
-var addColumns = []string{`ALTER TABLE queries ADD COLUMN proto TEXT NOT NULL DEFAULT ''`}
+var addColumns = []string{`ALTER TABLE queries ADD COLUMN proto TEXT NOT NULL DEFAULT ''`, `ALTER TABLE queries ADD COLUMN grp TEXT NOT NULL DEFAULT ''`}
 
 type Store struct {
 	db        *sql.DB
@@ -231,8 +232,8 @@ func (s *Store) write(batch []Entry) {
 		s.log.Error("querylog begin", "err", err)
 		return
 	}
-	stmt, err := tx.Prepare(`INSERT INTO queries (ts, client, domain, qtype, status, reason, rcode, upstream, duration_us, proto)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	stmt, err := tx.Prepare(`INSERT INTO queries (ts, client, domain, qtype, status, reason, rcode, upstream, duration_us, proto, grp)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		tx.Rollback()
 		s.log.Error("querylog prepare", "err", err)
@@ -241,7 +242,7 @@ func (s *Store) write(batch []Entry) {
 	defer stmt.Close()
 	for _, e := range batch {
 		if _, err := stmt.Exec(e.Time.UnixMilli(), e.Client, e.Domain, e.QType, int(e.Status),
-			e.Reason, e.Rcode, e.Upstream, e.Duration.Microseconds(), e.Proto); err != nil {
+			e.Reason, e.Rcode, e.Upstream, e.Duration.Microseconds(), e.Proto, e.Group); err != nil {
 			tx.Rollback()
 			s.log.Error("querylog insert", "err", err)
 			return
@@ -391,11 +392,13 @@ type LogRow struct {
 	Upstream   string  `json:"upstream,omitempty"`
 	DurationMs float64 `json:"ms"`
 	Proto      string  `json:"proto,omitempty"`
+	Group      string  `json:"group,omitempty"`
 }
 
 type LogFilter struct {
 	Status *Status
-	Search string // substring of domain or client
+	Search string  // substring of domain or client
+	Group  *string // exactly this device group ("" = without group)
 	Limit  int
 	Offset int
 }
@@ -408,6 +411,10 @@ func (s *Store) Recent(ctx context.Context, f LogFilter) ([]LogRow, int64, error
 	if f.Status != nil {
 		where = append(where, "status = ?")
 		args = append(args, int(*f.Status))
+	}
+	if f.Group != nil {
+		where = append(where, "grp = ?")
+		args = append(args, *f.Group)
 	}
 	if f.Search != "" {
 		like := "%" + escapeLike(strings.ToLower(f.Search)) + "%"
@@ -423,7 +430,7 @@ func (s *Store) Recent(ctx context.Context, f LogFilter) ([]LogRow, int64, error
 		return nil, 0, err
 	}
 
-	q := `SELECT ts, client, domain, qtype, status, reason, rcode, upstream, duration_us, proto FROM queries` +
+	q := `SELECT ts, client, domain, qtype, status, reason, rcode, upstream, duration_us, proto, grp FROM queries` +
 		cond + " ORDER BY id DESC LIMIT ? OFFSET ?"
 	rows, err := s.db.QueryContext(ctx, q, append(args, f.Limit, f.Offset)...)
 	if err != nil {
@@ -435,7 +442,7 @@ func (s *Store) Recent(ctx context.Context, f LogFilter) ([]LogRow, int64, error
 		var r LogRow
 		var st int
 		var us int64
-		if err := rows.Scan(&r.Time, &r.Client, &r.Domain, &r.QType, &st, &r.Reason, &r.Rcode, &r.Upstream, &us, &r.Proto); err != nil {
+		if err := rows.Scan(&r.Time, &r.Client, &r.Domain, &r.QType, &st, &r.Reason, &r.Rcode, &r.Upstream, &us, &r.Proto, &r.Group); err != nil {
 			return nil, 0, err
 		}
 		r.Status = Status(st).String()
@@ -448,4 +455,31 @@ func (s *Store) Recent(ctx context.Context, f LogFilter) ([]LogRow, int64, error
 func escapeLike(s string) string {
 	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 	return r.Replace(s)
+}
+
+// ClientRow ist ein Client der letzten Zeit (Seite Gruppen: Geraete zum Zuordnen).
+type ClientRow struct {
+	Client   string `json:"client"`
+	Queries  int64  `json:"queries"`
+	LastSeen int64  `json:"last"` // Unix-ms
+	Group    string `json:"group,omitempty"`
+}
+
+// RecentClients liefert die Clients seit since, die mit den meisten Anfragen zuerst (hoechstens limit).
+func (s *Store) RecentClients(ctx context.Context, since time.Time, limit int) ([]ClientRow, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT client, COUNT(*), MAX(ts), MAX(grp) FROM queries WHERE ts >= ? AND client != ''
+		GROUP BY client ORDER BY COUNT(*) DESC LIMIT ?`, since.UnixMilli(), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ClientRow{}
+	for rows.Next() {
+		var c ClientRow
+		if err := rows.Scan(&c.Client, &c.Queries, &c.LastSeen, &c.Group); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }

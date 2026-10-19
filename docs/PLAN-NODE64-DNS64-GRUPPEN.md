@@ -1,6 +1,7 @@
 # Plan: Gerätegruppen und Kinderschutz in DNS64
 
-Stand 2026-10-19, Entwurf zur Abstimmung mit Dennis. Grundlage ist DNS64 1.15.0. Heute gelten
+Stand 2026-10-19. Entschieden: Erkennung per MAC zuerst, IP/Netz als Ausweichweg. **G1 ist umgesetzt (DNS64 1.16.0).**
+Grundlage ist DNS64 1.15.0. Heute gelten
 Blocklisten, Freigaben und die Pause für **alle** Geräte gleich. Ziel ist, einzelne Geräte zu Gruppen
 zusammenzufassen, etwa „Kinder“, „Gäste“ oder „Smart-TV“. Jede Gruppe bekommt eigene Regeln:
 

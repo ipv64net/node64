@@ -229,6 +229,10 @@ func (m *Module) apiLog(w http.ResponseWriter, r *http.Request, e *engine) {
 	if st, ok := querylog.ParseStatus(r.URL.Query().Get("status")); ok {
 		f.Status = &st
 	}
+	if r.URL.Query().Has("group") { // "" = ohne Gruppe
+		g := r.URL.Query().Get("group")
+		f.Group = &g
+	}
 	rows, total, err := e.store.Recent(r.Context(), f)
 	if err != nil {
 		m.fail(w, err)

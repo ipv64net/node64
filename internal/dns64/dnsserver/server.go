@@ -52,6 +52,7 @@ type Server struct {
 	ExtraNets []netip.Prefix          // further client networks besides private and attached ones
 	Anonymize func(netip.Addr) string // client as stored in the log, nil = full IP
 	Paused    func() bool             // blocking switched off for now (nil = never)
+	Group     func(netip.Addr) string // device group of a client ("" = none, nil = no groups)
 
 	acl        *clientACL
 	srv        []*dns.Server
@@ -152,6 +153,9 @@ func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg 
 		Domain: name,
 		QType:  dns.TypeToString[q.Qtype],
 		Proto:  proto,
+	}
+	if s.Group != nil {
+		entry.Group = s.Group(clientIP)
 	}
 	if entry.QType == "" {
 		entry.QType = dns.Type(q.Qtype).String()

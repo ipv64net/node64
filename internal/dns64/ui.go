@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/dns64/dnsserver"
+	"github.com/ipv64net/node64/internal/dns64/groups"
 	"github.com/ipv64net/node64/internal/dns64/upstream"
 	"github.com/ipv64net/node64/internal/module"
 )
@@ -68,6 +69,8 @@ type pageData struct {
 	Cfg     config
 	Hours   []int
 	Records []Record
+	Groups  []groups.Group // Seiten Gruppen und Log
+	Devices []deviceView   // Seite Gruppen: Geraete der letzten 24 Stunden
 	Types   []string
 	Enc     encView
 	Pause   pauseView
@@ -76,6 +79,7 @@ type pageData struct {
 
 var tabs = []tab{{"overview", "/dns64", "dns64.tab.overview", "bi-speedometer2", false}, {"log", "/dns64/log", "dns64.tab.log", "bi-list-ul", false},
 	{"lists", "/dns64/lists", "dns64.tab.lists", "bi-funnel", false}, {"records", "/dns64/records", "dns64.tab.records", "bi-signpost-split", false},
+	{"groups", "/dns64/groups", "dns64.tab.groups", "bi-people", false},
 	{"encrypted", "/dns64/encrypted", "dns64.tab.encrypted", "bi-lock", false}, {"settings", "/dns64/settings", "dns64.tab.settings", "bi-gear", false}}
 
 func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
@@ -96,6 +100,18 @@ func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 		}
 		if e := m.running(); e != nil && key == "settings" {
 			d.Refused = e.srv.Refused()
+		}
+		if key == "groups" || key == "log" {
+			var err error
+			if d.Groups, err = m.Groups(ctx); err != nil {
+				m.g.Flash(w, r, "danger", err.Error())
+			}
+		}
+		if e := m.running(); e != nil && key == "groups" {
+			var err error
+			if d.Devices, err = m.devices(ctx, e); err != nil {
+				m.g.Flash(w, r, "danger", err.Error())
+			}
 		}
 		if key == "records" {
 			var err error
