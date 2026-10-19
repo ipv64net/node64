@@ -8,6 +8,7 @@
 ### Fixed
 - Statistics: evaluations over long periods could fail with "disk I/O error" (no directory for SQLite temporary files in the container); intermediate results now stay in memory.
 - Display: CDN64 logo is light in the dark theme.
+- Audit: “Load lists now” and “Check targets now” (UI and API) are logged.
 
 ## 1.11.0 – 2026-10-19
 

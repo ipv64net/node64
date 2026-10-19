@@ -8,6 +8,7 @@
 ### Behoben
 - Statistik: Auswertungen über große Zeiträume konnten mit „disk I/O error“ scheitern (kein Verzeichnis für SQLite-Zwischendateien im Container); Zwischenergebnisse bleiben jetzt im Speicher.
 - Darstellung: CDN64-Logo im dunklen Design hell.
+- Audit: „Listen jetzt laden“ und „Ziele jetzt prüfen“ (Oberfläche und API) werden protokolliert.
 
 ## 1.11.0 – 2026-10-19
 

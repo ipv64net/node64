@@ -5,6 +5,7 @@
 ### Fixed
 - Overview: timeline, top clients and top domains stayed empty (error "disk I/O error") once the query log was large enough for SQLite to want temporary files while sorting. The container has no directory for them; intermediate results now stay in memory.
 - Display: DNS64 logo is light in the dark theme.
+- Port overview (Settings → Ports): DoH/DoT/DoQ only count as active when the service actually started (previously also on certificate errors).
 
 ## 1.13.0 – 2026-10-18
 

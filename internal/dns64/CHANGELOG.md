@@ -5,6 +5,7 @@
 ### Behoben
 - Übersicht: Zeitverlauf, Top-Clients und Top-Domains blieben leer (Fehler „disk I/O error“), sobald das Abfrage-Log groß genug war, dass SQLite beim Sortieren Zwischendateien anlegen wollte. Im Container gibt es dafür kein Verzeichnis; Zwischenergebnisse bleiben jetzt im Speicher.
 - Darstellung: DNS64-Logo im dunklen Design hell.
+- Port-Übersicht (Einstellungen → Ports): DoH/DoT/DoQ gelten nur als aktiv, wenn der Dienst tatsächlich gestartet ist (bisher auch bei Zertifikatsfehler).
 
 ## 1.13.0 – 2026-10-18
 

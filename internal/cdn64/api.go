@@ -308,6 +308,7 @@ func (m *Module) apiToggle(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) apiCheck(w http.ResponseWriter, r *http.Request) {
 	m.checkSoon(0)
+	m.g.Audit(r, "cdn64.check", "", "")
 	writeJSON(w, http.StatusAccepted, map[string]bool{"checking": true})
 }
 

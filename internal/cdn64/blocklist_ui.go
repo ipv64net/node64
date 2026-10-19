@@ -21,6 +21,7 @@ func (m *Module) pageBlocklistsSave(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) pageBlocklistsRefresh(w http.ResponseWriter, r *http.Request) {
 	m.blKick(r.Context())
+	m.g.Audit(r, "cdn64.blocklists.refresh", "", "")
 	m.g.Flash(w, r, "success", m.g.T(r, "cdn64.bl.refreshing"))
 	http.Redirect(w, r, "/cdn64/access#blocklists", http.StatusSeeOther)
 }
@@ -64,5 +65,6 @@ func (m *Module) apiBlocklistsPut(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) apiBlocklistsRefresh(w http.ResponseWriter, r *http.Request) {
 	m.blKick(r.Context())
+	m.g.Audit(r, "cdn64.blocklists.refresh", "", "")
 	writeJSON(w, http.StatusAccepted, m.blView(r))
 }

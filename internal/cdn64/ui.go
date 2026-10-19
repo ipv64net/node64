@@ -245,6 +245,7 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 
 func (m *Module) pageCheck(w http.ResponseWriter, r *http.Request) {
 	m.checkSoon(0)
+	m.g.Audit(r, "cdn64.check", "", "")
 	m.g.Flash(w, r, "success", m.g.T(r, "cdn64.checking"))
 	back := r.PostFormValue("back")
 	if !strings.HasPrefix(back, "/cdn64") {
