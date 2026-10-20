@@ -34,7 +34,7 @@ ELK, echte Shells).
 | Melden | **nur über Node64** (keine Fremd-Meldungen aus Fail2ban/CrowdSec) |
 | DNS-Sperrliste | Zone **`bl.ipv64.net`** |
 | Angebot | Stufen nach dem Muster von CrowdSec (Abschnitt 8) |
-| Zugang zur v64 Blocklist | **alle bekommen sie vollständig und frei**; frei = Tagesstand (einmal täglich, bis 24 h alt); **ab Supporter** der Live-Stand nach jeder Bewertung (alle 30 min); Freigaben sind in beiden entfernt |
+| Zugang zur v64 Blocklist | **alle bekommen sie vollständig und frei**; frei = Tagesstand (einmal täglich, bis 24 h alt); **alle Klassen außer Standard** (`user_class` ≠ 1: VIP, Premium, Business, Company, Supporter) der Live-Stand nach jeder Bewertung (alle 30 min); Freigaben sind in beiden entfernt |
 
 ## 1. Sensoren: drei Quellen
 
@@ -204,7 +204,7 @@ weg). Wird es groß, gehen die Meldungen in eine Analyse-Datenbank (z. B. ClickH
 
 | Ergebnis | Form | wirkt in |
 |---|---|---|
-| **v64 Blocklist** | Tagesstand frei: `ipv64_blocklist_v64.txt` (+ v4/v6, MikroTik), `index.json`, nicht in `all`; Live-Stand ab Supporter (Abschnitt 8) | jede Firewall, PROXY64 |
+| **v64 Blocklist** | Tagesstand frei: `ipv64_blocklist_v64.txt` (+ v4/v6, MikroTik), `index.json`, nicht in `all`; Live-Stand für alle Klassen außer Standard (Abschnitt 8) | jede Firewall, PROXY64 |
 | Teillisten je Art | `…_v64_ssh`, `…_v64_web`, `…_v64_mail`, `…_v64_rdp`, `…_v64_scanner` | gezielt je Dienst |
 | Forschungs-Scanner | `…_v64_research` | wer Shodan & Co. aussperren will |
 | **Schadhosts aus Payloads** | Domains und IPs, die Angreifer in Payloads nachladen (`wget http://…`, `${jndi:ldap://…}`), erst ab mehreren Accounts; IPs in die v64 Blocklist, Domains als Liste für DNS-Filter | DNS64, Pi-hole, AdGuard, Firewall – blockt die Nachlade-Server, falls ein Gerät doch befallen ist |
@@ -235,23 +235,23 @@ gekürzte Liste. Unterschied ist nur die **Aktualität**:
 | Fassung | Inhalt | aktualisiert | für |
 |---|---|---|---|
 | **Tagesstand** | alle zum Stichtag gesperrten IPs, ohne Freigaben | einmal täglich (bis zu 24 h alt) | alle, frei, ohne Anmeldung |
-| **Live** | alle gerade gesperrten IPs, ohne Freigaben | nach jeder Bewertung (alle 30 min) | **ab Supporter** |
+| **Live** | alle gerade gesperrten IPs, ohne Freigaben | nach jeder Bewertung (alle 30 min) | **alle Klassen außer Standard** (`user_class` ≠ 1) |
 
 - Gleiches Schema für die Teillisten (`…_v64_ssh`, `…_web`, …) und die Schadhosts.
 - **Live-Abruf** über eine eigene Adresse mit persönlichem **Listen-Token** im Pfad, z. B.
   `https://ipv64.net/blocklists/live/<token>/ipv64_blocklist_v64.txt` – Firewalls wie pfSense, OPNsense, MikroTik,
   FortiGate können keine Kopfzeilen mitschicken, eine Adresse genügt ihnen. Das Token ist getrennt vom API-Key, im
-  Account sichtbar und widerrufbar; Abrufe werden je Token begrenzt (z. B. höchstens alle 5 Minuten).
+  Account sichtbar und widerrufbar; geprüft wird die Klasse bei jedem Abruf (läuft sie ab, gibt es wieder den Tagesstand); Abrufe werden je Token begrenzt (z. B. höchstens alle 5 Minuten).
 - **Freigaben** wirken in der Live-Fassung sofort, im Tagesstand mit dem nächsten Stichtag.
 - **DNS-Sperrliste `bl.ipv64.net`:** liefert für alle den Tagesstand; Live-Antworten für eingetragene Mailserver-IPs
-  ab Supporter (später).
+  aller Klassen außer Standard (später).
 - In `index.json` steht die freie Fassung; Node64/PROXY64 nimmt mit hinterlegtem Listen-Token automatisch die
   Live-Fassung.
 
 | Stufe | bekommt |
 |---|---|
 | alle, kostenlos | v64 Blocklist und Teillisten **vollständig im Tagesstand**, IP-Auskunft und DNS-Sperrliste mit Tageslimit |
-| ab Supporter | **Live-Stand** der v64 Blocklist und Teillisten (alle 30 min) |
+| VIP, Premium, Business, Company, Supporter | **Live-Stand** der v64 Blocklist und Teillisten (alle 30 min) |
 | Beitragende (Sensor läuft) | Statistik „dein Beitrag“, höhere Limits, Belohnung (später) |
 | Business/Company | Änderungs-Feed, hohe Limits für API und DNS-Sperrliste, Frühwarnung für eigene Netze, Passwortprüfung, gewerbliche Nutzung |
 | Hoster/Partner auf Anfrage | Netzberichte, BGP-Feed, Abgleich großer Datenmengen, Zusage zur Verfügbarkeit |
@@ -322,5 +322,5 @@ Netzbetreibern, Zusammenfassungen in Klartext für die Statistikseite.
 
 ## 15. Offen
 
-- Welche Account-Klassen „ab Supporter“ umfasst (Supporter, Business, Company?), Preise der übrigen Stufen (Abschnitt 8).
+- Preise und Zuordnung der übrigen Stufen (Abschnitt 8).
 - Belohnung für Beitragende.
