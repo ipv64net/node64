@@ -112,6 +112,8 @@ type Store struct {
 	OnRuntime func(token string, rt scheduler.Runtime)
 	// OnAnyChange nach jeder Konfigurationsaenderung, auch vom hub oder von anderen Nodes (lokale Gruppe)
 	OnAnyChange func(ctx context.Context, entity, id, op string)
+
+	OnStatusChange func() // Statusseiten geaendert (zwischengespeicherte Ansichten verwerfen)
 }
 
 type remoteKey struct{}

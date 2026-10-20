@@ -1,6 +1,6 @@
 # Plan: Statusseiten (Node64)
 
-Stand 2026-10-20, Entwurf zur Abstimmung mit Dennis. Öffentliche Statusseiten aus den Healthchecks: lokal auf der
+Stand 2026-10-20, Entscheidungen Dennis siehe unten. Öffentliche Statusseiten aus den Healthchecks: lokal auf der
 Node, optional über PROXY64 (eigene Domain) und CDN64, später gespiegelt bei ipv64.
 
 ## Vorbilder
@@ -96,7 +96,32 @@ mit CDN64 auf mehreren Nodes ist die Seite dann ausfallsicher.
 | S4 | Spiegel bei ipv64 (hub-Sync der Definition, Seite auf ipv64 aus hc2, Portal schlank: nur Anzeige, Verwaltung in der Node) |
 | S5 | node64.de: Doku und Werbung; Export/Import und Backup nehmen die Seiten mit |
 
-## Offene Entscheidungen
+## Entscheidungen (Dennis 2026-10-20)
+
+1. Untermenü der Healthchecks („Statusseiten“).
+2. Erst erreichbar, wenn man sie selbst einschaltet; vorher keine Ressourcen (kein Hintergrundjob: berechnet wird
+   nur auf Abruf, 30 s zwischengespeichert).
+3. **Kein** Spiegel bei ipv64 (S4 entfällt vorerst); nach außen über PROXY64/CDN64.
+4. Tagesbalken.
+5. Gestaltung leichtgewichtig: Übersicht über viele Checks, Probleme sofort sichtbar, keine Feinheiten. Klick auf
+   einen Eintrag zeigt die Details (Verfügbarkeit 24 h/7/30 Tage, Latenz, letzte Störungen, 24 Stundenbalken).
+
+## Umsetzung (parallel, Schnittstellen verbindlich)
+
+Fundament (Hauptsitzung): Migration `0012_status_pages.sql`, `statuspage.go` (Typen, Speicher, Ankündigungen),
+`statusview_types.go` (öffentliche Sicht), Platzhalter `statusview.go` und `statushtml.go` mit festen Signaturen.
+
+| Teil | Dateien (nur diese) | Inhalt |
+|---|---|---|
+| Kern | `internal/healthchecks/statusview.go`, `statuspublic.go`, `statusview_test.go`, eine Zeile in `module.go` (Routes, OnStatusChange), eine Zeile in `internal/web/middleware.go` (CSRF-Ausnahme `POST /status/`) | Berechnung (Tagesbalken aus `hc_daily`, heute aus Messungen; Störungen, Wartungen), Cache, öffentliche Routen, Passwort, Badges, Feed, `StatusSite(id)`, `StatusPageRefs` |
+| Verwaltung | `internal/healthchecks/statuspages_ui.go`, `statuspages_api.go`, `templates/pages/status_pages.html`, `status_page_form.html`, Test, eine Zeile in `ui.go` und `module.go`, Unterpunkt in `internal/web/view.go` nav() | Liste, Formular (Gruppen, Einträge, Reihenfolge), Ankündigungen, Vorschau, API `/api/status-pages`, Audit |
+| Oberfläche | `internal/healthchecks/statushtml.go`, `statuspublic/*` (embed), Test | eigenständige HTML-Seite (Liste, Kacheln, Kompakt), CSS/JS eingebettet, sicheres Mini-Markdown, Badge-SVG |
+| PROXY64 | `internal/cdn64/**` (Hostart `status`, Migration `0006`), eine Zeile `cmd/node64/main.go` | Domain → Statusseite über `StatusSite(id)`; damit auch CDN64 |
+
+i18n, openapi, CHANGELOG und Doku sammelt die Hauptsitzung: jeder Teil legt seine Schlüssel (DE und EN) als JSON
+in `docs/tmp-status-i18n-<teil>.json` ab (wird nach dem Zusammenführen gelöscht).
+
+## Offene Entscheidungen (erledigt, siehe oben)
 
 1. Ort in der Oberfläche: Teil von Healthchecks („Statusseiten“ im Untermenü, empfohlen) oder eigenes Modul?
 2. Stufe 1 (Node-Port): Standard aus und nur bewusst einschalten (empfohlen), oder an?
