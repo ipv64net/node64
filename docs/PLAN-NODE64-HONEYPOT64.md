@@ -34,6 +34,7 @@ ELK, echte Shells).
 | Melden | **nur über Node64** (keine Fremd-Meldungen aus Fail2ban/CrowdSec) |
 | DNS-Sperrliste | Zone **`bl.ipv64.net`** |
 | Angebot | Stufen nach dem Muster von CrowdSec (Abschnitt 8) |
+| Zugang zur v64 Blocklist | **alle bekommen sie vollständig und frei**; frei = Tagesstand (einmal täglich, bis 24 h alt); **ab Supporter** der Live-Stand nach jeder Bewertung (alle 30 min); Freigaben sind in beiden entfernt |
 
 ## 1. Sensoren: drei Quellen
 
@@ -203,7 +204,7 @@ weg). Wird es groß, gehen die Meldungen in eine Analyse-Datenbank (z. B. ClickH
 
 | Ergebnis | Form | wirkt in |
 |---|---|---|
-| **v64 Blocklist** | `ipv64_blocklist_v64.txt` (+ v4/v6, MikroTik), `index.json`, nicht in `all` | jede Firewall, PROXY64 |
+| **v64 Blocklist** | Tagesstand frei: `ipv64_blocklist_v64.txt` (+ v4/v6, MikroTik), `index.json`, nicht in `all`; Live-Stand ab Supporter (Abschnitt 8) | jede Firewall, PROXY64 |
 | Teillisten je Art | `…_v64_ssh`, `…_v64_web`, `…_v64_mail`, `…_v64_rdp`, `…_v64_scanner` | gezielt je Dienst |
 | Forschungs-Scanner | `…_v64_research` | wer Shodan & Co. aussperren will |
 | **Schadhosts aus Payloads** | Domains und IPs, die Angreifer in Payloads nachladen (`wget http://…`, `${jndi:ldap://…}`), erst ab mehreren Accounts; IPs in die v64 Blocklist, Domains als Liste für DNS-Filter | DNS64, Pi-hole, AdGuard, Firewall – blockt die Nachlade-Server, falls ein Gerät doch befallen ist |
@@ -228,9 +229,29 @@ Menge und fertige Anbindung (Premium-Blocklisten, „Blocklist as a Service“ f
 Spiegelung der Datenbank, Support). Übertragen auf die Account-Klassen von ipv64 (Vorschlag, Preise und Zuordnung
 entscheidet Dennis):
 
+**Grundsatz (Dennis 2026-10-20):** Die v64 Blocklist bekommt **jeder vollständig** – kein Account bekommt eine
+gekürzte Liste. Unterschied ist nur die **Aktualität**:
+
+| Fassung | Inhalt | aktualisiert | für |
+|---|---|---|---|
+| **Tagesstand** | alle zum Stichtag gesperrten IPs, ohne Freigaben | einmal täglich (bis zu 24 h alt) | alle, frei, ohne Anmeldung |
+| **Live** | alle gerade gesperrten IPs, ohne Freigaben | nach jeder Bewertung (alle 30 min) | **ab Supporter** |
+
+- Gleiches Schema für die Teillisten (`…_v64_ssh`, `…_web`, …) und die Schadhosts.
+- **Live-Abruf** über eine eigene Adresse mit persönlichem **Listen-Token** im Pfad, z. B.
+  `https://ipv64.net/blocklists/live/<token>/ipv64_blocklist_v64.txt` – Firewalls wie pfSense, OPNsense, MikroTik,
+  FortiGate können keine Kopfzeilen mitschicken, eine Adresse genügt ihnen. Das Token ist getrennt vom API-Key, im
+  Account sichtbar und widerrufbar; Abrufe werden je Token begrenzt (z. B. höchstens alle 5 Minuten).
+- **Freigaben** wirken in der Live-Fassung sofort, im Tagesstand mit dem nächsten Stichtag.
+- **DNS-Sperrliste `bl.ipv64.net`:** liefert für alle den Tagesstand; Live-Antworten für eingetragene Mailserver-IPs
+  ab Supporter (später).
+- In `index.json` steht die freie Fassung; Node64/PROXY64 nimmt mit hinterlegtem Listen-Token automatisch die
+  Live-Fassung.
+
 | Stufe | bekommt |
 |---|---|
-| alle, kostenlos | v64 Blocklist und Teillisten, IP-Auskunft und DNS-Sperrliste mit Tageslimit |
+| alle, kostenlos | v64 Blocklist und Teillisten **vollständig im Tagesstand**, IP-Auskunft und DNS-Sperrliste mit Tageslimit |
+| ab Supporter | **Live-Stand** der v64 Blocklist und Teillisten (alle 30 min) |
 | Beitragende (Sensor läuft) | Statistik „dein Beitrag“, höhere Limits, Belohnung (später) |
 | Business/Company | Änderungs-Feed, hohe Limits für API und DNS-Sperrliste, Frühwarnung für eigene Netze, Passwortprüfung, gewerbliche Nutzung |
 | Hoster/Partner auf Anfrage | Netzberichte, BGP-Feed, Abgleich großer Datenmengen, Zusage zur Verfügbarkeit |
@@ -301,5 +322,5 @@ Netzbetreibern, Zusammenfassungen in Klartext für die Statistikseite.
 
 ## 15. Offen
 
-- Preise und Zuordnung der Stufen zu den Account-Klassen (Abschnitt 8).
+- Welche Account-Klassen „ab Supporter“ umfasst (Supporter, Business, Company?), Preise der übrigen Stufen (Abschnitt 8).
 - Belohnung für Beitragende.
