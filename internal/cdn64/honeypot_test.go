@@ -36,7 +36,11 @@ func TestHoneypotDecoyAndAccess(t *testing.T) {
 	}
 	var mu sync.Mutex
 	var got []hpbridge.Access
+	var decoyAddr, decoyHost string
 	hpbridge.SetDecoy(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		decoyAddr, decoyHost = r.RemoteAddr, r.Host
+		mu.Unlock()
 		w.WriteHeader(http.StatusTeapot)
 		_, _ = io.WriteString(w, "decoy")
 	}))
@@ -61,6 +65,9 @@ func TestHoneypotDecoyAndAccess(t *testing.T) {
 		t.Fatalf("known host: %d %q", code, body)
 	}
 	mu.Lock()
+	if ap, err := netip.ParseAddrPort(decoyAddr); err != nil || !ap.Addr().IsLoopback() || ap.Port() == 0 || decoyHost != "fremd.example" {
+		t.Fatalf("decoy request: remote %q host %q", decoyAddr, decoyHost)
+	}
 	if len(got) != 3 || !got[2].Known || got[2].Host != "app.test" || got[2].Status != http.StatusOK || got[0].Known || got[0].Path != "/x" || got[0].Status != http.StatusTeapot || !got[0].TLS || got[0].Host != "fremd.example" ||
 		got[1].TLS || got[1].Path != "/wp-login.php" {
 		t.Fatalf("access: %+v", got)

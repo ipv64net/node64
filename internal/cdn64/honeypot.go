@@ -255,7 +255,8 @@ func (m *Module) hpReport(r *http.Request, client netip.Addr, known bool, status
 		Method: r.Method, Path: trunc(r.URL.Path, 500), Status: status, TLS: r.TLS != nil, AuthFail: authFail, UA: trunc(r.UserAgent(), 200)})
 }
 
-// hpUnknown: Anfrage ohne passenden Host - an den Koeder (falls eingeschaltet und Honeypot64 laeuft), sonst die
+// hpUnknown: Anfrage ohne passenden Host (ohne Host gibt es keine vertrauenswuerdigen Proxys: Quelle ist die
+// Gegenstelle bzw. beim CDN64-Tunnel der Besucher; gesperrte IPs trennt schon der Eingang vor der Host-Auswahl) - an den Koeder (falls eingeschaltet und Honeypot64 laeuft), sonst die
 // Standardseite; gemeldet wird sie in beiden Faellen (Schalter Zugriffe).
 func (m *Module) hpUnknown(w http.ResponseWriter, r *http.Request, def http.Handler) {
 	client := peerIP(r)
@@ -268,7 +269,11 @@ func (m *Module) hpUnknown(w http.ResponseWriter, r *http.Request, def http.Hand
 	defer func() { m.hpReport(r, client, false, sw.code(), false) }()
 	if d := hpbridge.Decoy(); d != nil && m.hpSettings().Decoy {
 		m.hp.decoyed.Add(1)
-		d.ServeHTTP(sw, r)
+		r2 := r.Clone(r.Context()) // der Koeder liest die Quelle aus RemoteAddr ("ip:port"), Host bleibt
+		if ap, err := netip.ParseAddrPort(r.RemoteAddr); err == nil {
+			r2.RemoteAddr = netip.AddrPortFrom(client, ap.Port()).String()
+		}
+		d.ServeHTTP(sw, r2)
 		return
 	}
 	def.ServeHTTP(sw, r)
