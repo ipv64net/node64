@@ -403,6 +403,19 @@ Dienst, Port aenderbar, Koeder-Auswahl, Anzeige „frei / belegt von …“, Pro
 Katalog), „alle freien einschalten“; Dienste mehrfach auf verschiedenen Ports moeglich. Auf einer reinen Honeypot-Node
 (Node64 mit Oberflaeche, sonst keine Module) sind so alle Ports nutzbar.
 
+## Herkunft der Angreifer (Wunsch Dennis 2026-10-20)
+
+Laenderflaggen und Herkunft im Container (wichtig) und zentral bei ipv64. Keine fremde GeoIP-Datenbank im Image.
+
+- **Quelle:** ipv64 erzeugt taeglich aus den RIR-Daten (wie die Laenderlisten) eine Datei
+  `https://ipv64.net/blocklists/country_ranges.txt.gz`: gzip-Text, Kommentarzeilen mit `#`, sonst je Zeile
+  `<CC> <erste IP> <letzte IP>` (IPv4 und IPv6, zusammengefasst, aufsteigend sortiert, CC = ISO-3166 alpha-2 gross).
+  In `index.json` als `"geo": {"file": "country_ranges.txt.gz", "updated": "<RFC3339>", "ranges": <Anzahl>}`.
+- **Node64:** Paket `internal/geoip` laedt die Datei (nur wenn ein Nutzer sie braucht, z. B. Honeypot64 an), Cache in
+  `/data/geoip/`, Aktualisierung taeglich (ETag), Suche per Binaersuche; Honeypot64 zeigt Flaggen (Emoji, keine
+  Bilder), Rangliste nach Land, farbige Uebersicht „was wurde angegriffen“; Prometheus mit Label `country` begrenzt.
+- **ipv64:** `hp_scores.country`, Herkunft in Statistik, `/threat/stats` und IP-Auskunft.
+
 ## 15. Offen
 
 - Aufteilung Überblick/volle Informationsseite im Detail (bei H4).
