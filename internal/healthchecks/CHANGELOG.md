@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.18.1 – 2026-10-20
+
+### Behoben
+- Statusseiten, Ansicht Kacheln: Gruppen mit wenigen Checks füllten auf großen Bildschirmen nur einen Teil der Breite;
+  die Kacheln teilen sich jetzt die ganze Zeile.
+
 ## 2.18.0 – 2026-10-20
 
 ### Neu

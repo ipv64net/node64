@@ -1,5 +1,11 @@
 # Changes – Healthchecks
 
+## 2.18.1 – 2026-10-20
+
+### Fixed
+- Status pages, tiles view: groups with few checks only filled part of the width on large screens; the tiles now share
+  the whole row.
+
 ## 2.18.0 – 2026-10-20
 
 ### New
