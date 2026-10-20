@@ -19,8 +19,9 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 RUN mkdir -p /out/data && chown 65532:65532 /out/data
 # Ports unter 1024 (DNS64: 53, spaeter 853) und ICMP ohne Root: die Rechte bekommt nur das Binary, und nur als
 # "erlaubt" (+p). Node64 schaltet sie beim Start selbst scharf (internal/caps); fehlen sie im Container (cap_drop,
-# Podman), startet es trotzdem. Der Prozess laeuft weiter als 65532.
-RUN apk add --no-cache libcap && setcap cap_net_bind_service,cap_net_raw=+p /out/node64
+# Podman), startet es trotzdem. Der Prozess laeuft weiter als 65532. cap_net_admin nur fuer den Firewall-Helfer
+# (NODE64_FIREWALL=nftables): wirkt nur, wenn der Container --cap-add NET_ADMIN bekommt.
+RUN apk add --no-cache libcap && setcap cap_net_bind_service,cap_net_raw,cap_net_admin=+p /out/node64
 
 # ---- CA-Zertifikate (Zeitzonen sind im Binary eingebettet). Laeuft auf der
 #      Build-Plattform, die Zertifikate sind architekturunabhaengig.

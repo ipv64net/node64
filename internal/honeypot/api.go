@@ -133,8 +133,9 @@ type EventView struct {
 	Client      string    `json:"client,omitempty"`
 	Page        string    `json:"page,omitempty"`
 	Detail      string    `json:"detail,omitempty"`
-	Source      string    `json:"source"`         // honeypot, log, syslog (H5)
-	Rule        string    `json:"rule,omitempty"` // Regel bei log/syslog, z. B. sshd/bruteforce@1
+	Source      string    `json:"source"`                // honeypot, log, syslog (H5)
+	Rule        string    `json:"rule,omitempty"`        // Regel bei log/syslog, z. B. sshd/bruteforce@1
+	Fingerprint string    `json:"fingerprint,omitempty"` // H6: "ja4:…" bzw. "hassh:…"
 	PayloadHex  string    `json:"payload_hex,omitempty"`
 	PayloadText string    `json:"payload_text,omitempty"` // Go-Escapes (\x00, \r\n …), nur ASCII
 	PayloadDump string    `json:"-"`                      // hex.Dump fuer die Seite
@@ -143,7 +144,7 @@ type EventView struct {
 func eventView(e Event) EventView {
 	v := EventView{Time: e.Time, Service: e.Service, Port: e.Port, Kind: e.Kind, Src: storeSrc(e.Src), SrcPort: e.SrcPort, Username: e.Username,
 		Password: e.Password, Method: e.Method, Path: e.Path, Host: e.Host, UA: e.UA, Client: e.Client, Page: e.Page, Detail: e.Detail,
-		Source: storeSource(e.Source), Rule: e.Rule}
+		Source: storeSource(e.Source), Rule: e.Rule, Fingerprint: e.Fingerprint}
 	if len(e.Payload) > 0 {
 		v.PayloadHex = hex.EncodeToString(e.Payload)
 		q := strconv.QuoteToASCII(string(e.Payload))

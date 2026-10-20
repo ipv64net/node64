@@ -12,7 +12,7 @@ import (
 const (
 	sensorTCPWait = 5 * time.Second
 	sensorTCPMore = 500 * time.Millisecond // Nachlesen, bis ein TLS-ClientHello vollstaendig ist
-	sensorTCPBuf  = 2048
+	sensorTCPBuf  = 4096                   // ClientHello mit Post-Quanten-Schluessel (ML-KEM) ist ueber 2 KiB
 )
 
 func (s *Sensor) handleTCP(c *trapConn) {
@@ -51,9 +51,11 @@ func sensorSniff(e *Event, b []byte) {
 	case len(b) >= 6 && b[0] == 0x16 && b[1] == 3 && b[5] == 1: // TLS-Handshake, ClientHello
 		e.Detail = "tls"
 		e.Host = sensorSNI(b)
+		e.Fingerprint, _ = sensorFingerprint(b) // JA4, nur bei vollstaendigem ClientHello
 	case bytes.HasPrefix(b, []byte("SSH-")):
 		e.Detail = "ssh"
 		e.Client = sensorFirstLine(b)
+		e.Fingerprint, _ = sensorFingerprint(b) // HASSH, falls der KEXINIT schon dabei ist
 	default:
 		line := sensorFirstLine(b)
 		f := strings.Fields(line)

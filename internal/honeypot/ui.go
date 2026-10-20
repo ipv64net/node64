@@ -214,6 +214,7 @@ func ranks(st *Stats) []uiRank {
 		mk("credentials", "honeypot.top.credentials", "bi-person-lock", true, st.TopCreds),
 		mk("paths", "honeypot.top.paths", "bi-signpost", true, st.TopPaths),
 		mk("uas", "honeypot.top.user_agents", "bi-window", true, st.TopUAs),
+		mk("fingerprints", "honeypot.top.fingerprints", "bi-fingerprint", true, st.TopFingerprints),
 	}
 }
 

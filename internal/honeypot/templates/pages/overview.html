@@ -122,6 +122,7 @@
 					{{if or .Method .Path}}<div class="font-monospace">{{.Method}} {{.Path}}{{with .Host}} <span class="text-body-secondary">({{.}})</span>{{end}}</div>{{end}}
 					{{with .UA}}<div class="text-body-secondary"><i class="bi bi-window"></i> {{.}}</div>{{end}}
 					{{with .Client}}<div class="text-body-secondary font-monospace">{{.}}</div>{{end}}
+					{{with .Fingerprint}}<div class="text-body-secondary font-monospace" title="{{$.T "honeypot.events.fingerprint"}}"><i class="bi bi-fingerprint"></i> {{.}}</div>{{end}}
 					{{with .Page}}<div class="text-body-secondary">{{$.T "honeypot.events.page"}}: {{.}}</div>{{end}}
 					{{with .Detail}}<div class="text-body-secondary">{{.}}</div>{{end}}
 					{{if .PayloadHex}}<details><summary class="text-body-secondary">{{$.T "honeypot.events.payload"}}</summary>

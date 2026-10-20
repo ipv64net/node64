@@ -446,10 +446,14 @@ func (s *Sensor) admit(t *trapService, c net.Conn) *trapConn {
 	switch t.key.Service {
 	case SvcSSH:
 		tc.left.Store(sensorSSHBudget)
+		tc.fp = &sensorFPCap{} // HASSH (sensor_fp.go)
 	case SvcTelnet:
 		tc.left.Store(sensorTelBudget)
 	case SvcHTTP, SvcHTTPS:
 		tc.left.Store(sensorWebBudget)
+		if t.key.Service == SvcHTTPS {
+			tc.fp = &sensorFPCap{} // JA4 (sensor_fp.go)
+		}
 	default:
 		if p := tcpProtos[t.key.Service]; p != nil && p.Budget > 0 {
 			tc.left.Store(p.Budget)
@@ -516,6 +520,7 @@ type trapConn struct {
 	left    atomic.Int64 // noch erlaubte Bytes zum Lesen
 	handled atomic.Bool  // HTTP: mindestens eine Anfrage bearbeitet
 	once    sync.Once
+	fp      *sensorFPCap // Mitschnitt fuer JA4/HASSH (nil = keiner)
 }
 
 func (c *trapConn) Read(p []byte) (int, error) {
@@ -528,6 +533,9 @@ func (c *trapConn) Read(p []byte) (int, error) {
 	}
 	n, err := c.Conn.Read(p)
 	c.left.Add(-int64(n))
+	if c.fp != nil && n > 0 {
+		c.fp.feed(p[:n])
+	}
 	return n, err
 }
 
@@ -545,7 +553,7 @@ func (c *trapConn) Close() error {
 
 // event liefert ein vorbelegtes Ereignis dieser Verbindung.
 func (c *trapConn) event(kind string) Event {
-	return Event{Time: time.Now(), Service: c.t.key.Service, Port: c.t.key.Port, Kind: kind, Src: c.src, SrcPort: c.srcPort}
+	return Event{Time: time.Now(), Service: c.t.key.Service, Port: c.t.key.Port, Kind: kind, Src: c.src, SrcPort: c.srcPort, Fingerprint: c.fp.get()}
 }
 
 // emit gibt ein Ereignis an die Sink (gekuerzt, Payload kopiert) und zaehlt es.

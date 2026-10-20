@@ -30,6 +30,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/caps"
 	"github.com/ipv64net/node64/internal/config"
+	"github.com/ipv64net/node64/internal/firewall"
 	"github.com/ipv64net/node64/internal/honeypot"
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/logging"
@@ -47,15 +48,16 @@ const (
 
 // hpModeConfig ist die Einstellung des Modus ohne Oberflaeche (nur aus der Umgebung).
 type hpModeConfig struct {
-	Profile   string          // minimal, standard, full ("" bei eigener Dienste-Liste nicht leer, nur Anzeige)
-	Custom    bool            // Dienste aus NODE64_HONEYPOT_SERVICES statt aus dem Profil
-	Sensor    honeypot.Config // Dienste und Port-Scan-Erkennung
-	Retention time.Duration   // lokale Aufbewahrung
-	InfoPort  int             // 0 = keine Info-Seite
-	InfoToken string          // leer = Info-Seite nur aus privaten Netzen
-	IPv64Key  string          // fuer die Meldung an ipv64 (H2)
-	Report    bool            // Meldung an ipv64: an, wenn ein Key gesetzt ist und NODE64_HONEYPOT_REPORT nicht 0 ist
-	APIBase   string          // NODE64_IPV64_API (leer = ipv64.net; nur fuer Tests)
+	Profile   string           // minimal, standard, full ("" bei eigener Dienste-Liste nicht leer, nur Anzeige)
+	Custom    bool             // Dienste aus NODE64_HONEYPOT_SERVICES statt aus dem Profil
+	Sensor    honeypot.Config  // Dienste und Port-Scan-Erkennung
+	Retention time.Duration    // lokale Aufbewahrung
+	InfoPort  int              // 0 = keine Info-Seite
+	InfoToken string           // leer = Info-Seite nur aus privaten Netzen
+	IPv64Key  string           // fuer die Meldung an ipv64 (H2)
+	Report    bool             // Meldung an ipv64: an, wenn ein Key gesetzt ist und NODE64_HONEYPOT_REPORT nicht 0 ist
+	APIBase   string           // NODE64_IPV64_API (leer = ipv64.net; nur fuer Tests)
+	Firewall  *firewall.Config // Firewall-Helfer (H6, NODE64_FIREWALL); nil = aus
 }
 
 // runMode startet einen besonderen Betriebsmodus (NODE64_MODE). Bisher gibt es nur "honeypot".
@@ -192,6 +194,14 @@ func honeypotRun(ctx context.Context, cfg *config.Config, hc *hpModeConfig, base
 	logLogStatus(log, hc.Sensor.Log, logs.Apply(ctx, hc.Sensor.Log, sink)) // leer = aus, oeffnet nichts
 	defer logs.Stop()
 
+	fw, err := startHPFirewall(ctx, hc, dir, log)
+	if err != nil {
+		return err
+	}
+	if fw != nil {
+		defer fw.wait()
+	}
+
 	info := ""
 	var srv *http.Server
 	if hc.InfoPort > 0 {
@@ -201,6 +211,9 @@ func honeypotRun(ctx context.Context, cfg *config.Config, hc *hpModeConfig, base
 		}
 		h := newHPInfo(hc, sensor, hpStore, st, rep, Version)
 		h.logs = logs
+		if fw != nil {
+			h.fw = fw.h
+		}
 		srv = &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second,
 			IdleTimeout: 60 * time.Second, MaxHeaderBytes: 8 << 10, ErrorLog: slog.NewLogLogger(base.Handler(), slog.LevelDebug)}
 		go func() {
@@ -229,6 +242,50 @@ func honeypotRun(ctx context.Context, cfg *config.Config, hc *hpModeConfig, base
 		cancel()
 	}
 	return nil
+}
+
+// hpFirewall ist der laufende Firewall-Helfer (H6).
+type hpFirewall struct {
+	h    *firewall.Helper
+	stop context.CancelFunc
+	done chan struct{}
+}
+
+// startHPFirewall startet den Firewall-Helfer, wenn NODE64_FIREWALL gesetzt ist (nil = aus). Fehlen Rechte oder
+// laeuft Node64 nicht unter Linux, startet der Modus nicht: ein stiller Ausfall waere ein Schutz, der nur so aussieht.
+func startHPFirewall(ctx context.Context, hc *hpModeConfig, dir string, log *slog.Logger) (*hpFirewall, error) {
+	if hc.Firewall == nil {
+		log.Info("firewall helper off (NODE64_FIREWALL)")
+		return nil, nil
+	}
+	fc := *hc.Firewall
+	fc.CacheDir, fc.Version, fc.Log = filepath.Join(dir, "firewall"), Version, log
+	h, err := firewall.New(fc)
+	if err == nil {
+		err = h.Probe()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("NODE64_FIREWALL=%s: %w", fc.Mode, err)
+	}
+	edition := "daily lists (no NODE64_IPV64_LIST_TOKEN)"
+	if fc.Token != "" {
+		edition = "live lists (list token)"
+	}
+	log.Info("firewall helper on", "mode", fc.Mode, "table", "inet "+firewall.Table, "lists", strings.Join(fc.Lists, ","),
+		"edition", edition, "allow", len(fc.Allow), "keep", fc.Keep)
+	fctx, stop := context.WithCancel(ctx)
+	fw := &hpFirewall{h: h, stop: stop, done: make(chan struct{})}
+	go func() { h.Run(fctx); close(fw.done) }()
+	return fw, nil
+}
+
+// wait beendet den Helfer und wartet, bis die Tabelle entfernt ist (hoechstens 15 s).
+func (fw *hpFirewall) wait() {
+	fw.stop()
+	select {
+	case <-fw.done:
+	case <-time.After(15 * time.Second):
+	}
 }
 
 // logServiceStatus fasst beim Start zusammen, welche Dienste offen sind und welche nicht (mit Grund). Jeden
@@ -351,7 +408,45 @@ func honeypotModeFromEnv(getenv func(string) string) (*hpModeConfig, error) {
 	if err := parseHPLogs(get, hc); err != nil {
 		return nil, err
 	}
+	if err := parseHPFirewall(get, hc); err != nil {
+		return nil, err
+	}
 	return hc, nil
+}
+
+// parseHPFirewall liest den Firewall-Helfer (H6): NODE64_FIREWALL (leer/0/off = aus, nftables), NODE64_FIREWALL_LISTS
+// (IDs aus index.json, Standard v64), NODE64_FIREWALL_ALLOW (eigene Netze, nie sperren), NODE64_FIREWALL_KEEP
+// (Tabelle beim Beenden stehen lassen), NODE64_IPV64_LIST_TOKEN (Listen-Token: Live-Fassung statt Tagesstand).
+func parseHPFirewall(get func(string) string, hc *hpModeConfig) error {
+	tok := get("NODE64_IPV64_LIST_TOKEN")
+	if tok != "" && !firewall.TokenRe.MatchString(tok) {
+		return errors.New("NODE64_IPV64_LIST_TOKEN is not a list token (32 letters and digits, see your ipv64 account)")
+	}
+	mode := strings.ToLower(get("NODE64_FIREWALL"))
+	switch mode {
+	case "", "0", "off", "no", "false", "none":
+		return nil
+	case firewall.ModeNFTables:
+	default:
+		return fmt.Errorf("NODE64_FIREWALL %q is not supported (nftables, or empty for off)", get("NODE64_FIREWALL"))
+	}
+	fc := &firewall.Config{Mode: mode, Token: tok}
+	var err error
+	if fc.Lists, err = firewall.ParseLists(get("NODE64_FIREWALL_LISTS")); err != nil {
+		return fmt.Errorf("NODE64_FIREWALL_LISTS: %w", err)
+	}
+	if fc.Allow, err = firewall.ParseAllow(get("NODE64_FIREWALL_ALLOW")); err != nil {
+		return fmt.Errorf("NODE64_FIREWALL_ALLOW: %w", err)
+	}
+	switch strings.ToLower(get("NODE64_FIREWALL_KEEP")) {
+	case "", "0", "false", "no", "off":
+	case "1", "true", "yes", "on":
+		fc.Keep = true
+	default:
+		return fmt.Errorf("NODE64_FIREWALL_KEEP %q is not 1 or 0", get("NODE64_FIREWALL_KEEP"))
+	}
+	hc.Firewall = fc
+	return nil
 }
 
 // parseHPLogs liest Log-Sensor und Syslog-Empfaenger (H5): NODE64_HONEYPOT_LOGS ("pfad[=format],…"),
@@ -409,7 +504,7 @@ func parseHPServices(v string) ([]honeypot.Service, error) {
 		case honeypot.SvcSSH, honeypot.SvcTelnet, honeypot.SvcHTTP, honeypot.SvcHTTPS, honeypot.SvcTCP:
 		default:
 			if !honeypot.ProtoKnown(svc) {
-				return nil, fmt.Errorf("NODE64_HONEYPOT_SERVICES: unknown service %q (ssh, telnet, http, https, tcp, ftp, smtp, pop3, imap, mqtt)", parts[0])
+				return nil, fmt.Errorf("NODE64_HONEYPOT_SERVICES: unknown service %q (ssh, telnet, http, https, tcp, ftp, smtp, pop3, imap, mqtt, mysql, postgres, mssql, redis, rdp, vnc, mikrotik-api, snmp, sip)", parts[0])
 			}
 		}
 		port, err := strconv.Atoi(strings.TrimSpace(parts[1]))
@@ -508,10 +603,17 @@ type hpLogs interface {
 	Status() honeypot.LogStatus
 }
 
+// hpFW ist der Teil des Firewall-Helfers, den der Info-Server braucht (*firewall.Helper; nil = aus).
+type hpFW interface {
+	Status() firewall.Status
+	WriteMetrics(w *metrics.Writer)
+}
+
 type hpInfo struct {
 	hc      *hpModeConfig
 	sensor  hpSensor
 	logs    hpLogs
+	fw      hpFW
 	store   *honeypot.Store
 	db      *store.Store
 	rep     *honeypot.Reporter
@@ -651,6 +753,9 @@ func (h *hpInfo) writeMetrics(ctx context.Context, w *metrics.Writer) {
 		st := h.logs.Status()
 		honeypot.WriteLogMetrics(w, &st)
 	}
+	if h.fw != nil {
+		h.fw.WriteMetrics(w)
+	}
 }
 
 func (h *hpInfo) profileLabel() string { return hpProfileLabel(h.hc) }
@@ -716,6 +821,16 @@ var (
 {{else}}<tr><td colspan="3" class="mut">{{$.T.Off}} (NODE64_HONEYPOT_LOGS)</td></tr>{{end}}
 <tr><td>Syslog</td><td colspan="2">{{with .Logs.Syslog}}{{if .Error}}<span class="bad">{{$.T.FileErr}} ({{.Port}}): {{short .Error}}</span>{{else}}<span class="ok">{{$.T.On}}</span> · Port {{.Port}}{{if .UDP}} UDP{{end}}{{if .TCP}} TCP{{end}} · {{$.T.Messages}}: {{.Messages}} · {{$.T.Denied}}: {{.Denied}}{{end}}{{else}}{{$.T.Off}} (NODE64_HONEYPOT_SYSLOG_PORT){{end}}</td></tr>
 </table></div><p class="mut">{{.T.LogNote}}</p></section>
+<section class="card"><h2>{{.T.FW}}</h2><div class="tw"><table>
+{{with .FW}}<tr><td>{{$.T.State}}</td><td>{{if .Active}}<span class="ok">{{$.T.On}}</span> · nftables inet node64{{else}}<span class="bad">{{$.T.FWWait}}</span>{{end}}</td></tr>
+<tr><td>{{$.T.FWEntries}}</td><td class="n">IPv4 {{.V4}} ({{.Addresses4}} {{$.T.FWAddrs}}) · IPv6 {{.V6}}</td></tr>
+<tr><td>{{$.T.FWUpdated}}</td><td>{{if .Updated.IsZero}}{{$.T.Never}}{{else}}{{when .Updated}}{{end}}{{if not .Changed.IsZero}} · {{$.T.FWChanged}} {{when .Changed}}{{end}}</td></tr>
+{{range .Lists}}<tr><td class="k">{{.ID}}</td><td>{{if .Edition}}{{.Edition}} · {{.Entries}}{{else}}–{{end}}{{if .LiveDenied}} · {{$.T.FWDenied}}{{end}}{{if .LiveError}} · {{short .LiveError}}{{end}}{{if .Error}} <span class="bad">{{short .Error}}</span>{{end}}</td></tr>
+{{end}}<tr><td>{{$.T.FWAllow}}</td><td class="n">{{.Allow}}{{if .Skipped}} · {{$.T.FWSkipped}}: {{.Skipped}}{{end}}</td></tr>
+<tr><td>{{$.T.RepErrors}}</td><td class="n">{{.Errors}}</td></tr>
+{{if .LastError}}<tr><td>{{$.T.LastErr}}</td><td class="bad">{{when .LastErrorAt}}: {{short .LastError}}</td></tr>{{end}}
+{{else}}<tr><td class="mut">{{$.T.Off}} (NODE64_FIREWALL)</td></tr>{{end}}
+</table></div>{{if .FW}}<p class="mut">{{if .FW.Live}}{{.T.FWLive}}{{else}}{{.T.FWDaily}}{{end}} {{if .FW.Keep}}{{.T.FWKeep}}{{else}}{{.T.FWRemove}}{{end}}</p>{{end}}</section>
 {{template "list" (.L .T.TopIPs .Week.TopSources)}}
 {{template "list" (.L .T.Kinds .Week.ByKind)}}
 {{template "list" (.L .T.Origins .Week.BySource)}}
@@ -736,6 +851,8 @@ type hpTexts struct {
 	Scan, On, Off, Report, NoKey, LastReport, Never, NextTry, RepSources, RepErrors, Rejected, LastErr, SensorID, TopIPs, Kinds, Ports, Creds, Paths, UAs, Foot string
 	// Log-Sensor und Syslog (H5)
 	Logs, File, Lines, FileOK, FileErr, PermHint, Messages, Denied, LogNote, Origins string
+	// Firewall-Helfer (H6)
+	FW, FWWait, FWEntries, FWAddrs, FWUpdated, FWChanged, FWDenied, FWAllow, FWSkipped, FWLive, FWDaily, FWKeep, FWRemove string
 }
 
 var hpTextsByLang = map[string]hpTexts{
@@ -748,7 +865,11 @@ var hpTextsByLang = map[string]hpTexts{
 		Foot: "Nur lesend. Aktualisiert sich jede Minute. Prometheus: /metrics",
 		Logs: "Log-Sensor und Syslog", File: "Datei", Lines: "Zeilen", FileOK: "wird gelesen", FileErr: "Fehler",
 		PermHint: "Keine Leserechte: Container mit --group-add 4 (Gruppe adm) starten.", Messages: "Nachrichten", Denied: "abgewiesen",
-		LogNote: "Aus echten Logs werden nur IP, Art, Dienst, Port, Anzahl und Regel gemeldet.", Origins: "Quellen (7 Tage)"},
+		LogNote: "Aus echten Logs werden nur IP, Art, Dienst, Port, Anzahl und Regel gemeldet.", Origins: "Quellen (7 Tage)",
+		FW: "Firewall-Helfer", FWWait: "noch nicht aktiv", FWEntries: "Einträge (Bereiche)", FWAddrs: "Adressen", FWUpdated: "Zuletzt geprüft",
+		FWChanged: "geändert", FWDenied: "Token ohne Berechtigung, Tagesstand", FWAllow: "Ausnahmen (NODE64_FIREWALL_ALLOW)", FWSkipped: "zu große Netze verworfen",
+		FWLive: "Live-Listen mit Listen-Token, Abruf alle 30 Minuten.", FWDaily: "Tagesstand (ohne NODE64_IPV64_LIST_TOKEN), Abruf alle 30 Minuten.",
+		FWKeep: "Die Tabelle bleibt beim Beenden stehen.", FWRemove: "Die Tabelle wird beim Beenden gelöscht."},
 	"en": {Profile: "Profile", Uptime: "Uptime", Hits24: "Hits 24 h", Hits7: "Hits 7 days", Src24: "Source IPs 24 h", Src7: "Source IPs 7 days",
 		Logins7: "Login attempts 7 days", StatsErr: "Statistics currently not readable.", Services: "Services", Service: "Service", State: "State",
 		Conns: "Connections", Open: "open", Closed: "not open", None: "none", Scan: "Port scan detection", On: "on", Off: "off",
@@ -758,7 +879,11 @@ var hpTextsByLang = map[string]hpTexts{
 		Foot: "Read only. Refreshes every minute. Prometheus: /metrics",
 		Logs: "Log sensor and syslog", File: "File", Lines: "Lines", FileOK: "reading", FileErr: "error",
 		PermHint: "No read permission: start the container with --group-add 4 (group adm).", Messages: "messages", Denied: "denied",
-		LogNote: "From real logs only IP, kind, service, port, count and rule are reported.", Origins: "Sources (7 days)"},
+		LogNote: "From real logs only IP, kind, service, port, count and rule are reported.", Origins: "Sources (7 days)",
+		FW: "Firewall helper", FWWait: "not active yet", FWEntries: "Entries (ranges)", FWAddrs: "addresses", FWUpdated: "Last checked",
+		FWChanged: "changed", FWDenied: "token not entitled, daily list", FWAllow: "Exceptions (NODE64_FIREWALL_ALLOW)", FWSkipped: "networks too large, dropped",
+		FWLive: "Live lists with list token, fetched every 30 minutes.", FWDaily: "Daily lists (no NODE64_IPV64_LIST_TOKEN), fetched every 30 minutes.",
+		FWKeep: "The table stays when Node64 stops.", FWRemove: "The table is removed when Node64 stops."},
 }
 
 type hpList struct {
@@ -774,6 +899,7 @@ type hpPage struct {
 	Services                       []honeypot.ServiceStatus
 	Rep                            honeypot.ReportStatus
 	Logs                           honeypot.LogStatus
+	FW                             *firewall.Status // nil = Firewall-Helfer aus
 }
 
 // L baut eine Rangliste fuer das Untertemplate "list".
@@ -792,6 +918,10 @@ func (h *hpInfo) page(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.logs != nil {
 		p.Logs = h.logs.Status()
+	}
+	if h.fw != nil {
+		st := h.fw.Status()
+		p.FW = &st
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if r.Method == http.MethodHead {

@@ -30,7 +30,7 @@ Bridge-Netz sehen manche Docker-Versionen statt der Angreifer die Adresse des Do
 |---|---|---|
 | `NODE64_MODE` | – | `honeypot` schaltet den Modus ohne Oberfläche ein; andere Werte sind ein Fehler |
 | `NODE64_HONEYPOT_PROFILE` | `standard` | `minimal`, `standard` oder `full` (Tabelle unten) |
-| `NODE64_HONEYPOT_SERVICES` | – | eigene Dienste statt des Profils, z. B. `ssh:22,ssh:2222,http:80,https:443,tcp:3389`; Dienste `ssh`, `telnet`, `http`, `https`, `tcp`, `ftp`, `smtp`, `pop3`, `imap`, `mqtt`; bei `http`/`https` optional ein Köder als dritter Teil (`http:80:wp-login`, möglich: `generic`, `wp-login`, `phpmyadmin`, `admin`). Unbekannte Dienste, doppelte Ports oder ungültige Ports verhindern den Start |
+| `NODE64_HONEYPOT_SERVICES` | – | eigene Dienste statt des Profils, z. B. `ssh:22,ssh:2222,http:80,https:443,tcp:3389`; Dienste `ssh`, `telnet`, `http`, `https`, `tcp`, `ftp`, `smtp`, `pop3`, `imap`, `mqtt`, `mysql`, `postgres`, `mssql`, `redis`, `rdp`, `vnc`, `mikrotik-api`, `snmp` (UDP), `sip` (UDP); bei `http`/`https` optional ein Köder als dritter Teil (`http:80:wp-login`, möglich: `generic`, `wp-login`, `phpmyadmin`, `admin`). Unbekannte Dienste, doppelte Ports oder ungültige Ports verhindern den Start |
 | `NODE64_HONEYPOT_SCAN` | `1` | Port-Scan-Erkennung (`1`/`0`) |
 | `NODE64_HONEYPOT_RETENTION` | `7d` | lokale Aufbewahrung, z. B. `3d`, `48h` (1 Stunde bis 365 Tage); zusätzlich gilt eine feste Obergrenze von 200 000 Ereignissen |
 | `NODE64_HONEYPOT_INFO_PORT` | `9064` | Port der Info-Seite, `0` = aus; darf kein Fallen-Port sein |
@@ -40,6 +40,11 @@ Bridge-Netz sehen manche Docker-Versionen statt der Angreifer die Adresse des Do
 | `NODE64_HONEYPOT_LOGS` | – | Log-Sensor: Komma-Liste, je Eintrag `pfad` oder `pfad=format`, z. B. `/host/log/auth.log=syslog,/host/log/nginx/*access.log=nginx`; Pfade absolut unterhalb von `/host/log`, `/var/log` oder `/data/logs`, Muster erlaubt, höchstens 32. Formate: `syslog`, `nginx`, `apache`, `caddy`, `nextcloud`, `vaultwarden`, `gitea`, `proxmox`, `homeassistant` (ohne = automatisch). Leer = aus; kein Profil schaltet ihn ein (siehe [Log-Sensor und Syslog](#log-sensor-und-syslog)) |
 | `NODE64_HONEYPOT_SYSLOG_PORT` | – | Syslog-Empfänger auf UDP und TCP, z. B. `514`; leer oder `0` = aus. Darf kein Fallen-Port und nicht der Info-Port sein |
 | `NODE64_HONEYPOT_SYSLOG_ALLOW` | private Netze | erlaubte Absender, Komma-Liste von IPs oder Netzen (CIDR), z. B. `192.168.1.1,10.0.0.0/8`; leer = private Netze und localhost |
+| `NODE64_FIREWALL` | – | `nftables` schaltet den [Firewall-Helfer](#firewall-helfer) ein (braucht `--cap-add NET_ADMIN` und `--network host`); leer oder `0` = aus |
+| `NODE64_FIREWALL_LISTS` | `v64` | Listen für die Firewall, Komma-Liste von IDs aus `index.json`, z. B. `v64_ssh,v64_web` |
+| `NODE64_FIREWALL_ALLOW` | – | eigene Netze, die nie gesperrt werden, Komma-Liste von IPs oder Netzen (CIDR) |
+| `NODE64_FIREWALL_KEEP` | `0` | `1` lässt die Tabelle `inet node64` beim Beenden stehen |
+| `NODE64_IPV64_LIST_TOKEN` | – | Listen-Token aus dem ipv64-Account (32 Zeichen): v64-Listen live statt im Tagesstand |
 | `NODE64_DATA_DIR` | `/data` | Datenverzeichnis: Datenbank `node64.db`, Sensor-Dateien (SSH-Host-Schlüssel, TLS-Zertifikat, Sensor-Kennung `sensor_id`, Stand der Meldung `report_state.json`) unter `honeypot/` |
 | `NODE64_BIND_ADDR` | – | Adresse der Info-Seite (leer = alle) |
 | `NODE64_LOG_LEVEL`, `NODE64_LOG_FORMAT` | `info`, `text` | wie im normalen Betrieb |
@@ -51,11 +56,15 @@ Die übrigen Variablen der Node (Weboberfläche, Admin, TLS) werden in diesem Mo
 | Profil | Dienste |
 |---|---|
 | `minimal` | SSH 22, HTTP 80 (für kleine Geräte) |
-| `standard` | SSH 22 und 2222, Telnet 23, HTTP 80 und 8080, HTTPS 443 und 8006, HTTP 8123, FTP 21, SMTP 25, IMAP 143, MQTT 1883, TCP 3306, 3389 (RDP), 5900 (VNC), 6379, 8291 (Winbox) |
-| `full` | wie `standard`, dazu Telnet 2323, SMTP 587, POP3 110, HTTP 2375, 3000, 5000, 8123, 9200, HTTPS 4444, 5001, 8007, 8443, 9443, 10000, 10250, 10443 und TCP 445, 1433, 5432, 8728, 8729, 27017 |
+| `standard` | SSH 22 und 2222, Telnet 23, HTTP 80, 8080 und 8123, HTTPS 443 und 8006, FTP 21, SMTP 25, IMAP 143, MQTT 1883, MySQL 3306, Redis 6379, RDP 3389, VNC 5900, MikroTik-API 8728, TCP 8291 (Winbox) |
+| `full` | wie `standard`, dazu Telnet 2323, SMTP 587, POP3 110, MSSQL 1433, PostgreSQL 5432, MikroTik-API mit TLS 8729, SNMP UDP 161, SIP UDP 5060, HTTP 2375, 3000, 5000, 9200, HTTPS 4444, 5001, 8007, 8443, 9443, 10000, 10250, 10443 und TCP 445, 27017 |
 
-**Login-Fallen:** FTP, SMTP (AUTH PLAIN/LOGIN, kein Relay), POP3, IMAP und MQTT nehmen Anmeldungen an, lehnen jede
+**Login-Fallen:** FTP, SMTP (AUTH PLAIN/LOGIN, kein Relay), POP3, IMAP, MQTT, PostgreSQL, MySQL, MSSQL, Redis, MikroTik-API, RDP (nur Benutzername), VNC (nur Versuch), SNMP (Community) und SIP (Benutzername) nehmen Anmeldungen an, lehnen jede
 ab und erfassen Benutzername und Passwort – wie SSH und Telnet. Reine TCP-Ports erfassen Verbindung und erste Bytes.
+
+**UDP:** SNMP und SIP laufen über UDP – bei Docker ohne `--network host` die Ports mit `/udp` veröffentlichen (`-p 161:161/udp -p 5060:5060/udp`). SNMP antwortet nie, SIP nur kurz und nie größer als die Anfrage (kein Missbrauch als Verstärker).
+
+**Fingerabdrücke:** Bei HTTPS (und TLS an TCP-Ports) entsteht ein JA4-, bei SSH ein HASSH-Fingerabdruck des Werkzeugs; er steht an jedem Ereignis, in der Rangliste und geht mit der Meldung an ipv64.
 
 **Geräte-Logins:** Die Web-Köder beantworten die Login-Aufrufe verbreiteter Geräte und Oberflächen (Router wie
 FRITZ!Box, Speedport, OpenWrt; Firewalls und SSL-VPN; NAS; UniFi; Home Assistant; Proxmox; Grafana; Jenkins; Webmin;
@@ -121,7 +130,9 @@ ipv64 (Modul und Modus ohne Oberfläche): `node64_honeypot_report_last_success_t
 keine), `node64_honeypot_report_errors_total`, `node64_honeypot_report_sources_total`. Log-Sensor und Syslog:
 `node64_honeypot_log_lines_total` (gelesene Zeilen aus Dateien), `node64_honeypot_log_file_ok{path}` (1 = wird
 gelesen, 0 = Fehler), `node64_honeypot_syslog_messages_total`, `node64_honeypot_syslog_denied_total`; in
-`node64_honeypot_events_total{kind,source}` steht `source` für `honeypot`, `log` oder `syslog`. Beispiel-Alarm:
+`node64_honeypot_events_total{kind,source}` steht `source` für `honeypot`, `log` oder `syslog`. Firewall-Helfer (nur
+wenn eingeschaltet): `node64_firewall_active`, `node64_firewall_entries{family}` (Bereiche je Set, `ipv4`/`ipv6`),
+`node64_firewall_last_update_timestamp`, `node64_firewall_errors_total`, `node64_firewall_list_entries{list,edition}`. Beispiel-Alarm:
 `time() - node64_honeypot_report_last_success_timestamp > 3600`. Die übrigen Kennzahlen der Node siehe
 [PROMETHEUS.md](PROMETHEUS.md).
 
@@ -303,10 +314,62 @@ Angreifer aufgefallen ist; die Node holt Treffer alle 30 Minuten ab und meldet s
   solange das Modul an ist; sonst „Jetzt abrufen“.
 - Grenzen je Account-Klasse: Standard 3 Netze, sonst 50.
 
+## Firewall-Helfer
+
+Mit `NODE64_FIREWALL=nftables` trägt Node64 die v64 Blocklist in die Firewall des Hosts ein – wie ein
+Firewall-Bouncer. Was andere Sensoren gesehen haben, kommt dann gar nicht erst bei den eigenen Diensten an.
+
+```bash
+docker run -d --name honeypot64 --network host --cap-add NET_ADMIN --restart unless-stopped \
+  -e NODE64_MODE=honeypot -e NODE64_IPV64_KEY=<api-key> \
+  -e NODE64_FIREWALL=nftables -e NODE64_FIREWALL_ALLOW=<büro-ip>,<vpn-netz>/24 \
+  -e NODE64_IPV64_LIST_TOKEN=<listen-token> \
+  -v honeypot64:/data ghcr.io/ipv64net/node64
+```
+
+- **Eigene Tabelle:** Node64 legt `table inet node64` an, mit den Sets `blocklist_v4` (`ipv4_addr`) und
+  `blocklist_v6` (`ipv6_addr`, beide `flags interval`) und den Ketten `input` und `forward` (`priority filter - 10`,
+  vor den üblichen Filterregeln, `policy accept`). Sie verwerfen nur Pakete, deren Absender im Set steht; alles
+  andere geht unverändert an die vorhandene Firewall (ufw, firewalld, Docker). Anschauen: `nft list table inet node64`.
+- **Listen:** Standard ist die Gesamtliste `v64`; mit `NODE64_FIREWALL_LISTS` andere Listen aus `index.json`
+  (`v64_ssh`, `v64_web`, `v64_mail`, `v64_rdp`, `v64_scanner`, `v64_research`, auch fremde wie `spamhaus_drop`).
+  Ohne Listen-Token gilt der Tagesstand, mit `NODE64_IPV64_LIST_TOKEN` die Live-Fassung (alle Klassen außer
+  Standard, siehe Plan Abschnitt 8); hat das Token keine Berechtigung, nimmt Node64 den Tagesstand.
+- **Aktualisierung:** alle 30 Minuten, nur bei Änderung (ETag/If-Modified-Since). Die Sets werden in einer
+  Transaktion geleert und neu gefüllt; es gibt keinen Moment ohne Schutz. Fehlt die Tabelle (z. B. nach
+  `nft flush ruleset`), legt Node64 sie beim nächsten Abruf neu an. Die letzte Fassung liegt unter
+  `/data/honeypot/firewall/`, damit der Schutz nach einem Neustart ohne Netz sofort steht.
+- **Nie gesperrt:** private und reservierte Netze (RFC 1918, CGNAT, Loopback, Link-Local, ULA, Multicast,
+  Dokumentation), bei IPv6 alles außerhalb von 2000::/3, die Adressen des Hosts selbst und `NODE64_FIREWALL_ALLOW`.
+  Netze größer als /8 (IPv4) bzw. /16 (IPv6) aus einer Liste werden verworfen.
+- **Beenden:** `docker stop` löscht die Tabelle; mit `NODE64_FIREWALL_KEEP=1` bleibt sie stehen (dann gilt der letzte
+  Stand weiter, bis Node64 wieder läuft oder man sie mit `nft delete table inet node64` entfernt).
+- **Zustand:** Info-Seite (Abschnitt „Firewall-Helfer“: Einträge, Fassung je Liste, letzte Prüfung, Fehler) und
+  `/metrics` (siehe [Prometheus](#prometheus)).
+
+**Rechte:** `--cap-add NET_ADMIN` erlaubt dem Container, die Firewall zu ändern; `--network host` ist nötig, sonst
+landet die Tabelle im eigenen Netz des Containers und schützt den Host nicht. Das Image gibt dem Binary
+`cap_net_admin` nur als „erlaubt“ mit; ohne `--cap-add NET_ADMIN` hat Node64 das Recht nicht und startet mit
+`NODE64_FIREWALL=nftables` gar nicht (Meldung „operation not permitted … needs --cap-add NET_ADMIN“). Nur Linux mit
+nftables im Kernel (auch Hosts, deren iptables über nftables läuft).
+
+**Risiken:**
+
+- Gesperrt wird nur **eingehend** nach Absender (`input`, `forward`). Antworten von gelisteten Adressen auf eigene
+  Verbindungen werden ebenfalls verworfen; ausgehende Verbindungen zu ihnen selbst bleiben möglich.
+- **Eigene Netze vorher in `NODE64_FIREWALL_ALLOW`** eintragen: feste öffentliche IPs von Büro, VPN-Gegenstelle,
+  Monitoring, Backup-Ziel. Steht eine davon (z. B. durch eine gemeinsam genutzte IP) in der Liste, sperrt der Helfer
+  sonst den eigenen Zugang – bei einem entfernten Server auch SSH. Wer gelistet ist, kann bei ipv64 eine Freigabe
+  beantragen.
+- `forward` betrifft auch Container und VMs hinter dem Host. Docker-Regeln selbst ändert Node64 nicht.
+- Andere Firewall-Werkzeuge, die mit `nft flush ruleset` alles neu schreiben, löschen auch diese Tabelle; Node64 legt
+  sie spätestens nach 30 Minuten wieder an.
+
 ## Beenden
 
 `docker stop` (SIGTERM) schließt erst die Info-Seite, dann Log-Sensor, Syslog-Empfänger und alle Fallen, und
-schreibt die noch gepufferten Ereignisse in die Datenbank.
+schreibt die noch gepufferten Ereignisse in die Datenbank. Der Firewall-Helfer löscht seine Tabelle (außer mit
+`NODE64_FIREWALL_KEEP=1`).
 
 ## Ressourcen
 

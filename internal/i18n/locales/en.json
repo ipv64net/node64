@@ -3178,7 +3178,8 @@
       "paths": "Paths",
       "user_agents": "User agents",
       "empty": "No entries.",
-      "origins": "Sensors (honeypot, log, syslog)"
+      "origins": "Sensors (honeypot, log, syslog)",
+      "fingerprints": "Fingerprints (JA4, HASSH)"
     },
     "events": {
       "title": "Latest events",
@@ -3193,7 +3194,8 @@
       "origin": "Sensor",
       "rule": "Rule",
       "filter": "Filter by sensor",
-      "filter_all": "All"
+      "filter_all": "All",
+      "fingerprint": "Client fingerprint (JA4 for TLS, HASSH for SSH)"
     },
     "settings": {
       "title": "Settings",

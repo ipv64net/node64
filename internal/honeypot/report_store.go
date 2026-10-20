@@ -57,7 +57,7 @@ func (s *Store) hasEvents(ctx context.Context, start, end time.Time) (bool, erro
 }
 
 // BuildReport baut den Bericht fuer [start, end): Quellen je (src, kind, service, port, source, rule) mit Anzahl und
-// erstem/letztem Zeitpunkt, dazu Proben (Zugangsdaten, Pfade, User-Agents, Payloads; nur aus dem Honeypot), jeweils
+// erstem/letztem Zeitpunkt, dazu Proben (Zugangsdaten, Pfade, User-Agents, Fingerabdruecke, Payloads; nur aus dem Honeypot), jeweils
 // haeufigste zuerst und auf die Grenzen
 // aus report_types.go gekuerzt (Rest in Dropped). ReportID und Sensor setzt der Aufrufer.
 func (s *Store) BuildReport(ctx context.Context, start, end time.Time) (*Report, error) {
@@ -149,11 +149,11 @@ func (s *Store) BuildReport(ctx context.Context, start, end time.Time) (*Report,
 		return nil, err
 	}
 
-	// Pfade und User-Agents
+	// Pfade, User-Agents und Fingerabdruecke (H6)
 	for _, k := range []struct {
 		col string
 		dst *[]ReportKey
-	}{{"path", &rep.Samples.Paths}, {"ua", &rep.Samples.UserAgents}} {
+	}{{"path", &rep.Samples.Paths}, {"ua", &rep.Samples.UserAgents}, {"fingerprint", &rep.Samples.Fingerprints}} {
 		rows, err = r.QueryContext(ctx, `SELECT `+k.col+` AS k, COUNT(*) AS n FROM hp_events WHERE ts >= ? AND ts < ?`+hp+` AND `+k.col+` <> ''
 			GROUP BY k ORDER BY n DESC, k`, from, to, string(skip))
 		if err != nil {

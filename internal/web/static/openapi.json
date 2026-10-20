@@ -3897,7 +3897,7 @@
           "report": {
             "type": "boolean",
             "default": false,
-            "description": "Meldung an ipv64 (Opt-in): alle 10 Minuten Quell-IPs, Arten, Ports, Zugangsdaten aus dem Honeypot, Pfade, User-Agents und Payload-Anfang; nie die eigene IP, keine privaten/reservierten Quellen. Einschalten nur mit eingetragenem zentralem API-Key (sonst 400 mit fields.report)."
+            "description": "Meldung an ipv64 (Opt-in): alle 10 Minuten Quell-IPs, Arten, Ports, Zugangsdaten aus dem Honeypot, Pfade, User-Agents, Fingerabdrücke (JA4, HASSH) und Payload-Anfang; nie die eigene IP, keine privaten/reservierten Quellen. Einschalten nur mit eingetragenem zentralem API-Key (sonst 400 mit fields.report)."
           },
           "log": {
             "$ref": "#/components/schemas/Honeypot64LogConfig"
@@ -4100,6 +4100,13 @@
               "$ref": "#/components/schemas/Honeypot64Count"
             }
           },
+          "top_fingerprints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Count"
+            },
+            "description": "Fingerabdrücke der Clients (H6), Key = \"ja4:<ja4>\" (TLS-ClientHello) bzw. \"hassh:<md5>\" (SSH-KEXINIT des Clients)"
+          },
           "timeline": {
             "type": "array",
             "items": {
@@ -4192,6 +4199,10 @@
           "rule": {
             "type": "string",
             "description": "Regel bei log/syslog, z. B. sshd/bruteforce@1"
+          },
+          "fingerprint": {
+            "type": "string",
+            "description": "Fingerabdruck des Clients (H6): \"ja4:<ja4>\" (TLS, JA4 nach FoxIO) bzw. \"hassh:<md5>\" (SSH, HASSH); fehlt, wenn keiner erkannt wurde"
           }
         }
       },

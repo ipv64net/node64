@@ -1,5 +1,15 @@
 # Changes – Honeypot64
 
+## 0.5.0 – 2026-10-20
+
+Phase H6.
+
+### New
+- Login traps for databases and remote access: PostgreSQL (5432, cleartext password), MySQL (3306, switch to cleartext password, otherwise user only), MSSQL (1433), Redis (6379, plus commands that would change the configuration reported as attacks), RDP (3389, user name from the connection request), VNC (5900, login attempt).
+- MikroTik API (8728, with TLS 8729), SNMP (UDP 161, community strings, never replies) and SIP (UDP 5060, scanners and digest logins, short replies never larger than the request).
+- Fingerprints of attack tools: JA4 (HTTPS and TLS on TCP ports) and HASSH (SSH) in the event list, top list and report to ipv64.
+- Profiles use the new traps instead of plain TCP ports; UDP services are registered as UDP in the port management.
+
 ## 0.4.0 – 2026-10-20
 
 ### New

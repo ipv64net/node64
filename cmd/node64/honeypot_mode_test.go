@@ -19,8 +19,10 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/config"
+	"github.com/ipv64net/node64/internal/firewall"
 	"github.com/ipv64net/node64/internal/honeypot"
 	"github.com/ipv64net/node64/internal/ipv64api"
+	"github.com/ipv64net/node64/internal/metrics"
 	"github.com/ipv64net/node64/internal/store"
 )
 
@@ -527,5 +529,74 @@ func TestHPInfoLogs(t *testing.T) {
 		if !strings.Contains(body, s) {
 			t.Errorf("metrics lack %q\n%s", s, body)
 		}
+	}
+}
+
+func TestHoneypotModeFirewallFromEnv(t *testing.T) {
+	hc, err := honeypotModeFromEnv(hpEnv(nil))
+	if err != nil || hc.Firewall != nil {
+		t.Fatal("firewall on by default", err)
+	}
+	if hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_FIREWALL": "off"})); err != nil || hc.Firewall != nil {
+		t.Fatal("off", err)
+	}
+	tok := "abcdefghijklmnopqrstuvwxyz012345"
+	hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_FIREWALL": "NFTables", "NODE64_FIREWALL_LISTS": "v64, v64_ssh",
+		"NODE64_FIREWALL_ALLOW": "203.0.113.0/24,2001:db8::1", "NODE64_FIREWALL_KEEP": "1", "NODE64_IPV64_LIST_TOKEN": tok}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fc := hc.Firewall
+	if fc == nil || fc.Mode != "nftables" || len(fc.Lists) != 2 || fc.Lists[1] != "v64_ssh" || len(fc.Allow) != 2 || !fc.Keep || fc.Token != tok {
+		t.Fatalf("%+v", fc)
+	}
+	if hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_FIREWALL": "nftables"})); err != nil || hc.Firewall.Lists[0] != "v64" || hc.Firewall.Keep {
+		t.Fatalf("defaults: %+v %v", hc.Firewall, err)
+	}
+	for _, env := range []map[string]string{
+		{"NODE64_FIREWALL": "iptables"},
+		{"NODE64_FIREWALL": "nftables", "NODE64_FIREWALL_ALLOW": "10.0.0.0/33"},
+		{"NODE64_FIREWALL": "nftables", "NODE64_FIREWALL_LISTS": "v64,../x"},
+		{"NODE64_FIREWALL": "nftables", "NODE64_FIREWALL_KEEP": "maybe"},
+		{"NODE64_IPV64_LIST_TOKEN": "short"},
+	} {
+		if _, err := honeypotModeFromEnv(hpEnv(env)); err == nil {
+			t.Errorf("%v accepted", env)
+		}
+	}
+}
+
+// fakeFW fuer den Info-Server.
+type fakeFW struct{ st firewall.Status }
+
+func (f *fakeFW) Status() firewall.Status { return f.st }
+func (f *fakeFW) WriteMetrics(w *metrics.Writer) {
+	w.Gauge("node64_firewall_entries", "test", float64(f.st.V4), "family", "ipv4")
+}
+
+func TestHPInfoFirewall(t *testing.T) {
+	h, _ := newTestHPInfo(t, "")
+	body := hpDo(h, "GET", "/", "127.0.0.1:1", map[string]string{"Accept-Language": "de"}).Body.String()
+	if !strings.Contains(body, "Firewall-Helfer") || !strings.Contains(body, "aus (NODE64_FIREWALL)") {
+		t.Fatalf("page without firewall:\n%s", body)
+	}
+	h.fw = &fakeFW{st: firewall.Status{Mode: "nftables", Active: true, V4: 12, V6: 3, Addresses4: 40, Updated: time.Now(), Changed: time.Now(), Allow: 2,
+		Lists: []firewall.ListStatus{{ID: "v64", Edition: "live", Entries: 15}, {ID: "v64_ssh", Edition: "daily", LiveDenied: true, Entries: 4}}}}
+	body = hpDo(h, "GET", "/", "127.0.0.1:1", map[string]string{"Accept-Language": "de"}).Body.String()
+	for _, s := range []string{"nftables inet node64", "IPv4 12 (40 Adressen) · IPv6 3", "live · 15", "Token ohne Berechtigung", "Tagesstand (ohne NODE64_IPV64_LIST_TOKEN)",
+		"beim Beenden gelöscht"} {
+		if !strings.Contains(body, s) {
+			t.Errorf("page lacks %q", s)
+		}
+	}
+	if body := hpDo(h, "GET", "/metrics", "127.0.0.1:1", nil).Body.String(); !strings.Contains(body, `node64_firewall_entries{family="ipv4"} 12`) {
+		t.Errorf("metrics lack firewall:\n%s", body)
+	}
+}
+
+func TestStartHPFirewallOff(t *testing.T) {
+	fw, err := startHPFirewall(context.Background(), &hpModeConfig{}, t.TempDir(), slog.New(slog.DiscardHandler))
+	if fw != nil || err != nil {
+		t.Fatal(fw, err)
 	}
 }

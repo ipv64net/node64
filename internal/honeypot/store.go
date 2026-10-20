@@ -186,7 +186,7 @@ func (s *Store) Flush(ctx context.Context) error {
 }
 
 const storeInsertSQL = `INSERT INTO hp_events (ts, service, port, kind, src, src_port, login, username, password,
-	method, path, host, ua, client, page, payload, detail, source, rule) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	method, path, host, ua, client, page, payload, detail, source, rule, fingerprint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 func (s *Store) write(ctx context.Context, batch []Event) error {
 	tx, err := s.st.Writer().BeginTx(ctx, nil)
@@ -205,7 +205,7 @@ func (s *Store) write(ctx context.Context, batch []Event) error {
 			payload = e.Payload
 		}
 		if _, err := stmt.ExecContext(ctx, storeTime(e.Time), e.Service, e.Port, e.Kind, storeSrc(e.Src), e.SrcPort, storeBool(storeIsLogin(e)),
-			e.Username, e.Password, e.Method, e.Path, e.Host, e.UA, e.Client, e.Page, payload, e.Detail, storeSource(e.Source), e.Rule); err != nil {
+			e.Username, e.Password, e.Method, e.Path, e.Host, e.UA, e.Client, e.Page, payload, e.Detail, storeSource(e.Source), e.Rule, e.Fingerprint); err != nil {
 			return err
 		}
 	}
@@ -286,6 +286,7 @@ func (s *Store) Stats(ctx context.Context, since time.Time, top int) (*Stats, er
 		{&out.TopCreds, `username || ':' || password`, ` AND password <> ''`, top},
 		{&out.TopPaths, `path`, ` AND path <> ''`, top},
 		{&out.TopUAs, `ua`, ` AND ua <> ''`, top},
+		{&out.TopFingerprints, `fingerprint`, ` AND fingerprint <> ''`, top},
 	}
 	for _, l := range lists {
 		cs, err := s.counts(ctx, `SELECT `+l.expr+` AS k, COUNT(*) AS n, MAX(ts) FROM hp_events WHERE ts >= ?`+l.where+
@@ -372,7 +373,7 @@ func (s *Store) RecentBy(ctx context.Context, limit int, source string) ([]Event
 		where, args = ` WHERE source = ?`, []any{source, limit}
 	}
 	rows, err := s.st.Reader().QueryContext(ctx, `SELECT ts, service, port, kind, src, src_port, username, password, method, path,
-		host, ua, client, page, payload, detail, source, rule FROM hp_events`+where+` ORDER BY id DESC LIMIT ?`, args...)
+		host, ua, client, page, payload, detail, source, rule, fingerprint FROM hp_events`+where+` ORDER BY id DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +383,7 @@ func (s *Store) RecentBy(ctx context.Context, limit int, source string) ([]Event
 		var e Event
 		var ts, src string
 		if err := rows.Scan(&ts, &e.Service, &e.Port, &e.Kind, &src, &e.SrcPort, &e.Username, &e.Password, &e.Method, &e.Path,
-			&e.Host, &e.UA, &e.Client, &e.Page, &e.Payload, &e.Detail, &e.Source, &e.Rule); err != nil {
+			&e.Host, &e.UA, &e.Client, &e.Page, &e.Payload, &e.Detail, &e.Source, &e.Rule, &e.Fingerprint); err != nil {
 			return nil, err
 		}
 		e.Time = storeParseTime(ts)
@@ -414,6 +415,7 @@ func storeSanitize(e Event) Event {
 	e.Source = storeSource(e.Source)
 	if e.Source != SrcHoneypot {
 		e.Username, e.Password, e.Method, e.Path, e.Host, e.UA, e.Client, e.Page, e.Payload = "", "", "", "", "", "", "", "", nil
+		e.Fingerprint = ""
 	}
 	e.Rule = storeClip(e.Rule, MaxText)
 	e.Service = storeClip(e.Service, MaxText)
@@ -427,6 +429,7 @@ func storeSanitize(e Event) Event {
 	e.Client = storeClip(e.Client, MaxText)
 	e.Page = storeClip(e.Page, MaxText)
 	e.Detail = storeClip(e.Detail, MaxText)
+	e.Fingerprint = storeClip(e.Fingerprint, MaxText)
 	if len(e.Payload) > 0 {
 		p := e.Payload
 		if len(p) > MaxPayload {

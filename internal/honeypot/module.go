@@ -35,7 +35,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.4.0"
+	version = "0.5.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -355,7 +355,7 @@ func (m *Module) Claims(context.Context) []ports.Claim {
 	}
 	out := make([]ports.Claim, 0, len(m.status)+2)
 	for _, s := range m.status {
-		out = append(out, ports.Claim{Owner: Name, Purpose: "Honeypot " + strings.ToUpper(s.Service), Proto: ports.TCP, Port: s.Port, Active: s.Listen})
+		out = append(out, ports.Claim{Owner: Name, Purpose: "Honeypot " + strings.ToUpper(s.Service), Proto: svcProto(s.Service), Port: s.Port, Active: s.Listen})
 	}
 	if sl := m.logState.Syslog; sl != nil && sl.Port > 0 && m.logErr == "" { // Syslog-Empfaenger: UDP und TCP
 		out = append(out, ports.Claim{Owner: Name, Purpose: "Honeypot Syslog", Proto: ports.UDP, Port: sl.Port, Active: sl.UDP},
@@ -371,11 +371,19 @@ func (m *Module) portCheck(service string, port int) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	return m.ports.Check(ctx, Name, []ports.Claim{{Owner: Name, Purpose: "Honeypot " + strings.ToUpper(service), Proto: ports.TCP, Port: port}})
+	return m.ports.Check(ctx, Name, []ports.Claim{{Owner: Name, Purpose: "Honeypot " + strings.ToUpper(service), Proto: svcProto(service), Port: port}})
 }
 
-// others liefert die Ports der anderen Teile (TCP).
-func (m *Module) others(ctx context.Context) []ports.Claim { return m.othersProto(ctx, ports.TCP) }
+// others liefert die Ports der anderen Teile (TCP und UDP; die Dienste pruefen mit svcProto).
+func (m *Module) others(ctx context.Context) []ports.Claim { return m.othersProto(ctx, "") }
+
+// svcProto: Transportprotokoll eines Fallen-Dienstes (UDP-Dienste aus sensor_proto.go, sonst TCP).
+func svcProto(service string) ports.Proto {
+	if ProtoUDP(service) {
+		return ports.UDP
+	}
+	return ports.TCP
+}
 
 // othersProto liefert die Ports der anderen Teile fuer ein Protokoll ("" = alle).
 func (m *Module) othersProto(ctx context.Context, proto ports.Proto) []ports.Claim {
@@ -425,7 +433,7 @@ func (m *Module) resolve(ctx context.Context, cfg ModuleConfig) ([]Service, []Wa
 		list = Profiles[cfg.Profile]
 	}
 	for _, s := range list {
-		if c, ok := portConflict(others, s.Port); ok {
+		if c, ok := portConflictProto(others, svcProto(s.Service), s.Port); ok {
 			w := Warning{Service: s.Service, Port: s.Port, Owner: c.Owner, Purpose: c.Purpose, Skipped: c.Active && cfg.Profile != ProfileCustom}
 			warns = append(warns, w)
 			if w.Skipped {
@@ -518,7 +526,7 @@ func (m *Module) validate(ctx context.Context, c *ModuleConfig) FieldErrors {
 		case s.Page != "" && ((s.Service != SvcHTTP && s.Service != SvcHTTPS) || !cfgPage(s.Page)):
 			problems = append(problems, "honeypot.err.page|"+s.Page)
 		default:
-			if o, ok := portConflict(others, s.Port); ok && o.Active {
+			if o, ok := portConflictProto(others, svcProto(s.Service), s.Port); ok && o.Active {
 				problems = append(problems, "honeypot.err.port_used|"+strconv.Itoa(s.Port)+"|"+o.Owner+" ("+o.Purpose+")")
 			}
 		}
@@ -848,7 +856,7 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		others := m.others(ctx)
 		var keep []Service
 		for _, s := range c.Services {
-			if o, ok := portConflict(others, s.Port); (!ok || !o.Active) && cfgService(s.Service) && s.Port > 0 && s.Port < 65536 {
+			if o, ok := portConflictProto(others, svcProto(s.Service), s.Port); (!ok || !o.Active) && cfgService(s.Service) && s.Port > 0 && s.Port < 65536 {
 				keep = append(keep, s)
 			}
 		}

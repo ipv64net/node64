@@ -134,15 +134,15 @@ type Config struct {
 var Profiles = map[string][]Service{
 	"minimal": {{SvcSSH, 22, ""}, {SvcHTTP, 80, ""}},
 	"standard": {{SvcSSH, 22, ""}, {SvcSSH, 2222, ""}, {SvcTelnet, 23, ""}, {SvcHTTP, 80, ""}, {SvcHTTPS, 443, ""}, {SvcHTTP, 8080, ""},
-		{SvcFTP, 21, ""}, {SvcSMTP, 25, ""}, {SvcTCP, 3306, ""}, {SvcTCP, 6379, ""}, {SvcTCP, 3389, ""}, {SvcTCP, 5900, ""},
-		{SvcTCP, 8291, ""}, {SvcHTTPS, 8006, "pve"}, {SvcIMAP, 143, ""}, {SvcMQTT, 1883, ""}, {SvcHTTP, 8123, ""}},
+		{SvcFTP, 21, ""}, {SvcSMTP, 25, ""}, {SvcMySQL, 3306, ""}, {SvcRedis, 6379, ""}, {SvcRDP, 3389, ""}, {SvcVNC, 5900, ""},
+		{SvcTCP, 8291, ""}, {SvcHTTPS, 8006, "pve"}, {SvcIMAP, 143, ""}, {SvcMQTT, 1883, ""}, {SvcHTTP, 8123, ""}, {SvcMTAPI, 8728, ""}},
 	"full": {{SvcSSH, 22, ""}, {SvcSSH, 2222, ""}, {SvcTelnet, 23, ""}, {SvcTelnet, 2323, ""}, {SvcHTTP, 80, ""}, {SvcHTTPS, 443, ""}, {SvcHTTP, 8080, ""}, {SvcHTTPS, 8443, "unifi"},
 		{SvcFTP, 21, ""}, {SvcSMTP, 25, ""}, {SvcSMTP, 587, ""}, {SvcPOP3, 110, ""}, {SvcIMAP, 143, ""}, {SvcTCP, 445, ""},
-		{SvcTCP, 1433, ""}, {SvcMQTT, 1883, ""}, {SvcHTTP, 2375, "docker"}, {SvcTCP, 3306, ""}, {SvcTCP, 3389, ""}, {SvcTCP, 5432, ""},
-		{SvcTCP, 5900, ""}, {SvcTCP, 6379, ""}, {SvcHTTPS, 8006, "pve"}, {SvcHTTPS, 8007, "pbs"}, {SvcHTTP, 5000, "nas"}, {SvcHTTPS, 5001, "nas"},
+		{SvcMSSQL, 1433, ""}, {SvcMQTT, 1883, ""}, {SvcHTTP, 2375, "docker"}, {SvcMySQL, 3306, ""}, {SvcRDP, 3389, ""}, {SvcPostgre, 5432, ""},
+		{SvcVNC, 5900, ""}, {SvcRedis, 6379, ""}, {SvcHTTPS, 8006, "pve"}, {SvcHTTPS, 8007, "pbs"}, {SvcHTTP, 5000, "nas"}, {SvcHTTPS, 5001, "nas"},
 		{SvcHTTP, 3000, "grafana"}, {SvcHTTP, 8123, "homeassistant"}, {SvcHTTPS, 9443, "portainer"}, {SvcHTTPS, 10000, "webmin"}, {SvcHTTPS, 10443, "sslvpn"}, {SvcHTTPS, 4444, ""},
 		{SvcHTTP, 9200, "elastic"}, {SvcHTTPS, 10250, "kubelet"}, {SvcTCP, 27017, ""},
-		{SvcTCP, 8291, ""}, {SvcTCP, 8728, ""}, {SvcTCP, 8729, ""}},
+		{SvcTCP, 8291, ""}, {SvcMTAPI, 8728, ""}, {SvcMTAPI, 8729, ""}, {SvcSNMP, 161, ""}, {SvcSIP, 5060, ""}},
 }
 
 // Pages: Koeder auf HTTP/HTTPS. Bewusst schlichte, neutrale Login-Formulare ohne Logos, Markennamen oder
@@ -171,21 +171,22 @@ type Counters struct {
 
 // Stats ist die Auswertung fuer Oberflaeche, Info-Seite und API (aus dem Speicher).
 type Stats struct {
-	Since      time.Time   `json:"since"`
-	Events     int64       `json:"events"`
-	Sources    int64       `json:"sources"` // verschiedene Quell-IPs
-	Logins     int64       `json:"logins"`
-	ByService  []Count     `json:"by_service"`
-	ByPort     []Count     `json:"by_port"`
-	ByKind     []Count     `json:"by_kind"`
-	BySource   []Count     `json:"by_source"`   // Key = honeypot, log, syslog (H5)
-	TopSources []Count     `json:"top_sources"` // Key = IP
-	TopUsers   []Count     `json:"top_users"`
-	TopPass    []Count     `json:"top_passwords"`
-	TopCreds   []Count     `json:"top_credentials"` // Key = "user:pass"
-	TopPaths   []Count     `json:"top_paths"`
-	TopUAs     []Count     `json:"top_user_agents"`
-	Timeline   []TimePoint `json:"timeline"` // je Stunde (24 h) bzw. je Tag (7 d)
+	Since           time.Time   `json:"since"`
+	Events          int64       `json:"events"`
+	Sources         int64       `json:"sources"` // verschiedene Quell-IPs
+	Logins          int64       `json:"logins"`
+	ByService       []Count     `json:"by_service"`
+	ByPort          []Count     `json:"by_port"`
+	ByKind          []Count     `json:"by_kind"`
+	BySource        []Count     `json:"by_source"`   // Key = honeypot, log, syslog (H5)
+	TopSources      []Count     `json:"top_sources"` // Key = IP
+	TopUsers        []Count     `json:"top_users"`
+	TopPass         []Count     `json:"top_passwords"`
+	TopCreds        []Count     `json:"top_credentials"` // Key = "user:pass"
+	TopPaths        []Count     `json:"top_paths"`
+	TopUAs          []Count     `json:"top_user_agents"`
+	TopFingerprints []Count     `json:"top_fingerprints"` // H6: Key = "ja4:…" bzw. "hassh:…"
+	Timeline        []TimePoint `json:"timeline"`         // je Stunde (24 h) bzw. je Tag (7 d)
 }
 
 // Count ist ein Eintrag einer Rangliste.

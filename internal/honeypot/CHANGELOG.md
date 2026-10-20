@@ -1,5 +1,15 @@
 # Änderungen – Honeypot64
 
+## 0.5.0 – 2026-10-20
+
+Phase H6.
+
+### Neu
+- Login-Fallen für Datenbanken und Fernzugriff: PostgreSQL (5432, Passwort im Klartext), MySQL (3306, Wechsel auf Klartext-Passwort, sonst nur Benutzer), MSSQL (1433), Redis (6379, dazu Befehle, die die Konfiguration ändern würden, als Angriff), RDP (3389, Benutzername aus dem Verbindungsaufbau), VNC (5900, Anmeldeversuch).
+- MikroTik-API (8728, mit TLS 8729), SNMP (UDP 161, Community-Strings, antwortet nie) und SIP (UDP 5060, Scanner und Digest-Anmeldungen, kurze Antworten nie größer als die Anfrage).
+- Fingerabdrücke der Angriffswerkzeuge: JA4 (HTTPS und TLS am TCP-Port) und HASSH (SSH) in Ereignisliste, Rangliste und Meldung an ipv64.
+- Profile nutzen die neuen Fallen statt einfacher TCP-Ports; UDP-Dienste werden in der Port-Verwaltung als UDP geführt.
+
 ## 0.4.0 – 2026-10-20
 
 ### Neu
