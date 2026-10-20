@@ -263,3 +263,62 @@ func TestStoreNewSources(t *testing.T) {
 		t.Fatalf("new sources %+v", cs)
 	}
 }
+
+// TestStoreSourceRule: Quelle und Regel werden gespeichert (leer = honeypot); Ereignisse aus echten Logs behalten
+// keine Inhalte, auch wenn eine Regel sie faelschlich setzt (H5).
+func TestStoreSourceRule(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	sink := s.Sink()
+	now := time.Now()
+	sink(Event{Time: now, Service: SvcSSH, Port: 22, Kind: KindSSHBrute, Src: ip("192.0.2.1"), Username: "root", Password: "toor"})
+	sink(Event{Time: now, Service: SvcSSH, Port: 22, Kind: KindSSHBrute, Src: ip("192.0.2.2"), Source: SrcLog, Rule: "sshd/bruteforce@1",
+		Username: "alice", Password: "geheim", Method: "GET", Path: "/intern", Host: "h", UA: "ua", Client: "c", Page: "p", Payload: []byte("x"), Detail: "sshd/bruteforce"})
+	sink(Event{Time: now, Service: SvcVPN, Port: 1194, Kind: KindVPNBrute, Src: ip("192.0.2.3"), Source: SrcSyslog, Rule: "opnsense/openvpn@1", Username: "bob"})
+	if err := s.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	all, err := s.Recent(ctx, 10)
+	if err != nil || len(all) != 3 {
+		t.Fatalf("recent: %v %d", err, len(all))
+	}
+	bySrc := map[string]Event{}
+	for _, e := range all {
+		bySrc[e.Src.String()] = e
+	}
+	if e := bySrc["192.0.2.1"]; e.Source != SrcHoneypot || e.Rule != "" || e.Username != "root" || e.Password != "toor" {
+		t.Fatalf("honeypot event: %+v", e)
+	}
+	e := bySrc["192.0.2.2"]
+	if e.Source != SrcLog || e.Rule != "sshd/bruteforce@1" || e.Detail != "sshd/bruteforce" {
+		t.Fatalf("log event: %+v", e)
+	}
+	if e.Username != "" || e.Password != "" || e.Method != "" || e.Path != "" || e.Host != "" || e.UA != "" || e.Client != "" || e.Page != "" || len(e.Payload) != 0 {
+		t.Fatalf("log event must not keep contents: %+v", e)
+	}
+	if e := bySrc["192.0.2.3"]; e.Source != SrcSyslog || e.Username != "" {
+		t.Fatalf("syslog event: %+v", e)
+	}
+	// Filter nach Quelle
+	for src, n := range map[string]int{SrcHoneypot: 1, SrcLog: 1, SrcSyslog: 1, "": 3, "other": 0} {
+		list, err := s.RecentBy(ctx, 10, src)
+		if err != nil || len(list) != n {
+			t.Errorf("RecentBy(%q): %v %d", src, err, len(list))
+		}
+	}
+	st, err := s.Stats(ctx, time.Time{}, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int64{}
+	for _, c := range st.BySource {
+		got[c.Key] = c.Count
+	}
+	if len(got) != 3 || got[SrcHoneypot] != 1 || got[SrcLog] != 1 || got[SrcSyslog] != 1 {
+		t.Fatalf("by_source: %+v", st.BySource)
+	}
+	// Zugangsdaten nur aus dem Honeypot in der Statistik
+	if len(st.TopUsers) != 1 || st.TopUsers[0].Key != "root" {
+		t.Fatalf("top users: %+v", st.TopUsers)
+	}
+}

@@ -126,6 +126,7 @@ func modTest(t *testing.T, webPort int) (*Module, *ports.Registry) {
 		t.Fatal(err)
 	}
 	m.newSensor = func(*slog.Logger, string) sensorAPI { return &modFakeSensor{lns: map[int]net.Listener{}} }
+	m.newLogs = func(*slog.Logger) logSensorAPI { return &modFakeLogs{} }
 	reg := ports.New()
 	reg.Provide("web", func(context.Context) []ports.Claim {
 		return []ports.Claim{{Purpose: "HTTP", Proto: ports.TCP, Port: webPort, Active: true}}
@@ -371,8 +372,18 @@ func TestAPI(t *testing.T) {
 	code, body = do("GET", "/api/honeypot/events?limit=2", "")
 	var evs []EventView
 	if err := json.Unmarshal([]byte(body), &evs); code != 200 || err != nil || len(evs) != 2 || evs[0].PayloadHex != "030000"+"3c7363726970743e" ||
-		evs[0].PayloadText != `\x03\x00\x00<script>` {
+		evs[0].PayloadText != `\x03\x00\x00<script>` || evs[0].Source != SrcHoneypot || !strings.Contains(body, `"source":"honeypot"`) {
 		t.Fatalf("events: %d %s", code, body)
+	}
+	// Filter nach Quelle (H5); Zustand des Log-Sensors im Status
+	if code, body := do("GET", "/api/honeypot/events?source=log", ""); code != 200 || strings.TrimSpace(body) != "[]" {
+		t.Fatalf("events source=log: %d %s", code, body)
+	}
+	if code, _ := do("GET", "/api/honeypot/events?source=bogus", ""); code != 400 {
+		t.Fatalf("events bad source: %d", code)
+	}
+	if !strings.Contains(stats.BySource[0].Key, SrcHoneypot) || st.Logs.Files == nil {
+		t.Fatalf("by_source / logs: %+v %+v", stats.BySource, st.Logs)
 	}
 	// Konfiguration: Teilaenderung, Audit
 	p := modFreePort(t)
@@ -601,6 +612,37 @@ func TestPagesRender(t *testing.T) {
 	if code != http.StatusSeeOther || !portOpen(p) {
 		t.Fatalf("save form: %d", code)
 	}
+	// Log-Sensor: Vorschlag per Knopf (nicht gespeichert), ungueltiger Pfad am Feld, gueltig gespeichert (H5)
+	form := url.Values{"_csrf": {csrf[1]}, "profile": {"custom"}, "services": {"tcp " + strconv.Itoa(p)}, "retention_days": {"7"}, "max_events": {"200000"},
+		"log_path": {"/host/log/nginx/access.log", ""}, "log_format": {"nginx", ""}, "syslog_port": {""}, "syslog_allow": {""}}
+	form.Set("log_suggest", "0")
+	code, body = post("/honeypot/settings", form)
+	if code != 200 || !strings.Contains(body, `value="/host/log/auth.log"`) || !strings.Contains(body, `value="/host/log/nginx/access.log"`) {
+		t.Fatalf("suggest: %d", code)
+	}
+	if l := m.loadConfig(context.Background()).Log; len(l.Files) != 0 {
+		t.Fatalf("suggestion must not be saved: %+v", l)
+	}
+	form.Del("log_suggest")
+	form["log_path"] = []string{"/etc/passwd"}
+	form["log_format"] = []string{""}
+	if code, body = post("/honeypot/settings", form); code != http.StatusUnprocessableEntity || !strings.Contains(body, `value="/etc/passwd"`) {
+		t.Fatalf("invalid log path: %d", code)
+	}
+	form["log_path"] = []string{"/host/log/auth.log", "/host/log/nginx/access.log", ""}
+	form["log_format"] = []string{"syslog", "nginx", ""}
+	form.Set("syslog_allow", "192.168.1.0/24\n10.0.0.1")
+	if code, _ = post("/honeypot/settings", form); code != http.StatusSeeOther {
+		t.Fatalf("save logs: %d", code)
+	}
+	if l := m.loadConfig(context.Background()).Log; len(l.Files) != 2 || l.Files[1].Format != "nginx" || strings.Join(l.SyslogAllow, ",") != "192.168.1.0/24,10.0.0.1/32" {
+		t.Fatalf("saved logs: %+v", l)
+	}
+	for _, path := range []string{"/honeypot/settings", "/honeypot?source=log", "/honeypot?source=bogus&range=7d"} {
+		if code, body := get(path); code != 200 || !strings.Contains(body, "logs") {
+			t.Fatalf("%s: %d", path, code)
+		}
+	}
 
 	// i18n-Schluessel: Templates und Go-Dateien des Moduls
 	keys := map[string]bool{"nav.honeypot": true, "notify.subject." + string(KindNotifyNew): true, "audit.actions.honeypot_config": true, "audit.actions.honeypot_clear": true}
@@ -624,9 +666,13 @@ func TestPagesRender(t *testing.T) {
 	for _, p := range []string{ProfileMinimal, ProfileStandard, ProfileFull, ProfileCustom} {
 		keys["honeypot.profile."+p] = true
 	}
+	for _, s := range []string{SrcHoneypot, SrcLog, SrcSyslog} {
+		keys["honeypot.origin."+s] = true
+	}
 	tmp := map[string]map[string]string{"de": {}, "en": {}}
-	for _, name := range []string{"tmp-honeypot-i18n-modul.json", "tmp-honeypot-i18n-h2.json"} {
-		if b, err := os.ReadFile(filepath.Join("..", "..", "docs", name)); err == nil {
+	frags, _ := filepath.Glob(filepath.Join("..", "..", "docs", "tmp-*i18n*.json")) // Fragmente bis zur Uebernahme
+	for _, name := range frags {
+		if b, err := os.ReadFile(name); err == nil {
 			var x map[string]map[string]string
 			if err := json.Unmarshal(b, &x); err != nil {
 				t.Fatalf("tmp i18n %s: %v", name, err)
@@ -667,5 +713,218 @@ func TestModuleUnconfiguredOpensNothing(t *testing.T) {
 	}
 	if !portOpen(p) {
 		t.Fatalf("after saving the port must be open: %+v", m.Status())
+	}
+}
+
+// modFakeLogs ersetzt den Log-Sensor: merkt sich die Einstellung, meldet Dateien als gelesen und Syslog als offen.
+type modFakeLogs struct {
+	mu      sync.Mutex
+	cfg     LogConfig
+	applies int
+	stopped bool
+	sink    Sink
+}
+
+func (f *modFakeLogs) Apply(_ context.Context, cfg LogConfig, sink Sink) LogStatus {
+	f.mu.Lock()
+	f.cfg, f.sink = cfg, sink
+	f.applies++
+	f.mu.Unlock()
+	return f.Status()
+}
+
+func (f *modFakeLogs) Stop() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.stopped, f.cfg = true, LogConfig{}
+}
+
+func (f *modFakeLogs) Status() LogStatus {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	st := LogStatus{Files: []LogFileStatus{}}
+	for _, x := range f.cfg.Files {
+		fs := LogFileStatus{Path: x.Path, Format: x.Format, OK: !strings.Contains(x.Path, "secure"), Lines: 3}
+		if !fs.OK {
+			fs.Error = "open " + x.Path + ": permission denied"
+		}
+		st.Files = append(st.Files, fs)
+	}
+	if f.cfg.SyslogPort > 0 {
+		st.Syslog = &SyslogStatus{Port: f.cfg.SyslogPort, UDP: true, TCP: true, Messages: 5, Denied: 1}
+	}
+	return st
+}
+
+func modLogs(t *testing.T, m *Module) *modFakeLogs {
+	t.Helper()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	f, ok := m.logs.(*modFakeLogs)
+	if !ok {
+		t.Fatal("no fake log sensor (module off?)")
+	}
+	return f
+}
+
+// TestModuleLogConfig: Pruefung der Log-Einstellung (Pfade, Wurzeln, Formate, Anzahl, Syslog-Port gegen andere Teile
+// und eigene Fallen, erlaubte Absender) (H5).
+func TestModuleLogConfig(t *testing.T) {
+	webPort := modFreePort(t)
+	m, reg := modTest(t, webPort)
+	ctx := context.Background()
+	reg.Provide("dns64", func(context.Context) []ports.Claim {
+		return []ports.Claim{{Purpose: "DNS", Proto: ports.UDP, Port: 5353, Active: true}}
+	})
+	p := modFreePort(t)
+	base := func(l LogConfig) ModuleConfig {
+		return ModuleConfig{Profile: ProfileCustom, Config: Config{Services: []Service{{Service: SvcTCP, Port: p}}, Log: l}}
+	}
+	cases := []struct {
+		log   LogConfig
+		field string
+		want  string
+	}{
+		{LogConfig{Files: []LogFile{{Path: "auth.log"}}}, "log_files", "honeypot.err.log_path|auth.log"},
+		{LogConfig{Files: []LogFile{{Path: "/host/log/../../etc/shadow"}}}, "log_files", "honeypot.err.log_path|"},
+		{LogConfig{Files: []LogFile{{Path: "/etc/shadow"}}}, "log_files", "honeypot.err.log_root|/etc/shadow"},
+		{LogConfig{Files: []LogFile{{Path: "/data/node64.db"}}}, "log_files", "honeypot.err.log_root|"},
+		{LogConfig{Files: []LogFile{{Path: "/host/log"}}}, "log_files", "honeypot.err.log_root|"},
+		{LogConfig{Files: []LogFile{{Path: "/host/log/[x"}}}, "log_files", "honeypot.err.log_path|"},
+		{LogConfig{Files: []LogFile{{Path: "/host/log/a.log", Format: "exotic"}}}, "log_files", "honeypot.err.log_format|exotic"},
+		{LogConfig{Files: []LogFile{{Path: "/host/log/a.log"}, {Path: "/host/log//a.log"}}}, "log_files", "honeypot.err.log_twice|/host/log/a.log"},
+		{LogConfig{SyslogPort: 70000}, "syslog_port", "honeypot.err.syslog_port"},
+		{LogConfig{SyslogPort: p}, "syslog_port", "honeypot.err.syslog_trap|" + strconv.Itoa(p)},
+		{LogConfig{SyslogPort: webPort}, "syslog_port", "honeypot.err.port_used|" + strconv.Itoa(webPort) + "/tcp|web"},
+		{LogConfig{SyslogPort: 5353}, "syslog_port", "honeypot.err.port_used|5353/udp|dns64"},
+		{LogConfig{SyslogAllow: []string{"10.0.0.0/33"}}, "syslog_allow", "honeypot.err.syslog_allow|10.0.0.0/33"},
+	}
+	for _, c := range cases {
+		_, err := m.SaveConfig(ctx, base(c.log))
+		fe, _ := err.(FieldErrors)
+		if !strings.Contains(fe[c.field], c.want) {
+			t.Errorf("%+v: want %q in %s, got %v", c.log, c.want, c.field, err)
+		}
+	}
+	var many []LogFile
+	for i := 0; i <= LogMaxFiles; i++ {
+		many = append(many, LogFile{Path: "/host/log/f" + strconv.Itoa(i) + ".log"})
+	}
+	if _, err := m.SaveConfig(ctx, base(LogConfig{Files: many})); err == nil || !strings.Contains(err.Error(), "honeypot.err.log_many") {
+		t.Errorf("too many files: %v", err)
+	}
+	// beim Profil zaehlen dessen Ports als eigene Fallen
+	if _, err := m.SaveConfig(ctx, ModuleConfig{Profile: ProfileMinimal, Config: Config{Log: LogConfig{SyslogPort: 22}}}); err == nil {
+		t.Error("syslog port on a trap port of the profile accepted")
+	}
+	// gueltig: normalisiert gespeichert
+	sp := modFreePort(t)
+	saved, err := m.SaveConfig(ctx, base(LogConfig{Files: []LogFile{{Path: " /host/log/auth.log ", Format: "SYSLOG"}, {Path: ""}, {Path: "/var/log/nginx/*.log", Format: "auto"},
+		{Path: "/data/logs/app/vaultwarden.log", Format: "vaultwarden"}}, SyslogPort: sp, SyslogAllow: []string{" 192.168.1.1 ", "10.1.2.3/8", "", "::ffff:10.0.0.0/104"}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := m.loadConfig(ctx).Log
+	if len(l.Files) != 3 || l.Files[0] != (LogFile{Path: "/host/log/auth.log", Format: "syslog"}) || l.Files[1] != (LogFile{Path: "/var/log/nginx/*.log"}) ||
+		l.SyslogPort != sp || strings.Join(l.SyslogAllow, " ") != "192.168.1.1/32 10.0.0.0/8" || saved.Log.SyslogPort != sp {
+		t.Fatalf("normalized: %+v", l)
+	}
+	if !strings.Contains(configDetails(saved), "logs=3 syslog="+strconv.Itoa(sp)) {
+		t.Errorf("audit details: %s", configDetails(saved))
+	}
+}
+
+// TestModuleLogSensor: Log-Sensor startet mit dem Modul (gleiche Sink), nichts vor dem ersten Speichern, Syslog als
+// Claim (UDP und TCP), Zustand in API und Prometheus, Stop beendet ihn, Export/Import mit Log (H5).
+func TestModuleLogSensor(t *testing.T) {
+	m, reg := modTest(t, modFreePort(t))
+	ctx := context.Background()
+	if err := m.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	f := modLogs(t, m)
+	if f.applies != 1 || len(f.cfg.Files) != 0 || f.cfg.SyslogPort != 0 {
+		t.Fatalf("unconfigured: nothing may open: %+v", f.cfg)
+	}
+	sp := modFreePort(t)
+	c := ModuleConfig{Profile: ProfileCustom, Config: Config{Services: []Service{{Service: SvcTCP, Port: modFreePort(t)}},
+		Log: LogConfig{Files: []LogFile{{Path: "/host/log/auth.log", Format: "syslog"}, {Path: "/host/log/secure"}}, SyslogPort: sp}}}
+	if _, err := m.SaveConfig(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	if f.applies != 2 || len(f.cfg.Files) != 2 || f.cfg.SyslogPort != sp || f.sink == nil {
+		t.Fatalf("applied: %+v", f.cfg)
+	}
+	// Ereignis ueber die Sink des Log-Sensors landet im Speicher (mit Quelle, ohne Inhalte) und in den Zaehlern
+	f.sink(Event{Service: SvcSSH, Port: 22, Kind: KindSSHBrute, Src: netip.MustParseAddr("192.0.2.77"), Source: SrcLog, Rule: "sshd/bruteforce@1", Username: "x"})
+	_ = m.st.Flush(ctx)
+	if list, err := m.st.RecentBy(ctx, 5, SrcLog); err != nil || len(list) != 1 || list[0].Username != "" || list[0].Rule != "sshd/bruteforce@1" {
+		t.Fatalf("log event: %v %+v", err, list)
+	}
+	// Syslog als Claim fuer UDP und TCP; ein anderer Teil sieht den Port belegt
+	var udp, tcp bool
+	for _, cl := range m.Claims(ctx) {
+		if cl.Port == sp && cl.Active {
+			udp = udp || cl.Proto == ports.UDP
+			tcp = tcp || cl.Proto == ports.TCP
+		}
+	}
+	if !udp || !tcp {
+		t.Fatalf("syslog claims: %+v", m.Claims(ctx))
+	}
+	if err := reg.Check(ctx, "dns64", []ports.Claim{{Proto: ports.UDP, Port: sp}}); err == nil {
+		t.Fatal("syslog port must be reported as used")
+	}
+	// Zustand in API und Prometheus
+	ls := m.LogStatus()
+	if len(ls.Files) != 2 || ls.Syslog == nil || ls.Syslog.Port != sp {
+		t.Fatalf("status: %+v", ls)
+	}
+	w := metrics.New()
+	m.Metrics(ctx, w)
+	var b strings.Builder
+	_, _ = w.WriteTo(&b)
+	for _, s := range []string{"node64_honeypot_log_lines_total 6", `node64_honeypot_log_file_ok{path="/host/log/auth.log"} 1`,
+		`node64_honeypot_log_file_ok{path="/host/log/secure"} 0`, "node64_honeypot_syslog_messages_total 5", "node64_honeypot_syslog_denied_total 1",
+		`node64_honeypot_events_total{kind="ssh:bruteforce",source="log"}`} {
+		if !strings.Contains(b.String(), s) {
+			t.Errorf("metrics lack %q\n%s", s, b.String())
+		}
+	}
+	// Syslog-Port inzwischen von einem anderen Teil belegt: nicht oeffnen, Fehler im Zustand, kein Claim
+	reg.Provide("cdn64", func(context.Context) []ports.Claim {
+		return []ports.Claim{{Purpose: "Stream", Proto: ports.UDP, Port: sp, Active: true}}
+	})
+	m.apply(ctx)
+	if f.cfg.SyslogPort != 0 || m.LogStatus().Syslog == nil || m.LogStatus().Syslog.Error == "" {
+		t.Fatalf("syslog port taken: %+v %+v", f.cfg, m.LogStatus().Syslog)
+	}
+	for _, cl := range m.Claims(ctx) {
+		if cl.Port == sp {
+			t.Fatalf("no claim for a syslog port that is not open: %+v", cl)
+		}
+	}
+	// Export enthaelt die Log-Einstellung; Import auf einer Node, auf der der Syslog-Port belegt ist: Syslog aus, Rest bleibt
+	data, _ := m.Export(ctx)
+	raw, _ := json.Marshal(data)
+	if !strings.Contains(string(raw), `"log":{"files":[{"path":"/host/log/auth.log","format":"syslog"},{"path":"/host/log/secure"}],"syslog_port":`+strconv.Itoa(sp)) {
+		t.Fatalf("export: %s", raw)
+	}
+	m2, reg2 := modTest(t, modFreePort(t))
+	reg2.Provide("dns64", func(context.Context) []ports.Claim {
+		return []ports.Claim{{Purpose: "DNS", Proto: ports.TCP, Port: sp, Active: true}}
+	})
+	if n, err := m2.Import(ctx, raw); n != 1 || err == nil || !strings.Contains(err.Error(), "syslog_port") {
+		t.Fatalf("import with syslog conflict: %d %v", n, err)
+	}
+	if l := m2.loadConfig(ctx).Log; l.SyslogPort != 0 || len(l.Files) != 2 {
+		t.Fatalf("import must keep the files: %+v", l)
+	}
+	// Stop beendet den Log-Sensor
+	if err := m.Stop(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if !f.stopped || len(m.LogStatus().Files) != 0 {
+		t.Fatal("log sensor not stopped")
 	}
 }

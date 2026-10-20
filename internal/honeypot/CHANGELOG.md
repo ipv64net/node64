@@ -1,5 +1,20 @@
 # Änderungen – Honeypot64
 
+## 0.3.0 – 2026-10-20
+
+Log-Sensor, Syslog-Empfänger und Frühwarnung für eigene Netze (Phase H5).
+
+### Neu
+- Frühwarnung (Reiter „Frühwarnung“): eigene Netze verwalten (gespeichert bei ipv64), DynDNS-IPs des Accounts automatisch überwacht; Treffer werden alle 30 Minuten abgeholt und gebündelt gemeldet. Netze ohne Nachweis melden nur IPs, die auf der v64 Blocklist stehen, DynDNS-IPs jede Sichtung. Braucht den zentralen API-Key, nicht die Meldung an ipv64.
+- Log-Sensor: liest Logs echter Dienste (sshd, nginx/Apache/Caddy, Postfix/Dovecot, Proxmox, Nextcloud, Vaultwarden, Gitea/Forgejo, Home Assistant) und erkennt Angriffe mit mitgelieferten, versionierten Regeln ab einer Schwelle. Dateien mit Format unter Einstellungen › „Log-Sensor und Syslog“, Vorschläge für gängige Pfade per Knopf; erlaubt sind Pfade unter `/host/log`, `/var/log` und `/data/logs` (Mount `-v /var/log:/host/log:ro`, für `auth.log` zusätzlich `--group-add 4`).
+- Syslog-Empfänger auf UDP und TCP (ein Port, z. B. 514) für Router und Firewalls (MikroTik, OPNsense/pfSense, FortiGate, Sophos, UniFi); nur erlaubte Absender (Standard private Netze und localhost). Der Port wird wie die Fallen über die Port-Verwaltung geprüft (UDP und TCP).
+- Aus echten Logs werden nur IP, Art, Dienst, Port, Anzahl und Regel gespeichert und gemeldet – keine Benutzernamen, Passwörter, Pfade, User-Agents oder Inhalte. Proben in der Meldung an ipv64 stammen nur aus dem Honeypot; Quellen tragen `source` (`honeypot`, `log`, `syslog`) und die Regel.
+- Zustand je Datei (z. B. „keine Leserechte – Container braucht --group-add 4“) und des Syslog-Empfängers in den Einstellungen, auf der Übersicht und unter `GET /api/honeypot/status` (`logs`).
+- Ereignisliste mit Sensor (Honeypot, Log, Syslog) und Regel, Filter nach Sensor (auch `GET /api/honeypot/events?source=`); Statistik mit Rangliste der Sensoren (`by_source`).
+- Prometheus: `node64_honeypot_events_total{kind,source}` mit echter Quelle, `node64_honeypot_log_lines_total`, `node64_honeypot_log_file_ok{path}`, `node64_honeypot_syslog_messages_total`, `node64_honeypot_syslog_denied_total`.
+- Modus ohne Oberfläche: `NODE64_HONEYPOT_LOGS`, `NODE64_HONEYPOT_SYSLOG_PORT`, `NODE64_HONEYPOT_SYSLOG_ALLOW`; Zustand auf der Info-Seite. Kein Profil schaltet den Log-Sensor von selbst ein.
+- Export/Import der Einstellungen mit Log-Sensor und Syslog; ist der Syslog-Port auf der Ziel-Node belegt, bleibt Syslog aus.
+
 ## 0.2.1 – 2026-10-20
 
 ### Behoben

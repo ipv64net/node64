@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,16 +16,16 @@ import (
 var metricCounts = struct {
 	mu     sync.Mutex
 	logins map[string]int64 // Dienst -> Login-Versuche
-	kinds  map[string]int64 // Art -> Ereignisse
+	kinds  map[string]int64 // Art + "\x00" + Quelle -> Ereignisse
 }{logins: map[string]int64{}, kinds: map[string]int64{}}
 
-// CountEvents umhuellt eine Sink und zaehlt jedes Ereignis je Art und jeden Login-Versuch je Dienst (fuer
+// CountEvents umhuellt eine Sink und zaehlt jedes Ereignis je Art und Quelle und jeden Login-Versuch je Dienst (fuer
 // node64_honeypot_events_total und node64_honeypot_logins_total). Modul und Modus ohne Oberflaeche geben dem
-// Sensor CountEvents(store.Sink()).
+// Sensor und dem Log-Sensor CountEvents(store.Sink()).
 func CountEvents(next Sink) Sink {
 	return func(e Event) {
 		metricCounts.mu.Lock()
-		metricCounts.kinds[e.Kind]++
+		metricCounts.kinds[e.Kind+"\x00"+storeSource(e.Source)]++
 		if storeIsLogin(e) {
 			metricCounts.logins[e.Service]++
 		}
@@ -88,7 +89,8 @@ func WriteMetrics(w *metrics.Writer, sensor SensorState, st *Store, rep *Reporte
 		w.Counter("node64_honeypot_logins_total", "Login-Versuche je Dienst seit dem Start.", float64(x.Count), "service", x.Key)
 	}
 	for _, x := range kinds {
-		w.Counter("node64_honeypot_events_total", "Ereignisse je Art und Quelle seit dem Start.", float64(x.Count), "kind", x.Key, "source", "honeypot")
+		kind, source, _ := strings.Cut(x.Key, "\x00")
+		w.Counter("node64_honeypot_events_total", "Ereignisse je Art und Quelle seit dem Start.", float64(x.Count), "kind", kind, "source", source)
 	}
 
 	var dropped int64
@@ -114,6 +116,28 @@ func WriteMetrics(w *metrics.Writer, sensor SensorState, st *Store, rep *Reporte
 		w.Gauge("node64_honeypot_report_last_success_timestamp", "Letzte erfolgreiche Meldung an ipv64 (Unix-Zeit, 0 = noch keine).", ts)
 		w.Counter("node64_honeypot_report_errors_total", "Fehlgeschlagene bzw. von ipv64 abgelehnte Meldungen seit dem Start.", float64(errs))
 		w.Counter("node64_honeypot_report_sources_total", "An ipv64 gemeldete Quell-IPs seit dem Start (je Meldung gezaehlt).", float64(sources))
+	}
+}
+
+// WriteLogMetrics schreibt die Kennzahlen von Log-Sensor und Syslog-Empfaenger (Modul und Modus ohne Oberflaeche
+// gleich): node64_honeypot_log_lines_total (gelesene Zeilen aus Dateien), node64_honeypot_log_file_ok{path},
+// node64_honeypot_syslog_messages_total, node64_honeypot_syslog_denied_total (nur mit eingestelltem Syslog).
+// st nil = nichts.
+func WriteLogMetrics(w *metrics.Writer, st *LogStatus) {
+	if st == nil {
+		return
+	}
+	var lines int64
+	for _, f := range st.Files {
+		lines += f.Lines
+	}
+	w.Counter("node64_honeypot_log_lines_total", "Gelesene Zeilen aus Log-Dateien seit dem Start.", float64(lines))
+	for _, f := range st.Files {
+		w.Gauge("node64_honeypot_log_file_ok", "Log-Datei wird gelesen (1) bzw. Fehler wie fehlende Rechte (0).", metrics.Bool(f.OK), "path", f.Path)
+	}
+	if sl := st.Syslog; sl != nil {
+		w.Counter("node64_honeypot_syslog_messages_total", "Angenommene Syslog-Nachrichten seit dem Start.", float64(sl.Messages))
+		w.Counter("node64_honeypot_syslog_denied_total", "Verworfene Syslog-Nachrichten nicht erlaubter Absender seit dem Start.", float64(sl.Denied))
 	}
 }
 
@@ -148,4 +172,6 @@ func (m *Module) Metrics(ctx context.Context, w *metrics.Writer) {
 		return
 	}
 	WriteMetrics(w, s, m.st, m.rep, ctx)
+	ls := m.LogStatus()
+	WriteLogMetrics(w, &ls)
 }

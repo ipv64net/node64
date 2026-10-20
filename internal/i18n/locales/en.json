@@ -1340,7 +1340,9 @@
       "peer_url": "Group address changed",
       "peer_remove": "Member removed",
       "honeypot_config": "Honeypot64 settings changed",
-      "honeypot_clear": "Honeypot64 events deleted"
+      "honeypot_clear": "Honeypot64 events deleted",
+      "honeypot_watch_add": "Early warning: network added",
+      "honeypot_watch_delete": "Early warning: network removed"
     }
   },
   "logs": {
@@ -2297,7 +2299,8 @@
       "cdn64_online_blocked": "🟠 CDN64: {name} blocked at ipv64",
       "cluster_down": "🔴 Cluster: node {name} unreachable",
       "cluster_up": "🟢 Cluster: node {name} reachable again",
-      "honeypot_new": "🐞 Honeypot64: new attackers"
+      "honeypot_new": "🐞 Honeypot64: new attackers",
+      "honeypot_watch": "🚨 Honeypot64 early warning: {name} seen as an attacker"
     },
     "body": {
       "quota_used": "Used: {used} of {limit} online checks today",
@@ -3105,7 +3108,8 @@
     "title": "Honeypot64",
     "tab": {
       "overview": "Overview",
-      "settings": "Settings"
+      "settings": "Settings",
+      "watch": "Early warning"
     },
     "since": "running since {time}",
     "running": "active · profile {profile}",
@@ -3173,7 +3177,8 @@
       "credentials": "Credentials",
       "paths": "Paths",
       "user_agents": "User agents",
-      "empty": "No entries."
+      "empty": "No entries.",
+      "origins": "Sensors (honeypot, log, syslog)"
     },
     "events": {
       "title": "Latest events",
@@ -3184,7 +3189,11 @@
       "details": "Details",
       "page": "Decoy",
       "payload": "Payload",
-      "empty": "No events yet."
+      "empty": "No events yet.",
+      "origin": "Sensor",
+      "rule": "Rule",
+      "filter": "Filter by sensor",
+      "filter_all": "All"
     },
     "settings": {
       "title": "Settings",
@@ -3209,7 +3218,7 @@
       "about_text": "The trap services accept logins and always reject them. Nothing is executed, nothing is downloaded and no outgoing connection is made. Every touch is suspicious because no real service runs on these ports.",
       "prometheus": "Metrics are available at /api/metrics (node64_honeypot_*).",
       "report": "Report to ipv64",
-      "report_hint": "Every 10 minutes, source IPs, kinds, ports, credentials from the honeypot (user name and password), paths, user agents and the start of payloads are sent to ipv64 – never your own IP and no sources from private or reserved networks. The data feeds into the v64 blocklist as soon as the evaluation at ipv64 is running.",
+      "report_hint": "Every 10 minutes, source IPs, kinds, ports, credentials from the honeypot (user name and password), paths, user agents and the start of payloads are sent to ipv64 – never your own IP and no sources from private or reserved networks. From real logs (log sensor, syslog) only IP, kind, service, port, count and rule are sent. The data feeds into the v64 blocklist.",
       "report_nokey": "This needs the node's central ipv64 API key.",
       "report_key_link": "Enter API key"
     },
@@ -3239,7 +3248,16 @@
       "port_twice": "Port {v1} is listed twice.",
       "page": "Decoy “{v1}” does not exist or does not fit the service (http/https only).",
       "port_used": "Port {v1} is used by {v2}.",
-      "report_key": "To report to ipv64, first enter the API key in the settings."
+      "report_key": "To report to ipv64, first enter the API key in the settings.",
+      "log_path": "\"{v1}\" is not an absolute path (no .., no control characters, valid pattern).",
+      "log_root": "\"{v1}\" is outside the allowed directories ({v2}).",
+      "log_format": "Format \"{v1}\" does not exist ({v2} or automatic).",
+      "log_twice": "{v1} is listed twice.",
+      "log_many": "At most {v1} log files.",
+      "syslog_port": "Syslog port: empty or 0 (off) or 1–65535.",
+      "syslog_trap": "Port {v1} is already used by the trap service {v2}.",
+      "syslog_allow": "\"{v1}\" is not an IP address or network (CIDR).",
+      "syslog_allow_many": "At most {v1} allowed senders."
     },
     "report": {
       "title": "Reporting to ipv64",
@@ -3254,6 +3272,103 @@
       "last_error": "Last error",
       "rejected": "Last time ipv64 rejected {count} sources: {reasons}",
       "sensor_id": "Sensor ID"
+    },
+    "watch": {
+      "title": "Early warning",
+      "intro": "Add your own networks: if an IP from them shows up as an attacker at ipv64 (usually a hijacked device), the node tells you. The networks are stored at ipv64 and checked there after every scoring run; your DynDNS IPs are included automatically.",
+      "nokey": "The early warning needs the central ipv64 API key.",
+      "auth_error": "ipv64 rejected the API key. Check the key in the settings.",
+      "load_error": "The list could not be loaded from ipv64:",
+      "networks": "Own networks",
+      "limits": "{used} of {max} networks · IPv4 from /{v4} · IPv6 from /{v6}",
+      "cidr": "Network (CIDR) or IP",
+      "label": "Label",
+      "label_placeholder": "e.g. office",
+      "verified": "Verified",
+      "verified_hint": "ipv64 links this network to your account: every sighting is reported.",
+      "unverified_hint": "Without verification ipv64 only reports IPs that are on the v64 blocklist.",
+      "yes": "yes",
+      "no": "no",
+      "created": "Added",
+      "delete": "Remove network",
+      "delete_confirm": "Remove {cidr} from the early warning?",
+      "no_networks": "No networks added yet.",
+      "full": "All {max} networks of your account class are in use. Remove one to add another.",
+      "add": "Add",
+      "add_hint": "Single IP or network, e.g. 203.0.113.0/24 or 2001:db8:1::/48. Public addresses only.",
+      "dyndns": "DynDNS IPs (automatic)",
+      "dyndns_hint": "ipv64 watches the current IPs of your DynDNS domains automatically. They count as verified: every sighting is reported.",
+      "ip": "IP",
+      "domain": "Domain",
+      "no_dyndns": "No DynDNS IPs in the account.",
+      "status": "Fetching hits",
+      "module_off": "Honeypot64 is off: hits are only fetched via “Fetch now”.",
+      "last_success": "Last fetch",
+      "next": "Next fetch",
+      "total": "Hits total",
+      "auth_backoff": "The API key was rejected. With the same key the node only asks every 6 hours; a new key or “Fetch now” tries right away.",
+      "check": "Fetch now",
+      "about": "How the early warning works",
+      "about_unverified": "Networks without verification only report IPs that are on the v64 blocklist (which is public anyway). That way nobody can add other people's networks to spy on them.",
+      "about_dyndns": "Your DynDNS IPs and verified networks report every sighting by a sensor, even below the blocklist threshold.",
+      "about_notify": "The node fetches hits every 30 minutes and sends one bundled notification per fetch through your channels. You don't need a sensor of your own for this.",
+      "hits": "Recent hits",
+      "time": "Time",
+      "network": "Network",
+      "score": "Score",
+      "kinds": "Kinds",
+      "seen": "Seen",
+      "listed": "v64",
+      "listed_hint": "On the v64 blocklist",
+      "hits_hint": "The node keeps the last {count} hits.",
+      "no_hits": "No hits yet – good.",
+      "added": "{cidr} is now being watched.",
+      "deleted": "{cidr} is no longer watched.",
+      "gone": "{cidr} was already gone at ipv64.",
+      "checked": "Fetched: {count} new hits.",
+      "err": {
+        "invalid_cidr": "Not a valid IP or network (CIDR).",
+        "prefix_too_large": "The network is too large: IPv4 at most /{v4}, IPv6 at most /{v6}.",
+        "not_public": "Only public addresses can be watched (no private or local networks).",
+        "duplicate": "This network is already added.",
+        "limit_reached": "Limit reached: at most {max} networks in your account class.",
+        "label": "The label is too long (at most {chars} characters).",
+        "not_found": "The network is not (or no longer) registered at ipv64.",
+        "invalid_id": "Invalid ID.",
+        "api": "ipv64 reports an error: {error}"
+      }
+    },
+    "logs": {
+      "title": "Log sensor and syslog",
+      "intro": "Reads logs of real services (SSH, web servers, mail, Proxmox, Nextcloud, Vaultwarden …) and accepts syslog from routers and firewalls. Bundled rules only report attacks above a threshold (e.g. 5 failed logins in 10 minutes); successful logins reset the counter.",
+      "privacy": "From real logs only IP, kind, service, port, count and rule are stored and reported – no user names, passwords, paths, user agents or other content.",
+      "unsaved": "Suggestion added – not saved yet.",
+      "files": "Log files",
+      "path": "File or pattern",
+      "format": "Format",
+      "format_auto": "automatic",
+      "files_hint": "Absolute paths or patterns (e.g. /host/log/nginx/*access.log) below {roots}; clearing a row removes the file. Mount the host logs with -v /var/log:/host/log:ro, for auth.log also --group-add 4. journald only via rsyslog or syslog forwarding.",
+      "suggest": "Suggestions (adds a row):",
+      "syslog_port": "Syslog port",
+      "syslog_allow": "Allowed senders",
+      "syslog_hint": "UDP and TCP on the same port, empty = off (usually 514). Senders as IP or network (CIDR), one per line; empty = private networks and localhost only. UDP senders can be spoofed – do not expose the port to the internet.",
+      "status": "State of log sensor and syslog",
+      "no_files": "No log files configured.",
+      "lines": "Lines",
+      "ok": "reading",
+      "hint_perm": "No read permission – the container needs --group-add 4 (group adm).",
+      "hint_missing": "File missing – is /var/log mounted with -v /var/log:/host/log:ro?",
+      "syslog": "Syslog",
+      "syslog_on": "port {port}",
+      "syslog_counts": "{messages} messages, {denied} denied",
+      "counts": "since start: {lines} lines/messages, {events} events",
+      "files_state": "{ok} of {total} files are being read",
+      "files_errors": "{count} with errors"
+    },
+    "origin": {
+      "honeypot": "Honeypot",
+      "log": "Log",
+      "syslog": "Syslog"
     }
   }
 }

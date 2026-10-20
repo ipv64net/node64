@@ -8,8 +8,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"os"
+	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,7 +35,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.2.1"
+	version = "0.3.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -79,6 +82,13 @@ type sensorAPI interface {
 	Counters() *Counters
 }
 
+// logSensorAPI ist, was das Modul vom Log-Sensor braucht (*LogSensor; Tests setzen einen Ersatz ein).
+type logSensorAPI interface {
+	Apply(ctx context.Context, cfg LogConfig, sink Sink) LogStatus
+	Stop()
+	Status() LogStatus
+}
+
 // Module implementiert module.Module.
 type Module struct {
 	core    *store.Store
@@ -93,6 +103,7 @@ type Module struct {
 	key       *ipv64api.Key      // zentraler ipv64-API-Key (nil = keiner, dann keine Meldung an ipv64)
 	rep       *Reporter          // Meldung an ipv64 (report.go)
 	newSensor func(*slog.Logger, string) sensorAPI
+	newLogs   func(*slog.Logger) logSensorAPI
 	every     time.Duration // Abstand der Meldungen bei neuen Angreifern
 
 	g module.Guards
@@ -100,12 +111,15 @@ type Module struct {
 	ctl      sync.Mutex // serialisiert Start, Stop und das Uebernehmen der Einstellungen
 	mu       sync.Mutex // die Felder darunter
 	sensor   sensorAPI  // nil = Modul aus
+	logs     logSensorAPI
 	life     context.Context
 	cancel   context.CancelFunc
 	wg       sync.WaitGroup
 	started  time.Time
 	status   []ServiceStatus // Stand nach dem letzten Apply (fuer Claims, ohne den Sensor zu fragen)
 	warnings []Warning       // vom Profil weggelassene bzw. riskante Ports
+	logState LogStatus       // Log-Sensor/Syslog nach dem letzten Apply (fuer Claims)
+	logErr   string          // Syslog nicht geoeffnet, weil ein anderer Teil den Port inzwischen belegt
 }
 
 // Warning ist ein Hinweis zu einem Port der Einstellung (Profil laesst ihn weg oder ein anderer Teil will ihn).
@@ -122,7 +136,8 @@ func New(core *store.Store, log *slog.Logger, dataDir, nodeVersion string) *Modu
 	l := log.With("module", Name)
 	st := NewStore(core, log)
 	m := &Module{core: core, log: l, dataDir: dataDir, version: nodeVersion, st: st, sink: CountEvents(st.Sink()), every: notifyEvery,
-		newSensor: func(log *slog.Logger, dir string) sensorAPI { return NewSensor(log, dir) }}
+		newSensor: func(log *slog.Logger, dir string) sensorAPI { return NewSensor(log, dir) },
+		newLogs:   func(log *slog.Logger) logSensorAPI { return NewLogSensor(log) }}
 	m.rep = NewReporter(ReporterConfig{Store: st, API: m.api, Enabled: func(ctx context.Context) bool { return m.loadConfig(ctx).Report },
 		Profile:  func(ctx context.Context) string { return m.loadConfig(ctx).Profile },
 		SensorID: func(ctx context.Context) (string, error) { return SensorIDFromSettings(ctx, core) },
@@ -187,8 +202,9 @@ func (m *Module) Start(ctx context.Context) error {
 	lctx, cancel := context.WithCancel(context.Background())
 	s := m.newSensor(m.log, m.dir())
 	s.SetPortCheck(m.portCheck)
+	ls := m.newLogs(m.log)
 	m.mu.Lock()
-	m.sensor, m.life, m.cancel, m.started = s, lctx, cancel, time.Now()
+	m.sensor, m.logs, m.life, m.cancel, m.started = s, ls, lctx, cancel, time.Now()
 	m.mu.Unlock()
 	m.wg.Add(4)
 	go func() { defer m.wg.Done(); m.st.Run(lctx) }()
@@ -205,13 +221,17 @@ func (m *Module) Stop(ctx context.Context) error {
 	m.ctl.Lock()
 	defer m.ctl.Unlock()
 	m.mu.Lock()
-	s, cancel := m.sensor, m.cancel
-	m.sensor, m.cancel, m.life, m.status, m.warnings = nil, nil, nil, nil, nil
+	s, ls, cancel := m.sensor, m.logs, m.cancel
+	m.sensor, m.logs, m.cancel, m.life, m.status, m.warnings = nil, nil, nil, nil, nil, nil
+	m.logState, m.logErr = LogStatus{}, ""
 	m.mu.Unlock()
 	if s == nil {
 		return nil
 	}
 	s.Stop() // zuerst: danach kommen keine Ereignisse mehr
+	if ls != nil {
+		ls.Stop()
+	}
 	cancel()
 	done := make(chan struct{})
 	go func() { m.wg.Wait(); close(done) }()
@@ -242,7 +262,7 @@ func (m *Module) apply(ctx context.Context) {
 // Anfrage), damit die Ports nach der Anfrage offen bleiben.
 func (m *Module) applyLocked(ctx context.Context) {
 	m.mu.Lock()
-	s, life := m.sensor, m.life
+	s, ls, life := m.sensor, m.logs, m.life
 	m.mu.Unlock()
 	if s == nil {
 		return
@@ -252,13 +272,61 @@ func (m *Module) applyLocked(ctx context.Context) {
 	svcs, warns := m.resolve(ctx, cfg)
 	run := cfg.Config
 	run.Services = svcs
+	run.Log = LogConfig{} // Log-Sensor und Syslog laufen getrennt (unten)
+	logs := cfg.Log
 	if m.core.SettingOr(ctx, setConfig, "") == "" { // nie eingestellt: nichts oeffnen, bis die Auswahl gespeichert ist
-		run.Services = nil
+		run.Services, logs = nil, LogConfig{}
+	}
+	logErr := ""
+	if logs.SyslogPort > 0 { // seit dem Speichern von einem anderen Teil belegt: Syslog nicht oeffnen
+		if err := m.syslogCheck(ctx, logs.SyslogPort); err != nil {
+			logErr, logs.SyslogPort = err.Error(), 0
+		}
 	}
 	status := s.Apply(life, run, m.sink)
+	var lst LogStatus
+	if ls != nil {
+		lst = ls.Apply(life, logs, m.sink) // gleiche Sink wie die Fallen (Zaehler und Speicher)
+	}
+	if logErr != "" {
+		lst.Syslog = &SyslogStatus{Port: cfg.Log.SyslogPort, Error: logErr}
+	}
 	m.mu.Lock()
 	m.status, m.warnings = status, warns
+	m.logState, m.logErr = lst, logErr
 	m.mu.Unlock()
+}
+
+// syslogCheck fragt die Port-Verwaltung, ob UDP und TCP auf port frei sind (aktive Ports anderer Teile).
+func (m *Module) syslogCheck(ctx context.Context, port int) error {
+	if m.ports == nil {
+		return nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return m.ports.Check(cctx, Name, []ports.Claim{{Owner: Name, Purpose: "Honeypot Syslog", Proto: ports.UDP, Port: port},
+		{Owner: Name, Purpose: "Honeypot Syslog", Proto: ports.TCP, Port: port}})
+}
+
+// LogStatus liefert den Zustand von Log-Sensor und Syslog-Empfaenger (leer = Modul aus bzw. nichts eingestellt).
+func (m *Module) LogStatus() LogStatus {
+	m.mu.Lock()
+	ls, logErr, port := m.logs, m.logErr, 0
+	if m.logState.Syslog != nil {
+		port = m.logState.Syslog.Port
+	}
+	m.mu.Unlock()
+	out := LogStatus{}
+	if ls != nil {
+		out = ls.Status()
+	}
+	if out.Files == nil {
+		out.Files = []LogFileStatus{}
+	}
+	if logErr != "" {
+		out.Syslog = &SyslogStatus{Port: port, Error: logErr}
+	}
+	return out
 }
 
 // Status liefert den Zustand je Dienst (leer = Modul aus).
@@ -285,9 +353,13 @@ func (m *Module) Claims(context.Context) []ports.Claim {
 	if m.sensor == nil {
 		return nil
 	}
-	out := make([]ports.Claim, 0, len(m.status))
+	out := make([]ports.Claim, 0, len(m.status)+2)
 	for _, s := range m.status {
 		out = append(out, ports.Claim{Owner: Name, Purpose: "Honeypot " + strings.ToUpper(s.Service), Proto: ports.TCP, Port: s.Port, Active: s.Listen})
+	}
+	if sl := m.logState.Syslog; sl != nil && sl.Port > 0 && m.logErr == "" { // Syslog-Empfaenger: UDP und TCP
+		out = append(out, ports.Claim{Owner: Name, Purpose: "Honeypot Syslog", Proto: ports.UDP, Port: sl.Port, Active: sl.UDP},
+			ports.Claim{Owner: Name, Purpose: "Honeypot Syslog", Proto: ports.TCP, Port: sl.Port, Active: sl.TCP})
 	}
 	return out
 }
@@ -303,13 +375,16 @@ func (m *Module) portCheck(service string, port int) error {
 }
 
 // others liefert die Ports der anderen Teile (TCP).
-func (m *Module) others(ctx context.Context) []ports.Claim {
+func (m *Module) others(ctx context.Context) []ports.Claim { return m.othersProto(ctx, ports.TCP) }
+
+// othersProto liefert die Ports der anderen Teile fuer ein Protokoll ("" = alle).
+func (m *Module) othersProto(ctx context.Context, proto ports.Proto) []ports.Claim {
 	if m.ports == nil {
 		return nil
 	}
 	var out []ports.Claim
 	for _, c := range m.ports.All(ctx) {
-		if c.Owner != Name && c.Proto == ports.TCP {
+		if c.Owner != Name && (proto == "" || c.Proto == proto) {
 			out = append(out, c)
 		}
 	}
@@ -319,7 +394,12 @@ func (m *Module) others(ctx context.Context) []ports.Claim {
 // portConflict sucht einen anderen Teil auf dem Port: zuerst einen, der ihn offen hat (active), sonst einen, der ihn
 // eingestellt hat (spaeter oeffnen will).
 func portConflict(others []ports.Claim, port int) (c ports.Claim, found bool) {
-	want := ports.Claim{Proto: ports.TCP, Port: port}
+	return portConflictProto(others, ports.TCP, port)
+}
+
+// portConflictProto wie portConflict fuer ein Protokoll (others muss dieses Protokoll enthalten).
+func portConflictProto(others []ports.Claim, proto ports.Proto, port int) (c ports.Claim, found bool) {
+	want := ports.Claim{Proto: proto, Port: port}
 	for _, o := range others {
 		if ports.Overlap(want, o) {
 			if o.Active {
@@ -409,6 +489,7 @@ func (m *Module) validate(ctx context.Context, c *ModuleConfig) FieldErrors {
 	if c.Services == nil {
 		c.Services = []Service{}
 	}
+	m.validateLog(ctx, c, errs)
 	if c.Profile != ProfileCustom {
 		return errs
 	}
@@ -464,6 +545,216 @@ func cfgPage(p string) bool {
 		}
 	}
 	return false
+}
+
+// Log-Sensor und Syslog (H5): erlaubte Formate (LogLine.Format; "" = automatisch) und Wurzeln der Dateien.
+//
+// Wurzeln: /host/log ist der empfohlene Mount der Host-Logs (-v /var/log:/host/log:ro), /var/log gilt fuer das
+// Binary ohne Docker (dort die echten Logs) bzw. Logs des Containers selbst, /data/logs fuer Logs, die andere
+// Container in ein gemeinsames Volume schreiben. Alles andere (z. B. /data/node64.db, /etc, /proc) ist gesperrt:
+// Der Sensor liest nur Logs, und eine Einstellung darf keine beliebigen Dateien der Node anfassen.
+var (
+	cfgLogFormats = []string{"syslog", "nginx", "apache", "caddy", "nextcloud", "vaultwarden", "gitea", "proxmox", "homeassistant"}
+	cfgLogRoots   = []string{"/host/log", "/var/log", "/data/logs"}
+)
+
+const (
+	logMaxPath  = 512 // Zeichen je Pfad
+	logMaxAllow = 64  // Eintraege in SyslogAllow
+)
+
+// logProblems prueft und normalisiert die Log-Einstellung ohne Port-Verwaltung (Modul und Modus ohne Oberflaeche):
+// leere Eintraege fallen weg, Formate klein, CIDR maskiert, Doppelte entfernt. Liefert je Feld (log_files,
+// syslog_port, syslog_allow) die Fehler als i18n-Schluessel mit Werten nach "|".
+func logProblems(c *LogConfig) map[string][]string {
+	out := map[string][]string{}
+	files := []LogFile{}
+	seen := map[string]bool{}
+	for _, f := range c.Files {
+		p := strings.TrimSpace(f.Path)
+		if p == "" {
+			continue
+		}
+		f.Format = strings.ToLower(strings.TrimSpace(f.Format))
+		if f.Format == "auto" {
+			f.Format = ""
+		}
+		switch {
+		case !logPathOK(p):
+			out["log_files"] = append(out["log_files"], "honeypot.err.log_path|"+storeClip(p, 80))
+			continue
+		case !logUnderRoot(path.Clean(p)):
+			out["log_files"] = append(out["log_files"], "honeypot.err.log_root|"+storeClip(p, 80)+"|"+strings.Join(cfgLogRoots, ", "))
+			continue
+		case f.Format != "" && !slices.Contains(cfgLogFormats, f.Format):
+			out["log_files"] = append(out["log_files"], "honeypot.err.log_format|"+storeClip(f.Format, 40)+"|"+strings.Join(cfgLogFormats, ", "))
+			continue
+		}
+		f.Path = path.Clean(p)
+		if seen[f.Path] {
+			out["log_files"] = append(out["log_files"], "honeypot.err.log_twice|"+f.Path)
+			continue
+		}
+		seen[f.Path] = true
+		files = append(files, f)
+	}
+	if len(files) > LogMaxFiles {
+		out["log_files"] = append(out["log_files"], "honeypot.err.log_many|"+strconv.Itoa(LogMaxFiles))
+	}
+	c.Files = files
+	if len(c.Files) == 0 {
+		c.Files = nil
+	}
+	if c.SyslogPort < 0 || c.SyslogPort > 65535 {
+		out["syslog_port"] = append(out["syslog_port"], "honeypot.err.syslog_port")
+	}
+	var allow []string
+	for _, a := range c.SyslogAllow {
+		a = strings.TrimSpace(a)
+		if a == "" {
+			continue
+		}
+		p, ok := logParseCIDR(a)
+		if !ok {
+			out["syslog_allow"] = append(out["syslog_allow"], "honeypot.err.syslog_allow|"+storeClip(a, 60))
+			continue
+		}
+		if !slices.Contains(allow, p.String()) {
+			allow = append(allow, p.String())
+		}
+	}
+	if len(allow) > logMaxAllow {
+		out["syslog_allow"] = append(out["syslog_allow"], "honeypot.err.syslog_allow_many|"+strconv.Itoa(logMaxAllow))
+	}
+	c.SyslogAllow = allow
+	return out
+}
+
+// logPathOK: absolut (Container-Pfad mit /), ohne "..", ohne Steuerzeichen, gueltiges Muster (filepath.Glob).
+func logPathOK(p string) bool {
+	if len(p) > logMaxPath || !strings.HasPrefix(p, "/") || strings.ContainsRune(p, '\\') {
+		return false
+	}
+	for _, r := range p {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	for _, seg := range strings.Split(p, "/") {
+		if seg == ".." {
+			return false
+		}
+	}
+	_, err := path.Match(p, "")
+	return err == nil
+}
+
+// logUnderRoot: der (bereinigte) Pfad liegt unterhalb einer erlaubten Wurzel (die Wurzel selbst ist keine Datei).
+func logUnderRoot(p string) bool {
+	for _, r := range cfgLogRoots {
+		if strings.HasPrefix(p, r+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// logParseCIDR liest ein Netz ("192.168.0.0/16") oder eine einzelne Adresse ("10.0.0.1" = /32 bzw. /128).
+func logParseCIDR(s string) (netip.Prefix, bool) {
+	if !strings.Contains(s, "/") {
+		a, err := netip.ParseAddr(s)
+		if err != nil || a.Zone() != "" {
+			return netip.Prefix{}, false
+		}
+		a = a.Unmap()
+		return netip.PrefixFrom(a, a.BitLen()), true
+	}
+	p, err := netip.ParsePrefix(s)
+	if err != nil {
+		return netip.Prefix{}, false
+	}
+	if p.Addr().Is4In6() {
+		a := p.Addr().Unmap()
+		bits := p.Bits() - 96
+		if bits < 0 {
+			return netip.Prefix{}, false
+		}
+		p = netip.PrefixFrom(a, bits)
+	}
+	return p.Masked(), true
+}
+
+// SyslogAllowPrefixes liefert die erlaubten Absender als Netze (ungueltige fallen weg; leer = Standard des Empfaengers).
+func SyslogAllowPrefixes(list []string) []netip.Prefix {
+	var out []netip.Prefix
+	for _, s := range list {
+		if p, ok := logParseCIDR(strings.TrimSpace(s)); ok {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// logErrEN: englische Texte der Log-Fehler fuer den Modus ohne Oberflaeche (dort gibt es keine Uebersetzung).
+var logErrEN = map[string]string{
+	"honeypot.err.log_path":          "%s is not an absolute path (no .., no control characters, valid glob pattern)",
+	"honeypot.err.log_root":          "%s is outside the allowed directories (%s)",
+	"honeypot.err.log_format":        "format %q is unknown (%s or empty = automatic)",
+	"honeypot.err.log_twice":         "%s is listed twice",
+	"honeypot.err.log_many":          "at most %s log files",
+	"honeypot.err.syslog_port":       "syslog port must be 0 (off) or 1-65535",
+	"honeypot.err.syslog_allow":      "%q is not an IP address or network (CIDR)",
+	"honeypot.err.syslog_allow_many": "at most %s allowed senders",
+}
+
+// ValidateLogConfig prueft und normalisiert die Log-Einstellung wie das Modul (ohne Port-Verwaltung), Fehler auf
+// Englisch (Modus ohne Oberflaeche).
+func ValidateLogConfig(c *LogConfig) error {
+	probs := logProblems(c)
+	var msgs []string
+	for _, field := range []string{"log_files", "syslog_port", "syslog_allow"} {
+		for _, p := range probs[field] {
+			parts := strings.Split(p, "|")
+			args := make([]any, 0, len(parts)-1)
+			for _, v := range parts[1:] {
+				args = append(args, v)
+			}
+			msgs = append(msgs, fmt.Sprintf(logErrEN[parts[0]], args...))
+		}
+	}
+	if len(msgs) == 0 {
+		return nil
+	}
+	return errors.New(strings.Join(msgs, "; "))
+}
+
+// validateLog prueft die Log-Einstellung des Moduls (Fehler in errs): wie logProblems, dazu der Syslog-Port gegen
+// die Ports anderer Teile (UDP und TCP, aktiv = Fehler) und gegen die eigenen Fallen-Dienste.
+func (m *Module) validateLog(ctx context.Context, c *ModuleConfig, errs FieldErrors) {
+	for k, v := range logProblems(&c.Log) {
+		errs[k] = strings.Join(v, "\n")
+	}
+	port := c.Log.SyslogPort
+	if port <= 0 || port > 65535 {
+		return
+	}
+	list := c.Services
+	if c.Profile != ProfileCustom {
+		list = Profiles[c.Profile]
+	}
+	for _, s := range list {
+		if s.Port == port {
+			errs["syslog_port"] = "honeypot.err.syslog_trap|" + strconv.Itoa(port) + "|" + s.Service
+			return
+		}
+	}
+	others := m.othersProto(ctx, "")
+	for _, proto := range []ports.Proto{ports.UDP, ports.TCP} {
+		if o, ok := portConflictProto(others, proto, port); ok && o.Active {
+			errs["syslog_port"] = "honeypot.err.port_used|" + strconv.Itoa(port) + "/" + string(proto) + "|" + o.Owner + " (" + o.Purpose + ")"
+			return
+		}
+	}
 }
 
 // loadConfig liest die Einstellung (fehlt sie oder ist sie kaputt: Standard).
@@ -544,6 +835,14 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	}
 	_, err := m.SaveConfig(ctx, c)
 	var fe FieldErrors
+	if errors.As(err, &fe) && fe["syslog_port"] != "" && c.Log.SyslogPort != 0 {
+		// Syslog-Port hier belegt: Syslog aus, den Rest uebernehmen (Fehler wird gemeldet)
+		skipped := "syslog_port: " + fe["syslog_port"]
+		c.Log.SyslogPort = 0
+		if _, err = m.SaveConfig(ctx, c); err == nil {
+			return 1, fmt.Errorf("honeypot: %s", skipped)
+		}
+	}
 	if errors.As(err, &fe) && len(fe) == 1 && fe["services"] != "" && c.Profile == ProfileCustom {
 		// nur Port-Konflikte u. ae. bei eigenen Diensten: die gueltigen uebernehmen
 		others := m.others(ctx)

@@ -437,3 +437,95 @@ func TestHoneypotRunReport(t *testing.T) {
 		t.Fatalf("no report expected within the first minute, got %d", n)
 	}
 }
+
+// TestHoneypotModeLogsFromEnv: Log-Sensor und Syslog nur aus NODE64_HONEYPOT_LOGS/_SYSLOG_*; Profile schalten ihn
+// nicht ein (H5).
+func TestHoneypotModeLogsFromEnv(t *testing.T) {
+	for _, p := range []string{"minimal", "standard", "full"} {
+		hc, err := honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_PROFILE": p}))
+		if err != nil || len(hc.Sensor.Log.Files) != 0 || hc.Sensor.Log.SyslogPort != 0 {
+			t.Fatalf("profile %s must not enable the log sensor: %+v %v", p, hc.Sensor.Log, err)
+		}
+	}
+	hc, err := honeypotModeFromEnv(hpEnv(map[string]string{
+		"NODE64_HONEYPOT_LOGS":         " /host/log/auth.log=syslog, /host/log/nginx/*access.log=NGINX,/var/log/x/../mail.log ,",
+		"NODE64_HONEYPOT_SYSLOG_PORT":  "514",
+		"NODE64_HONEYPOT_SYSLOG_ALLOW": "192.168.1.1, 10.0.0.0/8 fd00::/8",
+	}))
+	if err == nil {
+		t.Fatal(".. in a path must be rejected")
+	}
+	hc, err = honeypotModeFromEnv(hpEnv(map[string]string{
+		"NODE64_HONEYPOT_LOGS":         " /host/log/auth.log=syslog, /host/log/nginx/*access.log=NGINX,/var/log/mail.log ,",
+		"NODE64_HONEYPOT_SYSLOG_PORT":  "514",
+		"NODE64_HONEYPOT_SYSLOG_ALLOW": "192.168.1.1, 10.0.0.0/8 fd00::/8",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lc := hc.Sensor.Log
+	want := []honeypot.LogFile{{Path: "/host/log/auth.log", Format: "syslog"}, {Path: "/host/log/nginx/*access.log", Format: "nginx"}, {Path: "/var/log/mail.log"}}
+	if len(lc.Files) != len(want) || lc.SyslogPort != 514 || strings.Join(lc.SyslogAllow, " ") != "192.168.1.1/32 10.0.0.0/8 fd00::/8" {
+		t.Fatalf("logs: %+v", lc)
+	}
+	for i := range want {
+		if lc.Files[i] != want[i] {
+			t.Fatalf("file %d: %+v, want %+v", i, lc.Files[i], want[i])
+		}
+	}
+	bad := []map[string]string{
+		{"NODE64_HONEYPOT_LOGS": "auth.log"},               // nicht absolut
+		{"NODE64_HONEYPOT_LOGS": "/etc/shadow"},            // ausserhalb der Wurzeln
+		{"NODE64_HONEYPOT_LOGS": "/data/node64.db"},        // ausserhalb der Wurzeln
+		{"NODE64_HONEYPOT_LOGS": "/host/log/a.log=exotic"}, // Format unbekannt
+		{"NODE64_HONEYPOT_LOGS": "/host/log/a.log,/host/log/a.log"},
+		{"NODE64_HONEYPOT_SYSLOG_PORT": "70000"},
+		{"NODE64_HONEYPOT_SYSLOG_PORT": "x"},
+		{"NODE64_HONEYPOT_SYSLOG_PORT": "22"},   // Fallen-Port (Profil standard)
+		{"NODE64_HONEYPOT_SYSLOG_PORT": "9064"}, // Info-Port
+		{"NODE64_HONEYPOT_SYSLOG_ALLOW": "192.168.1.300"},
+	}
+	for _, m := range bad {
+		if _, err := honeypotModeFromEnv(hpEnv(m)); err == nil {
+			t.Errorf("%v: expected error", m)
+		}
+	}
+	var many []string
+	for i := 0; i <= honeypot.LogMaxFiles; i++ {
+		many = append(many, "/host/log/f"+strconv.Itoa(i)+".log")
+	}
+	if _, err := honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_LOGS": strings.Join(many, ",")})); err == nil {
+		t.Error("too many files accepted")
+	}
+}
+
+// fakeLogs fuer den Info-Server.
+type fakeLogs struct{ st honeypot.LogStatus }
+
+func (f *fakeLogs) Status() honeypot.LogStatus { return f.st }
+
+func TestHPInfoLogs(t *testing.T) {
+	h, _ := newTestHPInfo(t, "")
+	// ohne Log-Sensor: Abschnitt zeigt "aus"
+	w := hpDo(h, "GET", "/", "127.0.0.1:1", map[string]string{"Accept-Language": "de"})
+	if body := w.Body.String(); !strings.Contains(body, "Log-Sensor und Syslog") || !strings.Contains(body, "aus (NODE64_HONEYPOT_SYSLOG_PORT)") {
+		t.Fatalf("page without logs:\n%s", body)
+	}
+	h.logs = &fakeLogs{st: honeypot.LogStatus{Files: []honeypot.LogFileStatus{{Path: "/host/log/auth.log", Format: "syslog", OK: true, Lines: 12},
+		{Path: "/host/log/secure", Error: "open /host/log/secure: permission denied"}},
+		Syslog: &honeypot.SyslogStatus{Port: 514, UDP: true, TCP: true, Messages: 7, Denied: 2}, Lines: 19}}
+	body := hpDo(h, "GET", "/", "127.0.0.1:1", map[string]string{"Accept-Language": "de"}).Body.String()
+	for _, s := range []string{"/host/log/auth.log", "wird gelesen", "permission denied", "--group-add 4", "Port 514 UDP TCP", "Nachrichten: 7", "abgewiesen: 2",
+		"nur IP, Art, Dienst, Port, Anzahl und Regel"} {
+		if !strings.Contains(body, s) {
+			t.Errorf("page lacks %q", s)
+		}
+	}
+	body = hpDo(h, "GET", "/metrics", "127.0.0.1:1", nil).Body.String()
+	for _, s := range []string{"node64_honeypot_log_lines_total 12", `node64_honeypot_log_file_ok{path="/host/log/auth.log"} 1`,
+		`node64_honeypot_log_file_ok{path="/host/log/secure"} 0`, "node64_honeypot_syslog_messages_total 7", "node64_honeypot_syslog_denied_total 2"} {
+		if !strings.Contains(body, s) {
+			t.Errorf("metrics lack %q\n%s", s, body)
+		}
+	}
+}

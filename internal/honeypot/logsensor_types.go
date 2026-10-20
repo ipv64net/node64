@@ -44,10 +44,10 @@ const (
 
 // LogLine ist eine Zeile aus einer Datei oder eine Syslog-Nachricht, schon zerlegt.
 type LogLine struct {
-	Time    time.Time // aus der Zeile, sonst Empfangszeit (UTC)
-	Origin  string    // SrcLog (Datei) oder SrcSyslog
-	File    string    // Datei bzw. "udp://<absender>" / "tcp://<absender>" (nur lokal, fuer Fehlersuche)
-	Format  string    // Hinweis auf das Format der Quelle: "syslog" (auth.log, mail.log, Syslog-Nachricht), "nginx", "apache",
+	Time   time.Time // aus der Zeile, sonst Empfangszeit (UTC)
+	Origin string    // SrcLog (Datei) oder SrcSyslog
+	File   string    // Datei bzw. "udp://<absender>" / "tcp://<absender>" (nur lokal, fuer Fehlersuche)
+	Format string    // Hinweis auf das Format der Quelle: "syslog" (auth.log, mail.log, Syslog-Nachricht), "nginx", "apache",
 	//                     "caddy" (JSON), "nextcloud" (JSON), "vaultwarden", "gitea", "proxmox", "homeassistant", "" = unbekannt
 	Host    string // Hostname aus dem Syslog-Kopf ("" wenn keiner)
 	Program string // Programm/Tag aus dem Syslog-Kopf ohne PID, z. B. "sshd", "postfix/smtpd", "dovecot", "filterlog"

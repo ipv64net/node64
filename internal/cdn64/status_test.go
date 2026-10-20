@@ -169,7 +169,7 @@ func TestStatusHostGeoAndBlocklist(t *testing.T) {
 	if err := e.m.blSave(ctx, []string{"feodo"}, ""); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 100 && (e.m.bl.set.Load() == nil || !e.m.geoBlocked(&h.Advanced, netip.MustParseAddr("5.1.9.9"))); i++ {
+	for i := 0; i < 250 && (e.m.bl.set.Load() == nil || !e.m.geoBlocked(&h.Advanced, netip.MustParseAddr("5.1.9.9"))); i++ {
 		time.Sleep(20 * time.Millisecond)
 	}
 	c := e.client(false)

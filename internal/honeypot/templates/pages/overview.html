@@ -4,8 +4,8 @@
 	<h1 class="h4 mb-0"><i class="bi bi-bug text-primary"></i> {{.T "honeypot.title"}}{{.Doc "honeypot"}}</h1>
 	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "honeypot.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "honeypot.running" "profile" (.T (printf "honeypot.profile.%s" $d.Profile))}}</span>{{end}}
 	<div class="btn-group btn-group-sm ms-auto" role="group" aria-label="{{.T "honeypot.range"}}">
-		<a class="btn btn-outline-secondary{{if eq $d.Range "24h"}} active{{end}}" href="/honeypot">{{.T "honeypot.range_24h"}}</a>
-		<a class="btn btn-outline-secondary{{if eq $d.Range "7d"}} active{{end}}" href="/honeypot?range=7d">{{.T "honeypot.range_7d"}}</a>
+		<a class="btn btn-outline-secondary{{if eq $d.Range "24h"}} active{{end}}" href="/honeypot{{with $d.Source}}?source={{.}}{{end}}">{{.T "honeypot.range_24h"}}</a>
+		<a class="btn btn-outline-secondary{{if eq $d.Range "7d"}} active{{end}}" href="/honeypot?range=7d{{with $d.Source}}&amp;source={{.}}{{end}}">{{.T "honeypot.range_7d"}}</a>
 	</div>
 </div>
 <ul class="nav nav-tabs mb-3">
@@ -56,6 +56,12 @@
 					{{if $d.Report.LastError}}· <span class="text-danger" title="{{$d.Report.LastError}}">{{.T "honeypot.report.last_error"}}: {{.Time $d.Report.LastErrorAt}}</span>{{end}}
 					{{else}}<a href="/honeypot/settings">{{if $d.Report.KeySet}}{{.T "honeypot.report.off"}}{{else}}{{.T "honeypot.report.nokey"}}{{end}}</a>{{end}}
 				</div>
+				<div class="small text-body-secondary mt-1" id="logs-line"><i class="bi bi-journal-text"></i> {{.T "honeypot.logs.title"}}:
+					{{if or $d.Logs.Files $d.Logs.Syslog}}{{$ok := 0}}{{$bad := 0}}{{range $d.Logs.Files}}{{if .OK}}{{$ok = add $ok 1}}{{else}}{{$bad = add $bad 1}}{{end}}{{end}}
+					{{.T "honeypot.logs.files_state" "ok" $ok "total" (len $d.Logs.Files)}}{{if $bad}} · <a class="text-danger" href="/honeypot/settings#logs-status">{{.T "honeypot.logs.files_errors" "count" $bad}}</a>{{end}}
+					{{with $d.Logs.Syslog}}· {{$.T "honeypot.logs.syslog"}}: {{if .Error}}<a class="text-danger" href="/honeypot/settings#logs-status">{{$.T "honeypot.services.error"}}</a>{{else}}{{$.T "honeypot.logs.syslog_on" "port" .Port}} ({{$.Int .Messages}}){{end}}{{end}}
+					{{else}}<a href="/honeypot/settings#logs">{{.T "honeypot.report.off"}}</a>{{end}}
+				</div>
 			</div>
 		</div>
 	</div>
@@ -95,16 +101,23 @@
 </div>
 
 <div class="card">
-	<div class="card-header"><i class="bi bi-list-ul text-primary"></i> {{.T "honeypot.events.title"}}{{.Doc "honeypot#ereignisse"}}</div>
+	<div class="card-header d-flex flex-wrap align-items-center gap-2"><span><i class="bi bi-list-ul text-primary"></i> {{.T "honeypot.events.title"}}{{.Doc "honeypot#ereignisse"}}</span>
+		<div class="btn-group btn-group-sm ms-auto" role="group" aria-label="{{.T "honeypot.events.filter"}}">
+			<a class="btn btn-outline-secondary{{if not $d.Source}} active{{end}}" href="/honeypot{{if eq $d.Range "7d"}}?range=7d{{end}}">{{.T "honeypot.events.filter_all"}}</a>
+			{{range $d.Sources}}<a class="btn btn-outline-secondary{{if eq $d.Source .}} active{{end}}" href="/honeypot?source={{.}}{{if eq $d.Range "7d"}}&amp;range=7d{{end}}">{{$.T (printf "honeypot.origin.%s" .)}}</a>{{end}}
+		</div>
+	</div>
 	<div class="card-body p-0">
 		{{if $d.Events}}<div class="table-responsive"><table class="table table-sm table-hover align-middle small mb-0">
-			<thead><tr><th>{{.T "honeypot.events.time"}}</th><th>{{.T "honeypot.events.source"}}</th><th>{{.T "honeypot.events.service"}}</th><th>{{.T "honeypot.events.kind"}}</th><th>{{.T "honeypot.events.details"}}</th></tr></thead>
+			<thead><tr><th>{{.T "honeypot.events.time"}}</th><th>{{.T "honeypot.events.source"}}</th><th>{{.T "honeypot.events.origin"}}</th><th>{{.T "honeypot.events.service"}}</th><th>{{.T "honeypot.events.kind"}}</th><th>{{.T "honeypot.events.details"}}</th></tr></thead>
 			<tbody>{{range $d.Events}}<tr>
 				<td class="text-nowrap">{{$.Time .Time}}</td>
 				<td class="font-monospace text-nowrap">{{.Src}}{{if .SrcPort}}<span class="text-body-secondary">:{{.SrcPort}}</span>{{end}}</td>
+				<td class="text-nowrap"><span class="badge {{if eq .Source "honeypot"}}text-bg-primary{{else}}text-bg-info{{end}}">{{$.T (printf "honeypot.origin.%s" .Source)}}</span></td>
 				<td class="text-nowrap"><span class="text-uppercase">{{.Service}}</span> <span class="font-monospace text-body-secondary">{{.Port}}</span></td>
 				<td><span class="badge text-bg-light font-monospace">{{.Kind}}</span></td>
 				<td class="text-break" style="max-width:28rem">
+					{{with .Rule}}<div><i class="bi bi-funnel text-body-secondary"></i> {{$.T "honeypot.events.rule"}}: <span class="font-monospace">{{.}}</span></div>{{end}}
 					{{if or .Username .Password}}<div><i class="bi bi-person-lock text-body-secondary"></i> <span class="font-monospace">{{.Username}}</span> / <span class="font-monospace">{{.Password}}</span></div>{{end}}
 					{{if or .Method .Path}}<div class="font-monospace">{{.Method}} {{.Path}}{{with .Host}} <span class="text-body-secondary">({{.}})</span>{{end}}</div>{{end}}
 					{{with .UA}}<div class="text-body-secondary"><i class="bi bi-window"></i> {{.}}</div>{{end}}

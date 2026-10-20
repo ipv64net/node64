@@ -3898,6 +3898,9 @@
             "type": "boolean",
             "default": false,
             "description": "Meldung an ipv64 (Opt-in): alle 10 Minuten Quell-IPs, Arten, Ports, Zugangsdaten aus dem Honeypot, Pfade, User-Agents und Payload-Anfang; nie die eigene IP, keine privaten/reservierten Quellen. Einschalten nur mit eingetragenem zentralem API-Key (sonst 400 mit fields.report)."
+          },
+          "log": {
+            "$ref": "#/components/schemas/Honeypot64LogConfig"
           }
         }
       },
@@ -4004,6 +4007,9 @@
           },
           "report": {
             "$ref": "#/components/schemas/Honeypot64ReportStatus"
+          },
+          "logs": {
+            "$ref": "#/components/schemas/Honeypot64LogStatus"
           }
         }
       },
@@ -4108,6 +4114,13 @@
                 }
               }
             }
+          },
+          "by_source": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Count"
+            },
+            "description": "Ereignisse je Sensor (honeypot, log, syslog)"
           }
         }
       },
@@ -4167,6 +4180,18 @@
           "payload_text": {
             "type": "string",
             "description": "Go-Escapes (\\x00, \\r\\n …), nur ASCII"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "honeypot",
+              "log",
+              "syslog"
+            ]
+          },
+          "rule": {
+            "type": "string",
+            "description": "Regel bei log/syslog, z. B. sshd/bruteforce@1"
           }
         }
       },
@@ -4235,6 +4260,127 @@
               "type": "integer"
             },
             "description": "Gruende dazu mit Anzahl, z. B. {\"not_public\": 3}"
+          }
+        }
+      },
+      "Honeypot64LogFile": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absoluter Pfad oder Muster (Glob) unter /host/log, /var/log oder /data/logs"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "",
+              "auto",
+              "syslog",
+              "nginx",
+              "apache",
+              "caddy",
+              "nextcloud",
+              "vaultwarden",
+              "gitea",
+              "proxmox",
+              "homeassistant"
+            ],
+            "description": "leer/auto = automatisch"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "Honeypot64LogConfig": {
+        "type": "object",
+        "description": "Log-Sensor und Syslog-Empfaenger (H5). Aus echten Logs werden nur IP, Art, Dienst, Port, Anzahl und Regel gespeichert und gemeldet.",
+        "properties": {
+          "files": {
+            "type": "array",
+            "maxItems": 32,
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64LogFile"
+            }
+          },
+          "syslog_port": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 65535,
+            "description": "0 = aus; UDP und TCP"
+          },
+          "syslog_allow": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "type": "string"
+            },
+            "description": "Erlaubte Absender (IP/CIDR); leer = private Netze und localhost"
+          }
+        }
+      },
+      "Honeypot64LogStatus": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "format": {
+                  "type": "string"
+                },
+                "ok": {
+                  "type": "boolean"
+                },
+                "error": {
+                  "type": "string"
+                },
+                "lines": {
+                  "type": "integer"
+                },
+                "last": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "syslog": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "port": {
+                "type": "integer"
+              },
+              "udp": {
+                "type": "boolean"
+              },
+              "tcp": {
+                "type": "boolean"
+              },
+              "error": {
+                "type": "string"
+              },
+              "messages": {
+                "type": "integer"
+              },
+              "denied": {
+                "type": "integer"
+              }
+            }
+          },
+          "lines": {
+            "type": "integer"
+          },
+          "hits": {
+            "type": "integer"
+          },
+          "events": {
+            "type": "integer"
           }
         }
       }
@@ -15014,6 +15160,19 @@
               "type": "integer",
               "default": 50,
               "maximum": 1000
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "description": "Nur Ereignisse dieses Sensors (ungueltig = 400).",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "honeypot",
+                "log",
+                "syslog"
+              ]
             }
           }
         ],

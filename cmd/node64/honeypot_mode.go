@@ -181,10 +181,16 @@ func honeypotRun(ctx context.Context, cfg *config.Config, hc *hpModeConfig, base
 		}
 	}
 
+	sink := honeypot.CountEvents(hpStore.Sink()) // Zaehler fuer /metrics
 	sensor := honeypot.NewSensor(base, dir)
-	status := sensor.Apply(ctx, hc.Sensor, honeypot.CountEvents(hpStore.Sink())) // Zaehler fuer /metrics
+	trap := hc.Sensor
+	trap.Log = honeypot.LogConfig{} // Log-Sensor laeuft getrennt (unten)
+	status := sensor.Apply(ctx, trap, sink)
 	logServiceStatus(log, hc.Sensor.Services, status)
 	defer sensor.Stop() // laeuft vor dem Beenden des Speichers (defer in umgekehrter Reihenfolge)
+	logs := honeypot.NewLogSensor(base)
+	logLogStatus(log, hc.Sensor.Log, logs.Apply(ctx, hc.Sensor.Log, sink)) // leer = aus, oeffnet nichts
+	defer logs.Stop()
 
 	info := ""
 	var srv *http.Server
@@ -194,6 +200,7 @@ func honeypotRun(ctx context.Context, cfg *config.Config, hc *hpModeConfig, base
 			return fmt.Errorf("honeypot info port %d: %w", hc.InfoPort, err)
 		}
 		h := newHPInfo(hc, sensor, hpStore, st, rep, Version)
+		h.logs = logs
 		srv = &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second,
 			IdleTimeout: 60 * time.Second, MaxHeaderBytes: 8 << 10, ErrorLog: slog.NewLogLogger(base.Handler(), slog.LevelDebug)}
 		go func() {
@@ -255,6 +262,36 @@ func logServiceStatus(log *slog.Logger, want []honeypot.Service, status []honeyp
 	log.Info("honeypot services ready", "open", strings.Join(open, ", "))
 }
 
+// logLogStatus fasst beim Start den Log-Sensor und den Syslog-Empfaenger zusammen (nichts eingestellt = eine Zeile).
+func logLogStatus(log *slog.Logger, cfg honeypot.LogConfig, st honeypot.LogStatus) {
+	if len(cfg.Files) == 0 && cfg.SyslogPort == 0 {
+		log.Info("log sensor and syslog receiver off (NODE64_HONEYPOT_LOGS, NODE64_HONEYPOT_SYSLOG_PORT)")
+		return
+	}
+	var ok, bad []string
+	for _, f := range st.Files {
+		if f.OK {
+			ok = append(ok, f.Path)
+		} else {
+			bad = append(bad, f.Path+" ("+f.Error+")")
+		}
+	}
+	switch {
+	case len(bad) > 0:
+		log.Warn("log sensor: some files not readable (mount -v /var/log:/host/log:ro, --group-add 4 for auth.log)",
+			"ok", strings.Join(ok, ", "), "not_ok", strings.Join(bad, ", "))
+	case len(cfg.Files) > 0:
+		log.Info("log sensor reading", "files", strings.Join(ok, ", "))
+	}
+	if sl := st.Syslog; cfg.SyslogPort > 0 && sl != nil {
+		if sl.Error != "" {
+			log.Error("syslog receiver not open", "port", cfg.SyslogPort, "err", sl.Error)
+		} else {
+			log.Info("syslog receiver listening", "port", sl.Port, "udp", sl.UDP, "tcp", sl.TCP, "allow", strings.Join(cfg.SyslogAllow, ","))
+		}
+	}
+}
+
 // honeypotModeFromEnv liest die Einstellung aus der Umgebung (getenv: os.Getenv, in Tests eine Tabelle).
 func honeypotModeFromEnv(getenv func(string) string) (*hpModeConfig, error) {
 	get := func(k string) string { return strings.TrimSpace(getenv(k)) }
@@ -311,7 +348,48 @@ func honeypotModeFromEnv(getenv func(string) string) (*hpModeConfig, error) {
 	if hc.Report && !ipv64api.KeyRe.MatchString(hc.IPv64Key) {
 		return nil, errors.New("NODE64_IPV64_KEY is not a valid ipv64 API key (16 to 64 letters and digits)")
 	}
+	if err := parseHPLogs(get, hc); err != nil {
+		return nil, err
+	}
 	return hc, nil
+}
+
+// parseHPLogs liest Log-Sensor und Syslog-Empfaenger (H5): NODE64_HONEYPOT_LOGS ("pfad[=format],…"),
+// NODE64_HONEYPOT_SYSLOG_PORT (leer/0 = aus), NODE64_HONEYPOT_SYSLOG_ALLOW (CIDR-Liste, leer = private Netze).
+// Kein Profil schaltet den Log-Sensor ein: ohne Mount gaebe es nur Fehler.
+func parseHPLogs(get func(string) string, hc *hpModeConfig) error {
+	lc := &hc.Sensor.Log
+	for _, item := range strings.Split(get("NODE64_HONEYPOT_LOGS"), ",") {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		f := honeypot.LogFile{Path: item}
+		if i := strings.LastIndexByte(item, '='); i >= 0 {
+			f.Path, f.Format = strings.TrimSpace(item[:i]), strings.TrimSpace(item[i+1:])
+		}
+		lc.Files = append(lc.Files, f)
+	}
+	if v := get("NODE64_HONEYPOT_SYSLOG_PORT"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 || n > 65535 {
+			return fmt.Errorf("NODE64_HONEYPOT_SYSLOG_PORT must be 0 (off) or a port number up to 65535, got %q", v)
+		}
+		lc.SyslogPort = n
+	}
+	lc.SyslogAllow = strings.FieldsFunc(get("NODE64_HONEYPOT_SYSLOG_ALLOW"), func(r rune) bool { return r == ',' || r == ' ' || r == ';' })
+	if err := honeypot.ValidateLogConfig(lc); err != nil {
+		return fmt.Errorf("NODE64_HONEYPOT_LOGS / NODE64_HONEYPOT_SYSLOG_*: %w", err)
+	}
+	if p := lc.SyslogPort; p > 0 {
+		if slices.ContainsFunc(hc.Sensor.Services, func(s honeypot.Service) bool { return s.Port == p }) {
+			return fmt.Errorf("NODE64_HONEYPOT_SYSLOG_PORT %d is also a honeypot port", p)
+		}
+		if p == hc.InfoPort {
+			return fmt.Errorf("NODE64_HONEYPOT_SYSLOG_PORT %d is also NODE64_HONEYPOT_INFO_PORT", p)
+		}
+	}
+	return nil
 }
 
 // parseHPServices liest "ssh:22,ssh:2222,http:80,https:443:wp-login,tcp:3389" (Dienst:Port[:Koeder]).
@@ -423,9 +501,15 @@ func honeypotHealthcheck(cfg *config.Config) int {
 // hpSensor ist der Teil des Sensors, den der Info-Server braucht (in Tests ersetzbar).
 type hpSensor = honeypot.SensorState
 
+// hpLogs ist der Teil des Log-Sensors, den der Info-Server braucht (*honeypot.LogSensor; nil = keiner).
+type hpLogs interface {
+	Status() honeypot.LogStatus
+}
+
 type hpInfo struct {
 	hc      *hpModeConfig
 	sensor  hpSensor
+	logs    hpLogs
 	store   *honeypot.Store
 	db      *store.Store
 	rep     *honeypot.Reporter
@@ -561,6 +645,10 @@ func (h *hpInfo) writeMetrics(ctx context.Context, w *metrics.Writer) {
 	w.Gauge("node64_honeypot_info", "Honeypot64 ohne Oberflaeche (Version, Profil).", 1, "version", h.version, "profile", h.profileLabel())
 	w.Gauge("node64_honeypot_uptime_seconds", "Sekunden seit dem Start des Modus ohne Oberflaeche.", time.Since(h.started).Seconds())
 	honeypot.WriteMetrics(w, h.sensor, h.store, h.rep, ctx)
+	if h.logs != nil {
+		st := h.logs.Status()
+		honeypot.WriteLogMetrics(w, &st)
+	}
 }
 
 func (h *hpInfo) profileLabel() string { return hpProfileLabel(h.hc) }
@@ -592,7 +680,7 @@ var (
 		sum := sha256.Sum256([]byte(hpInfoCSS))
 		return "default-src 'none'; style-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 	}()
-	hpInfoTmpl = template.Must(template.New("info").Funcs(template.FuncMap{"short": hpShort, "when": hpWhen}).Parse(`<!doctype html>
+	hpInfoTmpl = template.Must(template.New("info").Funcs(template.FuncMap{"short": hpShort, "when": hpWhen, "perm": hpPermErr}).Parse(`<!doctype html>
 <html lang="{{.Lang}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="60">
 <title>Honeypot64</title><style>` + hpInfoCSS + `</style></head><body><main>
@@ -621,8 +709,14 @@ var (
 {{if .Rep.LastError}}<tr><td>{{.T.LastErr}}</td><td class="bad">{{when .Rep.LastErrorAt}}: {{short .Rep.LastError}}</td></tr>{{end}}
 <tr><td>{{.T.SensorID}}</td><td class="k">{{.Rep.SensorID}}</td></tr>{{end}}
 </table></div></section>
+<section class="card"><h2>{{.T.Logs}}</h2><div class="tw"><table><tr><th>{{.T.File}}</th><th>{{.T.State}}</th><th>{{.T.Lines}}</th></tr>
+{{range .Logs.Files}}<tr><td class="k">{{short .Path}}{{if .Format}} ({{.Format}}){{end}}</td><td>{{if .OK}}<span class="ok">{{$.T.FileOK}}</span>{{else}}<span class="bad">{{$.T.FileErr}}{{if .Error}}: {{short .Error}}{{end}}</span>{{if perm .Error}}<br><span class="mut">{{$.T.PermHint}}</span>{{end}}{{end}}</td><td class="n">{{.Lines}}</td></tr>
+{{else}}<tr><td colspan="3" class="mut">{{$.T.Off}} (NODE64_HONEYPOT_LOGS)</td></tr>{{end}}
+<tr><td>Syslog</td><td colspan="2">{{with .Logs.Syslog}}{{if .Error}}<span class="bad">{{$.T.FileErr}} ({{.Port}}): {{short .Error}}</span>{{else}}<span class="ok">{{$.T.On}}</span> · Port {{.Port}}{{if .UDP}} UDP{{end}}{{if .TCP}} TCP{{end}} · {{$.T.Messages}}: {{.Messages}} · {{$.T.Denied}}: {{.Denied}}{{end}}{{else}}{{$.T.Off}} (NODE64_HONEYPOT_SYSLOG_PORT){{end}}</td></tr>
+</table></div><p class="mut">{{.T.LogNote}}</p></section>
 {{template "list" (.L .T.TopIPs .Week.TopSources)}}
 {{template "list" (.L .T.Kinds .Week.ByKind)}}
+{{template "list" (.L .T.Origins .Week.BySource)}}
 {{template "list" (.L .T.Ports .Week.ByPort)}}
 {{template "list" (.L .T.Creds .Week.TopCreds)}}
 {{template "list" (.L .T.Paths .Week.TopPaths)}}
@@ -638,6 +732,8 @@ var (
 type hpTexts struct {
 	Profile, Uptime, Hits24, Hits7, Src24, Src7, Logins7, StatsErr, Services, Service, State, Conns, Open, Closed, None,
 	Scan, On, Off, Report, NoKey, LastReport, Never, NextTry, RepSources, RepErrors, Rejected, LastErr, SensorID, TopIPs, Kinds, Ports, Creds, Paths, UAs, Foot string
+	// Log-Sensor und Syslog (H5)
+	Logs, File, Lines, FileOK, FileErr, PermHint, Messages, Denied, LogNote, Origins string
 }
 
 var hpTextsByLang = map[string]hpTexts{
@@ -647,14 +743,20 @@ var hpTextsByLang = map[string]hpTexts{
 		Report: "Meldung an ipv64", NoKey: "kein NODE64_IPV64_KEY", LastReport: "Letzte Meldung", Never: "noch keine", NextTry: "Nächster Versuch",
 		RepSources: "Gemeldete Quell-IPs heute / seit Start", RepErrors: "Fehler seit Start", Rejected: "Zuletzt von ipv64 abgelehnte Quellen", LastErr: "Letzter Fehler", SensorID: "Sensor-Kennung", TopIPs: "Top-IPs (7 Tage)",
 		Kinds: "Arten (7 Tage)", Ports: "Ports (7 Tage)", Creds: "Zugangsdaten (7 Tage)", Paths: "Pfade (7 Tage)", UAs: "User-Agents (7 Tage)",
-		Foot: "Nur lesend. Aktualisiert sich jede Minute. Prometheus: /metrics"},
+		Foot: "Nur lesend. Aktualisiert sich jede Minute. Prometheus: /metrics",
+		Logs: "Log-Sensor und Syslog", File: "Datei", Lines: "Zeilen", FileOK: "wird gelesen", FileErr: "Fehler",
+		PermHint: "Keine Leserechte: Container mit --group-add 4 (Gruppe adm) starten.", Messages: "Nachrichten", Denied: "abgewiesen",
+		LogNote: "Aus echten Logs werden nur IP, Art, Dienst, Port, Anzahl und Regel gemeldet.", Origins: "Quellen (7 Tage)"},
 	"en": {Profile: "Profile", Uptime: "Uptime", Hits24: "Hits 24 h", Hits7: "Hits 7 days", Src24: "Source IPs 24 h", Src7: "Source IPs 7 days",
 		Logins7: "Login attempts 7 days", StatsErr: "Statistics currently not readable.", Services: "Services", Service: "Service", State: "State",
 		Conns: "Connections", Open: "open", Closed: "not open", None: "none", Scan: "Port scan detection", On: "on", Off: "off",
 		Report: "Reporting to ipv64", NoKey: "no NODE64_IPV64_KEY", LastReport: "Last report", Never: "none yet", NextTry: "Next attempt",
 		RepSources: "Reported source IPs today / since start", RepErrors: "Errors since start", Rejected: "Sources last rejected by ipv64", LastErr: "Last error", SensorID: "Sensor ID", TopIPs: "Top IPs (7 days)",
 		Kinds: "Kinds (7 days)", Ports: "Ports (7 days)", Creds: "Credentials (7 days)", Paths: "Paths (7 days)", UAs: "User agents (7 days)",
-		Foot: "Read only. Refreshes every minute. Prometheus: /metrics"},
+		Foot: "Read only. Refreshes every minute. Prometheus: /metrics",
+		Logs: "Log sensor and syslog", File: "File", Lines: "Lines", FileOK: "reading", FileErr: "error",
+		PermHint: "No read permission: start the container with --group-add 4 (group adm).", Messages: "messages", Denied: "denied",
+		LogNote: "From real logs only IP, kind, service, port, count and rule are reported.", Origins: "Sources (7 days)"},
 }
 
 type hpList struct {
@@ -669,6 +771,7 @@ type hpPage struct {
 	Err, Scan, Key                 bool
 	Services                       []honeypot.ServiceStatus
 	Rep                            honeypot.ReportStatus
+	Logs                           honeypot.LogStatus
 }
 
 // L baut eine Rangliste fuer das Untertemplate "list".
@@ -684,6 +787,9 @@ func (h *hpInfo) page(w http.ResponseWriter, r *http.Request) {
 		Day: day, Week: week, Err: err != nil, Scan: h.hc.Sensor.Scan, Key: h.hc.IPv64Key != "", Services: h.sensor.Status()}
 	if h.rep != nil {
 		p.Rep = h.rep.Status(r.Context())
+	}
+	if h.logs != nil {
+		p.Logs = h.logs.Status()
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if r.Method == http.MethodHead {
@@ -725,6 +831,9 @@ func hpUptime(d time.Duration) string {
 
 // hpWhen: Zeitpunkt in der Zeitzone des Containers (TZ), mit Zone.
 func hpWhen(t time.Time) string { return t.Local().Format("2006-01-02 15:04:05 MST") }
+
+// hpPermErr: Fehler beim Lesen einer Log-Datei sind fehlende Rechte (Hinweis auf --group-add 4).
+func hpPermErr(err string) bool { return strings.Contains(strings.ToLower(err), "permission denied") }
 
 // hpShort kuerzt Angreifer-Texte fuer die Anzeige (Steuerzeichen raus, hoechstens 120 Zeichen).
 func hpShort(s string) string {

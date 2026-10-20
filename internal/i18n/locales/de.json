@@ -1340,7 +1340,9 @@
       "peer_url": "Adresse in der Gruppe geändert",
       "peer_remove": "Mitglied entfernt",
       "honeypot_config": "Honeypot64-Einstellungen geändert",
-      "honeypot_clear": "Honeypot64-Ereignisse gelöscht"
+      "honeypot_clear": "Honeypot64-Ereignisse gelöscht",
+      "honeypot_watch_add": "Frühwarnung: Netz eingetragen",
+      "honeypot_watch_delete": "Frühwarnung: Netz entfernt"
     }
   },
   "logs": {
@@ -2297,7 +2299,8 @@
       "cdn64_online_blocked": "🟠 CDN64: {name} bei ipv64 gesperrt",
       "cluster_down": "🔴 Cluster: Node {name} nicht erreichbar",
       "cluster_up": "🟢 Cluster: Node {name} wieder erreichbar",
-      "honeypot_new": "🐞 Honeypot64: neue Angreifer"
+      "honeypot_new": "🐞 Honeypot64: neue Angreifer",
+      "honeypot_watch": "🚨 Honeypot64-Frühwarnung: {name} als Angreifer aufgefallen"
     },
     "body": {
       "quota_used": "Verbraucht: {used} von {limit} Online-Messungen heute",
@@ -3105,7 +3108,8 @@
     "title": "Honeypot64",
     "tab": {
       "overview": "Übersicht",
-      "settings": "Einstellungen"
+      "settings": "Einstellungen",
+      "watch": "Frühwarnung"
     },
     "since": "läuft seit {time}",
     "running": "aktiv · Profil {profile}",
@@ -3173,7 +3177,8 @@
       "credentials": "Zugangsdaten",
       "paths": "Pfade",
       "user_agents": "User-Agents",
-      "empty": "Keine Einträge."
+      "empty": "Keine Einträge.",
+      "origins": "Sensoren (Honeypot, Log, Syslog)"
     },
     "events": {
       "title": "Letzte Ereignisse",
@@ -3184,7 +3189,11 @@
       "details": "Details",
       "page": "Köder",
       "payload": "Payload",
-      "empty": "Noch keine Ereignisse."
+      "empty": "Noch keine Ereignisse.",
+      "origin": "Sensor",
+      "rule": "Regel",
+      "filter": "Nach Sensor filtern",
+      "filter_all": "Alle"
     },
     "settings": {
       "title": "Einstellungen",
@@ -3209,7 +3218,7 @@
       "about_text": "Die Fallen-Dienste nehmen Logins an und lehnen sie immer ab. Es wird nichts ausgeführt, nichts heruntergeladen und keine Verbindung nach außen aufgebaut. Jede Berührung ist verdächtig, weil auf diesen Ports kein echter Dienst läuft.",
       "prometheus": "Kennzahlen stehen unter /api/metrics (node64_honeypot_*).",
       "report": "An ipv64 melden",
-      "report_hint": "Alle 10 Minuten werden Quell-IPs, Arten, Ports, Zugangsdaten aus dem Honeypot (Benutzername und Passwort), Pfade, User-Agents und der Anfang von Payloads an ipv64 übertragen – nie die eigene IP und keine Quellen aus privaten oder reservierten Netzen. Die Daten fließen in die v64 Blocklist ein, sobald die Auswertung bei ipv64 läuft.",
+      "report_hint": "Alle 10 Minuten werden Quell-IPs, Arten, Ports, Zugangsdaten aus dem Honeypot (Benutzername und Passwort), Pfade, User-Agents und der Anfang von Payloads an ipv64 übertragen – nie die eigene IP und keine Quellen aus privaten oder reservierten Netzen. Aus echten Logs (Log-Sensor, Syslog) gehen nur IP, Art, Dienst, Port, Anzahl und Regel. Die Daten fließen in die v64 Blocklist ein.",
       "report_nokey": "Dafür braucht die Node den zentralen ipv64-API-Key.",
       "report_key_link": "API-Key eintragen"
     },
@@ -3239,7 +3248,16 @@
       "port_twice": "Port {v1} ist doppelt.",
       "page": "Köder „{v1}“ gibt es nicht oder er passt nicht zum Dienst (nur http/https).",
       "port_used": "Port {v1} ist belegt durch {v2}.",
-      "report_key": "Für die Meldung an ipv64 zuerst den API-Key in den Einstellungen eintragen."
+      "report_key": "Für die Meldung an ipv64 zuerst den API-Key in den Einstellungen eintragen.",
+      "log_path": "„{v1}“ ist kein absoluter Pfad (ohne .., ohne Steuerzeichen, gültiges Muster).",
+      "log_root": "„{v1}“ liegt außerhalb der erlaubten Ordner ({v2}).",
+      "log_format": "Format „{v1}“ gibt es nicht ({v2} oder automatisch).",
+      "log_twice": "{v1} ist doppelt.",
+      "log_many": "Höchstens {v1} Log-Dateien.",
+      "syslog_port": "Syslog-Port: leer bzw. 0 (aus) oder 1–65535.",
+      "syslog_trap": "Port {v1} nutzt schon der Fallen-Dienst {v2}.",
+      "syslog_allow": "„{v1}“ ist keine IP-Adresse und kein Netz (CIDR).",
+      "syslog_allow_many": "Höchstens {v1} erlaubte Absender."
     },
     "report": {
       "title": "Meldung an ipv64",
@@ -3254,6 +3272,103 @@
       "last_error": "Letzter Fehler",
       "rejected": "Zuletzt {count} Quellen von ipv64 abgelehnt: {reasons}",
       "sensor_id": "Sensor-Kennung"
+    },
+    "watch": {
+      "title": "Frühwarnung",
+      "intro": "Trag deine eigenen Netze ein: Fällt eine IP daraus bei ipv64 als Angreifer auf (meist ein gekapertes Gerät), meldet die Node das. Die Netze werden bei ipv64 gespeichert und dort nach jeder Bewertung geprüft; deine DynDNS-IPs sind automatisch dabei.",
+      "nokey": "Für die Frühwarnung braucht die Node den zentralen ipv64-API-Key.",
+      "auth_error": "ipv64 hat den API-Key abgelehnt. Prüfe den Key in den Einstellungen.",
+      "load_error": "Die Liste konnte nicht von ipv64 geladen werden:",
+      "networks": "Eigene Netze",
+      "limits": "{used} von {max} Netzen · IPv4 ab /{v4} · IPv6 ab /{v6}",
+      "cidr": "Netz (CIDR) oder IP",
+      "label": "Bezeichnung",
+      "label_placeholder": "z. B. Büro",
+      "verified": "Nachgewiesen",
+      "verified_hint": "ipv64 ordnet das Netz deinem Account zu: jede Sichtung wird gemeldet.",
+      "unverified_hint": "Ohne Nachweis meldet ipv64 nur IPs, die auf der v64 Blocklist stehen.",
+      "yes": "ja",
+      "no": "nein",
+      "created": "Eingetragen",
+      "delete": "Netz entfernen",
+      "delete_confirm": "{cidr} aus der Frühwarnung entfernen?",
+      "no_networks": "Noch keine Netze eingetragen.",
+      "full": "Alle {max} Netze deiner Account-Klasse sind belegt. Entferne ein Netz, um ein anderes einzutragen.",
+      "add": "Hinzufügen",
+      "add_hint": "Einzelne IP oder Netz, z. B. 203.0.113.0/24 oder 2001:db8:1::/48. Nur öffentliche Adressen.",
+      "dyndns": "DynDNS-IPs (automatisch)",
+      "dyndns_hint": "Die aktuellen IPs deiner DynDNS-Domains überwacht ipv64 automatisch. Sie gelten als nachgewiesen: jede Sichtung wird gemeldet.",
+      "ip": "IP",
+      "domain": "Domain",
+      "no_dyndns": "Keine DynDNS-IPs im Account.",
+      "status": "Abruf der Treffer",
+      "module_off": "Honeypot64 ist aus: Treffer werden nur über „Jetzt abrufen“ geholt.",
+      "last_success": "Letzter Abruf",
+      "next": "Nächster Abruf",
+      "total": "Treffer insgesamt",
+      "auth_backoff": "Der API-Key wurde abgelehnt. Mit demselben Key fragt die Node nur noch alle 6 Stunden; ein neuer Key oder „Jetzt abrufen“ versucht es sofort.",
+      "check": "Jetzt abrufen",
+      "about": "So funktioniert die Frühwarnung",
+      "about_unverified": "Netze ohne Nachweis melden nur IPs, die auf der v64 Blocklist stehen (die ist ohnehin öffentlich). So kann niemand fremde Netze eintragen und ausspähen.",
+      "about_dyndns": "Deine DynDNS-IPs und nachgewiesene Netze melden jede Sichtung durch einen Sensor, auch unterhalb der Schwelle der Blocklist.",
+      "about_notify": "Die Node holt die Treffer alle 30 Minuten ab und schickt je Abruf eine gebündelte Benachrichtigung über deine Kanäle. Einen eigenen Sensor brauchst du dafür nicht.",
+      "hits": "Letzte Treffer",
+      "time": "Zeit",
+      "network": "Netz",
+      "score": "Score",
+      "kinds": "Arten",
+      "seen": "Gesehen",
+      "listed": "v64",
+      "listed_hint": "Steht auf der v64 Blocklist",
+      "hits_hint": "Die Node speichert die letzten {count} Treffer.",
+      "no_hits": "Noch keine Treffer – gut so.",
+      "added": "{cidr} wird jetzt überwacht.",
+      "deleted": "{cidr} wird nicht mehr überwacht.",
+      "gone": "{cidr} war bei ipv64 schon nicht mehr eingetragen.",
+      "checked": "Abgerufen: {count} neue Treffer.",
+      "err": {
+        "invalid_cidr": "Keine gültige IP bzw. kein gültiges Netz (CIDR).",
+        "prefix_too_large": "Das Netz ist zu groß: IPv4 höchstens /{v4}, IPv6 höchstens /{v6}.",
+        "not_public": "Nur öffentliche Adressen lassen sich überwachen (keine privaten oder lokalen Netze).",
+        "duplicate": "Dieses Netz ist schon eingetragen.",
+        "limit_reached": "Limit erreicht: höchstens {max} Netze in deiner Account-Klasse.",
+        "label": "Die Bezeichnung ist zu lang (höchstens {chars} Zeichen).",
+        "not_found": "Das Netz ist bei ipv64 nicht (mehr) eingetragen.",
+        "invalid_id": "Ungültige Kennung.",
+        "api": "ipv64 meldet einen Fehler: {error}"
+      }
+    },
+    "logs": {
+      "title": "Log-Sensor und Syslog",
+      "intro": "Liest Logs echter Dienste (SSH, Webserver, Mail, Proxmox, Nextcloud, Vaultwarden …) und nimmt Syslog von Routern und Firewalls an. Mitgelieferte Regeln erkennen Angriffe erst ab einer Schwelle (z. B. 5 fehlgeschlagene Logins in 10 Minuten); erfolgreiche Anmeldungen setzen den Zähler zurück.",
+      "privacy": "Aus echten Logs werden nur IP, Art, Dienst, Port, Anzahl und Regel gespeichert und gemeldet – keine Benutzernamen, Passwörter, Pfade, User-Agents oder sonstigen Inhalte.",
+      "unsaved": "Vorschlag übernommen – noch nicht gespeichert.",
+      "files": "Log-Dateien",
+      "path": "Datei oder Muster",
+      "format": "Format",
+      "format_auto": "automatisch",
+      "files_hint": "Absolute Pfade bzw. Muster (z. B. /host/log/nginx/*access.log) unterhalb von {roots}; eine Zeile leeren entfernt die Datei. Die Logs des Hosts mit -v /var/log:/host/log:ro einbinden, für auth.log zusätzlich --group-add 4. journald nur über rsyslog oder Syslog-Weiterleitung.",
+      "suggest": "Vorschläge (fügt eine Zeile hinzu):",
+      "syslog_port": "Syslog-Port",
+      "syslog_allow": "Erlaubte Absender",
+      "syslog_hint": "UDP und TCP auf demselben Port, leer = aus (üblich 514). Absender als IP oder Netz (CIDR), je Zeile eins; leer = nur private Netze und localhost. UDP-Absender lassen sich fälschen – den Port nicht ins Internet freigeben.",
+      "status": "Zustand Log-Sensor und Syslog",
+      "no_files": "Keine Log-Dateien eingestellt.",
+      "lines": "Zeilen",
+      "ok": "wird gelesen",
+      "hint_perm": "Keine Leserechte – der Container braucht --group-add 4 (Gruppe adm).",
+      "hint_missing": "Datei fehlt – ist /var/log mit -v /var/log:/host/log:ro eingebunden?",
+      "syslog": "Syslog",
+      "syslog_on": "Port {port}",
+      "syslog_counts": "{messages} Nachrichten, {denied} abgewiesen",
+      "counts": "seit dem Start: {lines} Zeilen/Nachrichten, {events} Ereignisse",
+      "files_state": "{ok} von {total} Dateien werden gelesen",
+      "files_errors": "{count} mit Fehler"
+    },
+    "origin": {
+      "honeypot": "Honeypot",
+      "log": "Log",
+      "syslog": "Syslog"
     }
   }
 }

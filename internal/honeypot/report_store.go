@@ -56,8 +56,9 @@ func (s *Store) hasEvents(ctx context.Context, start, end time.Time) (bool, erro
 	return n > 0, err
 }
 
-// BuildReport baut den Bericht fuer [start, end): Quellen je (src, kind, service, port) mit Anzahl und erstem/letztem
-// Zeitpunkt, dazu Proben (Zugangsdaten, Pfade, User-Agents, Payloads), jeweils haeufigste zuerst und auf die Grenzen
+// BuildReport baut den Bericht fuer [start, end): Quellen je (src, kind, service, port, source, rule) mit Anzahl und
+// erstem/letztem Zeitpunkt, dazu Proben (Zugangsdaten, Pfade, User-Agents, Payloads; nur aus dem Honeypot), jeweils
+// haeufigste zuerst und auf die Grenzen
 // aus report_types.go gekuerzt (Rest in Dropped). ReportID und Sensor setzt der Aufrufer.
 func (s *Store) BuildReport(ctx context.Context, start, end time.Time) (*Report, error) {
 	start, end = start.UTC(), end.UTC()
@@ -91,17 +92,19 @@ func (s *Store) BuildReport(ctx context.Context, start, end time.Time) (*Report,
 	}
 	skip, _ := json.Marshal(private)
 	not := ` AND src <> '' AND src NOT IN (SELECT value FROM json_each(?))`
+	// Proben (Zugangsdaten, Pfade, User-Agents, Payloads) nur aus dem Honeypot, nie aus echten Logs (Plan Abschnitt 1b)
+	hp := not + ` AND source = 'honeypot'`
 
-	// Quellen (private IPs schon in SQL ausgeschlossen)
-	rows, err = r.QueryContext(ctx, `SELECT src, kind, service, port, COUNT(*) AS n, MIN(ts), MAX(ts), MAX(detail) FROM hp_events
-		WHERE ts >= ? AND ts < ?`+not+` GROUP BY src, kind, service, port ORDER BY n DESC, src, kind, service, port`, from, to, string(skip))
+	// Quellen (private IPs schon in SQL ausgeschlossen), je Quelle und Regel getrennt (H5)
+	rows, err = r.QueryContext(ctx, `SELECT src, kind, service, port, source, rule, COUNT(*) AS n, MIN(ts), MAX(ts), MAX(detail) FROM hp_events
+		WHERE ts >= ? AND ts < ?`+not+` GROUP BY src, kind, service, port, source, rule ORDER BY n DESC, src, kind, service, port, source, rule`, from, to, string(skip))
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var x ReportSource
 		var first, last string
-		if err := rows.Scan(&x.IP, &x.Kind, &x.Service, &x.Port, &x.Count, &first, &last, &x.Detail); err != nil {
+		if err := rows.Scan(&x.IP, &x.Kind, &x.Service, &x.Port, &x.Source, &x.Rule, &x.Count, &first, &last, &x.Detail); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -110,7 +113,11 @@ func (s *Store) BuildReport(ctx context.Context, start, end time.Time) (*Report,
 			continue
 		}
 		x.First, x.Last = storeParseTime(first), storeParseTime(last)
-		x.Source, x.Rule, x.Detail = "honeypot", "honeypot/"+x.Service+"@1", storeClip(x.Detail, reportDetailMax)
+		if x.Source == SrcHoneypot {
+			x.Rule, x.Detail = "honeypot/"+x.Service+"@1", storeClip(x.Detail, reportDetailMax)
+		} else {
+			x.Detail = "" // aus echten Logs nur IP, Art, Dienst, Port, Anzahl, Zeitraum und Regel (Plan Abschnitt 1b)
+		}
 		rep.Sources = append(rep.Sources, x)
 	}
 	rows.Close()
@@ -119,7 +126,7 @@ func (s *Store) BuildReport(ctx context.Context, start, end time.Time) (*Report,
 	}
 
 	// Zugangsdaten (nur Login-Dienste)
-	rows, err = r.QueryContext(ctx, `SELECT service, username, password, COUNT(*) AS n FROM hp_events WHERE ts >= ? AND ts < ?`+not+`
+	rows, err = r.QueryContext(ctx, `SELECT service, username, password, COUNT(*) AS n FROM hp_events WHERE ts >= ? AND ts < ?`+hp+`
 		AND service IN ('ssh', 'telnet', 'http', 'https') AND (username <> '' OR password <> '')
 		GROUP BY service, username, password ORDER BY n DESC, service, username, password`, from, to, string(skip))
 	if err != nil {
@@ -147,7 +154,7 @@ func (s *Store) BuildReport(ctx context.Context, start, end time.Time) (*Report,
 		col string
 		dst *[]ReportKey
 	}{{"path", &rep.Samples.Paths}, {"ua", &rep.Samples.UserAgents}} {
-		rows, err = r.QueryContext(ctx, `SELECT `+k.col+` AS k, COUNT(*) AS n FROM hp_events WHERE ts >= ? AND ts < ?`+not+` AND `+k.col+` <> ''
+		rows, err = r.QueryContext(ctx, `SELECT `+k.col+` AS k, COUNT(*) AS n FROM hp_events WHERE ts >= ? AND ts < ?`+hp+` AND `+k.col+` <> ''
 			GROUP BY k ORDER BY n DESC, k`, from, to, string(skip))
 		if err != nil {
 			return nil, err
@@ -171,7 +178,7 @@ func (s *Store) BuildReport(ctx context.Context, start, end time.Time) (*Report,
 	}
 
 	// Payloads: SHA-256 ueber die gespeicherten Bytes, Anfang als base64
-	rows, err = r.QueryContext(ctx, `SELECT payload, service, port, COUNT(*) AS n FROM hp_events WHERE ts >= ? AND ts < ?`+not+`
+	rows, err = r.QueryContext(ctx, `SELECT payload, service, port, COUNT(*) AS n FROM hp_events WHERE ts >= ? AND ts < ?`+hp+`
 		AND payload IS NOT NULL AND length(payload) > 0 GROUP BY payload, service, port ORDER BY n DESC, payload, service, port`, from, to, string(skip))
 	if err != nil {
 		return nil, err

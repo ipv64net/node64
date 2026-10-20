@@ -1,5 +1,20 @@
 # Changes – Honeypot64
 
+## 0.3.0 – 2026-10-20
+
+Log sensor, syslog receiver and early warning for your own networks (phase H5).
+
+### New
+- Early warning (tab "Early warning"): manage your own networks (stored at ipv64), your DynDNS IPs are watched automatically; hits are fetched every 30 minutes and sent as one bundled notification. Networks without proof only report IPs that are listed on the v64 Blocklist, DynDNS IPs report every sighting. Needs the central API key, not the report setting.
+- Log sensor: reads logs of real services (sshd, nginx/Apache/Caddy, Postfix/Dovecot, Proxmox, Nextcloud, Vaultwarden, Gitea/Forgejo, Home Assistant) and detects attacks with bundled, versioned rules above a threshold. Files with format under Settings › "Log sensor and syslog", suggestions for common paths at the push of a button; paths below `/host/log`, `/var/log` and `/data/logs` are allowed (mount `-v /var/log:/host/log:ro`, for `auth.log` also `--group-add 4`).
+- Syslog receiver on UDP and TCP (one port, e.g. 514) for routers and firewalls (MikroTik, OPNsense/pfSense, FortiGate, Sophos, UniFi); allowed senders only (default private networks and localhost). The port is checked against the port management like the traps (UDP and TCP).
+- From real logs only IP, kind, service, port, count and rule are stored and reported – no user names, passwords, paths, user agents or content. Samples in the report to ipv64 come from the honeypot only; sources carry `source` (`honeypot`, `log`, `syslog`) and the rule.
+- State per file (e.g. "no read permission – container needs --group-add 4") and of the syslog receiver in the settings, on the overview and in `GET /api/honeypot/status` (`logs`).
+- Event list with sensor (honeypot, log, syslog) and rule, filter by sensor (also `GET /api/honeypot/events?source=`); statistics with a top list of sensors (`by_source`).
+- Prometheus: `node64_honeypot_events_total{kind,source}` with the real source, `node64_honeypot_log_lines_total`, `node64_honeypot_log_file_ok{path}`, `node64_honeypot_syslog_messages_total`, `node64_honeypot_syslog_denied_total`.
+- Mode without web interface: `NODE64_HONEYPOT_LOGS`, `NODE64_HONEYPOT_SYSLOG_PORT`, `NODE64_HONEYPOT_SYSLOG_ALLOW`; state on the info page. No profile switches the log sensor on by itself.
+- Export/import of the settings including log sensor and syslog; if the syslog port is taken on the target node, syslog stays off.
+
 ## 0.2.1 – 2026-10-20
 
 ### Fixed

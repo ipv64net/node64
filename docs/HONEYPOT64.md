@@ -37,6 +37,9 @@ Bridge-Netz sehen manche Docker-Versionen statt der Angreifer die Adresse des Do
 | `NODE64_HONEYPOT_INFO_TOKEN` | – | erlaubt die Info-Seite auch von außerhalb privater Netze (mindestens 16 Zeichen) |
 | `NODE64_IPV64_KEY` | – | API-Key des ipv64-Accounts (16 bis 64 Buchstaben und Ziffern). Gesetzt = Meldung an ipv64 alle 10 Minuten; ein ungültiges Format verhindert den Start |
 | `NODE64_HONEYPOT_REPORT` | `1` | `0` schaltet die Meldung an ipv64 trotz Key ab; ohne Key ist sie immer aus |
+| `NODE64_HONEYPOT_LOGS` | – | Log-Sensor: Komma-Liste, je Eintrag `pfad` oder `pfad=format`, z. B. `/host/log/auth.log=syslog,/host/log/nginx/*access.log=nginx`; Pfade absolut unterhalb von `/host/log`, `/var/log` oder `/data/logs`, Muster erlaubt, höchstens 32. Formate: `syslog`, `nginx`, `apache`, `caddy`, `nextcloud`, `vaultwarden`, `gitea`, `proxmox`, `homeassistant` (ohne = automatisch). Leer = aus; kein Profil schaltet ihn ein (siehe [Log-Sensor und Syslog](#log-sensor-und-syslog)) |
+| `NODE64_HONEYPOT_SYSLOG_PORT` | – | Syslog-Empfänger auf UDP und TCP, z. B. `514`; leer oder `0` = aus. Darf kein Fallen-Port und nicht der Info-Port sein |
+| `NODE64_HONEYPOT_SYSLOG_ALLOW` | private Netze | erlaubte Absender, Komma-Liste von IPs oder Netzen (CIDR), z. B. `192.168.1.1,10.0.0.0/8`; leer = private Netze und localhost |
 | `NODE64_DATA_DIR` | `/data` | Datenverzeichnis: Datenbank `node64.db`, Sensor-Dateien (SSH-Host-Schlüssel, TLS-Zertifikat, Sensor-Kennung `sensor_id`, Stand der Meldung `report_state.json`) unter `honeypot/` |
 | `NODE64_BIND_ADDR` | – | Adresse der Info-Seite (leer = alle) |
 | `NODE64_LOG_LEVEL`, `NODE64_LOG_FORMAT` | `info`, `text` | wie im normalen Betrieb |
@@ -77,7 +80,7 @@ Auf dem Info-Port (getrennt von den Fallen) antwortet ein kleiner Server, nur `G
 
 | Pfad | Inhalt |
 |---|---|
-| `/` | Info-Seite, nur lesend (kein Formular, kein JavaScript, hell/dunkel nach System, Deutsch oder Englisch nach Browser): Zustand der Dienste, Treffer 24 h und 7 Tage, Quell-IPs, Login-Versuche, Top-IPs, Arten, Ports, Zugangsdaten, Pfade, User-Agents, Meldung an ipv64 (an/aus, letzte Meldung, nächster Versuch, gemeldete Quell-IPs, letzter Fehler, Sensor-Kennung), Version, Laufzeit. Aktualisiert sich jede Minute |
+| `/` | Info-Seite, nur lesend (kein Formular, kein JavaScript, hell/dunkel nach System, Deutsch oder Englisch nach Browser): Zustand der Dienste, Treffer 24 h und 7 Tage, Quell-IPs, Login-Versuche, Top-IPs, Arten, Quellen (Honeypot, Log, Syslog), Ports, Zugangsdaten, Pfade, User-Agents, Meldung an ipv64 (an/aus, letzte Meldung, nächster Versuch, gemeldete Quell-IPs, letzter Fehler, Sensor-Kennung), Log-Sensor und Syslog (Zustand je Datei, Syslog-Port, Nachrichten, abgewiesene Absender), Version, Laufzeit. Aktualisiert sich jede Minute |
 | `/metrics` | Prometheus-Textformat |
 | `/health` | `200 ok`, wenn die Datenbank antwortet und mindestens ein Fallen-Dienst offen ist, sonst `503` |
 
@@ -107,7 +110,10 @@ Kennzahlen (dieselben wie beim Modul unter `/api/metrics`, Zähler seit dem Star
 `node64_honeypot_buffer_events`, `node64_honeypot_dropped_total`; dazu im Modus ohne Oberfläche
 `node64_honeypot_up`, `node64_honeypot_info{version,profile}`, `node64_honeypot_uptime_seconds`. Zur Meldung an
 ipv64 (Modul und Modus ohne Oberfläche): `node64_honeypot_report_last_success_timestamp` (Unix-Zeit, 0 = noch
-keine), `node64_honeypot_report_errors_total`, `node64_honeypot_report_sources_total`. Beispiel-Alarm:
+keine), `node64_honeypot_report_errors_total`, `node64_honeypot_report_sources_total`. Log-Sensor und Syslog:
+`node64_honeypot_log_lines_total` (gelesene Zeilen aus Dateien), `node64_honeypot_log_file_ok{path}` (1 = wird
+gelesen, 0 = Fehler), `node64_honeypot_syslog_messages_total`, `node64_honeypot_syslog_denied_total`; in
+`node64_honeypot_events_total{kind,source}` steht `source` für `honeypot`, `log` oder `syslog`. Beispiel-Alarm:
 `time() - node64_honeypot_report_last_success_timestamp > 3600`. Die übrigen Kennzahlen der Node siehe
 [PROMETHEUS.md](PROMETHEUS.md).
 
@@ -145,10 +151,141 @@ trotzdem als angenommen. Gibt es im Zeitraum keine Ereignisse, geht trotzdem ein
 aktive Sensoren zählen. Wird die Meldung eingeschaltet (auch nach `NODE64_HONEYPOT_REPORT=0`), beginnt der Zeitraum
 neu; nichts aus der Zeit ohne Meldung wird nachgeholt.
 
+## Log-Sensor und Syslog
+
+Neben den Fallen kann der Sensor **Logs echter Dienste** lesen und **Syslog von Routern und Firewalls** annehmen.
+So kommen die Angriffe dazu, die wirklich bei den eigenen Diensten ankommen. Mitgelieferte, versionierte Regeln
+(z. B. `sshd/bruteforce@1`) erkennen Angriffe erst ab einer Schwelle (z. B. mehrere fehlgeschlagene Logins in wenigen
+Minuten), weil echte Logs auch Vertipper legitimer Nutzer enthalten; eine erfolgreiche Anmeldung derselben IP setzt
+den Zähler zurück. Der Log-Sensor liest nur, schreibt nichts und baut keine Verbindungen auf.
+
+Beim Modul mit Oberfläche: Honeypot64 → Einstellungen → „Log-Sensor und Syslog“ (Dateien mit Format, Vorschläge für
+gängige Pfade, Syslog-Port, erlaubte Absender); der Zustand je Datei und des Syslog-Empfängers steht daneben. Im
+Modus ohne Oberfläche die Variablen `NODE64_HONEYPOT_LOGS`, `NODE64_HONEYPOT_SYSLOG_PORT` und
+`NODE64_HONEYPOT_SYSLOG_ALLOW` ([Umgebungsvariablen](#umgebungsvariablen)). **Kein Profil schaltet den Log-Sensor
+ein** – ohne eingebundene Logs gäbe es nur Fehler. Wie bei den Fallen öffnet das Modul nichts, bevor die
+Einstellungen einmal gespeichert sind; ein Syslog-Port, den inzwischen ein anderer Teil der Node belegt, bleibt zu
+(Fehler im Zustand).
+
+### Was gemeldet wird
+
+Aus echten Logs werden **nur IP, Art, Dienst, Port, Anzahl, Zeitraum und Regel** gespeichert und (mit „An ipv64
+melden“) gemeldet. **Nie** Benutzernamen, Passwörter, Pfade, User-Agents oder andere Inhalte – das wären Mitarbeitende
+oder Kunden des Betreibers. Der Speicher leert solche Felder bei Log- und Syslog-Ereignissen zusätzlich, auch wenn eine
+Regel sie fälschlich setzen würde; Proben (Zugangsdaten, Pfade, User-Agents, Payloads) stammen ausschließlich aus dem
+Honeypot. In der Meldung steht je Quelle `source` (`honeypot`, `log`, `syslog`) und die Regel mit Version; ipv64
+gewichtet Honeypot höher als Log und Syslog. Private und reservierte Absender bleiben wie beim Honeypot lokal.
+
+### Logs einbinden
+
+Dateien werden über ihren Pfad im Container gelesen, erlaubt sind nur Pfade unterhalb von `/host/log` (empfohlener
+Mount der Host-Logs), `/var/log` (Binary ohne Docker, dort die echten Logs) und `/data/logs` (Logs anderer Container in
+einem gemeinsamen Volume). Muster wie `/host/log/nginx/*access.log` sind erlaubt, höchstens 32 Dateien. Rotation und
+Kürzen der Dateien werden erkannt.
+
+- **Mount:** `-v /var/log:/host/log:ro` – nur lesend.
+- **Rechte:** `auth.log`, `secure` und `mail.log` gehören meist der Gruppe `adm` (Debian/Ubuntu: GID 4) und sind nicht
+  für alle lesbar. Das Image läuft nicht als root, also `--group-add 4` mitgeben. Fehlt das, steht an der Datei
+  „permission denied“ mit dem Hinweis auf `--group-add 4`.
+- **journald:** Das Binärformat liest der Sensor (noch) nicht. Entweder `rsyslog` auf dem Host installieren (schreibt
+  wieder `/var/log/auth.log` usw.) oder journald per Syslog an den Empfänger weiterleiten.
+
+| Dienst | Datei (Host) | Format |
+|---|---|---|
+| sshd, sudo (Debian, Ubuntu) | `/var/log/auth.log` | `syslog` |
+| sshd (RHEL, Rocky, Alma) | `/var/log/secure` | `syslog` |
+| Postfix, Dovecot | `/var/log/mail.log` | `syslog` |
+| nginx | `/var/log/nginx/access.log` | `nginx` |
+| Apache | `/var/log/apache2/access.log` | `apache` |
+| Caddy (JSON-Log) | z. B. `/var/log/caddy/access.log` | `caddy` |
+| Proxmox VE | `/var/log/daemon.log` bzw. Syslog | `proxmox` |
+| Nextcloud | `nextcloud.log` (Datenordner) | `nextcloud` |
+| Vaultwarden (`LOG_FILE`) | z. B. `/var/log/vaultwarden.log` | `vaultwarden` |
+| Gitea/Forgejo | `gitea.log` | `gitea` |
+| Home Assistant | `home-assistant.log` | `homeassistant` |
+
+Logs, die nicht unter `/var/log` liegen (Nextcloud, Gitea, Home Assistant), einzeln nach `/host/log/…` oder
+`/data/logs/…` einbinden, z. B. `-v /srv/nextcloud/data/nextcloud.log:/data/logs/nextcloud.log:ro`.
+
+```bash
+docker run -d --name honeypot64 --network host --restart unless-stopped --group-add 4 \
+  -e NODE64_MODE=honeypot -e NODE64_HONEYPOT_PROFILE=standard -e NODE64_IPV64_KEY=<api-key> \
+  -e NODE64_HONEYPOT_LOGS=/host/log/auth.log=syslog,/host/log/nginx/*access.log=nginx \
+  -e NODE64_HONEYPOT_SYSLOG_PORT=514 -e NODE64_HONEYPOT_SYSLOG_ALLOW=192.168.1.1,10.0.0.0/8 \
+  -v /var/log:/host/log:ro -v honeypot64:/data ghcr.io/ipv64net/node64
+```
+
+```yaml
+services:
+  honeypot64:
+    image: ghcr.io/ipv64net/node64
+    network_mode: host
+    restart: unless-stopped
+    group_add: ["4"]          # Gruppe adm: auth.log lesen
+    environment:
+      NODE64_MODE: honeypot
+      NODE64_HONEYPOT_PROFILE: standard
+      NODE64_IPV64_KEY: <api-key>
+      NODE64_HONEYPOT_LOGS: /host/log/auth.log=syslog,/host/log/mail.log=syslog
+      NODE64_HONEYPOT_SYSLOG_PORT: "514"
+    volumes:
+      - /var/log:/host/log:ro
+      - honeypot64:/data
+volumes:
+  honeypot64:
+```
+
+Beim normalen Node64-Container (Modul mit Oberfläche) gilt dasselbe: Mount und `--group-add 4` beim Container, die
+Dateien dann in der Oberfläche eintragen.
+
+### Syslog
+
+Der Empfänger hört auf **UDP und TCP** auf demselben Port (üblich 514; RFC 3164 und RFC 5424, über TCP mit
+Zeilenende oder Octet-Counting). Unter 1024 öffnet Node64 den Port wie die Fallen über `cap_net_bind_service`; beim
+Modul prüft die Port-Verwaltung, dass kein anderer Teil (z. B. DNS64, Streams) den Port für UDP oder TCP nutzt.
+
+**Absender:** Standard sind nur private Netze und localhost; mit „Erlaubte Absender“ bzw.
+`NODE64_HONEYPOT_SYSLOG_ALLOW` genau festlegen (IP oder CIDR). Andere Absender werden verworfen und gezählt
+(`node64_honeypot_syslog_denied_total`). UDP-Absender lassen sich fälschen – den Syslog-Port **nie** ins Internet
+freigeben.
+
+**Zeitzone:** Klassisches Syslog (RFC 3164) schickt die Uhrzeit ohne Zone. Der Empfänger liest sie in der Zeitzone
+des Containers – für richtige Zeiten in der Ereignisliste `-e TZ=Europe/Berlin` setzen (Schwellen und Fenster hängen
+nicht davon ab).
+
+Beispiele (Sensor `192.168.1.20`; Menünamen können je nach Version abweichen, nicht auf jedem Gerät live getestet):
+
+- **MikroTik RouterOS:**
+
+  ```
+  /system/logging/action/add name=hp64 target=remote remote=192.168.1.20 remote-port=514 bsd-syslog=yes
+  /system/logging/add topics=system action=hp64
+  /system/logging/add topics=account action=hp64
+  ```
+
+- **OPNsense:** System › Einstellungen › Protokollierung › Ziele: neues Ziel, Transport UDP(4) oder TCP(4),
+  Host `192.168.1.20`, Port 514; Anwendungen z. B. Anmeldungen/Audit, Firewall (filter), OpenVPN/IPsec.
+- **pfSense:** Status › System Logs › Settings › Remote Logging: „Send log messages to remote syslog server“,
+  Remote log servers `192.168.1.20:514`, Inhalte System Events, Firewall Events, VPN Events.
+- **FortiGate:**
+
+  ```
+  config log syslogd setting
+      set status enable
+      set server "192.168.1.20"
+      set port 514
+  end
+  ```
+
+- **Sophos Firewall:** System services › Log settings › Syslog-Server hinzufügen (IP, Port 514, UDP oder TCP,
+  Format „Standard syslog protocol“), dann Authentifizierung, Firewall und VPN an diesen Server senden.
+- **UniFi (Network-App):** Einstellungen › Control Plane › Integrations › Activity Logging (Syslog) bzw. „SIEM
+  Server“: IP `192.168.1.20`, Port 514.
+
 ## Beenden
 
-`docker stop` (SIGTERM) schließt erst die Info-Seite, dann alle Fallen, und schreibt die noch gepufferten
-Ereignisse in die Datenbank.
+`docker stop` (SIGTERM) schließt erst die Info-Seite, dann Log-Sensor, Syslog-Empfänger und alle Fallen, und
+schreibt die noch gepufferten Ereignisse in die Datenbank.
 
 ## Ressourcen
 

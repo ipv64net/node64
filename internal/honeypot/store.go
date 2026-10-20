@@ -186,7 +186,7 @@ func (s *Store) Flush(ctx context.Context) error {
 }
 
 const storeInsertSQL = `INSERT INTO hp_events (ts, service, port, kind, src, src_port, login, username, password,
-	method, path, host, ua, client, page, payload, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	method, path, host, ua, client, page, payload, detail, source, rule) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 func (s *Store) write(ctx context.Context, batch []Event) error {
 	tx, err := s.st.Writer().BeginTx(ctx, nil)
@@ -205,7 +205,7 @@ func (s *Store) write(ctx context.Context, batch []Event) error {
 			payload = e.Payload
 		}
 		if _, err := stmt.ExecContext(ctx, storeTime(e.Time), e.Service, e.Port, e.Kind, storeSrc(e.Src), e.SrcPort, storeBool(storeIsLogin(e)),
-			e.Username, e.Password, e.Method, e.Path, e.Host, e.UA, e.Client, e.Page, payload, e.Detail); err != nil {
+			e.Username, e.Password, e.Method, e.Path, e.Host, e.UA, e.Client, e.Page, payload, e.Detail, storeSource(e.Source), e.Rule); err != nil {
 			return err
 		}
 	}
@@ -279,6 +279,7 @@ func (s *Store) Stats(ctx context.Context, since time.Time, top int) (*Stats, er
 		{&out.ByService, `service`, ``, -1},
 		{&out.ByPort, `CAST(port AS TEXT)`, ``, -1},
 		{&out.ByKind, `kind`, ``, -1},
+		{&out.BySource, `source`, ``, -1},
 		{&out.TopSources, `src`, ` AND src <> ''`, top},
 		{&out.TopUsers, `username`, ` AND username <> ''`, top},
 		{&out.TopPass, `password`, ` AND password <> ''`, top},
@@ -355,14 +356,23 @@ func (s *Store) timeline(ctx context.Context, since, now time.Time) ([]TimePoint
 
 // Recent liefert die letzten Ereignisse, neueste zuerst (limit <= 0 = 50, hoechstens 1000).
 func (s *Store) Recent(ctx context.Context, limit int) ([]Event, error) {
+	return s.RecentBy(ctx, limit, "")
+}
+
+// RecentBy wie Recent, nur Ereignisse einer Quelle (SrcHoneypot, SrcLog, SrcSyslog; "" = alle).
+func (s *Store) RecentBy(ctx context.Context, limit int, source string) ([]Event, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	if limit > 1000 {
 		limit = 1000
 	}
+	where, args := ``, []any{limit}
+	if source != "" {
+		where, args = ` WHERE source = ?`, []any{source, limit}
+	}
 	rows, err := s.st.Reader().QueryContext(ctx, `SELECT ts, service, port, kind, src, src_port, username, password, method, path,
-		host, ua, client, page, payload, detail FROM hp_events ORDER BY id DESC LIMIT ?`, limit)
+		host, ua, client, page, payload, detail, source, rule FROM hp_events`+where+` ORDER BY id DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -372,7 +382,7 @@ func (s *Store) Recent(ctx context.Context, limit int) ([]Event, error) {
 		var e Event
 		var ts, src string
 		if err := rows.Scan(&ts, &e.Service, &e.Port, &e.Kind, &src, &e.SrcPort, &e.Username, &e.Password, &e.Method, &e.Path,
-			&e.Host, &e.UA, &e.Client, &e.Page, &e.Payload, &e.Detail); err != nil {
+			&e.Host, &e.UA, &e.Client, &e.Page, &e.Payload, &e.Detail, &e.Source, &e.Rule); err != nil {
 			return nil, err
 		}
 		e.Time = storeParseTime(ts)
@@ -395,10 +405,17 @@ func (s *Store) NewSources(ctx context.Context, since time.Time, limit int) ([]C
 }
 
 // storeSanitize setzt fehlende Zeit, kuerzt Texte auf gueltiges UTF-8 der erlaubten Laenge und kopiert die Payload.
+// Ereignisse aus echten Logs (Quelle log/syslog) behalten keine Inhalte: Benutzernamen, Passwoerter, HTTP-Felder,
+// Client, Koeder und Payload werden geleert (Plan Abschnitt 1b/13) – auch wenn eine Regel sie faelschlich setzt.
 func storeSanitize(e Event) Event {
 	if e.Time.IsZero() {
 		e.Time = time.Now()
 	}
+	e.Source = storeSource(e.Source)
+	if e.Source != SrcHoneypot {
+		e.Username, e.Password, e.Method, e.Path, e.Host, e.UA, e.Client, e.Page, e.Payload = "", "", "", "", "", "", "", "", nil
+	}
+	e.Rule = storeClip(e.Rule, MaxText)
 	e.Service = storeClip(e.Service, MaxText)
 	e.Kind = storeClip(e.Kind, MaxText)
 	e.Username = storeClip(e.Username, MaxText)
@@ -442,6 +459,14 @@ func storeIsLogin(e Event) bool {
 		return true
 	}
 	return e.Username != "" || e.Password != ""
+}
+
+// storeSource: leere Quelle gilt als Honeypot; sonst gekuerzt (bekannt sind SrcHoneypot, SrcLog, SrcSyslog).
+func storeSource(s string) string {
+	if s == "" {
+		return SrcHoneypot
+	}
+	return storeClip(s, 16)
 }
 
 func storeSrc(a netip.Addr) string {

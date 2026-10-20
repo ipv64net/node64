@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -92,6 +93,9 @@ type overviewData struct {
 	Events   []EventView
 	Report   ReportStatus
 	Err      string
+	Source   string    // Filter der Ereignisliste: "" (alle), honeypot, log, syslog
+	Sources  []string  // Auswahl des Filters
+	Logs     LogStatus // Log-Sensor und Syslog-Empfaenger
 }
 
 func (m *Module) warnViews(r *http.Request, list []Warning) []uiWarning {
@@ -115,11 +119,13 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	info := m.statusInfo(r)
 	d := overviewData{Tabs: tabsFor("overview"), Running: info.Running, Started: info.StartedAt, Profile: info.Profile, Scan: info.Scan,
-		Services: info.Services, Warnings: m.warnViews(r, info.Warnings), Counters: info.Counters, Range: "24h", Report: info.Report}
+		Services: info.Services, Warnings: m.warnViews(r, info.Warnings), Counters: info.Counters, Range: "24h", Report: info.Report,
+		Sources: []string{SrcHoneypot, SrcLog, SrcSyslog}, Logs: info.Logs}
 	span := 24 * time.Hour
 	if r.URL.Query().Get("range") == "7d" {
 		d.Range, span = "7d", 7*24*time.Hour
 	}
+	d.Source, _ = eventSource(r.URL.Query().Get("source")) // unbekannt = alle
 	_ = m.st.Flush(ctx)
 	now := time.Now()
 	var err error
@@ -133,7 +139,7 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		d.Bars, d.BarsMax = m.bars(r, st.Timeline, d.Range == "7d")
 		d.Ranks = ranks(st)
-		d.Events, err = m.recent(r, 50)
+		d.Events, err = m.recent(r, 50, d.Source)
 	}
 	if err != nil {
 		m.log.Error("honeypot page", "err", err)
@@ -200,6 +206,7 @@ func ranks(st *Stats) []uiRank {
 	return []uiRank{
 		mk("sources", "honeypot.top.sources", "bi-geo-alt", true, st.TopSources),
 		mk("kinds", "honeypot.top.kinds", "bi-tags", true, st.ByKind),
+		mk("origins", "honeypot.top.origins", "bi-diagram-3", true, st.BySource),
 		mk("ports", "honeypot.top.ports", "bi-hdd-network", true, st.ByPort),
 		mk("services", "honeypot.top.services", "bi-hdd-stack", true, st.ByService),
 		mk("users", "honeypot.top.users", "bi-person", true, st.TopUsers),
@@ -224,6 +231,96 @@ type settingsData struct {
 	MaxEvents int
 	KeySet    bool         // zentraler ipv64-API-Key eingetragen (sonst Meldung an ipv64 gesperrt)
 	Report    ReportStatus // Zustand der Meldung an ipv64
+
+	// Log-Sensor und Syslog (H5)
+	LogRows     []LogFile     // Zeilen des Formulars (eingestellte Dateien + leere Zeilen)
+	SyslogPort  string        // Formularwert ("" = aus)
+	SyslogAllow string        // erlaubte Absender, je Zeile ein Netz
+	LogFormats  []string      // Auswahl (leer = automatisch)
+	LogRoots    string        // erlaubte Wurzeln (Hinweis)
+	LogSuggest  []LogFile     // Vorschlaege (Knoepfe)
+	LogFiles    []uiLogFile   // Zustand je Datei
+	Syslog      *SyslogStatus // Zustand des Empfaengers (nil = aus)
+	LogLines    int64
+	LogEvents   int64
+	Unsaved     bool // Vorschlag uebernommen, noch nicht gespeichert
+}
+
+// uiLogFile ist der Zustand einer Datei mit Hinweis zum Fehler (i18n-Schluessel, "" = keiner).
+type uiLogFile struct {
+	LogFileStatus
+	Hint string
+}
+
+// logSuggestions sind gaengige Pfade (Mount -v /var/log:/host/log:ro), als Knoepfe in den Einstellungen.
+var logSuggestions = []LogFile{
+	{Path: "/host/log/auth.log", Format: "syslog"},             // sshd, sudo (Debian, Ubuntu)
+	{Path: "/host/log/secure", Format: "syslog"},               // sshd (RHEL, Rocky, Alma)
+	{Path: "/host/log/mail.log", Format: "syslog"},             // Postfix, Dovecot
+	{Path: "/host/log/nginx/access.log", Format: "nginx"},      // nginx
+	{Path: "/host/log/apache2/access.log", Format: "apache"},   // Apache (Debian)
+	{Path: "/host/log/caddy/access.log", Format: "caddy"},      // Caddy (JSON)
+	{Path: "/host/log/daemon.log", Format: "proxmox"},          // Proxmox (pvedaemon)
+	{Path: "/host/log/vaultwarden.log", Format: "vaultwarden"}, // Vaultwarden (LOG_FILE)
+}
+
+// logHint: Hinweis zu einem Fehler beim Lesen (Rechte, Datei fehlt).
+func logHint(err string) string {
+	e := strings.ToLower(err)
+	switch {
+	case e == "":
+		return ""
+	case strings.Contains(e, "permission denied"):
+		return "honeypot.logs.hint_perm"
+	case strings.Contains(e, "no such file") || strings.Contains(e, "not exist") || strings.Contains(e, "no files match"):
+		return "honeypot.logs.hint_missing"
+	}
+	return ""
+}
+
+// logForm ist der Log-Teil des Formulars, so wie eingegeben (fuer die erneute Anzeige bei Fehlern).
+type logForm struct {
+	Files []LogFile
+	Port  string
+	Allow string
+}
+
+func logFormFrom(c LogConfig) logForm {
+	f := logForm{Files: append([]LogFile(nil), c.Files...), Allow: strings.Join(c.SyslogAllow, "\n")}
+	if c.SyslogPort > 0 {
+		f.Port = strconv.Itoa(c.SyslogPort)
+	}
+	return f
+}
+
+// parseLogForm liest Dateien (log_path/log_format je Zeile), Syslog-Port und erlaubte Absender.
+func parseLogForm(r *http.Request) logForm {
+	paths, formats := r.PostForm["log_path"], r.PostForm["log_format"]
+	f := logForm{Port: strings.TrimSpace(r.PostFormValue("syslog_port")), Allow: r.PostFormValue("syslog_allow")}
+	for i, p := range paths {
+		lf := LogFile{Path: strings.TrimSpace(p)}
+		if i < len(formats) {
+			lf.Format = formats[i]
+		}
+		if lf.Path != "" {
+			f.Files = append(f.Files, lf)
+		}
+	}
+	return f
+}
+
+// apply uebertraegt das Formular in die Einstellung (ungueltiger Port = -1, validate meldet es).
+func (f logForm) apply(c *LogConfig) {
+	c.Files = append([]LogFile(nil), f.Files...)
+	c.SyslogPort = 0
+	if f.Port != "" {
+		if n, err := strconv.Atoi(f.Port); err == nil {
+			c.SyslogPort = n
+		} else {
+			c.SyslogPort = -1
+		}
+	}
+	c.SyslogAllow = strings.FieldsFunc(f.Allow, func(r rune) bool { return r == '\n' || r == '\r' || r == ',' || r == ' ' || r == '\t' })
 }
 
 type profileView struct {
@@ -280,12 +377,24 @@ func parseServices(text string) []Service {
 	return out
 }
 
-func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, errs map[string]string) settingsData {
+func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, errs map[string]string, lf *logForm) settingsData {
 	d := settingsData{Tabs: tabsFor("settings"), Running: m.running() != nil, Cfg: c, Lines: lines, Profiles: profileViews(), Pages: Pages,
-		Errors: errs, MaxDays: maxRetentionDays, MinEvents: minMaxEvents, MaxEvents: maxMaxEvents}
+		Errors: errs, MaxDays: maxRetentionDays, MinEvents: minMaxEvents, MaxEvents: maxMaxEvents,
+		LogFormats: cfgLogFormats, LogRoots: strings.Join(cfgLogRoots, ", "), LogSuggest: logSuggestions}
 	if d.Errors == nil {
 		d.Errors = map[string]string{}
 	}
+	form := logFormFrom(c.Log)
+	if lf != nil {
+		form = *lf
+	}
+	d.LogRows = append(form.Files, LogFile{}, LogFile{}) // zwei leere Zeilen zum Ergaenzen
+	d.SyslogPort, d.SyslogAllow = form.Port, form.Allow
+	ls := m.LogStatus()
+	for _, f := range ls.Files {
+		d.LogFiles = append(d.LogFiles, uiLogFile{LogFileStatus: f, Hint: logHint(f.Error)})
+	}
+	d.Syslog, d.LogLines, d.LogEvents = ls.Syslog, ls.Lines, ls.Events
 	_, key := m.api(r.Context())
 	d.KeySet, d.Report = key != "", m.rep.Status(r.Context())
 	if d.Lines == "" {
@@ -298,7 +407,7 @@ func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, err
 }
 
 func (m *Module) pageSettings(w http.ResponseWriter, r *http.Request) {
-	m.g.Render(w, r, http.StatusOK, Name+"/settings", "honeypot.settings.title", m.settingsView(r, m.loadConfig(r.Context()), "", nil))
+	m.g.Render(w, r, http.StatusOK, Name+"/settings", "honeypot.settings.title", m.settingsView(r, m.loadConfig(r.Context()), "", nil, nil))
 }
 
 func formInt(r *http.Request, name string) int {
@@ -326,6 +435,18 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	c.Report = r.PostFormValue("report") != ""
 	c.MaxConnsPerIP, c.MaxConnsTotal = formInt(r, "max_conns_per_ip"), formInt(r, "max_conns_total")
 	c.RetentionDays, c.MaxEvents = formInt(r, "retention_days"), int64(formInt(r, "max_events"))
+	lf := parseLogForm(r)
+	if v := r.PostFormValue("log_suggest"); v != "" { // Vorschlag als Zeile uebernehmen, noch nicht speichern
+		if i, err := strconv.Atoi(v); err == nil && i >= 0 && i < len(logSuggestions) &&
+			!slices.ContainsFunc(lf.Files, func(f LogFile) bool { return f.Path == logSuggestions[i].Path }) {
+			lf.Files = append(lf.Files, logSuggestions[i])
+		}
+		d := m.settingsView(r, c, lines, nil, &lf)
+		d.Unsaved = true
+		m.g.Render(w, r, http.StatusOK, Name+"/settings", "honeypot.settings.title", d)
+		return
+	}
+	lf.apply(&c.Log)
 	saved, err := m.SaveConfig(ctx, c)
 	var fe FieldErrors
 	if errors.As(err, &fe) {
@@ -333,7 +454,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 		for k, v := range fe {
 			errs[k] = m.errText(r, v)
 		}
-		m.g.Render(w, r, http.StatusUnprocessableEntity, Name+"/settings", "honeypot.settings.title", m.settingsView(r, saved, lines, errs))
+		m.g.Render(w, r, http.StatusUnprocessableEntity, Name+"/settings", "honeypot.settings.title", m.settingsView(r, saved, lines, errs, &lf))
 		return
 	}
 	if err != nil {

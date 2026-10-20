@@ -58,7 +58,8 @@ const (
 	KindClusterDown Kind = "cluster_down" // Node des Clusters laenger nicht erreichbar oder ausgesetzt
 	KindClusterUp   Kind = "cluster_up"   // Node des Clusters wieder erreichbar
 
-	KindHoneypotNew Kind = "honeypot_new" // Honeypot64: neue Angreifer (gebuendelt, hoechstens stuendlich)
+	KindHoneypotNew   Kind = "honeypot_new"   // Honeypot64: neue Angreifer (gebuendelt, hoechstens stuendlich)
+	KindHoneypotWatch Kind = "honeypot_watch" // Honeypot64-Fruehwarnung: eigenes Netz bzw. DynDNS-IP als Angreifer aufgefallen
 
 	KindQuota Kind = "quota" // Tageskontingent der Online-Checks erreicht (Account, vom hub)
 )
@@ -100,7 +101,7 @@ func IsCDN64(k Kind) bool {
 func IsCluster(k Kind) bool { return k == KindClusterDown || k == KindClusterUp }
 
 // IsHoneypot: Meldung von Honeypot64.
-func IsHoneypot(k Kind) bool { return k == KindHoneypotNew }
+func IsHoneypot(k Kind) bool { return k == KindHoneypotNew || k == KindHoneypotWatch }
 
 // IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64, Zertifikate, CDN64 online, Cluster, Honeypot64).
 func IsModule(k Kind) bool {

@@ -37,6 +37,7 @@ type StatusInfo struct {
 	Buffered  int             `json:"buffered"`
 	Dropped   int64           `json:"dropped"` // im Speicher verworfen (Puffer voll, Schreibfehler)
 	Report    ReportStatus    `json:"report"`  // Meldung an ipv64
+	Logs      LogStatus       `json:"logs"`    // Log-Sensor und Syslog-Empfaenger (H5)
 }
 
 // CounterValues sind die Zaehler des Sensors seit dem Start.
@@ -50,7 +51,7 @@ type CounterValues struct {
 func (m *Module) statusInfo(r *http.Request) StatusInfo {
 	cfg := m.loadConfig(r.Context())
 	out := StatusInfo{Version: version, Profile: cfg.Profile, Scan: cfg.Scan, Services: []ServiceStatus{}, Warnings: m.Warnings(),
-		Buffered: m.st.Buffered(), Dropped: m.st.Dropped(), Report: m.rep.Status(r.Context())}
+		Buffered: m.st.Buffered(), Dropped: m.st.Dropped(), Report: m.rep.Status(r.Context()), Logs: m.LogStatus()}
 	if out.Warnings == nil {
 		out.Warnings = []Warning{}
 	}
@@ -132,6 +133,8 @@ type EventView struct {
 	Client      string    `json:"client,omitempty"`
 	Page        string    `json:"page,omitempty"`
 	Detail      string    `json:"detail,omitempty"`
+	Source      string    `json:"source"`         // honeypot, log, syslog (H5)
+	Rule        string    `json:"rule,omitempty"` // Regel bei log/syslog, z. B. sshd/bruteforce@1
 	PayloadHex  string    `json:"payload_hex,omitempty"`
 	PayloadText string    `json:"payload_text,omitempty"` // Go-Escapes (\x00, \r\n …), nur ASCII
 	PayloadDump string    `json:"-"`                      // hex.Dump fuer die Seite
@@ -139,7 +142,8 @@ type EventView struct {
 
 func eventView(e Event) EventView {
 	v := EventView{Time: e.Time, Service: e.Service, Port: e.Port, Kind: e.Kind, Src: storeSrc(e.Src), SrcPort: e.SrcPort, Username: e.Username,
-		Password: e.Password, Method: e.Method, Path: e.Path, Host: e.Host, UA: e.UA, Client: e.Client, Page: e.Page, Detail: e.Detail}
+		Password: e.Password, Method: e.Method, Path: e.Path, Host: e.Host, UA: e.UA, Client: e.Client, Page: e.Page, Detail: e.Detail,
+		Source: storeSource(e.Source), Rule: e.Rule}
 	if len(e.Payload) > 0 {
 		v.PayloadHex = hex.EncodeToString(e.Payload)
 		q := strconv.QuoteToASCII(string(e.Payload))
@@ -149,9 +153,18 @@ func eventView(e Event) EventView {
 	return v
 }
 
-func (m *Module) recent(r *http.Request, limit int) ([]EventView, error) {
+// eventSource prueft den Filter nach Quelle ("" = alle).
+func eventSource(v string) (string, bool) {
+	switch v = strings.ToLower(strings.TrimSpace(v)); v {
+	case "", SrcHoneypot, SrcLog, SrcSyslog:
+		return v, true
+	}
+	return "", false
+}
+
+func (m *Module) recent(r *http.Request, limit int, source string) ([]EventView, error) {
 	_ = m.st.Flush(r.Context())
-	list, err := m.st.Recent(r.Context(), limit)
+	list, err := m.st.RecentBy(r.Context(), limit, source)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +177,12 @@ func (m *Module) recent(r *http.Request, limit int) ([]EventView, error) {
 
 func (m *Module) apiEvents(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	list, err := m.recent(r, limit)
+	source, ok := eventSource(r.URL.Query().Get("source"))
+	if !ok {
+		apiErr(w, http.StatusBadRequest, "source: use honeypot, log or syslog")
+		return
+	}
+	list, err := m.recent(r, limit, source)
 	if err != nil {
 		m.fail(w, err)
 		return
@@ -224,7 +242,8 @@ func configDetails(c ModuleConfig) string {
 	for _, s := range list {
 		ps = append(ps, s.Service+"/"+strconv.Itoa(s.Port))
 	}
-	return strings.Join(ps, " ") + " scan=" + strconv.FormatBool(c.Scan) + " days=" + strconv.Itoa(c.RetentionDays) + " notify=" + strconv.FormatBool(c.NotifyNew) + " report=" + strconv.FormatBool(c.Report)
+	return strings.Join(ps, " ") + " scan=" + strconv.FormatBool(c.Scan) + " days=" + strconv.Itoa(c.RetentionDays) + " notify=" + strconv.FormatBool(c.NotifyNew) + " report=" + strconv.FormatBool(c.Report) +
+		" logs=" + strconv.Itoa(len(c.Log.Files)) + " syslog=" + strconv.Itoa(c.Log.SyslogPort)
 }
 
 // errText uebersetzt einen Fehlerschluessel aus validate ("schluessel|wert1|wert2", mehrere je Zeile).

@@ -99,6 +99,8 @@ type Config struct {
 	// Limits je Quell-IP gegen Ueberlast (0 = Standard).
 	MaxConnsPerIP int `json:"max_conns_per_ip,omitempty"` // gleichzeitig, Standard 8
 	MaxConnsTotal int `json:"max_conns_total,omitempty"`  // gleichzeitig, Standard 512
+	// Log-Sensor und Syslog-Empfaenger (H5); leer = aus. Der Sensor (Fallen-Dienste) beachtet das Feld nicht.
+	Log LogConfig `json:"log,omitempty"`
 }
 
 // Profile: vorgegebene Dienste (Plan Abschnitt 1, Sensor-Profile; H1 nur Stufe 1).
@@ -141,6 +143,7 @@ type Stats struct {
 	ByService  []Count     `json:"by_service"`
 	ByPort     []Count     `json:"by_port"`
 	ByKind     []Count     `json:"by_kind"`
+	BySource   []Count     `json:"by_source"`   // Key = honeypot, log, syslog (H5)
 	TopSources []Count     `json:"top_sources"` // Key = IP
 	TopUsers   []Count     `json:"top_users"`
 	TopPass    []Count     `json:"top_passwords"`

@@ -594,3 +594,62 @@ func TestModuleReportOptIn(t *testing.T) {
 		t.Fatalf("export: %s", raw)
 	}
 }
+
+// TestBuildReportLogSources: Quellen getrennt nach Quelle und Regel; Proben nur aus dem Honeypot – auch wenn Zeilen
+// aus echten Logs (am Speicher vorbei) Inhalte haetten (H5).
+func TestBuildReportLogSources(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	start, end := repNow.Add(-10*time.Minute), repNow
+	at := func(d time.Duration) time.Time { return start.Add(d) }
+	repWrite(t, s,
+		Event{Time: at(time.Minute), Service: SvcSSH, Port: 22, Kind: KindSSHBrute, Src: ip("45.83.64.1"), Username: "root", Password: "toor"},
+		Event{Time: at(2 * time.Minute), Service: SvcSSH, Port: 22, Kind: KindSSHBrute, Src: ip("45.83.64.1"), Source: SrcLog, Rule: "sshd/bruteforce@1", Detail: "sshd/bruteforce"},
+		Event{Time: at(3 * time.Minute), Service: SvcSSH, Port: 22, Kind: KindSSHBrute, Src: ip("45.83.64.1"), Source: SrcLog, Rule: "sshd/bruteforce@1"},
+		Event{Time: at(4 * time.Minute), Service: SvcVPN, Port: 1194, Kind: KindVPNBrute, Src: ip("45.83.64.2"), Source: SrcSyslog, Rule: "opnsense/openvpn@1"},
+		Event{Time: at(5 * time.Minute), Service: SvcSSH, Port: 22, Kind: KindSSHBrute, Src: ip("192.168.1.9"), Source: SrcLog, Rule: "sshd/bruteforce@1"},
+	)
+	// Zeilen aus echten Logs mit Inhalten direkt schreiben (ohne storeSanitize): duerfen trotzdem nicht in die Proben
+	if err := s.write(ctx, []Event{
+		{Time: at(6 * time.Minute), Service: SvcHTTP, Port: 443, Kind: KindHTTPExploit, Src: ip("45.83.64.3"), Source: SrcLog, Rule: "nginx/exploit@1",
+			Username: "kunde", Password: "pw", Path: "/kunde/geheim", UA: "Mitarbeiter-Browser", Payload: []byte("body")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := s.BuildReport(ctx, start, end)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type key struct{ ip, source, rule string }
+	got := map[key]ReportSource{}
+	for _, x := range rep.Sources {
+		got[key{x.IP, x.Source, x.Rule}] = x
+	}
+	if len(rep.Sources) != 4 {
+		t.Fatalf("sources: %+v", rep.Sources)
+	}
+	if x := got[key{"45.83.64.1", SrcHoneypot, "honeypot/ssh@1"}]; x.Count != 1 {
+		t.Fatalf("honeypot source: %+v", rep.Sources)
+	}
+	if x := got[key{"45.83.64.1", SrcLog, "sshd/bruteforce@1"}]; x.Count != 2 || x.Detail != "" || x.Kind != KindSSHBrute || x.Port != 22 {
+		t.Fatalf("log source: %+v", x)
+	}
+	if x := got[key{"45.83.64.2", SrcSyslog, "opnsense/openvpn@1"}]; x.Count != 1 || x.Service != SvcVPN {
+		t.Fatalf("syslog source: %+v", rep.Sources)
+	}
+	if x := got[key{"45.83.64.3", SrcLog, "nginx/exploit@1"}]; x.Count != 1 {
+		t.Fatalf("nginx source: %+v", rep.Sources)
+	}
+	if len(rep.Samples.Credentials) != 1 || rep.Samples.Credentials[0].User != "root" {
+		t.Fatalf("credentials only from the honeypot: %+v", rep.Samples.Credentials)
+	}
+	if len(rep.Samples.Paths) != 0 || len(rep.Samples.UserAgents) != 0 || len(rep.Samples.Payloads) != 0 {
+		t.Fatalf("no samples from real logs: %+v", rep.Samples)
+	}
+	raw, _ := json.Marshal(rep)
+	for _, s := range []string{"kunde", "geheim", "Mitarbeiter", "192.168.1.9"} {
+		if strings.Contains(string(raw), s) {
+			t.Errorf("report contains %q: %s", s, raw)
+		}
+	}
+}

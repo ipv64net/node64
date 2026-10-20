@@ -80,6 +80,43 @@
 					{{if not $d.KeySet}}<div class="form-text mt-0 text-warning-emphasis"><i class="bi bi-lock"></i> {{.T "honeypot.settings.report_nokey"}} <a href="/settings#ipv64">{{.T "honeypot.settings.report_key_link"}}</a></div>{{end}}
 					{{with index $d.Errors "report"}}<div class="text-danger small">{{.}}</div>{{end}}
 				</div>
+				<hr>
+				<h2 class="h6" id="logs"><i class="bi bi-journal-text text-primary"></i> {{.T "honeypot.logs.title"}}{{.Doc "honeypot#log-sensor-und-syslog"}}</h2>
+				{{if $d.Unsaved}}<div class="alert alert-info small py-2"><i class="bi bi-info-circle"></i> {{.T "honeypot.logs.unsaved"}}</div>{{end}}
+				<p class="small text-body-secondary">{{.T "honeypot.logs.intro"}}</p>
+				<div class="alert alert-secondary small py-2"><i class="bi bi-shield-lock"></i> {{.T "honeypot.logs.privacy"}}</div>
+				<div class="mb-2">
+					<div class="form-label">{{.T "honeypot.logs.files"}}</div>
+					<div class="table-responsive"><table class="table table-sm align-middle mb-1">
+						<thead><tr><th>{{.T "honeypot.logs.path"}}</th><th style="width:11rem">{{.T "honeypot.logs.format"}}</th></tr></thead>
+						<tbody>{{range $d.LogRows}}<tr>
+							<td><input type="text" class="form-control form-control-sm font-monospace{{if index $d.Errors "log_files"}} is-invalid{{end}}" name="log_path" value="{{.Path}}" placeholder="/host/log/auth.log" aria-label="{{$.T "honeypot.logs.path"}}"></td>
+							<td><select class="form-select form-select-sm" name="log_format" aria-label="{{$.T "honeypot.logs.format"}}">
+								<option value=""{{if not .Format}} selected{{end}}>{{$.T "honeypot.logs.format_auto"}}</option>
+								{{$f := .Format}}{{range $d.LogFormats}}<option value="{{.}}"{{if eq . $f}} selected{{end}}>{{.}}</option>{{end}}
+							</select></td>
+						</tr>{{end}}</tbody>
+					</table></div>
+					{{with index $d.Errors "log_files"}}<div class="text-danger small" style="white-space:pre-line">{{.}}</div>{{end}}
+					<div class="form-text mt-0">{{.T "honeypot.logs.files_hint" "roots" $d.LogRoots}}</div>
+				</div>
+				<div class="mb-3">
+					<div class="small text-body-secondary mb-1">{{.T "honeypot.logs.suggest"}}</div>
+					<div class="d-flex flex-wrap gap-1">{{range $i, $s := $d.LogSuggest}}<button class="btn btn-sm btn-outline-secondary font-monospace" type="submit" name="log_suggest" value="{{$i}}" formnovalidate title="{{$s.Format}}"><i class="bi bi-plus"></i> {{$s.Path}}</button>{{end}}</div>
+				</div>
+				<div class="row g-3">
+					<div class="col-sm-4">
+						<label class="form-label" for="syslog_port">{{.T "honeypot.logs.syslog_port"}}{{.Doc "honeypot#syslog"}}</label>
+						<input type="number" class="form-control{{if index $d.Errors "syslog_port"}} is-invalid{{end}}" id="syslog_port" name="syslog_port" min="0" max="65535" value="{{$d.SyslogPort}}" placeholder="514">
+						{{with index $d.Errors "syslog_port"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					</div>
+					<div class="col-sm-8">
+						<label class="form-label" for="syslog_allow">{{.T "honeypot.logs.syslog_allow"}}</label>
+						<textarea class="form-control font-monospace{{if index $d.Errors "syslog_allow"}} is-invalid{{end}}" id="syslog_allow" name="syslog_allow" rows="2" placeholder="192.168.1.1&#10;10.0.0.0/8">{{$d.SyslogAllow}}</textarea>
+						{{with index $d.Errors "syslog_allow"}}<div class="invalid-feedback" style="white-space:pre-line">{{.}}</div>{{end}}
+					</div>
+					<div class="col-12 form-text mt-1">{{.T "honeypot.logs.syslog_hint"}}</div>
+				</div>
 			</div>
 			<div class="card-footer text-end"><button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> {{.T "common.save"}}</button></div>
 		</form>
@@ -99,6 +136,25 @@
 				{{if .LastRejected}}<div class="text-warning-emphasis mt-2 text-break"><i class="bi bi-funnel"></i> {{$.T "honeypot.report.rejected" "count" .LastRejected "reasons" .RejectedText}}</div>{{end}}
 				{{if .LastError}}<div class="text-danger mt-2 text-break"><i class="bi bi-exclamation-triangle"></i> {{$.T "honeypot.report.last_error"}} ({{$.Time .LastErrorAt}}): {{.LastError}}</div>{{end}}
 			{{end}}</div>
+		</div>
+		<div class="card" id="logs-status">
+			<div class="card-header"><i class="bi bi-journal-text text-primary"></i> {{.T "honeypot.logs.status"}}{{.Doc "honeypot#log-sensor-und-syslog"}}</div>
+			<div class="card-body small">
+				{{if $d.LogFiles}}<div class="table-responsive"><table class="table table-sm align-middle mb-2">
+					<thead><tr><th>{{.T "honeypot.logs.path"}}</th><th>{{.T "honeypot.services.state"}}</th><th class="text-end">{{.T "honeypot.logs.lines"}}</th></tr></thead>
+					<tbody>{{range $d.LogFiles}}<tr>
+						<td class="font-monospace text-break">{{.Path}}{{with .Format}} <span class="text-body-secondary">({{.}})</span>{{end}}</td>
+						<td>{{if .OK}}<span class="badge text-bg-success"><i class="bi bi-check-circle"></i> {{$.T "honeypot.logs.ok"}}</span>{{else}}<span class="badge text-bg-danger"><i class="bi bi-x-circle"></i> {{$.T "honeypot.services.error"}}</span>
+							{{with .Error}}<div class="text-danger font-monospace text-break">{{.}}</div>{{end}}{{with .Hint}}<div class="text-warning-emphasis">{{$.T .}}</div>{{end}}{{end}}</td>
+						<td class="text-end">{{$.Int .Lines}}</td>
+					</tr>{{end}}</tbody>
+				</table></div>{{else}}<p class="text-body-secondary mb-2">{{.T "honeypot.logs.no_files"}}</p>{{end}}
+				<div><i class="bi bi-hdd-network"></i> {{.T "honeypot.logs.syslog"}}:
+					{{with $d.Syslog}}{{if .Error}}<span class="text-danger">{{$.T "honeypot.services.error"}} ({{.Port}}): <span class="font-monospace text-break">{{.Error}}</span></span>{{else}}{{$.T "honeypot.logs.syslog_on" "port" .Port}}{{if .UDP}} <span class="badge text-bg-success">UDP</span>{{else}} <span class="badge text-bg-danger">UDP</span>{{end}}{{if .TCP}} <span class="badge text-bg-success">TCP</span>{{else}} <span class="badge text-bg-danger">TCP</span>{{end}}
+					· {{$.T "honeypot.logs.syslog_counts" "messages" ($.Int .Messages) "denied" ($.Int .Denied)}}{{end}}{{else}}{{.T "honeypot.report.off"}}{{end}}
+				</div>
+				{{if or $d.LogFiles $d.Syslog}}<div class="text-body-secondary mt-1">{{.T "honeypot.logs.counts" "lines" (.Int $d.LogLines) "events" (.Int $d.LogEvents)}}</div>{{end}}
+			</div>
 		</div>
 		<div class="card">
 			<div class="card-header"><i class="bi bi-info-circle text-primary"></i> {{.T "honeypot.settings.about"}}</div>

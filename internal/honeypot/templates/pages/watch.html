@@ -1,0 +1,114 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><i class="bi bi-bug text-primary"></i> {{.T "honeypot.title"}}{{.Doc "honeypot#fruehwarnung"}}</h1>
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+<p class="text-body-secondary small">{{.T "honeypot.watch.intro"}}</p>
+{{if not $d.KeySet}}
+<div class="alert alert-warning d-flex gap-2" role="alert">
+	<i class="bi bi-lock fs-5"></i>
+	<div>{{.T "honeypot.watch.nokey"}} <a href="/settings#ipv64">{{.T "honeypot.settings.report_key_link"}}</a></div>
+</div>
+{{else}}
+{{if $d.AuthErr}}<div class="alert alert-danger small"><i class="bi bi-key"></i> {{.T "honeypot.watch.auth_error"}} <a href="/settings#ipv64">{{.T "honeypot.settings.report_key_link"}}</a></div>
+{{else if $d.Err}}<div class="alert alert-danger small text-break"><i class="bi bi-exclamation-triangle"></i> {{.T "honeypot.watch.load_error"}} <span class="font-monospace">{{$d.Err}}</span></div>{{end}}
+{{end}}
+<div class="row g-3 mb-3">
+	<div class="col-xl-7 d-flex flex-column gap-3">
+		<div class="card" id="watch-networks">
+			<div class="card-header d-flex flex-wrap gap-2 align-items-center"><span><i class="bi bi-diagram-3 text-primary"></i> {{.T "honeypot.watch.networks"}}</span>
+				{{if $d.Loaded}}<span class="ms-auto small text-body-secondary">{{.T "honeypot.watch.limits" "used" (len $d.Networks) "max" $d.Limits.Max "v4" $d.Limits.MinPrefixV4 "v6" $d.Limits.MinPrefixV6}}</span>{{end}}</div>
+			<div class="card-body">
+				{{if $d.Networks}}<div class="table-responsive"><table class="table table-sm align-middle small mb-3">
+					<thead><tr><th>{{.T "honeypot.watch.cidr"}}</th><th>{{.T "honeypot.watch.label"}}</th><th>{{.T "honeypot.watch.verified"}}</th><th>{{.T "honeypot.watch.created"}}</th><th></th></tr></thead>
+					<tbody>{{range $d.Networks}}<tr>
+						<td class="font-monospace text-nowrap">{{.CIDR}}</td>
+						<td class="text-break">{{.Label}}</td>
+						<td>{{if .Verified}}<span class="badge text-bg-success" title="{{$.T "honeypot.watch.verified_hint"}}"><i class="bi bi-patch-check"></i> {{$.T "honeypot.watch.yes"}}</span>{{else}}<span class="badge text-bg-secondary" title="{{$.T "honeypot.watch.unverified_hint"}}"><i class="bi bi-patch-question"></i> {{$.T "honeypot.watch.no"}}</span>{{end}}</td>
+						<td class="text-nowrap">{{if .Created.IsZero}}–{{else}}{{$.Time .Created}}{{end}}</td>
+						<td class="text-end"><form method="post" action="/honeypot/watch/{{.ID}}/delete" class="m-0" data-confirm="{{$.T "honeypot.watch.delete_confirm" "cidr" .CIDR}}">
+							<input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="cidr" value="{{.CIDR}}">
+							<button class="btn btn-sm btn-outline-danger" type="submit" title="{{$.T "honeypot.watch.delete"}}" aria-label="{{$.T "honeypot.watch.delete"}}"><i class="bi bi-trash"></i></button>
+						</form></td>
+					</tr>{{end}}</tbody>
+				</table></div>{{else if $d.Loaded}}<p class="text-body-secondary small">{{.T "honeypot.watch.no_networks"}}</p>{{end}}
+				{{if $d.KeySet}}{{if $d.Full}}<div class="alert alert-info small py-2 mb-0"><i class="bi bi-info-circle"></i> {{.T "honeypot.watch.full" "max" $d.Limits.Max}}</div>
+				{{else}}<form method="post" action="/honeypot/watch" novalidate>
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<div class="row g-2 align-items-start">
+						<div class="col-sm-5">
+							<label class="form-label small mb-1" for="watch-cidr">{{.T "honeypot.watch.cidr"}}</label>
+							<input class="form-control form-control-sm font-monospace{{if $d.FormErr}} is-invalid{{end}}" id="watch-cidr" name="cidr" value="{{$d.CIDR}}" placeholder="203.0.113.0/24" required autocomplete="off" spellcheck="false">
+						</div>
+						<div class="col-sm-4">
+							<label class="form-label small mb-1" for="watch-label">{{.T "honeypot.watch.label"}}</label>
+							<input class="form-control form-control-sm" id="watch-label" name="label" value="{{$d.Label}}" maxlength="64" placeholder="{{.T "honeypot.watch.label_placeholder"}}">
+						</div>
+						<div class="col-sm-3 d-grid"><label class="form-label small mb-1 d-none d-sm-block">&nbsp;</label><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-plus-lg"></i> {{.T "honeypot.watch.add"}}</button></div>
+					</div>
+					{{with $d.FormErr}}<div class="text-danger small mt-1">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "honeypot.watch.add_hint"}}</div>
+				</form>{{end}}{{end}}
+			</div>
+		</div>
+		<div class="card" id="watch-dyndns">
+			<div class="card-header"><i class="bi bi-arrow-repeat text-primary"></i> {{.T "honeypot.watch.dyndns"}}</div>
+			<div class="card-body small">
+				<p class="text-body-secondary">{{.T "honeypot.watch.dyndns_hint"}}</p>
+				{{if $d.DynDNS}}<div class="table-responsive"><table class="table table-sm align-middle mb-0">
+					<thead><tr><th>{{.T "honeypot.watch.ip"}}</th><th>{{.T "honeypot.watch.domain"}}</th></tr></thead>
+					<tbody>{{range $d.DynDNS}}<tr><td class="font-monospace">{{.IP}}</td><td class="text-break">{{.Domain}}</td></tr>{{end}}</tbody>
+				</table></div>{{else if $d.Loaded}}<p class="text-body-secondary mb-0">{{.T "honeypot.watch.no_dyndns"}}</p>{{end}}
+			</div>
+		</div>
+	</div>
+	<div class="col-xl-5 d-flex flex-column gap-3">
+		<div class="card" id="watch-status">
+			<div class="card-header"><i class="bi bi-cloud-download text-primary"></i> {{.T "honeypot.watch.status"}}</div>
+			<div class="card-body small">{{with $d.State}}
+				{{if not $d.Running}}<div class="text-warning-emphasis mb-2"><i class="bi bi-pause-circle"></i> {{$.T "honeypot.watch.module_off"}}</div>{{end}}
+				<dl class="row mb-0">
+					<dt class="col-6 fw-normal text-body-secondary">{{$.T "honeypot.watch.last_success"}}</dt><dd class="col-6">{{if .LastSuccess.IsZero}}{{$.T "honeypot.report.never"}}{{else}}{{$.Time .LastSuccess}}{{end}}</dd>
+					{{if and $d.Running (not .NextAttempt.IsZero)}}<dt class="col-6 fw-normal text-body-secondary">{{$.T "honeypot.watch.next"}}</dt><dd class="col-6">{{$.Time .NextAttempt}}</dd>{{end}}
+					<dt class="col-6 fw-normal text-body-secondary">{{$.T "honeypot.watch.total"}}</dt><dd class="col-6">{{$.Int .Total}}</dd>
+				</dl>
+				{{if .AuthFailed}}<div class="text-danger mt-2"><i class="bi bi-key"></i> {{$.T "honeypot.watch.auth_backoff"}}</div>{{end}}
+				{{if .LastError}}<div class="text-danger mt-2 text-break"><i class="bi bi-exclamation-triangle"></i> {{$.T "honeypot.report.last_error"}} ({{$.Time .LastErrorAt}}): {{.LastError}}</div>{{end}}
+			{{end}}
+				{{if $d.KeySet}}<form method="post" action="/honeypot/watch/check" class="mt-3 mb-0">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-arrow-clockwise"></i> {{.T "honeypot.watch.check"}}</button>
+				</form>{{end}}
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-header"><i class="bi bi-info-circle text-primary"></i> {{.T "honeypot.watch.about"}}</div>
+			<div class="card-body small">
+				<p>{{.T "honeypot.watch.about_unverified"}}</p>
+				<p>{{.T "honeypot.watch.about_dyndns"}}</p>
+				<p class="mb-0">{{.T "honeypot.watch.about_notify"}} <a href="/notifications">{{.T "nav.notifications"}}</a></p>
+			</div>
+		</div>
+	</div>
+</div>
+<div class="card" id="watch-hits">
+	<div class="card-header"><i class="bi bi-exclamation-diamond text-danger"></i> {{.T "honeypot.watch.hits"}}</div>
+	<div class="card-body">
+		{{if $d.Hits}}<div class="table-responsive" style="max-height:32rem"><table class="table table-sm align-middle small mb-0">
+			<thead><tr><th>{{.T "honeypot.watch.time"}}</th><th>{{.T "honeypot.watch.ip"}}</th><th>{{.T "honeypot.watch.network"}}</th><th>{{.T "honeypot.watch.score"}}</th><th>{{.T "honeypot.watch.kinds"}}</th><th>{{.T "honeypot.watch.seen"}}</th></tr></thead>
+			<tbody>{{range $d.Hits}}<tr>
+				<td class="text-nowrap">{{$.Time .At}}</td>
+				<td class="font-monospace text-nowrap">{{.IP}}</td>
+				<td class="text-break">{{if eq .Source "dyndns"}}<span class="badge text-bg-info">DynDNS</span> {{.Label}}{{else}}{{with .Label}}{{.}} {{end}}<span class="font-monospace text-body-secondary">{{.CIDR}}</span>{{end}}</td>
+				<td class="text-nowrap">{{.Score}}{{if .Listed}} <span class="badge text-bg-danger" title="{{$.T "honeypot.watch.listed_hint"}}">{{$.T "honeypot.watch.listed"}}</span>{{end}}</td>
+				<td class="font-monospace">{{join .Kinds ", "}}</td>
+				<td class="text-nowrap">{{.FirstSeen}}{{if and .LastSeen (ne .LastSeen .FirstSeen)}} – {{.LastSeen}}{{end}}</td>
+			</tr>{{end}}</tbody>
+		</table></div>
+		<div class="form-text">{{.T "honeypot.watch.hits_hint" "count" 200}}</div>{{else}}<p class="text-body-secondary small mb-0">{{.T "honeypot.watch.no_hits"}}</p>{{end}}
+	</div>
+</div>
+{{end}}
