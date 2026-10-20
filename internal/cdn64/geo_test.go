@@ -59,11 +59,13 @@ func TestGeoBlocked(t *testing.T) {
 	}{
 		{block, de, true}, {block, us, false}, {allow, de, false}, {allow, us, true},
 		{block, netip.MustParseAddr("2a00:1::1"), true},
-		{block, netip.MustParseAddr("::ffff:5.1.2.3"), true},                    // v4 in v6
-		{allow, netip.MustParseAddr("192.168.1.5"), false},                      // privat
-		{allow, netip.MustParseAddr("100.64.1.1"), false},                       // CGNAT
-		{allow, netip.MustParseAddr("fd00::1"), false},                          // ULA
-		{&Advanced{GeoMode: geoAllow, GeoCountries: []string{"FR"}}, us, false}, // Liste noch nicht geladen
+		{block, netip.MustParseAddr("::ffff:5.1.2.3"), true},                          // v4 in v6
+		{allow, netip.MustParseAddr("192.168.1.5"), false},                            // privat
+		{allow, netip.MustParseAddr("100.64.1.1"), false},                             // CGNAT
+		{allow, netip.MustParseAddr("fd00::1"), false},                                // ULA
+		{&Advanced{GeoMode: geoAllow, GeoCountries: []string{"FR"}}, us, false},       // Liste noch nicht geladen
+		{&Advanced{GeoMode: geoAllow, GeoCountries: []string{"DE", "AT"}}, us, false}, // AT fehlt noch: niemanden sperren
+		{&Advanced{GeoMode: geoBlock, GeoCountries: []string{"AT", "DE"}}, de, true},  // Sperre wirkt schon mit DE
 		{&Advanced{}, de, false},
 	}
 	for i, c := range cases {

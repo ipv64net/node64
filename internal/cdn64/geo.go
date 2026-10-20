@@ -109,19 +109,21 @@ func (m *Module) geoBlockedBy(mode string, countries []string, ip netip.Addr) bo
 			return false
 		}
 	}
-	in, loaded := false, false
+	in, missing := false, false
 	for _, c := range countries {
-		if s := g.sets[c]; s != nil {
-			loaded = true
-			if s.Has(ip) {
-				in = true
-				break
-			}
+		s := g.sets[c]
+		if s == nil {
+			missing = true // Liste (noch) nicht geladen
+			continue
+		}
+		if s.Has(ip) {
+			in = true
+			break
 		}
 	}
 	block := in
-	if mode == geoAllow {
-		block = loaded && !in
+	if mode == geoAllow { // nur zulassen: sperren erst, wenn alle Listen da sind (sonst traefe es erlaubte Laender)
+		block = !in && !missing && len(countries) > 0
 	}
 	if block {
 		g.blocked.Add(1)

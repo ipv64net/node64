@@ -1,5 +1,12 @@
 # Änderungen – PROXY64
 
+## 1.19.1 – 2026-10-20
+
+### Behoben
+- Ländersperre „nur zulassen“: Solange die Liste eines der erlaubten Länder noch nicht geladen ist (z. B. kurz nach
+  dem Start oder wenn ein Download scheitert), wird niemand gesperrt – vorher wurden Besucher dieses erlaubten Landes
+  abgewiesen.
+
 ## 1.19.0 – 2026-10-20
 
 ### Neu

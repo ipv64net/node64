@@ -1,5 +1,11 @@
 # Changes – PROXY64
 
+## 1.19.1 – 2026-10-20
+
+### Fixed
+- Country filter "allow only": while the list of one of the allowed countries is not loaded yet (e.g. right after
+  start or when a download fails), nobody is blocked – before, visitors from that allowed country were rejected.
+
 ## 1.19.0 – 2026-10-20
 
 ### New
