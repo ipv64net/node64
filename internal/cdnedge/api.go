@@ -180,6 +180,9 @@ func (s *Server) apiOK() {
 func (s *Server) applyConfig(c *apiConfig) {
 	s.apiCfg.Store(c)
 	s.routes.Store(newRoutes(s.cfg.Hosts, c))
+	if n := s.recheckLive(); n > 0 { // gesperrt, entfernt, Liste geaendert: laufende Verbindungen trennen
+		s.log.Info("connections closed after config change", "count", n)
+	}
 	s.pm.apply(c)
 	s.certs.kickLoop() // neue Modus-2-Namen: Zertifikat bald
 	bw := map[int]int{}

@@ -91,3 +91,18 @@ func TestNotInitial(t *testing.T) {
 		t.Fatalf("hello %x", h)
 	}
 }
+
+// Viele winzige Stuecke: der Assembler nimmt hoechstens maxParts an (Schutz der CPU).
+func TestAssemblerMaxParts(t *testing.T) {
+	var a Assembler
+	var chunks []Chunk
+	for i := 0; i < 1000; i++ {
+		chunks = append(chunks, Chunk{Offset: uint64(i), Data: []byte{0x01}})
+	}
+	if a.Add(chunks) {
+		t.Fatal("garbage must not complete a hello")
+	}
+	if len(a.parts) != maxParts {
+		t.Fatalf("parts: %d, want %d", len(a.parts), maxParts)
+	}
+}

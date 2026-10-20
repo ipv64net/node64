@@ -238,6 +238,7 @@ func (f *qflow) run(re *route, sni string) {
 		return
 	}
 	defer conn.Close()
+	defer s.track(re.Name, re.Mode, f.addr.Addr(), f.close)()
 	if counted {
 		st.Conns.Add(1)
 	}

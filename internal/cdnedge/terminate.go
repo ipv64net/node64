@@ -286,7 +286,10 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Alt-Svc", `h3=":443"; ma=86400`)
 	}
 	st.Requests.Add(1)
-	ctx := context.WithValue(r.Context(), termCtxKey{}, &termReq{re: re, host: host, client: r.RemoteAddr})
+	cctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	defer s.track(re.Name, re.Mode, ap.Addr(), cancel)()
+	ctx := context.WithValue(cctx, termCtxKey{}, &termReq{re: re, host: host, client: r.RemoteAddr})
 	if re.Mode == 3 {
 		s.serveCached(w, r.WithContext(ctx), re, s.term.direct)
 		return

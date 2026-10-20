@@ -43,6 +43,7 @@ type Server struct {
 
 	tlsConf    *tls.Config               // Zertifikat fuer Tunnel- und Nachbar-Port
 	routes     atomic.Pointer[routes]    // Name -> Tunnel
+	live       liveConns                 // offene Verbindungen je Name (live.go)
 	stats      *stats                    // je Name
 	guard      *guard                    // grober Schutz
 	local      *chanListener             // Port 80 ohne bekannten Namen -> eigene Seite

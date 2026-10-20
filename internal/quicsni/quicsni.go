@@ -252,8 +252,13 @@ type Assembler struct {
 	size  int
 }
 
-// maxHello: groesser wird kein ClientHello, den wir abwarten (Schutz des Speichers).
-const maxHello = 16 << 10
+// maxHello: groesser wird kein ClientHello, den wir abwarten (Schutz des Speichers); maxParts: so viele Stuecke
+// nimmt der Assembler hoechstens an (Browser teilen den ClientHello in wenige; viele winzige Stuecke wuerden das
+// Zusammensetzen bei jedem Paket teuer machen).
+const (
+	maxHello = 16 << 10
+	maxParts = 128
+)
 
 // Add nimmt Stuecke auf; true, wenn der ClientHello danach vollstaendig ist.
 func (a *Assembler) Add(chunks []Chunk) bool {
@@ -262,6 +267,9 @@ func (a *Assembler) Add(chunks []Chunk) bool {
 	}
 	for _, c := range chunks {
 		if c.Offset > maxHello || a.size > maxHello {
+			continue
+		}
+		if _, ok := a.parts[c.Offset]; !ok && len(a.parts) >= maxParts {
 			continue
 		}
 		if old, ok := a.parts[c.Offset]; !ok || len(old) < len(c.Data) {

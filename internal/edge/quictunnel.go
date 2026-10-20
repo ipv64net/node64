@@ -124,10 +124,11 @@ func (v *virtQUIC) serve(c net.Conn, client netip.AddrPort, release func()) {
 		if err != nil {
 			return
 		}
-		select {
+		select { // voll: verwerfen wie UDP (QUIC wiederholt), damit ein Besucher die anderen nicht aufhaelt
 		case v.pc.in <- vpkt{data: append([]byte(nil), buf[:n]...), addr: addr}:
 		case <-v.pc.done:
 			return
+		default:
 		}
 	}
 }

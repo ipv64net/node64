@@ -41,6 +41,10 @@ type pmEntry struct {
 const (
 	udpIdle        = 2 * time.Minute // ruhige UDP-Sitzung schliessen
 	udpMaxSessions = 4096            // je Port
+	udpQueue       = 8               // Datagramme, die warten, bis die Verbindung zum Ziel steht
+	udpNewPerSec   = 200             // neue Sitzungen je Port und Sekunde (gefaelschte Absender)
+	udpFree        = 32 << 10        // so viele Bytes darf das Ziel einem Besucher immer schicken ...
+	udpAmp         = 10              // ... danach hoechstens das Zehnfache dessen, was vom Besucher kam
 )
 
 type portmapper struct {
@@ -231,29 +235,40 @@ func (p *portmapper) serveTCP(port int, c net.Conn) {
 		return
 	}
 	st.Conns.Add(1)
+	defer p.s.track(re.Name, 3, addrOf(c.RemoteAddr()), func() { _ = c.Close(); _ = up.Close() })()
 	tunnel.Join(&meter{Conn: c, n: &st.BytesIn, bw: p.s.bw, uid: re.UserID}, &meter{Conn: up, n: &st.BytesOut, bw: p.s.bw, uid: re.UserID})
 }
 
 // ---------------------------------------------------------------- UDP
 
-// udpPort: ein UDP-Port; je Besucher (Adresse:Port) eine Sitzung mit eigenem Socket zum Ziel.
+// udpPort: ein UDP-Port; je Besucher (Adresse:Port) eine Sitzung mit eigenem Socket zum Ziel. Die Lese-Schleife
+// wartet nie: die Verbindung zum Ziel entsteht im Hintergrund (Datagramme bis dahin in einer kleinen Warteschlange).
+// Schutz vor Reflexion mit gefaelschten Absendern: neue Sitzungen je Port begrenzt, und das Ziel darf einem Besucher
+// nach udpFree Bytes hoechstens udpAmp-mal so viel schicken, wie von ihm kam.
 type udpPort struct {
-	p    *portmapper
-	port int
-	pc   *net.UDPConn
-	done chan struct{}
-	mu   sync.Mutex
-	sess map[netip.AddrPort]*udpSess
+	p       *portmapper
+	port    int
+	pc      *net.UDPConn
+	done    chan struct{}
+	mu      sync.Mutex
+	sess    map[netip.AddrPort]*udpSess
+	newTok  float64 // Kontingent neuer Sitzungen
+	newLast time.Time
 }
 
 type udpSess struct {
-	up      net.Conn
+	mu      sync.Mutex
+	up      net.Conn // nil, solange die Verbindung zum Ziel entsteht
+	queue   [][]byte
+	dead    bool
 	gen     string // Stand des Ziels: aendert er sich (DynDNS), neue Sitzung
 	tport   int
 	st      *hostStat
 	uid     int
 	last    atomic.Int64 // Unix-Nanosekunden der letzten Aktivitaet
+	in, out atomic.Int64 // Bytes vom bzw. zum Besucher
 	release func()
+	untrack func()
 	once    sync.Once
 }
 
@@ -261,20 +276,44 @@ func (u *udpPort) close() {
 	close(u.done)
 	_ = u.pc.Close()
 	u.mu.Lock()
+	all := make([]*udpSess, 0, len(u.sess))
 	for k, s := range u.sess {
-		s.end()
+		all = append(all, s)
 		delete(u.sess, k)
 	}
 	u.mu.Unlock()
+	for _, s := range all {
+		s.end()
+	}
 }
 
 func (s *udpSess) end() {
 	s.once.Do(func() {
-		_ = s.up.Close()
+		s.mu.Lock()
+		s.dead = true
+		up := s.up
+		s.queue = nil
+		s.mu.Unlock()
+		if up != nil {
+			_ = up.Close()
+		}
 		if s.release != nil {
 			s.release()
 		}
+		if s.untrack != nil {
+			s.untrack()
+		}
 	})
+}
+
+// drop nimmt eine Sitzung heraus und beendet sie.
+func (u *udpPort) drop(from netip.AddrPort, s *udpSess) {
+	u.mu.Lock()
+	if u.sess[from] == s {
+		delete(u.sess, from)
+	}
+	u.mu.Unlock()
+	s.end()
 }
 
 func (u *udpPort) serve() {
@@ -294,28 +333,55 @@ func (u *udpPort) serve() {
 			continue
 		}
 		s.last.Store(time.Now().UnixNano())
-		if _, err := s.up.Write(buf[:n]); err == nil {
+		s.mu.Lock()
+		up := s.up
+		if up == nil && !s.dead && len(s.queue) < udpQueue {
+			s.queue = append(s.queue, append([]byte(nil), buf[:n]...))
+		}
+		s.mu.Unlock()
+		if up == nil {
+			continue
+		}
+		if _, err := up.Write(buf[:n]); err == nil {
+			s.in.Add(int64(n))
 			s.st.BytesIn.Add(int64(n))
 			u.p.s.bw.take(s.uid, n)
 		}
 	}
 }
 
-// session: bestehende Sitzung (solange Ziel und Name unveraendert) oder eine neue; nil = verwerfen.
+// newOK: Kontingent fuer eine neue Sitzung auf diesem Port (u.mu gehalten).
+func (u *udpPort) newOK(now time.Time) bool {
+	if u.newLast.IsZero() {
+		u.newTok, u.newLast = udpNewPerSec, now
+	}
+	u.newTok = min(udpNewPerSec, u.newTok+now.Sub(u.newLast).Seconds()*udpNewPerSec)
+	u.newLast = now
+	if u.newTok < 1 {
+		return false
+	}
+	u.newTok--
+	return true
+}
+
+// session: bestehende Sitzung (solange Ziel und Name unveraendert) oder eine neue (Verbindung zum Ziel entsteht im
+// Hintergrund); nil = verwerfen.
 func (u *udpPort) session(from netip.AddrPort) *udpSess {
 	re, tport := u.p.resolve(pmKey{udp: true, port: u.port}, from.Addr())
 	u.mu.Lock()
 	s := u.sess[from]
 	if s != nil && (re == nil || s.gen != re.Target.gen || s.tport != tport) {
 		delete(u.sess, from)
+		u.mu.Unlock()
 		s.end()
+		u.mu.Lock()
 		s = nil
 	}
 	if s != nil || re == nil {
 		u.mu.Unlock()
 		return s
 	}
-	if len(u.sess) >= udpMaxSessions {
+	if len(u.sess) >= udpMaxSessions || !u.newOK(time.Now()) {
 		u.mu.Unlock()
 		return nil
 	}
@@ -324,35 +390,56 @@ func (u *udpPort) session(from netip.AddrPort) *udpSess {
 	if why != "" {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
-	up, err := u.p.dial(ctx, "udp", re, tport)
-	cancel()
-	st := u.p.s.stats.of(re.Name)
-	if err != nil {
-		release()
-		st.NoTunnel.Add(1)
-		return nil
-	}
-	s = &udpSess{up: up, gen: re.Target.gen, tport: tport, st: st, uid: re.UserID, release: release}
+	s = &udpSess{gen: re.Target.gen, tport: tport, st: u.p.s.stats.of(re.Name), uid: re.UserID, release: release}
 	s.last.Store(time.Now().UnixNano())
 	u.mu.Lock()
 	if old := u.sess[from]; old != nil { // gleichzeitig angelegt: die vorhandene nehmen
 		u.mu.Unlock()
-		s.end()
+		release()
 		return old
 	}
 	u.sess[from] = s
 	u.mu.Unlock()
-	st.Conns.Add(1)
-	go u.back(from, s)
+	s.untrack = u.p.s.track(re.Name, 3, from.Addr(), func() { u.drop(from, s) })
+	go u.connect(from, s, re, tport)
 	return s
 }
 
-// back: Antworten des Ziels an den Besucher.
-func (u *udpPort) back(to netip.AddrPort, s *udpSess) {
+// connect baut die Verbindung zum Ziel auf, schickt die wartenden Datagramme und reicht dann die Antworten zurueck.
+func (u *udpPort) connect(from netip.AddrPort, s *udpSess, re *route, tport int) {
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+	up, err := u.p.dial(ctx, "udp", re, tport)
+	cancel()
+	if err != nil {
+		s.st.NoTunnel.Add(1)
+		u.drop(from, s)
+		return
+	}
+	s.mu.Lock()
+	if s.dead {
+		s.mu.Unlock()
+		_ = up.Close()
+		return
+	}
+	q := s.queue
+	s.up, s.queue = up, nil
+	s.mu.Unlock()
+	s.st.Conns.Add(1)
+	for _, p := range q {
+		if _, err := up.Write(p); err == nil {
+			s.in.Add(int64(len(p)))
+			s.st.BytesIn.Add(int64(len(p)))
+			u.p.s.bw.take(s.uid, len(p))
+		}
+	}
+	u.back(from, s, up)
+}
+
+// back: Antworten des Ziels an den Besucher (hoechstens udpFree + udpAmp x Eingang).
+func (u *udpPort) back(to netip.AddrPort, s *udpSess, up net.Conn) {
 	buf := make([]byte, 64<<10)
 	for {
-		n, err := s.up.Read(buf)
+		n, err := up.Read(buf)
 		if err != nil {
 			if errors.Is(err, net.ErrClosed) {
 				break
@@ -361,17 +448,16 @@ func (u *udpPort) back(to netip.AddrPort, s *udpSess) {
 			continue
 		}
 		s.last.Store(time.Now().UnixNano())
+		if s.out.Load()+int64(n) > udpFree+udpAmp*s.in.Load() {
+			continue // mehr Antwort als Anfrage: gefaelschter Absender, verwerfen
+		}
 		if _, err := u.pc.WriteToUDPAddrPort(buf[:n], to); err == nil {
+			s.out.Add(int64(n))
 			s.st.BytesOut.Add(int64(n))
 			u.p.s.bw.take(s.uid, n)
 		}
 	}
-	u.mu.Lock()
-	if u.sess[to] == s {
-		delete(u.sess, to)
-	}
-	u.mu.Unlock()
-	s.end()
+	u.drop(to, s)
 }
 
 // sweep schliesst ruhige Sitzungen.
@@ -385,13 +471,17 @@ func (u *udpPort) sweep() {
 		case <-t.C:
 		}
 		cut := time.Now().Add(-udpIdle).UnixNano()
+		var idle []*udpSess
 		u.mu.Lock()
 		for k, s := range u.sess {
 			if s.last.Load() < cut {
 				delete(u.sess, k)
-				s.end()
+				idle = append(idle, s)
 			}
 		}
 		u.mu.Unlock()
+		for _, s := range idle {
+			s.end()
+		}
 	}
 }

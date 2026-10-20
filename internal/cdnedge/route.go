@@ -270,6 +270,11 @@ func (s *Server) forward(c net.Conn, kind, host string, port int, data []byte, c
 		st.BytesIn.Add(int64(len(data)))
 	}
 	st.Conns.Add(1)
+	var ip netip.Addr
+	if ap, err := netip.ParseAddrPort(client); err == nil {
+		ip = ap.Addr()
+	}
+	defer s.track(re.Name, re.Mode, ip, func() { _ = c.Close(); _ = ts.Close() })()
 	tunnel.Join(&meter{Conn: c, n: &st.BytesIn, bw: s.bw, uid: re.UserID}, &meter{Conn: ts, n: &st.BytesOut, bw: s.bw, uid: re.UserID})
 }
 
