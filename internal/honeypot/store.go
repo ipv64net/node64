@@ -372,16 +372,37 @@ func (s *Store) Recent(ctx context.Context, limit int) ([]Event, error) {
 
 // RecentBy wie Recent, nur Ereignisse einer Quelle (SrcHoneypot, SrcLog, SrcSyslog; "" = alle).
 func (s *Store) RecentBy(ctx context.Context, limit int, source string) ([]Event, error) {
+	return s.RecentIn(ctx, limit, source, "")
+}
+
+// RecentIn wie RecentBy, dazu nur Ereignisse aus einem Land (ISO 3166 alpha-2, "" = alle; geomap.go).
+func (s *Store) RecentIn(ctx context.Context, limit int, source, country string) ([]Event, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	if limit > 1000 {
 		limit = 1000
 	}
-	where, args := ``, []any{limit}
+	var conds []string
+	var args []any
 	if source != "" {
-		where, args = ` WHERE source = ?`, []any{source, limit}
+		conds, args = append(conds, `source = ?`), append(args, source)
 	}
+	if country != "" {
+		cond, arg, none, err := s.countryWhere(ctx, country)
+		if err != nil {
+			return nil, err
+		}
+		if none {
+			return []Event{}, nil
+		}
+		conds, args = append(conds, cond), append(args, arg)
+	}
+	where := ``
+	if len(conds) > 0 {
+		where = ` WHERE ` + strings.Join(conds, ` AND `)
+	}
+	args = append(args, limit)
 	rows, err := s.st.Reader().QueryContext(ctx, `SELECT ts, service, port, kind, src, src_port, username, password, method, path,
 		host, ua, client, page, payload, detail, source, rule, fingerprint FROM hp_events`+where+` ORDER BY id DESC LIMIT ?`, args...)
 	if err != nil {

@@ -15560,6 +15560,16 @@
                 "syslog"
               ]
             }
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "description": "Nur Ereignisse aus diesem Land (ISO 3166 alpha-2, z. B. DE; gross oder klein). Das Land wird je Quell-IP aus den Laenderdaten von ipv64.net nachgeschlagen (ohne Laenderdaten: leere Liste); ungueltig = 400.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{2}$",
+              "example": "DE"
+            }
           }
         ],
         "responses": {

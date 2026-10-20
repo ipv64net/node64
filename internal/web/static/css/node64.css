@@ -240,5 +240,21 @@ html[data-fs="xl"] { font-size: 125%; }
 .dyn-host { padding-left: 1.5rem !important; }
 @media (max-width: 767.98px) { .table-cards .dyn-domain-row > td::before { content: none; } .dyn-host { padding-left: .5rem !important; } }
 
+/* Honeypot64: Laenderkarte (Stufe 0 = keine Angriffe, 1-5 logarithmisch; eine Farbe hell -> dunkel, im Dunkelmodus
+   eigene Stufen von dunkel -> hell) */
+.hp-map { display: block; width: 100%; height: auto; --hp-m0: #e3e6ea; --hp-m1: #fdd0a2; --hp-m2: #fdae6b; --hp-m3: #fd8d3c; --hp-m4: #e6550d; --hp-m5: #a63603; }
+.hp-map path { fill: var(--hp-m0); stroke: var(--bs-body-bg); stroke-width: .4; stroke-linejoin: round; }
+.hp-map a path:hover { filter: brightness(1.12); stroke: var(--bs-body-color); stroke-width: .8; }
+.hp-map path.hp-sel { stroke: var(--bs-body-color); stroke-width: 1.2; }
+.hp-map .hp-m1 { fill: var(--hp-m1); } .hp-map .hp-m2 { fill: var(--hp-m2); } .hp-map .hp-m3 { fill: var(--hp-m3); }
+.hp-map .hp-m4 { fill: var(--hp-m4); } .hp-map .hp-m5 { fill: var(--hp-m5); }
+.hp-sw { display: inline-block; width: .9em; height: .9em; border-radius: .2em; vertical-align: -.1em; }
+.hp-sw.hp-m1 { background: #fdd0a2; } .hp-sw.hp-m2 { background: #fdae6b; } .hp-sw.hp-m3 { background: #fd8d3c; }
+.hp-sw.hp-m4 { background: #e6550d; } .hp-sw.hp-m5 { background: #a63603; }
+[data-bs-theme="dark"] .hp-map { --hp-m0: #2c3238; --hp-m1: #5e2d0c; --hp-m2: #8f420f; --hp-m3: #c75d14; --hp-m4: #f07f2a; --hp-m5: #ffb46b; }
+[data-bs-theme="dark"] .hp-sw.hp-m1 { background: #5e2d0c; } [data-bs-theme="dark"] .hp-sw.hp-m2 { background: #8f420f; }
+[data-bs-theme="dark"] .hp-sw.hp-m3 { background: #c75d14; } [data-bs-theme="dark"] .hp-sw.hp-m4 { background: #f07f2a; }
+[data-bs-theme="dark"] .hp-sw.hp-m5 { background: #ffb46b; }
+
 /* Unterpunkt im Menue (z. B. Healthchecks-Sync unter Healthchecks) */
 .nav-link.nav-sub { padding-left: 2.6rem; padding-top: .2rem; padding-bottom: .2rem; }

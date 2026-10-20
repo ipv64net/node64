@@ -174,6 +174,12 @@ type CardStat struct {
 	Pct      float64 // > 0: Anteil in Prozent hinter der Zahl
 	Class    string  // z. B. "text-danger"
 	Bytes    bool    // Value ist eine Datenmenge (lesbar formatiert)
+
+	TextKey   string    // statt Value/Text: i18n-Schluessel (uebersetzt)
+	Ago       time.Time // nicht null: "vor …" hinter dem Wert
+	Note      string    // kurzer Zusatz hinter dem Wert (z. B. Trend "▲ 12 %"), klein
+	NoteClass string    // Klasse des Zusatzes (z. B. "text-danger")
+	Title     string    // Tooltip des Werts (z. B. Fehlertext)
 }
 
 // DashboardInfo sind die Zahlen eines Moduls fuer das Dashboard.

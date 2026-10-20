@@ -114,7 +114,7 @@ Auf dem Info-Port (getrennt von den Fallen) antwortet ein kleiner Server, nur `G
 
 | Pfad | Inhalt |
 |---|---|
-| `/` | Info-Seite, nur lesend (kein Formular, kein JavaScript, hell/dunkel nach System, Deutsch oder Englisch nach Browser): Zustand der Dienste, Treffer 24 h und 7 Tage, Quell-IPs, Login-Versuche, Top-IPs, Arten, Quellen (Honeypot, Log, Syslog), Ports, Zugangsdaten, Pfade, User-Agents, Meldung an ipv64 (an/aus, letzte Meldung, nächster Versuch, gemeldete Quell-IPs, letzter Fehler, Sensor-Kennung), Log-Sensor und Syslog (Zustand je Datei, Syslog-Port, Nachrichten, abgewiesene Absender), Version, Laufzeit. Aktualisiert sich jede Minute |
+| `/` | Info-Seite, nur lesend (kein Formular, kein JavaScript, hell/dunkel nach System, Deutsch oder Englisch nach Browser): Zustand der Dienste, Treffer 24 h und 7 Tage, Quell-IPs, Login-Versuche, Länderkarte und Herkunft nach Land, Top-IPs, Arten, Quellen (Honeypot, Log, Syslog), Ports, Zugangsdaten, Pfade, User-Agents, Meldung an ipv64 (an/aus, letzte Meldung, nächster Versuch, gemeldete Quell-IPs, letzter Fehler, Sensor-Kennung), Log-Sensor und Syslog (Zustand je Datei, Syslog-Port, Nachrichten, abgewiesene Absender), Version, Laufzeit. Aktualisiert sich jede Minute |
 | `/metrics` | Prometheus-Textformat |
 | `/health` | `200 ok`, wenn die Datenbank antwortet und mindestens ein Fallen-Dienst offen ist, sonst `503` |
 
@@ -124,7 +124,8 @@ Tailscale), Loopback und Link-Local. Maßgeblich ist allein die Absender-Adresse
 mit `?token=<Token>` oder `Authorization: Bearer <Token>`; alles andere bekommt `403`. Die Seite schickt strenge
 Kopfzeilen (Content-Security-Policy ohne Skripte, `nosniff`, `no-referrer`, `X-Frame-Options: DENY`, `no-store`).
 
-Top-IPs zeigen Flagge und Ländercode, dazu gibt es die Rangliste „Herkunft nach Land“ (siehe [Herkunft](#herkunft)).
+Top-IPs zeigen Flagge und Ländercode, dazu gibt es die Länderkarte und die Rangliste „Herkunft nach Land“ (7 Tage,
+siehe [Herkunft](#herkunft)).
 
 Die Inhalte der Seite stammen von Angreifern (Benutzernamen, Pfade, User-Agents). Sie werden maskiert und gekürzt
 angezeigt; trotzdem gilt: nichts davon anklicken oder kopieren und ausführen.
@@ -182,7 +183,34 @@ erreichbar, läuft alles ohne Länder weiter (nur ein Eintrag im Log). Ohne Flag
 Browser statt der Flagge zwei Buchstaben; der Ländercode steht immer daneben.
 
 API: `country` an Ereignissen (`GET /api/honeypot/events`) und an `top_sources`, `by_country` und `country_unknown`
-in `GET /api/honeypot/stats`, dazu `by_decoy` (Köder und Geräte).
+in `GET /api/honeypot/stats`, dazu `by_decoy` (Köder und Geräte). Ereignisse eines Landes:
+`GET /api/honeypot/events?country=DE` (ISO 3166 alpha-2, groß oder klein; ungültig = `400`, ohne Länderdaten leer).
+
+### Karte
+
+Die Übersicht zeigt über der Rangliste eine Weltkarte für den gewählten Zeitraum (24 Std. oder 7 Tage): Länder mit
+Angriffen sind in fünf Stufen eingefärbt (logarithmisch bis zum stärksten Land, das immer in der obersten Stufe liegt;
+Legende oben rechts), Länder ohne Angriffe grau. Der Tooltip nennt Flagge, Name, Ereignisse und Quell-IPs. Ein Klick
+auf ein Land (oder seinen Namen in der Rangliste) filtert die Ereignisliste unten nach diesem Land
+(`/honeypot?country=DE`, funktioniert ohne JavaScript; Zeitraum und Sensor-Filter bleiben erhalten, das Kreuz am
+Länder-Abzeichen hebt den Filter auf). Ohne Länderdaten erscheint statt der Karte nur der Hinweis, dass sie geladen
+werden. Die Info-Seite des Modus ohne Oberfläche zeigt dieselbe Karte für 7 Tage (ohne Links).
+
+Kartendaten: Natural Earth 1:110m Admin-0 Countries (public domain), Projektion Natural Earth, vereinfacht und mit
+ganzzahligen Koordinaten in Node64 eingebettet (`internal/honeypot/worldmap/world.txt`, rund 30 KB, ohne Antarktis);
+es wird nichts aus dem Netz nachgeladen. Sehr kleine Inselstaaten fehlen in diesem Maßstab; sie stehen weiter in der
+Rangliste (Hinweis unter der Karte). Neu erzeugen: GeoJSON `ne_110m_admin_0_countries.geojson` aus
+github.com/nvkelso/natural-earth-vector laden und `go run ./internal/honeypot/worldmap/gen -in <Datei> -out
+internal/honeypot/worldmap/world.txt`.
+
+## Startseite
+
+Die Karte von Honeypot64 auf der Startseite zeigt für die letzten 24 Stunden: Ereignisse mit Trend gegenüber den
+24 Stunden davor (▲/▼ in Prozent, mehr = rot, weniger = grün), verschiedene Quell-IPs, Login-Versuche, die drei
+häufigsten Herkunftsländer als Flaggen (Tooltip mit Code und Anzahl), den meistangegriffenen Dienst mit Anteil, offene
+Fallen-Dienste und – rot mit Fehlertext – Dienste, die nicht geöffnet werden konnten, die Meldung an ipv64 (aus, kein
+API-Key, wartet, ok bzw. Fehler mit Zeitpunkt) und, sobald PROXY64 etwas übergeben hat, die Zahl der Anfragen über
+PROXY64 seit dem Start.
 
 ## Meldung an ipv64
 

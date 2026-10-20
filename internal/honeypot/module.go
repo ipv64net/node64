@@ -2,6 +2,7 @@ package honeypot
 
 import (
 	"context"
+	"database/sql"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -36,7 +37,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.7.0"
+	version = "0.8.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -890,31 +891,101 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	return 1, nil
 }
 
-// Card liefert die Dashboard-Karte (module.CardProvider): Zahlen der letzten 24 Stunden.
+// Card liefert die Dashboard-Karte (module.CardProvider): Zahlen der letzten 24 Stunden mit Trend gegenueber den
+// 24 Stunden davor, Top-3-Laender, meistangegriffener Dienst, Fallen-Ports, Meldung an ipv64 und PROXY64.
 func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 	c := &module.Card{TitleKey: "nav.honeypot", Icon: "bi-bug", Path: "/honeypot"}
 	open, errs := 0, 0
+	var errText []string
 	for _, s := range m.Status() {
 		if s.Listen {
 			open++
 		} else if s.Error != "" {
 			errs++
+			errText = append(errText, strings.ToUpper(s.Service)+" "+strconv.Itoa(s.Port)+": "+s.Error)
 		}
 	}
-	sum, err := m.summary(ctx, time.Now().Add(-24*time.Hour))
+	_ = m.st.Flush(ctx)
+	now := time.Now()
+	sum, err := m.summary(ctx, now.Add(-24*time.Hour))
 	if err != nil {
 		return nil, err
 	}
-	c.Stats = []module.CardStat{
-		{LabelKey: "honeypot.card.services", Value: int64(open)},
-		{LabelKey: "honeypot.card.events", Value: sum.Events},
+	prev, err := storeCountBetween(ctx, m.st, now.Add(-48*time.Hour), now.Add(-24*time.Hour))
+	if err != nil {
+		return nil, err
+	}
+	ev := module.CardStat{LabelKey: "honeypot.card.events", Value: sum.Events}
+	ev.Note, ev.NoteClass = cardTrend(sum.Events, prev)
+	c.Stats = []module.CardStat{ev,
 		{LabelKey: "honeypot.card.sources", Value: sum.Sources},
 		{LabelKey: "honeypot.card.logins", Value: sum.Logins},
 	}
+	from := storeTime(now.Add(-24 * time.Hour))
+	if list, _, err := m.st.byCountry(ctx, from); err == nil && len(list) > 0 {
+		var flags, title []string
+		for i, cc := range list {
+			if i == 3 {
+				break
+			}
+			flags = append(flags, geoip.Flag(cc.Key))
+			title = append(title, cc.Key+" "+strconv.FormatInt(cc.Count, 10))
+		}
+		c.Stats = append(c.Stats, module.CardStat{LabelKey: "honeypot.card.countries", Text: strings.Join(flags, " "), Title: strings.Join(title, " · ")})
+	}
+	if svc, n, err := storeTopService(ctx, m.st, from); err == nil && svc != "" && sum.Events > 0 {
+		c.Stats = append(c.Stats, module.CardStat{LabelKey: "honeypot.card.top_service", Text: strings.ToUpper(svc),
+			Note: strconv.FormatInt(n*100/sum.Events, 10) + " %", NoteClass: "text-body-secondary"})
+	}
+	c.Stats = append(c.Stats, module.CardStat{LabelKey: "honeypot.card.services", Value: int64(open)})
 	if errs > 0 {
-		c.Stats = append(c.Stats, module.CardStat{LabelKey: "honeypot.card.errors", Value: int64(errs), Class: "text-danger"})
+		c.Stats = append(c.Stats, module.CardStat{LabelKey: "honeypot.card.errors", Value: int64(errs), Class: "text-danger", Title: strings.Join(errText, "\n")})
+		c.Err = errText[0]
+		if errs > 1 {
+			c.Err += " (+" + strconv.Itoa(errs-1) + ")"
+		}
+	}
+	c.Stats = append(c.Stats, cardReport(m.rep.Status(ctx)))
+	if p := (overviewData{}).Proxy64(); p.Connected {
+		c.Stats = append(c.Stats, module.CardStat{LabelKey: "honeypot.card.proxy64", Value: p.Decoy + p.Access})
 	}
 	return c, nil
+}
+
+// cardTrend: Pfeil und Prozent gegenueber dem Zeitraum davor (mehr Angriffe = rot, weniger = gruen).
+func cardTrend(cur, prev int64) (note, class string) {
+	switch {
+	case prev == 0 && cur == 0:
+		return "", ""
+	case prev == 0:
+		return "▲", "text-danger"
+	}
+	pct := (cur - prev) * 100 / prev
+	switch {
+	case cur > prev:
+		return "▲ " + strconv.FormatInt(pct, 10) + " %", "text-danger"
+	case cur < prev:
+		return "▼ " + strconv.FormatInt(-pct, 10) + " %", "text-success"
+	}
+	return "± 0 %", "text-body-secondary"
+}
+
+// cardReport: Zeile „Meldung an ipv64“ (aus, ohne Key, wartet, ok mit Zeitpunkt, Fehler mit Zeitpunkt und Text).
+func cardReport(rs ReportStatus) module.CardStat {
+	st := module.CardStat{LabelKey: "honeypot.card.report"}
+	switch {
+	case !rs.Enabled:
+		st.TextKey, st.Class = "honeypot.card.report_off", "text-body-secondary"
+	case !rs.KeySet:
+		st.TextKey, st.Class = "honeypot.card.report_nokey", "text-warning-emphasis"
+	case rs.LastError != "" && rs.LastErrorAt.After(rs.LastSuccess):
+		st.TextKey, st.Class, st.Title, st.Ago = "honeypot.card.report_error", "text-danger", rs.LastError, rs.LastErrorAt
+	case rs.LastSuccess.IsZero():
+		st.TextKey, st.Class = "honeypot.card.report_wait", "text-body-secondary"
+	default:
+		st.TextKey, st.Class, st.Ago = "honeypot.card.report_ok", "text-success", rs.LastSuccess
+	}
+	return st
 }
 
 // summaryCounts sind die Kennzahlen eines Zeitraums ohne Ranglisten (guenstig fuer Karte und Prometheus).
@@ -931,6 +1002,24 @@ func storeSummary(ctx context.Context, st *Store, since time.Time) (summaryCount
 	err := st.st.Reader().QueryRowContext(ctx, `SELECT COUNT(*), COUNT(DISTINCT NULLIF(src, '')), COALESCE(SUM(login), 0) FROM hp_events WHERE ts >= ?`,
 		storeTime(since)).Scan(&s.Events, &s.Sources, &s.Logins)
 	return s, err
+}
+
+// storeCountBetween zaehlt die Ereignisse in [from, to) (Trend der Dashboard-Karte).
+func storeCountBetween(ctx context.Context, st *Store, from, to time.Time) (int64, error) {
+	var n int64
+	err := st.st.Reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM hp_events WHERE ts >= ? AND ts < ?`, storeTime(from), storeTime(to)).Scan(&n)
+	return n, err
+}
+
+// storeTopService liefert den Dienst mit den meisten Ereignissen ab from ("" = keine).
+func storeTopService(ctx context.Context, st *Store, from string) (string, int64, error) {
+	var svc string
+	var n int64
+	err := st.st.Reader().QueryRowContext(ctx, `SELECT service, COUNT(*) AS n FROM hp_events WHERE ts >= ? GROUP BY service ORDER BY n DESC, service LIMIT 1`, from).Scan(&svc, &n)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", 0, nil
+	}
+	return svc, n, err
 }
 
 // notifyLoop prueft stuendlich auf neue Angreifer und schickt hoechstens eine gebuendelte Meldung.

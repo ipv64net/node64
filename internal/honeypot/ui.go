@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -106,6 +107,28 @@ type overviewData struct {
 	Geo            geoip.Status
 	Targets        uiTargets
 	Decoys         []uiDecoy
+
+	// Laenderkarte und Filter der Ereignisliste nach Land (geomap.go)
+	Map     MapView
+	Country uiCountry // Filter country=XX ("" Code = alle)
+}
+
+// URL baut einen Link der Uebersicht mit Zeitraum, Sensor-Filter und Land (leere Werte fallen weg).
+func (overviewData) URL(rng, source, country string) string {
+	q := url.Values{}
+	if rng == "7d" {
+		q.Set("range", rng)
+	}
+	if source != "" {
+		q.Set("source", source)
+	}
+	if country != "" {
+		q.Set("country", country)
+	}
+	if len(q) == 0 {
+		return "/honeypot"
+	}
+	return "/honeypot?" + q.Encode()
 }
 
 func (m *Module) warnViews(r *http.Request, list []Warning) []uiWarning {
@@ -136,6 +159,10 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 		d.Range, span = "7d", 7*24*time.Hour
 	}
 	d.Source, _ = eventSource(r.URL.Query().Get("source")) // unbekannt = alle
+	// Filter nach Land (ungueltig = alle)
+	if cc, ok := validCountry(r.URL.Query().Get("country")); ok {
+		d.Country = countryView(cc, m.lang(r))
+	}
 	d.Geo = geoip.Current()
 	_ = m.st.Flush(ctx)
 	now := time.Now()
@@ -152,11 +179,12 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 		lang := m.lang(r)
 		d.Ranks = ranks(st, lang)
 		d.Countries, d.CountryCount, d.CountryUnknown = countryRanks(st.ByCountry, lang, 15), len(st.ByCountry), st.CountryUnknown
+		d.Map = BuildMap(st.ByCountry, lang)
 		d.Decoys = decoyRanks(st.ByDecoy)
 		var rows []targetRow
 		if rows, err = m.st.targets(ctx, storeTime(st.Since)); err == nil {
 			d.Targets = buildTargets(rows, 10)
-			d.Events, err = m.recent(r, 50, d.Source)
+			d.Events, err = m.recent(r, 50, d.Source, d.Country.Code)
 		}
 	}
 	if err != nil {

@@ -603,12 +603,29 @@ func TestPagesRender(t *testing.T) {
 			!strings.Contains(body, `id="targets-kinds"`) || !strings.Contains(body, "bg-danger") || strings.Contains(body, "\U0001F1E9\U0001F1EA")) {
 			t.Fatalf("overview without country data:\n%s", body)
 		}
+		if path == "/honeypot" && (!strings.Contains(body, `id="hp-map"`) || strings.Contains(body, `<svg class="hp-map"`)) {
+			t.Fatalf("map without country data must show a note only:\n%s", body)
+		}
 	}
 	// mit Laenderdaten: Flaggen an IPs (Ereignisse, Top-Quellen) und Rangliste nach Land
 	fakeCountries(t, map[string]string{"192.0.2.0/24": "DE", "198.51.100.0/24": "US"})
 	if code, body := get("/honeypot"); code != 200 || strings.Count(body, "\U0001F1E9\U0001F1EA") < 3 || !strings.Contains(body, "\U0001F1FA\U0001F1F8") ||
 		!strings.Contains(body, "Deutschland") || !strings.Contains(body, `progress-bar bg-primary`) {
 		t.Fatalf("overview with country data: %d\n%s", code, body)
+	}
+	// Laenderkarte: Laender mit Angriffen verlinkt und eingefaerbt, Legende; Filter der Ereignisliste nach Land
+	if code, body := get("/honeypot?range=7d&source=honeypot"); code != 200 || !strings.Contains(body, `<svg class="hp-map"`) ||
+		!strings.Contains(body, `href="/honeypot?country=DE&amp;range=7d&amp;source=honeypot#events"`) || !strings.Contains(body, `class="hp-m5"`) ||
+		!strings.Contains(body, `class="hp-m0"`) || !strings.Contains(body, `class="hp-sw hp-m5"`) || !strings.Contains(body, "<title>\U0001F1E9\U0001F1EA Deutschland: ") {
+		t.Fatalf("map: %d\n%s", code, body)
+	}
+	if code, body := get("/honeypot?country=us"); code != 200 || !strings.Contains(body, `class="hp-m1 hp-sel"`) || !strings.Contains(body, `href="/honeypot?country=US&amp;source=log"`) ||
+		!strings.Contains(body[strings.Index(body, `id="events"`):], `id="events-country"`) || !strings.Contains(body[strings.Index(body, `id="events"`):], "198.51.100.7") ||
+		strings.Contains(body[strings.Index(body, `id="events"`):], "192.0.2.10") {
+		t.Fatalf("country filter: %d\n%s", code, body)
+	}
+	if code, body := get("/honeypot?country=1x"); code != 200 || strings.Contains(body, `id="events-country"`) {
+		t.Fatalf("invalid country filter: %d", code)
 	}
 	// Formular: Port-Konflikt am Feld (Port 8080 hat hier niemand; 0 ist ungueltig)
 	_, body = get("/honeypot/settings")

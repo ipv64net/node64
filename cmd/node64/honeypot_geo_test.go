@@ -59,6 +59,9 @@ func TestHPInfoCountries(t *testing.T) {
 	if !strings.Contains(body, "Herkunft nach Land (7 Tage)") || !strings.Contains(body, "Noch keine Länderdaten") || strings.Contains(body, "\U0001F1E9\U0001F1EA") {
 		t.Fatalf("page without country data:\n%s", body)
 	}
+	if strings.Contains(body, `<svg class="map"`) {
+		t.Fatal("no map without country data")
+	}
 	dir := t.TempDir()
 	writeGeoCache(t, dir, "DE 192.0.2.0 192.0.2.255\nUS 198.51.100.0 198.51.100.255\n")
 	release := geoip.Start(dir, "test", slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -75,6 +78,16 @@ func TestHPInfoCountries(t *testing.T) {
 	}
 	if !strings.Contains(hpDo(h, "GET", "/", "127.0.0.1:1", nil).Body.String(), `title="Germany"`) {
 		t.Error("english country name expected")
+	}
+	// Laenderkarte: DE und US je 1 Ereignis (Stufe 5), Rest neutral, Legende; ohne Inline-Styles (CSP)
+	for _, s := range []string{`<svg class="map" viewBox="0 0 `, `<path class="m5"`, `<path class="m0"`, "<title>\U0001F1E9\U0001F1EA Deutschland: 1 Ereignisse, 1 IPs</title>",
+		`<span class="sw m5"></span> 1</p>`, "Herkunft auf der Karte (7 Tage)"} {
+		if !strings.Contains(body, s) {
+			t.Errorf("map lacks %q", s)
+		}
+	}
+	if strings.Contains(body, "style=") || strings.Contains(body, " fill=") {
+		t.Error("info page must not use inline styles")
 	}
 	honeypot.CountEvents(func(honeypot.Event) {})(honeypot.Event{Src: netip.MustParseAddr("192.0.2.99"), Kind: honeypot.KindProbe})
 	m := hpDo(h, "GET", "/metrics", "127.0.0.1:1", nil).Body.String()

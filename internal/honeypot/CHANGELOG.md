@@ -1,5 +1,12 @@
 # Änderungen – Honeypot64
 
+## 0.8.0 – 2026-10-20
+
+### Neu
+- Länderkarte auf der Übersicht: Weltkarte, Länder nach Ereignissen im gewählten Zeitraum in fünf Stufen eingefärbt (logarithmisch, hell/dunkel), Tooltip mit Flagge, Name, Ereignissen und Quell-IPs, Legende. Klick auf ein Land filtert die Ereignisliste nach diesem Land (ohne JavaScript). Kartendaten Natural Earth 1:110m (public domain) eingebettet, kein Nachladen aus dem Netz. Dieselbe Karte (7 Tage) auf der Info-Seite des Modus ohne Oberfläche.
+- Filter nach Land: `GET /api/honeypot/events?country=DE`, in der Oberfläche `/honeypot?country=DE`.
+- Startseiten-Karte mit mehr Informationen: Ereignisse 24 Std. mit Trend gegenüber den 24 Std. davor, Top-3-Länder als Flaggen, meistangegriffener Dienst, Meldung an ipv64 (aus/ok/Fehler mit Zeitpunkt), fehlerhafte Fallen-Dienste mit Hinweis, Anfragen über PROXY64.
+
 ## 0.7.0 – 2026-10-20
 
 ### Neu

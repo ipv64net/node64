@@ -3224,7 +3224,9 @@
       "rule": "Rule",
       "filter": "Filter by sensor",
       "filter_all": "All",
-      "fingerprint": "Client fingerprint (JA4 for TLS, HASSH for SSH)"
+      "fingerprint": "Client fingerprint (JA4 for TLS, HASSH for SSH)",
+      "country_clear": "Clear country filter",
+      "empty_country": "No stored events from this country."
     },
     "settings": {
       "title": "Settings",
@@ -3265,7 +3267,16 @@
       "events": "Events (24 h)",
       "sources": "Source IPs (24 h)",
       "logins": "Login attempts (24 h)",
-      "errors": "Services with errors"
+      "errors": "Services with errors",
+      "countries": "Top countries (24 h)",
+      "top_service": "Most attacked (24 h)",
+      "report": "Reporting to ipv64",
+      "report_off": "off",
+      "report_nokey": "no API key",
+      "report_wait": "waiting",
+      "report_ok": "ok",
+      "report_error": "error",
+      "proxy64": "Via PROXY64 (since start)"
     },
     "err": {
       "profile": "Unknown profile.",
@@ -3513,6 +3524,15 @@
       "scan": "Scan",
       "probe": "Probe",
       "log": "Log/syslog"
+    },
+    "map": {
+      "title": "Origin on the map",
+      "legend": "Events per country (levels, logarithmic)",
+      "aria": "World map: attacks from {count} countries",
+      "tip": "{events} events, {sources} source IPs",
+      "hint": "Click a country to show its events in the list below.",
+      "missing": "{count} countries are too small for the map (see list)",
+      "filter": "Show events from {country}"
     }
   }
 }

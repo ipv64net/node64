@@ -772,8 +772,10 @@ func hpProfileLabel(hc *hpModeConfig) string {
 // ---- Info-Seite (nur lesend, ohne Formular und ohne JS; zweisprachig fest im Template)
 
 // hpInfoCSS steht woertlich im Template; ihr Hash erlaubt sie in der CSP (sonst keine Inhalte).
-const hpInfoCSS = `:root{color-scheme:light dark;--bg:#f6f7f9;--fg:#1d2330;--mut:#5d6675;--card:#fff;--line:#dfe3ea;--ok:#1a7f37;--bad:#c62828;--acc:#2f5bd3}
-@media (prefers-color-scheme:dark){:root{--bg:#12151b;--fg:#e4e8ef;--mut:#99a3b3;--card:#1b2029;--line:#2c3340;--ok:#4cc26b;--bad:#f0645a;--acc:#7aa2ff}}
+const hpInfoCSS = `:root{color-scheme:light dark;--bg:#f6f7f9;--fg:#1d2330;--mut:#5d6675;--card:#fff;--line:#dfe3ea;--ok:#1a7f37;--bad:#c62828;--acc:#2f5bd3;
+--m0:#e3e6ea;--m1:#fdd0a2;--m2:#fdae6b;--m3:#fd8d3c;--m4:#e6550d;--m5:#a63603}
+@media (prefers-color-scheme:dark){:root{--bg:#12151b;--fg:#e4e8ef;--mut:#99a3b3;--card:#1b2029;--line:#2c3340;--ok:#4cc26b;--bad:#f0645a;--acc:#7aa2ff;
+--m0:#2c3238;--m1:#5e2d0c;--m2:#8f420f;--m3:#c75d14;--m4:#f07f2a;--m5:#ffb46b}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 main{max-width:1100px;margin:0 auto;padding:16px}h1{font-size:1.4rem;margin:0 0 4px}h2{font-size:1rem;margin:0 0 8px}
 .mut{color:var(--mut);font-size:.9rem}.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));margin-top:12px}
@@ -783,7 +785,11 @@ main{max-width:1100px;margin:0 auto;padding:16px}h1{font-size:1.4rem;margin:0 0 
 .tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:.9rem}td,th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 th{color:var(--mut);font-weight:600}td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}td.k{word-break:break-all;font-family:ui-monospace,Consolas,monospace}
 .ok{color:var(--ok)}.bad{color:var(--bad)}footer{margin-top:16px}.cc{white-space:nowrap;margin-right:4px}.cc small{color:var(--mut)}
-progress{display:block;width:100%;height:6px;margin-top:3px;accent-color:var(--acc)}`
+progress{display:block;width:100%;height:6px;margin-top:3px;accent-color:var(--acc)}
+.map{display:block;width:100%;height:auto}.map path{stroke:var(--card);stroke-width:.4}.mapcard{margin-top:12px}
+.sw{display:inline-block;width:.9em;height:.9em;border-radius:2px;vertical-align:-.1em;margin-left:6px}
+.m0{fill:var(--m0);background:var(--m0)}.m1{fill:var(--m1);background:var(--m1)}.m2{fill:var(--m2);background:var(--m2)}
+.m3{fill:var(--m3);background:var(--m3)}.m4{fill:var(--m4);background:var(--m4)}.m5{fill:var(--m5);background:var(--m5)}`
 
 var (
 	hpInfoCSP = func() string {
@@ -805,6 +811,9 @@ var (
 <div class="card kpi"><span class="mut">{{.T.Logins7}}</span><b>{{.Week.Logins}}</b></div>
 </div>
 {{if .Err}}<p class="bad">{{.T.StatsErr}}</p>{{end}}
+{{if .Map.Max}}<section class="card mapcard"><h2>{{.T.Map}}</h2><svg class="map" viewBox="{{.Map.ViewBox}}" role="img" aria-label="{{.T.Map}}">
+{{range .Map.Countries}}<path class="m{{.Level}}" d="{{.Path}}"><title>{{if .Count}}{{.Flag}} {{.Name}}: {{.Count}} {{$.T.MapEvents}}, {{.Sources}} IPs{{else}}{{.Name}}{{end}}</title></path>{{end}}
+</svg><p class="mut">{{.T.MapLegend}}:{{range .Map.Legend}} <span class="sw m{{.Level}}"></span> {{.From}}{{if ne .From .To}}–{{.To}}{{end}}{{end}}</p></section>{{end}}
 <div class="grid">
 <section class="card"><h2>{{.T.Services}}</h2><div class="tw"><table><tr><th>{{.T.Service}}</th><th>Port</th><th>{{.T.State}}</th><th>{{.T.Conns}}</th></tr>
 {{range .Services}}<tr><td>{{.Service}}</td><td class="n">{{.Port}}</td><td>{{if .Listen}}<span class="ok">{{$.T.Open}}</span>{{else}}<span class="bad">{{$.T.Closed}}{{if .Error}}: {{short .Error}}{{end}}</span>{{end}}</td><td class="n">{{.Conns}}</td></tr>
@@ -863,6 +872,8 @@ type hpTexts struct {
 	FW, FWWait, FWEntries, FWAddrs, FWUpdated, FWChanged, FWDenied, FWAllow, FWSkipped, FWLive, FWDaily, FWKeep, FWRemove string
 	// Herkunft der Angreifer
 	Countries, NoGeo, NoCountry string
+	// Laenderkarte
+	Map, MapEvents, MapLegend string
 }
 
 var hpTextsByLang = map[string]hpTexts{
@@ -880,7 +891,8 @@ var hpTextsByLang = map[string]hpTexts{
 		FWChanged: "geändert", FWDenied: "Token ohne Berechtigung, Tagesstand", FWAllow: "Ausnahmen (NODE64_FIREWALL_ALLOW)", FWSkipped: "zu große Netze verworfen",
 		FWLive: "Live-Listen mit Listen-Token, Abruf alle 30 Minuten.", FWDaily: "Tagesstand (ohne NODE64_IPV64_LIST_TOKEN), Abruf alle 30 Minuten.",
 		FWKeep: "Die Tabelle bleibt beim Beenden stehen.", FWRemove: "Die Tabelle wird beim Beenden gelöscht.",
-		Countries: "Herkunft nach Land (7 Tage)", NoGeo: "Noch keine Länderdaten von ipv64.net.", NoCountry: "Ereignisse ohne Land (privat oder unbekannt)"},
+		Countries: "Herkunft nach Land (7 Tage)", NoGeo: "Noch keine Länderdaten von ipv64.net.", NoCountry: "Ereignisse ohne Land (privat oder unbekannt)",
+		Map: "Herkunft auf der Karte (7 Tage)", MapEvents: "Ereignisse", MapLegend: "Ereignisse je Land"},
 	"en": {Profile: "Profile", Uptime: "Uptime", Hits24: "Hits 24 h", Hits7: "Hits 7 days", Src24: "Source IPs 24 h", Src7: "Source IPs 7 days",
 		Logins7: "Login attempts 7 days", StatsErr: "Statistics currently not readable.", Services: "Services", Service: "Service", State: "State",
 		Conns: "Connections", Open: "open", Closed: "not open", None: "none", Scan: "Port scan detection", On: "on", Off: "off",
@@ -895,7 +907,8 @@ var hpTextsByLang = map[string]hpTexts{
 		FWChanged: "changed", FWDenied: "token not entitled, daily list", FWAllow: "Exceptions (NODE64_FIREWALL_ALLOW)", FWSkipped: "networks too large, dropped",
 		FWLive: "Live lists with list token, fetched every 30 minutes.", FWDaily: "Daily lists (no NODE64_IPV64_LIST_TOKEN), fetched every 30 minutes.",
 		FWKeep: "The table stays when Node64 stops.", FWRemove: "The table is removed when Node64 stops.",
-		Countries: "Origin by country (7 days)", NoGeo: "No country data from ipv64.net yet.", NoCountry: "Events without country (private or unknown)"},
+		Countries: "Origin by country (7 days)", NoGeo: "No country data from ipv64.net yet.", NoCountry: "Events without country (private or unknown)",
+		Map: "Origin on the map (7 days)", MapEvents: "events", MapLegend: "Events per country"},
 }
 
 type hpList struct {
@@ -913,6 +926,7 @@ type hpPage struct {
 	Logs                           honeypot.LogStatus
 	FW                             *firewall.Status // nil = Firewall-Helfer aus
 	Geo                            geoip.Status     // Stand der Laenderdaten
+	Map                            honeypot.MapView // Laenderkarte (7 Tage)
 }
 
 // L baut eine Rangliste fuer das Untertemplate "list".
@@ -927,7 +941,8 @@ func (h *hpInfo) page(w http.ResponseWriter, r *http.Request) {
 		day, week = &honeypot.Stats{}, &honeypot.Stats{}
 	}
 	p := hpPage{Lang: lang, Version: h.version, Profile: h.profileLabel(), Uptime: hpUptime(time.Since(h.started)), T: hpTextsByLang[lang],
-		Day: day, Week: week, Err: err != nil, Scan: h.hc.Sensor.Scan, Key: h.hc.IPv64Key != "", Services: h.sensor.Status(), Geo: geoip.Current()}
+		Day: day, Week: week, Err: err != nil, Scan: h.hc.Sensor.Scan, Key: h.hc.IPv64Key != "", Services: h.sensor.Status(), Geo: geoip.Current(),
+		Map: honeypot.BuildMap(week.ByCountry, lang)}
 	if h.rep != nil {
 		p.Rep = h.rep.Status(r.Context())
 	}

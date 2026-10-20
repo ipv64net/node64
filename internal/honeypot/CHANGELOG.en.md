@@ -1,5 +1,12 @@
 # Changes – Honeypot64
 
+## 0.8.0 – 2026-10-20
+
+### New
+- Country map on the overview: world map with countries coloured in five levels by events in the selected period (logarithmic, light/dark), tooltip with flag, name, events and source IPs, legend. Clicking a country filters the event list by that country (no JavaScript needed). Map data Natural Earth 1:110m (public domain) embedded, nothing is loaded from the network. The same map (7 days) on the info page of the headless mode.
+- Filter by country: `GET /api/honeypot/events?country=DE`, in the web interface `/honeypot?country=DE`.
+- Dashboard card with more information: events 24 h with trend versus the previous 24 h, top 3 countries as flags, most attacked service, reporting to ipv64 (off/ok/error with time), failed trap services with a hint, requests via PROXY64.
+
 ## 0.7.0 – 2026-10-20
 
 ### New

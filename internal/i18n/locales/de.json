@@ -3224,7 +3224,9 @@
       "rule": "Regel",
       "filter": "Nach Sensor filtern",
       "filter_all": "Alle",
-      "fingerprint": "Fingerabdruck des Clients (JA4 bei TLS, HASSH bei SSH)"
+      "fingerprint": "Fingerabdruck des Clients (JA4 bei TLS, HASSH bei SSH)",
+      "country_clear": "Filter nach Land aufheben",
+      "empty_country": "Keine gespeicherten Ereignisse aus diesem Land."
     },
     "settings": {
       "title": "Einstellungen",
@@ -3265,7 +3267,16 @@
       "events": "Ereignisse (24 Std.)",
       "sources": "Quell-IPs (24 Std.)",
       "logins": "Login-Versuche (24 Std.)",
-      "errors": "Dienste mit Fehler"
+      "errors": "Dienste mit Fehler",
+      "countries": "Top-Länder (24 Std.)",
+      "top_service": "Meistangegriffen (24 Std.)",
+      "report": "Meldung an ipv64",
+      "report_off": "aus",
+      "report_nokey": "kein API-Key",
+      "report_wait": "wartet",
+      "report_ok": "ok",
+      "report_error": "Fehler",
+      "proxy64": "Über PROXY64 (seit Start)"
     },
     "err": {
       "profile": "Unbekanntes Profil.",
@@ -3513,6 +3524,15 @@
       "scan": "Scan",
       "probe": "Sondierung",
       "log": "Log/Syslog"
+    },
+    "map": {
+      "title": "Herkunft auf der Karte",
+      "legend": "Ereignisse je Land (Stufen, logarithmisch)",
+      "aria": "Weltkarte: Angriffe aus {count} Ländern",
+      "tip": "{events} Ereignisse, {sources} Quell-IPs",
+      "hint": "Klick auf ein Land zeigt seine Ereignisse in der Liste unten.",
+      "missing": "{count} Länder sind für die Karte zu klein (siehe Liste)",
+      "filter": "Ereignisse aus {country} anzeigen"
     }
   }
 }

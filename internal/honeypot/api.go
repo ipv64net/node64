@@ -179,9 +179,9 @@ func eventSource(v string) (string, bool) {
 	return "", false
 }
 
-func (m *Module) recent(r *http.Request, limit int, source string) ([]EventView, error) {
+func (m *Module) recent(r *http.Request, limit int, source, country string) ([]EventView, error) {
 	_ = m.st.Flush(r.Context())
-	list, err := m.st.RecentBy(r.Context(), limit, source)
+	list, err := m.st.RecentIn(r.Context(), limit, source, country)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,14 @@ func (m *Module) apiEvents(w http.ResponseWriter, r *http.Request) {
 		apiErr(w, http.StatusBadRequest, "source: use honeypot, log or syslog")
 		return
 	}
-	list, err := m.recent(r, limit, source)
+	country := ""
+	if v := r.URL.Query().Get("country"); v != "" {
+		if country, ok = validCountry(v); !ok {
+			apiErr(w, http.StatusBadRequest, "country: use an ISO 3166 alpha-2 code (e.g. DE)")
+			return
+		}
+	}
+	list, err := m.recent(r, limit, source, country)
 	if err != nil {
 		m.fail(w, err)
 		return

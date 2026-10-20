@@ -4,8 +4,8 @@
 	<h1 class="h4 mb-0"><i class="bi bi-bug text-primary"></i> {{.T "honeypot.title"}}{{.Doc "honeypot"}}</h1>
 	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "honeypot.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "honeypot.running" "profile" (.T (printf "honeypot.profile.%s" $d.Profile))}}</span>{{end}}
 	<div class="btn-group btn-group-sm ms-auto" role="group" aria-label="{{.T "honeypot.range"}}">
-		<a class="btn btn-outline-secondary{{if eq $d.Range "24h"}} active{{end}}" href="/honeypot{{with $d.Source}}?source={{.}}{{end}}">{{.T "honeypot.range_24h"}}</a>
-		<a class="btn btn-outline-secondary{{if eq $d.Range "7d"}} active{{end}}" href="/honeypot?range=7d{{with $d.Source}}&amp;source={{.}}{{end}}">{{.T "honeypot.range_7d"}}</a>
+		<a class="btn btn-outline-secondary{{if eq $d.Range "24h"}} active{{end}}" href="{{$d.URL "24h" $d.Source $d.Country.Code}}">{{.T "honeypot.range_24h"}}</a>
+		<a class="btn btn-outline-secondary{{if eq $d.Range "7d"}} active{{end}}" href="{{$d.URL "7d" $d.Source $d.Country.Code}}">{{.T "honeypot.range_7d"}}</a>
 	</div>
 </div>
 <ul class="nav nav-tabs mb-3">
@@ -85,6 +85,20 @@
 </div>
 
 <div class="row g-3 mb-3">
+	<div class="col-xl-7">
+		<div class="card" id="hp-map">
+			<div class="card-header d-flex flex-wrap align-items-center gap-2"><span><i class="bi bi-map text-primary"></i> {{.T "honeypot.map.title"}}{{.Doc "honeypot#herkunft"}}</span>
+				{{with $d.Map.Legend}}<span class="ms-auto small d-flex flex-wrap align-items-center gap-2" title="{{$.T "honeypot.map.legend"}}">{{range .}}<span class="text-nowrap"><span class="hp-sw hp-m{{.Level}}"></span> {{$.Int .From}}{{if ne .From .To}}–{{$.Int .To}}{{end}}</span>{{end}}</span>{{end}}
+			</div>
+			<div class="card-body p-2">
+				{{if $d.Map.Max}}<svg class="hp-map" viewBox="{{$d.Map.ViewBox}}" role="img" aria-label="{{.T "honeypot.map.aria" "count" $d.CountryCount}}">
+					{{range $d.Map.Countries}}{{if .Count}}<a href="{{$d.URL $d.Range $d.Source .Code}}#events"><path class="hp-m{{.Level}}{{if eq .Code $d.Country.Code}} hp-sel{{end}}" d="{{.Path}}"><title>{{.Flag}} {{.Name}}: {{$.T "honeypot.map.tip" "events" ($.Int .Count) "sources" ($.Int .Sources)}}</title></path></a>{{else}}<path class="hp-m0" d="{{.Path}}"><title>{{.Name}}</title></path>{{end}}{{end}}
+				</svg>
+				<div class="small text-body-secondary mx-1">{{.T "honeypot.map.hint"}}{{if $d.Map.Missing}} · {{.T "honeypot.map.missing" "count" $d.Map.Missing}}{{end}}</div>
+				{{else}}<p class="text-body-secondary small m-2">{{if $d.Geo.Loaded}}{{.T "honeypot.top.empty"}}{{else}}{{.T "honeypot.geo.waiting"}}{{end}}</p>{{end}}
+			</div>
+		</div>
+	</div>
 	<div class="col-xl-5">
 		<div class="card h-100" id="top-countries">
 			<div class="card-header"><i class="bi bi-globe-europe-africa text-primary"></i> {{.T "honeypot.geo.title"}}{{.Doc "honeypot#herkunft"}}</div>
@@ -95,7 +109,7 @@
 				<table class="table table-sm small mb-0">
 					<tbody>{{range $d.Countries}}<tr>
 						<td class="text-nowrap" style="width:1%"><span class="fs-5 lh-1" title="{{.Name}}">{{.Flag}}</span></td>
-						<td><span title="{{.Name}}">{{.Name}}</span> <span class="font-monospace text-body-secondary">{{.Code}}</span>
+						<td><a class="text-reset" href="{{$d.URL $d.Range $d.Source .Code}}#events" title="{{$.T "honeypot.map.filter" "country" .Name}}">{{.Name}}</a> <span class="font-monospace text-body-secondary">{{.Code}}</span>
 							<div class="progress mt-1" style="height:6px" role="progressbar" aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{.Color}}" style="width:{{.Pct}}%"></div></div></td>
 						<td class="text-end text-nowrap">{{$.Int .Count}}<div class="text-body-secondary" title="{{$.T "honeypot.geo.sources"}}"><i class="bi bi-pc-display"></i> {{$.Int .Sources}}</div></td>
 					</tr>{{end}}</tbody>
@@ -108,7 +122,10 @@
 			</div>
 		</div>
 	</div>
-	<div class="col-xl-7">
+</div>
+
+<div class="row g-3 mb-3">
+	<div class="col-12">
 		<div class="card h-100" id="targets">
 			<div class="card-header d-flex flex-wrap align-items-center gap-2"><span><i class="bi bi-bullseye text-primary"></i> {{.T "honeypot.targets.title"}}{{.Doc "honeypot#statistik"}}</span>
 				<span class="ms-auto small d-flex flex-wrap gap-2">{{range $d.Targets.Groups}}<span class="text-nowrap"><span class="d-inline-block rounded-1 {{$d.Targets.Color .}}" style="width:.8em;height:.8em;vertical-align:-.05em"></span> {{$.T (printf "honeypot.group.%s" .)}}</span>{{end}}</span>
@@ -151,11 +168,12 @@
 	</div>{{end}}
 </div>
 
-<div class="card">
+<div class="card" id="events">
 	<div class="card-header d-flex flex-wrap align-items-center gap-2"><span><i class="bi bi-list-ul text-primary"></i> {{.T "honeypot.events.title"}}{{.Doc "honeypot#ereignisse"}}</span>
+		{{if $d.Country.Code}}<a class="badge rounded-pill text-bg-primary text-decoration-none" id="events-country" href="{{$d.URL $d.Range $d.Source ""}}#events" title="{{.T "honeypot.events.country_clear"}}">{{$d.Country.Flag}} {{$d.Country.Name}} <i class="bi bi-x-lg"></i></a>{{end}}
 		<div class="btn-group btn-group-sm ms-auto" role="group" aria-label="{{.T "honeypot.events.filter"}}">
-			<a class="btn btn-outline-secondary{{if not $d.Source}} active{{end}}" href="/honeypot{{if eq $d.Range "7d"}}?range=7d{{end}}">{{.T "honeypot.events.filter_all"}}</a>
-			{{range $d.Sources}}<a class="btn btn-outline-secondary{{if eq $d.Source .}} active{{end}}" href="/honeypot?source={{.}}{{if eq $d.Range "7d"}}&amp;range=7d{{end}}">{{$.T (printf "honeypot.origin.%s" .)}}</a>{{end}}
+			<a class="btn btn-outline-secondary{{if not $d.Source}} active{{end}}" href="{{$d.URL $d.Range "" $d.Country.Code}}">{{.T "honeypot.events.filter_all"}}</a>
+			{{range $d.Sources}}<a class="btn btn-outline-secondary{{if eq $d.Source .}} active{{end}}" href="{{$d.URL $d.Range . $d.Country.Code}}">{{$.T (printf "honeypot.origin.%s" .)}}</a>{{end}}
 		</div>
 	</div>
 	<div class="card-body p-0">
@@ -182,7 +200,7 @@
 					</details>{{end}}
 				</td>
 			</tr>{{end}}</tbody>
-		</table></div>{{else}}<p class="text-body-secondary small m-3">{{.T "honeypot.events.empty"}}</p>{{end}}
+		</table></div>{{else}}<p class="text-body-secondary small m-3">{{if $d.Country.Code}}{{.T "honeypot.events.empty_country"}}{{else}}{{.T "honeypot.events.empty"}}{{end}}</p>{{end}}
 	</div>
 </div>
 {{end}}
