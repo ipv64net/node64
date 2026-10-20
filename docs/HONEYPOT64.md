@@ -282,6 +282,19 @@ Beispiele (Sensor `192.168.1.20`; Menünamen können je nach Version abweichen, 
 - **UniFi (Network-App):** Einstellungen › Control Plane › Integrations › Activity Logging (Syslog) bzw. „SIEM
   Server“: IP `192.168.1.20`, Port 514.
 
+## Frühwarnung
+
+Reiter „Frühwarnung“ im Modul: eigene Netze (IPv4 ab /16, IPv6 ab /32) bei ipv64 hinterlegen; die aktuellen
+DynDNS-IPs des Accounts werden automatisch überwacht. ipv64 prüft nach jeder Bewertung, ob eine dieser Adressen als
+Angreifer aufgefallen ist; die Node holt Treffer alle 30 Minuten ab und meldet sie gebündelt (Benachrichtigung
+„Honeypot64 Frühwarnung“), dazu eine Mail von ipv64.
+
+- Netze ohne Nachweis melden nur IPs, die auf der v64 Blocklist stehen (ohnehin öffentlich); DynDNS-IPs des Accounts
+  gelten als nachgewiesen und melden schon jede Sichtung.
+- Braucht den zentralen API-Key, nicht die Meldung an ipv64 und keinen eigenen Sensor. Der automatische Abruf läuft,
+  solange das Modul an ist; sonst „Jetzt abrufen“.
+- Grenzen je Account-Klasse: Standard 3 Netze, sonst 50.
+
 ## Beenden
 
 `docker stop` (SIGTERM) schließt erst die Info-Seite, dann Log-Sensor, Syslog-Empfänger und alle Fallen, und
