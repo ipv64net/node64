@@ -6,6 +6,11 @@
 - Healthchecks-Sync-Seite: Der Schalter für den Abgleich über den Cluster ist weg; die Seite zeigt nur noch, ob er an
   ist, und verweist auf die Cluster-Seite. Geschaltet wird nur noch dort.
 
+### Behoben
+- Online-Checks blieben nach einem Tag mit aufgebrauchtem Kontingent auf „Wartet“, obwohl ipv64 wieder maß und alle
+  Standorte OK meldeten (hub): Steht der Gesamtzustand auf „Wartet“, bewertet der hub jetzt schon die nächste Messung
+  eines Standorts neu.
+
 ## 2.16.0 – 2026-10-19
 
 ### Neu

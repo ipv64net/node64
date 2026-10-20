@@ -6,6 +6,11 @@
 - Healthchecks sync page: the switch for syncing via the cluster is gone; the page only shows whether it is on and
   links to the cluster page. It is switched only there.
 
+### Fixed
+- Online checks stayed on "Pending" after a day with the quota used up, although ipv64 measured again and all
+  locations reported OK (hub): when the overall state is "Pending", the hub now re-evaluates on the next measurement
+  of a location.
+
 ## 2.16.0 – 2026-10-19
 
 ### New

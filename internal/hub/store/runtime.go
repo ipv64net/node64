@@ -143,12 +143,21 @@ func (s *Store) SaveRuntime(ctx context.Context, token string, rt scheduler.Runt
 	prev, seen := s.states[token]
 	s.states[token] = string(rt.State)
 	s.mu.Unlock()
-	if !seen || prev != string(rt.State) {
+	if !seen || prev != string(rt.State) || s.overallPending(ctx, token) {
 		if err := s.Reverdict(ctx, token); err != nil {
 			s.log.Error("verdict failed", "token", token, "err", err)
 		}
 	}
 	return nil
+}
+
+// overallPending: der Gesamtzustand steht auf "pending", z. B. nachdem die Standorte wegen des Tageskontingents nicht
+// gemessen haben. Dann bewertet schon eine Messung ohne Zustandswechsel neu; sonst bliebe ein Online-Check nach
+// Mitternacht auf "Wartet", bis sich an einem Standort der Zustand aendert.
+func (s *Store) overallPending(ctx context.Context, token string) bool {
+	var st string
+	err := s.db.QueryRowContext(ctx, `SELECT state FROM hc2_checks WHERE token = ? AND deleted_at IS NULL`, token).Scan(&st)
+	return err == nil && st == string(scheduler.StatePending)
 }
 
 // OpenIncident/CloseIncident je Messstelle: Stoerungen gibt es nur fuer den
