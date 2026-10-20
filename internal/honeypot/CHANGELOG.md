@@ -3,6 +3,7 @@
 ## 0.7.0 – 2026-10-20
 
 ### Neu
+- Flaggen auch unter Windows: kleine Flaggen-Schrift (Twemoji, CC-BY 4.0) in der Oberfläche, die nur für Länderflaggen greift.
 - Herkunft der Angreifer: Flagge (Emoji), Ländercode und Name im Tooltip an jeder IP in Ereignisliste und Top-Quellen, in der Benachrichtigung über neue Angreifer und auf der Info-Seite des Modus ohne Oberfläche. Neue Rangliste „Herkunft nach Land“ mit farbigen Balken (Ereignisse und Quell-IPs je Land). Länderdaten von ipv64.net (`country_ranges.txt.gz`, täglich, nur bei Änderung geladen, Zwischenspeicher `/data/geoip/`), nur solange Honeypot64 läuft; ohne Daten läuft alles ohne Länder weiter.
 - „Was wurde angegriffen“ farbig: Balken je Dienst, Port und Art, aufgeteilt nach Login/Bruteforce, Exploit, Scan, Sondierung und Log/Syslog; Köder und erkannte Geräte als eigene kleine Rangliste.
 - API: `country` an Ereignissen und Top-Quellen, `by_country`, `country_unknown` und `by_decoy` in der Statistik. Prometheus `node64_honeypot_events_by_country_total{country}`.

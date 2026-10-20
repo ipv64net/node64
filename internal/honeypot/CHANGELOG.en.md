@@ -3,6 +3,7 @@
 ## 0.7.0 – 2026-10-20
 
 ### New
+- Flags on Windows too: small flag font (Twemoji, CC-BY 4.0) in the web interface that only applies to country flags.
 - Attacker origin: flag (emoji), country code and name as tooltip next to every IP in the event list and top sources, in the new-attacker notification and on the info page of the headless mode. New ranking “Origin by country” with coloured bars (events and source IPs per country). Country data from ipv64.net (`country_ranges.txt.gz`, daily, only downloaded when changed, cached in `/data/geoip/`), only while Honeypot64 runs; without data everything keeps working without countries.
 - “What was attacked” in colour: bars per service, port and kind, split into login/brute force, exploit, scan, probe and log/syslog; decoys and detected devices as their own small ranking.
 - API: `country` on events and top sources, `by_country`, `country_unknown` and `by_decoy` in the statistics. Prometheus `node64_honeypot_events_by_country_total{country}`.

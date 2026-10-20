@@ -9,6 +9,16 @@
 	src: url("fonts/open-sans-v34-latin-regular.woff2") format("woff2");
 }
 
+/* Laenderflaggen (Regional Indicator Symbols) auch unter Windows, das keine Flaggen-Emojis hat: Schrift nur fuer diese
+   Zeichen (unicode-range), sonst greift sie nie. "Twemoji Country Flags" aus country-flag-emoji-polyfill 0.1.8 (MIT),
+   Grafiken Twemoji (c) Twitter, Inc. and other contributors, CC-BY 4.0. */
+@font-face {
+	font-family: "Twemoji Country Flags";
+	unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F;
+	font-display: swap;
+	src: url("fonts/TwemojiCountryFlags.woff2") format("woff2");
+}
+
 :root, [data-bs-theme="light"] {
 	--bs-primary: #007bff;
 	--bs-primary-rgb: 0, 123, 255;
@@ -20,7 +30,7 @@
 	--bs-warning-rgb: 255, 193, 7;
 	--bs-info: #17a2b8;
 	--bs-info-rgb: 23, 162, 184;
-	--bs-body-font-family: "Open Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--bs-body-font-family: "Twemoji Country Flags", "Open Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 	--ipv64-orange: #f59c1a;
 	--ipv64-dark: #272828;
 	--sidebar-width: 15rem;

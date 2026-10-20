@@ -1,0 +1,6 @@
+TwemojiCountryFlags.woff2 – Schrift nur mit Laenderflaggen (Regional Indicator Symbols), damit Flaggen auch unter
+Windows erscheinen.
+
+Quelle: npm-Paket country-flag-emoji-polyfill 0.1.8 (https://github.com/talkjs/country-flag-emoji-polyfill), MIT-Lizenz.
+Flaggen-Grafiken: Twemoji, Copyright 2019 Twitter, Inc. and other contributors,
+Lizenz CC-BY 4.0 (https://creativecommons.org/licenses/by/4.0/), https://github.com/twitter/twemoji.
