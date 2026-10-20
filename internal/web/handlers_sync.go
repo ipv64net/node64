@@ -42,7 +42,7 @@ type linkData struct {
 	Cluster    clusterHint            // Hinweis auf den Cluster (handlers_peer.go)
 }
 
-// clusterHint: Healthchecks auch ueber den Cluster abgleichen (Schalter), Mitglieder.
+// clusterHint: Healthchecks auch ueber den Cluster abgleichen (nur Anzeige, geschaltet auf /cluster), Mitglieder.
 type clusterHint struct {
 	Available bool
 	HC        bool

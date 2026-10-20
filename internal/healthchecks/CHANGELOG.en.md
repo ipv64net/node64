@@ -1,5 +1,11 @@
 # Changes – Healthchecks
 
+## 2.16.1 – 2026-10-20
+
+### Changed
+- Healthchecks sync page: the switch for syncing via the cluster is gone; the page only shows whether it is on and
+  links to the cluster page. It is switched only there.
+
 ## 2.16.0 – 2026-10-19
 
 ### New

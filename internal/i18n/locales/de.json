@@ -2315,7 +2315,7 @@
     "err_unknown": "Diese Node gehört nicht (mehr) zum Cluster.",
     "err_other": "Verbindung fehlgeschlagen: {err}",
     "err_url": "Die Adresse muss mit http:// oder https:// beginnen.",
-    "link_hint": "Healthchecks lassen sich zusätzlich direkt zwischen den Nodes eines Clusters abgleichen, ergänzend zum Healthchecks-Sync über ipv64.",
+    "link_hint": "Healthchecks lassen sich zusätzlich direkt zwischen den Nodes eines Clusters abgleichen, ergänzend zum Healthchecks-Sync über ipv64. Ein- und ausgeschaltet wird das auf der Cluster-Seite.",
     "link_switch": "Healthchecks auch über den Cluster abgleichen",
     "link_open": "Cluster verwalten"
   },

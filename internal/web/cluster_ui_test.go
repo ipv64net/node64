@@ -57,10 +57,11 @@ func TestClusterPageAndSwitches(t *testing.T) {
 	}
 	csrf := csrfOf(t, body)
 
-	// Healthchecks-Sync-Seite: Gruppen-Block weg, Schalter und Link zum Cluster
+	// Healthchecks-Sync-Seite: Gruppen-Block weg, nur Zustand und Link zum Cluster (geschaltet wird auf /cluster)
 	_, link := a.get(t, "/link")
-	if strings.Contains(link, "/link/group") || !strings.Contains(link, `id="cluster_hc"`) || !strings.Contains(link, `href="/cluster"`) {
-		t.Fatal("link page: cluster hint missing or old group block left")
+	if strings.Contains(link, "/link/group") || strings.Contains(link, `action="/cluster/sync"`) || !strings.Contains(link, `id="cluster_hc"`) ||
+		!strings.Contains(link, `href="/cluster"`) {
+		t.Fatal("link page: cluster hint missing, switch or old group block left")
 	}
 
 	// Bereich aus (Checkbox nicht gesendet), zurueck auf /cluster

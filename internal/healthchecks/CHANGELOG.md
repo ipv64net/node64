@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.16.1 – 2026-10-20
+
+### Geändert
+- Healthchecks-Sync-Seite: Der Schalter für den Abgleich über den Cluster ist weg; die Seite zeigt nur noch, ob er an
+  ist, und verweist auf die Cluster-Seite. Geschaltet wird nur noch dort.
+
 ## 2.16.0 – 2026-10-19
 
 ### Neu

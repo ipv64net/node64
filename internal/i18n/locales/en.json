@@ -2315,7 +2315,7 @@
     "err_unknown": "This node is not (or no longer) part of the cluster.",
     "err_other": "Connection failed: {err}",
     "err_url": "The address must start with http:// or https://.",
-    "link_hint": "Healthchecks can additionally be synced directly between the nodes of a cluster, alongside the Healthchecks sync via ipv64.",
+    "link_hint": "Healthchecks can additionally be synced directly between the nodes of a cluster, alongside the Healthchecks sync via ipv64. Turn it on or off on the cluster page.",
     "link_switch": "Also sync Healthchecks via the cluster",
     "link_open": "Manage cluster"
   },
