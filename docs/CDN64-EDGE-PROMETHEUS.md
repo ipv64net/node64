@@ -28,6 +28,11 @@ systemctl restart cdn64-edge
 cat /var/lib/cdn64-edge/metrics-token   # nur fuer den Prometheus, nie in Chats/Logs
 ```
 
+Eingerichtet seit 2026-10-20 auf srv07 und srv08: `metrics_listen: ":9464"`, `metrics_allow` = Prometheus von Dennis
+(195.201.218.7, 2a01:4f8:1c1e:a8ac::1) und `127.0.0.1` (Prüfung auf dem Server selbst, z. B.
+`curl -H "Authorization: Bearer $(cat /var/lib/cdn64-edge/metrics-token)" http://127.0.0.1:9464/metrics`); Firewall-Regeln
+für die beiden Adressen in `/etc/nftables.conf`; Sicherungen `*.bak-metrics-*`.
+
 Beide Server haben eigene Tokens. Auf dem Prometheus je Server eine Datei mit dem Token ablegen (0600).
 
 ## prometheus.yml
