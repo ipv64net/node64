@@ -1,0 +1,228 @@
+{{define "content"}}
+{{$d := .Data}}
+{{$p := $d.Page}}
+{{$e := $d.Errors}}
+{{$act := "/healthchecks/status-pages/new"}}{{if $d.Edit}}{{$act = print "/healthchecks/status-pages/" $p.ID "/edit"}}{{end}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0 me-auto"><i class="bi {{if $d.Edit}}bi-pencil-square{{else}}bi-plus-circle{{end}} text-primary me-1"></i> {{if $d.Edit}}{{.T "hc.status.edit"}}: {{$p.Title}}{{else}}{{.T "hc.status.new"}}{{end}}{{$.Doc "healthchecks#status-pages"}}</h1>
+	{{if $d.Edit}}
+	<a class="btn btn-outline-secondary btn-sm" href="/healthchecks/status-pages/{{$p.ID}}/preview" target="_blank" rel="noopener"><i class="bi bi-eye"></i> {{.T "hc.status.preview"}}</a>
+	<a class="btn btn-outline-secondary btn-sm" href="/healthchecks/status-pages/{{$p.ID}}/notices"><i class="bi bi-megaphone"></i> {{.T "hc.status.notices"}}</a>
+	{{if and $p.Enabled $p.PublishNode}}<a class="btn btn-outline-success btn-sm" href="/status/{{$p.Slug}}" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> {{.T "hc.status.public_url"}}</a>{{end}}
+	{{end}}
+</div>
+{{if $d.Error}}<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle"></i> {{$d.Error}}</div>{{end}}
+{{if $d.Dirty}}<div class="alert alert-warning py-2 small"><i class="bi bi-pencil"></i> {{.T "hc.status.unsaved"}}</div>{{end}}
+<form method="post" action="{{$act}}" id="sp-form">
+<input type="hidden" name="_csrf" value="{{.CSRF}}">
+{{/* erster Knopf im Formular: Enter in einem Feld speichert (und loest keine Aktion bei Gruppen aus) */}}
+<button type="submit" name="op" value="save" class="visually-hidden" tabindex="-1" aria-hidden="true">{{.T "common.save"}}</button>
+<div class="row g-3">
+	<div class="col-lg-7">
+		<div class="card mb-3">
+			<div class="card-header"><i class="bi bi-card-text text-primary"></i> {{.T "hc.status.general"}}</div>
+			<div class="card-body">
+				<div class="row g-3">
+					<div class="col-md-7">
+						<label class="form-label" for="sp-title">{{.T "hc.status.title"}}</label>
+						<input class="form-control{{if index $e "title"}} is-invalid{{end}}" id="sp-title" name="title" value="{{$p.Title}}" maxlength="120" required{{if not $d.Edit}} autofocus{{end}}>
+						{{with index $e "title"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+					</div>
+					<div class="col-md-5">
+						<label class="form-label" for="sp-slug">{{.T "hc.status.slug"}}</label>
+						<div class="input-group"><span class="input-group-text">/status/</span><input class="form-control font-monospace{{if index $e "slug"}} is-invalid{{end}}" id="sp-slug" name="slug" value="{{$p.Slug}}" maxlength="63" pattern="[a-z0-9][a-z0-9\-]{1,62}"{{if not $p.Slug}} data-auto="1"{{end}} autocomplete="off"></div>
+						{{with index $e "slug"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+						<div class="form-text">{{.T "hc.status.slug_hint"}}</div>
+					</div>
+					<div class="col-12">
+						<label class="form-label" for="sp-description">{{.T "hc.status.description"}}</label>
+						<textarea class="form-control{{if index $e "description"}} is-invalid{{end}}" id="sp-description" name="description" rows="3" maxlength="5000">{{$p.Description}}</textarea>
+						{{with index $e "description"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+					</div>
+					<div class="col-12">
+						<label class="form-label" for="sp-footer">{{.T "hc.status.footer"}}</label>
+						<textarea class="form-control" id="sp-footer" name="footer" rows="2" maxlength="2000">{{$p.Footer}}</textarea>
+						<div class="form-text"><i class="bi bi-markdown"></i> {{.T "hc.status.markdown_hint"}}</div>
+					</div>
+					<div class="col-12">
+						<div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="enabled" id="sp-enabled"{{if $p.Enabled}} checked{{end}}><label class="form-check-label" for="sp-enabled">{{.T "hc.status.enabled"}}</label></div>
+						<div class="form-text mt-0 mb-2">{{.T "hc.status.enabled_hint"}} <a href="/cdn64">{{.T "nav.proxy"}}</a></div>
+						<div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="publish_node" id="sp-publish"{{if $p.PublishNode}} checked{{end}}><label class="form-check-label" for="sp-publish">{{.T "hc.status.publish_node"}}</label></div>
+						<div class="form-text mt-0 text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{.T "hc.status.publish_node_hint"}}</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="col-lg-5">
+		<div class="card mb-3">
+			<div class="card-header"><i class="bi bi-palette text-primary"></i> {{.T "hc.status.look"}}</div>
+			<div class="card-body">
+				<div class="row g-2">
+					<div class="col-6">
+						<label class="form-label" for="sp-layout">{{.T "hc.status.layout"}}</label>
+						<select class="form-select" id="sp-layout" name="layout">{{range $d.Layouts}}<option value="{{.}}"{{if eq . $p.Layout}} selected{{end}}>{{$.T (print "hc.status.layout_" .)}}</option>{{end}}</select>
+					</div>
+					<div class="col-6">
+						<label class="form-label" for="sp-theme">{{.T "nav.theme"}}</label>
+						<select class="form-select" id="sp-theme" name="theme">{{range $d.Themes}}<option value="{{.}}"{{if eq . $p.Theme}} selected{{end}}>{{$.T (print "nav.theme_" .)}}</option>{{end}}</select>
+					</div>
+					<div class="col-6">
+						<label class="form-label" for="sp-lang">{{.T "hc.status.lang"}}</label>
+						<select class="form-select" id="sp-lang" name="lang">
+							<option value=""{{if eq $p.Lang ""}} selected{{end}}>{{.T "hc.status.lang_auto"}}</option>
+							<option value="de"{{if eq $p.Lang "de"}} selected{{end}}>{{.T "lang.de"}}</option>
+							<option value="en"{{if eq $p.Lang "en"}} selected{{end}}>{{.T "lang.en"}}</option>
+						</select>
+					</div>
+					<div class="col-6">
+						<label class="form-label" for="sp-accent">{{.T "hc.status.accent"}}</label>
+						<div class="input-group">
+							<span class="input-group-text"><input class="form-check-input mt-0" type="checkbox" name="accent_on" id="sp-accent-on"{{if $p.Accent}} checked{{end}} aria-label="{{.T "hc.status.accent_own"}}" title="{{.T "hc.status.accent_own"}}"></span>
+							<input class="form-control form-control-color{{if index $e "accent"}} is-invalid{{end}}" type="color" style="flex:0 0 4rem" id="sp-accent" name="accent" value="{{if $p.Accent}}{{$p.Accent}}{{else}}#0d6efd{{end}}">
+						</div>
+						{{with index $e "accent"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+						<div class="form-text">{{.T "hc.status.accent_hint"}}</div>
+					</div>
+					<div class="col-6">
+						<label class="form-label" for="sp-days">{{.T "hc.status.days"}}</label>
+						<select class="form-select" id="sp-days" name="days">{{range $d.DaysOpts}}<option value="{{.}}"{{if eq . $p.Days}} selected{{end}}>{{$.T "hc.status.days_n" "n" .}}</option>{{end}}</select>
+					</div>
+					<div class="col-6">
+						<label class="form-label" for="sp-refresh">{{.T "hc.status.refresh"}}</label>
+						<div class="input-group"><input class="form-control" type="number" id="sp-refresh" name="refresh_sec" value="{{$p.RefreshSec}}" min="30" max="3600" step="1"><span class="input-group-text">s</span></div>
+					</div>
+					<div class="col-12">
+						<div class="form-check"><input class="form-check-input" type="checkbox" name="show_uptime" id="sp-uptime"{{if $p.ShowUptime}} checked{{end}}><label class="form-check-label" for="sp-uptime">{{.T "hc.status.show_uptime"}}</label></div>
+						<div class="form-check"><input class="form-check-input" type="checkbox" name="show_history" id="sp-history"{{if $p.ShowHistory}} checked{{end}}><label class="form-check-label" for="sp-history">{{.T "hc.status.show_history"}}</label></div>
+						<div class="form-check"><input class="form-check-input" type="checkbox" name="powered_by" id="sp-powered"{{if $p.PoweredBy}} checked{{end}}><label class="form-check-label" for="sp-powered">{{.T "hc.status.powered_by"}}</label></div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="card mb-3">
+			<div class="card-header"><i class="bi bi-shield-lock text-primary"></i> {{.T "hc.status.access"}}</div>
+			<div class="card-body">
+				<label class="form-label" for="sp-password">{{.T "hc.status.password"}} {{if $p.HasPassword}}<span class="badge text-bg-success"><i class="bi bi-lock"></i> {{.T "hc.status.password_set"}}</span>{{end}}</label>
+				<input class="form-control{{if index $e "password"}} is-invalid{{end}}" type="password" id="sp-password" name="password" maxlength="72" autocomplete="new-password" placeholder="{{if $p.HasPassword}}{{.T "hc.status.password_keep"}}{{else}}{{.T "hc.status.password_none"}}{{end}}">
+				{{with index $e "password"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+				<div class="form-text">{{.T "hc.status.password_hint"}}</div>
+				{{if $p.HasPassword}}<div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="password_remove" id="sp-pw-remove"><label class="form-check-label" for="sp-pw-remove">{{.T "hc.status.password_remove"}}</label></div>{{end}}
+				<div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="noindex" id="sp-noindex"{{if $p.NoIndex}} checked{{end}}><label class="form-check-label" for="sp-noindex">{{.T "hc.status.noindex"}}</label></div>
+			</div>
+		</div>
+	</div>
+</div>
+
+{{/* Gruppen und Eintraege: Knoepfe mit name="op" aendern nur das Formular (formaction mit Sprungmarke) */}}
+<div class="card mb-3" id="sp-groups">
+	<div class="card-header d-flex flex-wrap align-items-center gap-2"><span class="me-auto"><i class="bi bi-collection text-primary"></i> {{.T "hc.status.groups"}} <span class="badge text-bg-secondary">{{$d.Items}}</span></span><span class="small text-body-secondary">{{.T "hc.status.groups_hint"}}</span></div>
+	<div class="card-body">
+		{{with index $e "groups"}}<div class="alert alert-danger py-2 small">{{.}}</div>{{end}}
+		{{if not $p.Groups}}<p class="text-body-secondary small mb-3">{{.T "hc.status.groups_empty"}}</p>{{end}}
+		{{$ng := len $p.Groups}}
+		{{range $gi, $g := $p.Groups}}
+		<div class="border rounded mb-3">
+			<div class="d-flex flex-wrap align-items-center gap-2 p-2 bg-body-tertiary border-bottom">
+				<i class="bi bi-collection text-primary"></i>
+				<input class="form-control form-control-sm fw-semibold" style="max-width:22rem" name="gr_name" value="{{$g.Name}}" maxlength="100" placeholder="{{$.T "hc.status.group_unnamed"}}" aria-label="{{$.T "hc.status.group_name"}}">
+				<span class="badge text-bg-secondary">{{len $g.Items}}</span>
+				<span class="ms-auto text-nowrap">
+					<button class="btn btn-sm btn-outline-secondary" type="submit" name="op" value="gup-{{$gi}}" formaction="{{$act}}#sp-groups" formnovalidate title="{{$.T "hc.status.up"}}"{{if eq $gi 0}} disabled{{end}}><i class="bi bi-arrow-up"></i></button>
+					<button class="btn btn-sm btn-outline-secondary" type="submit" name="op" value="gdown-{{$gi}}" formaction="{{$act}}#sp-groups" formnovalidate title="{{$.T "hc.status.down"}}"{{if eq (add $gi 1) $ng}} disabled{{end}}><i class="bi bi-arrow-down"></i></button>
+					<button class="btn btn-sm btn-outline-secondary" type="submit" name="op" value="gsort-{{$gi}}" formaction="{{$act}}#sp-groups" formnovalidate title="{{$.T "hc.status.sort_az"}}"{{if lt (len $g.Items) 2}} disabled{{end}}><i class="bi bi-sort-alpha-down"></i></button>
+					<button class="btn btn-sm btn-outline-danger" type="submit" name="op" value="gdel-{{$gi}}" formaction="{{$act}}#sp-groups" formnovalidate title="{{$.T "hc.status.group_delete"}}"{{if $g.Items}} data-confirm="{{$.T "hc.status.group_delete_confirm"}}"{{end}}><i class="bi bi-trash"></i></button>
+				</span>
+			</div>
+			{{if not $g.Items}}<div class="small text-body-secondary p-2">{{$.T "hc.status.group_no_items"}}</div>
+			{{else}}
+			{{$ni := len $g.Items}}
+			<div class="table-responsive"><table class="table table-sm align-middle mb-0">
+				<tbody>
+				{{range $ii, $it := $g.Items}}
+				{{$name := index $d.Names $it.Token}}
+				<tr>
+					<td class="small" style="width:35%">
+						<input type="hidden" name="it_tok" value="{{$it.Token}}">
+						{{if $name}}<a href="/healthchecks/{{$it.Token}}" class="text-decoration-none" target="_blank" rel="noopener">{{$name}}</a>{{else}}<span class="text-danger"><i class="bi bi-x-circle"></i> {{$.T "hc.status.check_gone"}}</span>{{end}}
+					</td>
+					<td><input class="form-control form-control-sm" name="it_lbl" value="{{$it.Label}}" maxlength="120" placeholder="{{if $name}}{{$name}}{{else}}{{$.T "hc.status.label"}}{{end}}" aria-label="{{$.T "hc.status.label"}}"></td>
+					<td style="width:1%">{{if gt $ng 1}}<select class="form-select form-select-sm" style="min-width:8rem" name="it_g" aria-label="{{$.T "hc.status.move_to"}}" title="{{$.T "hc.status.move_to"}}">{{range $oi, $og := $p.Groups}}<option value="{{$oi}}"{{if eq $oi $gi}} selected{{end}}>{{if $og.Name}}{{$og.Name}}{{else}}{{$.T "hc.status.group_n" "n" (add $oi 1)}}{{end}}</option>{{end}}</select>{{else}}<input type="hidden" name="it_g" value="{{$gi}}">{{end}}</td>
+					<td class="text-end text-nowrap" style="width:1%">
+						<button class="btn btn-sm btn-outline-secondary" type="submit" name="op" value="iup-{{$gi}}-{{$ii}}" formaction="{{$act}}#sp-groups" formnovalidate title="{{$.T "hc.status.up"}}"{{if eq $ii 0}} disabled{{end}}><i class="bi bi-arrow-up"></i></button>
+						<button class="btn btn-sm btn-outline-secondary" type="submit" name="op" value="idown-{{$gi}}-{{$ii}}" formaction="{{$act}}#sp-groups" formnovalidate title="{{$.T "hc.status.down"}}"{{if eq (add $ii 1) $ni}} disabled{{end}}><i class="bi bi-arrow-down"></i></button>
+						<button class="btn btn-sm btn-outline-danger" type="submit" name="op" value="idel-{{$gi}}-{{$ii}}" formaction="{{$act}}#sp-groups" formnovalidate title="{{$.T "hc.status.item_remove"}}"><i class="bi bi-x-lg"></i></button>
+					</td>
+				</tr>
+				{{end}}
+				</tbody>
+			</table></div>
+			{{end}}
+		</div>
+		{{end}}
+		<div class="input-group input-group-sm" style="max-width:28rem">
+			<input class="form-control" name="new_group" maxlength="100" placeholder="{{.T "hc.status.group_name"}}" aria-label="{{.T "hc.status.group_name"}}">
+			<button class="btn btn-outline-primary" type="submit" name="op" value="gadd" formaction="{{$act}}#sp-groups" formnovalidate><i class="bi bi-plus-lg"></i> {{.T "hc.status.group_add"}}</button>
+		</div>
+	</div>
+</div>
+
+<div class="card mb-3" id="sp-add">
+	<div class="card-header"><i class="bi bi-plus-square text-primary"></i> {{.T "hc.status.add_checks"}}</div>
+	<div class="card-body">
+		{{if not $d.Checks}}<p class="text-body-secondary small mb-0">{{.T "hc.status.no_checks"}}</p>
+		{{else}}
+		<div class="row g-2 mb-2">
+			<div class="col-md-4">
+				<label class="form-label small mb-1" for="sp-add-to">{{.T "hc.status.add_to"}}</label>
+				{{if $p.Groups}}<select class="form-select form-select-sm" id="sp-add-to" name="add_to">{{range $oi, $og := $p.Groups}}<option value="{{$oi}}"{{if eq $oi $d.AddTo}} selected{{end}}>{{if $og.Name}}{{$og.Name}}{{else}}{{$.T "hc.status.group_n" "n" (add $oi 1)}}{{end}}</option>{{end}}</select>
+				{{else}}<div class="form-text mt-0">{{.T "hc.status.add_new_group"}}</div>{{end}}
+			</div>
+			<div class="col-md-8">
+				<label class="form-label small mb-1" for="sp-q">{{.T "common.search"}}</label>
+				<input class="form-control form-control-sm" type="search" id="sp-q" data-sp-q placeholder="{{.T "hc.status.search_hint"}}" autocomplete="off">
+			</div>
+			<div class="col-md-6">
+				<label class="form-label small mb-1" for="sp-tag">{{.T "hc.tags"}}</label>
+				<div class="input-group input-group-sm">
+					<select class="form-select" id="sp-tag" name="add_tag" data-sp-tag><option value="">{{.T "common.all"}}</option>{{range $d.Tags}}<option value="{{.}}">{{.}}</option>{{end}}</select>
+					<button class="btn btn-outline-primary" type="submit" name="op" value="addtag" formaction="{{$act}}#sp-groups" formnovalidate{{if not $d.Tags}} disabled{{end}}>{{.T "hc.status.add_tag"}}</button>
+				</div>
+			</div>
+			<div class="col-md-6">
+				<label class="form-label small mb-1" for="sp-hcg">{{.T "hc.group.label"}}</label>
+				<div class="input-group input-group-sm">
+					<select class="form-select" id="sp-hcg" name="add_hcg" data-sp-hcg><option value="">{{.T "common.all"}}</option>{{range $d.HCGroups}}<option value="{{.}}">{{.}}</option>{{end}}</select>
+					<button class="btn btn-outline-primary" type="submit" name="op" value="addhcg" formaction="{{$act}}#sp-groups" formnovalidate{{if not $d.HCGroups}} disabled{{end}}>{{.T "hc.status.add_hcg"}}</button>
+				</div>
+			</div>
+		</div>
+		<div class="border rounded p-2 mb-2" style="max-height:320px;overflow:auto" data-sp-list>
+			{{range $d.Checks}}
+			<div class="form-check" data-sp-check data-name="{{.Name}}" data-tags="{{.Tags}}" data-group="{{.Group}}">
+				<input class="form-check-input" type="checkbox" name="add_tok" value="{{.Token}}" id="sp-c-{{.Token}}">
+				<label class="form-check-label small" for="sp-c-{{.Token}}">{{.Name}}
+					{{if .Group}}<span class="badge text-bg-light"><i class="bi bi-collection"></i> {{.Group}}</span>{{end}}
+					{{if .Tags}}<span class="text-body-secondary"><i class="bi bi-tags"></i> {{.Tags}}</span>{{end}}
+					{{if .Paused}}<span class="badge text-bg-secondary">{{$.T "hc.state.paused"}}</span>{{end}}
+					{{if .OnPage}}<span class="badge text-bg-success-subtle text-success-emphasis"><i class="bi bi-check2"></i> {{$.T "hc.status.on_page"}}</span>{{end}}
+				</label>
+			</div>
+			{{end}}
+		</div>
+		<div class="d-flex flex-wrap gap-2 align-items-center">
+			<button class="btn btn-sm btn-outline-primary" type="submit" name="op" value="add" formaction="{{$act}}#sp-groups" formnovalidate><i class="bi bi-plus-lg"></i> {{.T "hc.status.add_selected"}}</button>
+			<button class="btn btn-sm btn-link d-none" type="button" data-sp-selall>{{.T "hc.status.select_visible"}}</button>
+			<span class="small text-body-secondary" data-sp-count></span>
+		</div>
+		{{end}}
+	</div>
+</div>
+
+<div class="d-flex gap-2 mb-4">
+	<button class="btn btn-primary" type="submit" name="op" value="save"><i class="bi bi-check-lg"></i> {{.T "common.save"}}</button>
+	<a class="btn btn-outline-secondary" href="/healthchecks/status-pages">{{.T "common.cancel"}}</a>
+</div>
+</form>
+{{end}}
+{{define "scripts"}}<script src="/static/js/statuspages.js?v={{.Version}}"></script>{{end}}

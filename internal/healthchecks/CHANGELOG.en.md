@@ -1,5 +1,20 @@
 # Changes – Healthchecks
 
+## 2.17.0 – 2026-10-20
+
+### New
+- **Status pages** (Healthchecks › Status pages): a public overview of any number of checks in groups, with an overall
+  banner, daily bars (30/60/90 days) and availability; groups with problems stay open, problems first. Clicking an entry
+  shows availability over 24 h/7/30 days, average latency, 24 hourly bars and the latest incidents. Incidents and
+  maintenance windows appear automatically, announcements are written by hand (with updates).
+- Views list, tiles (for a wall monitor) and compact (for embedding); light/dark, accent colour, language, simple
+  Markdown in description and footer, optional password and "do not index".
+- Visitors only see display names, state and availability, never targets, IPs, ports or error messages.
+- Status pages are off until you switch them on; nothing runs before that. Reachable via PROXY64 (host type "status
+  page", own domain, also via CDN64) or, deliberately switched on, directly on the node port at `/status/<name>`.
+  Computed only on request (cached for 30 s, compressed).
+- Plus `status.json`, badges (SVG) and an Atom feed per page; API `/api/status-pages`.
+
 ## 2.16.1 – 2026-10-20
 
 ### Changed

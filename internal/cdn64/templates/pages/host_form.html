@@ -48,6 +48,20 @@
 					</div>
 					<input type="hidden" name="scheme" value="https"><input type="hidden" name="cert_id" value="-1">
 					<div class="form-text mb-3">{{.T "cdn64.f.pass_hint"}}</div>
+					{{else if eq $h.Kind "status"}}
+					<label class="form-label fw-semibold" for="status_page_id">{{.T "cdn64.f.status_page"}}</label>
+					{{if $d.StatusOn}}
+					<select class="form-select form-select-sm{{if index $d.Errors "status_page_id"}} is-invalid{{end}}" id="status_page_id" name="status_page_id" required>
+						{{if not $d.StatusKnown}}<option value="{{if $h.StatusPageID}}{{$h.StatusPageID}}{{end}}" selected>{{if $h.StatusPageID}}{{.T "cdn64.f.status_page_missing" "id" $h.StatusPageID}}{{else}}{{.T "cdn64.f.status_page_choose"}}{{end}}</option>{{end}}
+						{{range $d.StatusPages}}<option value="{{.ID}}"{{if eq .ID $h.StatusPageID}} selected{{end}}>{{.Title}} ({{.Slug}}){{if not .Enabled}} – {{$.T "cdn64.f.status_page_off"}}{{end}}</option>{{end}}
+					</select>
+					{{if not $d.StatusPages}}<div class="form-text text-warning-emphasis">{{.T "cdn64.f.status_page_none"}}</div>{{end}}
+					{{else}}
+					<div class="alert alert-warning py-1 mb-1">{{.T "cdn64.f.status_hc_off"}}</div><input type="hidden" name="status_page_id" value="{{$h.StatusPageID}}">
+					{{end}}
+					{{with index $d.Errors "status_page_id"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+					<div class="form-text mb-3">{{.T "cdn64.f.status_page_hint"}} <a href="/healthchecks/status-pages">{{.T "cdn64.f.status_pages_manage"}}</a></div>
+					<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" name="block_exploits" id="block_exploits"{{if $h.BlockExploits}} checked{{end}}><label class="form-check-label" for="block_exploits">{{.T "cdn64.f.block_exploits"}}</label></div>
 					{{else}}
 					<div class="row g-2 mb-1">
 						<div class="col-sm-3"><label class="form-label fw-semibold" for="scheme">{{.T "cdn64.f.scheme"}}</label>
@@ -80,7 +94,7 @@
 						<div class="form-text">{{.T "cdn64.dnsrec.hint"}}</div>
 					</div>
 					{{end}}
-					{{if or (eq $h.Kind "proxy") (eq $h.Kind "redirect")}}
+					{{if or (eq $h.Kind "proxy") (eq $h.Kind "redirect") (eq $h.Kind "status")}}
 					<label class="form-label fw-semibold mt-3" for="access_list_id">{{.T "cdn64.f.access_list"}}</label>
 					<select class="form-select form-select-sm{{if index $d.Errors "access_list_id"}} is-invalid{{end}}" id="access_list_id" name="access_list_id">
 						<option value="0">{{.T "cdn64.f.access_public"}}</option>

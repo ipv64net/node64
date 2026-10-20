@@ -1,5 +1,15 @@
 # Änderungen – PROXY64
 
+## 1.18.0 – 2026-10-20
+
+### Neu
+- Neue Hostart „Statusseite“ (Reiter Statusseiten): Eine eigene Domain zeigt eine Statusseite der Healthchecks direkt
+  unter „/“, mit zentralem Zertifikat, Force-SSL, HSTS und HTTP/3.
+- Vor der Seite greifen wie bei Proxy-Hosts Blocklisten, Ländersperre, Limits, Exploit-Sperre und Zugriffsliste, dazu
+  Statistik und Zugriffs-Log. Über CDN64 ist sie wie ein Proxy-Host in Modus 1 oder 2 einschaltbar.
+- Export und Import nehmen die Zuordnung mit. Fehlt die Seite auf der Ziel-Node, antwortet der Host mit 404 (ohne
+  Healthchecks mit 503), bis eine Seite gewählt ist.
+
 ## 1.17.1 – 2026-10-19
 
 ### Neu

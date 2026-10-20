@@ -235,7 +235,7 @@ func (m *Module) apiCreate(w http.ResponseWriter, r *http.Request) {
 		kind = KindProxy
 	}
 	if !validKind(kind) {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "kind must be proxy, redirect, dead or passthrough", "field": "kind"})
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "kind must be proxy, redirect, dead, passthrough or status", "field": "kind"})
 		return
 	}
 	h := newHostKind(kind)

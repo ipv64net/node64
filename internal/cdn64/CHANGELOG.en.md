@@ -1,5 +1,15 @@
 # Changes – PROXY64
 
+## 1.18.0 – 2026-10-20
+
+### New
+- New host type "status page" (tab Status pages): your own domain shows a Healthchecks status page directly at "/",
+  with central certificate, force SSL, HSTS and HTTP/3.
+- As with proxy hosts, blocklists, country block, limits, exploit block and access list apply in front of the page,
+  plus statistics and access log. Via CDN64 it can be switched on like a proxy host in mode 1 or 2.
+- Export and import keep the assignment. If the page does not exist on the target node, the host answers 404 (503
+  without Healthchecks) until a page is chosen.
+
 ## 1.17.1 – 2026-10-19
 
 ### New

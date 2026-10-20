@@ -43,6 +43,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /healthchecks/{token}/action", page(m.pageAction))
 	m.maintenanceRoutes(mux, page)
 	m.incidentsRoutes(mux, page)
+	m.statusPagesRoutes(mux, page)
 }
 
 // ---------------------------------------------------------------- Darstellung

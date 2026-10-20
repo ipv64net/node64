@@ -224,6 +224,7 @@ func run() error {
 		}
 		return out
 	})
+	cdnModule.SetStatusPages(statusPages{hc: hcModule, on: func() bool { return modules.IsRunning(healthchecks.Name) }}) // Hostart "Statusseite"
 	portReg.Provide(cdn64.Name, cdnModule.Claims)
 	modules.Register(cdnModule)
 	portReg.Provide(dns64.Name, func(ctx context.Context) []ports.Claim { // nur eingeschaltet; aktiv, solange es laeuft
@@ -624,4 +625,29 @@ func healthcheck() int {
 	}
 	fmt.Println("healthy")
 	return 0
+}
+
+// statusPages gibt PROXY64 die Statusseiten der Healthchecks (Hostart "status"); Healthchecks aus -> nil.
+type statusPages struct {
+	hc *healthchecks.Module
+	on func() bool
+}
+
+func (s statusPages) StatusSite(id int64) http.Handler {
+	if !s.on() {
+		return nil
+	}
+	return s.hc.StatusSite(id)
+}
+
+func (s statusPages) StatusPageList(ctx context.Context) []cdn64.StatusPageInfo {
+	if !s.on() {
+		return nil
+	}
+	refs := s.hc.StatusPageRefs(ctx)
+	out := make([]cdn64.StatusPageInfo, 0, len(refs))
+	for _, p := range refs {
+		out = append(out, cdn64.StatusPageInfo{ID: p.ID, Slug: p.Slug, Title: p.Title, Enabled: p.Enabled})
+	}
+	return out
 }

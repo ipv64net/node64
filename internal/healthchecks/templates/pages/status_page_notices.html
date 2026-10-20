@@ -1,0 +1,76 @@
+{{define "content"}}
+{{$d := .Data}}
+{{$p := $d.Page}}
+{{$f := $d.Form}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0 me-auto"><i class="bi bi-megaphone text-primary me-1"></i> {{.T "hc.status.notices"}}: {{$p.Title}}{{$.Doc "healthchecks#status-notices"}}</h1>
+	<a class="btn btn-outline-secondary btn-sm" href="/healthchecks/status-pages/{{$p.ID}}/preview" target="_blank" rel="noopener"><i class="bi bi-eye"></i> {{.T "hc.status.preview"}}</a>
+	<a class="btn btn-outline-secondary btn-sm" href="/healthchecks/status-pages/{{$p.ID}}/edit"><i class="bi bi-pencil"></i> {{.T "hc.status.edit"}}</a>
+</div>
+<p class="text-body-secondary small">{{.T "hc.status.notices_hint"}}</p>
+{{if $d.Error}}<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle"></i> {{$d.Error}}</div>{{end}}
+<div class="row g-3">
+	<div class="col-lg-7">
+		{{if not $d.Open}}<div class="card mb-3"><div class="card-body small text-body-secondary">{{.T "hc.status.notices_none"}}</div></div>{{end}}
+		{{range $d.Open}}
+		<div class="card mb-3 border-{{.Level}}">
+			<div class="card-header d-flex flex-wrap align-items-center gap-2">
+				<span class="badge text-bg-{{.Level}}">{{$.T (print "hc.status.level_" .Level)}}</span>
+				<strong class="me-auto">{{.Title}}</strong>
+				<span class="small text-body-secondary">{{$.Time .CreatedAt}}</span>
+				<form method="post" action="/healthchecks/status-pages/{{$p.ID}}/notices/{{.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" title="{{$.T "common.delete"}}" data-confirm="{{$.T "common.confirm"}}"><i class="bi bi-trash"></i></button></form>
+			</div>
+			<div class="card-body">
+				{{range .Updates}}<div class="small mb-2"><span class="text-body-secondary">{{$.Time .Time}}</span><div style="white-space:pre-wrap">{{.Text}}</div></div>{{end}}
+				<form method="post" action="/healthchecks/status-pages/{{$p.ID}}/notices/{{.ID}}/update" class="border-top pt-2">
+					<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<label class="form-label small mb-1" for="nt-{{.ID}}">{{$.T "hc.status.notice_update"}}</label>
+					<textarea class="form-control form-control-sm mb-2" id="nt-{{.ID}}" name="text" rows="2" maxlength="5000"></textarea>
+					<div class="d-flex flex-wrap align-items-center gap-2">
+						{{$lv := .Level}}
+						<select class="form-select form-select-sm w-auto" name="level" aria-label="{{$.T "hc.status.level"}}">{{range (split "info warning danger")}}<option value="{{.}}"{{if eq . $lv}} selected{{end}}>{{$.T (print "hc.status.level_" .)}}</option>{{end}}</select>
+						<div class="form-check mb-0"><input class="form-check-input" type="checkbox" name="resolve" id="nr-{{.ID}}"><label class="form-check-label small" for="nr-{{.ID}}">{{$.T "hc.status.notice_resolve"}}</label></div>
+						<button class="btn btn-sm btn-primary ms-auto" type="submit">{{$.T "common.save"}}</button>
+					</div>
+				</form>
+			</div>
+		</div>
+		{{end}}
+		{{if $d.Resolved}}
+		<div class="card">
+			<div class="card-header"><i class="bi bi-check2-circle text-success"></i> {{.T "hc.status.notices_resolved"}}</div>
+			<ul class="list-group list-group-flush">
+			{{range $d.Resolved}}
+			<li class="list-group-item">
+				<div class="d-flex flex-wrap align-items-center gap-2">
+					<span class="badge text-bg-{{.Level}} bg-opacity-50">{{$.T (print "hc.status.level_" .Level)}}</span>
+					<span class="me-auto">{{.Title}}</span>
+					<span class="small text-body-secondary">{{$.Time .CreatedAt}} – {{$.Time .ResolvedAt}}</span>
+					<form method="post" action="/healthchecks/status-pages/{{$p.ID}}/notices/{{.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" title="{{$.T "common.delete"}}" data-confirm="{{$.T "common.confirm"}}"><i class="bi bi-trash"></i></button></form>
+				</div>
+				{{range .Updates}}<div class="small text-body-secondary mt-1"><span>{{$.Time .Time}}</span> · <span style="white-space:pre-wrap">{{.Text}}</span></div>{{end}}
+			</li>
+			{{end}}
+			</ul>
+		</div>
+		{{end}}
+	</div>
+	<div class="col-lg-5">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-plus-circle text-primary"></i> {{.T "hc.status.notice_new"}}</div>
+			<div class="card-body">
+				<form method="post" action="/healthchecks/status-pages/{{$p.ID}}/notices">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<div class="mb-2"><label class="form-label" for="n-title">{{.T "hc.status.notice_title"}}</label><input class="form-control" id="n-title" name="title" value="{{index $f "title"}}" maxlength="200" required></div>
+					<div class="mb-2"><label class="form-label" for="n-level">{{.T "hc.status.level"}}</label>
+						{{$sel := index $f "level"}}
+						<select class="form-select" id="n-level" name="level">{{range (split "info warning danger")}}<option value="{{.}}"{{if eq . $sel}} selected{{end}}>{{$.T (print "hc.status.level_" .)}}</option>{{end}}</select></div>
+					<div class="mb-2"><label class="form-label" for="n-text">{{.T "hc.status.notice_text"}}</label><textarea class="form-control" id="n-text" name="text" rows="4" maxlength="5000">{{index $f "text"}}</textarea>
+						<div class="form-text"><i class="bi bi-markdown"></i> {{.T "hc.status.markdown_hint"}}</div></div>
+					<button class="btn btn-primary" type="submit">{{.T "hc.status.notice_publish"}}</button>
+				</form>
+			</div>
+		</div>
+	</div>
+</div>
+{{end}}

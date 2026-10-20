@@ -1,0 +1,43 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0 me-auto"><i class="bi bi-broadcast text-primary me-1"></i> {{.T "nav.status_pages"}}{{$.Doc "healthchecks#status-pages"}}</h1>
+	<a class="btn btn-primary btn-sm" href="/healthchecks/status-pages/new"><i class="bi bi-plus-lg"></i> {{.T "hc.status.new"}}</a>
+</div>
+<p class="text-body-secondary small">{{.T "hc.status.hint"}}</p>
+{{if not $d.Pages}}
+<div class="card"><div class="card-body text-center text-body-secondary py-4">
+	<i class="bi bi-broadcast fs-1 d-block mb-2"></i>
+	<div>{{.T "hc.status.empty"}}</div>
+	<div class="small mt-1">{{.T "hc.status.empty_hint"}} <a href="/cdn64">{{.T "nav.proxy"}}</a></div>
+	<div class="mt-3"><a class="btn btn-primary" href="/healthchecks/status-pages/new">{{.T "hc.status.new"}}</a></div>
+</div></div>
+{{else}}
+<div class="card">
+	<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards">
+		<thead><tr><th>{{.T "hc.status.title"}}</th><th>{{.T "hc.status.slug"}}</th><th>{{.T "common.status"}}</th><th class="text-end">{{.T "hc.status.items"}}</th><th>{{.T "hc.status.notices"}}</th><th class="text-end">{{.T "common.actions"}}</th></tr></thead>
+		<tbody>
+		{{range $d.Pages}}
+		<tr{{if not .Enabled}} class="text-body-tertiary"{{end}}>
+			<td data-label="{{$.T "hc.status.title"}}"><a href="/healthchecks/status-pages/{{.ID}}/edit" class="fw-semibold">{{.Title}}</a>{{if .HasPassword}} <i class="bi bi-lock text-body-secondary" title="{{$.T "hc.status.password_set"}}"></i>{{end}}</td>
+			<td data-label="{{$.T "hc.status.slug"}}"><code>{{.Slug}}</code></td>
+			<td data-label="{{$.T "common.status"}}">
+				{{if .Enabled}}<span class="badge text-bg-success">{{$.T "common.on"}}</span>{{else}}<span class="badge text-bg-secondary">{{$.T "common.off"}}</span>{{end}}
+				{{if .PublishNode}}<span class="badge text-bg-warning" title="{{$.T "hc.status.publish_node_hint"}}"><i class="bi bi-hdd-network"></i> {{$.T "hc.status.on_node"}}</span>{{end}}
+			</td>
+			<td data-label="{{$.T "hc.status.items"}}" class="text-end">{{.Items}}</td>
+			<td data-label="{{$.T "hc.status.notices"}}"><a href="/healthchecks/status-pages/{{.ID}}/notices" class="text-decoration-none">{{if .Open}}<span class="badge text-bg-warning">{{$.T "hc.status.open_n" "count" .Open}}</span>{{else}}<i class="bi bi-megaphone"></i>{{end}}</a></td>
+			<td data-label="{{$.T "common.actions"}}" class="text-end text-nowrap">
+				{{if .URL}}<a class="btn btn-sm btn-outline-success" href="{{.URL}}" target="_blank" rel="noopener" title="{{$.T "hc.status.public_url"}}"><i class="bi bi-box-arrow-up-right"></i></a>{{end}}
+				<a class="btn btn-sm btn-outline-secondary" href="{{.Preview}}" target="_blank" rel="noopener" title="{{$.T "hc.status.preview"}}"><i class="bi bi-eye"></i></a>
+				<a class="btn btn-sm btn-outline-primary" href="/healthchecks/status-pages/{{.ID}}/edit" title="{{$.T "hc.edit"}}"><i class="bi bi-pencil"></i></a>
+				<form method="post" action="/healthchecks/status-pages/{{.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" title="{{$.T "common.delete"}}" data-confirm="{{$.T "hc.status.delete_confirm" "title" .Title}}"><i class="bi bi-trash"></i></button></form>
+			</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table></div>
+</div>
+<p class="text-body-secondary small mt-2"><i class="bi bi-info-circle"></i> {{.T "hc.status.empty_hint"}} <a href="/cdn64">{{.T "nav.proxy"}}</a></p>
+{{end}}
+{{end}}

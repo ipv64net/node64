@@ -31,6 +31,7 @@ const (
 	KindRedirect = "redirect"    // Weiterleitung auf eine andere Domain
 	KindDead     = "dead"        // antwortet immer mit 404
 	KindPass     = "passthrough" // TLS durchreichen (das Ziel beendet TLS selbst)
+	KindStatus   = "status"      // Statusseite der Healthchecks (StatusPageID)
 )
 
 var redirectCodes = map[int]bool{300: true, 301: true, 302: true, 303: true, 307: true, 308: true}
@@ -64,6 +65,8 @@ type Host struct {
 	Advanced       Advanced   `json:"advanced"`                  // weitere Optionen
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
+
+	StatusPageID int64 `json:"status_page_id"` // Statusseite der Healthchecks (nur Hostart status)
 }
 
 // Target ist die Adresse des Ziels (scheme://host:port).
@@ -90,7 +93,7 @@ func newHostKind(kind string) *Host {
 }
 
 func validKind(k string) bool {
-	return k == KindProxy || k == KindRedirect || k == KindDead || k == KindPass
+	return k == KindProxy || k == KindRedirect || k == KindDead || k == KindPass || k == KindStatus
 }
 
 // FieldError ist ein Fehler in einem Feld (Formular, API 422); Key ist der Text, Name ein Wert dazu.
@@ -164,6 +167,9 @@ func (h *Host) normalize() error {
 	if h.MinTLS != "1.3" {
 		h.MinTLS = "1.2"
 	}
+	if h.Kind != KindStatus {
+		h.StatusPageID = 0
+	}
 	switch h.Kind {
 	case KindRedirect:
 		if err := h.normalizeRedirect(); err != nil {
@@ -173,6 +179,12 @@ func (h *Host) normalize() error {
 		return h.normalizeTLS()
 	case KindDead:
 		h.TargetHost, h.TargetPort, h.WebSockets, h.CacheAssets, h.BlockExploits = "", 0, false, false, false
+		return h.normalizeTLS()
+	case KindStatus: // Seite kommt aus den Healthchecks: kein Ziel, keine Weiterleitung
+		if h.StatusPageID <= 0 {
+			return ferr("status_page_id", "cdn64.err.status_page")
+		}
+		h.TargetHost, h.TargetPort, h.WebSockets, h.CacheAssets, h.RedirectTarget = "", 0, false, false, ""
 		return h.normalizeTLS()
 	case KindPass:
 		h.Scheme, h.CertID, h.WebSockets, h.CacheAssets, h.BlockExploits = "https", CertNone, false, false, false
@@ -329,14 +341,14 @@ func isSingleLabel(s string) bool {
 
 const hostCols = `id, kind, names, enabled, scheme, target_host, target_port, websockets, block_exploits, cache_assets, cert_id, force_ssl, http2,
 	http3, hsts, hsts_subdomains, min_tls, verify_target, redirect_target, redirect_scheme, redirect_code, preserve_path, access_list_id, locations,
-	advanced, created_at, updated_at`
+	advanced, created_at, updated_at, status_page_id`
 
 func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
 	var h Host
 	var names, locs, adv, ca, ua string
 	if err := row.Scan(&h.ID, &h.Kind, &names, &h.Enabled, &h.Scheme, &h.TargetHost, &h.TargetPort, &h.WebSockets, &h.BlockExploits, &h.CacheAssets,
 		&h.CertID, &h.ForceSSL, &h.HTTP2, &h.HTTP3, &h.HSTS, &h.HSTSSubdomains, &h.MinTLS, &h.VerifyTarget, &h.RedirectTarget, &h.RedirectScheme,
-		&h.RedirectCode, &h.PreservePath, &h.AccessListID, &locs, &adv, &ca, &ua); err != nil {
+		&h.RedirectCode, &h.PreservePath, &h.AccessListID, &locs, &adv, &ca, &ua, &h.StatusPageID); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(locs), &h.Locations)
@@ -421,12 +433,12 @@ func (m *Module) saveHost(ctx context.Context, h *Host) error {
 	w := m.core.Writer()
 	args := []any{h.Kind, strings.Join(h.Names, ","), h.Enabled, h.Scheme, h.TargetHost, h.TargetPort, h.WebSockets, h.BlockExploits, h.CacheAssets,
 		h.CertID, h.ForceSSL, h.HTTP2, h.HTTP3, h.HSTS, h.HSTSSubdomains, h.MinTLS, h.VerifyTarget, h.RedirectTarget, h.RedirectScheme, h.RedirectCode,
-		h.PreservePath, h.AccessListID, string(locs), string(adv)}
+		h.PreservePath, h.AccessListID, string(locs), string(adv), h.StatusPageID}
 	if h.ID == 0 {
 		res, err := w.ExecContext(ctx, `INSERT INTO cdn_hosts (kind, names, enabled, scheme, target_host, target_port, websockets, block_exploits, cache_assets,
 			cert_id, force_ssl, http2, http3, hsts, hsts_subdomains, min_tls, verify_target, redirect_target, redirect_scheme, redirect_code, preserve_path,
-			access_list_id, locations, advanced, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
+			access_list_id, locations, advanced, status_page_id, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
 		if err != nil {
 			return err
 		}
@@ -435,7 +447,7 @@ func (m *Module) saveHost(ctx context.Context, h *Host) error {
 		res, err := w.ExecContext(ctx, `UPDATE cdn_hosts SET kind = ?, names = ?, enabled = ?, scheme = ?, target_host = ?, target_port = ?, websockets = ?,
 			block_exploits = ?, cache_assets = ?, cert_id = ?, force_ssl = ?, http2 = ?, http3 = ?, hsts = ?, hsts_subdomains = ?, min_tls = ?,
 			verify_target = ?, redirect_target = ?, redirect_scheme = ?, redirect_code = ?, preserve_path = ?, access_list_id = ?, locations = ?,
-			advanced = ?, updated_at = ? WHERE id = ?`,
+			advanced = ?, status_page_id = ?, updated_at = ? WHERE id = ?`,
 			append(args, now, h.ID)...)
 		if err != nil {
 			return err
@@ -497,6 +509,8 @@ func (h *Host) summary() string {
 			h.RedirectCode, h.PreservePath, h.Enabled, h.CertID, h.ForceSSL)
 	case KindDead:
 		return fmt.Sprintf("kind=dead enabled=%v cert=%d force_ssl=%v", h.Enabled, h.CertID, h.ForceSSL)
+	case KindStatus:
+		return fmt.Sprintf("kind=status page=%d enabled=%v cert=%d force_ssl=%v acl=%d", h.StatusPageID, h.Enabled, h.CertID, h.ForceSSL, h.AccessListID)
 	case KindPass:
 		return fmt.Sprintf("kind=passthrough target=%s enabled=%v", net.JoinHostPort(h.TargetHost, strconv.Itoa(h.TargetPort)), h.Enabled)
 	}

@@ -48,7 +48,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.17.1"
+	Version = "1.18.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -87,6 +87,7 @@ type Module struct {
 	lim        *limiter     // Schutz vor Ueberlastung
 	online     onlineState  // CDN64 online (Tunnel zu srv07/srv08)
 	dnsrec     DNSRecords   // DNS-Records bei ipv64 (nil = nicht verfuegbar)
+	status     StatusPages  // Statusseiten der Healthchecks (nil = nicht verfuegbar)
 
 	sapply sync.Mutex // ein Abgleich der Streams gleichzeitig
 	smu    sync.Mutex // Streams (nur kurz halten)
@@ -431,6 +432,8 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		if id := certByNames[nameKey(f.HostCerts[oldID])]; id > 0 {
 			h.CertID = id
 		}
+		// Statusseite: die ID gilt nur auf der Quelle. Gibt es sie hier nicht, wird der Host trotzdem angelegt
+		// (zeigt dann 404, bis im Formular eine Seite dieser Node gewaehlt ist).
 		if err := m.saveHost(ctx, h); err != nil {
 			var fe *FieldError
 			if errors.As(err, &fe) && fe.Key == "cdn64.err.name_taken" {

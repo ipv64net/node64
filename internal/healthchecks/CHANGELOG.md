@@ -1,5 +1,20 @@
 # Änderungen – Healthchecks
 
+## 2.17.0 – 2026-10-20
+
+### Neu
+- **Statusseiten** (Healthchecks › Statusseiten): öffentliche Übersicht über beliebig viele Checks in Gruppen, mit
+  Gesamtbanner, Tagesbalken (30/60/90 Tage) und Verfügbarkeit; gestörte Gruppen stehen offen, Probleme zuerst. Ein Klick
+  auf einen Eintrag zeigt Verfügbarkeit über 24 h/7/30 Tage, mittlere Latenz, 24 Stundenbalken und die letzten Störungen.
+  Störungen und Wartungsfenster erscheinen automatisch, Ankündigungen gibt es von Hand (mit Updates).
+- Ansichten Liste, Kacheln (für einen Monitor an der Wand) und Kompakt (zum Einbetten); hell/dunkel, Akzentfarbe,
+  Sprache, einfaches Markdown in Beschreibung und Fußzeile, optional Passwort und „nicht indexieren“.
+- Besucher sehen nur Anzeigenamen, Zustand und Verfügbarkeit, nie Ziele, IPs, Ports oder Fehlermeldungen.
+- Statusseiten sind aus, bis man sie einschaltet; vorher läuft nichts. Erreichbar über PROXY64 (Hostart
+  „Statusseite“, eigene Domain, auch über CDN64) oder, bewusst eingeschaltet, direkt auf dem Node-Port unter
+  `/status/<name>`. Berechnet wird nur auf Abruf (30 s zwischengespeichert, komprimiert).
+- Dazu `status.json`, Badges (SVG) und ein Atom-Feed je Seite; API `/api/status-pages`.
+
 ## 2.16.1 – 2026-10-20
 
 ### Geändert

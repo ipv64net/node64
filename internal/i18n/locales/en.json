@@ -82,7 +82,8 @@
     "theme_auto": "Automatic",
     "standalone": "Healthchecks sync off",
     "version": "Version {version}",
-    "api": "API"
+    "api": "API",
+    "status_pages": "Status pages"
   },
   "common": {
     "copy": "Copy",
@@ -333,7 +334,8 @@
       "streams": "Streams",
       "default": "Default page",
       "access": "Access lists",
-      "log": "Requests"
+      "log": "Requests",
+      "status": "Status pages"
     },
     "new": "Add proxy host",
     "edit": "Edit proxy host",
@@ -449,7 +451,15 @@
       "adv_access_log": "Access log for this host",
       "adv_access_log_hint": "Every request individually under \"Requests\". The hourly counters always run.",
       "adv_no_limits": "No per-IP limits",
-      "adv_no_limits_hint": "The per-IP request limit and the per-target limit do not apply to this host (e.g. an API used by many devices behind one address). Connection limits and bans still apply."
+      "adv_no_limits_hint": "The per-IP request limit and the per-target limit do not apply to this host (e.g. an API used by many devices behind one address). Connection limits and bans still apply.",
+      "status_page": "Status page",
+      "status_page_choose": "– Choose status page –",
+      "status_page_off": "off",
+      "status_page_missing": "Status page #{id} (does not exist on this node)",
+      "status_page_none": "No status page created yet.",
+      "status_hc_off": "The Healthchecks module is switched off. Until it runs, this host answers with 503.",
+      "status_page_hint": "The page appears directly under \"/\" on this domain. If it is switched off, the host answers with 404.",
+      "status_pages_manage": "Manage status pages"
     },
     "err": {
       "name": "Invalid domain name.",
@@ -490,7 +500,8 @@
       "dns_type": "Type CNAME, A or AAAA.",
       "geo_country": "Unknown country code {name}: two letters per ISO, e.g. DE.",
       "geo_none": "Enter at least one country for the country block.",
-      "geo_many": "At most 60 countries per host."
+      "geo_many": "At most 60 countries per host.",
+      "status_page": "Please choose a status page."
     },
     "help_title": "How it works",
     "help_ports": "The router forwards 80 and 443 (TCP, for HTTP/3 also 443/UDP) to this node. Node64 distributes the rest by domain name – also together with DNS64 in the same container.",
@@ -511,13 +522,15 @@
       "proxy": "Add proxy host",
       "redirect": "Add redirection",
       "dead": "Add 404 host",
-      "passthrough": "TLS passthrough"
+      "passthrough": "TLS passthrough",
+      "status": "Connect status page"
     },
     "kind_empty": {
       "proxy": "No proxy hosts yet. A proxy host forwards requests for a domain to a service in your home network.",
       "redirect": "No redirections yet. A redirection sends visitors of one domain to another (e.g. old domain to new).",
       "dead": "No 404 hosts yet. A 404 host deliberately answers a domain with \"not found\", e.g. for retired names.",
-      "passthrough": "Nothing passed through yet."
+      "passthrough": "Nothing passed through yet.",
+      "status": "No status pages on their own domain yet. Such a host shows a Healthchecks status page under a domain – with certificate, blocklists, country blocking and limits, optionally also via CDN64."
     },
     "redirect": {
       "auto": "same as request",
@@ -826,6 +839,10 @@
         "invalid_field": "The name is not valid.",
         "error": "Unexpected error."
       }
+    },
+    "status": {
+      "off": "off",
+      "unknown": "Status page #{id} not available"
     }
   },
   "certs": {
@@ -2000,6 +2017,217 @@
       "all": "… all measuring points report down (default)",
       "any": "… one measuring point reports down",
       "majority": "… the majority of measuring points report down"
+    },
+    "status": {
+      "pub": {
+        "reason_other": "Not reachable",
+        "too_many": "Too many failed attempts. Please try again in a few minutes.",
+        "badge": {
+          "up": "operational",
+          "degraded": "degraded",
+          "down": "down",
+          "maintenance": "maintenance",
+          "paused": "paused",
+          "unknown": "unknown",
+          "nodata": "no data"
+        },
+        "feed": {
+          "incident": "Outage: {item}",
+          "resolved": "Resolved: {item}",
+          "since": "Started: {time}",
+          "until": "Ended: {time}",
+          "done": "Resolved: {time}"
+        },
+        "title": "Status page",
+        "preview": "Preview – not public",
+        "updated": "Updated:",
+        "stale": "Connection lost · as of",
+        "overall": {
+          "up": "All systems operational",
+          "degraded": "Partial outage",
+          "down": "Major outage",
+          "maintenance": "Maintenance",
+          "unknown": "Status unknown"
+        },
+        "state": {
+          "up": "Operational",
+          "down": "Down",
+          "degraded": "Degraded",
+          "maintenance": "Maintenance",
+          "paused": "Paused",
+          "unknown": "Unknown"
+        },
+        "count": {
+          "up": "{count} OK",
+          "down": "{count} down",
+          "degraded": "{count} degraded",
+          "maintenance": "{count} in maintenance",
+          "paused": "{count} paused",
+          "unknown": "{count} unknown"
+        },
+        "problems": "Affected",
+        "more": "and {count} more",
+        "empty": "No entries yet.",
+        "maint": {
+          "title": "Maintenance",
+          "active": "Maintenance in progress",
+          "until": "until",
+          "affects": "affects:",
+          "planned": "Scheduled maintenance"
+        },
+        "level": {
+          "info": "Information",
+          "warning": "Warning",
+          "danger": "Outage"
+        },
+        "notice": {
+          "resolved": "resolved"
+        },
+        "history": {
+          "notices": "Past announcements",
+          "incidents": "Incidents in the last 30 days"
+        },
+        "inc": {
+          "running": "ongoing"
+        },
+        "dur": {
+          "m": "{m} min",
+          "h": "{h} h {m} min",
+          "d": "{d} d {h} h"
+        },
+        "bar": {
+          "up": "No issues",
+          "partial": "Partial outage",
+          "down": "Outage",
+          "maintenance": "Maintenance",
+          "none": "No data",
+          "downmin": "{dur} down"
+        },
+        "bars": {
+          "aria": "Last {days} days, {count} with issues"
+        },
+        "det": {
+          "h24": "24 hours",
+          "d7": "7 days",
+          "d30": "30 days",
+          "latency": "Avg. response (24 h)",
+          "since": "In this state since {t}",
+          "hours": "Last 24 hours",
+          "incidents": "Recent incidents",
+          "noinc": "No recent incidents",
+          "loading": "Loading …",
+          "unavailable": "Details not available."
+        },
+        "powered": "Powered by",
+        "pw": {
+          "hint": "This status page is protected. Please enter the password.",
+          "label": "Password",
+          "submit": "Show",
+          "wrong": "Wrong password."
+        }
+      },
+      "hint": "Public status pages from your health checks: only names, state, uptime, incidents, maintenance and announcements – never targets, IPs or error messages.",
+      "empty": "No status page yet. Status pages are off until you create one and switch it on.",
+      "empty_hint": "A page goes public through the PROXY64 host type “Status page” (own domain, certificate, also via CDN64) or optionally directly on the node port.",
+      "new": "New status page",
+      "edit": "Edit status page",
+      "deleted": "Status page deleted.",
+      "delete_confirm": "Delete status page “{title}” with all announcements?",
+      "unsaved": "Changed but not saved yet.",
+      "general": "General",
+      "title": "Title",
+      "slug": "Address (slug)",
+      "slug_hint": "Lowercase letters, digits and hyphens; empty = from the title.",
+      "description": "Description",
+      "footer": "Footer",
+      "markdown_hint": "Simple Markdown: **bold**, *italic*, [link](https://…), lists.",
+      "enabled": "Enabled",
+      "enabled_hint": "Off = not reachable anywhere (the preview always works). Best published through",
+      "publish_node": "Publish on the node port (/status/…)",
+      "publish_node_hint": "This requires the node port to be reachable from outside. Better use PROXY64 with your own domain so the admin port stays closed.",
+      "on_node": "Node port",
+      "public_url": "Public page",
+      "preview": "Preview",
+      "items": "Entries",
+      "open_n": "{count} open",
+      "look": "Appearance",
+      "layout": "Layout",
+      "layout_list": "List",
+      "layout_tiles": "Tiles (monitor/TV)",
+      "layout_compact": "Compact (for embedding)",
+      "lang": "Language",
+      "lang_auto": "like browser",
+      "accent": "Accent colour",
+      "accent_own": "Use own accent colour",
+      "accent_hint": "Unchecked = default colour.",
+      "days": "Daily bars",
+      "days_n": "{n} days",
+      "refresh": "Reload every",
+      "show_uptime": "Show uptime",
+      "show_history": "Show history (incidents and announcements of the last 30 days)",
+      "powered_by": "Show “Powered by Node64”",
+      "access": "Access",
+      "password": "Password",
+      "password_set": "Password set",
+      "password_keep": "leave empty = unchanged",
+      "password_none": "empty = no password",
+      "password_hint": "Optional, 4–72 characters. Stored only as a hash and never shown.",
+      "password_remove": "Remove password",
+      "noindex": "Ask search engines not to index (noindex)",
+      "groups": "Groups and entries",
+      "groups_hint": "Display name empty = name of the check.",
+      "groups_empty": "No group yet. Add one or add checks below (a group without heading is created).",
+      "group_name": "Group name",
+      "group_unnamed": "no heading",
+      "group_n": "Group {n}",
+      "group_add": "Add group",
+      "group_delete": "Remove group",
+      "group_delete_confirm": "Remove group with all entries?",
+      "group_no_items": "No entries – add checks below.",
+      "up": "Move up",
+      "down": "Move down",
+      "sort_az": "Sort entries alphabetically",
+      "label": "Display name",
+      "move_to": "Group",
+      "item_remove": "Remove entry",
+      "check_gone": "Check deleted",
+      "add_checks": "Add checks",
+      "add_to": "To group",
+      "add_new_group": "A group without heading will be created.",
+      "search_hint": "Filter by name …",
+      "add_tag": "Add all with tag",
+      "add_hcg": "Add all of group",
+      "add_selected": "Add selected",
+      "select_visible": "Select visible",
+      "on_page": "on the page",
+      "no_checks": "No health checks yet.",
+      "notices": "Announcements",
+      "notices_hint": "Announcements stay at the top of the page until resolved. Updates appear as a timeline.",
+      "notices_none": "No open announcement.",
+      "notices_resolved": "Resolved (last 90 days)",
+      "notice_new": "New announcement",
+      "notice_title": "Title",
+      "notice_text": "Text",
+      "notice_publish": "Publish",
+      "notice_update": "Add update",
+      "notice_resolve": "mark as resolved",
+      "notice_deleted": "Announcement deleted.",
+      "level": "Level",
+      "level_info": "Info",
+      "level_warning": "Warning",
+      "level_danger": "Outage",
+      "err": {
+        "slug": "Address: 2–63 characters, only a–z, 0–9 and hyphen, not starting with a hyphen (“assets” is reserved).",
+        "slug_taken": "This address is already taken.",
+        "title": "Title missing or too long (at most 120 characters).",
+        "text": "Description (5000) or footer (2000 characters) is too long.",
+        "accent": "Give the accent colour as #rrggbb.",
+        "group": "Group name too long (at most 100 characters).",
+        "item": "Entry without check or display name too long (at most 120 characters).",
+        "many": "Too many groups or entries (at most 50 groups and 1000 entries).",
+        "notice": "Announcement: title missing or too long (200), text at most 5000 characters.",
+        "password": "Password: 4–72 characters."
+      }
     }
   },
   "notify": {

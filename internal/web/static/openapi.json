@@ -1942,9 +1942,10 @@
               "proxy",
               "redirect",
               "dead",
-              "passthrough"
+              "passthrough",
+              "status"
             ],
-            "description": "Art; nur beim Anlegen, Standard proxy"
+            "description": "Art; nur beim Anlegen, Standard proxy. status = Statusseite der Healthchecks (status_page_id)"
           },
           "redirect_target": {
             "type": "string",
@@ -2002,6 +2003,10 @@
               }
             },
             "description": "Optional: für jede Domain im ipv64-Account einen Eintrag anlegen (vorhandene bleiben). Ergebnis in dns_records bzw. dns_error."
+          },
+          "status_page_id": {
+            "type": "integer",
+            "description": "nur kind status: ID der Statusseite der Healthchecks (Pflicht, > 0); sonst 0. Gibt es die Seite nicht (z. B. nach Import), antwortet der Host mit 404, ohne Healthchecks mit 503."
           }
         },
         "description": "Fehlende Felder: beim Anlegen Standardwerte (eingeschaltet, http, Port 80, WebSockets, HTTP/2, HTTP/3, TLS 1.2), beim Ändern bleiben sie."
@@ -2018,9 +2023,10 @@
               "proxy",
               "redirect",
               "dead",
-              "passthrough"
+              "passthrough",
+              "status"
             ],
-            "description": "Art; nur beim Anlegen, Standard proxy"
+            "description": "Art; nur beim Anlegen, Standard proxy. status = Statusseite der Healthchecks (status_page_id)"
           },
           "names": {
             "type": "array",
@@ -2244,6 +2250,10 @@
               "$ref": "#/components/schemas/CDNHostWatch"
             },
             "description": "Healthchecks auf dieses Ziel (nur wenn das Modul Healthchecks läuft)"
+          },
+          "status_page_id": {
+            "type": "integer",
+            "description": "nur kind status: ID der Statusseite der Healthchecks (Pflicht, > 0); sonst 0. Gibt es die Seite nicht (z. B. nach Import), antwortet der Host mit 404, ohne Healthchecks mit 503."
           }
         }
       },
@@ -3470,6 +3480,290 @@
           "end",
           "action"
         ]
+      },
+      "StatusPage": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{1,62}$",
+            "description": "/status/<slug>; leer beim Anlegen = aus dem Titel"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 5000,
+            "description": "einfaches Markdown"
+          },
+          "footer": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "einfaches Markdown"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "aus = nirgends erreichbar (auch nicht über PROXY64)"
+          },
+          "publish_node": {
+            "type": "boolean",
+            "description": "auch direkt auf dem Node-Port unter /status/<slug>"
+          },
+          "layout": {
+            "type": "string",
+            "enum": [
+              "list",
+              "tiles",
+              "compact"
+            ]
+          },
+          "theme": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "light",
+              "dark"
+            ]
+          },
+          "lang": {
+            "type": "string",
+            "enum": [
+              "",
+              "de",
+              "en"
+            ],
+            "description": "leer = Sprache des Browsers"
+          },
+          "accent": {
+            "type": "string",
+            "description": "Akzentfarbe #rrggbb, leer = Standard"
+          },
+          "days": {
+            "type": "integer",
+            "enum": [
+              30,
+              60,
+              90
+            ],
+            "description": "Tagesbalken"
+          },
+          "show_uptime": {
+            "type": "boolean"
+          },
+          "show_history": {
+            "type": "boolean",
+            "description": "Störungen und Ankündigungen der letzten 30 Tage zeigen"
+          },
+          "refresh_sec": {
+            "type": "integer",
+            "minimum": 30,
+            "maximum": 3600
+          },
+          "has_password": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "password": {
+            "type": "string",
+            "writeOnly": true,
+            "description": "neues Passwort (4–72 Zeichen); \"-\" entfernt es; leer = unverändert. Wird nie ausgegeben."
+          },
+          "noindex": {
+            "type": "boolean"
+          },
+          "powered_by": {
+            "type": "boolean",
+            "description": "„Bereitgestellt mit Node64“ zeigen"
+          },
+          "groups": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/StatusGroup"
+            },
+            "description": "höchstens 50 Gruppen und 1000 Einträge"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        }
+      },
+      "StatusGroup": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "leer = ohne Überschrift"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusItem"
+            }
+          }
+        }
+      },
+      "StatusItem": {
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "readOnly": true
+          },
+          "token": {
+            "type": "string",
+            "description": "Token des Checks"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 120,
+            "description": "Anzeigename; leer = Name des Checks"
+          }
+        }
+      },
+      "StatusNotice": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "page_id": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "danger"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resolved_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "fehlt, solange offen"
+          },
+          "updates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "time": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "text": {
+                  "type": "string",
+                  "description": "einfaches Markdown"
+                }
+              }
+            }
+          }
+        }
+      },
+      "StatusNoticeInput": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "danger"
+            ],
+            "default": "info"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 5000,
+            "description": "erster Eintrag der Zeitleiste (einfaches Markdown)"
+          }
+        }
+      },
+      "StatusNoticeUpdateInput": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "string",
+            "enum": [
+              "",
+              "info",
+              "warning",
+              "danger"
+            ],
+            "description": "leer = unverändert"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 5000,
+            "description": "Update (leer = keins)"
+          },
+          "resolve": {
+            "type": "boolean",
+            "description": "als erledigt markieren"
+          }
+        }
+      },
+      "StatusError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string",
+            "description": "betroffenes Feld"
+          },
+          "key": {
+            "type": "string",
+            "description": "i18n-Schlüssel, z. B. hc.status.err.slug"
+          }
+        }
       }
     }
   },
@@ -10158,7 +10452,8 @@
                 "proxy",
                 "redirect",
                 "dead",
-                "passthrough"
+                "passthrough",
+                "status"
               ]
             }
           }
@@ -10190,16 +10485,7 @@
               }
             }
           },
-          "422": {
-            "description": "Feld ungültig (field nennt es), z. B. Name schon vergeben",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
+          "422": "Fehlermeldung ggf. mit field \"status_page_id\" (kind status ohne Seite); Text bei falscher Art jetzt \"kind must be proxy, redirect, dead, passthrough or status\""
         }
       }
     },
@@ -13626,6 +13912,426 @@
           },
           "404": {
             "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/status-pages": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Statusseiten auflisten",
+        "description": "Alle Statusseiten mit Gruppen und Einträgen. Das Passwort wird nie ausgegeben (nur has_password).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StatusPage"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Statusseite anlegen",
+        "description": "Fehlende Felder bekommen die Standardwerte (layout list, theme auto, days 90, refresh_sec 60; show_uptime, show_history, noindex und powered_by an; enabled und publish_node aus). Ohne slug wird er aus dem Titel gebildet. password: Klartext (4–72 Zeichen), gespeichert wird ein bcrypt-Hash.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusPage"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ungültiges JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Slug vergeben (key hc.status.err.slug_taken)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültige Angaben (field und key nennen das Feld)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/status-pages/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID der Statusseite"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Statusseite lesen",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "status page not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Statusseite ändern",
+        "description": "Teiländerung: nur die mitgeschickten Felder ändern sich. groups ersetzt alle Gruppen und Einträge (deren IDs ändern sich dabei); ohne groups bleiben sie. password: neues Passwort, \"-\" entfernt es, leer oder weggelassen = unverändert.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusPage"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ungültiges JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "status page not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Slug vergeben",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültige Angaben",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Statusseite löschen",
+        "description": "Löscht die Seite mit Gruppen, Einträgen und Ankündigungen.",
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "404": {
+            "description": "status page not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/status-pages/{id}/notices": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID der Statusseite"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Ankündigungen einer Statusseite",
+        "description": "Offene und erledigte Ankündigungen (neueste zuerst, höchstens 100) mit Updates.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StatusNotice"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "status page not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Ankündigung anlegen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusNoticeInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusNotice"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ungültiges JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "status page not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Titel fehlt oder zu lang (key hc.status.err.notice)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/status-pages/{id}/notices/{nid}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID der Statusseite"
+        },
+        {
+          "name": "nid",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID der Ankündigung"
+        }
+      ],
+      "put": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Ankündigung fortschreiben",
+        "description": "Hängt ein Update an (text), ändert optional die Stufe (level) und markiert die Ankündigung mit resolve als erledigt.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusNoticeUpdateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusNotice"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ungültiges JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Seite oder Ankündigung unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültige Stufe oder Text zu lang",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Ankündigung löschen",
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "404": {
+            "description": "Seite oder Ankündigung unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
           }
         }
       }

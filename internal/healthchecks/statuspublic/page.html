@@ -1,0 +1,105 @@
+{{- /* Oeffentliche Statusseite: eigenstaendig, ohne externe Ressourcen. CSS/JS kommen eingebettet mit Nonce. */ -}}
+<!doctype html>
+<html lang="{{.Lang}}" class="{{.HTMLClass}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="{{.Scheme}}">
+<meta name="referrer" content="no-referrer">
+{{if .NoIndex}}<meta name="robots" content="noindex,nofollow">
+{{end}}{{if eq .Layout "compact"}}<base target="_blank">
+{{end}}<title>{{.Title}}</title>
+<style nonce="{{.Nonce}}">{{.CSS}}</style>
+</head>
+<body>
+{{if .Preview}}<div class="pv" role="note">{{$.T "hc.status.pub.preview"}}</div>
+{{end}}
+{{- if .NeedPassword}}{{template "login" .}}{{else}}
+<div class="w">
+{{if ne .Layout "compact"}}<header class="hd">
+<h1>{{.Title}}</h1>
+{{if .Desc}}<div class="md desc">{{.Desc}}</div>{{end}}
+</header>
+{{end}}
+<div class="ban s-{{.Overall}}" role="status">{{template "icon" .Overall}}<span>{{.OverallText}}</span><span class="sub" id="upd">{{$.T "hc.status.pub.updated"}} <time datetime="{{$.ISO .Generated}}" data-f="t">{{$.Clock .Generated}}</time></span></div>
+{{- if ne .Layout "compact"}}
+{{- range .Active}}
+<div class="ntc card lv-maint"><div class="nh"><span class="tag">{{$.T "hc.status.pub.maint.active"}}</span> <strong>{{.Title}}</strong></div><p class="mu">{{$.T "hc.status.pub.maint.until"}} <time datetime="{{$.ISO .End}}">{{$.When .End}}</time>{{if .Items}} · {{$.T "hc.status.pub.maint.affects"}} {{.Items}}{{end}}</p></div>
+{{- end}}
+{{- range .OpenNotices}}{{template "notice" .}}{{end}}
+{{- if .Problems}}
+<nav class="prb card" aria-label="{{$.T "hc.status.pub.problems"}}"><strong>{{$.T "hc.status.pub.problems"}}:</strong> {{range $i, $p := .Problems}}{{if $i}}, {{end}}<a href="#i{{$p.ID}}">{{$p.Label}}</a> <span class="tag s-{{$p.State}}">{{$p.StateText}}</span>{{end}}{{if .ProblemMore}} {{$.T "hc.status.pub.more" "count" .ProblemMore}}{{end}}</nav>
+{{- end}}
+{{end}}
+<main>
+{{- if not .Groups}}<p class="mu empty">{{$.T "hc.status.pub.empty"}}</p>{{end}}
+{{- if eq .Layout "compact"}}
+<ul class="cg card">
+{{- range .Groups}}<li class="s-{{.Overall}}"><span class="dot" aria-hidden="true"></span><span class="lb">{{.Name}}</span><span class="cnt">{{.Counts}}</span><span class="sr">{{.OverallText}}</span></li>{{end}}
+</ul>
+{{- else if eq .Layout "tiles"}}
+{{- range .Groups}}
+<section class="grp"><h2>{{.Name}} <span class="cnt">{{.Counts}}</span></h2>
+<ul class="its">
+{{- range .Items}}<li class="it tl s-{{.State}}" id="i{{.ID}}" data-id="{{.ID}}"><div class="row"><span class="lb">{{.Label}}</span><span class="st">{{.StateText}}</span>{{if .Uptime}}<span class="up">{{.Uptime}}</span>{{end}}</div></li>{{end}}
+</ul></section>
+{{- end}}
+{{- else}}
+{{- range .Groups}}
+<details class="grp card s-{{.Overall}}" data-k="{{.Key}}"{{if .Open}} open{{end}}><summary><span class="dot" aria-hidden="true"></span><span class="gn">{{.Name}}</span><span class="cnt">{{.Counts}}</span></summary>
+<ul class="its">
+{{- range .Items}}
+<li class="it s-{{.State}}" id="i{{.ID}}" data-id="{{.ID}}"><div class="row"><span class="dot" aria-hidden="true"></span><span class="nm"><span class="lb">{{.Label}}</span>{{if .Problem}}<span class="tag">{{.StateText}}</span>{{else}}<span class="sr">{{.StateText}}</span>{{end}}</span>{{if .Uptime}}<span class="up">{{.Uptime}}</span>{{end}}{{if .Bars}}<span class="bars" data-s="{{.FirstDay}}" role="img" aria-label="{{.BarsLabel}}">{{.Bars}}</span>{{end}}</div></li>
+{{- end}}
+</ul></details>
+{{- end}}
+{{- end}}
+</main>
+{{- if ne .Layout "compact"}}
+{{- if .Planned}}
+<section class="hs"><h2>{{$.T "hc.status.pub.maint.planned"}}</h2><ul class="hl">
+{{- range .Planned}}<li><strong>{{.Title}}</strong><br><span class="mu"><time datetime="{{$.ISO .Start}}">{{$.When .Start}}</time> – <time datetime="{{$.ISO .End}}">{{$.When .End}}</time>{{if .Items}} · {{$.T "hc.status.pub.maint.affects"}} {{.Items}}{{end}}</span></li>{{end}}
+</ul></section>
+{{- end}}
+{{- if .OldNotices}}
+<section class="hs"><h2>{{$.T "hc.status.pub.history.notices"}}</h2>
+{{- range .OldNotices}}{{template "notice" .}}{{end}}
+</section>
+{{- end}}
+{{- if .Incidents}}
+<section class="hs"><h2>{{$.T "hc.status.pub.history.incidents"}}</h2><ul class="hl">
+{{- range .Incidents}}<li class="{{if .Running}}run{{end}}"><time datetime="{{$.ISO .Start}}">{{$.When .Start}}</time> <strong>{{.Item}}</strong> <span class="mu">· {{.Dur}}{{if .Reason}} · {{.Reason}}{{end}}</span></li>{{end}}
+</ul>{{if .IncMore}}<p class="mu">{{$.T "hc.status.pub.more" "count" .IncMore}}</p>{{end}}</section>
+{{- end}}
+{{- end}}
+<footer class="ft">
+{{if .Footer}}<div class="md">{{.Footer}}</div>{{end}}
+{{if .PoweredBy}}<p>{{$.T "hc.status.pub.powered"}} <a href="https://node64.de" rel="noopener">Node64</a></p>{{end}}
+</footer>
+</div>
+<script type="application/json" id="L">{{.JSL}}</script>
+<script nonce="{{.Nonce}}">{{.JS}}</script>
+{{- end}}
+</body>
+</html>
+{{- define "notice"}}
+<div class="ntc card lv-{{.Level}}"><div class="nh"><span class="tag">{{.LevelText}}</span> <strong>{{.Title}}</strong>{{if .Done}} <span class="mu">· {{.DoneText}} <time datetime="{{.P.ISO .Resolved}}">{{.P.When .Resolved}}</time></span>{{end}}</div>
+{{- if .Updates}}<ol class="tlu">{{range .Updates}}<li><time class="mu" datetime="{{$.P.ISO .Time}}">{{$.P.When .Time}}</time><div class="md">{{.Text}}</div></li>{{end}}</ol>{{end}}</div>
+{{- end}}
+{{- define "login"}}
+<main class="w lg"><form class="card" method="post" action="{{.Base}}/login">
+<h1>{{.Title}}</h1>
+<p class="mu">{{$.T "hc.status.pub.pw.hint"}}</p>
+{{if .PasswordWrong}}<p class="err" role="alert">{{$.T "hc.status.pub.pw.wrong"}}</p>{{end}}
+<label for="pw">{{$.T "hc.status.pub.pw.label"}}</label>
+<input id="pw" type="password" name="password" required autofocus autocomplete="current-password">
+<button type="submit">{{$.T "hc.status.pub.pw.submit"}}</button>
+</form></main>
+{{- end}}
+{{- define "icon"}}<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="11" fill="rgba(255,255,255,.2)"/>
+{{- if eq . "up"}}<path d="M6.5 12.5l3.5 3.5 7.5-8" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+{{- else if eq . "down"}}<path d="M8 8l8 8M16 8l-8 8" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+{{- else if eq . "degraded"}}<path d="M12 6.5v7" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="17.3" r="1.4" fill="#fff"/>
+{{- else if eq . "maintenance"}}<path d="M7 17l6-6M14.5 6.5a3 3 0 104 4" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>
+{{- else}}<path d="M9.5 9.5a2.5 2.5 0 114 2c-1 .7-1.5 1.2-1.5 2.3" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="17.3" r="1.3" fill="#fff"/>
+{{- end}}</svg>{{end}}

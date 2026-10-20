@@ -75,6 +75,7 @@ type Module struct {
 func New(core *store.Store, log *slog.Logger, dispatcher *notify.Dispatcher, notifyStore *notify.Store, version string) *Module {
 	m := &Module{core: core, st: NewStore(core), log: log.With("module", Name), dispatcher: dispatcher, notifyStore: notifyStore, version: version, push: newPushLimiter(), reminders: map[string]time.Time{}}
 	m.notifier = m
+	m.st.OnStatusChange = m.statusFlush // Statusseiten: zwischengespeicherte Sichten verwerfen (statusview.go)
 	m.publicIP = newPublicIP()
 	setSelfStore(core)
 	return m
@@ -194,7 +195,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.16.1", Changelog: changelog, ChangelogEN: changelogEN}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.17.0", Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {
@@ -322,8 +323,10 @@ func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /api/push/{token}", g.Enabled(http.HandlerFunc(m.apiPush)))
 	mux.Handle("POST /api/push/{token}", g.Enabled(http.HandlerFunc(m.apiPush)))
 	m.uiRoutes(mux, g)
+	m.statusRoutes(mux, g) // oeffentliche Statusseiten /status/{slug} (statuspublic.go)
 	m.onlineRoutes(mux, g)
 	m.onlineAPIRoutes(mux, api)
+	m.statusPagesAPIRoutes(mux, api)
 }
 
 // upsertSched plant einen Check ein, wenn diese Node ihn misst; Online-Checks und Checks

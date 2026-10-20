@@ -65,13 +65,15 @@ func (m *Module) transport(verify bool) http.RoundTripper {
 	return m.trInsecure
 }
 
-// inner: was ein Host tut (Proxy, Weiterleitung, 404).
+// inner: was ein Host tut (Proxy, Weiterleitung, 404, Statusseite).
 func (m *Module) inner(h *Host, st *hostStats) http.Handler {
 	switch h.Kind {
 	case KindRedirect:
 		return redirectHandler(h)
 	case KindDead:
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { page(w, http.StatusNotFound) })
+	case KindStatus:
+		return m.statusHandler(h)
 	}
 	return m.proxyHandler(h, st)
 }

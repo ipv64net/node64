@@ -184,6 +184,9 @@ func (s *Server) session(next http.Handler) http.Handler {
 			if strings.HasPrefix(r.URL.Path, "/api/push/") {
 				break // Push-URL: oeffentlich, der Token in der URL ist die Berechtigung (keine Sitzung)
 			}
+			if strings.HasPrefix(r.URL.Path, "/status/") {
+				break // Passwortformular der oeffentlichen Statusseite (keine Sitzung, eigene Drosselung)
+			}
 			if strings.HasPrefix(r.URL.Path, "/peer/") {
 				break // Cluster: signierte Anfragen der anderen Nodes bzw. Kopplungscode (peer-Paket, alle Versionen)
 			}

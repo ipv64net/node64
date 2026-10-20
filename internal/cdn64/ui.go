@@ -18,6 +18,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /cdn64", page(m.listOf(KindProxy)))
 	mux.Handle("GET /cdn64/redirects", page(m.listOf(KindRedirect)))
 	mux.Handle("GET /cdn64/dead", page(m.listOf(KindDead)))
+	mux.Handle("GET /cdn64/status", page(m.listOf(KindStatus)))
 	mux.Handle("GET /cdn64/default", page(m.pageDefault))
 	mux.Handle("POST /cdn64/default", page(m.pageDefaultSave))
 	mux.Handle("GET /proxy", page(func(w http.ResponseWriter, r *http.Request) {
@@ -45,6 +46,8 @@ func listPath(kind string) string {
 		return "/cdn64/dead"
 	case KindPass:
 		return "/cdn64/streams"
+	case KindStatus:
+		return "/cdn64/status"
 	}
 	return "/cdn64"
 }
@@ -59,6 +62,7 @@ func tabs(active string) []tab {
 	t := []tab{{Path: "/cdn64", Icon: "bi-arrow-left-right", TitleKey: "cdn64.tab.hosts"},
 		{Path: "/cdn64/redirects", Icon: "bi-signpost-split", TitleKey: "cdn64.tab.redirects"},
 		{Path: "/cdn64/dead", Icon: "bi-sign-stop", TitleKey: "cdn64.tab.dead"},
+		{Path: "/cdn64/status", Icon: "bi-clipboard-pulse", TitleKey: "cdn64.tab.status"},
 		{Path: "/cdn64/streams", Icon: "bi-ethernet", TitleKey: "cdn64.tab.streams"},
 		{Path: "/cdn64/access", Icon: "bi-person-lock", TitleKey: "cdn64.tab.access"},
 		{Path: "/certificates", Icon: "bi-shield-lock", TitleKey: "cdn64.tab.certs"}, // Kernseite
@@ -132,6 +136,8 @@ type hostRow struct {
 	ACLName  string
 	Watch    []Watch    // Healthchecks auf genau dieses Ziel
 	Online   *onlineRow // CDN64 online (nil = aus)
+
+	Status *StatusPageInfo // Hostart status: die Seite (nil = unbekannt bzw. Healthchecks aus)
 }
 
 // onlineQuota: Kontingent fuer die Zeile unter der Liste (Traffic in Byte).
@@ -185,6 +191,16 @@ func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
 	}
 	watch := m.watchIndex(ctx)
 	onl := m.onlineIndex(ctx, list)
+	pages := map[int64]*StatusPageInfo{}
+	for _, h := range list {
+		if h.Kind == KindStatus { // nur abfragen, wenn es Status-Hosts gibt
+			sp := m.statusPages(ctx)
+			for i := range sp {
+				pages[sp[i].ID] = &sp[i]
+			}
+			break
+		}
+	}
 	out := make([]hostRow, 0, len(list))
 	for _, h := range list {
 		st := m.statsOf(h.ID)
@@ -192,6 +208,9 @@ func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
 			URL: firstURL(h), Cert: m.certFor(ctx, h, all), RouteErr: routeErr[h.ID], Day: day[h.ID], ACLName: acls[h.AccessListID], Online: onl[h.ID]}
 		if h.probed() {
 			row.Watch = watch.of(h.TargetHost, h.TargetPort)
+		}
+		if h.Kind == KindStatus {
+			row.Status = pages[h.StatusPageID]
 		}
 		out = append(out, row)
 	}
@@ -274,6 +293,10 @@ type formData struct {
 
 	GeoText   string       // Laender der Laendersperre (Komma)
 	Countries []geoCountry // Auswahl aus index.json (leer, solange nicht geladen)
+
+	StatusOn    bool             // Healthchecks verfuegbar (Hostart status)
+	StatusPages []StatusPageInfo // Auswahl der Statusseite
+	StatusKnown bool             // gewaehlte Seite gibt es auf dieser Node
 }
 
 // advText: die weiteren Optionen als Text fuer das Formular.
@@ -342,6 +365,13 @@ func (m *Module) form(ctx context.Context, h *Host, isNew bool) formData {
 	m.bl.mu.Lock()
 	d.Countries = m.bl.countries
 	m.bl.mu.Unlock()
+	if h.Kind == KindStatus {
+		d.StatusPages = m.statusPages(ctx)
+		d.StatusOn = d.StatusPages != nil // nil = Healthchecks aus
+		for _, p := range d.StatusPages {
+			d.StatusKnown = d.StatusKnown || p.ID == h.StatusPageID
+		}
+	}
 	return d
 }
 
@@ -386,6 +416,7 @@ func hostFromForm(r *http.Request, h *Host) {
 	h.RedirectTarget, h.RedirectScheme, h.PreservePath = strings.TrimSpace(r.PostFormValue("redirect_target")), r.PostFormValue("redirect_scheme"), on("preserve_path")
 	h.RedirectCode, _ = strconv.Atoi(r.PostFormValue("redirect_code"))
 	h.AccessListID, _ = strconv.ParseInt(r.PostFormValue("access_list_id"), 10, 64)
+	h.StatusPageID, _ = strconv.ParseInt(r.PostFormValue("status_page_id"), 10, 64)
 	if r.PostFormValue("has_locations") == "1" { // Reiter Locations war im Formular
 		n, _ := strconv.Atoi(r.PostFormValue("loc_count"))
 		h.Locations = []Location{}

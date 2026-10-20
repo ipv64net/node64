@@ -259,6 +259,7 @@ func (s *Server) nav(r *http.Request) []NavItem {
 		items = append(items, NavItem{Key: m.Info.TitleKey, Path: m.Info.Path, Icon: m.Info.Icon, Image: m.Info.Image, Available: m.Info.Available, Enabled: m.Running,
 			Hidden: m.Info.Available && !m.Enabled})
 		if m.Info.Path == "/healthchecks" && m.Enabled { // Healthchecks-Sync gehoert zu den Healthchecks
+			items = append(items, NavItem{Key: "nav.status_pages", Path: "/healthchecks/status-pages", Icon: "bi-broadcast", Available: true, Enabled: m.Running, Sub: true})
 			items, placed = append(items, link), true
 		}
 	}
@@ -279,9 +280,15 @@ func (s *Server) nav(r *http.Request) []NavItem {
 		NavItem{Key: "nav.logs", Path: "/logs", Icon: "bi-terminal", Available: true, Enabled: true},
 		NavItem{Key: "nav.api", Path: "/api/docs", Icon: "bi-code-slash", Available: true, Enabled: true},
 	)
+	best := -1 // nur der genaueste Treffer ist aktiv (Statusseiten unter /healthchecks/...)
 	for i := range items {
 		p := items[i].Path
-		items[i].Active = p == r.URL.Path || (p != "/" && strings.HasPrefix(r.URL.Path, p+"/"))
+		if (p == r.URL.Path || (p != "/" && strings.HasPrefix(r.URL.Path, p+"/"))) && (best < 0 || len(p) > len(items[best].Path)) {
+			best = i
+		}
+	}
+	if best >= 0 {
+		items[best].Active = true
 	}
 	return items
 }

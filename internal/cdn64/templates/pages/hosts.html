@@ -55,7 +55,8 @@
 				{{if .RouteErr}}<div class="text-danger">{{.RouteErr}}</div>{{end}}
 			</td>
 			{{if eq .Kind "proxy"}}<td class="font-monospace text-break">{{.Target}}</td>
-			{{else if eq .Kind "redirect"}}<td class="text-break"><span class="badge text-bg-light">{{.RedirectCode}}</span> <span class="font-monospace">{{if eq .RedirectScheme "auto"}}{{$.T "cdn64.redirect.auto_scheme"}}{{else}}{{.RedirectScheme}}://{{end}}{{.RedirectTarget}}{{if .PreservePath}}/…{{end}}</span></td>{{end}}
+			{{else if eq .Kind "redirect"}}<td class="text-break"><span class="badge text-bg-light">{{.RedirectCode}}</span> <span class="font-monospace">{{if eq .RedirectScheme "auto"}}{{$.T "cdn64.redirect.auto_scheme"}}{{else}}{{.RedirectScheme}}://{{end}}{{.RedirectTarget}}{{if .PreservePath}}/…{{end}}</span></td>
+			{{else if eq .Kind "status"}}<td class="text-break">{{with .Status}}<i class="bi bi-clipboard-pulse me-1"></i>{{.Title}}{{if not .Enabled}} <span class="badge text-bg-secondary">{{$.T "cdn64.status.off"}}</span>{{end}}{{else}}<span class="badge text-bg-warning">{{$.T "cdn64.status.unknown" "id" .StatusPageID}}</span>{{end}}</td>{{end}}
 			<td>{{with .Cert}}
 				{{if eq .State "http"}}<span class="badge text-bg-light">HTTP</span>
 				{{else if eq .State "ok"}}<span class="badge text-bg-success" title="{{.Name}}"><i class="bi bi-lock-fill"></i> {{$.T "cdn64.cert.days" "days" .Days}}</span>

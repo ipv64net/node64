@@ -82,7 +82,8 @@
     "theme_auto": "Automatisch",
     "standalone": "Healthchecks-Sync aus",
     "version": "Version {version}",
-    "api": "API"
+    "api": "API",
+    "status_pages": "Statusseiten"
   },
   "common": {
     "copy": "Kopieren",
@@ -333,7 +334,8 @@
       "streams": "Streams",
       "default": "Standardseite",
       "access": "Zugriffslisten",
-      "log": "Zugriffe"
+      "log": "Zugriffe",
+      "status": "Statusseiten"
     },
     "new": "Proxy-Host anlegen",
     "edit": "Proxy-Host bearbeiten",
@@ -449,7 +451,15 @@
       "adv_access_log": "Zugriffs-Log für diesen Host",
       "adv_access_log_hint": "Jede Anfrage einzeln unter „Zugriffe“. Die Zähler je Stunde laufen immer.",
       "adv_no_limits": "Ohne Limits je IP",
-      "adv_no_limits_hint": "Für diesen Host gelten das Anfrage-Limit je IP und die Grenze je Ziel nicht (z. B. API für viele Geräte hinter einer Adresse). Verbindungs-Limits und Sperren gelten weiter."
+      "adv_no_limits_hint": "Für diesen Host gelten das Anfrage-Limit je IP und die Grenze je Ziel nicht (z. B. API für viele Geräte hinter einer Adresse). Verbindungs-Limits und Sperren gelten weiter.",
+      "status_page": "Statusseite",
+      "status_page_choose": "– Statusseite wählen –",
+      "status_page_off": "aus",
+      "status_page_missing": "Statusseite #{id} (gibt es auf dieser Node nicht)",
+      "status_page_none": "Noch keine Statusseite angelegt.",
+      "status_hc_off": "Das Modul Healthchecks ist ausgeschaltet. Bis es läuft, antwortet dieser Host mit 503.",
+      "status_page_hint": "Die Seite erscheint unter dieser Domain direkt unter „/“. Ist sie ausgeschaltet, antwortet der Host mit 404.",
+      "status_pages_manage": "Statusseiten verwalten"
     },
     "err": {
       "name": "Ungültiger Domainname.",
@@ -490,7 +500,8 @@
       "dns_type": "Typ CNAME, A oder AAAA.",
       "geo_country": "Unbekannter Ländercode {name}: zwei Buchstaben nach ISO, z. B. DE.",
       "geo_none": "Für die Ländersperre mindestens ein Land angeben.",
-      "geo_many": "Höchstens 60 Länder je Host."
+      "geo_many": "Höchstens 60 Länder je Host.",
+      "status_page": "Bitte eine Statusseite wählen."
     },
     "help_title": "So funktioniert es",
     "help_ports": "Der Router leitet 80 und 443 (TCP, für HTTP/3 auch 443/UDP) auf diese Node weiter. Den Rest verteilt Node64 nach dem Domainnamen – auch zusammen mit DNS64 im selben Container.",
@@ -511,13 +522,15 @@
       "proxy": "Proxy-Host anlegen",
       "redirect": "Weiterleitung anlegen",
       "dead": "404-Host anlegen",
-      "passthrough": "TLS durchreichen"
+      "passthrough": "TLS durchreichen",
+      "status": "Statusseite verbinden"
     },
     "kind_empty": {
       "proxy": "Noch keine Proxy-Hosts. Ein Proxy-Host leitet Anfragen für eine Domain an einen Dienst im Heimnetz weiter.",
       "redirect": "Noch keine Weiterleitungen. Eine Weiterleitung schickt Besucher einer Domain auf eine andere (z. B. alte Domain auf neue).",
       "dead": "Noch keine 404-Hosts. Ein 404-Host beantwortet eine Domain bewusst mit „nicht gefunden“, z. B. für stillgelegte Namen.",
-      "passthrough": "Noch nichts durchgereicht."
+      "passthrough": "Noch nichts durchgereicht.",
+      "status": "Noch keine Statusseiten auf eigener Domain. Ein solcher Host zeigt eine Statusseite der Healthchecks unter einer Domain – mit Zertifikat, Blocklisten, Ländersperre und Limits, auf Wunsch auch über CDN64."
     },
     "redirect": {
       "auto": "wie die Anfrage",
@@ -826,6 +839,10 @@
         "invalid_field": "Der Name ist ungültig.",
         "error": "Unerwarteter Fehler."
       }
+    },
+    "status": {
+      "off": "aus",
+      "unknown": "Statusseite #{id} nicht verfügbar"
     }
   },
   "certs": {
@@ -2000,6 +2017,217 @@
       "all": "… alle Messstellen gestört melden (Standard)",
       "any": "… eine Messstelle gestört meldet",
       "majority": "… die Mehrheit der Messstellen gestört meldet"
+    },
+    "status": {
+      "pub": {
+        "reason_other": "Nicht erreichbar",
+        "too_many": "Zu viele Fehlversuche. Bitte in einigen Minuten erneut versuchen.",
+        "badge": {
+          "up": "betriebsbereit",
+          "degraded": "teilweise gestört",
+          "down": "gestört",
+          "maintenance": "Wartung",
+          "paused": "pausiert",
+          "unknown": "unbekannt",
+          "nodata": "keine Daten"
+        },
+        "feed": {
+          "incident": "Störung: {item}",
+          "resolved": "Behoben: {item}",
+          "since": "Beginn: {time}",
+          "until": "Ende: {time}",
+          "done": "Erledigt: {time}"
+        },
+        "title": "Statusseite",
+        "preview": "Vorschau – nicht öffentlich",
+        "updated": "Stand:",
+        "stale": "Keine Verbindung · Stand:",
+        "overall": {
+          "up": "Alle Systeme betriebsbereit",
+          "degraded": "Teilweise gestört",
+          "down": "Störung",
+          "maintenance": "Wartung",
+          "unknown": "Status unbekannt"
+        },
+        "state": {
+          "up": "Betriebsbereit",
+          "down": "Störung",
+          "degraded": "Eingeschränkt",
+          "maintenance": "Wartung",
+          "paused": "Pausiert",
+          "unknown": "Unbekannt"
+        },
+        "count": {
+          "up": "{count} OK",
+          "down": "{count} gestört",
+          "degraded": "{count} eingeschränkt",
+          "maintenance": "{count} in Wartung",
+          "paused": "{count} pausiert",
+          "unknown": "{count} unbekannt"
+        },
+        "problems": "Betroffen",
+        "more": "und {count} weitere",
+        "empty": "Noch keine Einträge.",
+        "maint": {
+          "title": "Wartung",
+          "active": "Wartung läuft",
+          "until": "bis",
+          "affects": "betrifft:",
+          "planned": "Geplante Wartungen"
+        },
+        "level": {
+          "info": "Information",
+          "warning": "Warnung",
+          "danger": "Störung"
+        },
+        "notice": {
+          "resolved": "erledigt"
+        },
+        "history": {
+          "notices": "Frühere Ankündigungen",
+          "incidents": "Störungen der letzten 30 Tage"
+        },
+        "inc": {
+          "running": "läuft noch"
+        },
+        "dur": {
+          "m": "{m} min",
+          "h": "{h} h {m} min",
+          "d": "{d} Tg. {h} h"
+        },
+        "bar": {
+          "up": "Keine Störung",
+          "partial": "Teilweise gestört",
+          "down": "Störung",
+          "maintenance": "Wartung",
+          "none": "Keine Daten",
+          "downmin": "{dur} gestört"
+        },
+        "bars": {
+          "aria": "Letzte {days} Tage, davon {count} mit Störung"
+        },
+        "det": {
+          "h24": "24 Stunden",
+          "d7": "7 Tage",
+          "d30": "30 Tage",
+          "latency": "Ø Antwortzeit (24 h)",
+          "since": "In diesem Zustand seit {t}",
+          "hours": "Letzte 24 Stunden",
+          "incidents": "Letzte Störungen",
+          "noinc": "Keine Störungen in letzter Zeit",
+          "loading": "Lädt …",
+          "unavailable": "Details nicht verfügbar."
+        },
+        "powered": "Bereitgestellt mit",
+        "pw": {
+          "hint": "Diese Statusseite ist geschützt. Bitte Passwort eingeben.",
+          "label": "Passwort",
+          "submit": "Anzeigen",
+          "wrong": "Passwort falsch."
+        }
+      },
+      "hint": "Öffentliche Statusseiten aus deinen Healthchecks: nur Namen, Zustand, Verfügbarkeit, Störungen, Wartungen und Ankündigungen – nie Ziele, IPs oder Fehlermeldungen.",
+      "empty": "Noch keine Statusseite. Statusseiten sind aus, bis du eine anlegst und einschaltest.",
+      "empty_hint": "Nach außen kommt eine Seite über die PROXY64-Hostart „Statusseite“ (eigene Domain, Zertifikat, auch über CDN64) oder optional direkt auf dem Node-Port.",
+      "new": "Neue Statusseite",
+      "edit": "Statusseite bearbeiten",
+      "deleted": "Statusseite gelöscht.",
+      "delete_confirm": "Statusseite „{title}“ mit allen Ankündigungen löschen?",
+      "unsaved": "Geändert, aber noch nicht gespeichert.",
+      "general": "Allgemein",
+      "title": "Titel",
+      "slug": "Adresse (Slug)",
+      "slug_hint": "Kleinbuchstaben, Ziffern und Bindestrich; leer = aus dem Titel.",
+      "description": "Beschreibung",
+      "footer": "Fußzeile",
+      "markdown_hint": "Einfaches Markdown: **fett**, *kursiv*, [Link](https://…), Listen.",
+      "enabled": "Eingeschaltet",
+      "enabled_hint": "Aus = nirgends erreichbar (die Vorschau geht immer). Nach außen am besten über",
+      "publish_node": "Auf dem Node-Port veröffentlichen (/status/…)",
+      "publish_node_hint": "Dafür muss der Node-Port von außen erreichbar sein. Besser über PROXY64 mit eigener Domain, dann bleibt der Port der Oberfläche zu.",
+      "on_node": "Node-Port",
+      "public_url": "Öffentliche Seite",
+      "preview": "Vorschau",
+      "items": "Einträge",
+      "open_n": "{count} offen",
+      "look": "Darstellung",
+      "layout": "Ansicht",
+      "layout_list": "Liste",
+      "layout_tiles": "Kacheln (Monitor/TV)",
+      "layout_compact": "Kompakt (zum Einbetten)",
+      "lang": "Sprache",
+      "lang_auto": "wie Browser",
+      "accent": "Akzentfarbe",
+      "accent_own": "Eigene Akzentfarbe verwenden",
+      "accent_hint": "Haken aus = Standardfarbe.",
+      "days": "Tagesbalken",
+      "days_n": "{n} Tage",
+      "refresh": "Neu laden alle",
+      "show_uptime": "Verfügbarkeit zeigen",
+      "show_history": "Verlauf zeigen (Störungen und Ankündigungen der letzten 30 Tage)",
+      "powered_by": "„Bereitgestellt mit Node64“ zeigen",
+      "access": "Zugriff",
+      "password": "Passwort",
+      "password_set": "Passwort gesetzt",
+      "password_keep": "leer lassen = unverändert",
+      "password_none": "leer = ohne Passwort",
+      "password_hint": "Optional, 4–72 Zeichen. Wird nur als Hash gespeichert und nie angezeigt.",
+      "password_remove": "Passwort entfernen",
+      "noindex": "Nicht von Suchmaschinen indexieren (noindex)",
+      "groups": "Gruppen und Einträge",
+      "groups_hint": "Anzeigename leer = Name des Checks.",
+      "groups_empty": "Noch keine Gruppe. Lege eine an oder füge unten Checks hinzu (dann entsteht eine Gruppe ohne Überschrift).",
+      "group_name": "Name der Gruppe",
+      "group_unnamed": "ohne Überschrift",
+      "group_n": "Gruppe {n}",
+      "group_add": "Gruppe hinzufügen",
+      "group_delete": "Gruppe entfernen",
+      "group_delete_confirm": "Gruppe mit allen Einträgen entfernen?",
+      "group_no_items": "Keine Einträge – unten Checks hinzufügen.",
+      "up": "Nach oben",
+      "down": "Nach unten",
+      "sort_az": "Einträge alphabetisch sortieren",
+      "label": "Anzeigename",
+      "move_to": "Gruppe",
+      "item_remove": "Eintrag entfernen",
+      "check_gone": "Check gelöscht",
+      "add_checks": "Checks hinzufügen",
+      "add_to": "In Gruppe",
+      "add_new_group": "Es wird eine Gruppe ohne Überschrift angelegt.",
+      "search_hint": "Name filtern …",
+      "add_tag": "Alle mit Tag hinzufügen",
+      "add_hcg": "Alle der Gruppe hinzufügen",
+      "add_selected": "Ausgewählte hinzufügen",
+      "select_visible": "Sichtbare auswählen",
+      "on_page": "auf der Seite",
+      "no_checks": "Noch keine Healthchecks vorhanden.",
+      "notices": "Ankündigungen",
+      "notices_hint": "Ankündigungen stehen oben auf der Seite, bis sie erledigt sind. Updates erscheinen als Zeitleiste.",
+      "notices_none": "Keine offene Ankündigung.",
+      "notices_resolved": "Erledigt (letzte 90 Tage)",
+      "notice_new": "Neue Ankündigung",
+      "notice_title": "Titel",
+      "notice_text": "Text",
+      "notice_publish": "Veröffentlichen",
+      "notice_update": "Update anhängen",
+      "notice_resolve": "als erledigt markieren",
+      "notice_deleted": "Ankündigung gelöscht.",
+      "level": "Stufe",
+      "level_info": "Info",
+      "level_warning": "Warnung",
+      "level_danger": "Störung",
+      "err": {
+        "slug": "Adresse: 2–63 Zeichen, nur a–z, 0–9 und Bindestrich, nicht mit Bindestrich beginnen („assets“ ist reserviert).",
+        "slug_taken": "Diese Adresse ist schon vergeben.",
+        "title": "Titel fehlt oder ist zu lang (höchstens 120 Zeichen).",
+        "text": "Beschreibung (5000) oder Fußzeile (2000 Zeichen) ist zu lang.",
+        "accent": "Akzentfarbe als #rrggbb angeben.",
+        "group": "Gruppenname zu lang (höchstens 100 Zeichen).",
+        "item": "Eintrag ohne Check oder Anzeigename zu lang (höchstens 120 Zeichen).",
+        "many": "Zu viele Gruppen oder Einträge (höchstens 50 Gruppen und 1000 Einträge).",
+        "notice": "Ankündigung: Titel fehlt oder ist zu lang (200), Text höchstens 5000 Zeichen.",
+        "password": "Passwort: 4–72 Zeichen."
+      }
     }
   },
   "notify": {
