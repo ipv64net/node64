@@ -451,6 +451,8 @@ func (m *Module) connBlocked(a netip.Addr, where string) bool {
 		m.rejectConn(a, rejBlocklist, where)
 	case m.lim.banned(a):
 		m.rejectConn(a, rejBan, where)
+	case m.hpBlocked(a):
+		m.rejectConn(a, rejHoneypot, where)
 	default:
 		return false
 	}

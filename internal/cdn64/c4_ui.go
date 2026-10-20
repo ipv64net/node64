@@ -30,6 +30,8 @@ func (m *Module) c4Routes(mux *http.ServeMux, page func(http.HandlerFunc) http.H
 	mux.Handle("POST /cdn64/blocklists/token/delete", page(m.pageBlocklistsTokenDelete))
 	mux.Handle("POST /cdn64/limits", page(m.pageLimitsSave))
 	mux.Handle("POST /cdn64/limits/unban", page(m.pageLimitsUnban))
+	mux.Handle("POST /cdn64/honeypot", page(m.pageHoneypotSave))
+	mux.Handle("POST /cdn64/honeypot/unblock", page(m.pageHoneypotUnblock))
 }
 
 func (m *Module) c4APIRoutes(mux *http.ServeMux, api func(http.HandlerFunc) http.Handler) {
@@ -46,6 +48,9 @@ func (m *Module) c4APIRoutes(mux *http.ServeMux, api func(http.HandlerFunc) http
 	mux.Handle("GET /api/cdn64/limits", api(m.apiLimitsGet))
 	mux.Handle("PUT /api/cdn64/limits", api(m.apiLimitsPut))
 	mux.Handle("DELETE /api/cdn64/limits/bans/{ip...}", api(m.apiLimitsUnban))
+	mux.Handle("GET /api/cdn64/honeypot", api(m.apiHoneypotGet))
+	mux.Handle("PUT /api/cdn64/honeypot", api(m.apiHoneypotPut))
+	mux.Handle("DELETE /api/cdn64/honeypot/blocks/{ip...}", api(m.apiHoneypotUnblock))
 	mux.Handle("GET /api/cdn64/online", api(m.apiOnlineGet))
 	mux.Handle("PUT /api/cdn64/online", api(m.apiOnlinePut))
 	mux.Handle("DELETE /api/cdn64/online", api(m.apiOnlineDelete))
@@ -71,6 +76,7 @@ type aclsData struct {
 	Rows []aclRow
 	BL   blocklistsView
 	Lim  limitsView
+	HP   honeypotView
 }
 
 func (m *Module) pageACLs(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +85,7 @@ func (m *Module) pageACLs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	d := aclsData{Tabs: tabs("/cdn64/access"), BL: m.blView(r), Lim: m.limView(r.Context())}
+	d := aclsData{Tabs: tabs("/cdn64/access"), BL: m.blView(r), Lim: m.limView(r.Context()), HP: m.hpView()}
 	for _, a := range list {
 		d.Rows = append(d.Rows, aclRow{AccessList: a.public(), UsedBy: m.aclInUse(r.Context(), a.ID)})
 	}

@@ -726,6 +726,28 @@
       "live_denied": "daily version – token without entitlement",
       "live_error": "live download rejected ({err}), daily version loaded"
     },
+    "hp": {
+      "title": "Honeypot64",
+      "running": "Honeypot64 running",
+      "not_running": "Honeypot64 not active",
+      "counts": "{decoy} to the decoy · {access} accesses reported",
+      "hint": "PROXY64 can work together with the Honeypot64 module of this node. Each point can be switched on separately and is off by default.",
+      "decoy": "Unknown requests to the honeypot",
+      "decoy_hint": "Requests without a matching host (IP only, foreign domain, unknown name) go to the web decoy of Honeypot64 instead of the default page. Unknown names get the fallback certificate.",
+      "decoy_missing": "Honeypot64 does not offer a web decoy right now – until then the default page applies.",
+      "access": "Hand accesses to the honeypot",
+      "access_hint": "For each request only metadata goes to Honeypot64 (IP, host, method, path without query, status, failed login) – never content. The honeypot evaluates it with its own rules.",
+      "access_missing": "Honeypot64 does not evaluate accesses right now.",
+      "block": "Block attackers from the honeypot immediately",
+      "block_hint": "IPs that stand out in the honeypot are blocked by PROXY64 for all hosts and streams – without waiting for the v64 blocklist. Private addresses, blocklist exceptions and trusted proxies of the hosts are never blocked. The list is kept in memory (at most 50,000 entries).",
+      "hours": "Block duration (hours)",
+      "hours_hint": "1 to 720, default 24.",
+      "needs": "Needs the Honeypot64 module (switched on under Settings → Modules).",
+      "blocks": "Blocked right now ({n})",
+      "err_hours": "The duration must be between 1 and 720 hours.",
+      "saved": "Honeypot64 settings saved.",
+      "unblocked": "Block for {ip} lifted."
+    },
     "lim": {
       "title": "Overload protection",
       "hint": "Limits connections and requests per IP address (IPv6 per /64), like HAProxy. Protects the node and every service behind the proxy against request flooding and many connections from one address. Addresses that hit the limits too often are rejected for a few minutes right when they connect. Exempt are the home network (if enabled), the trusted proxies of the hosts (e.g. Cloudflare; the real client IP counts there) and the blocklist exceptions. The defaults are fine for browsers, apps and sync clients.",
@@ -770,6 +792,7 @@
       "target": "target busy",
       "exploit": "exploit block",
       "acl": "access list",
+      "honeypot": "reported by the honeypot",
       "geo": "country block"
     },
     "online": {
@@ -1283,6 +1306,8 @@
       "cdn64_blocklists_refresh": "Blocklists reloaded",
       "cdn64_limits": "Limits changed",
       "cdn64_limits_unban": "Ban lifted",
+      "cdn64_honeypot": "PROXY64: Honeypot64 changed",
+      "cdn64_honeypot_unblock": "PROXY64: honeypot block lifted",
       "cdn64_access_blocked": "Address blocked after failed logins",
       "cdn64_check": "Targets checked",
       "cdn64_online": "CDN64 changed",

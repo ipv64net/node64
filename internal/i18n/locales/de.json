@@ -726,6 +726,28 @@
       "live_denied": "Tagesstand – Token ohne Berechtigung",
       "live_error": "Live-Abruf abgelehnt ({err}), Tagesstand geladen"
     },
+    "hp": {
+      "title": "Honeypot64",
+      "running": "Honeypot64 läuft",
+      "not_running": "Honeypot64 nicht aktiv",
+      "counts": "{decoy} an den Köder · {access} Zugriffe gemeldet",
+      "hint": "PROXY64 kann mit dem Modul Honeypot64 dieser Node zusammenarbeiten. Jeder Punkt ist einzeln schaltbar und standardmäßig aus.",
+      "decoy": "Unbekannte Anfragen an den Honeypot",
+      "decoy_hint": "Anfragen ohne passenden Host (nur IP, fremde Domain, unbekannter Name) bekommt der Web-Köder von Honeypot64 statt der Standardseite. Für unbekannte Namen gilt das Ersatz-Zertifikat.",
+      "decoy_missing": "Honeypot64 bietet gerade keinen Web-Köder an – bis dahin gilt die Standardseite.",
+      "access": "Zugriffe an den Honeypot geben",
+      "access_hint": "Je Anfrage gehen nur Metadaten an Honeypot64 (IP, Host, Methode, Pfad ohne Abfrage, Status, fehlgeschlagene Anmeldung) – nie Inhalte. Der Honeypot wertet sie mit eigenen Regeln aus.",
+      "access_missing": "Honeypot64 wertet gerade keine Zugriffe aus.",
+      "block": "Angreifer aus dem Honeypot sofort sperren",
+      "block_hint": "IPs, die im Honeypot auffallen, sperrt PROXY64 für alle Hosts und Streams – ohne auf die v64 Blocklist zu warten. Private Adressen, Ausnahmen der Blocklisten und vertrauenswürdige Proxys der Hosts werden nie gesperrt. Die Liste liegt im Speicher (höchstens 50 000 Einträge).",
+      "hours": "Dauer der Sperre (Stunden)",
+      "hours_hint": "1 bis 720, Standard 24.",
+      "needs": "Braucht das Modul Honeypot64 (eingeschaltet unter Einstellungen → Module).",
+      "blocks": "Gerade gesperrt ({n})",
+      "err_hours": "Die Dauer muss zwischen 1 und 720 Stunden liegen.",
+      "saved": "Einstellungen für Honeypot64 gespeichert.",
+      "unblocked": "Sperre für {ip} aufgehoben."
+    },
     "lim": {
       "title": "Schutz vor Überlastung",
       "hint": "Begrenzt Verbindungen und Anfragen je IP-Adresse (IPv6 je /64), wie beim HAProxy. Schützt die Node und alle Dienste hinter dem Proxy vor Request-Flooding und vielen Verbindungen von einer Adresse. Wer zu oft abprallt, wird für einige Minuten schon beim Verbindungsaufbau abgewiesen. Ausgenommen sind das Heimnetz (wenn eingeschaltet), die vertrauenswürdigen Proxys der Hosts (z. B. Cloudflare; dort zählt die echte Client-IP) und die Ausnahmen der Blocklisten. Die Standardwerte reichen für Browser, Apps und Sync-Clients.",
@@ -770,6 +792,7 @@
       "target": "Ziel ausgelastet",
       "exploit": "Exploit-Sperre",
       "acl": "Zugriffsliste",
+      "honeypot": "vom Honeypot gemeldet",
       "geo": "Ländersperre"
     },
     "online": {
@@ -1283,6 +1306,8 @@
       "cdn64_blocklists_refresh": "Blocklisten neu geladen",
       "cdn64_limits": "Limits geändert",
       "cdn64_limits_unban": "Sperre aufgehoben",
+      "cdn64_honeypot": "PROXY64: Honeypot64 geändert",
+      "cdn64_honeypot_unblock": "PROXY64: Honeypot-Sperre aufgehoben",
       "cdn64_access_blocked": "Adresse nach Fehlversuchen gesperrt",
       "cdn64_check": "Ziele geprüft",
       "cdn64_online": "CDN64 geändert",

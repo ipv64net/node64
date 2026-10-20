@@ -2987,6 +2987,77 @@
           }
         }
       },
+      "CDNHoneypotSettings": {
+        "type": "object",
+        "properties": {
+          "decoy": {
+            "type": "boolean",
+            "description": "Anfragen ohne passenden Host an den Web-Köder von Honeypot64"
+          },
+          "access": {
+            "type": "boolean",
+            "description": "Zugriffe (nur Metadaten) an den Log-Sensor von Honeypot64"
+          },
+          "block": {
+            "type": "boolean",
+            "description": "vom Honeypot gemeldete IPs sofort lokal sperren"
+          },
+          "block_hours": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 720,
+            "description": "Dauer der Sperre, Standard 24"
+          }
+        }
+      },
+      "CDNHoneypotView": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/CDNHoneypotSettings"
+          },
+          "decoy_available": {
+            "type": "boolean"
+          },
+          "access_available": {
+            "type": "boolean"
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ip": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "since": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "until": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "rejected": {
+            "type": "integer",
+            "description": "abgewiesen seit dem Start"
+          },
+          "decoyed": {
+            "type": "integer",
+            "description": "an den Köder gegeben seit dem Start"
+          },
+          "reported": {
+            "type": "integer",
+            "description": "an den Log-Sensor gegeben seit dem Start"
+          }
+        }
+      },
       "CDNLimitsView": {
         "type": "object",
         "properties": {
@@ -13373,6 +13444,140 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CDNBlocklists"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Modul läuft nicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/honeypot": {
+      "get": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "Honeypot64: Einstellungen, gesperrte IPs, Zähler",
+        "description": "Ob Honeypot64 gerade einen Web-Köder anbietet bzw. Zugriffe auswertet, steht in decoy_available und access_available.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNHoneypotView"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Modul läuft nicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "Honeypot64 einstellen (Köder, Zugriffe, Sofort-Sperre)",
+        "description": "Fehlende Felder bleiben unverändert. Sperre aus leert die Liste.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CDNHoneypotSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CDNHoneypotView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "kein gültiges JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "block_hours außerhalb 1–720",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Modul läuft nicht",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn64/honeypot/blocks/{ip}": {
+      "delete": {
+        "tags": [
+          "PROXY64"
+        ],
+        "summary": "Sperre aus dem Honeypot aufheben",
+        "parameters": [
+          {
+            "name": "ip",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "IPv4 oder IPv6 wie in blocks"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "aufgehoben"
+          },
+          "404": {
+            "description": "nicht gesperrt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

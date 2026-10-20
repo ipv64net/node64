@@ -1,5 +1,19 @@
 # Changes – PROXY64
 
+## 1.20.0 – 2026-10-20
+
+### New
+- Working together with Honeypot64 (card "Honeypot64" under access lists, three switches, all off by default, only
+  with the Honeypot64 module running):
+  - Unknown requests to the honeypot: requests without a matching host (IP only, foreign domain, unknown name) go to
+    the web decoy instead of the default page.
+  - Hand accesses to the honeypot: per request only metadata (IP, host, method, path without query, status, failed
+    login) goes to the log sensor, never content.
+  - Block attackers from the honeypot immediately: reported IPs are blocked for all hosts and streams (duration
+    adjustable, default 24 h), never private addresses, blocklist exceptions or the hosts' proxies. List with reason
+    and end, each entry can be lifted.
+- API `GET/PUT /api/cdn64/honeypot`, `DELETE /api/cdn64/honeypot/blocks/{ip}`; Prometheus `node64_cdn64_honeypot_*`.
+
 ## 1.19.1 – 2026-10-20
 
 ### Fixed

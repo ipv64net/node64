@@ -184,6 +184,7 @@ type Edge struct {
 	qonce    sync.Once // HTTP/3 ueber den Tunnel (quictunnel.go)
 	vq       *virtQUIC
 	tunH3    atomic.Pointer[func() bool]
+	unk      atomic.Pointer[unknownHook] // Anfragen ohne passenden Namen (SetUnknown)
 	fallback struct {
 		once sync.Once
 		crt  *tls.Certificate
@@ -303,6 +304,30 @@ func (e *Edge) Configure(cfg Config) error {
 	e.mu.Unlock()
 	e.runStops(stops)
 	return nil
+}
+
+// UnknownFunc beantwortet eine Anfrage ohne passenden Namen (nur IP, fremde Domain, leere SNI); def ist die
+// Standardseite nach den Einstellungen.
+type UnknownFunc func(w http.ResponseWriter, r *http.Request, def http.Handler)
+
+type unknownHook struct {
+	f      UnknownFunc
+	active func() bool // true: auch bei Standard "schliessen" TLS mit dem Ersatz-Zertifikat annehmen
+}
+
+// SetUnknown setzt die Behandlung unbekannter Namen (nil = Standardseite). Ist active wahr, nimmt der Eingang auch
+// TLS fuer unbekannte Namen mit dem Ersatz-Zertifikat an, sonst wie bisher nach den Einstellungen.
+func (e *Edge) SetUnknown(f UnknownFunc, active func() bool) {
+	if f == nil {
+		e.unk.Store(nil)
+		return
+	}
+	e.unk.Store(&unknownHook{f: f, active: active})
+}
+
+func (e *Edge) unknownActive() bool {
+	h := e.unk.Load()
+	return h != nil && h.active != nil && h.active()
 }
 
 // BlockFunc meldet, ob eine Gegenstelle abgewiesen wird.
@@ -703,7 +728,7 @@ func (e *Edge) configFor(hello *tls.ClientHelloInfo, quic bool) (*tls.Config, er
 		rt = tlsRoute(t.fallback) // per IP bzw. unbekannter Name: Zertifikat der Ersatz-Route
 	}
 	if rt == nil {
-		if e.defClose.Load() {
+		if e.defClose.Load() && !e.unknownActive() {
 			return nil, errUnknownName
 		}
 		return &tls.Config{MinVersion: tls.VersionTLS12, NextProtos: []string{"http/1.1"}, Certificates: []tls.Certificate{*e.fallbackCert()}}, nil
@@ -867,8 +892,17 @@ func (e *Edge) serveFallbackHTTP(t *table, w http.ResponseWriter, r *http.Reques
 	return false
 }
 
-// unknown: Antwort fuer unbekannte Namen.
+// unknown: Antwort fuer unbekannte Namen (ueber SetUnknown, sonst die Standardseite).
 func (e *Edge) unknown(w http.ResponseWriter, r *http.Request) {
+	if h := e.unk.Load(); h != nil {
+		h.f(w, r, http.HandlerFunc(e.unknownDefault))
+		return
+	}
+	e.unknownDefault(w, r)
+}
+
+// unknownDefault: Standardseite fuer unbekannte Namen nach den Einstellungen.
+func (e *Edge) unknownDefault(w http.ResponseWriter, r *http.Request) {
 	if e.defClose.Load() {
 		panic(http.ErrAbortHandler) // Verbindung ohne Antwort beenden
 	}

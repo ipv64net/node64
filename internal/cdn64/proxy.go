@@ -269,6 +269,9 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 		}
 		return true
 	}
+	if failed {
+		setAuthFail(r)
+	}
 	if failed && m.authFail.failed(ip) {
 		m.log.Warn("access list: too many failed logins, ip blocked", "host", h.Names[0], "ip", ip, "minutes", int(authBlockFor.Minutes()))
 		if m.g.Audit != nil {
@@ -337,10 +340,12 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		start := time.Now()
 		st.requests.Add(1)
 		client := h.Advanced.clientIP(r)
-		reject := new(string)
-		r = r.WithContext(context.WithValue(context.WithValue(r.Context(), ctxClientKey{}, client), ctxRejectKey{}, reject))
+		reject, authFail := new(string), new(bool)
+		ctx := context.WithValue(context.WithValue(r.Context(), ctxClientKey{}, client), ctxRejectKey{}, reject)
+		r = r.WithContext(context.WithValue(ctx, ctxAuthFailKey{}, authFail))
 		sw := &statusWriter{ResponseWriter: w}
 		defer func() {
+			m.hpReport(r, client, true, sw.code(), *authFail)
 			if sdb := m.stats2.Load(); sdb != nil {
 				sdb.add(hit{time: start, hostID: h.ID, client: client, method: r.Method, host: hostOnly(r.Host), path: trunc(r.URL.RequestURI(), 500),
 					status: sw.code(), bytes: sw.bytes, ms: time.Since(start).Milliseconds(), ua: trunc(r.UserAgent(), 200), log: h.Advanced.AccessLog,
@@ -349,6 +354,12 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		}()
 		if m.bl.Blocked(client) { // ipv64-Blocklisten (echte Client-IP hinter vertrauenswuerdigen Proxys)
 			*reject = rejBlocklist
+			st.blocked.Add(1)
+			page(sw, http.StatusForbidden)
+			return
+		}
+		if m.hpBlocked(client) { // vom Honeypot gemeldet (Sofort-Sperre)
+			*reject = rejHoneypot
 			st.blocked.Add(1)
 			page(sw, http.StatusForbidden)
 			return

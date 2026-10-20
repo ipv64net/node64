@@ -21,6 +21,13 @@ func (m *Module) Metrics(ctx context.Context, w *metrics.Writer) {
 		day, _ = sdb.sums(ctx, time.Now().Add(-24*time.Hour))
 	}
 	w.Gauge("node64_cdn64_hosts", "Hosts (proxy, redirect, 404, passthrough)", float64(len(list)))
+	if hs := m.hpSettings(); hs.Decoy || hs.Access || hs.Block { // Honeypot64 (honeypot.go), nur wenn ein Punkt an ist
+		w.Gauge("node64_cdn64_honeypot_blocks", "IPs blocked right now because the honeypot reported them", float64(len(m.hpList())))
+		w.Counter("node64_cdn64_honeypot_rejected_total", "Connections and requests rejected because of a honeypot block since node start", float64(m.hp.rejected.Load()))
+		w.Counter("node64_cdn64_honeypot_blocks_total", "Honeypot blocks taken over since node start", float64(m.hp.added.Load()))
+		w.Counter("node64_cdn64_honeypot_decoy_total", "Requests without a matching host handed to the honeypot decoy since node start", float64(m.hp.decoyed.Load()))
+		w.Counter("node64_cdn64_honeypot_reported_total", "Accesses handed to the honeypot log sensor since node start", float64(m.hp.reported.Load()))
+	}
 	for _, h := range list {
 		name := ""
 		if len(h.Names) > 0 {

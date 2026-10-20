@@ -106,6 +106,40 @@
 </form>
 </div>
 </div>
+{{with $d.HP}}
+<form method="post" action="/cdn64/honeypot" class="card mb-3" id="honeypot">
+	<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+	<div class="card-header d-flex flex-wrap align-items-center gap-2">
+		<span><i class="bi bi-bug text-primary"></i> {{$.T "cdn64.hp.title"}}{{$.Doc "cdn64#honeypot"}}</span>
+		{{if or .Decoy .Access}}<span class="badge text-bg-success"><i class="bi bi-check-circle"></i> {{$.T "cdn64.hp.running"}}</span>{{else}}<span class="badge text-bg-light">{{$.T "cdn64.hp.not_running"}}</span>{{end}}
+		<span class="ms-auto small text-body-secondary"><i class="bi bi-slash-circle"></i> {{$.T "cdn64.bl.blocked" "n" ($.Int .Rejected)}} · {{$.T "cdn64.hp.counts" "decoy" ($.Int .Decoyed) "access" ($.Int .Reported)}}</span>
+	</div>
+	<div class="card-body small">
+		<p class="text-body-secondary">{{$.T "cdn64.hp.hint"}}</p>
+		<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="hp_decoy" id="hp-decoy"{{if .Settings.Decoy}} checked{{end}}>
+			<label class="form-check-label fw-semibold" for="hp-decoy">{{$.T "cdn64.hp.decoy"}}</label>
+			<div class="form-text">{{$.T "cdn64.hp.decoy_hint"}}{{if and .Settings.Decoy (not .Decoy)}} <span class="text-warning-emphasis">{{$.T "cdn64.hp.decoy_missing"}}</span>{{end}}</div></div>
+		<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="hp_access" id="hp-access"{{if .Settings.Access}} checked{{end}}>
+			<label class="form-check-label fw-semibold" for="hp-access">{{$.T "cdn64.hp.access"}}</label>
+			<div class="form-text">{{$.T "cdn64.hp.access_hint"}}{{if and .Settings.Access (not .Access)}} <span class="text-warning-emphasis">{{$.T "cdn64.hp.access_missing"}}</span>{{end}}</div></div>
+		<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="hp_block" id="hp-block"{{if .Settings.Block}} checked{{end}}>
+			<label class="form-check-label fw-semibold" for="hp-block">{{$.T "cdn64.hp.block"}}</label>
+			<div class="form-text">{{$.T "cdn64.hp.block_hint"}}</div></div>
+		<div class="row g-3 mb-2"><div class="col-sm-4"><label class="form-label fw-semibold" for="hp-hours">{{$.T "cdn64.hp.hours"}}</label>
+			<input class="form-control form-control-sm" type="number" min="1" max="720" id="hp-hours" name="hp_block_hours" value="{{.Settings.BlockHours}}">
+			<div class="form-text">{{$.T "cdn64.hp.hours_hint"}}</div></div></div>
+		<div class="form-text">{{$.T "cdn64.hp.needs"}}</div>
+		{{if .Blocks}}
+		<h3 class="h6 mt-3">{{$.T "cdn64.hp.blocks" "n" (len .Blocks)}}</h3>
+		<div class="table-responsive" style="max-height:20rem"><table class="table table-sm align-middle mb-0"><tbody>
+		{{range .Blocks}}<tr><td class="font-monospace">{{.IP}}</td><td class="text-body-secondary">{{.Reason}}</td><td class="text-body-secondary">{{$.T "cdn64.lim.until" "time" ($.Time .Until)}}</td>
+			<td class="text-end"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" formaction="/cdn64/honeypot/unblock" name="ip" value="{{.IP}}"><i class="bi bi-unlock"></i> {{$.T "cdn64.lim.unban"}}</button></td></tr>{{end}}
+		</tbody></table></div>
+		{{end}}
+	</div>
+	<div class="card-footer"><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check2"></i> {{$.T "common.save"}}</button></div>
+</form>
+{{end}}
 <div class="card">
 	{{if not $d.Rows}}<div class="card-body text-center text-body-secondary py-5">
 		<div class="mb-2"><i class="bi bi-person-lock fs-2"></i></div>

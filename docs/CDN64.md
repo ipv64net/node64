@@ -134,6 +134,22 @@ und keinem Modul:
 - **Oberfläche über den Eingang:** standardmäßig nur aus dem eigenen Netz; „aus dem Internet“ muss ausdrücklich
   eingeschaltet werden.
 
+## Honeypot64 (Opt-in)
+
+Karte **Honeypot64** auf dem Reiter Zugriffslisten (`/cdn64/access#honeypot`, API `GET/PUT /api/cdn64/honeypot`).
+Drei Schalter, alle standardmäßig aus; wirken nur, wenn das Modul Honeypot64 auf derselben Node läuft (Verbindung über
+`internal/hpbridge`, keiner der beiden Teile kennt den anderen):
+
+| Schalter | Wirkung |
+|---|---|
+| Unbekannte Anfragen an den Honeypot | Anfragen ohne passenden Host (nur IP, fremde Domain, unbekannter Name, Port 80 und 443) bekommt der Web-Köder statt der Standardseite. Für unbekannte Namen gilt das Ersatz-Zertifikat – auch wenn als Standard „schließen“ eingestellt ist, solange der Köder da ist. |
+| Zugriffe an den Honeypot geben | Je Anfrage (bekannte Hosts und unbekannte) gehen nur Metadaten an den Log-Sensor: Client-IP (nach den vertrauenswürdigen Proxys des Hosts), Host, bekannt ja/nein, Methode, Pfad ohne Abfrage, Status, TLS, fehlgeschlagene Anmeldung an der Zugriffsliste, User-Agent (nur zur Einordnung). Nie Inhalte. |
+| Angreifer aus dem Honeypot sofort sperren | IPs, die der Honeypot meldet, sperrt PROXY64 für alle Hosts und Streams (Dauer einstellbar, 1–720 h, Standard 24 h), ohne auf die v64 Blocklist zu warten. Nie gesperrt: private Adressen, CGNAT, Ausnahmen der Blocklisten, vertrauenswürdige Proxys der Hosts. Liste im Speicher, höchstens 50 000 Einträge (voll: die am frühesten ablaufende weicht), nach einem Neustart leer. In der Karte mit Grund und Ende, einzeln aufhebbar (`DELETE /api/cdn64/honeypot/blocks/{ip}`). Ausschalten leert die Liste. |
+
+Abweisungen erscheinen in Statistik und Protokoll mit dem Grund „vom Honeypot gemeldet“. Prometheus:
+`node64_cdn64_honeypot_blocks`, `…_rejected_total`, `…_blocks_total`, `…_decoy_total`, `…_reported_total` (nur, wenn
+ein Schalter an ist).
+
 ## CDN64 (srv07/srv08)
 
 Ein Klick macht einen Host über **srv07.cdn64.de** (Nürnberg) und **srv08.cdn64.de** (Falkenstein) aus dem
