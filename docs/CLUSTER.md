@@ -70,6 +70,8 @@ Bereich nur, wenn er auf **beiden** Nodes an ist (die abholende Node nennt ihre 
 
 Benachrichtigungskanäle werden nicht abgeglichen. Neue Module hängen sich als Provider an `/peer/v2/sync`
 (`internal/peer/cluster.go`); eine ältere Node bekommt nie Eintragsarten, die sie nicht kennt.
+PROXY64 und DNS64 sind als Bereiche geplant, aber zurückgestellt, bis die Nachfrage da ist:
+[PLAN-NODE64-CLUSTER-MODULE.md](PLAN-NODE64-CLUSTER-MODULE.md).
 
 ## Wenn eine Node weg ist
 

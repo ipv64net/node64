@@ -76,5 +76,6 @@ deployen. i18n-Dateien nur mit kleinen Einfügungen (Edit-Werkzeug, vorher frisc
 
 ## Später (nicht jetzt, aber nicht verbauen)
 
-- PROXY64 (Hosts, Zugriffslisten, Einstellungen) und DNS64 (Zonen, Einträge, Listen) als Provider.
+- PROXY64 (Hosts, Zugriffslisten, Einstellungen) und DNS64 (Zonen, Einträge, Listen) als Provider – geplant, aber
+  zurückgestellt bis zur Nachfrage (Dennis 2026-10-20): [PLAN-NODE64-CLUSTER-MODULE.md](PLAN-NODE64-CLUSTER-MODULE.md).
 - Nur eine Seite erreichbar (NAT): Austausch in beide Richtungen über eine Verbindung.
