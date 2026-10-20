@@ -254,7 +254,8 @@ func (s *Server) termCert(hello *tls.ClientHelloInfo) (*tls.Certificate, error) 
 func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 	ap, aerr := netip.ParseAddrPort(r.RemoteAddr)
 	if aerr == nil && r.ProtoMajor == 3 && s.guard.set.Load().Has(ap.Addr().Unmap()) { // TCP prueft schon acceptLoop
-		s.guard.rejected.Add(1)
+		s.guard.reject("blocklist")
+		s.mx.termReject("blocklist")
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -263,22 +264,26 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 	re := rs.lookup(host)
 	if re == nil || (re.Mode != 2 && re.Mode != 3) || (r.TLS != nil && r.TLS.ServerName != "" && rs.lookup(r.TLS.ServerName) != re) ||
 		(r.TLS == nil && re.Mode != 3) {
+		s.mx.termReject("misdirected")
 		http.Error(w, "misdirected request", http.StatusMisdirectedRequest)
 		return
 	}
 	st := s.stats.of(re.Name)
 	if aerr == nil && !s.term.rl.allow(ap.Addr()) {
 		st.Rejected.Add(1)
+		s.mx.termReject("req_rate")
 		w.Header().Set("Retry-After", "1")
 		http.Error(w, "too many requests", http.StatusTooManyRequests)
 		return
 	}
 	if aerr == nil && !re.ACL.allows(ap.Addr()) {
 		st.Rejected.Add(1)
+		s.mx.termReject("acl")
 		termPage(w, r, http.StatusForbidden, host, "Zugriff von dieser Adresse nicht erlaubt.", "Access from this address is not allowed.")
 		return
 	}
 	if re.Blocked != "" {
+		s.mx.termReject("blocked")
 		termPage(w, r, http.StatusServiceUnavailable, host, "Dieser Dienst ist vorübergehend nicht verfügbar.", "This service is temporarily unavailable.")
 		return
 	}
@@ -286,6 +291,9 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Alt-Svc", `h3=":443"; ma=86400`)
 	}
 	st.Requests.Add(1)
+	rec := &statusRec{ResponseWriter: w}
+	w = rec
+	defer func() { s.mx.countRequest(re.Mode, rec.status, r.ProtoMajor) }()
 	cctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	defer s.track(re.Name, re.Mode, ap.Addr(), cancel)()

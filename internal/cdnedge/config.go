@@ -49,6 +49,11 @@ type Config struct {
 	CacheTotalMB int    `yaml:"cache_total_mb"`
 	PortRange    string `yaml:"port_range"`
 	CapacityMbit int    `yaml:"capacity_mbit"` // faire Drossel ab 80 % davon (bandwidth.go); Standard 1000, -1 = aus // Portmapper (Modus 3): Standard "50000-62000", "off" = aus
+	// Prometheus (promexport.go): nur mit metrics_listen UND metrics_allow; Bearer-Token aus metrics_token_file
+	// (Standard data_dir/metrics-token, wird bei Bedarf mit 0600 erzeugt)
+	MetricsListen    string   `yaml:"metrics_listen"` // z. B. ":9464"
+	MetricsAllow     []string `yaml:"metrics_allow"`  // IPs bzw. Netze des Prometheus; leer = Port zu
+	MetricsTokenFile string   `yaml:"metrics_token_file"`
 }
 
 // HostEntry: ein Name (auch *.domain) und der Tunnel, der ihn bedient.
@@ -108,6 +113,12 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if c.PeerListen != "" && len(c.PeerSecret) < 32 {
 		return nil, errors.New("config: peer_secret missing or too short (at least 32 characters)")
+	}
+	if c.MetricsTokenFile == "" {
+		c.MetricsTokenFile = c.DataDir + "/metrics-token"
+	}
+	if _, err := parseAllow(c.MetricsAllow); err != nil {
+		return nil, fmt.Errorf("config: %w", err)
 	}
 	if strings.HasPrefix(c.DebugListen, ":") || strings.HasPrefix(c.DebugListen, "0.0.0.0") || strings.HasPrefix(c.DebugListen, "[::]") {
 		return nil, errors.New("config: debug_listen only on 127.0.0.1")

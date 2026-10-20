@@ -47,6 +47,11 @@ func (s *Server) obtain(ctx context.Context, name string) ([]byte, []byte, error
 			cp, kp, err = s.obtainWith(ctx, ca, name)
 		}
 	}
+	if err != nil {
+		s.mx.certErr[caIndex(ca)].Add(1)
+	} else {
+		s.mx.certOK[caIndex(ca)].Add(1)
+	}
 	s.ca.mu.Lock()
 	if err != nil {
 		s.ca.lastErr[ca] = time.Now().UTC().Format(time.RFC3339) + " " + name + ": " + err.Error()

@@ -57,6 +57,7 @@ type Server struct {
 	cache      *respCache                // Modus 3: Cache
 	pm         *portmapper               // Modus 3: Portmapper
 	qd         atomic.Pointer[quicDemux] // Modus 1: QUIC durchreichen (fuer /health; gesetzt in listenUDP443)
+	mx         edgeCounters              // Zaehler nur fuer Prometheus (promexport.go)
 	acmeTokens tokenStore                // HTTP-01 (Ausweg)
 	acmeMu     sync.Mutex
 	ca         *caState // Zertifizierungsstellen: Konten, Zaehlung (acmeca.go)
@@ -170,6 +171,9 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		s.lns = append(s.lns, l)
 		go s.servePeer(l)
+	}
+	if err := s.startMetrics(); err != nil {
+		return err
 	}
 	if s.cfg.DebugListen != "" {
 		dl, err := net.Listen("tcp", s.cfg.DebugListen)

@@ -4,6 +4,8 @@ Node64 stellt seine Kennzahlen unter `GET /api/metrics` im Textformat von Promet
 des Kerns und die aller laufenden Module. Ausgeschaltete oder gestoppte Module liefern keine Werte, nur
 `node64_module_running{module="…"} 0`.
 
+Die CDN64-Server srv07/srv08 haben eine eigene Schnittstelle nur für den Betreiber: [CDN64-EDGE-PROMETHEUS.md](CDN64-EDGE-PROMETHEUS.md).
+
 ## Einrichten
 
 1. Unter **Einstellungen → API-Keys** einen eigenen Key anlegen, z. B. `prometheus`.

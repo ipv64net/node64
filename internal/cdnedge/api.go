@@ -115,6 +115,7 @@ func (s *Server) apiRequest(ctx context.Context, method, path string, body []byt
 }
 
 func (s *Server) apiFail(err error) {
+	s.mx.apiErr.Add(1)
 	s.apist.mu.Lock()
 	first := s.apist.lastErr == ""
 	s.apist.lastErr = err.Error()

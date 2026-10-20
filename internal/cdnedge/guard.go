@@ -26,6 +26,7 @@ type guard struct {
 	ips                               map[netip.Addr]*gstate
 	open                              atomic.Int64
 	rejected                          atomic.Int64
+	rej                               [len(guardReasons)]atomic.Int64 // je Grund (Prometheus)
 	set                               atomic.Pointer[shield.Set]
 	now                               func() time.Time
 }
@@ -62,14 +63,26 @@ func gkey(a netip.Addr) netip.Addr {
 }
 
 // admit: Verbindung zulassen? release gibt den Platz frei; why ist der Grund einer Abweisung.
+// Gruende der Abweisung (Reihenfolge = Index in rej).
+var guardReasons = [...]string{"blocklist", "max_conns", "conns", "conn_rate"}
+
+func (g *guard) reject(why string) {
+	g.rejected.Add(1)
+	for i, r := range guardReasons {
+		if r == why {
+			g.rej[i].Add(1)
+		}
+	}
+}
+
 func (g *guard) admit(a netip.Addr) (release func(), why string) {
 	a = a.Unmap()
 	if g.set.Load().Has(a) {
-		g.rejected.Add(1)
+		g.reject("blocklist")
 		return nil, "blocklist"
 	}
 	if g.maxConns > 0 && g.open.Load() >= int64(g.maxConns) {
-		g.rejected.Add(1)
+		g.reject("max_conns")
 		return nil, "max_conns"
 	}
 	k, now := gkey(a), g.now()
@@ -85,11 +98,11 @@ func (g *guard) admit(a netip.Addr) (release func(), why string) {
 	switch {
 	case g.connsPerIP > 0 && st.conns >= g.connsPerIP:
 		g.mu.Unlock()
-		g.rejected.Add(1)
+		g.reject("conns")
 		return nil, "conns"
 	case g.rate > 0 && st.tok < 1:
 		g.mu.Unlock()
-		g.rejected.Add(1)
+		g.reject("conn_rate")
 		return nil, "conn_rate"
 	}
 	if g.rate > 0 {

@@ -168,6 +168,23 @@ func (p *portmapper) close() {
 	}
 }
 
+// udpSessions: offene UDP-Sitzungen aller Ports (Prometheus).
+func (p *portmapper) udpSessions() int {
+	p.mu.Lock()
+	ports := make([]*udpPort, 0, len(p.udp))
+	for _, u := range p.udp {
+		ports = append(ports, u)
+	}
+	p.mu.Unlock()
+	n := 0
+	for _, u := range ports {
+		u.mu.Lock()
+		n += len(u.sess)
+		u.mu.Unlock()
+	}
+	return n
+}
+
 // open: Anzahl offener Ports (fuer /health).
 func (p *portmapper) open() (tcp, udp int) {
 	p.mu.Lock()
