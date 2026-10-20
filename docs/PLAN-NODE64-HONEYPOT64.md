@@ -30,6 +30,10 @@ ELK, echte Shells).
 | Betrieb ohne Oberfläche | ja (Modus `honeypot`, Abschnitt 2) |
 | Prometheus | ja |
 | Daten für spätere Auswertung (auch KI) | aufheben, mit gestuften Fristen (Abschnitt 4) |
+| Benutzernamen/Passwörter | **nur aus dem Honeypot**, nie aus echten Logs |
+| Melden | **nur über Node64** (keine Fremd-Meldungen aus Fail2ban/CrowdSec) |
+| DNS-Sperrliste | Zone **`bl.ipv64.net`** |
+| Angebot | Stufen nach dem Muster von CrowdSec (Abschnitt 8) |
 
 ## 1. Sensoren: drei Quellen
 
@@ -162,9 +166,8 @@ weg). Wird es groß, gehen die Meldungen in eine Analyse-Datenbank (z. B. ClickH
 
 - **Mit Node64:** verknüpft (API-Key), nach Opt-in, alle 10 Minuten `POST /honeypot/reports` (API v2). Fehlt die
   Verbindung, holt der Sensor aus dem lokalen Puffer nach (höchstens 7 Tage).
-- **Ohne Node64** (mehr Daten mit wenig Aufwand): derselbe Endpunkt für Fail2ban (fertige Action), CrowdSec
-  (Benachrichtigungs-Plugin) und eigene Skripte. Gewichtet niedriger als Honeypot-Meldungen, weil die Regeln dort
-  nicht von uns sind.
+- **Nur über Node64** (Entscheidung Dennis): keine Fremd-Meldungen aus Fail2ban, CrowdSec oder eigenen Skripten; so
+  stammen alle Daten aus unseren eigenen, versionierten Regeln.
 - Der Sensor meldet seine eigene öffentliche IP nicht; ipv64 kennt sie aus der Verbindung und schließt sie aus.
 
 ## 6. Bewertung bei ipv64 (alle 30 Minuten)
@@ -173,7 +176,7 @@ weg). Wird es groß, gehen die Meldungen in eine Analyse-Datenbank (z. B. ClickH
   selben /24 zählen als einer.
 - **Vertrauen je Sensor:** Werden seine Meldungen oft von anderen bestätigt, zählt er mehr; meldet er dauerhaft IPs,
   die sonst niemand sieht, weniger. Neue Accounts starten niedrig.
-- **Gewichtung nach Quelle und Art:** Honeypot > Log-Sensor > Fremd-Meldung (Fail2ban); Exploit/Login > Port-Scan >
+- **Gewichtung nach Quelle und Art:** Honeypot > Log-Sensor > Syslog; Exploit/Login > Port-Scan >
   bloßer Verbindungsaufbau. Ältere Treffer verlieren an Gewicht.
 - **Dynamische Schwelle** nach Zahl der Accounts, die in den letzten 7 Tagen gemeldet haben (Startwerte):
 
@@ -210,7 +213,23 @@ weg). Wird es groß, gehen die Meldungen in eine Analyse-Datenbank (z. B. ClickH
 Alle Listen laufen über die bestehende Pipeline (Generator, `index.json`, Listenseite, Leitfaden). Das reine
 Textformat nehmen auch Firmen-Firewalls direkt: Palo Alto (External Dynamic List), FortiGate (Threat Feed), Sophos.
 
-## 8. Hosting-Anbieter und Netzbetreiber
+## 8. Angebot und Stufen
+
+Muster CrowdSec: Software und Grundlisten kostenlos, die Gemeinschaft liefert die Daten; bezahlt wird für Aktualität,
+Menge und fertige Anbindung (Premium-Blocklisten, „Blocklist as a Service“ für Firewalls, IP-Auskunft per API,
+Spiegelung der Datenbank, Support). Übertragen auf die Account-Klassen von ipv64 (Vorschlag, Preise und Zuordnung
+entscheidet Dennis):
+
+| Stufe | bekommt |
+|---|---|
+| alle, kostenlos | v64 Blocklist und Teillisten, IP-Auskunft und DNS-Sperrliste mit Tageslimit |
+| Beitragende (Sensor läuft) | Statistik „dein Beitrag“, höhere Limits, Belohnung (später) |
+| Business/Company | Änderungs-Feed, hohe Limits für API und DNS-Sperrliste, Frühwarnung für eigene Netze, Passwortprüfung, gewerbliche Nutzung |
+| Hoster/Partner auf Anfrage | Netzberichte, BGP-Feed, Abgleich großer Datenmengen, Zusage zur Verfügbarkeit |
+
+Limits und Stufe hängen am API-Key; die DNS-Sperrliste zählt je abfragender IP bzw. je eingetragenem Mailserver.
+
+## 8b. Hosting-Anbieter und Netzbetreiber
 
 - **Berichte für eigene Netze** (wie Shadowserver): Anbieter trägt ASN bzw. Präfixe ein (Nachweis per RIR-Eintrag oder
   Mail an die Abuse-Adresse) und bekommt laufend bzw. täglich, welche IPs aus seinem Netz angreifen – für das eigene
@@ -268,14 +287,11 @@ Netzbetreibern, Zusammenfassungen in Klartext für die Statistikseite.
 | H2 | Meldung alle 10 Minuten (Format `schema: 1`), Tabellen bei ipv64, Statistik für Beitragende |
 | H3 | Bewertung alle 30 Minuten, v64 Blocklist und Teillisten, Cron, IP-Auskunft, Freigabe-Anträge |
 | H4 | Öffentliche Statistik unter „Secure“, Passwort-/Benutzer-/User-Agent-/Pfad-Listen, DNSBL, Leitfaden (Firmen-Firewalls, MikroTik-Container) |
-| H5 | Log-Sensor und Syslog-Empfänger, Melden ohne Node64 (Fail2ban, CrowdSec), Frühwarnung für eigene Netze |
+| H5 | Log-Sensor und Syslog-Empfänger, Frühwarnung für eigene Netze, Stufen und Limits |
 | H6 | Honeypot Stufe 2, JA4/HASSH, Passwortprüfung (k-Anonymität), Änderungs-Feed, Node64 als Firewall-Helfer |
 | H7 | Hosting-Anbieter (Netzberichte, BGP-Feed), Plugins, weitere Plattformen (FreeBSD, Windows), KI-Auswertung, Belohnung |
 
 ## 15. Offen
 
-1. Log-Sensor: Benutzernamen aus echten Logs nie melden (Vorschlag) – oder nur auf ausdrücklichen Wunsch?
-2. Fristen aus Abschnitt 4 so übernehmen?
-3. Hosting-Anbieter: kostenlos wie alle, oder eigene Stufe (Feed, BGP, höhere Limits) gegen Geld?
-4. Melden ohne Node64 (Fail2ban, CrowdSec) zulassen?
-5. Name der DNSBL-Zone (Vorschlag `bl.ipv64.net`).
+- Preise und Zuordnung der Stufen zu den Account-Klassen (Abschnitt 8).
+- Belohnung für Beitragende.
