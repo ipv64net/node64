@@ -22,9 +22,10 @@
 		{{range $d.BL.Lists}}
 			<div class="col-sm-6"><div class="border rounded p-2 h-100">
 				<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" role="switch" name="list" value="{{.ID}}" id="bl-{{.ID}}"{{if .Enabled}} checked{{end}}>
-					<label class="form-check-label fw-semibold" for="bl-{{.ID}}">{{.Name}}</label>{{if or (eq .Category "tor") (eq .Category "cloud")}} <span class="badge text-bg-light">{{$.T (print "cdn64.bl.cat." .Category)}}</span>{{end}}</div>
+					<label class="form-check-label fw-semibold" for="bl-{{.ID}}">{{.Name}}</label>{{if or (eq .Category "tor") (eq .Category "cloud")}} <span class="badge text-bg-light">{{$.T (print "cdn64.bl.cat." .Category)}}</span>{{else if eq .Category "honeypot"}} <span class="badge text-bg-primary"><i class="bi bi-bug"></i> {{$.T "cdn64.bl.cat.honeypot"}}</span>{{end}}</div>
 				<div class="text-body-secondary">{{if .Desc}}{{$.T .Desc}}{{else if .Text}}{{.Text}}{{else}}{{$.T (print "cdn64.bl.desc." .ID)}}{{end}}{{if .License}} <span class="text-nowrap">· {{.License}}</span>{{end}}</div>
 				<div class="mt-1">{{if .Error}}<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> {{.Error}}</span>{{else if .Entries}}<span class="font-monospace">{{$.Int .Entries}}</span> {{$.T "cdn64.bl.entries"}}{{if not .Updated.IsZero}} · {{$.T "cdn64.bl.updated" "ago" ($.Ago .Updated)}}{{end}}{{else if .Enabled}}<span class="text-body-secondary">{{$.T "cdn64.bl.loading"}}</span>{{end}}</div>
+				{{if and .Enabled .Edition}}<div class="mt-1">{{if eq .Edition "live"}}<span class="badge text-bg-success">{{$.T "cdn64.bl.edition_live"}}</span>{{else}}<span class="badge text-bg-light">{{$.T "cdn64.bl.edition_daily"}}</span>{{end}}{{if .LiveDenied}} <span class="text-warning-emphasis"><i class="bi bi-exclamation-circle"></i> {{$.T "cdn64.bl.live_denied"}}</span>{{end}}{{if .LiveError}} <span class="text-danger"><i class="bi bi-exclamation-triangle"></i> {{$.T "cdn64.bl.live_error" "err" .LiveError}}</span>{{end}}</div>{{end}}
 			</div></div>
 		{{end}}
 		</div>
@@ -32,6 +33,12 @@
 		<label class="form-label mt-3" for="bl-allow">{{.T "cdn64.bl.allow"}}</label>
 		<textarea class="form-control form-control-sm font-monospace" id="bl-allow" name="allow" rows="2" placeholder="203.0.113.7&#10;2001:db8::/48">{{join $d.BL.Allow "\n"}}</textarea>
 		<div class="form-text">{{.T "cdn64.bl.allow_hint"}}</div>
+		<label class="form-label mt-3" for="bl-token"><i class="bi bi-key"></i> {{.T "cdn64.bl.token"}}</label>
+		<div class="input-group input-group-sm">
+			<input class="form-control font-monospace" type="password" id="bl-token" name="token" autocomplete="new-password" maxlength="64" placeholder="{{if $d.BL.TokenSet}}••••••••••••••••{{else}}{{.T "cdn64.bl.token_placeholder"}}{{end}}">
+			{{if $d.BL.TokenSet}}<button class="btn btn-outline-danger" type="submit" form="bl-token-delete" data-confirm="{{.T "cdn64.bl.token_delete_confirm"}}" title="{{.T "common.delete"}}"><i class="bi bi-trash"></i></button>{{end}}
+		</div>
+		<div class="form-text">{{if $d.BL.TokenSet}}<span class="text-success"><i class="bi bi-check-circle"></i> {{.T "cdn64.bl.token_set"}}</span> {{end}}{{.T "cdn64.bl.token_hint"}}</div>
 	</div>
 	<div class="card-footer d-flex gap-2">
 		<button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-shield-check"></i> {{.T "common.save"}}</button>
@@ -39,6 +46,7 @@
 		<a class="btn btn-link btn-sm ms-auto" href="https://ipv64.net/v64_blocklists" target="_blank" rel="noopener">{{.T "cdn64.bl.about"}} <i class="bi bi-box-arrow-up-right"></i></a>
 	</div>
 </form>
+<form method="post" action="/cdn64/blocklists/token/delete" id="bl-token-delete" class="d-none"><input type="hidden" name="_csrf" value="{{.CSRF}}"></form>
 </div>
 <div class="col-lg-6">
 <form method="post" action="/cdn64/limits" class="card h-100" id="limits">

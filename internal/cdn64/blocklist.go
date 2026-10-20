@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/netip"
@@ -41,7 +40,7 @@ type BlocklistInfo struct {
 	File string `json:"file"`
 	Desc string `json:"desc"` // i18n-Schluessel cdn64.bl.desc.<id> (bekannte Listen), sonst leer
 	// aus index.json (leer, solange sie nicht geladen ist)
-	Category string `json:"category,omitempty"` // attack | botnet | tor | cloud
+	Category string `json:"category,omitempty"` // attack | botnet | tor | cloud | honeypot
 	Text     string `json:"text,omitempty"`     // Beschreibung von ipv64.net (englisch), fuer Listen ohne Uebersetzung
 	License  string `json:"license,omitempty"`
 	Source   string `json:"source,omitempty"`
@@ -62,7 +61,10 @@ var Blocklists = []BlocklistInfo{
 var blKnown = map[string]string{"all": "IPv64 Gesamtliste", "all_notor": "IPv64 Gesamtliste ohne Tor", "spamhaus_drop": "Spamhaus DROP",
 	"firehole_l1": "FireHOL Level 1", "blocklistde_all": "blocklist.de (alle)", "dshield1": "DShield", "tor_exit": "Tor Exit-Nodes",
 	"tor_all": "Tor (alle Relays)", "feodo": "abuse.ch Feodo Tracker", "et_compromised": "ET Compromised", "cins_army": "CINS Army",
-	"ipsum_l3": "IPsum Level 3", "aws": "Amazon AWS", "gcp": "Google Cloud", "cloudflare": "Cloudflare"}
+	"ipsum_l3": "IPsum Level 3", "aws": "Amazon AWS", "gcp": "Google Cloud", "cloudflare": "Cloudflare",
+	// ipv64 Honeypot (Kategorie honeypot, mit Listen-Token live)
+	"v64": "v64 Blocklist", "v64_ssh": "v64 SSH", "v64_web": "v64 Web", "v64_mail": "v64 Mail", "v64_rdp": "v64 RDP",
+	"v64_scanner": "v64 Scanner", "v64_research": "v64 Forschungs-Scanner"}
 
 // list: Auswahl aus index.json, sonst die feste Liste (b.mu gehalten).
 func (b *blocklists) list() []BlocklistInfo {
@@ -97,6 +99,12 @@ type BlocklistState struct {
 	Updated time.Time `json:"updated,omitzero"` // zuletzt geladen bzw. bestaetigt
 	Changed time.Time `json:"changed,omitzero"` // Inhalt zuletzt geaendert
 	Error   string    `json:"error,omitempty"`
+
+	// Kategorie honeypot (blocklist_live.go): geladene Fassung live | daily, Token ohne Berechtigung (ipv64 lieferte
+	// den Tagesstand), Fehler des Live-Abrufs (dann Tagesstand geladen; ohne Token)
+	Edition    string `json:"edition,omitempty"`
+	LiveDenied bool   `json:"live_denied,omitempty"`
+	LiveError  string `json:"live_error,omitempty"`
 }
 
 // blocklists ist der Zustand im Modul.
@@ -115,6 +123,8 @@ type blocklists struct {
 	catalog   []BlocklistInfo // aus index.json (leer = feste Liste)
 	countries []geoCountry    // Laender aus index.json (Auswahl im Formular)
 	geo       geoSets         // Laenderlisten fuer die Laendersperre je Host
+
+	src map[string]string // je Liste: Pfad, von dem sie geladen wurde (ETag gilt nur dafuer; live/daily)
 }
 
 func newBlocklists() *blocklists {
@@ -222,52 +232,63 @@ func (b *blocklists) stateOf(id string) *BlocklistState {
 	return st
 }
 
-// blFetch laedt eine Liste (nur bei Aenderung) und speichert sie zwischen.
+// blFetch laedt eine Liste (nur bei Aenderung) und speichert sie zwischen. Listen der Kategorie honeypot kommen mit
+// Listen-Token live (blocklist_live.go).
 func (m *Module) blFetch(ctx context.Context, id string) error {
 	m.bl.mu.Lock()
 	info, _ := m.bl.byID(id)
 	m.bl.mu.Unlock()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.bl.base+info.File, nil)
+	if info.Category == blCatHoneypot {
+		return m.blFetchHoneypot(ctx, id, info.File)
+	}
+	_, _, err := m.blFetchFrom(ctx, id, info.File)
+	return err
+}
+
+// blFetchFrom laedt rel (relativ zur Basis-URL) als Liste id, nur bei Aenderung. list = Kopfzeile X-IPv64-List.
+func (m *Module) blFetchFrom(ctx context.Context, id, rel string) (list string, notModified bool, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.bl.base+rel, nil)
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	req.Header.Set("User-Agent", "Node64/"+m.version)
 	m.bl.mu.Lock()
-	if e := m.bl.etag[id]; e != "" && len(m.bl.nets[id]) > 0 {
+	if e := m.bl.etag[id]; e != "" && len(m.bl.nets[id]) > 0 && m.bl.src[id] == rel {
 		req.Header.Set("If-None-Match", e)
 	}
 	m.bl.mu.Unlock()
 	resp, err := m.bl.client.Do(req)
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	defer resp.Body.Close()
 	now := time.Now()
+	list = resp.Header.Get(blListHeader)
 	if resp.StatusCode == http.StatusNotModified {
 		m.bl.mu.Lock()
 		m.bl.stateOf(id).Updated, m.bl.stateOf(id).Error = now, ""
 		m.bl.mu.Unlock()
-		return nil
+		return list, true, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
+		return "", false, blHTTPError(resp.StatusCode)
 	}
 	if ct := resp.Header.Get("Content-Type"); strings.Contains(ct, "html") {
-		return errors.New("no list (html answer)")
+		return "", false, errors.New("no list (html answer)")
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, blocklistMax+1))
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	if len(raw) > blocklistMax {
-		return errors.New("list too large")
+		return "", false, errors.New("list too large")
 	}
 	nets, err := shield.ParseList(bytes.NewReader(raw))
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	if len(nets) == 0 && len(bytes.TrimSpace(raw)) > 0 {
-		return errors.New("no addresses in the list")
+		return "", false, errors.New("no addresses in the list")
 	}
 	if dir := m.blCacheDir(); dir != "" {
 		if err := os.MkdirAll(dir, 0o750); err == nil {
@@ -280,10 +301,14 @@ func (m *Module) blFetch(ctx context.Context, id string) error {
 	m.bl.mu.Lock()
 	m.bl.nets[id] = nets
 	m.bl.etag[id] = resp.Header.Get("ETag")
+	if m.bl.src == nil {
+		m.bl.src = map[string]string{}
+	}
+	m.bl.src[id] = rel
 	st := m.bl.stateOf(id)
 	st.Entries, st.Updated, st.Changed, st.Error = int64(len(nets)), now, now, ""
 	m.bl.mu.Unlock()
-	return nil
+	return list, false, nil
 }
 
 // blRefresh laedt alle eingeschalteten Listen und baut die Sperrliste neu.

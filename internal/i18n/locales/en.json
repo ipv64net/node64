@@ -700,12 +700,31 @@
         "ipsum_l3": "addresses on at least three public blocklists (IPsum)",
         "aws": "all Amazon AWS networks: blocks bots and scanners from data centers",
         "gcp": "Google Cloud customer networks: blocks bots and scanners from data centers",
-        "cloudflare": "Cloudflare networks: do not enable if a host is behind Cloudflare"
+        "cloudflare": "Cloudflare networks: do not enable if a host is behind Cloudflare",
+        "v64": "Attackers reported by the community's ipv64 honeypots, across all services",
+        "v64_ssh": "Attackers on SSH and Telnet from the ipv64 honeypots",
+        "v64_web": "Attackers on web servers (exploits, login attempts) from the ipv64 honeypots",
+        "v64_mail": "Attackers on mail servers (SMTP, IMAP, POP3) from the ipv64 honeypots",
+        "v64_rdp": "Attackers on remote desktop (RDP, VNC) from the ipv64 honeypots",
+        "v64_scanner": "Port scanners probing the ipv64 honeypots",
+        "v64_research": "Research and search engine scanners (e.g. Shodan, Censys): also blocks harmless indexing"
       },
       "cat": {
         "tor": "Tor",
-        "cloud": "data centers"
-      }
+        "cloud": "data centers",
+        "honeypot": "ipv64 Honeypot"
+      },
+      "token": "List token for live lists",
+      "token_placeholder": "List token from your ipv64 account (32 characters)",
+      "token_hint": "With the list token from your ipv64 account, PROXY64 loads the \"ipv64 Honeypot\" lists in their live version (re-scored every 30 minutes), without it the daily version. Leave empty = unchanged. The token is stored encrypted and not exported.",
+      "token_set": "Token stored.",
+      "token_deleted": "List token deleted, the honeypot lists are back to the daily version.",
+      "token_delete_confirm": "Delete the list token? The honeypot lists will then be loaded in the daily version.",
+      "err_token": "Check the list token: 32 characters, letters and digits only.",
+      "edition_live": "live",
+      "edition_daily": "daily version",
+      "live_denied": "daily version – token without entitlement",
+      "live_error": "live download rejected ({err}), daily version loaded"
     },
     "lim": {
       "title": "Overload protection",

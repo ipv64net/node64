@@ -2832,7 +2832,7 @@
                 },
                 "category": {
                   "type": "string",
-                  "description": "aus index.json: attack, botnet, tor oder cloud"
+                  "description": "aus index.json: attack, botnet, tor, cloud oder honeypot (ipv64 Honeypot: v64, v64_ssh, v64_web, v64_mail, v64_rdp, v64_scanner, v64_research)"
                 },
                 "text": {
                   "type": "string",
@@ -2864,6 +2864,22 @@
                 },
                 "error": {
                   "type": "string"
+                },
+                "edition": {
+                  "type": "string",
+                  "enum": [
+                    "live",
+                    "daily"
+                  ],
+                  "description": "nur Kategorie honeypot: geladene Fassung (live mit berechtigtem Listen-Token, sonst daily = Tagesstand)"
+                },
+                "live_denied": {
+                  "type": "boolean",
+                  "description": "Listen-Token ohne Berechtigung: ipv64 lieferte den Tagesstand (Kopfzeile X-IPv64-List: daily)"
+                },
+                "live_error": {
+                  "type": "string",
+                  "description": "Live-Abruf abgelehnt (z. B. \"live: HTTP 403\"), stattdessen Tagesstand geladen; enthält nie das Token"
                 }
               }
             }
@@ -2910,6 +2926,10 @@
           "geo_blocked": {
             "type": "integer",
             "description": "von der Ländersperre abgewiesen seit dem Start"
+          },
+          "token_set": {
+            "type": "boolean",
+            "description": "Listen-Token für die Live-Fassung hinterlegt (das Token selbst wird nie ausgegeben)"
           }
         }
       },
@@ -13120,7 +13140,7 @@
           "PROXY64"
         ],
         "summary": "ipv64-Blocklisten ein-/ausschalten, Ausnahmen setzen",
-        "description": "Abgewiesen wird am Eingang vor TLS und vor jeder Zugriffsliste, für Proxy-Hosts, Durchreich-Hosts und Streams. Die Listen kommen von ipv64.net und werden alle 30 Minuten aktualisiert.",
+        "description": "Abgewiesen wird am Eingang vor TLS und vor jeder Zugriffsliste, für Proxy-Hosts, Durchreich-Hosts und Streams. Die Listen kommen von ipv64.net und werden alle 30 Minuten aktualisiert. Listen der Kategorie honeypot (v64 Blocklist) lädt PROXY64 mit hinterlegtem Listen-Token in der Live-Fassung, sonst den Tagesstand.",
         "requestBody": {
           "required": true,
           "content": {
@@ -13139,6 +13159,10 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "token": {
+                    "type": "string",
+                    "description": "Listen-Token aus dem ipv64-Account (32 Zeichen A-Z, a-z, 0-9) fuer die Live-Fassung der Listen der Kategorie honeypot; \"\" = loeschen, Feld weglassen = unveraendert. Wird nur token gesendet, bleiben eingeschaltete Listen und Ausnahmen unveraendert. Das Token wird verschluesselt gespeichert und nie zurueckgegeben."
                   }
                 }
               }
@@ -13157,7 +13181,7 @@
             }
           },
           "422": {
-            "description": "unbekannte Liste oder ungültige Ausnahme",
+            "description": "unbekannte Liste, ungültige Ausnahme oder ungültiges Listen-Token",
             "content": {
               "application/json": {
                 "schema": {

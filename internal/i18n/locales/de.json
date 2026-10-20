@@ -700,12 +700,31 @@
         "ipsum_l3": "Adressen auf mindestens drei öffentlichen Sperrlisten (IPsum)",
         "aws": "alle Netze von Amazon AWS: sperrt Bots und Scanner aus Rechenzentren",
         "gcp": "Kundennetze von Google Cloud: sperrt Bots und Scanner aus Rechenzentren",
-        "cloudflare": "Netze von Cloudflare: nicht einschalten, wenn ein Host hinter Cloudflare liegt"
+        "cloudflare": "Netze von Cloudflare: nicht einschalten, wenn ein Host hinter Cloudflare liegt",
+        "v64": "Angreifer, die die ipv64-Honeypots der Community gemeldet haben, über alle Dienste",
+        "v64_ssh": "Angreifer auf SSH und Telnet aus den ipv64-Honeypots",
+        "v64_web": "Angreifer auf Webserver (Exploits, Login-Versuche) aus den ipv64-Honeypots",
+        "v64_mail": "Angreifer auf Mailserver (SMTP, IMAP, POP3) aus den ipv64-Honeypots",
+        "v64_rdp": "Angreifer auf Remote Desktop (RDP, VNC) aus den ipv64-Honeypots",
+        "v64_scanner": "Port-Scanner, die die ipv64-Honeypots abtasten",
+        "v64_research": "Scanner von Forschung und Suchmaschinen (z. B. Shodan, Censys): sperrt auch harmlose Erfassung"
       },
       "cat": {
         "tor": "Tor",
-        "cloud": "Rechenzentren"
-      }
+        "cloud": "Rechenzentren",
+        "honeypot": "ipv64 Honeypot"
+      },
+      "token": "Listen-Token für Live-Listen",
+      "token_placeholder": "Listen-Token aus dem ipv64-Account (32 Zeichen)",
+      "token_hint": "Mit dem Listen-Token aus deinem ipv64-Account lädt PROXY64 die Listen „ipv64 Honeypot“ in der Live-Fassung (alle 30 Minuten neu bewertet), ohne Token den Tagesstand. Leer lassen = unverändert. Das Token wird verschlüsselt gespeichert und nicht exportiert.",
+      "token_set": "Token hinterlegt.",
+      "token_deleted": "Listen-Token gelöscht, die Honeypot-Listen kommen wieder im Tagesstand.",
+      "token_delete_confirm": "Listen-Token löschen? Die Honeypot-Listen werden dann im Tagesstand geladen.",
+      "err_token": "Listen-Token prüfen: 32 Zeichen, nur Buchstaben und Ziffern.",
+      "edition_live": "live",
+      "edition_daily": "Tagesstand",
+      "live_denied": "Tagesstand – Token ohne Berechtigung",
+      "live_error": "Live-Abruf abgelehnt ({err}), Tagesstand geladen"
     },
     "lim": {
       "title": "Schutz vor Überlastung",

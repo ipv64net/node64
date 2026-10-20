@@ -48,7 +48,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.18.1"
+	Version = "1.19.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -355,7 +355,7 @@ type exportFile struct {
 }
 
 // exportSettings: Einstellungen, die zur Konfiguration gehoeren (nicht CDN64 online: Tunnel und Token gehoeren
-// zu dieser Node).
+// zu dieser Node; nicht das Listen-Token der v64 Blocklist, es gehoert zum Account).
 var exportSettings = []string{setBlocklists, setBlockAllow, setLimits, setLogDays, setAnonymize}
 
 func (m *Module) Export(ctx context.Context) (any, error) {

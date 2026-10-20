@@ -1,5 +1,18 @@
 # Änderungen – PROXY64
 
+## 1.19.0 – 2026-10-20
+
+### Neu
+- ipv64-Blocklisten: Die Listen der ipv64-Honeypots (v64 Blocklist und Teillisten SSH, Web, Mail, RDP, Scanner,
+  Forschungs-Scanner) erscheinen mit der Markierung „ipv64 Honeypot“, sobald ipv64 sie in `index.json` anbietet.
+- Listen-Token für Live-Listen: In der Blocklisten-Karte lässt sich das Listen-Token aus dem ipv64-Account hinterlegen,
+  ändern und löschen. Damit lädt PROXY64 die Honeypot-Listen in der Live-Fassung (alle 30 Minuten neu bewertet), ohne
+  Token den Tagesstand. Jede Liste zeigt, welche Fassung geladen ist; hat das Token keine Berechtigung, steht dort
+  „Tagesstand – Token ohne Berechtigung“, wird es abgelehnt (401/403/404), lädt PROXY64 den Tagesstand und zeigt den
+  Fehler.
+- Das Token wird verschlüsselt gespeichert, nie angezeigt, geloggt oder exportiert. API: `GET /api/cdn64/blocklists`
+  liefert `token_set` und je Liste `edition`, `live_denied`, `live_error`; `PUT` nimmt `token` (leer = löschen).
+
 ## 1.18.1 – 2026-10-20
 
 ### Behoben

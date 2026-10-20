@@ -27,6 +27,7 @@ func (m *Module) c4Routes(mux *http.ServeMux, page func(http.HandlerFunc) http.H
 	mux.Handle("POST /cdn64/streams/{id}/healthcheck", page(m.pageStreamCheck))
 	mux.Handle("POST /cdn64/blocklists", page(m.pageBlocklistsSave))
 	mux.Handle("POST /cdn64/blocklists/refresh", page(m.pageBlocklistsRefresh))
+	mux.Handle("POST /cdn64/blocklists/token/delete", page(m.pageBlocklistsTokenDelete))
 	mux.Handle("POST /cdn64/limits", page(m.pageLimitsSave))
 	mux.Handle("POST /cdn64/limits/unban", page(m.pageLimitsUnban))
 }
