@@ -528,3 +528,203 @@ func TestStatusMaintenance(t *testing.T) {
 		t.Fatalf("maintenance: %+v", v.Maintenance)
 	}
 }
+
+func statusSourceHourly(t *testing.T, m *Module, token, source, hour string, count, up int) {
+	t.Helper()
+	if _, err := m.st.w.Exec(`INSERT INTO hc_source_hourly (token, source, hour, count, up_count, avg_ms) VALUES (?,?,?,?,?,20)`, token, source, hour, count, up); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Online-Checks haben keine eigenen Messungen: es zaehlen die von ipv64 (flags 8, aelter hc_source_hourly);
+// bei "both" nur fuer Balken ohne eigene Messungen.
+func TestStatusOnlineCheck(t *testing.T) {
+	m, _ := newStatusModule(t)
+	now := statusFixNow(t, m)
+	rt := scheduler.Runtime{State: scheduler.StateUp, LastCheck: now.Add(-30 * time.Second)}
+	o := statusAddCheck(t, m, "Online", rt)
+	b := statusAddCheck(t, m, "Both", rt)
+	if _, err := m.st.w.Exec(`UPDATE hc_checks SET execution = 'online', owner = 'online' WHERE token = ?`, o.Token); err != nil {
+		t.Fatal(err)
+	}
+	// heute: 2 fremde gute Messungen, 1 aus hc_source_points; Wartung zaehlt nicht
+	statusMeasure(t, m, o.Token, time.Date(2026, 10, 19, 22, 30, 0, 0, time.UTC), true, 8)
+	statusMeasure(t, m, o.Token, time.Date(2026, 10, 20, 7, 0, 0, 0, time.UTC), true, 8)
+	statusMeasure(t, m, o.Token, time.Date(2026, 10, 20, 7, 1, 0, 0, time.UTC), false, 8|FlagMaintenance)
+	if _, err := m.st.w.Exec(`INSERT INTO hc_source_points (token, source, time, status, latency_ms) VALUES (?, 'loc:fsn', ?, 1, 30)`,
+		o.Token, ft(time.Date(2026, 10, 20, 7, 2, 0, 0, time.UTC))); err != nil {
+		t.Fatal(err)
+	}
+	// gestern: 1 schlecht, 19 gut -> partial
+	statusMeasure(t, m, o.Token, time.Date(2026, 10, 18, 22, 30, 0, 0, time.UTC), false, 8)
+	for i := 0; i < 19; i++ {
+		statusMeasure(t, m, o.Token, time.Date(2026, 10, 19, 12, i, 0, 0, time.UTC), true, 8)
+	}
+	// aeltere Tage aus hc_source_hourly (zwei Standorte)
+	statusSourceHourly(t, m, o.Token, "loc:nbg", "2026-10-17T10:00:00.000Z", 60, 60)
+	statusSourceHourly(t, m, o.Token, "loc:fsn", "2026-10-17T10:00:00.000Z", 60, 60)
+	statusSourceHourly(t, m, o.Token, "loc:nbg", "2026-10-16T10:00:00.000Z", 100, 50)
+	// both: heute eigene gute und fremde schlechte -> nur eigene; am 17. nur fremde -> Luecke gefuellt
+	for i := 0; i < 10; i++ {
+		statusMeasure(t, m, b.Token, time.Date(2026, 10, 20, 6, i, 0, 0, time.UTC), true, 0)
+		statusMeasure(t, m, b.Token, time.Date(2026, 10, 20, 6, i, 30, 0, time.UTC), false, 8)
+	}
+	statusSourceHourly(t, m, b.Token, "loc:nbg", "2026-10-17T10:00:00.000Z", 60, 60)
+
+	p := statusSavePage(t, m, &StatusPage{Slug: "online", Title: "Online", Enabled: true, Days: 30,
+		Groups: []StatusGroup{{Items: []StatusItem{{Token: o.Token}, {Token: b.Token}}}}}, "")
+	v, err := m.statusView(context.Background(), p, "de")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ob, bb := v.Groups[0].Items[0].Bars, v.Groups[0].Items[1].Bars
+	if ob[29].State != "up" || ob[29].Uptime != 100 || ob[28].State != "partial" || ob[26].State != "up" || ob[25].State != "down" || ob[24].State != "none" {
+		t.Fatalf("online bars: %+v %+v %+v %+v", ob[29], ob[28], ob[26], ob[25])
+	}
+	if v.Groups[0].Items[0].Uptime != statusPct(statusAgg{count: 3 + 20 + 120 + 100, up: 3 + 19 + 120 + 50}) {
+		t.Fatalf("online uptime: %v", v.Groups[0].Items[0].Uptime)
+	}
+	if bb[29].State != "up" || bb[29].Uptime != 100 || bb[26].State != "up" {
+		t.Fatalf("both bars: %+v %+v", bb[29], bb[26])
+	}
+	d, err := m.statusItemDetail(context.Background(), p, v.Groups[0].Items[0].ID, "de")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 24 h: heute 3 und gestern 12:xx 19 (alle gut); 30 Tage zusaetzlich die schlechte von 22:30 und die Stundenwerte
+	if d.Uptime24h != 100 || d.Uptime30d != v.Groups[0].Items[0].Uptime || d.Latency <= 0 {
+		t.Fatalf("online detail: %+v", d)
+	}
+	up := 0
+	for _, h := range d.Hours {
+		if h.State == "up" {
+			up++
+		}
+	}
+	if up != 3 { // 12 Uhr UTC (19 Messungen), 22 Uhr UTC und 7 Uhr UTC
+		t.Fatalf("online hours: %+v", d.Hours)
+	}
+	db, _ := m.statusItemDetail(context.Background(), p, v.Groups[0].Items[1].ID, "de")
+	if db.Uptime24h != 100 {
+		t.Fatalf("both detail must not mix in remote points: %+v", db)
+	}
+}
+
+func TestStatusHCGroups(t *testing.T) {
+	m, _ := newStatusModule(t)
+	now := time.Now()
+	rt := scheduler.Runtime{State: scheduler.StateUp, LastCheck: now}
+	mk := func(name, group string, state scheduler.State) *Check {
+		r := rt
+		r.State = state
+		c := statusAddCheck(t, m, name, r)
+		if _, err := m.st.w.Exec(`UPDATE hc_checks SET group_name = ? WHERE token = ?`, group, c.Token); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	none := mk("ohne", "", scheduler.StateUp)
+	web1 := mk("web1", "Web", scheduler.StateUp)
+	db1 := mk("db1", "DB", scheduler.StateDown)
+	web2 := mk("web2", "Web", scheduler.StateUp)
+	gone := mk("weg", "Alt", scheduler.StateUp)
+	p := statusSavePage(t, m, &StatusPage{Slug: "gruppen", Title: "G", Enabled: true, HCGroups: true, Groups: []StatusGroup{
+		{Name: "Seite 1", Items: []StatusItem{{Token: none.Token}, {Token: web1.Token}, {Token: gone.Token}}},
+		{Name: "Seite 2", Items: []StatusItem{{Token: db1.Token}, {Token: web2.Token, Label: "Web zwei"}}}}}, "")
+	if err := m.st.Delete(context.Background(), gone.Token); err != nil {
+		t.Fatal(err)
+	}
+	v, err := m.statusView(context.Background(), p, "de")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, g := range v.Groups {
+		var names []string
+		for _, it := range g.Items {
+			names = append(names, it.Label)
+		}
+		got = append(got, g.Name+":"+strings.Join(names, ",")+"="+g.Overall)
+	}
+	if strings.Join(got, " | ") != "Web:web1,Web zwei=up | DB:db1=down | :ohne=up" || v.Overall != "down" {
+		t.Fatalf("hc groups: %v (%s)", got, v.Overall)
+	}
+	// aus: Gruppen der Seite
+	p.HCGroups = false
+	p = statusSavePage(t, m, p, "")
+	v, _ = m.statusView(context.Background(), p, "de")
+	if len(v.Groups) != 2 || v.Groups[0].Name != "Seite 1" {
+		t.Fatalf("page groups: %+v", v.Groups)
+	}
+}
+
+func TestStatusLogo(t *testing.T) {
+	m, srv := newStatusModule(t)
+	hash, _ := bcrypt.GenerateFromPassword([]byte("geheim"), bcrypt.MinCost)
+	p := statusSavePage(t, m, &StatusPage{Slug: "logo", Title: "Logo", Enabled: true, PublishNode: true}, string(hash))
+	base := srv.URL + "/status/logo"
+	ctx := context.Background()
+
+	// ohne Logo: logo 404, favicon faellt auf das Node64-Logo zurueck (bzw. 404 ohne Rueckfall)
+	if code, _, _ := statusGet(t, base+"/logo"); code != 404 {
+		t.Fatalf("no logo: %d", code)
+	}
+	if code, h, body := statusGet(t, base+"/favicon"); code != 200 || h.Get("Content-Type") != "image/svg+xml" || !strings.Contains(body, "<svg") {
+		t.Fatalf("node64 favicon: %d %v", code, h)
+	}
+	old := statusFaviconFallback
+	t.Cleanup(func() { statusFaviconFallback = old })
+	statusFaviconFallback = func() []byte { return []byte(`<svg xmlns="http://www.w3.org/2000/svg"><text>64</text></svg>`) }
+	code, h, body := statusGet(t, base+"/favicon")
+	if code != 200 || h.Get("Content-Type") != "image/svg+xml" || !strings.Contains(h.Get("Content-Security-Policy"), "sandbox") || !strings.Contains(body, "64") {
+		t.Fatalf("favicon fallback: %d %v %s", code, h, body)
+	}
+	statusFaviconFallback = nil
+	if code, _, _ := statusGet(t, base+"/favicon"); code != 404 {
+		t.Fatalf("favicon without fallback: %d", code)
+	}
+
+	// SVG-Logo: auch ohne Passwort-Cookie, mit sandbox-CSP, nosniff, ETag; privat wegen Passwort
+	svg := []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`)
+	if err := m.st.SetStatusLogo(ctx, p.ID, svg, "image/svg+xml"); err != nil {
+		t.Fatal(err)
+	}
+	p, _ = m.st.StatusPage(ctx, p.ID)
+	v, _ := m.statusView(ctx, p, "de")
+	if !strings.HasPrefix(v.Logo, "logo?v=") {
+		t.Fatalf("view logo: %q", v.Logo)
+	}
+	code, h, body = statusGet(t, base+"/"+v.Logo)
+	if code != 200 || h.Get("Content-Type") != "image/svg+xml" || h.Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; sandbox" ||
+		h.Get("X-Content-Type-Options") != "nosniff" || h.Get("ETag") == "" || h.Get("Cache-Control") != "private, max-age=31536000" || body != string(svg) {
+		t.Fatalf("svg logo: %d %v %s", code, h, body)
+	}
+	req, _ := http.NewRequest("GET", base+"/logo", nil)
+	req.Header.Set("If-None-Match", h.Get("ETag"))
+	if resp, err := http.DefaultClient.Do(req); err != nil || resp.StatusCode != http.StatusNotModified {
+		t.Fatalf("etag: %v %v", err, resp)
+	}
+	// favicon nimmt das eigene Logo; PNG ohne Passwort: public
+	png := []byte("\x89PNG\r\n\x1a\nxxxx")
+	if err := m.st.SetStatusLogo(ctx, p.ID, png, "image/png"); err != nil {
+		t.Fatal(err)
+	}
+	p, _ = m.st.StatusPage(ctx, p.ID)
+	statusSavePage(t, m, p, "-")
+	code, h, body = statusGet(t, base+"/favicon")
+	if code != 200 || h.Get("Content-Type") != "image/png" || body != string(png) || h.Get("Cache-Control") != "public, max-age=3600" ||
+		strings.Contains(h.Get("Content-Security-Policy"), "sandbox") {
+		t.Fatalf("png favicon: %d %v", code, h)
+	}
+	// entfernt: 404 und kein Logo in der Sicht
+	if err := m.st.SetStatusLogo(ctx, p.ID, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	p, _ = m.st.StatusPage(ctx, p.ID)
+	if v, _ := m.statusView(ctx, p, "de"); v.Logo != "" {
+		t.Fatalf("logo removed: %q", v.Logo)
+	}
+	if code, _, _ := statusGet(t, base+"/logo"); code != 404 {
+		t.Fatalf("removed logo: %d", code)
+	}
+}

@@ -39,6 +39,10 @@ var (
 	stTpl = template.Must(template.New("page.html").ParseFS(stPublicFS, "statuspublic/page.html"))
 	stCSS = template.CSS(stAsset("statuspublic/style.css", true))
 	stJS  = template.JS(stAsset("statuspublic/app.js", false))
+	// Node64-Logo fuer "Bereitgestellt mit" (Schrift in currentColor, passt sich hell/dunkel an)
+	stLogo = template.HTML(strings.TrimSpace(stAsset("statuspublic/logo.svg", true)))
+	// Favicon-Rueckfall: nur die orange "64"-Marke, quadratisch
+	stFavicon = []byte(strings.TrimSpace(stAsset("statuspublic/favicon.svg", true)))
 )
 
 // stAsset liest eine eingebettete Datei und entfernt Einrueckung und Kommentarzeilen (CSS: auch Zeilenumbrueche).
@@ -71,7 +75,6 @@ const (
 // stPage sind die aufbereiteten Daten fuer page.html.
 type stPage struct {
 	o             statusRenderOpts
-	showUptime    bool
 	Lang          string
 	Nonce         string
 	Base          string
@@ -101,6 +104,9 @@ type stPage struct {
 	Incidents     []stIncid
 	IncMore       int
 	PoweredBy     bool
+	ShowUptime    bool
+	Logo          template.HTML
+	OwnLogo       string // eigenes Logo (Pfad relativ zur Seite), "" = keins
 }
 
 type stRef struct {
@@ -116,6 +122,7 @@ type stGroup struct {
 	OverallText string
 	Key         string
 	Open        bool
+	Heading     bool // false: einzelne Gruppe ohne Namen (keine Ueberschrift)
 	Counts      string
 	Items       []stItem
 }
@@ -130,6 +137,7 @@ type stItem struct {
 	Bars      template.HTML
 	BarsLabel string
 	FirstDay  string
+	NoData    string // title fuer "–" (keine Daten)
 }
 
 type stMaint struct {
@@ -247,6 +255,9 @@ func (p *stPage) reason(r string) string {
 
 var stColorRe = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
+// statusNode64Favicon liefert das Node64-Favicon (SVG, quadratisch) als Rueckfall fuer <Base>/favicon.
+func statusNode64Favicon() []byte { return append([]byte(nil), stFavicon...) }
+
 // renderStatusHTML schreibt die ganze Seite (v darf bei NeedPassword nil sein).
 func renderStatusHTML(w io.Writer, v *StatusView, o statusRenderOpts) error {
 	p := stBuildPage(v, o)
@@ -265,7 +276,7 @@ func stBuildPage(v *StatusView, o statusRenderOpts) *stPage {
 	}
 	p := &stPage{o: o, Lang: o.Lang, Nonce: o.Nonce, Base: strings.TrimRight(o.Base, "/"), NoIndex: o.NoIndex,
 		Preview: o.Preview, NeedPassword: o.NeedPassword, PasswordWrong: o.PasswordWrong, PoweredBy: v.PoweredBy,
-		showUptime: v.ShowUptime}
+		ShowUptime: v.ShowUptime, Logo: stLogo, OwnLogo: strings.TrimLeft(strings.TrimSpace(v.Logo), "/")}
 	if p.Lang != "en" {
 		p.Lang = "de"
 	}
@@ -283,6 +294,9 @@ func stBuildPage(v *StatusView, o statusRenderOpts) *stPage {
 	case "light", "dark":
 		p.Scheme = v.Theme
 		cls = append(cls, "t-"+v.Theme)
+	}
+	if !v.ShowUptime {
+		cls = append(cls, "nu")
 	}
 	p.HTMLClass = strings.Join(cls, " ")
 	css := string(stCSS)
@@ -306,7 +320,13 @@ func stBuildPage(v *StatusView, o statusRenderOpts) *stPage {
 		total += len(g.Items)
 	}
 	for _, g := range v.Groups {
-		p.Groups = append(p.Groups, p.group(g, total))
+		sg := p.group(g, total)
+		// Ueberschrift immer, ausser bei einer einzigen Gruppe ohne Namen; mehrere namenlose heissen "Weitere"
+		sg.Heading = strings.TrimSpace(g.Name) != "" || len(v.Groups) > 1
+		if strings.TrimSpace(sg.Name) == "" && sg.Heading {
+			sg.Name = p.T("hc.status.pub.group_other")
+		}
+		p.Groups = append(p.Groups, sg)
 	}
 	for _, g := range p.Groups {
 		for _, it := range g.Items {
@@ -373,7 +393,7 @@ func stBuildPage(v *StatusView, o statusRenderOpts) *stPage {
 		"h24": p.T("hc.status.pub.det.h24"), "d7": p.T("hc.status.pub.det.d7"), "d30": p.T("hc.status.pub.det.d30"),
 		"lat": p.T("hc.status.pub.det.latency"), "since": p.T("hc.status.pub.det.since"), "hrs": p.T("hc.status.pub.det.hours"),
 		"inc": p.T("hc.status.pub.det.incidents"), "noinc": p.T("hc.status.pub.det.noinc"), "run": p.T("hc.status.pub.inc.running"),
-		"load": p.T("hc.status.pub.det.loading"), "nodet": p.T("hc.status.pub.det.unavailable"), "stale": p.T("hc.status.pub.stale"),
+		"load": p.T("hc.status.pub.det.loading"), "nodet": p.T("hc.status.pub.det.unavailable"), "stale": p.T("hc.status.pub.stale"), "nodata": p.T("hc.status.pub.nodata"),
 		"dm": p.T("hc.status.pub.dur.m", "m", "{m}"), "dh": p.T("hc.status.pub.dur.h", "h", "{h}", "m", "{m}"),
 		"dd": p.T("hc.status.pub.dur.d", "d", "{d}", "h", "{h}"),
 	}
@@ -421,8 +441,10 @@ func (p *stPage) group(g StatusViewGroup, total int) stGroup {
 		if st != "up" && st != "paused" && st != "unknown" {
 			flag = true
 		}
-		if it.Uptime >= 0 && p.showUptime {
-			si.Uptime = p.pct(it.Uptime)
+		// immer ein Wert (auch "–"), damit Zeilen und Kacheln gleich hoch und die Spalten buendig bleiben
+		si.Uptime = p.pct(it.Uptime)
+		if it.Uptime < 0 {
+			si.NoData = p.T("hc.status.pub.nodata")
 		}
 		if p.Layout == "list" && len(it.Bars) > 0 {
 			si.Bars, si.BarsLabel = p.bars(it.Bars)

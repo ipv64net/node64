@@ -2124,11 +2124,13 @@
           "label": "Passwort",
           "submit": "Anzeigen",
           "wrong": "Passwort falsch."
-        }
+        },
+        "nodata": "Keine Daten",
+        "group_other": "Weitere"
       },
       "hint": "Öffentliche Statusseiten aus deinen Healthchecks: nur Namen, Zustand, Verfügbarkeit, Störungen, Wartungen und Ankündigungen – nie Ziele, IPs oder Fehlermeldungen.",
       "empty": "Noch keine Statusseite. Statusseiten sind aus, bis du eine anlegst und einschaltest.",
-      "empty_hint": "Nach außen kommt eine Seite über die PROXY64-Hostart „Statusseite“ (eigene Domain, Zertifikat, auch über CDN64) oder optional direkt auf dem Node-Port.",
+      "empty_hint": "Eingeschaltete Seiten stehen unter /status/<Adresse> auf dem Port dieser Node. Optional mit eigener Domain (auch über CDN64) über die Hostart „Statusseite“ in",
       "new": "Neue Statusseite",
       "edit": "Statusseite bearbeiten",
       "deleted": "Statusseite gelöscht.",
@@ -2142,9 +2144,9 @@
       "footer": "Fußzeile",
       "markdown_hint": "Einfaches Markdown: **fett**, *kursiv*, [Link](https://…), Listen.",
       "enabled": "Eingeschaltet",
-      "enabled_hint": "Aus = nirgends erreichbar (die Vorschau geht immer). Nach außen am besten über",
+      "enabled_hint": "Aus = nirgends erreichbar (die Vorschau geht immer).",
       "publish_node": "Auf dem Node-Port veröffentlichen (/status/…)",
-      "publish_node_hint": "Dafür muss der Node-Port von außen erreichbar sein. Besser über PROXY64 mit eigener Domain, dann bleibt der Port der Oberfläche zu.",
+      "publish_node_hint": "Der normale Weg: die Seite steht unter /status/<Adresse> auf dem Port dieser Node. Optional mit eigener Domain, Zertifikat und CDN64 über",
       "on_node": "Node-Port",
       "public_url": "Öffentliche Seite",
       "preview": "Vorschau",
@@ -2226,8 +2228,18 @@
         "item": "Eintrag ohne Check oder Anzeigename zu lang (höchstens 120 Zeichen).",
         "many": "Zu viele Gruppen oder Einträge (höchstens 50 Gruppen und 1000 Einträge).",
         "notice": "Ankündigung: Titel fehlt oder ist zu lang (200), Text höchstens 5000 Zeichen.",
-        "password": "Passwort: 4–72 Zeichen."
-      }
+        "password": "Passwort: 4–72 Zeichen.",
+        "logo": "Logo: nur PNG, JPEG, WebP oder SVG bis 256 KiB."
+      },
+      "on_node_title": "Auf dem Node-Port unter /status/<Adresse> erreichbar",
+      "hc_groups": "Gruppen der Healthchecks übernehmen",
+      "hc_groups_hint": "Die Seite zeigt die Einträge in den Gruppen der Healthchecks; die Gruppen hier legen dann nur Auswahl und Reihenfolge fest.",
+      "hc_groups_active": "„Gruppen der Healthchecks übernehmen“ ist an: Die Seite zeigt die Einträge in den Gruppen der Healthchecks. Die Gruppen hier legen nur Auswahl und Reihenfolge fest.",
+      "logo": "Logo",
+      "logo_hint": "PNG, JPEG, WebP oder SVG, höchstens 256 KiB.",
+      "logo_replace": "Eine neue Datei ersetzt das Logo.",
+      "logo_remove": "Logo entfernen",
+      "logo_removed": "Logo entfernt."
     }
   },
   "notify": {

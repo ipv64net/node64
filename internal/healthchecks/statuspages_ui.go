@@ -1,10 +1,12 @@
 package healthchecks
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -85,6 +87,7 @@ func (m *Module) statusPagesRoutes(mux *http.ServeMux, page func(http.HandlerFun
 	mux.Handle("GET "+statusPagesPath+"/{id}/edit", page(m.pageStatusForm))
 	mux.Handle("POST "+statusPagesPath+"/{id}/edit", page(m.pageStatusSave))
 	mux.Handle("POST "+statusPagesPath+"/{id}/delete", page(m.pageStatusDelete))
+	mux.Handle("POST "+statusPagesPath+"/{id}/logo/delete", page(m.pageStatusLogoDelete))
 	// Vorschau (auch ausgeschaltete Seiten); Unterpfade (z. B. status.json, Details) reicht statusPreview selbst weiter
 	mux.Handle("GET "+statusPagesPath+"/{id}/preview", page(m.pageStatusPreview))
 	mux.Handle("GET "+statusPagesPath+"/{id}/preview/{rest...}", page(m.pageStatusPreview))
@@ -143,9 +146,10 @@ func (m *Module) statusCounts(ctx context.Context) (items, open map[int64]int) {
 
 // ---------------------------------------------------------------- Formular
 
-// newStatusPage: Standardwerte einer neuen Seite (wie in der Migration).
+// newStatusPage: Standardwerte einer neuen Seite (wie in der Migration; abweichend davon auf dem Node-Port
+// veroeffentlicht, das ist der normale Weg, PROXY64 der optionale).
 func newStatusPage() *StatusPage {
-	return &StatusPage{Layout: "list", Theme: "auto", Days: 90, ShowUptime: true, ShowHistory: true, RefreshSec: 60, NoIndex: true, PoweredBy: true,
+	return &StatusPage{PublishNode: true, Layout: "list", Theme: "auto", Days: 90, ShowUptime: true, ShowHistory: true, RefreshSec: 60, NoIndex: true, PoweredBy: true,
 		Groups: []StatusGroup{}}
 }
 
@@ -226,6 +230,7 @@ func statusPageFromForm(r *http.Request, p *StatusPage) {
 	p.Title, p.Slug = v("title"), strings.ToLower(v("slug"))
 	p.Description, p.Footer = strings.TrimSpace(r.PostFormValue("description")), strings.TrimSpace(r.PostFormValue("footer"))
 	p.Enabled, p.PublishNode, p.ShowUptime, p.ShowHistory, p.NoIndex, p.PoweredBy = on("enabled"), on("publish_node"), on("show_uptime"), on("show_history"), on("noindex"), on("powered_by")
+	p.HCGroups = on("hc_groups")
 	p.Layout, p.Theme, p.Lang = v("layout"), v("theme"), v("lang")
 	p.Accent = ""
 	if on("accent_on") {
@@ -445,13 +450,18 @@ func (m *Module) saveStatusPage(ctx context.Context, p *StatusPage) error {
 
 func (m *Module) pageStatusSave(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	_ = r.ParseForm()
+	perr := parseStatusForm(r)
 	p := newStatusPage()
 	edit := r.PathValue("id") != ""
 	if edit {
 		if p = m.loadStatusPage(w, r); p == nil {
 			return
 		}
+	}
+	if perr != nil { // z. B. Datei groesser als das Limit der Oberflaeche: Eingaben sind weg, Hinweis am Logo
+		msg := m.g.T(r, "hc.status.err.logo")
+		m.renderStatusForm(w, r, http.StatusUnprocessableEntity, statusFormData{Page: p, Edit: edit, Errors: map[string]string{"logo": msg}, Error: msg})
+		return
 	}
 	statusPageFromForm(r, p)
 	d := statusFormData{Page: p, Edit: edit}
@@ -471,7 +481,18 @@ func (m *Module) pageStatusSave(w http.ResponseWriter, r *http.Request) {
 	default:
 		p.Password = r.PostFormValue("password")
 	}
-	if err := m.saveStatusPage(ctx, p); err != nil {
+	// Logo vor dem Speichern pruefen (Fehler am Feld, nichts gespeichert); gesetzt wird es nach dem Speichern,
+	// damit auch eine neue Seite es gleich bekommt
+	logo, ltype, err := statusLogoUpload(r)
+	if err == nil {
+		err = m.saveStatusPage(ctx, p)
+	}
+	if err == nil && logo != nil {
+		if err = m.st.SetStatusLogo(ctx, p.ID, logo, ltype); err == nil {
+			m.auditText(r, "status_page.logo", p.Title+" ("+p.Slug+")")
+		}
+	}
+	if err != nil {
 		var fe *StatusFieldError
 		if !errors.As(err, &fe) {
 			m.fail(w, r, err)
@@ -485,6 +506,92 @@ func (m *Module) pageStatusSave(w http.ResponseWriter, r *http.Request) {
 	}
 	m.auditText(r, map[bool]string{true: "status_page.update", false: "status_page.create"}[edit], p.Title+" ("+p.Slug+")")
 	m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
+	http.Redirect(w, r, statusPagesPath+"/"+strconv.FormatInt(p.ID, 10)+"/edit", http.StatusSeeOther)
+}
+
+// parseStatusForm liest das Formular (multipart wegen des Logos, sonst urlencoded).
+func parseStatusForm(r *http.Request) error {
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
+		return r.ParseMultipartForm(StatusLogoMax + 1<<20)
+	}
+	return r.ParseForm()
+}
+
+// statusLogoUpload liest ein hochgeladenes Logo (Feld "logo"); nil = keins hochgeladen.
+func statusLogoUpload(r *http.Request) ([]byte, string, error) {
+	if r.MultipartForm == nil || len(r.MultipartForm.File["logo"]) == 0 {
+		return nil, "", nil
+	}
+	fh := r.MultipartForm.File["logo"][0]
+	if fh.Size == 0 {
+		return nil, "", nil // leeres Dateifeld
+	}
+	if fh.Size > StatusLogoMax {
+		return nil, "", fieldErr("logo", "hc.status.err.logo")
+	}
+	f, err := fh.Open()
+	if err != nil {
+		return nil, "", err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, StatusLogoMax+1))
+	if err != nil {
+		return nil, "", err
+	}
+	ctype, ok := statusLogoType(data)
+	if !ok || len(data) > StatusLogoMax {
+		return nil, "", fieldErr("logo", "hc.status.err.logo")
+	}
+	return data, ctype, nil
+}
+
+// statusLogoType bestimmt das Format nach dem Inhalt (nicht nach Name oder Header): PNG, JPEG, WebP oder SVG.
+func statusLogoType(data []byte) (string, bool) {
+	if len(data) == 0 {
+		return "", false
+	}
+	if ct := http.DetectContentType(data); StatusLogoTypes[ct] && ct != "image/svg+xml" {
+		return ct, true
+	}
+	// SVG: nach Leerraum, XML-Kopf, Kommentaren und DOCTYPE muss <svg kommen
+	s := bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})
+	for n := 0; n < 20; n++ {
+		s = bytes.TrimLeft(s, " \t\r\n")
+		var end []byte
+		switch {
+		case bytes.HasPrefix(s, []byte("<?xml")):
+			end = []byte("?>")
+		case bytes.HasPrefix(s, []byte("<!--")):
+			end = []byte("-->")
+		case bytes.HasPrefix(s, []byte("<!DOCTYPE")), bytes.HasPrefix(s, []byte("<!doctype")):
+			end = []byte(">")
+		default:
+			if len(s) > 4 && bytes.HasPrefix(s, []byte("<svg")) && strings.IndexByte(" \t\r\n>/", s[4]) >= 0 {
+				return "image/svg+xml", true
+			}
+			return "", false
+		}
+		i := bytes.Index(s, end)
+		if i < 0 {
+			return "", false
+		}
+		s = s[i+len(end):]
+	}
+	return "", false
+}
+
+// pageStatusLogoDelete entfernt das Logo einer Seite.
+func (m *Module) pageStatusLogoDelete(w http.ResponseWriter, r *http.Request) {
+	p := m.loadStatusPage(w, r)
+	if p == nil {
+		return
+	}
+	if err := m.st.SetStatusLogo(r.Context(), p.ID, nil, ""); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	m.auditText(r, "status_page.logo_remove", p.Title+" ("+p.Slug+")")
+	m.g.Flash(w, r, "success", m.g.T(r, "hc.status.logo_removed"))
 	http.Redirect(w, r, statusPagesPath+"/"+strconv.FormatInt(p.ID, 10)+"/edit", http.StatusSeeOther)
 }
 

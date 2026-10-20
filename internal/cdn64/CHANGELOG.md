@@ -1,5 +1,11 @@
 # Änderungen – PROXY64
 
+## 1.18.1 – 2026-10-20
+
+### Behoben
+- Ländersperre: Eine Länderliste, die genau während des Ladens für einen neuen Host gebraucht wurde, konnte bis zur
+  nächsten Aktualisierung fehlen.
+
 ## 1.18.0 – 2026-10-20
 
 ### Neu

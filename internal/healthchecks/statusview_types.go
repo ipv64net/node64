@@ -24,6 +24,8 @@ type StatusView struct {
 	Maintenance []StatusViewMaint `json:"maintenance"` // laufend und die naechsten 7 Tage
 	Incidents   []StatusViewIncid `json:"incidents"`   // automatisch aus den Checks, letzte 30 Tage (bei ShowHistory)
 	Generated   time.Time         `json:"generated"`
+
+	Logo string `json:"logo,omitempty"` // eigenes Logo: Pfad relativ zur Seite ("logo?v=<unix>"), leer = keins (dann Node64)
 }
 
 // StatusViewGroup ist eine Gruppe.

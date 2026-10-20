@@ -284,7 +284,7 @@ func (m *Module) geoRefresh(ctx context.Context) {
 	}
 	g.mu.Lock()
 	for c := range g.sets {
-		if !slices.Contains(need, c) {
+		if !slices.Contains(g.need, c) { // aktueller Stand (ein Host kann waehrend des Ladens dazugekommen sein)
 			delete(g.sets, c)
 			delete(g.state, c)
 		}

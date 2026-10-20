@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"image"
+	"image/png"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -139,6 +142,9 @@ func TestStatusPagesForm(t *testing.T) {
 	if w := e.do("GET", "/healthchecks/status-pages/new", nil, ""); w.Code != 200 || len(e.formData().Checks) != 3 {
 		t.Fatalf("new form: %d", w.Code)
 	}
+	if d := e.formData(); !d.Page.PublishNode || d.Page.HCGroups {
+		t.Fatalf("new form defaults: publish_node %v hc_groups %v", d.Page.PublishNode, d.Page.HCGroups)
+	}
 
 	// Gruppe anlegen (nur Formular, nichts gespeichert)
 	v := baseForm(&StatusPage{Title: "Meine Dienste"})
@@ -222,6 +228,7 @@ func TestStatusPagesForm(t *testing.T) {
 	v.Set("accent_on", "on")
 	v.Set("accent", "#ff8800")
 	v.Set("password", "geheim123")
+	v.Set("hc_groups", "on")
 	w := e.form("/healthchecks/status-pages/new", v)
 	if w.Code != http.StatusSeeOther {
 		t.Fatalf("save: %d %s", w.Code, w.Body)
@@ -231,7 +238,7 @@ func TestStatusPagesForm(t *testing.T) {
 		t.Fatalf("pages: %d", len(list))
 	}
 	p, _ := e.m.st.StatusPage(ctx, list[0].ID)
-	if p.Slug != "meine-dienste" || !p.Enabled || p.PublishNode || p.Accent != "#ff8800" || !p.HasPassword || !p.NoIndex || p.PoweredBy {
+	if p.Slug != "meine-dienste" || !p.Enabled || p.PublishNode || p.Accent != "#ff8800" || !p.HasPassword || !p.NoIndex || p.PoweredBy || !p.HCGroups {
 		t.Fatalf("saved: %+v", p)
 	}
 	if len(p.Groups) != 2 || p.Groups[1].Name != "Webseiten" || p.Groups[1].Items[0].Token != a || p.Groups[1].Items[0].Label != "Shop" || p.Groups[1].Items[1].Token != b {
@@ -388,6 +395,18 @@ func TestStatusPagesAPI(t *testing.T) {
 	}
 	id := strconv.FormatInt(p.ID, 10)
 	// Slug vergeben: 409
+	if !p.PublishNode || p.HCGroups {
+		t.Fatalf("api defaults: %s", body)
+	}
+	code, body = e.api("POST", "/api/status-pages", map[string]any{"title": "Nur Proxy", "publish_node": false, "hc_groups": true})
+	var q StatusPage
+	_ = json.Unmarshal(body, &q)
+	if code != 201 || q.PublishNode || !q.HCGroups {
+		t.Fatalf("api publish_node false: %d %s", code, body)
+	}
+	if code, body = e.api("PUT", "/api/status-pages/"+strconv.FormatInt(q.ID, 10), map[string]any{"hc_groups": false}); code != 200 || !strings.Contains(string(body), `"hc_groups":false`) || !strings.Contains(string(body), `"publish_node":false`) {
+		t.Fatalf("api put hc_groups: %d %s", code, body)
+	}
 	if code, body = e.api("POST", "/api/status-pages", map[string]any{"title": "Zwei", "slug": "oeffentlich"}); code != 409 || !strings.Contains(string(body), "slug_taken") {
 		t.Fatalf("409: %d %s", code, body)
 	}
@@ -475,7 +494,7 @@ func (fakeView) Time(t time.Time) string          { return t.Format(time.RFC3339
 // Die Templates der Verwaltung lassen sich mit Beispieldaten ausfuehren (Tippfehler fallen sonst erst im Betrieb auf).
 func TestStatusPagesTemplates(t *testing.T) {
 	funcs := template.FuncMap{"add": func(a, b int) int { return a + b }, "split": strings.Fields}
-	p := &StatusPage{ID: 3, Slug: "s", Title: "T", Enabled: true, PublishNode: true, Layout: "list", Theme: "auto", Days: 90, RefreshSec: 60, HasPassword: true,
+	p := &StatusPage{ID: 3, Slug: "s", Title: "T", Enabled: true, PublishNode: true, HCGroups: true, Layout: "list", Theme: "auto", Days: 90, RefreshSec: 60, HasPassword: true, HasLogo: true, LogoUpdated: time.Now(),
 		Groups: []StatusGroup{{Name: "A", Items: []StatusItem{{Token: "t1"}, {Token: "t2", Label: "L"}}}, {Name: "", Items: []StatusItem{}}}}
 	now := time.Now()
 	cases := map[string]any{
@@ -495,7 +514,8 @@ func TestStatusPagesTemplates(t *testing.T) {
 		if err := tpl.Execute(&buf, fakeView{Data: data, CSRF: "c", Version: "v"}); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		if name == "status_page_form" && (!strings.Contains(buf.String(), `name="it_tok" value="t1"`) || !strings.Contains(buf.String(), "statuspages.js")) {
+		if name == "status_page_form" && (!strings.Contains(buf.String(), `name="it_tok" value="t1"`) || !strings.Contains(buf.String(), "statuspages.js") || !strings.Contains(buf.String(), "hc.status.hc_groups_active") ||
+			!strings.Contains(buf.String(), "/preview/logo?v=") || !strings.Contains(buf.String(), `enctype="multipart/form-data"`)) {
 			t.Fatalf("form output: %s", buf.String())
 		}
 	}
@@ -506,5 +526,135 @@ func TestStatusPagesTemplates(t *testing.T) {
 		if err := tpl.Execute(io.Discard, fakeView{Data: data}); err != nil {
 			t.Fatalf("%s empty: %v", name, err)
 		}
+	}
+}
+
+// multipartForm baut ein Formular mit optionaler Datei im Feld "logo".
+func multipartForm(v url.Values, file []byte, name string) (io.Reader, string) {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for k, vals := range v {
+		for _, x := range vals {
+			_ = mw.WriteField(k, x)
+		}
+	}
+	if name != "" {
+		fw, _ := mw.CreateFormFile("logo", name)
+		_, _ = fw.Write(file)
+	}
+	_ = mw.Close()
+	return &buf, mw.FormDataContentType()
+}
+
+func testPNG() []byte {
+	var buf bytes.Buffer
+	_ = png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 2, 2)))
+	return buf.Bytes()
+}
+
+func TestStatusLogoType(t *testing.T) {
+	for in, want := range map[string]string{
+		string(testPNG()):                           "image/png",
+		"\xff\xd8\xff\xe0\x00\x10JFIF\x00":          "image/jpeg",
+		"RIFF\x10\x00\x00\x00WEBPVP8 ":              "image/webp",
+		`<svg xmlns="http://www.w3.org/2000/svg"/>`: "image/svg+xml",
+		"\xef\xbb\xbf \n<?xml version=\"1.0\"?>\n<!-- Logo -->\n<!DOCTYPE svg>\n<svg>": "image/svg+xml",
+		"<svgx>":         "",
+		"<html><svg>":    "",
+		"GIF89a\x01\x00": "",
+		"hallo":          "",
+		"":               "",
+	} {
+		got, ok := statusLogoType([]byte(in))
+		if got != want || ok != (want != "") {
+			t.Errorf("%q: %q %v, want %q", in[:min(len(in), 20)], got, ok, want)
+		}
+	}
+}
+
+func TestStatusPageLogo(t *testing.T) {
+	e := newSPEnv(t)
+	ctx := t.Context()
+	pngData := testPNG()
+	// neue Seite mit Logo
+	body, ct := multipartForm(baseForm(&StatusPage{Title: "Logo", Slug: "logo-test"}), pngData, "logo.png")
+	if w := e.do("POST", "/healthchecks/status-pages/new", body, ct); w.Code != http.StatusSeeOther || !e.audited("status_page.logo") {
+		t.Fatalf("create with logo: %d %s", w.Code, w.Body)
+	}
+	p, err := e.m.st.StatusPageBySlug(ctx, "logo-test")
+	if err != nil || !p.HasLogo || p.LogoUpdated.IsZero() {
+		t.Fatalf("logo missing: %+v %v", p, err)
+	}
+	if data, ctype, _, _ := e.m.st.StatusLogo(ctx, p.ID); ctype != "image/png" || !bytes.Equal(data, pngData) {
+		t.Fatalf("stored: %s %d", ctype, len(data))
+	}
+	edit := "/healthchecks/status-pages/" + strconv.FormatInt(p.ID, 10) + "/edit"
+	// falscher Inhalt (Name egal): Fehler am Feld, Logo bleibt
+	body, ct = multipartForm(baseForm(p), []byte("kein bild"), "logo.png")
+	if w := e.do("POST", edit, body, ct); w.Code != http.StatusUnprocessableEntity || e.formData().Errors["logo"] != "hc.status.err.logo" {
+		t.Fatalf("bad logo: %d", w.Code)
+	}
+	// zu gross
+	body, ct = multipartForm(baseForm(p), append([]byte("<svg>"), make([]byte, StatusLogoMax)...), "big.svg")
+	if w := e.do("POST", edit, body, ct); w.Code != http.StatusUnprocessableEntity || e.formData().Errors["logo"] != "hc.status.err.logo" {
+		t.Fatalf("big logo: %d", w.Code)
+	}
+	// ohne Datei speichern: Logo bleibt; SVG ersetzt es
+	body, ct = multipartForm(baseForm(p), nil, "")
+	if w := e.do("POST", edit, body, ct); w.Code != http.StatusSeeOther {
+		t.Fatalf("save without file: %d", w.Code)
+	}
+	if _, ctype, _, _ := e.m.st.StatusLogo(ctx, p.ID); ctype != "image/png" {
+		t.Fatalf("logo lost: %q", ctype)
+	}
+	body, ct = multipartForm(baseForm(p), []byte(`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"></svg>`), "l.svg")
+	if w := e.do("POST", edit, body, ct); w.Code != http.StatusSeeOther {
+		t.Fatalf("svg: %d", w.Code)
+	}
+	if _, ctype, _, _ := e.m.st.StatusLogo(ctx, p.ID); ctype != "image/svg+xml" {
+		t.Fatalf("svg type: %q", ctype)
+	}
+	// Formular zeigt Vorschau und Entfernen
+	e.do("GET", edit, nil, "")
+	if !e.formData().Page.HasLogo {
+		t.Fatal("form without logo")
+	}
+	// entfernen
+	if w := e.form("/healthchecks/status-pages/"+strconv.FormatInt(p.ID, 10)+"/logo/delete", url.Values{}); w.Code != http.StatusSeeOther || !e.audited("status_page.logo_remove") {
+		t.Fatalf("remove: %d", w.Code)
+	}
+	if data, _, _, _ := e.m.st.StatusLogo(ctx, p.ID); data != nil {
+		t.Fatal("logo not removed")
+	}
+
+	// API
+	id := strconv.FormatInt(p.ID, 10)
+	put := func(data []byte, ctype string) (int, []byte) {
+		w := e.do("PUT", "/api/status-pages/"+id+"/logo", bytes.NewReader(data), ctype)
+		return w.Code, w.Body.Bytes()
+	}
+	if code, b := put(pngData, "image/png"); code != 200 || !strings.Contains(string(b), `"has_logo":true`) || !strings.Contains(string(b), `"logo_updated"`) {
+		t.Fatalf("api put: %d %s", code, b)
+	}
+	if code, _ := put(pngData, ""); code != 200 {
+		t.Fatalf("api put without type: %d", code)
+	}
+	if code, b := put([]byte("text"), "image/png"); code != http.StatusUnsupportedMediaType || !strings.Contains(string(b), "hc.status.err.logo") {
+		t.Fatalf("api 415: %d %s", code, b)
+	}
+	if code, _ := put(pngData, "image/jpeg"); code != http.StatusUnsupportedMediaType {
+		t.Fatalf("api type mismatch: %d", code)
+	}
+	if code, _ := put(append(pngData, make([]byte, StatusLogoMax)...), "image/png"); code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("api 413: %d", code)
+	}
+	if w := e.do("PUT", "/api/status-pages/999/logo", bytes.NewReader(pngData), "image/png"); w.Code != 404 {
+		t.Fatalf("api 404: %d", w.Code)
+	}
+	if code, _ := e.api("DELETE", "/api/status-pages/"+id+"/logo", nil); code != 204 {
+		t.Fatalf("api delete: %d", code)
+	}
+	if code, b := e.api("GET", "/api/status-pages/"+id, nil); code != 200 || !strings.Contains(string(b), `"has_logo":false`) {
+		t.Fatalf("api after delete: %d %s", code, b)
 	}
 }

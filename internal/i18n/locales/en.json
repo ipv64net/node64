@@ -2124,11 +2124,13 @@
           "label": "Password",
           "submit": "Show",
           "wrong": "Wrong password."
-        }
+        },
+        "nodata": "No data",
+        "group_other": "Other"
       },
       "hint": "Public status pages from your health checks: only names, state, uptime, incidents, maintenance and announcements – never targets, IPs or error messages.",
       "empty": "No status page yet. Status pages are off until you create one and switch it on.",
-      "empty_hint": "A page goes public through the PROXY64 host type “Status page” (own domain, certificate, also via CDN64) or optionally directly on the node port.",
+      "empty_hint": "Enabled pages are served at /status/<address> on this node's port. Optionally with your own domain (also via CDN64) through the host type “Status page” in",
       "new": "New status page",
       "edit": "Edit status page",
       "deleted": "Status page deleted.",
@@ -2142,9 +2144,9 @@
       "footer": "Footer",
       "markdown_hint": "Simple Markdown: **bold**, *italic*, [link](https://…), lists.",
       "enabled": "Enabled",
-      "enabled_hint": "Off = not reachable anywhere (the preview always works). Best published through",
+      "enabled_hint": "Off = not reachable anywhere (the preview always works).",
       "publish_node": "Publish on the node port (/status/…)",
-      "publish_node_hint": "This requires the node port to be reachable from outside. Better use PROXY64 with your own domain so the admin port stays closed.",
+      "publish_node_hint": "The usual way: the page is served at /status/<address> on this node's port. Optionally with your own domain, certificate and CDN64 through",
       "on_node": "Node port",
       "public_url": "Public page",
       "preview": "Preview",
@@ -2226,8 +2228,18 @@
         "item": "Entry without check or display name too long (at most 120 characters).",
         "many": "Too many groups or entries (at most 50 groups and 1000 entries).",
         "notice": "Announcement: title missing or too long (200), text at most 5000 characters.",
-        "password": "Password: 4–72 characters."
-      }
+        "password": "Password: 4–72 characters.",
+        "logo": "Logo: only PNG, JPEG, WebP or SVG up to 256 KiB."
+      },
+      "on_node_title": "Reachable on the node port at /status/<address>",
+      "hc_groups": "Use the health check groups",
+      "hc_groups_hint": "The page shows the entries in the groups of the health checks; the groups here then only set selection and order.",
+      "hc_groups_active": "“Use the health check groups” is on: the page shows the entries in the groups of the health checks. The groups here only set selection and order.",
+      "logo": "Logo",
+      "logo_hint": "PNG, JPEG, WebP or SVG, at most 256 KiB.",
+      "logo_replace": "A new file replaces the logo.",
+      "logo_remove": "Remove logo",
+      "logo_removed": "Logo removed."
     }
   },
   "notify": {

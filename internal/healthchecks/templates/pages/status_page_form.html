@@ -13,7 +13,7 @@
 </div>
 {{if $d.Error}}<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle"></i> {{$d.Error}}</div>{{end}}
 {{if $d.Dirty}}<div class="alert alert-warning py-2 small"><i class="bi bi-pencil"></i> {{.T "hc.status.unsaved"}}</div>{{end}}
-<form method="post" action="{{$act}}" id="sp-form">
+<form method="post" action="{{$act}}" id="sp-form" enctype="multipart/form-data">
 <input type="hidden" name="_csrf" value="{{.CSRF}}">
 {{/* erster Knopf im Formular: Enter in einem Feld speichert (und loest keine Aktion bei Gruppen aus) */}}
 <button type="submit" name="op" value="save" class="visually-hidden" tabindex="-1" aria-hidden="true">{{.T "common.save"}}</button>
@@ -46,9 +46,9 @@
 					</div>
 					<div class="col-12">
 						<div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="enabled" id="sp-enabled"{{if $p.Enabled}} checked{{end}}><label class="form-check-label" for="sp-enabled">{{.T "hc.status.enabled"}}</label></div>
-						<div class="form-text mt-0 mb-2">{{.T "hc.status.enabled_hint"}} <a href="/cdn64">{{.T "nav.proxy"}}</a></div>
+						<div class="form-text mt-0 mb-2">{{.T "hc.status.enabled_hint"}}</div>
 						<div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="publish_node" id="sp-publish"{{if $p.PublishNode}} checked{{end}}><label class="form-check-label" for="sp-publish">{{.T "hc.status.publish_node"}}</label></div>
-						<div class="form-text mt-0 text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{.T "hc.status.publish_node_hint"}}</div>
+						<div class="form-text mt-0"><i class="bi bi-info-circle"></i> {{.T "hc.status.publish_node_hint"}} <a href="/cdn64">{{.T "nav.proxy"}}</a></div>
 					</div>
 				</div>
 			</div>
@@ -96,6 +96,18 @@
 						<div class="form-check"><input class="form-check-input" type="checkbox" name="show_uptime" id="sp-uptime"{{if $p.ShowUptime}} checked{{end}}><label class="form-check-label" for="sp-uptime">{{.T "hc.status.show_uptime"}}</label></div>
 						<div class="form-check"><input class="form-check-input" type="checkbox" name="show_history" id="sp-history"{{if $p.ShowHistory}} checked{{end}}><label class="form-check-label" for="sp-history">{{.T "hc.status.show_history"}}</label></div>
 						<div class="form-check"><input class="form-check-input" type="checkbox" name="powered_by" id="sp-powered"{{if $p.PoweredBy}} checked{{end}}><label class="form-check-label" for="sp-powered">{{.T "hc.status.powered_by"}}</label></div>
+						<div class="form-check"><input class="form-check-input" type="checkbox" name="hc_groups" id="sp-hcgroups"{{if $p.HCGroups}} checked{{end}}><label class="form-check-label" for="sp-hcgroups">{{.T "hc.status.hc_groups"}}</label></div>
+						<div class="form-text mt-0">{{.T "hc.status.hc_groups_hint"}}</div>
+					</div>
+					<div class="col-12">
+						<label class="form-label" for="sp-logo">{{.T "hc.status.logo"}}</label>
+						{{if and $d.Edit $p.HasLogo}}<div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+							<img src="/healthchecks/status-pages/{{$p.ID}}/preview/logo?v={{$p.LogoUpdated.Unix}}" alt="{{.T "hc.status.logo"}}" class="border rounded p-1 bg-body-tertiary" style="max-height:48px;max-width:180px">
+							<button class="btn btn-sm btn-outline-danger" type="submit" form="sp-logo-del" data-confirm="{{.T "common.confirm"}}"><i class="bi bi-trash"></i> {{.T "hc.status.logo_remove"}}</button>
+						</div>{{end}}
+						<input class="form-control form-control-sm{{if index $e "logo"}} is-invalid{{end}}" type="file" id="sp-logo" name="logo" accept="image/png,image/jpeg,image/webp,image/svg+xml">
+						{{with index $e "logo"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+						<div class="form-text">{{if $p.HasLogo}}{{.T "hc.status.logo_replace"}} {{end}}{{.T "hc.status.logo_hint"}}</div>
 					</div>
 				</div>
 			</div>
@@ -119,6 +131,7 @@
 	<div class="card-header d-flex flex-wrap align-items-center gap-2"><span class="me-auto"><i class="bi bi-collection text-primary"></i> {{.T "hc.status.groups"}} <span class="badge text-bg-secondary">{{$d.Items}}</span></span><span class="small text-body-secondary">{{.T "hc.status.groups_hint"}}</span></div>
 	<div class="card-body">
 		{{with index $e "groups"}}<div class="alert alert-danger py-2 small">{{.}}</div>{{end}}
+		{{if $p.HCGroups}}<div class="alert alert-info py-2 small"><i class="bi bi-collection"></i> {{.T "hc.status.hc_groups_active"}}</div>{{end}}
 		{{if not $p.Groups}}<p class="text-body-secondary small mb-3">{{.T "hc.status.groups_empty"}}</p>{{end}}
 		{{$ng := len $p.Groups}}
 		{{range $gi, $g := $p.Groups}}
@@ -224,5 +237,6 @@
 	<a class="btn btn-outline-secondary" href="/healthchecks/status-pages">{{.T "common.cancel"}}</a>
 </div>
 </form>
+{{if and $d.Edit $p.HasLogo}}<form method="post" action="/healthchecks/status-pages/{{$p.ID}}/logo/delete" id="sp-logo-del" class="d-none"><input type="hidden" name="_csrf" value="{{.CSRF}}"></form>{{end}}
 {{end}}
 {{define "scripts"}}<script src="/static/js/statuspages.js?v={{.Version}}"></script>{{end}}

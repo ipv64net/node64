@@ -36,10 +36,13 @@ func stTestView(layout string, groups, per, days int) *StatusView {
 				st = "paused"
 			}
 			it := StatusViewItem{ID: id, Label: fmt.Sprintf("Dienst %d-%d", g+1, i+1), State: st, Uptime: 99.987}
+			if i == 7 { // neu, noch keine Daten
+				it.State, it.Uptime = "unknown", -1
+			}
 			for d := 0; d < days; d++ {
 				day := StatusViewDay{Day: now.AddDate(0, 0, d-days+1).Format("2006-01-02"), State: "up", Uptime: 100}
 				switch {
-				case d < 3:
+				case d < 3 || it.Uptime < 0:
 					day.State, day.Uptime = "none", -1
 				case (int(id)+d)%37 == 0:
 					day.State, day.Uptime, day.DownMins = "down", 96.5, 50
@@ -101,6 +104,9 @@ func stCheckCommon(t *testing.T, h string, allow ...string) {
 	if !strings.Contains(h, `<style nonce="N0nc3">`) {
 		t.Error("style ohne nonce")
 	}
+	if !regexp.MustCompile(`<link rel="icon" href="[^"]*/favicon">`).MatchString(h) {
+		t.Error("Favicon fehlt")
+	}
 	for _, m := range stURLRe.FindAllString(h, -1) {
 		ok := m == "https://node64.de"
 		for _, a := range allow {
@@ -110,7 +116,10 @@ func stCheckCommon(t *testing.T, h string, allow ...string) {
 			t.Errorf("externe URL %q", m)
 		}
 	}
-	for _, bad := range []string{"<link", "src=", "@import", "url(http"} {
+	if strings.Count(h, "<link") != 1 {
+		t.Error("weitere <link>")
+	}
+	for _, bad := range []string{"src=", "@import", "url(http"} {
 		if strings.Contains(h, bad) {
 			t.Errorf("enthaelt %q", bad)
 		}
@@ -167,6 +176,16 @@ func TestStatusHTMLList(t *testing.T) {
 	if !strings.Contains(h, "hc.status.pub.history.notices") || !strings.Contains(h, "Mail langsam") {
 		t.Error("Verlauf Ankuendigungen fehlt")
 	}
+	// Platzhalter ohne Daten: gleiche Spalten
+	if n := strings.Count(h, `<span class="up"`); n != 240 {
+		t.Errorf("Uptime-Spalten %d", n)
+	}
+	if !strings.Contains(h, `<span class="up" title="hc.status.pub.nodata">–</span>`) {
+		t.Error("Platzhalter ohne Daten fehlt")
+	}
+	if !strings.Contains(h, `<a class="n64" href="https://node64.de" rel="noopener"><svg viewBox=`) {
+		t.Error("Logo im Footer fehlt")
+	}
 	t.Logf("Liste 240 Eintraege x 90 Tage: %d KB", len(h)/1024)
 }
 
@@ -202,6 +221,12 @@ func TestStatusHTMLTiles(t *testing.T) {
 	if strings.Contains(h, `class="bars"`) {
 		t.Error("Kacheln ohne Balken")
 	}
+	if n := strings.Count(h, `<span class="up"`); n != 100 {
+		t.Errorf("Kacheln mit Uptime-Zeile %d", n)
+	}
+	if !strings.Contains(h, `<h2 class="gh s-down">`) {
+		t.Error("Gruppenueberschrift Kacheln")
+	}
 	if !strings.Contains(h, `<li class="it tl s-down"`) || !strings.Contains(h, "99,98\u202f%") {
 		t.Error("gestoerte Kachel/Uptime")
 	}
@@ -231,7 +256,7 @@ func TestStatusHTMLCompact(t *testing.T) {
 }
 
 func TestStatusHTMLSize(t *testing.T) {
-	v := &StatusView{Title: "x", Overall: "up", Layout: "list", Generated: time.Now()}
+	v := &StatusView{Title: "x", Overall: "up", Layout: "list", PoweredBy: true, Generated: time.Now()}
 	h := stRender(t, v, statusRenderOpts{Lang: "de"})
 	if len(h) > 25<<10 {
 		t.Errorf("Grundgeruest %d Bytes > 25 KB", len(h))
@@ -360,6 +385,75 @@ func TestStatusBadgeSVG(t *testing.T) {
 	}
 }
 
+func TestStatusHTMLGroupHeadings(t *testing.T) {
+	// eine einzelne namenlose Gruppe: keine Ueberschrift
+	for _, l := range []string{"list", "tiles", "compact"} {
+		v := stTestView(l, 1, 5, 30)
+		v.Groups[0].Name = ""
+		h := stRender(t, v, statusRenderOpts{Lang: "de"})
+		if strings.Contains(h, "<summary>") || strings.Contains(h, `<h2 class="gh`) || strings.Contains(h, "group_other") {
+			t.Errorf("%s: Ueberschrift bei einzelner namenloser Gruppe", l)
+		}
+		if l != "compact" && strings.Count(h, `<li class="it `) != 5 {
+			t.Errorf("%s: Eintraege fehlen", l)
+		}
+	}
+	// mehrere Gruppen, eine ohne Namen: alle Ansichten zeigen Bloecke mit Ueberschrift, die namenlose heisst "Weitere"
+	for _, c := range []struct{ l, head string }{{"list", "<summary>"}, {"tiles", `<h2 class="gh`}, {"compact", `<span class="cnt">`}} {
+		v := stTestView(c.l, 3, 4, 30)
+		v.Groups[2].Name = ""
+		h := stRender(t, v, statusRenderOpts{Lang: "de"})
+		if n := strings.Count(h, c.head); n != 3 {
+			t.Errorf("%s: %d Gruppenkoepfe", c.l, n)
+		}
+		if !strings.Contains(h, "hc.status.pub.group_other") {
+			t.Errorf("%s: Weitere fehlt", c.l)
+		}
+	}
+	// ohne Uptime: keine Spalte, Gitter ohne Luecke
+	v := stTestView("list", 2, 4, 30)
+	v.ShowUptime = false
+	h := stRender(t, v, statusRenderOpts{Lang: "de"})
+	if strings.Contains(h, `<span class="up"`) || !strings.Contains(h, `class="l-list nu"`) {
+		t.Error("ShowUptime=false")
+	}
+}
+
+func TestStatusHTMLOwnLogo(t *testing.T) {
+	v := stTestView("list", 1, 2, 30)
+	v.Logo = "logo?v=123"
+	h := stRender(t, v, statusRenderOpts{Base: "/status/demo", Lang: "de"})
+	if !strings.Contains(h, `<img class="ol" src="/status/demo/logo?v=123" alt="Demo &lt;Status&gt;">`) {
+		t.Error("eigenes Logo im Kopf fehlt")
+	}
+	if !strings.Contains(h, `<link rel="icon" href="/status/demo/favicon">`) {
+		t.Error("Favicon-Link")
+	}
+	h = stRender(t, v, statusRenderOpts{Lang: "de", NeedPassword: true})
+	if !strings.Contains(h, `<img class="ol" src="/logo?v=123"`) {
+		t.Error("eigenes Logo im Passwortformular fehlt")
+	}
+	v.Logo = ""
+	h = stRender(t, v, statusRenderOpts{Lang: "de"})
+	if strings.Contains(h, "<img") {
+		t.Error("Logo ohne eigenes Logo")
+	}
+	v.Logo = `javascript:alert(1)`
+	if h = stRender(t, v, statusRenderOpts{Lang: "de"}); strings.Contains(h, `src="javascript`) {
+		t.Error("Logo-Pfad nicht entschaerft")
+	}
+	var x struct {
+		XMLName xml.Name `xml:"svg"`
+		ViewBox string   `xml:"viewBox,attr"`
+	}
+	if err := xml.Unmarshal(statusNode64Favicon(), &x); err != nil || len(strings.Fields(x.ViewBox)) != 4 {
+		t.Fatalf("Favicon kein gueltiges SVG: %v", err)
+	}
+	if f := strings.Fields(x.ViewBox); f[2] != f[3] {
+		t.Errorf("Favicon nicht quadratisch: %s", x.ViewBox)
+	}
+}
+
 // TestStatusHTMLPreviewFiles schreibt Beispielseiten (nur mit STATUS_PREVIEW_DIR), Texte aus locales + tmp-JSON.
 func TestStatusHTMLPreviewFiles(t *testing.T) {
 	dir := os.Getenv("STATUS_PREVIEW_DIR")
@@ -399,8 +493,14 @@ func TestStatusHTMLPreviewFiles(t *testing.T) {
 		}
 		return s
 	}
-	for _, l := range []string{"list", "tiles", "compact"} {
-		v := stTestView(l, 6, 14, 90)
+	for _, l := range []string{"list", "tiles", "compact", "tiles-weitere"} {
+		v := stTestView(strings.TrimSuffix(l, "-weitere"), 6, 14, 90)
+		if strings.HasSuffix(l, "-weitere") {
+			v.Groups[5].Name = ""
+		}
+		if l == "list" {
+			v.Logo = "logo.svg"
+		}
 		var b bytes.Buffer
 		if err := renderStatusHTML(&b, v, statusRenderOpts{Base: ".", Lang: "de", Nonce: "x", T: tr}); err != nil {
 			t.Fatal(err)
@@ -412,5 +512,7 @@ func TestStatusHTMLPreviewFiles(t *testing.T) {
 	var b bytes.Buffer
 	_ = renderStatusHTML(&b, nil, statusRenderOpts{Base: ".", Lang: "de", NeedPassword: true, PasswordWrong: true, T: tr})
 	_ = os.WriteFile(filepath.Join(dir, "status-login.html"), b.Bytes(), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "favicon"), statusNode64Favicon(), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "logo.svg"), statusNode64Favicon(), 0o644)
 	_ = os.WriteFile(filepath.Join(dir, "badge.svg"), statusBadgeSVG("status", "Betriebsbereit", "up"), 0o644)
 }

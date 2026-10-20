@@ -1,5 +1,22 @@
 # Changes – Healthchecks
 
+## 2.18.0 – 2026-10-20
+
+### New
+- Status pages: own logo per page (PNG, JPEG, WebP or SVG up to 256 KB) in the header next to the name, also as favicon;
+  without an own logo the tab shows the Node64 logo. "Provided by" shows the Node64 logo.
+- Status pages: option "use the Healthchecks groups" – entries appear in their Healthchecks groups as blocks (without a
+  group under "Other"), in all views.
+- Status pages: responsive from phone to 4K monitor (text, tiles and bars grow; more tiles per row on large screens).
+
+### Changed
+- New status pages are published directly on the node port by default; PROXY64 with an own domain is the optional way.
+
+### Fixed
+- Status pages: online checks had no availability and no daily bars. ipv64's measurements now count when there are no
+  own measurements for the day (no double counting for "both").
+- Status pages: without data a "–" is shown instead of a gap; tiles and rows keep the same height.
+
 ## 2.17.0 – 2026-10-20
 
 ### New

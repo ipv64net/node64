@@ -37,7 +37,7 @@ function show(p, j) {
 p.textContent = '';
 var g = el('div', 'dg');
 [[pct(j.uptime_24h), L.h24], [pct(j.uptime_7d), L.d7], [pct(j.uptime_30d), L.d30], [j.latency_ms >= 0 ? nf(j.latency_ms, 0) + ' ms' : '–', L.lat]].forEach(function (a) {
-var c = el('div'); c.appendChild(el('b', 0, a[0])); c.appendChild(el('span', 0, a[1])); g.appendChild(c);
+var c = el('div'), v = el('b', 0, a[0]); if (a[0] == '–') v.title = L.nodata; c.appendChild(v); c.appendChild(el('span', 0, a[1])); g.appendChild(c);
 });
 p.appendChild(g);
 if (set(j.since)) p.appendChild(el('p', 'mu', fmt(L.since, {t: ft(j.since)})));

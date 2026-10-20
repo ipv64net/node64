@@ -3516,7 +3516,8 @@
           },
           "publish_node": {
             "type": "boolean",
-            "description": "auch direkt auf dem Node-Port unter /status/<slug>"
+            "default": true,
+            "description": "direkt auf dem Node-Port unter /status/<slug> (der normale Weg); beim Anlegen ohne Angabe an. Optional über PROXY64 (Hostart status) mit eigener Domain, auch CDN64."
           },
           "layout": {
             "type": "string",
@@ -3601,6 +3602,22 @@
             "type": "string",
             "format": "date-time",
             "readOnly": true
+          },
+          "hc_groups": {
+            "type": "boolean",
+            "default": false,
+            "description": "Einträge in den Gruppen der Healthchecks zeigen; die Gruppen der Seite legen dann nur Auswahl und Reihenfolge fest"
+          },
+          "has_logo": {
+            "type": "boolean",
+            "readOnly": true,
+            "description": "eigenes Logo hochgeladen (PUT /status-pages/{id}/logo)"
+          },
+          "logo_updated": {
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true,
+            "description": "letzte Änderung des Logos (fehlt ohne Logo)"
           }
         }
       },
@@ -13944,7 +13961,7 @@
           "Healthchecks"
         ],
         "summary": "Statusseite anlegen",
-        "description": "Fehlende Felder bekommen die Standardwerte (layout list, theme auto, days 90, refresh_sec 60; show_uptime, show_history, noindex und powered_by an; enabled und publish_node aus). Ohne slug wird er aus dem Titel gebildet. password: Klartext (4–72 Zeichen), gespeichert wird ein bcrypt-Hash.",
+        "description": "Fehlende Felder bekommen die Standardwerte (layout list, theme auto, days 90, refresh_sec 60; publish_node, show_uptime, show_history, noindex und powered_by an; enabled und hc_groups aus). Ohne slug wird er aus dem Titel gebildet. password: Klartext (4–72 Zeichen), gespeichert wird ein bcrypt-Hash.",
         "requestBody": {
           "required": true,
           "content": {
@@ -14325,6 +14342,118 @@
           },
           "404": {
             "description": "Seite oder Ankündigung unbekannt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/status-pages/{id}/logo": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID der Statusseite"
+        }
+      ],
+      "put": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Logo einer Statusseite setzen",
+        "description": "Body = die Bilddatei (PNG, JPEG, WebP oder SVG, höchstens 256 KiB). Das Format wird am Inhalt erkannt; ein angegebener Content-Type image/* muss dazu passen (application/octet-stream oder leer = nur nach Inhalt).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/svg+xml": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "status page not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "größer als 256 KiB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "kein PNG, JPEG, WebP oder SVG (oder passt nicht zum Content-Type)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Logo einer Statusseite entfernen",
+        "responses": {
+          "204": {
+            "description": "entfernt"
+          },
+          "404": {
+            "description": "status page not found",
             "content": {
               "application/json": {
                 "schema": {

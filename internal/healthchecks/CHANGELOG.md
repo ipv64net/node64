@@ -1,5 +1,24 @@
 # Änderungen – Healthchecks
 
+## 2.18.0 – 2026-10-20
+
+### Neu
+- Statusseiten: eigenes Logo je Seite (PNG, JPEG, WebP oder SVG bis 256 KB) im Kopf neben dem Namen, auch als Favicon;
+  ohne eigenes Logo zeigt der Tab das Node64-Logo. „Bereitgestellt mit“ zeigt das Node64-Logo.
+- Statusseiten: Option „Gruppen der Healthchecks übernehmen“ – die Einträge erscheinen in ihren Healthchecks-Gruppen als
+  Blöcke (ohne Gruppe unter „Weitere“), in allen Ansichten.
+- Statusseiten: responsiv vom Handy bis zum 4K-Monitor (Schrift, Kacheln und Balken wachsen mit; auf großen
+  Bildschirmen mehr Kacheln je Zeile).
+
+### Geändert
+- Neue Statusseiten werden standardmäßig direkt auf dem Node-Port veröffentlicht; PROXY64 mit eigener Domain ist der
+  optionale Weg.
+
+### Behoben
+- Statusseiten: Online-Checks hatten keine Verfügbarkeit und keine Tagesbalken. Jetzt zählen die Messungen von ipv64,
+  wenn es für den Tag keine eigenen gibt (kein Doppelzählen bei „beides“).
+- Statusseiten: Ohne Daten steht „–“ statt einer leeren Stelle; Kacheln und Zeilen bleiben gleich hoch.
+
 ## 2.17.0 – 2026-10-20
 
 ### Neu

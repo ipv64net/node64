@@ -3,8 +3,10 @@ package healthchecks
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -18,6 +20,8 @@ func (m *Module) statusPagesAPIRoutes(mux *http.ServeMux, api func(http.HandlerF
 	mux.Handle("GET /api/status-pages/{id}", api(m.apiStatusPageGet))
 	mux.Handle("PUT /api/status-pages/{id}", api(m.apiStatusPageUpdate))
 	mux.Handle("DELETE /api/status-pages/{id}", api(m.apiStatusPageDelete))
+	mux.Handle("PUT /api/status-pages/{id}/logo", api(m.apiStatusLogoPut))
+	mux.Handle("DELETE /api/status-pages/{id}/logo", api(m.apiStatusLogoDelete))
 	mux.Handle("GET /api/status-pages/{id}/notices", api(m.apiStatusNotices))
 	mux.Handle("POST /api/status-pages/{id}/notices", api(m.apiStatusNoticeCreate))
 	mux.Handle("PUT /api/status-pages/{id}/notices/{nid}", api(m.apiStatusNoticeUpdate))
@@ -152,6 +156,51 @@ func (m *Module) apiStatusPageDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.auditText(r, "status_page.delete", p.Title+" ("+p.Slug+")")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// apiStatusLogoPut setzt das Logo: Body = Bild (PNG, JPEG, WebP, SVG; Format nach Inhalt), 413 zu gross, 415 falscher Typ.
+func (m *Module) apiStatusLogoPut(w http.ResponseWriter, r *http.Request) {
+	p := m.apiStatusPage(w, r)
+	if p == nil {
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(r.Body, StatusLogoMax+1))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "read body: "+err.Error())
+		return
+	}
+	if len(data) > StatusLogoMax {
+		writeJSON(w, http.StatusRequestEntityTooLarge, statusAPIError{Error: "logo larger than 256 KiB", Field: "logo", Key: "hc.status.err.logo"})
+		return
+	}
+	ctype, ok := statusLogoType(data)
+	// ein angegebener Bildtyp muss zum Inhalt passen (application/octet-stream oder leer = nur nach Inhalt)
+	if hdr, _, _ := strings.Cut(r.Header.Get("Content-Type"), ";"); ok && strings.HasPrefix(strings.TrimSpace(hdr), "image/") && strings.TrimSpace(hdr) != ctype {
+		ok = false
+	}
+	if !ok {
+		writeJSON(w, http.StatusUnsupportedMediaType, statusAPIError{Error: "logo must be png, jpeg, webp or svg", Field: "logo", Key: "hc.status.err.logo"})
+		return
+	}
+	if err := m.st.SetStatusLogo(r.Context(), p.ID, data, ctype); err != nil {
+		m.writeStatusErr(w, err)
+		return
+	}
+	m.auditText(r, "status_page.logo", p.Title+" ("+p.Slug+")")
+	m.apiStatusPageOut(w, r, http.StatusOK, p.ID)
+}
+
+func (m *Module) apiStatusLogoDelete(w http.ResponseWriter, r *http.Request) {
+	p := m.apiStatusPage(w, r)
+	if p == nil {
+		return
+	}
+	if err := m.st.SetStatusLogo(r.Context(), p.ID, nil, ""); err != nil {
+		m.writeStatusErr(w, err)
+		return
+	}
+	m.auditText(r, "status_page.logo_remove", p.Title+" ("+p.Slug+")")
 	w.WriteHeader(http.StatusNoContent)
 }
 

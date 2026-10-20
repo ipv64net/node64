@@ -1415,7 +1415,10 @@ func (m *Module) quotaReached() bool {
 
 // stale: der Check wird nicht mehr gemessen – die letzte Messung ist aelter als 3 Intervalle (mind. 5 min), etwa
 // weil die einzige messende Node offline ist. Pausierte und noch nie gemessene Checks zaehlen nicht.
-func stale(c *Check, last time.Time, state string) bool {
+func stale(c *Check, last time.Time, state string) bool { return staleAt(c, last, state, time.Now()) }
+
+// staleAt wie stale, zur Uhrzeit now (Statusseiten rechnen mit ihrer eigenen Uhr).
+func staleAt(c *Check, last time.Time, state string, now time.Time) bool {
 	if c.Paused || state == "paused" || last.IsZero() {
 		return false
 	}
@@ -1428,7 +1431,7 @@ func stale(c *Check, last time.Time, state string) bool {
 	if window < 5*time.Minute {
 		window = 5 * time.Minute
 	}
-	return time.Since(last) > window
+	return now.Sub(last) > window
 }
 
 // mergeEvents: lokale und von ipv64 bewertete Ereignisse nach Zeit (neueste zuerst), ohne doppelte Ereignis-IDs.

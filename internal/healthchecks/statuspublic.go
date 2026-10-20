@@ -143,6 +143,10 @@ func (m *Module) serveStatus(w http.ResponseWriter, r *http.Request, p *StatusPa
 		m.statusLogin(w, r, p, base, lang)
 		return
 	}
+	if rest == "logo" || rest == "favicon" || rest == "favicon.ico" {
+		m.statusLogo(w, r, p, preview, rest != "logo") // auch ohne Passwort: steht auf dem Passwortformular
+		return
+	}
 	locked := !preview && p.hash != "" && !statusAuthorized(r, p)
 	switch {
 	case rest == "" || rest == "index.html":
@@ -215,6 +219,59 @@ func (m *Module) serveStatus(w http.ResponseWriter, r *http.Request, p *StatusPa
 	case rest == "feed.atom":
 		m.statusFeed(w, r, p, base, lang, preview, v)
 	}
+}
+
+// statusFaviconFallback liefert das Node64-Logo (SVG, statushtml.go) fuer favicon ohne eigenes Logo; nil = 404 (Tests).
+var statusFaviconFallback = statusNode64Favicon
+
+// statusLogo liefert das eigene Logo (logo, favicon) bzw. fuer favicon ersatzweise das Node64-Logo. Mit ?v= (die
+// Sicht haengt den Zeitpunkt der letzten Aenderung an) lange cachebar, sonst eine Stunde; bei Passwort privat.
+func (m *Module) statusLogo(w http.ResponseWriter, r *http.Request, p *StatusPage, preview, favicon bool) {
+	data, ctype, _, err := m.st.StatusLogo(r.Context(), p.ID)
+	if err != nil && !errors.Is(err, ErrStatusPageNotFound) {
+		m.statusFail(w, r, err)
+		return
+	}
+	if data == nil {
+		if !favicon || statusFaviconFallback == nil {
+			http.NotFound(w, r)
+			return
+		}
+		data, ctype = statusFaviconFallback(), "image/svg+xml"
+		if len(data) == 0 {
+			http.NotFound(w, r)
+			return
+		}
+	}
+	sum := sha256.Sum256(data)
+	etag := `"` + hex.EncodeToString(sum[:12]) + `"`
+	h := w.Header()
+	h.Set("ETag", etag)
+	age := "3600"
+	if r.URL.Query().Get("v") != "" {
+		age = "31536000"
+	}
+	switch {
+	case preview:
+		h.Set("Cache-Control", "no-cache")
+	case p.hash != "":
+		h.Set("Cache-Control", "private, max-age="+age)
+	default:
+		h.Set("Cache-Control", "public, max-age="+age)
+	}
+	if ctype == "image/svg+xml" {
+		h.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox") // SVG kann Skripte enthalten
+	} else {
+		h.Set("Content-Security-Policy", "default-src 'none'")
+	}
+	if inm := r.Header.Get("If-None-Match"); inm != "" && strings.Contains(inm, etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	h.Set("Content-Type", ctype)
+	h.Set("Content-Length", strconv.Itoa(len(data)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
 
 // statusViewFor: oeffentlich aus dem Zwischenspeicher, die Vorschau immer frisch (ungespeicherte Aenderungen).

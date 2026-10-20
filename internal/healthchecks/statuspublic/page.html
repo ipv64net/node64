@@ -8,7 +8,8 @@
 <meta name="referrer" content="no-referrer">
 {{if .NoIndex}}<meta name="robots" content="noindex,nofollow">
 {{end}}{{if eq .Layout "compact"}}<base target="_blank">
-{{end}}<title>{{.Title}}</title>
+{{end}}<link rel="icon" href="{{.Base}}/favicon">
+<title>{{.Title}}</title>
 <style nonce="{{.Nonce}}">{{.CSS}}</style>
 </head>
 <body>
@@ -17,7 +18,7 @@
 {{- if .NeedPassword}}{{template "login" .}}{{else}}
 <div class="w">
 {{if ne .Layout "compact"}}<header class="hd">
-<h1>{{.Title}}</h1>
+<div class="ht">{{template "ownlogo" .}}<h1>{{.Title}}</h1></div>
 {{if .Desc}}<div class="md desc">{{.Desc}}</div>{{end}}
 </header>
 {{end}}
@@ -39,19 +40,19 @@
 </ul>
 {{- else if eq .Layout "tiles"}}
 {{- range .Groups}}
-<section class="grp"><h2>{{.Name}} <span class="cnt">{{.Counts}}</span></h2>
+<section class="grp">{{if .Heading}}<h2 class="gh s-{{.Overall}}"><span class="dot" aria-hidden="true"></span><span class="gn">{{.Name}}</span><span class="cnt">{{.Counts}}</span><span class="sr">{{.OverallText}}</span></h2>{{end}}
 <ul class="its">
-{{- range .Items}}<li class="it tl s-{{.State}}" id="i{{.ID}}" data-id="{{.ID}}"><div class="row"><span class="lb">{{.Label}}</span><span class="st">{{.StateText}}</span>{{if .Uptime}}<span class="up">{{.Uptime}}</span>{{end}}</div></li>{{end}}
+{{- range .Items}}<li class="it tl s-{{.State}}" id="i{{.ID}}" data-id="{{.ID}}"><div class="row"><span class="lb">{{.Label}}</span><span class="st">{{.StateText}}</span>{{if $.ShowUptime}}{{template "up" .}}{{end}}</div></li>{{end}}
 </ul></section>
 {{- end}}
 {{- else}}
 {{- range .Groups}}
-<details class="grp card s-{{.Overall}}" data-k="{{.Key}}"{{if .Open}} open{{end}}><summary><span class="dot" aria-hidden="true"></span><span class="gn">{{.Name}}</span><span class="cnt">{{.Counts}}</span></summary>
+{{if .Heading}}<details class="grp card s-{{.Overall}}" data-k="{{.Key}}"{{if .Open}} open{{end}}><summary><span class="dot" aria-hidden="true"></span><span class="gn">{{.Name}}</span><span class="cnt">{{.Counts}}</span></summary>{{else}}<div class="grp card">{{end}}
 <ul class="its">
 {{- range .Items}}
-<li class="it s-{{.State}}" id="i{{.ID}}" data-id="{{.ID}}"><div class="row"><span class="dot" aria-hidden="true"></span><span class="nm"><span class="lb">{{.Label}}</span>{{if .Problem}}<span class="tag">{{.StateText}}</span>{{else}}<span class="sr">{{.StateText}}</span>{{end}}</span>{{if .Uptime}}<span class="up">{{.Uptime}}</span>{{end}}{{if .Bars}}<span class="bars" data-s="{{.FirstDay}}" role="img" aria-label="{{.BarsLabel}}">{{.Bars}}</span>{{end}}</div></li>
+<li class="it s-{{.State}}" id="i{{.ID}}" data-id="{{.ID}}"><div class="row"><span class="dot" aria-hidden="true"></span><span class="nm"><span class="lb">{{.Label}}</span>{{if .Problem}}<span class="tag">{{.StateText}}</span>{{else}}<span class="sr">{{.StateText}}</span>{{end}}</span>{{if $.ShowUptime}}{{template "up" .}}{{end}}<span class="bars"{{if .Bars}} data-s="{{.FirstDay}}" role="img" aria-label="{{.BarsLabel}}"{{end}}>{{.Bars}}</span></div></li>
 {{- end}}
-</ul></details>
+</ul>{{if .Heading}}</details>{{else}}</div>{{end}}
 {{- end}}
 {{- end}}
 </main>
@@ -74,7 +75,7 @@
 {{- end}}
 <footer class="ft">
 {{if .Footer}}<div class="md">{{.Footer}}</div>{{end}}
-{{if .PoweredBy}}<p>{{$.T "hc.status.pub.powered"}} <a href="https://node64.de" rel="noopener">Node64</a></p>{{end}}
+{{if .PoweredBy}}<p class="pb">{{$.T "hc.status.pub.powered"}} <a class="n64" href="https://node64.de" rel="noopener">{{.Logo}}</a></p>{{end}}
 </footer>
 </div>
 <script type="application/json" id="L">{{.JSL}}</script>
@@ -86,9 +87,11 @@
 <div class="ntc card lv-{{.Level}}"><div class="nh"><span class="tag">{{.LevelText}}</span> <strong>{{.Title}}</strong>{{if .Done}} <span class="mu">· {{.DoneText}} <time datetime="{{.P.ISO .Resolved}}">{{.P.When .Resolved}}</time></span>{{end}}</div>
 {{- if .Updates}}<ol class="tlu">{{range .Updates}}<li><time class="mu" datetime="{{$.P.ISO .Time}}">{{$.P.When .Time}}</time><div class="md">{{.Text}}</div></li>{{end}}</ol>{{end}}</div>
 {{- end}}
+{{- define "ownlogo"}}{{if .OwnLogo}}<img class="ol" src="{{.Base}}/{{.OwnLogo}}" alt="{{.Title}}">{{end}}{{end}}
+{{- define "up"}}<span class="up"{{if .NoData}} title="{{.NoData}}"{{end}}>{{.Uptime}}</span>{{end}}
 {{- define "login"}}
 <main class="w lg"><form class="card" method="post" action="{{.Base}}/login">
-<h1>{{.Title}}</h1>
+<div class="ht">{{template "ownlogo" .}}<h1>{{.Title}}</h1></div>
 <p class="mu">{{$.T "hc.status.pub.pw.hint"}}</p>
 {{if .PasswordWrong}}<p class="err" role="alert">{{$.T "hc.status.pub.pw.wrong"}}</p>{{end}}
 <label for="pw">{{$.T "hc.status.pub.pw.label"}}</label>

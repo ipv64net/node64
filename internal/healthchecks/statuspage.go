@@ -37,6 +37,11 @@ type StatusPage struct {
 	CreatedAt   time.Time     `json:"created_at"`
 	UpdatedAt   time.Time     `json:"updated_at"`
 	hash        string        // gespeicherter bcrypt-Hash
+
+	HCGroups bool `json:"hc_groups"` // Eintraege nach den Gruppen der Healthchecks anzeigen (statt der Gruppen der Seite)
+
+	HasLogo     bool      `json:"has_logo"`              // eigenes Logo hochgeladen (SetStatusLogo)
+	LogoUpdated time.Time `json:"logo_updated,omitzero"` // fuer ?v= an der Logo-URL
 }
 
 // StatusGroup ist eine Gruppe auf der Seite.
@@ -147,15 +152,16 @@ type StatusFieldError struct{ Field, Key string }
 func (e *StatusFieldError) Error() string { return e.Field + ": " + e.Key }
 
 const statusPageCols = `id, slug, title, description, footer, enabled, publish_node, layout, theme, lang, accent, days, show_uptime,
-	show_history, refresh_sec, password, noindex, powered_by, created_at, updated_at`
+	show_history, refresh_sec, password, noindex, powered_by, created_at, updated_at, hc_groups, logo_type, logo_updated`
 
 func scanStatusPage(row interface{ Scan(...any) error }) (*StatusPage, error) {
 	var p StatusPage
-	var ca, ua string
+	var ca, ua, lt, lu string
 	if err := row.Scan(&p.ID, &p.Slug, &p.Title, &p.Description, &p.Footer, &p.Enabled, &p.PublishNode, &p.Layout, &p.Theme, &p.Lang,
-		&p.Accent, &p.Days, &p.ShowUptime, &p.ShowHistory, &p.RefreshSec, &p.hash, &p.NoIndex, &p.PoweredBy, &ca, &ua); err != nil {
+		&p.Accent, &p.Days, &p.ShowUptime, &p.ShowHistory, &p.RefreshSec, &p.hash, &p.NoIndex, &p.PoweredBy, &ca, &ua, &p.HCGroups, &lt, &lu); err != nil {
 		return nil, err
 	}
+	p.HasLogo, p.LogoUpdated = lt != "", pt(lu)
 	p.HasPassword = p.hash != ""
 	p.CreatedAt, p.UpdatedAt = pt(ca), pt(ua)
 	return &p, nil
@@ -241,10 +247,10 @@ func (s *Store) SaveStatusPage(ctx context.Context, p *StatusPage, hash string) 
 	defer tx.Rollback() //nolint:errcheck
 	now := ft(time.Now())
 	args := []any{p.Slug, p.Title, p.Description, p.Footer, p.Enabled, p.PublishNode, p.Layout, p.Theme, p.Lang, p.Accent, p.Days,
-		p.ShowUptime, p.ShowHistory, p.RefreshSec, p.NoIndex, p.PoweredBy}
+		p.ShowUptime, p.ShowHistory, p.RefreshSec, p.NoIndex, p.PoweredBy, p.HCGroups}
 	if p.ID == 0 {
 		res, err := tx.ExecContext(ctx, `INSERT INTO hc_status_pages (slug, title, description, footer, enabled, publish_node, layout, theme, lang,
-			accent, days, show_uptime, show_history, refresh_sec, noindex, powered_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			accent, days, show_uptime, show_history, refresh_sec, noindex, powered_by, hc_groups, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			append(args, now, now)...)
 		if err != nil {
 			return err
@@ -252,7 +258,7 @@ func (s *Store) SaveStatusPage(ctx context.Context, p *StatusPage, hash string) 
 		p.ID, _ = res.LastInsertId()
 	} else {
 		res, err := tx.ExecContext(ctx, `UPDATE hc_status_pages SET slug=?, title=?, description=?, footer=?, enabled=?, publish_node=?, layout=?,
-			theme=?, lang=?, accent=?, days=?, show_uptime=?, show_history=?, refresh_sec=?, noindex=?, powered_by=?, updated_at=? WHERE id=?`,
+			theme=?, lang=?, accent=?, days=?, show_uptime=?, show_history=?, refresh_sec=?, noindex=?, powered_by=?, hc_groups=?, updated_at=? WHERE id=?`,
 			append(args, now, p.ID)...)
 		if err != nil {
 			return err
@@ -462,4 +468,46 @@ func (s *Store) statusChanged() {
 	if s.OnStatusChange != nil {
 		s.OnStatusChange()
 	}
+}
+
+// ---------------------------------------------------------------- Logo
+
+// StatusLogoMax ist die groesste erlaubte Logo-Datei.
+const StatusLogoMax = 256 << 10
+
+// StatusLogoTypes sind die erlaubten Bildformate (SVG wird beim Ausliefern mit sandbox-CSP gesichert).
+var StatusLogoTypes = map[string]bool{"image/png": true, "image/jpeg": true, "image/webp": true, "image/svg+xml": true}
+
+// SetStatusLogo speichert das Logo einer Seite (data nil = entfernen). Das Format prueft der Aufrufer
+// (StatusLogoTypes, StatusLogoMax, Inhalt passt zum Typ).
+func (s *Store) SetStatusLogo(ctx context.Context, id int64, data []byte, ctype string) error {
+	if data != nil && (!StatusLogoTypes[ctype] || len(data) > StatusLogoMax) {
+		return fieldErr("logo", "hc.status.err.logo")
+	}
+	if data == nil {
+		ctype = ""
+	}
+	res, err := s.w.ExecContext(ctx, `UPDATE hc_status_pages SET logo = ?, logo_type = ?, logo_updated = ?, updated_at = ? WHERE id = ?`,
+		data, ctype, ft(time.Now()), ft(time.Now()), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrStatusPageNotFound
+	}
+	s.statusChanged()
+	return nil
+}
+
+// StatusLogo liefert das Logo einer Seite (data nil = keins) und den Zeitpunkt der letzten Aenderung.
+func (s *Store) StatusLogo(ctx context.Context, id int64) (data []byte, ctype string, updated time.Time, err error) {
+	var u string
+	err = s.r.QueryRowContext(ctx, `SELECT logo, logo_type, logo_updated FROM hc_status_pages WHERE id = ?`, id).Scan(&data, &ctype, &u)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, "", time.Time{}, ErrStatusPageNotFound
+	}
+	if len(data) == 0 {
+		data, ctype = nil, ""
+	}
+	return data, ctype, pt(u), err
 }

@@ -1,5 +1,11 @@
 # Changes – PROXY64
 
+## 1.18.1 – 2026-10-20
+
+### Fixed
+- Country block: a country list needed by a new host exactly while lists were loading could be missing until the next
+  refresh.
+
 ## 1.18.0 – 2026-10-20
 
 ### New

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -228,7 +229,7 @@ func (m *Module) statusItemState(c *Check, inMaint bool) (string, time.Time) {
 		return "paused", rt.Since
 	case inMaint:
 		return "maintenance", time.Time{}
-	case rt.State == "" || rt.State == scheduler.StatePending || stale(c, rt.LastCheck, string(rt.State)):
+	case rt.State == "" || rt.State == scheduler.StatePending || staleAt(c, rt.LastCheck, string(rt.State), statusNow()):
 		return "unknown", time.Time{}
 	}
 	switch rt.State {
@@ -409,6 +410,86 @@ func statusMaintCover(bounds []time.Time, wins []Maintenance, occ [][]statusSpan
 	return out
 }
 
+// statusDayAggs sammelt gruppierte Abfragen (token, schluessel, count, up) je Token-Teilmenge in Balken
+// (Schluessel ueber idx; unbekannte fallen weg, mehrere Abfragen addieren sich).
+func (m *Module) statusDayAggs(ctx context.Context, tokens []string, n int, idx map[string]int, queries ...func(ph string, args []any) (string, []any)) (map[string][]statusAgg, error) {
+	out := map[string][]statusAgg{}
+	for _, tok := range tokens {
+		out[tok] = make([]statusAgg, n)
+	}
+	for _, q := range queries {
+		err := statusTokenChunks(tokens, func(ph string, args []any) error {
+			query, qargs := q(ph, args)
+			rows, err := m.st.r.QueryContext(ctx, query, qargs...)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var tok, key string
+				var a statusAgg
+				if err := rows.Scan(&tok, &key, &a.count, &a.up); err != nil {
+					return err
+				}
+				if i, ok := idx[key]; ok && out[tok] != nil {
+					out[tok][i].add(a)
+				}
+			}
+			return rows.Err()
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// statusGroupsFor: die Gruppen der Seite oder (HCGroups) alle Eintraege nach der Healthchecks-Gruppe ihres Checks.
+// Dann Gruppen in der Reihenfolge ihres ersten Auftretens, Eintraege in Seitenreihenfolge, Checks ohne Gruppe in
+// einer Gruppe ohne Namen am Ende; geloeschte Checks bilden keine Gruppe.
+func statusGroupsFor(p *StatusPage, byTok map[string]*Check) []StatusGroup {
+	if !p.HCGroups {
+		return p.Groups
+	}
+	var out []StatusGroup
+	pos := map[string]int{}
+	var rest []StatusItem
+	for _, g := range p.Groups {
+		for _, it := range g.Items {
+			c := byTok[it.Token]
+			if c == nil {
+				continue
+			}
+			name := strings.TrimSpace(c.Group)
+			if name == "" {
+				rest = append(rest, it)
+				continue
+			}
+			i, ok := pos[name]
+			if !ok {
+				i = len(out)
+				pos[name] = i
+				out = append(out, StatusGroup{Name: name})
+			}
+			out[i].Items = append(out[i].Items, it)
+		}
+	}
+	if len(rest) > 0 {
+		out = append(out, StatusGroup{Items: rest})
+	}
+	return out
+}
+
+// statusPick waehlt die Messungen eines Balkens: eigene, sonst fremde Einzelpunkte, sonst fremde Stundenwerte.
+func statusPick(i int, sets ...[]statusAgg) statusAgg {
+	for _, s := range sets {
+		if i < len(s) && s[i].count > 0 {
+			return s[i]
+		}
+	}
+	return statusAgg{}
+}
+
 // buildStatusView rechnet die Sicht ohne Zwischenspeicher (auch fuer die Vorschau ungespeicherter Seiten).
 // Abfragen gesamt: Checks, Einstellung Zeitzone, Wartungen, Ankuendigungen und je 400 Tokens hc_daily, Messungen
 // (heute/gestern) und Stoerungen.
@@ -423,6 +504,9 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 	v := &StatusView{Slug: p.Slug, Title: p.Title, Description: p.Description, Footer: p.Footer, Layout: p.Layout, Theme: p.Theme,
 		Accent: p.Accent, Days: days, ShowUptime: p.ShowUptime, RefreshSec: p.RefreshSec, PoweredBy: p.PoweredBy, Generated: now.UTC(),
 		Groups: []StatusViewGroup{}, Notices: []StatusNotice{}, Maintenance: []StatusViewMaint{}, Incidents: []StatusViewIncid{}}
+	if p.HasLogo {
+		v.Logo = "logo?v=" + strconv.FormatInt(p.LogoUpdated.Unix(), 10) // neue Datei = neue URL (lange cachebar)
+	}
 
 	all, err := m.st.Checks(ctx)
 	if err != nil {
@@ -454,54 +538,53 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 	bounds[days] = now
 	yesterday, today := bounds[days-2], bounds[days-1]
 
-	// Tageswerte (aeltere Tage)
-	daily := map[string]map[string]statusAgg{}
-	err = statusTokenChunks(tokens, func(ph string, args []any) error {
-		rows, err := m.st.r.QueryContext(ctx, `SELECT token, day, count, up_count FROM hc_daily WHERE token IN (`+ph+`) AND day >= ? AND day < ?`,
-			append(args, labels[0], labels[days-2])...)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var tok, day string
-			var a statusAgg
-			if err := rows.Scan(&tok, &day, &a.count, &a.up); err != nil {
-				return err
-			}
-			if daily[tok] == nil {
-				daily[tok] = map[string]statusAgg{}
-			}
-			daily[tok][day] = a
-		}
-		return rows.Err()
+	// Messungen je Balken. Eigene Messungen (flags = 0) zaehlen zuerst; nur fuer Balken ohne eigene Messungen zaehlen
+	// die Messungen von ipv64 bzw. anderen Messstellen (Online-Checks, Luecken bei "both"), so nichts doppelt.
+	// Schluessel der Abfragen: 'T' = heute, 'Y' = gestern (Ortszeit), sonst der UTC-Tag (nur aeltere Tage).
+	idx := map[string]int{"T": days - 1, "Y": days - 2}
+	for i := 0; i < days-2; i++ {
+		idx[labels[i]] = i
+	}
+	dayKey := func(col string) string {
+		return `CASE WHEN ` + col + ` >= ? THEN 'T' WHEN ` + col + ` >= ? THEN 'Y' ELSE substr(` + col + `, 1, 10) END`
+	}
+	keyArgs := []any{ft(today), ft(yesterday)}
+	// eigene: aeltere Tage aus hc_daily, gestern und heute aus den Einzelmessungen
+	own, err := m.statusDayAggs(ctx, tokens, days, idx, func(ph string, args []any) (string, []any) {
+		return `SELECT token, day, count, up_count FROM hc_daily WHERE token IN (` + ph + `) AND day >= ? AND day < ?`,
+			append(args, labels[0], labels[days-2])
+	}, func(ph string, args []any) (string, []any) {
+		return `SELECT token, ` + dayKey("time") + `, count(*), coalesce(sum(status), 0) FROM hc_measurements
+			WHERE token IN (` + ph + `) AND time >= ? AND time <= ? AND flags = 0 GROUP BY 1, 2`,
+			append(append(append([]any{}, keyArgs...), args...), ft(yesterday), ft(now))
 	})
 	if err != nil {
 		return nil, err
 	}
-	// gestern und heute aus den Einzelmessungen
-	raw := map[string]*[2]statusAgg{}
-	err = statusTokenChunks(tokens, func(ph string, args []any) error {
-		rows, err := m.st.r.QueryContext(ctx, `SELECT token, time >= ?, count(*), coalesce(sum(status), 0) FROM hc_measurements
-			WHERE token IN (`+ph+`) AND time >= ? AND time <= ? AND flags = 0 GROUP BY 1, 2`,
-			append(append([]any{ft(today)}, args...), ft(yesterday), ft(now))...)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-		for rows.Next() {
-			var tok string
-			var isToday int
-			var a statusAgg
-			if err := rows.Scan(&tok, &isToday, &a.count, &a.up); err != nil {
-				return err
+	// fremde Messungen nur fuer Tokens mit Luecken: Einzelpunkte (flags 8 ohne Wartung, hc_source_points) und aelter
+	// die Stundenwerte hc_source_hourly (nur fuer Balken ganz ohne Einzelpunkte)
+	var gaps []string
+	for _, tok := range tokens {
+		for _, a := range own[tok] {
+			if a.count == 0 {
+				gaps = append(gaps, tok)
+				break
 			}
-			if raw[tok] == nil {
-				raw[tok] = &[2]statusAgg{}
-			}
-			raw[tok][min(max(isToday, 0), 1)].add(a)
 		}
-		return rows.Err()
+	}
+	remote, err := m.statusDayAggs(ctx, gaps, days, idx, func(ph string, args []any) (string, []any) {
+		return `SELECT token, ` + dayKey("time") + `, count(*), coalesce(sum(status), 0) FROM (
+			SELECT token, time, status FROM hc_measurements WHERE token IN (` + ph + `) AND time >= ? AND time <= ? AND (flags & 8) != 0 AND (flags & 1) = 0
+			UNION ALL SELECT token, time, status FROM hc_source_points WHERE token IN (` + ph + `) AND time >= ? AND time <= ?) GROUP BY 1, 2`,
+			append(append(append(append(append([]any{}, keyArgs...), args...), ft(bounds[0]), ft(now)), args...), ft(bounds[0]), ft(now))
+	})
+	if err != nil {
+		return nil, err
+	}
+	remoteHourly, err := m.statusDayAggs(ctx, gaps, days, idx, func(ph string, args []any) (string, []any) {
+		return `SELECT token, ` + dayKey("hour") + `, sum(count), sum(up_count) FROM hc_source_hourly
+			WHERE token IN (` + ph + `) AND hour >= ? AND hour <= ? GROUP BY 1, 2`,
+			append(append(append([]any{}, keyArgs...), args...), ft(bounds[0]), ft(now))
 	})
 	if err != nil {
 		return nil, err
@@ -545,15 +628,7 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 		maint := statusMaintCover(bounds, wins, occ, tok)
 		var total statusAgg
 		for i := 0; i < days; i++ {
-			var a statusAgg
-			switch {
-			case i == days-1 && raw[tok] != nil:
-				a = raw[tok][1]
-			case i == days-2 && raw[tok] != nil:
-				a = raw[tok][0]
-			case i < days-2:
-				a = daily[tok][labels[i]]
-			}
+			a := statusPick(i, own[tok], remote[tok], remoteHourly[tok])
 			total.add(a)
 			x.bars[i] = statusBucket(labels[i], a, downs[i], maint[i])
 		}
@@ -569,7 +644,7 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 		tok   string
 	}
 	var incItems []incItem
-	for _, g := range p.Groups {
+	for _, g := range statusGroupsFor(p, byTok) {
 		vg := StatusViewGroup{Name: g.Name, Items: []StatusViewItem{}}
 		var states []string
 		for _, it := range g.Items {
@@ -693,72 +768,97 @@ func (m *Module) statusItemDetail(ctx context.Context, p *StatusPage, itemID int
 		d.Since = d.Since.UTC()
 	}
 
-	// Verfuegbarkeit 24 h / 7 / 30 Tage und Latenz 24 h: Einzelmessungen, dazu Stundenwerte (nur vorhanden, wenn die
-	// Einzelmessungen kuerzer aufbewahrt werden; beide ueberschneiden sich nicht)
+	// Verfuegbarkeit 24 h / 7 / 30 Tage, Latenz 24 h (nur erfolgreiche Messungen) und Stundenbalken je UTC-Stunde.
+	// Je Stunde zaehlen die eigenen Messungen (Einzelpunkte flags = 0, aelter hc_hourly; beide ueberschneiden sich
+	// nicht); ohne eigene die fremden Einzelpunkte (flags 8 ohne Wartung, hc_source_points), sonst hc_source_hourly.
 	f24, f7, f30 := now.Add(-24*time.Hour), now.Add(-7*24*time.Hour), now.Add(-30*24*time.Hour)
+	from := ft(f30.Truncate(time.Hour))
+	type hourVal struct {
+		a    statusAgg
+		lat  float64 // Summe der Latenzen erfolgreicher Messungen
+		latN int
+	}
+	load := func(dst map[string]*hourVal, query string, args ...any) error {
+		rows, err := m.st.r.QueryContext(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var hour string
+			var x hourVal
+			if err := rows.Scan(&hour, &x.a.count, &x.a.up, &x.lat, &x.latN); err != nil {
+				return err
+			}
+			if h := dst[hour]; h != nil {
+				h.a.add(x.a)
+				h.lat += x.lat
+				h.latN += x.latN
+			} else {
+				dst[hour] = &x
+			}
+		}
+		return rows.Err()
+	}
+	own, remote, remoteHourly := map[string]*hourVal{}, map[string]*hourVal{}, map[string]*hourVal{}
+	for _, q := range []struct {
+		dst   map[string]*hourVal
+		query string
+		args  []any
+	}{
+		{own, `SELECT substr(time, 1, 13), count(*), coalesce(sum(status), 0), coalesce(sum(CASE WHEN status = 1 THEN latency_ms ELSE 0 END), 0),
+			coalesce(sum(CASE WHEN status = 1 AND latency_ms > 0 THEN 1 ELSE 0 END), 0)
+			FROM hc_measurements WHERE token = ? AND time >= ? AND time <= ? AND flags = 0 GROUP BY 1`, []any{c.Token, from, ft(now)}},
+		{own, `SELECT substr(hour, 1, 13), count, up_count, CASE WHEN avg_ms > 0 THEN avg_ms * up_count ELSE 0 END,
+			CASE WHEN avg_ms > 0 THEN up_count ELSE 0 END FROM hc_hourly WHERE token = ? AND hour >= ?`, []any{c.Token, from}},
+		{remote, `SELECT substr(time, 1, 13), count(*), coalesce(sum(status), 0), coalesce(sum(CASE WHEN status = 1 THEN latency_ms ELSE 0 END), 0),
+			coalesce(sum(CASE WHEN status = 1 AND latency_ms > 0 THEN 1 ELSE 0 END), 0) FROM (
+			SELECT time, status, latency_ms FROM hc_measurements WHERE token = ? AND time >= ? AND time <= ? AND (flags & 8) != 0 AND (flags & 1) = 0
+			UNION ALL SELECT time, status, latency_ms FROM hc_source_points WHERE token = ? AND time >= ? AND time <= ?) GROUP BY 1`,
+			[]any{c.Token, from, ft(now), c.Token, from, ft(now)}},
+		{remoteHourly, `SELECT substr(hour, 1, 13), sum(count), sum(up_count), coalesce(sum(CASE WHEN avg_ms > 0 THEN avg_ms * up_count END), 0),
+			coalesce(sum(CASE WHEN avg_ms > 0 THEN up_count END), 0) FROM hc_source_hourly WHERE token = ? AND hour >= ? GROUP BY 1`, []any{c.Token, from}},
+	} {
+		if err := load(q.dst, q.query, q.args...); err != nil {
+			return nil, err
+		}
+	}
+	hours := map[string]bool{}
+	for _, mp := range []map[string]*hourVal{own, remote, remoteHourly} {
+		for h := range mp {
+			hours[h] = true
+		}
+	}
 	var a24, a7, a30 statusAgg
 	var latSum float64
 	var latN int
-	var hourAgg = map[string]statusAgg{} // UTC-Stunde "2006-01-02T15" -> Messungen
-	rows, err := m.st.r.QueryContext(ctx, `SELECT substr(time, 1, 13), count(*), coalesce(sum(status), 0),
-		coalesce(sum(CASE WHEN status = 1 THEN latency_ms ELSE 0 END), 0), coalesce(sum(CASE WHEN status = 1 AND latency_ms > 0 THEN 1 ELSE 0 END), 0)
-		FROM hc_measurements WHERE token = ? AND time >= ? AND time <= ? AND flags = 0 GROUP BY 1`, c.Token, ft(f30.Truncate(time.Hour)), ft(now))
-	if err != nil {
-		return nil, err
-	}
-	addHour := func(hour string, a statusAgg, lat float64, latCount int) {
+	hourAgg := map[string]statusAgg{} // UTC-Stunde "2006-01-02T15" -> Messungen der letzten 24 h
+	for hour := range hours {
+		var x *hourVal
+		for _, mp := range []map[string]*hourVal{own, remote, remoteHourly} {
+			if v := mp[hour]; v != nil && v.a.count > 0 {
+				x = v
+				break
+			}
+		}
 		t, err := time.Parse("2006-01-02T15", hour)
-		if err != nil {
-			return
+		if x == nil || err != nil {
+			continue
 		}
 		// angebrochene Stunden am Anfang zaehlen zum laengeren Zeitraum (Stundenraster genuegt fuer die Anzeige)
 		if !t.Before(f30.Truncate(time.Hour)) {
-			a30.add(a)
+			a30.add(x.a)
 		}
 		if !t.Before(f7.Truncate(time.Hour)) {
-			a7.add(a)
+			a7.add(x.a)
 		}
 		if !t.Before(f24.Truncate(time.Hour)) {
-			a24.add(a)
-			latSum += lat
-			latN += latCount
-			h := hourAgg[hour]
-			h.add(a)
-			hourAgg[hour] = h
+			a24.add(x.a)
+			latSum += x.lat
+			latN += x.latN
+			hourAgg[hour] = x.a
 		}
 	}
-	for rows.Next() {
-		var hour string
-		var a statusAgg
-		var lat float64
-		var n int
-		if err := rows.Scan(&hour, &a.count, &a.up, &lat, &n); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		addHour(hour, a, lat, n)
-	}
-	rows.Close()
-	rows, err = m.st.r.QueryContext(ctx, `SELECT substr(hour, 1, 13), count, up_count, avg_ms FROM hc_hourly WHERE token = ? AND hour >= ?`,
-		c.Token, ft(f30.Truncate(time.Hour)))
-	if err != nil {
-		return nil, err
-	}
-	for rows.Next() {
-		var hour string
-		var a statusAgg
-		var avg float64
-		if err := rows.Scan(&hour, &a.count, &a.up, &avg); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		n := 0
-		if avg > 0 {
-			n = a.up
-		}
-		addHour(hour, a, avg*float64(n), n)
-	}
-	rows.Close()
 	d.Uptime24h, d.Uptime7d, d.Uptime30d = statusPct(a24), statusPct(a7), statusPct(a30)
 	d.Latency = -1
 	if latN > 0 {
