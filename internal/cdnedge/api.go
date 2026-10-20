@@ -326,10 +326,7 @@ func (s *Server) rateLoop(ctx context.Context) {
 			return
 		case <-t.C:
 		}
-		r := s.bw.rates()
-		if len(r) == 0 {
-			continue
-		}
+		r := s.bw.rates() // auch leer jede Sekunde: der Nachbar sieht so, dass dieser Server da ist (peer_up)
 		if conn == nil {
 			p := s.cfg.Peers[0]
 			h, _, _ := net.SplitHostPort(p.Addr)

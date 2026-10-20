@@ -1,6 +1,6 @@
 # CDN64-Server: Prometheus (nur für den Betreiber)
 
-Stand 2026-10-20 (cdn64-edge 0.13.0). Die CDN64-Server srv07/srv08 liefern ihre Zahlen auf einem eigenen Port – nicht
+Stand 2026-10-20 (cdn64-edge 0.13.1). Die CDN64-Server srv07/srv08 liefern ihre Zahlen auf einem eigenen Port – nicht
 öffentlich: nur für die eingetragenen Adressen und nur mit Bearer-Token. Code: `internal/cdnedge/promexport.go`.
 
 ## Zugang
@@ -93,7 +93,7 @@ Alle Zeilen tragen `server` (srv07/srv08). Zähler (`_total`) zählen seit dem S
 | `cdn64_edge_letsencrypt_cooldown` | | Domains, die gerade zu ZeroSSL gehen |
 | `cdn64_edge_config_age_seconds`, `cdn64_edge_config_ok`, `cdn64_edge_config_errors_total` | | Abruf der Konfiguration bei ipv64 |
 | `cdn64_edge_config_info` | `version`, `hosts` | Stand der Konfiguration |
-| `cdn64_edge_peer_up` | | 1 = Nachbarserver hat in den letzten 5 s seine Raten gemeldet |
+| `cdn64_edge_peer_up` | | 1 = Nachbarserver hat sich in den letzten 5 s gemeldet (Raten, jede Sekunde, auch ohne Verkehr) |
 | `cdn64_edge_portmap_ports` | `transport` | offene Portmapper-Ports |
 | `cdn64_edge_portmap_udp_sessions` | | offene UDP-Sitzungen des Portmappers |
 
