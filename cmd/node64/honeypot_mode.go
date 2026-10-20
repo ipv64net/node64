@@ -31,6 +31,7 @@ import (
 	"github.com/ipv64net/node64/internal/caps"
 	"github.com/ipv64net/node64/internal/config"
 	"github.com/ipv64net/node64/internal/firewall"
+	"github.com/ipv64net/node64/internal/geoip"
 	"github.com/ipv64net/node64/internal/honeypot"
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/logging"
@@ -111,6 +112,7 @@ func honeypotRun(ctx context.Context, cfg *config.Config, hc *hpModeConfig, base
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("honeypot dir %s: %w", dir, err)
 	}
+	defer honeypot.StartGeo(cfg.DataDir, "Node64/"+Version, log)() // Herkunft der Angreifer (laedt im Hintergrund)
 
 	st, err := store.Open(ctx, cfg.DBPath(), cfg.BackupDir(), base)
 	if err != nil {
@@ -780,14 +782,16 @@ main{max-width:1100px;margin:0 auto;padding:16px}h1{font-size:1.4rem;margin:0 0 
 .kpi b{display:block;font-size:1.5rem;font-variant-numeric:tabular-nums}
 .tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:.9rem}td,th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 th{color:var(--mut);font-weight:600}td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}td.k{word-break:break-all;font-family:ui-monospace,Consolas,monospace}
-.ok{color:var(--ok)}.bad{color:var(--bad)}footer{margin-top:16px}`
+.ok{color:var(--ok)}.bad{color:var(--bad)}footer{margin-top:16px}.cc{white-space:nowrap;margin-right:4px}.cc small{color:var(--mut)}
+progress{display:block;width:100%;height:6px;margin-top:3px;accent-color:var(--acc)}`
 
 var (
 	hpInfoCSP = func() string {
 		sum := sha256.Sum256([]byte(hpInfoCSS))
 		return "default-src 'none'; style-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 	}()
-	hpInfoTmpl = template.Must(template.New("info").Funcs(template.FuncMap{"short": hpShort, "when": hpWhen, "perm": hpPermErr}).Parse(`<!doctype html>
+	hpInfoTmpl = template.Must(template.New("info").Funcs(template.FuncMap{"short": hpShort, "when": hpWhen, "perm": hpPermErr,
+		"flag": geoip.Flag, "cname": geoip.Name}).Parse(`<!doctype html>
 <html lang="{{.Lang}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="60">
 <title>Honeypot64</title><style>` + hpInfoCSS + `</style></head><body><main>
@@ -832,6 +836,10 @@ var (
 {{else}}<tr><td class="mut">{{$.T.Off}} (NODE64_FIREWALL)</td></tr>{{end}}
 </table></div>{{if .FW}}<p class="mut">{{if .FW.Live}}{{.T.FWLive}}{{else}}{{.T.FWDaily}}{{end}} {{if .FW.Keep}}{{.T.FWKeep}}{{else}}{{.T.FWRemove}}{{end}}</p>{{end}}</section>
 {{template "list" (.L .T.TopIPs .Week.TopSources)}}
+<section class="card"><h2>{{.T.Countries}}</h2><div class="tw"><table>
+{{$max := 0}}{{range .Week.ByCountry}}{{if not $max}}{{$max = .Count}}{{end}}<tr><td><span class="cc" title="{{cname .Key $.Lang}}">{{flag .Key}} <small>{{.Key}}</small></span> {{cname .Key $.Lang}}<progress max="{{$max}}" value="{{.Count}}"></progress></td><td class="n">{{.Count}}<br><span class="mut">{{.Sources}} IPs</span></td></tr>
+{{else}}<tr><td class="mut">{{if .Geo.Loaded}}–{{else}}{{.T.NoGeo}}{{end}}</td></tr>{{end}}</table></div>
+{{if .Week.CountryUnknown}}<p class="mut">{{.T.NoCountry}}: {{.Week.CountryUnknown}}</p>{{end}}</section>
 {{template "list" (.L .T.Kinds .Week.ByKind)}}
 {{template "list" (.L .T.Origins .Week.BySource)}}
 {{template "list" (.L .T.Ports .Week.ByPort)}}
@@ -842,7 +850,7 @@ var (
 <footer class="mut">{{.T.Foot}}</footer>
 </main></body></html>
 {{define "list"}}<section class="card"><h2>{{.Title}}</h2><div class="tw"><table>
-{{range .Rows}}<tr><td class="k">{{short .Key}}</td><td class="n">{{.Count}}</td></tr>
+{{range .Rows}}<tr><td class="k">{{with .Country}}<span class="cc" title="{{cname . $.Lang}}">{{flag .}} <small>{{.}}</small></span>{{end}}{{short .Key}}</td><td class="n">{{.Count}}</td></tr>
 {{else}}<tr><td class="mut">–</td></tr>{{end}}</table></div></section>{{end}}`))
 )
 
@@ -853,6 +861,8 @@ type hpTexts struct {
 	Logs, File, Lines, FileOK, FileErr, PermHint, Messages, Denied, LogNote, Origins string
 	// Firewall-Helfer (H6)
 	FW, FWWait, FWEntries, FWAddrs, FWUpdated, FWChanged, FWDenied, FWAllow, FWSkipped, FWLive, FWDaily, FWKeep, FWRemove string
+	// Herkunft der Angreifer
+	Countries, NoGeo, NoCountry string
 }
 
 var hpTextsByLang = map[string]hpTexts{
@@ -869,7 +879,8 @@ var hpTextsByLang = map[string]hpTexts{
 		FW: "Firewall-Helfer", FWWait: "noch nicht aktiv", FWEntries: "Einträge (Bereiche)", FWAddrs: "Adressen", FWUpdated: "Zuletzt geprüft",
 		FWChanged: "geändert", FWDenied: "Token ohne Berechtigung, Tagesstand", FWAllow: "Ausnahmen (NODE64_FIREWALL_ALLOW)", FWSkipped: "zu große Netze verworfen",
 		FWLive: "Live-Listen mit Listen-Token, Abruf alle 30 Minuten.", FWDaily: "Tagesstand (ohne NODE64_IPV64_LIST_TOKEN), Abruf alle 30 Minuten.",
-		FWKeep: "Die Tabelle bleibt beim Beenden stehen.", FWRemove: "Die Tabelle wird beim Beenden gelöscht."},
+		FWKeep: "Die Tabelle bleibt beim Beenden stehen.", FWRemove: "Die Tabelle wird beim Beenden gelöscht.",
+		Countries: "Herkunft nach Land (7 Tage)", NoGeo: "Noch keine Länderdaten von ipv64.net.", NoCountry: "Ereignisse ohne Land (privat oder unbekannt)"},
 	"en": {Profile: "Profile", Uptime: "Uptime", Hits24: "Hits 24 h", Hits7: "Hits 7 days", Src24: "Source IPs 24 h", Src7: "Source IPs 7 days",
 		Logins7: "Login attempts 7 days", StatsErr: "Statistics currently not readable.", Services: "Services", Service: "Service", State: "State",
 		Conns: "Connections", Open: "open", Closed: "not open", None: "none", Scan: "Port scan detection", On: "on", Off: "off",
@@ -883,12 +894,13 @@ var hpTextsByLang = map[string]hpTexts{
 		FW: "Firewall helper", FWWait: "not active yet", FWEntries: "Entries (ranges)", FWAddrs: "addresses", FWUpdated: "Last checked",
 		FWChanged: "changed", FWDenied: "token not entitled, daily list", FWAllow: "Exceptions (NODE64_FIREWALL_ALLOW)", FWSkipped: "networks too large, dropped",
 		FWLive: "Live lists with list token, fetched every 30 minutes.", FWDaily: "Daily lists (no NODE64_IPV64_LIST_TOKEN), fetched every 30 minutes.",
-		FWKeep: "The table stays when Node64 stops.", FWRemove: "The table is removed when Node64 stops."},
+		FWKeep: "The table stays when Node64 stops.", FWRemove: "The table is removed when Node64 stops.",
+		Countries: "Origin by country (7 days)", NoGeo: "No country data from ipv64.net yet.", NoCountry: "Events without country (private or unknown)"},
 }
 
 type hpList struct {
-	Title string
-	Rows  []honeypot.Count
+	Title, Lang string
+	Rows        []honeypot.Count
 }
 
 type hpPage struct {
@@ -900,10 +912,13 @@ type hpPage struct {
 	Rep                            honeypot.ReportStatus
 	Logs                           honeypot.LogStatus
 	FW                             *firewall.Status // nil = Firewall-Helfer aus
+	Geo                            geoip.Status     // Stand der Laenderdaten
 }
 
 // L baut eine Rangliste fuer das Untertemplate "list".
-func (hpPage) L(title string, rows []honeypot.Count) hpList { return hpList{Title: title, Rows: rows} }
+func (p hpPage) L(title string, rows []honeypot.Count) hpList {
+	return hpList{Title: title, Lang: p.Lang, Rows: rows}
+}
 
 func (h *hpInfo) page(w http.ResponseWriter, r *http.Request) {
 	lang := hpLang(r.Header.Get("Accept-Language"))
@@ -912,7 +927,7 @@ func (h *hpInfo) page(w http.ResponseWriter, r *http.Request) {
 		day, week = &honeypot.Stats{}, &honeypot.Stats{}
 	}
 	p := hpPage{Lang: lang, Version: h.version, Profile: h.profileLabel(), Uptime: hpUptime(time.Since(h.started)), T: hpTextsByLang[lang],
-		Day: day, Week: week, Err: err != nil, Scan: h.hc.Sensor.Scan, Key: h.hc.IPv64Key != "", Services: h.sensor.Status()}
+		Day: day, Week: week, Err: err != nil, Scan: h.hc.Sensor.Scan, Key: h.hc.IPv64Key != "", Services: h.sensor.Status(), Geo: geoip.Current()}
 	if h.rep != nil {
 		p.Rep = h.rep.Status(r.Context())
 	}

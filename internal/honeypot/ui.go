@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/geoip"
 	"github.com/ipv64net/node64/internal/module"
 )
 
@@ -64,9 +65,10 @@ type uiRank struct {
 }
 
 type uiRankItem struct {
-	Key   string
-	Count int64
-	Pct   int
+	Key    string
+	Count  int64
+	Pct    int
+	Origin uiCountry // nur Quell-IPs: Land
 }
 
 // uiWarning ist ein Hinweis zu einem Port (Text schon uebersetzt).
@@ -96,6 +98,14 @@ type overviewData struct {
 	Source   string    // Filter der Ereignisliste: "" (alle), honeypot, log, syslog
 	Sources  []string  // Auswahl des Filters
 	Logs     LogStatus // Log-Sensor und Syslog-Empfaenger
+
+	// Herkunft und „Was wurde angegriffen“ (geo.go)
+	Countries      []uiCountryRank
+	CountryCount   int   // Laender mit Ereignissen
+	CountryUnknown int64 // Ereignisse ohne Land
+	Geo            geoip.Status
+	Targets        uiTargets
+	Decoys         []uiDecoy
 }
 
 func (m *Module) warnViews(r *http.Request, list []Warning) []uiWarning {
@@ -126,6 +136,7 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 		d.Range, span = "7d", 7*24*time.Hour
 	}
 	d.Source, _ = eventSource(r.URL.Query().Get("source")) // unbekannt = alle
+	d.Geo = geoip.Current()
 	_ = m.st.Flush(ctx)
 	now := time.Now()
 	var err error
@@ -138,8 +149,15 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil {
 		d.Bars, d.BarsMax = m.bars(r, st.Timeline, d.Range == "7d")
-		d.Ranks = ranks(st)
-		d.Events, err = m.recent(r, 50, d.Source)
+		lang := m.lang(r)
+		d.Ranks = ranks(st, lang)
+		d.Countries, d.CountryCount, d.CountryUnknown = countryRanks(st.ByCountry, lang, 15), len(st.ByCountry), st.CountryUnknown
+		d.Decoys = decoyRanks(st.ByDecoy)
+		var rows []targetRow
+		if rows, err = m.st.targets(ctx, storeTime(st.Since)); err == nil {
+			d.Targets = buildTargets(rows, 10)
+			d.Events, err = m.recent(r, 50, d.Source)
+		}
 	}
 	if err != nil {
 		m.log.Error("honeypot page", "err", err)
@@ -187,7 +205,16 @@ func maxInt64(a, b int64) int64 {
 	return b
 }
 
-func ranks(st *Stats) []uiRank {
+// lang: Sprache des Aufrufers (Laendernamen), ohne Oberflaeche "en".
+func (m *Module) lang(r *http.Request) string {
+	if m.g.Lang != nil {
+		return m.g.Lang(r)
+	}
+	return "en"
+}
+
+// ranks baut die Ranglisten; Dienste, Ports und Arten stehen farbig unter „Was wurde angegriffen“ (buildTargets).
+func ranks(st *Stats, lang string) []uiRank {
 	mk := func(id, key, icon string, mono bool, list []Count) uiRank {
 		r := uiRank{ID: id, TitleKey: key, Icon: icon, Mono: mono, Items: []uiRankItem{}}
 		var max int64
@@ -195,7 +222,7 @@ func ranks(st *Stats) []uiRank {
 			max = maxInt64(max, c.Count)
 		}
 		for _, c := range list {
-			it := uiRankItem{Key: c.Key, Count: c.Count}
+			it := uiRankItem{Key: c.Key, Count: c.Count, Origin: countryView(c.Country, lang)}
 			if max > 0 {
 				it.Pct = int(c.Count * 100 / max)
 			}
@@ -205,10 +232,7 @@ func ranks(st *Stats) []uiRank {
 	}
 	return []uiRank{
 		mk("sources", "honeypot.top.sources", "bi-geo-alt", true, st.TopSources),
-		mk("kinds", "honeypot.top.kinds", "bi-tags", true, st.ByKind),
 		mk("origins", "honeypot.top.origins", "bi-diagram-3", true, st.BySource),
-		mk("ports", "honeypot.top.ports", "bi-hdd-network", true, st.ByPort),
-		mk("services", "honeypot.top.services", "bi-hdd-stack", true, st.ByService),
 		mk("users", "honeypot.top.users", "bi-person", true, st.TopUsers),
 		mk("passwords", "honeypot.top.passwords", "bi-key", true, st.TopPass),
 		mk("credentials", "honeypot.top.credentials", "bi-person-lock", true, st.TopCreds),

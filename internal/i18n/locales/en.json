@@ -3490,6 +3490,29 @@
         "elastic": "Elasticsearch API",
         "kubelet": "Kubernetes kubelet API"
       }
+    },
+    "geo": {
+      "title": "Origin by country",
+      "share": "Share of countries among all events with a known country",
+      "sources": "Distinct source IPs",
+      "no_data": "No country data from ipv64.net yet – origins appear as soon as it is loaded.",
+      "more": "{count} more countries",
+      "unknown": "{count} events without country (private or unknown)",
+      "data": "Country data as of {time}",
+      "waiting": "Country data is loading or not yet available from ipv64.net."
+    },
+    "targets": {
+      "title": "What was attacked",
+      "decoys": "Decoys and detected devices",
+      "decoy_page": "Decoy (login page)",
+      "decoy_device": "Detected device (login call)"
+    },
+    "group": {
+      "login": "Login/brute force",
+      "exploit": "Exploit",
+      "scan": "Scan",
+      "probe": "Probe",
+      "log": "Log/syslog"
     }
   }
 }

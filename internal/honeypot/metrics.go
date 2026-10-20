@@ -14,17 +14,25 @@ import (
 // Zaehler je Dienst und Art fuer Prometheus. Es gibt je Prozess hoechstens einen Honeypot (Modul oder Modus ohne
 // Oberflaeche), daher zaehlt CountEvents prozessweit; Prometheus-Zaehler laufen ohnehin seit dem Start.
 var metricCounts = struct {
-	mu     sync.Mutex
-	logins map[string]int64 // Dienst -> Login-Versuche
-	kinds  map[string]int64 // Art + "\x00" + Quelle -> Ereignisse
-}{logins: map[string]int64{}, kinds: map[string]int64{}}
+	mu        sync.Mutex
+	logins    map[string]int64 // Dienst -> Login-Versuche
+	kinds     map[string]int64 // Art + "\x00" + Quelle -> Ereignisse
+	countries map[string]int64 // Land -> Ereignisse (hoechstens maxCountries Werte)
+}{logins: map[string]int64{}, kinds: map[string]int64{}, countries: map[string]int64{}}
 
 // CountEvents umhuellt eine Sink und zaehlt jedes Ereignis je Art und Quelle und jeden Login-Versuch je Dienst (fuer
-// node64_honeypot_events_total und node64_honeypot_logins_total). Modul und Modus ohne Oberflaeche geben dem
+// node64_honeypot_events_total und node64_honeypot_logins_total) und je Land der Quelle
+// (node64_honeypot_events_by_country_total, nur mit Laenderdaten). Modul und Modus ohne Oberflaeche geben dem
 // Sensor und dem Log-Sensor CountEvents(store.Sink()).
 func CountEvents(next Sink) Sink {
 	return func(e Event) {
+		cc, _ := lookupCountry(e.Src)
 		metricCounts.mu.Lock()
+		if cc != "" {
+			if _, ok := metricCounts.countries[cc]; ok || len(metricCounts.countries) < maxCountries {
+				metricCounts.countries[cc]++
+			}
+		}
 		metricCounts.kinds[e.Kind+"\x00"+storeSource(e.Source)]++
 		if storeIsLogin(e) {
 			metricCounts.logins[e.Service]++
@@ -53,7 +61,8 @@ var uniqueCache = struct {
 
 // WriteMetrics schreibt die Kennzahlen des Honeypots (Modul und Modus ohne Oberflaeche gleich, Plan Abschnitt 2):
 // node64_honeypot_connections_total{service,port}, node64_honeypot_logins_total{service},
-// node64_honeypot_events_total{kind,source}, node64_honeypot_unique_sources (24 h),
+// node64_honeypot_events_total{kind,source}, node64_honeypot_events_by_country_total{country},
+// node64_honeypot_unique_sources (24 h),
 // node64_honeypot_listen_errors{port}, node64_honeypot_buffer_events, node64_honeypot_dropped_total und zur Meldung
 // an ipv64 node64_honeypot_report_last_success_timestamp, node64_honeypot_report_errors_total,
 // node64_honeypot_report_sources_total. sensor, st und rep duerfen nil sein (dann fehlen die zugehoerigen Werte).
@@ -84,6 +93,7 @@ func WriteMetrics(w *metrics.Writer, sensor SensorState, st *Store, rep *Reporte
 	metricCounts.mu.Lock()
 	logins := sortedCounts(metricCounts.logins)
 	kinds := sortedCounts(metricCounts.kinds)
+	countries := sortedCounts(metricCounts.countries)
 	metricCounts.mu.Unlock()
 	for _, x := range logins {
 		w.Counter("node64_honeypot_logins_total", "Login-Versuche je Dienst seit dem Start.", float64(x.Count), "service", x.Key)
@@ -91,6 +101,9 @@ func WriteMetrics(w *metrics.Writer, sensor SensorState, st *Store, rep *Reporte
 	for _, x := range kinds {
 		kind, source, _ := strings.Cut(x.Key, "\x00")
 		w.Counter("node64_honeypot_events_total", "Ereignisse je Art und Quelle seit dem Start.", float64(x.Count), "kind", kind, "source", source)
+	}
+	for _, x := range countries {
+		w.Counter("node64_honeypot_events_by_country_total", "Ereignisse je Land der Quell-IP seit dem Start (nur mit Laenderdaten).", float64(x.Count), "country", x.Key)
 	}
 
 	var dropped int64

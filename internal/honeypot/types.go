@@ -187,13 +187,18 @@ type Stats struct {
 	TopUAs          []Count     `json:"top_user_agents"`
 	TopFingerprints []Count     `json:"top_fingerprints"` // H6: Key = "ja4:…" bzw. "hassh:…"
 	Timeline        []TimePoint `json:"timeline"`         // je Stunde (24 h) bzw. je Tag (7 d)
+	// Herkunft (geo.go): alle Laender mit Ereignissen, nach Anzahl; ohne Land = privat, unbekannt oder keine Daten.
+	ByCountry      []CountryCount `json:"by_country"`
+	CountryUnknown int64          `json:"country_unknown"`
+	ByDecoy        []Count        `json:"by_decoy"` // Key = "page:<koeder>" bzw. "device:<geraet>" (Detail device=…)
 }
 
 // Count ist ein Eintrag einer Rangliste.
 type Count struct {
-	Key   string    `json:"key"`
-	Count int64     `json:"count"`
-	Last  time.Time `json:"last,omitzero"`
+	Key     string    `json:"key"`
+	Count   int64     `json:"count"`
+	Last    time.Time `json:"last,omitzero"`
+	Country string    `json:"country,omitempty"` // nur top_sources: Land der IP (ISO 3166 alpha-2), "" = unbekannt
 }
 
 // TimePoint ist ein Punkt im Verlauf.

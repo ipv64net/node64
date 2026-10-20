@@ -3490,6 +3490,29 @@
         "elastic": "Elasticsearch-API",
         "kubelet": "Kubernetes-Kubelet-API"
       }
+    },
+    "geo": {
+      "title": "Herkunft nach Land",
+      "share": "Anteil der Länder an allen Ereignissen mit bekanntem Land",
+      "sources": "Verschiedene Quell-IPs",
+      "no_data": "Noch keine Länderdaten von ipv64.net – die Herkunft erscheint, sobald sie geladen sind.",
+      "more": "{count} weitere Länder",
+      "unknown": "{count} Ereignisse ohne Land (privat oder unbekannt)",
+      "data": "Länderdaten: Stand {time}",
+      "waiting": "Länderdaten werden geladen bzw. sind bei ipv64.net noch nicht verfügbar."
+    },
+    "targets": {
+      "title": "Was wurde angegriffen",
+      "decoys": "Köder und erkannte Geräte",
+      "decoy_page": "Köder (Login-Seite)",
+      "decoy_device": "Erkanntes Gerät (Login-Aufruf)"
+    },
+    "group": {
+      "login": "Login/Bruteforce",
+      "exploit": "Exploit",
+      "scan": "Scan",
+      "probe": "Sondierung",
+      "log": "Log/Syslog"
     }
   }
 }

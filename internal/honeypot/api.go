@@ -135,6 +135,7 @@ type EventView struct {
 	Kind        string    `json:"kind"`
 	Src         string    `json:"src"`
 	SrcPort     int       `json:"src_port"`
+	Country     string    `json:"country,omitempty"` // Land der Quell-IP (ISO 3166 alpha-2), "" = unbekannt (geo.go)
 	Username    string    `json:"username,omitempty"`
 	Password    string    `json:"password,omitempty"`
 	Method      string    `json:"method,omitempty"`
@@ -150,12 +151,16 @@ type EventView struct {
 	PayloadHex  string    `json:"payload_hex,omitempty"`
 	PayloadText string    `json:"payload_text,omitempty"` // Go-Escapes (\x00, \r\n …), nur ASCII
 	PayloadDump string    `json:"-"`                      // hex.Dump fuer die Seite
+	Origin      uiCountry `json:"-"`                      // Flagge und Name fuer die Seite
 }
 
 func eventView(e Event) EventView {
 	v := EventView{Time: e.Time, Service: e.Service, Port: e.Port, Kind: e.Kind, Src: storeSrc(e.Src), SrcPort: e.SrcPort, Username: e.Username,
 		Password: e.Password, Method: e.Method, Path: e.Path, Host: e.Host, UA: e.UA, Client: e.Client, Page: e.Page, Detail: e.Detail,
 		Source: storeSource(e.Source), Rule: e.Rule, Fingerprint: e.Fingerprint}
+	if cc, ok := lookupCountry(e.Src); ok {
+		v.Country = cc
+	}
 	if len(e.Payload) > 0 {
 		v.PayloadHex = hex.EncodeToString(e.Payload)
 		q := strconv.QuoteToASCII(string(e.Payload))
@@ -180,9 +185,12 @@ func (m *Module) recent(r *http.Request, limit int, source string) ([]EventView,
 	if err != nil {
 		return nil, err
 	}
+	lang := m.lang(r)
 	out := make([]EventView, 0, len(list))
 	for _, e := range list {
-		out = append(out, eventView(e))
+		v := eventView(e)
+		v.Origin = countryView(v.Country, lang)
+		out = append(out, v)
 	}
 	return out, nil
 }

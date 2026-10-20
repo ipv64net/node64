@@ -296,6 +296,16 @@ func (s *Store) Stats(ctx context.Context, since time.Time, top int) (*Stats, er
 		}
 		*l.dst = cs
 	}
+	for i := range out.TopSources {
+		out.TopSources[i].Country = countryOf(out.TopSources[i].Key)
+	}
+	var err error
+	if out.ByCountry, out.CountryUnknown, err = s.byCountry(ctx, from); err != nil {
+		return nil, err
+	}
+	if out.ByDecoy, err = s.byDecoy(ctx, from, top); err != nil {
+		return nil, err
+	}
 	tl, err := s.timeline(ctx, since, now)
 	if err != nil {
 		return nil, err

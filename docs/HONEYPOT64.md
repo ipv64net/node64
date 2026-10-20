@@ -124,6 +124,8 @@ Tailscale), Loopback und Link-Local. Maßgeblich ist allein die Absender-Adresse
 mit `?token=<Token>` oder `Authorization: Bearer <Token>`; alles andere bekommt `403`. Die Seite schickt strenge
 Kopfzeilen (Content-Security-Policy ohne Skripte, `nosniff`, `no-referrer`, `X-Frame-Options: DENY`, `no-store`).
 
+Top-IPs zeigen Flagge und Ländercode, dazu gibt es die Rangliste „Herkunft nach Land“ (siehe [Herkunft](#herkunft)).
+
 Die Inhalte der Seite stammen von Angreifern (Benutzernamen, Pfade, User-Agents). Sie werden maskiert und gekürzt
 angezeigt; trotzdem gilt: nichts davon anklicken oder kopieren und ausführen.
 
@@ -151,7 +153,8 @@ gelesen, 0 = Fehler), `node64_honeypot_syslog_messages_total`, `node64_honeypot_
 wenn eingeschaltet): `node64_firewall_active`, `node64_firewall_entries{family}` (Bereiche je Set, `ipv4`/`ipv6`),
 `node64_firewall_last_update_timestamp`, `node64_firewall_errors_total`, `node64_firewall_list_entries{list,edition}`. Zusammenarbeit mit
 PROXY64: `node64_honeypot_proxy_decoy_total`, `node64_honeypot_proxy_access_total`, `node64_honeypot_proxy_access_dropped_total`,
-`node64_honeypot_proxy_blocks_total`. Beispiel-Alarm:
+`node64_honeypot_proxy_blocks_total`. Herkunft: `node64_honeypot_events_by_country_total{country}` (nur Länder mit
+Ereignissen, höchstens 250 Werte, nur mit Länderdaten). Beispiel-Alarm:
 `time() - node64_honeypot_report_last_success_timestamp > 3600`. Die übrigen Kennzahlen der Node siehe
 [PROMETHEUS.md](PROMETHEUS.md).
 
@@ -160,6 +163,26 @@ PROXY64: `node64_honeypot_proxy_decoy_total`, `node64_honeypot_proxy_access_tota
 Der `HEALTHCHECK` des Images (`/node64 healthcheck`) fragt in diesem Modus `/health` auf dem Info-Port über
 `127.0.0.1`/`::1` (bzw. `NODE64_BIND_ADDR`) ab, mit Token, falls gesetzt. Mit `NODE64_HONEYPOT_INFO_PORT=0` gibt es
 keine Prüfung über das Netz; der Container gilt dann als gesund, solange der Prozess läuft.
+
+## Herkunft
+
+Honeypot64 zeigt zu jeder Quell-IP das Land: Flagge (Emoji), Ländercode und Name im Tooltip – in der Ereignisliste,
+bei den Top-Quellen, in der Benachrichtigung über neue Angreifer und auf der Info-Seite. Die Rangliste „Herkunft nach
+Land“ zählt Ereignisse und verschiedene Quell-IPs je Land; die Übersicht im Modul zeigt außerdem farbig, was angegriffen
+wurde (je Dienst, Port und Art, nach Gruppe Login/Bruteforce, Exploit, Scan, Sondierung, Log/Syslog) und welche Köder
+und erkannten Geräte (`device=…`) getroffen wurden.
+
+Die Länderdaten kommen von ipv64.net (`blocklists/country_ranges.txt.gz`, täglich aus den Daten der
+Registrierungsstellen, eingetragen in `blocklists/index.json` als `geo`), keine fremde GeoIP-Datenbank. Geladen wird
+nur, solange Honeypot64 läuft: beim Start sofort aus dem Zwischenspeicher `/data/geoip/`, danach von ipv64.net und
+täglich nur bei Änderung (ETag). Im Speicher belegen die Bereiche etwa 10 Byte je IPv4- und 18 Byte je IPv6-Bereich
+(einige MB). Das Land wird beim Auswerten nachgeschlagen, nicht gespeichert; neue Daten gelten sofort auch für ältere
+Ereignisse. Private und reservierte Adressen haben kein Land. Fehlt die Datei bei ipv64 oder ist ipv64 nicht
+erreichbar, läuft alles ohne Länder weiter (nur ein Eintrag im Log). Ohne Flaggen-Schrift (z. B. Windows) zeigt der
+Browser statt der Flagge zwei Buchstaben; der Ländercode steht immer daneben.
+
+API: `country` an Ereignissen (`GET /api/honeypot/events`) und an `top_sources`, `by_country` und `country_unknown`
+in `GET /api/honeypot/stats`, dazu `by_decoy` (Köder und Geräte).
 
 ## Meldung an ipv64
 

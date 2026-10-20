@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipv64net/node64/internal/geoip"
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
@@ -35,7 +36,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.6.0"
+	version = "0.7.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -120,6 +121,7 @@ type Module struct {
 	warnings []Warning       // vom Profil weggelassene bzw. riskante Ports
 	logState LogStatus       // Log-Sensor/Syslog nach dem letzten Apply (fuer Claims)
 	logErr   string          // Syslog nicht geoeffnet, weil ein anderer Teil den Port inzwischen belegt
+	geoStop  func()          // gibt die Laenderdaten zurueck (geo.go), nil = nicht angefordert
 }
 
 // Warning ist ein Hinweis zu einem Port der Einstellung (Profil laesst ihn weg oder ein anderer Teil will ihn).
@@ -205,6 +207,7 @@ func (m *Module) Start(ctx context.Context) error {
 	ls := m.newLogs(m.log)
 	m.mu.Lock()
 	m.sensor, m.logs, m.life, m.cancel, m.started = s, ls, lctx, cancel, time.Now()
+	m.geoStop = geoStart(m.dataDir, "Node64/"+m.version, m.log) // Herkunft der Angreifer (laedt im Hintergrund)
 	m.mu.Unlock()
 	m.wg.Add(4)
 	go func() { defer m.wg.Done(); m.st.Run(lctx) }()
@@ -222,12 +225,15 @@ func (m *Module) Stop(ctx context.Context) error {
 	m.ctl.Lock()
 	defer m.ctl.Unlock()
 	m.mu.Lock()
-	s, ls, cancel := m.sensor, m.logs, m.cancel
-	m.sensor, m.logs, m.cancel, m.life, m.status, m.warnings = nil, nil, nil, nil, nil, nil
+	s, ls, cancel, geoStop := m.sensor, m.logs, m.cancel, m.geoStop
+	m.sensor, m.logs, m.cancel, m.life, m.status, m.warnings, m.geoStop = nil, nil, nil, nil, nil, nil, nil
 	m.logState, m.logErr = LogStatus{}, ""
 	m.mu.Unlock()
 	if s == nil {
 		return nil
+	}
+	if geoStop != nil {
+		geoStop()
 	}
 	bridgeStop() // PROXY64 gibt danach nichts mehr ab
 	s.Stop()     // zuerst: danach kommen keine Ereignisse mehr
@@ -964,7 +970,11 @@ func (m *Module) notifyNew(ctx context.Context, since time.Time) time.Time {
 		if i == notifyIPs {
 			break
 		}
-		ips = append(ips, c.Key)
+		ip := c.Key
+		if cc := countryOf(c.Key); cc != "" {
+			ip += " (" + strings.TrimSpace(geoip.Flag(cc)+" "+cc) + ")"
+		}
+		ips = append(ips, ip)
 	}
 	msg := strconv.Itoa(len(list)) + " IPs: " + strings.Join(ips, ", ")
 	if len(list) > notifyIPs {

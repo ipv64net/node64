@@ -4219,6 +4219,31 @@
           "last": {
             "type": "string",
             "format": "date-time"
+          },
+          "country": {
+            "type": "string",
+            "description": "Nur top_sources: Land der Quell-IP (ISO 3166 alpha-2, gross) aus den Laenderdaten von ipv64.net; fehlt bei privaten oder unbekannten Adressen und solange keine Daten geladen sind."
+          }
+        }
+      },
+      "Honeypot64CountryCount": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Land (ISO 3166 alpha-2, gross)"
+          },
+          "count": {
+            "type": "integer",
+            "description": "Ereignisse"
+          },
+          "sources": {
+            "type": "integer",
+            "description": "verschiedene Quell-IPs"
+          },
+          "last": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -4322,6 +4347,24 @@
               "$ref": "#/components/schemas/Honeypot64Count"
             },
             "description": "Ereignisse je Sensor (honeypot, log, syslog)"
+          },
+          "by_country": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64CountryCount"
+            },
+            "description": "Herkunft: alle Laender mit Ereignissen, nach Anzahl (hoechstens 250). Das Land wird beim Auswerten nachgeschlagen (Laenderdaten von ipv64.net, taeglich aktualisiert); leer, solange keine Daten geladen sind."
+          },
+          "country_unknown": {
+            "type": "integer",
+            "description": "Ereignisse ohne Land (private oder unbekannte Adressen, keine Laenderdaten)"
+          },
+          "by_decoy": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Count"
+            },
+            "description": "Koeder und erkannte Geraete, Key = \"page:<koeder>\" bzw. \"device:<geraet>\" (Detail device=…), Laenge wie top"
           }
         }
       },
@@ -4347,6 +4390,10 @@
           },
           "src_port": {
             "type": "integer"
+          },
+          "country": {
+            "type": "string",
+            "description": "Land der Quell-IP (ISO 3166 alpha-2, gross), beim Abruf nachgeschlagen (Laenderdaten von ipv64.net); fehlt bei privaten oder unbekannten Adressen."
           },
           "username": {
             "type": "string"

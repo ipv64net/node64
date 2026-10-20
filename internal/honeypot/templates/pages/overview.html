@@ -84,6 +84,55 @@
 	</div>
 </div>
 
+<div class="row g-3 mb-3">
+	<div class="col-xl-5">
+		<div class="card h-100" id="top-countries">
+			<div class="card-header"><i class="bi bi-globe-europe-africa text-primary"></i> {{.T "honeypot.geo.title"}}{{.Doc "honeypot#herkunft"}}</div>
+			<div class="card-body p-2">
+				{{if $d.Countries}}<div class="progress-stacked mb-2" style="height:10px" role="img" aria-label="{{.T "honeypot.geo.share"}}">
+					{{range $d.Countries}}{{if .Share}}<div class="progress" role="progressbar" style="width:{{.Share}}%" aria-valuenow="{{.Share}}" aria-valuemin="0" aria-valuemax="100" title="{{.Name}}: {{.Share}} %"><div class="progress-bar {{.Color}}"></div></div>{{end}}{{end}}
+				</div>
+				<table class="table table-sm small mb-0">
+					<tbody>{{range $d.Countries}}<tr>
+						<td class="text-nowrap" style="width:1%"><span class="fs-5 lh-1" title="{{.Name}}">{{.Flag}}</span></td>
+						<td><span title="{{.Name}}">{{.Name}}</span> <span class="font-monospace text-body-secondary">{{.Code}}</span>
+							<div class="progress mt-1" style="height:6px" role="progressbar" aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{.Color}}" style="width:{{.Pct}}%"></div></div></td>
+						<td class="text-end text-nowrap">{{$.Int .Count}}<div class="text-body-secondary" title="{{$.T "honeypot.geo.sources"}}"><i class="bi bi-pc-display"></i> {{$.Int .Sources}}</div></td>
+					</tr>{{end}}</tbody>
+				</table>{{else}}<p class="text-body-secondary small m-2">{{if $d.Geo.Loaded}}{{.T "honeypot.top.empty"}}{{else}}{{.T "honeypot.geo.no_data"}}{{end}}</p>{{end}}
+				<div class="small text-body-secondary mt-2 mx-1">
+					{{if gt $d.CountryCount (len $d.Countries)}}{{.T "honeypot.geo.more" "count" (sub $d.CountryCount (len $d.Countries))}} · {{end}}
+					{{if $d.CountryUnknown}}{{.T "honeypot.geo.unknown" "count" (.Int $d.CountryUnknown)}} · {{end}}
+					{{if $d.Geo.Loaded}}{{.T "honeypot.geo.data" "time" (.Time $d.Geo.Updated)}}{{else}}{{.T "honeypot.geo.waiting"}}{{end}}
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="col-xl-7">
+		<div class="card h-100" id="targets">
+			<div class="card-header d-flex flex-wrap align-items-center gap-2"><span><i class="bi bi-bullseye text-primary"></i> {{.T "honeypot.targets.title"}}{{.Doc "honeypot#statistik"}}</span>
+				<span class="ms-auto small d-flex flex-wrap gap-2">{{range $d.Targets.Groups}}<span class="text-nowrap"><span class="d-inline-block rounded-1 {{$d.Targets.Color .}}" style="width:.8em;height:.8em;vertical-align:-.05em"></span> {{$.T (printf "honeypot.group.%s" .)}}</span>{{end}}</span>
+			</div>
+			<div class="card-body p-2">
+				{{if $d.Targets.Cols}}<div class="row g-3">
+					{{range $d.Targets.Cols}}<div class="col-md-4" id="targets-{{.ID}}">
+						<div class="small fw-semibold mb-1">{{$.T .TitleKey}}</div>
+						{{$mono := .Mono}}{{range .Items}}<div class="small mb-2" title="{{range $i, $s := .Segs}}{{if $i}} · {{end}}{{$.T (printf "honeypot.group.%s" $s.Group)}}: {{$.Int $s.Count}}{{end}}">
+							<div class="d-flex gap-2"><span class="text-break{{if $mono}} font-monospace{{end}}">{{.Key}}{{with .Sub}} <span class="text-body-secondary text-uppercase">{{.}}</span>{{end}}</span><span class="ms-auto text-nowrap fw-semibold">{{$.Int .Count}}</span></div>
+							<div class="progress-stacked mt-1" style="height:8px">{{range .Segs}}<div class="progress" role="progressbar" style="width:{{.Pct}}%" aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100" aria-label="{{$.T (printf "honeypot.group.%s" .Group)}}"><div class="progress-bar {{$d.Targets.Color .Group}}"></div></div>{{end}}</div>
+						</div>{{end}}
+					</div>{{end}}
+				</div>
+				{{with $d.Decoys}}<div class="border-top mt-1 pt-2" id="targets-decoys">
+					<div class="small fw-semibold mb-1"><i class="bi bi-door-closed text-primary"></i> {{$.T "honeypot.targets.decoys"}}</div>
+					<div class="d-flex flex-wrap gap-2">{{range .}}<span class="badge rounded-pill {{if eq .Kind "device"}}text-bg-warning{{else}}text-bg-secondary{{end}}" title="{{$.T (printf "honeypot.targets.decoy_%s" .Kind)}}"><i class="bi {{if eq .Kind "device"}}bi-router{{else}}bi-window{{end}}"></i> {{.Name}} <span class="fw-normal">{{$.Int .Count}}</span></span>{{end}}</div>
+				</div>{{end}}
+				{{else}}<p class="text-body-secondary small m-2">{{.T "honeypot.top.empty"}}</p>{{end}}
+			</div>
+		</div>
+	</div>
+</div>
+
 <h2 class="h6 mb-2">{{.T "honeypot.top.title"}}{{.Doc "honeypot#statistik"}}</h2>
 <div class="row g-3 mb-3">
 	{{range $d.Ranks}}<div class="col-md-6 col-xl-4">
@@ -92,7 +141,7 @@
 			<div class="card-body p-2">
 				{{if .Items}}<table class="table table-sm small mb-0">
 					<tbody>{{$mono := .Mono}}{{range .Items}}<tr>
-						<td class="text-break{{if $mono}} font-monospace{{end}}" style="max-width:16rem">{{.Key}}
+						<td class="text-break{{if $mono}} font-monospace{{end}}" style="max-width:16rem">{{if .Origin.Code}}<span class="hp-cc me-1 text-nowrap" title="{{.Origin.Name}}">{{.Origin.Flag}} <span class="small text-body-secondary">{{.Origin.Code}}</span></span>{{end}}{{.Key}}
 							<div class="progress mt-1" style="height:3px" role="progressbar" aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width:{{.Pct}}%"></div></div></td>
 						<td class="text-end text-nowrap">{{$.Int .Count}}</td>
 					</tr>{{end}}</tbody>
@@ -114,7 +163,7 @@
 			<thead><tr><th>{{.T "honeypot.events.time"}}</th><th>{{.T "honeypot.events.source"}}</th><th>{{.T "honeypot.events.origin"}}</th><th>{{.T "honeypot.events.service"}}</th><th>{{.T "honeypot.events.kind"}}</th><th>{{.T "honeypot.events.details"}}</th></tr></thead>
 			<tbody>{{range $d.Events}}<tr>
 				<td class="text-nowrap">{{$.Time .Time}}</td>
-				<td class="font-monospace text-nowrap">{{.Src}}{{if .SrcPort}}<span class="text-body-secondary">:{{.SrcPort}}</span>{{end}}</td>
+				<td class="font-monospace text-nowrap">{{if .Origin.Code}}<span class="hp-cc me-1" title="{{.Origin.Name}}">{{.Origin.Flag}} <span class="small text-body-secondary">{{.Origin.Code}}</span></span>{{end}}{{.Src}}{{if .SrcPort}}<span class="text-body-secondary">:{{.SrcPort}}</span>{{end}}</td>
 				<td class="text-nowrap"><span class="badge {{if eq .Source "honeypot"}}text-bg-primary{{else}}text-bg-info{{end}}">{{$.T (printf "honeypot.origin.%s" .Source)}}</span></td>
 				<td class="text-nowrap"><span class="text-uppercase">{{.Service}}</span> <span class="font-monospace text-body-secondary">{{.Port}}</span></td>
 				<td><span class="badge text-bg-light font-monospace">{{.Kind}}</span></td>

@@ -599,6 +599,16 @@ func TestPagesRender(t *testing.T) {
 		if path == "/honeypot" && (!strings.Contains(body, `id="top-credentials"`) || !strings.Contains(body, "root") || !strings.Contains(body, `&lt;script&gt;`)) {
 			t.Fatalf("overview content missing:\n%s", body)
 		}
+		if path == "/honeypot" && (!strings.Contains(body, `id="top-countries"`) || !strings.Contains(body, `id="targets-services"`) ||
+			!strings.Contains(body, `id="targets-kinds"`) || !strings.Contains(body, "bg-danger") || strings.Contains(body, "\U0001F1E9\U0001F1EA")) {
+			t.Fatalf("overview without country data:\n%s", body)
+		}
+	}
+	// mit Laenderdaten: Flaggen an IPs (Ereignisse, Top-Quellen) und Rangliste nach Land
+	fakeCountries(t, map[string]string{"192.0.2.0/24": "DE", "198.51.100.0/24": "US"})
+	if code, body := get("/honeypot"); code != 200 || strings.Count(body, "\U0001F1E9\U0001F1EA") < 3 || !strings.Contains(body, "\U0001F1FA\U0001F1F8") ||
+		!strings.Contains(body, "Deutschland") || !strings.Contains(body, `progress-bar bg-primary`) {
+		t.Fatalf("overview with country data: %d\n%s", code, body)
 	}
 	// Formular: Port-Konflikt am Feld (Port 8080 hat hier niemand; 0 ist ungueltig)
 	_, body = get("/honeypot/settings")
