@@ -43,6 +43,17 @@ var Presets = []Server{
 	{Name: "AdGuard", URL: "tls://dns.adguard-dns.com", IPs: []string{"94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff"}},
 	{Name: "AdGuard", URL: "quic://dns.adguard-dns.com", IPs: []string{"94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff"}},
 	{Name: "Mullvad", URL: "tls://dns.mullvad.net", IPs: []string{"194.242.2.2", "2a07:e340::2"}},
+	// European resolvers, unfiltered variants (DNS64 filters itself): DNS4EU (Whalebone, CZ, EU-funded),
+	// dnsforge "Blank" (adminForge, DE), Freifunk München (DE, PoP in Vienna), Digitalcourage (DE, DoT only).
+	{Name: "DNS4EU", URL: "https://unfiltered.joindns4.eu/dns-query", IPs: []string{"86.54.11.100", "86.54.11.200", "2a13:1001::86:54:11:100", "2a13:1001::86:54:11:200"}},
+	{Name: "dnsforge", URL: "https://blank.dnsforge.de/dns-query", IPs: []string{"138.199.149.249", "78.47.71.194", "2a01:4f8:c17:7aa5::249", "2a01:4f8:c013:aae9::194"}},
+	{Name: "Freifunk München", URL: "https://doh.ffmuc.net/dns-query", IPs: []string{"5.1.66.255", "185.150.99.255", "2001:678:e68:f000::", "2001:678:ed0:f000::"}},
+	{Name: "DNS4EU", URL: "tls://unfiltered.joindns4.eu", IPs: []string{"86.54.11.100", "86.54.11.200", "2a13:1001::86:54:11:100", "2a13:1001::86:54:11:200"}},
+	{Name: "dnsforge", URL: "tls://blank.dnsforge.de", IPs: []string{"138.199.149.249", "78.47.71.194", "2a01:4f8:c17:7aa5::249", "2a01:4f8:c013:aae9::194"}},
+	{Name: "dnsforge", URL: "quic://blank.dnsforge.de", IPs: []string{"138.199.149.249", "78.47.71.194", "2a01:4f8:c17:7aa5::249", "2a01:4f8:c013:aae9::194"}},
+	{Name: "Freifunk München", URL: "tls://dot.ffmuc.net", IPs: []string{"5.1.66.255", "185.150.99.255", "2001:678:e68:f000::", "2001:678:ed0:f000::"}},
+	{Name: "Freifunk München", URL: "quic://doq.ffmuc.net", IPs: []string{"5.1.66.255", "185.150.99.255", "2001:678:e68:f000::", "2001:678:ed0:f000::"}},
+	{Name: "Digitalcourage", URL: "tls://dns3.digitalcourage.de", IPs: []string{"5.9.164.112", "2a01:4f8:251:554::2"}},
 }
 
 // Proto is the transport of an upstream URL: doh, dot or doq ("" = not supported).

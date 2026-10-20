@@ -1,5 +1,15 @@
 # Changes – DNS64
 
+## 1.21.0 – 2026-10-20
+
+### New
+- European upstream presets, each in its unfiltered variant (DNS64 filters itself):
+  - DNS4EU (Whalebone, Czech Republic, co-funded by the EU): DoH and DoT, `unfiltered.joindns4.eu`;
+  - dnsforge (adminForge, servers in Germany only): DoH, DoT and DoQ, variant “Blank” `blank.dnsforge.de`;
+  - Freifunk München (Germany, second site in Vienna): DoH, DoT and DoQ (`doh.ffmuc.net`, `dot.ffmuc.net`, `doq.ffmuc.net`);
+  - Digitalcourage (Germany): DoT only, `dns3.digitalcourage.de`.
+- On existing installations the presets appear switched off; the default for new installations stays Cloudflare + Quad9. DNS0.EU is missing because the service has been discontinued.
+
 ## 1.20.0 – 2026-10-19
 
 ### New

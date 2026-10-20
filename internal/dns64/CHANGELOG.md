@@ -1,5 +1,15 @@
 # Änderungen – DNS64
 
+## 1.21.0 – 2026-10-20
+
+### Neu
+- Europäische Upstream-Vorlagen, jeweils die ungefilterte Variante (DNS64 filtert selbst):
+  - DNS4EU (Whalebone, Tschechien, von der EU kofinanziert): DoH und DoT, `unfiltered.joindns4.eu`;
+  - dnsforge (adminForge, Server nur in Deutschland): DoH, DoT und DoQ, Variante „Blank“ `blank.dnsforge.de`;
+  - Freifunk München (Deutschland, zweiter Standort Wien): DoH, DoT und DoQ (`doh.ffmuc.net`, `dot.ffmuc.net`, `doq.ffmuc.net`);
+  - Digitalcourage (Deutschland): nur DoT, `dns3.digitalcourage.de`.
+- Die Vorlagen erscheinen bei bestehenden Installationen ausgeschaltet; der Standard für neue Installationen bleibt Cloudflare + Quad9. DNS0.EU fehlt, weil der Dienst eingestellt ist.
+
 ## 1.20.0 – 2026-10-19
 
 ### Neu

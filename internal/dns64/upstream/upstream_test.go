@@ -189,3 +189,30 @@ func TestProto(t *testing.T) {
 		}
 	}
 }
+
+func TestPresets(t *testing.T) {
+	seen := map[string]bool{}
+	for _, p := range Presets {
+		if Proto(p.URL) == "" || seen[p.URL] || len(p.IPs) == 0 {
+			t.Errorf("preset %+v", p)
+		}
+		seen[p.URL] = true
+		v6 := false
+		for _, ip := range p.IPs {
+			a := net.ParseIP(ip)
+			if a == nil || (v6 && a.To4() != nil) { // IPv4 zuerst
+				t.Errorf("%s: IP %q", p.URL, ip)
+			}
+			v6 = v6 || (a != nil && a.To4() == nil)
+		}
+	}
+	// europaeische Vorlagen sind da, der Standard bleibt Cloudflare + Quad9
+	for _, u := range []string{"https://unfiltered.joindns4.eu/dns-query", "tls://blank.dnsforge.de", "quic://doq.ffmuc.net", "tls://dns3.digitalcourage.de"} {
+		if !seen[u] {
+			t.Errorf("preset %s missing", u)
+		}
+	}
+	if len(DefaultServers) != 2 || DefaultServers[0].Name != "Cloudflare" || DefaultServers[1].Name != "Quad9" {
+		t.Errorf("defaults = %+v", DefaultServers)
+	}
+}
