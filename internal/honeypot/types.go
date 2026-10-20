@@ -98,6 +98,8 @@ type Event struct {
 
 	Source string // SrcHoneypot ("" gilt als honeypot), SrcLog, SrcSyslog (H5)
 	Rule   string // Regel-Kennung bei log/syslog, z. B. "sshd/bruteforce@1" (H5)
+
+	Fingerprint string // H6: "ja4:<ja4>" (TLS ClientHello) bzw. "hassh:<md5>" (SSH-KEXINIT des Clients), sonst leer
 }
 
 // Grenzen fuer Texte und Payload (vom Sensor durchgesetzt, vom Speicher noch einmal geprueft).

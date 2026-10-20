@@ -74,6 +74,8 @@ type ReportSamples struct {
 	Paths       []ReportKey     `json:"paths,omitempty"`
 	UserAgents  []ReportKey     `json:"user_agents,omitempty"`
 	Payloads    []ReportPayload `json:"payloads,omitempty"`
+	// H6: Fingerabdruecke der Werkzeuge, Key "ja4:<ja4>" bzw. "hassh:<md5>" (optional, aeltere ipv64 ignorieren das Feld)
+	Fingerprints []ReportKey `json:"fingerprints,omitempty"`
 }
 
 // ReportCred ist ein Paar Benutzername/Passwort (Klartext, nur Honeypot).
