@@ -356,6 +356,34 @@ MikroTik `v64_mikrotik_v4_v64.rsc`), Teillisten `…_v64_ssh`, `_v64_web`, `_v64
 `_v64_research`. Live-Fassung ausserhalb des Webroots bzw. in einem gesperrten Ordner, ausgeliefert ueber
 `/blocklists/live/<token>/<datei>` (`live.php`). In `index.json` eigene Kategorie `honeypot`, `in_all` = false.
 
+## H5 Umsetzung (Schnittstellen, verbindlich fuer die parallelen Teile)
+
+Vertrag Go: `internal/honeypot/logsensor_types.go` (LogLine, LogRule, LogConfig, Status, Grenzen), `Event.Source`/`Event.Rule`
+(types.go), Platzhalter `logengine.go`, `syslog.go`, `watch.go` (Signaturen bleiben).
+
+| Teil | Dateien | Inhalt |
+|---|---|---|
+| Log-Sensor | `logengine.go`, `logtail.go`, `logrules_svc.go` (+ Tests) | Regeln anwenden, Schwellen je Regel und IP, Rueckstellung bei Erfolg, Dateien mitlesen (Rotation, Kuerzung, Glob, Poll), Regeln fuer sshd, nginx/Apache/Caddy, Postfix/Dovecot, Proxmox, Nextcloud, Vaultwarden, Gitea/Forgejo, Home Assistant |
+| Syslog | `syslog.go`, `logrules_fw.go` (+ Tests) | UDP/TCP (RFC 3164/5424, Octet-Counting), nur erlaubte Absender (Standard private Netze), Regeln fuer MikroTik, OPNsense/pfSense, FortiGate, Sophos, UniFi |
+| Einbindung | `types.go` (Config.Log), `store.go` + Migration `0002_source.sql`, `report_store.go`, `module.go`, `ui.go`, Templates, `metrics.go`, `cmd/node64/honeypot_mode.go`, `docs/HONEYPOT64.md` | Einstellungen und Port-Pruefung, Speichern mit Quelle/Regel, Meldung mit `source`/`rule`, Proben **nur** aus dem Honeypot, Oberflaeche (Quellen, Zustand der Dateien/Syslog), Umgebungsvariablen `NODE64_HONEYPOT_LOGS`, `NODE64_HONEYPOT_SYSLOG_PORT`, `NODE64_HONEYPOT_SYSLOG_ALLOW` |
+| Fruehwarnung Node64 | `watch.go`, `watch_ui.go`, Template, `internal/ipv64api/threat_watch.go`, Benachrichtigung `KindHoneypotWatch` | Netze in der Oberflaeche verwalten (gespeichert bei ipv64), Treffer alle 30 min abholen und melden |
+| ipv64 | `deploy/sql/honeypot_h5.sql`, `deploy/web/api_v2_threat_watch.php`, `deploy/web/honeypot/watch.php`, `deploy/web/bots/honeypot_watch.php`, `deploy/web/honeypot/hp_limits_lib.php`, kleine Aenderung `api_v2_honeypot.php` (Dienst `vpn`, Sensor-Limit) | Fruehwarnung (Netze, Pruefung nach jeder Bewertung, Mail + API), Limits je Klasse |
+
+**Entscheidungen H5** (Vorschlag, Dennis kann aendern):
+
+- Log-Sensor liest Textdateien; **journald direkt erst spaeter** (das Binaerformat braucht sonst CGO). Bis dahin
+  `rsyslog` auf dem Host oder Weiterleitung per Syslog an den Empfaenger.
+- Logs im Container: `-v /var/log:/host/log:ro`, dazu `--group-add 4` (Gruppe `adm`), weil `auth.log` nicht fuer alle
+  lesbar ist. Fehlende Rechte stehen als Fehler an der Datei.
+- Syslog nur von erlaubten Absendern (Standard: private Netze, localhost) – UDP-Absender lassen sich faelschen.
+- Aus echten Logs gehen **keine Proben** an ipv64 (keine Pfade, User-Agents, Benutzernamen), nur IP, Art, Dienst,
+  Port, Anzahl, Zeitraum, Regel. Lokal steht nur der Regelname im Detail.
+- Gemeldete Regel `<id>@<version>`; ipv64 gewichtet schon nach Quelle (honeypot 1.0, log 0.8, syslog 0.7).
+- Fruehwarnung: Netze ohne Nachweis bekommen nur Treffer, die **gelistet** sind (ohnehin oeffentlich); die
+  aktuellen DynDNS-IPs des Accounts gelten als nachgewiesen und melden schon jede Sichtung. Limits je Klasse:
+  Netze Standard 3, sonst 50; IPv4 ab /16, IPv6 ab /32.
+- Sensoren je Account: Standard 5, sonst 25 (weitere Sensoren bekommen `403 sensor_limit`).
+
 ## 15. Offen
 
 - Aufteilung Überblick/volle Informationsseite im Detail (bei H4).

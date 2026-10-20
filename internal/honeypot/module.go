@@ -165,6 +165,7 @@ func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	m.g = g
 	m.uiRoutes(mux, g)
 	m.apiRoutes(mux, g)
+	m.watchRoutes(mux, g)
 }
 
 func (m *Module) dir() string { return filepath.Join(m.dataDir, Name) }
@@ -189,8 +190,9 @@ func (m *Module) Start(ctx context.Context) error {
 	m.mu.Lock()
 	m.sensor, m.life, m.cancel, m.started = s, lctx, cancel, time.Now()
 	m.mu.Unlock()
-	m.wg.Add(3)
+	m.wg.Add(4)
 	go func() { defer m.wg.Done(); m.st.Run(lctx) }()
+	go func() { defer m.wg.Done(); m.watchLoop(lctx) }()
 	go func() { defer m.wg.Done(); m.notifyLoop(lctx) }()
 	go func() { defer m.wg.Done(); m.rep.Run(lctx) }() // tut nichts, solange die Meldung aus ist
 	m.applyLocked(ctx)

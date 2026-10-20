@@ -70,6 +70,9 @@ type Event struct {
 	Page     string // Koeder (Pages)
 	Payload  []byte // erste Bytes (TCP, HTTP-Body-Anfang)
 	Detail   string // kurzer Zusatz (z. B. Schluessel-Fingerabdruck, erkannte Muster)
+
+	Source string // SrcHoneypot ("" gilt als honeypot), SrcLog, SrcSyslog (H5)
+	Rule   string // Regel-Kennung bei log/syslog, z. B. "sshd/bruteforce@1" (H5)
 }
 
 // Grenzen fuer Texte und Payload (vom Sensor durchgesetzt, vom Speicher noch einmal geprueft).
