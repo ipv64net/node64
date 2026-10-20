@@ -32,7 +32,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.2.0"
+	version = "0.2.1"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -250,6 +250,9 @@ func (m *Module) applyLocked(ctx context.Context) {
 	svcs, warns := m.resolve(ctx, cfg)
 	run := cfg.Config
 	run.Services = svcs
+	if m.core.SettingOr(ctx, setConfig, "") == "" { // nie eingestellt: nichts oeffnen, bis die Auswahl gespeichert ist
+		run.Services = nil
+	}
 	status := s.Apply(life, run, m.sink)
 	m.mu.Lock()
 	m.status, m.warnings = status, warns

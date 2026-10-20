@@ -649,3 +649,23 @@ func TestPagesRender(t *testing.T) {
 		}
 	}
 }
+
+// Eingeschaltet, aber nie eingestellt: nichts oeffnen (auch nicht das Standardprofil), bis die Auswahl gespeichert ist.
+func TestModuleUnconfiguredOpensNothing(t *testing.T) {
+	m, _ := modTest(t, modFreePort(t))
+	ctx := context.Background()
+	if err := m.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer m.Stop(ctx) //nolint:errcheck
+	if st := m.Status(); len(st) != 0 || len(m.Claims(ctx)) != 0 {
+		t.Fatalf("unconfigured module must not open services: %+v", st)
+	}
+	p := modFreePort(t)
+	if _, err := m.SaveConfig(ctx, ModuleConfig{Profile: ProfileCustom, Config: Config{Services: []Service{{Service: SvcTCP, Port: p}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if !portOpen(p) {
+		t.Fatalf("after saving the port must be open: %+v", m.Status())
+	}
+}

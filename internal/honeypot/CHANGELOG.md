@@ -1,5 +1,11 @@
 # Änderungen – Honeypot64
 
+## 0.2.1 – 2026-10-20
+
+### Behoben
+- Beim ersten Einschalten öffnete das Modul kurz die Ports des Standardprofils, bevor eine eigene Auswahl galt. Jetzt
+  bleibt alles zu, bis die Einstellungen einmal gespeichert sind.
+
 ## 0.2.0 – 2026-10-20
 
 Meldung an ipv64 (Phase H2).

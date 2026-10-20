@@ -1,5 +1,11 @@
 # Changes – Honeypot64
 
+## 0.2.1 – 2026-10-20
+
+### Fixed
+- When first switched on, the module briefly opened the ports of the default profile before an own selection applied.
+  Now everything stays closed until the settings have been saved once.
+
 ## 0.2.0 – 2026-10-20
 
 Reporting to ipv64 (phase H2).
