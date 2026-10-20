@@ -1,5 +1,12 @@
 # Änderungen – Honeypot64
 
+## 0.4.0 – 2026-10-20
+
+### Neu
+- Login-Fallen für FTP (21), SMTP (25/587, AUTH PLAIN/LOGIN, kein Relay, Relay-Versuche werden gemeldet), POP3 (110), IMAP (143) und MQTT (1883): erfassen Benutzername und Passwort und lehnen jede Anmeldung ab. Auch als eigene Dienste wählbar (`ftp 21`, `smtp 587`, …) und im Modus ohne Oberfläche per `NODE64_HONEYPOT_SERVICES`.
+- Profile: `standard` mit FTP, SMTP, IMAP, MQTT und weiteren Ports (3306, 6379, 8006, 8291), `full` mit vielen weiteren Ports gängiger Web-Oberflächen und Dienste.
+- Zugangsdaten aller Login-Fallen gehen in die Meldung an ipv64 (bisher nur SSH, Telnet, HTTP/HTTPS).
+
 ## 0.3.0 – 2026-10-20
 
 Log-Sensor, Syslog-Empfänger und Frühwarnung für eigene Netze (Phase H5).

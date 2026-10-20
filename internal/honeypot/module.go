@@ -35,7 +35,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.3.0"
+	version = "0.4.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 

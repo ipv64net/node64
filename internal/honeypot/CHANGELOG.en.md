@@ -1,5 +1,12 @@
 # Changes – Honeypot64
 
+## 0.4.0 – 2026-10-20
+
+### New
+- Login traps for FTP (21), SMTP (25/587, AUTH PLAIN/LOGIN, no relay, relay attempts are reported), POP3 (110), IMAP (143) and MQTT (1883): record user name and password and reject every login. Also selectable as own services (`ftp 21`, `smtp 587`, …) and in the mode without web interface via `NODE64_HONEYPOT_SERVICES`.
+- Profiles: `standard` with FTP, SMTP, IMAP, MQTT and further ports (3306, 6379, 8006, 8291), `full` with many more ports of common web interfaces and services.
+- Credentials of all login traps go into the report to ipv64 (before only SSH, Telnet, HTTP/HTTPS).
+
 ## 0.3.0 – 2026-10-20
 
 Log sensor, syslog receiver and early warning for your own networks (phase H5).

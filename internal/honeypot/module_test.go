@@ -244,7 +244,7 @@ func TestConfigValidation(t *testing.T) {
 	}
 	// weitere Fehler
 	bad := ModuleConfig{Profile: ProfileCustom, RetentionDays: 500, MaxEvents: 10, Config: Config{MaxConnsPerIP: -1,
-		Services: []Service{{Service: "ftp", Port: 21}, {Service: SvcSSH, Port: 0}, {Service: SvcTCP, Port: 9999}, {Service: SvcSSH, Port: 9999}, {Service: SvcTCP, Port: 9998, Page: "admin"}}}}
+		Services: []Service{{Service: "gopher", Port: 70}, {Service: SvcSSH, Port: 0}, {Service: SvcTCP, Port: 9999}, {Service: SvcSSH, Port: 9999}, {Service: SvcTCP, Port: 9998, Page: "admin"}}}}
 	_, err = m.SaveConfig(ctx, bad)
 	fe, _ = err.(FieldErrors)
 	for _, k := range []string{"retention_days", "max_events", "max_conns_per_ip", "services"} {
@@ -252,7 +252,7 @@ func TestConfigValidation(t *testing.T) {
 			t.Errorf("expected error for %s: %v", k, err)
 		}
 	}
-	for _, s := range []string{"honeypot.err.service|ftp", "honeypot.err.port|0", "honeypot.err.port_twice|9999", "honeypot.err.page|admin"} {
+	for _, s := range []string{"honeypot.err.service|gopher", "honeypot.err.port|0", "honeypot.err.port_twice|9999", "honeypot.err.page|admin"} {
 		if !strings.Contains(fe["services"], s) {
 			t.Errorf("missing %q in %q", s, fe["services"])
 		}

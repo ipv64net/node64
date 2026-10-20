@@ -408,7 +408,9 @@ func parseHPServices(v string) ([]honeypot.Service, error) {
 		switch svc {
 		case honeypot.SvcSSH, honeypot.SvcTelnet, honeypot.SvcHTTP, honeypot.SvcHTTPS, honeypot.SvcTCP:
 		default:
-			return nil, fmt.Errorf("NODE64_HONEYPOT_SERVICES: unknown service %q (ssh, telnet, http, https, tcp)", parts[0])
+			if !honeypot.ProtoKnown(svc) {
+				return nil, fmt.Errorf("NODE64_HONEYPOT_SERVICES: unknown service %q (ssh, telnet, http, https, tcp, ftp, smtp, pop3, imap, mqtt)", parts[0])
+			}
 		}
 		port, err := strconv.Atoi(strings.TrimSpace(parts[1]))
 		if err != nil || port < 1 || port > 65535 {

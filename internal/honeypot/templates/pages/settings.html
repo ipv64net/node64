@@ -31,7 +31,7 @@
 				</div>
 				<div class="mb-3">
 					<label class="form-label" for="services">{{.T "honeypot.settings.services"}}{{.Doc "honeypot#dienste"}}</label>
-					<textarea class="form-control font-monospace{{if index $d.Errors "services"}} is-invalid{{end}}" id="services" name="services" rows="6" placeholder="ssh 2222&#10;telnet 2323&#10;http 8081 wp-login&#10;https 8443&#10;tcp 3389">{{$d.Lines}}</textarea>
+					<textarea class="form-control font-monospace{{if index $d.Errors "services"}} is-invalid{{end}}" id="services" name="services" rows="6" placeholder="ssh 2222&#10;telnet 2323&#10;http 8081 wp-login&#10;https 8443&#10;ftp 21&#10;smtp 587&#10;imap 143&#10;pop3 110&#10;mqtt 1883&#10;tcp 3389">{{$d.Lines}}</textarea>
 					{{with index $d.Errors "services"}}<div class="invalid-feedback" style="white-space:pre-line">{{.}}</div>{{end}}
 					<div class="form-text">{{.T "honeypot.settings.services_hint" "pages" (join $d.Pages ", ")}}</div>
 				</div>

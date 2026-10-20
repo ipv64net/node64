@@ -30,7 +30,7 @@ Bridge-Netz sehen manche Docker-Versionen statt der Angreifer die Adresse des Do
 |---|---|---|
 | `NODE64_MODE` | – | `honeypot` schaltet den Modus ohne Oberfläche ein; andere Werte sind ein Fehler |
 | `NODE64_HONEYPOT_PROFILE` | `standard` | `minimal`, `standard` oder `full` (Tabelle unten) |
-| `NODE64_HONEYPOT_SERVICES` | – | eigene Dienste statt des Profils, z. B. `ssh:22,ssh:2222,http:80,https:443,tcp:3389`; Dienste `ssh`, `telnet`, `http`, `https`, `tcp`; bei `http`/`https` optional ein Köder als dritter Teil (`http:80:wp-login`, möglich: `generic`, `wp-login`, `phpmyadmin`, `admin`). Unbekannte Dienste, doppelte Ports oder ungültige Ports verhindern den Start |
+| `NODE64_HONEYPOT_SERVICES` | – | eigene Dienste statt des Profils, z. B. `ssh:22,ssh:2222,http:80,https:443,tcp:3389`; Dienste `ssh`, `telnet`, `http`, `https`, `tcp`, `ftp`, `smtp`, `pop3`, `imap`, `mqtt`; bei `http`/`https` optional ein Köder als dritter Teil (`http:80:wp-login`, möglich: `generic`, `wp-login`, `phpmyadmin`, `admin`). Unbekannte Dienste, doppelte Ports oder ungültige Ports verhindern den Start |
 | `NODE64_HONEYPOT_SCAN` | `1` | Port-Scan-Erkennung (`1`/`0`) |
 | `NODE64_HONEYPOT_RETENTION` | `7d` | lokale Aufbewahrung, z. B. `3d`, `48h` (1 Stunde bis 365 Tage); zusätzlich gilt eine feste Obergrenze von 200 000 Ereignissen |
 | `NODE64_HONEYPOT_INFO_PORT` | `9064` | Port der Info-Seite, `0` = aus; darf kein Fallen-Port sein |
@@ -51,8 +51,11 @@ Die übrigen Variablen der Node (Weboberfläche, Admin, TLS) werden in diesem Mo
 | Profil | Dienste |
 |---|---|
 | `minimal` | SSH 22, HTTP 80 (für kleine Geräte) |
-| `standard` | SSH 22 und 2222, Telnet 23, HTTP 80 und 8080, HTTPS 443, TCP 3389 (RDP) und 5900 (VNC) |
-| `full` | wie `standard`, dazu Telnet 2323, HTTPS 8443 und TCP 21, 25, 445, 1433, 1883, 2375, 3306, 5432, 6379, 9200, 27017 |
+| `standard` | SSH 22 und 2222, Telnet 23, HTTP 80 und 8080, HTTPS 443 und 8006, FTP 21, SMTP 25, IMAP 143, MQTT 1883, TCP 3306, 3389 (RDP), 5900 (VNC), 6379, 8291 (Winbox) |
+| `full` | wie `standard`, dazu Telnet 2323, SMTP 587, POP3 110, HTTP 2375, 3000, 5000, 8123, 9200, HTTPS 5001, 8007, 8443, 9443, 10000, 10250, 10443 und TCP 445, 1433, 5432, 8728, 8729, 27017 |
+
+**Login-Fallen:** FTP, SMTP (AUTH PLAIN/LOGIN, kein Relay), POP3, IMAP und MQTT nehmen Anmeldungen an, lehnen jede
+ab und erfassen Benutzername und Passwort – wie SSH und Telnet. Reine TCP-Ports erfassen Verbindung und erste Bytes.
 
 Dazu die Info-Seite auf `NODE64_HONEYPOT_INFO_PORT` (Standard 9064).
 

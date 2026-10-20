@@ -80,7 +80,7 @@ func TestHoneypotModeFromEnv(t *testing.T) {
 
 	bad := []map[string]string{
 		{"NODE64_HONEYPOT_PROFILE": "huge"},
-		{"NODE64_HONEYPOT_SERVICES": "ftp:21"},
+		{"NODE64_HONEYPOT_SERVICES": "gopher:70"},
 		{"NODE64_HONEYPOT_SERVICES": "ssh"},
 		{"NODE64_HONEYPOT_SERVICES": "ssh:0"},
 		{"NODE64_HONEYPOT_SERVICES": "ssh:22,http:22"},
