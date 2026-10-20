@@ -384,6 +384,25 @@ Vertrag Go: `internal/honeypot/logsensor_types.go` (LogLine, LogRule, LogConfig,
   Netze Standard 3, sonst 50; IPv4 ab /16, IPv6 ab /32.
 - Sensoren je Account: Standard 5, sonst 25 (weitere Sensoren bekommen `403 sensor_limit`).
 
+## PROXY64 und Honeypot64 (Entscheidung Dennis 2026-10-20)
+
+Nur Opt-in: PROXY64 nutzt den Honeypot nur, wenn es in den Einstellungen von PROXY64 eingeschaltet ist (je Punkt ein
+Schalter, Standard aus) und das Modul Honeypot64 laeuft. Verbindung ueber `internal/hpbridge` (keiner der beiden Teile
+importiert den anderen).
+
+| Nr. | Was | Stand |
+|---|---|---|
+| 1 | Anfragen ohne passenden Host (nur IP, fremde Domain, leere SNI) gehen an den Web-Koeder statt an eine Fehlerseite | jetzt |
+| 2 | Zugriffe von PROXY64 (nur Metadaten) wertet der Log-Sensor mit eigenen Regeln aus (`proxy64/*@1`), gemeldet wird nur IP/Art/Anzahl | jetzt |
+| 3 | Sofort-Sperre: im Honeypot auffaellige IPs sperrt PROXY64 lokal fuer eine Weile (Standard 24 h) | jetzt |
+| 4 | Fallen-Pfade auf echten Hosts | spaeter |
+| 5 | **Merken:** PROXY64 erkennt bekannte Angriffswerkzeuge am JA4-Fingerabdruck (Daten aus der Statistik) | spaeter |
+
+**Dienste-Auswahl dynamischer:** Statt nur Profil oder Textliste ein Katalog aller Fallen-Dienste mit Schalter je
+Dienst, Port aenderbar, Koeder-Auswahl, Anzeige „frei / belegt von …“, Profile als Vorlage („uebernehmen“ fuellt den
+Katalog), „alle freien einschalten“; Dienste mehrfach auf verschiedenen Ports moeglich. Auf einer reinen Honeypot-Node
+(Node64 mit Oberflaeche, sonst keine Module) sind so alle Ports nutzbar.
+
 ## 15. Offen
 
 - Aufteilung Überblick/volle Informationsseite im Detail (bei H4).
