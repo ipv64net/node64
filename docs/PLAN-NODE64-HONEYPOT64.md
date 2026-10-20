@@ -26,7 +26,8 @@ ELK, echte Shells).
 | Schwelle | **dynamisch** nach Zahl der aktiven Beitragenden (Abschnitt 6) |
 | Freigabe (Whitelist) | muss es geben; Anträge werden automatisch geprüft, geht das nicht oder ist es strittig → an Dennis |
 | Eigene Sensoren | **nicht** auf srv07/srv08; Dennis betreibt selbst ein bis zwei Sensoren |
-| Belohnung für Beitragende | später (Dennis überlegt) |
+| Belohnung für Beitragende | **Live-Stand** der Listen (auch mit Klasse Standard) |
+| Preise | keine eigenen; alles in den bestehenden Account-Klassen |
 | Betrieb ohne Oberfläche | ja (Modus `honeypot`, Abschnitt 2) |
 | Prometheus | ja |
 | Daten für spätere Auswertung (auch KI) | aufheben, mit gestuften Fristen (Abschnitt 4) |
@@ -248,13 +249,19 @@ gekürzte Liste. Unterschied ist nur die **Aktualität**:
 - In `index.json` steht die freie Fassung; Node64/PROXY64 nimmt mit hinterlegtem Listen-Token automatisch die
   Live-Fassung.
 
-| Stufe | bekommt |
+**Keine eigenen Preise** (Dennis 2026-10-20): alles läuft in den bestehenden Account-Klassen; Limits (API,
+DNS-Sperrliste) über die vorhandenen Klassenwerte. Grundsätzlich bekommen **alle alles**; Unterschiede gibt es nur bei
+der Aktualität der Listen und beim Umfang der Informationsseite.
+
+| Wer | bekommt |
 |---|---|
-| alle, kostenlos | v64 Blocklist und Teillisten **vollständig im Tagesstand**, IP-Auskunft und DNS-Sperrliste mit Tageslimit |
-| VIP, Premium, Business, Company, Supporter | **Live-Stand** der v64 Blocklist und Teillisten (alle 30 min) |
-| Beitragende (Sensor läuft) | Statistik „dein Beitrag“, höhere Limits, Belohnung (später) |
-| Business/Company | Änderungs-Feed, hohe Limits für API und DNS-Sperrliste, Frühwarnung für eigene Netze, Passwortprüfung, gewerbliche Nutzung |
-| Hoster/Partner auf Anfrage | Netzberichte, BGP-Feed, Abgleich großer Datenmengen, Zusage zur Verfügbarkeit |
+| **alle** (auch ohne Konto) | v64 Blocklist, Teillisten und Schadhosts **vollständig im Tagesstand**, DNS-Sperrliste (Tagesstand), IP-Auskunft mit Freigabe-Antrag, Listen für Passwörter, Benutzernamen, User-Agents und Pfade, **Informationsseite im Überblick** |
+| **Beitragende** (mindestens ein Sensor hat in den letzten 7 Tagen gemeldet, auch Klasse Standard) | **Live-Stand** der Listen als Belohnung, Statistik „dein Beitrag“ |
+| **alle Klassen außer Standard** (`user_class` ≠ 1: VIP, Premium, Business, Company, Supporter) | **Live-Stand** der Listen, **volle Informationsseite** (eingeloggt) |
+| Hoster/Partner auf Anfrage | Netzberichte, BGP-Feed, Abgleich großer Datenmengen |
+
+Änderungs-Feed, Frühwarnung für eigene Netze und Passwortprüfung stehen allen Konten offen; ihr Umfang folgt den
+Klassenwerten.
 
 Limits und Stufe hängen am API-Key; die DNS-Sperrliste zählt je abfragender IP bzw. je eingetragenem Mailserver.
 
@@ -277,9 +284,13 @@ Limits und Stufe hängen am API-Key; die DNS-Sperrliste zählt je abfragender IP
 
 ## 10. Statistik bei ipv64 unter „Secure“
 
-- **Für alle:** aktive Sensoren und Länder, Angriffe 24 h und Verlauf, meistangegriffene Ports und Arten, Herkunft
-  nach Land und Netzbetreiber, häufigste Benutzernamen, Passwörter, Pfade, User-Agents, neue Angreifer heute, neue
-  Exploit-Pfade/CVE, Größe der Listen.
+**Überblick für alle, volle Informationsseite eingeloggt für alle Klassen außer Standard** (Abschnitt 8).
+
+- **Überblick (alle):** aktive Sensoren, Angriffe 24 h und Verlauf, meistangegriffene Ports und Arten, Herkunft nach
+  Land, Größe der Listen, Top 10 je Bereich.
+- **Volle Informationsseite (Klassen ≠ Standard):** alles aus dem Überblick ohne Top-10-Grenze, dazu Herkunft nach
+  Netzbetreiber, häufigste Benutzernamen, Passwörter, Pfade und User-Agents mit Verlauf, neue Angreifer heute, neue
+  Exploit-Pfade/CVE, Kampagnen, Länder der Sensoren, Suche und Export.
 - **Für Beitragende:** eigene Sensoren (online/offline, letzte Meldung, Version), Treffer je Quelle, Port und Zeit,
   Top-Angreifer bei mir, „Deine Meldungen haben X IPs auf die v64 Blocklist gebracht“.
 
@@ -318,9 +329,8 @@ Netzbetreibern, Zusammenfassungen in Klartext für die Statistikseite.
 | H4 | Öffentliche Statistik unter „Secure“, Passwort-/Benutzer-/User-Agent-/Pfad-Listen, DNSBL, Leitfaden (Firmen-Firewalls, MikroTik-Container) |
 | H5 | Log-Sensor und Syslog-Empfänger, Frühwarnung für eigene Netze, Stufen und Limits |
 | H6 | Honeypot Stufe 2, JA4/HASSH, Passwortprüfung (k-Anonymität), Änderungs-Feed, Node64 als Firewall-Helfer |
-| H7 | Hosting-Anbieter (Netzberichte, BGP-Feed), Plugins, weitere Plattformen (FreeBSD, Windows), KI-Auswertung, Belohnung |
+| H7 | Hosting-Anbieter (Netzberichte, BGP-Feed), Plugins, weitere Plattformen (FreeBSD, Windows), KI-Auswertung |
 
 ## 15. Offen
 
-- Preise und Zuordnung der übrigen Stufen (Abschnitt 8).
-- Belohnung für Beitragende.
+- Aufteilung Überblick/volle Informationsseite im Detail (bei H4).
