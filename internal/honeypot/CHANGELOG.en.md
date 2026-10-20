@@ -1,5 +1,11 @@
 # Changes – Honeypot64
 
+## 0.6.0 – 2026-10-20
+
+### New
+- Service selection as a catalog: all trap services with switch, editable port, decoy choice and state ("free", "used by …", "open"); presets Minimal/Standard/Full, "Enable all free", "All off", extra entries for services on several ports; the text list stays under "Advanced". API `GET /api/honeypot/catalog`. Duplicate ports are checked per protocol (161/udp and 161/tcp do not conflict).
+- Working together with PROXY64 (opt-in in PROXY64): decoy for requests without a matching host, analysis of accesses with rules `proxy64/*@1`, instant blocking of conspicuous IPs in PROXY64. Line on the overview and Prometheus `node64_honeypot_proxy_*`.
+
 ## 0.5.0 – 2026-10-20
 
 Phase H6.

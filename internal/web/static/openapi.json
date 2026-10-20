@@ -3886,13 +3886,7 @@
         "properties": {
           "service": {
             "type": "string",
-            "enum": [
-              "ssh",
-              "telnet",
-              "http",
-              "https",
-              "tcp"
-            ]
+            "description": "ssh, telnet, http, https, tcp, ftp, smtp, imap, pop3, mysql, postgres, mssql, redis, vnc, rdp, mqtt, mikrotik-api, snmp (UDP), sip (UDP); vollstaendige Liste: GET /api/honeypot/catalog (services)"
           },
           "port": {
             "type": "integer",
@@ -3972,6 +3966,135 @@
           },
           "log": {
             "$ref": "#/components/schemas/Honeypot64LogConfig"
+          }
+        }
+      },
+      "Honeypot64CatalogItem": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer",
+            "description": "Eingestellter bzw. Standardport"
+          },
+          "default_port": {
+            "type": "integer",
+            "description": "Standardport des Katalogs; fehlt bei eigenen Eintraegen"
+          },
+          "page": {
+            "type": "string",
+            "description": "Koeder (nur http/https)"
+          },
+          "proto": {
+            "type": "string",
+            "enum": [
+              "tcp",
+              "udp"
+            ]
+          },
+          "group": {
+            "type": "string",
+            "enum": [
+              "remote",
+              "web",
+              "mail",
+              "db",
+              "iot",
+              "other"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Profile, die genau diesen Eintrag enthalten"
+          },
+          "on": {
+            "type": "boolean",
+            "description": "In der gespeicherten Auswahl"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "free",
+              "open",
+              "error",
+              "used",
+              "reserved"
+            ]
+          },
+          "owner": {
+            "type": "string",
+            "description": "Anderer Teil bei used/reserved (web, edge, dns64, cdn64, honeypot …)"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "conns": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "Honeypot64Catalog": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "type": "string",
+            "description": "Gespeichertes Profil (custom = eigene Auswahl)"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64CatalogItem"
+            }
+          },
+          "extra": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64CatalogItem"
+            },
+            "description": "Ausgewaehlte Dienste ausserhalb des Katalogs (z. B. ein Dienst ein weiteres Mal)"
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presets": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/Honeypot64ServiceConfig"
+              }
+            },
+            "description": "Profile als Vorlage"
           }
         }
       },
@@ -15496,6 +15619,27 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/honeypot/catalog": {
+      "get": {
+        "tags": [
+          "Honeypot64"
+        ],
+        "summary": "Dienste-Katalog mit Auswahl und Zustand",
+        "description": "Alle Fallen-Dienste (Profil `full` und je Dienst ein Standardeintrag), sortiert nach Gruppe, mit der gespeicherten Auswahl und dem Zustand je Port: `free`, `open` (Falle offen), `error` (Sensor konnte nicht oeffnen), `used` (anderer Teil hat den Port offen, TCP und UDP getrennt), `reserved` (anderer Teil hat ihn eingestellt). Gespeichert wird ueber `PUT /api/honeypot/config` (`profile` = `custom` und `services`).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Honeypot64Catalog"
                 }
               }
             }

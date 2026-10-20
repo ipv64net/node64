@@ -1,5 +1,11 @@
 # Änderungen – Honeypot64
 
+## 0.6.0 – 2026-10-20
+
+### Neu
+- Dienste-Auswahl als Katalog: alle Fallen-Dienste mit Schalter, änderbarem Port, Köder-Auswahl und Zustand („frei“, „belegt von …“, „offen“); Vorlagen Minimal/Standard/Voll, „Alle freien einschalten“, „Alle aus“, weitere Einträge für Mehrfach-Dienste; die Textliste bleibt unter „Erweitert“. API `GET /api/honeypot/catalog`. Doppelte Ports werden je Protokoll geprüft (161/udp und 161/tcp sind kein Konflikt).
+- Zusammenarbeit mit PROXY64 (Opt-in in PROXY64): Köder für Anfragen ohne passenden Host, Auswertung der Zugriffe mit Regeln `proxy64/*@1`, Sofort-Sperre auffälliger IPs in PROXY64. Zeile in der Übersicht und Prometheus `node64_honeypot_proxy_*`.
+
 ## 0.5.0 – 2026-10-20
 
 Phase H6.

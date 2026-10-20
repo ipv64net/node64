@@ -84,6 +84,23 @@ legen oder den Port mit `NODE64_HONEYPOT_SERVICES` weglassen.
 Beim Start steht im Log für jeden Dienst, ob er offen ist und, wenn nicht, warum (z. B. „address already in use“,
 „permission denied“).
 
+### Auswahl im Modul (mit Oberfläche)
+
+Als Modul wählt man die Dienste unter Honeypot64 › Einstellungen in einer Tabelle aller Fallen-Dienste (nach
+Gruppen: Fernzugriff, Web, Mail, Datenbanken, Router/IoT, Sonstiges): je Zeile ein Schalter, der Port (änderbar),
+bei http/https der Köder und der Zustand des Ports – frei, offen, Fehler oder „belegt von …“ (PROXY64, DNS64, die
+Oberfläche; TCP und UDP getrennt, `udp 161` und `tcp 161` vertragen sich). Die Knöpfe „Minimal“, „Standard“, „Voll“
+füllen die Tabelle wie das Profil, „Alle freien einschalten“ nimmt jeden freien Port dazu, „Alle aus“ leert sie;
+gespeichert wird erst mit „Speichern“. Unter „Weitere Einträge“ läuft ein Dienst mehrfach (z. B. `ssh` auf 22 und
+2200). Entspricht die Auswahl genau einem Profil, wird sie als dieses Profil gespeichert (neue Dienste späterer
+Versionen kommen dann dazu), sonst als eigene Liste. Die Textliste „dienst port [köder]“ gibt es weiter unter
+„Erweitert“. Per API: `GET /api/honeypot/catalog` (Katalog mit Zustand), gespeichert wird mit
+`PUT /api/honeypot/config`.
+
+Auf einer Node mit weiteren Modulen sind manche Ports vergeben (80/443 PROXY64, 53/853 DNS64, die Oberfläche auf
+`NODE64_HTTP_PORT`, Standard 8080). Für alle Ports: Node64 nur mit Honeypot64 und der Oberfläche auf einem
+ungewöhnlichen Port – oder dieser Modus ohne Oberfläche.
+
 ### Portfreigabe
 
 Damit Angreifer die Fallen erreichen, müssen die Ports aus dem Internet ankommen: am Router die gewünschten Ports
@@ -132,7 +149,9 @@ keine), `node64_honeypot_report_errors_total`, `node64_honeypot_report_sources_t
 gelesen, 0 = Fehler), `node64_honeypot_syslog_messages_total`, `node64_honeypot_syslog_denied_total`; in
 `node64_honeypot_events_total{kind,source}` steht `source` für `honeypot`, `log` oder `syslog`. Firewall-Helfer (nur
 wenn eingeschaltet): `node64_firewall_active`, `node64_firewall_entries{family}` (Bereiche je Set, `ipv4`/`ipv6`),
-`node64_firewall_last_update_timestamp`, `node64_firewall_errors_total`, `node64_firewall_list_entries{list,edition}`. Beispiel-Alarm:
+`node64_firewall_last_update_timestamp`, `node64_firewall_errors_total`, `node64_firewall_list_entries{list,edition}`. Zusammenarbeit mit
+PROXY64: `node64_honeypot_proxy_decoy_total`, `node64_honeypot_proxy_access_total`, `node64_honeypot_proxy_access_dropped_total`,
+`node64_honeypot_proxy_blocks_total`. Beispiel-Alarm:
 `time() - node64_honeypot_report_last_success_timestamp > 3600`. Die übrigen Kennzahlen der Node siehe
 [PROMETHEUS.md](PROMETHEUS.md).
 
@@ -300,6 +319,21 @@ Beispiele (Sensor `192.168.1.20`; Menünamen können je nach Version abweichen, 
   Format „Standard syslog protocol“), dann Authentifizierung, Firewall und VPN an diesen Server senden.
 - **UniFi (Network-App):** Einstellungen › Control Plane › Integrations › Activity Logging (Syslog) bzw. „SIEM
   Server“: IP `192.168.1.20`, Port 514.
+
+## Zusammenarbeit mit PROXY64
+
+Nur Opt-in, eingeschaltet in PROXY64 (Zugriff › Honeypot64, je Punkt ein Schalter, Standard aus); Honeypot64 muss als
+Modul laufen (gespeicherte Fallen-Dienste sind dafür nicht nötig):
+
+- **Köder für unbekannte Anfragen:** Anfragen auf 80/443 ohne eingerichteten Host (nur IP, fremde Domain) beantwortet
+  der Web-Köder des Honeypots statt der Standardseite; Logins, Pfade, User-Agents und Fingerabdrücke werden erfasst
+  (Detail `via=proxy64`).
+- **Zugriffe auswerten:** PROXY64 gibt je Anfrage nur Eckdaten (IP, Host, Pfad ohne Abfrage, Status, abgelehnte
+  Anmeldung) an den Log-Sensor; Regeln `proxy64/exploit`, `proxy64/scan`, `proxy64/bad-useragent`, `proxy64/auth`,
+  `proxy64/unknown-host`. Gemeldet wird wie bei echten Logs nur IP, Art und Anzahl.
+- **Sofort-Sperre:** Fällt eine IP auf (Login-/Exploit-Versuch, Port-Scan, Regel aus PROXY64), sperrt PROXY64 sie
+  lokal für die eingestellte Dauer (Standard 24 h) – ohne auf die v64 Blocklist zu warten. Private Adressen, Trusted
+  Proxies und Ausnahmen werden nie gesperrt.
 
 ## Frühwarnung
 

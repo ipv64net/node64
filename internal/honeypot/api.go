@@ -22,6 +22,17 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("DELETE /api/honeypot/events", api(m.apiClear))
 	mux.Handle("GET /api/honeypot/config", api(m.apiConfig))
 	mux.Handle("PUT /api/honeypot/config", api(m.apiConfigPut))
+	mux.Handle("GET /api/honeypot/catalog", api(m.apiCatalog))
+}
+
+// apiCatalog liefert den Dienste-Katalog mit Auswahl und Zustand je Port (catalog.go). Gespeichert wird ueber
+// PUT /api/honeypot/config (profile + services).
+func (m *Module) apiCatalog(w http.ResponseWriter, r *http.Request) {
+	var tr func(string) string
+	if m.g.T != nil {
+		tr = func(k string) string { return m.g.T(r, k) }
+	}
+	apiJSON(w, http.StatusOK, m.catalogInfo(r.Context(), tr))
 }
 
 // StatusInfo ist der Zustand fuer GET /api/honeypot/status.

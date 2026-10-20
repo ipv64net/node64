@@ -28,6 +28,19 @@ type LogSensor struct {
 	sysKey  string // Port und erlaubte Absender des laufenden Empfaengers
 	sysErr  error  // Fehler beim Start (naechstes Apply versucht es erneut)
 	sysStop context.CancelFunc
+
+	feedMu  sync.Mutex                // feed, feedOff
+	feed    atomic.Pointer[logFeedCh] // Zeilen von aussen (FeedLine), nil = kein Leser
+	feedOff bool                      // nach Stop keine neuen Leser (bis zum naechsten Apply)
+}
+
+// logFeedQueue: so viele Zeilen von FeedLine warten hoechstens; mehr werden verworfen.
+const logFeedQueue = 4096
+
+// logFeedCh ist die Warteschlange von FeedLine mit ihrem Leser.
+type logFeedCh struct {
+	ch   chan LogLine
+	quit chan struct{}
 }
 
 // NewLogSensor legt den Log-Sensor an (noch nichts geoeffnet).
@@ -47,6 +60,9 @@ func (s *LogSensor) Apply(ctx context.Context, cfg LogConfig, sink Sink) LogStat
 		ctx = context.Background()
 	}
 	s.eng.setSink(sink)
+	s.feedMu.Lock()
+	s.feedOff = false
+	s.feedMu.Unlock()
 	s.applyFiles(logCleanFiles(cfg.Files))
 	s.applySyslog(ctx, cfg)
 	return s.Status()
@@ -58,6 +74,53 @@ func (s *LogSensor) Stop() {
 	defer s.applyMu.Unlock()
 	s.applyFiles(nil)
 	s.stopSyslog()
+	s.feedMu.Lock()
+	s.feedOff = true
+	f := s.feed.Swap(nil)
+	s.feedMu.Unlock()
+	if f != nil {
+		close(f.quit)
+	}
+}
+
+// FeedLine nimmt eine fertig zerlegte Zeile von aussen an (Zugriffe von PROXY64, bridge.go). Kehrt sofort zurueck: die
+// Regeln laufen in einem eigenen Leser; ist die Warteschlange voll (oder der Log-Sensor gestoppt), wird die Zeile
+// verworfen (false).
+func (s *LogSensor) FeedLine(l LogLine) bool {
+	f := s.feed.Load()
+	if f == nil {
+		if f = s.startFeed(); f == nil {
+			return false
+		}
+	}
+	select {
+	case f.ch <- l:
+		return true
+	default:
+		return false
+	}
+}
+
+// startFeed startet den Leser von FeedLine (nil = gestoppt).
+func (s *LogSensor) startFeed() *logFeedCh {
+	s.feedMu.Lock()
+	defer s.feedMu.Unlock()
+	if f := s.feed.Load(); f != nil || s.feedOff {
+		return f
+	}
+	f := &logFeedCh{ch: make(chan LogLine, logFeedQueue), quit: make(chan struct{})}
+	go func() {
+		for {
+			select {
+			case <-f.quit:
+				return
+			case l := <-f.ch:
+				s.eng.feed(l)
+			}
+		}
+	}()
+	s.feed.Store(f)
+	return f
 }
 
 // Status liefert den aktuellen Zustand.

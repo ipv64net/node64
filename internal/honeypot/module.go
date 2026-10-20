@@ -35,7 +35,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.5.0"
+	version = "0.6.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -135,7 +135,7 @@ type Warning struct {
 func New(core *store.Store, log *slog.Logger, dataDir, nodeVersion string) *Module {
 	l := log.With("module", Name)
 	st := NewStore(core, log)
-	m := &Module{core: core, log: l, dataDir: dataDir, version: nodeVersion, st: st, sink: CountEvents(st.Sink()), every: notifyEvery,
+	m := &Module{core: core, log: l, dataDir: dataDir, version: nodeVersion, st: st, sink: bridgeBlockSink(CountEvents(st.Sink())), every: notifyEvery,
 		newSensor: func(log *slog.Logger, dir string) sensorAPI { return NewSensor(log, dir) },
 		newLogs:   func(log *slog.Logger) logSensorAPI { return NewLogSensor(log) }}
 	m.rep = NewReporter(ReporterConfig{Store: st, API: m.api, Enabled: func(ctx context.Context) bool { return m.loadConfig(ctx).Report },
@@ -212,6 +212,7 @@ func (m *Module) Start(ctx context.Context) error {
 	go func() { defer m.wg.Done(); m.notifyLoop(lctx) }()
 	go func() { defer m.wg.Done(); m.rep.Run(lctx) }() // tut nichts, solange die Meldung aus ist
 	m.applyLocked(ctx)
+	bridgeStart(m.log, ls, m.sink) // Verbindung zu PROXY64 (bridge.go; PROXY64 nutzt sie nur mit eigenem Opt-in)
 	m.log.Info("honeypot started", "services", len(m.Status()))
 	return nil
 }
@@ -228,7 +229,8 @@ func (m *Module) Stop(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
-	s.Stop() // zuerst: danach kommen keine Ereignisse mehr
+	bridgeStop() // PROXY64 gibt danach nichts mehr ab
+	s.Stop()     // zuerst: danach kommen keine Ereignisse mehr
 	if ls != nil {
 		ls.Stop()
 	}
@@ -510,7 +512,7 @@ func (m *Module) validate(ctx context.Context, c *ModuleConfig) FieldErrors {
 		return errs
 	}
 	others := m.others(ctx)
-	seen := map[int]bool{}
+	seen := map[ports.Claim]bool{} // Protokoll und Port: udp 161 und tcp 161 sind kein Konflikt
 	var problems []string
 	for i := range c.Services {
 		s := &c.Services[i]
@@ -521,21 +523,29 @@ func (m *Module) validate(ctx context.Context, c *ModuleConfig) FieldErrors {
 			problems = append(problems, "honeypot.err.service|"+s.Service)
 		case s.Port < 1 || s.Port > 65535:
 			problems = append(problems, "honeypot.err.port|"+strconv.Itoa(s.Port))
-		case seen[s.Port]:
-			problems = append(problems, "honeypot.err.port_twice|"+strconv.Itoa(s.Port))
+		case seen[ports.Claim{Proto: svcProto(s.Service), Port: s.Port}]:
+			problems = append(problems, "honeypot.err.port_twice|"+portLabel(s.Service, s.Port))
 		case s.Page != "" && ((s.Service != SvcHTTP && s.Service != SvcHTTPS) || !cfgPage(s.Page)):
 			problems = append(problems, "honeypot.err.page|"+s.Page)
 		default:
 			if o, ok := portConflictProto(others, svcProto(s.Service), s.Port); ok && o.Active {
-				problems = append(problems, "honeypot.err.port_used|"+strconv.Itoa(s.Port)+"|"+o.Owner+" ("+o.Purpose+")")
+				problems = append(problems, "honeypot.err.port_used|"+portLabel(s.Service, s.Port)+"|"+o.Owner+" ("+o.Purpose+")")
 			}
 		}
-		seen[s.Port] = true
+		seen[ports.Claim{Proto: svcProto(s.Service), Port: s.Port}] = true
 	}
 	if len(problems) > 0 {
 		errs["services"] = strings.Join(problems, "\n")
 	}
 	return errs
+}
+
+// portLabel: Port fuer Meldungen, bei UDP-Diensten mit "/udp".
+func portLabel(service string, port int) string {
+	if svcProto(service) == ports.UDP {
+		return strconv.Itoa(port) + "/udp"
+	}
+	return strconv.Itoa(port)
 }
 
 func cfgService(s string) bool {

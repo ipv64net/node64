@@ -3160,7 +3160,8 @@
       "web": "die Oberfläche von Node64",
       "edge": "PROXY64 (gemeinsamer Eingang 80/443)",
       "dns64": "DNS64",
-      "cdn64": "PROXY64 (Streams)"
+      "cdn64": "PROXY64 (Streams)",
+      "honeypot": "Honeypot64"
     },
     "kpi": {
       "events_24h": "Ereignisse (24 Std.)",
@@ -3396,6 +3397,96 @@
       "honeypot": "Honeypot",
       "log": "Log",
       "syslog": "Syslog"
+    },
+    "proxy64": {
+      "line": "PROXY64 verbunden: Köder {decoy} · Zugriffe {access} · Sperren {blocks}",
+      "dropped": "{count} Zugriffe wegen Überlast verworfen"
+    },
+    "cat": {
+      "title": "Fallen-Dienste",
+      "saved_as": "gespeichert: {profile}",
+      "intro": "Schalte ein, was online sein soll. Port und Köder sind änderbar; der Zustand zeigt, ob der Port frei ist, offen oder von einem anderen Teil von Node64 belegt.",
+      "presets": "Vorlage:",
+      "preset": {
+        "minimal": "Minimal",
+        "standard": "Standard",
+        "full": "Voll",
+        "free": "Alle freien einschalten",
+        "none": "Alle aus"
+      },
+      "unsaved": "Vorlage übernommen – noch nicht gespeichert. Prüfen und mit „Speichern“ übernehmen.",
+      "on": "An",
+      "low": "Port unter 1024: braucht cap_net_bind_service",
+      "page_auto": "je Pfad",
+      "low_hint": "Ports unter 1024 öffnet Node64 ohne Root über die Fähigkeit cap_net_bind_service (im Image enthalten). Nimmt der Container sie weg (--cap-drop), bleiben diese Ports mit „permission denied“ zu.",
+      "state": {
+        "free": "frei",
+        "used": "belegt von {owner}",
+        "reserved": "eingestellt bei {owner}"
+      },
+      "extra": "Weitere Einträge (ein Dienst kann mehrfach laufen)",
+      "extra_pick": "– Dienst –",
+      "extra_hint": "Zum Beispiel ssh zusätzlich auf 2200 oder http mit eigenem Köder auf 8081. Leere Zeilen zählen nicht; nach dem Speichern kommen neue leere Zeilen dazu.",
+      "profile_hint": "Entspricht die Auswahl genau einer Vorlage, wird sie als dieses Profil gespeichert: Neue Dienste künftiger Versionen kommen dann von selbst dazu, und Ports, die ein anderer Teil offen hat, werden nur weggelassen. Sonst gilt sie als eigene Auswahl, und ein belegter Port ist ein Fehler.",
+      "node_title": "Alle Ports nutzen",
+      "node_hint": "Auf einer Node mit weiteren Modulen sind manche Ports schon vergeben – z. B. 80/443 durch PROXY64, 53/853 durch DNS64 und {ui} durch die Oberfläche von Node64. Für alle Ports eine eigene Honeypot-Node nehmen: Node64 nur mit Honeypot64 (die Oberfläche dann auf einen ungewöhnlichen Port legen, NODE64_HTTP_PORT, Standard 8080 – selbst ein beliebter Fallen-Port) oder den Modus ohne Oberfläche (NODE64_MODE=honeypot, Info-Seite auf 9064).",
+      "advanced": "Erweitert: Auswahl als Textliste",
+      "advanced_hint": "Je Zeile Dienst und Port, bei http/https optional ein Köder ({pages}). Dienste: {services}. Die Liste zeigt dieselbe Auswahl wie die Tabelle; „Textliste speichern“ übernimmt die Liste statt der Tabelle.",
+      "use_text": "Textliste speichern",
+      "group": {
+        "remote": "Fernzugriff",
+        "web": "Web",
+        "mail": "Mail",
+        "db": "Datenbanken",
+        "iot": "Router/IoT",
+        "other": "Sonstiges"
+      },
+      "svc": {
+        "ssh": "SSH-Login (Passwörter, Schlüssel)",
+        "telnet": "Telnet-Login (IoT-Botnetze)",
+        "http": "Web-Köder, Antwort je Pfad (WordPress, phpMyAdmin, Admin …)",
+        "https": "Web-Köder mit TLS, Antwort je Pfad",
+        "tcp": "Beliebiger TCP-Port: Verbindung und erste Bytes",
+        "ftp": "FTP-Login",
+        "smtp": "SMTP mit Anmeldung (kein Relay)",
+        "imap": "IMAP-Login",
+        "pop3": "POP3-Login",
+        "mysql": "MySQL/MariaDB-Login",
+        "postgres": "PostgreSQL-Login",
+        "mssql": "Microsoft-SQL-Server-Login",
+        "redis": "Redis (Anmeldung, gefährliche Befehle)",
+        "vnc": "VNC (Anmeldeversuche)",
+        "mqtt": "MQTT-Broker (Login)",
+        "mikrotik_api": "MikroTik-API (8728, mit TLS 8729)",
+        "snmp": "SNMP-Community-Strings",
+        "sip": "SIP/VoIP-Scanner und Anmeldungen",
+        "rdp": "Remote Desktop (Benutzername)",
+        "winbox": "MikroTik Winbox"
+      },
+      "tcp": {
+        "445": "SMB / Windows-Freigaben (Verbindung, erste Bytes)",
+        "27017": "MongoDB (Verbindung, erste Bytes)",
+        "8291": "MikroTik Winbox (Verbindung, erste Bytes)"
+      },
+      "page": {
+        "generic": "Allgemeiner Login-Köder",
+        "wp_login": "WordPress-Login",
+        "phpmyadmin": "phpMyAdmin",
+        "admin": "Admin-Bereich",
+        "pve": "Proxmox VE",
+        "pbs": "Proxmox Backup Server",
+        "nas": "NAS-Oberfläche",
+        "unifi": "UniFi-Controller",
+        "sslvpn": "SSL-VPN / Firewall-Portal",
+        "grafana": "Grafana",
+        "jenkins": "Jenkins",
+        "portainer": "Portainer",
+        "homeassistant": "Home Assistant",
+        "webmin": "Webmin",
+        "docker": "Docker-API ohne TLS",
+        "elastic": "Elasticsearch-API",
+        "kubelet": "Kubernetes-Kubelet-API"
+      }
     }
   }
 }

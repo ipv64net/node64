@@ -62,6 +62,8 @@
 					{{with $d.Logs.Syslog}}· {{$.T "honeypot.logs.syslog"}}: {{if .Error}}<a class="text-danger" href="/honeypot/settings#logs-status">{{$.T "honeypot.services.error"}}</a>{{else}}{{$.T "honeypot.logs.syslog_on" "port" .Port}} ({{$.Int .Messages}}){{end}}{{end}}
 					{{else}}<a href="/honeypot/settings#logs">{{.T "honeypot.report.off"}}</a>{{end}}
 				</div>
+				{{if $d.Running}}{{with $d.Proxy64}}{{if .Connected}}<div class="small text-body-secondary mt-1" id="proxy64-line"><i class="bi bi-diagram-3"></i> {{$.T "honeypot.proxy64.line" "decoy" ($.Int .Decoy) "access" ($.Int .Access) "blocks" ($.Int .Blocks)}}
+					{{if .Dropped}}· <span class="text-warning-emphasis">{{$.T "honeypot.proxy64.dropped" "count" ($.Int .Dropped)}}</span>{{end}}</div>{{end}}{{end}}{{end}}
 			</div>
 		</div>
 	</div>

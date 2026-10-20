@@ -3160,7 +3160,8 @@
       "web": "the Node64 web interface",
       "edge": "PROXY64 (shared entry 80/443)",
       "dns64": "DNS64",
-      "cdn64": "PROXY64 (streams)"
+      "cdn64": "PROXY64 (streams)",
+      "honeypot": "Honeypot64"
     },
     "kpi": {
       "events_24h": "Events (24 h)",
@@ -3396,6 +3397,96 @@
       "honeypot": "Honeypot",
       "log": "Log",
       "syslog": "Syslog"
+    },
+    "proxy64": {
+      "line": "PROXY64 connected: decoy {decoy} · requests {access} · blocks {blocks}",
+      "dropped": "{count} requests dropped (overload)"
+    },
+    "cat": {
+      "title": "Trap services",
+      "saved_as": "saved: {profile}",
+      "intro": "Switch on what should be online. Port and bait can be changed; the state shows whether the port is free, open or used by another part of Node64.",
+      "presets": "Template:",
+      "preset": {
+        "minimal": "Minimal",
+        "standard": "Standard",
+        "full": "Full",
+        "free": "Switch on all free",
+        "none": "All off"
+      },
+      "unsaved": "Template applied – not saved yet. Check it and confirm with “Save”.",
+      "on": "On",
+      "low": "Port below 1024: needs cap_net_bind_service",
+      "page_auto": "per path",
+      "low_hint": "Node64 opens ports below 1024 without root through the cap_net_bind_service capability (included in the image). If the container drops it (--cap-drop), these ports stay closed with “permission denied”.",
+      "state": {
+        "free": "free",
+        "used": "used by {owner}",
+        "reserved": "configured by {owner}"
+      },
+      "extra": "More entries (a service can run several times)",
+      "extra_pick": "– service –",
+      "extra_hint": "For example ssh additionally on 2200 or http with its own bait on 8081. Empty rows are ignored; new empty rows appear after saving.",
+      "profile_hint": "If the selection matches a template exactly, it is saved as that profile: new services of future versions are then added automatically, and ports another part has open are just left out. Otherwise it counts as a custom selection, and a used port is an error.",
+      "node_title": "Using all ports",
+      "node_hint": "On a node with other modules some ports are already taken – e.g. 80/443 by PROXY64, 53/853 by DNS64 and {ui} by the Node64 interface. For all ports use a dedicated honeypot node: Node64 with only Honeypot64 (move the interface to an unusual port, NODE64_HTTP_PORT, default 8080 – itself a popular trap port) or the headless mode (NODE64_MODE=honeypot, info page on 9064).",
+      "advanced": "Advanced: selection as a text list",
+      "advanced_hint": "One service and port per line, for http/https optionally a bait ({pages}). Services: {services}. The list shows the same selection as the table; “Save text list” saves the list instead of the table.",
+      "use_text": "Save text list",
+      "group": {
+        "remote": "Remote access",
+        "web": "Web",
+        "mail": "Mail",
+        "db": "Databases",
+        "iot": "Router/IoT",
+        "other": "Other"
+      },
+      "svc": {
+        "ssh": "SSH login (passwords, keys)",
+        "telnet": "Telnet login (IoT botnets)",
+        "http": "Web bait, answer per path (WordPress, phpMyAdmin, admin …)",
+        "https": "Web bait with TLS, answer per path",
+        "tcp": "Any TCP port: connection and first bytes",
+        "ftp": "FTP login",
+        "smtp": "SMTP with authentication (no relay)",
+        "imap": "IMAP login",
+        "pop3": "POP3 login",
+        "mysql": "MySQL/MariaDB login",
+        "postgres": "PostgreSQL login",
+        "mssql": "Microsoft SQL Server login",
+        "redis": "Redis (authentication, dangerous commands)",
+        "vnc": "VNC (login attempts)",
+        "mqtt": "MQTT broker (login)",
+        "mikrotik_api": "MikroTik API (8728, with TLS 8729)",
+        "snmp": "SNMP community strings",
+        "sip": "SIP/VoIP scanners and registrations",
+        "rdp": "Remote Desktop (user name)",
+        "winbox": "MikroTik Winbox"
+      },
+      "tcp": {
+        "445": "SMB / Windows shares (connection, first bytes)",
+        "27017": "MongoDB (connection, first bytes)",
+        "8291": "MikroTik Winbox (connection, first bytes)"
+      },
+      "page": {
+        "generic": "Generic login bait",
+        "wp_login": "WordPress login",
+        "phpmyadmin": "phpMyAdmin",
+        "admin": "Admin area",
+        "pve": "Proxmox VE",
+        "pbs": "Proxmox Backup Server",
+        "nas": "NAS interface",
+        "unifi": "UniFi controller",
+        "sslvpn": "SSL VPN / firewall portal",
+        "grafana": "Grafana",
+        "jenkins": "Jenkins",
+        "portainer": "Portainer",
+        "homeassistant": "Home Assistant",
+        "webmin": "Webmin",
+        "docker": "Docker API without TLS",
+        "elastic": "Elasticsearch API",
+        "kubelet": "Kubernetes kubelet API"
+      }
     }
   }
 }

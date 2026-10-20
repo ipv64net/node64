@@ -172,6 +172,7 @@ func (m *Module) Metrics(ctx context.Context, w *metrics.Writer) {
 		return
 	}
 	WriteMetrics(w, s, m.st, m.rep, ctx)
+	writeBridgeMetrics(w) // Verbindung zu PROXY64 (bridge.go)
 	ls := m.LogStatus()
 	WriteLogMetrics(w, &ls)
 }

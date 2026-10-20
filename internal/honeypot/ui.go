@@ -233,6 +233,18 @@ type settingsData struct {
 	KeySet    bool         // zentraler ipv64-API-Key eingetragen (sonst Meldung an ipv64 gesperrt)
 	Report    ReportStatus // Zustand der Meldung an ipv64
 
+	// Dienste-Katalog (catalog.go)
+	CatRows     []uiCatRow
+	CatExtras   []uiCatRow
+	CatServices []string // Auswahl der eigenen Zeilen
+	CatPresets  []string
+	CatUnsaved  bool   // Vorlage uebernommen, noch nicht gespeichert
+	CatLow      bool   // Auswahl enthaelt Ports unter 1024
+	SavedAs     string // gespeichertes Profil (custom = eigene Auswahl)
+	UIPorts     string // Ports der Oberflaeche ("" = unbekannt)
+	TextOpen    bool   // Textliste aufgeklappt (dort gespeichert)
+	ServiceList string // bekannte Dienste (Hinweis der Textliste)
+
 	// Log-Sensor und Syslog (H5)
 	LogRows     []LogFile     // Zeilen des Formulars (eingestellte Dateien + leere Zeilen)
 	SyslogPort  string        // Formularwert ("" = aus)
@@ -378,7 +390,8 @@ func parseServices(text string) []Service {
 	return out
 }
 
-func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, errs map[string]string, lf *logForm) settingsData {
+// settingsView baut die Einstellungsseite. cf = Katalog wie eingegeben (nil = aus der Einstellung c).
+func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, errs map[string]string, lf *logForm, cf *catForm) settingsData {
 	d := settingsData{Tabs: tabsFor("settings"), Running: m.running() != nil, Cfg: c, Lines: lines, Profiles: profileViews(), Pages: Pages,
 		Errors: errs, MaxDays: maxRetentionDays, MinEvents: minMaxEvents, MaxEvents: maxMaxEvents,
 		LogFormats: cfgLogFormats, LogRoots: strings.Join(cfgLogRoots, ", "), LogSuggest: logSuggestions}
@@ -398,8 +411,15 @@ func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, err
 	d.Syslog, d.LogLines, d.LogEvents = ls.Syslog, ls.Lines, ls.Events
 	_, key := m.api(r.Context())
 	d.KeySet, d.Report = key != "", m.rep.Status(r.Context())
+	catf := catFormFrom(effectiveServices(c))
+	if cf != nil {
+		catf = *cf
+	}
+	d.CatRows, d.CatExtras, d.CatLow = m.catView(r, catf, m.catStates(r.Context()))
+	d.CatServices, d.CatPresets, d.ServiceList = KnownServices(), catPresets, strings.Join(KnownServices(), ", ")
+	d.SavedAs, d.UIPorts = m.loadConfig(r.Context()).Profile, m.uiPorts(r.Context())
 	if d.Lines == "" {
-		d.Lines = servicesText(c.Services)
+		d.Lines = servicesText(catf.services()) // Textliste = Auswahl der Tabelle
 	}
 	// Hinweise fuer die aktuelle Auswahl (auch fuer ein Profil, das noch nicht gespeichert ist)
 	_, warns := m.resolve(r.Context(), c)
@@ -408,7 +428,7 @@ func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, err
 }
 
 func (m *Module) pageSettings(w http.ResponseWriter, r *http.Request) {
-	m.g.Render(w, r, http.StatusOK, Name+"/settings", "honeypot.settings.title", m.settingsView(r, m.loadConfig(r.Context()), "", nil, nil))
+	m.g.Render(w, r, http.StatusOK, Name+"/settings", "honeypot.settings.title", m.settingsView(r, m.loadConfig(r.Context()), "", nil, nil, nil))
 }
 
 func formInt(r *http.Request, name string) int {
@@ -426,10 +446,25 @@ func formInt(r *http.Request, name string) int {
 func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	c := m.loadConfig(ctx)
-	c.Profile = r.PostFormValue("profile")
 	lines := r.PostFormValue("services")
-	if c.Profile == ProfileCustom {
-		c.Services = parseServices(lines)
+	var cf *catForm
+	textOpen := false
+	switch {
+	case r.PostFormValue("use_text") != "": // Textliste (Erweitert) speichern
+		sel := parseServices(lines)
+		f := catFormFrom(sel)
+		cf, textOpen = &f, true
+		selectionConfig(&c, sel)
+	case r.PostFormValue("catalog") != "": // Tabelle der Dienste
+		f := parseCatForm(r)
+		cf = &f
+		selectionConfig(&c, f.services())
+		lines = ""
+	default: // Formular ohne Tabelle (Profil und Textliste, z. B. aus Skripten)
+		c.Profile = r.PostFormValue("profile")
+		if c.Profile == ProfileCustom {
+			c.Services = parseServices(lines)
+		}
 	}
 	c.Scan = r.PostFormValue("scan") != ""
 	c.NotifyNew = r.PostFormValue("notify_new") != ""
@@ -442,8 +477,16 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 			!slices.ContainsFunc(lf.Files, func(f LogFile) bool { return f.Path == logSuggestions[i].Path }) {
 			lf.Files = append(lf.Files, logSuggestions[i])
 		}
-		d := m.settingsView(r, c, lines, nil, &lf)
+		d := m.settingsView(r, c, lines, nil, &lf, cf)
 		d.Unsaved = true
+		m.g.Render(w, r, http.StatusOK, Name+"/settings", "honeypot.settings.title", d)
+		return
+	}
+	if p := r.PostFormValue("preset"); p != "" && cf != nil { // Vorlage in die Tabelle uebernehmen, noch nicht speichern
+		cf.preset(p, m.catStates(ctx))
+		selectionConfig(&c, cf.services())
+		d := m.settingsView(r, c, "", nil, &lf, cf)
+		d.CatUnsaved = true
 		m.g.Render(w, r, http.StatusOK, Name+"/settings", "honeypot.settings.title", d)
 		return
 	}
@@ -455,7 +498,9 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 		for k, v := range fe {
 			errs[k] = m.errText(r, v)
 		}
-		m.g.Render(w, r, http.StatusUnprocessableEntity, Name+"/settings", "honeypot.settings.title", m.settingsView(r, saved, lines, errs, &lf))
+		d := m.settingsView(r, saved, lines, errs, &lf, cf)
+		d.TextOpen = textOpen
+		m.g.Render(w, r, http.StatusUnprocessableEntity, Name+"/settings", "honeypot.settings.title", d)
 		return
 	}
 	if err != nil {
