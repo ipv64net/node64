@@ -535,7 +535,7 @@ func cfgService(s string) bool {
 	case SvcSSH, SvcTelnet, SvcHTTP, SvcHTTPS, SvcTCP:
 		return true
 	}
-	return false
+	return ProtoKnown(s)
 }
 
 func cfgPage(p string) bool {

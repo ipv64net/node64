@@ -127,7 +127,7 @@ func (s *Store) BuildReport(ctx context.Context, start, end time.Time) (*Report,
 
 	// Zugangsdaten (nur Login-Dienste)
 	rows, err = r.QueryContext(ctx, `SELECT service, username, password, COUNT(*) AS n FROM hp_events WHERE ts >= ? AND ts < ?`+hp+`
-		AND service IN ('ssh', 'telnet', 'http', 'https') AND (username <> '' OR password <> '')
+		AND service NOT IN ('tcp', 'scan') AND (username <> '' OR password <> '')
 		GROUP BY service, username, password ORDER BY n DESC, service, username, password`, from, to, string(skip))
 	if err != nil {
 		return nil, err

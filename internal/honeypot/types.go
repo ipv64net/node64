@@ -51,6 +51,31 @@ const (
 	KindScannerResch = "scanner:research"
 )
 
+// Stufe 2 (sensor_proto.go): weitere Dienste und Arten. Arten mit Endung "bruteforce" zaehlen bei ipv64 als starke
+// Hinweise (wie Login/Exploit). Neue Werte nur anhaengen, Muster [a-z][a-z0-9-]*, Dienste hoechstens 16 Zeichen.
+const (
+	SvcFTP     = "ftp"
+	SvcMySQL   = "mysql"
+	SvcPostgre = "postgres"
+	SvcMSSQL   = "mssql"
+	SvcRedis   = "redis"
+	SvcVNC     = "vnc"
+	SvcMQTT    = "mqtt"
+	SvcWinbox  = "winbox"       // MikroTik Winbox (8291)
+	SvcMTAPI   = "mikrotik-api" // MikroTik API (8728, TLS 8729)
+	SvcSNMP    = "snmp"         // UDP
+	SvcSIP     = "sip"          // UDP
+
+	KindFTPBrute    = "ftp:bruteforce"
+	KindVNCBrute    = "vnc:bruteforce"
+	KindMQTTBrute   = "mqtt:bruteforce"
+	KindRouterBrute = "router:bruteforce" // Winbox, MikroTik API
+	KindSNMPBrute   = "snmp:bruteforce"   // Community-Strings
+	KindSIPBrute    = "sip:bruteforce"    // REGISTER mit Anmeldedaten
+	KindSIPScan     = "sip:scan"          // OPTIONS/INVITE-Scanner (friendly-scanner, sipvicious)
+	KindDBExploit   = "db:exploit"        // z. B. Redis CONFIG SET/SLAVEOF, MSSQL xp_cmdshell
+)
+
 // Event ist ein Ereignis eines Fallen-Dienstes. Felder, die fuer den Dienst nicht passen, bleiben leer.
 // Alle Texte sind bereits gekuerzt (Laengen siehe Max*), Payload hoechstens MaxPayload Bytes.
 type Event struct {
@@ -105,17 +130,25 @@ type Config struct {
 
 // Profile: vorgegebene Dienste (Plan Abschnitt 1, Sensor-Profile; H1 nur Stufe 1).
 var Profiles = map[string][]Service{
-	"minimal":  {{SvcSSH, 22, ""}, {SvcHTTP, 80, ""}},
-	"standard": {{SvcSSH, 22, ""}, {SvcSSH, 2222, ""}, {SvcTelnet, 23, ""}, {SvcHTTP, 80, ""}, {SvcHTTPS, 443, ""}, {SvcHTTP, 8080, ""}, {SvcTCP, 3389, ""}, {SvcTCP, 5900, ""}},
-	"full": {{SvcSSH, 22, ""}, {SvcSSH, 2222, ""}, {SvcTelnet, 23, ""}, {SvcTelnet, 2323, ""}, {SvcHTTP, 80, ""}, {SvcHTTPS, 443, ""}, {SvcHTTP, 8080, ""}, {SvcHTTPS, 8443, ""},
-		{SvcTCP, 21, ""}, {SvcTCP, 25, ""}, {SvcTCP, 445, ""}, {SvcTCP, 1433, ""}, {SvcTCP, 1883, ""}, {SvcTCP, 2375, ""}, {SvcTCP, 3306, ""}, {SvcTCP, 3389, ""},
-		{SvcTCP, 5432, ""}, {SvcTCP, 5900, ""}, {SvcTCP, 6379, ""}, {SvcTCP, 9200, ""}, {SvcTCP, 27017, ""}},
+	"minimal": {{SvcSSH, 22, ""}, {SvcHTTP, 80, ""}},
+	"standard": {{SvcSSH, 22, ""}, {SvcSSH, 2222, ""}, {SvcTelnet, 23, ""}, {SvcHTTP, 80, ""}, {SvcHTTPS, 443, ""}, {SvcHTTP, 8080, ""},
+		{SvcFTP, 21, ""}, {SvcSMTP, 25, ""}, {SvcMySQL, 3306, ""}, {SvcRedis, 6379, ""}, {SvcRDP, 3389, ""}, {SvcVNC, 5900, ""},
+		{SvcWinbox, 8291, ""}, {SvcHTTPS, 8006, "pve"}},
+	"full": {{SvcSSH, 22, ""}, {SvcSSH, 2222, ""}, {SvcTelnet, 23, ""}, {SvcTelnet, 2323, ""}, {SvcHTTP, 80, ""}, {SvcHTTPS, 443, ""}, {SvcHTTP, 8080, ""}, {SvcHTTPS, 8443, "unifi"},
+		{SvcFTP, 21, ""}, {SvcSMTP, 25, ""}, {SvcSMTP, 587, ""}, {SvcPOP3, 110, ""}, {SvcIMAP, 143, ""}, {SvcTCP, 445, ""},
+		{SvcMSSQL, 1433, ""}, {SvcMQTT, 1883, ""}, {SvcHTTP, 2375, "docker"}, {SvcMySQL, 3306, ""}, {SvcRDP, 3389, ""}, {SvcPostgre, 5432, ""},
+		{SvcVNC, 5900, ""}, {SvcRedis, 6379, ""}, {SvcHTTPS, 8006, "pve"}, {SvcHTTPS, 8007, "pbs"}, {SvcHTTP, 5000, "nas"}, {SvcHTTPS, 5001, "nas"},
+		{SvcHTTP, 3000, "grafana"}, {SvcHTTP, 8123, "homeassistant"}, {SvcHTTPS, 9443, "portainer"}, {SvcHTTPS, 10000, "webmin"}, {SvcHTTPS, 10443, "sslvpn"},
+		{SvcHTTP, 9200, "elastic"}, {SvcHTTPS, 10250, "kubelet"}, {SvcTCP, 27017, ""},
+		{SvcWinbox, 8291, ""}, {SvcMTAPI, 8728, ""}, {SvcMTAPI, 8729, ""}, {SvcSNMP, 161, ""}, {SvcSIP, 5060, ""}},
 }
 
 // Pages: Koeder auf HTTP/HTTPS. Bewusst schlichte, neutrale Login-Formulare ohne Logos, Markennamen oder
 // Nachbau echter Herstellerseiten – Bots greifen Pfade an, nicht Optik. Der Schluessel nennt nur die Pfad-Gruppe,
 // die der Koeder beantwortet (z. B. /wp-login.php, /phpmyadmin/, /admin/).
-var Pages = []string{"generic", "wp-login", "phpmyadmin", "admin"}
+var Pages = []string{"generic", "wp-login", "phpmyadmin", "admin",
+	// Stufe 2: feste Koeder je Port (Pfade/API der Web-Oberflaechen, die Bots angreifen)
+	"pve", "pbs", "nas", "unifi", "sslvpn", "grafana", "jenkins", "portainer", "homeassistant", "webmin", "docker", "elastic", "kubelet"}
 
 // ServiceStatus ist der Zustand eines Dienstes (Oberflaeche, Info-Seite, Prometheus).
 type ServiceStatus struct {

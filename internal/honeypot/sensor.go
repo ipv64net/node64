@@ -166,7 +166,7 @@ func (s *Sensor) Apply(ctx context.Context, cfg Config, sink Sink) []ServiceStat
 		if t == nil {
 			t = &trapService{key: k}
 		}
-		if t.ln == nil {
+		if t.ln == nil && t.pc == nil {
 			s.openService(ctx, t, check)
 		}
 		next[k] = t
@@ -211,7 +211,7 @@ func (s *Sensor) Status() []ServiceStatus {
 		if t == nil {
 			continue
 		}
-		out = append(out, ServiceStatus{Service: k.Service, Port: k.Port, Listen: t.ln != nil, Error: t.err, Conns: t.conns.Load()})
+		out = append(out, ServiceStatus{Service: k.Service, Port: k.Port, Listen: t.ln != nil || t.pc != nil, Error: t.err, Conns: t.conns.Load()})
 	}
 	return append(out, s.bad...)
 }
@@ -224,7 +224,7 @@ func sensorValidService(v string) bool {
 	case SvcSSH, SvcTelnet, SvcHTTP, SvcHTTPS, SvcTCP:
 		return true
 	}
-	return false
+	return ProtoKnown(v)
 }
 
 func sensorValidPage(p string) bool {
@@ -239,7 +239,8 @@ func sensorValidPage(p string) bool {
 // trapService ist ein offener (oder gescheiterter) Fallen-Dienst.
 type trapService struct {
 	key   sensorKey
-	ln    net.Listener // nil = nicht offen; geschrieben nur in Apply/Stop unter Sensor.mu
+	ln    net.Listener   // nil = nicht offen; geschrieben nur in Apply/Stop unter Sensor.mu
+	pc    net.PacketConn // UDP-Dienste (sensor_proto.go) statt ln
 	err   string
 	srv   *http.Server // HTTP/HTTPS
 	conns atomic.Int64 // angenommene Verbindungen seit dem Start
@@ -264,6 +265,21 @@ func (s *Sensor) openService(ctx context.Context, t *trapService, check func(str
 			return
 		}
 	}
+	if p := udpProtos[k.Service]; p != nil {
+		var lc net.ListenConfig
+		pc, err := lc.ListenPacket(ctx, "udp", ":"+strconv.Itoa(k.Port))
+		if err != nil {
+			fail(sensorListenErr(err))
+			return
+		}
+		s.wg.Add(1)
+		go func() { defer s.wg.Done(); p.Handle(s, t, pc) }()
+		s.mu.Lock()
+		t.pc, t.err = pc, ""
+		s.mu.Unlock()
+		s.log.Info("honeypot service open", "service", k.Service, "port", k.Port, "proto", "udp")
+		return
+	}
 	var signer ssh.Signer
 	var cert *tls.Certificate
 	var err error
@@ -272,6 +288,10 @@ func (s *Sensor) openService(ctx context.Context, t *trapService, check func(str
 		signer, err = s.sshSigner()
 	case SvcHTTPS:
 		cert, err = s.tlsCert()
+	default:
+		if p := tcpProtos[k.Service]; p != nil && p.TLS {
+			cert, err = s.tlsCert()
+		}
 	}
 	if err != nil {
 		fail(err.Error())
@@ -294,6 +314,16 @@ func (s *Sensor) openService(ctx context.Context, t *trapService, check func(str
 		s.serveLoop(tl, s.handleTelnet)
 	case SvcTCP:
 		s.serveLoop(tl, s.handleTCP)
+	default:
+		if p := tcpProtos[k.Service]; p != nil {
+			s.serveLoop(tl, func(c *trapConn) {
+				if p.TLS {
+					s.serveProtoTLS(c, cert, p)
+					return
+				}
+				p.Handle(s, c)
+			})
+		}
 	case SvcHTTP, SvcHTTPS:
 		t.srv = s.httpServer(t, cert)
 		s.wg.Add(1)
@@ -328,11 +358,15 @@ func (s *Sensor) closeService(t *trapService) {
 		_ = t.ln.Close()
 		s.log.Info("honeypot service closed", "service", t.key.Service, "port", t.key.Port)
 	}
+	if t.pc != nil {
+		_ = t.pc.Close()
+		s.log.Info("honeypot service closed", "service", t.key.Service, "port", t.key.Port, "proto", "udp")
+	}
 	for _, c := range list {
 		_ = c.Close()
 	}
 	s.mu.Lock()
-	t.ln, t.srv = nil, nil
+	t.ln, t.srv, t.pc = nil, nil, nil
 	s.mu.Unlock()
 }
 
@@ -417,7 +451,11 @@ func (s *Sensor) admit(t *trapService, c net.Conn) *trapConn {
 	case SvcHTTP, SvcHTTPS:
 		tc.left.Store(sensorWebBudget)
 	default:
-		tc.left.Store(sensorTCPBudget)
+		if p := tcpProtos[t.key.Service]; p != nil && p.Budget > 0 {
+			tc.left.Store(p.Budget)
+		} else {
+			tc.left.Store(sensorTCPBudget)
+		}
 	}
 	t.mu.Lock()
 	if t.closed {
