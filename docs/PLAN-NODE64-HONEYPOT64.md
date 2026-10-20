@@ -3,7 +3,7 @@
 Stand 2026-10-20, Entscheidungen Dennis. Noch nicht umgesetzt. Dieser Plan legt die Grundlagen so fest (Datenformat,
 Arten, Speicherung, Schnittstellen), dass spätere Ausbaustufen ohne Umbau am Produkt dazukommen.
 
-**Ziel:** Die **erste Verteidigungslinie** der Kunden stärken: Firewall (IP), Mailserver, Login-Seiten. Dazu sammeln
+**Ziel:** Die **erste Verteidigungslinie** der Kunden stärken – ausschließlich über **IP- und DNS-Listen**, Honeypot64 wird nirgends als Schutzsoftware vor Anwendungen gesetzt: Firewall (IP), Mailserver, Login-Seiten. Dazu sammeln
 viele kleine Sensoren – Honeypot und Auswertung echter Logs – Angriffe und melden sie an ipv64. Dort entstehen aus den
 Meldungen **mehrerer unabhängiger** Beitragender laufend aktualisierte Listen und Auskünfte, die jeder nutzen kann,
 auch ohne eigenen Sensor: Homelab, Mittelstand und Hosting-Anbieter.
@@ -140,6 +140,13 @@ Jede Meldung trägt eine Art aus einer festen, erweiterbaren Liste (angelehnt an
 `http:bad-useragent`, `db:bruteforce`, `generic:portscan`, `generic:probe` (bloßer Verbindungsaufbau),
 `vpn:bruteforce`, `scanner:research` (Shodan, Censys …). Zusätzlich frei: CVE-Kennung, wenn erkannt.
 
+**Web-Angriffe nach OWASP eingeordnet:** Die gefälschten Webseiten prüfen jede Anfrage (Pfad, Parameter, Kopfzeilen,
+Body-Anfang) gegen eine kleine, mitgelieferte Musterliste, angelehnt an die Kategorien des OWASP Core Rule Set:
+`http:exploit:sqli`, `:xss`, `:traversal` (Path Traversal/LFI), `:rce` (Command Injection), `:log4shell`/`:jndi`,
+`:ssrf`, `:upload` (Web-Shells). Zweck ist **nur die Bewertung der IP**: Ein eindeutiger Exploit-Versuch zählt stärker
+als ein bloßer Aufruf und bringt die IP schneller und sicherer auf die Liste. Honeypot64 wird dadurch **keine WAF** und
+schützt keine Webseiten selbst – geblockt wird ausschließlich über IP- und DNS-Listen.
+
 ## 4. Datenmodell und Speicherung
 
 **Meldung (Sensor → ipv64), versioniert** (`schema: 1`): Sensor-Kennung, Programmversion, Profil, Zeitraum (10 min),
@@ -199,6 +206,7 @@ weg). Wird es groß, gehen die Meldungen in eine Analyse-Datenbank (z. B. ClickH
 | **v64 Blocklist** | `ipv64_blocklist_v64.txt` (+ v4/v6, MikroTik), `index.json`, nicht in `all` | jede Firewall, PROXY64 |
 | Teillisten je Art | `…_v64_ssh`, `…_v64_web`, `…_v64_mail`, `…_v64_rdp`, `…_v64_scanner` | gezielt je Dienst |
 | Forschungs-Scanner | `…_v64_research` | wer Shodan & Co. aussperren will |
+| **Schadhosts aus Payloads** | Domains und IPs, die Angreifer in Payloads nachladen (`wget http://…`, `${jndi:ldap://…}`), erst ab mehreren Accounts; IPs in die v64 Blocklist, Domains als Liste für DNS-Filter | DNS64, Pi-hole, AdGuard, Firewall – blockt die Nachlade-Server, falls ein Gerät doch befallen ist |
 | **DNSBL** | `<ip-rückwärts>.bl.ipv64.net` → `127.0.0.x` (Code je Art) | Mailserver (Postfix, rspamd), schnelle Prüfung ohne Listen-Download; über PowerDNS |
 | **Änderungs-Feed** | API `GET /threat/feed?since=` (nur Änderungen, ETag) | große Abnehmer, Hoster, eigene Werkzeuge |
 | **IP-Auskunft** | Seite und API `GET /threat/ip/{ip}` | „Warum ist diese IP gelistet?“: Zeiten, Arten, Ports, Accounts, Vertrauenswert, Land/ASN |
