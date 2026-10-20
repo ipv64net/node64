@@ -331,6 +331,31 @@ Netzbetreibern, Zusammenfassungen in Klartext für die Statistikseite.
 | H6 | Honeypot Stufe 2, JA4/HASSH, Passwortprüfung (k-Anonymität), Änderungs-Feed, Node64 als Firewall-Helfer |
 | H7 | Hosting-Anbieter (Netzberichte, BGP-Feed), Plugins, weitere Plattformen (FreeBSD, Windows), KI-Auswertung |
 
+## H3 Umsetzung (Schnittstellen, verbindlich fuer die parallelen Teile)
+
+| Teil | Dateien | Inhalt |
+|---|---|---|
+| Bewertung + Listen | `deploy/sql/honeypot_h3_scoring.sql`, `deploy/web/blocklists/site/bots/blocklist/honeypot_score.php`, Aenderungen an `create_blocklists_v2.php` und `v64_blocklists.php`, `deploy/web/blocklists/live.php`, Token-Verwaltung im Account (`deploy/web/honeypot/token.php`) | Abschnitt 6, 7 (v64 Blocklist + Teillisten), 8 (Tagesstand/Live, Listen-Token) |
+| IP-Auskunft + Freigaben | `deploy/sql/honeypot_h3_release.sql`, `deploy/web/honeypot/ip.php`, `deploy/web/api_v2_threat.php` (`GET /threat/ip/{ip}`), `deploy/web/honeypot/admin.php`, `deploy/web/bots/honeypot_release.php` | Abschnitt 7 (IP-Auskunft), 9 (Freigabe, Loeschantraege, dauerhafte Freigaben) |
+| Node64 | `internal/cdn64` (Blocklisten-Karte), ggf. `internal/honeypot` | Listen-Token hinterlegen: PROXY64 laedt v64-Listen dann live |
+
+**Tabellen** (MariaDB, `ip_bin` = `INET6_ATON`-Form, IPv4 als 4 Byte):
+
+- `hp_scores` (Teil Bewertung): `ip_bin` PK, `ip`, `family` (4/6), `score` 0–100, `accounts`, `sensors`, `events`,
+  `kinds` (Komma), `lists` (Komma: `ssh,web,mail,rdp,scanner,research`), `first_seen`, `last_seen`, `listed` (0/1),
+  `listed_since`, `reason` (`threshold`, `customer_ip`, `allowlist`, `infra`), `updated_at`.
+- `hp_list_tokens` (Teil Bewertung): `userid` PK, `token` (32 Zeichen, eindeutig), `created_at`, `last_used`,
+  `uses_window_start`, `uses_in_window`.
+- `hp_allowlist` (Teil Freigaben, liest die Bewertung): `id`, `cidr`, `ip_start`/`ip_end` (VARBINARY(16)), `reason`,
+  `source` (`manual`, `request`, `infra`, `cdn`), `until` (NULL = dauerhaft), `created_at`, `created_by`.
+- `hp_release_requests` (Teil Freigaben): `id`, `ip`, `ip_bin`, `userid` (NULL = anonym), `email`, `reason`,
+  `status` (`open`, `released`, `rejected`, `escalated`), `created_at`, `decided_at`, `protected_until`, `note`.
+
+**Dateien der Listen:** Tagesstand oeffentlich unter `blocklists/ipv64_blocklist_v64.txt` (+ `_v4_`, `_v6_`,
+MikroTik `v64_mikrotik_v4_v64.rsc`), Teillisten `…_v64_ssh`, `_v64_web`, `_v64_mail`, `_v64_rdp`, `_v64_scanner`,
+`_v64_research`. Live-Fassung ausserhalb des Webroots bzw. in einem gesperrten Ordner, ausgeliefert ueber
+`/blocklists/live/<token>/<datei>` (`live.php`). In `index.json` eigene Kategorie `honeypot`, `in_all` = false.
+
 ## 15. Offen
 
 - Aufteilung Überblick/volle Informationsseite im Detail (bei H4).
