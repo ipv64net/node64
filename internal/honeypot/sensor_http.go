@@ -106,6 +106,11 @@ func (s *Sensor) serveHTTP(t *trapService, w http.ResponseWriter, r *http.Reques
 	case kind == "":
 		kind = KindHTTPScan
 	}
+	dev := sensorDeviceFor(r)
+	if dev != nil && !owasp {
+		page = ""
+		tags = append(tags, "device="+dev.name)
+	}
 	e.Kind, e.Page, e.Detail = kind, page, strings.Join(tags, ",")
 	if isLogin {
 		e.Username, e.Password = user, pass
@@ -117,6 +122,8 @@ func (s *Sensor) serveHTTP(t *trapService, w http.ResponseWriter, r *http.Reques
 	h := w.Header()
 	h.Set("Server", sensorHTTPServer)
 	switch {
+	case dev != nil && !owasp:
+		dev.reply(w, isLogin)
 	case page != "":
 		h.Set("Content-Type", "text/html; charset=UTF-8")
 		h.Set("Cache-Control", "no-store")
@@ -136,10 +143,12 @@ func sensorHTTPError(w http.ResponseWriter, code int) {
 	_, _ = fmt.Fprintf(w, "<html>\r\n<head><title>%s</title></head>\r\n<body>\r\n<center><h1>%s</h1></center>\r\n<hr><center>%s</center>\r\n</body>\r\n</html>\r\n", st, st, sensorHTTPServer)
 }
 
-// Feldnamen fuer Zugangsdaten (WordPress, phpMyAdmin, uebliche Formulare).
+// Feldnamen fuer Zugangsdaten (WordPress, phpMyAdmin, uebliche Formulare, Router/Firewalls/NAS – sensor_devices.go).
 var (
-	sensorUserKeys = []string{"log", "pma_username", "username", "user", "login", "email", "uname", "usr"}
-	sensorPassKeys = []string{"pwd", "pma_password", "password", "pass", "passwd", "pw"}
+	sensorUserKeys = []string{"log", "pma_username", "username", "user", "login", "email", "uname", "usr",
+		"usernamefld", "luci_username", "j_username", "account", "user_name", "userid", "login_username"}
+	sensorPassKeys = []string{"pwd", "pma_password", "password", "pass", "passwd", "pw",
+		"passwordfld", "luci_password", "j_password", "credential", "psd", "login_password", "user_password"}
 )
 
 // sensorHTTPCreds findet Zugangsdaten: Basic-Auth, Formular oder JSON im Body, Passwort in der Abfrage.
@@ -164,6 +173,15 @@ func sensorHTTPCreds(r *http.Request, body []byte) (user, pass string, ok bool) 
 			if q, err := url.ParseQuery(string(body)); err == nil {
 				for k := range q {
 					vals[strings.ToLower(k)] = q.Get(k)
+				}
+				// manche Oberflaechen schicken die Zugangsdaten als JSON in einem Formularfeld (json={...})
+				var m map[string]any
+				if j := q.Get("json"); j != "" && json.Unmarshal([]byte(j), &m) == nil {
+					for k, v := range m {
+						if s, isStr := v.(string); isStr {
+							vals[strings.ToLower(k)] = s
+						}
+					}
 				}
 			}
 		}

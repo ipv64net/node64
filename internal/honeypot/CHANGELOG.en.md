@@ -4,7 +4,8 @@
 
 ### New
 - Login traps for FTP (21), SMTP (25/587, AUTH PLAIN/LOGIN, no relay, relay attempts are reported), POP3 (110), IMAP (143) and MQTT (1883): record user name and password and reject every login. Also selectable as own services (`ftp 21`, `smtp 587`, …) and in the mode without web interface via `NODE64_HONEYPOT_SERVICES`.
-- Profiles: `standard` with FTP, SMTP, IMAP, MQTT and further ports (3306, 6379, 8006, 8291), `full` with many more ports of common web interfaces and services.
+- Profiles: `standard` with FTP, SMTP, IMAP, MQTT and further ports (3306, 6379, 8006, 8123, 8291), `full` with many more ports of common web interfaces and services.
+- Web decoys recognise the login calls of common devices and interfaces (routers such as FRITZ!Box, Speedport and OpenWrt, firewalls and SSL VPN, NAS, UniFi, Home Assistant, Proxmox, Grafana, Jenkins, Webmin, Portainer) and answer with a plain rejection in the matching format; user name and password are recorded, the device is in the detail (`device=…`).
 - Credentials of all login traps go into the report to ipv64 (before only SSH, Telnet, HTTP/HTTPS).
 
 ## 0.3.0 – 2026-10-20

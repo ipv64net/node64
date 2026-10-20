@@ -4,7 +4,8 @@
 
 ### Neu
 - Login-Fallen für FTP (21), SMTP (25/587, AUTH PLAIN/LOGIN, kein Relay, Relay-Versuche werden gemeldet), POP3 (110), IMAP (143) und MQTT (1883): erfassen Benutzername und Passwort und lehnen jede Anmeldung ab. Auch als eigene Dienste wählbar (`ftp 21`, `smtp 587`, …) und im Modus ohne Oberfläche per `NODE64_HONEYPOT_SERVICES`.
-- Profile: `standard` mit FTP, SMTP, IMAP, MQTT und weiteren Ports (3306, 6379, 8006, 8291), `full` mit vielen weiteren Ports gängiger Web-Oberflächen und Dienste.
+- Profile: `standard` mit FTP, SMTP, IMAP, MQTT und weiteren Ports (3306, 6379, 8006, 8123, 8291), `full` mit vielen weiteren Ports gängiger Web-Oberflächen und Dienste.
+- Web-Köder erkennen die Login-Aufrufe verbreiteter Geräte und Oberflächen (Router wie FRITZ!Box, Speedport und OpenWrt, Firewalls und SSL-VPN, NAS, UniFi, Home Assistant, Proxmox, Grafana, Jenkins, Webmin, Portainer) und antworten mit einer schlichten Ablehnung im passenden Format; Benutzername und Passwort werden erfasst, das Gerät steht im Detail (`device=…`).
 - Zugangsdaten aller Login-Fallen gehen in die Meldung an ipv64 (bisher nur SSH, Telnet, HTTP/HTTPS).
 
 ## 0.3.0 – 2026-10-20
