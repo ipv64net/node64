@@ -1,0 +1,356 @@
+package honeypot
+
+import (
+	"embed"
+	"errors"
+	"io/fs"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/ipv64net/node64/internal/module"
+)
+
+//go:embed templates
+var templateFS embed.FS
+
+// Templates liefert die Seiten des Moduls (module.Templater).
+func (m *Module) Templates() fs.FS {
+	sub, _ := fs.Sub(templateFS, "templates")
+	return sub
+}
+
+func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
+	page := func(h http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(h)) }
+	mux.Handle("GET /honeypot", page(m.pageOverview))
+	mux.Handle("GET /honeypot/settings", page(m.pageSettings))
+	mux.Handle("POST /honeypot/settings", page(m.pageSettingsSave))
+	mux.Handle("POST /honeypot/clear", page(m.pageClear))
+}
+
+// uiTab ist ein Reiter der Modulseiten.
+type uiTab struct {
+	Key, Path, TitleKey, Icon string
+	Active                    bool
+}
+
+var uiTabs = []uiTab{{"overview", "/honeypot", "honeypot.tab.overview", "bi-speedometer2", false},
+	{"settings", "/honeypot/settings", "honeypot.tab.settings", "bi-gear", false}}
+
+func tabsFor(key string) []uiTab {
+	out := make([]uiTab, 0, len(uiTabs))
+	for _, t := range uiTabs {
+		t.Active = t.Key == key
+		out = append(out, t)
+	}
+	return out
+}
+
+// uiBar ist ein Balken im Verlauf.
+type uiBar struct {
+	Label string // Achse (Stunde bzw. Tag), leer = keine Beschriftung
+	Title string // Tooltip: Zeitpunkt
+	Count int64
+	Pct   int // Hoehe in Prozent des groessten Werts
+}
+
+// uiRank ist eine Rangliste.
+type uiRank struct {
+	ID, TitleKey, Icon string
+	Mono               bool
+	Items              []uiRankItem
+}
+
+type uiRankItem struct {
+	Key   string
+	Count int64
+	Pct   int
+}
+
+// uiWarning ist ein Hinweis zu einem Port (Text schon uebersetzt).
+type uiWarning struct {
+	Warning
+	OwnerName string
+}
+
+type overviewData struct {
+	Tabs     []uiTab
+	Running  bool
+	Started  time.Time
+	Profile  string
+	Scan     bool
+	Services []ServiceStatus
+	Warnings []uiWarning
+	Counters CounterValues
+	Range    string // 24h oder 7d
+	Day      summaryCounts
+	Week     summaryCounts
+	Bars     []uiBar
+	BarsMax  int64
+	Ranks    []uiRank
+	Events   []EventView
+	Err      string
+}
+
+func (m *Module) warnViews(r *http.Request, list []Warning) []uiWarning {
+	out := make([]uiWarning, 0, len(list))
+	for _, w := range list {
+		out = append(out, uiWarning{Warning: w, OwnerName: m.ownerName(r, w.Owner)})
+	}
+	return out
+}
+
+// ownerName: Teil der Node lesbar (honeypot.owner.<owner>, unbekannt = Kennung).
+func (m *Module) ownerName(r *http.Request, owner string) string {
+	key := "honeypot.owner." + owner
+	if t := m.g.T(r, key); t != key {
+		return t
+	}
+	return owner
+}
+
+func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	info := m.statusInfo(r)
+	d := overviewData{Tabs: tabsFor("overview"), Running: info.Running, Started: info.StartedAt, Profile: info.Profile, Scan: info.Scan,
+		Services: info.Services, Warnings: m.warnViews(r, info.Warnings), Counters: info.Counters, Range: "24h"}
+	span := 24 * time.Hour
+	if r.URL.Query().Get("range") == "7d" {
+		d.Range, span = "7d", 7*24*time.Hour
+	}
+	_ = m.st.Flush(ctx)
+	now := time.Now()
+	var err error
+	if d.Day, err = m.summary(ctx, now.Add(-24*time.Hour)); err == nil {
+		d.Week, err = m.summary(ctx, now.Add(-7*24*time.Hour))
+	}
+	var st *Stats
+	if err == nil {
+		st, err = m.st.Stats(ctx, now.Add(-span), 10)
+	}
+	if err == nil {
+		d.Bars, d.BarsMax = m.bars(r, st.Timeline, d.Range == "7d")
+		d.Ranks = ranks(st)
+		d.Events, err = m.recent(r, 50)
+	}
+	if err != nil {
+		m.log.Error("honeypot page", "err", err)
+		d.Err = err.Error()
+	}
+	m.g.Render(w, r, http.StatusOK, Name+"/overview", "honeypot.title", d)
+}
+
+// bars macht aus dem Verlauf Balken (Hoehe relativ zum groessten Wert, Beschriftung in der Zeitzone des Benutzers).
+func (m *Module) bars(r *http.Request, tl []TimePoint, daily bool) ([]uiBar, int64) {
+	loc := time.Local
+	if m.g.Timezone != nil {
+		if l := m.g.Timezone(r); l != nil {
+			loc = l
+		}
+	}
+	var max int64
+	for _, p := range tl {
+		max = maxInt64(max, p.Events)
+	}
+	out := make([]uiBar, 0, len(tl))
+	for i, p := range tl {
+		t := p.Time.In(loc)
+		b := uiBar{Count: p.Events, Title: t.Format("02.01. 15:04")}
+		if daily {
+			b.Label, b.Title = t.Format("02.01."), t.Format("02.01.2006")
+		} else if i%3 == 0 {
+			b.Label = t.Format("15")
+		}
+		if max > 0 {
+			b.Pct = int(p.Events * 100 / max)
+			if p.Events > 0 && b.Pct < 2 {
+				b.Pct = 2 // sichtbar
+			}
+		}
+		out = append(out, b)
+	}
+	return out, max
+}
+
+func maxInt64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func ranks(st *Stats) []uiRank {
+	mk := func(id, key, icon string, mono bool, list []Count) uiRank {
+		r := uiRank{ID: id, TitleKey: key, Icon: icon, Mono: mono, Items: []uiRankItem{}}
+		var max int64
+		for _, c := range list {
+			max = maxInt64(max, c.Count)
+		}
+		for _, c := range list {
+			it := uiRankItem{Key: c.Key, Count: c.Count}
+			if max > 0 {
+				it.Pct = int(c.Count * 100 / max)
+			}
+			r.Items = append(r.Items, it)
+		}
+		return r
+	}
+	return []uiRank{
+		mk("sources", "honeypot.top.sources", "bi-geo-alt", true, st.TopSources),
+		mk("kinds", "honeypot.top.kinds", "bi-tags", true, st.ByKind),
+		mk("ports", "honeypot.top.ports", "bi-hdd-network", true, st.ByPort),
+		mk("services", "honeypot.top.services", "bi-hdd-stack", true, st.ByService),
+		mk("users", "honeypot.top.users", "bi-person", true, st.TopUsers),
+		mk("passwords", "honeypot.top.passwords", "bi-key", true, st.TopPass),
+		mk("credentials", "honeypot.top.credentials", "bi-person-lock", true, st.TopCreds),
+		mk("paths", "honeypot.top.paths", "bi-signpost", true, st.TopPaths),
+		mk("uas", "honeypot.top.user_agents", "bi-window", true, st.TopUAs),
+	}
+}
+
+type settingsData struct {
+	Tabs      []uiTab
+	Running   bool
+	Cfg       ModuleConfig
+	Lines     string // eigene Dienste, je Zeile "dienst port [koeder]"
+	Profiles  []profileView
+	Pages     []string
+	Errors    map[string]string
+	Warnings  []uiWarning
+	MaxDays   int
+	MinEvents int
+	MaxEvents int
+}
+
+type profileView struct {
+	Key   string
+	Ports string // "ssh 22, http 80 …"
+}
+
+func profileViews() []profileView {
+	var out []profileView
+	for _, p := range []string{ProfileMinimal, ProfileStandard, ProfileFull} {
+		var parts []string
+		for _, s := range Profiles[p] {
+			parts = append(parts, s.Service+" "+strconv.Itoa(s.Port))
+		}
+		out = append(out, profileView{Key: p, Ports: strings.Join(parts, ", ")})
+	}
+	return out
+}
+
+// servicesText: eigene Dienste als Text fuer das Formular.
+func servicesText(list []Service) string {
+	var b strings.Builder
+	for _, s := range list {
+		b.WriteString(s.Service + " " + strconv.Itoa(s.Port))
+		if s.Page != "" {
+			b.WriteString(" " + s.Page)
+		}
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// parseServices liest "dienst port [koeder]" je Zeile (auch "dienst:port", Kommentare mit #). Unlesbare Zeilen
+// kommen als Dienst mit Port 0 an und fallen in validate auf.
+func parseServices(text string) []Service {
+	out := []Service{}
+	for _, line := range strings.Split(text, "\n") {
+		if i := strings.IndexByte(line, '#'); i >= 0 {
+			line = line[:i]
+		}
+		f := strings.Fields(strings.NewReplacer(":", " ", ",", " ", "/", " ").Replace(line))
+		if len(f) == 0 {
+			continue
+		}
+		s := Service{Service: strings.ToLower(f[0])}
+		if len(f) > 1 {
+			s.Port, _ = strconv.Atoi(f[1])
+		}
+		if len(f) > 2 {
+			s.Page = strings.ToLower(f[2])
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, errs map[string]string) settingsData {
+	d := settingsData{Tabs: tabsFor("settings"), Running: m.running() != nil, Cfg: c, Lines: lines, Profiles: profileViews(), Pages: Pages,
+		Errors: errs, MaxDays: maxRetentionDays, MinEvents: minMaxEvents, MaxEvents: maxMaxEvents}
+	if d.Errors == nil {
+		d.Errors = map[string]string{}
+	}
+	if d.Lines == "" {
+		d.Lines = servicesText(c.Services)
+	}
+	// Hinweise fuer die aktuelle Auswahl (auch fuer ein Profil, das noch nicht gespeichert ist)
+	_, warns := m.resolve(r.Context(), c)
+	d.Warnings = m.warnViews(r, warns)
+	return d
+}
+
+func (m *Module) pageSettings(w http.ResponseWriter, r *http.Request) {
+	m.g.Render(w, r, http.StatusOK, Name+"/settings", "honeypot.settings.title", m.settingsView(r, m.loadConfig(r.Context()), "", nil))
+}
+
+func formInt(r *http.Request, name string) int {
+	v := strings.TrimSpace(r.PostFormValue(name))
+	if v == "" {
+		return 0 // leer = Standard
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return -1 // ungueltig: validate meldet es
+	}
+	return n
+}
+
+func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	c := m.loadConfig(ctx)
+	c.Profile = r.PostFormValue("profile")
+	lines := r.PostFormValue("services")
+	if c.Profile == ProfileCustom {
+		c.Services = parseServices(lines)
+	}
+	c.Scan = r.PostFormValue("scan") != ""
+	c.NotifyNew = r.PostFormValue("notify_new") != ""
+	c.MaxConnsPerIP, c.MaxConnsTotal = formInt(r, "max_conns_per_ip"), formInt(r, "max_conns_total")
+	c.RetentionDays, c.MaxEvents = formInt(r, "retention_days"), int64(formInt(r, "max_events"))
+	saved, err := m.SaveConfig(ctx, c)
+	var fe FieldErrors
+	if errors.As(err, &fe) {
+		errs := map[string]string{}
+		for k, v := range fe {
+			errs[k] = m.errText(r, v)
+		}
+		m.g.Render(w, r, http.StatusUnprocessableEntity, Name+"/settings", "honeypot.settings.title", m.settingsView(r, saved, lines, errs))
+		return
+	}
+	if err != nil {
+		m.log.Error("honeypot settings", "err", err)
+		m.g.Flash(w, r, "danger", err.Error())
+		http.Redirect(w, r, "/honeypot/settings", http.StatusSeeOther)
+		return
+	}
+	m.log.Info("settings saved", "via", "ui", "by", m.g.Actor(r))
+	m.g.Audit(r, "honeypot.config", saved.Profile, configDetails(saved))
+	m.g.Flash(w, r, "success", m.g.T(r, "honeypot.settings.saved"))
+	http.Redirect(w, r, "/honeypot/settings", http.StatusSeeOther)
+}
+
+func (m *Module) pageClear(w http.ResponseWriter, r *http.Request) {
+	n, err := m.ClearEvents(r.Context())
+	if err != nil {
+		m.log.Error("honeypot clear", "err", err)
+		m.g.Flash(w, r, "danger", err.Error())
+	} else {
+		m.log.Info("events cleared", "count", n, "via", "ui", "by", m.g.Actor(r))
+		m.g.Audit(r, "honeypot.clear", "", strconv.FormatInt(n, 10))
+		m.g.Flash(w, r, "success", m.g.T(r, "honeypot.clear.done", "count", n))
+	}
+	http.Redirect(w, r, "/honeypot/settings", http.StatusSeeOther)
+}

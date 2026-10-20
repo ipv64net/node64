@@ -58,6 +58,8 @@ const (
 	KindClusterDown Kind = "cluster_down" // Node des Clusters laenger nicht erreichbar oder ausgesetzt
 	KindClusterUp   Kind = "cluster_up"   // Node des Clusters wieder erreichbar
 
+	KindHoneypotNew Kind = "honeypot_new" // Honeypot64: neue Angreifer (gebuendelt, hoechstens stuendlich)
+
 	KindQuota Kind = "quota" // Tageskontingent der Online-Checks erreicht (Account, vom hub)
 )
 
@@ -97,9 +99,12 @@ func IsCDN64(k Kind) bool {
 // IsCluster: Meldung des Clusters.
 func IsCluster(k Kind) bool { return k == KindClusterDown || k == KindClusterUp }
 
-// IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64, Zertifikate, CDN64 online, Cluster).
+// IsHoneypot: Meldung von Honeypot64.
+func IsHoneypot(k Kind) bool { return k == KindHoneypotNew }
+
+// IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64, Zertifikate, CDN64 online, Cluster, Honeypot64).
 func IsModule(k Kind) bool {
-	return IsDynDNS(k) || IsDNS64(k) || IsCert(k) || IsCDN64(k) || IsCluster(k)
+	return IsDynDNS(k) || IsDNS64(k) || IsCert(k) || IsCDN64(k) || IsCluster(k) || IsHoneypot(k)
 }
 
 // Message ist die fertig formulierte Nachricht fuer einen Sender.

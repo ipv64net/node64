@@ -4,6 +4,7 @@
 //
 //	node              startet den Node
 //	node healthcheck  prueft die lokale UI (fuer Docker HEALTHCHECK), Exit 0 = gesund
+//	                  (NODE64_MODE=honeypot: /health des Info-Ports, honeypot_mode.go)
 //	node version      zeigt die Version
 package main
 
@@ -39,6 +40,7 @@ import (
 	"github.com/ipv64net/node64/internal/dyndns"
 	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/healthchecks"
+	"github.com/ipv64net/node64/internal/honeypot"
 	"github.com/ipv64net/node64/internal/i18n"
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/logging"
@@ -78,6 +80,9 @@ func run() error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
+	}
+	if mode := strings.TrimSpace(os.Getenv("NODE64_MODE")); mode != "" { // z. B. honeypot: ohne Oberflaeche (honeypot_mode.go)
+		return runMode(cfg, mode)
 	}
 	logger := logging.New(cfg.LogLevel, cfg.LogFormat, os.Stdout)
 	defer logger.Close()
@@ -233,6 +238,11 @@ func run() error {
 		}
 		return dnsModule.Ports(ctx, modules.IsRunning(dns64.Name))
 	})
+	hpModule := honeypot.New(st, logger.Slog(), cfg.DataDir, Version) // Honeypot64 als Modul (standardmaessig aus)
+	hpModule.SetPorts(portReg)                                        // Fallen-Dienste pruefen ihre Ports
+	hpModule.SetNotifier(dispatcher.Dispatch)                         // neue Angreifer (gebuendelt, hoechstens stuendlich)
+	portReg.Provide(honeypot.Name, hpModule.Claims)
+	modules.Register(hpModule)
 	modules.StartEnabled(ctx)
 	defer modules.StopAll()
 
@@ -593,6 +603,9 @@ func healthcheck() int {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
+	}
+	if isHoneypotMode() { // ohne Oberflaeche: /health des Info-Ports
+		return honeypotHealthcheck(cfg)
 	}
 	// Bind-Adresse verwenden, wenn gesetzt; sonst beide Loopbacks probieren
 	// (Container ohne IPv4 oder ohne IPv6 sollen beide gesund gemeldet werden).

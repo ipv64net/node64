@@ -1,15 +1,18 @@
 # syntax=docker/dockerfile:1
 
-# ---- Build (reines Go, kein CGO, Cross-Compile ueber TARGETOS/TARGETARCH)
+# ---- Build (reines Go, kein CGO, Cross-Compile ueber TARGETOS/TARGETARCH; arm/v7 ueber TARGETVARIANT -> GOARM=7)
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
+ARG TARGETVARIANT
 ARG VERSION=dev
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
+# GOARM nur fuer arm setzen (arm64 meldet teils die Variante v8, die GOARM nicht kennt)
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    if [ "$TARGETARCH" = "arm" ] && [ -n "$TARGETVARIANT" ]; then export GOARM="${TARGETVARIANT#v}"; fi && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w -X main.Version=$VERSION" -o /out/node64 ./cmd/node64
 # Datenverzeichnis mit passenden Rechten fuer den Nicht-Root-Benutzer vorbereiten
@@ -35,7 +38,8 @@ ENV NODE64_DATA_DIR=/data \
     NODE64_HTTPS_PORT=0
 VOLUME ["/data"]
 # Weboberflaeche; dazu nur mit Modul DNS64: DNS 53 (UDP/TCP), DoH 443/TCP, DoT 853/TCP, DoQ 853/UDP
-# (empfohlen: Host-Netzwerk, siehe README)
+# (empfohlen: Host-Netzwerk, siehe README). Modus ohne Oberflaeche (NODE64_MODE=honeypot): Fallen-Ports je Profil,
+# Info-Seite 9064, siehe docs/HONEYPOT64.md
 EXPOSE 8080 8443 53/udp 53/tcp 443/tcp 853/tcp 853/udp
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 CMD ["/node64", "healthcheck"]
 ENTRYPOINT ["/node64"]

@@ -1,0 +1,100 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><i class="bi bi-bug text-primary"></i> {{.T "honeypot.title"}}{{.Doc "honeypot#einschalten"}}</h1>
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+<div class="alert alert-warning d-flex gap-2" role="alert">
+	<i class="bi bi-exclamation-octagon fs-5"></i>
+	<div><strong>{{.T "honeypot.warn.title"}}</strong> {{.T "honeypot.warn.text"}}{{.Doc "honeypot#sicherheit"}}</div>
+</div>
+<div class="row g-3">
+	<div class="col-xl-7">
+		<form method="post" action="/honeypot/settings" class="card" novalidate>
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-header"><i class="bi bi-gear text-primary"></i> {{.T "honeypot.settings.title"}}</div>
+			<div class="card-body">
+				<div class="mb-3">
+					<div class="form-label">{{.T "honeypot.settings.profile"}}{{.Doc "honeypot#profile"}}</div>
+					{{range $d.Profiles}}<div class="form-check">
+						<input class="form-check-input" type="radio" name="profile" id="profile-{{.Key}}" value="{{.Key}}"{{if eq $d.Cfg.Profile .Key}} checked{{end}}>
+						<label class="form-check-label" for="profile-{{.Key}}"><span class="fw-semibold">{{$.T (printf "honeypot.profile.%s" .Key)}}</span> <span class="small text-body-secondary font-monospace">{{.Ports}}</span></label>
+					</div>{{end}}
+					<div class="form-check">
+						<input class="form-check-input" type="radio" name="profile" id="profile-custom" value="custom"{{if eq $d.Cfg.Profile "custom"}} checked{{end}}>
+						<label class="form-check-label fw-semibold" for="profile-custom">{{.T "honeypot.profile.custom"}}</label>
+					</div>
+					{{with index $d.Errors "profile"}}<div class="text-danger small">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "honeypot.settings.profile_hint"}}</div>
+				</div>
+				<div class="mb-3">
+					<label class="form-label" for="services">{{.T "honeypot.settings.services"}}{{.Doc "honeypot#dienste"}}</label>
+					<textarea class="form-control font-monospace{{if index $d.Errors "services"}} is-invalid{{end}}" id="services" name="services" rows="6" placeholder="ssh 2222&#10;telnet 2323&#10;http 8081 wp-login&#10;https 8443&#10;tcp 3389">{{$d.Lines}}</textarea>
+					{{with index $d.Errors "services"}}<div class="invalid-feedback" style="white-space:pre-line">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "honeypot.settings.services_hint" "pages" (join $d.Pages ", ")}}</div>
+				</div>
+				{{with $d.Warnings}}<div class="alert alert-warning small py-2">
+					<div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle"></i> {{$.T "honeypot.ports.notes"}}{{$.Doc "honeypot#ports"}}</div>
+					<ul class="mb-0 ps-3">{{range .}}<li>{{if .Skipped}}{{$.T "honeypot.ports.skipped" "service" .Service "port" .Port "owner" .OwnerName}}{{else}}{{$.T "honeypot.ports.shared" "service" .Service "port" .Port "owner" .OwnerName}}{{end}}</li>{{end}}</ul>
+				</div>{{end}}
+				<div class="form-check mb-3">
+					<input class="form-check-input" type="checkbox" id="scan" name="scan" value="1"{{if $d.Cfg.Scan}} checked{{end}}>
+					<label class="form-check-label" for="scan">{{.T "honeypot.settings.scan"}}</label>{{.Doc "honeypot#port-scan"}}
+					<div class="form-text mt-0">{{.T "honeypot.settings.scan_hint"}}</div>
+				</div>
+				<div class="row g-3 mb-3">
+					<div class="col-sm-6">
+						<label class="form-label" for="max_conns_per_ip">{{.T "honeypot.settings.max_conns_per_ip"}}{{.Doc "honeypot#limits"}}</label>
+						<input type="number" class="form-control{{if index $d.Errors "max_conns_per_ip"}} is-invalid{{end}}" id="max_conns_per_ip" name="max_conns_per_ip" min="0" max="1000" value="{{if $d.Cfg.MaxConnsPerIP}}{{$d.Cfg.MaxConnsPerIP}}{{end}}" placeholder="8">
+						{{with index $d.Errors "max_conns_per_ip"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					</div>
+					<div class="col-sm-6">
+						<label class="form-label" for="max_conns_total">{{.T "honeypot.settings.max_conns_total"}}</label>
+						<input type="number" class="form-control{{if index $d.Errors "max_conns_total"}} is-invalid{{end}}" id="max_conns_total" name="max_conns_total" min="0" max="100000" value="{{if $d.Cfg.MaxConnsTotal}}{{$d.Cfg.MaxConnsTotal}}{{end}}" placeholder="512">
+						{{with index $d.Errors "max_conns_total"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					</div>
+					<div class="col-12 form-text mt-1">{{.T "honeypot.settings.limits_hint"}}</div>
+					<div class="col-sm-6">
+						<label class="form-label" for="retention_days">{{.T "honeypot.settings.retention"}}{{.Doc "honeypot#speicher"}}</label>
+						<div class="input-group has-validation"><input type="number" class="form-control{{if index $d.Errors "retention_days"}} is-invalid{{end}}" id="retention_days" name="retention_days" min="1" max="{{$d.MaxDays}}" value="{{$d.Cfg.RetentionDays}}"><span class="input-group-text">{{.T "honeypot.settings.days"}}</span>
+						{{with index $d.Errors "retention_days"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
+					</div>
+					<div class="col-sm-6">
+						<label class="form-label" for="max_events">{{.T "honeypot.settings.max_events"}}</label>
+						<div class="input-group has-validation"><input type="number" class="form-control{{if index $d.Errors "max_events"}} is-invalid{{end}}" id="max_events" name="max_events" min="{{$d.MinEvents}}" max="{{$d.MaxEvents}}" step="1000" value="{{$d.Cfg.MaxEvents}}"><span class="input-group-text">{{.T "honeypot.settings.events"}}</span>
+						{{with index $d.Errors "max_events"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
+					</div>
+					<div class="col-12 form-text mt-1">{{.T "honeypot.settings.storage_hint"}}</div>
+				</div>
+				<div class="form-check">
+					<input class="form-check-input" type="checkbox" id="notify_new" name="notify_new" value="1"{{if $d.Cfg.NotifyNew}} checked{{end}}>
+					<label class="form-check-label" for="notify_new">{{.T "honeypot.settings.notify_new"}}</label>{{.Doc "honeypot#benachrichtigung"}}
+					<div class="form-text mt-0">{{.T "honeypot.settings.notify_hint"}} <a href="/notifications">{{.T "nav.notifications"}}</a></div>
+				</div>
+			</div>
+			<div class="card-footer text-end"><button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> {{.T "common.save"}}</button></div>
+		</form>
+	</div>
+	<div class="col-xl-5 d-flex flex-column gap-3">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-info-circle text-primary"></i> {{.T "honeypot.settings.about"}}</div>
+			<div class="card-body small">
+				<p>{{.T "honeypot.settings.about_text"}}</p>
+				<p class="mb-0">{{.T "honeypot.settings.prometheus"}}{{.Doc "honeypot#prometheus"}}</p>
+			</div>
+		</div>
+		<div class="card border-danger-subtle">
+			<div class="card-header"><i class="bi bi-trash text-danger"></i> {{.T "honeypot.clear.title"}}</div>
+			<div class="card-body small">
+				<p>{{.T "honeypot.clear.hint"}}</p>
+				<form method="post" action="/honeypot/clear" class="m-0" data-confirm="{{.T "honeypot.clear.confirm"}}">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-trash"></i> {{.T "honeypot.clear.button"}}</button>
+				</form>
+			</div>
+		</div>
+	</div>
+</div>
+{{end}}

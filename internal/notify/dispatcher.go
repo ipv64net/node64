@@ -761,8 +761,11 @@ func (d *Dispatcher) composeDynDNS(lang string, a Alert, m Message) Message {
 	if IsCluster(a.Kind) {
 		m.URL = d.baseURL(uid, "/cluster")
 	}
+	if IsHoneypot(a.Kind) {
+		m.URL = d.baseURL(uid, "/honeypot")
+	}
 	m.Title, m.Priority = t("notify.subject."+string(a.Kind), "name", a.Check.Name), 4
-	if a.Kind == KindDynIP || a.Kind == KindDynOK || a.Kind == KindDNS64Up || a.Kind == KindCertOK || a.Kind == KindCDNOnlineUp || a.Kind == KindClusterUp {
+	if a.Kind == KindDynIP || a.Kind == KindDynOK || a.Kind == KindDNS64Up || a.Kind == KindCertOK || a.Kind == KindCDNOnlineUp || a.Kind == KindClusterUp || a.Kind == KindHoneypotNew {
 		m.Priority = 2
 	}
 	var lines []string

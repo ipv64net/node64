@@ -3,7 +3,7 @@ package web
 import "strings"
 
 // Bereiche fuer den Filter im Audit-Log (Praefixe der Aktionsnamen) und in GET /api/audit?area=.
-var auditAreaOrder = []string{"login", "settings", "healthchecks", "dyndns", "cdn64", "dns64", "certs", "sync"}
+var auditAreaOrder = []string{"login", "settings", "healthchecks", "dyndns", "cdn64", "dns64", "certs", "sync", "honeypot"}
 
 var auditAreas = map[string][]string{
 	"login":        {"setup", "login", "logout", "twofa.", "passkey.", "sso.", "apikey."},
@@ -14,6 +14,7 @@ var auditAreas = map[string][]string{
 	"dns64":        {"dns64."},
 	"certs":        {"cert."},
 	"sync":         {"sync.", "peer."},
+	"honeypot":     {"honeypot."},
 }
 
 // AuditAction: Aktionsname des Audit-Logs in der Sprache des Benutzers (unbekannte bleiben, wie sie sind).

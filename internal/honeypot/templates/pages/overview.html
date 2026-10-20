@@ -1,0 +1,116 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><i class="bi bi-bug text-primary"></i> {{.T "honeypot.title"}}{{.Doc "honeypot"}}</h1>
+	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "honeypot.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "honeypot.running" "profile" (.T (printf "honeypot.profile.%s" $d.Profile))}}</span>{{end}}
+	<div class="btn-group btn-group-sm ms-auto" role="group" aria-label="{{.T "honeypot.range"}}">
+		<a class="btn btn-outline-secondary{{if eq $d.Range "24h"}} active{{end}}" href="/honeypot">{{.T "honeypot.range_24h"}}</a>
+		<a class="btn btn-outline-secondary{{if eq $d.Range "7d"}} active{{end}}" href="/honeypot?range=7d">{{.T "honeypot.range_7d"}}</a>
+	</div>
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+<div class="alert alert-warning d-flex gap-2" role="alert">
+	<i class="bi bi-exclamation-octagon fs-5"></i>
+	<div><strong>{{.T "honeypot.warn.title"}}</strong> {{.T "honeypot.warn.text"}}{{.Doc "honeypot#sicherheit"}}</div>
+</div>
+{{if $d.Err}}<div class="alert alert-danger small font-monospace">{{$d.Err}}</div>{{end}}
+{{with $d.Warnings}}<div class="alert alert-info small">
+	<div class="fw-semibold mb-1"><i class="bi bi-info-circle"></i> {{$.T "honeypot.ports.notes"}}{{$.Doc "honeypot#ports"}}</div>
+	<ul class="mb-0 ps-3">{{range .}}<li>{{if .Skipped}}{{$.T "honeypot.ports.skipped" "service" .Service "port" .Port "owner" .OwnerName}}{{else}}{{$.T "honeypot.ports.shared" "service" .Service "port" .Port "owner" .OwnerName}}{{end}}</li>{{end}}</ul>
+</div>{{end}}
+
+<div class="row g-3 mb-3">
+	<div class="col-6 col-md-4 col-xl-2"><div class="card h-100"><div class="card-body py-2"><div class="small text-body-secondary">{{.T "honeypot.kpi.events_24h"}}</div><div class="fs-4 fw-semibold">{{.Int $d.Day.Events}}</div></div></div></div>
+	<div class="col-6 col-md-4 col-xl-2"><div class="card h-100"><div class="card-body py-2"><div class="small text-body-secondary">{{.T "honeypot.kpi.sources_24h"}}</div><div class="fs-4 fw-semibold">{{.Int $d.Day.Sources}}</div></div></div></div>
+	<div class="col-6 col-md-4 col-xl-2"><div class="card h-100"><div class="card-body py-2"><div class="small text-body-secondary">{{.T "honeypot.kpi.logins_24h"}}</div><div class="fs-4 fw-semibold">{{.Int $d.Day.Logins}}</div></div></div></div>
+	<div class="col-6 col-md-4 col-xl-2"><div class="card h-100"><div class="card-body py-2"><div class="small text-body-secondary">{{.T "honeypot.kpi.events_7d"}}</div><div class="fs-4 fw-semibold">{{.Int $d.Week.Events}}</div></div></div></div>
+	<div class="col-6 col-md-4 col-xl-2"><div class="card h-100"><div class="card-body py-2"><div class="small text-body-secondary">{{.T "honeypot.kpi.sources_7d"}}</div><div class="fs-4 fw-semibold">{{.Int $d.Week.Sources}}</div></div></div></div>
+	<div class="col-6 col-md-4 col-xl-2"><div class="card h-100"><div class="card-body py-2"><div class="small text-body-secondary">{{.T "honeypot.kpi.logins_7d"}}</div><div class="fs-4 fw-semibold">{{.Int $d.Week.Logins}}</div></div></div></div>
+</div>
+
+<div class="row g-3 mb-3">
+	<div class="col-xl-5">
+		<div class="card h-100">
+			<div class="card-header"><i class="bi bi-hdd-network text-primary"></i> {{.T "honeypot.services.title"}}{{.Doc "honeypot#dienste"}}</div>
+			<div class="card-body">
+				{{if $d.Services}}<div class="table-responsive"><table class="table table-sm align-middle small mb-2">
+					<thead><tr><th>{{.T "honeypot.services.service"}}</th><th>{{.T "honeypot.services.port"}}</th><th>{{.T "honeypot.services.state"}}</th><th class="text-end">{{.T "honeypot.services.conns"}}</th></tr></thead>
+					<tbody>{{range $d.Services}}<tr>
+						<td class="text-uppercase">{{.Service}}</td>
+						<td class="font-monospace">{{.Port}}</td>
+						<td>{{if .Listen}}<span class="badge text-bg-success"><i class="bi bi-door-open"></i> {{$.T "honeypot.services.open"}}</span>{{else}}<span class="badge text-bg-danger" title="{{.Error}}"><i class="bi bi-x-circle"></i> {{$.T "honeypot.services.error"}}</span>{{with .Error}}<div class="text-danger font-monospace text-break">{{.}}</div>{{end}}{{end}}</td>
+						<td class="text-end">{{$.Int .Conns}}</td>
+					</tr>{{end}}</tbody>
+				</table></div>{{else}}<p class="text-body-secondary small mb-2">{{.T "honeypot.services.none"}}</p>{{end}}
+				<div class="small text-body-secondary">
+					{{if $d.Scan}}<i class="bi bi-radar"></i> {{.T "honeypot.services.scan_on"}}{{else}}<i class="bi bi-radar"></i> {{.T "honeypot.services.scan_off"}}{{end}}
+					· {{.T "honeypot.services.counters" "conns" (.Int $d.Counters.Connections) "logins" (.Int $d.Counters.Logins) "events" (.Int $d.Counters.Events)}}
+					{{if $d.Counters.Dropped}}· <span class="text-warning-emphasis">{{.T "honeypot.services.dropped" "count" $d.Counters.Dropped}}</span>{{end}}
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="col-xl-7">
+		<div class="card h-100">
+			<div class="card-header"><i class="bi bi-bar-chart text-primary"></i> {{if eq $d.Range "7d"}}{{.T "honeypot.chart.title_7d"}}{{else}}{{.T "honeypot.chart.title_24h"}}{{end}}{{.Doc "honeypot#statistik"}}</div>
+			<div class="card-body">
+				{{if $d.BarsMax}}<div class="d-flex align-items-end gap-1" style="height:180px" role="img" aria-label="{{.T "honeypot.chart.aria" "max" $d.BarsMax}}">
+					{{range $d.Bars}}<div class="flex-fill d-flex flex-column justify-content-end h-100" title="{{.Title}}: {{$.Int .Count}}">
+						<div class="bg-primary rounded-top" style="height:{{.Pct}}%;min-height:{{if .Count}}2px{{else}}0{{end}}"></div>
+					</div>{{end}}
+				</div>
+				<div class="d-flex gap-1 small text-body-secondary mt-1">{{range $d.Bars}}<div class="flex-fill text-center text-nowrap overflow-hidden" style="flex-basis:0">{{.Label}}</div>{{end}}</div>
+				<div class="small text-body-secondary mt-1">{{.T "honeypot.chart.max" "max" (.Int $d.BarsMax)}}</div>
+				{{else}}<p class="text-body-secondary small mb-0">{{.T "honeypot.chart.empty"}}</p>{{end}}
+			</div>
+		</div>
+	</div>
+</div>
+
+<h2 class="h6 mb-2">{{.T "honeypot.top.title"}}{{.Doc "honeypot#statistik"}}</h2>
+<div class="row g-3 mb-3">
+	{{range $d.Ranks}}<div class="col-md-6 col-xl-4">
+		<div class="card h-100" id="top-{{.ID}}">
+			<div class="card-header"><i class="bi {{.Icon}} text-primary"></i> {{$.T .TitleKey}}</div>
+			<div class="card-body p-2">
+				{{if .Items}}<table class="table table-sm small mb-0">
+					<tbody>{{$mono := .Mono}}{{range .Items}}<tr>
+						<td class="text-break{{if $mono}} font-monospace{{end}}" style="max-width:16rem">{{.Key}}
+							<div class="progress mt-1" style="height:3px" role="progressbar" aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width:{{.Pct}}%"></div></div></td>
+						<td class="text-end text-nowrap">{{$.Int .Count}}</td>
+					</tr>{{end}}</tbody>
+				</table>{{else}}<p class="text-body-secondary small m-2">{{$.T "honeypot.top.empty"}}</p>{{end}}
+			</div>
+		</div>
+	</div>{{end}}
+</div>
+
+<div class="card">
+	<div class="card-header"><i class="bi bi-list-ul text-primary"></i> {{.T "honeypot.events.title"}}{{.Doc "honeypot#ereignisse"}}</div>
+	<div class="card-body p-0">
+		{{if $d.Events}}<div class="table-responsive"><table class="table table-sm table-hover align-middle small mb-0">
+			<thead><tr><th>{{.T "honeypot.events.time"}}</th><th>{{.T "honeypot.events.source"}}</th><th>{{.T "honeypot.events.service"}}</th><th>{{.T "honeypot.events.kind"}}</th><th>{{.T "honeypot.events.details"}}</th></tr></thead>
+			<tbody>{{range $d.Events}}<tr>
+				<td class="text-nowrap">{{$.Time .Time}}</td>
+				<td class="font-monospace text-nowrap">{{.Src}}{{if .SrcPort}}<span class="text-body-secondary">:{{.SrcPort}}</span>{{end}}</td>
+				<td class="text-nowrap"><span class="text-uppercase">{{.Service}}</span> <span class="font-monospace text-body-secondary">{{.Port}}</span></td>
+				<td><span class="badge text-bg-light font-monospace">{{.Kind}}</span></td>
+				<td class="text-break" style="max-width:28rem">
+					{{if or .Username .Password}}<div><i class="bi bi-person-lock text-body-secondary"></i> <span class="font-monospace">{{.Username}}</span> / <span class="font-monospace">{{.Password}}</span></div>{{end}}
+					{{if or .Method .Path}}<div class="font-monospace">{{.Method}} {{.Path}}{{with .Host}} <span class="text-body-secondary">({{.}})</span>{{end}}</div>{{end}}
+					{{with .UA}}<div class="text-body-secondary"><i class="bi bi-window"></i> {{.}}</div>{{end}}
+					{{with .Client}}<div class="text-body-secondary font-monospace">{{.}}</div>{{end}}
+					{{with .Page}}<div class="text-body-secondary">{{$.T "honeypot.events.page"}}: {{.}}</div>{{end}}
+					{{with .Detail}}<div class="text-body-secondary">{{.}}</div>{{end}}
+					{{if .PayloadHex}}<details><summary class="text-body-secondary">{{$.T "honeypot.events.payload"}}</summary>
+						<div class="font-monospace mt-1">{{.PayloadText}}</div>
+						<pre class="small bg-body-tertiary p-2 mb-0 mt-1">{{.PayloadDump}}</pre>
+					</details>{{end}}
+				</td>
+			</tr>{{end}}</tbody>
+		</table></div>{{else}}<p class="text-body-secondary small m-3">{{.T "honeypot.events.empty"}}</p>{{end}}
+	</div>
+</div>
+{{end}}

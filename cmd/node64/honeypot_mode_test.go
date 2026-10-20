@@ -1,0 +1,342 @@
+package main
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/netip"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/ipv64net/node64/internal/config"
+	"github.com/ipv64net/node64/internal/honeypot"
+	"github.com/ipv64net/node64/internal/store"
+)
+
+func hpEnv(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+
+func TestHoneypotModeFromEnv(t *testing.T) {
+	hc, err := honeypotModeFromEnv(hpEnv(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hc.Profile != "standard" || hc.Custom || !hc.Sensor.Scan || hc.Retention != 7*24*time.Hour || hc.InfoPort != 9064 || hc.InfoToken != "" {
+		t.Fatalf("defaults: %+v", hc)
+	}
+	if len(hc.Sensor.Services) != len(honeypot.Profiles["standard"]) {
+		t.Fatalf("standard services: %v", hc.Sensor.Services)
+	}
+	hc.Sensor.Services[0].Port = 1 // Kopie, das Profil bleibt unveraendert
+	if honeypot.Profiles["standard"][0].Port == 1 {
+		t.Fatal("profile aliased")
+	}
+
+	hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_PROFILE": "Minimal", "NODE64_HONEYPOT_SCAN": "0",
+		"NODE64_HONEYPOT_RETENTION": "48h", "NODE64_HONEYPOT_INFO_PORT": "0", "NODE64_IPV64_KEY": " abc "}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hc.Profile != "minimal" || hc.Sensor.Scan || hc.Retention != 48*time.Hour || hc.InfoPort != 0 || hc.IPv64Key != "abc" || len(hc.Sensor.Services) != 2 {
+		t.Fatalf("minimal: %+v", hc)
+	}
+
+	hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_SERVICES": "ssh:22, ssh:2222,http:80,https:443:wp-login,TCP:3389,",
+		"NODE64_HONEYPOT_RETENTION": "3d"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []honeypot.Service{{Service: "ssh", Port: 22}, {Service: "ssh", Port: 2222}, {Service: "http", Port: 80},
+		{Service: "https", Port: 443, Page: "wp-login"}, {Service: "tcp", Port: 3389}}
+	if !hc.Custom || hc.Retention != 72*time.Hour || len(hc.Sensor.Services) != len(want) {
+		t.Fatalf("services: %+v", hc)
+	}
+	for i := range want {
+		if hc.Sensor.Services[i] != want[i] {
+			t.Fatalf("service %d: %+v, want %+v", i, hc.Sensor.Services[i], want[i])
+		}
+	}
+
+	bad := []map[string]string{
+		{"NODE64_HONEYPOT_PROFILE": "huge"},
+		{"NODE64_HONEYPOT_SERVICES": "ftp:21"},
+		{"NODE64_HONEYPOT_SERVICES": "ssh"},
+		{"NODE64_HONEYPOT_SERVICES": "ssh:0"},
+		{"NODE64_HONEYPOT_SERVICES": "ssh:22,http:22"},
+		{"NODE64_HONEYPOT_SERVICES": "ssh:22:wp-login"},
+		{"NODE64_HONEYPOT_SERVICES": "http:80:unknown"},
+		{"NODE64_HONEYPOT_SERVICES": " , "},
+		{"NODE64_HONEYPOT_SCAN": "maybe"},
+		{"NODE64_HONEYPOT_RETENTION": "10m"},
+		{"NODE64_HONEYPOT_RETENTION": "x"},
+		{"NODE64_HONEYPOT_RETENTION": "400d"},
+		{"NODE64_HONEYPOT_INFO_PORT": "70000"},
+		{"NODE64_HONEYPOT_SERVICES": "tcp:9064"}, // Info-Port ist auch Fallen-Port
+		{"NODE64_HONEYPOT_INFO_TOKEN": "short"},
+	}
+	for _, m := range bad {
+		if _, err := honeypotModeFromEnv(hpEnv(m)); err == nil {
+			t.Errorf("%v: expected error", m)
+		}
+	}
+}
+
+func TestRunModeUnknown(t *testing.T) {
+	if err := runMode(&config.Config{}, "router"); err == nil {
+		t.Fatal("expected error for unknown mode")
+	}
+}
+
+// fakeSensor fuer den Info-Server.
+type fakeSensor struct {
+	status []honeypot.ServiceStatus
+	c      honeypot.Counters
+}
+
+func (f *fakeSensor) Status() []honeypot.ServiceStatus { return f.status }
+func (f *fakeSensor) Counters() *honeypot.Counters     { return &f.c }
+
+func newTestHPInfo(t *testing.T, token string) (*hpInfo, *fakeSensor) {
+	t.Helper()
+	dir := t.TempDir()
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(dir, "node64.db"), filepath.Join(dir, "backups"), log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	core, _ := store.CoreMigrations()
+	if err := st.Migrate(ctx, "core", core); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Migrate(ctx, honeypot.Name, honeypot.Migrations()); err != nil {
+		t.Fatal(err)
+	}
+	hs := honeypot.NewStore(st, log)
+	sink := hs.Sink()
+	sink(honeypot.Event{Service: honeypot.SvcSSH, Port: 22, Kind: honeypot.KindSSHBrute, Src: netip.MustParseAddr("192.0.2.7"), Username: "root", Password: "<b>x</b>"})
+	sink(honeypot.Event{Service: honeypot.SvcHTTP, Port: 80, Kind: honeypot.KindHTTPScan, Src: netip.MustParseAddr("198.51.100.3"), Method: "GET", Path: "/.env", UA: "evil‮bot"})
+	if err := hs.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fs := &fakeSensor{status: []honeypot.ServiceStatus{{Service: "ssh", Port: 22, Listen: true, Conns: 5}, {Service: "http", Port: 80, Error: "permission denied"}}}
+	fs.c.Logins.Store(3)
+	hc := &hpModeConfig{Profile: "minimal", InfoPort: 9064, InfoToken: token, Sensor: honeypot.Config{Services: honeypot.Profiles["minimal"], Scan: true}}
+	return newHPInfo(hc, fs, hs, st, "1.2.3"), fs
+}
+
+func hpDo(h http.Handler, method, target, remote string, hdr map[string]string) *httptest.ResponseRecorder {
+	r := httptest.NewRequest(method, target, nil)
+	r.RemoteAddr = remote
+	for k, v := range hdr {
+		r.Header.Set(k, v)
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	return w
+}
+
+func TestHPInfoAccess(t *testing.T) {
+	h, _ := newTestHPInfo(t, "")
+	for _, remote := range []string{"127.0.0.1:1", "[::1]:1", "192.168.1.5:5555", "10.1.2.3:1", "172.16.0.9:1", "100.64.3.4:1",
+		"[fd00::1]:1", "[fe80::1%eth0]:1", "169.254.1.1:1", "[::ffff:192.168.1.1]:1"} {
+		if w := hpDo(h, "GET", "/health", remote, nil); w.Code != http.StatusOK {
+			t.Errorf("%s: %d", remote, w.Code)
+		}
+	}
+	for _, remote := range []string{"203.0.113.5:1234", "[2001:db8::1]:1", "100.128.0.1:1", "garbage"} {
+		if w := hpDo(h, "GET", "/", remote, map[string]string{"X-Forwarded-For": "192.168.1.1", "X-Real-IP": "127.0.0.1"}); w.Code != http.StatusForbidden {
+			t.Errorf("%s: %d, want 403", remote, w.Code)
+		}
+	}
+	// ohne eingestelltes Token hilft auch ein Token nicht
+	if w := hpDo(h, "GET", "/?token=", "203.0.113.5:1", map[string]string{"Authorization": "Bearer "}); w.Code != http.StatusForbidden {
+		t.Errorf("empty token: %d", w.Code)
+	}
+
+	tok := "0123456789abcdef-secret"
+	h, _ = newTestHPInfo(t, tok)
+	pub := "203.0.113.5:1234"
+	if w := hpDo(h, "GET", "/metrics", pub, nil); w.Code != http.StatusForbidden {
+		t.Errorf("public without token: %d", w.Code)
+	}
+	if w := hpDo(h, "GET", "/metrics?token=wrong", pub, nil); w.Code != http.StatusForbidden {
+		t.Errorf("public wrong token: %d", w.Code)
+	}
+	if w := hpDo(h, "GET", "/metrics?token="+tok, pub, nil); w.Code != http.StatusOK {
+		t.Errorf("public ?token: %d", w.Code)
+	}
+	if w := hpDo(h, "GET", "/", pub, map[string]string{"Authorization": "Bearer " + tok}); w.Code != http.StatusOK {
+		t.Errorf("public bearer: %d", w.Code)
+	}
+	if w := hpDo(h, "GET", "/health", "192.168.0.2:1", nil); w.Code != http.StatusOK {
+		t.Errorf("private with token configured: %d", w.Code)
+	}
+	if w := hpDo(h, "POST", "/", "127.0.0.1:1", nil); w.Code != http.StatusMethodNotAllowed || w.Header().Get("Allow") != "GET, HEAD" {
+		t.Errorf("POST: %d", w.Code)
+	}
+	if w := hpDo(h, "GET", "/api/health", "127.0.0.1:1", nil); w.Code != http.StatusNotFound {
+		t.Errorf("unknown path: %d", w.Code)
+	}
+}
+
+func TestHPInfoPage(t *testing.T) {
+	h, _ := newTestHPInfo(t, "")
+	w := hpDo(h, "GET", "/", "127.0.0.1:1", map[string]string{"Accept-Language": "de-DE,de;q=0.9,en;q=0.8"})
+	if w.Code != http.StatusOK {
+		t.Fatal(w.Code)
+	}
+	body := w.Body.String()
+	for _, s := range []string{`lang="de"`, "Honeypot64", "1.2.3", "Treffer 24 h", "192.0.2.7", "root:&lt;b&gt;x&lt;/b&gt;", "/.env", "evil·bot",
+		"ssh:bruteforce", "permission denied", "folgt in einer späteren Version"} {
+		if !strings.Contains(body, s) {
+			t.Errorf("page lacks %q", s)
+		}
+	}
+	if strings.Contains(body, "<b>x</b>") || strings.Contains(body, "<script") || strings.Contains(body, "<form") {
+		t.Error("page not escaped or has script/form")
+	}
+	hd := w.Header()
+	for k, v := range map[string]string{"X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", "X-Frame-Options": "DENY"} {
+		if hd.Get(k) != v {
+			t.Errorf("%s = %q", k, hd.Get(k))
+		}
+	}
+	// die CSP erlaubt genau das eingebettete CSS
+	i, j := strings.Index(body, "<style>"), strings.Index(body, "</style>")
+	sum := sha256.Sum256([]byte(body[i+len("<style>") : j]))
+	if !strings.Contains(hd.Get("Content-Security-Policy"), "'sha256-"+base64.StdEncoding.EncodeToString(sum[:])+"'") ||
+		!strings.Contains(hd.Get("Content-Security-Policy"), "default-src 'none'") {
+		t.Errorf("CSP %q does not match the style block", hd.Get("Content-Security-Policy"))
+	}
+	if w := hpDo(h, "GET", "/", "127.0.0.1:1", map[string]string{"Accept-Language": "fr, en-US"}); !strings.Contains(w.Body.String(), "Hits 24 h") {
+		t.Error("english page expected")
+	}
+	if w := hpDo(h, "HEAD", "/", "127.0.0.1:1", nil); w.Code != http.StatusOK || w.Body.Len() != 0 {
+		t.Errorf("HEAD: %d %d", w.Code, w.Body.Len())
+	}
+}
+
+func TestHPInfoMetricsHealth(t *testing.T) {
+	h, fs := newTestHPInfo(t, "")
+	w := hpDo(h, "GET", "/metrics", "127.0.0.1:1", nil)
+	if w.Code != http.StatusOK || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain; version=0.0.4") {
+		t.Fatalf("metrics: %d %q", w.Code, w.Header().Get("Content-Type"))
+	}
+	body := w.Body.String()
+	for _, s := range []string{`node64_honeypot_connections_total{service="ssh",port="22"} 5`, `node64_honeypot_listen_errors{port="80"} 1`,
+		"node64_honeypot_up 1", "node64_honeypot_unique_sources 2", "node64_honeypot_report_last_success_timestamp 0",
+		`node64_honeypot_info{version="1.2.3",profile="minimal"} 1`} {
+		if !strings.Contains(body, s) {
+			t.Errorf("metrics lack %q\n%s", s, body)
+		}
+	}
+	if w := hpDo(h, "GET", "/health", "127.0.0.1:1", nil); w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != "ok" {
+		t.Errorf("health: %d %q", w.Code, w.Body.String())
+	}
+	fs.status = []honeypot.ServiceStatus{{Service: "ssh", Port: 22, Error: "address in use"}}
+	if w := hpDo(h, "GET", "/health", "127.0.0.1:1", nil); w.Code != http.StatusServiceUnavailable {
+		t.Errorf("health without open service: %d", w.Code)
+	}
+}
+
+func TestHPHelpers(t *testing.T) {
+	for in, want := range map[string]string{"": "en", "de": "de", "en-GB,de": "en", "fr;q=1, de-AT;q=0.5": "de", "*": "en"} {
+		if got := hpLang(in); got != want {
+			t.Errorf("hpLang(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := hpUptime(26*time.Hour + 3*time.Minute + 10*time.Second); got != "1 d 2 h 3 min" {
+		t.Errorf("uptime %q", got)
+	}
+	if got := hpShort(strings.Repeat("ä", 200)); len([]rune(got)) != 121 {
+		t.Errorf("short %d", len([]rune(got)))
+	}
+}
+
+func hpFreePort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	return ln.Addr().(*net.TCPAddr).Port
+}
+
+func TestHoneypotRunStartStop(t *testing.T) {
+	dir := t.TempDir()
+	trap, infoPort := hpFreePort(t), hpFreePort(t)
+	hc, err := honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_SERVICES": "tcp:" + strconv.Itoa(trap),
+		"NODE64_HONEYPOT_INFO_PORT": strconv.Itoa(infoPort), "NODE64_HONEYPOT_SCAN": "0"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{DataDir: dir, BindAddr: "127.0.0.1"}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ready := make(chan string, 1)
+	done := make(chan error, 1)
+	go func() { done <- honeypotRun(ctx, cfg, hc, log, func(info string) { ready <- info }) }()
+	var info string
+	select {
+	case info = <-ready:
+	case err := <-done:
+		t.Fatalf("run ended early: %v", err)
+	case <-time.After(20 * time.Second):
+		t.Fatal("run did not become ready")
+	}
+	if info == "" {
+		t.Fatal("info server not started")
+	}
+	resp, err := http.Get("http://" + info + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(b), "node64_honeypot_") {
+		t.Fatalf("metrics: %d %s", resp.StatusCode, b)
+	}
+	// /health: 200, sobald der Sensor den Fallen-Port offen hat
+	resp, err = http.Get("http://" + info + "/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if c, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(trap)), time.Second); err == nil {
+		c.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("health with open trap port: %d", resp.StatusCode)
+		}
+	} else if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("health without open trap port: %d", resp.StatusCode)
+	}
+	for _, p := range []string{"node64.db", honeypot.Name} {
+		if _, err := os.Stat(filepath.Join(dir, p)); err != nil {
+			t.Errorf("%s missing: %v", p, err)
+		}
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("run: %v", err)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("run did not stop")
+	}
+	if _, err := net.DialTimeout("tcp", info, time.Second); err == nil {
+		t.Error("info port still open after stop")
+	}
+}

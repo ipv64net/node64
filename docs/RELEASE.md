@@ -5,8 +5,10 @@ Gepusht wird nur auf Ansage von Dennis.
 
 ## Image
 
-Der Workflow `.github/workflows/image.yml` baut das Image für `linux/amd64` und `linux/arm64` und schiebt es nach
+Der Workflow `.github/workflows/image.yml` baut das Image für `linux/amd64`, `linux/arm64` und `linux/arm/v7` und schiebt es nach
 `ghcr.io/ipv64net/node64`. Vorher laufen `go vet` und alle Tests; schlagen sie fehl, entsteht kein Image.
+Alle Build-Stufen laufen auf der Plattform des Runners (Cross-Compile, kein QEMU); `arm/v7` setzt `GOARM=7` über
+`TARGETVARIANT`. Vorab lokal prüfen: `GOOS=linux GOARCH=arm GOARM=7 go build ./cmd/node64`.
 
 | Auslöser | Image-Tags |
 |---|---|

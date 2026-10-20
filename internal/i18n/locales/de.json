@@ -83,7 +83,8 @@
     "standalone": "Healthchecks-Sync aus",
     "version": "Version {version}",
     "api": "API",
-    "status_pages": "Statusseiten"
+    "status_pages": "Statusseiten",
+    "honeypot": "Honeypot64"
   },
   "common": {
     "copy": "Kopieren",
@@ -1185,7 +1186,8 @@
       "cdn64": "PROXY64",
       "dns64": "DNS64",
       "certs": "Zertifikate",
-      "sync": "ipv64 & Gruppe"
+      "sync": "ipv64 & Gruppe",
+      "honeypot": "Honeypot64"
     },
     "actions": {
       "setup": "Ersteinrichtung",
@@ -1317,7 +1319,9 @@
       "peer_join": "Gruppe beigetreten",
       "peer_leave": "Gruppe verlassen",
       "peer_url": "Adresse in der Gruppe geändert",
-      "peer_remove": "Mitglied entfernt"
+      "peer_remove": "Mitglied entfernt",
+      "honeypot_config": "Honeypot64-Einstellungen geändert",
+      "honeypot_clear": "Honeypot64-Ereignisse gelöscht"
     }
   },
   "logs": {
@@ -2273,7 +2277,8 @@
       "cdn64_online_up": "🟢 CDN64: Tunnel wieder verbunden ({name})",
       "cdn64_online_blocked": "🟠 CDN64: {name} bei ipv64 gesperrt",
       "cluster_down": "🔴 Cluster: Node {name} nicht erreichbar",
-      "cluster_up": "🟢 Cluster: Node {name} wieder erreichbar"
+      "cluster_up": "🟢 Cluster: Node {name} wieder erreichbar",
+      "honeypot_new": "🐞 Honeypot64: neue Angreifer"
     },
     "body": {
       "quota_used": "Verbraucht: {used} von {limit} Online-Messungen heute",
@@ -3075,6 +3080,142 @@
       "paused": "Blockieren pausiert",
       "paused_until": "Blockieren pausiert bis {time}",
       "resume": "Wieder einschalten"
+    }
+  },
+  "honeypot": {
+    "title": "Honeypot64",
+    "tab": {
+      "overview": "Übersicht",
+      "settings": "Einstellungen"
+    },
+    "since": "läuft seit {time}",
+    "running": "aktiv · Profil {profile}",
+    "range": "Zeitraum",
+    "range_24h": "24 Std.",
+    "range_7d": "7 Tage",
+    "profile": {
+      "minimal": "Minimal",
+      "standard": "Standard",
+      "full": "Voll",
+      "custom": "Eigene Auswahl"
+    },
+    "warn": {
+      "title": "Fallen-Dienste sind von außen sichtbar.",
+      "text": "Sobald du Ports am Router freigibst, erreicht jeder im Internet diese Dienste – genau dafür sind sie da. Lass auf diesen Ports nie echte Dienste (SSH, Weboberflächen, Datenbanken) laufen und gib nur die Ports frei, die der Honeypot nutzen soll."
+    },
+    "ports": {
+      "notes": "Hinweise zu den Ports",
+      "skipped": "{service} auf Port {port} wird nicht geöffnet: {owner} nutzt den Port bereits.",
+      "shared": "{service} auf Port {port}: {owner} hat diesen Port eingestellt und kann ihn nicht öffnen, solange der Honeypot ihn belegt."
+    },
+    "owner": {
+      "web": "die Oberfläche von Node64",
+      "edge": "PROXY64 (gemeinsamer Eingang 80/443)",
+      "dns64": "DNS64",
+      "cdn64": "PROXY64 (Streams)"
+    },
+    "kpi": {
+      "events_24h": "Ereignisse (24 Std.)",
+      "sources_24h": "Quell-IPs (24 Std.)",
+      "logins_24h": "Login-Versuche (24 Std.)",
+      "events_7d": "Ereignisse (7 Tage)",
+      "sources_7d": "Quell-IPs (7 Tage)",
+      "logins_7d": "Login-Versuche (7 Tage)"
+    },
+    "services": {
+      "title": "Fallen-Dienste",
+      "service": "Dienst",
+      "port": "Port",
+      "state": "Zustand",
+      "conns": "Verbindungen",
+      "open": "offen",
+      "error": "Fehler",
+      "none": "Keine Dienste offen. Wähle unter Einstellungen ein Profil oder eigene Dienste.",
+      "scan_on": "Port-Scan-Erkennung an",
+      "scan_off": "Port-Scan-Erkennung aus",
+      "counters": "seit dem Start: {conns} Verbindungen, {logins} Logins, {events} Ereignisse",
+      "dropped": "{count} wegen Überlast verworfen"
+    },
+    "chart": {
+      "title_24h": "Verlauf der letzten 24 Stunden",
+      "title_7d": "Verlauf der letzten 7 Tage",
+      "aria": "Ereignisse je Zeitabschnitt, höchstens {max}",
+      "max": "Höchster Wert: {max} Ereignisse",
+      "empty": "Noch keine Ereignisse in diesem Zeitraum."
+    },
+    "top": {
+      "title": "Ranglisten",
+      "sources": "Quell-IPs",
+      "kinds": "Arten",
+      "ports": "Ports",
+      "services": "Dienste",
+      "users": "Benutzernamen",
+      "passwords": "Passwörter",
+      "credentials": "Zugangsdaten",
+      "paths": "Pfade",
+      "user_agents": "User-Agents",
+      "empty": "Keine Einträge."
+    },
+    "events": {
+      "title": "Letzte Ereignisse",
+      "time": "Zeit",
+      "source": "Quelle",
+      "service": "Dienst",
+      "kind": "Art",
+      "details": "Details",
+      "page": "Köder",
+      "payload": "Payload",
+      "empty": "Noch keine Ereignisse."
+    },
+    "settings": {
+      "title": "Einstellungen",
+      "profile": "Profil",
+      "profile_hint": "Ein Profil lässt Ports weg, die ein anderer Teil von Node64 schon offen hat (z. B. PROXY64 auf 80/443, DNS64 auf 53/853, die Oberfläche). Bei eigener Auswahl ist ein belegter Port ein Fehler.",
+      "services": "Eigene Dienste",
+      "services_hint": "Nur bei „Eigene Auswahl“: je Zeile Dienst und Port, bei http/https optional ein Köder ({pages}). Dienste: ssh, telnet, http, https, tcp.",
+      "scan": "Port-Scan-Erkennung",
+      "scan_hint": "Erkennt Quellen, die in kurzer Zeit viele Fallen-Ports ansprechen.",
+      "max_conns_per_ip": "Verbindungen je Quell-IP",
+      "max_conns_total": "Verbindungen insgesamt",
+      "limits_hint": "Gleichzeitige Verbindungen; leer = Standard (8 je IP, 512 insgesamt). Schützt die Node vor Überlast.",
+      "retention": "Aufbewahrung",
+      "days": "Tage",
+      "max_events": "Obergrenze",
+      "events": "Ereignisse",
+      "storage_hint": "Ältere Ereignisse und alles über der Obergrenze werden stündlich gelöscht (älteste zuerst).",
+      "notify_new": "Bei neuen Angreifern benachrichtigen",
+      "notify_hint": "Höchstens eine gebündelte Meldung je Stunde mit Anzahl und den ersten IPs, über die Standardkanäle, einzurichten unter",
+      "saved": "Einstellungen von Honeypot64 gespeichert.",
+      "about": "So arbeitet Honeypot64",
+      "about_text": "Die Fallen-Dienste nehmen Logins an und lehnen sie immer ab. Es wird nichts ausgeführt, nichts heruntergeladen und keine Verbindung nach außen aufgebaut. Jede Berührung ist verdächtig, weil auf diesen Ports kein echter Dienst läuft.",
+      "prometheus": "Kennzahlen stehen unter /api/metrics (node64_honeypot_*)."
+    },
+    "clear": {
+      "title": "Daten löschen",
+      "hint": "Löscht alle gespeicherten Ereignisse dieser Node. Die Einstellungen bleiben.",
+      "button": "Ereignisse löschen",
+      "confirm": "Alle Ereignisse von Honeypot64 löschen?",
+      "done": "{count} Ereignisse gelöscht."
+    },
+    "card": {
+      "services": "Offene Fallen-Dienste",
+      "events": "Ereignisse (24 Std.)",
+      "sources": "Quell-IPs (24 Std.)",
+      "logins": "Login-Versuche (24 Std.)",
+      "errors": "Dienste mit Fehler"
+    },
+    "err": {
+      "profile": "Unbekanntes Profil.",
+      "retention": "Aufbewahrung: 1 bis {v1} Tage.",
+      "max_events": "Obergrenze: {v1} bis {v2} Ereignisse.",
+      "limit": "Erlaubt sind 0 (Standard) bis {v1}.",
+      "no_services": "Bei eigener Auswahl mindestens einen Dienst angeben.",
+      "too_many": "Höchstens {v1} Dienste.",
+      "service": "Unbekannter Dienst „{v1}“ (ssh, telnet, http, https, tcp).",
+      "port": "Ungültiger Port {v1} (1–65535).",
+      "port_twice": "Port {v1} ist doppelt.",
+      "page": "Köder „{v1}“ gibt es nicht oder er passt nicht zum Dienst (nur http/https).",
+      "port_used": "Port {v1} ist belegt durch {v2}."
     }
   }
 }

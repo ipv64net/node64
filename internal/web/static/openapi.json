@@ -43,6 +43,10 @@
     {
       "name": "PROXY64",
       "description": "PROXY64 – Reverse-Proxy (Modul-ID cdn64): Proxy-Hosts über den gemeinsamen Eingang, Erreichbarkeit der Ziele; dazu CDN64 (Veröffentlichen über srv07/srv08). Nur bei eingeschaltetem Modul."
+    },
+    {
+      "name": "Honeypot64",
+      "description": "Leichter Low-Interaction-Honeypot (Modul Honeypot64): Fallen-Dienste, lokale Statistik und Einstellungen. Ist das Modul aus: 404. Prometheus-Kennzahlen stehen unter `GET /metrics` (`node64_honeypot_*`)."
     }
   ],
   "security": [
@@ -3779,6 +3783,362 @@
           "key": {
             "type": "string",
             "description": "i18n-Schlüssel, z. B. hc.status.err.slug"
+          }
+        }
+      },
+      "Honeypot64ServiceConfig": {
+        "type": "object",
+        "required": [
+          "service",
+          "port"
+        ],
+        "properties": {
+          "service": {
+            "type": "string",
+            "enum": [
+              "ssh",
+              "telnet",
+              "http",
+              "https",
+              "tcp"
+            ]
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "page": {
+            "type": "string",
+            "enum": [
+              "generic",
+              "wp-login",
+              "phpmyadmin",
+              "admin"
+            ],
+            "description": "Nur http/https: Koeder; leer = Auswahl je Pfad."
+          }
+        }
+      },
+      "Honeypot64Config": {
+        "type": "object",
+        "properties": {
+          "profile": {
+            "type": "string",
+            "enum": [
+              "minimal",
+              "standard",
+              "full",
+              "custom"
+            ],
+            "default": "standard"
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64ServiceConfig"
+            },
+            "description": "Nur bei `custom`."
+          },
+          "scan": {
+            "type": "boolean",
+            "description": "Port-Scan-Erkennung",
+            "default": true
+          },
+          "max_conns_per_ip": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000,
+            "description": "Gleichzeitige Verbindungen je Quell-IP, 0 = Standard (8)."
+          },
+          "max_conns_total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "Gleichzeitige Verbindungen insgesamt, 0 = Standard (512)."
+          },
+          "retention_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90,
+            "default": 7
+          },
+          "max_events": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 5000000,
+            "default": 200000
+          },
+          "notify_new": {
+            "type": "boolean",
+            "default": false,
+            "description": "Hoechstens eine gebuendelte Meldung je Stunde bei neuen Quell-IPs."
+          }
+        }
+      },
+      "Honeypot64Service": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "listen": {
+            "type": "boolean",
+            "description": "Port offen"
+          },
+          "error": {
+            "type": "string",
+            "description": "Warum nicht offen (belegt, keine Rechte)"
+          },
+          "conns": {
+            "type": "integer",
+            "description": "Verbindungen seit dem Start"
+          }
+        }
+      },
+      "Honeypot64Warning": {
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "owner": {
+            "type": "string",
+            "description": "anderer Teil der Node (web, edge, dns64, cdn64 …)"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "skipped": {
+            "type": "boolean",
+            "description": "true = nicht geoeffnet (Port belegt); false = geoeffnet, der andere Teil kann ihn spaeter nicht nutzen"
+          }
+        }
+      },
+      "Honeypot64Status": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "scan": {
+            "type": "boolean"
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Service"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Warning"
+            }
+          },
+          "counters": {
+            "type": "object",
+            "properties": {
+              "connections": {
+                "type": "integer"
+              },
+              "logins": {
+                "type": "integer"
+              },
+              "events": {
+                "type": "integer"
+              },
+              "dropped": {
+                "type": "integer"
+              }
+            }
+          },
+          "buffered": {
+            "type": "integer",
+            "description": "Ereignisse, die noch auf das Schreiben warten"
+          },
+          "dropped": {
+            "type": "integer",
+            "description": "Im Speicher verworfene Ereignisse"
+          }
+        }
+      },
+      "Honeypot64Count": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "last": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Honeypot64Stats": {
+        "type": "object",
+        "properties": {
+          "since": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "events": {
+            "type": "integer"
+          },
+          "sources": {
+            "type": "integer",
+            "description": "verschiedene Quell-IPs"
+          },
+          "logins": {
+            "type": "integer"
+          },
+          "by_service": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Count"
+            }
+          },
+          "by_port": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Count"
+            }
+          },
+          "by_kind": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Count"
+            }
+          },
+          "top_sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Count"
+            }
+          },
+          "top_users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Count"
+            }
+          },
+          "top_passwords": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Count"
+            }
+          },
+          "top_credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Count"
+            },
+            "description": "Key = Benutzer:Passwort"
+          },
+          "top_paths": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Count"
+            }
+          },
+          "top_user_agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Honeypot64Count"
+            }
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "time": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "events": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Honeypot64Event": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "service": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string",
+            "description": "z. B. ssh:bruteforce, http:exploit:sqli, generic:probe"
+          },
+          "src": {
+            "type": "string"
+          },
+          "src_port": {
+            "type": "integer"
+          },
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "user_agent": {
+            "type": "string"
+          },
+          "client": {
+            "type": "string"
+          },
+          "page": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "payload_hex": {
+            "type": "string"
+          },
+          "payload_text": {
+            "type": "string",
+            "description": "Go-Escapes (\\x00, \\r\\n …), nur ASCII"
           }
         }
       }
@@ -14458,6 +14818,209 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/honeypot/status": {
+      "get": {
+        "tags": [
+          "Honeypot64"
+        ],
+        "summary": "Zustand der Fallen-Dienste",
+        "description": "Dienste mit Port, offen/Fehler und Verbindungen seit dem Start; Hinweise zu Ports, die das Profil weggelassen hat (`skipped`) oder die ein anderer Teil eingestellt hat; Zaehler des Sensors und des Speichers.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Honeypot64Status"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/honeypot/stats": {
+      "get": {
+        "tags": [
+          "Honeypot64"
+        ],
+        "summary": "Statistik eines Zeitraums",
+        "description": "Zahlen, Ranglisten und Verlauf (je Stunde bis 48 Stunden, sonst je Tag). Hoechstens die Aufbewahrung.",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "description": "`24h` (Standard), `7d`, `<n>d` oder eine Dauer wie `12h`.",
+            "schema": {
+              "type": "string",
+              "default": "24h"
+            }
+          },
+          {
+            "name": "top",
+            "in": "query",
+            "description": "Laenge der Ranglisten (Standard 10, hoechstens 100).",
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Honeypot64Stats"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungueltiger Zeitraum",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/honeypot/events": {
+      "get": {
+        "tags": [
+          "Honeypot64"
+        ],
+        "summary": "Letzte Ereignisse",
+        "description": "Neueste zuerst. Zugangsdaten im Klartext (nur Honeypot), Payload als Hex und als escapter ASCII-Text.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Anzahl (Standard 50, hoechstens 1000).",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 1000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Honeypot64Event"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Honeypot64"
+        ],
+        "summary": "Alle Ereignisse loeschen",
+        "description": "Loescht die gespeicherten Ereignisse dieser Node (Einstellungen bleiben). Steht im Audit-Log (`honeypot.clear`).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deleted": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/honeypot/config": {
+      "get": {
+        "tags": [
+          "Honeypot64"
+        ],
+        "summary": "Einstellungen",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Honeypot64Config"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Honeypot64"
+        ],
+        "summary": "Einstellungen aendern",
+        "description": "Uebernimmt die angegebenen Felder (fehlende bleiben), prueft und wendet sofort an. Bei `profile: custom` gelten `services`; ein Port, den ein anderer Teil der Node offen hat (PROXY64, DNS64, Streams, Oberflaeche), ist ein Fehler. Ein Profil laesst solche Ports weg. Steht im Audit-Log (`honeypot.config`).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Honeypot64Config"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Honeypot64Config"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungueltig; `fields` nennt den Fehler je Feld",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "fields": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    }
+                  }
                 }
               }
             }

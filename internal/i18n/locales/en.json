@@ -83,7 +83,8 @@
     "standalone": "Healthchecks sync off",
     "version": "Version {version}",
     "api": "API",
-    "status_pages": "Status pages"
+    "status_pages": "Status pages",
+    "honeypot": "Honeypot64"
   },
   "common": {
     "copy": "Copy",
@@ -1185,7 +1186,8 @@
       "cdn64": "PROXY64",
       "dns64": "DNS64",
       "certs": "Certificates",
-      "sync": "ipv64 & group"
+      "sync": "ipv64 & group",
+      "honeypot": "Honeypot64"
     },
     "actions": {
       "setup": "Initial setup",
@@ -1317,7 +1319,9 @@
       "peer_join": "Joined group",
       "peer_leave": "Left group",
       "peer_url": "Group address changed",
-      "peer_remove": "Member removed"
+      "peer_remove": "Member removed",
+      "honeypot_config": "Honeypot64 settings changed",
+      "honeypot_clear": "Honeypot64 events deleted"
     }
   },
   "logs": {
@@ -2273,7 +2277,8 @@
       "cdn64_online_up": "🟢 CDN64: tunnel connected again ({name})",
       "cdn64_online_blocked": "🟠 CDN64: {name} blocked at ipv64",
       "cluster_down": "🔴 Cluster: node {name} unreachable",
-      "cluster_up": "🟢 Cluster: node {name} reachable again"
+      "cluster_up": "🟢 Cluster: node {name} reachable again",
+      "honeypot_new": "🐞 Honeypot64: new attackers"
     },
     "body": {
       "quota_used": "Used: {used} of {limit} online checks today",
@@ -3075,6 +3080,142 @@
       "paused": "Blocking paused",
       "paused_until": "Blocking paused until {time}",
       "resume": "Switch back on"
+    }
+  },
+  "honeypot": {
+    "title": "Honeypot64",
+    "tab": {
+      "overview": "Overview",
+      "settings": "Settings"
+    },
+    "since": "running since {time}",
+    "running": "active · profile {profile}",
+    "range": "Period",
+    "range_24h": "24 h",
+    "range_7d": "7 days",
+    "profile": {
+      "minimal": "Minimal",
+      "standard": "Standard",
+      "full": "Full",
+      "custom": "Custom selection"
+    },
+    "warn": {
+      "title": "Trap services are visible from the outside.",
+      "text": "As soon as you forward ports on your router, anyone on the internet can reach these services – that is what they are for. Never run real services (SSH, web interfaces, databases) on these ports and only forward the ports the honeypot is meant to use."
+    },
+    "ports": {
+      "notes": "Notes on the ports",
+      "skipped": "{service} on port {port} is not opened: {owner} already uses the port.",
+      "shared": "{service} on port {port}: {owner} has this port configured and cannot open it while the honeypot holds it."
+    },
+    "owner": {
+      "web": "the Node64 web interface",
+      "edge": "PROXY64 (shared entry 80/443)",
+      "dns64": "DNS64",
+      "cdn64": "PROXY64 (streams)"
+    },
+    "kpi": {
+      "events_24h": "Events (24 h)",
+      "sources_24h": "Source IPs (24 h)",
+      "logins_24h": "Login attempts (24 h)",
+      "events_7d": "Events (7 days)",
+      "sources_7d": "Source IPs (7 days)",
+      "logins_7d": "Login attempts (7 days)"
+    },
+    "services": {
+      "title": "Trap services",
+      "service": "Service",
+      "port": "Port",
+      "state": "State",
+      "conns": "Connections",
+      "open": "open",
+      "error": "error",
+      "none": "No services open. Choose a profile or your own services under Settings.",
+      "scan_on": "Port scan detection on",
+      "scan_off": "Port scan detection off",
+      "counters": "since start: {conns} connections, {logins} logins, {events} events",
+      "dropped": "{count} dropped due to overload"
+    },
+    "chart": {
+      "title_24h": "Last 24 hours",
+      "title_7d": "Last 7 days",
+      "aria": "Events per period, at most {max}",
+      "max": "Highest value: {max} events",
+      "empty": "No events in this period yet."
+    },
+    "top": {
+      "title": "Top lists",
+      "sources": "Source IPs",
+      "kinds": "Kinds",
+      "ports": "Ports",
+      "services": "Services",
+      "users": "User names",
+      "passwords": "Passwords",
+      "credentials": "Credentials",
+      "paths": "Paths",
+      "user_agents": "User agents",
+      "empty": "No entries."
+    },
+    "events": {
+      "title": "Latest events",
+      "time": "Time",
+      "source": "Source",
+      "service": "Service",
+      "kind": "Kind",
+      "details": "Details",
+      "page": "Decoy",
+      "payload": "Payload",
+      "empty": "No events yet."
+    },
+    "settings": {
+      "title": "Settings",
+      "profile": "Profile",
+      "profile_hint": "A profile leaves out ports another part of Node64 already has open (e.g. PROXY64 on 80/443, DNS64 on 53/853, the web interface). With a custom selection a port in use is an error.",
+      "services": "Custom services",
+      "services_hint": "Only for “Custom selection”: one service and port per line, for http/https optionally a decoy ({pages}). Services: ssh, telnet, http, https, tcp.",
+      "scan": "Port scan detection",
+      "scan_hint": "Detects sources that touch many trap ports within a short time.",
+      "max_conns_per_ip": "Connections per source IP",
+      "max_conns_total": "Connections in total",
+      "limits_hint": "Concurrent connections; empty = default (8 per IP, 512 in total). Protects the node from overload.",
+      "retention": "Retention",
+      "days": "days",
+      "max_events": "Limit",
+      "events": "events",
+      "storage_hint": "Older events and everything above the limit are deleted hourly (oldest first).",
+      "notify_new": "Notify about new attackers",
+      "notify_hint": "At most one bundled message per hour with the count and the first IPs, via the default channels, set up under",
+      "saved": "Honeypot64 settings saved.",
+      "about": "How Honeypot64 works",
+      "about_text": "The trap services accept logins and always reject them. Nothing is executed, nothing is downloaded and no outgoing connection is made. Every touch is suspicious because no real service runs on these ports.",
+      "prometheus": "Metrics are available at /api/metrics (node64_honeypot_*)."
+    },
+    "clear": {
+      "title": "Delete data",
+      "hint": "Deletes all stored events of this node. The settings stay.",
+      "button": "Delete events",
+      "confirm": "Delete all Honeypot64 events?",
+      "done": "{count} events deleted."
+    },
+    "card": {
+      "services": "Open trap services",
+      "events": "Events (24 h)",
+      "sources": "Source IPs (24 h)",
+      "logins": "Login attempts (24 h)",
+      "errors": "Services with errors"
+    },
+    "err": {
+      "profile": "Unknown profile.",
+      "retention": "Retention: 1 to {v1} days.",
+      "max_events": "Limit: {v1} to {v2} events.",
+      "limit": "Allowed are 0 (default) to {v1}.",
+      "no_services": "With a custom selection, enter at least one service.",
+      "too_many": "At most {v1} services.",
+      "service": "Unknown service “{v1}” (ssh, telnet, http, https, tcp).",
+      "port": "Invalid port {v1} (1–65535).",
+      "port_twice": "Port {v1} is listed twice.",
+      "page": "Decoy “{v1}” does not exist or does not fit the service (http/https only).",
+      "port_used": "Port {v1} is used by {v2}."
     }
   }
 }
