@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.18.2 – 2026-10-20
+
+### Behoben
+- Statusseiten, Ansichten Liste und Kompakt: Auf großen Bildschirmen wuchs die Schrift mit der Fensterbreite (bis 30 px),
+  die Seite wirkte stark vergrößert. Sie bleibt jetzt bei höchstens 17 px; nur die Kacheln für den Wandmonitor wachsen mit.
+
 ## 2.18.1 – 2026-10-20
 
 ### Behoben

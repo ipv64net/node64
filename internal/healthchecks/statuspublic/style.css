@@ -3,7 +3,7 @@
 .t-dark{--bg:#0f1115;--bg2:#161a20;--fg:#e5e8ec;--mu:#9ba4ae;--card:#171a20;--ln:#2a3039;--n:#3a414c;--lk:color-mix(in srgb,var(--ac) 60%,#fff);color-scheme:dark}
 @media (prefers-color-scheme:dark){:root:not(.t-light){--bg:#0f1115;--bg2:#161a20;--fg:#e5e8ec;--mu:#9ba4ae;--card:#171a20;--ln:#2a3039;--n:#3a414c;--lk:color-mix(in srgb,var(--ac) 60%,#fff);color-scheme:dark}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:clamp(15px,.45vw + 8.7px,30px)/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:clamp(15px,.45vw + 8.7px,17px)/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-text-size-adjust:100%}
 a{color:var(--lk);text-underline-offset:2px}
 :focus-visible{outline:2px solid var(--ac);outline-offset:2px}
 h1{font-size:1.6em;line-height:1.2;margin:.3em 0}

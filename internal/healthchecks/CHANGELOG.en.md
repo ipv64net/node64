@@ -1,5 +1,11 @@
 # Changes – Healthchecks
 
+## 2.18.2 – 2026-10-20
+
+### Fixed
+- Status pages, list and compact views: on large screens the font grew with the window width (up to 30 px) and the page
+  looked heavily zoomed. It now stays at 17 px at most; only the tiles for a wall monitor still scale.
+
 ## 2.18.1 – 2026-10-20
 
 ### Fixed
