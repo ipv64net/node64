@@ -149,8 +149,8 @@ func TestSensorIMAP(t *testing.T) {
 		t.Fatalf("Versuche: %d", n)
 	}
 	// fuenfter Versuch -> BYE und getrennt
-	sensorPlainSay(t, c, "b1 LOGIN last try", "b1 NO ")
-	if out := sensorPlainClosed(t, c); !strings.Contains(out, "* BYE") {
+	out := sensorPlainSay(t, c, "b1 LOGIN last try", "b1 NO ") // BYE kann im selben Lesevorgang kommen
+	if out += sensorPlainClosed(t, c); !strings.Contains(out, "* BYE") {
 		t.Fatalf("kein BYE: %q", out)
 	}
 	if n := rec.count(sensorKind(KindMailBrute)); n != sensorMailTries {

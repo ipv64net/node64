@@ -137,13 +137,13 @@ func TestLogTailRotate(t *testing.T) {
 		t.Fatal(err)
 	}
 	var want []string
-	if runtime.GOOS != "windows" { // Schreiber hat die alte noch offen: der Rest wird zuerst ausgelesen
+	if runtime.GOOS != "windows" { // Schreiber hat die alte noch offen: der Rest wird gelesen, solange die neue fehlt
 		appendFile(t, p+".1", "late\n")
 		want = append(want, "late")
 	}
-	tt.expect(t) // neue Datei fehlt noch: die alte bleibt
+	tt.expect(t, want...) // neue Datei fehlt noch: die alte bleibt
 	appendFile(t, p, "fresh 1\nfresh 2\n")
-	tt.expect(t, append(want, "fresh 1", "fresh 2")...)
+	tt.expect(t, "fresh 1", "fresh 2")
 	appendFile(t, p, "fresh 3\n")
 	tt.expect(t, "fresh 3")
 }
