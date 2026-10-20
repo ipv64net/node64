@@ -3873,6 +3873,11 @@
             "type": "boolean",
             "default": false,
             "description": "Hoechstens eine gebuendelte Meldung je Stunde bei neuen Quell-IPs."
+          },
+          "report": {
+            "type": "boolean",
+            "default": false,
+            "description": "Meldung an ipv64 (Opt-in): alle 10 Minuten Quell-IPs, Arten, Ports, Zugangsdaten aus dem Honeypot, Pfade, User-Agents und Payload-Anfang; nie die eigene IP, keine privaten/reservierten Quellen. Einschalten nur mit eingetragenem zentralem API-Key (sonst 400 mit fields.report)."
           }
         }
       },
@@ -3976,6 +3981,9 @@
           "dropped": {
             "type": "integer",
             "description": "Im Speicher verworfene Ereignisse"
+          },
+          "report": {
+            "$ref": "#/components/schemas/Honeypot64ReportStatus"
           }
         }
       },
@@ -4139,6 +4147,74 @@
           "payload_text": {
             "type": "string",
             "description": "Go-Escapes (\\x00, \\r\\n …), nur ASCII"
+          }
+        }
+      },
+      "Honeypot64ReportStatus": {
+        "type": "object",
+        "description": "Meldung an ipv64 (alle 10 Minuten nach Opt-in, braucht den zentralen ipv64-API-Key).",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Opt-in `report` eingeschaltet"
+          },
+          "key_set": {
+            "type": "boolean",
+            "description": "Zentraler ipv64-API-Key eingetragen"
+          },
+          "active": {
+            "type": "boolean",
+            "description": "enabled und key_set: es wird gemeldet"
+          },
+          "sensor_id": {
+            "type": "string",
+            "description": "Feste Sensor-Kennung dieser Installation (UUID), nur wenn eingeschaltet"
+          },
+          "last_success": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Letzte von ipv64 angenommene Meldung (fehlt = noch keine)"
+          },
+          "last_end": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Gemeldet bis (Ende des letzten gemeldeten bzw. verworfenen Zeitraums)"
+          },
+          "last_error": {
+            "type": "string",
+            "description": "Letzter Fehler seit dem Start (bleibt nach einem Erfolg stehen, siehe last_error_at)"
+          },
+          "last_error_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "next_attempt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Naechster Durchlauf (nur wenn active)"
+          },
+          "errors": {
+            "type": "integer",
+            "description": "Fehlgeschlagene bzw. von ipv64 abgelehnte Meldungen seit dem Start"
+          },
+          "sources_today": {
+            "type": "integer",
+            "description": "Heute gemeldete Quell-IPs (je Meldung gezaehlt)"
+          },
+          "sources_total": {
+            "type": "integer",
+            "description": "Seit dem Start gemeldete Quell-IPs (je Meldung gezaehlt)"
+          },
+          "last_rejected": {
+            "type": "integer",
+            "description": "Von ipv64 in der letzten angenommenen Meldung einzeln abgelehnte Quellen (Meldung trotzdem 202)"
+          },
+          "last_rejected_reasons": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Gruende dazu mit Anzahl, z. B. {\"not_public\": 3}"
           }
         }
       }
@@ -14982,7 +15058,7 @@
           "Honeypot64"
         ],
         "summary": "Einstellungen aendern",
-        "description": "Uebernimmt die angegebenen Felder (fehlende bleiben), prueft und wendet sofort an. Bei `profile: custom` gelten `services`; ein Port, den ein anderer Teil der Node offen hat (PROXY64, DNS64, Streams, Oberflaeche), ist ein Fehler. Ein Profil laesst solche Ports weg. Steht im Audit-Log (`honeypot.config`).",
+        "description": "Wird `report` eingeschaltet, beginnt der gemeldete Zeitraum jetzt (nichts von vorher).",
         "requestBody": {
           "required": true,
           "content": {

@@ -3188,7 +3188,11 @@
       "saved": "Honeypot64 settings saved.",
       "about": "How Honeypot64 works",
       "about_text": "The trap services accept logins and always reject them. Nothing is executed, nothing is downloaded and no outgoing connection is made. Every touch is suspicious because no real service runs on these ports.",
-      "prometheus": "Metrics are available at /api/metrics (node64_honeypot_*)."
+      "prometheus": "Metrics are available at /api/metrics (node64_honeypot_*).",
+      "report": "Report to ipv64",
+      "report_hint": "Every 10 minutes, source IPs, kinds, ports, credentials from the honeypot (user name and password), paths, user agents and the start of payloads are sent to ipv64 – never your own IP and no sources from private or reserved networks. The data feeds into the v64 blocklist as soon as the evaluation at ipv64 is running.",
+      "report_nokey": "This needs the node's central ipv64 API key.",
+      "report_key_link": "Enter API key"
     },
     "clear": {
       "title": "Delete data",
@@ -3215,7 +3219,22 @@
       "port": "Invalid port {v1} (1–65535).",
       "port_twice": "Port {v1} is listed twice.",
       "page": "Decoy “{v1}” does not exist or does not fit the service (http/https only).",
-      "port_used": "Port {v1} is used by {v2}."
+      "port_used": "Port {v1} is used by {v2}.",
+      "report_key": "To report to ipv64, first enter the API key in the settings."
+    },
+    "report": {
+      "title": "Reporting to ipv64",
+      "on": "on",
+      "off": "off",
+      "nokey": "no API key",
+      "last_success": "Last report",
+      "never": "none yet",
+      "next": "Next attempt",
+      "sources": "Reported source IPs today / since start",
+      "errors": "Errors since start",
+      "last_error": "Last error",
+      "rejected": "Last time ipv64 rejected {count} sources: {reasons}",
+      "sensor_id": "Sensor ID"
     }
   }
 }

@@ -1,5 +1,18 @@
 # Änderungen – Honeypot64
 
+## 0.2.0 – 2026-10-20
+
+Meldung an ipv64 (Phase H2).
+
+### Neu
+- Schalter „An ipv64 melden“ (Standard aus, braucht den zentralen ipv64-API-Key): alle 10 Minuten gehen Quell-IPs mit Art, Dienst, Port und Anzahl sowie Proben (Zugangsdaten aus dem Honeypot, Pfade, User-Agents, Payload-Anfang mit SHA-256) im Format `schema: 1` an ipv64. Die Daten fließen in die v64 Blocklist ein, sobald die Auswertung bei ipv64 läuft.
+- Nie gemeldet werden die eigene IP und Quellen aus privaten oder reservierten Netzen (RFC 1918, CGNAT, Loopback, Link-Local, ULA, Doku-Netze); sie bleiben lokal sichtbar.
+- Gemeldet wird der Zeitraum seit der letzten erfolgreichen Meldung (höchstens 7 Tage, in Stücken zu höchstens einer Stunde, beim Nachholen von mehr als einem Tag zu sechs Stunden, gzip, höchstens eine Meldung je 2 Minuten); nach einem Ausfall wird nachgeholt, bei Fehlern mit Backoff (Retry-After wird beachtet). Ohne Ereignisse geht ein kurzes Lebenszeichen, damit ipv64 aktive Sensoren zählen kann. Beim Einschalten beginnt der Zeitraum neu.
+- Feste Sensor-Kennung je Installation (UUID); Version, Profil und Modus werden mitgeschickt.
+- Zustand (letzte Meldung, letzter Fehler, nächster Versuch, gemeldete Quell-IPs heute/seit Start, zuletzt von ipv64 abgelehnte Quellen mit Grund) auf der Übersicht, in den Einstellungen und unter `GET /api/honeypot/status` (`report`).
+- Prometheus: `node64_honeypot_report_last_success_timestamp`, `node64_honeypot_report_errors_total`, `node64_honeypot_report_sources_total`.
+- Modus ohne Oberfläche: Meldung an, wenn `NODE64_IPV64_KEY` gesetzt ist (abschalten mit `NODE64_HONEYPOT_REPORT=0`); Zustand auf der Info-Seite und unter `/metrics`.
+
 ## 0.1.0 – 2026-10-20
 
 Erste Fassung (Phase H1): leichter Low-Interaction-Honeypot als Modul mit Oberfläche.

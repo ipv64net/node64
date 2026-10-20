@@ -36,6 +36,7 @@ type StatusInfo struct {
 	Counters  CounterValues   `json:"counters"`
 	Buffered  int             `json:"buffered"`
 	Dropped   int64           `json:"dropped"` // im Speicher verworfen (Puffer voll, Schreibfehler)
+	Report    ReportStatus    `json:"report"`  // Meldung an ipv64
 }
 
 // CounterValues sind die Zaehler des Sensors seit dem Start.
@@ -49,7 +50,7 @@ type CounterValues struct {
 func (m *Module) statusInfo(r *http.Request) StatusInfo {
 	cfg := m.loadConfig(r.Context())
 	out := StatusInfo{Version: version, Profile: cfg.Profile, Scan: cfg.Scan, Services: []ServiceStatus{}, Warnings: m.Warnings(),
-		Buffered: m.st.Buffered(), Dropped: m.st.Dropped()}
+		Buffered: m.st.Buffered(), Dropped: m.st.Dropped(), Report: m.rep.Status(r.Context())}
 	if out.Warnings == nil {
 		out.Warnings = []Warning{}
 	}
@@ -223,7 +224,7 @@ func configDetails(c ModuleConfig) string {
 	for _, s := range list {
 		ps = append(ps, s.Service+"/"+strconv.Itoa(s.Port))
 	}
-	return strings.Join(ps, " ") + " scan=" + strconv.FormatBool(c.Scan) + " days=" + strconv.Itoa(c.RetentionDays) + " notify=" + strconv.FormatBool(c.NotifyNew)
+	return strings.Join(ps, " ") + " scan=" + strconv.FormatBool(c.Scan) + " days=" + strconv.Itoa(c.RetentionDays) + " notify=" + strconv.FormatBool(c.NotifyNew) + " report=" + strconv.FormatBool(c.Report)
 }
 
 // errText uebersetzt einen Fehlerschluessel aus validate ("schluessel|wert1|wert2", mehrere je Zeile).

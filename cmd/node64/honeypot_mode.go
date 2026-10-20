@@ -31,6 +31,7 @@ import (
 	"github.com/ipv64net/node64/internal/caps"
 	"github.com/ipv64net/node64/internal/config"
 	"github.com/ipv64net/node64/internal/honeypot"
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/logging"
 	"github.com/ipv64net/node64/internal/metrics"
 	"github.com/ipv64net/node64/internal/store"
@@ -52,7 +53,9 @@ type hpModeConfig struct {
 	Retention time.Duration   // lokale Aufbewahrung
 	InfoPort  int             // 0 = keine Info-Seite
 	InfoToken string          // leer = Info-Seite nur aus privaten Netzen
-	IPv64Key  string          // fuer die Meldung an ipv64 (H2), jetzt nur vorgemerkt
+	IPv64Key  string          // fuer die Meldung an ipv64 (H2)
+	Report    bool            // Meldung an ipv64: an, wenn ein Key gesetzt ist und NODE64_HONEYPOT_REPORT nicht 0 ist
+	APIBase   string          // NODE64_IPV64_API (leer = ipv64.net; nur fuer Tests)
 }
 
 // runMode startet einen besonderen Betriebsmodus (NODE64_MODE). Bisher gibt es nur "honeypot".
@@ -136,10 +139,46 @@ func honeypotRun(ctx context.Context, cfg *config.Config, hc *hpModeConfig, base
 		}
 	}()
 
-	if hc.IPv64Key != "" {
-		log.Info("NODE64_IPV64_KEY is set; reporting to ipv64 follows in a later version")
-	} else {
-		log.Info("NODE64_IPV64_KEY is not set; events stay local (reporting to ipv64 follows in a later version)")
+	api := ipv64api.NewClient(hc.APIBase, "node64/"+Version)
+	rep := honeypot.NewReporter(honeypot.ReporterConfig{Store: hpStore, Mode: "headless", Version: Version, Log: log,
+		API: func(context.Context) (*ipv64api.Client, string) {
+			if !hc.Report {
+				return nil, ""
+			}
+			return api, hc.IPv64Key
+		},
+		Enabled:  func(context.Context) bool { return hc.Report },
+		Profile:  func(context.Context) string { return hpProfileLabel(hc) },
+		SensorID: func(context.Context) (string, error) { return honeypot.SensorIDFromFile(dir) },
+		State:    honeypot.FileReportState(dir)})
+	repCtx, repStop := context.WithCancel(ctx)
+	repDone := make(chan struct{})
+	defer func() { repStop(); <-repDone }() // vor dem Speicher beenden
+	repState := honeypot.FileReportState(dir)
+	switch {
+	case hc.Report:
+		id, err := honeypot.SensorIDFromFile(dir)
+		if err != nil {
+			close(repDone)
+			return fmt.Errorf("honeypot sensor id: %w", err)
+		}
+		if rs, err := repState.Load(ctx); err != nil || rs.LastEnd.IsZero() { // erste Meldung: ab jetzt
+			_ = rep.ResetWindow(ctx)
+		}
+		log.Info("reporting to ipv64 every 10 minutes", "sensor_id", id)
+		go func() { rep.Run(repCtx); close(repDone) }()
+	case hc.IPv64Key != "":
+		log.Info("NODE64_HONEYPOT_REPORT=0; events stay local")
+		close(repDone)
+	default:
+		log.Info("NODE64_IPV64_KEY is not set; events stay local")
+		close(repDone)
+	}
+	if !hc.Report { // spaeter wieder eingeschaltet: nichts aus der Zeit ohne Meldung nachholen
+		if rs, err := repState.Load(ctx); err == nil && !rs.LastEnd.IsZero() {
+			rs.LastEnd = time.Time{}
+			_ = repState.Save(ctx, rs)
+		}
 	}
 
 	sensor := honeypot.NewSensor(base, dir)
@@ -154,7 +193,7 @@ func honeypotRun(ctx context.Context, cfg *config.Config, hc *hpModeConfig, base
 		if err != nil {
 			return fmt.Errorf("honeypot info port %d: %w", hc.InfoPort, err)
 		}
-		h := newHPInfo(hc, sensor, hpStore, st, Version)
+		h := newHPInfo(hc, sensor, hpStore, st, rep, Version)
 		srv = &http.Server{Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 30 * time.Second,
 			IdleTimeout: 60 * time.Second, MaxHeaderBytes: 8 << 10, ErrorLog: slog.NewLogLogger(base.Handler(), slog.LevelDebug)}
 		go func() {
@@ -260,6 +299,17 @@ func honeypotModeFromEnv(getenv func(string) string) (*hpModeConfig, error) {
 	}
 	if hc.InfoToken != "" && len(hc.InfoToken) < hpMinTokenLen {
 		return nil, fmt.Errorf("NODE64_HONEYPOT_INFO_TOKEN must have at least %d characters", hpMinTokenLen)
+	}
+	hc.APIBase = get("NODE64_IPV64_API")
+	switch strings.ToLower(get("NODE64_HONEYPOT_REPORT")) {
+	case "", "1", "true", "yes", "on":
+		hc.Report = hc.IPv64Key != ""
+	case "0", "false", "no", "off":
+	default:
+		return nil, fmt.Errorf("NODE64_HONEYPOT_REPORT %q is not 1 or 0", get("NODE64_HONEYPOT_REPORT"))
+	}
+	if hc.Report && !ipv64api.KeyRe.MatchString(hc.IPv64Key) {
+		return nil, errors.New("NODE64_IPV64_KEY is not a valid ipv64 API key (16 to 64 letters and digits)")
 	}
 	return hc, nil
 }
@@ -378,6 +428,7 @@ type hpInfo struct {
 	sensor  hpSensor
 	store   *honeypot.Store
 	db      *store.Store
+	rep     *honeypot.Reporter
 	version string
 	started time.Time
 	token   [32]byte // SHA-256 des Tokens (Vergleich in konstanter Zeit, auch bei anderer Laenge)
@@ -389,8 +440,8 @@ type hpInfo struct {
 	statErr error
 }
 
-func newHPInfo(hc *hpModeConfig, sensor hpSensor, hpStore *honeypot.Store, db *store.Store, version string) *hpInfo {
-	h := &hpInfo{hc: hc, sensor: sensor, store: hpStore, db: db, version: version, started: time.Now()}
+func newHPInfo(hc *hpModeConfig, sensor hpSensor, hpStore *honeypot.Store, db *store.Store, rep *honeypot.Reporter, version string) *hpInfo {
+	h := &hpInfo{hc: hc, sensor: sensor, store: hpStore, db: db, rep: rep, version: version, started: time.Now()}
 	if hc.InfoToken != "" {
 		h.token = sha256.Sum256([]byte(hc.InfoToken))
 	}
@@ -509,17 +560,16 @@ func (h *hpInfo) writeMetrics(ctx context.Context, w *metrics.Writer) {
 	w.Gauge("node64_honeypot_up", "Honeypot64 laeuft.", 1)
 	w.Gauge("node64_honeypot_info", "Honeypot64 ohne Oberflaeche (Version, Profil).", 1, "version", h.version, "profile", h.profileLabel())
 	w.Gauge("node64_honeypot_uptime_seconds", "Sekunden seit dem Start des Modus ohne Oberflaeche.", time.Since(h.started).Seconds())
-	honeypot.WriteMetrics(w, h.sensor, h.store, ctx)
-	// Meldung an ipv64 folgt mit H2; bis dahin feste Nullwerte, damit Dashboards die Namen schon kennen
-	w.Gauge("node64_honeypot_report_last_success_timestamp", "Letzte erfolgreiche Meldung an ipv64 (0 = noch keine).", 0)
-	w.Counter("node64_honeypot_report_errors_total", "Fehlgeschlagene Meldungen an ipv64.", 0)
+	honeypot.WriteMetrics(w, h.sensor, h.store, h.rep, ctx)
 }
 
-func (h *hpInfo) profileLabel() string {
-	if h.hc.Custom {
+func (h *hpInfo) profileLabel() string { return hpProfileLabel(h.hc) }
+
+func hpProfileLabel(hc *hpModeConfig) string {
+	if hc.Custom {
 		return "custom"
 	}
-	return h.hc.Profile
+	return hc.Profile
 }
 
 // ---- Info-Seite (nur lesend, ohne Formular und ohne JS; zweisprachig fest im Template)
@@ -542,7 +592,7 @@ var (
 		sum := sha256.Sum256([]byte(hpInfoCSS))
 		return "default-src 'none'; style-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 	}()
-	hpInfoTmpl = template.Must(template.New("info").Funcs(template.FuncMap{"short": hpShort}).Parse(`<!doctype html>
+	hpInfoTmpl = template.Must(template.New("info").Funcs(template.FuncMap{"short": hpShort, "when": hpWhen}).Parse(`<!doctype html>
 <html lang="{{.Lang}}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="60">
 <title>Honeypot64</title><style>` + hpInfoCSS + `</style></head><body><main>
@@ -560,7 +610,17 @@ var (
 <section class="card"><h2>{{.T.Services}}</h2><div class="tw"><table><tr><th>{{.T.Service}}</th><th>Port</th><th>{{.T.State}}</th><th>{{.T.Conns}}</th></tr>
 {{range .Services}}<tr><td>{{.Service}}</td><td class="n">{{.Port}}</td><td>{{if .Listen}}<span class="ok">{{$.T.Open}}</span>{{else}}<span class="bad">{{$.T.Closed}}{{if .Error}}: {{short .Error}}{{end}}</span>{{end}}</td><td class="n">{{.Conns}}</td></tr>
 {{else}}<tr><td colspan="4" class="mut">{{$.T.None}}</td></tr>{{end}}</table></div>
-<p class="mut">{{.T.Scan}}: {{if .Scan}}{{.T.On}}{{else}}{{.T.Off}}{{end}} · {{.T.Report}}: {{.T.Later}}{{if .Key}} ({{.T.KeySet}}){{end}}</p></section>
+<p class="mut">{{.T.Scan}}: {{if .Scan}}{{.T.On}}{{else}}{{.T.Off}}{{end}}</p></section>
+<section class="card"><h2>{{.T.Report}}</h2><div class="tw"><table>
+<tr><td>{{.T.State}}</td><td>{{if .Rep.Active}}<span class="ok">{{.T.On}}</span>{{else if .Key}}{{.T.Off}} (NODE64_HONEYPOT_REPORT=0){{else}}{{.T.Off}} ({{.T.NoKey}}){{end}}</td></tr>
+{{if .Rep.Active}}<tr><td>{{.T.LastReport}}</td><td>{{if .Rep.LastSuccess.IsZero}}{{.T.Never}}{{else}}{{when .Rep.LastSuccess}}{{end}}</td></tr>
+<tr><td>{{.T.NextTry}}</td><td>{{if .Rep.NextAttempt.IsZero}}–{{else}}{{when .Rep.NextAttempt}}{{end}}</td></tr>
+<tr><td>{{.T.RepSources}}</td><td class="n">{{.Rep.SourcesToday}} / {{.Rep.SourcesTotal}}</td></tr>
+<tr><td>{{.T.RepErrors}}</td><td class="n">{{.Rep.Errors}}</td></tr>
+{{if .Rep.LastRejected}}<tr><td>{{.T.Rejected}}</td><td>{{.Rep.LastRejected}}: {{short .Rep.RejectedText}}</td></tr>{{end}}
+{{if .Rep.LastError}}<tr><td>{{.T.LastErr}}</td><td class="bad">{{when .Rep.LastErrorAt}}: {{short .Rep.LastError}}</td></tr>{{end}}
+<tr><td>{{.T.SensorID}}</td><td class="k">{{.Rep.SensorID}}</td></tr>{{end}}
+</table></div></section>
 {{template "list" (.L .T.TopIPs .Week.TopSources)}}
 {{template "list" (.L .T.Kinds .Week.ByKind)}}
 {{template "list" (.L .T.Ports .Week.ByPort)}}
@@ -577,20 +637,22 @@ var (
 
 type hpTexts struct {
 	Profile, Uptime, Hits24, Hits7, Src24, Src7, Logins7, StatsErr, Services, Service, State, Conns, Open, Closed, None,
-	Scan, On, Off, Report, Later, KeySet, TopIPs, Kinds, Ports, Creds, Paths, UAs, Foot string
+	Scan, On, Off, Report, NoKey, LastReport, Never, NextTry, RepSources, RepErrors, Rejected, LastErr, SensorID, TopIPs, Kinds, Ports, Creds, Paths, UAs, Foot string
 }
 
 var hpTextsByLang = map[string]hpTexts{
 	"de": {Profile: "Profil", Uptime: "Laufzeit", Hits24: "Treffer 24 h", Hits7: "Treffer 7 Tage", Src24: "Quell-IPs 24 h", Src7: "Quell-IPs 7 Tage",
 		Logins7: "Login-Versuche 7 Tage", StatsErr: "Statistik zurzeit nicht lesbar.", Services: "Dienste", Service: "Dienst", State: "Zustand",
 		Conns: "Verbindungen", Open: "offen", Closed: "nicht offen", None: "keine", Scan: "Port-Scan-Erkennung", On: "an", Off: "aus",
-		Report: "Meldung an ipv64", Later: "folgt in einer späteren Version", KeySet: "API-Key hinterlegt", TopIPs: "Top-IPs (7 Tage)",
+		Report: "Meldung an ipv64", NoKey: "kein NODE64_IPV64_KEY", LastReport: "Letzte Meldung", Never: "noch keine", NextTry: "Nächster Versuch",
+		RepSources: "Gemeldete Quell-IPs heute / seit Start", RepErrors: "Fehler seit Start", Rejected: "Zuletzt von ipv64 abgelehnte Quellen", LastErr: "Letzter Fehler", SensorID: "Sensor-Kennung", TopIPs: "Top-IPs (7 Tage)",
 		Kinds: "Arten (7 Tage)", Ports: "Ports (7 Tage)", Creds: "Zugangsdaten (7 Tage)", Paths: "Pfade (7 Tage)", UAs: "User-Agents (7 Tage)",
 		Foot: "Nur lesend. Aktualisiert sich jede Minute. Prometheus: /metrics"},
 	"en": {Profile: "Profile", Uptime: "Uptime", Hits24: "Hits 24 h", Hits7: "Hits 7 days", Src24: "Source IPs 24 h", Src7: "Source IPs 7 days",
 		Logins7: "Login attempts 7 days", StatsErr: "Statistics currently not readable.", Services: "Services", Service: "Service", State: "State",
 		Conns: "Connections", Open: "open", Closed: "not open", None: "none", Scan: "Port scan detection", On: "on", Off: "off",
-		Report: "Reporting to ipv64", Later: "follows in a later version", KeySet: "API key set", TopIPs: "Top IPs (7 days)",
+		Report: "Reporting to ipv64", NoKey: "no NODE64_IPV64_KEY", LastReport: "Last report", Never: "none yet", NextTry: "Next attempt",
+		RepSources: "Reported source IPs today / since start", RepErrors: "Errors since start", Rejected: "Sources last rejected by ipv64", LastErr: "Last error", SensorID: "Sensor ID", TopIPs: "Top IPs (7 days)",
 		Kinds: "Kinds (7 days)", Ports: "Ports (7 days)", Creds: "Credentials (7 days)", Paths: "Paths (7 days)", UAs: "User agents (7 days)",
 		Foot: "Read only. Refreshes every minute. Prometheus: /metrics"},
 }
@@ -606,6 +668,7 @@ type hpPage struct {
 	Day, Week                      *honeypot.Stats
 	Err, Scan, Key                 bool
 	Services                       []honeypot.ServiceStatus
+	Rep                            honeypot.ReportStatus
 }
 
 // L baut eine Rangliste fuer das Untertemplate "list".
@@ -619,6 +682,9 @@ func (h *hpInfo) page(w http.ResponseWriter, r *http.Request) {
 	}
 	p := hpPage{Lang: lang, Version: h.version, Profile: h.profileLabel(), Uptime: hpUptime(time.Since(h.started)), T: hpTextsByLang[lang],
 		Day: day, Week: week, Err: err != nil, Scan: h.hc.Sensor.Scan, Key: h.hc.IPv64Key != "", Services: h.sensor.Status()}
+	if h.rep != nil {
+		p.Rep = h.rep.Status(r.Context())
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if r.Method == http.MethodHead {
 		return
@@ -656,6 +722,9 @@ func hpUptime(d time.Duration) string {
 	}
 	return fmt.Sprintf("%d min", mins)
 }
+
+// hpWhen: Zeitpunkt in der Zeitzone des Containers (TZ), mit Zone.
+func hpWhen(t time.Time) string { return t.Local().Format("2006-01-02 15:04:05 MST") }
 
 // hpShort kuerzt Angreifer-Texte fuer die Anzeige (Steuerzeichen raus, hoechstens 120 Zeichen).
 func hpShort(s string) string {

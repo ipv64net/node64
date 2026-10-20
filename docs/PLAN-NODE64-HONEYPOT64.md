@@ -1,6 +1,6 @@
 # Plan: Honeypot64
 
-Stand 2026-10-20, Entscheidungen Dennis. Noch nicht umgesetzt. Dieser Plan legt die Grundlagen so fest (Datenformat,
+Stand 2026-10-20, Entscheidungen Dennis. Umgesetzt: H1 (98fbfc4), H2 Node64-Seite und ipv64-Seite (Einspielen: deploy/web/H2-HONEYPOT-VORHER-NACHHER.md). Dieser Plan legt die Grundlagen so fest (Datenformat,
 Arten, Speicherung, Schnittstellen), dass spätere Ausbaustufen ohne Umbau am Produkt dazukommen.
 
 **Ziel:** Die **erste Verteidigungslinie** der Kunden stärken – ausschließlich über **IP- und DNS-Listen**, Honeypot64 wird nirgends als Schutzsoftware vor Anwendungen gesetzt: Firewall (IP), Mailserver, Login-Seiten. Dazu sammeln

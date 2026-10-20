@@ -90,6 +90,7 @@ type overviewData struct {
 	BarsMax  int64
 	Ranks    []uiRank
 	Events   []EventView
+	Report   ReportStatus
 	Err      string
 }
 
@@ -114,7 +115,7 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	info := m.statusInfo(r)
 	d := overviewData{Tabs: tabsFor("overview"), Running: info.Running, Started: info.StartedAt, Profile: info.Profile, Scan: info.Scan,
-		Services: info.Services, Warnings: m.warnViews(r, info.Warnings), Counters: info.Counters, Range: "24h"}
+		Services: info.Services, Warnings: m.warnViews(r, info.Warnings), Counters: info.Counters, Range: "24h", Report: info.Report}
 	span := 24 * time.Hour
 	if r.URL.Query().Get("range") == "7d" {
 		d.Range, span = "7d", 7*24*time.Hour
@@ -221,6 +222,8 @@ type settingsData struct {
 	MaxDays   int
 	MinEvents int
 	MaxEvents int
+	KeySet    bool         // zentraler ipv64-API-Key eingetragen (sonst Meldung an ipv64 gesperrt)
+	Report    ReportStatus // Zustand der Meldung an ipv64
 }
 
 type profileView struct {
@@ -283,6 +286,8 @@ func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, err
 	if d.Errors == nil {
 		d.Errors = map[string]string{}
 	}
+	_, key := m.api(r.Context())
+	d.KeySet, d.Report = key != "", m.rep.Status(r.Context())
 	if d.Lines == "" {
 		d.Lines = servicesText(c.Services)
 	}
@@ -318,6 +323,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	}
 	c.Scan = r.PostFormValue("scan") != ""
 	c.NotifyNew = r.PostFormValue("notify_new") != ""
+	c.Report = r.PostFormValue("report") != ""
 	c.MaxConnsPerIP, c.MaxConnsTotal = formInt(r, "max_conns_per_ip"), formInt(r, "max_conns_total")
 	c.RetentionDays, c.MaxEvents = formInt(r, "retention_days"), int64(formInt(r, "max_events"))
 	saved, err := m.SaveConfig(ctx, c)

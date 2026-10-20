@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/ports"
@@ -31,7 +32,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.1.0"
+	version = "0.2.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -61,6 +62,7 @@ type ModuleConfig struct {
 	RetentionDays int   `json:"retention_days"` // Aufbewahrung der Ereignisse, Standard 7
 	MaxEvents     int64 `json:"max_events"`     // Obergrenze der gespeicherten Ereignisse, Standard 200000
 	NotifyNew     bool  `json:"notify_new"`     // Benachrichtigung bei neuen Angreifern (Standard aus)
+	Report        bool  `json:"report"`         // Meldung an ipv64 (Opt-in, Standard aus; braucht den zentralen API-Key)
 }
 
 // DefaultConfig: Profil standard mit Port-Scan-Erkennung, 7 Tage, ohne Benachrichtigung.
@@ -88,6 +90,8 @@ type Module struct {
 
 	ports     *ports.Registry    // Port-Verwaltung des Kerns (nil = keine Pruefung)
 	notifier  func(notify.Alert) // Meldungen (nil = keine)
+	key       *ipv64api.Key      // zentraler ipv64-API-Key (nil = keiner, dann keine Meldung an ipv64)
+	rep       *Reporter          // Meldung an ipv64 (report.go)
 	newSensor func(*slog.Logger, string) sensorAPI
 	every     time.Duration // Abstand der Meldungen bei neuen Angreifern
 
@@ -117,9 +121,28 @@ type Warning struct {
 func New(core *store.Store, log *slog.Logger, dataDir, nodeVersion string) *Module {
 	l := log.With("module", Name)
 	st := NewStore(core, log)
-	return &Module{core: core, log: l, dataDir: dataDir, version: nodeVersion, st: st, sink: CountEvents(st.Sink()), every: notifyEvery,
+	m := &Module{core: core, log: l, dataDir: dataDir, version: nodeVersion, st: st, sink: CountEvents(st.Sink()), every: notifyEvery,
 		newSensor: func(log *slog.Logger, dir string) sensorAPI { return NewSensor(log, dir) }}
+	m.rep = NewReporter(ReporterConfig{Store: st, API: m.api, Enabled: func(ctx context.Context) bool { return m.loadConfig(ctx).Report },
+		Profile:  func(ctx context.Context) string { return m.loadConfig(ctx).Profile },
+		SensorID: func(ctx context.Context) (string, error) { return SensorIDFromSettings(ctx, core) },
+		State:    SettingsReportState(core), Mode: "module", Version: nodeVersion, Log: l})
+	return m
 }
+
+// SetKey verbindet das Modul mit dem zentralen ipv64-API-Key (Meldung an ipv64).
+func (m *Module) SetKey(k *ipv64api.Key) { m.key = k }
+
+// api liefert Client und Key fuer die Meldung ("" = kein Key eingetragen).
+func (m *Module) api(ctx context.Context) (*ipv64api.Client, string) {
+	if m.key == nil {
+		return nil, ""
+	}
+	return m.key.Client(), m.key.Get(ctx)
+}
+
+// Reporter liefert den Sender der Meldungen an ipv64.
+func (m *Module) Reporter() *Reporter { return m.rep }
 
 // SetPorts verbindet das Modul mit der Port-Verwaltung des Kerns.
 func (m *Module) SetPorts(r *ports.Registry) { m.ports = r }
@@ -166,9 +189,10 @@ func (m *Module) Start(ctx context.Context) error {
 	m.mu.Lock()
 	m.sensor, m.life, m.cancel, m.started = s, lctx, cancel, time.Now()
 	m.mu.Unlock()
-	m.wg.Add(2)
+	m.wg.Add(3)
 	go func() { defer m.wg.Done(); m.st.Run(lctx) }()
 	go func() { defer m.wg.Done(); m.notifyLoop(lctx) }()
+	go func() { defer m.wg.Done(); m.rep.Run(lctx) }() // tut nichts, solange die Meldung aus ist
 	m.applyLocked(ctx)
 	m.log.Info("honeypot started", "services", len(m.Status()))
 	return nil
@@ -466,7 +490,12 @@ func (m *Module) loadConfig(ctx context.Context) ModuleConfig {
 // SaveConfig prueft und speichert die Einstellung und uebernimmt sie sofort (laeuft das Modul).
 // Fehler je Feld kommen als FieldErrors.
 func (m *Module) SaveConfig(ctx context.Context, c ModuleConfig) (ModuleConfig, error) {
-	if errs := m.validate(ctx, &c); len(errs) > 0 {
+	old := m.loadConfig(ctx)
+	errs := m.validate(ctx, &c)
+	if _, key := m.api(ctx); c.Report && !old.Report && key == "" {
+		errs["report"] = "honeypot.err.report_key"
+	}
+	if len(errs) > 0 {
 		return c, errs
 	}
 	raw, err := json.Marshal(c)
@@ -475,6 +504,11 @@ func (m *Module) SaveConfig(ctx context.Context, c ModuleConfig) (ModuleConfig, 
 	}
 	if err := m.core.SetSetting(ctx, setConfig, string(raw)); err != nil {
 		return c, err
+	}
+	if c.Report && !old.Report { // Opt-in: gemeldet wird erst ab jetzt, nichts von vorher
+		if err := m.rep.ResetWindow(ctx); err != nil {
+			m.log.Warn("honeypot report: state not saved", "err", err)
+		}
 	}
 	m.apply(ctx)
 	return c, nil
@@ -499,6 +533,9 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	c := DefaultConfig()
 	if err := json.Unmarshal(raw, &c); err != nil {
 		return 0, fmt.Errorf("honeypot: %w", err)
+	}
+	if _, key := m.api(ctx); key == "" && !m.loadConfig(ctx).Report {
+		c.Report = false // ohne API-Key hier nicht einschaltbar
 	}
 	_, err := m.SaveConfig(ctx, c)
 	var fe FieldErrors

@@ -438,12 +438,14 @@ func TestMetricsOutput(t *testing.T) {
 			t.Errorf("missing %q in\n%s", s, out)
 		}
 	}
-	if strings.Contains(out, "report_") {
-		t.Error("report metrics belong to H2")
+	for _, s := range []string{"node64_honeypot_report_last_success_timestamp 0", "node64_honeypot_report_errors_total 0", "node64_honeypot_report_sources_total 0"} {
+		if !strings.Contains(out, s) {
+			t.Errorf("missing %q in\n%s", s, out)
+		}
 	}
 	// ohne Sensor und Speicher (Modus ohne Oberflaeche beim Start)
 	w = metrics.New()
-	WriteMetrics(w, nil, nil, ctx)
+	WriteMetrics(w, nil, nil, nil, ctx)
 	b.Reset()
 	if _, err := w.WriteTo(&b); err != nil || !strings.Contains(b.String(), "node64_honeypot_services 0") {
 		t.Fatalf("nil: %v %s", err, b.String())
@@ -614,7 +616,7 @@ func TestPagesRender(t *testing.T) {
 			re = tplKeyRe
 		}
 		for _, mm := range re.FindAllStringSubmatch(string(b), -1) {
-			if !strings.HasSuffix(mm[1], ".") && mm[1] != setConfig && mm[1] != "honeypot.clear" {
+			if !strings.HasSuffix(mm[1], ".") && mm[1] != setConfig && mm[1] != setSensorID && mm[1] != setReportState && mm[1] != "honeypot.clear" {
 				keys[mm[1]] = true
 			}
 		}
@@ -622,10 +624,21 @@ func TestPagesRender(t *testing.T) {
 	for _, p := range []string{ProfileMinimal, ProfileStandard, ProfileFull, ProfileCustom} {
 		keys["honeypot.profile."+p] = true
 	}
-	tmp := map[string]map[string]string{}
-	if b, err := os.ReadFile(filepath.Join("..", "..", "docs", "tmp-honeypot-i18n-modul.json")); err == nil {
-		if err := json.Unmarshal(b, &tmp); err != nil {
-			t.Fatalf("tmp i18n: %v", err)
+	tmp := map[string]map[string]string{"de": {}, "en": {}}
+	for _, name := range []string{"tmp-honeypot-i18n-modul.json", "tmp-honeypot-i18n-h2.json"} {
+		if b, err := os.ReadFile(filepath.Join("..", "..", "docs", name)); err == nil {
+			var x map[string]map[string]string
+			if err := json.Unmarshal(b, &x); err != nil {
+				t.Fatalf("tmp i18n %s: %v", name, err)
+			}
+			for lang, m := range x {
+				for k, v := range m {
+					if tmp[lang] == nil {
+						tmp[lang] = map[string]string{}
+					}
+					tmp[lang][k] = v
+				}
+			}
 		}
 	}
 	for k := range keys {

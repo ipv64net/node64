@@ -13,8 +13,11 @@ ausgeführt oder geladen, und der Sensor baut keine ausgehenden Verbindungen auf
 ```bash
 docker run -d --name honeypot64 --network host --restart unless-stopped \
   -e NODE64_MODE=honeypot -e NODE64_HONEYPOT_PROFILE=standard \
+  -e NODE64_IPV64_KEY=<api-key> \
   -v honeypot64:/data ghcr.io/ipv64net/node64
 ```
+
+Ohne `NODE64_IPV64_KEY` bleiben alle Ereignisse lokal (siehe [Meldung an ipv64](#meldung-an-ipv64)).
 
 Das Image gibt es für `linux/amd64`, `linux/arm64` und `linux/arm/v7` (ältere Raspberry Pi, viele NAS).
 
@@ -32,8 +35,9 @@ Bridge-Netz sehen manche Docker-Versionen statt der Angreifer die Adresse des Do
 | `NODE64_HONEYPOT_RETENTION` | `7d` | lokale Aufbewahrung, z. B. `3d`, `48h` (1 Stunde bis 365 Tage); zusätzlich gilt eine feste Obergrenze von 200 000 Ereignissen |
 | `NODE64_HONEYPOT_INFO_PORT` | `9064` | Port der Info-Seite, `0` = aus; darf kein Fallen-Port sein |
 | `NODE64_HONEYPOT_INFO_TOKEN` | – | erlaubt die Info-Seite auch von außerhalb privater Netze (mindestens 16 Zeichen) |
-| `NODE64_IPV64_KEY` | – | API-Key für die Meldung an ipv64. **Wird bisher nur eingelesen**: die Meldung folgt in einer späteren Version (Phase H2), bis dahin bleiben alle Ereignisse lokal |
-| `NODE64_DATA_DIR` | `/data` | Datenverzeichnis: Datenbank `node64.db`, Sensor-Dateien (SSH-Host-Schlüssel, TLS-Zertifikat) unter `honeypot/` |
+| `NODE64_IPV64_KEY` | – | API-Key des ipv64-Accounts (16 bis 64 Buchstaben und Ziffern). Gesetzt = Meldung an ipv64 alle 10 Minuten; ein ungültiges Format verhindert den Start |
+| `NODE64_HONEYPOT_REPORT` | `1` | `0` schaltet die Meldung an ipv64 trotz Key ab; ohne Key ist sie immer aus |
+| `NODE64_DATA_DIR` | `/data` | Datenverzeichnis: Datenbank `node64.db`, Sensor-Dateien (SSH-Host-Schlüssel, TLS-Zertifikat, Sensor-Kennung `sensor_id`, Stand der Meldung `report_state.json`) unter `honeypot/` |
 | `NODE64_BIND_ADDR` | – | Adresse der Info-Seite (leer = alle) |
 | `NODE64_LOG_LEVEL`, `NODE64_LOG_FORMAT` | `info`, `text` | wie im normalen Betrieb |
 
@@ -73,7 +77,7 @@ Auf dem Info-Port (getrennt von den Fallen) antwortet ein kleiner Server, nur `G
 
 | Pfad | Inhalt |
 |---|---|
-| `/` | Info-Seite, nur lesend (kein Formular, kein JavaScript, hell/dunkel nach System, Deutsch oder Englisch nach Browser): Zustand der Dienste, Treffer 24 h und 7 Tage, Quell-IPs, Login-Versuche, Top-IPs, Arten, Ports, Zugangsdaten, Pfade, User-Agents, Version, Laufzeit. Aktualisiert sich jede Minute |
+| `/` | Info-Seite, nur lesend (kein Formular, kein JavaScript, hell/dunkel nach System, Deutsch oder Englisch nach Browser): Zustand der Dienste, Treffer 24 h und 7 Tage, Quell-IPs, Login-Versuche, Top-IPs, Arten, Ports, Zugangsdaten, Pfade, User-Agents, Meldung an ipv64 (an/aus, letzte Meldung, nächster Versuch, gemeldete Quell-IPs, letzter Fehler, Sensor-Kennung), Version, Laufzeit. Aktualisiert sich jede Minute |
 | `/metrics` | Prometheus-Textformat |
 | `/health` | `200 ok`, wenn die Datenbank antwortet und mindestens ein Fallen-Dienst offen ist, sonst `503` |
 
@@ -101,15 +105,45 @@ Kennzahlen (dieselben wie beim Modul unter `/api/metrics`, Zähler seit dem Star
 `node64_honeypot_events_total{kind,source}`, `node64_honeypot_unique_sources` (24 h),
 `node64_honeypot_services`, `node64_honeypot_services_listening`, `node64_honeypot_listen_errors{port}`,
 `node64_honeypot_buffer_events`, `node64_honeypot_dropped_total`; dazu im Modus ohne Oberfläche
-`node64_honeypot_up`, `node64_honeypot_info{version,profile}`, `node64_honeypot_uptime_seconds` sowie
-`node64_honeypot_report_last_success_timestamp` und `node64_honeypot_report_errors_total` (bis zur Meldung an ipv64
-immer 0). Die übrigen Kennzahlen der Node siehe [PROMETHEUS.md](PROMETHEUS.md).
+`node64_honeypot_up`, `node64_honeypot_info{version,profile}`, `node64_honeypot_uptime_seconds`. Zur Meldung an
+ipv64 (Modul und Modus ohne Oberfläche): `node64_honeypot_report_last_success_timestamp` (Unix-Zeit, 0 = noch
+keine), `node64_honeypot_report_errors_total`, `node64_honeypot_report_sources_total`. Beispiel-Alarm:
+`time() - node64_honeypot_report_last_success_timestamp > 3600`. Die übrigen Kennzahlen der Node siehe
+[PROMETHEUS.md](PROMETHEUS.md).
 
 ### Docker-Healthcheck
 
 Der `HEALTHCHECK` des Images (`/node64 healthcheck`) fragt in diesem Modus `/health` auf dem Info-Port über
 `127.0.0.1`/`::1` (bzw. `NODE64_BIND_ADDR`) ab, mit Token, falls gesetzt. Mit `NODE64_HONEYPOT_INFO_PORT=0` gibt es
 keine Prüfung über das Netz; der Container gilt dann als gesund, solange der Prozess läuft.
+
+## Meldung an ipv64
+
+Mit `NODE64_IPV64_KEY` meldet der Sensor alle 10 Minuten (mit kleinem Zufallsversatz) an ipv64
+(`POST /api/v2/honeypot/reports`, Format `schema: 1`, gzip). Beim Modul mit Oberfläche ist es der Schalter
+„An ipv64 melden“ unter Honeypot64 → Einstellungen (Standard aus, braucht den zentralen API-Key der Node).
+
+**Übertragen werden:** je Quell-IP Art, Dienst, Port, Anzahl, erster und letzter Zeitpunkt; dazu Proben mit Anzahl:
+Zugangsdaten aus dem Honeypot (Benutzername und Passwort im Klartext, nur SSH, Telnet, HTTP/HTTPS), Pfade,
+User-Agents und der Anfang von Payloads (SHA-256 und höchstens 256 Bytes). Außerdem eine feste Sensor-Kennung
+(UUID, `honeypot/sensor_id`), Version, Profil und Modus. Die Daten fließen in die v64 Blocklist ein, sobald die
+Auswertung bei ipv64 läuft.
+
+**Nie übertragen:** die eigene öffentliche IP (ipv64 kennt sie aus der Verbindung) und Quellen aus privaten oder
+reservierten Netzen – RFC 1918, CGNAT (100.64/10), Loopback, Link-Local, ULA (fc00::/7), Doku-Netze (192.0.2/24,
+198.51.100/24, 203.0.113/24, 2001:db8::/32) u. a. So landen lokale Tests und interne Scanner nicht bei ipv64; lokal
+bleiben sie sichtbar.
+
+**Ablauf:** Gemeldet wird jeweils der Zeitraum seit der letzten erfolgreichen Meldung (`honeypot/report_state.json`),
+höchstens 7 Tage zurück und in Stücken zu höchstens einer Stunde (beim Nachholen von mehr als einem Tag zu sechs
+Stunden). War ipv64 nicht erreichbar, holt der Sensor danach nach; ipv64 nimmt je Sensor höchstens eine Meldung in
+2 Minuten an, entsprechend verteilt sich das Nachholen. Antworten: `202`/`200` (schon bekannt) = Erfolg; `400`/`413`/`422` = Meldung ungültig, wird verworfen und
+gezählt; `401`/`403`/`429`/`5xx` oder Netzfehler = später erneut (Backoff ab 1 Minute bis 1 Stunde, `Retry-After`
+wird beachtet). Einzelne Quellen, die ipv64 nicht übernimmt (z. B. eigene oder nicht öffentliche IPs, außerhalb des
+Zeitraums), stehen mit Grund auf der Info-Seite bzw. in der Oberfläche („zuletzt abgelehnt“); die Meldung selbst gilt
+trotzdem als angenommen. Gibt es im Zeitraum keine Ereignisse, geht trotzdem eine kurze Meldung ohne Quellen – so kann ipv64
+aktive Sensoren zählen. Wird die Meldung eingeschaltet (auch nach `NODE64_HONEYPOT_REPORT=0`), beginnt der Zeitraum
+neu; nichts aus der Zeit ohne Meldung wird nachgeholt.
 
 ## Beenden
 

@@ -73,11 +73,33 @@
 					<label class="form-check-label" for="notify_new">{{.T "honeypot.settings.notify_new"}}</label>{{.Doc "honeypot#benachrichtigung"}}
 					<div class="form-text mt-0">{{.T "honeypot.settings.notify_hint"}} <a href="/notifications">{{.T "nav.notifications"}}</a></div>
 				</div>
+				<div class="form-check mt-3">
+					<input class="form-check-input" type="checkbox" id="report" name="report" value="1"{{if $d.Cfg.Report}} checked{{end}}{{if not $d.KeySet}} disabled{{end}}>
+					<label class="form-check-label" for="report">{{.T "honeypot.settings.report"}}</label>{{.Doc "honeypot#melden"}}
+					<div class="form-text mt-0">{{.T "honeypot.settings.report_hint"}}</div>
+					{{if not $d.KeySet}}<div class="form-text mt-0 text-warning-emphasis"><i class="bi bi-lock"></i> {{.T "honeypot.settings.report_nokey"}} <a href="/settings#ipv64">{{.T "honeypot.settings.report_key_link"}}</a></div>{{end}}
+					{{with index $d.Errors "report"}}<div class="text-danger small">{{.}}</div>{{end}}
+				</div>
 			</div>
 			<div class="card-footer text-end"><button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> {{.T "common.save"}}</button></div>
 		</form>
 	</div>
 	<div class="col-xl-5 d-flex flex-column gap-3">
+		<div class="card" id="report-status">
+			<div class="card-header"><i class="bi bi-cloud-upload text-primary"></i> {{.T "honeypot.report.title"}}{{.Doc "honeypot#melden"}}</div>
+			<div class="card-body small">{{with $d.Report}}
+				<div class="mb-2">{{if .Active}}<span class="badge text-bg-success"><i class="bi bi-cloud-check"></i> {{$.T "honeypot.report.on"}}</span>{{else if not .KeySet}}<span class="badge text-bg-secondary"><i class="bi bi-lock"></i> {{$.T "honeypot.report.nokey"}}</span>{{else}}<span class="badge text-bg-secondary">{{$.T "honeypot.report.off"}}</span>{{end}}</div>
+				<dl class="row mb-0">
+					<dt class="col-6 fw-normal text-body-secondary">{{$.T "honeypot.report.last_success"}}</dt><dd class="col-6">{{if .LastSuccess.IsZero}}{{$.T "honeypot.report.never"}}{{else}}{{$.Time .LastSuccess}}{{end}}</dd>
+					{{if .Active}}<dt class="col-6 fw-normal text-body-secondary">{{$.T "honeypot.report.next"}}</dt><dd class="col-6">{{if .NextAttempt.IsZero}}–{{else}}{{$.Time .NextAttempt}}{{end}}</dd>{{end}}
+					<dt class="col-6 fw-normal text-body-secondary">{{$.T "honeypot.report.sources"}}</dt><dd class="col-6">{{$.Int .SourcesToday}} / {{$.Int .SourcesTotal}}</dd>
+					{{if .Errors}}<dt class="col-6 fw-normal text-body-secondary">{{$.T "honeypot.report.errors"}}</dt><dd class="col-6">{{$.Int .Errors}}</dd>{{end}}
+					{{if .SensorID}}<dt class="col-6 fw-normal text-body-secondary">{{$.T "honeypot.report.sensor_id"}}</dt><dd class="col-6 font-monospace text-break">{{.SensorID}}</dd>{{end}}
+				</dl>
+				{{if .LastRejected}}<div class="text-warning-emphasis mt-2 text-break"><i class="bi bi-funnel"></i> {{$.T "honeypot.report.rejected" "count" .LastRejected "reasons" .RejectedText}}</div>{{end}}
+				{{if .LastError}}<div class="text-danger mt-2 text-break"><i class="bi bi-exclamation-triangle"></i> {{$.T "honeypot.report.last_error"}} ({{$.Time .LastErrorAt}}): {{.LastError}}</div>{{end}}
+			{{end}}</div>
+		</div>
 		<div class="card">
 			<div class="card-header"><i class="bi bi-info-circle text-primary"></i> {{.T "honeypot.settings.about"}}</div>
 			<div class="card-body small">

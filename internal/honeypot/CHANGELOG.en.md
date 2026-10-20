@@ -1,5 +1,18 @@
 # Changes – Honeypot64
 
+## 0.2.0 – 2026-10-20
+
+Reporting to ipv64 (phase H2).
+
+### New
+- Switch "Report to ipv64" (off by default, needs the central ipv64 API key): every 10 minutes, source IPs with kind, service, port and count as well as samples (credentials from the honeypot, paths, user agents, start of payloads with SHA-256) are sent to ipv64 in format `schema: 1`. The data feeds into the v64 blocklist as soon as the evaluation at ipv64 is running.
+- Never reported: your own IP and sources from private or reserved networks (RFC 1918, CGNAT, loopback, link-local, ULA, documentation ranges); they stay visible locally.
+- The period since the last successful report is sent (at most 7 days, in pieces of at most one hour, six hours when catching up more than a day, gzip, at most one report per 2 minutes); after an outage it catches up, on errors with backoff (Retry-After is respected). Without events a short sign of life is sent so ipv64 can count active sensors. Switching it on starts a new period.
+- Fixed sensor ID per installation (UUID); version, profile and mode are sent along.
+- State (last report, last error, next attempt, reported source IPs today/since start, sources last rejected by ipv64 with reason) on the overview, in the settings and in `GET /api/honeypot/status` (`report`).
+- Prometheus: `node64_honeypot_report_last_success_timestamp`, `node64_honeypot_report_errors_total`, `node64_honeypot_report_sources_total`.
+- Mode without web interface: reporting is on when `NODE64_IPV64_KEY` is set (switch off with `NODE64_HONEYPOT_REPORT=0`); state on the info page and in `/metrics`.
+
 ## 0.1.0 – 2026-10-20
 
 First version (phase H1): lightweight low-interaction honeypot as a module with web interface.

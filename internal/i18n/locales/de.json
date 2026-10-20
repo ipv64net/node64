@@ -3188,7 +3188,11 @@
       "saved": "Einstellungen von Honeypot64 gespeichert.",
       "about": "So arbeitet Honeypot64",
       "about_text": "Die Fallen-Dienste nehmen Logins an und lehnen sie immer ab. Es wird nichts ausgeführt, nichts heruntergeladen und keine Verbindung nach außen aufgebaut. Jede Berührung ist verdächtig, weil auf diesen Ports kein echter Dienst läuft.",
-      "prometheus": "Kennzahlen stehen unter /api/metrics (node64_honeypot_*)."
+      "prometheus": "Kennzahlen stehen unter /api/metrics (node64_honeypot_*).",
+      "report": "An ipv64 melden",
+      "report_hint": "Alle 10 Minuten werden Quell-IPs, Arten, Ports, Zugangsdaten aus dem Honeypot (Benutzername und Passwort), Pfade, User-Agents und der Anfang von Payloads an ipv64 übertragen – nie die eigene IP und keine Quellen aus privaten oder reservierten Netzen. Die Daten fließen in die v64 Blocklist ein, sobald die Auswertung bei ipv64 läuft.",
+      "report_nokey": "Dafür braucht die Node den zentralen ipv64-API-Key.",
+      "report_key_link": "API-Key eintragen"
     },
     "clear": {
       "title": "Daten löschen",
@@ -3215,7 +3219,22 @@
       "port": "Ungültiger Port {v1} (1–65535).",
       "port_twice": "Port {v1} ist doppelt.",
       "page": "Köder „{v1}“ gibt es nicht oder er passt nicht zum Dienst (nur http/https).",
-      "port_used": "Port {v1} ist belegt durch {v2}."
+      "port_used": "Port {v1} ist belegt durch {v2}.",
+      "report_key": "Für die Meldung an ipv64 zuerst den API-Key in den Einstellungen eintragen."
+    },
+    "report": {
+      "title": "Meldung an ipv64",
+      "on": "an",
+      "off": "aus",
+      "nokey": "kein API-Key",
+      "last_success": "Letzte Meldung",
+      "never": "noch keine",
+      "next": "Nächster Versuch",
+      "sources": "Gemeldete Quell-IPs heute / seit Start",
+      "errors": "Fehler seit Start",
+      "last_error": "Letzter Fehler",
+      "rejected": "Zuletzt {count} Quellen von ipv64 abgelehnt: {reasons}",
+      "sensor_id": "Sensor-Kennung"
     }
   }
 }

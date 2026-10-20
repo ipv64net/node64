@@ -14,11 +14,13 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/ipv64net/node64/internal/config"
 	"github.com/ipv64net/node64/internal/honeypot"
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/store"
 )
 
@@ -41,12 +43,23 @@ func TestHoneypotModeFromEnv(t *testing.T) {
 	}
 
 	hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_PROFILE": "Minimal", "NODE64_HONEYPOT_SCAN": "0",
-		"NODE64_HONEYPOT_RETENTION": "48h", "NODE64_HONEYPOT_INFO_PORT": "0", "NODE64_IPV64_KEY": " abc "}))
+		"NODE64_HONEYPOT_RETENTION": "48h", "NODE64_HONEYPOT_INFO_PORT": "0", "NODE64_IPV64_KEY": " abcdefgh12345678 "}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if hc.Profile != "minimal" || hc.Sensor.Scan || hc.Retention != 48*time.Hour || hc.InfoPort != 0 || hc.IPv64Key != "abc" || len(hc.Sensor.Services) != 2 {
+	if hc.Profile != "minimal" || hc.Sensor.Scan || hc.Retention != 48*time.Hour || hc.InfoPort != 0 || hc.IPv64Key != "abcdefgh12345678" || len(hc.Sensor.Services) != 2 {
 		t.Fatalf("minimal: %+v", hc)
+	}
+	// Meldung an ipv64: an mit Key (Standard), aus mit NODE64_HONEYPOT_REPORT=0 oder ohne Key
+	if !hc.Report {
+		t.Fatal("report must be on with a key")
+	}
+	if hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_IPV64_KEY": "abcdefgh12345678", "NODE64_HONEYPOT_REPORT": "0",
+		"NODE64_IPV64_API": "http://127.0.0.1:1/api/v2"})); err != nil || hc.Report || hc.APIBase != "http://127.0.0.1:1/api/v2" {
+		t.Fatalf("report=0: %+v %v", hc, err)
+	}
+	if hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_REPORT": "1"})); err != nil || hc.Report {
+		t.Fatalf("report without key: %+v %v", hc, err)
 	}
 
 	hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_SERVICES": "ssh:22, ssh:2222,http:80,https:443:wp-login,TCP:3389,",
@@ -81,6 +94,8 @@ func TestHoneypotModeFromEnv(t *testing.T) {
 		{"NODE64_HONEYPOT_INFO_PORT": "70000"},
 		{"NODE64_HONEYPOT_SERVICES": "tcp:9064"}, // Info-Port ist auch Fallen-Port
 		{"NODE64_HONEYPOT_INFO_TOKEN": "short"},
+		{"NODE64_HONEYPOT_REPORT": "maybe"},
+		{"NODE64_IPV64_KEY": "abc"}, // Meldung an, Key ungueltig
 	}
 	for _, m := range bad {
 		if _, err := honeypotModeFromEnv(hpEnv(m)); err == nil {
@@ -131,7 +146,12 @@ func newTestHPInfo(t *testing.T, token string) (*hpInfo, *fakeSensor) {
 	fs := &fakeSensor{status: []honeypot.ServiceStatus{{Service: "ssh", Port: 22, Listen: true, Conns: 5}, {Service: "http", Port: 80, Error: "permission denied"}}}
 	fs.c.Logins.Store(3)
 	hc := &hpModeConfig{Profile: "minimal", InfoPort: 9064, InfoToken: token, Sensor: honeypot.Config{Services: honeypot.Profiles["minimal"], Scan: true}}
-	return newHPInfo(hc, fs, hs, st, "1.2.3"), fs
+	rep := honeypot.NewReporter(honeypot.ReporterConfig{Store: hs, Mode: "headless", Version: "1.2.3", Log: log,
+		API:      func(context.Context) (*ipv64api.Client, string) { return nil, "" },
+		Enabled:  func(context.Context) bool { return false },
+		SensorID: func(context.Context) (string, error) { return honeypot.SensorIDFromFile(dir) },
+		State:    honeypot.FileReportState(dir)})
+	return newHPInfo(hc, fs, hs, st, rep, "1.2.3"), fs
 }
 
 func hpDo(h http.Handler, method, target, remote string, hdr map[string]string) *httptest.ResponseRecorder {
@@ -197,7 +217,7 @@ func TestHPInfoPage(t *testing.T) {
 	}
 	body := w.Body.String()
 	for _, s := range []string{`lang="de"`, "Honeypot64", "1.2.3", "Treffer 24 h", "192.0.2.7", "root:&lt;b&gt;x&lt;/b&gt;", "/.env", "evil·bot",
-		"ssh:bruteforce", "permission denied", "folgt in einer späteren Version"} {
+		"ssh:bruteforce", "permission denied", "Meldung an ipv64", "kein NODE64_IPV64_KEY"} {
 		if !strings.Contains(body, s) {
 			t.Errorf("page lacks %q", s)
 		}
@@ -234,7 +254,7 @@ func TestHPInfoMetricsHealth(t *testing.T) {
 	}
 	body := w.Body.String()
 	for _, s := range []string{`node64_honeypot_connections_total{service="ssh",port="22"} 5`, `node64_honeypot_listen_errors{port="80"} 1`,
-		"node64_honeypot_up 1", "node64_honeypot_unique_sources 2", "node64_honeypot_report_last_success_timestamp 0",
+		"node64_honeypot_up 1", "node64_honeypot_unique_sources 2", "node64_honeypot_report_last_success_timestamp 0", "node64_honeypot_report_errors_total 0",
 		`node64_honeypot_info{version="1.2.3",profile="minimal"} 1`} {
 		if !strings.Contains(body, s) {
 			t.Errorf("metrics lack %q\n%s", s, body)
@@ -338,5 +358,82 @@ func TestHoneypotRunStartStop(t *testing.T) {
 	}
 	if _, err := net.DialTimeout("tcp", info, time.Second); err == nil {
 		t.Error("info port still open after stop")
+	}
+}
+
+// TestHoneypotRunReport: mit Key ist die Meldung an (Sensor-Kennung und Startpunkt als Datei, Zustand auf Info-Seite
+// und in /metrics); mit NODE64_HONEYPOT_REPORT=0 aus, der Startpunkt wird verworfen (nichts nachholen).
+func TestHoneypotRunReport(t *testing.T) {
+	var hits atomic.Int32
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits.Add(1); w.WriteHeader(http.StatusAccepted) }))
+	defer api.Close()
+	dir := t.TempDir()
+	run := func(env map[string]string) (page, metrics string) {
+		t.Helper()
+		env["NODE64_HONEYPOT_SERVICES"] = "tcp:" + strconv.Itoa(hpFreePort(t))
+		env["NODE64_HONEYPOT_INFO_PORT"] = strconv.Itoa(hpFreePort(t))
+		env["NODE64_IPV64_API"] = api.URL + "/api/v2"
+		hc, err := honeypotModeFromEnv(hpEnv(env))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ready := make(chan string, 1)
+		done := make(chan error, 1)
+		go func() {
+			done <- honeypotRun(ctx, &config.Config{DataDir: dir, BindAddr: "127.0.0.1"}, hc, slog.New(slog.NewTextHandler(io.Discard, nil)), func(info string) { ready <- info })
+		}()
+		var info string
+		select {
+		case info = <-ready:
+		case err := <-done:
+			t.Fatalf("run ended early: %v", err)
+		case <-time.After(20 * time.Second):
+			t.Fatal("run did not become ready")
+		}
+		get := func(path string) string {
+			req, _ := http.NewRequest(http.MethodGet, "http://"+info+path, nil)
+			req.Header.Set("Accept-Language", "de")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			b, _ := io.ReadAll(resp.Body)
+			return string(b)
+		}
+		page, metrics = get("/"), get("/metrics")
+		cancel()
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+		return page, metrics
+	}
+	page, metrics := run(map[string]string{"NODE64_IPV64_KEY": "abcdefgh12345678"})
+	idb, err := os.ReadFile(filepath.Join(dir, honeypot.Name, "sensor_id"))
+	id := strings.TrimSpace(string(idb))
+	if err != nil || len(id) != 36 {
+		t.Fatalf("sensor id: %q %v", idb, err)
+	}
+	st, _ := honeypot.FileReportState(filepath.Join(dir, honeypot.Name)).Load(context.Background())
+	if st.LastEnd.IsZero() || time.Since(st.LastEnd) > time.Minute {
+		t.Fatalf("start of the first period: %+v", st)
+	}
+	if !strings.Contains(page, `<span class="ok">an</span>`) || !strings.Contains(page, id) || !strings.Contains(page, "noch keine") {
+		t.Fatalf("info page lacks report state:\n%s", page)
+	}
+	if !strings.Contains(metrics, "node64_honeypot_report_errors_total 0") || !strings.Contains(metrics, "node64_honeypot_report_sources_total 0") {
+		t.Fatalf("metrics:\n%s", metrics)
+	}
+	page, _ = run(map[string]string{"NODE64_IPV64_KEY": "abcdefgh12345678", "NODE64_HONEYPOT_REPORT": "0"})
+	if !strings.Contains(page, "aus (NODE64_HONEYPOT_REPORT=0)") {
+		t.Fatalf("info page report off:\n%s", page)
+	}
+	if st, _ = honeypot.FileReportState(filepath.Join(dir, honeypot.Name)).Load(context.Background()); !st.LastEnd.IsZero() {
+		t.Fatalf("last_end must be dropped while reporting is off: %+v", st)
+	}
+	if n := hits.Load(); n != 0 {
+		t.Fatalf("no report expected within the first minute, got %d", n)
 	}
 }

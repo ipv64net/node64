@@ -29,9 +29,15 @@ var ErrUnauthorized = errors.New("API key rejected by ipv64")
 
 // APIError ist eine Fehlerantwort der API (RFC 9457: code, detail).
 type APIError struct {
-	Status int
-	Code   string // z. B. limit_reached, domain_not_in_account
-	Detail string
+	Status     int
+	Code       string // z. B. limit_reached, domain_not_in_account
+	Detail     string
+	RetryAfter time.Duration // aus Retry-After (bisher nur HoneypotReport), 0 = keine Angabe
+}
+
+// Is: ein APIError mit 401 gilt als ErrUnauthorized.
+func (e *APIError) Is(target error) bool {
+	return target == ErrUnauthorized && e.Status == http.StatusUnauthorized
 }
 
 func (e *APIError) Error() string {

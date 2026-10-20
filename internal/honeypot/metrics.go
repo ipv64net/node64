@@ -53,9 +53,10 @@ var uniqueCache = struct {
 // WriteMetrics schreibt die Kennzahlen des Honeypots (Modul und Modus ohne Oberflaeche gleich, Plan Abschnitt 2):
 // node64_honeypot_connections_total{service,port}, node64_honeypot_logins_total{service},
 // node64_honeypot_events_total{kind,source}, node64_honeypot_unique_sources (24 h),
-// node64_honeypot_listen_errors{port}, node64_honeypot_buffer_events, node64_honeypot_dropped_total.
-// sensor und st duerfen nil sein (dann fehlen die zugehoerigen Werte).
-func WriteMetrics(w *metrics.Writer, sensor SensorState, st *Store, ctx context.Context) {
+// node64_honeypot_listen_errors{port}, node64_honeypot_buffer_events, node64_honeypot_dropped_total und zur Meldung
+// an ipv64 node64_honeypot_report_last_success_timestamp, node64_honeypot_report_errors_total,
+// node64_honeypot_report_sources_total. sensor, st und rep duerfen nil sein (dann fehlen die zugehoerigen Werte).
+func WriteMetrics(w *metrics.Writer, sensor SensorState, st *Store, rep *Reporter, ctx context.Context) {
 	var status []ServiceStatus
 	var c *Counters
 	if sensor != nil {
@@ -104,6 +105,16 @@ func WriteMetrics(w *metrics.Writer, sensor SensorState, st *Store, ctx context.
 	if c != nil || st != nil {
 		w.Counter("node64_honeypot_dropped_total", "Wegen Ueberlast verworfene Ereignisse bzw. abgewiesene Verbindungen.", float64(dropped))
 	}
+	if rep != nil {
+		last, errs, sources := rep.metricsValues(ctx)
+		ts := 0.0
+		if !last.IsZero() {
+			ts = float64(last.Unix())
+		}
+		w.Gauge("node64_honeypot_report_last_success_timestamp", "Letzte erfolgreiche Meldung an ipv64 (Unix-Zeit, 0 = noch keine).", ts)
+		w.Counter("node64_honeypot_report_errors_total", "Fehlgeschlagene bzw. von ipv64 abgelehnte Meldungen seit dem Start.", float64(errs))
+		w.Counter("node64_honeypot_report_sources_total", "An ipv64 gemeldete Quell-IPs seit dem Start (je Meldung gezaehlt).", float64(sources))
+	}
 }
 
 func uniqueSources(ctx context.Context, st *Store) (int64, bool) {
@@ -136,5 +147,5 @@ func (m *Module) Metrics(ctx context.Context, w *metrics.Writer) {
 	if s == nil {
 		return
 	}
-	WriteMetrics(w, s, m.st, ctx)
+	WriteMetrics(w, s, m.st, m.rep, ctx)
 }

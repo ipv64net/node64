@@ -241,6 +241,7 @@ func run() error {
 	hpModule := honeypot.New(st, logger.Slog(), cfg.DataDir, Version) // Honeypot64 als Modul (standardmaessig aus)
 	hpModule.SetPorts(portReg)                                        // Fallen-Dienste pruefen ihre Ports
 	hpModule.SetNotifier(dispatcher.Dispatch)                         // neue Angreifer (gebuendelt, hoechstens stuendlich)
+	hpModule.SetKey(ipv64Key)                                         // Meldung an ipv64 (Opt-in) mit dem zentralen API-Key
 	portReg.Provide(honeypot.Name, hpModule.Claims)
 	modules.Register(hpModule)
 	modules.StartEnabled(ctx)
