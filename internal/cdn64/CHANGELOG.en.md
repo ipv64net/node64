@@ -1,5 +1,12 @@
 # Changes – PROXY64
 
+## 1.20.1 – 2026-10-20
+
+### Changed
+- Honeypot64: the switch "Unknown requests to the honeypot" now says that the node then answers unknown requests
+  visibly (login page, fallback certificate) – highlighted when the default page is set to "close connection". In the
+  settings (ports) the default page points out that the decoy replaces it while it is active.
+
 ## 1.20.0 – 2026-10-20
 
 ### New

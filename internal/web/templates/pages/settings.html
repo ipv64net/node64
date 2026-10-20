@@ -243,6 +243,7 @@
 						{{if .Edge.Config.DefaultPage}}<option value="html"{{if eq .Edge.Config.Default "html"}} selected{{end}}>{{$.T "ports.edge_default_html"}}</option>{{end}}
 					</select>
 					<div class="form-text mb-2">{{$.T "ports.edge_hint"}}</div>
+					{{if .Edge.UnknownReplaced}}<div class="alert alert-warning py-2 small"><i class="bi bi-bug"></i> {{$.T "ports.edge_decoy"}} <a href="/cdn64/access#honeypot" class="alert-link">{{$.T "ports.edge_decoy_link"}}</a></div>{{end}}
 					<label class="form-label" for="ui_name">{{$.T "ports.ui_name"}}</label>
 					<input class="form-control form-control-sm font-monospace mb-1" id="ui_name" name="ui_name" value="{{.UIName}}" placeholder="node64.example.ipv64.de" maxlength="253">
 					<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" id="ui_public" name="ui_public"{{if .UIPublic}} checked{{end}}><label class="form-check-label" for="ui_public">{{$.T "ports.ui_public"}}</label></div>

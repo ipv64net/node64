@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/hpbridge"
 )
 
@@ -20,11 +21,14 @@ type honeypotView struct {
 	Rejected int64            `json:"rejected"` // abgewiesen seit dem Start
 	Decoyed  int64            `json:"decoyed"`  // an den Koeder gegeben seit dem Start
 	Reported int64            `json:"reported"` // an den Log-Sensor gegeben seit dem Start
+	// DefaultClose: Standardseite fuer unbekannte Namen steht auf "Verbindung schliessen" (der Koeder antwortet trotzdem)
+	DefaultClose bool `json:"default_close"`
 }
 
 func (m *Module) hpView() honeypotView {
 	return honeypotView{Settings: m.hpSettings(), Decoy: hpbridge.Decoy() != nil, Access: hpbridge.AccessActive(), Blocks: m.hpList(),
-		Rejected: m.hp.rejected.Load(), Decoyed: m.hp.decoyed.Load(), Reported: m.hp.reported.Load()}
+		Rejected: m.hp.rejected.Load(), Decoyed: m.hp.decoyed.Load(), Reported: m.hp.reported.Load(),
+		DefaultClose: m.edge != nil && m.edge.Config().Default == edge.DefaultClose}
 }
 
 func hpAudit(s HoneypotSettings) string {

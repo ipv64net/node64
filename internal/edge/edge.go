@@ -509,6 +509,9 @@ type Status struct {
 	Config    Config           `json:"config"`
 	Listeners []ListenerStatus `json:"listeners"`
 	Names     []NameStatus     `json:"names"`
+	// UnknownReplaced: unbekannte Namen beantwortet gerade ein anderer Handler (z. B. der Honeypot-Koeder ueber
+	// PROXY64), die Standardseite gilt solange nicht
+	UnknownReplaced bool `json:"unknown_replaced,omitempty"`
 }
 
 type ListenerStatus struct {
@@ -528,9 +531,10 @@ type NameStatus struct {
 }
 
 func (e *Edge) Status() Status {
+	replaced := e.unknownActive() // fragt den Abnehmer, nicht unter e.mu
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	st := Status{Config: e.cfg}
+	st := Status{Config: e.cfg, UnknownReplaced: replaced}
 	need := e.needLocked()
 	for _, name := range []string{"http", "https", "http3"} {
 		c, l := e.claimLocked(name), e.lst[name]

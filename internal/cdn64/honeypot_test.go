@@ -83,7 +83,13 @@ func TestHoneypotDecoyAndAccess(t *testing.T) {
 	if code, _, _ := do(t, c, "GET", "https://anders.example/"); code != http.StatusTeapot {
 		t.Fatalf("decoy with default close: %d", code)
 	}
+	if !e.edge.Status().UnknownReplaced || !e.m.hpView().DefaultClose {
+		t.Fatal("settings must show that the decoy replaces the default page (close)")
+	}
 	_ = e.m.hpSave(ctx, HoneypotSettings{Access: true})
+	if e.edge.Status().UnknownReplaced {
+		t.Fatal("without decoy the default page applies again")
+	}
 	c2 := e.client(false) // neue Verbindung: jetzt ohne Koeder wieder ohne TLS
 	if _, err := c2.Get("https://anders.example/"); err == nil {
 		t.Fatal("without decoy an unknown name must be refused again (default close)")

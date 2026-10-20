@@ -118,7 +118,8 @@
 		<p class="text-body-secondary">{{$.T "cdn64.hp.hint"}}</p>
 		<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="hp_decoy" id="hp-decoy"{{if .Settings.Decoy}} checked{{end}}>
 			<label class="form-check-label fw-semibold" for="hp-decoy">{{$.T "cdn64.hp.decoy"}}</label>
-			<div class="form-text">{{$.T "cdn64.hp.decoy_hint"}}{{if and .Settings.Decoy (not .Decoy)}} <span class="text-warning-emphasis">{{$.T "cdn64.hp.decoy_missing"}}</span>{{end}}</div></div>
+			<div class="form-text">{{$.T "cdn64.hp.decoy_hint"}}{{if and .Settings.Decoy (not .Decoy)}} <span class="text-warning-emphasis">{{$.T "cdn64.hp.decoy_missing"}}</span>{{end}}</div>
+			<div class="form-text{{if .DefaultClose}} text-warning-emphasis fw-semibold{{end}}">{{if .DefaultClose}}<i class="bi bi-exclamation-triangle"></i> {{end}}{{$.T "cdn64.hp.decoy_visible"}}</div></div>
 		<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="hp_access" id="hp-access"{{if .Settings.Access}} checked{{end}}>
 			<label class="form-check-label fw-semibold" for="hp-access">{{$.T "cdn64.hp.access"}}</label>
 			<div class="form-text">{{$.T "cdn64.hp.access_hint"}}{{if and .Settings.Access (not .Access)}} <span class="text-warning-emphasis">{{$.T "cdn64.hp.access_missing"}}</span>{{end}}</div></div>

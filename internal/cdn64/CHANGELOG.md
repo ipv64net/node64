@@ -1,5 +1,12 @@
 # Änderungen – PROXY64
 
+## 1.20.1 – 2026-10-20
+
+### Geändert
+- Honeypot64: Am Schalter „Unbekannte Anfragen an den Honeypot“ steht, dass die Node danach auf unbekannte Anfragen
+  sichtbar antwortet (Login-Seite, Ersatz-Zertifikat) – hervorgehoben, wenn die Standardseite auf „Verbindung
+  schließen“ steht. In den Einstellungen (Ports) weist die Standardseite darauf hin, solange der Köder sie ersetzt.
+
 ## 1.20.0 – 2026-10-20
 
 ### Neu
