@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.18.3 – 2026-10-20
+
+### Behoben
+- Statusseiten, Ansicht Kacheln: Die Schrift wuchs auf breiten Bildschirmen zu stark (bis 40 px). Sie wächst jetzt nur
+  noch sanft mit und bleibt bei höchstens 22 px.
+
 ## 2.18.2 – 2026-10-20
 
 ### Behoben

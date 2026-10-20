@@ -1,5 +1,11 @@
 # Changes – Healthchecks
 
+## 2.18.3 – 2026-10-20
+
+### Fixed
+- Status pages, tiles view: the font grew too much on wide screens (up to 40 px). It now scales only gently and stays
+  at 22 px at most.
+
 ## 2.18.2 – 2026-10-20
 
 ### Fixed

@@ -61,7 +61,7 @@ details .its{border-top:1px solid var(--ln)}
 .il{margin:0;padding-left:1.2em}
 .l-tiles .its{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10.5em),1fr));gap:.6em}
 .l-tiles .it+.it{border-top:0}
-.l-tiles body{font-size:clamp(15px,.6vw + 7px,40px)}
+.l-tiles body{font-size:clamp(15px,.3vw + 10px,22px)}
 @media (min-width:1200px){.l-tiles .its{grid-template-columns:repeat(auto-fit,minmax(13em,1fr))}}
 .gh{display:flex;flex-wrap:wrap;align-items:center;gap:.3em .5em}
 .l-tiles .grp+.grp{margin-top:1.4em}
