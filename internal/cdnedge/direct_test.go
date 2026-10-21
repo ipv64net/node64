@@ -33,6 +33,11 @@ func TestDirect(t *testing.T) {
 		case "/cookie":
 			w.Header().Set("Cache-Control", "max-age=60")
 			w.Header().Set("Set-Cookie", "a=b")
+		case "/big.css":
+			w.Header().Set("Cache-Control", "public, max-age=60")
+			w.Header().Set("Content-Type", "text/css")
+			_, _ = io.WriteString(w, strings.Repeat("body { color: #333; } ", 300))
+			return
 		}
 		_, _ = io.WriteString(w, "target "+r.Host+" xff="+r.Header.Get("X-Forwarded-For")+" real="+r.Header.Get("X-Real-IP")+" proto="+r.Header.Get("X-Forwarded-Proto"))
 	}))
@@ -132,6 +137,21 @@ func TestDirect(t *testing.T) {
 	get(https, "https://d.test/cookie")
 	if hits.Load() != 4 {
 		t.Fatalf("bypass / Set-Cookie must reach the target: hits=%d", hits.Load())
+	}
+	// Komprimierung: Ziel liefert unkomprimiert, der Server komprimiert je nach Browser und legt die Fassung ab
+	raw := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: dpool}, DisableCompression: true,
+		DialContext: func(ctx context.Context, n, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, n, cfg.ListenHTTPS)
+		}}}
+	hits.Store(0)
+	for i, c := range []struct{ ae, want, cache string }{{"gzip, br, zstd", "br", "MISS"}, {"gzip, br, zstd", "br", "HIT"}, {"gzip", "gzip", "MISS"}, {"", "", "MISS"}} {
+		_, body, h := get(raw, "https://d.test/big.css", "Accept-Encoding", c.ae)
+		if h.Get("Content-Encoding") != c.want || h.Get("X-Proxy-Cache") != c.cache || (c.want != "" && len(body) > 1000) {
+			t.Fatalf("compress %d %q: enc %q cache %q len %d", i, c.ae, h.Get("Content-Encoding"), h.Get("X-Proxy-Cache"), len(body))
+		}
+	}
+	if hits.Load() != 3 {
+		t.Fatalf("compressed variants: target hits %d", hits.Load())
 	}
 	// Ziel aendert sich (DynDNS): sofort, auch bei offener Keep-Alive-Verbindung zum alten Ziel
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "new target") }))

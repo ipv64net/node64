@@ -54,6 +54,8 @@ type Config struct {
 	MetricsListen    string   `yaml:"metrics_listen"` // z. B. ":9464"
 	MetricsAllow     []string `yaml:"metrics_allow"`  // IPs bzw. Netze des Prometheus; leer = Port zu
 	MetricsTokenFile string   `yaml:"metrics_token_file"`
+	// Modus 3: Antworten des Ziels komprimieren, wenn es selbst nicht komprimiert (zstd, Brotli, gzip); "off" = aus
+	Compression string `yaml:"compression"`
 }
 
 // HostEntry: ein Name (auch *.domain) und der Tunnel, der ihn bedient.

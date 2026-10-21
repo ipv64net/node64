@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ipv64net/node64/internal/httpcompress"
 )
 
 // Cache fuer Modus 3 (wie proxy_cache im alten CDN): nur GET/HEAD ohne Anmeldung, nur Antworten 200, die das Ziel
@@ -53,8 +55,17 @@ func newRespCache(dir string, maxMB int) *respCache {
 	return &respCache{dir: dir, max: int64(maxMB) << 20, hosts: map[int]*hostCache{}}
 }
 
+// cacheKey: Name, Pfad und Abfrage, dazu das Verfahren, das der Server waehlen wuerde, und die Komprimierungen, die der
+// Browser kann (fuer Ziele, die selbst komprimieren) - statt der ganzen Accept-Encoding-Zeile (zu viele Fassungen).
 func cacheKey(r *http.Request) string {
-	h := sha256.Sum256([]byte(hostOnly(r.Host) + " " + r.URL.RequestURI() + " " + r.Header.Get("Accept-Encoding")))
+	ae := strings.ToLower(r.Header.Get("Accept-Encoding"))
+	enc := httpcompress.Negotiate(ae, staticAsset(r)) + "|"
+	for _, e := range []string{"br", "gzip", "zstd"} {
+		if strings.Contains(ae, e) {
+			enc += e + ","
+		}
+	}
+	h := sha256.Sum256([]byte(hostOnly(r.Host) + " " + r.URL.RequestURI() + " " + enc))
 	return hex.EncodeToString(h[:])
 }
 

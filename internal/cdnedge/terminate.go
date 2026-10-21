@@ -21,6 +21,7 @@ import (
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 
+	"github.com/ipv64net/node64/internal/httpcompress"
 	"github.com/ipv64net/node64/internal/tunnel"
 )
 
@@ -45,6 +46,7 @@ type terminator struct {
 	plain  *chanListener          // Port 80 fuer Modus-3-Namen mit "nur HTTP" (bzw. bis das Zertifikat da ist)
 	refuse *chanListener          // Port 80 fuer Modus-3-Namen mit "nur HTTPS"
 	direct *httputil.ReverseProxy // Modus 3: zum Ziel
+	dirC   http.Handler           // Modus 3 mit Komprimierung (compress.go), sonst direct
 	srvs   []*http.Server
 	h3     *http3.Server
 	udp    *quic.Listener // UDP 443: HTTP/3 und Tunnel (ALPN), gemeinsam
@@ -57,6 +59,10 @@ type terminator struct {
 func (s *Server) termInit() {
 	t := &terminator{tls: newChanListener(&net.TCPAddr{}), http: newChanListener(&net.TCPAddr{}), plain: newChanListener(&net.TCPAddr{}),
 		refuse: newChanListener(&net.TCPAddr{}), rl: newReqLimiter(s.cfg.Shield.ReqRate), direct: s.directInit()}
+	t.dirC = t.direct
+	if s.compressOn() {
+		t.dirC = httpcompress.Handler(t.direct, httpcompress.Options{Static: staticAsset})
+	}
 	discard := log.New(io.Discard, "", 0)
 	tr := &http.Transport{DialContext: s.termDial, DisableKeepAlives: true, MaxResponseHeaderBytes: 1 << 20, ExpectContinueTimeout: time.Second}
 	t.proxy = &httputil.ReverseProxy{Transport: tr, FlushInterval: -1, ErrorLog: discard, ErrorHandler: s.termError,
@@ -299,7 +305,7 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 	defer s.track(re.Name, re.Mode, ap.Addr(), cancel)()
 	ctx := context.WithValue(cctx, termCtxKey{}, &termReq{re: re, host: host, client: r.RemoteAddr})
 	if re.Mode == 3 {
-		s.serveCached(w, r.WithContext(ctx), re, s.term.direct)
+		s.serveCached(w, r.WithContext(ctx), re, s.term.dirC)
 		return
 	}
 	s.term.proxy.ServeHTTP(w, r.WithContext(ctx))

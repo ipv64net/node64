@@ -53,6 +53,9 @@ Node nicht erreichbar ist. Die Node nimmt den Namen dann bei sich ebenfalls hera
   Supporter-Accounts haben zusätzlich eine Bandbreitengrenze.
 - **Meldungen:** Steht der Tunnel länger als 3 Minuten zu keinem Server oder sperrt ipv64 einen Namen, meldet
   Node64 das über deine Benachrichtigungskanäle.
+- **Komprimierung:** In Modus 3 komprimieren die Server Text-Antworten deines Ziels selbst (zstd, Brotli oder gzip,
+  je nach Browser), wenn dein Ziel es nicht schon tut – das spart Traffic-Kontingent. In Modus 1 und 2 komprimiert
+  deine Node (PROXY64, Schalter „Antworten komprimieren“, für neue Hosts an).
 - **Langsam?** Zeigt die Node „UDP gesperrt“, läuft der Tunnel über TCP. Ein Hinweis auf einen kleinen UDP-Puffer
   nennt den Befehl für den Docker-Host.
 
