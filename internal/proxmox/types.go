@@ -43,6 +43,7 @@ const (
 	StateOnline    State = "online"  // Node
 	StateOffline   State = "offline" // Node
 	StateUnknown   State = "unknown" // Node offline bzw. keine Daten
+	StateError     State = "error"   // Absturz: qmpstatus internal-error, guest-panicked bzw. io-error (Gast „haengt“)
 )
 
 // Resource ist ein Node oder Gast in einem Snapshot.

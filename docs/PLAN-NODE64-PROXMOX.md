@@ -39,7 +39,8 @@ Proxmox nichts (nur lesende API-Aufrufe).
 | suspendiert | `lock` suspended bzw. qmpstatus suspended | Störung (wählbar) |
 | Backup läuft | `lock` backup | ok, Hinweis „Backup“ |
 | Migration, Snapshot, Klonen … | `lock` migrate/snapshot/… | ok, Hinweis |
-| gestoppt | `stopped` | Störung, wenn erwartet „läuft“ (Standard: war beim Einrichten an) |
+| abgestürzt / hängt | `qmpstatus` internal-error, guest-panicked, io-error | Störung (immer, Kernfall „Maschine abgestürzt“) |
+| gestoppt | `stopped` | Störung, wenn erwartet „läuft“ (Standard: war beim Einrichten an); unerwartet von „läuft“ auf „gestoppt“ = Absturz bzw. Ausfall |
 | Node offline | Node `offline`/`unknown` | Störung des Nodes, seine Gäste „unbekannt“ |
 | System nicht erreichbar | API antwortet nicht | Störung des Systems |
 | Neustart | `uptime` springt zurück bei weiterlaufendem Gast | Hinweis „neu gestartet“ |
@@ -57,8 +58,10 @@ Schwellen weiter über Proxmox.
 
 ## Speicher (lokal)
 
-Systeme, Node-/Gast-Einstellungen und Regeln in der Node-Datenbank (Scope healthchecks). Verlauf: je Gast und Node
-1-Minuten-Werte 48 h, 15-Minuten-Werte 30 Tage (CPU, RAM, Disk, Netz rein/raus, Disk lesen/schreiben als Raten).
+Systeme, Node-/Gast-Einstellungen und Regeln in der Node-Datenbank (Scope healthchecks). Verlauf (Dennis 2026-10-21:
+so lange wie in den lokalen Einstellungen der Healthchecks): 1-Minuten-Werte 48 h, 5-Minuten-Werte so lange wie
+`hc.raw_days` (Einzelmessungen), Stundenwerte so lange wie `hc.hourly_days` (0 = unbegrenzt) – CPU, RAM, Disk, Netz
+rein/raus, Disk lesen/schreiben als Raten.
 
 ## Oberfläche
 
