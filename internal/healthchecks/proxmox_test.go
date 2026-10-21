@@ -303,7 +303,7 @@ func TestPVERuntimeNotifyRestartAsCheck(t *testing.T) {
 	}
 	al := rec.take()
 	if len(al) != 1 || al[0].Kind != notify.KindProxmoxDown || al[0].Data["what"] != "crashed" || al[0].Data["detail"] != "guest-panicked" ||
-		!al[0].Check.Critical || al[0].Check.Name != "lab – app" || al[0].Data["type"] != "qemu" || !al[0].Check.Local ||
+		al[0].Check.Critical || al[0].Check.Name != "lab – app" || al[0].Data["type"] != "qemu" || !al[0].Check.Local ||
 		al[0].Data["path"] != "/healthchecks/proxmox/system/"+fmt.Sprint(id)+"/res/qemu/102" {
 		t.Fatalf("crash alert: %+v", al)
 	}

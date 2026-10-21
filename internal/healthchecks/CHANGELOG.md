@@ -3,6 +3,7 @@
 ## 2.19.0 – 2026-10-21
 
 ### Neu
+- Proxmox-Meldungen halten sich an Ruhezeiten (auch Abstürze) und Wartungsfenster (Fenster für alle Checks; für bestimmte Checks, wenn der Gast als Check geführt wird).
 - Proxmox VE: neuer Menüpunkt „Proxmox VE“ unter Healthchecks. Überwacht Proxmox-VE-Systeme (Einzel-Node oder
   Cluster) nur lesend über ein API-Token: Nodes, VMs und Container mit Zustand (inkl. Backup, Lock, Absturz per
   qmpstatus), CPU, RAM, Disk, Netz und Laufzeit; Filter nach Zustand, Node, Typ und Suche.

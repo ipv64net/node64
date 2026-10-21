@@ -358,8 +358,17 @@ func (m *Module) pveNotify(ctx context.Context, set *proxmox.SystemSettings, s *
 	}
 	a := notify.Alert{EventID: "pve-" + strconv.FormatInt(set.SystemID, 10) + "-" + ev.Key + "-" + ev.Kind + "-" + strconv.FormatInt(at.UnixNano(), 36),
 		Kind: kind, Time: at.UTC(), Reason: ev.What, Data: data,
-		Check: notify.CheckInfo{Name: name, Type: string(checks.TypeProxmox), Target: ev.Key, NotifyDown: true, NotifyUp: true, Local: true,
-			Critical: ev.Kind == proxmox.KindDown && ev.What == proxmox.WhatCrashed}} // Absturz: hohe Prioritaet, auch in der Ruhezeit
+		Check: notify.CheckInfo{Name: name, Type: string(checks.TypeProxmox), Target: ev.Key, NotifyDown: true, NotifyUp: true, Local: true}}
+	// Ruhezeit ist Ruhezeit, auch beim Absturz (Dennis 2026-10-21); Wartungsfenster unterdruecken die Meldung: Fenster fuer
+	// alle Checks immer, Fenster fuer bestimmte Checks, wenn der Gast als Check gefuehrt wird.
+	tok := ""
+	if it := set.Items[ev.Key]; it != nil {
+		tok = it.CheckToken
+	}
+	if m.st != nil && m.st.InMaintenance(ctx, tok, at) {
+		m.log.Info("proxmox event suppressed (maintenance)", "system", set.Name, "key", ev.Key, "kind", ev.Kind, "what", ev.What)
+		return
+	}
 	if ev.Kind == proxmox.KindUp && !ev.Since.IsZero() {
 		a.Duration = at.Sub(ev.Since)
 	}

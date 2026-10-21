@@ -75,7 +75,7 @@ Wert gilt und woher es kommt („Standard“, „vom System geerbt“, „vom No
 
 | Regel | Standard | Bedeutung |
 |---|---|---|
-| Absturz | an | qmpstatus internal-error/guest-panicked/io-error – sofort, hohe Priorität (auch in der Ruhezeit) |
+| Absturz | an | qmpstatus internal-error/guest-panicked/io-error – sofort, ohne Verzögerung |
 | Gestoppt | an | nur wenn „erwartet läuft“: automatisch, sobald der Gast einmal lief; je Gast fest einstellbar |
 | Angehalten / Suspendiert | an | qmpstatus paused bzw. Lock/qmpstatus suspended |
 | Node offline | an | Node laut cluster/status offline; seine Gäste melden dann nichts einzeln |
@@ -84,7 +84,7 @@ Wert gilt und woher es kommt („Standard“, „vom System geerbt“, „vom No
 | CPU / RAM / Disk über | 90 % 10 min / 95 % 10 min / 90 % | mindestens so lange über der Grenze; 0 % = aus. Disk nur bei Containern bzw. VMs mit Gast-Agent |
 | Verzögerung | 2 Abfragen | erst melden, wenn der Zustand so viele Abfragen anhält (Entwarnung ebenso) |
 
-„Stumm“ schaltet Meldungen eines Systems, Nodes oder Gasts ab. Versand über die vorhandenen Kanäle und Ruhezeiten
+„Stumm“ schaltet Meldungen eines Systems, Nodes oder Gasts ab. Ruhezeiten gelten für alle Proxmox-Meldungen, auch für Abstürze. In einem Wartungsfenster für alle Checks kommen keine Proxmox-Meldungen; ein Fenster für bestimmte Checks gilt für Gäste, die als Check geführt werden. Versand über die vorhandenen Kanäle und Ruhezeiten
 der Benachrichtigungen mit eigenen Arten:
 
 | Art | Wann |
