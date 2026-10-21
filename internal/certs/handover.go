@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/pem"
 	"errors"
+	"github.com/ipv64net/node64/internal/notify"
 	"net"
 	"slices"
 	"strconv"
@@ -224,7 +225,7 @@ func (m *Manager) issueNow(ctx context.Context, id int64, names []string) (*Cert
 	m.bg.Done()
 	if err != nil {
 		now := store.Now()
-		_, _ = m.w.ExecContext(ctx, `UPDATE certs SET status = ?, last_error = ?, last_attempt = ?, updated_at = ? WHERE id = ?`, StatusError, err.Error(), now, now, id)
+		_, _ = m.w.ExecContext(ctx, `UPDATE certs SET status = ?, last_error = ?, last_attempt = ?, updated_at = ? WHERE id = ?`, StatusError, notify.RedactSecrets(err.Error()), now, now, id)
 		return nil, err
 	}
 	return m.Get(ctx, id)

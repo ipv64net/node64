@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/store"
 )
 
@@ -360,6 +361,7 @@ func (m *Manager) clusterGetCert(ctx context.Context, uid string) (*clusterCert,
 	if err != nil {
 		return nil, err
 	}
+	c.LastError = notify.RedactSecrets(c.LastError)
 	if m.ownedIDs(ctx)[id] {
 		return nil, nil
 	}
@@ -549,14 +551,14 @@ func (m *Manager) clusterApplyCert(ctx context.Context, uid string, data json.Ra
 			ref_ca = ?, ref_acme_ca = ?, days = ?, key_type = ?, staging = ?, auto_renew = ?, cert_pem = ?, key_pem = ?, not_before = ?, not_after = ?, issuer = ?,
 			status = ?, last_error = ?, last_attempt = ?, renewer = ?, warned = CASE WHEN cert_pem = ? THEN warned ELSE '' END, updated_at = ? WHERE id = ?`,
 			strings.Join(in.Names, ","), in.Source, in.AliasZone, in.AliasPrefix, dns, ca, acmeCA, in.DNSAccount, in.CA, in.ACMECA, in.Days, in.KeyType, in.Staging,
-			in.AutoRenew, in.CertPEM, sealed, in.NotBefore, in.NotAfter, in.Issuer, in.Status, in.LastError, in.LastAttempt, renewer, in.CertPEM, now, id)
+			in.AutoRenew, in.CertPEM, sealed, in.NotBefore, in.NotAfter, in.Issuer, in.Status, notify.RedactSecrets(in.LastError), in.LastAttempt, renewer, in.CertPEM, now, id)
 	} else {
 		var res sql.Result
 		res, err = m.w.ExecContext(ctx, `INSERT INTO certs (uid, names, source, alias_zone, alias_prefix, dns_account, ca_id, acme_ca, ref_dns_account, ref_ca, ref_acme_ca,
 			days, key_type, staging, auto_renew, cert_pem, key_pem, not_before, not_after, issuer, status, last_error, last_attempt, renewer, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, uid, strings.Join(in.Names, ","), in.Source, in.AliasZone, in.AliasPrefix,
 			dns, ca, acmeCA, in.DNSAccount, in.CA, in.ACMECA, in.Days, in.KeyType, in.Staging, in.AutoRenew, in.CertPEM, sealed, in.NotBefore, in.NotAfter, in.Issuer,
-			in.Status, in.LastError, in.LastAttempt, renewer, in.CreatedAt, now)
+			in.Status, notify.RedactSecrets(in.LastError), in.LastAttempt, renewer, in.CreatedAt, now)
 		if err == nil {
 			id, _ = res.LastInsertId()
 		}

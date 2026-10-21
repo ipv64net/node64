@@ -249,6 +249,7 @@ func (m *Manager) scan(row interface{ Scan(...any) error }) (*Cert, error) {
 		return nil, err
 	}
 	c.Names = strings.Split(names, ",")
+	c.LastError = notify.RedactSecrets(c.LastError) // auch aeltere Eintraege (vor der Schwaerzung gespeichert)
 	c.NotBefore, c.NotAfter, c.LastAttempt = store.ParseTime(nb), store.ParseTime(na), store.ParseTime(la)
 	c.CreatedAt, c.UpdatedAt = store.ParseTime(ca), store.ParseTime(ua)
 	if c.hasCert && !c.NotAfter.IsZero() && time.Now().After(c.NotAfter) && c.Status != StatusError {

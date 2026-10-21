@@ -75,7 +75,7 @@ func (m *Manager) issue(ctx context.Context, id int64, reason string) {
 		if m.base.Err() != nil {
 			return // Node wird beendet: kein Fehler festhalten
 		}
-		msg := err.Error()
+		msg := notify.RedactSecrets(err.Error()) // DNS-Provider liefern teils Zugangsdaten in Fehlertexten (z. B. URL mit token=)
 		if len(msg) > 500 {
 			msg = msg[:500]
 		}
@@ -285,7 +285,7 @@ func (m *Manager) authorize(ctx context.Context, cl *acme.Client, c *Cert, z *ac
 		}
 		cleanup = func() {
 			if err := prov.CleanUp(base, chal.Token, ka); err != nil {
-				m.log.Warn("acme TXT record not removed", "name", base, "err", err)
+				m.log.Warn("acme TXT record not removed", "name", base, "err", notify.RedactSecrets(err.Error()))
 			}
 		}
 		val, err := cl.DNS01ChallengeRecord(chal.Token)
@@ -332,7 +332,7 @@ func (m *Manager) authorize(ctx context.Context, cl *acme.Client, c *Cert, z *ac
 			dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
 			defer cancel()
 			if err := m.d.DNS.DeleteTXT(dctx, zone, prefix, val); err != nil {
-				m.log.Warn("acme TXT record not removed", "zone", zone, "prefix", prefix, "err", err)
+				m.log.Warn("acme TXT record not removed", "zone", zone, "prefix", prefix, "err", notify.RedactSecrets(err.Error()))
 			}
 		}
 		m.step(c.ID, "dns")
