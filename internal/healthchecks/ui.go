@@ -314,7 +314,7 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 		}
 		d.Counts[rw.State]++
 		d.Total++
-		if f["state"] != "" && rw.State != f["state"] {
+		if st := f["state"]; st != "" && rw.State != st && (st != "problem" || !problemState(rw.State)) {
 			continue
 		}
 		if f["type"] != "" && string(c.Type) != f["type"] {
@@ -1466,4 +1466,9 @@ func mergeEvents(local, hub []Event, limit int) []Event {
 		out = out[:limit]
 	}
 	return out
+}
+
+// problemState: Zustaende, die die Kachel „Gestoert“ zusammenzaehlt (Filter state=problem).
+func problemState(st string) bool {
+	return st == string(scheduler.StateDown) || st == string(scheduler.StateFlapping) || st == string(scheduler.StateDependent)
 }

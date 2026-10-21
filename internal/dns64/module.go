@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.22.1"
+	version   = "1.22.2"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -425,7 +425,7 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 	c.Stats = []module.CardStat{
 		{LabelKey: "dns64.card.listen", Text: e.addr},
 		{LabelKey: "dns64.card.total", Value: sum.Total},
-		{LabelKey: "dns64.card.blocked", Value: sum.Blocked, Pct: pct, Class: "text-danger"},
+		{LabelKey: "dns64.card.blocked", Value: sum.Blocked, Pct: pct, Class: blockedClass(sum.Blocked)},
 		{LabelKey: "dns64.card.cached", Value: sum.Cached},
 		{LabelKey: "dns64.card.clients", Value: sum.Clients},
 		{LabelKey: "dns64.card.lists", Value: int64(e.lists.Matcher().Size())},
@@ -459,4 +459,12 @@ func clockText(t, now time.Time, loc *time.Location) string {
 		return t.Format("15:04")
 	}
 	return t.Format("02.01. 15:04")
+}
+
+// blockedClass: rot nur, wenn wirklich etwas blockiert wurde.
+func blockedClass(n int64) string {
+	if n > 0 {
+		return "text-danger"
+	}
+	return ""
 }
