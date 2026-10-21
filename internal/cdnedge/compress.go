@@ -12,7 +12,9 @@ import (
 // (verschluesselt), Modus 2 komprimiert die Node (PROXY64).
 
 // compressOn: Standard an, "off" in der Konfiguration schaltet ab.
-func (s *Server) compressOn() bool { return !strings.EqualFold(strings.TrimSpace(s.cfg.Compression), "off") }
+func (s *Server) compressOn() bool {
+	return !strings.EqualFold(strings.TrimSpace(s.cfg.Compression), "off")
+}
 
 var staticExt = map[string]bool{".css": true, ".js": true, ".mjs": true, ".svg": true, ".json": true, ".map": true, ".txt": true,
 	".xml": true, ".wasm": true, ".ttf": true, ".otf": true, ".eot": true, ".ico": true}

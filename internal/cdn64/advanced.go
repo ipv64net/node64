@@ -152,4 +152,3 @@ func (a *Advanced) clientIP(r *http.Request) netip.Addr {
 	}
 	return peer
 }
-
