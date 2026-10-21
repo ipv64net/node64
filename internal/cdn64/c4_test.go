@@ -234,6 +234,19 @@ func TestAdvancedOptions(t *testing.T) {
 	if !strings.HasPrefix(string(plain), "node64 node64") {
 		t.Fatalf("gzip body: %q", plain[:20])
 	}
+	// zstd und Brotli je nach Browser
+	for _, c := range []struct{ ae, want string }{{"gzip, deflate, br, zstd", "zstd"}, {"gzip, br", "br"}} {
+		req, _ = http.NewRequest("GET", "http://adv.test/big.txt", nil)
+		req.Header.Set("Accept-Encoding", c.ae)
+		r2, err := gc.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r2.Body.Close()
+		if r2.Header.Get("Content-Encoding") != c.want {
+			t.Fatalf("%s: %v", c.ae, r2.Header)
+		}
+	}
 	// ohne vertrauenswuerdigen Proxy zaehlt die Gegenstelle
 	h.Advanced.TrustedProxies = nil
 	if err := e.m.saveHost(ctx, h); err != nil {
@@ -340,3 +353,10 @@ func TestHealthcheckForTarget(t *testing.T) {
 }
 
 func netipMust(s string) netip.Addr { return netip.MustParseAddr(s) }
+
+// Neue Proxy-Hosts komprimieren standardmaessig, andere Arten nicht.
+func TestCompressionDefault(t *testing.T) {
+	if !newHost().Advanced.Gzip || newHostKind(KindRedirect).Advanced.Gzip {
+		t.Fatal("compression on for new proxy hosts only")
+	}
+}

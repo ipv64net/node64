@@ -1,5 +1,15 @@
 # Änderungen – PROXY64
 
+## 1.21.0 – 2026-10-21
+
+### Neu
+- Komprimierung mit zstd und Brotli zusätzlich zu gzip, gewählt nach dem Browser (dynamisch zstd → Brotli → gzip,
+  statische Dateien im Cache Brotli → zstd → gzip auf stärkerer Stufe). Für neue Proxy-Hosts standardmäßig an.
+
+### Geändert
+- Der Cache liegt jetzt hinter der Komprimierung und liefert die fertig komprimierte Fassung aus; Schalter heißt
+  „Antworten komprimieren“. Starke ETags werden beim Komprimieren schwach, `Cache-Control: no-transform` wird beachtet.
+
 ## 1.20.1 – 2026-10-20
 
 ### Geändert

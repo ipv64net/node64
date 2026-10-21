@@ -444,7 +444,7 @@
       "adv_timeout": "Timeout (s)",
       "adv_max_body": "Max upload (MB)",
       "adv_no_buffering": "No buffering (streaming, server-sent events)",
-      "adv_gzip": "Compress text responses (gzip)",
+      "adv_gzip": "Compress responses (zstd, Brotli, gzip – depending on the browser)",
       "adv_limits_hint": "Timeout: how long to wait for the target's answer, 0 = no limit. Upload: larger requests get 413, 0 = unlimited.",
       "adv_trusted": "Trusted proxies in front",
       "adv_cloudflare": "Insert Cloudflare networks",

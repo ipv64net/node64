@@ -89,6 +89,7 @@ func newHostKind(kind string) *Host {
 	if kind == KindPass {
 		h.Scheme, h.TargetPort, h.CertID = "https", 443, CertNone
 	}
+	h.Advanced.Gzip = kind == KindProxy // Komprimierung fuer neue Proxy-Hosts an
 	return h
 }
 

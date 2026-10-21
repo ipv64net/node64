@@ -1,12 +1,9 @@
 package cdn64
 
 import (
-	"compress/gzip"
 	"net/http"
 	"net/netip"
-	"strconv"
 	"strings"
-	"sync"
 )
 
 // Erweitert: feste Felder statt freier nginx-Konfiguration.
@@ -27,7 +24,7 @@ type Advanced struct {
 	TimeoutSeconds  int      `json:"timeout_seconds,omitempty"`  // bis zur Antwort des Ziels, 0 = ohne
 	MaxBodyMB       int      `json:"max_body_mb,omitempty"`      // hoechstens so viel hochladen, 0 = unbegrenzt
 	NoBuffering     bool     `json:"no_buffering,omitempty"`     // sofort weiterreichen (Streaming, SSE)
-	Gzip            bool     `json:"gzip,omitempty"`             // Text-Antworten komprimieren
+	Gzip            bool     `json:"gzip,omitempty"`             // Antworten komprimieren (zstd, Brotli, gzip; Name aus der ersten Fassung)
 	TrustedProxies  []string `json:"trusted_proxies,omitempty"`  // echte Client-IP aus diesen Proxys (z. B. Cloudflare)
 	AccessLog       bool     `json:"access_log,omitempty"`       // jede Anfrage protokollieren
 	NoLimits        bool     `json:"no_limits,omitempty"`        // ohne Anfrage-Limit je IP und ohne Platzgrenze beim Ziel
@@ -156,78 +153,3 @@ func (a *Advanced) clientIP(r *http.Request) netip.Addr {
 	return peer
 }
 
-// ---------------------------------------------------------------- gzip
-
-var gzPool = sync.Pool{New: func() any { w, _ := gzip.NewWriterLevel(nil, gzip.DefaultCompression); return w }}
-
-func compressible(ct string) bool {
-	ct = strings.ToLower(ct)
-	return strings.HasPrefix(ct, "text/") || strings.Contains(ct, "json") || strings.Contains(ct, "javascript") || strings.Contains(ct, "xml") ||
-		strings.Contains(ct, "svg") || strings.Contains(ct, "wasm")
-}
-
-// gzipWriter komprimiert, wenn die Antwort dafuer taugt (entschieden beim ersten WriteHeader).
-type gzipWriter struct {
-	http.ResponseWriter
-	gz      *gzip.Writer
-	decided bool
-}
-
-func (w *gzipWriter) WriteHeader(code int) {
-	if !w.decided {
-		w.decided = true
-		h := w.Header()
-		cl, _ := strconv.Atoi(h.Get("Content-Length"))
-		if code == http.StatusOK && h.Get("Content-Encoding") == "" && compressible(h.Get("Content-Type")) && (cl == 0 || cl >= 512) {
-			h.Del("Content-Length")
-			h.Set("Content-Encoding", "gzip")
-			h.Add("Vary", "Accept-Encoding")
-			w.gz = gzPool.Get().(*gzip.Writer)
-			w.gz.Reset(w.ResponseWriter)
-		}
-	}
-	w.ResponseWriter.WriteHeader(code)
-}
-
-func (w *gzipWriter) Write(b []byte) (int, error) {
-	if !w.decided {
-		w.WriteHeader(http.StatusOK)
-	}
-	if w.gz != nil {
-		return w.gz.Write(b)
-	}
-	return w.ResponseWriter.Write(b)
-}
-
-func (w *gzipWriter) Flush() {
-	if w.gz != nil {
-		_ = w.gz.Flush()
-	}
-	if f, ok := w.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
-}
-
-func (w *gzipWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
-
-func (w *gzipWriter) close() {
-	if w.gz != nil {
-		_ = w.gz.Close()
-		gzPool.Put(w.gz)
-		w.gz = nil
-	}
-}
-
-// withGzip komprimiert Antworten fuer Browser, die gzip koennen (nicht bei Range, HEAD und WebSockets).
-func withGzip(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodHead || r.Header.Get("Range") != "" || r.Header.Get("Upgrade") != "" ||
-			!strings.Contains(strings.ToLower(r.Header.Get("Accept-Encoding")), "gzip") {
-			next.ServeHTTP(w, r)
-			return
-		}
-		gw := &gzipWriter{ResponseWriter: w}
-		defer gw.close()
-		next.ServeHTTP(gw, r)
-	})
-}

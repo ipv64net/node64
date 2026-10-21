@@ -72,6 +72,26 @@ und keinem Modul:
   mit Zustand und Link an: „Healthcheck (lokal)“ für Checks dieser Node, sonst „ipv64/andere Node“. Das gilt
   auch für Checks, die von Hand angelegt wurden. API: Feld `healthchecks` am Host.
 
+## Komprimierung
+
+Schalter „Antworten komprimieren“ unter Erweitert (JSON-Feld `advanced.gzip`, Name aus der ersten Fassung); für neue
+Proxy-Hosts **standardmäßig an**, bestehende Hosts behalten ihre Einstellung. Gewählt wird nach `Accept-Encoding`
+des Browsers (`internal/httpcompress`):
+
+| Antwort | Reihenfolge | Stufe |
+|---|---|---|
+| dynamisch | zstd → Brotli → gzip | zstd Standard, Brotli 4, gzip 5 |
+| statische Datei mit „Cache Assets“ | Brotli → zstd → gzip | Brotli 9, zstd hoch, gzip 9 – einmal, dann aus dem Cache |
+
+Komprimiert wird nur Status 200, Text/JSON/JS/XML/SVG/WASM/Schriften außer woff/woff2, ab 512 Byte, nicht bei Range,
+HEAD, WebSocket, `Cache-Control: no-transform` oder wenn das Ziel schon komprimiert. Starke ETags werden dabei schwach
+(`W/`). Der Cache liegt hinter der Komprimierung und hält je Verfahren eine Fassung. Gilt auch für CDN64 Modus 1 und
+2 (die Antwort kommt von der Node; in Modus 2 spart es zusätzlich Verkehr im Tunnel).
+
+Hinweis BREACH: Seiten, die ein Geheimnis (z. B. CSRF-Token) zusammen mit Eingaben eines Angreifers in derselben
+Antwort ausliefern, können über die Größe der komprimierten Antwort angreifbar sein – dann den Schalter für diesen
+Host ausschalten.
+
 ## Zertifikate
 
 | Weg | Wann | Port offen? |
@@ -233,7 +253,7 @@ Wiederholen: `go test -tags loadtest -run TestLoad -v ./internal/cdn64/`
 | NPM | PROXY64 |
 |---|---|
 | Proxy Hosts (Details, Custom Locations, SSL) | Proxy-Hosts mit Reitern Details, Locations, SSL, Erweitert |
-| Advanced (nginx-Konfiguration) | Erweitert: Kopfzeilen, Host-Kopf, Timeout, Upload-Grenze, Puffern, gzip, vertrauenswürdige Proxys |
+| Advanced (nginx-Konfiguration) | Erweitert: Kopfzeilen, Host-Kopf, Timeout, Upload-Grenze, Puffern, Komprimierung (zstd/Brotli/gzip), vertrauenswürdige Proxys |
 | Redirection Hosts / Streams / 404 Hosts | Weiterleitungen / Streams / 404-Hosts |
 | Access Lists | Zugriffslisten |
 | SSL Certificates (certbot-Plugins) | Zertifikate im Kern (ipv64, Alias, DNS-Anbieter, HTTP-01, eigene) |

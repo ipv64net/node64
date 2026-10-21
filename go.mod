@@ -31,6 +31,7 @@ require (
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/alexbrainman/sspi v0.0.0-20180613141037-e580b900e9f5 // indirect
+	github.com/andybalholm/brotli v1.2.0
 	github.com/bodgit/tsig v1.2.2 // indirect
 	github.com/boombuler/barcode v1.0.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
@@ -56,6 +57,7 @@ require (
 	github.com/jcmturner/gokrb5/v8 v8.4.4 // indirect
 	github.com/jcmturner/rpc/v2 v2.0.3 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
+	github.com/klauspost/compress v1.18.0
 	github.com/kolo/xmlrpc v0.0.0-20220921171641-a4b6fa1dd06b // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mdlayher/socket v0.5.0 // indirect

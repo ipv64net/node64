@@ -1,5 +1,15 @@
 # Changes – PROXY64
 
+## 1.21.0 – 2026-10-21
+
+### New
+- Compression with zstd and Brotli in addition to gzip, chosen by the browser (dynamic zstd → Brotli → gzip, static
+  files in the cache Brotli → zstd → gzip at a stronger level). On by default for new proxy hosts.
+
+### Changed
+- The cache now sits behind the compression and serves the compressed variant; the switch is called "Compress
+  responses". Strong ETags become weak when compressing, `Cache-Control: no-transform` is respected.
+
 ## 1.20.1 – 2026-10-20
 
 ### Changed

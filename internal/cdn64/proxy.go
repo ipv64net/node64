@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/edge"
+	"github.com/ipv64net/node64/internal/httpcompress"
 )
 
 // Der Proxy eines Hosts: httputil.ReverseProxy (WebSockets, Streaming, HTTP/2 kommen von Go selbst), davor
@@ -204,17 +205,17 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 		return &url.URL{Scheme: scheme, Host: net.JoinHostPort(host, strconv.Itoa(port))}
 	}
 	var next http.Handler = m.reverseProxy(h, target{url: mk(h.Scheme, h.TargetHost, h.TargetPort)}, st, tr)
+	if h.Advanced.Gzip { // vor dem Cache: der legt die fertig komprimierte Fassung ab (statische Dateien staerker)
+		next = httpcompress.Handler(next, httpcompress.Options{Static: func(r *http.Request) bool { return h.CacheAssets && cacheable(r) }})
+	}
 	if h.CacheAssets {
 		next = m.cache.cached(h.ID, next)
-	}
-	if h.Advanced.Gzip {
-		next = withGzip(next)
 	}
 	routes := []route{{ws: h.WebSockets, acl: h.AccessListID, next: next}}
 	for _, l := range h.Locations {
 		var ln http.Handler = m.reverseProxy(h, target{url: mk(l.Scheme, l.TargetHost, l.TargetPort), prefix: l.Path, forward: l.ForwardPath}, st, tr)
 		if h.Advanced.Gzip {
-			ln = withGzip(ln)
+			ln = httpcompress.Handler(ln, httpcompress.Options{})
 		}
 		acl := l.AccessListID
 		if acl == 0 {

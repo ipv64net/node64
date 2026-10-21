@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ipv64net/node64/internal/httpcompress"
 )
 
 // Cache Assets: statische Dateien (Bilder, CSS, JS, Schriften) eines Hosts im Speicher halten, wie die
@@ -58,10 +60,11 @@ func cacheable(r *http.Request) bool {
 	return assetExt[strings.ToLower(path.Ext(r.URL.Path))]
 }
 
-// cacheKey: Host, Pfad und Abfrage, dazu die Komprimierungen, die der Browser kann.
+// cacheKey: Host, Pfad und Abfrage, dazu das Verfahren, das PROXY64 waehlen wuerde, und die Komprimierungen, die der
+// Browser kann (fuer Ziele, die selbst komprimieren).
 func cacheKey(id int64, r *http.Request) string {
 	ae := strings.ToLower(r.Header.Get("Accept-Encoding"))
-	enc := ""
+	enc := httpcompress.Negotiate(ae, true) + "|"
 	for _, e := range []string{"br", "gzip", "zstd"} {
 		if strings.Contains(ae, e) {
 			enc += e + ","
