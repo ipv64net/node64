@@ -96,6 +96,12 @@ func (m *Module) pveMetrics(ctx context.Context, w *metrics.Writer) {
 					w.Gauge("node64_pve_guest_disk_ratio", "Disk-Belegung des Gasts (0..1, bei VMs nur mit Gast-Agent).", disk, gl...)
 				}
 				w.Gauge("node64_pve_guest_uptime_seconds", "Laufzeit des Gasts.", float64(r.Uptime), gl...)
+				w.Gauge("node64_pve_guest_net_in_bytes", "Netz eingehend des Gasts (Byte/s, Mittel seit der letzten Abfrage).", r.NetIn, gl...)
+				w.Gauge("node64_pve_guest_net_out_bytes", "Netz ausgehend des Gasts (Byte/s).", r.NetOut, gl...)
+				w.Gauge("node64_pve_guest_disk_read_bytes", "Disk lesen des Gasts (Byte/s).", r.DiskRead, gl...)
+				w.Gauge("node64_pve_guest_disk_write_bytes", "Disk schreiben des Gasts (Byte/s).", r.DiskWrite, gl...)
+				w.Gauge("node64_pve_guest_memory_bytes", "RAM-Belegung des Gasts (Byte).", float64(r.Mem), gl...)
+				w.Gauge("node64_pve_guest_cpus", "Zugewiesene CPUs des Gasts.", r.MaxCPU, gl...)
 			}
 		}
 	}

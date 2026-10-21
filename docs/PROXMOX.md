@@ -13,6 +13,19 @@ Messdaten (Verlauf, Graphen, Prometheus) bleiben **auf der Node**. An ipv64 geht
 
 ### 1. Leser-Token in Proxmox anlegen
 
+> **Häufigster Fehler:** Node64 zeigt nur den Node, aber **keine VMs und Container** – und auf der Systemseite steht
+> „Dem Token fehlen Leserechte“. Ursache: Das Token wurde mit **Privilege Separation** angelegt (Standard, auch beim
+> Anlegen in der Proxmox-Oberfläche, auch für `root@pam`). Ein solches Token hat **keine eigenen Rechte** – auch nicht
+> die von root. Lösung: dem **Token selbst** die Rolle `PVEAuditor` auf `/` geben:
+>
+> ```bash
+> pveum acl modify / --tokens 'root@pam!test' --roles PVEAuditor
+> ```
+>
+> (Token-ID anpassen.) Oder in der Oberfläche: **Rechenzentrum › Berechtigungen › Hinzufügen › API-Token-Berechtigung**:
+> Pfad `/`, Token auswählen, Rolle `PVEAuditor`, Haken bei **Weitergeben**. Nach spätestens 30 s erscheinen die Gäste.
+> `PVEAuditor` darf nur lesen – Node64 kann damit nichts starten, stoppen oder ändern.
+
 Auf einem Node als root (Shell, z. B. Datacenter → Node → Shell):
 
 ```bash
@@ -142,8 +155,10 @@ Unter `/api/healthchecks/proxmox` (Anmeldung wie die übrige API, siehe `/api/do
 | `node64_pve_node_up{system,node}`, `node64_pve_node_{cpu,memory,disk}_ratio`, `node64_pve_node_uptime_seconds` | je Node |
 | `node64_pve_guest_state{system,node,type,vmid,name,state}` | immer 1, Zustand im Label |
 | `node64_pve_guest_up`, `node64_pve_guest_{cpu,memory,disk}_ratio`, `node64_pve_guest_uptime_seconds` `{system,type,vmid}` | je Gast (Anteile 0..1) |
+| `node64_pve_guest_net_{in,out}_bytes`, `node64_pve_guest_disk_{read,write}_bytes` `{system,type,vmid}` | Netz und Disk-I/O je Gast in Byte/s (Mittel seit der letzten Abfrage) |
+| `node64_pve_guest_memory_bytes`, `node64_pve_guest_cpus` | RAM in Byte und zugewiesene CPUs je Gast |
 
-Gäste insgesamt höchstens 1000 (Labels begrenzt), Namen höchstens 64 Zeichen, Vorlagen nicht.
+Abruf über den lokalen Prometheus-Endpunkt der Node (`/api/metrics`, mit API-Key bzw. Token wie die übrigen Kennzahlen, siehe Prometheus-Doku). Gäste insgesamt höchstens 1000 (Labels begrenzt), Namen höchstens 64 Zeichen, Vorlagen nicht.
 
 ## Export und Import
 

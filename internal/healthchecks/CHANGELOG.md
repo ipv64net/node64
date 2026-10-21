@@ -3,6 +3,7 @@
 ## 2.19.0 – 2026-10-21
 
 ### Neu
+- Prometheus je Gast zusätzlich Netz und Disk-I/O (Byte/s), RAM in Byte und CPUs; Systemseite zeigt einen Hinweis, wenn dem Token Leserechte fehlen (häufigster Einrichtungsfehler: Token mit Privilege Separation ohne eigene Rolle).
 - Proxmox-Meldungen halten sich an Ruhezeiten (auch Abstürze) und Wartungsfenster (Fenster für alle Checks; für bestimmte Checks, wenn der Gast als Check geführt wird).
 - Proxmox VE: neuer Menüpunkt „Proxmox VE“ unter Healthchecks. Überwacht Proxmox-VE-Systeme (Einzel-Node oder
   Cluster) nur lesend über ein API-Token: Nodes, VMs und Container mit Zustand (inkl. Backup, Lock, Absturz per

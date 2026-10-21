@@ -70,7 +70,7 @@ Labels je Check: `token` (bleibt gleich, auch wenn der Name sich ändert), `chec
 
 Proxmox VE (Healthchecks → Proxmox VE): `node64_pve_up{system}`, `node64_pve_poll_failures_total`,
 `node64_pve_guest_state{system,node,type,vmid,name,state}`, CPU/RAM/Disk je Node und Gast
-(`node64_pve_node_*_ratio`, `node64_pve_guest_*_ratio`) – Liste in [PROXMOX.md](PROXMOX.md#prometheus).
+(`node64_pve_node_*_ratio`, `node64_pve_guest_*_ratio`), Netz und Disk-I/O je Gast (`node64_pve_guest_net_*_bytes`, `node64_pve_guest_disk_*_bytes`) – Liste in [PROXMOX.md](PROXMOX.md#prometheus).
 
 ## DynDNS
 

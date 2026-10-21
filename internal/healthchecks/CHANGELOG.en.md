@@ -3,6 +3,7 @@
 ## 2.19.0 – 2026-10-21
 
 ### New
+- Prometheus per guest also network and disk I/O (bytes/s), RAM in bytes and CPUs; the system page shows a hint if the token lacks read permissions (most common setup error: token with privilege separation without its own role).
 - Proxmox notifications respect quiet hours (crashes too) and maintenance windows (windows for all checks; for specific checks if the guest is kept as a check).
 - Proxmox VE: new menu entry “Proxmox VE” under Healthchecks. Monitors Proxmox VE systems (single node or cluster)
   read-only with an API token: nodes, VMs and containers with state (incl. backup, lock, crash via qmpstatus), CPU,
