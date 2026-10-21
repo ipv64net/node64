@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -157,7 +158,7 @@ func newClient(sys System, roots *x509.CertPool, dialTO, reqTO time.Duration) (*
 		if !ok {
 			return nil, fmt.Errorf("invalid address %q (use https://host:8006)", a)
 		}
-		if !pveHas(c.addrs, n) {
+		if !slices.Contains(c.addrs, n) {
 			c.addrs = append(c.addrs, n)
 		}
 	}
@@ -183,7 +184,7 @@ func (c *Client) buildHTTP(pins []string) *http.Client {
 				return &errPinMismatch{got: "(none)"}
 			}
 			got := CertFingerprint(raw[0])
-			if !pveHas(pins, got) {
+			if !slices.Contains(pins, got) {
 				return &errPinMismatch{got: got}
 			}
 			return nil
@@ -217,15 +218,6 @@ func (c *Client) httpFor(addr string) *http.Client {
 	return c.http
 }
 
-func pveHas(l []string, s string) bool {
-	for _, x := range l {
-		if x == s {
-			return true
-		}
-	}
-	return false
-}
-
 // Address ist die zuletzt funktionierende Adresse ("" vor dem ersten Erfolg).
 func (c *Client) Address() string {
 	c.mu.Lock()
@@ -253,22 +245,22 @@ func (c *Client) SetLearned(ips []string) {
 	var l []string
 	for _, ip := range ips {
 		a := c.learnedAddr(ip)
-		if a != "" && !pveHas(c.addrs, a) && !pveHas(l, a) {
+		if a != "" && !slices.Contains(c.addrs, a) && !slices.Contains(l, a) {
 			l = append(l, a)
 		}
 	}
 	c.learn = l
 	for a := range c.lpins {
-		if !pveHas(l, a) {
+		if !slices.Contains(l, a) {
 			c.dropPinsLocked(a)
 		}
 	}
 	for a := range c.badTLS {
-		if !pveHas(l, a) {
+		if !slices.Contains(l, a) {
 			delete(c.badTLS, a)
 		}
 	}
-	if c.last != "" && !pveHas(c.addrs, c.last) && !pveHas(l, c.last) {
+	if c.last != "" && !slices.Contains(c.addrs, c.last) && !slices.Contains(l, c.last) {
 		c.last = ""
 	}
 }
@@ -281,12 +273,12 @@ func (c *Client) SetLearnedPins(pins map[string][]string) {
 	defer c.mu.Unlock()
 	for ip, raw := range pins {
 		a := c.learnedAddr(ip)
-		if a == "" || pveHas(c.addrs, a) {
+		if a == "" || slices.Contains(c.addrs, a) {
 			continue
 		}
 		var l []string
 		for _, p := range raw {
-			if n, ok := NormalizePin(p); ok && n != "" && !pveHas(l, n) {
+			if n, ok := NormalizePin(p); ok && n != "" && !slices.Contains(l, n) {
 				l = append(l, n)
 			}
 		}
@@ -322,7 +314,7 @@ func (c *Client) order() []string {
 		out = append(out, c.last)
 	}
 	for _, a := range c.addrs {
-		if !pveHas(out, a) {
+		if !slices.Contains(out, a) {
 			out = append(out, a)
 		}
 	}
@@ -330,7 +322,7 @@ func (c *Client) order() []string {
 		if t, bad := c.badTLS[a]; bad && now.Sub(t) < pveCertBadPause {
 			continue
 		}
-		if !pveHas(out, a) {
+		if !slices.Contains(out, a) {
 			out = append(out, a)
 		}
 	}
@@ -340,7 +332,7 @@ func (c *Client) order() []string {
 func (c *Client) isConfigured(a string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return pveHas(c.addrs, a)
+	return slices.Contains(c.addrs, a)
 }
 
 // Get fragt path (relativ zu /api2/json, z. B. "/cluster/resources") ab und legt "data" in v ab.

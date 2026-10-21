@@ -106,3 +106,34 @@ func TestProxmoxValidateAndPrivate(t *testing.T) {
 		t.Fatal("proxmox checks must stay local")
 	}
 }
+
+// Abfrage gerade gestartet, noch kein Stand: voriges Ergebnis bleibt (kein kurzes down nach Neustart), hoechstens
+// ProxmoxPendingGrace; gestoppt mit Lock nennt den Lock.
+func TestProxmoxCheckPendingAndLock(t *testing.T) {
+	now := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	state := ProxmoxState{System: "lab", Polling: true, Started: now.Add(-30 * time.Second), Interval: 30 * time.Second}
+	r := NewRunner()
+	r.Now = func() time.Time { return now }
+	r.Proxmox = func(int64, string) ProxmoxState { return state }
+	if res := r.Run(context.Background(), pveDef(3, "qemu/100")); res[0].Status != Up || !strings.Contains(res[0].Message, "waiting") {
+		t.Fatalf("pending without previous: %+v", res)
+	}
+	state.Last = Down
+	if res := r.Run(context.Background(), pveDef(3, "qemu/100")); res[0].Status != Down {
+		t.Fatalf("pending after down: %+v", res)
+	}
+	state.Last = Up
+	r.Now = func() time.Time { return now.Add(ProxmoxPendingGrace) }
+	if res := r.Run(context.Background(), pveDef(3, "qemu/100")); res[0].Status != Down || res[0].Reason != ReasonPVEUnreachable {
+		t.Fatalf("pending too long: %+v", res)
+	}
+	state = ProxmoxState{System: "lab", Polling: true, Reachable: true, Time: now, Interval: 30 * time.Second, Found: true, State: "stopped", Status: "stopped", Lock: "backup"}
+	r.Now = func() time.Time { return now }
+	if res := r.Run(context.Background(), pveDef(3, "qemu/100")); res[0].Status != Down || res[0].Reason != ReasonPVEStopped || !strings.Contains(res[0].Message, "lock backup") {
+		t.Fatalf("stopped with lock: %+v", res)
+	}
+	state.State = "backup"
+	if res := r.Run(context.Background(), pveDef(3, "qemu/100")); res[0].Status != Up || !strings.Contains(res[0].Message, "guest stopped") {
+		t.Fatalf("backup stop mode: %+v", res)
+	}
+}

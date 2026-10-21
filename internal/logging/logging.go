@@ -241,7 +241,9 @@ func LevelName(l slog.Level) string {
 	}
 }
 
-var secretKeyParts = []string{"password", "passwd", "secret", "token", "apikey", "api_key", "authorization", "private", "credential", "cookie"}
+// "passw" deckt password, passwd und passwort ab; "private" nur als Schluessel (private_key, privkey), ein
+// Merkmal wie "private" (Adresse aus privatem Netz) ist kein Geheimnis. Mitgenutzt von internal/mcp.
+var secretKeyParts = []string{"passw", "secret", "token", "apikey", "api_key", "authorization", "private_key", "privatekey", "privkey", "credential", "cookie"}
 
 // IsSecretKey sagt, ob ein Attributname nach einem Geheimnis aussieht.
 func IsSecretKey(key string) bool {

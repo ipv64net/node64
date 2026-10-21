@@ -511,19 +511,37 @@ func TestPVEAPI(t *testing.T) {
 			t.Fatalf("validation %v: %d %s", body, code, b)
 		}
 	}
-	// Verbindung testen: Fingerabdruck, Version, Cluster, Nodes, Gaeste (ohne Vorlage)
+	// Verbindung testen: selbstsigniert ohne Pin nur der Fingerabdruck (Token nicht gesendet), dann mit Pin:
+	// Version, Cluster, Nodes, Gaeste (ohne Vorlage)
 	code, b := call(t, srv, "POST", base+"/probe", map[string]any{"addresses": []string{fsrv.URL}, "token_id": pveTestToken, "secret": pveTestSecret})
 	var pr proxmox.ProbeResult
 	_ = json.Unmarshal(b, &pr)
-	if code != 200 || !pr.OK || pr.CertSHA256 != pvePinOf(fsrv) || pr.CertTrusted || pr.Version != "8.2.4" || pr.Cluster != "lab" || len(pr.Nodes) != 2 || pr.Guests != 4 {
+	if code != 200 || pr.OK || !pr.NeedConfirm || pr.CertSHA256 != pvePinOf(fsrv) || pr.CertTrusted || pr.Version != "" {
+		t.Fatalf("probe unconfirmed: %d %s", code, b)
+	}
+	code, b = call(t, srv, "POST", base+"/probe", map[string]any{"addresses": []string{fsrv.URL}, "token_id": pveTestToken, "secret": pveTestSecret,
+		"pin_sha256": pr.CertSHA256})
+	pr = proxmox.ProbeResult{}
+	_ = json.Unmarshal(b, &pr)
+	if code != 200 || !pr.OK || pr.NeedConfirm || pr.CertSHA256 != pvePinOf(fsrv) || pr.Version != "8.2.4" || pr.Cluster != "lab" || len(pr.Nodes) != 2 || pr.Guests != 4 {
 		t.Fatalf("probe: %d %s", code, b)
 	}
-	code, b = call(t, srv, "POST", base+"/probe", map[string]any{"addresses": []string{fsrv.URL}, "token_id": pveTestToken, "secret": "wrong"})
+	code, b = call(t, srv, "POST", base+"/probe", map[string]any{"addresses": []string{fsrv.URL}, "token_id": pveTestToken, "secret": "wrong",
+		"pin_sha256": pvePinOf(fsrv)})
 	if _ = json.Unmarshal(b, &pr); code != 200 || pr.OK || !strings.Contains(pr.Error, "token") {
 		t.Fatalf("probe wrong secret: %s", b)
 	}
 
 	id := pveCreate(t, srv, fsrv)
+	// gespeichertes Secret nur fuer dieselben Adressen und denselben Pin
+	if code, b := call(t, srv, "POST", base+"/probe", map[string]any{"system_id": id}); code != 200 || !strings.Contains(string(b), `"ok":true`) {
+		t.Fatalf("probe stored: %d %s", code, b)
+	}
+	for _, body := range []map[string]any{{"system_id": id, "addresses": []string{"https://evil.example:8006"}}, {"system_id": id, "pin_sha256": ""}} {
+		if code, b := call(t, srv, "POST", base+"/probe", body); code != 422 || !strings.Contains(string(b), "pve.err.secret_reenter") {
+			t.Fatalf("probe changed target with stored secret %v: %d %s", body, code, b)
+		}
+	}
 	pvePollNow(t, m, id)
 	code, b = call(t, srv, "GET", base+"/systems", nil)
 	if code != 200 || !strings.Contains(string(b), `"state":"warn"`) || !strings.Contains(string(b), `"guests_bad":1`) || !strings.Contains(string(b), `"cluster":"lab"`) ||
@@ -636,11 +654,13 @@ func TestPVEPagesAndWizard(t *testing.T) {
 		t.Fatal("card without systems")
 	}
 
-	// Assistent: Verbindung testen zeigt den Fingerabdruck; Speichern ohne Bestaetigung geht nicht (selbstsigniert)
+	// Assistent: Verbindung testen zeigt erst nur den Fingerabdruck (Token nicht gesendet); Speichern ohne
+	// Bestaetigung geht nicht (selbstsigniert)
 	form := url.Values{"addresses": {fsrv.URL}, "token_id": {pveTestToken}, "secret": {pveTestSecret}, "interval": {"30"}, "enabled": {"on"}, "op": {"probe"}}
 	resp, body := pvePost(t, srv, "/healthchecks/proxmox/new", form)
 	if resp.StatusCode != 200 || !strings.Contains(body, pveFingerprint(pvePinOf(fsrv))) || !strings.Contains(body, `name="probe_pin" value="`+pvePinOf(fsrv)) ||
-		!strings.Contains(body, "pve.form.cert_untrusted") || !strings.Contains(body, `value="lab"`) || strings.Contains(body, "probe_trusted") {
+		!strings.Contains(body, "pve.form.cert_untrusted") || !strings.Contains(body, "pve.form.probe_confirm_first") || strings.Contains(body, `value="lab"`) ||
+		strings.Contains(body, "probe_trusted") {
 		t.Fatalf("probe page: %d %s", resp.StatusCode, body)
 	}
 	form.Set("op", "save")
@@ -650,7 +670,17 @@ func TestPVEPagesAndWizard(t *testing.T) {
 	if resp.StatusCode != 422 || !strings.Contains(body, "pve.err.pin_confirm") {
 		t.Fatalf("save without confirm: %d %s", resp.StatusCode, body)
 	}
+	// bestaetigt und erneut getestet: jetzt mit Token (Name vorgeschlagen), Bestaetigung bleibt
 	form.Set("pin_confirm", "on")
+	form.Set("op", "probe")
+	form.Del("name")
+	resp, body = pvePost(t, srv, "/healthchecks/proxmox/new", form)
+	if resp.StatusCode != 200 || !strings.Contains(body, "8.2.4") || !strings.Contains(body, `value="lab"`) || !strings.Contains(body, `name="pin_confirm" checked`) ||
+		strings.Contains(body, "pve.form.probe_confirm_first") {
+		t.Fatalf("confirmed probe: %d %s", resp.StatusCode, body)
+	}
+	form.Set("op", "save")
+	form.Set("name", "lab")
 	resp, _ = pvePost(t, srv, "/healthchecks/proxmox/new", form)
 	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/healthchecks/proxmox/system/") {
 		t.Fatalf("save: %d %v", resp.StatusCode, resp.Header)
@@ -757,8 +787,15 @@ func TestPVEPagesAndWizard(t *testing.T) {
 	}
 	resp, body = pvePost(t, srv, sp+"/edit", url.Values{"addresses": {fsrv.URL}, "token_id": {pveTestToken}, "interval": {"30"}, "enabled": {"on"}, "name": {"lab"},
 		"pin_sha256": {pveFingerprint(pvePinOf(fsrv))}, "op": {"probe"}})
-	if resp.StatusCode != 200 || !strings.Contains(body, "pve.form.probe_result") || strings.Contains(body, "pve.form.pin_differs") || strings.Contains(body, pveTestSecret) {
+	if resp.StatusCode != 200 || !strings.Contains(body, "pve.form.probe_result") || !strings.Contains(body, "8.2.4") || strings.Contains(body, "pve.form.pin_differs") ||
+		strings.Contains(body, pveTestSecret) {
 		t.Fatalf("edit probe: %d %s", resp.StatusCode, body)
+	}
+	// andere Adresse bzw. anderer Pin: gespeichertes Secret wird nicht benutzt
+	resp, body = pvePost(t, srv, sp+"/edit", url.Values{"addresses": {fsrv.URL + "\nhttps://evil.example:8006"}, "token_id": {pveTestToken}, "interval": {"30"},
+		"name": {"lab"}, "pin_sha256": {pveFingerprint(pvePinOf(fsrv))}, "op": {"probe"}})
+	if resp.StatusCode != 422 || !strings.Contains(body, "pve.err.secret_reenter") || strings.Contains(body, "pve.form.probe_result") {
+		t.Fatalf("edit probe other address: %d %s", resp.StatusCode, body)
 	}
 	// Startseiten-Karte: nur ein Gast gestoert -> System ok, Gast gestoert (nicht doppelt)
 	card, err := m.Card(context.Background())
@@ -810,9 +847,10 @@ func TestPVEMetricsAndExport(t *testing.T) {
 	var buf bytes.Buffer
 	_, _ = w.WriteTo(&buf)
 	out := buf.String()
-	for _, want := range []string{`node64_pve_up{system="lab"} 1`, `node64_pve_guest_state{system="lab",node="pve1",type="qemu",vmid="102",name="app",state="error"} 1`,
-		`node64_pve_guest_cpu_ratio{system="lab",type="qemu",vmid="100"} 0.25`, `node64_pve_node_up{system="lab",node="pve2"} 1`, `node64_pve_poll_failures_total{system="lab"} 0`,
-		`node64_pve_guests_bad{system="lab"} 1`, `node64_pve_quorate{system="lab"} 1`, `node64_pve_node_memory_ratio{system="lab",node="pve1"} 0.25`} {
+	sl := fmt.Sprintf(`system="lab",system_id="%d"`, id)
+	for _, want := range []string{`node64_pve_up{` + sl + `} 1`, `node64_pve_guest_state{` + sl + `,node="pve1",type="qemu",vmid="102",name="app",state="error"} 1`,
+		`node64_pve_guest_cpu_ratio{` + sl + `,type="qemu",vmid="100"} 0.25`, `node64_pve_node_up{` + sl + `,node="pve2"} 1`, `node64_pve_poll_failures_total{` + sl + `} 0`,
+		`node64_pve_guests_bad{` + sl + `} 1`, `node64_pve_quorate{` + sl + `} 1`, `node64_pve_node_memory_ratio{` + sl + `,node="pve1"} 0.25`} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("metrics: %q missing:\n%s", want, out)
 		}
@@ -828,7 +866,7 @@ func TestPVEMetricsAndExport(t *testing.T) {
 	m.Metrics(context.Background(), w)
 	buf.Reset()
 	_, _ = w.WriteTo(&buf)
-	if !strings.Contains(buf.String(), `node64_pve_up{system="lab"} 0`) || !strings.Contains(buf.String(), `node64_pve_poll_failures_total{system="lab"} 1`) {
+	if !strings.Contains(buf.String(), `node64_pve_up{`+sl+`} 0`) || !strings.Contains(buf.String(), `node64_pve_poll_failures_total{`+sl+`} 1`) {
 		t.Fatalf("metrics down: %s", buf.String())
 	}
 	fake.mu.Lock()

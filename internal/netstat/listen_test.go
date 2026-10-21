@@ -37,8 +37,12 @@ func TestParseProcNet(t *testing.T) {
 	if !l.Covers("tcp", "", 53) || !l.Covers("tcp", "127.0.0.1", 53) || l.Covers("tcp", "192.0.2.1", 53) || l.Covers("udp", "", 53) || l.Covers("tcp", "", 54) {
 		t.Fatal("covers")
 	}
-	if !list6[0].Covers("tcp", "192.0.2.1", 443) {
+	if !list6[0].Covers("tcp", "192.0.2.1", 443) || !list6[0].Covers("tcp", "[2001:db8::1]", 443) {
 		t.Fatal(":: covers all addresses")
+	}
+	any4 := Listener{Proto: "tcp", Addr: list[0].Addr, Port: 443} // 0.0.0.0: nur IPv4
+	if !any4.Covers("tcp", "192.0.2.1", 443) || any4.Covers("tcp", "2001:db8::1", 443) || any4.Covers("tcp", "[::1]", 443) || !any4.Covers("tcp", "", 443) {
+		t.Fatal("0.0.0.0 must not cover IPv6 addresses")
 	}
 
 	// ganzes /proc: Dateien lesen, Rechte
@@ -70,5 +74,14 @@ func TestParseProcNet(t *testing.T) {
 	p.UnprivStart = 0
 	if !p.LowPortOK(80) {
 		t.Fatal("ip_unprivileged_port_start=0 allows all ports")
+	}
+	// root mit allen Faehigkeiten: darf; root ohne cap_net_bind_service (z. B. --cap-drop): darf nicht
+	_ = os.WriteFile(filepath.Join(dir, "self", "status"), []byte("Uid:\t0\t0\t0\t0\nCapEff:\t000001ffffffffff\n"), 0o644)
+	if p = ReadPrivileges(); !p.Root || !p.CapNetBind || !p.LowPortOK(80) {
+		t.Fatalf("root: %+v", p)
+	}
+	_ = os.WriteFile(filepath.Join(dir, "self", "status"), []byte("Uid:\t0\t0\t0\t0\nCapEff:\t00000000a80421fb\n"), 0o644)
+	if p = ReadPrivileges(); !p.Root || p.CapNetBind || p.LowPortOK(80) {
+		t.Fatalf("root without capability: %+v", p)
 	}
 }

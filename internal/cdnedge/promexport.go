@@ -85,7 +85,7 @@ type statusRec struct {
 }
 
 func (w *statusRec) WriteHeader(code int) {
-	if w.status == 0 {
+	if w.status == 0 && (code < 100 || code >= 200 || code == http.StatusSwitchingProtocols) { // 1xx davor zaehlt nicht
 		w.status = code
 	}
 	w.ResponseWriter.WriteHeader(code)

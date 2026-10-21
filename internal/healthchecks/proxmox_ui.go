@@ -51,6 +51,7 @@ type pveSysRow struct {
 	Guests      int
 	Running     int
 	Bad         int
+	SysProblem  bool // eigenes Problem des Systems: nicht erreichbar bzw. abfragbar, Node offline, Quorum weg
 	Settings    *proxmox.SystemSettings
 }
 
@@ -99,8 +100,11 @@ type pveResRow struct {
 	CPU        string
 	Mem        string
 	Disk       string
-	Net        string
-	IO         string
+	Rates      bool  // Gaeste: Netz und Disk-I/O in Byte/s (Anzeige mit $.Bytes, Locale wie die uebrige Seite)
+	NetIn      int64 // Byte/s
+	NetOut     int64
+	DiskRd     int64
+	DiskWr     int64
 	Uptime     time.Duration
 	Spark      template.HTML
 	GuestsOn   int // Nodes: Gaeste auf diesem Node
@@ -131,18 +135,12 @@ func pvePctText(v float64) string {
 	return strconv.FormatFloat(v, 'f', 0, 64) + " %"
 }
 
-// pveRate formatiert Byte/s (1024er-Schritte wie die Oberflaeche).
-func pveRate(v float64) string {
-	u := []string{"B/s", "KB/s", "MB/s", "GB/s", "TB/s"}
-	i := 0
-	for v >= 1024 && i < len(u)-1 {
-		v /= 1024
-		i++
+// pveRate rundet Byte/s fuer die Anzeige mit $.Bytes.
+func pveRate(v float64) int64 {
+	if math.IsNaN(v) || v < 0 {
+		return 0
 	}
-	if i == 0 {
-		return strconv.FormatFloat(v, 'f', 0, 64) + " " + u[i]
-	}
-	return strconv.FormatFloat(v, 'f', 1, 64) + " " + u[i]
+	return int64(math.Round(v))
 }
 
 // pveExpected: gestoppt ist eine Stoerung (fest eingestellt bzw. lief schon einmal).
@@ -156,21 +154,12 @@ func pveExpected(it *proxmox.Settings) bool {
 	return it.SeenRunning
 }
 
-func pveHasTag(r *proxmox.Resource, tag string) bool {
-	for _, t := range r.Tags {
-		if strings.EqualFold(strings.TrimSpace(t), tag) {
-			return true
-		}
-	}
-	return false
-}
-
 // pveRow bewertet eine Ressource fuer die Anzeige.
 func pveRow(id int64, r proxmox.Resource, set *proxmox.SystemSettings) pveResRow {
 	row := pveResRow{R: r, Key: r.Key(), TypeLabel: "pve.type." + r.Type}
 	row.Path = pveResPath(id, row.Key)
 	it := set.Item(row.Key)
-	row.Excluded = r.Template || pveHasTag(&r, proxmox.TagNoMonitor)
+	row.Excluded = r.Excluded()
 	if it != nil {
 		row.Muted, row.AsCheck, row.CheckToken = it.Muted, it.AsCheck, it.CheckToken
 	}
@@ -195,18 +184,18 @@ func pveRow(id int64, r proxmox.Resource, set *proxmox.SystemSettings) pveResRow
 	if row.Excluded {
 		row.Bad = false
 	}
-	row.Measured = r.State == proxmox.StateOnline || r.Status == "running"
+	row.Measured = r.Measurable() // wie die Regeln (Schwellen)
 	if row.Measured {
 		row.CPU = pvePctText(r.CPU * 100)
-		if r.MaxMem > 0 {
-			row.Mem = pvePctText(float64(r.Mem) * 100 / float64(r.MaxMem))
+		if v, ok := r.MemPercent(); ok {
+			row.Mem = pvePctText(v)
 		}
-		if r.MaxDisk > 0 && (r.Disk > 0 || r.Type != proxmox.TypeQEMU) {
-			row.Disk = pvePctText(float64(r.Disk) * 100 / float64(r.MaxDisk))
+		if v, ok := r.DiskPercent(); ok {
+			row.Disk = pvePctText(v)
 		}
 		if r.Type != proxmox.TypeNode {
-			row.Net = "↓ " + pveRate(r.NetIn) + " · ↑ " + pveRate(r.NetOut)
-			row.IO = "R " + pveRate(r.DiskRead) + " · W " + pveRate(r.DiskWrite)
+			row.Rates = true
+			row.NetIn, row.NetOut, row.DiskRd, row.DiskWr = pveRate(r.NetIn), pveRate(r.NetOut), pveRate(r.DiskRead), pveRate(r.DiskWrite)
 		}
 		row.Uptime = time.Duration(r.Uptime) * time.Second
 	}
@@ -227,7 +216,7 @@ func (m *Module) pveSysView(ctx context.Context, sys *proxmox.System) pveSysRow 
 		row.State = "off"
 		return row
 	case reason != "":
-		row.State, row.Error = "error", reason
+		row.State, row.Error, row.SysProblem = "error", reason, true
 		return row
 	case pp == nil:
 		row.State = "pending"
@@ -240,7 +229,7 @@ func (m *Module) pveSysView(ctx context.Context, sys *proxmox.System) pveSysRow 
 		return row
 	}
 	if !s.OK {
-		row.State, row.Error = "down", s.Error
+		row.State, row.Error, row.SysProblem = "down", s.Error, true
 		return row
 	}
 	row.State = "ok"
@@ -264,7 +253,8 @@ func (m *Module) pveSysView(ctx context.Context, sys *proxmox.System) pveSysRow 
 			row.Bad++
 		}
 	}
-	if row.NodesOnline < row.Nodes || row.Bad > 0 || row.Quorum() == "lost" {
+	row.SysProblem = row.NodesOnline < row.Nodes || row.Quorum() == "lost"
+	if row.SysProblem || row.Bad > 0 {
 		row.State = "warn"
 	}
 	return row
@@ -274,7 +264,8 @@ func (m *Module) pveSysView(ctx context.Context, sys *proxmox.System) pveSysRow 
 func (m *Module) pveSparks(ctx context.Context, id int64) map[string]template.HTML {
 	out := map[string]template.HTML{}
 	since := time.Now().Add(-time.Hour).Unix()
-	rows, err := m.core.Reader().QueryContext(ctx, `SELECT key, t, cpu FROM pve_hist_1m WHERE system_id = ? AND t >= ? ORDER BY key, t`, id, since)
+	// Index (system_id, t) aus 0016: nach t sortiert, je Key bleibt die Reihenfolge zeitlich
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT key, t, cpu FROM pve_hist_1m WHERE system_id = ? AND t >= ? ORDER BY t`, id, since)
 	if err != nil {
 		return out
 	}
@@ -388,7 +379,7 @@ func (m *Module) pagePVESystem(w http.ResponseWriter, r *http.Request) {
 		sparks := m.pveSparks(ctx, sys.ID)
 		perNode := map[string]int{}
 		for _, res := range d.Snap.Resources {
-			if res.Type != proxmox.TypeNode && !res.Template {
+			if res.Type != proxmox.TypeNode && !res.Excluded() { // wie die Summe der Gaeste
 				perNode[res.Node]++
 			}
 		}
@@ -796,7 +787,10 @@ func (m *Module) pagePVESettings(w http.ResponseWriter, r *http.Request) {
 		it = &proxmox.Settings{SystemID: sys.ID, Key: key}
 	}
 	if r.PostFormValue("op") == "reset" { // alles erben; „als Check“ bleibt
-		it.Muted, it.ExpectRunning, it.Rules = false, nil, proxmox.RuleSet{}
+		if err := m.pve.st.ResetSettings(ctx, sys.ID, key); err != nil {
+			m.fail(w, r, err)
+			return
+		}
 	} else {
 		rs, err := pveRulesFromForm(r, pveLevel(key))
 		if err != nil {
@@ -822,11 +816,12 @@ func (m *Module) pagePVESettings(w http.ResponseWriter, r *http.Request) {
 				it.ExpectRunning = nil
 			}
 		}
+		if err := m.pve.st.SaveSettings(ctx, it); err != nil {
+			m.fail(w, r, err)
+			return
+		}
 	}
-	if err := m.pve.st.SaveSettings(ctx, it); err != nil {
-		m.fail(w, r, err)
-		return
-	}
+	m.pveSyncCheckChannels(ctx, sys.ID, m.actor(r)) // Checks „als Check“: Kanaele wie die Regeln
 	m.auditText(r, "proxmox.settings", sys.Name+pveKeySuffix(key))
 	m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
 	http.Redirect(w, r, back, http.StatusSeeOther)
@@ -993,9 +988,9 @@ func (m *Module) pagePVESave(w http.ResponseWriter, r *http.Request) {
 	edit := r.PathValue("id") != ""
 	sys := &proxmox.System{}
 	stored := ""
+	var old *proxmox.System
 	if edit {
-		old := m.pveSystemOf(w, r)
-		if old == nil {
+		if old = m.pveSystemOf(w, r); old == nil {
 			return
 		}
 		sys.ID, sys.Created, stored = old.ID, old.Created, old.Secret
@@ -1009,15 +1004,34 @@ func (m *Module) pagePVESave(w http.ResponseWriter, r *http.Request) {
 	d.ProbePin = strings.TrimSpace(r.PostFormValue("probe_pin"))
 	d.PinConfirm = r.PostFormValue("pin_confirm") == "on"
 	if r.PostFormValue("op") == "probe" {
+		// Pin des Tests: im vorigen Test gesehener und bestaetigter Fingerabdruck, sonst das Feld (leer = System-CA;
+		// ein unbestaetigtes Zertifikat bekommt dann nur den Fingerabdruck gezeigt, das Token geht nicht hin)
 		test := *sys
-		if test.Secret == "" {
-			test.Secret = stored
+		confirmed := ""
+		if d.ProbePin != "" && d.PinConfirm {
+			if p, ok := proxmox.NormalizePin(d.ProbePin); ok {
+				confirmed = p
+				test.PinSHA256 = p
+			}
 		}
-		test.PinSHA256 = "" // Zertifikat ansehen, wie es ist (Abgleich mit dem Pin folgt hier)
 		if test.Name == "" {
 			test.Name = "probe"
 		}
-		if err := proxmox.ValidateSystem(&test, true); err != nil {
+		err := proxmox.ValidateSystem(&test, false)
+		if err == nil && test.Secret == "" {
+			// gespeichertes Secret nur an dieselben Adressen mit demselben Pin, sonst neu eingeben
+			if old != nil && proxmox.SameEndpoint(old, &test) {
+				test.Secret = stored
+			}
+			if test.Secret == "" {
+				key := "pve.err.secret"
+				if edit {
+					key = "pve.err.secret_reenter"
+				}
+				err = &proxmox.FieldError{Field: "secret", Key: key}
+			}
+		}
+		if err != nil {
 			var fe *proxmox.FieldError
 			if errors.As(err, &fe) {
 				d.Errors[fe.Field] = m.g.T(r, fe.Key)
@@ -1033,7 +1047,8 @@ func (m *Module) pagePVESave(w http.ResponseWriter, r *http.Request) {
 		d.ProbePin, d.ProbeFmt = res.CertSHA256, pveFingerprint(res.CertSHA256)
 		pin, _ := proxmox.NormalizePin(sys.PinSHA256)
 		d.PinDiffers = pin != "" && res.CertSHA256 != "" && pin != res.CertSHA256
-		d.PinConfirm = false
+		// bestaetigt bleibt bestaetigt (gleiches Zertifikat)
+		d.PinConfirm = confirmed != "" && confirmed == res.CertSHA256
 		if sys.Name == "" && res.OK { // Name vorschlagen: Clustername bzw. erster Node
 			switch {
 			case res.Cluster != "":
@@ -1105,18 +1120,14 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 	var errs []string
 	for _, sys := range list {
 		row := m.pveSysView(ctx, sys)
-		state := row.State
-		if state == "warn" && row.NodesOnline >= row.Nodes && row.Quorum() != "lost" {
-			state = "ok" // nur Gaeste gestoert
-		}
-		switch state {
-		case "ok":
-			ok++
-		case "down", "error", "warn":
+		switch {
+		case row.SysProblem:
 			bad++
 			if row.Error != "" {
 				errs = append(errs, sys.Name+": "+row.Error)
 			}
+		case row.State == "ok" || row.State == "warn": // warn ohne eigenes Problem: nur Gaeste gestoert
+			ok++
 		}
 		running += int64(row.Running)
 		guestsBad += int64(row.Bad)

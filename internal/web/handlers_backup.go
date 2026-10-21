@@ -359,7 +359,7 @@ func (s *Server) buildExport(ctx context.Context, mode, password string) (*confi
 	}
 	for _, m := range s.Modules.Modules() {
 		ex, ok := m.(module.Exporter)
-		if !ok {
+		if !ok || !s.Modules.IsRunning(m.Info().Name) {
 			continue // nur laufende Module: ein nie eingeschaltetes hat noch keine Tabellen (Export brach sonst ab)
 		}
 		data, err := ex.Export(ctx)

@@ -31,11 +31,19 @@ func (m *Module) OnlinePoints(ctx context.Context, exclude string, accLocs int) 
 	}
 	n := 0
 	for _, c := range list {
-		if c.Token != exclude && (c.Execution == "online" || c.Execution == "both") {
-			n += onlineLocs(c, accLocs)
+		if c.Token != exclude {
+			n += CheckOnlinePoints(c, accLocs)
 		}
 	}
 	return n
+}
+
+// CheckOnlinePoints: belegte Online-Messstellen eines Checks (wie OnlinePoints, fuer eine schon geladene Liste).
+func CheckOnlinePoints(c *Check, accLocs int) int {
+	if c.Execution == "online" || c.Execution == "both" {
+		return onlineLocs(c, accLocs)
+	}
+	return 0
 }
 
 // CheckDailyCost: Online-Messungen pro Tag fuer einen Check (0 = lokal, pausiert oder Push).

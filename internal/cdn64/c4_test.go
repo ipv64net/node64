@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -294,7 +295,7 @@ func TestStatsAndAccessLog(t *testing.T) {
 	if len(list) != 2 || list[1].Path != "/eins?x=1" || list[1].UA != "Testlauf" || list[1].Client != "127.0.0.1" || list[1].Status != 200 || list[1].Bytes == 0 {
 		t.Fatalf("log: %+v", list)
 	}
-	sums, err := sdb.sums(ctx, time.Now().Add(-time.Hour))
+	sums, err := sdb.sums(ctx, time.Now().Add(-2*time.Hour)) // 2 Eimer: auch kurz nach einem Stundenwechsel
 	if err != nil || sums[h.ID].Requests != 2 || sums[h.ID].S2 != 2 {
 		t.Fatalf("sums: %+v %v", sums, err)
 	}
@@ -313,6 +314,39 @@ func TestStatsAndAccessLog(t *testing.T) {
 	}
 	if e.m.stats2.Load() != nil {
 		t.Fatal("stats must close with the module")
+	}
+}
+
+// "N Stunden" sind genau N Stunden-Eimer inkl. der laufenden; Summen und Verlauf zaehlen dieselben Eimer.
+func TestStatsWindowSumsEqualTimeline(t *testing.T) {
+	ctx := context.Background()
+	s, err := openStats(t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)), func() int { return 7 }, func() bool { return false })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.close()
+	now := time.Now()
+	cur := now.UTC().Truncate(time.Hour)
+	for k := 0; k <= 25; k++ {
+		if _, err := s.db.Exec(`INSERT INTO hourly (host_id, hour, requests) VALUES (1, ?, 1)`, cur.Add(-time.Duration(k)*time.Hour).Format(time.RFC3339)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	since := now.Add(-24 * time.Hour)
+	sums, err := s.sums(ctx, since)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pts, err := s.hours(ctx, 0, since)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tl int64
+	for _, p := range pts {
+		tl += p.Requests
+	}
+	if len(pts) != 24 || !pts[0].Hour.Equal(cur.Add(-23*time.Hour)) || sums[1].Requests != 24 || tl != sums[1].Requests {
+		t.Fatalf("window: %d buckets %+v, sums %d, timeline %d", len(pts), pts, sums[1].Requests, tl)
 	}
 }
 

@@ -19,7 +19,9 @@ import (
 //   version            beim Start und alle 10 min
 //   certificates/info  je Node alle 10 min bzw. bei neuen Nodes, nur bei Systemen mit Pin: Fingerabdruck des
 //                      Zertifikats, das der Node benutzt, als Pin fuer seine gelernte Adresse (Failover im Cluster)
-//   qmpstatus          laufender VMs alle 2 min (hoechstens 4 gleichzeitig)
+//   qmpstatus          laufender VMs alle 2 min (hoechstens 4 gleichzeitig); VMs, deren letzter Wert nicht
+//                      „running“ ist, bei jeder Abfrage neu (hoechstens pveQMPRecheck), damit ein alter Wert
+//                      (angehalten, abgestuerzt) nach Fortsetzen bzw. Neustart nicht stehen bleibt
 // Jede Abfrage ergibt einen Snapshot (auch bei Fehler: OK=false, Error, keine Resources) und geht an fn.
 
 const (
@@ -30,6 +32,8 @@ const (
 	pveQMPParallel    = 4
 	pveBackoffStart   = 5 * time.Second
 	pveQMPRequestWait = 30 * time.Second // alle qmpstatus-Anfragen einer Runde zusammen
+	pveQMPRecheck     = 16               // VMs mit qmpstatus ungleich running je Abfrage neu fragen
+	pveLockGrace      = 4 * time.Hour    // gestoppter Gast mit Lock (Backup im Stopp-Modus, Migration): so lange neutral
 )
 
 // ClampInterval bringt ein Intervall in die Grenzen (0 = Standard).
@@ -68,19 +72,29 @@ type Poller struct {
 	quorate   *bool
 	nodeUp    map[string]bool // aus cluster/status
 	qmpAt     time.Time
-	qmp       map[string]string // Key -> qmpstatus
+	qmp       map[string]pveQMP // Key -> qmpstatus mit dem Stand beim Abruf
 	prev      map[string]pvePrev
 	failing   bool
 	warn      string // Rechte-Hinweis aus cluster/status (403)
+	paced     bool   // laeuft per Run (Takt mit schnellen Wiederholungen): Snapshot.Interval setzen
 }
 
-// pvePrev ist der Stand einer Resource bei der letzten erfolgreichen Abfrage (Raten, Neustart).
+// pvePrev ist der Stand einer Resource bei der letzten erfolgreichen Abfrage (Raten, Neustart, Lock).
 type pvePrev struct {
 	t                                 time.Time
 	netIn, netOut, diskRead, diskWrit float64
 	uptime                            int64
 	up                                bool
 	node                              string
+	lock                              string
+	lockSince                         time.Time // gestoppt mit Lock seit (Null = nicht)
+}
+
+// pveQMP ist ein abgerufener qmpstatus mit dem Stand der VM beim Abruf: passt der Stand nicht mehr (Node, Lock,
+// Uptime zurueckgesprungen), gilt der Wert nicht mehr.
+type pveQMP struct {
+	status, node, lock string
+	uptime             int64
 }
 
 // NewPoller baut den Poller eines Systems. fn darf nil sein. Ist das System fehlerhaft eingerichtet (Adresse,
@@ -103,7 +117,7 @@ func newPoller(log *slog.Logger, sys System, fn SnapshotFunc, c *Client, err err
 		now:      time.Now,
 		interval: ClampInterval(sys.Interval),
 		nodeUp:   map[string]bool{},
-		qmp:      map[string]string{},
+		qmp:      map[string]pveQMP{},
 		prev:     map[string]pvePrev{},
 	}
 }
@@ -117,6 +131,7 @@ func (p *Poller) Last() *Snapshot {
 
 // Run fragt ab, bis ctx endet. Nach Fehlern wird frueher wiederholt (5 s, verdoppelt bis zum Intervall).
 func (p *Poller) Run(ctx context.Context) {
+	p.paced = true
 	backoff := pveBackoffStart
 	for {
 		s := p.Poll(ctx)
@@ -168,6 +183,9 @@ func (p *Poller) Poll(ctx context.Context) *Snapshot {
 	}
 	s.Version, s.Cluster, s.Quorate = p.version, p.cluster, p.quorate
 	s.Warning = p.warn
+	if p.paced {
+		s.Interval = p.interval // Verzoegerung „nicht erreichbar“ auch zeitlich (Wiederholungen nach Fehlern sind schneller)
+	}
 	p.mu.Lock()
 	p.last = s
 	p.mu.Unlock()
@@ -269,7 +287,9 @@ func (p *Poller) collect(ctx context.Context, now time.Time, s *Snapshot) error 
 	res := p.build(raw)
 	if p.qmpAt.IsZero() || now.Sub(p.qmpAt) >= pveQMPEvery {
 		p.qmpAt = now
-		p.fetchQMP(ctx, res)
+		p.fetchQMP(ctx, res, nil)
+	} else if only := p.qmpRecheck(res); len(only) > 0 {
+		p.fetchQMP(ctx, res, only)
 	}
 	p.evaluate(now, res)
 	s.Resources = res
@@ -439,30 +459,55 @@ func (p *Poller) nodeOnline(r *Resource) bool {
 	return true
 }
 
+// qmpRecheck: laufende VMs, deren gemerkter qmpstatus nicht „running“ ist (hoechstens pveQMPRecheck).
+func (p *Poller) qmpRecheck(res []Resource) map[string]bool {
+	var only map[string]bool
+	for i := range res {
+		r := &res[i]
+		if r.Type != TypeQEMU || r.Status != "running" {
+			continue
+		}
+		if q, ok := p.qmp[r.Key()]; ok && q.status != "" && q.status != "running" {
+			if only == nil {
+				only = map[string]bool{}
+			}
+			only[r.Key()] = true
+			if len(only) >= pveQMPRecheck {
+				break
+			}
+		}
+	}
+	return only
+}
+
 // fetchQMP holt qmpstatus fuer laufende VMs auf Nodes, die online sind (hoechstens pveQMPParallel gleichzeitig).
-// Fehler einzelner VMs lassen deren Wert leer.
-func (p *Poller) fetchQMP(ctx context.Context, res []Resource) {
+// Fehler einzelner VMs lassen deren Wert leer. only != nil: nur diese VMs, die uebrigen Werte bleiben.
+func (p *Poller) fetchQMP(ctx context.Context, res []Resource, only map[string]bool) {
 	nodes := map[string]bool{}
 	for i := range res {
 		if res[i].Type == TypeNode {
 			nodes[res[i].Node] = p.nodeOnline(&res[i])
 		}
 	}
-	type job struct{ key, path string }
+	type job struct {
+		key, path string
+		at        pveQMP
+	}
 	var jobs []job
 	for i := range res {
 		r := &res[i]
-		if r.Type != TypeQEMU || r.Template || r.Status != "running" {
+		if r.Type != TypeQEMU || r.Template || r.Status != "running" || (only != nil && !only[r.Key()]) {
 			continue
 		}
 		if up, ok := nodes[r.Node]; ok && !up {
 			continue
 		}
-		jobs = append(jobs, job{r.Key(), "/nodes/" + url.PathEscape(r.Node) + "/qemu/" + strconv.Itoa(r.VMID) + "/status/current"})
+		jobs = append(jobs, job{r.Key(), "/nodes/" + url.PathEscape(r.Node) + "/qemu/" + strconv.Itoa(r.VMID) + "/status/current",
+			pveQMP{node: r.Node, lock: r.Lock, uptime: r.Uptime}})
 	}
 	ctx, cancel := context.WithTimeout(ctx, pveQMPRequestWait)
 	defer cancel()
-	got := map[string]string{}
+	got := map[string]pveQMP{}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, pveQMPParallel)
@@ -479,13 +524,25 @@ func (p *Poller) fetchQMP(ctx context.Context, res []Resource) {
 				p.log.Debug("proxmox qmpstatus failed", "guest", j.key, "err", err)
 				return
 			}
+			q := j.at
+			q.status = st.QMPStatus
 			mu.Lock()
-			got[j.key] = st.QMPStatus
+			got[j.key] = q
 			mu.Unlock()
 		}(j)
 	}
 	wg.Wait()
-	p.qmp = got
+	if only == nil {
+		p.qmp = got
+		return
+	}
+	for k := range only {
+		if q, ok := got[k]; ok {
+			p.qmp[k] = q
+		} else {
+			delete(p.qmp, k) // Fehler: alter Wert gilt nicht weiter
+		}
+	}
 }
 
 // guestState bewertet einen Gast nach der Plan-Tabelle.
@@ -500,6 +557,8 @@ func pveGuestState(r *Resource, nodeUp bool) State {
 			return StateError
 		}
 	}
+	// Lock zaehlt bei gestoppten Gaesten nur eine Weile (pveLockGrace, evaluate) – ein haengender Lock verdeckt
+	// sonst einen gestoppten Gast.
 	switch r.Lock {
 	case "":
 	case "backup":
@@ -556,13 +615,22 @@ func (p *Poller) evaluate(now time.Time, res []Resource) {
 					nodeUp = up
 				}
 			}
-			if r.Type == TypeQEMU && r.Status == "running" {
-				r.QMP = p.qmp[r.Key()]
+			if q, ok := p.qmp[r.Key()]; ok && r.Type == TypeQEMU && r.Status == "running" && q.node == r.Node && q.lock == r.Lock && r.Uptime >= q.uptime {
+				r.QMP = q.status // nur, solange die VM seit dem Abruf nicht umgezogen, neu gestartet oder gelockt ist
 			}
 			r.State = pveGuestState(r, nodeUp)
 		}
 		up := r.Status == "running" || r.State == StateOnline
-		cur := pvePrev{t: now, netIn: r.NetIn, netOut: r.NetOut, diskRead: r.DiskRead, diskWrit: r.DiskWrite, uptime: r.Uptime, up: up, node: r.Node}
+		cur := pvePrev{t: now, netIn: r.NetIn, netOut: r.NetOut, diskRead: r.DiskRead, diskWrit: r.DiskWrite, uptime: r.Uptime, up: up, node: r.Node, lock: r.Lock}
+		if (r.State == StateBackup || r.State == StateLocked) && r.Status == "stopped" {
+			cur.lockSince = now
+			if old, ok := p.prev[r.Key()]; ok && old.lock == r.Lock && !old.lockSince.IsZero() {
+				cur.lockSince = old.lockSince
+			}
+			if now.Sub(cur.lockSince) >= pveLockGrace {
+				r.State = StateStopped // Lock haengt: wie gestoppt (Lock bleibt im Feld)
+			}
+		}
 		// In NetIn usw. stehen bis hier die Zaehler; daraus werden Raten.
 		r.NetIn, r.NetOut, r.DiskRead, r.DiskWrite = 0, 0, 0, 0
 		if old, ok := p.prev[r.Key()]; ok {

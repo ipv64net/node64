@@ -1,5 +1,25 @@
 # Changes – Healthchecks
 
+## 2.21.0 – 2026-10-21
+
+### Fixed
+- Proxmox VE: "Test connection" never sends the token to an unconfirmed certificate. Confirm the fingerprint first,
+  then test again. The stored secret is only used for the configured addresses with the same fingerprint.
+- Proxmox VE: no more duplicate notifications with "monitor as check"; an outage already reported is handed over to
+  the check. An outage detected while "as check" was on or the rule was off is reported afterwards.
+- Proxmox VE: "as check" checks use the channels of the Proxmox rules, also after changes; on a disabled system they
+  are created paused.
+- Proxmox VE: "Unreachable" waits for the configured delay in time as well. Resumed or restarted VMs no longer show a
+  stale "paused/crashed" state. A stopped guest with a stale lock counts as stopped after 4 hours. Right after a
+  restart the check no longer reports a short outage.
+- Proxmox VE: import properly stops disabled systems; systems with the same name are matched by address, otherwise
+  created anew. Concurrent saves no longer start a second poller.
+- Proxmox VE: Prometheus metrics get an additional `system_id` label. The system page filter submits on change, rates
+  use the language's number format, the system page loads faster.
+- Notifications: alerts held during quiet hours are persisted and survive a restart. Secrets in error texts are
+  redacted more thoroughly (client_secret, auth_token, JSON pairs, Authorization with any scheme); "basic constraints"
+  stays readable.
+
 ## 2.20.1 – 2026-10-21
 
 ### Fixed

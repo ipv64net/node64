@@ -19,7 +19,7 @@ func Tools() []Tool {
 
 func coreTools() []Tool {
 	return []Tool{
-		{Name: "node_status", Area: AreaNode, Title: "Node status",
+		{Name: "node_status", Area: AreaNode, Title: "Node status", Untrusted: true,
 			Desc:   "Node64 overview: version, uptime, database size, modules on/off, link to ipv64.net and a summary per module.",
 			Schema: noArgs, Run: nodeStatus},
 		{Name: "list_modules", Area: AreaNode, Title: "List modules",
@@ -29,12 +29,12 @@ func coreTools() []Tool {
 			Desc:   "Certificates managed by the node: names, issuer, expiry, status, renewal. Never includes private keys.",
 			Schema: noArgs, Run: listCerts},
 		{Name: "recent_notifications", Area: AreaNotifications, Title: "Recent notifications", Untrusted: true,
-			Desc: "Notification deliveries (newest first): channel, kind, delivered or failed, plus the configured channels without credentials.",
+			Desc: "Notification deliveries (newest first): channel, kind, delivered or failed, plus the configured channels without credentials. Error texts (responses of the remote services) are under untrusted.",
 			Schema: schema(nil, pInt("limit", "Maximum number of deliveries.", 30, 1, 200), pBool("failed_only", "Only failed deliveries."),
 				pIntOpt("channel_id", "Only deliveries of this channel.", 1, 1<<30)),
 			Run: recentNotifications},
 		{Name: "audit_log", Area: AreaAudit, Title: "Audit log", Untrusted: true,
-			Desc: "Audit log of the node (who changed what, logins, MCP calls), newest first.",
+			Desc: "Audit log of the node (who changed what, logins, MCP calls), newest first. The actor is under untrusted (for failed logins it is the name typed by the visitor).",
 			Schema: schema(nil, pEnum("area", "Filter by area.", "", "login", "settings", "healthchecks", "dyndns", "cdn64", "dns64", "certs", "sync", "honeypot", "mcp"),
 				pInt("limit", "Maximum number of entries.", 50, 1, 200), pIntOpt("before", "Only entries with an id lower than this (paging).", 1, maxID)),
 			Run: auditLog},
@@ -63,7 +63,7 @@ func nodeStatus(c *call, _ map[string]any) (map[string]any, error) {
 	if boolean(l, "linked") {
 		link["plan"], link["last_sync_at"], link["outbox"], link["conflicts"] = str(l, "plan"), ts(l["last_sync_at"]), i64(l, "outbox"), i64(l, "conflicts")
 		link["online_checks_today"], link["online_checks_limit"] = i64(l, "checks_today"), i64(l, "checks_limit")
-		link["last_error"] = clean(str(l, "last_error"), 200)
+		link["untrusted"] = obj{"last_error": clean(str(l, "last_error"), 200)} // Antworttext des Servers
 	}
 	var mods []any
 	for _, e := range asArr(st["modules"]) {
@@ -154,7 +154,7 @@ func recentNotifications(c *call, a map[string]any) (map[string]any, error) {
 		for _, e := range chans {
 			m := asObj(e)
 			cl = append(cl, obj{"id": i64(m, "id"), "name": clean(str(m, "name"), 80), "type": str(m, "type"), "enabled": boolean(m, "enabled"),
-				"default": boolean(m, "default"), "last_used_at": ts(m["last_used_at"]), "last_error": clean(str(m, "last_error"), 200)})
+				"default": boolean(m, "default"), "last_used_at": ts(m["last_used_at"]), "untrusted": obj{"last_error": clean(str(m, "last_error"), 200)}})
 		}
 		res["channels"] = cl
 	}
@@ -179,8 +179,9 @@ func auditLog(c *call, a map[string]any) (map[string]any, error) {
 	for _, e := range list {
 		m := asObj(e)
 		last = i64(m, "id")
-		out = append(out, obj{"id": last, "time": ts(m["time"]), "actor": clean(str(m, "actor"), 64), "action": str(m, "action"), "ip": str(m, "ip"),
-			"origin": clean(str(m, "origin"), 80), "untrusted": obj{"target": clean(str(m, "target"), 200), "details": clean(str(m, "details"), 300)}})
+		// actor ist bei login.failed der vom Besucher eingegebene Name (bzw. Name aus SSO): fremde Daten
+		out = append(out, obj{"id": last, "time": ts(m["time"]), "action": str(m, "action"), "ip": str(m, "ip"), "origin": clean(str(m, "origin"), 80),
+			"untrusted": obj{"actor": clean(str(m, "actor"), 64), "target": clean(str(m, "target"), 200), "details": clean(str(m, "details"), 300)}})
 	}
 	res := obj{"entries": out, "count": len(out)}
 	if len(out) == limit && last > 1 {

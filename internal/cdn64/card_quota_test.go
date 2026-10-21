@@ -43,4 +43,14 @@ func TestCardQuotaStats(t *testing.T) {
 	if d := quotaStats(newOnlineQuota(q, now))[0]; d.BarPct != 100 || d.BarClass != "bg-danger" {
 		t.Fatalf("ohne Limit: %+v", d)
 	}
+	// Kacheln der PROXY64-Seite: dieselben Werte wie die Karte (DomClass/TrafficClass statt eigener Schwellen)
+	q.TrafficMB.Limit, q.TrafficMB.Used = 0, 10
+	o := newOnlineQuota(q, now)
+	if o.DomClass != "bg-danger" || o.DomBar != 100 || o.TrafficClass != "bg-danger" || o.TrafficBar != 100 {
+		t.Fatalf("Kacheln ohne Limit: %+v", o)
+	}
+	q.Domains.Limit, q.TrafficMB.Limit, q.TrafficMB.Used = 5, 100*1024, 50*1024
+	if o := newOnlineQuota(q, now); o.DomClass != "bg-danger" || o.TrafficClass != "bg-warning" {
+		t.Fatalf("Kacheln voll / Prognose: %+v", o)
+	}
 }

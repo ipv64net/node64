@@ -7,6 +7,8 @@ package proxmox
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -83,29 +85,50 @@ func (r *Resource) Key() string {
 	if r.Type == TypeNode {
 		return "node/" + r.Node
 	}
-	return r.Type + "/" + itoa(r.VMID)
+	return r.Type + "/" + strconv.Itoa(r.VMID)
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
+// Excluded: Vorlage bzw. Tag nomonitor – keine Regeln, zaehlt nirgends als Gast.
+func (r *Resource) Excluded() bool {
+	if r.Template {
+		return true
 	}
-	var b [20]byte
-	i := len(b)
-	neg := n < 0
-	if neg {
-		n = -n
+	for _, t := range r.Tags {
+		if strings.EqualFold(strings.TrimSpace(t), TagNoMonitor) {
+			return true
+		}
 	}
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
+	return false
+}
+
+// Measurable: Werte sind aussagekraeftig (Node online, Gast laeuft – auch mit Lock).
+func (r *Resource) Measurable() bool {
+	if r.Type == TypeNode {
+		return r.State == StateOnline
 	}
-	if neg {
-		i--
-		b[i] = '-'
+	switch r.State {
+	case StateRunning:
+		return true
+	case StateBackup, StateLocked:
+		return r.Status == "running"
 	}
-	return string(b[i:])
+	return false
+}
+
+// MemPercent liefert die RAM-Belegung in Prozent; ok = Maximum bekannt.
+func (r *Resource) MemPercent() (float64, bool) {
+	if r.MaxMem <= 0 {
+		return 0, false
+	}
+	return float64(r.Mem) * 100 / float64(r.MaxMem), true
+}
+
+// DiskPercent liefert die Disk-Belegung in Prozent; ok = Wert vorhanden (bei QEMU nur mit Gast-Agent, sonst 0).
+func (r *Resource) DiskPercent() (float64, bool) {
+	if r.MaxDisk <= 0 || (r.Disk <= 0 && r.Type == TypeQEMU) {
+		return 0, false
+	}
+	return float64(r.Disk) * 100 / float64(r.MaxDisk), true
 }
 
 // Snapshot ist der Stand eines Systems nach einer Abfrage.
@@ -120,6 +143,9 @@ type Snapshot struct {
 	Quorate   *bool      `json:"quorate,omitempty"`
 	Warning   string     `json:"warning,omitempty"` // erreichbar, aber eingeschraenkt (z. B. Token ohne Leserechte: Gaeste fehlen)
 	Resources []Resource `json:"resources"`
+	// Interval ist das Abfrageintervall des Pollers: die Verzoegerung „nicht erreichbar“ zaehlt auch zeitlich
+	// (schnelle Wiederholungen nach Fehlern verkuerzen sie nicht); nur von Run gesetzt, 0 = nur Abfragen zaehlen.
+	Interval time.Duration `json:"-"`
 }
 
 // Poller fragt ein System regelmaessig ab (poller.go). Neue Snapshots gehen an OnSnapshot.
@@ -142,6 +168,9 @@ type ProbeResult struct {
 	CertSubject string   `json:"cert_subject,omitempty"`
 	CertTrusted bool     `json:"cert_trusted"`           // von der System-CA bestaetigt
 	PermWarning string   `json:"perm_warning,omitempty"` // z. B. Token sieht keine Gaeste (Rechte fehlen)
+	// NeedConfirm: Zertifikat nicht von der System-CA bestaetigt und kein Pin – nur der Fingerabdruck wurde gelesen,
+	// das Token nicht gesendet. Nach der Bestaetigung erneut mit diesem Fingerabdruck als Pin testen.
+	NeedConfirm bool `json:"need_confirm,omitempty"`
 }
 
 // Event ist ein Ergebnis der Regeln (rules.go) fuer die Benachrichtigung.

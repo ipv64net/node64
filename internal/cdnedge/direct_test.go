@@ -144,10 +144,15 @@ func TestDirect(t *testing.T) {
 			return (&net.Dialer{}).DialContext(ctx, n, cfg.ListenHTTPS)
 		}}}
 	hits.Store(0)
+	st := s.stats.of("d.test")
 	for i, c := range []struct{ ae, want, cache string }{{"gzip, br, zstd", "br", "MISS"}, {"gzip, br, zstd", "br", "HIT"}, {"gzip", "gzip", "MISS"}, {"", "", "MISS"}} {
+		out := st.BytesOut.Load()
 		_, body, h := get(raw, "https://d.test/big.css", "Accept-Encoding", c.ae)
 		if h.Get("Content-Encoding") != c.want || h.Get("X-Proxy-Cache") != c.cache || (c.want != "" && len(body) > 1000) {
 			t.Fatalf("compress %d %q: enc %q cache %q len %d", i, c.ae, h.Get("Content-Encoding"), h.Get("X-Proxy-Cache"), len(body))
+		}
+		if d := st.BytesOut.Load() - out; d != int64(len(body)) { // Traffic: was zum Besucher geht (komprimiert), auch beim MISS
+			t.Fatalf("compress %d: bytes out %d, sent %d", i, d, len(body))
 		}
 	}
 	if hits.Load() != 3 {

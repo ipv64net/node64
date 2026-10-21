@@ -267,9 +267,10 @@ func proxyAccessLog(c *call, a map[string]any) (map[string]any, error) {
 	for _, e := range list {
 		m := asObj(e)
 		last = i64(m, "id")
-		o := obj{"id": last, "time": ts(m["time"]), "host_id": i64(m, "host_id"), "client": clean(str(m, "client"), 64), "method": clean(str(m, "method"), 10),
+		o := obj{"id": last, "time": ts(m["time"]), "host_id": i64(m, "host_id"), "client": clean(str(m, "client"), 64),
 			"status": i64(m, "status"), "bytes": i64(m, "bytes"), "ms": i64(m, "ms"), "rejected_reason": str(m, "reason")}
-		o["untrusted"] = obj{"host": clean(str(m, "host"), 253), "path": clean(stripQuery(str(m, "path")), 300), "user_agent": clean(str(m, "user_agent"), 200)}
+		o["untrusted"] = obj{"method": clean(str(m, "method"), 10), "host": clean(str(m, "host"), 253), "path": clean(stripQuery(str(m, "path")), 300),
+			"user_agent": clean(str(m, "user_agent"), 200)}
 		out = append(out, o)
 	}
 	res := obj{"rows": out, "count": len(out)}
@@ -309,12 +310,12 @@ func proxyBlocked(c *call, _ map[string]any) (map[string]any, error) {
 				continue
 			}
 			lists = append(lists, obj{"id": str(m, "id"), "name": clean(str(m, "name"), 80), "entries": i64(m, "entries"), "updated": ts(m["updated"]),
-				"error": clean(str(m, "error"), 200)})
+				"untrusted": obj{"error": clean(str(m, "error"), 200)}}) // Fehler beim Abruf: Antworttext des Servers
 		}
 		var geo []any
 		for _, e := range asArr(bl["countries"]) {
 			m := asObj(e)
-			geo = append(geo, obj{"country": str(m, "code"), "entries": i64(m, "entries"), "error": clean(str(m, "error"), 200)})
+			geo = append(geo, obj{"country": str(m, "code"), "entries": i64(m, "entries"), "untrusted": obj{"error": clean(str(m, "error"), 200)}})
 		}
 		out["blocklists"] = obj{"active": boolean(bl, "active"), "enabled_lists": lists, "blocked_since_start": i64(bl, "blocked"),
 			"blocked_countries": geo, "geo_blocked_since_start": i64(bl, "geo_blocked")}

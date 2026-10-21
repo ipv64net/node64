@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strconv"
 	"time"
+
+	"github.com/ipv64net/node64/internal/httpcompress"
 )
 
 // Modus 3 (direkt zum Ziel, Abschnitt 7 der Planung): wie das alte CDN, ohne Node. TLS endet hier (oder nur HTTP),
@@ -180,6 +182,7 @@ func (s *Server) directInit() *httputil.ReverseProxy {
 	tr := &http.Transport{DialContext: s.directDial, DialTLSContext: s.directDialTLS, MaxIdleConnsPerHost: 32, IdleConnTimeout: 60 * time.Second,
 		MaxResponseHeaderBytes: 1 << 20, ExpectContinueTimeout: time.Second, ForceAttemptHTTP2: false}
 	return &httputil.ReverseProxy{Transport: tr, FlushInterval: -1, ErrorLog: log.New(io.Discard, "", 0), ErrorHandler: s.directError,
+		ModifyResponse: func(resp *http.Response) error { httpcompress.TrackBody(resp); return nil }, // Cache: nur ganz gelesene Antworten
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			tq, _ := pr.In.Context().Value(termCtxKey{}).(*termReq)
 			scheme, gen := "http", "x"
@@ -224,7 +227,7 @@ func (s *Server) directDial(ctx context.Context, _, _ string) (net.Conn, error) 
 			continue
 		}
 		st.Conns.Add(1)
-		return &termConn{Conn: c, st: st, bw: s.bw, uid: tq.re.UserID}, nil
+		return &termConn{Conn: c, st: st, bw: s.bw, uid: tq.re.UserID, noOut: true}, nil // Antwort zaehlt outCounter
 	}
 	st.NoTunnel.Add(1)
 	return nil, last

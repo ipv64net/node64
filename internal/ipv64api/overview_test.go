@@ -49,17 +49,38 @@ func TestOverviewCDNQuota(t *testing.T) {
 	}
 }
 
-// Balkenbreite: Kommazahl, bei Verbrauch mindestens 1 %, hoechstens 100 %, unbegrenzt 0.
+// Balkenbreite: Kommazahl, bei Verbrauch mindestens 1 %, hoechstens 100 %, unbegrenzt 0; Limit 0 und belegt = voll.
 func TestLimitBarPct(t *testing.T) {
 	for _, c := range []struct {
 		l    Limit
 		want float64
 	}{
 		{Limit{Used: 0, Max: 100}, 0}, {Limit{Used: 0.4, Max: 100}, 1}, {Limit{Used: 37.25, Max: 100}, 37.3}, {Limit{Used: 1, Max: 3}, 33.3},
-		{Limit{Used: 150, Max: 100}, 100}, {Limit{Used: 5, Unlimited: true}, 0}, {Limit{Used: 5}, 0},
+		{Limit{Used: 150, Max: 100}, 100}, {Limit{Used: 5, Unlimited: true}, 0}, {Limit{Used: 5}, 100}, {Limit{}, 0},
 	} {
 		if got := c.l.BarPct(); got != c.want {
 			t.Errorf("%+v: %v, want %v", c.l, got, c.want)
+		}
+	}
+}
+
+// Farbe und Zustand wie bei PROXY64: Limit 0, aber belegt (z. B. CDN-Domains nicht im Tarif) ist voll und rot.
+func TestLimitFullClass(t *testing.T) {
+	for _, c := range []struct {
+		l          Limit
+		pct        int
+		full, warn bool
+		class      string
+	}{
+		{Limit{Used: 2}, 100, true, true, "bg-danger"},
+		{Limit{}, 0, false, false, "bg-success"},
+		{Limit{Used: 80, Max: 100}, 80, false, true, "bg-warning"},
+		{Limit{Used: 100, Max: 100}, 100, true, true, "bg-danger"},
+		{Limit{Used: 10, Max: 100}, 10, false, false, "bg-success"},
+		{Limit{Used: 5, Unlimited: true}, 0, false, false, "bg-success"},
+	} {
+		if c.l.Pct() != c.pct || c.l.Full() != c.full || c.l.Warn() != c.warn || c.l.BarClass() != c.class {
+			t.Errorf("%+v: pct %d full %v warn %v class %s", c.l, c.l.Pct(), c.l.Full(), c.l.Warn(), c.l.BarClass())
 		}
 	}
 }

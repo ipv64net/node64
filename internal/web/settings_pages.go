@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/netstat"
 	"github.com/ipv64net/node64/internal/ports"
 )
@@ -150,7 +151,7 @@ type portsPage struct {
 	LowDenied                      bool   // mindestens einer davon nicht erlaubt
 	DockerArgs                     string // -p … fuer docker run
 	WebPort, HTTPPort, HTTPSPort   int
-	Edge                           *portsView // Formular des Eingangs (nil = nicht verfuegbar)
+	Edge                           *edge.Status // Formular des Eingangs (nil = nicht verfuegbar; Name der Oberflaeche: reachView)
 }
 
 var portStates = []string{"open", "closed", "conflict", "error", "foreign", "via", "out"}
@@ -180,7 +181,11 @@ func (s *Server) ownerMeta(ctx context.Context) map[string]portModule {
 
 func (s *Server) portsPageData(ctx context.Context, module, state string) *portsPage {
 	d := &portsPage{Module: module, State: state, StateOptions: portStates, HTTPPort: s.Cfg.HTTPPort, HTTPSPort: s.Cfg.HTTPSPort,
-		Priv: privilegeSource(), Edge: s.portsData(ctx)}
+		Priv: privilegeSource()}
+	if s.Ports != nil && s.Edge != nil { // wie portRoutes (POST /settings/edge)
+		st := s.Edge.Status()
+		d.Edge = &st
+	}
 	meta := s.ownerMeta(ctx)
 	webPort := s.Cfg.HTTPPort
 	if webPort == 0 {

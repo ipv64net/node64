@@ -141,7 +141,7 @@
 			{{if .Err}}<div class="alert alert-warning py-1 px-2 mb-2">{{$.T "dashboard.api_err"}}: {{.Err}}</div>{{end}}
 			{{range .Limits}}<div class="mb-2">
 				<div class="d-flex justify-content-between gap-2"><span>{{$.T (print "dashboard.limit." .Key)}}</span><span class="text-nowrap {{if .Full}}text-danger{{else if .Warn}}text-warning-emphasis{{else}}text-body-secondary{{end}}">{{if .GB}}{{$.GB .Used}}{{else}}{{.UsedText}}{{end}} / {{if .Unlimited}}∞{{else if .GB}}{{$.GB .Max}}{{else}}{{.MaxText}}{{end}}</span></div>
-				{{if not .Unlimited}}<div class="progress mt-1" style="height:.4rem" role="progressbar" aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{if .Full}}bg-danger{{else if .Warn}}bg-warning{{else}}bg-success{{end}}" style="width:{{.BarPct}}%"></div></div>{{end}}
+				{{if not .Unlimited}}<div class="progress mt-1" style="height:.4rem" role="progressbar" aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{.BarClass}}" style="width:{{.BarPct}}%"></div></div>{{end}}
 			</div>{{end}}
 			<div class="text-body-secondary" title="{{$.Time .At}}">{{$.T "dashboard.api_at"}} {{$.Ago .At}}</div>
 			{{else}}<div class="alert alert-warning py-1 px-2 mb-0">{{$.T "dashboard.api_err"}}: {{.Err}} <a href="/settings#ipv64">{{$.T "nav.settings"}}</a></div>{{end}}

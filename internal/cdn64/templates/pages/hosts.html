@@ -134,13 +134,13 @@
 	<div class="col-md-6"><div class="card h-100"><div class="card-body py-2 small">
 		<div class="d-flex align-items-center mb-1"><span class="fw-semibold"><i class="bi bi-diagram-3 text-primary"></i> {{$.T "cdn64.online.q_domains"}}</span>
 			<span class="ms-auto">{{.Used}} / {{.Limit}}</span></div>
-		<div class="progress" style="height:.5rem" role="progressbar" aria-valuenow="{{.DomPct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{if ge .DomPct 100}}bg-danger{{else if ge .DomPct 80}}bg-warning{{else}}bg-success{{end}}" style="width:{{.DomBar}}%"></div></div>
+		<div class="progress" style="height:.5rem" role="progressbar" aria-valuenow="{{.DomPct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{.DomClass}}" style="width:{{.DomBar}}%"></div></div>
 		<div class="text-body-secondary mt-1">{{if .OldCDN}}{{$.T "cdn64.online.q_old" "n" .OldCDN}} · {{end}}{{if .Mbit}}{{$.T "cdn64.online.bandwidth" "n" .Mbit}}{{else}}{{$.T "cdn64.online.q_bw_free"}}{{end}}</div>
 	</div></div></div>
 	<div class="col-md-6"><div class="card h-100"><div class="card-body py-2 small">
 		<div class="d-flex align-items-center mb-1"><span class="fw-semibold"><i class="bi bi-arrow-down-up text-primary"></i> {{$.T "cdn64.online.q_traffic"}}</span>
 			<span class="ms-auto">{{$.Bytes .Traffic}} / {{$.Bytes .TrafficLimit}}</span></div>
-		<div class="progress" style="height:.5rem" role="progressbar" aria-valuenow="{{.TrafficPct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{if ge .TrafficPct 100}}bg-danger{{else if or .Short (ge .TrafficPct 80)}}bg-warning{{else}}bg-success{{end}}" style="width:{{.TrafficBar}}%"></div></div>
+		<div class="progress" style="height:.5rem" role="progressbar" aria-valuenow="{{.TrafficPct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{.TrafficClass}}" style="width:{{.TrafficBar}}%"></div></div>
 		<div class="mt-1 {{if .Short}}text-warning-emphasis{{else}}text-body-secondary{{end}}">{{if .Short}}<i class="bi bi-exclamation-triangle"></i> {{$.T "cdn64.online.q_short" "date" ($.Date .EmptyAt) "n" ($.Bytes .Projected)}}{{else if .Projected}}{{$.T "cdn64.online.q_ok" "n" ($.Bytes .Projected)}}{{else}}{{$.T "cdn64.online.q_early"}}{{end}}</div>
 	</div></div></div>
 </div>{{end}}

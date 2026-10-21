@@ -153,6 +153,29 @@ func TestMCPEndToEnd(t *testing.T) {
 			t.Fatalf("%s: %d", ra, r.StatusCode)
 		}
 	}
+	// Ueber PROXY64 (X-Node64-Proxy): nur mit privater weitergereichter Adresse; entfernte Koepfe sperren
+	viaProxy := func(xff string) func(*http.Request) {
+		return func(r *http.Request) {
+			r.Header.Set("X-Node64-Proxy", "loop-token")
+			if xff != "" {
+				r.Header.Set("X-Forwarded-For", xff)
+			}
+		}
+	}
+	for xff, want := range map[string]int{"": http.StatusForbidden, "8.8.8.8": http.StatusForbidden, "192.168.1.5": http.StatusOK} {
+		if r := mcpPost(t, a, key, viaProxy(xff)); r.StatusCode != want {
+			t.Fatalf("via proxy xff=%q: %d", xff, r.StatusCode)
+		}
+	}
+	// JSON-RPC-Batch: 400 (sonst viele Aufrufe fuer ein Token des Rate-Limits)
+	batch := " \n[" + strings.Repeat(`{"jsonrpc":"2.0","id":1,"method":"tools/list"},`, 5) + `{"jsonrpc":"2.0","id":2,"method":"tools/list"}]`
+	r := mcpPost(t, a, key, func(r *http.Request) {
+		r.Body = io.NopCloser(strings.NewReader(batch))
+		r.Header.Del("MCP-Protocol-Version")
+	})
+	if b, _ := io.ReadAll(r.Body); r.StatusCode != http.StatusBadRequest || !strings.Contains(string(b), "-32600") {
+		t.Fatalf("batch: %d %s", r.StatusCode, b)
+	}
 
 	// Echter MCP-Client
 	cs := mcpClient(t, a, key)

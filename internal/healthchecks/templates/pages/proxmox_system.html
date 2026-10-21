@@ -55,17 +55,17 @@
 <div class="card mb-3">
 	<div class="card-header"><i class="bi bi-boxes text-primary"></i> {{.T "pve.guests"}} <span class="badge text-bg-secondary">{{len $d.Guests}}{{if ne (len $d.Guests) $d.Total}}/{{$d.Total}}{{end}}</span></div>
 	<div class="card-body pb-0">
-		<form method="get" action="{{$d.Path}}" class="row g-2 mb-2 align-items-end" data-autosubmit>
+		<form method="get" action="{{$d.Path}}" class="row g-2 mb-2 align-items-end">
 			<div class="col-12 col-md-4"><input class="form-control form-control-sm" type="search" name="q" value="{{$f.q}}" placeholder="{{.T "common.search"}} …"></div>
-			<div class="col-6 col-md-2"><select class="form-select form-select-sm" name="state">
+			<div class="col-6 col-md-2"><select class="form-select form-select-sm" name="state" data-autosubmit>
 				<option value="">{{.T "common.status"}}: {{.T "common.all"}}</option>
 				{{range $d.States}}<option value="{{.}}"{{if eq . $f.state}} selected{{end}}>{{$.T (print "pve.filter." .)}}</option>{{end}}
 			</select></div>
-			{{if gt (len $d.NodeNames) 1}}<div class="col-6 col-md-2"><select class="form-select form-select-sm" name="node">
+			{{if gt (len $d.NodeNames) 1}}<div class="col-6 col-md-2"><select class="form-select form-select-sm" name="node" data-autosubmit>
 				<option value="">Node: {{.T "common.all"}}</option>
 				{{range $d.NodeNames}}<option value="{{.}}"{{if eq . $f.node}} selected{{end}}>{{.}}</option>{{end}}
 			</select></div>{{end}}
-			<div class="col-6 col-md-2"><select class="form-select form-select-sm" name="type">
+			<div class="col-6 col-md-2"><select class="form-select form-select-sm" name="type" data-autosubmit>
 				<option value="">{{.T "common.type"}}: {{.T "common.all"}}</option>
 				<option value="qemu"{{if eq "qemu" $f.type}} selected{{end}}>{{.T "pve.type.qemu"}}</option>
 				<option value="lxc"{{if eq "lxc" $f.type}} selected{{end}}>{{.T "pve.type.lxc"}}</option>
@@ -88,7 +88,7 @@
 			<td data-label="CPU" class="text-end text-nowrap">{{or .CPU "–"}}</td>
 			<td data-label="RAM" class="text-end text-nowrap">{{or .Mem "–"}}</td>
 			<td data-label="Disk" class="text-end text-nowrap">{{or .Disk "–"}}</td>
-			<td data-label="{{$.T "pve.net"}}" class="small text-nowrap">{{or .Net "–"}}</td>
+			<td data-label="{{$.T "pve.net"}}" class="small text-nowrap">{{if .Rates}}↓ {{$.Bytes .NetIn}}/s · ↑ {{$.Bytes .NetOut}}/s{{else}}–{{end}}</td>
 			<td data-label="{{$.T "pve.uptime"}}" class="small text-nowrap">{{if .Uptime}}{{$.Duration .Uptime}}{{else}}–{{end}}</td>
 			<td data-label="{{$.T "pve.cpu_1h"}}" class="text-primary">{{.Spark}}</td>
 			<td data-label="{{$.T "pve.as_check"}}" class="text-end">{{if not .Excluded}}<form method="post" action="{{$d.Path}}/ascheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="key" value="{{.Key}}"><input type="hidden" name="back" value="{{$d.Path}}">{{if .AsCheck}}<input type="hidden" name="on" value="0"><a class="btn btn-sm btn-link p-0 me-1" href="/healthchecks/{{.CheckToken}}" title="{{$.T "pve.check.open"}}"><i class="bi bi-heart-pulse"></i></a><button class="btn btn-sm btn-success py-0" type="submit" title="{{$.T "pve.check.remove"}}" data-confirm="{{$.T "pve.check.remove_confirm"}}"><i class="bi bi-toggle-on"></i></button>{{else}}<input type="hidden" name="on" value="1"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "pve.check.add"}}"><i class="bi bi-toggle-off"></i></button>{{end}}</form>{{end}}</td>

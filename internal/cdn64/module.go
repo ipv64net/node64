@@ -49,7 +49,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.21.4"
+	Version = "1.22.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -339,12 +339,9 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 // quotaStats: Zeilen der Startseiten-Karte zum CDN-Kontingent (x / y mit Balken; gruen, ab 80 % oder wenn der Monat
 // laut Prognose nicht reicht gelb, voll rot; dann mit Hinweis bis wann).
 func quotaStats(q *onlineQuota) []module.CardStat {
-	row := func(key string, used, limit int64, pct int, warn bool) module.CardStat {
-		p := float64(pct)
-		if limit <= 0 && used > 0 { // nicht im Tarif, aber belegt (ipv64 zaehlt das als ueberschritten)
-			p = 100
-		}
-		st := module.CardStat{LabelKey: key, Value: used, Max: limit, Bar: true, BarPct: module.BarWidth(p, used > 0), BarClass: module.BarClassOf(p, warn)}
+	// Balken und Farbe wie auf der PROXY64-Seite aus newOnlineQuota (dort auch: Limit 0 und belegt = voll)
+	row := func(key string, used, limit int64, bar float64, class string) module.CardStat {
+		st := module.CardStat{LabelKey: key, Value: used, Max: limit, Bar: true, BarPct: bar, BarClass: class}
 		switch st.BarClass {
 		case "bg-danger":
 			st.Class = "text-danger"
@@ -353,8 +350,8 @@ func quotaStats(q *onlineQuota) []module.CardStat {
 		}
 		return st
 	}
-	dom := row("cdn64.online.q_domains", int64(q.Used), int64(q.Limit), q.DomPct, false)
-	tr := row("cdn64.online.q_traffic", q.Traffic, q.TrafficLimit, q.TrafficPct, q.Short)
+	dom := row("cdn64.online.q_domains", int64(q.Used), int64(q.Limit), q.DomBar, q.DomClass)
+	tr := row("cdn64.online.q_traffic", q.Traffic, q.TrafficLimit, q.TrafficBar, q.TrafficClass)
 	tr.Bytes = true
 	if q.Short {
 		tr.HintKey, tr.HintDate, tr.HintBytes, tr.HintClass = "cdn64.online.q_short", q.EmptyAt, q.Projected, "text-warning-emphasis"
@@ -482,13 +479,18 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 			h.CertID = id
 		}
 		// Statusseite: die ID gilt nur auf der Quelle, daher ueber den Slug umhaengen. Fehlt die Seite hier, wird
-		// der Host ausgeschaltet angelegt (sonst zeigte er womoeglich eine fremde Seite dieser Node).
-		if slug, ok := f.HostStatus[oldID]; ok && h.Kind == KindStatus {
-			if id := pageBySlug[slug]; id > 0 {
+		// der Host ausgeschaltet angelegt (sonst zeigte er womoeglich eine fremde Seite dieser Node). Ohne Slug im
+		// Export (vor 1.21.4 oder Healthchecks dort aus) ist die Seite unbekannt: ebenso ausgeschaltet.
+		if h.Kind == KindStatus {
+			slug, ok := f.HostStatus[oldID]
+			if id := pageBySlug[slug]; ok && id > 0 {
 				h.StatusPageID = id
-			} else {
+			} else if ok {
 				h.Enabled = false
 				keep(fmt.Errorf("cdn64: status page %q of %s not found – host switched off", slug, strings.Join(h.Names, ",")))
+			} else if h.Enabled {
+				h.Enabled = false
+				keep(fmt.Errorf("cdn64: status page of %s unknown in export – host switched off", strings.Join(h.Names, ",")))
 			}
 		}
 		if err := m.saveHost(ctx, h); err != nil {

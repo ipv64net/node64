@@ -151,10 +151,14 @@ func (m *Module) reverseProxy(h *Host, t target, st *hostStats, tr http.RoundTri
 				pr.Out.Header.Set("X-Real-IP", ip.String())
 			}
 			for _, n := range adv.RequestRemove {
-				pr.Out.Header.Del(n)
+				if !ownHeaders[strings.ToLower(n)] { // auch aeltere gespeicherte Einstellungen
+					pr.Out.Header.Del(n)
+				}
 			}
 			for _, x := range adv.RequestHeaders {
-				pr.Out.Header.Set(x.Name, x.Value)
+				if !fixedHeaders[strings.ToLower(x.Name)] {
+					pr.Out.Header.Set(x.Name, x.Value)
+				}
 			}
 			pr.Out.Header.Set(loopHeader, token)
 		},
@@ -173,16 +177,15 @@ func (m *Module) reverseProxy(h *Host, t target, st *hostStats, tr http.RoundTri
 			page(w, status)
 		},
 	}
-	if len(adv.ResponseHeaders) > 0 || len(adv.ResponseRemove) > 0 {
-		rp.ModifyResponse = func(resp *http.Response) error {
-			for _, n := range adv.ResponseRemove {
-				resp.Header.Del(n)
-			}
-			for _, x := range adv.ResponseHeaders {
-				resp.Header.Set(x.Name, x.Value)
-			}
-			return nil
+	rp.ModifyResponse = func(resp *http.Response) error {
+		httpcompress.TrackBody(resp) // Cache: nur ganz gelesene Antworten
+		for _, n := range adv.ResponseRemove {
+			resp.Header.Del(n)
 		}
+		for _, x := range adv.ResponseHeaders {
+			resp.Header.Set(x.Name, x.Value)
+		}
+		return nil
 	}
 	if adv.NoBuffering {
 		rp.FlushInterval = -1
@@ -205,8 +208,10 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 		return &url.URL{Scheme: scheme, Host: net.JoinHostPort(host, strconv.Itoa(port))}
 	}
 	var next http.Handler = m.reverseProxy(h, target{url: mk(h.Scheme, h.TargetHost, h.TargetPort)}, st, tr)
-	if h.Advanced.Gzip { // vor dem Cache: der legt die fertig komprimierte Fassung ab (statische Dateien staerker)
-		next = httpcompress.Handler(next, httpcompress.Options{Static: func(r *http.Request) bool { return h.CacheAssets && cacheable(r) }})
+	if h.Advanced.Gzip { // vor dem Cache: der legt die fertig komprimierte Fassung ab (was er ablegt, staerker)
+		next = httpcompress.Handler(next, httpcompress.Options{Static: func(r *http.Request, hd http.Header) bool {
+			return h.CacheAssets && r.Method == http.MethodGet && cacheable(r) && httpcompress.StaticExt(r.URL.Path) && storable(hd)
+		}})
 	}
 	if h.CacheAssets {
 		next = m.cache.cached(h.ID, next)

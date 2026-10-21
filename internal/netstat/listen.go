@@ -14,7 +14,7 @@ import (
 // --network host: dem des Hosts) auf Verbindungen wartet: TCP im Zustand LISTEN, UDP ohne feste Gegenstelle.
 type Listener struct {
 	Proto string     // tcp oder udp
-	Addr  netip.Addr // 0.0.0.0 bzw. :: = alle Adressen
+	Addr  netip.Addr // 0.0.0.0 bzw. :: = alle Adressen (bleibt beim Unmap erhalten: Familie des Sockets)
 	Port  int
 }
 
@@ -85,34 +85,35 @@ func parseHexAddr(s string) (netip.Addr, int, bool) {
 	return addr.Unmap(), int(port), true
 }
 
-// Covers: lauscht der Socket fuer proto/port auf bind ("" bzw. 0.0.0.0/:: = alle Adressen)?
+// Covers: lauscht der Socket fuer proto/port auf bind ("" bzw. 0.0.0.0/:: = alle Adressen)? 0.0.0.0 gilt nur fuer
+// IPv4-Adressen, :: fuer IPv6 und IPv4 (Go lauscht auf :: fuer beide Familien).
 func (l Listener) Covers(proto string, bind string, port int) bool {
 	if l.Proto != proto || l.Port != port {
 		return false
-	}
-	if l.Addr.IsUnspecified() {
-		return true
 	}
 	b := strings.Trim(bind, "[]")
 	if b == "" || b == "0.0.0.0" || b == "::" {
 		return true // eine bestimmte Adresse zaehlt fuer "alle" (zumindest dort offen)
 	}
 	a, err := netip.ParseAddr(b)
+	if l.Addr.IsUnspecified() {
+		return err != nil || l.Addr.Is6() || a.Unmap().Is4()
+	}
 	return err == nil && a.Unmap() == l.Addr
 }
 
 // Privileges: darf der Prozess Ports unter 1024 oeffnen? (nur Linux, sonst Known = false)
 type Privileges struct {
 	Known       bool // /proc lesbar
-	Root        bool // effektive UID 0
-	CapNetBind  bool // Faehigkeit cap_net_bind_service (z. B. per setcap im Image)
+	Root        bool // effektive UID 0 (nur Anzeige: Ports unter 1024 haengen an CapNetBind, nicht an der UID)
+	CapNetBind  bool // Faehigkeit cap_net_bind_service in CapEff (root hat sie normalerweise, z. B. per setcap im Image)
 	UnprivStart int  // net.ipv4.ip_unprivileged_port_start (-1 = unbekannt; Docker setzt im Container meist 0)
 	Container   bool // laeuft in einem Container (/.dockerenv bzw. /run/.containerenv)
 }
 
 // LowPortOK: darf port geoeffnet werden (ab 1024 immer)?
 func (p Privileges) LowPortOK(port int) bool {
-	return port >= 1024 || p.Root || p.CapNetBind || (p.UnprivStart >= 0 && port >= p.UnprivStart)
+	return port >= 1024 || p.CapNetBind || (p.UnprivStart >= 0 && port >= p.UnprivStart)
 }
 
 // ReadPrivileges liest UID, Faehigkeiten und die Grenze fuer Ports ohne Rechte.

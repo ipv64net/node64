@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -94,6 +95,24 @@ func NormalizeAddress(s string) (string, bool) {
 func NormalizePin(s string) (string, bool) {
 	s = strings.ToLower(strings.NewReplacer(":", "", " ", "", "-", "").Replace(strings.TrimSpace(s)))
 	return s, s == "" || pveRePin.MatchString(s)
+}
+
+// SameEndpoint sagt, ob b dieselben Adressen (Reihenfolge egal) und denselben Pin hat wie a, beides normalisiert.
+// Nur dann darf ein gespeichertes Secret fuer einen Test wiederverwendet werden (sonst ginge es an ein anderes Ziel).
+func SameEndpoint(a, b *System) bool {
+	norm := func(l []string) []string {
+		var out []string
+		for _, x := range l {
+			if n, ok := NormalizeAddress(x); ok && !slices.Contains(out, n) {
+				out = append(out, n)
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+	pa, okA := NormalizePin(a.PinSHA256)
+	pb, okB := NormalizePin(b.PinSHA256)
+	return okA && okB && pa == pb && slices.Equal(norm(a.Addresses), norm(b.Addresses))
 }
 
 // ValidateSystem prueft und normalisiert ein System. isNew verlangt ein Secret (beim Aendern: leer = behalten).
@@ -461,15 +480,6 @@ func (s *Store) Settings(ctx context.Context, systemID int64) (*SystemSettings, 
 	return ss, rows.Err()
 }
 
-// Effective liefert die wirksame Regel einer Ebene (siehe SystemSettings.Effective).
-func (s *Store) Effective(ctx context.Context, systemID int64, key, nodeName string) (Rule, error) {
-	ss, err := s.Settings(ctx, systemID)
-	if err != nil {
-		return Rule{}, err
-	}
-	return ss.Effective(key, nodeName), nil
-}
-
 // SaveSettings legt die Einstellungen einer Ebene an oder ersetzt sie (SeenRunning bleibt erhalten).
 func (s *Store) SaveSettings(ctx context.Context, st *Settings) error {
 	if !ValidKey(st.Key) {
@@ -508,9 +518,13 @@ func (s *Store) SaveSettings(ctx context.Context, st *Settings) error {
 	return err
 }
 
-// DeleteSettings setzt eine Ebene auf „alles erben“ zurueck (SeenRunning bleibt erhalten).
-func (s *Store) DeleteSettings(ctx context.Context, systemID int64, key string) error {
-	_, err := s.w.ExecContext(ctx, `UPDATE pve_settings SET muted=0, as_check=0, check_token='', expect_running=NULL, rules='', updated_at=?
+// ResetSettings setzt eine Ebene auf „alles erben“ zurueck: Regeln, Stummschaltung und „erwartet laeuft“;
+// „als Check“ und SeenRunning bleiben erhalten (Oberflaeche und API).
+func (s *Store) ResetSettings(ctx context.Context, systemID int64, key string) error {
+	if !ValidKey(key) {
+		return pveFerr("key", "pve.err.key")
+	}
+	_, err := s.w.ExecContext(ctx, `UPDATE pve_settings SET muted=0, expect_running=NULL, rules='', updated_at=?
 		WHERE system_id = ? AND key = ?`, store.Now(), systemID, key)
 	return err
 }

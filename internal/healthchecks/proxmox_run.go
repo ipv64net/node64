@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -47,10 +48,11 @@ type pveRuntime struct {
 }
 
 type pvePoll struct {
-	sys    proxmox.System
-	p      *proxmox.Poller
-	cancel context.CancelFunc
-	done   chan struct{}
+	sys     proxmox.System
+	p       *proxmox.Poller
+	cancel  context.CancelFunc
+	done    chan struct{}
+	started time.Time
 }
 
 // pveIncident ist die letzte Stoerung (Startseite).
@@ -123,38 +125,50 @@ func (m *Module) pveStop() {
 	rt.wg.Wait()
 }
 
-// pveRun startet die Abfrage eines Systems (vorher laufende wird beendet).
+// pveRun startet die Abfrage eines Systems (vorher laufende wird beendet). Austausch unter der Sperre: bei
+// gleichzeitigem Speichern bleibt keine Abfrage verwaist; die neue beginnt erst, wenn die alte beendet ist.
 func (m *Module) pveRun(ctx context.Context, sys *proxmox.System) {
 	rt := m.pve
-	m.pveHalt(sys.ID)
+	reason := ""
 	if sys.Secret == "" {
-		reason := m.pveSecretProblem(ctx, sys.ID)
-		rt.mu.Lock()
-		rt.errs[sys.ID] = reason
-		rt.mu.Unlock()
-		m.log.Error("proxmox system not polled", "system", sys.Name, "reason", reason)
-		return
+		reason = m.pveSecretProblem(ctx, sys.ID)
 	}
 	rt.mu.Lock()
-	defer rt.mu.Unlock()
-	if rt.ctx == nil {
-		return // Modul gestoppt
-	}
+	old := rt.polls[sys.ID]
+	delete(rt.polls, sys.ID)
 	delete(rt.errs, sys.ID)
-	pctx, cancel := context.WithCancel(rt.ctx)
-	p := proxmox.NewPoller(m.log, *sys, m.pveSnapshot)
-	pp := &pvePoll{sys: *sys, p: p, cancel: cancel, done: make(chan struct{})}
-	rt.polls[sys.ID] = pp
-	if rt.noRun {
-		close(pp.done)
-		return
+	if old != nil {
+		old.cancel()
 	}
-	rt.wg.Add(1)
-	go func() {
-		defer rt.wg.Done()
-		defer close(pp.done)
-		p.Run(pctx)
-	}()
+	switch {
+	case reason != "":
+		rt.errs[sys.ID] = reason
+	case rt.ctx != nil: // sonst Modul gestoppt
+		pctx, cancel := context.WithCancel(rt.ctx)
+		p := proxmox.NewPoller(m.log, *sys, m.pveSnapshot)
+		pp := &pvePoll{sys: *sys, p: p, cancel: cancel, done: make(chan struct{}), started: time.Now()}
+		rt.polls[sys.ID] = pp
+		if rt.noRun {
+			close(pp.done)
+			break
+		}
+		rt.wg.Add(1)
+		go func() {
+			defer rt.wg.Done()
+			defer close(pp.done)
+			if old != nil {
+				<-old.done
+			}
+			p.Run(pctx)
+		}()
+	}
+	rt.mu.Unlock()
+	if old != nil {
+		<-old.done
+	}
+	if reason != "" {
+		m.log.Error("proxmox system not polled", "system", sys.Name, "reason", reason)
+	}
 }
 
 // pveHalt beendet die Abfrage eines Systems und wartet darauf.
@@ -263,15 +277,20 @@ func (m *Module) pveSnapshot(ctx context.Context, s *proxmox.Snapshot) {
 }
 
 // pveCheckLinks: wurde ein Check „als Check“ in der Liste der Healthchecks geloescht, gilt der Gast wieder als normal
-// ueberwacht (sonst meldete niemand seinen Zustand).
+// ueberwacht (sonst meldete niemand seinen Zustand). Eine Abfrage fuer alle Checks vom Typ proxmox (nicht je Gast).
 func (m *Module) pveCheckLinks(ctx context.Context, set *proxmox.SystemSettings) {
+	var have map[string]bool
 	for _, it := range set.Items {
 		if !it.AsCheck {
 			continue
 		}
-		if c, err := m.st.Check(ctx, it.CheckToken); err == nil && c != nil {
-			continue
-		} else if err != nil {
+		if have == nil {
+			var err error
+			if have, err = m.pveCheckTokens(ctx); err != nil {
+				return
+			}
+		}
+		if have[it.CheckToken] {
 			continue
 		}
 		it.AsCheck, it.CheckToken = false, ""
@@ -279,6 +298,24 @@ func (m *Module) pveCheckLinks(ctx context.Context, set *proxmox.SystemSettings)
 			m.log.Error("proxmox settings", "err", err)
 		}
 	}
+}
+
+// pveCheckTokens liefert die Tokens aller Checks vom Typ proxmox.
+func (m *Module) pveCheckTokens(ctx context.Context) (map[string]bool, error) {
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT token FROM hc_checks WHERE type = ?`, string(checks.TypeProxmox))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	have := map[string]bool{}
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		have[t] = true
+	}
+	return have, rows.Err()
 }
 
 // pvePersist speichert den Stand der Regeln, wenn er sich geaendert hat.
@@ -447,9 +484,10 @@ func (m *Module) pveLookup(systemID int64, key string) checks.ProxmoxState {
 		}
 		return st
 	}
-	st.System, st.Polling, st.Interval = pp.sys.Name, true, proxmox.ClampInterval(pp.sys.Interval)
+	st.System, st.Polling, st.Interval, st.Started = pp.sys.Name, true, proxmox.ClampInterval(pp.sys.Interval), pp.started
 	s := pp.p.Last()
 	if s == nil {
+		st.Last = m.pveCheckLast(systemID, key) // noch kein Stand: voriges Ergebnis des Checks bleibt
 		return st
 	}
 	st.Time, st.Reachable, st.Error = s.Time, s.OK, s.Error
@@ -462,6 +500,24 @@ func (m *Module) pveLookup(systemID int64, key string) checks.ProxmoxState {
 		break
 	}
 	return st
+}
+
+// pveCheckLast liefert das letzte Ergebnis des Checks „als Check“ eines Keys (leer = keins).
+func (m *Module) pveCheckLast(systemID int64, key string) checks.Status {
+	s := m.scheduler()
+	if s == nil {
+		return ""
+	}
+	set, err := m.pve.st.Settings(context.Background(), systemID)
+	if err != nil {
+		return ""
+	}
+	if it := set.Item(key); it != nil && it.CheckToken != "" {
+		if rt, ok := s.Runtime(it.CheckToken); ok {
+			return rt.LastStatus
+		}
+	}
+	return ""
 }
 
 // ---------------------------------------------------------------- „auch als Check fuehren“
@@ -487,6 +543,9 @@ func (m *Module) pveResName(id int64, key string) string {
 }
 
 // pveSetAsCheck schaltet „auch als Check fuehren“ fuer einen Gast bzw. Node: legt den Check an bzw. loescht ihn.
+// Der neue Check bekommt die Kanaele der Proxmox-Regeln und ist pausiert, solange das System abgeschaltet ist. Eine
+// schon gemeldete Stoerung uebernimmt er (beginnt gestoert, meldet nur die Entwarnung); umgekehrt uebernimmt die
+// Engine die Stoerung eines gestoerten Checks, der entfernt wird (keine doppelte Meldung).
 func (m *Module) pveSetAsCheck(r *http.Request, sys *proxmox.System, key string, on bool) error {
 	ctx := r.Context()
 	if key == "" || !proxmox.ValidKey(key) {
@@ -513,8 +572,10 @@ func (m *Module) pveSetAsCheck(r *http.Request, sys *proxmox.System, key string,
 		iv := int(pveCheckInterval(sys).Seconds())
 		riv := min(20, iv)
 		group := pveCheckGroup
+		paused := !sys.Enabled
 		in := checkJSON{Name: sys.Name + " – " + m.pveResName(sys.ID, key), Type: string(checks.TypeProxmox), Target: key, Params: params,
-			IntervalSeconds: &iv, RetryIntervalSeconds: &riv, Group: &group, Tags: []string{"proxmox"}, Execution: "local"}
+			IntervalSeconds: &iv, RetryIntervalSeconds: &riv, Group: &group, Tags: []string{"proxmox"}, Execution: "local", Paused: &paused,
+			Channels: m.pveChannels(ctx, set.Effective(key, m.pveNodeOf(sys.ID, key)).Channels)}
 		c := &Check{Token: NewToken(), UpdatedBy: m.actor(r)}
 		if err := m.apply(c, in, true); err != nil {
 			return err
@@ -523,8 +584,16 @@ func (m *Module) pveSetAsCheck(r *http.Request, sys *proxmox.System, key string,
 			return err
 		}
 		c, _ = m.st.Check(ctx, c.Token)
+		var start *scheduler.Runtime
+		if since, ok := m.pve.engine.Outage(sys.ID, key); ok && c != nil && sys.Enabled {
+			// schon gemeldet: der Check beginnt gestoert (keine zweite Meldung), die Entwarnung kommt vom Check
+			start = &scheduler.Runtime{State: scheduler.StateDown, Since: since, DownSince: since, LastStatus: checks.Down, ConsecutiveFail: 1}
+			if err := m.st.SaveRuntime(ctx, c.Token, *start); err != nil {
+				m.log.Error("proxmox check runtime", "err", err)
+			}
+		}
 		if s := m.scheduler(); s != nil && c != nil {
-			upsertSched(s, c, nil)
+			upsertSched(s, c, start)
 		}
 		if c != nil {
 			m.audit(r, "check.create", c)
@@ -535,6 +604,9 @@ func (m *Module) pveSetAsCheck(r *http.Request, sys *proxmox.System, key string,
 	}
 	if existing != nil {
 		if s := m.scheduler(); s != nil {
+			if live, ok := s.Runtime(existing.Token); ok && pveRuntimeDown(live.State) {
+				m.pve.engine.Adopt(sys.ID, key) // vom Check gemeldet: Engine meldet nur noch die Entwarnung
+			}
 			s.Remove(existing.Token)
 		}
 		if err := m.st.Delete(ctx, existing.Token); err != nil {
@@ -544,6 +616,37 @@ func (m *Module) pveSetAsCheck(r *http.Request, sys *proxmox.System, key string,
 	}
 	it.AsCheck, it.CheckToken = false, ""
 	return m.pve.st.SaveSettings(ctx, it)
+}
+
+// pveRuntimeDown: Check gilt als gestoert (Meldung ist raus).
+func pveRuntimeDown(st scheduler.State) bool {
+	return st == scheduler.StateDown || st == scheduler.StateDependent || st == scheduler.StateStabilizing
+}
+
+// pveSyncCheckChannels gibt den Checks „als Check“ eines Systems die Kanaele der Proxmox-Regeln (nach Aenderung
+// der Regeln; wirksame Regel je Gast bzw. Node wie bei den Meldungen der Engine).
+func (m *Module) pveSyncCheckChannels(ctx context.Context, id int64, by string) {
+	set, err := m.pve.st.Settings(ctx, id)
+	if err != nil {
+		return
+	}
+	for key, it := range set.Items {
+		if !it.AsCheck || it.CheckToken == "" {
+			continue
+		}
+		c, _ := m.st.Check(ctx, it.CheckToken)
+		if c == nil {
+			continue
+		}
+		ch := m.pveChannels(ctx, set.Effective(key, m.pveNodeOf(id, key)).Channels)
+		if slices.Equal(ch, c.Channels) {
+			continue
+		}
+		c.Channels, c.UpdatedBy = ch, by
+		if err := m.st.Update(ctx, c); err != nil {
+			m.log.Error("proxmox check channels", "err", err)
+		}
+	}
 }
 
 // pveSystemChecks liefert die Checks „als Check“ eines Systems.

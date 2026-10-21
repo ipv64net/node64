@@ -316,7 +316,7 @@ func TestLimitsEnforced(t *testing.T) {
 	if all, _ := sdb.entries(ctx, LogFilter{Limit: 500}); len(all) != len(list) {
 		t.Fatalf("normal requests must not be logged without access log: %d vs %d", len(all), len(list))
 	}
-	pts, _ := sdb.hours(ctx, 0, time.Now().Add(-time.Hour))
+	pts, _ := sdb.hours(ctx, 0, time.Now().Add(-2*time.Hour))
 	var blocked, conn, req int64
 	for _, p := range pts {
 		blocked, conn, req = blocked+p.Blocked, conn+p.ConnBlocked, req+p.Requests

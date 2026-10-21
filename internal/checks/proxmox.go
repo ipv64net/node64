@@ -13,14 +13,19 @@ import (
 // Proxmox-Check: ein Gast (VM/Container) oder Node eines Proxmox-VE-Systems „auch als Check gefuehrt“. Der Check
 // fragt Proxmox nicht selbst, sondern liest den letzten Stand der Abfrage des Systems (Healthchecks → Proxmox VE)
 // ueber Runner.Proxmox – so haengt dieses Paket nicht von internal/proxmox ab. Bewertung:
-//   running, backup, locked (Gast) bzw. online (Node)           -> up
+//   running, backup, locked (Gast) bzw. online (Node)           -> up (gestoppt mit Lock nur eine Weile, danach stopped)
 //   stopped / paused / suspended / error (Absturz)              -> down (pve_stopped, pve_paused, pve_suspended, pve_crashed)
+//   Abfrage laeuft, aber noch kein Stand (Start, System gespeichert) -> voriges Ergebnis bleibt (hoechstens
+//                                                                       ProxmoxPendingGrace), danach down
 //   Node offline, Gast auf Node offline bzw. ohne Daten         -> down (pve_offline, pve_unknown)
 //   Gast bzw. Node nicht mehr vorhanden                         -> down (pve_missing)
 //   System nicht erreichbar, abgeschaltet, Stand zu alt         -> down (pve_unreachable)
 // Laeuft ausschliesslich lokal auf der Node, die das System abfragt.
 
 const TypeProxmox Type = "proxmox"
+
+// ProxmoxPendingGrace: so lange nach dem Start der Abfrage gilt „noch kein Stand“ nicht als Stoerung.
+const ProxmoxPendingGrace = 2 * time.Minute
 
 const (
 	ReasonPVEStopped     Reason = "pve_stopped"
@@ -46,6 +51,8 @@ type ProxmoxState struct {
 	Reachable bool      // letzte Abfrage erfolgreich
 	Error     string    // Fehler der letzten Abfrage bzw. warum nicht abgefragt wird
 	Time      time.Time // Zeit der letzten Abfrage (Null = noch keine)
+	Started   time.Time // Start der Abfrage (fuer „noch kein Stand“)
+	Last      Status    // voriges Ergebnis des Checks (leer = keins), bleibt bis zum ersten Stand
 	Interval  time.Duration
 	Found     bool   // Gast bzw. Node in der letzten Abfrage enthalten
 	Name      string // Anzeigename des Gasts bzw. Nodes
@@ -98,6 +105,13 @@ func (c proxmoxChecker) Check(_ context.Context, def Definition, _ net.IP) Resul
 	case !st.Polling:
 		res.Status, res.Reason, res.Message = Down, ReasonPVEUnreachable, ifEmpty(st.Error, "proxmox system is not monitored")
 		return res
+	case st.Time.IsZero() && !st.Started.IsZero() && now.Sub(st.Started) < ProxmoxPendingGrace:
+		// gerade gestartet: Zustand nicht aendern (sonst kurz down nach Neustart bzw. Speichern des Systems)
+		res.Status, res.Reason, res.Message = Up, ReasonOK, "waiting for the first data from proxmox"
+		if st.Last == Down {
+			res.Status, res.Reason = Down, ReasonPVEUnreachable
+		}
+		return res
 	case st.Time.IsZero():
 		res.Status, res.Reason, res.Message = Down, ReasonPVEUnreachable, "no data from proxmox yet"
 		return res
@@ -133,11 +147,11 @@ func (c proxmoxChecker) Check(_ context.Context, def Definition, _ net.IP) Resul
 	case "running", "online":
 		res.Status, res.Reason, res.Message = Up, ReasonOK, st.State+where+up
 	case "backup":
-		res.Status, res.Reason, res.Message = Up, ReasonOK, "backup running"+where+up
+		res.Status, res.Reason, res.Message = Up, ReasonOK, "backup running"+ifNotEmpty(" (guest ", stoppedOnly(st.Status))+closeIf(stoppedOnly(st.Status))+where+up
 	case "locked":
 		res.Status, res.Reason, res.Message = Up, ReasonOK, fmt.Sprintf("locked (%s)%s%s", ifEmpty(st.Lock, "lock"), where, up)
 	case "stopped":
-		res.Status, res.Reason, res.Message = Down, ReasonPVEStopped, "stopped"+where
+		res.Status, res.Reason, res.Message = Down, ReasonPVEStopped, "stopped"+ifNotEmpty(" (lock ", st.Lock)+closeIf(st.Lock)+where
 	case "paused":
 		res.Status, res.Reason, res.Message = Down, ReasonPVEPaused, "paused"+where
 	case "suspended":
@@ -157,6 +171,14 @@ func ifEmpty(s, def string) string {
 		return def
 	}
 	return s
+}
+
+// stoppedOnly: Status nur nennen, wenn der Gast nicht laeuft (Backup im Stopp-Modus).
+func stoppedOnly(status string) string {
+	if status == "running" {
+		return ""
+	}
+	return status
 }
 
 func closeIf(s string) string {

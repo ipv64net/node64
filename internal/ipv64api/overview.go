@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ipv64net/node64/internal/module"
 )
 
 // Account-Uebersicht fuer das Dashboard: alle Limits des Accounts direkt aus der API v2 (GET /me, fuer
@@ -20,27 +22,35 @@ type Limit struct {
 	Unlimited bool
 }
 
-// Pct ist der Verbrauch in Prozent (0 bei unbegrenzt, hoechstens 100).
-func (l Limit) Pct() int {
-	if l.Unlimited || l.Max <= 0 {
+// pct ist der Verbrauch in Prozent ohne Obergrenze (0 bei unbegrenzt). Limit 0, aber belegt, gilt als voll (100 %,
+// ipv64 zaehlt das als ueberschritten) – wie die Kacheln und die Karte von PROXY64.
+func (l Limit) pct() float64 {
+	switch {
+	case l.Unlimited:
+		return 0
+	case l.Max <= 0:
+		if l.Used > 0 {
+			return 100
+		}
 		return 0
 	}
-	p := int(l.Used * 100 / l.Max)
-	return min(p, 100)
+	return l.Used * 100 / l.Max
 }
+
+// Pct ist der Verbrauch in Prozent (0 bei unbegrenzt, hoechstens 100).
+func (l Limit) Pct() int { return int(min(l.pct(), 100)) }
 
 // BarPct ist die Breite des Balkens in Prozent: als Kommazahl (eine Stelle), hoechstens 100 und bei Verbrauch > 0
 // mindestens 1 – sonst bliebe der Balken bei kleinem Verbrauch (z. B. 0,4 von 100 GB) unsichtbar.
 func (l Limit) BarPct() float64 {
-	if l.Unlimited || l.Max <= 0 {
+	if l.Unlimited {
 		return 0
 	}
-	p := min(math.Round(l.Used*1000/l.Max)/10, 100)
-	if l.Used > 0 && p < 1 {
-		p = 1
-	}
-	return p
+	return module.BarWidth(math.Round(l.pct()*10)/10, l.Used > 0)
 }
+
+// BarClass ist die Farbe des Balkens (module.BarClassOf: gruen, ab 80 % gelb, voll rot).
+func (l Limit) BarClass() string { return module.BarClassOf(l.pct(), false) }
 
 // GB: der Wert ist eine Datenmenge in GB (Schluessel *_gb, Anzeige mit Einheit).
 func (l Limit) GB() bool { return strings.HasSuffix(l.Key, "_gb") }
@@ -56,9 +66,9 @@ func numText(v float64) string {
 	return strconv.FormatFloat(v, 'f', 2, 64)
 }
 
-// Warn: ab 80 %; Full: ausgeschoepft.
-func (l Limit) Warn() bool { return !l.Unlimited && l.Max > 0 && l.Pct() >= 80 }
-func (l Limit) Full() bool { return !l.Unlimited && l.Max > 0 && l.Used >= l.Max }
+// Warn: ab 80 %; Full: ausgeschoepft (auch Limit 0, aber belegt).
+func (l Limit) Warn() bool { return !l.Unlimited && l.Pct() >= 80 }
+func (l Limit) Full() bool { return !l.Unlimited && l.Used > 0 && l.Used >= l.Max }
 
 // Overview ist der Stand des Accounts hinter dem zentralen Key.
 type Overview struct {

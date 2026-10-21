@@ -61,16 +61,9 @@ func cacheable(r *http.Request) bool {
 }
 
 // cacheKey: Host, Pfad und Abfrage, dazu das Verfahren, das PROXY64 waehlen wuerde, und die Komprimierungen, die der
-// Browser kann (fuer Ziele, die selbst komprimieren).
+// Browser annimmt (fuer Ziele, die selbst komprimieren; httpcompress.CacheVariant).
 func cacheKey(id int64, r *http.Request) string {
-	ae := strings.ToLower(r.Header.Get("Accept-Encoding"))
-	enc := httpcompress.Negotiate(ae, true) + "|"
-	for _, e := range []string{"br", "gzip", "zstd"} {
-		if strings.Contains(ae, e) {
-			enc += e + ","
-		}
-	}
-	return strconv.FormatInt(id, 10) + "|" + r.Host + "|" + r.URL.RequestURI() + "|" + enc
+	return strconv.FormatInt(id, 10) + "|" + r.Host + "|" + r.URL.RequestURI() + "|" + httpcompress.CacheVariant(r.Header.Get("Accept-Encoding"))
 }
 
 func (c *assetCache) get(key string) *cacheEntry {
@@ -168,16 +161,30 @@ func ttlOf(h http.Header) (time.Duration, bool) {
 	return cacheTTL, true
 }
 
+// storable: Antwort mit diesen Koepfen kaeme in den Cache (dann lohnt die staerkere Komprimierung).
+func storable(h http.Header) bool {
+	if _, ok := ttlOf(h); !ok {
+		return false
+	}
+	cl, err := strconv.ParseInt(h.Get("Content-Length"), 10, 64)
+	return err != nil || cl <= cacheMaxObject
+}
+
 // recorder nimmt die Antwort fuer den Cache mit auf (bis zur Hoechstgroesse), waehrend sie zum Browser geht.
 type recorder struct {
 	http.ResponseWriter
 	status int
 	buf    []byte
 	over   bool
+	failed bool   // Schreibfehler zum Browser
 	origCC string // Cache-Control des Ziels (vor der Ergaenzung fuer den Browser)
 }
 
 func (w *recorder) WriteHeader(code int) {
+	if code >= 100 && code < 200 && code != http.StatusSwitchingProtocols { // 103 Early Hints: nicht der Status
+		w.ResponseWriter.WriteHeader(code)
+		return
+	}
 	if w.status == 0 {
 		w.status = code
 		w.origCC = w.Header().Get("Cache-Control")
@@ -200,7 +207,11 @@ func (w *recorder) Write(b []byte) (int, error) {
 			w.buf = append(w.buf, b...)
 		}
 	}
-	return w.ResponseWriter.Write(b)
+	n, err := w.ResponseWriter.Write(b)
+	if err != nil {
+		w.failed = true
+	}
+	return n, err
 }
 
 func (w *recorder) Flush() {
@@ -218,8 +229,8 @@ func (c *assetCache) cached(id int64, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		key := cacheKey(id, r)
-		if e := c.get(key); e != nil {
+		key, ae := cacheKey(id, r), r.Header.Get("Accept-Encoding")
+		if e := c.get(key); e != nil && httpcompress.Acceptable(ae, e.header.Get("Content-Encoding")) {
 			for k, v := range e.header {
 				w.Header()[k] = v
 			}
@@ -232,8 +243,11 @@ func (c *assetCache) cached(id int64, next http.Handler) http.Handler {
 			return
 		}
 		rec := &recorder{ResponseWriter: w}
+		r, body := httpcompress.Track(r)
 		next.ServeHTTP(rec, r)
-		if r.Method != http.MethodGet || rec.status != http.StatusOK || rec.over {
+		// nur vollstaendig vom Ziel gelesen und ohne Fehler (abgebrochen: komprimiert ohne Content-Length nicht erkennbar)
+		if r.Method != http.MethodGet || rec.status != http.StatusOK || rec.over || rec.failed || !body.Complete() ||
+			!httpcompress.Acceptable(ae, w.Header().Get("Content-Encoding")) {
 			return
 		}
 		orig := w.Header().Clone()

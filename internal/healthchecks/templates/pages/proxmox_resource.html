@@ -32,7 +32,7 @@
 	<div class="col-6 col-md-2"><div class="border rounded p-2"><div class="small text-body-secondary">CPU</div><div class="fs-5 fw-semibold">{{or $r.CPU "–"}}</div>{{if $r.R.MaxCPU}}<div class="small text-body-secondary">{{$r.R.MaxCPU}} vCPU</div>{{end}}</div></div>
 	<div class="col-6 col-md-2"><div class="border rounded p-2"><div class="small text-body-secondary">RAM</div><div class="fs-5 fw-semibold">{{or $r.Mem "–"}}</div>{{if $r.R.MaxMem}}<div class="small text-body-secondary">{{$.Bytes $r.R.Mem}} / {{$.Bytes $r.R.MaxMem}}</div>{{end}}</div></div>
 	<div class="col-6 col-md-2"><div class="border rounded p-2"><div class="small text-body-secondary">Disk</div><div class="fs-5 fw-semibold">{{or $r.Disk "–"}}</div>{{if $r.R.MaxDisk}}<div class="small text-body-secondary">{{if $r.Disk}}{{$.Bytes $r.R.Disk}} / {{end}}{{$.Bytes $r.R.MaxDisk}}</div>{{end}}</div></div>
-	<div class="col-6 col-md-3"><div class="border rounded p-2"><div class="small text-body-secondary">{{.T "pve.net"}}</div><div class="small fw-semibold">{{or $r.Net "–"}}</div><div class="small text-body-secondary">{{or $r.IO ""}}</div></div></div>
+	<div class="col-6 col-md-3"><div class="border rounded p-2"><div class="small text-body-secondary">{{.T "pve.net"}}</div><div class="small fw-semibold">{{if $r.Rates}}↓ {{$.Bytes $r.NetIn}}/s · ↑ {{$.Bytes $r.NetOut}}/s{{else}}–{{end}}</div><div class="small text-body-secondary">{{if $r.Rates}}R {{$.Bytes $r.DiskRd}}/s · W {{$.Bytes $r.DiskWr}}/s{{end}}</div></div></div>
 	<div class="col-12 col-md-3"><div class="border rounded p-2"><div class="small text-body-secondary">{{.T "pve.uptime"}}</div><div class="fs-6 fw-semibold">{{if $r.Uptime}}{{$.Duration $r.Uptime}}{{else}}–{{end}}</div></div></div>
 </div>
 {{end}}

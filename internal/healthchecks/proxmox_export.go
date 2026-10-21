@@ -65,14 +65,35 @@ func (m *Module) pveImport(ctx context.Context, in []pveExportSystem) (int, erro
 	if err != nil {
 		return 0, err
 	}
-	byName := map[string]*proxmox.System{}
+	// Zuordnung ueber den Namen (nicht eindeutig, Standard ist der erste Node, z. B. „pve“): gleichnamige vorhandene
+	// Systeme werden ueber die Adressen unterschieden; passt keins eindeutig oder zielen mehrere Eintraege auf dasselbe
+	// System, wird neu angelegt statt zusammengelegt.
+	byName := map[string][]*proxmox.System{}
 	for _, s := range existing {
-		byName[strings.ToLower(s.Name)] = s
+		byName[strings.ToLower(s.Name)] = append(byName[strings.ToLower(s.Name)], s)
+	}
+	match := make([]int64, len(in))
+	hits := map[int64]int{}
+	for i, x := range in {
+		cands := byName[strings.ToLower(x.Name)]
+		if len(cands) > 1 {
+			var same []*proxmox.System
+			for _, c := range cands {
+				if proxmox.SameEndpoint(&proxmox.System{Addresses: c.Addresses}, &proxmox.System{Addresses: x.Addresses}) {
+					same = append(same, c)
+				}
+			}
+			cands = same
+		}
+		if len(cands) == 1 {
+			match[i] = cands[0].ID
+			hits[cands[0].ID]++
+		}
 	}
 	seal := module.SecretSealerOf(ctx)
 	n := 0
 	var problems []string
-	for _, x := range in {
+	for i, x := range in {
 		secret := ""
 		if x.Secret != "" && seal != nil {
 			if plain, err := seal.Decrypt(x.Secret); err == nil {
@@ -81,8 +102,8 @@ func (m *Module) pveImport(ctx context.Context, in []pveExportSystem) (int, erro
 		}
 		sys := &proxmox.System{Name: x.Name, Addresses: x.Addresses, TokenID: x.TokenID, Secret: secret, PinSHA256: x.PinSHA256,
 			Interval: x.Interval, Enabled: x.Enabled}
-		if old := byName[strings.ToLower(x.Name)]; old != nil {
-			sys.ID = old.ID
+		if id := match[i]; id != 0 && hits[id] == 1 {
+			sys.ID = id
 		}
 		switch {
 		case m.pve.box == nil:
@@ -132,6 +153,12 @@ func (m *Module) pveImport(ctx context.Context, in []pveExportSystem) (int, erro
 				problems = append(problems, x.Name+" "+it.Key+": "+err.Error())
 			}
 		}
+		// wie beim Speichern: abgeschaltet → Abfrage beenden, Stand verwerfen; Checks pausiert, solange abgeschaltet
+		if !sys.Enabled {
+			m.pveHalt(sys.ID)
+			m.pveForget(ctx, sys.ID)
+		}
+		m.pveSyncChecks(ctx, sys, "import", true)
 		if m.scheduler() != nil { // laeuft: Abfrage gleich (neu) starten
 			if sys.Enabled {
 				m.pveReload(ctx, sys.ID)

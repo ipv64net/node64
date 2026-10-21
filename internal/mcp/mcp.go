@@ -221,7 +221,7 @@ func addTool(srv *sdk.Server, o Options, id Identity, t Tool) {
 			o.Logger.Debug("mcp tool call", "tool", t.Name, "key", id.KeyName, "result", result, "ms", time.Since(start).Milliseconds())
 		}
 		if err != nil {
-			return nil, nil, errors.New(scrubSecrets(clean(err.Error(), 300)))
+			return nil, nil, errors.New(clean(err.Error(), 300))
 		}
 		clean, _ := sanitize(out, false).(map[string]any)
 		return nil, clean, nil
@@ -234,7 +234,7 @@ func auditParams(args map[string]any) string {
 		return ""
 	}
 	b, _ := json.Marshal(args)
-	return clean(scrubSecrets(string(b)), 200)
+	return clean(string(b), 200) // clean schwaerzt vor dem Kuerzen
 }
 
 // ---------------------------------------------------------------- Aufruf der API

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -15,8 +16,9 @@ import (
 // Probe prueft eine Verbindung im Assistenten: holt das Zertifikat (auch ein ungueltiges) und zeigt Fingerabdruck,
 // Subject und ob die System-CA es bestaetigt; danach version, cluster/status und cluster/resources mit dem Token.
 //
-// Ohne Pin und mit nicht vertrauenswuerdigem Zertifikat wird fuer den Test der eben gesehene Fingerabdruck benutzt
-// (der Assistent laesst ihn danach bestaetigen). Ist ein Pin gesetzt und passt nicht, bricht Probe mit Fehler ab.
+// Ohne Pin und mit nicht vertrauenswuerdigem Zertifikat wird das Token nicht gesendet: Probe liefert nur den
+// Fingerabdruck (NeedConfirm); nach der Bestaetigung testet der Assistent erneut mit ihm als Pin. Ist ein Pin gesetzt
+// und passt nicht, bricht Probe mit Fehler ab.
 func Probe(ctx context.Context, sys System) ProbeResult {
 	return probe(ctx, sys, nil, pveDialTimeout, pveRequestTimeout)
 }
@@ -64,7 +66,8 @@ func probe(ctx context.Context, sys System, roots *x509.CertPool, dialTO, reqTO 
 		res.Error = (&Error{Kind: ErrCertMismatch, Address: used, Detail: "got " + res.CertSHA256}).Error()
 		return res
 	case pin == "" && !res.CertTrusted:
-		pin = res.CertSHA256
+		res.NeedConfirm = true // Secret nie an ein unbestaetigtes Zertifikat
+		return res
 	}
 
 	// Mit dem Token nur die Adresse testen, deren Zertifikat eben gesehen wurde.
@@ -116,7 +119,7 @@ func probe(ctx context.Context, sys System, roots *x509.CertPool, dialTO, reqTO 
 				}
 			case TypeNode:
 				nodesSeen++
-				if !pveHas(res.Nodes, r.Node) {
+				if !slices.Contains(res.Nodes, r.Node) {
 					res.Nodes = append(res.Nodes, r.Node)
 				}
 			}

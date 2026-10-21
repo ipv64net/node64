@@ -1,6 +1,7 @@
 package cdnedge
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -56,16 +57,10 @@ func newRespCache(dir string, maxMB int) *respCache {
 }
 
 // cacheKey: Name, Pfad und Abfrage, dazu das Verfahren, das der Server waehlen wuerde, und die Komprimierungen, die der
-// Browser kann (fuer Ziele, die selbst komprimieren) - statt der ganzen Accept-Encoding-Zeile (zu viele Fassungen).
+// Browser annimmt (fuer Ziele, die selbst komprimieren; httpcompress.CacheVariant) - statt der ganzen
+// Accept-Encoding-Zeile (zu viele Fassungen).
 func cacheKey(r *http.Request) string {
-	ae := strings.ToLower(r.Header.Get("Accept-Encoding"))
-	enc := httpcompress.Negotiate(ae, staticAsset(r)) + "|"
-	for _, e := range []string{"br", "gzip", "zstd"} {
-		if strings.Contains(ae, e) {
-			enc += e + ","
-		}
-	}
-	h := sha256.Sum256([]byte(hostOnly(r.Host) + " " + r.URL.RequestURI() + " " + enc))
+	h := sha256.Sum256([]byte(hostOnly(r.Host) + " " + r.URL.RequestURI() + " " + httpcompress.CacheVariant(r.Header.Get("Accept-Encoding"))))
 	return hex.EncodeToString(h[:])
 }
 
@@ -107,9 +102,11 @@ func (s *Server) serveCached(w http.ResponseWriter, r *http.Request, re *route, 
 		next.ServeHTTP(w, r)
 		return
 	}
-	key := cacheKey(r)
+	key, ae := cacheKey(r), r.Header.Get("Accept-Encoding")
 	now := time.Now()
-	if it, f := s.cache.get(re.HostID, key, now); it != nil {
+	if it, f := s.cache.get(re.HostID, key, now); it != nil && !httpcompress.Acceptable(ae, it.header.Get("Content-Encoding")) {
+		_ = f.Close() // Verfahren des Ziels, das dieser Browser nicht kann: zum Ziel
+	} else if it != nil {
 		defer f.Close()
 		for k, v := range it.header {
 			w.Header()[k] = v
@@ -118,15 +115,17 @@ func (s *Server) serveCached(w http.ResponseWriter, r *http.Request, re *route, 
 		w.Header().Set("Content-Length", strconv.FormatInt(it.size, 10))
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodGet {
-			n, _ := io.Copy(w, f)
-			s.stats.of(re.Name).BytesOut.Add(n)
+			_, _ = io.Copy(w, f) // Traffic zaehlt outCounter (terminate.go)
 		}
 		return
 	}
-	cw := &captureWriter{ResponseWriter: w, s: s, now: now, limit: min(int64(cacheMaxObject), int64(t.cacheMB)<<20/4), get: r.Method == http.MethodGet}
-	next.ServeHTTP(cw, r)
+	cw := &captureWriter{ResponseWriter: w, s: s, now: now, limit: min(int64(cacheMaxObject), int64(t.cacheMB)<<20/4), get: r.Method == http.MethodGet, ae: ae}
+	r, cw.body = httpcompress.Track(r)
+	next.ServeHTTP(cw, r.WithContext(context.WithValue(r.Context(), captureKey{}, cw)))
 	cw.finish(re, key, t)
 }
+
+type captureKey struct{}
 
 type captureWriter struct {
 	http.ResponseWriter
@@ -134,6 +133,8 @@ type captureWriter struct {
 	now     time.Time
 	limit   int64
 	get     bool
+	ae      string             // Accept-Encoding der Anfrage
+	body    *httpcompress.Body // vollstaendig vom Ziel gelesen?
 	wrote   bool
 	ttl     time.Duration
 	tmp     *os.File
@@ -143,17 +144,31 @@ type captureWriter struct {
 	flusher bool
 }
 
+// storable: Antwort mit Status und Koepfen kaeme in den Cache (auch fuer die staerkere Komprimierung, compress.go).
+func (c *captureWriter) storable(code int, h http.Header) (time.Duration, bool) {
+	ttl, ok := cacheable(code, h, c.now)
+	if !ok || !c.get || c.s.cache.dir == "" {
+		return 0, false
+	}
+	if cl, err := strconv.ParseInt(h.Get("Content-Length"), 10, 64); err == nil && cl > c.limit {
+		return 0, false
+	}
+	return ttl, true
+}
+
 func (c *captureWriter) WriteHeader(code int) {
+	if code >= 100 && code < 200 && code != http.StatusSwitchingProtocols { // 103 Early Hints: nicht der Status
+		c.ResponseWriter.WriteHeader(code)
+		return
+	}
 	if c.wrote {
 		return
 	}
 	c.wrote = true
 	h := c.Header()
-	if ttl, ok := cacheable(code, h, c.now); ok && c.get && c.s.cache.dir != "" {
-		if cl, err := strconv.ParseInt(h.Get("Content-Length"), 10, 64); err != nil || cl <= c.limit {
-			if f, err := os.CreateTemp(c.s.cache.dir, "tmp-*"); err == nil {
-				c.tmp, c.ttl, c.header = f, ttl, h.Clone()
-			}
+	if ttl, ok := c.storable(code, h); ok {
+		if f, err := os.CreateTemp(c.s.cache.dir, "tmp-*"); err == nil {
+			c.tmp, c.ttl, c.header = f, ttl, h.Clone()
 		}
 	}
 	h.Set("X-Proxy-Cache", "MISS")
@@ -165,6 +180,9 @@ func (c *captureWriter) Write(p []byte) (int, error) {
 		c.WriteHeader(http.StatusOK)
 	}
 	n, err := c.ResponseWriter.Write(p)
+	if err != nil {
+		c.failed = true
+	}
 	if c.tmp != nil && !c.failed {
 		if c.n+int64(n) > c.limit {
 			c.failed = true
@@ -182,14 +200,16 @@ func (c *captureWriter) Flush() {
 	}
 }
 
-// finish: vollstaendige, cachebare Antwort uebernehmen.
+// finish: vollstaendige, cachebare Antwort uebernehmen - nur wenn der Body des Ziels ganz gelesen wurde (komprimiert
+// fehlt die Content-Length) und das Verfahren zu dieser Anfrage passt.
 func (c *captureWriter) finish(re *route, key string, t *target) {
 	if c.tmp == nil {
 		return
 	}
 	name := c.tmp.Name()
 	_ = c.tmp.Close()
-	if cl, err := strconv.ParseInt(c.header.Get("Content-Length"), 10, 64); c.failed || (err == nil && cl != c.n) {
+	if cl, err := strconv.ParseInt(c.header.Get("Content-Length"), 10, 64); c.failed || (err == nil && cl != c.n) || !c.body.Complete() ||
+		!httpcompress.Acceptable(c.ae, c.header.Get("Content-Encoding")) {
 		_ = os.Remove(name)
 		return
 	}

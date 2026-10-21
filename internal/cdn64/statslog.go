@@ -284,15 +284,17 @@ type HostStat struct {
 	Blocked  int64 `json:"blocked"` // abgewiesen; bei Host 0 Verbindungen vor der ersten Anfrage
 }
 
-// sums: Zahlen je Host seit since, in vollen Stunden-Eimern: die angebrochene Stunde von since zaehlt nicht mehr mit,
-// sonst waeren "24 Std." bis zu 25 Stunden.
+// bucketFrom: erster Stunden-Eimer ab since. Die angebrochene Stunde von since zaehlt nicht mehr mit, die laufende
+// Stunde schon: since = jetzt - N Std. ergibt genau N Eimer (sonst waeren "24 Std." bis zu 25 Stunden). sums und
+// hours nutzen beide diesen Anfang, damit die Summen dem Verlauf entsprechen.
+func bucketFrom(since time.Time) string {
+	return since.UTC().Truncate(time.Hour).Add(time.Hour).Format(time.RFC3339)
+}
+
+// sums: Zahlen je Host seit since, in vollen Stunden-Eimern (bucketFrom).
 func (s *statsDB) sums(ctx context.Context, since time.Time) (map[int64]HostStat, error) {
-	from := since.UTC().Truncate(time.Hour)
-	if from.Before(since) {
-		from = from.Add(time.Hour)
-	}
 	rows, err := s.db.QueryContext(ctx, `SELECT host_id, SUM(requests), SUM(s2), SUM(s3), SUM(s4), SUM(s5), SUM(bytes), SUM(blocked) FROM hourly WHERE hour >= ? GROUP BY host_id`,
-		from.Format(time.RFC3339))
+		bucketFrom(since))
 	if err != nil {
 		return nil, err
 	}
@@ -316,11 +318,11 @@ type HourPoint struct {
 	ConnBlocked int64 `json:"conn_blocked"` // davon Verbindungen vor der ersten Anfrage (nicht in requests)
 }
 
-// hours: Verlauf je Stunde (alle Hosts oder einer).
+// hours: Verlauf je Stunde (alle Hosts oder einer), ab bucketFrom(since) wie sums.
 func (s *statsDB) hours(ctx context.Context, hostID int64, since time.Time) ([]HourPoint, error) {
 	q := `SELECT hour, SUM(requests), SUM(s2), SUM(s3), SUM(s4), SUM(s5), SUM(bytes), SUM(blocked),
 		SUM(CASE WHEN host_id = 0 THEN blocked ELSE 0 END) FROM hourly WHERE hour >= ?`
-	args := []any{since.UTC().Truncate(time.Hour).Format(time.RFC3339)}
+	args := []any{bucketFrom(since)}
 	if hostID > 0 {
 		q += ` AND host_id = ?`
 		args = append(args, hostID)

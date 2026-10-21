@@ -128,20 +128,3 @@ func (s *Server) saveUIRouteForm(r *http.Request) error {
 	}
 	return s.saveUIRoute(r, r.PostFormValue("ui_name"), r.PostFormValue("ui_public") == "on")
 }
-
-// portsView: Ports und Eingang (Formular auf der Seite Ports, Name der Oberflaeche unter Allgemein).
-type portsView struct {
-	Entries  []ports.Entry
-	Edge     edge.Status
-	UIName   string
-	UIPublic bool
-	UICert   uiCertView
-}
-
-func (s *Server) portsData(ctx context.Context) *portsView {
-	if s.Ports == nil || s.Edge == nil {
-		return nil
-	}
-	return &portsView{Entries: s.Ports.Overview(ctx), Edge: s.Edge.Status(), UIName: s.Store.SettingOr(ctx, setUIName, ""),
-		UIPublic: s.Store.SettingOr(ctx, setUIPublic, "0") == "1", UICert: s.uiCertData(ctx)}
-}

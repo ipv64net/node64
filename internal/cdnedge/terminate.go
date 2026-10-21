@@ -1,6 +1,7 @@
 package cdnedge
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -61,7 +62,7 @@ func (s *Server) termInit() {
 		refuse: newChanListener(&net.TCPAddr{}), rl: newReqLimiter(s.cfg.Shield.ReqRate), direct: s.directInit()}
 	t.dirC = t.direct
 	if s.compressOn() {
-		t.dirC = httpcompress.Handler(t.direct, httpcompress.Options{Static: staticAsset})
+		t.dirC = httpcompress.Handler(t.direct, httpcompress.Options{Static: staticCached})
 	}
 	discard := log.New(io.Discard, "", 0)
 	tr := &http.Transport{DialContext: s.termDial, DisableKeepAlives: true, MaxResponseHeaderBytes: 1 << 20, ExpectContinueTimeout: time.Second}
@@ -304,8 +305,8 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	defer s.track(re.Name, re.Mode, ap.Addr(), cancel)()
 	ctx := context.WithValue(cctx, termCtxKey{}, &termReq{re: re, host: host, client: r.RemoteAddr})
-	if re.Mode == 3 {
-		s.serveCached(w, r.WithContext(ctx), re, s.term.dirC)
+	if re.Mode == 3 { // Traffic: was zum Besucher geht (komprimiert bzw. aus dem Cache), nicht was vom Ziel kommt
+		s.serveCached(&outCounter{ResponseWriter: w, st: st, bw: s.bw, uid: re.UserID}, r.WithContext(ctx), re, s.term.dirC)
 		return
 	}
 	s.term.proxy.ServeHTTP(w, r.WithContext(ctx))
@@ -393,17 +394,19 @@ func hostOnly(h string) string {
 	return normName(h)
 }
 
-// termConn zaehlt beide Richtungen eines Streams und haelt das Bandbreiten-Limit des Accounts ein.
+// termConn zaehlt beide Richtungen eines Streams und haelt das Bandbreiten-Limit des Accounts ein. noOut (Modus 3):
+// die Antwort zaehlt outCounter beim Besucher.
 type termConn struct {
 	net.Conn
-	st  *hostStat
-	bw  *bandwidth
-	uid int
+	st    *hostStat
+	bw    *bandwidth
+	uid   int
+	noOut bool
 }
 
 func (c *termConn) Read(p []byte) (int, error) { // Node -> Besucher
 	n, err := c.Conn.Read(p)
-	if n > 0 {
+	if n > 0 && !c.noOut {
 		c.st.BytesOut.Add(int64(n))
 		c.bw.take(c.uid, n)
 	}
@@ -416,6 +419,55 @@ func (c *termConn) Write(p []byte) (int, error) { // Besucher -> Node
 		c.st.BytesIn.Add(int64(n))
 		c.bw.take(c.uid, n)
 	}
+	return n, err
+}
+
+// outCounter (Modus 3) zaehlt die Bytes, die wirklich zum Besucher gehen - nach der Komprimierung und auch bei
+// Treffern aus dem Cache - und haelt dabei das Bandbreiten-Limit ein. WebSockets zaehlen nach Hijack weiter.
+type outCounter struct {
+	http.ResponseWriter
+	st  *hostStat
+	bw  *bandwidth
+	uid int
+}
+
+func (w *outCounter) Write(p []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(p)
+	w.count(n)
+	return n, err
+}
+
+func (w *outCounter) count(n int) {
+	if n > 0 {
+		w.st.BytesOut.Add(int64(n))
+		w.bw.take(w.uid, n)
+	}
+}
+
+func (w *outCounter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func (w *outCounter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+func (w *outCounter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	c, brw, err := http.NewResponseController(w.ResponseWriter).Hijack()
+	if err != nil {
+		return nil, nil, err
+	}
+	return &outConn{Conn: c, w: w}, brw, nil
+}
+
+type outConn struct {
+	net.Conn
+	w *outCounter
+}
+
+func (c *outConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+	c.w.count(n)
 	return n, err
 }
 

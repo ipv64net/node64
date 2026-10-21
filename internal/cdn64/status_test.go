@@ -211,14 +211,15 @@ func TestStatusHostExportImport(t *testing.T) {
 	}
 	b := newEnv(t) // ohne Healthchecks
 	b.enable(t)
-	if n, err := b.m.Import(ctx, raw); err != nil || n != 1 {
+	// Seite 42 gibt es auf der Quelle nicht: kein Slug im Export, der Host kommt ausgeschaltet (mit Meldung)
+	if n, err := b.m.Import(ctx, raw); err == nil || n != 1 || !strings.Contains(err.Error(), "status.test") {
 		t.Fatalf("import: n=%d err=%v", n, err)
 	}
 	list, _ := b.m.hosts(ctx)
-	if len(list) != 1 || list[0].Kind != KindStatus || list[0].StatusPageID != 42 || list[0].Advanced.GeoMode != geoAllow {
+	if len(list) != 1 || list[0].Kind != KindStatus || list[0].StatusPageID != 42 || list[0].Advanced.GeoMode != geoAllow || list[0].Enabled {
 		t.Fatalf("imported: %+v", list)
 	}
-	if code, _, _ := do(t, b.client(false), "GET", "http://status.test/"); code != http.StatusServiceUnavailable {
-		t.Fatalf("imported without healthchecks: %d", code)
+	if code, _, _ := do(t, b.client(false), "GET", "http://status.test/"); code == http.StatusOK {
+		t.Fatalf("imported host must be off: %d", code)
 	}
 }

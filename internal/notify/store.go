@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -231,4 +232,42 @@ func (s *Store) Deliveries(ctx context.Context, limit int, before int64, channel
 func (s *Store) PruneDeliveries(ctx context.Context, keep time.Duration) error {
 	_, err := s.w.ExecContext(ctx, `DELETE FROM nf_deliveries WHERE time < ?`, store.FormatTime(time.Now().Add(-keep)))
 	return err
+}
+
+// SaveHeld speichert die in der Ruhezeit zurueckgehaltenen Alerts eines Accounts (leer = entfernen).
+func (s *Store) SaveHeld(ctx context.Context, userID int64, list []Alert) error {
+	if len(list) == 0 {
+		_, err := s.w.ExecContext(ctx, `DELETE FROM nf_held WHERE user_id = ?`, userID)
+		return err
+	}
+	b, err := json.Marshal(list)
+	if err != nil {
+		return err
+	}
+	_, err = s.w.ExecContext(ctx, `INSERT INTO nf_held (user_id, alerts, updated_at) VALUES (?, ?, ?)
+		ON CONFLICT(user_id) DO UPDATE SET alerts = excluded.alerts, updated_at = excluded.updated_at`, userID, string(b), store.Now())
+	return err
+}
+
+// LoadHeld liefert die gespeicherten zurueckgehaltenen Alerts je Account (nach einem Neustart).
+func (s *Store) LoadHeld(ctx context.Context) (map[int64][]Alert, error) {
+	rows, err := s.r.QueryContext(ctx, `SELECT user_id, alerts FROM nf_held`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64][]Alert{}
+	for rows.Next() {
+		var uid int64
+		var raw string
+		if err := rows.Scan(&uid, &raw); err != nil {
+			return nil, err
+		}
+		var list []Alert
+		if err := json.Unmarshal([]byte(raw), &list); err != nil {
+			continue // kaputter Eintrag: nicht den Start blockieren
+		}
+		out[uid] = list
+	}
+	return out, rows.Err()
 }

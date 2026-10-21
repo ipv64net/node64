@@ -147,6 +147,7 @@ type onlineQuota struct {
 	Traffic, TrafficLimit     int64
 	DomPct, TrafficPct        int       // Fuellstand in Prozent (0-100)
 	DomBar, TrafficBar        float64   // Breite der Balken (bei Verbrauch mindestens 1 %, sonst unsichtbar)
+	DomClass, TrafficClass    string    // Farbe der Balken (module.BarClassOf; Traffic gelb auch bei Short)
 	Projected                 int64     // Prognose fuer den ganzen Monat bei gleichbleibendem Verbrauch (0 = noch keine)
 	Short                     bool      // Prognose ueber dem Limit
 	EmptyAt                   time.Time // voraussichtlich aufgebraucht (nur mit Short)
@@ -182,6 +183,7 @@ func newOnlineQuota(q ipv64api.CDN64Quota, now time.Time) *onlineQuota {
 			}
 		}
 	}
+	o.DomClass, o.TrafficClass = module.BarClassOf(float64(o.DomPct), false), module.BarClassOf(float64(o.TrafficPct), o.Short)
 	return o
 }
 

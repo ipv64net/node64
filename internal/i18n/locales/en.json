@@ -517,7 +517,8 @@
       "geo_country": "Unknown country code {name}: two letters per ISO, e.g. DE.",
       "geo_none": "Enter at least one country for the country block.",
       "geo_many": "At most 60 countries per host.",
-      "status_page": "Please choose a status page."
+      "status_page": "Please choose a status page.",
+      "pass_self": "Passthrough to this node's own web interface is not allowed – use a proxy host instead."
     },
     "help_title": "How it works",
     "help_ports": "The router forwards 80 and 443 (TCP, for HTTP/3 also 443/UDP) to this node. Node64 distributes the rest by domain name – also together with DNS64 in the same container.",
@@ -3874,7 +3875,8 @@
       "delay": "Delay 1–60 polls.",
       "key": "Unknown guest or node.",
       "no_box": "No key (secret.key) loaded – token secrets cannot be stored encrypted.",
-      "channels": "Channels: invalid selection (at most 100)."
+      "channels": "Channels: invalid selection (at most 100).",
+      "secret_reenter": "Addresses or fingerprint changed: please enter the token secret again for the test (the stored one is only sent to the configured target)."
     },
     "form": {
       "connection": "Connection",
@@ -3904,7 +3906,8 @@
       "rights_privsep": "With “Privilege Separation” the token needs its own rights:",
       "rights_secret": "Proxmox shows the secret only once when the token is created.",
       "about": "What Node64 queries",
-      "about_text": "Read-only: cluster/resources at the set interval (one call for everything), cluster/status every minute, qmpstatus of running VMs every 2 minutes. Node64 never starts, stops or changes anything in Proxmox."
+      "about_text": "Read-only: cluster/resources at the set interval (one call for everything), cluster/status every minute, qmpstatus of running VMs every 2 minutes. Node64 never starts, stops or changes anything in Proxmox.",
+      "probe_confirm_first": "The token has not been sent yet: compare and confirm the fingerprint first, then click “Test connection” again."
     },
     "warn_rights": "The token lacks read permissions – VMs and containers are missing.",
     "warn_rights_fix": "In Proxmox give the token the role PVEAuditor on path “/” (Datacenter › Permissions › Add › API Token Permission, Propagate); the guests appear with the next poll."

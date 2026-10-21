@@ -1,5 +1,23 @@
 # Änderungen – PROXY64
 
+## 1.22.0 – 2026-10-21
+
+### Behoben
+- Asset-Cache: Abgebrochene oder fehlerhafte Antworten des Ziels werden nie mehr zwischengespeichert, auch komprimiert
+  und über HTTP/3 bzw. den CDN64-Tunnel.
+- Cache-Fassungen richten sich nach den Verfahren, die der Browser wirklich annimmt (q=0 zählt nicht). Was das Ziel
+  selbst komprimiert (z. B. deflate), bekommt kein Browser, der es nicht kann.
+- 103 Early Hints vom Ziel verhindern Komprimierung und Cache nicht mehr. Accept-Ranges entfällt bei komprimierten
+  Antworten.
+- Komprimierung braucht deutlich weniger Speicher (kleinere Fenster, ca. 3–6 MB statt bis zu 50 MB je Antwort). Die
+  stärkere Stufe gilt nur für Antworten, die wirklich in den Cache kommen, und läuft höchstens 2–4-mal gleichzeitig.
+- X-Forwarded-For und X-Real-IP lassen sich unter „Erweitert“ nicht mehr setzen oder entfernen (die echte
+  Client-Adresse bleibt verlässlich). Durchreichen auf die eigene Oberfläche der Node wird abgelehnt.
+- Import: Statusseiten-Hosts ohne Seitenzuordnung im Export (ältere Exporte oder Healthchecks dort aus) werden
+  ausgeschaltet angelegt und gemeldet.
+- Statistik: Summen und Verlauf zählen dieselben Stunden (genau N Stunden inkl. der laufenden).
+- Kontingent: Kacheln und Startseiten-Karte nutzen dieselben Balkenwerte und Farben.
+
 ## 1.21.4 – 2026-10-21
 
 ### Behoben

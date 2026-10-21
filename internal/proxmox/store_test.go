@@ -187,12 +187,21 @@ func TestValidateSystem(t *testing.T) {
 
 func pveBool(b bool) *bool { return &b }
 
+// pveEffective: wirksame Regel einer Ebene aus dem Speicher.
+func pveEffective(ctx context.Context, s *Store, id int64, key, node string) (Rule, error) {
+	ss, err := s.Settings(ctx, id)
+	if err != nil {
+		return Rule{}, err
+	}
+	return ss.Effective(key, node), nil
+}
+
 func TestRulesInheritance(t *testing.T) {
 	ctx := context.Background()
 	s, _ := pveTestStore(t)
 	sys := pveNewSystem(t, s)
 
-	def, err := s.Effective(ctx, sys.ID, "qemu/100", "pve1")
+	def, err := pveEffective(ctx, s, sys.ID, "qemu/100", "pve1")
 	if err != nil || !reflect.DeepEqual(def, DefaultRule()) {
 		t.Fatalf("Standard: %+v %v", def, err)
 	}
@@ -211,23 +220,23 @@ func TestRulesInheritance(t *testing.T) {
 	must(&Settings{SystemID: sys.ID, Key: "node/pve1", Rules: RuleSet{Stopped: pveBool(false), Mem: &Threshold{70, 1}}})
 	must(&Settings{SystemID: sys.ID, Key: "qemu/100", Rules: RuleSet{CPU: &Threshold{0, 0}, Stopped: pveBool(true)}, ExpectRunning: pveBool(false)})
 
-	r, _ := s.Effective(ctx, sys.ID, "qemu/100", "pve1")
+	r, _ := pveEffective(ctx, s, sys.ID, "qemu/100", "pve1")
 	if r.CPU.Percent != 0 || !r.Stopped || r.Mem != (Threshold{70, 1}) || r.Delay != 3 || r.Disk != (Threshold{90, 0}) {
 		t.Fatalf("Gast: %+v", r)
 	}
-	r, _ = s.Effective(ctx, sys.ID, "qemu/101", "pve1")
+	r, _ = pveEffective(ctx, s, sys.ID, "qemu/101", "pve1")
 	if r.CPU != (Threshold{80, 5}) || r.Stopped || r.Mem.Percent != 70 {
 		t.Fatalf("anderer Gast auf pve1: %+v", r)
 	}
-	r, _ = s.Effective(ctx, sys.ID, "qemu/101", "pve2")
+	r, _ = pveEffective(ctx, s, sys.ID, "qemu/101", "pve2")
 	if r.CPU != (Threshold{80, 5}) || !r.Stopped || r.Mem.Percent != 95 {
 		t.Fatalf("Gast auf pve2: %+v", r)
 	}
-	r, _ = s.Effective(ctx, sys.ID, "node/pve1", "pve1")
+	r, _ = pveEffective(ctx, s, sys.ID, "node/pve1", "pve1")
 	if r.Mem.Percent != 70 || r.Stopped {
 		t.Fatalf("Node: %+v", r)
 	}
-	r, _ = s.Effective(ctx, sys.ID, "", "")
+	r, _ = pveEffective(ctx, s, sys.ID, "", "")
 	if r.CPU.Percent != 80 || r.Mem.Percent != 95 {
 		t.Fatalf("System: %+v", r)
 	}
@@ -239,10 +248,10 @@ func TestRulesInheritance(t *testing.T) {
 	if ss.Name != "Lab" {
 		t.Fatalf("Name: %q", ss.Name)
 	}
-	if err := s.DeleteSettings(ctx, sys.ID, "qemu/100"); err != nil {
+	if err := s.ResetSettings(ctx, sys.ID, "qemu/100"); err != nil {
 		t.Fatal(err)
 	}
-	r, _ = s.Effective(ctx, sys.ID, "qemu/100", "pve1")
+	r, _ = pveEffective(ctx, s, sys.ID, "qemu/100", "pve1")
 	if r.CPU.Percent != 80 || r.Stopped {
 		t.Fatalf("nach Zuruecksetzen: %+v", r)
 	}
@@ -271,6 +280,39 @@ func TestRulesInheritance(t *testing.T) {
 	if it := ss.Item("lxc/200"); !it.AsCheck || it.CheckToken != "tok" || it.ExpectRunning != nil {
 		t.Fatalf("AsCheck: %+v", it)
 	}
+	// Zuruecksetzen behaelt „als Check“
+	must(&Settings{SystemID: sys.ID, Key: "lxc/200", AsCheck: true, CheckToken: "tok", Muted: true, Rules: RuleSet{Delay: &delay}})
+	if err := s.ResetSettings(ctx, sys.ID, "lxc/200"); err != nil {
+		t.Fatal(err)
+	}
+	ss, _ = s.Settings(ctx, sys.ID)
+	if it := ss.Item("lxc/200"); !it.AsCheck || it.CheckToken != "tok" || it.Muted || it.Rules != (RuleSet{}) {
+		t.Fatalf("Reset mit AsCheck: %+v", it)
+	}
+	if err := s.ResetSettings(ctx, sys.ID, "qemu/x"); !errors.As(err, &fe) {
+		t.Fatalf("Reset Key: %v", err)
+	}
+}
+
+// Gespeichertes Secret nur fuer dieselben Adressen und denselben Pin.
+func TestSameEndpoint(t *testing.T) {
+	pin := strings.Repeat("ab", 32)
+	a := &System{Addresses: []string{"https://pve1:8006", "pve2"}, PinSHA256: pin}
+	for _, c := range []struct {
+		b    System
+		same bool
+	}{
+		{System{Addresses: []string{"pve2:8006", "PVE1"}, PinSHA256: strings.ToUpper(pin)}, true},
+		{System{Addresses: []string{"pve1", "pve2", "pve2"}, PinSHA256: pin}, true},
+		{System{Addresses: []string{"pve1"}, PinSHA256: pin}, false},
+		{System{Addresses: []string{"pve1", "evil"}, PinSHA256: pin}, false},
+		{System{Addresses: []string{"pve1", "pve2"}}, false},
+		{System{Addresses: []string{"pve1", "pve2"}, PinSHA256: strings.Repeat("cd", 32)}, false},
+	} {
+		if got := SameEndpoint(a, &c.b); got != c.same {
+			t.Errorf("%+v: %v", c.b, got)
+		}
+	}
 }
 
 // Kanaele: nil = erben, leere Liste = Standardkanaele, sonst diese (doppelte entfernt, sortiert); JSON-Roundtrip.
@@ -286,7 +328,7 @@ func TestRulesChannels(t *testing.T) {
 	}
 	eff := func(key, node string) []int64 {
 		t.Helper()
-		r, err := s.Effective(ctx, sys.ID, key, node)
+		r, err := pveEffective(ctx, s, sys.ID, key, node)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -327,7 +369,7 @@ func TestRulesChannels(t *testing.T) {
 		t.Fatalf("JSON: %s", b)
 	}
 	// Zuruecksetzen: wieder erben
-	if err := s.DeleteSettings(ctx, sys.ID, "node/pve1"); err != nil {
+	if err := s.ResetSettings(ctx, sys.ID, "node/pve1"); err != nil {
 		t.Fatal(err)
 	}
 	if got := eff("qemu/100", "pve1"); !reflect.DeepEqual(got, []int64{3, 7}) {

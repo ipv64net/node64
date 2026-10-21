@@ -1,5 +1,26 @@
 # Änderungen – Healthchecks
 
+## 2.21.0 – 2026-10-21
+
+### Behoben
+- Proxmox VE: „Verbindung testen“ schickt das Token nie an ein unbestätigtes Zertifikat. Erst den Fingerabdruck
+  bestätigen, dann erneut testen. Das gespeicherte Secret gilt nur für die eingerichteten Adressen mit demselben
+  Fingerabdruck.
+- Proxmox VE: Keine doppelten Meldungen mehr bei „als Check führen“; eine schon gemeldete Störung übernimmt der Check.
+  Eine Störung, die während „als Check“ oder bei abgeschalteter Regel erkannt wurde, wird nachgeholt.
+- Proxmox VE: Checks „als Check“ nutzen die Kanäle der Proxmox-Regeln, auch nach Änderungen; bei abgeschaltetem System
+  werden sie pausiert angelegt.
+- Proxmox VE: „Nicht erreichbar“ wartet die eingestellte Verzögerung auch zeitlich ab. Fortgesetzte bzw. neu
+  gestartete VMs zeigen keinen alten Zustand „angehalten/abgestürzt“ mehr. Ein gestoppter Gast mit hängendem Lock gilt
+  nach 4 Stunden als gestoppt. Direkt nach einem Neustart meldet der Check keine kurze Störung mehr.
+- Proxmox VE: Import schaltet abgeschaltete Systeme richtig ab; gleichnamige Systeme werden über die Adressen
+  zugeordnet, sonst neu angelegt. Gleichzeitiges Speichern startet keine zweite Abfrage mehr.
+- Proxmox VE: Prometheus-Kennzahlen mit zusätzlichem Label `system_id`. Filter der Systemseite sendet direkt ab, Raten
+  im Zahlenformat der Sprache, Systemseite lädt schneller.
+- Benachrichtigungen: In der Ruhezeit zurückgehaltene Meldungen werden gespeichert und gehen bei einem Neustart nicht
+  mehr verloren. Geheimnisse in Fehlertexten werden gründlicher geschwärzt (client_secret, auth_token, JSON-Paare,
+  Authorization mit beliebigem Schema); „basic constraints“ bleibt lesbar.
+
 ## 2.20.1 – 2026-10-21
 
 ### Behoben

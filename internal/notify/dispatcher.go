@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -180,6 +181,7 @@ func (d *Dispatcher) settings(userID int64) Settings {
 
 // Start startet die Verarbeitung.
 func (d *Dispatcher) Start(ctx context.Context) {
+	d.loadHeld(ctx)
 	d.ctx, d.cancel = context.WithCancel(ctx)
 	d.wg.Add(1)
 	go d.run()
@@ -397,15 +399,58 @@ func (d *Dispatcher) quiet(a Alert) bool {
 	return d.inQuietHours(a.Check.UserID, at)
 }
 
-// hold merkt einen in der Ruhezeit unterdrueckten Alert fuer die Sammelmeldung danach.
+// heldStore: Datenhaltung der zurueckgehaltenen Alerts (Store des Nodes). Die Module merken sich Meldungen als
+// verschickt (z. B. Proxmox VE); ohne Speicher gingen sie bei einem Neustart in der Ruhezeit verloren.
+type heldStore interface {
+	SaveHeld(ctx context.Context, userID int64, list []Alert) error
+	LoadHeld(ctx context.Context) (map[int64][]Alert, error)
+}
+
+// loadHeld holt nach dem Start die zurueckgehaltenen Alerts zurueck (Sammelmeldung nach der Ruhezeit wie sonst).
+func (d *Dispatcher) loadHeld(ctx context.Context) {
+	hs, ok := d.st.(heldStore)
+	if !ok {
+		return
+	}
+	m, err := hs.LoadHeld(ctx)
+	if err != nil {
+		d.log.Warn("held notifications not loaded", "err", err)
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for uid, list := range m {
+		d.held[uid] = append(d.held[uid], list[:min(len(list), maxHeld)]...)
+	}
+}
+
+// saveHeld speichert den Stand eines Accounts (leer = entfernen).
+func (d *Dispatcher) saveHeld(uid int64) {
+	hs, ok := d.st.(heldStore)
+	if !ok {
+		return
+	}
+	d.mu.Lock()
+	list := slices.Clone(d.held[uid])
+	d.mu.Unlock()
+	if err := hs.SaveHeld(context.Background(), uid, list); err != nil {
+		d.log.Warn("held notifications not saved", "err", err)
+	}
+}
+
+// hold merkt einen in der Ruhezeit unterdrueckten Alert fuer die Sammelmeldung danach (auch gespeichert).
 func (d *Dispatcher) hold(a Alert) {
 	if a.Time.IsZero() {
 		a.Time = d.now()
 	}
 	d.mu.Lock()
-	defer d.mu.Unlock()
-	if len(d.held[a.Check.UserID]) < maxHeld {
+	full := len(d.held[a.Check.UserID]) >= maxHeld
+	if !full {
 		d.held[a.Check.UserID] = append(d.held[a.Check.UserID], a)
+	}
+	d.mu.Unlock()
+	if !full {
+		d.saveHeld(a.Check.UserID)
 	}
 }
 
@@ -424,6 +469,7 @@ func (d *Dispatcher) releaseHeld(ctx context.Context) {
 	d.mu.Unlock()
 	for uid, list := range ready {
 		d.sendDigest(ctx, uid, list)
+		d.saveHeld(uid) // erst nach dem Versand entfernen
 	}
 }
 
@@ -1002,7 +1048,7 @@ func RedactURLs(s string) string {
 		if err != nil || u.Host == "" {
 			return "[url]"
 		}
-		if u.Path == "" && u.RawQuery == "" && u.User == nil {
+		if u.Path == "" && u.RawQuery == "" && u.User == nil && u.Fragment == "" {
 			return raw
 		}
 		return u.Scheme + "://" + u.Host + "/…"

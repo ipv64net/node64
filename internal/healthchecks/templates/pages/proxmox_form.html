@@ -41,10 +41,11 @@
 		</div>
 
 		{{with $d.Probe}}
-		<div class="card mb-3 {{if .OK}}border-success{{else}}border-danger{{end}}" id="probe">
-			<div class="card-header"><i class="bi {{if .OK}}bi-check-circle text-success{{else}}bi-x-circle text-danger{{end}}"></i> {{$.T "pve.form.probe_result"}}</div>
+		<div class="card mb-3 {{if .OK}}border-success{{else if .NeedConfirm}}border-warning{{else}}border-danger{{end}}" id="probe">
+			<div class="card-header"><i class="bi {{if .OK}}bi-check-circle text-success{{else if .NeedConfirm}}bi-shield-exclamation text-warning{{else}}bi-x-circle text-danger{{end}}"></i> {{$.T "pve.form.probe_result"}}</div>
 			<div class="card-body small">
 				{{if .Error}}<div class="alert alert-danger py-2 mb-2 text-break">{{.Error}}</div>{{end}}
+				{{if .NeedConfirm}}<div class="alert alert-warning py-2 mb-2"><i class="bi bi-shield-exclamation"></i> {{$.T "pve.form.probe_confirm_first"}}</div>{{end}}
 				{{if .OK}}<dl class="row mb-2">
 					<dt class="col-sm-4">{{$.T "pve.version"}}</dt><dd class="col-sm-8">{{.Version}}</dd>
 					<dt class="col-sm-4">{{$.T "pve.cluster"}}</dt><dd class="col-sm-8">{{if .Cluster}}{{.Cluster}}{{else}}{{$.T "pve.single"}}{{end}}</dd>

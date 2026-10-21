@@ -1,11 +1,13 @@
 package web
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -45,7 +47,9 @@ func (s *Server) mcpEnabled(ctx context.Context) bool {
 
 // mcpPrivateSource: Absender und alle Weiterleitungs-Koepfe muessen aus privaten Netzen kommen. Koepfe von aussen
 // koennen den Zugang nie oeffnen, nur sperren (z. B. PROXY64 bzw. ein Reverse-Proxy reicht eine oeffentliche
-// Adresse in X-Forwarded-For weiter).
+// Adresse in X-Forwarded-For weiter). Kam die Anfrage ueber PROXY64 (fester Kopf X-Node64-Proxy), muss eine
+// weitergereichte Client-Adresse da sein: die erweiterten Einstellungen eines Proxy-Hosts koennen
+// X-Forwarded-For/X-Real-IP entfernen, dann saehe ein Besucher aus dem Internet sonst privat aus.
 func mcpPrivateSource(r *http.Request) bool {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -73,6 +77,7 @@ func mcpPrivateSource(r *http.Request) bool {
 			}
 		}
 	}
+	n := 0
 	for _, f := range fwd {
 		f = strings.TrimSpace(f)
 		if f == "" {
@@ -87,8 +92,37 @@ func mcpPrivateSource(r *http.Request) bool {
 		if err != nil || !lanOnly(a.Unmap()) {
 			return false
 		}
+		n++
 	}
-	return true
+	return n > 0 || r.Header.Get(mcpProxyHeader) == ""
+}
+
+// mcpProxyHeader setzt PROXY64 bei jeder weitergeleiteten Anfrage (internal/cdn64, nicht ueberschreibbar).
+const mcpProxyHeader = "X-Node64-Proxy"
+
+// mcpBatch: Rumpf ist ein JSON-RPC-Batch (Array). Das SDK nimmt Batches bei alten Protokoll-Versionen noch an;
+// sie wuerden das Rate-Limit je Anfrage umgehen (MCP 2025-06-18 hat Batches abgeschafft). Der Rumpf bleibt lesbar.
+func mcpBatch(r *http.Request) bool {
+	if r.Method != http.MethodPost || r.Body == nil {
+		return false
+	}
+	br := bufio.NewReader(r.Body)
+	r.Body = struct {
+		io.Reader
+		io.Closer
+	}{br, r.Body}
+	for {
+		b, err := br.Peek(1)
+		if err != nil {
+			return false
+		}
+		switch b[0] {
+		case ' ', '\t', '\r', '\n':
+			_, _ = br.ReadByte()
+		default:
+			return b[0] == '['
+		}
+	}
 }
 
 func mcpErr(w http.ResponseWriter, status int, msg string) {
@@ -137,6 +171,11 @@ func (s *Server) mcpServe(w http.ResponseWriter, r *http.Request) {
 	if !s.mcpLimit.allow("key:" + strconv.FormatInt(key.ID, 10)) {
 		w.Header().Set("Retry-After", "5")
 		mcpErr(w, http.StatusTooManyRequests, fmt.Sprintf("rate limit: %d requests per minute per MCP key", mcpRate))
+		return
+	}
+	if mcpBatch(r) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"jsonrpc": "2.0", "id": nil,
+			"error": map[string]any{"code": -32600, "message": "JSON-RPC batch requests are not supported, send one request per HTTP call"}})
 		return
 	}
 	if time.Since(key.LastUsedAt) > 30*time.Second || key.LastIP != ip {

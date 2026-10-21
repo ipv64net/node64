@@ -376,3 +376,85 @@ func TestEngineExportImport(t *testing.T) {
 	}
 	e4.Import(1, nil) // nil aendert nichts
 }
+
+// Waehrend AsCheck bzw. abgeschalteter Regel erkannte Stoerung wird nachgeholt, sobald AsCheck aus bzw. die Regel an
+// ist (sonst kaeme nie eine Meldung); eine vom Check gemeldete Stoerung (Adopt) nicht noch einmal.
+func TestRulesPendingOutage(t *testing.T) {
+	p := newPveRun(t)
+	p.snap(true, pveVM(100, StateRunning))
+	p.item("qemu/100").AsCheck = true
+	p.snap(true, pveVM(100, StateStopped))
+	p.expect(p.snap(true, pveVM(100, StateStopped)), "")
+	p.item("qemu/100").AsCheck = false
+	evs := p.snap(true, pveVM(100, StateStopped))
+	p.expect(evs, "down:stopped:qemu/100")
+	if !evs[0].Since.Equal(p.now.Add(-60 * time.Second)) {
+		t.Fatalf("Since: %v", evs[0].Since)
+	}
+	p.expect(p.snap(true, pveVM(100, StateStopped)), "")
+	p.expect(p.snap(true, pveVM(100, StateRunning)), "up:stopped:qemu/100")
+
+	// Check hatte gemeldet: Engine uebernimmt (Adopt), meldet nur die Entwarnung
+	p.item("qemu/100").AsCheck = true
+	p.snap(true, pveVM(100, StateStopped))
+	p.snap(true, pveVM(100, StateStopped))
+	p.e.Adopt(1, "qemu/100")
+	p.item("qemu/100").AsCheck = false
+	p.expect(p.snap(true, pveVM(100, StateStopped)), "")
+	p.expect(p.snap(true, pveVM(100, StateRunning)), "up:stopped:qemu/100")
+	p.e.Adopt(1, "qemu/100") // laeuft: nichts zu uebernehmen
+	p.expect(p.snap(true, pveVM(100, StateRunning)), "")
+
+	// „nicht erreichbar“ abgeschaltet, waehrend es passiert, dann wieder an: Meldung nachgeholt
+	q := newPveRun(t)
+	q.item("").Rules.Unreachable = pveBool(false)
+	q.snap(false)
+	q.expect(q.snap(false), "")
+	q.item("").Rules.Unreachable = nil
+	q.expect(q.snap(false), "down:unreachable:")
+	q.expect(q.snap(true), "up:unreachable:")
+}
+
+// Als Check meldet die Engine keine Entwarnung (der Check meldet sie); eine schon gemeldete Stoerung gibt Outage
+// heraus, damit der neue Check sie uebernimmt statt sie noch einmal zu melden.
+func TestRulesAsCheckNoDuplicateUp(t *testing.T) {
+	p := newPveRun(t)
+	p.snap(true, pveVM(100, StateRunning))
+	p.snap(true, pveVM(100, StateStopped))
+	p.expect(p.snap(true, pveVM(100, StateStopped)), "down:stopped:qemu/100")
+	since, ok := p.e.Outage(1, "qemu/100")
+	if !ok || !since.Equal(p.now.Add(-30*time.Second)) {
+		t.Fatalf("Outage: %v %v", since, ok)
+	}
+	if _, ok := p.e.Outage(1, "qemu/101"); ok {
+		t.Fatal("Outage ohne Stoerung")
+	}
+	p.item("qemu/100").AsCheck = true
+	p.expect(p.snap(true, pveVM(100, StateStopped)), "")
+	p.expect(p.snap(true, pveVM(100, StateRunning)), "") // Entwarnung kommt ueber den Check
+	if _, ok := p.e.Outage(1, "qemu/100"); ok {
+		t.Fatal("Stoerung nach Entwarnung offen")
+	}
+	p.item("qemu/100").AsCheck = false
+	p.expect(p.snap(true, pveVM(100, StateRunning)), "")
+}
+
+// Die Verzoegerung „nicht erreichbar“ zaehlt auch zeitlich: schnelle Wiederholungen nach Fehlern (5 s, 10 s …)
+// melden nicht schon nach Sekunden.
+func TestRulesUnreachableDelayByTime(t *testing.T) {
+	e := NewEngine()
+	set := &SystemSettings{SystemID: 1, Name: "Lab"}
+	t0 := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	at := func(sec int, ok bool) string {
+		return pveEvStr(e.Evaluate(&Snapshot{SystemID: 1, Time: t0.Add(time.Duration(sec) * time.Second), OK: ok, Interval: 30 * time.Second}, set))
+	}
+	at(0, true)
+	for _, sec := range []int{1, 6, 16} { // Backoff 5 s, 10 s
+		if got := at(sec, false); got != "" {
+			t.Fatalf("%d s: %q zu frueh", sec, got)
+		}
+	}
+	if got := at(31, false); got != "down:unreachable:" { // 30 s nach dem ersten Fehler (Delay 2 × 30 s Intervall)
+		t.Fatalf("31 s: %q", got)
+	}
+}

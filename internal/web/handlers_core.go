@@ -318,9 +318,9 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 					d.Other++
 				}
 				d.ChecksProj += healthchecks.CheckDailyCost(c, v.Sync.Locations)
+				d.OnlinePoints += healthchecks.CheckOnlinePoints(c, v.Sync.Locations) // wie der hub zaehlt (ein Standort je Check, wenn der Account nur einen hat)
 			}
 		}
-		d.OnlinePoints = s.HC.OnlinePoints(ctx, "", v.Sync.Locations) // wie der hub zaehlt (ein Standort je Check, wenn der Account nur einen hat)
 	}
 	if s.IPv64 != nil {
 		if r.URL.Query().Get("refresh") == "account" {
@@ -397,7 +397,6 @@ type settingsData struct {
 	LogModules map[string]string
 	Modules2   []string
 	HTTPSPort  int
-	Ports      *portsView        // Ports und Eingang (nil = nicht verfuegbar)
 	Reach      *reachView        // Karte Erreichbarkeit dieser Node
 	Moved      map[string]string // alte Sprungmarken -> neue Seite (Weiterleitung in app.js)
 	// lokale Datenhaltung (Healthchecks)
@@ -450,7 +449,6 @@ func (s *Server) settingsView(r *http.Request) *View {
 		d.LogModules[k] = logging.LevelName(l)
 	}
 	d.Modules2 = logModuleNames
-	d.Ports = s.portsData(ctx)
 	d.Reach, d.Moved = s.reachData(ctx), settingsMoved
 	v.Data = d
 	v.Form = map[string]string{"node_name": d.NodeName, "location": d.Location, "lang": v.User.Lang, "timezone": v.User.Timezone, "level": d.LogLevel}

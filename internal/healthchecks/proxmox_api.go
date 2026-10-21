@@ -193,7 +193,9 @@ func (m *Module) apiPVEDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// apiPVEProbe prueft eine Verbindung (Assistent): mit system_id ohne Secret wird das gespeicherte benutzt.
+// apiPVEProbe prueft eine Verbindung (Assistent): mit system_id ohne Secret wird das gespeicherte benutzt – nur mit
+// den gespeicherten Adressen und dem gespeicherten Pin (sonst muss das Secret mitkommen). Ohne Pin und mit nicht
+// vertrauenswuerdigem Zertifikat kommt nur der Fingerabdruck zurueck (need_confirm); danach mit ihm als pin_sha256.
 func (m *Module) apiPVEProbe(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		pveSystemIn
@@ -204,18 +206,22 @@ func (m *Module) apiPVEProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sys := proxmox.System{Name: "probe", Interval: proxmox.DefaultInterval}
+	var old *proxmox.System
 	if in.SystemID > 0 {
-		old, err := m.pve.st.System(r.Context(), in.SystemID)
-		if err != nil {
+		var err error
+		if old, err = m.pve.st.System(r.Context(), in.SystemID); err != nil {
 			m.pveAPIErr(w, err)
 			return
 		}
 		sys = *old
 	}
-	secret := sys.Secret
 	in.apply(&sys)
-	if sys.Secret == "" {
-		sys.Secret = secret
+	if sys.Secret == "" && old != nil {
+		if !proxmox.SameEndpoint(old, &sys) {
+			m.pveAPIErr(w, &proxmox.FieldError{Field: "secret", Key: "pve.err.secret_reenter"})
+			return
+		}
+		sys.Secret = old.Secret
 	}
 	if err := proxmox.ValidateSystem(&sys, true); err != nil {
 		m.pveAPIErr(w, err)
@@ -378,6 +384,7 @@ func (m *Module) apiPVESettingsPut(w http.ResponseWriter, r *http.Request) {
 		m.pveAPIErr(w, err)
 		return
 	}
+	m.pveSyncCheckChannels(ctx, sys.ID, m.actor(r)) // Checks „als Check“: Kanaele wie die Regeln
 	m.auditText(r, "proxmox.settings", sys.Name+pveKeySuffix(key))
 	set, _ = m.pve.st.Settings(ctx, sys.ID)
 	writeJSON(w, http.StatusOK, map[string]any{"settings": set.Item(key), "effective": set.Effective(key, m.pveNodeOf(sys.ID, key))})
@@ -399,12 +406,12 @@ func (m *Module) apiPVESettingsDelete(w http.ResponseWriter, r *http.Request) {
 		m.pveAPIErr(w, err)
 		return
 	}
-	if it := set.Item(key); it != nil {
-		it.Muted, it.ExpectRunning, it.Rules = false, nil, proxmox.RuleSet{}
-		if err := m.pve.st.SaveSettings(r.Context(), it); err != nil {
+	if set.Item(key) != nil {
+		if err := m.pve.st.ResetSettings(r.Context(), sys.ID, key); err != nil {
 			m.pveAPIErr(w, err)
 			return
 		}
+		m.pveSyncCheckChannels(r.Context(), sys.ID, m.actor(r))
 	}
 	m.auditText(r, "proxmox.settings_reset", sys.Name+pveKeySuffix(key))
 	w.WriteHeader(http.StatusNoContent)

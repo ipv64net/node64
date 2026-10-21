@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/edge"
+	"github.com/ipv64net/node64/internal/ports"
 	"github.com/ipv64net/node64/internal/store"
 )
 
@@ -421,6 +422,9 @@ func (m *Module) saveHost(ctx context.Context, h *Host) error {
 	if err := m.checkUnique(ctx, h); err != nil {
 		return err
 	}
+	if h.Kind == KindPass && m.passToSelf(ctx, h) {
+		return ferr("target_port", "cdn64.err.pass_self")
+	}
 	for _, id := range append([]int64{h.AccessListID}, locationACLs(h)...) {
 		if id > 0 {
 			if _, err := m.accessList(ctx, id); err != nil {
@@ -517,4 +521,40 @@ func (h *Host) summary() string {
 	}
 	return fmt.Sprintf("target=%s enabled=%v ws=%v exploits=%v cache=%v cert=%d force_ssl=%v http2=%v http3=%v hsts=%v tls=%s acl=%d locations=%d", h.Target(),
 		h.Enabled, h.WebSockets, h.BlockExploits, h.CacheAssets, h.CertID, h.ForceSSL, h.HTTP2, h.HTTP3, h.HSTS, h.MinTLS, h.AccessListID, len(h.Locations))
+}
+
+// passToSelf: Durchreichen auf die eigene Oberflaeche (Port des Kerns "web" auf localhost bzw. einer Adresse dieser
+// Node) gaebe Fremden aus dem Internet eine Verbindung, die wie aus dem Heimnetz aussieht (ohne weitergereichte
+// Client-Adresse; /mcp und Heimnetz-Pruefungen sind dann blind). Die Oberflaeche geht ueber einen Proxy-Host.
+func (m *Module) passToSelf(ctx context.Context, h *Host) bool {
+	if m.ports == nil {
+		return false
+	}
+	web := false
+	for _, c := range m.ports.All(ctx) {
+		if c.Owner == "web" && c.Proto == ports.TCP && c.Port == h.TargetPort {
+			web = true
+		}
+	}
+	if !web {
+		return false
+	}
+	if h.TargetHost == "localhost" {
+		return true
+	}
+	a, err := netip.ParseAddr(h.TargetHost)
+	if err != nil {
+		return false
+	}
+	a = a.Unmap()
+	if a.IsLoopback() || a.IsUnspecified() {
+		return true
+	}
+	addrs, _ := net.InterfaceAddrs()
+	for _, x := range addrs {
+		if p, err := netip.ParsePrefix(x.String()); err == nil && p.Addr().Unmap() == a {
+			return true
+		}
+	}
+	return false
 }

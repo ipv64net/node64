@@ -59,3 +59,39 @@ func TestExportImportStatusHostBySlug(t *testing.T) {
 		t.Fatalf("alt must be switched off: %+v", h)
 	}
 }
+
+// Export ohne Slug (alte Version oder Healthchecks dort aus): der Host wird ausgeschaltet angelegt, auch wenn
+// hier eine Seite mit derselben ID existiert.
+func TestImportStatusHostWithoutSlug(t *testing.T) {
+	ctx := context.Background()
+	a := newEnv(t) // ohne Statusseiten (Healthchecks aus): kein host_status im Export
+	a.enable(t)
+	h := newHostKind(KindStatus)
+	h.Names, h.StatusPageID, h.CertID = []string{"old.test"}, 7, CertNone
+	if err := a.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	exp, err := a.m.Export(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(exp)
+	if strings.Contains(string(raw), `"host_status"`) {
+		t.Fatalf("unexpected host_status: %s", raw)
+	}
+
+	b := newEnv(t)
+	b.m.SetStatusPages(pageList{{ID: 7, Slug: "fremd"}})
+	b.enable(t)
+	n, err := b.m.Import(ctx, raw)
+	if n != 1 || err == nil || !strings.Contains(err.Error(), "old.test") {
+		t.Fatalf("import: %d %v", n, err)
+	}
+	list, err := b.m.hosts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].Enabled {
+		t.Fatalf("host must be switched off: %+v", list)
+	}
+}

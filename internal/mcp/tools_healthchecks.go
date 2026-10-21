@@ -42,7 +42,7 @@ func healthTools() []Tool {
 			Desc:   "Monitored Proxmox VE systems (clusters or hosts): state, version, quorum, number of nodes and guests, problems.",
 			Schema: noArgs, Run: pveSystems},
 		{Name: "pve_resources", Area: AreaProxmox, Title: "Proxmox VE nodes and guests", Untrusted: true,
-			Desc: "Nodes, VMs and containers of the Proxmox VE systems from the last poll with state and load (CPU, memory, disk).",
+			Desc: "Nodes, VMs and containers of the Proxmox VE systems from the last poll with state and load (CPU, memory, disk). Load values are only present for online nodes and running guests; disk_percent is missing for VMs without guest agent.",
 			Schema: schema(nil, pIntOpt("system", "Only this system id (from pve_systems).", 1, 1<<30), pEnum("type", "Only this resource type.", "", "node", "qemu", "lxc"),
 				pBool("problems_only", "Only resources with a problem (stopped, offline, error, ...)."), pInt("limit", "Maximum number of resources.", 200, 1, 1000)),
 			Run: pveResources},
@@ -433,13 +433,20 @@ func pveResources(c *call, a map[string]any) (map[string]any, error) {
 				continue
 			}
 			o := obj{"system": id, "system_name": sysName, "key": str(m, "key"), "type": str(m, "type"), "node": clean(str(m, "node"), 64),
-				"state": str(m, "state"), "problem": boolean(m, "bad"), "cpu_percent": round(num(m, "cpu")*100, 1),
-				"mem_percent": pct(num(m, "mem"), num(m, "max_mem")), "mem_bytes": i64(m, "mem"), "uptime_seconds": i64(m, "uptime")}
+				"state": str(m, "state"), "problem": boolean(m, "bad")}
 			if vmid := i64(m, "vmid"); vmid > 0 {
 				o["vmid"] = vmid
 			}
-			if num(m, "max_disk") > 0 {
-				o["disk_percent"] = pct(num(m, "disk"), num(m, "max_disk"))
+			// Messwerte wie in der Oberflaeche (healthchecks/proxmox_ui.go, proxmox.Resource.DiskPercent): nur bei
+			// Node online bzw. laufendem Gast; Disk bei QEMU ohne Gast-Agent (disk 0) unbekannt statt 0 %
+			if str(m, "state") == "online" || str(m, "status") == "running" {
+				o["cpu_percent"], o["uptime_seconds"] = round(num(m, "cpu")*100, 1), i64(m, "uptime")
+				if num(m, "max_mem") > 0 {
+					o["mem_percent"], o["mem_bytes"] = pct(num(m, "mem"), num(m, "max_mem")), i64(m, "mem")
+				}
+				if num(m, "max_disk") > 0 && (num(m, "disk") > 0 || str(m, "type") != "qemu") {
+					o["disk_percent"] = pct(num(m, "disk"), num(m, "max_disk"))
+				}
 			}
 			if boolean(m, "muted") {
 				o["muted"] = true

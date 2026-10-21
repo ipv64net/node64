@@ -1,5 +1,23 @@
 # Changes – PROXY64
 
+## 1.22.0 – 2026-10-21
+
+### Fixed
+- Asset cache: aborted or failed upstream responses are never cached, including compressed ones and over HTTP/3 or the
+  CDN64 tunnel.
+- Cache variants follow the encodings the browser actually accepts (q=0 does not count). Responses the target
+  compressed itself (e.g. deflate) are not served to browsers that can't decode them.
+- 103 Early Hints from the target no longer prevent compression and caching. Accept-Ranges is removed from compressed
+  responses.
+- Compression uses much less memory (smaller windows, about 3–6 MB instead of up to 50 MB per response). The stronger
+  level only applies to responses that are actually cached, and at most 2–4 such runs happen at once.
+- X-Forwarded-For and X-Real-IP can no longer be set or removed under "Advanced" (the real client address stays
+  reliable). Passthrough to the node's own web interface is refused.
+- Import: status-page hosts without a page mapping in the export (older exports or Healthchecks off on the source) are
+  created switched off and reported.
+- Statistics: totals and timeline cover the same hours (exactly N hours including the current one).
+- Quota: tiles and dashboard card share the same bar values and colours.
+
 ## 1.21.4 – 2026-10-21
 
 ### Fixed

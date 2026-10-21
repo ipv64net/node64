@@ -2,28 +2,34 @@ package mcp
 
 import (
 	"encoding/json"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/ipv64net/node64/internal/logging"
+	"github.com/ipv64net/node64/internal/notify"
 )
 
 // Zentraler Filter fuer alle Antworten der Werkzeuge: Geheimnisse entfernen, fremde Texte saeubern und kuerzen,
 // Zeiten einheitlich (RFC 3339, UTC). Die Werkzeuge waehlen ihre Felder ausdruecklich aus (Positivliste); der
 // Filter hier ist die zweite Sicherung fuer alles, was trotzdem durchrutscht (z. B. Fehlertexte mit URLs).
 
-// secretKeyRe: Feldnamen, die nie ausgegeben werden (ausser unter "untrusted", dort stehen z. B. die Passwoerter,
-// die Angreifer am Honeypot probiert haben – das sind Daten der Angreifer, keine Geheimnisse der Node).
-var secretKeyRe = regexp.MustCompile(`(?i)(passw|passwd|secret|token|api_?key|authorization|private|credential|cookie|push_url|_pem$|^headers$|^params$|request_headers|response_headers)`)
+// secretKey: Feldnamen, die nie ausgegeben werden (ausser unter "untrusted", dort stehen z. B. die Passwoerter, die
+// Angreifer am Honeypot probiert haben – das sind Daten der Angreifer, keine Geheimnisse der Node). Gemeinsame Liste
+// mit dem Log (logging.IsSecretKey), dazu Felder, die bei MCP nie gebraucht werden (Push-Adresse, PEM, Koepfe).
+var mcpSecretKeyRe = regexp.MustCompile(`(?i)(push_url|_pem$|^headers$|^params$|request_headers|response_headers)`)
+
+func secretKey(k string) bool { return logging.IsSecretKey(k) || mcpSecretKeyRe.MatchString(k) }
 
 var (
-	pemRe     = regexp.MustCompile(`-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z0-9 ]*PRIVATE KEY-----|$)`)
-	urlRe     = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.-]*://[^\s"'<>\]\[]+`)
-	authRe    = regexp.MustCompile(`(?i)\b(bearer|basic|token)\s+[A-Za-z0-9._~+/=-]{8,}`)
-	kvRe      = regexp.MustCompile(`(?i)\b(token|access_token|secret|password|passwd|pwd|pass|api[_-]?key|apikey|key|auth|sig|signature|session|sid|code)=([^&\s"';,]+)`)
+	pemRe = regexp.MustCompile(`-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z0-9 ]*PRIVATE KEY-----|$)`)
+	// zusaetzlich zu notify.RedactSecrets: kurze bzw. allgemeine Namen, die in Fehlertexten zu oft vorkommen,
+	// fuer die KI aber trotzdem nicht gebraucht werden
+	kvRe      = regexp.MustCompile(`(?i)\b(pass|key|sig|session|sid|code)=([^&\s"';,]+)`)
+	tokSchRe  = regexp.MustCompile(`(?i)\b(token)\s+[A-Za-z0-9._~+/=-]{8,}`)
 	prefixRe  = regexp.MustCompile(`\b(node64|mcp64)_[A-Za-z0-9_-]{16,}`)
 	longTokRe = regexp.MustCompile(`[A-Za-z0-9_-]{24,}`)
 	// Steuerzeichen und unsichtbare Richtungs-/Breitenzeichen (Unicode-Tricks in fremden Texten)
@@ -49,29 +55,17 @@ func looksLikeToken(s string) bool {
 	return up && low && dig
 }
 
-// scrubURL: nur Schema und Host bleiben (wie notify.RedactURLs). In Pfad, Query und Zugangsdaten stehen oft
-// Tokens (Webhooks, DoH-Profile, DuckDNS-Updates), die sich nicht zuverlaessig erkennen lassen.
-func scrubURL(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
-		return "[url]"
-	}
-	out := u.Scheme + "://" + u.Host
-	if (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
-		out += "/…"
-	}
-	return out
-}
-
-// scrubSecrets entfernt typische Geheimnis-Muster aus einem Text.
+// scrubSecrets entfernt typische Geheimnis-Muster aus einem Text: notify.RedactSecrets (URLs nur mit Schema und
+// Host – in Pfad, Query und Zugangsdaten stehen oft Tokens –, Schluessel=Wert, JSON-Paare, Authorization), dazu
+// private Schluessel (PEM), Schluessel der Node (node64_/mcp64_) und lange Zufallstokens.
 func scrubSecrets(s string) string {
 	if s == "" {
 		return s
 	}
 	s = pemRe.ReplaceAllString(s, "[private key removed]")
-	s = urlRe.ReplaceAllStringFunc(s, scrubURL)
-	s = authRe.ReplaceAllString(s, "$1 ***")
+	s = notify.RedactSecrets(s)
 	s = kvRe.ReplaceAllString(s, "$1=***")
+	s = tokSchRe.ReplaceAllString(s, "$1 ***")
 	s = prefixRe.ReplaceAllString(s, "${1}_***")
 	s = longTokRe.ReplaceAllStringFunc(s, func(t string) string {
 		if looksLikeToken(t) {
@@ -82,7 +76,8 @@ func scrubSecrets(s string) string {
 	return s
 }
 
-// clean: fremder Text ohne Steuerzeichen, gekuerzt auf max Zeichen (Runen).
+// clean: fremder Text ohne Steuerzeichen und ohne Geheimnisse, gekuerzt auf max Zeichen (Runen). Geschwaerzt wird
+// vor dem Kuerzen: ein an der Grenze abgeschnittenes Token waere sonst zu kurz fuer die Erkennung.
 func clean(s string, max int) string {
 	if s == "" {
 		return ""
@@ -91,7 +86,6 @@ func clean(s string, max int) string {
 		s = strings.ToValidUTF8(s, "�")
 	}
 	var b strings.Builder
-	n := 0
 	for _, r := range s {
 		if r == '\n' || r == '\t' || r == '\r' {
 			r = ' '
@@ -99,14 +93,20 @@ func clean(s string, max int) string {
 		if unicode.IsControl(r) || invisible[r] {
 			continue
 		}
-		if n >= max {
-			b.WriteString("…")
-			break
-		}
 		b.WriteRune(r)
-		n++
 	}
-	return strings.TrimSpace(b.String())
+	s = scrubSecrets(b.String())
+	if utf8.RuneCountInString(s) > max {
+		n := 0
+		for i := range s {
+			if n == max {
+				s = s[:i] + "…"
+				break
+			}
+			n++
+		}
+	}
+	return strings.TrimSpace(s)
 }
 
 // sanitize geht rekursiv durch die Ausgabe: Geheimnis-Felder weg, alle Texte gefiltert.
@@ -115,7 +115,7 @@ func sanitize(v any, inUntrusted bool) any {
 	case map[string]any:
 		out := make(map[string]any, len(x))
 		for k, val := range x {
-			if !inUntrusted && secretKeyRe.MatchString(k) {
+			if !inUntrusted && secretKey(k) {
 				continue
 			}
 			sv := sanitize(val, inUntrusted || k == "untrusted")
@@ -152,7 +152,7 @@ func sanitize(v any, inUntrusted bool) any {
 		}
 		return out
 	case string:
-		return scrubSecrets(clean(x, 2000))
+		return clean(x, 2000)
 	default:
 		return v
 	}

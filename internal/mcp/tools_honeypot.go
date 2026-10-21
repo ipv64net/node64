@@ -207,8 +207,9 @@ func honeypotLookupIP(c *call, a map[string]any) (map[string]any, error) {
 				}
 				cnt++
 				if len(lr) < 10 {
-					lr = append(lr, obj{"time": ts(m["time"]), "status": i64(m, "status"), "method": clean(str(m, "method"), 10), "rejected_reason": str(m, "reason"),
-						"untrusted": obj{"host": clean(str(m, "host"), 253), "path": clean(stripQuery(str(m, "path")), 300), "user_agent": clean(str(m, "user_agent"), 200)}})
+					lr = append(lr, obj{"time": ts(m["time"]), "status": i64(m, "status"), "rejected_reason": str(m, "reason"),
+						"untrusted": obj{"method": clean(str(m, "method"), 10), "host": clean(str(m, "host"), 253), "path": clean(stripQuery(str(m, "path")), 300),
+							"user_agent": clean(str(m, "user_agent"), 200)}})
 				}
 			}
 			px["access_log_rows"] = cnt

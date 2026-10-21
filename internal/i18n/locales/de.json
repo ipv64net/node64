@@ -517,7 +517,8 @@
       "geo_country": "Unbekannter Ländercode {name}: zwei Buchstaben nach ISO, z. B. DE.",
       "geo_none": "Für die Ländersperre mindestens ein Land angeben.",
       "geo_many": "Höchstens 60 Länder je Host.",
-      "status_page": "Bitte eine Statusseite wählen."
+      "status_page": "Bitte eine Statusseite wählen.",
+      "pass_self": "Durchreichen auf die eigene Oberfläche geht nicht – dafür einen Proxy-Host anlegen."
     },
     "help_title": "So funktioniert es",
     "help_ports": "Der Router leitet 80 und 443 (TCP, für HTTP/3 auch 443/UDP) auf diese Node weiter. Den Rest verteilt Node64 nach dem Domainnamen – auch zusammen mit DNS64 im selben Container.",
@@ -3874,7 +3875,8 @@
       "delay": "Verzögerung 1–60 Abfragen.",
       "key": "Unbekannter Gast bzw. Node.",
       "no_box": "Kein Schlüssel (secret.key) geladen – Token-Secrets lassen sich nicht verschlüsselt speichern.",
-      "channels": "Kanäle: ungültige Auswahl (höchstens 100)."
+      "channels": "Kanäle: ungültige Auswahl (höchstens 100).",
+      "secret_reenter": "Adressen oder Fingerabdruck geändert: bitte das Token-Secret für den Test neu eingeben (das gespeicherte geht nur an das eingerichtete Ziel)."
     },
     "form": {
       "connection": "Verbindung",
@@ -3904,7 +3906,8 @@
       "rights_privsep": "Mit „Privilege Separation“ braucht das Token eigene Rechte:",
       "rights_secret": "Das Secret zeigt Proxmox nur einmal beim Anlegen an.",
       "about": "Was Node64 abfragt",
-      "about_text": "Nur lesend: cluster/resources im eingestellten Takt (ein Aufruf für alles), cluster/status jede Minute, qmpstatus laufender VMs alle 2 Minuten. Node64 startet, stoppt oder ändert in Proxmox nichts."
+      "about_text": "Nur lesend: cluster/resources im eingestellten Takt (ein Aufruf für alles), cluster/status jede Minute, qmpstatus laufender VMs alle 2 Minuten. Node64 startet, stoppt oder ändert in Proxmox nichts.",
+      "probe_confirm_first": "Das Token wurde noch nicht gesendet: erst den Fingerabdruck vergleichen und bestätigen, dann erneut „Verbindung testen“."
     },
     "warn_rights": "Dem Token fehlen Leserechte – VMs und Container fehlen deshalb.",
     "warn_rights_fix": "In Proxmox dem Token die Rolle PVEAuditor auf dem Pfad „/“ geben (Rechenzentrum › Berechtigungen › Hinzufügen › API-Token-Berechtigung, Weitergeben an), danach erscheinen die Gäste bei der nächsten Abfrage."

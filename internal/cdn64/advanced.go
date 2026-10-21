@@ -64,9 +64,13 @@ func validHeaderName(n string) bool {
 	return true
 }
 
+// ownHeaders setzt Node64 selbst (echte Client-Adresse - darauf baut z. B. die Pruefung von /mcp -, Schleifenschutz):
+// weder ueberschreibbar noch entfernbar
+var ownHeaders = map[string]bool{"x-forwarded-for": true, "x-real-ip": true, strings.ToLower(loopHeader): true}
+
 // hop-by-hop und Kopfzeilen, die Node64 selbst setzt: nicht ueberschreibbar
 var fixedHeaders = map[string]bool{"connection": true, "upgrade": true, "transfer-encoding": true, "content-length": true, "te": true,
-	"trailer": true, "keep-alive": true, "proxy-connection": true, strings.ToLower(loopHeader): true}
+	"trailer": true, "keep-alive": true, "proxy-connection": true, "x-forwarded-for": true, "x-real-ip": true, strings.ToLower(loopHeader): true}
 
 // normalize prueft die weiteren Optionen.
 func (a *Advanced) normalize() error {
@@ -78,10 +82,10 @@ func (a *Advanced) normalize() error {
 			}
 		}
 	}
-	for _, list := range [][]string{a.RequestRemove, a.ResponseRemove} {
+	for j, list := range [][]string{a.RequestRemove, a.ResponseRemove} {
 		for i := range list {
 			list[i] = strings.TrimSpace(list[i])
-			if !validHeaderName(list[i]) {
+			if !validHeaderName(list[i]) || (j == 0 && ownHeaders[strings.ToLower(list[i])]) {
 				return &FieldError{Field: "advanced", Key: "cdn64.err.header", Name: list[i]}
 			}
 		}

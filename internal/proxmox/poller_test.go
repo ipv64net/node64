@@ -255,7 +255,7 @@ func TestPollerRun(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run did not stop")
 	}
-	if n != 1 || p.Last() == nil || !p.Last().OK {
+	if n != 1 || p.Last() == nil || !p.Last().OK || p.Last().Interval != 30*time.Second {
 		t.Fatalf("run: n=%d last=%+v", n, p.Last())
 	}
 }
@@ -272,10 +272,21 @@ func TestProbe(t *testing.T) {
 	f := newCluster()
 	srv := startTLS(t, f, "", nil)
 	ctx := context.Background()
-	// selbstsigniert, ohne Pin: Fingerabdruck zeigen, Test mit diesem Fingerabdruck
+	// selbstsigniert, ohne Pin: nur Fingerabdruck zeigen, das Token geht nicht an das unbestaetigte Zertifikat
 	r := probe(ctx, testSys("", srv.URL), x509.NewCertPool(), time.Second, 2*time.Second)
-	if !r.OK || r.CertTrusted || r.CertSHA256 != pinOf(srv) || !strings.Contains(r.CertSubject, "Acme") {
+	if r.OK || !r.NeedConfirm || r.Error != "" || r.CertTrusted || r.CertSHA256 != pinOf(srv) || !strings.Contains(r.CertSubject, "Acme") || r.Version != "" {
 		t.Fatalf("untrusted: %+v", r)
+	}
+	f.mu.Lock()
+	sent := len(f.auths)
+	f.mu.Unlock()
+	if sent != 0 {
+		t.Fatalf("token sent to an unconfirmed certificate (%d requests)", sent)
+	}
+	// bestaetigt: Test mit diesem Fingerabdruck als Pin
+	r = probe(ctx, testSys(r.CertSHA256, srv.URL), x509.NewCertPool(), time.Second, 2*time.Second)
+	if !r.OK || r.NeedConfirm || r.CertTrusted {
+		t.Fatalf("confirmed: %+v", r)
 	}
 	if r.Version != "8.2.4" || r.Cluster != "lab" || strings.Join(r.Nodes, ",") != "pve1,pve2,pve3" || r.Guests != 10 || r.PermWarning != "" {
 		t.Fatalf("data: %+v", r)
@@ -304,7 +315,7 @@ func TestProbe(t *testing.T) {
 		t.Fatalf("no rights: %+v", r)
 	}
 	// nicht erreichbar, zweite Adresse geht
-	r = probe(ctx, testSys("", deadAddr(t), srv.URL), nil, time.Second, 2*time.Second)
+	r = probe(ctx, testSys(pinOf(srv), deadAddr(t), srv.URL), nil, time.Second, 2*time.Second)
 	if !r.OK || r.CertSHA256 == "" {
 		t.Fatalf("second address: %+v", r)
 	}
@@ -424,5 +435,84 @@ func TestPollerNoNodePinsWithCA(t *testing.T) {
 	}
 	if f.hit("/nodes/pve2/certificates/info") != 0 || len(c.lpins) != 0 {
 		t.Fatal("certificates/info asked for a CA system")
+	}
+}
+
+// qmpstatus ungleich running wird bei jeder Abfrage neu gefragt: eine fortgesetzte VM zeigt nicht bis zur naechsten
+// Runde (2 min) weiter „angehalten“; Fehler beim Nachfragen verwerfen den alten Wert.
+func TestPollerQMPRecheck(t *testing.T) {
+	f := newCluster()
+	srv := startTLS(t, f, "", nil)
+	clock := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	p := testPoller(t, testSys(pinOf(srv), srv.URL), nil, &clock)
+	ctx := context.Background()
+	if m := byKey(p.Poll(ctx)); m["qemu/101"].State != StatePaused || m["qemu/107"].State != StateError {
+		t.Fatalf("first poll: %v %v", m["qemu/101"].State, m["qemu/107"].State)
+	}
+	f.set(func(f *fakePVE) {
+		f.qmp["pve1/101"] = "running" // fortgesetzt
+		delete(f.qmp, "pve1/107")     // Nachfrage schlaegt fehl
+	})
+	clock = clock.Add(30 * time.Second)
+	m := byKey(p.Poll(ctx))
+	if m["qemu/101"].State != StateRunning || m["qemu/107"].State != StateRunning || m["qemu/107"].QMP != "" {
+		t.Fatalf("after resume: %v %v", m["qemu/101"].State, m["qemu/107"].State)
+	}
+	if f.hit("/nodes/pve1/qemu/101/status/current") != 2 || f.hit("/nodes/pve1/qemu/100/status/current") != 1 {
+		t.Fatalf("recheck: %v", f.hits)
+	}
+	// ab jetzt running: erst in der naechsten Runde wieder gefragt
+	clock = clock.Add(30 * time.Second)
+	p.Poll(ctx)
+	if f.hit("/nodes/pve1/qemu/101/status/current") != 2 {
+		t.Fatalf("running asked again: %v", f.hits)
+	}
+	// gemerkter Wert gilt nach Neustart (Uptime kleiner), Umzug oder geaendertem Lock nicht mehr
+	p.qmp = map[string]pveQMP{
+		"qemu/1": {status: "paused", node: "pve1", uptime: 100},
+		"qemu/2": {status: "paused", node: "pve1", uptime: 100},
+		"qemu/3": {status: "paused", node: "pve2", uptime: 100},
+		"qemu/4": {status: "paused", node: "pve1", lock: "backup", uptime: 100},
+	}
+	vm := func(id int, uptime int64) Resource {
+		return Resource{Type: TypeQEMU, VMID: id, Node: "pve1", Status: "running", Uptime: uptime}
+	}
+	res := []Resource{vm(1, 160), vm(2, 20), vm(3, 160), vm(4, 160)}
+	p.evaluate(clock, res)
+	for i, want := range []State{StatePaused, StateRunning, StateRunning, StateRunning} {
+		if res[i].State != want {
+			t.Errorf("qemu/%d: %v, want %v", i+1, res[i].State, want)
+		}
+	}
+}
+
+// Gestoppter Gast mit Lock: eine Weile neutral (Backup im Stopp-Modus), danach als gestoppt bewertet (haengender Lock).
+func TestPollerStaleLock(t *testing.T) {
+	f := newCluster()
+	srv := startTLS(t, f, "", nil)
+	clock := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	p := testPoller(t, testSys(pinOf(srv), srv.URL), nil, &clock)
+	ctx := context.Background()
+	f.set(func(f *fakePVE) {
+		for _, r := range f.resources {
+			if r["id"] == "qemu/106" {
+				r["lock"] = "backup"
+			}
+		}
+	})
+	if m := byKey(p.Poll(ctx)); m["qemu/106"].State != StateBackup {
+		t.Fatalf("stopped backup: %v", m["qemu/106"].State)
+	}
+	clock = clock.Add(pveLockGrace - time.Minute)
+	if m := byKey(p.Poll(ctx)); m["qemu/106"].State != StateBackup {
+		t.Fatalf("within grace: %v", m["qemu/106"].State)
+	}
+	clock = clock.Add(time.Minute)
+	if m := byKey(p.Poll(ctx)); m["qemu/106"].State != StateStopped || m["qemu/106"].Lock != "backup" {
+		t.Fatalf("stale lock: %+v", m["qemu/106"])
+	}
+	// laufender Gast mit Lock bleibt Backup
+	if m := byKey(p.Poll(ctx)); m["qemu/103"].State != StateBackup {
+		t.Fatalf("running backup: %v", m["qemu/103"].State)
 	}
 }

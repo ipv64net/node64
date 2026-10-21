@@ -3,7 +3,9 @@ package proxmox
 import (
 	"context"
 	"database/sql"
+	"maps"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/ipv64net/node64/internal/store"
@@ -142,7 +144,7 @@ func (s *Store) Record(ctx context.Context, snap *Snapshot) error {
 		}
 		key := r.Key()
 		var disk any
-		if r.MaxDisk > 0 && (r.Disk > 0 || r.Type != TypeQEMU) {
+		if _, ok := r.DiskPercent(); ok {
 			disk = pveRatio(r.Disk, r.MaxDisk)
 		}
 		cpu := pveClamp(r.CPU * 10000)
@@ -179,7 +181,7 @@ func (s *Store) seenRunning(ctx context.Context, systemID int64) (map[string]boo
 	m := s.seen[systemID]
 	s.mu.Unlock()
 	if m != nil {
-		return pveCopyMap(m), nil
+		return maps.Clone(m), nil
 	}
 	rows, err := s.r.QueryContext(ctx, `SELECT key FROM pve_settings WHERE system_id = ? AND seen_running = 1`, systemID)
 	if err != nil {
@@ -203,30 +205,32 @@ func (s *Store) seenRunning(ctx context.Context, systemID int64) (map[string]boo
 	}
 	m = s.seen[systemID]
 	s.mu.Unlock()
-	return pveCopyMap(m), nil
-}
-
-func pveCopyMap(m map[string]bool) map[string]bool {
-	out := make(map[string]bool, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
+	return maps.Clone(m), nil
 }
 
 // pveCompactSQL fasst src in Intervalle von step Sekunden in dst zusammen (gewichtet mit n). Bereits vorhandene
 // Intervalle werden ersetzt, damit ein erneuter Lauf (z. B. nach spaeten Werten) dasselbe Ergebnis liefert.
 func pveCompactSQL(src, dst string, step int64) string {
-	b := "(t / " + itoa(int(step)) + ") * " + itoa(int(step))
-	avg := func(c string) string { return "CAST(round(sum(" + c + " * n) * 1.0 / sum(n)) AS INTEGER)" }
 	return `INSERT INTO ` + dst + ` (system_id, key, t, n, cpu, cpu_max, mem, disk, net_in, net_out, disk_read, disk_write)
-	SELECT system_id, key, ` + b + ` AS b, sum(n), ` + avg("cpu") + `, max(cpu_max), ` + avg("mem") + `,
-		CAST(round(sum(disk * n) * 1.0 / sum(CASE WHEN disk IS NULL THEN 0 ELSE n END)) AS INTEGER),
-		` + avg("net_in") + `, ` + avg("net_out") + `, ` + avg("disk_read") + `, ` + avg("disk_write") + `
+	SELECT system_id, key, ` + pveAggCols(step, true) + `
 	FROM ` + src + ` WHERE t >= ? AND t < ? GROUP BY system_id, key, b
 	ON CONFLICT(system_id, key, t) DO UPDATE SET n = excluded.n, cpu = excluded.cpu, cpu_max = excluded.cpu_max,
 		mem = excluded.mem, disk = excluded.disk, net_in = excluded.net_in, net_out = excluded.net_out,
 		disk_read = excluded.disk_read, disk_write = excluded.disk_write`
+}
+
+// pveAggCols sind die Spalten eines Intervalls von step Sekunden (b = Beginn, gewichtet mit n gemittelt, CPU auch
+// als Maximum, Disk nur ueber Werte ungleich NULL) – gemeinsam fuer Verdichtung und Series. withN: mit sum(n).
+func pveAggCols(step int64, withN bool) string {
+	st := strconv.FormatInt(step, 10)
+	avg := func(c string) string { return "CAST(round(sum(" + c + " * n) * 1.0 / sum(n)) AS INTEGER)" }
+	n := ""
+	if withN {
+		n = "sum(n), "
+	}
+	return `(t / ` + st + `) * ` + st + ` AS b, ` + n + avg("cpu") + `, max(cpu_max), ` + avg("mem") + `,
+		CAST(round(sum(disk * n) * 1.0 / sum(CASE WHEN disk IS NULL THEN 0 ELSE n END)) AS INTEGER),
+		` + avg("net_in") + `, ` + avg("net_out") + `, ` + avg("disk_read") + `, ` + avg("disk_write")
 }
 
 // maintain verdichtet abgeschlossene Intervalle (1 min → 5 min → 1 h) und raeumt alle 15 Minuten auf.
@@ -339,11 +343,7 @@ func (s *Store) Series(ctx context.Context, systemID int64, key string, from, to
 	if tail > to.Unix() {
 		return out, nil
 	}
-	b := "(t / " + itoa(int(step)) + ") * " + itoa(int(step))
-	avg := func(c string) string { return "CAST(round(sum(" + c + " * n) * 1.0 / sum(n)) AS INTEGER)" }
-	more, err := s.seriesQuery(ctx, `SELECT `+b+` AS b, `+avg("cpu")+`, max(cpu_max), `+avg("mem")+`,
-		CAST(round(sum(disk * n) * 1.0 / sum(CASE WHEN disk IS NULL THEN 0 ELSE n END)) AS INTEGER),
-		`+avg("net_in")+`, `+avg("net_out")+`, `+avg("disk_read")+`, `+avg("disk_write")+`
+	more, err := s.seriesQuery(ctx, `SELECT `+pveAggCols(step, false)+`
 		FROM pve_hist_1m WHERE system_id = ? AND key = ? AND t >= ? AND t <= ? GROUP BY b ORDER BY b`, systemID, key, tail, to.Unix())
 	if err != nil {
 		return nil, err
