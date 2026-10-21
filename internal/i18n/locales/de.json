@@ -3787,6 +3787,8 @@
       "rights_secret": "Das Secret zeigt Proxmox nur einmal beim Anlegen an.",
       "about": "Was Node64 abfragt",
       "about_text": "Nur lesend: cluster/resources im eingestellten Takt (ein Aufruf für alles), cluster/status jede Minute, qmpstatus laufender VMs alle 2 Minuten. Node64 startet, stoppt oder ändert in Proxmox nichts."
-    }
+    },
+    "warn_rights": "Dem Token fehlen Leserechte – VMs und Container fehlen deshalb.",
+    "warn_rights_fix": "In Proxmox dem Token die Rolle PVEAuditor auf dem Pfad „/“ geben (Rechenzentrum › Berechtigungen › Hinzufügen › API-Token-Berechtigung, Weitergeben an), danach erscheinen die Gäste bei der nächsten Abfrage."
   }
 }

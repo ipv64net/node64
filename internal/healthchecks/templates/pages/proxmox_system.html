@@ -25,6 +25,7 @@
 {{else if eq $d.State "error"}}<div class="alert alert-danger small"><i class="bi bi-key"></i> <strong>{{.T "pve.sys_state.error"}}:</strong> {{$d.Error}} <a href="{{$d.Path}}/edit">{{.T "pve.edit"}}</a></div>
 {{else if eq $d.State "down"}}<div class="alert alert-danger small"><i class="bi bi-plug"></i> <strong>{{.T "pve.unreachable"}}:</strong> {{$d.Error}}</div>
 {{else if eq $d.State "pending"}}<div class="alert alert-info small"><i class="bi bi-hourglass-split"></i> {{.T "pve.pending"}}</div>{{end}}
+{{with $d.Snap}}{{if .Warning}}<div class="alert alert-warning small"><i class="bi bi-shield-exclamation"></i> <strong>{{$.T "pve.warn_rights"}}</strong> {{$.T "pve.warn_rights_fix"}}<div class="font-monospace text-break mt-1">{{.Warning}}</div></div>{{end}}{{end}}
 
 {{if $d.NodeRows}}
 <div class="card mb-3">

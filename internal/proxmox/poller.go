@@ -71,6 +71,7 @@ type Poller struct {
 	qmp       map[string]string // Key -> qmpstatus
 	prev      map[string]pvePrev
 	failing   bool
+	warn      string // Rechte-Hinweis aus cluster/status (403)
 }
 
 // pvePrev ist der Stand einer Resource bei der letzten erfolgreichen Abfrage (Raten, Neustart).
@@ -166,6 +167,7 @@ func (p *Poller) Poll(ctx context.Context) *Snapshot {
 		s.Address = p.client.Address()
 	}
 	s.Version, s.Cluster, s.Quorate = p.version, p.cluster, p.quorate
+	s.Warning = p.warn
 	p.mu.Lock()
 	p.last = s
 	p.mu.Unlock()
@@ -279,8 +281,12 @@ func (p *Poller) fetchStatus(ctx context.Context) {
 	var st []pveStatusEntry
 	if err := p.client.Get(ctx, "/cluster/status", &st); err != nil {
 		p.log.Debug("proxmox cluster/status failed", "err", err)
+		if errors.Is(err, ErrPermission) {
+			p.warn = err.Error() // in der Oberflaeche zeigen: ohne Rechte fehlen Gaeste
+		}
 		return
 	}
+	p.warn = ""
 	cluster, quorate, up, ips := pveParseStatus(st)
 	p.cluster, p.quorate, p.nodeUp = cluster, quorate, up
 	p.client.SetLearned(ips)

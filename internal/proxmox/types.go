@@ -118,6 +118,7 @@ type Snapshot struct {
 	Version   string     `json:"version,omitempty"`
 	Cluster   string     `json:"cluster,omitempty"` // Clustername, leer bei Einzel-Node
 	Quorate   *bool      `json:"quorate,omitempty"`
+	Warning   string     `json:"warning,omitempty"` // erreichbar, aber eingeschraenkt (z. B. Token ohne Leserechte: Gaeste fehlen)
 	Resources []Resource `json:"resources"`
 }
 

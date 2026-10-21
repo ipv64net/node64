@@ -3787,6 +3787,8 @@
       "rights_secret": "Proxmox shows the secret only once when the token is created.",
       "about": "What Node64 queries",
       "about_text": "Read-only: cluster/resources at the set interval (one call for everything), cluster/status every minute, qmpstatus of running VMs every 2 minutes. Node64 never starts, stops or changes anything in Proxmox."
-    }
+    },
+    "warn_rights": "The token lacks read permissions – VMs and containers are missing.",
+    "warn_rights_fix": "In Proxmox give the token the role PVEAuditor on path “/” (Datacenter › Permissions › Add › API Token Permission, Propagate); the guests appear with the next poll."
   }
 }
