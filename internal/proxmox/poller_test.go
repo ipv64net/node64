@@ -1,0 +1,428 @@
+package proxmox
+
+import (
+	"context"
+	"crypto/x509"
+	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+var testLog = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+// testPoller: Poller mit Testuhr (now zeigt auf *clock).
+func testPoller(t *testing.T, sys System, fn SnapshotFunc, clock *time.Time) *Poller {
+	t.Helper()
+	c := mustClient(t, sys, nil)
+	p := newPoller(testLog, sys, fn, c, nil)
+	p.now = func() time.Time { return *clock }
+	c.now = p.now
+	return p
+}
+
+func byKey(s *Snapshot) map[string]Resource {
+	m := map[string]Resource{}
+	for _, r := range s.Resources {
+		m[r.Key()] = r
+	}
+	return m
+}
+
+func TestPollerClusterStates(t *testing.T) {
+	f := newCluster()
+	srv := startTLS(t, f, "", nil)
+	clock := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	var got []*Snapshot
+	p := testPoller(t, testSys(pinOf(srv), srv.URL), func(_ context.Context, s *Snapshot) { got = append(got, s) }, &clock)
+	if p.Last() != nil {
+		t.Fatal("Last before first poll")
+	}
+	s := p.Poll(context.Background())
+	if !s.OK || s.Error != "" {
+		t.Fatalf("poll: %+v", s)
+	}
+	if len(got) != 1 || got[0] != s || p.Last() != s {
+		t.Fatal("snapshot not delivered")
+	}
+	if s.SystemID != 7 || s.Version != "8.2.4" || s.Cluster != "lab" || s.Quorate == nil || !*s.Quorate || s.Address != srv.URL {
+		t.Fatalf("header: %+v", s)
+	}
+	if len(s.Resources) != 14 {
+		t.Fatalf("resources %d (storage must be filtered)", len(s.Resources))
+	}
+	if s.Resources[0].Key() != "node/pve1" || s.Resources[3].Key() != "qemu/100" {
+		t.Fatalf("order: %s %s", s.Resources[0].Key(), s.Resources[3].Key())
+	}
+	m := byKey(s)
+	want := map[string]State{
+		"node/pve1": StateOnline, "node/pve2": StateOnline, "node/pve3": StateOffline,
+		"qemu/100": StateRunning, "qemu/101": StatePaused, "qemu/102": StateSuspended, "qemu/103": StateBackup,
+		"qemu/104": StateLocked, "qemu/105": StateSuspended, "qemu/106": StateStopped, "qemu/107": StateError,
+		"qemu/108": StateUnknown, "lxc/200": StateRunning, "qemu/9000": StateStopped,
+	}
+	for k, st := range want {
+		if m[k].State != st {
+			t.Errorf("%s: state %q, want %q (qmp %q)", k, m[k].State, st, m[k].QMP)
+		}
+	}
+	if r := m["qemu/100"]; strings.Join(r.Tags, ",") != "prod,web" || r.HAState != "started" || r.QMP != "running" || r.MaxMem != 4<<30 || r.CPU != 0.25 {
+		t.Errorf("qemu/100: %+v", r)
+	}
+	if !m["qemu/9000"].Template || m["qemu/100"].Template {
+		t.Error("template flag")
+	}
+	if m["lxc/200"].Tags[0] != "db" || m["lxc/200"].QMP != "" {
+		t.Errorf("lxc: %+v", m["lxc/200"])
+	}
+	if m["qemu/104"].Lock != "migrate" || m["node/pve1"].Name != "pve1" || m["node/pve1"].Uptime != 100000 {
+		t.Error("lock/node fields")
+	}
+	// erste Abfrage: keine Raten
+	if m["qemu/100"].NetIn != 0 || m["qemu/100"].Restarted {
+		t.Error("rates on first poll")
+	}
+	// gelernte Adressen: nur Nodes, die online sind, ohne die eingerichtete
+	if len(p.client.learn) != 1 || !strings.HasPrefix(p.client.learn[0], "https://127.0.0.2:") {
+		t.Errorf("learned %v", p.client.learn)
+	}
+	// keine qmpstatus-Abfrage fuer gestoppte VMs, LXC, Vorlagen und Gaeste auf offline-Nodes
+	for _, path := range []string{"pve2/qemu/106", "pve3/qemu/108", "pve2/lxc/200", "pve1/qemu/9000"} {
+		if f.hit("/nodes/"+path+"/status/current") != 0 {
+			t.Errorf("qmpstatus asked for %s", path)
+		}
+	}
+}
+
+func TestPollerSingleNode(t *testing.T) {
+	f := newSingle()
+	srv := startTLS(t, f, "", nil)
+	clock := time.Now()
+	s := testPoller(t, testSys(pinOf(srv), srv.URL), nil, &clock).Poll(context.Background())
+	if !s.OK || s.Cluster != "" || s.Quorate != nil || len(s.Resources) != 2 {
+		t.Fatalf("single: %+v", s)
+	}
+	if byKey(s)["qemu/100"].State != StateRunning || byKey(s)["node/pve"].State != StateOnline {
+		t.Fatalf("states: %+v", s.Resources)
+	}
+}
+
+func TestPollerRatesAndRestart(t *testing.T) {
+	f := newCluster()
+	srv := startTLS(t, f, "", nil)
+	clock := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	p := testPoller(t, testSys(pinOf(srv), srv.URL), nil, &clock)
+	p.Poll(context.Background())
+
+	clock = clock.Add(30 * time.Second)
+	f.set(func(f *fakePVE) {
+		for _, r := range f.resources {
+			switch r["id"] {
+			case "qemu/100": // +3000 Byte in 30 s = 100 B/s
+				r["netin"], r["netout"], r["diskread"], r["diskwrite"], r["uptime"] = 4000, 2000+30*50, 3000, 4000+30*1000, 5030
+			case "qemu/101": // Zaehler zurueck und Uptime kleiner: neu gestartet
+				r["netin"], r["uptime"] = 10, 20
+			case "qemu/102": // auf anderen Node migriert: Uptime neu, aber kein Neustart
+				r["node"], r["uptime"] = "pve1", 3
+			case "qemu/106": // gestartet: kein Neustart
+				r["status"], r["uptime"] = "running", 10
+			case "node/pve2": // Node neu gestartet
+				r["uptime"] = 50
+			}
+		}
+	})
+	m := byKey(p.Poll(context.Background()))
+	r := m["qemu/100"]
+	if r.NetIn != 100 || r.NetOut != 50 || r.DiskRead != 0 || r.DiskWrite != 1000 || r.Restarted {
+		t.Fatalf("rates: in %v out %v read %v write %v restarted %v", r.NetIn, r.NetOut, r.DiskRead, r.DiskWrite, r.Restarted)
+	}
+	if m["qemu/101"].NetIn != 0 || !m["qemu/101"].Restarted {
+		t.Fatalf("restart 101: %+v", m["qemu/101"])
+	}
+	if m["qemu/102"].Restarted || m["qemu/102"].Node != "pve1" {
+		t.Fatalf("migrated 102: %+v", m["qemu/102"])
+	}
+	if m["qemu/106"].Restarted || m["qemu/106"].State != StateRunning {
+		t.Fatalf("started 106: %+v", m["qemu/106"])
+	}
+	if !m["node/pve2"].Restarted || m["node/pve1"].Restarted {
+		t.Fatal("node restart")
+	}
+	// naechste Abfrage ohne Aenderung: kein Neustart mehr, Raten 0
+	clock = clock.Add(30 * time.Second)
+	m = byKey(p.Poll(context.Background()))
+	if m["qemu/101"].Restarted || m["qemu/100"].NetIn != 0 {
+		t.Fatalf("third poll: %+v", m["qemu/101"])
+	}
+}
+
+func TestPollerTakt(t *testing.T) {
+	f := newCluster()
+	srv := startTLS(t, f, "", nil)
+	clock := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	p := testPoller(t, testSys(pinOf(srv), srv.URL), nil, &clock)
+	ctx := context.Background()
+	qmp := func() int { return f.hit("/nodes/pve1/qemu/100/status/current") }
+
+	p.Poll(ctx)
+	if f.hit("/cluster/resources") != 1 || f.hit("/cluster/status") != 1 || f.hit("/version") != 1 || qmp() != 1 {
+		t.Fatalf("first poll: %v", f.hits)
+	}
+	if f.hit("/nodes/pve1/qemu/107/status/current") != 1 || f.hit("/nodes/pve2/qemu/104/status/current") != 1 {
+		t.Fatalf("qmp for running vms: %v", f.hits)
+	}
+	clock = clock.Add(30 * time.Second)
+	s := p.Poll(ctx)
+	if f.hit("/cluster/resources") != 2 || f.hit("/cluster/status") != 1 || qmp() != 1 {
+		t.Fatalf("after 30 s: %v", f.hits)
+	}
+	// qmpstatus bleibt bis zur naechsten Runde gueltig
+	if m := byKey(s); m["qemu/101"].State != StatePaused || m["qemu/107"].State != StateError {
+		t.Fatalf("qmp kept: %+v", m["qemu/101"])
+	}
+	clock = clock.Add(30 * time.Second)
+	p.Poll(ctx)
+	if f.hit("/cluster/status") != 2 || qmp() != 1 {
+		t.Fatalf("after 60 s: %v", f.hits)
+	}
+	clock = clock.Add(60 * time.Second)
+	p.Poll(ctx)
+	if qmp() != 2 || f.hit("/version") != 1 {
+		t.Fatalf("after 2 min: %v", f.hits)
+	}
+	// Node geht laut cluster/resources offline -> cluster/status sofort neu, Gaeste unbekannt
+	f.set(func(f *fakePVE) {
+		f.resources[1]["status"] = "offline"
+		f.status[2]["online"] = 0
+	})
+	clock = clock.Add(30 * time.Second)
+	m := byKey(p.Poll(ctx))
+	if f.hit("/cluster/status") != 4 {
+		t.Fatalf("status not refreshed early: %d", f.hit("/cluster/status"))
+	}
+	if m["node/pve2"].State != StateOffline || m["lxc/200"].State != StateUnknown || m["qemu/106"].State != StateUnknown {
+		t.Fatalf("offline node: %v %v", m["node/pve2"].State, m["lxc/200"].State)
+	}
+}
+
+func TestPollerError(t *testing.T) {
+	f := newCluster()
+	srv := startTLS(t, f, "", nil)
+	clock := time.Now()
+	p := testPoller(t, testSys(pinOf(srv), srv.URL), nil, &clock)
+	if s := p.Poll(context.Background()); !s.OK {
+		t.Fatal(s.Error)
+	}
+	f.set(func(f *fakePVE) { f.code = http.StatusUnauthorized })
+	clock = clock.Add(30 * time.Second)
+	s := p.Poll(context.Background())
+	if s.OK || !strings.Contains(s.Error, "401") || len(s.Resources) != 0 || s.Resources == nil {
+		t.Fatalf("error snapshot: %+v", s)
+	}
+	if s.Cluster != "lab" || s.Version == "" {
+		t.Fatalf("cluster/version should stay: %+v", s)
+	}
+	// falsch eingerichtetes System: Snapshot mit Fehler statt Panik
+	bad := NewPoller(nil, testSys("zz", srv.URL), nil)
+	if s := bad.Poll(context.Background()); s.OK || !strings.Contains(s.Error, "fingerprint") {
+		t.Fatalf("bad system: %+v", s)
+	}
+}
+
+func TestPollerRun(t *testing.T) {
+	f := newSingle()
+	srv := startTLS(t, f, "", nil)
+	var mu sync.Mutex
+	n := 0
+	ctx, cancel := context.WithCancel(context.Background())
+	c := mustClient(t, testSys(pinOf(srv), srv.URL), nil)
+	p := newPoller(testLog, testSys(pinOf(srv), srv.URL), func(_ context.Context, s *Snapshot) {
+		mu.Lock()
+		n++
+		mu.Unlock()
+		cancel()
+	}, c, nil)
+	done := make(chan struct{})
+	go func() { p.Run(ctx); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not stop")
+	}
+	if n != 1 || p.Last() == nil || !p.Last().OK {
+		t.Fatalf("run: n=%d last=%+v", n, p.Last())
+	}
+}
+
+func TestClampInterval(t *testing.T) {
+	for in, want := range map[int]time.Duration{0: 30 * time.Second, 5: 15 * time.Second, 60: time.Minute, 999: 300 * time.Second} {
+		if got := ClampInterval(in); got != want {
+			t.Errorf("%d: %v", in, got)
+		}
+	}
+}
+
+func TestProbe(t *testing.T) {
+	f := newCluster()
+	srv := startTLS(t, f, "", nil)
+	ctx := context.Background()
+	// selbstsigniert, ohne Pin: Fingerabdruck zeigen, Test mit diesem Fingerabdruck
+	r := probe(ctx, testSys("", srv.URL), x509.NewCertPool(), time.Second, 2*time.Second)
+	if !r.OK || r.CertTrusted || r.CertSHA256 != pinOf(srv) || !strings.Contains(r.CertSubject, "Acme") {
+		t.Fatalf("untrusted: %+v", r)
+	}
+	if r.Version != "8.2.4" || r.Cluster != "lab" || strings.Join(r.Nodes, ",") != "pve1,pve2,pve3" || r.Guests != 10 || r.PermWarning != "" {
+		t.Fatalf("data: %+v", r)
+	}
+	// CA bestaetigt
+	roots := x509.NewCertPool()
+	roots.AddCert(srv.Certificate())
+	if r := probe(ctx, testSys("", srv.URL), roots, time.Second, 2*time.Second); !r.OK || !r.CertTrusted {
+		t.Fatalf("trusted: %+v", r)
+	}
+	// falscher Pin: Fehler, aber Zertifikat sichtbar
+	r = probe(ctx, testSys(strings.Repeat("0", 64), srv.URL), nil, time.Second, 2*time.Second)
+	if r.OK || r.CertSHA256 != pinOf(srv) || !strings.Contains(r.Error, "certificate mismatch") {
+		t.Fatalf("wrong pin: %+v", r)
+	}
+	// falsches Secret
+	bad := testSys(pinOf(srv), srv.URL)
+	bad.Secret = "x"
+	if r := probe(ctx, bad, nil, time.Second, 2*time.Second); r.OK || !strings.Contains(r.Error, "401") {
+		t.Fatalf("bad token: %+v", r)
+	}
+	// Token mit Privilege Separation ohne eigene Rechte: erreichbar, aber Hinweis
+	f.set(func(f *fakePVE) { f.noRights = true })
+	r = probe(ctx, testSys(pinOf(srv), srv.URL), nil, time.Second, 2*time.Second)
+	if !r.OK || r.Guests != 0 || !strings.Contains(r.PermWarning, "PVEAuditor") || !strings.Contains(r.PermWarning, testTokenID) {
+		t.Fatalf("no rights: %+v", r)
+	}
+	// nicht erreichbar, zweite Adresse geht
+	r = probe(ctx, testSys("", deadAddr(t), srv.URL), nil, time.Second, 2*time.Second)
+	if !r.OK || r.CertSHA256 == "" {
+		t.Fatalf("second address: %+v", r)
+	}
+	if r := probe(ctx, testSys("", deadAddr(t)), nil, time.Second, time.Second); r.OK || !strings.Contains(r.Error, "not reachable") {
+		t.Fatalf("dead: %+v", r)
+	}
+}
+
+// colonFP: Fingerabdruck im Format von Proxmox (AA:BB:…).
+func colonFP(der []byte) string {
+	h := strings.ToUpper(CertFingerprint(der))
+	var l []string
+	for i := 0; i < len(h); i += 2 {
+		l = append(l, h[i:i+2])
+	}
+	return strings.Join(l, ":")
+}
+
+// pveCertInfo baut certificates/info: pve-ssl.pem und optional pveproxy-ssl.pem (eigenes Zertifikat, hat Vorrang).
+func pveCertInfo(pveSSL, proxy string) []map[string]any {
+	l := []map[string]any{{"filename": "pve-root-ca.pem", "fingerprint": strings.Repeat("11:", 31) + "11"},
+		{"filename": "pve-ssl.pem", "fingerprint": pveSSL}}
+	if proxy != "" {
+		l = append(l, map[string]any{"filename": "pveproxy-ssl.pem", "fingerprint": proxy})
+	}
+	return l
+}
+
+// clusterOnTwoIPs: Node pve1 auf 127.0.0.1:P (Zertifikat von httptest, gepinnt), Node pve2 auf 127.0.0.2:P mit
+// eigenem Zertifikat (wie bei Proxmox: jeder Node hat sein eigenes pve-ssl.pem).
+func clusterOnTwoIPs(t *testing.T) (f1, f2 *fakePVE, s1, s2 *httptest.Server) {
+	f1, f2 = newCluster(), newCluster()
+	s1 = startTLS(t, f1, "127.0.0.1:0", nil)
+	port := s1.Listener.Addr().(*net.TCPAddr).Port
+	other := genCert(t, "127.0.0.2")
+	s2 = startTLS(t, f2, fmt.Sprintf("127.0.0.2:%d", port), &other)
+	certs := map[string][]map[string]any{
+		"pve1": pveCertInfo(colonFP(s1.Certificate().Raw), ""),
+		// pve-ssl.pem ist hier ein altes Zertifikat, benutzt wird pveproxy-ssl.pem
+		"pve2": pveCertInfo(strings.Repeat("22:", 31)+"22", colonFP(other.Certificate[0])),
+	}
+	f1.certs, f2.certs = certs, certs
+	return f1, f2, s1, s2
+}
+
+func TestPollerLearnsNodePins(t *testing.T) {
+	f1, f2, s1, s2 := clusterOnTwoIPs(t)
+	clock := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	sys := testSys(pinOf(s1), s1.URL)
+	p := testPoller(t, sys, nil, &clock)
+	ctx := context.Background()
+	if s := p.Poll(ctx); !s.OK {
+		t.Fatal(s.Error)
+	}
+	// nur fuer gelernte Nodes, die online sind (pve1 ist die eingerichtete Adresse, pve3 offline)
+	if f1.hit("/nodes/pve2/certificates/info") != 1 || f1.hit("/nodes/pve1/certificates/info") != 0 || f1.hit("/nodes/pve3/certificates/info") != 0 {
+		t.Fatalf("certificates/info: %v", f1.hits)
+	}
+	if got := p.client.lpins[s2.URL]; len(got) != 1 || got[0] != CertFingerprint(s2.TLS.Certificates[0].Certificate[0]) {
+		t.Fatalf("learned pin %v", got)
+	}
+	// Node 1 faellt aus -> Failover auf Node 2 mit seinem eigenen Zertifikat
+	s1.Close()
+	clock = clock.Add(30 * time.Second)
+	s := p.Poll(ctx)
+	if !s.OK || s.Address != s2.URL || f2.hit("/cluster/resources") != 1 {
+		t.Fatalf("failover: %+v", s)
+	}
+	// nach 10 min neu (jetzt ueber Node 2), dazwischen nicht
+	clock = clock.Add(5 * time.Minute)
+	p.Poll(ctx)
+	if f2.hit("/nodes/pve2/certificates/info") != 0 {
+		t.Fatal("refreshed too early")
+	}
+	clock = clock.Add(5 * time.Minute)
+	p.Poll(ctx)
+	if f2.hit("/nodes/pve2/certificates/info") != 1 {
+		t.Fatalf("no refresh after 10 min: %v", f2.hits)
+	}
+	// der Pin des Systems bleibt unveraendert
+	if p.sys.PinSHA256 != sys.PinSHA256 || p.client.pin != pinOf(s1) {
+		t.Fatal("system pin changed")
+	}
+}
+
+func TestPollerNodePinsWithoutRights(t *testing.T) {
+	f1, f2, s1, _ := clusterOnTwoIPs(t)
+	f1.noCerts = true
+	clock := time.Now()
+	p := testPoller(t, testSys(pinOf(s1), s1.URL), nil, &clock)
+	if s := p.Poll(context.Background()); !s.OK {
+		t.Fatal(s.Error)
+	}
+	if len(p.client.lpins) != 0 {
+		t.Fatalf("pins without rights: %v", p.client.lpins)
+	}
+	// wie bisher: Node 2 hat ein anderes Zertifikat als der Pin des Systems -> nicht benutzt
+	s1.Close()
+	clock = clock.Add(30 * time.Second)
+	s := p.Poll(context.Background())
+	if s.OK || !strings.Contains(s.Error, "not reachable") || f2.hit("/cluster/resources") != 0 {
+		t.Fatalf("without rights: %+v", s)
+	}
+}
+
+func TestPollerNoNodePinsWithCA(t *testing.T) {
+	f := newCluster()
+	srv := startTLS(t, f, "", nil)
+	f.certs = map[string][]map[string]any{"pve2": pveCertInfo(colonFP(srv.Certificate().Raw), "")}
+	roots := x509.NewCertPool()
+	roots.AddCert(srv.Certificate())
+	sys := testSys("", srv.URL)
+	c := mustClient(t, sys, roots)
+	p := newPoller(testLog, sys, nil, c, nil)
+	if s := p.Poll(context.Background()); !s.OK {
+		t.Fatal(s.Error)
+	}
+	if f.hit("/nodes/pve2/certificates/info") != 0 || len(c.lpins) != 0 {
+		t.Fatal("certificates/info asked for a CA system")
+	}
+}

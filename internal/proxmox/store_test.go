@@ -1,0 +1,270 @@
+package proxmox
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/ipv64net/node64/internal/secrets"
+	"github.com/ipv64net/node64/internal/store"
+)
+
+// pveTestStore oeffnet eine leere Datenbank mit Kern- und allen Healthchecks-Migrationen (inkl. 0015_proxmox).
+func pveTestStore(t *testing.T) (*Store, *store.Store) {
+	t.Helper()
+	dir := t.TempDir()
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	core, err := store.Open(context.Background(), filepath.Join(dir, "node64.db"), filepath.Join(dir, "backups"), log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { core.Close() })
+	cm, _ := store.CoreMigrations()
+	if err := core.Migrate(context.Background(), "core", cm); err != nil {
+		t.Fatal(err)
+	}
+	hm, err := store.ReadMigrations(os.DirFS("../healthchecks"), "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := core.Migrate(context.Background(), "healthchecks", hm); err != nil {
+		t.Fatal(err)
+	}
+	box, err := secrets.New(make([]byte, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return NewStore(core, box), core
+}
+
+const pveTestSecret = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+func pveNewSystem(t *testing.T, s *Store) *System {
+	t.Helper()
+	sys := &System{Name: "Lab", Addresses: []string{"pve1.example.com"}, TokenID: "monitor@pve!node64", Secret: pveTestSecret, Enabled: true}
+	if err := s.SaveSystem(context.Background(), sys); err != nil {
+		t.Fatal(err)
+	}
+	return sys
+}
+
+func TestStoreSystems(t *testing.T) {
+	ctx := context.Background()
+	s, core := pveTestStore(t)
+	sys := pveNewSystem(t, s)
+	if sys.ID == 0 || sys.Interval != DefaultInterval || sys.Addresses[0] != "https://pve1.example.com:8006" {
+		t.Fatalf("normalisiert: %+v", sys)
+	}
+	var raw string
+	if err := core.Reader().QueryRow(`SELECT secret FROM pve_systems WHERE id = ?`, sys.ID).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	if !secrets.IsEncrypted(raw) || strings.Contains(raw, pveTestSecret) {
+		t.Fatalf("Secret nicht verschluesselt: %q", raw)
+	}
+	got, err := s.System(ctx, sys.ID)
+	if err != nil || got.Secret != pveTestSecret || got.TokenID != sys.TokenID || !got.Enabled || got.Created.IsZero() {
+		t.Fatalf("System: %+v %v", got, err)
+	}
+	b, _ := json.Marshal(got)
+	if strings.Contains(string(b), pveTestSecret) {
+		t.Fatalf("Secret im JSON: %s", b)
+	}
+
+	// Aendern ohne Secret behaelt das alte
+	got.Secret, got.Name, got.Interval = "", "Lab 2", 60
+	got.Addresses = []string{"https://10.0.0.1:8006", "10.0.0.2", "https://10.0.0.1:8006"}
+	if err := s.SaveSystem(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := s.System(ctx, sys.ID)
+	if again.Secret != pveTestSecret || again.Name != "Lab 2" || again.Interval != 60 || len(again.Addresses) != 2 {
+		t.Fatalf("nach Aendern: %+v", again)
+	}
+	again.Secret = "neu"
+	if err := s.SaveSystem(ctx, again); err != nil {
+		t.Fatal(err)
+	}
+	if x, _ := s.System(ctx, sys.ID); x.Secret != "neu" {
+		t.Fatalf("neues Secret: %q", x.Secret)
+	}
+
+	pveNewSystem(t, s)
+	list, err := s.Systems(ctx)
+	if err != nil || len(list) != 2 {
+		t.Fatalf("Systems: %d %v", len(list), err)
+	}
+
+	// Loeschen mit Einstellungen
+	if err := s.SaveSettings(ctx, &Settings{SystemID: sys.ID, Key: "qemu/100", Muted: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteSystem(ctx, sys.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.System(ctx, sys.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("nach Loeschen: %v", err)
+	}
+	var n int
+	core.Reader().QueryRow(`SELECT count(*) FROM pve_settings WHERE system_id = ?`, sys.ID).Scan(&n)
+	if n != 0 {
+		t.Fatalf("Einstellungen nicht geloescht: %d", n)
+	}
+	if err := s.DeleteSystem(ctx, sys.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("zweites Loeschen: %v", err)
+	}
+	if err := s.SaveSystem(ctx, &System{ID: 999, Addresses: []string{"h"}, TokenID: "a@b!c"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unbekanntes System: %v", err)
+	}
+}
+
+func TestStoreNoBox(t *testing.T) {
+	_, core := pveTestStore(t)
+	s := NewStore(core, nil)
+	err := s.SaveSystem(context.Background(), &System{Addresses: []string{"h"}, TokenID: "a@b!c", Secret: "x"})
+	if !errors.Is(err, ErrNoBox) {
+		t.Fatalf("ohne Box: %v", err)
+	}
+}
+
+func TestValidateSystem(t *testing.T) {
+	ok := func() System {
+		return System{Addresses: []string{"https://pve:8006"}, TokenID: "root@pam!mon", Secret: "x", Interval: 30}
+	}
+	cases := []struct {
+		name  string
+		mod   func(*System)
+		field string
+	}{
+		{"ok", func(*System) {}, ""},
+		{"http", func(s *System) { s.Addresses = []string{"http://pve:8006"} }, "addresses"},
+		{"ohne Adresse", func(s *System) { s.Addresses = []string{" "} }, "addresses"},
+		{"Port 0", func(s *System) { s.Addresses = []string{"https://pve:0"} }, "addresses"},
+		{"Port zu gross", func(s *System) { s.Addresses = []string{"pve:70000"} }, "addresses"},
+		{"IPv6", func(s *System) { s.Addresses = []string{"[fd00::1]"} }, ""},
+		{"Token ohne !", func(s *System) { s.TokenID = "root@pam" }, "token_id"},
+		{"Token ohne @", func(s *System) { s.TokenID = "root!mon" }, "token_id"},
+		{"ohne Secret", func(s *System) { s.Secret = "" }, "secret"},
+		{"Interval klein", func(s *System) { s.Interval = 10 }, "interval"},
+		{"Interval gross", func(s *System) { s.Interval = 301 }, "interval"},
+		{"Interval 0 = Standard", func(s *System) { s.Interval = 0 }, ""},
+		{"Pin mit Doppelpunkten", func(s *System) { s.PinSHA256 = strings.Repeat("AB:", 31) + "AB" }, ""},
+		{"Pin kurz", func(s *System) { s.PinSHA256 = "abcd" }, "pin_sha256"},
+		{"Pin kein hex", func(s *System) { s.PinSHA256 = strings.Repeat("g", 64) }, "pin_sha256"},
+	}
+	for _, c := range cases {
+		s := ok()
+		c.mod(&s)
+		err := ValidateSystem(&s, true)
+		var fe *FieldError
+		switch {
+		case c.field == "" && err != nil:
+			t.Errorf("%s: unerwarteter Fehler %v", c.name, err)
+		case c.field != "" && (!errors.As(err, &fe) || fe.Field != c.field):
+			t.Errorf("%s: erwartet Feld %s, bekommen %v", c.name, c.field, err)
+		}
+	}
+	s := ok()
+	s.PinSHA256 = strings.Repeat("AB:", 31) + "AB"
+	s.Addresses = []string{"[FD00::1]"}
+	ValidateSystem(&s, true)
+	if s.PinSHA256 != strings.Repeat("ab", 32) || s.Addresses[0] != "https://[fd00::1]:8006" {
+		t.Fatalf("normalisiert: %q %q", s.PinSHA256, s.Addresses)
+	}
+	s = ok()
+	s.Secret = ""
+	if err := ValidateSystem(&s, false); err != nil {
+		t.Fatalf("Aendern ohne Secret: %v", err)
+	}
+}
+
+func pveBool(b bool) *bool { return &b }
+
+func TestRulesInheritance(t *testing.T) {
+	ctx := context.Background()
+	s, _ := pveTestStore(t)
+	sys := pveNewSystem(t, s)
+
+	def, err := s.Effective(ctx, sys.ID, "qemu/100", "pve1")
+	if err != nil || def != DefaultRule() {
+		t.Fatalf("Standard: %+v %v", def, err)
+	}
+	if d := DefaultRule(); !d.Crashed || !d.Stopped || !d.Restarted || d.CPU != (Threshold{90, 10}) || d.Mem != (Threshold{95, 10}) ||
+		d.Disk != (Threshold{90, 0}) || d.Delay != 2 {
+		t.Fatalf("Standardwerte: %+v", d)
+	}
+	delay := 3
+	must := func(st *Settings) {
+		t.Helper()
+		if err := s.SaveSettings(ctx, st); err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(&Settings{SystemID: sys.ID, Key: "", Rules: RuleSet{CPU: &Threshold{80, 5}, Delay: &delay}})
+	must(&Settings{SystemID: sys.ID, Key: "node/pve1", Rules: RuleSet{Stopped: pveBool(false), Mem: &Threshold{70, 1}}})
+	must(&Settings{SystemID: sys.ID, Key: "qemu/100", Rules: RuleSet{CPU: &Threshold{0, 0}, Stopped: pveBool(true)}, ExpectRunning: pveBool(false)})
+
+	r, _ := s.Effective(ctx, sys.ID, "qemu/100", "pve1")
+	if r.CPU.Percent != 0 || !r.Stopped || r.Mem != (Threshold{70, 1}) || r.Delay != 3 || r.Disk != (Threshold{90, 0}) {
+		t.Fatalf("Gast: %+v", r)
+	}
+	r, _ = s.Effective(ctx, sys.ID, "qemu/101", "pve1")
+	if r.CPU != (Threshold{80, 5}) || r.Stopped || r.Mem.Percent != 70 {
+		t.Fatalf("anderer Gast auf pve1: %+v", r)
+	}
+	r, _ = s.Effective(ctx, sys.ID, "qemu/101", "pve2")
+	if r.CPU != (Threshold{80, 5}) || !r.Stopped || r.Mem.Percent != 95 {
+		t.Fatalf("Gast auf pve2: %+v", r)
+	}
+	r, _ = s.Effective(ctx, sys.ID, "node/pve1", "pve1")
+	if r.Mem.Percent != 70 || r.Stopped {
+		t.Fatalf("Node: %+v", r)
+	}
+	r, _ = s.Effective(ctx, sys.ID, "", "")
+	if r.CPU.Percent != 80 || r.Mem.Percent != 95 {
+		t.Fatalf("System: %+v", r)
+	}
+
+	ss, _ := s.Settings(ctx, sys.ID)
+	if it := ss.Item("qemu/100"); it == nil || it.ExpectRunning == nil || *it.ExpectRunning {
+		t.Fatalf("ExpectRunning: %+v", it)
+	}
+	if ss.Name != "Lab" {
+		t.Fatalf("Name: %q", ss.Name)
+	}
+	if err := s.DeleteSettings(ctx, sys.ID, "qemu/100"); err != nil {
+		t.Fatal(err)
+	}
+	r, _ = s.Effective(ctx, sys.ID, "qemu/100", "pve1")
+	if r.CPU.Percent != 80 || r.Stopped {
+		t.Fatalf("nach Zuruecksetzen: %+v", r)
+	}
+
+	// Validierung
+	bad := 0
+	var fe *FieldError
+	if err := s.SaveSettings(ctx, &Settings{SystemID: sys.ID, Key: "qemu/x"}); !errors.As(err, &fe) || fe.Field != "key" {
+		t.Fatalf("Key: %v", err)
+	}
+	if err := s.SaveSettings(ctx, &Settings{SystemID: sys.ID, Key: "lxc/1", Rules: RuleSet{Delay: &bad}}); !errors.As(err, &fe) || fe.Field != "delay" {
+		t.Fatalf("Delay: %v", err)
+	}
+	if err := s.SaveSettings(ctx, &Settings{SystemID: sys.ID, Key: "lxc/1", Rules: RuleSet{Disk: &Threshold{101, 0}}}); !errors.As(err, &fe) || fe.Field != "disk" {
+		t.Fatalf("Disk: %v", err)
+	}
+	if err := s.SaveSettings(ctx, &Settings{SystemID: 999, Key: "lxc/1"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unbekanntes System: %v", err)
+	}
+	// AsCheck mit Check
+	must(&Settings{SystemID: sys.ID, Key: "lxc/200", AsCheck: true, CheckToken: "tok"})
+	ss, _ = s.Settings(ctx, sys.ID)
+	if it := ss.Item("lxc/200"); !it.AsCheck || it.CheckToken != "tok" || it.ExpectRunning != nil {
+		t.Fatalf("AsCheck: %+v", it)
+	}
+}

@@ -153,5 +153,6 @@ type Event struct {
 	Value    float64   `json:"value,omitempty"`
 	Limit    float64   `json:"limit,omitempty"`
 	Since    time.Time `json:"since"`
-	Text     string    `json:"text"` // kurzer Text (Sprache wie Anzeige)
+	Text     string    `json:"text"`             // kurzer Text (Sprache wie Anzeige)
+	Detail   string    `json:"detail,omitempty"` // Zusatz, z. B. qmpstatus beim Absturz (fuer i18n-Text pve.ev.<Kind>.<What>)
 }
