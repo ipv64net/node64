@@ -51,6 +51,16 @@ type streamRow struct {
 		BytesUp int64 `json:"bytes_out"`
 	} `json:"stats"`
 	CertName string `json:"cert_name,omitempty"`
+	// CDN64: angemeldete Ports der Server (Portmapper Modus 1/2) und Fehler beim Anmelden
+	Online    []onlinePortView `json:"cdn64_ports,omitempty"`
+	OnlineErr string           `json:"cdn64_error,omitempty"` // Code (cdn64.online.e.<code>)
+}
+
+// onlinePortView: oeffentlicher Port eines Streams ueber CDN64.
+type onlinePortView struct {
+	Name       string `json:"name"`
+	ListenPort int    `json:"listen_port"`
+	Transport  string `json:"transport"`
 }
 
 func (m *Module) streamRows(ctx context.Context) ([]streamRow, error) {
@@ -66,9 +76,16 @@ func (m *Module) streamRows(ctx context.Context) ([]streamRow, error) {
 			}
 		}
 	}
+	ports, perr := m.onlinePortsOf(ctx)
 	out := make([]streamRow, 0, len(list))
 	for _, s := range list {
 		r := streamRow{Stream: s, Reach: m.sreach.get(s.ID), Errors: m.streamErrs(s.ID), CertName: names[s.TLSCertID]}
+		for _, p := range ports[s.ID] {
+			r.Online = append(r.Online, onlinePortView{Name: p.Name, ListenPort: p.ListenPort, Transport: p.Transport})
+		}
+		if c := perr[s.ID]; c != "" && s.OnlineName != "" {
+			r.OnlineErr = c
+		}
 		m.smu.Lock()
 		if run := m.runs[s.ID]; run != nil {
 			r.Running = run.tcp != nil || run.udp != nil
@@ -111,6 +128,9 @@ type streamForm struct {
 
 	GeoText   string       // Laender der Laendersperre (Komma)
 	Countries []geoCountry // Auswahl aus index.json
+
+	OnlineOn    bool         // CDN64 verfuegbar (ipv64 angebunden)
+	OnlineNames []onlineName // CDN64-Namen der Node (Auswahl fuer den Portmapper)
 }
 
 func (m *Module) streamFormData(ctx context.Context, s *Stream, isNew bool) streamForm {
@@ -121,6 +141,8 @@ func (m *Module) streamFormData(ctx context.Context, s *Stream, isNew bool) stre
 	if m.certs != nil {
 		d.Certs, _ = m.certs.List(ctx)
 	}
+	d.OnlineOn = m.online.api != nil && m.edge != nil
+	d.OnlineNames, _ = m.onlineNames(ctx)
 	return d
 }
 
@@ -155,6 +177,9 @@ func streamFromForm(r *http.Request, s *Stream) {
 	s.TargetHost = strings.TrimSpace(r.PostFormValue("target_host"))
 	s.TargetPort, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("target_port")))
 	s.TLSCertID, _ = strconv.ParseInt(r.PostFormValue("tls_cert_id"), 10, 64)
+	if r.PostFormValue("has_online") == "1" { // CDN64 war im Formular
+		s.OnlineName = strings.ToLower(strings.TrimSpace(r.PostFormValue("online_name")))
+	}
 	if r.PostFormValue("has_geo") == "1" { // Laendersperre war im Formular
 		s.GeoMode, s.GeoCountries = r.PostFormValue("geo_mode"), lines(r.PostFormValue("geo_countries"))
 	}

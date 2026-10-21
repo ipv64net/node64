@@ -272,6 +272,15 @@ Karte „Weitere Namen in CDN64“. Namen, die die Node nicht verwaltet (Modus 3
 Zeile ihres Hosts, wenn es hier einen Host mit dem Namen gibt (kein Einschalten dort), sonst in dieser Karte: Ziel,
 Cache, Liste, Portmapper, Status, Traffic. Einträge `paused`/`resumed` in `cdn64o_events` und im Log.
 
+**Portmapper Modus 1/2 (2026-10-21):** `cdn64o_mappings` gilt für alle Modi. In Modus 1/2 ist `target_port` der Port
+eines Streams in PROXY64. Die Server öffnen den Port wie in Modus 3, wählen aber nicht das Ziel an, sondern öffnen einen
+Stream `tcp` bzw. `udp` durch den Tunnel (Kopf: Name, Ziel-Port, echte Besucher-Adresse; UDP als Datagramme mit
+Länge). Ohne Tunnel auf diesem Server geht es über den Nachbarn (der zählt und begrenzt). Die Node meldet dafür die
+Fähigkeit `ports`; ältere Nodes bekommen keine solchen Streams. In der Node wählt man am Stream den CDN64-Namen
+(`cdn_streams.online_name`); die Node meldet je Protokoll ein Mapping an (`cdn_online_ports`), trägt es beim
+Ausschalten, Löschen oder Portwechsel wieder aus und meldet es neu an, wenn es bei ipv64 fehlt. Eingehende Streams
+landen nur bei angemeldeten Streams (Name + Protokoll + Port), mit Blocklisten, Grenzen je IP und Ländersperre.
+
 ### 8.4 Endpunkte für die Server (Server-Geheimnis, eigene Datei)
 
 | Methode | Pfad | Zweck |
@@ -627,7 +636,8 @@ Jede Phase endet mit Tests und einem Commit; Server-Änderungen nur nach Freigab
   reichen Modus-1-QUIC roh durch den Tunnel (Stream `quic`), TLS endet in der Node; Alt-Svc nur, wenn alle
   verbundenen Server die Fähigkeit `quic` melden. Live seit 2026-10-18 (cdn64-edge 0.10.x, node64-test 0.11.100-h3):
   pfsense.ipv64.de über alle vier Server-Adressen per HTTP/3 von hub2 (~90 ms), Zertifikat der Node (TLS endet dort).
-- **TCP-/UDP-Streams (Portmapper Modus 1/2), fremde Domains:** bewusst später.
+- **TCP-/UDP-Streams (Portmapper Modus 1/2):** gebaut 2026-10-21 (PROXY64 1.24.0, cdn64-edge 0.15.0), siehe 8.3.
+- **Fremde Domains:** bewusst später.
 - **Modus 3 und Missbrauch:** offene Weiterleitung ins Internet ist anfällig (Angriffe über unsere IPs); SSRF-Schutz,
   Limits und Sperre je Account sind Pflicht, Abuse-Kontakt klären.
 - **Portmapper:** Port-Bereiche und Kollisionen zwischen Kunden auf zwei Servern planen (T8).

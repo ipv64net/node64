@@ -41,16 +41,19 @@ type onlineState struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 
-	api    OnlineAPI                       // ipv64 /cdn64o (nil = nicht verfuegbar)
-	op     sync.Mutex                      // ein Ein-/Ausschalten bzw. Abgleich gleichzeitig
-	remote atomic.Pointer[onlineRemote]    // letzter Stand von ipv64
-	names  atomic.Pointer[map[string]bool] // eingeschaltete Namen (geteilter DNS)
-	kick   chan struct{}                   // Abgleich bald
-	want   atomic.Bool                     // Liste geoeffnet: Stand von ipv64 auch ohne eigene Namen holen
-	seenMu sync.Mutex                      // Selbsttest: Streams je Name
-	seen   map[string]int                  //
-	ports  [2]int                          // Tests: Besucher-Ports der Server (sonst 443, 80)
-	notify func(notify.Alert)              // Meldungen (nil = keine)
+	api     OnlineAPI                         // ipv64 /cdn64o (nil = nicht verfuegbar)
+	op      sync.Mutex                        // ein Ein-/Ausschalten bzw. Abgleich gleichzeitig
+	remote  atomic.Pointer[onlineRemote]      // letzter Stand von ipv64
+	names   atomic.Pointer[map[string]bool]   // eingeschaltete Namen (geteilter DNS)
+	kick    chan struct{}                     // Abgleich bald
+	want    atomic.Bool                       // Liste geoeffnet: Stand von ipv64 auch ohne eigene Namen holen
+	portIdx atomic.Pointer[map[portKey]int64] // Portmapper: (tcp/udp, Name, Port des Streams) -> Stream
+	portMu  sync.Mutex                        // Fehler je Stream beim Anmelden
+	portErr map[int64]string                  // Stream -> Code (cdn64.online.e.<code>)
+	seenMu  sync.Mutex                        // Selbsttest: Streams je Name
+	seen    map[string]int                    //
+	ports   [2]int                            // Tests: Besucher-Ports der Server (sonst 443, 80)
+	notify  func(notify.Alert)                // Meldungen (nil = keine)
 }
 
 // SetSecrets gibt den Schluessel fuer verschluesselt gespeicherte Werte (Tunnel-Token).
@@ -88,7 +91,7 @@ func (m *Module) onlineStart(ctx context.Context) {
 	}
 	node, _ := os.Hostname()
 	cl := tunnel.NewClient(tunnel.ClientConfig{Tunnel: c.Tunnel, Token: tok, Node: node, NodeVersion: m.version, Edges: c.Edges,
-		Handler: m.onlineHandle, Log: m.log, RootCAs: m.online.roots, Caps: []string{tunnel.CapQUIC}})
+		Handler: m.onlineHandle, Log: m.log, RootCAs: m.online.roots, Caps: []string{tunnel.CapQUIC, tunnel.CapPorts}})
 	rctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	done := make(chan struct{})
 	m.online.mu.Lock()
@@ -132,6 +135,8 @@ func (m *Module) onlineHandle(st tunnel.Stream, h tunnel.Header) {
 			return
 		}
 		m.edge.ServeQUICStream(c, netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port()))
+	case tunnel.KindTCP, tunnel.KindUDP: // Portmapper Modus 1/2: an den Stream der Node
+		m.onlinePortStream(c, h)
 	default:
 		_ = st.Close()
 	}

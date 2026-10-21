@@ -25,7 +25,9 @@
 				{{if .TCP}}<span class="badge text-bg-light">TCP</span>{{end}}{{if .UDP}}<span class="badge text-bg-light">UDP</span>{{end}}
 				{{if .Name}}<div class="text-body-secondary">{{.Name}}</div>{{end}}
 				{{if not .Enabled}}<div><span class="badge text-bg-secondary">{{$.T "cdn64.disabled"}}</span></div>{{end}}
-				{{range $p, $e := .Errors}}<div class="text-danger text-break">{{$p}}: {{$e}}</div>{{end}}</td>
+				{{range $p, $e := .Errors}}<div class="text-danger text-break">{{$p}}: {{$e}}</div>{{end}}
+				{{range .Online}}<div class="mt-1" title="{{$.T "cdn64.streams.online_title"}}"><i class="bi bi-cloud-arrow-up text-primary"></i> <span class="font-monospace">{{.Name}}:{{.ListenPort}}</span> <span class="badge text-bg-light">{{if eq .Transport "udp"}}UDP{{else}}TCP{{end}}</span></div>{{end}}
+				{{with .OnlineErr}}<div class="text-danger text-break"><i class="bi bi-cloud-slash"></i> {{$.T (print "cdn64.online.e." .)}}</div>{{end}}</td>
 			<td class="font-monospace text-break">{{.TargetHost}}:{{.TargetPort}}</td>
 			<td>{{if .TLSCertID}}<span class="badge text-bg-success" title="{{.CertName}}"><i class="bi bi-lock-fill"></i></span>{{else}}<span class="text-body-secondary">–</span>{{end}}</td>
 			<td>{{if .Enabled}}{{with .Reach}}

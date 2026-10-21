@@ -27,10 +27,15 @@ const (
 	KindHTTP80 = "http80" // Port 80 roh (Modus 1)
 	KindHTTP   = "http"   // HTTP vom Server, TLS dort beendet (Modus 2, ab T5)
 	KindQUIC   = "quic"   // QUIC eines Besuchers roh (Modus 1, HTTP/3): Datagramme mit Laengenpraefix (WriteDatagram)
+	KindTCP    = "tcp"    // Portmapper (Modus 1/2): TCP roh, Port = Ziel-Port (Port des Streams in der Node)
+	KindUDP    = "udp"    // Portmapper (Modus 1/2): UDP eines Besuchers, Datagramme mit Laengenpraefix (WriteDatagram)
 )
 
 // CapQUIC: Faehigkeit "QUIC durchreichen" (Hello der Node, Welcome des Servers).
 const CapQUIC = "quic"
+
+// CapPorts: die Node nimmt Portmapper-Streams an (KindTCP, KindUDP).
+const CapPorts = "ports"
 
 // HasCap: steht die Faehigkeit in der Liste?
 func HasCap(caps []string, c string) bool {

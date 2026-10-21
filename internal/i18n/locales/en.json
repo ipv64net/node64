@@ -561,6 +561,7 @@
     },
     "streams": {
       "title": "Streams (TCP/UDP)",
+      "online_title": "Via CDN64: port of the servers (srv07/srv08) that leads to this stream",
       "new": "Add stream",
       "edit": "Edit stream",
       "empty": "No streams yet. A stream forwards a port raw to a service, e.g. for game servers, MQTT or WireGuard.",
@@ -575,6 +576,10 @@
       "hint": "Streams occupy their port per protocol; Settings → Ports shows overlaps. UDP sessions end after 60 s without packets.",
       "f": {
         "name": "Name (optional)",
+        "online_empty": "Switch a host on in CDN64 in mode 1 or 2 first; then the stream can be reached via its name.",
+        "online_hint": "srv07/srv08 open a port for this stream and pass connections through the encrypted tunnel to this node (port mapping). No port has to be open at home, your address stays hidden. The server port is shown in the list after saving; it counts towards the port mapping quota.",
+        "online_none": "no, only here",
+        "online": "Reachable from the internet via CDN64",
         "listen_port": "Port",
         "hint": "Target in the home network. A port can only be opened once per protocol.",
         "tls": "Terminate TLS here (TCP only)",
@@ -814,6 +819,7 @@
     },
     "online": {
       "err_conf": "Check the tunnel settings: tunnel, token and at least one server (name, host).",
+      "o_ports_node": "Port mappings: server port → port of the stream or target",
       "col": "CDN64",
       "on": "Switch on",
       "on_title": "Make reachable from the internet via srv07/srv08.cdn64.de (IPv4 and IPv6, no open ports)",
@@ -910,6 +916,9 @@
       "wait_edges": "The servers are picking up the new setting, testing again …",
       "e": {
         "no_api_key": "No ipv64 account connected. Enter the API key under Settings › ipv64, then continue here.",
+        "port_in_use": "No suitable port is free on the servers.",
+        "mapping_exists": "This port is already mapped for the name.",
+        "port_name_off": "The CDN64 name is no longer switched on at this node.",
         "not_online": "CDN64 is not switched on for this host.",
         "api_key_rejected": "ipv64 rejects the API key (expired or revoked). Enter a valid key under Settings › ipv64.",
         "ipv64_unreachable": "ipv64.net is not reachable right now. Please try again later.",

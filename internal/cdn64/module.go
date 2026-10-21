@@ -49,7 +49,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.23.2"
+	Version = "1.24.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -506,6 +506,7 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	for _, s := range f.Streams {
 		oldID := s.ID
 		s.ID = 0
+		s.OnlineName = "" // CDN64 gehoert zu dieser Node (wie Tunnel und Namen)
 		s.TLSCertID = certByNames[nameKey(f.StreamCerts[oldID])]
 		if err := m.saveStream(ctx, s); err != nil {
 			var fe *FieldError

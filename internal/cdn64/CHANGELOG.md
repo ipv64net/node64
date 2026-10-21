@@ -1,5 +1,16 @@
 # Änderungen – PROXY64
 
+## 1.24.0 – 2026-10-21
+
+### Neu
+- Portmapper für CDN64 Modus 1/2: Ein Stream lässt sich über einen CDN64-Namen der Node aus dem Internet erreichen
+  (Auswahl „Über CDN64 aus dem Internet erreichbar“ im Stream). srv07/srv08 öffnen dafür einen Port und reichen
+  TCP bzw. UDP durch den verschlüsselten Tunnel zum Stream. Zu Hause muss kein Port offen sein, die eigene Adresse
+  bleibt verborgen. Blocklisten, Grenzen je IP und Ländersperre gelten nach der echten Besucher-Adresse, TLS-Abschluss
+  des Streams ebenso. Der Port der Server steht in der Stream-Liste und in der Zeile des Hosts; er zählt zum
+  Kontingent für Portmapper. Pause und Erlauben-/Sperrliste des Namens gelten auch für diese Ports.
+- Ab cdn64-edge 0.15.0 auf den Servern.
+
 ## 1.23.2 – 2026-10-21
 
 ### Geändert

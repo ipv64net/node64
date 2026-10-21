@@ -43,6 +43,9 @@ type Stream struct {
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 
+	// CDN64 (Portmapper Modus 1/2): ueber diesen Namen der Node auch aus dem Internet erreichbar ("" = nur hier)
+	OnlineName string `json:"online_name,omitempty"`
+
 	// Laendersperre wie bei Hosts (geo.go): "" = aus, block, allow; aendern startet den Stream nicht neu
 	GeoMode      string   `json:"geo_mode,omitempty"`
 	GeoCountries []string `json:"geo_countries,omitempty"`
@@ -104,12 +107,12 @@ func (s *Stream) claims(active map[string]bool) []ports.Claim {
 
 // ---------------------------------------------------------------- Datenbank
 
-const streamCols = `id, name, enabled, listen_port, tcp, udp, target_host, target_port, tls_cert_id, created_at, updated_at, geo_mode, geo_countries`
+const streamCols = `id, name, enabled, listen_port, tcp, udp, target_host, target_port, tls_cert_id, created_at, updated_at, geo_mode, geo_countries, online_name`
 
 func scanStream(row interface{ Scan(...any) error }) (*Stream, error) {
 	var s Stream
 	var ca, ua, geo string
-	if err := row.Scan(&s.ID, &s.Name, &s.Enabled, &s.ListenPort, &s.TCP, &s.UDP, &s.TargetHost, &s.TargetPort, &s.TLSCertID, &ca, &ua, &s.GeoMode, &geo); err != nil {
+	if err := row.Scan(&s.ID, &s.Name, &s.Enabled, &s.ListenPort, &s.TCP, &s.UDP, &s.TargetHost, &s.TargetPort, &s.TLSCertID, &ca, &ua, &s.GeoMode, &geo, &s.OnlineName); err != nil {
 		return nil, err
 	}
 	if geo != "" {
@@ -170,17 +173,17 @@ func (m *Module) saveStream(ctx context.Context, s *Stream) error {
 	}
 	now := store.Now()
 	w := m.core.Writer()
-	args := []any{s.Name, s.Enabled, s.ListenPort, s.TCP, s.UDP, s.TargetHost, s.TargetPort, s.TLSCertID, s.GeoMode, strings.Join(s.GeoCountries, ",")}
+	args := []any{s.Name, s.Enabled, s.ListenPort, s.TCP, s.UDP, s.TargetHost, s.TargetPort, s.TLSCertID, s.GeoMode, strings.Join(s.GeoCountries, ","), s.OnlineName}
 	if s.ID == 0 {
 		res, err := w.ExecContext(ctx, `INSERT INTO cdn_streams (name, enabled, listen_port, tcp, udp, target_host, target_port, tls_cert_id, geo_mode, geo_countries,
-			created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
+			online_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
 		if err != nil {
 			return err
 		}
 		s.ID, _ = res.LastInsertId()
 	} else {
 		res, err := w.ExecContext(ctx, `UPDATE cdn_streams SET name = ?, enabled = ?, listen_port = ?, tcp = ?, udp = ?, target_host = ?, target_port = ?,
-			tls_cert_id = ?, geo_mode = ?, geo_countries = ?, updated_at = ? WHERE id = ?`, append(args, now, s.ID)...)
+			tls_cert_id = ?, geo_mode = ?, geo_countries = ?, online_name = ?, updated_at = ? WHERE id = ?`, append(args, now, s.ID)...)
 		if err != nil {
 			return err
 		}
@@ -189,6 +192,7 @@ func (m *Module) saveStream(ctx context.Context, s *Stream) error {
 		}
 	}
 	m.applyStreams(ctx)
+	m.onlinePortsNow(ctx)
 	m.checkSoon(0) // Ziel gleich pruefen
 	return nil
 }
@@ -202,6 +206,7 @@ func (m *Module) setStreamEnabled(ctx context.Context, id int64, on bool) error 
 		return errNotFound
 	}
 	m.applyStreams(ctx)
+	m.onlinePortsNow(ctx)
 	return nil
 }
 
@@ -214,6 +219,7 @@ func (m *Module) deleteStream(ctx context.Context, id int64) error {
 		return errNotFound
 	}
 	m.applyStreams(ctx)
+	m.onlinePortsNow(ctx)
 	m.sreach.forget(id)
 	return nil
 }
@@ -229,6 +235,8 @@ type streamStats struct {
 
 type streamRun struct {
 	key    string
+	target string      // Ziel host:port (auch fuer Verbindungen aus dem CDN64-Tunnel)
+	tlsc   *tls.Config // TLS hier beenden (nil = nein)
 	tcp    net.Listener
 	udp    net.PacketConn
 	errs   map[string]string // tcp/udp -> Fehler beim Oeffnen
@@ -352,8 +360,17 @@ func (m *Module) applyStreams(ctx context.Context) {
 
 // startStream oeffnet die Ports eines Streams (Fehler je Protokoll, der Rest laeuft).
 func (m *Module) startStream(ctx context.Context, s *Stream) *streamRun {
-	r := &streamRun{key: s.key(), errs: map[string]string{}, stats: m.streamStatsOf(s.ID), conns: map[net.Conn]struct{}{}}
+	r := &streamRun{key: s.key(), target: s.target(), errs: map[string]string{}, stats: m.streamStatsOf(s.ID), conns: map[net.Conn]struct{}{}}
 	r.geo.Store(s)
+	if s.TLSCertID > 0 && m.certs != nil {
+		id := s.TLSCertID
+		r.tlsc = &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+			if c := m.certs.ByID(id); c != nil {
+				return c, nil
+			}
+			return nil, errors.New("certificate not available")
+		}}
+	}
 	addr := ":" + strconv.Itoa(s.ListenPort)
 	check := func(p ports.Proto) error {
 		if m.ports == nil {
@@ -367,14 +384,8 @@ func (m *Module) startStream(ctx context.Context, s *Stream) *streamRun {
 		} else if ln, err := net.Listen("tcp", addr); err != nil {
 			r.errs["tcp"] = err.Error()
 		} else {
-			if s.TLSCertID > 0 && m.certs != nil {
-				id := s.TLSCertID
-				ln = tls.NewListener(ln, &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
-					if c := m.certs.ByID(id); c != nil {
-						return c, nil
-					}
-					return nil, errors.New("certificate not available")
-				}})
+			if r.tlsc != nil {
+				ln = tls.NewListener(ln, r.tlsc)
 			}
 			r.tcp = ln
 			r.wg.Add(1)
@@ -422,29 +433,34 @@ func (m *Module) serveTCP(r *streamRun, target string) {
 		r.wg.Add(1)
 		go func() {
 			defer r.wg.Done()
-			if release != nil {
-				defer release()
-			}
-			up, err := net.DialTimeout("tcp", target, tcpDialTimeout)
-			if err != nil {
-				_ = c.Close()
-				return
-			}
-			if !r.track(c) || !r.track(up) {
-				_ = c.Close()
-				_ = up.Close()
-				return
-			}
-			r.stats.conns.Add(1)
-			r.stats.active.Add(1)
-			in, out := edge.Pipe(c, up)
-			r.stats.active.Add(-1)
-			r.stats.bytesIn.Add(in)
-			r.stats.bytesUp.Add(out)
-			r.untrack(c)
-			r.untrack(up)
+			m.streamPipe(r, c, target, release)
 		}()
 	}
+}
+
+// streamPipe: eine TCP-Verbindung ans Ziel weiterreichen (vom Port des Streams oder aus dem CDN64-Tunnel).
+func (m *Module) streamPipe(r *streamRun, c net.Conn, target string, release func()) {
+	if release != nil {
+		defer release()
+	}
+	up, err := net.DialTimeout("tcp", target, tcpDialTimeout)
+	if err != nil {
+		_ = c.Close()
+		return
+	}
+	if !r.track(c) || !r.track(up) {
+		_ = c.Close()
+		_ = up.Close()
+		return
+	}
+	r.stats.conns.Add(1)
+	r.stats.active.Add(1)
+	in, out := edge.Pipe(c, up)
+	r.stats.active.Add(-1)
+	r.stats.bytesIn.Add(in)
+	r.stats.bytesUp.Add(out)
+	r.untrack(c)
+	r.untrack(up)
 }
 
 // serveUDP: je Client eine Sitzung mit eigenem Socket zum Ziel; nach 60 s ohne Pakete faellt sie weg.

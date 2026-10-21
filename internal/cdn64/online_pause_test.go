@@ -157,7 +157,7 @@ func rowsHosts(rows []hostRow) []*Host {
 
 // tplView spielt die View der Oberflaeche fuer die Vorlage (Texte = Schluessel).
 type tplView struct {
-	Data          listData
+	Data          any
 	CSRF, Version string
 }
 
@@ -172,7 +172,12 @@ func (tplView) Ago(time.Time) string          { return "" }
 
 func renderHosts(t *testing.T, d listData) string {
 	t.Helper()
-	tp, err := template.ParseFS(templateFS, "templates/pages/hosts.html")
+	return renderPage(t, "hosts.html", d)
+}
+
+func renderPage(t *testing.T, file string, d any) string {
+	t.Helper()
+	tp, err := template.New(file).Funcs(template.FuncMap{"join": strings.Join}).ParseFS(templateFS, "templates/pages/"+file)
 	if err != nil {
 		t.Fatal(err)
 	}

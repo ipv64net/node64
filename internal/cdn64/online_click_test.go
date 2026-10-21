@@ -38,6 +38,9 @@ type fakeOnline struct {
 	paused  map[int64]bool
 	extra   []ipv64api.CDN64Host // Namen, die die Node nicht verwaltet (Modus 3 von der Webseite)
 	calls   int                  // Abrufe von Overview
+	maps    map[int64][]ipv64api.CDN64Mapping
+	mapNext int64
+	mapErr  error // naechstes AddMapping scheitert
 }
 
 func (f *fakeOnline) Ready(context.Context) bool { f.mu.Lock(); defer f.mu.Unlock(); return f.ready }
@@ -52,7 +55,7 @@ func (f *fakeOnline) Overview(context.Context) (*ipv64api.CDN64Overview, error) 
 		ov.Tunnels = append(ov.Tunnels, ipv64api.CDN64Tunnel{ID: id, Status: "active"})
 	}
 	for id, n := range f.hosts {
-		ov.Hosts = append(ov.Hosts, ipv64api.CDN64Host{ID: id, FQDN: n, Status: "active", Mode: max(f.modes[id], 1), Paused: f.paused[id]})
+		ov.Hosts = append(ov.Hosts, ipv64api.CDN64Host{ID: id, FQDN: n, Status: "active", Mode: max(f.modes[id], 1), Paused: f.paused[id], Mappings: f.maps[id]})
 	}
 	for _, h := range f.extra {
 		h.Paused = f.paused[h.ID]
@@ -117,6 +120,41 @@ func (f *fakeOnline) SetPaused(_ context.Context, id int64, paused bool) error {
 	return nil
 }
 
+func (f *fakeOnline) AddMapping(_ context.Context, id int64, name, transport string, targetPort int) ([]ipv64api.CDN64Mapping, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.mapErr; err != nil {
+		f.mapErr = nil
+		return nil, err
+	}
+	if f.hosts[id] == "" {
+		return nil, &ipv64api.APIError{Status: 404, Code: "cdn64o_host_not_found"}
+	}
+	if f.maps == nil {
+		f.maps = map[int64][]ipv64api.CDN64Mapping{}
+	}
+	for _, x := range f.maps[id] {
+		if x.Transport == transport && x.TargetPort == targetPort {
+			return nil, &ipv64api.APIError{Status: 409, Code: "mapping_exists"}
+		}
+	}
+	f.mapNext++
+	f.maps[id] = append(f.maps[id], ipv64api.CDN64Mapping{ID: f.mapNext, Name: name, Transport: transport, TargetPort: targetPort, ListenPort: 50000 + int(f.mapNext)})
+	return f.maps[id], nil
+}
+
+func (f *fakeOnline) DeleteMapping(_ context.Context, id, mapping int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i, x := range f.maps[id] {
+		if x.ID == mapping {
+			f.maps[id] = append(f.maps[id][:i], f.maps[id][i+1:]...)
+			return nil
+		}
+	}
+	return &ipv64api.APIError{Status: 404, Code: "not_found"}
+}
+
 func (f *fakeOnline) DeleteHost(_ context.Context, id int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -124,6 +162,7 @@ func (f *fakeOnline) DeleteHost(_ context.Context, id int64) error {
 		return &ipv64api.APIError{Status: 404, Code: "cdn64o_host_not_found"}
 	}
 	delete(f.hosts, id)
+	delete(f.maps, id)
 	return nil
 }
 

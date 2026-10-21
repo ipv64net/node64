@@ -1,5 +1,16 @@
 # Changes – PROXY64
 
+## 1.24.0 – 2026-10-21
+
+### New
+- Port mappings for CDN64 mode 1/2: a stream can be reached from the internet via a CDN64 name of the node (option
+  "Reachable from the internet via CDN64" on the stream). srv07/srv08 open a port and pass TCP or UDP through the
+  encrypted tunnel to the stream. No port has to be open at home and your own address stays hidden. Block lists,
+  per-IP limits and the country block apply to the real visitor address, so does the stream's TLS termination. The
+  server port is shown in the stream list and in the host row; it counts towards the port mapping quota. Pause and
+  the allow/block list of the name apply to these ports as well.
+- Requires cdn64-edge 0.15.0 on the servers.
+
 ## 1.23.2 – 2026-10-21
 
 ### Changed

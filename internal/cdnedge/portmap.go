@@ -3,6 +3,7 @@ package cdnedge
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"sort"
@@ -15,10 +16,12 @@ import (
 	"github.com/ipv64net/node64/internal/tunnel"
 )
 
-// Portmapper (T8, Modus 3): ein Port der Server (Bereich port_range, Standard 50000-62000) geht roh per TCP bzw. UDP
-// an einen Port des Ziels eines Modus-3-Namens - wie der Portmapper des alten CDN. Beide Server oeffnen dieselben
-// Ports (der Name zeigt im DNS auf beide). Ziel, Sperre und Liste kommen bei jeder Verbindung aus dem aktuellen
-// Stand des Namens; SSRF-Schutz wie bei HTTP. Gezaehlt wird auf den Namen (Traffic, Verbindungen).
+// Portmapper (T8): ein Port der Server (Bereich port_range, Standard 50000-62000) geht roh per TCP bzw. UDP an einen
+// Port des Ziels - wie der Portmapper des alten CDN. Modus 3: direkt zum Ziel des Namens (SSRF-Schutz wie bei HTTP).
+// Modus 1/2: durch den Tunnel der Node (Stream tcp bzw. udp, Port = Ziel-Port = Port eines Streams in der Node), ohne
+// Tunnel hier ueber den Nachbarserver; die Node braucht die Faehigkeit "ports". Beide Server oeffnen dieselben Ports
+// (der Name zeigt im DNS auf beide). Sperre (auch Pause) und Liste kommen bei jeder Verbindung aus dem aktuellen Stand
+// des Namens. Gezaehlt wird auf den Namen (Traffic, Verbindungen).
 
 // apiMapping: ein Eintrag von ipv64.
 type apiMapping struct {
@@ -86,7 +89,7 @@ func (p *portmapper) apply(c *apiConfig) {
 	m := map[pmKey]pmEntry{}
 	if p.lo > 0 && c != nil {
 		for _, h := range c.Hosts {
-			if h.Mode != 3 || h.Target == nil {
+			if h.Mode == 3 && h.Target == nil || h.Mode != 3 && len(h.Tunnels) == 0 {
 				continue
 			}
 			for _, x := range h.Mappings {
@@ -199,10 +202,78 @@ func (p *portmapper) resolve(k pmKey, client netip.Addr) (*route, int) {
 		return nil, 0
 	}
 	re := p.s.routes.Load().lookup(e.name)
-	if re == nil || re.Mode != 3 || re.Target == nil || re.Blocked != "" || !re.ACL.allows(client) {
+	if re == nil || re.Mode == 3 && re.Target == nil || re.Blocked != "" || !re.ACL.allows(client) {
 		return nil, 0
 	}
 	return re, e.port
+}
+
+var errNoPortTunnel = errors.New("portmapper: node not connected or without port mappings")
+
+// upstream: Verbindung fuer einen Besucher - Modus 3 direkt zum Ziel, Modus 1/2 durch den Tunnel der Node bzw. ueber
+// den Nachbarn (UDP dann als Datagramme mit Laenge). counted = false: der Nachbar zaehlt und begrenzt.
+func (p *portmapper) upstream(ctx context.Context, network string, re *route, port int, client string) (net.Conn, bool, error) {
+	if re.Mode == 3 {
+		c, err := p.dial(ctx, network, re, port)
+		return c, true, err
+	}
+	kind := tunnel.KindTCP
+	if network == "udp" {
+		kind = tunnel.KindUDP
+	}
+	var c net.Conn
+	counted := true
+	if pe := p.s.peerFor(re.Tunnels); pe != nil {
+		if !tunnel.HasCap(pe.Caps, tunnel.CapPorts) {
+			return nil, false, errNoPortTunnel
+		}
+		ts, err := p.s.openPeer(ctx, pe, tunnel.Header{Kind: kind, Client: client, Host: re.Name, Port: port})
+		if err != nil {
+			return nil, false, err
+		}
+		c = ts
+	} else if pc := p.s.dialPeer(ctx, kind, re.Name, port, client, nil); pc != nil {
+		c, counted = pc, false
+		p.s.stats.of(re.Name).ViaPeer.Add(1)
+	} else {
+		return nil, false, errNoPortTunnel
+	}
+	if network == "udp" {
+		c = &dgramConn{Conn: c}
+	}
+	return c, counted, nil
+}
+
+// dgramConn: UDP ueber einen Stream (tunnel.WriteDatagram/ReadDatagram); jeder Fehler beim Lesen beendet die
+// Sitzung (net.ErrClosed).
+type dgramConn struct {
+	net.Conn
+	wmu sync.Mutex
+}
+
+func (d *dgramConn) Read(b []byte) (int, error) {
+	n, err := tunnel.ReadDatagram(d.Conn, b)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %v", net.ErrClosed, err)
+	}
+	return n, nil
+}
+
+func (d *dgramConn) Write(b []byte) (int, error) {
+	d.wmu.Lock()
+	defer d.wmu.Unlock()
+	if err := tunnel.WriteDatagram(d.Conn, b); err != nil {
+		return 0, err
+	}
+	return len(b), nil
+}
+
+// targetGen: Stand des Ziels (Modus 3, DynDNS); Modus 1/2 hat keins.
+func targetGen(re *route) string {
+	if re.Target == nil {
+		return ""
+	}
+	return re.Target.gen
 }
 
 // dial: Verbindung zum Ziel (wie directDial: oeffentliche Adressen, nach dem Verbinden noch einmal geprueft).
@@ -244,16 +315,29 @@ func (p *portmapper) serveTCP(port int, c net.Conn) {
 	}
 	st := p.s.stats.of(re.Name)
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
-	up, err := p.dial(ctx, "tcp", re, tport)
+	up, counted, err := p.upstream(ctx, "tcp", re, tport, clientOf(c.RemoteAddr()))
 	cancel()
 	if err != nil {
 		st.NoTunnel.Add(1)
 		_ = c.Close()
 		return
 	}
+	defer p.s.track(re.Name, re.Mode, addrOf(c.RemoteAddr()), func() { _ = c.Close(); _ = up.Close() })()
+	if !counted {
+		tunnel.Join(c, up)
+		return
+	}
 	st.Conns.Add(1)
-	defer p.s.track(re.Name, 3, addrOf(c.RemoteAddr()), func() { _ = c.Close(); _ = up.Close() })()
 	tunnel.Join(&meter{Conn: c, n: &st.BytesIn, bw: p.s.bw, uid: re.UserID}, &meter{Conn: up, n: &st.BytesOut, bw: p.s.bw, uid: re.UserID})
+}
+
+// clientOf: Besucher-Adresse ip:port (IPv4 ohne ::ffff:) fuer den Kopf im Tunnel.
+func clientOf(a net.Addr) string {
+	if ta, ok := a.(*net.TCPAddr); ok {
+		ap := ta.AddrPort()
+		return netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port()).String()
+	}
+	return a.String()
 }
 
 // ---------------------------------------------------------------- UDP
@@ -282,6 +366,7 @@ type udpSess struct {
 	tport   int
 	st      *hostStat
 	uid     int
+	free    bool         // ueber den Nachbarn: der zaehlt und begrenzt
 	last    atomic.Int64 // Unix-Nanosekunden der letzten Aktivitaet
 	in, out atomic.Int64 // Bytes vom bzw. zum Besucher
 	release func()
@@ -360,10 +445,16 @@ func (u *udpPort) serve() {
 			continue
 		}
 		if _, err := up.Write(buf[:n]); err == nil {
-			s.in.Add(int64(n))
-			s.st.BytesIn.Add(int64(n))
-			u.p.s.bw.take(s.uid, n)
+			s.countIn(u, n)
 		}
+	}
+}
+
+func (s *udpSess) countIn(u *udpPort, n int) {
+	s.in.Add(int64(n))
+	if !s.free {
+		s.st.BytesIn.Add(int64(n))
+		u.p.s.bw.take(s.uid, n)
 	}
 }
 
@@ -387,7 +478,7 @@ func (u *udpPort) session(from netip.AddrPort) *udpSess {
 	re, tport := u.p.resolve(pmKey{udp: true, port: u.port}, from.Addr())
 	u.mu.Lock()
 	s := u.sess[from]
-	if s != nil && (re == nil || s.gen != re.Target.gen || s.tport != tport) {
+	if s != nil && (re == nil || s.gen != targetGen(re) || s.tport != tport) {
 		delete(u.sess, from)
 		u.mu.Unlock()
 		s.end()
@@ -407,7 +498,7 @@ func (u *udpPort) session(from netip.AddrPort) *udpSess {
 	if why != "" {
 		return nil
 	}
-	s = &udpSess{gen: re.Target.gen, tport: tport, st: u.p.s.stats.of(re.Name), uid: re.UserID, release: release}
+	s = &udpSess{gen: targetGen(re), tport: tport, st: u.p.s.stats.of(re.Name), uid: re.UserID, release: release}
 	s.last.Store(time.Now().UnixNano())
 	u.mu.Lock()
 	if old := u.sess[from]; old != nil { // gleichzeitig angelegt: die vorhandene nehmen
@@ -417,7 +508,7 @@ func (u *udpPort) session(from netip.AddrPort) *udpSess {
 	}
 	u.sess[from] = s
 	u.mu.Unlock()
-	s.untrack = u.p.s.track(re.Name, 3, from.Addr(), func() { u.drop(from, s) })
+	s.untrack = u.p.s.track(re.Name, re.Mode, from.Addr(), func() { u.drop(from, s) })
 	go u.connect(from, s, re, tport)
 	return s
 }
@@ -425,7 +516,7 @@ func (u *udpPort) session(from netip.AddrPort) *udpSess {
 // connect baut die Verbindung zum Ziel auf, schickt die wartenden Datagramme und reicht dann die Antworten zurueck.
 func (u *udpPort) connect(from netip.AddrPort, s *udpSess, re *route, tport int) {
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
-	up, err := u.p.dial(ctx, "udp", re, tport)
+	up, counted, err := u.p.upstream(ctx, "udp", re, tport, from.String())
 	cancel()
 	if err != nil {
 		s.st.NoTunnel.Add(1)
@@ -439,14 +530,14 @@ func (u *udpPort) connect(from netip.AddrPort, s *udpSess, re *route, tport int)
 		return
 	}
 	q := s.queue
-	s.up, s.queue = up, nil
+	s.up, s.queue, s.free = up, nil, !counted
 	s.mu.Unlock()
-	s.st.Conns.Add(1)
+	if counted {
+		s.st.Conns.Add(1)
+	}
 	for _, p := range q {
 		if _, err := up.Write(p); err == nil {
-			s.in.Add(int64(len(p)))
-			s.st.BytesIn.Add(int64(len(p)))
-			u.p.s.bw.take(s.uid, len(p))
+			s.countIn(u, len(p))
 		}
 	}
 	u.back(from, s, up)
@@ -470,8 +561,10 @@ func (u *udpPort) back(to netip.AddrPort, s *udpSess, up net.Conn) {
 		}
 		if _, err := u.pc.WriteToUDPAddrPort(buf[:n], to); err == nil {
 			s.out.Add(int64(n))
-			s.st.BytesOut.Add(int64(n))
-			u.p.s.bw.take(s.uid, n)
+			if !s.free {
+				s.st.BytesOut.Add(int64(n))
+				u.p.s.bw.take(s.uid, n)
+			}
 		}
 	}
 	u.drop(to, s)

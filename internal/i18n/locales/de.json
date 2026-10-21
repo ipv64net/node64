@@ -561,6 +561,7 @@
     },
     "streams": {
       "title": "Streams (TCP/UDP)",
+      "online_title": "Über CDN64: Port der Server (srv07/srv08), der zu diesem Stream geht",
       "new": "Stream anlegen",
       "edit": "Stream bearbeiten",
       "empty": "Noch keine Streams. Ein Stream reicht einen Port roh an einen Dienst weiter, z. B. für Spiele-Server, MQTT oder WireGuard.",
@@ -575,6 +576,10 @@
       "hint": "Streams belegen ihren Port je Protokoll; die Übersicht unter Einstellungen → Ports zeigt Überschneidungen. UDP-Sitzungen enden nach 60 s ohne Pakete.",
       "f": {
         "name": "Name (optional)",
+        "online_empty": "Erst einen Host bei CDN64 in Modus 1 oder 2 einschalten, dann lässt sich der Stream über dessen Namen erreichen.",
+        "online_hint": "srv07/srv08 öffnen für diesen Stream einen Port und reichen Verbindungen durch den verschlüsselten Tunnel hierher (Portmapper). Zu Hause muss kein Port offen sein, deine Adresse bleibt verborgen. Der Port der Server steht nach dem Speichern in der Liste; er zählt zum Kontingent für Portmapper.",
+        "online_none": "nein, nur hier",
+        "online": "Über CDN64 aus dem Internet erreichbar",
         "listen_port": "Port",
         "hint": "Ziel im Heimnetz. Ein Port lässt sich je Protokoll nur einmal öffnen.",
         "tls": "TLS hier beenden (nur TCP)",
@@ -814,6 +819,7 @@
     },
     "online": {
       "err_conf": "Tunnel-Daten prüfen: Tunnel, Token und mindestens ein Server (Name, Host).",
+      "o_ports_node": "Portmapper: Port der Server → Port des Streams bzw. Ziels",
       "col": "CDN64",
       "on": "Einschalten",
       "on_title": "Über srv07/srv08.cdn64.de aus dem Internet erreichbar machen (IPv4 und IPv6, ohne offene Ports)",
@@ -910,6 +916,9 @@
       "wait_edges": "Die Server übernehmen die neue Einstellung, Test wird wiederholt …",
       "e": {
         "no_api_key": "Kein ipv64-Account verbunden. Unter Einstellungen › ipv64 den API-Key eintragen und danach hier weitermachen.",
+        "port_in_use": "Auf den Servern ist kein passender Port frei.",
+        "mapping_exists": "Dieser Port ist für den Namen schon gemappt.",
+        "port_name_off": "Der CDN64-Name ist an dieser Node nicht mehr eingeschaltet.",
         "not_online": "Für diesen Host ist CDN64 nicht eingeschaltet.",
         "api_key_rejected": "ipv64 lehnt den API-Key ab (abgelaufen oder widerrufen). Unter Einstellungen › ipv64 einen gültigen Key eintragen.",
         "ipv64_unreachable": "ipv64.net ist gerade nicht erreichbar. Bitte später noch einmal versuchen.",

@@ -167,6 +167,22 @@ func (c *Client) CDN64SetPaused(ctx context.Context, key string, id int64, pause
 	return &out, nil
 }
 
+// CDN64AddMapping legt einen Portmapper an (Modus 1/2: targetPort = Port des Streams in der Node); Antwort: alle
+// Mappings des Namens.
+func (c *Client) CDN64AddMapping(ctx context.Context, key string, id int64, name, transport string, targetPort int) ([]CDN64Mapping, error) {
+	var out []CDN64Mapping
+	in := map[string]any{"name": name, "transport": transport, "target_port": targetPort}
+	if err := c.do(ctx, http.MethodPost, key, "/cdn64o/hosts/"+strconv.FormatInt(id, 10)+"/mappings", in, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CDN64DeleteMapping entfernt einen Portmapper.
+func (c *Client) CDN64DeleteMapping(ctx context.Context, key string, id, mapping int64) error {
+	return c.do(ctx, http.MethodDelete, key, "/cdn64o/hosts/"+strconv.FormatInt(id, 10)+"/mappings/"+strconv.FormatInt(mapping, 10), nil, nil)
+}
+
 // CDN64DeleteHost schaltet einen Namen aus (DNS zurueck).
 func (c *Client) CDN64DeleteHost(ctx context.Context, key string, id int64) error {
 	return c.do(ctx, http.MethodDelete, key, "/cdn64o/hosts/"+strconv.FormatInt(id, 10), nil, nil)

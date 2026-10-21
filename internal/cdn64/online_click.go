@@ -38,6 +38,8 @@ type OnlineAPI interface {
 	AddHost(ctx context.Context, fqdn, tunnelID string, mode int, target *ipv64api.CDN64Target) (*ipv64api.CDN64Host, error)
 	SetMode(ctx context.Context, id int64, mode int) error
 	SetPaused(ctx context.Context, id int64, paused bool) error
+	AddMapping(ctx context.Context, id int64, name, transport string, targetPort int) ([]ipv64api.CDN64Mapping, error)
+	DeleteMapping(ctx context.Context, id, mapping int64) error
 	DeleteHost(ctx context.Context, id int64) error
 }
 
@@ -66,6 +68,12 @@ func (o ipv64Online) SetMode(ctx context.Context, id int64, mode int) error {
 func (o ipv64Online) SetPaused(ctx context.Context, id int64, paused bool) error {
 	_, err := o.k.Client().CDN64SetPaused(ctx, o.k.Get(ctx), id, paused)
 	return err
+}
+func (o ipv64Online) AddMapping(ctx context.Context, id int64, name, transport string, targetPort int) ([]ipv64api.CDN64Mapping, error) {
+	return o.k.Client().CDN64AddMapping(ctx, o.k.Get(ctx), id, name, transport, targetPort)
+}
+func (o ipv64Online) DeleteMapping(ctx context.Context, id, mapping int64) error {
+	return o.k.Client().CDN64DeleteMapping(ctx, o.k.Get(ctx), id, mapping)
 }
 func (o ipv64Online) DeleteHost(ctx context.Context, id int64) error {
 	return o.k.Client().CDN64DeleteHost(ctx, o.k.Get(ctx), id)
@@ -472,6 +480,7 @@ func (m *Module) onlineKick() {
 
 func (m *Module) onlineLoop(ctx context.Context) {
 	m.onlineLoadNames(ctx)
+	m.onlinePortsIndex(ctx)
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
 	for {
@@ -511,7 +520,11 @@ func (m *Module) onlineSync(ctx context.Context) {
 	}
 	ov, err := a.Overview(ctx)
 	m.onlineSetRemote(ov, err)
-	if err != nil || idle {
+	if err != nil {
+		return
+	}
+	if idle {
+		m.onlinePortsApply(ctx, ov) // keine Namen mehr: Portmapper der Streams austragen
 		return
 	}
 	remote := map[int64]ipv64api.CDN64Host{}
@@ -553,6 +566,9 @@ func (m *Module) onlineSync(ctx context.Context) {
 	if removed {
 		m.onlineLoadNames(ctx)
 		m.onlineDropTunnel(ctx)
+	}
+	m.onlinePortsApply(ctx, ov)
+	if removed {
 		return
 	}
 	if c != nil {
@@ -1005,7 +1021,7 @@ type onlineRow struct {
 	RemoteID int64                   // erster Name bei ipv64 (Bearbeiten auf ipv64.net)
 	Target   *ipv64api.CDN64Target   // Modus 3: Ziel und Cache der Server
 	ACL      *ipv64api.CDN64ACL      // Erlauben-/Sperrliste auf den Servern (erster Name)
-	Mappings []ipv64api.CDN64Mapping // Portmapper der Namen (Modus 3)
+	Mappings []ipv64api.CDN64Mapping // Portmapper der Namen (Modus 3 zum Ziel, Modus 1/2 zu Streams der Node)
 }
 
 // onlineMonth: was srv07/srv08 fuer die Namen eines Hosts im laufenden Monat gezaehlt haben.
@@ -1081,6 +1097,7 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 			r.Month.Requests += tm.Requests
 			r.Month.Rejected += tm.Rejected
 			r.Paused = r.Paused || rh.Paused
+			r.Mappings = append(r.Mappings, rh.Mappings...)
 			if r.Status != "blocked" {
 				r.Status = rh.Status
 				if rh.BlockedReason != nil {

@@ -52,7 +52,7 @@ type apiHost struct {
 	Blocked  string       `json:"blocked"`
 	Target   *apiTarget   `json:"target,omitempty"`   // Modus 3
 	ACL      *apiACL      `json:"acl,omitempty"`      // Erlauben-/Sperrliste (alle Modi)
-	Mappings []apiMapping `json:"mappings,omitempty"` // Portmapper (Modus 3)
+	Mappings []apiMapping `json:"mappings,omitempty"` // Portmapper (Modus 3 direkt, Modus 1/2 durch den Tunnel)
 }
 
 type apiState struct {
