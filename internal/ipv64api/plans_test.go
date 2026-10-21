@@ -66,3 +66,16 @@ func TestPlans(t *testing.T) {
 		t.Fatal("cached plans must be used for a day")
 	}
 }
+
+// Fehlende Grenzen kommen aus dem eingebauten Stand, null von ipv64 bleibt unbegrenzt.
+func TestPlansWithBuiltin(t *testing.T) {
+	sixty := 60
+	got := withBuiltin([]Plan{{Key: "free", Limits: map[string]*int{"dyndns_ttl_s": &sixty, "sms_24h": nil}}})
+	l := got[0].Limits
+	if l["dyndns_ttl_s"] == nil || *l["dyndns_ttl_s"] != 60 || l["sms_24h"] != nil {
+		t.Fatalf("given values must stay: %v", l)
+	}
+	if l["statistics_days"] == nil || *l["statistics_days"] != 14 {
+		t.Fatalf("missing value from builtin: %v", l["statistics_days"])
+	}
+}

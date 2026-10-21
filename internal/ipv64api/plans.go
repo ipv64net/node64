@@ -7,8 +7,9 @@ import (
 	"time"
 )
 
-// Account-Klassen von ipv64.net (GET /plans, oeffentlich). Die Node zeigt sie als Uebersicht und verweist bei
-// erreichten Limits darauf. Abgerufen einmal am Tag; bis der Endpunkt erreichbar ist bzw. ohne Internet gilt der
+// Account-Klassen von ipv64.net (GET /plans, oeffentlich; Grenzen live aus user_class). Die Node zeigt sie als
+// Uebersicht und verweist bei erreichten Limits darauf. Abgerufen jede Stunde; fehlt bei ipv64 ein Wert, gilt der
+// eingebaute; bis der Endpunkt erreichbar ist bzw. ohne Internet gilt der
 // eingebaute Stand (Preisseite ipv64.net/pricing, Stand 2026-10-21: neue CDN-Grenzen).
 
 // PricingURL ist die Preisseite von ipv64.net.
@@ -67,7 +68,33 @@ var PlanOrder = [][2]string{
 const (
 	setPlans   = "ipv64.plans"
 	setPlansAt = "ipv64.plans_at"
+	plansEvery = time.Hour // Aenderungen in user_class kommen so spaetestens nach einer Stunde an
 )
+
+// withBuiltin ergaenzt Grenzen, die ipv64 nicht liefert (Schluessel fehlt), aus dem eingebauten Stand derselben
+// Klasse; null von ipv64 heisst unbegrenzt und bleibt.
+func withBuiltin(list []Plan) []Plan {
+	out := make([]Plan, len(list))
+	for i, p := range list {
+		lim := map[string]*int{}
+		for k, v := range p.Limits {
+			lim[k] = v
+		}
+		for _, b := range builtinPlans {
+			if b.Key != p.Key {
+				continue
+			}
+			for k, v := range b.Limits {
+				if _, ok := lim[k]; !ok {
+					lim[k] = v
+				}
+			}
+		}
+		p.Limits = lim
+		out[i] = p
+	}
+	return out
+}
 
 // Plans liefert die Account-Klassen: abgerufen (hoechstens einmal am Tag), sonst der letzte Abruf, sonst der
 // eingebaute Stand. live = aus der API.
@@ -75,8 +102,8 @@ func (k *Key) Plans(ctx context.Context) (list []Plan, live bool) {
 	at, _ := time.Parse(time.RFC3339, k.st.SettingOr(ctx, setPlansAt, ""))
 	var cached []Plan
 	_ = json.Unmarshal([]byte(k.st.SettingOr(ctx, setPlans, "")), &cached)
-	if len(cached) > 0 && time.Since(at) < 24*time.Hour {
-		return cached, true
+	if len(cached) > 0 && time.Since(at) < plansEvery {
+		return withBuiltin(cached), true
 	}
 	if time.Since(at) > 10*time.Minute || len(cached) > 0 { // Fehlschlaege hoechstens alle 10 min wiederholen
 		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -87,13 +114,13 @@ func (k *Key) Plans(ctx context.Context) (list []Plan, live bool) {
 			if b, err := json.Marshal(fresh); err == nil {
 				_ = k.st.SetSetting(ctx, setPlans, string(b))
 			}
-			return fresh, true
+			return withBuiltin(fresh), true
 		} else if err != nil && k.log != nil {
 			k.log.Debug("ipv64 plans not available", "err", err)
 		}
 	}
 	if len(cached) > 0 {
-		return cached, true
+		return withBuiltin(cached), true
 	}
 	return builtinPlans, false
 }
