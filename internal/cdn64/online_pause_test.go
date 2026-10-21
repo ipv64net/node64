@@ -24,7 +24,8 @@ func TestOnlinePause(t *testing.T) {
 		extra: []ipv64api.CDN64Host{{ID: 50, FQDN: "web.test", Mode: 3, Status: "active", Wildcard: true,
 			Target:   &ipv64api.CDN64Target{Source: "fixed", Target: "203.0.113.5", Port: 8443, Scheme: "https", Frontend: 2, CacheMB: 256, CacheMinutes: 10},
 			ACL:      &ipv64api.CDN64ACL{Default: "deny", List: []string{"198.51.100.0/24"}},
-			Mappings: []ipv64api.CDN64Mapping{{ID: 1, Name: "WireGuard", ListenPort: 51820, Transport: "udp", TargetPort: 51820}}}}}
+			Mappings: []ipv64api.CDN64Mapping{{ID: 1, Name: "WireGuard", ListenPort: 51820, Transport: "udp", TargetPort: 51820}}},
+			{ID: 51, FQDN: "pf.test", Mode: 3, Status: "active", Target: &ipv64api.CDN64Target{Source: "records", Port: 443, Scheme: "https", Frontend: 3, CacheMB: 128, CacheMinutes: 10}}}}
 	e.m.SetOnlineAPI(f)
 	e.enable(t)
 	h := newHost()
@@ -35,6 +36,11 @@ func TestOnlinePause(t *testing.T) {
 	other := newHost()
 	other.Names, other.TargetHost, other.TargetPort = []string{"local.test"}, "93.184.216.34", 8081
 	if err := e.m.saveHost(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	pf := newHost() // Name auf ipv64.net in Modus 3, Host gibt es auch hier
+	pf.Names, pf.TargetHost, pf.TargetPort = []string{"pf.test"}, "93.184.216.34", 8082
+	if err := e.m.saveHost(ctx, pf); err != nil {
 		t.Fatal(err)
 	}
 	if res, err := e.m.onlineEnable(ctx, h, 1); err != nil || len(res) != 1 || res[0].Result != "on" {
@@ -70,7 +76,7 @@ func TestOnlinePause(t *testing.T) {
 	}
 
 	// Name, den die Node nicht verwaltet: in der Liste, Pause per ID bei ipv64
-	others := e.m.onlineOthers(ctx, e.m.online.remote.Load().Data)
+	others := e.m.onlineOthers(ctx)
 	if len(others) != 1 || others[0].FQDN != "web.test" || others[0].Target.CacheMB != 256 {
 		t.Fatalf("others: %+v", others)
 	}
@@ -89,14 +95,26 @@ func TestOnlinePause(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := listData{Kind: KindProxy, Rows: rows, OnlineOn: true, Others: e.m.onlineOthers(ctx, e.m.online.remote.Load().Data)}
+	// Modus 3 mit Host hier: Stand in der Zeile des Hosts, Pause ueber den Host, kein Einschalten
+	if r := e.m.onlineIndex(ctx, rowsHosts(rows))[pf.ID]; r == nil || !r.Foreign || r.RemoteID != 51 || r.Mode != 3 || r.Target.CacheMB != 128 {
+		t.Fatalf("foreign row: %+v", r)
+	}
+	if c := call("/api/cdn64/hosts/"+strconv.FormatInt(pf.ID, 10)+"/online/pause", `{"paused":true}`); c != http.StatusNoContent || !f.paused[51] {
+		t.Fatalf("pause foreign via host: %d %v", c, f.paused)
+	}
+	rows, _ = e.m.rowsOf(ctx, KindProxy)
+	d := listData{Kind: KindProxy, Rows: rows, OnlineOn: true, Others: e.m.onlineOthers(ctx)}
 	body := renderHosts(t, d)
 	for _, want := range []string{`data-c64o-pause="` + strconv.FormatInt(h.ID, 10) + `"`, `data-c64o-rpause="50" data-paused="1"`,
 		"https://203.0.113.5:8443", "cdn64.online.o_cache", "cdn64.online.o_acl_deny", "51820/udp → 51820 (WireGuard)",
-		"https://ipv64.net/cdn64?edit=50", "cdn64.online.paused", `<tr class="table-warning">`} {
+		"https://ipv64.net/cdn64?edit=50", "cdn64.online.paused", `<tr class="table-warning">`,
+		`data-c64o-pause="` + strconv.FormatInt(pf.ID, 10) + `" data-paused="1"`, "https://ipv64.net/cdn64?edit=51", "cdn64.online.o_web_title"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("page misses %q", want)
 		}
+	}
+	if strings.Contains(body, `data-c64o-on="`+strconv.FormatInt(pf.ID, 10)+`"`) || strings.Contains(body, `data-c64o-rpause="51"`) {
+		t.Fatal("mode 3 host: switch-on button or second row")
 	}
 }
 
@@ -125,6 +143,14 @@ func TestOnlineIdleSync(t *testing.T) {
 	if f.calls != 4 || len(e.m.online.remote.Load().Data.Hosts) != 1 {
 		t.Fatalf("with names: %d calls", f.calls)
 	}
+}
+
+func rowsHosts(rows []hostRow) []*Host {
+	out := make([]*Host, len(rows))
+	for i := range rows {
+		out[i] = rows[i].Host
+	}
+	return out
 }
 
 // tplView spielt die View der Oberflaeche fuer die Vorlage (Texte = Schluessel).

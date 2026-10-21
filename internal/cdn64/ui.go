@@ -294,7 +294,7 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 	if rm != nil && rm.Data != nil && len(rm.Data.Hosts) > 0 {
 		d.Quota = newOnlineQuota(rm.Data.Quota, time.Now())
 		if d.OnlineOn && kind == KindProxy {
-			d.Others = m.onlineOthers(r.Context(), rm.Data)
+			d.Others = m.onlineOthers(r.Context())
 		}
 	}
 	if m.edge != nil {

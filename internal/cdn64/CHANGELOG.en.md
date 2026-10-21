@@ -4,6 +4,9 @@
 
 ### Changed
 - Paused CDN64 names are highlighted in yellow in the host list and in "More names in CDN64".
+- A name in mode 3 (on ipv64.net) or from another node that has a host here is now shown in the row of that host:
+  mode, status, cache, traffic, pause and an edit link. Switching on and changing the mode are no longer offered
+  there. The "More names in CDN64" card only lists names without a host here.
 
 ## 1.23.0 – 2026-10-21
 

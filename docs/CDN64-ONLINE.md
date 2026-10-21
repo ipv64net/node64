@@ -268,8 +268,9 @@ beim Traffic-Limit: Modus 1 trennt die Verbindung, Modus 2/3 antworten mit 503, 
 offene Verbindungen trennt `recheckLive` nach dem nächsten Abruf der Konfiguration. DNS bleibt auf den Servern, die
 Adresse des Ziels bzw. der Node bleibt also verborgen. Einstellungen, Liste, Portmapper und Statistik bleiben erhalten.
 Pausieren und Fortsetzen geht auf der Webseite (`cdn64.php`, alle Namen) und in PROXY64: am eigenen Host und in der
-Karte „Weitere Namen in CDN64“. Diese Karte zeigt Namen, die die Node nicht verwaltet (Modus 3, andere Nodes), nur
-lesend: Ziel, Cache, Liste, Portmapper, Status, Traffic. Einträge `paused`/`resumed` in `cdn64o_events` und im Log.
+Karte „Weitere Namen in CDN64“. Namen, die die Node nicht verwaltet (Modus 3, andere Nodes), stehen nur lesend in der
+Zeile ihres Hosts, wenn es hier einen Host mit dem Namen gibt (kein Einschalten dort), sonst in dieser Karte: Ziel,
+Cache, Liste, Portmapper, Status, Traffic. Einträge `paused`/`resumed` in `cdn64o_events` und im Log.
 
 ### 8.4 Endpunkte für die Server (Server-Geheimnis, eigene Datei)
 

@@ -904,6 +904,14 @@ func (m *Module) apiOnlinePause(w http.ResponseWriter, r *http.Request) {
 			ids = append(ids, x.RemoteID)
 		}
 	}
+	if len(ids) == 0 { // Namen des Hosts, die nicht von hier eingeschaltet sind (Modus 3, andere Node)
+		foreign := m.onlineForeign(r.Context())
+		for _, n := range h.Names {
+			if rh, ok := foreign[strings.ToLower(n)]; ok {
+				ids = append(ids, rh.ID)
+			}
+		}
+	}
 	if len(ids) == 0 {
 		m.onlineFail(w, r, errOnline("not_online"))
 		return
@@ -991,6 +999,11 @@ type onlineRow struct {
 	Reason  string
 	Paused  bool        // mindestens ein Name pausiert (Server nehmen nichts an, DNS bleibt)
 	Month   onlineMonth // Zahlen der Server in diesem Monat (aus dem letzten Abgleich)
+	// Foreign: die Namen sind in CDN64, aber nicht von dieser Node eingeschaltet - Modus 3 (auf ipv64.net eingerichtet)
+	// oder Tunnel einer anderen Node. Die Zeile zeigt nur den Stand und bietet Pause; einschalten geht hier nicht.
+	Foreign  bool
+	RemoteID int64                 // erster Name bei ipv64 (Bearbeiten auf ipv64.net)
+	Target   *ipv64api.CDN64Target // Modus 3: Ziel und Cache der Server
 }
 
 // onlineMonth: was srv07/srv08 fuer die Namen eines Hosts im laufenden Monat gezaehlt haben.
@@ -1012,7 +1025,11 @@ var viaOrder = []string{"", "quic", "quic443", "tls"}
 // onlineIndex: Zustand je Host-ID (nur Hosts mit eingeschalteten Namen).
 func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onlineRow {
 	list, err := m.onlineNames(ctx)
-	if err != nil || len(list) == 0 {
+	if err != nil {
+		return nil
+	}
+	foreign := m.onlineForeign(ctx)
+	if len(list) == 0 && len(foreign) == 0 {
 		return nil
 	}
 	var badges []onlineBadge
@@ -1077,6 +1094,33 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 					r.Missing++
 				}
 			}
+			continue
+		}
+		for _, n := range h.Names { // nicht von hier eingeschaltet, aber in CDN64: Stand in der Zeile des Hosts
+			rh, ok := foreign[strings.ToLower(n)]
+			if !ok {
+				continue
+			}
+			r := out[h.ID]
+			if r == nil {
+				r = &onlineRow{Foreign: true, RemoteID: rh.ID, Target: rh.Target}
+				out[h.ID] = r
+			}
+			tm := rh.TrafficMonth
+			r.Names = append(r.Names, rh.FQDN)
+			r.Mode = max(r.Mode, rh.Mode)
+			r.Month.Known = true
+			r.Month.Bytes += tm.BytesIn + tm.BytesOut
+			r.Month.Conns += tm.Conns
+			r.Month.Requests += tm.Requests
+			r.Month.Rejected += tm.Rejected
+			r.Paused = r.Paused || rh.Paused
+			if r.Status != "blocked" {
+				r.Status = rh.Status
+				if rh.BlockedReason != nil {
+					r.Reason = *rh.BlockedReason
+				}
+			}
 		}
 	}
 	return out
@@ -1090,19 +1134,42 @@ type onlineOther struct {
 	Bytes int64 // Traffic im Monat (rein + raus)
 }
 
-// onlineOthers: Namen aus dem letzten Abgleich ohne Eintrag in cdn_online, nach Name sortiert.
-func (m *Module) onlineOthers(ctx context.Context, ov *ipv64api.CDN64Overview) []onlineOther {
+// onlineForeign: Namen aus dem letzten Abgleich, die diese Node nicht eingeschaltet hat (Modus 3 von ipv64.net, Namen
+// anderer Nodes), nach Name (klein).
+func (m *Module) onlineForeign(ctx context.Context) map[string]ipv64api.CDN64Host {
+	rm := m.online.remote.Load()
+	if rm == nil || rm.Data == nil || len(rm.Data.Hosts) == 0 {
+		return nil
+	}
 	mine := map[int64]bool{}
 	if list, err := m.onlineNames(ctx); err == nil {
 		for _, x := range list {
 			mine[x.RemoteID] = true
 		}
 	}
-	var out []onlineOther
-	for _, h := range ov.Hosts {
+	out := map[string]ipv64api.CDN64Host{}
+	for _, h := range rm.Data.Hosts {
 		if !mine[h.ID] {
-			out = append(out, onlineOther{CDN64Host: h, Bytes: h.TrafficMonth.BytesIn + h.TrafficMonth.BytesOut})
+			out[strings.ToLower(h.FQDN)] = h
 		}
+	}
+	return out
+}
+
+// onlineOthers: Namen aus dem letzten Abgleich, die weder diese Node eingeschaltet hat noch zu einem Host hier gehoeren
+// (die stehen in der Zeile ihres Hosts), nach Name sortiert.
+func (m *Module) onlineOthers(ctx context.Context) []onlineOther {
+	foreign := m.onlineForeign(ctx)
+	if hl, err := m.hosts(ctx); err == nil {
+		for _, h := range hl {
+			for _, n := range h.Names {
+				delete(foreign, strings.ToLower(n))
+			}
+		}
+	}
+	var out []onlineOther
+	for _, h := range foreign {
+		out = append(out, onlineOther{CDN64Host: h, Bytes: h.TrafficMonth.BytesIn + h.TrafficMonth.BytesOut})
 	}
 	slices.SortFunc(out, func(a, b onlineOther) int { return strings.Compare(a.FQDN, b.FQDN) })
 	return out

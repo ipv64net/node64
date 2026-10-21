@@ -4,6 +4,9 @@
 
 ### Geändert
 - Pausierte CDN64-Namen sind in der Host-Liste und in „Weitere Namen in CDN64“ gelb hinterlegt.
+- Ein Name in Modus 3 (auf ipv64.net) oder von einer anderen Node, zu dem es hier einen Host gibt, steht jetzt in der
+  Zeile dieses Hosts: Modus, Status, Cache, Traffic, Pause und Link zum Bearbeiten. Einschalten und Modus wechseln
+  gibt es dort nicht mehr. Die Karte „Weitere Namen in CDN64“ zeigt nur noch Namen ohne Host hier.
 
 ## 1.23.0 – 2026-10-21
 
