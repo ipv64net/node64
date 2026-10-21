@@ -1,5 +1,10 @@
 # Changes – DNS64
 
+## 1.22.0 – 2026-10-21
+
+### Changed
+- Default upstreams for new installations: Cloudflare and Quad9 (DoH) plus dnsforge via DoQ and DoH (servers in Germany only). Existing installations keep their selection; dnsforge can be ticked there under *Upstream servers*.
+
 ## 1.21.0 – 2026-10-20
 
 ### New

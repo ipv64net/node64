@@ -28,7 +28,8 @@ type Server struct {
 	IPs []string `json:"ips"`
 }
 
-var DefaultServers = []Server{Presets[0], Presets[1]}
+// Default: Cloudflare and Quad9 (DoH) plus dnsforge (DoQ and DoH, servers in Germany).
+var DefaultServers = []Server{Presets[0], Presets[1], Presets[16], Presets[12]}
 
 // Presets are the public resolvers offered in the settings (IPv4 first: without IPv6 the v6 addresses fail fast).
 var Presets = []Server{

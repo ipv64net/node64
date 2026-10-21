@@ -206,13 +206,14 @@ func TestPresets(t *testing.T) {
 			v6 = v6 || (a != nil && a.To4() == nil)
 		}
 	}
-	// europaeische Vorlagen sind da, der Standard bleibt Cloudflare + Quad9
+	// europaeische Vorlagen sind da; Standard: Cloudflare, Quad9, dnsforge (DoQ und DoH)
 	for _, u := range []string{"https://unfiltered.joindns4.eu/dns-query", "tls://blank.dnsforge.de", "quic://doq.ffmuc.net", "tls://dns3.digitalcourage.de"} {
 		if !seen[u] {
 			t.Errorf("preset %s missing", u)
 		}
 	}
-	if len(DefaultServers) != 2 || DefaultServers[0].Name != "Cloudflare" || DefaultServers[1].Name != "Quad9" {
+	if len(DefaultServers) != 4 || DefaultServers[0].Name != "Cloudflare" || DefaultServers[1].Name != "Quad9" ||
+		DefaultServers[2].URL != "quic://blank.dnsforge.de" || DefaultServers[3].URL != "https://blank.dnsforge.de/dns-query" {
 		t.Errorf("defaults = %+v", DefaultServers)
 	}
 }

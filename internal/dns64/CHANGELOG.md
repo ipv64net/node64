@@ -1,5 +1,10 @@
 # Änderungen – DNS64
 
+## 1.22.0 – 2026-10-21
+
+### Geändert
+- Standard-Upstreams für neue Installationen: Cloudflare und Quad9 (DoH) und dazu dnsforge per DoQ und DoH (Server nur in Deutschland). Bestehende Installationen behalten ihre Auswahl; dnsforge lässt sich dort unter *Upstream-Server* anhaken.
+
 ## 1.21.0 – 2026-10-20
 
 ### Neu

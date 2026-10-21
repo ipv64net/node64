@@ -18,7 +18,7 @@ func TestConfigDefaultsAndSave(t *testing.T) {
 	m, _ := testModule(t)
 	ctx := context.Background()
 	c := m.loadConfig(ctx)
-	if len(c.activeUpstreams()) != 2 || c.activeUpstreams()[0].Name != "Cloudflare" || len(c.Upstreams) != len(upstream.Presets) {
+	if len(c.activeUpstreams()) != 4 || c.activeUpstreams()[0].Name != "Cloudflare" || len(c.Upstreams) != len(upstream.Presets) {
 		t.Fatalf("upstreams = %+v", c.Upstreams)
 	}
 	if len(c.activeLists()) != len(filter.DefaultLists) || len(c.Lists) != len(filter.DefaultLists)+len(filter.MoreLists) {
