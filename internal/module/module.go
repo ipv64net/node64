@@ -199,6 +199,37 @@ type CardStat struct {
 	Note      string    // kurzer Zusatz hinter dem Wert (z. B. Trend "▲ 12 %"), klein
 	NoteClass string    // Klasse des Zusatzes (z. B. "text-danger")
 	Title     string    // Tooltip des Werts (z. B. Fehlertext)
+
+	// optional: Verbrauch mit Grenze als „Wert / Max“ und Balken unter der Zeile (z. B. Kontingent)
+	Max       int64     // > 0: hinter dem Wert „/ Max“ (wie Value formatiert, auch Bytes)
+	Bar       bool      // Balken zeigen
+	BarPct    float64   // Breite in Prozent (0-100; mit BarWidth bei Verbrauch > 0 mindestens 1)
+	BarClass  string    // bg-success (Standard), bg-warning, bg-danger
+	HintKey   string    // i18n-Schluessel unter dem Balken, Argumente {date} = HintDate, {n} = HintBytes
+	HintDate  time.Time // fuer {date}
+	HintBytes int64     // fuer {n} (als Datenmenge)
+	HintClass string    // Klasse des Hinweises (z. B. "text-warning-emphasis")
+}
+
+// BarWidth: Breite eines Balkens aus dem Fuellstand in Prozent – hoechstens 100 und bei Verbrauch > 0 mindestens 1,
+// damit kleiner Verbrauch sichtbar bleibt.
+func BarWidth(pct float64, used bool) float64 {
+	pct = min(max(pct, 0), 100)
+	if used && pct < 1 {
+		pct = 1
+	}
+	return pct
+}
+
+// BarClassOf: Farbe wie bei den Limits des Accounts – gruen, ab 80 % (oder bei warn) gelb, voll rot.
+func BarClassOf(pct float64, warn bool) string {
+	switch {
+	case pct >= 100:
+		return "bg-danger"
+	case warn || pct >= 80:
+		return "bg-warning"
+	}
+	return "bg-success"
 }
 
 // DashboardInfo sind die Zahlen eines Moduls fuer das Dashboard.

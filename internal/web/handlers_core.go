@@ -317,16 +317,10 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 				default:
 					d.Other++
 				}
-				if c.Execution == "online" || c.Execution == "both" {
-					n := len(c.Locations)
-					if n == 0 {
-						n = 2
-					}
-					d.OnlinePoints += n
-				}
 				d.ChecksProj += healthchecks.CheckDailyCost(c, v.Sync.Locations)
 			}
 		}
+		d.OnlinePoints = s.HC.OnlinePoints(ctx, "", v.Sync.Locations) // wie der hub zaehlt (ein Standort je Check, wenn der Account nur einen hat)
 	}
 	if s.IPv64 != nil {
 		if r.URL.Query().Get("refresh") == "account" {

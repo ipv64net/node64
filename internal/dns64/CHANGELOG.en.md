@@ -1,5 +1,11 @@
 # Changes – DNS64
 
+## 1.22.1 – 2026-10-21
+
+### Fixed
+- Start page card: "blocking paused until" shows the time in the node's time zone (previously the container's,
+  usually UTC), with the date if it is another day.
+
 ## 1.22.0 – 2026-10-21
 
 ### Changed

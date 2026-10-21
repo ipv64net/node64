@@ -279,8 +279,8 @@
       "failover_monitors": "Failover monitors",
       "failover_rules": "Failover rules",
       "cdn_domains": "CDN domains",
-      "cdn_traffic_gb": "CDN traffic (GB)",
-      "vpn_traffic_gb": "VPN traffic (GB)",
+      "cdn_traffic_gb": "CDN traffic (month)",
+      "vpn_traffic_gb": "VPN traffic",
       "dns64_clients": "DNS64 clients"
     },
     "link_quota": "Online checks today",

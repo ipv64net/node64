@@ -1,5 +1,11 @@
 # Änderungen – PROXY64
 
+## 1.21.2 – 2026-10-21
+
+### Geändert
+- Startseiten-Karte: wenn CDN64 online genutzt wird, CDN-Domains und CDN-Traffic dieses Monats als „x / y“ mit Balken
+  (grün, ab 80 % gelb, voll rot) und Hinweis, bis wann der Traffic bei gleichem Verbrauch reicht.
+
 ## 1.21.1 – 2026-10-21
 
 ### Geändert

@@ -2,13 +2,15 @@ package ipv64api
 
 import (
 	"context"
+	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
 // Account-Uebersicht fuer das Dashboard: alle Limits des Accounts direkt aus der API v2 (GET /me, fuer
-// Healthchecks 2.0 zusaetzlich GET /hc2/account), im Speicher zwischengespeichert.
+// Healthchecks 2.0 zusaetzlich GET /hc2/account, fuer das CDN GET /cdn64o), im Speicher zwischengespeichert.
 
 // Limit ist ein Verbrauch mit Grenze.
 type Limit struct {
@@ -26,6 +28,22 @@ func (l Limit) Pct() int {
 	p := int(l.Used * 100 / l.Max)
 	return min(p, 100)
 }
+
+// BarPct ist die Breite des Balkens in Prozent: als Kommazahl (eine Stelle), hoechstens 100 und bei Verbrauch > 0
+// mindestens 1 – sonst bliebe der Balken bei kleinem Verbrauch (z. B. 0,4 von 100 GB) unsichtbar.
+func (l Limit) BarPct() float64 {
+	if l.Unlimited || l.Max <= 0 {
+		return 0
+	}
+	p := min(math.Round(l.Used*1000/l.Max)/10, 100)
+	if l.Used > 0 && p < 1 {
+		p = 1
+	}
+	return p
+}
+
+// GB: der Wert ist eine Datenmenge in GB (Schluessel *_gb, Anzeige mit Einheit).
+func (l Limit) GB() bool { return strings.HasSuffix(l.Key, "_gb") }
 
 // UsedText / MaxText: ganze Zahlen ohne, Traffic mit zwei Nachkommastellen.
 func (l Limit) UsedText() string { return numText(l.Used) }
@@ -112,6 +130,14 @@ func (c *Client) overview(ctx context.Context, key string) (*Overview, error) {
 			src["hc_checks_today"] = u
 		}
 	}
+	// CDN: Kontingent aus /cdn64o (altes CDN und CDN64 online zusammen, Traffic im laufenden Monat); /me zaehlt nur
+	// das alte CDN. Ohne die Route (aelterer Stand bei ipv64) bleibt es bei /me.
+	var cdn struct {
+		Quota CDN64Quota `json:"quota"`
+	}
+	if err := c.get(ctx, key, "/cdn64o", &cdn); err == nil {
+		cdnUsage(src, cdn.Quota)
+	}
 	for _, k := range limitOrder {
 		u, ok := src[k]
 		if !ok {
@@ -124,6 +150,13 @@ func (c *Client) overview(ctx context.Context, key string) (*Overview, error) {
 		ov.Limits = append(ov.Limits, l)
 	}
 	return ov, nil
+}
+
+// cdnUsage traegt Domains und Traffic (MB -> GB) aus dem CDN-Kontingent ein.
+func cdnUsage(src map[string]usage, q CDN64Quota) {
+	dl, tl := float64(q.Domains.Limit), float64(q.TrafficMB.Limit)/1024
+	src["cdn_domains"] = usage{Used: float64(q.Domains.Used), Limit: &dl}
+	src["cdn_traffic_gb"] = usage{Used: q.TrafficMB.Used / 1024, Limit: &tl}
 }
 
 type overviewCache struct {

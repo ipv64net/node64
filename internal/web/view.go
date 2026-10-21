@@ -161,6 +161,36 @@ func (v *View) Bytes(n int64) string {
 	return v.s.I18n.FormatFloat(v.Lang, float64(n)/float64(div), 1) + " " + string("KMGTPE"[exp]) + "B"
 }
 
+// GB formatiert eine Datenmenge in GB (Account-Limits): ab 1024 GB in TB wie bei den Account-Klassen, Nachkommastellen
+// nach Groesse (unter 10: zwei, unter 100: eine, sonst keine; Nullen am Ende fallen weg), kleine Mengen als "< 0,01 GB".
+func (v *View) GB(gb float64) string {
+	key := "plans.unit.gb"
+	if gb >= 1024 {
+		key, gb = "plans.unit.tb", gb/1024
+	}
+	if gb > 0 && gb < 0.005 {
+		return v.T(key, "n", "< "+v.Float(0.01, 2))
+	}
+	return v.T(key, "n", v.decimal(gb))
+}
+
+// decimal: Kommazahl nach Locale mit Nachkommastellen nach Groesse, ohne Nullen am Ende.
+func (v *View) decimal(f float64) string {
+	d := 0
+	switch {
+	case f < 10:
+		d = 2
+	case f < 100:
+		d = 1
+	}
+	s := v.Float(f, d)
+	if d > 0 {
+		s = strings.TrimRight(s, "0")
+		s = strings.TrimRight(s, ".,")
+	}
+	return s
+}
+
 // Err liefert die Fehlermeldung eines Formularfelds oder "".
 func (v *View) Err(field string) string { return v.Errors[field] }
 

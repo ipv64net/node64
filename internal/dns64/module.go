@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.22.0"
+	version   = "1.22.1"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -445,9 +445,18 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 	if p := m.pauseState(); p.Active { // Blockieren pausiert: oben und gelb
 		until := "∞"
 		if !p.Forever {
-			until = p.Until.Format("15:04")
+			until = clockText(p.Until, time.Now(), m.location())
 		}
 		c.Stats = append([]module.CardStat{{LabelKey: "dns64.card.paused", Text: until, Class: "text-warning-emphasis"}}, c.Stats...)
 	}
 	return c, nil
+}
+
+// clockText: Uhrzeit in der Zeitzone der Node (nicht der des Containers), an einem anderen Tag mit Datum.
+func clockText(t, now time.Time, loc *time.Location) string {
+	t, now = t.In(loc), now.In(loc)
+	if t.Year() == now.Year() && t.YearDay() == now.YearDay() {
+		return t.Format("15:04")
+	}
+	return t.Format("02.01. 15:04")
 }

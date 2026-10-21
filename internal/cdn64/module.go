@@ -48,7 +48,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.21.1"
+	Version = "1.21.2"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -325,10 +325,40 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 		}
 		c.Stats = append(c.Stats, st)
 	}
+	// CDN64 online genutzt: Kontingent bei ipv64 (Domains, Traffic im Monat) als Balken wie auf der PROXY64-Seite
+	if rm := m.online.remote.Load(); rm != nil && rm.Data != nil && len(rm.Data.Hosts) > 0 {
+		c.Stats = append(c.Stats, quotaStats(newOnlineQuota(rm.Data.Quota, time.Now()))...)
+	}
 	if e := m.edgeError(); e != "" {
 		c.Err = e
 	}
 	return c, nil
+}
+
+// quotaStats: Zeilen der Startseiten-Karte zum CDN-Kontingent (x / y mit Balken; gruen, ab 80 % oder wenn der Monat
+// laut Prognose nicht reicht gelb, voll rot; dann mit Hinweis bis wann).
+func quotaStats(q *onlineQuota) []module.CardStat {
+	row := func(key string, used, limit int64, pct int, warn bool) module.CardStat {
+		p := float64(pct)
+		if limit <= 0 && used > 0 { // nicht im Tarif, aber belegt (ipv64 zaehlt das als ueberschritten)
+			p = 100
+		}
+		st := module.CardStat{LabelKey: key, Value: used, Max: limit, Bar: true, BarPct: module.BarWidth(p, used > 0), BarClass: module.BarClassOf(p, warn)}
+		switch st.BarClass {
+		case "bg-danger":
+			st.Class = "text-danger"
+		case "bg-warning":
+			st.Class = "text-warning-emphasis"
+		}
+		return st
+	}
+	dom := row("cdn64.online.q_domains", int64(q.Used), int64(q.Limit), q.DomPct, false)
+	tr := row("cdn64.online.q_traffic", q.Traffic, q.TrafficLimit, q.TrafficPct, q.Short)
+	tr.Bytes = true
+	if q.Short {
+		tr.HintKey, tr.HintDate, tr.HintBytes, tr.HintClass = "cdn64.online.q_short", q.EmptyAt, q.Projected, "text-warning-emphasis"
+	}
+	return []module.CardStat{dom, tr}
 }
 
 // edgeError: ein Port des Eingangs, den CDN64 braucht, ist nicht offen.

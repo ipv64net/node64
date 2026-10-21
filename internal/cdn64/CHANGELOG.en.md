@@ -1,5 +1,11 @@
 # Changes – PROXY64
 
+## 1.21.2 – 2026-10-21
+
+### Changed
+- Start page card: when CDN64 online is used, CDN domains and CDN traffic this month as "x / y" with a bar (green,
+  yellow from 80 %, red when full) and a note until when the traffic lasts at the same usage.
+
 ## 1.21.1 – 2026-10-21
 
 ### Changed

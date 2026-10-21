@@ -1,5 +1,11 @@
 # Änderungen – DNS64
 
+## 1.22.1 – 2026-10-21
+
+### Behoben
+- Startseiten-Karte: „Blockieren pausiert bis“ zeigt die Uhrzeit in der Zeitzone der Node (vorher die des Containers,
+  meist UTC), an einem anderen Tag mit Datum.
+
 ## 1.22.0 – 2026-10-21
 
 ### Geändert
