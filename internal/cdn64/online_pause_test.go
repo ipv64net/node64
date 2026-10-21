@@ -93,7 +93,7 @@ func TestOnlinePause(t *testing.T) {
 	body := renderHosts(t, d)
 	for _, want := range []string{`data-c64o-pause="` + strconv.FormatInt(h.ID, 10) + `"`, `data-c64o-rpause="50" data-paused="1"`,
 		"https://203.0.113.5:8443", "cdn64.online.o_cache", "cdn64.online.o_acl_deny", "51820/udp → 51820 (WireGuard)",
-		"https://ipv64.net/cdn64?edit=50", "cdn64.online.paused"} {
+		"https://ipv64.net/cdn64?edit=50", "cdn64.online.paused", `<tr class="table-warning">`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("page misses %q", want)
 		}

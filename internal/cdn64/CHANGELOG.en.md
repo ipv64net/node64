@@ -1,5 +1,10 @@
 # Changes – PROXY64
 
+## 1.23.1 – 2026-10-21
+
+### Changed
+- Paused CDN64 names are highlighted in yellow in the host list and in "More names in CDN64".
+
 ## 1.23.0 – 2026-10-21
 
 ### New

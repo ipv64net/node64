@@ -48,7 +48,7 @@
 		</tr></thead>
 		<tbody>
 		{{range $d.Rows}}
-		<tr{{if not .Enabled}} class="opacity-50"{{end}}>
+		<tr{{if not .Enabled}} class="opacity-50"{{else if and .Online .Online.Paused}} class="table-warning"{{end}}>
 			<td class="ps-3">
 				{{range $i, $n := .Names}}{{if $i}}<br>{{end}}<span class="font-monospace text-break">{{$n}}</span>{{end}}
 				{{if not .Enabled}}<div><span class="badge text-bg-secondary">{{$.T "cdn64.disabled"}}</span></div>{{end}}
@@ -122,7 +122,7 @@
 	<div class="table-responsive"><table class="table table-sm align-middle mb-0 small">
 		<thead><tr><th class="ps-3">{{$.T "cdn64.online.o_name"}}</th><th>{{$.T "cdn64.online.o_mode"}}</th><th>{{$.T "cdn64.online.o_target"}}</th><th>{{$.T "cdn64.online.o_status"}}</th><th class="text-end">{{$.T "cdn64.online.o_month"}}</th><th class="text-end pe-3"></th></tr></thead>
 		<tbody>{{range .}}
-		<tr>
+		<tr{{if .Paused}} class="table-warning"{{end}}>
 			<td class="ps-3"><a class="font-monospace text-decoration-none" href="https://{{.FQDN}}" target="_blank" rel="noopener">{{.FQDN}}</a>{{if .Wildcard}} <span class="text-body-secondary" title="{{$.T "cdn64.online.o_wildcard"}}">+ *.</span>{{end}}</td>
 			<td class="text-nowrap"><span class="badge text-bg-light">{{$.T "cdn64.online.mode_badge" "n" .Mode}}</span><div class="text-body-secondary">{{if eq .Mode 3}}{{$.T "cdn64.online.o_web"}}{{else}}{{$.T "cdn64.online.o_node"}}{{end}}</div></td>
 			<td>{{with .Target}}
