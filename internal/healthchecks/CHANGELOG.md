@@ -1,5 +1,16 @@
 # Änderungen – Healthchecks
 
+## 2.20.0 – 2026-10-21
+
+### Neu
+- Export/Import der Konfiguration enthält die Statusseiten (Einstellungen, Gruppen, Einträge, Logo; abgeglichen über den
+  Slug). Der Passwort-Hash einer geschützten Seite nur beim Export mit Passwort; ohne ihn kommt die Seite
+  ausgeschaltet an. Ankündigungen bleiben auf der Node.
+
+### Geändert
+- Datenhaltung: abgeschlossene Störungen werden wie Stundenwerte und Ereignisse nach „Stundenwerte aufbewahren“
+  gelöscht (unbegrenzt = bleiben); bisher blieben sie für immer.
+
 ## 2.19.1 – 2026-10-21
 
 ### Neu

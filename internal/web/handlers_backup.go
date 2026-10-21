@@ -19,6 +19,7 @@ import (
 	"golang.org/x/crypto/argon2"
 
 	"github.com/ipv64net/node64/internal/certs"
+	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/secrets"
@@ -79,7 +80,7 @@ func (s *Server) restoreUpload(w http.ResponseWriter, r *http.Request) {
 	f, _, err := r.FormFile("file")
 	if err != nil {
 		s.flash(w, r, "danger", v.T("backup.no_file"))
-		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		http.Redirect(w, r, "/settings/data#restore", http.StatusSeeOther)
 		return
 	}
 	defer f.Close()
@@ -91,7 +92,7 @@ func (s *Server) restoreUpload(w http.ResponseWriter, r *http.Request) {
 			key = "backup.password_wrong"
 		}
 		s.flash(w, r, "danger", v.T(key))
-		http.Redirect(w, r, "/settings#backup", http.StatusSeeOther)
+		http.Redirect(w, r, "/settings/data#restore", http.StatusSeeOther)
 		return
 	case errors.Is(err, errRestoreInvalid):
 		msg := v.T("backup.invalid")
@@ -99,7 +100,7 @@ func (s *Server) restoreUpload(w http.ResponseWriter, r *http.Request) {
 			msg += " (" + detail + ")"
 		}
 		s.flash(w, r, "danger", msg)
-		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		http.Redirect(w, r, "/settings/data#restore", http.StatusSeeOther)
 		return
 	case err != nil:
 		s.fail(w, r, err)
@@ -160,7 +161,7 @@ func (s *Server) resetNode(w http.ResponseWriter, r *http.Request) {
 	if !VerifyPassword(v.User.PasswordHash, r.PostFormValue("password")) {
 		s.audit(r, "node.reset_denied", "", "wrong password")
 		s.flash(w, r, "danger", v.T("settings.password_wrong"))
-		http.Redirect(w, r, "/settings#reset", http.StatusSeeOther)
+		http.Redirect(w, r, "/settings/data#reset", http.StatusSeeOther)
 		return
 	}
 	problems, err := s.requestReset(r.Context(), r.PostFormValue("keep_checks") == "on")
@@ -266,7 +267,10 @@ type configChannel struct {
 }
 
 var exportedSettings = []string{SettingNodeName, SettingNodeLocation, SettingNodeTimezone, notify.SetBaseURL, notify.SetQuietEnabled, notify.SetQuietFrom,
-	notify.SetQuietTo, notify.SetQuietDays, notify.SetQuietTZ, notify.SetRatePerHour, notify.SetBatchThreshold, notify.SetBatchWindow}
+	notify.SetQuietTo, notify.SetQuietDays, notify.SetQuietTZ, notify.SetRatePerHour, notify.SetBatchThreshold, notify.SetBatchWindow,
+	// Datenhaltung (ungueltige Werte gelten beim Lesen als Standard) und der Schalter der MCP-Schnittstelle (ihre
+	// Schluessel gehoeren zum Benutzer dieser Node und fehlen im Export immer)
+	healthchecks.SettingRawDays, healthchecks.SettingHourlyDays, healthchecks.SettingChartDetail, SettingAuditDays, setMCPEnabled}
 
 func deriveBox(password string, salt []byte) (*secrets.Box, error) {
 	key := argon2.IDKey([]byte(password), salt, 3, 64*1024, 2, 32)
@@ -279,7 +283,7 @@ func (s *Server) exportConfig(w http.ResponseWriter, r *http.Request) {
 	cf, err := s.buildExport(r.Context(), r.PostFormValue("secrets"), r.PostFormValue("password"))
 	if errors.Is(err, errPasswordShort) {
 		s.flash(w, r, "danger", v.T("backup.password_short"))
-		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		http.Redirect(w, r, "/settings/data#export", http.StatusSeeOther)
 		return
 	}
 	if err != nil {
@@ -374,7 +378,7 @@ func (s *Server) importConfig(w http.ResponseWriter, r *http.Request) {
 	f, _, err := r.FormFile("file")
 	if err != nil {
 		s.flash(w, r, "danger", v.T("backup.no_file"))
-		http.Redirect(w, r, "/settings", http.StatusSeeOther)
+		http.Redirect(w, r, "/settings/data#import", http.StatusSeeOther)
 		return
 	}
 	defer f.Close()
@@ -402,7 +406,7 @@ func (s *Server) importConfig(w http.ResponseWriter, r *http.Request) {
 			s.flash(w, r, "success", v.T("backup.imported", "count", count))
 		}
 	}
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/data#import", http.StatusSeeOther)
 }
 
 // applyImport uebernimmt eine exportierte Konfiguration (Oberflaeche und API): Einstellungen, Kanaele (gleicher

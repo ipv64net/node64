@@ -48,7 +48,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.21.2"
+	Version = "1.21.3"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -388,8 +388,9 @@ type exportFile struct {
 }
 
 // exportSettings: Einstellungen, die zur Konfiguration gehoeren (nicht CDN64 online: Tunnel und Token gehoeren
-// zu dieser Node; nicht das Listen-Token der v64 Blocklist, es gehoert zum Account).
-var exportSettings = []string{setBlocklists, setBlockAllow, setLimits, setLogDays, setAnonymize}
+// zu dieser Node; nicht das Listen-Token der v64 Blocklist, es gehoert zum Account). setHoneypot: die Schalter der
+// Verbindung zum Honeypot (Koeder, Zugriffe, Sofort-Sperre), die Sperrliste selbst bleibt im Speicher.
+var exportSettings = []string{setBlocklists, setBlockAllow, setLimits, setLogDays, setAnonymize, setHoneypot}
 
 func (m *Module) Export(ctx context.Context) (any, error) {
 	list, err := m.hosts(ctx)
@@ -498,6 +499,7 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 			}
 		}
 	}
+	m.hpLoad(ctx) // Honeypot-Schalter gleich wirksam
 	m.apply(ctx)
 	return n, firstErr
 }

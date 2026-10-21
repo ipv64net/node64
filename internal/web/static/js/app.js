@@ -64,6 +64,15 @@
 		try { document.execCommand("copy"); } catch (e) {}
 		document.body.removeChild(ta);
 	}
+	// Einstellungen: alte Sprungmarken (/settings#ports, #backup …) auf die neuen Unterseiten weiterleiten
+	var moved = document.getElementById("settings-moved");
+	var followMoved = function () {
+		if (!moved || location.hash.length < 2) { return; }
+		var to = moved.querySelector('[data-from="' + location.hash.slice(1).replace(/[^a-z0-9_-]/gi, "") + '"]');
+		if (to) { location.replace(to.getAttribute("data-to")); }
+	};
+	followMoved();
+	window.addEventListener("hashchange", followMoved); // Link auf derselben Seite (nur die Sprungmarke aendert sich)
 	// Formular beim Aendern absenden (statt onchange-Attribut, das die CSP blockiert)
 	document.addEventListener("change", function (ev) {
 		var el = ev.target.closest ? ev.target.closest("[data-autosubmit]") : null;

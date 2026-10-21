@@ -37,7 +37,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.8.0"
+	version = "0.8.1"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -364,13 +364,23 @@ func (m *Module) Claims(context.Context) []ports.Claim {
 	}
 	out := make([]ports.Claim, 0, len(m.status)+2)
 	for _, s := range m.status {
-		out = append(out, ports.Claim{Owner: Name, Purpose: "Honeypot " + strings.ToUpper(s.Service), Proto: svcProto(s.Service), Port: s.Port, Active: s.Listen})
+		out = append(out, ports.Claim{Owner: Name, Purpose: "Honeypot " + strings.ToUpper(s.Service), Proto: svcProto(s.Service), Port: s.Port, Active: s.Listen, Error: s.Error})
 	}
-	if sl := m.logState.Syslog; sl != nil && sl.Port > 0 && m.logErr == "" { // Syslog-Empfaenger: UDP und TCP
-		out = append(out, ports.Claim{Owner: Name, Purpose: "Honeypot Syslog", Proto: ports.UDP, Port: sl.Port, Active: sl.UDP},
-			ports.Claim{Owner: Name, Purpose: "Honeypot Syslog", Proto: ports.TCP, Port: sl.Port, Active: sl.TCP})
+	if sl := m.logState.Syslog; sl != nil && sl.Port > 0 { // Syslog-Empfaenger: UDP und TCP
+		// nicht geoeffnet, weil ein anderer Teil den Port belegt (logErr): nur eingestellt, mit Fehler (Anzeige)
+		udp, tcp, e := sl.UDP && m.logErr == "", sl.TCP && m.logErr == "", sl.Error
+		out = append(out, ports.Claim{Owner: Name, Purpose: "Honeypot Syslog", Proto: ports.UDP, Port: sl.Port, Active: udp, Error: errIf(!udp, e)},
+			ports.Claim{Owner: Name, Purpose: "Honeypot Syslog", Proto: ports.TCP, Port: sl.Port, Active: tcp, Error: errIf(!tcp, e)})
 	}
 	return out
+}
+
+// errIf: Fehlertext nur fuer einen nicht offenen Port.
+func errIf(cond bool, e string) string {
+	if cond {
+		return e
+	}
+	return ""
 }
 
 // portCheck fragt die Port-Verwaltung vor dem Oeffnen (Sensor.SetPortCheck).
@@ -961,6 +971,12 @@ func cardTrend(cur, prev int64) (note, class string) {
 		return "▲", "text-danger"
 	}
 	pct := (cur - prev) * 100 / prev
+	if pct == 0 && cur != prev { // kleine Aenderung: nicht „▲ 0 %“
+		if cur > prev {
+			return "▲ < 1 %", "text-danger"
+		}
+		return "▼ < 1 %", "text-success"
+	}
 	switch {
 	case cur > prev:
 		return "▲ " + strconv.FormatInt(pct, 10) + " %", "text-danger"

@@ -1,5 +1,10 @@
 # Changes – Honeypot64
 
+## 0.8.1 – 2026-10-21
+
+### Fixed
+- Port overview (Settings › Ports): trap services and the syslog receiver report why a port is not open; a syslog port taken by another part in the meantime is shown as configured with the error instead of not at all.
+
 ## 0.8.0 – 2026-10-20
 
 ### New

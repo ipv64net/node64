@@ -918,7 +918,7 @@ func TestModuleLogSensor(t *testing.T) {
 			t.Errorf("metrics lack %q\n%s", s, b.String())
 		}
 	}
-	// Syslog-Port inzwischen von einem anderen Teil belegt: nicht oeffnen, Fehler im Zustand, kein Claim
+	// Syslog-Port inzwischen von einem anderen Teil belegt: nicht oeffnen, Fehler im Zustand, Claim nur eingestellt (mit Fehler)
 	reg.Provide("cdn64", func(context.Context) []ports.Claim {
 		return []ports.Claim{{Purpose: "Stream", Proto: ports.UDP, Port: sp, Active: true}}
 	})
@@ -927,8 +927,8 @@ func TestModuleLogSensor(t *testing.T) {
 		t.Fatalf("syslog port taken: %+v %+v", f.cfg, m.LogStatus().Syslog)
 	}
 	for _, cl := range m.Claims(ctx) {
-		if cl.Port == sp {
-			t.Fatalf("no claim for a syslog port that is not open: %+v", cl)
+		if cl.Port == sp && (cl.Active || cl.Error == "") {
+			t.Fatalf("a syslog port that is not open is only set, with the error: %+v", cl)
 		}
 	}
 	// Export enthaelt die Log-Einstellung; Import auf einer Node, auf der der Syslog-Port belegt ist: Syslog aus, Rest bleibt

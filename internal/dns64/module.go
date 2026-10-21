@@ -279,6 +279,11 @@ func (m *Module) start(ctx context.Context) error {
 		st.CloseNow()
 		return err
 	}
+	keep := listURLs(neededLists(cfg, glist)) // Dateien entfernter Listen loeschen; eingestellte (auch ausgeschaltete) bleiben
+	for _, l := range cfg.Lists {
+		keep = append(keep, l.URL)
+	}
+	filter.PruneFiles(lists, keep)
 	m.buildPolicies(e.lists, cfg, glist)
 	e.cache = cache.New(cfg.CacheSize)
 	e.up = upstream.New(cfg.activeUpstreams(), cfg.UpMode)

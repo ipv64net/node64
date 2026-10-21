@@ -1,11 +1,14 @@
 {{define "content"}}
 {{$d := .Data}}
 <h1 class="h4 mb-3"><i class="bi bi-gear-fill text-secondary me-1"></i> {{.T "settings.title"}}</h1>
+{{template "settings_tabs" .}}
+<!-- alte Sprungmarken (z. B. /settings#ports, #backup) leitet app.js auf die neuen Seiten weiter -->
+<div hidden id="settings-moved">{{range $from, $to := $d.Moved}}<span data-from="{{$from}}" data-to="{{$to}}"></span>{{end}}</div>
 <!-- zwei unabhaengige Spalten: Karten stehen lueckenlos untereinander (keine Zeilen mit ungleich hohen Paaren) -->
 <div class="row g-3 align-items-start">
 	<div class="col-lg-6 d-flex flex-column gap-3">
-		<!-- Node, Benutzer und Zugang -->
-		<div class="card">
+		<!-- Node, Benutzer, Zugang und Erreichbarkeit -->
+		<div class="card" id="node">
 			<div class="card-header"><i class="bi bi-hdd-network text-primary"></i> {{.T "settings.node"}}{{$.Doc "configuration#oberflaeche"}}</div>
 			<div class="card-body">
 				<form method="post" action="/settings/node">
@@ -23,29 +26,7 @@
 				</form>
 			</div>
 		</div>
-		{{if $d.IPv64On}}
-		<div class="card" id="ipv64">
-			<div class="card-header"><img src="/static/img/ipv64_logo.svg" alt="" height="14" class="logo logo-light align-baseline"><img src="/static/img/ipv64_logo_white.svg" alt="" height="14" class="logo logo-dark align-baseline"> {{.T "ipv64key.title"}}{{.Doc "ipv64#api-key"}}</div>
-			<div class="card-body small">
-				<p class="text-body-secondary">{{.T "ipv64key.hint"}}</p>
-				{{if $d.IPv64Set}}
-				<div class="mb-2"><i class="bi bi-check-circle-fill text-success"></i> {{.T "ipv64key.connected" "account" $d.IPv64.Account}}{{if $d.IPv64.Plan}} <span class="badge text-bg-light">{{$d.IPv64.Plan}}</span>{{end}}{{if not $d.IPv64.CheckedAt.IsZero}} <span class="text-body-secondary" title="{{.Time $d.IPv64.CheckedAt}}">· {{.T "ipv64key.checked"}} {{.Ago $d.IPv64.CheckedAt}}</span>{{end}}</div>
-				<div class="mb-2">{{if $d.IPv64.KeyName}}<span class="text-body-secondary">{{.T "ipv64key.key_name"}}</span> {{$d.IPv64.KeyName}} · {{end}}{{if $d.IPv64.ExpiresAt.IsZero}}<span class="text-body-secondary">{{.T "ipv64key.no_expiry"}}</span>{{else if $d.IPv64.Expired}}<span class="badge text-bg-danger">{{.T "ipv64key.expired" "date" (.Date $d.IPv64.ExpiresAt)}}</span>{{else}}<span class="badge {{if lt $d.IPv64.DaysLeft 14}}text-bg-warning{{else}}text-bg-light{{end}}" title="{{.Time $d.IPv64.ExpiresAt}}">{{.T "ipv64key.expires" "date" (.Date $d.IPv64.ExpiresAt) "days" $d.IPv64.DaysLeft}}</span>{{end}}</div>
-				{{if and (not $d.IPv64.ExpiresAt.IsZero) (lt $d.IPv64.DaysLeft 14)}}<div class="alert alert-warning py-2">{{.T "ipv64key.expiry_warn"}}</div>{{end}}
-				{{end}}
-				<form method="post" action="/settings/ipv64">
-					<input type="hidden" name="_csrf" value="{{.CSRF}}">
-					<div class="input-group input-group-sm mb-1">
-						<input class="form-control" type="password" name="apikey" placeholder="{{if $d.IPv64Set}}{{.T "ipv64key.placeholder_new"}}{{else}}{{.T "ipv64key.placeholder"}}{{end}}" autocomplete="off"{{if not $d.IPv64Set}} required{{end}}>
-						<button class="btn btn-outline-primary" type="submit">{{if $d.IPv64Set}}{{.T "ipv64key.recheck"}}{{else}}{{.T "ipv64key.save"}}{{end}}</button>
-					</div>
-					<div class="form-text mb-2">{{.T "ipv64key.stored_hint"}} <a href="https://ipv64.net/api_settings" target="_blank" rel="noopener">{{.T "ipv64key.create_link"}}</a></div>
-				</form>
-				{{if $d.IPv64Set}}<form method="post" action="/settings/ipv64/delete" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="{{.T "ipv64key.remove_confirm"}}"><i class="bi bi-trash"></i> {{.T "ipv64key.remove"}}</button></form>{{end}}
-			</div>
-		</div>
-		{{end}}
-		<div class="card">
+		<div class="card" id="user">
 			<div class="card-header"><i class="bi bi-person text-primary"></i> {{.T "settings.user"}}: {{.User.Username}}</div>
 			<div class="card-body">
 				<form method="post" action="/settings/user" class="mb-4">
@@ -111,7 +92,7 @@
 				</div>
 			</div>
 		</div>
-		<div class="card">
+		<div class="card" id="twofa">
 			<div class="card-header"><i class="bi bi-shield-lock text-success"></i> {{.T "twofa.title"}}{{$.Doc "security#zwei-faktor"}}</div>
 			<div class="card-body">
 				{{if $d.TOTP}}<p class="mb-2"><i class="bi bi-shield-check text-success"></i> {{.T "twofa.active"}}</p>
@@ -121,6 +102,62 @@
 				<hr class="my-2"><div class="small"><i class="bi bi-person-badge"></i> {{.T "sso.settings_hint"}} <a href="/settings/login">{{.T "sso.title"}}</a></div>
 			</div>
 		</div>
+		{{with $d.Reach}}<div class="card" id="reach">
+			<div class="card-header"><i class="bi bi-broadcast-pin text-primary"></i> {{$.T "settings.reach"}}{{$.Doc "configuration#oberflaeche"}}</div>
+			<div class="card-body small">
+				<p class="text-body-secondary">{{$.T "settings.reach_hint"}}</p>
+				<dl class="row mb-2">
+					{{if .HTTPPort}}<dt class="col-5">{{$.T "settings.reach_web_port"}}</dt><dd class="col-7 font-monospace">{{.HTTPPort}}/tcp <span class="text-body-secondary small">{{$.T "settings.reach_dual"}}</span></dd>{{end}}
+					{{if .HTTPSPort}}<dt class="col-5">{{$.T "settings.reach_https_port"}}</dt><dd class="col-7 font-monospace">{{.HTTPSPort}}/tcp</dd>{{end}}
+					<dt class="col-5">{{$.T "settings.reach_bind"}}</dt><dd class="col-7 font-monospace">{{if .Bind}}{{.Bind}}{{else}}{{$.T "settings.reach_bind_all"}}{{end}}</dd>
+					<dt class="col-5">{{$.T "settings.reach_this"}}</dt><dd class="col-7 font-monospace text-break">{{$.Scheme}}://{{$.Host}}</dd>
+					{{if .URLs}}<dt class="col-5">{{$.T "settings.reach_addrs"}}</dt><dd class="col-7 font-monospace text-break">{{range .URLs}}<div><a href="{{.}}">{{.}}</a></div>{{end}}</dd>{{end}}
+					{{if or .HTTPSPort .HTTPPort}}<dt class="col-5">{{$.T "settings.reach_tls"}}</dt><dd class="col-7"><a href="/settings/certificate">{{$.T "settings.cert_download"}}</a></dd>{{end}}
+				</dl>
+				<form method="post" action="/settings/reach">
+					<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					{{if .EdgeOn}}<label class="form-label" for="ui_name">{{$.T "ports.ui_name"}}</label>
+					<input class="form-control form-control-sm font-monospace mb-1" id="ui_name" name="ui_name" value="{{.UIName}}" placeholder="node64.example.ipv64.de" maxlength="253">
+					<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" id="ui_public" name="ui_public"{{if .UIPublic}} checked{{end}}><label class="form-check-label" for="ui_public">{{$.T "ports.ui_public"}}</label></div>
+					<div class="form-text mb-2">{{$.T "ports.ui_hint"}}</div>{{end}}
+					<label class="form-label" for="ui_cert">{{$.T "ports.ui_cert"}}</label>
+					<select class="form-select form-select-sm mb-1" id="ui_cert" name="ui_cert">
+						<option value="auto"{{if eq .UICert.Value "auto"}} selected{{end}}>{{$.T "ports.ui_cert_auto"}}</option>
+						<option value="self"{{if eq .UICert.Value "self"}} selected{{end}}>{{$.T "ports.ui_cert_self"}}</option>
+						{{range .UICert.Certs}}<option value="{{.ID}}"{{if eq (print .ID) $.Data.Reach.UICert.Value}} selected{{end}}>{{.Title}} ({{$.Date .NotAfter}})</option>{{end}}
+					</select>
+					<div class="form-text mb-2">{{if .UICert.EnvFile}}<i class="bi bi-info-circle"></i> {{$.T "ports.ui_cert_env"}}{{else}}{{$.T "ports.ui_cert_hint"}}{{end}} <a href="/certificates">{{$.T "nav.certificates"}}</a></div>
+					<button class="btn btn-primary btn-sm" type="submit">{{$.T "common.save"}}</button>
+					<a class="btn btn-outline-secondary btn-sm" href="/settings/ports"><i class="bi bi-ethernet"></i> {{$.T "settings.reach_all_ports"}}</a>
+				</form>
+			</div>
+		</div>{{end}}
+	</div>
+
+	<div class="col-lg-6 d-flex flex-column gap-3">
+		<!-- ipv64, Schnittstellen, Module und System -->
+		{{if $d.IPv64On}}
+		<div class="card" id="ipv64">
+			<div class="card-header"><img src="/static/img/ipv64_logo.svg" alt="" height="14" class="logo logo-light align-baseline"><img src="/static/img/ipv64_logo_white.svg" alt="" height="14" class="logo logo-dark align-baseline"> {{.T "ipv64key.title"}}{{.Doc "ipv64#api-key"}}</div>
+			<div class="card-body small">
+				<p class="text-body-secondary">{{.T "ipv64key.hint"}}</p>
+				{{if $d.IPv64Set}}
+				<div class="mb-2"><i class="bi bi-check-circle-fill text-success"></i> {{.T "ipv64key.connected" "account" $d.IPv64.Account}}{{if $d.IPv64.Plan}} <span class="badge text-bg-light">{{$d.IPv64.Plan}}</span>{{end}}{{if not $d.IPv64.CheckedAt.IsZero}} <span class="text-body-secondary" title="{{.Time $d.IPv64.CheckedAt}}">· {{.T "ipv64key.checked"}} {{.Ago $d.IPv64.CheckedAt}}</span>{{end}}</div>
+				<div class="mb-2">{{if $d.IPv64.KeyName}}<span class="text-body-secondary">{{.T "ipv64key.key_name"}}</span> {{$d.IPv64.KeyName}} · {{end}}{{if $d.IPv64.ExpiresAt.IsZero}}<span class="text-body-secondary">{{.T "ipv64key.no_expiry"}}</span>{{else if $d.IPv64.Expired}}<span class="badge text-bg-danger">{{.T "ipv64key.expired" "date" (.Date $d.IPv64.ExpiresAt)}}</span>{{else}}<span class="badge {{if lt $d.IPv64.DaysLeft 14}}text-bg-warning{{else}}text-bg-light{{end}}" title="{{.Time $d.IPv64.ExpiresAt}}">{{.T "ipv64key.expires" "date" (.Date $d.IPv64.ExpiresAt) "days" $d.IPv64.DaysLeft}}</span>{{end}}</div>
+				{{if and (not $d.IPv64.ExpiresAt.IsZero) (lt $d.IPv64.DaysLeft 14)}}<div class="alert alert-warning py-2">{{.T "ipv64key.expiry_warn"}}</div>{{end}}
+				{{end}}
+				<form method="post" action="/settings/ipv64">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<div class="input-group input-group-sm mb-1">
+						<input class="form-control" type="password" name="apikey" placeholder="{{if $d.IPv64Set}}{{.T "ipv64key.placeholder_new"}}{{else}}{{.T "ipv64key.placeholder"}}{{end}}" autocomplete="off"{{if not $d.IPv64Set}} required{{end}}>
+						<button class="btn btn-outline-primary" type="submit">{{if $d.IPv64Set}}{{.T "ipv64key.recheck"}}{{else}}{{.T "ipv64key.save"}}{{end}}</button>
+					</div>
+					<div class="form-text mb-2">{{.T "ipv64key.stored_hint"}} <a href="https://ipv64.net/api_settings" target="_blank" rel="noopener">{{.T "ipv64key.create_link"}}</a></div>
+				</form>
+				{{if $d.IPv64Set}}<form method="post" action="/settings/ipv64/delete" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="{{.T "ipv64key.remove_confirm"}}"><i class="bi bi-trash"></i> {{.T "ipv64key.remove"}}</button></form>{{end}}
+			</div>
+		</div>
+		{{end}}
 		<div class="card" id="mcp">
 			<div class="card-header"><i class="bi bi-robot text-primary"></i> {{.T "mcp.title"}}</div>
 			<div class="card-body">
@@ -128,8 +165,8 @@
 				<a class="btn btn-outline-secondary btn-sm" href="/settings/mcp">{{.T "mcp.manage"}}</a>
 			</div>
 		</div>
-		<div class="card">
-			<div class="card-header"><i class="bi bi-terminal text-body-secondary"></i> {{.T "settings.logging"}}{{$.Doc "configuration#logs"}}{{.Doc "configuration#logs"}}</div>
+		<div class="card" id="logging">
+			<div class="card-header"><i class="bi bi-terminal text-body-secondary"></i> {{.T "settings.logging"}}{{.Doc "configuration#logs"}}</div>
 			<div class="card-body">
 				<form method="post" action="/settings/logging">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
@@ -168,10 +205,6 @@
 				</form>
 			</div>
 		</div>
-	</div>
-
-	<div class="col-lg-6 d-flex flex-column gap-3">
-		<!-- Module, Daten und System -->
 		<div class="card" id="modules">
 			<div class="card-header"><i class="bi bi-grid text-primary"></i> {{.T "settings.modules"}}</div>
 			<div class="card-body">
@@ -214,133 +247,13 @@
 				</ul>
 			</div>
 		</div>
-		{{with $d.Ports}}<div class="card" id="ports">
-			<div class="card-header"><i class="bi bi-ethernet text-primary"></i> {{$.T "ports.title"}}{{$.Doc "configuration#ports"}}{{$.Doc "configuration#ports"}}</div>
-			<div class="card-body">
-				<p class="text-body-secondary small">{{$.T "ports.hint"}}</p>
-				<div class="table-responsive"><table class="table table-sm align-middle small mb-3">
-					<thead><tr><th>{{$.T "ports.port"}}</th><th>{{$.T "ports.owner"}}</th><th>{{$.T "ports.state"}}</th></tr></thead>
-					<tbody>{{range .Entries}}<tr>
-						<td class="font-monospace text-nowrap">{{.Port}}/{{.Proto}}{{if .Bind}} <span class="text-body-secondary">{{.Bind}}</span>{{end}}</td>
-						<td>{{$.T (print "ports.owner_" .Owner)}} <span class="text-body-secondary">· {{.Purpose}}</span></td>
-						<td>{{if .Conflicts}}<span class="badge text-bg-danger">{{$.T "ports.conflict" "with" (index .Conflicts 0)}}</span>{{else if .Active}}<span class="badge text-bg-success">{{$.T "ports.active"}}</span>{{else}}<span class="badge text-bg-light">{{$.T "ports.idle"}}</span>{{end}}</td>
-					</tr>{{end}}</tbody>
-				</table></div>
-				<h2 class="h6">{{$.T "ports.edge_title"}}</h2>
-				{{$open := false}}{{range .Edge.Listeners}}{{if .Running}}{{$open = true}}{{end}}{{if .Error}}<div class="text-danger small mb-1">{{.Name}}: {{.Error}}</div>{{end}}{{end}}
-				{{if not $open}}<div class="text-body-secondary small mb-2">{{$.T "ports.edge_off"}}</div>{{end}}
-				<form method="post" action="/settings/edge">
-					<input type="hidden" name="_csrf" value="{{$.CSRF}}">
-					<div class="row g-2 mb-2">
-						<div class="col-sm-4"><label class="form-label" for="edge_http">{{$.T "ports.edge_http"}}</label>
-							<input class="form-control form-control-sm" type="number" min="0" max="65535" id="edge_http" name="http_port" value="{{.Edge.Config.HTTPPort}}"></div>
-						<div class="col-sm-4"><label class="form-label" for="edge_https">{{$.T "ports.edge_https"}}</label>
-							<input class="form-control form-control-sm" type="number" min="0" max="65535" id="edge_https" name="https_port" value="{{.Edge.Config.HTTPSPort}}"></div>
-						<div class="col-sm-4"><label class="form-label" for="edge_public">{{$.T "ports.edge_public"}}</label>
-							<input class="form-control form-control-sm" type="number" min="0" max="65535" id="edge_public" name="public_port" value="{{if .Edge.Config.PublicPort}}{{.Edge.Config.PublicPort}}{{end}}" placeholder="{{.Edge.Config.HTTPSPort}}"></div>
-					</div>
-					<div class="form-text mb-2">{{$.T "ports.edge_public_hint"}}</div>
-					<div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="edge_h3" name="http3"{{if .Edge.Config.HTTP3}} checked{{end}}>
-						<label class="form-check-label" for="edge_h3">{{$.T "ports.edge_http3"}}</label></div>
-					<label class="form-label" for="edge_default">{{$.T "ports.edge_default"}}</label>
-					<select class="form-select form-select-sm mb-2" id="edge_default" name="default">
-						<option value="404"{{if eq .Edge.Config.Default "404"}} selected{{end}}>{{$.T "ports.edge_default_404"}}</option>
-						<option value="close"{{if eq .Edge.Config.Default "close"}} selected{{end}}>{{$.T "ports.edge_default_close"}}</option>
-						{{if .Edge.Config.DefaultURL}}<option value="redirect"{{if eq .Edge.Config.Default "redirect"}} selected{{end}}>{{$.T "ports.edge_default_redirect"}}</option>{{end}}
-						{{if .Edge.Config.DefaultPage}}<option value="html"{{if eq .Edge.Config.Default "html"}} selected{{end}}>{{$.T "ports.edge_default_html"}}</option>{{end}}
-					</select>
-					<div class="form-text mb-2">{{$.T "ports.edge_hint"}}</div>
-					{{if .Edge.UnknownReplaced}}<div class="alert alert-warning py-2 small"><i class="bi bi-bug"></i> {{$.T "ports.edge_decoy"}} <a href="/cdn64/access#honeypot" class="alert-link">{{$.T "ports.edge_decoy_link"}}</a></div>{{end}}
-					<label class="form-label" for="ui_name">{{$.T "ports.ui_name"}}</label>
-					<input class="form-control form-control-sm font-monospace mb-1" id="ui_name" name="ui_name" value="{{.UIName}}" placeholder="node64.example.ipv64.de" maxlength="253">
-					<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" id="ui_public" name="ui_public"{{if .UIPublic}} checked{{end}}><label class="form-check-label" for="ui_public">{{$.T "ports.ui_public"}}</label></div>
-					<div class="form-text mb-2">{{$.T "ports.ui_hint"}}</div>
-					<label class="form-label" for="ui_cert">{{$.T "ports.ui_cert"}}</label>
-					<select class="form-select form-select-sm mb-1" id="ui_cert" name="ui_cert">
-						<option value="auto"{{if eq .UICert.Value "auto"}} selected{{end}}>{{$.T "ports.ui_cert_auto"}}</option>
-						<option value="self"{{if eq .UICert.Value "self"}} selected{{end}}>{{$.T "ports.ui_cert_self"}}</option>
-						{{range .UICert.Certs}}<option value="{{.ID}}"{{if eq (print .ID) $.Data.Ports.UICert.Value}} selected{{end}}>{{.Title}} ({{$.Date .NotAfter}})</option>{{end}}
-					</select>
-					<div class="form-text mb-2">{{if .UICert.EnvFile}}<i class="bi bi-info-circle"></i> {{$.T "ports.ui_cert_env"}}{{else}}{{$.T "ports.ui_cert_hint"}}{{end}} <a href="/certificates">{{$.T "nav.certificates"}}</a></div>
-					<button class="btn btn-primary btn-sm" type="submit">{{$.T "common.save"}}</button>
-				</form>
-			</div>
-		</div>{{end}}
-		<div class="card" id="data">
-			<div class="card-header"><i class="bi bi-bar-chart-line text-info"></i> {{.T "settings.data"}}</div>
-			<div class="card-body">
-				<p class="small text-body-secondary">{{.T "settings.data_hint"}}</p>
-				<form method="post" action="/settings/data">
-					<input type="hidden" name="_csrf" value="{{.CSRF}}">
-					<div class="row g-2 mb-2">
-						<div class="col-sm-6"><label class="form-label" for="raw_days">{{.T "settings.data_raw"}}</label>
-							<select class="form-select form-select-sm" id="raw_days" name="raw_days">{{range $d.RawOptions}}<option value="{{.}}"{{if eq . $d.RawDays}} selected{{end}}>{{$.T "settings.data_days" "n" .}}</option>{{end}}</select></div>
-						<div class="col-sm-6"><label class="form-label" for="hourly_days">{{.T "settings.data_hourly"}}</label>
-							<select class="form-select form-select-sm" id="hourly_days" name="hourly_days">{{range $d.HourlyOptions}}<option value="{{.}}"{{if eq . $d.HourlyDays}} selected{{end}}>{{if eq . 0}}{{$.T "settings.data_unlimited"}}{{else}}{{$.T "settings.data_days" "n" .}}{{end}}</option>{{end}}</select></div>
-					</div>
-					<label class="form-label" for="chart_detail">{{.T "settings.data_chart"}}</label>
-					<select class="form-select form-select-sm mb-1" id="chart_detail" name="chart_detail">{{range $d.ChartOptions}}<option value="{{.}}"{{if eq . $d.ChartDetail}} selected{{end}}>{{$.T (print "settings.data_chart_" .)}}</option>{{end}}</select>
-					<div class="form-text mb-2">{{.T "settings.data_chart_hint"}}</div>
-					<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>
-				</form>
-			</div>
-		</div>
-		<div class="card" id="backup">
-			<div class="card-header"><i class="bi bi-database text-info"></i> {{.T "backup.title"}}{{$.Doc "update-backup#backup-wege"}}{{.Doc "update-backup#backup-wege"}}</div>
-			<div class="card-body">
-				<p class="small text-body-secondary">{{.T "backup.hint"}}</p>
-				<form method="post" action="/settings/backup" class="mb-1">
-					<input type="hidden" name="_csrf" value="{{.CSRF}}">
-					<label class="form-label" for="backup_pw">{{.T "backup.archive"}}</label>
-					<div class="input-group input-group-sm">
-						<input class="form-control" type="password" id="backup_pw" name="password" minlength="8" required placeholder="{{.T "backup.password"}}" autocomplete="new-password">
-						<button class="btn btn-outline-primary" type="submit"><i class="bi bi-download"></i> {{.T "backup.download"}}</button>
-					</div>
-					<div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="stats" id="backup_stats"><label class="form-check-label small" for="backup_stats">{{.T "backup.stats"}}</label></div>
-					<div class="form-text">{{.T "backup.archive_hint"}}</div>
-				</form>
-				<div class="small mb-3"><a href="/settings/backup">{{.T "backup.download_db"}}</a></div>
-				<form method="post" action="/settings/restore" enctype="multipart/form-data" class="mb-3">
-					<input type="hidden" name="_csrf" value="{{.CSRF}}">
-					<label class="form-label" for="restore_file">{{.T "backup.restore"}}</label>
-					<div class="input-group input-group-sm">
-						<input class="form-control" type="file" id="restore_file" name="file" accept=".n64backup,.db,.sqlite,.sqlite3" required>
-						<input class="form-control" type="password" name="password" placeholder="{{.T "backup.password"}}" autocomplete="off">
-						<button class="btn btn-outline-danger" type="submit" data-confirm="{{.T "backup.restore_confirm"}}">{{.T "backup.restore_btn"}}</button>
-					</div>
-					<div class="form-text">{{.T "backup.restore_hint"}}</div>
-				</form>
-				<hr>
-				<form method="post" action="/settings/export" class="mb-3">
-					<input type="hidden" name="_csrf" value="{{.CSRF}}">
-					<label class="form-label">{{.T "backup.export"}}</label>
-					<div class="form-check"><input class="form-check-input" type="radio" name="secrets" value="none" id="exp_none" checked><label class="form-check-label small" for="exp_none">{{.T "backup.export_none"}}</label></div>
-					<div class="form-check mb-2"><input class="form-check-input" type="radio" name="secrets" value="password" id="exp_pw"><label class="form-check-label small" for="exp_pw">{{.T "backup.export_password"}}</label></div>
-					<div class="input-group input-group-sm">
-						<input class="form-control" type="password" name="password" placeholder="{{.T "backup.password"}}" autocomplete="new-password">
-						<button class="btn btn-outline-primary" type="submit"><i class="bi bi-download"></i> {{.T "backup.export_btn"}}</button>
-					</div>
-				</form>
-				<form method="post" action="/settings/import" enctype="multipart/form-data">
-					<input type="hidden" name="_csrf" value="{{.CSRF}}">
-					<label class="form-label" for="import_file">{{.T "backup.import"}}</label>
-					<div class="input-group input-group-sm mb-1">
-						<input class="form-control" type="file" id="import_file" name="file" accept=".json" required>
-						<input class="form-control" type="password" name="password" placeholder="{{.T "backup.password"}}" autocomplete="off">
-						<button class="btn btn-outline-primary" type="submit">{{.T "backup.import_btn"}}</button>
-					</div>
-					<div class="form-text">{{.T "backup.import_hint"}}</div>
-				</form>
-			</div>
-		</div>
-		<div class="card">
+		<div class="card" id="about">
 			<div class="card-header"><i class="bi bi-info-circle text-info"></i> {{.T "settings.about"}}{{$.Doc "update-backup#update"}}</div>
 			<div class="card-body small">
 				<dl class="row mb-0">
 					<dt class="col-4">{{.T "settings.version"}}</dt><dd class="col-8">{{.Version}}</dd>
 					<dt class="col-4">{{.T "dashboard.database"}}</dt><dd class="col-8">{{$d.DBPath}} ({{.Bytes $d.DBSize}})</dd>
-					<dt class="col-4">Backups</dt><dd class="col-8">{{$d.BackupDir}}</dd>
-					{{if $d.HTTPSPort}}<dt class="col-4">HTTPS</dt><dd class="col-8"><a href="/settings/certificate">{{.T "settings.cert_download"}}</a></dd>{{end}}
+					<dt class="col-4">Backups</dt><dd class="col-8">{{$d.BackupDir}} · <a href="/settings/data">{{.T "nav.settings_data"}}</a></dd>
 				</dl>
 				<hr>
 				<form method="post" action="/settings/updates">
@@ -349,18 +262,6 @@
 					<div class="form-text mb-2">{{.T "settings.updates_hint"}}</div>
 					{{if $d.Update}}{{if index $d.Update "newer"}}<div class="alert alert-info py-2">{{.T "settings.update_available" "version" (index $d.Update "version")}}{{with index $d.Update "url"}} <a href="{{.}}" target="_blank" rel="noopener">Release</a>{{end}}</div>{{else}}<div class="text-body-secondary">{{.T "settings.update_none" "version" (index $d.Update "version")}}</div>{{end}}{{end}}
 					<button class="btn btn-outline-primary btn-sm mt-2" type="submit">{{.T "common.save"}}</button>
-				</form>
-				<hr>
-				<form method="post" action="/settings/reset" id="reset">
-					<input type="hidden" name="_csrf" value="{{.CSRF}}">
-					<div class="fw-semibold text-danger mb-1"><i class="bi bi-exclamation-octagon"></i> {{.T "reset.title"}}</div>
-					<div class="form-text mb-2">{{.T "reset.hint"}}</div>
-					{{if $d.Linked}}<div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="keep_checks" id="reset_keep" checked><label class="form-check-label" for="reset_keep">{{.T "link.keep_checks" "count" $d.Own}}</label></div>
-					<div class="form-text mb-2">{{$.T "link.scope" "own" $d.Own "other" $d.Other}}</div>{{end}}
-					<div class="input-group input-group-sm">
-						<input class="form-control" type="password" name="password" placeholder="{{.T "reset.password"}}" autocomplete="current-password" required>
-						<button class="btn btn-outline-danger" type="submit" data-confirm="{{.T "reset.confirm"}}"><i class="bi bi-arrow-counterclockwise"></i> {{.T "reset.button"}}</button>
-					</div>
 				</form>
 			</div>
 		</div>

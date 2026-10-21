@@ -246,6 +246,22 @@ func (m *Manager) migrateFiles() {
 	}
 }
 
+// PruneFiles removes cache files in dir of lists that are not in urls (removed from the settings), so old
+// downloads do not pile up under lists/. The caller passes every configured list, also switched off ones and those
+// only used by device groups; a list added again is simply downloaded again. Downloads in progress (.tmp) stay.
+func PruneFiles(dir string, urls []string) {
+	keep := map[string]bool{}
+	for _, u := range urls {
+		keep[filepath.Base(fileFor(dir, u))] = true
+	}
+	names, _ := filepath.Glob(filepath.Join(dir, "list-*.txt"))
+	for _, p := range names {
+		if !keep[filepath.Base(p)] {
+			_ = os.Remove(p)
+		}
+	}
+}
+
 // refresh downloads stale lists in parallel and reports whether any download
 // failed. Each list goes live as soon as it arrives, so one slow server does
 // not hold back the others.

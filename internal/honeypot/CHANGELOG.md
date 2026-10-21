@@ -1,5 +1,10 @@
 # Änderungen – Honeypot64
 
+## 0.8.1 – 2026-10-21
+
+### Behoben
+- Port-Übersicht (Einstellungen › Ports): Fallen-Dienste und Syslog-Empfänger melden, warum ein Port nicht offen ist; ein Syslog-Port, den inzwischen ein anderer Teil belegt, erscheint als eingestellt mit Fehler statt gar nicht.
+
 ## 0.8.0 – 2026-10-20
 
 ### Neu

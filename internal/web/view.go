@@ -308,14 +308,19 @@ func (s *Server) nav(r *http.Request) []NavItem {
 	items = append(items,
 		NavItem{Key: "nav.notifications", Path: "/notifications", Icon: "bi-bell", Available: true, Enabled: s.Notify != nil},
 		NavItem{Key: "nav.settings", Path: "/settings", Icon: "bi-gear", Available: true, Enabled: true},
+		// Untermenue der Einstellungen: Allgemein (gleicher Pfad, bei Gleichstand aktiv), Ports, Daten & Sicherung
+		NavItem{Key: "nav.settings_general", Path: "/settings", Icon: "bi-sliders", Available: true, Enabled: true, Sub: true},
+		NavItem{Key: "nav.settings_ports", Path: "/settings/ports", Icon: "bi-ethernet", Available: true, Enabled: true, Sub: true},
+		NavItem{Key: "nav.settings_data", Path: "/settings/data", Icon: "bi-database", Available: true, Enabled: true, Sub: true},
 		NavItem{Key: "nav.audit", Path: "/audit", Icon: "bi-journal-text", Available: true, Enabled: true},
 		NavItem{Key: "nav.logs", Path: "/logs", Icon: "bi-terminal", Available: true, Enabled: true},
 		NavItem{Key: "nav.api", Path: "/api/docs", Icon: "bi-code-slash", Available: true, Enabled: true},
 	)
-	best := -1 // nur der genaueste Treffer ist aktiv (Statusseiten unter /healthchecks/...)
+	best := -1 // nur der genaueste Treffer ist aktiv (Statusseiten unter /healthchecks/...); gleich lang: der Unterpunkt
 	for i := range items {
 		p := items[i].Path
-		if (p == r.URL.Path || (p != "/" && strings.HasPrefix(r.URL.Path, p+"/"))) && (best < 0 || len(p) > len(items[best].Path)) {
+		if (p == r.URL.Path || (p != "/" && strings.HasPrefix(r.URL.Path, p+"/"))) &&
+			(best < 0 || len(p) > len(items[best].Path) || (len(p) == len(items[best].Path) && items[i].Sub && !items[best].Sub)) {
 			best = i
 		}
 	}

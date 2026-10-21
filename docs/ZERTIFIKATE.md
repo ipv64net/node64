@@ -35,7 +35,7 @@ Stand 2026-10-16 (Z0–Z5 fertig). Die Zertifikatsverwaltung gehört zum Kern vo
 
 ## Zertifikat der Oberfläche
 
-*Einstellungen → Ports → Zertifikat der Oberfläche* gilt für den HTTPS-Port (`NODE64_HTTPS_PORT`) und für den
+*Einstellungen → Allgemein → Erreichbarkeit dieser Node → Zertifikat der Oberfläche* gilt für den HTTPS-Port (`NODE64_HTTPS_PORT`) und für den
 Namen am Eingang. Ein Wechsel greift sofort, ohne Neustart.
 
 | Auswahl | Verhalten |

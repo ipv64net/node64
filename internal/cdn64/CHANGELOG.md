@@ -1,5 +1,12 @@
 # Änderungen – PROXY64
 
+## 1.21.3 – 2026-10-21
+
+### Behoben
+- Export/Import der Konfiguration enthält jetzt auch die Honeypot-Schalter (Köder, Zugriffe an den Log-Sensor,
+  Sofort-Sperre mit Dauer); nach dem Import gelten sie sofort. Die Sperrliste selbst bleibt auf der Node.
+- Port-Übersicht (Einstellungen › Ports): Streams melden, warum ein Port nicht offen ist (z. B. „address already in use“); der Tunnel von CDN64 online erscheint als ausgehende Verbindung (Server, Port, verbunden, letzter Fehler).
+
 ## 1.21.2 – 2026-10-21
 
 ### Geändert

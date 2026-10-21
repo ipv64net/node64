@@ -549,8 +549,9 @@ func (s *Server) apiRetentionGet(w http.ResponseWriter, r *http.Request) {
 		"raw_days":     healthchecks.RawDays(s.Store), // wirksame Werte (ohne Einstellung die Standardwerte)
 		"hourly_days":  healthchecks.HourlyDays(s.Store),
 		"chart_detail": healthchecks.ChartDetail(s.Store),
+		"audit_days":   AuditDays(s.Store),
 		"options": map[string]any{"raw_days": healthchecks.RawDayOptions, "hourly_days": healthchecks.HourlyDayOptions,
-			"chart_detail": healthchecks.ChartDetailOptions},
+			"chart_detail": healthchecks.ChartDetailOptions, "audit_days": AuditDayOptions},
 	})
 }
 
@@ -559,6 +560,7 @@ func (s *Server) apiRetentionPut(w http.ResponseWriter, r *http.Request) {
 		RawDays     *int    `json:"raw_days"`
 		HourlyDays  *int    `json:"hourly_days"`
 		ChartDetail *string `json:"chart_detail"`
+		AuditDays   *int    `json:"audit_days"`
 	}
 	if !decodeJSON(w, r, &in) {
 		return
@@ -596,6 +598,13 @@ func (s *Server) apiRetentionPut(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		set[healthchecks.SettingChartDetail] = *in.ChartDetail
+	}
+	if in.AuditDays != nil {
+		if !in1(*in.AuditDays, AuditDayOptions) {
+			writeErr(w, http.StatusUnprocessableEntity, fmt.Sprintf("audit_days must be one of %v", AuditDayOptions))
+			return
+		}
+		set[SettingAuditDays] = strconv.Itoa(*in.AuditDays)
 	}
 	for k, v := range set {
 		if err := s.Store.SetSetting(r.Context(), k, v); err != nil {

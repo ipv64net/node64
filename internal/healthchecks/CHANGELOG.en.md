@@ -1,5 +1,16 @@
 # Changes – Healthchecks
 
+## 2.20.0 – 2026-10-21
+
+### New
+- Configuration export/import contains the status pages (settings, groups, entries, logo; matched by slug). The
+  password hash of a protected page only with an export password; without it the page arrives switched off.
+  Announcements stay on the node.
+
+### Changed
+- Data retention: closed incidents are deleted like hourly values and events after "keep hourly values" (unlimited =
+  kept); so far they were kept forever.
+
 ## 2.19.1 – 2026-10-21
 
 ### New

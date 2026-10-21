@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -232,6 +233,7 @@ func run() error {
 	})
 	cdnModule.SetStatusPages(statusPages{hc: hcModule, on: func() bool { return modules.IsRunning(healthchecks.Name) }}) // Hostart "Statusseite"
 	portReg.Provide(cdn64.Name, cdnModule.Claims)
+	portReg.ProvideOutbound(cdn64.Name, cdnModule.OutboundClaims) // Tunnel CDN64 online (ausgehend, nur Anzeige)
 	modules.Register(cdnModule)
 	portReg.Provide(dns64.Name, func(ctx context.Context) []ports.Claim { // nur eingeschaltet; aktiv, solange es laeuft
 		if on, _ := st.ModuleEnabled(ctx, dns64.Name); !on {
@@ -482,6 +484,7 @@ func applyRestore(cfg *config.Config, log *slog.Logger) error {
 	if err := applyRestoreArchive(cfg, log); err != nil {
 		return err
 	}
+	defer pruneRestoreBackups(cfg, keepRestoreBackups)
 	restore := filepath.Join(cfg.DataDir, web.RestoreFileName)
 	if _, err := os.Stat(restore); err != nil {
 		return nil
@@ -504,6 +507,35 @@ func applyRestore(cfg *config.Config, log *slog.Logger) error {
 	}
 	log.Warn("database restored from upload")
 	return nil
+}
+
+// keepRestoreBackups: so viele Staende vor einer Wiederherstellung bleiben unter backups/ (je Art: Datenbank bzw.
+// Archiv), aeltere werden geloescht – wie die Backups vor Migrationen (store.BackupBeforeMigration).
+const keepRestoreBackups = 5
+
+// pruneRestoreBackups loescht aeltere Staende vor einer Wiederherstellung (node64-<Zeit>-pre-restore.db und
+// pre-restore-<Zeit>/); die Namen sortieren nach der Zeit.
+func pruneRestoreBackups(cfg *config.Config, keep int) {
+	entries, err := os.ReadDir(cfg.BackupDir())
+	if err != nil {
+		return
+	}
+	var files, dirs []string
+	for _, e := range entries {
+		switch {
+		case !e.IsDir() && strings.HasPrefix(e.Name(), "node64-") && strings.HasSuffix(e.Name(), "-pre-restore.db"):
+			files = append(files, e.Name())
+		case e.IsDir() && strings.HasPrefix(e.Name(), "pre-restore-"):
+			dirs = append(dirs, e.Name())
+		}
+	}
+	for _, list := range [][]string{files, dirs} {
+		sort.Strings(list)
+		for len(list) > keep {
+			_ = os.RemoveAll(filepath.Join(cfg.BackupDir(), list[0]))
+			list = list[1:]
+		}
+	}
 }
 
 // applyRestoreArchive setzt den Inhalt von restore.new ein (Datenbank, secret.key, Dateien der Module); ersetzte

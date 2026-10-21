@@ -88,3 +88,23 @@ func TestProbe(t *testing.T) {
 		t.Fatalf("free port: %v", err)
 	}
 }
+
+func TestOutbound(t *testing.T) {
+	ctx := context.Background()
+	r := New()
+	r.Provide("edge", func(context.Context) []Claim {
+		return []Claim{{Purpose: "HTTP/3", Proto: UDP, Port: 443, Active: true}}
+	})
+	r.ProvideOutbound("cdn64", func(context.Context) []Claim {
+		return []Claim{{Purpose: "Tunnel", Proto: UDP, Port: 443, Bind: "srv07.cdn64.de", Active: true}}
+	})
+	if out := r.Outbound(ctx); len(out) != 1 || out[0].Owner != "cdn64" {
+		t.Fatalf("outbound: %+v", out)
+	}
+	if len(r.All(ctx)) != 1 || len(r.Overview(ctx)[0].Conflicts) != 0 {
+		t.Fatal("outgoing connections must not count as ports of the node")
+	}
+	if err := r.Check(ctx, "honeypot", []Claim{{Proto: UDP, Port: 7844}}); err != nil {
+		t.Fatal(err)
+	}
+}

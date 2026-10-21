@@ -76,7 +76,7 @@
 					<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>
 				</form>
 				<hr>
-				<div class="mb-1">{{if $d.DNSReady}}<i class="bi bi-check-circle text-success"></i> {{.T "certs.dns_ready"}}{{else}}<i class="bi bi-x-circle text-danger"></i> {{.T "certs.dns_missing"}} <a href="/settings">{{.T "nav.settings"}}</a>{{end}}</div>
+				<div class="mb-1">{{if $d.DNSReady}}<i class="bi bi-check-circle text-success"></i> {{.T "certs.dns_ready"}}{{else}}<i class="bi bi-x-circle text-danger"></i> {{.T "certs.dns_missing"}} <a href="/settings#ipv64">{{.T "nav.settings"}}</a>{{end}}</div>
 				<div>{{if $d.HTTPReady}}<i class="bi bi-check-circle text-success"></i>{{else}}<i class="bi bi-x-circle text-danger"></i>{{end}} {{.T "certs.http_ready"}}</div>
 			</div>
 		</div>

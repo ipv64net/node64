@@ -1,5 +1,12 @@
 # Änderungen – DNS64
 
+## 1.22.2 – 2026-10-21
+
+### Behoben
+- Blocklisten: Dateien entfernter Listen unter `/data/dns64/lists/` werden beim Start gelöscht und sammeln sich
+  nicht mehr an (eingestellte Listen, auch ausgeschaltete und die der Gruppen, bleiben).
+- Port-Übersicht (Einstellungen › Ports): DNS, DoH, DoT und DoQ melden ihren Startfehler (z. B. „permission denied“ oder Zertifikat fehlt).
+
 ## 1.22.1 – 2026-10-21
 
 ### Behoben

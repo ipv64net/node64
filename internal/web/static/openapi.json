@@ -9768,6 +9768,10 @@
                     "chart_detail": {
                       "type": "string"
                     },
+                    "audit_days": {
+                      "type": "integer",
+                      "description": "Audit-Log aufbewahren (Tage), 0 = unbegrenzt"
+                    },
                     "options": {
                       "type": "object"
                     }
@@ -9798,6 +9802,9 @@
                   },
                   "chart_detail": {
                     "type": "string"
+                  },
+                  "audit_days": {
+                    "type": "integer"
                   }
                 }
               }
@@ -9821,6 +9828,10 @@
                     },
                     "chart_detail": {
                       "type": "string"
+                    },
+                    "audit_days": {
+                      "type": "integer",
+                      "description": "Audit-Log aufbewahren (Tage), 0 = unbegrenzt"
                     },
                     "options": {
                       "type": "object"

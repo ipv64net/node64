@@ -475,7 +475,7 @@ func (e *Edge) Close(ctx context.Context) {
 	e.stopping.Wait()
 }
 
-// Claims: die eingestellten Ports fuer die Port-Verwaltung (aktiv = offen).
+// Claims: die eingestellten Ports fuer die Port-Verwaltung (aktiv = offen, Error = warum nicht).
 func (e *Edge) Claims(context.Context) []ports.Claim {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -485,7 +485,7 @@ func (e *Edge) Claims(context.Context) []ports.Claim {
 		if c.Port == 0 {
 			continue
 		}
-		c.Active = e.lst[name].stop != nil
+		c.Active, c.Error = e.lst[name].stop != nil, e.lst[name].err
 		out = append(out, c)
 	}
 	return out

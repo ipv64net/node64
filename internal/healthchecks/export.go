@@ -12,12 +12,14 @@ import (
 )
 
 // Export/Import der Konfiguration (module.Exporter). Messdaten sind nicht
-// enthalten, nur Checks, Wartungsfenster und Proxmox-Systeme (proxmox_export.go).
+// enthalten, nur Checks, Wartungsfenster, Proxmox-Systeme (proxmox_export.go)
+// und Statusseiten (statuspage_export.go).
 
 type exportFile struct {
-	Checks      []checkJSON       `json:"checks"`
-	Maintenance []Maintenance     `json:"maintenance"`
-	Proxmox     []pveExportSystem `json:"proxmox,omitempty"`
+	Checks      []checkJSON        `json:"checks"`
+	Maintenance []Maintenance      `json:"maintenance"`
+	Proxmox     []pveExportSystem  `json:"proxmox,omitempty"`
+	StatusPages []statusExportPage `json:"status_pages,omitempty"`
 }
 
 func (m *Module) Export(ctx context.Context) (any, error) {
@@ -58,6 +60,13 @@ func (m *Module) Export(ctx context.Context) (any, error) {
 	}
 	if len(px) > 0 {
 		out.Proxmox = px
+	}
+	sp, err := m.statusExport(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(sp) > 0 {
+		out.StatusPages = sp
 	}
 	return out, nil
 }
@@ -154,6 +163,14 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		n++
 	}
 	k, err := m.pveImport(ctx, in.Proxmox)
+	n += k
+	k, serr := m.statusImport(ctx, in.StatusPages)
+	switch {
+	case err != nil && serr != nil:
+		err = fmt.Errorf("%v; %v", err, serr)
+	case serr != nil:
+		err = serr
+	}
 	return n + k, err
 }
 

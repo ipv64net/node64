@@ -57,9 +57,9 @@ kein zusätzlicher Port, gleiches TLS-Zertifikat. Node64 arbeitet zustandslos (k
 Node64 nutzt ohne weitere Einrichtung ein selbst signiertes Zertifikat. Anwendungen auf Basis von Node.js (Claude
 Code, `mcp-remote`) lehnen das ab. Möglichkeiten:
 
-- Zertifikat der Node herunterladen (*Einstellungen*, Zertifikat der Oberfläche) und `NODE_EXTRA_CA_CERTS=/pfad/node64.pem`
+- Zertifikat der Node herunterladen (*Einstellungen → Allgemein → Erreichbarkeit dieser Node*) und `NODE_EXTRA_CA_CERTS=/pfad/node64.pem`
   setzen, bevor die Anwendung startet.
-- Für die Oberfläche ein Zertifikat aus der Zertifikatsverwaltung wählen (*Einstellungen → Ports*) und die Node über
+- Für die Oberfläche ein Zertifikat aus der Zertifikatsverwaltung wählen (*Einstellungen → Allgemein → Erreichbarkeit dieser Node*) und die Node über
   diesen Namen ansprechen.
 - Im LAN geht auch `http://<node>:<port>/mcp` (HTTP und HTTPS laufen auf demselben Port) – der Schlüssel geht dann
   unverschlüsselt durchs Heimnetz.
@@ -212,3 +212,6 @@ Fehler eines Werkzeugs (z. B. Check nicht gefunden, Modul gestoppt) kommen als W
 
 - **2026-10-21 – M1:** Transport `/mcp`, Schalter, nur private Netze, MCP-Schlüssel mit Rechten je Bereich,
   Rate-Limit, Audit, 25 lesende Werkzeuge, drei Prompts, Prometheus-Zähler.
+- **2026-10-21:** Der Schalter `mcp.enabled` zieht mit Export/Import der Konfiguration um; MCP-Schlüssel nie (auch
+  nicht mit Passwort). Die Audit-Einträge der Aufrufe (`mcp.call`) folgen der Aufbewahrung des Audit-Logs
+  (`audit.keep_days`, Standard 365 Tage).

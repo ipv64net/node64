@@ -22,12 +22,13 @@ const (
 
 // Claim ist ein belegter (oder eingestellter) Port.
 type Claim struct {
-	Owner   string `json:"owner"`          // web, edge, dns64, cdn64 …
-	Purpose string `json:"purpose"`        // z. B. "HTTPS", "DoH", "DNS"
-	Proto   Proto  `json:"proto"`          // tcp oder udp
-	Port    int    `json:"port"`           // 1–65535
-	Bind    string `json:"bind,omitempty"` // Adresse, "" = alle
-	Active  bool   `json:"active"`         // derzeit geoeffnet bzw. eingeschaltet
+	Owner   string `json:"owner"`           // web, edge, dns64, cdn64 …
+	Purpose string `json:"purpose"`         // z. B. "HTTPS", "DoH", "DNS"
+	Proto   Proto  `json:"proto"`           // tcp oder udp
+	Port    int    `json:"port"`            // 1–65535
+	Bind    string `json:"bind,omitempty"`  // Adresse, "" = alle
+	Active  bool   `json:"active"`          // derzeit geoeffnet bzw. eingeschaltet
+	Error   string `json:"error,omitempty"` // warum nicht offen (z. B. "address already in use"), aus dem Status des Teils
 }
 
 func (c Claim) String() string {
@@ -46,9 +47,45 @@ type Registry struct {
 	mu        sync.Mutex
 	owners    []string
 	providers map[string]Provider
+	outOwners []string            // ausgehende Verbindungen (nur Anzeige)
+	outbound  map[string]Provider //
 }
 
-func New() *Registry { return &Registry{providers: map[string]Provider{}} }
+func New() *Registry {
+	return &Registry{providers: map[string]Provider{}, outbound: map[string]Provider{}}
+}
+
+// ProvideOutbound meldet ausgehende Verbindungen eines Teils an (z. B. Tunnel zu CDN64). Nur zur Anzeige: sie
+// belegen keinen Port der Node und zaehlen weder bei Check noch bei Overview. Port und Bind sind die Gegenstelle.
+func (r *Registry) ProvideOutbound(owner string, p Provider) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.outbound[owner]; !ok {
+		r.outOwners = append(r.outOwners, owner)
+	}
+	r.outbound[owner] = p
+}
+
+// Outbound liefert die ausgehenden Verbindungen aller Teile (Reihenfolge der Anmeldung).
+func (r *Registry) Outbound(ctx context.Context) []Claim {
+	r.mu.Lock()
+	owners := append([]string(nil), r.outOwners...)
+	providers := make([]Provider, len(owners))
+	for i, o := range owners {
+		providers[i] = r.outbound[o]
+	}
+	r.mu.Unlock()
+	var out []Claim
+	for i, p := range providers {
+		for _, c := range p(ctx) {
+			if c.Owner == "" {
+				c.Owner = owners[i]
+			}
+			out = append(out, c)
+		}
+	}
+	return out
+}
 
 // Provide meldet die Ports eines Teils an (ersetzt eine fruehere Anmeldung).
 func (r *Registry) Provide(owner string, p Provider) {

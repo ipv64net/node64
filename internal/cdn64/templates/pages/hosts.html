@@ -31,7 +31,7 @@
 		<div class="small text-body-secondary d-none" data-stats-empty>{{.T "cdn64.stats.empty"}}</div>
 	</div>
 </div>{{end}}
-{{if $d.EdgeErr}}<div class="alert alert-danger small"><i class="bi bi-exclamation-triangle"></i> {{.T "cdn64.edge_error"}} <span class="font-monospace">{{$d.EdgeErr}}</span> · <a href="/settings#ports">{{.T "cdn64.edge_settings"}}</a></div>{{end}}
+{{if $d.EdgeErr}}<div class="alert alert-danger small"><i class="bi bi-exclamation-triangle"></i> {{.T "cdn64.edge_error"}} <span class="font-monospace">{{$d.EdgeErr}}</span> · <a href="/settings/ports#edge">{{.T "cdn64.edge_settings"}}</a></div>{{end}}
 <div class="card">
 	{{if not $d.Rows}}
 	<div class="card-body text-center text-body-secondary py-5">

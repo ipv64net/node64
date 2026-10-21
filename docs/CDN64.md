@@ -42,8 +42,15 @@ und keinem Modul:
   - Let's Encrypt (HTTP-01);
   - die Oberfläche von Node64 unter einem eigenen Namen.
 - **Offen** sind die Ports nur, solange ein Abnehmer sie braucht. Besteht DoH allein, bleibt Port 80 zu.
-- **Port-Verwaltung:** Die Übersicht unter *Einstellungen → Ports* zeigt, wer welchen Port belegt, und meldet
-  Überschneidungen.
+- **Port-Verwaltung:** Die Seite *Einstellungen → Ports* zeigt, wer welchen Port belegt, und meldet
+  Überschneidungen. Dort stehen auch die Ports des Eingangs (HTTP, HTTPS, Port von außen, HTTP/3, unbekannte Namen).
+  - Je Port: Modul, Zweck, Protokoll, Bind-Adresse, eingestellt/offen, ob wirklich ein Listener lauscht (Linux,
+    `/proc/net/tcp|udp`, im Container dessen Netz-Namensraum) und der Fehler des Teils (z. B. „address already in
+    use“, „permission denied“). Was über den Eingang läuft (Proxy-Hosts, DoH, Oberfläche unter eigenem Namen,
+    Honeypot-Köder) und über den Web-Port (Cluster, MCP, Prometheus), steht als „mitgenutzt“ darunter; der Tunnel
+    von CDN64 online als ausgehende Verbindung. Filter nach Modul und Zustand.
+  - Name und Zertifikat der Oberfläche am Eingang stehen unter *Einstellungen → Allgemein → Erreichbarkeit dieser
+    Node*; `POST /settings/edge` übernimmt sie nur noch, wenn das Formular die Felder enthält.
   - Streams prüfen ihren Port vor dem Öffnen; die Ports des Eingangs sind für Streams gesperrt.
   - Ein Port, den ein anderes Programm auf dem Host belegt, wird erkannt und mit Grund angezeigt.
 - **Zwei Container oder IPs** braucht es nur, wenn ein anderes Programm auf demselben Host 443 will, etwa ein

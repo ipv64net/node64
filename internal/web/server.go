@@ -194,6 +194,7 @@ func (s *Server) routes() {
 	s.syncRoutes()
 	s.peerRoutes()
 	s.portRoutes()
+	s.settingsPageRoutes() // Einstellungen › Ports und › Daten & Sicherung
 	s.certRoutes()
 	s.mcpRoutes()
 
@@ -335,6 +336,9 @@ func (s *Server) housekeeping(ctx context.Context) {
 			s.mcpLimit.cleanup()
 			if s.Notify != nil {
 				_ = s.Notify.PruneDeliveries(ctx, 90*24*time.Hour)
+			}
+			if n, err := s.Store.PruneAudit(ctx, auditKeep(s.Store)); err == nil && n > 0 { // Audit-Log (audit.keep_days)
+				s.log.Debug("old audit entries removed", "count", n)
 			}
 		}
 	}

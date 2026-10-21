@@ -858,7 +858,11 @@ func (s *Store) Aggregate(ctx context.Context, now time.Time) error {
 	if _, err := s.w.ExecContext(ctx, `DELETE FROM hc_source_hourly WHERE hour < ?`, ft(now.Add(-hourlyRet))); err != nil {
 		return err
 	}
-	_, err := s.w.ExecContext(ctx, `DELETE FROM hc_events WHERE time < ?`, ft(now.Add(-hourlyRet)))
+	if _, err := s.w.ExecContext(ctx, `DELETE FROM hc_events WHERE time < ?`, ft(now.Add(-hourlyRet))); err != nil {
+		return err
+	}
+	// abgeschlossene Stoerungen wie die Ereignisse (laufende bleiben)
+	_, err := s.w.ExecContext(ctx, `DELETE FROM hc_incidents WHERE ended_at != '' AND ended_at < ?`, ft(now.Add(-hourlyRet)))
 	return err
 }
 

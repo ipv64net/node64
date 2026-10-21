@@ -88,7 +88,7 @@ func (s *Server) saveEdge(r *http.Request, cfg edge.Config) error {
 	return nil
 }
 
-// settingsEdge: Formular in den Einstellungen (Karte Ports).
+// settingsEdge: Formular des Eingangs (Einstellungen › Ports).
 func (s *Server) settingsEdge(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Edge.Config()
 	num := func(name string) (int, bool) {
@@ -112,15 +112,24 @@ func (s *Server) settingsEdge(w http.ResponseWriter, r *http.Request) {
 		s.flash(w, r, "danger", v.T("ports.err_save", "error", err.Error()))
 	} else if err := s.saveUICertForm(r); err != nil {
 		s.flash(w, r, "danger", v.T("ports.err_save", "error", err.Error()))
-	} else if err := s.saveUIRoute(r, r.PostFormValue("ui_name"), r.PostFormValue("ui_public") == "on"); err != nil {
+	} else if err := s.saveUIRouteForm(r); err != nil {
 		s.flash(w, r, "danger", v.T("ports.err_save", "error", err.Error()))
 	} else {
 		s.flash(w, r, "success", v.T("common.saved"))
 	}
-	http.Redirect(w, r, "/settings#ports", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/ports#edge", http.StatusSeeOther)
 }
 
-// portsView: Daten der Karte Ports.
+// saveUIRouteForm: Name der Oberflaeche nur, wenn das Formular ihn enthaelt (er steht jetzt unter Allgemein ›
+// Erreichbarkeit; das Formular des Eingangs auf der Seite Ports hat ihn nicht).
+func (s *Server) saveUIRouteForm(r *http.Request) error {
+	if !r.PostForm.Has("ui_name") {
+		return nil
+	}
+	return s.saveUIRoute(r, r.PostFormValue("ui_name"), r.PostFormValue("ui_public") == "on")
+}
+
+// portsView: Ports und Eingang (Formular auf der Seite Ports, Name der Oberflaeche unter Allgemein).
 type portsView struct {
 	Entries  []ports.Entry
 	Edge     edge.Status

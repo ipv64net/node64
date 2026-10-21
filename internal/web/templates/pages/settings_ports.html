@@ -1,0 +1,128 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1 class="h4 mb-3"><i class="bi bi-gear-fill text-secondary me-1"></i> {{.T "settings.title"}}</h1>
+{{template "settings_tabs" .}}
+<p class="small text-body-secondary mb-2">{{.T "ports.page_hint"}}{{.Doc "configuration#ports"}}</p>
+<div class="d-flex flex-wrap gap-2 mb-3 small" id="port-summary">
+	<span class="badge text-bg-light border">{{.T "ports.sum_total" "n" $d.Total}}</span>
+	<span class="badge text-bg-success">{{.T "ports.sum_open" "n" $d.Open}}</span>
+	{{if $d.Conflicts}}<a class="badge text-bg-danger text-decoration-none" href="/settings/ports?state=conflict">{{.T "ports.sum_conflicts" "n" $d.Conflicts}}</a>{{end}}
+	{{if $d.Errors}}<a class="badge text-bg-warning text-decoration-none" href="/settings/ports?state=error">{{.T "ports.sum_errors" "n" $d.Errors}}</a>{{end}}
+	{{if not $d.Checked}}<span class="badge text-bg-light border" title="{{.T "ports.open_unknown_hint"}}"><i class="bi bi-question-circle"></i> {{.T "ports.open_unknown"}}</span>{{end}}
+</div>
+<form method="get" action="/settings/ports" class="row g-2 align-items-end mb-2">
+	<div class="col-sm-auto">
+		<label class="form-label small mb-1" for="f-module">{{.T "ports.col_module"}}</label>
+		<select class="form-select form-select-sm" id="f-module" name="module" data-autosubmit>
+			<option value="">{{.T "common.all"}}</option>
+			{{range $d.Owners}}<option value="{{.Owner}}"{{if eq .Owner $d.Module}} selected{{end}}>{{$.T .TitleKey}}</option>{{end}}
+		</select>
+	</div>
+	<div class="col-sm-auto">
+		<label class="form-label small mb-1" for="f-state">{{.T "ports.col_state"}}</label>
+		<select class="form-select form-select-sm" id="f-state" name="state" data-autosubmit>
+			<option value="">{{.T "common.all"}}</option>
+			{{range $d.StateOptions}}<option value="{{.}}"{{if eq . $d.State}} selected{{end}}>{{$.T (print "ports.filter_" .)}}</option>{{end}}
+		</select>
+	</div>
+	<div class="col-sm-auto"><noscript><button class="btn btn-outline-secondary btn-sm" type="submit">{{.T "ports.filter_apply"}}</button></noscript>
+		{{if or $d.Module $d.State}}<a class="btn btn-link btn-sm" href="/settings/ports">{{.T "ports.filter_reset"}}</a>{{end}}</div>
+</form>
+<div class="card mb-3" id="ports">
+	<div class="table-responsive">
+		<table class="table table-sm table-hover align-middle small mb-0">
+			<thead><tr>
+				<th>{{.T "ports.col_module"}}</th><th>{{.T "ports.col_purpose"}}</th><th>{{.T "ports.port"}}</th><th>{{.T "ports.col_proto"}}</th>
+				<th>{{.T "ports.col_bind"}}</th><th>{{.T "ports.col_node"}}</th><th>{{.T "ports.col_open"}}</th><th>{{.T "ports.col_notes"}}</th>
+			</tr></thead>
+			<tbody>
+			{{range $d.Rows}}
+			<tr class="port-row{{if .Conflicts}} table-danger{{else if or .Error .Foreign .LowDenied}} table-warning{{end}}" data-owner="{{.Owner}}" data-kind="{{.Kind}}">
+				<td class="text-nowrap">{{if .Mod.Image}}<img src="/static/img/{{.Mod.Image}}" alt="" class="nav-img logo logo-light"><img src="/static/img/{{darkimg .Mod.Image}}" alt="" class="nav-img logo logo-dark">{{else}}<i class="bi {{.Mod.Icon}}"></i>{{end}} {{$.T .Mod.TitleKey}}</td>
+				<td>{{if eq .Kind "via"}}{{$.T (print "ports.via_" .Via)}}{{if .Names}} <div class="text-body-secondary font-monospace text-break" title="{{join .Names ", "}}">{{range $i, $n := .Names}}{{if lt $i 3}}{{if $i}}, {{end}}{{$n}}{{end}}{{end}}{{if gt (len .Names) 3}} …{{end}}</div>{{else}} <span class="text-body-secondary">· {{.Purpose}}</span>{{end}}
+					{{else if eq .Kind "out"}}<i class="bi bi-box-arrow-up-right"></i> {{$.T "ports.outbound"}} <span class="text-body-secondary">· {{.Purpose}}</span>
+					{{else}}{{.Purpose}}{{end}}</td>
+				<td class="font-monospace text-nowrap">{{.Port}}{{if .Low}} <span class="badge text-bg-light border" title="{{$.T "ports.low_hint"}}">&lt;1024</span>{{end}}</td>
+				<td class="text-nowrap">{{if eq (print .Proto) "udp"}}UDP{{else}}TCP{{end}}</td>
+				<td class="font-monospace text-break">{{if .Bind}}{{.Bind}}{{else}}<span class="text-body-secondary">{{$.T "ports.bind_all"}}</span>{{end}}</td>
+				<td class="text-nowrap">{{if eq .Kind "out"}}{{if .Active}}<span class="badge text-bg-success">{{$.T "ports.connected"}}</span>{{else}}<span class="badge text-bg-secondary">{{$.T "ports.disconnected"}}</span>{{end}}
+					{{else if eq .Kind "via"}}<span class="badge text-bg-light border">{{$.T "ports.shared"}}</span>
+					{{else if .Active}}<span class="badge text-bg-success">{{$.T "ports.active"}}</span>{{else}}<span class="badge text-bg-light border">{{$.T "ports.idle"}}</span>{{end}}</td>
+				<td class="text-nowrap">{{if eq .Open "yes"}}{{if .Foreign}}<span class="badge text-bg-warning" title="{{$.T "ports.foreign_hint"}}">{{$.T "ports.foreign"}}</span>{{else}}<span class="badge text-bg-success"><i class="bi bi-check-lg"></i> {{$.T "ports.open_yes"}}</span>{{end}}
+					{{else if eq .Open "no"}}{{if .Active}}<span class="badge text-bg-warning" title="{{$.T "ports.open_missing_hint"}}">{{$.T "ports.open_missing"}}</span>{{else}}<span class="badge text-bg-light border">{{$.T "ports.open_no"}}</span>{{end}}
+					{{else if eq .Open "unknown"}}<span class="text-body-secondary">{{$.T "ports.open_unknown"}}</span>
+					{{else}}<span class="text-body-secondary">–</span>{{end}}</td>
+				<td>{{range .Conflicts}}<span class="badge text-bg-danger me-1">{{$.T "ports.conflict" "with" .}}</span>{{end}}
+					{{if .Error}}<div class="text-danger font-monospace text-break">{{.Error}}</div>{{end}}
+					{{if .LowDenied}}<div class="text-warning-emphasis">{{$.T "ports.low_denied"}}</div>{{end}}</td>
+			</tr>
+			{{else}}
+			<tr><td colspan="8" class="text-body-secondary">{{.T "ports.none"}}</td></tr>
+			{{end}}
+			</tbody>
+		</table>
+	</div>
+	<div class="card-footer small text-body-secondary">{{if $d.Checked}}{{.T "ports.open_hint"}}{{else}}{{.T "ports.open_unknown_hint"}}{{end}}</div>
+</div>
+
+<div class="row g-3 align-items-start">
+	<div class="col-lg-6 d-flex flex-column gap-3">
+		{{with $d.Edge}}<div class="card" id="edge">
+			<div class="card-header"><i class="bi bi-signpost-split text-primary"></i> {{$.T "ports.edge_title"}}{{$.Doc "configuration#ports"}}</div>
+			<div class="card-body small">
+				{{$open := false}}{{range .Edge.Listeners}}{{if .Running}}{{$open = true}}{{end}}{{if .Error}}<div class="text-danger small mb-1">{{.Name}}: {{.Error}}</div>{{end}}{{end}}
+				{{if not $open}}<div class="text-body-secondary small mb-2">{{$.T "ports.edge_off"}}</div>{{end}}
+				<form method="post" action="/settings/edge">
+					<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<div class="row g-2 mb-2">
+						<div class="col-sm-4"><label class="form-label" for="edge_http">{{$.T "ports.edge_http"}}</label>
+							<input class="form-control form-control-sm" type="number" min="0" max="65535" id="edge_http" name="http_port" value="{{.Edge.Config.HTTPPort}}"></div>
+						<div class="col-sm-4"><label class="form-label" for="edge_https">{{$.T "ports.edge_https"}}</label>
+							<input class="form-control form-control-sm" type="number" min="0" max="65535" id="edge_https" name="https_port" value="{{.Edge.Config.HTTPSPort}}"></div>
+						<div class="col-sm-4"><label class="form-label" for="edge_public">{{$.T "ports.edge_public"}}</label>
+							<input class="form-control form-control-sm" type="number" min="0" max="65535" id="edge_public" name="public_port" value="{{if .Edge.Config.PublicPort}}{{.Edge.Config.PublicPort}}{{end}}" placeholder="{{.Edge.Config.HTTPSPort}}"></div>
+					</div>
+					<div class="form-text mb-2">{{$.T "ports.edge_public_hint"}}</div>
+					<div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="edge_h3" name="http3"{{if .Edge.Config.HTTP3}} checked{{end}}>
+						<label class="form-check-label" for="edge_h3">{{$.T "ports.edge_http3"}}</label></div>
+					<label class="form-label" for="edge_default">{{$.T "ports.edge_default"}}</label>
+					<select class="form-select form-select-sm mb-2" id="edge_default" name="default">
+						<option value="404"{{if eq .Edge.Config.Default "404"}} selected{{end}}>{{$.T "ports.edge_default_404"}}</option>
+						<option value="close"{{if eq .Edge.Config.Default "close"}} selected{{end}}>{{$.T "ports.edge_default_close"}}</option>
+						{{if .Edge.Config.DefaultURL}}<option value="redirect"{{if eq .Edge.Config.Default "redirect"}} selected{{end}}>{{$.T "ports.edge_default_redirect"}}</option>{{end}}
+						{{if .Edge.Config.DefaultPage}}<option value="html"{{if eq .Edge.Config.Default "html"}} selected{{end}}>{{$.T "ports.edge_default_html"}}</option>{{end}}
+					</select>
+					<div class="form-text mb-2">{{$.T "ports.edge_hint"}} <a href="/cdn64/default">{{$.T "ports.edge_default_link"}}</a></div>
+					{{if .Edge.UnknownReplaced}}<div class="alert alert-warning py-2 small"><i class="bi bi-bug"></i> {{$.T "ports.edge_decoy"}} <a href="/cdn64/access#honeypot" class="alert-link">{{$.T "ports.edge_decoy_link"}}</a></div>{{end}}
+					<div class="form-text mb-2"><i class="bi bi-info-circle"></i> {{$.T "ports.edge_ui_moved"}} <a href="/settings#reach">{{$.T "settings.reach"}}</a></div>
+					<button class="btn btn-primary btn-sm" type="submit">{{$.T "common.save"}}</button>
+				</form>
+			</div>
+		</div>{{end}}
+	</div>
+	<div class="col-lg-6 d-flex flex-column gap-3">
+		<div class="card" id="hints">
+			<div class="card-header"><i class="bi bi-lightbulb text-warning"></i> {{.T "ports.hints_title"}}</div>
+			<div class="card-body small">
+				<h2 class="h6">{{.T "ports.low_title"}}</h2>
+				{{if $d.LowPorts}}<p class="mb-1">{{.T "ports.low_used"}} <span class="font-monospace">{{range $i, $p := $d.LowPorts}}{{if $i}}, {{end}}{{$p}}{{end}}</span></p>{{end}}
+				{{if $d.Priv.Known}}
+				<p class="mb-1">{{if $d.Priv.Root}}<i class="bi bi-check-circle text-success"></i> {{.T "ports.low_root"}}
+					{{else if $d.Priv.CapNetBind}}<i class="bi bi-check-circle text-success"></i> {{.T "ports.low_cap"}}
+					{{else if and (ge $d.Priv.UnprivStart 0) (lt $d.Priv.UnprivStart 1024)}}<i class="bi bi-check-circle text-success"></i> {{.T "ports.low_sysctl" "n" $d.Priv.UnprivStart}}
+					{{else}}<i class="bi bi-exclamation-triangle text-warning"></i> {{.T "ports.low_none"}}{{end}}</p>
+				{{if $d.LowDenied}}<div class="alert alert-warning py-2">{{.T "ports.low_denied_hint"}}</div>{{end}}
+				{{else}}<p class="text-body-secondary mb-1">{{.T "ports.low_unknown"}}</p>{{end}}
+				<p class="text-body-secondary">{{.T "ports.low_explain"}}</p>
+				<h2 class="h6">{{.T "ports.docker_title"}}</h2>
+				{{if $d.Priv.Container}}<p class="mb-1"><i class="bi bi-box-seam"></i> {{.T "ports.docker_in"}}</p>{{end}}
+				<p class="mb-1">{{.T "ports.docker_hint"}}</p>
+				{{if $d.DockerArgs}}<div class="input-group input-group-sm mb-1"><input class="form-control font-monospace" id="docker-args" value="{{$d.DockerArgs}}" readonly aria-label="docker run -p">
+					<button class="btn btn-outline-secondary" type="button" data-copy-target="#docker-args" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
+				<div class="form-text mb-2">{{.T "ports.docker_args_hint"}}</div>{{end}}
+				<p class="text-body-secondary mb-0">{{.T "ports.docker_host"}}</p>
+			</div>
+		</div>
+	</div>
+</div>
+{{end}}

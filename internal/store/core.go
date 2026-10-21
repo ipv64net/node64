@@ -235,6 +235,18 @@ func (s *Store) Audit(ctx context.Context, e AuditEntry) error {
 	return err
 }
 
+// PruneAudit loescht Eintraege aelter als keep (keep <= 0: nichts). Liefert die Zahl der geloeschten Eintraege.
+func (s *Store) PruneAudit(ctx context.Context, keep time.Duration) (int64, error) {
+	if keep <= 0 {
+		return 0, nil
+	}
+	res, err := s.w.ExecContext(ctx, `DELETE FROM audit_log WHERE time < ?`, FormatTime(time.Now().Add(-keep)))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // AuditList liefert die neuesten Eintraege, optional nur mit ID < before.
 func (s *Store) AuditList(ctx context.Context, limit int, before int64) ([]AuditEntry, error) {
 	return s.AuditListFiltered(ctx, limit, before, nil)

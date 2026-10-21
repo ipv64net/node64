@@ -26,11 +26,12 @@ const (
 	maxArchiveBytes = 8 << 30 // entpackt
 )
 
-// backupSkip: nicht ins Archiv (Caches, alte Sicherungen, Arbeitsdateien).
+// backupSkip: nicht ins Archiv (Caches, alte Sicherungen, Arbeitsdateien). geoip/ ist der Zwischenspeicher der
+// Laenderdaten (laedt die Node von ipv64.net neu), Blocklisten ebenso.
 func backupSkip(rel string, dir bool) bool {
 	base := filepath.Base(rel)
 	switch {
-	case rel == "backups" || rel == "tmp" || rel == RestoreDirName || strings.HasPrefix(base, ".backup-") || strings.HasPrefix(base, "restore."):
+	case rel == "backups" || rel == "tmp" || rel == "geoip" || rel == RestoreDirName || strings.HasPrefix(base, ".backup-") || strings.HasPrefix(base, "restore."):
 		return true
 	case dir && (base == "lists" || base == "blocklists" || strings.Contains(base, ".bak")):
 		return true
@@ -122,7 +123,7 @@ func (s *Server) backupArchiveDownload(w http.ResponseWriter, r *http.Request) {
 	pw := r.PostFormValue("password")
 	if len(pw) < 8 {
 		s.flash(w, r, "danger", v.T("backup.password_short"))
-		http.Redirect(w, r, "/settings#backup", http.StatusSeeOther)
+		http.Redirect(w, r, "/settings/data#backup", http.StatusSeeOther)
 		return
 	}
 	stats := r.PostFormValue("stats") == "on"

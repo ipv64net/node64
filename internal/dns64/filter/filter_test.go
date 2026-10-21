@@ -160,3 +160,24 @@ func TestListFilesByURL(t *testing.T) {
 		t.Fatal("file not renamed")
 	}
 }
+
+// Dateien entfernter Listen bleiben nicht liegen; die der genutzten Listen und halbe Downloads (.tmp) bleiben.
+func TestListFilesPruned(t *testing.T) {
+	dir := t.TempDir()
+	used, gone := fileFor(dir, DefaultLists[0].URL), fileFor(dir, "https://example.org/removed.txt")
+	for _, p := range []string{used, gone, gone + ".tmp"} {
+		if err := os.WriteFile(p, []byte("||ads.example.com^\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	PruneFiles(dir, []string{DefaultLists[0].URL})
+	if _, err := os.Stat(used); err != nil {
+		t.Fatal("file of a used list removed")
+	}
+	if _, err := os.Stat(gone); err == nil {
+		t.Fatal("file of a removed list kept")
+	}
+	if _, err := os.Stat(gone + ".tmp"); err != nil {
+		t.Fatal("download in progress removed")
+	}
+}

@@ -1,5 +1,12 @@
 # Changes – DNS64
 
+## 1.22.2 – 2026-10-21
+
+### Fixed
+- Blocklists: files of removed lists under `/data/dns64/lists/` are deleted at start and no longer pile up
+  (configured lists, also switched-off ones and those of groups, stay).
+- Port overview (Settings › Ports): DNS, DoH, DoT and DoQ report their start error (e.g. "permission denied" or missing certificate).
+
 ## 1.22.1 – 2026-10-21
 
 ### Fixed

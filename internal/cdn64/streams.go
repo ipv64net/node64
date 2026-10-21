@@ -571,10 +571,53 @@ func (m *Module) Claims(ctx context.Context) []ports.Claim {
 			continue
 		}
 		active := map[string]bool{}
-		if r := m.runs[s.ID]; r != nil {
+		r := m.runs[s.ID]
+		if r != nil {
 			active["tcp"], active["udp"] = r.tcp != nil, r.udp != nil
 		}
-		out = append(out, s.claims(active)...)
+		for _, c := range s.claims(active) {
+			if r != nil && !c.Active {
+				c.Error = r.errs[string(c.Proto)] // z. B. "address already in use" (Anzeige in der Port-Uebersicht)
+			}
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// OutboundClaims: Tunnel von CDN64 online zu den Servern fuer die Port-Uebersicht (ausgehend, nur Anzeige: Port
+// und Bind sind die Gegenstelle, z. B. 7844/udp bei srv07.cdn64.de). Leer, solange Modul oder Tunnel aus sind.
+func (m *Module) OutboundClaims(ctx context.Context) []ports.Claim {
+	m.mu.Lock()
+	on := m.running
+	m.mu.Unlock()
+	m.online.mu.Lock()
+	cl := m.online.client
+	m.online.mu.Unlock()
+	if !on || cl == nil {
+		return nil
+	}
+	conf := map[string]int{} // eingestellter Port je Server (solange nicht verbunden)
+	if c, _, err := m.onlineConf(ctx); err == nil && c != nil {
+		for _, e := range c.Edges {
+			conf[e.Name] = e.Port
+		}
+	}
+	var out []ports.Claim
+	for _, e := range cl.Status() {
+		c := ports.Claim{Owner: Name, Purpose: "CDN64 online " + e.Name, Proto: ports.UDP, Port: conf[e.Name], Bind: e.Host, Active: e.Connected, Error: e.LastError}
+		if c.Port == 0 {
+			c.Port = 7844 // Standard des Tunnels (tunnel.Client)
+		}
+		if _, p, err := net.SplitHostPort(e.Addr); err == nil && e.Connected { // verbunden: tatsaechlicher Weg
+			if n, err := strconv.Atoi(p); err == nil {
+				c.Port = n
+			}
+			if e.Transport == "tcp" {
+				c.Proto = ports.TCP
+			}
+		}
+		out = append(out, c)
 	}
 	return out
 }

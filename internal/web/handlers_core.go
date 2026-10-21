@@ -397,12 +397,16 @@ type settingsData struct {
 	LogModules map[string]string
 	Modules2   []string
 	HTTPSPort  int
-	Ports      *portsView // Karte Ports (nil = nicht verfuegbar)
+	Ports      *portsView        // Ports und Eingang (nil = nicht verfuegbar)
+	Reach      *reachView        // Karte Erreichbarkeit dieser Node
+	Moved      map[string]string // alte Sprungmarken -> neue Seite (Weiterleitung in app.js)
 	// lokale Datenhaltung (Healthchecks)
 	RawDays, HourlyDays       int
 	ChartDetail               string
 	RawOptions, HourlyOptions []int
 	ChartOptions              []string
+	AuditDays                 int   // Audit-Log aufbewahren (0 = unbegrenzt)
+	AuditOptions              []int //
 }
 
 func (s *Server) settingsView(r *http.Request) *View {
@@ -423,6 +427,7 @@ func (s *Server) settingsView(r *http.Request) *View {
 	}
 	d.RawDays, d.HourlyDays, d.ChartDetail = healthchecks.RawDays(s.Store), healthchecks.HourlyDays(s.Store), healthchecks.ChartDetail(s.Store)
 	d.RawOptions, d.HourlyOptions, d.ChartOptions = healthchecks.RawDayOptions, healthchecks.HourlyDayOptions, healthchecks.ChartDetailOptions
+	d.AuditDays, d.AuditOptions = AuditDays(s.Store), AuditDayOptions
 	d.UpdateOn = s.Store.SettingOr(ctx, "updates.check", "0") == "1"
 	if s.IPv64 != nil {
 		d.IPv64On = true
@@ -446,6 +451,7 @@ func (s *Server) settingsView(r *http.Request) *View {
 	}
 	d.Modules2 = logModuleNames
 	d.Ports = s.portsData(ctx)
+	d.Reach, d.Moved = s.reachData(ctx), settingsMoved
 	v.Data = d
 	v.Form = map[string]string{"node_name": d.NodeName, "location": d.Location, "lang": v.User.Lang, "timezone": v.User.Timezone, "level": d.LogLevel}
 	if v.Form["lang"] == "" {
@@ -579,7 +585,7 @@ func (s *Server) settingsModules(w http.ResponseWriter, r *http.Request) {
 
 // settingsData speichert die lokale Datenhaltung (nur diese Node; ipv64 behaelt eigene Fristen).
 func (s *Server) settingsData(w http.ResponseWriter, r *http.Request) {
-	f := s.formValues(r, "raw_days", "hourly_days", "chart_detail")
+	f := s.formValues(r, "raw_days", "hourly_days", "chart_detail", "audit_days")
 	v := s.settingsView(r)
 	inInts := func(val string, opts []int) bool {
 		n, err := strconv.Atoi(val)
@@ -594,20 +600,26 @@ func (s *Server) settingsData(w http.ResponseWriter, r *http.Request) {
 	for _, o := range healthchecks.ChartDetailOptions {
 		okDetail = okDetail || o == f["chart_detail"]
 	}
-	if !inInts(f["raw_days"], healthchecks.RawDayOptions) || !inInts(f["hourly_days"], healthchecks.HourlyDayOptions) || !okDetail {
+	auditSet := r.PostForm.Has("audit_days") // Audit-Log: nur, wenn das Formular das Feld enthaelt
+	if !inInts(f["raw_days"], healthchecks.RawDayOptions) || !inInts(f["hourly_days"], healthchecks.HourlyDayOptions) || !okDetail ||
+		(auditSet && !inInts(f["audit_days"], AuditDayOptions)) {
 		s.flash(w, r, "danger", v.T("errors.validation"))
-		http.Redirect(w, r, "/settings#data", http.StatusSeeOther)
+		http.Redirect(w, r, "/settings/data#retention", http.StatusSeeOther)
 		return
 	}
-	for k, val := range map[string]string{healthchecks.SettingRawDays: f["raw_days"], healthchecks.SettingHourlyDays: f["hourly_days"], healthchecks.SettingChartDetail: f["chart_detail"]} {
+	set := map[string]string{healthchecks.SettingRawDays: f["raw_days"], healthchecks.SettingHourlyDays: f["hourly_days"], healthchecks.SettingChartDetail: f["chart_detail"]}
+	if auditSet {
+		set[SettingAuditDays] = f["audit_days"]
+	}
+	for k, val := range set {
 		if err := s.Store.SetSetting(r.Context(), k, val); err != nil {
 			s.fail(w, r, err)
 			return
 		}
 	}
-	s.audit(r, "settings.data", "", fmt.Sprintf("raw_days=%s hourly_days=%s chart=%s", f["raw_days"], f["hourly_days"], f["chart_detail"]))
+	s.audit(r, "settings.data", "", fmt.Sprintf("raw_days=%s hourly_days=%s chart=%s audit_days=%s", f["raw_days"], f["hourly_days"], f["chart_detail"], f["audit_days"]))
 	s.flash(w, r, "success", v.T("common.saved"))
-	http.Redirect(w, r, "/settings#data", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/data#retention", http.StatusSeeOther)
 }
 
 // logModuleNames: Module mit eigenem Log-Level (Oberflaeche und API).

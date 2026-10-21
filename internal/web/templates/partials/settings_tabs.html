@@ -1,0 +1,7 @@
+{{define "settings_tabs"}}
+<ul class="nav nav-tabs mb-3">
+	<li class="nav-item"><a class="nav-link{{if and (ne .Path "/settings/ports") (ne .Path "/settings/data")}} active{{end}}" href="/settings"><i class="bi bi-sliders"></i> {{.T "nav.settings_general"}}</a></li>
+	<li class="nav-item"><a class="nav-link{{if eq .Path "/settings/ports"}} active{{end}}" href="/settings/ports"><i class="bi bi-ethernet"></i> {{.T "nav.settings_ports"}}</a></li>
+	<li class="nav-item"><a class="nav-link{{if eq .Path "/settings/data"}} active{{end}}" href="/settings/data"><i class="bi bi-database"></i> {{.T "nav.settings_data"}}</a></li>
+</ul>
+{{end}}

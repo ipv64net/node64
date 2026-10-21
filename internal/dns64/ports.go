@@ -20,18 +20,29 @@ func (m *Module) Ports(ctx context.Context, running bool) []ports.Claim {
 		}
 		return true
 	}
+	// Fehler fuer die Port-Uebersicht: Start des Moduls bzw. des verschluesselten Dienstes
+	startErr := ""
+	if !running {
+		startErr = m.startError()
+	}
+	encErr := func(proto string) string {
+		if e := m.running(); running && e != nil && e.enc != nil {
+			return e.enc.errs[proto]
+		}
+		return startErr
+	}
 	out := []ports.Claim{
-		{Owner: Name, Purpose: "DNS", Proto: ports.UDP, Port: c.Port, Bind: c.Bind, Active: running},
-		{Owner: Name, Purpose: "DNS", Proto: ports.TCP, Port: c.Port, Bind: c.Bind, Active: running},
+		{Owner: Name, Purpose: "DNS", Proto: ports.UDP, Port: c.Port, Bind: c.Bind, Active: running, Error: startErr},
+		{Owner: Name, Purpose: "DNS", Proto: ports.TCP, Port: c.Port, Bind: c.Bind, Active: running, Error: startErr},
 	}
 	if c.DoH && !m.dohViaEdge(c) { // ueber den Eingang: 443 fuehrt der Eingang
-		out = append(out, ports.Claim{Owner: Name, Purpose: "DoH", Proto: ports.TCP, Port: c.DoHPort, Bind: c.Bind, Active: encOn("doh")})
+		out = append(out, ports.Claim{Owner: Name, Purpose: "DoH", Proto: ports.TCP, Port: c.DoHPort, Bind: c.Bind, Active: encOn("doh"), Error: encErr("doh")})
 	}
 	if c.DoT {
-		out = append(out, ports.Claim{Owner: Name, Purpose: "DoT", Proto: ports.TCP, Port: c.DoTPort, Bind: c.Bind, Active: encOn("dot")})
+		out = append(out, ports.Claim{Owner: Name, Purpose: "DoT", Proto: ports.TCP, Port: c.DoTPort, Bind: c.Bind, Active: encOn("dot"), Error: encErr("dot")})
 	}
 	if c.DoQ {
-		out = append(out, ports.Claim{Owner: Name, Purpose: "DoQ", Proto: ports.UDP, Port: c.DoTPort, Bind: c.Bind, Active: encOn("doq")})
+		out = append(out, ports.Claim{Owner: Name, Purpose: "DoQ", Proto: ports.UDP, Port: c.DoTPort, Bind: c.Bind, Active: encOn("doq"), Error: encErr("doq")})
 	}
 	return out
 }

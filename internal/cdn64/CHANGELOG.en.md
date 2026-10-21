@@ -1,5 +1,12 @@
 # Changes – PROXY64
 
+## 1.21.3 – 2026-10-21
+
+### Fixed
+- Configuration export/import now also contains the honeypot switches (decoy, access to the log sensor, instant
+  block with duration); they apply right after the import. The block list itself stays on the node.
+- Port overview (Settings › Ports): streams report why a port is not open (e.g. "address already in use"); the CDN64 online tunnel appears as an outgoing connection (server, port, connected, last error).
+
 ## 1.21.2 – 2026-10-21
 
 ### Changed

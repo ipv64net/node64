@@ -1,0 +1,122 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1 class="h4 mb-3"><i class="bi bi-gear-fill text-secondary me-1"></i> {{.T "settings.title"}}</h1>
+{{template "settings_tabs" .}}
+<p class="small text-body-secondary"><i class="bi bi-database"></i> {{.T "dashboard.database"}}: <span class="font-monospace">{{$d.DBPath}}</span> ({{.Bytes $d.DBSize}}) · Backups: <span class="font-monospace">{{$d.BackupDir}}</span></p>
+<div class="row g-3 align-items-start">
+	<div class="col-lg-6 d-flex flex-column gap-3">
+		<!-- Datenhaltung je Modul -->
+		<div class="card" id="retention">
+			<div class="card-header"><i class="bi bi-bar-chart-line text-info"></i> {{.T "settings.data"}}</div>
+			<div class="card-body">
+				<h2 class="h6"><i class="bi bi-heart-pulse"></i> {{.T "nav.healthchecks"}}</h2>
+				<p class="small text-body-secondary">{{.T "settings.data_hint"}}</p>
+				<form method="post" action="/settings/data">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<div class="row g-2 mb-2">
+						<div class="col-sm-6"><label class="form-label" for="raw_days">{{.T "settings.data_raw"}}</label>
+							<select class="form-select form-select-sm" id="raw_days" name="raw_days">{{range $d.RawOptions}}<option value="{{.}}"{{if eq . $d.RawDays}} selected{{end}}>{{$.T "settings.data_days" "n" .}}</option>{{end}}</select></div>
+						<div class="col-sm-6"><label class="form-label" for="hourly_days">{{.T "settings.data_hourly"}}</label>
+							<select class="form-select form-select-sm" id="hourly_days" name="hourly_days">{{range $d.HourlyOptions}}<option value="{{.}}"{{if eq . $d.HourlyDays}} selected{{end}}>{{if eq . 0}}{{$.T "settings.data_unlimited"}}{{else}}{{$.T "settings.data_days" "n" .}}{{end}}</option>{{end}}</select></div>
+					</div>
+					<label class="form-label" for="chart_detail">{{.T "settings.data_chart"}}</label>
+					<select class="form-select form-select-sm mb-1" id="chart_detail" name="chart_detail">{{range $d.ChartOptions}}<option value="{{.}}"{{if eq . $d.ChartDetail}} selected{{end}}>{{$.T (print "settings.data_chart_" .)}}</option>{{end}}</select>
+					<div class="form-text mb-2">{{.T "settings.data_chart_hint"}}</div>
+					<div class="form-text mb-2">{{.T "settings.data_hourly_hint"}}</div>
+					<h2 class="h6 mt-3"><i class="bi bi-journal-text"></i> {{.T "nav.audit"}}</h2>
+					<label class="form-label" for="audit_days">{{.T "settings.data_audit"}}</label>
+					<select class="form-select form-select-sm mb-1" id="audit_days" name="audit_days">{{range $d.AuditOptions}}<option value="{{.}}"{{if eq . $d.AuditDays}} selected{{end}}>{{if eq . 0}}{{$.T "settings.data_unlimited"}}{{else}}{{$.T "settings.data_days" "n" .}}{{end}}</option>{{end}}</select>
+					<div class="form-text mb-2">{{.T "settings.data_audit_hint"}}</div>
+					<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>
+				</form>
+				<hr>
+				<h2 class="h6">{{.T "settings.data_more"}}</h2>
+				<p class="small text-body-secondary mb-2">{{.T "settings.data_fixed"}}</p>
+				<ul class="list-unstyled small mb-0">
+				{{range $d.Modules}}{{if .Enabled}}
+					{{if eq .Info.Name "dns64"}}<li class="mb-1"><i class="bi {{.Info.Icon}}"></i> {{$.T .Info.TitleKey}}: {{$.T "settings.data_dns64"}} – <a href="/dns64/settings">{{$.T "settings.data_goto"}}</a></li>{{end}}
+					{{if eq .Info.Name "cdn64"}}<li class="mb-1"><i class="bi {{.Info.Icon}}"></i> {{$.T .Info.TitleKey}}: {{$.T "settings.data_cdn64"}} – <a href="/cdn64/log">{{$.T "settings.data_goto"}}</a></li>{{end}}
+					{{if eq .Info.Name "honeypot"}}<li class="mb-1"><i class="bi {{.Info.Icon}}"></i> {{$.T .Info.TitleKey}}: {{$.T "settings.data_honeypot"}} – <a href="/honeypot/settings">{{$.T "settings.data_goto"}}</a></li>{{end}}
+				{{end}}{{end}}
+					<li class="text-body-secondary"><i class="bi bi-terminal"></i> {{.T "settings.data_logs"}}</li>
+				</ul>
+			</div>
+		</div>
+		<!-- Backup und Wiederherstellung -->
+		<div class="card" id="backup">
+			<div class="card-header"><i class="bi bi-database text-info"></i> {{.T "settings.backup_restore"}}{{.Doc "update-backup#backup-wege"}}</div>
+			<div class="card-body">
+				<p class="small text-body-secondary">{{.T "backup.hint"}}</p>
+				<form method="post" action="/settings/backup" class="mb-1">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<label class="form-label" for="backup_pw">{{.T "backup.archive"}}</label>
+					<div class="input-group input-group-sm">
+						<input class="form-control" type="password" id="backup_pw" name="password" minlength="8" required placeholder="{{.T "backup.password"}}" autocomplete="new-password">
+						<button class="btn btn-outline-primary" type="submit"><i class="bi bi-download"></i> {{.T "backup.download"}}</button>
+					</div>
+					<div class="form-check mt-1"><input class="form-check-input" type="checkbox" name="stats" id="backup_stats"><label class="form-check-label small" for="backup_stats">{{.T "backup.stats"}}</label></div>
+					<div class="form-text">{{.T "backup.archive_hint"}}</div>
+				</form>
+				<div class="small mb-3"><a href="/settings/backup">{{.T "backup.download_db"}}</a></div>
+				<form method="post" action="/settings/restore" enctype="multipart/form-data" id="restore">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<label class="form-label" for="restore_file">{{.T "backup.restore"}}</label>
+					<div class="input-group input-group-sm">
+						<input class="form-control" type="file" id="restore_file" name="file" accept=".n64backup,.db,.sqlite,.sqlite3" required>
+						<input class="form-control" type="password" name="password" placeholder="{{.T "backup.password"}}" autocomplete="off">
+						<button class="btn btn-outline-danger" type="submit" data-confirm="{{.T "backup.restore_confirm"}}">{{.T "backup.restore_btn"}}</button>
+					</div>
+					<div class="form-text">{{.T "backup.restore_hint"}}</div>
+				</form>
+			</div>
+		</div>
+	</div>
+
+	<div class="col-lg-6 d-flex flex-column gap-3">
+		<!-- Konfiguration exportieren und importieren -->
+		<div class="card" id="export">
+			<div class="card-header"><i class="bi bi-filetype-json text-info"></i> {{.T "settings.config_transfer"}}{{.Doc "update-backup#backup-wege"}}</div>
+			<div class="card-body">
+				<form method="post" action="/settings/export" class="mb-3">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<label class="form-label">{{.T "backup.export"}}</label>
+					<div class="form-check"><input class="form-check-input" type="radio" name="secrets" value="none" id="exp_none" checked><label class="form-check-label small" for="exp_none">{{.T "backup.export_none"}}</label></div>
+					<div class="form-check mb-2"><input class="form-check-input" type="radio" name="secrets" value="password" id="exp_pw"><label class="form-check-label small" for="exp_pw">{{.T "backup.export_password"}}</label></div>
+					<div class="input-group input-group-sm">
+						<input class="form-control" type="password" name="password" placeholder="{{.T "backup.password"}}" autocomplete="new-password">
+						<button class="btn btn-outline-primary" type="submit"><i class="bi bi-download"></i> {{.T "backup.export_btn"}}</button>
+					</div>
+					<div class="form-text">{{.T "backup.export_hint"}}</div>
+				</form>
+				<form method="post" action="/settings/import" enctype="multipart/form-data" id="import">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<label class="form-label" for="import_file">{{.T "backup.import"}}</label>
+					<div class="input-group input-group-sm mb-1">
+						<input class="form-control" type="file" id="import_file" name="file" accept=".json" required>
+						<input class="form-control" type="password" name="password" placeholder="{{.T "backup.password"}}" autocomplete="off">
+						<button class="btn btn-outline-primary" type="submit">{{.T "backup.import_btn"}}</button>
+					</div>
+					<div class="form-text">{{.T "backup.import_hint"}}</div>
+				</form>
+			</div>
+		</div>
+		<!-- Zuruecksetzen -->
+		<div class="card border-danger-subtle" id="reset">
+			<div class="card-header text-danger"><i class="bi bi-exclamation-octagon"></i> {{.T "reset.title"}}</div>
+			<div class="card-body small">
+				<form method="post" action="/settings/reset">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<div class="form-text mb-2">{{.T "reset.hint"}}</div>
+					{{if $d.Linked}}<div class="form-check mb-1"><input class="form-check-input" type="checkbox" name="keep_checks" id="reset_keep" checked><label class="form-check-label" for="reset_keep">{{.T "link.keep_checks" "count" $d.Own}}</label></div>
+					<div class="form-text mb-2">{{$.T "link.scope" "own" $d.Own "other" $d.Other}}</div>{{end}}
+					<div class="input-group input-group-sm">
+						<input class="form-control" type="password" name="password" placeholder="{{.T "reset.password"}}" autocomplete="current-password" required>
+						<button class="btn btn-outline-danger" type="submit" data-confirm="{{.T "reset.confirm"}}"><i class="bi bi-arrow-counterclockwise"></i> {{.T "reset.button"}}</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/healthchecks.js?v={{.Version}}"></script>{{end}}

@@ -149,3 +149,23 @@ func TestUsersSessionsAudit(t *testing.T) {
 		t.Fatal("module should be enabled")
 	}
 }
+
+// Das Audit-Log behaelt nur die eingestellte Zeit (0 = unbegrenzt).
+func TestPruneAudit(t *testing.T) {
+	st := openTest(t)
+	ctx := context.Background()
+	if _, err := st.w.ExecContext(ctx, `INSERT INTO audit_log (time, actor, action) VALUES (?, 'a', 'alt'), (?, 'a', 'neu')`,
+		FormatTime(time.Now().AddDate(0, 0, -400)), Now()); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := st.PruneAudit(ctx, 0); err != nil || n != 0 {
+		t.Fatalf("unlimited: %d %v", n, err)
+	}
+	if n, err := st.PruneAudit(ctx, 365*24*time.Hour); err != nil || n != 1 {
+		t.Fatalf("pruned %d %v", n, err)
+	}
+	list, _ := st.AuditList(ctx, 10, 0)
+	if len(list) != 1 || list[0].Action != "neu" {
+		t.Fatalf("left: %+v", list)
+	}
+}
