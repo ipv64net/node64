@@ -10,6 +10,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/certs"
 	"github.com/ipv64net/node64/internal/edge"
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/module"
 )
 
@@ -140,10 +141,43 @@ type hostRow struct {
 	Status *StatusPageInfo // Hostart status: die Seite (nil = unbekannt bzw. Healthchecks aus)
 }
 
-// onlineQuota: Kontingent fuer die Zeile unter der Liste (Traffic in Byte).
+// onlineQuota: Kontingent unter der Liste (zwei Kacheln; Traffic in Byte, altes CDN mitgezaehlt).
 type onlineQuota struct {
-	Used, Limit, Mbit     int
-	Traffic, TrafficLimit int64
+	Used, Limit, OldCDN, Mbit int
+	Traffic, TrafficLimit     int64
+	DomPct, TrafficPct        int       // Fuellstand in Prozent (0-100)
+	Projected                 int64     // Prognose fuer den ganzen Monat bei gleichbleibendem Verbrauch (0 = noch keine)
+	Short                     bool      // Prognose ueber dem Limit
+	EmptyAt                   time.Time // voraussichtlich aufgebraucht (nur mit Short)
+	MonthEnd                  time.Time
+}
+
+// newOnlineQuota rechnet Fuellstand und Prognose (ab dem zweiten Tag des Monats, linear hochgerechnet).
+func newOnlineQuota(q ipv64api.CDN64Quota, now time.Time) *onlineQuota {
+	o := &onlineQuota{Used: q.Domains.Used, Limit: q.Domains.Limit, OldCDN: q.Domains.OldCDN, Traffic: int64(q.TrafficMB.Used * (1 << 20)),
+		TrafficLimit: int64(q.TrafficMB.Limit) << 20, Mbit: q.BandwidthMbit}
+	pct := func(a, b int64) int {
+		if b <= 0 {
+			return 0
+		}
+		return int(min(100, a*100/b))
+	}
+	o.DomPct, o.TrafficPct = pct(int64(o.Used), int64(o.Limit)), pct(o.Traffic, o.TrafficLimit)
+	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	o.MonthEnd = start.AddDate(0, 1, 0)
+	if el := now.Sub(start); el >= 24*time.Hour && o.Traffic > 0 {
+		rate := float64(o.Traffic) / el.Seconds() // Byte je Sekunde bisher
+		o.Projected = int64(rate * o.MonthEnd.Sub(start).Seconds())
+		if o.TrafficLimit > 0 && o.Projected > o.TrafficLimit {
+			o.Short = true
+			if left := o.TrafficLimit - o.Traffic; left > 0 {
+				o.EmptyAt = now.Add(time.Duration(float64(left)/rate) * time.Second)
+			} else {
+				o.EmptyAt = now
+			}
+		}
+	}
+	return o
 }
 
 type listData struct {
@@ -245,9 +279,7 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 	d := listData{Kind: kind, Tabs: tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError(), StatsOn: m.stats2.Load() != nil,
 		OnlineOn: m.online.api != nil && m.edge != nil, OnlineL: m.onlineStrings(r), LimitsOn: m.limLoad(r.Context()).Enabled}
 	if rm := m.online.remote.Load(); rm != nil && rm.Data != nil && len(rm.Data.Hosts) > 0 {
-		q := rm.Data.Quota
-		d.Quota = &onlineQuota{Used: q.Domains.Used, Limit: q.Domains.Limit, Traffic: int64(q.TrafficMB.Used * (1 << 20)),
-			TrafficLimit: int64(q.TrafficMB.Limit) << 20, Mbit: q.BandwidthMbit}
+		d.Quota = newOnlineQuota(rm.Data.Quota, time.Now())
 	}
 	if m.edge != nil {
 		d.Listeners = m.edge.Status().Listeners

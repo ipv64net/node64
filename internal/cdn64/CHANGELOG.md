@@ -1,5 +1,11 @@
 # Änderungen – PROXY64
 
+## 1.21.1 – 2026-10-21
+
+### Geändert
+- CDN-Kontingent unter der Host-Liste als zwei Kacheln mit Fortschrittsbalken (Domains mit Bandbreite, Traffic
+  diesen Monat) und Prognose: bei gleichem Verbrauch, ob der Traffic bis zum Monatsende reicht, sonst bis wann.
+
 ## 1.21.0 – 2026-10-21
 
 ### Neu

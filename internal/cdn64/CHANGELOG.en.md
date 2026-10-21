@@ -1,5 +1,11 @@
 # Changes – PROXY64
 
+## 1.21.1 – 2026-10-21
+
+### Changed
+- CDN quota below the host list as two tiles with progress bars (domains with bandwidth, traffic this month) and a
+  forecast: at the same usage, whether the traffic lasts until the end of the month, otherwise until when.
+
 ## 1.21.0 – 2026-10-21
 
 ### New

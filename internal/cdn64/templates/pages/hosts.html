@@ -130,7 +130,20 @@
 		<div class="modal-footer"><button type="button" class="btn btn-primary btn-sm" data-online-start>{{.T "cdn64.online.start"}}</button><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{{.T "cdn64.online.close"}}</button></div>
 	</div></div>
 </div>{{end}}
-{{with $d.Quota}}<p class="small text-body-secondary mt-2 mb-0"><i class="bi bi-cloud-arrow-up"></i> {{$.T "cdn64.online.quota_line" "used" .Used "limit" .Limit "traffic" ($.Bytes .Traffic) "tlimit" ($.Bytes .TrafficLimit)}}{{if .Mbit}} · {{$.T "cdn64.online.bandwidth" "n" .Mbit}}{{end}}</p>{{end}}
+{{with $d.Quota}}<div class="row g-2 mt-1" id="cdn-quota">
+	<div class="col-md-6"><div class="card h-100"><div class="card-body py-2 small">
+		<div class="d-flex align-items-center mb-1"><span class="fw-semibold"><i class="bi bi-diagram-3 text-primary"></i> {{$.T "cdn64.online.q_domains"}}</span>
+			<span class="ms-auto">{{.Used}} / {{.Limit}}</span></div>
+		<div class="progress" style="height:.5rem" role="progressbar" aria-valuenow="{{.DomPct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{if ge .DomPct 100}}bg-danger{{else if ge .DomPct 80}}bg-warning{{else}}bg-success{{end}}" style="width:{{.DomPct}}%"></div></div>
+		<div class="text-body-secondary mt-1">{{if .OldCDN}}{{$.T "cdn64.online.q_old" "n" .OldCDN}} · {{end}}{{if .Mbit}}{{$.T "cdn64.online.bandwidth" "n" .Mbit}}{{else}}{{$.T "cdn64.online.q_bw_free"}}{{end}}</div>
+	</div></div></div>
+	<div class="col-md-6"><div class="card h-100"><div class="card-body py-2 small">
+		<div class="d-flex align-items-center mb-1"><span class="fw-semibold"><i class="bi bi-arrow-down-up text-primary"></i> {{$.T "cdn64.online.q_traffic"}}</span>
+			<span class="ms-auto">{{$.Bytes .Traffic}} / {{$.Bytes .TrafficLimit}}</span></div>
+		<div class="progress" style="height:.5rem" role="progressbar" aria-valuenow="{{.TrafficPct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{if ge .TrafficPct 100}}bg-danger{{else if or .Short (ge .TrafficPct 80)}}bg-warning{{else}}bg-success{{end}}" style="width:{{.TrafficPct}}%"></div></div>
+		<div class="mt-1 {{if .Short}}text-warning-emphasis{{else}}text-body-secondary{{end}}">{{if .Short}}<i class="bi bi-exclamation-triangle"></i> {{$.T "cdn64.online.q_short" "date" ($.Date .EmptyAt) "n" ($.Bytes .Projected)}}{{else if .Projected}}{{$.T "cdn64.online.q_ok" "n" ($.Bytes .Projected)}}{{else}}{{$.T "cdn64.online.q_early"}}{{end}}</div>
+	</div></div></div>
+</div>{{end}}
 <p class="small text-body-secondary mt-2">{{if eq $d.Kind "proxy"}}{{.T "cdn64.list_hint"}}{{else}}{{.T "cdn64.list_hint_other"}}{{end}}{{if $d.CacheN}} · {{.T "cdn64.cache_info" "n" $d.CacheN "size" (.Bytes $d.CacheB)}}{{end}}</p>
 {{end}}
 {{define "scripts"}}{{if and (eq .Data.Kind "proxy") .Data.StatsOn}}<script src="/static/js/chart.umd.js"></script><script src="/static/js/cdn64-chart.js?v={{.Version}}"></script><script src="/static/js/cdn64-stats.js?v={{.Version}}"></script>{{end}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{if .Data.OnlineOn}}<script src="/static/js/cdn64-online.js?v={{.Version}}"></script>{{end}}{{end}}

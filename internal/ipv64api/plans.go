@@ -9,7 +9,7 @@ import (
 
 // Account-Klassen von ipv64.net (GET /plans, oeffentlich). Die Node zeigt sie als Uebersicht und verweist bei
 // erreichten Limits darauf. Abgerufen einmal am Tag; bis der Endpunkt erreichbar ist bzw. ohne Internet gilt der
-// eingebaute Stand (Preisseite ipv64.net/pricing, Stand 2026-10-16).
+// eingebaute Stand (Preisseite ipv64.net/pricing, Stand 2026-10-21: neue CDN-Grenzen).
 
 // PricingURL ist die Preisseite von ipv64.net.
 const PricingURL = "https://ipv64.net/pricing"
@@ -32,31 +32,34 @@ var builtinPlans = []Plan{
 	{ID: 1, Key: "free", Name: "Free", ClassName: "Standard", PriceYearEUR: 0, UpgradeURL: "https://ipv64.net/account", Limits: map[string]*int{
 		"dyndns_domains": lim(3), "dyndns_updates_24h": lim(64), "own_domains": lim(0), "dyndns_ttl_s": lim(60), "healthchecks": lim(3),
 		"healthcheck_pings_24h": lim(1024), "sms_24h": lim(5), "statistics_days": lim(14), "failover_policies": lim(1), "failover_monitors": lim(2),
-		"failover_rules": lim(2), "offline_pages": lim(1), "cdn_domains": lim(1), "cdn_traffic_gb": lim(100), "cdn_mappings": lim(2),
+		"failover_rules": lim(2), "offline_pages": lim(1), "cdn_domains": lim(1), "cdn_traffic_gb": lim(10), "cdn_bandwidth_mbit": lim(50), "cdn_mappings": lim(2),
 		"cloud_routers": lim(1), "vpn_gateways": lim(1), "vpn_peers": lim(2), "vpn_traffic_gb": lim(50), "dns64_clients": lim(1), "log_days": lim(7)}},
 	{ID: 6, Key: "supporter", Name: "Home / Supporter", ClassName: "Supporter", PriceYearEUR: 40, UpgradeURL: "https://ipv64.net/account?account_class&type=supporter", Limits: map[string]*int{
 		"dyndns_domains": lim(10), "dyndns_updates_24h": lim(1024), "own_domains": lim(3), "dyndns_ttl_s": lim(10), "healthchecks": lim(10),
 		"healthcheck_pings_24h": lim(8192), "sms_24h": lim(50), "statistics_days": lim(90), "failover_policies": lim(5), "failover_monitors": lim(25),
-		"failover_rules": lim(50), "offline_pages": lim(5), "cdn_domains": lim(5), "cdn_traffic_gb": lim(1024), "cdn_mappings": lim(10),
+		"failover_rules": lim(50), "offline_pages": lim(5), "cdn_domains": lim(5), "cdn_traffic_gb": lim(100), "cdn_bandwidth_mbit": lim(1000), "cdn_mappings": lim(10),
 		"cloud_routers": lim(3), "vpn_gateways": lim(3), "vpn_peers": lim(6), "vpn_traffic_gb": lim(1024), "dns64_clients": lim(5), "log_days": lim(30)}},
 	{ID: 4, Key: "business", Name: "Business", ClassName: "Business", PriceYearEUR: 100, UpgradeURL: "https://ipv64.net/account?account_class&type=business", Limits: map[string]*int{
 		"dyndns_domains": lim(50), "dyndns_updates_24h": nil, "own_domains": lim(10), "dyndns_ttl_s": lim(10), "healthchecks": lim(50),
 		"healthcheck_pings_24h": nil, "sms_24h": nil, "statistics_days": lim(180), "failover_policies": lim(25), "failover_monitors": lim(100),
-		"failover_rules": lim(100), "offline_pages": lim(25), "cdn_domains": lim(10), "cdn_traffic_gb": lim(10240), "cdn_mappings": lim(50),
+		"failover_rules": lim(100), "offline_pages": lim(25), "cdn_domains": lim(10), "cdn_traffic_gb": lim(20480), "cdn_bandwidth_mbit": nil, "cdn_mappings": lim(50),
 		"cloud_routers": lim(10), "vpn_gateways": lim(10), "vpn_peers": lim(20), "vpn_traffic_gb": lim(10240), "dns64_clients": lim(10), "log_days": lim(90)}},
 	{ID: 5, Key: "company", Name: "Company", ClassName: "Company", PriceYearEUR: 200, UpgradeURL: "https://ipv64.net/account?account_class&type=company", Limits: map[string]*int{
 		"dyndns_domains": lim(256), "dyndns_updates_24h": nil, "own_domains": lim(50), "dyndns_ttl_s": lim(10), "healthchecks": lim(250),
 		"healthcheck_pings_24h": nil, "sms_24h": nil, "statistics_days": lim(365), "failover_policies": lim(50), "failover_monitors": lim(250),
-		"failover_rules": lim(250), "offline_pages": lim(50), "cdn_domains": lim(25), "cdn_traffic_gb": lim(20480), "cdn_mappings": lim(250),
+		"failover_rules": lim(250), "offline_pages": lim(50), "cdn_domains": lim(25), "cdn_traffic_gb": lim(20480), "cdn_bandwidth_mbit": nil, "cdn_mappings": lim(250),
 		"cloud_routers": lim(25), "vpn_gateways": lim(32), "vpn_peers": lim(64), "vpn_traffic_gb": lim(10240), "dns64_clients": lim(50), "log_days": lim(365)}},
 }
+
+// PopularKey: die Klasse, die die Uebersicht hervorhebt (trifft die meisten Nutzer).
+const PopularKey = "supporter"
 
 // PlanOrder: Reihenfolge der Zeilen in der Uebersicht (Gruppe, Schluessel).
 var PlanOrder = [][2]string{
 	{"dyndns", "dyndns_domains"}, {"dyndns", "own_domains"}, {"dyndns", "dyndns_updates_24h"}, {"dyndns", "dyndns_ttl_s"},
 	{"healthchecks", "healthchecks"}, {"healthchecks", "healthcheck_pings_24h"}, {"healthchecks", "sms_24h"},
 	{"failover", "failover_policies"}, {"failover", "failover_monitors"}, {"failover", "failover_rules"}, {"failover", "offline_pages"},
-	{"cdn", "cdn_domains"}, {"cdn", "cdn_traffic_gb"}, {"cdn", "cdn_mappings"},
+	{"cdn", "cdn_domains"}, {"cdn", "cdn_traffic_gb"}, {"cdn", "cdn_bandwidth_mbit"}, {"cdn", "cdn_mappings"},
 	{"vpn", "cloud_routers"}, {"vpn", "vpn_gateways"}, {"vpn", "vpn_peers"}, {"vpn", "vpn_traffic_gb"},
 	{"other", "dns64_clients"}, {"other", "statistics_days"}, {"other", "log_days"},
 }

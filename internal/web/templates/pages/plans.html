@@ -8,29 +8,34 @@
 {{if $d.Current}}<div class="alert alert-light border small py-2"><i class="bi bi-award text-primary"></i> {{.T "plans.yours" "name" $d.Current}}{{if not $d.CurrentKey}} {{.T "plans.legacy"}}{{end}}</div>
 {{else}}<div class="alert alert-light border small py-2"><i class="bi bi-info-circle"></i> {{.T "plans.not_connected"}} <a href="/settings#ipv64">{{.T "nav.settings"}}</a></div>{{end}}
 <div class="table-responsive table-shadow">
-<table class="table table-sm align-middle mb-2">
+<table class="table table-sm align-middle mb-2 plans-table">
 	<thead>
 		<tr>
 			<th></th>
-			{{range $d.Plans}}<th class="text-center{{if eq .Key $d.CurrentKey}} table-primary{{end}}">
+			{{range $d.Plans}}{{$cur := eq .Key $d.CurrentKey}}{{$pop := and (eq .Key $d.PopularKey) (not $cur)}}
+			<th class="text-center{{if $cur}} table-primary{{else if $pop}} bg-warning-subtle border-top border-warning border-3{{end}}" style="min-width:8.5rem">
+				{{if $pop}}<span class="badge text-bg-warning mb-1"><i class="bi bi-star-fill"></i> {{$.T "plans.popular"}}</span>{{end}}
 				<div class="fs-6">{{.Name}}</div>
 				<div class="fw-normal small text-body-secondary">{{if .PriceYearEUR}}{{$.Float .PriceYearEUR 0}} € / {{$.T "plans.year"}}{{else}}{{$.T "plans.free"}}{{end}}</div>
-				{{if eq .Key $d.CurrentKey}}<span class="badge text-bg-primary">{{$.T "plans.current"}}</span>{{end}}
+				{{if $cur}}<span class="badge text-bg-primary">{{$.T "plans.current"}}</span>{{end}}
 			</th>{{end}}
 		</tr>
 	</thead>
 	<tbody>
 	{{$group := ""}}
 	{{range $row := $d.Rows}}{{$g := index $row 0}}{{$k := index $row 1}}
-		{{if ne $g $group}}{{$group = $g}}<tr class="table-light"><td colspan="{{add (len $d.Plans) 1}}" class="small fw-semibold">{{$.T (print "plans.group." $g)}}</td></tr>{{end}}
+		{{if ne $g $group}}{{$group = $g}}<tr class="table-light">
+			<td class="small fw-semibold"><i class="bi {{index $d.Icons $g}} text-primary me-1"></i> {{$.T (print "plans.group." $g)}}</td>
+			{{range $d.Plans}}<td class="text-center{{if eq .Key $d.CurrentKey}} table-primary{{else if eq .Key $d.PopularKey}} bg-warning-subtle{{end}}">{{if index (index $d.Groups .Key) $g}}<i class="bi {{index $d.Icons $g}} text-success" title="{{$.T "plans.included"}}"></i>{{else}}<i class="bi bi-dash text-body-secondary"></i>{{end}}</td>{{end}}
+		</tr>{{end}}
 		<tr>
-			<td class="small">{{$.T (print "plans.limit." $k)}}</td>
-			{{range $d.Plans}}<td class="text-center small{{if eq .Key $d.CurrentKey}} table-primary{{end}}">{{index (index $d.Cells .Key) $k}}</td>{{end}}
+			<td class="small ps-4">{{$.T (print "plans.limit." $k)}}</td>
+			{{range $d.Plans}}<td class="text-center small text-nowrap{{if eq .Key $d.CurrentKey}} table-primary fw-semibold{{else if eq .Key $d.PopularKey}} bg-warning-subtle{{end}}">{{index (index $d.Cells .Key) $k}}</td>{{end}}
 		</tr>
 	{{end}}
 		<tr>
 			<td></td>
-			{{range $d.Plans}}<td class="text-center{{if eq .Key $d.CurrentKey}} table-primary{{end}}">{{if and .PriceYearEUR (ne .Key $d.CurrentKey)}}<a class="btn btn-sm btn-outline-primary" href="{{.UpgradeURL}}" target="_blank" rel="noopener">{{$.T "plans.upgrade"}}</a>{{end}}</td>{{end}}
+			{{range $d.Plans}}<td class="text-center{{if eq .Key $d.CurrentKey}} table-primary{{else if eq .Key $d.PopularKey}} bg-warning-subtle{{end}}">{{if and .PriceYearEUR (ne .Key $d.CurrentKey)}}<a class="btn btn-sm {{if eq .Key $d.PopularKey}}btn-warning{{else}}btn-outline-primary{{end}}" href="{{.UpgradeURL}}" target="_blank" rel="noopener">{{$.T "plans.upgrade"}}</a>{{end}}</td>{{end}}
 		</tr>
 	</tbody>
 </table>
