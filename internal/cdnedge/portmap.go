@@ -48,6 +48,7 @@ const (
 	udpNewPerSec   = 200             // neue Sitzungen je Port und Sekunde (gefaelschte Absender)
 	udpFree        = 32 << 10        // so viele Bytes darf das Ziel einem Besucher immer schicken ...
 	udpAmp         = 10              // ... danach hoechstens das Zehnfache dessen, was vom Besucher kam
+	tcpIdle        = time.Hour       // TCP ohne Daten in beide Richtungen: trennen (ruhende Verbindungen binden nichts)
 )
 
 type portmapper struct {
@@ -59,10 +60,11 @@ type portmapper struct {
 	udp    map[int]*udpPort
 	failed map[pmKey]bool // Port belegt: einmal melden
 	closed bool
+	idle   time.Duration // TCP-Leerlauf bis zum Trennen (Tests kuerzer)
 }
 
 func newPortmapper(s *Server, rng string) *portmapper {
-	p := &portmapper{s: s, tcp: map[int]net.Listener{}, udp: map[int]*udpPort{}, failed: map[pmKey]bool{}}
+	p := &portmapper{s: s, tcp: map[int]net.Listener{}, udp: map[int]*udpPort{}, failed: map[pmKey]bool{}, idle: tcpIdle}
 	p.lo, p.hi = parsePortRange(rng)
 	m := map[pmKey]pmEntry{}
 	p.want.Store(&m)
@@ -323,12 +325,58 @@ func (p *portmapper) serveTCP(port int, c net.Conn) {
 		return
 	}
 	defer p.s.track(re.Name, re.Mode, addrOf(c.RemoteAddr()), func() { _ = c.Close(); _ = up.Close() })()
+	var last atomic.Int64
+	last.Store(time.Now().UnixNano())
+	defer p.idleWatch(&last, func() { _ = c.Close(); _ = up.Close() })()
+	var vc, uc net.Conn = &activeConn{Conn: c, last: &last}, &activeConn{Conn: up, last: &last}
 	if !counted {
-		tunnel.Join(c, up)
+		tunnel.Join(vc, uc)
 		return
 	}
 	st.Conns.Add(1)
-	tunnel.Join(&meter{Conn: c, n: &st.BytesIn, bw: p.s.bw, uid: re.UserID}, &meter{Conn: up, n: &st.BytesOut, bw: p.s.bw, uid: re.UserID})
+	tunnel.Join(&meter{Conn: vc, n: &st.BytesIn, bw: p.s.bw, uid: re.UserID}, &meter{Conn: uc, n: &st.BytesOut, bw: p.s.bw, uid: re.UserID})
+}
+
+// idleWatch trennt eine TCP-Verbindung nach p.idle ohne Daten (Rueckgabe: beenden).
+func (p *portmapper) idleWatch(last *atomic.Int64, cut func()) func() {
+	done := make(chan struct{})
+	go func() {
+		t := time.NewTicker(max(p.idle/12, 10*time.Millisecond))
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				if time.Since(time.Unix(0, last.Load())) > p.idle {
+					cut()
+					return
+				}
+			}
+		}
+	}()
+	return func() { close(done) }
+}
+
+// activeConn merkt sich, wann zuletzt Daten kamen (Leerlauf).
+type activeConn struct {
+	net.Conn
+	last *atomic.Int64
+}
+
+func (c *activeConn) Read(b []byte) (int, error) {
+	n, err := c.Conn.Read(b)
+	if n > 0 {
+		c.last.Store(time.Now().UnixNano())
+	}
+	return n, err
+}
+
+func (c *activeConn) CloseWrite() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return c.Conn.Close()
 }
 
 // clientOf: Besucher-Adresse ip:port (IPv4 ohne ::ffff:) fuer den Kopf im Tunnel.

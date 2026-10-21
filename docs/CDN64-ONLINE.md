@@ -280,6 +280,8 @@ Fähigkeit `ports`; ältere Nodes bekommen keine solchen Streams. In der Node w�
 (`cdn_streams.online_name`); die Node meldet je Protokoll ein Mapping an (`cdn_online_ports`), trägt es beim
 Ausschalten, Löschen oder Portwechsel wieder aus und meldet es neu an, wenn es bei ipv64 fehlt. Eingehende Streams
 landen nur bei angemeldeten Streams (Name + Protokoll + Port), mit Blocklisten, Grenzen je IP und Ländersperre.
+TCP-Verbindungen über den Portmapper (alle Modi) trennen die Server nach 1 Stunde ohne Daten in beide Richtungen
+(cdn64-edge 0.15.1).
 
 ### 8.4 Endpunkte für die Server (Server-Geheimnis, eigene Datei)
 

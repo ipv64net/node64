@@ -1,10 +1,12 @@
 package cdnedge
 
 import (
+	"errors"
 	"io"
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -212,5 +214,54 @@ func TestPortmapUDPIPv6First(t *testing.T) {
 	n, err := c.Read(b)
 	if err != nil || string(b[:n]) != "v6:x" {
 		t.Fatalf("udp did not go to the IPv6 target: %q %v", b[:n], err)
+	}
+}
+
+// Leerlauf: eine ruhende TCP-Verbindung wird getrennt, eine aktive bleibt.
+func TestPortmapTCPIdle(t *testing.T) {
+	back, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer back.Close()
+	go func() {
+		for {
+			c, err := back.Accept()
+			if err != nil {
+				return
+			}
+			go func() { defer c.Close(); _, _ = io.Copy(io.Discard, c) }() // liest, antwortet nie
+		}
+	}()
+	cf, kf, pool, _ := testCA(t, "edge.test")
+	cfg := &Config{Name: "B", ListenHTTP: freeAddr(t), TLSCert: cf, TLSKey: kf, DataDir: t.TempDir(), PortRange: "1024-65535"}
+	s := startEdge(t, cfg, pool)
+	s.targetOK = func(a netip.Addr) bool { return a.IsLoopback() }
+	s.pm.idle = 300 * time.Millisecond
+	lp := port(freeAddr(t))
+	_, bp, _ := net.SplitHostPort(back.Addr().String())
+	tp, _ := strconv.Atoi(bp)
+	s.applyConfig(&apiConfig{Hosts: []apiHost{{ID: 1, Name: "i.test", Mode: 3, UserID: 1,
+		Target: &apiTarget{Addrs: []string{"127.0.0.1"}, Port: 80, Scheme: "http"}, Mappings: []apiMapping{{Listen: lp, Transport: "tcp", Port: tp}}}}})
+	dial := func() net.Conn {
+		c, err := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(lp), 3*time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	quiet, busy := dial(), dial()
+	defer quiet.Close()
+	defer busy.Close()
+	start := time.Now()
+	for time.Since(start) < 900*time.Millisecond {
+		if _, err := busy.Write([]byte("x")); err != nil {
+			t.Fatalf("active connection cut after %v: %v", time.Since(start), err)
+		}
+		time.Sleep(60 * time.Millisecond)
+	}
+	_ = quiet.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if _, err := quiet.Read(make([]byte, 1)); err == nil || errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("idle connection not cut: %v", err)
 	}
 }
