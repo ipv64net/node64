@@ -1,5 +1,12 @@
 # Änderungen – PROXY64
 
+## 1.24.1 – 2026-10-21
+
+### Behoben
+- Portmapper über CDN64: höchstens 1024 UDP-Sitzungen und 4096 TCP-Verbindungen je Stream aus dem Tunnel (wie am
+  Port des Streams). Vorher waren aus dem Tunnel beliebig viele UDP-Sitzungen möglich (die Server erlauben bis zu
+  4096 je Port und Server).
+
 ## 1.24.0 – 2026-10-21
 
 ### Neu

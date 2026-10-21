@@ -121,6 +121,18 @@ func TestOnlinePorts(t *testing.T) {
 	if s := e.m.streamStatsOf(st.ID); s.conns.Load() != 1 || s.bytesIn.Load() != 2 {
 		t.Fatalf("stream stats: conns %d in %d", s.conns.Load(), s.bytesIn.Load())
 	}
+	// Grenze je Stream: volle UDP-Sitzungen -> neue werden geschlossen
+	e.m.smu.Lock()
+	run := e.m.runs[su.ID]
+	e.m.smu.Unlock()
+	run.tunUDP.Store(udpMaxSessions)
+	u = open(tunnel.KindUDP, "app.test", sp)
+	_ = tunnel.WriteDatagram(u, []byte("x"))
+	if _, err := tunnel.ReadDatagram(u, buf); err == nil {
+		t.Fatal("udp session over the limit must be closed")
+	}
+	u.Close()
+	run.tunUDP.Store(0)
 	for _, x := range []struct {
 		kind, host string
 		port       int

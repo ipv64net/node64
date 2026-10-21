@@ -21,6 +21,10 @@ import (
 // bzw. udp). Hier landen sie im Stream wie eine Verbindung auf seinem Port - mit Blocklisten, Grenzen je IP und
 // Laendersperre nach der echten Besucher-Adresse. Zu Hause muss dafuer kein Port offen sein.
 
+// tunMaxTCP: hoechstens so viele Verbindungen aus dem Tunnel je Stream (die Server begrenzen je IP und insgesamt,
+// das hier schuetzt die Node, wenn viele Adressen gleichzeitig kommen). UDP: udpMaxSessions wie am Port des Streams.
+const tunMaxTCP = 4096
+
 // portKey: Stream fuer einen Portmapper-Stream aus dem Tunnel.
 type portKey struct {
 	udp  bool
@@ -249,9 +253,21 @@ func (m *Module) onlinePortStream(c net.Conn, h tunnel.Header) {
 		return
 	}
 	if h.Kind == tunnel.KindUDP {
+		if r.tunUDP.Add(1) > udpMaxSessions {
+			r.tunUDP.Add(-1)
+			_ = c.Close()
+			return
+		}
+		defer r.tunUDP.Add(-1)
 		m.streamUDPTunnel(r, c)
 		return
 	}
+	if r.tunTCP.Add(1) > tunMaxTCP {
+		r.tunTCP.Add(-1)
+		_ = c.Close()
+		return
+	}
+	defer r.tunTCP.Add(-1)
 	release, ok := m.connOpen(ip, where) // Limits je IP
 	if !ok {
 		_ = c.Close()

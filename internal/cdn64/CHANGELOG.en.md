@@ -1,5 +1,12 @@
 # Changes – PROXY64
 
+## 1.24.1 – 2026-10-21
+
+### Fixed
+- Port mappings via CDN64: at most 1024 UDP sessions and 4096 TCP connections per stream from the tunnel (as on the
+  stream's own port). Before, any number of UDP sessions was possible from the tunnel (the servers allow up to 4096
+  per port and server).
+
 ## 1.24.0 – 2026-10-21
 
 ### New

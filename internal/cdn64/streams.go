@@ -235,8 +235,10 @@ type streamStats struct {
 
 type streamRun struct {
 	key    string
-	target string      // Ziel host:port (auch fuer Verbindungen aus dem CDN64-Tunnel)
-	tlsc   *tls.Config // TLS hier beenden (nil = nein)
+	target string       // Ziel host:port (auch fuer Verbindungen aus dem CDN64-Tunnel)
+	tlsc   *tls.Config  // TLS hier beenden (nil = nein)
+	tunTCP atomic.Int64 // offene Verbindungen aus dem CDN64-Tunnel (Grenze tunMaxTCP)
+	tunUDP atomic.Int64 // offene UDP-Sitzungen aus dem CDN64-Tunnel (Grenze udpMaxSessions)
 	tcp    net.Listener
 	udp    net.PacketConn
 	errs   map[string]string // tcp/udp -> Fehler beim Oeffnen
