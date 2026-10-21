@@ -25,7 +25,8 @@ func TestOnlinePause(t *testing.T) {
 			Target:   &ipv64api.CDN64Target{Source: "fixed", Target: "203.0.113.5", Port: 8443, Scheme: "https", Frontend: 2, CacheMB: 256, CacheMinutes: 10},
 			ACL:      &ipv64api.CDN64ACL{Default: "deny", List: []string{"198.51.100.0/24"}},
 			Mappings: []ipv64api.CDN64Mapping{{ID: 1, Name: "WireGuard", ListenPort: 51820, Transport: "udp", TargetPort: 51820}}},
-			{ID: 51, FQDN: "pf.test", Mode: 3, Status: "active", Target: &ipv64api.CDN64Target{Source: "records", Port: 443, Scheme: "https", Frontend: 3, CacheMB: 128, CacheMinutes: 10}}}}
+			{ID: 51, FQDN: "pf.test", Mode: 3, Status: "active", Target: &ipv64api.CDN64Target{Source: "records", Port: 443, Scheme: "https", Frontend: 3, CacheMB: 128, CacheMinutes: 10},
+				ACL: &ipv64api.CDN64ACL{Default: "allow", List: []string{"192.0.2.1"}}, Mappings: []ipv64api.CDN64Mapping{{ID: 2, ListenPort: 50022, Transport: "tcp", TargetPort: 22}}}}}
 	e.m.SetOnlineAPI(f)
 	e.enable(t)
 	h := newHost()
@@ -108,7 +109,8 @@ func TestOnlinePause(t *testing.T) {
 	for _, want := range []string{`data-c64o-pause="` + strconv.FormatInt(h.ID, 10) + `"`, `data-c64o-rpause="50" data-paused="1"`,
 		"https://203.0.113.5:8443", "cdn64.online.o_cache", "cdn64.online.o_acl_deny", "51820/udp → 51820 (WireGuard)",
 		"https://ipv64.net/cdn64?edit=50", "cdn64.online.paused", `<tr class="table-warning">`,
-		`data-c64o-pause="` + strconv.FormatInt(pf.ID, 10) + `" data-paused="1"`, "https://ipv64.net/cdn64?edit=51", "cdn64.online.o_web_title"} {
+		`data-c64o-pause="` + strconv.FormatInt(pf.ID, 10) + `" data-paused="1"`, "https://ipv64.net/cdn64?edit=51", "cdn64.online.o_web_title",
+		"50022/tcp → 22", "cdn64.online.o_acl_allow"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("page misses %q", want)
 		}

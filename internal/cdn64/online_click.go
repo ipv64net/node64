@@ -1002,8 +1002,10 @@ type onlineRow struct {
 	// Foreign: die Namen sind in CDN64, aber nicht von dieser Node eingeschaltet - Modus 3 (auf ipv64.net eingerichtet)
 	// oder Tunnel einer anderen Node. Die Zeile zeigt nur den Stand und bietet Pause; einschalten geht hier nicht.
 	Foreign  bool
-	RemoteID int64                 // erster Name bei ipv64 (Bearbeiten auf ipv64.net)
-	Target   *ipv64api.CDN64Target // Modus 3: Ziel und Cache der Server
+	RemoteID int64                   // erster Name bei ipv64 (Bearbeiten auf ipv64.net)
+	Target   *ipv64api.CDN64Target   // Modus 3: Ziel und Cache der Server
+	ACL      *ipv64api.CDN64ACL      // Erlauben-/Sperrliste auf den Servern (erster Name)
+	Mappings []ipv64api.CDN64Mapping // Portmapper der Namen (Modus 3)
 }
 
 // onlineMonth: was srv07/srv08 fuer die Namen eines Hosts im laufenden Monat gezaehlt haben.
@@ -1103,9 +1105,10 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 			}
 			r := out[h.ID]
 			if r == nil {
-				r = &onlineRow{Foreign: true, RemoteID: rh.ID, Target: rh.Target}
+				r = &onlineRow{Foreign: true, RemoteID: rh.ID, Target: rh.Target, ACL: rh.ACL}
 				out[h.ID] = r
 			}
+			r.Mappings = append(r.Mappings, rh.Mappings...)
 			tm := rh.TrafficMonth
 			r.Names = append(r.Names, rh.FQDN)
 			r.Mode = max(r.Mode, rh.Mode)

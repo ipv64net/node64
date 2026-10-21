@@ -1,5 +1,11 @@
 # Änderungen – PROXY64
 
+## 1.23.2 – 2026-10-21
+
+### Geändert
+- Steht ein Modus-3-Name in der Zeile seines Hosts, zeigt sie jetzt auch die Portmapper (Port der Server → Port des
+  Ziels) und die Erlauben-/Sperrliste.
+
 ## 1.23.1 – 2026-10-21
 
 ### Geändert

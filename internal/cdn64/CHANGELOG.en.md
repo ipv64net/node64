@@ -1,5 +1,11 @@
 # Changes – PROXY64
 
+## 1.23.2 – 2026-10-21
+
+### Changed
+- When a mode 3 name is shown in the row of its host, the row now also lists the port mappings (server port → target
+  port) and the allow/block list.
+
 ## 1.23.1 – 2026-10-21
 
 ### Changed
