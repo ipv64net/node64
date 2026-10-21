@@ -5001,6 +5001,16 @@
           "delay": {
             "type": "integer",
             "description": "erst nach N Abfragen melden (1–60)"
+          },
+          "channels": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "description": "Kanäle der Meldungen (IDs wie bei Checks): fehlt bzw. null = erben (System: Standardkanäle), [] = Standardkanäle, sonst nur diese Kanäle. Gelöschte Kanäle werden beim Senden ignoriert; bleibt keiner übrig, gelten die Standardkanäle."
           }
         }
       },
@@ -16314,7 +16324,7 @@
                     },
                     "effective": {
                       "type": "object",
-                      "description": "Key → wirksame Regel ('' = System)"
+                      "description": "Key → wirksame Regel ('' = System); channels = wirksame Kanal-IDs, leer = Standardkanäle"
                     },
                     "defaults": {
                       "type": "object"

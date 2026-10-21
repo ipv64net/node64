@@ -356,11 +356,20 @@ func (m *Module) pveNotify(ctx context.Context, set *proxmox.SystemSettings, s *
 	if at.IsZero() {
 		at = time.Now()
 	}
+	node := ""
+	for i := range s.Resources {
+		if s.Resources[i].Key() == ev.Key {
+			node = s.Resources[i].Node
+			break
+		}
+	}
 	a := notify.Alert{EventID: "pve-" + strconv.FormatInt(set.SystemID, 10) + "-" + ev.Key + "-" + ev.Kind + "-" + strconv.FormatInt(at.UnixNano(), 36),
 		Kind: kind, Time: at.UTC(), Reason: ev.What, Data: data,
-		Check: notify.CheckInfo{Name: name, Type: string(checks.TypeProxmox), Target: ev.Key, NotifyDown: true, NotifyUp: true, Local: true}}
-	// Ruhezeit ist Ruhezeit, auch beim Absturz (Dennis 2026-10-21); Wartungsfenster unterdruecken die Meldung: Fenster fuer
-	// alle Checks immer, Fenster fuer bestimmte Checks, wenn der Gast als Check gefuehrt wird.
+		Check: notify.CheckInfo{Name: name, Type: string(checks.TypeProxmox), Target: ev.Key, NotifyDown: true, NotifyUp: true, Local: true,
+			Channels: m.pveChannels(ctx, set.Effective(ev.Key, node).Channels)}}
+	// Ruhezeit ist Ruhezeit, auch beim Absturz (Dennis 2026-10-21): der Dispatcher merkt die Meldung und schickt sie
+	// danach in der Sammelmeldung wie bei Checks. Wartungsfenster unterdruecken die Meldung: Fenster fuer alle Checks
+	// immer, Fenster fuer bestimmte Checks, wenn der Gast als Check gefuehrt wird.
 	tok := ""
 	if it := set.Items[ev.Key]; it != nil {
 		tok = it.CheckToken
@@ -384,6 +393,29 @@ func (m *Module) pveNotify(ctx context.Context, set *proxmox.SystemSettings, s *
 	} else if m.dispatcher != nil {
 		m.dispatcher.Dispatch(a)
 	}
+}
+
+// pveChannels liefert die Kanaele einer Meldung aus der wirksamen Regel ohne geloeschte Kanaele (nil = Standardkanaele,
+// auch wenn keiner der gewaehlten mehr existiert).
+func (m *Module) pveChannels(ctx context.Context, ids []int64) []int64 {
+	if len(ids) == 0 {
+		return nil
+	}
+	all, err := m.channels(ctx)
+	if err != nil || m.notifyStore == nil {
+		return ids // Kanaele nicht lesbar bzw. kein Kanalspeicher: der Dispatcher ignoriert unbekannte ohnehin
+	}
+	have := map[int64]bool{}
+	for _, ch := range all {
+		have[ch.ID] = true
+	}
+	var out []int64
+	for _, id := range ids {
+		if have[id] {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // pveLastIncident liefert die letzte Stoerung (nil = keine).

@@ -96,9 +96,20 @@ Wert gilt und woher es kommt („Standard“, „vom System geerbt“, „vom No
 | Neustart | an | Laufzeit springt zurück, obwohl der Gast weiterläuft (Hinweis) |
 | CPU / RAM / Disk über | 90 % 10 min / 95 % 10 min / 90 % | mindestens so lange über der Grenze; 0 % = aus. Disk nur bei Containern bzw. VMs mit Gast-Agent |
 | Verzögerung | 2 Abfragen | erst melden, wenn der Zustand so viele Abfragen anhält (Entwarnung ebenso) |
+| Kanäle | Standardkanäle | wohin die Meldungen gehen – Auswahl wie im Check-Formular (siehe unten) |
 
-„Stumm“ schaltet Meldungen eines Systems, Nodes oder Gasts ab. Ruhezeiten gelten für alle Proxmox-Meldungen, auch für Abstürze. In einem Wartungsfenster für alle Checks kommen keine Proxmox-Meldungen; ein Fenster für bestimmte Checks gilt für Gäste, die als Check geführt werden. Versand über die vorhandenen Kanäle und Ruhezeiten
-der Benachrichtigungen mit eigenen Arten:
+**Kanäle:** Auf Systemebene wählst du wie bei einem Check bestimmte Kanäle aus; keine Auswahl = Standardkanäle. Node
+und Gast **erben** die Auswahl (angezeigt mit Herkunft „vom System geerbt“ bzw. „vom Node geerbt“) oder haben eine
+**eigene Auswahl** (ohne Haken = Standardkanäle). Gelöschte Kanäle werden beim Senden übergangen; bleibt keiner der
+gewählten übrig, gehen die Meldungen an die Standardkanäle. Für Gäste „als Check“ gelten für Ausfall und Entwarnung die
+Kanäle des Checks.
+
+„Stumm“ schaltet Meldungen eines Systems, Nodes oder Gasts ab. Ruhezeiten gelten für alle Proxmox-Meldungen, auch für
+Abstürze: Wie bei Checks werden sie in der Ruhezeit **zurückgehalten** und danach als **eine Sammelmeldung** verschickt
+(je Gast bzw. Node der letzte Stand: noch gestört bzw. über der Schwelle, zwischendurch gestört und wieder in Ordnung,
+Neustart; Link auf die Proxmox-Seite). In einem Wartungsfenster für alle Checks kommen keine Proxmox-Meldungen; ein
+Fenster für bestimmte Checks gilt für Gäste, die als Check geführt werden. Versand über die vorhandenen Kanäle mit
+eigenen Arten:
 
 | Art | Wann |
 |---|---|
@@ -142,7 +153,7 @@ Unter `/api/healthchecks/proxmox` (Anmeldung wie die übrige API, siehe `/api/do
 | POST | `/probe` | Verbindung testen (Fingerabdruck, Version, Nodes, Gäste) |
 | GET | `/systems/{id}/resources` | Nodes und Gäste der letzten Abfrage |
 | GET | `/systems/{id}/series?key=qemu/101&range=24h` | Verlauf (`1h`, `24h`, `7d`, `30d`) |
-| GET / PUT / DELETE | `/systems/{id}/settings[?key=…]` | Einstellungen und wirksame Regeln / Ebene setzen (`as_check` legt den Check an) / zurücksetzen |
+| GET / PUT / DELETE | `/systems/{id}/settings[?key=…]` | Einstellungen und wirksame Regeln / Ebene setzen (`as_check` legt den Check an; `rules.channels`: fehlt = erben, `[]` = Standardkanäle, sonst Kanal-IDs) / zurücksetzen |
 
 ## Prometheus
 
@@ -164,4 +175,6 @@ Abruf über den lokalen Prometheus-Endpunkt der Node (`/api/metrics`, mit API-Ke
 
 Der Export der Konfiguration enthält die Systeme mit Einstellungen und Regeln. Das Token-Secret ist nur beim Export
 **mit Passwort** dabei (verschlüsselt). Ohne Passwort wird ein System beim Import abgeschaltet angelegt und zeigt
-„Secret fehlt“, bis du es einträgst. Checks „als Check“ werden auf das System der neuen Node umgestellt.
+„Secret fehlt“, bis du es einträgst. Checks „als Check“ werden auf das System der neuen Node umgestellt. Gewählte
+Kanäle werden wie bei Checks auf die Kanäle der neuen Node umgeschrieben; fehlt ein Kanal dort, entfällt er (keiner
+übrig = Standardkanäle).

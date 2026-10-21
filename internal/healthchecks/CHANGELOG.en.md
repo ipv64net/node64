@@ -1,5 +1,16 @@
 # Changes – Healthchecks
 
+## 2.19.1 – 2026-10-21
+
+### New
+- Proxmox VE: channels selectable per level (system, node, guest) like for checks – default channels or specific
+  channels; node and guest visibly inherit the selection (“inherited from the system”, “inherited from the node”). Deleted
+  channels are skipped when sending; export/import maps the channels like for checks. API: `rules.channels`.
+
+### Changed
+- Proxmox notifications during quiet hours are no longer dropped but held back like check notifications and sent in
+  the digest afterwards (with the kind of notification and a link to the Proxmox page).
+
 ## 2.19.0 – 2026-10-21
 
 ### New

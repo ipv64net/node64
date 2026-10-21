@@ -107,6 +107,10 @@ func (m *Module) pveImport(ctx context.Context, in []pveExportSystem) (int, erro
 			}
 			st := *it
 			st.SystemID = sys.ID
+			if st.Rules.Channels != nil { // Kanal-IDs wie bei Checks auf die Kanaele dieser Node umschreiben
+				ids := module.MapChannels(ctx, *st.Rules.Channels)
+				st.Rules.Channels = &ids
+			}
 			if st.AsCheck {
 				st.AsCheck = false
 				if c, _ := m.st.Check(ctx, st.CheckToken); c != nil && c.Type == checks.TypeProxmox {

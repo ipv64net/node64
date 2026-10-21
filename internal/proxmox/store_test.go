@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -192,7 +193,7 @@ func TestRulesInheritance(t *testing.T) {
 	sys := pveNewSystem(t, s)
 
 	def, err := s.Effective(ctx, sys.ID, "qemu/100", "pve1")
-	if err != nil || def != DefaultRule() {
+	if err != nil || !reflect.DeepEqual(def, DefaultRule()) {
 		t.Fatalf("Standard: %+v %v", def, err)
 	}
 	if d := DefaultRule(); !d.Crashed || !d.Stopped || !d.Restarted || d.CPU != (Threshold{90, 10}) || d.Mem != (Threshold{95, 10}) ||
@@ -261,10 +262,75 @@ func TestRulesInheritance(t *testing.T) {
 	if err := s.SaveSettings(ctx, &Settings{SystemID: 999, Key: "lxc/1"}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unbekanntes System: %v", err)
 	}
+	if err := s.SaveSettings(ctx, &Settings{SystemID: sys.ID, Key: "lxc/1", Rules: RuleSet{Channels: &[]int64{3, 0}}}); !errors.As(err, &fe) || fe.Field != "channels" {
+		t.Fatalf("Channels: %v", err)
+	}
 	// AsCheck mit Check
 	must(&Settings{SystemID: sys.ID, Key: "lxc/200", AsCheck: true, CheckToken: "tok"})
 	ss, _ = s.Settings(ctx, sys.ID)
 	if it := ss.Item("lxc/200"); !it.AsCheck || it.CheckToken != "tok" || it.ExpectRunning != nil {
 		t.Fatalf("AsCheck: %+v", it)
+	}
+}
+
+// Kanaele: nil = erben, leere Liste = Standardkanaele, sonst diese (doppelte entfernt, sortiert); JSON-Roundtrip.
+func TestRulesChannels(t *testing.T) {
+	ctx := context.Background()
+	s, _ := pveTestStore(t)
+	sys := pveNewSystem(t, s)
+	must := func(st *Settings) {
+		t.Helper()
+		if err := s.SaveSettings(ctx, st); err != nil {
+			t.Fatal(err)
+		}
+	}
+	eff := func(key, node string) []int64 {
+		t.Helper()
+		r, err := s.Effective(ctx, sys.ID, key, node)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r.Channels
+	}
+	if c := eff("qemu/100", "pve1"); c == nil || len(c) != 0 {
+		t.Fatalf("Standard: %v", c)
+	}
+	must(&Settings{SystemID: sys.ID, Key: "", Rules: RuleSet{Channels: &[]int64{7, 3, 7}}})
+	must(&Settings{SystemID: sys.ID, Key: "node/pve1", Rules: RuleSet{Channels: &[]int64{}}})
+	must(&Settings{SystemID: sys.ID, Key: "qemu/101", Rules: RuleSet{Channels: &[]int64{9}}})
+	must(&Settings{SystemID: sys.ID, Key: "qemu/102", Muted: true}) // ohne Kanaele: erbt
+	for _, c := range []struct {
+		key, node string
+		want      []int64
+	}{
+		{"", "", []int64{3, 7}},              // System: sortiert, ohne doppelte
+		{"node/pve2", "pve2", []int64{3, 7}}, // Node ohne eigene: vom System
+		{"qemu/200", "pve2", []int64{3, 7}},  // Gast auf pve2: vom System
+		{"node/pve1", "pve1", []int64{}},     // Node: Standardkanaele
+		{"qemu/100", "pve1", []int64{}},      // Gast auf pve1: vom Node (Standardkanaele)
+		{"qemu/101", "pve1", []int64{9}},     // Gast mit eigener Auswahl
+		{"qemu/102", "pve2", []int64{3, 7}},  // Gast mit Einstellungen, aber ohne Kanaele
+	} {
+		if got := eff(c.key, c.node); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s@%s: %v, erwartet %v", c.key, c.node, got, c.want)
+		}
+	}
+	ss, _ := s.Settings(ctx, sys.ID)
+	if it := ss.Item("node/pve1"); it == nil || it.Rules.Channels == nil || len(*it.Rules.Channels) != 0 {
+		t.Fatalf("leere Liste gespeichert: %+v", it)
+	}
+	if it := ss.Item("qemu/102"); it == nil || it.Rules.Channels != nil {
+		t.Fatalf("ohne Kanaele: %+v", it)
+	}
+	b, _ := json.Marshal(ss.Item("node/pve1").Rules)
+	if string(b) != `{"channels":[]}` {
+		t.Fatalf("JSON: %s", b)
+	}
+	// Zuruecksetzen: wieder erben
+	if err := s.DeleteSettings(ctx, sys.ID, "node/pve1"); err != nil {
+		t.Fatal(err)
+	}
+	if got := eff("qemu/100", "pve1"); !reflect.DeepEqual(got, []int64{3, 7}) {
+		t.Fatalf("nach Zuruecksetzen: %v", got)
 	}
 }

@@ -427,16 +427,33 @@ func (d *Dispatcher) releaseHeld(ctx context.Context) {
 	}
 }
 
+// heldKey: wofuer in der Sammelmeldung der letzte Stand zaehlt – je Check; bei Proxmox VE je System und Ressource,
+// getrennt nach Zustand, Schwelle (cpu, mem, disk) und Neustart.
+func heldKey(a Alert) string {
+	if !IsProxmox(a.Kind) {
+		return a.Check.Token
+	}
+	part := "state"
+	switch a.Kind {
+	case KindProxmoxThreshold, KindProxmoxThresholdOK:
+		part = "thr:" + a.Data["what"]
+	case KindProxmoxRestarted:
+		part = "restarted"
+	}
+	return "pve|" + a.Data["path"] + "|" + a.Check.Name + "|" + part
+}
+
 // sendDigest fasst die Ereignisse einer Ruhezeit je Kanal zusammen.
 func (d *Dispatcher) sendDigest(ctx context.Context, uid int64, list []Alert) {
 	sort.SliceStable(list, func(i, j int) bool { return list[i].Time.Before(list[j].Time) })
 	last := map[string]Alert{} // je Check der letzte Alert
 	first := map[string]Alert{}
 	for _, a := range list {
-		if _, ok := first[a.Check.Token]; !ok {
-			first[a.Check.Token] = a
+		k := heldKey(a)
+		if _, ok := first[k]; !ok {
+			first[k] = a
 		}
-		last[a.Check.Token] = a
+		last[k] = a
 	}
 	perChannel := map[int64][]Alert{}
 	chans := map[int64]*Channel{}
@@ -454,13 +471,21 @@ func (d *Dispatcher) sendDigest(ctx context.Context, uid int64, list []Alert) {
 		lang := ch.Lang
 		sort.Slice(items, func(i, j int) bool { return items[i].Check.Name < items[j].Check.Name })
 		var lines []string
-		stillDown := 0
+		stillDown, pve := 0, 0
 		for _, a := range items {
-			at := d.i18n.FormatDateTime(lang, first[a.Check.Token].Time, loc)
-			if isDownKind(a.Kind) {
+			at := d.i18n.FormatDateTime(lang, first[heldKey(a)].Time, loc)
+			msg := a.Message
+			if IsProxmox(a.Kind) { // Text des Ereignisses (Art, Gast, Wert) in der Sprache des Kanals
+				pve++
+				msg = d.proxmoxEventText(lang, a)
+			}
+			switch {
+			case a.Kind == KindProxmoxRestarted: // Hinweis, keine Stoerung
+				lines = append(lines, d.i18n.T(lang, "notify.body.summary_item", "name", a.Check.Name, "message", msg+" ("+d.i18n.FormatDateTime(lang, a.Time, loc)+")"))
+			case isDownKind(a.Kind):
 				stillDown++
-				lines = append(lines, d.i18n.T(lang, "notify.body.digest_down", "name", a.Check.Name, "time", at, "message", a.Message))
-			} else {
+				lines = append(lines, d.i18n.T(lang, "notify.body.digest_down", "name", a.Check.Name, "time", at, "message", msg))
+			default:
 				lines = append(lines, d.i18n.T(lang, "notify.body.digest_up", "name", a.Check.Name, "time", d.i18n.FormatDateTime(lang, a.Time, loc)))
 			}
 		}
@@ -468,9 +493,23 @@ func (d *Dispatcher) sendDigest(ctx context.Context, uid int64, list []Alert) {
 		if stillDown > 0 {
 			kind, path = KindSummary, "/healthchecks?state=down"
 		}
+		link, subject := d.listURL(uid, path), "notify.subject.quiet_digest"
+		if pve > 0 { // Proxmox VE dabei: „Meldungen“ statt „Checks“; nur Proxmox: Link auf die Proxmox-Seite
+			subject = "notify.subject.quiet_digest_events"
+			if pve == len(items) {
+				p := proxmoxPath(items[0].Data["path"])
+				for _, a := range items[1:] {
+					if a.Data["path"] != items[0].Data["path"] {
+						p = proxmoxPath("")
+						break
+					}
+				}
+				link = d.baseURL(uid, p)
+			}
+		}
 		m := Message{Kind: kind, Priority: 4, Time: d.now(), Language: lang, EventID: "quiet-" + strconv.FormatInt(d.now().UnixNano(), 36), Check: CheckInfo{UserID: uid},
-			Title: d.i18n.T(lang, "notify.subject.quiet_digest", "count", len(items), "down", stillDown),
-			Text:  d.i18n.T(lang, "notify.body.digest_intro") + "\n" + strings.Join(lines, "\n") + "\n" + d.nodeLine(uid, lang), URL: d.listURL(uid, path)}
+			Title: d.i18n.T(lang, subject, "count", len(items), "down", stillDown),
+			Text:  d.i18n.T(lang, "notify.body.digest_intro") + "\n" + strings.Join(lines, "\n") + "\n" + d.nodeLine(uid, lang), URL: link}
 		m.Payload = map[string]any{"kind": string(kind), "count": len(items), "down": stillDown, "checks": names(items), "node": d.nodeName(uid), "time": m.Time.UTC().Format(time.RFC3339), "title": m.Title, "text": m.Text}
 		d.send(ctx, ch, m)
 	}
@@ -547,9 +586,10 @@ func (d *Dispatcher) rateOK(id int64, per float64) bool {
 	return true
 }
 
-// deliver verschickt einen Alert an alle zustaendigen Kanaele (in der Ruhezeit: fuer spaeter merken).
+// deliver verschickt einen Alert an alle zustaendigen Kanaele (in der Ruhezeit: fuer spaeter merken; Modul-Meldungen
+// ausser Proxmox VE entfallen).
 func (d *Dispatcher) deliver(ctx context.Context, a Alert) {
-	if d.quiet(a) && (IsModule(a.Kind) || a.Kind == KindQuota) {
+	if d.quiet(a) && ((IsModule(a.Kind) && !IsProxmox(a.Kind)) || a.Kind == KindQuota) {
 		d.log.Debug("notification dropped (quiet hours)", "name", a.Check.Name, "kind", a.Kind)
 		return // steht im Verlauf des Moduls; keine Sammelmeldung danach
 	}
@@ -803,11 +843,7 @@ func (d *Dispatcher) composeProxmox(lang string, a Alert, m Message) Message {
 	if data == nil {
 		data = map[string]string{}
 	}
-	path := data["path"]
-	if !strings.HasPrefix(path, "/healthchecks/proxmox") {
-		path = "/healthchecks/proxmox"
-	}
-	m.URL = d.baseURL(uid, path)
+	m.URL = d.baseURL(uid, proxmoxPath(data["path"]))
 	what := data["what"]
 	m.Title = t("notify.subject."+string(a.Kind), "name", a.Check.Name)
 	switch a.Kind {
@@ -823,23 +859,7 @@ func (d *Dispatcher) composeProxmox(lang string, a Alert, m Message) Message {
 	default:
 		m.Priority = 2
 	}
-	typ := ""
-	if data["type"] != "" {
-		typ = t("pve.type." + data["type"])
-	}
-	kind := strings.TrimPrefix(string(a.Kind), "proxmox_")
-	if what == "" {
-		what = "guest"
-		if data["type"] == "node" {
-			what = "node"
-		}
-	}
-	name := data["name"]
-	if name == "" {
-		name = a.Check.Name
-	}
-	lines := []string{t("pve.ev."+kind+"."+what, "name", name, "type", typ, "value", data["value"], "limit", data["limit"],
-		"detail", data["detail"], "system", data["system"])}
+	lines := []string{d.proxmoxEventText(lang, a)}
 	if a.Message != "" {
 		lines = append(lines, t("notify.body.message", "message", a.Message))
 	}
@@ -852,6 +872,40 @@ func (d *Dispatcher) composeProxmox(lang string, a Alert, m Message) Message {
 		"proxmox": data, "message": a.Message, "url": m.URL, "title": m.Title, "text": m.Text,
 		"node": map[string]any{"name": d.settings(uid)(SetNodeName, ""), "location": d.settings(uid)(SetNodeLocation, "")}}
 	return m
+}
+
+// proxmoxPath begrenzt den Link einer Proxmox-Meldung auf die Proxmox-Seiten des Nodes (sonst die Uebersicht).
+func proxmoxPath(path string) string {
+	if !strings.HasPrefix(path, "/healthchecks/proxmox") {
+		return "/healthchecks/proxmox"
+	}
+	return path
+}
+
+// proxmoxEventText: Text eines Proxmox-Ereignisses (pve.ev.<Art>.<Ursache>) in der Sprache des Kanals.
+func (d *Dispatcher) proxmoxEventText(lang string, a Alert) string {
+	data := a.Data
+	if data == nil {
+		data = map[string]string{}
+	}
+	typ := ""
+	if data["type"] != "" {
+		typ = d.i18n.T(lang, "pve.type."+data["type"])
+	}
+	kind := strings.TrimPrefix(string(a.Kind), "proxmox_")
+	what := data["what"]
+	if what == "" {
+		what = "guest"
+		if data["type"] == "node" {
+			what = "node"
+		}
+	}
+	name := data["name"]
+	if name == "" {
+		name = a.Check.Name
+	}
+	return d.i18n.T(lang, "pve.ev."+kind+"."+what, "name", name, "type", typ, "value", data["value"], "limit", data["limit"],
+		"detail", data["detail"], "system", data["system"])
 }
 
 // composeQuota: Tageskontingent der Online-Checks erreicht (Message = "verbraucht/Limit").

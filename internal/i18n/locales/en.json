@@ -2351,7 +2351,8 @@
       "proxmox_up": "🟢 Proxmox: {name} back to normal",
       "proxmox_threshold": "🟠 Proxmox: {name} above threshold",
       "proxmox_threshold_ok": "🟢 Proxmox: {name} below threshold again",
-      "proxmox_restarted": "🔄 Proxmox: {name} restarted"
+      "proxmox_restarted": "🔄 Proxmox: {name} restarted",
+      "quiet_digest_events": "🌙 During quiet hours: {count} notifications, {down} still open"
     },
     "body": {
       "quota_used": "Used: {used} of {limit} online checks today",
@@ -3715,7 +3716,8 @@
       "cpu": "CPU above",
       "mem": "RAM above",
       "disk": "Disk above (containers or with guest agent)",
-      "delay": "Delay"
+      "delay": "Delay",
+      "channels": "Channels"
     },
     "rules": {
       "title": "Notifications",
@@ -3743,7 +3745,10 @@
       "from_node": "inherited from the node",
       "polls": "polls",
       "reset": "Inherit all",
-      "reset_confirm": "Reset the own rules of this level?"
+      "reset_confirm": "Reset the own rules of this level?",
+      "channels_own": "own selection",
+      "channels_default": "default channels",
+      "channels_hint": "“inherit” = channels of the node or system. Own selection without ticks = default channels."
     },
     "err": {
       "name": "Name too long (100 characters at most).",
@@ -3756,7 +3761,8 @@
       "threshold": "Threshold 0–100 % and 0–1440 minutes.",
       "delay": "Delay 1–60 polls.",
       "key": "Unknown guest or node.",
-      "no_box": "No key (secret.key) loaded – token secrets cannot be stored encrypted."
+      "no_box": "No key (secret.key) loaded – token secrets cannot be stored encrypted.",
+      "channels": "Channels: invalid selection (at most 100)."
     },
     "form": {
       "connection": "Connection",

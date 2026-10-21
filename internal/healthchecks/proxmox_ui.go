@@ -383,6 +383,7 @@ func (m *Module) pagePVESystem(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	d.Filter = map[string]string{"state": q.Get("state"), "node": q.Get("node"), "type": q.Get("type"), "q": strings.TrimSpace(q.Get("q"))}
 	d.Rules = pveRulesFor(d.Settings, "", "", d.Path+"/settings")
+	m.pveRulesChannels(ctx, &d.Rules, d.Settings, "", "")
 	if d.Snap != nil && d.Snap.OK {
 		sparks := m.pveSparks(ctx, sys.ID)
 		perNode := map[string]int{}
@@ -496,6 +497,7 @@ func (m *Module) pagePVEResource(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	d.Rules = pveRulesFor(set, key, node, d.SysPath+"/settings")
+	m.pveRulesChannels(ctx, &d.Rules, set, key, node)
 	m.g.Render(w, r, http.StatusOK, Name+"/proxmox_resource", "nav.proxmox", d)
 }
 
@@ -522,6 +524,13 @@ type pveRulesForm struct {
 	Expect string // Gaeste: "", "1", "0" (gestoppt ist eine Stoerung: automatisch, ja, nein)
 	Seen   bool   // Gaeste: lief schon einmal (automatisch erwartet)
 	Fields []pveRuleField
+	// Kanaele wie im Check-Formular (keine Auswahl = Standardkanaele): ChanOwn = eigene Auswahl dieser Ebene (System:
+	// immer), sonst geerbt; Channels zur Auswahl (vorgewaehlt: eigene bzw. geerbte), ChanInh die geerbten Namen
+	// (leer = Standardkanaele) mit Herkunft ChanFrom
+	ChanOwn  bool
+	Channels []channelOpt
+	ChanInh  string
+	ChanFrom string
 }
 
 type pveRuleDef struct {
@@ -656,9 +665,67 @@ func pveRulesFor(set *proxmox.SystemSettings, key, node, action string) pveRules
 	return f
 }
 
-// pveRulesFromForm liest die Regeln einer Ebene aus dem Formular (leer = erben).
+// pveRulesChannels ergaenzt das Regelformular um die Kanalauswahl: eigene Auswahl bzw. was die Ebene erbt
+// (Standard → System → Node). Ohne Kanaele entfaellt sie (wie im Check-Formular).
+func (m *Module) pveRulesChannels(ctx context.Context, f *pveRulesForm, set *proxmox.SystemSettings, key, node string) {
+	chans, err := m.channels(ctx)
+	if err != nil || len(chans) == 0 {
+		return
+	}
+	var own *[]int64
+	if it := set.Item(key); it != nil {
+		own = it.Rules.Channels
+	}
+	var inh []int64
+	f.ChanFrom = "pve.rules.from_default"
+	if f.Level != "system" {
+		if it := set.Item(""); it != nil && it.Rules.Channels != nil {
+			inh, f.ChanFrom = *it.Rules.Channels, "pve.rules.from_system"
+		}
+		if f.Level == "guest" && node != "" {
+			if it := set.Item("node/" + node); it != nil && it.Rules.Channels != nil {
+				inh, f.ChanFrom = *it.Rules.Channels, "pve.rules.from_node"
+			}
+		}
+	}
+	f.ChanOwn = f.Level == "system" || own != nil
+	sel, inhSet := map[int64]bool{}, map[int64]bool{}
+	for _, id := range inh {
+		inhSet[id] = true
+	}
+	if own != nil {
+		for _, id := range *own {
+			sel[id] = true
+		}
+	} else {
+		sel = inhSet
+	}
+	var names []string
+	for _, ch := range chans {
+		f.Channels = append(f.Channels, channelOpt{ID: ch.ID, Name: ch.Name, Type: string(ch.Type), Default: ch.Default, Selected: sel[ch.ID]})
+		if inhSet[ch.ID] {
+			names = append(names, ch.Name)
+		}
+	}
+	f.ChanInh = strings.Join(names, ", ") // geloeschte Kanaele zaehlen nicht
+}
+
+// pveRulesFromForm liest die Regeln einer Ebene aus dem Formular (leer = erben). Kanaele: Systemebene wie im
+// Check-Formular (keine Auswahl = Standardkanaele), Node/Gast nur mit ch_mode=own (sonst erben).
 func pveRulesFromForm(r *http.Request, level string) (proxmox.RuleSet, error) {
 	var rs proxmox.RuleSet
+	_ = r.ParseForm()
+	if (level != "system" && r.PostFormValue("ch_mode") == "own") || (level == "system" && len(r.PostForm["channels"]) > 0) {
+		ids := []int64{}
+		for _, v := range r.PostForm["channels"] {
+			n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+			if err != nil {
+				return rs, &proxmox.FieldError{Field: "channels", Key: "pve.err.channels"}
+			}
+			ids = append(ids, n)
+		}
+		rs.Channels = &ids
+	}
 	lv := level[:1]
 	for _, rd := range pveRuleDefs {
 		if !strings.Contains(rd.levels, lv) {

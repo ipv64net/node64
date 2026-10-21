@@ -2351,7 +2351,8 @@
       "proxmox_up": "🟢 Proxmox: {name} wieder in Ordnung",
       "proxmox_threshold": "🟠 Proxmox: {name} über der Schwelle",
       "proxmox_threshold_ok": "🟢 Proxmox: {name} wieder unter der Schwelle",
-      "proxmox_restarted": "🔄 Proxmox: {name} neu gestartet"
+      "proxmox_restarted": "🔄 Proxmox: {name} neu gestartet",
+      "quiet_digest_events": "🌙 Während der Ruhezeit: {count} Meldungen, davon {down} noch offen"
     },
     "body": {
       "quota_used": "Verbraucht: {used} von {limit} Online-Messungen heute",
@@ -3715,7 +3716,8 @@
       "cpu": "CPU über",
       "mem": "RAM über",
       "disk": "Disk über (nur Container bzw. mit Gast-Agent)",
-      "delay": "Verzögerung"
+      "delay": "Verzögerung",
+      "channels": "Kanäle"
     },
     "rules": {
       "title": "Benachrichtigung",
@@ -3743,7 +3745,10 @@
       "from_node": "vom Node geerbt",
       "polls": "Abfragen",
       "reset": "Alles erben",
-      "reset_confirm": "Eigene Regeln dieser Ebene zurücksetzen?"
+      "reset_confirm": "Eigene Regeln dieser Ebene zurücksetzen?",
+      "channels_own": "eigene Auswahl",
+      "channels_default": "Standardkanäle",
+      "channels_hint": "„erben“ = Kanäle von Node bzw. System. Eigene Auswahl ohne Haken = Standardkanäle."
     },
     "err": {
       "name": "Name zu lang (höchstens 100 Zeichen).",
@@ -3756,7 +3761,8 @@
       "threshold": "Schwelle 0–100 % und 0–1440 Minuten.",
       "delay": "Verzögerung 1–60 Abfragen.",
       "key": "Unbekannter Gast bzw. Node.",
-      "no_box": "Kein Schlüssel (secret.key) geladen – Token-Secrets lassen sich nicht verschlüsselt speichern."
+      "no_box": "Kein Schlüssel (secret.key) geladen – Token-Secrets lassen sich nicht verschlüsselt speichern.",
+      "channels": "Kanäle: ungültige Auswahl (höchstens 100)."
     },
     "form": {
       "connection": "Verbindung",

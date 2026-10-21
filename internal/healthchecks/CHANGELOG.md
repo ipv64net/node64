@@ -1,5 +1,16 @@
 # Änderungen – Healthchecks
 
+## 2.19.1 – 2026-10-21
+
+### Neu
+- Proxmox VE: Kanäle je Ebene wählbar (System, Node, Gast) wie bei Checks – Standardkanäle oder bestimmte Kanäle;
+  Node und Gast erben die Auswahl sichtbar („vom System geerbt“, „vom Node geerbt“). Gelöschte Kanäle werden beim
+  Senden übergangen; Export/Import schreibt die Kanäle wie bei Checks um. API: `rules.channels`.
+
+### Geändert
+- Proxmox-Meldungen in der Ruhezeit werden nicht mehr verworfen, sondern wie Check-Meldungen zurückgehalten und danach
+  in der Sammelmeldung verschickt (mit Art der Meldung und Link auf die Proxmox-Seite).
+
 ## 2.19.0 – 2026-10-21
 
 ### Neu

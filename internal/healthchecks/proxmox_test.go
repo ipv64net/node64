@@ -895,3 +895,162 @@ func TestPVEMetricsAndExport(t *testing.T) {
 		t.Fatal("imported system not polled")
 	}
 }
+
+// Kanalwahl je Ebene: Vererbung System → Node → Gast, bestimmte Kanaele, Standardkanaele, geloeschte Kanaele
+// (beim Senden uebergangen), Formular, API und Export/Import (Kanal-IDs wie bei Checks umgeschrieben).
+func TestPVEChannels(t *testing.T) {
+	fake := newPVEFake()
+	fsrv := startPVEFake(t, fake)
+	core := pveCore(t)
+	box := pveBox(t, 1)
+	m, srv, rec := newPVEModule(t, core, box)
+	ctx := context.Background()
+	ms, _ := notify.Migrations()
+	if err := core.Migrate(ctx, "notify", ms); err != nil {
+		t.Fatal(err)
+	}
+	m.notifyStore = notify.NewStore(core, box)
+	addCh := func(name string, def bool) int64 {
+		t.Helper()
+		c := &notify.Channel{Type: notify.TypeWebhook, Name: name, Config: map[string]string{"url": "http://x/", "method": "POST"}, Enabled: true, Default: def, NotifyDown: true, NotifyUp: true}
+		if err := m.notifyStore.Insert(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+		return c.ID
+	}
+	addCh("std", true)
+	b, c := addCh("ops", false), addCh("dev", false)
+	id := pveCreate(t, srv, fsrv)
+	base := "/api/healthchecks/proxmox/systems/" + fmt.Sprint(id) + "/settings"
+	sp := pveResPath(id, "")
+
+	// API: System mit Kanal b und einem nicht (mehr) vorhandenen Kanal 999
+	code, body := call(t, srv, "PUT", base, map[string]any{"rules": map[string]any{"channels": []int64{999, b, b}}})
+	if code != 200 || !strings.Contains(string(body), fmt.Sprintf(`"channels":[%d,999]`, b)) {
+		t.Fatalf("api system channels: %d %s", code, body)
+	}
+	// Formular: Node pve1 eigene Auswahl ohne Haken (= Standardkanaele), Gast qemu/101 eigene Auswahl c
+	resp, _ := pvePost(t, srv, sp+"/settings", url.Values{"key": {"node/pve1"}, "ch_mode": {"own"}, "op": {"save"}})
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("node form: %d", resp.StatusCode)
+	}
+	pvePost(t, srv, sp+"/settings", url.Values{"key": {"qemu/101"}, "ch_mode": {"own"}, "channels": {fmt.Sprint(c)}, "op": {"save"}})
+	// Gast ohne ch_mode erbt (Haken werden dann ignoriert)
+	pvePost(t, srv, sp+"/settings", url.Values{"key": {"lxc/200"}, "channels": {fmt.Sprint(c)}, "op": {"save"}})
+	if resp, _ := pvePost(t, srv, sp+"/settings", url.Values{"key": {"qemu/100"}, "ch_mode": {"own"}, "channels": {"x"}}); !strings.Contains(resp.Header.Get("X-Flash"), "danger:pve.err.channels") {
+		t.Fatalf("invalid channel: %v", resp.Header)
+	}
+	set, _ := m.pve.st.Settings(ctx, id)
+	if it := set.Item("node/pve1"); it == nil || it.Rules.Channels == nil || len(*it.Rules.Channels) != 0 {
+		t.Fatalf("node channels: %+v", it)
+	}
+	if it := set.Item("qemu/101"); it == nil || it.Rules.Channels == nil || fmt.Sprint(*it.Rules.Channels) != fmt.Sprint([]int64{c}) {
+		t.Fatalf("guest channels: %+v", it)
+	}
+	if it := set.Item("lxc/200"); it == nil || it.Rules.Channels != nil {
+		t.Fatalf("inherit: %+v", it)
+	}
+	code, body = call(t, srv, "GET", base, nil)
+	var sv struct {
+		Effective map[string]proxmox.Rule `json:"effective"`
+	}
+	_ = json.Unmarshal(body, &sv)
+	if code != 200 || fmt.Sprint(sv.Effective["qemu/101"].Channels) != fmt.Sprint([]int64{c}) || len(sv.Effective["qemu/100"].Channels) != 0 ||
+		fmt.Sprint(sv.Effective["lxc/200"].Channels) != fmt.Sprint([]int64{b, 999}) {
+		t.Fatalf("effective: %d %s", code, body)
+	}
+
+	// Seiten: System mit Haken bei b, Gast mit eigener Auswahl, Gast auf pve1 erbt vom Node (Standardkanaele)
+	pvePollNow(t, m, id)
+	if _, page := pveGet(t, srv, sp); !strings.Contains(page, fmt.Sprintf(`id="pvech%d" checked`, b)) || strings.Contains(page, `name="ch_mode"`) ||
+		!strings.Contains(page, "hc.form.channels_hint") {
+		t.Fatalf("system page: %s", page)
+	}
+	if _, page := pveGet(t, srv, sp+"/res/qemu/101"); !strings.Contains(page, `value="own" selected`) || !strings.Contains(page, fmt.Sprintf(`id="pvech%d" checked`, c)) ||
+		strings.Contains(page, fmt.Sprintf(`id="pvech%d" checked`, b)) {
+		t.Fatalf("guest page own: %s", page)
+	}
+	if _, page := pveGet(t, srv, sp+"/res/qemu/100"); !strings.Contains(page, `value="" selected`) || !strings.Contains(page, "pve.rules.channels_default · pve.rules.from_node") {
+		t.Fatalf("guest page inherited: %s", page)
+	}
+	if _, page := pveGet(t, srv, sp+"/res/lxc/200"); !strings.Contains(page, "ops · pve.rules.from_system") || !strings.Contains(page, fmt.Sprintf(`id="pvech%d" checked`, b)) {
+		t.Fatalf("guest page from system: %s", page)
+	}
+
+	// Meldungen: Absturz qemu/102 (pve1, Node mit Standardkanaelen) bei der ersten Abfrage
+	al := rec.take()
+	if len(al) != 1 || al[0].Check.Target != "qemu/102" || al[0].Check.Channels != nil {
+		t.Fatalf("crash alert channels: %+v", al)
+	}
+	fake.set("qemu/101", "status", "stopped") // pve2, eigene Auswahl c
+	fake.set("lxc/200", "status", "stopped")  // pve2, vom System: b (999 entfaellt)
+	pvePollNow(t, m, id)
+	pvePollNow(t, m, id)
+	got := map[string]string{}
+	for _, a := range rec.take() {
+		got[a.Check.Target] = fmt.Sprint(a.Check.Channels)
+	}
+	if got["qemu/101"] != fmt.Sprint([]int64{c}) || got["lxc/200"] != fmt.Sprint([]int64{b}) {
+		t.Fatalf("channels: %v", got)
+	}
+
+	// Export/Import: Kanal-IDs wie bei Checks umschreiben (b → 42, c und 999 unbekannt)
+	data, err := m.Export(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(data)
+	m2, _, _ := newPVEModule(t, pveCore(t), pveBox(t, 3))
+	_, _ = m2.Import(module.WithChannelMap(ctx, map[int64]int64{b: 42}), raw)
+	list, _ := m2.pve.st.Systems(ctx)
+	if len(list) != 1 {
+		t.Fatalf("imported: %+v", list)
+	}
+	set2, _ := m2.pve.st.Settings(ctx, list[0].ID)
+	if it := set2.Item(""); it == nil || it.Rules.Channels == nil || fmt.Sprint(*it.Rules.Channels) != "[42]" {
+		t.Fatalf("imported system channels: %+v", it)
+	}
+	if it := set2.Item("qemu/101"); it == nil || it.Rules.Channels == nil || len(*it.Rules.Channels) != 0 {
+		t.Fatalf("imported guest channels: %+v", it)
+	}
+	if it := set2.Item("lxc/200"); it != nil && it.Rules.Channels != nil {
+		t.Fatalf("imported inherit: %+v", it)
+	}
+
+	// Kanal c geloescht: Entwarnung fuer qemu/101 geht an die Standardkanaele
+	if err := m.notifyStore.Delete(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	fake.set("qemu/101", "status", "running")
+	pvePollNow(t, m, id)
+	up := false
+	for _, a := range rec.take() {
+		if a.Check.Target == "qemu/101" && a.Kind == notify.KindProxmoxUp {
+			up = true
+			if a.Check.Channels != nil {
+				t.Fatalf("deleted channel not ignored: %+v", a.Check)
+			}
+		}
+	}
+	if !up {
+		t.Fatal("no recovery for qemu/101")
+	}
+	if _, page := pveGet(t, srv, sp+"/res/qemu/101"); strings.Contains(page, fmt.Sprintf(`id="pvech%d"`, c)) {
+		t.Fatalf("deleted channel offered: %s", page)
+	}
+
+	// Systemebene im Formular ohne Haken: Standardkanaele (nichts gespeichert)
+	pvePost(t, srv, sp+"/settings", url.Values{"key": {""}, "op": {"save"}})
+	set, _ = m.pve.st.Settings(ctx, id)
+	if it := set.Item(""); it == nil || it.Rules.Channels != nil {
+		t.Fatalf("system default: %+v", it)
+	}
+	// API: leere Liste = Standardkanaele, ungueltige ID 422
+	code, body = call(t, srv, "PUT", base+"?key=lxc/200", map[string]any{"rules": map[string]any{"channels": []int64{}}})
+	if code != 200 || !strings.Contains(string(body), `"rules":{"channels":[]}`) {
+		t.Fatalf("api empty list: %d %s", code, body)
+	}
+	if code, body = call(t, srv, "PUT", base+"?key=lxc/200", map[string]any{"rules": map[string]any{"channels": []int64{-1}}}); code != 422 {
+		t.Fatalf("api invalid channel: %d %s", code, body)
+	}
+}

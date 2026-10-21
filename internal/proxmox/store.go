@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,6 +59,7 @@ const (
 	MaxInterval     = 300
 	DefaultPort     = "8006"
 	maxAddresses    = 16
+	maxChannels     = 100 // Kanaele je Ebene
 )
 
 var (
@@ -278,6 +280,8 @@ type RuleSet struct {
 	Mem         *Threshold `json:"mem,omitempty"`
 	Disk        *Threshold `json:"disk,omitempty"`
 	Delay       *int       `json:"delay,omitempty"` // erst nach N Abfragen melden (1 = sofort)
+	// Channels: Kanaele der Meldungen wie bei Checks; nil = erben, leere Liste = Standardkanaele, sonst diese Kanaele
+	Channels *[]int64 `json:"channels,omitempty"`
 }
 
 // Rule ist die wirksame Regel nach der Vererbung.
@@ -293,12 +297,13 @@ type Rule struct {
 	Mem         Threshold `json:"mem"`
 	Disk        Threshold `json:"disk"`
 	Delay       int       `json:"delay"`
+	Channels    []int64   `json:"channels"` // wirksame Kanaele; leer = Standardkanaele
 }
 
 // DefaultRule sind die Standardwerte der Systemebene.
 func DefaultRule() Rule {
 	return Rule{Crashed: true, Stopped: true, Paused: true, Suspended: true, Offline: true, Unreachable: true, Restarted: true,
-		CPU: Threshold{90, 10}, Mem: Threshold{95, 10}, Disk: Threshold{90, 0}, Delay: 2}
+		CPU: Threshold{90, 10}, Mem: Threshold{95, 10}, Disk: Threshold{90, 0}, Delay: 2, Channels: []int64{}}
 }
 
 // Apply ueberschreibt r mit den gesetzten Werten von rs.
@@ -327,6 +332,9 @@ func (r Rule) Apply(rs RuleSet) Rule {
 	if rs.Delay != nil {
 		r.Delay = *rs.Delay
 	}
+	if rs.Channels != nil {
+		r.Channels = append([]int64{}, (*rs.Channels)...)
+	}
 	return r
 }
 
@@ -342,6 +350,24 @@ func (rs *RuleSet) Validate() error {
 	}
 	if rs.Delay != nil && (*rs.Delay < 1 || *rs.Delay > 60) {
 		return pveFerr("delay", "pve.err.delay")
+	}
+	if rs.Channels != nil { // doppelte entfernen, sortieren
+		ids := []int64{}
+		have := map[int64]bool{}
+		for _, id := range *rs.Channels {
+			if id <= 0 {
+				return pveFerr("channels", "pve.err.channels")
+			}
+			if !have[id] {
+				have[id] = true
+				ids = append(ids, id)
+			}
+		}
+		if len(ids) > maxChannels {
+			return pveFerr("channels", "pve.err.channels")
+		}
+		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+		rs.Channels = &ids
 	}
 	return nil
 }
