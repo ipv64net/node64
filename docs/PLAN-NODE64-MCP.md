@@ -26,8 +26,8 @@ handeln.
 - **Anmeldung:** eigene **MCP-Schlüssel** (Bearer), getrennt von normalen API-Keys, je Schlüssel **Rechte je
   Bereich** (lesen; später schreiben), Name, letzte Nutzung, widerrufbar. Später (M3) OAuth 2.1 für Anwendungen, die
   das verlangen (z. B. Connectors in claude.ai).
-- **Erreichbarkeit:** Standard nur aus privaten Netzen (Heimnetz, VPN); „überall mit Schlüssel“ als Schalter.
-  Öffentlich nur bewusst über PROXY64 mit Zugriffsliste.
+- **Erreichbarkeit:** nur aus privaten Netzen (Heimnetz, VPN, localhost) – Entscheidung Dennis; Anfragen von
+  öffentlichen Adressen bekommen 403, auch über PROXY64.
 - **Grenzen:** Rate-Limit je Schlüssel (z. B. 60 Aufrufe/min), Ergebnisgröße begrenzt (Seiten, `limit`), Zeitraum-
   Parameter mit Obergrenzen.
 - **Audit:** jeder Aufruf im Audit-Log (Werkzeug, Schlüsselname, Parameter gekürzt, Ergebnis ok/Fehler).
@@ -87,8 +87,8 @@ ChatGPT) sicher zugreifen können; Ressourcen (z. B. Kurz-Doku je Modul), Benach
 | M2 | Ändernde Werkzeuge je Bereich, Bestätigung, Rechte je Schlüssel |
 | M3 | OAuth 2.1, öffentliche Erreichbarkeit über PROXY64, Ressourcen |
 
-## Entscheidungen (offen)
+## Entscheidungen (Dennis 2026-10-21)
 
-1. Offizielles Go-SDK (neue Abhängigkeit, Protokolländerungen kommen mit) oder eigene schlanke Umsetzung?
-2. Standard „nur Heimnetz“ – ok?
-3. Welche ändernden Werkzeuge in M2 zuerst?
+1. **Offizielles Go-SDK** (`github.com/modelcontextprotocol/go-sdk`).
+2. **Nur Heimnetz** (private Netze, VPN) – kein Schalter „überall“ in M1.
+3. **Erstmal nur lesen (M1).** M2 (ändernd) und M3 (OAuth) später auf Ansage.
