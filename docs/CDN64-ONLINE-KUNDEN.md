@@ -50,7 +50,10 @@ Node nicht erreichbar ist. Die Node nimmt den Namen dann bei sich ebenfalls hera
   nicht über das Internet.
 - **Kontingent:** Jeder Name zählt als CDN-Domain, Traffic zählt gegen den CDN-Traffic deiner Klasse (gemeinsam mit
   dem bisherigen CDN). Ist der Traffic des Monats aufgebraucht, sind deine Namen bis zum Monatswechsel gesperrt.
-  Supporter-Accounts haben zusätzlich eine Bandbreitengrenze.
+  Grenzen je Klasse (Stand 2026-10-21): Free 1 Domain, 10 GB im Monat, 50 Mbit/s · Home/Supporter 5 Domains,
+  100 GB, 1 Gbit/s · Business 10 Domains, 20 TB, Bandbreite unbegrenzt · Company 25 Domains, 20 TB, unbegrenzt.
+  Ein Upgrade gilt sofort: wegen Traffic gesperrte Namen werden innerhalb einer Minute wieder frei, die neue
+  Bandbreite gilt nach höchstens 10 Sekunden. PROXY64 zeigt das Kontingent mit Prognose bis zum Monatsende.
 - **Meldungen:** Steht der Tunnel länger als 3 Minuten zu keinem Server oder sperrt ipv64 einen Namen, meldet
   Node64 das über deine Benachrichtigungskanäle.
 - **Komprimierung:** In Modus 3 komprimieren die Server Text-Antworten deines Ziels selbst (zstd, Brotli oder gzip,
