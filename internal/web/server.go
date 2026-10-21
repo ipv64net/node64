@@ -29,6 +29,7 @@ import (
 	"github.com/ipv64net/node64/internal/i18n"
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/logging"
+	"github.com/ipv64net/node64/internal/mcp"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/peer"
@@ -76,6 +77,10 @@ type Server struct {
 	limiter      *loginLimiter
 	ipLimit      *ipLimiter
 	fwd          fwdCache // Forward-Auth: Einrichtung und letzte Audit-Eintraege (auth_forward.go)
+
+	mcpHandler http.Handler // MCP-Schnittstelle /mcp (mcp.go)
+	mcpCounter *mcp.Counter
+	mcpLimit   *ipLimiter // Rate-Limit je MCP-Schluessel
 
 	mu      sync.Mutex
 	servers []*http.Server
@@ -190,6 +195,7 @@ func (s *Server) routes() {
 	s.peerRoutes()
 	s.portRoutes()
 	s.certRoutes()
+	s.mcpRoutes()
 
 	s.mux.Handle("GET /{$}", s.auth(s.dashboard))
 	s.mux.Handle("GET /settings", s.auth(s.settings))
@@ -326,6 +332,7 @@ func (s *Server) housekeeping(ctx context.Context) {
 			}
 			s.limiter.cleanup()
 			s.ipLimit.cleanup()
+			s.mcpLimit.cleanup()
 			if s.Notify != nil {
 				_ = s.Notify.PruneDeliveries(ctx, 90*24*time.Hour)
 			}

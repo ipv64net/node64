@@ -49,6 +49,8 @@ beim API-Key „zuletzt benutzt“. Falsche Keys bremst Node64 wie bei der übri
 | `node64_link_online_checks_today`, `node64_link_online_checks_limit` | | Online-Messungen heute / Tageslimit (0 = keins) |
 | `node64_group_members`, `node64_group_members_online` | | lokale Gruppe |
 | `node64_group_member_up` | `node_id`, `node_name` | Mitglied erreichbar |
+| `node64_mcp_enabled` | | MCP-Schnittstelle (KI-Anwendungen) eingeschaltet, 1/0 ([MCP.md](MCP.md)) |
+| `node64_mcp_calls_total` | `tool`, `result` (`ok`, `error`) | Werkzeugaufrufe über MCP seit dem Start (Counter) |
 | `go_goroutines`, `go_memstats_heap_alloc_bytes`, `go_memstats_sys_bytes`, `go_gc_cycles_total` | | Laufzeit von Go |
 | `node64_scrape_duration_seconds` | | Dauer der Abfrage |
 

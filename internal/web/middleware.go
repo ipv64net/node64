@@ -181,6 +181,9 @@ func (s *Server) session(next http.Handler) http.Handler {
 			if strings.HasPrefix(r.URL.Path, "/api/") && r.Header.Get("Authorization") != "" {
 				break // API-Key-Auth braucht kein CSRF
 			}
+			if r.URL.Path == "/mcp" && strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+				break // MCP: nur mit Schluessel im Kopf (mcp.go), keine Sitzung
+			}
 			if strings.HasPrefix(r.URL.Path, "/api/push/") {
 				break // Push-URL: oeffentlich, der Token in der URL ist die Berechtigung (keine Sitzung)
 			}

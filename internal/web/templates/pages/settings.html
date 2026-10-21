@@ -121,6 +121,13 @@
 				<hr class="my-2"><div class="small"><i class="bi bi-person-badge"></i> {{.T "sso.settings_hint"}} <a href="/settings/login">{{.T "sso.title"}}</a></div>
 			</div>
 		</div>
+		<div class="card" id="mcp">
+			<div class="card-header"><i class="bi bi-robot text-primary"></i> {{.T "mcp.title"}}</div>
+			<div class="card-body">
+				<p class="small text-body-secondary">{{.T "mcp.settings_hint"}}</p>
+				<a class="btn btn-outline-secondary btn-sm" href="/settings/mcp">{{.T "mcp.manage"}}</a>
+			</div>
+		</div>
 		<div class="card">
 			<div class="card-header"><i class="bi bi-terminal text-body-secondary"></i> {{.T "settings.logging"}}{{$.Doc "configuration#logs"}}{{.Doc "configuration#logs"}}</div>
 			<div class="card-body">

@@ -30,7 +30,8 @@ von Node64 selbst (Kern, z. B. `0.11.66-dev`). So ist sichtbar, welches Modul si
 
 Die Zertifikatsverwaltung (`internal/certs`, Seite `internal/certsui`), der gemeinsame Eingang (`internal/edge`)
 und die Port-Verwaltung (`internal/ports`) gehören zum Kern und haben keine eigene Modulversion. Ihre Änderungen
-stehen in [ZERTIFIKATE.md](ZERTIFIKATE.md) bzw. [CDN64.md](CDN64.md) und laufen mit der Version von Node64.
+stehen in [ZERTIFIKATE.md](ZERTIFIKATE.md) bzw. [CDN64.md](CDN64.md) und laufen mit der Version von Node64. Ebenso die
+MCP-Schnittstelle (`internal/mcp`, `internal/web/mcp.go`): Änderungen in [MCP.md](MCP.md#änderungen).
 
 Die Version wird mit der Änderung im selben Commit erhöht. Mehrere Änderungen bis zum nächsten Ausrollen dürfen
 in einer Version zusammenkommen. Änderungen nur am Kern (Menü, Einstellungen, Sync) ändern keine Modulversion.

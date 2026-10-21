@@ -1,0 +1,91 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex align-items-center mb-3">
+	<h1 class="h4 mb-0"><i class="bi bi-robot text-primary me-1"></i> {{.T "mcp.title"}}</h1>
+	<a class="btn btn-sm btn-outline-secondary ms-auto" href="/settings"><i class="bi bi-arrow-left"></i> {{.T "nav.settings"}}</a>
+</div>
+<p class="text-body-secondary small">{{.T "mcp.intro"}}</p>
+<div class="alert alert-info small py-2"><i class="bi bi-house-lock"></i> {{.T "mcp.lan_only"}}{{if not $d.Private}}<br><i class="bi bi-exclamation-triangle text-warning"></i> {{.T "mcp.lan_only_this" "ip" $d.ClientIP}}{{end}}</div>
+<div class="row g-3 align-items-start">
+<div class="col-lg-6 d-flex flex-column gap-3">
+	<div class="card" id="switch">
+		<div class="card-header"><i class="bi bi-toggle-on text-primary"></i> {{.T "mcp.switch"}} {{if $d.Enabled}}<span class="badge text-bg-success">{{.T "common.enabled"}}</span>{{else}}<span class="badge text-bg-secondary">{{.T "common.disabled"}}</span>{{end}}</div>
+		<div class="card-body">
+			<p class="small text-body-secondary">{{.T "mcp.switch_hint"}}</p>
+			<form method="post" action="/settings/mcp" class="mb-3">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				{{if $d.Enabled}}<button class="btn btn-sm btn-outline-danger" type="submit" name="enabled" value="0"><i class="bi bi-power"></i> {{.T "mcp.disable"}}</button>
+				{{else}}<button class="btn btn-sm btn-primary" type="submit" name="enabled" value="1"><i class="bi bi-power"></i> {{.T "mcp.enable"}}</button>{{end}}
+			</form>
+			<label class="form-label small fw-semibold" for="mcp-url">{{.T "mcp.url"}}</label>
+			<div class="input-group input-group-sm"><input class="form-control font-monospace" id="mcp-url" value="{{$d.URL}}" readonly><button class="btn btn-outline-secondary btn-copy" type="button" data-copy-target="#mcp-url" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
+			<div class="form-text">{{.T "mcp.url_hint"}}</div>
+		</div>
+	</div>
+	<div class="card" id="keys">
+		<div class="card-header"><i class="bi bi-key text-warning"></i> {{.T "mcp.keys"}}</div>
+		<div class="card-body">
+			<p class="small text-body-secondary">{{.T "mcp.keys_hint"}}</p>
+			{{if $d.NewKey}}<div class="alert alert-warning small"><strong>{{.T "mcp.key_show_once"}}</strong><br><div class="input-group input-group-sm mt-1"><span class="input-group-text"><i class="bi bi-key"></i></span><input class="form-control font-monospace" id="new-mcp-key" value="{{$d.NewKey}}" readonly><button class="btn btn-outline-secondary btn-copy" type="button" data-copy-target="#new-mcp-key" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div></div>{{end}}
+			{{if $d.Keys}}
+			<ul class="list-group list-group-flush mb-3">
+			{{range $d.Keys}}
+				<li class="list-group-item d-flex justify-content-between align-items-start px-0 small">
+					<span><strong>{{.Name}}</strong> <code>{{.Hint}}</code><br>
+						{{range .ReadAreas}}<span class="badge text-bg-light border me-1">{{$.T (print "mcp.area_" .)}}</span>{{end}}<br>
+						<span class="text-body-secondary">{{$.T "nf.last_used"}}: {{$.Ago .LastUsedAt}}{{if .LastIP}} · {{.LastIP}}{{end}}</span></span>
+					<form method="post" action="/settings/mcp/keys/{{.ID}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{$.T "mcp.revoke_confirm"}}" title="{{$.T "mcp.revoke"}}"><i class="bi bi-x-lg"></i></button></form>
+				</li>
+			{{end}}
+			</ul>
+			{{else}}<p class="small">{{.T "mcp.no_keys"}}</p>{{end}}
+			<form method="post" action="/settings/mcp/keys">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<label class="form-label small fw-semibold" for="mcp-key-name">{{.T "mcp.key_name"}}</label>
+				<input class="form-control form-control-sm mb-2" id="mcp-key-name" name="name" maxlength="100" required placeholder="Claude Code">
+				<div class="small fw-semibold mb-1">{{.T "mcp.rights"}} <span class="fw-normal text-body-secondary">({{.T "mcp.read_only"}})</span></div>
+				<div class="row row-cols-2 g-1 mb-2">
+				{{range $d.Areas}}
+					<div class="col"><div class="form-check small"><input class="form-check-input" type="checkbox" name="area" value="{{.Name}}" id="mcp-area-{{.Name}}" checked><label class="form-check-label" for="mcp-area-{{.Name}}">{{$.T (print "mcp.area_" .Name)}}{{if not .Available}} <span class="text-body-secondary">({{$.T "mcp.area_off"}})</span>{{end}}</label></div></div>
+				{{end}}
+				</div>
+				<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-plus-lg"></i> {{.T "mcp.key_create"}}</button>
+			</form>
+		</div>
+	</div>
+</div>
+<div class="col-lg-6 d-flex flex-column gap-3">
+	<div class="card" id="setup">
+		<div class="card-header"><i class="bi bi-plug text-primary"></i> {{.T "mcp.setup"}}</div>
+		<div class="card-body small">
+			<p class="text-body-secondary">{{if $d.NewKey}}{{.T "mcp.setup_with_key"}}{{else}}{{.T "mcp.setup_placeholder"}}{{end}}</p>
+			<div class="fw-semibold">Claude Code</div>
+			<p class="text-body-secondary mb-1">{{.T "mcp.setup_claude_code"}}</p>
+			<div class="position-relative mb-3"><pre class="bg-body-tertiary border rounded p-2 mb-0 small text-wrap text-break" id="snip-cc">{{index $d.Snippets "claude_code"}}</pre><button class="btn btn-sm btn-outline-secondary btn-copy position-absolute top-0 end-0 m-1" type="button" data-copy-target="#snip-cc" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
+			<div class="fw-semibold">Cursor</div>
+			<p class="text-body-secondary mb-1">{{.T "mcp.setup_cursor"}}</p>
+			<div class="position-relative mb-3"><pre class="bg-body-tertiary border rounded p-2 mb-0 small" id="snip-cursor">{{index $d.Snippets "cursor"}}</pre><button class="btn btn-sm btn-outline-secondary btn-copy position-absolute top-0 end-0 m-1" type="button" data-copy-target="#snip-cursor" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
+			<div class="fw-semibold">VS Code</div>
+			<p class="text-body-secondary mb-1">{{.T "mcp.setup_vscode"}}</p>
+			<div class="position-relative mb-3"><pre class="bg-body-tertiary border rounded p-2 mb-0 small" id="snip-vscode">{{index $d.Snippets "vscode"}}</pre><button class="btn btn-sm btn-outline-secondary btn-copy position-absolute top-0 end-0 m-1" type="button" data-copy-target="#snip-vscode" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
+			<div class="fw-semibold">Claude Desktop <span class="badge text-bg-warning">{{.T "mcp.check"}}</span></div>
+			<p class="text-body-secondary mb-1">{{.T "mcp.setup_claude_desktop"}}</p>
+			<div class="position-relative mb-3"><pre class="bg-body-tertiary border rounded p-2 mb-0 small" id="snip-desktop">{{index $d.Snippets "claude_desktop"}}</pre><button class="btn btn-sm btn-outline-secondary btn-copy position-absolute top-0 end-0 m-1" type="button" data-copy-target="#snip-desktop" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
+			<p class="text-body-secondary mb-0"><i class="bi bi-shield-exclamation"></i> {{.T "mcp.setup_tls"}}</p>
+		</div>
+	</div>
+	<div class="card" id="security">
+		<div class="card-header"><i class="bi bi-shield-check text-success"></i> {{.T "mcp.security"}}</div>
+		<div class="card-body small">
+			<ul class="mb-0 ps-3">
+				<li>{{.T "mcp.sec_read_only"}}</li>
+				<li>{{.T "mcp.sec_no_secrets"}}</li>
+				<li>{{.T "mcp.sec_untrusted"}}</li>
+				<li>{{.T "mcp.sec_limits"}}</li>
+				<li>{{.T "mcp.sec_audit"}} <a href="/audit?area=mcp">{{.T "nav.audit"}}</a></li>
+			</ul>
+		</div>
+	</div>
+</div>
+</div>
+{{end}}

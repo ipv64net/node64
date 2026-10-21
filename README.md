@@ -245,6 +245,7 @@ Ohne Oberfläche als reiner Sensor (z. B. auf einem kleinen Raspberry Pi, auch a
 - **Zwei-Faktor-Anmeldung:** TOTP mit jeder Authenticator-App, acht Wiederherstellungscodes.
 - **Passwort vergessen:** `docker exec node64 /node64 reset-password` setzt im laufenden Container ein neues (zufälliges) Passwort und beendet alle Sitzungen; `-disable-2fa` schaltet zusätzlich die Zwei-Faktor-Anmeldung ab, `-user NAME` wählt den Benutzer (siehe [docs/ANMELDUNG.md](docs/ANMELDUNG.md)).
 - **API-Keys:** Für Skripte gegen die lokale API, `Authorization: Bearer node64_...`. Keys werden nur einmal angezeigt und gehasht gespeichert.
+- **KI-Schnittstelle (MCP):** Claude Code, Cursor, VS Code oder Claude Desktop fragen über `/mcp` den Zustand der Node ab (nur lesen, nur aus dem Heimnetz, eigene Schlüssel mit Rechten je Bereich, Standard aus). Einrichtung unter *Einstellungen → KI-Schnittstelle (MCP)*, Details: [docs/MCP.md](docs/MCP.md).
 - **Schutz:** Login-Ratelimit, Ratelimit je IP für alle Anfragen, Push-URLs mit Mindestabstand, höchstens 60 Nachrichten je Kanal und Stunde.
 - **Updates:** Optional prüft der Node täglich eine Versionsdatei bei ipv64.net. Es werden keine Daten gesendet.
 

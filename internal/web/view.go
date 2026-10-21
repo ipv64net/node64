@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/ipv64api"
+	"github.com/ipv64net/node64/internal/mcp"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/store"
 	nodesync "github.com/ipv64net/node64/internal/sync"
@@ -352,6 +353,9 @@ func (s *Server) audit(r *http.Request, action, target, details string) {
 		if k.Hint != "" {
 			origin += " (" + k.Hint + ")"
 		}
+	}
+	if id, ok := r.Context().Value(ctxMCPKey).(mcp.Identity); ok { // in-process ueber die MCP-Schnittstelle
+		origin = mcpOrigin(id.KeyName, id.KeyHint)
 	}
 	if err := s.Store.Audit(r.Context(), store.AuditEntry{Actor: actor, Action: action, Target: target, Details: details, IP: s.clientIP(r), Origin: origin}); err != nil {
 		s.log.Error("audit write failed", "err", err)

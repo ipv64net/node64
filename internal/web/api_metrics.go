@@ -82,6 +82,11 @@ func (s *Server) apiMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	m.Gauge("node64_mcp_enabled", "MCP-Schnittstelle (KI-Anwendungen) eingeschaltet.", metrics.Bool(s.mcpEnabled(ctx)))
+	for _, c := range s.mcpCounter.Snapshot() {
+		m.Counter("node64_mcp_calls_total", "Werkzeugaufrufe ueber die MCP-Schnittstelle seit dem Start.", float64(c.Count), "tool", c.Tool, "result", c.Result)
+	}
+
 	m.Gauge("node64_scrape_duration_seconds", "Dauer dieser Abfrage.", time.Since(start).Seconds())
 	w.Header().Set("Content-Type", metrics.ContentType)
 	w.Header().Set("Cache-Control", "no-store")
