@@ -35,6 +35,10 @@
 					<div class="col-12" data-types="push">
 						<div class="alert alert-info small mb-0">{{.T "hc.form.push_hint"}}</div>
 					</div>
+					{{if eq (index $f "type") "proxmox"}}<div class="col-12" data-types="proxmox">
+						<input type="hidden" name="pve_params" value="{{index $f "pve_params"}}">
+						<div class="alert alert-info small mb-0"><i class="bi bi-hdd-rack"></i> {{.T "pve.check.form_hint"}} <a href="/healthchecks/proxmox">{{.T "nav.proxmox"}}</a></div>
+					</div>{{end}}
 					<div class="col-md-6">
 						<label class="form-label" for="group">{{.T "hc.group.label"}}</label>
 						<div class="input-group"><span class="input-group-text"><i class="bi bi-collection text-primary"></i></span><input class="form-control" id="group" name="group" value="{{index $f "group"}}" maxlength="100" list="hc-groups" placeholder="{{.T "hc.group.placeholder"}}"></div>

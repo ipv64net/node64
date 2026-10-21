@@ -464,8 +464,8 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 		if v, ok := nodeRef.(string); ok {
 			owner0 = v
 		}
-		if c.Type == "docker" && exists && owner.Valid && owner.String != "" && owner0 != owner.String {
-			res.Error = "docker checks belong to the node that runs the container and cannot be moved"
+		if singleNodeType(c.Type) && exists && owner.Valid && owner.String != "" && owner0 != owner.String {
+			res.Error = c.Type + " checks belong to the node that runs them and cannot be moved"
 			return nil
 		}
 		nodeList = measuringNodes(c.Nodes, owner0)
@@ -507,8 +507,8 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 			res.Error = fmt.Sprintf("online limit reached (%d of %d measuring points)", used, lim)
 			return nil
 		}
-		if c.Type == "docker" {
-			res.Error = "docker checks run only locally on a node and cannot be moved"
+		if singleNodeType(c.Type) {
+			res.Error = c.Type + " checks run only locally on a node and cannot be moved"
 			return nil
 		}
 		if isPrivateTarget(c.Type, c.Target) || (c.Type == "dns" && checks.DNSNeedsNode(c.Params)) {
@@ -792,7 +792,7 @@ func orDefault(v, def string) string {
 
 func validateWireCheck(c *wire.Check) error {
 	switch c.Type {
-	case "http", "keyword", "json", "dns", "icmp", "tcp", "port", "cert", "push", "docker":
+	case "http", "keyword", "json", "dns", "icmp", "tcp", "port", "cert", "push", "docker", "proxmox":
 	default:
 		return fmt.Errorf("unknown type %q", c.Type)
 	}
@@ -1167,5 +1167,6 @@ func measuringNodes(list []string, owner string) []string {
 	return out
 }
 
-// singleNodeType: der Docker-Socket gehoert zu genau einer Node (Push-Checks sind frei zuordenbar).
-func singleNodeType(typ string) bool { return typ == "docker" }
+// singleNodeType: der Docker-Socket bzw. die Proxmox-Abfrage gehoert zu genau einer Node (Push-Checks sind frei
+// zuordenbar).
+func singleNodeType(typ string) bool { return typ == "docker" || typ == "proxmox" }

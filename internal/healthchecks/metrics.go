@@ -69,4 +69,5 @@ func (m *Module) Metrics(ctx context.Context, w *metrics.Writer) {
 		}
 		w.Gauge("node64_hc_incidents_open", "Offene Stoerungen.", float64(open))
 	}
+	m.pveMetrics(ctx, w) // Proxmox VE (proxmox_metrics.go)
 }

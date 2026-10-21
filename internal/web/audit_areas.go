@@ -8,7 +8,7 @@ var auditAreaOrder = []string{"login", "settings", "healthchecks", "dyndns", "cd
 var auditAreas = map[string][]string{
 	"login":        {"setup", "login", "logout", "twofa.", "passkey.", "sso.", "apikey."},
 	"settings":     {"settings.", "logging.", "notify.", "channel.", "module.", "edge.settings", "edge.ui", "web.tls_cert", "backup.", "config.", "node."},
-	"healthchecks": {"check."},
+	"healthchecks": {"check.", "proxmox."},
 	"dyndns":       {"dyndns."},
 	"cdn64":        {"cdn64.", "edge.default", "certs.dns."},
 	"dns64":        {"dns64."},

@@ -350,6 +350,9 @@ func (s *Server) buildExport(ctx context.Context, mode, password string) (*confi
 			cf.Channels = append(cf.Channels, configChannel{ID: ch.ID, Name: ch.Name, Type: string(ch.Type), Enabled: ch.Enabled, Default: ch.Default, Lang: ch.Lang, NotifyDown: ch.NotifyDown, NotifyUp: ch.NotifyUp, Config: cfg})
 		}
 	}
+	if box != nil { // mit Passwort: Module duerfen Geheimnisse verschluesselt mitgeben (z. B. Proxmox-Token)
+		ctx = module.WithSecretSealer(ctx, box)
+	}
 	for _, m := range s.Modules.Modules() {
 		ex, ok := m.(module.Exporter)
 		if !ok || !s.Modules.IsRunning(m.Info().Name) {
@@ -520,6 +523,9 @@ func (s *Server) applyImport(ctx context.Context, raw []byte, password string) (
 				problems = append(problems, "certificates: "+err.Error())
 			}
 		}
+	}
+	if box != nil {
+		ctx = module.WithSecretSealer(ctx, box)
 	}
 	for _, m := range s.Modules.Modules() {
 		ex, ok := m.(module.Exporter)

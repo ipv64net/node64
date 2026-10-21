@@ -226,8 +226,8 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 		switch in.Execution {
 		case "local":
 		case "online", "both":
-			if c.Type == checks.TypeDocker {
-				return errors.New("execution: docker checks run only locally on this node")
+			if singleNode(c.Type) {
+				return errors.New("execution: " + string(c.Type) + " checks run only locally on this node")
 			}
 			if m.linked == nil || !m.linked() {
 				return errors.New("execution: online and hybrid need the ipv64 link")

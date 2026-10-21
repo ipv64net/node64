@@ -44,6 +44,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	m.maintenanceRoutes(mux, page)
 	m.incidentsRoutes(mux, page)
 	m.statusPagesRoutes(mux, page)
+	m.pveRoutes(mux, page)
 }
 
 // ---------------------------------------------------------------- Darstellung
@@ -739,6 +740,8 @@ func formFromCheck(c *Check) map[string]string {
 		set("grace_seconds", "grace_seconds")
 	case checks.TypeDocker:
 		set("docker_host", "host")
+	case checks.TypeProxmox:
+		f["pve_params"] = string(c.Params) // System und Gast stehen fest (Proxmox VE → „als Check“)
 	case checks.TypeDNS:
 		var dp checks.DNSParams
 		_ = json.Unmarshal(c.Params, &dp)
@@ -970,6 +973,14 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 		if err := num("grace_seconds", "grace_seconds"); err != nil {
 			return in, err
 		}
+	case checks.TypeProxmox: // unveraendert aus dem verborgenen Feld; das Ziel ist der Key
+		var pp checks.ProxmoxParams
+		if err := json.Unmarshal([]byte(v("pve_params")), &pp); err != nil {
+			return in, fmt.Errorf("proxmox: %w", err)
+		}
+		in.Target = pp.Key
+		in.Params, _ = json.Marshal(pp)
+		return in, nil
 	}
 	in.Params, _ = json.Marshal(p)
 	return in, nil
@@ -996,6 +1007,9 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 	}
 	cancel()
 	d.Types = checks.Types
+	if d.Form["type"] == string(checks.TypeProxmox) { // nur ueber Proxmox VE angelegt, hier nur bearbeiten
+		d.Types = append(append([]checks.Type{}, checks.Types...), checks.TypeProxmox)
+	}
 	d.IPModes = []string{"auto", "ipv4", "ipv6", "both"}
 	d.DNSRecordTypes, d.DNSExpects = checks.DNSRecordTypes, checks.DNSExpects
 	d.Policies, d.Locations, d.Executions = Policies, KnownLocations, []string{"local", "online", "both"}
@@ -1159,6 +1173,8 @@ func (c *Check) TargetBadge() Badge {
 		return Badge{Text: t, Class: "bi-shield-lock"}
 	case checks.TypeDocker:
 		return Badge{Text: t, Class: "bi-box"}
+	case checks.TypeProxmox:
+		return Badge{Text: t, Class: "bi-hdd-rack"}
 	case checks.TypeDNS:
 		var p checks.DNSParams
 		_ = json.Unmarshal(c.Params, &p)

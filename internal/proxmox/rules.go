@@ -9,9 +9,9 @@ import (
 )
 
 // Regeln: Engine vergleicht jeden Snapshot mit dem vorigen Stand je System und Key und liefert Ereignisse fuer die
-// Benachrichtigung (Event.Kind down, up, threshold, threshold_ok, restarted). Die Engine haelt nur Zustand im
-// Speicher; nach einem Neustart von Node64 beginnt die Zaehlung neu (offene Stoerungen werden dann erneut gemeldet,
-// sobald die Verzoegerung erreicht ist).
+// Benachrichtigung (Event.Kind down, up, threshold, threshold_ok, restarted). Die Engine haelt ihren Zustand im
+// Speicher; gemeldete Stoerungen und Schwellen gibt Export heraus, damit die Einbindung sie speichern und nach einem
+// Neustart von Node64 mit Import wiederherstellen kann (sonst kaemen sie doppelt bzw. ohne Entwarnung).
 
 // Ereignisarten (Event.Kind).
 const (
@@ -289,7 +289,11 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 				rs.down, rs.what = true, what
 				if !asCheck {
 					rs.notified = true
-					add(Event{Key: key, Name: name, Kind: KindDown, What: what, Since: rs.since, Text: pveDownText(r, lbl, what)})
+					ev := Event{Key: key, Name: name, Kind: KindDown, What: what, Since: rs.since, Text: pveDownText(r, lbl, what)}
+					if what == WhatCrashed {
+						ev.Detail = r.QMP // qmpstatus fuer den Text (internal-error, guest-panicked, io-error)
+					}
+					add(ev)
 				}
 			}
 		case good:
@@ -389,4 +393,91 @@ func pveDownText(r *Resource, lbl, what string) string {
 		return lbl + " ist offline"
 	}
 	return lbl + ": " + what
+}
+
+// EngineState ist der gesicherte Stand eines Systems: nur gemeldete Stoerungen und Schwellen (alles andere beginnt
+// nach einem Neustart neu zu zaehlen). Die Einbindung speichert ihn und stellt ihn beim Start mit Import wieder her.
+type EngineState struct {
+	Down  bool                      `json:"down,omitempty"` // „nicht erreichbar“ gemeldet
+	Since time.Time                 `json:"since,omitempty"`
+	Res   map[string]EngineResState `json:"res,omitempty"` // Key → gemeldeter Stand
+}
+
+// EngineResState ist der gemeldete Stand eines Nodes oder Gasts.
+type EngineResState struct {
+	What  string               `json:"what,omitempty"` // gemeldete Stoerung ('' = keine)
+	Since time.Time            `json:"since,omitempty"`
+	Thr   map[string]EngineThr `json:"thr,omitempty"` // cpu, mem, disk: gemeldete Schwellen
+}
+
+// EngineThr ist eine gemeldete Schwelle.
+type EngineThr struct {
+	Limit float64   `json:"limit"`
+	Since time.Time `json:"since"`
+}
+
+// Export liefert die gemeldeten Stoerungen eines Systems (nil = nichts offen).
+func (e *Engine) Export(systemID int64) *EngineState {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	st := e.sys[systemID]
+	if st == nil {
+		return nil
+	}
+	out := &EngineState{}
+	if st.notified {
+		out.Down, out.Since = true, st.since
+	}
+	for k, rs := range st.res {
+		var x EngineResState
+		if rs.notified {
+			x.What, x.Since = rs.what, rs.since
+		}
+		for m := 0; m < 3; m++ {
+			if rs.thr[m].fired {
+				if x.Thr == nil {
+					x.Thr = map[string]EngineThr{}
+				}
+				x.Thr[pveMetricWhat[m]] = EngineThr{Limit: rs.thrLimits[m], Since: rs.thr[m].since}
+			}
+		}
+		if x.What != "" || x.Thr != nil {
+			if out.Res == nil {
+				out.Res = map[string]EngineResState{}
+			}
+			out.Res[k] = x
+		}
+	}
+	if !out.Down && out.Res == nil {
+		return nil
+	}
+	return out
+}
+
+// Import stellt den gesicherten Stand eines Systems wieder her (nach einem Neustart, vor der ersten Auswertung):
+// die Stoerungen gelten als schon gemeldet, die naechste Auswertung meldet nur noch die Entwarnung.
+func (e *Engine) Import(systemID int64, s *EngineState) {
+	if s == nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	st := &pveSysState{res: map[string]*pveResState{}}
+	if s.Down {
+		st.bad, st.down, st.notified, st.since = 1, true, true, s.Since
+	}
+	for k, x := range s.Res {
+		rs := &pveResState{ran: true}
+		if x.What != "" {
+			rs.bad, rs.down, rs.notified, rs.what, rs.since = 1, true, true, x.What, x.Since
+		}
+		for m := 0; m < 3; m++ {
+			if t, ok := x.Thr[pveMetricWhat[m]]; ok && t.Limit > 0 {
+				rs.thr[m] = pveThrState{since: t.Since, above: 1, fired: true}
+				rs.thrLimits[m] = t.Limit
+			}
+		}
+		st.res[k] = rs
+	}
+	e.sys[systemID] = st
 }

@@ -30,7 +30,7 @@ type NodeTestrunResult struct {
 
 // CreateNodeTestrun legt einen Online-Testlauf an; Standorte auf die bekannten und die Klasse begrenzt.
 func (s *Store) CreateNodeTestrun(ctx context.Context, userID int64, def wire.Check, locations []string) (int64, []string, error) {
-	if def.Type == "docker" || def.Type == "push" {
+	if def.Type == "docker" || def.Type == "proxmox" || def.Type == "push" {
 		return 0, nil, ErrTestrunType
 	}
 	if isPrivateTarget(def.Type, def.Target) || (def.Type == "dns" && checks.DNSNeedsNode(def.Params)) {

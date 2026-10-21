@@ -1,0 +1,144 @@
+{{define "content"}}
+{{$d := .Data}}
+{{$f := $d.Filter}}
+<div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+	<div>
+		<h1 class="h4 mb-1"><i class="bi bi-hdd-rack text-primary me-1"></i> {{$d.Sys.Name}} <span class="badge {{$d.Class}}">{{.T (print "pve.sys_state." $d.State)}}</span>{{$.Doc "proxmox"}}</h1>
+		<div class="small text-body-secondary d-flex flex-wrap gap-2">
+			{{with $d.Snap}}{{if .Version}}<span class="badge text-bg-light">PVE {{.Version}}</span>{{end}}{{if .Cluster}}<span class="badge text-bg-light"><i class="bi bi-diagram-3"></i> {{.Cluster}}</span>{{end}}{{end}}
+			{{if eq $d.Quorum "ok"}}<span class="badge text-bg-success">{{.T "pve.quorum_ok"}}</span>{{else if eq $d.Quorum "lost"}}<span class="badge text-bg-danger">{{.T "pve.quorum_lost"}}</span>{{end}}
+			{{with $d.Snap}}{{if .Address}}<code>{{.Address}}</code>{{end}} <span>{{$.T "pve.last_poll"}}: {{$.Ago .Time}}</span>{{end}}
+			<span>{{.T "pve.interval"}}: {{$d.Sys.Interval}} s</span>
+			{{if $d.Sys.PinSHA256}}<span title="{{$d.PinFmt}}"><i class="bi bi-pin-angle"></i> {{.T "pve.pinned"}}</span>{{end}}
+		</div>
+	</div>
+	<div class="d-flex gap-1 flex-wrap">
+		<a class="btn btn-sm btn-outline-secondary" href="{{$d.Path}}" title="{{.T "logs.refresh"}}"><i class="bi bi-arrow-clockwise"></i></a>
+		<a class="btn btn-sm btn-outline-primary" href="{{$d.Path}}/edit"><i class="bi bi-pencil"></i> {{.T "pve.edit"}}</a>
+		<form method="post" action="{{$d.Path}}/toggle" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}">
+			{{if $d.Sys.Enabled}}<button class="btn btn-sm btn-outline-warning" type="submit"><i class="bi bi-pause-fill"></i> {{.T "pve.disable"}}</button>{{else}}<button class="btn btn-sm btn-outline-success" type="submit"><i class="bi bi-play-fill"></i> {{.T "pve.enable"}}</button>{{end}}</form>
+		<form method="post" action="{{$d.Path}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{.T "pve.delete_confirm" "name" $d.Sys.Name}}"><i class="bi bi-trash"></i> {{.T "common.delete"}}</button></form>
+	</div>
+</div>
+
+{{if eq $d.State "off"}}<div class="alert alert-secondary small"><i class="bi bi-pause-circle"></i> {{.T "pve.off_hint"}}</div>
+{{else if eq $d.State "error"}}<div class="alert alert-danger small"><i class="bi bi-key"></i> <strong>{{.T "pve.sys_state.error"}}:</strong> {{$d.Error}} <a href="{{$d.Path}}/edit">{{.T "pve.edit"}}</a></div>
+{{else if eq $d.State "down"}}<div class="alert alert-danger small"><i class="bi bi-plug"></i> <strong>{{.T "pve.unreachable"}}:</strong> {{$d.Error}}</div>
+{{else if eq $d.State "pending"}}<div class="alert alert-info small"><i class="bi bi-hourglass-split"></i> {{.T "pve.pending"}}</div>{{end}}
+
+{{if $d.NodeRows}}
+<div class="card mb-3">
+	<div class="card-header"><i class="bi bi-hdd-stack text-primary"></i> {{.T "pve.nodes"}} <span class="badge text-bg-secondary">{{$d.NodesOnline}}/{{$d.Nodes}}</span></div>
+	<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards hc-table">
+		<thead><tr><th>{{.T "common.name"}}</th><th>{{.T "common.status"}}</th><th class="text-end">CPU</th><th class="text-end">RAM</th><th class="text-end">Disk</th><th>{{.T "pve.uptime"}}</th><th>{{.T "pve.cpu_1h"}}</th><th class="text-end">{{.T "pve.guests"}}</th><th class="text-end">{{.T "pve.as_check"}}</th></tr></thead>
+		<tbody>
+		{{range $d.NodeRows}}
+		<tr{{if .Bad}} class="hc-row-down"{{end}}>
+			<td data-label="{{$.T "common.name"}}"><a href="{{.Path}}" class="fw-semibold">{{.R.Node}}</a>{{if .Muted}} <i class="bi bi-bell-slash text-body-secondary" title="{{$.T "pve.muted"}}"></i>{{end}}</td>
+			<td data-label="{{$.T "common.status"}}"><span class="badge {{.Class}}">{{$.T .Label}}</span></td>
+			<td data-label="CPU" class="text-end text-nowrap">{{or .CPU "–"}}</td>
+			<td data-label="RAM" class="text-end text-nowrap">{{or .Mem "–"}}</td>
+			<td data-label="Disk" class="text-end text-nowrap">{{or .Disk "–"}}</td>
+			<td data-label="{{$.T "pve.uptime"}}" class="small text-nowrap">{{if .Uptime}}{{$.Duration .Uptime}}{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.cpu_1h"}}" class="text-primary">{{.Spark}}</td>
+			<td data-label="{{$.T "pve.guests"}}" class="text-end">{{.GuestsOn}}</td>
+			<td data-label="{{$.T "pve.as_check"}}" class="text-end"><form method="post" action="{{$d.Path}}/ascheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="key" value="{{.Key}}"><input type="hidden" name="back" value="{{$d.Path}}">{{if .AsCheck}}<input type="hidden" name="on" value="0"><a class="btn btn-sm btn-link p-0 me-1" href="/healthchecks/{{.CheckToken}}" title="{{$.T "pve.check.open"}}"><i class="bi bi-heart-pulse"></i></a><button class="btn btn-sm btn-success py-0" type="submit" title="{{$.T "pve.check.remove"}}" data-confirm="{{$.T "pve.check.remove_confirm"}}"><i class="bi bi-toggle-on"></i></button>{{else}}<input type="hidden" name="on" value="1"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "pve.check.add"}}"><i class="bi bi-toggle-off"></i></button>{{end}}</form></td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table></div>
+</div>
+{{end}}
+
+{{if $d.Snap}}{{if $d.Snap.OK}}
+<div class="card mb-3">
+	<div class="card-header"><i class="bi bi-boxes text-primary"></i> {{.T "pve.guests"}} <span class="badge text-bg-secondary">{{len $d.Guests}}{{if ne (len $d.Guests) $d.Total}}/{{$d.Total}}{{end}}</span></div>
+	<div class="card-body pb-0">
+		<form method="get" action="{{$d.Path}}" class="row g-2 mb-2 align-items-end" data-autosubmit>
+			<div class="col-12 col-md-4"><input class="form-control form-control-sm" type="search" name="q" value="{{$f.q}}" placeholder="{{.T "common.search"}} …"></div>
+			<div class="col-6 col-md-2"><select class="form-select form-select-sm" name="state">
+				<option value="">{{.T "common.status"}}: {{.T "common.all"}}</option>
+				{{range $d.States}}<option value="{{.}}"{{if eq . $f.state}} selected{{end}}>{{$.T (print "pve.filter." .)}}</option>{{end}}
+			</select></div>
+			{{if gt (len $d.NodeNames) 1}}<div class="col-6 col-md-2"><select class="form-select form-select-sm" name="node">
+				<option value="">Node: {{.T "common.all"}}</option>
+				{{range $d.NodeNames}}<option value="{{.}}"{{if eq . $f.node}} selected{{end}}>{{.}}</option>{{end}}
+			</select></div>{{end}}
+			<div class="col-6 col-md-2"><select class="form-select form-select-sm" name="type">
+				<option value="">{{.T "common.type"}}: {{.T "common.all"}}</option>
+				<option value="qemu"{{if eq "qemu" $f.type}} selected{{end}}>{{.T "pve.type.qemu"}}</option>
+				<option value="lxc"{{if eq "lxc" $f.type}} selected{{end}}>{{.T "pve.type.lxc"}}</option>
+			</select></div>
+			<div class="col-6 col-md-2"><button class="btn btn-sm btn-outline-secondary w-100" type="submit"><i class="bi bi-funnel"></i> {{.T "pve.filter.apply"}}</button></div>
+		</form>
+	</div>
+	{{if $d.Guests}}
+	<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards hc-table">
+		<thead><tr><th>{{.T "common.name"}}</th><th>ID</th><th>{{.T "common.type"}}</th><th>Node</th><th>{{.T "common.status"}}</th><th class="text-end">CPU</th><th class="text-end">RAM</th><th class="text-end">Disk</th><th>{{.T "pve.net"}}</th><th>{{.T "pve.uptime"}}</th><th>{{.T "pve.cpu_1h"}}</th><th class="text-end">{{.T "pve.as_check"}}</th></tr></thead>
+		<tbody>
+		{{range $d.Guests}}
+		<tr class="{{if and .Bad (not .Muted)}}hc-row-down{{end}}{{if .Excluded}} text-body-tertiary{{end}}">
+			<td data-label="{{$.T "common.name"}}"><a href="{{.Path}}" class="fw-semibold text-nowrap">{{or .R.Name .Key}}</a>{{if .Muted}} <i class="bi bi-bell-slash text-body-secondary" title="{{$.T "pve.muted"}}"></i>{{end}}
+				{{range .R.Tags}}<span class="badge rounded-pill text-bg-light fw-normal">{{.}}</span> {{end}}</td>
+			<td data-label="ID">{{.R.VMID}}</td>
+			<td data-label="{{$.T "common.type"}}" class="text-nowrap"><span class="badge text-bg-light">{{$.T .TypeLabel}}</span></td>
+			<td data-label="Node">{{.R.Node}}</td>
+			<td data-label="{{$.T "common.status"}}"><span class="badge {{.Class}}">{{$.T .Label}}</span>{{if .R.Lock}} <span class="badge text-bg-light" title="lock"><i class="bi bi-lock"></i> {{.R.Lock}}</span>{{end}}{{if .R.QMP}}{{if eq (print .R.State) "error"}} <span class="small text-danger">{{.R.QMP}}</span>{{end}}{{end}}{{if .R.Template}} <span class="badge text-bg-light">{{$.T "pve.template"}}</span>{{else if .Excluded}} <span class="badge text-bg-light" title="nomonitor">{{$.T "pve.excluded"}}</span>{{end}}</td>
+			<td data-label="CPU" class="text-end text-nowrap">{{or .CPU "–"}}</td>
+			<td data-label="RAM" class="text-end text-nowrap">{{or .Mem "–"}}</td>
+			<td data-label="Disk" class="text-end text-nowrap">{{or .Disk "–"}}</td>
+			<td data-label="{{$.T "pve.net"}}" class="small text-nowrap">{{or .Net "–"}}</td>
+			<td data-label="{{$.T "pve.uptime"}}" class="small text-nowrap">{{if .Uptime}}{{$.Duration .Uptime}}{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.cpu_1h"}}" class="text-primary">{{.Spark}}</td>
+			<td data-label="{{$.T "pve.as_check"}}" class="text-end">{{if not .Excluded}}<form method="post" action="{{$d.Path}}/ascheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="key" value="{{.Key}}"><input type="hidden" name="back" value="{{$d.Path}}">{{if .AsCheck}}<input type="hidden" name="on" value="0"><a class="btn btn-sm btn-link p-0 me-1" href="/healthchecks/{{.CheckToken}}" title="{{$.T "pve.check.open"}}"><i class="bi bi-heart-pulse"></i></a><button class="btn btn-sm btn-success py-0" type="submit" title="{{$.T "pve.check.remove"}}" data-confirm="{{$.T "pve.check.remove_confirm"}}"><i class="bi bi-toggle-on"></i></button>{{else}}<input type="hidden" name="on" value="1"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "pve.check.add"}}"><i class="bi bi-toggle-off"></i></button>{{end}}</form>{{end}}</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table></div>
+	{{else}}<div class="card-body pt-0 small text-body-secondary">{{if $d.Total}}{{.T "pve.no_match"}}{{else}}{{.T "pve.no_guests"}}{{end}}</div>{{end}}
+</div>
+{{end}}{{end}}
+
+{{template "pverules" $}}
+{{end}}
+
+{{define "pverules"}}{{$r := .Data.Rules}}
+<div class="card mb-3" id="rules">
+	<div class="card-header"><i class="bi bi-bell text-primary"></i> {{.T "pve.rules.title"}} <span class="small text-body-secondary">· {{.T (print "pve.rules.level_" $r.Level)}}</span>{{.Doc "proxmox"}}</div>
+	<form method="post" action="{{$r.Action}}" class="card-body">
+		<input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="key" value="{{$r.Key}}">
+		<p class="small text-body-secondary">{{.T (print "pve.rules.hint_" $r.Level)}}</p>
+		<div class="row g-2 mb-2">
+			<div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="pve-muted" name="muted"{{if $r.Muted}} checked{{end}}><label class="form-check-label" for="pve-muted">{{.T (print "pve.rules.muted_" $r.Level)}}</label></div></div>
+			{{if eq $r.Level "guest"}}<div class="col-md-6"><label class="form-label small mb-0" for="pve-expect">{{.T "pve.rules.expect"}}</label>
+				<select class="form-select form-select-sm" id="pve-expect" name="expect">
+					<option value=""{{if eq $r.Expect ""}} selected{{end}}>{{.T "pve.rules.expect_auto"}} ({{if $r.Seen}}{{.T "pve.rules.expect_seen"}}{{else}}{{.T "pve.rules.expect_unseen"}}{{end}})</option>
+					<option value="1"{{if eq $r.Expect "1"}} selected{{end}}>{{.T "pve.rules.expect_yes"}}</option>
+					<option value="0"{{if eq $r.Expect "0"}} selected{{end}}>{{.T "pve.rules.expect_no"}}</option>
+				</select></div>{{end}}
+		</div>
+		<div class="table-responsive"><table class="table table-sm align-middle mb-2">
+			<thead><tr><th>{{.T "pve.rules.rule"}}</th><th style="min-width:14rem">{{.T "pve.rules.own"}}</th><th>{{.T "pve.rules.inherited"}}</th></tr></thead>
+			<tbody>
+			{{range $r.Fields}}
+			<tr>
+				<td>{{$.T .Label}}</td>
+				<td>{{if eq .Kind "bool"}}<select class="form-select form-select-sm" name="r_{{.Name}}">
+						<option value=""{{if eq .Own ""}} selected{{end}}>{{$.T "pve.rules.inherit"}}</option>
+						<option value="1"{{if eq .Own "1"}} selected{{end}}>{{$.T "common.on"}}</option>
+						<option value="0"{{if eq .Own "0"}} selected{{end}}>{{$.T "common.off"}}</option>
+					</select>
+					{{else if eq .Kind "thr"}}<div class="input-group input-group-sm"><input class="form-control" name="r_{{.Name}}" value="{{.Own}}" inputmode="decimal" placeholder="{{$.T "pve.rules.inherit"}}" aria-label="%"><span class="input-group-text">%</span><input class="form-control" name="r_{{.Name}}_min" value="{{.OwnMin}}" inputmode="numeric" placeholder="0" aria-label="min"><span class="input-group-text">min</span></div>
+					{{else}}<div class="input-group input-group-sm"><input class="form-control" name="r_{{.Name}}" value="{{.Own}}" inputmode="numeric" placeholder="{{$.T "pve.rules.inherit"}}"><span class="input-group-text">{{$.T "pve.rules.polls"}}</span></div>{{end}}</td>
+				<td class="small {{if ne .Own ""}}text-body-tertiary text-decoration-line-through{{else}}text-body-secondary{{end}}">{{if .InhKey}}{{$.T .InhKey}}{{else}}{{.Inh}}{{end}} · {{$.T .From}}</td>
+			</tr>
+			{{end}}
+			</tbody>
+		</table></div>
+		<div class="d-flex gap-2">
+			<button class="btn btn-primary btn-sm" type="submit" name="op" value="save"><i class="bi bi-check-lg"></i> {{.T "common.save"}}</button>
+			<button class="btn btn-outline-secondary btn-sm" type="submit" name="op" value="reset" data-confirm="{{.T "pve.rules.reset_confirm"}}"><i class="bi bi-arrow-counterclockwise"></i> {{.T "pve.rules.reset"}}</button>
+		</div>
+	</form>
+</div>
+{{end}}

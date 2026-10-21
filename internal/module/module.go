@@ -130,6 +130,25 @@ func WithChannelMap(ctx context.Context, m map[int64]int64) context.Context {
 	return context.WithValue(ctx, channelMapKey{}, m)
 }
 
+type sealerKey struct{}
+
+// SecretSealer verschluesselt Geheimnisse eines Moduls im Export mit dem Export-Passwort (Export „mit Passwort“).
+type SecretSealer interface {
+	Encrypt(plain string) string
+	Decrypt(value string) (string, error)
+}
+
+// WithSecretSealer: Export bzw. Import mit Passwort – Module duerfen Geheimnisse damit verschluesselt mitgeben.
+func WithSecretSealer(ctx context.Context, s SecretSealer) context.Context {
+	return context.WithValue(ctx, sealerKey{}, s)
+}
+
+// SecretSealerOf liefert den Verschluesseler des Exports bzw. Imports (nil = ohne Passwort, Geheimnisse fehlen).
+func SecretSealerOf(ctx context.Context) SecretSealer {
+	s, _ := ctx.Value(sealerKey{}).(SecretSealer)
+	return s
+}
+
 // MapChannels setzt Kanal-IDs aus einer importierten Datei auf die dieser Node um; unbekannte entfallen.
 // Ohne Zuordnung (aeltere Exporte ohne Kanal-IDs) bleiben die IDs unveraendert.
 func MapChannels(ctx context.Context, ids []int64) []int64 {

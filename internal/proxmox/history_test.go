@@ -135,12 +135,13 @@ func TestHistoryCompactPruneSeries(t *testing.T) {
 	}
 	s.now = func() time.Time { return base.Add(10 * 24 * time.Hour) }
 	pts, _ = s.Series(ctx, sys.ID, "lxc/200", base, base.Add(3*time.Hour))
-	if len(pts) != 24 || pts[0].CPU != 18 || pts[0].CPUMax != 90 {
+	// 24 verdichtete Werte + das noch nicht verdichtete Ende (02:00) aus den 1-Minuten-Werten
+	if len(pts) != 25 || pts[0].CPU != 18 || pts[0].CPUMax != 90 || !pts[24].T.Equal(base.Add(2*time.Hour)) || pts[24].CPU != 30 {
 		t.Fatalf("5-min-Punkte: %d %+v", len(pts), pts)
 	}
 	s.now = func() time.Time { return base.Add(40 * 24 * time.Hour) }
 	pts, _ = s.Series(ctx, sys.ID, "lxc/200", base, base.Add(3*time.Hour))
-	if len(pts) != 2 || pts[1].CPU != 30 {
+	if len(pts) != 3 || pts[1].CPU != 30 || !pts[2].T.Equal(base.Add(2*time.Hour)) {
 		t.Fatalf("Stundenpunkte: %+v", pts)
 	}
 

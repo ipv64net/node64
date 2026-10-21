@@ -84,7 +84,8 @@
     "version": "Version {version}",
     "api": "API",
     "status_pages": "Statusseiten",
-    "honeypot": "Honeypot64"
+    "honeypot": "Honeypot64",
+    "proxmox": "Proxmox VE"
   },
   "common": {
     "copy": "Kopieren",
@@ -1370,7 +1371,15 @@
       "honeypot_config": "Honeypot64-Einstellungen geändert",
       "honeypot_clear": "Honeypot64-Ereignisse gelöscht",
       "honeypot_watch_add": "Frühwarnung: Netz eingetragen",
-      "honeypot_watch_delete": "Frühwarnung: Netz entfernt"
+      "honeypot_watch_delete": "Frühwarnung: Netz entfernt",
+      "proxmox_create": "Proxmox-System angelegt",
+      "proxmox_update": "Proxmox-System geändert",
+      "proxmox_delete": "Proxmox-System gelöscht",
+      "proxmox_enable": "Proxmox-System eingeschaltet",
+      "proxmox_disable": "Proxmox-System ausgeschaltet",
+      "proxmox_probe": "Proxmox-Verbindung getestet",
+      "proxmox_settings": "Proxmox-Regeln geändert",
+      "proxmox_settings_reset": "Proxmox-Regeln zurückgesetzt"
     }
   },
   "logs": {
@@ -1810,7 +1819,15 @@
       "dns_nxdomain": "Name existiert nicht",
       "dnssec_failed": "DNSSEC nicht validiert",
       "unchecked": "Nicht überwacht",
-      "quota_exhausted": "Tageskontingent aufgebraucht"
+      "quota_exhausted": "Tageskontingent aufgebraucht",
+      "pve_stopped": "Gast gestoppt",
+      "pve_paused": "Gast angehalten",
+      "pve_suspended": "Gast suspendiert",
+      "pve_crashed": "Gast abgestürzt",
+      "pve_offline": "Node offline",
+      "pve_unknown": "Zustand unbekannt",
+      "pve_missing": "Gast/Node nicht vorhanden",
+      "pve_unreachable": "Proxmox nicht erreichbar"
     },
     "reason": "Grund",
     "no_events": "Noch keine Ereignisse.",
@@ -1898,7 +1915,8 @@
       "push": "Push / Heartbeat",
       "docker": "Docker-Container",
       "json": "JSON (API)",
-      "dns": "DNS"
+      "dns": "DNS",
+      "proxmox": "Proxmox VE"
     },
     "json": {
       "rules": "Bedingungen",
@@ -2328,7 +2346,12 @@
       "cluster_down": "🔴 Cluster: Node {name} nicht erreichbar",
       "cluster_up": "🟢 Cluster: Node {name} wieder erreichbar",
       "honeypot_new": "🐞 Honeypot64: neue Angreifer",
-      "honeypot_watch": "🚨 Honeypot64-Frühwarnung: {name} als Angreifer aufgefallen"
+      "honeypot_watch": "🚨 Honeypot64-Frühwarnung: {name} als Angreifer aufgefallen",
+      "proxmox_down": "🔴 Proxmox: {name} gestört",
+      "proxmox_up": "🟢 Proxmox: {name} wieder in Ordnung",
+      "proxmox_threshold": "🟠 Proxmox: {name} über der Schwelle",
+      "proxmox_threshold_ok": "🟢 Proxmox: {name} wieder unter der Schwelle",
+      "proxmox_restarted": "🔄 Proxmox: {name} neu gestartet"
     },
     "body": {
       "quota_used": "Verbraucht: {used} von {limit} Online-Messungen heute",
@@ -3533,6 +3556,237 @@
       "hint": "Klick auf ein Land zeigt seine Ereignisse in der Liste unten.",
       "missing": "{count} Länder sind für die Karte zu klein (siehe Liste)",
       "filter": "Ereignisse aus {country} anzeigen"
+    }
+  },
+  "pve": {
+    "ev": {
+      "down": {
+        "crashed": "{type} „{name}“ ist abgestürzt ({detail}).",
+        "stopped": "{type} „{name}“ ist gestoppt.",
+        "paused": "{type} „{name}“ ist angehalten.",
+        "suspended": "{type} „{name}“ ist suspendiert.",
+        "offline": "Node „{name}“ ist offline.",
+        "unreachable": "Proxmox-System „{name}“ ist nicht erreichbar."
+      },
+      "up": {
+        "crashed": "{type} „{name}“ läuft wieder.",
+        "stopped": "{type} „{name}“ läuft wieder.",
+        "paused": "{type} „{name}“ läuft wieder.",
+        "suspended": "{type} „{name}“ läuft wieder.",
+        "offline": "Node „{name}“ ist wieder online.",
+        "unreachable": "Proxmox-System „{name}“ ist wieder erreichbar."
+      },
+      "threshold": {
+        "cpu": "{type} „{name}“: CPU {value} % (Grenze {limit} %).",
+        "mem": "{type} „{name}“: RAM {value} % (Grenze {limit} %).",
+        "disk": "{type} „{name}“: Disk {value} % (Grenze {limit} %)."
+      },
+      "threshold_ok": {
+        "cpu": "{type} „{name}“: CPU wieder unter {limit} % ({value} %).",
+        "mem": "{type} „{name}“: RAM wieder unter {limit} % ({value} %).",
+        "disk": "{type} „{name}“: Disk wieder unter {limit} % ({value} %)."
+      },
+      "restarted": {
+        "guest": "{type} „{name}“ wurde neu gestartet.",
+        "node": "Node „{name}“ wurde neu gestartet."
+      }
+    },
+    "type": {
+      "qemu": "VM",
+      "lxc": "Container",
+      "node": "Node"
+    },
+    "state": {
+      "running": "läuft",
+      "stopped": "gestoppt",
+      "paused": "angehalten",
+      "suspended": "suspendiert",
+      "backup": "Backup",
+      "locked": "gesperrt",
+      "online": "online",
+      "offline": "offline",
+      "unknown": "unbekannt",
+      "error": "abgestürzt"
+    },
+    "sys_state": {
+      "ok": "in Ordnung",
+      "warn": "Hinweis",
+      "down": "nicht erreichbar",
+      "error": "Fehler",
+      "off": "aus",
+      "pending": "wartet"
+    },
+    "what": {
+      "crashed": "abgestürzt",
+      "stopped": "gestoppt",
+      "paused": "angehalten",
+      "suspended": "suspendiert",
+      "offline": "offline",
+      "unreachable": "nicht erreichbar"
+    },
+    "filter": {
+      "problem": "gestört",
+      "running": "läuft",
+      "stopped": "gestoppt",
+      "paused": "angehalten",
+      "suspended": "suspendiert",
+      "error": "abgestürzt",
+      "backup": "Backup",
+      "locked": "gesperrt",
+      "unknown": "unbekannt",
+      "apply": "Filtern"
+    },
+    "hint": "Überwacht Proxmox-VE-Systeme (Einzel-Node oder Cluster) nur lesend über die API: Nodes, VMs und Container, Abstürze, Schwellen für CPU, RAM und Disk. Messdaten bleiben auf dieser Node; einzelne Gäste lassen sich zusätzlich als Healthchecks-Check führen.",
+    "empty": "Noch kein Proxmox-System eingerichtet.",
+    "empty_hint": "Du brauchst die Adresse eines Nodes (https://…:8006) und ein API-Token mit Leserechten (Rolle PVEAuditor).",
+    "add": "System hinzufügen",
+    "edit": "System bearbeiten",
+    "enable": "Einschalten",
+    "disable": "Ausschalten",
+    "delete_confirm": "Proxmox-System „{name}“ mit Einstellungen, Verlauf und seinen Checks löschen?",
+    "deleted": "Proxmox-System gelöscht.",
+    "not_found": "Proxmox-System nicht gefunden.",
+    "version": "Version",
+    "cluster": "Cluster",
+    "single": "Einzel-Node",
+    "quorum_ok": "Quorum",
+    "quorum_lost": "kein Quorum",
+    "nodes": "Nodes",
+    "guests": "Gäste",
+    "running": "laufend",
+    "bad": "gestört",
+    "last_poll": "Letzte Abfrage",
+    "interval": "Intervall",
+    "pinned": "Zertifikat festgepinnt",
+    "uptime": "Laufzeit",
+    "net": "Netz",
+    "cpu_1h": "CPU (1 h)",
+    "as_check": "Als Check",
+    "muted": "stumm",
+    "template": "Vorlage",
+    "excluded": "nicht überwacht",
+    "no_guests": "Keine VMs oder Container sichtbar.",
+    "no_match": "Kein Gast passt zum Filter.",
+    "off_hint": "Das System ist ausgeschaltet: keine Abfrage, keine Meldungen; seine Checks sind pausiert.",
+    "pending": "Die erste Abfrage läuft noch …",
+    "unreachable": "Nicht erreichbar",
+    "res_missing": "Dieser Gast bzw. Node ist in der letzten Abfrage nicht enthalten (gelöscht oder umbenannt?). Verlauf und Regeln bleiben erhalten.",
+    "res_nodata": "Noch keine aktuellen Daten vom System.",
+    "graphs": "Verlauf",
+    "chart": {
+      "cpu": "CPU",
+      "cpu_max": "CPU Spitze",
+      "mem_disk": "RAM und Disk",
+      "net_in": "eingehend",
+      "net_out": "ausgehend",
+      "read": "lesen",
+      "write": "schreiben",
+      "io": "Disk-I/O",
+      "step_1m": "Minutenwerte.",
+      "step_5m": "5-Minuten-Mittel.",
+      "step_1h": "Stundenmittel."
+    },
+    "card": {
+      "systems_ok": "Systeme ok",
+      "systems_bad": "Systeme gestört",
+      "guests_running": "Gäste laufend",
+      "guests_bad": "Gäste gestört",
+      "last": "Letzte Störung"
+    },
+    "check": {
+      "add": "Als Check führen",
+      "add_hint": "Legt einen Healthchecks-Check an (Statusseiten, Sync mit ipv64, Uptime). Zustandsmeldungen kommen dann über den Check, Schwellen weiter über Proxmox.",
+      "remove": "Check entfernen",
+      "remove_confirm": "Den zugehörigen Healthchecks-Check löschen?",
+      "open": "Check öffnen",
+      "added": "Check angelegt.",
+      "removed": "Check entfernt.",
+      "active_hint": "Wird als Check geführt: Ausfall und Entwarnung meldet der Check (mit seinen Kanälen), Neustart und Schwellen meldet Proxmox VE.",
+      "form_hint": "System und Gast dieses Checks legst du unter Proxmox VE fest."
+    },
+    "rule": {
+      "crashed": "Absturz (qmpstatus)",
+      "stopped": "Gestoppt",
+      "paused": "Angehalten",
+      "suspended": "Suspendiert",
+      "offline": "Node offline",
+      "unreachable": "System nicht erreichbar",
+      "restarted": "Neustart",
+      "cpu": "CPU über",
+      "mem": "RAM über",
+      "disk": "Disk über (nur Container bzw. mit Gast-Agent)",
+      "delay": "Verzögerung"
+    },
+    "rules": {
+      "title": "Benachrichtigung",
+      "level_system": "für das ganze System",
+      "level_node": "für diesen Node und seine Gäste",
+      "level_guest": "für diesen Gast",
+      "hint_system": "Gilt für alle Nodes und Gäste, solange dort nichts anderes eingestellt ist. Leer = Standard.",
+      "hint_node": "Gilt für den Node und die Gäste darauf; leer = vom System geerbt.",
+      "hint_guest": "Leer = geerbt (Node bzw. System). Schwelle 0 % schaltet sie aus.",
+      "muted_system": "Stumm: keine Meldungen für dieses System",
+      "muted_node": "Stumm: keine Meldungen für diesen Node",
+      "muted_guest": "Stumm: keine Meldungen für diesen Gast",
+      "expect": "Gestoppt ist eine Störung",
+      "expect_auto": "automatisch",
+      "expect_seen": "lief schon einmal: ja",
+      "expect_unseen": "lief noch nie: nein",
+      "expect_yes": "ja, immer",
+      "expect_no": "nein (darf aus sein)",
+      "rule": "Regel",
+      "own": "Eigener Wert",
+      "inherited": "Sonst",
+      "inherit": "erben",
+      "from_default": "Standard",
+      "from_system": "vom System geerbt",
+      "from_node": "vom Node geerbt",
+      "polls": "Abfragen",
+      "reset": "Alles erben",
+      "reset_confirm": "Eigene Regeln dieser Ebene zurücksetzen?"
+    },
+    "err": {
+      "name": "Name zu lang (höchstens 100 Zeichen).",
+      "address": "Adresse ungültig – https://host:8006, eine je Zeile (höchstens 16).",
+      "token_id": "Token-ID wie benutzer@realm!tokenname.",
+      "secret": "Secret fehlt oder ist ungültig.",
+      "pin": "Fingerabdruck: 64 Hex-Zeichen (SHA-256), Doppelpunkte erlaubt.",
+      "pin_confirm": "Bitte den Fingerabdruck des Zertifikats bestätigen (selbstsigniert).",
+      "interval": "Intervall zwischen 15 und 300 Sekunden.",
+      "threshold": "Schwelle 0–100 % und 0–1440 Minuten.",
+      "delay": "Verzögerung 1–60 Abfragen.",
+      "key": "Unbekannter Gast bzw. Node.",
+      "no_box": "Kein Schlüssel (secret.key) geladen – Token-Secrets lassen sich nicht verschlüsselt speichern."
+    },
+    "form": {
+      "connection": "Verbindung",
+      "addresses": "Adresse(n)",
+      "addresses_hint": "https://host:8006 – eine reicht; im Cluster kommen weitere Nodes automatisch dazu. Weitere Adressen (eine je Zeile) dienen als Ausweich.",
+      "token_id": "Token-ID",
+      "secret": "Token-Secret",
+      "secret_hint": "Wird verschlüsselt gespeichert und nie wieder angezeigt.",
+      "secret_edit_hint": "Leer lassen, um das gespeicherte Secret zu behalten.",
+      "secret_keep": "(gespeichert – leer lassen)",
+      "probe": "Verbindung testen",
+      "probe_result": "Ergebnis des Tests",
+      "cert": "Zertifikat",
+      "cert_trusted": "Von einer bekannten Zertifizierungsstelle bestätigt – Pinning ist optional.",
+      "cert_untrusted": "Selbstsigniert bzw. unbekannte Zertifizierungsstelle: bitte den Fingerabdruck mit dem in Proxmox (Node → System → Zertifikate) vergleichen und bestätigen.",
+      "pin_confirm": "Fingerabdruck stimmt – festpinnen",
+      "pin_hint": "Node64 vertraut dann genau diesem Zertifikat (wie Proxmox selbst). Ändert es sich, meldet die Abfrage „certificate mismatch“.",
+      "pin_differs": "Das Zertifikat hat sich geändert: der gespeicherte Fingerabdruck passt nicht mehr.",
+      "settings": "Einstellungen",
+      "name_hint": "Standard: Clustername bzw. Node",
+      "enabled": "Überwachen",
+      "pin": "Fingerabdruck (SHA-256)",
+      "pin_placeholder": "leer = System-CA",
+      "pin_field_hint": "Wird mit „Verbindung testen“ übernommen. Leer = Prüfung über die Zertifizierungsstellen des Systems.",
+      "rights": "Leser-Token in Proxmox anlegen",
+      "rights_hint": "Auf einem Node als root (Shell) – nur Leserechte (PVEAuditor):",
+      "rights_privsep": "Mit „Privilege Separation“ braucht das Token eigene Rechte:",
+      "rights_secret": "Das Secret zeigt Proxmox nur einmal beim Anlegen an.",
+      "about": "Was Node64 abfragt",
+      "about_text": "Nur lesend: cluster/resources im eingestellten Takt (ein Aufruf für alles), cluster/status jede Minute, qmpstatus laufender VMs alle 2 Minuten. Node64 startet, stoppt oder ändert in Proxmox nichts."
     }
   }
 }

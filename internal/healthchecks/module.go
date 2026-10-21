@@ -15,6 +15,7 @@ import (
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/scheduler"
+	"github.com/ipv64net/node64/internal/secrets"
 	"github.com/ipv64net/node64/internal/store"
 	"github.com/ipv64net/node64/internal/wire"
 )
@@ -69,6 +70,9 @@ type Module struct {
 	runRemote func(token string) bool
 	// lokale Gruppe: sie bewertet den Gesamtzustand statt des hub (Stellvertreter-Nodes), nil = keine Gruppe
 	groupDecides func(ctx context.Context, nodes []string) bool
+	// Proxmox VE (proxmox_*.go): Schluessel fuer die Token-Secrets und Laufzeit der Abfragen
+	box *secrets.Box
+	pve *pveRuntime
 }
 
 // New erzeugt das Modul. dispatcher und notifyStore duerfen nil sein (dann nur Log).
@@ -77,6 +81,7 @@ func New(core *store.Store, log *slog.Logger, dispatcher *notify.Dispatcher, not
 	m.notifier = m
 	m.st.OnStatusChange = m.statusFlush // Statusseiten: zwischengespeicherte Sichten verwerfen (statusview.go)
 	m.publicIP = newPublicIP()
+	m.pve = newPVERuntime(m, nil) // ohne SetSecrets lassen sich keine Systeme speichern
 	setSelfStore(core)
 	return m
 }
@@ -195,7 +200,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.18.3", Changelog: changelog, ChangelogEN: changelogEN}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.19.0", Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {
@@ -214,6 +219,7 @@ func (m *Module) Start(ctx context.Context) error {
 	m.st.reloadMaintenance(ctx)
 	runner := checks.NewRunner()
 	runner.PublicIP = m.publicIP
+	runner.Proxmox = m.pveLookup // Check-Typ proxmox liest den letzten Stand der Proxmox-Abfrage
 	m.sched = scheduler.New(m.st, m.notifier, runner, m.log, scheduler.Options{})
 	list, err := m.st.Checks(ctx)
 	if err != nil {
@@ -227,6 +233,7 @@ func (m *Module) Start(ctx context.Context) error {
 		m.sched.Upsert(c.SchedulerCheck(), &rt)
 	}
 	m.sched.Start(ctx)
+	m.pveStart(ctx) // Proxmox VE: Abfrage der eingeschalteten Systeme
 	m.wg.Add(1)
 	go m.housekeeping(ctx)
 	m.log.Info("healthchecks loaded", "count", len(list))
@@ -242,6 +249,7 @@ func (m *Module) Stop(ctx context.Context) error {
 	if cancel != nil {
 		cancel()
 	}
+	m.pveStop()
 	if sched != nil {
 		sched.Stop()
 	}
@@ -286,6 +294,7 @@ func (m *Module) housekeeping(ctx context.Context) {
 func (m *Module) aggregate(ctx context.Context) {
 	start := time.Now()
 	m.st.SetRetention(m.retention())
+	m.pve.st.SetRetention(RawDays(m.core), HourlyDays(m.core)) // Proxmox-Verlauf wie die Healthchecks
 	if err := m.st.Aggregate(ctx, time.Now()); err != nil {
 		m.log.Error("aggregation failed", "err", err)
 		return
@@ -327,6 +336,7 @@ func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	m.onlineRoutes(mux, g)
 	m.onlineAPIRoutes(mux, api)
 	m.statusPagesAPIRoutes(mux, api)
+	m.pveAPIRoutes(mux, api)
 }
 
 // upsertSched plant einen Check ein, wenn diese Node ihn misst; Online-Checks und Checks

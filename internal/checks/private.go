@@ -8,8 +8,8 @@ import (
 // IsPrivateTarget sagt, ob ein Ziel im privaten Netz liegt (RFC 1918, ULA, Loopback, Link-Local,
 // .local, localhost). Solche Ziele kann ipv64 von aussen nicht pruefen.
 func IsPrivateTarget(typ, target string) bool {
-	if typ == string(TypeDocker) {
-		return true // Container der Node sind von aussen nie erreichbar
+	if typ == string(TypeDocker) || typ == string(TypeProxmox) {
+		return true // Container der Node bzw. Stand der lokalen Proxmox-Abfrage sind von aussen nie erreichbar
 	}
 	host := strings.ToLower(strings.TrimSpace(target))
 	if typ == "dns" {

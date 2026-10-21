@@ -1,5 +1,23 @@
 # Changes – Healthchecks
 
+## 2.19.0 – 2026-10-21
+
+### New
+- Proxmox VE: new menu entry “Proxmox VE” under Healthchecks. Monitors Proxmox VE systems (single node or cluster)
+  read-only with an API token: nodes, VMs and containers with state (incl. backup, lock, crash via qmpstatus), CPU,
+  RAM, disk, network and uptime; filters by state, node, type and search.
+- “Add system” wizard: address(es), token, “Test connection” with the SHA-256 fingerprint to pin (self-signed
+  certificates), pveum commands for a read-only token (PVEAuditor); edit, switch off, delete.
+- Detail page per guest and node with graphs (1 h, 24 h, 7 days, 30 days) and rules with visible inheritance
+  (system → node → guest): crash, stopped, paused, suspended, node offline, unreachable, restart, thresholds for
+  CPU/RAM/disk with duration, delay, mute.
+- Notifications via the existing channels and quiet hours with new kinds (down, recovery, threshold, restart); a
+  crash is sent with high priority. Open incidents survive a restart of the node.
+- “Keep as check” per guest and node: new check type `proxmox` (local only), so status pages, uptime and the sync
+  with ipv64 apply; state notifications then come only from the check.
+- Dashboard card “Proxmox VE”, Prometheus metrics (`node64_pve_*`), API under `/api/healthchecks/proxmox`,
+  export/import (token secret only with an export password).
+
 ## 2.18.3 – 2026-10-20
 
 ### Fixed

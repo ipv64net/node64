@@ -1,5 +1,23 @@
 # Änderungen – Healthchecks
 
+## 2.19.0 – 2026-10-21
+
+### Neu
+- Proxmox VE: neuer Menüpunkt „Proxmox VE“ unter Healthchecks. Überwacht Proxmox-VE-Systeme (Einzel-Node oder
+  Cluster) nur lesend über ein API-Token: Nodes, VMs und Container mit Zustand (inkl. Backup, Lock, Absturz per
+  qmpstatus), CPU, RAM, Disk, Netz und Laufzeit; Filter nach Zustand, Node, Typ und Suche.
+- Assistent „System hinzufügen“: Adresse(n), Token, „Verbindung testen“ mit SHA-256-Fingerabdruck zum Festpinnen
+  (selbstsignierte Zertifikate), pveum-Befehle für ein Leser-Token (PVEAuditor); Bearbeiten, Ausschalten, Löschen.
+- Detailseite je Gast und Node mit Graphen (1 h, 24 h, 7 Tage, 30 Tage) und Regeln mit sichtbarer Vererbung
+  (System → Node → Gast): Absturz, gestoppt, angehalten, suspendiert, Node offline, nicht erreichbar, Neustart,
+  Schwellen für CPU/RAM/Disk mit Dauer, Verzögerung, stumm.
+- Benachrichtigung über die vorhandenen Kanäle und Ruhezeiten mit neuen Arten (Störung, Entwarnung, Schwelle,
+  Neustart); ein Absturz meldet mit hoher Priorität. Offene Störungen überstehen einen Neustart der Node.
+- „Als Check führen“ je Gast und Node: neuer Check-Typ `proxmox` (nur lokal), damit Statusseiten, Uptime und der
+  Sync mit ipv64 greifen; Zustandsmeldungen kommen dann nur über den Check.
+- Startseiten-Karte „Proxmox VE“, Prometheus-Kennzahlen (`node64_pve_*`), API unter `/api/healthchecks/proxmox`,
+  Export/Import (Token-Secret nur mit Export-Passwort).
+
 ## 2.18.3 – 2026-10-20
 
 ### Behoben

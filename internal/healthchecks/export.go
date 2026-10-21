@@ -12,11 +12,12 @@ import (
 )
 
 // Export/Import der Konfiguration (module.Exporter). Messdaten sind nicht
-// enthalten, nur Checks und Wartungsfenster.
+// enthalten, nur Checks, Wartungsfenster und Proxmox-Systeme (proxmox_export.go).
 
 type exportFile struct {
-	Checks      []checkJSON   `json:"checks"`
-	Maintenance []Maintenance `json:"maintenance"`
+	Checks      []checkJSON       `json:"checks"`
+	Maintenance []Maintenance     `json:"maintenance"`
+	Proxmox     []pveExportSystem `json:"proxmox,omitempty"`
 }
 
 func (m *Module) Export(ctx context.Context) (any, error) {
@@ -50,6 +51,13 @@ func (m *Module) Export(ctx context.Context) (any, error) {
 	}
 	if mw, err := m.st.MaintenanceList(ctx); err == nil && mw != nil {
 		out.Maintenance = mw
+	}
+	px, err := m.pveExport(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(px) > 0 {
+		out.Proxmox = px
 	}
 	return out, nil
 }
@@ -145,7 +153,8 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		}
 		n++
 	}
-	return n, nil
+	k, err := m.pveImport(ctx, in.Proxmox)
+	return n + k, err
 }
 
 var _ = checks.TypePush

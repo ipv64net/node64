@@ -27,6 +27,9 @@ type Alert struct {
 	Message  string
 	Duration time.Duration
 	Flaps    int
+	// Data: Platzhalter fuer Meldungen eines Moduls mit eigenem Text (Proxmox VE: what, type, value, limit, detail,
+	// system, path – siehe composeProxmox).
+	Data map[string]string
 }
 
 // Settings liest Einstellungen des Kerns (Agent-Name, Ruhezeiten, Basis-URL).
@@ -361,7 +364,7 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 func isDownKind(k Kind) bool {
 	return k == KindDown || k == KindReminder || k == KindFlappingStart || k == KindSummary || k == KindDegraded || k == KindUnchecked || k == KindDynFail || k == KindDynLimit || k == KindQuota ||
 		k == KindDNS64Down || k == KindDNS64Lists || k == KindDNS64Cert || k == KindCertFail || k == KindCertExpiry || k == KindCDNOnlineDown ||
-		k == KindCDNOnlineBlocked || k == KindClusterDown || k == KindHoneypotWatch
+		k == KindCDNOnlineBlocked || k == KindClusterDown || k == KindHoneypotWatch || k == KindProxmoxDown || k == KindProxmoxThreshold
 }
 
 // flagsOK prueft die Schalter von Check und Kanal (Stoerung/Entwarnung/teilweise gestoert).
@@ -670,6 +673,9 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 	if m.Time.IsZero() {
 		m.Time = d.now()
 	}
+	if IsProxmox(a.Kind) {
+		return d.composeProxmox(lang, a, m)
+	}
 	if IsModule(a.Kind) {
 		return d.composeDynDNS(lang, a, m)
 	}
@@ -782,6 +788,68 @@ func (d *Dispatcher) composeDynDNS(lang string, a Alert, m Message) Message {
 	m.Text = strings.Join(lines, "\n")
 	m.Payload = map[string]any{"event_id": a.EventID, "kind": string(a.Kind), "time": m.Time.UTC().Format(time.RFC3339), "name": a.Check.Name,
 		"reason": a.Reason, "message": a.Message, "url": m.URL, "title": m.Title, "text": m.Text,
+		"node": map[string]any{"name": d.settings(uid)(SetNodeName, ""), "location": d.settings(uid)(SetNodeLocation, "")}}
+	return m
+}
+
+// composeProxmox formuliert Meldungen der Proxmox-VE-Ueberwachung: Titel notify.subject.<kind> mit dem Namen
+// (System bzw. „System – Gast“), Text pve.ev.<what-Art>.<what> mit Name, Typ, Wert, Grenze und Detail (z. B.
+// qmpstatus beim Absturz). Data: what, type (qemu, lxc, node; leer = System), value, limit, detail, system, path.
+// Ein Absturz ist eine Stoerung hoher Prioritaet (5).
+func (d *Dispatcher) composeProxmox(lang string, a Alert, m Message) Message {
+	t := func(key string, args ...any) string { return d.i18n.T(lang, key, args...) }
+	uid := a.Check.UserID
+	data := a.Data
+	if data == nil {
+		data = map[string]string{}
+	}
+	path := data["path"]
+	if !strings.HasPrefix(path, "/healthchecks/proxmox") {
+		path = "/healthchecks/proxmox"
+	}
+	m.URL = d.baseURL(uid, path)
+	what := data["what"]
+	m.Title = t("notify.subject."+string(a.Kind), "name", a.Check.Name)
+	switch a.Kind {
+	case KindProxmoxDown:
+		m.Priority = 4
+		if what == "crashed" || what == "unreachable" {
+			m.Priority = 5
+		}
+	case KindProxmoxThreshold:
+		m.Priority = 4
+	case KindProxmoxRestarted:
+		m.Priority = 3
+	default:
+		m.Priority = 2
+	}
+	typ := ""
+	if data["type"] != "" {
+		typ = t("pve.type." + data["type"])
+	}
+	kind := strings.TrimPrefix(string(a.Kind), "proxmox_")
+	if what == "" {
+		what = "guest"
+		if data["type"] == "node" {
+			what = "node"
+		}
+	}
+	name := data["name"]
+	if name == "" {
+		name = a.Check.Name
+	}
+	lines := []string{t("pve.ev."+kind+"."+what, "name", name, "type", typ, "value", data["value"], "limit", data["limit"],
+		"detail", data["detail"], "system", data["system"])}
+	if a.Message != "" {
+		lines = append(lines, t("notify.body.message", "message", a.Message))
+	}
+	if a.Kind == KindProxmoxUp && a.Duration > 0 {
+		lines = append(lines, t("notify.body.duration", "duration", d.i18n.FormatDuration(lang, a.Duration)))
+	}
+	lines = append(lines, t("notify.body.time", "time", d.i18n.FormatDateTime(lang, m.Time, d.location(uid))), d.nodeLine(uid, lang))
+	m.Text = strings.Join(lines, "\n")
+	m.Payload = map[string]any{"event_id": a.EventID, "kind": string(a.Kind), "time": m.Time.UTC().Format(time.RFC3339), "name": a.Check.Name,
+		"proxmox": data, "message": a.Message, "url": m.URL, "title": m.Title, "text": m.Text,
 		"node": map[string]any{"name": d.settings(uid)(SetNodeName, ""), "location": d.settings(uid)(SetNodeLocation, "")}}
 	return m
 }

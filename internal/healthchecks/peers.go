@@ -52,8 +52,9 @@ func selfNodeID() string {
 	return self.id
 }
 
-// singleNode: Docker-Checks gehoeren zur Node mit dem Container (Push-Checks sind frei zuordenbar).
-func singleNode(t checks.Type) bool { return t == checks.TypeDocker }
+// singleNode: Docker-Checks gehoeren zur Node mit dem Container, Proxmox-Checks zur Node, die das System abfragt
+// (Push-Checks sind frei zuordenbar).
+func singleNode(t checks.Type) bool { return t == checks.TypeDocker || t == checks.TypeProxmox }
 
 // measures sagt, ob diese Node den Check misst (ohne Ausfuehrungsort).
 // Where beschreibt fuer die Anzeige, wo ein Check gemessen wird (nicht, wem er gehoert):

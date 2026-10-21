@@ -203,6 +203,9 @@ a { color: var(--bs-primary); }
 .hc-table tr.hc-row-stale > * { --bs-table-bg: rgba(var(--bs-warning-rgb), .28); }
 .hc-state-pending, .hc-state-paused, .hc-state-quota { background: var(--bs-secondary) !important; color: #fff; }
 .hc-chart-wrap { position: relative; height: 280px; }
+/* Proxmox VE: Graphen der Detailseite und CPU-Verlauf der letzten Stunde in den Tabellen */
+.pve-chart-wrap { position: relative; height: 220px; }
+.pve-spark { display: block; overflow: visible; }
 .hc-json { max-height: 320px; overflow: auto; font-size: .8rem; background: var(--bs-tertiary-bg); }
 .hc-exec { font-weight: 500; }
 th a { color: inherit; text-decoration: none; }

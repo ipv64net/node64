@@ -68,6 +68,10 @@ Labels je Check: `token` (bleibt gleich, auch wenn der Name sich ändert), `chec
 | `node64_hc_checks{state}` | Anzahl je Zustand, `maintenance` zählt zusätzlich |
 | `node64_hc_incidents_open` | offene Störungen |
 
+Proxmox VE (Healthchecks → Proxmox VE): `node64_pve_up{system}`, `node64_pve_poll_failures_total`,
+`node64_pve_guest_state{system,node,type,vmid,name,state}`, CPU/RAM/Disk je Node und Gast
+(`node64_pve_node_*_ratio`, `node64_pve_guest_*_ratio`) – Liste in [PROXMOX.md](PROXMOX.md#prometheus).
+
 ## DynDNS
 
 | Metrik | Labels | Bedeutung |

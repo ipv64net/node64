@@ -1,0 +1,124 @@
+{{define "content"}}
+{{$d := .Data}}
+{{$s := $d.Sys}}
+{{$e := $d.Errors}}
+{{$act := "/healthchecks/proxmox/new"}}{{if $d.Edit}}{{$act = print "/healthchecks/proxmox/system/" $s.ID "/edit"}}{{end}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0 me-auto"><i class="bi {{if $d.Edit}}bi-pencil-square{{else}}bi-plus-circle{{end}} text-primary me-1"></i> {{if $d.Edit}}{{.T "pve.edit"}}: {{$s.Name}}{{else}}{{.T "pve.add"}}{{end}}{{$.Doc "proxmox"}}</h1>
+	{{if $d.Edit}}<a class="btn btn-outline-secondary btn-sm" href="/healthchecks/proxmox/system/{{$s.ID}}"><i class="bi bi-arrow-left"></i> {{.T "common.back"}}</a>{{end}}
+</div>
+{{if $d.NoBox}}<div class="alert alert-danger small"><i class="bi bi-key"></i> {{.T "pve.err.no_box"}}</div>{{end}}
+{{if $d.Error}}<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle"></i> {{$d.Error}}</div>{{end}}
+<form method="post" action="{{$act}}" autocomplete="off">
+<input type="hidden" name="_csrf" value="{{.CSRF}}">
+<button type="submit" name="op" value="save" class="visually-hidden" tabindex="-1" aria-hidden="true">{{.T "common.save"}}</button>
+<div class="row g-3">
+	<div class="col-lg-7">
+		<div class="card mb-3">
+			<div class="card-header"><i class="bi bi-plug text-primary"></i> {{.T "pve.form.connection"}}</div>
+			<div class="card-body"><div class="row g-3">
+				<div class="col-12">
+					<label class="form-label" for="pve-addresses">{{.T "pve.form.addresses"}}</label>
+					<textarea class="form-control font-monospace{{if index $e "addresses"}} is-invalid{{end}}" id="pve-addresses" name="addresses" rows="2" required placeholder="https://pve1.lan:8006">{{$d.Addresses}}</textarea>
+					{{with index $e "addresses"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "pve.form.addresses_hint"}}</div>
+				</div>
+				<div class="col-md-6">
+					<label class="form-label" for="pve-token">{{.T "pve.form.token_id"}}</label>
+					<input class="form-control font-monospace{{if index $e "token_id"}} is-invalid{{end}}" id="pve-token" name="token_id" value="{{$s.TokenID}}" required placeholder="node64@pve!monitor" maxlength="200">
+					{{with index $e "token_id"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+				</div>
+				<div class="col-md-6">
+					<label class="form-label" for="pve-secret">{{.T "pve.form.secret"}}</label>
+					<input class="form-control font-monospace{{if index $e "secret"}} is-invalid{{end}}" type="password" id="pve-secret" name="secret" value="{{$d.Secret}}" maxlength="256" autocomplete="new-password"{{if not $d.Edit}} required{{end}} placeholder="{{if $d.HasSecret}}{{.T "pve.form.secret_keep"}}{{else}}xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx{{end}}">
+					{{with index $e "secret"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+					<div class="form-text">{{if $d.Edit}}{{.T "pve.form.secret_edit_hint"}}{{else}}{{.T "pve.form.secret_hint"}}{{end}}</div>
+				</div>
+				<div class="col-12">
+					<button class="btn btn-outline-primary" type="submit" name="op" value="probe" formnovalidate><i class="bi bi-plug"></i> {{.T "pve.form.probe"}}</button>
+				</div>
+			</div></div>
+		</div>
+
+		{{with $d.Probe}}
+		<div class="card mb-3 {{if .OK}}border-success{{else}}border-danger{{end}}" id="probe">
+			<div class="card-header"><i class="bi {{if .OK}}bi-check-circle text-success{{else}}bi-x-circle text-danger{{end}}"></i> {{$.T "pve.form.probe_result"}}</div>
+			<div class="card-body small">
+				{{if .Error}}<div class="alert alert-danger py-2 mb-2 text-break">{{.Error}}</div>{{end}}
+				{{if .OK}}<dl class="row mb-2">
+					<dt class="col-sm-4">{{$.T "pve.version"}}</dt><dd class="col-sm-8">{{.Version}}</dd>
+					<dt class="col-sm-4">{{$.T "pve.cluster"}}</dt><dd class="col-sm-8">{{if .Cluster}}{{.Cluster}}{{else}}{{$.T "pve.single"}}{{end}}</dd>
+					<dt class="col-sm-4">{{$.T "pve.nodes"}}</dt><dd class="col-sm-8">{{join .Nodes ", "}}</dd>
+					<dt class="col-sm-4">{{$.T "pve.guests"}}</dt><dd class="col-sm-8">{{.Guests}}</dd>
+				</dl>{{end}}
+				{{if .PermWarning}}<div class="alert alert-warning py-2 mb-2 text-break"><i class="bi bi-shield-exclamation"></i> {{.PermWarning}}</div>{{end}}
+				{{if .CertSHA256}}
+				<div class="mb-1 fw-semibold"><i class="bi bi-shield-lock"></i> {{$.T "pve.form.cert"}}</div>
+				{{if .CertSubject}}<div class="text-body-secondary">{{.CertSubject}}</div>{{end}}
+				<div class="font-monospace text-break my-1 p-2 rounded bg-body-tertiary">SHA-256: {{$d.ProbeFmt}}</div>
+				{{if $d.PinDiffers}}<div class="alert alert-warning py-2 mb-2"><i class="bi bi-exclamation-triangle"></i> {{$.T "pve.form.pin_differs"}}</div>{{end}}
+				{{if .CertTrusted}}<div class="text-success mb-1"><i class="bi bi-patch-check"></i> {{$.T "pve.form.cert_trusted"}}</div><input type="hidden" name="probe_trusted" value="1">{{else}}<div class="text-warning-emphasis mb-1"><i class="bi bi-exclamation-diamond"></i> {{$.T "pve.form.cert_untrusted"}}</div>{{end}}
+				<input type="hidden" name="probe_pin" value="{{$d.ProbePin}}">
+				<div class="form-check"><input class="form-check-input{{if index $e "pin_sha256"}} is-invalid{{end}}" type="checkbox" id="pve-pin-confirm" name="pin_confirm"{{if $d.PinConfirm}} checked{{end}}><label class="form-check-label" for="pve-pin-confirm">{{$.T "pve.form.pin_confirm"}}</label></div>
+				<div class="form-text">{{$.T "pve.form.pin_hint"}}</div>
+				{{end}}
+			</div>
+		</div>
+		{{else}}{{if $d.ProbePin}}<input type="hidden" name="probe_pin" value="{{$d.ProbePin}}">
+		<div class="card mb-3 border-warning"><div class="card-body small">
+			<div class="font-monospace text-break mb-1">SHA-256: {{$d.ProbeFmt}}</div>
+			<div class="form-check"><input class="form-check-input{{if index $e "pin_sha256"}} is-invalid{{end}}" type="checkbox" id="pve-pin-confirm" name="pin_confirm"{{if $d.PinConfirm}} checked{{end}}><label class="form-check-label" for="pve-pin-confirm">{{.T "pve.form.pin_confirm"}}</label></div>
+		</div></div>{{end}}{{end}}
+
+		<div class="card mb-3">
+			<div class="card-header"><i class="bi bi-sliders text-primary"></i> {{.T "pve.form.settings"}}</div>
+			<div class="card-body"><div class="row g-3">
+				<div class="col-md-6">
+					<label class="form-label" for="pve-name">{{.T "common.name"}}</label>
+					<input class="form-control{{if index $e "name"}} is-invalid{{end}}" id="pve-name" name="name" value="{{$s.Name}}" maxlength="100" placeholder="{{.T "pve.form.name_hint"}}">
+					{{with index $e "name"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+				</div>
+				<div class="col-md-3">
+					<label class="form-label" for="pve-interval">{{.T "pve.interval"}}</label>
+					<div class="input-group"><input class="form-control{{if index $e "interval"}} is-invalid{{end}}" type="number" id="pve-interval" name="interval" value="{{$s.Interval}}" min="{{$d.MinIv}}" max="{{$d.MaxIv}}"><span class="input-group-text">s</span></div>
+					{{with index $e "interval"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+				</div>
+				<div class="col-md-3 d-flex align-items-end">
+					<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="pve-enabled" name="enabled"{{if $s.Enabled}} checked{{end}}><label class="form-check-label" for="pve-enabled">{{.T "pve.form.enabled"}}</label></div>
+				</div>
+				<div class="col-12">
+					<label class="form-label" for="pve-pin">{{.T "pve.form.pin"}}</label>
+					<input class="form-control font-monospace{{if index $e "pin_sha256"}} is-invalid{{end}}" id="pve-pin" name="pin_sha256" value="{{$d.PinFmt}}" placeholder="{{.T "pve.form.pin_placeholder"}}">
+					{{with index $e "pin_sha256"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "pve.form.pin_field_hint"}}</div>
+				</div>
+			</div></div>
+		</div>
+		<div class="d-flex gap-2 mb-3">
+			<button class="btn btn-primary" type="submit" name="op" value="save"{{if $d.NoBox}} disabled{{end}}><i class="bi bi-check-lg"></i> {{.T "common.save"}}</button>
+			<a class="btn btn-outline-secondary" href="/healthchecks/proxmox">{{.T "common.cancel"}}</a>
+		</div>
+	</div>
+
+	<div class="col-lg-5">
+		<div class="card mb-3">
+			<div class="card-header"><i class="bi bi-terminal text-primary"></i> {{.T "pve.form.rights"}}</div>
+			<div class="card-body small">
+				<p>{{.T "pve.form.rights_hint"}}</p>
+				<pre class="p-2 rounded bg-body-tertiary mb-2"><code>pveum user add {{$d.User}}
+pveum aclmod / -user {{$d.User}} -role PVEAuditor
+pveum user token add {{$d.User}} {{$d.TokenName}} --privsep 0</code></pre>
+				<p class="mb-1">{{.T "pve.form.rights_privsep"}}</p>
+				<pre class="p-2 rounded bg-body-tertiary mb-2"><code>pveum user token add {{$d.User}} {{$d.TokenName}} --privsep 1
+pveum aclmod / -token '{{$d.User}}!{{$d.TokenName}}' -role PVEAuditor</code></pre>
+				<p class="mb-0 text-body-secondary">{{.T "pve.form.rights_secret"}}</p>
+			</div>
+		</div>
+		<div class="card mb-3">
+			<div class="card-header"><i class="bi bi-info-circle text-primary"></i> {{.T "pve.form.about"}}</div>
+			<div class="card-body small text-body-secondary">{{.T "pve.form.about_text"}}</div>
+		</div>
+	</div>
+</div>
+</form>
+{{end}}

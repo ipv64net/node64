@@ -61,6 +61,13 @@ const (
 	KindHoneypotNew   Kind = "honeypot_new"   // Honeypot64: neue Angreifer (gebuendelt, hoechstens stuendlich)
 	KindHoneypotWatch Kind = "honeypot_watch" // Honeypot64-Fruehwarnung: eigenes Netz bzw. DynDNS-IP als Angreifer aufgefallen
 
+	// Proxmox VE (Healthchecks, ohne Check; Gaeste „als Check“ melden ihren Zustand ueber den Check)
+	KindProxmoxDown        Kind = "proxmox_down"         // System nicht erreichbar, Node offline, Gast gestoppt/angehalten/abgestuerzt
+	KindProxmoxUp          Kind = "proxmox_up"           // Entwarnung
+	KindProxmoxThreshold   Kind = "proxmox_threshold"    // CPU/RAM/Disk ueber der Schwelle
+	KindProxmoxThresholdOK Kind = "proxmox_threshold_ok" // wieder unter der Schwelle
+	KindProxmoxRestarted   Kind = "proxmox_restarted"    // Gast bzw. Node neu gestartet (Hinweis)
+
 	KindQuota Kind = "quota" // Tageskontingent der Online-Checks erreicht (Account, vom hub)
 )
 
@@ -103,9 +110,14 @@ func IsCluster(k Kind) bool { return k == KindClusterDown || k == KindClusterUp 
 // IsHoneypot: Meldung von Honeypot64.
 func IsHoneypot(k Kind) bool { return k == KindHoneypotNew || k == KindHoneypotWatch }
 
-// IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64, Zertifikate, CDN64 online, Cluster, Honeypot64).
+// IsProxmox: Meldung der Proxmox-VE-Ueberwachung.
+func IsProxmox(k Kind) bool {
+	return k == KindProxmoxDown || k == KindProxmoxUp || k == KindProxmoxThreshold || k == KindProxmoxThresholdOK || k == KindProxmoxRestarted
+}
+
+// IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64, Zertifikate, CDN64 online, Cluster, Honeypot64, Proxmox VE).
 func IsModule(k Kind) bool {
-	return IsDynDNS(k) || IsDNS64(k) || IsCert(k) || IsCDN64(k) || IsCluster(k) || IsHoneypot(k)
+	return IsDynDNS(k) || IsDNS64(k) || IsCert(k) || IsCDN64(k) || IsCluster(k) || IsHoneypot(k) || IsProxmox(k)
 }
 
 // Message ist die fertig formulierte Nachricht fuer einen Sender.

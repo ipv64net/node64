@@ -315,17 +315,44 @@ func (s *Store) Resolution(from time.Time) time.Duration {
 }
 
 // Series liefert den Verlauf einer Ressource (key wie Resource.Key()) in der passenden Aufloesung (Resolution),
-// zeitlich aufsteigend. Intervalle ohne Werte (gestoppt, nicht erreichbar) fehlen.
+// zeitlich aufsteigend. Intervalle ohne Werte (gestoppt, nicht erreichbar) fehlen. Bei 5-Minuten- und Stundenwerten
+// wird das noch nicht verdichtete Ende (laufendes Intervall) aus den 1-Minuten-Werten angehaengt, damit der Graph
+// bis jetzt reicht.
 func (s *Store) Series(ctx context.Context, systemID int64, key string, from, to time.Time) ([]Point, error) {
-	table := "pve_hist_1h"
+	table, step := "pve_hist_1h", int64(Step1h/time.Second)
 	switch s.Resolution(from) {
 	case Step1m:
-		table = "pve_hist_1m"
+		table, step = "pve_hist_1m", 0
 	case Step5m:
-		table = "pve_hist_5m"
+		table, step = "pve_hist_5m", int64(Step5m/time.Second)
 	}
-	rows, err := s.r.QueryContext(ctx, `SELECT t, cpu, cpu_max, mem, disk, net_in, net_out, disk_read, disk_write FROM `+table+`
+	out, err := s.seriesQuery(ctx, `SELECT t, cpu, cpu_max, mem, disk, net_in, net_out, disk_read, disk_write FROM `+table+`
 		WHERE system_id = ? AND key = ? AND t >= ? AND t <= ? ORDER BY t`, systemID, key, from.Unix(), to.Unix())
+	if err != nil || step == 0 {
+		return out, err
+	}
+	// Ende aus den 1-Minuten-Werten, je Intervall gewichtet gemittelt wie bei der Verdichtung
+	tail := from.Unix() / step * step
+	if n := len(out); n > 0 {
+		tail = out[n-1].T.Unix() + step
+	}
+	if tail > to.Unix() {
+		return out, nil
+	}
+	b := "(t / " + itoa(int(step)) + ") * " + itoa(int(step))
+	avg := func(c string) string { return "CAST(round(sum(" + c + " * n) * 1.0 / sum(n)) AS INTEGER)" }
+	more, err := s.seriesQuery(ctx, `SELECT `+b+` AS b, `+avg("cpu")+`, max(cpu_max), `+avg("mem")+`,
+		CAST(round(sum(disk * n) * 1.0 / sum(CASE WHEN disk IS NULL THEN 0 ELSE n END)) AS INTEGER),
+		`+avg("net_in")+`, `+avg("net_out")+`, `+avg("disk_read")+`, `+avg("disk_write")+`
+		FROM pve_hist_1m WHERE system_id = ? AND key = ? AND t >= ? AND t <= ? GROUP BY b ORDER BY b`, systemID, key, tail, to.Unix())
+	if err != nil {
+		return nil, err
+	}
+	return append(out, more...), nil
+}
+
+func (s *Store) seriesQuery(ctx context.Context, q string, args ...any) ([]Point, error) {
+	rows, err := s.r.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

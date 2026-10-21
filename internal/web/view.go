@@ -259,7 +259,8 @@ func (s *Server) nav(r *http.Request) []NavItem {
 		items = append(items, NavItem{Key: m.Info.TitleKey, Path: m.Info.Path, Icon: m.Info.Icon, Image: m.Info.Image, Available: m.Info.Available, Enabled: m.Running,
 			Hidden: m.Info.Available && !m.Enabled})
 		if m.Info.Path == "/healthchecks" && m.Enabled { // Healthchecks-Sync gehoert zu den Healthchecks
-			items = append(items, NavItem{Key: "nav.status_pages", Path: "/healthchecks/status-pages", Icon: "bi-broadcast", Available: true, Enabled: m.Running, Sub: true})
+			items = append(items, NavItem{Key: "nav.status_pages", Path: "/healthchecks/status-pages", Icon: "bi-broadcast", Available: true, Enabled: m.Running, Sub: true},
+				NavItem{Key: "nav.proxmox", Path: "/healthchecks/proxmox", Icon: "bi-hdd-rack", Available: true, Enabled: m.Running, Sub: true})
 			items, placed = append(items, link), true
 		}
 	}

@@ -4635,6 +4635,427 @@
             "type": "integer"
           }
         }
+      },
+      "PVESystem": {
+        "type": "object",
+        "description": "Proxmox-VE-System (Einzel-Node oder Cluster) mit Zustand; das Token-Secret wird nie ausgegeben.",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "addresses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "https://pve1.lan:8006"
+            ]
+          },
+          "token_id": {
+            "type": "string",
+            "example": "node64@pve!monitor"
+          },
+          "pin_sha256": {
+            "type": "string",
+            "description": "festgepinnter Fingerabdruck (64 hex), leer = System-CA"
+          },
+          "interval": {
+            "type": "integer",
+            "description": "Sekunden (15–300)"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "has_secret": {
+            "type": "boolean",
+            "description": "Secret gespeichert und lesbar (false z. B. nach Import ohne Passwort oder mit anderem secret.key)"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "warn",
+              "down",
+              "error",
+              "off",
+              "pending"
+            ]
+          },
+          "error": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "cluster": {
+            "type": "string"
+          },
+          "quorate": {
+            "type": "boolean"
+          },
+          "address": {
+            "type": "string"
+          },
+          "last_poll": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "nodes": {
+            "type": "integer"
+          },
+          "nodes_online": {
+            "type": "integer"
+          },
+          "guests": {
+            "type": "integer"
+          },
+          "guests_running": {
+            "type": "integer"
+          },
+          "guests_bad": {
+            "type": "integer"
+          }
+        }
+      },
+      "PVESystemInput": {
+        "type": "object",
+        "description": "Anlegen bzw. Teiländerung. secret ist beim Anlegen nötig; beim Ändern behält ein leeres Secret das gespeicherte.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "addresses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "token_id": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "pin_sha256": {
+            "type": "string"
+          },
+          "interval": {
+            "type": "integer",
+            "default": 30
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "PVEProbe": {
+        "type": "object",
+        "description": "Ergebnis von „Verbindung testen“ (Fingerabdruck auch bei nicht vertrauenswürdigem Zertifikat).",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "cluster": {
+            "type": "string"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "guests": {
+            "type": "integer"
+          },
+          "cert_sha256": {
+            "type": "string"
+          },
+          "cert_subject": {
+            "type": "string"
+          },
+          "cert_trusted": {
+            "type": "boolean"
+          },
+          "perm_warning": {
+            "type": "string"
+          }
+        }
+      },
+      "PVEResource": {
+        "type": "object",
+        "description": "Node bzw. Gast aus der letzten Abfrage.",
+        "properties": {
+          "key": {
+            "type": "string",
+            "example": "qemu/101"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "node",
+              "qemu",
+              "lxc"
+            ]
+          },
+          "node": {
+            "type": "string"
+          },
+          "vmid": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "running",
+              "stopped",
+              "paused",
+              "suspended",
+              "backup",
+              "locked",
+              "online",
+              "offline",
+              "unknown",
+              "error"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "qmp": {
+            "type": "string"
+          },
+          "lock": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ha_state": {
+            "type": "string"
+          },
+          "template": {
+            "type": "boolean"
+          },
+          "cpu": {
+            "type": "number",
+            "description": "Anteil 0..1"
+          },
+          "max_cpu": {
+            "type": "number"
+          },
+          "mem": {
+            "type": "integer"
+          },
+          "max_mem": {
+            "type": "integer"
+          },
+          "disk": {
+            "type": "integer"
+          },
+          "max_disk": {
+            "type": "integer"
+          },
+          "uptime": {
+            "type": "integer"
+          },
+          "net_in": {
+            "type": "number",
+            "description": "Byte/s"
+          },
+          "net_out": {
+            "type": "number"
+          },
+          "disk_read": {
+            "type": "number"
+          },
+          "disk_write": {
+            "type": "number"
+          },
+          "restarted": {
+            "type": "boolean"
+          },
+          "bad": {
+            "type": "boolean"
+          },
+          "excluded": {
+            "type": "boolean",
+            "description": "Vorlage bzw. Tag nomonitor"
+          },
+          "muted": {
+            "type": "boolean"
+          },
+          "as_check": {
+            "type": "boolean"
+          },
+          "check_token": {
+            "type": "string"
+          }
+        }
+      },
+      "PVEPoint": {
+        "type": "object",
+        "properties": {
+          "t": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cpu": {
+            "type": "number",
+            "description": "%"
+          },
+          "cpu_max": {
+            "type": "number"
+          },
+          "mem": {
+            "type": "number"
+          },
+          "disk": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "net_in": {
+            "type": "number",
+            "description": "Byte/s"
+          },
+          "net_out": {
+            "type": "number"
+          },
+          "disk_read": {
+            "type": "number"
+          },
+          "disk_write": {
+            "type": "number"
+          }
+        }
+      },
+      "PVEThreshold": {
+        "type": "object",
+        "properties": {
+          "percent": {
+            "type": "number",
+            "description": "0 = aus"
+          },
+          "minutes": {
+            "type": "integer"
+          }
+        }
+      },
+      "PVERuleSet": {
+        "type": "object",
+        "description": "Regeln einer Ebene; fehlende Felder werden geerbt (System → Node → Gast).",
+        "properties": {
+          "crashed": {
+            "type": "boolean"
+          },
+          "stopped": {
+            "type": "boolean"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "suspended": {
+            "type": "boolean"
+          },
+          "offline": {
+            "type": "boolean"
+          },
+          "unreachable": {
+            "type": "boolean"
+          },
+          "restarted": {
+            "type": "boolean"
+          },
+          "cpu": {
+            "$ref": "#/components/schemas/PVEThreshold"
+          },
+          "mem": {
+            "$ref": "#/components/schemas/PVEThreshold"
+          },
+          "disk": {
+            "$ref": "#/components/schemas/PVEThreshold"
+          },
+          "delay": {
+            "type": "integer",
+            "description": "erst nach N Abfragen melden (1–60)"
+          }
+        }
+      },
+      "PVESettings": {
+        "type": "object",
+        "properties": {
+          "system_id": {
+            "type": "integer"
+          },
+          "key": {
+            "type": "string"
+          },
+          "muted": {
+            "type": "boolean"
+          },
+          "as_check": {
+            "type": "boolean"
+          },
+          "check_token": {
+            "type": "string"
+          },
+          "expect_running": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "seen_running": {
+            "type": "boolean"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/PVERuleSet"
+          }
+        }
+      },
+      "PVESettingsInput": {
+        "type": "object",
+        "description": "Teiländerung einer Ebene. as_check legt den Healthchecks-Check an bzw. löscht ihn; expect_running null = automatisch.",
+        "properties": {
+          "muted": {
+            "type": "boolean"
+          },
+          "as_check": {
+            "type": "boolean"
+          },
+          "expect_running": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "rules": {
+            "$ref": "#/components/schemas/PVERuleSet"
+          }
+        }
       }
     }
   },
@@ -15450,6 +15871,575 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StatusError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthchecks/proxmox/systems": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Proxmox-Systeme auflisten",
+        "description": "Alle Systeme mit Zustand aus der letzten Abfrage (ohne Secret).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PVESystem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Proxmox-System anlegen",
+        "description": "Startet die Abfrage sofort (wenn eingeschaltet). Das Secret wird verschlüsselt gespeichert.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PVESystemInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PVESystem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ungültiges JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein secret.key geladen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültige Angaben (field, key)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthchecks/proxmox/probe": {
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Verbindung testen",
+        "description": "Holt Zertifikat (Fingerabdruck), Version, Cluster, Nodes und Gäste. Mit system_id und ohne secret wird das gespeicherte Secret benutzt.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PVESystemInput"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "system_id": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PVEProbe"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültige Angaben",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthchecks/proxmox/systems/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID des Proxmox-Systems"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Proxmox-System lesen",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PVESystem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Proxmox-System ändern",
+        "description": "Teiländerung; leeres secret behält das gespeicherte. Ein-/Ausschalten pausiert bzw. startet die Checks des Systems.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PVESystemInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PVESystem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültige Angaben",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Proxmox-System löschen",
+        "description": "Mit Einstellungen, Verlauf und den Checks „als Check“.",
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthchecks/proxmox/systems/{id}/resources": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID des Proxmox-Systems"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Nodes und Gäste (letzte Abfrage)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "system": {
+                      "$ref": "#/components/schemas/PVESystem"
+                    },
+                    "resources": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PVEResource"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthchecks/proxmox/systems/{id}/series": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID des Proxmox-Systems"
+        },
+        {
+          "name": "key",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "node/<name>, qemu/<vmid> oder lxc/<vmid>"
+        },
+        {
+          "name": "range",
+          "in": "query",
+          "schema": {
+            "type": "string",
+            "enum": [
+              "1h",
+              "24h",
+              "7d",
+              "30d"
+            ],
+            "default": "24h"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Verlauf eines Nodes bzw. Gasts",
+        "description": "CPU/RAM/Disk in %, Netz und Disk-I/O in Byte/s; Auflösung 1 min (bis 48 h), 5 min bzw. 1 h, das noch nicht verdichtete Ende aus den Minutenwerten.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "range": {
+                      "type": "string"
+                    },
+                    "step_seconds": {
+                      "type": "integer"
+                    },
+                    "from": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "to": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PVEPoint"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ungültiger key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthchecks/proxmox/systems/{id}/settings": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID des Proxmox-Systems"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Einstellungen und wirksame Regeln",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "system_id": {
+                      "type": "integer"
+                    },
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/PVESettings"
+                      }
+                    },
+                    "effective": {
+                      "type": "object",
+                      "description": "Key → wirksame Regel ('' = System)"
+                    },
+                    "defaults": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Einstellungen einer Ebene setzen",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "leer = System, sonst node/<name>, qemu/<vmid>, lxc/<vmid>"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PVESettingsInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "settings": {
+                      "$ref": "#/components/schemas/PVESettings"
+                    },
+                    "effective": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ungültiger key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültige Regel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Ebene auf „alles erben“ zurücksetzen",
+        "description": "„als Check“ bleibt bestehen.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "leer = System"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "zurückgesetzt"
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

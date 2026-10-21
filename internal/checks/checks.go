@@ -157,6 +157,9 @@ type Runner struct {
 	// FamilyProbe sagt, ob der Node selbst ipv4 bzw. ipv6 erreichen kann.
 	// Im Modus auto werden nur verfuegbare Familien geprueft; austauschbar fuer Tests.
 	FamilyProbe func(family string) bool
+	// Proxmox liefert den letzten Stand eines Gasts bzw. Nodes aus der Proxmox-Abfrage (Check-Typ proxmox); nil =
+	// Proxmox-Ueberwachung laeuft nicht (z. B. auf den ipv64-Servern).
+	Proxmox func(systemID int64, key string) ProxmoxState
 
 	famMu    sync.Mutex
 	famCache map[string]famState
@@ -171,7 +174,7 @@ type famState struct {
 func NewRunner() *Runner {
 	r := &Runner{checkers: map[Type]Checker{}, Resolver: net.DefaultResolver, Now: func() time.Time { return time.Now().UTC() }, famCache: map[string]famState{}}
 	r.FamilyProbe = probeFamily
-	for _, c := range []Checker{&httpChecker{}, &httpChecker{keyword: true}, &httpChecker{json: true}, &dnsChecker{r: r}, &tcpChecker{}, &portChecker{}, &certChecker{}, &icmpChecker{}, dockerChecker{}} {
+	for _, c := range []Checker{&httpChecker{}, &httpChecker{keyword: true}, &httpChecker{json: true}, &dnsChecker{r: r}, &tcpChecker{}, &portChecker{}, &certChecker{}, &icmpChecker{}, dockerChecker{}, proxmoxChecker{r: r}} {
 		r.checkers[c.Type()] = c
 	}
 	return r
@@ -201,7 +204,7 @@ func (r *Runner) Run(ctx context.Context, def Definition) []Result {
 	if def.IPMode == "" {
 		def.IPMode = IPAuto
 	}
-	if def.Type == TypeDocker || def.Type == TypeDNS { // kein Ziel zum Aufloesen: Docker-API bzw. DNS-Abfrage selbst
+	if def.Type == TypeDocker || def.Type == TypeDNS || def.Type == TypeProxmox { // kein Ziel zum Aufloesen: Docker-API, DNS-Abfrage bzw. Stand der Proxmox-Abfrage
 		cctx, cancel := context.WithTimeout(ctx, def.Timeouts.Total)
 		res := c.Check(cctx, def, nil)
 		cancel()
@@ -449,6 +452,10 @@ func Validate(def Definition) error {
 		}
 	case TypeDNS:
 		if err := validateDNS(def); err != nil {
+			return err
+		}
+	case TypeProxmox:
+		if err := validateProxmox(def); err != nil {
 			return err
 		}
 	case TypePush:

@@ -313,3 +313,66 @@ func TestRulesThresholds(t *testing.T) {
 }
 
 func pveWithDisk(r Resource, d int64) Resource { r.Disk = d; return r }
+
+// Gemeldete Stoerungen ueberstehen einen Neustart: Export → Import, danach keine zweite Meldung, nur die Entwarnung.
+func TestEngineExportImport(t *testing.T) {
+	now := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	snap := func(st State, qmp string, cpu float64, ok bool) *Snapshot {
+		s := &Snapshot{SystemID: 1, Time: now, OK: ok}
+		if ok {
+			s.Resources = []Resource{{Type: TypeNode, Node: "n", Name: "n", State: StateOnline, Status: "online", CPU: cpu, MaxMem: 1},
+				{Type: TypeQEMU, VMID: 100, Node: "n", Name: "web", State: st, Status: "running", QMP: qmp, CPU: 0.1, MaxMem: 1}}
+		}
+		now = now.Add(time.Minute)
+		return s
+	}
+	e := NewEngine()
+	if e.Export(1) != nil {
+		t.Fatal("export of unknown system")
+	}
+	e.Evaluate(snap(StateRunning, "running", 0.1, true), nil)
+	evs := e.Evaluate(snap(StateError, "io-error", 0.1, true), nil)
+	if len(evs) != 1 || evs[0].What != WhatCrashed || evs[0].Detail != "io-error" {
+		t.Fatalf("crash event: %+v", evs)
+	}
+	for i := 0; i < 12; i++ { // CPU des Nodes ueber 90 % fuer mehr als 10 min
+		e.Evaluate(snap(StateError, "io-error", 0.99, true), nil)
+	}
+	st := e.Export(1)
+	if st == nil || st.Res["qemu/100"].What != WhatCrashed || st.Res["node/n"].Thr["cpu"].Limit != 90 {
+		t.Fatalf("export: %+v", st)
+	}
+	e2 := NewEngine()
+	e2.Import(1, st)
+	if evs := e2.Evaluate(snap(StateError, "io-error", 0.99, true), nil); len(evs) != 0 {
+		t.Fatalf("after import: reported again: %+v", evs)
+	}
+	evs = e2.Evaluate(snap(StateRunning, "running", 0.1, true), nil)
+	if len(evs) != 1 || evs[0].Kind != KindUp {
+		t.Fatalf("up after import: %+v", evs)
+	}
+	evs = e2.Evaluate(snap(StateRunning, "running", 0.1, true), nil)
+	if len(evs) != 1 || evs[0].Kind != KindThresholdOK {
+		t.Fatalf("threshold ok after import: %+v", evs)
+	}
+	if e2.Export(1) != nil {
+		t.Fatal("nothing open any more")
+	}
+	// System nicht erreichbar
+	e3 := NewEngine()
+	e3.Evaluate(snap(StateRunning, "", 0, false), nil)
+	e3.Evaluate(snap(StateRunning, "", 0, false), nil)
+	st = e3.Export(1)
+	if st == nil || !st.Down {
+		t.Fatalf("unreachable export: %+v", st)
+	}
+	e4 := NewEngine()
+	e4.Import(1, st)
+	if evs := e4.Evaluate(snap(StateRunning, "", 0, false), nil); len(evs) != 0 {
+		t.Fatalf("unreachable again: %+v", evs)
+	}
+	if evs := e4.Evaluate(snap(StateRunning, "running", 0, true), nil); len(evs) != 1 || evs[0].Kind != KindUp || evs[0].What != WhatUnreachable {
+		t.Fatalf("reachable again: %+v", evs)
+	}
+	e4.Import(1, nil) // nil aendert nichts
+}
