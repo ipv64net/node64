@@ -407,12 +407,16 @@ func (m *Module) onlineDisable(ctx context.Context, hostID int64) error {
 	return first
 }
 
-// BeforeReset (module.Resetter): vor "Node zuruecksetzen" alle Namen bei ipv64 austragen und den Tunnel entfernen.
+// BeforeReset (module.Resetter): vor "Node zuruecksetzen" alle Namen bei ipv64 austragen und den Tunnel entfernen –
+// auch wenn das Modul gerade aus ist (sonst bleiben Namen und Tunnel bei ipv64 zurueck). Nie eingeschaltet = nichts zu tun.
 func (m *Module) BeforeReset(ctx context.Context) error {
 	m.online.op.Lock()
 	defer m.online.op.Unlock()
 	list, err := m.onlineNames(ctx)
 	if err != nil {
+		if strings.Contains(err.Error(), "no such table") {
+			return nil
+		}
 		return err
 	}
 	var first error

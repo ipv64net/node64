@@ -1,5 +1,17 @@
 # Änderungen – PROXY64
 
+## 1.21.4 – 2026-10-21
+
+### Behoben
+- Export/Import: Hosts der Art „Statusseite“ zeigen nach dem Import auf die Seite mit demselben Slug auf der Ziel-Node
+  (die Seiten-ID gilt nur auf der Quelle). Fehlt die Seite dort, wird der Host ausgeschaltet angelegt.
+- Node zurücksetzen trägt die Namen von CDN64 online und den Tunnel bei ipv64 auch dann aus, wenn PROXY64 gerade
+  ausgeschaltet ist; so bleiben keine Rückstände online.
+- „24 Std.“ (Seite, Startseiten-Karte, Prometheus) zählt nur noch volle Stunden-Eimer der letzten 24 Stunden statt
+  bis zu 25 Stunden.
+- Kontingent-Kacheln auf der PROXY64-Seite: Der Balken ist bei kleinem Verbrauch sichtbar (mindestens 1 %), Domains
+  ohne Kontingent im Tarif zählen als voll.
+
 ## 1.21.3 – 2026-10-21
 
 ### Behoben

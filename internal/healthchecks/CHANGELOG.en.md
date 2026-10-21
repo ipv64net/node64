@@ -1,5 +1,11 @@
 # Changes – Healthchecks
 
+## 2.20.1 – 2026-10-21
+
+### Fixed
+- Dashboard card "Proxmox VE": a system only counts as disturbed with a problem of its own (unreachable, node
+  offline, quorum lost). Disturbed guests are only listed under "guests disturbed" and no longer counted twice.
+
 ## 2.20.0 – 2026-10-21
 
 ### New

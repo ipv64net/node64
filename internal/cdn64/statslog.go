@@ -284,10 +284,15 @@ type HostStat struct {
 	Blocked  int64 `json:"blocked"` // abgewiesen; bei Host 0 Verbindungen vor der ersten Anfrage
 }
 
-// sums: Zahlen je Host seit since.
+// sums: Zahlen je Host seit since, in vollen Stunden-Eimern: die angebrochene Stunde von since zaehlt nicht mehr mit,
+// sonst waeren "24 Std." bis zu 25 Stunden.
 func (s *statsDB) sums(ctx context.Context, since time.Time) (map[int64]HostStat, error) {
+	from := since.UTC().Truncate(time.Hour)
+	if from.Before(since) {
+		from = from.Add(time.Hour)
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT host_id, SUM(requests), SUM(s2), SUM(s3), SUM(s4), SUM(s5), SUM(bytes), SUM(blocked) FROM hourly WHERE hour >= ? GROUP BY host_id`,
-		since.UTC().Truncate(time.Hour).Format(time.RFC3339))
+		from.Format(time.RFC3339))
 	if err != nil {
 		return nil, err
 	}

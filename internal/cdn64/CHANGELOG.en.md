@@ -1,5 +1,17 @@
 # Changes – PROXY64
 
+## 1.21.4 – 2026-10-21
+
+### Fixed
+- Export/import: hosts of the kind "status page" point to the page with the same slug on the target node after the
+  import (the page ID is only valid on the source). If the page is missing there, the host is created switched off.
+- Resetting the node removes the CDN64 online names and the tunnel at ipv64 even when PROXY64 is switched off, so
+  nothing is left behind online.
+- "24 h" (page, dashboard card, Prometheus) only counts the full hourly buckets of the last 24 hours instead of up to
+  25 hours.
+- Quota tiles on the PROXY64 page: the bar stays visible with small usage (at least 1 %), domains without a quota in
+  the plan count as full.
+
 ## 1.21.3 – 2026-10-21
 
 ### Fixed

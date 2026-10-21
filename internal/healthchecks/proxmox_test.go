@@ -760,9 +760,9 @@ func TestPVEPagesAndWizard(t *testing.T) {
 	if resp.StatusCode != 200 || !strings.Contains(body, "pve.form.probe_result") || strings.Contains(body, "pve.form.pin_differs") || strings.Contains(body, pveTestSecret) {
 		t.Fatalf("edit probe: %d %s", resp.StatusCode, body)
 	}
-	// Startseiten-Karte
+	// Startseiten-Karte: nur ein Gast gestoert -> System ok, Gast gestoert (nicht doppelt)
 	card, err := m.Card(context.Background())
-	if err != nil || card == nil || card.Path != pvePath || len(card.Stats) < 4 || card.Stats[1].Value != 1 || card.Stats[3].Value != 1 {
+	if err != nil || card == nil || card.Path != pvePath || len(card.Stats) < 4 || card.Stats[0].Value != 1 || card.Stats[1].Value != 0 || card.Stats[3].Value != 1 {
 		t.Fatalf("card: %+v %v", card, err)
 	}
 	// Ausschalten und Loeschen ueber die Oberflaeche

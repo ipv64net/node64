@@ -146,6 +146,7 @@ type onlineQuota struct {
 	Used, Limit, OldCDN, Mbit int
 	Traffic, TrafficLimit     int64
 	DomPct, TrafficPct        int       // Fuellstand in Prozent (0-100)
+	DomBar, TrafficBar        float64   // Breite der Balken (bei Verbrauch mindestens 1 %, sonst unsichtbar)
 	Projected                 int64     // Prognose fuer den ganzen Monat bei gleichbleibendem Verbrauch (0 = noch keine)
 	Short                     bool      // Prognose ueber dem Limit
 	EmptyAt                   time.Time // voraussichtlich aufgebraucht (nur mit Short)
@@ -158,11 +159,15 @@ func newOnlineQuota(q ipv64api.CDN64Quota, now time.Time) *onlineQuota {
 		TrafficLimit: int64(q.TrafficMB.Limit) << 20, Mbit: q.BandwidthMbit}
 	pct := func(a, b int64) int {
 		if b <= 0 {
+			if a > 0 {
+				return 100 // nicht im Tarif, aber belegt (ipv64 zaehlt das als ueberschritten)
+			}
 			return 0
 		}
 		return int(min(100, a*100/b))
 	}
 	o.DomPct, o.TrafficPct = pct(int64(o.Used), int64(o.Limit)), pct(o.Traffic, o.TrafficLimit)
+	o.DomBar, o.TrafficBar = module.BarWidth(float64(o.DomPct), o.Used > 0), module.BarWidth(float64(o.TrafficPct), o.Traffic > 0)
 	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	o.MonthEnd = start.AddDate(0, 1, 0)
 	if el := now.Sub(start); el >= 24*time.Hour && o.Traffic > 0 {

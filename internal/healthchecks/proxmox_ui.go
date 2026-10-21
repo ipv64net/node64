@@ -1093,7 +1093,8 @@ func pveHostOf(addrs []string) string {
 // ---------------------------------------------------------------- Startseiten-Karte
 
 // Card: Karte „Proxmox VE“ auf der Startseite (nur mit eingerichteten Systemen): Systeme ok/gestoert, Gaeste
-// laufend/gestoert, letzte Stoerung.
+// laufend/gestoert, letzte Stoerung. Ein System zaehlt nur mit eigenem Problem (nicht erreichbar, Node offline,
+// Quorum weg) als gestoert; gestoerte Gaeste stehen allein unter "Gaeste gestoert" (sonst doppelt gezaehlt).
 func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 	list, err := m.pve.st.Systems(ctx)
 	if err != nil || len(list) == 0 {
@@ -1104,7 +1105,11 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 	var errs []string
 	for _, sys := range list {
 		row := m.pveSysView(ctx, sys)
-		switch row.State {
+		state := row.State
+		if state == "warn" && row.NodesOnline >= row.Nodes && row.Quorum() != "lost" {
+			state = "ok" // nur Gaeste gestoert
+		}
+		switch state {
 		case "ok":
 			ok++
 		case "down", "error", "warn":

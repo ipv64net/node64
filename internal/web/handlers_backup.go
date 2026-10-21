@@ -176,7 +176,7 @@ func (s *Server) resetNode(w http.ResponseWriter, r *http.Request) {
 	s.restartSoon("restarting for factory reset")
 }
 
-// requestReset meldet die Node vorher online ab (Module mit module.Resetter, z. B. CDN64 online; lokale Gruppe;
+// requestReset meldet die Node vorher online ab (Module mit module.Resetter, auch ausgeschaltete, z. B. CDN64 online; lokale Gruppe;
 // Verknuepfung mit ipv64) und legt den Merker fuer den Werksreset beim naechsten Start ab (Oberflaeche und API; das
 // Passwort prueft der Aufrufer). problems = was online nicht aufgeraeumt werden konnte; der Reset laeuft trotzdem.
 func (s *Server) requestReset(ctx context.Context, keepChecks bool) (problems []string, err error) {
@@ -184,7 +184,7 @@ func (s *Server) requestReset(ctx context.Context, keepChecks bool) (problems []
 	defer cancel()
 	for _, m := range s.Modules.Modules() {
 		rs, ok := m.(module.Resetter)
-		if !ok || !s.Modules.IsRunning(m.Info().Name) {
+		if !ok {
 			continue
 		}
 		if err := rs.BeforeReset(rctx); err != nil {
@@ -359,7 +359,7 @@ func (s *Server) buildExport(ctx context.Context, mode, password string) (*confi
 	}
 	for _, m := range s.Modules.Modules() {
 		ex, ok := m.(module.Exporter)
-		if !ok || !s.Modules.IsRunning(m.Info().Name) {
+		if !ok {
 			continue // nur laufende Module: ein nie eingeschaltetes hat noch keine Tabellen (Export brach sonst ab)
 		}
 		data, err := ex.Export(ctx)

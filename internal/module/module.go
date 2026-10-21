@@ -103,7 +103,7 @@ type Exporter interface {
 }
 
 // Resetter raeumt vor "Node zuruecksetzen" auf, was das Modul ausserhalb der Node angelegt hat (z. B. Namen
-// und Tunnel bei ipv64). Fehler halten den Reset nicht auf.
+// und Tunnel bei ipv64). Wird auch fuer ausgeschaltete Module aufgerufen; Fehler halten den Reset nicht auf.
 type Resetter interface {
 	BeforeReset(ctx context.Context) error
 }

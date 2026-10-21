@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -48,7 +49,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.21.3"
+	Version = "1.21.4"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -385,6 +386,9 @@ type exportFile struct {
 	// Import wird das Zertifikat mit genau diesen Namen gesucht (Zertifikate kommen vorher mit dem Backup des Kerns).
 	HostCerts   map[int64][]string `json:"host_certs,omitempty"`
 	StreamCerts map[int64][]string `json:"stream_certs,omitempty"`
+	// Statusseiten: Slug der Seite je Host-ID der Quelle (Hostart status); beim Import auf die Seite gleichen
+	// Slugs dieser Node umgehaengt (die Healthchecks kommen vorher mit dem Import).
+	HostStatus map[int64]string `json:"host_status,omitempty"`
 }
 
 // exportSettings: Einstellungen, die zur Konfiguration gehoeren (nicht CDN64 online: Tunnel und Token gehoeren
@@ -397,7 +401,11 @@ func (m *Module) Export(ctx context.Context) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	f := exportFile{Hosts: list, HostCerts: map[int64][]string{}, StreamCerts: map[int64][]string{}, Settings: map[string]string{}}
+	f := exportFile{Hosts: list, HostCerts: map[int64][]string{}, StreamCerts: map[int64][]string{}, HostStatus: map[int64]string{}, Settings: map[string]string{}}
+	slugs := map[int64]string{}
+	for _, p := range m.statusPages(ctx) {
+		slugs[p.ID] = p.Slug
+	}
 	certNames := func(id int64) []string {
 		if id <= 0 || m.certs == nil {
 			return nil
@@ -413,6 +421,9 @@ func (m *Module) Export(ctx context.Context) (any, error) {
 				f.HostCerts[h.ID] = n
 			}
 			h.CertID = CertAuto
+		}
+		if h.Kind == KindStatus && slugs[h.StatusPageID] != "" {
+			f.HostStatus[h.ID] = slugs[h.StatusPageID]
 		}
 	}
 	if f.Streams, err = m.streams(ctx); err != nil {
@@ -456,6 +467,10 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	}
 	n += acl.added
 	certByNames := m.certIndex(ctx)
+	pageBySlug := map[string]int64{}
+	for _, p := range m.statusPages(ctx) {
+		pageBySlug[p.Slug] = p.ID
+	}
 	for _, h := range f.Hosts {
 		oldID := h.ID
 		h.ID = 0
@@ -466,8 +481,16 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		if id := certByNames[nameKey(f.HostCerts[oldID])]; id > 0 {
 			h.CertID = id
 		}
-		// Statusseite: die ID gilt nur auf der Quelle. Gibt es sie hier nicht, wird der Host trotzdem angelegt
-		// (zeigt dann 404, bis im Formular eine Seite dieser Node gewaehlt ist).
+		// Statusseite: die ID gilt nur auf der Quelle, daher ueber den Slug umhaengen. Fehlt die Seite hier, wird
+		// der Host ausgeschaltet angelegt (sonst zeigte er womoeglich eine fremde Seite dieser Node).
+		if slug, ok := f.HostStatus[oldID]; ok && h.Kind == KindStatus {
+			if id := pageBySlug[slug]; id > 0 {
+				h.StatusPageID = id
+			} else {
+				h.Enabled = false
+				keep(fmt.Errorf("cdn64: status page %q of %s not found – host switched off", slug, strings.Join(h.Names, ",")))
+			}
+		}
 		if err := m.saveHost(ctx, h); err != nil {
 			var fe *FieldError
 			if errors.As(err, &fe) && fe.Key == "cdn64.err.name_taken" {

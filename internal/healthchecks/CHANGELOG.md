@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.20.1 – 2026-10-21
+
+### Behoben
+- Startseiten-Karte „Proxmox VE“: Ein System zählt nur noch mit eigenem Problem (nicht erreichbar, Node offline,
+  Quorum verloren) als gestört. Gestörte Gäste stehen allein unter „Gäste gestört“ und werden nicht doppelt gezählt.
+
 ## 2.20.0 – 2026-10-21
 
 ### Neu
