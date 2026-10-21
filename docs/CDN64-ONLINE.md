@@ -257,10 +257,19 @@ deaktivieren) – die Zuordnung steht aber nur in `cdn64o_records`, nie in den S
 | PUT | `/cdn64o/hosts/{id}/target` | Modus 3: Ziel, Port, Schema, Optionen ändern |
 | GET/PUT | `/cdn64o/hosts/{id}/acl` | Erlauben-/Sperrliste |
 | GET | `/cdn64o/hosts/{id}` | Status mit Schritten |
-| PATCH | `/cdn64o/hosts/{id}` | Modus wechseln |
+| PATCH | `/cdn64o/hosts/{id}` | Modus wechseln; `{paused: true\|false}` pausiert bzw. setzt fort (alle Modi) |
 | DELETE | `/cdn64o/hosts/{id}` | ausschalten: DNS zurück, Zertifikat auf den Servern löschen |
 
 Umsetzung als eigene Datei `deploy/web/api_v2_cdn64o.php`, eingebunden wie `api_v2_hc2.php`; OpenAPI ergänzen.
+
+**Pause (alle Modi, 2026-10-21):** `cdn64o_hosts.paused` (mit `paused_at`), getrennt von der Traffic-Sperre
+(`status`/`blocked_reason`). Die Server bekommen den Namen mit `blocked: "paused"`. Damit greift dieselbe Sperre wie
+beim Traffic-Limit: Modus 1 trennt die Verbindung, Modus 2/3 antworten mit 503, Portmapper und QUIC nehmen nichts an,
+offene Verbindungen trennt `recheckLive` nach dem nächsten Abruf der Konfiguration. DNS bleibt auf den Servern, die
+Adresse des Ziels bzw. der Node bleibt also verborgen. Einstellungen, Liste, Portmapper und Statistik bleiben erhalten.
+Pausieren und Fortsetzen geht auf der Webseite (`cdn64.php`, alle Namen) und in PROXY64: am eigenen Host und in der
+Karte „Weitere Namen in CDN64“. Diese Karte zeigt Namen, die die Node nicht verwaltet (Modus 3, andere Nodes), nur
+lesend: Ziel, Cache, Liste, Portmapper, Status, Traffic. Einträge `paused`/`resumed` in `cdn64o_events` und im Log.
 
 ### 8.4 Endpunkte für die Server (Server-Geheimnis, eigene Datei)
 

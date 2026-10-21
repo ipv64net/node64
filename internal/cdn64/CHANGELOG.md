@@ -1,5 +1,19 @@
 # Änderungen – PROXY64
 
+## 1.23.0 – 2026-10-21
+
+### Neu
+- CDN64 pausieren (alle Modi): Ein Klick in der Host-Liste, und srv07/srv08 nehmen für den Namen nichts mehr an.
+  Offene Verbindungen trennen die Server nach wenigen Sekunden. Gedacht als schneller Selbstschutz, etwa bei einem
+  Angriff. Der Tunnel bleibt verbunden und DNS zeigt weiter auf die Server, die eigene Adresse bleibt also verborgen.
+  Einstellungen und Statistik bleiben erhalten. Fortsetzen mit demselben Knopf.
+- „Weitere Namen in CDN64“: Namen des Kontos, die diese Node nicht verwaltet, erscheinen unter der Liste. Das sind
+  Namen in Modus 3 (auf ipv64.net eingerichtet, die Server gehen direkt zum Ziel) oder Namen in Modus 1/2 über eine
+  andere Node. Angezeigt werden Ziel, Cache der Server, Erlauben-/Sperrliste, Portmapper, Status und Traffic im
+  Monat. Pausieren geht hier, bearbeitet wird auf ipv64.net bzw. in der anderen Node.
+- Den Stand holt die Node jetzt auch ohne eigene CDN64-Namen. Ohne Namen im Konto geschieht das alle 5 Minuten,
+  beim Öffnen der Liste sofort.
+
 ## 1.22.0 – 2026-10-21
 
 ### Behoben

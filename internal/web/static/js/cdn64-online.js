@@ -253,6 +253,22 @@
 			});
 		});
 	});
+	// Pause: Host der Node (data-c64o-pause = Host-ID) bzw. Name, den die Node nicht verwaltet (data-c64o-rpause = ID bei ipv64)
+	document.querySelectorAll("[data-c64o-pause],[data-c64o-rpause]").forEach(function (b) {
+		b.addEventListener("click", function () {
+			var pause = b.getAttribute("data-paused") !== "1";
+			if (pause && !window.confirm(t("pause_confirm", { name: b.getAttribute("data-name") || "" }))) { return; }
+			var path = b.hasAttribute("data-c64o-pause") ? "/api/cdn64/hosts/" + b.getAttribute("data-c64o-pause") + "/online/pause"
+				: "/api/cdn64/online/names/" + b.getAttribute("data-c64o-rpause") + "/pause";
+			b.disabled = true;
+			api("POST", path, { paused: pause }).then(function () {
+				window.location.reload();
+			}, function (e) {
+				b.disabled = false;
+				window.alert(e.message);
+			});
+		});
+	});
 	startBtn.addEventListener("click", function () { if (!busy) { run(); } });
 	modalEl.addEventListener("hidden.bs.modal", function () { if (changed) { window.location.reload(); } });
 })();

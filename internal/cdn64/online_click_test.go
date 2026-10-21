@@ -35,6 +35,9 @@ type fakeOnline struct {
 	hosts   map[int64]string
 	modes   map[int64]int
 	next    int64
+	paused  map[int64]bool
+	extra   []ipv64api.CDN64Host // Namen, die die Node nicht verwaltet (Modus 3 von der Webseite)
+	calls   int                  // Abrufe von Overview
 }
 
 func (f *fakeOnline) Ready(context.Context) bool { f.mu.Lock(); defer f.mu.Unlock(); return f.ready }
@@ -44,11 +47,16 @@ func (f *fakeOnline) Overview(context.Context) (*ipv64api.CDN64Overview, error) 
 	defer f.mu.Unlock()
 	ov := &ipv64api.CDN64Overview{Edges: f.edges}
 	ov.Quota.Domains.Limit = 5
+	f.calls++
 	for id := range f.tunnels {
 		ov.Tunnels = append(ov.Tunnels, ipv64api.CDN64Tunnel{ID: id, Status: "active"})
 	}
 	for id, n := range f.hosts {
-		ov.Hosts = append(ov.Hosts, ipv64api.CDN64Host{ID: id, FQDN: n, Status: "active", Mode: max(f.modes[id], 1)})
+		ov.Hosts = append(ov.Hosts, ipv64api.CDN64Host{ID: id, FQDN: n, Status: "active", Mode: max(f.modes[id], 1), Paused: f.paused[id]})
+	}
+	for _, h := range f.extra {
+		h.Paused = f.paused[h.ID]
+		ov.Hosts = append(ov.Hosts, h)
 	}
 	return ov, nil
 }
@@ -89,6 +97,23 @@ func (f *fakeOnline) SetMode(_ context.Context, id int64, mode int) error {
 		return &ipv64api.APIError{Status: 404, Code: "cdn64o_host_not_found"}
 	}
 	f.modes[id] = mode
+	return nil
+}
+
+func (f *fakeOnline) SetPaused(_ context.Context, id int64, paused bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	known := f.hosts[id] != ""
+	for _, h := range f.extra {
+		known = known || h.ID == id
+	}
+	if !known {
+		return &ipv64api.APIError{Status: 404, Code: "cdn64o_host_not_found"}
+	}
+	if f.paused == nil {
+		f.paused = map[int64]bool{}
+	}
+	f.paused[id] = paused
 	return nil
 }
 

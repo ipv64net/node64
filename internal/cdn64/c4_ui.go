@@ -58,6 +58,8 @@ func (m *Module) c4APIRoutes(mux *http.ServeMux, api func(http.HandlerFunc) http
 	mux.Handle("POST /api/cdn64/hosts/{id}/online", api(m.apiOnlineEnable))
 	mux.Handle("DELETE /api/cdn64/hosts/{id}/online", api(m.apiOnlineDisable))
 	mux.Handle("POST /api/cdn64/hosts/{id}/online/test", api(m.apiOnlineTest))
+	mux.Handle("POST /api/cdn64/hosts/{id}/online/pause", api(m.apiOnlinePause))
+	mux.Handle("POST /api/cdn64/online/names/{rid}/pause", api(m.apiOnlineRemotePause))
 	mux.Handle("GET /api/cdn64/settings", api(m.apiSettingsGet))
 	mux.Handle("PUT /api/cdn64/settings", api(m.apiSettingsPut))
 	mux.Handle("POST /api/cdn64/hosts/{id}/healthcheck", api(m.apiHostCheck))

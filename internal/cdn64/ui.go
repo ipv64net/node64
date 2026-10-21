@@ -197,11 +197,12 @@ type listData struct {
 	CacheN    int
 	CacheB    int64
 	StartedAt time.Time
-	StatsOn   bool         // cdn64.db verfuegbar (Statistik-Karte)
-	OnlineOn  bool         // CDN64 online verfuegbar (ipv64 angebunden)
-	LimitsOn  bool         // Schutz vor Ueberlastung (Rate-Limits) eingeschaltet
-	Quota     *onlineQuota // Kontingent bei ipv64 (nur wenn Namen eingeschaltet sind)
-	OnlineL   string       // Texte fuer cdn64-online.js (JSON)
+	StatsOn   bool          // cdn64.db verfuegbar (Statistik-Karte)
+	OnlineOn  bool          // CDN64 online verfuegbar (ipv64 angebunden)
+	LimitsOn  bool          // Schutz vor Ueberlastung (Rate-Limits) eingeschaltet
+	Quota     *onlineQuota  // Kontingent bei ipv64 (nur wenn Namen eingeschaltet sind)
+	Others    []onlineOther // Namen des Accounts, die diese Node nicht verwaltet (Modus 3 von ipv64.net, andere Nodes)
+	OnlineL   string        // Texte fuer cdn64-online.js (JSON)
 }
 
 func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
@@ -285,8 +286,16 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 	}
 	d := listData{Kind: kind, Tabs: tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError(), StatsOn: m.stats2.Load() != nil,
 		OnlineOn: m.online.api != nil && m.edge != nil, OnlineL: m.onlineStrings(r), LimitsOn: m.limLoad(r.Context()).Enabled}
-	if rm := m.online.remote.Load(); rm != nil && rm.Data != nil && len(rm.Data.Hosts) > 0 {
+	rm := m.online.remote.Load()
+	if d.OnlineOn && (rm == nil || time.Since(rm.At) > time.Minute) { // auch ohne eigene Namen bald nachsehen (Modus 3)
+		m.online.want.Store(true)
+		m.onlineKick()
+	}
+	if rm != nil && rm.Data != nil && len(rm.Data.Hosts) > 0 {
 		d.Quota = newOnlineQuota(rm.Data.Quota, time.Now())
+		if d.OnlineOn && kind == KindProxy {
+			d.Others = m.onlineOthers(r.Context(), rm.Data)
+		}
 	}
 	if m.edge != nil {
 		d.Listeners = m.edge.Status().Listeners

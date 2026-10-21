@@ -48,6 +48,27 @@ type CDN64Host struct {
 		Requests int64 `json:"requests"` // Modus 2
 		Rejected int64 `json:"rejected"` // Modus 2: Anfrage-Limit der Server
 	} `json:"traffic_month"`
+	Paused     bool           `json:"paused"` // Server nehmen nichts an, DNS bleibt auf den Servern
+	PausedAt   *time.Time     `json:"paused_at"`
+	CreatedVia string         `json:"created_via"` // node, web
+	Target     *CDN64Target   `json:"target"`      // nur Modus 3
+	ACL        *CDN64ACL      `json:"acl"`
+	Mappings   []CDN64Mapping `json:"mappings"` // Portmapper (nur Modus 3)
+}
+
+// CDN64ACL: Erlauben-/Sperrliste eines Namens auf den Servern (default off, allow, deny).
+type CDN64ACL struct {
+	Default string   `json:"default"`
+	List    []string `json:"list"`
+}
+
+// CDN64Mapping: Port der Server, der roh an einen Port des Ziels geht (Modus 3).
+type CDN64Mapping struct {
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	ListenPort int    `json:"listen_port"`
+	Transport  string `json:"transport"` // tcp, udp
+	TargetPort int    `json:"target_port"`
 }
 
 // CDN64Quota: Kontingent des Accounts (altes und neues CDN zusammen).
@@ -103,7 +124,12 @@ type CDN64Target struct {
 	Port      int    `json:"port"`
 	Scheme    string `json:"scheme"` // http | https
 	VerifyTLS bool   `json:"verify_tls"`
-	Frontend  int    `json:"frontend,omitempty"` // 1 nur HTTP, 2 HTTPS mit Umleitung, 3 nur HTTPS
+	Frontend  int    `json:"frontend,omitempty"` // 0 nur Portmapper, 1 nur HTTP, 2 HTTPS mit Umleitung, 3 nur HTTPS
+	// nur in Antworten
+	Addrs        []string `json:"addrs,omitempty"` // source records: aktuelle Adressen des Namens
+	PreferIPv6   bool     `json:"prefer_ipv6,omitempty"`
+	CacheMB      int      `json:"cache_mb,omitempty"` // 0 = kein Cache auf den Servern
+	CacheMinutes int      `json:"cache_minutes,omitempty"`
 }
 
 // CDN64AddHost schaltet einen Namen ein (DNS zeigt danach auf die Server); target nur fuer Modus 3.
@@ -126,6 +152,16 @@ func (c *Client) CDN64AddHost(ctx context.Context, key, fqdn, tunnelID string, m
 func (c *Client) CDN64SetMode(ctx context.Context, key string, id int64, mode int) (*CDN64Host, error) {
 	var out CDN64Host
 	if err := c.do(ctx, http.MethodPatch, key, "/cdn64o/hosts/"+strconv.FormatInt(id, 10), map[string]int{"mode": mode}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CDN64SetPaused pausiert einen Namen bzw. setzt ihn fort: die Server nehmen nichts mehr an und trennen offene
+// Verbindungen, DNS, Einstellungen und Statistik bleiben.
+func (c *Client) CDN64SetPaused(ctx context.Context, key string, id int64, paused bool) (*CDN64Host, error) {
+	var out CDN64Host
+	if err := c.do(ctx, http.MethodPatch, key, "/cdn64o/hosts/"+strconv.FormatInt(id, 10), map[string]bool{"paused": paused}, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

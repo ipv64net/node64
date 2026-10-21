@@ -37,6 +37,7 @@ type OnlineAPI interface {
 	DeleteTunnel(ctx context.Context, id string) error
 	AddHost(ctx context.Context, fqdn, tunnelID string, mode int, target *ipv64api.CDN64Target) (*ipv64api.CDN64Host, error)
 	SetMode(ctx context.Context, id int64, mode int) error
+	SetPaused(ctx context.Context, id int64, paused bool) error
 	DeleteHost(ctx context.Context, id int64) error
 }
 
@@ -60,6 +61,10 @@ func (o ipv64Online) AddHost(ctx context.Context, fqdn, tunnelID string, mode in
 }
 func (o ipv64Online) SetMode(ctx context.Context, id int64, mode int) error {
 	_, err := o.k.Client().CDN64SetMode(ctx, o.k.Get(ctx), id, mode)
+	return err
+}
+func (o ipv64Online) SetPaused(ctx context.Context, id int64, paused bool) error {
+	_, err := o.k.Client().CDN64SetPaused(ctx, o.k.Get(ctx), id, paused)
 	return err
 }
 func (o ipv64Online) DeleteHost(ctx context.Context, id int64) error {
@@ -499,12 +504,14 @@ func (m *Module) onlineSync(ctx context.Context) {
 		return
 	}
 	c, tok, _ := m.onlineConf(ctx)
-	if len(list) == 0 && c == nil {
+	idle := len(list) == 0 && c == nil // nichts von dieser Node: Namen des Accounts nur zur Anzeige (Modus 3, andere Nodes)
+	if rm := m.online.remote.Load(); idle && !m.online.want.Swap(false) && rm != nil && time.Since(rm.At) < onlineIdleEvery &&
+		(rm.Data == nil || len(rm.Data.Hosts) == 0) {
 		return
 	}
 	ov, err := a.Overview(ctx)
 	m.onlineSetRemote(ov, err)
-	if err != nil {
+	if err != nil || idle {
 		return
 	}
 	remote := map[int64]ipv64api.CDN64Host{}
@@ -773,7 +780,7 @@ func (m *Module) onlineFail(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, errNotFound):
 		writeErr(w, http.StatusNotFound, "host not found")
 		return
-	case code == "no_api_key" || code == "not_configured" || code == "mode_not_available":
+	case code == "no_api_key" || code == "not_configured" || code == "mode_not_available" || code == "not_online":
 		st = http.StatusConflict
 	case code == "api_key_rejected" || code == "plan_not_allowed" || code == "limit_reached" || code == "traffic_limit_reached" || code == "tunnel_blocked":
 		st = http.StatusForbidden
@@ -870,6 +877,92 @@ func (m *Module) apiOnlineDisable(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// POST /api/cdn64/hosts/{id}/online/pause {paused}: alle eingeschalteten Namen des Hosts pausieren bzw. fortsetzen. Die
+// Server nehmen dann nichts mehr an und trennen offene Verbindungen; DNS bleibt auf den Servern (die eigene Adresse
+// bleibt verborgen), der Tunnel bleibt verbunden.
+func (m *Module) apiOnlinePause(w http.ResponseWriter, r *http.Request) {
+	h, err := m.host(r.Context(), pathID(r))
+	if err != nil {
+		m.onlineFail(w, r, err)
+		return
+	}
+	in := struct {
+		Paused bool `json:"paused"`
+	}{}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+	list, err := m.onlineNames(r.Context())
+	if err != nil {
+		m.onlineFail(w, r, err)
+		return
+	}
+	var ids []int64
+	for _, x := range list {
+		if x.HostID == h.ID {
+			ids = append(ids, x.RemoteID)
+		}
+	}
+	if len(ids) == 0 {
+		m.onlineFail(w, r, errOnline("not_online"))
+		return
+	}
+	if err := m.onlinePause(r.Context(), ids, in.Paused); err != nil {
+		m.onlineFail(w, r, err)
+		return
+	}
+	m.g.Audit(r, "cdn64.online.pause", h.Names[0], strconv.FormatBool(in.Paused))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// POST /api/cdn64/online/names/{rid}/pause {paused}: ein Name des Accounts, den diese Node nicht verwaltet (Modus 3
+// von ipv64.net, Name einer anderen Node).
+func (m *Module) apiOnlineRemotePause(w http.ResponseWriter, r *http.Request) {
+	rid, err := strconv.ParseInt(r.PathValue("rid"), 10, 64)
+	in := struct {
+		Paused bool `json:"paused"`
+	}{}
+	if err != nil || rid <= 0 || json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&in) != nil {
+		writeErr(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	name := ""
+	if rm := m.online.remote.Load(); rm != nil && rm.Data != nil {
+		for _, rh := range rm.Data.Hosts {
+			if rh.ID == rid {
+				name = rh.FQDN
+			}
+		}
+	}
+	if name == "" {
+		writeErr(w, http.StatusNotFound, "name not found")
+		return
+	}
+	if err := m.onlinePause(r.Context(), []int64{rid}, in.Paused); err != nil {
+		m.onlineFail(w, r, err)
+		return
+	}
+	m.g.Audit(r, "cdn64.online.pause", name, strconv.FormatBool(in.Paused))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// onlinePause setzt die Pause bei ipv64 und holt danach den Stand (die Liste zeigt ihn sofort).
+func (m *Module) onlinePause(ctx context.Context, ids []int64, paused bool) error {
+	a := m.online.api
+	if a == nil || !a.Ready(ctx) {
+		return errOnline("no_api_key")
+	}
+	for _, id := range ids {
+		if err := a.SetPaused(ctx, id, paused); err != nil {
+			return err
+		}
+	}
+	ov, err := a.Overview(ctx)
+	m.onlineSetRemote(ov, err)
+	return nil
+}
+
 // POST /api/cdn64/hosts/{id}/online/test: Selbsttest ueber srv07/srv08.
 func (m *Module) apiOnlineTest(w http.ResponseWriter, r *http.Request) {
 	h, err := m.host(r.Context(), pathID(r))
@@ -896,6 +989,7 @@ type onlineRow struct {
 	Via     string // schwaechster Weg der verbundenen Server: quic, quic443, tls ("" = keiner verbunden)
 	Status  string // active, blocked, pending ("" = noch kein Abgleich)
 	Reason  string
+	Paused  bool        // mindestens ein Name pausiert (Server nehmen nichts an, DNS bleibt)
 	Month   onlineMonth // Zahlen der Server in diesem Monat (aus dem letzten Abgleich)
 }
 
@@ -967,6 +1061,7 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 			r.Month.Conns += tm.Conns
 			r.Month.Requests += tm.Requests
 			r.Month.Rejected += tm.Rejected
+			r.Paused = r.Paused || rh.Paused
 			if r.Status != "blocked" {
 				r.Status = rh.Status
 				if rh.BlockedReason != nil {
@@ -987,6 +1082,32 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 	return out
 }
 
+// onlineOther: Name des Accounts, den diese Node nicht verwaltet - Modus 3 (auf ipv64.net eingerichtet, die Server
+// gehen direkt zum Ziel) oder Modus 1/2 ueber den Tunnel einer anderen Node. Nur Anzeige und Pause; bearbeitet wird
+// er dort, wo er eingerichtet ist.
+type onlineOther struct {
+	ipv64api.CDN64Host
+	Bytes int64 // Traffic im Monat (rein + raus)
+}
+
+// onlineOthers: Namen aus dem letzten Abgleich ohne Eintrag in cdn_online, nach Name sortiert.
+func (m *Module) onlineOthers(ctx context.Context, ov *ipv64api.CDN64Overview) []onlineOther {
+	mine := map[int64]bool{}
+	if list, err := m.onlineNames(ctx); err == nil {
+		for _, x := range list {
+			mine[x.RemoteID] = true
+		}
+	}
+	var out []onlineOther
+	for _, h := range ov.Hosts {
+		if !mine[h.ID] {
+			out = append(out, onlineOther{CDN64Host: h, Bytes: h.TrafficMonth.BytesIn + h.TrafficMonth.BytesOut})
+		}
+	}
+	slices.SortFunc(out, func(a, b onlineOther) int { return strings.Compare(a.FQDN, b.FQDN) })
+	return out
+}
+
 // onlineStrings: Texte fuer cdn64-online.js (JSON im data-Attribut der Seite).
 func (m *Module) onlineStrings(r *http.Request) string {
 	if m.g.T == nil {
@@ -994,7 +1115,8 @@ func (m *Module) onlineStrings(r *http.Request) string {
 	}
 	keys := []string{"intro", "start", "retest", "close", "s_account", "s_tunnel", "s_names", "s_test", "quota", "connect", "tcp", "udp_buf",
 		"skipped", "untrusted", "dns_ok", "dns_wait", "done", "partial", "failed", "hint_lan", "check_created", "check_failed", "working",
-		"off_confirm", "direct", "peer", "down", "other_node", "route_error", "wait_edges", "mode2_hint", "via_quic", "via_quic443", "via_tls"}
+		"off_confirm", "direct", "peer", "down", "other_node", "route_error", "wait_edges", "mode2_hint", "via_quic", "via_quic443", "via_tls",
+		"pause_confirm"}
 	out := map[string]string{}
 	for _, k := range keys {
 		out[k] = m.g.T(r, "cdn64.online."+k)
@@ -1010,6 +1132,9 @@ func (m *Module) onlineStrings(r *http.Request) string {
 
 // onlineGrace: so lange darf der Tunnel weg sein, bevor gemeldet wird (Neustarts der Server, kurze Netzaussetzer).
 const onlineGrace = 3 * time.Minute
+
+// onlineIdleEvery: ohne eigene Namen und ohne Tunnel holt die Node den Stand seltener (nur zur Anzeige).
+const onlineIdleEvery = 5 * time.Minute
 
 // SetNotifier haengt den Versand an (Dispatcher des Kerns; nil = keine Meldungen).
 func (m *Module) SetNotifier(f func(notify.Alert)) { m.online.notify = f }

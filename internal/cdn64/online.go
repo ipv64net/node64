@@ -46,6 +46,7 @@ type onlineState struct {
 	remote atomic.Pointer[onlineRemote]    // letzter Stand von ipv64
 	names  atomic.Pointer[map[string]bool] // eingeschaltete Namen (geteilter DNS)
 	kick   chan struct{}                   // Abgleich bald
+	want   atomic.Bool                     // Liste geoeffnet: Stand von ipv64 auch ohne eigene Namen holen
 	seenMu sync.Mutex                      // Selbsttest: Streams je Name
 	seen   map[string]int                  //
 	ports  [2]int                          // Tests: Besucher-Ports der Server (sonst 443, 80)
