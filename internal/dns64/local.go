@@ -201,12 +201,7 @@ func (m *Module) importZoneFile(ctx context.Context, text, zone string) (importR
 			}
 		}
 	}
-	for _, r := range list {
-		if err := m.addImported(ctx, r, &res); err != nil {
-			return res, err
-		}
-	}
-	return res, nil
+	return res, m.addBatch(ctx, list, &res)
 }
 
 func (m *Module) pageZoneFile(w http.ResponseWriter, r *http.Request) {

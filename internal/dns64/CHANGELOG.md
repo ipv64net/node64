@@ -1,5 +1,13 @@
 # Änderungen – DNS64
 
+## 1.27.1 – 2026-10-22
+
+### Behoben
+- Import vieler Einträge (Hosts-Datei, CSV, JSON, Zonendatei) in einer Transaktion: 5000 Einträge in Sekundenbruchteilen
+  statt Minuten (vorher je Eintrag alles neu geladen; ein Import von 3000 brach nach 20 s mit dem Client ab).
+- Cluster mit tausenden Einträgen: Die liefernde Node gibt den Stand aus dem zuletzt gemeldeten Stand, die
+  übernehmende schreibt gezielt und baut die DNS-Tabelle gebündelt neu – 3000 Einträge in 0,2 s statt rund 45 s.
+
 ## 1.27.0 – 2026-10-22
 
 ### Neu

@@ -303,13 +303,25 @@ func (m *Module) ClusterIDs(ctx context.Context, item string) ([]string, error) 
 	return out, nil
 }
 
-// ClusterGet: aktueller Stand eines Eintrags; found=false, wenn es ihn nicht (mehr) gibt.
+// ClusterGet: aktueller Stand eines Eintrags; found=false, wenn es ihn nicht (mehr) gibt. Kommt aus dem zuletzt
+// gemeldeten Stand (jede Aenderung laeuft ueber clChanged bzw. eine Uebernahme), sonst muesste die Node fuer jeden
+// abgeholten Eintrag den ganzen Bereich neu bauen.
 func (m *Module) ClusterGet(ctx context.Context, item, id string) (json.RawMessage, bool, error) {
+	m.clMu.Lock()
+	snap, has := m.clSnap[item]
+	v, ok := snap[id]
+	m.clMu.Unlock()
+	if has {
+		if !ok {
+			return nil, false, nil
+		}
+		return json.RawMessage(v), true, nil
+	}
 	cur, err := m.clCurrent(ctx, item)
 	if err != nil {
 		return nil, false, err
 	}
-	v, ok := cur[id]
+	v, ok = cur[id]
 	if !ok {
 		return nil, false, nil
 	}
@@ -382,39 +394,71 @@ func (m *Module) restartSoon() {
 	})
 }
 
+// clApplyRecord uebernimmt einen Eintrag gezielt per SQL und setzt den gemeldeten Stand selbst (die Herkunft fuehrt
+// der Cluster); die Momentaufnahme fuer den DNS-Dienst entsteht gebuendelt kurz danach (reloadRecordsSoon).
 func (m *Module) clApplyRecord(ctx context.Context, id string, data json.RawMessage, deleted bool) error {
-	recs, err := m.Records(ctx)
-	if err != nil {
-		return err
-	}
+	w := m.core.Writer()
 	if deleted {
-		for _, r := range recs {
-			if !r.LocalOnly && recordKey(r.Name, r.Type, r.Value) == id {
-				return m.DeleteRecord(ctx, r.ID)
-			}
+		m.clMu.Lock()
+		old, ok := m.clSnap[ItemRecords][id]
+		m.clMu.Unlock()
+		var in clRecord
+		if !ok || json.Unmarshal([]byte(old), &in) != nil {
+			return nil // hier nicht vorhanden
 		}
+		if _, err := w.ExecContext(ctx, `DELETE FROM dns64_records WHERE name = ? AND type = ? AND value = ? AND local_only = 0`, in.Name, in.Type, in.Value); err != nil {
+			return err
+		}
+		m.clSetSnap(ItemRecords, id, "")
+		m.reloadRecordsSoon()
 		return nil
 	}
 	var in clRecord
 	if err := json.Unmarshal(data, &in); err != nil {
 		return err
 	}
-	for _, r := range recs {
-		if r.Name == in.Name && r.Type == in.Type && r.Value == in.Value {
-			if r.LocalOnly {
-				return nil // hier gilt der eigene Eintrag
-			}
-			return m.recordExec(ctx, `UPDATE dns64_records SET ttl = ?, comment = ?, no_ptr = ?, enabled = ? WHERE id = ?`, in.TTL, in.Comment, in.NoPTR, in.Enabled, r.ID)
-		}
+	r := Record{Name: in.Name, Type: in.Type, Value: in.Value, TTL: in.TTL, Comment: in.Comment, NoPTR: in.NoPTR}
+	if err := normalizeRecord(&r); err != nil {
+		return err
 	}
-	rec, err := m.AddRecord(ctx, Record{Name: in.Name, Type: in.Type, Value: in.Value, TTL: in.TTL, Comment: in.Comment, NoPTR: in.NoPTR})
+	var rowID int64
+	var local bool
+	err := m.core.Reader().QueryRowContext(ctx, `SELECT id, local_only FROM dns64_records WHERE name = ? AND type = ? AND value = ?`, r.Name, r.Type, r.Value).Scan(&rowID, &local)
+	switch {
+	case err == nil && local:
+		return nil // hier gilt der eigene Eintrag
+	case err == nil:
+		_, err = w.ExecContext(ctx, `UPDATE dns64_records SET ttl = ?, comment = ?, no_ptr = ?, enabled = ? WHERE id = ?`, r.TTL, r.Comment, r.NoPTR, in.Enabled, rowID)
+	case errors.Is(err, sql.ErrNoRows):
+		if err = m.checkRecord(ctx, &r, 0); err != nil {
+			return err // z. B. CNAME neben anderen Typen hier
+		}
+		_, err = w.ExecContext(ctx, `INSERT INTO dns64_records (name, type, value, ttl, comment, no_ptr, enabled, created_at) VALUES (?,?,?,?,?,?,?,?)`,
+			r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, in.Enabled, time.Now().UTC().Format(time.RFC3339))
+	}
 	if err != nil {
 		return err
 	}
-	if !in.Enabled {
-		return m.SetRecordEnabled(ctx, rec.ID, false)
-	}
+	m.clSetSnap(ItemRecords, id, jsonString(clRecord{r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, in.Enabled}))
+	m.reloadRecordsSoon()
 	return nil
+}
+
+// clSetSnap setzt einen Eintrag im gemeldeten Stand ("" = entfernt).
+func (m *Module) clSetSnap(item, id, v string) {
+	m.clMu.Lock()
+	defer m.clMu.Unlock()
+	if m.clSnap == nil {
+		return
+	}
+	if m.clSnap[item] == nil {
+		m.clSnap[item] = map[string]string{}
+	}
+	if v == "" {
+		delete(m.clSnap[item], id)
+	} else {
+		m.clSnap[item][id] = v
+	}
 }
 
 func (m *Module) clApplyZone(ctx context.Context, name string, data json.RawMessage, deleted bool) error {

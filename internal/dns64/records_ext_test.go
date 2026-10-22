@@ -2,8 +2,10 @@ package dns64
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/miekg/dns"
 )
@@ -130,5 +132,29 @@ func TestRecordImportExport(t *testing.T) {
 	again, _, bad := parseRecords(string(csvBody))
 	if bad != 0 || len(again) != len(list) {
 		t.Fatalf("csv round trip: %d of %d, bad %d", len(again), len(list), bad)
+	}
+}
+
+// Grosser Import: in einer Transaktion (frueher je Eintrag neu geladen, bei tausenden quadratisch langsam).
+func TestRecordImportLarge(t *testing.T) {
+	m, _ := testModule(t)
+	ctx := context.Background()
+	var b strings.Builder
+	for k := 0; k < 5000; k++ {
+		fmt.Fprintf(&b, "10.100.%d.%d host%d.bulk.lan\n", k/250, k%250+1, k)
+	}
+	start := time.Now()
+	res, err := m.ImportRecords(ctx, b.String()+"10.100.0.1 host0.bulk.lan\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Added != 5000 || res.Skipped != 1 {
+		t.Fatalf("import = %+v", res)
+	}
+	if d := time.Since(start); d > 15*time.Second {
+		t.Fatalf("import of 5000 took %s", d)
+	}
+	if rrs, ok := m.Lookup("host4999.bulk.lan", dns.TypeA); !ok || len(rrs) != 1 {
+		t.Fatal("imported record not answered")
 	}
 }

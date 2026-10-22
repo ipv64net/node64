@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Eigene Eintraege bearbeiten, importieren und exportieren. Import erkennt das Format selbst: JSON (Liste wie
@@ -132,29 +133,53 @@ func (m *Module) importText(ctx context.Context, text, zone string) (importResul
 	}
 	list, skipped, bad := parseRecords(text)
 	res := importResult{Skipped: skipped, Invalid: bad}
-	for _, r := range list {
-		if err := m.addImported(ctx, r, &res); err != nil {
-			return res, err
-		}
-	}
-	return res, nil
+	return res, m.addBatch(ctx, list, &res)
 }
 
-// addImported legt einen importierten Eintrag an und zaehlt das Ergebnis; Fehler nur, wenn die Datenbank streikt.
-func (m *Module) addImported(ctx context.Context, r Record, res *importResult) error {
-	_, err := m.AddRecord(ctx, r)
-	var ce *cfgError
-	switch {
-	case err == nil:
-		res.Added++
-	case errors.As(err, &ce) && (ce.Key == "err_dup" || ce.Key == "err_cname"):
-		res.Skipped++
-	case errors.As(err, &ce):
-		res.Invalid++
-	default:
+// addBatch legt die Eintraege eines Imports in einer Transaktion an und laedt danach einmal neu (statt je Eintrag:
+// bei tausenden Eintraegen sonst quadratisch). Doppelte bzw. CNAME neben anderen Typen zaehlen als uebersprungen,
+// ungueltige als ungueltig; Fehler nur, wenn die Datenbank streikt.
+func (m *Module) addBatch(ctx context.Context, list []Record, res *importResult) error {
+	existing, err := m.Records(ctx)
+	if err != nil {
 		return err
 	}
-	return nil
+	byName := map[string][]Record{}
+	for _, x := range existing {
+		byName[x.Name] = append(byName[x.Name], x)
+	}
+	tx, err := m.core.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, r := range list {
+		if normalizeRecord(&r) != nil {
+			res.Invalid++
+			continue
+		}
+		skip := false
+		for _, x := range byName[r.Name] {
+			if x.Type == r.Type && x.Value == r.Value || x.Type == "CNAME" || r.Type == "CNAME" {
+				skip = true
+			}
+		}
+		if skip {
+			res.Skipped++
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO dns64_records (name, type, value, ttl, comment, no_ptr, local_only, enabled, created_at) VALUES (?,?,?,?,?,?,?,1,?)`,
+			r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, r.LocalOnly, now); err != nil {
+			return err
+		}
+		byName[r.Name] = append(byName[r.Name], r)
+		res.Added++
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return m.loadRecords(ctx)
 }
 
 // exportRecords schreibt die Eintraege als hosts, csv oder json; liefert Inhalt, Typ und Dateiendung.

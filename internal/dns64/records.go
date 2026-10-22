@@ -118,8 +118,35 @@ func hdr(name string, t uint16, ttl int) dns.RR_Header {
 	return dns.RR_Header{Name: dns.Fqdn(name), Rrtype: t, Class: dns.ClassINET, Ttl: uint32(ttl)}
 }
 
-// loadRecords baut die Momentaufnahme neu (nach jeder Aenderung und beim Start).
+// loadRecords baut die Momentaufnahme neu (nach jeder Aenderung und beim Start) und meldet Aenderungen an den Cluster.
 func (m *Module) loadRecords(ctx context.Context) error {
+	if err := m.buildRecords(ctx); err != nil {
+		return err
+	}
+	m.clChanged(ctx, ItemRecords)
+	return nil
+}
+
+// reloadRecordsSoon baut die Momentaufnahme kurz nach Uebernahmen aus dem Cluster neu (gebuendelt: beim Abgleich
+// tausender Eintraege nicht je Eintrag).
+func (m *Module) reloadRecordsSoon() {
+	m.clMu.Lock()
+	defer m.clMu.Unlock()
+	if m.recReload != nil {
+		return
+	}
+	m.recReload = time.AfterFunc(100*time.Millisecond, func() {
+		m.clMu.Lock()
+		m.recReload = nil
+		m.clMu.Unlock()
+		if err := m.buildRecords(context.Background()); err != nil {
+			m.log.Warn("dns64 records after cluster sync", "err", err)
+		}
+	})
+}
+
+// buildRecords baut nur die Momentaufnahme fuer den DNS-Dienst.
+func (m *Module) buildRecords(ctx context.Context) error {
 	list, err := m.Records(ctx)
 	if err != nil {
 		return err
@@ -143,7 +170,6 @@ func (m *Module) loadRecords(ctx context.Context) error {
 		}
 	}
 	m.recs.Store(t)
-	m.clChanged(ctx, ItemRecords)
 	return nil
 }
 
@@ -314,22 +340,28 @@ func (m *Module) checkRecord(ctx context.Context, r *Record, self int64) error {
 	if err := normalizeRecord(r); err != nil {
 		return err
 	}
-	list, err := m.Records(ctx)
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, type, value FROM dns64_records WHERE name = ?`, r.Name)
 	if err != nil {
 		return err
 	}
-	for _, x := range list {
-		if x.Name != r.Name || x.ID == self {
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var typ, value string
+		if err := rows.Scan(&id, &typ, &value); err != nil {
+			return err
+		}
+		if id == self {
 			continue
 		}
-		if x.Type == r.Type && x.Value == r.Value {
+		if typ == r.Type && value == r.Value {
 			return errCfg("err_dup")
 		}
-		if x.Type == "CNAME" || r.Type == "CNAME" {
+		if typ == "CNAME" || r.Type == "CNAME" {
 			return errCfg("err_cname")
 		}
 	}
-	return nil
+	return rows.Err()
 }
 
 // DeleteRecord loescht einen Eintrag.

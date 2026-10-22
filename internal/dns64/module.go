@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.27.0"
+	version   = "1.27.1"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -110,6 +110,7 @@ type Module struct {
 	clHook    ClusterHook                  // nil = kein Cluster
 	clSnap    map[string]map[string]string // zuletzt gemeldeter Stand je Bereich
 	clRestart *time.Timer                  // Neustart nach uebernommenen Einstellungen
+	recReload *time.Timer                  // Momentaufnahme nach Uebernahmen neu (records.go)
 }
 
 const retryEvery = time.Minute
