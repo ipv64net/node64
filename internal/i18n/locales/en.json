@@ -3973,7 +3973,13 @@
         "paused": "{type} “{name}” is paused.",
         "suspended": "{type} “{name}” is suspended.",
         "offline": "Node “{name}” is offline.",
-        "unreachable": "Proxmox system “{name}” is unreachable."
+        "unreachable": "Proxmox system “{name}” is unreachable.",
+        "unhealthy": "{type} “{name}” is unhealthy.",
+        "restarting": "{type} “{name}” keeps restarting ({detail} restarts).",
+        "exited": "{type} “{name}” exited (exit code {detail}).",
+        "oom": "{type} “{name}” was killed: out of memory (OOM, exit code {detail}).",
+        "dead": "{type} “{name}” is dead.",
+        "docker_unreachable": "Docker host “{name}” is unreachable."
       },
       "up": {
         "crashed": "{type} “{name}” is running again.",
@@ -3981,7 +3987,13 @@
         "paused": "{type} “{name}” is running again.",
         "suspended": "{type} “{name}” is running again.",
         "offline": "Node “{name}” is online again.",
-        "unreachable": "Proxmox system “{name}” is reachable again."
+        "unreachable": "Proxmox system “{name}” is reachable again.",
+        "unhealthy": "{type} “{name}” is healthy again.",
+        "restarting": "{type} “{name}” is running stably again.",
+        "exited": "{type} “{name}” is running again.",
+        "oom": "{type} “{name}” is running again.",
+        "dead": "{type} “{name}” is running again.",
+        "docker_unreachable": "Docker host “{name}” is reachable again."
       },
       "threshold": {
         "cpu": "{type} “{name}”: CPU {value} % (limit {limit} %).",
@@ -4001,7 +4013,8 @@
     "type": {
       "qemu": "VM",
       "lxc": "Container",
-      "node": "Node"
+      "node": "Node",
+      "docker": "Docker container"
     },
     "state": {
       "running": "running",
@@ -4154,7 +4167,13 @@
       "reset_confirm": "Reset the own rules of this level?",
       "channels_own": "own selection",
       "channels_default": "default channels",
-      "channels_hint": "“inherit” = channels of the node or system. Own selection without ticks = default channels."
+      "channels_hint": "“inherit” = channels of the node or system. Own selection without ticks = default channels.",
+      "level_docker_system": "for all containers of this host",
+      "level_container": "for this container",
+      "hint_docker_system": "Applies to all containers unless set otherwise there. Empty = default. “Stopped” and “exited with error” only notify for containers that should run (ran before or set explicitly).",
+      "hint_container": "Empty = inherited from the host. A threshold of 0 % switches it off; RAM refers to the limit of the container (without a limit: the RAM of the host).",
+      "muted_docker_system": "Muted: no notifications for this Docker host",
+      "muted_container": "Muted: no notifications for this container"
     },
     "err": {
       "name": "Name too long (100 characters at most).",
@@ -4169,7 +4188,9 @@
       "key": "Unknown guest or node.",
       "no_box": "No key (secret.key) loaded – token secrets cannot be stored encrypted.",
       "channels": "Channels: invalid selection (at most 100).",
-      "secret_reenter": "Addresses or fingerprint changed: please enter the token secret again for the test (the stored one is only sent to the configured target)."
+      "secret_reenter": "Addresses or fingerprint changed: please enter the token secret again for the test (the stored one is only sent to the configured target).",
+      "kind": "Unknown kind (pve or docker).",
+      "docker_host": "Docker host: unix:///path/to/socket, tcp://host:port or http(s)://…"
     },
     "form": {
       "connection": "Connection",
@@ -4261,5 +4282,56 @@
   "nodes": {
     "removed_banner": "This node was removed on ipv64.net ({date}). The API key and the Healthchecks link were cleared here, local data stays. To connect it again, allow the node again at ipv64.net/nodes.php and enter an API key.",
     "removed_settings": "Go to the API key"
+  },
+  "docker": {
+    "page_hint": "All containers of this host are monitored through the Docker socket like Proxmox guests: state, CPU, RAM, network and disk I/O with history, rules and channels. “Keep as check” additionally creates a Healthchecks check (status pages, sync, uptime). The label node64.nomonitor=true excludes a container.",
+    "setup_hint": "The Docker socket is reachable, but the host is not monitored yet.",
+    "off_hint": "Docker monitoring was removed and is no longer set up automatically.",
+    "setup": "Monitor Docker host",
+    "disabled_hint": "Docker monitoring is switched off: no polling, no notifications. Containers kept as checks keep checking themselves.",
+    "enable": "Switch monitoring on",
+    "disable": "Switch monitoring off",
+    "disable_confirm": "Switch Docker monitoring off? Containers kept as checks keep running.",
+    "live": "live values",
+    "kpi": {
+      "bad": "Problems",
+      "checks": "Docker checks",
+      "as_check": "{count} of them kept as check",
+      "load": "Load of all containers"
+    },
+    "filter": {
+      "running": "Running",
+      "problem": "Problems",
+      "stopped": "Stopped",
+      "paused": "Paused",
+      "watched": "With check",
+      "unwatched": "Without check",
+      "missing": "Container missing"
+    },
+    "state": {
+      "running": "running",
+      "stopped": "stopped",
+      "paused": "paused",
+      "error": "problem",
+      "unknown": "unknown",
+      "unhealthy": "unhealthy",
+      "restarting": "restart loop",
+      "exited": "exited (error)",
+      "oom": "out of memory (OOM)",
+      "dead": "dead"
+    },
+    "rule": {
+      "crashed": "Problem (unhealthy, restart loop, exited with error, OOM)",
+      "unreachable": "Docker socket unreachable"
+    },
+    "restarts": "Restarts",
+    "exit_code": "Exit code",
+    "image": "Image",
+    "labels": "Labels",
+    "res_missing": "This container is not in the last poll (deleted or renamed?). History and rules are kept.",
+    "check": {
+      "add_hint": "Creates a Healthchecks check of type Docker (status pages, sync with ipv64, uptime). State notifications then come from the check, thresholds and restarts still from Docker monitoring.",
+      "active_hint": "Kept as a check: outage and recovery are notified by the check (with its channels), restarts and thresholds by Docker monitoring."
+    }
   }
 }

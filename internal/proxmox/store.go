@@ -116,10 +116,20 @@ func SameEndpoint(a, b *System) bool {
 }
 
 // ValidateSystem prueft und normalisiert ein System. isNew verlangt ein Secret (beim Aendern: leer = behalten).
+// Docker-Hosts haben eine Adresse (unix://, tcp://, http(s)://) und weder Token noch Secret noch Pin.
 func ValidateSystem(sys *System, isNew bool) error {
 	sys.Name = strings.TrimSpace(sys.Name)
 	if len(sys.Name) > 100 {
 		return pveFerr("name", "pve.err.name")
+	}
+	switch sys.Kind {
+	case "":
+		sys.Kind = KindPVE
+	case KindPVE:
+	case KindDocker:
+		return validateDocker(sys)
+	default:
+		return pveFerr("kind", "pve.err.kind")
 	}
 	var addrs []string
 	have := map[string]bool{}
@@ -162,12 +172,37 @@ func ValidateSystem(sys *System, isNew bool) error {
 	return nil
 }
 
-const systemCols = `id, name, addresses, token_id, secret, pin_sha256, interval_sec, enabled, created_at`
+// validateDocker prueft einen Docker-Host (leere Adresse = Standard, NODE64_DOCKER_HOST bzw. der Socket).
+func validateDocker(sys *System) error {
+	var addrs []string
+	for _, a := range sys.Addresses {
+		if a = strings.TrimSpace(a); a != "" {
+			addrs = append(addrs, a)
+		}
+	}
+	if len(addrs) == 0 {
+		addrs = []string{DefaultDockerHost()}
+	}
+	if len(addrs) != 1 || len(addrs[0]) > 300 || !ValidDockerHost(addrs[0]) {
+		return pveFerr("addresses", "pve.err.docker_host")
+	}
+	sys.Addresses = addrs
+	sys.TokenID, sys.Secret, sys.PinSHA256 = "", "", ""
+	if sys.Interval == 0 {
+		sys.Interval = DefaultInterval
+	}
+	if sys.Interval < MinInterval || sys.Interval > MaxInterval {
+		return pveFerr("interval", "pve.err.interval")
+	}
+	return nil
+}
+
+const systemCols = `id, kind, name, addresses, token_id, secret, pin_sha256, interval_sec, enabled, created_at`
 
 func (s *Store) scanSystem(row interface{ Scan(...any) error }) (*System, error) {
 	var sys System
 	var addrs, secret, created string
-	if err := row.Scan(&sys.ID, &sys.Name, &addrs, &sys.TokenID, &secret, &sys.PinSHA256, &sys.Interval, &sys.Enabled, &created); err != nil {
+	if err := row.Scan(&sys.ID, &sys.Kind, &sys.Name, &addrs, &sys.TokenID, &secret, &sys.PinSHA256, &sys.Interval, &sys.Enabled, &created); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(addrs), &sys.Addresses)
@@ -212,15 +247,15 @@ func (s *Store) SaveSystem(ctx context.Context, sys *System) error {
 	if err := ValidateSystem(sys, sys.ID == 0); err != nil {
 		return err
 	}
-	if s.box == nil {
+	if s.box == nil && !sys.IsDocker() { // Docker-Hosts haben kein Secret
 		return ErrNoBox
 	}
 	addrs, _ := json.Marshal(sys.Addresses)
 	now := store.Now()
 	if sys.ID == 0 {
-		res, err := s.w.ExecContext(ctx, `INSERT INTO pve_systems (name, addresses, token_id, secret, pin_sha256, interval_sec, enabled,
-			created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)`,
-			sys.Name, string(addrs), sys.TokenID, s.box.Encrypt(sys.Secret), sys.PinSHA256, sys.Interval, sys.Enabled, now, now)
+		res, err := s.w.ExecContext(ctx, `INSERT INTO pve_systems (kind, name, addresses, token_id, secret, pin_sha256, interval_sec, enabled,
+			created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+			sys.Kind, sys.Name, string(addrs), sys.TokenID, s.box.Encrypt(sys.Secret), sys.PinSHA256, sys.Interval, sys.Enabled, now, now)
 		if err != nil {
 			return err
 		}
@@ -230,6 +265,9 @@ func (s *Store) SaveSystem(ctx context.Context, sys *System) error {
 	}
 	q := `UPDATE pve_systems SET name=?, addresses=?, token_id=?, pin_sha256=?, interval_sec=?, enabled=?, updated_at=?`
 	args := []any{sys.Name, string(addrs), sys.TokenID, sys.PinSHA256, sys.Interval, sys.Enabled, now}
+	if sys.IsDocker() {
+		q += `, secret=''`
+	}
 	if sys.Secret != "" {
 		q += `, secret=?`
 		args = append(args, s.box.Encrypt(sys.Secret))
@@ -241,7 +279,7 @@ func (s *Store) SaveSystem(ctx context.Context, sys *System) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	if sys.Secret == "" {
+	if sys.Secret == "" && !sys.IsDocker() {
 		if old, err := s.System(ctx, sys.ID); err == nil {
 			sys.Secret = old.Secret
 		}
@@ -409,7 +447,8 @@ type Settings struct {
 type SystemSettings struct {
 	SystemID int64                `json:"system_id"`
 	Name     string               `json:"name"`
-	Items    map[string]*Settings `json:"items"` // Key → Einstellungen; "" = Systemebene
+	Kind     string               `json:"kind,omitempty"` // pve bzw. docker
+	Items    map[string]*Settings `json:"items"`          // Key → Einstellungen; "" = Systemebene
 }
 
 // Item liefert die Einstellungen eines Keys oder nil.
@@ -441,7 +480,7 @@ func (ss *SystemSettings) Effective(key, nodeName string) Rule {
 	return r
 }
 
-var pveReKey = regexp.MustCompile(`^(node/[A-Za-z0-9._-]{1,64}|(qemu|lxc)/[1-9][0-9]{0,9})$`)
+var pveReKey = regexp.MustCompile(`^(node/[A-Za-z0-9._-]{1,64}|(qemu|lxc)/[1-9][0-9]{0,9}|docker/[A-Za-z0-9][A-Za-z0-9_.-]{0,127})$`)
 
 // ValidKey sagt, ob key eine Ebene bezeichnet ("" = System).
 func ValidKey(key string) bool { return key == "" || pveReKey.MatchString(key) }
@@ -449,7 +488,7 @@ func ValidKey(key string) bool { return key == "" || pveReKey.MatchString(key) }
 // Settings liefert alle Einstellungen eines Systems.
 func (s *Store) Settings(ctx context.Context, systemID int64) (*SystemSettings, error) {
 	ss := &SystemSettings{SystemID: systemID, Items: map[string]*Settings{}}
-	if err := s.r.QueryRowContext(ctx, `SELECT name FROM pve_systems WHERE id = ?`, systemID).Scan(&ss.Name); err != nil {
+	if err := s.r.QueryRowContext(ctx, `SELECT name, kind FROM pve_systems WHERE id = ?`, systemID).Scan(&ss.Name, &ss.Kind); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}

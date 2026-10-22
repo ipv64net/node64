@@ -922,6 +922,9 @@ func (d *Dispatcher) composeProxmox(lang string, a Alert, m Message) Message {
 
 // proxmoxPath begrenzt den Link einer Proxmox-Meldung auf die Proxmox-Seiten des Nodes (sonst die Uebersicht).
 func proxmoxPath(path string) string {
+	if strings.HasPrefix(path, "/healthchecks/docker") { // Docker-Hosts (gleiche Ueberwachung, eigene Seiten)
+		return path
+	}
 	if !strings.HasPrefix(path, "/healthchecks/proxmox") {
 		return "/healthchecks/proxmox"
 	}

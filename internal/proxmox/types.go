@@ -3,20 +3,31 @@
 // Einbindung (Healthchecks, Menue „Proxmox VE“) liegt in internal/healthchecks/proxmox_*.go.
 //
 // Diese Datei ist der Vertrag der parallelen Teile (client/poller, store/history/rules, Einbindung).
+//
+// Docker: ein Docker-Host ist ein System der Art KindDocker (docker.go), seine Container sind Gaeste vom Typ
+// TypeDocker (Key docker/<name>). Regeln, Verlauf, Einstellungen und Benachrichtigung sind dieselben.
 package proxmox
 
 import (
 	"context"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// System ist ein eingerichtetes Proxmox-System (Einzel-Node oder Cluster).
+// Arten von Systemen (System.Kind).
+const (
+	KindPVE    = "pve"
+	KindDocker = "docker"
+)
+
+// System ist ein eingerichtetes Proxmox-System (Einzel-Node oder Cluster) bzw. ein Docker-Host (Kind docker).
 type System struct {
 	ID        int64     `json:"id"`
+	Kind      string    `json:"kind"`                 // pve (Standard) oder docker
 	Name      string    `json:"name"`                 // Anzeigename (Standard: Clustername bzw. Node-Name)
-	Addresses []string  `json:"addresses"`            // https://host:8006 – eine reicht, weitere Nodes kommen aus cluster/status
+	Addresses []string  `json:"addresses"`            // https://host:8006 – eine reicht, weitere Nodes kommen aus cluster/status; Docker: unix:///var/run/docker.sock
 	TokenID   string    `json:"token_id"`             // user@realm!tokenid
 	Secret    string    `json:"-"`                    // Token-Secret (verschluesselt gespeichert, nie ausgeben)
 	PinSHA256 string    `json:"pin_sha256,omitempty"` // Fingerabdruck des Zertifikats (hex, ohne Doppelpunkte); leer = System-CA
@@ -27,10 +38,14 @@ type System struct {
 
 // Guest-Typen und Node-Zustaende wie in der API.
 const (
-	TypeQEMU = "qemu"
-	TypeLXC  = "lxc"
-	TypeNode = "node"
+	TypeQEMU   = "qemu"
+	TypeLXC    = "lxc"
+	TypeNode   = "node"
+	TypeDocker = "docker" // Container eines Docker-Hosts
 )
+
+// IsDocker sagt, ob das System ein Docker-Host ist.
+func (s *System) IsDocker() bool { return s != nil && s.Kind == KindDocker }
 
 // State ist der bewertete Zustand (Anzeige und Regeln).
 type State string
@@ -77,21 +92,43 @@ type Resource struct {
 	DiskWrite float64 `json:"disk_write"`
 
 	Restarted bool `json:"restarted,omitempty"` // uptime ist zurueckgesprungen, obwohl weiter laufend
+
+	// Nur Docker (Type docker): Key ist der Name (bleibt beim Neuanlegen), die ID wird mitgefuehrt.
+	ContainerID string            `json:"container_id,omitempty"` // 12 Zeichen
+	Image       string            `json:"image,omitempty"`
+	Health      string            `json:"health,omitempty"` // healthy, unhealthy, starting ('' = ohne Healthcheck)
+	Restarts    int               `json:"restart_count,omitempty"`
+	ExitCode    int               `json:"exit_code,omitempty"`
+	OOMKilled   bool              `json:"oom_killed,omitempty"`
+	Created     int64             `json:"created,omitempty"` // Unix-Zeit
+	Ports       []string          `json:"ports,omitempty"`   // z. B. 8080->80/tcp
+	Labels      map[string]string `json:"labels,omitempty"`
+	Detail      string            `json:"detail,omitempty"` // Docker-Stoerung: unhealthy, restarting, exited, oom, dead
 }
 
 // Key ist die stabile Kennung eines Nodes oder Gasts innerhalb eines Systems: "node/<name>" bzw. "qemu/<vmid>",
 // "lxc/<vmid>" (Gaeste behalten ihre ID beim Umzug auf einen anderen Node).
 func (r *Resource) Key() string {
-	if r.Type == TypeNode {
+	switch r.Type {
+	case TypeNode:
 		return "node/" + r.Node
+	case TypeDocker:
+		return TypeDocker + "/" + r.Name
 	}
 	return r.Type + "/" + strconv.Itoa(r.VMID)
 }
 
-// Excluded: Vorlage bzw. Tag nomonitor – keine Regeln, zaehlt nirgends als Gast.
+// Excluded: Vorlage bzw. Tag nomonitor (Docker: Label node64.nomonitor=true) – keine Regeln, zaehlt nirgends als Gast.
 func (r *Resource) Excluded() bool {
 	if r.Template {
 		return true
+	}
+	if r.Type == TypeDocker {
+		switch strings.ToLower(strings.TrimSpace(r.Labels[LabelNoMonitor])) {
+		case "true", "1", "yes", "on":
+			return true
+		}
+		return false
 	}
 	for _, t := range r.Tags {
 		if strings.EqualFold(strings.TrimSpace(t), TagNoMonitor) {
@@ -105,6 +142,9 @@ func (r *Resource) Excluded() bool {
 func (r *Resource) Measurable() bool {
 	if r.Type == TypeNode {
 		return r.State == StateOnline
+	}
+	if r.Type == TypeDocker {
+		return r.Status == "running" // auch unhealthy bzw. Neustart-Schleife: Werte sind echt
 	}
 	switch r.State {
 	case StateRunning:
@@ -133,16 +173,17 @@ func (r *Resource) DiskPercent() (float64, bool) {
 
 // Snapshot ist der Stand eines Systems nach einer Abfrage.
 type Snapshot struct {
-	SystemID  int64      `json:"system_id"`
-	Time      time.Time  `json:"time"`
-	OK        bool       `json:"ok"`              // API erreichbar
-	Error     string     `json:"error,omitempty"` // letzter Fehler (z. B. „401 token invalid“, „certificate mismatch“)
-	Address   string     `json:"address"`         // zuletzt erfolgreich benutzte Adresse
-	Version   string     `json:"version,omitempty"`
-	Cluster   string     `json:"cluster,omitempty"` // Clustername, leer bei Einzel-Node
-	Quorate   *bool      `json:"quorate,omitempty"`
-	Warning   string     `json:"warning,omitempty"` // erreichbar, aber eingeschraenkt (z. B. Token ohne Leserechte: Gaeste fehlen)
-	Resources []Resource `json:"resources"`
+	SystemID  int64       `json:"system_id"`
+	Time      time.Time   `json:"time"`
+	OK        bool        `json:"ok"`              // API erreichbar
+	Error     string      `json:"error,omitempty"` // letzter Fehler (z. B. „401 token invalid“, „certificate mismatch“)
+	Address   string      `json:"address"`         // zuletzt erfolgreich benutzte Adresse
+	Version   string      `json:"version,omitempty"`
+	Cluster   string      `json:"cluster,omitempty"` // Clustername, leer bei Einzel-Node
+	Quorate   *bool       `json:"quorate,omitempty"`
+	Warning   string      `json:"warning,omitempty"` // erreichbar, aber eingeschraenkt (z. B. Token ohne Leserechte: Gaeste fehlen)
+	Resources []Resource  `json:"resources"`
+	Docker    *DockerInfo `json:"docker,omitempty"` // nur Docker-Host: /info
 	// Interval ist das Abfrageintervall des Pollers: die Verzoegerung „nicht erreichbar“ zaehlt auch zeitlich
 	// (schnelle Wiederholungen nach Fehlern verkuerzen sie nicht); nur von Run gesetzt, 0 = nur Abfragen zaehlen.
 	Interval time.Duration `json:"-"`
@@ -154,6 +195,21 @@ type Snapshot struct {
 //	p.Run(ctx)                 // bis ctx endet
 //	p.Last() *Snapshot         // letzter Stand (nil vor der ersten Abfrage)
 type SnapshotFunc func(ctx context.Context, s *Snapshot)
+
+// Source fragt ein System ab: Poller (Proxmox) bzw. DockerPoller (Docker-Host).
+type Source interface {
+	Run(ctx context.Context)
+	Poll(ctx context.Context) *Snapshot
+	Last() *Snapshot
+}
+
+// NewSource baut die Abfrage passend zur Art des Systems.
+func NewSource(log *slog.Logger, sys System, fn SnapshotFunc) Source {
+	if sys.IsDocker() {
+		return NewDockerPoller(log, sys, fn)
+	}
+	return NewPoller(log, sys, fn)
+}
 
 // Probe prueft eine Verbindung beim Anlegen (Assistent): liefert Version, Clustername, Nodes und den
 // Fingerabdruck des Zertifikats (fuer die Bestaetigung), auch wenn das Zertifikat nicht vertrauenswuerdig ist.

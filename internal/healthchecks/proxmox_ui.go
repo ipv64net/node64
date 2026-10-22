@@ -157,6 +157,7 @@ func pveExpected(it *proxmox.Settings) bool {
 // pveRow bewertet eine Ressource fuer die Anzeige.
 func pveRow(id int64, r proxmox.Resource, set *proxmox.SystemSettings) pveResRow {
 	row := pveResRow{R: r, Key: r.Key(), TypeLabel: "pve.type." + r.Type}
+	docker := r.Type == proxmox.TypeDocker
 	row.Path = pveResPath(id, row.Key)
 	it := set.Item(row.Key)
 	row.Excluded = r.Excluded()
@@ -164,6 +165,12 @@ func pveRow(id int64, r proxmox.Resource, set *proxmox.SystemSettings) pveResRow
 		row.Muted, row.AsCheck, row.CheckToken = it.Muted, it.AsCheck, it.CheckToken
 	}
 	row.Label = "pve.state." + string(r.State)
+	if docker { // Docker: Ursache statt „abgestuerzt“ (unhealthy, restarting, exited, oom, dead)
+		row.Label = "docker.state." + string(r.State)
+		if r.State == proxmox.StateError && r.Detail != "" {
+			row.Label = "docker.state." + r.Detail
+		}
+	}
 	switch r.State {
 	case proxmox.StateRunning, proxmox.StateOnline:
 		row.Class = "text-bg-success"
@@ -178,6 +185,9 @@ func pveRow(id int64, r proxmox.Resource, set *proxmox.SystemSettings) pveResRow
 		row.Class, row.Bad = "text-bg-warning", true
 	case proxmox.StateError, proxmox.StateOffline:
 		row.Class, row.Bad = "text-bg-danger", true
+		if docker && r.DockerDown() && !pveExpected(it) { // beendet, soll aber nicht laufen: wie die Regeln
+			row.Class, row.Bad = "text-bg-secondary", false
+		}
 	default:
 		row.Class = "text-bg-secondary"
 	}
@@ -204,7 +214,7 @@ func pveRow(id int64, r proxmox.Resource, set *proxmox.SystemSettings) pveResRow
 
 // pveSysView baut die Zeile eines Systems (mit Zaehlern aus dem letzten Snapshot).
 func (m *Module) pveSysView(ctx context.Context, sys *proxmox.System) pveSysRow {
-	row := pveSysRow{Sys: sys, Path: pveResPath(sys.ID, "")}
+	row := pveSysRow{Sys: sys, Path: pveKeyPath(sys.Kind, sys.ID, "")}
 	set, _ := m.pve.st.Settings(ctx, sys.ID)
 	if set == nil {
 		set = &proxmox.SystemSettings{SystemID: sys.ID, Name: sys.Name}
@@ -321,6 +331,9 @@ func (m *Module) pagePVE(w http.ResponseWriter, r *http.Request) {
 	}
 	d := pveOverviewData{NoBox: m.pve.box == nil, Last: m.pveLastIncident(ctx)}
 	for _, sys := range list {
+		if sys.IsDocker() {
+			continue // Docker-Hosts stehen unter /healthchecks/docker
+		}
 		d.Systems = append(d.Systems, m.pveSysView(ctx, sys))
 	}
 	if d.Last != nil {
@@ -367,6 +380,10 @@ func (m *Module) pveSystemOf(w http.ResponseWriter, r *http.Request) *proxmox.Sy
 func (m *Module) pagePVESystem(w http.ResponseWriter, r *http.Request) {
 	sys := m.pveSystemOf(w, r)
 	if sys == nil {
+		return
+	}
+	if sys.IsDocker() {
+		http.Redirect(w, r, dockerSysPath(sys.ID), http.StatusSeeOther)
 		return
 	}
 	ctx := r.Context()
@@ -464,6 +481,10 @@ func (m *Module) pagePVEResource(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if sys.IsDocker() {
+		http.Redirect(w, r, pveKeyPath(sys.Kind, sys.ID, key), http.StatusSeeOther)
+		return
+	}
 	set, err := m.pve.st.Settings(ctx, sys.ID)
 	if err != nil {
 		m.fail(w, r, err)
@@ -509,6 +530,7 @@ type pveRuleField struct {
 // pveRulesForm ist das Regelformular einer Ebene.
 type pveRulesForm struct {
 	Level  string // system, node, guest
+	Text   string // Texte (pve.rules.level_<Text> …): wie Level, Docker: docker_system bzw. container
 	Key    string
 	Action string
 	Muted  bool
@@ -573,7 +595,11 @@ func pveThrText(t proxmox.Threshold) string {
 // pveRulesFor baut das Formular einer Ebene: eigene Werte und was sie sonst erben wuerde (mit Herkunft).
 func pveRulesFor(set *proxmox.SystemSettings, key, node, action string) pveRulesForm {
 	level := pveLevel(key)
-	f := pveRulesForm{Level: level, Key: key, Action: action}
+	f := pveRulesForm{Level: level, Key: key, Action: action, Text: level}
+	docker := set != nil && set.Kind == proxmox.KindDocker
+	if docker {
+		f.Text = map[string]string{"system": "docker_system", "guest": "container"}[level]
+	}
 	if it := set.Item(key); it != nil {
 		f.Muted, f.Seen = it.Muted, it.SeenRunning
 		if it.ExpectRunning != nil {
@@ -602,7 +628,13 @@ func pveRulesFor(set *proxmox.SystemSettings, key, node, action string) pveRules
 		if !strings.Contains(rd.levels, lv) {
 			continue
 		}
+		if docker && (rd.name == "suspended" || rd.name == "offline" || rd.name == "disk") {
+			continue // gibt es bei Docker nicht
+		}
 		fl := pveRuleField{Name: rd.name, Label: "pve.rule." + rd.name, Kind: rd.kind, From: "pve.rules.from_default"}
+		if docker && (rd.name == "crashed" || rd.name == "unreachable") {
+			fl.Label = "docker.rule." + rd.name
+		}
 		var own *proxmox.RuleSet
 		if it := set.Item(key); it != nil {
 			own = &it.Rules
@@ -772,7 +804,7 @@ func (m *Module) pagePVESettings(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	key := strings.TrimSpace(r.PostFormValue("key"))
-	back := pveResPath(sys.ID, key)
+	back := pveKeyPath(sys.Kind, sys.ID, key)
 	if !proxmox.ValidKey(key) {
 		http.Error(w, "invalid key", http.StatusBadRequest)
 		return
@@ -843,8 +875,8 @@ func (m *Module) pagePVEAsCheck(w http.ResponseWriter, r *http.Request) {
 	key := strings.TrimSpace(r.PostFormValue("key"))
 	on := r.PostFormValue("on") == "1"
 	back := r.PostFormValue("back")
-	if !strings.HasPrefix(back, pvePath+"/") || strings.Contains(back, "//") {
-		back = pveResPath(sys.ID, "")
+	if !(strings.HasPrefix(back, pvePath+"/") || strings.HasPrefix(back, dockerPath)) || strings.Contains(back, "//") {
+		back = pveKeyPath(sys.Kind, sys.ID, "")
 	}
 	if err := m.pveSetAsCheck(r, sys, key, on); err != nil {
 		var fe *proxmox.FieldError
@@ -875,8 +907,8 @@ func (m *Module) pagePVEToggle(w http.ResponseWriter, r *http.Request) {
 		m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
 	}
 	back := r.PostFormValue("back")
-	if back != pvePath {
-		back = pveResPath(sys.ID, "")
+	if back != pvePath && back != dockerPath {
+		back = pveKeyPath(sys.Kind, sys.ID, "")
 	}
 	http.Redirect(w, r, back, http.StatusSeeOther)
 }
@@ -892,6 +924,10 @@ func (m *Module) pagePVEDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	m.auditText(r, "proxmox.delete", sys.Name)
 	m.g.Flash(w, r, "success", m.g.T(r, "pve.deleted"))
+	if sys.IsDocker() {
+		http.Redirect(w, r, dockerPath, http.StatusSeeOther)
+		return
+	}
 	http.Redirect(w, r, pvePath, http.StatusSeeOther)
 }
 
@@ -954,6 +990,10 @@ func (m *Module) pagePVEForm(w http.ResponseWriter, r *http.Request) {
 		if sys = m.pveSystemOf(w, r); sys == nil {
 			return
 		}
+		if sys.IsDocker() { // kein Formular fuer Docker-Hosts
+			http.Redirect(w, r, dockerSysPath(sys.ID), http.StatusSeeOther)
+			return
+		}
 	}
 	d := m.pveFormData(sys, edit)
 	d.HasSecret = edit && sys.Secret != ""
@@ -991,6 +1031,10 @@ func (m *Module) pagePVESave(w http.ResponseWriter, r *http.Request) {
 	var old *proxmox.System
 	if edit {
 		if old = m.pveSystemOf(w, r); old == nil {
+			return
+		}
+		if old.IsDocker() {
+			http.Redirect(w, r, dockerSysPath(old.ID), http.StatusSeeOther)
 			return
 		}
 		sys.ID, sys.Created, stored = old.ID, old.Created, old.Secret
@@ -1115,10 +1159,19 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 	if err != nil || len(list) == 0 {
 		return nil, err
 	}
+	pve := list[:0:0]
+	for _, sys := range list {
+		if !sys.IsDocker() { // Docker-Hosts zaehlen nicht zur Proxmox-Karte
+			pve = append(pve, sys)
+		}
+	}
+	if len(pve) == 0 {
+		return nil, nil
+	}
 	c := &module.Card{TitleKey: "nav.proxmox", Icon: "bi-hdd-rack", Path: pvePath}
 	var ok, bad, running, guestsBad int64
 	var errs []string
-	for _, sys := range list {
+	for _, sys := range pve {
 		row := m.pveSysView(ctx, sys)
 		switch {
 		case row.SysProblem:

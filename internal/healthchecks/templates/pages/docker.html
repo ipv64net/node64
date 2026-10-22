@@ -1,13 +1,38 @@
 {{define "content"}}
 {{$d := .Data}}
+{{if $d.Res}}{{template "dockerres" $}}{{else}}{{template "dockersys" $}}{{end}}
+{{range $d.Hcs}}
+<form method="post" action="/healthchecks/{{.Check.Token}}/action" id="act-{{.Check.Token}}" class="d-none"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="back" value="docker"></form>
+{{end}}
+{{end}}
+
+{{define "dockersys"}}
+{{$d := .Data}}
 {{$f := $d.Filter}}
-<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-	<h1 class="h4 mb-0 me-auto"><i class="bi bi-box-seam text-primary me-1"></i> {{.T "nav.docker"}}{{$.Doc "healthchecks#docker"}}</h1>
-	<a class="btn btn-outline-secondary btn-sm" href="/healthchecks/docker" title="{{.T "logs.refresh"}}"><i class="bi bi-arrow-clockwise"></i></a>
-	<a class="btn btn-primary btn-sm" href="/healthchecks/new?type=docker"><i class="bi bi-plus-lg"></i> {{.T "hc.docker.add"}}</a>
+<div class="d-flex flex-wrap align-items-start gap-2 mb-3">
+	<div class="me-auto">
+		<h1 class="h4 mb-1"><i class="bi bi-box-seam text-primary me-1"></i> {{.T "nav.docker"}}{{if $d.Sys}} <span class="badge {{$d.View.Class}}">{{.T (print "pve.sys_state." $d.View.State)}}</span>{{end}}{{$.Doc "healthchecks#docker"}}</h1>
+		<div class="small text-body-secondary d-flex flex-wrap gap-2 align-items-center">
+			{{with $d.Info}}<span><i class="bi bi-hdd"></i> {{.Name}}</span>{{if .Version}}<span class="badge text-bg-light">Docker {{.Version}}</span>{{end}}{{if .OS}}<span>{{.OS}}</span>{{end}}<span>{{.NCPU}} CPU · {{$.Bytes .MemTotal}} RAM</span>{{end}}
+			<code>{{$d.Host}}</code>
+			{{if $d.Sys}}{{with $d.View.Snap}}<span>{{$.T "pve.last_poll"}}: {{$.Ago .Time}}</span>{{end}}<span>{{.T "pve.interval"}}: {{$d.Sys.Interval}} s</span>{{end}}
+		</div>
+	</div>
+	<div class="d-flex gap-1 flex-wrap">
+		<a class="btn btn-outline-secondary btn-sm" href="{{or $d.Path "/healthchecks/docker"}}" title="{{.T "logs.refresh"}}"><i class="bi bi-arrow-clockwise"></i></a>
+		{{if $d.Sys}}<form method="post" action="{{$d.Act}}/toggle" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="back" value="/healthchecks/docker">
+			{{if $d.Sys.Enabled}}<button class="btn btn-sm btn-outline-warning" type="submit" data-confirm="{{.T "docker.disable_confirm"}}"><i class="bi bi-pause-fill"></i> {{.T "docker.disable"}}</button>{{else}}<button class="btn btn-sm btn-outline-success" type="submit"><i class="bi bi-play-fill"></i> {{.T "docker.enable"}}</button>{{end}}</form>{{end}}
+		<a class="btn btn-outline-primary btn-sm" href="/healthchecks/new?type=docker"><i class="bi bi-plus-lg"></i> {{.T "hc.docker.add"}}</a>
+	</div>
 </div>
-<p class="text-body-secondary small mb-2">{{.T "hc.docker.page_hint"}}</p>
-{{if $d.Socket}}<div class="small mb-3" id="docker-socket"><span class="badge text-bg-success"><i class="bi bi-plug"></i> {{.T "hc.docker.socket_ok"}}</span> <code>{{$d.Host}}</code></div>
+<p class="text-body-secondary small mb-2">{{.T "docker.page_hint"}}</p>
+
+{{if not $d.Sys}}
+	{{if $d.Socket}}<div class="alert alert-info small d-flex flex-wrap align-items-center gap-2" id="docker-setup"><i class="bi bi-info-circle"></i> <span class="me-auto">{{if $d.Off}}{{.T "docker.off_hint"}}{{else}}{{.T "docker.setup_hint"}}{{end}}</span>
+		<form method="post" action="/healthchecks/docker/enable" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-activity"></i> {{.T "docker.setup"}}</button></form></div>{{end}}
+{{else if eq $d.View.State "off"}}<div class="alert alert-secondary small" id="docker-off"><i class="bi bi-pause-circle"></i> {{.T "docker.disabled_hint"}}</div>
+{{else if eq $d.View.State "pending"}}<div class="alert alert-info small"><i class="bi bi-hourglass-split"></i> {{.T "pve.pending"}}</div>{{end}}
+{{if $d.Socket}}<div class="small mb-3" id="docker-socket"><span class="badge text-bg-success"><i class="bi bi-plug"></i> {{.T "hc.docker.socket_ok"}}</span>{{if $d.Live}} <span class="badge text-bg-light"><i class="bi bi-activity"></i> {{.T "docker.live"}}</span>{{end}}</div>
 {{else}}<div class="alert alert-warning small" id="docker-socket"><i class="bi bi-exclamation-triangle"></i> {{.T "hc.docker.socket_missing" "host" $d.Host}}
 	<div class="text-break mt-1 text-body-secondary">{{$d.SocketErr}}</div>
 	<div class="mt-2">{{.T "hc.docker.socket_mount"}} <code>-v /var/run/docker.sock:/var/run/docker.sock:ro</code>{{$.Doc "healthchecks#docker"}}</div>
@@ -15,60 +40,62 @@
 </div>{{end}}
 
 <div class="row g-2 mb-3">
-	<div class="col-6 col-md-3"><a class="card stat stat-primary" href="/healthchecks/docker"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.total"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Total}}{{else}}–{{end}}</div></div><i class="bi bi-box-seam stat-icon"></i></div></a></div>
-	<div class="col-6 col-md-3"><a class="card stat stat-ok" href="/healthchecks/docker?state=running"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.running"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Running}}{{else}}–{{end}}</div></div><i class="bi bi-play-circle stat-icon"></i></div></a></div>
-	<div class="col-6 col-md-3"><a class="card stat {{if $d.Bad}}stat-down{{else}}stat-muted{{end}}" href="/healthchecks/docker?state=problem"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.bad"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Bad}}{{else}}–{{end}}</div>{{if $d.Missing}}<div class="stat-sub">{{.T "hc.docker.kpi.missing" "count" $d.Missing}}</div>{{end}}</div><i class="bi bi-exclamation-triangle stat-icon"></i></div></a></div>
-	<div class="col-6 col-md-3"><a class="card stat stat-info" href="/healthchecks/docker?state=watched"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.watched"}}</div><div class="stat-value">{{$d.Watched}}</div></div><i class="bi bi-eye stat-icon"></i></div></a></div>
+	<div class="col-6 col-md"><a class="card stat stat-primary" href="/healthchecks/docker"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.total"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Total}}{{else}}–{{end}}</div></div><i class="bi bi-box-seam stat-icon"></i></div></a></div>
+	<div class="col-6 col-md"><a class="card stat stat-ok" href="/healthchecks/docker?state=running"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.running"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Running}}{{else}}–{{end}}</div></div><i class="bi bi-play-circle stat-icon"></i></div></a></div>
+	<div class="col-6 col-md"><a class="card stat {{if $d.Bad}}stat-down{{else}}stat-muted{{end}}" href="/healthchecks/docker?state=problem"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "docker.kpi.bad"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Bad}}{{else}}–{{end}}</div>{{if $d.Missing}}<div class="stat-sub">{{.T "hc.docker.kpi.missing" "count" $d.Missing}}</div>{{end}}</div><i class="bi bi-exclamation-triangle stat-icon"></i></div></a></div>
+	<div class="col-6 col-md"><a class="card stat stat-info" href="/healthchecks/docker?state=watched"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "docker.kpi.checks"}}</div><div class="stat-value">{{$d.Watched}}</div>{{if $d.AsCheck}}<div class="stat-sub">{{.T "docker.kpi.as_check" "count" $d.AsCheck}}</div>{{end}}</div><i class="bi bi-heart-pulse stat-icon"></i></div></a></div>
+	{{if $d.Live}}<div class="col-12 col-md"><div class="card stat stat-muted"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "docker.kpi.load"}}</div><div class="stat-value stat-value-sm">CPU {{or $d.CPUText "–"}} · RAM {{$.Bytes $d.MemSum}}</div>{{with $d.Last}}<div class="stat-sub"><a href="{{$d.LastURL}}">{{$.T "pve.card.last"}}: {{.Name}}</a> · {{$.Ago .Time}}</div>{{end}}</div><i class="bi bi-speedometer2 stat-icon"></i></div></div></div>{{end}}
 </div>
 
-<form method="get" action="/healthchecks/docker" class="row g-2 mb-3 align-items-end">
+<form method="get" action="{{or $d.Path "/healthchecks/docker"}}" class="row g-2 mb-3 align-items-end">
 	<div class="col-12 col-md-4"><input class="form-control form-control-sm" type="search" name="q" value="{{$f.q}}" placeholder="{{.T "common.search"}} …"></div>
 	<div class="col-6 col-md-3">
 		<select class="form-select form-select-sm" name="state" data-autosubmit>
 			<option value="">{{.T "common.status"}}: {{.T "common.all"}}</option>
-			{{range $d.States}}<option value="{{.}}"{{if eq . $f.state}} selected{{end}}>{{$.T (print "hc.docker.filter." .)}}</option>{{end}}
+			{{range $d.States}}<option value="{{.}}"{{if eq . $f.state}} selected{{end}}>{{$.T (print "docker.filter." .)}}</option>{{end}}
 		</select>
 	</div>
 	<div class="col-6 col-md-3 d-flex gap-2">
 		<button class="btn btn-outline-secondary btn-sm" type="submit">{{.T "hc.filter"}}</button>
-		{{if or $f.q $f.state}}<a class="btn btn-link btn-sm" href="/healthchecks/docker">{{.T "hc.reset"}}</a>{{end}}
+		{{if or $f.q $f.state}}<a class="btn btn-link btn-sm" href="{{or $d.Path "/healthchecks/docker"}}">{{.T "hc.reset"}}</a>{{end}}
 	</div>
 </form>
 
 {{if not $d.Rows}}
-<div class="card"><div class="card-body text-center text-body-secondary py-4">
+<div class="card mb-3"><div class="card-body text-center text-body-secondary py-4">
 	<i class="bi bi-box-seam fs-1 d-block mb-2"></i>
 	{{if $d.All}}{{.T "hc.docker.empty_filter"}}{{else}}{{.T "hc.docker.empty"}}{{end}}
 </div></div>
 {{else}}
-<div class="card">
+<div class="card mb-3">
 	<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards hc-table" id="docker-table">
-		<thead><tr><th>{{.T "hc.docker.container"}}</th><th>{{.T "hc.docker.state"}}</th><th class="d-none d-md-table-cell">{{.T "hc.docker.created"}}</th><th class="d-none d-md-table-cell">{{.T "hc.docker.ports"}}</th><th>{{.T "hc.docker.check"}}</th><th class="text-end">{{.T "common.actions"}}</th></tr></thead>
+		<thead><tr><th>{{.T "hc.docker.container"}}</th><th>{{.T "hc.docker.state"}}</th><th class="text-end">CPU</th><th class="text-end">RAM</th><th class="d-none d-lg-table-cell">{{.T "pve.net"}}</th><th class="d-none d-md-table-cell">{{.T "pve.uptime"}}</th><th class="d-none d-lg-table-cell">{{.T "pve.cpu_1h"}}</th><th>{{.T "hc.docker.check"}}</th><th class="text-end">{{.T "pve.as_check"}}</th></tr></thead>
 		<tbody>
 		{{range $d.Rows}}
 		<tr{{with .RowClass}} class="{{.}}"{{end}} data-container="{{.Name}}">
-			<td data-label="{{$.T "hc.docker.container"}}" class="hc-c-name"><span class="fw-semibold">{{.Name}}</span>
-				{{with .Ct}}<div class="small text-body-secondary text-truncate" style="max-width:22rem" title="{{.Image}} · {{.ID}}"><i class="bi bi-layers"></i> {{.Image}}</div>{{end}}</td>
-			<td data-label="{{$.T "hc.docker.state"}}"><span class="badge {{.Class}}">{{$.T (print "hc.docker.kind." .Kind)}}</span>
-				{{with .Health}}<span class="badge {{if eq . "unhealthy"}}text-bg-danger{{else if eq . "starting"}}text-bg-warning{{else}}text-bg-light{{end}}">{{$.T (print "hc.docker.health." .)}}</span>{{end}}
-				{{with .Ct}}<div class="small text-body-secondary">{{.Status}}</div>{{end}}</td>
-			<td data-label="{{$.T "hc.docker.created"}}" class="small text-nowrap d-none d-md-table-cell">{{if .Started.IsZero}}–{{else}}<span title="{{$.Time .Started}}">{{$.Ago .Started}}</span>{{end}}</td>
-			<td data-label="{{$.T "hc.docker.ports"}}" class="small d-none d-md-table-cell">{{with .Ct}}{{range .Ports}}<span class="badge text-bg-light">{{.}}</span> {{else}}–{{end}}{{else}}–{{end}}</td>
+			<td data-label="{{$.T "hc.docker.container"}}" class="hc-c-name">{{if .Path}}<a href="{{.Path}}" class="fw-semibold">{{.Name}}</a>{{else}}<span class="fw-semibold">{{.Name}}</span>{{end}}{{if .Muted}} <i class="bi bi-bell-slash text-body-secondary" title="{{$.T "pve.muted"}}"></i>{{end}}
+				{{range .R.Tags}}<span class="badge rounded-pill text-bg-light fw-normal" title="compose">{{.}}</span> {{end}}
+				{{if .Found}}<div class="small text-body-secondary text-truncate" style="max-width:22rem" title="{{.R.Image}} · {{.R.ContainerID}}"><i class="bi bi-layers"></i> {{.R.Image}}</div>
+				{{with .R.Ports}}<div class="small d-none d-md-block">{{range .}}<span class="badge text-bg-light">{{.}}</span> {{end}}</div>{{end}}{{end}}</td>
+			<td data-label="{{$.T "hc.docker.state"}}"><span class="badge {{.Class}}">{{$.T .Label}}</span>
+				{{with .R.Health}}<span class="badge {{if eq . "unhealthy"}}text-bg-danger{{else if eq . "starting"}}text-bg-warning{{else}}text-bg-light{{end}}">{{$.T (print "hc.docker.health." .)}}</span>{{end}}
+				{{if .Excluded}}<span class="badge text-bg-light" title="node64.nomonitor=true">{{$.T "pve.excluded"}}</span>{{end}}
+				{{if .R.Restarts}}<div class="small text-body-secondary">{{$.T "docker.restarts"}}: {{.R.Restarts}}</div>{{end}}
+				{{if and .Found (eq .R.Status "exited")}}<div class="small text-body-secondary">{{$.T "docker.exit_code"}}: {{.R.ExitCode}}{{if .R.OOMKilled}} · OOM{{end}}</div>{{end}}</td>
+			<td data-label="CPU" class="text-end text-nowrap">{{or .CPU "–"}}</td>
+			<td data-label="RAM" class="text-end text-nowrap">{{or .Mem "–"}}{{if .MemUsed}}<div class="small text-body-secondary">{{$.Bytes .R.Mem}} / {{$.Bytes .R.MaxMem}}</div>{{end}}</td>
+			<td data-label="{{$.T "pve.net"}}" class="small text-nowrap d-none d-lg-table-cell">{{if .Rates}}↓ {{$.Bytes .NetIn}}/s · ↑ {{$.Bytes .NetOut}}/s{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.uptime"}}" class="small text-nowrap d-none d-md-table-cell">{{if .Uptime}}{{$.Duration .Uptime}}{{else if not .Started.IsZero}}<span class="text-body-tertiary" title="{{$.T "hc.docker.created"}}: {{$.Time .Started}}">{{$.Ago .Started}}</span>{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.cpu_1h"}}" class="text-primary d-none d-lg-table-cell">{{.Spark}}</td>
 			<td data-label="{{$.T "hc.docker.check"}}">{{with .Hc}}{{$c := .Check}}
 				<a href="/healthchecks/{{$c.Token}}" class="fw-semibold">{{$c.Name}}</a> <span class="badge hc-state-{{.State}}">{{$.T (print "hc.state." .State)}}</span>
 				{{if $c.Foreign}}<span class="badge text-bg-light hc-exec"><i class="bi bi-hdd-network"></i> {{$.T "hc.owner.other"}}</span>{{end}}
 				<div class="beats mt-1">{{range .Pills}}<span class="beat beat-{{.Class}}" data-bs-toggle="tooltip" data-tip-label="{{.Label}}" data-tip-when="{{.When}}" data-tip-ms="{{.Latency}}" data-tip-msg="{{.Message}}"></span>{{end}}</div>
-				{{if .Message}}<div class="small text-body-secondary text-truncate" style="max-width:22rem" title="{{.Message}}">{{.Message}}</div>{{end}}
-				{{else}}<span class="text-body-secondary small"><i class="bi bi-eye-slash"></i> {{$.T "hc.docker.not_watched"}}</span>{{end}}</td>
-			<td data-label="{{$.T "common.actions"}}" class="text-end text-nowrap hc-c-actions">
-				{{with .Hc}}{{$c := .Check}}
-				{{if eq .State "paused"}}<button class="btn btn-sm btn-outline-success" form="act-{{$c.Token}}" name="action" value="resume" title="{{$.T "hc.action.resume"}}"><i class="bi bi-play-fill"></i></button>
-				{{else}}<button class="btn btn-sm btn-outline-warning" form="act-{{$c.Token}}" name="action" value="pause" title="{{$.T "hc.action.pause"}}"><i class="bi bi-pause-fill"></i></button>{{end}}
-				{{if $c.Runnable}}<button class="btn btn-sm btn-outline-info" form="act-{{$c.Token}}" name="action" value="run" title="{{$.T "hc.action.run"}}"><i class="bi bi-lightning-charge"></i></button>{{end}}
-				<a class="btn btn-sm btn-outline-primary" href="/healthchecks/{{$c.Token}}/edit" title="{{$.T "hc.edit"}}"><i class="bi bi-pencil"></i></a>
-				{{end}}
-				{{if eq .Kind "missing"}}{{with .Hc}}<button class="btn btn-sm btn-outline-danger" form="act-{{.Check.Token}}" name="action" value="delete" title="{{$.T "common.delete"}}" data-confirm="{{$.T "common.confirm"}}"><i class="bi bi-trash"></i></button>{{end}}{{end}}
-				{{if not .Hc}}<a class="btn btn-sm btn-primary" href="/healthchecks/new?type=docker&target={{.Name}}&name={{.Name}}"><i class="bi bi-eye"></i> {{$.T "hc.docker.watch"}}</a>{{end}}
+				{{else}}<span class="text-body-secondary small">–</span>{{end}}</td>
+			<td data-label="{{$.T "pve.as_check"}}" class="text-end text-nowrap">
+				{{if and $d.Sys .Found (not .Excluded)}}<form method="post" action="{{$d.Act}}/ascheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="key" value="{{.Key}}"><input type="hidden" name="back" value="{{or $d.Path "/healthchecks/docker"}}">{{if .Linked}}<input type="hidden" name="on" value="0"><button class="btn btn-sm btn-success py-0" type="submit" title="{{$.T "pve.check.remove"}}" data-confirm="{{$.T "pve.check.remove_confirm"}}"><i class="bi bi-toggle-on"></i></button>{{else}}<input type="hidden" name="on" value="1"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "pve.check.add"}}"><i class="bi bi-toggle-off"></i></button>{{end}}</form>{{end}}
+				{{if not .Found}}{{with .Hc}}<a class="btn btn-sm btn-outline-primary py-0" href="/healthchecks/{{.Check.Token}}/edit" title="{{$.T "hc.edit"}}"><i class="bi bi-pencil"></i></a>{{end}}{{end}}
+				{{if eq .Kind "missing"}}{{with .Hc}}<button class="btn btn-sm btn-outline-danger py-0" form="act-{{.Check.Token}}" name="action" value="delete" title="{{$.T "common.delete"}}" data-confirm="{{$.T "common.confirm"}}"><i class="bi bi-trash"></i></button>{{end}}{{end}}
 			</td>
 		</tr>
 		{{end}}
@@ -76,8 +103,135 @@
 	</table></div>
 </div>
 {{end}}
-{{range $d.Hcs}}
-<form method="post" action="/healthchecks/{{.Check.Token}}/action" id="act-{{.Check.Token}}" class="d-none"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="back" value="docker"></form>
+{{if $d.Sys}}{{template "dockerrules" $}}{{end}}
 {{end}}
+
+{{define "dockerres"}}
+{{$d := .Data}}
+{{$x := $d.Res}}
+{{$r := $x.Row}}
+<div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+	<div>
+		<h1 class="h4 mb-1"><i class="bi bi-box text-primary me-1"></i> {{$r.Name}} <span class="badge {{$r.Class}}">{{.T $r.Label}}</span>{{with $r.R.Health}} <span class="badge {{if eq . "unhealthy"}}text-bg-danger{{else if eq . "starting"}}text-bg-warning{{else}}text-bg-light{{end}}">{{$.T (print "hc.docker.health." .)}}</span>{{end}}{{$.Doc "healthchecks#docker"}}</h1>
+		<div class="small text-body-secondary d-flex flex-wrap gap-2 align-items-center">
+			<a href="{{$d.Path}}"><i class="bi bi-box-seam"></i> {{$d.Sys.Name}}</a>
+			{{if $r.R.Image}}<span title="{{$.T "docker.image"}}"><i class="bi bi-layers"></i> {{$r.R.Image}}</span>{{end}}
+			{{if $r.R.ContainerID}}<code>{{$r.R.ContainerID}}</code>{{end}}
+			{{range $r.R.Tags}}<span class="badge rounded-pill text-bg-secondary" title="compose">{{.}}</span>{{end}}
+			{{if $r.R.Restarts}}<span>{{.T "docker.restarts"}}: {{$r.R.Restarts}}</span>{{end}}
+			{{if eq $r.R.Status "exited"}}<span>{{.T "docker.exit_code"}}: {{$r.R.ExitCode}}{{if $r.R.OOMKilled}} · OOM{{end}}</span>{{end}}
+			{{range $r.R.Ports}}<span class="badge text-bg-light">{{.}}</span>{{end}}
+			{{if $r.Excluded}}<span class="badge text-bg-light" title="node64.nomonitor=true">{{.T "pve.excluded"}}</span>{{end}}
+			{{if $r.Muted}}<span><i class="bi bi-bell-slash"></i> {{.T "pve.muted"}}</span>{{end}}
+		</div>
+	</div>
+	<form method="post" action="{{$d.Act}}/ascheck" class="d-flex gap-1 flex-wrap m-0">
+		<input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="key" value="{{$x.Key}}"><input type="hidden" name="back" value="{{$r.Path}}">
+		{{if $r.AsCheck}}<a class="btn btn-sm btn-outline-primary" href="/healthchecks/{{$r.CheckToken}}"><i class="bi bi-heart-pulse"></i> {{.T "pve.check.open"}}</a>
+		<input type="hidden" name="on" value="0"><button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{.T "pve.check.remove_confirm"}}"><i class="bi bi-toggle-on"></i> {{.T "pve.check.remove"}}</button>
+		{{else if not $r.Excluded}}<input type="hidden" name="on" value="1"><button class="btn btn-sm btn-outline-success" type="submit" title="{{.T "docker.check.add_hint"}}"><i class="bi bi-toggle-off"></i> {{.T "pve.check.add"}}</button>{{end}}
+	</form>
+</div>
+{{if not $r.Found}}<div class="alert alert-warning small"><i class="bi bi-question-circle"></i> {{if $x.Reach}}{{.T "docker.res_missing"}}{{else}}{{.T "pve.res_nodata"}}{{end}}</div>{{end}}
+{{if $r.AsCheck}}<div class="alert alert-info small py-2"><i class="bi bi-heart-pulse"></i> {{.T "docker.check.active_hint"}}</div>{{end}}
+
+{{if $r.Found}}
+<div class="row g-2 mb-3">
+	<div class="col-6 col-md-4 col-xl"><div class="card stat stat-primary"><div class="card-body"><div class="stat-text"><div class="stat-label">CPU</div><div class="stat-value">{{or $r.CPU "–"}}</div>{{if $r.R.MaxCPU}}<div class="stat-sub">{{$r.R.MaxCPU}} CPU</div>{{end}}</div><i class="bi bi-cpu stat-icon"></i></div></div></div>
+	<div class="col-6 col-md-4 col-xl"><div class="card stat stat-info"><div class="card-body"><div class="stat-text"><div class="stat-label">RAM</div><div class="stat-value">{{or $r.Mem "–"}}</div>{{if $r.MemUsed}}<div class="stat-sub">{{$.Bytes $r.R.Mem}} / {{$.Bytes $r.R.MaxMem}}</div>{{end}}</div><i class="bi bi-memory stat-icon"></i></div></div></div>
+	<div class="col-6 col-md-4 col-xl"><div class="card stat stat-info"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "pve.net"}}</div><div class="stat-value stat-value-sm">{{if $r.Rates}}↓ {{$.Bytes $r.NetIn}}/s · ↑ {{$.Bytes $r.NetOut}}/s{{else}}–{{end}}</div></div><i class="bi bi-arrow-down-up stat-icon"></i></div></div></div>
+	<div class="col-6 col-md-4 col-xl"><div class="card stat stat-info"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "pve.chart.io"}}</div><div class="stat-value stat-value-sm">{{if $r.Rates}}R {{$.Bytes $r.DiskRd}}/s · W {{$.Bytes $r.DiskWr}}/s{{else}}–{{end}}</div></div><i class="bi bi-device-hdd stat-icon"></i></div></div></div>
+	<div class="col-6 col-md-4 col-xl"><div class="card stat stat-muted"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "pve.uptime"}}</div><div class="stat-value">{{if $r.Uptime}}{{$.Duration $r.Uptime}}{{else}}–{{end}}</div>{{if not $r.Started.IsZero}}<div class="stat-sub">{{.T "hc.docker.created"}}: {{$.Ago $r.Started}}</div>{{end}}</div><i class="bi bi-clock-history stat-icon"></i></div></div></div>
+</div>
 {{end}}
-{{define "scripts"}}<script src="/static/js/healthchecks.js?v={{.Version}}"></script>{{end}}
+
+<div class="card mb-3">
+	<div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+		<span><i class="bi bi-graph-up text-primary"></i> {{.T "pve.graphs"}}</span>
+		<div class="btn-group btn-group-sm" role="group" id="pve-ranges">
+			{{range $x.Ranges}}<button type="button" class="btn btn-outline-secondary{{if eq . "24h"}} active{{end}}" data-range="{{.}}">{{.}}</button>{{end}}
+		</div>
+	</div>
+	<div class="card-body" id="pve-charts" data-url="{{$x.Series}}" data-empty="{{.T "hc.no_data"}}"
+		data-l-cpu="CPU %" data-l-cpumax="{{.T "pve.chart.cpu_max"}}" data-l-mem="RAM %" data-l-disk="Disk %" data-l-in="{{.T "pve.chart.net_in"}}" data-l-out="{{.T "pve.chart.net_out"}}" data-l-read="{{.T "pve.chart.read"}}" data-l-write="{{.T "pve.chart.write"}}"
+		data-note-1="{{.T "pve.chart.step_1m"}}" data-note-5="{{.T "pve.chart.step_5m"}}" data-note-60="{{.T "pve.chart.step_1h"}}">
+		<div class="row g-3">
+			<div class="col-lg-6"><div class="small text-body-secondary mb-1">{{.T "pve.chart.cpu"}}</div><div class="pve-chart-wrap"><canvas id="pve-chart-cpu"></canvas></div></div>
+			<div class="col-lg-6"><div class="small text-body-secondary mb-1">RAM</div><div class="pve-chart-wrap"><canvas id="pve-chart-mem"></canvas></div></div>
+			<div class="col-lg-6"><div class="small text-body-secondary mb-1">{{.T "pve.net"}}</div><div class="pve-chart-wrap"><canvas id="pve-chart-net"></canvas></div></div>
+			<div class="col-lg-6"><div class="small text-body-secondary mb-1">{{.T "pve.chart.io"}}</div><div class="pve-chart-wrap"><canvas id="pve-chart-io"></canvas></div></div>
+		</div>
+		<div class="small text-body-secondary mt-2" id="pve-chart-note"></div>
+	</div>
+</div>
+
+{{with $r.R.Labels}}
+<details class="card mb-3">
+	<summary class="card-header"><i class="bi bi-tags text-primary"></i> {{$.T "docker.labels"}} <span class="badge text-bg-secondary">{{len .}}</span></summary>
+	<div class="table-responsive"><table class="table table-sm mb-0 small">
+		<tbody>{{range $k, $v := .}}<tr><td class="font-monospace text-break">{{$k}}</td><td class="font-monospace text-break">{{$v}}</td></tr>{{end}}</tbody>
+	</table></div>
+</details>
+{{end}}
+
+{{template "dockerrules" $}}
+{{end}}
+
+{{define "scripts"}}{{if .Data.Res}}<script src="/static/js/chart.umd.js"></script><script src="/static/js/proxmox.js?v={{.Version}}"></script>{{end}}<script src="/static/js/healthchecks.js?v={{.Version}}"></script>{{end}}
+
+{{define "dockerrules"}}{{$r := .Data.Rules}}
+<div class="card mb-3" id="rules">
+	<div class="card-header"><i class="bi bi-bell text-primary"></i> {{.T "pve.rules.title"}} <span class="small text-body-secondary">· {{.T (print "pve.rules.level_" $r.Text)}}</span>{{.Doc "healthchecks#docker"}}</div>
+	<form method="post" action="{{$r.Action}}" class="card-body">
+		<input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="key" value="{{$r.Key}}">
+		<p class="small text-body-secondary">{{.T (print "pve.rules.hint_" $r.Text)}}</p>
+		<div class="row g-2 mb-2">
+			<div class="col-md-6"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="pve-muted" name="muted"{{if $r.Muted}} checked{{end}}><label class="form-check-label" for="pve-muted">{{.T (print "pve.rules.muted_" $r.Text)}}</label></div></div>
+			{{if eq $r.Level "guest"}}<div class="col-md-6"><label class="form-label small mb-0" for="pve-expect">{{.T "pve.rules.expect"}}</label>
+				<select class="form-select form-select-sm" id="pve-expect" name="expect">
+					<option value=""{{if eq $r.Expect ""}} selected{{end}}>{{.T "pve.rules.expect_auto"}} ({{if $r.Seen}}{{.T "pve.rules.expect_seen"}}{{else}}{{.T "pve.rules.expect_unseen"}}{{end}})</option>
+					<option value="1"{{if eq $r.Expect "1"}} selected{{end}}>{{.T "pve.rules.expect_yes"}}</option>
+					<option value="0"{{if eq $r.Expect "0"}} selected{{end}}>{{.T "pve.rules.expect_no"}}</option>
+				</select></div>{{end}}
+		</div>
+		<div class="table-responsive"><table class="table table-sm align-middle mb-2">
+			<thead><tr><th>{{.T "pve.rules.rule"}}</th><th style="min-width:14rem">{{.T "pve.rules.own"}}</th><th>{{.T "pve.rules.inherited"}}</th></tr></thead>
+			<tbody>
+			{{range $r.Fields}}
+			<tr>
+				<td>{{$.T .Label}}</td>
+				<td>{{if eq .Kind "bool"}}<select class="form-select form-select-sm" name="r_{{.Name}}">
+						<option value=""{{if eq .Own ""}} selected{{end}}>{{$.T "pve.rules.inherit"}}</option>
+						<option value="1"{{if eq .Own "1"}} selected{{end}}>{{$.T "common.on"}}</option>
+						<option value="0"{{if eq .Own "0"}} selected{{end}}>{{$.T "common.off"}}</option>
+					</select>
+					{{else if eq .Kind "thr"}}<div class="input-group input-group-sm"><input class="form-control" name="r_{{.Name}}" value="{{.Own}}" inputmode="decimal" placeholder="{{$.T "pve.rules.inherit"}}" aria-label="%"><span class="input-group-text">%</span><input class="form-control" name="r_{{.Name}}_min" value="{{.OwnMin}}" inputmode="numeric" placeholder="0" aria-label="min"><span class="input-group-text">min</span></div>
+					{{else}}<div class="input-group input-group-sm"><input class="form-control" name="r_{{.Name}}" value="{{.Own}}" inputmode="numeric" placeholder="{{$.T "pve.rules.inherit"}}"><span class="input-group-text">{{$.T "pve.rules.polls"}}</span></div>{{end}}</td>
+				<td class="small {{if ne .Own ""}}text-body-tertiary text-decoration-line-through{{else}}text-body-secondary{{end}}">{{if .InhKey}}{{$.T .InhKey}}{{else}}{{.Inh}}{{end}} · {{$.T .From}}</td>
+			</tr>
+			{{end}}
+			</tbody>
+		</table></div>
+		{{if $r.Channels}}
+		<div class="mb-3">
+			<label class="form-label small mb-0">{{.T "pve.rule.channels"}}</label>
+			{{if ne $r.Level "system"}}<div class="row g-2 align-items-center mb-1">
+				<div class="col-md-6"><select class="form-select form-select-sm" name="ch_mode" aria-label="{{.T "pve.rule.channels"}}">
+					<option value=""{{if not $r.ChanOwn}} selected{{end}}>{{.T "pve.rules.inherit"}}</option>
+					<option value="own"{{if $r.ChanOwn}} selected{{end}}>{{.T "pve.rules.channels_own"}}</option>
+				</select></div>
+				<div class="col-md-6 small {{if $r.ChanOwn}}text-body-tertiary text-decoration-line-through{{else}}text-body-secondary{{end}}">{{.T "pve.rules.inherited"}}: {{if $r.ChanInh}}{{$r.ChanInh}}{{else}}{{.T "pve.rules.channels_default"}}{{end}} · {{.T $r.ChanFrom}}</div>
+			</div>{{end}}
+			{{range $r.Channels}}
+			<div class="form-check"><input class="form-check-input" type="checkbox" name="channels" value="{{.ID}}" id="pvech{{.ID}}"{{if .Selected}} checked{{end}}><label class="form-check-label" for="pvech{{.ID}}">{{.Name}} <span class="text-body-secondary small">{{$.T (print "nf.type." .Type)}}{{if .Default}} · {{$.T "nf.default"}}{{end}}</span></label></div>
+			{{end}}
+			<div class="form-text">{{if eq $r.Level "system"}}{{.T "hc.form.channels_hint"}}{{else}}{{.T "pve.rules.channels_hint"}}{{end}}</div>
+		</div>
+		{{end}}
+		<div class="d-flex gap-2">
+			<button class="btn btn-primary btn-sm" type="submit" name="op" value="save"><i class="bi bi-check-lg"></i> {{.T "common.save"}}</button>
+			<button class="btn btn-outline-secondary btn-sm" type="submit" name="op" value="reset" data-confirm="{{.T "pve.rules.reset_confirm"}}"><i class="bi bi-arrow-counterclockwise"></i> {{.T "pve.rules.reset"}}</button>
+		</div>
+	</form>
+</div>
+{{end}}

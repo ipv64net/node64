@@ -54,6 +54,9 @@ func (s *Store) SetRetention(rawDays, hourlyDays int) {
 
 // pveGuestRan sagt, ob ein Gast gestartet ist (laeuft, angehalten, abgestuerzt, mit Lock laufend).
 func pveGuestRan(r *Resource) bool {
+	if r.Type == TypeDocker { // beendet mit Fehler ist kein Lauf (alte Container wuerden sonst sofort erwartet)
+		return r.Status == "running" || r.Status == "paused" || r.Status == "restarting"
+	}
 	switch r.State {
 	case StateRunning, StatePaused, StateSuspended, StateError:
 		return true
@@ -70,6 +73,9 @@ func pveRecordable(r *Resource) bool {
 	}
 	if r.Type == TypeNode {
 		return r.State == StateOnline
+	}
+	if r.Type == TypeDocker {
+		return r.Status == "running" // Werte (stats) nur von laufenden Containern
 	}
 	return pveGuestRan(r)
 }

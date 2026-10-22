@@ -3,6 +3,12 @@
 ## 2.23.0 – 2026-10-22
 
 ### Added
+- Docker monitoring like Proxmox VE: with a reachable Docker socket the host is set up automatically and all
+  containers are monitored – state, health, restarts, exit code/OOM, CPU and RAM (relative to the limit, like docker
+  stats), network and block I/O with history from 1 h to 30 days. Rules inherit host → container, with channels, quiet
+  hours and maintenance; problem on unhealthy, restart loop, exited with error, OOM or dead. Container page with graphs
+  and labels, "keep as check" (existing Docker checks are linked), label `node64.nomonitor=true`, on/off switch, API
+  `/api/healthchecks/docker/systems/…`, Prometheus `node64_docker_*`, export/import.
 - Notifications: new "iGotify (iPhone)" channel – sends to a Gotify server whose iGotify assistant pushes to the
   iPhone.
 

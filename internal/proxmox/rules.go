@@ -33,6 +33,12 @@ const (
 	WhatCPU         = "cpu"
 	WhatMem         = "mem"
 	WhatDisk        = "disk"
+	// Docker-Container (gleiche Werte wie Resource.Detail; Regel „Absturz“, ohne Verzoegerung)
+	WhatUnhealthy  = DockerUnhealthy
+	WhatRestarting = DockerRestarting
+	WhatExited     = DockerExited
+	WhatOOM        = DockerOOM
+	WhatDead       = DockerDead
 )
 
 // TagNoMonitor schliesst einen Gast aus (Proxmox-Tag).
@@ -88,6 +94,8 @@ func pveLabel(r *Resource) string {
 		return "Node „" + r.Node + "“"
 	case TypeLXC:
 		s = "Container " + strconv.Itoa(r.VMID)
+	case TypeDocker:
+		return "Docker-Container „" + r.Name + "“"
 	default:
 		s = "VM " + strconv.Itoa(r.VMID)
 	}
@@ -162,6 +170,10 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 		sysName = "#" + strconv.FormatInt(snap.SystemID, 10)
 	}
 	sysRule := set.Effective("", "")
+	sysWord := "Proxmox"
+	if set != nil && set.Kind == KindDocker {
+		sysWord = "Docker"
+	}
 	var evs []Event
 	add := func(ev Event) {
 		ev.SystemID = snap.SystemID
@@ -180,7 +192,7 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 		}
 		if st.down && !st.notified && sysRule.Unreachable { // auch nachtraeglich, wenn die Regel wieder an ist
 			st.notified = true
-			txt := "Proxmox „" + sysName + "“ nicht erreichbar"
+			txt := sysWord + " „" + sysName + "“ nicht erreichbar"
 			if snap.Error != "" {
 				txt += ": " + snap.Error
 			}
@@ -189,7 +201,7 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 		return evs // ohne Daten bleibt der Stand der Ressourcen unveraendert
 	}
 	if st.notified {
-		add(Event{Name: sysName, Kind: KindUp, What: WhatUnreachable, Since: st.since, Text: "Proxmox „" + sysName + "“ wieder erreichbar"})
+		add(Event{Name: sysName, Kind: KindUp, What: WhatUnreachable, Since: st.since, Text: sysWord + " „" + sysName + "“ wieder erreichbar"})
 	}
 	st.bad, st.down, st.notified = 0, false, false
 
@@ -236,11 +248,24 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 				what, bad = WhatOffline, rule.Offline
 			}
 		} else {
+			expect := rs.ran || (it != nil && it.SeenRunning)
+			if it != nil && it.ExpectRunning != nil {
+				expect = *it.ExpectRunning
+			}
 			switch r.State {
 			case StateRunning:
 				good = true
 			case StateError:
 				what, bad, delay = WhatCrashed, rule.Crashed, 1
+				if r.Type == TypeDocker {
+					what = r.Detail
+					if what == "" {
+						what = WhatCrashed
+					}
+					if r.DockerDown() { // beendet bzw. tot: nur eine Stoerung, wenn der Container laufen soll
+						bad = bad && expect
+					}
+				}
 			case StatePaused:
 				what, bad = WhatPaused, rule.Paused
 			case StateSuspended:
@@ -248,10 +273,6 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 			case StateBackup, StateLocked:
 				good = r.Status == "running"
 			case StateStopped:
-				expect := rs.ran || (it != nil && it.SeenRunning)
-				if it != nil && it.ExpectRunning != nil {
-					expect = *it.ExpectRunning
-				}
 				what, bad = WhatStopped, rule.Stopped && expect && !rs.prevLock
 			}
 		}
@@ -272,6 +293,9 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 				ev := Event{Key: key, Name: name, Kind: KindDown, What: rs.what, Since: rs.since, Text: pveDownText(r, lbl, rs.what)}
 				if rs.what == WhatCrashed {
 					ev.Detail = r.QMP // qmpstatus fuer den Text (internal-error, guest-panicked, io-error)
+				}
+				if r.Type == TypeDocker {
+					ev.Detail = dockerEventDetail(r, rs.what)
 				}
 				add(ev)
 			}
@@ -380,8 +404,29 @@ func (e *Engine) Adopt(systemID int64, key string) {
 
 func pveRound1(v float64) float64 { return math.Round(v*10) / 10 }
 
+// dockerEventDetail: Zusatz fuer den Text ({detail}): Exit-Code bzw. Zahl der Neustarts.
+func dockerEventDetail(r *Resource, what string) string {
+	switch what {
+	case WhatExited, WhatOOM:
+		return strconv.Itoa(r.ExitCode)
+	case WhatRestarting:
+		return strconv.Itoa(r.Restarts)
+	}
+	return ""
+}
+
 func pveDownText(r *Resource, lbl, what string) string {
 	switch what {
+	case WhatUnhealthy:
+		return lbl + " ist unhealthy"
+	case WhatRestarting:
+		return lbl + " startet ständig neu"
+	case WhatExited:
+		return lbl + " ist beendet (Exit-Code " + strconv.Itoa(r.ExitCode) + ")"
+	case WhatOOM:
+		return lbl + " wurde wegen Speichermangel beendet"
+	case WhatDead:
+		return lbl + " ist tot (dead)"
 	case WhatCrashed:
 		if r.QMP != "" {
 			return lbl + " ist abgestürzt (" + r.QMP + ")"

@@ -3,6 +3,12 @@
 ## 2.23.0 – 2026-10-22
 
 ### Neu
+- Docker-Überwachung wie Proxmox VE: Mit erreichbarem Docker-Socket wird der Host automatisch eingerichtet und alle
+  Container überwacht – Zustand, Health, Neustarts, Exit-Code/OOM, CPU und RAM (bezogen auf das Limit, wie docker
+  stats), Netz und Block-I/O mit Verlauf von 1 h bis 30 Tage. Regeln mit Vererbung Host → Container, Kanäle, Ruhezeiten
+  und Wartung; Störung bei unhealthy, Neustart-Schleife, beendet mit Fehler, OOM oder dead. Containerseite mit Graphen
+  und Labels, „Als Check führen“ (vorhandene Docker-Checks werden zugeordnet), Label `node64.nomonitor=true`,
+  Ein/Aus-Schalter, API `/api/healthchecks/docker/systems/…`, Prometheus `node64_docker_*`, Export/Import.
 - Benachrichtigungen: Neuer Kanal „iGotify (iPhone)“ – Versand an einen Gotify-Server, den der iGotify-Assistent per
   Push aufs iPhone bringt.
 

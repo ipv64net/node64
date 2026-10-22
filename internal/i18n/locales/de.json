@@ -3973,7 +3973,13 @@
         "paused": "{type} „{name}“ ist angehalten.",
         "suspended": "{type} „{name}“ ist suspendiert.",
         "offline": "Node „{name}“ ist offline.",
-        "unreachable": "Proxmox-System „{name}“ ist nicht erreichbar."
+        "unreachable": "Proxmox-System „{name}“ ist nicht erreichbar.",
+        "unhealthy": "{type} „{name}“ ist unhealthy.",
+        "restarting": "{type} „{name}“ startet ständig neu ({detail} Neustarts).",
+        "exited": "{type} „{name}“ ist beendet (Exit-Code {detail}).",
+        "oom": "{type} „{name}“ wurde wegen Speichermangel beendet (OOM, Exit-Code {detail}).",
+        "dead": "{type} „{name}“ ist tot (dead).",
+        "docker_unreachable": "Docker-Host „{name}“ ist nicht erreichbar."
       },
       "up": {
         "crashed": "{type} „{name}“ läuft wieder.",
@@ -3981,7 +3987,13 @@
         "paused": "{type} „{name}“ läuft wieder.",
         "suspended": "{type} „{name}“ läuft wieder.",
         "offline": "Node „{name}“ ist wieder online.",
-        "unreachable": "Proxmox-System „{name}“ ist wieder erreichbar."
+        "unreachable": "Proxmox-System „{name}“ ist wieder erreichbar.",
+        "unhealthy": "{type} „{name}“ ist wieder gesund.",
+        "restarting": "{type} „{name}“ läuft wieder stabil.",
+        "exited": "{type} „{name}“ läuft wieder.",
+        "oom": "{type} „{name}“ läuft wieder.",
+        "dead": "{type} „{name}“ läuft wieder.",
+        "docker_unreachable": "Docker-Host „{name}“ ist wieder erreichbar."
       },
       "threshold": {
         "cpu": "{type} „{name}“: CPU {value} % (Grenze {limit} %).",
@@ -4001,7 +4013,8 @@
     "type": {
       "qemu": "VM",
       "lxc": "Container",
-      "node": "Node"
+      "node": "Node",
+      "docker": "Docker-Container"
     },
     "state": {
       "running": "läuft",
@@ -4154,7 +4167,13 @@
       "reset_confirm": "Eigene Regeln dieser Ebene zurücksetzen?",
       "channels_own": "eigene Auswahl",
       "channels_default": "Standardkanäle",
-      "channels_hint": "„erben“ = Kanäle von Node bzw. System. Eigene Auswahl ohne Haken = Standardkanäle."
+      "channels_hint": "„erben“ = Kanäle von Node bzw. System. Eigene Auswahl ohne Haken = Standardkanäle.",
+      "level_docker_system": "für alle Container dieses Hosts",
+      "level_container": "für diesen Container",
+      "hint_docker_system": "Gilt für alle Container, solange dort nichts anderes eingestellt ist. Leer = Standard. „Gestoppt“ und „beendet mit Fehler“ melden nur Container, die laufen sollen (lief schon einmal bzw. fest eingestellt).",
+      "hint_container": "Leer = vom Host geerbt. Schwelle 0 % schaltet sie aus; RAM bezieht sich auf das Limit des Containers (ohne Limit: RAM des Hosts).",
+      "muted_docker_system": "Stumm: keine Meldungen für diesen Docker-Host",
+      "muted_container": "Stumm: keine Meldungen für diesen Container"
     },
     "err": {
       "name": "Name zu lang (höchstens 100 Zeichen).",
@@ -4169,7 +4188,9 @@
       "key": "Unbekannter Gast bzw. Node.",
       "no_box": "Kein Schlüssel (secret.key) geladen – Token-Secrets lassen sich nicht verschlüsselt speichern.",
       "channels": "Kanäle: ungültige Auswahl (höchstens 100).",
-      "secret_reenter": "Adressen oder Fingerabdruck geändert: bitte das Token-Secret für den Test neu eingeben (das gespeicherte geht nur an das eingerichtete Ziel)."
+      "secret_reenter": "Adressen oder Fingerabdruck geändert: bitte das Token-Secret für den Test neu eingeben (das gespeicherte geht nur an das eingerichtete Ziel).",
+      "kind": "Unbekannte Art (pve oder docker).",
+      "docker_host": "Docker-Host: unix:///pfad/zum/socket, tcp://host:port oder http(s)://…"
     },
     "form": {
       "connection": "Verbindung",
@@ -4261,5 +4282,56 @@
   "nodes": {
     "removed_banner": "Diese Node wurde auf ipv64.net entfernt ({date}). API-Key und Healthchecks-Verknüpfung wurden hier gelöscht, die lokalen Daten bleiben. Zum erneuten Anbinden die Node unter ipv64.net/nodes.php wieder zulassen und einen API-Key eintragen.",
     "removed_settings": "Zum API-Key"
+  },
+  "docker": {
+    "page_hint": "Alle Container dieses Hosts werden über den Docker-Socket überwacht wie Proxmox-Gäste: Zustand, CPU, RAM, Netz und Disk-I/O mit Verlauf, Regeln und Kanälen. „Als Check führen“ legt zusätzlich einen Healthchecks-Check an (Statusseiten, Sync, Uptime). Label node64.nomonitor=true schließt einen Container aus.",
+    "setup_hint": "Docker-Socket erreichbar, der Host wird aber noch nicht überwacht.",
+    "off_hint": "Die Docker-Überwachung wurde entfernt und wird nicht mehr automatisch eingerichtet.",
+    "setup": "Docker-Host überwachen",
+    "disabled_hint": "Die Docker-Überwachung ist ausgeschaltet: keine Abfrage, keine Meldungen. Container „als Check“ prüfen weiter selbst.",
+    "enable": "Überwachung einschalten",
+    "disable": "Überwachung ausschalten",
+    "disable_confirm": "Docker-Überwachung ausschalten? Container „als Check“ laufen weiter.",
+    "live": "Werte live",
+    "kpi": {
+      "bad": "Gestört",
+      "checks": "Docker-Checks",
+      "as_check": "davon {count} als Check geführt",
+      "load": "Auslastung aller Container"
+    },
+    "filter": {
+      "running": "Laufend",
+      "problem": "Gestört",
+      "stopped": "Gestoppt",
+      "paused": "Pausiert",
+      "watched": "Mit Check",
+      "unwatched": "Ohne Check",
+      "missing": "Container fehlt"
+    },
+    "state": {
+      "running": "läuft",
+      "stopped": "gestoppt",
+      "paused": "pausiert",
+      "error": "gestört",
+      "unknown": "unbekannt",
+      "unhealthy": "unhealthy",
+      "restarting": "Neustart-Schleife",
+      "exited": "beendet (Fehler)",
+      "oom": "Speicher voll (OOM)",
+      "dead": "tot (dead)"
+    },
+    "rule": {
+      "crashed": "Störung (unhealthy, Neustart-Schleife, beendet mit Fehler, OOM)",
+      "unreachable": "Docker-Socket nicht erreichbar"
+    },
+    "restarts": "Neustarts",
+    "exit_code": "Exit-Code",
+    "image": "Image",
+    "labels": "Labels",
+    "res_missing": "Dieser Container ist nicht in der letzten Abfrage (gelöscht oder umbenannt?). Verlauf und Regeln bleiben erhalten.",
+    "check": {
+      "add_hint": "Legt einen Healthchecks-Check vom Typ Docker an (Statusseiten, Sync mit ipv64, Uptime). Zustandsmeldungen kommen dann über den Check, Schwellen und Neustarts weiter über die Docker-Überwachung.",
+      "active_hint": "Wird als Check geführt: Ausfall und Entwarnung meldet der Check (mit seinen Kanälen), Neustarts und Schwellen meldet die Docker-Überwachung."
+    }
   }
 }

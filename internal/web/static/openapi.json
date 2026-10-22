@@ -4754,10 +4754,18 @@
       },
       "PVESystem": {
         "type": "object",
-        "description": "Proxmox-VE-System (Einzel-Node oder Cluster) mit Zustand; das Token-Secret wird nie ausgegeben.",
+        "description": "Proxmox-VE-System (Einzel-Node oder Cluster) bzw. Docker-Host (kind docker) mit Zustand; das Token-Secret wird nie ausgegeben. Docker: addresses = [unix:///var/run/docker.sock], ohne token_id/pin_sha256; guests = Container.",
         "properties": {
           "id": {
             "type": "integer"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "pve",
+              "docker"
+            ],
+            "description": "pve = Proxmox VE, docker = Docker-Host (Container als Gäste, Key docker/<name>)"
           },
           "name": {
             "type": "string"
@@ -4919,14 +4927,16 @@
         "properties": {
           "key": {
             "type": "string",
-            "example": "qemu/101"
+            "example": "qemu/101",
+            "description": "node/<name>, qemu/<vmid>, lxc/<vmid> bzw. docker/<name>"
           },
           "type": {
             "type": "string",
             "enum": [
               "node",
               "qemu",
-              "lxc"
+              "lxc",
+              "docker"
             ]
           },
           "node": {
@@ -4976,16 +4986,18 @@
           },
           "cpu": {
             "type": "number",
-            "description": "Anteil 0..1"
+            "description": "Anteil 0..1 (bezogen auf max_cpu; Docker: CPU-Limit bzw. Kerne des Hosts)"
           },
           "max_cpu": {
             "type": "number"
           },
           "mem": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Byte (Docker: ohne inactive_file wie docker stats)"
           },
           "max_mem": {
-            "type": "integer"
+            "type": "integer",
+            "description": "Byte (Docker: Limit bzw. RAM des Hosts)"
           },
           "disk": {
             "type": "integer"
@@ -5017,7 +5029,7 @@
           },
           "excluded": {
             "type": "boolean",
-            "description": "Vorlage bzw. Tag nomonitor"
+            "description": "Vorlage bzw. Tag nomonitor (Docker: Label node64.nomonitor=true)"
           },
           "muted": {
             "type": "boolean"
@@ -5027,6 +5039,67 @@
           },
           "check_token": {
             "type": "string"
+          },
+          "container_id": {
+            "type": "string",
+            "description": "nur Docker: ID (12 Zeichen)"
+          },
+          "image": {
+            "type": "string",
+            "description": "nur Docker"
+          },
+          "health": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "unhealthy",
+              "starting"
+            ],
+            "description": "nur Docker: Healthcheck des Containers"
+          },
+          "restart_count": {
+            "type": "integer",
+            "description": "nur Docker: Neustarts durch Docker"
+          },
+          "exit_code": {
+            "type": "integer",
+            "description": "nur Docker"
+          },
+          "oom_killed": {
+            "type": "boolean",
+            "description": "nur Docker"
+          },
+          "created": {
+            "type": "integer",
+            "description": "nur Docker: Erstellzeit (Unix)"
+          },
+          "ports": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "8080->80/tcp"
+            ],
+            "description": "nur Docker"
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "nur Docker (höchstens 64)"
+          },
+          "detail": {
+            "type": "string",
+            "enum": [
+              "unhealthy",
+              "restarting",
+              "exited",
+              "oom",
+              "dead"
+            ],
+            "description": "nur Docker, bei state error: Ursache"
           }
         }
       },
@@ -16241,7 +16314,7 @@
           "Healthchecks"
         ],
         "summary": "Docker-Container des Hosts",
-        "description": "Alle Container des Docker-Hosts (Socket) zusammen mit den Docker-Checks, wie die Seite /healthchecks/docker. kind: running, stopped, paused, restarting, missing (Check ohne Container), remote (andere Node bzw. anderer Docker-Host), unknown (Socket nicht erreichbar). check ist null, wenn der Container nicht überwacht wird.",
+        "description": "Alle Container des Docker-Hosts mit den Werten der Überwachung und den Docker-Checks, wie die Seite /healthchecks/docker. kind: running, stopped, paused, restarting, missing (Check ohne Container), remote (andere Node bzw. anderer Docker-Host), unknown (Socket nicht erreichbar). check ist null ohne Check. Werte (cpu, mem …) nur mit laufender Überwachung (monitored).",
         "responses": {
           "200": {
             "description": "OK",
@@ -16300,10 +16373,6 @@
                             "type": "string",
                             "example": "running"
                           },
-                          "status": {
-                            "type": "string",
-                            "example": "Up 3 hours (healthy)"
-                          },
                           "created": {
                             "type": "string",
                             "format": "date-time"
@@ -16336,9 +16405,98 @@
                                 "type": "string"
                               }
                             }
+                          },
+                          "key": {
+                            "type": "string",
+                            "example": "docker/web"
+                          },
+                          "monitor": {
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "stopped",
+                              "paused",
+                              "error",
+                              "unknown"
+                            ],
+                            "description": "Zustand wie die Regeln"
+                          },
+                          "detail": {
+                            "type": "string",
+                            "enum": [
+                              "unhealthy",
+                              "restarting",
+                              "exited",
+                              "oom",
+                              "dead"
+                            ]
+                          },
+                          "bad": {
+                            "type": "boolean",
+                            "description": "gestört (wie die Regeln) bzw. Container fehlt"
+                          },
+                          "as_check": {
+                            "type": "boolean"
+                          },
+                          "excluded": {
+                            "type": "boolean",
+                            "description": "Label node64.nomonitor=true"
+                          },
+                          "muted": {
+                            "type": "boolean"
+                          },
+                          "cpu": {
+                            "type": "number",
+                            "description": "Anteil 0..1 bezogen auf cpus"
+                          },
+                          "cpus": {
+                            "type": "number",
+                            "description": "CPU-Limit bzw. Kerne des Hosts"
+                          },
+                          "mem": {
+                            "type": "integer",
+                            "description": "Byte ohne inactive_file"
+                          },
+                          "max_mem": {
+                            "type": "integer",
+                            "description": "Limit bzw. RAM des Hosts"
+                          },
+                          "net_in": {
+                            "type": "number",
+                            "description": "Byte/s"
+                          },
+                          "net_out": {
+                            "type": "number",
+                            "description": "Byte/s"
+                          },
+                          "disk_read": {
+                            "type": "number",
+                            "description": "Byte/s"
+                          },
+                          "disk_write": {
+                            "type": "number",
+                            "description": "Byte/s"
+                          },
+                          "uptime": {
+                            "type": "integer",
+                            "description": "Sekunden"
+                          },
+                          "restart_count": {
+                            "type": "integer"
+                          },
+                          "exit_code": {
+                            "type": "integer"
                           }
                         }
                       }
+                    },
+                    "system_id": {
+                      "type": "integer",
+                      "description": "Docker-Host der Überwachung (fehlt = keiner)"
+                    },
+                    "monitored": {
+                      "type": "boolean",
+                      "description": "Werte aus der laufenden Überwachung"
                     }
                   }
                 }
@@ -16348,13 +16506,13 @@
         }
       }
     },
-    "/healthchecks/proxmox/systems": {
+    "/healthchecks/docker/systems": {
       "get": {
         "tags": [
           "Healthchecks"
         ],
-        "summary": "Proxmox-Systeme auflisten",
-        "description": "Alle Systeme mit Zustand aus der letzten Abfrage (ohne Secret).",
+        "summary": "Docker-Hosts auflisten",
+        "description": "Docker-Hosts der Überwachung (kind docker) mit Zustand; guests = Container (ohne node64.nomonitor).",
         "responses": {
           "200": {
             "description": "OK",
@@ -16370,6 +16528,542 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Docker-Host anlegen",
+        "description": "Mit erreichbarem Socket richtet Node64 den lokalen Host automatisch ein; nach dem Entfernen nur noch hiermit bzw. über die Seite. Ohne addresses: NODE64_DOCKER_HOST bzw. unix:///var/run/docker.sock. Kein Token, kein Secret.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "example": "Docker"
+                  },
+                  "addresses": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "unix:///var/run/docker.sock"
+                    ]
+                  },
+                  "interval": {
+                    "type": "integer",
+                    "description": "Sekunden (15–300, Standard 30)"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PVESystem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültige Angaben (field, key)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthchecks/docker/systems/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID des Docker-Hosts"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Docker-Host abrufen",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PVESystem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Wie /healthchecks/proxmox/systems/{id} (gleiche Daten), für Docker-Hosts. "
+      },
+      "put": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Docker-Host ändern (Name, Intervall, ein/aus)",
+        "description": "Wie /healthchecks/proxmox/systems/{id} (gleiche Daten), für Docker-Hosts. Teiländerung; leeres secret behält das gespeicherte. Ein-/Ausschalten pausiert bzw. startet die Checks des Systems.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PVESystemInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PVESystem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültige Angaben",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Docker-Host entfernen (Docker-Checks bleiben, keine automatische Einrichtung mehr)",
+        "description": "Wie /healthchecks/proxmox/systems/{id} (gleiche Daten), für Docker-Hosts. Mit Einstellungen, Verlauf und den Checks „als Check“.",
+        "responses": {
+          "204": {
+            "description": "gelöscht"
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthchecks/docker/systems/{id}/resources": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID des Docker-Hosts"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Container eines Docker-Hosts",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "system": {
+                      "$ref": "#/components/schemas/PVESystem"
+                    },
+                    "resources": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PVEResource"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Wie /healthchecks/proxmox/systems/{id}/resources (gleiche Daten), für Docker-Hosts. "
+      }
+    },
+    "/healthchecks/docker/systems/{id}/series": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID des Docker-Hosts"
+        },
+        {
+          "name": "key",
+          "in": "query",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "docker/<name>"
+        },
+        {
+          "name": "range",
+          "in": "query",
+          "schema": {
+            "type": "string",
+            "enum": [
+              "1h",
+              "24h",
+              "7d",
+              "30d"
+            ],
+            "default": "24h"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Verlauf eines Containers",
+        "description": "Wie /healthchecks/proxmox/systems/{id}/series (gleiche Daten), für Docker-Hosts. CPU/RAM/Disk in %, Netz und Disk-I/O in Byte/s; Auflösung 1 min (bis 48 h), 5 min bzw. 1 h, das noch nicht verdichtete Ende aus den Minutenwerten.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "range": {
+                      "type": "string"
+                    },
+                    "step_seconds": {
+                      "type": "integer"
+                    },
+                    "from": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "to": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PVEPoint"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ungültiger key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthchecks/docker/systems/{id}/settings": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer"
+          },
+          "description": "ID des Docker-Hosts"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Einstellungen und Regeln eines Docker-Hosts",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "system_id": {
+                      "type": "integer"
+                    },
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/PVESettings"
+                      }
+                    },
+                    "effective": {
+                      "type": "object",
+                      "description": "Key → wirksame Regel ('' = System); channels = wirksame Kanal-IDs, leer = Standardkanäle"
+                    },
+                    "defaults": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Wie /healthchecks/proxmox/systems/{id}/settings (gleiche Daten), für Docker-Hosts. "
+      },
+      "put": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Einstellungen einer Ebene setzen (as_check legt einen Check vom Typ docker an)",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "leer = System, sonst node/<name>, qemu/<vmid>, lxc/<vmid>"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PVESettingsInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "settings": {
+                      "$ref": "#/components/schemas/PVESettings"
+                    },
+                    "effective": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ungültiger key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "ungültige Regel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Wie /healthchecks/proxmox/systems/{id}/settings (gleiche Daten), für Docker-Hosts. "
+      },
+      "delete": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Ebene auf „alles erben“ zurücksetzen",
+        "description": "Wie /healthchecks/proxmox/systems/{id}/settings (gleiche Daten), für Docker-Hosts. „als Check“ bleibt bestehen.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "leer = System"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "zurückgesetzt"
+          },
+          "404": {
+            "description": "proxmox system not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthchecks/proxmox/systems": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Proxmox-Systeme auflisten",
+        "description": "Alle Proxmox-Systeme mit Zustand aus der letzten Abfrage (ohne Secret). Docker-Hosts nur mit ?kind=docker bzw. all (oder /healthchecks/docker/systems).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PVESystem"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pve",
+                "docker",
+                "all"
+              ],
+              "default": "pve"
+            }
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -16437,7 +17131,7 @@
           "Healthchecks"
         ],
         "summary": "Verbindung testen",
-        "description": "Holt Zertifikat (Fingerabdruck), Version, Cluster, Nodes und Gäste. Mit system_id und ohne secret wird das gespeicherte Secret benutzt.",
+        "description": "Holt Zertifikat (Fingerabdruck), Version, Cluster, Nodes und Gäste. Mit system_id und ohne secret wird das gespeicherte Secret benutzt. Für Docker-Hosts nicht nötig (422).",
         "requestBody": {
           "required": true,
           "content": {
@@ -16666,7 +17360,7 @@
           "schema": {
             "type": "string"
           },
-          "description": "node/<name>, qemu/<vmid> oder lxc/<vmid>"
+          "description": "node/<name>, qemu/<vmid> oder lxc/<vmid> bzw. docker/<name> (Docker-Host)"
         },
         {
           "name": "range",

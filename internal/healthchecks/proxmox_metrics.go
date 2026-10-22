@@ -29,8 +29,12 @@ func (m *Module) pveMetrics(ctx context.Context, w *metrics.Writer) {
 	if err != nil || len(list) == 0 {
 		return
 	}
+	m.dockerMetrics(ctx, w, list) // Docker-Hosts: node64_docker_* (docker_metrics.go)
 	guests := 0
 	for _, sys := range list {
+		if sys.IsDocker() {
+			continue // Docker-Hosts: node64_docker_* (docker_metrics.go)
+		}
 		sl := pveShortLabel(sys.Name)
 		sid := strconv.FormatInt(sys.ID, 10)
 		sysl := []string{"system", sl, "system_id", sid}

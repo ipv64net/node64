@@ -28,6 +28,18 @@ func (m *Module) pveAPIRoutes(mux *http.ServeMux, api func(http.HandlerFunc) htt
 	mux.Handle("GET "+p+"/systems/{id}/settings", api(m.apiPVESettings))
 	mux.Handle("PUT "+p+"/systems/{id}/settings", api(m.apiPVESettingsPut))
 	mux.Handle("DELETE "+p+"/systems/{id}/settings", api(m.apiPVESettingsDelete))
+	// Docker-Hosts (Kind docker): dieselben Handler unter /api/healthchecks/docker (die Liste nur mit Docker-Hosts)
+	const d = "/api/healthchecks/docker"
+	mux.Handle("GET "+d+"/systems", api(m.apiDockerSystems))
+	mux.Handle("POST "+d+"/systems", api(m.apiDockerCreate))
+	mux.Handle("GET "+d+"/systems/{id}", api(m.apiPVEGet))
+	mux.Handle("PUT "+d+"/systems/{id}", api(m.apiPVEUpdate))
+	mux.Handle("DELETE "+d+"/systems/{id}", api(m.apiPVEDelete))
+	mux.Handle("GET "+d+"/systems/{id}/resources", api(m.apiPVEResources))
+	mux.Handle("GET "+d+"/systems/{id}/series", api(m.apiPVESeries))
+	mux.Handle("GET "+d+"/systems/{id}/settings", api(m.apiPVESettings))
+	mux.Handle("PUT "+d+"/systems/{id}/settings", api(m.apiPVESettingsPut))
+	mux.Handle("DELETE "+d+"/systems/{id}/settings", api(m.apiPVESettingsDelete))
 }
 
 // pveSystemJSON ist ein System in der API (ohne Secret) mit seinem Zustand.
@@ -122,7 +134,21 @@ func (m *Module) pveAPISystem(w http.ResponseWriter, r *http.Request) *proxmox.S
 	return sys
 }
 
+// apiPVESystems: Proxmox-Systeme (?kind=docker bzw. all: auch Docker-Hosts).
 func (m *Module) apiPVESystems(w http.ResponseWriter, r *http.Request) {
+	kind := r.URL.Query().Get("kind")
+	if kind == "" {
+		kind = proxmox.KindPVE
+	}
+	m.pveListJSON(w, r, kind)
+}
+
+// apiDockerSystems: Docker-Hosts.
+func (m *Module) apiDockerSystems(w http.ResponseWriter, r *http.Request) {
+	m.pveListJSON(w, r, proxmox.KindDocker)
+}
+
+func (m *Module) pveListJSON(w http.ResponseWriter, r *http.Request, kind string) {
 	list, err := m.pve.st.Systems(r.Context())
 	if err != nil {
 		m.pveAPIErr(w, err)
@@ -130,9 +156,33 @@ func (m *Module) apiPVESystems(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]pveSystemJSON, 0, len(list))
 	for _, sys := range list {
-		out = append(out, m.pveJSON(r.Context(), sys))
+		if kind == "all" || sys.Kind == kind {
+			out = append(out, m.pveJSON(r.Context(), sys))
+		}
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// apiDockerCreate legt einen Docker-Host an (Standard: lokaler Socket bzw. NODE64_DOCKER_HOST).
+func (m *Module) apiDockerCreate(w http.ResponseWriter, r *http.Request) {
+	var in pveSystemIn
+	if err := readJSON(r, &in); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid json: "+err.Error())
+		return
+	}
+	sys := &proxmox.System{Kind: proxmox.KindDocker, Interval: proxmox.DefaultInterval, Enabled: true}
+	in.apply(sys)
+	sys.Kind = proxmox.KindDocker
+	if strings.TrimSpace(sys.Name) == "" {
+		sys.Name = "Docker"
+	}
+	if err := m.pveSaveSystem(r, sys); err != nil {
+		m.pveAPIErr(w, err)
+		return
+	}
+	_ = m.core.SetSetting(r.Context(), dockerSettingMonitor, "")
+	m.auditText(r, "proxmox.create", sys.Name)
+	writeJSON(w, http.StatusCreated, m.pveJSON(r.Context(), sys))
 }
 
 func (m *Module) apiPVEGet(w http.ResponseWriter, r *http.Request) {
@@ -216,6 +266,10 @@ func (m *Module) apiPVEProbe(w http.ResponseWriter, r *http.Request) {
 		sys = *old
 	}
 	in.apply(&sys)
+	if sys.IsDocker() {
+		m.pveAPIErr(w, &proxmox.FieldError{Field: "kind", Key: "pve.err.kind"}) // Docker-Hosts brauchen keinen Test
+		return
+	}
 	if sys.Secret == "" && old != nil {
 		if !proxmox.SameEndpoint(old, &sys) {
 			m.pveAPIErr(w, &proxmox.FieldError{Field: "secret", Key: "pve.err.secret_reenter"})
@@ -274,7 +328,7 @@ func (m *Module) apiPVESeries(w http.ResponseWriter, r *http.Request) {
 	}
 	key := r.URL.Query().Get("key")
 	if key == "" || !proxmox.ValidKey(key) {
-		writeErr(w, http.StatusBadRequest, "key must look like node/<name>, qemu/<vmid> or lxc/<vmid>")
+		writeErr(w, http.StatusBadRequest, "key must look like node/<name>, qemu/<vmid>, lxc/<vmid> or docker/<name>")
 		return
 	}
 	rg := r.URL.Query().Get("range")

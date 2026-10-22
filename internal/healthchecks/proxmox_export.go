@@ -17,7 +17,8 @@ import (
 // zeigt „Secret fehlt“ – nach dem Eintragen laeuft es. Verlauf und Zustand gehoeren zur Node und fehlen.
 
 type pveExportSystem struct {
-	ID        int64               `json:"id"` // ID in der Quelle (Zuordnung der Checks „als Check“)
+	ID        int64               `json:"id"`             // ID in der Quelle (Zuordnung der Checks „als Check“)
+	Kind      string              `json:"kind,omitempty"` // pve (leer) bzw. docker
 	Name      string              `json:"name"`
 	Addresses []string            `json:"addresses"`
 	TokenID   string              `json:"token_id"`
@@ -36,7 +37,7 @@ func (m *Module) pveExport(ctx context.Context) ([]pveExportSystem, error) {
 	seal := module.SecretSealerOf(ctx)
 	out := []pveExportSystem{}
 	for _, sys := range list {
-		x := pveExportSystem{ID: sys.ID, Name: sys.Name, Addresses: sys.Addresses, TokenID: sys.TokenID, PinSHA256: sys.PinSHA256,
+		x := pveExportSystem{ID: sys.ID, Kind: sys.Kind, Name: sys.Name, Addresses: sys.Addresses, TokenID: sys.TokenID, PinSHA256: sys.PinSHA256,
 			Interval: sys.Interval, Enabled: sys.Enabled, Settings: []*proxmox.Settings{}}
 		if seal != nil && sys.Secret != "" {
 			x.Secret = seal.Encrypt(sys.Secret)
@@ -76,6 +77,22 @@ func (m *Module) pveImport(ctx context.Context, in []pveExportSystem) (int, erro
 	hits := map[int64]int{}
 	for i, x := range in {
 		cands := byName[strings.ToLower(x.Name)]
+		if x.Kind == proxmox.KindDocker { // Docker-Host: derselbe Socket, egal wie er heisst (wird automatisch angelegt)
+			cands = nil
+			for _, c := range existing {
+				if c.IsDocker() && len(c.Addresses) > 0 && len(x.Addresses) > 0 && c.Addresses[0] == x.Addresses[0] {
+					cands = append(cands, c)
+				}
+			}
+		} else {
+			var pve []*proxmox.System
+			for _, c := range cands {
+				if !c.IsDocker() {
+					pve = append(pve, c)
+				}
+			}
+			cands = pve
+		}
 		if len(cands) > 1 {
 			var same []*proxmox.System
 			for _, c := range cands {
@@ -100,12 +117,17 @@ func (m *Module) pveImport(ctx context.Context, in []pveExportSystem) (int, erro
 				secret = plain
 			}
 		}
-		sys := &proxmox.System{Name: x.Name, Addresses: x.Addresses, TokenID: x.TokenID, Secret: secret, PinSHA256: x.PinSHA256,
+		sys := &proxmox.System{Kind: x.Kind, Name: x.Name, Addresses: x.Addresses, TokenID: x.TokenID, Secret: secret, PinSHA256: x.PinSHA256,
 			Interval: x.Interval, Enabled: x.Enabled}
 		if id := match[i]; id != 0 && hits[id] == 1 {
 			sys.ID = id
 		}
 		switch {
+		case sys.IsDocker(): // ohne Secret
+			if err := m.pve.st.SaveSystem(ctx, sys); err != nil {
+				problems = append(problems, x.Name+": "+err.Error())
+				continue
+			}
 		case m.pve.box == nil:
 			problems = append(problems, x.Name+": "+proxmox.ErrNoBox.Error())
 			continue
@@ -132,7 +154,11 @@ func (m *Module) pveImport(ctx context.Context, in []pveExportSystem) (int, erro
 				ids := module.MapChannels(ctx, *st.Rules.Channels)
 				st.Rules.Channels = &ids
 			}
-			if st.AsCheck {
+			if st.AsCheck && sys.IsDocker() { // Docker-Check fragt den Container selbst: nur die Zuordnung pruefen
+				if c, _ := m.st.Check(ctx, st.CheckToken); c == nil || c.Type != checks.TypeDocker {
+					st.AsCheck, st.CheckToken = false, ""
+				}
+			} else if st.AsCheck {
 				st.AsCheck = false
 				if c, _ := m.st.Check(ctx, st.CheckToken); c != nil && c.Type == checks.TypeProxmox {
 					var p checks.ProxmoxParams

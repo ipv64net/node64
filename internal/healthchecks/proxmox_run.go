@@ -23,11 +23,16 @@ import (
 // Check“ sind normale Checks vom Typ proxmox, die den letzten Snapshot lesen (pveLookup).
 
 const (
-	pveSettingEngine = "pve.engine."       // + System-ID: gemeldete Stoerungen (JSON, leer = keine)
-	pveSettingLast   = "pve.last_incident" // letzte Stoerung (Startseite)
-	pveCheckGroup    = "Proxmox VE"        // Gruppe der Checks „als Check“
-	pveRetentionRead = time.Minute         // Aufbewahrung (hc.raw_days/hc.hourly_days) so oft neu lesen
+	pveSettingEngine  = "pve.engine."       // + System-ID: gemeldete Stoerungen (JSON, leer = keine)
+	pveSettingLast    = "pve.last_incident" // letzte Stoerung (Startseite)
+	pveCheckGroup     = "Proxmox VE"        // Gruppe der Checks „als Check“
+	pveRetentionRead  = time.Minute         // Aufbewahrung (hc.raw_days/hc.hourly_days) so oft neu lesen
+	dockerCheckGroup  = "Docker"            // Gruppe der Container „als Check“
+	dockerSettingLast = "docker.last_incident"
 )
+
+// pveNewSource baut die Abfrage eines Systems (Tests: Docker-API austauschen).
+var pveNewSource = proxmox.NewSource
 
 // pveRuntime ist der Laufzeitzustand der Proxmox-Ueberwachung.
 type pveRuntime struct {
@@ -41,6 +46,7 @@ type pveRuntime struct {
 	saved     map[int64]string // zuletzt gespeicherter Stand der Engine (JSON)
 	fails     map[int64]int64  // fehlgeschlagene Abfragen seit dem Start (Prometheus)
 	retention time.Time        // letztes Lesen der Aufbewahrung
+	dockerMu  sync.Mutex       // Docker-Host automatisch einrichten (nur einmal)
 	wg        sync.WaitGroup
 	// Tests: noRun startet keine Abfrage-Schleife (Abfragen nur per Poll), alert faengt Meldungen ab
 	noRun bool
@@ -49,7 +55,7 @@ type pveRuntime struct {
 
 type pvePoll struct {
 	sys     proxmox.System
-	p       *proxmox.Poller
+	p       proxmox.Source
 	cancel  context.CancelFunc
 	done    chan struct{}
 	started time.Time
@@ -109,6 +115,15 @@ func (m *Module) pveStart(ctx context.Context) {
 	if len(list) > 0 {
 		m.log.Info("proxmox monitoring started", "systems", len(list))
 	}
+	if !rt.noRun { // Docker-Host mit erreichbarem Socket automatisch einrichten (docker_ui.go)
+		rt.wg.Add(1)
+		go func() {
+			defer rt.wg.Done()
+			if _, err := m.dockerEnsure(ctx, false); err != nil {
+				m.log.Debug("docker host not monitored", "err", err)
+			}
+		}()
+	}
 }
 
 // pveStop beendet alle Abfragen (Stop des Moduls).
@@ -130,7 +145,7 @@ func (m *Module) pveStop() {
 func (m *Module) pveRun(ctx context.Context, sys *proxmox.System) {
 	rt := m.pve
 	reason := ""
-	if sys.Secret == "" {
+	if sys.Secret == "" && !sys.IsDocker() {
 		reason = m.pveSecretProblem(ctx, sys.ID)
 	}
 	rt.mu.Lock()
@@ -145,7 +160,7 @@ func (m *Module) pveRun(ctx context.Context, sys *proxmox.System) {
 		rt.errs[sys.ID] = reason
 	case rt.ctx != nil: // sonst Modul gestoppt
 		pctx, cancel := context.WithCancel(rt.ctx)
-		p := proxmox.NewPoller(m.log, *sys, m.pveSnapshot)
+		p := pveNewSource(m.log, *sys, m.pveSnapshot)
 		pp := &pvePoll{sys: *sys, p: p, cancel: cancel, done: make(chan struct{}), started: time.Now()}
 		rt.polls[sys.ID] = pp
 		if rt.noRun {
@@ -266,6 +281,9 @@ func (m *Module) pveSnapshot(ctx context.Context, s *proxmox.Snapshot) {
 		return // System inzwischen geloescht
 	}
 	m.pveCheckLinks(ctx, set)
+	if set.Kind == proxmox.KindDocker {
+		m.dockerLinkChecks(ctx, set, s)
+	}
 	evs := rt.engine.Evaluate(s, set)
 	m.pvePersist(ctx, s.SystemID)
 	for _, ev := range evs {
@@ -277,7 +295,7 @@ func (m *Module) pveSnapshot(ctx context.Context, s *proxmox.Snapshot) {
 }
 
 // pveCheckLinks: wurde ein Check „als Check“ in der Liste der Healthchecks geloescht, gilt der Gast wieder als normal
-// ueberwacht (sonst meldete niemand seinen Zustand). Eine Abfrage fuer alle Checks vom Typ proxmox (nicht je Gast).
+// ueberwacht (sonst meldete niemand seinen Zustand). Eine Abfrage fuer alle Checks vom Typ proxmox bzw. docker (nicht je Gast).
 func (m *Module) pveCheckLinks(ctx context.Context, set *proxmox.SystemSettings) {
 	var have map[string]bool
 	for _, it := range set.Items {
@@ -286,7 +304,7 @@ func (m *Module) pveCheckLinks(ctx context.Context, set *proxmox.SystemSettings)
 		}
 		if have == nil {
 			var err error
-			if have, err = m.pveCheckTokens(ctx); err != nil {
+			if have, err = m.pveCheckTokens(ctx, pveCheckType(set.Kind)); err != nil {
 				return
 			}
 		}
@@ -300,9 +318,17 @@ func (m *Module) pveCheckLinks(ctx context.Context, set *proxmox.SystemSettings)
 	}
 }
 
-// pveCheckTokens liefert die Tokens aller Checks vom Typ proxmox.
-func (m *Module) pveCheckTokens(ctx context.Context) (map[string]bool, error) {
-	rows, err := m.core.Reader().QueryContext(ctx, `SELECT token FROM hc_checks WHERE type = ?`, string(checks.TypeProxmox))
+// pveCheckType: Check-Typ „als Check“ je Art des Systems (Docker: der vorhandene Typ docker).
+func pveCheckType(kind string) checks.Type {
+	if kind == proxmox.KindDocker {
+		return checks.TypeDocker
+	}
+	return checks.TypeProxmox
+}
+
+// pveCheckTokens liefert die Tokens aller Checks des Typs.
+func (m *Module) pveCheckTokens(ctx context.Context, typ checks.Type) (map[string]bool, error) {
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT token FROM hc_checks WHERE type = ?`, string(typ))
 	if err != nil {
 		return nil, err
 	}
@@ -361,13 +387,27 @@ func pveKeyType(key string) string {
 	return t
 }
 
-// pveResPath: Seite eines Systems bzw. einer Ressource.
+// pveResPath: Seite eines Systems bzw. einer Ressource (Docker-Container: Seite unter /healthchecks/docker).
 func pveResPath(id int64, key string) string {
+	if name, ok := strings.CutPrefix(key, proxmox.TypeDocker+"/"); ok {
+		return dockerSysPath(id) + "/c/" + name
+	}
 	p := pvePath + "/system/" + strconv.FormatInt(id, 10)
 	if key != "" {
 		p += "/res/" + key
 	}
 	return p
+}
+
+// dockerSysPath: Seite eines Docker-Hosts.
+func dockerSysPath(id int64) string { return dockerPath + "/system/" + strconv.FormatInt(id, 10) }
+
+// pveKeyPath: Seite eines Keys nach Art des Systems ("" = System).
+func pveKeyPath(kind string, id int64, key string) string {
+	if kind == proxmox.KindDocker && key == "" {
+		return dockerSysPath(id)
+	}
+	return pveResPath(id, key)
 }
 
 // pveNotify verschickt ein Ereignis der Regeln (Text in der Sprache des Kanals ueber pve.ev.<Kind>.<What>).
@@ -380,8 +420,12 @@ func (m *Module) pveNotify(ctx context.Context, set *proxmox.SystemSettings, s *
 	if ev.Key != "" {
 		name += " – " + ev.Name
 	}
+	docker := set.Kind == proxmox.KindDocker
 	data := map[string]string{"what": ev.What, "type": pveKeyType(ev.Key), "name": ev.Name, "system": set.Name, "detail": ev.Detail,
-		"path": pveResPath(set.SystemID, ev.Key)}
+		"path": pveKeyPath(set.Kind, set.SystemID, ev.Key)}
+	if docker && ev.Key == "" {
+		data["what"] = "docker_" + ev.What // Text „Docker-Host … nicht erreichbar“
+	}
 	if ev.Key == "" {
 		data["name"] = set.Name
 	}
@@ -402,7 +446,7 @@ func (m *Module) pveNotify(ctx context.Context, set *proxmox.SystemSettings, s *
 	}
 	a := notify.Alert{EventID: "pve-" + strconv.FormatInt(set.SystemID, 10) + "-" + ev.Key + "-" + ev.Kind + "-" + strconv.FormatInt(at.UnixNano(), 36),
 		Kind: kind, Time: at.UTC(), Reason: ev.What, Data: data,
-		Check: notify.CheckInfo{Name: name, Type: string(checks.TypeProxmox), Target: ev.Key, NotifyDown: true, NotifyUp: true, Local: true,
+		Check: notify.CheckInfo{Name: name, Type: string(pveCheckType(set.Kind)), Target: ev.Key, NotifyDown: true, NotifyUp: true, Local: true,
 			Channels: m.pveChannels(ctx, set.Effective(ev.Key, node).Channels)}}
 	// Ruhezeit ist Ruhezeit, auch beim Absturz (Dennis 2026-10-21): der Dispatcher merkt die Meldung und schickt sie
 	// danach in der Sammelmeldung wie bei Checks. Wartungsfenster unterdruecken die Meldung: Fenster fuer alle Checks
@@ -421,7 +465,11 @@ func (m *Module) pveNotify(ctx context.Context, set *proxmox.SystemSettings, s *
 	if ev.Kind == proxmox.KindDown {
 		inc := pveIncident{SystemID: set.SystemID, Key: ev.Key, Name: name, What: ev.What, Time: at.UTC()}
 		if b, err := json.Marshal(inc); err == nil {
-			_ = m.core.SetSetting(context.WithoutCancel(ctx), pveSettingLast, string(b))
+			key := pveSettingLast
+			if docker { // eigene letzte Stoerung (Docker-Seite), die Proxmox-Karte bleibt bei Proxmox
+				key = dockerSettingLast
+			}
+			_ = m.core.SetSetting(context.WithoutCancel(ctx), key, string(b))
 		}
 	}
 	m.log.Info("proxmox event", "system", set.Name, "key", ev.Key, "kind", ev.Kind, "what", ev.What)
@@ -457,7 +505,12 @@ func (m *Module) pveChannels(ctx context.Context, ids []int64) []int64 {
 
 // pveLastIncident liefert die letzte Stoerung (nil = keine).
 func (m *Module) pveLastIncident(ctx context.Context) *pveIncident {
-	raw := m.core.SettingOr(ctx, pveSettingLast, "")
+	return m.lastIncident(ctx, pveSettingLast)
+}
+
+// lastIncident liest die letzte Stoerung aus einer Einstellung (Proxmox bzw. Docker).
+func (m *Module) lastIncident(ctx context.Context, setting string) *pveIncident {
+	raw := m.core.SettingOr(ctx, setting, "")
 	if raw == "" {
 		return nil
 	}
@@ -576,6 +629,15 @@ func (m *Module) pveSetAsCheck(r *http.Request, sys *proxmox.System, key string,
 		in := checkJSON{Name: sys.Name + " – " + m.pveResName(sys.ID, key), Type: string(checks.TypeProxmox), Target: key, Params: params,
 			IntervalSeconds: &iv, RetryIntervalSeconds: &riv, Group: &group, Tags: []string{"proxmox"}, Execution: "local", Paused: &paused,
 			Channels: m.pveChannels(ctx, set.Effective(key, m.pveNodeOf(sys.ID, key)).Channels)}
+		if sys.IsDocker() { // Docker: der vorhandene Check-Typ docker fragt den Container selbst (laeuft auch ohne Abfrage)
+			name, _ := strings.CutPrefix(key, proxmox.TypeDocker+"/")
+			params = nil
+			if h := dockerSysHost(sys); h != checks.DefaultDockerHost() {
+				params, _ = json.Marshal(checks.DockerParams{Host: h})
+			}
+			group, paused = dockerCheckGroup, false
+			in.Name, in.Type, in.Target, in.Params, in.Tags = sys.Name+" – "+name, string(checks.TypeDocker), name, params, []string{"docker"}
+		}
 		c := &Check{Token: NewToken(), UpdatedBy: m.actor(r)}
 		if err := m.apply(c, in, true); err != nil {
 			return err
@@ -684,7 +746,7 @@ func (m *Module) pveSyncChecks(ctx context.Context, sys *proxmox.System, by stri
 				continue
 			}
 		}
-		if pauseChanged && c.Paused == sys.Enabled {
+		if pauseChanged && c.Paused == sys.Enabled && !sys.IsDocker() { // Docker-Checks fragen selbst, laufen weiter
 			if err := m.st.SetPaused(ctx, c.Token, !sys.Enabled, by); err != nil {
 				m.log.Error("proxmox check pause", "err", err)
 				continue
@@ -709,8 +771,13 @@ func (m *Module) pveSyncChecks(ctx context.Context, sys *proxmox.System, by stri
 func (m *Module) pveDeleteSystem(r *http.Request, id int64) error {
 	ctx := r.Context()
 	cs := m.pveSystemChecks(ctx, id)
-	if _, err := m.pve.st.System(ctx, id); err != nil {
+	sys, err := m.pve.st.System(ctx, id)
+	if err != nil {
 		return err
+	}
+	if sys.IsDocker() {
+		cs = nil // Docker-Checks bleiben (sie fragen den Container selbst); nicht automatisch neu anlegen
+		_ = m.core.SetSetting(ctx, dockerSettingMonitor, "off")
 	}
 	m.pveHalt(id)
 	m.pveForget(ctx, id)
@@ -725,8 +792,10 @@ func (m *Module) pveDeleteSystem(r *http.Request, id int64) error {
 	if err := m.pve.st.DeleteSystem(ctx, id); err != nil {
 		return err
 	}
-	if inc := m.pveLastIncident(ctx); inc != nil && inc.SystemID == id {
-		_ = m.core.SetSetting(ctx, pveSettingLast, "")
+	for _, k := range []string{pveSettingLast, dockerSettingLast} {
+		if inc := m.lastIncident(ctx, k); inc != nil && inc.SystemID == id {
+			_ = m.core.SetSetting(ctx, k, "")
+		}
 	}
 	return nil
 }
@@ -741,8 +810,9 @@ func (m *Module) pveSaveSystem(r *http.Request, sys *proxmox.System) error {
 			return err
 		}
 		wasEnabled = old.Enabled
+		sys.Kind = old.Kind // die Art bleibt
 	}
-	if m.pve.box == nil {
+	if m.pve.box == nil && !sys.IsDocker() {
 		return proxmox.ErrNoBox
 	}
 	if err := m.pve.st.SaveSystem(ctx, sys); err != nil {
