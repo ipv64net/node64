@@ -153,6 +153,24 @@ Host ausschalten.
   - 0 schaltet ein einzelnes Limit ab. Gesperrte Adressen stehen in der Karte und lassen sich freigeben; jede
     Sperre steht im Log. Der Zähler „abgewiesen“ geht in die Statistik ein.
 - **Block Common Exploits:** Regeln wie im NPM, dazu `.git`, `.env` und `wp-config.php`.
+- **KI-Bots (je Host, Reiter *Details*):**
+  - „KI-Bots abweisen (User-Agent)“: Anfragen, deren User-Agent eine Kennung der Liste „v64 KI-Bots (User-Agent)“
+    enthält, bekommen eine neutrale 403 (Grund „KI-Bot“ in Statistik und Zugriffs-Log). Die Liste ist ein
+    täglicher Spiegel von [ai.robots.txt](https://github.com/ai-robots-txt/ai.robots.txt) auf ipv64.net
+    (`ipv64_ai_useragents.json`, rund 190 Kennungen); Node64 lädt nichts von GitHub. Groß/klein egal; die Kennung
+    muss als eigenes Wort stehen („Spider“ trifft nicht „Baiduspider“).
+  - „Nutzer-Abrufe auch sperren“ (Standard an): Abrufe auf Anfrage eines Nutzers (ChatGPT-User, Perplexity-User,
+    Claude-User, Assistenten, Agenten). Aus = nur Crawler sperren.
+  - `/robots.txt` wird nie gesperrt. „robots.txt mit KI-Sperre ausliefern“ (nur Proxy-Hosts): Hat das Ziel keine
+    (404), liefert PROXY64 eine mit `Disallow: /` für alle Kennungen; eine eigene robots.txt bleibt unberührt.
+  - Für Proxy-Hosts, Weiterleitungen und Statusseiten. Die Liste wird nur geladen, solange ein Host sie nutzt
+    (alle 30 Minuten nur bei Änderung, Zwischenspeicher `/data/cdn64/blocklists/ai_useragents.json`; ohne
+    ipv64.net gilt der letzte Stand). Stand und Zähler stehen auf der Karte der Blocklisten.
+  - Zusätzlich gibt es die Blockliste „v64 KI-Bots (IP)“ (Kategorie KI-Bots): die offiziellen Netze von OpenAI,
+    Perplexity, Common Crawl, Mistral und Google-Agent; sie sperrt wie jede Blockliste für alle Hosts schon beim
+    Verbindungsaufbau.
+  - Achtung: ai.robots.txt enthält auch `Applebot` (Siri/Spotlight) und `facebookexternalhit` (Link-Vorschau);
+    wer das braucht, lässt die Sperre am betroffenen Host aus.
 - **Fehlerseiten:** Neutrale Seiten (404, 403, 502, 508) verraten nichts über Node64 oder das Ziel. Unbekannte
   Namen bekommen die Standardseite: 404, Verbindung schließen, Weiterleitung oder eigenes HTML.
 - **DNS bleibt im LAN:** DoH über 443 beantwortet DNS64 nur für Clients aus seiner Freigabeliste. Dabei zählt
@@ -230,8 +248,8 @@ Die Node baut dazu einen Tunnel nach außen auf (QUIC über UDP 7844, sonst TCP 
   Abgewiesen im Zeitraum.
 - **Abweisungen** werden immer erfasst und protokolliert, auch ohne Zugriffs-Log am Host:
   - Gründe: ipv64-Blockliste, Sperre (Überlastung), zu viele Verbindungen, zu viele neue Verbindungen,
-    Verbindungen insgesamt voll, zu viele Anfragen (429), Ziel ausgelastet (503), Exploit-Sperre, Zugriffsliste
-    (403/429; die normale Passwortabfrage 401 zählt nicht).
+    Verbindungen insgesamt voll, zu viele Anfragen (429), Ziel ausgelastet (503), Exploit-Sperre, KI-Bot,
+    Zugriffsliste (403/429; die normale Passwortabfrage 401 zählt nicht).
   - Verbindungen, die schon vor der ersten Anfrage getrennt werden (am Eingang oder bei Streams), stehen als
     „Verbindung abgewiesen“ ohne Host; im Diagramm nur bei „alle Hosts“.
   - Im Log je Adresse, Grund und Host höchstens ein Eintrag alle 10 Sekunden und höchstens 600 je Minute; gezählt

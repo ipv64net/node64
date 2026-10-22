@@ -500,6 +500,9 @@ func hostFromForm(r *http.Request, h *Host) {
 	if r.PostFormValue("has_geo") == "1" { // Laendersperre war im Formular
 		h.Advanced.GeoMode, h.Advanced.GeoCountries = r.PostFormValue("geo_mode"), lines(r.PostFormValue("geo_countries"))
 	}
+	if r.PostFormValue("has_ai") == "1" { // KI-Bots waren im Formular (Haken "Nutzer-Abrufe auch sperren" = nicht AllowUser)
+		h.Advanced.AIBots, h.Advanced.AIBotsAllowUser, h.Advanced.AIRobots = on("ai_bots"), !on("ai_bots_user"), on("ai_robots")
+	}
 	if h.Kind == KindPass {
 		h.CertID = CertNone
 	}

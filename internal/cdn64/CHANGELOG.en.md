@@ -1,5 +1,14 @@
 # Changes – PROXY64
 
+## 1.25.0 – 2026-10-22
+
+### Added
+- Per host "Reject AI bots (user agent)" with "Also block fetches on behalf of users" (on by default) and "Serve
+  robots.txt that blocks AI bots" (only if the target has none). Based on the ipv64.net list "v64 AI Bots (User-Agent)"
+  (mirror of ai.robots.txt). Rejected AI bots get 403 and show up as "AI bot" in statistics and the access log.
+- The blocklist "v64 AI Bots (IP)" (official networks of OpenAI, Perplexity, Common Crawl, Mistral, Google-Agent) can
+  be selected.
+
 ## 1.24.1 – 2026-10-21
 
 ### Fixed

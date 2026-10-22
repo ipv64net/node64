@@ -148,6 +148,7 @@ func (h *Host) normalize() error {
 	if h.Kind == KindDead { // 404-Host: nichts zu schuetzen
 		h.Advanced.GeoMode = ""
 	}
+	h.Advanced.normalizeAI(h.Kind)
 	if err := h.Advanced.normalizeGeo(); err != nil {
 		return err
 	}

@@ -33,6 +33,12 @@ type Advanced struct {
 	// Laendersperre (geo.go): "" = aus, block = diese Laender sperren, allow = nur diese Laender zulassen
 	GeoMode      string   `json:"geo_mode,omitempty"`
 	GeoCountries []string `json:"geo_countries,omitempty"` // ISO-Laendercodes, z. B. DE
+
+	// KI-Bots (aibots.go): User-Agent aus der Liste von ipv64.net abweisen (403); AllowUser = Nutzer-Abrufe (ChatGPT-User
+	// u. a.) durchlassen; AIRobots = /robots.txt mit KI-Sperre ausliefern, wenn das Ziel keine hat
+	AIBots          bool `json:"ai_bots,omitempty"`
+	AIBotsAllowUser bool `json:"ai_bots_allow_user,omitempty"`
+	AIRobots        bool `json:"ai_robots,omitempty"`
 }
 
 // Location ist ein Pfad mit eigenem Ziel (Custom Location).

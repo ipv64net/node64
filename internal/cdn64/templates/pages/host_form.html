@@ -118,6 +118,14 @@
 					{{if $d.Countries}}<datalist id="geo-cc">{{range $d.Countries}}<option value="{{.Code}}">{{.Name}}</option>{{end}}</datalist>{{end}}
 					<div class="form-text">{{.T "cdn64.f.geo_hint"}}</div>
 					{{end}}
+					{{if or (eq $h.Kind "proxy") (eq $h.Kind "redirect") (eq $h.Kind "status")}}
+					<input type="hidden" name="has_ai" value="1">
+					<div class="fw-semibold mt-3 mb-1">{{.T "cdn64.f.ai"}}{{$.Doc "cdn64#ki-bots"}}</div>
+					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="ai_bots" id="ai_bots"{{if $h.Advanced.AIBots}} checked{{end}}><label class="form-check-label" for="ai_bots">{{.T "cdn64.f.ai_bots"}}</label></div>
+					<div class="form-check form-switch ms-4"><input class="form-check-input" type="checkbox" name="ai_bots_user" id="ai_bots_user"{{if not $h.Advanced.AIBotsAllowUser}} checked{{end}}><label class="form-check-label" for="ai_bots_user">{{.T "cdn64.f.ai_bots_user"}}</label></div>
+					{{if eq $h.Kind "proxy"}}<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="ai_robots" id="ai_robots"{{if $h.Advanced.AIRobots}} checked{{end}}><label class="form-check-label" for="ai_robots">{{.T "cdn64.f.ai_robots"}}</label></div>{{end}}
+					<div class="form-text">{{.T "cdn64.f.ai_hint"}}</div>
+					{{end}}
 					<hr>
 					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="enabled" id="enabled"{{if $h.Enabled}} checked{{end}}><label class="form-check-label" for="enabled">{{.T "cdn64.f.enabled"}}</label></div>
 				</div>

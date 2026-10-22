@@ -1,5 +1,14 @@
 # Änderungen – PROXY64
 
+## 1.25.0 – 2026-10-22
+
+### Neu
+- Je Host „KI-Bots abweisen (User-Agent)“ mit „Nutzer-Abrufe auch sperren“ (Standard an) und „robots.txt mit KI-Sperre
+  ausliefern“ (nur wenn das Ziel keine hat). Grundlage ist die Liste „v64 KI-Bots (User-Agent)“ von ipv64.net (Spiegel
+  von ai.robots.txt). Abgewiesene KI-Bots bekommen 403 und erscheinen als „KI-Bot“ in Statistik und Zugriffs-Log.
+- Die Blockliste „v64 KI-Bots (IP)“ (offizielle Netze von OpenAI, Perplexity, Common Crawl, Mistral, Google-Agent) ist
+  auswählbar.
+
 ## 1.24.1 – 2026-10-21
 
 ### Behoben

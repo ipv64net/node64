@@ -178,6 +178,9 @@ func (m *Module) reverseProxy(h *Host, t target, st *hostStats, tr http.RoundTri
 		},
 	}
 	rp.ModifyResponse = func(resp *http.Response) error {
+		if t.prefix == "" {
+			m.aiRobots(adv, resp) // robots.txt mit KI-Sperre, wenn das Ziel keine hat
+		}
 		httpcompress.TrackBody(resp) // Cache: nur ganz gelesene Antworten
 		for _, n := range adv.ResponseRemove {
 			resp.Header.Del(n)
@@ -376,6 +379,12 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			page(sw, http.StatusForbidden)
 			return
 		}
+		if m.aiBlocked(&h.Advanced, r) { // KI-Bot nach User-Agent (aibots.go)
+			*reject = rejAIBot
+			st.blocked.Add(1)
+			page(sw, http.StatusForbidden)
+			return
+		}
 		if m.lim.banned(client) { // gesperrt wegen Ueberlastung
 			*reject = rejBan
 			st.blocked.Add(1)
@@ -549,6 +558,7 @@ func (m *Module) apply(ctx context.Context) {
 		}
 	}
 	m.geoNeed(active)
+	m.aiNeed(active)
 	for {
 		routes := make([]edge.Route, 0, len(active))
 		for _, h := range active {

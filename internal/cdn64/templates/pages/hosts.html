@@ -67,6 +67,7 @@
 			<td class="text-nowrap">
 				{{if .WebSockets}}<i class="bi bi-plug me-1" title="{{$.T "cdn64.f.websockets"}}"></i>{{end}}
 				{{if .BlockExploits}}<i class="bi bi-shield-check me-1" title="{{$.T "cdn64.f.block_exploits"}}"></i>{{end}}
+				{{if .Advanced.AIBots}}<i class="bi bi-robot me-1" title="{{$.T "cdn64.f.ai_bots"}}"></i>{{end}}
 				{{if and $d.LimitsOn (not .Advanced.NoLimits)}}<a href="/cdn64/access#limits" class="text-reset text-decoration-none"><i class="bi bi-speedometer2 me-1" title="{{$.T "cdn64.f.limits_on"}}"></i></a>{{end}}
 				{{if .CacheAssets}}<i class="bi bi-lightning-charge me-1" title="{{$.T "cdn64.f.cache_assets"}}"></i>{{end}}
 				{{if .ForceSSL}}<i class="bi bi-arrow-up-right-square me-1" title="{{$.T "cdn64.f.force_ssl"}}"></i>{{end}}

@@ -477,7 +477,12 @@
       "status_page_none": "Noch keine Statusseite angelegt.",
       "status_hc_off": "Das Modul Healthchecks ist ausgeschaltet. Bis es läuft, antwortet dieser Host mit 503.",
       "status_page_hint": "Die Seite erscheint unter dieser Domain direkt unter „/“. Ist sie ausgeschaltet, antwortet der Host mit 404.",
-      "status_pages_manage": "Statusseiten verwalten"
+      "status_pages_manage": "Statusseiten verwalten",
+      "ai": "KI-Bots",
+      "ai_bots": "KI-Bots abweisen (User-Agent)",
+      "ai_bots_user": "Nutzer-Abrufe (ChatGPT-User, Perplexity-User …) auch sperren",
+      "ai_robots": "robots.txt mit KI-Sperre ausliefern",
+      "ai_hint": "Liste „v64 KI-Bots (User-Agent)“ von ipv64.net (Spiegel von ai.robots.txt, täglich): Anfragen mit passendem User-Agent bekommen 403, /robots.txt bleibt erreichbar. Die robots.txt kommt nur, wenn das Ziel keine hat. Die offiziellen IP-Netze der KI-Crawler gibt es zusätzlich als Blockliste „v64 KI-Bots (IP)“ unter Zugriffslisten."
     },
     "err": {
       "name": "Ungültiger Domainname.",
@@ -730,12 +735,14 @@
         "v64_mail": "Angreifer auf Mailserver (SMTP, IMAP, POP3) aus den ipv64-Honeypots",
         "v64_rdp": "Angreifer auf Remote Desktop (RDP, VNC) aus den ipv64-Honeypots",
         "v64_scanner": "Port-Scanner, die die ipv64-Honeypots abtasten",
-        "v64_research": "Scanner von Forschung und Suchmaschinen (z. B. Shodan, Censys): sperrt auch harmlose Erfassung"
+        "v64_research": "Scanner von Forschung und Suchmaschinen (z. B. Shodan, Censys): sperrt auch harmlose Erfassung",
+        "ai_bots": "offizielle Netze der KI-Crawler (OpenAI, Perplexity, Common Crawl, Mistral, Google-Agent), auch Nutzer-Abrufe wie ChatGPT-User"
       },
       "cat": {
         "tor": "Tor",
         "cloud": "Rechenzentren",
-        "honeypot": "ipv64 Honeypot"
+        "honeypot": "ipv64 Honeypot",
+        "ai": "KI-Bots"
       },
       "token": "Listen-Token für Live-Listen",
       "token_placeholder": "Listen-Token aus dem ipv64-Account (32 Zeichen)",
@@ -817,7 +824,8 @@
       "exploit": "Exploit-Sperre",
       "acl": "Zugriffsliste",
       "honeypot": "vom Honeypot gemeldet",
-      "geo": "Ländersperre"
+      "geo": "Ländersperre",
+      "ai_bot": "KI-Bot"
     },
     "online": {
       "err_conf": "Tunnel-Daten prüfen: Tunnel, Token und mindestens ein Server (Name, Host).",
@@ -950,6 +958,10 @@
     "status": {
       "off": "aus",
       "unknown": "Statusseite #{id} nicht verfügbar"
+    },
+    "ai": {
+      "list": "KI-Bots (User-Agent)",
+      "entries": "{n} Kennungen, davon {users} Nutzer-Abrufe"
     }
   },
   "certs": {

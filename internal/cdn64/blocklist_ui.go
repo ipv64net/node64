@@ -58,11 +58,13 @@ type blocklistsView struct {
 	GeoBlocked int64      `json:"geo_blocked"` // von der Laendersperre abgewiesen seit dem Start
 
 	TokenSet bool `json:"token_set"` // Listen-Token fuer die Live-Fassung hinterlegt (das Token wird nie ausgegeben)
+
+	AIBots AIBotsState `json:"ai_bots"` // User-Agent-Liste der KI-Bots (Hosts mit KI-Sperre)
 }
 
 func (m *Module) blView(r *http.Request) blocklistsView {
 	v := blocklistsView{Lists: m.blStates(r.Context()), Allow: strings.Fields(m.core.SettingOr(r.Context(), setBlockAllow, "")), Blocked: m.bl.blocked.Load(),
-		Active: m.bl.set.Load() != nil, Countries: m.geoStates(), GeoBlocked: m.bl.geo.blocked.Load()}
+		Active: m.bl.set.Load() != nil, Countries: m.geoStates(), GeoBlocked: m.bl.geo.blocked.Load(), AIBots: m.aiState()}
 	v.TokenSet = m.blToken(r.Context()) != ""
 	if v.Allow == nil {
 		v.Allow = []string{}

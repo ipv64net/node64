@@ -64,7 +64,9 @@ var blKnown = map[string]string{"all": "IPv64 Gesamtliste", "all_notor": "IPv64 
 	"ipsum_l3": "IPsum Level 3", "aws": "Amazon AWS", "gcp": "Google Cloud", "cloudflare": "Cloudflare",
 	// ipv64 Honeypot (Kategorie honeypot, mit Listen-Token live)
 	"v64": "v64 Blocklist", "v64_ssh": "v64 SSH", "v64_web": "v64 Web", "v64_mail": "v64 Mail", "v64_rdp": "v64 RDP",
-	"v64_scanner": "v64 Scanner", "v64_research": "v64 Forschungs-Scanner"}
+	"v64_scanner": "v64 Scanner", "v64_research": "v64 Forschungs-Scanner",
+	// offizielle Netze von KI-Crawlern (Kategorie ai, aibots.go fuer die User-Agent-Liste)
+	"ai_bots": "v64 KI-Bots (IP)"}
 
 // list: Auswahl aus index.json, sonst die feste Liste (b.mu gehalten).
 func (b *blocklists) list() []BlocklistInfo {
@@ -125,6 +127,8 @@ type blocklists struct {
 	geo       geoSets         // Laenderlisten fuer die Laendersperre je Host
 
 	src map[string]string // je Liste: Pfad, von dem sie geladen wurde (ETag gilt nur dafuer; live/daily)
+
+	ai aiBots // User-Agent-Liste der KI-Bots (aibots.go)
 }
 
 func newBlocklists() *blocklists {
@@ -199,6 +203,7 @@ func (m *Module) blLoadCache(ctx context.Context) {
 	}
 	m.blLoadIndexCache()
 	m.geoLoadCache(ctx)
+	m.aiLoadCache()
 	for _, id := range m.blEnabled(ctx) {
 		f, err := os.Open(filepath.Join(dir, id+".txt"))
 		if err != nil {
@@ -325,6 +330,7 @@ func (m *Module) blRefresh(ctx context.Context) {
 		}
 	}
 	m.geoRefresh(ctx)
+	m.aiRefresh(ctx)
 	m.blRebuild(ctx)
 }
 

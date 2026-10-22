@@ -477,7 +477,12 @@
       "status_page_none": "No status page created yet.",
       "status_hc_off": "The Healthchecks module is switched off. Until it runs, this host answers with 503.",
       "status_page_hint": "The page appears directly under \"/\" on this domain. If it is switched off, the host answers with 404.",
-      "status_pages_manage": "Manage status pages"
+      "status_pages_manage": "Manage status pages",
+      "ai": "AI bots",
+      "ai_bots": "Reject AI bots (user agent)",
+      "ai_bots_user": "Also block fetches on behalf of users (ChatGPT-User, Perplexity-User …)",
+      "ai_robots": "Serve robots.txt that blocks AI bots",
+      "ai_hint": "List “v64 AI Bots (User-Agent)” from ipv64.net (mirror of ai.robots.txt, daily): requests with a matching user agent get 403, /robots.txt stays reachable. The robots.txt is only served if the target has none. The official IP ranges of AI crawlers are also available as the blocklist “v64 AI Bots (IP)” under Access lists."
     },
     "err": {
       "name": "Invalid domain name.",
@@ -730,12 +735,14 @@
         "v64_mail": "Attackers on mail servers (SMTP, IMAP, POP3) from the ipv64 honeypots",
         "v64_rdp": "Attackers on remote desktop (RDP, VNC) from the ipv64 honeypots",
         "v64_scanner": "Port scanners probing the ipv64 honeypots",
-        "v64_research": "Research and search engine scanners (e.g. Shodan, Censys): also blocks harmless indexing"
+        "v64_research": "Research and search engine scanners (e.g. Shodan, Censys): also blocks harmless indexing",
+        "ai_bots": "official networks of AI crawlers (OpenAI, Perplexity, Common Crawl, Mistral, Google-Agent), including user fetchers such as ChatGPT-User"
       },
       "cat": {
         "tor": "Tor",
         "cloud": "data centers",
-        "honeypot": "ipv64 Honeypot"
+        "honeypot": "ipv64 Honeypot",
+        "ai": "AI bots"
       },
       "token": "List token for live lists",
       "token_placeholder": "List token from your ipv64 account (32 characters)",
@@ -817,7 +824,8 @@
       "exploit": "exploit block",
       "acl": "access list",
       "honeypot": "reported by the honeypot",
-      "geo": "country block"
+      "geo": "country block",
+      "ai_bot": "AI bot"
     },
     "online": {
       "err_conf": "Check the tunnel settings: tunnel, token and at least one server (name, host).",
@@ -950,6 +958,10 @@
     "status": {
       "off": "off",
       "unknown": "Status page #{id} not available"
+    },
+    "ai": {
+      "list": "AI bots (user agent)",
+      "entries": "{n} tokens, {users} of them user fetchers"
     }
   },
   "certs": {

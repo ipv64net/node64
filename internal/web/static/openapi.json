@@ -2547,6 +2547,18 @@
             },
             "maxItems": 60,
             "description": "ISO-Ländercodes (Kleinschreibung wird umgewandelt), z. B. [\"DE\",\"AT\"]"
+          },
+          "ai_bots": {
+            "type": "boolean",
+            "description": "KI-Bots abweisen (403), wenn der User-Agent eine Kennung der Liste „v64 KI-Bots (User-Agent)“ von ipv64.net enthält (Spiegel von ai.robots.txt, Groß/klein egal). /robots.txt bleibt erreichbar. Nur Proxy, Weiterleitung, Statusseite."
+          },
+          "ai_bots_allow_user": {
+            "type": "boolean",
+            "description": "Abrufe auf Anfrage eines Nutzers (ChatGPT-User, Perplexity-User, Assistenten, Agenten) durchlassen; Standard false = auch sperren"
+          },
+          "ai_robots": {
+            "type": "boolean",
+            "description": "/robots.txt mit Disallow für alle KI-Bots ausliefern, wenn das Ziel keine hat (404). Nur Proxy-Hosts."
           }
         }
       },
@@ -2955,6 +2967,38 @@
           "token_set": {
             "type": "boolean",
             "description": "Listen-Token für die Live-Fassung hinterlegt (das Token selbst wird nie ausgegeben)"
+          },
+          "ai_bots": {
+            "type": "object",
+            "description": "User-Agent-Liste der KI-Bots (Hosts mit advanced.ai_bots bzw. ai_robots)",
+            "properties": {
+              "needed": {
+                "type": "boolean",
+                "description": "ein eingeschalteter Host nutzt die Liste (nur dann wird sie geladen)"
+              },
+              "entries": {
+                "type": "integer"
+              },
+              "users": {
+                "type": "integer",
+                "description": "davon Abrufe auf Anfrage eines Nutzers"
+              },
+              "updated": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "changed": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "error": {
+                "type": "string"
+              },
+              "blocked": {
+                "type": "integer",
+                "description": "abgewiesen seit dem Start"
+              }
+            }
           }
         }
       },
