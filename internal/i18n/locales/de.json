@@ -4172,5 +4172,9 @@
     "sec_audit": "Jeder Werkzeugaufruf steht mit Schlüssel und Parametern im Audit-Log.",
     "settings_hint": "KI-Anwendungen (Claude Code, Cursor, VS Code …) lesen über MCP den Zustand der Node – nur aus dem Heimnetz, nur lesen.",
     "manage": "KI-Schnittstelle verwalten"
+  },
+  "nodes": {
+    "removed_banner": "Diese Node wurde auf ipv64.net entfernt ({date}). API-Key und Healthchecks-Verknüpfung wurden hier gelöscht, die lokalen Daten bleiben. Zum erneuten Anbinden die Node unter ipv64.net/nodes.php wieder zulassen und einen API-Key eintragen.",
+    "removed_settings": "Zum API-Key"
   }
 }

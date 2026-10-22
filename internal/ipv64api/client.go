@@ -61,6 +61,7 @@ type Client struct {
 	base string
 	http *http.Client
 	ua   string
+	node func() string // Kennung der Node fuer X-Node64-Node (nil oder leer = ohne Kopfzeile)
 }
 
 // NewClient erzeugt einen Client (base leer = DefaultBase).
@@ -69,6 +70,20 @@ func NewClient(base, userAgent string) *Client {
 		base = DefaultBase
 	}
 	return &Client{base: strings.TrimRight(base, "/"), http: &http.Client{Timeout: 15 * time.Second}, ua: userAgent}
+}
+
+// SetNodeID setzt die Quelle der Node-Kennung, die jede Anfrage als X-Node64-Node mitschickt (vor der ersten
+// Anfrage aufrufen). ipv64 ordnet die Anfragen damit einer Node der Node-Uebersicht zu.
+func (c *Client) SetNodeID(f func() string) { c.node = f }
+
+// setNode setzt X-Node64-Node, wenn eine Kennung bekannt ist.
+func (c *Client) setNode(req *http.Request) {
+	if c.node == nil {
+		return
+	}
+	if id := c.node(); id != "" {
+		req.Header.Set(HeaderNode, id)
+	}
 }
 
 // Usage ist ein Verbrauch mit Grenze (Limit nil = unbegrenzt).
@@ -161,6 +176,7 @@ func (c *Client) do(ctx context.Context, method, key, path string, in any, out a
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.ua)
+	c.setNode(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		var ne net.Error

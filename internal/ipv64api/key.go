@@ -16,6 +16,7 @@ import (
 const (
 	SetKey     = "ipv64.apikey"  // verschluesselt (secrets.Box)
 	SetAccount = "ipv64.account" // AccountInfo als JSON, nur zur Anzeige
+	SetRemoved = "ipv64.removed" // Node auf ipv64.net entfernt (RFC 3339); leer = nein, ein neuer Key setzt zurueck
 )
 
 // AccountInfo ist das Konto hinter dem gespeicherten Key (zur Anzeige, ohne Key).
@@ -114,7 +115,22 @@ func (k *Key) Set(ctx context.Context, key string) (*Me, error) {
 	}
 	raw, _ := json.Marshal(info)
 	_ = k.st.SetSetting(ctx, SetAccount, string(raw))
+	_ = k.st.SetSetting(ctx, SetRemoved, "") // neuer bzw. erneut geprueft Key: wieder melden (hello)
 	return me, nil
+}
+
+// Removed liefert, wann ipv64 diese Node entfernt hat (Null = nicht entfernt).
+func (k *Key) Removed(ctx context.Context) time.Time {
+	t, _ := time.Parse(time.RFC3339, k.st.SettingOr(ctx, SetRemoved, ""))
+	return t
+}
+
+// MarkRemoved merkt die Entfernung auf ipv64.net und loescht den Key (lokale Daten bleiben).
+func (k *Key) MarkRemoved(ctx context.Context) error {
+	if err := k.st.SetSetting(ctx, SetRemoved, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		return err
+	}
+	return k.Clear(ctx)
 }
 
 // RefreshIfStale prueft den gespeicherten Key erneut, wenn die letzte Pruefung aelter als maxAge ist

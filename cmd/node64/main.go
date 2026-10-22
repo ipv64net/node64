@@ -155,6 +155,7 @@ func run() error {
 	hcModule.SetSecrets(box) // Proxmox VE: Token-Secrets verschluesselt
 	modules.Register(hcModule)
 	ipv64Key := ipv64api.NewKey(st, box, ipv64api.NewClient(os.Getenv("NODE64_IPV64_API"), "node64/"+Version), logger.Slog()) // leer = ipv64.net (Env nur fuer Tests)
+	ipv64Key.Client().SetNodeID(func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") })           // X-Node64-Node
 
 	// Kern: Port-Verwaltung, Zertifikate und der gemeinsame Eingang 80/443 (offen nur, solange ein Abnehmer ihn
 	// braucht). Vor den Modulen angelegt und nach ihnen geschlossen (defer).
@@ -363,6 +364,18 @@ func run() error {
 	}
 	defer syncClient.Stop(context.Background())
 	go updateLoop(ctx, st, log)
+	// Node-Uebersicht auf ipv64.net: anmelden; dort entfernt = Key und Verknuepfung lokal vergessen
+	go ipv64api.NewPresence(ipv64api.PresenceConfig{Client: ipv64Key.Client(), Key: ipv64Key.Get, Log: logger.Slog().With("module", "ipv64"),
+		Info:    func(ctx context.Context) ipv64api.Hello { return nodeHello(ctx, st, modules, syncClient.Linked) },
+		Removed: func(ctx context.Context) bool { return !ipv64Key.Removed(ctx).IsZero() },
+		OnRemoved: func(ctx context.Context) {
+			if err := ipv64Key.MarkRemoved(ctx); err != nil {
+				log.Error("node removed: api key not cleared", "err", err)
+			}
+			if err := syncClient.Forget(ctx); err != nil {
+				log.Error("node removed: healthchecks link not cleared", "err", err)
+			}
+		}}).Run(ctx)
 
 	srv, err := web.New(web.Deps{
 		Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: modules, Notify: nfStore, Dispatcher: dispatcher,

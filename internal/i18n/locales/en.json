@@ -4172,5 +4172,9 @@
     "sec_audit": "Every tool call is recorded in the audit log with key and parameters.",
     "settings_hint": "AI applications (Claude Code, Cursor, VS Code …) read the state of the node via MCP – home network only, read-only.",
     "manage": "Manage AI interface"
+  },
+  "nodes": {
+    "removed_banner": "This node was removed on ipv64.net ({date}). The API key and the Healthchecks link were cleared here, local data stays. To connect it again, allow the node again at ipv64.net/nodes.php and enter an API key.",
+    "removed_settings": "Go to the API key"
   }
 }

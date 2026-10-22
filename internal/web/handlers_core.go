@@ -269,7 +269,8 @@ type dashboardData struct {
 	ChecksProj                                   int // Tageskontingent: hochgerechneter Verbrauch pro Tag
 	// ipv64-Account direkt ueber die API v2 (nil = kein Key)
 	API                             *ipv64api.Overview
-	Mismatch                        bool // API-Key gehoert zu einem anderen Account als der Healthchecks-Sync
+	Mismatch                        bool      // API-Key gehoert zu einem anderen Account als der Healthchecks-Sync
+	NodeRemoved                     time.Time // auf ipv64.net entfernt (Null = nein)
 	ConnectedAt, LastSync, LinkedAt time.Time
 	Peers, PeersOnline              int            // Nodes dieser Verknuepfung
 	Cluster                         *dashCluster   // nil = kein Cluster (keine Mitglieder)
@@ -327,6 +328,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 			s.IPv64.ResetOverview()
 		}
 		d.API = s.IPv64.Overview(ctx, 5*time.Minute)
+		d.NodeRemoved = s.IPv64.Removed(ctx)
 		d.Mismatch = d.API != nil && v.Sync.Linked && v.API.ID != 0 && v.Sync.AccountID != "" && v.Sync.AccountID != strconv.Itoa(v.API.ID)
 	}
 	st := v.Sync
@@ -380,7 +382,8 @@ type settingsData struct {
 	IPv64On    bool // zentraler API-Key verfuegbar
 	IPv64Set   bool // API-Key eingetragen
 	IPv64      ipv64api.AccountInfo
-	Own, Other int // Checks nur dieser Node / uebrige im Account
+	Removed    time.Time // Node auf ipv64.net entfernt (Null = nein)
+	Own, Other int       // Checks nur dieser Node / uebrige im Account
 	NodeName   string
 	Location   string
 	Modules    []module.Status
@@ -433,6 +436,7 @@ func (s *Server) settingsView(r *http.Request) *View {
 		rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		s.IPv64.RefreshIfStale(rctx, 24*time.Hour) // Name und Ablauf des Keys aktuell halten
 		cancel()
+		d.Removed = s.IPv64.Removed(ctx)
 		if d.IPv64Set = s.IPv64.Get(ctx) != ""; d.IPv64Set {
 			d.IPv64 = s.IPv64.Info(ctx)
 		}

@@ -596,6 +596,21 @@ func (c *Live) Unlink(ctx context.Context, keepChecks bool) error {
 	return nil
 }
 
+// Forget trennt die Verknuepfung nur lokal (ohne hub und API): die Node wurde auf ipv64.net entfernt, der Token ist
+// dort schon widerrufen. Wie der Widerruf durch den hub; lokale Checks und Daten bleiben.
+func (c *Live) Forget(ctx context.Context) error {
+	if !c.Linked() {
+		return nil
+	}
+	_ = c.Stop(ctx)
+	if err := c.clearLink(ctx); err != nil {
+		return err
+	}
+	c.setErr(errors.New("the node was removed on ipv64.net, the node runs standalone"))
+	c.log.Warn("ipv64 link cleared: node removed on ipv64.net")
+	return nil
+}
+
 // clearLink setzt die Node lokal auf standalone: Zugangsdaten weg, alle Checks wieder eigene,
 // Platzhalter der Server-Kanaele entfernt. Beim Trennen hier und beim Widerruf durch ipv64.
 func (c *Live) clearLink(ctx context.Context) error {

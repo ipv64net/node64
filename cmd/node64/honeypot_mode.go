@@ -170,6 +170,7 @@ func honeypotRun(ctx context.Context, cfg *config.Config, hc *hpModeConfig, base
 			_ = rep.ResetWindow(ctx)
 		}
 		log.Info("reporting to ipv64 every 10 minutes", "sensor_id", id)
+		go headlessPresence(api, hc.IPv64Key, dir, log).Run(repCtx) // Node-Uebersicht auf ipv64.net (setzt X-Node64-Node)
 		go func() { rep.Run(repCtx); close(repDone) }()
 	case hc.IPv64Key != "":
 		log.Info("NODE64_HONEYPOT_REPORT=0; events stay local")

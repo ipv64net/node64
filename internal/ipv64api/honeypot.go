@@ -43,6 +43,7 @@ func (c *Client) HoneypotReport(ctx context.Context, key string, gz []byte) (*Ho
 	req.Header.Set("Authorization", "Bearer "+key)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.ua)
+	c.setNode(req)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		var ne net.Error

@@ -9,6 +9,7 @@
 		<button type="button" class="btn btn-sm btn-outline-secondary dash-edit-hide" id="dash-edit"><i class="bi bi-sliders"></i> {{.T "dashboard.customize"}}</button>
 	</div>
 </div>
+{{if not $d.NodeRemoved.IsZero}}<div class="alert alert-danger py-2"><i class="bi bi-x-octagon-fill"></i> {{.T "nodes.removed_banner" "date" (.Time $d.NodeRemoved)}} <a href="/settings#ipv64" class="alert-link">{{.T "nodes.removed_settings"}}</a></div>{{end}}
 <div class="alert alert-info py-2 small dash-edit-show"><i class="bi bi-info-circle"></i> {{.T "dashboard.edit_hint"}}</div>
 {{with $d.Cluster}}{{if .Down}}<div class="alert alert-warning py-2 small"><i class="bi bi-hdd-network"></i> {{$.T "dashboard.cluster_down" "names" (join .Down ", ")}} <a href="/cluster" class="alert-link">{{$.T "cluster.link_open"}}</a></div>{{end}}{{end}}
 <div class="row g-3" id="dash">
