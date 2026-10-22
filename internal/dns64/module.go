@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.22.2"
+	version   = "1.22.3"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -93,6 +93,10 @@ type Module struct {
 	cur atomic.Pointer[tls.Certificate] // aktuelles Zertifikat fuer DoH/DoT/DoQ (wechselt ohne Neustart)
 	// certInUse: Kennung des Zertifikats aus der Verwaltung, das DNS64 gerade nutzt (0 = keins)
 	certInUse atomic.Int64
+	// Stand fuer die Port-Uebersicht ohne m.mu: der Eingang fragt Ports, waehrend DNS64 unter m.mu startet und dort
+	// Routen anmeldet (oeffnet der Eingang dafuer erst Port 80/443, wartete Ports sonst auf m.mu: Start haengt)
+	engNow atomic.Pointer[engine]
+	errNow atomic.Pointer[string]
 	migErr    string // Umzug in die Verwaltung noch nicht erledigt: letzter Fehler (m.mu)
 
 	pauseUntil atomic.Int64 // Blockieren aus bis (UnixNano), -1 = bis zum Wiedereinschalten, 0 = aktiv (pause.go)
@@ -219,6 +223,8 @@ func (m *Module) tryStart(ctx context.Context) error {
 		m.lastErr = err.Error()
 		m.log.Warn("dns64 could not start", "err", err)
 	}
+	last := m.lastErr
+	m.errNow.Store(&last)
 	return err
 }
 
@@ -306,6 +312,7 @@ func (m *Module) start(ctx context.Context) error {
 		go func() { defer e.wg.Done(); run(ectx) }()
 	}
 	m.eng = e
+	m.engNow.Store(e)
 	m.syncHintRoute(glist, true) // Hinweisseite bei "Internet aus" (nur wenn eine Gruppe gesperrt sein kann)
 	m.log.Info("dns64 started", "dns", e.addr, "router", m.routerAddr(ctx))
 	return nil
@@ -326,6 +333,8 @@ func (m *Module) stopLocked(ctx context.Context) error {
 	}
 	e := m.eng
 	m.life, m.eng, m.lastErr = nil, nil, ""
+	m.engNow.Store(nil)
+	m.errNow.Store(nil)
 	m.mu.Unlock()
 	m.edgeMu.Lock()
 	m.edgeHint = false // DoH meldet encrypted.stop ab

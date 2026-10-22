@@ -15,18 +15,18 @@ func (m *Module) Ports(ctx context.Context, running bool) []ports.Claim {
 		if !running {
 			return false
 		}
-		if e := m.running(); e != nil && e.enc != nil {
+		if e := m.engNow.Load(); e != nil && e.enc != nil {
 			return e.enc.errs[proto] == ""
 		}
 		return true
 	}
 	// Fehler fuer die Port-Uebersicht: Start des Moduls bzw. des verschluesselten Dienstes
 	startErr := ""
-	if !running {
-		startErr = m.startError()
+	if p := m.errNow.Load(); !running && p != nil {
+		startErr = *p
 	}
 	encErr := func(proto string) string {
-		if e := m.running(); running && e != nil && e.enc != nil {
+		if e := m.engNow.Load(); running && e != nil && e.enc != nil {
 			return e.enc.errs[proto]
 		}
 		return startErr

@@ -1,5 +1,12 @@
 # Changes – DNS64
 
+## 1.22.3 – 2026-10-22
+
+### Fixed
+- Start hung (whole node without UI) when DNS64 registered a route at the shared entrance during start (notice page
+  of a group with an "internet off" schedule, DoH via port 443) and the entrance had to open port 80/443 for it first:
+  its port check asked DNS64 and waited for the running start. The port overview now reads the state without that lock.
+
 ## 1.22.2 – 2026-10-21
 
 ### Fixed

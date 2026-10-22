@@ -1,5 +1,13 @@
 # Änderungen – DNS64
 
+## 1.22.3 – 2026-10-22
+
+### Behoben
+- Start hing (ganze Node ohne Oberfläche), wenn DNS64 beim Start eine Route am gemeinsamen Eingang anmeldete
+  (Hinweisseite einer Gruppe mit Zeitplan „Internet aus“, DoH über Port 443) und der Eingang dafür Port 80/443 erst
+  öffnen musste: seine Port-Prüfung fragte DNS64 und wartete auf den laufenden Start. Die Port-Übersicht liest den
+  Stand jetzt ohne diese Sperre.
+
 ## 1.22.2 – 2026-10-21
 
 ### Behoben
