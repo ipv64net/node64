@@ -21,11 +21,11 @@
 		</div>
 	</div>
 	<div class="card-body">
-		<div class="row g-2 small mb-2">
-			<div class="col-6 col-md-3"><div class="text-body-secondary">{{.T "cdn64.stats.requests"}}</div><div class="fs-5 font-monospace" data-kpi="requests">–</div></div>
-			<div class="col-6 col-md-3"><div class="text-body-secondary">{{.T "cdn64.stats.bytes"}}</div><div class="fs-5 font-monospace" data-kpi="bytes">–</div></div>
-			<div class="col-6 col-md-3"><div class="text-body-secondary">{{.T "cdn64.stats.errors"}}</div><div class="fs-5 font-monospace" data-kpi="errors">–</div></div>
-			<div class="col-6 col-md-3"><div class="text-body-secondary">{{.T "cdn64.stats.blocked"}}</div><div class="fs-5 font-monospace text-danger" title="{{.T "cdn64.stats.blocked_hint"}}" data-kpi="blocked">–</div></div>
+		<div class="row g-2 mb-3">
+			<div class="col-6 col-md-3"><div class="card stat stat-primary"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.stats.requests"}}</div><div class="stat-value" data-kpi="requests">–</div></div><i class="bi bi-globe stat-icon"></i></div></div></div>
+			<div class="col-6 col-md-3"><div class="card stat stat-info"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.stats.bytes"}}</div><div class="stat-value" data-kpi="bytes">–</div></div><i class="bi bi-arrow-down-up stat-icon"></i></div></div></div>
+			<div class="col-6 col-md-3"><div class="card stat stat-warn"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.stats.errors"}}</div><div class="stat-value" data-kpi="errors">–</div></div><i class="bi bi-exclamation-circle stat-icon"></i></div></div></div>
+			<div class="col-6 col-md-3"><div class="card stat stat-down" title="{{.T "cdn64.stats.blocked_hint"}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.stats.blocked"}}</div><div class="stat-value" data-kpi="blocked">–</div></div><i class="bi bi-shield-x stat-icon"></i></div></div></div>
 		</div>
 		<div class="dash-chart"><canvas data-stats-chart></canvas></div>
 		<div class="small text-body-secondary d-none" data-stats-empty>{{.T "cdn64.stats.empty"}}</div>
@@ -175,18 +175,18 @@
 	</div></div>
 </div>{{end}}
 {{with $d.Quota}}<div class="row g-2 mt-1" id="cdn-quota">
-	<div class="col-md-6"><div class="card h-100"><div class="card-body py-2 small">
-		<div class="d-flex align-items-center mb-1"><span class="fw-semibold"><i class="bi bi-diagram-3 text-primary"></i> {{$.T "cdn64.online.q_domains"}}</span>
-			<span class="ms-auto">{{.Used}} / {{.Limit}}</span></div>
-		<div class="progress" style="height:.5rem" role="progressbar" aria-valuenow="{{.DomPct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{.DomClass}}" style="width:{{.DomBar}}%"></div></div>
-		<div class="text-body-secondary mt-1">{{if .OldCDN}}{{$.T "cdn64.online.q_old" "n" .OldCDN}} · {{end}}{{if .Mbit}}{{$.T "cdn64.online.bandwidth" "n" .Mbit}}{{else}}{{$.T "cdn64.online.q_bw_free"}}{{end}}</div>
-	</div></div></div>
-	<div class="col-md-6"><div class="card h-100"><div class="card-body py-2 small">
-		<div class="d-flex align-items-center mb-1"><span class="fw-semibold"><i class="bi bi-arrow-down-up text-primary"></i> {{$.T "cdn64.online.q_traffic"}}</span>
-			<span class="ms-auto">{{$.Bytes .Traffic}} / {{$.Bytes .TrafficLimit}}</span></div>
-		<div class="progress" style="height:.5rem" role="progressbar" aria-valuenow="{{.TrafficPct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{.TrafficClass}}" style="width:{{.TrafficBar}}%"></div></div>
-		<div class="mt-1 {{if .Short}}text-warning-emphasis{{else}}text-body-secondary{{end}}">{{if .Short}}<i class="bi bi-exclamation-triangle"></i> {{$.T "cdn64.online.q_short" "date" ($.Date .EmptyAt) "n" ($.Bytes .Projected)}}{{else if .Projected}}{{$.T "cdn64.online.q_ok" "n" ($.Bytes .Projected)}}{{else}}{{$.T "cdn64.online.q_early"}}{{end}}</div>
-	</div></div></div>
+	<div class="col-md-6"><div class="card stat stat-primary"><div class="card-body"><div class="stat-text">
+		<div class="stat-label">{{$.T "cdn64.online.q_domains"}}</div>
+		<div class="stat-value">{{.Used}} / {{.Limit}}</div>
+		<div class="progress mt-1" style="height:.5rem" role="progressbar" aria-valuenow="{{.DomPct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{.DomClass}}" style="width:{{.DomBar}}%"></div></div>
+		<div class="small text-body-secondary mt-1">{{if .OldCDN}}{{$.T "cdn64.online.q_old" "n" .OldCDN}} · {{end}}{{if .Mbit}}{{$.T "cdn64.online.bandwidth" "n" .Mbit}}{{else}}{{$.T "cdn64.online.q_bw_free"}}{{end}}</div>
+	</div><i class="bi bi-diagram-3 stat-icon"></i></div></div></div>
+	<div class="col-md-6"><div class="card stat {{if .Short}}stat-warn{{else}}stat-info{{end}}"><div class="card-body"><div class="stat-text">
+		<div class="stat-label">{{$.T "cdn64.online.q_traffic"}}</div>
+		<div class="stat-value">{{$.Bytes .Traffic}} / {{$.Bytes .TrafficLimit}}</div>
+		<div class="progress mt-1" style="height:.5rem" role="progressbar" aria-valuenow="{{.TrafficPct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{.TrafficClass}}" style="width:{{.TrafficBar}}%"></div></div>
+		<div class="small mt-1 {{if .Short}}text-warning-emphasis{{else}}text-body-secondary{{end}}">{{if .Short}}<i class="bi bi-exclamation-triangle"></i> {{$.T "cdn64.online.q_short" "date" ($.Date .EmptyAt) "n" ($.Bytes .Projected)}}{{else if .Projected}}{{$.T "cdn64.online.q_ok" "n" ($.Bytes .Projected)}}{{else}}{{$.T "cdn64.online.q_early"}}{{end}}</div>
+	</div><i class="bi bi-arrow-down-up stat-icon"></i></div></div></div>
 </div>{{end}}
 <p class="small text-body-secondary mt-2">{{if eq $d.Kind "proxy"}}{{.T "cdn64.list_hint"}}{{else}}{{.T "cdn64.list_hint_other"}}{{end}}{{if $d.CacheN}} · {{.T "cdn64.cache_info" "n" $d.CacheN "size" (.Bytes $d.CacheB)}}{{end}}</p>
 {{end}}

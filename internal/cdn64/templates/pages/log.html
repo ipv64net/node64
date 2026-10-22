@@ -8,13 +8,13 @@
 </ul>
 {{if $d.NoDB}}<div class="alert alert-warning small">{{.T "cdn64.log.no_db"}}</div>{{else}}
 <div class="row g-3 mb-3">
-	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">{{.T "cdn64.log.req24"}}</div><div class="fs-5 font-monospace">{{.Int $d.Total.Requests}}</div></div></div></div>
-	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">2xx</div><div class="fs-5 font-monospace text-success">{{.Int $d.Total.S2}}</div></div></div></div>
-	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">3xx</div><div class="fs-5 font-monospace">{{.Int $d.Total.S3}}</div></div></div></div>
-	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">4xx</div><div class="fs-5 font-monospace text-warning-emphasis">{{.Int $d.Total.S4}}</div></div></div></div>
-	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">5xx</div><div class="fs-5 font-monospace text-danger">{{.Int $d.Total.S5}}</div></div></div></div>
-	<div class="col-6 col-md"><div class="card"><div class="card-body py-2"><div class="small text-body-secondary">{{.T "cdn64.log.traffic"}}</div><div class="fs-5 font-monospace">{{.Bytes $d.Total.Bytes}}</div></div></div></div>
-	<div class="col-6 col-md"><a class="card text-decoration-none" href="/cdn64/log?status=r" title="{{.T "cdn64.log.rejected_hint"}}"><div class="card-body py-2"><div class="small text-body-secondary">{{.T "cdn64.log.rejected"}}</div><div class="fs-5 font-monospace text-danger">{{.Int $d.Total.Blocked}}</div></div></a></div>
+	<div class="col-6 col-md-3 col-xxl"><div class="card stat stat-primary"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.log.req24"}}</div><div class="stat-value">{{.Int $d.Total.Requests}}</div></div><i class="bi bi-globe stat-icon"></i></div></div></div>
+	<div class="col-6 col-md-3 col-xxl"><div class="card stat stat-ok"><div class="card-body"><div class="stat-text"><div class="stat-label">2xx</div><div class="stat-value">{{.Int $d.Total.S2}}</div></div><i class="bi bi-check-circle stat-icon"></i></div></div></div>
+	<div class="col-6 col-md-3 col-xxl"><div class="card stat stat-info"><div class="card-body"><div class="stat-text"><div class="stat-label">3xx</div><div class="stat-value">{{.Int $d.Total.S3}}</div></div><i class="bi bi-arrow-return-right stat-icon"></i></div></div></div>
+	<div class="col-6 col-md-3 col-xxl"><div class="card stat stat-warn"><div class="card-body"><div class="stat-text"><div class="stat-label">4xx</div><div class="stat-value">{{.Int $d.Total.S4}}</div></div><i class="bi bi-exclamation-circle stat-icon"></i></div></div></div>
+	<div class="col-6 col-md-3 col-xxl"><div class="card stat stat-down"><div class="card-body"><div class="stat-text"><div class="stat-label">5xx</div><div class="stat-value">{{.Int $d.Total.S5}}</div></div><i class="bi bi-exclamation-triangle stat-icon"></i></div></div></div>
+	<div class="col-6 col-md-3 col-xxl"><div class="card stat stat-info"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.log.traffic"}}</div><div class="stat-value">{{.Bytes $d.Total.Bytes}}</div></div><i class="bi bi-arrow-down-up stat-icon"></i></div></div></div>
+	<div class="col-6 col-md-3 col-xxl"><a class="card stat stat-down" href="/cdn64/log?status=r" title="{{.T "cdn64.log.rejected_hint"}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.log.rejected"}}</div><div class="stat-value">{{.Int $d.Total.Blocked}}</div></div><i class="bi bi-shield-x stat-icon"></i></div></a></div>
 </div>
 {{end}}
 <div class="row g-3">

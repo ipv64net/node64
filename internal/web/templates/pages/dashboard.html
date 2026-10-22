@@ -24,11 +24,11 @@
 	{{if eq $it.Kind "board"}}{{with $it.Board}}
 	<div class="card h-100"><div class="card-header"><i class="bi bi-heart-pulse text-danger"></i> {{$.T .TitleKey}}</div><div class="card-body py-2">
 	<div class="row g-2">
-		<div class="col-6 col-md"><a class="card tile tile-ok text-decoration-none" href="{{.Path}}?state=up"><div class="card-body py-2"><div class="fs-4 fw-semibold">{{.OK}}</div><div class="small">{{$.T "dashboard.ok"}}</div></div></a></div>
-		<div class="col-6 col-md"><a class="card tile tile-down text-decoration-none" href="{{.Path}}?state=problem"><div class="card-body py-2"><div class="fs-4 fw-semibold">{{.Down}}</div><div class="small">{{$.T "dashboard.down"}}</div></div></a></div>
-		{{if .Unchecked}}<div class="col-6 col-md"><a class="card tile tile-unchecked text-decoration-none" href="{{.Path}}?state=unchecked"><div class="card-body py-2"><div class="fs-4 fw-semibold">{{.Unchecked}}</div><div class="small">{{$.T "hc.state.unchecked"}}</div></div></a></div>{{end}}
-		<div class="col-6 col-md"><a class="card tile tile-paused text-decoration-none" href="{{.Path}}?state=paused"><div class="card-body py-2"><div class="fs-4 fw-semibold">{{.Paused}}</div><div class="small">{{$.T "dashboard.paused"}}</div></div></a></div>
-		<div class="col-6 col-md"><a class="card tile tile-other text-decoration-none" href="{{.Path}}"><div class="card-body py-2"><div class="fs-4 fw-semibold">{{.Other}}</div><div class="small">{{$.T "dashboard.other"}}</div></div></a></div>
+		<div class="col-6 col-md"><a class="card stat stat-ok" href="{{.Path}}?state=up"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "dashboard.ok"}}</div><div class="stat-value">{{.OK}}</div></div><i class="bi bi-check-circle stat-icon"></i></div></a></div>
+		<div class="col-6 col-md"><a class="card stat stat-down" href="{{.Path}}?state=problem"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "dashboard.down"}}</div><div class="stat-value">{{.Down}}</div></div><i class="bi bi-exclamation-triangle stat-icon"></i></div></a></div>
+		{{if .Unchecked}}<div class="col-6 col-md"><a class="card stat stat-warn" href="{{.Path}}?state=unchecked"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "hc.state.unchecked"}}</div><div class="stat-value">{{.Unchecked}}</div></div><i class="bi bi-hourglass-split stat-icon"></i></div></a></div>{{end}}
+		<div class="col-6 col-md"><a class="card stat stat-muted" href="{{.Path}}?state=paused"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "dashboard.paused"}}</div><div class="stat-value">{{.Paused}}</div></div><i class="bi bi-pause-circle stat-icon"></i></div></a></div>
+		<div class="col-6 col-md"><a class="card stat stat-info" href="{{.Path}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "dashboard.other"}}</div><div class="stat-value">{{.Other}}</div></div><i class="bi bi-info-circle stat-icon"></i></div></a></div>
 	</div></div></div>
 	{{end}}{{else if eq $it.Kind "incidents"}}{{with $it.Board}}
 	<div class="card h-100">

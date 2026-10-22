@@ -40,14 +40,14 @@
 <div class="card mb-3">
 	<div class="card-body">
 		<div class="beats beats-fill mb-2">{{range $d.Pills}}<span class="beat beat-lg beat-{{.Class}}" data-bs-toggle="tooltip" data-tip-label="{{.Label}}" data-tip-when="{{.When}}" data-tip-ms="{{.Latency}}" data-tip-msg="{{.Message}}"></span>{{end}}{{if not $d.Pills}}<span class="text-body-secondary small">{{.T "hc.no_data"}}</span>{{end}}</div>
-		<div class="row g-2 text-center">
+		<div class="row g-2">
 			{{range $d.Ranges}}
 			<div class="col-4">
-				<div class="border rounded p-2">
-					<div class="small text-body-secondary">{{$.T (print "hc.range." .Range)}}</div>
-					<div class="fs-5 fw-semibold {{if lt .UpPercent 99.0}}text-warning{{end}}{{if lt .UpPercent 95.0}} text-danger{{end}}">{{if .Count}}{{pct .UpPercent}} %{{else}}–{{end}}</div>
-					<div class="small text-body-secondary">{{if .Count}}Ø {{ms .AvgMS}} ms{{else}}{{$.T "hc.no_data"}}{{end}}</div>
-				</div>
+				<div class="card stat {{if not .Count}}stat-muted{{else if lt .UpPercent 95.0}}stat-down{{else if lt .UpPercent 99.0}}stat-warn{{else}}stat-ok{{end}}"><div class="card-body"><div class="stat-text">
+					<div class="stat-label">{{$.T (print "hc.range." .Range)}}</div>
+					<div class="stat-value">{{if .Count}}{{pct .UpPercent}} %{{else}}–{{end}}</div>
+					<div class="stat-sub">{{if .Count}}Ø {{ms .AvgMS}} ms{{else}}{{$.T "hc.no_data"}}{{end}}</div>
+				</div><i class="bi bi-activity stat-icon"></i></div></div>
 			</div>
 			{{end}}
 		</div>

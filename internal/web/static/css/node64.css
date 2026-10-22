@@ -129,14 +129,43 @@ a { color: var(--bs-primary); }
 	.table-cards td.text-nowrap { white-space: normal !important; }
 }
 
-/* Dashboard-Kacheln */
-.tile { border-left: 4px solid var(--bs-secondary); color: var(--bs-body-color); }
-.tile:hover { background: var(--bs-tertiary-bg); }
-.tile-ok { border-left-color: var(--bs-success); }
-.tile-down { border-left-color: var(--bs-danger); }
-.tile-paused { border-left-color: var(--bs-secondary); }
-.tile-other { border-left-color: var(--bs-info); }
-.tile-unchecked { border-left-color: var(--bs-warning); }
+/* Kennzahl-Kacheln, ueberall gleich: Name klein oben, Wert gross darunter, Symbol rechts, farbiger Rand links.
+   Alle Kacheln einer Reihe sind gleich hoch (Spalten strecken sich, die Karte fuellt die Spalte).
+   Schmale Kacheln (container query) werden kompakter, sehr schmale zeigen kein Symbol. */
+.stat { border-left: 4px solid var(--bs-secondary-border-subtle); height: 100%; color: var(--bs-body-color); container-type: inline-size; }
+.stat .card-body { display: flex; align-items: center; gap: .75rem; padding: .7rem 1rem; }
+.stat-text { flex: 1 1 auto; min-width: 0; }
+.stat-label { font-size: .875rem; color: var(--bs-secondary-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-value { font-size: 1.6rem; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-value-sm { font-size: 1.05rem; line-height: 1.4; white-space: normal; }
+.stat-sub { font-size: .8rem; color: var(--bs-secondary-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-icon { flex: 0 0 auto; margin-left: auto; font-size: 1.8rem; line-height: 1; opacity: .5; color: var(--bs-secondary-color); }
+.stat-ok { border-left-color: var(--bs-success); }
+.stat-down { border-left-color: var(--bs-danger); }
+.stat-warn { border-left-color: var(--bs-warning); }
+.stat-info { border-left-color: var(--bs-info); }
+.stat-primary { border-left-color: var(--bs-primary); }
+.stat-muted { border-left-color: var(--bs-secondary); }
+.stat-ok .stat-icon { color: var(--bs-success); }
+.stat-down .stat-icon { color: var(--bs-danger); }
+.stat-warn .stat-icon { color: var(--bs-warning); }
+.stat-info .stat-icon { color: var(--bs-info); }
+.stat-primary .stat-icon { color: var(--bs-primary); }
+a.stat { text-decoration: none; }
+a.stat:hover { background: var(--bs-tertiary-bg); }
+@container (max-width: 12rem) {
+	.stat .card-body { gap: .5rem; padding: .6rem .75rem; }
+	.stat-value { font-size: 1.3rem; }
+	.stat-value-sm { font-size: .95rem; }
+	.stat-icon { font-size: 1.4rem; }
+}
+@container (max-width: 9rem) { .stat-icon { display: none; } }
+@media (max-width: 575.98px) {
+	.stat .card-body { gap: .5rem; padding: .6rem .75rem; }
+	.stat-value { font-size: 1.3rem; }
+	.stat-value-sm { font-size: .95rem; }
+	.stat-icon { font-size: 1.4rem; }
+}
 /* Dashboard anpassen: Werkzeuge nur im Bearbeitungsmodus, ausgeblendete Kacheln dort blass */
 .dash-item { position: relative; }
 .dash-tools { display: none; position: absolute; top: .35rem; right: 1.1rem; z-index: 5; gap: .25rem; align-items: center; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: .375rem; padding: .1rem .25rem; }
