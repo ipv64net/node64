@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ipv64net/node64/internal/checks"
@@ -286,6 +287,9 @@ func (m *Manager) pullLoop(ctx context.Context) {
 	defer t.Stop()
 	m.pullAll(ctx, "")
 	m.ready.Store(true)
+	// Die regelmaessige Runde laeuft nebenher: ein haengendes Mitglied (nimmt an, antwortet nicht) haelt sie bis
+	// zum Timeout auf, Anstoesse der anderen werden trotzdem sofort abgeholt (je Mitglied sperrt ein eigenes Schloss).
+	var round atomic.Bool
 	for {
 		select {
 		case <-ctx.Done():
@@ -293,7 +297,12 @@ func (m *Manager) pullLoop(ctx context.Context) {
 		case id := <-m.pull.kick:
 			m.pullAll(ctx, id)
 		case <-t.C:
-			m.pullAll(ctx, "")
+			if round.CompareAndSwap(false, true) {
+				go func() {
+					defer round.Store(false)
+					m.pullAll(ctx, "")
+				}()
+			}
 		}
 	}
 }

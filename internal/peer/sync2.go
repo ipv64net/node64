@@ -218,6 +218,7 @@ func (m *Manager) pullSync2(ctx context.Context, list []Member, only string) {
 		}
 	}
 	own := m.syncCaps(ctx)
+	var wg sync.WaitGroup // je Mitglied nebenher: ein haengendes haelt die anderen nicht auf
 	for _, x := range list {
 		if x.Suspended() || only != "" && x.NodeID != only {
 			continue
@@ -226,10 +227,13 @@ func (m *Manager) pullSync2(ctx context.Context, list []Member, only string) {
 		if len(wants) == 0 {
 			continue
 		}
-		if err := m.pullSync2From(ctx, x, wants); err != nil {
-			m.d.Log.Debug("cluster pull", "from", x.Name, "err", err)
-		}
+		wg.Go(func() {
+			if err := m.pullSync2From(ctx, x, wants); err != nil {
+				m.d.Log.Debug("cluster pull", "from", x.Name, "err", err)
+			}
+		})
 	}
+	wg.Wait()
 }
 
 func (m *Manager) pullSync2From(ctx context.Context, x Member, wants []string) error {
