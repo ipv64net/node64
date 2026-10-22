@@ -8,3 +8,6 @@
 /data/
 /dist/
 build/
+
+# Upload fuer ipv64.net (kann Schluessel enthalten, nie committen)
+deploy/upload/
