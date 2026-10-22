@@ -26,8 +26,9 @@ func TestSessionCookieDuplicateNames(t *testing.T) {
 	}
 	_ = a.store.SetSessionTOTP(ctx, sess.ID, true)
 	req, _ := http.NewRequest(http.MethodGet, a.srv.URL+"/", nil)
-	req.Header.Add("Cookie", sessionCookie+"=alte-ungueltige-sitzung")
-	req.Header.Add("Cookie", sessionCookie+"="+sess.ID)
+	req.Header.Add("Cookie", sessionCookie+"_h=alte-ungueltige-sitzung") // http: eigener Name
+	req.Header.Add("Cookie", sessionCookie+"=sicheres-cookie-von-https")
+	req.Header.Add("Cookie", sessionCookie+"_h="+sess.ID)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)

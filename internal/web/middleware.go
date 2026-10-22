@@ -131,7 +131,7 @@ func (s *Server) session(next http.Handler) http.Handler {
 		// Der Browser kann mehrere Cookies gleichen Namens schicken (z. B. ein altes von http neben dem neuen von https
 		// auf demselben Host): die erste gueltige Sitzung zaehlt, sonst endete jede Anmeldung wieder auf /login.
 		for _, c := range r.Cookies() {
-			if c.Name != sessionCookie || c.Value == "" {
+			if c.Name != cookieName(r, sessionCookie) || c.Value == "" {
 				continue
 			}
 			x, _ := s.Store.SessionByID(ctx, c.Value)
@@ -165,7 +165,7 @@ func (s *Server) session(next http.Handler) http.Handler {
 			}
 		}
 		if sess == nil {
-			if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
+			if c, err := cookie(r, sessionCookie); err == nil && c.Value != "" {
 				s.clearCookie(w, r, sessionCookie)
 			}
 		}
@@ -174,13 +174,13 @@ func (s *Server) session(next http.Handler) http.Handler {
 		csrf := ""
 		if sess != nil && ctx.Value(ctxPending) == nil {
 			csrf = sess.CSRF
-		} else if c, err := r.Cookie(csrfCookie); err == nil && len(c.Value) >= 32 {
+		} else if c, err := cookie(r, csrfCookie); err == nil && len(c.Value) >= 32 {
 			csrf = c.Value
 		}
 		if csrf == "" {
 			csrf = randomToken(32)
 		}
-		if c, err := r.Cookie(csrfCookie); err != nil || c.Value != csrf {
+		if c, err := cookie(r, csrfCookie); err != nil || c.Value != csrf {
 			s.setCookie(w, r, csrfCookie, csrf, 0)
 		}
 		ctx = context.WithValue(ctx, ctxCSRF, csrf)
@@ -263,7 +263,21 @@ func csrfToken(r *http.Request) string {
 	return t
 }
 
+// cookieName: eigener Name fuer unverschluesselte Aufrufe. Ein Browser darf ein sicheres Cookie (von https) nicht von
+// http aus ueberschreiben – mit gleichem Namen endete eine Anmeldung per http dann immer wieder auf /login.
+// Betrifft nur Sitzung und CSRF; Sprache, Darstellung, Hinweise u. ae. behalten ihren Namen.
+func cookieName(r *http.Request, name string) string {
+	if r.TLS == nil && (name == sessionCookie || name == csrfCookie) {
+		return name + "_h"
+	}
+	return name
+}
+
+// cookie liest das Cookie unter dem Namen fuer diese Verbindung (http/https).
+func cookie(r *http.Request, name string) (*http.Cookie, error) { return r.Cookie(cookieName(r, name)) }
+
 func (s *Server) setCookie(w http.ResponseWriter, r *http.Request, name, value string, maxAge int) {
+	name = cookieName(r, name)
 	http.SetCookie(w, &http.Cookie{
 		Name: name, Value: value, Path: "/", HttpOnly: true, Secure: r.TLS != nil,
 		SameSite: http.SameSiteLaxMode, MaxAge: maxAge,
@@ -271,7 +285,7 @@ func (s *Server) setCookie(w http.ResponseWriter, r *http.Request, name, value s
 }
 
 func (s *Server) clearCookie(w http.ResponseWriter, r *http.Request, name string) {
-	http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: cookieName(r, name), Value: "", Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: -1})
 }
 
 // clientIP liefert die Adresse des Aufrufers; X-Forwarded-For nur, wenn
