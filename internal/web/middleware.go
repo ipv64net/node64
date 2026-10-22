@@ -128,11 +128,20 @@ func (s *Server) session(next http.Handler) http.Handler {
 			}
 		}
 		var sess *store.Session
-		if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
-			sess, _ = s.Store.SessionByID(ctx, c.Value)
-			if sess != nil && time.Since(sess.CreatedAt) > sessionMax {
-				_ = s.Store.DeleteSession(ctx, sess.ID)
-				sess = nil
+		// Der Browser kann mehrere Cookies gleichen Namens schicken (z. B. ein altes von http neben dem neuen von https
+		// auf demselben Host): die erste gueltige Sitzung zaehlt, sonst endete jede Anmeldung wieder auf /login.
+		for _, c := range r.Cookies() {
+			if c.Name != sessionCookie || c.Value == "" {
+				continue
+			}
+			x, _ := s.Store.SessionByID(ctx, c.Value)
+			if x != nil && time.Since(x.CreatedAt) > sessionMax {
+				_ = s.Store.DeleteSession(ctx, x.ID)
+				x = nil
+			}
+			if x != nil {
+				sess = x
+				break
 			}
 		}
 		if sess != nil {
