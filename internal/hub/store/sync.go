@@ -718,7 +718,7 @@ func (s *Store) proposeChannel(ctx context.Context, tx *sql.Tx, userID int64, no
 				}
 				v = n
 			}
-			if (k == "email" || k == "number") && merged[k] != v {
+			if (k == "email" || k == "number") && !sameAddress(k, merged[k], v) {
 				verified = 0
 			}
 			if isSecretField(k) && s.box != nil {
@@ -1170,3 +1170,14 @@ func measuringNodes(list []string, owner string) []string {
 // singleNodeType: der Docker-Socket bzw. die Proxmox-Abfrage gehoert zu genau einer Node (Push-Checks sind frei
 // zuordenbar).
 func singleNodeType(typ string) bool { return typ == "docker" || typ == "proxmox" }
+
+// sameAddress: dieselbe Adresse bzw. Nummer, nur anders geschrieben? Das Portal speichert Nummern als Ziffern
+// ("+49 177 …" -> "49177…"), die Node schickt sie normalisiert ("0049177…"); das darf die Bestaetigung nicht
+// zuruecksetzen.
+func sameAddress(k, old, v string) bool {
+	if k == "number" {
+		a, err := notify.SMSNumber(old)
+		return err == nil && a == v
+	}
+	return strings.EqualFold(strings.TrimSpace(old), v)
+}
