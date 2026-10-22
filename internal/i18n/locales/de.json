@@ -2859,6 +2859,33 @@
     "conflict_resolved": "Konflikt aufgelöst."
   },
   "dns64": {
+    "forwards": {
+      "title": "Weiterleitungen",
+      "add": "Weiterleitung hinzufügen",
+      "edit": "Weiterleitung bearbeiten",
+      "domain": "Domain",
+      "servers": "DNS-Server",
+      "domain_hint": "Gilt mit allen Namen darunter, z. B. firma.local, corp.example.de oder ein Netz wie 192.168.0.0/16 (wird zur Rückwärtszone).",
+      "servers_hint": "Einer je Zeile: IP (Port 53), IP:Port, tls://…, https://…/dns-query oder quic://…; der Reihe nach, bei Ausfall der nächste.",
+      "comment_ph": "optional, z. B. Büro über VPN",
+      "stats": "{n} Anfragen, ⌀ {ms} ms, {err} Fehler",
+      "test": "Testen (SOA der Domain abfragen)",
+      "delete_confirm": "„{name}“ löschen?",
+      "builtin": "Lokale Namen (.lan, .local, .fritz.box …) und private Rückwärtssuche",
+      "builtin_badge": "Router (fest)",
+      "order": "Reihenfolge: eigene Einträge, Umschreiben, Weiterleitungen, Router, Internet. Blocklisten und Gruppenregeln gelten auch für weitergeleitete Domains, außer für lokale Namen und die private Rückwärtssuche. Antwortet keiner der Server, gibt es SERVFAIL – der Name geht nie ins Internet.",
+      "added": "Weiterleitung angelegt, gilt sofort.",
+      "saved": "Gespeichert, gilt sofort.",
+      "deleted": "Gelöscht.",
+      "rw_title": "Umschreiben",
+      "rw_add": "Umschreiben hinzufügen",
+      "rw_edit": "Umschreiben bearbeiten",
+      "rw_name": "Name",
+      "rw_target": "antwortet wie",
+      "rw_hint": "DNS64 löst das Ziel selbst auf und antwortet unter dem gefragten Namen (ohne CNAME). *.example.com gilt für alle Namen darunter.",
+      "rw_none": "Noch nichts umgeschrieben.",
+      "rw_added": "Umschreiben angelegt, gilt sofort."
+    },
     "title": "DNS64",
     "card": {
       "groups": "Gerätegruppen",
@@ -2880,6 +2907,7 @@
     "range_7d": "7 Tage",
     "err_domain": "Ungültiger Domainname",
     "tab": {
+      "forwards": "Weiterleitungen",
       "groups": "Gruppen",
       "overview": "Übersicht",
       "log": "Abfrage-Log",
@@ -3014,6 +3042,10 @@
       "later": "Verschlüsselte Anfragen der Geräte (DoH/DoT/DoQ) gibt es im Reiter „Verschlüsselung“."
     },
     "js": {
+      "fwd_ok": "OK: {rcode} von {server} in {ms} ms",
+      "fwd_fail": "Keine Antwort: {err}",
+      "reason_forward": "Weiterleitung {domain} über {server}",
+      "reason_rewrite": "umgeschrieben auf {target}",
       "rec_hint_A": "IPv4-Adresse des Geräts.",
       "rec_hint_AAAA": "IPv6-Adresse des Geräts.",
       "rec_hint_CNAME": "Anderer Name; DNS64 löst ihn gleich mit auf. Steht allein (kein weiterer Typ für denselben Namen).",
@@ -3242,6 +3274,10 @@
       "deleted": "Gruppe gelöscht."
     },
     "err": {
+      "fwd_domain": "Die Domain ist ungültig.",
+      "fwd_server": "Mindestens ein und höchstens acht Server angeben: IP, IP:Port, tls://, https:// oder quic://.",
+      "fwd_dup": "Für diese Domain gibt es schon eine Weiterleitung.",
+      "rw_dup": "Dieser Name wird schon umgeschrieben.",
       "comment": "Der Kommentar ist zu lang (höchstens 200 Zeichen).",
       "txt": "Der Text ist leer, zu lang (höchstens 2048 Zeichen) oder enthält Steuerzeichen.",
       "mx": "MX: Vorrang und Mailserver angeben, z. B. „10 mail.home.lan“.",

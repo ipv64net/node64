@@ -1,5 +1,21 @@
 # Änderungen – DNS64
 
+## 1.24.0 – 2026-10-22
+
+### Neu
+- Weiterleitungen (Phase L3, neuer Reiter „Weiterleitungen“): Domain → eigene DNS-Server, z. B. `firma.local` an den
+  VPN-DNS oder `192.168.0.0/16` (wird zur Rückwärtszone) an den Router. Server als IP, IP:Port, `tls://`, `https://`
+  oder `quic://`, der Reihe nach mit Ausfall auf den nächsten; die längste passende Domain gewinnt.
+  Blocklisten und Gruppenregeln gelten weiter, außer für lokale Namen und die private Rückwärtssuche. Antwortet kein
+  Server, gibt es SERVFAIL – der Name geht nie an die öffentlichen Upstreams. Testknopf je Weiterleitung (SOA),
+  Statistik je Server, Grund „Weiterleitung … über …“ im Abfrage-Log.
+- Umschreiben: Ein Name (auch `*.domain`) antwortet wie ein anderer; DNS64 löst das Ziel selbst auf und antwortet
+  unter dem gefragten Namen ohne CNAME. Ketten werden verfolgt, Schleifen ergeben SERVFAIL.
+- Export/Import der Konfiguration nimmt Weiterleitungen und Umschreiben mit.
+- Prometheus: `node64_dns64_forward_up`, `node64_dns64_forward_requests_total`, `node64_dns64_forward_errors_total` (`domain`, `server`).
+- API: `GET|POST /api/dns64/forwards`, `PUT|DELETE /api/dns64/forwards/{id}`, `POST /api/dns64/forwards/{id}/enable|disable|test`,
+  `GET|POST /api/dns64/rewrites`, `PUT|DELETE /api/dns64/rewrites/{id}`, `POST /api/dns64/rewrites/{id}/enable|disable`.
+
 ## 1.23.0 – 2026-10-22
 
 ### Neu

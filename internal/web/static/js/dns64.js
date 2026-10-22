@@ -343,6 +343,8 @@
 				else if (details === "off:hold") { details = t("reason_off_hold", { group: r.group || "" }); }
 				else if (details.indexOf("off:schedule:") === 0) { details = t("reason_off_schedule", { name: details.slice(13), group: r.group || "" }); }
 				else if (details.indexOf("safesearch:") === 0) { details = t("reason_safesearch", { target: details.slice(11), group: r.group || "" }); }
+				else if (details.indexOf("forward:") === 0) { details = t("reason_forward", { domain: details.slice(8), server: r.upstream || "" }); }
+				else if (details.indexOf("rewrite:") === 0) { details = t("reason_rewrite", { target: details.slice(8) }); }
 				else if (details === "canary") { details = t("reason_canary"); }
 				else if (details === "bypass:icloud") { details = t("reason_bypass_icloud", { group: r.group || "" }); }
 				else if (details.indexOf("cat:") === 0) { details = t("reason_cat", { cat: t("cat." + details.slice(4)), group: r.group || "" }); }
@@ -517,5 +519,44 @@
 				$("rec-count").textContent = nf.format(n);
 			});
 		}
+	}
+
+	// Weiterleitungen und Umschreiben: Bearbeiten im Formular der Karte, Testabfrage je Weiterleitung
+	if (kind === "forwards") {
+		var reset = function (form) {
+			var title = form.closest(".card").querySelector(".card-header [data-edit]"), btn = form.querySelector("button[type=submit] span");
+			form.reset();
+			form.action = form.getAttribute("data-base");
+			if (form.dataset.addTitle) { title.textContent = form.dataset.addTitle; btn.textContent = form.dataset.addLabel; }
+			form.querySelector("[data-cancel]").classList.add("d-none");
+		};
+		document.querySelectorAll("[data-edit-form]").forEach(function (b) {
+			b.addEventListener("click", function () {
+				var form = $(b.getAttribute("data-edit-form"));
+				var title = form.closest(".card").querySelector(".card-header [data-edit]"), btn = form.querySelector("button[type=submit]");
+				if (!form.dataset.addTitle) { form.dataset.addTitle = title.textContent; form.dataset.addLabel = btn.querySelector("span").textContent; }
+				form.action = form.getAttribute("data-base") + "/" + b.getAttribute("data-id") + "/edit";
+				form.querySelectorAll("[data-field]").forEach(function (f) { f.value = b.getAttribute("data-" + f.getAttribute("data-field")) || ""; });
+				title.textContent = title.getAttribute("data-edit");
+				btn.querySelector("span").textContent = btn.getAttribute("data-edit");
+				form.querySelector("[data-cancel]").classList.remove("d-none");
+				form.scrollIntoView({ behavior: "smooth", block: "start" });
+			});
+		});
+		document.querySelectorAll("form [data-cancel]").forEach(function (c) {
+			c.addEventListener("click", function () { reset(c.form); });
+		});
+		document.querySelectorAll("[data-fwd-test]").forEach(function (b) {
+			b.addEventListener("click", function () {
+				var id = b.getAttribute("data-fwd-test"), out = document.querySelector('[data-fwd-result="' + id + '"]');
+				out.className = "small text-body-secondary";
+				out.textContent = t("loading");
+				api("forwards/" + id + "/test", { method: "POST" }).then(function (r) {
+					out.className = "small " + (r.ok ? "text-success" : "text-danger");
+					out.textContent = r.ok ? t("fwd_ok", { rcode: r.rcode, server: r.server, ms: pf.format(r.ms) })
+						: t("fwd_fail", { err: r.error || r.rcode || "" });
+				}).catch(function (e) { out.className = "small text-danger"; out.textContent = t("error") + ": " + e.message; });
+			});
+		});
 	}
 })();

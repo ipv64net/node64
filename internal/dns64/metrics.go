@@ -90,4 +90,14 @@ func (m *Module) Metrics(ctx context.Context, w *metrics.Writer) {
 			w.Gauge("node64_dns64_upstream_latency_seconds", "Mittlere Antwortzeit des Upstreams.", u.AvgMs/1000, l...)
 		}
 	}
+	if t := m.fwd.Load(); t != nil { // Weiterleitungen je Domain und Server
+		for _, fe := range t.byID {
+			for _, u := range fe.up.Stats() {
+				l := []string{"domain", fe.f.Domain, "server", u.Name}
+				w.Gauge("node64_dns64_forward_up", "Server der Weiterleitung gesund.", metrics.Bool(u.Healthy), l...)
+				w.Counter("node64_dns64_forward_requests_total", "Anfragen an den Server der Weiterleitung.", float64(u.Requests), l...)
+				w.Counter("node64_dns64_forward_errors_total", "Fehler des Servers der Weiterleitung.", float64(u.Errors), l...)
+			}
+		}
+	}
 }

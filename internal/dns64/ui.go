@@ -73,6 +73,8 @@ type pageData struct {
 	Cfg     config
 	Hours   []int
 	Records []Record
+	Fwds    []forwardView            // Seite Weiterleitungen
+	Rws     []Rewrite                // Seite Weiterleitungen: Umschreiben
 	Groups  []groups.Group           // Seiten Gruppen und Log
 	Devices []deviceView             // Seite Gruppen: Geraete der letzten 24 Stunden
 	Cats    []string                 // Seite Gruppen: Kategorien
@@ -86,6 +88,7 @@ type pageData struct {
 
 var tabs = []tab{{"overview", "/dns64", "dns64.tab.overview", "bi-speedometer2", false}, {"log", "/dns64/log", "dns64.tab.log", "bi-list-ul", false},
 	{"lists", "/dns64/lists", "dns64.tab.lists", "bi-funnel", false}, {"records", "/dns64/records", "dns64.tab.records", "bi-signpost-split", false},
+	{"forwards", "/dns64/forwards", "dns64.tab.forwards", "bi-signpost-2", false},
 	{"groups", "/dns64/groups", "dns64.tab.groups", "bi-people", false},
 	{"encrypted", "/dns64/encrypted", "dns64.tab.encrypted", "bi-lock", false}, {"settings", "/dns64/settings", "dns64.tab.settings", "bi-gear", false}}
 
@@ -129,6 +132,16 @@ func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 				m.g.Flash(w, r, "danger", err.Error())
 			}
 		}
+		if key == "forwards" {
+			fl, err := m.Forwards(ctx)
+			if err == nil {
+				d.Rws, err = m.Rewrites(ctx)
+			}
+			if err != nil {
+				m.g.Flash(w, r, "danger", err.Error())
+			}
+			d.Fwds = m.forwardViews(fl)
+		}
 		d.JS = map[string]any{"csrf": m.g.CSRF(r), "lang": m.g.Lang(r), "t": m.jsTexts(r)}
 		m.g.Render(w, r, http.StatusOK, Name+"/"+key, titleKey, d)
 	}
@@ -142,7 +155,7 @@ var jsKeys = []string{"status.allowed", "status.blocked", "status.cached", "stat
 	"blocked_n", "no_entries", "via", "entries", "page", "live_paused", "flush_confirm", "flushed", "error", "active", "loading",
 	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_released", "mode_parallel", "mode_ordered", "mode_fastest", "in_use", "off",
 	"proto.udp", "proto.tcp", "proto.doh", "proto.dot", "proto.doq", "reason_paused",
-	"reason_group", "reason_cat", "reason_off_hold", "reason_off_schedule", "reason_safesearch", "reason_canary", "reason_bypass_icloud", "rec_hint_A", "rec_hint_AAAA", "rec_hint_CNAME", "rec_hint_TXT", "rec_hint_MX", "rec_hint_SRV", "rec_hint_PTR", "rec_hint_CAA", "cat.social", "cat.games", "cat.streaming", "cat.gambling", "cat.adult"}
+	"reason_group", "reason_cat", "reason_off_hold", "reason_off_schedule", "reason_safesearch", "reason_canary", "reason_bypass_icloud", "fwd_ok", "fwd_fail", "reason_forward", "reason_rewrite", "rec_hint_A", "rec_hint_AAAA", "rec_hint_CNAME", "rec_hint_TXT", "rec_hint_MX", "rec_hint_SRV", "rec_hint_PTR", "rec_hint_CAA", "cat.social", "cat.games", "cat.streaming", "cat.gambling", "cat.adult"}
 
 func (m *Module) jsTexts(r *http.Request) map[string]string {
 	out := make(map[string]string, len(jsKeys))

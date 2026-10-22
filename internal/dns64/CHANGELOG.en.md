@@ -1,5 +1,21 @@
 # Changes – DNS64
 
+## 1.24.0 – 2026-10-22
+
+### New
+- Forwarding (phase L3, new tab "Forwarding"): domain → own DNS servers, e.g. `company.local` to the VPN DNS or
+  `192.168.0.0/16` (becomes the reverse zone) to the router. Servers as IP, IP:port, `tls://`, `https://` or
+  `quic://`, in order with failover to the next; the longest matching domain wins.
+  Blocklists and group rules keep applying, except for local names and private reverse lookups. If no server answers,
+  the result is SERVFAIL – the name never goes to the public upstreams. Test button per forwarding (SOA), statistics
+  per server, reason "forwarding … via …" in the query log.
+- Rewrites: a name (also `*.domain`) answers like another one; DNS64 resolves the target itself and answers under the
+  queried name without CNAME. Chains are followed, loops give SERVFAIL.
+- Configuration export/import carries forwarding and rewrites.
+- Prometheus: `node64_dns64_forward_up`, `node64_dns64_forward_requests_total`, `node64_dns64_forward_errors_total` (`domain`, `server`).
+- API: `GET|POST /api/dns64/forwards`, `PUT|DELETE /api/dns64/forwards/{id}`, `POST /api/dns64/forwards/{id}/enable|disable|test`,
+  `GET|POST /api/dns64/rewrites`, `PUT|DELETE /api/dns64/rewrites/{id}`, `POST /api/dns64/rewrites/{id}/enable|disable`.
+
 ## 1.23.0 – 2026-10-22
 
 ### New

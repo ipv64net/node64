@@ -1,0 +1,116 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dns64.title"}}{{.Doc "dns64#weiterleitungen"}}</h1>
+	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "dns64.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "dns64.listening" "addr" $d.Listen}}</span>{{end}}
+	{{if $d.Running}}<div class="ms-auto d-flex align-items-center gap-2" id="dns64-pause">
+		{{if $d.Pause.Active}}<span class="badge text-bg-warning"><i class="bi bi-pause-circle"></i> {{if $d.Pause.Forever}}{{.T "dns64.pause.paused"}}{{else}}{{.T "dns64.pause.paused_until" "time" (.Time $d.Pause.Until)}}{{end}}</span>
+		<form method="post" action="/dns64/resume" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-sm btn-success" type="submit"><i class="bi bi-play-fill"></i> {{.T "dns64.pause.resume"}}</button></form>
+		{{else}}<div class="dropdown">
+			<button class="btn btn-sm btn-outline-warning dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-pause-fill"></i> {{.T "dns64.pause.button"}}</button>
+			<form method="post" action="/dns64/pause" class="dropdown-menu dropdown-menu-end">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<button class="dropdown-item" type="submit" name="minutes" value="10"><i class="bi bi-clock"></i> {{.T "dns64.pause.ten"}}</button>
+				<button class="dropdown-item" type="submit" name="minutes" value="0"><i class="bi bi-pause-circle"></i> {{.T "dns64.pause.forever"}}</button>
+			</form>
+		</div>{{end}}
+	</div>{{end}}
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+{{if not $d.Running}}<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.not_running"}}{{if $d.Err}}<div class="small mt-1 font-monospace">{{$d.Err}}</div><div class="small mt-1">{{.T "dns64.retrying"}}</div>{{end}}</div>{{end}}
+<script type="application/json" id="dns64-data">{{$d.JS}}</script>
+<div class="row g-3" data-dns64-page="forwards">
+	<div class="col-xl-4">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-plus-circle text-primary"></i> <span id="fwd-title" data-edit="{{.T "dns64.forwards.edit"}}">{{.T "dns64.forwards.add"}}</span>{{.Doc "dns64#weiterleitungen"}}</div>
+			<div class="card-body">
+				<form method="post" action="/dns64/forwards" id="fwd-form" data-base="/dns64/forwards">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<label class="form-label" for="f-domain">{{.T "dns64.forwards.domain"}}</label>
+					<input type="text" class="form-control font-monospace mb-1" id="f-domain" name="domain" data-field="domain" placeholder="firma.local" required maxlength="253">
+					<div class="form-text mb-2">{{.T "dns64.forwards.domain_hint"}}</div>
+					<label class="form-label" for="f-servers">{{.T "dns64.forwards.servers"}}</label>
+					<textarea class="form-control font-monospace mb-1" id="f-servers" name="servers" data-field="servers" rows="2" placeholder="10.8.0.1&#10;tls://dns.firma.de" required></textarea>
+					<div class="form-text mb-2">{{.T "dns64.forwards.servers_hint"}}</div>
+					<label class="form-label" for="f-comment">{{.T "dns64.records.comment"}}</label>
+					<input type="text" class="form-control mb-3" id="f-comment" name="comment" data-field="comment" maxlength="200" placeholder="{{.T "dns64.forwards.comment_ph"}}">
+					<button class="btn btn-primary" type="submit" data-edit="{{.T "common.save"}}"><i class="bi bi-plus"></i> <span>{{.T "dns64.records.add_btn"}}</span></button>
+					<button class="btn btn-outline-secondary d-none" type="button" data-cancel>{{.T "common.cancel"}}</button>
+				</form>
+			</div>
+		</div>
+		<div class="card mt-3">
+			<div class="card-header"><i class="bi bi-arrow-left-right text-primary"></i> <span id="rw-title" data-edit="{{.T "dns64.forwards.rw_edit"}}">{{.T "dns64.forwards.rw_add"}}</span>{{.Doc "dns64#umschreiben"}}</div>
+			<div class="card-body">
+				<form method="post" action="/dns64/rewrites" id="rw-form" data-base="/dns64/rewrites">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<label class="form-label" for="w-name">{{.T "dns64.forwards.rw_name"}}</label>
+					<input type="text" class="form-control font-monospace mb-2" id="w-name" name="name" data-field="name" placeholder="nas.example.com" required maxlength="253">
+					<label class="form-label" for="w-target">{{.T "dns64.forwards.rw_target"}}</label>
+					<input type="text" class="form-control font-monospace mb-1" id="w-target" name="target" data-field="target" placeholder="nas.home.lan" required maxlength="253">
+					<div class="form-text mb-2">{{.T "dns64.forwards.rw_hint"}}</div>
+					<label class="form-label" for="w-comment">{{.T "dns64.records.comment"}}</label>
+					<input type="text" class="form-control mb-3" id="w-comment" name="comment" data-field="comment" maxlength="200">
+					<button class="btn btn-primary" type="submit" data-edit="{{.T "common.save"}}"><i class="bi bi-plus"></i> <span>{{.T "dns64.records.add_btn"}}</span></button>
+					<button class="btn btn-outline-secondary d-none" type="button" data-cancel>{{.T "common.cancel"}}</button>
+				</form>
+			</div>
+		</div>
+	</div>
+	<div class="col-xl-8">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-signpost-2 text-primary"></i> {{.T "dns64.forwards.title"}} <span class="badge text-bg-light">{{len $d.Fwds}}</span></div>
+			<form method="post">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="table-responsive">
+					<table class="table table-sm table-hover align-middle mb-0 small">
+						<thead><tr><th class="ps-3">{{.T "dns64.forwards.domain"}}</th><th>{{.T "dns64.forwards.servers"}}</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
+						<tbody>
+						{{range $d.Fwds}}<tr{{if not .Enabled}} class="text-body-tertiary"{{end}}>
+							<td class="ps-3 text-break"><span class="font-monospace">{{.Domain}}</span>{{if .Comment}}<div class="text-body-secondary">{{.Comment}}</div>{{end}}</td>
+							<td>{{range .State}}<div class="font-monospace text-break">{{if not .Healthy}}<i class="bi bi-exclamation-triangle text-warning" title="{{.LastErr}}"></i> {{end}}{{.Label}}{{if .Requests}} <span class="text-body-secondary">· {{$.T "dns64.forwards.stats" "n" .Requests "ms" (printf "%.0f" .AvgMs) "err" .Errors}}</span>{{end}}</div>{{end}}
+								<div class="small" data-fwd-result="{{.ID}}"></div></td>
+							<td>{{if .Enabled}}<span class="badge text-bg-success">{{$.T "dns64.js.active"}}</span>{{else}}<span class="badge text-bg-secondary">{{$.T "dns64.js.off"}}</span>{{end}}</td>
+							<td class="text-end pe-3 text-nowrap">
+								<button type="button" class="btn btn-sm btn-outline-secondary py-0" data-fwd-test="{{.ID}}" title="{{$.T "dns64.forwards.test"}}"><i class="bi bi-activity"></i></button>
+								<button type="button" class="btn btn-sm btn-outline-primary py-0" data-edit-form="fwd-form" data-id="{{.ID}}" data-domain="{{.Domain}}" data-servers="{{range $i, $s := .State}}{{if $i}}&#10;{{end}}{{$s.Label}}{{end}}" data-comment="{{.Comment}}" title="{{$.T "dns64.forwards.edit"}}"><i class="bi bi-pencil"></i></button>
+								<button type="submit" class="btn btn-sm btn-outline-secondary py-0" formaction="/dns64/forwards/{{.ID}}/toggle" name="on" value="{{if .Enabled}}0{{else}}1{{end}}" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause{{else}}bi-play{{end}}"></i></button>
+								<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/forwards/{{.ID}}/delete" data-confirm="{{$.T "dns64.forwards.delete_confirm" "name" .Domain}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button>
+							</td>
+						</tr>{{end}}
+						<tr class="text-body-secondary"><td class="ps-3"><i class="bi bi-house"></i> {{.T "dns64.forwards.builtin"}}</td><td class="font-monospace">{{if $d.Router}}{{$d.Router}}{{else}}–{{end}}</td><td><span class="badge text-bg-light">{{.T "dns64.forwards.builtin_badge"}}</span></td><td class="text-end pe-3"><a class="btn btn-sm btn-outline-secondary py-0" href="/dns64/settings" title="{{.T "dns64.tab.settings"}}"><i class="bi bi-gear"></i></a></td></tr>
+						</tbody>
+					</table>
+				</div>
+			</form>
+			<div class="card-footer small text-body-secondary">{{.T "dns64.forwards.order"}}</div>
+		</div>
+		<div class="card mt-3">
+			<div class="card-header"><i class="bi bi-arrow-left-right text-primary"></i> {{.T "dns64.forwards.rw_title"}} <span class="badge text-bg-light">{{len $d.Rws}}</span></div>
+			{{if $d.Rws}}<form method="post">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<div class="table-responsive">
+					<table class="table table-sm table-hover align-middle mb-0 small">
+						<thead><tr><th class="ps-3">{{.T "dns64.forwards.rw_name"}}</th><th></th><th>{{.T "dns64.forwards.rw_target"}}</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
+						<tbody>
+						{{range $d.Rws}}<tr{{if not .Enabled}} class="text-body-tertiary"{{end}}>
+							<td class="ps-3 text-break"><span class="font-monospace">{{.Name}}</span>{{if .Comment}}<div class="text-body-secondary">{{.Comment}}</div>{{end}}</td>
+							<td><i class="bi bi-arrow-right"></i></td><td class="font-monospace text-break">{{.Target}}</td>
+							<td>{{if .Enabled}}<span class="badge text-bg-success">{{$.T "dns64.js.active"}}</span>{{else}}<span class="badge text-bg-secondary">{{$.T "dns64.js.off"}}</span>{{end}}</td>
+							<td class="text-end pe-3 text-nowrap">
+								<button type="button" class="btn btn-sm btn-outline-primary py-0" data-edit-form="rw-form" data-id="{{.ID}}" data-name="{{.Name}}" data-target="{{.Target}}" data-comment="{{.Comment}}" title="{{$.T "dns64.forwards.rw_edit"}}"><i class="bi bi-pencil"></i></button>
+								<button type="submit" class="btn btn-sm btn-outline-secondary py-0" formaction="/dns64/rewrites/{{.ID}}/toggle" name="on" value="{{if .Enabled}}0{{else}}1{{end}}" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause{{else}}bi-play{{end}}"></i></button>
+								<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/rewrites/{{.ID}}/delete" data-confirm="{{$.T "dns64.forwards.delete_confirm" "name" .Name}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button>
+							</td>
+						</tr>{{end}}
+						</tbody>
+					</table>
+				</div>
+			</form>{{else}}<div class="card-body small text-body-secondary">{{.T "dns64.forwards.rw_none"}}</div>{{end}}
+		</div>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/dns64.js?v={{.Version}}"></script>{{end}}

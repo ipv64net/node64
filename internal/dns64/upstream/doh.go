@@ -70,6 +70,8 @@ func Proto(raw string) string {
 		return "dot"
 	case "quic":
 		return "doq"
+	case "dns": // klassisch, nur fuer Weiterleitungen (plain.go)
+		return "dns"
 	}
 	return ""
 }
@@ -131,6 +133,8 @@ func New(servers []Server, mode string) *Resolver {
 			u.ex = newDoT(pu.Hostname(), port, s.IPs)
 		case "doq":
 			u.ex = newDoQ(pu.Hostname(), port, s.IPs)
+		case "dns":
+			u.ex = newPlain(pu.Hostname(), pu.Port())
 		default:
 			u.client = newClient(s.IPs)
 		}

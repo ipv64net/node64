@@ -86,6 +86,8 @@ type Server struct {
 	Canary    bool                     // use-application-dns.net -> NXDOMAIN (Firefox schaltet sein DoH ab)
 	HintV4    net.IP                   // Adresse der Node fuer "Internet aus" (Hinweisseite)
 	HintV6    net.IP
+	Forward   ForwardFunc // Domain -> eigene DNS-Server (nil = keine, forward.go)
+	Rewrite   RewriteFunc // Name antwortet wie ein anderer (nil = keins)
 
 	acl        *clientACL
 	srv        []*dns.Server
@@ -239,7 +241,20 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy) 
 		return errorMsg(r, dns.RcodeNameError)
 	}
 
+	if s.Rewrite != nil {
+		if target, ok := s.Rewrite(name); ok {
+			return s.rewrite(r, name, target, e, p)
+		}
+	}
+	var fwd *Forward
+	if s.Forward != nil {
+		fwd = s.Forward(name)
+	}
+
 	if isLocalName(name) {
+		if fwd != nil { // eigene Weiterleitung vor dem Router, ungefiltert wie alle lokalen Namen
+			return s.forward(r, fwd, e, querylog.StatusLocal)
+		}
 		e.Status = querylog.StatusLocal
 		if s.Local.Addr() != "" {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -301,6 +316,10 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy) 
 			e.Status, e.Reason = querylog.StatusAllowed, ReasonSafeSearch+target
 			return s.custom(r, []dns.RR{&dns.CNAME{Hdr: dns.RR_Header{Name: dns.Fqdn(name), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300}, Target: dns.Fqdn(target)}})
 		}
+	}
+
+	if fwd != nil { // nach Filter und SafeSearch: an die eigenen Server statt an die Upstreams
+		return s.forward(r, fwd, e, querylog.StatusAllowed)
 	}
 
 	if resp, state, refresh := s.Cache.Get(r); resp != nil {

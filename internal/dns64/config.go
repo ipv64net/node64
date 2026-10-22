@@ -419,7 +419,7 @@ func parsePrefix(s string) (netip.Prefix, error) {
 func checkUpstream(s *upstream.Server) error {
 	s.Name = strings.TrimSpace(s.Name)
 	u, err := url.Parse(strings.TrimSpace(s.URL))
-	if err != nil || upstream.Proto(s.URL) == "" || u.Host == "" || (u.Scheme != "https" && u.Path != "" && u.Path != "/") {
+	if err != nil || upstream.Proto(s.URL) == "" || upstream.Proto(s.URL) == "dns" || u.Host == "" || (u.Scheme != "https" && u.Path != "" && u.Path != "/") {
 		return errCfg("err_up_url", "url", s.URL)
 	}
 	if u.Scheme != "https" {

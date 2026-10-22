@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.23.0"
+	version   = "1.24.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -81,6 +81,8 @@ type Module struct {
 	certs    *certs.Manager // zentrale Zertifikatsverwaltung, nil = keine (Tests)
 	lastErr  string         // letzter Fehler beim Start (z. B. Port belegt)
 
+	fwd  atomic.Pointer[fwdTable]                    // Weiterleitungen (forwards.go)
+	rw   atomic.Pointer[rwTable]                     // Umschreiben (forwards.go)
 	recs atomic.Pointer[recordTable]                 // eigene DNS-Eintraege (records.go)
 	grp  *groups.Resolver                            // Geraetegruppen (groupstore.go)
 	pol  atomic.Pointer[map[int64]*dnsserver.Policy] // Regeln je Gruppe (policy.go)
@@ -97,7 +99,7 @@ type Module struct {
 	// Routen anmeldet (oeffnet der Eingang dafuer erst Port 80/443, wartete Ports sonst auf m.mu: Start haengt)
 	engNow atomic.Pointer[engine]
 	errNow atomic.Pointer[string]
-	migErr    string // Umzug in die Verwaltung noch nicht erledigt: letzter Fehler (m.mu)
+	migErr string // Umzug in die Verwaltung noch nicht erledigt: letzter Fehler (m.mu)
 
 	pauseUntil atomic.Int64 // Blockieren aus bis (UnixNano), -1 = bis zum Wiedereinschalten, 0 = aktiv (pause.go)
 }
@@ -142,6 +144,7 @@ func (m *Module) Migrations() []store.Migration {
 func (m *Module) Routes(mux *http.ServeMux, g module.Guards) {
 	m.uiRoutes(mux, g)
 	m.groupRoutes(mux, g)
+	m.forwardRoutes(mux, g)
 	m.apiRoutes(mux, g)
 	m.apiMoreRoutes(mux, g)
 }
@@ -261,6 +264,9 @@ func (m *Module) start(ctx context.Context) error {
 	if err := m.loadGroups(ctx); err != nil {
 		return fmt.Errorf("load groups: %w", err)
 	}
+	if err := m.loadForwards(ctx); err != nil {
+		return fmt.Errorf("load forwards: %w", err)
+	}
 	cfg := m.loadConfig(ctx)
 	m.migrateCentral(ctx, &cfg)
 	m.loadPause(ctx)
@@ -296,7 +302,7 @@ func (m *Module) start(ctx context.Context) error {
 	e.up.SetTop(cfg.UpCount)
 	e.local = localnet.New(m.routerAddr(ctx), m.log)
 	e.srv = &dnsserver.Server{Addr: e.addr, Local: e.local, Filter: e.lists, Upstream: e.up, Cache: e.cache, Log: st, Logger: m.log,
-		Records: m, Split: m.split, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused,
+		Records: m, Split: m.split, Forward: m.forwardFor, Rewrite: m.rewriteFor, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused,
 		Policy: m.policy, Canary: cfg.Canary}
 	e.srv.HintV4, e.srv.HintV6 = hintAddrs(cfg.Bind)
 	if err := e.srv.Start(); err != nil {

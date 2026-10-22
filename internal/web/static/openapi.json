@@ -1175,7 +1175,7 @@
           },
           "reason": {
             "type": "string",
-            "description": "Liste; released:<liste>, paused:<liste>, stale, group:<domain> (Sperre der Gruppe), cat:<kategorie>, safesearch:<ziel>, canary, bypass:icloud, off:hold, off:schedule:<name>"
+            "description": "Liste; released:<liste>, paused:<liste>, stale, group:<domain> (Sperre der Gruppe), cat:<kategorie>, safesearch:<ziel>, canary, bypass:icloud, off:hold, off:schedule:<name>, forward:<Domain>, rewrite:<Ziel>"
           },
           "rcode": {
             "type": "string"
@@ -5081,6 +5081,109 @@
             "$ref": "#/components/schemas/PVERuleSet"
           }
         }
+      },
+      "DNS64Forward": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "domain": {
+            "type": "string",
+            "example": "firma.local",
+            "description": "gilt mit allen Unternamen; ein Netz wie 192.168.0.0/16 wird zur Rückwärtszone"
+          },
+          "servers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "10.8.0.1",
+              "tls://dns.firma.de"
+            ],
+            "description": "IP, IP:Port, tls://, https://…/dns-query, quic:// (1–8, der Reihe nach)"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "type": "array",
+            "description": "nur GET: Statistik je Server",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "requests": {
+                  "type": "integer"
+                },
+                "errors": {
+                  "type": "integer"
+                },
+                "avg_ms": {
+                  "type": "number"
+                },
+                "healthy": {
+                  "type": "boolean"
+                },
+                "last_error": {
+                  "type": "string"
+                },
+                "last_error_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "domain",
+          "servers"
+        ]
+      },
+      "DNS64Rewrite": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string",
+            "example": "nas.example.com",
+            "description": "auch *.domain"
+          },
+          "target": {
+            "type": "string",
+            "example": "nas.home.lan"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "name",
+          "target"
+        ]
       }
     }
   },
@@ -16839,6 +16942,408 @@
         "responses": {
           "200": {
             "description": "Datei (hosts: nur A/AAAA)"
+          }
+        }
+      }
+    },
+    "/dns64/forwards": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Weiterleitungen auflisten",
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DNS64Forward"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Weiterleitung anlegen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNS64Forward"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Forward"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
+          }
+        }
+      }
+    },
+    "/dns64/forwards/{id}": {
+      "put": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Weiterleitung ändern (an/aus bleibt)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNS64Forward"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Forward"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Weiterleitung löschen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gelöscht"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/forwards/{id}/enable": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Weiterleitung einschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/forwards/{id}/disable": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Weiterleitung ausschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/rewrites": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Umschreibungen auflisten",
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DNS64Rewrite"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Umschreibung anlegen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNS64Rewrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Rewrite"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
+          }
+        }
+      }
+    },
+    "/dns64/rewrites/{id}": {
+      "put": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Umschreibung ändern (an/aus bleibt)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNS64Rewrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Rewrite"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Umschreibung löschen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gelöscht"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/rewrites/{id}/enable": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Umschreibung einschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/rewrites/{id}/disable": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Umschreibung ausschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/forwards/{id}/test": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Weiterleitung testen (SOA der Domain, auch ausgeschaltet)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ergebnis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "rcode": {
+                      "type": "string"
+                    },
+                    "server": {
+                      "type": "string"
+                    },
+                    "ms": {
+                      "type": "number"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden"
           }
         }
       }

@@ -2859,6 +2859,33 @@
     "conflict_resolved": "Conflict resolved."
   },
   "dns64": {
+    "forwards": {
+      "title": "Forwarding",
+      "add": "Add forwarding",
+      "edit": "Edit forwarding",
+      "domain": "Domain",
+      "servers": "DNS servers",
+      "domain_hint": "Applies to all names below, e.g. company.local, corp.example.com or a network like 192.168.0.0/16 (becomes the reverse zone).",
+      "servers_hint": "One per line: IP (port 53), IP:port, tls://…, https://…/dns-query or quic://…; in order, the next one on failure.",
+      "comment_ph": "optional, e.g. office via VPN",
+      "stats": "{n} queries, ⌀ {ms} ms, {err} errors",
+      "test": "Test (query the SOA of the domain)",
+      "delete_confirm": "Delete \"{name}\"?",
+      "builtin": "Local names (.lan, .local, .fritz.box …) and private reverse lookups",
+      "builtin_badge": "Router (built in)",
+      "order": "Order: custom records, rewrites, forwarding, router, internet. Blocklists and group rules also apply to forwarded domains, except for local names and private reverse lookups. If none of the servers answers, the result is SERVFAIL – the name never goes to the internet.",
+      "added": "Forwarding added, effective immediately.",
+      "saved": "Saved, effective immediately.",
+      "deleted": "Deleted.",
+      "rw_title": "Rewrites",
+      "rw_add": "Add rewrite",
+      "rw_edit": "Edit rewrite",
+      "rw_name": "Name",
+      "rw_target": "answers like",
+      "rw_hint": "DNS64 resolves the target itself and answers under the queried name (without CNAME). *.example.com applies to all names below.",
+      "rw_none": "Nothing rewritten yet.",
+      "rw_added": "Rewrite added, effective immediately."
+    },
     "title": "DNS64",
     "card": {
       "groups": "Device groups",
@@ -2880,6 +2907,7 @@
     "range_7d": "7 days",
     "err_domain": "Invalid domain name",
     "tab": {
+      "forwards": "Forwarding",
       "groups": "Groups",
       "overview": "Overview",
       "log": "Query log",
@@ -3014,6 +3042,10 @@
       "later": "Encrypted queries from devices (DoH/DoT/DoQ) are on the “Encryption” tab."
     },
     "js": {
+      "fwd_ok": "OK: {rcode} from {server} in {ms} ms",
+      "fwd_fail": "No answer: {err}",
+      "reason_forward": "forwarding {domain} via {server}",
+      "reason_rewrite": "rewritten to {target}",
       "rec_hint_A": "IPv4 address of the device.",
       "rec_hint_AAAA": "IPv6 address of the device.",
       "rec_hint_CNAME": "Another name; DNS64 resolves it right away. Stands alone (no other type for the same name).",
@@ -3242,6 +3274,10 @@
       "deleted": "Group deleted."
     },
     "err": {
+      "fwd_domain": "The domain is invalid.",
+      "fwd_server": "Give at least one and at most eight servers: IP, IP:port, tls://, https:// or quic://.",
+      "fwd_dup": "There is already a forwarding for this domain.",
+      "rw_dup": "This name is already rewritten.",
       "comment": "The comment is too long (at most 200 characters).",
       "txt": "The text is empty, too long (at most 2048 characters) or contains control characters.",
       "mx": "MX: give preference and mail server, e.g. \"10 mail.home.lan\".",

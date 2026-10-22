@@ -108,6 +108,9 @@ und `increase()` kommen damit zurecht.
 | `node64_dns64_group_internet_off` | `group` | Internet aus für die Gruppe (Knopf oder Zeitplan) |
 | `node64_dns64_group_free` | `group` | Knopf „Frei“ aktiv (Zeitpläne und Kategorien ausgesetzt) |
 | `node64_dns64_group_members` | `group` | Einträge (MAC, IP, Netz) der Gruppe |
+| `node64_dns64_forward_up` | `domain`, `server` | Server der Weiterleitung gesund |
+| `node64_dns64_forward_requests_total` | `domain`, `server` | Anfragen an den Server der Weiterleitung |
+| `node64_dns64_forward_errors_total` | `domain`, `server` | Fehler des Servers der Weiterleitung |
 
 Anteil blockierter Anfragen der letzten Stunde:
 

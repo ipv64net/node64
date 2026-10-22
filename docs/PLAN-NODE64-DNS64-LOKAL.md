@@ -1,6 +1,6 @@
 # Plan: DNS64 als lokaler DNS-Server, Weiterleitungen und Cluster
 
-Stand 2026-10-22. Anlass: Rückmeldungen an Dennis – eigene Einträge reichen für einen echten lokalen DNS-Server noch
+Stand 2026-10-22. **Umgesetzt: L1 (DNS64 1.23.0), L3 (1.24.0).** Anlass: Rückmeldungen an Dennis – eigene Einträge reichen für einen echten lokalen DNS-Server noch
 nicht, gewünscht sind Weiterleitungen „Domain → DNS-Server“, und DNS64 soll in den Cluster (Schalter je Bereich).
 Grundlagen: [PLAN-NODE64-DNS64.md](PLAN-NODE64-DNS64.md), [CLUSTER.md](CLUSTER.md),
 [PLAN-NODE64-CLUSTER-MODULE.md](PLAN-NODE64-CLUSTER-MODULE.md) (DNS64-Teil wird hiermit umgesetzt).

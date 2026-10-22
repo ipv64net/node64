@@ -337,6 +337,8 @@ type exportData struct {
 	Records   []Record          `json:"records"`
 	CertID    int64             `json:"cert_id,omitempty"` // Zertifikat aus der Verwaltung (bei "central")
 	Groups    []groups.Group    `json:"groups,omitempty"`  // Geraetegruppen samt Mitgliedern, Regeln und Zeitplaenen
+	Forwards  []Forward         `json:"forwards,omitempty"`
+	Rewrites  []Rewrite         `json:"rewrites,omitempty"`
 }
 
 // allowlist liefert die Freigaben: vom laufenden Resolver oder direkt aus der Datei.
@@ -378,6 +380,12 @@ func (m *Module) Export(ctx context.Context) (any, error) {
 	for i := range out.Groups { // Knopf-Zustand bleibt auf der alten Node
 		out.Groups[i].Hold, out.Groups[i].HoldUntil = "", ""
 	}
+	if out.Forwards, err = m.Forwards(ctx); err != nil && !m.noTable(err) {
+		return nil, err
+	}
+	if out.Rewrites, err = m.Rewrites(ctx); err != nil && !m.noTable(err) {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -414,6 +422,16 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		}
 	}
 	n += m.importGroups(ctx, in.Groups)
+	for _, f := range in.Forwards { // vorhandene (gleiche Domain bzw. gleicher Name) bleiben
+		if _, err := m.AddForward(ctx, f); err == nil {
+			n++
+		}
+	}
+	for _, x := range in.Rewrites {
+		if _, err := m.AddRewrite(ctx, x); err == nil {
+			n++
+		}
+	}
 	return n, m.restart(ctx)
 }
 
