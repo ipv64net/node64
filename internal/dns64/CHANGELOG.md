@@ -1,5 +1,17 @@
 # Änderungen – DNS64
 
+## 1.25.0 – 2026-10-22
+
+### Neu
+- Lokale Zonen (Phase L2, Karte „Lokale Zonen“ unter „Eigene Einträge“): Namen unter einer Zone wie `home.lan`
+  beantwortet DNS64 selbst – eigene Einträge, SOA/NS der Zone und, wenn die Zone „zuständig“ ist, NXDOMAIN mit SOA
+  für unbekannte Namen (sonst weiter an Weiterleitungen und Router).
+- Gerätenamen: Geräte der Gerätegruppen mit Bezeichnung erscheinen als `<name>.<zone>` (z. B. „Tablet Lea“ →
+  `tablet-lea.home.lan`) mit ihrer aktuellen IP aus der Nachbartabelle (MAC) bzw. der eingetragenen IP, samt
+  Rückwärtssuche; je Zone abschaltbar. Die Karte zeigt die Namen mit ihren Adressen.
+- Export/Import der Konfiguration nimmt die Zonen mit.
+- API: `GET|POST /api/dns64/zones`, `PUT|DELETE /api/dns64/zones/{id}`, `POST /api/dns64/zones/{id}/enable|disable`, `GET /api/dns64/device-names`.
+
 ## 1.24.0 – 2026-10-22
 
 ### Neu

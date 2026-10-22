@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -245,6 +246,18 @@ func (r *Resolver) For(ip netip.Addr) Match {
 // MAC liefert die MAC einer IP aus der Nachbartabelle ("" = unbekannt), ohne die Tabelle neu zu lesen.
 func (r *Resolver) MAC(ip netip.Addr) string {
 	return (*r.neigh.Load())[ip.Unmap().WithZone("")]
+}
+
+// IPs liefert die Adressen einer MAC aus der Nachbartabelle (ohne Link-Local), sortiert.
+func (r *Resolver) IPs(mac string) []netip.Addr {
+	var out []netip.Addr
+	for ip, m := range *r.neigh.Load() {
+		if m == mac && !ip.IsLinkLocalUnicast() {
+			out = append(out, ip)
+		}
+	}
+	slices.SortFunc(out, func(a, b netip.Addr) int { return a.Compare(b) })
+	return out
 }
 
 // refresh liest die Nachbartabelle; soon = auf Anfrage (hoechstens alle 5 s), sonst sofort.

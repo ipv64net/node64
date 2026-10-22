@@ -2859,6 +2859,20 @@
     "conflict_resolved": "Konflikt aufgelöst."
   },
   "dns64": {
+    "zones": {
+      "title": "Lokale Zonen",
+      "edit": "Zone bearbeiten",
+      "name": "Zone",
+      "auth": "Zuständig: unbekannte Namen sind „nicht vorhanden“",
+      "auth_hint": "Sonst gehen Namen, die DNS64 nicht kennt, weiter an Weiterleitungen und Router.",
+      "auth_badge": "zuständig",
+      "devices": "Geräte der Gruppen mit Namen als <name>.<zone>",
+      "devices_hint": "Bezeichnung des Geräts in den Gerätegruppen, z. B. „Tablet Lea“ → tablet-lea.home.lan, mit aktueller IP und Rückwärtssuche.",
+      "devices_badge": "Geräte",
+      "device_names": "Gerätenamen",
+      "offline": "gerade nicht im Netz",
+      "added": "Zone angelegt, gilt sofort."
+    },
     "forwards": {
       "title": "Weiterleitungen",
       "add": "Weiterleitung hinzufügen",
@@ -3274,6 +3288,8 @@
       "deleted": "Gruppe gelöscht."
     },
     "err": {
+      "zone_name": "Der Name der Zone ist ungültig.",
+      "zone_dup": "Diese Zone gibt es schon.",
       "fwd_domain": "Die Domain ist ungültig.",
       "fwd_server": "Mindestens ein und höchstens acht Server angeben: IP, IP:Port, tls://, https:// oder quic://.",
       "fwd_dup": "Für diese Domain gibt es schon eine Weiterleitung.",

@@ -31,6 +31,9 @@ type ForwardFunc func(name string) *Forward
 // RewriteFunc liefert das Ziel, wenn der Name wie ein anderer antworten soll.
 type RewriteFunc func(name string) (target string, ok bool)
 
+// ZoneFunc beantwortet Namen lokaler Zonen (Antwort, Authority mit SOA, Rcode); ok=false: nicht zustaendig.
+type ZoneFunc func(name string, qtype uint16) (ans, ns []dns.RR, rcode int, ok bool)
+
 // forward fragt die Server der Weiterleitung (kein Cache: die Antwort gehoert nur zu dieser Weiterleitung).
 func (s *Server) forward(r *dns.Msg, f *Forward, e *querylog.Entry, status querylog.Status) *dns.Msg {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)

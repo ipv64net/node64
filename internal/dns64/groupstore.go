@@ -300,6 +300,7 @@ func (m *Module) loadGroups(ctx context.Context) error {
 		return err
 	}
 	m.grp.Set(list)
+	m.buildDeviceNames(list)
 	return nil
 }
 

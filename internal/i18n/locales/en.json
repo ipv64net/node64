@@ -2859,6 +2859,20 @@
     "conflict_resolved": "Conflict resolved."
   },
   "dns64": {
+    "zones": {
+      "title": "Local zones",
+      "edit": "Edit zone",
+      "name": "Zone",
+      "auth": "Authoritative: unknown names \"do not exist\"",
+      "auth_hint": "Otherwise names DNS64 does not know go on to forwarding and the router.",
+      "auth_badge": "authoritative",
+      "devices": "Devices of the groups with a name as <name>.<zone>",
+      "devices_hint": "Label of the device in the device groups, e.g. \"Tablet Lea\" → tablet-lea.home.lan, with its current IP and reverse lookup.",
+      "devices_badge": "devices",
+      "device_names": "Device names",
+      "offline": "not in the network right now",
+      "added": "Zone added, effective immediately."
+    },
     "forwards": {
       "title": "Forwarding",
       "add": "Add forwarding",
@@ -3274,6 +3288,8 @@
       "deleted": "Group deleted."
     },
     "err": {
+      "zone_name": "The zone name is invalid.",
+      "zone_dup": "This zone already exists.",
       "fwd_domain": "The domain is invalid.",
       "fwd_server": "Give at least one and at most eight servers: IP, IP:port, tls://, https:// or quic://.",
       "fwd_dup": "There is already a forwarding for this domain.",

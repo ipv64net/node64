@@ -75,6 +75,8 @@ type pageData struct {
 	Records []Record
 	Fwds    []forwardView            // Seite Weiterleitungen
 	Rws     []Rewrite                // Seite Weiterleitungen: Umschreiben
+	Zones   []Zone                   // Seite Eigene Eintraege: lokale Zonen
+	DNames  []deviceName             // Seite Eigene Eintraege: Geraetenamen der Zonen
 	Groups  []groups.Group           // Seiten Gruppen und Log
 	Devices []deviceView             // Seite Gruppen: Geraete der letzten 24 Stunden
 	Cats    []string                 // Seite Gruppen: Kategorien
@@ -128,9 +130,13 @@ func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 		}
 		if key == "records" {
 			var err error
-			if d.Records, err = m.Records(ctx); err != nil {
+			if d.Records, err = m.Records(ctx); err == nil {
+				d.Zones, err = m.Zones(ctx)
+			}
+			if err != nil {
 				m.g.Flash(w, r, "danger", err.Error())
 			}
+			d.DNames = m.DeviceNames()
 		}
 		if key == "forwards" {
 			fl, err := m.Forwards(ctx)

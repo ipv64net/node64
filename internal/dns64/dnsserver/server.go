@@ -88,6 +88,7 @@ type Server struct {
 	HintV6    net.IP
 	Forward   ForwardFunc // Domain -> eigene DNS-Server (nil = keine, forward.go)
 	Rewrite   RewriteFunc // Name antwortet wie ein anderer (nil = keins)
+	Zone      ZoneFunc    // lokale Zonen: Geraetenamen, SOA, NXDOMAIN fuer Unbekanntes (nil = keine)
 
 	acl        *clientACL
 	srv        []*dns.Server
@@ -244,6 +245,14 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy) 
 	if s.Rewrite != nil {
 		if target, ok := s.Rewrite(name); ok {
 			return s.rewrite(r, name, target, e, p)
+		}
+	}
+	if s.Zone != nil {
+		if ans, ns, rcode, ok := s.Zone(name, q.Qtype); ok {
+			e.Status = querylog.StatusCustom
+			m := s.custom(r, ans)
+			m.Ns, m.Rcode = ns, rcode
+			return m
 		}
 	}
 	var fwd *Forward

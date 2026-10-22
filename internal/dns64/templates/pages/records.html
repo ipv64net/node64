@@ -61,6 +61,41 @@
 				</form>
 			</div>
 		</div>
+		<div class="card mt-3">
+			<div class="card-header"><i class="bi bi-house-door text-primary"></i> <span data-edit="{{.T "dns64.zones.edit"}}">{{.T "dns64.zones.title"}}</span>{{.Doc "dns64#zonen"}}</div>
+			{{if $d.Zones}}<form method="post">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<ul class="list-group list-group-flush small">
+				{{range $d.Zones}}<li class="list-group-item d-flex align-items-center gap-2{{if not .Enabled}} text-body-tertiary{{end}}">
+					<div class="me-auto text-break"><span class="font-monospace">{{.Name}}</span>
+						{{if .Authoritative}}<span class="badge text-bg-light" title="{{$.T "dns64.zones.auth_hint"}}">{{$.T "dns64.zones.auth_badge"}}</span>{{end}}
+						{{if .Devices}}<span class="badge text-bg-light" title="{{$.T "dns64.zones.devices_hint"}}"><i class="bi bi-laptop"></i> {{$.T "dns64.zones.devices_badge"}}</span>{{end}}
+						{{if .Comment}}<div class="text-body-secondary">{{.Comment}}</div>{{end}}</div>
+					<button type="button" class="btn btn-sm btn-outline-primary py-0" data-edit-form="zone-form" data-id="{{.ID}}" data-name="{{.Name}}" data-authoritative="{{if .Authoritative}}1{{end}}" data-devices="{{if .Devices}}1{{end}}" data-comment="{{.Comment}}" title="{{$.T "dns64.zones.edit"}}"><i class="bi bi-pencil"></i></button>
+					<button type="submit" class="btn btn-sm btn-outline-secondary py-0" formaction="/dns64/zones/{{.ID}}/toggle" name="on" value="{{if .Enabled}}0{{else}}1{{end}}" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause{{else}}bi-play{{end}}"></i></button>
+					<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/zones/{{.ID}}/delete" data-confirm="{{$.T "dns64.forwards.delete_confirm" "name" .Name}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button>
+				</li>{{end}}
+				</ul>
+			</form>{{end}}
+			<div class="card-body">
+				<form method="post" action="/dns64/zones" id="zone-form" data-base="/dns64/zones">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<label class="form-label" for="z-name">{{.T "dns64.zones.name"}}</label>
+					<input type="text" class="form-control font-monospace mb-2" id="z-name" name="name" data-field="name" placeholder="home.lan" required maxlength="253">
+					<div class="form-check"><input class="form-check-input" type="checkbox" id="z-auth" name="authoritative" value="1" data-field="authoritative" checked><label class="form-check-label" for="z-auth">{{.T "dns64.zones.auth"}}</label></div>
+					<div class="form-text mb-2">{{.T "dns64.zones.auth_hint"}}</div>
+					<div class="form-check"><input class="form-check-input" type="checkbox" id="z-dev" name="devices" value="1" data-field="devices" checked><label class="form-check-label" for="z-dev">{{.T "dns64.zones.devices"}}</label></div>
+					<div class="form-text mb-2">{{.T "dns64.zones.devices_hint"}}</div>
+					<input type="text" class="form-control mb-3" name="comment" data-field="comment" maxlength="200" placeholder="{{.T "dns64.records.comment"}}" aria-label="{{.T "dns64.records.comment"}}">
+					<button class="btn btn-outline-primary btn-sm" type="submit" data-edit="{{.T "common.save"}}"><i class="bi bi-plus"></i> <span>{{.T "dns64.records.add_btn"}}</span></button>
+					<button class="btn btn-outline-secondary btn-sm d-none" type="button" data-cancel>{{.T "common.cancel"}}</button>
+				</form>
+			</div>
+			{{if $d.DNames}}<div class="card-footer small">
+				<div class="text-body-secondary mb-1">{{.T "dns64.zones.device_names"}}</div>
+				{{range $d.DNames}}<div class="d-flex gap-2"><span class="font-monospace text-break me-auto">{{.Name}}</span><span class="font-monospace text-body-secondary">{{range $i, $ip := .IPs}}{{if $i}}, {{end}}{{$ip}}{{else}}{{$.T "dns64.zones.offline"}}{{end}}</span></div>{{end}}
+			</div>{{end}}
+		</div>
 	</div>
 	<div class="col-xl-8">
 		<div class="card">

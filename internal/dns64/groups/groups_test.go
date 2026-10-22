@@ -84,3 +84,21 @@ func TestResolver(t *testing.T) {
 		}
 	}
 }
+
+// IPs: alle Adressen einer MAC aus der Nachbartabelle, ohne Link-Local, sortiert.
+func TestResolverIPs(t *testing.T) {
+	r := NewResolver(nil)
+	r.read = func() (map[netip.Addr]string, error) {
+		return map[netip.Addr]string{
+			netip.MustParseAddr("192.168.1.20"):   "02:11:22:33:44:55",
+			netip.MustParseAddr("fe80::1"):        "02:11:22:33:44:55",
+			netip.MustParseAddr("2001:db8::abcd"): "02:11:22:33:44:55",
+			netip.MustParseAddr("192.168.1.21"):   "02:11:22:33:44:66",
+		}, nil
+	}
+	r.refresh(false)
+	got := r.IPs("02:11:22:33:44:55")
+	if len(got) != 2 || got[0].String() != "192.168.1.20" || got[1].String() != "2001:db8::abcd" {
+		t.Fatalf("IPs = %v", got)
+	}
+}

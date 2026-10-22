@@ -5184,6 +5184,39 @@
           "name",
           "target"
         ]
+      },
+      "DNS64Zone": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string",
+            "example": "home.lan"
+          },
+          "authoritative": {
+            "type": "boolean",
+            "description": "unbekannte Namen NXDOMAIN (sonst weiter an Weiterleitung/Router)"
+          },
+          "devices": {
+            "type": "boolean",
+            "description": "Geräte der Gruppen mit Bezeichnung als <name>.<zone>"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "name"
+        ]
       }
     }
   },
@@ -17344,6 +17377,217 @@
           },
           "404": {
             "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/zones": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Lokale Zonen auflisten",
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DNS64Zone"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Lokale Zone anlegen",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNS64Zone"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Angelegt",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Zone"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
+          }
+        }
+      }
+    },
+    "/dns64/zones/{id}": {
+      "put": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Lokale Zone ändern (an/aus bleibt)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNS64Zone"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Zone"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Lokale Zone löschen",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Gelöscht"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/zones/{id}/enable": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Lokale Zone einschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/zones/{id}/disable": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Lokale Zone ausschalten",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      }
+    },
+    "/dns64/device-names": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Gerätenamen der Zonen mit ihren aktuellen Adressen",
+        "responses": {
+          "200": {
+            "description": "Liste",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "example": "tablet-lea.home.lan"
+                      },
+                      "ips": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

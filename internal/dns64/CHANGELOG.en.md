@@ -1,5 +1,17 @@
 # Changes – DNS64
 
+## 1.25.0 – 2026-10-22
+
+### New
+- Local zones (phase L2, card "Local zones" under "Custom records"): DNS64 answers names below a zone like
+  `home.lan` itself – custom records, SOA/NS of the zone and, if the zone is "authoritative", NXDOMAIN with SOA for
+  unknown names (otherwise on to forwarding and the router).
+- Device names: devices of the device groups with a label appear as `<name>.<zone>` (e.g. "Tablet Lea" →
+  `tablet-lea.home.lan`) with their current IP from the neighbour table (MAC) or the entered IP, including reverse
+  lookup; can be switched off per zone. The card lists the names with their addresses.
+- Configuration export/import carries the zones.
+- API: `GET|POST /api/dns64/zones`, `PUT|DELETE /api/dns64/zones/{id}`, `POST /api/dns64/zones/{id}/enable|disable`, `GET /api/dns64/device-names`.
+
 ## 1.24.0 – 2026-10-22
 
 ### New

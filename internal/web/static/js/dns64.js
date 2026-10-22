@@ -521,8 +521,8 @@
 		}
 	}
 
-	// Weiterleitungen und Umschreiben: Bearbeiten im Formular der Karte, Testabfrage je Weiterleitung
-	if (kind === "forwards") {
+	// Weiterleitungen, Umschreiben und lokale Zonen: Bearbeiten im Formular der Karte, Testabfrage je Weiterleitung
+	if (kind === "forwards" || kind === "records") {
 		var reset = function (form) {
 			var title = form.closest(".card").querySelector(".card-header [data-edit]"), btn = form.querySelector("button[type=submit] span");
 			form.reset();
@@ -536,7 +536,10 @@
 				var title = form.closest(".card").querySelector(".card-header [data-edit]"), btn = form.querySelector("button[type=submit]");
 				if (!form.dataset.addTitle) { form.dataset.addTitle = title.textContent; form.dataset.addLabel = btn.querySelector("span").textContent; }
 				form.action = form.getAttribute("data-base") + "/" + b.getAttribute("data-id") + "/edit";
-				form.querySelectorAll("[data-field]").forEach(function (f) { f.value = b.getAttribute("data-" + f.getAttribute("data-field")) || ""; });
+				form.querySelectorAll("[data-field]").forEach(function (f) {
+					var v = b.getAttribute("data-" + f.getAttribute("data-field")) || "";
+					if (f.type === "checkbox") { f.checked = v === "1"; } else { f.value = v; }
+				});
 				title.textContent = title.getAttribute("data-edit");
 				btn.querySelector("span").textContent = btn.getAttribute("data-edit");
 				form.querySelector("[data-cancel]").classList.remove("d-none");
