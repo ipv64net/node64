@@ -54,9 +54,14 @@ type Sensor struct {
 	conns  map[netip.Addr]int
 	nconns int
 
-	keyMu  sync.Mutex
-	signer ssh.Signer
-	cert   *tls.Certificate
+	keyMu   sync.Mutex
+	signer  ssh.Signer
+	sshKeys *sensorSSHKeys // Host-Schluessel wie OpenSSH (RSA, ECDSA, Ed25519)
+	cert    *tls.Certificate
+	certs   map[string]*tls.Certificate // Zertifikate je Profil (sensor_keys.go)
+
+	seed    string                         // Seed ohne Config.Seed (zufaellig, nur im Speicher)
+	persona atomic.Pointer[sensorPersonas] // Dienst-Profile (sensor_persona.go)
 
 	wg sync.WaitGroup
 }
@@ -84,7 +89,7 @@ func NewSensor(log *slog.Logger, dir string) *Sensor {
 	if log == nil {
 		log = slog.Default()
 	}
-	s := &Sensor{log: log.With("module", Name), dir: dir, svcs: map[sensorKey]*trapService{}, conns: map[netip.Addr]int{}}
+	s := &Sensor{log: log.With("module", Name), dir: dir, svcs: map[sensorKey]*trapService{}, conns: map[netip.Addr]int{}, seed: sensorRandomSeed()}
 	s.perIP.Store(sensorDefPerIP)
 	s.total.Store(sensorDefTotal)
 	return s
@@ -116,6 +121,14 @@ func (s *Sensor) Apply(ctx context.Context, cfg Config, sink Sink) []ServiceStat
 	s.perIP.Store(int64(per))
 	s.total.Store(int64(total))
 	s.scanOn.Store(cfg.Scan)
+	seed := cfg.Seed
+	if seed == "" && s.dir != "" { // Modus ohne Oberflaeche: Sensor-Kennung aus <dir>/sensor_id (wie die Meldung)
+		seed, _ = SensorIDFromFile(s.dir)
+	}
+	if seed == "" {
+		seed = s.seed
+	}
+	s.persona.Store(newSensorPersonas(seed, cfg.Hostname, cfg.Personas)) // gilt ab der naechsten Verbindung
 	if !cfg.Scan {
 		s.scan.reset()
 	}
@@ -280,14 +293,14 @@ func (s *Sensor) openService(ctx context.Context, t *trapService, check func(str
 		s.log.Info("honeypot service open", "service", k.Service, "port", k.Port, "proto", "udp")
 		return
 	}
-	var signer ssh.Signer
+	var keys *sensorSSHKeys
 	var cert *tls.Certificate
 	var err error
 	switch k.Service {
 	case SvcSSH:
-		signer, err = s.sshSigner()
+		keys, err = s.sshHostKeys()
 	case SvcHTTPS:
-		cert, err = s.tlsCert()
+		cert, err = s.httpsCert(k)
 	default:
 		if p := tcpProtos[k.Service]; p != nil && p.TLS {
 			cert, err = s.tlsCert()
@@ -309,7 +322,7 @@ func (s *Sensor) openService(ctx context.Context, t *trapService, check func(str
 	tl := &trapListener{Listener: ln, s: s, t: t}
 	switch k.Service {
 	case SvcSSH:
-		s.serveLoop(tl, func(c *trapConn) { s.handleSSH(c, signer) })
+		s.serveLoop(tl, func(c *trapConn) { s.handleSSH(c, keys) })
 	case SvcTelnet:
 		s.serveLoop(tl, s.handleTelnet)
 	case SvcTCP:

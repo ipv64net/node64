@@ -7,17 +7,54 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// SSH-Falle: Banner wie ein OpenSSH auf Debian 12, jede Anmeldung (Passwort, Public Key, Keyboard-Interactive)
-// wird abgelehnt und gemeldet. Kein Kanal, keine Shell, keine Weiterleitung (die Verbindung endet mit der Anmeldung).
+// SSH-Falle: Banner und Algorithmen je Profil (OpenSSH Debian 12 / Ubuntu 24.04, Dropbear), jede Anmeldung
+// (Passwort, Public Key, Keyboard-Interactive) wird abgelehnt und gemeldet. Kein Kanal, keine Shell, keine
+// Weiterleitung (die Verbindung endet mit der Anmeldung).
 const (
-	sensorSSHBanner  = "SSH-2.0-OpenSSH_9.2p1 Debian-2+deb12u3"
 	sensorSSHTries   = 6
 	sensorSSHTimeout = 60 * time.Second
 )
 
 var errSensorDenied = errors.New("permission denied")
 
-func (s *Sensor) handleSSH(c *trapConn, signer ssh.Signer) {
+// sensorSSHConfig liefert Banner, Algorithmen und Host-Schluessel zum Profil: die Reihenfolge wie beim Original,
+// soweit x/crypto/ssh die Verfahren kennt (sntrup761, group18, umac fehlen; mlkem bieten OpenSSH 9.2/9.6 und
+// Dropbear 2024 nicht an). OpenSSH ohne ssh-rsa (SHA-1), Dropbear mit.
+func sensorSSHConfig(persona string, id *sensorIdent, keys *sensorSSHKeys) (string, ssh.Config, []ssh.Signer) {
+	banner := id.sshBanner(persona)
+	rsaAlgos := []string{ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}
+	cfg := ssh.Config{
+		KeyExchanges: []string{ssh.KeyExchangeCurve25519, ssh.KeyExchangeECDHP256, ssh.KeyExchangeECDHP384, ssh.KeyExchangeECDHP521,
+			ssh.KeyExchangeDHGEXSHA256, ssh.KeyExchangeDH16SHA512, ssh.KeyExchangeDH14SHA256},
+		Ciphers: []string{ssh.CipherChaCha20Poly1305, ssh.CipherAES128CTR, ssh.CipherAES192CTR, ssh.CipherAES256CTR, ssh.CipherAES128GCM, ssh.CipherAES256GCM},
+		MACs:    []string{ssh.HMACSHA256ETM, ssh.HMACSHA512ETM, ssh.HMACSHA256, ssh.HMACSHA512, ssh.HMACSHA1},
+	}
+	order := []ssh.Signer{keys.rsa, keys.ecdsa, keys.ed25519}
+	if persona == PersonaDropbear {
+		rsaAlgos = []string{ssh.KeyAlgoRSASHA256, ssh.KeyAlgoRSA}
+		cfg = ssh.Config{
+			KeyExchanges: []string{ssh.KeyExchangeCurve25519, ssh.KeyExchangeECDHP521, ssh.KeyExchangeECDHP384, ssh.KeyExchangeECDHP256,
+				ssh.KeyExchangeDH14SHA256, ssh.InsecureKeyExchangeDH14SHA1},
+			Ciphers: []string{ssh.CipherChaCha20Poly1305, ssh.CipherAES128CTR, ssh.CipherAES256CTR},
+			MACs:    []string{ssh.HMACSHA1, ssh.HMACSHA256},
+		}
+		order = []ssh.Signer{keys.ed25519, keys.ecdsa, keys.rsa}
+	}
+	var hostKeys []ssh.Signer
+	for _, k := range order {
+		if as, ok := k.(ssh.AlgorithmSigner); ok && k == keys.rsa {
+			if ms, err := ssh.NewSignerWithAlgorithms(as, rsaAlgos); err == nil {
+				k = ms
+			}
+		}
+		hostKeys = append(hostKeys, k)
+	}
+	return banner, cfg, hostKeys
+}
+
+func (s *Sensor) handleSSH(c *trapConn, keys *sensorSSHKeys) {
+	p := s.personas()
+	banner, algos, hostKeys := sensorSSHConfig(p.of(c.t.key), p.id, keys)
 	_ = c.SetDeadline(time.Now().Add(sensorSSHTimeout))
 	attempts := 0
 	var client string
@@ -28,8 +65,9 @@ func (s *Sensor) handleSSH(c *trapConn, signer ssh.Signer) {
 		return e
 	}
 	cfg := &ssh.ServerConfig{
+		Config:        algos,
 		MaxAuthTries:  sensorSSHTries,
-		ServerVersion: sensorSSHBanner,
+		ServerVersion: banner,
 		PasswordCallback: func(m ssh.ConnMetadata, pw []byte) (*ssh.Permissions, error) {
 			attempts++
 			e := ev(m)
@@ -59,7 +97,9 @@ func (s *Sensor) handleSSH(c *trapConn, signer ssh.Signer) {
 			client = string(m.ClientVersion())
 		},
 	}
-	cfg.AddHostKey(signer)
+	for _, k := range hostKeys {
+		cfg.AddHostKey(k)
+	}
 	if sc, _, _, err := ssh.NewServerConn(c, cfg); err == nil {
 		_ = sc.Close() // kann nicht passieren (alles wird abgelehnt), sicherheitshalber
 	}

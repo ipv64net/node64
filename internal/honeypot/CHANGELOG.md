@@ -1,5 +1,17 @@
 # Änderungen – Honeypot64
 
+## 0.9.0 – 2026-10-22
+
+### Neu
+- Dienst-Profile je Port: SSH als OpenSSH Debian 12, Ubuntu 24.04 oder Dropbear (Banner, Algorithmen und
+  Host-Schlüssel RSA/ECDSA/Ed25519 passend), Telnet als BusyBox- oder Linux-Login, MySQL 8.0 (caching_sha2_password)
+  oder MariaDB 10.11/11.4, Web als nginx, Apache, Proxmox VE, Webmin, Home Assistant, Grafana, NAS oder Elasticsearch
+  (Kopfzeilen, Status, API-Antworten ohne Anmeldung, Zertifikat wie das Original, ohne Logos).
+- Standard je Port (8006 Proxmox, 10000 Webmin, 8123 Home Assistant, 3000 Grafana, 5000/5001 NAS, 9200 Elasticsearch,
+  sonst nginx), Auswahl in der Tabelle der Fallen-Dienste, Hostname der Fallen einstellbar.
+- Hostname, Versionen und Zertifikatsdaten variieren stabil je Sensor (aus der Sensor-Kennung), damit nicht alle
+  Sensoren denselben Fingerabdruck haben. Geräte-Logins mit eigenem Profil antworten nur noch auf dessen Port.
+
 ## 0.8.1 – 2026-10-21
 
 ### Behoben

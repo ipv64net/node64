@@ -42,9 +42,9 @@ var bridgeCounts struct {
 }
 
 // bridgeStart meldet Koeder und Auswertung der Zugriffe an. ls ist der Log-Sensor (Zugriffe nur, wenn er FeedLine
-// kann), sink die Sink des Moduls.
-func bridgeStart(log *slog.Logger, ls logSensorAPI, sink Sink) {
-	hpbridge.SetDecoy(newBridgeDecoy(log, sink))
+// kann), sink die Sink des Moduls, seed der Seed der Dienst-Profile (Sensor-Kennung).
+func bridgeStart(log *slog.Logger, ls logSensorAPI, sink Sink, seed string) {
+	hpbridge.SetDecoy(newBridgeDecoy(log, sink, seed))
 	var feed func(LogLine) bool
 	if f, ok := ls.(interface{ FeedLine(LogLine) bool }); ok {
 		feed = f.FeedLine
@@ -62,9 +62,10 @@ func bridgeStop() {
 type bridgeDecoy struct{ s *Sensor }
 
 // newBridgeDecoy legt den Sensor des Koeders an: keine Ports, eigene Zaehler, Ereignisse mit "via=proxy64" an sink.
-func newBridgeDecoy(log *slog.Logger, sink Sink) *bridgeDecoy {
+// Profil immer nginx (PROXY64 antwortet auf jedem Port als Webserver, nicht je Port des Host-Kopfs als Anwendung).
+func newBridgeDecoy(log *slog.Logger, sink Sink, seed string) *bridgeDecoy {
 	s := NewSensor(log, "")
-	s.Apply(context.Background(), Config{}, func(e Event) {
+	s.Apply(context.Background(), Config{Seed: seed}, func(e Event) {
 		if e.Detail == "" {
 			e.Detail = bridgeDetail
 		} else {
@@ -74,6 +75,9 @@ func newBridgeDecoy(log *slog.Logger, sink Sink) *bridgeDecoy {
 			sink(e)
 		}
 	})
+	p := *s.personas()
+	p.web = PersonaNginx
+	s.persona.Store(&p)
 	return &bridgeDecoy{s: s}
 }
 

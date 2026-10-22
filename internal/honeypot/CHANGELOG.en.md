@@ -1,5 +1,17 @@
 # Changes – Honeypot64
 
+## 0.9.0 – 2026-10-22
+
+### Added
+- Service profiles per port: SSH as OpenSSH Debian 12, Ubuntu 24.04 or Dropbear (matching banner, algorithms and
+  RSA/ECDSA/Ed25519 host keys), Telnet as BusyBox or Linux login, MySQL 8.0 (caching_sha2_password) or MariaDB
+  10.11/11.4, web as nginx, Apache, Proxmox VE, Webmin, Home Assistant, Grafana, NAS or Elasticsearch (headers, status
+  codes, unauthenticated API responses, certificate like the original, no logos).
+- Defaults per port (8006 Proxmox, 10000 Webmin, 8123 Home Assistant, 3000 Grafana, 5000/5001 NAS, 9200 Elasticsearch,
+  otherwise nginx), selectable in the trap service table, configurable trap hostname.
+- Hostname, versions and certificate data vary per sensor and stay stable (derived from the sensor ID), so sensors
+  don't share one fingerprint. Device logins with their own profile only answer on that profile's port.
+
 ## 0.8.1 – 2026-10-21
 
 ### Fixed

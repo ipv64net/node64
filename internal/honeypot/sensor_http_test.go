@@ -44,7 +44,7 @@ func TestSensorHTTPBait(t *testing.T) {
 	const browser = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
 
 	code, body, h := sensorGet(t, cl, "GET", base+"/wp-login.php", browser, "", nil)
-	if code != 200 || !strings.Contains(body, `name="log"`) || !strings.Contains(body, `name="pwd"`) || h.Get("Server") != "nginx" {
+	if code != 200 || !strings.Contains(body, `name="log"`) || !strings.Contains(body, `name="pwd"`) || !strings.HasPrefix(h.Get("Server"), "nginx/1.2") {
 		t.Fatalf("Koeder: %d %q %v", code, body, h)
 	}
 	e := rec.wait(t, func(e Event) bool { return e.Path == "/wp-login.php" })
@@ -123,7 +123,7 @@ func TestSensorHTTPS(t *testing.T) {
 	if e.Service != SvcHTTPS || e.Page != "admin" || e.Host != "localhost:"+strconv.Itoa(p) {
 		t.Fatalf("Ereignis: %+v", e)
 	}
-	for _, f := range []string{sensorCertFile, sensorKeyFile} {
+	for _, f := range []string{"tls-generic.crt", "tls-generic.key"} { // Zertifikat des Profils nginx
 		if _, err := os.Stat(filepath.Join(s.dir, f)); err != nil {
 			t.Fatal(err)
 		}

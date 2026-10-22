@@ -69,7 +69,27 @@ ab und erfassen Benutzername und Passwort – wie SSH und Telnet. Reine TCP-Port
 **Geräte-Logins:** Die Web-Köder beantworten die Login-Aufrufe verbreiteter Geräte und Oberflächen (Router wie
 FRITZ!Box, Speedport, OpenWrt; Firewalls und SSL-VPN; NAS; UniFi; Home Assistant; Proxmox; Grafana; Jenkins; Webmin;
 Portainer) mit einer schlichten Ablehnung und erfassen die Zugangsdaten (Gerät im Detail `device=…`). Es gibt keine
-Logos oder Nachbauten der Herstellerseiten – Bots greifen die Adressen an, nicht die Optik.
+Logos oder Nachbauten der Herstellerseiten – Bots greifen die Adressen an, nicht die Optik. Proxmox, Home Assistant,
+NAS, Webmin und Grafana antworten nur auf Ports mit diesem Profil (siehe unten), die übrigen auf den Webserver-Ports.
+
+**Dienst-Profile:** Jede Falle gibt sich als ein bestimmter Dienst aus, damit Scanner sie richtig einordnen. Geändert
+wird nur, was die Falle sendet; erfasst wird bei jedem Profil dasselbe.
+
+| Dienst | Profile (Standard fett) | Was die Falle sendet |
+|---|---|---|
+| SSH | **`openssh`** (Debian 12 oder Ubuntu 24.04 je Sensor), `openssh-debian`, `openssh-ubuntu`, `dropbear` | Banner wie `OpenSSH_9.2p1 Debian-2+deb12u…` bzw. `dropbear_2024.8…`, Schlüsseltausch, Verfahren und Host-Schlüssel (RSA, ECDSA, Ed25519) in der Reihenfolge des Originals, soweit Go sie kennt |
+| Telnet | **`busybox`**, `linux` | `<host> login: ` (BusyBox) bzw. `Debian GNU/Linux 12` / `Ubuntu 24.04.x LTS` und dann `<host> login: `, Telnet-Optionen wie das Original |
+| MySQL | **`mysql`** (8.0, `caching_sha2_password`), `mariadb` (10.11 der Distribution), `mariadb11` (11.4) | Version, Fähigkeiten, Zeichensatz und Auth-Plugin passend zur Version (ohne TLS) |
+| HTTP/HTTPS | **`nginx`**, `apache`, `pve`, `webmin`, `homeassistant`, `grafana`, `nas`, `elasticsearch` | Server-Kopf, Fehlerseiten, Status und API-Format wie das Original ohne Anmeldung, schlichte Seiten mit Titel, Zertifikat passend (z. B. Proxmox: `OU=PVE Cluster Node, O=Proxmox Virtual Environment, CN=<host>.<domain>`, von einer „PVE Cluster Manager CA“) |
+
+Standard bei HTTP/HTTPS je Port (bzw. Köder): 8006 `pve`, 10000 `webmin`, 8123 `homeassistant`, 3000 `grafana`,
+5000/5001 `nas`, 9200 `elasticsearch`, alle anderen `nginx`. Webserver-Profile (`nginx`, `apache`) zeigen die Köder
+je Pfad wie bisher; Anwendungen antworten wie das Original ohne Anmeldung (z. B. Proxmox `/api2/json/*` → 401
+`{"data":null}`, Home Assistant `/api/` → 401, Grafana `/api/health` mit Version, Elasticsearch `/` mit Knotenname
+und Version 7.17.x). Hostname, Domain, Distribution, Patch-Stände und Zertifikatsdaten (Seriennummer, Ausstellung)
+leitet jeder Sensor aus seiner Sensor-Kennung ab: über Neustarts gleich, von Sensor zu Sensor verschieden. Ohne
+Oberfläche gelten die Standards je Port. Zertifikate und Host-Schlüssel liegen im Datenordner (`tls-<art>.crt/.key`,
+`ssh_host_rsa`, `ssh_host_ecdsa`, `ssh_host_ed25519`).
 
 Dazu die Info-Seite auf `NODE64_HONEYPOT_INFO_PORT` (Standard 9064).
 
@@ -94,8 +114,12 @@ füllen die Tabelle wie das Profil, „Alle freien einschalten“ nimmt jeden fr
 gespeichert wird erst mit „Speichern“. Unter „Weitere Einträge“ läuft ein Dienst mehrfach (z. B. `ssh` auf 22 und
 2200). Entspricht die Auswahl genau einem Profil, wird sie als dieses Profil gespeichert (neue Dienste späterer
 Versionen kommen dann dazu), sonst als eigene Liste. Die Textliste „dienst port [köder]“ gibt es weiter unter
-„Erweitert“. Per API: `GET /api/honeypot/catalog` (Katalog mit Zustand), gespeichert wird mit
-`PUT /api/honeypot/config`.
+„Erweitert“. Die Spalte „Profil“ wählt je Zeile das Dienst-Profil (Standard für Port und Köder vorausgewählt;
+gespeichert werden nur Abweichungen, als `personas` mit Schlüssel `dienst:port`, z. B. `{"ssh:22":"dropbear"}`), das
+Feld „Hostname der Fallen“ setzt den Hostnamen (leer = aus der Sensor-Kennung erzeugt). Per API:
+`GET /api/honeypot/catalog` (Katalog mit Zustand, Profil, Standardprofil und Auswahl je Zeile, `hostname`),
+gespeichert wird mit `PUT /api/honeypot/config` (`personas`, `hostname`; ältere Einstellungen ohne diese Felder
+gelten unverändert mit den Standards je Port).
 
 Auf einer Node mit weiteren Modulen sind manche Ports vergeben (80/443 PROXY64, 53/853 DNS64, die Oberfläche auf
 `NODE64_HTTP_PORT`, Standard 8080). Für alle Ports: Node64 nur mit Honeypot64 und der Oberfläche auf einem

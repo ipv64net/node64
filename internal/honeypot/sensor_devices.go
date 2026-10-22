@@ -44,6 +44,19 @@ var sensorDevices = []sensorDevice{
 	{"grafana", false, "/login", "application/json", 401, `{"message":"Invalid username or password"}`},
 }
 
+// sensorDevicePersona: Endpunkte mit eigenem Profil antworten nur auf Ports mit diesem Profil (Standard z. B. 8006
+// Proxmox, 8123 Home Assistant, 5000/5001 NAS, 10000 Webmin, 3000 Grafana); alle anderen nur auf Webserver-Profilen.
+var sensorDevicePersona = map[string]string{"proxmox": PersonaPVE, "homeassistant": PersonaHA, "nas": PersonaNAS, "webmin": PersonaWebmin,
+	"grafana": PersonaGrafana}
+
+// sensorDeviceFits: Endpunkt passt zum Profil des Ports.
+func sensorDeviceFits(d *sensorDevice, persona string) bool {
+	if p := sensorDevicePersona[d.name]; p != "" {
+		return p == persona
+	}
+	return sensorWebServer(persona)
+}
+
 // sensorDeviceFor liefert den Endpunkt fuer einen Pfad (nil = keiner). /login gilt nur fuer JSON-Anfragen (sonst
 // bleibt es beim normalen Koeder).
 func sensorDeviceFor(r *http.Request) *sensorDevice {

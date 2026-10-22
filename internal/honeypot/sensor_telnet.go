@@ -6,19 +6,32 @@ import (
 	"time"
 )
 
-// Telnet-Falle im Stil eines IoT-Geraets mit BusyBox-telnetd: Login- und Passwort-Abfrage, immer "Login incorrect",
+// Telnet-Falle je Profil: BusyBox-telnetd (IoT/Router, "<host> login: ") oder Linux mit login(1) ("Debian GNU/Linux
+// 12" bzw. Ubuntu aus /etc/issue.net, dann "<host> login: "). Login- und Passwort-Abfrage, immer "Login incorrect",
 // nach sensorTelTries Versuchen getrennt. Telnet-Optionen (IAC) werden gelesen und ignoriert.
 const (
 	sensorTelTries   = 3
 	sensorTelTimeout = 60 * time.Second
-	sensorTelPrompt  = "localhost login: "
 )
 
 // sensorTelDelay ist die Pause vor "Login incorrect" (wie login(1)); Tests setzen sie kurz.
 var sensorTelDelay = 500 * time.Millisecond
 
-// Optionen wie BusyBox telnetd beim Verbindungsaufbau: DO ECHO, DO NAWS, WILL ECHO, WILL SGA.
-var sensorTelIAC = []byte{255, 253, 1, 255, 253, 31, 255, 251, 1, 255, 251, 3}
+// Optionen beim Verbindungsaufbau: BusyBox telnetd DO ECHO, DO NAWS, WILL ECHO, WILL SGA; telnetd unter Linux
+// (netkit/inetutils) DO TTYPE, DO TSPEED, DO XDISPLOC, DO NEW-ENVIRON, dann WILL ECHO, WILL SGA.
+var (
+	sensorTelIAC      = []byte{255, 253, 1, 255, 253, 31, 255, 251, 1, 255, 251, 3}
+	sensorTelIACLinux = []byte{255, 253, 24, 255, 253, 32, 255, 253, 35, 255, 253, 39, 255, 251, 1, 255, 251, 3}
+)
+
+// sensorTelGreeting liefert Optionen, Begruessung (vor dem ersten Prompt) und Prompt zum Profil.
+func sensorTelGreeting(persona string, id *sensorIdent) (iac []byte, greet, prompt string) {
+	prompt = id.telnetHost(persona) + " login: "
+	if persona == PersonaLinux {
+		return sensorTelIACLinux, "\r\n" + id.osIssue() + "\r\n", prompt
+	}
+	return sensorTelIAC, "\r\n", prompt
+}
 
 const (
 	telIAC  = 255
@@ -30,7 +43,9 @@ const (
 
 func (s *Sensor) handleTelnet(c *trapConn) {
 	_ = c.SetDeadline(time.Now().Add(sensorTelTimeout))
-	if _, err := c.Write(append(append([]byte{}, sensorTelIAC...), "\r\n"+sensorTelPrompt...)); err != nil {
+	p := s.personas()
+	iac, greet, prompt := sensorTelGreeting(p.of(c.t.key), p.id)
+	if _, err := c.Write(append(append([]byte{}, iac...), greet+prompt...)); err != nil {
 		return
 	}
 	tl := &sensorTelLine{br: bufio.NewReaderSize(c, 512), w: c}
@@ -48,7 +63,7 @@ func (s *Sensor) handleTelnet(c *trapConn) {
 			if empty++; empty > 5 {
 				break
 			}
-			if _, err := io.WriteString(c, sensorTelPrompt); err != nil {
+			if _, err := io.WriteString(c, prompt); err != nil {
 				break
 			}
 			continue
@@ -65,7 +80,7 @@ func (s *Sensor) handleTelnet(c *trapConn) {
 		time.Sleep(sensorTelDelay)
 		msg := "\r\nLogin incorrect\r\n"
 		if attempts < sensorTelTries {
-			msg += sensorTelPrompt
+			msg += prompt
 		}
 		if _, err := io.WriteString(c, msg); err != nil {
 			break

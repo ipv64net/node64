@@ -3598,7 +3598,9 @@
       "report": "Report to ipv64",
       "report_hint": "Every 10 minutes, source IPs, kinds, ports, credentials from the honeypot (user name and password), paths, user agents and the start of payloads are sent to ipv64 – never your own IP and no sources from private or reserved networks. From real logs (log sensor, syslog) only IP, kind, service, port, count and rule are sent. The data feeds into the v64 blocklist.",
       "report_nokey": "This needs the node's central ipv64 API key.",
-      "report_key_link": "Enter API key"
+      "report_key_link": "Enter API key",
+      "hostname": "Trap hostname",
+      "hostname_hint": "Shown in the Telnet prompt, the TLS certificate, page titles (Proxmox VE, NAS) and by Elasticsearch. Empty = generated from the sensor ID, different on every node and stable across restarts (here: {name})."
     },
     "clear": {
       "title": "Delete data",
@@ -3644,7 +3646,10 @@
       "syslog_port": "Syslog port: empty or 0 (off) or 1–65535.",
       "syslog_trap": "Port {v1} is already used by the trap service {v2}.",
       "syslog_allow": "\"{v1}\" is not an IP address or network (CIDR).",
-      "syslog_allow_many": "At most {v1} allowed senders."
+      "syslog_allow_many": "At most {v1} allowed senders.",
+      "hostname": "“{v1}” is not a valid hostname (a–z, 0–9, hyphen, dots between labels).",
+      "persona": "There is no profile “{v2}” for “{v1}”.",
+      "persona_many": "At most {v1} profiles."
     },
     "report": {
       "title": "Reporting to ipv64",
@@ -3845,7 +3850,10 @@
         "docker": "Docker API without TLS",
         "elastic": "Elasticsearch API",
         "kubelet": "Kubernetes kubelet API"
-      }
+      },
+      "persona": "Profile",
+      "persona_default": "(default)",
+      "persona_hint": "The profile decides what a trap pretends to be: banner, headers, responses and certificate (e.g. nginx, Proxmox VE, OpenSSH Ubuntu, Dropbear, MariaDB). The default for port and decoy is preselected; every profile captures the same data."
     },
     "geo": {
       "title": "Origin by country",

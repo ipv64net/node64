@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"fmt"
+	"html"
 	"io"
 	"log"
 	"mime"
@@ -17,12 +17,12 @@ import (
 )
 
 // HTTP/HTTPS-Falle: neutrale Login-Koeder (ohne Markennamen, Logos oder Nachbau echter Seiten) nach Pfad-Gruppen,
-// jede Anfrage wird eingeordnet (sensor_classify.go) und gemeldet. Antworten wie ein ueblicher Webserver.
+// jede Anfrage wird eingeordnet (sensor_classify.go) und gemeldet. Antworten wie der Webserver bzw. die Anwendung
+// des Profils (sensor_http_persona.go).
 const (
 	sensorHTTPHeader  = 8 << 10  // Kopfzeilen
 	sensorHTTPBody    = 16 << 10 // gelesener Body
 	sensorHTTPTimeout = 15 * time.Second
-	sensorHTTPServer  = "nginx"
 )
 
 type sensorConnKey struct{}
@@ -55,7 +55,13 @@ func (s *Sensor) httpServer(t *trapService, cert *tls.Certificate) *http.Server 
 		},
 	}
 	if cert != nil {
-		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*cert}, NextProtos: []string{"http/1.1"}}
+		// Zertifikat zum aktuellen Profil (Apply aendert es ohne neuen Port), sonst das beim Oeffnen erzeugte
+		srv.TLSConfig = &tls.Config{NextProtos: []string{"http/1.1"}, GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+			if c, err := s.httpsCert(t.key); err == nil {
+				return c, nil
+			}
+			return cert, nil
+		}}
 	}
 	srv.SetKeepAlivesEnabled(false)
 	return srv
@@ -96,9 +102,16 @@ func (s *Sensor) serveHTTP(t *trapService, w http.ResponseWriter, r *http.Reques
 	kind, tags := sensorClassify(r, body)
 	owasp := strings.HasPrefix(kind, KindHTTPExploit+":")
 	user, pass, isLogin := sensorHTTPCreds(r, body)
+	ps := s.personas()
+	persona := ps.of(t.key)
+	web := sensorWebServer(persona)
 	page := ""
 	if !owasp && kind != KindHTTPExploit {
-		page = sensorPageFor(t.key.Page, r.URL.Path)
+		if web {
+			page = sensorPageFor(t.key.Page, r.URL.Path)
+		} else if sensorHTTPAppMain(persona, r.URL.Path) {
+			page = sensorPersonaPage[persona]
+		}
 	}
 	switch {
 	case isLogin && !owasp:
@@ -107,6 +120,9 @@ func (s *Sensor) serveHTTP(t *trapService, w http.ResponseWriter, r *http.Reques
 		kind = KindHTTPScan
 	}
 	dev := sensorDeviceFor(r)
+	if dev != nil && !sensorDeviceFits(dev, persona) {
+		dev = nil
+	}
 	if dev != nil && !owasp {
 		page = ""
 		tags = append(tags, "device="+dev.name)
@@ -120,27 +136,21 @@ func (s *Sensor) serveHTTP(t *trapService, w http.ResponseWriter, r *http.Reques
 	}
 
 	h := w.Header()
-	h.Set("Server", sensorHTTPServer)
+	sensorHTTPHeaders(h, persona, ps.id)
 	switch {
-	case dev != nil && !owasp:
+	case dev != nil && !owasp && persona != PersonaWebmin: // Webmin: Login-Seite der Anwendung
 		dev.reply(w, isLogin)
+	case !web:
+		sensorHTTPApp(w, r, persona, ps.id, isLogin)
 	case page != "":
 		h.Set("Content-Type", "text/html; charset=UTF-8")
 		h.Set("Cache-Control", "no-store")
 		_, _ = io.WriteString(w, sensorPageHTML(page, isLogin))
 	case strings.HasPrefix(r.URL.Path, "/."):
-		sensorHTTPError(w, http.StatusForbidden)
+		sensorHTTPError(w, r, persona, ps.id, t.key.Port, http.StatusForbidden)
 	default:
-		sensorHTTPError(w, http.StatusNotFound)
+		sensorHTTPError(w, r, persona, ps.id, t.key.Port, http.StatusNotFound)
 	}
-}
-
-// sensorHTTPError schreibt eine schlichte Fehlerseite wie ein ueblicher Webserver.
-func sensorHTTPError(w http.ResponseWriter, code int) {
-	w.Header().Set("Content-Type", "text/html")
-	w.WriteHeader(code)
-	st := fmt.Sprintf("%d %s", code, http.StatusText(code))
-	_, _ = fmt.Fprintf(w, "<html>\r\n<head><title>%s</title></head>\r\n<body>\r\n<center><h1>%s</h1></center>\r\n<hr><center>%s</center>\r\n</body>\r\n</html>\r\n", st, st, sensorHTTPServer)
 }
 
 // Feldnamen fuer Zugangsdaten (WordPress, phpMyAdmin, uebliche Formulare, Router/Firewalls/NAS – sensor_devices.go).
@@ -262,6 +272,17 @@ func sensorPageHTML(page string, failed bool) string {
 	case "admin":
 		title = "Administration"
 	}
+	return sensorFormHTML(title, title, title, action, userLabel, uf, pf, extra, failed)
+}
+
+// sensorLoginHTML: schlichte Anmeldeseite einer Anwendung (Titel wie das Original, Formular neutral).
+func sensorLoginHTML(title, button, action, uf, pf, extra string, failed bool) string {
+	return sensorFormHTML(title, button, button, action, "Username", uf, pf, extra, failed)
+}
+
+// sensorFormHTML baut das neutrale Formular (Titel, Ueberschrift, Knopf, Ziel, Feldnamen).
+func sensorFormHTML(title, heading, button, action, userLabel, uf, pf, extra string, failed bool) string {
+	title, heading = html.EscapeString(title), html.EscapeString(heading)
 	msg := ""
 	if failed {
 		msg = `<p class="err">Invalid username or password.</p>`
@@ -279,12 +300,12 @@ button{margin-top:16px;padding:8px 16px}.err{color:#b00}</style>
 </head>
 <body>
 <form method="post" action="` + action + `">
-<h1>` + title + `</h1>
+<h1>` + heading + `</h1>
 ` + msg + `
 <label for="u">` + userLabel + `</label><input type="text" id="u" name="` + uf + `" autocomplete="username">
 <label for="p">Password</label><input type="password" id="p" name="` + pf + `" autocomplete="current-password">
 ` + extra + `
-<button type="submit">` + title + `</button>
+<button type="submit">` + button + `</button>
 </form>
 </body>
 </html>

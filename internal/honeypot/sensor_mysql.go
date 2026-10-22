@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// MySQL-Falle (Stufe 2, Port 3306): Server-Greeting (Protokoll 10, 20 Byte Zufalls-Salt, Plugin
-// mysql_native_password, ohne SSL/Kompression/LOCAL INFILE), liest die Handshake-Response (Username, Datenbank,
+// MySQL-Falle (Stufe 2, Port 3306): Server-Greeting je Profil (Protokoll 10, 20 Byte Zufalls-Salt, MySQL 8.0 mit
+// caching_sha2_password oder MariaDB mit mysql_native_password, ohne SSL/Kompression/LOCAL INFILE), liest die Handshake-Response (Username, Datenbank,
 // Client-Attribute) und wechselt per AuthSwitchRequest auf mysql_clear_password. Antwortet der Client im Klartext,
 // wird das Passwort erfasst, sonst bleibt es leer (Detail "hash"); gemeldet als db:bruteforce, Antwort immer
 // ERR 1045. Eine SSL-Anfrage des Clients wird als db:bruteforce mit Detail "tls" gemeldet und getrennt (kein TLS).
@@ -19,11 +19,10 @@ func init() {
 }
 
 const (
-	sensorMySQLMax     = 4096     // Laenge eines Pakets vom Client
-	sensorMySQLVersion = "8.0.36" // wie ein verbreiteter Server, ohne Zusatz
-	sensorMySQLCaps    = 0x01fff75f
-	sensorMySQLNative  = "mysql_native_password"
-	sensorMySQLClear   = "mysql_clear_password"
+	sensorMySQLMax    = 4096 // Laenge eines Pakets vom Client
+	sensorMySQLNative = "mysql_native_password"
+	sensorMySQLSHA2   = "caching_sha2_password" // Standard ab MySQL 8.0
+	sensorMySQLClear  = "mysql_clear_password"
 
 	sensorMySQLCapDB      = 0x8      // CLIENT_CONNECT_WITH_DB
 	sensorMySQLCap41      = 0x200    // CLIENT_PROTOCOL_41
@@ -42,7 +41,8 @@ func (s *Sensor) handleMySQL(c *trapConn) {
 	for i := range salt {
 		salt[i] = byte(0x21 + rand.N(94)) // druckbar, ohne NUL
 	}
-	if d.write(sensorMySQLPacket(0, sensorMySQLGreeting(10+rand.Uint32N(90000), salt))) != nil {
+	p := s.personas()
+	if d.write(sensorMySQLPacket(0, sensorMySQLGreeting(sensorMySQLProfileFor(p.of(c.t.key), p.id), 10+rand.Uint32N(90000), salt))) != nil {
 		return
 	}
 	seq, body, bad := d.mysqlRead()
@@ -144,22 +144,52 @@ func (d *sensorDB) mysqlRead() (seq byte, body []byte, bad string) {
 	return h[3], body, ""
 }
 
+// sensorMySQLProfile ist das Greeting eines Profils: Version, Faehigkeiten (ohne SSL, Kompression und LOCAL INFILE),
+// Zeichensatz und Auth-Plugin passend zur Version.
+type sensorMySQLProfile struct {
+	version string
+	caps    uint32
+	charset byte
+	plugin  string
+	ext     uint32 // MariaDB: erweiterte Faehigkeiten in den letzten 4 Fuellbytes
+}
+
+// sensorMySQLProfileFor: MySQL 8.0 wie das offizielle Image (caching_sha2_password, utf8mb4_0900_ai_ci), MariaDB
+// 10.11 als Paket der Distribution bzw. 11.4 wie das offizielle Image (mysql_native_password, utf8mb4_general_ci,
+// Version mit "5.5.5-" davor wie bei MariaDB ueblich). Patch-Stand je Sensor.
+func sensorMySQLProfileFor(persona string, id *sensorIdent) sensorMySQLProfile {
+	switch persona {
+	case PersonaMariaDB:
+		v := "5.5.5-10.11." + id.choose("mariadb", "6", "11", "13", "14") + "-MariaDB-0+deb12u1"
+		if id.ubuntu() {
+			v = "5.5.5-10.11." + id.choose("mariadb", "8", "13") + "-MariaDB-0ubuntu0.24.04.1"
+		}
+		return sensorMySQLProfile{version: v, caps: 0x81bff75e, charset: 45, plugin: sensorMySQLNative, ext: 0x1d}
+	case PersonaMariaDB11:
+		return sensorMySQLProfile{version: "5.5.5-11.4." + id.choose("mariadb11", "3", "4", "5", "7") + "-MariaDB-ubu2404", caps: 0x81bff75e,
+			charset: 45, plugin: sensorMySQLNative, ext: 0x1d}
+	}
+	return sensorMySQLProfile{version: "8.0." + id.choose("mysql", "36", "37", "39", "40", "41", "42", "43"), caps: 0xdbfff75f, charset: 255,
+		plugin: sensorMySQLSHA2}
+}
+
 // sensorMySQLGreeting baut das Server-Greeting (Protokoll 10).
-func sensorMySQLGreeting(id uint32, salt []byte) []byte {
-	b := append([]byte{10}, sensorMySQLVersion...)
+func sensorMySQLGreeting(pr sensorMySQLProfile, id uint32, salt []byte) []byte {
+	b := append([]byte{10}, pr.version...)
 	b = append(b, 0)
 	b = binary.LittleEndian.AppendUint32(b, id)
 	b = append(b, salt[:8]...)
 	b = append(b, 0)
-	b = binary.LittleEndian.AppendUint16(b, uint16(sensorMySQLCaps&0xffff))
-	b = append(b, 255)                            // utf8mb4_0900_ai_ci
+	b = binary.LittleEndian.AppendUint16(b, uint16(pr.caps&0xffff))
+	b = append(b, pr.charset)
 	b = binary.LittleEndian.AppendUint16(b, 0x02) // SERVER_STATUS_AUTOCOMMIT
-	b = binary.LittleEndian.AppendUint16(b, uint16(sensorMySQLCaps>>16))
+	b = binary.LittleEndian.AppendUint16(b, uint16(pr.caps>>16))
 	b = append(b, byte(len(salt)+1))
-	b = append(b, make([]byte, 10)...)
+	b = append(b, make([]byte, 6)...)
+	b = binary.LittleEndian.AppendUint32(b, pr.ext)
 	b = append(b, salt[8:]...)
 	b = append(b, 0)
-	b = append(b, sensorMySQLNative...)
+	b = append(b, pr.plugin...)
 	return append(b, 0)
 }
 

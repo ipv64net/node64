@@ -194,6 +194,7 @@ type catRow struct {
 	Service string
 	Port    string
 	Page    string
+	Persona string // Dienst-Profil ("" = Standard fuer Port und Koeder)
 }
 
 // catForm ist der Katalog im Formular: Rows in Katalog-Reihenfolge, Extras = eigene Eintraege.
@@ -265,15 +266,42 @@ func catFormFrom(sel []Service) catForm {
 	return f
 }
 
-// parseCatForm liest den Katalog aus dem Formular: je Zeile on_<i>, port_<i>, page_<i>; eigene Zeilen xsvc_<j>,
-// xport_<j>, xpage_<j> (Anzahl in xn). Der Dienst einer Zeile kommt aus dem Katalog, nicht aus dem Formular.
+// withPersonas traegt die eingestellten Dienst-Profile (Schluessel dienst:port) in die Zeilen ein.
+func (f *catForm) withPersonas(set map[string]string) {
+	for _, rows := range [][]catRow{f.Rows, f.Extras} {
+		for i := range rows {
+			if p, err := strconv.Atoi(rows[i].Port); err == nil {
+				rows[i].Persona = set[PersonaKey(rows[i].Service, p)]
+			}
+		}
+	}
+}
+
+// personas liefert die Profile der eingeschalteten Zeilen, die vom Standard abweichen (nil = alle Standard).
+func (f catForm) personas() map[string]string {
+	out := map[string]string{}
+	for _, r := range append(append([]catRow(nil), f.Rows...), f.Extras...) {
+		p, err := strconv.Atoi(r.Port)
+		if !r.On || err != nil || !personaValid(r.Service, r.Persona) || r.Persona == DefaultPersona(r.Service, p, r.Page) {
+			continue
+		}
+		out[PersonaKey(r.Service, p)] = r.Persona
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// parseCatForm liest den Katalog aus dem Formular: je Zeile on_<i>, port_<i>, page_<i>, persona_<i>; eigene Zeilen
+// xsvc_<j>, xport_<j>, xpage_<j>, xpersona_<j> (Anzahl in xn). Der Dienst einer Zeile kommt aus dem Katalog.
 func parseCatForm(r *http.Request) catForm {
 	cat := Catalog()
 	f := catForm{Rows: make([]catRow, len(cat))}
 	for i, e := range cat {
 		n := strconv.Itoa(i)
 		f.Rows[i] = catRow{On: r.PostFormValue("on_"+n) != "", Service: e.Service, Port: strings.TrimSpace(r.PostFormValue("port_" + n)),
-			Page: strings.ToLower(strings.TrimSpace(r.PostFormValue("page_" + n)))}
+			Page: strings.ToLower(strings.TrimSpace(r.PostFormValue("page_" + n))), Persona: strings.ToLower(strings.TrimSpace(r.PostFormValue("persona_" + n)))}
 		if e.Service != SvcHTTP && e.Service != SvcHTTPS {
 			f.Rows[i].Page = ""
 		}
@@ -282,7 +310,7 @@ func parseCatForm(r *http.Request) catForm {
 	for j := 0; j < min(xn, catMaxExtras); j++ {
 		n := strconv.Itoa(j)
 		x := catRow{On: true, Service: strings.ToLower(strings.TrimSpace(r.PostFormValue("xsvc_" + n))), Port: strings.TrimSpace(r.PostFormValue("xport_" + n)),
-			Page: strings.ToLower(strings.TrimSpace(r.PostFormValue("xpage_" + n)))}
+			Page: strings.ToLower(strings.TrimSpace(r.PostFormValue("xpage_" + n))), Persona: strings.ToLower(strings.TrimSpace(r.PostFormValue("xpersona_" + n)))}
 		if x.Service != "" || x.Port != "" {
 			f.Extras = append(f.Extras, x)
 		}
@@ -397,12 +425,26 @@ type CatalogItem struct {
 	Description string   `json:"description,omitempty"`
 	Profiles    []string `json:"profiles,omitempty"`
 	On          bool     `json:"on"`
+	// Dienst-Profil: eingestellt bzw. Standard, Standard fuer Port und Koeder, Auswahl (leer = keine)
+	Persona        string   `json:"persona,omitempty"`
+	DefaultPersona string   `json:"default_persona,omitempty"`
+	Personas       []string `json:"personas,omitempty"`
 	CatalogState
+}
+
+// personaItem fuellt die Profil-Felder einer Zeile der API.
+func (it *CatalogItem) personaItem(persona string) {
+	it.DefaultPersona, it.Personas = DefaultPersona(it.Service, it.Port, it.Page), PersonasFor(it.Service)
+	it.Persona = persona
+	if it.Persona == "" {
+		it.Persona = it.DefaultPersona
+	}
 }
 
 // CatalogInfo ist die Antwort von GET /api/honeypot/catalog.
 type CatalogInfo struct {
 	Profile  string               `json:"profile"`  // gespeichertes Profil (custom = eigene Auswahl)
+	Hostname string               `json:"hostname"` // Hostname der Fallen (eingestellt oder erzeugt)
 	Running  bool                 `json:"running"`  // Modul laeuft (sonst kein Zustand offen/Fehler)
 	Entries  []CatalogItem        `json:"entries"`  // Katalog
 	Extra    []CatalogItem        `json:"extra"`    // ausgewaehlte Dienste ausserhalb des Katalogs (z. B. ssh 2200)
@@ -416,11 +458,12 @@ type CatalogInfo struct {
 func (m *Module) catalogInfo(ctx context.Context, tr func(string) string) CatalogInfo {
 	c := m.loadConfig(ctx)
 	f := catFormFrom(effectiveServices(c))
+	f.withPersonas(c.Personas)
 	st := m.catStates(ctx)
 	if tr == nil {
 		tr = func(k string) string { return k }
 	}
-	out := CatalogInfo{Profile: c.Profile, Running: m.running() != nil, Entries: []CatalogItem{}, Extra: []CatalogItem{}, Services: KnownServices(),
+	out := CatalogInfo{Profile: c.Profile, Hostname: m.ident(ctx, c).host, Running: m.running() != nil, Entries: []CatalogItem{}, Extra: []CatalogItem{}, Services: KnownServices(),
 		Pages: Pages, Groups: CatalogGroups, Presets: map[string][]Service{}}
 	for _, p := range []string{ProfileMinimal, ProfileStandard, ProfileFull} {
 		out.Presets[p] = Profiles[p]
@@ -428,14 +471,18 @@ func (m *Module) catalogInfo(ctx context.Context, tr func(string) string) Catalo
 	for i, e := range Catalog() {
 		r := f.Rows[i]
 		p, _ := strconv.Atoi(r.Port)
-		out.Entries = append(out.Entries, CatalogItem{Service: e.Service, Port: p, DefaultPort: e.Port, Page: r.Page, Proto: e.Proto, Group: e.Group,
-			Description: tr(e.DescKey), Profiles: e.Profiles, On: r.On, CatalogState: st.state(e.Service, p)})
+		it := CatalogItem{Service: e.Service, Port: p, DefaultPort: e.Port, Page: r.Page, Proto: e.Proto, Group: e.Group,
+			Description: tr(e.DescKey), Profiles: e.Profiles, On: r.On, CatalogState: st.state(e.Service, p)}
+		it.personaItem(r.Persona)
+		out.Entries = append(out.Entries, it)
 	}
 	for _, r := range f.Extras {
 		p, _ := strconv.Atoi(r.Port)
 		s := Service{Service: r.Service, Port: p, Page: r.Page}
-		out.Extra = append(out.Extra, CatalogItem{Service: s.Service, Port: p, Page: s.Page, Proto: string(svcProto(s.Service)), Group: catalogGroup(s),
-			Description: tr(catalogDesc(s)), On: true, CatalogState: st.state(s.Service, p)})
+		it := CatalogItem{Service: s.Service, Port: p, Page: s.Page, Proto: string(svcProto(s.Service)), Group: catalogGroup(s),
+			Description: tr(catalogDesc(s)), On: true, CatalogState: st.state(s.Service, p)}
+		it.personaItem(r.Persona)
+		out.Extra = append(out.Extra, it)
 	}
 	return out
 }
@@ -451,7 +498,15 @@ type uiCatRow struct {
 	Web        bool // http/https: Koeder-Auswahl
 	Low        bool // Port unter 1024 (cap_net_bind_service)
 	CatalogState
-	OwnerName string
+	OwnerName  string
+	Personas   []uiPersona // Auswahl des Dienst-Profils (leer = keine)
+	PersonaSel string      // ausgewaehltes Profil (eingestellt oder Standard)
+}
+
+// uiPersona ist ein Eintrag der Profil-Auswahl.
+type uiPersona struct {
+	Key, Label string
+	Default    bool
 }
 
 // catView baut die Zeilen der Tabelle (Katalog und eigene Eintraege, dazu leere Zeilen zum Ergaenzen).
@@ -462,6 +517,14 @@ func (m *Module) catView(r *http.Request, f catForm, st catStates) (rows, extras
 			u.CatalogState = st.state(cr.Service, p)
 			u.Low = p > 0 && p < 1024
 			low = low || (u.Low && cr.On)
+			def := DefaultPersona(cr.Service, p, cr.Page)
+			u.PersonaSel = cr.Persona
+			if !personaValid(cr.Service, u.PersonaSel) {
+				u.PersonaSel = def
+			}
+			for _, k := range PersonasFor(cr.Service) {
+				u.Personas = append(u.Personas, uiPersona{Key: k, Label: PersonaLabels[k], Default: k == def})
+			}
 		}
 		if u.Owner != "" {
 			u.OwnerName = m.ownerName(r, u.Owner)

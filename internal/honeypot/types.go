@@ -126,6 +126,12 @@ type Config struct {
 	// Limits je Quell-IP gegen Ueberlast (0 = Standard).
 	MaxConnsPerIP int `json:"max_conns_per_ip,omitempty"` // gleichzeitig, Standard 8
 	MaxConnsTotal int `json:"max_conns_total,omitempty"`  // gleichzeitig, Standard 512
+	// Dienst-Profile (sensor_persona.go): je "dienst:port" ein Profil (fehlt = Standard fuer Port und Koeder) und
+	// der Hostname der Fallen ("" = aus dem Seed erzeugt). Seed = Sensor-Kennung (nicht gespeichert; "" = Datei
+	// sensor_id im Datenverzeichnis des Sensors, wie im Modus ohne Oberflaeche).
+	Personas map[string]string `json:"personas,omitempty"`
+	Hostname string            `json:"hostname,omitempty"`
+	Seed     string            `json:"-"`
 	// Log-Sensor und Syslog-Empfaenger (H5); leer = aus. Der Sensor (Fallen-Dienste) beachtet das Feld nicht.
 	Log LogConfig `json:"log,omitempty"`
 }

@@ -9,8 +9,16 @@ import (
 )
 
 func TestSensorDeviceLogins(t *testing.T) {
+	// Geraete mit eigenem Profil antworten auf dessen Port, die anderen auf dem Webserver (nginx)
 	p := sensorFreePort(t)
-	_, rec := sensorStart(t, Config{Services: []Service{{SvcHTTP, p, ""}}})
+	ports := map[string]int{"": p}
+	cfg := Config{Services: []Service{{SvcHTTP, p, ""}}, Personas: map[string]string{}}
+	for _, pe := range []string{PersonaPVE, PersonaHA, PersonaNAS, PersonaGrafana} {
+		ports[pe] = sensorFreePort(t)
+		cfg.Services = append(cfg.Services, Service{Service: SvcHTTP, Port: ports[pe]})
+		cfg.Personas[PersonaKey(SvcHTTP, ports[pe])] = pe
+	}
+	_, rec := sensorStart(t, cfg)
 	cl := &http.Client{Timeout: 5 * time.Second}
 	base := "http://" + sensorAddrOf(p)
 	form := map[string]string{"Content-Type": "application/x-www-form-urlencoded"}
@@ -22,17 +30,18 @@ func TestSensorDeviceLogins(t *testing.T) {
 		code       int
 		dev, user  string
 		pass       string
+		persona    string
 	}{
-		{"/api2/json/access/ticket", url.Values{"username": {"root@pam"}, "password": {"pve1"}}.Encode(), form, 401, "proxmox", "root@pam", "pve1"},
-		{"/auth/login_flow/abc", `{"username":"admin","password":"ha1","client_id":"x"}`, jsn, 200, "homeassistant", "admin", "ha1"},
-		{"/api/login", `{"username":"ubnt","password":"ubnt"}`, jsn, 400, "unifi", "ubnt", "ubnt"},
-		{"/webapi/auth.cgi", url.Values{"account": {"admin"}, "passwd": {"nas1"}}.Encode(), form, 200, "nas", "admin", "nas1"},
-		{"/webconsole/Controller", url.Values{"mode": {"151"}, "json": {`{"username":"admin","password":"fw1"}`}}.Encode(), form, 200, "firewall", "admin", "fw1"},
-		{"/cgi-bin/luci", url.Values{"luci_username": {"root"}, "luci_password": {"owrt"}}.Encode(), form, 403, "openwrt", "root", "owrt"},
-		{"/remote/logincheck", url.Values{"username": {"vpn"}, "credential": {"vpn1"}}.Encode(), form, 200, "sslvpn", "vpn", "vpn1"},
-		{"/login", `{"user":"admin","password":"graf1"}`, jsn, 401, "grafana", "admin", "graf1"},
+		{"/api2/json/access/ticket", url.Values{"username": {"root@pam"}, "password": {"pve1"}}.Encode(), form, 401, "proxmox", "root@pam", "pve1", PersonaPVE},
+		{"/auth/login_flow/abc", `{"username":"admin","password":"ha1","client_id":"x"}`, jsn, 200, "homeassistant", "admin", "ha1", PersonaHA},
+		{"/api/login", `{"username":"ubnt","password":"ubnt"}`, jsn, 400, "unifi", "ubnt", "ubnt", ""},
+		{"/webapi/auth.cgi", url.Values{"account": {"admin"}, "passwd": {"nas1"}}.Encode(), form, 200, "nas", "admin", "nas1", PersonaNAS},
+		{"/webconsole/Controller", url.Values{"mode": {"151"}, "json": {`{"username":"admin","password":"fw1"}`}}.Encode(), form, 200, "firewall", "admin", "fw1", ""},
+		{"/cgi-bin/luci", url.Values{"luci_username": {"root"}, "luci_password": {"owrt"}}.Encode(), form, 403, "openwrt", "root", "owrt", ""},
+		{"/remote/logincheck", url.Values{"username": {"vpn"}, "credential": {"vpn1"}}.Encode(), form, 200, "sslvpn", "vpn", "vpn1", ""},
+		{"/login", `{"user":"admin","password":"graf1"}`, jsn, 401, "grafana", "admin", "graf1", PersonaGrafana},
 	} {
-		code, _, _ := sensorGet(t, cl, "POST", base+c.path, "curl/8", c.body, c.hdr)
+		code, _, _ := sensorGet(t, cl, "POST", "http://"+sensorAddrOf(ports[c.persona])+c.path, "curl/8", c.body, c.hdr)
 		if code != c.code {
 			t.Fatalf("%s: %d, want %d", c.path, code, c.code)
 		}

@@ -37,7 +37,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.8.1"
+	version = "0.9.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -216,7 +216,7 @@ func (m *Module) Start(ctx context.Context) error {
 	go func() { defer m.wg.Done(); m.notifyLoop(lctx) }()
 	go func() { defer m.wg.Done(); m.rep.Run(lctx) }() // tut nichts, solange die Meldung aus ist
 	m.applyLocked(ctx)
-	bridgeStart(m.log, ls, m.sink) // Verbindung zu PROXY64 (bridge.go; PROXY64 nutzt sie nur mit eigenem Opt-in)
+	bridgeStart(m.log, ls, m.sink, m.seed(ctx)) // Verbindung zu PROXY64 (bridge.go; PROXY64 nutzt sie nur mit eigenem Opt-in)
 	m.log.Info("honeypot started", "services", len(m.Status()))
 	return nil
 }
@@ -281,6 +281,7 @@ func (m *Module) applyLocked(ctx context.Context) {
 	svcs, warns := m.resolve(ctx, cfg)
 	run := cfg.Config
 	run.Services = svcs
+	run.Seed = m.seed(ctx)
 	run.Log = LogConfig{} // Log-Sensor und Syslog laufen getrennt (unten)
 	logs := cfg.Log
 	if m.core.SettingOr(ctx, setConfig, "") == "" { // nie eingestellt: nichts oeffnen, bis die Auswahl gespeichert ist
@@ -304,6 +305,20 @@ func (m *Module) applyLocked(ctx context.Context) {
 	m.status, m.warnings = status, warns
 	m.logState, m.logErr = lst, logErr
 	m.mu.Unlock()
+}
+
+// seed liefert den Seed der Dienst-Profile: die Sensor-Kennung (stabil ueber Neustarts, je Node verschieden).
+func (m *Module) seed(ctx context.Context) string {
+	id, err := SensorIDFromSettings(ctx, m.core)
+	if err != nil {
+		m.log.Warn("honeypot: sensor id not saved, profiles vary until restart", "err", err)
+	}
+	return id
+}
+
+// ident liefert die Identitaet der Fallen (Hostname usw.) fuer die Oberflaeche.
+func (m *Module) ident(ctx context.Context, c ModuleConfig) *sensorIdent {
+	return newSensorPersonas(m.seed(ctx), c.Hostname, c.Personas).id
 }
 
 // syslogCheck fragt die Port-Verwaltung, ob UDP und TCP auf port frei sind (aktive Ports anderer Teile).
@@ -515,6 +530,13 @@ func (m *Module) validate(ctx context.Context, c *ModuleConfig) FieldErrors {
 	}
 	if c.Services == nil {
 		c.Services = []Service{}
+	}
+	for _, p := range PersonaProblems(&c.Config) {
+		key := "personas"
+		if strings.HasPrefix(p, "honeypot.err.hostname") {
+			key = "hostname"
+		}
+		errs[key] = strings.TrimPrefix(errs[key]+"\n"+p, "\n")
 	}
 	m.validateLog(ctx, c, errs)
 	if c.Profile != ProfileCustom {

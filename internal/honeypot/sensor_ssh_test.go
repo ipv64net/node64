@@ -27,7 +27,7 @@ func TestSensorSSHPassword(t *testing.T) {
 	_ = c.SetDeadline(time.Now().Add(5 * time.Second))
 	line, _ := bufio.NewReader(c).ReadString('\n')
 	c.Close()
-	if strings.TrimSpace(line) != sensorSSHBanner {
+	if b := strings.TrimSpace(line); !strings.HasPrefix(b, "SSH-2.0-OpenSSH_9.") || (!strings.Contains(b, " Debian-") && !strings.Contains(b, " Ubuntu-")) {
 		t.Fatalf("Banner %q", line)
 	}
 

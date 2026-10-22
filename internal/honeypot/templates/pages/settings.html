@@ -32,10 +32,11 @@
 					{{if $d.CatUnsaved}}<div class="alert alert-info small py-2"><i class="bi bi-info-circle"></i> {{.T "honeypot.cat.unsaved"}}</div>{{end}}
 					{{with index $d.Errors "profile"}}<div class="text-danger small">{{.}}</div>{{end}}
 					{{with index $d.Errors "services"}}<div class="alert alert-danger small py-2 mb-2" style="white-space:pre-line">{{.}}</div>{{end}}
+					{{with index $d.Errors "personas"}}<div class="alert alert-danger small py-2 mb-2" style="white-space:pre-line">{{.}}</div>{{end}}
 					<div class="table-responsive"><table class="table table-sm align-middle mb-1">
-						<thead><tr><th style="width:3rem">{{.T "honeypot.cat.on"}}</th><th>{{.T "honeypot.services.service"}}</th><th style="width:7.5rem">{{.T "honeypot.services.port"}}</th><th style="width:10rem">{{.T "honeypot.events.page"}}</th><th>{{.T "honeypot.services.state"}}</th></tr></thead>
+						<thead><tr><th style="width:3rem">{{.T "honeypot.cat.on"}}</th><th>{{.T "honeypot.services.service"}}</th><th style="width:7.5rem">{{.T "honeypot.services.port"}}</th><th style="width:10rem">{{.T "honeypot.events.page"}}</th><th style="width:11rem">{{.T "honeypot.cat.persona"}}</th><th>{{.T "honeypot.services.state"}}</th></tr></thead>
 						<tbody>{{range $d.CatRows}}
-							{{if .GroupStart}}<tr class="table-light"><th colspan="5" class="small text-body-secondary">{{$.T (printf "honeypot.cat.group.%s" .Group)}}</th></tr>{{end}}
+							{{if .GroupStart}}<tr class="table-light"><th colspan="6" class="small text-body-secondary">{{$.T (printf "honeypot.cat.group.%s" .Group)}}</th></tr>{{end}}
 							<tr>
 								<td><div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" role="switch" id="on_{{.Index}}" name="on_{{.Index}}" value="1"{{if .On}} checked{{end}}></div></td>
 								<td><label class="mb-0" for="on_{{.Index}}"><span class="font-monospace fw-semibold">{{.Service}}</span>{{if eq .Proto "udp"}} <span class="badge text-bg-secondary">UDP</span>{{end}}<span class="d-block small text-body-secondary">{{$.T .DescKey}}</span></label></td>
@@ -43,6 +44,9 @@
 								<td>{{if .Web}}<select class="form-select form-select-sm" style="min-width:8rem" name="page_{{.Index}}" aria-label="{{$.T "honeypot.events.page"}} {{.Service}}">
 									<option value="">{{$.T "honeypot.cat.page_auto"}}</option>
 									{{$p := .Page}}{{range $d.Pages}}<option value="{{.}}"{{if eq . $p}} selected{{end}}>{{.}}</option>{{end}}
+								</select>{{else}}<span class="text-body-secondary">–</span>{{end}}</td>
+								<td>{{if .Personas}}<select class="form-select form-select-sm" style="min-width:9rem" name="persona_{{.Index}}" aria-label="{{$.T "honeypot.cat.persona"}} {{.Service}}">
+									{{$ps := .PersonaSel}}{{range .Personas}}<option value="{{.Key}}"{{if eq .Key $ps}} selected{{end}}>{{.Label}}{{if .Default}} {{$.T "honeypot.cat.persona_default"}}{{end}}</option>{{end}}
 								</select>{{else}}<span class="text-body-secondary">–</span>{{end}}</td>
 								<td class="small">{{if eq .State "open"}}<span class="badge text-bg-success"><i class="bi bi-check-circle"></i> {{$.T "honeypot.services.open"}}</span>
 									{{else if eq .State "error"}}<span class="badge text-bg-danger"><i class="bi bi-x-circle"></i> {{$.T "honeypot.services.error"}}</span><div class="text-danger font-monospace text-break">{{.Error}}</div>{{if .Low}}<div class="text-warning-emphasis">{{$.T "honeypot.cat.low_hint"}}</div>{{end}}
@@ -59,7 +63,7 @@
 								<option value="">{{$.T "honeypot.cat.extra_pick"}}</option>
 								{{$s := .Service}}{{range $d.CatServices}}<option value="{{.}}"{{if eq . $s}} selected{{end}}>{{.}}</option>{{end}}
 							</select></td>
-							<td style="width:7.5rem"><input type="number" class="form-control form-control-sm" style="min-width:5.5rem" name="xport_{{.Index}}" min="1" max="65535" value="{{.Port}}" placeholder="2222" aria-label="{{$.T "honeypot.services.port"}}"></td>
+							<td style="width:7.5rem"><input type="hidden" name="xpersona_{{.Index}}" value="{{.Persona}}"><input type="number" class="form-control form-control-sm" style="min-width:5.5rem" name="xport_{{.Index}}" min="1" max="65535" value="{{.Port}}" placeholder="2222" aria-label="{{$.T "honeypot.services.port"}}"></td>
 							<td style="width:10rem">{{if .Web}}<select class="form-select form-select-sm" style="min-width:8rem" name="xpage_{{.Index}}" aria-label="{{$.T "honeypot.events.page"}}">
 								<option value="">{{$.T "honeypot.cat.page_auto"}}</option>
 								{{$p := .Page}}{{range $d.Pages}}<option value="{{.}}"{{if eq . $p}} selected{{end}}>{{.}}</option>{{end}}
@@ -73,6 +77,7 @@
 					</table></div>
 					<div class="form-text mt-0">{{.T "honeypot.cat.extra_hint"}}</div>
 					<div class="form-text">{{.T "honeypot.cat.profile_hint"}}</div>
+					<div class="form-text">{{.T "honeypot.cat.persona_hint"}}</div>
 					{{if $d.CatLow}}<div class="form-text"><i class="bi bi-shield-lock"></i> {{.T "honeypot.cat.low_hint"}}</div>{{end}}
 					<div class="alert alert-info small py-2 mt-2 mb-2">
 						<div class="fw-semibold mb-1"><i class="bi bi-lightbulb"></i> {{.T "honeypot.cat.node_title"}}{{.Doc "honeypot#ports"}}</div>
@@ -92,6 +97,12 @@
 					<div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle"></i> {{$.T "honeypot.ports.notes"}}{{$.Doc "honeypot#ports"}}</div>
 					<ul class="mb-0 ps-3">{{range .}}<li>{{if .Skipped}}{{$.T "honeypot.ports.skipped" "service" .Service "port" .Port "owner" .OwnerName}}{{else}}{{$.T "honeypot.ports.shared" "service" .Service "port" .Port "owner" .OwnerName}}{{end}}</li>{{end}}</ul>
 				</div>{{end}}
+				<div class="mb-3">
+					<label class="form-label" for="hostname">{{.T "honeypot.settings.hostname"}}</label>
+					<input type="text" class="form-control{{if index $d.Errors "hostname"}} is-invalid{{end}}" id="hostname" name="hostname" maxlength="253" value="{{$d.Cfg.Hostname}}" placeholder="{{$d.HostAuto}}" autocomplete="off" spellcheck="false">
+					{{with index $d.Errors "hostname"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "honeypot.settings.hostname_hint" "name" $d.HostAuto}}</div>
+				</div>
 				<div class="form-check mb-3">
 					<input class="form-check-input" type="checkbox" id="scan" name="scan" value="1"{{if $d.Cfg.Scan}} checked{{end}}>
 					<label class="form-check-label" for="scan">{{.T "honeypot.settings.scan"}}</label>{{.Doc "honeypot#port-scan"}}

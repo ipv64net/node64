@@ -296,6 +296,7 @@ type settingsData struct {
 	UIPorts     string // Ports der Oberflaeche ("" = unbekannt)
 	TextOpen    bool   // Textliste aufgeklappt (dort gespeichert)
 	ServiceList string // bekannte Dienste (Hinweis der Textliste)
+	HostAuto    string // erzeugter Hostname der Fallen (Platzhalter, wenn keiner eingestellt ist)
 
 	// Log-Sensor und Syslog (H5)
 	LogRows     []LogFile     // Zeilen des Formulars (eingestellte Dateien + leere Zeilen)
@@ -464,9 +465,13 @@ func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, err
 	_, key := m.api(r.Context())
 	d.KeySet, d.Report = key != "", m.rep.Status(r.Context())
 	catf := catFormFrom(effectiveServices(c))
+	catf.withPersonas(c.Personas)
 	if cf != nil {
 		catf = *cf
 	}
+	auto := c
+	auto.Hostname = ""
+	d.HostAuto = m.ident(r.Context(), auto).host
 	d.CatRows, d.CatExtras, d.CatLow = m.catView(r, catf, m.catStates(r.Context()))
 	d.CatServices, d.CatPresets, d.ServiceList = KnownServices(), catPresets, strings.Join(KnownServices(), ", ")
 	d.SavedAs, d.UIPorts = m.loadConfig(r.Context()).Profile, m.uiPorts(r.Context())
@@ -505,18 +510,23 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	case r.PostFormValue("use_text") != "": // Textliste (Erweitert) speichern
 		sel := parseServices(lines)
 		f := catFormFrom(sel)
+		f.withPersonas(c.Personas)
 		cf, textOpen = &f, true
 		selectionConfig(&c, sel)
 	case r.PostFormValue("catalog") != "": // Tabelle der Dienste
 		f := parseCatForm(r)
 		cf = &f
 		selectionConfig(&c, f.services())
+		c.Personas = f.personas()
 		lines = ""
 	default: // Formular ohne Tabelle (Profil und Textliste, z. B. aus Skripten)
 		c.Profile = r.PostFormValue("profile")
 		if c.Profile == ProfileCustom {
 			c.Services = parseServices(lines)
 		}
+	}
+	if _, ok := r.PostForm["hostname"]; ok {
+		c.Hostname = r.PostFormValue("hostname")
 	}
 	c.Scan = r.PostFormValue("scan") != ""
 	c.NotifyNew = r.PostFormValue("notify_new") != ""

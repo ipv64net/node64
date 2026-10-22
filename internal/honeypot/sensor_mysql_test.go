@@ -45,7 +45,7 @@ func sensorMySQLDial(t *testing.T, port int) (net.Conn, []byte) {
 	t.Helper()
 	c := sensorPGDial(t, port)
 	seq, g := sensorMySQLGet(t, c)
-	if seq != 0 || g[0] != 10 || !bytes.HasPrefix(g[1:], []byte(sensorMySQLVersion+"\x00")) {
+	if seq != 0 || g[0] != 10 || !bytes.HasPrefix(g[1:], []byte("8.0.")) { // Standardprofil MySQL 8.0
 		t.Fatalf("Greeting: %q", g)
 	}
 	r := &sensorMySQLReader{b: g[1:]}
@@ -62,7 +62,7 @@ func sensorMySQLDial(t *testing.T, port int) (net.Conn, []byte) {
 	salt = append(salt, r.skip(n-1-8)...)
 	r.skip(1)
 	plugin := r.cstr()
-	if r.bad || len(salt) != 20 || bytes.IndexByte(salt, 0) >= 0 || plugin != sensorMySQLNative ||
+	if r.bad || len(salt) != 20 || bytes.IndexByte(salt, 0) >= 0 || plugin != sensorMySQLSHA2 ||
 		caps&sensorMySQLCapPlugin == 0 || caps&sensorMySQLCap41 == 0 || caps&sensorMySQLCapSSL != 0 {
 		t.Fatalf("Greeting: salt %q plugin %q caps %x", salt, plugin, caps)
 	}

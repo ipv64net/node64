@@ -3598,7 +3598,9 @@
       "report": "An ipv64 melden",
       "report_hint": "Alle 10 Minuten werden Quell-IPs, Arten, Ports, Zugangsdaten aus dem Honeypot (Benutzername und Passwort), Pfade, User-Agents und der Anfang von Payloads an ipv64 übertragen – nie die eigene IP und keine Quellen aus privaten oder reservierten Netzen. Aus echten Logs (Log-Sensor, Syslog) gehen nur IP, Art, Dienst, Port, Anzahl und Regel. Die Daten fließen in die v64 Blocklist ein.",
       "report_nokey": "Dafür braucht die Node den zentralen ipv64-API-Key.",
-      "report_key_link": "API-Key eintragen"
+      "report_key_link": "API-Key eintragen",
+      "hostname": "Hostname der Fallen",
+      "hostname_hint": "Erscheint im Telnet-Prompt, im TLS-Zertifikat, in Seitentiteln (Proxmox VE, NAS) und bei Elasticsearch. Leer = aus der Sensor-Kennung erzeugt, auf jeder Node anders und über Neustarts gleich (hier: {name})."
     },
     "clear": {
       "title": "Daten löschen",
@@ -3644,7 +3646,10 @@
       "syslog_port": "Syslog-Port: leer bzw. 0 (aus) oder 1–65535.",
       "syslog_trap": "Port {v1} nutzt schon der Fallen-Dienst {v2}.",
       "syslog_allow": "„{v1}“ ist keine IP-Adresse und kein Netz (CIDR).",
-      "syslog_allow_many": "Höchstens {v1} erlaubte Absender."
+      "syslog_allow_many": "Höchstens {v1} erlaubte Absender.",
+      "hostname": "„{v1}“ ist kein gültiger Hostname (a–z, 0–9, Bindestrich, Punkte zwischen den Teilen).",
+      "persona": "Profil „{v2}“ gibt es für „{v1}“ nicht.",
+      "persona_many": "Höchstens {v1} Profile."
     },
     "report": {
       "title": "Meldung an ipv64",
@@ -3845,7 +3850,10 @@
         "docker": "Docker-API ohne TLS",
         "elastic": "Elasticsearch-API",
         "kubelet": "Kubernetes-Kubelet-API"
-      }
+      },
+      "persona": "Profil",
+      "persona_default": "(Standard)",
+      "persona_hint": "Das Profil bestimmt, als was sich eine Falle ausgibt: Banner, Kopfzeilen, Antworten und Zertifikat (z. B. nginx, Proxmox VE, OpenSSH Ubuntu, Dropbear, MariaDB). Vorausgewählt ist der Standard für Port und Köder; erfasst wird bei jedem Profil dasselbe."
     },
     "geo": {
       "title": "Herkunft nach Land",

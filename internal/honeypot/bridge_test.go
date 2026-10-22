@@ -38,7 +38,7 @@ func bridgeReset() { bridgeCounts.lastDecoy.Store(0) }
 func TestBridgeDecoy(t *testing.T) {
 	bridgeReset()
 	var c bridgeCapture
-	d := newBridgeDecoy(nil, c.sink)
+	d := newBridgeDecoy(nil, c.sink, "")
 
 	r := httptest.NewRequest(http.MethodPost, "/wp-login.php", strings.NewReader("log=admin&pwd=geheim"))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
