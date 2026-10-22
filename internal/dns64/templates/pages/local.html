@@ -1,0 +1,183 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><i class="bi bi-diagram-3 text-primary"></i> {{.T "dns64.local.title"}}{{.Doc "dns64#lokaler-dns"}}</h1>
+	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "dns64.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "dns64.listening" "addr" $d.Listen}}</span>{{end}}
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+{{if not $d.Running}}<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.not_running"}}{{if $d.Err}}<div class="small mt-1 font-monospace">{{$d.Err}}</div><div class="small mt-1">{{.T "dns64.retrying"}}</div>{{end}}</div>{{end}}
+<script type="application/json" id="dns64-data">{{$d.JS}}</script>
+<div class="row g-3" data-dns64-page="records">
+	<div class="col-xl-3">
+		<div class="card">
+			<div class="card-header"><i class="bi bi-diagram-3 text-primary"></i> {{.T "dns64.zones.title"}}{{.Doc "dns64#zonen"}}</div>
+			<div class="list-group list-group-flush small">
+				<a class="list-group-item list-group-item-action d-flex align-items-center{{if eq $d.Sel "*"}} active{{end}}" href="/dns64/local?zone=*"><i class="bi bi-list-ul me-2"></i><span class="me-auto">{{.T "dns64.local.all"}}</span><span class="badge text-bg-light">{{index $d.ZCount "*"}}</span></a>
+				{{range $d.Zones}}<a class="list-group-item list-group-item-action d-flex align-items-center{{if eq $d.Sel .Name}} active{{end}}{{if not .Enabled}} text-body-tertiary{{end}}" href="/dns64/local?zone={{.Name}}"><i class="bi bi-folder2 me-2"></i><span class="me-auto font-monospace text-break">{{.Name}}</span>{{if .Dynamic}}<i class="bi bi-arrow-repeat me-1" title="{{$.T "dns64.zones.dynamic"}}"></i>{{end}}<span class="badge text-bg-light">{{index $d.ZCount .Name}}</span></a>{{end}}
+				{{if index $d.ZCount "-"}}<a class="list-group-item list-group-item-action d-flex align-items-center{{if eq $d.Sel "-"}} active{{end}}" href="/dns64/local?zone=-"><i class="bi bi-question-circle me-2"></i><span class="me-auto">{{.T "dns64.local.no_zone"}}</span><span class="badge text-bg-light">{{index $d.ZCount "-"}}</span></a>{{end}}
+			</div>
+			<div class="card-body border-top">
+				<form method="post" action="/dns64/zones">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<label class="form-label small" for="z-new">{{.T "dns64.zones.add"}}</label>
+					<div class="input-group input-group-sm mb-1"><input type="text" class="form-control font-monospace" id="z-new" name="name" placeholder="home.lan" required maxlength="253"><button class="btn btn-outline-primary" type="submit" title="{{.T "dns64.records.add_btn"}}"><i class="bi bi-plus"></i></button></div>
+					<input type="hidden" name="authoritative" value="1"><input type="hidden" name="devices" value="1">
+					<div class="form-text">{{.T "dns64.zones.add_hint"}}</div>
+				</form>
+			</div>
+		</div>
+		{{if $d.DNames}}<div class="card mt-3">
+			<div class="card-header small"><i class="bi bi-laptop text-primary"></i> {{.T "dns64.zones.device_names"}}</div>
+			<div class="card-body small py-2">
+				{{range $d.DNames}}<div class="d-flex gap-2"><span class="font-monospace text-break me-auto">{{.Name}}</span><span class="font-monospace text-body-secondary">{{range $i, $ip := .IPs}}{{if $i}}, {{end}}{{$ip}}{{else}}{{$.T "dns64.zones.offline"}}{{end}}</span></div>{{end}}
+			</div>
+		</div>{{end}}
+		<div class="card mt-3">
+			<div class="card-body small text-body-secondary"><i class="bi bi-hdd-network"></i> {{.T "dns64.local.cluster_hint"}} <a href="/cluster">{{.T "dns64.local.cluster_link"}}</a></div>
+		</div>
+	</div>
+	<div class="col-xl-9">
+		{{with $d.SelZone}}<div class="card mb-3">
+			<div class="card-header d-flex flex-wrap align-items-center gap-2">
+				<span class="me-auto"><i class="bi bi-folder2-open text-primary"></i> {{$.T "dns64.zones.zone"}} <span class="font-monospace fw-semibold">{{.Name}}</span>
+					{{if .Authoritative}}<span class="badge text-bg-light" title="{{$.T "dns64.zones.auth_hint"}}">{{$.T "dns64.zones.auth_badge"}}</span>{{end}}
+					{{if .Devices}}<span class="badge text-bg-light" title="{{$.T "dns64.zones.devices_hint"}}"><i class="bi bi-laptop"></i> {{$.T "dns64.zones.devices_badge"}}</span>{{end}}
+					{{if not .Enabled}}<span class="badge text-bg-secondary">{{$.T "dns64.js.off"}}</span>{{end}}</span>
+				<form method="post" class="d-flex gap-1 m-0">
+					<input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="back" value="{{$d.Back}}">
+					<a class="btn btn-sm btn-outline-secondary" href="/dns64/zones/{{.ID}}/zonefile" title="{{$.T "dns64.zones.zonefile_export"}}"><i class="bi bi-file-earmark-arrow-down"></i> {{$.T "dns64.zones.zonefile"}}</a>
+					<button type="submit" class="btn btn-sm btn-outline-secondary" formaction="/dns64/zones/{{.ID}}/toggle" name="on" value="{{if .Enabled}}0{{else}}1{{end}}" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause{{else}}bi-play{{end}}"></i></button>
+					<button type="submit" class="btn btn-sm btn-outline-danger" formaction="/dns64/zones/{{.ID}}/delete" data-confirm="{{$.T "dns64.zones.delete_confirm" "name" .Name}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button>
+				</form>
+			</div>
+			<details class="card-body py-2">
+				<summary class="small text-body-secondary">{{$.T "dns64.zones.settings"}}</summary>
+				<form method="post" action="/dns64/zones/{{.ID}}/edit" class="mt-2">
+					<input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="back" value="{{$d.Back}}"><input type="hidden" name="name" value="{{.Name}}"><input type="hidden" name="from_settings" value="1">
+					<div class="row g-2 small">
+						<div class="col-md-6">
+							<div class="form-check"><input class="form-check-input" type="checkbox" id="zs-auth" name="authoritative" value="1"{{if .Authoritative}} checked{{end}}><label class="form-check-label" for="zs-auth">{{$.T "dns64.zones.auth"}}</label></div>
+							<div class="form-text mb-1">{{$.T "dns64.zones.auth_hint"}}</div>
+							<div class="form-check"><input class="form-check-input" type="checkbox" id="zs-dev" name="devices" value="1"{{if .Devices}} checked{{end}}><label class="form-check-label" for="zs-dev">{{$.T "dns64.zones.devices"}}</label></div>
+							<div class="form-text mb-1">{{$.T "dns64.zones.devices_hint"}}</div>
+							<div class="form-check"><input class="form-check-input" type="checkbox" id="zs-dyn" name="dynamic" value="1"{{if .Dynamic}} checked{{end}}><label class="form-check-label" for="zs-dyn">{{$.T "dns64.zones.dynamic"}}</label></div>
+							<div class="form-text mb-1">{{$.T "dns64.zones.dynamic_hint"}}</div>
+							<label class="form-label mb-0" for="zs-comment">{{$.T "dns64.records.comment"}}</label>
+							<input type="text" class="form-control form-control-sm" id="zs-comment" name="comment" maxlength="200" value="{{.Comment}}">
+						</div>
+						<div class="col-md-6">
+							<div class="row g-2">
+								<div class="col-6"><label class="form-label mb-0" for="zs-ttl">{{$.T "dns64.zones.ttl"}}</label><input type="number" class="form-control form-control-sm" id="zs-ttl" name="ttl" min="1" max="86400" value="{{.TTL}}"></div>
+								<div class="col-6"><label class="form-label mb-0" for="zs-min">{{$.T "dns64.zones.minimum"}}</label><input type="number" class="form-control form-control-sm" id="zs-min" name="minimum" min="1" max="86400" value="{{.Minimum}}"></div>
+								<div class="col-4"><label class="form-label mb-0" for="zs-ref">Refresh</label><input type="number" class="form-control form-control-sm" id="zs-ref" name="refresh" min="1" value="{{.Refresh}}"></div>
+								<div class="col-4"><label class="form-label mb-0" for="zs-ret">Retry</label><input type="number" class="form-control form-control-sm" id="zs-ret" name="retry" min="1" value="{{.Retry}}"></div>
+								<div class="col-4"><label class="form-label mb-0" for="zs-exp">Expire</label><input type="number" class="form-control form-control-sm" id="zs-exp" name="expire" min="1" value="{{.Expire}}"></div>
+								<div class="col-12"><label class="form-label mb-0" for="zs-mail">{{$.T "dns64.zones.hostmaster"}}</label><input type="email" class="form-control form-control-sm" id="zs-mail" name="hostmaster" value="{{.Hostmaster}}" placeholder="hostmaster@{{.Name}}"></div>
+							</div>
+						</div>
+					</div>
+					<button class="btn btn-primary btn-sm mt-2" type="submit"><i class="bi bi-check"></i> {{$.T "common.save"}}</button>
+				</form>
+			</details>
+			{{if .Dynamic}}<div class="card-body border-top small">
+				<div class="d-flex flex-wrap align-items-center gap-2 mb-2"><span class="fw-semibold"><i class="bi bi-arrow-repeat text-primary"></i> {{$.T "dns64.zones.dynamic_title"}}</span>{{$.Doc "dns64#dynamische-updates"}}
+					<form method="post" action="/dns64/zones/{{.ID}}/tsig" class="ms-auto m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="back" value="{{$d.Back}}">
+						<button class="btn btn-sm btn-outline-secondary" type="submit" data-confirm="{{$.T "dns64.zones.tsig_renew_confirm"}}"><i class="bi bi-key"></i> {{$.T "dns64.zones.tsig_renew"}}</button></form></div>
+				<div class="row g-2">
+					<div class="col-md-4"><div class="text-body-secondary">{{$.T "dns64.zones.tsig_server"}}</div><span class="font-monospace">{{if $d.Listen}}{{$d.Listen}}{{else}}–{{end}}</span></div>
+					<div class="col-md-4"><div class="text-body-secondary">{{$.T "dns64.zones.tsig_name"}}</div><span class="font-monospace">{{.TSIGName}}</span></div>
+					<div class="col-md-4"><div class="text-body-secondary">{{$.T "dns64.zones.tsig_alg"}}</div><span class="font-monospace">HMAC-SHA256</span></div>
+					<div class="col-12"><div class="text-body-secondary">{{$.T "dns64.zones.tsig_secret"}}</div>
+						<div class="input-group input-group-sm"><input type="password" class="form-control font-monospace" value="{{.TSIGSecret}}" readonly id="zs-secret" aria-label="{{$.T "dns64.zones.tsig_secret"}}">
+							<button class="btn btn-outline-secondary" type="button" data-reveal="zs-secret" title="{{$.T "dns64.zones.tsig_show"}}"><i class="bi bi-eye"></i></button>
+							<button class="btn btn-outline-secondary btn-copy" type="button" data-copy-text="{{.TSIGSecret}}" title="{{$.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div></div>
+					<div class="col-12"><div class="text-body-secondary">{{$.T "dns64.zones.tsig_nsupdate"}}</div>
+						<pre class="small bg-body-tertiary rounded p-2 mb-0">key "{{.TSIGName}}" {
+	algorithm hmac-sha256;
+	secret "…";
+};</pre></div>
+				</div>
+			</div>{{end}}
+		</div>{{end}}
+		<div class="card mb-3">
+			<div class="card-header"><i class="bi bi-plus-circle text-primary"></i> <span id="rec-title" data-edit="{{.T "dns64.records.edit"}}">{{.T "dns64.records.add"}}</span>{{.Doc "dns64#eigene-eintraege"}}</div>
+			<div class="card-body">
+				<form method="post" action="/dns64/records" id="rec-form" data-zone="{{with $d.SelZone}}{{.Name}}{{end}}">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="back" value="{{$d.Back}}">
+					{{with $d.SelZone}}<input type="hidden" name="zone" value="{{.Name}}">{{end}}
+					<div class="row g-2">
+						<div class="col-md-4"><label class="form-label" for="r-name">{{.T "common.name"}}</label>
+							{{with $d.SelZone}}<div class="input-group"><input type="text" class="form-control font-monospace" id="r-name" name="name" placeholder="nas" required maxlength="253" title="{{$.T "dns64.records.rel_hint"}}"><span class="input-group-text font-monospace small">.{{.Name}}</span></div>
+							{{else}}<input type="text" class="form-control font-monospace" id="r-name" name="name" placeholder="nas.home.lan" required maxlength="253">{{end}}</div>
+						<div class="col-md-2 col-4"><label class="form-label" for="r-type">{{.T "common.type"}}</label>
+							<select class="form-select" id="r-type" name="type">{{range $d.Types}}<option>{{.}}</option>{{end}}</select></div>
+						<div class="col-md-4 col-8"><label class="form-label" for="r-value">{{.T "dns64.records.value"}}</label>
+							<input type="text" class="form-control font-monospace" id="r-value" name="value" placeholder="192.168.1.10" required maxlength="2048"></div>
+						<div class="col-md-2"><label class="form-label" for="r-ttl">TTL</label>
+							<input type="number" class="form-control" id="r-ttl" name="ttl" min="1" max="86400" value="{{with $d.SelZone}}{{.TTL}}{{else}}300{{end}}"></div>
+					</div>
+					<div class="form-text mb-2" id="r-type-hint"></div>
+					<div class="row g-2 align-items-center">
+						<div class="col-md-5"><input type="text" class="form-control form-control-sm" id="r-comment" name="comment" maxlength="200" placeholder="{{.T "dns64.records.comment_ph"}}" aria-label="{{.T "dns64.records.comment"}}"></div>
+						<div class="col-md-7 small d-flex flex-wrap gap-3">
+							<div class="form-check" id="r-noptr-wrap"><input class="form-check-input" type="checkbox" id="r-noptr" name="no_ptr" value="1"><label class="form-check-label" for="r-noptr">{{.T "dns64.records.no_ptr"}}</label></div>
+							<div class="form-check"><input class="form-check-input" type="checkbox" id="r-local" name="local_only" value="1"><label class="form-check-label" for="r-local">{{.T "dns64.records.local_only"}}</label></div>
+						</div>
+					</div>
+					<div class="mt-2">
+						<button class="btn btn-primary" type="submit" id="rec-submit" data-edit="{{.T "common.save"}}"><i class="bi bi-plus"></i> <span>{{.T "dns64.records.add_btn"}}</span></button>
+						<button class="btn btn-outline-secondary d-none" type="button" id="rec-cancel">{{.T "common.cancel"}}</button>
+					</div>
+				</form>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-header d-flex flex-wrap align-items-center gap-2"><span><i class="bi bi-signpost-split text-primary"></i> {{.T "dns64.records.title"}} <span class="badge text-bg-light" id="rec-count">{{len $d.Records}}</span></span>
+				{{if $d.Records}}<input type="search" class="form-control form-control-sm ms-auto" style="max-width:14rem" id="rec-search" placeholder="{{.T "dns64.records.search"}}" aria-label="{{.T "dns64.records.search"}}">
+				<div class="dropdown"><button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-download"></i> {{.T "dns64.records.export"}}</button>
+					<ul class="dropdown-menu dropdown-menu-end">
+						<li><a class="dropdown-item" href="/dns64/records/export?format=hosts">{{.T "dns64.records.export_hosts"}}</a></li>
+						<li><a class="dropdown-item" href="/dns64/records/export?format=csv">CSV</a></li>
+						<li><a class="dropdown-item" href="/dns64/records/export?format=json">JSON</a></li>
+					</ul></div>{{end}}
+			</div>
+			{{if $d.Records}}<form method="post">
+				<input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="back" value="{{$d.Back}}">
+				<div class="table-responsive">
+					<table class="table table-sm table-hover align-middle mb-0 small">
+						<thead><tr><th class="ps-3">{{.T "common.name"}}</th><th>{{.T "common.type"}}</th><th>{{.T "dns64.records.value"}}</th><th class="text-end">TTL</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
+						<tbody>
+						{{range $d.Records}}<tr data-rec="{{.Name}} {{.Type}} {{.Value}} {{.Comment}}"{{if not .Enabled}} class="text-body-tertiary"{{end}}>
+							<td class="ps-3 text-break"><span class="font-monospace">{{.Name}}</span>{{if .Comment}}<div class="text-body-secondary">{{.Comment}}</div>{{end}}</td><td><span class="badge text-bg-light">{{.Type}}</span>{{if .NoPTR}} <span class="badge text-bg-light" title="{{$.T "dns64.records.no_ptr"}}">PTR <i class="bi bi-x"></i></span>{{end}}{{if .LocalOnly}} <span class="badge text-bg-light" title="{{$.T "dns64.records.local_only"}}"><i class="bi bi-pin-angle"></i></span>{{end}}{{if .Dynamic}} <span class="badge text-bg-light" title="{{$.T "dns64.records.dynamic"}}"><i class="bi bi-arrow-repeat"></i></span>{{end}}</td>
+							<td class="font-monospace text-break">{{.Value}}</td><td class="text-end">{{.TTL}}</td>
+							<td>{{if .Enabled}}<span class="badge text-bg-success">{{$.T "dns64.js.active"}}</span>{{else}}<span class="badge text-bg-secondary">{{$.T "dns64.js.off"}}</span>{{end}}</td>
+							<td class="text-end pe-3 text-nowrap">
+								<button type="button" class="btn btn-sm btn-outline-primary py-0" data-rec-edit="{{.ID}}" data-name="{{.Name}}" data-type="{{.Type}}" data-value="{{.Value}}" data-ttl="{{.TTL}}" data-comment="{{.Comment}}" data-noptr="{{if .NoPTR}}1{{end}}" data-local="{{if .LocalOnly}}1{{end}}" title="{{$.T "dns64.records.edit"}}"><i class="bi bi-pencil"></i></button>
+								<button type="submit" class="btn btn-sm btn-outline-secondary py-0" formaction="/dns64/records/{{.ID}}/toggle" name="on" value="{{if .Enabled}}0{{else}}1{{end}}" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause{{else}}bi-play{{end}}"></i></button>
+								<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/records/{{.ID}}/delete" data-confirm="{{$.T "dns64.records.delete_confirm" "name" .Name}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button>
+							</td>
+						</tr>{{end}}
+						</tbody>
+					</table>
+				</div>
+			</form>{{else}}<div class="card-body small text-body-secondary">{{.T "dns64.records.none"}}</div>{{end}}
+		</div>
+		<details class="card mt-3">
+			<summary class="card-header"><i class="bi bi-upload text-primary"></i> {{.T "dns64.records.import"}}{{.Doc "dns64#eigene-eintraege-import"}}</summary>
+			<div class="card-body">
+				<form method="post" action="/dns64/records/import" enctype="multipart/form-data">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="back" value="{{$d.Back}}">
+					{{with $d.SelZone}}<input type="hidden" name="zone" value="{{.Name}}">{{end}}
+					<textarea class="form-control font-monospace small mb-2" name="text" rows="4" placeholder="192.168.1.10  nas nas.home.lan&#10;name,type,value,ttl,comment&#10;$ORIGIN home.lan.&#10;nas  300 IN A 192.168.1.10"></textarea>
+					<input class="form-control form-control-sm mb-2" type="file" name="file" accept=".txt,.csv,.json,.hosts,.zone,.db,text/plain">
+					<div class="form-text mb-2">{{.T "dns64.records.import_hint"}}</div>
+					<button class="btn btn-outline-primary btn-sm" type="submit"><i class="bi bi-upload"></i> {{.T "dns64.records.import_btn"}}</button>
+				</form>
+			</div>
+		</details>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/dns64.js?v={{.Version}}"></script>{{end}}

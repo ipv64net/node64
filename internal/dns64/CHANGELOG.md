@@ -1,5 +1,23 @@
 # Änderungen – DNS64
 
+## 1.27.0 – 2026-10-22
+
+### Neu
+- Eigener Menüpunkt **„Lokaler DNS“** unter DNS64 (Reiter Zonen und Weiterleitungen); DNS64 selbst bleibt der
+  Werbeblocker. Die alten Adressen `/dns64/records` und `/dns64/forwards` leiten weiter.
+- Zonen-Ansicht (L5): Zonen links mit Zahl der Einträge, „Alle Einträge“ und „Ohne Zone“; Einträge der gewählten
+  Zone rechts, Name relativ zur Zone (`@` = die Zone selbst). Je Zone einstellbar: Standard-TTL, SOA (Refresh, Retry,
+  Expire, TTL für „nicht vorhanden“, verantwortliche Mail). Ein Netz wie `192.168.1.0/24` wird zur Rückwärtszone.
+- Zonendatei (L6): Export je Zone im BIND-Format (`$ORIGIN`, `$TTL`, SOA, NS, relative Namen, Kommentare); Import von
+  Zonendateien (z. B. aus Bind, Technitium, Windows-DNS) über denselben Import wie Hosts-Datei/CSV/JSON – SOA-Werte
+  gehen an die Zone, NS und nicht unterstützte Typen werden übersprungen.
+- Dynamische Updates nach RFC 2136 (L7): je Zone einschaltbar mit TSIG-Schlüssel (HMAC-SHA256, von der Node erzeugt,
+  erneuerbar). DHCP-Server wie pfSense, OPNsense oder Kea tragen Namen selbst ein (A, AAAA, CNAME, TXT, PTR, SRV, MX,
+  DHCID); Vorbedingungen und Löschen nach RFC, alles oder nichts. Ohne gültigen Schlüssel, außerhalb der Zone oder für
+  SOA/NS wird abgelehnt. Per Update angelegte Einträge sind markiert; der Schlüssel bleibt auf der Node (nie in API,
+  Export oder Cluster).
+- API: `GET /api/dns64/zones/{id}/zonefile`, `POST /api/dns64/records/import?zone=…` (auch Zonendateien).
+
 ## 1.26.0 – 2026-10-22
 
 ### Neu

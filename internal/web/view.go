@@ -294,6 +294,9 @@ func (s *Server) nav(r *http.Request) []NavItem {
 				NavItem{Key: "nav.proxmox", Path: "/healthchecks/proxmox", Icon: "bi-hdd-rack", Available: true, Enabled: m.Running, Sub: true})
 			items, placed = append(items, link), true
 		}
+		if m.Info.Path == "/dns64" && m.Enabled { // lokaler DNS-Server (Zonen, Weiterleitungen) unter DNS64
+			items = append(items, NavItem{Key: "nav.local_dns", Path: "/dns64/local", Icon: "bi-diagram-3", Available: true, Enabled: m.Running, Sub: true})
+		}
 	}
 	if !placed {
 		link.Sub = false

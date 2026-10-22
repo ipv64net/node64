@@ -65,6 +65,7 @@
     }
   },
   "nav": {
+    "local_dns": "Lokaler DNS",
     "plan": "Account-Klasse: {name}",
     "api_ok": "ipv64-API verbunden",
     "api_none": "ipv64-API nicht eingerichtet",
@@ -2867,7 +2868,37 @@
     "conflict_resolved": "Konflikt aufgelöst."
   },
   "dns64": {
+    "local": {
+      "title": "Lokaler DNS",
+      "all": "Alle Einträge",
+      "no_zone": "Ohne Zone",
+      "cluster_hint": "Zonen, Einträge und Weiterleitungen lassen sich mit anderen Nodes abgleichen (je Bereich einschaltbar).",
+      "cluster_link": "Zum Cluster"
+    },
     "zones": {
+      "add": "Zone anlegen",
+      "add_hint": "z. B. home.lan oder ein Netz wie 192.168.1.0/24 (Rückwärtszone)",
+      "zone": "Zone",
+      "settings": "Einstellungen der Zone (zuständig, Gerätenamen, TTL, SOA, dynamische Updates)",
+      "ttl": "Standard-TTL (s)",
+      "minimum": "TTL für „nicht vorhanden“ (s)",
+      "hostmaster": "Verantwortlich (Mail im SOA)",
+      "zonefile": "Zonendatei",
+      "zonefile_export": "Zonendatei herunterladen (BIND-Format)",
+      "delete_confirm": "Zone „{name}“ löschen? Die Einträge bleiben (unter „Ohne Zone“).",
+      "deleted": "Zone gelöscht.",
+      "dynamic": "Dynamische Updates (RFC 2136) mit TSIG-Schlüssel",
+      "dynamic_hint": "DHCP-Server wie pfSense, OPNsense oder Kea tragen Gerätenamen selbst ein (A, AAAA, PTR, TXT, DHCID …).",
+      "dynamic_title": "Dynamische Updates",
+      "tsig_server": "DNS-Server",
+      "tsig_name": "Schlüsselname",
+      "tsig_alg": "Algorithmus",
+      "tsig_secret": "Schlüssel (Secret)",
+      "tsig_show": "Anzeigen",
+      "tsig_nsupdate": "Für nsupdate/BIND (Secret einsetzen):",
+      "tsig_renew": "Neuer Schlüssel",
+      "tsig_renew_confirm": "Neuen Schlüssel erzeugen? Der alte gilt sofort nicht mehr.",
+      "tsig_renewed": "Neuer Schlüssel erzeugt – bitte im DHCP-Server eintragen.",
       "title": "Lokale Zonen",
       "edit": "Zone bearbeiten",
       "name": "Zone",
@@ -2929,6 +2960,7 @@
     "range_7d": "7 Tage",
     "err_domain": "Ungültiger Domainname",
     "tab": {
+      "zones": "Zonen",
       "forwards": "Weiterleitungen",
       "groups": "Gruppen",
       "overview": "Übersicht",
@@ -3167,6 +3199,8 @@
     "retrying": "Neuer Versuch jede Minute; Port oder Adresse lassen sich unter Einstellungen ändern.",
     "custom": "eigene",
     "records": {
+      "rel_hint": "Name relativ zur Zone, @ = die Zone selbst, mit Punkt am Ende = vollständiger Name",
+      "dynamic": "Per dynamischem Update eingetragen",
       "local_only": "Nur diese Node (im Cluster nicht abgleichen)",
       "edit": "Eintrag bearbeiten",
       "saved": "Eintrag gespeichert, gilt sofort.",
@@ -3297,6 +3331,8 @@
       "deleted": "Gruppe gelöscht."
     },
     "err": {
+      "zone_soa": "TTL- und SOA-Werte sind außerhalb des erlaubten Bereichs.",
+      "zone_mail": "Die Mail im SOA ist ungültig.",
       "zone_name": "Der Name der Zone ist ungültig.",
       "zone_dup": "Diese Zone gibt es schon.",
       "fwd_domain": "Die Domain ist ungültig.",

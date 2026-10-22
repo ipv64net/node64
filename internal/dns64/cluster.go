@@ -126,6 +126,12 @@ type clZone struct {
 	Devices       bool   `json:"devices"`
 	Comment       string `json:"comment,omitempty"`
 	Enabled       bool   `json:"enabled"`
+	TTL           int    `json:"ttl,omitempty"`
+	Refresh       int    `json:"refresh,omitempty"`
+	Retry         int    `json:"retry,omitempty"`
+	Expire        int    `json:"expire,omitempty"`
+	Minimum       int    `json:"minimum,omitempty"`
+	Hostmaster    string `json:"hostmaster,omitempty"`
 }
 
 type clForward struct {
@@ -222,7 +228,7 @@ func (m *Module) clCurrent(ctx context.Context, item string) (map[string]string,
 			return nil, err
 		}
 		for _, z := range zones {
-			out["z:"+z.Name] = jsonString(clZone{z.Name, z.Authoritative, z.Devices, z.Comment, z.Enabled})
+			out["z:"+z.Name] = jsonString(clZone{z.Name, z.Authoritative, z.Devices, z.Comment, z.Enabled, z.TTL, z.Refresh, z.Retry, z.Expire, z.Minimum, z.Hostmaster})
 		}
 	case ItemForwards:
 		fl, err := m.Forwards(ctx)
@@ -432,13 +438,15 @@ func (m *Module) clApplyZone(ctx context.Context, name string, data json.RawMess
 	if err := json.Unmarshal(data, &in); err != nil {
 		return err
 	}
+	nz := Zone{Name: in.Name, Authoritative: in.Authoritative, Devices: in.Devices, Comment: in.Comment, TTL: in.TTL, Refresh: in.Refresh,
+		Retry: in.Retry, Expire: in.Expire, Minimum: in.Minimum, Hostmaster: in.Hostmaster}
 	if cur == nil {
-		z, err := m.AddZone(ctx, Zone{Name: in.Name, Authoritative: in.Authoritative, Devices: in.Devices, Comment: in.Comment})
+		z, err := m.AddZone(ctx, nz)
 		if err != nil {
 			return err
 		}
 		cur = &z
-	} else if _, err := m.UpdateZone(ctx, cur.ID, Zone{Name: in.Name, Authoritative: in.Authoritative, Devices: in.Devices, Comment: in.Comment}); err != nil {
+	} else if _, err := m.UpdateZone(ctx, cur.ID, nz); err != nil {
 		return err
 	}
 	return m.SetZoneEnabled(ctx, cur.ID, in.Enabled)

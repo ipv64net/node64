@@ -1066,6 +1066,11 @@
           "local_only": {
             "type": "boolean",
             "description": "nur diese Node (im Cluster nie abgeglichen)"
+          },
+          "dynamic": {
+            "type": "boolean",
+            "readOnly": true,
+            "description": "per dynamischem Update angelegt"
           }
         },
         "required": [
@@ -5206,7 +5211,8 @@
           },
           "name": {
             "type": "string",
-            "example": "home.lan"
+            "example": "home.lan",
+            "description": "auch ein Netz wie 192.168.1.0/24 (wird zur Rückwärtszone)"
           },
           "authoritative": {
             "type": "boolean",
@@ -5225,6 +5231,41 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "ttl": {
+            "type": "integer",
+            "default": 300,
+            "description": "Standard-TTL neuer Einträge"
+          },
+          "refresh": {
+            "type": "integer",
+            "default": 3600
+          },
+          "retry": {
+            "type": "integer",
+            "default": 600
+          },
+          "expire": {
+            "type": "integer",
+            "default": 86400
+          },
+          "minimum": {
+            "type": "integer",
+            "default": 60,
+            "description": "TTL für „nicht vorhanden“"
+          },
+          "hostmaster": {
+            "type": "string",
+            "description": "Mail im SOA, leer = hostmaster.<zone>"
+          },
+          "dynamic": {
+            "type": "boolean",
+            "readOnly": true,
+            "description": "dynamische Updates (RFC 2136) an (auf der Seite einschaltbar)"
+          },
+          "tsig_name": {
+            "type": "string",
+            "readOnly": true
           }
         },
         "required": [
@@ -16928,7 +16969,7 @@
         "tags": [
           "DNS64"
         ],
-        "summary": "Eigene Einträge importieren (Hosts-Datei, CSV name,type,value,ttl,comment oder JSON; vorhandene bleiben)",
+        "summary": "Eigene Einträge importieren (Hosts-Datei, CSV, JSON oder Zonendatei im BIND-Format; vorhandene bleiben)",
         "requestBody": {
           "required": true,
           "content": {
@@ -16961,7 +17002,17 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "zone",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Zone für relative Namen einer Zonendatei ohne $ORIGIN"
+          }
+        ]
       }
     },
     "/dns64/records/export": {
@@ -17601,6 +17652,39 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/dns64/zones/{id}/zonefile": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Zonendatei der Zone (BIND-Format)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Zonendatei",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nicht gefunden"
           }
         }
       }

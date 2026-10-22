@@ -26,6 +26,17 @@ type Zone struct {
 	Comment       string    `json:"comment,omitempty"`
 	Enabled       bool      `json:"enabled"`
 	CreatedAt     time.Time `json:"created_at"`
+
+	TTL        int    `json:"ttl"`                  // Standard fuer neue Eintraege der Zone
+	Refresh    int    `json:"refresh"`              // SOA
+	Retry      int    `json:"retry"`                // SOA
+	Expire     int    `json:"expire"`               // SOA
+	Minimum    int    `json:"minimum"`              // SOA: TTL fuer "nicht vorhanden"
+	Hostmaster string `json:"hostmaster,omitempty"` // Mail im SOA, leer = hostmaster.<zone>
+
+	Dynamic    bool   `json:"dynamic"`             // dynamische Updates (RFC 2136) mit TSIG erlaubt
+	TSIGName   string `json:"tsig_name,omitempty"` // Name des Schluessels (ohne Punkt am Ende)
+	TSIGSecret string `json:"-"`                   // Schluessel (Base64), nie in API, Export oder Cluster
 }
 
 type zoneTable struct {
@@ -131,8 +142,22 @@ func (t *zoneTable) zoneFor(name string) (Zone, bool) {
 }
 
 func (t *zoneTable) soa(z Zone) dns.RR {
-	return &dns.SOA{Hdr: hdr(z.Name, dns.TypeSOA, zoneTTL), Ns: dns.Fqdn("ns." + z.Name), Mbox: dns.Fqdn("hostmaster." + z.Name),
-		Serial: t.serial, Refresh: 3600, Retry: 600, Expire: 86400, Minttl: zoneTTL}
+	return zoneSOA(z, t.serial)
+}
+
+// zoneSOA: SOA einer Zone (Nameserver ns.<zone>, Mail aus Hostmaster mit "." statt "@").
+func zoneSOA(z Zone, serial uint32) *dns.SOA {
+	mbox := "hostmaster." + z.Name
+	if z.Hostmaster != "" {
+		user, domain, _ := strings.Cut(z.Hostmaster, "@")
+		mbox = strings.ReplaceAll(user, ".", "\\.") + "." + domain
+	}
+	minimum := z.Minimum
+	if minimum <= 0 {
+		minimum = zoneTTL
+	}
+	return &dns.SOA{Hdr: hdr(z.Name, dns.TypeSOA, minimum), Ns: dns.Fqdn("ns." + z.Name), Mbox: dns.Fqdn(mbox),
+		Serial: serial, Refresh: uint32(z.Refresh), Retry: uint32(z.Retry), Expire: uint32(z.Expire), Minttl: uint32(minimum)}
 }
 
 // zoneAnswer beantwortet Namen lokaler Zonen (dnsserver.ZoneFunc); ok=false: weiter wie bisher.
@@ -238,7 +263,7 @@ func (m *Module) loadZones(ctx context.Context) error {
 
 // Zones liefert alle Zonen, nach Name sortiert.
 func (m *Module) Zones(ctx context.Context) ([]Zone, error) {
-	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, authoritative, devices, comment, enabled, created_at FROM dns64_zones ORDER BY name`)
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, authoritative, devices, comment, enabled, created_at, ttl, refresh, retry, expire, minimum, hostmaster, dynamic, tsig_name, tsig_secret FROM dns64_zones ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +272,7 @@ func (m *Module) Zones(ctx context.Context) ([]Zone, error) {
 	for rows.Next() {
 		var z Zone
 		var created string
-		if err := rows.Scan(&z.ID, &z.Name, &z.Authoritative, &z.Devices, &z.Comment, &z.Enabled, &created); err != nil {
+		if err := rows.Scan(&z.ID, &z.Name, &z.Authoritative, &z.Devices, &z.Comment, &z.Enabled, &created, &z.TTL, &z.Refresh, &z.Retry, &z.Expire, &z.Minimum, &z.Hostmaster, &z.Dynamic, &z.TSIGName, &z.TSIGSecret); err != nil {
 			return nil, err
 		}
 		z.CreatedAt, _ = time.Parse(time.RFC3339, created)
@@ -258,12 +283,33 @@ func (m *Module) Zones(ctx context.Context) ([]Zone, error) {
 
 func normalizeZone(z *Zone) error {
 	z.Name = strings.TrimPrefix(hostName(z.Name), "*.")
-	if !validName(z.Name) || strings.HasSuffix(z.Name, ".arpa") || z.Name == "arpa" {
+	if r, ok := reverseZone(z.Name); ok { // Netz -> Rueckwaertszone
+		z.Name = r
+	}
+	if !validName(z.Name) || z.Name == "arpa" || z.Name == "in-addr.arpa" || z.Name == "ip6.arpa" {
 		return errCfg("err_zone_name")
 	}
 	z.Comment = strings.TrimSpace(z.Comment)
 	if len(z.Comment) > 200 {
 		return errCfg("err_comment")
+	}
+	for _, v := range []struct {
+		p        *int
+		def, max int
+	}{{&z.TTL, 300, 86400}, {&z.Refresh, 3600, 604800}, {&z.Retry, 600, 604800}, {&z.Expire, 86400, 2419200}, {&z.Minimum, 60, 86400}} {
+		if *v.p == 0 {
+			*v.p = v.def
+		}
+		if *v.p < 1 || *v.p > v.max {
+			return errCfg("err_zone_soa")
+		}
+	}
+	z.Hostmaster = strings.ToLower(strings.TrimSpace(z.Hostmaster))
+	if z.Hostmaster != "" {
+		user, domain, ok := strings.Cut(z.Hostmaster, "@")
+		if !ok || user == "" || !validName(hostName(domain)) {
+			return errCfg("err_zone_mail")
+		}
 	}
 	return nil
 }
@@ -274,8 +320,8 @@ func (m *Module) AddZone(ctx context.Context, z Zone) (Zone, error) {
 		return z, err
 	}
 	z.Enabled, z.CreatedAt = true, time.Now().UTC()
-	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_zones (name, authoritative, devices, comment, enabled, created_at) VALUES (?,?,?,?,1,?)`,
-		z.Name, z.Authoritative, z.Devices, z.Comment, z.CreatedAt.Format(time.RFC3339))
+	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_zones (name, authoritative, devices, comment, enabled, created_at, ttl, refresh, retry, expire, minimum, hostmaster) VALUES (?,?,?,?,1,?,?,?,?,?,?,?)`,
+		z.Name, z.Authoritative, z.Devices, z.Comment, z.CreatedAt.Format(time.RFC3339), z.TTL, z.Refresh, z.Retry, z.Expire, z.Minimum, z.Hostmaster)
 	if isUnique(err) {
 		return z, errCfg("err_zone_dup")
 	}
@@ -291,7 +337,8 @@ func (m *Module) UpdateZone(ctx context.Context, id int64, z Zone) (Zone, error)
 	if err := normalizeZone(&z); err != nil {
 		return z, err
 	}
-	err := m.zoneExec(ctx, `UPDATE dns64_zones SET name = ?, authoritative = ?, devices = ?, comment = ? WHERE id = ?`, z.Name, z.Authoritative, z.Devices, z.Comment, id)
+	err := m.zoneExec(ctx, `UPDATE dns64_zones SET name = ?, authoritative = ?, devices = ?, comment = ?, ttl = ?, refresh = ?, retry = ?, expire = ?, minimum = ?, hostmaster = ? WHERE id = ?`,
+		z.Name, z.Authoritative, z.Devices, z.Comment, z.TTL, z.Refresh, z.Retry, z.Expire, z.Minimum, z.Hostmaster, id)
 	if isUnique(err) {
 		return z, errCfg("err_zone_dup")
 	}

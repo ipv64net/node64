@@ -31,7 +31,8 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /dns64", page(m.pageTab("overview", "dns64.title")))
 	mux.Handle("GET /dns64/log", page(m.pageTab("log", "dns64.log.title")))
 	mux.Handle("GET /dns64/lists", page(m.pageTab("lists", "dns64.lists.title")))
-	mux.Handle("GET /dns64/records", page(m.pageTab("records", "dns64.records.title")))
+	mux.Handle("GET /dns64/local", page(m.pageTab("local", "dns64.local.title")))
+	mux.Handle("GET /dns64/records", page(redirectTo("/dns64/local"))) // alte Adresse
 	mux.Handle("GET /dns64/encrypted", page(m.pageTab("encrypted", "dns64.enc.title")))
 	mux.Handle("POST /dns64/encrypted", page(m.pageEncryptedSave))
 	mux.Handle("GET /dns64/ca.crt", page(m.pageCA))
@@ -75,8 +76,12 @@ type pageData struct {
 	Records []Record
 	Fwds    []forwardView            // Seite Weiterleitungen
 	Rws     []Rewrite                // Seite Weiterleitungen: Umschreiben
-	Zones   []Zone                   // Seite Eigene Eintraege: lokale Zonen
-	DNames  []deviceName             // Seite Eigene Eintraege: Geraetenamen der Zonen
+	Zones   []Zone                   // Seite Lokaler DNS: Zonen
+	DNames  []deviceName             // Seite Lokaler DNS: Geraetenamen der Zonen
+	Sel     string                   // Seite Lokaler DNS: gewaehlte Zone ("*" = alle, "-" = ohne Zone)
+	SelZone *Zone                    // Seite Lokaler DNS: gewaehlte Zone
+	ZCount  map[string]int           // Seite Lokaler DNS: Eintraege je Zone ("*", "-")
+	Back    string                   // Seite Lokaler DNS: Ruecksprung nach dem Speichern
 	Groups  []groups.Group           // Seiten Gruppen und Log
 	Devices []deviceView             // Seite Gruppen: Geraete der letzten 24 Stunden
 	Cats    []string                 // Seite Gruppen: Kategorien
@@ -89,16 +94,22 @@ type pageData struct {
 }
 
 var tabs = []tab{{"overview", "/dns64", "dns64.tab.overview", "bi-speedometer2", false}, {"log", "/dns64/log", "dns64.tab.log", "bi-list-ul", false},
-	{"lists", "/dns64/lists", "dns64.tab.lists", "bi-funnel", false}, {"records", "/dns64/records", "dns64.tab.records", "bi-signpost-split", false},
-	{"forwards", "/dns64/forwards", "dns64.tab.forwards", "bi-signpost-2", false},
+	{"lists", "/dns64/lists", "dns64.tab.lists", "bi-funnel", false},
 	{"groups", "/dns64/groups", "dns64.tab.groups", "bi-people", false},
 	{"encrypted", "/dns64/encrypted", "dns64.tab.encrypted", "bi-lock", false}, {"settings", "/dns64/settings", "dns64.tab.settings", "bi-gear", false}}
+
+// localTabs: Reiter des Unterpunkts "Lokaler DNS" (Zonen mit Eintraegen, Weiterleitungen mit Umschreiben).
+var localTabs = []tab{{"local", "/dns64/local", "dns64.tab.zones", "bi-diagram-3", false}, {"forwards", "/dns64/local/forwards", "dns64.tab.forwards", "bi-signpost-2", false}}
 
 func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		d := pageData{Cfg: m.loadConfig(ctx), Hours: listHours, Types: recordTypes}
-		for _, t := range tabs {
+		set := tabs
+		if key == "local" || key == "forwards" {
+			set = localTabs
+		}
+		for _, t := range set {
 			t.Active = t.Key == key
 			d.Tabs = append(d.Tabs, t)
 		}
@@ -128,15 +139,10 @@ func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 				m.g.Flash(w, r, "danger", err.Error())
 			}
 		}
-		if key == "records" {
-			var err error
-			if d.Records, err = m.Records(ctx); err == nil {
-				d.Zones, err = m.Zones(ctx)
-			}
-			if err != nil {
+		if key == "local" {
+			if err := m.localView(r, &d); err != nil {
 				m.g.Flash(w, r, "danger", err.Error())
 			}
-			d.DNames = m.DeviceNames()
 		}
 		if key == "forwards" {
 			fl, err := m.Forwards(ctx)
@@ -307,7 +313,19 @@ func (m *Module) recordBack(w http.ResponseWriter, r *http.Request, err error, o
 	} else if okKey != "" {
 		m.g.Flash(w, r, "success", m.g.T(r, okKey))
 	}
-	http.Redirect(w, r, "/dns64/records", http.StatusSeeOther)
+	http.Redirect(w, r, localBack(r), http.StatusSeeOther)
+}
+
+// localBack: Ruecksprung auf die Seite "Lokaler DNS" (Feld back, nur Pfade darunter), sonst ihr Anfang.
+func localBack(r *http.Request) string {
+	if b := r.PostFormValue("back"); strings.HasPrefix(b, "/dns64/local") && !strings.Contains(b, "//") {
+		return b
+	}
+	return "/dns64/local"
+}
+
+func redirectTo(path string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, path, http.StatusMovedPermanently) }
 }
 
 func (m *Module) pageRecordAdd(w http.ResponseWriter, r *http.Request) {

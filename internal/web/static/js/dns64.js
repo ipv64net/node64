@@ -475,7 +475,8 @@
 		var onType = function () {
 			var ty = typeSel.value;
 			$("r-value").placeholder = examples[ty] || "";
-			$("r-name").placeholder = ty === "PTR" ? "192.168.1.10" : ty === "SRV" ? "_sip._tcp.home.lan" : "nas.home.lan";
+			var zn = form.getAttribute("data-zone") || ""; // in einer Zone: Name relativ
+			$("r-name").placeholder = ty === "PTR" && !zn ? "192.168.1.10" : ty === "SRV" ? (zn ? "_sip._tcp" : "_sip._tcp.home.lan") : (zn ? "nas" : "nas.home.lan");
 			$("r-type-hint").textContent = t("rec_hint_" + ty);
 			$("r-noptr-wrap").classList.toggle("d-none", ty !== "A" && ty !== "AAAA");
 		};
@@ -493,7 +494,9 @@
 		document.querySelectorAll("[data-rec-edit]").forEach(function (b) {
 			b.addEventListener("click", function () {
 				form.action = "/dns64/records/" + b.getAttribute("data-rec-edit") + "/edit";
-				$("r-name").value = b.getAttribute("data-name");
+				var nm = b.getAttribute("data-name"), zn = form.getAttribute("data-zone") || "";
+				if (zn) { nm = nm === zn ? "@" : nm.slice(-(zn.length + 1)) === "." + zn ? nm.slice(0, -(zn.length + 1)) : nm + "."; }
+				$("r-name").value = nm;
 				typeSel.value = b.getAttribute("data-type");
 				$("r-value").value = b.getAttribute("data-value");
 				$("r-ttl").value = b.getAttribute("data-ttl");
@@ -509,6 +512,9 @@
 			});
 		});
 		$("rec-cancel").addEventListener("click", reset);
+		document.querySelectorAll("[data-reveal]").forEach(function (b) {
+			b.addEventListener("click", function () { var f = $(b.getAttribute("data-reveal")); f.type = f.type === "password" ? "text" : "password"; });
+		});
 		if ($("rec-search")) {
 			$("rec-search").addEventListener("input", function (e) {
 				var q = e.target.value.trim().toLowerCase(), n = 0;

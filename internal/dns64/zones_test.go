@@ -50,7 +50,7 @@ func TestLocalZones(t *testing.T) {
 	if _, err := m.AddZone(ctx, Zone{Name: "home.lan"}); err == nil {
 		t.Fatal("duplicate zone accepted")
 	}
-	if _, err := m.AddZone(ctx, Zone{Name: "10.in-addr.arpa"}); err == nil {
+	if _, err := m.AddZone(ctx, Zone{Name: "in-addr.arpa"}); err == nil {
 		t.Fatal("arpa zone accepted")
 	}
 	if _, err := m.AddZone(ctx, Zone{Name: "lab.lan"}); err != nil {

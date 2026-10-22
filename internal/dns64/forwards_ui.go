@@ -11,7 +11,8 @@ import (
 
 func (m *Module) forwardRoutes(mux *http.ServeMux, g module.Guards) {
 	page := func(h http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(h)) }
-	mux.Handle("GET /dns64/forwards", page(m.pageTab("forwards", "dns64.forwards.title")))
+	mux.Handle("GET /dns64/local/forwards", page(m.pageTab("forwards", "dns64.forwards.title")))
+	mux.Handle("GET /dns64/forwards", page(redirectTo("/dns64/local/forwards"))) // alte Adresse
 	mux.Handle("POST /dns64/forwards", page(m.pageForwardSave))
 	mux.Handle("POST /dns64/forwards/{id}/edit", page(m.pageForwardSave))
 	mux.Handle("POST /dns64/forwards/{id}/delete", page(m.pageForwardDelete))
@@ -43,7 +44,7 @@ func (m *Module) forwardBack(w http.ResponseWriter, r *http.Request, err error, 
 	} else if okKey != "" {
 		m.g.Flash(w, r, "success", m.g.T(r, okKey))
 	}
-	http.Redirect(w, r, "/dns64/forwards", http.StatusSeeOther)
+	http.Redirect(w, r, "/dns64/local/forwards", http.StatusSeeOther)
 }
 
 func onOff(on bool) string { return map[bool]string{true: "enable", false: "disable"}[on] }

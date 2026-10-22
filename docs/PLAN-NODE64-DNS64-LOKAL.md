@@ -1,6 +1,6 @@
 # Plan: DNS64 als lokaler DNS-Server, Weiterleitungen und Cluster
 
-Stand 2026-10-22. **Umgesetzt: L1 (DNS64 1.23.0), L3 (1.24.0), L2 (1.25.0), L4 (1.26.0).** Anlass: Rückmeldungen an Dennis – eigene Einträge reichen für einen echten lokalen DNS-Server noch
+Stand 2026-10-22. **Umgesetzt: L1 (DNS64 1.23.0), L3 (1.24.0), L2 (1.25.0), L4 (1.26.0); auf node64-test als 0.11.144-dev; L5–L7 (1.27.0).** Anlass: Rückmeldungen an Dennis – eigene Einträge reichen für einen echten lokalen DNS-Server noch
 nicht, gewünscht sind Weiterleitungen „Domain → DNS-Server“, und DNS64 soll in den Cluster (Schalter je Bereich).
 Grundlagen: [PLAN-NODE64-DNS64.md](PLAN-NODE64-DNS64.md), [CLUSTER.md](CLUSTER.md),
 [PLAN-NODE64-CLUSTER-MODULE.md](PLAN-NODE64-CLUSTER-MODULE.md) (DNS64-Teil wird hiermit umgesetzt).
@@ -86,3 +86,18 @@ Anfang an eine `uid` haben). Jede Phase eigene DNS64-Version mit Tests, Rollout 
 2. Cluster: alle DNS64-Bereiche ohne Einstellung **aus**, jeder Bereich wird einzeln eingeschaltet.
 3. Geräte mit Namen automatisch als DNS-Namen: wird in L1 mitgebaut (Schalter je lokaler Zone, siehe L2).
 4. „Umschreiben“ Domain A → Domain B: wird mitgebaut (in L3).
+
+## Teil D – Lokaler DNS als eigener Menüpunkt (Entscheidung Dennis 2026-10-22)
+
+DNS64 bleibt der Werbeblocker (Übersicht, Abfrage-Log, Freigaben & Blocklisten, Gruppen, Verschlüsselung,
+Einstellungen). Darunter steht im linken Menü der Unterpunkt **„Lokaler DNS“** (`/dns64/local`) mit den Reitern Zonen
+und Weiterleitungen; alte Adressen leiten weiter. Technisch bleibt alles im Modul DNS64 (derselbe Dienst auf Port 53).
+
+- **L5 Zonen-Ansicht:** Zonen links, ihre Einträge rechts („Ohne Zone“ für den Rest); Name relativ zur Zone (`@` =
+  Zone selbst), SOA und Standard-TTL je Zone einstellbar.
+- **L6 Zonendatei:** Import und Export im BIND-Format je Zone (Umzug von Pi-hole, Technitium, Bind, Windows-DNS).
+- **L7 Dynamische Updates (RFC 2136) mit TSIG:** je Zone einschaltbar, Schlüssel (HMAC-SHA256) erzeugt die Node;
+  pfSense, OPNsense oder Kea tragen DHCP-Namen selbst ein (A, AAAA, CNAME, TXT, PTR, SRV, MX). Ohne gültigen
+  Schlüssel wird jedes Update abgelehnt.
+
+Bewusst nicht: DNSSEC, Secondary-/Stub-Zonen, Zonentransfer, Antwort je Netz, Zähler je Eintrag (später möglich).

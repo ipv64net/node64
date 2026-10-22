@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.26.0"
+	version   = "1.27.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -105,6 +105,7 @@ type Module struct {
 
 	pauseUntil atomic.Int64 // Blockieren aus bis (UnixNano), -1 = bis zum Wiedereinschalten, 0 = aktiv (pause.go)
 
+	updMu     sync.Mutex                   // dynamische Updates nacheinander (update.go)
 	clMu      sync.Mutex                   // Cluster (cluster.go)
 	clHook    ClusterHook                  // nil = kein Cluster
 	clSnap    map[string]map[string]string // zuletzt gemeldeter Stand je Bereich
@@ -313,7 +314,7 @@ func (m *Module) start(ctx context.Context) error {
 	e.up.SetTop(cfg.UpCount)
 	e.local = localnet.New(m.routerAddr(ctx), m.log)
 	e.srv = &dnsserver.Server{Addr: e.addr, Local: e.local, Filter: e.lists, Upstream: e.up, Cache: e.cache, Log: st, Logger: m.log,
-		Records: m, Split: m.split, Forward: m.forwardFor, Rewrite: m.rewriteFor, Zone: m.zoneAnswer, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused,
+		Records: m, Split: m.split, Forward: m.forwardFor, Rewrite: m.rewriteFor, Zone: m.zoneAnswer, Updates: m, BlockNX: cfg.BlockMode == blockNX, ExtraNets: cfg.allowPrefixes(), Anonymize: cfg.anonymizer(), Paused: m.paused,
 		Policy: m.policy, Canary: cfg.Canary}
 	e.srv.HintV4, e.srv.HintV6 = hintAddrs(cfg.Bind)
 	if err := e.srv.Start(); err != nil {

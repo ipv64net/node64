@@ -119,23 +119,42 @@ func parseCSV(text string) (list []Record, skipped, bad int) {
 
 // ImportRecords legt die Eintraege eines Imports an; vorhandene (gleicher Name, Typ, Wert) bleiben.
 func (m *Module) ImportRecords(ctx context.Context, text string) (importResult, error) {
+	return m.importText(ctx, text, "")
+}
+
+// importText: wie ImportRecords, auch Zonendateien (BIND-Format); zone gilt fuer relative Namen ohne $ORIGIN.
+func (m *Module) importText(ctx context.Context, text, zone string) (importResult, error) {
+	if isZoneFile(text) {
+		if zone == "" {
+			zone = "."
+		}
+		return m.importZoneFile(ctx, text, zone)
+	}
 	list, skipped, bad := parseRecords(text)
 	res := importResult{Skipped: skipped, Invalid: bad}
 	for _, r := range list {
-		_, err := m.AddRecord(ctx, r)
-		var ce *cfgError
-		switch {
-		case err == nil:
-			res.Added++
-		case errors.As(err, &ce) && (ce.Key == "err_dup" || ce.Key == "err_cname"):
-			res.Skipped++
-		case errors.As(err, &ce):
-			res.Invalid++
-		default:
+		if err := m.addImported(ctx, r, &res); err != nil {
 			return res, err
 		}
 	}
 	return res, nil
+}
+
+// addImported legt einen importierten Eintrag an und zaehlt das Ergebnis; Fehler nur, wenn die Datenbank streikt.
+func (m *Module) addImported(ctx context.Context, r Record, res *importResult) error {
+	_, err := m.AddRecord(ctx, r)
+	var ce *cfgError
+	switch {
+	case err == nil:
+		res.Added++
+	case errors.As(err, &ce) && (ce.Key == "err_dup" || ce.Key == "err_cname"):
+		res.Skipped++
+	case errors.As(err, &ce):
+		res.Invalid++
+	default:
+		return err
+	}
+	return nil
 }
 
 // exportRecords schreibt die Eintraege als hosts, csv oder json; liefert Inhalt, Typ und Dateiendung.
@@ -205,14 +224,30 @@ func (m *Module) pageRecordEdit(w http.ResponseWriter, r *http.Request) {
 	m.recordBack(w, r, err, "dns64.records.saved")
 }
 
-// recordForm liest einen Eintrag aus dem Formular der Seite.
+// recordForm liest einen Eintrag aus dem Formular der Seite; mit Zone ist der Name relativ ("@" = die Zone selbst).
 func recordForm(r *http.Request) Record {
 	ttl := formInt(r, "ttl")
 	if ttl < 0 {
 		ttl = 0
 	}
-	return Record{Name: r.PostFormValue("name"), Type: r.PostFormValue("type"), Value: r.PostFormValue("value"), TTL: ttl,
+	return Record{Name: qualify(r.PostFormValue("name"), r.PostFormValue("zone")), Type: r.PostFormValue("type"), Value: r.PostFormValue("value"), TTL: ttl,
 		Comment: r.PostFormValue("comment"), NoPTR: r.PostFormValue("no_ptr") == "1", LocalOnly: r.PostFormValue("local_only") == "1"}
+}
+
+// qualify haengt die Zone an einen relativen Namen ("@" oder leer = die Zone, Name mit Punkt am Ende = absolut).
+func qualify(name, zone string) string {
+	name, zone = strings.TrimSpace(name), strings.TrimSuffix(strings.TrimSpace(zone), ".")
+	switch {
+	case zone == "":
+		return name
+	case name == "@" || name == "":
+		return zone
+	case strings.HasSuffix(name, "."):
+		return name
+	case strings.EqualFold(name, zone) || strings.HasSuffix(strings.ToLower(name), "."+strings.ToLower(zone)):
+		return name
+	}
+	return name + "." + zone
 }
 
 func (m *Module) pageRecordImport(w http.ResponseWriter, r *http.Request) {
@@ -222,7 +257,7 @@ func (m *Module) pageRecordImport(w http.ResponseWriter, r *http.Request) {
 		f.Close()
 		text = string(b) + "\n" + text
 	}
-	res, err := m.ImportRecords(r.Context(), text)
+	res, err := m.importText(r.Context(), text, r.PostFormValue("zone"))
 	if err == nil {
 		m.log.Info("records imported", "added", res.Added, "skipped", res.Skipped, "invalid", res.Invalid, "by", m.g.Actor(r))
 		m.audit(r, "dns64.record.import", strconv.Itoa(res.Added)+" records", strconv.Itoa(res.Invalid)+" invalid")
@@ -263,7 +298,7 @@ func (m *Module) apiRecordImport(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "body too large")
 		return
 	}
-	res, err := m.ImportRecords(r.Context(), string(b))
+	res, err := m.importText(r.Context(), string(b), r.URL.Query().Get("zone"))
 	if err != nil {
 		m.fail(w, err)
 		return

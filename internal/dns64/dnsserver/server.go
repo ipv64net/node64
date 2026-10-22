@@ -89,6 +89,7 @@ type Server struct {
 	Forward   ForwardFunc // Domain -> eigene DNS-Server (nil = keine, forward.go)
 	Rewrite   RewriteFunc // Name antwortet wie ein anderer (nil = keins)
 	Zone      ZoneFunc    // lokale Zonen: Geraetenamen, SOA, NXDOMAIN fuer Unbekanntes (nil = keine)
+	Updates   Updater     // dynamische Updates mit TSIG (nil = keine, update.go)
 
 	acl        *clientACL
 	srv        []*dns.Server
@@ -112,6 +113,11 @@ func (s *Server) Start() error {
 		return err
 	}
 	s.srv = []*dns.Server{{PacketConn: pc, Net: "udp", Handler: s}, {Listener: ln, Net: "tcp", Handler: s}}
+	if s.Updates != nil { // TSIG der dynamischen Updates pruefen (Schluessel aus dem Modul)
+		for _, srv := range s.srv {
+			srv.TsigProvider, srv.MsgAcceptFunc = tsigProvider{s.Updates}, acceptUpdates
+		}
+	}
 	for _, srv := range s.srv {
 		Serve(srv, &s.wg, func(err error) { s.Logger.Debug("dns listener ended", "net", srv.Net, "err", err) })
 	}
@@ -151,6 +157,10 @@ func (s *Server) Shutdown(ctx context.Context) {
 }
 
 func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
+	if r.Opcode == dns.OpcodeUpdate {
+		reply(w, r, s.update(w, r))
+		return
+	}
 	proto := "udp"
 	if _, isTCP := w.RemoteAddr().(*net.TCPAddr); isTCP {
 		proto = "tcp"

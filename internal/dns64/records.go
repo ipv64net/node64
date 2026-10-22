@@ -2,6 +2,7 @@ package dns64
 
 import (
 	"context"
+	"encoding/base64"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -26,6 +27,7 @@ type Record struct {
 	Comment   string    `json:"comment,omitempty"`
 	NoPTR     bool      `json:"no_ptr,omitempty"`     // A/AAAA: keine Rueckwaertssuche aus diesem Eintrag
 	LocalOnly bool      `json:"local_only,omitempty"` // nur diese Node (nie im Cluster abgeglichen)
+	Dynamic   bool      `json:"dynamic,omitempty"`    // per dynamischem Update (RFC 2136) angelegt
 	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -94,6 +96,8 @@ func recordRR(name string, r Record) dns.RR {
 		return &dns.MX{Hdr: h, Preference: n(0), Mx: dns.Fqdn(f[1])}
 	case "SRV":
 		return &dns.SRV{Hdr: h, Priority: n(0), Weight: n(1), Port: n(2), Target: dns.Fqdn(f[3])}
+	case "DHCID":
+		return &dns.DHCID{Hdr: h, Digest: r.Value}
 	case "CAA":
 		flag, _ := strconv.ParseUint(f[0], 10, 8)
 		return &dns.CAA{Hdr: h, Flag: uint8(flag), Tag: f[1], Value: strings.Join(f[2:], " ")}
@@ -145,7 +149,7 @@ func (m *Module) loadRecords(ctx context.Context) error {
 
 // Records liefert alle eigenen Eintraege, nach Name sortiert.
 func (m *Module) Records(ctx context.Context) ([]Record, error) {
-	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, type, value, ttl, comment, no_ptr, local_only, enabled, created_at FROM dns64_records ORDER BY name, type, value`)
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, type, value, ttl, comment, no_ptr, local_only, dynamic, enabled, created_at FROM dns64_records ORDER BY name, type, value`)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +158,7 @@ func (m *Module) Records(ctx context.Context) ([]Record, error) {
 	for rows.Next() {
 		var r Record
 		var created string
-		if err := rows.Scan(&r.ID, &r.Name, &r.Type, &r.Value, &r.TTL, &r.Comment, &r.NoPTR, &r.LocalOnly, &r.Enabled, &created); err != nil {
+		if err := rows.Scan(&r.ID, &r.Name, &r.Type, &r.Value, &r.TTL, &r.Comment, &r.NoPTR, &r.LocalOnly, &r.Dynamic, &r.Enabled, &created); err != nil {
 			return nil, err
 		}
 		r.CreatedAt, _ = time.Parse(time.RFC3339, created)
@@ -221,6 +225,10 @@ func normalizeRecord(r *Record) error {
 			return errCfg("err_srv")
 		}
 		r.Value = num(f[0]) + " " + num(f[1]) + " " + num(f[2]) + " " + hostName(f[3])
+	case "DHCID": // Kennung des DHCP-Clients (RFC 4701), kommt nur per dynamischem Update
+		if _, err := base64.StdEncoding.DecodeString(r.Value); err != nil || r.Value == "" {
+			return errCfg("err_txt")
+		}
 	case "CAA":
 		f := strings.Fields(strings.ReplaceAll(r.Value, `"`, " "))
 		if len(f) == 2 { // ohne Flag: 0
@@ -273,8 +281,8 @@ func (m *Module) AddRecord(ctx context.Context, r Record) (Record, error) {
 		return r, err
 	}
 	r.Enabled, r.CreatedAt = true, time.Now().UTC()
-	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_records (name, type, value, ttl, comment, no_ptr, local_only, enabled, created_at) VALUES (?,?,?,?,?,?,?,1,?)`,
-		r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, r.LocalOnly, r.CreatedAt.Format(time.RFC3339))
+	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_records (name, type, value, ttl, comment, no_ptr, local_only, dynamic, enabled, created_at) VALUES (?,?,?,?,?,?,?,?,1,?)`,
+		r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, r.LocalOnly, r.Dynamic, r.CreatedAt.Format(time.RFC3339))
 	if err != nil {
 		return r, err
 	}

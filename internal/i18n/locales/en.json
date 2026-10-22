@@ -65,6 +65,7 @@
     }
   },
   "nav": {
+    "local_dns": "Local DNS",
     "plan": "Account class: {name}",
     "api_ok": "ipv64 API connected",
     "api_none": "ipv64 API not set up",
@@ -2867,7 +2868,37 @@
     "conflict_resolved": "Conflict resolved."
   },
   "dns64": {
+    "local": {
+      "title": "Local DNS",
+      "all": "All records",
+      "no_zone": "Without zone",
+      "cluster_hint": "Zones, records and forwarding can be synced with other nodes (switchable per area).",
+      "cluster_link": "To the cluster"
+    },
     "zones": {
+      "add": "Add zone",
+      "add_hint": "e.g. home.lan or a network like 192.168.1.0/24 (reverse zone)",
+      "zone": "Zone",
+      "settings": "Zone settings (authoritative, device names, TTL, SOA, dynamic updates)",
+      "ttl": "Default TTL (s)",
+      "minimum": "TTL for \"does not exist\" (s)",
+      "hostmaster": "Responsible (mail in SOA)",
+      "zonefile": "Zone file",
+      "zonefile_export": "Download zone file (BIND format)",
+      "delete_confirm": "Delete zone \"{name}\"? The records stay (under \"Without zone\").",
+      "deleted": "Zone deleted.",
+      "dynamic": "Dynamic updates (RFC 2136) with TSIG key",
+      "dynamic_hint": "DHCP servers like pfSense, OPNsense or Kea register device names themselves (A, AAAA, PTR, TXT, DHCID …).",
+      "dynamic_title": "Dynamic updates",
+      "tsig_server": "DNS server",
+      "tsig_name": "Key name",
+      "tsig_alg": "Algorithm",
+      "tsig_secret": "Key (secret)",
+      "tsig_show": "Show",
+      "tsig_nsupdate": "For nsupdate/BIND (insert the secret):",
+      "tsig_renew": "New key",
+      "tsig_renew_confirm": "Create a new key? The old one stops working immediately.",
+      "tsig_renewed": "New key created – please enter it in the DHCP server.",
       "title": "Local zones",
       "edit": "Edit zone",
       "name": "Zone",
@@ -2929,6 +2960,7 @@
     "range_7d": "7 days",
     "err_domain": "Invalid domain name",
     "tab": {
+      "zones": "Zones",
       "forwards": "Forwarding",
       "groups": "Groups",
       "overview": "Overview",
@@ -3167,6 +3199,8 @@
     "retrying": "Retrying every minute; port or address can be changed in the settings.",
     "custom": "custom",
     "records": {
+      "rel_hint": "Name relative to the zone, @ = the zone itself, with a trailing dot = full name",
+      "dynamic": "Registered by dynamic update",
       "local_only": "This node only (not synced in the cluster)",
       "edit": "Edit record",
       "saved": "Record saved, effective immediately.",
@@ -3297,6 +3331,8 @@
       "deleted": "Group deleted."
     },
     "err": {
+      "zone_soa": "TTL and SOA values are out of the allowed range.",
+      "zone_mail": "The mail in the SOA is invalid.",
       "zone_name": "The zone name is invalid.",
       "zone_dup": "This zone already exists.",
       "fwd_domain": "The domain is invalid.",

@@ -1,5 +1,22 @@
 # Changes – DNS64
 
+## 1.27.0 – 2026-10-22
+
+### New
+- Own menu entry **"Local DNS"** below DNS64 (tabs zones and forwarding); DNS64 itself stays the ad blocker. The old
+  addresses `/dns64/records` and `/dns64/forwards` redirect.
+- Zone view (L5): zones on the left with their record count, "All records" and "Without zone"; records of the
+  selected zone on the right, names relative to the zone (`@` = the zone itself). Per zone: default TTL, SOA (refresh,
+  retry, expire, TTL for "does not exist", responsible mail). A network like `192.168.1.0/24` becomes the reverse zone.
+- Zone file (L6): export per zone in BIND format (`$ORIGIN`, `$TTL`, SOA, NS, relative names, comments); import of
+  zone files (e.g. from Bind, Technitium, Windows DNS) through the same import as hosts file/CSV/JSON – SOA values go
+  to the zone, NS and unsupported types are skipped.
+- Dynamic updates per RFC 2136 (L7): switchable per zone with a TSIG key (HMAC-SHA256, created by the node,
+  renewable). DHCP servers like pfSense, OPNsense or Kea register names themselves (A, AAAA, CNAME, TXT, PTR, SRV, MX,
+  DHCID); prerequisites and deletes per RFC, all or nothing. Without a valid key, outside the zone or for SOA/NS the
+  update is refused. Records created by updates are marked; the key stays on the node (never in API, export or cluster).
+- API: `GET /api/dns64/zones/{id}/zonefile`, `POST /api/dns64/records/import?zone=…` (also zone files).
+
 ## 1.26.0 – 2026-10-22
 
 ### New
