@@ -162,11 +162,11 @@ func (g *Gateway) sendChannelTest(ctx context.Context, ch *notify.Channel, userI
 		Check: notify.CheckInfo{UserID: userID, Name: ch.Name}, EventID: "portal-" + strconv.FormatInt(time.Now().UnixNano(), 36),
 		URL: "https://ipv64.net/notifications.php"}
 	switch kind {
-	case "verify":
+	case "verify": // Code auch im Titel: die SMS besteht nur aus Titel und zweiter Textzeile
 		if lang == "en" {
-			m.Title, m.Text = "IPv64.net: confirmation code", "Your code to confirm the notification channel \""+ch.Name+"\": "+code+"\nValid for 15 minutes."
+			m.Title, m.Text = "IPv64.net: confirmation code "+code, "Your code to confirm the notification channel \""+ch.Name+"\": "+code+"\nValid for 15 minutes."
 		} else {
-			m.Title, m.Text = "IPv64.net: Bestätigungscode", "Dein Code zur Bestätigung des Benachrichtigungskanals \""+ch.Name+"\": "+code+"\nGültig 15 Minuten."
+			m.Title, m.Text = "IPv64.net: Bestätigungscode "+code, "Dein Code zur Bestätigung des Benachrichtigungskanals \""+ch.Name+"\": "+code+"\nGültig 15 Minuten."
 		}
 	default:
 		if lang == "en" {
