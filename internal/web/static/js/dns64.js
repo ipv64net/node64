@@ -464,4 +464,58 @@
 		loadLists().catch(function () {});
 		every(60000, loadLists);
 	}
+
+	// Eigene Eintraege: Beispiel und Hinweis je Typ, Bearbeiten im selben Formular, Suche in der Tabelle
+	if (kind === "records" && $("rec-form")) {
+		var examples = { A: "192.168.1.10", AAAA: "fd00::10", CNAME: "nas.home.lan", TXT: "v=spf1 -all", MX: "10 mail.home.lan",
+			SRV: "0 5 5060 sip.home.lan", PTR: "nas.home.lan", CAA: "0 issue letsencrypt.org" };
+		var form = $("rec-form"), typeSel = $("r-type");
+		var onType = function () {
+			var ty = typeSel.value;
+			$("r-value").placeholder = examples[ty] || "";
+			$("r-name").placeholder = ty === "PTR" ? "192.168.1.10" : ty === "SRV" ? "_sip._tcp.home.lan" : "nas.home.lan";
+			$("r-type-hint").textContent = t("rec_hint_" + ty);
+			$("r-noptr-wrap").classList.toggle("d-none", ty !== "A" && ty !== "AAAA");
+		};
+		typeSel.addEventListener("change", onType);
+		onType();
+		var addTitle = $("rec-title").textContent, submit = $("rec-submit"), addLabel = submit.querySelector("span").textContent;
+		var reset = function () {
+			form.reset();
+			form.action = "/dns64/records";
+			$("rec-title").textContent = addTitle;
+			submit.querySelector("span").textContent = addLabel;
+			$("rec-cancel").classList.add("d-none");
+			onType();
+		};
+		document.querySelectorAll("[data-rec-edit]").forEach(function (b) {
+			b.addEventListener("click", function () {
+				form.action = "/dns64/records/" + b.getAttribute("data-rec-edit") + "/edit";
+				$("r-name").value = b.getAttribute("data-name");
+				typeSel.value = b.getAttribute("data-type");
+				$("r-value").value = b.getAttribute("data-value");
+				$("r-ttl").value = b.getAttribute("data-ttl");
+				$("r-comment").value = b.getAttribute("data-comment");
+				$("r-noptr").checked = b.getAttribute("data-noptr") === "1";
+				$("rec-title").textContent = $("rec-title").getAttribute("data-edit");
+				submit.querySelector("span").textContent = submit.getAttribute("data-edit");
+				$("rec-cancel").classList.remove("d-none");
+				onType();
+				form.scrollIntoView({ behavior: "smooth", block: "start" });
+				$("r-name").focus();
+			});
+		});
+		$("rec-cancel").addEventListener("click", reset);
+		if ($("rec-search")) {
+			$("rec-search").addEventListener("input", function (e) {
+				var q = e.target.value.trim().toLowerCase(), n = 0;
+				document.querySelectorAll("tr[data-rec]").forEach(function (tr) {
+					var hit = !q || tr.getAttribute("data-rec").toLowerCase().indexOf(q) >= 0;
+					tr.classList.toggle("d-none", !hit);
+					if (hit) { n++; }
+				});
+				$("rec-count").textContent = nf.format(n);
+			});
+		}
+	}
 })();

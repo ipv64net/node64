@@ -53,6 +53,9 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /api/dns64/records", plain(m.apiRecords))
 	mux.Handle("POST /api/dns64/records", plain(m.apiRecordAdd))
 	mux.Handle("DELETE /api/dns64/records/{id}", plain(m.apiRecordDelete))
+	mux.Handle("PUT /api/dns64/records/{id}", plain(m.apiRecordUpdate))
+	mux.Handle("POST /api/dns64/records/import", plain(m.apiRecordImport))
+	mux.Handle("GET /api/dns64/records/export", plain(m.writeExport))
 }
 
 func (m *Module) apiSettings(w http.ResponseWriter, r *http.Request) {

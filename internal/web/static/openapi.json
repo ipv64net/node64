@@ -1023,19 +1023,26 @@
           },
           "name": {
             "type": "string",
-            "example": "nas.home.lan"
+            "example": "nas.home.lan",
+            "description": "bei PTR auch die IP-Adresse (wird zu …in-addr.arpa/…ip6.arpa)"
           },
           "type": {
             "type": "string",
             "enum": [
               "A",
               "AAAA",
-              "CNAME"
+              "CNAME",
+              "TXT",
+              "MX",
+              "SRV",
+              "PTR",
+              "CAA"
             ]
           },
           "value": {
             "type": "string",
-            "example": "192.168.1.10"
+            "example": "192.168.1.10",
+            "description": "IP, Zielname, Text bzw. \"10 mail.home.lan\" (MX), \"0 5 5060 sip.home.lan\" (SRV), \"0 issue letsencrypt.org\" (CAA)"
           },
           "ttl": {
             "type": "integer",
@@ -1047,6 +1054,14 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "no_ptr": {
+            "type": "boolean",
+            "description": "A/AAAA: keine Rückwärtssuche aus diesem Eintrag"
           }
         },
         "required": [
@@ -7892,6 +7907,50 @@
         "responses": {
           "204": {
             "description": "Geloescht"
+          },
+          "404": {
+            "description": "Nicht gefunden"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigenen Eintrag ändern (an/aus bleibt)",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DNS64Record"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Gespeichert",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DNS64Record"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungültig"
           },
           "404": {
             "description": "Nicht gefunden"
@@ -16711,6 +16770,75 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/dns64/records/import": {
+      "post": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigene Einträge importieren (Hosts-Datei, CSV name,type,value,ttl,comment oder JSON; vorhandene bleiben)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "text/plain": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ergebnis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "added": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    },
+                    "invalid": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dns64/records/export": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Eigene Einträge exportieren",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "hosts",
+                "csv",
+                "json"
+              ],
+              "default": "hosts"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Datei (hosts: nur A/AAAA)"
           }
         }
       }

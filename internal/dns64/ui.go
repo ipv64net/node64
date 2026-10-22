@@ -50,6 +50,9 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /dns64/records", page(m.pageRecordAdd))
 	mux.Handle("POST /dns64/records/{id}/delete", page(m.pageRecordDelete))
 	mux.Handle("POST /dns64/records/{id}/toggle", page(m.pageRecordToggle))
+	mux.Handle("POST /dns64/records/{id}/edit", page(m.pageRecordEdit))
+	mux.Handle("POST /dns64/records/import", page(m.pageRecordImport))
+	mux.Handle("GET /dns64/records/export", page(m.writeExport))
 }
 
 // tab ist ein Reiter der Modulseiten.
@@ -139,7 +142,7 @@ var jsKeys = []string{"status.allowed", "status.blocked", "status.cached", "stat
 	"blocked_n", "no_entries", "via", "entries", "page", "live_paused", "flush_confirm", "flushed", "error", "active", "loading",
 	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_released", "mode_parallel", "mode_ordered", "mode_fastest", "in_use", "off",
 	"proto.udp", "proto.tcp", "proto.doh", "proto.dot", "proto.doq", "reason_paused",
-	"reason_group", "reason_cat", "reason_off_hold", "reason_off_schedule", "reason_safesearch", "reason_canary", "reason_bypass_icloud", "cat.social", "cat.games", "cat.streaming", "cat.gambling", "cat.adult"}
+	"reason_group", "reason_cat", "reason_off_hold", "reason_off_schedule", "reason_safesearch", "reason_canary", "reason_bypass_icloud", "rec_hint_A", "rec_hint_AAAA", "rec_hint_CNAME", "rec_hint_TXT", "rec_hint_MX", "rec_hint_SRV", "rec_hint_PTR", "rec_hint_CAA", "cat.social", "cat.games", "cat.streaming", "cat.gambling", "cat.adult"}
 
 func (m *Module) jsTexts(r *http.Request) map[string]string {
 	out := make(map[string]string, len(jsKeys))
@@ -289,11 +292,7 @@ func (m *Module) recordBack(w http.ResponseWriter, r *http.Request, err error, o
 }
 
 func (m *Module) pageRecordAdd(w http.ResponseWriter, r *http.Request) {
-	ttl := formInt(r, "ttl")
-	if ttl < 0 {
-		ttl = 0
-	}
-	rec, err := m.AddRecord(r.Context(), Record{Name: r.PostFormValue("name"), Type: r.PostFormValue("type"), Value: r.PostFormValue("value"), TTL: ttl})
+	rec, err := m.AddRecord(r.Context(), recordForm(r))
 	if err == nil {
 		m.log.Info("record added", "name", rec.Name, "type", rec.Type, "value", rec.Value, "by", m.g.Actor(r))
 		m.audit(r, "dns64.record.add", rec.Name, rec.Type+" "+rec.Value)

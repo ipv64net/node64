@@ -70,7 +70,7 @@ func TestRecords(t *testing.T) {
 		{Name: "x.lan", Type: "A", Value: "fd00::1"},             // falsche Familie
 		{Name: "bad name.lan", Type: "A", Value: "1.2.3.4"},      // Name
 		{Name: "loop.lan", Type: "CNAME", Value: "loop.lan"},     // auf sich selbst
-		{Name: "x.lan", Type: "MX", Value: "mail.lan"},           // Typ
+		{Name: "x.lan", Type: "NS", Value: "ns.lan"},             // Typ
 	} {
 		if _, err := m.AddRecord(ctx, bad); err == nil {
 			t.Fatalf("accepted %+v", bad)

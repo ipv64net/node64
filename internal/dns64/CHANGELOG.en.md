@@ -1,5 +1,15 @@
 # Changes – DNS64
 
+## 1.23.0 – 2026-10-22
+
+### New
+- Custom records as a local DNS server (phase L1, plan `docs/PLAN-NODE64-DNS64-LOKAL.md`):
+  - More types TXT, MX, SRV, PTR (name may be the IP) and CAA; values are checked and normalised.
+  - Edit in the same form, comment per record, reverse lookup (PTR) can be switched off per A/AAAA record.
+  - Import from a hosts file, CSV or JSON (text or file; localhost and 0.0.0.0 lines are skipped),
+    export as hosts file, CSV or JSON; search in the list.
+  - API: `PUT /api/dns64/records/{id}`, `POST /api/dns64/records/import`, `GET /api/dns64/records/export?format=hosts|csv|json`.
+
 ## 1.22.3 – 2026-10-22
 
 ### Fixed
