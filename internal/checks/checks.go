@@ -160,6 +160,9 @@ type Runner struct {
 	// Proxmox liefert den letzten Stand eines Gasts bzw. Nodes aus der Proxmox-Abfrage (Check-Typ proxmox); nil =
 	// Proxmox-Ueberwachung laeuft nicht (z. B. auf den ipv64-Servern).
 	Proxmox func(systemID int64, key string) ProxmoxState
+	// Docker liefert die Verbindung der Docker-Ueberwachung zu einem Host (Check-Typ docker bei https:// bzw. ssh://
+	// mit Zugangsdaten); nil = keine.
+	Docker DockerRemote
 
 	famMu    sync.Mutex
 	famCache map[string]famState
@@ -174,7 +177,7 @@ type famState struct {
 func NewRunner() *Runner {
 	r := &Runner{checkers: map[Type]Checker{}, Resolver: net.DefaultResolver, Now: func() time.Time { return time.Now().UTC() }, famCache: map[string]famState{}}
 	r.FamilyProbe = probeFamily
-	for _, c := range []Checker{&httpChecker{}, &httpChecker{keyword: true}, &httpChecker{json: true}, &dnsChecker{r: r}, &tcpChecker{}, &portChecker{}, &certChecker{}, &icmpChecker{}, dockerChecker{}, proxmoxChecker{r: r}} {
+	for _, c := range []Checker{&httpChecker{}, &httpChecker{keyword: true}, &httpChecker{json: true}, &dnsChecker{r: r}, &tcpChecker{}, &portChecker{}, &certChecker{}, &icmpChecker{}, dockerChecker{r: r}, proxmoxChecker{r: r}} {
 		r.checkers[c.Type()] = c
 	}
 	return r

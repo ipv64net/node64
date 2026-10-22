@@ -4224,7 +4224,16 @@
       "probe_confirm_first": "The token has not been sent yet: compare and confirm the fingerprint first, then click “Test connection” again."
     },
     "warn_rights": "The token lacks read permissions – VMs and containers are missing.",
-    "warn_rights_fix": "In Proxmox give the token the role PVEAuditor on path “/” (Datacenter › Permissions › Add › API Token Permission, Propagate); the guests appear with the next poll."
+    "warn_rights_fix": "In Proxmox give the token the role PVEAuditor on path “/” (Datacenter › Permissions › Add › API Token Permission, Propagate); the guests appear with the next poll.",
+    "kpi": {
+      "systems": "Systems",
+      "sys_bad": "{count} with problems",
+      "nodes": "Nodes online",
+      "running": "Guests running",
+      "of": "of {count}",
+      "bad": "Guests with problems",
+      "load": "Load of all nodes"
+    }
   },
   "mcp": {
     "title": "AI interface (MCP)",
@@ -4297,7 +4306,8 @@
       "bad": "Problems",
       "checks": "Docker checks",
       "as_check": "{count} of them kept as check",
-      "load": "Load of all containers"
+      "load": "Load of all containers",
+      "hosts": "Docker hosts"
     },
     "filter": {
       "running": "Running",
@@ -4332,6 +4342,78 @@
     "check": {
       "add_hint": "Creates a Healthchecks check of type Docker (status pages, sync with ipv64, uptime). State notifications then come from the check, thresholds and restarts still from Docker monitoring.",
       "active_hint": "Kept as a check: outage and recovery are notified by the check (with its channels), restarts and thresholds by Docker monitoring."
+    },
+    "containers": "Containers",
+    "local": "local",
+    "hosts_hint": "All Docker hosts of this node: the local socket and remote hosts (SSH, TLS or docker-socket-proxy). No agent is needed on the hosts, Node64 only reads via the Docker API.",
+    "connected": "Connected",
+    "unreachable": "Docker host not reachable ({host}).",
+    "host": {
+      "add": "Add Docker host",
+      "edit": "Edit Docker host",
+      "delete_confirm": "Delete Docker host “{name}” with settings, history and its checks?"
+    },
+    "conn": {
+      "ssh": "SSH (recommended)",
+      "tls": "Docker API with TLS (port 2376)",
+      "tcp": "TCP / docker-socket-proxy (port 2375)",
+      "local": "Local socket"
+    },
+    "conn_hint": {
+      "ssh": "Node64 logs in via SSH with its own key and talks to the Docker socket through the tunnel – like “docker -H ssh://”. Nothing has to be opened or installed on the host.",
+      "tls": "The Docker daemon listens with TLS and checks the client certificate (--tlsverify). Secure, but certificates must be set up on the host.",
+      "tcp": "Unencrypted and without login – only in a trusted LAN and only via docker-socket-proxy with read access, never expose the Docker daemon itself on 2375.",
+      "local": "Docker socket of this machine, mounted into the Node64 container."
+    },
+    "form": {
+      "conn": "Connection",
+      "socket": "Socket",
+      "user": "User",
+      "host": "Host",
+      "port": "Port",
+      "sshsock_hint": "Empty = /var/run/docker.sock (rootless Docker: /run/user/<uid>/docker.sock).",
+      "address": "Address",
+      "ssh_key": "SSH key",
+      "pubkey": "Public key – add it to ~/.ssh/authorized_keys of the user:",
+      "genkey": "Generate key",
+      "genkey_new": "Generate new key",
+      "key_keep": "stored – leave empty to keep",
+      "ssh_key_hint": "Easiest: “Generate key” (ed25519). Or paste your own private key without passphrase. It is stored encrypted.",
+      "ca": "CA certificate (ca.pem)",
+      "ca_clear": "Remove stored CA",
+      "ca_hint": "Empty = confirm the fingerprint of the server certificate (test) or system CA.",
+      "cert": "Client certificate (cert.pem)",
+      "tls_key": "Client key (key.pem)",
+      "cert_clear": "Remove stored client certificate",
+      "probe_confirm_first": "Fingerprint not confirmed yet: key or certificate were not used. Check the fingerprint, confirm it and test again.",
+      "hostname": "Hostname",
+      "hostkey": "Host key (SHA-256)",
+      "pin_differs": "The fingerprint does not match the stored one. Was the host reinstalled? Otherwise do not confirm.",
+      "hostkey_confirm": "Confirm this host key",
+      "hostkey_hint": "Compare with “ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub” on the host.",
+      "hostkey_field_hint": "Shown by the test and taken over when confirmed. Format SHA256:… like ssh-keygen -l.",
+      "name_hint": "Default: hostname",
+      "setup": "Setup on the host",
+      "about_text": "All containers of the host are monitored like the local Docker host: state, health, restarts, CPU, RAM, network and disk I/O with history, rules and channels. Node64 only reads (GET), nothing is started or changed. Credentials are stored encrypted."
+    },
+    "howto": {
+      "ssh1": "Create a dedicated user with access to the Docker socket:",
+      "ssh2": "Add the key like this to ~/.ssh/authorized_keys of this user – then it only reaches the Docker API, no shell (the docker CLI comes with Docker installations):",
+      "ssh3": "Without the docker CLI it works via socket forwarding: add the key without “restrict” and allow AllowTcpForwarding in sshd (default on Debian/Ubuntu). Node64 picks the way that works by itself. Note: whoever can use the Docker socket is root on the host – protect the key well.",
+      "tls1": "Docker daemon with TLS in /etc/docker/daemon.json (certificates e.g. following the Docker guide “Protect the Docker daemon socket”):",
+      "tls2": "Enter ca.pem, cert.pem and key.pem of the client here. Without ca.pem confirm the fingerprint of the server certificate.",
+      "tcp1": "docker-socket-proxy only exposes the needed read endpoints (containers and info):",
+      "tcp2": "Make port 2375 reachable from the LAN only (firewall). Without INFO=1 hostname, CPU cores and RAM of the host are missing."
+    },
+    "err": {
+      "key": "No valid private key (PEM, e.g. OpenSSH ed25519).",
+      "key_passphrase": "Keys with passphrase are not supported – use a key without passphrase or “Generate key”.",
+      "cert_pair": "Client certificate and client key belong together – both or none.",
+      "cert": "Client certificate and key do not match or are not valid PEM.",
+      "ca": "CA certificate is not valid PEM.",
+      "hostkey": "Host key missing: “Test connection” and confirm the fingerprint.",
+      "host": "Host is missing.",
+      "duplicate": "This Docker host is already set up."
     }
   }
 }

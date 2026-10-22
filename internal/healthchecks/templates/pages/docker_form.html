@@ -1,0 +1,210 @@
+{{define "content"}}
+{{$d := .Data}}
+{{$s := $d.Sys}}
+{{$e := $d.Errors}}
+{{$f := $d.F}}
+{{$act := "/healthchecks/docker/new"}}{{if $d.Edit}}{{$act = print "/healthchecks/docker/system/" $s.ID "/edit"}}{{end}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0 me-auto"><i class="bi {{if $d.Edit}}bi-pencil-square{{else}}bi-plus-circle{{end}} text-primary me-1"></i> {{if $d.Edit}}{{.T "docker.host.edit"}}: {{$s.Name}}{{else}}{{.T "docker.host.add"}}{{end}}{{$.Doc "healthchecks#docker-remote"}}</h1>
+	<a class="btn btn-outline-secondary btn-sm" href="{{if $d.Edit}}/healthchecks/docker/system/{{$s.ID}}{{else}}/healthchecks/docker{{end}}"><i class="bi bi-arrow-left"></i> {{.T "common.back"}}</a>
+</div>
+{{if and $d.NoBox (or (eq $d.Conn "ssh") (eq $d.Conn "tls"))}}<div class="alert alert-danger small"><i class="bi bi-key"></i> {{.T "pve.err.no_box"}}</div>{{end}}
+{{if $d.Error}}<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle"></i> {{$d.Error}}</div>{{end}}
+<form method="post" action="{{$act}}" autocomplete="off" id="docker-form">
+<input type="hidden" name="_csrf" value="{{.CSRF}}">
+<button type="submit" name="op" value="save" class="visually-hidden" tabindex="-1" aria-hidden="true">{{.T "common.save"}}</button>
+{{if $d.KeyGen}}<input type="hidden" name="key_gen" value="{{$d.KeyGen}}"><input type="hidden" name="key_conn" value="{{$d.Conn}}">{{end}}
+<div class="row g-3">
+	<div class="col-lg-7">
+		<div class="card mb-3">
+			<div class="card-header"><i class="bi bi-plug text-primary"></i> {{.T "pve.form.connection"}}</div>
+			<div class="card-body"><div class="row g-3">
+				<div class="col-12">
+					<label class="form-label" for="dk-conn">{{.T "docker.form.conn"}}</label>
+					<select class="form-select" id="dk-conn" name="conn" data-autosubmit>
+						{{range $d.Conns}}<option value="{{.}}"{{if eq . $d.Conn}} selected{{end}}>{{$.T (print "docker.conn." .)}}</option>{{end}}
+					</select>
+					<div class="form-text">{{.T (print "docker.conn_hint." $d.Conn)}}</div>
+				</div>
+				{{if eq $d.Conn "local"}}
+				<div class="col-12">
+					<label class="form-label" for="dk-socket">{{.T "docker.form.socket"}}</label>
+					<input class="form-control font-monospace" id="dk-socket" name="socket" value="{{$f.socket}}" placeholder="/var/run/docker.sock" maxlength="200">
+				</div>
+				{{else}}
+				{{if eq $d.Conn "ssh"}}<div class="col-md-4">
+					<label class="form-label" for="dk-user">{{.T "docker.form.user"}}</label>
+					<input class="form-control font-monospace{{if index $e "addresses"}} is-invalid{{end}}" id="dk-user" name="user" value="{{$f.user}}" placeholder="node64" maxlength="64" required>
+				</div>{{end}}
+				<div class="{{if eq $d.Conn "ssh"}}col-md-5{{else}}col-md-9{{end}}">
+					<label class="form-label" for="dk-host">{{.T "docker.form.host"}}</label>
+					<input class="form-control font-monospace{{if or (index $e "host") (index $e "addresses")}} is-invalid{{end}}" id="dk-host" name="host" value="{{$f.host}}" placeholder="192.168.1.20" maxlength="253" required>
+					{{with index $e "host"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+				</div>
+				<div class="col-md-3">
+					<label class="form-label" for="dk-port">{{.T "docker.form.port"}}</label>
+					<input class="form-control font-monospace" id="dk-port" name="port" value="{{$f.port}}" inputmode="numeric" placeholder="{{if eq $d.Conn "ssh"}}22{{else if eq $d.Conn "tls"}}2376{{else}}2375{{end}}" maxlength="5">
+				</div>
+				{{if eq $d.Conn "ssh"}}<div class="col-12">
+					<label class="form-label" for="dk-sshsock">{{.T "docker.form.socket"}}</label>
+					<input class="form-control font-monospace" id="dk-sshsock" name="sshsock" value="{{$f.sshsock}}" placeholder="/var/run/docker.sock" maxlength="200">
+					<div class="form-text">{{.T "docker.form.sshsock_hint"}}</div>
+				</div>{{end}}
+				{{end}}
+				{{with index $e "addresses"}}<div class="col-12"><div class="invalid-feedback d-block">{{.}}</div></div>{{end}}
+				{{if $d.Address}}<div class="col-12 small text-body-secondary">{{.T "docker.form.address"}}: <code>{{$d.Address}}</code></div>{{end}}
+
+				{{if eq $d.Conn "ssh"}}
+				<div class="col-12">
+					<label class="form-label" for="dk-key">{{.T "docker.form.ssh_key"}}</label>
+					{{if $d.PubKey}}
+					<div class="small mb-1">{{.T "docker.form.pubkey"}}</div>
+					<div class="input-group mb-2"><input class="form-control form-control-sm font-monospace" id="dk-pub" value="{{$d.PubKey}}" readonly><button class="btn btn-outline-secondary btn-sm" type="button" data-copy-target="#dk-pub" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
+					{{end}}
+					<div class="d-flex flex-wrap gap-2 mb-2">
+						<button class="btn btn-outline-primary btn-sm" type="submit" name="op" value="genkey" formnovalidate><i class="bi bi-key"></i> {{if or $d.PubKey $d.HasKey}}{{.T "docker.form.genkey_new"}}{{else}}{{.T "docker.form.genkey"}}{{end}}</button>
+					</div>
+					<textarea class="form-control form-control-sm font-monospace{{if index $e "key"}} is-invalid{{end}}" id="dk-key" name="key" rows="3" placeholder="{{if or $d.HasKey $d.KeyGen}}{{.T "docker.form.key_keep"}}{{else}}-----BEGIN OPENSSH PRIVATE KEY-----{{end}}"></textarea>
+					{{with index $e "key"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "docker.form.ssh_key_hint"}}</div>
+				</div>
+				{{end}}
+
+				{{if eq $d.Conn "tls"}}
+				<div class="col-12">
+					<label class="form-label" for="dk-ca">{{.T "docker.form.ca"}}</label>
+					<textarea class="form-control form-control-sm font-monospace{{if index $e "ca"}} is-invalid{{end}}" id="dk-ca" name="ca" rows="2" placeholder="{{if $d.HasCA}}{{.T "docker.form.key_keep"}}{{else}}-----BEGIN CERTIFICATE----- (ca.pem){{end}}">{{$f.ca}}</textarea>
+					{{with index $e "ca"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+					{{if $d.HasCA}}<div class="form-check small mt-1"><input class="form-check-input" type="checkbox" id="dk-ca-clear" name="ca_clear"><label class="form-check-label" for="dk-ca-clear">{{.T "docker.form.ca_clear"}}</label></div>{{end}}
+					<div class="form-text">{{.T "docker.form.ca_hint"}}</div>
+				</div>
+				<div class="col-md-6">
+					<label class="form-label" for="dk-cert">{{.T "docker.form.cert"}}</label>
+					<textarea class="form-control form-control-sm font-monospace{{if index $e "cert"}} is-invalid{{end}}" id="dk-cert" name="cert" rows="3" placeholder="{{if $d.HasCert}}{{.T "docker.form.key_keep"}}{{else}}cert.pem{{end}}">{{$f.cert}}</textarea>
+					{{with index $e "cert"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+				</div>
+				<div class="col-md-6">
+					<label class="form-label" for="dk-tlskey">{{.T "docker.form.tls_key"}}</label>
+					<textarea class="form-control form-control-sm font-monospace" id="dk-tlskey" name="key" rows="3" placeholder="{{if or $d.HasCert $d.KeyGen}}{{.T "docker.form.key_keep"}}{{else}}key.pem{{end}}"></textarea>
+				</div>
+				{{if $d.HasCert}}<div class="col-12"><div class="form-check small"><input class="form-check-input" type="checkbox" id="dk-cert-clear" name="cert_clear"><label class="form-check-label" for="dk-cert-clear">{{.T "docker.form.cert_clear"}}</label></div></div>{{end}}
+				{{end}}
+
+				<div class="col-12">
+					<button class="btn btn-outline-primary" type="submit" name="op" value="probe" formnovalidate><i class="bi bi-plug"></i> {{.T "pve.form.probe"}}</button>
+				</div>
+			</div></div>
+		</div>
+
+		{{with $d.Probe}}
+		<div class="card mb-3 {{if .OK}}border-success{{else if .NeedConfirm}}border-warning{{else}}border-danger{{end}}" id="probe">
+			<div class="card-header"><i class="bi {{if .OK}}bi-check-circle text-success{{else if .NeedConfirm}}bi-shield-exclamation text-warning{{else}}bi-x-circle text-danger{{end}}"></i> {{$.T "pve.form.probe_result"}}</div>
+			<div class="card-body small">
+				{{if .Error}}<div class="alert alert-danger py-2 mb-2 text-break">{{.Error}}</div>{{end}}
+				{{if .NeedConfirm}}<div class="alert alert-warning py-2 mb-2"><i class="bi bi-shield-exclamation"></i> {{$.T "docker.form.probe_confirm_first"}}</div>{{end}}
+				{{if .OK}}<dl class="row mb-2">
+					{{with .Info}}<dt class="col-sm-4">{{$.T "pve.version"}}</dt><dd class="col-sm-8">Docker {{.Version}}{{if .OS}} · {{.OS}}{{end}}</dd>
+					{{if .Name}}<dt class="col-sm-4">{{$.T "docker.form.hostname"}}</dt><dd class="col-sm-8">{{.Name}}</dd>{{end}}{{end}}
+					<dt class="col-sm-4">{{$.T "docker.containers"}}</dt><dd class="col-sm-8">{{.Running}} {{$.T "pve.running"}} / {{.Containers}}</dd>
+				</dl>{{end}}
+				{{if .Warning}}<div class="alert alert-warning py-2 mb-2 text-break"><i class="bi bi-exclamation-triangle"></i> {{.Warning}}</div>{{end}}
+				{{if .Fingerprint}}
+				<div class="mb-1 fw-semibold"><i class="bi bi-shield-lock"></i> {{if eq $d.Conn "ssh"}}{{$.T "docker.form.hostkey"}}{{else}}{{$.T "pve.form.cert"}}{{end}}</div>
+				<div class="font-monospace text-break my-1 p-2 rounded bg-body-tertiary">{{$d.ProbeFmt}}</div>
+				{{if $d.PinDiffers}}<div class="alert alert-warning py-2 mb-2"><i class="bi bi-exclamation-triangle"></i> {{$.T "docker.form.pin_differs"}}</div>{{end}}
+				{{if .Trusted}}<div class="text-success mb-1"><i class="bi bi-patch-check"></i> {{$.T "pve.form.cert_trusted"}}</div><input type="hidden" name="probe_trusted" value="1">{{end}}
+				<input type="hidden" name="probe_pin" value="{{$d.ProbePin}}">
+				{{if not .Trusted}}<div class="form-check"><input class="form-check-input{{if index $e "pin_sha256"}} is-invalid{{end}}" type="checkbox" id="dk-pin-confirm" name="pin_confirm"{{if $d.PinConfirm}} checked{{end}}><label class="form-check-label" for="dk-pin-confirm">{{if eq $d.Conn "ssh"}}{{$.T "docker.form.hostkey_confirm"}}{{else}}{{$.T "pve.form.pin_confirm"}}{{end}}</label></div>
+				<div class="form-text">{{if eq $d.Conn "ssh"}}{{$.T "docker.form.hostkey_hint"}}{{else}}{{$.T "pve.form.pin_hint"}}{{end}}</div>{{end}}
+				{{end}}
+			</div>
+		</div>
+		{{else}}{{if $d.ProbePin}}<input type="hidden" name="probe_pin" value="{{$d.ProbePin}}">
+		<div class="card mb-3 border-warning"><div class="card-body small">
+			<div class="font-monospace text-break mb-1">{{$d.ProbeFmt}}</div>
+			<div class="form-check"><input class="form-check-input{{if index $e "pin_sha256"}} is-invalid{{end}}" type="checkbox" id="dk-pin-confirm" name="pin_confirm"{{if $d.PinConfirm}} checked{{end}}><label class="form-check-label" for="dk-pin-confirm">{{.T "pve.form.pin_confirm"}}</label></div>
+		</div></div>{{end}}{{end}}
+
+		<div class="card mb-3">
+			<div class="card-header"><i class="bi bi-sliders text-primary"></i> {{.T "pve.form.settings"}}</div>
+			<div class="card-body"><div class="row g-3">
+				<div class="col-md-6">
+					<label class="form-label" for="dk-name">{{.T "common.name"}}</label>
+					<input class="form-control{{if index $e "name"}} is-invalid{{end}}" id="dk-name" name="name" value="{{$s.Name}}" maxlength="100" placeholder="{{.T "docker.form.name_hint"}}">
+					{{with index $e "name"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+				</div>
+				<div class="col-md-3">
+					<label class="form-label" for="dk-interval">{{.T "pve.interval"}}</label>
+					<div class="input-group"><input class="form-control{{if index $e "interval"}} is-invalid{{end}}" type="number" id="dk-interval" name="interval" value="{{$s.Interval}}" min="{{$d.MinIv}}" max="{{$d.MaxIv}}"><span class="input-group-text">s</span></div>
+					{{with index $e "interval"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+				</div>
+				<div class="col-md-3 d-flex align-items-end">
+					<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="dk-enabled" name="enabled"{{if $s.Enabled}} checked{{end}}><label class="form-check-label" for="dk-enabled">{{.T "pve.form.enabled"}}</label></div>
+				</div>
+				{{if or (eq $d.Conn "ssh") (eq $d.Conn "tls")}}
+				<div class="col-12">
+					<input type="hidden" name="pin_present" value="1">
+					<label class="form-label" for="dk-pin">{{if eq $d.Conn "ssh"}}{{.T "docker.form.hostkey"}}{{else}}{{.T "pve.form.pin"}}{{end}}</label>
+					<input class="form-control font-monospace{{if index $e "pin_sha256"}} is-invalid{{end}}" id="dk-pin" name="pin_sha256" value="{{$d.PinFmt}}" placeholder="{{if eq $d.Conn "ssh"}}SHA256:…{{else}}{{.T "pve.form.pin_placeholder"}}{{end}}">
+					{{with index $e "pin_sha256"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+					<div class="form-text">{{if eq $d.Conn "ssh"}}{{.T "docker.form.hostkey_field_hint"}}{{else}}{{.T "pve.form.pin_field_hint"}}{{end}}</div>
+				</div>
+				{{end}}
+			</div></div>
+		</div>
+		<div class="d-flex gap-2 mb-3">
+			<button class="btn btn-primary" type="submit" name="op" value="save"><i class="bi bi-check-lg"></i> {{.T "common.save"}}</button>
+			<a class="btn btn-outline-secondary" href="{{if $d.Edit}}/healthchecks/docker/system/{{$s.ID}}{{else}}/healthchecks/docker{{end}}">{{.T "common.cancel"}}</a>
+		</div>
+	</div>
+
+	<div class="col-lg-5">
+		<div class="card mb-3">
+			<div class="card-header"><i class="bi bi-terminal text-primary"></i> {{.T "docker.form.setup"}}</div>
+			<div class="card-body small">
+			{{if eq $d.Conn "ssh"}}
+				<p>{{.T "docker.howto.ssh1"}}</p>
+				<pre class="p-2 rounded bg-body-tertiary mb-2"><code>sudo useradd -m -s /bin/sh {{or $f.user "node64"}}
+sudo usermod -aG docker {{or $f.user "node64"}}</code></pre>
+				<p>{{.T "docker.howto.ssh2"}}</p>
+				<pre class="p-2 rounded bg-body-tertiary mb-2 text-wrap text-break"><code>restrict,command="docker system dial-stdio" {{or $d.PubKey "ssh-ed25519 AAAA… node64"}}</code></pre>
+				<p class="mb-0 text-body-secondary">{{.T "docker.howto.ssh3"}}</p>
+			{{else if eq $d.Conn "tls"}}
+				<p>{{.T "docker.howto.tls1"}}</p>
+				<pre class="p-2 rounded bg-body-tertiary mb-2"><code>{
+  "hosts": ["unix:///var/run/docker.sock", "tcp://0.0.0.0:2376"],
+  "tls": true, "tlsverify": true,
+  "tlscacert": "/etc/docker/ca.pem",
+  "tlscert": "/etc/docker/server-cert.pem",
+  "tlskey": "/etc/docker/server-key.pem"
+}</code></pre>
+				<p class="mb-0 text-body-secondary">{{.T "docker.howto.tls2"}}</p>
+			{{else if eq $d.Conn "tcp"}}
+				<p>{{.T "docker.howto.tcp1"}}</p>
+				<pre class="p-2 rounded bg-body-tertiary mb-2"><code>services:
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      INFO: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "2375:2375"</code></pre>
+				<p class="mb-0 text-body-secondary">{{.T "docker.howto.tcp2"}}</p>
+			{{else}}
+				<p>{{.T "hc.docker.socket_mount"}}</p>
+				<pre class="p-2 rounded bg-body-tertiary mb-2"><code>-v /var/run/docker.sock:/var/run/docker.sock:ro
+--group-add $(stat -c %g /var/run/docker.sock)</code></pre>
+			{{end}}
+			</div>
+		</div>
+		<div class="card mb-3">
+			<div class="card-header"><i class="bi bi-info-circle text-primary"></i> {{.T "pve.form.about"}}</div>
+			<div class="card-body small text-body-secondary">{{.T "docker.form.about_text"}}</div>
+		</div>
+	</div>
+</div>
+</form>
+{{end}}

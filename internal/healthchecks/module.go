@@ -200,7 +200,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.23.0", Changelog: changelog, ChangelogEN: changelogEN}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.24.0", Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {
@@ -219,7 +219,8 @@ func (m *Module) Start(ctx context.Context) error {
 	m.st.reloadMaintenance(ctx)
 	runner := checks.NewRunner()
 	runner.PublicIP = m.publicIP
-	runner.Proxmox = m.pveLookup // Check-Typ proxmox liest den letzten Stand der Proxmox-Abfrage
+	runner.Proxmox = m.pveLookup   // Check-Typ proxmox liest den letzten Stand der Proxmox-Abfrage
+	runner.Docker = m.dockerRemote // Check-Typ docker: Hosts mit Zugangsdaten ueber die Verbindung der Docker-Abfrage
 	m.sched = scheduler.New(m.st, m.notifier, runner, m.log, scheduler.Options{})
 	list, err := m.st.Checks(ctx)
 	if err != nil {

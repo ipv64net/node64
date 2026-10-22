@@ -123,7 +123,7 @@ func (m *Module) pveImport(ctx context.Context, in []pveExportSystem) (int, erro
 			sys.ID = id
 		}
 		switch {
-		case sys.IsDocker(): // ohne Secret
+		case sys.IsDocker() && (secret != "" || proxmox.DockerScheme(sys.Addresses[0]) != "ssh"): // meist ohne Secret
 			if err := m.pve.st.SaveSystem(ctx, sys); err != nil {
 				problems = append(problems, x.Name+": "+err.Error())
 				continue
@@ -210,8 +210,8 @@ func (m *Module) pveInsertNoSecret(ctx context.Context, sys *proxmox.System) err
 	addrs, _ := json.Marshal(sys.Addresses)
 	now := store.Now()
 	sys.Enabled = false
-	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO pve_systems (name, addresses, token_id, secret, pin_sha256, interval_sec, enabled,
-		created_at, updated_at) VALUES (?,?,?,'',?,?,0,?,?)`, sys.Name, string(addrs), sys.TokenID, sys.PinSHA256, sys.Interval, now, now)
+	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO pve_systems (kind, name, addresses, token_id, secret, pin_sha256, interval_sec, enabled,
+		created_at, updated_at) VALUES (?,?,?,?,'',?,?,0,?,?)`, sys.Kind, sys.Name, string(addrs), sys.TokenID, sys.PinSHA256, sys.Interval, now, now)
 	if err != nil {
 		return err
 	}

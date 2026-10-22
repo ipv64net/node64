@@ -1,0 +1,44 @@
+{{define "content"}}
+{{$d := .Data}}
+{{$s := $d.Sum}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0 me-auto"><i class="bi bi-box-seam text-primary me-1"></i> {{.T "nav.docker"}}{{$.Doc "healthchecks#docker"}}</h1>
+	<a class="btn btn-outline-secondary btn-sm" href="/healthchecks/docker" title="{{.T "logs.refresh"}}"><i class="bi bi-arrow-clockwise"></i></a>
+	<a class="btn btn-primary btn-sm" href="/healthchecks/docker/new"><i class="bi bi-plus-lg"></i> {{.T "docker.host.add"}}</a>
+</div>
+<p class="text-body-secondary small">{{.T "docker.hosts_hint"}}</p>
+
+<div class="row g-2 mb-3" id="docker-kpi">
+	<div class="col-6 col-md"><div class="card stat stat-primary"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "docker.kpi.hosts"}}</div><div class="stat-value">{{$s.Systems}}</div>{{if $s.SysBad}}<div class="stat-sub text-danger">{{.T "pve.kpi.sys_bad" "count" $s.SysBad}}</div>{{end}}</div><i class="bi bi-hdd-network stat-icon"></i></div></div></div>
+	<div class="col-6 col-md"><div class="card stat stat-info"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.total"}}</div><div class="stat-value">{{$s.Guests}}</div></div><i class="bi bi-box-seam stat-icon"></i></div></div></div>
+	<div class="col-6 col-md"><div class="card stat stat-ok"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.running"}}</div><div class="stat-value">{{$s.Running}}</div></div><i class="bi bi-play-circle stat-icon"></i></div></div></div>
+	<div class="col-6 col-md"><div class="card stat {{if $s.Bad}}stat-down{{else}}stat-muted{{end}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "docker.kpi.bad"}}</div><div class="stat-value">{{$s.Bad}}</div></div><i class="bi bi-exclamation-triangle stat-icon"></i></div></div></div>
+	<div class="col-12 col-md"><div class="card stat stat-muted"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "docker.kpi.load"}}</div><div class="stat-value stat-value-sm">CPU {{or $s.CPUText "–"}} · RAM {{$.Bytes $s.Mem}}{{if $s.MemMax}} / {{$.Bytes $s.MemMax}}{{end}}</div>{{with $d.Last}}<div class="stat-sub"><a href="{{$d.LastURL}}">{{$.T "pve.card.last"}}: {{.Name}}</a> · {{$.Ago .Time}}</div>{{end}}</div><i class="bi bi-speedometer2 stat-icon"></i></div></div></div>
+</div>
+
+<div class="card">
+	<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards hc-table" id="docker-hosts">
+		<thead><tr><th>{{.T "common.name"}}</th><th>{{.T "common.status"}}</th><th>{{.T "pve.version"}}</th><th class="text-end">{{.T "docker.containers"}}</th><th class="d-none d-md-table-cell">CPU · RAM</th><th>{{.T "pve.last_poll"}}</th><th class="text-end">{{.T "common.actions"}}</th></tr></thead>
+		<tbody>
+		{{range $d.Hosts}}
+		<tr{{if eq .State "off"}} class="text-body-tertiary"{{else if or (eq .State "down") (eq .State "error")}} class="hc-row-down"{{else if eq .State "warn"}} class="hc-row-warn"{{end}}>
+			<td data-label="{{$.T "common.name"}}"><a href="{{.Path}}" class="fw-semibold">{{.Sys.Name}}</a> {{if .Local}}<span class="badge text-bg-light fw-normal">{{$.T "docker.local"}}</span>{{end}}
+				<div class="small text-body-secondary text-truncate font-monospace" style="max-width:22rem">{{range .Sys.Addresses}}{{.}}{{end}}</div></td>
+			<td data-label="{{$.T "common.status"}}"><span class="badge {{.Class}}">{{$.T (print "pve.sys_state." .State)}}</span>
+				{{if .Error}}<div class="small text-danger text-break">{{.Error}}</div>{{end}}</td>
+			<td data-label="{{$.T "pve.version"}}">{{with .Info}}Docker {{.Version}}<div class="small text-body-secondary">{{.Name}}</div>{{end}}</td>
+			<td data-label="{{$.T "docker.containers"}}" class="text-end text-nowrap">{{if .Guests}}<span class="text-success" title="{{$.T "pve.running"}}"><i class="bi bi-play-fill"></i>{{.Running}}</span>{{if .Bad}} <span class="text-danger fw-semibold" title="{{$.T "pve.bad"}}"><i class="bi bi-exclamation-octagon"></i>{{.Bad}}</span>{{end}} <span class="text-body-secondary">/ {{.Guests}}</span>{{else}}–{{end}}</td>
+			<td data-label="CPU · RAM" class="d-none d-md-table-cell small text-nowrap">{{if .CPUMax}}{{.CPUText}} · {{$.Bytes .Mem}}{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.last_poll"}}" class="small text-nowrap">{{with .Snap}}{{$.Ago .Time}}{{else}}–{{end}} <span class="text-body-secondary">· {{.Sys.Interval}} s</span></td>
+			<td data-label="{{$.T "common.actions"}}" class="text-end text-nowrap">
+				<a class="btn btn-sm btn-outline-primary" href="{{.Path}}/edit" title="{{$.T "docker.host.edit"}}"><i class="bi bi-pencil"></i></a>
+				<form method="post" action="/healthchecks/proxmox/system/{{.Sys.ID}}/toggle" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="back" value="/healthchecks/docker">
+					{{if .Sys.Enabled}}<button class="btn btn-sm btn-outline-warning" type="submit" title="{{$.T "docker.disable"}}"><i class="bi bi-pause-fill"></i></button>{{else}}<button class="btn btn-sm btn-outline-success" type="submit" title="{{$.T "docker.enable"}}"><i class="bi bi-play-fill"></i></button>{{end}}</form>
+				<form method="post" action="/healthchecks/proxmox/system/{{.Sys.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" title="{{$.T "common.delete"}}" data-confirm="{{$.T "docker.host.delete_confirm" "name" .Sys.Name}}"><i class="bi bi-trash"></i></button></form>
+			</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table></div>
+</div>
+{{end}}

@@ -1,5 +1,17 @@
 # Änderungen – Healthchecks
 
+## 2.24.0 – 2026-10-22
+
+### Neu
+- Docker-Hosts aus der Ferne, ohne Agent: Unter Healthchecks → Docker lassen sich weitere Hosts hinzufügen – per SSH
+  (empfohlen; Node64 erzeugt den Schlüssel, der Host-Key wird beim Test bestätigt, geht über Socket-Weiterleitung oder
+  `docker system dial-stdio`, also auch mit `restrict,command="docker system dial-stdio"` im authorized_keys), über die
+  Docker-API mit TLS (Port 2376, Client-Zertifikat, CA oder bestätigter Fingerabdruck) oder über docker-socket-proxy
+  (TCP 2375). Zugangsdaten werden verschlüsselt gespeichert. Ab zwei Hosts gibt es eine Übersicht mit Kacheln über
+  alle Hosts; „Als Check führen“ nutzt bei SSH/TLS dieselbe Verbindung.
+- Proxmox VE: Die Übersicht hat Kacheln über alle Systeme und Cluster – Systeme, Nodes online, Gäste laufend und
+  gestört, Auslastung (CPU, RAM) mit der letzten Störung.
+
 ## 2.23.0 – 2026-10-22
 
 ### Neu

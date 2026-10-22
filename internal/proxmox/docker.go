@@ -50,6 +50,19 @@ type DockerInfo struct {
 	MemTotal int64  `json:"mem_total"`
 }
 
+// dockerInfoRaw ist der benutzte Teil von /info.
+type dockerInfoRaw struct {
+	Name            string `json:"Name"`
+	OperatingSystem string `json:"OperatingSystem"`
+	ServerVersion   string `json:"ServerVersion"`
+	NCPU            int    `json:"NCPU"`
+	MemTotal        int64  `json:"MemTotal"`
+}
+
+func (in dockerInfoRaw) toInfo() *DockerInfo {
+	return &DockerInfo{Name: in.Name, OS: in.OperatingSystem, Version: in.ServerVersion, NCPU: in.NCPU, MemTotal: in.MemTotal}
+}
+
 // DefaultDockerHost: NODE64_DOCKER_HOST oder der uebliche Socket (wie der Check-Typ docker).
 func DefaultDockerHost() string {
 	if h := strings.TrimSpace(os.Getenv("NODE64_DOCKER_HOST")); h != "" {
@@ -58,9 +71,13 @@ func DefaultDockerHost() string {
 	return "unix:///var/run/docker.sock"
 }
 
-// ValidDockerHost: unix:///pfad (lokaler Socket) oder tcp:// bzw. http(s):// (z. B. docker-socket-proxy).
+// ValidDockerHost: unix:///pfad (lokaler Socket), tcp:// bzw. http(s):// (z. B. docker-socket-proxy, TLS auf 2376) oder
+// ssh://user@host[:port][/socket] (docker_remote.go).
 func ValidDockerHost(h string) bool {
 	switch {
+	case strings.HasPrefix(h, "ssh://"):
+		_, _, _, err := dockerSSHTarget(h)
+		return err == nil
 	case strings.HasPrefix(h, "unix://"):
 		return strings.HasPrefix(strings.TrimPrefix(h, "unix://"), "/")
 	case strings.HasPrefix(h, "tcp://"), strings.HasPrefix(h, "http://"), strings.HasPrefix(h, "https://"):
@@ -97,6 +114,7 @@ type DockerPoller struct {
 	base     string
 	host     string
 	initErr  error
+	close    func() // Verbindung schliessen (SSH), am Ende von Run
 	now      func() time.Time
 	interval time.Duration
 
@@ -136,15 +154,27 @@ type dockerInspected struct {
 
 // NewDockerPoller baut die Abfrage eines Docker-Hosts. fn darf nil sein.
 func NewDockerPoller(log *slog.Logger, sys System, fn SnapshotFunc) *DockerPoller {
-	host := DefaultDockerHost()
-	if len(sys.Addresses) > 0 && strings.TrimSpace(sys.Addresses[0]) != "" {
-		host = strings.TrimSpace(sys.Addresses[0])
+	host := dockerSysAddr(sys)
+	conn, err := dockerConnect(sys, nil)
+	if err != nil {
+		conn = &dockerConn{hc: &http.Client{}, base: "http://docker", close: func() {}}
 	}
-	hc, base, err := dockerHTTP(host)
-	p := NewDockerPollerClient(log, sys, fn, hc, base)
-	p.host, p.initErr = host, err
+	p := NewDockerPollerClient(log, sys, fn, conn.hc, conn.base)
+	p.host, p.initErr, p.close = host, err, conn.close
 	return p
 }
+
+// Client liefert HTTP-Client und Basis-URL der Abfrage (Check-Typ docker fuer Hosts mit Zugangsdaten: dieselbe
+// Verbindung); nil bei Fehler in der Einrichtung.
+func (p *DockerPoller) Client() (*http.Client, string) {
+	if p.initErr != nil {
+		return nil, ""
+	}
+	return p.hc, p.base
+}
+
+// Host ist die Adresse des Docker-Hosts.
+func (p *DockerPoller) Host() string { return p.host }
 
 // NewDockerPollerClient baut die Abfrage mit eigenem HTTP-Client und Basis-URL (Tests: httptest).
 func NewDockerPollerClient(log *slog.Logger, sys System, fn SnapshotFunc, hc *http.Client, base string) *DockerPoller {
@@ -167,6 +197,9 @@ func (p *DockerPoller) Last() *Snapshot {
 
 // Run fragt ab, bis ctx endet. Nach Fehlern wird frueher wiederholt (5 s, verdoppelt bis zum Intervall).
 func (p *DockerPoller) Run(ctx context.Context) {
+	if p.close != nil {
+		defer p.close()
+	}
 	p.paced = true
 	backoff := pveBackoffStart
 	for {
@@ -200,7 +233,7 @@ func (p *DockerPoller) Poll(ctx context.Context) *Snapshot {
 		err = p.collect(ctx, now, s)
 	}
 	if err != nil {
-		s.OK, s.Error, s.Resources = false, dockerHint(err), []Resource{}
+		s.OK, s.Error, s.Resources = false, dockerHintFor(p.host, err), []Resource{}
 		if !p.failing {
 			p.log.Warn("docker api failed", "err", s.Error)
 		}
@@ -352,15 +385,9 @@ func (p *DockerPoller) collect(ctx context.Context, now time.Time, s *Snapshot) 
 		return err
 	}
 	if p.info == nil || now.Sub(p.infoAt) >= dockerInfoEvery {
-		var in struct {
-			Name            string `json:"Name"`
-			OperatingSystem string `json:"OperatingSystem"`
-			ServerVersion   string `json:"ServerVersion"`
-			NCPU            int    `json:"NCPU"`
-			MemTotal        int64  `json:"MemTotal"`
-		}
+		var in dockerInfoRaw
 		if err := p.get(ctx, "/info", &in); err == nil {
-			p.info, p.infoAt = &DockerInfo{Name: in.Name, OS: in.OperatingSystem, Version: in.ServerVersion, NCPU: in.NCPU, MemTotal: in.MemTotal}, now
+			p.info, p.infoAt = in.toInfo(), now
 		} else {
 			p.log.Debug("docker info failed", "err", err) // z. B. docker-socket-proxy ohne INFO=1: nicht fatal
 			p.infoAt = now

@@ -775,8 +775,8 @@ func (m *Module) pveDeleteSystem(r *http.Request, id int64) error {
 	if err != nil {
 		return err
 	}
-	if sys.IsDocker() {
-		cs = nil // Docker-Checks bleiben (sie fragen den Container selbst); nicht automatisch neu anlegen
+	if sys.IsDocker() && dockerSysHost(sys) == checks.DefaultDockerHost() {
+		cs = nil // lokaler Host: Docker-Checks bleiben (sie fragen den Container selbst); nicht automatisch neu anlegen
 		_ = m.core.SetSetting(ctx, dockerSettingMonitor, "off")
 	}
 	m.pveHalt(id)

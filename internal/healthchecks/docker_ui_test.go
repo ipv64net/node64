@@ -22,6 +22,7 @@ import (
 	"github.com/ipv64net/node64/internal/metrics"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/proxmox"
+	"github.com/ipv64net/node64/internal/secrets"
 	"github.com/ipv64net/node64/internal/store"
 )
 
@@ -39,10 +40,19 @@ func newDockerModule(t *testing.T) (*httptest.Server, *any) {
 // newDockerModuleRec: wie newDockerModule, mit Modul und abgefangenen Meldungen.
 func newDockerModuleRec(t *testing.T, core *store.Store) (*Module, *httptest.Server, *any, *pveRec) {
 	t.Helper()
+	return newDockerModuleBox(t, core, nil)
+}
+
+// newDockerModuleBox: wie newDockerModuleRec, mit Schluessel fuer Zugangsdaten (nil = keiner).
+func newDockerModuleBox(t *testing.T, core *store.Store, box *secrets.Box) (*Module, *httptest.Server, *any, *pveRec) {
+	t.Helper()
 	lg := slog.New(slog.NewTextHandler(io.Discard, nil))
 	m := New(core, lg, nil, nil, "test")
 	if err := core.Migrate(context.Background(), Name, m.Migrations()); err != nil {
 		t.Fatal(err)
+	}
+	if box != nil {
+		m.SetSecrets(box)
 	}
 	rec := &pveRec{}
 	m.pve.noRun, m.pve.alert = true, rec.add

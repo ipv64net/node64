@@ -1,5 +1,17 @@
 # Changes – Healthchecks
 
+## 2.24.0 – 2026-10-22
+
+### Added
+- Remote Docker hosts without an agent: under Healthchecks → Docker further hosts can be added – via SSH
+  (recommended; Node64 generates the key, the host key is confirmed in the test, works via socket forwarding or
+  `docker system dial-stdio`, so also with `restrict,command="docker system dial-stdio"` in authorized_keys), via the
+  Docker API with TLS (port 2376, client certificate, CA or confirmed fingerprint) or via docker-socket-proxy
+  (TCP 2375). Credentials are stored encrypted. With two or more hosts there is an overview with tiles across all
+  hosts; “Track as check” uses the same connection for SSH/TLS.
+- Proxmox VE: the overview has tiles across all systems and clusters – systems, nodes online, guests running and with
+  problems, load (CPU, RAM) with the last incident.
+
 ## 2.23.0 – 2026-10-22
 
 ### Added
@@ -65,7 +77,7 @@
 
 ## 2.20.0 – 2026-10-21
 
-### New
+### Added
 - Configuration export/import contains the status pages (settings, groups, entries, logo; matched by slug). The
   password hash of a protected page only with an export password; without it the page arrives switched off.
   Announcements stay on the node.
@@ -76,7 +88,7 @@
 
 ## 2.19.1 – 2026-10-21
 
-### New
+### Added
 - Proxmox VE: channels selectable per level (system, node, guest) like for checks – default channels or specific
   channels; node and guest visibly inherit the selection (“inherited from the system”, “inherited from the node”). Deleted
   channels are skipped when sending; export/import maps the channels like for checks. API: `rules.channels`.
@@ -87,7 +99,7 @@
 
 ## 2.19.0 – 2026-10-21
 
-### New
+### Added
 - Prometheus per guest also network and disk I/O (bytes/s), RAM in bytes and CPUs; the system page shows a hint if the token lacks read permissions (most common setup error: token with privilege separation without its own role).
 - Proxmox notifications respect quiet hours (crashes too) and maintenance windows (windows for all checks; for specific checks if the guest is kept as a check).
 - Proxmox VE: new menu entry “Proxmox VE” under Healthchecks. Monitors Proxmox VE systems (single node or cluster)
@@ -125,7 +137,7 @@
 
 ## 2.18.0 – 2026-10-20
 
-### New
+### Added
 - Status pages: own logo per page (PNG, JPEG, WebP or SVG up to 256 KB) in the header next to the name, also as favicon;
   without an own logo the tab shows the Node64 logo. "Provided by" shows the Node64 logo.
 - Status pages: option "use the Healthchecks groups" – entries appear in their Healthchecks groups as blocks (without a
@@ -142,7 +154,7 @@
 
 ## 2.17.0 – 2026-10-20
 
-### New
+### Added
 - **Status pages** (Healthchecks › Status pages): a public overview of any number of checks in groups, with an overall
   banner, daily bars (30/60/90 days) and availability; groups with problems stay open, problems first. Clicking an entry
   shows availability over 24 h/7/30 days, average latency, 24 hourly bars and the latest incidents. Incidents and
@@ -168,7 +180,7 @@
 
 ## 2.16.0 – 2026-10-19
 
-### New
+### Added
 - **Cluster** instead of “local group”: own menu entry, nodes may also be in different networks. Healthchecks keep syncing via the hubs; the cluster is an additional path that can be switched off (switch on the Healthchecks sync page and under Cluster, separately for checks and maintenance windows; notification settings are a separate entry “Notifications” under Cluster).
 - Cluster without ipv64: if no node has an ipv64 account, checks, measurements, evaluation and notifications run purely locally in the cluster.
 - The connection between nodes is always encrypted (HTTPS, also via the normal web port); a valid certificate is not required.
@@ -178,7 +190,7 @@
 
 ## 2.15.0 – 2026-10-19
 
-### New
+### Added
 - Form: **Test from ipv64** – before switching to online or hybrid, the ipv64 locations measure the input once and show the result per location (API: `POST /api/checks/online-test`).
 - Form: online limit as in the portal – locations above the account class are locked, used online measuring points are shown and checked on save.
 - List: filters by execution location and node, account bar with class, online measuring points (used/limit), split online/local/hybrid and nodes online.
@@ -194,14 +206,14 @@
 
 ## 2.14.0 – 2026-10-19
 
-### New
+### Added
 - Check type **JSON**: fetches a URL like HTTP and checks values in the JSON response, one condition per line, e.g. `status == ok`, `queue < 100`, `items[0].up == true`, `tags contains web`, `version exists`, `name ~ ^web-[0-9]+$`. All conditions must be met, optionally one is enough. The value of the first condition appears in the message, and as a number also in the measurement details.
 - Check type **DNS**: queries a name (A, AAAA, CNAME, MX, TXT, NS, SRV, CAA, PTR, SOA) via the default resolver, a specific server or directly the authoritative name servers of the zone. Expectation: any answer, contains values, exactly these values, regex, name does not exist (NXDOMAIN) or “points to my public IP” (for DynDNS domains). Optional DNSSEC validation and minimum TTL; the response time is measured.
 - Both run locally, online and hybrid. Local only: private targets, a DNS server in the home network and “points to my public IP”.
 
 ## 2.13.0 – 2026-10-19
 
-### New
+### Added
 - Prometheus: state, response time, last measurement, consecutive failures, maintenance and certificate expiry per
   check, plus counts per state and open incidents at `GET /api/metrics` (see docs/PROMETHEUS.md).
 
@@ -215,13 +227,13 @@
 
 ## 2.12.1 – 2026-10-16
 
-### New
+### Added
 - Hints about limits (daily quota, change rejected by the hub due to the online limit, locations in the form)
   link to the new overview of account classes.
 
 ## 2.12.0 – 2026-10-16
 
-### New
+### Added
 - Separate state "Not monitored": a check without a measurement for 3 intervals (at least 5 minutes) no longer shows
   as "OK" but as "Not monitored" (yellow striped) – in the list, the filter and the header of the detail page. The
   detail page also states that all values come from the last measurement (with time and the state at that time) and which
@@ -230,7 +242,7 @@
 
 ## 2.11.0 – 2026-10-16
 
-### New
+### Added
 - "Not being checked": if no measuring point has measured a check for 3 intervals (at least 5 minutes), e.g. because
   the only measuring node is offline, its row in the list is marked yellow (hourglass with the last measurement).
 - ipv64 (hub) detects this itself: the check goes to "pending", and the notification "no longer being checked" is sent
@@ -240,7 +252,7 @@
 
 ## 2.10.0 – 2026-10-15
 
-### New
+### Added
 - Other modules can create a check the same way as the API (validation, sync, local group, limits and audit included). CDN64 is the first to use it with "Create healthcheck for this target".
 
 ## 2.9.1 – 2026-10-15
@@ -254,14 +266,14 @@
 
 ## 2.9.0 – 2026-10-15
 
-### New
+### Added
 - Proxy nodes: checks measured by nodes of the local group without their own ipv64 link now appear in the portal via
   the forwarding node, with states and measurements. Notifications stay with the group; the group also evaluates the
   overall state of such checks on linked nodes.
 
 ## 2.8.0 – 2026-10-15
 
-### New
+### Added
 - `POST /api/checks/bulk`: bulk actions via API (pause, resume, check now, delete, set or
   remove tag) with a result per check; bulk actions (also in the UI) get a single summary entry in the audit.
 
@@ -281,7 +293,7 @@
 
 ## 2.7.0 – 2026-10-14
 
-### New
+### Added
 - JSON API for online checks in API mode (ipv64 API key only, no sync): `/api/online-checks` – list,
   create, read, update, delete, pause, resume, check now; same input validation and same
   audit entries as in the UI.
@@ -308,7 +320,7 @@
 
 ## 2.6.0 – 2026-10-14
 
-### New
+### Added
 - Local group: a node linked to ipv64 forwards the data from the hub to nodes without Healthchecks sync –
   the overall state of checks that no node of the group measures (e.g. online checks), and the measuring points
   outside the group (ipv64 locations, other nodes) including history. A node without sync thus shows all checks
@@ -316,7 +328,7 @@
 
 ## 2.5.0 – 2026-10-14
 
-### New
+### Added
 - Local group: the account's notification settings (quiet hours, limits, summary notification) are synced
   between the nodes; changes on a node without Healthchecks sync go to ipv64 via the group.
 - Detail page: "Notified by" shows who reports a status change (ipv64, this node or a node of the
@@ -327,7 +339,7 @@
 
 ## 2.4.0 – 2026-10-14
 
-### New
+### Added
 - Local group: maintenance windows are synced between the nodes (create, update, delete on any node).
   A linked node forwards windows from nodes without Healthchecks sync to ipv64; the same window from the hub
   and from the group is merged, not created twice.
@@ -342,7 +354,7 @@
 
 ## 2.3.0 – 2026-10-14
 
-### New
+### Added
 - Local group: if several nodes of the group measure a check, exactly one notifies – the first reachable one
   in the list of measuring nodes (the owner node; if it fails, the next one). The reported state is the
   overall state of all measuring points as with ipv64 (incl. "partially down" if enabled). When a node
@@ -356,7 +368,7 @@
 
 ## 2.2.0 – 2026-10-14
 
-### New
+### Added
 - Local group: measurements and states are exchanged between the nodes. Each node shows the checks of the
   others with current state, measuring point table and chart (a new node receives the last 24 h).
 - Without Healthchecks sync (or for checks unknown to ipv64), the node determines the overall state from the
@@ -365,7 +377,7 @@
 
 ## 2.1.0 – 2026-10-14
 
-### New
+### Added
 - Local group: nodes of the same ipv64 account in the local network sync their checks with each other (create,
   update, delete on any node, everywhere within a few seconds). The newer change wins; channels remain a
   per-node setting.
@@ -379,7 +391,7 @@
 
 Healthchecks 2.0: first complete version in Node64, locally and together with the ipv64 hubs.
 
-### New
+### Added
 - Check types HTTP(S), keyword, ping, TCP port, DNS, certificate expiry, push and Docker container (socket/TCP); port only in the port field, host:port in the target is taken over.
 - Measuring points per check: local, online (ipv64 hubs), hybrid and multiple measuring nodes; display of where a check is measured (Online, Hybrid, Local, Other node).
 - Healthchecks sync with ipv64: linking via code or with one click via the API key, outbox and conflicts, everything editable from any node (checks, channels, maintenance, check now via the hub).

@@ -35,6 +35,9 @@ func (f *fakeDocker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.hits["info"]++
 		_ = json.NewEncoder(w).Encode(map[string]any{"Name": "dockerhost", "NCPU": 4, "MemTotal": 8 << 30, "ServerVersion": "27.3.1", "OperatingSystem": "Debian"})
 		return
+	case path == "/version":
+		_ = json.NewEncoder(w).Encode(map[string]any{"Version": "27.3.1", "Os": "linux"})
+		return
 	case path == "/containers/json":
 		f.hits["list"]++
 		if f.fail {

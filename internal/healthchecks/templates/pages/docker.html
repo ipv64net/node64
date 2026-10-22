@@ -11,7 +11,7 @@
 {{$f := $d.Filter}}
 <div class="d-flex flex-wrap align-items-start gap-2 mb-3">
 	<div class="me-auto">
-		<h1 class="h4 mb-1"><i class="bi bi-box-seam text-primary me-1"></i> {{.T "nav.docker"}}{{if $d.Sys}} <span class="badge {{$d.View.Class}}">{{.T (print "pve.sys_state." $d.View.State)}}</span>{{end}}{{$.Doc "healthchecks#docker"}}</h1>
+		<h1 class="h4 mb-1"><i class="bi bi-box-seam text-primary me-1"></i> {{.T "nav.docker"}}{{if and $d.Sys (gt $d.Hosts 1)}}: {{$d.Sys.Name}}{{end}}{{if $d.Sys}} <span class="badge {{$d.View.Class}}">{{.T (print "pve.sys_state." $d.View.State)}}</span>{{end}}{{$.Doc "healthchecks#docker"}}</h1>
 		<div class="small text-body-secondary d-flex flex-wrap gap-2 align-items-center">
 			{{with $d.Info}}<span><i class="bi bi-hdd"></i> {{.Name}}</span>{{if .Version}}<span class="badge text-bg-light">Docker {{.Version}}</span>{{end}}{{if .OS}}<span>{{.OS}}</span>{{end}}<span>{{.NCPU}} CPU · {{$.Bytes .MemTotal}} RAM</span>{{end}}
 			<code>{{$d.Host}}</code>
@@ -22,7 +22,9 @@
 		<a class="btn btn-outline-secondary btn-sm" href="{{or $d.Path "/healthchecks/docker"}}" title="{{.T "logs.refresh"}}"><i class="bi bi-arrow-clockwise"></i></a>
 		{{if $d.Sys}}<form method="post" action="{{$d.Act}}/toggle" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="back" value="/healthchecks/docker">
 			{{if $d.Sys.Enabled}}<button class="btn btn-sm btn-outline-warning" type="submit" data-confirm="{{.T "docker.disable_confirm"}}"><i class="bi bi-pause-fill"></i> {{.T "docker.disable"}}</button>{{else}}<button class="btn btn-sm btn-outline-success" type="submit"><i class="bi bi-play-fill"></i> {{.T "docker.enable"}}</button>{{end}}</form>{{end}}
+		{{if $d.Sys}}<a class="btn btn-outline-primary btn-sm" href="{{$d.Path}}/edit" title="{{.T "docker.host.edit"}}"><i class="bi bi-pencil"></i></a>{{end}}
 		<a class="btn btn-outline-primary btn-sm" href="/healthchecks/new?type=docker"><i class="bi bi-plus-lg"></i> {{.T "hc.docker.add"}}</a>
+		<a class="btn btn-outline-primary btn-sm" href="/healthchecks/docker/new"><i class="bi bi-hdd-network"></i> {{.T "docker.host.add"}}</a>
 	</div>
 </div>
 <p class="text-body-secondary small mb-2">{{.T "docker.page_hint"}}</p>
@@ -32,7 +34,9 @@
 		<form method="post" action="/healthchecks/docker/enable" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-activity"></i> {{.T "docker.setup"}}</button></form></div>{{end}}
 {{else if eq $d.View.State "off"}}<div class="alert alert-secondary small" id="docker-off"><i class="bi bi-pause-circle"></i> {{.T "docker.disabled_hint"}}</div>
 {{else if eq $d.View.State "pending"}}<div class="alert alert-info small"><i class="bi bi-hourglass-split"></i> {{.T "pve.pending"}}</div>{{end}}
-{{if $d.Socket}}<div class="small mb-3" id="docker-socket"><span class="badge text-bg-success"><i class="bi bi-plug"></i> {{.T "hc.docker.socket_ok"}}</span>{{if $d.Live}} <span class="badge text-bg-light"><i class="bi bi-activity"></i> {{.T "docker.live"}}</span>{{end}}</div>
+{{if $d.Socket}}<div class="small mb-3" id="docker-socket"><span class="badge text-bg-success"><i class="bi bi-plug"></i> {{if $d.Local}}{{.T "hc.docker.socket_ok"}}{{else}}{{.T "docker.connected"}}{{end}}</span>{{if $d.Live}} <span class="badge text-bg-light"><i class="bi bi-activity"></i> {{.T "docker.live"}}</span>{{end}}</div>
+{{else if not $d.Local}}{{if $d.SocketErr}}<div class="alert alert-warning small" id="docker-socket"><i class="bi bi-exclamation-triangle"></i> {{.T "docker.unreachable" "host" $d.Host}}
+	<div class="text-break mt-1 text-body-secondary">{{$d.SocketErr}}</div></div>{{end}}
 {{else}}<div class="alert alert-warning small" id="docker-socket"><i class="bi bi-exclamation-triangle"></i> {{.T "hc.docker.socket_missing" "host" $d.Host}}
 	<div class="text-break mt-1 text-body-secondary">{{$d.SocketErr}}</div>
 	<div class="mt-2">{{.T "hc.docker.socket_mount"}} <code>-v /var/run/docker.sock:/var/run/docker.sock:ro</code>{{$.Doc "healthchecks#docker"}}</div>
@@ -40,10 +44,10 @@
 </div>{{end}}
 
 <div class="row g-2 mb-3">
-	<div class="col-6 col-md"><a class="card stat stat-primary" href="/healthchecks/docker"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.total"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Total}}{{else}}–{{end}}</div></div><i class="bi bi-box-seam stat-icon"></i></div></a></div>
-	<div class="col-6 col-md"><a class="card stat stat-ok" href="/healthchecks/docker?state=running"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.running"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Running}}{{else}}–{{end}}</div></div><i class="bi bi-play-circle stat-icon"></i></div></a></div>
-	<div class="col-6 col-md"><a class="card stat {{if $d.Bad}}stat-down{{else}}stat-muted{{end}}" href="/healthchecks/docker?state=problem"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "docker.kpi.bad"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Bad}}{{else}}–{{end}}</div>{{if $d.Missing}}<div class="stat-sub">{{.T "hc.docker.kpi.missing" "count" $d.Missing}}</div>{{end}}</div><i class="bi bi-exclamation-triangle stat-icon"></i></div></a></div>
-	<div class="col-6 col-md"><a class="card stat stat-info" href="/healthchecks/docker?state=watched"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "docker.kpi.checks"}}</div><div class="stat-value">{{$d.Watched}}</div>{{if $d.AsCheck}}<div class="stat-sub">{{.T "docker.kpi.as_check" "count" $d.AsCheck}}</div>{{end}}</div><i class="bi bi-heart-pulse stat-icon"></i></div></a></div>
+	<div class="col-6 col-md"><a class="card stat stat-primary" href="{{or $d.Path "/healthchecks/docker"}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.total"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Total}}{{else}}–{{end}}</div></div><i class="bi bi-box-seam stat-icon"></i></div></a></div>
+	<div class="col-6 col-md"><a class="card stat stat-ok" href="{{or $d.Path "/healthchecks/docker"}}?state=running"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.running"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Running}}{{else}}–{{end}}</div></div><i class="bi bi-play-circle stat-icon"></i></div></a></div>
+	<div class="col-6 col-md"><a class="card stat {{if $d.Bad}}stat-down{{else}}stat-muted{{end}}" href="{{or $d.Path "/healthchecks/docker"}}?state=problem"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "docker.kpi.bad"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Bad}}{{else}}–{{end}}</div>{{if $d.Missing}}<div class="stat-sub">{{.T "hc.docker.kpi.missing" "count" $d.Missing}}</div>{{end}}</div><i class="bi bi-exclamation-triangle stat-icon"></i></div></a></div>
+	<div class="col-6 col-md"><a class="card stat stat-info" href="{{or $d.Path "/healthchecks/docker"}}?state=watched"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "docker.kpi.checks"}}</div><div class="stat-value">{{$d.Watched}}</div>{{if $d.AsCheck}}<div class="stat-sub">{{.T "docker.kpi.as_check" "count" $d.AsCheck}}</div>{{end}}</div><i class="bi bi-heart-pulse stat-icon"></i></div></a></div>
 	{{if $d.Live}}<div class="col-12 col-md"><div class="card stat stat-muted"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "docker.kpi.load"}}</div><div class="stat-value stat-value-sm">CPU {{or $d.CPUText "–"}} · RAM {{$.Bytes $d.MemSum}}</div>{{with $d.Last}}<div class="stat-sub"><a href="{{$d.LastURL}}">{{$.T "pve.card.last"}}: {{.Name}}</a> · {{$.Ago .Time}}</div>{{end}}</div><i class="bi bi-speedometer2 stat-icon"></i></div></div></div>{{end}}
 </div>
 

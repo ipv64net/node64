@@ -116,7 +116,8 @@ func SameEndpoint(a, b *System) bool {
 }
 
 // ValidateSystem prueft und normalisiert ein System. isNew verlangt ein Secret (beim Aendern: leer = behalten).
-// Docker-Hosts haben eine Adresse (unix://, tcp://, http(s)://) und weder Token noch Secret noch Pin.
+// Docker-Hosts haben eine Adresse (unix://, tcp://, http(s)://, ssh://) und kein Token; Secret (Zugangsdaten als JSON) und
+// Pin nur bei https:// und ssh:// (docker_remote.go).
 func ValidateSystem(sys *System, isNew bool) error {
 	sys.Name = strings.TrimSpace(sys.Name)
 	if len(sys.Name) > 100 {
@@ -127,7 +128,7 @@ func ValidateSystem(sys *System, isNew bool) error {
 		sys.Kind = KindPVE
 	case KindPVE:
 	case KindDocker:
-		return validateDocker(sys)
+		return validateDocker(sys, isNew)
 	default:
 		return pveFerr("kind", "pve.err.kind")
 	}
@@ -172,8 +173,9 @@ func ValidateSystem(sys *System, isNew bool) error {
 	return nil
 }
 
-// validateDocker prueft einen Docker-Host (leere Adresse = Standard, NODE64_DOCKER_HOST bzw. der Socket).
-func validateDocker(sys *System) error {
+// validateDocker prueft einen Docker-Host (leere Adresse = Standard, NODE64_DOCKER_HOST bzw. der Socket). isNew verlangt
+// bei ssh:// einen Schluessel (beim Aendern: leeres Secret = behalten).
+func validateDocker(sys *System, isNew bool) error {
 	var addrs []string
 	for _, a := range sys.Addresses {
 		if a = strings.TrimSpace(a); a != "" {
@@ -187,7 +189,27 @@ func validateDocker(sys *System) error {
 		return pveFerr("addresses", "pve.err.docker_host")
 	}
 	sys.Addresses = addrs
-	sys.TokenID, sys.Secret, sys.PinSHA256 = "", "", ""
+	sys.TokenID = ""
+	if !DockerUsesSecret(addrs[0]) {
+		sys.Secret, sys.PinSHA256 = "", ""
+	} else {
+		pin, ok := NormalizeDockerPin(sys.PinSHA256)
+		if !ok {
+			return pveFerr("pin_sha256", "pve.err.pin")
+		}
+		sys.PinSHA256 = pin
+		if DockerScheme(addrs[0]) == "ssh" && pin == "" {
+			return pveFerr("pin_sha256", "docker.err.hostkey")
+		}
+		if len(sys.Secret) > dockerMaxSecret {
+			return pveFerr("key", "docker.err.key")
+		}
+		if sys.Secret != "" || (isNew && DockerScheme(addrs[0]) == "ssh") {
+			if err := validateDockerCreds(addrs[0], ParseDockerCreds(sys.Secret)); err != nil {
+				return err
+			}
+		}
+	}
 	if sys.Interval == 0 {
 		sys.Interval = DefaultInterval
 	}
@@ -247,7 +269,7 @@ func (s *Store) SaveSystem(ctx context.Context, sys *System) error {
 	if err := ValidateSystem(sys, sys.ID == 0); err != nil {
 		return err
 	}
-	if s.box == nil && !sys.IsDocker() { // Docker-Hosts haben kein Secret
+	if s.box == nil && (!sys.IsDocker() || sys.Secret != "") { // Docker-Hosts meist ohne Secret
 		return ErrNoBox
 	}
 	addrs, _ := json.Marshal(sys.Addresses)
@@ -265,7 +287,8 @@ func (s *Store) SaveSystem(ctx context.Context, sys *System) error {
 	}
 	q := `UPDATE pve_systems SET name=?, addresses=?, token_id=?, pin_sha256=?, interval_sec=?, enabled=?, updated_at=?`
 	args := []any{sys.Name, string(addrs), sys.TokenID, sys.PinSHA256, sys.Interval, sys.Enabled, now}
-	if sys.IsDocker() {
+	keepSecret := !sys.IsDocker() || DockerUsesSecret(sys.Addresses[0])
+	if !keepSecret {
 		q += `, secret=''`
 	}
 	if sys.Secret != "" {
@@ -279,7 +302,7 @@ func (s *Store) SaveSystem(ctx context.Context, sys *System) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	if sys.Secret == "" && !sys.IsDocker() {
+	if sys.Secret == "" && keepSecret {
 		if old, err := s.System(ctx, sys.ID); err == nil {
 			sys.Secret = old.Secret
 		}

@@ -55,8 +55,12 @@ func DefaultDockerHost() string {
 var containerRe = regexp.MustCompile(`^/?[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 
 func validDockerHost(h string) bool {
-	return h == "" || strings.HasPrefix(h, "unix://") || strings.HasPrefix(h, "tcp://") || strings.HasPrefix(h, "http://") || strings.HasPrefix(h, "https://")
+	return h == "" || strings.HasPrefix(h, "unix://") || strings.HasPrefix(h, "tcp://") || strings.HasPrefix(h, "http://") || strings.HasPrefix(h, "https://") || strings.HasPrefix(h, "ssh://")
 }
+
+// DockerRemote liefert fuer einen Host der Docker-Ueberwachung deren Verbindung (Zugangsdaten bei https://, ssh://);
+// ok=false: dort nicht eingerichtet bzw. ausgeschaltet. Gesetzt von Healthchecks (Runner.Docker).
+type DockerRemote func(host string) (hc *http.Client, base string, ok bool)
 
 // dockerClient baut HTTP-Client und Basis-URL fuer einen Docker-Host.
 func dockerClient(host string, timeout time.Duration) (*http.Client, string, error) {
@@ -79,8 +83,18 @@ func dockerClient(host string, timeout time.Duration) (*http.Client, string, err
 	return nil, "", fmt.Errorf("unknown docker host %q (use unix://, tcp:// or http(s)://)", host)
 }
 
-func dockerGet(ctx context.Context, host, path string, timeout time.Duration, v any) (int, error) {
+func dockerGet(ctx context.Context, remote DockerRemote, host, path string, timeout time.Duration, v any) (int, error) {
 	cl, base, err := dockerClient(host, timeout)
+	if remote != nil && host != "" {
+		if hc, b, ok := remote(host); ok {
+			c := *hc
+			c.Timeout = timeout
+			cl, base, err = &c, b, nil
+		}
+	}
+	if err != nil && strings.HasPrefix(host, "ssh://") {
+		err = errors.New("ssh docker host is not set up under Healthchecks → Docker (or switched off)")
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -144,17 +158,21 @@ type dockerInspect struct {
 	} `json:"State"`
 }
 
-type dockerChecker struct{}
+type dockerChecker struct{ r *Runner }
 
 func (dockerChecker) Type() Type { return TypeDocker }
 
-func (dockerChecker) Check(ctx context.Context, def Definition, _ net.IP) Result {
+func (c dockerChecker) Check(ctx context.Context, def Definition, _ net.IP) Result {
 	var p DockerParams
 	_ = decode(def.Params, &p)
 	name := strings.TrimPrefix(strings.TrimSpace(def.Target), "/")
 	start := time.Now()
 	var in dockerInspect
-	code, err := dockerGet(ctx, p.Host, "/containers/"+url.PathEscape(name)+"/json", def.Timeouts.Total, &in)
+	var remote DockerRemote
+	if c.r != nil {
+		remote = c.r.Docker
+	}
+	code, err := dockerGet(ctx, remote, p.Host, "/containers/"+url.PathEscape(name)+"/json", def.Timeouts.Total, &in)
 	lat := time.Since(start)
 	res := Result{Latency: lat, Details: map[string]any{"container": name}}
 	if err != nil {
@@ -259,7 +277,7 @@ func ListContainers(ctx context.Context, host string) ([]Container, error) {
 			Type        string `json:"Type"`
 		} `json:"Ports"`
 	}
-	if _, err := dockerGet(ctx, host, "/containers/json?all=1", 5*time.Second, &raw); err != nil {
+	if _, err := dockerGet(ctx, nil, host, "/containers/json?all=1", 5*time.Second, &raw); err != nil {
 		return nil, errors.New(dockerHint(host, err))
 	}
 	out := make([]Container, 0, len(raw))

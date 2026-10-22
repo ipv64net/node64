@@ -53,6 +53,17 @@ type pveSysRow struct {
 	Bad         int
 	SysProblem  bool // eigenes Problem des Systems: nicht erreichbar bzw. abfragbar, Node offline, Quorum weg
 	Settings    *proxmox.SystemSettings
+	CPUCores    float64 // belegte Kerne der Nodes (online)
+	CPUMax      float64
+	Mem, MemMax int64
+}
+
+// CPUText: belegte CPU bezogen auf die Kerne (Nodes bzw. Docker-Host), "" ohne Werte.
+func (r pveSysRow) CPUText() string {
+	if r.CPUMax <= 0 {
+		return ""
+	}
+	return pvePctText(r.CPUCores * 100 / r.CPUMax)
 }
 
 // Class: Farbe des Zustands (Badge).
@@ -249,6 +260,10 @@ func (m *Module) pveSysView(ctx context.Context, sys *proxmox.System) pveSysRow 
 			row.Nodes++
 			if r.State == proxmox.StateOnline {
 				row.NodesOnline++
+				row.CPUCores += r.CPU * r.MaxCPU
+				row.CPUMax += r.MaxCPU
+				row.Mem += r.Mem
+				row.MemMax += r.MaxMem
 			}
 			continue
 		}
@@ -320,6 +335,40 @@ type pveOverviewData struct {
 	NoBox   bool // kein secret.key: Systeme lassen sich nicht speichern
 	Last    *pveIncident
 	LastURL string
+	Sum     pveSum // Kacheln ueber alle Systeme
+}
+
+// pveSum sind die Kennzahlen aller Systeme (Kacheln der Uebersicht; Docker-Seite mit mehreren Hosts ebenso).
+type pveSum struct {
+	Systems, SysBad      int // SysBad: eigenes Problem (nicht erreichbar, Node offline, Quorum weg)
+	Nodes, NodesOnline   int
+	Guests, Running, Bad int
+	CPUCores, CPUMax     float64
+	Mem, MemMax          int64
+}
+
+func (s *pveSum) add(r pveSysRow) {
+	s.Systems++
+	if r.SysProblem {
+		s.SysBad++
+	}
+	s.Nodes += r.Nodes
+	s.NodesOnline += r.NodesOnline
+	s.Guests += r.Guests
+	s.Running += r.Running
+	s.Bad += r.Bad
+	s.CPUCores += r.CPUCores
+	s.CPUMax += r.CPUMax
+	s.Mem += r.Mem
+	s.MemMax += r.MemMax
+}
+
+// CPUText: belegte CPU aller Nodes (online) bezogen auf ihre Kerne.
+func (s pveSum) CPUText() string {
+	if s.CPUMax <= 0 {
+		return ""
+	}
+	return pvePctText(s.CPUCores * 100 / s.CPUMax)
 }
 
 func (m *Module) pagePVE(w http.ResponseWriter, r *http.Request) {
@@ -334,7 +383,9 @@ func (m *Module) pagePVE(w http.ResponseWriter, r *http.Request) {
 		if sys.IsDocker() {
 			continue // Docker-Hosts stehen unter /healthchecks/docker
 		}
-		d.Systems = append(d.Systems, m.pveSysView(ctx, sys))
+		row := m.pveSysView(ctx, sys)
+		d.Sum.add(row)
+		d.Systems = append(d.Systems, row)
 	}
 	if d.Last != nil {
 		d.LastURL = pveResPath(d.Last.SystemID, d.Last.Key)
@@ -990,8 +1041,8 @@ func (m *Module) pagePVEForm(w http.ResponseWriter, r *http.Request) {
 		if sys = m.pveSystemOf(w, r); sys == nil {
 			return
 		}
-		if sys.IsDocker() { // kein Formular fuer Docker-Hosts
-			http.Redirect(w, r, dockerSysPath(sys.ID), http.StatusSeeOther)
+		if sys.IsDocker() { // Docker-Hosts haben ihr eigenes Formular
+			http.Redirect(w, r, dockerSysPath(sys.ID)+"/edit", http.StatusSeeOther)
 			return
 		}
 	}
@@ -1034,7 +1085,7 @@ func (m *Module) pagePVESave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if old.IsDocker() {
-			http.Redirect(w, r, dockerSysPath(old.ID), http.StatusSeeOther)
+			http.Redirect(w, r, dockerSysPath(old.ID)+"/edit", http.StatusSeeOther)
 			return
 		}
 		sys.ID, sys.Created, stored = old.ID, old.Created, old.Secret

@@ -33,7 +33,11 @@ var listContainers = checks.ListContainers
 func (m *Module) dockerRoutes(mux *http.ServeMux, page func(http.HandlerFunc) http.Handler) {
 	mux.Handle("GET "+dockerPath, page(m.pageDocker))
 	mux.Handle("POST "+dockerPath+"/enable", page(m.pageDockerEnable))
+	mux.Handle("GET "+dockerPath+"/new", page(m.pageDockerForm))
+	mux.Handle("POST "+dockerPath+"/new", page(m.pageDockerSave))
 	mux.Handle("GET "+dockerPath+"/system/{id}", page(m.pageDocker))
+	mux.Handle("GET "+dockerPath+"/system/{id}/edit", page(m.pageDockerForm))
+	mux.Handle("POST "+dockerPath+"/system/{id}/edit", page(m.pageDockerSave))
 	mux.Handle("GET "+dockerPath+"/system/{id}/c/{name}", page(m.pageDockerContainer))
 	mux.Handle("GET /api"+dockerPath+"/containers", page(m.apiDockerContainers))
 }
@@ -62,8 +66,41 @@ func (m *Module) dockerSystems(ctx context.Context) ([]*proxmox.System, error) {
 	return out, nil
 }
 
-// dockerEnsure richtet den lokalen Docker-Host ein, wenn der Socket erreichbar ist, noch keiner eingerichtet ist und
-// die Einrichtung nicht abgeschaltet wurde (force: auch dann; ein abgeschalteter Host wird eingeschaltet).
+// dockerLocalOf liefert den lokalen Docker-Host (Socket bzw. NODE64_DOCKER_HOST) aus der Liste (nil = keiner).
+func dockerLocalOf(list []*proxmox.System) *proxmox.System {
+	for _, s := range list {
+		if dockerSysHost(s) == checks.DefaultDockerHost() {
+			return s
+		}
+	}
+	return nil
+}
+
+// dockerRemote liefert die Verbindung der laufenden Abfrage eines Hosts mit Zugangsdaten (https://, ssh://) fuer den
+// Check-Typ docker (Runner.Docker): dieselbe SSH-Verbindung bzw. dasselbe Client-Zertifikat.
+func (m *Module) dockerRemote(host string) (*http.Client, string, bool) {
+	if !proxmox.DockerUsesSecret(host) {
+		return nil, "", false
+	}
+	rt := m.pve
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	for _, pp := range rt.polls {
+		if dp, ok := pp.p.(interface {
+			Host() string
+			Client() (*http.Client, string)
+		}); ok && dp.Host() == host {
+			if hc, base := dp.Client(); hc != nil {
+				return hc, base, true
+			}
+		}
+	}
+	return nil, "", false
+}
+
+// dockerEnsure richtet den lokalen Docker-Host ein, wenn der Socket erreichbar ist, er noch nicht eingerichtet ist und
+// die Einrichtung nicht abgeschaltet wurde (force: auch dann; ein abgeschalteter Host wird eingeschaltet). Hosts aus der
+// Ferne zaehlen dabei nicht.
 func (m *Module) dockerEnsure(ctx context.Context, force bool) (*proxmox.System, error) {
 	rt := m.pve
 	rt.dockerMu.Lock()
@@ -72,8 +109,7 @@ func (m *Module) dockerEnsure(ctx context.Context, force bool) (*proxmox.System,
 	if err != nil {
 		return nil, err
 	}
-	if len(list) > 0 {
-		sys := list[0]
+	if sys := dockerLocalOf(list); sys != nil {
 		if force && !sys.Enabled {
 			sys.Enabled, sys.Secret = true, ""
 			if err := m.pve.st.SaveSystem(ctx, sys); err != nil {
@@ -283,6 +319,8 @@ type dockerData struct {
 	Path      string          // Seite des Systems
 	Act       string          // Aktionen des Systems (/healthchecks/proxmox/system/{id}: settings, ascheck, toggle)
 	Off       bool            // Einrichtung abgeschaltet (docker.monitor = off) und kein Host
+	Local     bool            // Socket dieser Maschine (sonst aus der Ferne: tcp, https, ssh)
+	Hosts     int             // eingerichtete Docker-Hosts (ab 2 gibt es die Uebersicht)
 	Socket    bool            // Docker-Socket erreichbar
 	SocketErr string          // Fehler mit Hinweis (Socket fehlt, keine Rechte)
 	Live      bool            // Werte aus der laufenden Abfrage (sonst nur die Containerliste)
@@ -338,6 +376,7 @@ func (m *Module) dockerCollect(r *http.Request, sys *proxmox.System) (dockerData
 	ctx := r.Context()
 	lang := m.g.Lang(r)
 	d := dockerData{Host: dockerSysHost(sys), Sys: sys, States: dockerStates, Last: m.lastIncident(ctx, dockerSettingLast)}
+	d.Local = proxmox.DockerLocal(d.Host)
 	list, err := m.dockerChecks(ctx)
 	if err != nil {
 		return d, nil, err
@@ -371,9 +410,9 @@ func (m *Module) dockerCollect(r *http.Request, sys *proxmox.System) (dockerData
 		d.Off = m.core.SettingOr(ctx, dockerSettingMonitor, "") == "off"
 		d.Last = nil
 	}
-	if !d.Live && d.SocketErr == "" { // keine Abfrage (aus, wartet): Containerliste direkt
+	if !d.Live && d.SocketErr == "" && !proxmox.DockerUsesSecret(d.Host) { // keine Abfrage (aus, wartet): Containerliste direkt
 		cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		cs, cerr := listContainers(cctx, "")
+		cs, cerr := listContainers(cctx, dockerListHost(d.Host))
 		cancel()
 		if cerr != nil {
 			d.SocketErr = cerr.Error()
@@ -510,13 +549,27 @@ func dockerMatch(dr dockerRow, f map[string]string) bool {
 	return true
 }
 
-// dockerSystemOf liefert den Docker-Host der Seite: {id} bzw. der erste (eingerichtet, sonst automatisch).
+// dockerListHost: Host fuer die Containerliste ohne Abfrage ("" = Standard).
+func dockerListHost(host string) string {
+	if host == checks.DefaultDockerHost() {
+		return ""
+	}
+	return host
+}
+
+// dockerSystemOf liefert den Docker-Host der Seite: {id} bzw. der lokale (eingerichtet, sonst automatisch) oder der
+// einzige eingerichtete.
 func (m *Module) dockerSystemOf(w http.ResponseWriter, r *http.Request) (*proxmox.System, bool) {
 	ctx := r.Context()
 	if r.PathValue("id") == "" {
 		sys, err := m.dockerEnsure(ctx, false)
 		if err != nil && sys == nil {
 			m.log.Debug("docker host not set up", "err", err)
+		}
+		if sys == nil {
+			if list, _ := m.dockerSystems(ctx); len(list) > 0 {
+				sys = list[0]
+			}
 		}
 		return sys, true
 	}
@@ -537,6 +590,20 @@ func (m *Module) dockerSystemOf(w http.ResponseWriter, r *http.Request) (*proxmo
 }
 
 func (m *Module) pageDocker(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("id") == "" { // ab zwei Hosts: Uebersicht wie Proxmox VE
+		if _, err := m.dockerEnsure(r.Context(), false); err != nil {
+			m.log.Debug("docker host not set up", "err", err)
+		}
+		list, err := m.dockerSystems(r.Context())
+		if err != nil {
+			m.fail(w, r, err)
+			return
+		}
+		if len(list) > 1 {
+			m.pageDockerHosts(w, r, list)
+			return
+		}
+	}
 	sys, ok := m.dockerSystemOf(w, r)
 	if !ok {
 		return
@@ -545,6 +612,9 @@ func (m *Module) pageDocker(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		m.fail(w, r, err)
 		return
+	}
+	if list, err := m.dockerSystems(r.Context()); err == nil {
+		d.Hosts = len(list)
 	}
 	q := r.URL.Query()
 	d.Filter = map[string]string{"state": q.Get("state"), "q": strings.TrimSpace(q.Get("q"))}

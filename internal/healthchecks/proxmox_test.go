@@ -707,6 +707,11 @@ func TestPVEPagesAndWizard(t *testing.T) {
 	if code != 200 || !strings.Contains(body, `href="`+sp+`"`) || !strings.Contains(body, "pve.sys_state.warn") || !strings.Contains(body, "8.2.4") || !strings.Contains(body, "pve.quorum_ok") {
 		t.Fatalf("overview: %s", body)
 	}
+	for _, want := range []string{`id="pve-kpi"`, "pve.kpi.nodes", "pve.kpi.load", "CPU "} { // Kacheln ueber alle Systeme
+		if !strings.Contains(body, want) {
+			t.Fatalf("overview kpi: %q missing", want)
+		}
+	}
 	code, body = pveGet(t, srv, sp)
 	for _, want := range []string{"pve1", "web", "app", "guest-panicked", "pve.state.error", "pve.template", `name="key" value="qemu/100"`, "pve-spark", "pve.rules.level_system",
 		`name="r_unreachable"`, "pve.rules.from_default"} {
