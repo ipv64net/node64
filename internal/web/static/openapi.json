@@ -1062,6 +1062,10 @@
           "no_ptr": {
             "type": "boolean",
             "description": "A/AAAA: keine Rückwärtssuche aus diesem Eintrag"
+          },
+          "local_only": {
+            "type": "boolean",
+            "description": "nur diese Node (im Cluster nie abgeglichen)"
           }
         },
         "required": [
@@ -3475,6 +3479,11 @@
                 "type": "string"
               }
             }
+          },
+          "uid": {
+            "type": "string",
+            "description": "Kennung im Cluster (auf allen Nodes gleich)",
+            "readOnly": true
           }
         }
       },
@@ -5147,6 +5156,10 @@
                 }
               }
             }
+          },
+          "local_only": {
+            "type": "boolean",
+            "description": "nur diese Node (im Cluster nie abgeglichen)"
           }
         },
         "required": [

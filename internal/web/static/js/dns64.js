@@ -499,6 +499,7 @@
 				$("r-ttl").value = b.getAttribute("data-ttl");
 				$("r-comment").value = b.getAttribute("data-comment");
 				$("r-noptr").checked = b.getAttribute("data-noptr") === "1";
+				$("r-local").checked = b.getAttribute("data-local") === "1";
 				$("rec-title").textContent = $("rec-title").getAttribute("data-edit");
 				submit.querySelector("span").textContent = submit.getAttribute("data-edit");
 				$("rec-cancel").classList.remove("d-none");

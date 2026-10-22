@@ -51,7 +51,7 @@ func onOff(on bool) string { return map[bool]string{true: "enable", false: "disa
 // ---- Seite ----
 
 func (m *Module) pageForwardSave(w http.ResponseWriter, r *http.Request) {
-	f := Forward{Domain: r.PostFormValue("domain"), Servers: []string{r.PostFormValue("servers")}, Comment: r.PostFormValue("comment")}
+	f := Forward{Domain: r.PostFormValue("domain"), Servers: []string{r.PostFormValue("servers")}, Comment: r.PostFormValue("comment"), LocalOnly: r.PostFormValue("local_only") == "1"}
 	var err error
 	if id := pathID(r); id > 0 {
 		f, err = m.UpdateForward(r.Context(), id, f)

@@ -281,6 +281,8 @@ func (m *Module) saveConfig(ctx context.Context, c config) error {
 			return err
 		}
 	}
+	m.clChanged(ctx, ItemSettings)
+	m.clChanged(ctx, ItemLists)
 	return nil
 }
 

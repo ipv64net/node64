@@ -24,7 +24,8 @@ type Record struct {
 	Value     string    `json:"value"` // IP, Zielname, Text bzw. "10 mail.home.lan" (MX), "0 5 5060 sip.home.lan" (SRV), "0 issue letsencrypt.org" (CAA)
 	TTL       int       `json:"ttl"`
 	Comment   string    `json:"comment,omitempty"`
-	NoPTR     bool      `json:"no_ptr,omitempty"` // A/AAAA: keine Rueckwaertssuche aus diesem Eintrag
+	NoPTR     bool      `json:"no_ptr,omitempty"`     // A/AAAA: keine Rueckwaertssuche aus diesem Eintrag
+	LocalOnly bool      `json:"local_only,omitempty"` // nur diese Node (nie im Cluster abgeglichen)
 	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -138,12 +139,13 @@ func (m *Module) loadRecords(ctx context.Context) error {
 		}
 	}
 	m.recs.Store(t)
+	m.clChanged(ctx, ItemRecords)
 	return nil
 }
 
 // Records liefert alle eigenen Eintraege, nach Name sortiert.
 func (m *Module) Records(ctx context.Context) ([]Record, error) {
-	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, type, value, ttl, comment, no_ptr, enabled, created_at FROM dns64_records ORDER BY name, type, value`)
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, type, value, ttl, comment, no_ptr, local_only, enabled, created_at FROM dns64_records ORDER BY name, type, value`)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +154,7 @@ func (m *Module) Records(ctx context.Context) ([]Record, error) {
 	for rows.Next() {
 		var r Record
 		var created string
-		if err := rows.Scan(&r.ID, &r.Name, &r.Type, &r.Value, &r.TTL, &r.Comment, &r.NoPTR, &r.Enabled, &created); err != nil {
+		if err := rows.Scan(&r.ID, &r.Name, &r.Type, &r.Value, &r.TTL, &r.Comment, &r.NoPTR, &r.LocalOnly, &r.Enabled, &created); err != nil {
 			return nil, err
 		}
 		r.CreatedAt, _ = time.Parse(time.RFC3339, created)
@@ -271,8 +273,8 @@ func (m *Module) AddRecord(ctx context.Context, r Record) (Record, error) {
 		return r, err
 	}
 	r.Enabled, r.CreatedAt = true, time.Now().UTC()
-	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_records (name, type, value, ttl, comment, no_ptr, enabled, created_at) VALUES (?,?,?,?,?,?,1,?)`,
-		r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, r.CreatedAt.Format(time.RFC3339))
+	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_records (name, type, value, ttl, comment, no_ptr, local_only, enabled, created_at) VALUES (?,?,?,?,?,?,?,1,?)`,
+		r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, r.LocalOnly, r.CreatedAt.Format(time.RFC3339))
 	if err != nil {
 		return r, err
 	}
@@ -286,8 +288,8 @@ func (m *Module) UpdateRecord(ctx context.Context, id int64, r Record) (Record, 
 		return r, err
 	}
 	r.ID = id
-	if err := m.recordExec(ctx, `UPDATE dns64_records SET name = ?, type = ?, value = ?, ttl = ?, comment = ?, no_ptr = ? WHERE id = ?`,
-		r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, id); err != nil {
+	if err := m.recordExec(ctx, `UPDATE dns64_records SET name = ?, type = ?, value = ?, ttl = ?, comment = ?, no_ptr = ?, local_only = ? WHERE id = ?`,
+		r.Name, r.Type, r.Value, r.TTL, r.Comment, r.NoPTR, r.LocalOnly, id); err != nil {
 		return r, err
 	}
 	list, err := m.Records(ctx) // gespeicherter Stand (an/aus, angelegt)

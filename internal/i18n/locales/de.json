@@ -2749,7 +2749,8 @@
     "mod": {
       "healthchecks": "Healthchecks",
       "notifications": "Benachrichtigungen",
-      "certs": "Zertifikate"
+      "certs": "Zertifikate",
+      "dns64": "DNS64"
     },
     "item": {
       "checks": "Checks",
@@ -2758,7 +2759,14 @@
       "certificates": "Zertifikate",
       "acme": "ACME (Konto und CAs)",
       "dns_accounts": "DNS-Anbieter",
-      "cas": "Eigene CAs"
+      "cas": "Eigene CAs",
+      "dns64_settings": "Einstellungen (Upstreams, Blockier-Art, Cache, Aufbewahrung)",
+      "dns64_lists": "Blocklisten",
+      "dns64_allowlist": "Freigaben",
+      "dns64_records": "Eigene Einträge und lokale Zonen",
+      "dns64_forwards": "Weiterleitungen und Umschreiben",
+      "dns64_groups": "Gerätegruppen (Regeln, Zeitpläne, Sperren)",
+      "dns64_group_members": "Mitglieder der Gerätegruppen (gehören zum Standort)"
     },
     "add_title": "Weitere Node aufnehmen",
     "add_hint": "Zeigt einen Code, den du auf der anderen Node unter „Einem Cluster beitreten“ eingibst.",
@@ -3159,6 +3167,7 @@
     "retrying": "Neuer Versuch jede Minute; Port oder Adresse lassen sich unter Einstellungen ändern.",
     "custom": "eigene",
     "records": {
+      "local_only": "Nur diese Node (im Cluster nicht abgleichen)",
       "edit": "Eintrag bearbeiten",
       "saved": "Eintrag gespeichert, gilt sofort.",
       "comment": "Kommentar",

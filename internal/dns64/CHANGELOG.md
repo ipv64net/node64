@@ -1,5 +1,20 @@
 # Änderungen – DNS64
 
+## 1.26.0 – 2026-10-22
+
+### Neu
+- DNS64 im Cluster (Phase L4): Unter „Cluster“ erscheint DNS64 mit sieben Schaltern, alle ohne Einstellung aus –
+  Einstellungen (Upstreams, Modus, Blockier-Art, Cache, Anonymisierung, Aufbewahrung, Firefox, Meldungen),
+  Blocklisten, Freigaben, eigene Einträge samt lokalen Zonen, Weiterleitungen samt Umschreiben, Gerätegruppen
+  (Regeln, Kategorien, Kinderschutz, Domains, Zeitpläne, Sperren/Frei) und die Mitglieder der Gruppen (gehören zum
+  Standort). Ein Bereich wird nur mit Nodes abgeglichen, bei denen er ebenfalls an ist; die jüngere Änderung gewinnt.
+- „Nur diese Node“ je eigenem Eintrag und je Weiterleitung: wird nie abgeglichen, und ein gleicher Eintrag einer
+  anderen Node überschreibt ihn nicht.
+- Nie abgeglichen: Ports, Schnittstellen, Router, DoH/DoT/DoQ, Namen und Zertifikat, Client-Netze, Pause, Abfrage-Log.
+- Gruppen haben eine Cluster-Kennung (`uid`); gibt es dieselbe Gruppe (gleicher Name) schon auf beiden Nodes, wird
+  sie beim ersten Abgleich zusammengeführt.
+- Eine Node übernimmt die Einträge auch, solange DNS64 bei ihr (noch) aus ist.
+
 ## 1.25.0 – 2026-10-22
 
 ### Neu

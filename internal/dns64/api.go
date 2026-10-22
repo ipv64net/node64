@@ -296,6 +296,7 @@ func (m *Module) apiAllowAdd(w http.ResponseWriter, r *http.Request, e *engine) 
 		return
 	}
 	d, err := e.lists.Allow.Add(body.Domain)
+	m.clChanged(r.Context(), ItemAllow)
 	if errors.Is(err, filter.ErrInvalidDomain) {
 		writeErr(w, http.StatusBadRequest, m.g.T(r, "dns64.err_domain"))
 		return
@@ -312,6 +313,7 @@ func (m *Module) apiAllowAdd(w http.ResponseWriter, r *http.Request, e *engine) 
 func (m *Module) apiAllowRemove(w http.ResponseWriter, r *http.Request, e *engine) {
 	d := r.URL.Query().Get("domain")
 	err := e.lists.Allow.Remove(d)
+	m.clChanged(r.Context(), ItemAllow)
 	if errors.Is(err, filter.ErrInvalidDomain) {
 		writeErr(w, http.StatusBadRequest, m.g.T(r, "dns64.err_domain"))
 		return
@@ -440,6 +442,9 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		if _, err := m.AddZone(ctx, z); err == nil {
 			n++
 		}
+	}
+	for _, it := range []string{ItemSettings, ItemLists, ItemAllow} { // direkt gesetzt, nicht ueber saveConfig
+		m.clChanged(ctx, it)
 	}
 	return n, m.restart(ctx)
 }

@@ -32,6 +32,9 @@ erscheinen als „nicht erreichbar“.
 
 ## DNS64
 
+**Umgesetzt** in DNS64 1.26.0 (Plan [PLAN-NODE64-DNS64-LOKAL.md](PLAN-NODE64-DNS64-LOKAL.md), Phase L4); abweichend
+von dieser Tabelle sind alle Bereiche ohne Einstellung **aus** (Entscheidung Dennis 2026-10-22).
+
 | Bereich | Standard | Anmerkung |
 |---|---|---|
 | Einstellungen (Upstreams, Blockier-Art, Cache, Firefox-Schalter) | an | nicht: Ports, Schnittstellen, DoT/DoH-Zertifikat |

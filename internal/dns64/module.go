@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.25.0"
+	version   = "1.26.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -104,6 +104,11 @@ type Module struct {
 	migErr string // Umzug in die Verwaltung noch nicht erledigt: letzter Fehler (m.mu)
 
 	pauseUntil atomic.Int64 // Blockieren aus bis (UnixNano), -1 = bis zum Wiedereinschalten, 0 = aktiv (pause.go)
+
+	clMu      sync.Mutex                   // Cluster (cluster.go)
+	clHook    ClusterHook                  // nil = kein Cluster
+	clSnap    map[string]map[string]string // zuletzt gemeldeter Stand je Bereich
+	clRestart *time.Timer                  // Neustart nach uebernommenen Einstellungen
 }
 
 const retryEvery = time.Minute

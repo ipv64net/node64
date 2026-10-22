@@ -27,6 +27,7 @@ const (
 // und ihren Regeln.
 type Group struct {
 	ID        int64    `json:"id"`
+	UID       string   `json:"uid,omitempty"` // Kennung im Cluster (auf allen Nodes gleich)
 	Name      string   `json:"name"`
 	Position  int      `json:"position"`
 	Members   []Member `json:"members"`

@@ -24,6 +24,7 @@ type Forward struct {
 	Domain    string    `json:"domain"`  // gilt mit allen Unternamen
 	Servers   []string  `json:"servers"` // 192.168.1.1, 10.0.0.53:5353, tls://dns.firma.de, https://…/dns-query, quic://…
 	Comment   string    `json:"comment,omitempty"`
+	LocalOnly bool      `json:"local_only,omitempty"` // nur diese Node (nie im Cluster abgeglichen)
 	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"created_at"`
 }
@@ -123,6 +124,7 @@ func (m *Module) loadForwards(ctx context.Context) error {
 		}
 	}
 	m.rw.Store(rt)
+	m.clChanged(ctx, ItemForwards)
 	if old := m.fwd.Swap(t); old != nil { // laufende Anfragen duerfen die alten Verbindungen noch zu Ende nutzen
 		time.AfterFunc(30*time.Second, func() {
 			for _, e := range old.byID {
@@ -279,7 +281,7 @@ func normalizeRewrite(r *Rewrite) error {
 
 // Forwards liefert alle Weiterleitungen, nach Domain sortiert.
 func (m *Module) Forwards(ctx context.Context) ([]Forward, error) {
-	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, domain, servers, comment, enabled, created_at FROM dns64_forwards ORDER BY domain`)
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, domain, servers, comment, local_only, enabled, created_at FROM dns64_forwards ORDER BY domain`)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +290,7 @@ func (m *Module) Forwards(ctx context.Context) ([]Forward, error) {
 	for rows.Next() {
 		var f Forward
 		var servers, created string
-		if err := rows.Scan(&f.ID, &f.Domain, &servers, &f.Comment, &f.Enabled, &created); err != nil {
+		if err := rows.Scan(&f.ID, &f.Domain, &servers, &f.Comment, &f.LocalOnly, &f.Enabled, &created); err != nil {
 			return nil, err
 		}
 		f.Servers = strings.Fields(servers)
@@ -304,8 +306,8 @@ func (m *Module) AddForward(ctx context.Context, f Forward) (Forward, error) {
 		return f, err
 	}
 	f.Enabled, f.CreatedAt = true, time.Now().UTC()
-	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_forwards (domain, servers, comment, enabled, created_at) VALUES (?,?,?,1,?)`,
-		f.Domain, strings.Join(f.Servers, "\n"), f.Comment, f.CreatedAt.Format(time.RFC3339))
+	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_forwards (domain, servers, comment, local_only, enabled, created_at) VALUES (?,?,?,?,1,?)`,
+		f.Domain, strings.Join(f.Servers, "\n"), f.Comment, f.LocalOnly, f.CreatedAt.Format(time.RFC3339))
 	if isUnique(err) {
 		return f, errCfg("err_fwd_dup")
 	}
@@ -321,7 +323,7 @@ func (m *Module) UpdateForward(ctx context.Context, id int64, f Forward) (Forwar
 	if err := normalizeForward(&f); err != nil {
 		return f, err
 	}
-	err := m.fwdExec(ctx, `UPDATE dns64_forwards SET domain = ?, servers = ?, comment = ? WHERE id = ?`, f.Domain, strings.Join(f.Servers, "\n"), f.Comment, id)
+	err := m.fwdExec(ctx, `UPDATE dns64_forwards SET domain = ?, servers = ?, comment = ?, local_only = ? WHERE id = ?`, f.Domain, strings.Join(f.Servers, "\n"), f.Comment, f.LocalOnly, id)
 	if isUnique(err) {
 		return f, errCfg("err_fwd_dup")
 	}

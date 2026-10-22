@@ -232,6 +232,7 @@ func (m *Module) loadZones(ctx context.Context) error {
 		}
 	}
 	m.zns.Store(t)
+	m.clChanged(ctx, ItemRecords)
 	return nil
 }
 

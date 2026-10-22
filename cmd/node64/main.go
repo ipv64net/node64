@@ -38,6 +38,7 @@ import (
 	"github.com/ipv64net/node64/internal/certs/certcluster"
 	"github.com/ipv64net/node64/internal/config"
 	"github.com/ipv64net/node64/internal/dns64"
+	"github.com/ipv64net/node64/internal/dns64/dns64cluster"
 	"github.com/ipv64net/node64/internal/dyndns"
 	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/healthchecks"
@@ -319,6 +320,7 @@ func run() error {
 		return out
 	})
 	certcluster.Register(peerMgr, certMgr, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // Zertifikate ueber den Cluster
+	dns64cluster.Register(peerMgr, dnsModule)                                                                                  // DNS64 ueber den Cluster
 	go peerMgr.Run(ctx)
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)

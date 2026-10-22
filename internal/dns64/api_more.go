@@ -1,6 +1,7 @@
 package dns64
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -35,6 +36,7 @@ func (m *Module) importAllow(lines []string) (n, bad int, err error) {
 		}
 		n++
 	}
+	m.clChanged(context.Background(), ItemAllow)
 	return n, bad, nil
 }
 

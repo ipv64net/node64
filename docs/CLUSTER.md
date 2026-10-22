@@ -67,11 +67,13 @@ Bereich nur, wenn er auf **beiden** Nodes an ist (die abholende Node nennt ihre 
 | `healthchecks` | `checks` (mit Messwerten), `maintenance` | an | `/peer/v1/changes`, `/measurements`, `/relay` |
 | `notifications` | `settings` (Ruhezeiten, Drossel, Bündeln) | an | `/peer/v1/changes` |
 | `certs` | `certificates`, `acme`, `dns_accounts`, `cas` | aus | `/peer/v2/sync` |
+| `dns64` | `settings`, `lists`, `allowlist`, `records` (mit Zonen), `forwards` (mit Umschreiben), `groups`, `group_members` | aus | `/peer/v2/sync` |
 
 Benachrichtigungskanäle werden nicht abgeglichen. Neue Module hängen sich als Provider an `/peer/v2/sync`
 (`internal/peer/cluster.go`); eine ältere Node bekommt nie Eintragsarten, die sie nicht kennt.
-PROXY64 und DNS64 sind als Bereiche geplant, aber zurückgestellt, bis die Nachfrage da ist:
-[PLAN-NODE64-CLUSTER-MODULE.md](PLAN-NODE64-CLUSTER-MODULE.md).
+PROXY64 ist als Bereich geplant, aber zurückgestellt, bis die Nachfrage da ist:
+[PLAN-NODE64-CLUSTER-MODULE.md](PLAN-NODE64-CLUSTER-MODULE.md). DNS64: [PLAN-NODE64-DNS64-LOKAL.md](PLAN-NODE64-DNS64-LOKAL.md)
+(Einträge und Weiterleitungen mit „nur diese Node“ werden nie abgeglichen).
 
 ## Wenn eine Node weg ist
 

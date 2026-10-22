@@ -18,7 +18,7 @@ import (
 
 // Groups liefert alle Gruppen mit Mitgliedern, nach Position.
 func (m *Module) Groups(ctx context.Context) ([]groups.Group, error) {
-	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, name, position, lists_mode, lists, cats, safesearch, youtube, bypass, hold, hold_until FROM dns64_groups ORDER BY position, id`)
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT id, uid, name, position, lists_mode, lists, cats, safesearch, youtube, bypass, hold, hold_until FROM dns64_groups ORDER BY position, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +27,7 @@ func (m *Module) Groups(ctx context.Context) ([]groups.Group, error) {
 	for rows.Next() {
 		var g groups.Group
 		var lists, cats string
-		if err := rows.Scan(&g.ID, &g.Name, &g.Position, &g.ListsMode, &lists, &cats, &g.SafeSearch, &g.YouTube, &g.Bypass, &g.Hold, &g.HoldUntil); err != nil {
+		if err := rows.Scan(&g.ID, &g.UID, &g.Name, &g.Position, &g.ListsMode, &lists, &cats, &g.SafeSearch, &g.YouTube, &g.Bypass, &g.Hold, &g.HoldUntil); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -301,6 +301,8 @@ func (m *Module) loadGroups(ctx context.Context) error {
 	}
 	m.grp.Set(list)
 	m.buildDeviceNames(list)
+	m.clChanged(ctx, ItemGroups)
+	m.clChanged(ctx, ItemMembers)
 	return nil
 }
 
@@ -320,7 +322,8 @@ func (m *Module) AddGroup(ctx context.Context, name string) (groups.Group, error
 	}
 	var pos int
 	_ = m.core.Reader().QueryRowContext(ctx, `SELECT COALESCE(MAX(position), 0) + 1 FROM dns64_groups`).Scan(&pos)
-	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_groups (name, position, created_at) VALUES (?, ?, ?)`, name, pos, time.Now().UTC().Format(time.RFC3339))
+	uid := newUID()
+	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dns64_groups (uid, name, position, created_at) VALUES (?, ?, ?, ?)`, uid, name, pos, time.Now().UTC().Format(time.RFC3339))
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return groups.Group{}, errCfg("err_group_dup")
@@ -328,7 +331,7 @@ func (m *Module) AddGroup(ctx context.Context, name string) (groups.Group, error
 		return groups.Group{}, err
 	}
 	id, _ := res.LastInsertId()
-	return groups.Group{ID: id, Name: name, Position: pos, Members: []groups.Member{}, ListsMode: groups.ListsGlobal, Lists: []string{}, Cats: []string{}, Domains: []groups.Domain{}}, m.groupsChanged(ctx)
+	return groups.Group{ID: id, UID: uid, Name: name, Position: pos, Members: []groups.Member{}, ListsMode: groups.ListsGlobal, Lists: []string{}, Cats: []string{}, Domains: []groups.Domain{}}, m.groupsChanged(ctx)
 }
 
 // RenameGroup benennt eine Gruppe um.

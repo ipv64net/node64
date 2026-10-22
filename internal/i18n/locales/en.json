@@ -2749,7 +2749,8 @@
     "mod": {
       "healthchecks": "Healthchecks",
       "notifications": "Notifications",
-      "certs": "Certificates"
+      "certs": "Certificates",
+      "dns64": "DNS64"
     },
     "item": {
       "checks": "Checks",
@@ -2758,7 +2759,14 @@
       "certificates": "Certificates",
       "acme": "ACME (account and CAs)",
       "dns_accounts": "DNS providers",
-      "cas": "Own CAs"
+      "cas": "Own CAs",
+      "dns64_settings": "Settings (upstreams, blocking mode, cache, retention)",
+      "dns64_lists": "Blocklists",
+      "dns64_allowlist": "Allowlist",
+      "dns64_records": "Custom records and local zones",
+      "dns64_forwards": "Forwarding and rewrites",
+      "dns64_groups": "Device groups (rules, schedules, blocks)",
+      "dns64_group_members": "Members of the device groups (belong to the site)"
     },
     "add_title": "Add another node",
     "add_hint": "Shows a code that you enter on the other node under “Join a cluster”.",
@@ -3159,6 +3167,7 @@
     "retrying": "Retrying every minute; port or address can be changed in the settings.",
     "custom": "custom",
     "records": {
+      "local_only": "This node only (not synced in the cluster)",
       "edit": "Edit record",
       "saved": "Record saved, effective immediately.",
       "comment": "Comment",

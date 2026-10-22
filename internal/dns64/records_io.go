@@ -212,7 +212,7 @@ func recordForm(r *http.Request) Record {
 		ttl = 0
 	}
 	return Record{Name: r.PostFormValue("name"), Type: r.PostFormValue("type"), Value: r.PostFormValue("value"), TTL: ttl,
-		Comment: r.PostFormValue("comment"), NoPTR: r.PostFormValue("no_ptr") == "1"}
+		Comment: r.PostFormValue("comment"), NoPTR: r.PostFormValue("no_ptr") == "1", LocalOnly: r.PostFormValue("local_only") == "1"}
 }
 
 func (m *Module) pageRecordImport(w http.ResponseWriter, r *http.Request) {

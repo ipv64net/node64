@@ -43,6 +43,7 @@
 					<label class="form-label" for="r-comment">{{.T "dns64.records.comment"}}</label>
 					<input type="text" class="form-control mb-2" id="r-comment" name="comment" maxlength="200" placeholder="{{.T "dns64.records.comment_ph"}}">
 					<div class="form-check mb-2" id="r-noptr-wrap"><input class="form-check-input" type="checkbox" id="r-noptr" name="no_ptr" value="1"><label class="form-check-label" for="r-noptr">{{.T "dns64.records.no_ptr"}}</label></div>
+					<div class="form-check mb-2"><input class="form-check-input" type="checkbox" id="r-local" name="local_only" value="1"><label class="form-check-label" for="r-local">{{.T "dns64.records.local_only"}}</label></div>
 					<div class="form-text mb-3">{{.T "dns64.records.hint"}}</div>
 					<button class="btn btn-primary" type="submit" id="rec-submit" data-edit="{{.T "common.save"}}"><i class="bi bi-plus"></i> <span>{{.T "dns64.records.add_btn"}}</span></button>
 					<button class="btn btn-outline-secondary d-none" type="button" id="rec-cancel">{{.T "common.cancel"}}</button>
@@ -115,11 +116,11 @@
 						<thead><tr><th class="ps-3">{{.T "common.name"}}</th><th>{{.T "common.type"}}</th><th>{{.T "dns64.records.value"}}</th><th class="text-end">TTL</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
 						<tbody>
 						{{range $d.Records}}<tr data-rec="{{.Name}} {{.Type}} {{.Value}} {{.Comment}}"{{if not .Enabled}} class="text-body-tertiary"{{end}}>
-							<td class="ps-3 text-break"><span class="font-monospace">{{.Name}}</span>{{if .Comment}}<div class="text-body-secondary">{{.Comment}}</div>{{end}}</td><td><span class="badge text-bg-light">{{.Type}}</span>{{if .NoPTR}} <span class="badge text-bg-light" title="{{$.T "dns64.records.no_ptr"}}">PTR <i class="bi bi-x"></i></span>{{end}}</td>
+							<td class="ps-3 text-break"><span class="font-monospace">{{.Name}}</span>{{if .Comment}}<div class="text-body-secondary">{{.Comment}}</div>{{end}}</td><td><span class="badge text-bg-light">{{.Type}}</span>{{if .NoPTR}} <span class="badge text-bg-light" title="{{$.T "dns64.records.no_ptr"}}">PTR <i class="bi bi-x"></i></span>{{end}}{{if .LocalOnly}} <span class="badge text-bg-light" title="{{$.T "dns64.records.local_only"}}"><i class="bi bi-pin-angle"></i></span>{{end}}</td>
 							<td class="font-monospace text-break">{{.Value}}</td><td class="text-end">{{.TTL}}</td>
 							<td>{{if .Enabled}}<span class="badge text-bg-success">{{$.T "dns64.js.active"}}</span>{{else}}<span class="badge text-bg-secondary">{{$.T "dns64.js.off"}}</span>{{end}}</td>
 							<td class="text-end pe-3 text-nowrap">
-								<button type="button" class="btn btn-sm btn-outline-primary py-0" data-rec-edit="{{.ID}}" data-name="{{.Name}}" data-type="{{.Type}}" data-value="{{.Value}}" data-ttl="{{.TTL}}" data-comment="{{.Comment}}" data-noptr="{{if .NoPTR}}1{{end}}" title="{{$.T "dns64.records.edit"}}"><i class="bi bi-pencil"></i></button>
+								<button type="button" class="btn btn-sm btn-outline-primary py-0" data-rec-edit="{{.ID}}" data-name="{{.Name}}" data-type="{{.Type}}" data-value="{{.Value}}" data-ttl="{{.TTL}}" data-comment="{{.Comment}}" data-noptr="{{if .NoPTR}}1{{end}}" data-local="{{if .LocalOnly}}1{{end}}" title="{{$.T "dns64.records.edit"}}"><i class="bi bi-pencil"></i></button>
 								<button type="submit" class="btn btn-sm btn-outline-secondary py-0" formaction="/dns64/records/{{.ID}}/toggle" name="on" value="{{if .Enabled}}0{{else}}1{{end}}" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause{{else}}bi-play{{end}}"></i></button>
 								<button type="submit" class="btn btn-sm btn-outline-danger py-0" formaction="/dns64/records/{{.ID}}/delete" data-confirm="{{$.T "dns64.records.delete_confirm" "name" .Name}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button>
 							</td>

@@ -1,5 +1,20 @@
 # Changes – DNS64
 
+## 1.26.0 – 2026-10-22
+
+### New
+- DNS64 in the cluster (phase L4): under "Cluster" DNS64 shows seven switches, all off by default – settings
+  (upstreams, mode, blocking mode, cache, anonymisation, retention, Firefox, notifications), blocklists, allowlist,
+  custom records with local zones, forwarding with rewrites, device groups (rules, categories, child safety, domains,
+  schedules, block/free) and the members of the groups (belong to the site). An area is only synced with nodes that
+  have it switched on too; the newer change wins.
+- "This node only" per custom record and per forwarding: never synced, and an equal entry of another node does not
+  overwrite it.
+- Never synced: ports, interfaces, router, DoH/DoT/DoQ, names and certificate, client networks, pause, query log.
+- Groups have a cluster id (`uid`); if the same group (same name) already exists on both nodes, it is merged on the
+  first sync.
+- A node takes over the entries even while DNS64 is (still) switched off there.
+
 ## 1.25.0 – 2026-10-22
 
 ### New
