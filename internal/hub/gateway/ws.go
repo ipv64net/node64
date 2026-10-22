@@ -261,6 +261,7 @@ func (c *conn) handle(m wire.Msg) {
 		}
 		ack, err := g.st.IngestMeasurements(ctx, n, in.Batch)
 		if err != nil {
+			g.log.Error("node data failed", "node", n.ID, "type", m.T, "err", err) // sonst nur "database error" bei der Node
 			c.ack(m.ID, wire.Ack{Error: "database error"})
 			return
 		}
@@ -274,6 +275,7 @@ func (c *conn) handle(m wire.Msg) {
 			return
 		}
 		if err := g.st.IngestStates(ctx, n, in.Items); err != nil {
+			g.log.Error("node data failed", "node", n.ID, "type", m.T, "err", err) // sonst nur "database error" bei der Node
 			c.ack(m.ID, wire.Ack{Error: "database error"})
 			return
 		}
@@ -303,6 +305,7 @@ func (c *conn) handle(m wire.Msg) {
 		}
 		p, err := g.st.ProxyOf(ctx, n, in.Node)
 		if err != nil {
+			g.log.Error("node data failed", "node", n.ID, "type", m.T, "err", err) // sonst nur "database error" bei der Node
 			c.ack(m.ID, wire.Ack{Error: "database error"})
 			return
 		}
@@ -311,11 +314,13 @@ func (c *conn) handle(m wire.Msg) {
 			return
 		}
 		if err := g.st.IngestStates(ctx, p, in.States); err != nil {
+			g.log.Error("node data failed", "node", n.ID, "type", m.T, "err", err) // sonst nur "database error" bei der Node
 			c.ack(m.ID, wire.Ack{Error: "database error"})
 			return
 		}
 		ack, err := g.st.IngestMeasurements(ctx, p, in.Batch)
 		if err != nil {
+			g.log.Error("node data failed", "node", n.ID, "type", m.T, "err", err) // sonst nur "database error" bei der Node
 			c.ack(m.ID, wire.Ack{Error: "database error"})
 			return
 		}
@@ -330,6 +335,7 @@ func (c *conn) handle(m wire.Msg) {
 		}
 		ack, err := g.st.IngestEvents(ctx, n, in.Batch)
 		if err != nil {
+			g.log.Error("node data failed", "node", n.ID, "type", m.T, "err", err) // sonst nur "database error" bei der Node
 			c.ack(m.ID, wire.Ack{Error: "database error"})
 			return
 		}
@@ -511,6 +517,7 @@ func (c *conn) handleNotify(ctx context.Context, m wire.Msg) {
 	}
 	chans, err := c.g.nf.ChannelsFor(ctx, c.node.UserID)
 	if err != nil {
+		c.g.log.Error("channels for node failed", "node", c.node.ID, "err", err)
 		c.ack(m.ID, wire.Ack{Error: "database error"})
 		return
 	}
