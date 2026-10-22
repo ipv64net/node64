@@ -134,7 +134,7 @@ func (s *Store) SaveRuntime(ctx context.Context, token string, rt scheduler.Runt
 			last_status=VALUES(last_status), last_latency_ms=VALUES(last_latency_ms), last_reason=VALUES(last_reason), last_message=VALUES(last_message),
 			consecutive_fail=VALUES(consecutive_fail), consecutive_ok=VALUES(consecutive_ok), down_since=VALUES(down_since), updated_at=VALUES(updated_at)`,
 		token, s.source, string(rt.State), ft(rt.Since), ft(rt.LastCheck), ft(rt.NextCheck), nullStr(string(rt.LastStatus)), msf(rt.LastLatency),
-		nullStr(string(rt.LastReason)), truncate(rt.LastMessage, 500), rt.ConsecutiveFail, rt.ConsecutiveOK, ft(rt.DownSince), nowStr())
+		nullStr(string(rt.LastReason)), truncate(rt.LastMessage, 500), smallCount(rt.ConsecutiveFail), smallCount(rt.ConsecutiveOK), ft(rt.DownSince), nowStr())
 	if err != nil {
 		s.Metrics.add(&s.Metrics.DBErrors, 1)
 		return err
@@ -210,3 +210,8 @@ func truncate(s string, n int) string {
 	}
 	return string(r[:n])
 }
+
+// smallCount: Zaehler fuer die Spalten consecutive_fail/ok (SMALLINT) begrenzen. Laeuft ein Check lange ohne Wechsel
+// (z. B. Docker/Proxmox alle 30 s ueber Wochen), wuerde der Wert sonst ueberlaufen und das ganze Paket mit
+// "Out of range" ablehnen; mehr als 32767 in Folge sagt fachlich nichts Neues.
+func smallCount(n int) int { return min(max(n, 0), 32767) }

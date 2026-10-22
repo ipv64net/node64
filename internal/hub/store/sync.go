@@ -1046,7 +1046,7 @@ func (s *Store) IngestStates(ctx context.Context, n *Node, items []wire.State) e
 		vals = append(vals, "(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
 		state := orDefault(it.State, "pending")
 		args = append(args, it.Token, source, state, ft(it.Since), ft(it.LastCheckAt), ft(it.NextCheckAt), nullStr(it.LastStatus), it.LatencyMS, nullStr(truncate(it.Reason, 64)), truncate(it.Message, 500),
-			it.ConsecutiveFail, it.ConsecutiveOK, ft(it.DownSince), nowStr())
+			smallCount(it.ConsecutiveFail), smallCount(it.ConsecutiveOK), ft(it.DownSince), nowStr())
 		// Neubewertung nur, wenn sich an dieser Messstelle etwas geaendert hat oder der Gesamtzustand
 		// nicht dazu passt (neuer Check, einzige Messstelle mit anderem Zustand); sonst bleibt alles, wie es ist
 		single := p.execution == "local" && len(measuringNodes(splitList(p.nodes), p.owner)) <= 1

@@ -20,3 +20,12 @@ func TestSameAddress(t *testing.T) {
 		}
 	}
 }
+
+// Lange Serien ohne Wechsel duerfen die SMALLINT-Spalten nicht sprengen.
+func TestSmallCount(t *testing.T) {
+	for _, x := range []struct{ in, want int }{{0, 0}, {5, 5}, {32767, 32767}, {40000, 32767}, {-3, 0}} {
+		if got := smallCount(x.in); got != x.want {
+			t.Fatalf("%d: %d", x.in, got)
+		}
+	}
+}
