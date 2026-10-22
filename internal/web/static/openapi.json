@@ -540,6 +540,7 @@
               "ntfy",
               "gotify",
               "pushover",
+              "homeassistant",
               "webhook",
               "ipv64_mail",
               "ipv64_sms",

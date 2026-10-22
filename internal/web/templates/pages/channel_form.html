@@ -18,11 +18,13 @@
 					<div class="input-group"><span class="input-group-text"><i class="bi bi-tag"></i></span><input class="form-control" id="name" name="name" value="{{index $f "name"}}" maxlength="100" required autofocus></div>
 				</div>
 				{{if $d.Server}}<div class="alert alert-info small py-2"><i class="bi bi-cloud"></i> {{.T "nf.server_channel_hint"}}</div>{{end}}
+				{{if eq (print $d.Type) "homeassistant"}}<div class="alert alert-info small py-2"><i class="bi bi-house-gear"></i> {{.T "nf.ha_hint"}}{{.Doc "notifications#home-assistant"}}</div>{{end}}
 				{{range $d.Fields}}
 				{{$key := print "cfg_" .Key}}
 				<div class="mb-3">
 					{{if eq .Kind "bool"}}
-					<div class="form-check"><input class="form-check-input" type="checkbox" name="{{$key}}" id="{{$key}}"{{if eq (index $f $key) "true"}} checked{{end}}><label class="form-check-label" for="{{$key}}">{{$.T (print "nf.field." .Key)}}</label></div>
+					<div class="form-check"><input class="form-check-input" type="checkbox" name="{{$key}}" id="{{$key}}"{{if or (eq (index $f $key) "true") (eq (index $f $key) "on")}} checked{{end}}><label class="form-check-label" for="{{$key}}">{{$.T (print "nf.field." .Key)}}</label></div>
+					{{if eq .Key "verify_tls"}}<div class="form-text">{{$.T "nf.field.verify_tls_hint"}}</div>{{end}}
 					{{else}}
 					<label class="form-label" for="{{$key}}">{{$.T (print "nf.field." .Key)}}{{if .Required}} *{{end}}</label>
 					{{if eq .Kind "select"}}
@@ -37,6 +39,8 @@
 					<input class="form-control" id="{{$key}}" name="{{$key}}" value="{{index $f $key}}"{{if .Required}} required{{end}}>
 					{{end}}
 					{{if eq .Key "body"}}<div class="form-text">{{$.T "nf.field.body_hint"}}</div>{{end}}
+					{{if and (eq (print $d.Type) "homeassistant") (eq .Key "url")}}<div class="form-text">{{$.T "nf.ha_url_hint"}}</div>{{end}}
+					{{if eq .Key "webhook_id"}}<div class="form-text">{{$.T "nf.field.webhook_id_hint"}}</div>{{end}}
 					{{end}}
 				</div>
 				{{end}}

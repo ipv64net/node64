@@ -777,7 +777,7 @@ func deletedAfterChange(ctx context.Context, tx *sql.Tx, table string, id, userI
 
 func isSecretField(k string) bool {
 	switch k {
-	case "bot_token", "webhook_url", "token", "password", "app_token", "user_key", "headers", "device_token":
+	case "bot_token", "webhook_url", "token", "password", "app_token", "user_key", "headers", "device_token", "webhook_id":
 		return true
 	}
 	return false

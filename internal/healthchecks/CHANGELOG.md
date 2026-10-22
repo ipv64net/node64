@@ -1,5 +1,17 @@
 # Änderungen – Healthchecks
 
+## 2.22.0 – 2026-10-22
+
+### Neu
+- Benachrichtigungen: Neuer Kanal „Home Assistant“. Er löst eine Automation über ihren Webhook aus
+  (`POST /api/webhook/<ID>`, JSON mit `state`, `kind`, `title`, `message`, `check`, `node`, `url` und `time`). Die
+  Webhook-ID wird verschlüsselt gespeichert und erscheint in keinem Fehlertext. Die Zertifikatsprüfung lässt sich für
+  selbst signierte Zertifikate im LAN abschalten. Gesendet wird nur von der Node, „Nur lokal“ in Home Assistant geht.
+
+### Behoben
+- Kanal-Formular: Angehakte Optionen bleiben nach einem Eingabefehler angehakt.
+- Der Menüpunkt „Healthchecks-Sync“ erscheint nur noch, wenn Healthchecks eingeschaltet ist.
+
 ## 2.21.1 – 2026-10-22
 
 ### Geändert

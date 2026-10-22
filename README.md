@@ -14,6 +14,46 @@ Webhooks bekommen standardmäßig ein JSON mit `event_id`, `kind` (down, up, fla
 
 Gegen Alarmrauschen wirken Wiederholungen vor Alarm, Stabilisierung, Flatter-Erkennung, Sammelmeldungen ab drei gleichzeitigen Störungen, Ruhezeiten (nur kritische Checks alarmieren) und höchstens 60 Nachrichten je Kanal und Stunde. Links in Nachrichten brauchen die externe Adresse des Nodes in den Einstellungen der Benachrichtigungen.
 
+### Home Assistant
+
+Der Kanal *Home Assistant* ruft den Webhook-Auslöser einer Automation auf: `POST <URL>/api/webhook/<Webhook-ID>` mit JSON. Einzutragen sind die Adresse von Home Assistant ohne Pfad (z. B. `http://homeassistant.local:8123`), die Webhook-ID (wie ein Passwort, verschlüsselt gespeichert, erscheint nicht in Fehlertexten) und optional *Zertifikat prüfen* (bei selbst signiertem Zertifikat im LAN abschalten). Gesendet wird nur von der Node, nicht vom ipv64-Server; *Nur lokal* in Home Assistant kann daher eingeschaltet bleiben. Home Assistant antwortet auf jede Webhook-ID mit 200 – ob die Automation lief, zeigt ihr Verlauf in Home Assistant. Netzwerkfehler und HTTP 5xx werden nach 1, 5 und 15 Minuten erneut versucht.
+
+Felder unter `trigger.json`: `source` (immer `node64`), `kind` (wie beim Webhook, z. B. `down`, `up`, `test`, `dyndns_fail`), `state` (`down`, `up`, `degraded`, `unchecked`, `test` oder `info`), `title`, `message`, `url`, `time` (RFC 3339, UTC), `priority` (1–5), `event_id`, `check` (`name`, `token`, `type`, `target`, `critical`; beim Test leer) und `node` (Name der Node).
+
+```yaml
+alias: Node64-Meldung
+triggers:
+  - trigger: webhook
+    webhook_id: node64-xyz   # eigene ID
+    allowed_methods: [POST]
+    local_only: true
+actions:
+  - action: notify.mobile_app_dein_handy
+    data:
+      title: "{{ trigger.json.title }}"
+      message: "{{ trigger.json.message }}"
+```
+
+Bei einer Störung eine Lampe rot schalten:
+
+```yaml
+alias: Node64-Störung rot
+triggers:
+  - trigger: webhook
+    webhook_id: node64-xyz
+    allowed_methods: [POST]
+    local_only: true
+conditions:
+  - condition: template
+    value_template: "{{ trigger.json.state == 'down' }}"
+actions:
+  - action: light.turn_on
+    target:
+      entity_id: light.flur
+    data:
+      color_name: red
+```
+
 ## Schnellstart
 
 ```bash

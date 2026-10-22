@@ -183,6 +183,8 @@ func Senders(version string, b *Bridge, st *Store) map[notify.Type]notify.Sender
 	m[notify.TypeApp] = appSender{b}
 	// Browser-Kanaele gibt es nur an der Node; der hub reicht sie als Sendeauftrag weiter
 	m[notify.TypeBrowser] = nodeOnlySender{}
+	// Home Assistant steht im LAN der Node: der hub ruft keine solchen Adressen auf
+	m[notify.TypeHomeAssistant] = nodeOnlySender{}
 	out := map[notify.Type]notify.Sender{}
 	for t, snd := range m {
 		out[t] = relaySender{inner: snd, st: st}

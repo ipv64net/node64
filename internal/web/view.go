@@ -285,22 +285,17 @@ func (s *Server) view(r *http.Request, titleKey string) *View {
 func (s *Server) nav(r *http.Request) []NavItem {
 	items := []NavItem{{Key: "nav.dashboard", Path: "/", Icon: "bi-speedometer2", Available: true, Enabled: true}}
 	link := NavItem{Key: "nav.link", Path: "/link", Icon: "bi-cloud", Available: true, Enabled: true, Sub: true}
-	placed := false
 	for _, m := range s.Modules.List(r.Context()) {
 		items = append(items, NavItem{Key: m.Info.TitleKey, Path: m.Info.Path, Icon: m.Info.Icon, Image: m.Info.Image, Available: m.Info.Available, Enabled: m.Running,
 			Hidden: m.Info.Available && !m.Enabled})
-		if m.Info.Path == "/healthchecks" && m.Enabled { // Healthchecks-Sync gehoert zu den Healthchecks
+		if m.Info.Path == "/healthchecks" && m.Enabled { // Healthchecks-Sync gehoert zu den Healthchecks (ohne sie kein Menuepunkt)
 			items = append(items, NavItem{Key: "nav.status_pages", Path: "/healthchecks/status-pages", Icon: "bi-broadcast", Available: true, Enabled: m.Running, Sub: true},
 				NavItem{Key: "nav.proxmox", Path: "/healthchecks/proxmox", Icon: "bi-hdd-rack", Available: true, Enabled: m.Running, Sub: true})
-			items, placed = append(items, link), true
+			items = append(items, link)
 		}
 		if m.Info.Path == "/dns64" && m.Enabled { // lokaler DNS-Server (Zonen, Weiterleitungen) unter DNS64
 			items = append(items, NavItem{Key: "nav.local_dns", Path: "/dns64/local", Icon: "bi-diagram-3", Available: true, Enabled: m.Running, Sub: true})
 		}
-	}
-	if !placed {
-		link.Sub = false
-		items = append(items, link)
 	}
 	if s.Certs != nil {
 		items = append(items, NavItem{Key: "nav.certificates", Path: "/certificates", Icon: "bi-shield-lock", Available: true, Enabled: true})

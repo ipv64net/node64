@@ -2574,7 +2574,8 @@
       "ipv64_mail": "E-Mail über ipv64",
       "ipv64_sms": "SMS über ipv64",
       "pushover": "Pushover",
-      "browser": "Browser"
+      "browser": "Browser",
+      "homeassistant": "Home Assistant"
     },
     "field": {
       "email": "E-Mail-Adresse",
@@ -2606,7 +2607,11 @@
       "body_hint": "Platzhalter: {{title}} {{text}} {{name}} {{status}} {{kind}} {{reason}} {{message}} {{url}} {{token}} {{time}}",
       "insecure_tls": "Zertifikatsfehler ignorieren",
       "user_key": "User-Key",
-      "device": "Gerät (optional)"
+      "device": "Gerät (optional)",
+      "webhook_id": "Webhook-ID",
+      "webhook_id_hint": "Die Webhook-ID aus dem Auslöser „Webhook“ der Automation (nur A–Z, a–z, 0–9, _ und -). Sie wirkt wie ein Passwort und wird verschlüsselt gespeichert.",
+      "verify_tls": "Zertifikat prüfen",
+      "verify_tls_hint": "Nur abschalten, wenn Home Assistant im LAN ein selbst signiertes Zertifikat nutzt."
     },
     "quiet": "Ruhezeiten",
     "quiet_hint": "In dieser Zeit alarmieren nur Checks, die als kritisch markiert sind.",
@@ -2630,7 +2635,9 @@
     "failed": "fehlgeschlagen",
     "saved": "Kanal gespeichert.",
     "deleted": "Kanal gelöscht.",
-    "planned": "nach Verknüpfung mit ipv64"
+    "planned": "nach Verknüpfung mit ipv64",
+    "ha_hint": "In Home Assistant eine Automation mit dem Auslöser „Webhook“ anlegen (Methode POST), die Webhook-ID kopieren und hier eintragen. „Nur lokal“ kann eingeschaltet bleiben, die Node sendet aus dem LAN. In der Automation stehen die Werte unter trigger.json (title, message, state, kind, check, node, url).",
+    "ha_url_hint": "Adresse von Home Assistant ohne Pfad, z. B. http://homeassistant.local:8123 oder https://ha.example.de."
   },
   "day": {
     "1": "Mo",

@@ -147,7 +147,7 @@ func Senders(version string) map[Type]Sender {
 	return map[Type]Sender{
 		TypeSMTP: smtpSender{}, TypeTelegram: telegramSender{ua}, TypeDiscord: discordSender{ua},
 		TypeNtfy: ntfySender{ua}, TypeGotify: gotifySender{ua}, TypeWebhook: webhookSender{ua}, TypePushover: pushoverSender{ua},
-		TypeBrowser: browserSender{},
+		TypeBrowser: browserSender{}, TypeHomeAssistant: homeAssistantSender{ua},
 	}
 }
 
@@ -411,6 +411,91 @@ func (w webhookSender) Send(ctx context.Context, ch *Channel, m Message) error {
 		return httpErr(resp.StatusCode, rb)
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------- Home Assistant
+
+// homeAssistantSender ruft den Webhook-Ausloeser einer HA-Automation auf: POST <url>/api/webhook/<id> mit festem
+// JSON (siehe haBody). Die Webhook-ID ist das Geheimnis und erscheint nie in Fehlertexten.
+type homeAssistantSender struct{ ua string }
+
+func (h homeAssistantSender) Send(ctx context.Context, ch *Channel, m Message) error {
+	id := ch.Config["webhook_id"]
+	if !haWebhookID.MatchString(id) {
+		return errors.New("home assistant: invalid webhook_id")
+	}
+	b, err := json.Marshal(haBody(m))
+	if err != nil {
+		return err
+	}
+	u := strings.TrimRight(ch.Config["url"], "/") + "/api/webhook/" + url.PathEscape(id)
+	// ohne ID im Text: URL auf Schema und Host kuerzen, Reste (z. B. Echo im Body) ersetzen
+	redact := func(s string) string { return strings.ReplaceAll(RedactURLs(s), id, "***") }
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(b))
+	if err != nil {
+		return errors.New(redact(err.Error()))
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", h.ua)
+	client := httpClient
+	if ch.Config["verify_tls"] == "false" { // selbst signiertes Zertifikat im LAN
+		client = &http.Client{Timeout: 20 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} //nolint:gosec // bewusst per Option
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return Temporary(fmt.Errorf("home assistant: %s", redact(err.Error()))) // HA startet z. B. gerade neu
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		rb, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		err := fmt.Errorf("home assistant: %s", redact(httpErr(resp.StatusCode, rb).Error()))
+		if resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests {
+			return Temporary(err)
+		}
+		return err
+	}
+	return nil
+}
+
+// haBody ist das JSON fuer Home Assistant (in Automationen als trigger.json.<feld>). Felder bleiben stabil:
+// source, kind, state, title, message, url, time, priority, event_id, check {name, token, type, target, critical}, node.
+func haBody(m Message) map[string]any {
+	t := m.Time
+	if t.IsZero() {
+		t = time.Now()
+	}
+	check := map[string]any{"name": m.Check.Name, "token": m.Check.Token, "type": m.Check.Type, "target": m.Check.Target, "critical": m.Check.Critical}
+	if m.Kind == KindTest { // beim Test steht hier der Kanalname, kein Check
+		check = map[string]any{"name": "", "token": "", "type": "", "target": "", "critical": false}
+	}
+	node := ""
+	switch v := m.Payload["node"].(type) {
+	case string:
+		node = v
+	case map[string]any:
+		node, _ = v["name"].(string)
+	}
+	return map[string]any{"source": "node64", "kind": string(m.Kind), "state": haState(m), "title": m.Title, "message": m.Text, "url": m.URL,
+		"time": t.UTC().Format(time.RFC3339), "priority": m.Priority, "event_id": m.EventID, "check": check, "node": node}
+}
+
+// haState: down, up, degraded, unchecked (wie "status" im Webhook), test oder info (Hinweis ohne Stoerung).
+func haState(m Message) string {
+	if s, ok := m.Payload["status"].(string); ok && s != "" {
+		return s
+	}
+	switch {
+	case m.Kind == KindTest:
+		return "test"
+	case isDownKind(m.Kind):
+		return "down"
+	}
+	switch m.Kind {
+	case KindUp, KindFlappingEnd, KindDegradedEnd, KindRechecked, KindSummaryUp, KindDynOK, KindDNS64Up, KindCertOK, KindCDNOnlineUp,
+		KindClusterUp, KindProxmoxUp, KindProxmoxThresholdOK:
+		return "up"
+	}
+	return "info"
 }
 
 // fillTemplate ersetzt {{feld}} in eigenen Webhook-Bodys.

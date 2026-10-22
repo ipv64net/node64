@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -25,6 +26,8 @@ const (
 	TypeNtfy     Type = "ntfy"
 	TypeGotify   Type = "gotify"
 	TypePushover Type = "pushover"
+	// Home Assistant: Webhook-Ausloeser einer Automation (nur von der Node gesendet, HA steht im LAN)
+	TypeHomeAssistant Type = "homeassistant"
 	// Server-Typen: Versand ueber ipv64.net (im Node erst nach Verknuepfung)
 	TypeIPv64Mail Type = "ipv64_mail"
 	TypeIPv64SMS  Type = "ipv64_sms"
@@ -32,7 +35,7 @@ const (
 )
 
 // Types in Anzeigereihenfolge.
-var Types = []Type{TypeBrowser, TypeSMTP, TypeTelegram, TypeDiscord, TypeNtfy, TypeGotify, TypePushover, TypeWebhook}
+var Types = []Type{TypeBrowser, TypeSMTP, TypeTelegram, TypeDiscord, TypeNtfy, TypeGotify, TypePushover, TypeHomeAssistant, TypeWebhook}
 
 // Planned sind Kanaele, die ipv64.net nach der Verknuepfung bereitstellt:
 // Mail ohne eigenen SMTP-Server und SMS ueber das ipv64-Gateway. Sie werden
@@ -113,7 +116,15 @@ var Fields = map[Type][]Field{
 		{Key: "body", Kind: "textarea"},
 		{Key: "insecure_tls", Kind: "bool"},
 	},
+	TypeHomeAssistant: {
+		{Key: "url", Kind: "url", Required: true}, // Basis-URL, z. B. http://homeassistant.local:8123
+		{Key: "webhook_id", Secret: true, Required: true, Kind: "password"},
+		{Key: "verify_tls", Kind: "bool", Default: "true"},
+	},
 }
+
+// haWebhookID: erlaubte Zeichen der Webhook-ID von Home Assistant.
+var haWebhookID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 
 // IsSecret sagt, ob ein Feld verschluesselt gespeichert wird.
 func IsSecret(t Type, key string) bool {
@@ -198,6 +209,16 @@ func (c *Channel) validate(keepSecrets bool) error {
 			if !strings.Contains(to, "@") {
 				return fmt.Errorf("to: %q is not an e-mail address", to)
 			}
+		}
+	}
+	if c.Type == TypeHomeAssistant {
+		// Basis-URL ohne Abfrage; der Pfad /api/webhook/<id> kommt beim Senden dazu
+		if u, err := url.Parse(c.Config["url"]); err == nil && (u.RawQuery != "" || u.Fragment != "" || u.User != nil) {
+			return errors.New("url must be the Home Assistant base URL, e.g. http://homeassistant.local:8123")
+		}
+		c.Config["url"] = strings.TrimRight(c.Config["url"], "/")
+		if id := c.Config["webhook_id"]; (id != "" || !keepSecrets) && !haWebhookID.MatchString(id) {
+			return errors.New("webhook_id may only contain A-Z, a-z, 0-9, _ and - (max 128 characters)")
 		}
 	}
 	if c.Lang == "" {
@@ -307,6 +328,8 @@ func (c *Channel) Summary() string {
 		return "ipv64 App"
 	case TypeWebhook:
 		return g("method") + " " + g("url")
+	case TypeHomeAssistant:
+		return g("url")
 	}
 	return ""
 }
