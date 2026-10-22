@@ -60,8 +60,11 @@ func nodeHello(ctx context.Context, st *store.Store, mods *module.Registry, link
 
 // headlessPresence: Modus ohne Oberflaeche. Kennung der Node ist die Sensor-Kennung (es gibt kein node.id); entfernt
 // meldet sich der Modus bis zum Neustart nicht mehr an (der Key kommt aus der Umgebung, ipv64 weist die Meldungen des
-// gesperrten Sensors selbst ab).
-func headlessPresence(api *ipv64api.Client, key, dir string, log *slog.Logger) *ipv64api.Presence {
+// gesperrten Sensors selbst ab). name ist NODE64_NAME ("" = Honeypot64).
+func headlessPresence(api *ipv64api.Client, key, dir, name string, log *slog.Logger) *ipv64api.Presence {
+	if name == "" {
+		name = "Honeypot64"
+	}
 	sensor := func() string { id, _ := honeypot.SensorIDFromFile(dir); return id }
 	api.SetNodeID(sensor)
 	var removed atomic.Bool
@@ -69,7 +72,7 @@ func headlessPresence(api *ipv64api.Client, key, dir string, log *slog.Logger) *
 		Key: func(context.Context) string { return key },
 		Info: func(context.Context) ipv64api.Hello {
 			id := sensor()
-			return ipv64api.Hello{NodeID: id, Name: "Honeypot64", Version: Version, OSArch: runtime.GOOS + "/" + runtime.GOARCH, Mode: "headless",
+			return ipv64api.Hello{NodeID: id, Name: name, Version: Version, OSArch: runtime.GOOS + "/" + runtime.GOARCH, Mode: "headless",
 				Modules: []string{honeypot.Name}, Features: ipv64api.HelloFeatures{HoneypotSensorID: id}}
 		},
 		Removed:   func(context.Context) bool { return removed.Load() },

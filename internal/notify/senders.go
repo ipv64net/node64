@@ -60,6 +60,7 @@ const (
 
 	KindHoneypotNew   Kind = "honeypot_new"   // Honeypot64: neue Angreifer (gebuendelt, hoechstens stuendlich)
 	KindHoneypotWatch Kind = "honeypot_watch" // Honeypot64-Fruehwarnung: eigenes Netz bzw. DynDNS-IP als Angreifer aufgefallen
+	KindHoneypotLogin Kind = "honeypot_login" // Honeypot64: viele Fehlversuche an der Anmeldung von Node64 (Regel node64/login)
 
 	// Proxmox VE (Healthchecks, ohne Check; Gaeste „als Check“ melden ihren Zustand ueber den Check)
 	KindProxmoxDown        Kind = "proxmox_down"         // System nicht erreichbar, Node offline, Gast gestoppt/angehalten/abgestuerzt
@@ -108,7 +109,9 @@ func IsCDN64(k Kind) bool {
 func IsCluster(k Kind) bool { return k == KindClusterDown || k == KindClusterUp }
 
 // IsHoneypot: Meldung von Honeypot64.
-func IsHoneypot(k Kind) bool { return k == KindHoneypotNew || k == KindHoneypotWatch }
+func IsHoneypot(k Kind) bool {
+	return k == KindHoneypotNew || k == KindHoneypotWatch || k == KindHoneypotLogin
+}
 
 // IsProxmox: Meldung der Proxmox-VE-Ueberwachung.
 func IsProxmox(k Kind) bool {

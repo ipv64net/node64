@@ -55,17 +55,19 @@ func (t *trapService) udpEvent(kind string, from netip.AddrPort) Event {
 }
 
 // serveProtoTLS fuehrt den TLS-Handshake (Zeitlimit) und gibt die Verbindung dann an den Dienst; danach liest und
-// schreibt c ueber TLS (Budget zaehlt den Klartext).
+// schreibt c ueber TLS (Budget zaehlt den Klartext). cert ist das selbst signierte Zertifikat; ein Zertifikat der
+// Verwaltung hat Vorrang (sensor_cert.go). Der angefragte Name (SNI) steht danach in den Ereignissen (Host).
 func (s *Sensor) serveProtoTLS(c *trapConn, cert *tls.Certificate, p *TCPProto) {
 	if cert == nil {
 		return
 	}
-	tc := tls.Server(c.Conn, &tls.Config{Certificates: []tls.Certificate{*cert}, MinVersion: tls.VersionTLS10})
+	tc := tls.Server(c.Conn, s.tlsConfigFor(c.t.key, func() (*tls.Certificate, error) { return cert, nil }))
 	_ = tc.SetDeadline(time.Now().Add(sensorTCPWait))
 	if err := tc.Handshake(); err != nil {
 		return
 	}
 	_ = tc.SetDeadline(time.Time{})
+	c.sni = storeClip(tc.ConnectionState().ServerName, MaxText)
 	c.Conn = tc
 	p.Handle(s, c)
 }

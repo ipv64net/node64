@@ -1,5 +1,17 @@
 # Changes – Honeypot64
 
+## 0.10.0 – 2026-10-22
+
+### Added
+- HTTPS traps with a web server profile and the new mail traps with TLS (SMTPS 465, IMAPS 993, POP3S 995) can
+  optionally present a valid certificate from the certificate manager. It can be created directly for plausible decoy
+  names (DNS-01 via ipv64, optionally with A/AAAA or CNAME records). Profiles that are self-signed in the original
+  (Proxmox, Webmin, NAS …) stay self-signed. The requested name (SNI) is recorded with every event.
+- Watch for the Node64 login (rule `node64/login@1`): from 5 failed logins in 10 minutes per public IP (configurable)
+  one event without credentials, with a notification, an instant block via PROXY64 (with its opt-in) and reporting to
+  ipv64. Counted: password, TOTP, passkey, SSO, API and MCP keys. New row in the overview.
+- Headless mode: `NODE64_HONEYPOT_PERSONAS`, `NODE64_HONEYPOT_HOSTNAME`, `NODE64_NAME`.
+
 ## 0.9.0 – 2026-10-22
 
 ### Added

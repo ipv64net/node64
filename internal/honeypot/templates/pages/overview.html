@@ -62,6 +62,11 @@
 					{{with $d.Logs.Syslog}}· {{$.T "honeypot.logs.syslog"}}: {{if .Error}}<a class="text-danger" href="/honeypot/settings#logs-status">{{$.T "honeypot.services.error"}}</a>{{else}}{{$.T "honeypot.logs.syslog_on" "port" .Port}} ({{$.Int .Messages}}){{end}}{{end}}
 					{{else}}<a href="/honeypot/settings#logs">{{.T "honeypot.report.off"}}</a>{{end}}
 				</div>
+				<div class="small text-body-secondary mt-1" id="login-line"><i class="bi bi-person-lock"></i> {{.T "honeypot.login.overview"}}:
+					{{if $d.Login.On}}{{if $d.Login.Day}}<span class="text-danger fw-semibold">{{.T "honeypot.login.events" "day" (.Int $d.Login.Day) "week" (.Int $d.Login.Week)}}</span>{{else}}{{.T "honeypot.login.events" "day" (.Int $d.Login.Day) "week" (.Int $d.Login.Week)}}{{end}}
+					· {{.T "honeypot.login.counts" "fails" (.Int $d.Login.Fails) "local" (.Int $d.Login.Local)}} · {{.T "honeypot.login.rule" "threshold" $d.Login.Threshold "window" $d.Login.Window}}
+					{{else}}<a href="/honeypot/settings#anmeldung">{{.T "honeypot.report.off"}}</a>{{end}}
+				</div>
 				{{if $d.Running}}{{with $d.Proxy64}}{{if .Connected}}<div class="small text-body-secondary mt-1" id="proxy64-line"><i class="bi bi-diagram-3"></i> {{$.T "honeypot.proxy64.line" "decoy" ($.Int .Decoy) "access" ($.Int .Access) "blocks" ($.Int .Blocks)}}
 					{{if .Dropped}}· <span class="text-warning-emphasis">{{$.T "honeypot.proxy64.dropped" "count" ($.Int .Dropped)}}</span>{{end}}</div>{{end}}{{end}}{{end}}
 			</div>
@@ -192,6 +197,7 @@
 					{{with .UA}}<div class="text-body-secondary"><i class="bi bi-window"></i> {{.}}</div>{{end}}
 					{{with .Client}}<div class="text-body-secondary font-monospace">{{.}}</div>{{end}}
 					{{with .Fingerprint}}<div class="text-body-secondary font-monospace" title="{{$.T "honeypot.events.fingerprint"}}"><i class="bi bi-fingerprint"></i> {{.}}</div>{{end}}
+					{{with .SNI}}<div class="text-body-secondary" title="{{$.T "honeypot.events.sni_hint"}}"><i class="bi bi-signpost"></i> {{$.T "honeypot.events.sni"}}: <span class="font-monospace">{{.}}</span></div>{{end}}
 					{{with .Page}}<div class="text-body-secondary">{{$.T "honeypot.events.page"}}: {{.}}</div>{{end}}
 					{{with .Detail}}<div class="text-body-secondary">{{.}}</div>{{end}}
 					{{if .PayloadHex}}<details><summary class="text-body-secondary">{{$.T "honeypot.events.payload"}}</summary>

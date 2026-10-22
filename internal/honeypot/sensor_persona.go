@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -150,6 +151,31 @@ func PersonaProblems(c *Config) []string {
 		c.Personas = nil
 	}
 	return out
+}
+
+// personaErrEN: englische Texte fuer den Modus ohne Oberflaeche (dort gibt es keine Uebersetzung).
+var personaErrEN = map[string]string{
+	"honeypot.err.hostname":     "hostname %q is not valid (letters, digits, - and dots)",
+	"honeypot.err.persona":      "profile %[2]q is not available for %[1]q (service:port=profile, e.g. ssh:22=dropbear)",
+	"honeypot.err.persona_many": "at most %s profiles",
+}
+
+// ValidatePersonas prueft und normalisiert Profile und Hostname wie das Modul, Fehler auf Englisch (Modus ohne
+// Oberflaeche).
+func ValidatePersonas(c *Config) error {
+	var msgs []string
+	for _, p := range PersonaProblems(c) {
+		parts := strings.Split(p, "|")
+		args := make([]any, 0, len(parts)-1)
+		for _, v := range parts[1:] {
+			args = append(args, v)
+		}
+		msgs = append(msgs, fmt.Sprintf(personaErrEN[parts[0]], args...))
+	}
+	if len(msgs) == 0 {
+		return nil
+	}
+	return errors.New(strings.Join(msgs, "; "))
 }
 
 // ValidHostname: Hostname nach RFC 1123 (Labels a-z, 0-9, "-", hoechstens 63 Zeichen, insgesamt 253).

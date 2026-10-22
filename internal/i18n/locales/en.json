@@ -2544,7 +2544,8 @@
       "proxmox_threshold": "🟠 Proxmox: {name} above threshold",
       "proxmox_threshold_ok": "🟢 Proxmox: {name} below threshold again",
       "proxmox_restarted": "🔄 Proxmox: {name} restarted",
-      "quiet_digest_events": "🌙 During quiet hours: {count} notifications, {down} still open"
+      "quiet_digest_events": "🌙 During quiet hours: {count} notifications, {down} still open",
+      "honeypot_login": "🚨 Honeypot64: attack on the login of {name}"
     },
     "body": {
       "quota_used": "Used: {used} of {limit} online checks today",
@@ -3571,7 +3572,9 @@
       "filter_all": "All",
       "fingerprint": "Client fingerprint (JA4 for TLS, HASSH for SSH)",
       "country_clear": "Clear country filter",
-      "empty_country": "No stored events from this country."
+      "empty_country": "No stored events from this country.",
+      "sni": "Requested name",
+      "sni_hint": "Name from TLS (SNI) or server name: shows whether attackers know the decoy names (e.g. from Certificate Transparency logs)"
     },
     "settings": {
       "title": "Settings",
@@ -3649,7 +3652,19 @@
       "syslog_allow_many": "At most {v1} allowed senders.",
       "hostname": "“{v1}” is not a valid hostname (a–z, 0–9, hyphen, dots between labels).",
       "persona": "There is no profile “{v2}” for “{v1}”.",
-      "persona_many": "At most {v1} profiles."
+      "persona_many": "At most {v1} profiles.",
+      "cert": "Certificate #{v1} does not exist in the certificate manager.",
+      "cert_ports": "Invalid ports: {v1} (1–65535).",
+      "cert_ports_many": "At most {v1} ports.",
+      "cert_domain": "Please choose a domain of the ipv64 account.",
+      "cert_wildcard": "“{v1}”: no wildcards here – list individual names.",
+      "cert_apex": "The domain {v1} itself is not a decoy name.",
+      "cert_name": "“{v1}” is not a valid name.",
+      "cert_names": "Enter at least one name.",
+      "cert_many": "At most {v1} names.",
+      "cert_dns": "DNS target “{v1}”: public IPv4, IPv6 (one each) or a name for a CNAME.",
+      "login_threshold": "Threshold: {v1} to {v2} failed logins.",
+      "login_window": "Time window: {v1} to {v2} minutes."
     },
     "report": {
       "title": "Reporting to ipv64",
@@ -3825,7 +3840,10 @@
         "snmp": "SNMP community strings",
         "sip": "SIP/VoIP scanners and registrations",
         "rdp": "Remote Desktop (user name)",
-        "winbox": "MikroTik Winbox"
+        "winbox": "MikroTik Winbox",
+        "smtps": "SMTP over TLS (SMTPS): logins recorded and rejected, no relay",
+        "imaps": "IMAP over TLS (IMAPS): logins recorded and rejected",
+        "pop3s": "POP3 over TLS (POP3S): logins recorded and rejected"
       },
       "tcp": {
         "445": "SMB / Windows shares (connection, first bytes)",
@@ -3886,6 +3904,51 @@
       "hint": "Click a country to show its events in the list below.",
       "missing": "{count} countries are too small for the map (see list)",
       "filter": "Show events from {country}"
+    },
+    "cert": {
+      "title": "Certificate for decoy names",
+      "off": "Off – all traps self-signed",
+      "not_valid": "not issued yet or expired",
+      "hint": "HTTPS traps with a web server profile (nginx, Apache) and the mail traps with TLS (SMTPS, IMAPS, POP3S) present this certificate from the certificate manager. Profiles that are self-signed in real life (Proxmox, Webmin, NAS, UniFi, routers, Grafana, Home Assistant, Elasticsearch) stay self-signed. If the certificate is missing or not issued yet, everything stays self-signed.",
+      "uses": "Presenting the certificate: {services}",
+      "uses_none": "No enabled trap presents the certificate (enable HTTPS with nginx/Apache, SMTPS, IMAPS or POP3S, or list ports below).",
+      "ports": "Also present on these ports",
+      "ports_hint": "Optional: ports that present the certificate despite a self-signed profile (e.g. 8006 for Proxmox with its own certificate). Comma-separated.",
+      "ct_hint": "The names of a certificate are public in the Certificate Transparency logs – scanners read them there. Use a separate domain or subdomain just for the decoys, never your main domain or names of real services.",
+      "unavailable": "Without the certificate manager (e.g. in headless mode) all traps stay self-signed.",
+      "create_title": "Create a certificate for decoy names",
+      "create_intro": "Creates a certificate in the certificate manager for individual, plausible names (no wildcard), e.g. mail., vpn., cloud., portal. below an ipv64 domain. It is issued via DNS-01 through ipv64; port 80 stays a trap. The new certificate is selected right away.",
+      "nokey": "Enter the ipv64 API key in the settings first.",
+      "domain": "ipv64 domain",
+      "names": "Names",
+      "names_hint": "Prefixes or full names, comma-separated, at most 20. No *, not the domain itself.",
+      "dns": "Create DNS records (optional)",
+      "dns_hint": "Public IPv4 and/or IPv6 of the node (A/AAAA) or a name for a CNAME (e.g. the DynDNS domain). Existing records of the names stay untouched. Empty = create the records yourself.",
+      "create": "Create certificate",
+      "created": "Certificate for {names} created and selected; it is being issued in the background (see Certificates).",
+      "created_unselected": "Certificate for {names} created but not selected (check the settings and choose the certificate above).",
+      "err_domains": "ipv64 domains could not be loaded: {error}",
+      "err_tos": "Accept the Let's Encrypt terms of service under Certificates first.",
+      "err_create": "Certificate not created: {error}",
+      "dns_failed": "DNS records not created: {error}",
+      "dns_created": "DNS records created: {count}.",
+      "dns_exists": "Already present, not changed: {names}.",
+      "dns_errors": "Errors: {errors}"
+    },
+    "login": {
+      "title": "Watch the Node64 login",
+      "intro": "Failed logins at the node's own login (password, TOTP, passkey, SSO, API and MCP keys) are counted per IP. At the threshold (default {threshold} in {window} minutes) an event of rule node64/login@1 is recorded – without usernames or passwords – with a notification, an instant block via PROXY64 (if enabled there) and reporting to ipv64 (if enabled). Private and local addresses are only counted, never reported.",
+      "watch": "Watch failed logins",
+      "threshold": "Threshold (failed logins per IP)",
+      "window": "Time window",
+      "minutes": "minutes",
+      "notify": "Notify",
+      "notify_hint": "Through the node's notifications, at most one message every 10 minutes (further ones are counted in).",
+      "public_hint": "Never expose the Node64 interface to the internet (no port forwarding for the web port). From outside use a VPN or PROXY64 with login and access list.",
+      "overview": "Attacks on the Node64 login",
+      "events": "{day} in 24 h, {week} in 7 days",
+      "counts": "failed logins since start: {fails} counted, {local} local (not reported)",
+      "rule": "threshold {threshold} in {window} min"
     }
   },
   "pve": {

@@ -132,6 +132,10 @@ type Config struct {
 	Personas map[string]string `json:"personas,omitempty"`
 	Hostname string            `json:"hostname,omitempty"`
 	Seed     string            `json:"-"`
+	// Gueltiges Zertifikat fuer Koeder-Namen (sensor_cert.go): Kennung in der zentralen Zertifikatsverwaltung (0 = aus,
+	// alle Fallen selbst signiert) und Ports, die es auch bei Profilen mit selbst signiertem Zertifikat zeigen.
+	CertID    int64 `json:"cert_id,omitempty"`
+	CertPorts []int `json:"cert_ports,omitempty"`
 	// Log-Sensor und Syslog-Empfaenger (H5); leer = aus. Der Sensor (Fallen-Dienste) beachtet das Feld nicht.
 	Log LogConfig `json:"log,omitempty"`
 }

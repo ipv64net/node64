@@ -59,6 +59,7 @@ type hpModeConfig struct {
 	Report    bool             // Meldung an ipv64: an, wenn ein Key gesetzt ist und NODE64_HONEYPOT_REPORT nicht 0 ist
 	APIBase   string           // NODE64_IPV64_API (leer = ipv64.net; nur fuer Tests)
 	Firewall  *firewall.Config // Firewall-Helfer (H6, NODE64_FIREWALL); nil = aus
+	Name      string           // Name in der Node-Uebersicht auf ipv64.net (NODE64_NAME, Standard Honeypot64)
 }
 
 // runMode startet einen besonderen Betriebsmodus (NODE64_MODE). Bisher gibt es nur "honeypot".
@@ -170,7 +171,7 @@ func honeypotRun(ctx context.Context, cfg *config.Config, hc *hpModeConfig, base
 			_ = rep.ResetWindow(ctx)
 		}
 		log.Info("reporting to ipv64 every 10 minutes", "sensor_id", id)
-		go headlessPresence(api, hc.IPv64Key, dir, log).Run(repCtx) // Node-Uebersicht auf ipv64.net (setzt X-Node64-Node)
+		go headlessPresence(api, hc.IPv64Key, dir, hc.Name, log).Run(repCtx) // Node-Uebersicht auf ipv64.net (setzt X-Node64-Node)
 		go func() { rep.Run(repCtx); close(repDone) }()
 	case hc.IPv64Key != "":
 		log.Info("NODE64_HONEYPOT_REPORT=0; events stay local")
@@ -414,7 +415,57 @@ func honeypotModeFromEnv(getenv func(string) string) (*hpModeConfig, error) {
 	if err := parseHPFirewall(get, hc); err != nil {
 		return nil, err
 	}
+	if err := parseHPPersonas(get, hc); err != nil {
+		return nil, err
+	}
 	return hc, nil
+}
+
+// hpMaxName: Zeichen von NODE64_NAME (ipv64 speichert hoechstens 100).
+const hpMaxName = 64
+
+// parseHPPersonas liest die Dienst-Profile (NODE64_HONEYPOT_PERSONAS, z. B. "ssh:22=dropbear,http:8080=apache"), den
+// Hostnamen der Fallen (NODE64_HONEYPOT_HOSTNAME, leer = aus der Sensor-Kennung) und den Namen in der Node-Uebersicht
+// auf ipv64.net (NODE64_NAME, leer = Honeypot64). Gleiche Pruefung wie im Modul; Profile nur fuer aktive Fallen.
+func parseHPPersonas(get func(string) string, hc *hpModeConfig) error {
+	if v := get("NODE64_HONEYPOT_PERSONAS"); v != "" {
+		m := map[string]string{}
+		for _, item := range strings.Split(v, ",") {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			k, p, ok := strings.Cut(item, "=")
+			k, p = strings.ToLower(strings.TrimSpace(k)), strings.ToLower(strings.TrimSpace(p))
+			if !ok || k == "" || p == "" {
+				return fmt.Errorf("NODE64_HONEYPOT_PERSONAS: %q is not service:port=profile (e.g. ssh:22=dropbear)", item)
+			}
+			if _, dup := m[k]; dup {
+				return fmt.Errorf("NODE64_HONEYPOT_PERSONAS: %s is listed twice", k)
+			}
+			m[k] = p
+		}
+		hc.Sensor.Personas = m
+	}
+	hc.Sensor.Hostname = get("NODE64_HONEYPOT_HOSTNAME")
+	if err := honeypot.ValidatePersonas(&hc.Sensor); err != nil {
+		return fmt.Errorf("NODE64_HONEYPOT_PERSONAS / NODE64_HONEYPOT_HOSTNAME: %w", err)
+	}
+	keys := make([]string, 0, len(hc.Sensor.Personas))
+	for k := range hc.Sensor.Personas {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys { // Tippfehler beim Port fallen sonst nicht auf
+		if !slices.ContainsFunc(hc.Sensor.Services, func(s honeypot.Service) bool { return honeypot.PersonaKey(s.Service, s.Port) == k }) {
+			return fmt.Errorf("NODE64_HONEYPOT_PERSONAS: %s is not an active trap (see NODE64_HONEYPOT_PROFILE / NODE64_HONEYPOT_SERVICES)", k)
+		}
+	}
+	hc.Name = get("NODE64_NAME")
+	if utf8.RuneCountInString(hc.Name) > hpMaxName || !utf8.ValidString(hc.Name) || strings.ContainsFunc(hc.Name, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		return fmt.Errorf("NODE64_NAME must be valid text without control characters, at most %d characters", hpMaxName)
+	}
+	return nil
 }
 
 // parseHPFirewall liest den Firewall-Helfer (H6): NODE64_FIREWALL (leer/0/off = aus, nftables), NODE64_FIREWALL_LISTS
@@ -507,7 +558,7 @@ func parseHPServices(v string) ([]honeypot.Service, error) {
 		case honeypot.SvcSSH, honeypot.SvcTelnet, honeypot.SvcHTTP, honeypot.SvcHTTPS, honeypot.SvcTCP:
 		default:
 			if !honeypot.ProtoKnown(svc) {
-				return nil, fmt.Errorf("NODE64_HONEYPOT_SERVICES: unknown service %q (ssh, telnet, http, https, tcp, ftp, smtp, pop3, imap, mqtt, mysql, postgres, mssql, redis, rdp, vnc, mikrotik-api, snmp, sip)", parts[0])
+				return nil, fmt.Errorf("NODE64_HONEYPOT_SERVICES: unknown service %q (ssh, telnet, http, https, tcp, ftp, smtp, smtps, pop3, pop3s, imap, imaps, mqtt, mysql, postgres, mssql, redis, rdp, vnc, mikrotik-api, snmp, sip)", parts[0])
 			}
 		}
 		port, err := strconv.Atoi(strings.TrimSpace(parts[1]))

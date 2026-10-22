@@ -267,6 +267,7 @@ func (s *Server) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 	_, cred, err := wa.FinishPasskeyLogin(handler, f.session, r)
 	if err != nil || found == nil {
 		s.limiter.fail("ip:" + ipKey(ip))
+		s.loginFailed(r, ip)
 		s.auditEntry(ctx, store.AuditEntry{Actor: "passkey", Action: "login.failed", Details: "passkey", IP: ip})
 		s.log.Warn("passkey login failed", "ip", ip, "err", err)
 		writeErr(w, http.StatusUnauthorized, "passkey not accepted")

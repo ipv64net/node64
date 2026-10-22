@@ -148,6 +148,7 @@ type EventView struct {
 	Source      string    `json:"source"`                // honeypot, log, syslog (H5)
 	Rule        string    `json:"rule,omitempty"`        // Regel bei log/syslog, z. B. sshd/bruteforce@1
 	Fingerprint string    `json:"fingerprint,omitempty"` // H6: "ja4:…" bzw. "hassh:…"
+	SNI         string    `json:"sni,omitempty"`         // angefragter Name (TLS-SNI bzw. Servername ohne HTTP), siehe eventSNI
 	PayloadHex  string    `json:"payload_hex,omitempty"`
 	PayloadText string    `json:"payload_text,omitempty"` // Go-Escapes (\x00, \r\n …), nur ASCII
 	PayloadDump string    `json:"-"`                      // hex.Dump fuer die Seite
@@ -157,7 +158,7 @@ type EventView struct {
 func eventView(e Event) EventView {
 	v := EventView{Time: e.Time, Service: e.Service, Port: e.Port, Kind: e.Kind, Src: storeSrc(e.Src), SrcPort: e.SrcPort, Username: e.Username,
 		Password: e.Password, Method: e.Method, Path: e.Path, Host: e.Host, UA: e.UA, Client: e.Client, Page: e.Page, Detail: e.Detail,
-		Source: storeSource(e.Source), Rule: e.Rule, Fingerprint: e.Fingerprint}
+		Source: storeSource(e.Source), Rule: e.Rule, Fingerprint: e.Fingerprint, SNI: eventSNI(e)}
 	if cc, ok := lookupCountry(e.Src); ok {
 		v.Country = cc
 	}
@@ -168,6 +169,20 @@ func eventView(e Event) EventView {
 		v.PayloadDump = strings.TrimRight(hex.Dump(e.Payload), "\n")
 	}
 	return v
+}
+
+// eventSNI: angefragter Name eines Ereignisses – bei HTTPS aus dem Detail ("sni=…"), bei Diensten ohne HTTP (Mail mit
+// TLS, MikroTik API-SSL) aus Host. Macht sichtbar, ob Bots die Koeder-Namen (z. B. aus CT-Logs) kennen.
+func eventSNI(e Event) string {
+	for _, t := range strings.Split(e.Detail, ",") {
+		if v, ok := strings.CutPrefix(t, "sni="); ok {
+			return v
+		}
+	}
+	if e.Method == "" && e.Path == "" {
+		return e.Host
+	}
+	return ""
 }
 
 // eventSource prueft den Filter nach Quelle ("" = alle).

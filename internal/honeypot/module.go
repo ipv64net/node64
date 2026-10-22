@@ -37,7 +37,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.9.0"
+	version = "0.10.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -68,6 +68,8 @@ type ModuleConfig struct {
 	MaxEvents     int64 `json:"max_events"`     // Obergrenze der gespeicherten Ereignisse, Standard 200000
 	NotifyNew     bool  `json:"notify_new"`     // Benachrichtigung bei neuen Angreifern (Standard aus)
 	Report        bool  `json:"report"`         // Meldung an ipv64 (Opt-in, Standard aus; braucht den zentralen API-Key)
+	// Ueberwachung der eigenen Anmeldung (login.go, Regel node64/login@1); leer = an mit Standardwerten
+	Login LoginConfig `json:"login,omitzero"`
 }
 
 // DefaultConfig: Profil standard mit Port-Scan-Erkennung, 7 Tage, ohne Benachrichtigung.
@@ -123,6 +125,10 @@ type Module struct {
 	logState LogStatus       // Log-Sensor/Syslog nach dem letzten Apply (fuer Claims)
 	logErr   string          // Syslog nicht geoeffnet, weil ein anderer Teil den Port inzwischen belegt
 	geoStop  func()          // gibt die Laenderdaten zurueck (geo.go), nil = nicht angefordert
+
+	certs  certManager // zentrale Zertifikatsverwaltung (decoy_cert.go), nil = keine
+	dnsrec decoyDNS    // Tests: Ersatz fuer die ipv64-Records (sonst ueber key)
+	login  *loginWatch // Ueberwachung der eigenen Anmeldung (login.go)
 }
 
 // Warning ist ein Hinweis zu einem Port der Einstellung (Profil laesst ihn weg oder ein anderer Teil will ihn).
@@ -138,7 +144,7 @@ type Warning struct {
 func New(core *store.Store, log *slog.Logger, dataDir, nodeVersion string) *Module {
 	l := log.With("module", Name)
 	st := NewStore(core, log)
-	m := &Module{core: core, log: l, dataDir: dataDir, version: nodeVersion, st: st, sink: bridgeBlockSink(CountEvents(st.Sink())), every: notifyEvery,
+	m := &Module{core: core, log: l, dataDir: dataDir, version: nodeVersion, st: st, sink: bridgeBlockSink(CountEvents(st.Sink())), every: notifyEvery, login: newLoginWatch(),
 		newSensor: func(log *slog.Logger, dir string) sensorAPI { return NewSensor(log, dir) },
 		newLogs:   func(log *slog.Logger) logSensorAPI { return NewLogSensor(log) }}
 	m.rep = NewReporter(ReporterConfig{Store: st, API: m.api, Enabled: func(ctx context.Context) bool { return m.loadConfig(ctx).Report },
@@ -205,6 +211,9 @@ func (m *Module) Start(ctx context.Context) error {
 	lctx, cancel := context.WithCancel(context.Background())
 	s := m.newSensor(m.log, m.dir())
 	s.SetPortCheck(m.portCheck)
+	if cs, ok := s.(certSourcer); ok { // Zertifikate fuer Koeder-Namen (decoy_cert.go)
+		cs.SetCertSource(m.certSource())
+	}
 	ls := m.newLogs(m.log)
 	m.mu.Lock()
 	m.sensor, m.logs, m.life, m.cancel, m.started = s, ls, lctx, cancel, time.Now()
@@ -230,6 +239,7 @@ func (m *Module) Stop(ctx context.Context) error {
 	m.sensor, m.logs, m.cancel, m.life, m.status, m.warnings, m.geoStop = nil, nil, nil, nil, nil, nil, nil
 	m.logState, m.logErr = LogStatus{}, ""
 	m.mu.Unlock()
+	m.login.cfg.Store(nil) // Anmeldung nicht mehr ueberwachen
 	if s == nil {
 		return nil
 	}
@@ -305,6 +315,8 @@ func (m *Module) applyLocked(ctx context.Context) {
 	m.status, m.warnings = status, warns
 	m.logState, m.logErr = lst, logErr
 	m.mu.Unlock()
+	lc := cfg.Login
+	m.login.cfg.Store(&lc)
 }
 
 // seed liefert den Seed der Dienst-Profile: die Sensor-Kennung (stabil ueber Neustarts, je Node verschieden).
@@ -539,6 +551,12 @@ func (m *Module) validate(ctx context.Context, c *ModuleConfig) FieldErrors {
 		errs[key] = strings.TrimPrefix(errs[key]+"\n"+p, "\n")
 	}
 	m.validateLog(ctx, c, errs)
+	for k, v := range m.certProblems(ctx, &c.Config) {
+		errs[k] = v
+	}
+	for k, v := range loginProblems(c.Login) {
+		errs[k] = v
+	}
 	if c.Profile != ProfileCustom {
 		return errs
 	}
@@ -889,6 +907,11 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	}
 	if _, key := m.api(ctx); key == "" && !m.loadConfig(ctx).Report {
 		c.Report = false // ohne API-Key hier nicht einschaltbar
+	}
+	if c.CertID > 0 && m.certs != nil { // Kennung gilt nur auf dieser Node: fehlt das Zertifikat hier, selbst signiert
+		if crt, err := m.certs.Get(ctx, c.CertID); err != nil || crt == nil {
+			c.CertID = 0
+		}
 	}
 	_, err := m.SaveConfig(ctx, c)
 	var fe FieldErrors

@@ -286,6 +286,7 @@ func (s *Server) loginOIDCCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	if u == nil {
 		s.limiter.fail("ip:" + ipKey(ip))
+		s.loginFailed(r, ip)
 		s.auditEntry(ctx, store.AuditEntry{Actor: truncate(label, 64), Action: "login.failed", Details: "sso: " + errSSONotLinked.Error(), IP: ip})
 		s.log.Warn("sso login without linked user", "label", label, "ip", ip)
 		fail("/login", "sso.not_linked", "name", label)

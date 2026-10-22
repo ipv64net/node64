@@ -163,6 +163,7 @@ func (s *Server) mcpServe(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil || key == nil || u == nil {
 		s.limiter.fail(lk)
+		s.loginFailed(r, ip)
 		s.log.Warn("invalid mcp key", "ip", ip)
 		w.Header().Set("WWW-Authenticate", `Bearer realm="node64-mcp", error="invalid_token"`)
 		mcpErr(w, http.StatusUnauthorized, "invalid MCP key")

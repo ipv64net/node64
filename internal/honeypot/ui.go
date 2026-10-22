@@ -30,6 +30,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /honeypot/settings", page(m.pageSettings))
 	mux.Handle("POST /honeypot/settings", page(m.pageSettingsSave))
 	mux.Handle("POST /honeypot/clear", page(m.pageClear))
+	mux.Handle("POST /honeypot/cert", page(m.pageCert))
 }
 
 // uiTab ist ein Reiter der Modulseiten.
@@ -99,6 +100,7 @@ type overviewData struct {
 	Source   string    // Filter der Ereignisliste: "" (alle), honeypot, log, syslog
 	Sources  []string  // Auswahl des Filters
 	Logs     LogStatus // Log-Sensor und Syslog-Empfaenger
+	Login    loginView // Angriffe auf die Node64-Anmeldung (login.go)
 
 	// Herkunft und „Was wurde angegriffen“ (geo.go)
 	Countries      []uiCountryRank
@@ -153,7 +155,7 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 	info := m.statusInfo(r)
 	d := overviewData{Tabs: tabsFor("overview"), Running: info.Running, Started: info.StartedAt, Profile: info.Profile, Scan: info.Scan,
 		Services: info.Services, Warnings: m.warnViews(r, info.Warnings), Counters: info.Counters, Range: "24h", Report: info.Report,
-		Sources: []string{SrcHoneypot, SrcLog, SrcSyslog}, Logs: info.Logs}
+		Sources: []string{SrcHoneypot, SrcLog, SrcSyslog}, Logs: info.Logs, Login: m.loginOverview(ctx, m.loadConfig(ctx).Login)}
 	span := 24 * time.Hour
 	if r.URL.Query().Get("range") == "7d" {
 		d.Range, span = "7d", 7*24*time.Hour
@@ -310,6 +312,16 @@ type settingsData struct {
 	LogLines    int64
 	LogEvents   int64
 	Unsaved     bool // Vorschlag uebernommen, noch nicht gespeichert
+
+	// Zertifikat fuer Koeder-Namen (decoy_cert.go) und Ueberwachung der Anmeldung (login.go)
+	CertAvail   bool     // zentrale Zertifikatsverwaltung vorhanden
+	CertDNS     bool     // DNS-01 ueber ipv64 moeglich (API-Key)
+	Certs       []uiCert // Auswahl
+	CertPorts   string   // Formularwert
+	CertUses    []string // Dienste, die das Zertifikat zeigen
+	CertDomains []string // ipv64-Domains (neues Zertifikat)
+	LoginThr    int      // Standard (Platzhalter)
+	LoginWin    int
 }
 
 // uiLogFile ist der Zustand einer Datei mit Hinweis zum Fehler (i18n-Schluessel, "" = keiner).
@@ -481,6 +493,14 @@ func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, err
 	// Hinweise fuer die aktuelle Auswahl (auch fuer ein Profil, das noch nicht gespeichert ist)
 	_, warns := m.resolve(r.Context(), c)
 	d.Warnings = m.warnViews(r, warns)
+	d.CertAvail, d.CertPorts, d.LoginThr, d.LoginWin = m.certs != nil, portsText(c.CertPorts), LoginDefThreshold, LoginDefWindow
+	if d.CertAvail {
+		d.Certs = m.certViews(r.Context())
+		d.CertUses = CertUses(c.Config, effectiveServices(c), m.seed(r.Context()))
+		if d.CertDNS = m.certs.DNSReady(r.Context()); d.CertDNS {
+			d.CertDomains, _ = m.certs.Domains(r.Context())
+		}
+	}
 	return d
 }
 
@@ -531,6 +551,14 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	c.Scan = r.PostFormValue("scan") != ""
 	c.NotifyNew = r.PostFormValue("notify_new") != ""
 	c.Report = r.PostFormValue("report") != ""
+	if r.PostFormValue("cert_form") != "" { // Zertifikat fuer Koeder-Namen (nur mit diesem Teil des Formulars)
+		c.CertID = int64(formInt(r, "cert_id"))
+		c.CertPorts = parsePorts(r.PostFormValue("cert_ports"))
+	}
+	if r.PostFormValue("login_form") != "" { // Ueberwachung der Anmeldung
+		c.Login = LoginConfig{Off: r.PostFormValue("login_watch") == "", NoNotify: r.PostFormValue("login_notify") == "",
+			Threshold: formInt(r, "login_threshold"), Window: formInt(r, "login_window")}
+	}
 	c.MaxConnsPerIP, c.MaxConnsTotal = formInt(r, "max_conns_per_ip"), formInt(r, "max_conns_total")
 	c.RetentionDays, c.MaxEvents = formInt(r, "retention_days"), int64(formInt(r, "max_events"))
 	lf := parseLogForm(r)

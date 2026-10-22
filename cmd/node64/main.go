@@ -247,6 +247,7 @@ func run() error {
 	hpModule.SetPorts(portReg)                                        // Fallen-Dienste pruefen ihre Ports
 	hpModule.SetNotifier(dispatcher.Dispatch)                         // neue Angreifer (gebuendelt, hoechstens stuendlich)
 	hpModule.SetKey(ipv64Key)                                         // Meldung an ipv64 (Opt-in) mit dem zentralen API-Key
+	hpModule.SetCerts(certMgr)                                        // gueltige Zertifikate fuer Koeder-Namen (optional)
 	portReg.Provide(honeypot.Name, hpModule.Claims)
 	modules.Register(hpModule)
 	modules.StartEnabled(ctx)
@@ -385,6 +386,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	srv.SetLoginWatcher(hpModule) // Fehlversuche an der Anmeldung (Honeypot64, Regel node64/login@1; nur wenn das Modul laeuft)
 	err = srv.Run(ctx)
 	log.Info("node64 stopped")
 	return err

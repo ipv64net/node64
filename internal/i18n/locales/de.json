@@ -2544,7 +2544,8 @@
       "proxmox_threshold": "🟠 Proxmox: {name} über der Schwelle",
       "proxmox_threshold_ok": "🟢 Proxmox: {name} wieder unter der Schwelle",
       "proxmox_restarted": "🔄 Proxmox: {name} neu gestartet",
-      "quiet_digest_events": "🌙 Während der Ruhezeit: {count} Meldungen, davon {down} noch offen"
+      "quiet_digest_events": "🌙 Während der Ruhezeit: {count} Meldungen, davon {down} noch offen",
+      "honeypot_login": "🚨 Honeypot64: Angriff auf die Anmeldung von {name}"
     },
     "body": {
       "quota_used": "Verbraucht: {used} von {limit} Online-Messungen heute",
@@ -3571,7 +3572,9 @@
       "filter_all": "Alle",
       "fingerprint": "Fingerabdruck des Clients (JA4 bei TLS, HASSH bei SSH)",
       "country_clear": "Filter nach Land aufheben",
-      "empty_country": "Keine gespeicherten Ereignisse aus diesem Land."
+      "empty_country": "Keine gespeicherten Ereignisse aus diesem Land.",
+      "sni": "Angefragter Name",
+      "sni_hint": "Name aus TLS (SNI) bzw. Servername: zeigt, ob Angreifer die Köder-Namen kennen (z. B. aus Certificate-Transparency-Logs)"
     },
     "settings": {
       "title": "Einstellungen",
@@ -3649,7 +3652,19 @@
       "syslog_allow_many": "Höchstens {v1} erlaubte Absender.",
       "hostname": "„{v1}“ ist kein gültiger Hostname (a–z, 0–9, Bindestrich, Punkte zwischen den Teilen).",
       "persona": "Profil „{v2}“ gibt es für „{v1}“ nicht.",
-      "persona_many": "Höchstens {v1} Profile."
+      "persona_many": "Höchstens {v1} Profile.",
+      "cert": "Zertifikat #{v1} gibt es in der Zertifikatsverwaltung nicht.",
+      "cert_ports": "Ungültige Ports: {v1} (1–65535).",
+      "cert_ports_many": "Höchstens {v1} Ports.",
+      "cert_domain": "Bitte eine Domain des ipv64-Accounts wählen.",
+      "cert_wildcard": "„{v1}“: Wildcards gibt es hier nicht – einzelne Namen angeben.",
+      "cert_apex": "Die Domain {v1} selbst ist kein Köder-Name.",
+      "cert_name": "„{v1}“ ist kein gültiger Name.",
+      "cert_names": "Mindestens einen Namen angeben.",
+      "cert_many": "Höchstens {v1} Namen.",
+      "cert_dns": "DNS-Ziel „{v1}“: öffentliche IPv4, IPv6 (je eine) oder ein Name für CNAME.",
+      "login_threshold": "Schwelle: {v1} bis {v2} Fehlversuche.",
+      "login_window": "Zeitfenster: {v1} bis {v2} Minuten."
     },
     "report": {
       "title": "Meldung an ipv64",
@@ -3825,7 +3840,10 @@
         "snmp": "SNMP-Community-Strings",
         "sip": "SIP/VoIP-Scanner und Anmeldungen",
         "rdp": "Remote Desktop (Benutzername)",
-        "winbox": "MikroTik Winbox"
+        "winbox": "MikroTik Winbox",
+        "smtps": "SMTP mit TLS (SMTPS): Anmeldung wird erfasst und abgelehnt, kein Relay",
+        "imaps": "IMAP mit TLS (IMAPS): Anmeldung wird erfasst und abgelehnt",
+        "pop3s": "POP3 mit TLS (POP3S): Anmeldung wird erfasst und abgelehnt"
       },
       "tcp": {
         "445": "SMB / Windows-Freigaben (Verbindung, erste Bytes)",
@@ -3886,6 +3904,51 @@
       "hint": "Klick auf ein Land zeigt seine Ereignisse in der Liste unten.",
       "missing": "{count} Länder sind für die Karte zu klein (siehe Liste)",
       "filter": "Ereignisse aus {country} anzeigen"
+    },
+    "cert": {
+      "title": "Zertifikat für Köder-Namen",
+      "off": "Aus – alle Fallen selbst signiert",
+      "not_valid": "noch nicht ausgestellt oder abgelaufen",
+      "hint": "HTTPS-Fallen mit Webserver-Profil (nginx, Apache) und die Mail-Fallen mit TLS (SMTPS, IMAPS, POP3S) zeigen dieses Zertifikat aus der Zertifikatsverwaltung. Profile, die in echt selbst signiert sind (Proxmox, Webmin, NAS, UniFi, Router, Grafana, Home Assistant, Elasticsearch), bleiben selbst signiert. Fehlt das Zertifikat oder ist es noch nicht ausgestellt, bleibt alles selbst signiert.",
+      "uses": "Zeigen das Zertifikat: {services}",
+      "uses_none": "Keine eingeschaltete Falle zeigt das Zertifikat (HTTPS mit nginx/Apache, SMTPS, IMAPS oder POP3S einschalten oder Ports unten eintragen).",
+      "ports": "Auch auf diesen Ports zeigen",
+      "ports_hint": "Optional: Ports, die das Zertifikat trotz Profil mit selbst signiertem Zertifikat zeigen (z. B. 8006 für Proxmox mit eigenem Zertifikat). Komma-Liste.",
+      "ct_hint": "Die Namen eines Zertifikats stehen öffentlich in den Certificate-Transparency-Logs – Scanner lesen sie dort mit. Eine eigene Domain bzw. Subdomain nur für die Köder nehmen, nie die Hauptdomain oder Namen echter Dienste.",
+      "unavailable": "Ohne Zertifikatsverwaltung (z. B. im Modus ohne Oberfläche) bleiben alle Fallen selbst signiert.",
+      "create_title": "Zertifikat für Köder-Namen anlegen",
+      "create_intro": "Legt in der Zertifikatsverwaltung ein Zertifikat für einzelne, glaubwürdige Namen an (kein Wildcard), z. B. mail., vpn., cloud., portal. unter einer ipv64-Domain. Ausgestellt wird per DNS-01 über ipv64, Port 80 bleibt eine Falle. Das neue Zertifikat wird sofort ausgewählt.",
+      "nokey": "Dafür zuerst den ipv64-API-Key in den Einstellungen eintragen.",
+      "domain": "ipv64-Domain",
+      "names": "Namen",
+      "names_hint": "Präfixe oder ganze Namen, durch Komma getrennt, höchstens 20. Kein *, nicht die Domain selbst.",
+      "dns": "DNS-Records anlegen (optional)",
+      "dns_hint": "Öffentliche IPv4 und/oder IPv6 der Node (A/AAAA) oder ein Name für einen CNAME (z. B. die DynDNS-Domain). Vorhandene Records der Namen bleiben unberührt. Leer = Records selbst anlegen.",
+      "create": "Zertifikat anlegen",
+      "created": "Zertifikat für {names} angelegt und ausgewählt; die Ausstellung läuft im Hintergrund (Stand unter Zertifikate).",
+      "created_unselected": "Zertifikat für {names} angelegt, aber nicht ausgewählt (Einstellung prüfen und das Zertifikat oben wählen).",
+      "err_domains": "ipv64-Domains nicht abrufbar: {error}",
+      "err_tos": "Zuerst unter Zertifikate die Nutzungsbedingungen von Let's Encrypt annehmen.",
+      "err_create": "Zertifikat nicht angelegt: {error}",
+      "dns_failed": "DNS-Records nicht angelegt: {error}",
+      "dns_created": "DNS-Records angelegt: {count}.",
+      "dns_exists": "Schon vorhanden, nicht geändert: {names}.",
+      "dns_errors": "Fehler: {errors}"
+    },
+    "login": {
+      "title": "Anmeldung von Node64 überwachen",
+      "intro": "Fehlversuche an der eigenen Anmeldung (Passwort, TOTP, Passkey, SSO, API- und MCP-Keys) werden je IP gezählt. Ab der Schwelle (Standard {threshold} in {window} Minuten) entsteht ein Ereignis der Regel node64/login@1 – ohne Benutzernamen oder Passwörter – mit Benachrichtigung, Sofort-Sperre über PROXY64 (wenn dort eingeschaltet) und Meldung an ipv64 (wenn eingeschaltet). Private und lokale Adressen werden nur gezählt, nie gemeldet.",
+      "watch": "Fehlversuche an der Anmeldung überwachen",
+      "threshold": "Schwelle (Fehlversuche je IP)",
+      "window": "Zeitfenster",
+      "minutes": "Minuten",
+      "notify": "Benachrichtigen",
+      "notify_hint": "Über die Benachrichtigungen der Node, höchstens eine Meldung alle 10 Minuten (weitere werden mitgezählt).",
+      "public_hint": "Die Oberfläche von Node64 nie offen ins Internet stellen (keine Portfreigabe für den Web-Port). Zugriff von unterwegs nur über VPN oder über PROXY64 mit Anmeldung und Zugriffsliste.",
+      "overview": "Angriffe auf die Node64-Anmeldung",
+      "events": "{day} in 24 h, {week} in 7 Tagen",
+      "counts": "Fehlversuche seit dem Start: {fails} gewertet, {local} lokal (nicht gemeldet)",
+      "rule": "Schwelle {threshold} in {window} min"
     }
   },
   "pve": {

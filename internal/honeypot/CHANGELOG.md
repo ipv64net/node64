@@ -1,5 +1,17 @@
 # Änderungen – Honeypot64
 
+## 0.10.0 – 2026-10-22
+
+### Neu
+- Optional zeigen die HTTPS-Fallen mit Webserver-Profil und die neuen Mail-Fallen mit TLS (SMTPS 465, IMAPS 993,
+  POP3S 995) ein gültiges Zertifikat aus der Zertifikatsverwaltung. Es lässt sich direkt für glaubwürdige Köder-Namen
+  anlegen (DNS-01 über ipv64, auf Wunsch mit A/AAAA- oder CNAME-Records). Profile, die im Original selbst signiert
+  sind (Proxmox, Webmin, NAS …), bleiben selbst signiert. Der angefragte Name (SNI) steht an jedem Ereignis.
+- Überwachung der eigenen Node64-Anmeldung (Regel `node64/login@1`): ab 5 Fehlversuchen in 10 Minuten je öffentlicher
+  IP (einstellbar) ein Ereignis ohne Zugangsdaten, mit Benachrichtigung, Sofort-Sperre über PROXY64 (mit deren Opt-in)
+  und Meldung an ipv64. Gezählt werden Passwort, TOTP, Passkey, SSO, API- und MCP-Key. Neue Zeile in der Übersicht.
+- Modus ohne Oberfläche: `NODE64_HONEYPOT_PERSONAS`, `NODE64_HONEYPOT_HOSTNAME`, `NODE64_NAME`.
+
 ## 0.9.0 – 2026-10-22
 
 ### Neu

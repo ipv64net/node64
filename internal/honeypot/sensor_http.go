@@ -57,6 +57,9 @@ func (s *Sensor) httpServer(t *trapService, cert *tls.Certificate) *http.Server 
 	if cert != nil {
 		// Zertifikat zum aktuellen Profil (Apply aendert es ohne neuen Port), sonst das beim Oeffnen erzeugte
 		srv.TLSConfig = &tls.Config{NextProtos: []string{"http/1.1"}, GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+			if c := s.realCert(t.key); c != nil { // Zertifikat der Verwaltung (sensor_cert.go)
+				return c, nil
+			}
 			if c, err := s.httpsCert(t.key); err == nil {
 				return c, nil
 			}
@@ -126,6 +129,9 @@ func (s *Sensor) serveHTTP(t *trapService, w http.ResponseWriter, r *http.Reques
 	if dev != nil && !owasp {
 		page = ""
 		tags = append(tags, "device="+dev.name)
+	}
+	if r.TLS != nil && r.TLS.ServerName != "" { // angefragter Name (SNI), z. B. Bots, die Namen aus CT-Logs lesen
+		tags = append(tags, "sni="+r.TLS.ServerName)
 	}
 	e.Kind, e.Page, e.Detail = kind, page, strings.Join(tags, ",")
 	if isLogin {

@@ -120,6 +120,7 @@ func (s *Server) session(next http.Handler) http.Handler {
 					}
 				}
 				s.limiter.fail(lk)
+				s.loginFailed(r, s.clientIP(r))
 				s.log.Warn("invalid api key", "ip", s.clientIP(r), "path", r.URL.Path) // hoechstens ~5 + 2/min je IP
 				w.Header().Set("WWW-Authenticate", "Bearer")
 				http.Error(w, `{"error":"invalid api key"}`, http.StatusUnauthorized)

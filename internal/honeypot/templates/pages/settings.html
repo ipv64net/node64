@@ -103,6 +103,23 @@
 					{{with index $d.Errors "hostname"}}<div class="invalid-feedback">{{.}}</div>{{end}}
 					<div class="form-text">{{.T "honeypot.settings.hostname_hint" "name" $d.HostAuto}}</div>
 				</div>
+				<div class="mb-3" id="zertifikat">
+					<input type="hidden" name="cert_form" value="1">
+					<label class="form-label" for="cert_id">{{.T "honeypot.cert.title"}}{{.Doc "honeypot#zertifikat"}}</label>
+					{{if $d.CertAvail}}<select class="form-select{{if index $d.Errors "cert_id"}} is-invalid{{end}}" id="cert_id" name="cert_id">
+						<option value="0">{{.T "honeypot.cert.off"}}</option>
+						{{range $d.Certs}}<option value="{{.ID}}"{{if eq .ID $d.Cfg.CertID}} selected{{end}}>{{.Title}}{{if .Staging}} (Staging){{end}}{{if not .Valid}} – {{$.T "honeypot.cert.not_valid"}}{{end}}</option>{{end}}
+					</select>
+					{{with index $d.Errors "cert_id"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "honeypot.cert.hint"}}</div>
+					{{if $d.Cfg.CertID}}<div class="form-text">{{if $d.CertUses}}<i class="bi bi-patch-check"></i> {{.T "honeypot.cert.uses" "services" (join $d.CertUses ", ")}}{{else}}<span class="text-warning-emphasis">{{.T "honeypot.cert.uses_none"}}</span>{{end}}</div>{{end}}
+					<label class="form-label small mt-2" for="cert_ports">{{.T "honeypot.cert.ports"}}</label>
+					<input type="text" class="form-control form-control-sm font-monospace{{if index $d.Errors "cert_ports"}} is-invalid{{end}}" id="cert_ports" name="cert_ports" value="{{$d.CertPorts}}" placeholder="8006, 10000" autocomplete="off">
+					{{with index $d.Errors "cert_ports"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "honeypot.cert.ports_hint"}}</div>
+					<div class="alert alert-warning small py-2 mt-2 mb-0"><i class="bi bi-eye"></i> {{.T "honeypot.cert.ct_hint"}}</div>
+					{{else}}<div class="form-text">{{.T "honeypot.cert.unavailable"}}</div>{{end}}
+				</div>
 				<div class="form-check mb-3">
 					<input class="form-check-input" type="checkbox" id="scan" name="scan" value="1"{{if $d.Cfg.Scan}} checked{{end}}>
 					<label class="form-check-label" for="scan">{{.T "honeypot.settings.scan"}}</label>{{.Doc "honeypot#port-scan"}}
@@ -144,6 +161,32 @@
 					{{if not $d.KeySet}}<div class="form-text mt-0 text-warning-emphasis"><i class="bi bi-lock"></i> {{.T "honeypot.settings.report_nokey"}} <a href="/settings#ipv64">{{.T "honeypot.settings.report_key_link"}}</a></div>{{end}}
 					{{with index $d.Errors "report"}}<div class="text-danger small">{{.}}</div>{{end}}
 				</div>
+				<hr>
+				<h2 class="h6" id="anmeldung"><i class="bi bi-person-lock text-primary"></i> {{.T "honeypot.login.title"}}{{.Doc "honeypot#node64-anmeldung"}}</h2>
+				<input type="hidden" name="login_form" value="1">
+				<p class="small text-body-secondary">{{.T "honeypot.login.intro" "threshold" $d.LoginThr "window" $d.LoginWin}}</p>
+				<div class="form-check mb-2">
+					<input class="form-check-input" type="checkbox" id="login_watch" name="login_watch" value="1"{{if not $d.Cfg.Login.Off}} checked{{end}}>
+					<label class="form-check-label" for="login_watch">{{.T "honeypot.login.watch"}}</label>
+				</div>
+				<div class="row g-3 mb-2">
+					<div class="col-sm-6">
+						<label class="form-label" for="login_threshold">{{.T "honeypot.login.threshold"}}</label>
+						<input type="number" class="form-control{{if index $d.Errors "login_threshold"}} is-invalid{{end}}" id="login_threshold" name="login_threshold" min="2" max="100" value="{{if $d.Cfg.Login.Threshold}}{{$d.Cfg.Login.Threshold}}{{end}}" placeholder="{{$d.LoginThr}}">
+						{{with index $d.Errors "login_threshold"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					</div>
+					<div class="col-sm-6">
+						<label class="form-label" for="login_window">{{.T "honeypot.login.window"}}</label>
+						<div class="input-group has-validation"><input type="number" class="form-control{{if index $d.Errors "login_window"}} is-invalid{{end}}" id="login_window" name="login_window" min="1" max="1440" value="{{if $d.Cfg.Login.Window}}{{$d.Cfg.Login.Window}}{{end}}" placeholder="{{$d.LoginWin}}"><span class="input-group-text">{{.T "honeypot.login.minutes"}}</span>
+						{{with index $d.Errors "login_window"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
+					</div>
+				</div>
+				<div class="form-check mb-2">
+					<input class="form-check-input" type="checkbox" id="login_notify" name="login_notify" value="1"{{if not $d.Cfg.Login.NoNotify}} checked{{end}}>
+					<label class="form-check-label" for="login_notify">{{.T "honeypot.login.notify"}}</label>
+					<div class="form-text mt-0">{{.T "honeypot.login.notify_hint"}}</div>
+				</div>
+				<div class="alert alert-danger small py-2 mb-0"><i class="bi bi-shield-exclamation"></i> {{.T "honeypot.login.public_hint"}}</div>
 				<hr>
 				<h2 class="h6" id="logs"><i class="bi bi-journal-text text-primary"></i> {{.T "honeypot.logs.title"}}{{.Doc "honeypot#log-sensor-und-syslog"}}</h2>
 				{{if $d.Unsaved}}<div class="alert alert-info small py-2"><i class="bi bi-info-circle"></i> {{.T "honeypot.logs.unsaved"}}</div>{{end}}
@@ -201,6 +244,34 @@
 				{{if .LastError}}<div class="text-danger mt-2 text-break"><i class="bi bi-exclamation-triangle"></i> {{$.T "honeypot.report.last_error"}} ({{$.Time .LastErrorAt}}): {{.LastError}}</div>{{end}}
 			{{end}}</div>
 		</div>
+		{{if $d.CertAvail}}<div class="card" id="cert-create">
+			<div class="card-header"><i class="bi bi-patch-check text-primary"></i> {{.T "honeypot.cert.create_title"}}{{.Doc "honeypot#zertifikat"}}</div>
+			<div class="card-body small">
+				<p>{{.T "honeypot.cert.create_intro"}}</p>
+				<div class="alert alert-warning py-2"><i class="bi bi-eye"></i> {{.T "honeypot.cert.ct_hint"}}</div>
+				{{if not $d.CertDNS}}<p class="text-warning-emphasis mb-0"><i class="bi bi-lock"></i> {{.T "honeypot.cert.nokey"}} <a href="/settings#ipv64">{{.T "honeypot.settings.report_key_link"}}</a></p>
+				{{else}}<form method="post" action="/honeypot/cert" class="m-0">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<div class="mb-2">
+						<label class="form-label" for="cert_domain">{{.T "honeypot.cert.domain"}}</label>
+						<select class="form-select form-select-sm" id="cert_domain" name="cert_domain" required>
+							{{range $d.CertDomains}}<option value="{{.}}">{{.}}</option>{{end}}
+						</select>
+					</div>
+					<div class="mb-2">
+						<label class="form-label" for="cert_names">{{.T "honeypot.cert.names"}}</label>
+						<input type="text" class="form-control form-control-sm font-monospace" id="cert_names" name="cert_names" value="mail, vpn, cloud, portal" autocomplete="off" spellcheck="false" required>
+						<div class="form-text">{{.T "honeypot.cert.names_hint"}}</div>
+					</div>
+					<div class="mb-2">
+						<label class="form-label" for="dns_target">{{.T "honeypot.cert.dns"}}</label>
+						<input type="text" class="form-control form-control-sm font-monospace" id="dns_target" name="dns_target" placeholder="203.0.113.10, 2001:db8::10" autocomplete="off" spellcheck="false">
+						<div class="form-text">{{.T "honeypot.cert.dns_hint"}}</div>
+					</div>
+					<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-patch-plus"></i> {{.T "honeypot.cert.create"}}</button>
+				</form>{{end}}
+			</div>
+		</div>{{end}}
 		<div class="card" id="logs-status">
 			<div class="card-header"><i class="bi bi-journal-text text-primary"></i> {{.T "honeypot.logs.status"}}{{.Doc "honeypot#log-sensor-und-syslog"}}</div>
 			<div class="card-body small">

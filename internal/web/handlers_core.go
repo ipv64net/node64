@@ -175,6 +175,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 			VerifyPassword("$argon2id$v=19$m=65536,t=3,p=2$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", f["password"])
 		}
 		s.limiter.fail(keys...)
+		s.loginFailed(r, ip)
 		s.auditEntry(ctx, store.AuditEntry{Actor: truncate(f["username"], 64), Action: "login.failed", IP: ip})
 		s.log.Warn("login failed", "user", f["username"], "ip", ip)
 		v.Flash = &Flash{Kind: "danger", Text: v.T("login.failed")}

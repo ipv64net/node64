@@ -30,8 +30,11 @@ Bridge-Netz sehen manche Docker-Versionen statt der Angreifer die Adresse des Do
 |---|---|---|
 | `NODE64_MODE` | – | `honeypot` schaltet den Modus ohne Oberfläche ein; andere Werte sind ein Fehler |
 | `NODE64_HONEYPOT_PROFILE` | `standard` | `minimal`, `standard` oder `full` (Tabelle unten) |
-| `NODE64_HONEYPOT_SERVICES` | – | eigene Dienste statt des Profils, z. B. `ssh:22,ssh:2222,http:80,https:443,tcp:3389`; Dienste `ssh`, `telnet`, `http`, `https`, `tcp`, `ftp`, `smtp`, `pop3`, `imap`, `mqtt`, `mysql`, `postgres`, `mssql`, `redis`, `rdp`, `vnc`, `mikrotik-api`, `snmp` (UDP), `sip` (UDP); bei `http`/`https` optional ein Köder als dritter Teil (`http:80:wp-login`, möglich: `generic`, `wp-login`, `phpmyadmin`, `admin`). Unbekannte Dienste, doppelte Ports oder ungültige Ports verhindern den Start |
+| `NODE64_HONEYPOT_SERVICES` | – | eigene Dienste statt des Profils, z. B. `ssh:22,ssh:2222,http:80,https:443,tcp:3389`; Dienste `ssh`, `telnet`, `http`, `https`, `tcp`, `ftp`, `smtp`, `pop3`, `imap`, `smtps`, `pop3s`, `imaps` (Mail mit TLS), `mqtt`, `mysql`, `postgres`, `mssql`, `redis`, `rdp`, `vnc`, `mikrotik-api`, `snmp` (UDP), `sip` (UDP); bei `http`/`https` optional ein Köder als dritter Teil (`http:80:wp-login`, möglich: `generic`, `wp-login`, `phpmyadmin`, `admin`). Unbekannte Dienste, doppelte Ports oder ungültige Ports verhindern den Start |
 | `NODE64_HONEYPOT_SCAN` | `1` | Port-Scan-Erkennung (`1`/`0`) |
+| `NODE64_HONEYPOT_PERSONAS` | – | Dienst-Profile je Port, Komma-Liste `dienst:port=profil`, z. B. `ssh:22=dropbear,http:8080=apache` (Profile siehe [Ports](#ports)); nur für aktive Fallen, Fehler verhindern den Start |
+| `NODE64_HONEYPOT_HOSTNAME` | – | Hostname der Fallen (Banner, Zertifikate), leer = aus der Sensor-Kennung erzeugt |
+| `NODE64_NAME` | `Honeypot64` | Name des Sensors in der Node-Übersicht auf ipv64.net (höchstens 64 Zeichen) |
 | `NODE64_HONEYPOT_RETENTION` | `7d` | lokale Aufbewahrung, z. B. `3d`, `48h` (1 Stunde bis 365 Tage); zusätzlich gilt eine feste Obergrenze von 200 000 Ereignissen |
 | `NODE64_HONEYPOT_INFO_PORT` | `9064` | Port der Info-Seite, `0` = aus; darf kein Fallen-Port sein |
 | `NODE64_HONEYPOT_INFO_TOKEN` | – | erlaubt die Info-Seite auch von außerhalb privater Netze (mindestens 16 Zeichen) |
@@ -59,7 +62,8 @@ Die übrigen Variablen der Node (Weboberfläche, Admin, TLS) werden in diesem Mo
 | `standard` | SSH 22 und 2222, Telnet 23, HTTP 80, 8080 und 8123, HTTPS 443 und 8006, FTP 21, SMTP 25, IMAP 143, MQTT 1883, MySQL 3306, Redis 6379, RDP 3389, VNC 5900, MikroTik-API 8728, TCP 8291 (Winbox) |
 | `full` | wie `standard`, dazu Telnet 2323, SMTP 587, POP3 110, MSSQL 1433, PostgreSQL 5432, MikroTik-API mit TLS 8729, SNMP UDP 161, SIP UDP 5060, HTTP 2375, 3000, 5000, 9200, HTTPS 4444, 5001, 8007, 8443, 9443, 10000, 10250, 10443 und TCP 445, 27017 |
 
-**Login-Fallen:** FTP, SMTP (AUTH PLAIN/LOGIN, kein Relay), POP3, IMAP, MQTT, PostgreSQL, MySQL, MSSQL, Redis, MikroTik-API, RDP (nur Benutzername), VNC (nur Versuch), SNMP (Community) und SIP (Benutzername) nehmen Anmeldungen an, lehnen jede
+**Login-Fallen:** FTP, SMTP (AUTH PLAIN/LOGIN, kein Relay), POP3, IMAP (auch mit TLS: SMTPS 465, POP3S 995, IMAPS 993 –
+in keinem Profil, nur eigene Auswahl), MQTT, PostgreSQL, MySQL, MSSQL, Redis, MikroTik-API, RDP (nur Benutzername), VNC (nur Versuch), SNMP (Community) und SIP (Benutzername) nehmen Anmeldungen an, lehnen jede
 ab und erfassen Benutzername und Passwort – wie SSH und Telnet. Reine TCP-Ports erfassen Verbindung und erste Bytes.
 
 **UDP:** SNMP und SIP laufen über UDP – bei Docker ohne `--network host` die Ports mit `/udp` veröffentlichen (`-p 161:161/udp -p 5060:5060/udp`). SNMP antwortet nie, SIP nur kurz und nie größer als die Anfrage (kein Missbrauch als Verstärker).
@@ -88,7 +92,8 @@ je Pfad wie bisher; Anwendungen antworten wie das Original ohne Anmeldung (z. B.
 `{"data":null}`, Home Assistant `/api/` → 401, Grafana `/api/health` mit Version, Elasticsearch `/` mit Knotenname
 und Version 7.17.x). Hostname, Domain, Distribution, Patch-Stände und Zertifikatsdaten (Seriennummer, Ausstellung)
 leitet jeder Sensor aus seiner Sensor-Kennung ab: über Neustarts gleich, von Sensor zu Sensor verschieden. Ohne
-Oberfläche gelten die Standards je Port. Zertifikate und Host-Schlüssel liegen im Datenordner (`tls-<art>.crt/.key`,
+Oberfläche gelten die Standards je Port, abweichende Profile und Hostname mit `NODE64_HONEYPOT_PERSONAS` und
+`NODE64_HONEYPOT_HOSTNAME`. Zertifikate und Host-Schlüssel liegen im Datenordner (`tls-<art>.crt/.key`,
 `ssh_host_rsa`, `ssh_host_ecdsa`, `ssh_host_ed25519`).
 
 Dazu die Info-Seite auf `NODE64_HONEYPOT_INFO_PORT` (Standard 9064).
@@ -131,6 +136,53 @@ Damit Angreifer die Fallen erreichen, müssen die Ports aus dem Internet ankomme
 (z. B. 22, 23, 80, 443, 2222, 3389) an den Rechner mit dem Sensor weiterleiten, am besten an ein eigenes Gerät oder
 eine eigene VM in einem abgetrennten Netz (DMZ/VLAN). **Den Port der Info-Seite (9064) nicht freigeben.** Ein
 Sensor nur im Heimnetz sieht fast nichts.
+
+## Zertifikat für Köder-Namen
+
+Nur im Modul (mit Oberfläche): Unter Honeypot64 › Einstellungen › „Zertifikat für Köder-Namen“ zeigen die HTTPS-Fallen
+mit Webserver-Profil (`nginx`, `apache`) und die Mail-Fallen mit TLS (SMTPS, IMAPS, POP3S) ein gültiges Zertifikat aus
+der zentralen Zertifikatsverwaltung der Node statt des selbst signierten. Ein Scanner sieht dann z. B. auf 443 und 993
+einen „echten“ Server `mail.<domain>`. Profile, die in echt selbst signiert sind – Proxmox (8006, 8007), Webmin
+(10000), NAS (5000/5001), UniFi, Router/MikroTik (8729), Grafana, Home Assistant, Elasticsearch, Kubelet, Portainer –
+bleiben selbst signiert; unter „Auch auf diesen Ports zeigen“ lassen sich einzelne Ports trotzdem zuweisen. Port 80
+bleibt eine Falle (kein HTTP-01 nötig). STARTTLS auf 25/587/110/143 bieten die Fallen weiter nicht an.
+
+- **Vorhandenes Zertifikat wählen** oder **neu anlegen**: einzelne, glaubwürdige Namen (Standard `mail, vpn, cloud,
+  portal`, kein Wildcard, höchstens 20) unter einer Domain des ipv64-Accounts. Angelegt wird über den normalen Weg der
+  Zertifikatsverwaltung (Let's Encrypt, DNS-01 über ipv64 mit dem zentralen API-Key; Nutzungsbedingungen unter
+  *Zertifikate* angenommen). Das Zertifikat erscheint dort mit „benutzt von Honeypot64“ und wird automatisch erneuert;
+  bis es ausgestellt ist, bleiben die Fallen selbst signiert.
+- **DNS-Records** (optional): Mit einer öffentlichen IPv4/IPv6 der Node legt das Modul A/AAAA-Records an, mit einem
+  Namen (z. B. der DynDNS-Domain) einen CNAME – über den zentralen API-Key. Namen, die schon A, AAAA oder CNAME haben,
+  bleiben unberührt. Ohne Angabe die Records selbst bei ipv64 anlegen.
+- **Eine eigene Domain bzw. Subdomain nur für die Köder nehmen**, nie die Hauptdomain oder Namen echter Dienste: Jedes
+  Zertifikat steht mit allen Namen öffentlich in den Certificate-Transparency-Logs (crt.sh), und Scanner lesen dort mit.
+- **Angefragter Name (SNI):** Bei HTTPS steht der Name aus dem TLS-Handshake im Detail (`sni=…`), bei Mail mit TLS als
+  Host; die Ereignisliste zeigt ihn als „Angefragter Name“. So wird sichtbar, welche Bots die Namen aus den CT-Logs
+  kennen.
+
+Im Modus ohne Oberfläche gibt es keine Zertifikatsverwaltung: dort bleiben alle Fallen selbst signiert.
+
+## Anmeldung von Node64 überwachen
+
+Nur im Modul: Solange Honeypot64 läuft, zählt es die Fehlversuche an der eigenen Anmeldung von Node64 (Passwort, TOTP,
+Passkey, SSO ohne verknüpftes Konto, ungültige API- und MCP-Keys) je Quell-IP. Ab der Schwelle (Standard 5 Fehlversuche
+in 10 Minuten, einstellbar 2–100 bzw. 1–1440 Minuten) entsteht genau ein Ereignis je IP und Zeitfenster: Quelle `log`,
+Regel `node64/login@1`, Art `http:bruteforce`, Dienst `http`/`https` mit dem Port der Oberfläche – **ohne
+Benutzernamen oder Passwörter**. Dazu:
+
+- Benachrichtigung „Angriff auf die Anmeldung“ über die Kanäle der Node (höchstens eine alle 10 Minuten, weitere
+  werden mitgezählt; abschaltbar),
+- Sofort-Sperre über PROXY64, wenn dort die Sofort-Sperre von Honeypot64 eingeschaltet ist (siehe [Zusammenarbeit mit PROXY64](#zusammenarbeit-mit-proxy64)),
+- Meldung an ipv64 mit den übrigen Ereignissen, wenn die Meldung eingeschaltet ist.
+
+Private, Loopback- und andere nicht öffentliche Adressen werden nur gezählt (Übersicht), nie gemeldet oder gesperrt –
+auch ein Reverse-Proxy vor der Oberfläche ohne `NODE64_TRUST_PROXY` erscheint so. Die Übersicht zeigt die Zeile
+„Angriffe auf die Node64-Anmeldung“ (24 Stunden, 7 Tage, Fehlversuche seit dem Start).
+
+**Die Oberfläche von Node64 nie offen ins Internet stellen** (keine Portfreigabe für `NODE64_HTTP_PORT`/
+`NODE64_HTTPS_PORT`). Von unterwegs nur über VPN oder über PROXY64 mit Anmeldung und Zugriffsliste. Die Überwachung
+ist ein Frühwarnsystem, kein Schutz für eine offene Oberfläche.
 
 ## Info-Seite, `/metrics`, `/health`
 

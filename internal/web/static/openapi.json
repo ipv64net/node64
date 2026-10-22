@@ -3996,6 +3996,43 @@
           },
           "log": {
             "$ref": "#/components/schemas/Honeypot64LogConfig"
+          },
+          "cert_id": {
+            "type": "integer",
+            "description": "Zertifikat der Zertifikatsverwaltung fuer Koeder-Namen (0/fehlt = aus, alle Fallen selbst signiert). Zeigen: HTTPS mit Profil nginx/apache und smtps/imaps/pop3s; Profile mit selbst signiertem Original nur ueber cert_ports."
+          },
+          "cert_ports": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "description": "Ports, die das Zertifikat trotz Profil mit selbst signiertem Zertifikat zeigen (z. B. 8006)."
+          },
+          "login": {
+            "type": "object",
+            "description": "Ueberwachung der eigenen Anmeldung (Regel node64/login@1). Fehlt = an, 5 Fehlversuche in 10 Minuten, mit Benachrichtigung.",
+            "properties": {
+              "off": {
+                "type": "boolean"
+              },
+              "threshold": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 100,
+                "description": "Fehlversuche je IP im Fenster, 0 = 5"
+              },
+              "window_min": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1440,
+                "description": "Fenster in Minuten, 0 = 10"
+              },
+              "no_notify": {
+                "type": "boolean"
+              }
+            }
           }
         }
       },
@@ -4474,6 +4511,10 @@
           "fingerprint": {
             "type": "string",
             "description": "Fingerabdruck des Clients (H6): \"ja4:<ja4>\" (TLS, JA4 nach FoxIO) bzw. \"hassh:<md5>\" (SSH, HASSH); fehlt, wenn keiner erkannt wurde"
+          },
+          "sni": {
+            "type": "string",
+            "description": "Angefragter Name: bei HTTPS aus TLS (SNI, im Detail sni=…), bei Diensten ohne HTTP (z. B. IMAPS) der Host; fehlt, wenn keiner"
           }
         }
       },

@@ -82,6 +82,8 @@ type Server struct {
 	mcpCounter *mcp.Counter
 	mcpLimit   *ipLimiter // Rate-Limit je MCP-Schluessel
 
+	loginWatch atomic.Pointer[LoginWatcher] // Fehlversuche an Honeypot64 (login_watch.go), nil = keiner
+
 	mu      sync.Mutex
 	servers []*http.Server
 }

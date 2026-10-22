@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -62,6 +63,9 @@ type Sensor struct {
 
 	seed    string                         // Seed ohne Config.Seed (zufaellig, nur im Speicher)
 	persona atomic.Pointer[sensorPersonas] // Dienst-Profile (sensor_persona.go)
+
+	certSrc atomic.Pointer[func(int64) *tls.Certificate] // Zertifikate der Verwaltung (sensor_cert.go), nil = keine
+	certCfg atomic.Pointer[sensorCertCfg]                // Zuweisung nach dem letzten Apply
 
 	wg sync.WaitGroup
 }
@@ -129,6 +133,7 @@ func (s *Sensor) Apply(ctx context.Context, cfg Config, sink Sink) []ServiceStat
 		seed = s.seed
 	}
 	s.persona.Store(newSensorPersonas(seed, cfg.Hostname, cfg.Personas)) // gilt ab der naechsten Verbindung
+	s.certCfg.Store(&sensorCertCfg{id: cfg.CertID, ports: slices.Clone(cfg.CertPorts)})
 	if !cfg.Scan {
 		s.scan.reset()
 	}
@@ -303,7 +308,11 @@ func (s *Sensor) openService(ctx context.Context, t *trapService, check func(str
 		cert, err = s.httpsCert(k)
 	default:
 		if p := tcpProtos[k.Service]; p != nil && p.TLS {
-			cert, err = s.tlsCert()
+			if certMail(k.Service) { // wie ein Mailserver mit Snakeoil-Zertifikat (CN = Hostname)
+				cert, err = s.personaCert(certGeneric, s.personas().id)
+			} else {
+				cert, err = s.tlsCert()
+			}
 		}
 	}
 	if err != nil {
@@ -534,6 +543,7 @@ type trapConn struct {
 	handled atomic.Bool  // HTTP: mindestens eine Anfrage bearbeitet
 	once    sync.Once
 	fp      *sensorFPCap // Mitschnitt fuer JA4/HASSH (nil = keiner)
+	sni     string       // TLS-Dienste (sensor_proto.go): angefragter Name (SNI), "" = keiner
 }
 
 func (c *trapConn) Read(p []byte) (int, error) {
@@ -566,7 +576,7 @@ func (c *trapConn) Close() error {
 
 // event liefert ein vorbelegtes Ereignis dieser Verbindung.
 func (c *trapConn) event(kind string) Event {
-	return Event{Time: time.Now(), Service: c.t.key.Service, Port: c.t.key.Port, Kind: kind, Src: c.src, SrcPort: c.srcPort, Fingerprint: c.fp.get()}
+	return Event{Time: time.Now(), Service: c.t.key.Service, Port: c.t.key.Port, Kind: kind, Src: c.src, SrcPort: c.srcPort, Fingerprint: c.fp.get(), Host: c.sni}
 }
 
 // emit gibt ein Ereignis an die Sink (gekuerzt, Payload kopiert) und zaehlt es.

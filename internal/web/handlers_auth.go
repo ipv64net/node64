@@ -83,6 +83,7 @@ func (s *Server) loginTOTPSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ok {
 		s.limiter.fail(keys...)
+		s.loginFailed(r, ip)
 		s.auditEntry(ctx, store.AuditEntry{Actor: u.Username, Action: "login.totp_failed", IP: ip})
 		v.Flash = &Flash{Kind: "danger", Text: v.T("login.totp_failed")}
 		s.render(w, r, http.StatusUnauthorized, "login_totp", v)
