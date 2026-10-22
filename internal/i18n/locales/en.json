@@ -100,7 +100,8 @@
     "proxmox": "Proxmox VE",
     "settings_general": "General",
     "settings_ports": "Ports",
-    "settings_data": "Data & backup"
+    "settings_data": "Data & backup",
+    "docker": "Docker"
   },
   "common": {
     "copy": "Copy",
@@ -1884,7 +1885,47 @@
       "host": "Docker host",
       "host_hint": "Empty = default. unix:///var/run/docker.sock or tcp://socket-proxy:2375 (e.g. docker-socket-proxy).",
       "found": "Docker reachable, {count} containers found.",
-      "rules": "Docker checks run only on this node (not online, not movable). Rating: running = OK; healthcheck “unhealthy”, stopped, paused or restart loop = down. When linked to ipv64 the state is reported and visible in the portal too."
+      "rules": "Docker checks run only on this node (not online, not movable). Rating: running = OK; healthcheck “unhealthy”, stopped, paused or restart loop = down. When linked to ipv64 the state is reported and visible in the portal too.",
+      "page_hint": "All containers on this host via the Docker socket, together with their Docker checks. Unwatched containers can be monitored with one click.",
+      "socket_ok": "Docker socket connected",
+      "socket_missing": "Docker socket not reachable ({host}). Only the existing Docker checks are shown.",
+      "socket_mount": "Mount the socket read-only into the container:",
+      "socket_group": "If permissions are missing, add the socket's group (compose: group_add):",
+      "kpi": {
+        "total": "Containers total",
+        "running": "Running",
+        "bad": "Stopped/unhealthy",
+        "watched": "Monitored",
+        "missing": "{count} missing"
+      },
+      "created": "Created",
+      "ports": "Ports",
+      "check": "Check",
+      "watch": "Monitor",
+      "not_watched": "not monitored",
+      "empty": "No containers found and no Docker checks yet.",
+      "empty_filter": "No container matches the filter.",
+      "kind": {
+        "running": "running",
+        "stopped": "stopped",
+        "paused": "paused",
+        "restarting": "restarting",
+        "missing": "container missing",
+        "remote": "other node/other host",
+        "unknown": "unknown"
+      },
+      "health": {
+        "healthy": "healthy",
+        "unhealthy": "unhealthy",
+        "starting": "starting"
+      },
+      "filter": {
+        "running": "Running",
+        "problem": "Stopped/unhealthy",
+        "watched": "Monitored",
+        "unwatched": "Not monitored",
+        "missing": "Container missing"
+      }
     },
     "run_unreachable": "No measuring node reachable (not connected to ipv64?).",
     "run_remote": "Measured by ipv64 only; online checks run on their interval.",

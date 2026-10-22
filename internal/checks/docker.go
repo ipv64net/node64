@@ -235,12 +235,13 @@ func shortID(id string) string {
 
 // Container ist ein Eintrag der Containerliste (fuer die Oberflaeche).
 type Container struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Image   string `json:"image"`
-	State   string `json:"state"`  // running, exited, ...
-	Status  string `json:"status"` // "Up 3 hours (healthy)"
-	Created int64  `json:"created"`
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Image   string   `json:"image"`
+	State   string   `json:"state"`  // running, exited, ...
+	Status  string   `json:"status"` // "Up 3 hours (healthy)"
+	Created int64    `json:"created"`
+	Ports   []string `json:"ports,omitempty"` // veroeffentlichte Ports, z. B. "8080->80/tcp"
 }
 
 // ListContainers liefert alle Container des Docker-Hosts (auch gestoppte).
@@ -252,6 +253,11 @@ func ListContainers(ctx context.Context, host string) ([]Container, error) {
 		State   string   `json:"State"`
 		Status  string   `json:"Status"`
 		Created int64    `json:"Created"`
+		Ports   []struct {
+			PrivatePort int    `json:"PrivatePort"`
+			PublicPort  int    `json:"PublicPort"`
+			Type        string `json:"Type"`
+		} `json:"Ports"`
 	}
 	if _, err := dockerGet(ctx, host, "/containers/json?all=1", 5*time.Second, &raw); err != nil {
 		return nil, errors.New(dockerHint(host, err))
@@ -262,7 +268,20 @@ func ListContainers(ctx context.Context, host string) ([]Container, error) {
 		if len(c.Names) > 0 {
 			name = strings.TrimPrefix(c.Names[0], "/")
 		}
-		out = append(out, Container{ID: shortID(c.ID), Name: name, Image: c.Image, State: c.State, Status: c.Status, Created: c.Created})
+		ct := Container{ID: shortID(c.ID), Name: name, Image: c.Image, State: c.State, Status: c.Status, Created: c.Created}
+		seen := map[string]bool{} // IPv4 und IPv6 liefern denselben Port doppelt
+		for _, p := range c.Ports {
+			s := fmt.Sprintf("%d/%s", p.PrivatePort, p.Type)
+			if p.PublicPort > 0 {
+				s = fmt.Sprintf("%d->%s", p.PublicPort, s)
+			}
+			if !seen[s] {
+				seen[s] = true
+				ct.Ports = append(ct.Ports, s)
+			}
+		}
+		sort.Strings(ct.Ports)
+		out = append(out, ct)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil

@@ -109,7 +109,7 @@ Der Check-Typ **Docker-Container** fragt die Docker-Engine-API nach dem Zustand 
       - "996"   # stat -c %g /var/run/docker.sock
 ```
 
-Bewertung (angelehnt an Uptime Kuma): läuft = OK, läuft mit Healthcheck „healthy“ oder „starting“ = OK, Healthcheck „unhealthy“, gestoppt (mit Exit-Code, OOM), pausiert oder in einer Neustart-Schleife = gestört, nicht vorhanden = gestört. Die Healthchecks-Seite zeigt Docker-Checks in einer eigenen Tabelle und listet Container, die noch nicht überwacht werden, zum Anlegen per Klick.
+Bewertung (angelehnt an Uptime Kuma): läuft = OK, läuft mit Healthcheck „healthy“ oder „starting“ = OK, Healthcheck „unhealthy“, gestoppt (mit Exit-Code, OOM), pausiert oder in einer Neustart-Schleife = gestört, nicht vorhanden = gestört. Docker-Checks stehen als normale Zeilen in der Healthchecks-Liste. Der Menüpunkt **Healthchecks → Docker** (`/healthchecks/docker`) zeigt alle Container des Hosts mit Image, Zustand/Health, Erstellzeit und Ports zusammen mit ihren Checks: überwachte mit Check-Zustand und Aktionen (Pause, Messen, Bearbeiten), nicht überwachte mit „Überwachen“, Checks ohne Container als „Container fehlt“. Ohne Socket zeigt die Seite nur die Docker-Checks und wie der Socket eingebunden wird. Dieselbe Liste liefert `GET /api/healthchecks/docker/containers`.
 
 Docker-Checks laufen nur lokal auf der Node; sie lassen sich nicht online prüfen oder umhängen. Mit ipv64 verknüpft wird ihr Zustand trotzdem gemeldet und ist im Portal sichtbar.
 

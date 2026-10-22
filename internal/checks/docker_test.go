@@ -22,7 +22,8 @@ func TestDockerCheck(t *testing.T) {
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/containers/json" {
-			_ = json.NewEncoder(w).Encode([]map[string]any{{"Id": "abcdef1234567890", "Names": []string{"/web"}, "Image": "nginx", "State": "running", "Status": "Up 1 hour"}})
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"Id": "abcdef1234567890", "Names": []string{"/web"}, "Image": "nginx", "State": "running", "Status": "Up 1 hour",
+				"Ports": []map[string]any{{"IP": "0.0.0.0", "PrivatePort": 80, "PublicPort": 8080, "Type": "tcp"}, {"IP": "::", "PrivatePort": 80, "PublicPort": 8080, "Type": "tcp"}, {"PrivatePort": 443, "Type": "tcp"}}}})
 			return
 		}
 		name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/containers/"), "/json")
@@ -58,6 +59,9 @@ func TestDockerCheck(t *testing.T) {
 	list, err := ListContainers(context.Background(), srv.URL)
 	if err != nil || len(list) != 1 || list[0].Name != "web" {
 		t.Fatalf("list: %v %+v", err, list)
+	}
+	if strings.Join(list[0].Ports, ",") != "443/tcp,8080->80/tcp" { // Ports ohne IPv4/IPv6-Doppel
+		t.Fatalf("ports: %v", list[0].Ports)
 	}
 	if !IsPrivateTarget("docker", "web") {
 		t.Fatal("docker must never run online")

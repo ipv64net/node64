@@ -100,7 +100,8 @@
     "proxmox": "Proxmox VE",
     "settings_general": "Allgemein",
     "settings_ports": "Ports",
-    "settings_data": "Daten & Sicherung"
+    "settings_data": "Daten & Sicherung",
+    "docker": "Docker"
   },
   "common": {
     "copy": "Kopieren",
@@ -1884,7 +1885,47 @@
       "host": "Docker-Host",
       "host_hint": "Leer = Standard. unix:///var/run/docker.sock oder tcp://socket-proxy:2375 (z. B. docker-socket-proxy).",
       "found": "Docker erreichbar, {count} Container gefunden.",
-      "rules": "Docker-Checks laufen nur auf dieser Node (nicht online, nicht umhängbar). Bewertung: läuft = OK, Healthcheck „unhealthy“, gestoppt, pausiert oder Neustart-Schleife = gestört. Mit ipv64 verknüpft wird der Zustand gemeldet und ist auch im Portal sichtbar."
+      "rules": "Docker-Checks laufen nur auf dieser Node (nicht online, nicht umhängbar). Bewertung: läuft = OK, Healthcheck „unhealthy“, gestoppt, pausiert oder Neustart-Schleife = gestört. Mit ipv64 verknüpft wird der Zustand gemeldet und ist auch im Portal sichtbar.",
+      "page_hint": "Alle Container dieses Hosts über den Docker-Socket, zusammen mit ihren Docker-Checks. Nicht überwachte Container lassen sich mit einem Klick überwachen.",
+      "socket_ok": "Docker-Socket verbunden",
+      "socket_missing": "Docker-Socket nicht erreichbar ({host}). Angezeigt werden nur die vorhandenen Docker-Checks.",
+      "socket_mount": "Socket nur lesend in den Container einbinden:",
+      "socket_group": "Fehlen die Rechte, die Gruppe des Sockets ergänzen (compose: group_add):",
+      "kpi": {
+        "total": "Container gesamt",
+        "running": "Laufend",
+        "bad": "Gestoppt/unhealthy",
+        "watched": "Überwacht",
+        "missing": "davon {count} fehlen"
+      },
+      "created": "Erstellt",
+      "ports": "Ports",
+      "check": "Check",
+      "watch": "Überwachen",
+      "not_watched": "nicht überwacht",
+      "empty": "Keine Container gefunden und noch keine Docker-Checks angelegt.",
+      "empty_filter": "Kein Container passt zum Filter.",
+      "kind": {
+        "running": "läuft",
+        "stopped": "gestoppt",
+        "paused": "pausiert",
+        "restarting": "Neustart",
+        "missing": "Container fehlt",
+        "remote": "andere Node/anderer Host",
+        "unknown": "unbekannt"
+      },
+      "health": {
+        "healthy": "healthy",
+        "unhealthy": "unhealthy",
+        "starting": "startet"
+      },
+      "filter": {
+        "running": "Laufend",
+        "problem": "Gestoppt/unhealthy",
+        "watched": "Überwacht",
+        "unwatched": "Nicht überwacht",
+        "missing": "Container fehlt"
+      }
     },
     "run_unreachable": "Keine messende Node erreichbar (ipv64 nicht verbunden?).",
     "run_remote": "Wird nur von ipv64 gemessen; Online-Checks laufen in ihrem Intervall.",

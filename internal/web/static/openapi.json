@@ -16149,6 +16149,119 @@
         }
       }
     },
+    "/healthchecks/docker/containers": {
+      "get": {
+        "tags": [
+          "Healthchecks"
+        ],
+        "summary": "Docker-Container des Hosts",
+        "description": "Alle Container des Docker-Hosts (Socket) zusammen mit den Docker-Checks, wie die Seite /healthchecks/docker. kind: running, stopped, paused, restarting, missing (Check ohne Container), remote (andere Node bzw. anderer Docker-Host), unknown (Socket nicht erreichbar). check ist null, wenn der Container nicht überwacht wird.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "host": {
+                      "type": "string",
+                      "example": "unix:///var/run/docker.sock"
+                    },
+                    "socket": {
+                      "type": "boolean",
+                      "description": "Docker-Socket erreichbar"
+                    },
+                    "error": {
+                      "type": "string",
+                      "description": "Fehler mit Hinweis, wenn der Socket fehlt"
+                    },
+                    "containers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "running",
+                              "stopped",
+                              "paused",
+                              "restarting",
+                              "missing",
+                              "remote",
+                              "unknown"
+                            ]
+                          },
+                          "health": {
+                            "type": "string",
+                            "enum": [
+                              "healthy",
+                              "unhealthy",
+                              "starting"
+                            ]
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "image": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string",
+                            "example": "running"
+                          },
+                          "status": {
+                            "type": "string",
+                            "example": "Up 3 hours (healthy)"
+                          },
+                          "created": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "ports": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "8080->80/tcp"
+                            ]
+                          },
+                          "check": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "token": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "state": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthchecks/proxmox/systems": {
       "get": {
         "tags": [

@@ -290,7 +290,8 @@ func (s *Server) nav(r *http.Request) []NavItem {
 			Hidden: m.Info.Available && !m.Enabled})
 		if m.Info.Path == "/healthchecks" && m.Enabled { // Healthchecks-Sync gehoert zu den Healthchecks (ohne sie kein Menuepunkt)
 			items = append(items, NavItem{Key: "nav.status_pages", Path: "/healthchecks/status-pages", Icon: "bi-broadcast", Available: true, Enabled: m.Running, Sub: true},
-				NavItem{Key: "nav.proxmox", Path: "/healthchecks/proxmox", Icon: "bi-hdd-rack", Available: true, Enabled: m.Running, Sub: true})
+				NavItem{Key: "nav.proxmox", Path: "/healthchecks/proxmox", Icon: "bi-hdd-rack", Available: true, Enabled: m.Running, Sub: true},
+				NavItem{Key: "nav.docker", Path: "/healthchecks/docker", Icon: "bi-box-seam", Available: true, Enabled: m.Running, Sub: true})
 			items = append(items, link)
 		}
 		if m.Info.Path == "/dns64" && m.Enabled { // lokaler DNS-Server (Zonen, Weiterleitungen) unter DNS64

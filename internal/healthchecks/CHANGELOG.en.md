@@ -3,6 +3,10 @@
 ## 2.22.0 – 2026-10-22
 
 ### Added
+- Docker containers have their own menu entry under Healthchecks (like Proxmox VE): all containers on the host with
+  image, state/health, creation time and ports together with their checks, key figures, filter and search; monitor
+  unwatched ones with one click, checks without a container show as "container missing". Docker checks now appear as
+  normal rows in the list, which no longer queries the Docker socket (faster). New: `GET /api/healthchecks/docker/containers`.
 - Notifications: new "Home Assistant" channel. It triggers an automation via its webhook (`POST /api/webhook/<ID>`,
   JSON with `state`, `kind`, `title`, `message`, `check`, `node`, `url` and `time`). The webhook ID is stored encrypted
   and never appears in error messages. Certificate verification can be turned off for self-signed certificates in your

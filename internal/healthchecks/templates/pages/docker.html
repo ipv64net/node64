@@ -1,0 +1,83 @@
+{{define "content"}}
+{{$d := .Data}}
+{{$f := $d.Filter}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0 me-auto"><i class="bi bi-box-seam text-primary me-1"></i> {{.T "nav.docker"}}{{$.Doc "healthchecks#docker"}}</h1>
+	<a class="btn btn-outline-secondary btn-sm" href="/healthchecks/docker" title="{{.T "logs.refresh"}}"><i class="bi bi-arrow-clockwise"></i></a>
+	<a class="btn btn-primary btn-sm" href="/healthchecks/new?type=docker"><i class="bi bi-plus-lg"></i> {{.T "hc.docker.add"}}</a>
+</div>
+<p class="text-body-secondary small mb-2">{{.T "hc.docker.page_hint"}}</p>
+{{if $d.Socket}}<div class="small mb-3" id="docker-socket"><span class="badge text-bg-success"><i class="bi bi-plug"></i> {{.T "hc.docker.socket_ok"}}</span> <code>{{$d.Host}}</code></div>
+{{else}}<div class="alert alert-warning small" id="docker-socket"><i class="bi bi-exclamation-triangle"></i> {{.T "hc.docker.socket_missing" "host" $d.Host}}
+	<div class="text-break mt-1 text-body-secondary">{{$d.SocketErr}}</div>
+	<div class="mt-2">{{.T "hc.docker.socket_mount"}} <code>-v /var/run/docker.sock:/var/run/docker.sock:ro</code>{{$.Doc "healthchecks#docker"}}</div>
+	<div class="mt-1">{{.T "hc.docker.socket_group"}} <code>--group-add $(stat -c %g /var/run/docker.sock)</code></div>
+</div>{{end}}
+
+<div class="row g-2 mb-3">
+	<div class="col-6 col-md-3"><a class="card stat stat-primary" href="/healthchecks/docker"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.total"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Total}}{{else}}–{{end}}</div></div><i class="bi bi-box-seam stat-icon"></i></div></a></div>
+	<div class="col-6 col-md-3"><a class="card stat stat-ok" href="/healthchecks/docker?state=running"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.running"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Running}}{{else}}–{{end}}</div></div><i class="bi bi-play-circle stat-icon"></i></div></a></div>
+	<div class="col-6 col-md-3"><a class="card stat {{if $d.Bad}}stat-down{{else}}stat-muted{{end}}" href="/healthchecks/docker?state=problem"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.bad"}}</div><div class="stat-value">{{if $d.Socket}}{{$d.Bad}}{{else}}–{{end}}</div>{{if $d.Missing}}<div class="stat-sub">{{.T "hc.docker.kpi.missing" "count" $d.Missing}}</div>{{end}}</div><i class="bi bi-exclamation-triangle stat-icon"></i></div></a></div>
+	<div class="col-6 col-md-3"><a class="card stat stat-info" href="/healthchecks/docker?state=watched"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.watched"}}</div><div class="stat-value">{{$d.Watched}}</div></div><i class="bi bi-eye stat-icon"></i></div></a></div>
+</div>
+
+<form method="get" action="/healthchecks/docker" class="row g-2 mb-3 align-items-end">
+	<div class="col-12 col-md-4"><input class="form-control form-control-sm" type="search" name="q" value="{{$f.q}}" placeholder="{{.T "common.search"}} …"></div>
+	<div class="col-6 col-md-3">
+		<select class="form-select form-select-sm" name="state" data-autosubmit>
+			<option value="">{{.T "common.status"}}: {{.T "common.all"}}</option>
+			{{range $d.States}}<option value="{{.}}"{{if eq . $f.state}} selected{{end}}>{{$.T (print "hc.docker.filter." .)}}</option>{{end}}
+		</select>
+	</div>
+	<div class="col-6 col-md-3 d-flex gap-2">
+		<button class="btn btn-outline-secondary btn-sm" type="submit">{{.T "hc.filter"}}</button>
+		{{if or $f.q $f.state}}<a class="btn btn-link btn-sm" href="/healthchecks/docker">{{.T "hc.reset"}}</a>{{end}}
+	</div>
+</form>
+
+{{if not $d.Rows}}
+<div class="card"><div class="card-body text-center text-body-secondary py-4">
+	<i class="bi bi-box-seam fs-1 d-block mb-2"></i>
+	{{if $d.All}}{{.T "hc.docker.empty_filter"}}{{else}}{{.T "hc.docker.empty"}}{{end}}
+</div></div>
+{{else}}
+<div class="card">
+	<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards hc-table" id="docker-table">
+		<thead><tr><th>{{.T "hc.docker.container"}}</th><th>{{.T "hc.docker.state"}}</th><th class="d-none d-md-table-cell">{{.T "hc.docker.created"}}</th><th class="d-none d-md-table-cell">{{.T "hc.docker.ports"}}</th><th>{{.T "hc.docker.check"}}</th><th class="text-end">{{.T "common.actions"}}</th></tr></thead>
+		<tbody>
+		{{range $d.Rows}}
+		<tr{{with .RowClass}} class="{{.}}"{{end}} data-container="{{.Name}}">
+			<td data-label="{{$.T "hc.docker.container"}}" class="hc-c-name"><span class="fw-semibold">{{.Name}}</span>
+				{{with .Ct}}<div class="small text-body-secondary text-truncate" style="max-width:22rem" title="{{.Image}} · {{.ID}}"><i class="bi bi-layers"></i> {{.Image}}</div>{{end}}</td>
+			<td data-label="{{$.T "hc.docker.state"}}"><span class="badge {{.Class}}">{{$.T (print "hc.docker.kind." .Kind)}}</span>
+				{{with .Health}}<span class="badge {{if eq . "unhealthy"}}text-bg-danger{{else if eq . "starting"}}text-bg-warning{{else}}text-bg-light{{end}}">{{$.T (print "hc.docker.health." .)}}</span>{{end}}
+				{{with .Ct}}<div class="small text-body-secondary">{{.Status}}</div>{{end}}</td>
+			<td data-label="{{$.T "hc.docker.created"}}" class="small text-nowrap d-none d-md-table-cell">{{if .Started.IsZero}}–{{else}}<span title="{{$.Time .Started}}">{{$.Ago .Started}}</span>{{end}}</td>
+			<td data-label="{{$.T "hc.docker.ports"}}" class="small d-none d-md-table-cell">{{with .Ct}}{{range .Ports}}<span class="badge text-bg-light">{{.}}</span> {{else}}–{{end}}{{else}}–{{end}}</td>
+			<td data-label="{{$.T "hc.docker.check"}}">{{with .Hc}}{{$c := .Check}}
+				<a href="/healthchecks/{{$c.Token}}" class="fw-semibold">{{$c.Name}}</a> <span class="badge hc-state-{{.State}}">{{$.T (print "hc.state." .State)}}</span>
+				{{if $c.Foreign}}<span class="badge text-bg-light hc-exec"><i class="bi bi-hdd-network"></i> {{$.T "hc.owner.other"}}</span>{{end}}
+				<div class="beats mt-1">{{range .Pills}}<span class="beat beat-{{.Class}}" data-bs-toggle="tooltip" data-tip-label="{{.Label}}" data-tip-when="{{.When}}" data-tip-ms="{{.Latency}}" data-tip-msg="{{.Message}}"></span>{{end}}</div>
+				{{if .Message}}<div class="small text-body-secondary text-truncate" style="max-width:22rem" title="{{.Message}}">{{.Message}}</div>{{end}}
+				{{else}}<span class="text-body-secondary small"><i class="bi bi-eye-slash"></i> {{$.T "hc.docker.not_watched"}}</span>{{end}}</td>
+			<td data-label="{{$.T "common.actions"}}" class="text-end text-nowrap hc-c-actions">
+				{{with .Hc}}{{$c := .Check}}
+				{{if eq .State "paused"}}<button class="btn btn-sm btn-outline-success" form="act-{{$c.Token}}" name="action" value="resume" title="{{$.T "hc.action.resume"}}"><i class="bi bi-play-fill"></i></button>
+				{{else}}<button class="btn btn-sm btn-outline-warning" form="act-{{$c.Token}}" name="action" value="pause" title="{{$.T "hc.action.pause"}}"><i class="bi bi-pause-fill"></i></button>{{end}}
+				{{if $c.Runnable}}<button class="btn btn-sm btn-outline-info" form="act-{{$c.Token}}" name="action" value="run" title="{{$.T "hc.action.run"}}"><i class="bi bi-lightning-charge"></i></button>{{end}}
+				<a class="btn btn-sm btn-outline-primary" href="/healthchecks/{{$c.Token}}/edit" title="{{$.T "hc.edit"}}"><i class="bi bi-pencil"></i></a>
+				{{end}}
+				{{if eq .Kind "missing"}}{{with .Hc}}<button class="btn btn-sm btn-outline-danger" form="act-{{.Check.Token}}" name="action" value="delete" title="{{$.T "common.delete"}}" data-confirm="{{$.T "common.confirm"}}"><i class="bi bi-trash"></i></button>{{end}}{{end}}
+				{{if not .Hc}}<a class="btn btn-sm btn-primary" href="/healthchecks/new?type=docker&target={{.Name}}&name={{.Name}}"><i class="bi bi-eye"></i> {{$.T "hc.docker.watch"}}</a>{{end}}
+			</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table></div>
+</div>
+{{end}}
+{{range $d.Hcs}}
+<form method="post" action="/healthchecks/{{.Check.Token}}/action" id="act-{{.Check.Token}}" class="d-none"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="back" value="docker"></form>
+{{end}}
+{{end}}
+{{define "scripts"}}<script src="/static/js/healthchecks.js?v={{.Version}}"></script>{{end}}

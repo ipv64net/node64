@@ -45,6 +45,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	m.incidentsRoutes(mux, page)
 	m.statusPagesRoutes(mux, page)
 	m.pveRoutes(mux, page)
+	m.dockerRoutes(mux, page)
 }
 
 // ---------------------------------------------------------------- Darstellung
@@ -114,15 +115,11 @@ type group struct {
 }
 
 type listData struct {
-	Docker      []row              // Docker-Checks (eigene Tabelle)
-	Unwatched   []checks.Container // Container ohne Check
-	DockerErr   string
-	DockerShown bool
-	Groups      []group
-	Grouped     bool // mindestens ein Check hat eine Gruppe
-	QuotaToday  int  // Online-Messungen heute (Tageskontingent)
-	QuotaLimit  int  // Tageskontingent (0 = unbegrenzt/standalone)
-	QuotaNear   bool // mindestens 90 % verbraucht
+	Groups     []group
+	Grouped    bool // mindestens ein Check hat eine Gruppe
+	QuotaToday int  // Online-Messungen heute (Tageskontingent)
+	QuotaLimit int  // Tageskontingent (0 = unbegrenzt/standalone)
+	QuotaNear  bool // mindestens 90 % verbraucht
 	// Online-Checks direkt ueber die API (Key hinterlegt, kein Sync)
 	APIMode   bool
 	Online    []onlineRow
@@ -337,32 +334,8 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 		if f["q"] != "" && !strings.Contains(strings.ToLower(c.Name+" "+c.Target+" "+c.Group+" "+strings.Join(c.Tags, " ")), strings.ToLower(f["q"])) {
 			continue
 		}
-		if c.Type == checks.TypeDocker {
-			d.Docker = append(d.Docker, rw)
-			continue
-		}
-		d.Rows = append(d.Rows, rw)
+		d.Rows = append(d.Rows, rw) // Docker-Checks als normale Zeilen; Container des Hosts auf /healthchecks/docker
 	}
-	// Container des Hosts, die noch keinen Check haben (nur wenn der Socket da ist)
-	cctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	if cs, err := checks.ListContainers(cctx, ""); err == nil {
-		watched := map[string]bool{}
-		for _, c := range list {
-			if c.Type == checks.TypeDocker {
-				watched[strings.TrimPrefix(c.Target, "/")] = true
-			}
-		}
-		for _, ct := range cs {
-			if !watched[ct.Name] && !watched[ct.ID] {
-				d.Unwatched = append(d.Unwatched, ct)
-			}
-		}
-		d.DockerShown = true
-	} else if len(d.Docker) > 0 {
-		d.DockerErr, d.DockerShown = err.Error(), true
-	}
-	cancel()
-	sortRows(d.Docker, d.Sort, d.Dir == "desc")
 	for t := range tagSet {
 		d.Tags = append(d.Tags, t)
 	}
@@ -1218,13 +1191,15 @@ func (m *Module) pageAction(w http.ResponseWriter, r *http.Request) {
 	back := "/healthchecks/" + c.Token
 	if r.PostFormValue("back") == "list" {
 		back = "/healthchecks"
+	} else if r.PostFormValue("back") == "docker" {
+		back = dockerPath
 	}
 	if err := m.doAction(r, c, action); err != nil {
 		m.g.Flash(w, r, "danger", err.Error())
 	} else {
 		m.g.Flash(w, r, "success", m.g.T(r, "hc.done."+action, "name", c.Name))
 	}
-	if action == "delete" {
+	if action == "delete" && back != dockerPath {
 		back = "/healthchecks"
 	}
 	if action == "clone" {
