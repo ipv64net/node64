@@ -4394,7 +4394,8 @@
       "hostkey_field_hint": "Shown by the test and taken over when confirmed. Format SHA256:… like ssh-keygen -l.",
       "name_hint": "Default: hostname",
       "setup": "Setup on the host",
-      "about_text": "All containers of the host are monitored like the local Docker host: state, health, restarts, CPU, RAM, network and disk I/O with history, rules and channels. Node64 only reads (GET), nothing is started or changed. Credentials are stored encrypted."
+      "about_text": "All containers of the host are monitored like the local Docker host: state, health, restarts, CPU, RAM, network and disk I/O with history, rules and channels. Node64 only reads (GET), nothing is started or changed. Credentials are stored encrypted.",
+      "key_pending": "taken – leave empty to use this key"
     },
     "howto": {
       "ssh1": "Create a dedicated user with access to the Docker socket:",

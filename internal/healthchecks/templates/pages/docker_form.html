@@ -64,7 +64,7 @@
 					<div class="d-flex flex-wrap gap-2 mb-2">
 						<button class="btn btn-outline-primary btn-sm" type="submit" name="op" value="genkey" formnovalidate><i class="bi bi-key"></i> {{if or $d.PubKey $d.HasKey}}{{.T "docker.form.genkey_new"}}{{else}}{{.T "docker.form.genkey"}}{{end}}</button>
 					</div>
-					<textarea class="form-control form-control-sm font-monospace{{if index $e "key"}} is-invalid{{end}}" id="dk-key" name="key" rows="3" placeholder="{{if or $d.HasKey $d.KeyGen}}{{.T "docker.form.key_keep"}}{{else}}-----BEGIN OPENSSH PRIVATE KEY-----{{end}}"></textarea>
+					<textarea class="form-control form-control-sm font-monospace{{if index $e "key"}} is-invalid{{end}}" id="dk-key" name="key" rows="3" placeholder="{{if $d.KeyGen}}{{.T "docker.form.key_pending"}}{{else if $d.HasKey}}{{.T "docker.form.key_keep"}}{{else}}-----BEGIN OPENSSH PRIVATE KEY-----{{end}}"></textarea>
 					{{with index $e "key"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
 					<div class="form-text">{{.T "docker.form.ssh_key_hint"}}</div>
 				</div>
@@ -85,7 +85,7 @@
 				</div>
 				<div class="col-md-6">
 					<label class="form-label" for="dk-tlskey">{{.T "docker.form.tls_key"}}</label>
-					<textarea class="form-control form-control-sm font-monospace" id="dk-tlskey" name="key" rows="3" placeholder="{{if or $d.HasCert $d.KeyGen}}{{.T "docker.form.key_keep"}}{{else}}key.pem{{end}}"></textarea>
+					<textarea class="form-control form-control-sm font-monospace" id="dk-tlskey" name="key" rows="3" placeholder="{{if $d.KeyGen}}{{.T "docker.form.key_pending"}}{{else if $d.HasCert}}{{.T "docker.form.key_keep"}}{{else}}key.pem{{end}}"></textarea>
 				</div>
 				{{if $d.HasCert}}<div class="col-12"><div class="form-check small"><input class="form-check-input" type="checkbox" id="dk-cert-clear" name="cert_clear"><label class="form-check-label" for="dk-cert-clear">{{.T "docker.form.cert_clear"}}</label></div></div>{{end}}
 				{{end}}
