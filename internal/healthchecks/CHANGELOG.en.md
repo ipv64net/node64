@@ -1,5 +1,14 @@
 # Changes – Healthchecks
 
+## 2.21.1 – 2026-10-22
+
+### Changed
+- KPI tiles (uptime, Proxmox) in the unified style.
+
+### Fixed
+- The overview loads much faster: the status pills only read the latest measurements per check instead of the whole
+  measurement table (which got slower as retention grew).
+
 ## 2.21.0 – 2026-10-21
 
 ### Fixed

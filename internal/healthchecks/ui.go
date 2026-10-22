@@ -192,9 +192,11 @@ func (m *Module) rowOf(ctx context.Context, lang string, c *Check, pills map[str
 // pillsFor liefert die letzten n Messungen je Check als Pillen (aelteste zuerst).
 func (m *Module) pillsFor(ctx context.Context, lang string, loc *time.Location, n int) (map[string][]Pill, error) {
 	tr := m.translator(lang)
-	rows, err := m.st.r.QueryContext(ctx, `SELECT token, time, status, latency_ms, flags, reason, message FROM (
-		SELECT token, time, status, latency_ms, flags, reason, message, row_number() OVER (PARTITION BY token ORDER BY node_seq DESC) AS rn FROM hc_measurements
-	) WHERE rn <= ? ORDER BY token, time`, n)
+	// je Check die letzten n Messungen ueber den Index (token, time) – nicht die ganze Tabelle durchnummerieren (das
+	// dauerte mit wachsender Aufbewahrung bei jedem Aufruf der Uebersicht spuerbar)
+	rows, err := m.st.r.QueryContext(ctx, `SELECT m.token, m.time, m.status, m.latency_ms, m.flags, m.reason, m.message FROM hc_checks c
+		JOIN hc_measurements m ON m.node_seq IN (SELECT node_seq FROM hc_measurements WHERE token = c.token ORDER BY time DESC LIMIT ?)
+		ORDER BY m.token, m.time`, n)
 	if err != nil {
 		return nil, err
 	}

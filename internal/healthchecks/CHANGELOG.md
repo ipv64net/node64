@@ -1,5 +1,14 @@
 # Änderungen – Healthchecks
 
+## 2.21.1 – 2026-10-22
+
+### Geändert
+- Kennzahl-Kacheln (Verfügbarkeit, Proxmox) im einheitlichen Stil.
+
+### Behoben
+- Die Übersicht lädt deutlich schneller: Für die Status-Pillen werden nur noch die letzten Messungen je Check gelesen
+  statt der ganzen Messtabelle (wurde mit wachsender Aufbewahrung immer langsamer).
+
 ## 2.21.0 – 2026-10-21
 
 ### Behoben
