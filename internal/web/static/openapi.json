@@ -539,6 +539,7 @@
               "discord",
               "ntfy",
               "gotify",
+              "igotify",
               "pushover",
               "homeassistant",
               "webhook",

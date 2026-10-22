@@ -2629,7 +2629,8 @@
       "ipv64_sms": "SMS über ipv64",
       "pushover": "Pushover",
       "browser": "Browser",
-      "homeassistant": "Home Assistant"
+      "homeassistant": "Home Assistant",
+      "igotify": "iGotify (iPhone)"
     },
     "field": {
       "email": "E-Mail-Adresse",
@@ -2691,7 +2692,8 @@
     "deleted": "Kanal gelöscht.",
     "planned": "nach Verknüpfung mit ipv64",
     "ha_hint": "In Home Assistant eine Automation mit dem Auslöser „Webhook“ anlegen (Methode POST), die Webhook-ID kopieren und hier eintragen. „Nur lokal“ kann eingeschaltet bleiben, die Node sendet aus dem LAN. In der Automation stehen die Werte unter trigger.json (title, message, state, kind, check, node, url).",
-    "ha_url_hint": "Adresse von Home Assistant ohne Pfad, z. B. http://homeassistant.local:8123 oder https://ha.example.de."
+    "ha_url_hint": "Adresse von Home Assistant ohne Pfad, z. B. http://homeassistant.local:8123 oder https://ha.example.de.",
+    "igotify_hint": "iGotify bringt Nachrichten eines Gotify-Servers als Push aufs iPhone. Node64 sendet an deinen Gotify-Server (Adresse und App-Token einer Gotify-App); der iGotify-Assistent und die iGotify-App auf dem iPhone stellen sie zu. "
   },
   "day": {
     "1": "Mo",

@@ -110,3 +110,24 @@ func TestHomeAssistantValidate(t *testing.T) {
 		t.Fatalf("masked: %v", m)
 	}
 }
+
+// iGotify ist ein Gotify-Server mit iGotify-Assistent: gleicher Versand wie Gotify (POST /message mit App-Token).
+func TestIGotifySendsLikeGotify(t *testing.T) {
+	var path, key string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path, key = r.URL.Path, r.Header.Get("X-Gotify-Key")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	s, ok := Senders("test")[TypeIGotify]
+	if !ok {
+		t.Fatal("no sender for igotify")
+	}
+	ch := &Channel{Type: TypeIGotify, Name: "iPhone", Config: map[string]string{"server": srv.URL + "/", "app_token": "Atoken123"}}
+	if err := s.Send(context.Background(), ch, Message{Kind: KindTest, Title: "t", Text: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if path != "/message" || key != "Atoken123" {
+		t.Fatalf("path=%q key=%q", path, key)
+	}
+}

@@ -25,6 +25,7 @@ const (
 	TypeDiscord  Type = "discord"
 	TypeNtfy     Type = "ntfy"
 	TypeGotify   Type = "gotify"
+	TypeIGotify  Type = "igotify" // Gotify-Server mit iGotify-Assistent: Push aufs iPhone (gleicher Versand wie Gotify)
 	TypePushover Type = "pushover"
 	// Home Assistant: Webhook-Ausloeser einer Automation (nur von der Node gesendet, HA steht im LAN)
 	TypeHomeAssistant Type = "homeassistant"
@@ -35,7 +36,7 @@ const (
 )
 
 // Types in Anzeigereihenfolge.
-var Types = []Type{TypeBrowser, TypeSMTP, TypeTelegram, TypeDiscord, TypeNtfy, TypeGotify, TypePushover, TypeHomeAssistant, TypeWebhook}
+var Types = []Type{TypeBrowser, TypeSMTP, TypeTelegram, TypeDiscord, TypeNtfy, TypeGotify, TypeIGotify, TypePushover, TypeHomeAssistant, TypeWebhook}
 
 // Planned sind Kanaele, die ipv64.net nach der Verknuepfung bereitstellt:
 // Mail ohne eigenen SMTP-Server und SMS ueber das ipv64-Gateway. Sie werden
@@ -96,6 +97,10 @@ var Fields = map[Type][]Field{
 		{Key: "priority_up", Kind: "select", Options: []string{"1", "2", "3", "4", "5"}, Default: "3"},
 	},
 	TypeGotify: {
+		{Key: "server", Kind: "url", Required: true}, {Key: "app_token", Secret: true, Required: true, Kind: "password"},
+		{Key: "priority", Kind: "number", Default: "5"},
+	},
+	TypeIGotify: {
 		{Key: "server", Kind: "url", Required: true}, {Key: "app_token", Secret: true, Required: true, Kind: "password"},
 		{Key: "priority", Kind: "number", Default: "5"},
 	},
@@ -313,7 +318,7 @@ func (c *Channel) Summary() string {
 		return "Webhook"
 	case TypeNtfy:
 		return strings.TrimRight(g("server"), "/") + "/" + g("topic")
-	case TypeGotify:
+	case TypeGotify, TypeIGotify:
 		return g("server")
 	case TypePushover:
 		if g("device") != "" {
