@@ -4,6 +4,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"strings"
 
@@ -37,6 +38,10 @@ type Config struct {
 	} `yaml:"limits"`
 	LogLevel string     `yaml:"log_level"` // debug, info, warn, error
 	Ops      ops.Config `yaml:"ops"`       // Betriebsalarme an den Betreiber (andere hubs, Datenbank)
+
+	// Prometheus fuer den Betreiber: eigener Port im internen Netz (z. B. 10.10.0.10:9464), nur fuer metrics_allow
+	MetricsListen string   `yaml:"metrics_listen"`
+	MetricsAllow  []string `yaml:"metrics_allow"` // IPs bzw. Netze, z. B. 10.10.0.0/24 (leer = jeder, der die Adresse erreicht)
 }
 
 // Load liest und prueft die Datei.
@@ -73,7 +78,28 @@ func Load(path string) (*Config, error) {
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
 	}
+	if _, err := c.MetricsPrefixes(); err != nil {
+		return nil, err
+	}
 	return &c, nil
+}
+
+// MetricsPrefixes: metrics_allow als Netze (eine einzelne IP gilt als /32 bzw. /128).
+func (c *Config) MetricsPrefixes() ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, a := range c.MetricsAllow {
+		a = strings.TrimSpace(a)
+		if p, err := netip.ParsePrefix(a); err == nil {
+			out = append(out, p.Masked())
+			continue
+		}
+		ip, err := netip.ParseAddr(a)
+		if err != nil {
+			return nil, fmt.Errorf("config: metrics_allow %q ist keine IP bzw. kein Netz", a)
+		}
+		out = append(out, netip.PrefixFrom(ip.Unmap(), ip.Unmap().BitLen()))
+	}
+	return out, nil
 }
 
 // HasRole sagt, ob die Rolle aktiv ist.

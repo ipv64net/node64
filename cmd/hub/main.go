@@ -177,6 +177,15 @@ func run(cfgPath string) error {
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
 	log.Info("http listening", "addr", cfg.Listen)
+	if cfg.MetricsListen != "" { // Prometheus fuer den Betreiber im internen Netz
+		allow, _ := cfg.MetricsPrefixes() // in config.Load geprueft
+		ms, err := srv.ServeMetrics(cfg.MetricsListen, allow)
+		if err != nil {
+			return fmt.Errorf("metrics_listen: %w", err)
+		}
+		defer ms.Shutdown(5 * time.Second)
+		log.Info("metrics listening", "addr", ms.Addr(), "allow", cfg.MetricsAllow)
+	}
 
 	select {
 	case <-ctx.Done():

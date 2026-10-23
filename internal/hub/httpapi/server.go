@@ -71,4 +71,5 @@ func (s *Server) prometheus(w http.ResponseWriter, _ *http.Request) {
 	fmt.Fprintf(w, "# TYPE hub_verdicts_total counter\nhub_verdicts_total %d\n", m.Verdicts)
 	fmt.Fprintf(w, "# TYPE hub_overall_changes_total counter\nhub_overall_changes_total %d\n", m.OverallChanges)
 	fmt.Fprintf(w, "# TYPE hub_uptime_seconds gauge\nhub_uptime_seconds %d\n", int(time.Since(s.started).Seconds()))
+	s.runtimeMetrics(w)
 }
