@@ -498,8 +498,8 @@ func TestStatusPagesTemplates(t *testing.T) {
 		Groups: []StatusGroup{{Name: "A", Items: []StatusItem{{Token: "t1"}, {Token: "t2", Label: "L"}}}, {Name: "", Items: []StatusItem{}}}}
 	now := time.Now()
 	cases := map[string]any{
-		"status_pages":        statusPagesData{Pages: []statusPageRow{{StatusPage: p, Items: 2, Open: 1, URL: "/status/s", Preview: "/x"}}},
-		"status_page_form":    statusFormData{Page: p, Edit: true, Dirty: true, Errors: map[string]string{"slug": "x", "groups": "y"}, Error: "e", Names: map[string]string{"t1": "Check 1"}, Checks: []statusCheckOpt{{Token: "t1", Name: "Check 1", Tags: "a,b", Group: "G", OnPage: true, Paused: true}}, Tags: []string{"a"}, HCGroups: []string{"G"}, Layouts: []string{"list", "tiles", "compact"}, Themes: []string{"auto"}, DaysOpts: []int{30, 90}, Items: 2,
+		"status_pages": statusPagesData{Pages: []statusPageRow{{StatusPage: p, Items: 2, Open: 1, URL: "/status/s", Preview: "/x"}}},
+		"status_page_form": statusFormData{Page: p, Edit: true, Dirty: true, Errors: map[string]string{"slug": "x", "groups": "y"}, Error: "e", Names: map[string]string{"t1": "Check 1"}, Checks: []statusCheckOpt{{Token: "t1", Name: "Check 1", Tags: "a,b", Group: "G", OnPage: true, Paused: true}}, Tags: []string{"a"}, HCGroups: []string{"G"}, Layouts: []string{"list", "tiles", "compact"}, Themes: []string{"auto"}, DaysOpts: []int{30, 90}, Items: 2,
 			ResCards: []statusResCard{{Kind: "pve", Title: "nav.proxmox", Icon: "bi-hdd-stack", Hint: "h", Systems: []statusResSys{{Name: "lab", Items: []statusResOpt{{ID: "1-0", Value: "1|qemu/100", Name: "vm", Type: "pve.type.qemu"}, {ID: "1-1", Value: "1|node/pve", Name: "pve", Type: "pve.type.node", Token: "t1", OnPage: true}}}, {Name: "leer"}}}}},
 		"status_page_notices": statusNoticesData{Page: p, Form: map[string]string{"level": "info"}, Open: []StatusNotice{{ID: 1, Title: "N", Level: "warning", CreatedAt: now, Updates: []StatusNoticeUpdate{{Time: now, Text: "x"}}}}, Resolved: []StatusNotice{{ID: 2, Title: "R", Level: "info", CreatedAt: now, ResolvedAt: now}}},
 	}

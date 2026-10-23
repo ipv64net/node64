@@ -486,6 +486,13 @@ func (c *Live) pollPending(code string, exp time.Time) {
 	}
 }
 
+// RefreshAccount laedt Klasse, Limits und Verbrauch des Accounts sofort vom hub (z. B. nach einem Upgrade).
+func (c *Live) RefreshAccount(ctx context.Context) {
+	if c.Linked() {
+		c.refreshMe(ctx)
+	}
+}
+
 // Quota liefert das Tageskontingent der Online-Checks (heute, Limit; Limit 0 = unbegrenzt oder unbekannt)
 // und die Standorte je Check laut Account (fuer die Hochrechnung).
 func (c *Live) Quota() (today, limit, locs int) {

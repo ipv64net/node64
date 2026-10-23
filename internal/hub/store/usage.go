@@ -202,7 +202,7 @@ func (s *Store) FlushUsage(ctx context.Context) {
 	}
 	var needLimit []int64
 	for _, id := range ids {
-		if at, ok := u.limitAt[id]; !ok || time.Since(at) > 10*time.Minute {
+		if at, ok := u.limitAt[id]; !ok || time.Since(at) > 2*time.Minute { // Upgrade gilt nach wenigen Minuten
 			needLimit = append(needLimit, id)
 		}
 	}

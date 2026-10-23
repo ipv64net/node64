@@ -365,6 +365,7 @@ func run() error {
 	}
 	defer syncClient.Stop(context.Background())
 	go updateLoop(ctx, st, log)
+	go planLoop(ctx, ipv64Key, syncClient)
 	// Node-Uebersicht auf ipv64.net: anmelden; dort entfernt = Key und Verknuepfung lokal vergessen
 	go ipv64api.NewPresence(ipv64api.PresenceConfig{Client: ipv64Key.Client(), Key: ipv64Key.Get, Log: logger.Slog().With("module", "ipv64"),
 		Info:    func(ctx context.Context) ipv64api.Hello { return nodeHello(ctx, st, modules, syncClient.Linked) },
@@ -714,4 +715,23 @@ func (s statusPages) StatusPageList(ctx context.Context) []cdn64.StatusPageInfo 
 		out = append(out, cdn64.StatusPageInfo{ID: p.ID, Slug: p.Slug, Title: p.Title, Enabled: p.Enabled})
 	}
 	return out
+}
+
+// planLoop schaut regelmaessig nach der Account-Klasse: nach einem Upgrade gelten Klasse und Limits nach wenigen
+// Minuten (Seitenleiste, Tarife, Healthchecks-Limits vom hub), nicht erst nach einem Tag.
+func planLoop(ctx context.Context, key *ipv64api.Key, sc *nodesync.Live) {
+	t := time.NewTicker(ipv64api.PlanEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		if key.RefreshPlan(cctx) {
+			sc.RefreshAccount(cctx)
+		}
+		cancel()
+	}
 }

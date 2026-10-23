@@ -148,6 +148,34 @@ func (k *Key) RefreshIfStale(ctx context.Context, maxAge time.Duration) {
 	}
 }
 
+// PlanEvery: so oft fragt die Node die Account-Klasse ab (ein Upgrade soll schnell ankommen).
+const PlanEvery = 2 * time.Minute
+
+// RefreshPlan fragt Klasse und Konto beim gespeicherten Key ab (nur /me). true = geaendert; dann ist auch die
+// Account-Uebersicht verworfen.
+func (k *Key) RefreshPlan(ctx context.Context) bool {
+	key := k.Get(ctx)
+	if key == "" {
+		return false
+	}
+	me, err := k.client.Me(ctx, key)
+	if err != nil {
+		return false
+	}
+	info := k.Info(ctx)
+	if info.Account == "" || (info.Plan == me.Plan.Name && info.ID == me.ID && info.Account == me.Account()) {
+		return false // noch nie geprueft (das macht Set) oder unveraendert
+	}
+	k.log.Info("ipv64 account class changed", "old", info.Plan, "new", me.Plan.Name)
+	info.ID, info.Account, info.Plan = me.ID, me.Account(), me.Plan.Name
+	raw, _ := json.Marshal(info)
+	if k.st.SetSetting(ctx, SetAccount, string(raw)) != nil {
+		return false
+	}
+	k.ResetOverview()
+	return true
+}
+
 // Clear entfernt den Key.
 func (k *Key) Clear(ctx context.Context) error {
 	if err := k.st.SetSetting(ctx, SetKey, ""); err != nil {

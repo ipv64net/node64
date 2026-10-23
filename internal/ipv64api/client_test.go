@@ -2,6 +2,7 @@ package ipv64api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -89,6 +90,17 @@ func TestKey(t *testing.T) {
 	}
 	if k.Get(ctx) != testKey || k.Info(ctx).Account != "tester" || k.Info(ctx).Plan != "Supporter" {
 		t.Fatalf("get/info: %q %+v", k.Get(ctx), k.Info(ctx))
+	}
+	// Klasse regelmaessig: unveraendert nichts, nach einem Upgrade neu (Name und Ablauf des Keys bleiben)
+	if k.RefreshPlan(ctx) {
+		t.Fatal("refresh plan: unchanged reported as changed")
+	}
+	old := k.Info(ctx)
+	old.Plan = "Standard"
+	raw, _ := json.Marshal(old)
+	_ = st.SetSetting(ctx, SetAccount, string(raw))
+	if !k.RefreshPlan(ctx) || k.Info(ctx).Plan != "Supporter" || k.Info(ctx).KeyName != "Node64 Keller" || !k.Info(ctx).CheckedAt.Equal(old.CheckedAt) {
+		t.Fatalf("refresh plan: %+v", k.Info(ctx))
 	}
 	if _, err := k.Set(ctx, ""); err != nil { // erneut pruefen
 		t.Fatal(err)
