@@ -692,7 +692,12 @@
       "errors": "Fehler (4xx/5xx)",
       "blocked": "Abgewiesen",
       "blocked_hint": "Im Zeitraum: Blocklisten, Limits, Sperren, Zugriffslisten und Exploit-Sperre, auch Verbindungen, die vor der ersten Anfrage getrennt wurden (nur bei „alle Hosts“). Einzeln unter Zugriffe.",
-      "empty": "Noch keine Anfragen im Zeitraum."
+      "empty": "Noch keine Anfragen im Zeitraum.",
+      "range_24": "24 Stunden",
+      "range_168": "7 Tage",
+      "range_720": "30 Tage",
+      "last": "letzte {range}",
+      "col": "Anfragen ({range})"
     },
     "bl": {
       "title": "ipv64-Blocklisten",

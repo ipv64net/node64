@@ -24,9 +24,27 @@
 			set("errors", C.nf.format(sum.err) + (sum.req ? " (" + (100 * sum.err / sum.req).toFixed(1) + " %)" : ""));
 			set("blocked", C.nf.format(sum.blocked));
 			card.querySelector("[data-stats-empty]").classList.toggle("d-none", sum.req + sum.blocked > 0);
+			rows(d.hosts || {});
 			if (chart) { chart.destroy(); }
 			chart = new window.Chart(canvas, C.config(s, { requests: L("requests"), blocked: L("blocked"), bytes: L("bytes") }));
 		}).catch(function () { card.querySelector("[data-stats-empty]").classList.remove("d-none"); });
+	}
+
+	// Zeitraum an Kennzahlen und Spaltenkopf, Werte je Host in der Tabelle (gleicher Zeitraum wie die Kennzahlen)
+	function rows(hosts) {
+		var r = L("r" + hours);
+		card.querySelectorAll("[data-stats-last]").forEach(function (el) { el.textContent = L("last").replace("{range}", r); });
+		var col = document.querySelector("[data-stats-col]");
+		if (col) { col.textContent = L("col").replace("{range}", r); }
+		document.querySelectorAll("[data-stats-row]").forEach(function (td) {
+			var h = hosts[td.getAttribute("data-stats-row")] || {};
+			var err = (h["4xx"] || 0) + (h["5xx"] || 0);
+			var v = function (k, text, show) { var el = td.querySelector('[data-v="' + k + '"]'); if (el) { el.textContent = text; el.classList.toggle("d-none", !show); } };
+			v("requests", C.nf.format(h.requests || 0), true);
+			v("bytes", C.bytes(h.bytes || 0), (h.bytes || 0) > 0);
+			v("errors", L("errors-n").replace("{n}", C.nf.format(err)), err > 0);
+			v("blocked", L("blocked-n").replace("{n}", C.nf.format(h.blocked || 0)), (h.blocked || 0) > 0);
+		});
 	}
 
 	card.querySelectorAll("[data-stats-range]").forEach(function (b) {

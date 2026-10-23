@@ -10,7 +10,7 @@
 <ul class="nav nav-tabs mb-3">
 	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
 </ul>
-{{if and (eq $d.Kind "proxy") $d.StatsOn}}<div class="card mb-3" data-cdn64-stats data-l-requests="{{.T "dashboard.js.requests"}}" data-l-blocked="{{.T "dashboard.js.rejected"}}" data-l-bytes="{{.T "dashboard.js.bytes"}}">
+{{if and (eq $d.Kind "proxy") $d.StatsOn}}<div class="card mb-3" data-cdn64-stats data-l-requests="{{.T "dashboard.js.requests"}}" data-l-blocked="{{.T "dashboard.js.rejected"}}" data-l-bytes="{{.T "dashboard.js.bytes"}}" data-l-r24="{{.T "cdn64.stats.range_24"}}" data-l-r168="{{.T "cdn64.stats.range_168"}}" data-l-r720="{{.T "cdn64.stats.range_720"}}" data-l-last="{{.T "cdn64.stats.last" "range" "{range}"}}" data-l-col="{{.T "cdn64.stats.col" "range" "{range}"}}" data-l-errors-n="{{.T "cdn64.errors" "n" "{n}"}}" data-l-blocked-n="{{.T "cdn64.blocked" "n" "{n}"}}">
 	<div class="card-header d-flex flex-wrap align-items-center gap-2">
 		<span><i class="bi bi-diagram-3 text-primary"></i> {{.T "dashboard.chart_cdn64"}}</span>
 		<select class="form-select form-select-sm w-auto ms-auto py-0" data-stats-host aria-label="{{.T "cdn64.stats.host"}}"><option value="0">{{.T "cdn64.stats.all"}}</option>{{range $d.Rows}}<option value="{{.ID}}">{{index .Names 0}}</option>{{end}}</select>
@@ -22,10 +22,10 @@
 	</div>
 	<div class="card-body">
 		<div class="row g-2 mb-3">
-			<div class="col-6 col-md-3"><div class="card stat stat-primary"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.stats.requests"}}</div><div class="stat-value" data-kpi="requests">–</div></div><i class="bi bi-globe stat-icon"></i></div></div></div>
-			<div class="col-6 col-md-3"><div class="card stat stat-info"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.stats.bytes"}}</div><div class="stat-value" data-kpi="bytes">–</div></div><i class="bi bi-arrow-down-up stat-icon"></i></div></div></div>
-			<div class="col-6 col-md-3"><div class="card stat stat-warn"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.stats.errors"}}</div><div class="stat-value" data-kpi="errors">–</div></div><i class="bi bi-exclamation-circle stat-icon"></i></div></div></div>
-			<div class="col-6 col-md-3"><div class="card stat stat-down" title="{{.T "cdn64.stats.blocked_hint"}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.stats.blocked"}}</div><div class="stat-value" data-kpi="blocked">–</div></div><i class="bi bi-shield-x stat-icon"></i></div></div></div>
+			<div class="col-6 col-md-3"><div class="card stat stat-primary"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.stats.requests"}}</div><div class="stat-value" data-kpi="requests">–</div><div class="stat-sub" data-stats-last>{{.T "cdn64.stats.last" "range" (.T "cdn64.stats.range_24")}}</div></div><i class="bi bi-globe stat-icon"></i></div></div></div>
+			<div class="col-6 col-md-3"><div class="card stat stat-info"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.stats.bytes"}}</div><div class="stat-value" data-kpi="bytes">–</div><div class="stat-sub" data-stats-last>{{.T "cdn64.stats.last" "range" (.T "cdn64.stats.range_24")}}</div></div><i class="bi bi-arrow-down-up stat-icon"></i></div></div></div>
+			<div class="col-6 col-md-3"><div class="card stat stat-warn"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.stats.errors"}}</div><div class="stat-value" data-kpi="errors">–</div><div class="stat-sub" data-stats-last>{{.T "cdn64.stats.last" "range" (.T "cdn64.stats.range_24")}}</div></div><i class="bi bi-exclamation-circle stat-icon"></i></div></div></div>
+			<div class="col-6 col-md-3"><div class="card stat stat-down" title="{{.T "cdn64.stats.blocked_hint"}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.stats.blocked"}}</div><div class="stat-value" data-kpi="blocked">–</div><div class="stat-sub" data-stats-last>{{.T "cdn64.stats.last" "range" (.T "cdn64.stats.range_24")}}</div></div><i class="bi bi-shield-x stat-icon"></i></div></div></div>
 		</div>
 		<div class="dash-chart"><canvas data-stats-chart></canvas></div>
 		<div class="small text-body-secondary d-none" data-stats-empty>{{.T "cdn64.stats.empty"}}</div>
@@ -44,7 +44,7 @@
 	<table class="table table-hover align-middle mb-0 small">
 		<thead><tr>
 			<th class="ps-3">{{.T "cdn64.col.names"}}</th>{{if ne $d.Kind "dead"}}<th>{{.T "cdn64.col.target"}}</th>{{end}}<th>{{.T "cdn64.col.ssl"}}</th><th>{{.T "cdn64.col.options"}}</th>
-			{{if eq $d.Kind "proxy"}}<th>{{.T "cdn64.col.reach"}}</th>{{end}}{{if $d.OnlineOn}}<th>{{.T "cdn64.online.col"}}</th>{{end}}<th class="text-end">{{.T "cdn64.col.requests24"}}</th><th class="text-end pe-3"></th>
+			{{if eq $d.Kind "proxy"}}<th>{{.T "cdn64.col.reach"}}</th>{{end}}{{if $d.OnlineOn}}<th>{{.T "cdn64.online.col"}}</th>{{end}}<th class="text-end" data-stats-col>{{.T "cdn64.col.requests24"}}</th><th class="text-end pe-3"></th>
 		</tr></thead>
 		<tbody>
 		{{range $d.Rows}}
@@ -114,7 +114,7 @@
 					<button type="button" class="btn btn-sm btn-outline-danger py-0" data-c64o-off="{{.ID}}" data-name="{{index .Names 0}}" title="{{$.T "cdn64.online.off"}}"><i class="bi bi-cloud-slash"></i></button>
 				</div>
 			{{else}}<button type="button" class="btn btn-sm btn-outline-primary py-0" data-c64o-on="{{.ID}}" title="{{$.T "cdn64.online.on_title"}}"><i class="bi bi-cloud-arrow-up"></i> {{$.T "cdn64.online.on"}}</button>{{end}}</td>{{end}}
-			<td class="text-end font-monospace" title="{{$.T "cdn64.since_start" "n" .Requests}}">{{$.Int .Day.Requests}}{{if .Errors}}<div class="text-danger">{{$.T "cdn64.errors" "n" .Errors}}</div>{{end}}{{if .Blocked}}<div class="text-body-secondary">{{$.T "cdn64.blocked" "n" .Blocked}}</div>{{end}}</td>
+			<td class="text-end font-monospace" data-stats-row="{{.ID}}" title="{{$.T "cdn64.since_start" "n" .Requests}}"><span data-v="requests">{{$.Int .Day.Requests}}</span><div class="text-body-secondary text-nowrap{{if not .Day.Bytes}} d-none{{end}}" data-v="bytes">{{$.Bytes .Day.Bytes}}</div><div class="text-danger{{if not .Day.Errors}} d-none{{end}}" data-v="errors">{{$.T "cdn64.errors" "n" ($.Int .Day.Errors)}}</div><div class="text-body-secondary{{if not .Day.Blocked}} d-none{{end}}" data-v="blocked">{{$.T "cdn64.blocked" "n" ($.Int .Day.Blocked)}}</div></td>
 			<td class="text-end pe-3 text-nowrap">
 				{{if .URL}}<a class="btn btn-sm btn-outline-secondary py-0" href="{{.URL}}" target="_blank" rel="noopener" title="{{$.T "cdn64.open"}}"><i class="bi bi-box-arrow-up-right"></i></a>{{end}}
 				{{if eq .Kind "proxy"}}{{if .Watch}}<a class="btn btn-sm btn-outline-success py-0" href="/healthchecks/{{(index .Watch 0).Token}}" title="{{$.T "cdn64.watch.open"}}"><i class="bi bi-heart-pulse-fill"></i></a>{{else}}<form method="post" action="/cdn64/hosts/{{.ID}}/healthcheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "cdn64.create_check"}}"><i class="bi bi-heart-pulse"></i></button></form>{{end}}{{end}}

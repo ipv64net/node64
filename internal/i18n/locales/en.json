@@ -692,7 +692,12 @@
       "errors": "Errors (4xx/5xx)",
       "blocked": "Rejected",
       "blocked_hint": "In this period: blocklists, limits, bans, access lists and exploit block, including connections cut before the first request (only with “all hosts”). Details under Accesses.",
-      "empty": "No requests in this period yet."
+      "empty": "No requests in this period yet.",
+      "range_24": "24 hours",
+      "range_168": "7 days",
+      "range_720": "30 days",
+      "last": "last {range}",
+      "col": "Requests ({range})"
     },
     "bl": {
       "title": "ipv64 blocklists",

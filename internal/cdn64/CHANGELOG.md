@@ -1,5 +1,13 @@
 # Änderungen – PROXY64
 
+## 1.25.1 – 2026-10-23
+
+### Geändert
+- Proxy-Hosts: Die Zahlen je Host in der Tabelle folgen dem Zeitraum der Verkehrs-Karte (24 Stunden, 7 Tage,
+  30 Tage) – Anfragen, neu der Datenverkehr, Fehler (4xx/5xx) und Abgewiesene. Bisher zeigte die Spalte die Anfragen
+  der letzten 24 Stunden, Fehler und Abgewiesene aber seit dem Start des Moduls. Spaltenkopf und Kennzahlen nennen den
+  gewählten Zeitraum.
+
 ## 1.25.0 – 2026-10-22
 
 ### Neu

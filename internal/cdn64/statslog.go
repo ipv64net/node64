@@ -284,6 +284,9 @@ type HostStat struct {
 	Blocked  int64 `json:"blocked"` // abgewiesen; bei Host 0 Verbindungen vor der ersten Anfrage
 }
 
+// Errors: Antworten mit 4xx/5xx (wie die Kennzahl "Fehler" der Uebersicht).
+func (h HostStat) Errors() int64 { return h.S4 + h.S5 }
+
 // bucketFrom: erster Stunden-Eimer ab since. Die angebrochene Stunde von since zaehlt nicht mehr mit, die laufende
 // Stunde schon: since = jetzt - N Std. ergibt genau N Eimer (sonst waeren "24 Std." bis zu 25 Stunden). sums und
 // hours nutzen beide diesen Anfang, damit die Summen dem Verlauf entsprechen.

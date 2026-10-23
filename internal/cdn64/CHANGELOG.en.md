@@ -1,5 +1,12 @@
 # Changes – PROXY64
 
+## 1.25.1 – 2026-10-23
+
+### Changed
+- Proxy hosts: the per-host numbers in the table follow the period of the traffic card (24 hours, 7 days, 30 days) –
+  requests, newly the traffic, errors (4xx/5xx) and rejected. Previously the column showed requests of the last 24
+  hours but errors and rejected since the module started. Column header and key figures name the selected period.
+
 ## 1.25.0 – 2026-10-22
 
 ### Added
