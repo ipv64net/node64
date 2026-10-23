@@ -61,6 +61,11 @@ Node nicht erreichbar ist. Die Node nimmt den Namen dann bei sich ebenfalls hera
   deine Node (PROXY64, Schalter „Antworten komprimieren“, für neue Hosts an).
 - **Langsam?** Zeigt die Node „UDP gesperrt“, läuft der Tunnel über TCP. Ein Hinweis auf einen kleinen UDP-Puffer
   nennt den Befehl für den Docker-Host.
+- **Fehlerseite:** Ist deine Node bzw. dein Ziel nicht erreichbar oder antwortet mit einem Fehler 5xx, zeigen die
+  Server Browsern eine kleine Seite im ipv64-Stil („Gerade nicht erreichbar“, Link zu ipv64.net). Abrufe von Apps und
+  APIs (ohne `text/html`) bekommen die Antwort deines Ziels unverändert. Eigene Fehlerseite behalten: Antwort-Header
+  `CDN64-Error-Page: off` senden. In Modus 1 (TLS bei dir) gibt es die Seite nur über HTTP, wenn die Node nicht
+  verbunden ist.
 
 ## Häufige Meldungen
 
