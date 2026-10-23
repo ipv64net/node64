@@ -1,5 +1,11 @@
 # Changes – DNS64
 
+## 1.27.4 – 2026-10-23
+
+### Fixed
+- Queries of the router itself (1.27.2): a local target is no longer sent back to the router via rewrites, own CNAME
+  records, SafeSearch or split DNS either (the query could loop otherwise).
+
 ## 1.27.3 – 2026-10-23
 
 ### Fixed

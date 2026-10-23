@@ -214,14 +214,15 @@ func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg 
 	}
 
 	var resp *dns.Msg
+	fromRouter := s.Local != nil && s.Local.IsRouter(clientIP)
 	if s.Split != nil {
 		if rrs, ok := s.Split(name, q.Qtype, clientIP); ok {
 			entry.Status = querylog.StatusCustom
-			resp = s.custom(r, rrs)
+			resp = s.custom(r, rrs, fromRouter)
 		}
 	}
 	if resp == nil {
-		resp = s.resolve(r, name, &entry, pol, s.Local != nil && s.Local.IsRouter(clientIP))
+		resp = s.resolve(r, name, &entry, pol, fromRouter)
 	}
 	resp.Id = r.Id
 	entry.Rcode = dns.RcodeToString[resp.Rcode]
@@ -244,7 +245,7 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 	if s.Records != nil {
 		if rrs, ok := s.Records.Lookup(name, q.Qtype); ok {
 			e.Status = querylog.StatusCustom
-			return s.custom(r, rrs)
+			return s.custom(r, rrs, fromRouter)
 		}
 	}
 
@@ -259,13 +260,13 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 
 	if s.Rewrite != nil {
 		if target, ok := s.Rewrite(name); ok {
-			return s.rewrite(r, name, target, e, p)
+			return s.rewrite(r, name, target, e, p, fromRouter)
 		}
 	}
 	if s.Zone != nil {
 		if ans, ns, rcode, ok := s.Zone(name, q.Qtype); ok {
 			e.Status = querylog.StatusCustom
-			m := s.custom(r, ans)
+			m := s.custom(r, ans, fromRouter)
 			m.Ns, m.Rcode = ns, rcode
 			return m
 		}
@@ -338,7 +339,7 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 	if p != nil && p.SafeSearch { // Suchmaschinen und YouTube kinderfreundlich (auch bei Freigaben der Gruppe)
 		if target := safeTarget(name, p.YouTube); target != "" {
 			e.Status, e.Reason = querylog.StatusAllowed, ReasonSafeSearch+target
-			return s.custom(r, []dns.RR{&dns.CNAME{Hdr: dns.RR_Header{Name: dns.Fqdn(name), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300}, Target: dns.Fqdn(target)}})
+			return s.custom(r, []dns.RR{&dns.CNAME{Hdr: dns.RR_Header{Name: dns.Fqdn(name), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300}, Target: dns.Fqdn(target)}}, fromRouter)
 		}
 	}
 
@@ -453,8 +454,9 @@ func errorMsg(r *dns.Msg, rcode int) *dns.Msg {
 }
 
 // custom answers from own records. A CNAME is followed: to further own records, otherwise like any query
-// (blocklists, cache, upstream), so the client gets the addresses in one answer.
-func (s *Server) custom(r *dns.Msg, rrs []dns.RR) *dns.Msg {
+// (blocklists, cache, upstream), so the client gets the addresses in one answer. fromRouter: the query came from the
+// router itself (a local CNAME target is then not sent back to it, see resolve).
+func (s *Server) custom(r *dns.Msg, rrs []dns.RR, fromRouter bool) *dns.Msg {
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.RecursionAvailable = true
@@ -474,7 +476,7 @@ func (s *Server) custom(r *dns.Msg, rrs []dns.RR) *dns.Msg {
 		sub := new(dns.Msg)
 		sub.SetQuestion(dns.Fqdn(target), qtype)
 		sub.RecursionDesired = true
-		resp := s.resolve(sub, target, &querylog.Entry{}, nil, false) // Ziel eines eigenen CNAME: globale Regeln
+		resp := s.resolve(sub, target, &querylog.Entry{}, nil, fromRouter) // Ziel eines eigenen CNAME: globale Regeln
 		m.Answer = append(m.Answer, resp.Answer...)
 		m.Rcode = resp.Rcode
 		break

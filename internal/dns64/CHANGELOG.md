@@ -1,5 +1,11 @@
 # Änderungen – DNS64
 
+## 1.27.4 – 2026-10-23
+
+### Behoben
+- Anfragen des Routers selbst (1.27.2): Auch über Umschreiben, eigene CNAME-Einträge, SafeSearch und geteilten DNS
+  geht ein lokales Ziel nicht mehr an den Router zurück (sonst konnte die Anfrage kreisen).
+
 ## 1.27.3 – 2026-10-23
 
 ### Behoben
