@@ -4237,7 +4237,7 @@
       "about_text": "Nur lesend: cluster/resources im eingestellten Takt (ein Aufruf für alles), cluster/status jede Minute, qmpstatus laufender VMs alle 2 Minuten. Node64 startet, stoppt oder ändert in Proxmox nichts.",
       "probe_confirm_first": "Das Token wurde noch nicht gesendet: erst den Fingerabdruck vergleichen und bestätigen, dann erneut „Verbindung testen“."
     },
-    "warn_rights": "Dem Token fehlen Leserechte – VMs und Container fehlen deshalb.",
+    "warn_rights": "Dem Token fehlen Leserechte (Sys.Audit auf „/“) – Clustername, Quorum und Node-Zustand fehlen, ohne weitere Rechte auch VMs und Container.",
     "warn_rights_fix": "In Proxmox dem Token die Rolle PVEAuditor auf dem Pfad „/“ geben (Rechenzentrum › Berechtigungen › Hinzufügen › API-Token-Berechtigung, Weitergeben an), danach erscheinen die Gäste bei der nächsten Abfrage.",
     "kpi": {
       "systems": "Systeme",
@@ -4247,7 +4247,10 @@
       "of": "von {count}",
       "bad": "Gäste gestört",
       "load": "Auslastung aller Nodes"
-    }
+    },
+    "cluster_unknown": "Cluster – Quorum unbekannt",
+    "cluster_unknown_hint": "Mehrere Nodes, aber Clustername und Quorum fehlen: dem Token fehlt das Recht Sys.Audit auf dem Pfad „/“ (cluster/status).",
+    "warn_rights_cmd": "Auf einem Proxmox-Node prüfen (zeigt die wirksamen Rechte des Tokens auf „/“; Sys.Audit muss dabei sein) und setzen:"
   },
   "mcp": {
     "title": "KI-Schnittstelle (MCP)",

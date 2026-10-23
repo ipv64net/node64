@@ -1097,3 +1097,21 @@ func TestPVEChannels(t *testing.T) {
 		t.Fatalf("api invalid channel: %d %s", code, body)
 	}
 }
+
+// Cluster ohne Recht auf cluster/status (403, Sys.Audit auf „/“ fehlt): mehrere Nodes gelten als Cluster mit unbekanntem
+// Quorum, nicht als Einzel-Node; Token-Teile fuer die pveum-Befehle.
+func TestPVEClusterUnknown(t *testing.T) {
+	sys := &proxmox.System{TokenID: "node64@pve!monitor"}
+	row := pveSysRow{Sys: sys, Nodes: 3, Snap: &proxmox.Snapshot{OK: true}}
+	if !row.ClusterUnknown() || row.TokenUser() != "node64@pve" || row.TokenName() != "monitor" {
+		t.Fatalf("cluster unknown: %v %q %q", row.ClusterUnknown(), row.TokenUser(), row.TokenName())
+	}
+	ok := true
+	row.Snap.Quorate, row.Snap.Cluster = &ok, "benny"
+	if row.ClusterUnknown() {
+		t.Fatal("cluster mit status gilt als unbekannt")
+	}
+	if (pveSysRow{Sys: sys, Nodes: 1, Snap: &proxmox.Snapshot{OK: true}}).ClusterUnknown() {
+		t.Fatal("einzel-node als cluster")
+	}
+}

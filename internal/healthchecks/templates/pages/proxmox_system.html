@@ -6,7 +6,7 @@
 		<h1 class="h4 mb-1"><i class="bi bi-hdd-rack text-primary me-1"></i> {{$d.Sys.Name}} <span class="badge {{$d.Class}}">{{.T (print "pve.sys_state." $d.State)}}</span>{{$.Doc "proxmox"}}</h1>
 		<div class="small text-body-secondary d-flex flex-wrap gap-2">
 			{{with $d.Snap}}{{if .Version}}<span class="badge text-bg-light">PVE {{.Version}}</span>{{end}}{{if .Cluster}}<span class="badge text-bg-light"><i class="bi bi-diagram-3"></i> {{.Cluster}}</span>{{end}}{{end}}
-			{{if eq $d.Quorum "ok"}}<span class="badge text-bg-success">{{.T "pve.quorum_ok"}}</span>{{else if eq $d.Quorum "lost"}}<span class="badge text-bg-danger">{{.T "pve.quorum_lost"}}</span>{{end}}
+			{{if eq $d.Quorum "ok"}}<span class="badge text-bg-success">{{.T "pve.quorum_ok"}}</span>{{else if eq $d.Quorum "lost"}}<span class="badge text-bg-danger">{{.T "pve.quorum_lost"}}</span>{{else if $d.ClusterUnknown}}<span class="badge text-bg-secondary" title="{{.T "pve.cluster_unknown_hint"}}"><i class="bi bi-diagram-3"></i> {{.T "pve.cluster_unknown"}}</span>{{end}}
 			{{with $d.Snap}}{{if .Address}}<code>{{.Address}}</code>{{end}} <span>{{$.T "pve.last_poll"}}: {{$.Ago .Time}}</span>{{end}}
 			<span>{{.T "pve.interval"}}: {{$d.Sys.Interval}} s</span>
 			{{if $d.Sys.PinSHA256}}<span title="{{$d.PinFmt}}"><i class="bi bi-pin-angle"></i> {{.T "pve.pinned"}}</span>{{end}}
@@ -25,7 +25,11 @@
 {{else if eq $d.State "error"}}<div class="alert alert-danger small"><i class="bi bi-key"></i> <strong>{{.T "pve.sys_state.error"}}:</strong> {{$d.Error}} <a href="{{$d.Path}}/edit">{{.T "pve.edit"}}</a></div>
 {{else if eq $d.State "down"}}<div class="alert alert-danger small"><i class="bi bi-plug"></i> <strong>{{.T "pve.unreachable"}}:</strong> {{$d.Error}}</div>
 {{else if eq $d.State "pending"}}<div class="alert alert-info small"><i class="bi bi-hourglass-split"></i> {{.T "pve.pending"}}</div>{{end}}
-{{with $d.Snap}}{{if .Warning}}<div class="alert alert-warning small"><i class="bi bi-shield-exclamation"></i> <strong>{{$.T "pve.warn_rights"}}</strong> {{$.T "pve.warn_rights_fix"}}<div class="font-monospace text-break mt-1">{{.Warning}}</div></div>{{end}}{{end}}
+{{with $d.Snap}}{{if .Warning}}<div class="alert alert-warning small" id="pve-rights"><i class="bi bi-shield-exclamation"></i> <strong>{{$.T "pve.warn_rights"}}</strong> {{$.T "pve.warn_rights_fix"}}<div class="font-monospace text-break mt-1">{{.Warning}}</div>
+	{{if $d.TokenName}}<div class="mt-2">{{$.T "pve.warn_rights_cmd"}}</div>
+	<pre class="p-2 rounded bg-body-tertiary mt-1 mb-0" style="white-space:pre-wrap;word-break:break-all"><code id="pve-rights-cmd">pveum user token permissions {{$d.TokenUser}} {{$d.TokenName}} --path /
+pveum acl modify / --tokens '{{$d.Sys.TokenID}}' --roles PVEAuditor</code></pre>
+	<button class="btn btn-outline-secondary btn-sm mt-1" type="button" data-copy-target="#pve-rights-cmd"><i class="bi bi-clipboard"></i> {{$.T "common.copy"}}</button>{{end}}</div>{{end}}{{end}}
 
 {{if $d.NodeRows}}
 <div class="card mb-3">

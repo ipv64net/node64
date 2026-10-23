@@ -4237,7 +4237,7 @@
       "about_text": "Read-only: cluster/resources at the set interval (one call for everything), cluster/status every minute, qmpstatus of running VMs every 2 minutes. Node64 never starts, stops or changes anything in Proxmox.",
       "probe_confirm_first": "The token has not been sent yet: compare and confirm the fingerprint first, then click “Test connection” again."
     },
-    "warn_rights": "The token lacks read permissions – VMs and containers are missing.",
+    "warn_rights": "The token lacks read rights (Sys.Audit on “/”) – cluster name, quorum and node state are missing, without further rights also VMs and containers.",
     "warn_rights_fix": "In Proxmox give the token the role PVEAuditor on path “/” (Datacenter › Permissions › Add › API Token Permission, Propagate); the guests appear with the next poll.",
     "kpi": {
       "systems": "Systems",
@@ -4247,7 +4247,10 @@
       "of": "of {count}",
       "bad": "Guests with problems",
       "load": "Load of all nodes"
-    }
+    },
+    "cluster_unknown": "Cluster – quorum unknown",
+    "cluster_unknown_hint": "Several nodes, but cluster name and quorum are missing: the token lacks Sys.Audit on the path “/” (cluster/status).",
+    "warn_rights_cmd": "Check on a Proxmox node (shows the token's effective rights on “/”; Sys.Audit must be included) and set:"
   },
   "mcp": {
     "title": "AI interface (MCP)",

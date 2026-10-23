@@ -80,6 +80,16 @@ func (r pveSysRow) Quorum() string {
 	return "lost"
 }
 
+// ClusterUnknown: mehrere Nodes, aber Clustername und Quorum unbekannt (cluster/status ohne Recht Sys.Audit auf „/“).
+func (r pveSysRow) ClusterUnknown() bool {
+	return r.Nodes > 1 && r.Quorum() == "" && (r.Snap == nil || r.Snap.Cluster == "")
+}
+
+// TokenUser und TokenName: Teile der Token-ID (user@realm!name) fuer die pveum-Befehle im Rechte-Hinweis.
+func (r pveSysRow) TokenUser() string { u, _, _ := strings.Cut(r.Sys.TokenID, "!"); return u }
+
+func (r pveSysRow) TokenName() string { _, n, _ := strings.Cut(r.Sys.TokenID, "!"); return n }
+
 // PinFmt zeigt den gepinnten Fingerabdruck mit Doppelpunkten.
 func (r pveSysRow) PinFmt() string { return pveFingerprint(r.Sys.PinSHA256) }
 

@@ -3,6 +3,9 @@
 ## 2.24.2 – 2026-10-23
 
 ### Fixed
+- Proxmox VE: a cluster whose token may not read `cluster/status` (Sys.Audit on “/” missing) shows as “Cluster –
+  quorum unknown” instead of “single node”; the hint names the missing right exactly and shows the pveum commands to
+  check and set it with the token ID.
 - Notifications name the reason as text in the language of the channel (“Reason: Timeout”) instead of an internal
   code (“timeout”).
 - Notifications of a Docker host are now called “Docker: … down” instead of “Proxmox: …” (an unreachable
