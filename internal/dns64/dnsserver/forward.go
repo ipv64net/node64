@@ -69,7 +69,7 @@ func (s *Server) rewrite(r *dns.Msg, name, target string, e *querylog.Entry, p *
 	sub.SetQuestion(dns.Fqdn(target), q.Qtype)
 	sub.RecursionDesired = true
 	var te querylog.Entry
-	resp := s.resolve(sub, target, &te, p)
+	resp := s.resolve(sub, target, &te, p, false)
 	e.Reason, e.Upstream = ReasonRewrite+target, te.Upstream
 	if te.Status == querylog.StatusBlocked {
 		e.Status = querylog.StatusBlocked

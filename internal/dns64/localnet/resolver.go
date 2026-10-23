@@ -5,6 +5,7 @@ package localnet
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
 	"io"
@@ -34,6 +35,33 @@ type Resolver struct {
 
 	namesMu sync.Mutex
 	names   map[string]nameEntry
+
+	probes sync.Map // Pruefnamen der Router-Suche, die beim eigenen DNS-Dienst ankamen (= der Kandidat sind wir selbst)
+}
+
+// probeSuffix: Pruefname der Router-Suche. Kommt er beim eigenen DNS-Dienst an, ist der Kandidat diese Node selbst
+// (z. B. Docker-Bridge: das Gateway leitet den veroeffentlichten Port 53 zurueck in den Container).
+const probeSuffix = ".node64-probe.invalid."
+
+// SelfProbe meldet, ob q eine Pruefanfrage der Router-Suche ist (der eigene DNS-Dienst ruft das je Anfrage auf und
+// antwortet dann sofort, ohne Protokoll).
+func (r *Resolver) SelfProbe(q string) bool {
+	if !strings.HasSuffix(strings.ToLower(q), probeSuffix) {
+		return false
+	}
+	r.probes.Store(strings.ToLower(q), true)
+	return true
+}
+
+// IsRouter: ip ist der DNS-Server des Routers (Anfragen von dort nicht wieder an ihn weiterleiten).
+func (r *Resolver) IsRouter(ip netip.Addr) bool {
+	host, _, err := net.SplitHostPort(r.Addr())
+	if err != nil || !ip.IsValid() {
+		return false
+	}
+	a, err := netip.ParseAddr(host)
+	// Loopback-Router (LOCAL_DNS=127.0.0.1:5353, z. B. dnsmasq auf dem Host) nicht: von dort fragt auch der Host selbst
+	return err == nil && !a.IsLoopback() && a.WithZone("") == ip.Unmap().WithZone("")
 }
 
 type nameEntry struct {
@@ -72,10 +100,16 @@ func (r *Resolver) detect(ctx context.Context) {
 	gws := gateways()
 	found := ""
 	for _, gw := range gws {
-		if addr := net.JoinHostPort(gw, "53"); probe(ctx, addr) {
-			found = addr
-			break
+		addr := net.JoinHostPort(gw, "53")
+		if !probe(ctx, addr) {
+			continue
 		}
+		if r.isSelf(ctx, addr) {
+			r.log.Info("router DNS candidate is this node itself, ignored", "addr", addr)
+			continue
+		}
+		found = addr
+		break
 	}
 	r.mu.Lock()
 	changed := found != r.addr
@@ -194,6 +228,19 @@ func (r *Resolver) lookup(ctx context.Context, ip string) (string, bool) {
 		}
 	}
 	return "", true
+}
+
+// isSelf schickt einen Pruefnamen an addr; kommt er beim eigenen DNS-Dienst an, ist addr diese Node selbst.
+func (r *Resolver) isSelf(ctx context.Context, addr string) bool {
+	var nonce [8]byte
+	_, _ = rand.Read(nonce[:])
+	name := hex.EncodeToString(nonce[:]) + probeSuffix
+	req := new(dns.Msg)
+	req.SetQuestion(name, dns.TypeTXT)
+	c := &dns.Client{Net: "udp", Timeout: time.Second}
+	_, _, _ = c.ExchangeContext(ctx, req, addr)
+	_, seen := r.probes.LoadAndDelete(name)
+	return seen
 }
 
 func probe(ctx context.Context, addr string) bool {

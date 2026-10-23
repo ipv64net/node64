@@ -188,6 +188,9 @@ func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg 
 	}
 
 	q := r.Question[0]
+	if s.Local != nil && s.Local.SelfProbe(q.Name) { // Router-Suche dieser Node landet bei ihr selbst
+		return errorMsg(r, dns.RcodeNameError)
+	}
 	name := strings.TrimSuffix(strings.ToLower(q.Name), ".")
 	client := clientIP.String()
 	if s.Anonymize != nil {
@@ -218,7 +221,7 @@ func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg 
 		}
 	}
 	if resp == nil {
-		resp = s.resolve(r, name, &entry, pol)
+		resp = s.resolve(r, name, &entry, pol, s.Local != nil && s.Local.IsRouter(clientIP))
 	}
 	resp.Id = r.Id
 	entry.Rcode = dns.RcodeToString[resp.Rcode]
@@ -233,7 +236,9 @@ func (s *Server) Allowed(ip netip.Addr) bool { return s.acl.allowed(ip) }
 // Refused: queries from outside the allowed networks since start.
 func (s *Server) Refused() Refused { return s.acl.stats() }
 
-func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy) *dns.Msg {
+// resolve beantwortet eine Anfrage; fromRouter: sie kommt vom Router selbst (lokale Namen dann nicht zurueck an ihn,
+// sonst kreisen sie, z. B. Router mit Node64 als Upstream oder Docker-Bridge mit veroeffentlichtem Port 53).
+func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, fromRouter bool) *dns.Msg {
 	q := r.Question[0]
 
 	if s.Records != nil {
@@ -275,7 +280,7 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy) 
 			return s.forward(r, fwd, e, querylog.StatusLocal)
 		}
 		e.Status = querylog.StatusLocal
-		if s.Local.Addr() != "" {
+		if s.Local.Addr() != "" && !fromRouter {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 			if resp, err := s.Local.Exchange(ctx, r); err == nil {
@@ -469,7 +474,7 @@ func (s *Server) custom(r *dns.Msg, rrs []dns.RR) *dns.Msg {
 		sub := new(dns.Msg)
 		sub.SetQuestion(dns.Fqdn(target), qtype)
 		sub.RecursionDesired = true
-		resp := s.resolve(sub, target, &querylog.Entry{}, nil) // Ziel eines eigenen CNAME: globale Regeln
+		resp := s.resolve(sub, target, &querylog.Entry{}, nil, false) // Ziel eines eigenen CNAME: globale Regeln
 		m.Answer = append(m.Answer, resp.Answer...)
 		m.Rcode = resp.Rcode
 		break

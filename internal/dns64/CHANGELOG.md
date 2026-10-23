@@ -1,5 +1,15 @@
 # Änderungen – DNS64
 
+## 1.27.2 – 2026-10-23
+
+### Behoben
+- Docker im Bridge-Netz mit veröffentlichtem Port 53: Die Router-Suche fand das Docker-Gateway (z. B. 172.17.0.1),
+  das die Anfrage aber zurück in den Container leitete – lokale Namen und die Rückwärtssuche der Client-Namen (PTR)
+  liefen dadurch endlos im Kreis (Millionen PTR-Anfragen von 172.17.0.1, volle CPU, langsames Dashboard). Die Suche
+  erkennt jetzt mit einem Prüfnamen, wenn der Kandidat die Node selbst ist, und nimmt ihn nicht.
+- Allgemeiner Schleifenschutz: Anfragen, die vom Router selbst kommen (z. B. Router mit Node64 als Upstream), gehen
+  für lokale Namen nicht wieder an den Router zurück.
+
 ## 1.27.1 – 2026-10-22
 
 ### Behoben

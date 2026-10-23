@@ -1,5 +1,15 @@
 # Changes – DNS64
 
+## 1.27.2 – 2026-10-23
+
+### Fixed
+- Docker bridge network with published port 53: the router search found the Docker gateway (e.g. 172.17.0.1), which
+  sent the query back into the container – local names and the reverse lookup of client names (PTR) looped endlessly
+  (millions of PTR queries from 172.17.0.1, full CPU, slow dashboard). The search now detects with a probe name when
+  the candidate is the node itself and skips it.
+- General loop protection: queries coming from the router itself (e.g. router with Node64 as upstream) are not sent
+  back to the router for local names.
+
 ## 1.27.1 – 2026-10-22
 
 ### Fixed
