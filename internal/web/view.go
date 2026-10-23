@@ -290,7 +290,8 @@ func (s *Server) nav(r *http.Request) []NavItem {
 	items := []NavItem{{Key: "nav.dashboard", Path: "/", Icon: "bi-speedometer2", Available: true, Enabled: true}}
 	link := NavItem{Key: "nav.link", Path: "/link", Icon: "bi-cloud", Available: true, Enabled: true, Sub: true}
 	for _, m := range s.Modules.List(r.Context()) {
-		items = append(items, NavItem{Key: m.Info.TitleKey, Path: m.Info.Path, Icon: m.Info.Icon, Image: m.Info.Image, Available: m.Info.Available, Enabled: m.Running,
+		// in der Navigation nur Symbole (auch eingeklappt); die Logos der Module stehen auf ihren Seiten
+		items = append(items, NavItem{Key: m.Info.TitleKey, Path: m.Info.Path, Icon: m.Info.Icon, Available: m.Info.Available, Enabled: m.Running,
 			Hidden: m.Info.Available && !m.Enabled})
 		if m.Info.Path == "/healthchecks" && m.Enabled { // Healthchecks-Sync gehoert zu den Healthchecks (ohne sie kein Menuepunkt)
 			items = append(items, NavItem{Key: "nav.status_pages", Path: "/healthchecks/status-pages", Icon: "bi-broadcast", Available: true, Enabled: m.Running, Sub: true},
