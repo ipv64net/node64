@@ -22,9 +22,7 @@ func TestMetrics(t *testing.T) {
 	if s := out(); !strings.Contains(s, "node64_dns64_up 0") || strings.Contains(s, "queries_total") {
 		t.Fatalf("stopped:\n%s", s)
 	}
-	if err := m.Start(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	port = startUp(t, m, port)
 	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 	for i := 0; i < 2; i++ {
 		if _, err := query(addr, "nas"); err != nil {
@@ -43,4 +41,25 @@ func TestMetrics(t *testing.T) {
 			t.Errorf("missing %q in\n%s", want, s)
 		}
 	}
+}
+
+// startUp startet den DNS-Dienst und stellt sicher, dass er wirklich lauscht: Start meldet einen belegten Port nicht
+// als Fehler (Neuversuch jede Minute), und bei "go test ./..." kann ein anderes Paket den eben freien Port belegt
+// haben - dann ginge die Testanfrage an dessen Server. Liefert den Port, auf dem DNS64 laeuft.
+func startUp(t *testing.T, m *Module, port int) int {
+	t.Helper()
+	ctx := context.Background()
+	for i := 0; i < 5; i++ {
+		if err := m.Start(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if m.running() != nil {
+			return port
+		}
+		_ = m.Stop(ctx)
+		port = freePort(t)
+		_ = m.core.SetSetting(ctx, setPort, strconv.Itoa(port))
+	}
+	t.Fatalf("dns64 not started: %s", m.startError())
+	return 0
 }
