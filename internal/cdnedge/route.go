@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -144,13 +145,17 @@ func (s *Server) acceptLoop(ln net.Listener, handle func(c net.Conn)) {
 // handle443: SNI lesen, roh in den Tunnel.
 func (s *Server) handle443(c net.Conn) {
 	_ = c.SetReadDeadline(time.Now().Add(10 * time.Second))
-	sni, data, ok := edge.PeekSNI(c)
+	sni, alpn, data, ok := edge.PeekHello(c)
 	_ = c.SetReadDeadline(time.Time{})
 	if !ok || sni == "" {
 		_ = c.Close()
 		return
 	}
-	if s.tun != nil && s.isPublicName(sni) { // G1: Tunnel der Node ueber Port 443
+	if s.tun != nil && s.isPublicName(sni) { // G1: Tunnel der Node ueber Port 443; ein Browser bekommt die Infoseite
+		if s.own != nil && !slices.Contains(alpn, tunnel.ALPN) {
+			s.own.push(&prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)})
+			return
+		}
 		s.tun.ServeTCPConn(&prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)})
 		return
 	}

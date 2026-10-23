@@ -3,13 +3,17 @@ package cdnedge
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"crypto/tls"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestErrorPage(t *testing.T) {
@@ -125,5 +129,54 @@ func TestRawPage(t *testing.T) {
 	rawPage(&b, []byte("HEAD / HTTP/1.1\r\n\r\n"), http.StatusServiceUnavailable, "x", "a", "b")
 	if strings.Contains(b.String(), "<html") || !strings.HasPrefix(b.String(), "HTTP/1.1 503 Service Unavailable\r\n") {
 		t.Fatalf("head raw: %s", b.String())
+	}
+}
+
+// Aufruf des Servers selbst: Infoseite auf Port 80 (jeder Name ohne Kunde) und per HTTPS auf dem eigenen Namen
+// (Browser ohne Tunnel-ALPN); der Tunnel ueber 443 bleibt (TestTunnelOn443).
+func TestInfoPage(t *testing.T) {
+	cf, kf, pool, _ := testCA(t, "edge.test")
+	cfg := &Config{Name: "B", PublicHost: "edge.test", ListenHTTP: freeAddr(t), ListenHTTPS: freeAddr(t), TunnelListen: freeAddr(t),
+		TLSCert: cf, TLSKey: kf, DataDir: t.TempDir()}
+	startEdge(t, cfg, pool)
+	get := func(c *http.Client, u, host string) (int, string) {
+		req, _ := http.NewRequest(http.MethodGet, u, nil)
+		req.Host = host
+		req.Header.Set("Accept-Language", "de")
+		resp, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+	for _, host := range []string{"edge.test", "127.0.0.1", "unknown.example"} {
+		code, body := get(http.DefaultClient, "http://"+cfg.ListenHTTP+"/", host)
+		if code != 200 || !strings.Contains(body, "Server des IPv64 CDN") || !strings.Contains(body, "https://node64.de") || !strings.Contains(body, "edge.test") {
+			t.Fatalf("http %s: %d %s", host, code, body)
+		}
+	}
+	if code, body := get(http.DefaultClient, "http://"+cfg.ListenHTTP+"/wp-login.php", "edge.test"); code != 404 || !strings.Contains(body, "IPv64 CDN") {
+		t.Fatalf("404: %d %s", code, body)
+	}
+	if code, body := get(http.DefaultClient, "http://"+cfg.ListenHTTP+"/health", "edge.test"); code != 200 || !strings.Contains(body, `"status":"ok"`) {
+		t.Fatalf("health: %d %s", code, body)
+	}
+	tr := &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, ServerName: "edge.test"}, ForceAttemptHTTP2: true,
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, network, cfg.ListenHTTPS)
+		}}
+	defer tr.CloseIdleConnections()
+	for i := 0; i < 100; i++ { // Port 443 oeffnet nach dem Tunnel
+		if c, err := net.Dial("tcp", cfg.ListenHTTPS); err == nil {
+			c.Close()
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	code, body := get(&http.Client{Transport: tr, Timeout: 10 * time.Second}, "https://edge.test/", "edge.test")
+	if code != 200 || !strings.Contains(body, "Server des IPv64 CDN") {
+		t.Fatalf("https: %d %s", code, body)
 	}
 }

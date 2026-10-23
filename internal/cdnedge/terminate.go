@@ -220,6 +220,9 @@ func (s *Server) isPublicName(n string) bool {
 }
 
 func (s *Server) termClose(ctx context.Context) {
+	if s.ownSrv != nil {
+		_ = s.ownSrv.Close()
+	}
 	t := s.term
 	if t == nil {
 		return

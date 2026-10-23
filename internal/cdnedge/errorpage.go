@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -44,28 +45,88 @@ func pick(de bool, a, b string) string {
 	return b
 }
 
-// errorPageHTML baut die Seite (lang "de" oder "en").
+// pageSpec ist der Inhalt einer Seite (Fehler- bzw. Infoseite).
+type pageSpec struct {
+	code              int // Status gross ueber der Ueberschrift (0 = keiner)
+	title, text, note string
+	links             [][2]string // Beschriftung, Ziel
+	host              string
+}
+
+// errorPageHTML baut die Fehlerseite.
 func errorPageHTML(de bool, code int, host, text string) []byte {
+	return renderPage(de, pageSpec{code: code, title: pageTitle(code, de), text: text, host: host, links: [][2]string{{"ipv64.net", ipv64URL}},
+		note: pick(de, "Diese Adresse wird über das IPv64 CDN ausgeliefert. Danke für deine Geduld!",
+			"This address is delivered by the IPv64 CDN. Thank you for your patience!")})
+}
+
+// infoPageHTML: Seite fuer Aufrufe des Servers selbst (eigener Name, IP, unbekannter Name auf Port 80).
+func infoPageHTML(de bool, host string) []byte {
+	return renderPage(de, pageSpec{title: pick(de, "Server des IPv64 CDN", "IPv64 CDN server"), host: host,
+		text: pick(de, "Über diesen Server liefert das IPv64 CDN Webseiten und Dienste unserer Kunden aus. Hier selbst gibt es nichts zu sehen.",
+			"This server delivers websites and services of our customers through the IPv64 CDN. There is nothing to see here."),
+		note:  pick(de, "Schau dir gern unsere Dienste an:", "Have a look at our services:"),
+		links: [][2]string{{"ipv64.net", ipv64URL}, {"node64.de", "https://node64.de"}}})
+}
+
+// renderPage baut eine Seite (lang "de" oder "en").
+func renderPage(de bool, p pageSpec) []byte {
 	lang := pick(de, "de", "en")
-	title := pageTitle(code, de)
-	note := pick(de, "Diese Adresse wird über das IPv64 CDN ausgeliefert. Danke für deine Geduld!",
-		"This address is delivered by the IPv64 CDN. Thank you for your patience!")
+	docTitle, codeHTML := p.title, ""
+	if p.code > 0 {
+		docTitle = strconv.Itoa(p.code) + " · " + p.title
+		codeHTML = `<div class="code">` + strconv.Itoa(p.code) + `</div>`
+	}
+	var links strings.Builder
+	for i, l := range p.links {
+		if i > 0 {
+			links.WriteByte(' ')
+		}
+		fmt.Fprintf(&links, `<a class="btn" href="%s">%s</a>`, html.EscapeString(l[1]), html.EscapeString(l[0]))
+	}
 	var b bytes.Buffer
 	fmt.Fprintf(&b, `<!doctype html><html lang="%s"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
-<title>%d · %s</title><style>
+<title>%s</title><style>
 :root{color-scheme:light dark;--fg:#212529;--mut:#6c757d;--bg:#f4f5f7;--card:#fff;--line:#dee2e6;--brand:#f59c1a}
 @media(prefers-color-scheme:dark){:root{--fg:#e9ecef;--mut:#9aa0a6;--bg:#16181b;--card:#202327;--line:#30343a}}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 main{width:100%%;max-width:34rem;background:var(--card);border:1px solid var(--line);border-top:4px solid var(--brand);border-radius:.75rem;padding:2rem 1.5rem;text-align:center}
 .logo{height:44px;width:auto;margin-bottom:1.25rem}.logo .cls-1{fill:var(--brand)}.logo .cls-2{fill:currentColor}
 .code{font-size:3rem;font-weight:700;line-height:1;color:var(--brand)}h1{font-size:1.35rem;margin:.5rem 0 .75rem}p{margin:0 0 1rem}
-.mut{color:var(--mut);font-size:.9rem}a.btn{display:inline-block;padding:.5rem 1.2rem;border-radius:.5rem;background:var(--brand);color:#fff;text-decoration:none;font-weight:600}
+.mut{color:var(--mut);font-size:.9rem}a.btn{display:inline-block;margin:.2rem;padding:.5rem 1.2rem;border-radius:.5rem;background:var(--brand);color:#fff;text-decoration:none;font-weight:600}
 footer{margin-top:1.5rem;font-size:.75rem;color:var(--mut);overflow-wrap:anywhere}
-</style></head><body><main>%s<div class="code">%d</div><h1>%s</h1><p>%s</p><p class="mut">%s</p><a class="btn" href="%s">ipv64.net</a>
+</style></head><body><main>%s%s<h1>%s</h1><p>%s</p><p class="mut">%s</p>%s
 <footer>%s · IPv64 CDN · %s</footer></main></body></html>`,
-		lang, code, html.EscapeString(title), errorLogo, code, html.EscapeString(title), html.EscapeString(text), html.EscapeString(note), ipv64URL,
-		html.EscapeString(host), time.Now().UTC().Format("2006-01-02 15:04:05 UTC"))
+		lang, html.EscapeString(docTitle), errorLogo, codeHTML, html.EscapeString(p.title), html.EscapeString(p.text), html.EscapeString(p.note), links.String(),
+		html.EscapeString(p.host), time.Now().UTC().Format("2006-01-02 15:04:05 UTC"))
 	return b.Bytes()
+}
+
+// infoPage: GET / auf Port 80 (unbekannter Name, eigener Name, IP) und HTTPS des eigenen Namens.
+func (s *Server) infoPage(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		termPage(w, r, http.StatusNotFound, s.pageHost(r), "Diese Seite gibt es hier nicht.", "This page does not exist here.")
+		return
+	}
+	isDE := prefersGerman(r.Header.Get("Accept-Language"))
+	body := infoPageHTML(isDE, s.pageHost(r))
+	setPageHeader(w.Header(), isDE, len(body))
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	if r.Method == http.MethodHead {
+		return
+	}
+	_, _ = w.Write(body)
+}
+
+// pageHost: angezeigter Name (der eigene, wenn der Aufruf ohne bekannten Namen kam).
+func (s *Server) pageHost(r *http.Request) string {
+	if h := hostOnly(r.Host); h != "" && net.ParseIP(h) == nil && s.isPublicName(h) {
+		return h
+	}
+	if s.cfg.PublicHost != "" {
+		return s.cfg.PublicHost
+	}
+	return s.cfg.Name
 }
 
 // termPage: Fehlerseite als Antwort des Servers selbst.

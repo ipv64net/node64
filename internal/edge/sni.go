@@ -21,6 +21,13 @@ const helloTimeout = 10 * time.Second
 
 // peekHello liest das ClientHello und liefert den Namen (SNI) und alle dabei gelesenen Bytes.
 func peekHello(conn net.Conn) (sni string, data []byte, ok bool) {
+	sni, _, data, ok = PeekHello(conn)
+	return sni, data, ok
+}
+
+// PeekHello wie PeekSNI, dazu die angebotenen Protokolle (ALPN), z. B. um den Tunnel einer Node von einem Browser zu
+// unterscheiden.
+func PeekHello(conn net.Conn) (sni string, alpn []string, data []byte, ok bool) {
 	var buf bytes.Buffer
 	var hello *tls.ClientHelloInfo
 	_ = tls.Server(readOnlyConn{r: io.TeeReader(conn, &buf), c: conn}, &tls.Config{
@@ -30,9 +37,9 @@ func peekHello(conn net.Conn) (sni string, data []byte, ok bool) {
 		},
 	}).Handshake()
 	if hello == nil {
-		return "", buf.Bytes(), false
+		return "", nil, buf.Bytes(), false
 	}
-	return hello.ServerName, buf.Bytes(), true
+	return hello.ServerName, hello.SupportedProtos, buf.Bytes(), true
 }
 
 // PeekSNI liest das TLS-ClientHello einer Verbindung, ohne zu antworten: Name (SNI) und die gelesenen Bytes, die

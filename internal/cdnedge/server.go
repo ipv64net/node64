@@ -10,6 +10,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
+	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -47,6 +49,8 @@ type Server struct {
 	stats      *stats                    // je Name
 	guard      *guard                    // grober Schutz
 	local      *chanListener             // Port 80 ohne bekannten Namen -> eigene Seite
+	own        *chanListener             // Port 443 des eigenen Namens ohne Tunnel-ALPN (Browser) -> Infoseite
+	ownSrv     *http.Server              // Infoseite fuer own
 	peerRoots  *x509.CertPool            // Tests: CA der Nachbarn (sonst System)
 	apiCfg     atomic.Pointer[apiConfig] // letzter Stand von ipv64
 	apist      *apiState
@@ -83,7 +87,7 @@ func New(cfg *Config, log *slog.Logger, version string) *Server {
 	s.bw.setCapacity(capMbit)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
-	mux.HandleFunc("/", notFound)
+	mux.HandleFunc("/", s.infoPage) // Infoseite (errorpage.go), andere Pfade 404 im selben Stil
 	var h http.Handler = mux
 	if cfg.TunnelListen != "" && cfg.TLSCert == "" {
 		s.acme = &autocert.Manager{Prompt: autocert.AcceptTOS, HostPolicy: autocert.HostWhitelist(cfg.PublicHost),
@@ -154,6 +158,14 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 	}
 	s.listenUDP443()
+	if s.cfg.ListenHTTPS != "" && s.tlsConf != nil { // Browser auf https://<eigener Name>: Infoseite
+		s.own = newChanListener(&net.TCPAddr{})
+		s.ownSrv = &http.Server{Handler: http.HandlerFunc(s.infoPage), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second,
+			MaxHeaderBytes: 16 << 10, ErrorLog: log.New(io.Discard, "", 0),
+			TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: s.tlsConf.GetCertificate, Certificates: s.tlsConf.Certificates,
+				NextProtos: []string{"h2", "http/1.1"}}}
+		go func() { _ = s.ownSrv.ServeTLS(s.own, "", "") }()
+	}
 	if s.cfg.ListenHTTPS != "" {
 		l, err := net.Listen("tcp", s.cfg.ListenHTTPS)
 		if err != nil {
@@ -525,11 +537,4 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 func local(r *http.Request) bool {
 	ap, err := netip.ParseAddrPort(r.RemoteAddr)
 	return err == nil && ap.Addr().Unmap().IsLoopback()
-}
-
-// notFound: neutrale Antwort ohne Hinweis auf den Dienst.
-func notFound(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusNotFound)
-	_, _ = w.Write([]byte("404 not found\n"))
 }
