@@ -88,6 +88,7 @@
     "soon": "coming soon",
     "disabled": "disabled",
     "menu": "Menu",
+    "toggle": "Collapse/expand menu",
     "theme": "Color scheme",
     "theme_light": "Light",
     "theme_dark": "Dark",

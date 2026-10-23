@@ -42,6 +42,19 @@
 		});
 	});
 
+	// Menue-Knopf: ab lg Seitenleiste ein-/ausklappen (Cookie node64_nav), darunter das ausfahrende Menue
+	var navToggle = document.getElementById("navToggle");
+	if (navToggle) {
+		navToggle.addEventListener("click", function () {
+			if (window.matchMedia("(min-width: 992px)").matches) {
+				var mini = root.classList.toggle("nav-mini");
+				setCookie("node64_nav", mini ? "mini" : "");
+			} else if (window.bootstrap) {
+				window.bootstrap.Offcanvas.getOrCreateInstance(document.getElementById("sidenav")).toggle();
+			}
+		});
+	}
+
 	// In die Zwischenablage: <button data-copy-target="#id"> oder <button data-copy-text="...">
 	function copyText(text, btn) {
 		var done = function () {

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{.Lang}}"{{if .Theme}} data-bs-theme="{{.Theme}}"{{end}}{{if .FontSize}} data-fs="{{.FontSize}}"{{end}}>
+<html lang="{{.Lang}}"{{if .Theme}} data-bs-theme="{{.Theme}}"{{end}}{{if .FontSize}} data-fs="{{.FontSize}}"{{end}}{{if .NavMini}} class="nav-mini"{{end}}>
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,11 +12,13 @@
 <body>
 {{if .User}}
 <header class="navbar navbar-expand topbar border-bottom px-3">
-	<button class="btn btn-outline-secondary d-lg-none me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidenav" aria-label="{{.T "nav.menu"}}"><i class="bi bi-list"></i></button>
-	<a class="navbar-brand d-flex align-items-center" href="/">
-		<img src="/static/img/node64.svg?v={{.Version}}" alt="Node64" class="logo logo-light" height="28">
-		<img src="/static/img/node64_dark.svg?v={{.Version}}" alt="Node64" class="logo logo-dark" height="28">
-	</a>
+	<div class="topbar-start d-flex align-items-center">
+		<button class="btn btn-outline-secondary me-2" type="button" id="navToggle" aria-controls="sidenav" aria-label="{{.T "nav.toggle"}}" title="{{.T "nav.toggle"}}"><i class="bi bi-list"></i></button>
+		<a class="navbar-brand d-flex align-items-center" href="/">
+			<img src="/static/img/node64.svg?v={{.Version}}" alt="Node64" class="logo logo-light" height="28">
+			<img src="/static/img/node64_dark.svg?v={{.Version}}" alt="Node64" class="logo logo-dark" height="28">
+		</a>
+	</div>
 	<nav aria-label="breadcrumb" class="topbar-crumbs d-none d-md-block ms-3 border-start ps-3 min-w-0">
 		<ol class="breadcrumb mb-0">
 			{{range .Crumbs}}{{if .URL}}<li class="breadcrumb-item"><a href="{{.URL}}">{{.Label}}</a></li>{{else}}<li class="breadcrumb-item active" aria-current="page">{{.Label}}</li>{{end}}{{end}}
