@@ -182,7 +182,11 @@ func (s *Server) directInit() *httputil.ReverseProxy {
 	tr := &http.Transport{DialContext: s.directDial, DialTLSContext: s.directDialTLS, MaxIdleConnsPerHost: 32, IdleConnTimeout: 60 * time.Second,
 		MaxResponseHeaderBytes: 1 << 20, ExpectContinueTimeout: time.Second, ForceAttemptHTTP2: false}
 	return &httputil.ReverseProxy{Transport: tr, FlushInterval: -1, ErrorLog: log.New(io.Discard, "", 0), ErrorHandler: s.directError,
-		ModifyResponse: func(resp *http.Response) error { httpcompress.TrackBody(resp); return nil }, // Cache: nur ganz gelesene Antworten
+		ModifyResponse: func(resp *http.Response) error { // 5xx des Ziels: Fehlerseite fuer Browser; Cache: nur ganz gelesene Antworten
+			_ = originErrorPage(resp)
+			httpcompress.TrackBody(resp)
+			return nil
+		},
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			tq, _ := pr.In.Context().Value(termCtxKey{}).(*termReq)
 			scheme, gen := "http", "x"

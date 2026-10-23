@@ -5,8 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
-	"html"
 	"io"
 	"log"
 	"net"
@@ -67,6 +65,7 @@ func (s *Server) termInit() {
 	discard := log.New(io.Discard, "", 0)
 	tr := &http.Transport{DialContext: s.termDial, DisableKeepAlives: true, MaxResponseHeaderBytes: 1 << 20, ExpectContinueTimeout: time.Second}
 	t.proxy = &httputil.ReverseProxy{Transport: tr, FlushInterval: -1, ErrorLog: discard, ErrorHandler: s.termError,
+		ModifyResponse: originErrorPage, // 5xx der Node: Fehlerseite fuer Browser (errorpage.go)
 		Rewrite: func(pr *httputil.ProxyRequest) { // X-Forwarded-* und Forwarded entfernt Rewrite schon
 			pr.Out.URL.Scheme, pr.Out.URL.Host, pr.Out.Host = "http", pr.In.Host, pr.In.Host
 			pr.Out.Header.Del("X-Real-Ip")
@@ -351,22 +350,6 @@ func (s *Server) termError(w http.ResponseWriter, r *http.Request, err error) {
 func termRedirect(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "close")
 	http.Redirect(w, r, "https://"+hostOnly(r.Host)+r.URL.RequestURI(), http.StatusMovedPermanently)
-}
-
-// termPage: kleine Seite fuer Fehler (Deutsch und Englisch, ohne externe Quellen).
-func termPage(w http.ResponseWriter, r *http.Request, code int, host, de, en string) {
-	lang, text := "en", en
-	if prefersGerman(r.Header.Get("Accept-Language")) {
-		lang, text = "de", de
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Language", lang)
-	w.Header().Set("Vary", "Accept-Language")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(code)
-	_, _ = fmt.Fprintf(w, `<!doctype html><html lang="%s"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>%d</title><style>body{font-family:system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem;color:#222}@media(prefers-color-scheme:dark){body{background:#111;color:#ddd}}small{color:#888}</style></head>
-<body><h1>%d</h1><p>%s</p><p><small>%s · CDN64</small></p></body></html>`, lang, code, code, html.EscapeString(text), html.EscapeString(host))
 }
 
 // prefersGerman: steht Deutsch im Accept-Language vorn (hoechstes q, bei Gleichstand das erste)? Sonst Englisch.

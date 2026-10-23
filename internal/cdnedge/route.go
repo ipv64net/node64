@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/http"
 	"net/netip"
 	"strings"
 	"sync"
@@ -236,11 +237,11 @@ func (s *Server) forward(c net.Conn, kind, host string, port int, data []byte, c
 		return
 	}
 	if re.Blocked != "" {
-		blockedReply(c, kind)
+		blockedReply(c, kind, host, data)
 		return
 	}
 	if ap, err := netip.ParseAddrPort(client); err == nil && !re.ACL.allows(ap.Addr()) { // Liste (Modus 1: nur nach IP)
-		blockedReply(c, kind)
+		blockedReply(c, kind, host, data)
 		return
 	}
 	st := s.stats.of(re.Name)
@@ -250,6 +251,9 @@ func (s *Server) forward(c net.Conn, kind, host string, port int, data []byte, c
 			return
 		}
 		st.NoTunnel.Add(1)
+		if !fromPeer {
+			unreachableReply(c, kind, host, data)
+		}
 		_ = c.Close()
 		return
 	}
@@ -258,6 +262,9 @@ func (s *Server) forward(c net.Conn, kind, host string, port int, data []byte, c
 	cancel()
 	if err != nil {
 		st.NoTunnel.Add(1)
+		if !fromPeer {
+			unreachableReply(c, kind, host, data)
+		}
 		_ = c.Close()
 		return
 	}
@@ -303,13 +310,23 @@ func (m *meter) CloseWrite() error {
 	return m.Conn.Close()
 }
 
-// blockedReply: gesperrter Name (z. B. Traffic aufgebraucht) - Port 80 bekommt eine neutrale 503, 443 wird getrennt.
-func blockedReply(c net.Conn, kind string) {
+// blockedReply: gesperrter Name (z. B. Traffic aufgebraucht) bzw. nicht auf der Liste - Port 80 bekommt die
+// Fehlerseite (503), 443 wird getrennt.
+func blockedReply(c net.Conn, kind, host string, data []byte) {
 	if kind == tunnel.KindHTTP80 || kind == tunnel.KindHTTP {
 		_ = c.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		_, _ = io.WriteString(c, "HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 24\r\nConnection: close\r\n\r\n503 service unavailable\n")
+		rawPage(c, data, http.StatusServiceUnavailable, host, "Dieser Dienst ist vorübergehend nicht verfügbar.", "This service is temporarily unavailable.")
 	}
 	_ = c.Close()
+}
+
+// unreachableReply: Node nicht verbunden - Port 80 bekommt die Fehlerseite (502), 443 (TLS beim Kunden) nichts.
+func unreachableReply(c net.Conn, kind, host string, data []byte) {
+	if kind == tunnel.KindHTTP80 || kind == tunnel.KindHTTP {
+		_ = c.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		rawPage(c, data, http.StatusBadGateway, host, "Der Server hinter dieser Adresse ist gerade nicht erreichbar. Bitte später noch einmal versuchen.",
+			"The server behind this address is not reachable right now. Please try again later.")
+	}
 }
 
 // ---------------------------------------------------------------- Nachbarserver
