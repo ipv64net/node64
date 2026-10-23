@@ -127,3 +127,19 @@ func TestProxmoxQuietHoursRecovered(t *testing.T) {
 		t.Fatalf("recovered digest: %+v", m)
 	}
 }
+
+// Docker-Hosts laufen ueber dieselbe Ueberwachung, die Meldung heisst aber „Docker: …“ (nicht „Proxmox: …“).
+func TestDockerAlertSubject(t *testing.T) {
+	d, st, rec := testDispatcher(t, map[string]string{SetBaseURL: "https://node.example"})
+	addChannel(t, st, "default", true)
+	info := CheckInfo{Name: "10.10.0.7", Type: "docker", NotifyDown: true, NotifyUp: true, Local: true}
+	d.Dispatch(Alert{EventID: "d1", Kind: KindProxmoxDown, Check: info, Time: time.Now(), Reason: "unreachable",
+		Data: map[string]string{"what": "docker_unreachable", "name": "10.10.0.7", "system": "10.10.0.7", "source": "docker", "path": "/healthchecks/docker/system/3"}})
+	m := waitMsgs(t, rec, 1)[0]
+	if strings.Contains(m.Title, "Proxmox") || strings.Contains(m.Title, "proxmox_") || m.Priority != 5 || m.URL != "https://node.example/healthchecks/docker/system/3" {
+		t.Fatalf("docker message: %q prio %d url %s", m.Title, m.Priority, m.URL)
+	}
+	if !strings.Contains(m.Title, "Docker") && m.Title != "notify.subject.docker_down" {
+		t.Fatalf("title: %q", m.Title)
+	}
+}

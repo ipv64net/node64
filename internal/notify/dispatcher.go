@@ -891,11 +891,15 @@ func (d *Dispatcher) composeProxmox(lang string, a Alert, m Message) Message {
 	}
 	m.URL = d.baseURL(uid, proxmoxPath(data["path"]))
 	what := data["what"]
-	m.Title = t("notify.subject."+string(a.Kind), "name", a.Check.Name)
+	subject := "notify.subject." + string(a.Kind)
+	if data["source"] == "docker" { // Docker-Hosts laufen ueber dieselbe Ueberwachung, Betreff „Docker: …“
+		subject = "notify.subject.docker_" + strings.TrimPrefix(string(a.Kind), "proxmox_")
+	}
+	m.Title = t(subject, "name", a.Check.Name)
 	switch a.Kind {
 	case KindProxmoxDown:
 		m.Priority = 4
-		if what == "crashed" || what == "unreachable" {
+		if what == "crashed" || what == "unreachable" || what == "docker_unreachable" {
 			m.Priority = 5
 		}
 	case KindProxmoxThreshold:

@@ -424,8 +424,11 @@ func (m *Module) pveNotify(ctx context.Context, set *proxmox.SystemSettings, s *
 	docker := set.Kind == proxmox.KindDocker
 	data := map[string]string{"what": ev.What, "type": pveKeyType(ev.Key), "name": ev.Name, "system": set.Name, "detail": ev.Detail,
 		"path": pveKeyPath(set.Kind, set.SystemID, ev.Key)}
-	if docker && ev.Key == "" {
-		data["what"] = "docker_" + ev.What // Text „Docker-Host … nicht erreichbar“
+	if docker {
+		data["source"] = "docker" // Betreff „Docker: …“ statt „Proxmox: …“
+		if ev.Key == "" {
+			data["what"] = "docker_" + ev.What // Text „Docker-Host … nicht erreichbar“
+		}
 	}
 	if ev.Key == "" {
 		data["name"] = set.Name

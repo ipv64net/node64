@@ -2557,7 +2557,12 @@
       "proxmox_threshold_ok": "🟢 Proxmox: {name} below threshold again",
       "proxmox_restarted": "🔄 Proxmox: {name} restarted",
       "quiet_digest_events": "🌙 During quiet hours: {count} notifications, {down} still open",
-      "honeypot_login": "🚨 Honeypot64: attack on the login of {name}"
+      "honeypot_login": "🚨 Honeypot64: attack on the login of {name}",
+      "docker_down": "🔴 Docker: {name} has a problem",
+      "docker_up": "🟢 Docker: {name} is OK again",
+      "docker_threshold": "🟠 Docker: {name} above the threshold",
+      "docker_threshold_ok": "🟢 Docker: {name} below the threshold again",
+      "docker_restarted": "🔄 Docker: {name} restarted"
     },
     "body": {
       "quota_used": "Used: {used} of {limit} online checks today",

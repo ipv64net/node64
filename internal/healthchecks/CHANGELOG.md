@@ -1,5 +1,13 @@
 # Änderungen – Healthchecks
 
+## 2.24.2 – 2026-10-23
+
+### Behoben
+- Meldungen eines Docker-Hosts heißen jetzt „Docker: … gestört“ statt „Proxmox: … gestört“ (ein nicht erreichbarer
+  Docker-Host mit hoher Priorität wie bei Proxmox).
+- Docker-Formular: Die Einrichtung am Host ist für SSH eine Schritt-für-Schritt-Anleitung mit dem Knopf „Schlüssel
+  erzeugen“ und fertigen Befehlen zum Kopieren (Benutzer anlegen, Schlüssel samt Rechten eintragen, Host-Key vergleichen).
+
 ## 2.24.1 – 2026-10-23
 
 ### Behoben
