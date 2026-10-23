@@ -20,6 +20,9 @@
 				{{if $d.Server}}<div class="alert alert-info small py-2"><i class="bi bi-cloud"></i> {{.T "nf.server_channel_hint"}}</div>{{end}}
 				{{if eq (print $d.Type) "igotify"}}<div class="alert alert-info small py-2"><i class="bi bi-phone"></i> {{.T "nf.igotify_hint"}}{{.Doc "notifications#igotify"}}</div>{{end}}
 				{{if eq (print $d.Type) "homeassistant"}}<div class="alert alert-info small py-2"><i class="bi bi-house-gear"></i> {{.T "nf.ha_hint"}}{{.Doc "notifications#home-assistant"}}</div>{{end}}
+				{{if eq (print $d.Type) "slack"}}<div class="alert alert-info small py-2"><i class="bi bi-slack"></i> {{.T "nf.slack_hint"}}{{.Doc "notifications#slack"}}</div>{{end}}
+				{{if eq (print $d.Type) "teams"}}<div class="alert alert-info small py-2"><i class="bi bi-microsoft-teams"></i> {{.T "nf.teams_hint"}}{{.Doc "notifications#teams"}}</div>{{end}}
+				{{if eq (print $d.Type) "matrix"}}<div class="alert alert-info small py-2"><i class="bi bi-chat-square-dots"></i> {{.T "nf.matrix_hint"}}{{.Doc "notifications#matrix"}}</div>{{end}}
 				{{range $d.Fields}}
 				{{$key := print "cfg_" .Key}}
 				<div class="mb-3">
@@ -42,6 +45,8 @@
 					{{if eq .Key "body"}}<div class="form-text">{{$.T "nf.field.body_hint"}}</div>{{end}}
 					{{if and (eq (print $d.Type) "homeassistant") (eq .Key "url")}}<div class="form-text">{{$.T "nf.ha_url_hint"}}</div>{{end}}
 					{{if eq .Key "webhook_id"}}<div class="form-text">{{$.T "nf.field.webhook_id_hint"}}</div>{{end}}
+					{{if eq .Key "room"}}<div class="form-text">{{$.T "nf.field.room_hint"}}</div>{{end}}
+					{{if and (eq (print $d.Type) "matrix") (eq .Key "token")}}<div class="form-text">{{$.T "nf.field.matrix_token_hint"}}</div>{{end}}
 					{{end}}
 				</div>
 				{{end}}

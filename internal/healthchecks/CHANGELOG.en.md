@@ -1,5 +1,12 @@
 # Changes – Healthchecks
 
+## 2.27.0 – 2026-10-23
+
+### Added
+- Notifications to Slack (incoming webhook), Microsoft Teams (Workflows webhook with Adaptive Card; the old Office 365
+  connectors stopped working in May 2026) and Matrix (bot account with access token, room ID or alias) – locally on the
+  node and as server channel on ipv64.net. Colour like the status bar of the mails, “Details” link.
+
 ## 2.26.0 – 2026-10-23
 
 ### Added

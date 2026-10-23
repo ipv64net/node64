@@ -27,6 +27,9 @@ const (
 	TypeGotify   Type = "gotify"
 	TypeIGotify  Type = "igotify" // Gotify-Server mit iGotify-Assistent: Push aufs iPhone (gleicher Versand wie Gotify)
 	TypePushover Type = "pushover"
+	TypeSlack    Type = "slack"  // Incoming Webhook
+	TypeTeams    Type = "teams"  // Workflows-Webhook (die alten Office-365-Connectoren gibt es seit Mai 2026 nicht mehr)
+	TypeMatrix   Type = "matrix" // Client-Server-API: Homeserver, Zugriffstoken eines Bot-Kontos, Raum
 	// Home Assistant: Webhook-Ausloeser einer Automation (nur von der Node gesendet, HA steht im LAN)
 	TypeHomeAssistant Type = "homeassistant"
 	// Server-Typen: Versand ueber ipv64.net (im Node erst nach Verknuepfung)
@@ -36,7 +39,7 @@ const (
 )
 
 // Types in Anzeigereihenfolge.
-var Types = []Type{TypeBrowser, TypeSMTP, TypeTelegram, TypeDiscord, TypeNtfy, TypeGotify, TypeIGotify, TypePushover, TypeHomeAssistant, TypeWebhook}
+var Types = []Type{TypeBrowser, TypeSMTP, TypeTelegram, TypeDiscord, TypeSlack, TypeTeams, TypeMatrix, TypeNtfy, TypeGotify, TypeIGotify, TypePushover, TypeHomeAssistant, TypeWebhook}
 
 // Planned sind Kanaele, die ipv64.net nach der Verknuepfung bereitstellt:
 // Mail ohne eigenen SMTP-Server und SMS ueber das ipv64-Gateway. Sie werden
@@ -109,6 +112,13 @@ var Fields = map[Type][]Field{
 		{Key: "device"},
 		{Key: "priority_down", Kind: "select", Options: []string{"-2", "-1", "0", "1", "2"}, Default: "1"},
 		{Key: "priority_up", Kind: "select", Options: []string{"-2", "-1", "0", "1", "2"}, Default: "0"},
+	},
+	TypeSlack: {{Key: "webhook_url", Secret: true, Required: true, Kind: "password"}},
+	TypeTeams: {{Key: "webhook_url", Secret: true, Required: true, Kind: "password"}},
+	TypeMatrix: {
+		{Key: "server", Kind: "url", Default: "https://matrix.org", Required: true},
+		{Key: "token", Secret: true, Required: true, Kind: "password"},
+		{Key: "room", Required: true},
 	},
 	TypeBrowser:   {},
 	TypeIPv64Mail: {{Key: "email", Required: true}},
@@ -214,6 +224,19 @@ func (c *Channel) validate(keepSecrets bool) error {
 			if !strings.Contains(to, "@") {
 				return fmt.Errorf("to: %q is not an e-mail address", to)
 			}
+		}
+	}
+	if c.Type == TypeSlack || c.Type == TypeTeams || c.Type == TypeDiscord {
+		if v := c.Config["webhook_url"]; v != "" || !keepSecrets {
+			if u, err := url.Parse(v); err != nil || u.Scheme != "https" || u.Host == "" {
+				return errors.New("webhook_url must be an https URL")
+			}
+		}
+	}
+	if c.Type == TypeMatrix {
+		c.Config["server"] = strings.TrimRight(c.Config["server"], "/")
+		if !matrixRoom.MatchString(c.Config["room"]) {
+			return errors.New("room must be a room ID (!abc:example.org) or an alias (#room:example.org)")
 		}
 	}
 	if c.Type == TypeHomeAssistant {
