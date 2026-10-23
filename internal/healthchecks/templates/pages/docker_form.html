@@ -175,7 +175,7 @@ sudo usermod -aG docker {{$u}}</code></pre>
 						<div class="my-2"><button class="btn btn-primary btn-sm" type="submit" name="op" value="genkey" formnovalidate><i class="bi bi-key"></i> {{if or $d.PubKey $d.HasKey}}{{.T "docker.form.genkey_new"}}{{else}}{{.T "docker.form.genkey"}}{{end}}</button></div>
 						{{if $d.PubKey}}<div class="text-success"><i class="bi bi-check-circle"></i> {{.T "docker.howto.s2_done"}}</div>{{else}}<div class="text-body-secondary">{{.T "docker.howto.s2_hint"}}</div>{{end}}</li>
 					<li class="mb-3"><span class="fw-semibold">{{.T "docker.howto.s3"}}</span>
-						{{if $d.PubKey}}<pre class="p-2 rounded bg-body-tertiary my-1 text-wrap text-break"><code id="dk-cmd3">sudo mkdir -p /home/{{$u}}/.ssh
+						{{if $d.PubKey}}<pre class="p-2 rounded bg-body-tertiary my-1" style="white-space:pre-wrap;word-break:break-all"><code id="dk-cmd3">sudo mkdir -p /home/{{$u}}/.ssh
 echo 'restrict,command="docker system dial-stdio" {{$d.PubKey}}' | sudo tee -a /home/{{$u}}/.ssh/authorized_keys
 sudo chown -R {{$u}}:{{$u}} /home/{{$u}}/.ssh
 sudo chmod 700 /home/{{$u}}/.ssh
