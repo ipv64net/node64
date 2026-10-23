@@ -113,16 +113,19 @@
 				<div class="font-monospace text-break my-1 p-2 rounded bg-body-tertiary">{{$d.ProbeFmt}}</div>
 				{{if $d.PinDiffers}}<div class="alert alert-warning py-2 mb-2"><i class="bi bi-exclamation-triangle"></i> {{$.T "docker.form.pin_differs"}}</div>{{end}}
 				{{if .Trusted}}<div class="text-success mb-1"><i class="bi bi-patch-check"></i> {{$.T "pve.form.cert_trusted"}}</div><input type="hidden" name="probe_trusted" value="1">{{end}}
-				<input type="hidden" name="probe_pin" value="{{$d.ProbePin}}">
+				<input type="hidden" name="probe_pin" value="{{$d.ProbePin}}"><input type="hidden" name="pin_conn" value="{{$d.Conn}}">
 				{{if not .Trusted}}<div class="form-check"><input class="form-check-input{{if index $e "pin_sha256"}} is-invalid{{end}}" type="checkbox" id="dk-pin-confirm" name="pin_confirm"{{if $d.PinConfirm}} checked{{end}}><label class="form-check-label" for="dk-pin-confirm">{{if eq $d.Conn "ssh"}}{{$.T "docker.form.hostkey_confirm"}}{{else}}{{$.T "pve.form.pin_confirm"}}{{end}}</label></div>
 				<div class="form-text">{{if eq $d.Conn "ssh"}}{{$.T "docker.form.hostkey_hint"}}{{else}}{{$.T "pve.form.pin_hint"}}{{end}}</div>{{end}}
 				{{end}}
 			</div>
 		</div>
-		{{else}}{{if $d.ProbePin}}<input type="hidden" name="probe_pin" value="{{$d.ProbePin}}">
-		<div class="card mb-3 border-warning"><div class="card-body small">
+		{{else}}{{if $d.ProbePin}}<input type="hidden" name="probe_pin" value="{{$d.ProbePin}}"><input type="hidden" name="pin_conn" value="{{$d.Conn}}">
+		{{if $d.ProbeTrusted}}<input type="hidden" name="probe_trusted" value="1">{{end}}
+		<div class="card mb-3 {{if $d.ProbeTrusted}}border-success{{else}}border-warning{{end}}"><div class="card-body small">
+			<div class="mb-1 fw-semibold"><i class="bi bi-shield-lock"></i> {{if eq $d.Conn "ssh"}}{{.T "docker.form.hostkey"}}{{else}}{{.T "pve.form.cert"}}{{end}}</div>
 			<div class="font-monospace text-break mb-1">{{$d.ProbeFmt}}</div>
-			<div class="form-check"><input class="form-check-input{{if index $e "pin_sha256"}} is-invalid{{end}}" type="checkbox" id="dk-pin-confirm" name="pin_confirm"{{if $d.PinConfirm}} checked{{end}}><label class="form-check-label" for="dk-pin-confirm">{{.T "pve.form.pin_confirm"}}</label></div>
+			{{if $d.ProbeTrusted}}<div class="text-success"><i class="bi bi-patch-check"></i> {{.T "pve.form.cert_trusted"}}</div>
+			{{else}}<div class="form-check"><input class="form-check-input{{if index $e "pin_sha256"}} is-invalid{{end}}" type="checkbox" id="dk-pin-confirm" name="pin_confirm"{{if $d.PinConfirm}} checked{{end}}><label class="form-check-label" for="dk-pin-confirm">{{if eq $d.Conn "ssh"}}{{.T "docker.form.hostkey_confirm"}}{{else}}{{.T "pve.form.pin_confirm"}}{{end}}</label></div>{{end}}
 		</div></div>{{end}}{{end}}
 
 		<div class="card mb-3">
@@ -143,7 +146,7 @@
 				</div>
 				{{if or (eq $d.Conn "ssh") (eq $d.Conn "tls")}}
 				<div class="col-12">
-					<input type="hidden" name="pin_present" value="1">
+					<input type="hidden" name="pin_present" value="1"><input type="hidden" name="pin_conn" value="{{$d.Conn}}">
 					<label class="form-label" for="dk-pin">{{if eq $d.Conn "ssh"}}{{.T "docker.form.hostkey"}}{{else}}{{.T "pve.form.pin"}}{{end}}</label>
 					<input class="form-control font-monospace{{if index $e "pin_sha256"}} is-invalid{{end}}" id="dk-pin" name="pin_sha256" value="{{$d.PinFmt}}" placeholder="{{if eq $d.Conn "ssh"}}SHA256:…{{else}}{{.T "pve.form.pin_placeholder"}}{{end}}">
 					{{with index $e "pin_sha256"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}

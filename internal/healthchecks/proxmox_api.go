@@ -180,7 +180,9 @@ func (m *Module) apiDockerCreate(w http.ResponseWriter, r *http.Request) {
 		m.pveAPIErr(w, err)
 		return
 	}
-	_ = m.core.SetSetting(r.Context(), dockerSettingMonitor, "")
+	if dockerIsLocal(sys) {
+		_ = m.core.SetSetting(r.Context(), dockerSettingMonitor, "")
+	}
 	m.auditText(r, "proxmox.create", sys.Name)
 	writeJSON(w, http.StatusCreated, m.pveJSON(r.Context(), sys))
 }

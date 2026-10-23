@@ -4297,10 +4297,10 @@
     "setup_hint": "The Docker socket is reachable, but the host is not monitored yet.",
     "off_hint": "Docker monitoring was removed and is no longer set up automatically.",
     "setup": "Monitor Docker host",
-    "disabled_hint": "Docker monitoring is switched off: no polling, no notifications. Containers kept as checks keep checking themselves.",
+    "disabled_hint": "Docker monitoring is switched off: no polling, no notifications. Containers kept as checks keep checking themselves (with SSH or TLS with credentials they are paused, they need the connection of the monitoring).",
     "enable": "Switch monitoring on",
     "disable": "Switch monitoring off",
-    "disable_confirm": "Switch Docker monitoring off? Containers kept as checks keep running.",
+    "disable_confirm": "Switch Docker monitoring off? Containers kept as checks keep running (with SSH or TLS with credentials they are paused).",
     "live": "live values",
     "kpi": {
       "bad": "Problems",
@@ -4351,7 +4351,7 @@
     "host": {
       "add": "Add Docker host",
       "edit": "Edit Docker host",
-      "delete_confirm": "Delete Docker host “{name}” with settings, history and its checks?"
+      "delete_confirm": "Delete Docker host “{name}” with settings and history? Checks kept for an SSH or TLS host are deleted too, other Docker checks stay."
     },
     "conn": {
       "ssh": "SSH (recommended)",

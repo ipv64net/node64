@@ -1,5 +1,21 @@
 # Änderungen – Healthchecks
 
+## 2.24.1 – 2026-10-23
+
+### Behoben
+- Docker-Hosts aus der Ferne (Review): Container „als Check“ eines SSH-/TLS-Hosts werden pausiert, solange der Host
+  ausgeschaltet ist (keine Fehlalarme); eine neue Adresse nehmen seine Checks mit, eine andere Maschine beginnt ohne
+  Verlauf und „laufend gesehen“ der alten; Wechsel der Verbindungsart bzw. CA/Zertifikat entfernen behält keine alten
+  Zugangsdaten und keinen alten Fingerabdruck mehr; SSH-Host-Key: Ed25519 zuerst (wie `ssh-keygen -lf …ed25519_key.pub`),
+  Host-Zertifikate nach ihrem Schlüssel; der Rückfall auf `docker system dial-stdio` gilt nicht mehr für immer;
+  Bearbeiten lässt Adressen unverändert (Port, Pfad, http://); „Verbindung testen“ ohne Host prüft nicht mehr den
+  lokalen Socket; Löschen eines Hosts behält Docker-Checks, die selbst fragen (nur SSH/TLS-Checks gehen mit); Anlegen
+  eines Fern-Hosts per API holt den entfernten lokalen Host nicht zurück; ein geänderter `NODE64_DOCKER_HOST` legt
+  keinen zweiten lokalen Host an; Import: Eintrag ohne Adresse bricht nicht mehr ab, TLS-Host ohne Zugangsdaten kommt
+  abgeschaltet mit Hinweis; Host-Seiten zeigen nur ihre eigenen Checks, die Übersicht zählt wie die Host-Seite;
+  Docker-Checks auf den lokalen Socket nutzen ihre Verbindung wieder; Container-Vorschläge im Check-Formular auch
+  für SSH-/TLS-Hosts.
+
 ## 2.24.0 – 2026-10-22
 
 ### Neu

@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,12 +27,15 @@ import (
 
 // sshDocker ist ein SSH-Server, der direct-streamlocal zum Socket /var/run/docker.sock an eine Docker-API weiterreicht.
 func sshDocker(t *testing.T, api http.Handler, user string, allowed ssh.PublicKey) (addr string, hostKey ssh.PublicKey) {
-	return sshDockerMode(t, api, user, allowed, true, false)
+	on := new(atomic.Bool)
+	on.Store(true)
+	return sshDockerMode(t, api, user, allowed, on, false)
 }
 
 // sshDockerMode: stream = Socket-Weiterleitung erlaubt (sonst „open failed“ wie bei AllowTcpForwarding no), stdio =
 // docker-CLI vorhanden (exec „docker system dial-stdio“, sonst „not found“ mit Exit 127).
-func sshDockerMode(t *testing.T, api http.Handler, user string, allowed ssh.PublicKey, stream, stdio bool) (addr string, hostKey ssh.PublicKey) {
+// Der Server hat wie OpenSSH auch einen ECDSA-Host-Key; hostKey ist der Ed25519-Key (den der Client nehmen soll).
+func sshDockerMode(t *testing.T, api http.Handler, user string, allowed ssh.PublicKey, stream *atomic.Bool, stdio bool) (addr string, hostKey ssh.PublicKey) {
 	t.Helper()
 	backend := httptest.NewServer(api)
 	t.Cleanup(backend.Close)
@@ -47,6 +51,10 @@ func sshDockerMode(t *testing.T, api http.Handler, user string, allowed ssh.Publ
 		return nil, errors.New("denied")
 	}}
 	cfg.AddHostKey(signer)
+	ek, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if es, err := ssh.NewSignerFromKey(ek); err == nil {
+		cfg.AddHostKey(es)
+	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -79,7 +87,7 @@ func sshDockerMode(t *testing.T, api http.Handler, user string, allowed ssh.Publ
 						_ = nc.Reject(ssh.UnknownChannelType, "unsupported")
 						continue
 					}
-					if !stream {
+					if !stream.Load() {
 						_ = nc.Reject(ssh.ConnectionFailed, "open failed")
 						continue
 					}
@@ -147,7 +155,8 @@ func TestDockerSSHStdio(t *testing.T) {
 	key, _ := GenerateDockerSSHKey()
 	signer, _ := ssh.ParsePrivateKey([]byte(key))
 	ctx := context.Background()
-	addr, hostKey := sshDockerMode(t, f, "node64", signer.PublicKey(), false, true)
+	off := new(atomic.Bool)
+	addr, hostKey := sshDockerMode(t, f, "node64", signer.PublicKey(), off, true)
 	sys := System{Kind: KindDocker, Name: "stdio", Addresses: []string{"ssh://node64@" + addr}, Secret: DockerCreds{Key: key}.Encode(),
 		PinSHA256: SSHFingerprint(hostKey), Interval: 30}
 	if res := DockerProbe(ctx, sys); !res.OK || res.Containers != 1 || res.Info == nil || res.Info.Name != "dockerhost" {
@@ -161,11 +170,22 @@ func TestDockerSSHStdio(t *testing.T) {
 	}
 	p.close()
 	// weder Weiterleitung noch docker-CLI: verstaendlicher Fehler
-	addr, hostKey = sshDockerMode(t, f, "node64", signer.PublicKey(), false, false)
+	streamOK := new(atomic.Bool)
+	addr, hostKey = sshDockerMode(t, f, "node64", signer.PublicKey(), streamOK, false)
 	sys.Addresses, sys.PinSHA256 = []string{"ssh://node64@" + addr}, SSHFingerprint(hostKey)
 	if res := DockerProbe(ctx, sys); res.OK || !strings.Contains(res.Error, "not found") || !strings.Contains(res.Error, "docker CLI is missing") {
 		t.Fatalf("ohne docker-cli: %+v", res)
 	}
+	// dial-stdio gescheitert (keine CLI): sobald die Weiterleitung wieder geht (Socket war kurz weg), laeuft es wieder
+	p = NewDockerPoller(nil, sys, nil)
+	if s := p.Poll(ctx); s.OK {
+		t.Fatal("ohne weiterleitung und cli ok")
+	}
+	streamOK.Store(true)
+	if s := p.Poll(ctx); !s.OK || len(s.Resources) != 1 {
+		t.Fatalf("weiterleitung wieder da: %+v", s)
+	}
+	p.close()
 	if _, _, _, err := dockerSSHTarget("ssh://a@h/var/run/x';rm -rf /"); err == nil {
 		t.Fatal("socket-pfad mit Sonderzeichen")
 	}
@@ -340,6 +360,16 @@ func TestStoreDockerSecret(t *testing.T) {
 	}
 	if got, _ = s.System(ctx, sys.ID); ParseDockerCreds(got.Secret).Key != key || got.Name != "r2" {
 		t.Fatalf("behalten: %+v", got)
+	}
+	if err := s.SaveSystem(ctx, &System{ID: got.ID, Kind: KindDocker, Name: "r2", Addresses: []string{"ssh://a@h"}, PinSHA256: pin, Secret: DockerNoCreds}); err == nil {
+		t.Fatal("ssh ohne schluessel per DockerNoCreds gespeichert")
+	}
+	tlsSys := &System{ID: got.ID, Kind: KindDocker, Name: "r2", Addresses: []string{"https://h:2376"}, Secret: DockerNoCreds}
+	if err := s.SaveSystem(ctx, tlsSys); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = s.System(ctx, sys.ID); got.Secret != "" {
+		t.Fatal("DockerNoCreds hat das Secret nicht geloescht")
 	}
 	got.Addresses, got.Secret = []string{"tcp://h:2375"}, ""
 	if err := s.SaveSystem(ctx, got); err != nil {

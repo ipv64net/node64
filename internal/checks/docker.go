@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -62,6 +63,22 @@ func validDockerHost(h string) bool {
 // ok=false: dort nicht eingerichtet bzw. ausgeschaltet. Gesetzt von Healthchecks (Runner.Docker).
 type DockerRemote func(host string) (hc *http.Client, base string, ok bool)
 
+// unixTransports: ein Transport je Socket (sonst bliebe je Check-Lauf eine Keep-Alive-Verbindung offen, dockerd
+// schliesst Leerlauf nicht).
+var unixTransports sync.Map
+
+func unixTransport(sock string) *http.Transport {
+	if tr, ok := unixTransports.Load(sock); ok {
+		return tr.(*http.Transport)
+	}
+	tr := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "unix", sock)
+	}, MaxIdleConnsPerHost: 2, IdleConnTimeout: 90 * time.Second}
+	got, _ := unixTransports.LoadOrStore(sock, tr)
+	return got.(*http.Transport)
+}
+
 // dockerClient baut HTTP-Client und Basis-URL fuer einen Docker-Host.
 func dockerClient(host string, timeout time.Duration) (*http.Client, string, error) {
 	if host == "" {
@@ -69,12 +86,7 @@ func dockerClient(host string, timeout time.Duration) (*http.Client, string, err
 	}
 	switch {
 	case strings.HasPrefix(host, "unix://"):
-		sock := strings.TrimPrefix(host, "unix://")
-		tr := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", sock)
-		}}
-		return &http.Client{Transport: tr, Timeout: timeout}, "http://docker", nil
+		return &http.Client{Transport: unixTransport(strings.TrimPrefix(host, "unix://")), Timeout: timeout}, "http://docker", nil
 	case strings.HasPrefix(host, "tcp://"):
 		return &http.Client{Timeout: timeout}, "http://" + strings.TrimPrefix(host, "tcp://"), nil
 	case strings.HasPrefix(host, "http://"), strings.HasPrefix(host, "https://"):
@@ -264,6 +276,11 @@ type Container struct {
 
 // ListContainers liefert alle Container des Docker-Hosts (auch gestoppte).
 func ListContainers(ctx context.Context, host string) ([]Container, error) {
+	return ListContainersVia(ctx, nil, host)
+}
+
+// ListContainersVia wie ListContainers, fuer Hosts mit Zugangsdaten ueber die Verbindung der Docker-Ueberwachung.
+func ListContainersVia(ctx context.Context, remote DockerRemote, host string) ([]Container, error) {
 	var raw []struct {
 		ID      string   `json:"Id"`
 		Names   []string `json:"Names"`
@@ -277,7 +294,7 @@ func ListContainers(ctx context.Context, host string) ([]Container, error) {
 			Type        string `json:"Type"`
 		} `json:"Ports"`
 	}
-	if _, err := dockerGet(ctx, nil, host, "/containers/json?all=1", 5*time.Second, &raw); err != nil {
+	if _, err := dockerGet(ctx, remote, host, "/containers/json?all=1", 5*time.Second, &raw); err != nil {
 		return nil, errors.New(dockerHint(host, err))
 	}
 	out := make([]Container, 0, len(raw))

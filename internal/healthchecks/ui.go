@@ -977,7 +977,7 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 	d.DockerHost = checks.DefaultDockerHost()
 	cctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	var derr error
-	if d.Containers, derr = checks.ListContainers(cctx, d.Form["docker_host"]); derr != nil {
+	if d.Containers, derr = checks.ListContainersVia(cctx, m.dockerRemote, d.Form["docker_host"]); derr != nil {
 		d.DockerErr = derr.Error()
 	}
 	cancel()

@@ -77,6 +77,9 @@ func ParseDockerCreds(secret string) DockerCreds {
 // Empty sagt, ob keine Zugangsdaten gesetzt sind.
 func (c DockerCreds) Empty() bool { return c.Key == "" && c.Cert == "" && c.CA == "" }
 
+// DockerNoCreds als Secret loescht gespeicherte Zugangsdaten (ein leeres Secret heisst beim Aendern „behalten“).
+const DockerNoCreds = "{}"
+
 // Encode schreibt die Zugangsdaten als Secret ("" ohne Zugangsdaten).
 func (c DockerCreds) Encode() string {
 	if c.Empty() {
@@ -297,11 +300,19 @@ func dockerConnectTLS(host, pin string, creds DockerCreds, seen func(string, boo
 	return &dockerConn{hc: hc, base: strings.TrimRight(host, "/"), close: tr.CloseIdleConnections}, nil
 }
 
+// dockerHostKeyAlgos: Ed25519 zuerst (wie der Hinweis im Formular: ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub),
+// ohne Zertifikats-Algorithmen (der Pin ist der Schluessel des Hosts).
+var dockerHostKeyAlgos = []string{ssh.KeyAlgoED25519, ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521,
+	ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}
+
+// dockerStdioFor: so lange nach einer verweigerten Socket-Weiterleitung gleich dial-stdio, danach wieder versuchen.
+const dockerStdioFor = 10 * time.Minute
+
 // dockerSSH haelt die SSH-Verbindung eines Hosts (bei Abbruch neu).
 type dockerSSH struct {
 	addr, sock string
 	cfg        *ssh.ClientConfig
-	stdio      atomic.Bool // Socket-Weiterleitung verweigert: docker system dial-stdio
+	stdioUntil atomic.Int64 // Unix-Zeit: bis dahin docker system dial-stdio (Socket-Weiterleitung verweigert)
 	mu         sync.Mutex
 	c          *ssh.Client
 	closed     bool
@@ -320,7 +331,11 @@ func dockerConnectSSH(host, pin string, creds DockerCreds, seen func(string, boo
 		return nil, errors.New("ssh key: " + err.Error())
 	}
 	cfg := &ssh.ClientConfig{User: user, Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)}, Timeout: dockerDialTimeout,
+		HostKeyAlgorithms: dockerHostKeyAlgos,
 		HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
+			if c, ok := key.(*ssh.Certificate); ok { // Host-Zertifikat: der Schluessel zaehlt, nicht die Ausstellung
+				key = c.Key
+			}
 			got := SSHFingerprint(key)
 			if seen != nil {
 				seen(got, false)
@@ -335,7 +350,8 @@ func dockerConnectSSH(host, pin string, creds DockerCreds, seen func(string, boo
 		}}
 	d := &dockerSSH{addr: addr, sock: sock, cfg: cfg}
 	tr := &http.Transport{Proxy: nil, DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) { return d.dial(ctx) },
-		ResponseHeaderTimeout: dockerRequestTimeout, MaxIdleConnsPerHost: dockerParallel, IdleConnTimeout: 90 * time.Second}
+		ResponseHeaderTimeout: dockerRequestTimeout, MaxIdleConnsPerHost: dockerParallel, MaxConnsPerHost: dockerParallel,
+		IdleConnTimeout: 90 * time.Second} // MaxConnsPerHost: wartende Anfragen stauen keine Verbindungsversuche (Host haengt)
 	return &dockerConn{hc: &http.Client{Transport: tr}, base: "http://docker", close: func() {
 		tr.CloseIdleConnections()
 		d.shutdown()
@@ -449,7 +465,7 @@ func (d *dockerSSH) dial(ctx context.Context) (net.Conn, error) {
 // open: Socket-Weiterleitung (direct-streamlocal); verweigert der Server sie (AllowTcpForwarding no, restrict), startet
 // es auf dem Host „docker system dial-stdio“ und merkt sich das.
 func (d *dockerSSH) open(ctx context.Context, c *ssh.Client) (net.Conn, error) {
-	if d.stdio.Load() {
+	if time.Now().Unix() < d.stdioUntil.Load() {
 		return sshConnCtx(ctx, func() (net.Conn, error) { return d.stdioConn(c) })
 	}
 	conn, err := sshConnCtx(ctx, func() (net.Conn, error) { return c.Dial("unix", d.sock) })
@@ -461,7 +477,7 @@ func (d *dockerSSH) open(ctx context.Context, c *ssh.Client) (net.Conn, error) {
 	if serr != nil {
 		return nil, fmt.Errorf("%w; docker system dial-stdio: %v", err, serr)
 	}
-	d.stdio.Store(true)
+	d.stdioUntil.Store(time.Now().Add(dockerStdioFor).Unix()) // nicht fuer immer: ein kurz fehlender Socket sieht genauso aus
 	return conn, nil
 }
 
@@ -512,7 +528,7 @@ func (d *dockerSSH) stdioConn(c *ssh.Client) (net.Conn, error) {
 		s.Close()
 		return nil, err
 	}
-	return &sshStdioConn{s: s, r: out, w: in, stderr: stderr}, nil
+	return &sshStdioConn{s: s, r: out, w: in, stderr: stderr, d: d}, nil
 }
 
 // sshErrBuf sammelt die ersten 1024 Byte der Fehlerausgabe.
@@ -542,6 +558,7 @@ type sshStdioConn struct {
 	r        io.Reader
 	w        io.WriteCloser
 	stderr   *sshErrBuf
+	d        *dockerSSH // scheitert der Befehl, gleich wieder die Weiterleitung versuchen
 	got      atomic.Bool
 	once     sync.Once
 	waitOnce sync.Once
@@ -576,6 +593,9 @@ func (c *sshStdioConn) failed(err error) error {
 	select {
 	case <-c.waited:
 	case <-time.After(2 * time.Second):
+	}
+	if c.d != nil {
+		c.d.stdioUntil.Store(0)
 	}
 	if msg := c.stderr.String(); msg != "" {
 		return errors.New("docker system dial-stdio: " + msg)

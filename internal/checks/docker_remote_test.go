@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 // Docker-Check fuer einen Host mit Zugangsdaten nimmt die Verbindung der Docker-Ueberwachung (Runner.Docker).
@@ -34,5 +35,15 @@ func TestDockerCheckRemote(t *testing.T) {
 	}
 	if res := r.Run(context.Background(), def); len(res) != 1 || res[0].Status != Up {
 		t.Fatalf("ueber Runner.Docker: %+v", res)
+	}
+}
+
+// Ein Transport je Socket: Check-Laeufe lassen keine Keep-Alive-Verbindungen liegen.
+func TestDockerUnixTransportShared(t *testing.T) {
+	a, _, _ := dockerClient("unix:///run/x.sock", time.Second)
+	b, _, _ := dockerClient("unix:///run/x.sock", 2*time.Second)
+	c, _, _ := dockerClient("unix:///run/y.sock", time.Second)
+	if a.Transport != b.Transport || a.Transport == c.Transport {
+		t.Fatal("transport je socket")
 	}
 }

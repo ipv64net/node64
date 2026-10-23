@@ -73,7 +73,23 @@ func dockerLocalOf(list []*proxmox.System) *proxmox.System {
 			return s
 		}
 	}
+	for _, s := range list { // NODE64_DOCKER_HOST umgestellt: ein Socket dieser Maschine bleibt der lokale Host
+		if dockerIsLocal(s) {
+			return s
+		}
+	}
 	return nil
+}
+
+// dockerIsLocal: Host dieser Maschine (Standard bzw. NODE64_DOCKER_HOST oder ein unix-Socket).
+func dockerIsLocal(sys *proxmox.System) bool {
+	h := dockerSysHost(sys)
+	return h == checks.DefaultDockerHost() || proxmox.DockerLocal(h)
+}
+
+// dockerNeedsPoll: Docker-Checks des Hosts brauchen die laufende Abfrage (Zugangsdaten: ssh://, https://).
+func dockerNeedsPoll(sys *proxmox.System) bool {
+	return sys.IsDocker() && proxmox.DockerUsesSecret(dockerSysHost(sys))
 }
 
 // dockerRemote liefert die Verbindung der laufenden Abfrage eines Hosts mit Zugangsdaten (https://, ssh://) fuer den
@@ -213,16 +229,17 @@ func (m *Module) dockerLinkChecks(ctx context.Context, set *proxmox.SystemSettin
 
 // dockerOnHost: der Check prueft einen Container dieses Hosts auf dieser Node.
 func dockerOnHost(c *Check, host string) bool {
-	if c.Foreign() {
-		return false
-	}
+	return !c.Foreign() && dockerCheckHost(c) == host
+}
+
+// dockerCheckHost: Docker-Host eines Checks (leer = Standard).
+func dockerCheckHost(c *Check) string {
 	var p checks.DockerParams
 	_ = json.Unmarshal(c.Params, &p)
-	h := strings.TrimSpace(p.Host)
-	if h == "" {
-		h = checks.DefaultDockerHost()
+	if h := strings.TrimSpace(p.Host); h != "" {
+		return h
 	}
-	return h == host
+	return checks.DefaultDockerHost()
 }
 
 // ---------------------------------------------------------------- Darstellung
@@ -385,7 +402,20 @@ func (m *Module) dockerCollect(r *http.Request, sys *proxmox.System) (dockerData
 	if err != nil {
 		return d, nil, err
 	}
+	others := map[string]bool{} // Adressen der anderen eingerichteten Hosts
+	if sys != nil {
+		if all, err := m.dockerSystems(ctx); err == nil {
+			for _, x := range all {
+				if x.ID != sys.ID {
+					others[dockerSysHost(x)] = true
+				}
+			}
+		}
+	}
 	for _, c := range list {
+		if !c.Foreign() && others[dockerCheckHost(c)] {
+			continue
+		}
 		d.Hcs = append(d.Hcs, m.rowOf(ctx, lang, c, pills))
 	}
 	d.Watched = len(d.Hcs)

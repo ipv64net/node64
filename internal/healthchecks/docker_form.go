@@ -52,10 +52,18 @@ func (m *Module) pageDockerHosts(w http.ResponseWriter, r *http.Request, list []
 		row := dockerHostRow{pveSysRow: m.pveSysView(ctx, sys), Local: proxmox.DockerLocal(dockerSysHost(sys))}
 		if s := row.Snap; s != nil && s.OK {
 			row.Info = s.Docker
+			row.Guests, row.Running = 0, 0 // wie die Host-Seite: alle Container (auch node64.nomonitor)
 			for _, x := range s.Resources {
-				if x.Type == proxmox.TypeDocker && x.Status == "running" {
+				if x.Type != proxmox.TypeDocker {
+					continue
+				}
+				row.Guests++
+				if x.Status == "running" {
 					row.CPUCores += x.CPU * x.MaxCPU
 					row.Mem += x.Mem
+					if !pveRow(sys.ID, x, row.Settings).Bad {
+						row.Running++
+					}
 				}
 			}
 			if s.Docker != nil {
@@ -74,28 +82,29 @@ func (m *Module) pageDockerHosts(w http.ResponseWriter, r *http.Request, list []
 // ---------------------------------------------------------------- Formular
 
 type dockerFormData struct {
-	Sys        *proxmox.System
-	Edit       bool
-	Conn       string
-	Conns      []string
-	F          map[string]string // socket, host, port, user, sshsock, ca, cert (Zertifikate nur im Assistenten)
-	KeyGen     string            // eben erzeugter Schluessel (im Formular gehalten, bis gespeichert)
-	PubKey     string            // Zeile fuer authorized_keys
-	HasKey     bool              // gespeichert (Bearbeiten): leer lassen = behalten
-	HasCert    bool
-	HasCA      bool
-	Address    string
-	Probe      *proxmox.DockerProbeResult
-	ProbePin   string
-	ProbeFmt   string
-	PinConfirm bool
-	PinFmt     string
-	PinDiffers bool
-	Errors     map[string]string
-	Error      string
-	NoBox      bool
-	MinIv      int
-	MaxIv      int
+	Sys          *proxmox.System
+	Edit         bool
+	Conn         string
+	Conns        []string
+	F            map[string]string // socket, host, port, user, sshsock, ca, cert (Zertifikate nur im Assistenten)
+	KeyGen       string            // eben erzeugter Schluessel (im Formular gehalten, bis gespeichert)
+	PubKey       string            // Zeile fuer authorized_keys
+	HasKey       bool              // gespeichert (Bearbeiten): leer lassen = behalten
+	HasCert      bool
+	HasCA        bool
+	Address      string
+	Probe        *proxmox.DockerProbeResult
+	ProbePin     string
+	ProbeTrusted bool // Zertifikat von CA bzw. System-CA bestaetigt (Test), bleibt ueber Neuzeichnungen
+	ProbeFmt     string
+	PinConfirm   bool
+	PinFmt       string
+	PinDiffers   bool
+	Errors       map[string]string
+	Error        string
+	NoBox        bool
+	MinIv        int
+	MaxIv        int
 }
 
 func (d dockerFormData) Crumb() string {
@@ -213,6 +222,9 @@ func (m *Module) pageDockerForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Module) renderDockerForm(w http.ResponseWriter, r *http.Request, status int, d dockerFormData) {
+	if d.ProbeFmt == "" { // jede Neuzeichnung zeigt den gesehenen Fingerabdruck (nicht nur direkt nach dem Test)
+		d.ProbeFmt = dockerPinFmt(d.Conn, d.ProbePin)
+	}
 	title := "docker.host.add"
 	if d.Edit {
 		title = "docker.host.edit"
@@ -256,15 +268,25 @@ func (m *Module) pageDockerSave(w http.ResponseWriter, r *http.Request) {
 	if c := r.PostFormValue("conn"); containsStr(dockerConns, c) {
 		d.Conn = c
 	}
+	// Art gewechselt: Zugangsdaten und Pin der alten Art gelten nicht
+	connChanged := old != nil && dockerConnOf(dockerSysHost(old)) != d.Conn
+	if connChanged {
+		d.HasKey, d.HasCert, d.HasCA, d.PubKey, sys.PinSHA256 = false, false, false, "", ""
+	}
 	d.F = map[string]string{}
 	for _, k := range []string{"socket", "host", "port", "user", "sshsock"} {
 		d.F[k] = strings.TrimSpace(r.PostFormValue(k))
 	}
 	d.Address = dockerAddress(d.Conn, d.F)
+	if old != nil && !connChanged { // Felder unveraendert: Adresse bleibt wortgleich (ohne Port, mit Pfad, http://)
+		if oh := dockerSysHost(old); dockerAddress(d.Conn, dockerFieldsOf(oh)) == d.Address {
+			d.Address = oh
+		}
+	}
 	sys.Addresses = []string{d.Address}
 	// Zugangsdaten: gespeicherte bleiben, Eingaben ersetzen sie
 	creds := proxmox.DockerCreds{}
-	if old != nil && dockerConnOf(dockerSysHost(old)) == d.Conn {
+	if old != nil && !connChanged {
 		creds = proxmox.ParseDockerCreds(old.Secret)
 	}
 	// Schluessel aus diesem Formular (erzeugt bzw. eingefuegt) bleibt bis zum Speichern im Formular (wie das Secret im
@@ -311,15 +333,22 @@ func (m *Module) pageDockerSave(w http.ResponseWriter, r *http.Request) {
 		creds, d.KeyGen = proxmox.DockerCreds{}, ""
 	}
 	sys.Secret = creds.Encode()
-	// Pin: im Test gesehener und bestaetigter Fingerabdruck, sonst das Feld
-	if r.PostFormValue("pin_present") == "1" { // Feld leeren = Pin entfernen
+	if sys.Secret == "" && old != nil && old.Secret != "" { // leer heisst beim Speichern sonst „behalten“
+		sys.Secret = proxmox.DockerNoCreds
+	}
+	// Pin: im Test gesehener und bestaetigter Fingerabdruck, sonst das Feld (beides nur fuer die Art, fuer die es galt)
+	pinOK := r.PostFormValue("pin_conn") == "" || r.PostFormValue("pin_conn") == d.Conn
+	if r.PostFormValue("pin_present") == "1" && pinOK { // Feld leeren = Pin entfernen
 		sys.PinSHA256 = strings.TrimSpace(r.PostFormValue("pin_sha256"))
 	}
 	if p, ok := proxmox.NormalizeDockerPin(sys.PinSHA256); ok {
 		sys.PinSHA256 = p
 	}
-	d.ProbePin = strings.TrimSpace(r.PostFormValue("probe_pin"))
-	d.PinConfirm = r.PostFormValue("pin_confirm") == "on"
+	if pinOK {
+		d.ProbePin = strings.TrimSpace(r.PostFormValue("probe_pin"))
+		d.ProbeTrusted = r.PostFormValue("probe_trusted") == "1"
+	}
+	d.PinConfirm = r.PostFormValue("pin_confirm") == "on" && d.ProbePin != ""
 	if d.ProbePin != "" && d.PinConfirm {
 		sys.PinSHA256 = d.ProbePin
 	}
@@ -332,6 +361,10 @@ func (m *Module) pageDockerSave(w http.ResponseWriter, r *http.Request) {
 		m.renderDockerForm(w, r, http.StatusOK, d)
 		return
 	case "probe":
+		if d.Address == "" { // sonst setzte die Pruefung den lokalen Socket ein
+			m.dockerFormErr(w, r, &d, &proxmox.FieldError{Field: "host", Key: "docker.err.host"})
+			return
+		}
 		test := *sys
 		if test.Name == "" {
 			test.Name = "probe"
@@ -344,7 +377,7 @@ func (m *Module) pageDockerSave(w http.ResponseWriter, r *http.Request) {
 		res := dockerProbe(pctx, test)
 		cancel()
 		d.Probe = &res
-		d.ProbePin, d.ProbeFmt = res.Fingerprint, dockerPinFmt(d.Conn, res.Fingerprint)
+		d.ProbePin, d.ProbeFmt, d.ProbeTrusted = res.Fingerprint, dockerPinFmt(d.Conn, res.Fingerprint), res.Trusted
 		pin, _ := proxmox.NormalizeDockerPin(sys.PinSHA256)
 		d.PinDiffers = pin != "" && res.Fingerprint != "" && pin != res.Fingerprint
 		d.PinConfirm = d.PinConfirm && d.ProbePin != "" && pin == res.Fingerprint
@@ -359,8 +392,11 @@ func (m *Module) pageDockerSave(w http.ResponseWriter, r *http.Request) {
 		m.dockerFormErr(w, r, &d, &proxmox.FieldError{Field: "host", Key: "docker.err.host"})
 		return
 	}
-	if d.Conn == dockerConnTLS && d.ProbePin != "" && !d.PinConfirm && sys.PinSHA256 == "" && r.PostFormValue("probe_trusted") != "1" {
-		d.ProbeFmt = dockerPinFmt(d.Conn, d.ProbePin)
+	if d.Conn == dockerConnSSH && creds.Key == "" { // auch beim Bearbeiten (z. B. nach Wechsel der Art)
+		m.dockerFormErr(w, r, &d, &proxmox.FieldError{Field: "key", Key: "docker.err.key"})
+		return
+	}
+	if d.Conn == dockerConnTLS && d.ProbePin != "" && !d.PinConfirm && sys.PinSHA256 == "" && !d.ProbeTrusted {
 		m.dockerFormErr(w, r, &d, &proxmox.FieldError{Field: "pin_sha256", Key: "pve.err.pin_confirm"})
 		return
 	}
@@ -390,7 +426,7 @@ func (m *Module) pageDockerSave(w http.ResponseWriter, r *http.Request) {
 		m.dockerFormErr(w, r, &d, err)
 		return
 	}
-	if d.Conn == dockerConnLocal && d.Address == checks.DefaultDockerHost() {
+	if dockerIsLocal(sys) {
 		_ = m.core.SetSetting(ctx, dockerSettingMonitor, "")
 	}
 	m.auditText(r, map[bool]string{true: "proxmox.update", false: "proxmox.create"}[edit], sys.Name)

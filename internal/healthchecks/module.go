@@ -200,7 +200,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.24.0", Changelog: changelog, ChangelogEN: changelogEN}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.24.1", Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {
@@ -233,8 +233,8 @@ func (m *Module) Start(ctx context.Context) error {
 		rt := c.Runtime
 		m.sched.Upsert(c.SchedulerCheck(), &rt)
 	}
+	m.pveStart(ctx) // Proxmox VE: Abfrage der eingeschalteten Systeme (vor den Checks: Docker-Checks auf ssh/https nutzen sie)
 	m.sched.Start(ctx)
-	m.pveStart(ctx) // Proxmox VE: Abfrage der eingeschalteten Systeme
 	m.wg.Add(1)
 	go m.housekeeping(ctx)
 	m.log.Info("healthchecks loaded", "count", len(list))

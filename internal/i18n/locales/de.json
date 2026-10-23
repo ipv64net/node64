@@ -4297,10 +4297,10 @@
     "setup_hint": "Docker-Socket erreichbar, der Host wird aber noch nicht überwacht.",
     "off_hint": "Die Docker-Überwachung wurde entfernt und wird nicht mehr automatisch eingerichtet.",
     "setup": "Docker-Host überwachen",
-    "disabled_hint": "Die Docker-Überwachung ist ausgeschaltet: keine Abfrage, keine Meldungen. Container „als Check“ prüfen weiter selbst.",
+    "disabled_hint": "Die Docker-Überwachung ist ausgeschaltet: keine Abfrage, keine Meldungen. Container „als Check“ prüfen weiter selbst (bei SSH bzw. TLS mit Zugangsdaten sind sie pausiert, sie brauchen die Verbindung der Überwachung).",
     "enable": "Überwachung einschalten",
     "disable": "Überwachung ausschalten",
-    "disable_confirm": "Docker-Überwachung ausschalten? Container „als Check“ laufen weiter.",
+    "disable_confirm": "Docker-Überwachung ausschalten? Container „als Check“ laufen weiter (bei SSH bzw. TLS mit Zugangsdaten werden sie pausiert).",
     "live": "Werte live",
     "kpi": {
       "bad": "Gestört",
@@ -4351,7 +4351,7 @@
     "host": {
       "add": "Docker-Host hinzufügen",
       "edit": "Docker-Host bearbeiten",
-      "delete_confirm": "Docker-Host „{name}“ mit Einstellungen, Verlauf und seinen Checks löschen?"
+      "delete_confirm": "Docker-Host „{name}“ mit Einstellungen und Verlauf löschen? Checks „als Check“ eines SSH- bzw. TLS-Hosts werden mitgelöscht, andere Docker-Checks bleiben."
     },
     "conn": {
       "ssh": "SSH (empfohlen)",

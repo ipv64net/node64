@@ -269,12 +269,15 @@ func (s *Store) SaveSystem(ctx context.Context, sys *System) error {
 	if err := ValidateSystem(sys, sys.ID == 0); err != nil {
 		return err
 	}
-	if s.box == nil && (!sys.IsDocker() || sys.Secret != "") { // Docker-Hosts meist ohne Secret
+	if s.box == nil && (!sys.IsDocker() || (sys.Secret != "" && sys.Secret != DockerNoCreds)) { // Docker-Hosts meist ohne Secret
 		return ErrNoBox
 	}
 	addrs, _ := json.Marshal(sys.Addresses)
 	now := store.Now()
 	if sys.ID == 0 {
+		if sys.Secret == DockerNoCreds {
+			sys.Secret = ""
+		}
 		res, err := s.w.ExecContext(ctx, `INSERT INTO pve_systems (kind, name, addresses, token_id, secret, pin_sha256, interval_sec, enabled,
 			created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
 			sys.Kind, sys.Name, string(addrs), sys.TokenID, s.box.Encrypt(sys.Secret), sys.PinSHA256, sys.Interval, sys.Enabled, now, now)
@@ -288,6 +291,9 @@ func (s *Store) SaveSystem(ctx context.Context, sys *System) error {
 	q := `UPDATE pve_systems SET name=?, addresses=?, token_id=?, pin_sha256=?, interval_sec=?, enabled=?, updated_at=?`
 	args := []any{sys.Name, string(addrs), sys.TokenID, sys.PinSHA256, sys.Interval, sys.Enabled, now}
 	keepSecret := !sys.IsDocker() || DockerUsesSecret(sys.Addresses[0])
+	if sys.IsDocker() && sys.Secret == DockerNoCreds { // ausdruecklich ohne Zugangsdaten
+		sys.Secret, keepSecret = "", false
+	}
 	if !keepSecret {
 		q += `, secret=''`
 	}
@@ -307,6 +313,21 @@ func (s *Store) SaveSystem(ctx context.Context, sys *System) error {
 			sys.Secret = old.Secret
 		}
 	}
+	return nil
+}
+
+// ResetHistory verwirft Verlauf und „laufend gesehen“ eines Systems (Docker-Host auf eine andere Maschine umgestellt:
+// Container gleichen Namens sind andere). Regeln, Stummschaltung und „als Check“ bleiben.
+func (s *Store) ResetHistory(ctx context.Context, id int64) error {
+	for _, q := range []string{`UPDATE pve_settings SET seen_running = 0 WHERE system_id = ?`, `DELETE FROM pve_hist_1m WHERE system_id = ?`,
+		`DELETE FROM pve_hist_5m WHERE system_id = ?`, `DELETE FROM pve_hist_1h WHERE system_id = ?`} {
+		if _, err := s.w.ExecContext(ctx, q, id); err != nil {
+			return err
+		}
+	}
+	s.mu.Lock()
+	delete(s.seen, id)
+	s.mu.Unlock()
 	return nil
 }
 

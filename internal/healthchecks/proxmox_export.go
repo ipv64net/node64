@@ -22,7 +22,8 @@ type pveExportSystem struct {
 	Name      string              `json:"name"`
 	Addresses []string            `json:"addresses"`
 	TokenID   string              `json:"token_id"`
-	Secret    string              `json:"secret,omitempty"` // nur mit Export-Passwort, verschluesselt
+	Secret    string              `json:"secret,omitempty"`     // nur mit Export-Passwort, verschluesselt
+	HasSecret bool                `json:"has_secret,omitempty"` // Quelle hatte ein Secret (Docker: Zugangsdaten), auch ohne Passwort
 	PinSHA256 string              `json:"pin_sha256,omitempty"`
 	Interval  int                 `json:"interval"`
 	Enabled   bool                `json:"enabled"`
@@ -42,6 +43,7 @@ func (m *Module) pveExport(ctx context.Context) ([]pveExportSystem, error) {
 		if seal != nil && sys.Secret != "" {
 			x.Secret = seal.Encrypt(sys.Secret)
 		}
+		x.HasSecret = sys.Secret != ""
 		if set, err := m.pve.st.Settings(ctx, sys.ID); err == nil {
 			for _, it := range set.Items {
 				if it.Muted || it.AsCheck || it.ExpectRunning != nil || it.Rules != (proxmox.RuleSet{}) {
@@ -122,8 +124,10 @@ func (m *Module) pveImport(ctx context.Context, in []pveExportSystem) (int, erro
 		if id := match[i]; id != 0 && hits[id] == 1 {
 			sys.ID = id
 		}
+		// Docker meist ohne Zugangsdaten; fehlen sie aber (Export ohne Passwort), abgeschaltet mit Hinweis wie Proxmox
+		dockerNoCreds := sys.IsDocker() && secret == "" && (x.HasSecret || proxmox.DockerScheme(dockerSysHost(sys)) == "ssh")
 		switch {
-		case sys.IsDocker() && (secret != "" || proxmox.DockerScheme(sys.Addresses[0]) != "ssh"): // meist ohne Secret
+		case sys.IsDocker() && !dockerNoCreds:
 			if err := m.pve.st.SaveSystem(ctx, sys); err != nil {
 				problems = append(problems, x.Name+": "+err.Error())
 				continue

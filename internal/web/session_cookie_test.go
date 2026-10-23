@@ -39,3 +39,39 @@ func TestSessionCookieDuplicateNames(t *testing.T) {
 		t.Fatalf("status %d at %s, want dashboard", resp.StatusCode, resp.Request.URL.Path)
 	}
 }
+
+// Hoechstens drei gleichnamige Sitzungs-Cookies werden geprueft (sonst eine Datenbankabfrage je mitgeschicktem Cookie).
+func TestSessionCookieLimit(t *testing.T) {
+	a := newTestApp(t)
+	ctx := context.Background()
+	u, err := a.store.CreateUser(ctx, "lim", "geheim-passwort", "", "UTC")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	sess := &store.Session{ID: "gueltige-sitzung-9876543210", UserID: u.ID, CSRF: "csrf-9876543210-9876543210-9876", CreatedAt: now, LastSeenAt: now, ExpiresAt: now.Add(time.Hour)}
+	if err := a.store.CreateSession(ctx, sess); err != nil {
+		t.Fatal(err)
+	}
+	_ = a.store.SetSessionTOTP(ctx, sess.ID, true)
+	get := func(bogus int) string {
+		req, _ := http.NewRequest(http.MethodGet, a.srv.URL+"/", nil)
+		for i := 0; i < bogus; i++ {
+			req.Header.Add("Cookie", sessionCookie+"_h=ungueltig-"+string(rune('a'+i)))
+		}
+		req.Header.Add("Cookie", sessionCookie+"_h="+sess.ID)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		return resp.Request.URL.Path
+	}
+	if p := get(2); p != "/" {
+		t.Fatalf("drittes cookie gueltig: %s", p)
+	}
+	if p := get(10); p != "/login" {
+		t.Fatalf("elftes cookie wurde noch geprueft: %s", p)
+	}
+}

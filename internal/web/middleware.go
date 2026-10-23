@@ -130,9 +130,13 @@ func (s *Server) session(next http.Handler) http.Handler {
 		var sess *store.Session
 		// Der Browser kann mehrere Cookies gleichen Namens schicken (z. B. ein altes von http neben dem neuen von https
 		// auf demselben Host): die erste gueltige Sitzung zaehlt, sonst endete jede Anmeldung wieder auf /login.
+		tried := 0 // hoechstens 3 Werte pruefen (sonst eine Datenbankabfrage je mitgeschicktem Cookie)
 		for _, c := range r.Cookies() {
 			if c.Name != cookieName(r, sessionCookie) || c.Value == "" {
 				continue
+			}
+			if tried++; tried > 3 {
+				break
 			}
 			x, _ := s.Store.SessionByID(ctx, c.Value)
 			if x != nil && time.Since(x.CreatedAt) > sessionMax {

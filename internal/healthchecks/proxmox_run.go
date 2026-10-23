@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -635,7 +636,7 @@ func (m *Module) pveSetAsCheck(r *http.Request, sys *proxmox.System, key string,
 			if h := dockerSysHost(sys); h != checks.DefaultDockerHost() {
 				params, _ = json.Marshal(checks.DockerParams{Host: h})
 			}
-			group, paused = dockerCheckGroup, false
+			group, paused = dockerCheckGroup, !sys.Enabled && dockerNeedsPoll(sys) // ssh/https: ohne Abfrage keine Verbindung
 			in.Name, in.Type, in.Target, in.Params, in.Tags = sys.Name+" – "+name, string(checks.TypeDocker), name, params, []string{"docker"}
 		}
 		c := &Check{Token: NewToken(), UpdatedBy: m.actor(r)}
@@ -746,7 +747,8 @@ func (m *Module) pveSyncChecks(ctx context.Context, sys *proxmox.System, by stri
 				continue
 			}
 		}
-		if pauseChanged && c.Paused == sys.Enabled && !sys.IsDocker() { // Docker-Checks fragen selbst, laufen weiter
+		// Docker-Checks fragen selbst und laufen weiter - ausser ssh/https, die die Verbindung der Abfrage brauchen
+		if pauseChanged && c.Paused == sys.Enabled && (!sys.IsDocker() || dockerNeedsPoll(sys)) {
 			if err := m.st.SetPaused(ctx, c.Token, !sys.Enabled, by); err != nil {
 				m.log.Error("proxmox check pause", "err", err)
 				continue
@@ -775,9 +777,11 @@ func (m *Module) pveDeleteSystem(r *http.Request, id int64) error {
 	if err != nil {
 		return err
 	}
-	if sys.IsDocker() && dockerSysHost(sys) == checks.DefaultDockerHost() {
-		cs = nil // lokaler Host: Docker-Checks bleiben (sie fragen den Container selbst); nicht automatisch neu anlegen
-		_ = m.core.SetSetting(ctx, dockerSettingMonitor, "off")
+	if sys.IsDocker() && !dockerNeedsPoll(sys) {
+		cs = nil // Docker-Checks bleiben (sie fragen den Container selbst, auch selbst angelegte und nur verknuepfte)
+	}
+	if sys.IsDocker() && dockerIsLocal(sys) {
+		_ = m.core.SetSetting(ctx, dockerSettingMonitor, "off") // lokalen Host nicht automatisch neu anlegen
 	}
 	m.pveHalt(id)
 	m.pveForget(ctx, id)
@@ -804,9 +808,10 @@ func (m *Module) pveDeleteSystem(r *http.Request, id int64) error {
 func (m *Module) pveSaveSystem(r *http.Request, sys *proxmox.System) error {
 	ctx := r.Context()
 	wasEnabled := true
+	var old *proxmox.System
 	if sys.ID != 0 {
-		old, err := m.pve.st.System(ctx, sys.ID)
-		if err != nil {
+		var err error
+		if old, err = m.pve.st.System(ctx, sys.ID); err != nil {
 			return err
 		}
 		wasEnabled = old.Enabled
@@ -818,12 +823,62 @@ func (m *Module) pveSaveSystem(r *http.Request, sys *proxmox.System) error {
 	if err := m.pve.st.SaveSystem(ctx, sys); err != nil {
 		return err
 	}
+	pauseChanged := wasEnabled != sys.Enabled
+	if old != nil && sys.IsDocker() && dockerSysHost(old) != dockerSysHost(sys) {
+		pauseChanged = m.dockerRetarget(ctx, old, sys, m.actor(r)) || pauseChanged
+	}
 	if !sys.Enabled {
 		m.pveHalt(sys.ID)
 		m.pveForget(ctx, sys.ID)
 	} else {
 		m.pveReload(ctx, sys.ID)
 	}
-	m.pveSyncChecks(ctx, sys, m.actor(r), wasEnabled != sys.Enabled)
+	m.pveSyncChecks(ctx, sys, m.actor(r), pauseChanged)
 	return nil
+}
+
+// dockerRetarget: neue Adresse eines Docker-Hosts. Die Checks „als Check“ fragen ab jetzt die neue Adresse; zeigt sie
+// auf eine andere Maschine, gelten Verlauf, „laufend gesehen“ und gemeldete Stoerungen des alten Hosts nicht mehr.
+// true: die Pause der Checks ist neu abzugleichen (ssh/https brauchen die Abfrage, die anderen nicht).
+func (m *Module) dockerRetarget(ctx context.Context, old, sys *proxmox.System, by string) bool {
+	oldHost, newHost := dockerSysHost(old), dockerSysHost(sys)
+	for _, c := range m.pveSystemChecks(ctx, sys.ID) {
+		if c.Type != checks.TypeDocker || dockerCheckHost(c) != oldHost {
+			continue
+		}
+		c.Params = nil
+		if newHost != checks.DefaultDockerHost() {
+			c.Params, _ = json.Marshal(checks.DockerParams{Host: newHost})
+		}
+		c.UpdatedBy = by
+		if err := m.st.Update(ctx, c); err != nil {
+			m.log.Error("docker check host", "err", err)
+			continue
+		}
+		if s := m.scheduler(); s != nil {
+			if nc, _ := m.st.Check(ctx, c.Token); nc != nil {
+				upsertSched(s, nc, nil)
+			}
+		}
+	}
+	if dockerMachine(oldHost) != dockerMachine(newHost) {
+		m.pveHalt(sys.ID)
+		m.pveForget(ctx, sys.ID)
+		if err := m.pve.st.ResetHistory(ctx, sys.ID); err != nil {
+			m.log.Error("docker reset history", "err", err)
+		}
+	}
+	return dockerNeedsPoll(old) != dockerNeedsPoll(sys)
+}
+
+// dockerMachine: Rechner hinter einer Docker-Adresse (Hostname bzw. lokal), ohne Port, Benutzer, Pfad und Art.
+func dockerMachine(host string) string {
+	if proxmox.DockerLocal(host) {
+		return "local"
+	}
+	u, err := url.Parse(strings.Replace(host, "tcp://", "http://", 1))
+	if err != nil {
+		return host
+	}
+	return strings.ToLower(u.Hostname())
 }
