@@ -254,7 +254,7 @@ func (m *Module) apiLog(w http.ResponseWriter, r *http.Request, e *engine) {
 	for i := range rows {
 		rows[i].ClientName = names[rows[i].Client]
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"rows": rows, "total": total})
+	writeJSON(w, http.StatusOK, map[string]any{"rows": rows, "total": total, "capped": total >= querylog.CountCap}) // gedeckelt: "100.000+"
 }
 
 func (m *Module) apiLists(w http.ResponseWriter, r *http.Request, e *engine) {

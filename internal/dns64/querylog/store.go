@@ -135,7 +135,7 @@ func Open(path string, retention time.Duration, log *slog.Logger) (*Store, error
 		return nil, err
 	}
 	db.SetMaxOpenConns(4)
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.Exec(schema + aggSchema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
@@ -181,6 +181,7 @@ func (s *Store) Add(e Entry) {
 // Run writes queued entries in batches and prunes old rows until ctx ends.
 func (s *Store) Run(ctx context.Context) {
 	defer close(s.done)
+	s.backfillAgg()
 	flush := time.NewTicker(time.Second)
 	prune := time.NewTicker(time.Hour)
 	defer flush.Stop()
@@ -266,6 +267,11 @@ func (s *Store) write(batch []Entry) {
 			return
 		}
 	}
+	if err := writeAgg(tx, batch); err != nil {
+		tx.Rollback()
+		s.log.Error("querylog aggregate", "err", err)
+		return
+	}
 	if err := tx.Commit(); err != nil {
 		s.log.Error("querylog commit", "err", err)
 	}
@@ -281,6 +287,7 @@ const (
 // pruneStep loescht hoechstens pruneBatch abgelaufene Zeilen; more = es gibt vermutlich noch welche.
 func (s *Store) pruneStep() (n int64, more bool) {
 	cutoff := time.Now().Add(-s.retention).UnixMilli()
+	s.pruneAgg(cutoff)
 	res, err := s.db.Exec(`DELETE FROM queries WHERE rowid IN (SELECT rowid FROM queries WHERE ts < ? LIMIT ?)`, cutoff, pruneBatch)
 	if err != nil {
 		s.log.Error("querylog prune", "err", err)
@@ -304,15 +311,17 @@ type Summary struct {
 func (s *Store) Summary(ctx context.Context, since time.Time) (Summary, error) {
 	var out Summary
 	var avgUs sql.NullFloat64
-	err := s.db.QueryRowContext(ctx, `
-		SELECT COUNT(*),
-		       COALESCE(SUM(status = ?), 0),
-		       COALESCE(SUM(status = ?), 0),
-		       COUNT(DISTINCT client),
-		       AVG(CASE WHEN status = ? THEN duration_us END)
-		FROM queries WHERE ts >= ?`,
-		int(StatusBlocked), int(StatusCached), int(StatusAllowed), since.UnixMilli(),
-	).Scan(&out.Total, &out.Blocked, &out.Cached, &out.Clients, &avgUs)
+	// aus den Minuten-Zaehlern (Clients aus den Stunden-Aggregaten), nicht aus den Einzelzeilen
+	var upN, upUs int64
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(total), 0), COALESCE(SUM(blocked), 0), COALESCE(SUM(cached), 0),
+		COALESCE(SUM(up_n), 0), COALESCE(SUM(up_us), 0) FROM agg_min WHERE m >= ?`, since.UnixMilli()/60000,
+	).Scan(&out.Total, &out.Blocked, &out.Cached, &upN, &upUs)
+	if err == nil {
+		err = s.db.QueryRowContext(ctx, `SELECT COUNT(DISTINCT name) FROM agg_top WHERE kind = ? AND h >= ?`, topClient, since.UnixMilli()/3600000).Scan(&out.Clients)
+	}
+	if upN > 0 {
+		avgUs = sql.NullFloat64{Float64: float64(upUs) / float64(upN), Valid: true}
+	}
 	out.AvgUpstreamM = avgUs.Float64 / 1000
 	out.Dropped = s.dropped.Load()
 	return out, err
@@ -330,9 +339,9 @@ func (s *Store) Timeline(ctx context.Context, since time.Time, step time.Duratio
 	stepMs := step.Milliseconds()
 	from := since.UnixMilli() / stepMs * stepMs
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT (ts / ?) * ? AS b, COUNT(*), COALESCE(SUM(status = ?), 0)
-		FROM queries WHERE ts >= ? GROUP BY b ORDER BY b`,
-		stepMs, stepMs, int(StatusBlocked), from)
+		SELECT (m * 60000 / ?) * ? AS b, SUM(total), SUM(blocked)
+		FROM agg_min WHERE m >= ? GROUP BY b ORDER BY b`,
+		stepMs, stepMs, from/60000)
 	if err != nil {
 		return nil, err
 	}
@@ -368,21 +377,13 @@ type TopItem struct {
 // Top returns the most frequent domains or clients. kind is one of
 // "blocked", "allowed" or "clients".
 func (s *Store) Top(ctx context.Context, kind string, since time.Time, limit int) ([]TopItem, error) {
-	var q string
-	switch kind {
-	case "blocked":
-		q = `SELECT domain, COUNT(*) AS c, COUNT(*) FROM queries
-		     WHERE ts >= ? AND status = 2 GROUP BY domain ORDER BY c DESC LIMIT ?`
-	case "allowed":
-		q = `SELECT domain, COUNT(*) AS c, 0 FROM queries
-		     WHERE ts >= ? AND status IN (0, 1, 3, 5) GROUP BY domain ORDER BY c DESC LIMIT ?`
-	case "clients":
-		q = `SELECT client, COUNT(*) AS c, COALESCE(SUM(status = 2), 0) FROM queries
-		     WHERE ts >= ? GROUP BY client ORDER BY c DESC LIMIT ?`
-	default:
+	k, ok := map[string]int{"blocked": topBlocked, "allowed": topAllowed, "clients": topClient}[kind]
+	if !ok {
 		return nil, fmt.Errorf("unknown kind %q", kind)
 	}
-	rows, err := s.db.QueryContext(ctx, q, since.UnixMilli(), limit)
+	// aus den Stunden-Aggregaten (die angefangene erste Stunde zaehlt ganz mit)
+	rows, err := s.db.QueryContext(ctx, `SELECT name, SUM(n) AS c, SUM(blocked) FROM agg_top WHERE kind = ? AND h >= ?
+		GROUP BY name ORDER BY c DESC LIMIT ?`, k, since.UnixMilli()/3600000, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -443,8 +444,8 @@ func (s *Store) Recent(ctx context.Context, f LogFilter) ([]LogRow, int64, error
 	if len(where) > 0 {
 		cond = " WHERE " + strings.Join(where, " AND ")
 	}
-	var total int64
-	if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM queries"+cond, args...).Scan(&total); err != nil {
+	total, err := s.cappedCount(ctx, cond, args)
+	if err != nil {
 		return nil, 0, err
 	}
 
@@ -452,7 +453,7 @@ func (s *Store) Recent(ctx context.Context, f LogFilter) ([]LogRow, int64, error
 		cond + " ORDER BY id DESC LIMIT ? OFFSET ?"
 	rows, err := s.db.QueryContext(ctx, q, append(args, f.Limit, f.Offset)...)
 	if err != nil {
-		return nil, 0, err
+		return nil, total, err
 	}
 	defer rows.Close()
 	out := []LogRow{}
@@ -485,8 +486,8 @@ type ClientRow struct {
 
 // RecentClients liefert die Clients seit since, die mit den meisten Anfragen zuerst (hoechstens limit).
 func (s *Store) RecentClients(ctx context.Context, since time.Time, limit int) ([]ClientRow, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT client, COUNT(*), MAX(ts), MAX(grp) FROM queries WHERE ts >= ? AND client != ''
-		GROUP BY client ORDER BY COUNT(*) DESC LIMIT ?`, since.UnixMilli(), limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT name, SUM(n) AS c, MAX(last), MAX(grp) FROM agg_top WHERE kind = ? AND h >= ? AND name != ''
+		GROUP BY name ORDER BY c DESC LIMIT ?`, topClient, since.UnixMilli()/3600000, limit)
 	if err != nil {
 		return nil, err
 	}

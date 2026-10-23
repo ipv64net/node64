@@ -1,5 +1,14 @@
 # Changes – DNS64
 
+## 1.28.0 – 2026-10-23
+
+### Changed
+- Overview, dashboard card and device list stay fast with millions of log entries: while writing the query log DNS64
+  keeps counters per minute and frequencies per domain and client per hour; KPIs, timeline and top lists read only
+  these (before, every call counted all entries of the period, with “context canceled” and long loading times). On
+  update DNS64 builds the counters once from the existing log.
+- The log page counts matches up to 100,000 and then shows “100,000+”.
+
 ## 1.27.4 – 2026-10-23
 
 ### Fixed

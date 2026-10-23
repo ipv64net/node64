@@ -1,5 +1,14 @@
 # Änderungen – DNS64
 
+## 1.28.0 – 2026-10-23
+
+### Geändert
+- Übersicht, Dashboard-Karte und Geräteliste bleiben auch bei Millionen Log-Einträgen schnell: Beim Schreiben des
+  Abfrage-Logs führt DNS64 Zähler je Minute und Häufigkeiten je Domain und Client je Stunde mit; Kennzahlen, Verlauf
+  und Top-Listen lesen nur noch diese (vorher bei jedem Aufruf alle Einträge des Zeitraums gezählt, mit „context
+  canceled“ und langen Ladezeiten). Beim Update baut DNS64 die Zähler einmal aus dem vorhandenen Log.
+- Die Log-Seite zählt Treffer höchstens bis 100.000 und zeigt dann „100.000+“.
+
 ## 1.27.4 – 2026-10-23
 
 ### Behoben

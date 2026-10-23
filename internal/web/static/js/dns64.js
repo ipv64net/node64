@@ -311,6 +311,7 @@
 		if (state.group !== "*") { p.set("group", state.group); }
 		return api("log?" + p).then(function (d) {
 			state.total = d.total;
+			state.capped = !!d.capped;
 			var pages = Math.max(1, Math.ceil(d.total / PAGE_SIZE));
 			if (state.page >= pages) { state.page = pages - 1; if (d.total) { return loadLog(); } }
 			renderPager(pages);
@@ -365,7 +366,7 @@
 	function renderPager(pages) {
 		var from = state.total ? state.page * PAGE_SIZE + 1 : 0;
 		var to = Math.min(state.total, (state.page + 1) * PAGE_SIZE);
-		$("page-info").textContent = t("entries", { from: nf.format(from), to: nf.format(to), total: nf.format(state.total) })
+		$("page-info").textContent = t("entries", { from: nf.format(from), to: nf.format(to), total: nf.format(state.total) + (state.capped ? "+" : "") })
 			+ (state.page > 0 && state.live ? " · " + t("live_paused") : "");
 		$("page-num").textContent = t("page", { n: nf.format(state.page + 1), of: nf.format(pages) });
 		$("page-first").disabled = $("page-prev").disabled = state.page === 0;
