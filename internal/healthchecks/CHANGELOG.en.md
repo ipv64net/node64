@@ -3,7 +3,9 @@
 ## 2.24.2 – 2026-10-23
 
 ### Fixed
-- Notifications of a Docker host are now called “Docker: … has a problem” instead of “Proxmox: …” (an unreachable
+- Notifications name the reason as text in the language of the channel (“Reason: Timeout”) instead of an internal
+  code (“timeout”).
+- Notifications of a Docker host are now called “Docker: … down” instead of “Proxmox: …” (an unreachable
   Docker host with high priority like Proxmox).
 - Docker form: setup on the host for SSH is a step-by-step guide with the “Generate key” button and ready-to-copy
   commands (create user, add the key with permissions, compare the host key).

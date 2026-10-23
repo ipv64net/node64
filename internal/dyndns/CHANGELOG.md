@@ -1,5 +1,11 @@
 # Änderungen – DynDNS-Updater
 
+## 1.3.2 – 2026-10-23
+
+### Behoben
+- Benachrichtigungen kommen vollständig in der Sprache des Kanals: „Adresse mehrfach nicht ermittelt“ und „Tageslimit
+  erreicht“ waren bisher immer englisch.
+
 ## 1.3.1 – 2026-10-19
 
 ### Geändert

@@ -73,15 +73,16 @@ func (m *Manager) watchMembers(ctx context.Context) {
 	m.mu.Unlock()
 	for _, a := range out {
 		reason := ""
+		var data map[string]string
 		if a.kind == notify.KindClusterDown {
 			if a.x.Suspended() {
-				reason = "suspended: " + a.x.Reason
+				data = map[string]string{"text": "notify.text.cluster_suspended", "reason": a.x.Reason} // Text in der Sprache des Kanals
 			} else {
 				reason = a.x.LastError
 			}
 		}
-		m.d.Log.Info("notification", "kind", a.kind, "node", a.x.Name, "reason", reason)
+		m.d.Log.Info("notification", "kind", a.kind, "node", a.x.Name, "reason", reason, "suspended", data != nil)
 		m.d.Notify(notify.Alert{EventID: "cluster-" + string(a.kind) + "-" + a.x.NodeID + "-" + strconv.FormatInt(now.UnixNano(), 36), Kind: a.kind, Time: now.UTC(),
-			Check: notify.CheckInfo{Name: a.x.Name, NotifyDown: true, NotifyUp: true, Local: true}, Reason: reason})
+			Check: notify.CheckInfo{Name: a.x.Name, NotifyDown: true, NotifyUp: true, Local: true}, Reason: reason, Data: data})
 	}
 }

@@ -584,7 +584,7 @@ func (m *Module) apply(ctx context.Context, t *Target, r updResult, ip4, ip6, pr
 	switch {
 	case r.Limit:
 		if m.notifyOnce(ctx, setLimitReachedSent) {
-			m.alert(ctx, SetNotifyLimit, notify.KindDynLimit, "", "", "ipv64: daily update limit reached")
+			m.alert(ctx, SetNotifyLimit, notify.KindDynLimit, "", "", "ipv64: daily update limit reached", "text", "notify.text.dyndns_limit_reached")
 		}
 	case r.OK:
 		m.alertOK(ctx, t)

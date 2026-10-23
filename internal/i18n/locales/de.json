@@ -2581,6 +2581,15 @@
       "digest_down": "• {name}: gestört seit {time} – {message}",
       "digest_up": "• {name}: war gestört, wieder OK seit {time}",
       "summary_item": "• {name}: {message}"
+    },
+    "text": {
+      "dyndns_addr_failed": "Öffentliche {family}-Adresse {count}-mal hintereinander nicht ermittelt.",
+      "dyndns_limit_reached": "ipv64: Tageslimit für Updates erreicht.",
+      "cluster_suspended": "Ausgesetzt: {reason}"
+    },
+    "reason": {
+      "traffic": "Traffic-Kontingent aufgebraucht",
+      "blocked": "von ipv64 gesperrt"
     }
   },
   "nf": {

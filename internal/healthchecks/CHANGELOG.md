@@ -3,6 +3,8 @@
 ## 2.24.2 – 2026-10-23
 
 ### Behoben
+- Benachrichtigungen nennen den Grund als Text in der Sprache des Kanals („Grund: Zeitüberschreitung“ bzw. „Reason:
+  Timeout“) statt als internen Code („timeout“).
 - Meldungen eines Docker-Hosts heißen jetzt „Docker: … gestört“ statt „Proxmox: … gestört“ (ein nicht erreichbarer
   Docker-Host mit hoher Priorität wie bei Proxmox).
 - Docker-Formular: Die Einrichtung am Host ist für SSH eine Schritt-für-Schritt-Anleitung mit dem Knopf „Schlüssel

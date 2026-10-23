@@ -1,5 +1,11 @@
 # Changes – DynDNS updater
 
+## 1.3.2 – 2026-10-23
+
+### Fixed
+- Notifications come entirely in the language of the channel: “address not determined repeatedly” and “daily limit
+  reached” were always English so far.
+
 ## 1.3.1 – 2026-10-19
 
 ### Changed

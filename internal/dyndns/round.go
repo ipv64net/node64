@@ -179,7 +179,8 @@ func (m *Module) trackIPFailure(ctx context.Context, fam int, failed bool, errTe
 	name := "IPv" + strconv.Itoa(fam)
 	switch {
 	case send:
-		m.alert(ctx, SetNotifyFail, notify.KindDynFail, name, errText, "public "+name+" address not determined "+strconv.Itoa(n)+" times in a row")
+		m.alert(ctx, SetNotifyFail, notify.KindDynFail, name, errText, "public "+name+" address not determined "+strconv.Itoa(n)+" times in a row",
+			"text", "notify.text.dyndns_addr_failed", "family", name, "count", strconv.Itoa(n))
 	case recover:
 		m.alert(ctx, SetNotifyFail, notify.KindDynOK, name, "", "")
 	}

@@ -2558,10 +2558,10 @@
       "proxmox_restarted": "🔄 Proxmox: {name} restarted",
       "quiet_digest_events": "🌙 During quiet hours: {count} notifications, {down} still open",
       "honeypot_login": "🚨 Honeypot64: attack on the login of {name}",
-      "docker_down": "🔴 Docker: {name} has a problem",
-      "docker_up": "🟢 Docker: {name} is OK again",
-      "docker_threshold": "🟠 Docker: {name} above the threshold",
-      "docker_threshold_ok": "🟢 Docker: {name} below the threshold again",
+      "docker_down": "🔴 Docker: {name} down",
+      "docker_up": "🟢 Docker: {name} back to normal",
+      "docker_threshold": "🟠 Docker: {name} above threshold",
+      "docker_threshold_ok": "🟢 Docker: {name} below threshold again",
       "docker_restarted": "🔄 Docker: {name} restarted"
     },
     "body": {
@@ -2581,6 +2581,15 @@
       "digest_down": "• {name}: down since {time} – {message}",
       "digest_up": "• {name}: was down, OK again since {time}",
       "summary_item": "• {name}: {message}"
+    },
+    "text": {
+      "dyndns_addr_failed": "Public {family} address not determined {count} times in a row.",
+      "dyndns_limit_reached": "ipv64: daily update limit reached.",
+      "cluster_suspended": "Suspended: {reason}"
+    },
+    "reason": {
+      "traffic": "traffic quota used up",
+      "blocked": "blocked by ipv64"
     }
   },
   "nf": {

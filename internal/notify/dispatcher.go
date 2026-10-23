@@ -802,7 +802,7 @@ func (d *Dispatcher) compose(lang string, a Alert) Message {
 		lines = append(lines, t("notify.body.target", "target", a.Check.Target))
 	}
 	if a.Reason != "" && a.Kind != KindUp && a.Kind != KindFlappingEnd && a.Kind != KindUnchecked && a.Kind != KindRechecked {
-		lines = append(lines, t("notify.body.reason", "reason", a.Reason))
+		lines = append(lines, t("notify.body.reason", "reason", d.reasonText(lang, a.Reason)))
 	}
 	if a.Message != "" {
 		lines = append(lines, t("notify.body.message", "message", a.Message))
@@ -864,11 +864,19 @@ func (d *Dispatcher) composeDynDNS(lang string, a Alert, m Message) Message {
 		m.Priority = 2
 	}
 	var lines []string
-	if a.Message != "" {
+	if key := a.Data["text"]; key != "" { // Text des Moduls als Schluessel mit Werten (Sprache des Kanals)
+		args := make([]any, 0, 2*len(a.Data))
+		for k, v := range a.Data {
+			if k != "text" {
+				args = append(args, k, v)
+			}
+		}
+		lines = append(lines, t(key, args...))
+	} else if a.Message != "" {
 		lines = append(lines, a.Message)
 	}
 	if a.Reason != "" {
-		lines = append(lines, t("notify.body.reason", "reason", a.Reason))
+		lines = append(lines, t("notify.body.reason", "reason", d.reasonText(lang, a.Reason)))
 	}
 	lines = append(lines, t("notify.body.time", "time", d.i18n.FormatDateTime(lang, m.Time, d.location(uid))), d.nodeLine(uid, lang))
 	m.Text = strings.Join(lines, "\n")
@@ -876,6 +884,20 @@ func (d *Dispatcher) composeDynDNS(lang string, a Alert, m Message) Message {
 		"reason": a.Reason, "message": a.Message, "url": m.URL, "title": m.Title, "text": m.Text,
 		"node": map[string]any{"name": d.settings(uid)(SetNodeName, ""), "location": d.settings(uid)(SetNodeLocation, "")}}
 	return m
+}
+
+// reasonText uebersetzt einen Grund, der ein Code ist (hc.reasons.<code> bzw. notify.reason.<code>, z. B. timeout,
+// traffic); Fehlertexte bleiben, wie sie sind.
+func (d *Dispatcher) reasonText(lang, r string) string {
+	if r == "" || strings.ContainsAny(r, " :/.") {
+		return r
+	}
+	for _, k := range []string{"hc.reasons." + r, "notify.reason." + r} {
+		if v := d.i18n.T(lang, k); v != k {
+			return v
+		}
+	}
+	return r
 }
 
 // composeProxmox formuliert Meldungen der Proxmox-VE-Ueberwachung: Titel notify.subject.<kind> mit dem Namen

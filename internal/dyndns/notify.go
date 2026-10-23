@@ -27,14 +27,22 @@ func (m *Module) notifyOn(ctx context.Context, key string) bool {
 	return m.core.SettingOr(ctx, key, "1") == "1"
 }
 
-// alert schickt eine Meldung, wenn sie eingeschaltet ist.
-func (m *Module) alert(ctx context.Context, key string, kind notify.Kind, name, reason, msg string) {
+// alert schickt eine Meldung, wenn sie eingeschaltet ist. text: Paare fuer einen uebersetzten Text ("text", Schluessel,
+// danach Platzhalter und Werte); msg bleibt der Text fuer Verlauf und Schnittstellen.
+func (m *Module) alert(ctx context.Context, key string, kind notify.Kind, name, reason, msg string, text ...string) {
 	if m.notifier == nil || !m.notifyOn(ctx, key) {
 		return
 	}
 	now := time.Now().UTC()
+	var data map[string]string
+	if len(text) > 1 {
+		data = map[string]string{}
+		for i := 0; i+1 < len(text); i += 2 {
+			data[text[i]] = text[i+1]
+		}
+	}
 	m.notifier(notify.Alert{EventID: "dyn-" + string(kind) + "-" + name + "-" + strconv.FormatInt(now.UnixNano(), 36), Kind: kind, Time: now,
-		Check: notify.CheckInfo{Name: name, NotifyDown: true, NotifyUp: true, Local: true}, Reason: reason, Message: msg})
+		Check: notify.CheckInfo{Name: name, NotifyDown: true, NotifyUp: true, Local: true}, Reason: reason, Message: msg, Data: data})
 }
 
 // notifyOnce: true, wenn heute unter diesem Schluessel noch nicht gemeldet wurde (und merkt es sich).
