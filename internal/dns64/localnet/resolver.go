@@ -46,10 +46,13 @@ const probeSuffix = ".node64-probe.invalid."
 // SelfProbe meldet, ob q eine Pruefanfrage der Router-Suche ist (der eigene DNS-Dienst ruft das je Anfrage auf und
 // antwortet dann sofort, ohne Protokoll).
 func (r *Resolver) SelfProbe(q string) bool {
-	if !strings.HasSuffix(strings.ToLower(q), probeSuffix) {
+	q = strings.ToLower(q)
+	if !strings.HasSuffix(q, probeSuffix) {
 		return false
 	}
-	r.probes.Store(strings.ToLower(q), true)
+	if _, pending := r.probes.Load(q); pending { // nur eigene, gerade verschickte Pruefnamen (sonst waechst die Map je Anfrage)
+		r.probes.Store(q, true)
+	}
 	return true
 }
 
@@ -237,10 +240,11 @@ func (r *Resolver) isSelf(ctx context.Context, addr string) bool {
 	name := hex.EncodeToString(nonce[:]) + probeSuffix
 	req := new(dns.Msg)
 	req.SetQuestion(name, dns.TypeTXT)
+	r.probes.Store(name, false)
 	c := &dns.Client{Net: "udp", Timeout: time.Second}
 	_, _, _ = c.ExchangeContext(ctx, req, addr)
-	_, seen := r.probes.LoadAndDelete(name)
-	return seen
+	v, _ := r.probes.LoadAndDelete(name)
+	return v == true
 }
 
 func probe(ctx context.Context, addr string) bool {

@@ -1,5 +1,11 @@
 # Changes – DNS64
 
+## 1.27.3 – 2026-10-23
+
+### Fixed
+- Router detection (1.27.2): probe names `*.node64-probe.invalid` from other devices are still answered immediately,
+  but no longer remembered – only the ones just sent by the node itself (memory grew with every such query before).
+
 ## 1.27.2 – 2026-10-23
 
 ### Fixed

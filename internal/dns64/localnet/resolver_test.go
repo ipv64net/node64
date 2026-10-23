@@ -2,6 +2,7 @@ package localnet
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -67,5 +68,20 @@ func TestIsRouter(t *testing.T) {
 	}
 	if New("127.0.0.1:5353", r.log).IsRouter(netip.MustParseAddr("127.0.0.1")) || New("", r.log).IsRouter(netip.MustParseAddr("172.17.0.1")) {
 		t.Fatal("loopback/ohne router")
+	}
+}
+
+// Fremde Pruefnamen (nicht von der Router-Suche dieser Node) werden beantwortet, aber nicht gemerkt.
+func TestSelfProbeIgnoresForeignNames(t *testing.T) {
+	r := New("", nil)
+	for i := 0; i < 100; i++ {
+		if !r.SelfProbe(fmt.Sprintf("x%d.node64-probe.invalid.", i)) {
+			t.Fatal("probe name not recognised")
+		}
+	}
+	n := 0
+	r.probes.Range(func(any, any) bool { n++; return true })
+	if n != 0 {
+		t.Fatalf("%d foreign probe names stored", n)
 	}
 }

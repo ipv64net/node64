@@ -1,5 +1,11 @@
 # Änderungen – DNS64
 
+## 1.27.3 – 2026-10-23
+
+### Behoben
+- Router-Suche (1.27.2): Prüfnamen `*.node64-probe.invalid` von fremden Geräten werden weiter sofort beantwortet, aber
+  nicht mehr gemerkt – nur die gerade selbst verschickten (sonst wuchs der Speicher mit jeder solchen Anfrage).
+
 ## 1.27.2 – 2026-10-23
 
 ### Behoben
