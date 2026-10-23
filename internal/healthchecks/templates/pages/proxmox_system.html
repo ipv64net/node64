@@ -28,8 +28,19 @@
 {{with $d.Snap}}{{if .Warning}}<div class="alert alert-warning small" id="pve-rights"><i class="bi bi-shield-exclamation"></i> <strong>{{$.T "pve.warn_rights"}}</strong> {{$.T "pve.warn_rights_fix"}}<div class="font-monospace text-break mt-1">{{.Warning}}</div>
 	{{if $d.TokenName}}<div class="mt-2">{{$.T "pve.warn_rights_cmd"}}</div>
 	<pre class="p-2 rounded bg-body-tertiary mt-1 mb-0" style="white-space:pre-wrap;word-break:break-all"><code id="pve-rights-cmd">pveum user token permissions {{$d.TokenUser}} {{$d.TokenName}} --path /
+pveum acl modify / --users '{{$d.TokenUser}}' --roles PVEAuditor
 pveum acl modify / --tokens '{{$d.Sys.TokenID}}' --roles PVEAuditor</code></pre>
 	<button class="btn btn-outline-secondary btn-sm mt-1" type="button" data-copy-target="#pve-rights-cmd"><i class="bi bi-clipboard"></i> {{$.T "common.copy"}}</button>{{end}}</div>{{end}}{{end}}
+
+{{with $d.Snap}}{{if .OK}}
+<div class="row g-2 mb-3" id="pve-sys-kpi">
+	<div class="col-6 col-md"><div class="card stat {{if lt $d.NodesOnline $d.Nodes}}stat-down{{else}}stat-ok{{end}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "pve.kpi.nodes"}}</div><div class="stat-value">{{$d.NodesOnline}} / {{$d.Nodes}}</div><div class="stat-sub">{{if .Cluster}}{{.Cluster}}{{if eq $d.Quorum "ok"}} · {{$.T "pve.quorum_ok"}}{{else if eq $d.Quorum "lost"}} · {{$.T "pve.quorum_lost"}}{{end}}{{else if $d.ClusterUnknown}}{{$.T "pve.cluster_unknown"}}{{else}}{{$.T "pve.single"}}{{end}}</div></div><i class="bi bi-server stat-icon"></i></div></div></div>
+	<div class="col-6 col-md"><a class="card stat stat-primary" href="{{$d.Path}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "pve.guests"}}</div><div class="stat-value">{{$d.Guests}}</div></div><i class="bi bi-boxes stat-icon"></i></div></a></div>
+	<div class="col-6 col-md"><a class="card stat stat-ok" href="{{$d.Path}}?state=running"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "pve.kpi.running"}}</div><div class="stat-value">{{$d.Running}}</div><div class="stat-sub">{{$.T "pve.kpi.of" "count" $d.Guests}}</div></div><i class="bi bi-play-circle stat-icon"></i></div></a></div>
+	<div class="col-6 col-md"><a class="card stat {{if $d.Bad}}stat-down{{else}}stat-muted{{end}}" href="{{$d.Path}}?state=problem"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "pve.kpi.bad"}}</div><div class="stat-value">{{$d.Bad}}</div></div><i class="bi bi-exclamation-triangle stat-icon"></i></div></a></div>
+	<div class="col-12 col-md"><div class="card stat stat-muted"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "pve.kpi.load"}}</div><div class="stat-value stat-value-sm">CPU {{or $d.CPUText "–"}} · RAM {{if $d.MemMax}}{{$.Bytes $d.Mem}} / {{$.Bytes $d.MemMax}}{{else}}–{{end}}</div>{{if $d.CPUMax}}<div class="stat-sub">{{$.T "pve.kpi.cores" "count" $d.CPUMax}}</div>{{end}}</div><i class="bi bi-speedometer2 stat-icon"></i></div></div></div>
+</div>
+{{end}}{{end}}
 
 {{if $d.NodeRows}}
 <div class="card mb-3">

@@ -713,7 +713,7 @@ func TestPVEPagesAndWizard(t *testing.T) {
 		}
 	}
 	code, body = pveGet(t, srv, sp)
-	for _, want := range []string{"pve1", "web", "app", "guest-panicked", "pve.state.error", "pve.template", `name="key" value="qemu/100"`, "pve-spark", "pve.rules.level_system",
+	for _, want := range []string{`id="pve-sys-kpi"`, "pve.kpi.nodes", "pve.kpi.load", "?state=problem", "pve1", "web", "app", "guest-panicked", "pve.state.error", "pve.template", `name="key" value="qemu/100"`, "pve-spark", "pve.rules.level_system",
 		`name="r_unreachable"`, "pve.rules.from_default"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("system page: %q missing: %s", want, body)

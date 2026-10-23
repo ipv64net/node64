@@ -1,5 +1,15 @@
 # Changes – Healthchecks
 
+## 2.24.3 – 2026-10-23
+
+### Added
+- Proxmox VE: the page of a system has KPI tiles at the top like the overview – nodes online (with cluster name and
+  quorum), guests, running, with problems (clickable as filter) and load (CPU, RAM, cores).
+
+### Changed
+- Rights hint: with a token using “Privilege Separation” only what user and token both may counts – the hint now shows
+  the commands for both.
+
 ## 2.24.2 – 2026-10-23
 
 ### Fixed

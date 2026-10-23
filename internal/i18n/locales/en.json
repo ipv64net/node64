@@ -4246,11 +4246,12 @@
       "running": "Guests running",
       "of": "of {count}",
       "bad": "Guests with problems",
-      "load": "Load of all nodes"
+      "load": "Load of all nodes",
+      "cores": "{count} CPU cores"
     },
     "cluster_unknown": "Cluster – quorum unknown",
     "cluster_unknown_hint": "Several nodes, but cluster name and quorum are missing: the token lacks Sys.Audit on the path “/” (cluster/status).",
-    "warn_rights_cmd": "Check on a Proxmox node (shows the token's effective rights on “/”; Sys.Audit must be included) and set:"
+    "warn_rights_cmd": "Check on a Proxmox node (shows the token's effective rights on “/”; Sys.Audit must be included) and set them – with “Privilege Separation” only what user and token both may counts, hence both:"
   },
   "mcp": {
     "title": "AI interface (MCP)",

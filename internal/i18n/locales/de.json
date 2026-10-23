@@ -4246,11 +4246,12 @@
       "running": "Gäste laufend",
       "of": "von {count}",
       "bad": "Gäste gestört",
-      "load": "Auslastung aller Nodes"
+      "load": "Auslastung aller Nodes",
+      "cores": "{count} CPU-Kerne"
     },
     "cluster_unknown": "Cluster – Quorum unbekannt",
     "cluster_unknown_hint": "Mehrere Nodes, aber Clustername und Quorum fehlen: dem Token fehlt das Recht Sys.Audit auf dem Pfad „/“ (cluster/status).",
-    "warn_rights_cmd": "Auf einem Proxmox-Node prüfen (zeigt die wirksamen Rechte des Tokens auf „/“; Sys.Audit muss dabei sein) und setzen:"
+    "warn_rights_cmd": "Auf einem Proxmox-Node prüfen (zeigt die wirksamen Rechte des Tokens auf „/“; Sys.Audit muss dabei sein) und setzen – bei einem Token mit „Privilege Separation“ zählt nur, was Benutzer und Token beide dürfen, darum beide:"
   },
   "mcp": {
     "title": "KI-Schnittstelle (MCP)",

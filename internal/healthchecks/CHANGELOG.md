@@ -1,5 +1,15 @@
 # Änderungen – Healthchecks
 
+## 2.24.3 – 2026-10-23
+
+### Neu
+- Proxmox VE: Die Seite eines Systems hat oben Kennzahl-Kacheln wie die Übersicht – Nodes online (mit Clustername und
+  Quorum), Gäste, laufend, gestört (anklickbar als Filter) und Auslastung (CPU, RAM, Kerne).
+
+### Geändert
+- Rechte-Hinweis: Bei einem Token mit „Privilege Separation“ zählt nur, was Benutzer und Token beide dürfen – der
+  Hinweis zeigt jetzt die Befehle für beide.
+
 ## 2.24.2 – 2026-10-23
 
 ### Behoben
