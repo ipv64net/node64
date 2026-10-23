@@ -346,6 +346,7 @@ func (s *Store) Delete(ctx context.Context, token string) error {
 	for _, q := range []string{
 		`DELETE FROM hc_checks WHERE token = ?`, `DELETE FROM hc_measurements WHERE token = ?`, `DELETE FROM hc_events WHERE token = ?`,
 		`DELETE FROM hc_incidents WHERE token = ?`, `DELETE FROM hc_sources WHERE token = ?`, `DELETE FROM hc_source_points WHERE token = ?`, `DELETE FROM hc_source_hourly WHERE token = ?`, `DELETE FROM hc_hourly WHERE token = ?`, `DELETE FROM hc_daily WHERE token = ?`,
+		`DELETE FROM hc_status_items WHERE token = ?`, // auch von allen Statusseiten
 	} {
 		if _, err := tx.ExecContext(ctx, q, token); err != nil {
 			return err
@@ -360,6 +361,7 @@ func (s *Store) Delete(ctx context.Context, token string) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	s.statusChanged()
 	s.changed(ctx, "check", token, "delete")
 	return nil
 }

@@ -54,7 +54,7 @@ func TestIntervalMinByExecution(t *testing.T) {
 // Karte Tageskontingent: Hochrechnung bis Mitternacht (Europe/Berlin), Zeitpunkt des Erreichens, erreicht.
 func TestHCQuotaCard(t *testing.T) {
 	now := time.Date(2026, 10, 23, 10, 0, 0, 0, quotaZone) // 14 h bis Mitternacht
-	q := newHCQuota(1000, 10000, 8640, now)                 // 0,1 je Sekunde -> 5040 bis Mitternacht
+	q := newHCQuota(1000, 10000, 8640, now)                // 0,1 je Sekunde -> 5040 bis Mitternacht
 	if q.Short || q.Reached || q.Tomorrow || q.AtMidnight != 6040 || q.Pct != 10 {
 		t.Fatalf("ok: %+v", q)
 	}
@@ -70,4 +70,3 @@ func TestHCQuotaCard(t *testing.T) {
 		t.Fatalf("none: %+v", q)
 	}
 }
-

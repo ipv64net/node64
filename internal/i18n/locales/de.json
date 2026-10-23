@@ -2522,7 +2522,12 @@
       "logo_hint": "PNG, JPEG, WebP oder SVG, höchstens 256 KiB.",
       "logo_replace": "Eine neue Datei ersetzt das Logo.",
       "logo_remove": "Logo entfernen",
-      "logo_removed": "Logo entfernt."
+      "logo_removed": "Logo entfernt.",
+      "res_hint_pve": "Nodes, VMs und Container deiner Proxmox-Systeme. Ohne Check wird beim Hinzufügen einer angelegt (wie „auch als Check führen“).",
+      "res_hint_docker": "Container deiner Docker-Hosts. Ohne Check wird beim Hinzufügen einer angelegt (wie „auch als Check führen“).",
+      "res_new": "neuer Check",
+      "res_new_hint": "Noch kein Check – wird beim Hinzufügen angelegt, mit den Benachrichtigungen der Regeln (keine doppelten Meldungen).",
+      "res_none": "Noch keine Daten – das System ist aus oder wurde noch nicht abgefragt."
     }
   },
   "notify": {

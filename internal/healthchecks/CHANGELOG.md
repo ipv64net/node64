@@ -1,5 +1,17 @@
 # Änderungen – Healthchecks
 
+## 2.26.0 – 2026-10-23
+
+### Neu
+- Statusseiten: Beim Hinzufügen gibt es neben den Checks eigene Karten für Proxmox VE (Nodes, VMs, Container je System)
+  und Docker (Container je Host) – nur, wenn es Proxmox-Systeme bzw. Docker-Hosts gibt. Hat ein Eintrag noch keinen
+  Check, wird er beim Hinzufügen angelegt wie mit „auch als Check führen“ (Benachrichtigungen der Regeln, keine doppelten
+  Meldungen). Checks von Nodes, Gästen und Containern stehen nur noch in ihrer Karte.
+
+### Behoben
+- Wird ein Check gelöscht (auch über eine andere Node, ipv64 oder „als Check“ aus), verschwindet er von allen
+  Statusseiten; Einträge bereits gelöschter Checks werden beim Update entfernt.
+
 ## 2.25.0 – 2026-10-23
 
 ### Neu

@@ -2522,7 +2522,12 @@
       "logo_hint": "PNG, JPEG, WebP or SVG, at most 256 KiB.",
       "logo_replace": "A new file replaces the logo.",
       "logo_remove": "Remove logo",
-      "logo_removed": "Logo removed."
+      "logo_removed": "Logo removed.",
+      "res_hint_pve": "Nodes, VMs and containers of your Proxmox systems. Without a check one is created when adding (like “also run as check”).",
+      "res_hint_docker": "Containers of your Docker hosts. Without a check one is created when adding (like “also run as check”).",
+      "res_new": "new check",
+      "res_new_hint": "No check yet – created when adding, with the notifications of the rules (no duplicate alerts).",
+      "res_none": "No data yet – the system is off or has not been queried yet."
     }
   },
   "notify": {
