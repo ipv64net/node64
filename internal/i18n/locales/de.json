@@ -4398,13 +4398,20 @@
       "key_pending": "übernommen – leer lassen = diesen Schlüssel verwenden"
     },
     "howto": {
-      "ssh1": "Eigenen Benutzer mit Zugriff auf den Docker-Socket anlegen:",
-      "ssh2": "Den Schlüssel so in ~/.ssh/authorized_keys dieses Benutzers eintragen – dann erreicht er nur die Docker-API, keine Shell (die docker-CLI auf dem Host ist bei Docker-Installationen dabei):",
       "ssh3": "Ohne docker-CLI geht es über Socket-Weiterleitung: Schlüssel ohne „restrict“ eintragen und im sshd AllowTcpForwarding erlauben (Standard bei Debian/Ubuntu). Node64 nimmt von selbst den Weg, der funktioniert. Hinweis: Wer den Docker-Socket nutzen kann, hat auf dem Host root-Rechte – den Schlüssel gut schützen.",
       "tls1": "Docker-Daemon mit TLS in /etc/docker/daemon.json (Zertifikate z. B. nach der Docker-Anleitung „Protect the Docker daemon socket“):",
       "tls2": "Hier ca.pem, cert.pem und key.pem des Clients eintragen. Ohne ca.pem den Fingerabdruck des Server-Zertifikats bestätigen.",
       "tcp1": "docker-socket-proxy gibt nur die nötigen Lese-Endpunkte frei (Container und Info):",
-      "tcp2": "Port 2375 nur im LAN erreichbar machen (Firewall). Ohne INFO=1 fehlen Hostname, CPU-Kerne und RAM des Hosts."
+      "tcp2": "Port 2375 nur im LAN erreichbar machen (Firewall). Ohne INFO=1 fehlen Hostname, CPU-Kerne und RAM des Hosts.",
+      "s1": "Auf dem Docker-Host einen Benutzer mit Zugriff auf Docker anlegen:",
+      "s2": "Hier einen Schlüssel für Node64 erzeugen:",
+      "s2_done": "Schlüssel ist da – er wird beim Speichern verschlüsselt abgelegt.",
+      "s2_hint": "Alternativ links einen eigenen privaten Schlüssel ohne Passphrase einfügen.",
+      "s3": "Den Schlüssel auf dem Docker-Host eintragen – alles kopieren und dort ausführen:",
+      "s3_wait": "Erscheint hier, sobald ein Schlüssel erzeugt ist.",
+      "s3_new": "Wichtig: Nach „Neuen Schlüssel erzeugen“ diesen Schritt wiederholen und die alte Zeile in authorized_keys löschen – der alte Schlüssel gilt dann nicht mehr. Die Zeile erlaubt nur die Docker-API, keine Shell.",
+      "s4": "Links Benutzer und Host eintragen, „Verbindung testen“ klicken und den angezeigten Host-Key mit der Ausgabe dieses Befehls auf dem Docker-Host vergleichen; stimmt er, bestätigen:",
+      "s5": "Speichern – danach erscheinen die Container des Hosts."
     },
     "err": {
       "key": "Kein gültiger privater Schlüssel (PEM, z. B. OpenSSH ed25519).",

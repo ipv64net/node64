@@ -4398,13 +4398,20 @@
       "key_pending": "taken – leave empty to use this key"
     },
     "howto": {
-      "ssh1": "Create a dedicated user with access to the Docker socket:",
-      "ssh2": "Add the key like this to ~/.ssh/authorized_keys of this user – then it only reaches the Docker API, no shell (the docker CLI comes with Docker installations):",
       "ssh3": "Without the docker CLI it works via socket forwarding: add the key without “restrict” and allow AllowTcpForwarding in sshd (default on Debian/Ubuntu). Node64 picks the way that works by itself. Note: whoever can use the Docker socket is root on the host – protect the key well.",
       "tls1": "Docker daemon with TLS in /etc/docker/daemon.json (certificates e.g. following the Docker guide “Protect the Docker daemon socket”):",
       "tls2": "Enter ca.pem, cert.pem and key.pem of the client here. Without ca.pem confirm the fingerprint of the server certificate.",
       "tcp1": "docker-socket-proxy only exposes the needed read endpoints (containers and info):",
-      "tcp2": "Make port 2375 reachable from the LAN only (firewall). Without INFO=1 hostname, CPU cores and RAM of the host are missing."
+      "tcp2": "Make port 2375 reachable from the LAN only (firewall). Without INFO=1 hostname, CPU cores and RAM of the host are missing.",
+      "s1": "On the Docker host, create a user with access to Docker:",
+      "s2": "Generate a key for Node64 here:",
+      "s2_done": "Key ready – it is stored encrypted when you save.",
+      "s2_hint": "Or paste your own private key without passphrase on the left.",
+      "s3": "Add the key on the Docker host – copy everything and run it there:",
+      "s3_wait": "Shows up here once a key has been generated.",
+      "s3_new": "Important: after “Generate new key” repeat this step and delete the old line in authorized_keys – the old key no longer works. The line only allows the Docker API, no shell.",
+      "s4": "Enter user and host on the left, click “Test connection” and compare the host key shown with the output of this command on the Docker host; if it matches, confirm:",
+      "s5": "Save – then the containers of the host show up."
     },
     "err": {
       "key": "No valid private key (PEM, e.g. OpenSSH ed25519).",

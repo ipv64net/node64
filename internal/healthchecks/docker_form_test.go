@@ -43,7 +43,7 @@ func TestDockerRemoteHosts(t *testing.T) {
 	ctx := context.Background()
 	dockerGetPage(t, srv, "/healthchecks/docker") // lokaler Host automatisch
 	body := dockerGetPage(t, srv, "/healthchecks/docker/new")
-	for _, want := range []string{"docker.conn.ssh", "docker.howto.ssh1", `id="dk-host"`, "docker.form.genkey"} {
+	for _, want := range []string{"docker.conn.ssh", "docker.howto.s1", `id="dk-host"`, "docker.form.genkey"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("form: %q missing", want)
 		}

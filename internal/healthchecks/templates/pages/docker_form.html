@@ -165,13 +165,29 @@
 		<div class="card mb-3">
 			<div class="card-header"><i class="bi bi-terminal text-primary"></i> {{.T "docker.form.setup"}}</div>
 			<div class="card-body small">
-			{{if eq $d.Conn "ssh"}}
-				<p>{{.T "docker.howto.ssh1"}}</p>
-				<pre class="p-2 rounded bg-body-tertiary mb-2"><code>sudo useradd -m -s /bin/sh {{or $f.user "node64"}}
-sudo usermod -aG docker {{or $f.user "node64"}}</code></pre>
-				<p>{{.T "docker.howto.ssh2"}}</p>
-				<pre class="p-2 rounded bg-body-tertiary mb-2 text-wrap text-break"><code>restrict,command="docker system dial-stdio" {{or $d.PubKey "ssh-ed25519 AAAA… node64"}}</code></pre>
-				<p class="mb-0 text-body-secondary">{{.T "docker.howto.ssh3"}}</p>
+			{{if eq $d.Conn "ssh"}}{{$u := or $f.user "node64"}}
+				<ol class="ps-3 mb-0" id="dk-howto">
+					<li class="mb-3"><span class="fw-semibold">{{.T "docker.howto.s1"}}</span>
+						<pre class="p-2 rounded bg-body-tertiary my-1"><code id="dk-cmd1">sudo useradd -m -s /bin/sh {{$u}}
+sudo usermod -aG docker {{$u}}</code></pre>
+						<button class="btn btn-outline-secondary btn-sm" type="button" data-copy-target="#dk-cmd1"><i class="bi bi-clipboard"></i> {{.T "common.copy"}}</button></li>
+					<li class="mb-3"><span class="fw-semibold">{{.T "docker.howto.s2"}}</span>
+						<div class="my-2"><button class="btn btn-primary btn-sm" type="submit" name="op" value="genkey" formnovalidate><i class="bi bi-key"></i> {{if or $d.PubKey $d.HasKey}}{{.T "docker.form.genkey_new"}}{{else}}{{.T "docker.form.genkey"}}{{end}}</button></div>
+						{{if $d.PubKey}}<div class="text-success"><i class="bi bi-check-circle"></i> {{.T "docker.howto.s2_done"}}</div>{{else}}<div class="text-body-secondary">{{.T "docker.howto.s2_hint"}}</div>{{end}}</li>
+					<li class="mb-3"><span class="fw-semibold">{{.T "docker.howto.s3"}}</span>
+						{{if $d.PubKey}}<pre class="p-2 rounded bg-body-tertiary my-1 text-wrap text-break"><code id="dk-cmd3">sudo mkdir -p /home/{{$u}}/.ssh
+echo 'restrict,command="docker system dial-stdio" {{$d.PubKey}}' | sudo tee -a /home/{{$u}}/.ssh/authorized_keys
+sudo chown -R {{$u}}:{{$u}} /home/{{$u}}/.ssh
+sudo chmod 700 /home/{{$u}}/.ssh
+sudo chmod 600 /home/{{$u}}/.ssh/authorized_keys</code></pre>
+						<button class="btn btn-outline-secondary btn-sm" type="button" data-copy-target="#dk-cmd3"><i class="bi bi-clipboard"></i> {{.T "common.copy"}}</button>
+						{{else}}<div class="text-body-secondary fst-italic">{{.T "docker.howto.s3_wait"}}</div>{{end}}
+						<div class="form-text">{{.T "docker.howto.s3_new"}}</div></li>
+					<li class="mb-3"><span class="fw-semibold">{{.T "docker.howto.s4"}}</span>
+						<pre class="p-2 rounded bg-body-tertiary my-1"><code>sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code></pre></li>
+					<li><span class="fw-semibold">{{.T "docker.howto.s5"}}</span></li>
+				</ol>
+				<p class="mt-3 mb-0 text-body-secondary">{{.T "docker.howto.ssh3"}}</p>
 			{{else if eq $d.Conn "tls"}}
 				<p>{{.T "docker.howto.tls1"}}</p>
 				<pre class="p-2 rounded bg-body-tertiary mb-2"><code>{
