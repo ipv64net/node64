@@ -58,3 +58,12 @@ func TestDailyUsageGate(t *testing.T) {
 		t.Fatalf("flips after rollover = %v, want [true false]", flips)
 	}
 }
+
+// Klassenlimit: alle 2 Minuten neu, gesperrte Accounts bei jedem Abgleich (Upgrade gibt sofort frei).
+func TestLimitDue(t *testing.T) {
+	now := time.Now()
+	u := usage{limitAt: map[int64]time.Time{1: now.Add(-time.Minute), 2: now.Add(-3 * time.Minute), 3: now.Add(-time.Minute)}, blocked: map[int64]bool{3: true}}
+	if u.limitDue(1, now) || !u.limitDue(2, now) || !u.limitDue(3, now) || !u.limitDue(4, now) {
+		t.Fatalf("due: 1=%v 2=%v 3=%v 4=%v", u.limitDue(1, now), u.limitDue(2, now), u.limitDue(3, now), u.limitDue(4, now))
+	}
+}

@@ -189,6 +189,13 @@ func (s *Store) UsageLoop(ctx context.Context) {
 	}
 }
 
+// limitDue: Klassenlimit neu lesen (u.mu gehalten) – alle 2 Minuten, gesperrte Accounts bei jedem Abgleich (alle
+// 30 s), damit sie nach einem Upgrade sofort wieder frei sind.
+func (u *usage) limitDue(id int64, now time.Time) bool {
+	at, ok := u.limitAt[id]
+	return !ok || u.blocked[id] || now.Sub(at) > 2*time.Minute
+}
+
 // FlushUsage schreibt die offenen Zaehler, liest die Tagesstaende und Limits und setzt die Sperren neu.
 func (s *Store) FlushUsage(ctx context.Context) {
 	u := &s.use
@@ -202,7 +209,7 @@ func (s *Store) FlushUsage(ctx context.Context) {
 	}
 	var needLimit []int64
 	for _, id := range ids {
-		if at, ok := u.limitAt[id]; !ok || time.Since(at) > 2*time.Minute { // Upgrade gilt nach wenigen Minuten
+		if u.limitDue(id, time.Now()) {
 			needLimit = append(needLimit, id)
 		}
 	}
