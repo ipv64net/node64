@@ -28,6 +28,7 @@ type CDN64Tunnel struct {
 	LastEdge *string     `json:"last_edge"`
 	Token    string      `json:"token,omitempty"`
 	Edges    []CDN64Edge `json:"edges,omitempty"`
+	Sessions int         `json:"sessions,omitempty"` // parallele Verbindungen je Server (Klasse; Business/Company mehrere)
 }
 
 // CDN64Host ist ein eingeschalteter Name.

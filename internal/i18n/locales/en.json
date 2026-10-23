@@ -42,6 +42,7 @@
     "limit": {
       "dyndns_domains": "DynDNS domains",
       "own_domains": "Own domains (DNS)",
+      "cdn_tunnel_sessions": "Parallel tunnel connections per server",
       "dyndns_updates_24h": "DynDNS updates per day",
       "dyndns_ttl_s": "DynDNS TTL",
       "healthchecks": "Online measuring points (checks × locations)",
@@ -835,6 +836,7 @@
     },
     "online": {
       "err_conf": "Check the tunnel settings: tunnel, token and at least one server (name, host).",
+      "sessions_title": "{n} parallel tunnel connections to this server (Business/Company): new visitors use the least loaded one; if one fails, the others carry on",
       "o_ports_node": "Port mappings: server port → port of the stream or target",
       "col": "CDN64",
       "on": "Switch on",

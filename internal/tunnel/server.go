@@ -7,7 +7,9 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -19,8 +21,10 @@ type Peer struct {
 	Node    string
 	Version string
 	Caps    []string // Faehigkeiten der Node (Hello)
+	Slot    int      // Nummer der Verbindung (parallele Sessions eines Tunnels)
 	Since   time.Time
 	Session Session
+	Streams atomic.Int64 // offene Daten-Streams (Auswahl der am wenigsten belasteten Verbindung)
 	ctrl    Stream
 	wmu     sync.Mutex
 }
@@ -39,9 +43,11 @@ type Server struct {
 	Caps []string            // Faehigkeiten im Welcome (z. B. CapQUIC)
 	TLS  *tls.Config         // Zertifikat des Servers
 	Auth func(h Hello) error // nil = angenommen; Fehlertext geht an die Node
-	Up   func(p *Peer)       // Node angemeldet
-	Down func(p *Peer)       // Node getrennt
-	Log  *slog.Logger        // nil = still
+	// Sessions: erlaubte parallele Verbindungen je Tunnel (nil bzw. < 1 = eine); hoehere Slots lehnt der Server ab
+	Sessions func(tunnel string) int
+	Up       func(p *Peer) // Node angemeldet
+	Down     func(p *Peer) // Node getrennt
+	Log      *slog.Logger  // nil = still
 
 	mu   sync.Mutex
 	wg   sync.WaitGroup
@@ -172,13 +178,23 @@ func (s *Server) handshake(sess Session) {
 			return
 		}
 	}
-	if err := writeMsg(ctrl, Welcome{Version: Version, Edge: s.Name, Caps: s.Caps}); err != nil {
+	limit := 1
+	if s.Sessions != nil {
+		limit = max(1, s.Sessions(h.Tunnel))
+	}
+	if h.Slot < 0 || h.Slot >= limit {
+		_ = writeMsg(ctrl, Welcome{Version: Version, Edge: s.Name, Error: "session limit (" + strconv.Itoa(limit) + ")", Sessions: limit})
+		time.Sleep(100 * time.Millisecond)
+		_ = sess.Close("session limit")
+		return
+	}
+	if err := writeMsg(ctrl, Welcome{Version: Version, Edge: s.Name, Caps: s.Caps, Sessions: limit}); err != nil {
 		_ = sess.Close("write")
 		return
 	}
 	_ = ctrl.SetDeadline(time.Time{})
-	p := &Peer{Tunnel: h.Tunnel, Node: h.Node, Version: h.NodeVersion, Caps: h.Caps, Since: time.Now(), Session: sess, ctrl: ctrl}
-	s.log().Info("tunnel up", "tunnel", h.Tunnel, "node", h.Node, "transport", sess.Transport(), "from", sess.RemoteAddr().String())
+	p := &Peer{Tunnel: h.Tunnel, Node: h.Node, Version: h.NodeVersion, Caps: h.Caps, Slot: h.Slot, Since: time.Now(), Session: sess, ctrl: ctrl}
+	s.log().Info("tunnel up", "tunnel", h.Tunnel, "node", h.Node, "slot", h.Slot, "transport", sess.Transport(), "from", sess.RemoteAddr().String())
 	if s.Up != nil {
 		s.Up(p)
 	}
@@ -222,5 +238,6 @@ func OpenStream(ctx context.Context, p *Peer, h Header) (Stream, error) {
 		return nil, err
 	}
 	_ = st.SetWriteDeadline(time.Time{})
-	return st, nil
+	p.Streams.Add(1)
+	return &countedStream{Stream: st, n: &p.Streams}, nil
 }

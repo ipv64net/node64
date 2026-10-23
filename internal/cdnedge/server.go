@@ -40,6 +40,7 @@ type Server struct {
 
 	mu      sync.Mutex
 	peers   map[string][]*tunnel.Peer // je Tunnel die angemeldeten Verbindungen (neueste zuletzt)
+	rr      atomic.Uint64             // Startpunkt reihum fuer die Auswahl der Verbindung (leastLoaded)
 	streams atomic.Int64              // offene Daten-Streams
 	total   atomic.Int64
 
@@ -238,7 +239,7 @@ func (s *Server) tlsConfig() (*tls.Config, error) {
 }
 
 func (s *Server) startTunnel() error {
-	s.tun = &tunnel.Server{Name: s.cfg.Name, TLS: s.tlsConf, Log: s.log, Auth: s.auth, Up: s.up, Down: s.down}
+	s.tun = &tunnel.Server{Name: s.cfg.Name, TLS: s.tlsConf, Log: s.log, Auth: s.auth, Up: s.up, Down: s.down, Sessions: s.sessionsFor}
 	if s.cfg.ListenHTTPS != "" { // QUIC (HTTP/3) fuer Modus 1 durchreichen (quicpass.go)
 		s.tun.Caps = []string{tunnel.CapQUIC}
 	}
@@ -300,20 +301,53 @@ func (s *Server) down(p *tunnel.Peer) {
 	}
 }
 
-// peer: neueste Verbindung eines Tunnels (nil = nicht verbunden).
+// sessionsFor: erlaubte parallele Verbindungen eines Tunnels (ipv64 je Klasse, feste Konfiguration; mindestens eine,
+// hoechstens tunnel.MaxSessions).
+func (s *Server) sessionsFor(id string) int {
+	n := 0
+	for _, t := range s.cfg.Tunnels {
+		if t.ID == id {
+			n = t.Sessions
+		}
+	}
+	if c := s.apiCfg.Load(); c != nil {
+		for _, t := range c.Tunnels {
+			if t.ID == id {
+				n = t.Sessions
+			}
+		}
+	}
+	return min(max(n, 1), tunnel.MaxSessions)
+}
+
+// peer: am wenigsten belastete Verbindung eines Tunnels (offene Streams; gleich viele: die neueste), nil = nicht
+// verbunden. Mehrere Verbindungen gibt es bei parallelen Sessions (Business/Company) und kurz beim Neuverbinden.
 func (s *Server) peer(id string) *tunnel.Peer {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if id == "" { // T1-Testeingang ohne feste Zuordnung: irgendein Tunnel
 		for _, l := range s.peers {
-			return l[len(l)-1]
+			return leastLoaded(l, nil, int(s.rr.Add(1)))
 		}
 		return nil
 	}
-	if l := s.peers[id]; len(l) > 0 {
-		return l[len(l)-1]
+	return leastLoaded(s.peers[id], nil, int(s.rr.Add(1)))
+}
+
+// leastLoaded: Verbindung mit den wenigsten offenen Streams ausser skip. Bei Gleichstand reihum ab start: viele
+// Besucher gleichzeitig (bevor die Zaehler steigen) verteilen sich so trotzdem.
+func leastLoaded(l []*tunnel.Peer, skip map[*tunnel.Peer]bool, start int) *tunnel.Peer {
+	var best *tunnel.Peer
+	for i := range l {
+		p := l[(start+i)%len(l)]
+		if skip[p] {
+			continue
+		}
+		if best == nil || p.Streams.Load() < best.Streams.Load() {
+			best = p
+		}
 	}
-	return nil
+	return best
 }
 
 // peerFor: erste verbundene Node aus einer Liste von Tunnels (Reihenfolge = Prioritaet).
@@ -339,6 +373,16 @@ func (s *Server) openPeer(ctx context.Context, p *tunnel.Peer, h tunnel.Header) 
 	}
 	h.Edge, h.Ray = s.cfg.Name, ray()
 	st, err := tunnel.OpenStream(ctx, p, h)
+	for tried := map[*tunnel.Peer]bool{p: true}; err != nil && ctx.Err() == nil; { // andere Verbindung desselben Tunnels
+		s.mu.Lock()
+		next := leastLoaded(s.peers[p.Tunnel], tried, 0)
+		s.mu.Unlock()
+		if next == nil {
+			break
+		}
+		tried[next] = true
+		st, err = tunnel.OpenStream(ctx, next, h)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -40,6 +40,7 @@ type apiTunnel struct {
 	TokenSHA256 string `json:"token_sha256"`
 	UserID      int    `json:"userid"`
 	Blocked     bool   `json:"blocked"`
+	Sessions    int    `json:"sessions"` // parallele Verbindungen der Klasse (Business/Company; 0 = eine)
 }
 
 type apiHost struct {

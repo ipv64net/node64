@@ -283,6 +283,14 @@ landen nur bei angemeldeten Streams (Name + Protokoll + Port), mit Blocklisten, 
 TCP-Verbindungen über den Portmapper (alle Modi) trennen die Server nach 1 Stunde ohne Daten in beide Richtungen
 (cdn64-edge 0.15.1).
 
+**Parallele Tunnel-Verbindungen (2026-10-23, PROXY64 1.26.0, cdn64-edge 0.18.0):** `user_class.cdn_tunnel_sessions`
+(Business/Company 4, sonst 1) geht als `sessions` an die Node (Tunnel in `GET /cdn64o`) und an die Server (Tunnels in
+`edge/config`). Die Node baut je Server so viele Verbindungen auf (Hello `slot` 0..n-1, jede mit eigenem Rückfall
+QUIC → QUIC 443 → TLS); der Server lehnt höhere Slots ab (Welcome `sessions` = Grenze, die Node lässt den Slot dann
+aus) und gibt neue Besucher-Streams an die Verbindung mit den wenigsten offenen Streams (bei Gleichstand reihum),
+bei einem Fehler an die nächste. Grund: Lasttest 2026-10-23 – eine QUIC-Verbindung je Server deckelte Modus 1/2 bei
+etwa 650–830 Mbit/s (ein CPU-Kern). Nebenbei begrenzt das die Zahl der Verbindungen je Tunnel (vorher unbegrenzt).
+
 ### 8.4 Endpunkte für die Server (Server-Geheimnis, eigene Datei)
 
 | Methode | Pfad | Zweck |

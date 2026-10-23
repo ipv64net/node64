@@ -28,19 +28,20 @@ import (
 
 // fakeOnline spielt ipv64 /cdn64o fuer die Node.
 type fakeOnline struct {
-	mu      sync.Mutex
-	ready   bool
-	edges   []ipv64api.CDN64Edge
-	tunnels map[string]bool
-	hosts   map[int64]string
-	modes   map[int64]int
-	next    int64
-	paused  map[int64]bool
-	extra   []ipv64api.CDN64Host // Namen, die die Node nicht verwaltet (Modus 3 von der Webseite)
-	calls   int                  // Abrufe von Overview
-	maps    map[int64][]ipv64api.CDN64Mapping
-	mapNext int64
-	mapErr  error // naechstes AddMapping scheitert
+	mu       sync.Mutex
+	ready    bool
+	edges    []ipv64api.CDN64Edge
+	tunnels  map[string]bool
+	hosts    map[int64]string
+	modes    map[int64]int
+	next     int64
+	paused   map[int64]bool
+	extra    []ipv64api.CDN64Host // Namen, die die Node nicht verwaltet (Modus 3 von der Webseite)
+	calls    int                  // Abrufe von Overview
+	maps     map[int64][]ipv64api.CDN64Mapping
+	mapNext  int64
+	mapErr   error // naechstes AddMapping scheitert
+	sessions int   // parallele Verbindungen, die ipv64 der Klasse erlaubt
 }
 
 func (f *fakeOnline) Ready(context.Context) bool { f.mu.Lock(); defer f.mu.Unlock(); return f.ready }
@@ -52,7 +53,7 @@ func (f *fakeOnline) Overview(context.Context) (*ipv64api.CDN64Overview, error) 
 	ov.Quota.Domains.Limit = 5
 	f.calls++
 	for id := range f.tunnels {
-		ov.Tunnels = append(ov.Tunnels, ipv64api.CDN64Tunnel{ID: id, Status: "active"})
+		ov.Tunnels = append(ov.Tunnels, ipv64api.CDN64Tunnel{ID: id, Status: "active", Sessions: f.sessions})
 	}
 	for id, n := range f.hosts {
 		ov.Hosts = append(ov.Hosts, ipv64api.CDN64Host{ID: id, FQDN: n, Status: "active", Mode: max(f.modes[id], 1), Paused: f.paused[id], Mappings: f.maps[id]})

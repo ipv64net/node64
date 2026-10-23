@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,7 +26,10 @@ import (
 // Tunnel-Daten kommen per Klick von ipv64 (online_click.go); von Hand setzen geht weiter (API, Tests). Planung:
 // docs/CDN64-ONLINE.md.
 
-const setOnline = "cdn64.online" // JSON onlineConf
+const (
+	setOnline         = "cdn64.online"          // JSON onlineConf
+	setOnlineSessions = "cdn64.online_sessions" // parallele Verbindungen je Server, die ipv64 der Klasse erlaubt
+)
 
 type onlineConf struct {
 	Tunnel string        `json:"tunnel"`
@@ -90,15 +94,16 @@ func (m *Module) onlineStart(ctx context.Context) {
 		return
 	}
 	node, _ := os.Hostname()
+	sessions, _ := strconv.Atoi(m.core.SettingOr(ctx, setOnlineSessions, "1"))
 	cl := tunnel.NewClient(tunnel.ClientConfig{Tunnel: c.Tunnel, Token: tok, Node: node, NodeVersion: m.version, Edges: c.Edges,
-		Handler: m.onlineHandle, Log: m.log, RootCAs: m.online.roots, Caps: []string{tunnel.CapQUIC, tunnel.CapPorts}})
+		Handler: m.onlineHandle, Log: m.log, RootCAs: m.online.roots, Caps: []string{tunnel.CapQUIC, tunnel.CapPorts}, Sessions: sessions})
 	rctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	done := make(chan struct{})
 	m.online.mu.Lock()
 	m.online.client, m.online.cancel, m.online.done = cl, cancel, done
 	m.online.mu.Unlock()
 	go func() { defer close(done); cl.Run(rctx) }()
-	m.log.Info("cdn64 online: tunnel started", "tunnel", c.Tunnel, "edges", len(c.Edges))
+	m.log.Info("cdn64 online: tunnel started", "tunnel", c.Tunnel, "edges", len(c.Edges), "sessions", max(sessions, 1))
 }
 
 func (m *Module) onlineStop() {

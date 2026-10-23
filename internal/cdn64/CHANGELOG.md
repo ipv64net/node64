@@ -1,5 +1,16 @@
 # Änderungen – PROXY64
 
+## 1.26.0 – 2026-10-23
+
+### Neu
+- CDN64 für Business und Company: mehrere parallele Tunnel-Verbindungen je Server (4 statt 1, über QUIC, QUIC über
+  443 oder TLS, je nachdem, was durchkommt). srv07/srv08 geben neue Besucher an die am wenigsten belastete Verbindung;
+  fällt eine aus oder hakt, laufen die Besucher über die anderen weiter. Im Lasttest bremste bisher die eine
+  Verbindung je Server bei etwa 650–830 Mbit/s. Die Zahl kommt von ipv64 je Klasse; ändert sich die Klasse, baut die
+  Node die Verbindungen von selbst neu auf. In der Host-Liste zeigt der Server „×4“, wenn mehrere Verbindungen stehen.
+- Account-Klassen: neue Zeile „Parallele Tunnel-Verbindungen je Server“.
+- Ab cdn64-edge 0.18.0 auf den Servern (ältere Server nutzen weiter eine Verbindung).
+
 ## 1.25.1 – 2026-10-23
 
 ### Geändert

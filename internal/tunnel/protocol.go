@@ -55,6 +55,7 @@ type Hello struct {
 	Node        string   `json:"node,omitempty"`         // Name der Node (Anzeige)
 	NodeVersion string   `json:"node_version,omitempty"` // Version von Node64
 	Caps        []string `json:"caps,omitempty"`         // Faehigkeiten (z. B. "http")
+	Slot        int      `json:"slot,omitempty"`         // Nummer der Verbindung zu diesem Server (0 = erste; parallele Sessions)
 }
 
 // Welcome: Antwort des Servers (Error gesetzt = abgelehnt, danach wird getrennt).
@@ -63,6 +64,8 @@ type Welcome struct {
 	Edge    string   `json:"edge"`
 	Error   string   `json:"error,omitempty"`
 	Caps    []string `json:"caps,omitempty"` // Faehigkeiten des Servers (z. B. "quic")
+	// Sessions: so viele parallele Verbindungen erlaubt der Server diesem Tunnel (0 = keine Angabe, aeltere Server)
+	Sessions int `json:"sessions,omitempty"`
 }
 
 // Control: weitere Nachrichten auf dem Steuer-Stream.

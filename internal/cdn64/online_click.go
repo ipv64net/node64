@@ -573,6 +573,13 @@ func (m *Module) onlineSync(ctx context.Context) {
 	}
 	if c != nil {
 		for _, t := range ov.Tunnels {
+			if cur := m.core.SettingOr(ctx, setOnlineSessions, "1"); t.ID == c.Tunnel && t.Sessions > 0 && strconv.Itoa(t.Sessions) != cur {
+				// Klasse geaendert (z. B. Business): so viele parallele Verbindungen je Server aufbauen
+				if err := m.core.SetSetting(ctx, setOnlineSessions, strconv.Itoa(t.Sessions)); err == nil && m.isRunning() {
+					m.log.Info("cdn64 online: parallel sessions changed", "sessions", t.Sessions)
+					m.onlineStart(ctx)
+				}
+			}
 			if edges := toEdges(ov.Edges); t.ID == c.Tunnel && len(edges) > 0 && !sameEdges(c.Edges, edges) {
 				if err := m.onlineSave(ctx, c.Tunnel, tok, edges); err == nil && m.isRunning() {
 					m.log.Info("cdn64 online: server list changed", "edges", len(edges))
@@ -1035,6 +1042,7 @@ type onlineBadge struct {
 	State     string // direct, peer, down
 	Transport string
 	Via       string // quic, quic443, tls ("" = nicht verbunden)
+	Sessions  int    // verbundene parallele Verbindungen (mehr als 1: Business/Company)
 }
 
 // viaOrder: Wege vom besten zum schwaechsten (die Zeile zeigt den schwaechsten verbundenen).
@@ -1062,7 +1070,7 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 			up = up || e.Connected
 		}
 		for _, e := range st {
-			b := onlineBadge{Name: e.Name, State: "down", Transport: e.Transport, Via: e.Via}
+			b := onlineBadge{Name: e.Name, State: "down", Transport: e.Transport, Via: e.Via, Sessions: e.Sessions}
 			if slices.Index(viaOrder, e.Via) > slices.Index(viaOrder, via) {
 				via = e.Via
 			}

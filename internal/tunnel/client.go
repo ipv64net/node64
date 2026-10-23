@@ -40,7 +40,13 @@ type ClientConfig struct {
 	AltPort     int      // zweiter Port, wenn der Tunnel-Port nicht geht (0 = 443, -1 = keiner; G1)
 	TCPOnly     bool     // nur TCP+TLS (Tests, Netze ohne UDP)
 	Caps        []string // Faehigkeiten der Node im Hello (z. B. CapQUIC)
+	// Sessions: parallele Verbindungen je Server (Business/Company; < 1 = eine, hoechstens MaxSessions). Der Server
+	// verteilt neue Besucher auf die am wenigsten belastete; faellt eine aus, laufen die anderen weiter.
+	Sessions int
 }
+
+// MaxSessions: hoechstens so viele parallele Verbindungen je Server.
+const MaxSessions = 8
 
 // EdgeStatus ist der Zustand des Tunnels zu einem Server (Anzeige in der Node).
 type EdgeStatus struct {
@@ -58,13 +64,15 @@ type EdgeStatus struct {
 	LastError  string    `json:"last_error,omitempty"`
 	UDPBlocked bool      `json:"udp_blocked,omitempty"` // QUIC scheitert, TCP genutzt
 	Caps       []string  `json:"caps,omitempty"`        // Faehigkeiten des Servers (Welcome)
+	Sessions   int       `json:"sessions"`              // verbundene parallele Verbindungen
+	Wanted     int       `json:"sessions_wanted"`       // gewuenschte (Konfiguration bzw. Grenze des Servers)
 }
 
 // Client haelt die Tunnels zu allen Servern.
 type Client struct {
 	cfg      ClientConfig
 	mu       sync.Mutex
-	st       map[string]*edgeState
+	st       map[string][]*edgeState                    // je Server eine Verbindung je Slot
 	resolve  func(ctx context.Context, e Edge) []net.IP // Tests: feste Adressen
 	forceTCP bool                                       // Tests: nur der Ausweichweg
 }
@@ -74,6 +82,7 @@ type edgeState struct {
 	streams atomic.Int64
 	total   atomic.Int64
 	sess    Session
+	off     bool // Slot ueber der Grenze des Servers: aus
 }
 
 // NewClient legt den Client an (Run startet ihn).
@@ -81,32 +90,57 @@ func NewClient(cfg ClientConfig) *Client {
 	if cfg.Log == nil {
 		cfg.Log = slog.New(slog.DiscardHandler)
 	}
-	c := &Client{cfg: cfg, st: map[string]*edgeState{}, resolve: addrs, forceTCP: cfg.TCPOnly}
+	cfg.Sessions = min(max(cfg.Sessions, 1), MaxSessions)
+	c := &Client{cfg: cfg, st: map[string][]*edgeState{}, resolve: addrs, forceTCP: cfg.TCPOnly}
 	for _, e := range cfg.Edges {
-		c.st[e.Name] = &edgeState{EdgeStatus: EdgeStatus{Name: e.Name, Host: e.Host}}
+		for range cfg.Sessions {
+			c.st[e.Name] = append(c.st[e.Name], &edgeState{EdgeStatus: EdgeStatus{Name: e.Name, Host: e.Host}})
+		}
 	}
 	return c
 }
 
-// Run haelt zu jedem Server einen Tunnel, bis ctx endet.
+// Run haelt zu jedem Server cfg.Sessions Tunnel-Verbindungen, bis ctx endet.
 func (c *Client) Run(ctx context.Context) {
 	var wg sync.WaitGroup
 	for _, e := range c.cfg.Edges {
-		wg.Add(1)
-		go func() { defer wg.Done(); c.loop(ctx, e) }()
+		for slot := range c.cfg.Sessions {
+			wg.Add(1)
+			go func() { defer wg.Done(); c.loop(ctx, e, slot) }()
+		}
 	}
 	wg.Wait()
 }
 
-// Status: Zustand je Server in der Reihenfolge der Konfiguration.
+// Status: Zustand je Server in der Reihenfolge der Konfiguration; mehrere Verbindungen zusammengefasst (Angaben der
+// ersten verbundenen, Streams zusammengezaehlt).
 func (c *Client) Status() []EdgeStatus {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := make([]EdgeStatus, 0, len(c.st))
 	for _, e := range c.cfg.Edges {
-		s := c.st[e.Name]
-		x := s.EdgeStatus
-		x.Streams, x.Total, x.Via = s.streams.Load(), s.total.Load(), via(x)
+		slots := c.st[e.Name]
+		base := slots[0]
+		for _, s := range slots {
+			if s.Connected {
+				base = s
+				break
+			}
+		}
+		x := base.EdgeStatus
+		x.Streams, x.Total, x.Reconnects, x.Sessions, x.Wanted = 0, 0, 0, 0, 0
+		for _, s := range slots {
+			x.Streams += s.streams.Load()
+			x.Total += s.total.Load()
+			x.Reconnects += s.Reconnects
+			if s.Connected {
+				x.Sessions++
+			}
+			if !s.off {
+				x.Wanted++
+			}
+		}
+		x.Via = via(x)
 		out = append(out, x)
 	}
 	return out
@@ -131,37 +165,47 @@ func (c *Client) AllHave(capability string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	n := 0
-	for _, s := range c.st {
-		if !s.Connected {
-			continue
+	for _, slots := range c.st {
+		for _, s := range slots {
+			if !s.Connected {
+				continue
+			}
+			if !HasCap(s.Caps, capability) {
+				return false
+			}
+			n++
 		}
-		if !HasCap(s.Caps, capability) {
-			return false
-		}
-		n++
 	}
 	return n > 0
 }
 
-func (c *Client) update(name string, f func(s *edgeState)) {
+func (c *Client) update(name string, slot int, f func(s *edgeState)) {
 	c.mu.Lock()
-	f(c.st[name])
+	f(c.st[name][slot])
 	c.mu.Unlock()
 }
+
+// errSlotOff: der Server erlaubt diesem Tunnel weniger Verbindungen; der Slot bleibt aus.
+var errSlotOff = errors.New("session limit of the server")
 
 // errRejected: der Server hat die Anmeldung abgelehnt (kein UDP-Problem).
 type errRejected struct{ msg string }
 
 func (e errRejected) Error() string { return "rejected by server: " + e.msg }
 
-func (c *Client) loop(ctx context.Context, e Edge) {
+func (c *Client) loop(ctx context.Context, e Edge, slot int) {
 	backoff := time.Second
 	quicFails := 0
 	var lastQUIC time.Time
 	port := 0 // zuletzt erfolgreicher Port (0 = noch keiner)
 	for ctx.Err() == nil {
 		useTCP := c.forceTCP || quicFails >= 2 && time.Since(lastQUIC) < 5*time.Minute // alle 5 Minuten QUIC erneut versuchen
-		sess, err := c.connect(ctx, e, useTCP, port)
+		sess, err := c.connect(ctx, e, slot, useTCP, port)
+		if errors.Is(err, errSlotOff) {
+			c.update(e.Name, slot, func(s *edgeState) { s.off, s.Connected, s.LastError = true, false, err.Error() })
+			c.cfg.Log.Info("tunnel: parallel session not allowed by the server", "edge", e.Name, "slot", slot)
+			return
+		}
 		if err == nil {
 			if _, p, perr := net.SplitHostPort(sess.RemoteAddr().String()); perr == nil {
 				port, _ = strconv.Atoi(p)
@@ -178,7 +222,7 @@ func (c *Client) loop(ctx context.Context, e Edge) {
 		}
 		if err == nil {
 			start := time.Now()
-			c.serve(ctx, e, sess)
+			c.serve(ctx, e, slot, sess)
 			if time.Since(start) > 30*time.Second {
 				backoff = time.Second
 			}
@@ -187,14 +231,14 @@ func (c *Client) loop(ctx context.Context, e Edge) {
 		if ctx.Err() != nil {
 			break
 		}
-		c.update(e.Name, func(s *edgeState) {
+		c.update(e.Name, slot, func(s *edgeState) {
 			s.LastError, s.UDPBlocked = err.Error(), quicFails >= 2
 			if s.Connected || s.Since.IsZero() {
 				s.Since = time.Now()
 			}
 			s.Connected, s.Transport, s.Addr, s.sess = false, "", "", nil
 		})
-		c.cfg.Log.Debug("tunnel: retry", "edge", e.Name, "in", backoff, "err", err)
+		c.cfg.Log.Debug("tunnel: retry", "edge", e.Name, "slot", slot, "in", backoff, "err", err)
 		wait := time.Duration(float64(backoff) * (0.5 + rand.Float64()))
 		select {
 		case <-ctx.Done():
@@ -202,7 +246,7 @@ func (c *Client) loop(ctx context.Context, e Edge) {
 		}
 		backoff = min(backoff*2, time.Minute)
 	}
-	c.update(e.Name, func(s *edgeState) { s.Connected, s.sess = false, nil })
+	c.update(e.Name, slot, func(s *edgeState) { s.Connected, s.sess = false, nil })
 }
 
 // addrs: Adressen des Servers, IPv6 zuerst (Zielgruppe nur IPv6), bei DNS-Fehler die hinterlegten IPs.
@@ -232,7 +276,7 @@ func (c *Client) tlsConfig(e Edge) *tls.Config {
 
 // connect: Verbindung aufbauen (je Adresse und Port hoechstens 5 s) und anmelden. Ports: der Tunnel-Port, sonst 443
 // (G1, Netze, die nur 443 hinauslassen); prefer zuerst.
-func (c *Client) connect(ctx context.Context, e Edge, useTCP bool, prefer int) (Session, error) {
+func (c *Client) connect(ctx context.Context, e Edge, slot int, useTCP bool, prefer int) (Session, error) {
 	alt := c.cfg.AltPort
 	if alt == 0 {
 		alt = 443
@@ -269,7 +313,7 @@ func (c *Client) connect(ctx context.Context, e Edge, useTCP bool, prefer int) (
 			cancel()
 			if err == nil { // Anmeldung mit eigener Frist (der Handschlag darf die 5 s fast aufbrauchen)
 				hctx, hcancel := context.WithTimeout(ctx, 10*time.Second)
-				err = c.hello(hctx, sess, e.Name)
+				err = c.hello(hctx, sess, e.Name, slot)
 				hcancel()
 				if err != nil {
 					_ = sess.Close("hello")
@@ -279,7 +323,7 @@ func (c *Client) connect(ctx context.Context, e Edge, useTCP bool, prefer int) (
 				return sess, nil
 			}
 			var rej errRejected
-			if errors.As(err, &rej) {
+			if errors.As(err, &rej) || errors.Is(err, errSlotOff) {
 				return nil, err
 			}
 			lastErr = fmt.Errorf("%s: %w", addr, err)
@@ -307,14 +351,14 @@ func dialTCP(ctx context.Context, addr string, conf *tls.Config) (Session, error
 }
 
 // hello: Steuer-Stream oeffnen, anmelden, Welcome lesen. Der Steuer-Stream bleibt offen (GOAWAY vom Server).
-func (c *Client) hello(ctx context.Context, sess Session, edge string) error {
+func (c *Client) hello(ctx context.Context, sess Session, edge string, slot int) error {
 	ctrl, err := sess.OpenStream(ctx)
 	if err != nil {
 		return err
 	}
 	dl, _ := ctx.Deadline()
 	_ = ctrl.SetDeadline(dl)
-	if err := writeMsg(ctrl, Hello{Version: Version, Tunnel: c.cfg.Tunnel, Token: c.cfg.Token, Node: c.cfg.Node, NodeVersion: c.cfg.NodeVersion, Caps: c.cfg.Caps}); err != nil {
+	if err := writeMsg(ctrl, Hello{Version: Version, Tunnel: c.cfg.Tunnel, Token: c.cfg.Token, Node: c.cfg.Node, NodeVersion: c.cfg.NodeVersion, Caps: c.cfg.Caps, Slot: slot}); err != nil {
 		return err
 	}
 	br := bufio.NewReaderSize(ctrl, 64<<10)
@@ -323,9 +367,15 @@ func (c *Client) hello(ctx context.Context, sess Session, edge string) error {
 		return err
 	}
 	if w.Error != "" {
+		if w.Sessions > 0 && slot >= w.Sessions {
+			return errSlotOff
+		}
 		return errRejected{w.Error}
 	}
-	c.update(edge, func(s *edgeState) { s.Caps = w.Caps })
+	if slot > 0 && w.Sessions == 0 { // aelterer Server: nur eine Verbindung je Tunnel sinnvoll
+		return errSlotOff
+	}
+	c.update(edge, slot, func(s *edgeState) { s.Caps = w.Caps })
 	_ = ctrl.SetDeadline(time.Time{})
 	go func() { // Steuer-Nachrichten des Servers
 		var m Control
@@ -339,13 +389,13 @@ func (c *Client) hello(ctx context.Context, sess Session, edge string) error {
 }
 
 // serve nimmt Daten-Streams an, bis die Verbindung endet.
-func (c *Client) serve(ctx context.Context, e Edge, sess Session) {
-	c.update(e.Name, func(s *edgeState) {
+func (c *Client) serve(ctx context.Context, e Edge, slot int, sess Session) {
+	c.update(e.Name, slot, func(s *edgeState) {
 		s.Connected, s.Transport, s.Addr, s.Since, s.LastError, s.sess = true, sess.Transport(), sess.RemoteAddr().String(), time.Now(), "", sess
 		s.RTTms = float64(sess.RTT().Microseconds()) / 1000
 		s.Reconnects++
 	})
-	c.cfg.Log.Info("tunnel: connected", "edge", e.Name, "transport", sess.Transport(), "addr", sess.RemoteAddr().String())
+	c.cfg.Log.Info("tunnel: connected", "edge", e.Name, "slot", slot, "transport", sess.Transport(), "addr", sess.RemoteAddr().String())
 	sctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go func() {
@@ -360,12 +410,12 @@ func (c *Client) serve(ctx context.Context, e Edge, sess Session) {
 				return
 			case <-t.C:
 				rtt := float64(sess.RTT().Microseconds()) / 1000
-				c.update(e.Name, func(s *edgeState) { s.RTTms = rtt })
+				c.update(e.Name, slot, func(s *edgeState) { s.RTTms = rtt })
 			}
 		}
 	}()
 	c.mu.Lock()
-	es := c.st[e.Name]
+	es := c.st[e.Name][slot]
 	c.mu.Unlock()
 	for {
 		st, err := sess.AcceptStream(sctx)

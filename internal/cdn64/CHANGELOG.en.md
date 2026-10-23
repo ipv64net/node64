@@ -1,5 +1,16 @@
 # Changes – PROXY64
 
+## 1.26.0 – 2026-10-23
+
+### New
+- CDN64 for Business and Company: several parallel tunnel connections per server (4 instead of 1, over QUIC, QUIC on
+  443 or TLS, whatever gets through). srv07/srv08 hand new visitors to the least loaded connection; if one fails or
+  stalls, visitors carry on over the others. In the load test the single connection per server capped at about
+  650–830 Mbit/s. The number comes from ipv64 per plan; when the plan changes, the node rebuilds the connections on its
+  own. The host list shows "×4" on a server when several connections are up.
+- Account plans: new row "Parallel tunnel connections per server".
+- Requires cdn64-edge 0.18.0 on the servers (older servers keep using one connection).
+
 ## 1.25.1 – 2026-10-23
 
 ### Changed

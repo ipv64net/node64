@@ -85,6 +85,7 @@ type ShieldConfig struct {
 type TunnelEntry struct {
 	ID          string `yaml:"id"`
 	TokenSHA256 string `yaml:"token_sha256"`
+	Sessions    int    `yaml:"sessions"` // parallele Verbindungen (0 = eine)
 }
 
 // LoadConfig liest die Datei und setzt Standardwerte.
