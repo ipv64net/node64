@@ -88,3 +88,22 @@ func TestNotifyChannelLanguage(t *testing.T) {
 		t.Fatalf("sprachen: %+v", got)
 	}
 }
+
+// Statusbalken der Mail passt zum Betreff: Stoerungen rot, Entwarnungen gruen, Warnungen orange (auch Modul-Meldungen).
+func TestMailStatusMatchesKind(t *testing.T) {
+	red, green, orange := "#d63939", "#2fb344", "#f59f00"
+	for k, want := range map[Kind]string{KindDown: red, KindReminder: red, KindProxmoxDown: red, KindDynFail: red, KindDNS64Down: red,
+		KindCertFail: red, KindCDNOnlineDown: red, KindCDNOnlineBlocked: red, KindClusterDown: red, KindHoneypotWatch: red,
+		KindUp: green, KindProxmoxUp: green, KindProxmoxThresholdOK: green, KindDynOK: green, KindDNS64Up: green, KindCertOK: green,
+		KindCDNOnlineUp: green, KindClusterUp: green, KindRechecked: green,
+		KindDegraded: orange, KindFlappingStart: orange, KindProxmoxThreshold: orange, KindCertExpiry: orange, KindQuota: orange} {
+		for _, lang := range []string{"de", "en"} {
+			if c, label := mailStatus(k, lang); c != want || label == "" {
+				t.Errorf("%s [%s]: %s %q, want %s", k, lang, c, label, want)
+			}
+		}
+	}
+	if _, l := mailStatus(KindProxmoxThreshold, "en"); l != "Warning" {
+		t.Fatalf("label en: %q", l)
+	}
+}

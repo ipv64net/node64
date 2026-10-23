@@ -23,9 +23,9 @@ type MailBrand struct {
 // mailLabels: feste Texte der Mail-Vorlage (die Nachricht selbst ist schon uebersetzt).
 var mailLabels = map[string]map[string]string{
 	"de": {"open": "Check öffnen", "list": "Übersicht öffnen", "auto": "Automatische Benachrichtigung von %s.", "manage": "Benachrichtigungen verwalten",
-		"down": "Störung", "up": "Wieder OK", "warn": "Teilweise gestört", "info": "Information"},
+		"down": "Störung", "up": "Wieder OK", "warn": "Teilweise gestört", "attention": "Achtung", "info": "Information"},
 	"en": {"open": "Open check", "list": "Open overview", "auto": "Automatic notification from %s.", "manage": "Manage notifications",
-		"down": "Down", "up": "Recovered", "warn": "Partially down", "info": "Information"},
+		"down": "Down", "up": "Recovered", "warn": "Partially down", "attention": "Warning", "info": "Information"},
 }
 
 // mailStatus liefert Farbe und Bezeichnung des Statusbalkens.
@@ -34,13 +34,17 @@ func mailStatus(k Kind, lang string) (color, label string) {
 	if l == nil {
 		l = mailLabels["de"]
 	}
-	switch k {
-	case KindDown, KindReminder, KindSummary:
+	switch k { // Balken passend zum Betreff (auch Modul-Meldungen: Proxmox/Docker, DynDNS, DNS64, Zertifikate, CDN64, Cluster)
+	case KindDown, KindReminder, KindSummary, KindProxmoxDown, KindDynFail, KindDNS64Down, KindDNS64Lists, KindDNS64Cert, KindCertFail,
+		KindCDNOnlineDown, KindCDNOnlineBlocked, KindClusterDown, KindHoneypotWatch, KindHoneypotLogin:
 		return "#d63939", l["down"]
-	case KindUp, KindFlappingEnd, KindDegradedEnd, KindSummaryUp:
+	case KindUp, KindFlappingEnd, KindDegradedEnd, KindSummaryUp, KindRechecked, KindProxmoxUp, KindProxmoxThresholdOK, KindDynOK, KindDNS64Up,
+		KindCertOK, KindCDNOnlineUp, KindClusterUp:
 		return "#2fb344", l["up"]
-	case KindDegraded, KindFlappingStart, KindQuota:
+	case KindDegraded:
 		return "#f59f00", l["warn"]
+	case KindFlappingStart, KindQuota, KindProxmoxThreshold, KindCertExpiry, KindDynLimit, KindUnchecked:
+		return "#f59f00", l["attention"]
 	}
 	return "#17bebb", l["info"]
 }
