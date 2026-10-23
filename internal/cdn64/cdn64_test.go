@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -45,12 +46,23 @@ type env struct {
 	st   *store.Store
 }
 
+// freePortUsed: schon vergebene Ports - nie zweimal ausgeben (z. B. Edge-Ports, die erst spaeter geoeffnet werden).
+var (
+	freePortMu   sync.Mutex
+	freePortUsed = map[int]bool{}
+)
+
 func freePort(t *testing.T) int {
 	t.Helper()
+	freePortMu.Lock()
+	defer freePortMu.Unlock()
 	// eigener Bereich unterhalb der Ports, die das System fuer ":0" vergibt: so greifen parallel laufende
 	// Testpakete (z. B. DNS64) nicht nach denselben gerade freigegebenen Ports
 	for i := 0; i < 200; i++ {
 		p := 20000 + mrand.IntN(10000)
+		if freePortUsed[p] {
+			continue
+		}
 		ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(p))
 		if err != nil {
 			continue
@@ -58,6 +70,7 @@ func freePort(t *testing.T) int {
 		ln.Close()
 		if pc, err := net.ListenPacket("udp", "127.0.0.1:"+strconv.Itoa(p)); err == nil {
 			pc.Close()
+			freePortUsed[p] = true
 			return p
 		}
 	}

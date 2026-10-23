@@ -127,23 +127,31 @@ func TestOnlineIdleSync(t *testing.T) {
 	f := &fakeOnline{ready: true, tunnels: map[string]bool{}, hosts: map[int64]string{}, modes: map[int64]int{}}
 	e.m.SetOnlineAPI(f)
 	e.enable(t)
+	calls := func() int { f.mu.Lock(); defer f.mu.Unlock(); return f.calls }
+	// der Abgleich im Hintergrund (onlineLoop) holt beim Start einmal den Stand; erst danach zaehlen, sonst haengt
+	// das Ergebnis vom Zeitverhalten ab (der naechste Hintergrund-Abgleich kommt erst nach einer Minute)
+	for i := 0; i < 200 && calls() < 1; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
 	for i := 0; i < 3; i++ {
 		e.m.onlineSync(ctx)
 	}
-	if f.calls != 1 {
-		t.Fatalf("idle: %d calls, want 1", f.calls)
+	if n := calls(); n != 1 {
+		t.Fatalf("idle: %d calls, want 1", n)
 	}
 	e.m.online.want.Store(true)
 	e.m.onlineSync(ctx)
-	if f.calls != 2 {
-		t.Fatalf("list opened: %d calls, want 2", f.calls)
+	if n := calls(); n != 2 {
+		t.Fatalf("list opened: %d calls, want 2", n)
 	}
+	f.mu.Lock()
 	f.extra = []ipv64api.CDN64Host{{ID: 7, FQDN: "web.test", Mode: 3, Status: "active"}}
+	f.mu.Unlock()
 	e.m.online.want.Store(true)
 	e.m.onlineSync(ctx)
 	e.m.onlineSync(ctx) // Namen da: jeder Abgleich holt den Stand
-	if f.calls != 4 || len(e.m.online.remote.Load().Data.Hosts) != 1 {
-		t.Fatalf("with names: %d calls", f.calls)
+	if n := calls(); n != 4 || len(e.m.online.remote.Load().Data.Hosts) != 1 {
+		t.Fatalf("with names: %d calls", n)
 	}
 }
 
