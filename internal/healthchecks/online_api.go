@@ -3,6 +3,7 @@ package healthchecks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -155,6 +156,9 @@ func (m *Module) onlineSave(ctx context.Context, key string, cl *ipv64api.Client
 	vin.Execution = "local" // Pruefung der Eingaben wie lokal; die Regel "online nur mit Sync" gilt hier nicht
 	if err := m.apply(tmp, vin, true); err != nil {
 		return nil, err
+	}
+	if tmp.Type != checks.TypePush && tmp.Interval < checks.MinInterval {
+		return nil, errors.New("interval_seconds must be between 20 and 86400 for online checks")
 	}
 	in.Execution = "online"
 	body := map[string]any{}

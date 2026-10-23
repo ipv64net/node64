@@ -99,8 +99,8 @@
           },
           "interval_seconds": {
             "type": "integer",
-            "minimum": 20,
-            "description": "20 bis 86400 (bei push ohne Bedeutung). Standard 60."
+            "minimum": 5,
+            "description": "5 bis 86400 bei lokalen Checks, 20 bis 86400 bei online und hybrid (bei push ohne Bedeutung). Standard 60."
           },
           "retry_interval_seconds": {
             "type": "integer",

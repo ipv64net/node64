@@ -1876,7 +1876,14 @@
       "reached": "Daily quota for online checks reached ({today} of {limit}). Online checks and push evaluation at ipv64 pause until midnight; local checks of this node keep running.",
       "near": "Daily quota for online checks almost reached: {today} of {limit} today. After that, online checks pause until midnight.",
       "paused_title": "Daily quota used up.",
-      "paused_detail": "ipv64 does not measure this online check until midnight, then again automatically. Last measurement: {time}, state then: {state}. More measurements per day come with another account class."
+      "paused_detail": "ipv64 does not measure this online check until midnight, then again automatically. Last measurement: {time}, state then: {state}. More measurements per day come with another account class.",
+      "card_title": "Online checks today (daily quota)",
+      "card_ok": "Enough for today – about {n} by midnight.",
+      "card_short": "Expected to run out at {time} – online checks then pause until midnight.",
+      "card_reached": "Reached – online checks pause until {time}; local checks keep running.",
+      "card_none": "No active online or hybrid checks.",
+      "card_day": "Projection: {n} checks for a full day (without push)",
+      "card_tomorrow": "more than the quota"
     },
     "sync_rejected": "Rejected by ipv64",
     "sync_rejected_hint": "The change only applies locally. Reduce online measuring points (locations, online/hybrid) or upgrade the account class, then save again.",
@@ -2253,7 +2260,8 @@
       "policy": "Down when …",
       "policy_hint": "With several measuring points (node, Nuremberg, Falkenstein) this rule decides when the check counts as down. If only some report a failure, the check is “partially down”.",
       "notify_degraded": "Also notify on \\u201cpartially down\\u201d",
-      "notify_degraded_hint": "Only relevant with several measuring points."
+      "notify_degraded_hint": "Only relevant with several measuring points.",
+      "interval_min": "Local from 5 s, online and hybrid from 20 s."
     },
     "push": {
       "local": "Local (this node)",

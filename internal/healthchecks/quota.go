@@ -2,8 +2,10 @@ package healthchecks
 
 import (
 	"context"
+	"time"
 
 	"github.com/ipv64net/node64/internal/checks"
+	"github.com/ipv64net/node64/internal/module"
 )
 
 // Tageskontingent der Online-Checks: Hochrechnung des taeglichen Verbrauchs (Online-Messungen je
@@ -68,4 +70,44 @@ func (m *Module) DailyProjection(ctx context.Context, exclude string, accLocs in
 		}
 	}
 	return sum
+}
+
+// hcQuota: Karte unter der Check-Tabelle – Verbrauch heute, Hochrechnung aus den aktiven Online-/Hybrid-Checks und
+// wann das Kontingent voraussichtlich erreicht ist. Der hub zaehlt ab Mitternacht Europe/Berlin.
+type hcQuota struct {
+	Today, Limit int64
+	PerDay       int64 // Messungen an einem ganzen Tag mit den aktiven Checks
+	AtMidnight   int64 // voraussichtlicher Stand um Mitternacht
+	Pct          int
+	Bar          float64
+	Class        string
+	Reached      bool      // heute schon erreicht
+	Short        bool      // reicht heute nicht: EmptyAt liegt vor Mitternacht
+	Tomorrow     bool      // ein ganzer Tag braucht mehr als das Kontingent
+	EmptyAt      time.Time // voraussichtlich erreicht (nur bei Short)
+	ResetAt      time.Time // naechste Mitternacht
+}
+
+var quotaZone = func() *time.Location {
+	if l, err := time.LoadLocation("Europe/Berlin"); err == nil {
+		return l
+	}
+	return time.UTC
+}()
+
+func newHCQuota(today, limit, perDay int, now time.Time) *hcQuota {
+	q := &hcQuota{Today: int64(today), Limit: int64(limit), PerDay: int64(perDay)}
+	b := now.In(quotaZone)
+	q.ResetAt = time.Date(b.Year(), b.Month(), b.Day()+1, 0, 0, 0, 0, quotaZone)
+	rate := float64(perDay) / 86400 // Messungen je Sekunde
+	q.AtMidnight = int64(today) + int64(rate*q.ResetAt.Sub(now).Seconds())
+	q.Pct = min(100, today*100/limit)
+	q.Reached = today >= limit
+	q.Tomorrow = perDay > limit
+	if !q.Reached && q.AtMidnight > q.Limit && rate > 0 {
+		q.Short = true
+		q.EmptyAt = now.Add(time.Duration(float64(limit-today)/rate) * time.Second)
+	}
+	q.Bar, q.Class = module.BarWidth(float64(q.Pct), today > 0), module.BarClassOf(float64(q.Pct), q.Short)
+	return q
 }

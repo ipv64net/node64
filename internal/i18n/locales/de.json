@@ -1876,7 +1876,14 @@
       "reached": "Tageskontingent für Online-Messungen erreicht ({today} von {limit}). Online-Messungen und Push-Auswertung bei ipv64 pausieren bis Mitternacht; die lokalen Messungen dieser Node laufen weiter.",
       "near": "Tageskontingent für Online-Messungen fast erreicht: {today} von {limit} heute. Danach pausieren die Online-Messungen bis Mitternacht.",
       "paused_title": "Tageskontingent aufgebraucht.",
-      "paused_detail": "ipv64 misst diesen Online-Check bis Mitternacht nicht mehr, danach wieder automatisch. Letzte Messung: {time}, Zustand damals: {state}. Mehr Messungen pro Tag gibt es mit einer anderen Account-Klasse."
+      "paused_detail": "ipv64 misst diesen Online-Check bis Mitternacht nicht mehr, danach wieder automatisch. Letzte Messung: {time}, Zustand damals: {state}. Mehr Messungen pro Tag gibt es mit einer anderen Account-Klasse.",
+      "card_title": "Online-Messungen heute (Tageskontingent)",
+      "card_ok": "Reicht für heute – bis Mitternacht voraussichtlich {n}.",
+      "card_short": "Voraussichtlich erreicht am {time} – danach pausieren die Online-Messungen bis Mitternacht.",
+      "card_reached": "Erreicht – Online-Messungen pausieren bis {time}; lokale Messungen laufen weiter.",
+      "card_none": "Keine aktiven Online- oder Hybrid-Checks.",
+      "card_day": "Hochrechnung: {n} Messungen an einem ganzen Tag (ohne Push)",
+      "card_tomorrow": "mehr als das Kontingent"
     },
     "sync_rejected": "Von ipv64 abgelehnt",
     "sync_rejected_hint": "Die Änderung gilt nur lokal. Online-Messstellen reduzieren (Standorte, Online/Hybrid) oder die Account-Klasse erhöhen, dann erneut speichern.",
@@ -2253,7 +2260,8 @@
       "policy": "Gestört, wenn …",
       "policy_hint": "Mit mehreren Messstellen (Node, Nürnberg, Falkenstein) legt diese Regel fest, wann der Check als gestört gilt. Meldet nur ein Teil eine Störung, ist der Check „teilweise gestört“.",
       "notify_degraded": "Auch bei „teilweise gestört“ benachrichtigen",
-      "notify_degraded_hint": "Nur mit mehreren Messstellen relevant."
+      "notify_degraded_hint": "Nur mit mehreren Messstellen relevant.",
+      "interval_min": "Lokal ab 5 s, online und hybrid ab 20 s."
     },
     "push": {
       "local": "Lokal (diese Node)",

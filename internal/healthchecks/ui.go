@@ -116,10 +116,11 @@ type group struct {
 
 type listData struct {
 	Groups     []group
-	Grouped    bool // mindestens ein Check hat eine Gruppe
-	QuotaToday int  // Online-Messungen heute (Tageskontingent)
-	QuotaLimit int  // Tageskontingent (0 = unbegrenzt/standalone)
-	QuotaNear  bool // mindestens 90 % verbraucht
+	Grouped    bool     // mindestens ein Check hat eine Gruppe
+	QuotaToday int      // Online-Messungen heute (Tageskontingent)
+	QuotaLimit int      // Tageskontingent (0 = unbegrenzt/standalone)
+	QuotaNear  bool     // mindestens 90 % verbraucht
+	Quota      *hcQuota // Karte unter der Tabelle (nur mit Tageskontingent, z. B. Free und Home/Supporter)
 	// Online-Checks direkt ueber die API (Key hinterlegt, kein Sync)
 	APIMode   bool
 	Online    []onlineRow
@@ -257,8 +258,16 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 	d := listData{Types: checks.Types, States: listStates, Filter: f, Sort: q.Get("sort"), Dir: q.Get("dir"), Counts: map[string]int{}}
 	tagSet, grpSet := map[string]bool{}, map[string]bool{}
 	if m.quota != nil {
-		d.QuotaToday, d.QuotaLimit, _ = m.quota()
+		var locs int
+		d.QuotaToday, d.QuotaLimit, locs = m.quota()
 		d.QuotaNear = d.QuotaLimit > 0 && d.QuotaToday*10 >= d.QuotaLimit*9
+		if d.QuotaLimit > 0 {
+			perDay := 0
+			for _, c := range list {
+				perDay += CheckDailyCost(c, locs)
+			}
+			d.Quota = newHCQuota(d.QuotaToday, d.QuotaLimit, perDay, time.Now())
+		}
 	}
 	if m.linked != nil && m.linked() {
 		d.Peers = m.peers(ctx)

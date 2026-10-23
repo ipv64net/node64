@@ -803,8 +803,12 @@ func validateWireCheck(c *wire.Check) error {
 		return errors.New("target is required")
 	}
 	if c.Type != "push" {
-		if c.IntervalSeconds < 20 {
-			c.IntervalSeconds = 20
+		minIv := 20 // online und hybrid; nur lokal ab 5 s
+		if c.Execution == "" || c.Execution == "local" {
+			minIv = 5
+		}
+		if c.IntervalSeconds < minIv {
+			c.IntervalSeconds = minIv
 		}
 		if c.RetryIntervalSeconds < 5 {
 			c.RetryIntervalSeconds = 5

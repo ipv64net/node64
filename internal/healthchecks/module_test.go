@@ -79,7 +79,7 @@ func TestCheckLifecycleViaAPI(t *testing.T) {
 	if code != 422 {
 		t.Fatalf("expected 422, got %d %s", code, b)
 	}
-	iv := 5
+	iv := 4
 	code, b = call(t, srv, "POST", "/api/checks", map[string]any{"name": "x", "type": "http", "target": target.URL, "interval_seconds": iv})
 	if code != 422 || !strings.Contains(string(b), "interval_seconds") {
 		t.Fatalf("min interval: %d %s", code, b)

@@ -135,7 +135,8 @@ type Checker interface {
 const (
 	DefaultConnectTimeout = 5 * time.Second
 	DefaultTotalTimeout   = 10 * time.Second
-	MinInterval           = 20 * time.Second
+	MinInterval           = 20 * time.Second // online und hybrid (ipv64 misst mit)
+	MinIntervalLocal      = 5 * time.Second  // nur lokal auf den Nodes
 	DefaultInterval       = 60 * time.Second
 	MaxBody               = 1 << 20
 	UserAgent             = "node64"

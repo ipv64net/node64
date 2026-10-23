@@ -1,5 +1,14 @@
 # Changes – Healthchecks
 
+## 2.25.0 – 2026-10-23
+
+### Added
+- Below the check table a card for the daily quota of online checks (only for classes with a quota, e.g. Free and
+  Home/Supporter): usage today as a bar, projection until midnight from the active online and hybrid checks, the
+  expected time the quota runs out, and a note when a full day needs more than the quota.
+- Local checks may run every 5 seconds; online and hybrid stay at 20 seconds minimum (node, hub and portal). The retry
+  interval is capped at the interval.
+
 ## 2.24.3 – 2026-10-23
 
 ### Added

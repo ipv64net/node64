@@ -110,9 +110,11 @@
 				if (single) { cb.checked = !!own; cb.disabled = true; } else { cb.disabled = false; }
 			});
 		};
-		if (exSel) { exSel.addEventListener("change", syncNodes); }
-		typeSel.addEventListener("change", function () { update(); lockExec(); syncNodes(); });
-		update(); lockExec(); syncNodes();
+		var ivIn = document.getElementById("interval_seconds");
+		var syncMin = function () { if (ivIn) { ivIn.min = !exSel || exSel.value === "local" ? 5 : 20; } }; // lokal ab 5 s, online/hybrid ab 20 s
+		if (exSel) { exSel.addEventListener("change", syncNodes); exSel.addEventListener("change", syncMin); }
+		typeSel.addEventListener("change", function () { update(); lockExec(); syncNodes(); syncMin(); });
+		update(); lockExec(); syncNodes(); syncMin();
 	}
 
 	// Tooltips der Pillen: Inhalt aus data-Attributen, hier maskiert und als HTML gesetzt

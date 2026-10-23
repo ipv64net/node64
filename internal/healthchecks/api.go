@@ -278,10 +278,17 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 	}
 	// Grenzen
 	if c.Type != checks.TypePush {
-		if c.Interval < checks.MinInterval || c.Interval > 24*time.Hour {
-			return fmt.Errorf("interval_seconds must be between %d and 86400", int(checks.MinInterval.Seconds()))
+		minIv := checks.MinInterval
+		if c.Execution == "local" || c.Execution == "" {
+			minIv = checks.MinIntervalLocal
 		}
-		if c.RetryInterval < 5*time.Second || c.RetryInterval > c.Interval {
+		if c.Interval < minIv || c.Interval > 24*time.Hour {
+			return fmt.Errorf("interval_seconds must be between %d and 86400 (5 only local, 20 online/hybrid)", int(minIv.Seconds()))
+		}
+		if c.RetryInterval > c.Interval {
+			c.RetryInterval = c.Interval // z. B. Standard 20 s bei einem lokalen 5-s-Check
+		}
+		if c.RetryInterval < 5*time.Second {
 			return errors.New("retry_interval_seconds must be between 5 and interval_seconds")
 		}
 	}

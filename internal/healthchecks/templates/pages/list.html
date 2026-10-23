@@ -157,6 +157,15 @@
 {{range $d.Rows}}
 <form method="post" action="/healthchecks/{{.Check.Token}}/action" id="act-{{.Check.Token}}" class="d-none"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="back" value="list"></form>
 {{end}}
+{{with $d.Quota}}<div class="row g-2 mt-1" id="hc-quota">
+	<div class="col-md-6"><div class="card stat {{if or .Reached .Short}}stat-warn{{else}}stat-info{{end}}"><div class="card-body"><div class="stat-text">
+		<div class="stat-label">{{$.T "hc.quota.card_title"}}</div>
+		<div class="stat-value">{{$.Int .Today}} / {{$.Int .Limit}}</div>
+		<div class="progress mt-1" style="height:.5rem" role="progressbar" aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{.Class}}" style="width:{{.Bar}}%"></div></div>
+		<div class="small mt-1 {{if or .Reached .Short}}text-warning-emphasis{{else}}text-body-secondary{{end}}">{{if .Reached}}<i class="bi bi-hourglass-split"></i> {{$.T "hc.quota.card_reached" "time" ($.Time .ResetAt)}}{{else if .Short}}<i class="bi bi-exclamation-triangle"></i> {{$.T "hc.quota.card_short" "time" ($.Time .EmptyAt)}}{{else if .PerDay}}{{$.T "hc.quota.card_ok" "n" ($.Int .AtMidnight)}}{{else}}{{$.T "hc.quota.card_none"}}{{end}}</div>
+		<div class="small text-body-secondary">{{$.T "hc.quota.card_day" "n" ($.Int .PerDay)}}{{if .Tomorrow}} · <span class="text-warning-emphasis">{{$.T "hc.quota.card_tomorrow"}}</span>{{end}} · <a href="/plans">{{$.T "hc.plans_link"}}</a></div>
+	</div><i class="bi bi-cloud-check stat-icon"></i></div></div></div>
+</div>{{end}}
 {{if $d.APIMode}}
 <div class="card mt-3" id="online">
 	<div class="card-header d-flex align-items-center flex-wrap gap-2"><span><i class="bi bi-cloud text-info"></i> {{.T "hc.api.title"}}{{$.Doc "ipv64#api-key"}} <span class="text-body-secondary small">{{len $d.Online}}</span></span>

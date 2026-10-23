@@ -1,5 +1,15 @@
 # Änderungen – Healthchecks
 
+## 2.25.0 – 2026-10-23
+
+### Neu
+- Unter der Check-Tabelle eine Karte zum Tageskontingent der Online-Messungen (nur bei Klassen mit Kontingent, z. B.
+  Free und Home/Supporter): Verbrauch heute als Balken, Hochrechnung bis Mitternacht aus den aktiven Online- und
+  Hybrid-Checks, voraussichtlicher Zeitpunkt, wann das Kontingent erreicht ist, und Hinweis, wenn ein ganzer Tag mehr
+  braucht als das Kontingent.
+- Lokale Checks dürfen ab 5 Sekunden prüfen; online und hybrid bleibt es bei mindestens 20 Sekunden (Node, hub und
+  Portal). Die Wiederholung bei Fehler wird höchstens so lang wie das Intervall.
+
 ## 2.24.3 – 2026-10-23
 
 ### Neu

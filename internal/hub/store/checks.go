@@ -141,6 +141,9 @@ func scanCheck(row interface{ Scan(...any) error }) (*Check, error) {
 	if len(strings.TrimSpace(params)) == 0 {
 		c.Params = json.RawMessage("{}")
 	}
+	if typ != "push" && iv < 20 {
+		iv = 20 // ipv64 misst nie oefter als alle 20 s (lokale Checks ab 5 s, z. B. nach dem Umhaengen)
+	}
 	c.Interval, c.RetryInterval = time.Duration(iv)*time.Second, time.Duration(riv)*time.Second
 	c.ConnectTimeout, c.TotalTimeout = time.Duration(cto)*time.Millisecond, time.Duration(tto)*time.Millisecond
 	c.Invert, c.Paused, c.Critical, c.NotifyDown, c.NotifyUp, c.NotifyDegraded = invert == 1, paused == 1, critical == 1, nd == 1, nu == 1, ndeg == 1
