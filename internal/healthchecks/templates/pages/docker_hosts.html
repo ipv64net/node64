@@ -2,7 +2,7 @@
 {{$d := .Data}}
 {{$s := $d.Sum}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-	<h1 class="h4 mb-0 me-auto"><i class="bi bi-box-seam text-primary me-1"></i> {{.T "nav.docker"}}{{$.Doc "healthchecks#docker"}}</h1>
+	<h1 class="h4 mb-0 me-auto"><i class="bi bi-box-seam text-primary me-1"></i> {{.T "nav.docker"}}{{$.Doc "docker"}}</h1>
 	<a class="btn btn-outline-secondary btn-sm" href="/healthchecks/docker" title="{{.T "logs.refresh"}}"><i class="bi bi-arrow-clockwise"></i></a>
 	<a class="btn btn-primary btn-sm" href="/healthchecks/docker/new"><i class="bi bi-plus-lg"></i> {{.T "docker.host.add"}}</a>
 </div>

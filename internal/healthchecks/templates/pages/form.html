@@ -188,7 +188,7 @@
 		</div>
 
 		<div class="card mb-3" data-types="docker">
-			<div class="card-header"><i class="bi bi-box-seam text-primary"></i> {{.T "hc.type.docker"}}{{$.Doc "healthchecks#docker"}}</div>
+			<div class="card-header"><i class="bi bi-box-seam text-primary"></i> {{.T "hc.type.docker"}}{{$.Doc "docker#check-typ"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-12"><label class="form-label" for="docker_host">{{.T "hc.docker.host"}}</label>
 					<div class="input-group"><span class="input-group-text"><i class="bi bi-hdd-stack"></i></span><input class="form-control font-monospace" id="docker_host" name="docker_host" value="{{index $f "docker_host"}}" placeholder="{{$d.DockerHost}}"></div>

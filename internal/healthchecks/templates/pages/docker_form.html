@@ -5,7 +5,7 @@
 {{$f := $d.F}}
 {{$act := "/healthchecks/docker/new"}}{{if $d.Edit}}{{$act = print "/healthchecks/docker/system/" $s.ID "/edit"}}{{end}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-	<h1 class="h4 mb-0 me-auto"><i class="bi {{if $d.Edit}}bi-pencil-square{{else}}bi-plus-circle{{end}} text-primary me-1"></i> {{if $d.Edit}}{{.T "docker.host.edit"}}: {{$s.Name}}{{else}}{{.T "docker.host.add"}}{{end}}{{$.Doc "healthchecks#docker-remote"}}</h1>
+	<h1 class="h4 mb-0 me-auto"><i class="bi {{if $d.Edit}}bi-pencil-square{{else}}bi-plus-circle{{end}} text-primary me-1"></i> {{if $d.Edit}}{{.T "docker.host.edit"}}: {{$s.Name}}{{else}}{{.T "docker.host.add"}}{{end}}{{$.Doc "docker#docker-remote"}}</h1>
 	<a class="btn btn-outline-secondary btn-sm" href="{{if $d.Edit}}/healthchecks/docker/system/{{$s.ID}}{{else}}/healthchecks/docker{{end}}"><i class="bi bi-arrow-left"></i> {{.T "common.back"}}</a>
 </div>
 {{if and $d.NoBox (or (eq $d.Conn "ssh") (eq $d.Conn "tls"))}}<div class="alert alert-danger small"><i class="bi bi-key"></i> {{.T "pve.err.no_box"}}</div>{{end}}

@@ -11,7 +11,7 @@
 {{$f := $d.Filter}}
 <div class="d-flex flex-wrap align-items-start gap-2 mb-3">
 	<div class="me-auto">
-		<h1 class="h4 mb-1"><i class="bi bi-box-seam text-primary me-1"></i> {{.T "nav.docker"}}{{if and $d.Sys (gt $d.Hosts 1)}}: {{$d.Sys.Name}}{{end}}{{if $d.Sys}} <span class="badge {{$d.View.Class}}">{{.T (print "pve.sys_state." $d.View.State)}}</span>{{end}}{{$.Doc "healthchecks#docker"}}</h1>
+		<h1 class="h4 mb-1"><i class="bi bi-box-seam text-primary me-1"></i> {{.T "nav.docker"}}{{if and $d.Sys (gt $d.Hosts 1)}}: {{$d.Sys.Name}}{{end}}{{if $d.Sys}} <span class="badge {{$d.View.Class}}">{{.T (print "pve.sys_state." $d.View.State)}}</span>{{end}}{{$.Doc "docker"}}</h1>
 		<div class="small text-body-secondary d-flex flex-wrap gap-2 align-items-center">
 			{{with $d.Info}}<span><i class="bi bi-hdd"></i> {{.Name}}</span>{{if .Version}}<span class="badge text-bg-light">Docker {{.Version}}</span>{{end}}{{if .OS}}<span>{{.OS}}</span>{{end}}<span>{{.NCPU}} CPU · {{$.Bytes .MemTotal}} RAM</span>{{end}}
 			<code>{{$d.Host}}</code>
@@ -39,7 +39,7 @@
 	<div class="text-break mt-1 text-body-secondary">{{$d.SocketErr}}</div></div>{{end}}
 {{else}}<div class="alert alert-warning small" id="docker-socket"><i class="bi bi-exclamation-triangle"></i> {{.T "hc.docker.socket_missing" "host" $d.Host}}
 	<div class="text-break mt-1 text-body-secondary">{{$d.SocketErr}}</div>
-	<div class="mt-2">{{.T "hc.docker.socket_mount"}} <code>-v /var/run/docker.sock:/var/run/docker.sock:ro</code>{{$.Doc "healthchecks#docker"}}</div>
+	<div class="mt-2">{{.T "hc.docker.socket_mount"}} <code>-v /var/run/docker.sock:/var/run/docker.sock:ro</code>{{$.Doc "docker#docker-socket"}}</div>
 	<div class="mt-1">{{.T "hc.docker.socket_group"}} <code>--group-add $(stat -c %g /var/run/docker.sock)</code></div>
 </div>{{end}}
 
@@ -116,7 +116,7 @@
 {{$r := $x.Row}}
 <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
 	<div>
-		<h1 class="h4 mb-1"><i class="bi bi-box text-primary me-1"></i> {{$r.Name}} <span class="badge {{$r.Class}}">{{.T $r.Label}}</span>{{with $r.R.Health}} <span class="badge {{if eq . "unhealthy"}}text-bg-danger{{else if eq . "starting"}}text-bg-warning{{else}}text-bg-light{{end}}">{{$.T (print "hc.docker.health." .)}}</span>{{end}}{{$.Doc "healthchecks#docker"}}</h1>
+		<h1 class="h4 mb-1"><i class="bi bi-box text-primary me-1"></i> {{$r.Name}} <span class="badge {{$r.Class}}">{{.T $r.Label}}</span>{{with $r.R.Health}} <span class="badge {{if eq . "unhealthy"}}text-bg-danger{{else if eq . "starting"}}text-bg-warning{{else}}text-bg-light{{end}}">{{$.T (print "hc.docker.health." .)}}</span>{{end}}{{$.Doc "docker#ueberwachung"}}</h1>
 		<div class="small text-body-secondary d-flex flex-wrap gap-2 align-items-center">
 			<a href="{{$d.Path}}"><i class="bi bi-box-seam"></i> {{$d.Sys.Name}}</a>
 			{{if $r.R.Image}}<span title="{{$.T "docker.image"}}"><i class="bi bi-layers"></i> {{$r.R.Image}}</span>{{end}}
@@ -185,7 +185,7 @@
 
 {{define "dockerrules"}}{{$r := .Data.Rules}}
 <div class="card mb-3" id="rules">
-	<div class="card-header"><i class="bi bi-bell text-primary"></i> {{.T "pve.rules.title"}} <span class="small text-body-secondary">· {{.T (print "pve.rules.level_" $r.Text)}}</span>{{.Doc "healthchecks#docker"}}</div>
+	<div class="card-header"><i class="bi bi-bell text-primary"></i> {{.T "pve.rules.title"}} <span class="small text-body-secondary">· {{.T (print "pve.rules.level_" $r.Text)}}</span>{{.Doc "docker#ueberwachung"}}</div>
 	<form method="post" action="{{$r.Action}}" class="card-body">
 		<input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="key" value="{{$r.Key}}">
 		<p class="small text-body-secondary">{{.T (print "pve.rules.hint_" $r.Text)}}</p>
