@@ -11,6 +11,10 @@
 - Ohne Verknüpfung mit dem Healthchecks-Sync gehen jetzt auch die Meldungen der Healthchecks (nicht nur die der
   Module) über den API-Key an E-Mail, SMS und App des Accounts; die ipv64-App ist dabei als Kanal mit dabei.
 
+### Behoben
+- SMS-Kontingent 0 bedeutet bei ipv64 „unbegrenzt“ (Business, Company) – Node und Portal zeigten dafür „SMS nicht in
+  deiner Klasse“ und das Portal ließ keinen SMS-Kanal anlegen.
+
 ## 2.27.0 – 2026-10-23
 
 ### Neu

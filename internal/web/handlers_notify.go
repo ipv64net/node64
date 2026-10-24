@@ -31,6 +31,7 @@ type notifyData struct {
 }
 
 // smsQuota: SMS des ipv64-Accounts heute (nur verknuepft; Stand der letzten Abfrage, hoechstens 5 min alt).
+// Limit 0 = unbegrenzt (Business/Company, wie user_class.sms_limit bei ipv64).
 type smsQuota struct{ Left, Limit int }
 
 func (s *Server) smsQuota(ctx context.Context) *smsQuota {

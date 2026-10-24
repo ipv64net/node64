@@ -44,7 +44,7 @@
 			<td data-label="{{$.T "common.name"}}">
 				<a href="/notifications/{{.ID}}/edit" class="fw-semibold">{{.Name}}</a>
 				<div class="small text-body-secondary text-break">{{.Summary}}</div>
-				{{if and (eq (print .Type) "ipv64_sms") $d.SMS}}<div class="small {{if eq $d.SMS.Left 0}}text-danger{{else}}text-body-secondary{{end}}"><i class="bi bi-chat-dots"></i> {{if $d.SMS.Limit}}{{$.T "nf.sms_left" "left" $d.SMS.Left "limit" $d.SMS.Limit}}{{else}}{{$.T "nf.sms_none"}}{{end}}</div>{{end}}
+				{{if and (eq (print .Type) "ipv64_sms") $d.SMS}}<div class="small {{if and $d.SMS.Limit (eq $d.SMS.Left 0)}}text-danger{{else}}text-body-secondary{{end}}"><i class="bi bi-chat-dots"></i> {{if $d.SMS.Limit}}{{$.T "nf.sms_left" "left" $d.SMS.Left "limit" $d.SMS.Limit}}{{else}}{{$.T "nf.sms_unlimited"}}{{end}}</div>{{end}}
 				{{if .LastError}}<div class="small text-danger text-break"><i class="bi bi-exclamation-circle"></i> {{.LastError}}</div>{{end}}
 			</td>
 			<td data-label="{{$.T "common.type"}}"><span class="badge text-bg-light">{{$.T (print "nf.type." .Type)}}</span> <span class="small text-body-secondary">{{.Lang}}</span></td>

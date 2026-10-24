@@ -11,6 +11,10 @@
 - Without linking to the Healthchecks sync, health check alerts (not only module messages) now also go via the API key
   to e-mail, SMS and app of the account; the ipv64 app is included as a channel.
 
+### Fixed
+- SMS quota 0 means “unlimited” at ipv64 (Business, Company) – node and portal showed “SMS not included in your class”
+  and the portal refused to create an SMS channel.
+
 ## 2.27.0 – 2026-10-23
 
 ### Added
