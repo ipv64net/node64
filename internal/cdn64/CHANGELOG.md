@@ -1,5 +1,14 @@
 # Änderungen – PROXY64
 
+## 1.27.1 – 2026-10-24
+
+### Geändert
+- Host-Formular, „Neues Zertifikat gleich mit anfordern“: Der Weg zum Zertifikat bietet jetzt alle Wege wie unter
+  Zertifikate – Automatisch, ipv64 DNS-01, HTTP-01, anderer DNS-Anbieter (je Zugang), eigene CA (je CA) und selbst
+  signiert. Nicht verfügbare Wege stehen ausgegraut mit Grund da (kein API-Key, kein DNS-Zugang, keine CA); Alias über
+  ipv64 verweist auf Zertifikate → Neu. Eigene CA und selbst signiert brauchen kein Let's-Encrypt-Konto – der Haken für
+  die Nutzungsbedingungen erscheint nur bei den Let's-Encrypt-Wegen.
+
 ## 1.27.0 – 2026-10-24
 
 ### Neu

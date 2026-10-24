@@ -489,7 +489,10 @@
       "ai_bots": "KI-Bots abweisen (User-Agent)",
       "ai_bots_user": "Nutzer-Abrufe (ChatGPT-User, Perplexity-User …) auch sperren",
       "ai_robots": "robots.txt mit KI-Sperre ausliefern",
-      "ai_hint": "Liste „v64 KI-Bots (User-Agent)“ von ipv64.net (Spiegel von ai.robots.txt, täglich): Anfragen mit passendem User-Agent bekommen 403, /robots.txt bleibt erreichbar. Die robots.txt kommt nur, wenn das Ziel keine hat. Die offiziellen IP-Netze der KI-Crawler gibt es zusätzlich als Blockliste „v64 KI-Bots (IP)“ unter Zugriffslisten."
+      "ai_hint": "Liste „v64 KI-Bots (User-Agent)“ von ipv64.net (Spiegel von ai.robots.txt, täglich): Anfragen mit passendem User-Agent bekommen 403, /robots.txt bleibt erreichbar. Die robots.txt kommt nur, wenn das Ziel keine hat. Die offiziellen IP-Netze der KI-Crawler gibt es zusätzlich als Blockliste „v64 KI-Bots (IP)“ unter Zugriffslisten.",
+      "cert_alias_where": "unter Zertifikate (braucht den CNAME)",
+      "cert_ways_hint": "Ausgegraute Wege brauchen erst etwas (API-Key, DNS-Zugang, eigene CA). Alias über ipv64 und alle Einstellungen gibt es unter",
+      "cert_ways_link": "Zertifikate → Neu"
     },
     "err": {
       "name": "Ungültiger Domainname.",

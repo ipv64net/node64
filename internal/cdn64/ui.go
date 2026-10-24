@@ -335,6 +335,8 @@ type formData struct {
 	Errors  map[string]string
 	ACLs    []*AccessList
 	DNS     []*certs.DNSAccount // Zugaenge fuer "Zertifikat gleich mit anfordern"
+	CAs     []*certs.CA         // eigene CAs fuer "Zertifikat gleich mit anfordern"
+	DNSKey  bool                // ipv64 DNS-01 moeglich (API-Key)
 	IPv64   bool                // DNS-Eintrag bei ipv64 moeglich (API-Key)
 	Zones   []string            // ipv64-Domains (Ziel fuer CNAME)
 	Locs    []Location          // vorhandene Locations und zwei leere Zeilen
@@ -394,6 +396,8 @@ func (m *Module) form(ctx context.Context, h *Host, isNew bool) formData {
 	d.ACLs, _ = m.accessLists(ctx)
 	if m.certs != nil {
 		d.DNS, _ = m.certs.DNSAccounts(ctx)
+		d.CAs, _ = m.certs.CAs(ctx)
+		d.DNSKey = m.certs.DNSReady(ctx)
 	}
 	if isNew && m.dnsrec != nil && m.dnsrec.Ready(ctx) {
 		d.IPv64 = true
@@ -535,7 +539,10 @@ func (m *Module) saveForm(w http.ResponseWriter, r *http.Request, h *Host, isNew
 	names := h.Names
 	// Zertifikat gleich mit anfordern: ohne Let's-Encrypt-Konto (Nutzungsbedingungen) nicht - im Formular annehmen
 	// (Haken) oder vorher unter Zertifikate; sonst bleibt der Host ungespeichert und das Formular zeigt den Hinweis
-	if r.PostFormValue("cert_id") == "new" && m.certs != nil && h.Kind != KindPass {
+	// (eigene CA und selbst signiert brauchen kein Let's-Encrypt-Konto)
+	src := r.PostFormValue("cert_source")
+	acme := src != "self" && !strings.HasPrefix(src, "ca:")
+	if r.PostFormValue("cert_id") == "new" && m.certs != nil && h.Kind != KindPass && acme {
 		if acc := m.certs.Account(ctx); !acc.TOSAccepted {
 			if r.PostFormValue("accept_tos") != "on" {
 				d := m.form(ctx, h, isNew)
@@ -593,12 +600,22 @@ func (m *Module) saveForm(w http.ResponseWriter, r *http.Request, h *Host, isNew
 		}
 	}
 	if r.PostFormValue("cert_id") == "new" && m.certs != nil { // Zertifikat gleich mit anfordern
-		src, dnsAcc := r.PostFormValue("cert_source"), int64(0)
+		dnsAcc := int64(0)
 		if v, ok := strings.CutPrefix(src, "dns:"); ok { // "dns:<Zugang>"
 			src = "dns"
 			dnsAcc, _ = strconv.ParseInt(v, 10, 64)
 		}
-		c, err := m.requestCert(ctx, h.Names, src, "", "", dnsAcc, false)
+		var c *certs.Cert
+		var err error
+		switch {
+		case src == "self": // selbst signiert, wie unter Zertifikate (ECDSA, Standardlaufzeit)
+			c, err = m.certs.Create(ctx, certs.Request{Names: h.Names, Source: "self"})
+		case strings.HasPrefix(src, "ca:"): // "ca:<CA>": eigene CA
+			caID, _ := strconv.ParseInt(strings.TrimPrefix(src, "ca:"), 10, 64)
+			c, err = m.certs.Create(ctx, certs.Request{Names: h.Names, Source: "ca", CAID: caID})
+		default:
+			c, err = m.requestCert(ctx, h.Names, src, "", "", dnsAcc, false)
+		}
 		if err != nil {
 			m.g.Flash(w, r, "warning", m.g.T(r, "certs.host_saved_no_cert", "error", m.certError(r, err)))
 			http.Redirect(w, r, listPath(h.Kind), http.StatusSeeOther)

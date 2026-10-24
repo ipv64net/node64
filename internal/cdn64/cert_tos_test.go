@@ -68,3 +68,32 @@ func TestHostFormNeedsTOS(t *testing.T) {
 		t.Fatal("terms checkbox still shown after accepting")
 	}
 }
+
+// Host-Formular: alle Wege zum Zertifikat wie unter Zertifikate (nicht verfuegbare ausgegraut mit Grund); selbst
+// signiert braucht kein Let's-Encrypt-Konto und wird gleich ausgestellt.
+func TestHostFormCertWays(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.enable(t)
+	body := aiRender(t, "host_form.html", e.m.form(ctx, newHostKind(KindProxy), true))
+	for _, want := range []string{`value="auto"`, `value="ipv64"`, `value="alias" disabled`, `value="http"`, `value="dns" disabled`, `value="ca" disabled`, `value="self"`, `data-cert-tos`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("host form misses %s", want)
+		}
+	}
+	var flash string
+	e.m.g.Flash = func(_ http.ResponseWriter, _ *http.Request, kind, text string) { flash = kind + ": " + text }
+	e.m.g.T = func(_ *http.Request, key string, args ...any) string { return key + fmt.Sprint(args...) }
+	form := url.Values{"names": {"self.test"}, "scheme": {"http"}, "target_host": {"192.168.1.10"}, "target_port": {"8080"}, "enabled": {"on"},
+		"cert_id": {"new"}, "cert_source": {"self"}}
+	req := httptest.NewRequest("POST", "/cdn64/hosts", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	h := newHostKind(KindProxy)
+	_ = req.ParseForm()
+	hostFromForm(req, h)
+	e.m.saveForm(rec, req, h, true)
+	if rec.Code != http.StatusSeeOther || !strings.HasPrefix(flash, "success: certs.host_saved_cert") || e.m.certs.Account(ctx).TOSAccepted {
+		t.Fatalf("self signed: %d %q tos=%v", rec.Code, flash, e.m.certs.Account(ctx).TOSAccepted)
+	}
+}

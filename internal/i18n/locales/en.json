@@ -489,7 +489,10 @@
       "ai_bots": "Reject AI bots (user agent)",
       "ai_bots_user": "Also block fetches on behalf of users (ChatGPT-User, Perplexity-User …)",
       "ai_robots": "Serve robots.txt that blocks AI bots",
-      "ai_hint": "List “v64 AI Bots (User-Agent)” from ipv64.net (mirror of ai.robots.txt, daily): requests with a matching user agent get 403, /robots.txt stays reachable. The robots.txt is only served if the target has none. The official IP ranges of AI crawlers are also available as the blocklist “v64 AI Bots (IP)” under Access lists."
+      "ai_hint": "List “v64 AI Bots (User-Agent)” from ipv64.net (mirror of ai.robots.txt, daily): requests with a matching user agent get 403, /robots.txt stays reachable. The robots.txt is only served if the target has none. The official IP ranges of AI crawlers are also available as the blocklist “v64 AI Bots (IP)” under Access lists.",
+      "cert_alias_where": "under certificates (needs the CNAME)",
+      "cert_ways_hint": "Greyed out ways need something first (API key, DNS account, own CA). Alias via ipv64 and all settings are under",
+      "cert_ways_link": "Certificates → New"
     },
     "err": {
       "name": "Invalid domain name.",

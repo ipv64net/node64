@@ -201,14 +201,18 @@
 					<div class="form-text mb-3">{{.T "cdn64.f.cert_hint"}}</div>
 					<div class="border rounded p-2 mb-3 d-none" data-new-cert>
 						<label class="form-label" for="cert_source">{{.T "certs.method"}}</label>
-						<select class="form-select form-select-sm mb-1" id="cert_source" name="cert_source">
+						<select class="form-select form-select-sm mb-1" id="cert_source" name="cert_source" data-cert-way>
 							<option value="auto">{{.T "certs.src.auto"}}</option>
-							<option value="ipv64">{{.T "certs.src.ipv64"}}</option>
+							<option value="ipv64"{{if not $d.DNSKey}} disabled{{end}}>{{.T "certs.src.ipv64"}}{{if not $d.DNSKey}} – {{.T "certs.why.nokey"}}{{end}}</option>
+							<option value="alias" disabled>{{.T "certs.src.alias"}} – {{.T "cdn64.f.cert_alias_where"}}</option>
 							<option value="http">{{.T "certs.src.http"}}</option>
-							{{range $d.DNS}}<option value="dns:{{.ID}}">{{$.T "certs.src.dns"}}: {{.Name}}</option>{{end}}
+							{{range $d.DNS}}<option value="dns:{{.ID}}">{{$.T "certs.src.dns"}}: {{.Name}}</option>{{else}}<option value="dns" disabled>{{.T "certs.src.dns"}} – {{.T "certs.why.nodns"}}</option>{{end}}
+							{{range $d.CAs}}<option value="ca:{{.ID}}">{{$.T "certs.src.ca"}}: {{.Name}}</option>{{else}}<option value="ca" disabled>{{.T "certs.src.ca"}} – {{.T "certs.why.noca"}}</option>{{end}}
+							<option value="self">{{.T "certs.src.self"}}</option>
 						</select>
+						<div class="form-text mb-1">{{.T "cdn64.f.cert_ways_hint"}} <a href="/certificates/new" target="_blank" rel="noopener">{{.T "cdn64.f.cert_ways_link"}} <i class="bi bi-box-arrow-up-right"></i></a></div>
 						<div class="form-text">{{.T "cdn64.f.cert_new_hint"}}</div>
-						{{if not $d.ACME.TOSAccepted}}<div class="form-check mt-2">
+						{{if not $d.ACME.TOSAccepted}}<div class="form-check mt-2" data-cert-tos>
 							<input class="form-check-input{{if index $d.Errors "cert_id"}} is-invalid{{end}}" type="checkbox" id="accept_tos" name="accept_tos">
 							<label class="form-check-label" for="accept_tos">{{.T "certs.tos_accept"}} <a href="{{$d.ACME.TOSURL}}" target="_blank" rel="noopener">{{.T "certs.tos_link"}}</a></label>
 							<div class="form-text">{{.T "cdn64.f.cert_tos_hint"}} <a href="/certificates" target="_blank" rel="noopener">{{.T "cdn64.f.cert_tos_link"}} <i class="bi bi-box-arrow-up-right"></i></a></div>

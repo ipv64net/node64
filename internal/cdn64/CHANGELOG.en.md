@@ -1,5 +1,14 @@
 # Changes – PROXY64
 
+## 1.27.1 – 2026-10-24
+
+### Changed
+- Host form, “Request a new certificate right away”: the way to the certificate now offers all ways like under
+  certificates – automatic, ipv64 DNS-01, HTTP-01, other DNS provider (per account), own CA (per CA) and self-signed.
+  Unavailable ways are greyed out with the reason (no API key, no DNS account, no CA); alias via ipv64 points to
+  certificates → new. Own CA and self-signed need no Let's Encrypt account – the checkbox for the terms only appears for
+  the Let's Encrypt ways.
+
 ## 1.27.0 – 2026-10-24
 
 ### New

@@ -24,6 +24,16 @@
 	if (sel) { sel.addEventListener("change", sync); }
 	if (hsts) { hsts.addEventListener("change", sync); }
 	sync();
+	// Nutzungsbedingungen von Let's Encrypt nur fuer ACME-Wege (nicht eigene CA, nicht selbst signiert)
+	var way = document.querySelector("[data-cert-way]");
+	var tos = document.querySelector("[data-cert-tos]");
+	var tosSync = function () {
+		if (!way || !tos) { return; }
+		var acme = way.value !== "self" && way.value.indexOf("ca:") !== 0;
+		tos.classList.toggle("d-none", !acme);
+	};
+	if (way) { way.addEventListener("change", tosSync); }
+	tosSync();
 
 	// Neues Zertifikat: Alias-Felder nur beim Alias-Weg, dazu die noetigen CNAMEs als Vorschau
 	var names = document.querySelector("[data-cert-names]");
