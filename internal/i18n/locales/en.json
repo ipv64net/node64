@@ -103,7 +103,8 @@
     "settings_general": "General",
     "settings_ports": "Ports",
     "settings_data": "Data & backup",
-    "docker": "Docker"
+    "docker": "Docker",
+    "settings_modules": "Modules"
   },
   "common": {
     "copy": "Copy",
@@ -1380,7 +1381,11 @@
     "data_goto": "configure",
     "data_logs": "Node logs: in memory only (last lines), not stored.",
     "backup_restore": "Backup and restore",
-    "config_transfer": "Export and import configuration"
+    "config_transfer": "Export and import configuration",
+    "module_on": "on",
+    "module_off": "off",
+    "module_open": "Open",
+    "module_disable_confirm": "Switch off {name}? The module stops running and disappears from the menu; its settings are kept."
   },
   "audit": {
     "title": "Audit log",
@@ -4476,6 +4481,33 @@
       "hostkey": "Host key missing: “Test connection” and confirm the fingerprint.",
       "host": "Host is missing.",
       "duplicate": "This Docker host is already set up."
+    }
+  },
+  "modinfo": {
+    "healthchecks": {
+      "desc": "Monitors websites, servers and services locally in your home network and optionally online from ipv64 – with notifications on outages and recovery.",
+      "h1": "HTTP, keyword, JSON, DNS, ping, TCP, certificates, push, Docker and Proxmox VE",
+      "h2": "Status pages, maintenance windows and many notification channels"
+    },
+    "dyndns": {
+      "desc": "Keeps your ipv64 domains on your current IPv4 and IPv6 automatically – right from the node, no router setup needed.",
+      "h1": "IPv4 and IPv6, including prefixes for devices in your network",
+      "h2": "Reports failed updates and IP changes"
+    },
+    "cdn64": {
+      "desc": "Reverse proxy for the services in your home network: names with HTTPS certificates, access protection and forwarding – locally or via the ipv64 CDN64 servers.",
+      "h1": "Automatic certificates, country blocking, blocklists and access protection",
+      "h2": "Reachable even without open ports via the CDN64 servers"
+    },
+    "dns64": {
+      "desc": "Your own DNS server for the home network: filters ads and trackers, answers local names and protects devices by group.",
+      "h1": "Blocklists, device groups with schedules and SafeSearch",
+      "h2": "DNS over TLS, HTTPS and QUIC, own records and zones"
+    },
+    "honeypot": {
+      "desc": "A decoy in your network: detects attackers trying credentials and reports them to the IPv64 blocklists.",
+      "h1": "Simulates common services such as SSH, Telnet and web logins",
+      "h2": "Early warning and a contribution to the shared blocklists"
     }
   }
 }

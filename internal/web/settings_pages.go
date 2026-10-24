@@ -14,10 +14,12 @@ import (
 	"github.com/ipv64net/node64/internal/ports"
 )
 
-// Einstellungen in drei Seiten: Allgemein (/settings), Ports (/settings/ports) und Daten & Sicherung
-// (/settings/data). Die Formulare posten wie bisher an /settings/…; hier nur die Seiten und die Port-Tabelle.
+// Einstellungen in vier Seiten: Allgemein (/settings), Module (/settings/modules), Ports (/settings/ports) und
+// Daten & Sicherung (/settings/data). Die Formulare posten wie bisher an /settings/…; hier nur die Seiten und die
+// Port-Tabelle.
 
 func (s *Server) settingsPageRoutes() {
+	s.mux.Handle("GET /settings/modules", s.auth(s.settingsModulesPage))
 	s.mux.Handle("GET /settings/ports", s.auth(s.settingsPortsPage))
 	s.mux.Handle("GET /settings/data", s.auth(s.settingsDataPage))
 	s.mux.Handle("POST /settings/reach", s.auth(s.settingsReach))
@@ -25,6 +27,7 @@ func (s *Server) settingsPageRoutes() {
 
 // settingsMoved: alte Sprungmarken auf /settings und ihr neuer Ort (app.js leitet weiter; der Server sieht #… nicht).
 var settingsMoved = map[string]string{
+	"modules": "/settings/modules",
 	"ports":   "/settings/ports",
 	"edge":    "/settings/ports#edge",
 	"data":    "/settings/data#retention",
@@ -33,6 +36,15 @@ var settingsMoved = map[string]string{
 	"export":  "/settings/data#export",
 	"import":  "/settings/data#import",
 	"reset":   "/settings/data#reset",
+}
+
+// ---------------------------------------------------------------- Module
+
+// settingsModulesPage: alle Module mit Kurzbeschreibung, zwei Highlights und Schalter (POST /settings/modules).
+func (s *Server) settingsModulesPage(w http.ResponseWriter, r *http.Request) {
+	v := s.settingsView(r)
+	v.Title = v.T("nav.settings_modules")
+	s.render(w, r, http.StatusOK, "settings_modules", v)
 }
 
 // ---------------------------------------------------------------- Daten & Sicherung

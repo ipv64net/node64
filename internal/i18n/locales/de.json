@@ -103,7 +103,8 @@
     "settings_general": "Allgemein",
     "settings_ports": "Ports",
     "settings_data": "Daten & Sicherung",
-    "docker": "Docker"
+    "docker": "Docker",
+    "settings_modules": "Module"
   },
   "common": {
     "copy": "Kopieren",
@@ -1380,7 +1381,11 @@
     "data_goto": "einstellen",
     "data_logs": "Logs der Node: nur im Speicher (letzte Zeilen), nicht gespeichert.",
     "backup_restore": "Backup und Wiederherstellung",
-    "config_transfer": "Konfiguration exportieren und importieren"
+    "config_transfer": "Konfiguration exportieren und importieren",
+    "module_on": "an",
+    "module_off": "aus",
+    "module_open": "Öffnen",
+    "module_disable_confirm": "{name} ausschalten? Das Modul läuft dann nicht mehr und verschwindet aus dem Menü; die Einstellungen bleiben erhalten."
   },
   "audit": {
     "title": "Audit-Log",
@@ -4476,6 +4481,33 @@
       "hostkey": "Host-Key fehlt: „Verbindung testen“ und den Fingerabdruck bestätigen.",
       "host": "Host fehlt.",
       "duplicate": "Dieser Docker-Host ist schon eingerichtet."
+    }
+  },
+  "modinfo": {
+    "healthchecks": {
+      "desc": "Überwacht Webseiten, Server und Dienste lokal im Heimnetz und auf Wunsch zusätzlich online von ipv64 aus – mit Benachrichtigung bei Störung und Entwarnung.",
+      "h1": "HTTP, Keyword, JSON, DNS, Ping, TCP, Zertifikate, Push, Docker und Proxmox VE",
+      "h2": "Statusseiten, Wartungsfenster und viele Benachrichtigungswege"
+    },
+    "dyndns": {
+      "desc": "Hält deine ipv64-Domains automatisch auf der aktuellen IPv4 und IPv6 – direkt von der Node, ohne Router-Einstellung.",
+      "h1": "IPv4 und IPv6, auch Präfixe für Geräte im Heimnetz",
+      "h2": "Meldet fehlgeschlagene Updates und IP-Wechsel"
+    },
+    "cdn64": {
+      "desc": "Reverse-Proxy für deine Dienste im Heimnetz: Namen mit HTTPS-Zertifikat, Zugriffsschutz und Weiterleitung – lokal oder über die CDN64-Server von ipv64.",
+      "h1": "Automatische Zertifikate, Ländersperre, Blocklisten und Zugangsschutz",
+      "h2": "Erreichbar auch ohne offene Ports über die CDN64-Server"
+    },
+    "dns64": {
+      "desc": "Eigener DNS-Server fürs Heimnetz: filtert Werbung und Tracker, beantwortet lokale Namen und schützt Geräte nach Gruppen.",
+      "h1": "Blocklisten, Gerätegruppen mit Zeitplänen und SafeSearch",
+      "h2": "DNS über TLS, HTTPS und QUIC, eigene Einträge und Zonen"
+    },
+    "honeypot": {
+      "desc": "Lockvogel im Netz: erkennt Angreifer, die Zugangsdaten durchprobieren, und meldet sie an die IPv64-Blocklisten.",
+      "h1": "Simuliert gängige Dienste wie SSH, Telnet und Web-Logins",
+      "h2": "Frühwarnung und Beitrag zu den gemeinsamen Blocklisten"
     }
   }
 }

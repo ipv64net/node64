@@ -119,19 +119,33 @@ func TestSettingsPages(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("settings: %d", resp.StatusCode)
 	}
-	for _, want := range []string{`id="reach"`, `action="/settings/reach"`, `id="modules"`, `id="logging"`, `id="about"`,
+	for _, want := range []string{`id="reach"`, `action="/settings/reach"`, `id="logging"`, `id="about"`,
 		`data-from="backup" data-to="/settings/data#backup"`, `data-from="ports" data-to="/settings/ports"`, `data-from="reset" data-to="/settings/data#reset"`,
-		`href="/settings/ports"`, `href="/settings/data"`} {
+		`data-from="modules" data-to="/settings/modules"`, `href="/settings/ports"`, `href="/settings/data"`, `href="/settings/modules"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("settings lacks %s", want)
 		}
 	}
-	for _, gone := range []string{`action="/settings/backup"`, `action="/settings/reset"`, `action="/settings/edge"`, `action="/settings/data"`} {
+	for _, gone := range []string{`action="/settings/backup"`, `action="/settings/reset"`, `action="/settings/edge"`, `action="/settings/data"`, `action="/settings/modules"`} {
 		if strings.Contains(body, gone) {
 			t.Errorf("settings still has %s", gone)
 		}
 	}
 	csrf := csrfOf(t, body)
+
+	// Module: eigene Seite mit Beschreibung, zwei Highlights, Schalter mit Rueckfrage beim Ausschalten
+	resp, body = a.get(t, "/settings/modules")
+	if resp.StatusCode != 200 {
+		t.Fatalf("modules: %d", resp.StatusCode)
+	}
+	for _, want := range []string{`id="modules"`, `class="nav-link active" href="/settings/modules"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("modules page lacks %s", want)
+		}
+	}
+	if strings.Contains(body, "modinfo.") || strings.Contains(body, "module-changelog") {
+		t.Error("modules page: untranslated text or changelog")
+	}
 
 	resp, body = a.get(t, "/settings/data")
 	if resp.StatusCode != 200 {
@@ -200,7 +214,7 @@ func TestSettingsNav(t *testing.T) {
 		return out
 	}
 	for path, want := range map[string]string{"/settings": "nav.settings_general", "/settings/2fa": "nav.settings_general",
-		"/settings/ports": "nav.settings_ports", "/settings/data": "nav.settings_data", "/healthchecks/status-pages": "", "/audit": "nav.audit"} {
+		"/settings/modules": "nav.settings_modules", "/settings/ports": "nav.settings_ports", "/settings/data": "nav.settings_data", "/healthchecks/status-pages": "", "/audit": "nav.audit"} {
 		got := active(path)
 		if want == "" {
 			continue
@@ -215,7 +229,36 @@ func TestSettingsNav(t *testing.T) {
 			subs = append(subs, n.Key)
 		}
 	}
-	if strings.Join(subs, ",") != "nav.settings_general,nav.settings_ports,nav.settings_data" {
+	if strings.Join(subs, ",") != "nav.settings_general,nav.settings_modules,nav.settings_ports,nav.settings_data" {
 		t.Fatalf("settings submenu: %v", subs)
+	}
+}
+
+// Seite Module mit einem verfuegbaren Modul: Beschreibung, zwei Highlights, Schalter mit Rueckfrage, kein Changelog.
+func TestSettingsModulesPage(t *testing.T) {
+	a := newTestAppDeps(t, nil, hcModule{})
+	loginAs(t, a, "admin", "sehr geheimes passwort")
+	resp, body := a.get(t, "/settings/modules")
+	if resp.StatusCode != 200 || !strings.Contains(body, `name="action" value="enable"`) {
+		t.Fatalf("modules: %d", resp.StatusCode)
+	}
+	resp, _ = a.post(t, "/settings/modules", url.Values{"_csrf": {csrfOf(t, body)}, "module": {"healthchecks"}, "action": {"enable"}})
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/settings/modules" {
+		t.Fatalf("enable: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	_, body = a.get(t, "/settings/modules")
+	for _, want := range []string{`id="module-healthchecks"`, `action="/settings/modules"`, `href="/healthchecks"`, `data-confirm=`,
+		"Statusseiten, Wartungsfenster"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("modules page lacks %s", want)
+		}
+	}
+	if strings.Contains(body, "modinfo.") || strings.Contains(body, "module-changelog") {
+		t.Error("untranslated text or changelog")
+	}
+	csrf := csrfOf(t, body)
+	resp, _ = a.post(t, "/settings/modules", url.Values{"_csrf": {csrf}, "module": {"healthchecks"}, "action": {"disable"}})
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/settings/modules" {
+		t.Fatalf("disable: %d %s", resp.StatusCode, resp.Header.Get("Location"))
 	}
 }

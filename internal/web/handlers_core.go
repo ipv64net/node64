@@ -583,7 +583,7 @@ func (s *Server) settingsModules(w http.ResponseWriter, r *http.Request) {
 		}
 		s.flash(w, r, "success", v.T(key, "name", title))
 	}
-	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+	http.Redirect(w, r, "/settings/modules", http.StatusSeeOther)
 }
 
 // settingsData speichert die lokale Datenhaltung (nur diese Node; ipv64 behaelt eigene Fristen).

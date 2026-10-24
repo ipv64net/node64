@@ -1,0 +1,44 @@
+{{define "content"}}
+{{$d := .Data}}
+<h1 class="h4 mb-3"><i class="bi bi-gear-fill text-secondary me-1"></i> {{.T "settings.title"}}</h1>
+{{template "settings_tabs" .}}
+<p class="text-body-secondary small">{{.T "settings.modules_hint"}}</p>
+<div class="row g-3" id="modules">
+{{range $d.Modules}}
+	{{$k := print "modinfo." .Info.Name}}
+	{{$desc := $.T (print $k ".desc")}}
+	<div class="col-md-6 col-xl-4">
+		<div class="card h-100{{if not .Enabled}} border-secondary-subtle{{end}}" id="module-{{.Info.Name}}">
+			<div class="card-body d-flex flex-column">
+				<div class="d-flex align-items-center gap-2 mb-2">
+					{{if .Info.Image}}<img src="/static/img/{{.Info.Image}}" alt="" class="logo logo-light" style="height:1.6rem"><img src="/static/img/{{darkimg .Info.Image}}" alt="" class="logo logo-dark" style="height:1.6rem">{{else}}<i class="bi {{.Info.Icon}} fs-4 text-primary"></i>{{end}}
+					<span class="fw-semibold">{{$.T .Info.TitleKey}}</span>
+					{{if .Info.Version}}<span class="badge text-bg-light font-monospace">v{{.Info.Version}}</span>{{end}}
+					<span class="ms-auto badge {{if not .Info.Available}}text-bg-light{{else if .Enabled}}text-bg-success{{else}}text-bg-secondary{{end}}">{{if not .Info.Available}}{{$.T "nav.soon"}}{{else if .Enabled}}{{$.T "settings.module_on"}}{{else}}{{$.T "settings.module_off"}}{{end}}</span>
+				</div>
+				{{if ne $desc (print $k ".desc")}}<p class="small mb-2">{{$desc}}</p>
+				<ul class="small text-body-secondary ps-3 mb-3">
+					<li>{{$.T (print $k ".h1")}}</li>
+					<li>{{$.T (print $k ".h2")}}</li>
+				</ul>{{end}}
+				{{if .LastError}}<div class="text-danger small mb-2">{{.LastError}}</div>{{end}}
+				{{if .Info.Available}}
+				<form method="post" action="/settings/modules" class="mt-auto d-flex align-items-center gap-2">
+					<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<input type="hidden" name="module" value="{{.Info.Name}}">
+					{{if .Enabled}}
+					<input type="hidden" name="action" value="disable">
+					<button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{$.T "settings.module_disable_confirm" "name" ($.T .Info.TitleKey)}}"><i class="bi bi-power"></i> {{$.T "common.disable"}}</button>
+					<a class="btn btn-sm btn-outline-secondary ms-auto" href="{{.Info.Path}}">{{$.T "settings.module_open"}}</a>
+					{{else}}
+					<input type="hidden" name="action" value="enable">
+					<button class="btn btn-sm btn-success" type="submit"><i class="bi bi-power"></i> {{$.T "common.enable"}}</button>
+					{{end}}
+				</form>
+				{{end}}
+			</div>
+		</div>
+	</div>
+{{end}}
+</div>
+{{end}}
