@@ -268,6 +268,7 @@ Ohne Zertifikate und ohne Abnehmer läuft keine Erneuerung im Hintergrund.
 | „Nutzungsbedingungen … annehmen“ | Karte *Let's-Encrypt-Konto*: Haken setzen (für weitere ACME-Stellen beim Anlegen der Stelle) |
 | „Für diesen Weg fehlt der ipv64-API-Key“ | *Einstellungen → ipv64*: API-Key eintragen |
 | hängt bei „wartet auf die Nameserver“ | TXT-Record noch nicht sichtbar; bis 8 Minuten normal, bei netcup länger. Danach Fehler und neuer Versuch in 6 Stunden |
+| „TXT record … not visible …“ | Die Meldung nennt je Nameserver den Stand. *record not there yet*: der Eintrag fehlt dort – bei einer eigenen Domain prüfen, ob sie wirklich an die ipv64-Nameserver delegiert ist. *not authoritative* / *no answer*: das Netz sperrt ausgehendes DNS (Port 53) oder leitet es auf einen eigenen Resolver um (Pi-hole, AdGuard, Firewall-Regel); die Node prüft dann über öffentliche Resolver per DoH (Port 443) weiter. Hilft das nicht, die Node von der Sperre/Umleitung ausnehmen |
 | Alias: „CNAME fehlt“ | Beim Anbieter der fremden Domain den angezeigten CNAME `_acme-challenge.<name>` anlegen |
 | HTTP-01 scheitert | Port 80 von außen muss auf die Node zeigen (Router), und der Name muss per DNS auf den Anschluss zeigen |
 | eigene CA: „… is not allowed by the CA“ | Name oder IP liegt außerhalb der Einschränkung; Domain bei einer neuen CA erlauben oder eine CA ohne Einschränkung nutzen |
