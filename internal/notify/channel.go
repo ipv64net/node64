@@ -25,7 +25,7 @@ const (
 	TypeDiscord  Type = "discord"
 	TypeNtfy     Type = "ntfy"
 	TypeGotify   Type = "gotify"
-	TypeIGotify  Type = "igotify" // Gotify-Server mit iGotify-Assistent: Push aufs iPhone (gleicher Versand wie Gotify)
+	TypeIGotify  Type = "igotify" // frueher eigener Menuepunkt (iPhone ueber iGotify) – jetzt normaler Gotify; bleibt fuer alte Kanaele/API gueltig
 	TypePushover Type = "pushover"
 	TypeSlack    Type = "slack"  // Incoming Webhook
 	TypeTeams    Type = "teams"  // Workflows-Webhook (die alten Office-365-Connectoren gibt es seit Mai 2026 nicht mehr)
@@ -39,7 +39,7 @@ const (
 )
 
 // Types in Anzeigereihenfolge.
-var Types = []Type{TypeBrowser, TypeSMTP, TypeTelegram, TypeDiscord, TypeSlack, TypeTeams, TypeMatrix, TypeNtfy, TypeGotify, TypeIGotify, TypePushover, TypeHomeAssistant, TypeWebhook}
+var Types = []Type{TypeBrowser, TypeSMTP, TypeTelegram, TypeDiscord, TypeSlack, TypeTeams, TypeMatrix, TypeNtfy, TypeGotify, TypePushover, TypeHomeAssistant, TypeWebhook}
 
 // Planned sind Kanaele, die ipv64.net nach der Verknuepfung bereitstellt:
 // Mail ohne eigenen SMTP-Server und SMS ueber das ipv64-Gateway. Sie werden

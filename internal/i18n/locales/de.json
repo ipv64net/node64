@@ -2731,13 +2731,19 @@
     "failed": "fehlgeschlagen",
     "saved": "Kanal gespeichert.",
     "deleted": "Kanal gelöscht.",
-    "planned": "nach Verknüpfung mit ipv64",
+    "planned": "nach Verknüpfung oder mit API-Key",
     "ha_hint": "In Home Assistant eine Automation mit dem Auslöser „Webhook“ anlegen (Methode POST), die Webhook-ID kopieren und hier eintragen. „Nur lokal“ kann eingeschaltet bleiben, die Node sendet aus dem LAN. In der Automation stehen die Werte unter trigger.json (title, message, state, kind, check, node, url).",
     "ha_url_hint": "Adresse von Home Assistant ohne Pfad, z. B. http://homeassistant.local:8123 oder https://ha.example.de.",
     "igotify_hint": "iGotify bringt Nachrichten eines Gotify-Servers als Push aufs iPhone. Node64 sendet an deinen Gotify-Server (Adresse und App-Token einer Gotify-App); der iGotify-Assistent und die iGotify-App auf dem iPhone stellen sie zu. ",
     "slack_hint": "In Slack eine App mit „Incoming Webhooks“ anlegen, für den gewünschten Kanal einen Webhook hinzufügen und die URL (https://hooks.slack.com/services/…) hier eintragen.",
     "teams_hint": "In Teams im Kanal „Workflows“ öffnen und die Vorlage „Bei Empfang einer Webhookanforderung in einem Kanal posten“ wählen; die angezeigte URL hier eintragen. Die alten Office-365-Connectoren funktionieren seit Mai 2026 nicht mehr.",
-    "matrix_hint": "Für Matrix (Element, Synapse, matrix.org u. a.): ein eigenes Bot-Konto anlegen, in den Raum einladen, dessen Zugriffstoken und den Raum eintragen. Nachrichten kommen als Hinweis (m.notice)."
+    "matrix_hint": "Für Matrix (Element, Synapse, matrix.org u. a.): ein eigenes Bot-Konto anlegen, in den Raum einladen, dessen Zugriffstoken und den Raum eintragen. Nachrichten kommen als Hinweis (m.notice).",
+    "ipv64_add": "E-Mail oder SMS über ipv64 auf ipv64.net anlegen",
+    "ipv64_title": "E-Mail und SMS über ipv64",
+    "ipv64_manage": "Auf ipv64.net verwalten",
+    "ipv64_hint": "Diese Kanäle deines Accounts nutzt die Node über den API-Key (Meldungen der Module, lokale Checks). Anlegen, Bestätigen und Ändern auf ipv64.net.",
+    "ipv64_empty": "Noch keine bestätigten E-Mail- oder SMS-Kanäle bei ipv64. Lege sie auf ipv64.net unter Benachrichtigungen an – die Node nutzt sie dann automatisch über den API-Key.",
+    "gotify_ios_hint": "Fürs iPhone: Gotify-Server mit der App iGotify (iGotify-Assistent am Gotify-Server) – hier ganz normal den Gotify-Server und das App-Token eintragen."
   },
   "day": {
     "1": "Mo",

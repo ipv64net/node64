@@ -25,6 +25,9 @@ type notifyData struct {
 	Days       []int
 	HasBrowser bool // es gibt schon einen Browser-Kanal
 	SMS        *smsQuota
+	Linked     bool              // Healthchecks-Sync mit ipv64 verknuepft (Server-Kanaele kommen als Platzhalter)
+	APIKey     bool              // API-Key eingetragen: E-Mail/SMS-Kanaele des Accounts gehen ueber die API
+	Remote     []*notify.Channel // Kanaele des Accounts bei ipv64 (nur mit API-Key ohne Verknuepfung, nur lesen)
 }
 
 // smsQuota: SMS des ipv64-Accounts heute (nur verknuepft; Stand der letzten Abfrage, hoechstens 5 min alt).
@@ -118,6 +121,11 @@ func (s *Server) notifyIndex(w http.ResponseWriter, r *http.Request) {
 		if ch.Type == notify.TypeBrowser {
 			d.HasBrowser = true
 		}
+	}
+	d.Linked = s.Sync != nil && s.Sync.State().Linked
+	d.APIKey = s.IPv64 != nil && s.IPv64.Get(ctx) != ""
+	if d.APIKey && !d.Linked {
+		d.Remote = s.IPv64.RemoteChannels(ctx)
 	}
 	if len(dl) == 50 {
 		d.NextBefore = dl[len(dl)-1].ID

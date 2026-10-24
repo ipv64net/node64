@@ -1,5 +1,14 @@
 # Changes – Healthchecks
 
+## 2.27.1 – 2026-10-24
+
+### Changed
+- Notifications with an API key (without linking): instead of “SMS/e-mail via ipv64 – after linking” the page shows
+  the confirmed e-mail and SMS channels of the account (read only) and a link to create them on ipv64.net; the node uses
+  them via the API key.
+- iGotify is no longer a channel type of its own (it is a normal Gotify server); existing iGotify channels become Gotify.
+  The Gotify channel mentions iGotify for the iPhone in its hint.
+
 ## 2.27.0 – 2026-10-23
 
 ### Added
