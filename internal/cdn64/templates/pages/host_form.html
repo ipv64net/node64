@@ -202,13 +202,13 @@
 					<div class="border rounded p-2 mb-3 d-none" data-new-cert>
 						<label class="form-label" for="cert_source">{{.T "certs.method"}}</label>
 						<select class="form-select form-select-sm mb-1" id="cert_source" name="cert_source" data-cert-way>
-							<option value="auto">{{.T "certs.src.auto"}}</option>
-							<option value="ipv64"{{if not $d.DNSKey}} disabled{{end}}>{{.T "certs.src.ipv64"}}{{if not $d.DNSKey}} – {{.T "certs.why.nokey"}}{{end}}</option>
+							{{$cs := $d.CertSrc}}<option value="auto"{{if eq $cs "auto"}} selected{{end}}>{{.T "certs.src.auto"}}</option>
+							<option value="ipv64"{{if not $d.DNSKey}} disabled{{else if eq $cs "ipv64"}} selected{{end}}>{{.T "certs.src.ipv64"}}{{if not $d.DNSKey}} – {{.T "certs.why.nokey"}}{{end}}</option>
 							<option value="alias" disabled>{{.T "certs.src.alias"}} – {{.T "cdn64.f.cert_alias_where"}}</option>
-							<option value="http">{{.T "certs.src.http"}}</option>
-							{{range $d.DNS}}<option value="dns:{{.ID}}">{{$.T "certs.src.dns"}}: {{.Name}}</option>{{else}}<option value="dns" disabled>{{.T "certs.src.dns"}} – {{.T "certs.why.nodns"}}</option>{{end}}
-							{{range $d.CAs}}<option value="ca:{{.ID}}">{{$.T "certs.src.ca"}}: {{.Name}}</option>{{else}}<option value="ca" disabled>{{.T "certs.src.ca"}} – {{.T "certs.why.noca"}}</option>{{end}}
-							<option value="self">{{.T "certs.src.self"}}</option>
+							<option value="http"{{if eq $cs "http"}} selected{{end}}>{{.T "certs.src.http"}}</option>
+							{{range $d.DNS}}<option value="dns:{{.ID}}"{{if eq $cs (printf "dns:%d" .ID)}} selected{{end}}>{{$.T "certs.src.dns"}}: {{.Name}}</option>{{else}}<option value="dns" disabled>{{.T "certs.src.dns"}} – {{.T "certs.why.nodns"}}</option>{{end}}
+							{{range $d.CAs}}<option value="ca:{{.ID}}"{{if eq $cs (printf "ca:%d" .ID)}} selected{{end}}>{{$.T "certs.src.ca"}}: {{.Name}}</option>{{else}}<option value="ca" disabled>{{.T "certs.src.ca"}} – {{.T "certs.why.noca"}}</option>{{end}}
+							<option value="self"{{if eq $cs "self"}} selected{{end}}>{{.T "certs.src.self"}}</option>
 						</select>
 						<div class="form-text mb-1">{{.T "cdn64.f.cert_ways_hint"}} <a href="/certificates/new" target="_blank" rel="noopener">{{.T "cdn64.f.cert_ways_link"}} <i class="bi bi-box-arrow-up-right"></i></a></div>
 						<div class="form-text">{{.T "cdn64.f.cert_new_hint"}}</div>

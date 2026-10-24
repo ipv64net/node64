@@ -1,5 +1,11 @@
 # Changes – PROXY64
 
+## 1.27.2 – 2026-10-24
+
+### Fixed
+- Host form: after an error in the form (e.g. an invalid name or the missing terms checkbox) the chosen way to the new
+  certificate stays selected instead of jumping back to “automatic”.
+
 ## 1.27.1 – 2026-10-24
 
 ### Changed

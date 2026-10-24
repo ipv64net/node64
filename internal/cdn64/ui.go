@@ -331,6 +331,7 @@ type formData struct {
 	New     bool
 	Back    string        // Liste dieser Art
 	NewCert bool          // "Zertifikat gleich mit anfordern" gewaehlt (nach einem Fehler im Formular)
+	CertSrc string        // ... und der gewaehlte Weg (auto, ipv64, http, dns:<Zugang>, ca:<CA>, self)
 	ACME    certs.Account // Let's-Encrypt-Konto (Nutzungsbedingungen angenommen?) fuer "Zertifikat gleich mit anfordern"
 	Errors  map[string]string
 	ACLs    []*AccessList
@@ -546,7 +547,7 @@ func (m *Module) saveForm(w http.ResponseWriter, r *http.Request, h *Host, isNew
 		if acc := m.certs.Account(ctx); !acc.TOSAccepted {
 			if r.PostFormValue("accept_tos") != "on" {
 				d := m.form(ctx, h, isNew)
-				d.Names, d.NewCert = strings.Join(names, "\n"), true
+				d.Names, d.NewCert, d.CertSrc = strings.Join(names, "\n"), true, src
 				d.Errors["cert_id"] = m.g.T(r, "certs.err.tos")
 				title := "cdn64.edit"
 				if isNew {
@@ -565,7 +566,7 @@ func (m *Module) saveForm(w http.ResponseWriter, r *http.Request, h *Host, isNew
 	if err := m.saveHost(ctx, h); err != nil {
 		d := m.form(ctx, h, isNew)
 		d.Names = strings.Join(names, "\n")
-		d.NewCert = r.PostFormValue("cert_id") == "new"
+		d.NewCert, d.CertSrc = r.PostFormValue("cert_id") == "new", src
 		var fe *FieldError
 		if errors.As(err, &fe) {
 			d.Errors[fe.Field] = m.g.T(r, fe.Key, "name", fe.Name)

@@ -1,5 +1,11 @@
 # Änderungen – PROXY64
 
+## 1.27.2 – 2026-10-24
+
+### Behoben
+- Host-Formular: Nach einem Fehler im Formular (z. B. ungültiger Name oder fehlender Haken für die Nutzungsbedingungen)
+  bleibt der gewählte Weg zum neuen Zertifikat ausgewählt, statt auf „automatisch“ zurückzuspringen.
+
 ## 1.27.1 – 2026-10-24
 
 ### Geändert
