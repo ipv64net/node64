@@ -14,13 +14,20 @@ import (
 // das Heimnetz einen Port nur, wenn er auf dem Docker-Host veroeffentlicht ist (-p 53:53/udp), und Docker kann
 // Absender-Adressen durch die des Gateways ersetzen (Userland-Proxy, IPv6 ohne ip6tables, manche NAS-Systeme).
 
-// InBridge meldet, ob die Node in einem Container im Bridge-Netz laeuft: Container-Datei vorhanden und nur virtuelle
-// Schnittstellen (im Host-Netz sieht der Container die echten Netzwerkkarten des Hosts).
-func InBridge() bool {
+// Bridge meldet, ob die Node in einem Container im Bridge-Netz laeuft: Container-Datei vorhanden und nur virtuelle
+// Schnittstellen (im Host-Netz sieht der Container die echten Netzwerkkarten des Hosts). Auch fuer andere Module
+// (PROXY64): das Paket importiert nichts aus internal/dns64.
+func Bridge() bool {
 	return inBridge(fileExists("/.dockerenv") || fileExists("/run/.containerenv"), readIfaces("/sys/class/net"))
 }
 
 // Gateway: IPv4-Default-Gateway (im Bridge-Netz der Docker-Host, z. B. 172.17.0.1).
+//
+// Hairpin-Annahme fuer die Pruefung "auf dem Host veroeffentlicht?": Ein mit -p veroeffentlichter Port ist auch ueber
+// das Gateway erreichbar und fuehrt zurueck in den Container (Docker-NAT bzw. docker-proxy auf 0.0.0.0). Eine Anfrage
+// an Gateway:Port, die beim eigenen Dienst ankommt, heisst also: veroeffentlicht - unter derselben Portnummer. Ist der
+// Port nur an eine bestimmte Host-Adresse gebunden (-p 192.168.1.5:53:53) oder auf eine andere Nummer gelegt, meldet die
+// Pruefung ihn als fehlend.
 func Gateway() netip.Addr { return defaultGateway() }
 
 // iface: ifindex und iflink einer Schnittstelle (gleich = echte Schnittstelle, verschieden = veth-Paar).

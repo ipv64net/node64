@@ -109,7 +109,7 @@ func (m *Module) probeTargets(c config, gw netip.Addr) map[string]func(context.C
 // checkPublished prueft im Bridge-Netz, ob die Ports des laufenden DNS-Dienstes auf dem Docker-Host veroeffentlicht
 // sind (sonst nur Bridge=false merken).
 func (m *Module) checkPublished(ctx context.Context, e *engine, c config) {
-	st := &pubState{Bridge: localnet.InBridge(), Checked: time.Now()}
+	st := &pubState{Bridge: localnet.Bridge(), Checked: time.Now()}
 	gw := localnet.Gateway()
 	if st.Bridge && gw.IsValid() {
 		st.Gateway = gw.String()
