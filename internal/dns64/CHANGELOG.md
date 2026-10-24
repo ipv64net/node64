@@ -1,5 +1,18 @@
 # Änderungen – DNS64
 
+## 1.28.1 – 2026-10-24
+
+### Neu
+- Docker-Bridge-Netz: DNS64 prüft über das Docker-Gateway, ob seine Ports auf dem Host veröffentlicht sind (Prüfname
+  per UDP, TCP, DoT, DoQ bzw. DoH an Gateway:Port – ein veröffentlichter Port führt zurück in den Container). Fehlt
+  einer, steht das in der Port-Übersicht und als Warnung auf Übersicht, Abfrage-Log, Einstellungen und Verschlüsselung,
+  mit Beispiel für `docker run` (`-p 53:53/udp -p 53:53/tcp`) und `compose` (`ports:`) bzw. `network_mode: host`.
+  Geprüft kurz nach dem Start und alle 30 Minuten; im Host-Netz entfällt die Prüfung.
+- Abfrage-Log: Hinweise, warum Client-Adressen fehlen oder gleich aussehen – Anfragen mit der Adresse des
+  Docker-Gateways (Docker ersetzt den Absender), abgewiesene Anfragen aus nicht erlaubten Netzen (stehen nicht im Log,
+  z. B. weiteres VLAN oder im Bridge-Netz das öffentliche IPv6 des Heimnetzes) und gekürzte bzw. nicht gespeicherte
+  Client-Adressen.
+
 ## 1.28.0 – 2026-10-23
 
 ### Geändert

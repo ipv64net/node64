@@ -192,7 +192,7 @@ Das Modul *DNS64* (in den Einstellungen einschalten) ist ein cachender DNS-Serve
         - node64-data:/data
   ```
 
-  Ohne Host-Netzwerk (Bridge) die Ports freigeben; DNS64 sieht die Geräte-IPs dann trotzdem (Docker leitet per NAT weiter), den Router für lokale Namen unter *Einstellungen* eintragen:
+  Ohne Host-Netzwerk (Bridge) die Ports unter derselben Nummer freigeben (DNS64 prüft das über das Docker-Gateway und warnt, wenn ein Port fehlt), den Router für lokale Namen unter *Einstellungen* eintragen. Docker leitet per NAT weiter; je nach Docker-Einstellung (Userland-Proxy, IPv6 ohne ip6tables, manche NAS) erscheinen Geräte aber mit der Adresse des Docker-Gateways, und Geräte mit öffentlicher IPv6-Adresse gelten als fremdes Netz – echte Client-IPs nur mit Host-Netzwerk:
 
   ```yaml
       ports:

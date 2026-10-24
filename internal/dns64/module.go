@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.28.0"
+	version   = "1.28.1"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -106,6 +106,7 @@ type Module struct {
 	pauseUntil atomic.Int64 // Blockieren aus bis (UnixNano), -1 = bis zum Wiedereinschalten, 0 = aktiv (pause.go)
 
 	updMu     sync.Mutex                   // dynamische Updates nacheinander (update.go)
+	pub       atomic.Pointer[pubState]     // Docker-Bridge: Ports auf dem Host veroeffentlicht? (published.go)
 	clMu      sync.Mutex                   // Cluster (cluster.go)
 	clHook    ClusterHook                  // nil = kein Cluster
 	clSnap    map[string]map[string]string // zuletzt gemeldeter Stand je Bereich
@@ -326,7 +327,7 @@ func (m *Module) start(ctx context.Context) error {
 	e.enc = m.startEncrypted(cfg, e.srv)
 	ectx, cancel := context.WithCancel(ctx)
 	e.cancel = cancel
-	for _, run := range []func(context.Context){st.Run, e.lists.Run, e.local.Run, e.up.RunProbes, m.grp.Run, func(ctx context.Context) { m.runMonitor(ctx, e) }} {
+	for _, run := range []func(context.Context){st.Run, e.lists.Run, e.local.Run, e.up.RunProbes, m.grp.Run, func(ctx context.Context) { m.runMonitor(ctx, e) }, func(ctx context.Context) { m.runPublished(ctx, e, cfg) }} {
 		e.wg.Add(1)
 		go func() { defer e.wg.Done(); run(ectx) }()
 	}

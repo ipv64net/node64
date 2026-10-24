@@ -2988,6 +2988,16 @@
     "conflict_resolved": "Conflict resolved."
   },
   "dns64": {
+    "pub": {
+      "refused": "{n} queries from networks that are not allowed were refused (last {ip}, {time}) – they are not in the log. If the network is yours (e.g. another VLAN, a public IPv6 prefix, in a Docker bridge network also the home network’s IPv6), add it under \"Further allowed client networks\".",
+      "missing": "Docker bridge network: DNS64 listens inside the container, but these ports are not published on the Docker host – the home network cannot reach them: {ports}.",
+      "run": "docker run:",
+      "compose": "docker compose:",
+      "host": "Alternatively network_mode: host – then nothing needs to be published, and DNS64 sees the real device addresses.",
+      "gateway": "The query log shows queries with the address of the Docker gateway {gw} instead of the device IP: Docker replaces the sender here (e.g. userland proxy, IPv6 without ip6tables, some NAS). Real client IPs – and with them device groups and per-device statistics – are only available with network_mode: host.",
+      "anon_mask": "\"Client addresses in the log\" is set to \"shortened\": devices in the same network appear with the same shortened address (Settings).",
+      "anon_hide": "\"Client addresses in the log\" is set to \"do not store\": no client address is in the log (Settings)."
+    },
     "local": {
       "title": "Local DNS",
       "all": "All records",

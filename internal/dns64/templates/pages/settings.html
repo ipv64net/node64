@@ -21,6 +21,10 @@
 	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
 </ul>
 {{if not $d.Running}}<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.not_running"}}{{if $d.Err}}<div class="small mt-1 font-monospace">{{$d.Err}}</div><div class="small mt-1">{{.T "dns64.retrying"}}</div>{{end}}</div>{{end}}
+{{if $d.Pub.Missing}}<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.pub.missing" "ports" (join $d.Pub.Missing ", ")}}{{.Doc "dns64#docker"}}
+	<div class="small mt-2">{{.T "dns64.pub.run"}} <code class="user-select-all">{{$d.Pub.Publish}}</code></div>
+	<div class="small mt-1">{{.T "dns64.pub.compose"}} <code class="user-select-all">ports: [{{$d.Pub.Compose}}]</code></div>
+	<div class="small mt-1 text-body-secondary">{{.T "dns64.pub.host"}}</div></div>{{end}}
 <script type="application/json" id="dns64-data">{{$d.JS}}</script>
 <div class="row g-3">
 	<div class="col-xl-6">

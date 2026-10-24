@@ -82,6 +82,7 @@ type pageData struct {
 	SelZone *Zone                    // Seite Lokaler DNS: gewaehlte Zone
 	ZCount  map[string]int           // Seite Lokaler DNS: Eintraege je Zone ("*", "-")
 	Back    string                   // Seite Lokaler DNS: Ruecksprung nach dem Speichern
+	Pub     pubView                  // Docker-Bridge: fehlende Veroeffentlichung, Gateway als Client (published.go)
 	Groups  []groups.Group           // Seiten Gruppen und Log
 	Devices []deviceView             // Seite Gruppen: Geraete der letzten 24 Stunden
 	Cats    []string                 // Seite Gruppen: Kategorien
@@ -118,10 +119,13 @@ func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 		}
 		d.Err = m.startError()
 		d.Pause = m.pauseState()
+		if key == "overview" || key == "log" || key == "settings" || key == "encrypted" {
+			d.Pub = m.pubView(ctx, m.running())
+		}
 		if key == "encrypted" {
 			d.Enc = m.encView(r, d.Cfg)
 		}
-		if e := m.running(); e != nil && key == "settings" {
+		if e := m.running(); e != nil && (key == "settings" || key == "log") {
 			d.Refused = e.srv.Refused()
 		}
 		if key == "groups" || key == "log" {

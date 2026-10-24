@@ -2,6 +2,7 @@ package dns64
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/ipv64net/node64/internal/ports"
 )
@@ -43,6 +44,12 @@ func (m *Module) Ports(ctx context.Context, running bool) []ports.Claim {
 	}
 	if c.DoQ {
 		out = append(out, ports.Claim{Owner: Name, Purpose: "DoQ", Proto: ports.UDP, Port: c.DoTPort, Bind: c.Bind, Active: encOn("doq"), Error: encErr("doq")})
+	}
+	for i := range out { // Docker-Bridge: lauscht im Container, aber auf dem Host nicht veroeffentlicht (published.go)
+		if cl := &out[i]; cl.Active && cl.Error == "" && m.pubMissing(cl.Port, cl.Proto) {
+			p := strconv.Itoa(cl.Port)
+			cl.Error = "nicht auf dem Docker-Host veröffentlicht (-p " + p + ":" + p + "/" + string(cl.Proto) + ")"
+		}
 	}
 	return out
 }

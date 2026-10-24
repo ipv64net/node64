@@ -2988,6 +2988,16 @@
     "conflict_resolved": "Konflikt aufgelöst."
   },
   "dns64": {
+    "pub": {
+      "refused": "{n} Anfragen aus nicht erlaubten Netzen abgewiesen (zuletzt {ip}, {time}) – sie stehen nicht im Log. Gehört das Netz zu dir (z. B. weiteres VLAN, öffentliches IPv6-Präfix, im Docker-Bridge-Netz auch das IPv6 des Heimnetzes), trage es unter „Weitere erlaubte Client-Netze“ ein.",
+      "missing": "Docker-Bridge-Netz: DNS64 lauscht im Container, aber diese Ports sind auf dem Docker-Host nicht veröffentlicht – das Heimnetz erreicht sie nicht: {ports}.",
+      "run": "docker run:",
+      "compose": "docker compose:",
+      "host": "Alternativ network_mode: host – dann braucht es keine Veröffentlichung, und DNS64 sieht die echten Adressen der Geräte.",
+      "gateway": "Im Abfrage-Log stehen Anfragen mit der Adresse des Docker-Gateways {gw} statt der Geräte-IP: Docker ersetzt hier den Absender (z. B. Userland-Proxy, IPv6 ohne ip6tables, manche NAS). Echte Client-IPs – und damit Gerätegruppen und Statistik je Gerät – gibt es nur mit network_mode: host.",
+      "anon_mask": "„Client-Adressen im Log“ steht auf „gekürzt“: Geräte im selben Netz erscheinen mit derselben gekürzten Adresse (Einstellungen).",
+      "anon_hide": "„Client-Adressen im Log“ steht auf „nicht speichern“: Es steht keine Client-Adresse im Log (Einstellungen)."
+    },
     "local": {
       "title": "Lokaler DNS",
       "all": "Alle Einträge",
