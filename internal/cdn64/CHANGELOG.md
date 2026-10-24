@@ -1,5 +1,12 @@
 # Änderungen – PROXY64
 
+## 1.26.1 – 2026-10-24
+
+### Behoben
+- Proxy-Host mit „neues Zertifikat anfordern“ ohne Let’s-Encrypt-Konto: Bisher wurde der Host gespeichert und das
+  Zertifikat scheiterte danach an den nicht angenommenen Nutzungsbedingungen. Jetzt steht im Formular der Haken für die
+  Nutzungsbedingungen (mit Link); ohne ihn bleibt der Host ungespeichert und das Formular zeigt den Hinweis.
+
 ## 1.26.0 – 2026-10-23
 
 ### Neu

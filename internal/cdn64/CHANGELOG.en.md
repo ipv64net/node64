@@ -1,5 +1,12 @@
 # Changes – PROXY64
 
+## 1.26.1 – 2026-10-24
+
+### Fixed
+- Proxy host with "request a new certificate" without a Let's Encrypt account: the host used to be saved and the
+  certificate then failed because the terms of service were not accepted. The form now shows the terms checkbox (with
+  link); without it the host is not saved and the form shows the hint.
+
 ## 1.26.0 – 2026-10-23
 
 ### New

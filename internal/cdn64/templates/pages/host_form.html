@@ -208,6 +208,11 @@
 							{{range $d.DNS}}<option value="dns:{{.ID}}">{{$.T "certs.src.dns"}}: {{.Name}}</option>{{end}}
 						</select>
 						<div class="form-text">{{.T "cdn64.f.cert_new_hint"}}</div>
+						{{if not $d.ACME.TOSAccepted}}<div class="form-check mt-2">
+							<input class="form-check-input{{if index $d.Errors "cert_id"}} is-invalid{{end}}" type="checkbox" id="accept_tos" name="accept_tos">
+							<label class="form-check-label" for="accept_tos">{{.T "certs.tos_accept"}} <a href="{{$d.ACME.TOSURL}}" target="_blank" rel="noopener">{{.T "certs.tos_link"}}</a></label>
+							<div class="form-text">{{.T "cdn64.f.cert_tos_hint"}} <a href="/certificates" target="_blank" rel="noopener">{{.T "cdn64.f.cert_tos_link"}} <i class="bi bi-box-arrow-up-right"></i></a></div>
+						</div>{{end}}
 					</div>
 					<fieldset data-ssl-options>
 						<div class="row g-2">

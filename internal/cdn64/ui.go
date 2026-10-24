@@ -328,8 +328,9 @@ type formData struct {
 	Names   string
 	Certs   []*certs.Cert
 	New     bool
-	Back    string // Liste dieser Art
-	NewCert bool   // "Zertifikat gleich mit anfordern" gewaehlt (nach einem Fehler im Formular)
+	Back    string        // Liste dieser Art
+	NewCert bool          // "Zertifikat gleich mit anfordern" gewaehlt (nach einem Fehler im Formular)
+	ACME    certs.Account // Let's-Encrypt-Konto (Nutzungsbedingungen angenommen?) fuer "Zertifikat gleich mit anfordern"
 	Errors  map[string]string
 	ACLs    []*AccessList
 	DNS     []*certs.DNSAccount // Zugaenge fuer "Zertifikat gleich mit anfordern"
@@ -387,6 +388,7 @@ func (m *Module) form(ctx context.Context, h *Host, isNew bool) formData {
 	d := formData{Tabs: tabs(listPath(h.Kind)), Back: listPath(h.Kind), Host: h, Names: strings.Join(h.Names, "\n"), New: isNew, Errors: map[string]string{}}
 	if m.certs != nil {
 		d.Certs, _ = m.certs.List(ctx)
+		d.ACME = m.certs.Account(ctx)
 	}
 	d.ACLs, _ = m.accessLists(ctx)
 	if m.certs != nil {
@@ -530,6 +532,28 @@ func (m *Module) pageUpdate(w http.ResponseWriter, r *http.Request) {
 func (m *Module) saveForm(w http.ResponseWriter, r *http.Request, h *Host, isNew bool) {
 	ctx := r.Context()
 	names := h.Names
+	// Zertifikat gleich mit anfordern: ohne Let's-Encrypt-Konto (Nutzungsbedingungen) nicht - im Formular annehmen
+	// (Haken) oder vorher unter Zertifikate; sonst bleibt der Host ungespeichert und das Formular zeigt den Hinweis
+	if r.PostFormValue("cert_id") == "new" && m.certs != nil && h.Kind != KindPass {
+		if acc := m.certs.Account(ctx); !acc.TOSAccepted {
+			if r.PostFormValue("accept_tos") != "on" {
+				d := m.form(ctx, h, isNew)
+				d.Names, d.NewCert = strings.Join(names, "\n"), true
+				d.Errors["cert_id"] = m.g.T(r, "certs.err.tos")
+				title := "cdn64.edit"
+				if isNew {
+					title = "cdn64.new"
+				}
+				m.g.Render(w, r, http.StatusUnprocessableEntity, Name+"/host_form", title, d)
+				return
+			}
+			if err := m.certs.SetAccount(ctx, acc.Email, true); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			m.g.Audit(r, "cert.account", "", "accept_tos=true")
+		}
+	}
 	if err := m.saveHost(ctx, h); err != nil {
 		d := m.form(ctx, h, isNew)
 		d.Names = strings.Join(names, "\n")

@@ -430,6 +430,8 @@
       "min_tls_hint": "TLS 1.3 ist aktuell; 1.2 für ältere Geräte.",
       "cert_new": "Neues Zertifikat gleich mit anfordern",
       "cert_new_hint": "Für alle Domains dieses Hosts; der Abruf läuft nach dem Speichern im Hintergrund.",
+      "cert_tos_hint": "Für ein neues Zertifikat legt die Node einmal ein Konto bei Let’s Encrypt an; dafür müssen die Nutzungsbedingungen angenommen sein. Gilt dann für die ganze Node. Eine Kontakt-Mail (optional) stellst du unter",
+      "cert_tos_link": "Zertifikate ein",
       "redirect_target": "Ziel-Domain",
       "redirect_code": "HTTP-Code",
       "redirect_hint": "Domain, optional mit Port und Pfad (z. B. www.example.com/neu). „Wie die Anfrage“ nimmt http oder https so, wie der Besucher kam.",
