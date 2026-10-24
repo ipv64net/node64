@@ -27,6 +27,11 @@ API `/api/cdn64/...`, Einstellungen `cdn64.*`, Metriken `node64_cdn64_*` und Abl
 5. **Docker:**
    - Empfohlen ist das Host-Netzwerk (`network_mode: host`), weil Streams beliebige Ports öffnen.
    - Im Bridge-Modus `-p 80:80 -p 443:443 -p 443:443/udp` und je Stream eine weitere Freigabe.
+   - Im Bridge-Modus prüft Node64, ob 80 und 443 auf dem Docker-Host wirklich veröffentlicht sind: eine Prüfanfrage
+     geht über das Gateway (den Docker-Host) an denselben Port und muss bei PROXY64 ankommen. Fehlt ein Port, warnen
+     die Host-Liste und *Einstellungen → Ports* („nicht veröffentlicht“) mit fertigen Angaben für `docker run` und
+     `docker compose`. Ist der Port auf dem Host unter einer anderen Nummer veröffentlicht (z. B. `-p 8443:443`), diese
+     Nummer unter „Port nach außen“ eintragen. HTTP/3 (UDP) lässt sich so nicht prüfen.
    - Ports unter 1024 gehen ohne Root (`cap_net_bind_service` im Image).
 
 ## Ports: Wie sich Module 443 teilen

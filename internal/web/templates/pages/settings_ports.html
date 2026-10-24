@@ -28,6 +28,18 @@
 	<div class="col-sm-auto"><noscript><button class="btn btn-outline-secondary btn-sm" type="submit">{{.T "ports.filter_apply"}}</button></noscript>
 		{{if or $d.Module $d.State}}<a class="btn btn-link btn-sm" href="/settings/ports">{{.T "ports.filter_reset"}}</a>{{end}}</div>
 </form>
+{{if $d.Pub.Missing}}<div class="alert alert-danger small" id="published">
+	<div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle"></i> {{.T "ports.pub_title"}}</div>
+	<p class="mb-2">{{.T "ports.pub_alert" "ports" $d.Pub.PortList "gw" $d.Pub.Gateway}}</p>
+	<div class="mb-1">{{.T "ports.pub_run"}}</div>
+	<div class="input-group input-group-sm mb-2"><input class="form-control font-monospace" id="pub-run" value="{{$d.Pub.RunArgs}}" readonly aria-label="docker run -p">
+		<button class="btn btn-outline-secondary" type="button" data-copy-target="#pub-run" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
+	<div class="mb-1">{{.T "ports.pub_compose"}}</div>
+	<pre class="bg-body border rounded p-2 mb-2 small"><code>services:
+  node64:
+{{$d.Pub.Compose}}</code></pre>
+	<div class="mb-0">{{.T "ports.pub_host"}}</div>
+</div>{{end}}
 <div class="card mb-3" id="ports">
 	<div class="table-responsive">
 		<table class="table table-sm table-hover align-middle small mb-0">
@@ -49,6 +61,7 @@
 					{{else if eq .Kind "via"}}<span class="badge text-bg-light border">{{$.T "ports.shared"}}</span>
 					{{else if .Active}}<span class="badge text-bg-success">{{$.T "ports.active"}}</span>{{else}}<span class="badge text-bg-light border">{{$.T "ports.idle"}}</span>{{end}}</td>
 				<td class="text-nowrap">{{if eq .Open "yes"}}{{if .Foreign}}<span class="badge text-bg-warning" title="{{$.T "ports.foreign_hint"}}">{{$.T "ports.foreign"}}</span>{{else}}<span class="badge text-bg-success"><i class="bi bi-check-lg"></i> {{$.T "ports.open_yes"}}</span>{{end}}
+					{{if eq .Published "no"}}<a class="badge text-bg-danger text-decoration-none" href="#published" title="{{$.T "ports.pub_no_hint"}}">{{$.T "ports.pub_no"}}</a>{{else if eq .Published "yes"}}<span class="badge text-bg-success" title="{{$.T "ports.pub_yes_hint"}}"><i class="bi bi-box-arrow-right"></i> {{$.T "ports.pub_yes"}}</span>{{end}}
 					{{else if eq .Open "no"}}{{if .Active}}<span class="badge text-bg-warning" title="{{$.T "ports.open_missing_hint"}}">{{$.T "ports.open_missing"}}</span>{{else}}<span class="badge text-bg-light border">{{$.T "ports.open_no"}}</span>{{end}}
 					{{else if eq .Open "unknown"}}<span class="text-body-secondary">{{$.T "ports.open_unknown"}}</span>
 					{{else}}<span class="text-body-secondary">–</span>{{end}}</td>
@@ -62,7 +75,7 @@
 			</tbody>
 		</table>
 	</div>
-	<div class="card-footer small text-body-secondary">{{if $d.Checked}}{{.T "ports.open_hint"}}{{else}}{{.T "ports.open_unknown_hint"}}{{end}}</div>
+	<div class="card-footer small text-body-secondary">{{if $d.Checked}}{{.T "ports.open_hint"}}{{else}}{{.T "ports.open_unknown_hint"}}{{end}}{{if $d.Pub.Bridge}} {{.T "ports.open_bridge_hint"}}{{end}}</div>
 </div>
 
 <div class="row g-3 align-items-start">

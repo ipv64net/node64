@@ -138,6 +138,7 @@ type portRow struct {
 	Kind      string   // listen (Node64 oeffnet ihn), via (laeuft ueber den Port eines anderen Teils), out (ausgehend)
 	Via       string   // bei via: Teil, dem der Port gehoert (edge, web)
 	Open      string   // yes, no, unknown; leer bei via/out
+	Published string   // Docker-Bridge-Netz, Eingang: yes/no = auf dem Docker-Host veroeffentlicht; sonst leer
 	Foreign   bool     // offen, aber kein Teil von Node64 hat ihn offen (anderes Programm im selben Netz)
 	Conflicts []string // "dns64 (DoH)" …
 	Low       bool     // Port unter 1024
@@ -163,7 +164,8 @@ type portsPage struct {
 	LowDenied                      bool   // mindestens einer davon nicht erlaubt
 	DockerArgs                     string // -p … fuer docker run
 	WebPort, HTTPPort, HTTPSPort   int
-	Edge                           *edge.Status // Formular des Eingangs (nil = nicht verfuegbar; Name der Oberflaeche: reachView)
+	Edge                           *edge.Status   // Formular des Eingangs (nil = nicht verfuegbar; Name der Oberflaeche: reachView)
+	Pub                            edge.Published // Docker-Bridge-Netz: HTTP/HTTPS des Eingangs auf dem Host veroeffentlicht?
 }
 
 var portStates = []string{"open", "closed", "conflict", "error", "foreign", "via", "out"}
@@ -197,6 +199,9 @@ func (s *Server) portsPageData(ctx context.Context, module, state string) *ports
 	if s.Ports != nil && s.Edge != nil { // wie portRoutes (POST /settings/edge)
 		st := s.Edge.Status()
 		d.Edge = &st
+	}
+	if s.Edge != nil {
+		d.Pub = s.Edge.Published(ctx)
 	}
 	meta := s.ownerMeta(ctx)
 	webPort := s.Cfg.HTTPPort
@@ -279,6 +284,12 @@ func (s *Server) portsPageData(ctx context.Context, module, state string) *ports
 					row.Open = "yes"
 					break
 				}
+			}
+		}
+		if d.Pub.Bridge && d.Pub.Gateway != "" && row.Owner == edge.Owner && row.Proto == ports.TCP && row.Active {
+			row.Published = "yes"
+			if d.Pub.MissingPort(row.Port) {
+				row.Published = "no"
 			}
 		}
 		if row.Port > 0 && row.Port < 1024 {

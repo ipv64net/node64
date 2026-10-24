@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,6 +61,19 @@ func TestUIViaEdge(t *testing.T) {
 	for ip, want := range map[string]bool{"192.168.1.5": true, "127.0.0.1": true, "fd00::1": true, "100.100.1.1": true, "203.0.113.9": false, "2001:db8::1": false} {
 		if got := lanOnly(netip.MustParseAddr(ip)); got != want {
 			t.Errorf("lanOnly(%s) = %v", ip, got)
+		}
+	}
+	// Docker-Bridge-Netz ohne veroeffentlichte Ports (Gateway ohne Dienst): Seite Ports warnt mit Beispiel
+	defer edge.BridgeForTest(true, netip.MustParseAddr("127.0.0.2"))()
+	if d := a.s.portsPageData(ctx, "", ""); !d.Pub.Bridge || !d.Pub.MissingPort(cfg.HTTPSPort) {
+		t.Fatalf("published: %+v", d.Pub)
+	}
+	loginAs(t, a, "admin", "sehr geheimes passwort")
+	_, body := a.get(t, "/settings/ports")
+	hp := strconv.Itoa(cfg.HTTPSPort)
+	for _, want := range []string{`id="published"`, "-p " + hp + ":" + hp, `- &#34;` + hp + ":" + hp + `&#34;`, "network_mode: host"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("ports page lacks %q", want)
 		}
 	}
 	_ = a.store.SetSetting(ctx, setUIName, "")

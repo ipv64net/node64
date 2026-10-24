@@ -192,6 +192,7 @@ type listData struct {
 	Tabs      []tab
 	Rows      []hostRow
 	EdgeErr   string
+	Pub       edge.Published // Docker-Bridge-Netz: fehlen HTTP/HTTPS des Eingangs auf dem Host?
 	EdgeOpen  bool
 	Listeners []edge.ListenerStatus
 	CacheN    int
@@ -284,7 +285,7 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	d := listData{Kind: kind, Tabs: tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError(), StatsOn: m.stats2.Load() != nil,
+	d := listData{Kind: kind, Tabs: tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError(), Pub: m.published(r.Context()), StatsOn: m.stats2.Load() != nil,
 		OnlineOn: m.online.api != nil && m.edge != nil, OnlineL: m.onlineStrings(r), LimitsOn: m.limLoad(r.Context()).Enabled}
 	rm := m.online.remote.Load()
 	if d.OnlineOn && (rm == nil || time.Since(rm.At) > time.Minute) { // auch ohne eigene Namen bald nachsehen (Modus 3)

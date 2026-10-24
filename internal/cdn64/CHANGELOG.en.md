@@ -1,5 +1,14 @@
 # Changes – PROXY64
 
+## 1.27.0 – 2026-10-24
+
+### New
+- Docker bridge network: PROXY64 checks whether the HTTP and HTTPS ports (80/443) are published on the Docker host – a
+  probe request via the gateway must reach its own entry point; another program on the host does not count. If a port
+  is missing, the host list shows a clear warning with a ready-to-copy `-p …`; *Settings → Ports* shows “not
+  published” or “published on the host” plus an example for `docker run` and `docker compose`. Previously the check
+  reported “listening” as soon as the port was open inside the container, even if nothing arrived from outside.
+
 ## 1.26.1 – 2026-10-24
 
 ### Fixed

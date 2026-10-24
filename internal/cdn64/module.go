@@ -49,7 +49,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.26.1"
+	Version = "1.27.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -370,6 +370,15 @@ func (m *Module) edgeError() string {
 		}
 	}
 	return ""
+}
+
+// published: im Docker-Bridge-Netz, ob HTTP/HTTPS des Eingangs auf dem Docker-Host veroeffentlicht sind (leer ohne
+// Eingang oder ohne Hosts - dann lauscht der Eingang fuer PROXY64 nicht).
+func (m *Module) published(ctx context.Context) edge.Published {
+	if m.edge == nil {
+		return edge.Published{}
+	}
+	return m.edge.Published(ctx)
 }
 
 // ---------------------------------------------------------------- Export / Import (module.Exporter)

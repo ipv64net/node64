@@ -31,6 +31,10 @@
 		<div class="small text-body-secondary d-none" data-stats-empty>{{.T "cdn64.stats.empty"}}</div>
 	</div>
 </div>{{end}}
+{{if $d.Pub.Missing}}<div class="alert alert-danger small"><i class="bi bi-exclamation-triangle"></i> {{.T "cdn64.pub_missing" "ports" $d.Pub.PortList}}
+	<div class="input-group input-group-sm my-2"><input class="form-control font-monospace" id="pub-run" value="{{$d.Pub.RunArgs}}" readonly aria-label="docker run -p">
+		<button class="btn btn-outline-secondary" type="button" data-copy-target="#pub-run" title="{{.T "common.copy"}}"><i class="bi bi-clipboard"></i></button></div>
+	<a href="/settings/ports#published" class="alert-link">{{.T "cdn64.pub_more"}}</a></div>{{end}}
 {{if $d.EdgeErr}}<div class="alert alert-danger small"><i class="bi bi-exclamation-triangle"></i> {{.T "cdn64.edge_error"}} <span class="font-monospace">{{$d.EdgeErr}}</span> · <a href="/settings/ports#edge">{{.T "cdn64.edge_settings"}}</a></div>{{end}}
 <div class="card">
 	{{if not $d.Rows}}

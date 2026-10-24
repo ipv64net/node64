@@ -1,5 +1,14 @@
 # Änderungen – PROXY64
 
+## 1.27.0 – 2026-10-24
+
+### Neu
+- Docker-Bridge-Netz: PROXY64 prüft, ob HTTP- und HTTPS-Port (80/443) auf dem Docker-Host veröffentlicht sind – eine
+  Prüfanfrage über das Gateway muss beim eigenen Eingang ankommen, ein anderes Programm auf dem Host zählt nicht.
+  Fehlt ein Port, warnt die Host-Liste deutlich mit fertigem `-p …` zum Kopieren; *Einstellungen → Ports* zeigt
+  „nicht veröffentlicht“ bzw. „auf dem Host veröffentlicht“ und ein Beispiel für `docker run` und `docker compose`.
+  Bisher meldete die Prüfung „lauscht“, sobald der Port im Container offen war, auch wenn von außen nichts ankam.
+
 ## 1.26.1 – 2026-10-24
 
 ### Behoben

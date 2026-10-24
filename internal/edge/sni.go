@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -130,6 +131,10 @@ func (e *Edge) dispatch(conn net.Conn, tlsLn *chanListener) {
 	_ = conn.SetReadDeadline(time.Time{})
 	if !ok {
 		_ = conn.Close() // kein TLS
+		return
+	}
+	if nonce, found := strings.CutSuffix(strings.ToLower(sni), probeSuffix); found && e.probeHit(nonce) {
+		_ = conn.Close() // Pruefanfrage (published.go)
 		return
 	}
 	if name, err := NormalizeName(sni); err == nil {

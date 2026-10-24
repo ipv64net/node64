@@ -185,6 +185,8 @@ type Edge struct {
 	vq       *virtQUIC
 	tunH3    atomic.Pointer[func() bool]
 	unk      atomic.Pointer[unknownHook] // Anfragen ohne passenden Namen (SetUnknown)
+	probes   sync.Map                    // Pruefwerte "auf dem Docker-Host veroeffentlicht?" (published.go) -> angekommen
+	pub      atomic.Pointer[pubCache]
 	fallback struct {
 		once sync.Once
 		crt  *tls.Certificate
@@ -839,6 +841,10 @@ func (e *Edge) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 
 // serveHTTP: Port 80 (ACME-Pruefungen, Weiterleitung auf HTTPS, reine HTTP-Abnehmer).
 func (e *Edge) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	if nonce, ok := strings.CutPrefix(r.URL.Path, probePath); ok && e.probeHit(nonce) {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	if tok, ok := strings.CutPrefix(r.URL.Path, acmePath); ok {
 		e.mu.Lock()
 		ka, found := e.tokens[tok]
