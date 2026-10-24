@@ -1,5 +1,16 @@
 # Änderungen – Healthchecks
 
+## 2.28.0 – 2026-10-24
+
+### Neu
+- E-Mail und SMS über ipv64 sind mit dem API-Key in der normalen Kanaltabelle der Benachrichtigungen verwaltbar wie
+  alle anderen Kanäle: anlegen, bearbeiten, an/aus, Standard, Test, löschen und die Bestätigung per Code direkt in der
+  Node (Badge „ipv64“, unbestätigte mit Badge und Link zum Bestätigen). Gespeichert sind sie bei ipv64 und gelten für
+  den ganzen Account. Die eigene Karte dafür entfällt.
+
+### Geändert
+- Die Karte „Browser-Benachrichtigungen“ steht halb breit unter der Kanaltabelle.
+
 ## 2.27.1 – 2026-10-24
 
 ### Geändert

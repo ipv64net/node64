@@ -7,13 +7,58 @@
 		<ul class="dropdown-menu dropdown-menu-end">
 			{{range $d.Types}}<li><a class="dropdown-item" href="/notifications/new?type={{.}}">{{$.T (print "nf.type." .)}}</a></li>{{end}}
 			<li><hr class="dropdown-divider"></li>
-			{{if or $d.Linked $d.APIKey}}<li><a class="dropdown-item" href="https://ipv64.net/notifications" target="_blank" rel="noopener"><i class="bi bi-cloud"></i> {{.T "nf.ipv64_add"}} <i class="bi bi-box-arrow-up-right small"></i></a></li>
+			{{if $d.APIKey}}{{range $d.Planned}}<li><a class="dropdown-item" href="/notifications/ipv64/new?type={{.}}"><i class="bi bi-cloud"></i> {{$.T (print "nf.type." .)}}</a></li>{{end}}
+			{{else if $d.Linked}}<li><a class="dropdown-item" href="https://ipv64.net/notifications" target="_blank" rel="noopener"><i class="bi bi-cloud"></i> {{.T "nf.ipv64_add"}} <i class="bi bi-box-arrow-up-right small"></i></a></li>
 			{{else}}{{range $d.Planned}}<li><span class="dropdown-item disabled">{{$.T (print "nf.type." .)}} <span class="badge text-bg-light">{{$.T "nf.planned"}}</span></span></li>{{end}}{{end}}
 		</ul>
 	</div>
 </div>
 
-<div class="card mb-3 border-primary-subtle" id="browser-notify-card">
+
+<div class="card mb-3">
+	<div class="card-header"><i class="bi bi-bell text-warning"></i> {{.T "nf.channels"}}{{$.Doc "notifications#channels"}}</div>
+	{{if $d.RemoteErr}}<div class="alert alert-warning small m-3 mb-0"><i class="bi bi-cloud-slash"></i> {{.T "nf.ipv64_error" "error" $d.RemoteErr}}</div>{{end}}
+	{{if not $d.Rows}}
+	<div class="card-body text-body-secondary small">{{.T "nf.empty"}}</div>
+	{{else}}
+	<div class="table-responsive">
+	<table class="table table-sm table-hover align-middle mb-0 table-cards">
+		<thead><tr><th>{{.T "common.name"}}</th><th>{{.T "common.type"}}</th><th>{{.T "nf.default"}}</th><th>{{.T "nf.enabled"}}</th><th>{{.T "nf.last_used"}}</th><th class="text-end">{{.T "common.actions"}}</th></tr></thead>
+		<tbody>
+		{{range $d.Rows}}
+		<tr>
+			<td data-label="{{$.T "common.name"}}">
+				<a href="{{.Base}}/edit" class="fw-semibold">{{.Name}}</a>{{if .Remote}} <span class="badge text-bg-info-subtle text-info-emphasis" title="{{$.T "nf.ipv64_badge_hint"}}"><i class="bi bi-cloud"></i> ipv64</span>{{end}}{{if .Unverified}} <a class="badge text-bg-warning text-decoration-none" href="{{.Base}}/verify"><i class="bi bi-shield-exclamation"></i> {{$.T "nf.unverified"}}</a>{{end}}
+				<div class="small text-body-secondary text-break">{{.Summary}}</div>
+				{{if and (eq (print .Type) "ipv64_sms") $d.SMS}}<div class="small {{if and $d.SMS.Limit (eq $d.SMS.Left 0)}}text-danger{{else}}text-body-secondary{{end}}"><i class="bi bi-chat-dots"></i> {{if $d.SMS.Limit}}{{$.T "nf.sms_left" "left" $d.SMS.Left "limit" $d.SMS.Limit}}{{else}}{{$.T "nf.sms_unlimited"}}{{end}}</div>{{end}}
+				{{if .LastError}}<div class="small text-danger text-break"><i class="bi bi-exclamation-circle"></i> {{.LastError}}</div>{{end}}
+			</td>
+			<td data-label="{{$.T "common.type"}}"><span class="badge text-bg-light">{{$.T (print "nf.type." .Type)}}</span> <span class="small text-body-secondary">{{.Lang}}</span></td>
+			<td data-label="{{$.T "nf.default"}}">
+				<form method="post" action="{{.Base}}/toggle" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="field" value="default">
+					<button class="btn btn-sm {{if .Default}}btn-success{{else}}btn-outline-secondary{{end}}" type="submit" title="{{$.T "nf.default_hint"}}"><i class="bi {{if .Default}}bi-star-fill{{else}}bi-star{{end}}"></i></button></form>
+			</td>
+			<td data-label="{{$.T "nf.enabled"}}">
+				<form method="post" action="{{.Base}}/toggle" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="field" value="enabled">
+					<button class="btn btn-sm {{if .Enabled}}btn-success{{else}}btn-outline-secondary{{end}}" type="submit">{{if .Enabled}}{{$.T "common.on"}}{{else}}{{$.T "common.off"}}{{end}}</button></form>
+			</td>
+			<td data-label="{{$.T "nf.last_used"}}" class="small text-nowrap">{{$.Ago .LastUsedAt}}</td>
+			<td data-label="{{$.T "common.actions"}}" class="text-end text-nowrap">
+				<form method="post" action="{{.Base}}/test" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-primary" type="submit" title="{{$.T "nf.test"}}"><i class="bi bi-send"></i></button></form>
+				<a class="btn btn-sm btn-outline-secondary" href="{{.Base}}/edit" title="{{$.T "nf.edit"}}"><i class="bi bi-pencil"></i></a>
+				<form method="post" action="{{.Base}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{$.T "nf.delete_confirm" "name" .Name}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button></form>
+			</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table>
+	</div>
+	{{end}}
+</div>
+
+
+<div class="row g-3 mb-3"><div class="col-lg-6">
+<div class="card h-100 border-primary-subtle" id="browser-notify-card">
 	<div class="card-header"><i class="bi bi-window-stack text-primary"></i> {{.T "nf.browser.title"}}{{$.Doc "notifications#browser"}}</div>
 	<div class="card-body small">
 		<p class="mb-2">{{.T "nf.browser.intro"}}</p>
@@ -29,67 +74,7 @@
 		<div class="text-body-secondary mt-1">{{.T "nf.browser.note"}} {{.T "nf.browser.sound_note"}}</div>
 	</div>
 </div>
-
-<div class="card mb-3">
-	<div class="card-header"><i class="bi bi-bell text-warning"></i> {{.T "nf.channels"}}{{$.Doc "notifications#channels"}}</div>
-	{{if not $d.Channels}}
-	<div class="card-body text-body-secondary small">{{.T "nf.empty"}}</div>
-	{{else}}
-	<div class="table-responsive">
-	<table class="table table-sm table-hover align-middle mb-0 table-cards">
-		<thead><tr><th>{{.T "common.name"}}</th><th>{{.T "common.type"}}</th><th>{{.T "nf.default"}}</th><th>{{.T "nf.enabled"}}</th><th>{{.T "nf.last_used"}}</th><th class="text-end">{{.T "common.actions"}}</th></tr></thead>
-		<tbody>
-		{{range $d.Channels}}
-		<tr>
-			<td data-label="{{$.T "common.name"}}">
-				<a href="/notifications/{{.ID}}/edit" class="fw-semibold">{{.Name}}</a>
-				<div class="small text-body-secondary text-break">{{.Summary}}</div>
-				{{if and (eq (print .Type) "ipv64_sms") $d.SMS}}<div class="small {{if and $d.SMS.Limit (eq $d.SMS.Left 0)}}text-danger{{else}}text-body-secondary{{end}}"><i class="bi bi-chat-dots"></i> {{if $d.SMS.Limit}}{{$.T "nf.sms_left" "left" $d.SMS.Left "limit" $d.SMS.Limit}}{{else}}{{$.T "nf.sms_unlimited"}}{{end}}</div>{{end}}
-				{{if .LastError}}<div class="small text-danger text-break"><i class="bi bi-exclamation-circle"></i> {{.LastError}}</div>{{end}}
-			</td>
-			<td data-label="{{$.T "common.type"}}"><span class="badge text-bg-light">{{$.T (print "nf.type." .Type)}}</span> <span class="small text-body-secondary">{{.Lang}}</span></td>
-			<td data-label="{{$.T "nf.default"}}">
-				<form method="post" action="/notifications/{{.ID}}/toggle" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="field" value="default">
-					<button class="btn btn-sm {{if .Default}}btn-success{{else}}btn-outline-secondary{{end}}" type="submit" title="{{$.T "nf.default_hint"}}"><i class="bi {{if .Default}}bi-star-fill{{else}}bi-star{{end}}"></i></button></form>
-			</td>
-			<td data-label="{{$.T "nf.enabled"}}">
-				<form method="post" action="/notifications/{{.ID}}/toggle" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="field" value="enabled">
-					<button class="btn btn-sm {{if .Enabled}}btn-success{{else}}btn-outline-secondary{{end}}" type="submit">{{if .Enabled}}{{$.T "common.on"}}{{else}}{{$.T "common.off"}}{{end}}</button></form>
-			</td>
-			<td data-label="{{$.T "nf.last_used"}}" class="small text-nowrap">{{$.Ago .LastUsedAt}}</td>
-			<td data-label="{{$.T "common.actions"}}" class="text-end text-nowrap">
-				<form method="post" action="/notifications/{{.ID}}/test" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-primary" type="submit" title="{{$.T "nf.test"}}"><i class="bi bi-send"></i></button></form>
-				<a class="btn btn-sm btn-outline-secondary" href="/notifications/{{.ID}}/edit" title="{{$.T "nf.edit"}}"><i class="bi bi-pencil"></i></a>
-				<form method="post" action="/notifications/{{.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{$.T "nf.delete_confirm" "name" .Name}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button></form>
-			</td>
-		</tr>
-		{{end}}
-		</tbody>
-	</table>
-	</div>
-	{{end}}
-</div>
-
-{{if and $d.APIKey (not $d.Linked)}}
-<div class="card mb-3" id="ipv64-channels">
-	<div class="card-header d-flex align-items-center flex-wrap gap-2"><span class="me-auto"><i class="bi bi-cloud text-info"></i> {{.T "nf.ipv64_title"}}{{$.Doc "notifications#ipv64"}}</span>
-		<a class="btn btn-sm btn-outline-primary" href="https://ipv64.net/notifications" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> {{.T "nf.ipv64_manage"}}</a></div>
-	{{if $d.Remote}}
-	<div class="table-responsive"><table class="table table-sm align-middle mb-0 table-cards">
-		<thead><tr><th>{{.T "common.name"}}</th><th>{{.T "common.type"}}</th><th>{{.T "nf.default"}}</th><th>{{.T "nf.enabled"}}</th></tr></thead>
-		<tbody>{{range $d.Remote}}<tr>
-			<td data-label="{{$.T "common.name"}}" class="fw-semibold">{{.Name}}</td>
-			<td data-label="{{$.T "common.type"}}"><span class="badge text-bg-light">{{$.T (print "nf.type." .Type)}}</span> <span class="small text-body-secondary">{{.Lang}}</span></td>
-			<td data-label="{{$.T "nf.default"}}">{{if .Default}}<i class="bi bi-star-fill text-success"></i>{{else}}<i class="bi bi-star text-body-secondary"></i>{{end}}</td>
-			<td data-label="{{$.T "nf.enabled"}}">{{if .Enabled}}<span class="badge text-bg-success">{{$.T "common.on"}}</span>{{else}}<span class="badge text-bg-secondary">{{$.T "common.off"}}</span>{{end}}</td>
-		</tr>{{end}}</tbody>
-	</table></div>
-	<div class="card-footer small text-body-secondary">{{.T "nf.ipv64_hint"}}</div>
-	{{else}}
-	<div class="card-body small text-body-secondary">{{.T "nf.ipv64_empty"}}</div>
-	{{end}}
-</div>
-{{end}}
+</div></div>
 
 <form method="post" action="/notifications/settings">
 <input type="hidden" name="_csrf" value="{{.CSRF}}">

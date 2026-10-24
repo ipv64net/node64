@@ -1,5 +1,16 @@
 # Changes – Healthchecks
 
+## 2.28.0 – 2026-10-24
+
+### Added
+- E-mail and SMS via ipv64 can be managed with the API key in the normal channel table of the notifications like all
+  other channels: create, edit, on/off, default, test, delete and the confirmation by code directly in the node (badge
+  “ipv64”, unconfirmed ones with a badge and link to confirm). They are stored at ipv64 and apply to the whole account.
+  The separate card for them is gone.
+
+### Changed
+- The “Browser notifications” card is half width below the channel table.
+
 ## 2.27.1 – 2026-10-24
 
 ### Changed

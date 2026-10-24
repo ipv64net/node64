@@ -36,17 +36,20 @@ type SendResult struct {
 
 // RemoteChannel ist ein Kanal des Accounts (GET /hc2/channels).
 type RemoteChannel struct {
-	ID          int64  `json:"id"`
-	Type        string `json:"type"`
-	Name        string `json:"name"`
-	Enabled     bool   `json:"enabled"`
-	Default     bool   `json:"default"`
-	Verified    bool   `json:"verified"`
-	Lang        string `json:"lang"`
-	NotifyDown  bool   `json:"notify_down"`
-	NotifyUp    bool   `json:"notify_up"`
-	Execution   string `json:"execution"`
-	SendableAPI *bool  `json:"sendable_via_api"` // nil = Server kennt das Feld noch nicht
+	ID          int64          `json:"id"`
+	Type        string         `json:"type"`
+	Name        string         `json:"name"`
+	Enabled     bool           `json:"enabled"`
+	Default     bool           `json:"default"`
+	Verified    bool           `json:"verified"`
+	Lang        string         `json:"lang"`
+	NotifyDown  bool           `json:"notify_down"`
+	NotifyUp    bool           `json:"notify_up"`
+	Execution   string         `json:"execution"`
+	SendableAPI *bool          `json:"sendable_via_api"` // nil = Server kennt das Feld noch nicht
+	NodeID      string         `json:"node_id"`          // Kanal einer Node (verwaltet die Node selbst)
+	Config      map[string]any `json:"config"`           // nicht geheime Werte (E-Mail-Adresse, Nummer)
+	LastError   string         `json:"last_error"`
 }
 
 // SendChannel verschickt eine Nachricht ueber einen ipv64-Kanal des Accounts.

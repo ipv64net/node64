@@ -25,9 +25,10 @@ type notifyData struct {
 	Days       []int
 	HasBrowser bool // es gibt schon einen Browser-Kanal
 	SMS        *smsQuota
-	Linked     bool              // Healthchecks-Sync mit ipv64 verknuepft (Server-Kanaele kommen als Platzhalter)
-	APIKey     bool              // API-Key eingetragen: E-Mail/SMS-Kanaele des Accounts gehen ueber die API
-	Remote     []*notify.Channel // Kanaele des Accounts bei ipv64 (nur mit API-Key ohne Verknuepfung, nur lesen)
+	Linked     bool      // Healthchecks-Sync mit ipv64 verknuepft (Server-Kanaele kommen als Platzhalter)
+	APIKey     bool      // API-Key eingetragen: E-Mail/SMS des Accounts anlegen und verwalten ueber die API
+	Rows       []chanRow // Tabelle: eigene Kanaele und (ohne Verknuepfung) E-Mail/SMS/App bei ipv64
+	RemoteErr  string    // ipv64 nicht erreichbar (Kanaele bei ipv64 fehlen in der Tabelle)
 }
 
 // smsQuota: SMS des ipv64-Accounts heute (nur verknuepft; Stand der letzten Abfrage, hoechstens 5 min alt).
@@ -61,6 +62,7 @@ func (s *Server) notifyRoutes() {
 	s.mux.Handle("POST /notifications/{id}/delete", s.auth(s.channelDelete))
 	s.mux.Handle("POST /notifications/{id}/toggle", s.auth(s.channelToggle))
 	s.mux.Handle("GET /notifications/stream", s.auth(s.notifyStream))
+	s.ipv64ChRoutes()
 }
 
 // notifyStream liefert Browser-Benachrichtigungen als Server-Sent Events an die geoeffnete Seite.
@@ -125,8 +127,17 @@ func (s *Server) notifyIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	d.Linked = s.Sync != nil && s.Sync.State().Linked
 	d.APIKey = s.IPv64 != nil && s.IPv64.Get(ctx) != ""
-	if d.APIKey && !d.Linked {
-		d.Remote = s.IPv64.RemoteChannels(ctx)
+	for _, ch := range chans {
+		d.Rows = append(d.Rows, chanRow{Channel: ch, Base: "/notifications/" + strconv.FormatInt(ch.ID, 10)})
+	}
+	if d.APIKey && !d.Linked { // verknuepft kommen sie als Platzhalter ueber den Sync (schon in chans)
+		list, err := s.IPv64.AccountChannels(ctx)
+		if err != nil {
+			d.RemoteErr = err.Error()
+		}
+		for _, rc := range list {
+			d.Rows = append(d.Rows, remoteChannel(rc))
+		}
 	}
 	if len(dl) == 50 {
 		d.NextBefore = dl[len(dl)-1].ID
@@ -219,15 +230,18 @@ func clampStr(s string, lo, hi int, def string) string {
 }
 
 type channelFormData struct {
-	Server bool // Kanal des Portals (Geheimnisse bei ipv64)
-	Edit   bool
-	ID     int64
-	Type   notify.Type
-	Types  []notify.Type
-	Fields []notify.Field
-	Form   map[string]string
-	Error  string
-	Langs  []string
+	Server   bool   // Kanal des Portals (Geheimnisse bei ipv64)
+	IPv64    bool   // E-Mail/SMS bei ipv64, ueber die API verwaltet
+	Action   string // Ziel des Formulars ("" = eigener Kanal)
+	TypeBase string // Adresse der Typ-Auswahl ("" = /notifications/new)
+	Edit     bool
+	ID       int64
+	Type     notify.Type
+	Types    []notify.Type
+	Fields   []notify.Field
+	Form     map[string]string
+	Error    string
+	Langs    []string
 }
 
 func (s *Server) loadChannel(w http.ResponseWriter, r *http.Request) *notify.Channel {
