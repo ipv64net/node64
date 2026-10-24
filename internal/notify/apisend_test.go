@@ -82,6 +82,20 @@ func TestAPISender(t *testing.T) {
 	if at(2) != 7 {
 		t.Fatalf("remote list: %d", at(2))
 	}
+	// ohne Verknuepfung gehen auch Healthchecks-Alerts ueber die API (sonst kaeme ohne Sync nichts an) ...
+	d.SetLinked(func() bool { return false })
+	d.Dispatch(Alert{EventID: "h2", Kind: KindDown, Check: CheckInfo{Token: "t", Name: "Web", NotifyDown: true, NotifyUp: true}})
+	wait(4)
+	if at(3) != 7 {
+		t.Fatalf("check alert without link: %d", at(3))
+	}
+	// ... verknuepft bleiben sie beim hub
+	d.SetLinked(func() bool { return true })
+	d.Dispatch(Alert{EventID: "h3", Kind: KindUp, Check: CheckInfo{Token: "t", Name: "Web", NotifyDown: true, NotifyUp: true}})
+	time.Sleep(200 * time.Millisecond)
+	if n() != 4 {
+		t.Fatal("check alert while linked must stay with the hub")
+	}
 }
 
 // Andere Portal-Kanaele (Webhook, Telegram) stellt die API nicht zu: die Node sendet sie bei eigenen Meldungen

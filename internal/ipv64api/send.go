@@ -65,7 +65,7 @@ func (c *Client) Channels(ctx context.Context, key string) ([]RemoteChannel, err
 }
 
 // serverTypes sind die Kanaltypen, die ipv64 selbst zustellt.
-var serverTypes = map[string]bool{"ipv64_mail": true, "ipv64_sms": true}
+var serverTypes = map[string]bool{"ipv64_mail": true, "ipv64_sms": true, "app": true}
 
 // ErrNoKey: kein API-Key eingetragen.
 var ErrNoKey = errors.New("no ipv64 API key")

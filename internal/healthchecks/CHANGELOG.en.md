@@ -8,6 +8,8 @@
   them via the API key.
 - iGotify is no longer a channel type of its own (it is a normal Gotify server); existing iGotify channels become Gotify.
   The Gotify channel mentions iGotify for the iPhone in its hint.
+- Without linking to the Healthchecks sync, health check alerts (not only module messages) now also go via the API key
+  to e-mail, SMS and app of the account; the ipv64 app is included as a channel.
 
 ## 2.27.0 – 2026-10-23
 

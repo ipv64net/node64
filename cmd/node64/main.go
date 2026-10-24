@@ -328,6 +328,7 @@ func run() error {
 	dispatcher.SetServerSends(syncClient.ServerSends)
 	// Meldungen der Module (z. B. DynDNS) ueber ipv64-Mail/-SMS direkt per API, ohne hub; ohne Verknuepfung die Kanaele des Accounts
 	dispatcher.SetAPISender(ipv64Key.SendNotification, ipv64Key.APIReady)
+	dispatcher.SetLinked(syncClient.Linked) // ohne Verknuepfung auch Healthchecks ueber die API
 	dispatcher.SetRemoteChannels(func(ctx context.Context) []*notify.Channel {
 		if syncClient.Linked() {
 			return nil // verknuepft: die Server-Kanaele kommen als Platzhalter ueber den Sync

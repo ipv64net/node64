@@ -91,6 +91,7 @@ type Dispatcher struct {
 	hookMu      sync.RWMutex // die Hooks darunter werden evtl. erst nach Start gesetzt
 	serverSends func() bool
 	apiSend     func(ctx context.Context, ch *Channel, m Message) error
+	linked      func() bool // Healthchecks-Sync mit ipv64 verknuepft (nil = unbekannt: nur Modul-Meldungen ueber die API)
 	apiReady    func() bool
 	remote      func(ctx context.Context) []*Channel
 }
@@ -118,13 +119,30 @@ func (d *Dispatcher) hubSends() bool {
 // dem Server. Wird protokolliert, markiert den Kanal aber nicht als gestoert.
 var ErrUnavailable = errors.New("delivery path not available")
 
-// SetAPISender installiert den direkten Versand ueber die ipv64-API fuer Server-Kanaele (ipv64-Mail, -SMS).
-// Er gilt nur fuer Meldungen der Module (CheckInfo.Local); Healthchecks bleiben beim hub. ready meldet,
+// SetAPISender installiert den direkten Versand ueber die ipv64-API fuer Server-Kanaele (ipv64-Mail, -SMS, App).
+// Er gilt fuer Meldungen der Module (CheckInfo.Local) und – ohne Verknuepfung mit dem Healthchecks-Sync
+// (SetLinked) – auch fuer die Healthchecks dieser Node; verknuepft bleiben die Healthchecks beim hub. ready meldet,
 // ob ein API-Key da ist.
 func (d *Dispatcher) SetAPISender(send func(ctx context.Context, ch *Channel, m Message) error, ready func() bool) {
 	d.hookMu.Lock()
 	d.apiSend, d.apiReady = send, ready
 	d.hookMu.Unlock()
+}
+
+// SetLinked meldet, ob die Node mit dem Healthchecks-Sync verknuepft ist. Ohne Verknuepfung gehen alle Meldungen
+// (auch Healthchecks) an die ipv64-Kanaele ueber die API, sonst kaeme bei Nutzern ohne Sync nichts an.
+func (d *Dispatcher) SetLinked(fn func() bool) {
+	d.hookMu.Lock()
+	d.linked = fn
+	d.hookMu.Unlock()
+}
+
+// unlinked: sicher nicht verknuepft (ohne Auskunft gilt: verknuepft, also wie bisher nur Modul-Meldungen).
+func (d *Dispatcher) unlinked() bool {
+	d.hookMu.RLock()
+	fn := d.linked
+	d.hookMu.RUnlock()
+	return fn != nil && !fn()
 }
 
 // SetRemoteChannels liefert ohne Verknuepfung die ipv64-Kanaele des Accounts (nur lesend, nicht gespeichert).
@@ -140,10 +158,11 @@ func (d *Dispatcher) hooks() (send func(context.Context, *Channel, Message) erro
 	return d.apiSend, d.apiReady, d.remote
 }
 
-// viaAPI: Server-Kanaele dieses Alerts gehen direkt ueber die API.
+// viaAPI: Server-Kanaele dieses Alerts gehen direkt ueber die API (Modul-Meldungen immer, Healthchecks nur ohne
+// Verknuepfung – verknuepft sendet sie der hub).
 func (d *Dispatcher) viaAPI(c CheckInfo) bool {
 	send, ready, _ := d.hooks()
-	return c.Local && !d.sendServerChannels.Load() && send != nil && ready != nil && ready()
+	return (c.Local || d.unlinked()) && !d.sendServerChannels.Load() && send != nil && ready != nil && ready()
 }
 
 type bucket struct {

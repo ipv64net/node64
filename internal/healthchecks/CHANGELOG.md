@@ -8,6 +8,8 @@
   nutzt sie über den API-Key.
 - iGotify ist kein eigener Kanaltyp mehr (es ist ein normaler Gotify-Server); vorhandene iGotify-Kanäle werden zu Gotify.
   Der Gotify-Kanal nennt iGotify fürs iPhone im Hinweis.
+- Ohne Verknüpfung mit dem Healthchecks-Sync gehen jetzt auch die Meldungen der Healthchecks (nicht nur die der
+  Module) über den API-Key an E-Mail, SMS und App des Accounts; die ipv64-App ist dabei als Kanal mit dabei.
 
 ## 2.27.0 – 2026-10-23
 
