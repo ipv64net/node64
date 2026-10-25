@@ -1,7 +1,7 @@
 {{define "content"}}
 {{$d := .Data}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dns64_dark.webp" alt="" height="26" class="me-1 align-text-bottom logo logo-dark"> {{.T "dns64.title"}}{{.Doc "dns64#gruppen"}}</h1>
+	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="{{.T "dns64.title"}}" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dns64_dark.webp" alt="{{.T "dns64.title"}}" height="26" class="me-1 align-text-bottom logo logo-dark">{{.Doc "dns64#gruppen"}}</h1>
 	{{if $d.Running}}<span class="badge text-bg-success" title="{{.T "dns64.since" "time" (.Time $d.Started)}}"><i class="bi bi-broadcast"></i> {{.T "dns64.listening" "addr" $d.Listen}}</span>{{end}}
 	{{if $d.Running}}<div class="ms-auto d-flex align-items-center gap-2" id="dns64-pause">
 		{{if $d.Pause.Active}}<span class="badge text-bg-warning"><i class="bi bi-pause-circle"></i> {{if $d.Pause.Forever}}{{.T "dns64.pause.paused"}}{{else}}{{.T "dns64.pause.paused_until" "time" (.Time $d.Pause.Until)}}{{end}}</span>
