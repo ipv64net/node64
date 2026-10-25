@@ -143,6 +143,9 @@ type Options struct {
 	Jitter        float64       // Anteil des Intervalls, Standard 0.1
 	// Allow (optional, hub): false = Ausfuehrung auslassen, z. B. Tageskontingent erschoepft; push = Push-Auswertung
 	Allow func(token string, push bool) bool
+	// Throttle (optional, hub): false = diesen Lauf auslassen, weil das Ziel bzw. der Server gerade genug Anfragen
+	// bekommt (Bremse gegen Missbrauch als Lastquelle); Zustand bleibt, naechster Versuch nach dem Intervall.
+	Throttle func(c Check) bool
 }
 
 type entry struct {
@@ -407,6 +410,12 @@ func (s *Scheduler) runOnce(e *entry) {
 	if s.opts.Allow != nil && !s.opts.Allow(e.check.Token, e.check.Def.Type == checks.TypePush) {
 		e.mu.Lock()
 		e.rt.NextCheck = s.now().Add(e.check.Interval) // ausgelassen, Zustand bleibt
+		e.mu.Unlock()
+		return
+	}
+	if s.opts.Throttle != nil && e.check.Def.Type != checks.TypePush && !s.opts.Throttle(e.check) {
+		e.mu.Lock()
+		e.rt.NextCheck = s.now().Add(e.check.Interval)
 		e.mu.Unlock()
 		return
 	}

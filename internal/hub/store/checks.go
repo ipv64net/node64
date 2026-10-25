@@ -44,6 +44,13 @@ type Check struct {
 	Runtime        *scheduler.Runtime // Zustand dieser Messstelle, nil = noch keiner
 }
 
+// Obergrenzen der Timeouts auf den ipv64-Servern: ein Check mit z. B. 3600 s belegte sonst lange einen der Worker
+// und bremste die Checks aller anderen aus.
+const (
+	MaxConnectTimeout = 30 * time.Second
+	MaxTotalTimeout   = 60 * time.Second
+)
+
 // SchedulerCheck liefert die Sicht des Schedulers.
 func (c *Check) SchedulerCheck() scheduler.Check {
 	return scheduler.Check{Token: c.Token, Name: c.Name,
@@ -144,8 +151,11 @@ func scanCheck(row interface{ Scan(...any) error }) (*Check, error) {
 	if typ != "push" && iv < 20 {
 		iv = 20 // ipv64 misst nie oefter als alle 20 s (lokale Checks ab 5 s, z. B. nach dem Umhaengen)
 	}
+	if typ != "push" && riv < 20 {
+		riv = 20 // auch im gestoerten Zustand nicht oefter (sonst alle 5 s, solange das Ziel ausfaellt)
+	}
 	c.Interval, c.RetryInterval = time.Duration(iv)*time.Second, time.Duration(riv)*time.Second
-	c.ConnectTimeout, c.TotalTimeout = time.Duration(cto)*time.Millisecond, time.Duration(tto)*time.Millisecond
+	c.ConnectTimeout, c.TotalTimeout = min(time.Duration(cto)*time.Millisecond, MaxConnectTimeout), min(time.Duration(tto)*time.Millisecond, MaxTotalTimeout)
 	c.Invert, c.Paused, c.Critical, c.NotifyDown, c.NotifyUp, c.NotifyDegraded = invert == 1, paused == 1, critical == 1, nd == 1, nu == 1, ndeg == 1
 	c.Parent = parent.String
 	c.Deleted = deletedAt.Valid

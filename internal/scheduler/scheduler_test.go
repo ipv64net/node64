@@ -411,3 +411,27 @@ func TestCombineBothFamilies(t *testing.T) {
 		t.Fatalf("invert: %+v", m)
 	}
 }
+
+// Throttle (hub): ausgelassene Laeufe messen nichts und aendern keinen Zustand.
+func TestThrottleSkipsRun(t *testing.T) {
+	fake := &scripted{seq: []checks.Status{checks.Up}}
+	var mu sync.Mutex
+	allow := false
+	asked := 0
+	s, st, _ := newTestScheduler(t, fake, Options{Throttle: func(Check) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		asked++
+		return allow
+	}})
+	s.Upsert(httpCheck("a", 0, 1), nil)
+	s.Start(context.Background())
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return asked >= 3 }, "throttle asked")
+	if st.count("a") != 0 {
+		t.Fatal("measured although throttled")
+	}
+	mu.Lock()
+	allow = true
+	mu.Unlock()
+	waitFor(t, func() bool { return st.count("a") >= 1 }, "measurement after throttle")
+}

@@ -87,7 +87,7 @@ func (c *httpChecker) Check(ctx context.Context, def Definition, ip net.IP) Resu
 	if ip.To4() == nil {
 		family = "tcp6"
 	}
-	dialer := &net.Dialer{Timeout: def.Timeouts.Connect}
+	dialer := guard(ctx, &net.Dialer{Timeout: def.Timeouts.Connect}) // Weiterleitungen auf interne Ziele gesperrt (ipv64-Server)
 	transport := &http.Transport{
 		Proxy: nil,
 		// Der Ursprungs-Host wird an die aufgeloeste Adresse gebunden, Redirect-

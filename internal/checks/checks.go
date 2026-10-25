@@ -164,6 +164,9 @@ type Runner struct {
 	// Docker liefert die Verbindung der Docker-Ueberwachung zu einem Host (Check-Typ docker bei https:// bzw. ssh://
 	// mit Zugangsdaten); nil = keine.
 	Docker DockerRemote
+	// DenyPrivate (ipv64-Server): nur oeffentliche Adressen erreichen – auch nach DNS-Aufloesung, Weiterleitung und
+	// bei DNS-Checks mit eigenem Server oder zustaendigen Nameservern (guard.go).
+	DenyPrivate bool
 
 	famMu    sync.Mutex
 	famCache map[string]famState
@@ -208,6 +211,12 @@ func (r *Runner) Run(ctx context.Context, def Definition) []Result {
 	if def.IPMode == "" {
 		def.IPMode = IPAuto
 	}
+	if r.DenyPrivate {
+		if def.Type == TypeDocker || def.Type == TypeProxmox {
+			return []Result{{Status: Down, Reason: ReasonInvalid, Message: ErrPrivateAddress.Error(), Time: now}}
+		}
+		ctx = withDenyPrivate(ctx)
+	}
 	if def.Type == TypeDocker || def.Type == TypeDNS || def.Type == TypeProxmox { // kein Ziel zum Aufloesen: Docker-API, DNS-Abfrage bzw. Stand der Proxmox-Abfrage
 		cctx, cancel := context.WithTimeout(ctx, def.Timeouts.Total)
 		res := c.Check(cctx, def, nil)
@@ -224,6 +233,13 @@ func (r *Runner) Run(ctx context.Context, def Definition) []Result {
 	ips, res := r.resolve(ctx, host, def.IPMode, def.Timeouts.Connect, now)
 	if res != nil {
 		return []Result{*res}
+	}
+	if r.DenyPrivate {
+		for _, ip := range ips {
+			if !PublicIP(ip) {
+				return []Result{{Status: Down, Reason: ReasonInvalid, Message: ErrPrivateAddress.Error() + " (" + ip.String() + ")", Time: now, Details: map[string]any{"host": host}}}
+			}
+		}
 	}
 	var out []Result
 	for _, ip := range ips {
@@ -618,8 +634,7 @@ func isTimeout(err error) bool {
 
 // dialIP verbindet zu einer festen Adresse mit Connect-Timeout.
 func dialIP(ctx context.Context, ip net.IP, port int, connect time.Duration) (net.Conn, error) {
-	d := net.Dialer{Timeout: connect}
-	return d.DialContext(ctx, "tcp", net.JoinHostPort(ip.String(), strconv.Itoa(port)))
+	return guard(ctx, &net.Dialer{Timeout: connect}).DialContext(ctx, "tcp", net.JoinHostPort(ip.String(), strconv.Itoa(port)))
 }
 
 func fail(reason Reason, msg string, lat time.Duration, details map[string]any) Result {

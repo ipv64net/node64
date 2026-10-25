@@ -825,6 +825,10 @@ func validateWireCheck(c *wire.Check) error {
 	if c.TimeoutSeconds <= 0 {
 		c.TimeoutSeconds = 10
 	}
+	if c.Execution == "online" || c.Execution == "both" { // gemessen von ipv64: Obergrenzen wie im Checker
+		c.ConnectTimeoutSeconds = min(c.ConnectTimeoutSeconds, MaxConnectTimeout.Seconds())
+		c.TimeoutSeconds = min(c.TimeoutSeconds, MaxTotalTimeout.Seconds())
+	}
 	if c.Stabilize <= 0 {
 		c.Stabilize = 3
 	}

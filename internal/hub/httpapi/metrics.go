@@ -86,6 +86,9 @@ func (s *Server) runtimeMetrics(w io.Writer) {
 	if c, ok := st["connections"].(int); ok {
 		fmt.Fprintf(w, "# TYPE hub_gateway_connections gauge\nhub_gateway_connections %d\n", c)
 	}
+	if n, ok := st["throttled"].(uint64); ok { // von der Bremse ausgelassene Laeufe (je Zielhost bzw. Server)
+		fmt.Fprintf(w, "# TYPE hub_checks_throttled_total counter\nhub_checks_throttled_total %d\n", n)
+	}
 	up := 1
 	if v, _ := st["status"].(string); v != "" && v != "ok" {
 		up = 0

@@ -35,6 +35,9 @@ type Config struct {
 		MaxConnections int      `yaml:"max_connections"`
 		CheckerWorkers int      `yaml:"checker_workers"`
 		TrustedIPs     []string `yaml:"trusted_ips"` // ohne IP-Ratenlimit (z. B. Lasttest-Quelle); leer im Normalbetrieb
+		// Bremse der Messungen (0 = Standard): Laeufe je Zielhost und Minute ueber alle Accounts, Laeufe je Sekunde
+		TargetRunsPerMinute int `yaml:"target_runs_per_minute"`
+		RunsPerSecond       int `yaml:"runs_per_second"`
 	} `yaml:"limits"`
 	LogLevel string     `yaml:"log_level"` // debug, info, warn, error
 	Ops      ops.Config `yaml:"ops"`       // Betriebsalarme an den Betreiber (andere hubs, Datenbank)

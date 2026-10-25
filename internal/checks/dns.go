@@ -351,7 +351,7 @@ func exchange(ctx context.Context, name string, qtype uint16, servers []string, 
 	}
 	var last error
 	for _, s := range servers {
-		cl := &dns.Client{Net: "udp", Timeout: timeout}
+		cl := &dns.Client{Net: "udp", Timeout: timeout, Dialer: guard(ctx, &net.Dialer{Timeout: timeout})}
 		resp, _, err := cl.ExchangeContext(ctx, m, s)
 		if err == nil && resp.Truncated {
 			cl.Net = "tcp"

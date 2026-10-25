@@ -44,6 +44,7 @@ type Checker struct {
 	lastPush time.Time
 	wg       sync.WaitGroup
 	cancel   context.CancelFunc
+	throttle *throttle // Bremse je Zielhost und Server (throttle.go)
 }
 
 // New erzeugt den Checker.
@@ -155,7 +156,11 @@ func (c *Checker) Start(ctx context.Context) error {
 	}
 	c.lastPush = time.Now().UTC()
 	runner := checks.NewRunner()
-	c.sched = scheduler.New(c.st, notifier{c.log}, runner, c.log, scheduler.Options{Workers: c.workers, Allow: c.st.AllowRun})
+	runner.DenyPrivate = true // nur oeffentliche Ziele, auch nach Aufloesung/Weiterleitung (internes Netz der hubs)
+	if c.throttle == nil {
+		c.throttle = newThrottle(0, 0, c.log)
+	}
+	c.sched = scheduler.New(c.st, notifier{c.log}, runner, c.log, scheduler.Options{Workers: c.workers, Allow: c.st.AllowRun, Throttle: c.throttle.allow})
 	nodes, _ := c.st.LiveNodes(ctx)
 	c.slotIdx, c.slotMod = c.st.SlotShare(nodes)
 	if len(nodes) > 0 {
@@ -220,6 +225,7 @@ func (c *Checker) runTest(ctx context.Context, runner *checks.Runner, raw json.R
 	if def.Timeouts.Total <= 0 {
 		def.Timeouts.Total = checks.DefaultTotalTimeout
 	}
+	def.Timeouts.Connect, def.Timeouts.Total = min(def.Timeouts.Connect, store.MaxConnectTimeout), min(def.Timeouts.Total, store.MaxTotalTimeout)
 	if err := checks.Validate(def); err != nil {
 		out.Error = err.Error()
 		return out

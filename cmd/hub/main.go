@@ -125,6 +125,7 @@ func run(cfgPath string) error {
 	var chk *checker.Checker
 	if cfg.HasRole("checker") {
 		chk = checker.New(st, log, cfg.Location, Version, strings.Join(cfg.Roles, ","), cfg.Limits.CheckerWorkers)
+		chk.SetLimits(cfg.Limits.TargetRunsPerMinute, cfg.Limits.RunsPerSecond)
 		chk.SetNotifier(dispatcher, nfStore)
 		if err := chk.Start(ctx); err != nil {
 			return fmt.Errorf("checker: %w", err)
@@ -162,6 +163,7 @@ func run(cfgPath string) error {
 		}
 		if chk != nil {
 			out["checks"] = chk.Count()
+			out["throttled"] = chk.Skipped()
 		}
 		if gw != nil {
 			out["connections"] = gw.Connections()
