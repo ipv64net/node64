@@ -1,5 +1,11 @@
 # Changes – Healthchecks
 
+## 2.29.1 – 2026-10-25
+
+### Changed
+- Check form, “Sources and evaluation”: with “local on nodes” the online locations (Nuremberg, Falkenstein) and the ipv64 test are hidden; they appear only with “online” or “both”.
+- Online measurement at ipv64: targets must be publicly reachable – a hostname, redirect or DNS server must not point to an internal address either. Timeouts at most 30 s (connect) / 60 s (total), retry while down at the earliest after 20 s.
+
 ## 2.29.0 – 2026-10-25
 
 ### Added

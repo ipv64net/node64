@@ -110,11 +110,14 @@
 				if (single) { cb.checked = !!own; cb.disabled = true; } else { cb.disabled = false; }
 			});
 		};
+		// Online-Standorte und Online-Test nur, wenn ipv64 mitmisst (online oder beides)
+		var onlineBox = document.getElementById("onlinebox");
+		var syncOnline = function () { if (onlineBox && exSel) { onlineBox.classList.toggle("d-none", exSel.value === "local"); } };
 		var ivIn = document.getElementById("interval_seconds");
 		var syncMin = function () { if (ivIn) { ivIn.min = !exSel || exSel.value === "local" ? 5 : 20; } }; // lokal ab 5 s, online/hybrid ab 20 s
-		if (exSel) { exSel.addEventListener("change", syncNodes); exSel.addEventListener("change", syncMin); }
-		typeSel.addEventListener("change", function () { update(); lockExec(); syncNodes(); syncMin(); });
-		update(); lockExec(); syncNodes(); syncMin();
+		if (exSel) { exSel.addEventListener("change", syncNodes); exSel.addEventListener("change", syncMin); exSel.addEventListener("change", syncOnline); }
+		typeSel.addEventListener("change", function () { update(); lockExec(); syncNodes(); syncMin(); syncOnline(); });
+		update(); lockExec(); syncNodes(); syncMin(); syncOnline();
 	}
 
 	// Tooltips der Pillen: Inhalt aus data-Attributen, hier maskiert und als HTML gesetzt

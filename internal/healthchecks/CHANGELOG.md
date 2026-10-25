@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.29.1 – 2026-10-25
+
+### Geändert
+- Check-Formular, „Messstellen und Bewertung“: Bei „lokal auf Nodes“ sind die Online-Standorte (Nürnberg, Falkenstein) und der Test bei ipv64 ausgeblendet; sie erscheinen nur bei „online“ oder „beides“.
+- Online-Messung bei ipv64: Ziele müssen öffentlich erreichbar sein – auch ein Hostname, eine Weiterleitung oder ein DNS-Server darf nicht auf eine interne Adresse zeigen. Timeouts höchstens 30 s (Verbindung) bzw. 60 s (gesamt), Wiederholung bei Störung frühestens nach 20 s.
+
 ## 2.29.0 – 2026-10-25
 
 ### Neu

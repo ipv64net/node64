@@ -234,6 +234,7 @@
 					<div class="form-text" data-types="http keyword json dns icmp tcp port cert push">{{.T "hc.form.nodes_hint"}}</div>
 					<div class="form-text text-warning-emphasis" data-types="docker">{{.T "hc.form.nodes_single"}}</div></div>
 				{{end}}
+				<div class="col-12" id="onlinebox"><div class="row g-3"><!-- nur bei online/beides (healthchecks.js) -->
 				<div class="col-12"><label class="form-label">{{.T "hc.form.locations"}}{{$.Doc "healthchecks#online-limits"}}</label>
 					{{range $i, $l := $d.Locations}}{{$over := and $d.Linked (gt $d.AccLocs 0) (ge $i $d.AccLocs)}}<div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="locations" value="{{$l}}" id="loc_{{$l}}"{{if and (contains (index $f "locations") $l) (not $over)}} checked{{end}}{{if or (and (not $d.Linked) (not $d.APIMode)) $over}} disabled{{end}}><label class="form-check-label" for="loc_{{$l}}">{{$.T (print "hc.location." $l)}}{{if $over}} <span class="badge text-bg-secondary">{{$.T "hc.form.loc_class"}}</span>{{end}}</label></div>{{end}}
 					<div class="form-text">{{.T "hc.form.locations_hint"}} <a href="/plans">{{.T "plans.title"}}</a></div>
@@ -245,6 +246,7 @@
 					<div class="form-text">{{.T "hc.otest.hint"}}</div>
 					<ul class="list-unstyled small mt-2 mb-0" id="hc-otest-out" aria-live="polite"></ul>
 				</div>{{end}}
+				</div></div>
 				<div class="col-12"><label class="form-label" for="policy">{{.T "hc.form.policy"}}</label>
 					<div class="input-group"><span class="input-group-text"><i class="bi bi-sliders"></i></span><select class="form-select" id="policy" name="policy">{{range $d.Policies}}<option value="{{.}}"{{if eq . (index $f "policy")}} selected{{end}}>{{$.T (print "hc.policy." .)}}</option>{{end}}</select></div>
 					<div class="form-text">{{.T "hc.form.policy_hint"}}</div></div>
