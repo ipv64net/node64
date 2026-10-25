@@ -2712,7 +2712,8 @@
       "igotify": "iGotify (iPhone)",
       "slack": "Slack",
       "teams": "Microsoft Teams",
-      "matrix": "Matrix"
+      "matrix": "Matrix",
+      "secntfy": "SecNtfy (encrypted)"
     },
     "field": {
       "email": "E-mail address",
@@ -2751,7 +2752,11 @@
       "verify_tls_hint": "Only turn off if Home Assistant uses a self-signed certificate in your LAN.",
       "room": "Room",
       "room_hint": "Room ID (!abc123:matrix.org, in Element under room settings → Advanced) or alias (#my-room:matrix.org). The bot account has to be in the room.",
-      "matrix_token_hint": "Access token of a dedicated bot account (Element: Settings → Help & About → Access token). It works like a password and is stored encrypted."
+      "matrix_token_hint": "Access token of a dedicated bot account (Element: Settings → Help & About → Access token). It works like a password and is stored encrypted.",
+      "device_key": "Device token",
+      "device_key_hint": "Starts with NTFY-DEVICE-. It acts like a password and is stored encrypted.",
+      "critical": "Send problems as critical alert",
+      "critical_hint": "Critical alerts get through even in silent and focus mode (if the device allows it). Recoveries and notices stay normal."
     },
     "quiet": "Quiet hours",
     "quiet_hint": "During this time only checks marked as critical alert.",
@@ -2796,7 +2801,8 @@
     "verify_check": "Confirm",
     "verify_sent": "Code sent – please enter it within 15 minutes.",
     "verify_ok": "Channel confirmed.",
-    "verify_failed": "Code wrong or expired."
+    "verify_failed": "Code wrong or expired.",
+    "secntfy_hint": "SecNtfy delivers push notifications end-to-end encrypted: title and text are encrypted with your device's key, only the device can read them. Enter the device token from the SecNtfy app. An encrypted block holds little – long messages arrive shortened on SecNtfy (text at most 150 characters), all other channels get them in full."
   },
   "day": {
     "1": "Mon",

@@ -1,5 +1,11 @@
 # Changes – Healthchecks
 
+## 2.29.0 – 2026-10-25
+
+### Added
+- Notifications via SecNtfy (secntfy.app): end-to-end encrypted push – title and text are encrypted with the device's public RSA key, only the device can read them. Enter the device token (NTFY-DEVICE-…), server adjustable (default api.secntfy.app), problems optionally as critical alert. In the node and in the portal (sent by the hubs).
+- An encrypted block holds little: only SecNtfy shortens long messages (text at most 150 characters, title to fit the key), all other channels get them in full.
+
 ## 2.28.1 – 2026-10-25
 
 ### Fixed

@@ -23,12 +23,14 @@
 				{{if eq (print $d.Type) "slack"}}<div class="alert alert-info small py-2"><i class="bi bi-slack"></i> {{.T "nf.slack_hint"}}{{.Doc "notifications#slack"}}</div>{{end}}
 				{{if eq (print $d.Type) "teams"}}<div class="alert alert-info small py-2"><i class="bi bi-microsoft-teams"></i> {{.T "nf.teams_hint"}}{{.Doc "notifications#teams"}}</div>{{end}}
 				{{if eq (print $d.Type) "matrix"}}<div class="alert alert-info small py-2"><i class="bi bi-chat-square-dots"></i> {{.T "nf.matrix_hint"}}{{.Doc "notifications#matrix"}}</div>{{end}}
+				{{if eq (print $d.Type) "secntfy"}}<div class="alert alert-info small py-2"><i class="bi bi-shield-lock"></i> {{.T "nf.secntfy_hint"}}{{.Doc "notifications#secntfy"}}</div>{{end}}
 				{{range $d.Fields}}
 				{{$key := print "cfg_" .Key}}
 				<div class="mb-3">
 					{{if eq .Kind "bool"}}
 					<div class="form-check"><input class="form-check-input" type="checkbox" name="{{$key}}" id="{{$key}}"{{if or (eq (index $f $key) "true") (eq (index $f $key) "on")}} checked{{end}}><label class="form-check-label" for="{{$key}}">{{$.T (print "nf.field." .Key)}}</label></div>
 					{{if eq .Key "verify_tls"}}<div class="form-text">{{$.T "nf.field.verify_tls_hint"}}</div>{{end}}
+					{{if eq .Key "critical"}}<div class="form-text">{{$.T "nf.field.critical_hint"}}</div>{{end}}
 					{{else}}
 					<label class="form-label" for="{{$key}}">{{$.T (print "nf.field." .Key)}}{{if .Required}} *{{end}}</label>
 					{{if eq .Kind "select"}}
@@ -46,6 +48,7 @@
 					{{if and (eq (print $d.Type) "homeassistant") (eq .Key "url")}}<div class="form-text">{{$.T "nf.ha_url_hint"}}</div>{{end}}
 					{{if eq .Key "webhook_id"}}<div class="form-text">{{$.T "nf.field.webhook_id_hint"}}</div>{{end}}
 					{{if eq .Key "room"}}<div class="form-text">{{$.T "nf.field.room_hint"}}</div>{{end}}
+					{{if eq .Key "device_key"}}<div class="form-text">{{$.T "nf.field.device_key_hint"}}</div>{{end}}
 					{{if and (eq (print $d.Type) "matrix") (eq .Key "token")}}<div class="form-text">{{$.T "nf.field.matrix_token_hint"}}</div>{{end}}
 					{{end}}
 				</div>

@@ -2712,7 +2712,8 @@
       "igotify": "iGotify (iPhone)",
       "slack": "Slack",
       "teams": "Microsoft Teams",
-      "matrix": "Matrix"
+      "matrix": "Matrix",
+      "secntfy": "SecNtfy (verschlüsselt)"
     },
     "field": {
       "email": "E-Mail-Adresse",
@@ -2751,7 +2752,11 @@
       "verify_tls_hint": "Nur abschalten, wenn Home Assistant im LAN ein selbst signiertes Zertifikat nutzt.",
       "room": "Raum",
       "room_hint": "Raum-ID (!abc123:matrix.org, in Element unter Raumeinstellungen → Erweitert) oder Alias (#mein-raum:matrix.org). Das Bot-Konto muss im Raum sein.",
-      "matrix_token_hint": "Zugriffstoken eines eigenen Bot-Kontos (Element: Einstellungen → Hilfe & Info → Zugriffstoken). Es wirkt wie ein Passwort und wird verschlüsselt gespeichert."
+      "matrix_token_hint": "Zugriffstoken eines eigenen Bot-Kontos (Element: Einstellungen → Hilfe & Info → Zugriffstoken). Es wirkt wie ein Passwort und wird verschlüsselt gespeichert.",
+      "device_key": "Geräte-Token",
+      "device_key_hint": "Beginnt mit NTFY-DEVICE-. Er wirkt wie ein Passwort und wird verschlüsselt gespeichert.",
+      "critical": "Störungen als kritischen Alarm senden",
+      "critical_hint": "Kritische Alarme kommen auch im Lautlos- und Fokus-Modus durch (sofern das Gerät es erlaubt). Entwarnungen und Hinweise bleiben normal."
     },
     "quiet": "Ruhezeiten",
     "quiet_hint": "In dieser Zeit alarmieren nur Checks, die als kritisch markiert sind.",
@@ -2796,7 +2801,8 @@
     "verify_check": "Bestätigen",
     "verify_sent": "Code gesendet – bitte innerhalb von 15 Minuten eingeben.",
     "verify_ok": "Kanal bestätigt.",
-    "verify_failed": "Code falsch oder abgelaufen."
+    "verify_failed": "Code falsch oder abgelaufen.",
+    "secntfy_hint": "SecNtfy stellt Push-Nachrichten Ende-zu-Ende verschlüsselt zu: Titel und Text werden mit dem Schlüssel deines Geräts verschlüsselt, nur das Gerät kann sie lesen. Trag den Geräte-Token aus der SecNtfy-App ein. Ein verschlüsselter Block fasst wenig – lange Meldungen kommen bei SecNtfy gekürzt an (Text höchstens 150 Zeichen), alle anderen Kanäle bekommen sie vollständig."
   },
   "day": {
     "1": "Mo",

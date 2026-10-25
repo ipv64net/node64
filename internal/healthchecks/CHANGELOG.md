@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.29.0 – 2026-10-25
+
+### Neu
+- Benachrichtigungen über SecNtfy (secntfy.app): Push-Nachrichten Ende-zu-Ende verschlüsselt – Titel und Text werden mit dem öffentlichen RSA-Schlüssel des Geräts verschlüsselt, nur das Gerät kann sie lesen. Geräte-Token (NTFY-DEVICE-…) eintragen, Server änderbar (Vorgabe api.secntfy.app), Störungen auf Wunsch als kritischer Alarm. In der Node und im Portal (Versand über die hubs).
+- Ein verschlüsselter Block fasst wenig: Nur bei SecNtfy werden lange Meldungen gekürzt (Text höchstens 150 Zeichen, Titel passend zum Schlüssel), alle anderen Kanäle bekommen sie vollständig.
+
 ## 2.28.1 – 2026-10-25
 
 ### Behoben

@@ -540,6 +540,7 @@
               "slack",
               "teams",
               "matrix",
+              "secntfy",
               "ntfy",
               "gotify",
               "pushover",

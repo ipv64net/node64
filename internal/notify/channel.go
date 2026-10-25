@@ -27,9 +27,10 @@ const (
 	TypeGotify   Type = "gotify"
 	TypeIGotify  Type = "igotify" // frueher eigener Menuepunkt (iPhone ueber iGotify) – jetzt normaler Gotify; bleibt fuer alte Kanaele/API gueltig
 	TypePushover Type = "pushover"
-	TypeSlack    Type = "slack"  // Incoming Webhook
-	TypeTeams    Type = "teams"  // Workflows-Webhook (die alten Office-365-Connectoren gibt es seit Mai 2026 nicht mehr)
-	TypeMatrix   Type = "matrix" // Client-Server-API: Homeserver, Zugriffstoken eines Bot-Kontos, Raum
+	TypeSlack    Type = "slack"   // Incoming Webhook
+	TypeTeams    Type = "teams"   // Workflows-Webhook (die alten Office-365-Connectoren gibt es seit Mai 2026 nicht mehr)
+	TypeMatrix   Type = "matrix"  // Client-Server-API: Homeserver, Zugriffstoken eines Bot-Kontos, Raum
+	TypeSecNtfy  Type = "secntfy" // SecNtfy: Ende-zu-Ende verschluesselt (RSA mit dem Schluessel des Geraets)
 	// Home Assistant: Webhook-Ausloeser einer Automation (nur von der Node gesendet, HA steht im LAN)
 	TypeHomeAssistant Type = "homeassistant"
 	// Server-Typen: Versand ueber ipv64.net (im Node erst nach Verknuepfung)
@@ -39,7 +40,7 @@ const (
 )
 
 // Types in Anzeigereihenfolge.
-var Types = []Type{TypeBrowser, TypeSMTP, TypeTelegram, TypeDiscord, TypeSlack, TypeTeams, TypeMatrix, TypeNtfy, TypeGotify, TypePushover, TypeHomeAssistant, TypeWebhook}
+var Types = []Type{TypeBrowser, TypeSMTP, TypeTelegram, TypeDiscord, TypeSlack, TypeTeams, TypeMatrix, TypeNtfy, TypeGotify, TypePushover, TypeSecNtfy, TypeHomeAssistant, TypeWebhook}
 
 // Planned sind Kanaele, die ipv64.net nach der Verknuepfung bereitstellt:
 // Mail ohne eigenen SMTP-Server und SMS ueber das ipv64-Gateway. Sie werden
@@ -119,6 +120,11 @@ var Fields = map[Type][]Field{
 		{Key: "server", Kind: "url", Default: "https://matrix.org", Required: true},
 		{Key: "token", Secret: true, Required: true, Kind: "password"},
 		{Key: "room", Required: true},
+	},
+	TypeSecNtfy: {
+		{Key: "device_key", Secret: true, Required: true, Kind: "password"},
+		{Key: "server", Kind: "url", Default: "https://api.secntfy.app", Required: true},
+		{Key: "critical", Kind: "bool"},
 	},
 	TypeBrowser:   {},
 	TypeIPv64Mail: {{Key: "email", Required: true}},
@@ -239,6 +245,15 @@ func (c *Channel) validate(keepSecrets bool) error {
 			return errors.New("room must be a room ID (!abc:example.org) or an alias (#room:example.org)")
 		}
 	}
+	if c.Type == TypeSecNtfy {
+		c.Config["server"] = strings.TrimRight(c.Config["server"], "/")
+		if v := strings.TrimSpace(c.Config["device_key"]); v != "" || !keepSecrets {
+			if !validSecntfyToken(v) {
+				return errors.New("device_key must be a SecNtfy device token (NTFY-DEVICE-…)")
+			}
+			c.Config["device_key"] = v
+		}
+	}
 	if c.Type == TypeHomeAssistant {
 		// Basis-URL ohne Abfrage; der Pfad /api/webhook/<id> kommt beim Senden dazu
 		if u, err := url.Parse(c.Config["url"]); err == nil && (u.RawQuery != "" || u.Fragment != "" || u.User != nil) {
@@ -343,6 +358,8 @@ func (c *Channel) Summary() string {
 		return strings.TrimRight(g("server"), "/") + "/" + g("topic")
 	case TypeGotify, TypeIGotify:
 		return g("server")
+	case TypeSecNtfy:
+		return "SecNtfy"
 	case TypePushover:
 		if g("device") != "" {
 			return "Pushover (" + g("device") + ")"

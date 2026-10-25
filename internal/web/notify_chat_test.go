@@ -53,3 +53,42 @@ func TestChatChannelForms(t *testing.T) {
 		t.Fatalf("stored: %+v", list)
 	}
 }
+
+// SecNtfy: Formular mit Anleitung und Schalter fuer kritische Alarme, Geraete-Token geprueft und verschluesselt gespeichert.
+func TestSecNtfyChannelForm(t *testing.T) {
+	ctx := context.Background()
+	box, _ := secrets.Load(filepath.Join(t.TempDir(), "k"))
+	var nf *notify.Store
+	a := newTestAppDeps(t, func(d *Deps) {
+		ms, _ := notify.Migrations()
+		if err := d.Store.Migrate(ctx, "notify", ms); err != nil {
+			t.Fatal(err)
+		}
+		nf = notify.NewStore(d.Store, box)
+		d.Notify = nf
+		d.Dispatcher = notify.NewDispatcher(nf, notify.Senders("test"), d.I18n, func(_, def string) string { return def }, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	})
+	loginAs(t, a, "admin", "sehr geheimes passwort")
+	_, list := a.get(t, "/notifications")
+	if !strings.Contains(list, "type=secntfy") {
+		t.Fatal("type not offered")
+	}
+	resp, body := a.get(t, "/notifications/new?type=secntfy")
+	if resp.StatusCode != 200 || !strings.Contains(body, "/docs/notifications/#secntfy") || strings.Contains(body, "nf.") || !strings.Contains(body, `type="password" id="cfg_device_key"`) ||
+		!strings.Contains(body, `name="cfg_critical"`) || !strings.Contains(body, "https://api.secntfy.app") {
+		t.Fatalf("form: %d", resp.StatusCode)
+	}
+	form := url.Values{"_csrf": {csrfOf(t, body)}, "type": {"secntfy"}, "name": {"Handy"}, "lang": {"de"}, "enabled": {"on"}, "notify_down": {"on"},
+		"cfg_server": {"https://api.secntfy.app"}, "cfg_device_key": {"geheim"}, "cfg_critical": {"on"}}
+	if resp, _ := a.post(t, "/notifications/new", form); resp.StatusCode != 422 {
+		t.Fatalf("bad token: %d", resp.StatusCode)
+	}
+	form.Set("cfg_device_key", "NTFY-DEVICE-abc123")
+	if resp, _ := a.post(t, "/notifications/new", form); resp.StatusCode != 303 {
+		t.Fatalf("save: %d", resp.StatusCode)
+	}
+	chs, _ := nf.Channels(ctx)
+	if len(chs) != 1 || chs[0].Config["device_key"] != "NTFY-DEVICE-abc123" || chs[0].Config["critical"] != "true" {
+		t.Fatalf("stored: %+v", chs)
+	}
+}
