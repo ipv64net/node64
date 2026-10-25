@@ -446,12 +446,19 @@ func (m *Module) blockedAny(a netip.Addr) bool {
 }
 
 func (m *Module) connBlocked(a netip.Addr, where string) bool {
+	web := where == "" // Web-Eingang: mit Weg an den Koeder bleibt die Verbindung offen, die Anfrage bekommt ihn
 	switch {
-	case m.bl.Blocked(a):
-		m.rejectConn(a, rejBlocklist, where)
 	case m.lim.banned(a):
 		m.rejectConn(a, rejBan, where)
+	case m.bl.Blocked(a):
+		if web && m.hpRoute(rejBlocklist) {
+			return false
+		}
+		m.rejectConn(a, rejBlocklist, where)
 	case m.hpBlocked(a):
+		if web && m.hpRoute(rejHoneypot) {
+			return false
+		}
 		m.rejectConn(a, rejHoneypot, where)
 	default:
 		return false

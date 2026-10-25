@@ -537,6 +537,9 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 		f := parseCatForm(r)
 		cf = &f
 		selectionConfig(&c, f.services())
+		if len(f.services()) == 0 && r.PostFormValue("proxy_only") != "" { // Vorlage "Nur ueber PROXY64" (keine Dienste)
+			c.Profile = ProfileProxy
+		}
 		c.Personas = f.personas()
 		lines = ""
 	default: // Formular ohne Tabelle (Profil und Textliste, z. B. aus Skripten)
@@ -575,6 +578,9 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	if p := r.PostFormValue("preset"); p != "" && cf != nil { // Vorlage in die Tabelle uebernehmen, noch nicht speichern
 		cf.preset(p, m.catStates(ctx))
 		selectionConfig(&c, cf.services())
+		if p == ProfileProxy {
+			c.Profile = ProfileProxy
+		}
 		d := m.settingsView(r, c, "", nil, &lf, cf)
 		d.CatUnsaved = true
 		m.g.Render(w, r, http.StatusOK, Name+"/settings", "honeypot.settings.title", d)

@@ -1,5 +1,19 @@
 # Changes – PROXY64
 
+## 1.28.0 – 2026-10-25
+
+### Added
+- Honeypot: requests recognised as malicious can get the Honeypot64 decoy instead of 403 – one switch per kind under
+  Access → Honeypot: IPs on the ipv64 blocklists, attackers reported by the honeypot, exploit patterns, AI bots/scanners
+  (all on by default) and country block (off by default). Overload (rate limits) never goes to the decoy. Only while the
+  decoy is active and only for HTTP(S); TCP/UDP streams and TLS passthrough still reject.
+- If Honeypot64 runs with the “Only via PROXY64” preset, the decoy is switched on automatically.
+
+### Changed
+- Blocked IPs (blocklists, honeypot block) are no longer cut off before TLS at the web entrance when their route to the
+  decoy is on – the request gets the decoy instead. Passthrough hosts now check the blocks themselves after the first
+  TLS packet.
+
 ## 1.27.2 – 2026-10-24
 
 ### Fixed

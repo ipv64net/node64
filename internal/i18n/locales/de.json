@@ -792,7 +792,17 @@
       "blocks": "Gerade gesperrt ({n})",
       "err_hours": "Die Dauer muss zwischen 1 und 720 Stunden liegen.",
       "saved": "Einstellungen für Honeypot64 gespeichert.",
-      "unblocked": "Sperre für {ip} aufgehoben."
+      "unblocked": "Sperre für {ip} aufgehoben.",
+      "wanted": "Honeypot64 läuft mit der Vorlage „Nur über PROXY64“: Er öffnet keine eigenen Ports, der Köder ist eingeschaltet und bekommt die Anfragen unten.",
+      "wanted_link": "Vorlage ändern",
+      "route": "Auch als schädlich erkannte Anfragen an den Köder",
+      "route_hint": "Statt 403 beantwortet der Köder des Honeypots diese Anfragen – Angreifer merken nichts, der Honeypot sammelt mehr. Gilt nur, wenn der Köder aktiv ist, und nur für HTTP(S); TCP/UDP-Streams und TLS-Durchreichen weisen weiter ab.",
+      "route_blocklist": "IPs aus den ipv64-Blocklisten",
+      "route_honeypot": "vom Honeypot gemeldete Angreifer (Sofort-Sperre)",
+      "route_exploit": "Exploit-Muster („Block Common Exploits“ am Host)",
+      "route_ai_bot": "KI-Bots und Scanner (Sperre am Host)",
+      "route_geo": "Ländersperre (trifft auch echte Besucher)",
+      "route_never": "Überlast (zu viele Anfragen oder Verbindungen) geht nie an den Köder – das ist Schutz, kein Angriff."
     },
     "lim": {
       "title": "Schutz vor Überlastung",
@@ -3627,7 +3637,8 @@
       "minimal": "Minimal",
       "standard": "Standard",
       "full": "Voll",
-      "custom": "Eigene Auswahl"
+      "custom": "Eigene Auswahl",
+      "proxy": "Nur über PROXY64"
     },
     "warn": {
       "title": "Fallen-Dienste sind von außen sichtbar.",
@@ -3924,7 +3935,8 @@
         "standard": "Standard",
         "full": "Voll",
         "free": "Alle freien einschalten",
-        "none": "Alle aus"
+        "none": "Alle aus",
+        "proxy": "Nur über PROXY64"
       },
       "unsaved": "Vorlage übernommen – noch nicht gespeichert. Prüfen und mit „Speichern“ übernehmen.",
       "on": "An",
@@ -4004,7 +4016,9 @@
       },
       "persona": "Profil",
       "persona_default": "(Standard)",
-      "persona_hint": "Das Profil bestimmt, als was sich eine Falle ausgibt: Banner, Kopfzeilen, Antworten und Zertifikat (z. B. nginx, Proxmox VE, OpenSSH Ubuntu, Dropbear, MariaDB). Vorausgewählt ist der Standard für Port und Köder; erfasst wird bei jedem Profil dasselbe."
+      "persona_hint": "Das Profil bestimmt, als was sich eine Falle ausgibt: Banner, Kopfzeilen, Antworten und Zertifikat (z. B. nginx, Proxmox VE, OpenSSH Ubuntu, Dropbear, MariaDB). Vorausgewählt ist der Standard für Port und Köder; erfasst wird bei jedem Profil dasselbe.",
+      "proxy_hint": "Nur über PROXY64: Der Honeypot öffnet keine eigenen Ports. Er bekommt nur, was PROXY64 weitergibt – Anfragen, die keinem Host zuzuordnen sind, und als schädlich erkannte (Blocklisten, gemeldete Angreifer, Exploit-Muster, KI-Bots). Welche Arten, stellst du bei PROXY64 ein. Schaltest du hier Dienste ein, wird daraus eine eigene Auswahl.",
+      "proxy_link": "PROXY64 → Zugriff → Honeypot"
     },
     "geo": {
       "title": "Herkunft nach Land",

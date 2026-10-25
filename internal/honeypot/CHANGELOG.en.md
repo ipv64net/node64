@@ -1,5 +1,15 @@
 # Changes – Honeypot64
 
+## 0.11.0 – 2026-10-25
+
+### Added
+- “Only via PROXY64” preset next to minimal, standard and full: the honeypot opens no ports of its own and only gets
+  what PROXY64 passes on – requests that match no host and those recognised as malicious (blocklists, reported
+  attackers, exploit patterns, AI bots). Which kinds is set in PROXY64 under Access → Honeypot.
+
+### Changed
+- “Only via PROXY64” is the new default. Anyone who already saved a preset or a custom selection keeps it.
+
 ## 0.10.0 – 2026-10-22
 
 ### Added

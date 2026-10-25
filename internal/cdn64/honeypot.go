@@ -20,6 +20,10 @@ import (
 //     statt der Standardseite.
 //  2. Zugriffe: je Anfrage gehen Metadaten (IP, Host, Methode, Pfad ohne Abfrage, Status, TLS, fehlgeschlagene
 //     Anmeldung) an den Log-Sensor des Honeypots - nie Inhalte.
+//     Mit Weg je Art (HoneypotRoute) bekommen auch als schaedlich erkannte Anfragen den Koeder statt 403: IPs der
+//     Blocklisten, vom Honeypot gemeldete, Exploit-Muster, KI-Bots, Laendersperre. Nur HTTP(S) ueber den Web-Eingang;
+//     Streams und TLS-Durchreichen weisen weiter ab. Laeuft der Honeypot mit der Vorlage "Nur ueber PROXY64"
+//     (hpbridge.Wanted), gilt der Koeder als eingeschaltet.
 //  3. Sofort-Sperre: IPs, die im Honeypot auffallen, sperrt PROXY64 lokal fuer eine einstellbare Dauer (Standard
 //     24 h) fuer alle Hosts und Streams - private Adressen, Ausnahmen der Blocklisten und vertrauenswuerdige Proxys
 //     der Hosts nie. Die Liste liegt im Speicher (hoechstens hpMaxBlocks Eintraege, laufen von selbst ab).
@@ -34,12 +38,27 @@ const (
 	hpSweepInterval = time.Minute
 )
 
-// HoneypotSettings: die drei Schalter.
+// HoneypotSettings: die drei Schalter und die Wege schaedlicher Anfragen.
 type HoneypotSettings struct {
-	Decoy      bool `json:"decoy"`       // unbekannte Anfragen an den Koeder
-	Access     bool `json:"access"`      // Zugriffe an den Log-Sensor
-	Block      bool `json:"block"`       // Angreifer aus dem Honeypot sofort sperren
-	BlockHours int  `json:"block_hours"` // Dauer der Sperre (Stunden)
+	Decoy      bool           `json:"decoy"`           // unbekannte Anfragen an den Koeder
+	Access     bool           `json:"access"`          // Zugriffe an den Log-Sensor
+	Block      bool           `json:"block"`           // Angreifer aus dem Honeypot sofort sperren
+	BlockHours int            `json:"block_hours"`     // Dauer der Sperre (Stunden)
+	Route      *HoneypotRoute `json:"route,omitempty"` // nil = Standard (hpDefaultRoute)
+}
+
+// HoneypotRoute: welche abgewiesenen Anfragen statt 403 den Koeder bekommen (nur mit Koeder).
+type HoneypotRoute struct {
+	Blocklist bool `json:"blocklist"` // IPs der ipv64-Blocklisten
+	Honeypot  bool `json:"honeypot"`  // vom Honeypot gemeldete Angreifer (Sofort-Sperre)
+	Exploit   bool `json:"exploit"`   // Exploit-Muster (Block Common Exploits)
+	AIBot     bool `json:"ai_bot"`    // KI-Bots und Scanner nach User-Agent
+	Geo       bool `json:"geo"`       // Laendersperre (trifft auch echte Besucher, Standard aus)
+}
+
+// hpDefaultRoute: Angriffe ja, Laendersperre nein; Ueberlast (Rate-Limits) nie - das ist Schutz, kein Angriff.
+func hpDefaultRoute() HoneypotRoute {
+	return HoneypotRoute{Blocklist: true, Honeypot: true, Exploit: true, AIBot: true}
 }
 
 // HoneypotBlock: eine lokal gesperrte IP.
@@ -72,6 +91,10 @@ func (s HoneypotSettings) normalized() HoneypotSettings {
 		s.BlockHours = hpDefaultHours
 	}
 	s.BlockHours = min(s.BlockHours, hpMaxHours)
+	if s.Route == nil {
+		r := hpDefaultRoute()
+		s.Route = &r
+	}
 	return s
 }
 
@@ -109,7 +132,7 @@ func (m *Module) hpSettings() HoneypotSettings {
 	if p := m.hp.cfg.Load(); p != nil {
 		return *p
 	}
-	return HoneypotSettings{BlockHours: hpDefaultHours}
+	return HoneypotSettings{BlockHours: hpDefaultHours}.normalized()
 }
 
 // hpStart: Sperren abonnieren und unbekannte Anfragen uebernehmen (bei Start des Moduls).
@@ -131,8 +154,60 @@ func (m *Module) hpStop() {
 	}
 }
 
-// hpDecoyActive: unbekannte Anfragen gehen gerade an den Koeder (Schalter an und Honeypot64 laeuft).
-func (m *Module) hpDecoyActive() bool { return m.hpSettings().Decoy && hpbridge.Decoy() != nil }
+// hpDecoyActive: unbekannte Anfragen gehen gerade an den Koeder (Schalter an oder Honeypot "nur ueber PROXY64",
+// und Honeypot64 laeuft).
+func (m *Module) hpDecoyActive() bool {
+	return (m.hpSettings().Decoy || hpbridge.Wanted()) && hpbridge.Decoy() != nil
+}
+
+// hpRoute: diese abgewiesene Anfrage geht an den Koeder statt 403 (Koeder aktiv und Weg der Art an).
+func (m *Module) hpRoute(reason string) bool {
+	if !m.hpDecoyActive() {
+		return false
+	}
+	r := m.hpSettings().Route
+	if r == nil {
+		return false
+	}
+	switch reason {
+	case rejBlocklist:
+		return r.Blocklist
+	case rejHoneypot:
+		return r.Honeypot
+	case rejExploit:
+		return r.Exploit
+	case rejAIBot:
+		return r.AIBot
+	case rejGeo:
+		return r.Geo
+	}
+	return false
+}
+
+// hpDivert: abgewiesene Anfrage an den Koeder statt der Fehlerseite; false = nicht umgeleitet (Aufrufer weist ab).
+func (m *Module) hpDivert(w http.ResponseWriter, r *http.Request, client netip.Addr, reason string) bool {
+	if !m.hpRoute(reason) {
+		return false
+	}
+	return m.hpServeDecoy(w, r, client)
+}
+
+// hpServeDecoy gibt die Anfrage dem Koeder (der liest die Quelle aus RemoteAddr "ip:port", Host bleibt).
+func (m *Module) hpServeDecoy(w http.ResponseWriter, r *http.Request, client netip.Addr) bool {
+	d := hpbridge.Decoy()
+	if d == nil {
+		return false
+	}
+	m.hp.decoyed.Add(1)
+	r2 := r.Clone(r.Context())
+	port := uint16(0)
+	if ap, err := netip.ParseAddrPort(r.RemoteAddr); err == nil {
+		port = ap.Port()
+	}
+	r2.RemoteAddr = netip.AddrPortFrom(client, port).String()
+	d.ServeHTTP(w, r2)
+	return true
+}
 
 // hpExempt: Adressen, die nie gesperrt werden (privat, CGNAT, Ausnahmen der Blocklisten, Proxys der Hosts).
 func (m *Module) hpExempt(ctx context.Context, ip netip.Addr) bool {
@@ -260,20 +335,13 @@ func (m *Module) hpReport(r *http.Request, client netip.Addr, known bool, status
 // Standardseite; gemeldet wird sie in beiden Faellen (Schalter Zugriffe).
 func (m *Module) hpUnknown(w http.ResponseWriter, r *http.Request, def http.Handler) {
 	client := peerIP(r)
-	if m.hpBlocked(client) {
-		page(w, http.StatusForbidden)
-		m.hpReport(r, client, false, http.StatusForbidden, false)
-		return
-	}
 	sw := &statusWriter{ResponseWriter: w}
 	defer func() { m.hpReport(r, client, false, sw.code(), false) }()
-	if d := hpbridge.Decoy(); d != nil && m.hpSettings().Decoy {
-		m.hp.decoyed.Add(1)
-		r2 := r.Clone(r.Context()) // der Koeder liest die Quelle aus RemoteAddr ("ip:port"), Host bleibt
-		if ap, err := netip.ParseAddrPort(r.RemoteAddr); err == nil {
-			r2.RemoteAddr = netip.AddrPortFrom(client, ap.Port()).String()
-		}
-		d.ServeHTTP(sw, r2)
+	if m.hpBlocked(client) && !m.hpRoute(rejHoneypot) {
+		page(sw, http.StatusForbidden)
+		return
+	}
+	if m.hpDecoyActive() && m.hpServeDecoy(sw, r, client) {
 		return
 	}
 	def.ServeHTTP(sw, r)

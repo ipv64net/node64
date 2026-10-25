@@ -792,7 +792,17 @@
       "blocks": "Blocked right now ({n})",
       "err_hours": "The duration must be between 1 and 720 hours.",
       "saved": "Honeypot64 settings saved.",
-      "unblocked": "Block for {ip} lifted."
+      "unblocked": "Block for {ip} lifted.",
+      "wanted": "Honeypot64 runs with the “Only via PROXY64” preset: it opens no ports of its own, the decoy is on and gets the requests below.",
+      "wanted_link": "Change preset",
+      "route": "Also send requests recognised as malicious to the decoy",
+      "route_hint": "Instead of 403 the honeypot decoy answers these requests – attackers notice nothing, the honeypot collects more. Only while the decoy is active and only for HTTP(S); TCP/UDP streams and TLS passthrough still reject.",
+      "route_blocklist": "IPs on the ipv64 blocklists",
+      "route_honeypot": "attackers reported by the honeypot (instant block)",
+      "route_exploit": "exploit patterns (“Block Common Exploits” on the host)",
+      "route_ai_bot": "AI bots and scanners (blocked on the host)",
+      "route_geo": "country block (also hits real visitors)",
+      "route_never": "Overload (too many requests or connections) never goes to the decoy – that is protection, not an attack."
     },
     "lim": {
       "title": "Overload protection",
@@ -3627,7 +3637,8 @@
       "minimal": "Minimal",
       "standard": "Standard",
       "full": "Full",
-      "custom": "Custom selection"
+      "custom": "Custom selection",
+      "proxy": "Only via PROXY64"
     },
     "warn": {
       "title": "Trap services are visible from the outside.",
@@ -3924,7 +3935,8 @@
         "standard": "Standard",
         "full": "Full",
         "free": "Switch on all free",
-        "none": "All off"
+        "none": "All off",
+        "proxy": "Only via PROXY64"
       },
       "unsaved": "Template applied – not saved yet. Check it and confirm with “Save”.",
       "on": "On",
@@ -4004,7 +4016,9 @@
       },
       "persona": "Profile",
       "persona_default": "(default)",
-      "persona_hint": "The profile decides what a trap pretends to be: banner, headers, responses and certificate (e.g. nginx, Proxmox VE, OpenSSH Ubuntu, Dropbear, MariaDB). The default for port and decoy is preselected; every profile captures the same data."
+      "persona_hint": "The profile decides what a trap pretends to be: banner, headers, responses and certificate (e.g. nginx, Proxmox VE, OpenSSH Ubuntu, Dropbear, MariaDB). The default for port and decoy is preselected; every profile captures the same data.",
+      "proxy_hint": "Only via PROXY64: the honeypot opens no ports of its own. It only gets what PROXY64 passes on – requests that match no host and those recognised as malicious (blocklists, reported attackers, exploit patterns, AI bots). Which kinds is set in PROXY64. Switching on services here turns it into a custom selection.",
+      "proxy_link": "PROXY64 → Access → Honeypot"
     },
     "geo": {
       "title": "Origin by country",

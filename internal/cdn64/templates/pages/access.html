@@ -121,6 +121,20 @@
 			<label class="form-check-label fw-semibold" for="hp-decoy">{{$.T "cdn64.hp.decoy"}}</label>
 			<div class="form-text">{{$.T "cdn64.hp.decoy_hint"}}{{if and .Settings.Decoy (not .Decoy)}} <span class="text-warning-emphasis">{{$.T "cdn64.hp.decoy_missing"}}</span>{{end}}</div>
 			<div class="form-text{{if .DefaultClose}} text-warning-emphasis fw-semibold{{end}}">{{if .DefaultClose}}<i class="bi bi-exclamation-triangle"></i> {{end}}{{$.T "cdn64.hp.decoy_visible"}}</div></div>
+		{{if .Wanted}}<div class="alert alert-info py-2 mb-2"><i class="bi bi-diagram-3"></i> {{$.T "cdn64.hp.wanted"}} <a href="/honeypot/settings#dienste">{{$.T "cdn64.hp.wanted_link"}}</a></div>{{end}}
+		<input type="hidden" name="hp_route_form" value="1">
+		<div class="ms-4 mb-3" id="hp-route">
+			<div class="fw-semibold mb-1">{{$.T "cdn64.hp.route"}}</div>
+			<div class="form-text mt-0 mb-1">{{$.T "cdn64.hp.route_hint"}}</div>
+			{{with .Settings.Route}}
+			<div class="form-check"><input class="form-check-input" type="checkbox" name="hp_route_blocklist" id="hp-route-blocklist"{{if .Blocklist}} checked{{end}}><label class="form-check-label" for="hp-route-blocklist">{{$.T "cdn64.hp.route_blocklist"}}</label></div>
+			<div class="form-check"><input class="form-check-input" type="checkbox" name="hp_route_honeypot" id="hp-route-honeypot"{{if .Honeypot}} checked{{end}}><label class="form-check-label" for="hp-route-honeypot">{{$.T "cdn64.hp.route_honeypot"}}</label></div>
+			<div class="form-check"><input class="form-check-input" type="checkbox" name="hp_route_exploit" id="hp-route-exploit"{{if .Exploit}} checked{{end}}><label class="form-check-label" for="hp-route-exploit">{{$.T "cdn64.hp.route_exploit"}}</label></div>
+			<div class="form-check"><input class="form-check-input" type="checkbox" name="hp_route_ai_bot" id="hp-route-ai-bot"{{if .AIBot}} checked{{end}}><label class="form-check-label" for="hp-route-ai-bot">{{$.T "cdn64.hp.route_ai_bot"}}</label></div>
+			<div class="form-check"><input class="form-check-input" type="checkbox" name="hp_route_geo" id="hp-route-geo"{{if .Geo}} checked{{end}}><label class="form-check-label" for="hp-route-geo">{{$.T "cdn64.hp.route_geo"}}</label></div>
+			{{end}}
+			<div class="form-text">{{$.T "cdn64.hp.route_never"}}</div>
+		</div>
 		<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="hp_access" id="hp-access"{{if .Settings.Access}} checked{{end}}>
 			<label class="form-check-label fw-semibold" for="hp-access">{{$.T "cdn64.hp.access"}}</label>
 			<div class="form-text">{{$.T "cdn64.hp.access_hint"}}{{if and .Settings.Access (not .Access)}} <span class="text-warning-emphasis">{{$.T "cdn64.hp.access_missing"}}</span>{{end}}</div></div>

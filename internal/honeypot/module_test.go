@@ -228,9 +228,9 @@ func TestConfigValidation(t *testing.T) {
 	m, _ := modTest(t, webPort)
 	ctx := context.Background()
 
-	// Standard: Profil standard, 7 Tage
+	// Standard: nur ueber PROXY64 (keine eigenen Ports), 7 Tage
 	c := m.loadConfig(ctx)
-	if c.Profile != ProfileStandard || c.RetentionDays != 7 || c.MaxEvents != DefaultMaxRows || c.NotifyNew {
+	if c.Profile != ProfileProxy || c.RetentionDays != 7 || c.MaxEvents != DefaultMaxRows || c.NotifyNew {
 		t.Fatalf("defaults: %+v", c)
 	}
 	// eigene Auswahl mit belegtem Port (Oberflaeche) -> Fehler am Feld services
@@ -239,7 +239,7 @@ func TestConfigValidation(t *testing.T) {
 	if !ok || !strings.Contains(fe["services"], "honeypot.err.port_used|"+strconv.Itoa(webPort)+"|web") {
 		t.Fatalf("port conflict: %v", err)
 	}
-	if m.loadConfig(ctx).Profile != ProfileStandard {
+	if m.loadConfig(ctx).Profile != ProfileProxy {
 		t.Fatal("invalid settings must not be saved")
 	}
 	// weitere Fehler

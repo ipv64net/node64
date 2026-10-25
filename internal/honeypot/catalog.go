@@ -336,12 +336,12 @@ func (f catForm) services() []Service {
 }
 
 // catPresets sind die Vorlagen-Knoepfe (Profile, "free" = alle freien einschalten, "none" = alle aus).
-var catPresets = []string{ProfileMinimal, ProfileStandard, ProfileFull, "free", "none"}
+var catPresets = []string{ProfileProxy, ProfileMinimal, ProfileStandard, ProfileFull, "free", "none"}
 
 // preset wendet eine Vorlage auf das Formular an (ohne zu speichern). false = unbekannte Vorlage.
 func (f *catForm) preset(name string, st catStates) bool {
 	switch name {
-	case ProfileMinimal, ProfileStandard, ProfileFull:
+	case ProfileMinimal, ProfileStandard, ProfileFull, ProfileProxy:
 		*f = catFormFrom(Profiles[name])
 	case "free":
 		for i := range f.Rows {

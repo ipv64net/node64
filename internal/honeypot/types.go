@@ -142,6 +142,7 @@ type Config struct {
 
 // Profile: vorgegebene Dienste (Plan Abschnitt 1, Sensor-Profile; H1 nur Stufe 1).
 var Profiles = map[string][]Service{
+	"proxy":   {}, // nur ueber PROXY64 (keine eigenen Ports)
 	"minimal": {{SvcSSH, 22, ""}, {SvcHTTP, 80, ""}},
 	"standard": {{SvcSSH, 22, ""}, {SvcSSH, 2222, ""}, {SvcTelnet, 23, ""}, {SvcHTTP, 80, ""}, {SvcHTTPS, 443, ""}, {SvcHTTP, 8080, ""},
 		{SvcFTP, 21, ""}, {SvcSMTP, 25, ""}, {SvcMySQL, 3306, ""}, {SvcRedis, 6379, ""}, {SvcRDP, 3389, ""}, {SvcVNC, 5900, ""},

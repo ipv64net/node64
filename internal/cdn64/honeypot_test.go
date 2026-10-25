@@ -132,3 +132,81 @@ func TestHoneypotBlock(t *testing.T) {
 		t.Fatal("hours out of range")
 	}
 }
+
+// Als schaedlich erkannte Anfragen gehen mit Koeder und Weg an den Honeypot statt 403; Ueberlast nie; der Eingang
+// laesst gesperrte IPs dafuer durch, Durchreichen trennt sie weiter; Vorlage "Nur ueber PROXY64" schaltet den Koeder an.
+func TestHoneypotRoute(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "app") }))
+	defer backend.Close()
+	bu, _ := url.Parse(backend.URL)
+	bport, _ := strconv.Atoi(bu.Port())
+	certPEM, keyPEM := selfSigned(t, "app.test")
+	if _, err := e.crt.Upload(ctx, certPEM, keyPEM); err != nil {
+		t.Fatal(err)
+	}
+	e.enable(t)
+	m := e.m
+	h := newHost()
+	h.Names, h.TargetHost, h.TargetPort, h.BlockExploits = []string{"app.test"}, "127.0.0.1", bport, true
+	if err := m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { hpbridge.SetDecoy(nil); hpbridge.SetWanted(false) })
+	c := e.client(false)
+	exploit := "https://app.test/index.php?file=../../../../etc/passwd"
+
+	// ohne Honeypot: 403 wie bisher
+	if code, _, _ := do(t, c, "GET", exploit); code != http.StatusForbidden {
+		t.Fatalf("no honeypot: %d", code)
+	}
+	hpbridge.SetDecoy(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+		_, _ = io.WriteString(w, "decoy")
+	}))
+	// Koeder-Schalter aus und keine Vorlage "proxy": weiter 403
+	if code, _, _ := do(t, c, "GET", exploit); code != http.StatusForbidden {
+		t.Fatalf("decoy off: %d", code)
+	}
+	// Vorlage "Nur ueber PROXY64": Koeder gilt als an, Standard-Wege (Exploit an)
+	hpbridge.SetWanted(true)
+	if code, body, _ := do(t, c, "GET", exploit); code != http.StatusTeapot || body != "decoy" {
+		t.Fatalf("proxy only: %d %q", code, body)
+	}
+	if code, body, _ := do(t, c, "GET", "https://app.test/ok"); code != http.StatusOK || body != "app" {
+		t.Fatalf("normal request: %d %q", code, body)
+	}
+	// Weg Exploit aus: wieder 403
+	off := hpDefaultRoute()
+	off.Exploit = false
+	if err := m.hpSave(ctx, HoneypotSettings{Route: &off}); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, _ := do(t, c, "GET", exploit); code != http.StatusForbidden {
+		t.Fatalf("route off: %d", code)
+	}
+
+	// Eingang: gesperrte IP mit Weg durchlassen, ohne Weg/Koeder trennen; Ueberlast und Streams immer trennen
+	bad := netip.MustParseAddr("203.0.113.7")
+	if err := m.hpSave(ctx, HoneypotSettings{Block: true, BlockHours: 1}); err != nil { // Route nil = Standard
+		t.Fatal(err)
+	}
+	hpbridge.PublishBlock(hpbridge.Block{IP: bad, Reason: "ssh:bruteforce"})
+	if !m.hpBlocked(bad) || m.blockedAny(bad) || !m.connBlocked(bad, "stream :25565") {
+		t.Fatal("web entrance must let the reported IP through to the decoy, streams must not")
+	}
+	// Durchreichen: TLS gehoert dem Ziel, kein Koeder - Verbindung trennen
+	p := newHostKind(KindPass)
+	p.Names, p.TargetHost, p.TargetPort = []string{"pass.test"}, "127.0.0.1", bport
+	if rt := m.routeFor(p); rt.Allow == nil || rt.Allow(bad) || !rt.Allow(netip.MustParseAddr("198.51.100.20")) {
+		t.Fatal("passthrough must reject blocked IPs itself")
+	}
+	hpbridge.SetWanted(false) // Koeder aus: Eingang trennt wieder
+	if !m.blockedAny(bad) {
+		t.Fatal("without decoy the entrance must reject")
+	}
+	if s := m.hpSettings(); s.Route == nil || !s.Route.Blocklist || !s.Route.Honeypot || s.Route.Geo {
+		t.Fatalf("default route: %+v", s.Route)
+	}
+}

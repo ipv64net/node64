@@ -1,5 +1,19 @@
 # Änderungen – PROXY64
 
+## 1.28.0 – 2026-10-25
+
+### Neu
+- Honeypot: Auch als schädlich erkannte Anfragen können statt 403 den Köder von Honeypot64 bekommen – je Art ein
+  Schalter unter Zugriff → Honeypot: IPs der ipv64-Blocklisten, vom Honeypot gemeldete Angreifer, Exploit-Muster,
+  KI-Bots/Scanner (alle Standard an) und Ländersperre (Standard aus). Überlast (Rate-Limits) geht nie an den Köder.
+  Gilt nur, solange der Köder aktiv ist, und nur für HTTP(S); TCP/UDP-Streams und TLS-Durchreichen weisen weiter ab.
+- Läuft Honeypot64 mit der Vorlage „Nur über PROXY64“, ist der Köder automatisch eingeschaltet.
+
+### Geändert
+- Gesperrte IPs (Blocklisten, Honeypot-Sperre) trennt der Web-Eingang nicht mehr vor TLS, wenn ihr Weg an den Köder
+  an ist – die Anfrage bekommt dann den Köder. Durchgereichte Hosts prüfen die Sperren jetzt selbst nach dem ersten
+  TLS-Paket.
+
 ## 1.27.2 – 2026-10-24
 
 ### Behoben

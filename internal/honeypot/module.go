@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/geoip"
+	"github.com/ipv64net/node64/internal/hpbridge"
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/notify"
@@ -37,7 +38,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.10.0"
+	version = "0.11.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -45,6 +46,7 @@ const (
 	ProfileMinimal  = "minimal"
 	ProfileStandard = "standard"
 	ProfileFull     = "full"
+	ProfileProxy    = "proxy" // keine eigenen Ports: nur, was PROXY64 weitergibt (unzuordenbar oder als schaedlich erkannt)
 	ProfileCustom   = "custom"
 
 	defaultRetentionDays = 7
@@ -62,7 +64,7 @@ const KindNotifyNew = notify.KindHoneypotNew
 // ModuleConfig ist die Einstellung des Moduls (Datenbank der Node, Schluessel honeypot.config). Config wird
 // eingebettet: Dienste, Port-Scan-Erkennung und Limits stehen im JSON auf oberster Ebene.
 type ModuleConfig struct {
-	Profile string `json:"profile"` // minimal, standard, full oder custom (dann gilt Services)
+	Profile string `json:"profile"` // minimal, standard, full, proxy oder custom (dann gilt Services)
 	Config
 	RetentionDays int   `json:"retention_days"` // Aufbewahrung der Ereignisse, Standard 7
 	MaxEvents     int64 `json:"max_events"`     // Obergrenze der gespeicherten Ereignisse, Standard 200000
@@ -74,7 +76,7 @@ type ModuleConfig struct {
 
 // DefaultConfig: Profil standard mit Port-Scan-Erkennung, 7 Tage, ohne Benachrichtigung.
 func DefaultConfig() ModuleConfig {
-	return ModuleConfig{Profile: ProfileStandard, Config: Config{Scan: true}, RetentionDays: defaultRetentionDays, MaxEvents: DefaultMaxRows}
+	return ModuleConfig{Profile: ProfileProxy, Config: Config{Scan: true}, RetentionDays: defaultRetentionDays, MaxEvents: DefaultMaxRows}
 }
 
 // sensorAPI ist, was das Modul vom Sensor braucht (Tests setzen einen Ersatz ein).
@@ -287,6 +289,7 @@ func (m *Module) applyLocked(ctx context.Context) {
 		return
 	}
 	cfg := m.loadConfig(ctx)
+	hpbridge.SetWanted(cfg.Profile == ProfileProxy) // PROXY64 gibt dann seine unzuordenbaren/schaedlichen Anfragen ab
 	m.st.SetLimits(time.Duration(cfg.RetentionDays)*24*time.Hour, cfg.MaxEvents)
 	svcs, warns := m.resolve(ctx, cfg)
 	run := cfg.Config
@@ -517,7 +520,7 @@ func (m *Module) validate(ctx context.Context, c *ModuleConfig) FieldErrors {
 	errs := FieldErrors{}
 	c.Profile = strings.ToLower(strings.TrimSpace(c.Profile))
 	if c.Profile == "" {
-		c.Profile = ProfileStandard
+		c.Profile = ProfileProxy
 	}
 	if _, ok := Profiles[c.Profile]; !ok && c.Profile != ProfileCustom {
 		errs["profile"] = "honeypot.err.profile"

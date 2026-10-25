@@ -45,6 +45,7 @@ type Block struct {
 var (
 	decoy  atomic.Pointer[http.Handler]
 	access atomic.Pointer[func(Access)]
+	wanted atomic.Bool
 
 	subMu sync.Mutex
 	subs  = map[int]func(Block){}
@@ -76,6 +77,13 @@ func SetAccessSink(f func(Access)) {
 	}
 	access.Store(&f)
 }
+
+// SetWanted: der Honeypot laeuft „nur ueber PROXY64“ (Vorlage proxy, keine eigenen Ports) und moechte die
+// unzuordenbaren und als schaedlich erkannten Anfragen bekommen. Nur Honeypot64.
+func SetWanted(on bool) { wanted.Store(on) }
+
+// Wanted: der Honeypot moechte den Verkehr von PROXY64 (dann gilt der Koeder als eingeschaltet). Nur PROXY64.
+func Wanted() bool { return wanted.Load() && Decoy() != nil }
 
 // AccessActive: es gibt eine Auswertung (PROXY64 kann sich sonst die Arbeit sparen).
 func AccessActive() bool { return access.Load() != nil }

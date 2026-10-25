@@ -29,6 +29,8 @@
 						<span class="small text-body-secondary me-1">{{.T "honeypot.cat.presets"}}</span>
 						{{range $d.CatPresets}}<button class="btn btn-sm btn-outline-secondary" type="submit" name="preset" value="{{.}}" formnovalidate>{{$.T (printf "honeypot.cat.preset.%s" .)}}</button>{{end}}
 					</div>
+					{{if eq $d.Cfg.Profile "proxy"}}<input type="hidden" name="proxy_only" value="1">
+					<div class="alert alert-info small py-2"><i class="bi bi-diagram-3"></i> {{.T "honeypot.cat.proxy_hint"}} <a href="/cdn64/access#honeypot">{{.T "honeypot.cat.proxy_link"}}</a></div>{{end}}
 					{{if $d.CatUnsaved}}<div class="alert alert-info small py-2"><i class="bi bi-info-circle"></i> {{.T "honeypot.cat.unsaved"}}</div>{{end}}
 					{{with index $d.Errors "profile"}}<div class="text-danger small">{{.}}</div>{{end}}
 					{{with index $d.Errors "services"}}<div class="alert alert-danger small py-2 mb-2" style="white-space:pre-line">{{.}}</div>{{end}}

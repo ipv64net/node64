@@ -340,6 +340,27 @@ func TestCatalogSave(t *testing.T) {
 	if r = catPost(t, m, catFormValues(nil)); r.status != http.StatusUnprocessableEntity || r.data.Errors["services"] == "" {
 		t.Fatalf("empty: %d", r.status)
 	}
+
+	// Vorlage "Nur ueber PROXY64": Tabelle leer, Hinweis mit Merker; gespeichert als Profil proxy (ohne Dienste)
+	v = catFormValues(nil)
+	v.Set("preset", ProfileProxy)
+	if r = catPost(t, m, v); r.status != http.StatusOK || r.data.Cfg.Profile != ProfileProxy {
+		t.Fatalf("preset proxy: %d %s", r.status, r.data.Cfg.Profile)
+	}
+	v = catFormValues(nil)
+	v.Set("proxy_only", "1")
+	if r = catPost(t, m, v); r.status != http.StatusSeeOther {
+		t.Fatalf("save proxy: %d %v", r.status, r.data.Errors)
+	}
+	if c = m.loadConfig(ctx); c.Profile != ProfileProxy || len(effectiveServices(c)) != 0 {
+		t.Fatalf("proxy saved: %+v", c)
+	}
+	// Dienst eingeschaltet: wird eigene Auswahl bzw. Profil, Merker zaehlt nicht
+	v = catFormValues(map[string]bool{"ssh 22": true, "http 80": true})
+	v.Set("proxy_only", "1")
+	if r = catPost(t, m, v); r.status != http.StatusSeeOther || m.loadConfig(ctx).Profile != ProfileMinimal {
+		t.Fatalf("services win over proxy: %d %s", r.status, m.loadConfig(ctx).Profile)
+	}
 }
 
 // GET /api/honeypot/catalog: Katalog mit Auswahl und Zustand.

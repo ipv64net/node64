@@ -364,25 +364,33 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		if m.bl.Blocked(client) { // ipv64-Blocklisten (echte Client-IP hinter vertrauenswuerdigen Proxys)
 			*reject = rejBlocklist
 			st.blocked.Add(1)
-			page(sw, http.StatusForbidden)
+			if !m.hpDivert(sw, r, client, rejBlocklist) {
+				page(sw, http.StatusForbidden)
+			}
 			return
 		}
 		if m.hpBlocked(client) { // vom Honeypot gemeldet (Sofort-Sperre)
 			*reject = rejHoneypot
 			st.blocked.Add(1)
-			page(sw, http.StatusForbidden)
+			if !m.hpDivert(sw, r, client, rejHoneypot) {
+				page(sw, http.StatusForbidden)
+			}
 			return
 		}
 		if m.geoBlocked(&h.Advanced, client) { // Laendersperre des Hosts
 			*reject = rejGeo
 			st.blocked.Add(1)
-			page(sw, http.StatusForbidden)
+			if !m.hpDivert(sw, r, client, rejGeo) {
+				page(sw, http.StatusForbidden)
+			}
 			return
 		}
 		if m.aiBlocked(&h.Advanced, r) { // KI-Bot nach User-Agent (aibots.go)
 			*reject = rejAIBot
 			st.blocked.Add(1)
-			page(sw, http.StatusForbidden)
+			if !m.hpDivert(sw, r, client, rejAIBot) {
+				page(sw, http.StatusForbidden)
+			}
 			return
 		}
 		if m.lim.banned(client) { // gesperrt wegen Ueberlastung
@@ -406,7 +414,9 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		if h.BlockExploits && blocked(r) {
 			*reject = rejExploit
 			st.blocked.Add(1)
-			page(sw, http.StatusForbidden)
+			if !m.hpDivert(sw, r, client, rejExploit) {
+				page(sw, http.StatusForbidden)
+			}
 			return
 		}
 		if maxBody > 0 {
@@ -593,15 +603,24 @@ func (m *Module) routeFor(h *Host) edge.Route {
 		st := m.statsOf(h.ID)
 		rt := edge.Route{Names: h.Names, Passthrough: net.JoinHostPort(h.TargetHost, strconv.Itoa(h.TargetPort)), Count: func() { st.requests.Add(1) },
 			HTTP: http.HandlerFunc(m.toHTTPS)}
-		if h.Advanced.GeoMode != "" { // Laendersperre: Verbindung gleich nach dem ersten TLS-Paket schliessen
-			rt.Allow = func(ip netip.Addr) bool {
-				if m.geoBlocked(&h.Advanced, ip) {
-					st.blocked.Add(1)
-					m.rejectConn(ip, rejGeo, h.Names[0])
-					return false
-				}
-				return true
+		// gesperrte IPs (der Eingang laesst sie mit Weg an den Koeder durch - TLS gehoert hier dem Ziel, also kein
+		// Koeder) und Laendersperre: Verbindung gleich nach dem ersten TLS-Paket schliessen
+		rt.Allow = func(ip netip.Addr) bool {
+			reason := ""
+			switch {
+			case m.bl.Blocked(ip):
+				reason = rejBlocklist
+			case m.hpBlocked(ip):
+				reason = rejHoneypot
+			case h.Advanced.GeoMode != "" && m.geoBlocked(&h.Advanced, ip):
+				reason = rejGeo
 			}
+			if reason != "" {
+				st.blocked.Add(1)
+				m.rejectConn(ip, reason, h.Names[0])
+				return false
+			}
+			return true
 		}
 		return rt
 	}
