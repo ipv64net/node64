@@ -1,0 +1,47 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><i class="bi bi-diagram-3 text-primary"></i> {{.T "certs.dnscheck.title"}}{{$.Doc "certificates#dns-pruefung"}}</h1>
+	<div class="ms-auto"><a class="btn btn-sm btn-outline-secondary" href="/certificates"><i class="bi bi-arrow-left"></i> {{.T "certs.title"}}</a></div>
+</div>
+<div class="row g-3">
+	<div class="col-xl-7">
+		<div class="card"><div class="card-header d-flex align-items-center"><span><i class="bi bi-activity text-primary"></i> {{.T "certs.dnscheck.paths"}}</span>
+			<a class="btn btn-sm btn-primary py-0 ms-auto" href="/certificates/dns-check?run=1"><i class="bi bi-play"></i> {{.T "certs.dnscheck.run"}}</a></div>
+			<div class="card-body small">
+				<p class="text-body-secondary">{{.T "certs.dnscheck.intro"}}</p>
+				{{if not $d.Ran}}<p class="mb-0">{{.T "certs.dnscheck.not_run"}}</p>
+				{{else}}
+				{{if $d.Direct}}<div class="alert alert-success py-2"><i class="bi bi-check-circle"></i> {{.T "certs.dnscheck.ok_direct"}}</div>
+				{{else if $d.Public}}<div class="alert alert-success py-2"><i class="bi bi-check-circle"></i> {{.T "certs.dnscheck.ok_public"}}</div>
+				{{else}}<div class="alert alert-danger py-2"><i class="bi bi-x-circle"></i> {{.T "certs.dnscheck.none"}}</div>{{end}}
+				<div class="table-responsive">
+				<table class="table table-sm align-middle mb-0">
+					<thead><tr><th>{{.T "certs.dnscheck.path"}}</th><th>{{.T "certs.dnscheck.kind"}}</th><th>{{.T "certs.dnscheck.state"}}</th></tr></thead>
+					<tbody>
+					{{range $d.Results}}<tr>
+						<td class="font-monospace">{{.Name}}</td>
+						<td>{{if .Direct}}{{$.T "certs.dnscheck.direct"}}{{else}}{{$.T "certs.dnscheck.public"}}{{end}}</td>
+						<td>{{if .OK}}<span class="text-success"><i class="bi bi-check-circle"></i> {{$.T "certs.dnscheck.reachable"}}</span>{{else}}<span class="text-danger"><i class="bi bi-x-circle"></i> {{$.T "certs.dnscheck.unreachable"}}</span> <span class="text-body-secondary">{{.Detail}}</span>{{end}}</td>
+					</tr>{{end}}
+					</tbody>
+				</table>
+				</div>
+				{{end}}
+			</div>
+		</div>
+	</div>
+	<div class="col-xl-5">
+		<form method="post" action="/certificates/dns-check" class="card">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-header"><i class="bi bi-hdd-network text-primary"></i> {{.T "certs.dnscheck.own"}}</div>
+			<div class="card-body small">
+				<label class="form-label" for="resolvers">{{.T "certs.dnscheck.own_label"}}</label>
+				<textarea class="form-control form-control-sm font-monospace mb-1" id="resolvers" name="resolvers" rows="4" placeholder="192.168.1.1&#10;https://dns.quad9.net/dns-query">{{$d.Resolvers}}</textarea>
+				<div class="form-text mb-2">{{.T "certs.dnscheck.own_hint"}}</div>
+				<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>
+			</div>
+		</form>
+	</div>
+</div>
+{{end}}

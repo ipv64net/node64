@@ -1208,6 +1208,28 @@
     "self": {
       "key_type": "Schlüssel",
       "hint": "Namen und IP-Adressen je Zeile, auch Wildcards. 397 Tage akzeptieren auch Apple und Chrome. Erneuert wird automatisch vor Ablauf – danach muss man dem neuen Zertifikat erneut vertrauen. Wer mehrere Geräte hat, legt besser eine eigene CA an: dann vertraut man nur einmal der CA."
+    },
+    "dnscheck": {
+      "link": "DNS-01-Prüfung: Wege testen, eigene Resolver",
+      "title": "DNS-01-Prüfung",
+      "paths": "Wege von dieser Node",
+      "run": "Jetzt testen",
+      "intro": "Vor der Freigabe bei Let's Encrypt prüft die Node, ob der TXT-Record im DNS sichtbar ist: zuerst direkt bei den Nameservern (Port 53), sonst über öffentliche Resolver (DoH über feste IP-Adressen bei mehreren Betreibern, dazu Port 53). Ein Weg genügt. Sperrt ein DNS-Filter (DNS64-Blockliste, Pi-hole, Firewall) einzelne Resolver, nimmt die Prüfung die anderen.",
+      "not_run": "Noch nicht getestet – „Jetzt testen“ prüft alle Wege (dauert einige Sekunden).",
+      "ok_direct": "Die Nameserver sind direkt erreichbar – DNS-01 funktioniert von hier.",
+      "ok_public": "Die Nameserver sind nicht direkt erreichbar (Port 53 gesperrt oder umgeleitet), aber öffentliche Resolver – DNS-01 funktioniert von hier.",
+      "none": "Kein Weg erreichbar: weder die Nameserver direkt noch ein öffentlicher Resolver. Gib unten einen erreichbaren Resolver ein oder gib einen der Resolver in deinem DNS-Filter/deiner Firewall frei.",
+      "path": "Weg",
+      "kind": "Art",
+      "state": "Stand",
+      "direct": "Nameserver direkt",
+      "public": "öffentlicher Resolver",
+      "reachable": "erreichbar",
+      "unreachable": "nicht erreichbar",
+      "own": "Eigene Resolver",
+      "own_label": "Zusätzliche Resolver für die Prüfung (je Zeile einer)",
+      "own_hint": "IP-Adresse (Port 53), IP:Port oder https://…, tls://…, quic://… (höchstens 10). Sie kommen zu den eingebauten Resolvern dazu und werden zuerst gefragt. Leer = nur die eingebauten.",
+      "err": "Resolver nicht gespeichert: {err}"
     }
   },
   "ports": {

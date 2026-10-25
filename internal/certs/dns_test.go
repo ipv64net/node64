@@ -2,7 +2,9 @@ package certs
 
 import (
 	"context"
+	"errors"
 	"net"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
@@ -132,5 +134,90 @@ func TestWaitTXTMissingDetail(t *testing.T) {
 	err := waitTXT(context.Background(), "example.org", "_acme-challenge.example.org", "token")
 	if err == nil || !strings.Contains(err.Error(), "ns1.test: record not there yet (NXDOMAIN)") || strings.Contains(err.Error(), "port 53") {
 		t.Fatalf("error: %v", err)
+	}
+}
+
+// Sperrt der System-Resolver die Nameserver (DNS-Filter antwortet 0.0.0.0) oder antwortet gar nicht, kommen die
+// Nameserver ueber oeffentliche Resolver.
+func TestLookupNSFallsBackWhenBlocked(t *testing.T) {
+	fake := func(ip string, nsErr error) nsLookup {
+		return nsLookup{
+			cname: func(context.Context, string) string { return "" },
+			ns: func(_ context.Context, name string) ([]string, error) {
+				if name != "example.org" {
+					return nil, nil
+				}
+				return []string{"ns1.example.net."}, nsErr
+			},
+			ip: func(_ context.Context, fam, _ string) []netip.Addr {
+				if fam == "ip6" {
+					return nil
+				}
+				return []netip.Addr{netip.MustParseAddr(ip)}
+			},
+		}
+	}
+	oldSys, oldPub := systemNS, publicNS
+	t.Cleanup(func() { systemNS, publicNS = oldSys, oldPub })
+	systemNS, publicNS = fake("0.0.0.0", nil), fake("203.0.113.53", nil)
+	ns, err := lookupNS(context.Background(), "_acme-challenge.example.org")
+	if err != nil || len(ns) != 1 || ns[0].Addrs[0] != "203.0.113.53:53" {
+		t.Fatalf("fallback: %v %v", ns, err)
+	}
+	publicNS = fake("::", nil)
+	if _, err := lookupNS(context.Background(), "example.org"); err == nil || !strings.Contains(err.Error(), "blocked or missing") {
+		t.Fatalf("blocked everywhere: %v", err)
+	}
+}
+
+// Die oeffentliche Pruefung fragt alle Resolver: ein gesperrter (keine Antwort) haelt sie nicht auf; sind alle
+// unerreichbar, nennt der Fehler jeden.
+func TestPublicTXTSkipsUnreachable(t *testing.T) {
+	dead, _ := net.ListenPacket("udp", "127.0.0.1:0")
+	deadAddr := dead.LocalAddr().String()
+	dead.Close()
+	good := testNS(t, answer(false, "token"), answer(false, "token"))
+	ps := newPathSet([]checkPath{{Name: "blocked", plain: deadAddr}, {Name: "good", plain: good}})
+	defer ps.close()
+	ctx := withPaths(context.Background(), ps)
+	if ok, err := publicTXT(ctx, "_acme-challenge.example.org", "token"); !ok || err != nil {
+		t.Fatalf("found: %v %v", ok, err)
+	}
+	if ok, err := publicTXT(ctx, "_acme-challenge.example.org", "other"); ok || err != nil {
+		t.Fatalf("missing: %v %v", ok, err)
+	}
+	ps2 := newPathSet([]checkPath{{Name: "blocked1", plain: deadAddr}, {Name: "blocked2", plain: deadAddr}})
+	defer ps2.close()
+	_, err := publicTXT(withPaths(context.Background(), ps2), "x.example.org", "token")
+	if err == nil || !strings.Contains(err.Error(), "blocked1: ") || !strings.Contains(err.Error(), "blocked2: ") {
+		t.Fatalf("unreachable: %v", err)
+	}
+}
+
+// Kein Nameserver direkt und kein oeffentlicher Resolver erreichbar: die Meldung sagt das (statt nur „TXT fehlt“).
+func TestWaitTXTNoPathMessage(t *testing.T) {
+	addr := testNS(t, answer(false, ""), answer(false, ""))
+	fastTXT(t, []nameserver{{Name: "ns1.test", Addrs: []string{addr}}}, 200*time.Millisecond)
+	publicCheck = func(context.Context, string, string) (bool, error) {
+		return false, errors.New("Cloudflare (DoH): timeout")
+	}
+	err := waitTXT(context.Background(), "example.org", "_acme-challenge.example.org", "token")
+	if err == nil || !strings.Contains(err.Error(), "no public resolver reachable either (Cloudflare (DoH): timeout)") {
+		t.Fatalf("error: %v", err)
+	}
+}
+
+func TestParseCheckResolvers(t *testing.T) {
+	got, err := ParseCheckResolvers("192.168.1.1\n[2001:db8::1]:5353, https://dns.quad9.net/dns-query\n\n tls://dns.example ")
+	if err != nil || strings.Join(got, "|") != "192.168.1.1:53|[2001:db8::1]:5353|https://dns.quad9.net/dns-query|tls://dns.example" {
+		t.Fatalf("%q %v", got, err)
+	}
+	if p, _ := parsePath("https://dns.quad9.net/dns-query"); len(p.srv.IPs) == 0 {
+		t.Fatal("preset IPs not taken over")
+	}
+	for _, bad := range []string{"dns.example", "http://x", "1.2.3.4:99999"} {
+		if _, err := ParseCheckResolvers(bad); err == nil {
+			t.Fatalf("%q accepted", bad)
+		}
 	}
 }

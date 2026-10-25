@@ -78,6 +78,7 @@
 				<hr>
 				<div class="mb-1">{{if $d.DNSReady}}<i class="bi bi-check-circle text-success"></i> {{.T "certs.dns_ready"}}{{else}}<i class="bi bi-x-circle text-danger"></i> {{.T "certs.dns_missing"}} <a href="/settings#ipv64">{{.T "nav.settings"}}</a>{{end}}</div>
 				<div>{{if $d.HTTPReady}}<i class="bi bi-check-circle text-success"></i>{{else}}<i class="bi bi-x-circle text-danger"></i>{{end}} {{.T "certs.http_ready"}}</div>
+				<div class="mt-2"><a href="/certificates/dns-check"><i class="bi bi-diagram-3"></i> {{.T "certs.dnscheck.link"}}</a></div>
 			</div>
 		</div>
 		<div class="card mt-3"><div class="card-header d-flex align-items-center"><span><i class="bi bi-patch-check text-primary"></i> {{.T "certs.ca.title"}}{{$.Doc "certificates#eigene-ca"}}</span>

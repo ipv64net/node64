@@ -191,7 +191,8 @@ func New(ctx context.Context, d Deps) (*Manager, error) {
 	base, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	m := &Manager{d: d, log: d.Log.With("module", "certs"), w: d.Store.Writer(), r: d.Store.Reader(), loaded: map[int64]*loadedCert{},
 		steps: map[int64]string{}, users: map[string]func(context.Context) map[int64][]string{}, holds: map[string]bool{}, reg: map[string]bool{},
-		base: base, cancel: cancel, txtVisible: waitTXT, cnameOf: lookupCNAME, loopFirst: time.Minute, loopEvery: time.Hour}
+		base: base, cancel: cancel, cnameOf: lookupCNAME, loopFirst: time.Minute, loopEvery: time.Hour}
+	m.txtVisible = m.waitTXTFor // mit den eingestellten Resolvern
 	if err := m.reload(ctx); err != nil {
 		cancel()
 		return nil, err

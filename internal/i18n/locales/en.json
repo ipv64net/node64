@@ -1208,6 +1208,28 @@
     "self": {
       "key_type": "Key",
       "hint": "Names and IP addresses one per line, wildcards too. 397 days are accepted by Apple and Chrome as well. It is renewed automatically before expiry – you then have to trust the new certificate again. With several devices an own CA is better: you trust the CA only once."
+    },
+    "dnscheck": {
+      "link": "DNS-01 check: test paths, own resolvers",
+      "title": "DNS-01 check",
+      "paths": "Paths from this node",
+      "run": "Test now",
+      "intro": "Before Let's Encrypt validates, the node checks that the TXT record is visible in DNS: first directly at the nameservers (port 53), otherwise via public resolvers (DoH over fixed IP addresses at several operators, plus port 53). One path is enough. If a DNS filter (DNS64 blocklist, Pi-hole, firewall) blocks some resolvers, the check uses the others.",
+      "not_run": "Not tested yet – “Test now” checks all paths (takes a few seconds).",
+      "ok_direct": "The nameservers are reachable directly – DNS-01 works from here.",
+      "ok_public": "The nameservers are not reachable directly (port 53 blocked or redirected), but public resolvers are – DNS-01 works from here.",
+      "none": "No path reachable: neither the nameservers directly nor a public resolver. Enter a reachable resolver below or allow one of the resolvers in your DNS filter/firewall.",
+      "path": "Path",
+      "kind": "Kind",
+      "state": "State",
+      "direct": "nameserver direct",
+      "public": "public resolver",
+      "reachable": "reachable",
+      "unreachable": "not reachable",
+      "own": "Own resolvers",
+      "own_label": "Additional resolvers for the check (one per line)",
+      "own_hint": "IP address (port 53), IP:port or https://…, tls://…, quic://… (at most 10). They are added to the built-in resolvers and asked first. Empty = built-in only.",
+      "err": "Resolvers not saved: {err}"
     }
   },
   "ports": {

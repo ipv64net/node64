@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"strings"
 	"time"
 
 	"github.com/miekg/dns"
 
-	"github.com/ipv64net/node64/internal/dns64/upstream"
 	"github.com/ipv64net/node64/internal/ipv64api"
 )
 
@@ -106,28 +106,18 @@ func (m *Manager) checkAlias(ctx context.Context, c *Cert) error {
 	return nil
 }
 
-// oeffentliche Resolver fuer die CNAME-Pruefung (nicht der eigene: im Heimnetz koennte er anders antworten)
-var publicResolvers = []string{"1.1.1.1:53", "9.9.9.9:53", "[2606:4700:4700::1111]:53", "[2620:fe::fe]:53"}
-
+// lookupCNAME ueber oeffentliche Resolver (nicht der eigene: im Heimnetz koennte er anders antworten oder sperren).
 func lookupCNAME(ctx context.Context, name string) (string, error) {
-	q := new(dns.Msg)
-	q.SetQuestion(dns.Fqdn(name), dns.TypeCNAME)
-	c := &dns.Client{Timeout: 4 * time.Second}
-	var lastErr error = errors.New("no resolver reachable")
-	for _, s := range publicResolvers {
-		r, _, err := c.ExchangeContext(ctx, q, s)
-		if err != nil || r == nil {
-			lastErr = err
-			continue
-		}
-		for _, rr := range r.Answer {
-			if cn, ok := rr.(*dns.CNAME); ok {
-				return cn.Target, nil
-			}
-		}
-		return "", nil
+	ans, err := publicLookup(ctx, name, dns.TypeCNAME)
+	if err != nil {
+		return "", err
 	}
-	return "", lastErr
+	for _, rr := range ans {
+		if cn, ok := rr.(*dns.CNAME); ok {
+			return cn.Target, nil
+		}
+	}
+	return "", nil
 }
 
 var (
@@ -144,15 +134,100 @@ type nameserver struct {
 // lookupNS findet die Nameserver der Zone (Domain oder eine Ebene darueber): je Nameserver seine Adressen als
 // ip:53, IPv4 und IPv6 (wer nur eine Familie nach aussen hat, erreicht ihn trotzdem). Eine Ebene mit CNAME zaehlt
 // nicht: der Resolver folgt ihm sonst und liefert die Nameserver des Ziels (z. B. ein Name, der auf ein CDN zeigt).
+// Erst ueber den System-Resolver; sperrt oder faelscht der (Blockliste, 0.0.0.0) oder antwortet nicht, ueber
+// oeffentliche Resolver.
 var lookupNS = func(ctx context.Context, domain string) ([]nameserver, error) {
+	out, err := findNS(ctx, domain, systemNS)
+	if err == nil {
+		return out, nil
+	}
+	out, perr := findNS(ctx, domain, publicNS)
+	if perr == nil {
+		return out, nil
+	}
+	return nil, fmt.Errorf("no nameserver for %s (system resolver: %v; public resolvers: %v)", domain, err, perr)
+}
+
+// nsLookup: die Abfragen fuer findNS (System-Resolver oder oeffentliche Resolver).
+type nsLookup struct {
+	cname func(ctx context.Context, name string) string // Ziel, "" = kein CNAME
+	ns    func(ctx context.Context, name string) ([]string, error)
+	ip    func(ctx context.Context, fam, host string) []netip.Addr
+}
+
+var systemNS = nsLookup{
+	cname: func(ctx context.Context, name string) string {
+		cn, err := net.DefaultResolver.LookupCNAME(ctx, name)
+		if err != nil {
+			return ""
+		}
+		return cn
+	},
+	ns: func(ctx context.Context, name string) ([]string, error) {
+		ns, err := net.DefaultResolver.LookupNS(ctx, name)
+		var out []string
+		for _, n := range ns {
+			out = append(out, n.Host)
+		}
+		return out, err
+	},
+	ip: func(ctx context.Context, fam, host string) []netip.Addr {
+		ips, _ := net.DefaultResolver.LookupNetIP(ctx, fam, host)
+		return ips
+	},
+}
+
+var publicNS = nsLookup{
+	cname: func(ctx context.Context, name string) string {
+		cn, _ := lookupCNAME(ctx, name)
+		return cn
+	},
+	ns: func(ctx context.Context, name string) ([]string, error) {
+		ans, err := publicLookup(ctx, name, dns.TypeNS)
+		var out []string
+		for _, rr := range ans {
+			if n, ok := rr.(*dns.NS); ok {
+				out = append(out, n.Ns)
+			}
+		}
+		return out, err
+	},
+	ip: func(ctx context.Context, fam, host string) []netip.Addr {
+		qt := dns.TypeA
+		if fam == "ip6" {
+			qt = dns.TypeAAAA
+		}
+		ans, _ := publicLookup(ctx, host, qt)
+		var out []netip.Addr
+		for _, rr := range ans {
+			switch r := rr.(type) {
+			case *dns.A:
+				if a, ok := netip.AddrFromSlice(r.A); ok {
+					out = append(out, a)
+				}
+			case *dns.AAAA:
+				if a, ok := netip.AddrFromSlice(r.AAAA); ok {
+					out = append(out, a)
+				}
+			}
+		}
+		return out
+	},
+}
+
+func findNS(ctx context.Context, domain string, l nsLookup) ([]nameserver, error) {
 	name := domain
 	var hosts []string
+	var lastErr error
 	for strings.Count(name, ".") >= 1 {
-		cn, cerr := net.DefaultResolver.LookupCNAME(ctx, name)
-		if cerr != nil || strings.EqualFold(strings.TrimSuffix(cn, "."), name) {
-			if ns, err := net.DefaultResolver.LookupNS(ctx, name); err == nil && len(ns) > 0 {
+		if cn := l.cname(ctx, name); cn == "" || strings.EqualFold(strings.TrimSuffix(cn, "."), name) {
+			ns, err := l.ns(ctx, name)
+			if err != nil {
+				lastErr = err
+			}
+			if len(ns) > 0 {
 				for _, n := range ns {
-					hosts = append(hosts, strings.TrimSuffix(n.Host, "."))
+					hosts = append(hosts, strings.TrimSuffix(n, "."))
 				}
 				break
 			}
@@ -163,8 +238,11 @@ var lookupNS = func(ctx context.Context, domain string) ([]nameserver, error) {
 	for _, h := range hosts {
 		var addrs []string
 		for _, fam := range []string{"ip4", "ip6"} { // IPv4 zuerst: Docker-Bridges haben oft kein IPv6
-			if ips, err := net.DefaultResolver.LookupNetIP(ctx, fam, h); err == nil && len(ips) > 0 {
-				addrs = append(addrs, net.JoinHostPort(ips[0].Unmap().String(), "53"))
+			for _, ip := range l.ip(ctx, fam, h) {
+				if usableAddr(ip) { // Sperrantwort (0.0.0.0, ::) ueberspringen
+					addrs = append(addrs, net.JoinHostPort(ip.Unmap().String(), "53"))
+					break
+				}
 			}
 		}
 		if len(addrs) > 0 {
@@ -172,7 +250,12 @@ var lookupNS = func(ctx context.Context, domain string) ([]nameserver, error) {
 		}
 	}
 	if len(out) == 0 {
-		return nil, errors.New("no nameserver for " + domain)
+		if lastErr == nil && len(hosts) > 0 {
+			lastErr = errors.New("nameserver addresses blocked or missing (" + strings.Join(hosts, ", ") + ")")
+		} else if lastErr == nil {
+			lastErr = errors.New("no NS records")
+		}
+		return nil, errors.New(shortErr(lastErr))
 	}
 	return out, nil
 }
@@ -187,27 +270,9 @@ const (
 	txtFound
 )
 
-// publicCheck: ueber oeffentliche Resolver (DoH, Port 443) pruefen, wenn kein Nameserver direkt antwortet; Fehler =
-// keiner erreichbar. Austauschbar fuer Tests.
-var publicCheck = func(ctx context.Context, fqdn, want string) (bool, error) {
-	var lastErr error = errors.New("no public resolver reachable")
-	for _, s := range []upstream.Server{upstream.Presets[0], upstream.Presets[1], upstream.Presets[2]} { // Cloudflare, Quad9, Google
-		r := upstream.New([]upstream.Server{s}, upstream.ModeOrdered)
-		q := new(dns.Msg)
-		q.SetQuestion(dns.Fqdn(fqdn), dns.TypeTXT)
-		resp, _, err := r.Exchange(ctx, q)
-		r.Close()
-		if err != nil || resp == nil {
-			lastErr = err
-			continue
-		}
-		if txtIn(resp, want) {
-			return true, nil
-		}
-		lastErr = nil
-	}
-	return false, lastErr
-}
+// publicCheck: ueber oeffentliche Resolver (DoH ueber feste IPs bei mehreren Betreibern, dazu Port 53) pruefen, wenn
+// kein Nameserver direkt antwortet; Fehler = keiner erreichbar. Austauschbar fuer Tests.
+var publicCheck = publicTXT
 
 // directRounds: so viele Runden ohne zustaendige Antwort, dann zusaetzlich ueber oeffentliche Resolver pruefen.
 const directRounds = 3
@@ -261,9 +326,9 @@ func waitTXT(ctx context.Context, zone, fqdn, want string) error {
 			if !auth {
 				msg += "; the nameservers cannot be queried directly from here (outgoing port 53 blocked or redirected to a local resolver?)"
 				if pubErr != nil {
-					msg += ", public resolvers via DoH unreachable too: " + pubErr.Error()
+					msg += "; no public resolver reachable either (" + pubErr.Error() + ") – a firewall or DNS filter blocks them: allow one of them or enter a reachable resolver under Certificates → DNS-01 check"
 				} else {
-					msg += ", public resolvers (DoH) do not show the record either"
+					msg += "; public resolvers are reachable but do not show the record either"
 				}
 			}
 			return errors.New(msg)

@@ -337,3 +337,31 @@ func TestUICertificate(t *testing.T) {
 		t.Fatal("reload")
 	}
 }
+
+// DNS-01-Pruefung: Link im Konto-Kasten, eigene Resolver speichern (falsche Eingabe abgelehnt), Seite ohne Test.
+func TestCertificatesDNSCheck(t *testing.T) {
+	a, mgr := newCertsApp(t)
+	_, body := a.get(t, "/certificates")
+	if !strings.Contains(body, `href="/certificates/dns-check"`) {
+		t.Fatal("link missing")
+	}
+	csrf := csrfOf(t, body)
+	resp, page := a.get(t, "/certificates/dns-check")
+	if resp.StatusCode != 200 || !strings.Contains(page, `href="/certificates/dns-check?run=1"`) || !strings.Contains(page, `name="resolvers"`) || strings.Contains(page, "certs.dnscheck") {
+		t.Fatalf("page: %d", resp.StatusCode)
+	}
+	a.post(t, "/certificates/dns-check", url.Values{"_csrf": {csrf}, "resolvers": {"dns.example"}})
+	if got := mgr.CheckResolvers(context.Background()); len(got) != 0 {
+		t.Fatalf("bad input saved: %v", got)
+	}
+	resp, _ = a.post(t, "/certificates/dns-check", url.Values{"_csrf": {csrf}, "resolvers": {"192.0.2.53\nhttps://dns.quad9.net/dns-query"}})
+	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/certificates/dns-check?run=1" {
+		t.Fatalf("save: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if got := mgr.CheckResolvers(context.Background()); strings.Join(got, "|") != "192.0.2.53:53|https://dns.quad9.net/dns-query" {
+		t.Fatalf("saved: %v", got)
+	}
+	if _, page = a.get(t, "/certificates/dns-check"); !strings.Contains(page, "192.0.2.53:53\nhttps://dns.quad9.net/dns-query</textarea>") {
+		t.Fatal("not shown")
+	}
+}

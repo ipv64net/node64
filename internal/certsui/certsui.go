@@ -52,6 +52,8 @@ func (u *UI) Routes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST "+Base, page(u.pageCertCreate))
 	mux.Handle("POST "+Base+"/upload", page(u.pageCertUpload))
 	mux.Handle("POST "+Base+"/account", page(u.pageCertAccount))
+	mux.Handle("GET "+Base+"/dns-check", page(u.pageDNSCheck))
+	mux.Handle("POST "+Base+"/dns-check", page(u.pageDNSCheckSave))
 	mux.Handle("POST "+Base+"/{id}/renew", page(u.pageCertRenew))
 	mux.Handle("POST "+Base+"/{id}/autorenew", page(u.pageCertAutoRenew))
 	mux.Handle("POST "+Base+"/{id}/delete", page(u.pageCertDelete))
@@ -278,6 +280,45 @@ func (u *UI) pageCertAccount(w http.ResponseWriter, r *http.Request) {
 		u.g.Flash(w, r, "success", u.g.T(r, "common.saved"))
 	}
 	http.Redirect(w, r, Base, http.StatusSeeOther)
+}
+
+type dnsCheckData struct {
+	Resolvers string
+	Ran       bool
+	Results   []certs.PathResult
+	Direct    bool // ein Nameserver von ipv64 direkt erreichbar
+	Public    bool // ein oeffentlicher Resolver erreichbar
+}
+
+// pageDNSCheck: eigene Resolver der DNS-01-Pruefung und Test, welche Wege von hier gehen (?run=1).
+func (u *UI) pageDNSCheck(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	d := dnsCheckData{Resolvers: strings.Join(u.m.CheckResolvers(ctx), "\n"), Ran: r.URL.Query().Get("run") == "1"}
+	if d.Ran {
+		tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		d.Results = u.m.CheckDNSPaths(tctx)
+		cancel()
+		for _, x := range d.Results {
+			d.Direct = d.Direct || x.Direct && x.OK
+			d.Public = d.Public || !x.Direct && x.OK
+		}
+	}
+	u.g.Render(w, r, http.StatusOK, Name+"/dns_check", "certs.dnscheck.title", d)
+}
+
+func (u *UI) pageDNSCheckSave(w http.ResponseWriter, r *http.Request) {
+	list, err := certs.ParseCheckResolvers(r.PostFormValue("resolvers"))
+	if err == nil {
+		err = u.m.SetCheckResolvers(r.Context(), list)
+	}
+	if err != nil {
+		u.g.Flash(w, r, "danger", u.g.T(r, "certs.dnscheck.err", "err", err.Error()))
+		http.Redirect(w, r, Base+"/dns-check", http.StatusSeeOther)
+		return
+	}
+	u.g.Audit(r, "cert.dnscheck", "", fmt.Sprintf("resolvers=%d", len(list)))
+	u.g.Flash(w, r, "success", u.g.T(r, "common.saved"))
+	http.Redirect(w, r, Base+"/dns-check?run=1", http.StatusSeeOther)
 }
 
 func (u *UI) certFromPath(w http.ResponseWriter, r *http.Request) (*certs.Cert, bool) {
