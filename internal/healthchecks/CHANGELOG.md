@@ -1,5 +1,10 @@
 # Änderungen – Healthchecks
 
+## 2.28.1 – 2026-10-25
+
+### Behoben
+- Proxmox VE, Systemseite: Die Kacheln „Gäste“ und „Gäste laufend“ zeigten statt der Anzahl die rohe Gästeliste (`[{qemu …`). Jetzt steht dort die Zahl.
+
 ## 2.28.0 – 2026-10-24
 
 ### Neu

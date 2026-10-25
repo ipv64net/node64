@@ -408,8 +408,8 @@ func (m *Module) pagePVE(w http.ResponseWriter, r *http.Request) {
 type pveSystemData struct {
 	pveSysRow
 	NodeRows  []pveResRow
-	Guests    []pveResRow
-	Total     int // Gaeste ohne Filter
+	GuestRows []pveResRow // gefiltert (nicht „Guests“: das ueberdeckte die Zahl aus pveSysRow in den Kacheln)
+	Total     int         // Gaeste ohne Filter
 	Filter    map[string]string
 	NodeNames []string
 	States    []string
@@ -472,7 +472,7 @@ func (m *Module) pagePVESystem(w http.ResponseWriter, r *http.Request) {
 			}
 			d.Total++
 			if pveMatch(row, d.Filter) {
-				d.Guests = append(d.Guests, row)
+				d.GuestRows = append(d.GuestRows, row)
 			}
 		}
 		sort.Strings(d.NodeNames)

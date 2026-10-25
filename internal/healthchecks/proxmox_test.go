@@ -719,6 +719,9 @@ func TestPVEPagesAndWizard(t *testing.T) {
 			t.Fatalf("system page: %q missing: %s", want, body)
 		}
 	}
+	if strings.Contains(body, "[{") || strings.Contains(body, "&lt;nil&gt;") { // Kachel „Gaeste“ zeigte die Liste statt der Zahl
+		t.Fatalf("system kpi shows a raw value: %s", body)
+	}
 	// Filter: nur gestoerte, Typ LXC, Suche
 	if _, body = pveGet(t, srv, sp+"?state=problem"); !strings.Contains(body, ">app<") || strings.Contains(body, ">web<") {
 		t.Fatalf("filter problem: %s", body)

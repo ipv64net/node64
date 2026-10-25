@@ -1,5 +1,10 @@
 # Changes – Healthchecks
 
+## 2.28.1 – 2026-10-25
+
+### Fixed
+- Proxmox VE, system page: the “Guests” and “Guests running” cards showed the raw guest list (`[{qemu …`) instead of the count. They show the number now.
+
 ## 2.28.0 – 2026-10-24
 
 ### Added

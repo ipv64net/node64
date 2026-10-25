@@ -68,7 +68,7 @@ pveum acl modify / --tokens '{{$d.Sys.TokenID}}' --roles PVEAuditor</code></pre>
 
 {{if $d.Snap}}{{if $d.Snap.OK}}
 <div class="card mb-3">
-	<div class="card-header"><i class="bi bi-boxes text-primary"></i> {{.T "pve.guests"}} <span class="badge text-bg-secondary">{{len $d.Guests}}{{if ne (len $d.Guests) $d.Total}}/{{$d.Total}}{{end}}</span></div>
+	<div class="card-header"><i class="bi bi-boxes text-primary"></i> {{.T "pve.guests"}} <span class="badge text-bg-secondary">{{len $d.GuestRows}}{{if ne (len $d.GuestRows) $d.Total}}/{{$d.Total}}{{end}}</span></div>
 	<div class="card-body pb-0">
 		<form method="get" action="{{$d.Path}}" class="row g-2 mb-2 align-items-end">
 			<div class="col-12 col-md-4"><input class="form-control form-control-sm" type="search" name="q" value="{{$f.q}}" placeholder="{{.T "common.search"}} …"></div>
@@ -88,11 +88,11 @@ pveum acl modify / --tokens '{{$d.Sys.TokenID}}' --roles PVEAuditor</code></pre>
 			<div class="col-6 col-md-2"><button class="btn btn-sm btn-outline-secondary w-100" type="submit"><i class="bi bi-funnel"></i> {{.T "pve.filter.apply"}}</button></div>
 		</form>
 	</div>
-	{{if $d.Guests}}
+	{{if $d.GuestRows}}
 	<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards hc-table">
 		<thead><tr><th>{{.T "common.name"}}</th><th>ID</th><th>{{.T "common.type"}}</th><th>Node</th><th>{{.T "common.status"}}</th><th class="text-end">CPU</th><th class="text-end">RAM</th><th class="text-end">Disk</th><th>{{.T "pve.net"}}</th><th>{{.T "pve.uptime"}}</th><th>{{.T "pve.cpu_1h"}}</th><th class="text-end">{{.T "pve.as_check"}}</th></tr></thead>
 		<tbody>
-		{{range $d.Guests}}
+		{{range $d.GuestRows}}
 		<tr class="{{if and .Bad (not .Muted)}}hc-row-down{{end}}{{if .Excluded}} text-body-tertiary{{end}}">
 			<td data-label="{{$.T "common.name"}}"><a href="{{.Path}}" class="fw-semibold text-nowrap">{{or .R.Name .Key}}</a>{{if .Muted}} <i class="bi bi-bell-slash text-body-secondary" title="{{$.T "pve.muted"}}"></i>{{end}}
 				{{range .R.Tags}}<span class="badge rounded-pill text-bg-light fw-normal">{{.}}</span> {{end}}</td>
