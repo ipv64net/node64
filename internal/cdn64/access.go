@@ -125,8 +125,13 @@ func (g *guard) authOK(r *http.Request) (ok, tried bool) {
 	if hit && time.Now().Before(until) {
 		return true, true
 	}
+	known := false
 	for _, u := range g.list.Users {
-		if subtle.ConstantTimeCompare([]byte(u.Username), []byte(user)) == 1 && bcrypt.CompareHashAndPassword([]byte(u.Hash), []byte(pass)) == nil {
+		if subtle.ConstantTimeCompare([]byte(u.Username), []byte(user)) != 1 {
+			continue
+		}
+		known = true
+		if bcrypt.CompareHashAndPassword([]byte(u.Hash), []byte(pass)) == nil {
 			g.mu.Lock()
 			if len(g.cache) > 1000 {
 				g.cache = map[[32]byte]time.Time{}
@@ -136,8 +141,14 @@ func (g *guard) authOK(r *http.Request) (ok, tried bool) {
 			return true, true
 		}
 	}
+	if !known { // unbekannter Benutzer dauert so lange wie ein falsches Passwort (Benutzernamen nicht erratbar)
+		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(pass))
+	}
 	return false, true
 }
+
+// dummyHash: bcrypt-Wert ohne Benutzer, nur fuer gleiche Laufzeit bei unbekannten Namen.
+var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("node64-unknown-user"), bcrypt.DefaultCost)
 
 // decide: Zugriff erlaubt? Sonst 401 (Anmeldung koennte helfen) oder 403. key: Schluessel der Sitzungs-Cookies
 // (Login-Seite; nil = ohne).

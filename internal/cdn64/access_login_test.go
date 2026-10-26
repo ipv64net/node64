@@ -89,9 +89,17 @@ func TestAccessListLoginPage(t *testing.T) {
 	if code, _, _ = get("/", "Cookie", ck.Name+"="+ck.Value); code != 401 {
 		t.Fatalf("old session after new password: %d", code)
 	}
-	// Abmelden loescht das Cookie
-	if code, _, hdr = get("/.node64/logout"); code != 303 || !strings.Contains(hdr.Get("Set-Cookie"), ck.Name+"=;") {
-		t.Fatalf("logout: %d %v", code, hdr)
+	// Abmelden: GET zeigt nur den Knopf, POST loescht das Cookie
+	if code, body, hdr = get("/.node64/logout"); code != 200 || hdr.Get("Set-Cookie") != "" || !strings.Contains(body, `method="post"`) {
+		t.Fatalf("logout get: %d %v", code, hdr)
+	}
+	lo, err := c.Post("http://login.test/.node64/logout", "application/x-www-form-urlencoded", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lo.Body.Close()
+	if lo.StatusCode != 303 || !strings.Contains(lo.Header.Get("Set-Cookie"), ck.Name+"=;") {
+		t.Fatalf("logout: %d %v", lo.StatusCode, lo.Header)
 	}
 	// ohne Login-Seite: Browser-Dialog wie bisher, /.node64/ geht ans Ziel
 	a.LoginPage = false

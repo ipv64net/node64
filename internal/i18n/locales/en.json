@@ -662,7 +662,7 @@
       "hint": "After 10 failed logins within 5 minutes the IP is blocked for 15 minutes (recorded in the audit log).",
       "help": "Typical: only from the home network (\"allow 192.168.0.0/16\") and with password when away – then \"one condition is enough\".",
       "login_page": "Login page instead of browser dialog",
-      "login_page_hint": "Visitors sign in on a page in the style of Node64 instead of the browser's password window; a cookie then keeps the session (12 hours, 30 days with \"stay signed in\"). A new password ends existing sessions. Sign out via /.node64/logout. Programs can still sign in with Basic Auth. Best used with HTTPS only.",
+      "login_page_hint": "Visitors sign in on a page in the style of Node64 instead of the browser's password window; a cookie then keeps the session (12 hours, 30 days with \"stay signed in\"). A new password ends existing sessions. Sign out via /.node64/logout. Programs can still sign in with Basic Auth. Best used with HTTPS only (force SSL). Also via CDN64 mode 1 and 2, not for mode 3 (IP rules only there).",
       "login_page_short": "login page"
     },
     "log": {

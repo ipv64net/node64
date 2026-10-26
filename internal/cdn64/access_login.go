@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"html"
+	"io"
 	"net/http"
 	"net/netip"
 	"strconv"
@@ -115,6 +116,10 @@ func (g *guard) cookieOK(r *http.Request, key []byte) bool {
 func (m *Module) loginEndpoint(w http.ResponseWriter, r *http.Request, h *Host, g *guard, ip netip.Addr) {
 	name := loginCookieName(g.list.ID)
 	if r.URL.Path == logoutPath {
+		if r.Method != http.MethodPost { // nur per Formular: ein fremdes <img> soll niemanden abmelden
+			logoutPage(w, r)
+			return
+		}
 		http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode})
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
@@ -193,6 +198,21 @@ func loginPage(w http.ResponseWriter, r *http.Request, g *guard, next, user stri
 	hd.Set("X-Robots-Tag", "noindex")
 	w.WriteHeader(http.StatusUnauthorized)
 	_, _ = w.Write([]byte(repl.Replace(accessLoginHTML)))
+}
+
+// logoutPage: Knopf zum Abmelden (GET /.node64/logout), das Abmelden selbst nur per POST.
+func logoutPage(w http.ResponseWriter, r *http.Request) {
+	de := strings.HasPrefix(strings.ToLower(r.Header.Get("Accept-Language")), "de")
+	label := "Sign out"
+	if de {
+		label = "Abmelden"
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = io.WriteString(w, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">`+
+		`<title>`+label+`</title></head><body style="font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:90vh">`+
+		`<form method="post" action="`+logoutPath+`"><button type="submit" style="font:inherit;padding:10px 24px;border:0;border-radius:6px;background:#0d6efd;color:#fff;cursor:pointer">`+
+		label+`</button></form></body></html>`)
 }
 
 // stripLoginCookie entfernt das Sitzungs-Cookie, bevor die Anfrage zum Ziel geht.
