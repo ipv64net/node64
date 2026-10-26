@@ -134,7 +134,8 @@ func (m *Module) formSystemCheck(w http.ResponseWriter, r *http.Request, kind st
 
 // subGroupOf liefert fuer die Liste je Check der Gruppen „Proxmox VE“ und „Docker“ die Untergruppe, jedes Mal frisch
 // aus der Ueberwachung: bei Proxmox der Clustername aus dem letzten Abruf (sonst der Name des Systems), bei Docker
-// der Name des Docker-Hosts. Checks einer anderen Node laufen unter deren Namen (deren System-IDs gelten hier nicht).
+// der Name des Docker-Hosts. Checks einer anderen Node: Name des Systems aus ihren Parametern (Docker mit der Node),
+// sonst die Node (deren System-IDs gelten hier nicht).
 func (m *Module) subGroupOf(ctx context.Context, r *http.Request) func(row) string {
 	systems := map[int64]*proxmox.System{}
 	byHost := map[string]*proxmox.System{}
@@ -158,11 +159,27 @@ func (m *Module) subGroupOf(ctx context.Context, r *http.Request) func(row) stri
 		if c == nil || (c.Type != checks.TypeProxmox && c.Type != checks.TypeDocker) {
 			return ""
 		}
-		if c.Foreign() {
+		if c.Foreign() { // Name des Systems aus den Parametern (setzt die andere Node), sonst die Node
+			var p struct {
+				System string `json:"system"`
+			}
+			_ = json.Unmarshal(c.Params, &p)
+			node := ""
 			for _, id := range c.Nodes {
 				if n := peers[id]; n != "" {
-					return m.g.T(r, "hc.sub.node", "name", n)
+					node = n
+					break
 				}
+			}
+			switch {
+			case p.System != "" && c.Type == checks.TypeProxmox:
+				return p.System
+			case p.System != "" && node != "":
+				return p.System + " · " + node
+			case p.System != "":
+				return p.System
+			case node != "":
+				return m.g.T(r, "hc.sub.node", "name", node)
 			}
 			return m.g.T(r, "hc.sub.other_node")
 		}

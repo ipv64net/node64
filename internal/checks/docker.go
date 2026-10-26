@@ -42,7 +42,8 @@ const (
 
 // DockerParams sind die Parameter eines Docker-Checks.
 type DockerParams struct {
-	Host string `json:"host,omitempty"` // unix:///var/run/docker.sock (Standard), tcp://host:2375, http(s)://...
+	Host   string `json:"host,omitempty"`   // unix:///var/run/docker.sock (Standard), tcp://host:2375, http(s)://...
+	System string `json:"system,omitempty"` // nur Anzeige: Name des Docker-Hosts in der Ueberwachung (Gruppierung, auch im Portal)
 }
 
 // DefaultDockerHost: NODE64_DOCKER_HOST oder der uebliche Socket.

@@ -1,5 +1,13 @@
 # Changes – Healthchecks
 
+## 2.35.0 – 2026-10-26
+
+### New
+- Checks kept from Proxmox VE and Docker carry the name of their system in their parameters (`system`: cluster name
+  or system name, name of the Docker host). The node keeps it current on every poll; it is synced to ipv64, where the
+  portal sorts the checks into the same subgroups. Other nodes show foreign checks under the system's name as well
+  (Docker with the node).
+
 ## 2.34.0 – 2026-10-26
 
 ### New

@@ -41,7 +41,8 @@ const (
 // ProxmoxParams sind die Parameter eines Proxmox-Checks.
 type ProxmoxParams struct {
 	SystemID int64  `json:"system_id"`
-	Key      string `json:"key"` // node/<name>, qemu/<vmid>, lxc/<vmid>
+	Key      string `json:"key"`              // node/<name>, qemu/<vmid>, lxc/<vmid>
+	System   string `json:"system,omitempty"` // nur Anzeige: Clustername bzw. Name des Systems (Gruppierung, auch im Portal)
 }
 
 // ProxmoxState ist der Stand eines Gasts bzw. Nodes aus der letzten Abfrage (geliefert von Runner.Proxmox).

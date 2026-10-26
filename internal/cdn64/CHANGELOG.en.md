@@ -1,5 +1,11 @@
 # Changes – PROXY64
 
+## 1.30.1 – 2026-10-26
+
+### Fixed
+- The tiles “CDN domains” and “CDN traffic” only appear below the proxy hosts, no longer below redirections, 404 hosts,
+  status pages and streams.
+
 ## 1.30.0 – 2026-10-26
 
 ### New

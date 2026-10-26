@@ -301,9 +301,9 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 		m.online.want.Store(true)
 		m.onlineKick()
 	}
-	if rm != nil && rm.Data != nil && len(rm.Data.Hosts) > 0 {
+	if rm != nil && rm.Data != nil && len(rm.Data.Hosts) > 0 && kind == KindProxy { // Kontingent nur unter den Proxy-Hosts
 		d.Quota = newOnlineQuota(rm.Data.Quota, time.Now())
-		if d.OnlineOn && kind == KindProxy {
+		if d.OnlineOn {
 			d.Others = m.onlineOthers(r.Context())
 		}
 	}

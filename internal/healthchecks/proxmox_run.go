@@ -276,6 +276,7 @@ func (m *Module) pveSnapshot(ctx context.Context, s *proxmox.Snapshot) {
 	if set.Kind == proxmox.KindDocker {
 		m.dockerLinkChecks(ctx, set, s)
 	}
+	m.pveCheckLabels(ctx, set, s)
 	evs := rt.engine.Evaluate(s, set)
 	m.pvePersist(ctx, s.SystemID)
 	for _, ev := range evs {
@@ -283,6 +284,69 @@ func (m *Module) pveSnapshot(ctx context.Context, s *proxmox.Snapshot) {
 	}
 	if err := rt.st.Record(ctx, s); err != nil && ctx.Err() == nil {
 		m.log.Error("proxmox history", "system", set.Name, "err", err)
+	}
+}
+
+// pveSystemLabel: Name eines Systems fuer die Gruppierung der Checks (Proxmox: Clustername aus dem letzten Abruf,
+// sonst Name des Systems; Docker: Name des Hosts).
+func (m *Module) pveSystemLabel(sys *proxmox.System) string {
+	if !sys.IsDocker() {
+		if s := m.pveLast(sys.ID); s != nil && s.OK && s.Cluster != "" {
+			return s.Cluster
+		}
+	}
+	return sys.Name
+}
+
+// pveCheckLabels haelt den Namen des Systems in den Parametern der Checks „als Check“ aktuell (Umbenennen, Cluster).
+// Er geht per Sync zu ipv64 und gruppiert die Checks dort wie in der Liste der Node.
+func (m *Module) pveCheckLabels(ctx context.Context, set *proxmox.SystemSettings, s *proxmox.Snapshot) {
+	if !s.OK {
+		return
+	}
+	label := set.Name
+	if set.Kind != proxmox.KindDocker && s.Cluster != "" {
+		label = s.Cluster
+	}
+	for _, it := range set.Items {
+		if !it.AsCheck || it.CheckToken == "" {
+			continue
+		}
+		c, err := m.st.Check(ctx, it.CheckToken)
+		if err != nil || c == nil || c.Foreign() {
+			continue
+		}
+		var raw []byte
+		switch c.Type {
+		case checks.TypeProxmox:
+			var p checks.ProxmoxParams
+			if json.Unmarshal(c.Params, &p) != nil || p.System == label {
+				continue
+			}
+			p.System = label
+			raw, _ = json.Marshal(p)
+		case checks.TypeDocker:
+			var p checks.DockerParams
+			if len(c.Params) > 0 && json.Unmarshal(c.Params, &p) != nil || p.System == label {
+				continue
+			}
+			p.System = label
+			raw, _ = json.Marshal(p)
+		default:
+			continue
+		}
+		c.Params = raw
+		if err := m.st.Update(ctx, c); err != nil {
+			m.log.Warn("proxmox check label", "token", c.Token, "err", err)
+			continue
+		}
+		if sch := m.scheduler(); sch != nil {
+			var rt *scheduler.Runtime
+			if live, ok := sch.Runtime(c.Token); ok {
+				rt = &live
+			}
+			upsertSched(sch, c, rt)
+		}
 	}
 }
 
@@ -621,7 +685,7 @@ func (m *Module) pveSetAsCheckNamed(r *http.Request, sys *proxmox.System, key st
 			it.AsCheck = true
 			return m.pve.st.SaveSettings(ctx, it)
 		}
-		params, _ := json.Marshal(checks.ProxmoxParams{SystemID: sys.ID, Key: key})
+		params, _ := json.Marshal(checks.ProxmoxParams{SystemID: sys.ID, Key: key, System: m.pveSystemLabel(sys)})
 		iv := int(pveCheckInterval(sys).Seconds())
 		riv := min(20, iv)
 		group := pveCheckGroup
@@ -631,10 +695,11 @@ func (m *Module) pveSetAsCheckNamed(r *http.Request, sys *proxmox.System, key st
 			Channels: m.pveChannels(ctx, set.Effective(key, m.pveNodeOf(sys.ID, key)).Channels)}
 		if sys.IsDocker() { // Docker: der vorhandene Check-Typ docker fragt den Container selbst (laeuft auch ohne Abfrage)
 			name, _ := strings.CutPrefix(key, proxmox.TypeDocker+"/")
-			params = nil
+			dp := checks.DockerParams{System: sys.Name}
 			if h := dockerSysHost(sys); h != checks.DefaultDockerHost() {
-				params, _ = json.Marshal(checks.DockerParams{Host: h})
+				dp.Host = h
 			}
+			params, _ = json.Marshal(dp)
 			group, paused = dockerCheckGroup, !sys.Enabled && dockerNeedsPoll(sys) // ssh/https: ohne Abfrage keine Verbindung
 			in.Name, in.Type, in.Target, in.Params, in.Tags = sys.Name+" – "+name, string(checks.TypeDocker), name, params, []string{"docker"}
 		}

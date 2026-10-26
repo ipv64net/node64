@@ -105,3 +105,32 @@ func TestGroupRowsParts(t *testing.T) {
 		t.Fatalf("web parts: %+v", gs[1].Parts)
 	}
 }
+
+// „Als Check“: der Name des Docker-Hosts steht in den Parametern und folgt einer Umbenennung beim naechsten Abruf.
+func TestCheckSystemLabel(t *testing.T) {
+	fakeContainers(t, dockerHost, nil)
+	fakeDockerSource(t)
+	m, srv, _, _ := newDockerModuleRec(t, pveCore(t))
+	ctx := context.Background()
+	dockerAddLocal(t, srv)
+	id := dockerSysID(t, m)
+	pvePollNow(t, m, id)
+	sid := strconv.FormatInt(id, 10)
+	_, loc := dockerPost(t, srv, "/healthchecks/new", url.Values{"type": {"sys:docker"}, "sys_id_docker": {sid}, "sys_key_docker": {"docker/web"}})
+	tok := strings.TrimPrefix(loc, "/healthchecks/")
+	if c, _ := m.st.Check(ctx, tok); c == nil || !strings.Contains(string(c.Params), `"system":"Docker"`) {
+		t.Fatalf("params: %+v", c)
+	}
+	sys, _ := m.pve.st.System(ctx, id)
+	sys.Name, sys.Secret = "Heimserver", ""
+	if err := m.pve.st.SaveSystem(ctx, sys); err != nil {
+		t.Fatal(err)
+	}
+	pvePollNow(t, m, id)
+	if c, _ := m.st.Check(ctx, tok); c == nil || !strings.Contains(string(c.Params), `"system":"Heimserver"`) || c.Target != "web" {
+		t.Fatalf("after rename: %s", c.Params)
+	}
+	if err := checks.Validate((&Check{Type: checks.TypeDocker, Target: "web", Params: []byte(`{"system":"Heimserver"}`)}).Definition()); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+}

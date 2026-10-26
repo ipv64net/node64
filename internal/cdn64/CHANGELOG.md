@@ -1,5 +1,11 @@
 # Änderungen – PROXY64
 
+## 1.30.1 – 2026-10-26
+
+### Behoben
+- Die Kacheln „CDN-Domains“ und „CDN-Traffic“ stehen nur noch unter den Proxy-Hosts, nicht mehr unter Weiterleitungen,
+  404-Hosts, Statusseiten und Streams.
+
 ## 1.30.0 – 2026-10-26
 
 ### Neu

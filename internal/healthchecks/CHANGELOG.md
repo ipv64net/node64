@@ -1,5 +1,13 @@
 # Änderungen – Healthchecks
 
+## 2.35.0 – 2026-10-26
+
+### Neu
+- Checks „als Check“ aus Proxmox VE und Docker tragen den Namen ihres Systems in den Parametern (`system`: Clustername
+  bzw. Name des Systems, Name des Docker-Hosts). Die Node hält ihn bei jedem Abruf aktuell; er geht per Sync zu ipv64,
+  wo das Portal die Checks genauso in Untergruppen einsortiert. Andere Nodes zeigen damit auch fremde Checks unter dem
+  Namen des Systems (Docker mit der Node).
+
 ## 2.34.0 – 2026-10-26
 
 ### Neu
