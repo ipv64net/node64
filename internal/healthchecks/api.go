@@ -285,6 +285,12 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 		if c.Interval < minIv || c.Interval > 24*time.Hour {
 			return fmt.Errorf("interval_seconds must be between %d and 86400 (5 only local, 20 online/hybrid)", int(minIv.Seconds()))
 		}
+		if c.Type == checks.TypeWhois && c.Interval < checks.MinIntervalWhois {
+			return fmt.Errorf("interval_seconds must be at least %d for whois checks (WHOIS/RDAP servers limit queries)", int(checks.MinIntervalWhois.Seconds()))
+		}
+		if c.Type == checks.TypeWhois && c.RetryInterval < checks.MinRetryWhois {
+			c.RetryInterval = checks.MinRetryWhois // auch im gestoerten Zustand nicht oefter fragen
+		}
 		if c.RetryInterval > c.Interval {
 			c.RetryInterval = c.Interval // z. B. Standard 20 s bei einem lokalen 5-s-Check
 		}

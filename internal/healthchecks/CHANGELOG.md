@@ -1,5 +1,18 @@
 # Änderungen – Healthchecks
 
+## 2.31.0 – 2026-10-26
+
+### Neu
+- Check-Typ **WHOIS / RDAP**: Registrierungsdaten einer Domain, einer IP-Adresse bzw. eines Netzes oder eines AS
+  (AS3320). Zuerst per RDAP (zuständiger Server über den IANA-Bootstrap), sonst per klassischem WHOIS über Port 43
+  (Kette whois.iana.org → Registry, z. B. für .de). Die gefundenen Angaben stehen unter „Letzte Messung“: bei Domains
+  Registrar, Status, Nameserver, Registrierung, letzte Änderung und Ablauf; bei Netzen und AS Name (netname), Bereich,
+  CIDR bzw. Route, Ursprungs-AS, Organisation, Land, Stadt/Adresse und Abuse-Kontakt.
+- Gestört, wenn die Abfrage scheitert, die Domain nicht (mehr) registriert ist, sie in weniger als „Warnen vor Ablauf“
+  Tagen abläuft (Standard 14) oder eine erwartete Angabe fehlt (z. B. „nameserver: ns1.ipv64.net“, „country: DE“).
+- Rücksicht auf die Server: höchstens stündlich, im gestörten Zustand alle 10 Minuten; begrenzte Antwortgröße.
+  Läuft lokal und online bei ipv64.
+
 ## 2.30.0 – 2026-10-26
 
 ### Behoben

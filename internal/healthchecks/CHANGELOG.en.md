@@ -1,5 +1,18 @@
 # Changes – Healthchecks
 
+## 2.31.0 – 2026-10-26
+
+### Added
+- Check type **WHOIS / RDAP**: registration data of a domain, an IP address or network, or an AS (AS3320). First via
+  RDAP (responsible server from the IANA bootstrap), otherwise via classic WHOIS on port 43 (chain whois.iana.org →
+  registry, e.g. for .de). The values found are shown under “Last measurement”: for domains registrar, status, name
+  servers, registration, last change and expiry; for networks and AS the name (netname), range, CIDR or route, origin
+  AS, organisation, country, city/address and abuse contact.
+- Down when the query fails, the domain is not (or no longer) registered, it expires in fewer than “warn before expiry”
+  days (default 14) or an expected value is missing (e.g. “nameserver: ns1.ipv64.net”, “country: DE”).
+- Considerate towards the servers: at most hourly, every 10 minutes while down; limited answer size. Runs locally and
+  online at ipv64.
+
 ## 2.30.0 – 2026-10-26
 
 ### Fixed

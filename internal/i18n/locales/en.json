@@ -2113,7 +2113,12 @@
       "pve_offline": "Node offline",
       "pve_unknown": "State unknown",
       "pve_missing": "Guest/node not found",
-      "pve_unreachable": "Proxmox unreachable"
+      "pve_unreachable": "Proxmox unreachable",
+      "whois_failed": "WHOIS/RDAP query failed",
+      "whois_not_found": "not registered",
+      "whois_expiring": "domain expires soon",
+      "whois_expired": "domain expired",
+      "whois_mismatch": "expected value missing"
     },
     "reason": "Reason",
     "no_events": "No events yet.",
@@ -2202,7 +2207,8 @@
       "docker": "Docker container",
       "json": "JSON (API)",
       "dns": "DNS",
-      "proxmox": "Proxmox VE"
+      "proxmox": "Proxmox VE",
+      "whois": "WHOIS / RDAP"
     },
     "json": {
       "rules": "Conditions",
@@ -2603,6 +2609,18 @@
       "res_new": "new check",
       "res_new_hint": "No check yet – created when adding, with the notifications of the rules (no duplicate alerts).",
       "res_none": "No data yet – the system is off or has not been queried yet."
+    },
+    "whois": {
+      "target_hint": "Domain (example.de), IP address or network (192.0.2.1, 2001:db8::/32) or AS number (AS3320).",
+      "source": "Source",
+      "source_auto": "automatic (RDAP, otherwise WHOIS)",
+      "source_rdap": "RDAP only",
+      "source_whois": "WHOIS only (port 43)",
+      "min_days": "Warn before expiry (days)",
+      "min_days_hint": "Domains only, when the registry states an expiry date. Default 14, 0 = only once expired.",
+      "contains": "Expected values (one per line)",
+      "contains_hint": "Down when a value is missing (case-insensitive, part of the text is enough). With field: registrar, nameserver, status, org, country, city, netname, cidr, asn – e.g. “nameserver: ns1.example.org”. Without a field all values are searched.",
+      "interval_hint": "WHOIS and RDAP servers limit queries: the check runs at most hourly, every 10 minutes while down. The values found (registrar, expiry, name servers or network, CIDR, AS, organisation, country, city) are shown under “Last measurement”."
     }
   },
   "notify": {

@@ -22,7 +22,7 @@
 							{{range $d.Types}}<option value="{{.}}"{{if eq (print .) (index $f "type")}} selected{{end}}>{{$.T (print "hc.type." .)}}</option>{{end}}
 						</select></div>
 					</div>
-					<div class="col-12" data-types="http keyword json dns icmp tcp port cert docker">
+					<div class="col-12" data-types="http keyword json dns icmp tcp port cert docker whois">
 						<label class="form-label" for="target">{{.T "hc.form.target"}}</label>
 						<div class="input-group"><span class="input-group-text"><i class="bi bi-bullseye"></i></span><input class="form-control" id="target" name="target" value="{{index $f "target"}}" maxlength="500" list="hc-containers"></div>
 						<div class="form-text" data-types="http keyword json">{{.T "hc.form.target_hint"}}</div>
@@ -30,6 +30,7 @@
 						<div class="form-text" data-types="icmp">{{.T "hc.form.target_hint_host"}}</div>
 						<div class="form-text" data-types="tcp port cert">{{.T "hc.form.target_hint_port"}}</div>
 						<div class="form-text" data-types="docker">{{.T "hc.docker.target_hint"}}</div>
+						<div class="form-text" data-types="whois">{{.T "hc.whois.target_hint"}}</div>
 						<datalist id="hc-containers">{{range $d.Containers}}<option value="{{.Name}}">{{.Image}} · {{.Status}}</option>{{end}}</datalist>
 					</div>
 					<div class="col-12" data-types="push">
@@ -187,6 +188,21 @@
 			</div></div>
 		</div>
 
+		<div class="card mb-3" data-types="whois">
+			<div class="card-header"><i class="bi bi-person-vcard text-info"></i> {{.T "hc.type.whois"}}{{$.Doc "healthchecks#type-whois"}}</div>
+			<div class="card-body"><div class="row g-3">
+				<div class="col-md-6"><label class="form-label" for="whois_source">{{.T "hc.whois.source"}}</label>
+					<div class="input-group"><span class="input-group-text"><i class="bi bi-database"></i></span><select class="form-select" id="whois_source" name="whois_source">{{range $d.WhoisSources}}<option value="{{.}}"{{if eq . (index $f "whois_source")}} selected{{end}}>{{$.T (print "hc.whois.source_" .)}}</option>{{end}}</select></div></div>
+				<div class="col-md-6"><label class="form-label" for="whois_min_days">{{.T "hc.whois.min_days"}}</label>
+					<div class="input-group"><span class="input-group-text"><i class="bi bi-calendar-check"></i></span><input class="form-control" type="number" id="whois_min_days" name="whois_min_days" value="{{index $f "whois_min_days"}}" min="0" max="3650" placeholder="14"></div>
+					<div class="form-text">{{.T "hc.whois.min_days_hint"}}</div></div>
+				<div class="col-12"><label class="form-label" for="whois_contains">{{.T "hc.whois.contains"}}</label>
+					<textarea class="form-control font-monospace" id="whois_contains" name="whois_contains" rows="3" placeholder="nameserver: ns1.ipv64.net&#10;registrar: DENIC&#10;country: DE">{{index $f "whois_contains"}}</textarea>
+					<div class="form-text">{{.T "hc.whois.contains_hint"}}</div></div>
+				<div class="col-12"><div class="alert alert-info small mb-0"><i class="bi bi-info-circle"></i> {{.T "hc.whois.interval_hint"}}</div></div>
+			</div></div>
+		</div>
+
 		<div class="card mb-3" data-types="docker">
 			<div class="card-header"><i class="bi bi-box-seam text-primary"></i> {{.T "hc.type.docker"}}{{$.Doc "docker#check-typ"}}</div>
 			<div class="card-body"><div class="row g-3">
@@ -209,7 +225,7 @@
 	</div>
 
 	<div class="col-lg-5">
-		<div class="card mb-3" data-types="http keyword json dns icmp tcp port cert docker">
+		<div class="card mb-3" data-types="http keyword json dns icmp tcp port cert docker whois">
 			<div class="card-header"><i class="bi bi-stopwatch text-secondary"></i> {{.T "hc.form.timing"}}{{$.Doc "healthchecks#timing"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-6"><label class="form-label" for="interval_seconds">{{.T "hc.form.interval"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-clock"></i></span><input class="form-control" type="number" id="interval_seconds" name="interval_seconds" value="{{index $f "interval_seconds"}}" min="{{if eq (index $f "execution") "local" ""}}5{{else}}20{{end}}" max="86400"><span class="input-group-text">s</span></div><div class="form-text">{{.T "hc.form.interval_min"}}</div></div>
@@ -231,7 +247,7 @@
 				<div class="col-12" id="nodesbox"><label class="form-label">{{.T "hc.form.nodes"}}</label>
 					<input type="hidden" name="nodes_present" value="1">
 					{{range $d.Peers}}<div class="form-check"><input class="form-check-input" type="checkbox" name="nodes" value="{{.ID}}" id="node_{{.ID}}"{{if contains (index $f "nodes") .ID}} checked{{end}}><label class="form-check-label" for="node_{{.ID}}"><i class="bi bi-hdd-network text-primary"></i> {{.Name}}{{if .Self}} <span class="badge text-bg-success">{{$.T "hc.form.this_node"}}</span>{{end}}{{if .Location}} <span class="text-body-secondary small">· {{.Location}}</span>{{end}}{{if not .Online}} <span class="badge text-bg-secondary">offline</span>{{end}}</label></div>{{end}}
-					<div class="form-text" data-types="http keyword json dns icmp tcp port cert push">{{.T "hc.form.nodes_hint"}}</div>
+					<div class="form-text" data-types="http keyword json dns icmp tcp port cert push whois">{{.T "hc.form.nodes_hint"}}</div>
 					<div class="form-text text-warning-emphasis" data-types="docker">{{.T "hc.form.nodes_single"}}</div></div>
 				{{end}}
 				<div class="col-12" id="onlinebox"><div class="row g-3"><!-- nur bei online/beides (healthchecks.js) -->
@@ -241,7 +257,7 @@
 					{{if and $d.Linked $d.PointsLimit}}<div class="form-text{{if ge $d.PointsUsed $d.PointsLimit}} text-danger{{end}}">{{.T "hc.form.points_used" "used" $d.PointsUsed "limit" $d.PointsLimit}}</div>{{end}}
 					{{if and $d.Linked $d.QuotaLimit}}<div class="small mt-1" id="hc-proj" data-other="{{$d.ProjOther}}" data-today="{{$d.QuotaToday}}" data-limit="{{$d.QuotaLimit}}" data-acclocs="{{$d.AccLocs}}"
 						data-t-check="{{.T "hc.proj.check"}}" data-t-local="{{.T "hc.proj.local"}}" data-t-total="{{.T "hc.proj.total"}}" data-t-over="{{.T "hc.proj.over"}}" data-t-runout="{{.T "hc.proj.runout"}}"></div>{{end}}</div>
-				{{if and $d.Linked (not $d.APIMode)}}<div class="col-12" data-types="http keyword json dns icmp tcp port cert">
+				{{if and $d.Linked (not $d.APIMode)}}<div class="col-12" data-types="http keyword json dns icmp tcp port cert whois">
 					<button type="button" class="btn btn-outline-info btn-sm" id="hc-otest" data-token="{{$d.Token}}" data-t-running="{{.T "hc.otest.running"}}" data-t-ok="{{.T "hc.otest.ok"}}" data-t-failed="{{.T "hc.otest.failed"}}" data-t-expired="{{.T "hc.otest.expired"}}" data-t-error="{{.T "hc.otest.error"}}"{{range $d.Locations}} data-t-loc-{{.}}="{{$.T (print "hc.location." .)}}"{{end}}><i class="bi bi-cloud-check"></i> {{.T "hc.otest.button"}}</button>{{$.Doc "healthchecks#execution"}}
 					<div class="form-text">{{.T "hc.otest.hint"}}</div>
 					<ul class="list-unstyled small mt-2 mb-0" id="hc-otest-out" aria-live="polite"></ul>

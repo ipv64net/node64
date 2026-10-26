@@ -114,7 +114,12 @@
 		var onlineBox = document.getElementById("onlinebox");
 		var syncOnline = function () { if (onlineBox && exSel) { onlineBox.classList.toggle("d-none", exSel.value === "local"); } };
 		var ivIn = document.getElementById("interval_seconds");
-		var syncMin = function () { if (ivIn) { ivIn.min = !exSel || exSel.value === "local" ? 5 : 20; } }; // lokal ab 5 s, online/hybrid ab 20 s
+		var syncMin = function () { // lokal ab 5 s, online/hybrid ab 20 s; WHOIS hoechstens stuendlich
+			if (!ivIn) { return; }
+			var whois = typeSel.value === "whois";
+			ivIn.min = whois ? 3600 : (!exSel || exSel.value === "local" ? 5 : 20);
+			if (whois && (parseInt(ivIn.value, 10) || 0) < 3600) { ivIn.value = 3600; }
+		};
 		if (exSel) { exSel.addEventListener("change", syncNodes); exSel.addEventListener("change", syncMin); exSel.addEventListener("change", syncOnline); }
 		typeSel.addEventListener("change", function () { update(); lockExec(); syncNodes(); syncMin(); syncOnline(); });
 		update(); lockExec(); syncNodes(); syncMin(); syncOnline();

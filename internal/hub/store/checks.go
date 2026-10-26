@@ -151,6 +151,9 @@ func scanCheck(row interface{ Scan(...any) error }) (*Check, error) {
 	if typ != "push" && iv < 20 {
 		iv = 20 // ipv64 misst nie oefter als alle 20 s (lokale Checks ab 5 s, z. B. nach dem Umhaengen)
 	}
+	if typ == "whois" { // WHOIS/RDAP-Server begrenzen Abfragen (auch fuer Eintraege von vor der Regel)
+		iv, riv = max(iv, int64(checks.MinIntervalWhois.Seconds())), max(riv, int64(checks.MinRetryWhois.Seconds()))
+	}
 	if typ != "push" && riv < 20 {
 		riv = 20 // auch im gestoerten Zustand nicht oefter (sonst alle 5 s, solange das Ziel ausfaellt)
 	}

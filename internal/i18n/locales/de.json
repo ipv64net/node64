@@ -2113,7 +2113,12 @@
       "pve_offline": "Node offline",
       "pve_unknown": "Zustand unbekannt",
       "pve_missing": "Gast/Node nicht vorhanden",
-      "pve_unreachable": "Proxmox nicht erreichbar"
+      "pve_unreachable": "Proxmox nicht erreichbar",
+      "whois_failed": "WHOIS/RDAP-Abfrage fehlgeschlagen",
+      "whois_not_found": "nicht registriert",
+      "whois_expiring": "Domain läuft bald ab",
+      "whois_expired": "Domain abgelaufen",
+      "whois_mismatch": "erwartete Angabe fehlt"
     },
     "reason": "Grund",
     "no_events": "Noch keine Ereignisse.",
@@ -2202,7 +2207,8 @@
       "docker": "Docker-Container",
       "json": "JSON (API)",
       "dns": "DNS",
-      "proxmox": "Proxmox VE"
+      "proxmox": "Proxmox VE",
+      "whois": "WHOIS / RDAP"
     },
     "json": {
       "rules": "Bedingungen",
@@ -2603,6 +2609,18 @@
       "res_new": "neuer Check",
       "res_new_hint": "Noch kein Check – wird beim Hinzufügen angelegt, mit den Benachrichtigungen der Regeln (keine doppelten Meldungen).",
       "res_none": "Noch keine Daten – das System ist aus oder wurde noch nicht abgefragt."
+    },
+    "whois": {
+      "target_hint": "Domain (example.de), IP-Adresse bzw. Netz (192.0.2.1, 2001:db8::/32) oder AS-Nummer (AS3320).",
+      "source": "Quelle",
+      "source_auto": "automatisch (RDAP, sonst WHOIS)",
+      "source_rdap": "nur RDAP",
+      "source_whois": "nur WHOIS (Port 43)",
+      "min_days": "Warnen vor Ablauf (Tage)",
+      "min_days_hint": "Nur für Domains, wenn das Register ein Ablaufdatum nennt. Standard 14, 0 = erst, wenn abgelaufen.",
+      "contains": "Erwartete Angaben (je Zeile)",
+      "contains_hint": "Gestört, wenn eine Angabe fehlt (Groß-/Kleinschreibung egal, Teiltext genügt). Mit Feld: registrar, nameserver, status, org, country, city, netname, cidr, asn – z. B. „nameserver: ns1.example.org“. Ohne Feld wird in allen Angaben gesucht.",
+      "interval_hint": "WHOIS- und RDAP-Server begrenzen Abfragen: Der Check läuft höchstens stündlich, im gestörten Zustand alle 10 Minuten. Die gefundenen Angaben (Registrar, Ablauf, Nameserver bzw. Netz, CIDR, AS, Organisation, Land, Stadt) stehen unter „Letzte Messung“."
     }
   },
   "notify": {

@@ -603,6 +603,7 @@ type formData struct {
 	APIMode                                    bool // Online-Check direkt ueber die API v2 (online_api.go)
 	// DNS-Check: Auswahl im Formular
 	DNSRecordTypes, DNSExpects []string
+	WhoisSources               []string
 	// Online-Messstellen des Accounts ohne diesen Check und Limit der Klasse (0 = unbegrenzt/unbekannt)
 	PointsUsed, PointsLimit int
 }
@@ -726,6 +727,14 @@ func formFromCheck(c *Check) map[string]string {
 		set("docker_host", "host")
 	case checks.TypeProxmox:
 		f["pve_params"] = string(c.Params) // System und Gast stehen fest (Proxmox VE → „als Check“)
+	case checks.TypeWhois:
+		var wp checks.WhoisParams
+		_ = json.Unmarshal(c.Params, &wp)
+		f["whois_source"] = wp.Source
+		if wp.MinDays != nil {
+			f["whois_min_days"] = strconv.Itoa(*wp.MinDays)
+		}
+		f["whois_contains"] = strings.Join(wp.Contains, "\n")
 	case checks.TypeDNS:
 		var dp checks.DNSParams
 		_ = json.Unmarshal(c.Params, &dp)
@@ -930,6 +939,22 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 		if s := strings.TrimSpace(v("docker_host")); s != "" {
 			p["host"] = s
 		}
+	case checks.TypeWhois:
+		if s := v("whois_source"); s != "" && s != "auto" {
+			p["source"] = s
+		}
+		if err := num("min_days", "whois_min_days"); err != nil {
+			return in, err
+		}
+		var rules []string
+		for _, line := range strings.Split(r.PostFormValue("whois_contains"), "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				rules = append(rules, line)
+			}
+		}
+		if len(rules) > 0 {
+			p["contains"] = rules
+		}
 	case checks.TypeDNS:
 		p["record_type"], p["resolver"], p["expect"] = v("dns_record_type"), v("dns_resolver"), v("dns_expect")
 		if v("dns_resolver") == "server" {
@@ -996,6 +1021,7 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 	}
 	d.IPModes = []string{"auto", "ipv4", "ipv6", "both"}
 	d.DNSRecordTypes, d.DNSExpects = checks.DNSRecordTypes, checks.DNSExpects
+	d.WhoisSources = checks.WhoisSources
 	d.Policies, d.Locations, d.Executions = Policies, KnownLocations, []string{"local", "online", "both"}
 	d.Linked = m.linked != nil && m.linked()
 	if d.Linked && m.quota != nil {
@@ -1155,6 +1181,8 @@ func (c *Check) TargetBadge() Badge {
 		return Badge{Text: t, Class: "bi-broadcast-pin"}
 	case checks.TypeCert:
 		return Badge{Text: t, Class: "bi-shield-lock"}
+	case checks.TypeWhois:
+		return Badge{Text: t, Class: "bi-person-vcard"}
 	case checks.TypeDocker:
 		return Badge{Text: t, Class: "bi-box"}
 	case checks.TypeProxmox:

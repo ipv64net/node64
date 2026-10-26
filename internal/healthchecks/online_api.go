@@ -160,6 +160,10 @@ func (m *Module) onlineSave(ctx context.Context, key string, cl *ipv64api.Client
 	if tmp.Type != checks.TypePush && tmp.Interval < checks.MinInterval {
 		return nil, errors.New("interval_seconds must be between 20 and 86400 for online checks")
 	}
+	if tmp.Type == checks.TypeWhois && in.RetryIntervalSeconds != nil && *in.RetryIntervalSeconds < int(checks.MinRetryWhois.Seconds()) {
+		v := int(checks.MinRetryWhois.Seconds())
+		in.RetryIntervalSeconds = &v
+	}
 	in.Execution = "online"
 	body := map[string]any{}
 	raw, _ := json.Marshal(in)

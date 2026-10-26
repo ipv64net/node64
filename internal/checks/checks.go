@@ -34,10 +34,11 @@ const (
 	TypePush    Type = "push"
 	TypeJSON    Type = "json"
 	TypeDNS     Type = "dns"
+	TypeWhois   Type = "whois" // Registrierungsdaten (RDAP, sonst WHOIS) einer Domain, IP bzw. eines AS
 )
 
 // Types sind alle bekannten Typen in Anzeigereihenfolge.
-var Types = []Type{TypeHTTP, TypeKeyword, TypeJSON, TypeDNS, TypeICMP, TypeTCP, TypePort, TypeCert, TypePush, TypeDocker}
+var Types = []Type{TypeHTTP, TypeKeyword, TypeJSON, TypeDNS, TypeICMP, TypeTCP, TypePort, TypeCert, TypeWhois, TypePush, TypeDocker}
 
 // IPMode bestimmt, welche Adressfamilie geprueft wird.
 type IPMode string
@@ -181,7 +182,7 @@ type famState struct {
 func NewRunner() *Runner {
 	r := &Runner{checkers: map[Type]Checker{}, Resolver: net.DefaultResolver, Now: func() time.Time { return time.Now().UTC() }, famCache: map[string]famState{}}
 	r.FamilyProbe = probeFamily
-	for _, c := range []Checker{&httpChecker{}, &httpChecker{keyword: true}, &httpChecker{json: true}, &dnsChecker{r: r}, &tcpChecker{}, &portChecker{}, &certChecker{}, &icmpChecker{}, dockerChecker{r: r}, proxmoxChecker{r: r}} {
+	for _, c := range []Checker{&httpChecker{}, &httpChecker{keyword: true}, &httpChecker{json: true}, &dnsChecker{r: r}, &tcpChecker{}, &portChecker{}, &certChecker{}, &icmpChecker{}, dockerChecker{r: r}, proxmoxChecker{r: r}, whoisChecker{r: r}} {
 		r.checkers[c.Type()] = c
 	}
 	return r
@@ -217,7 +218,7 @@ func (r *Runner) Run(ctx context.Context, def Definition) []Result {
 		}
 		ctx = withDenyPrivate(ctx)
 	}
-	if def.Type == TypeDocker || def.Type == TypeDNS || def.Type == TypeProxmox { // kein Ziel zum Aufloesen: Docker-API, DNS-Abfrage bzw. Stand der Proxmox-Abfrage
+	if def.Type == TypeDocker || def.Type == TypeDNS || def.Type == TypeProxmox || def.Type == TypeWhois { // kein Ziel zum Aufloesen: Docker-API, DNS-Abfrage bzw. Stand der Proxmox-Abfrage
 		cctx, cancel := context.WithTimeout(ctx, def.Timeouts.Total)
 		res := c.Check(cctx, def, nil)
 		cancel()
@@ -472,6 +473,10 @@ func Validate(def Definition) error {
 		}
 	case TypeDNS:
 		if err := validateDNS(def); err != nil {
+			return err
+		}
+	case TypeWhois:
+		if err := validateWhois(def); err != nil {
 			return err
 		}
 	case TypeProxmox:

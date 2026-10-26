@@ -804,7 +804,7 @@ func orDefault(v, def string) string {
 
 func validateWireCheck(c *wire.Check) error {
 	switch c.Type {
-	case "http", "keyword", "json", "dns", "icmp", "tcp", "port", "cert", "push", "docker", "proxmox":
+	case "http", "keyword", "json", "dns", "icmp", "tcp", "port", "cert", "push", "docker", "proxmox", "whois":
 	default:
 		return fmt.Errorf("unknown type %q", c.Type)
 	}
@@ -818,6 +818,10 @@ func validateWireCheck(c *wire.Check) error {
 		minIv := 20 // online und hybrid; nur lokal ab 5 s
 		if c.Execution == "" || c.Execution == "local" {
 			minIv = 5
+		}
+		if c.Type == "whois" { // WHOIS/RDAP-Server begrenzen Abfragen
+			minIv = max(minIv, int(checks.MinIntervalWhois.Seconds()))
+			c.RetryIntervalSeconds = max(c.RetryIntervalSeconds, int(checks.MinRetryWhois.Seconds()))
 		}
 		if c.IntervalSeconds < minIv {
 			c.IntervalSeconds = minIv
