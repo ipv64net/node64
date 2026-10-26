@@ -540,7 +540,7 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 			n++
 		}
 	}
-	for _, it := range []string{ItemSettings, ItemLists, ItemAllow} { // direkt gesetzt, nicht ueber saveConfig
+	for _, it := range []string{ItemSettings, ItemLists, ItemAllow, ItemDeny} { // direkt gesetzt, nicht ueber saveConfig
 		m.clChanged(ctx, it)
 	}
 	return n, m.restart(ctx)
