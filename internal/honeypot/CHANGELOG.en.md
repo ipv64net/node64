@@ -1,5 +1,13 @@
 # Changes – Honeypot64
 
+## 0.12.0 – 2026-10-26
+
+### Changed
+- New start page of the web trap (`/`, also for bots PROXY64 hands to the decoy): a fictional gateway terminal
+  ("NODE-07 // Gateway") instead of the plain form. The form really submits (POST username/password), credentials are
+  captured as before; after an attempt it shows "ACCESS DENIED". No third-party brands, no external resources. The
+  other decoys (WordPress, phpMyAdmin, admin) stay plain.
+
 ## 0.11.0 – 2026-10-25
 
 ### Added

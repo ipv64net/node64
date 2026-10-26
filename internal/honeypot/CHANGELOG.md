@@ -1,5 +1,13 @@
 # Änderungen – Honeypot64
 
+## 0.12.0 – 2026-10-26
+
+### Geändert
+- Neue Startseite der Web-Falle (`/`, auch für Bots, die PROXY64 an den Köder gibt): ein fiktives Gateway-Terminal
+  („NODE-07 // Gateway“) statt des schlichten Formulars. Das Formular sendet echt (POST username/password), die
+  Zugangsdaten werden wie bisher erfasst; nach einem Versuch erscheint „ACCESS DENIED“. Keine fremden Marken, keine
+  externen Quellen. Die übrigen Köder (WordPress, phpMyAdmin, Admin) bleiben schlicht.
+
 ## 0.11.0 – 2026-10-25
 
 ### Neu

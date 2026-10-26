@@ -3,6 +3,7 @@ package honeypot
 import (
 	"context"
 	"crypto/tls"
+	_ "embed"
 	"encoding/json"
 	"html"
 	"io"
@@ -264,8 +265,21 @@ func sensorPageGroup(path string) string {
 	return ""
 }
 
-// sensorPageHTML liefert einen schlichten, neutralen Login-Koeder.
+// decoyGatewayHTML: Startseite der Falle ("/", Gruppe generic) – fiktives Gateway-Terminal ohne Marke; {{FAILED}}
+// wird nach einem Anmeldeversuch durch die Fehlermeldung ersetzt.
+//
+//go:embed decoy_gateway.html
+var decoyGatewayHTML string
+
+// sensorPageHTML liefert den Login-Koeder einer Gruppe (Startseite: Gateway, sonst schlicht und neutral).
 func sensorPageHTML(page string, failed bool) string {
+	if page == "generic" {
+		msg := ""
+		if failed {
+			msg = `<div class="warnbox">&gt; ACCESS DENIED. INVALID CREDENTIALS. INCIDENT RECORDED.</div>`
+		}
+		return strings.Replace(decoyGatewayHTML, "{{FAILED}}", msg, 1)
+	}
 	title, action, userLabel, uf, pf, extra := "Sign in", "", "Username", "username", "password", ""
 	switch page {
 	case "wp-login":

@@ -135,3 +135,22 @@ func TestSensorHTTPS(t *testing.T) {
 	}
 	rec.wait(t, func(e Event) bool { return e.Kind == KindProbe && e.Service == SvcHTTPS })
 }
+
+// Startseite der Falle: Gateway-Terminal mit echtem Formular (POST username/password), Fehlermeldung nach Versuch.
+func TestDecoyGatewayPage(t *testing.T) {
+	p := sensorPageHTML("generic", false)
+	for _, s := range []string{"NODE-07 // Gateway", `<form method="post" action="/">`, `name="username"`, `name="password"`, `noindex`} {
+		if !strings.Contains(p, s) {
+			t.Errorf("page lacks %q", s)
+		}
+	}
+	if strings.Contains(p, "{{FAILED}}") || strings.Contains(p, "ACCESS DENIED") || strings.Contains(p, "return false") {
+		t.Error("placeholder, error or blocked form in fresh page")
+	}
+	if !strings.Contains(sensorPageHTML("generic", true), "ACCESS DENIED") {
+		t.Error("no error after failed login")
+	}
+	if strings.Contains(sensorPageHTML("admin", false), "NODE-07") {
+		t.Error("other decoys must stay neutral")
+	}
+}
