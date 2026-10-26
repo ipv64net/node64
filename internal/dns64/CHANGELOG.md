@@ -1,5 +1,21 @@
 # Änderungen – DNS64
 
+## 1.29.0 – 2026-10-26
+
+### Neu
+- Eigene Sperrliste: Domains (samt Subdomains) selbst sperren – mit dem Knopf „Blockieren“ im Abfrage-Log oder in der
+  neuen Karte unter „Freigegebene Domains“. Sie gilt für alle Geräte zusätzlich zu den Blocklisten; eine Freigabe
+  derselben Domain hebt die Sperre auf, eine genauere Freigabe (z. B. cdn.example.com) gewinnt. Im Cluster als eigener
+  Bereich abgleichbar, im Export enthalten.
+- Eigener Upstream als einfacher DNS-Server: nur die IP-Adresse eintragen (z. B. 8.8.8.8, Port 53, oder IP:Port).
+  In der Liste als „DNS (unverschlüsselt)“ gekennzeichnet.
+- „Anfragen im Zeitverlauf“ mit eigenem Zeitraum am Diagramm: 30 min, 6 h, 24 h, 7 Tage.
+
+### Geändert
+- Abfrage-Log: Fragt ein Gerät eine öffentliche Domain mit angehängter lokaler Suchdomain an (z. B.
+  example.com.home.local), steht dabei „Suchdomain vom Gerät angehängt“. Das macht das Gerät selbst, meist nachdem die
+  eigentliche Anfrage scheiterte (z. B. SERVFAIL, weil die Upstreams kurz nicht antworteten) – DNS64 hängt nichts an.
+
 ## 1.28.1 – 2026-10-24
 
 ### Neu

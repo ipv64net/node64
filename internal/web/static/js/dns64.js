@@ -19,8 +19,9 @@
 	var nf = new Intl.NumberFormat(locale);
 	var pf = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
 	var PAGE_SIZE = 50;
-	var state = { range: "24h", status: "", search: "", group: "*", live: true, page: 0, total: 0 };
+	var state = { range: "24h", chartRange: "24h", status: "", search: "", group: "*", live: true, page: 0, total: 0 };
 	var allowed = new Set();
+	var denied = new Set(); // eigene Sperrliste
 	var $ = function (id) { return document.getElementById(id); };
 
 	// t liefert einen Text, {name}-Platzhalter werden ersetzt
@@ -100,8 +101,60 @@
 		return b;
 	}
 
+	// Eigene Sperrliste: Domain samt Subdomains sperren (Knopf im Abfrage-Log und Karte unter den Freigaben)
+	function isDenied(domain) {
+		for (var d = domain; d;) {
+			if (denied.has(d)) { return true; }
+			var i = d.indexOf(".");
+			if (i < 0) { return false; }
+			d = d.slice(i + 1);
+		}
+		return false;
+	}
+
+	function blockButton(domain) {
+		if (isDenied(domain)) { return el("span", { "class": "badge text-bg-light" }, "⛔ " + t("own_blocked")); }
+		var b = el("button", { type: "button", "class": "btn btn-sm btn-outline-danger py-0", title: t("block_title", { domain: domain }) }, t("block"));
+		b.addEventListener("click", function (e) { e.stopPropagation(); block(domain); });
+		return b;
+	}
+
+	function block(domain) {
+		if (!window.confirm(t("block_confirm", { domain: domain }))) { return; }
+		api("denylist", { method: "POST", body: { domain: domain } }).then(function (r) {
+			toast(t("blocked_toast", { domain: (r && r.domain) || domain }));
+			return afterAllowChange();
+		}).catch(function (e) { toast(t("error") + ": " + e.message); });
+	}
+
+	function unblock(domain) {
+		if (!window.confirm(t("unblock_confirm", { domain: domain }))) { return; }
+		api("denylist?domain=" + encodeURIComponent(domain), { method: "DELETE" }).then(function () {
+			toast(t("unblocked_toast", { domain: domain }));
+			return afterAllowChange();
+		}).catch(function (e) { toast(t("error") + ": " + e.message); });
+	}
+
+	function loadDeny() {
+		return api("denylist").then(function (list) {
+			denied = new Set(list.map(function (e) { return e.domain; }));
+			var ul = $("deny-list");
+			if (!ul) { return; }
+			ul.replaceChildren();
+			if (!list.length) { ul.append(el("li", { "class": "list-group-item px-0 text-body-secondary" }, t("no_own_blocks"))); return; }
+			list.forEach(function (e) {
+				var li = el("li", { "class": "list-group-item px-0 d-flex align-items-center gap-2" });
+				var b = el("button", { type: "button", "class": "btn btn-sm btn-outline-secondary py-0 ms-auto" }, t("remove"));
+				b.addEventListener("click", function () { unblock(e.domain); });
+				var when = e.addedAt && e.addedAt.indexOf("0001") !== 0 ? ago(new Date(e.addedAt)) : "";
+				li.append(el("span", { "class": "font-monospace text-truncate", title: e.domain }, e.domain), el("span", { "class": "text-body-secondary text-nowrap" }, when), b);
+				ul.append(li);
+			});
+		});
+	}
+
 	function afterAllowChange() {
-		return loadAllow().then(function () {
+		return Promise.allSettled([loadAllow(), loadDeny()]).then(function () {
 			if ($("top-blocked")) { loadTop("blocked", "top-blocked"); }
 			if ($("log-body")) { loadLog(); }
 		});
@@ -225,7 +278,7 @@
 	}
 
 	function loadTimeline() {
-		return api("timeline?range=" + state.range).then(function (d) {
+		return api("timeline?range=" + state.chartRange).then(function (d) {
 			var b = d.buckets || [];
 			var labels = b.map(function (x) { return fmtBucket(x.t, d.stepMs); });
 			var blocked = b.map(function (x) { return x.blocked; });
@@ -339,6 +392,8 @@
 				var details = r.reason || "";
 				if (details === "stale") { details = t("reason_stale"); }
 				else if (details.indexOf("released:") === 0) { details = t("reason_released", { list: details.slice(9) }); }
+				else if (details.indexOf("own:") === 0) { details = t("reason_own", { domain: details.slice(4) }); }
+				else if (details.indexOf("search:") === 0) { details = t("reason_search", { domain: details.slice(7) }); }
 				else if (details.indexOf("paused:") === 0) { details = t("reason_paused", { list: details.slice(7) }); }
 				else if (details.indexOf("group:") === 0) { details = t("reason_group", { domain: details.slice(6), group: r.group || "" }); }
 				else if (details === "off:hold") { details = t("reason_off_hold", { group: r.group || "" }); }
@@ -355,6 +410,7 @@
 				st.append(badge(r.status));
 				var action = el("td", { "class": "text-end" });
 				if (r.status === "blocked") { action.append(releaseButton(r.domain)); }
+				else if (r.status === "allowed" || r.status === "cached") { action.append(blockButton(r.domain)); }
 				tr.append(el("td", { "class": "text-nowrap" }, time), client, domain, el("td", { "class": "text-nowrap" }, r.qtype + (r.proto && r.proto !== "udp" ? " · " + t("proto." + r.proto) : "")), st,
 					el("td", { "class": "text-body-secondary text-truncate", style: "max-width:22rem", title: details }, details),
 					el("td", { "class": "text-end text-nowrap" }, r.ms < 1 ? "<1 ms" : pf.format(r.ms) + " ms"), action);
@@ -409,6 +465,14 @@
 				refreshStats();
 			});
 		});
+		// Zeitraum nur fuer das Diagramm "Anfragen im Zeitverlauf"
+		document.querySelectorAll("[data-chart-range]").forEach(function (btn) {
+			btn.addEventListener("click", function () {
+				document.querySelectorAll("[data-chart-range]").forEach(function (b) { b.classList.toggle("active", b === btn); });
+				state.chartRange = btn.getAttribute("data-chart-range");
+				loadTimeline().catch(function () {});
+			});
+		});
 		$("cache-flush").addEventListener("click", function () {
 			if (!window.confirm(t("flush_confirm"))) { return; }
 			api("cache/flush", { method: "POST" }).then(function (r) {
@@ -448,7 +512,7 @@
 		$("page-first").addEventListener("click", function () { state.page = 0; loadLog(); });
 		$("page-prev").addEventListener("click", function () { state.page = Math.max(0, state.page - 1); loadLog(); });
 		$("page-next").addEventListener("click", function () { state.page += 1; loadLog(); });
-		loadAllow().catch(function () {}).then(loadLog);
+		Promise.allSettled([loadAllow(), loadDeny()]).then(loadLog);
 		every(3000, function () { return state.live && state.page === 0 ? loadLog() : Promise.resolve(); });
 	}
 
@@ -463,7 +527,20 @@
 				return loadAllow();
 			}).catch(function (err) { toast(t("error") + ": " + err.message); });
 		});
+		if ($("deny-form")) {
+			$("deny-form").addEventListener("submit", function (e) {
+				e.preventDefault();
+				var v = $("deny-input").value.trim().toLowerCase();
+				if (!v) { return; }
+				api("denylist", { method: "POST", body: { domain: v } }).then(function (r) {
+					$("deny-input").value = "";
+					toast(t("blocked_toast", { domain: r.domain }));
+					return afterAllowChange();
+				}).catch(function (err) { toast(t("error") + ": " + err.message); });
+			});
+		}
 		loadAllow().catch(function () {});
+		loadDeny().catch(function () {});
 		loadLists().catch(function () {});
 		every(60000, loadLists);
 	}

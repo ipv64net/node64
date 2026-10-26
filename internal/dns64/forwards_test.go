@@ -32,8 +32,18 @@ func TestNormalizeServerAndReverseZone(t *testing.T) {
 			t.Errorf("normalizeServer(%q) accepted", bad)
 		}
 	}
-	if err := checkUpstream(&upstream.Server{URL: "dns://1.1.1.1"}); err == nil {
-		t.Error("plain dns accepted as public upstream")
+	// klassisches DNS als eigener Upstream (Wunsch: einfach 8.8.8.8 eintragen): nur mit IP, Port 53 als Standard
+	for in, want := range map[string]string{"8.8.8.8": "dns://8.8.8.8:53", " dns://1.1.1.1 ": "dns://1.1.1.1:53", "192.168.1.1:5353": "dns://192.168.1.1:5353",
+		"2001:4860:4860::8888": "dns://[2001:4860:4860::8888]:53", "[fd00::1]:5353": "dns://[fd00::1]:5353"} {
+		s := upstream.Server{URL: in}
+		if err := checkUpstream(&s); err != nil || s.URL != want || s.Name == "" || upstream.Proto(s.URL) != "dns" {
+			t.Errorf("checkUpstream(%q) = %q %q %v; want %q", in, s.URL, s.Name, err, want)
+		}
+	}
+	for _, bad := range []string{"dns://dns.google", "dns.google", "8.8.8.8:0", "https://"} {
+		if err := checkUpstream(&upstream.Server{URL: bad}); err == nil {
+			t.Errorf("checkUpstream(%q) accepted", bad)
+		}
 	}
 	if serverLabel("dns://192.168.1.1:53") != "192.168.1.1" || serverLabel("dns://[fd00::1]:5353") != "[fd00::1]:5353" {
 		t.Error("serverLabel")

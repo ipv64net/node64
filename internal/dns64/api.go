@@ -44,6 +44,9 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /api/dns64/allowlist", api(m.apiAllowList))
 	mux.Handle("POST /api/dns64/allowlist", api(m.apiAllowAdd))
 	mux.Handle("DELETE /api/dns64/allowlist", api(m.apiAllowRemove))
+	mux.Handle("GET /api/dns64/denylist", api(m.apiDenyList))
+	mux.Handle("POST /api/dns64/denylist", api(m.apiDenyAdd))
+	mux.Handle("DELETE /api/dns64/denylist", api(m.apiDenyRemove))
 	// Einstellungen und eigene Eintraege gehen auch, wenn der DNS-Dienst gerade nicht laeuft
 	plain := func(h http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(h)) }
 	mux.Handle("GET /api/dns64/settings", plain(m.apiSettings))
@@ -146,7 +149,9 @@ func (m *Module) fail(w http.ResponseWriter, err error) {
 
 // ranges bildet den Zeitraum der Oberflaeche auf Rueckblick und Balkenbreite ab.
 var ranges = map[string]struct{ window, step time.Duration }{
+	"30m": {30 * time.Minute, time.Minute},
 	"1h":  {time.Hour, 2 * time.Minute},
+	"6h":  {6 * time.Hour, 10 * time.Minute},
 	"24h": {24 * time.Hour, 30 * time.Minute},
 	"7d":  {7 * 24 * time.Hour, 4 * time.Hour},
 }
@@ -296,6 +301,12 @@ func (m *Module) apiAllowAdd(w http.ResponseWriter, r *http.Request, e *engine) 
 		return
 	}
 	d, err := e.lists.Allow.Add(body.Domain)
+	if err == nil && e.lists.Deny != nil { // Freigeben hebt die eigene Sperre derselben Domain auf
+		if _, ok := e.lists.Deny.Match(d); ok {
+			_ = e.lists.Deny.Remove(d)
+			m.clChanged(r.Context(), ItemDeny)
+		}
+	}
 	m.clChanged(r.Context(), ItemAllow)
 	if errors.Is(err, filter.ErrInvalidDomain) {
 		writeErr(w, http.StatusBadRequest, m.g.T(r, "dns64.err_domain"))
@@ -327,6 +338,79 @@ func (m *Module) apiAllowRemove(w http.ResponseWriter, r *http.Request, e *engin
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (m *Module) apiDenyList(w http.ResponseWriter, r *http.Request, e *engine) {
+	if e.lists.Deny == nil {
+		writeJSON(w, http.StatusOK, []filter.AllowEntry{})
+		return
+	}
+	writeJSON(w, http.StatusOK, e.lists.Deny.List())
+}
+
+// apiDenyAdd: Domain (samt Subdomains) auf die eigene Sperrliste; eine gleiche Freigabe faellt dabei weg.
+func (m *Module) apiDenyAdd(w http.ResponseWriter, r *http.Request, e *engine) {
+	var body struct {
+		Domain string `json:"domain"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if e.lists.Deny == nil {
+		writeErr(w, http.StatusServiceUnavailable, "denylist not loaded")
+		return
+	}
+	d, err := e.lists.Deny.Add(body.Domain)
+	if errors.Is(err, filter.ErrInvalidDomain) {
+		writeErr(w, http.StatusBadRequest, m.g.T(r, "dns64.err_domain"))
+		return
+	}
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	if a, ok := e.lists.Allow.Match(d); ok && a == d {
+		_ = e.lists.Allow.Remove(d)
+		m.clChanged(r.Context(), ItemAllow)
+	}
+	m.clChanged(r.Context(), ItemDeny)
+	e.cache.Flush() // sonst liefert der Cache die Domain noch bis zum Ablauf aus
+	m.log.Info("domain blocked", "domain", d, "by", m.g.Actor(r))
+	m.audit(r, "dns64.denylist.add", d, "")
+	writeJSON(w, http.StatusOK, map[string]string{"domain": d})
+}
+
+func (m *Module) apiDenyRemove(w http.ResponseWriter, r *http.Request, e *engine) {
+	d := r.URL.Query().Get("domain")
+	if e.lists.Deny == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	err := e.lists.Deny.Remove(d)
+	m.clChanged(r.Context(), ItemDeny)
+	if errors.Is(err, filter.ErrInvalidDomain) {
+		writeErr(w, http.StatusBadRequest, m.g.T(r, "dns64.err_domain"))
+		return
+	}
+	if err != nil {
+		m.fail(w, err)
+		return
+	}
+	m.log.Info("domain block removed", "domain", d, "by", m.g.Actor(r))
+	m.audit(r, "dns64.denylist.remove", d, "")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// denylist liefert die eigene Sperrliste: vom laufenden Resolver oder direkt aus der Datei.
+func (m *Module) denylist() (*filter.Allowlist, error) {
+	if e := m.running(); e != nil && e.lists.Deny != nil {
+		return e.lists.Deny, nil
+	}
+	if err := os.MkdirAll(m.dir(), 0o750); err != nil {
+		return nil, err
+	}
+	return filter.LoadDenylist(filepath.Join(m.dir(), "denylist.txt"))
+}
+
 // ---- Export/Import (module.Exporter) ----
 
 var exportSettings = []string{setPort, setBind, setRouter, setRetention, setUpstreams, setUpMode, setUpCount, setLists, setListHours,
@@ -336,6 +420,7 @@ var exportSettings = []string{setPort, setBind, setRouter, setRetention, setUpst
 type exportData struct {
 	Settings  map[string]string `json:"settings"`
 	Allowlist []string          `json:"allowlist"`
+	Denylist  []string          `json:"denylist,omitempty"` // eigene Sperrliste
 	Records   []Record          `json:"records"`
 	CertID    int64             `json:"cert_id,omitempty"` // Zertifikat aus der Verwaltung (bei "central")
 	Groups    []groups.Group    `json:"groups,omitempty"`  // Geraetegruppen samt Mitgliedern, Regeln und Zeitplaenen
@@ -369,6 +454,11 @@ func (m *Module) Export(ctx context.Context) (any, error) {
 	}
 	for _, e := range a.List() {
 		out.Allowlist = append(out.Allowlist, e.Domain)
+	}
+	if dl, err := m.denylist(); err == nil {
+		for _, e := range dl.List() {
+			out.Denylist = append(out.Denylist, e.Domain)
+		}
 	}
 	if out.Records, err = m.Records(ctx); err != nil && !m.noTable(err) {
 		return nil, err
@@ -418,6 +508,13 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	for _, d := range in.Allowlist {
 		if _, err := a.Add(d); err == nil {
 			n++
+		}
+	}
+	if dl, err := m.denylist(); err == nil {
+		for _, d := range in.Denylist {
+			if _, err := dl.Add(d); err == nil {
+				n++
+			}
 		}
 	}
 	for _, rec := range in.Records { // vorhandene (gleicher Name, Typ, Wert) bleiben

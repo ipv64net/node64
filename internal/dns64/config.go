@@ -59,7 +59,7 @@ type upstreamSetting struct {
 func (u upstreamSetting) Proto() string { return protoLabel(upstream.Proto(u.URL)) }
 
 func protoLabel(p string) string {
-	return map[string]string{"doh": "DoH", "dot": "DoT", "doq": "DoQ"}[p]
+	return map[string]string{"doh": "DoH", "dot": "DoT", "doq": "DoQ", "dns": "DNS"}[p]
 }
 
 type listSetting struct {
@@ -417,9 +417,17 @@ func parsePrefix(s string) (netip.Prefix, error) {
 }
 
 // checkUpstream: https:// (DoH), tls:// (DoT) oder quic:// (DoQ); Bootstrap-IPs noetig, wenn der Host kein IP
-// ist (sonst Schleife ueber den eigenen Resolver).
+// ist (sonst Schleife ueber den eigenen Resolver). Klassisches DNS (unverschluesselt, Port 53) als IP, IP:Port oder
+// dns://IP[:Port] - nur mit IP-Adresse, ein Name braeuchte wieder DNS.
 func checkUpstream(s *upstream.Server) error {
 	s.Name = strings.TrimSpace(s.Name)
+	if plain, ok := plainUpstream(s.URL); ok {
+		s.URL, s.IPs = plain, nil
+		if s.Name == "" {
+			s.Name = strings.TrimPrefix(plain, "dns://")
+		}
+		return nil
+	}
 	u, err := url.Parse(strings.TrimSpace(s.URL))
 	if err != nil || upstream.Proto(s.URL) == "" || upstream.Proto(s.URL) == "dns" || u.Host == "" || (u.Scheme != "https" && u.Path != "" && u.Path != "/") {
 		return errCfg("err_up_url", "url", s.URL)
@@ -447,6 +455,21 @@ func checkUpstream(s *upstream.Server) error {
 		return errCfg("err_up_ips", "name", s.Name)
 	}
 	return nil
+}
+
+// plainUpstream: klassischer DNS-Server als dns://ip:port (Eingabe IP, IP:Port, [IPv6]:Port oder dns://…).
+func plainUpstream(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if h, ok := strings.CutPrefix(raw, "dns://"); ok {
+		raw = strings.TrimSuffix(h, "/")
+	}
+	if a, err := netip.ParseAddr(strings.Trim(raw, "[]")); err == nil {
+		return "dns://" + netip.AddrPortFrom(a.Unmap(), 53).String(), true
+	}
+	if ap, err := netip.ParseAddrPort(raw); err == nil && ap.Port() != 0 {
+		return "dns://" + netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port()).String(), true
+	}
+	return "", false
 }
 
 func checkListURL(raw string) error {

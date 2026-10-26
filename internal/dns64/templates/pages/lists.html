@@ -64,7 +64,7 @@
 		</div>
 	</div>
 	<div class="col-xl-5">
-		<div class="card h-100">
+		<div class="card">
 			<div class="card-header"><i class="bi bi-unlock text-success"></i> {{.T "dns64.allow.title"}}{{.Doc "dns64#freigaben"}}</div>
 			<div class="card-body small">
 				<p class="text-body-secondary">{{.T "dns64.allow.hint"}}</p>
@@ -83,6 +83,18 @@
 						<button class="btn btn-sm btn-outline-success" type="submit"><i class="bi bi-upload"></i> {{.T "dns64.allow.import_btn"}}</button>
 					</form>
 				</details>
+			</div>
+		</div>
+		<div class="card mt-3" id="eigene-sperrliste">
+			<div class="card-header"><i class="bi bi-slash-circle text-danger"></i> {{.T "dns64.deny.title"}}{{.Doc "dns64#eigene-sperrliste"}}</div>
+			<div class="card-body small">
+				<p class="text-body-secondary">{{.T "dns64.deny.hint"}}</p>
+				{{if $d.Running}}<form id="deny-form" class="input-group mb-3">
+					<span class="input-group-text"><i class="bi bi-globe"></i></span>
+					<input type="text" class="form-control" id="deny-input" placeholder="tracker.example.com" aria-label="{{.T "dns64.deny.title"}}" autocomplete="off">
+					<button class="btn btn-danger" type="submit"><i class="bi bi-slash-circle"></i> {{.T "dns64.js.block"}}</button>
+				</form>
+				<ul class="list-group list-group-flush" id="deny-list"></ul>{{else}}<p class="mb-0">{{.T "dns64.allow.not_running"}}</p>{{end}}
 			</div>
 		</div>
 	</div>

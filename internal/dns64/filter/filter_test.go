@@ -126,6 +126,39 @@ func TestManagerCheck(t *testing.T) {
 	}
 }
 
+// Eigene Sperrliste: vor den Blocklisten, samt Subdomains; eine genauere oder gleiche Freigabe gewinnt.
+func TestManagerDeny(t *testing.T) {
+	dir := t.TempDir()
+	a, _ := LoadAllowlist(filepath.Join(dir, "allow.txt"))
+	d, _ := LoadDenylist(filepath.Join(dir, "deny.txt"))
+	m := &Manager{Allow: a, Deny: d}
+	m.cur.Store(newMatcher(nil))
+	if blocked, _ := m.CheckMask("ads.example.com", ^uint64(0)); blocked {
+		t.Fatal("empty denylist blocks")
+	}
+	if _, err := d.Add("example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if blocked, reason := m.CheckMask("ads.example.com", 0); !blocked || reason != OwnPrefix+"example.com" {
+		t.Fatalf("deny: %v %q", blocked, reason)
+	}
+	a.Add("cdn.example.com") // genauere Freigabe
+	if blocked, _ := m.CheckMask("img.cdn.example.com", 0); blocked {
+		t.Fatal("more specific release must win")
+	}
+	if blocked, _ := m.CheckMask("www.example.com", 0); !blocked {
+		t.Fatal("other subdomain must stay blocked")
+	}
+	d2, _ := LoadDenylist(filepath.Join(dir, "deny.txt")) // gespeichert und wieder geladen
+	if _, ok := d2.Match("x.example.com"); !ok {
+		t.Fatal("denylist not persisted")
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "deny.txt"))
+	if !strings.HasPrefix(string(b), "# Eigene Sperrliste") {
+		t.Fatalf("header: %q", b)
+	}
+}
+
 func BenchmarkMatch(b *testing.B) {
 	m := newMatcher([]string{"l"})
 	var sb strings.Builder

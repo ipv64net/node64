@@ -286,9 +286,13 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 			defer cancel()
 			if resp, err := s.Local.Exchange(ctx, r); err == nil {
 				e.Upstream = "Router"
+				if resp.Rcode == dns.RcodeNameError {
+					markSearchSuffix(name, e)
+				}
 				return resp
 			}
 		}
+		markSearchSuffix(name, e)
 		// Local names must never leak to public resolvers.
 		return errorMsg(r, dns.RcodeNameError)
 	}

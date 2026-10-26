@@ -3,7 +3,7 @@
 // Uebernommen aus dem eigenstaendigen DNS64-Container; Plan: docs/PLAN-NODE64-DNS64.md.
 //
 // Aus = keine Sockets, keine Goroutinen, kein Speicher fuer Listen und Cache. Die Daten liegen unter
-// <DATA_DIR>/dns64/ (Abfrage-Log dns64.db, Freigaben allowlist.txt, Blocklisten lists/).
+// <DATA_DIR>/dns64/ (Abfrage-Log dns64.db, Freigaben allowlist.txt, eigene Sperrliste denylist.txt, Blocklisten lists/).
 package dns64
 
 import (
@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.28.1"
+	version   = "1.29.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -295,6 +295,11 @@ func (m *Module) start(ctx context.Context) error {
 		st.CloseNow()
 		return fmt.Errorf("load allowlist: %w", err)
 	}
+	deny, err := filter.LoadDenylist(filepath.Join(m.dir(), "denylist.txt"))
+	if err != nil {
+		st.CloseNow()
+		return fmt.Errorf("load denylist: %w", err)
+	}
 	lists := filepath.Join(m.dir(), "lists")
 	glist, err := m.Groups(ctx)
 	if err != nil {
@@ -310,6 +315,7 @@ func (m *Module) start(ctx context.Context) error {
 		keep = append(keep, l.URL)
 	}
 	filter.PruneFiles(lists, keep)
+	e.lists.Deny = deny
 	m.buildPolicies(e.lists, cfg, glist)
 	e.cache = cache.New(cfg.CacheSize)
 	e.up = upstream.New(cfg.activeUpstreams(), cfg.UpMode)

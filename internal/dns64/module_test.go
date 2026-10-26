@@ -13,6 +13,7 @@ import (
 
 	"github.com/miekg/dns"
 
+	"github.com/ipv64net/node64/internal/dns64/querylog"
 	"github.com/ipv64net/node64/internal/store"
 )
 
@@ -198,5 +199,43 @@ func TestExportImport(t *testing.T) {
 	bl, _ := b.allowlist()
 	if !bl.Contains("www.example.com") {
 		t.Fatal("allowlist not imported")
+	}
+}
+
+// Eigene Sperrliste wirkt sofort (samt Subdomains); eine angehaengte Suchdomain steht im Log mit Hinweis.
+func TestDenylistAndSearchSuffix(t *testing.T) {
+	m, port := testModule(t)
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	if err := m.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	e := m.running()
+	if e == nil || e.lists.Deny == nil {
+		t.Fatalf("not running or no denylist: %s", m.startError())
+	}
+	if _, err := e.lists.Deny.Add("tracker.test"); err != nil {
+		t.Fatal(err)
+	}
+	r, err := query(addr, "ads.tracker.test")
+	if err != nil || len(r.Answer) != 1 || !r.Answer[0].(*dns.A).A.IsUnspecified() {
+		t.Fatalf("own block: %v %v", r, err)
+	}
+	if r, err := query(addr, "example.com.home.local"); err != nil || r.Rcode != dns.RcodeNameError {
+		t.Fatalf("search suffix: %v %v", r, err)
+	}
+	var rows []querylog.LogRow
+	for i := 0; i < 50; i++ { // das Log schreibt gebuendelt
+		rows, _, _ = e.store.Recent(context.Background(), querylog.LogFilter{Limit: 10})
+		if len(rows) >= 2 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	got := map[string]string{}
+	for _, row := range rows {
+		got[row.Domain] = row.Reason
+	}
+	if got["ads.tracker.test"] != "own:tracker.test" || got["example.com.home.local"] != "search:example.com" {
+		t.Fatalf("log reasons: %v", got)
 	}
 }

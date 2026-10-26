@@ -33,6 +33,7 @@ const (
 	ItemSettings = "settings"      // Upstreams, Modus, Blockier-Art, Cache, Anonymisierung, Aufbewahrung, Firefox, Meldungen
 	ItemLists    = "lists"         // Blocklisten-Auswahl, eigene Listen, Aktualisierung
 	ItemAllow    = "allowlist"     // Freigaben
+	ItemDeny     = "denylist"      // eigene Sperrliste
 	ItemRecords  = "records"       // eigene Eintraege (r:<hash>) und lokale Zonen (z:<name>)
 	ItemForwards = "forwards"      // Weiterleitungen (f:<domain>) und Umschreiben (w:<name>)
 	ItemGroups   = "groups"        // Gruppen mit Regeln, Domains, Zeitplaenen, Sperren/Frei (<uid>)
@@ -45,7 +46,7 @@ type ClusterItem struct{ ID, TitleKey string }
 // ClusterItems: Bereiche von DNS64 (alle ohne Einstellung aus).
 func ClusterItems() []ClusterItem {
 	out := []ClusterItem{}
-	for _, id := range []string{ItemSettings, ItemLists, ItemAllow, ItemRecords, ItemForwards, ItemGroups, ItemMembers} {
+	for _, id := range []string{ItemSettings, ItemLists, ItemAllow, ItemDeny, ItemRecords, ItemForwards, ItemGroups, ItemMembers} {
 		out = append(out, ClusterItem{id, "cluster.item.dns64_" + id})
 	}
 	return out
@@ -205,8 +206,11 @@ func (m *Module) clCurrent(ctx context.Context, item string) (map[string]string,
 				out[k] = jsonString(v)
 			}
 		}
-	case ItemAllow:
+	case ItemAllow, ItemDeny:
 		a, err := m.allowlist()
+		if item == ItemDeny {
+			a, err = m.denylist()
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -348,8 +352,11 @@ func (m *Module) ClusterApply(ctx context.Context, item, id string, data json.Ra
 		m.clChanged(ctx, item)
 		m.restartSoon()
 		return nil
-	case ItemAllow:
+	case ItemAllow, ItemDeny:
 		a, err := m.allowlist()
+		if item == ItemDeny {
+			a, err = m.denylist()
+		}
 		if err != nil {
 			return err
 		}

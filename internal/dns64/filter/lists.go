@@ -125,6 +125,7 @@ type Manager struct {
 	client   *http.Client
 	log      *slog.Logger
 	Allow    *Allowlist
+	Deny     *Allowlist // eigene Sperrliste (nil = keine)
 
 	cur       atomic.Pointer[Matcher]
 	notGlobal atomic.Uint64 // complement of the lists for devices without a group (zero value = all lists)
@@ -175,12 +176,21 @@ func (m *Manager) Check(name string) (blocked bool, reason string) {
 
 // CheckMask is Check with the lists of a device group (Mask).
 func (m *Manager) CheckMask(name string, mask uint64) (blocked bool, reason string) {
+	// eigene Sperrliste vor den Blocklisten; eine genauere (oder gleiche) Freigabe gewinnt
+	if d, ok := m.Deny.Match(name); ok {
+		if a, ok := m.Allow.Match(name); !ok || len(a) < len(d) {
+			return true, OwnPrefix + d
+		}
+	}
 	blocked, list := m.cur.Load().MatchMask(name, mask)
 	if blocked && m.Allow.Contains(name) {
 		return false, ReleasedPrefix + list // UI: "freigegeben (sonst: <list>)"
 	}
 	return blocked, list
 }
+
+// OwnPrefix kennzeichnet Sperren der eigenen Sperrliste im Grund ("own:<Eintrag>").
+const OwnPrefix = "own:"
 
 // Mask is the bit mask of the given lists (by URL) among the loaded ones; unknown URLs are skipped.
 func (m *Manager) Mask(urls []string) uint64 {

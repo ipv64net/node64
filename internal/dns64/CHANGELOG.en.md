@@ -1,5 +1,21 @@
 # Changes – DNS64
 
+## 1.29.0 – 2026-10-26
+
+### Added
+- Own blocklist: block domains (including subdomains) yourself – with the “Block” button in the query log or in the new
+  card below “Released domains”. It applies to all devices in addition to the blocklists; releasing the same domain
+  lifts the block, a more specific release (e.g. cdn.example.com) wins. Syncable as its own cluster area, included in
+  the export.
+- Own upstream as a plain DNS server: just enter the IP address (e.g. 8.8.8.8, port 53, or IP:port). Marked as
+  “DNS (unencrypted)” in the list.
+- “Queries over time” with its own chart period: 30 min, 6 h, 24 h, 7 days.
+
+### Changed
+- Query log: when a device asks for a public domain with its local search domain appended (e.g.
+  example.com.home.local), the entry says “search domain appended by the device”. The device does this itself, usually
+  after the real query failed (e.g. SERVFAIL because the upstreams briefly did not answer) – DNS64 appends nothing.
+
 ## 1.28.1 – 2026-10-24
 
 ### New

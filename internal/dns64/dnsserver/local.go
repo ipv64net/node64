@@ -8,6 +8,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/net/publicsuffix"
+
+	"github.com/ipv64net/node64/internal/dns64/querylog"
 )
 
 // localSuffixes are names that only exist inside the home network. They are
@@ -18,6 +22,36 @@ var localSuffixes = []string{
 	// reverse lookups for private address ranges
 	".10.in-addr.arpa", ".168.192.in-addr.arpa", ".254.169.in-addr.arpa", ".127.in-addr.arpa",
 	".d.f.ip6.arpa", ".8.e.f.ip6.arpa", ".9.e.f.ip6.arpa", ".a.e.f.ip6.arpa", ".b.e.f.ip6.arpa",
+}
+
+// ReasonSearch: das Geraet hat an eine oeffentliche Domain seine Suchdomain gehaengt (z. B. example.com.home.local),
+// meist nachdem die eigentliche Anfrage scheiterte (SERVFAIL, keine Adresse). Nur Hinweis im Abfrage-Log.
+const ReasonSearch = "search:"
+
+// markSearchSuffix kennzeichnet eine unbeantwortete lokale Anfrage, deren vorderer Teil eine oeffentliche Domain ist.
+func markSearchSuffix(name string, e *querylog.Entry) {
+	if base := searchBase(name); base != "" && e.Reason == "" {
+		e.Reason = ReasonSearch + base
+	}
+}
+
+// searchBase: "example.com" bei "example.com.home.local" ("" = keine angehaengte Suchdomain erkennbar). Der vordere
+// Teil braucht mindestens zwei Labels mit oeffentlicher (ICANN-)Endung, der hintere muss lokal sein.
+func searchBase(name string) string {
+	if strings.HasPrefix(name, "_") {
+		return "" // Dienst-Suche (SRV), z. B. _ldap._tcp.dc._msdcs.<Zone>
+	}
+	labels := strings.Split(name, ".")
+	for i := len(labels) - 1; i >= 2; i-- { // laengster oeffentlicher Teil vorne (example.co.uk, nicht example.co)
+		base := strings.Join(labels[:i], ".")
+		if !isLocalName(strings.Join(labels[i:], ".")) {
+			continue
+		}
+		if ps, icann := publicsuffix.PublicSuffix(base); icann && ps != base {
+			return base
+		}
+	}
+	return ""
 }
 
 func isLocalName(name string) bool {

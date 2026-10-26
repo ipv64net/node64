@@ -15,9 +15,10 @@ import (
 // the domain and all of its subdomains. It is stored as a plain text file
 // ("domain<TAB>RFC3339 time" per line) so it survives image updates.
 type Allowlist struct {
-	path string
-	mu   sync.RWMutex
-	set  map[string]time.Time
+	path   string
+	header string // erste Zeile der Datei
+	mu     sync.RWMutex
+	set    map[string]time.Time
 }
 
 type AllowEntry struct {
@@ -28,7 +29,16 @@ type AllowEntry struct {
 var ErrInvalidDomain = errors.New("ungültiger Domainname")
 
 func LoadAllowlist(path string) (*Allowlist, error) {
-	a := &Allowlist{path: path, set: map[string]time.Time{}}
+	return loadDomainList(path, "# Freigegebene Domains (inkl. Subdomains)")
+}
+
+// LoadDenylist laedt die eigene Sperrliste (gleiches Format wie die Freigaben; Eintrag = Domain samt Subdomains).
+func LoadDenylist(path string) (*Allowlist, error) {
+	return loadDomainList(path, "# Eigene Sperrliste (inkl. Subdomains)")
+}
+
+func loadDomainList(path, header string) (*Allowlist, error) {
+	a := &Allowlist{path: path, header: header, set: map[string]time.Time{}}
 	f, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return a, nil
@@ -56,18 +66,27 @@ func LoadAllowlist(path string) (*Allowlist, error) {
 
 // Contains reports whether name or one of its parent domains is allowed.
 func (a *Allowlist) Contains(name string) bool {
+	_, ok := a.Match(name)
+	return ok
+}
+
+// Match liefert den genauesten Eintrag, der name abdeckt (name selbst oder eine Elterndomain).
+func (a *Allowlist) Match(name string) (string, bool) {
+	if a == nil {
+		return "", false
+	}
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if len(a.set) == 0 {
-		return false
+		return "", false
 	}
 	for s := name; ; {
 		if _, ok := a.set[s]; ok {
-			return true
+			return s, true
 		}
 		i := strings.IndexByte(s, '.')
 		if i < 0 {
-			return false
+			return "", false
 		}
 		s = s[i+1:]
 	}
@@ -111,7 +130,7 @@ func (a *Allowlist) List() []AllowEntry {
 
 func (a *Allowlist) saveLocked() error {
 	var sb strings.Builder
-	sb.WriteString("# Freigegebene Domains (inkl. Subdomains)\n")
+	sb.WriteString(a.header + "\n")
 	for d, t := range a.set {
 		fmt.Fprintf(&sb, "%s\t%s\n", d, t.Format(time.RFC3339))
 	}

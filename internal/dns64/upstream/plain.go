@@ -8,9 +8,8 @@ import (
 	"github.com/miekg/dns"
 )
 
-// plain spricht klassisches DNS (UDP, bei abgeschnittener Antwort TCP) mit einem Server im eigenen Netz, z. B.
-// dem DNS eines VPN oder Routers. Nur fuer Weiterleitungen einzelner Domains (dns://ip:port); die oeffentlichen
-// Upstreams bleiben verschluesselt.
+// plain spricht klassisches DNS (UDP, bei abgeschnittener Antwort TCP), z. B. mit dem DNS eines VPN oder Routers
+// (Weiterleitungen) oder einem selbst eingetragenen Upstream wie 8.8.8.8 (dns://ip:port, unverschluesselt).
 type plain struct {
 	addr string // ip:port
 }

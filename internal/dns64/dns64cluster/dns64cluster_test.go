@@ -5,7 +5,7 @@ import "testing"
 // Alle Bereiche ohne Einstellung aus (Entscheidung: jeder Bereich wird einzeln eingeschaltet).
 func TestModuleItemsDefaultOff(t *testing.T) {
 	mi := Module()
-	if mi.ID != "dns64" || len(mi.Items) != 7 {
+	if mi.ID != "dns64" || len(mi.Items) != 8 {
 		t.Fatalf("module = %+v", mi)
 	}
 	for _, it := range mi.Items {
