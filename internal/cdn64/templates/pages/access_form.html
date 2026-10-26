@@ -29,6 +29,8 @@
 				<div class="form-check mb-3"><input class="form-check-input" type="radio" name="satisfy_any" id="sat-any" value="1"{{if $a.SatisfyAny}} checked{{end}}><label class="form-check-label" for="sat-any">{{.T "cdn64.acl.any_long"}}</label></div>
 				<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="pass_auth" id="pass_auth"{{if $a.PassAuth}} checked{{end}}><label class="form-check-label" for="pass_auth">{{.T "cdn64.acl.pass_auth"}}</label>
 					<div class="form-text">{{.T "cdn64.acl.pass_auth_hint"}}</div></div>
+				<div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" name="login_page" id="login_page"{{if $a.LoginPage}} checked{{end}}><label class="form-check-label" for="login_page">{{.T "cdn64.acl.login_page"}}</label>
+					<div class="form-text">{{.T "cdn64.acl.login_page_hint"}}</div></div>
 			</div>
 			<div class="card-footer d-flex gap-2">
 				<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>

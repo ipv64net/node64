@@ -171,7 +171,7 @@
 			<td class="ps-3 fw-semibold">{{.Name}}</td>
 			<td>{{len .Users}}</td>
 			<td>{{len .Rules}}</td>
-			<td>{{if .SatisfyAny}}{{$.T "cdn64.acl.any"}}{{else}}{{$.T "cdn64.acl.all"}}{{end}}{{if .PassAuth}} · {{$.T "cdn64.acl.pass_auth_short"}}{{end}}</td>
+			<td>{{if .SatisfyAny}}{{$.T "cdn64.acl.any"}}{{else}}{{$.T "cdn64.acl.all"}}{{end}}{{if .PassAuth}} · {{$.T "cdn64.acl.pass_auth_short"}}{{end}}{{if .LoginPage}} · {{$.T "cdn64.acl.login_page_short"}}{{end}}</td>
 			<td>{{if .UsedBy}}{{range $i, $u := .UsedBy}}{{if $i}}, {{end}}<span class="font-monospace">{{$u}}</span>{{end}}{{else}}<span class="text-body-secondary">–</span>{{end}}</td>
 			<td class="text-end pe-3 text-nowrap">
 				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/access/{{.ID}}" title="{{$.T "cdn64.acl.edit"}}"><i class="bi bi-pencil"></i></a>

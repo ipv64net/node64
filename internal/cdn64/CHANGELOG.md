@@ -12,6 +12,12 @@
   Richtungen. Zwei Kacheln oben, je Host „↓ … · ↑ …“, zwei Linien im Diagramm, getrennt auch auf der Seite Zugriffe
   und in der Karte auf der Startseite. Upload zählt ab diesem Stand (ältere Stunden nur Download).
 
+- Zugriffslisten mit Login-Seite (Schalter „Login-Seite statt Browser-Dialog“): Besucher melden sich auf einer Seite im
+  Stil von Node64 an (hell/dunkel, Deutsch/Englisch nach Browser), danach hält ein signiertes Cookie die Sitzung
+  (12 Stunden, „Angemeldet bleiben“ 30 Tage). Ein neues Passwort beendet bestehende Sitzungen, das Cookie geht nie an
+  das Ziel, Fehlversuche zählen wie bisher (Sperre, Honeypot-Meldung). Basic Auth bleibt für Programme möglich;
+  Abmelden über /.node64/logout.
+
 ### Geändert
 - WebSockets zählen in der Statistik als beantwortet (101) statt als abgebrochen (4xx).
 

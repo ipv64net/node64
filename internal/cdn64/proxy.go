@@ -272,10 +272,23 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 		page(w, http.StatusTooManyRequests)
 		return false
 	}
-	ok, status, failed := g.decide(r, ip)
+	login := g.list.LoginPage && len(g.list.Users) > 0
+	if login && strings.HasPrefix(r.URL.Path, "/.node64/") { // Login-Seite: Anmelden und Abmelden gehoeren PROXY64
+		setReject(r, rejACL)
+		m.loginEndpoint(w, r, h, g, ip)
+		return false
+	}
+	var key []byte
+	if login {
+		key = m.loginKeyOf(r.Context())
+	}
+	ok, status, failed := g.decide(r, ip, key)
 	if ok {
 		if len(g.list.Users) > 0 && !g.list.PassAuth {
 			r.Header.Del("Authorization")
+		}
+		if login {
+			stripLoginCookie(r, g.list.ID)
 		}
 		return true
 	}
@@ -290,6 +303,10 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 	}
 	if status != http.StatusUnauthorized { // 401 ist die normale Passwortabfrage
 		setReject(r, rejACL)
+	}
+	if status == http.StatusUnauthorized && login { // Formular statt Browser-Dialog
+		loginPage(w, r, g, safeNext(r.URL.RequestURI()), "", false)
+		return false
 	}
 	if status == http.StatusUnauthorized {
 		w.Header().Set("WWW-Authenticate", `Basic realm="`+strings.ReplaceAll(g.list.Name, `"`, "")+`", charset="UTF-8"`)

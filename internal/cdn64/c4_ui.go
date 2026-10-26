@@ -194,6 +194,7 @@ func (m *Module) saveACLForm(w http.ResponseWriter, r *http.Request, a *AccessLi
 	_ = r.ParseForm()
 	users := usersFromForm(r, a)
 	a.Name, a.SatisfyAny, a.PassAuth = r.PostFormValue("name"), r.PostFormValue("satisfy_any") == "1", r.PostFormValue("pass_auth") == "on"
+	a.LoginPage = r.PostFormValue("login_page") == "on"
 	a.Rules = parseRules(r.PostFormValue("rules"))
 	if err := m.saveAccessList(r.Context(), a, users); err != nil {
 		d := aclForm{Tabs: tabs("/cdn64/access"), A: a.public(), New: isNew, Rules: r.PostFormValue("rules"), Errors: map[string]string{}}
@@ -210,7 +211,7 @@ func (m *Module) saveACLForm(w http.ResponseWriter, r *http.Request, a *AccessLi
 	if isNew {
 		action = "cdn64.acl.create"
 	}
-	m.g.Audit(r, action, a.Name, fmt.Sprintf("users=%d rules=%d satisfy_any=%v pass_auth=%v", len(a.Users), len(a.Rules), a.SatisfyAny, a.PassAuth))
+	m.g.Audit(r, action, a.Name, fmt.Sprintf("users=%d rules=%d satisfy_any=%v pass_auth=%v login_page=%v", len(a.Users), len(a.Rules), a.SatisfyAny, a.PassAuth, a.LoginPage))
 	m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
 	http.Redirect(w, r, "/cdn64/access", http.StatusSeeOther)
 }
@@ -430,6 +431,7 @@ type aclInput struct {
 	Name       *string      `json:"name"`
 	SatisfyAny *bool        `json:"satisfy_any"`
 	PassAuth   *bool        `json:"pass_auth"`
+	LoginPage  *bool        `json:"login_page"`
 	Users      []UserInput  `json:"users"`
 	Rules      []AccessRule `json:"rules"`
 }
@@ -448,6 +450,9 @@ func (m *Module) apiACLSave(w http.ResponseWriter, r *http.Request, a *AccessLis
 	}
 	if in.PassAuth != nil {
 		a.PassAuth = *in.PassAuth
+	}
+	if in.LoginPage != nil {
+		a.LoginPage = *in.LoginPage
 	}
 	if in.Rules != nil {
 		a.Rules = in.Rules

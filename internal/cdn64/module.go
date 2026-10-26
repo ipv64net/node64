@@ -81,6 +81,8 @@ type Module struct {
 	stats2     atomic.Pointer[statsDB] // Statistik und Zugriffs-Log (nur bei laufendem Modul)
 	acl        map[int64]*guard
 	authFail   *failLimiter
+	loginKey   atomic.Pointer[[]byte] // Schluessel der Sitzungs-Cookies der Login-Seite (access_login.go)
+	loginKeyMu sync.Mutex
 	hostTr     map[int64]*http.Transport
 	checks     CheckCreator    // Healthcheck anlegen (nil = nicht verfuegbar)
 	findChecks CheckFinder     // Healthchecks lesen ("ueberwacht" in der Liste; nil = nicht verfuegbar)
@@ -568,8 +570,8 @@ func (m *Module) importACLs(ctx context.Context, lists []*AccessList) (aclImport
 		ub, _ := json.Marshal(a.Users)
 		rb, _ := json.Marshal(a.Rules)
 		now := store.Now()
-		r, err := m.core.Writer().ExecContext(ctx, `INSERT INTO cdn_access_lists (name, satisfy_any, pass_auth, users, rules, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			a.Name, a.SatisfyAny, a.PassAuth, string(ub), string(rb), now, now)
+		r, err := m.core.Writer().ExecContext(ctx, `INSERT INTO cdn_access_lists (name, satisfy_any, pass_auth, login_page, users, rules, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			a.Name, a.SatisfyAny, a.PassAuth, a.LoginPage, string(ub), string(rb), now, now)
 		if err != nil {
 			return res, err
 		}

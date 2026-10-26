@@ -660,7 +660,10 @@
       "empty": "No access lists yet. They restrict hosts by password and/or to certain networks.",
       "delete_confirm": "Delete access list \"{name}\"?",
       "hint": "After 10 failed logins within 5 minutes the IP is blocked for 15 minutes (recorded in the audit log).",
-      "help": "Typical: only from the home network (\"allow 192.168.0.0/16\") and with password when away – then \"one condition is enough\"."
+      "help": "Typical: only from the home network (\"allow 192.168.0.0/16\") and with password when away – then \"one condition is enough\".",
+      "login_page": "Login page instead of browser dialog",
+      "login_page_hint": "Visitors sign in on a page in the style of Node64 instead of the browser's password window; a cookie then keeps the session (12 hours, 30 days with \"stay signed in\"). A new password ends existing sessions. Sign out via /.node64/logout. Programs can still sign in with Basic Auth. Best used with HTTPS only.",
+      "login_page_short": "login page"
     },
     "log": {
       "no_db": "Statistics are not available (module just started or file not writable).",

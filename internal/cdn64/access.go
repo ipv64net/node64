@@ -48,6 +48,7 @@ type AccessList struct {
 	Name       string       `json:"name"`
 	SatisfyAny bool         `json:"satisfy_any"`
 	PassAuth   bool         `json:"pass_auth"`
+	LoginPage  bool         `json:"login_page"` // Anmeldung ueber eine Login-Seite statt des Browser-Dialogs (access_login.go)
 	Users      []AccessUser `json:"users"`
 	Rules      []AccessRule `json:"rules"`
 	CreatedAt  time.Time    `json:"created_at"`
@@ -138,14 +139,18 @@ func (g *guard) authOK(r *http.Request) (ok, tried bool) {
 	return false, true
 }
 
-// decide: Zugriff erlaubt? Sonst 401 (Anmeldung koennte helfen) oder 403.
-func (g *guard) decide(r *http.Request, ip netip.Addr) (allowed bool, status int, failed bool) {
+// decide: Zugriff erlaubt? Sonst 401 (Anmeldung koennte helfen) oder 403. key: Schluessel der Sitzungs-Cookies
+// (Login-Seite; nil = ohne).
+func (g *guard) decide(r *http.Request, ip netip.Addr, key []byte) (allowed bool, status int, failed bool) {
 	a := g.list
 	hasRules, hasUsers := len(a.Rules) > 0, len(a.Users) > 0
 	ipOK := !hasRules || a.ipAllowed(ip)
 	authOK, tried := true, false
 	if hasUsers {
 		authOK, tried = g.authOK(r)
+		if !authOK && a.LoginPage && g.cookieOK(r, key) {
+			authOK = true
+		}
 	}
 	if a.SatisfyAny {
 		if (hasRules && ipOK) || (hasUsers && authOK) || (!hasRules && !hasUsers) {
@@ -208,12 +213,12 @@ func (l *failLimiter) failed(ip netip.Addr) bool {
 
 // ---------------------------------------------------------------- Datenbank
 
-const aclCols = `id, name, satisfy_any, pass_auth, users, rules, created_at, updated_at`
+const aclCols = `id, name, satisfy_any, pass_auth, login_page, users, rules, created_at, updated_at`
 
 func scanACL(row interface{ Scan(...any) error }) (*AccessList, error) {
 	var a AccessList
 	var users, rules, ca, ua string
-	if err := row.Scan(&a.ID, &a.Name, &a.SatisfyAny, &a.PassAuth, &users, &rules, &ca, &ua); err != nil {
+	if err := row.Scan(&a.ID, &a.Name, &a.SatisfyAny, &a.PassAuth, &a.LoginPage, &users, &rules, &ca, &ua); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(users), &a.Users)
@@ -336,14 +341,14 @@ func (m *Module) saveAccessList(ctx context.Context, a *AccessList, users []User
 	now := store.Now()
 	w := m.core.Writer()
 	if a.ID == 0 {
-		res, err := w.ExecContext(ctx, `INSERT INTO cdn_access_lists (name, satisfy_any, pass_auth, users, rules, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			a.Name, a.SatisfyAny, a.PassAuth, string(ub), string(rb), now, now)
+		res, err := w.ExecContext(ctx, `INSERT INTO cdn_access_lists (name, satisfy_any, pass_auth, login_page, users, rules, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			a.Name, a.SatisfyAny, a.PassAuth, a.LoginPage, string(ub), string(rb), now, now)
 		if err != nil {
 			return err
 		}
 		a.ID, _ = res.LastInsertId()
-	} else if _, err := w.ExecContext(ctx, `UPDATE cdn_access_lists SET name = ?, satisfy_any = ?, pass_auth = ?, users = ?, rules = ?, updated_at = ? WHERE id = ?`,
-		a.Name, a.SatisfyAny, a.PassAuth, string(ub), string(rb), now, a.ID); err != nil {
+	} else if _, err := w.ExecContext(ctx, `UPDATE cdn_access_lists SET name = ?, satisfy_any = ?, pass_auth = ?, login_page = ?, users = ?, rules = ?, updated_at = ? WHERE id = ?`,
+		a.Name, a.SatisfyAny, a.PassAuth, a.LoginPage, string(ub), string(rb), now, a.ID); err != nil {
 		return err
 	}
 	m.apply(ctx)
