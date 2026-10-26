@@ -126,7 +126,9 @@
 
 {{/* Eintraege der Seite: eine Liste; die Seite gruppiert nach den Gruppen der Healthchecks. Knoepfe mit name="op"
      aendern nur das Formular (formaction mit Sprungmarke) */}}
-<div class="card mb-3" id="sp-groups">
+<div class="row g-3 mb-3">
+<div class="col-xl-6">
+<div class="card h-100" id="sp-groups">
 	<div class="card-header d-flex flex-wrap align-items-center gap-2"><span class="me-auto"><i class="bi bi-list-check text-primary"></i> {{.T "hc.status.items"}} <span class="badge text-bg-secondary">{{$d.Items}}</span></span><span class="small text-body-secondary">{{.T "hc.status.items_hint"}}</span></div>
 	<div class="card-body">
 		{{with index $e "groups"}}<div class="alert alert-danger py-2 small">{{.}}</div>{{end}}
@@ -149,8 +151,9 @@
 		{{end}}
 	</div>
 </div>
-
-<div class="card mb-3" id="sp-add">
+</div>
+<div class="col-xl-6">
+<div class="card h-100" id="sp-add">
 	<div class="card-header"><i class="bi bi-plus-square text-primary"></i> {{.T "hc.status.add_checks"}}</div>
 	<div class="card-body">
 		{{if not $d.Checks}}<p class="text-body-secondary small mb-0">{{.T "hc.status.no_checks"}}</p>
@@ -190,6 +193,8 @@
 		</div>
 		{{end}}
 	</div>
+</div>
+</div>
 </div>
 
 <div class="d-flex gap-2 mb-4">

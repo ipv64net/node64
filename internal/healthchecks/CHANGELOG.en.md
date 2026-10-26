@@ -1,5 +1,10 @@
 # Changes – Healthchecks
 
+## 2.36.1 – 2026-10-26
+
+### Changed
+- Editing a status page: “Entries” and “Add checks” sit side by side on wide screens (stacked below that).
+
 ## 2.36.0 – 2026-10-26
 
 ### Changed

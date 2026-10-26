@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.36.1 – 2026-10-26
+
+### Geändert
+- Statusseite bearbeiten: „Einträge“ und „Checks hinzufügen“ stehen auf breiten Bildschirmen nebeneinander (darunter
+  untereinander).
+
 ## 2.36.0 – 2026-10-26
 
 ### Geändert
