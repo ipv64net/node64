@@ -1,0 +1,163 @@
+package honeypot
+
+import (
+	"context"
+	"io"
+	"net"
+	"net/http"
+	"net/netip"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/ipv64net/node64/internal/geoip"
+	"github.com/ipv64net/node64/internal/honeypot/worldmap"
+)
+
+// Live-Karte (Wunsch Dennis 2026-10-26): auf der Laenderkarte der Uebersicht fliegen Boegen von der Quelle eines
+// Angriffs zum eigenen Sensor. Daten aus GET /api/honeypot/live (Ereignisse der letzten Minuten mit Land und
+// Kartenpunkt); das Zeichnen und das Wiederholen aelterer Eintraege bei wenig Verkehr macht honeypot-live.js. Ziel
+// ist das Land der oeffentlichen IPv4 der Node (bei ipv64.net erfragt wie im DynDNS-Modul, 6 Stunden gemerkt).
+
+const (
+	liveDefaultMin = 60
+	liveMaxMin     = 24 * 60
+	liveMax        = 500 // hoechstens so viele Ereignisse je Abruf
+)
+
+// LiveEvent ist ein Angriff auf der Live-Karte.
+type LiveEvent struct {
+	Time    int64   `json:"t"` // Unix-Millisekunden
+	Country string  `json:"cc"`
+	Flag    string  `json:"flag"`
+	Name    string  `json:"name"`
+	X       float64 `json:"x"`
+	Y       float64 `json:"y"`
+	IP      string  `json:"ip"`
+	Kind    string  `json:"kind"`
+	Group   string  `json:"group"` // KindGroups (Farbe)
+	Service string  `json:"service"`
+	Port    int     `json:"port"`
+	Source  string  `json:"source"`
+}
+
+// LivePoint ist das Ziel der Boegen (eigener Standort).
+type LivePoint struct {
+	Country string  `json:"cc"`
+	Flag    string  `json:"flag"`
+	Name    string  `json:"name"`
+	X       float64 `json:"x"`
+	Y       float64 `json:"y"`
+	Known   bool    `json:"known"` // false = Land unbekannt, Ziel ist die Kartenmitte
+}
+
+// ownCountry: Land der oeffentlichen IPv4 (gemerkt; Fehler eine Minute, Erfolg 6 Stunden).
+type ownCountry struct {
+	mu   sync.Mutex
+	cc   string
+	at   time.Time
+	err  bool
+	from func(ctx context.Context) (netip.Addr, error)
+}
+
+var ownCC = &ownCountry{from: fetchOwnIPv4}
+
+func (o *ownCountry) get(ctx context.Context) string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if !o.at.IsZero() && (time.Since(o.at) < time.Minute || (!o.err && time.Since(o.at) < 6*time.Hour)) {
+		return o.cc
+	}
+	a, err := o.from(ctx)
+	o.at, o.err = time.Now(), err != nil
+	if err == nil {
+		o.cc, _ = lookupCountry(a)
+	}
+	return o.cc
+}
+
+// fetchOwnIPv4 fragt die oeffentliche IPv4 bei ipv64.net ab (erzwungen ueber IPv4).
+func fetchOwnIPv4(ctx context.Context) (netip.Addr, error) {
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+	d := &net.Dialer{Timeout: 5 * time.Second}
+	cl := &http.Client{Transport: &http.Transport{DisableKeepAlives: true,
+		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) { return d.DialContext(ctx, "tcp4", addr) }}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://ipv4.ipv64.net/ipcheck.php?ipv4", nil)
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	req.Header.Set("User-Agent", "node64")
+	resp, err := cl.Do(req)
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+	for _, f := range strings.FieldsFunc(string(b), func(r rune) bool { return !(r >= '0' && r <= '9' || r == '.') }) {
+		if a, err := netip.ParseAddr(f); err == nil && a.Is4() {
+			return a, nil
+		}
+	}
+	return netip.Addr{}, io.ErrUnexpectedEOF
+}
+
+// liveTarget: Ziel der Boegen (eigenes Land, sonst Kartenmitte).
+func liveTarget(ctx context.Context, lang string) LivePoint {
+	cc := ownCC.get(ctx)
+	if x, y, ok := worldmap.Centroid(cc); ok {
+		return LivePoint{Country: cc, Flag: geoip.Flag(cc), Name: geoip.Name(cc, lang), X: x, Y: y, Known: true}
+	}
+	vb := strings.Fields(worldmap.ViewBox())
+	w, h := 1000.0, 436.0
+	if len(vb) == 4 {
+		w, _ = strconv.ParseFloat(vb[2], 64)
+		h, _ = strconv.ParseFloat(vb[3], 64)
+	}
+	return LivePoint{X: w / 2, Y: h / 2}
+}
+
+// liveEvents: Ereignisse der letzten minutes Minuten mit bekanntem Land (neueste zuerst).
+func (m *Module) liveEvents(ctx context.Context, minutes int, lang string) ([]LiveEvent, error) {
+	list, err := m.st.RecentIn(ctx, liveMax, "", "")
+	if err != nil {
+		return nil, err
+	}
+	since := time.Now().Add(-time.Duration(minutes) * time.Minute)
+	out := []LiveEvent{}
+	for _, e := range list {
+		if e.Time.Before(since) {
+			break
+		}
+		cc := countryOf(e.Src.String())
+		x, y, ok := worldmap.Centroid(cc)
+		if !ok {
+			continue
+		}
+		src := e.Source
+		if src == "" {
+			src = SrcHoneypot
+		}
+		out = append(out, LiveEvent{Time: e.Time.UnixMilli(), Country: cc, Flag: geoip.Flag(cc), Name: geoip.Name(cc, lang), X: x, Y: y,
+			IP: e.Src.String(), Kind: e.Kind, Group: KindGroup(e.Kind, src), Service: e.Service, Port: e.Port, Source: src})
+	}
+	return out, nil
+}
+
+// apiLive: GET /api/honeypot/live?minutes=60 – Ereignisse fuer die Live-Karte und das Ziel der Boegen.
+func (m *Module) apiLive(w http.ResponseWriter, r *http.Request) {
+	minutes, _ := strconv.Atoi(r.URL.Query().Get("minutes"))
+	if minutes <= 0 {
+		minutes = liveDefaultMin
+	}
+	minutes = min(minutes, liveMaxMin)
+	lang := m.lang(r)
+	ev, err := m.liveEvents(r.Context(), minutes, lang)
+	if err != nil {
+		apiErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	apiJSON(w, http.StatusOK, map[string]any{"minutes": minutes, "target": liveTarget(r.Context(), lang), "events": ev, "now": time.Now().UnixMilli()})
+}

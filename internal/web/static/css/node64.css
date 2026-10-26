@@ -314,6 +314,28 @@ html[data-fs="xl"] { font-size: 125%; }
 .hp-map path { fill: var(--hp-m0); stroke: var(--bs-body-bg); stroke-width: .4; stroke-linejoin: round; }
 .hp-map a path:hover { filter: brightness(1.12); stroke: var(--bs-body-color); stroke-width: .8; }
 .hp-map path.hp-sel { stroke: var(--bs-body-color); stroke-width: 1.2; }
+/* Honeypot64: Live-Karte (honeypot-live.js) - Boegen je Art-Gruppe, Ziel pulsiert; Wiederholungen blasser */
+.hp-map .hp-live path.hp-arc { fill: none; stroke-width: 2.4; stroke-linecap: round; pointer-events: stroke; filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, .35)); }
+.hp-map .hp-live path.hp-arc-replay { stroke-width: 1.8; stroke-opacity: .7; }
+.hp-map .hp-live circle.hp-src { stroke: var(--bs-body-bg); stroke-width: .6; }
+.hp-map .hp-live .hp-g-login { stroke: var(--bs-danger); fill: var(--bs-danger); }
+.hp-map .hp-live .hp-g-exploit { stroke: var(--bs-warning); fill: var(--bs-warning); }
+.hp-map .hp-live .hp-g-scan { stroke: var(--bs-info); fill: var(--bs-info); }
+.hp-map .hp-live .hp-g-log { stroke: var(--bs-primary); fill: var(--bs-primary); }
+.hp-map .hp-live .hp-g-probe { stroke: var(--bs-secondary); fill: var(--bs-secondary); }
+.hp-map .hp-live .hp-target-dot { fill: var(--bs-danger); stroke: var(--bs-body-bg); stroke-width: .8; }
+.hp-map .hp-live .hp-target-ring { fill: none; stroke: var(--bs-danger); stroke-width: 1; transform-box: fill-box; transform-origin: center; animation: hp-pulse 2s ease-out infinite; }
+@keyframes hp-pulse { from { transform: scale(.6); opacity: .9; } to { transform: scale(3); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .hp-map .hp-live .hp-target-ring { animation: none; } }
+.hp-live-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; vertical-align: .05rem; }
+[aria-pressed="true"] > .hp-live-dot { animation: hp-blink 1.4s steps(2) infinite; }
+@keyframes hp-blink { 50% { opacity: .2; } }
+.hp-live-row { display: flex; gap: .4rem; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hp-live-row > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.hp-live-sw { flex: 0 0 .55rem; height: .55rem; border-radius: 50%; }
+.hp-live-sw.hp-g-login { background: var(--bs-danger); } .hp-live-sw.hp-g-exploit { background: var(--bs-warning); }
+.hp-live-sw.hp-g-scan { background: var(--bs-info); } .hp-live-sw.hp-g-log { background: var(--bs-primary); }
+.hp-live-sw.hp-g-probe { background: var(--bs-secondary); }
 .hp-map .hp-m1 { fill: var(--hp-m1); } .hp-map .hp-m2 { fill: var(--hp-m2); } .hp-map .hp-m3 { fill: var(--hp-m3); }
 .hp-map .hp-m4 { fill: var(--hp-m4); } .hp-map .hp-m5 { fill: var(--hp-m5); }
 .hp-sw { display: inline-block; width: .9em; height: .9em; border-radius: .2em; vertical-align: -.1em; }

@@ -94,12 +94,15 @@
 		<div class="card" id="hp-map">
 			<div class="card-header d-flex flex-wrap align-items-center gap-2"><span><i class="bi bi-map text-primary"></i> {{.T "honeypot.map.title"}}{{.Doc "honeypot#herkunft"}}</span>
 				{{with $d.Map.Legend}}<span class="ms-auto small d-flex flex-wrap align-items-center gap-2" title="{{$.T "honeypot.map.legend"}}">{{range .}}<span class="text-nowrap"><span class="hp-sw hp-m{{.Level}}"></span> {{$.Int .From}}{{if ne .From .To}}–{{$.Int .To}}{{end}}</span>{{end}}</span>{{end}}
+				{{if or $d.Map.Max $d.Geo.Loaded}}<button type="button" class="btn btn-sm btn-outline-danger py-0{{if not $d.Map.Legend}} ms-auto{{end}}" data-hp-live-toggle aria-pressed="true" title="{{.T "honeypot.live.toggle"}}"><span class="hp-live-dot"></span> {{.T "honeypot.live.title"}}</button>{{end}}
 			</div>
 			<div class="card-body p-2">
-				{{if $d.Map.Max}}<svg class="hp-map" viewBox="{{$d.Map.ViewBox}}" role="img" aria-label="{{.T "honeypot.map.aria" "count" $d.CountryCount}}">
+				{{if or $d.Map.Max $d.Geo.Loaded}}<svg class="hp-map" viewBox="{{$d.Map.ViewBox}}" role="img" aria-label="{{.T "honeypot.map.aria" "count" $d.CountryCount}}" data-hp-live-map>
 					{{range $d.Map.Countries}}{{if .Count}}<a href="{{$d.URL $d.Range $d.Source .Code}}#events"><path class="hp-m{{.Level}}{{if eq .Code $d.Country.Code}} hp-sel{{end}}" d="{{.Path}}"><title>{{.Flag}} {{.Name}}: {{$.T "honeypot.map.tip" "events" ($.Int .Count) "sources" ($.Int .Sources)}}</title></path></a>{{else}}<path class="hp-m0" d="{{.Path}}"><title>{{.Name}}</title></path>{{end}}{{end}}
+					<g class="hp-live" data-hp-live-layer></g>
 				</svg>
-				<div class="small text-body-secondary mx-1">{{.T "honeypot.map.hint"}}{{if $d.Map.Missing}} · {{.T "honeypot.map.missing" "count" $d.Map.Missing}}{{end}}</div>
+				<div class="small text-body-secondary mx-1">{{.T "honeypot.map.hint"}}{{if $d.Map.Missing}} · {{.T "honeypot.map.missing" "count" $d.Map.Missing}}{{end}} · {{.T "honeypot.live.hint"}}</div>
+				<div class="hp-live-list small mt-2" data-hp-live-list data-l-empty="{{.T "honeypot.live.empty"}}" data-l-replay="{{.T "honeypot.live.replay"}}" data-l-target="{{.T "honeypot.live.target"}}" data-l-unknown="{{.T "honeypot.live.target_unknown"}}"></div>
 				{{else}}<p class="text-body-secondary small m-2">{{if $d.Geo.Loaded}}{{.T "honeypot.top.empty"}}{{else}}{{.T "honeypot.geo.waiting"}}{{end}}</p>{{end}}
 			</div>
 		</div>
@@ -210,3 +213,4 @@
 	</div>
 </div>
 {{end}}
+{{define "scripts"}}<script src="/static/js/honeypot-live.js?v={{.Version}}"></script>{{end}}

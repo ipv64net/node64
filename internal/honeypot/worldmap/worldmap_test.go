@@ -64,3 +64,23 @@ func TestParse(t *testing.T) {
 		t.Fatalf("%+v", d)
 	}
 }
+
+// Mittelpunkte liegen im Festland: Deutschland in Mitteleuropa, USA ohne Alaska/Hawaii, Frankreich ohne Guayana.
+func TestCentroid(t *testing.T) {
+	in := func(code string, x0, x1, y0, y1 float64) {
+		t.Helper()
+		x, y, ok := Centroid(code)
+		if !ok || x < x0 || x > x1 || y < y0 || y > y1 {
+			t.Errorf("%s: %.0f %.0f %v", code, x, y, ok)
+		}
+	}
+	// Grenzen grob aus der Lage im Kartenausschnitt (1000 x 436)
+	deX, deY, _ := Centroid("DE")
+	in("FR", deX-40, deX, deY-5, deY+25)
+	in("US", 150, 300, 80, 160)
+	in("DE", 500, 560, 60, 110)
+	in("AU", 800, 950, 250, 360)
+	if _, _, ok := Centroid("XX"); ok {
+		t.Error("unknown country")
+	}
+}

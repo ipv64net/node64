@@ -4303,6 +4303,15 @@
       "gateway": "Gateway-Terminal (Matrix-Stil)",
       "neutral": "Schlichtes Anmeldeformular",
       "hint": "Was Bots auf „/“ sehen – auch die, die PROXY64 an den Honeypot gibt. Beide Formulare erfassen die eingegebenen Zugangsdaten."
+    },
+    "live": {
+      "title": "Live",
+      "toggle": "Live-Bögen anhalten bzw. fortsetzen",
+      "hint": "Live: Bögen zeigen Angriffe der letzten Stunde von der Quelle zu deinem Sensor; ist gerade nichts Neues da, werden ältere wiederholt (blasser).",
+      "empty": "In der letzten Stunde keine Angriffe mit bekanntem Land.",
+      "replay": "Wiederholung",
+      "target": "Dein Sensor: {name}",
+      "target_unknown": "Dein Sensor (Land unbekannt)"
     }
   },
   "pve": {

@@ -4303,6 +4303,15 @@
       "gateway": "Gateway terminal (Matrix style)",
       "neutral": "Plain sign-in form",
       "hint": "What bots see on “/” – including those PROXY64 hands to the honeypot. Both forms record the credentials entered."
+    },
+    "live": {
+      "title": "Live",
+      "toggle": "Pause or resume live arcs",
+      "hint": "Live: arcs show attacks of the last hour from the source to your sensor; when nothing new comes in, older ones are replayed (fainter).",
+      "empty": "No attacks with a known country in the last hour.",
+      "replay": "replay",
+      "target": "Your sensor: {name}",
+      "target_unknown": "Your sensor (country unknown)"
     }
   },
   "pve": {

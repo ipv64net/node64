@@ -14,6 +14,11 @@
 - Start page of the web trap selectable: gateway terminal in Matrix style (default) or a plain sign-in form. Also
   applies to bots PROXY64 hands to the honeypot.
 
+- Live map: on the country map of the overview, arcs fly from the source of an attack to your sensor (colour per kind,
+  pulsing target, details on hover), with the latest attacks listed below. New attacks first; when nothing new comes
+  in, older ones from the last hour are replayed fainter (map only). "Live" button to pause, no animation with
+  "reduce motion". The target is the country of the node's public IPv4. API `GET /api/honeypot/live`.
+
 ### Changed
 - "Report to ipv64" is on by default for new setups (takes effect once the central API key is set; reporting starts
   with the first run, nothing from before). Without a key, saving leaves the switch unchanged.

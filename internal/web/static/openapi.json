@@ -17862,6 +17862,124 @@
         }
       }
     },
+    "/honeypot/live": {
+      "get": {
+        "tags": [
+          "Honeypot64"
+        ],
+        "summary": "Live-Karte: Angriffe der letzten Minuten mit Land und Kartenpunkt",
+        "description": "Ereignisse mit bekanntem Herkunftsland (neueste zuerst, höchstens 500) und das Ziel der Bögen (Land der öffentlichen IPv4 der Node). x/y sind Koordinaten der Länderkarte (viewBox 0 0 1000 436).",
+        "parameters": [
+          {
+            "name": "minutes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 60,
+              "minimum": 1,
+              "maximum": 1440
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "minutes": {
+                      "type": "integer"
+                    },
+                    "now": {
+                      "type": "integer",
+                      "description": "Unix-Millisekunden"
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "cc": {
+                          "type": "string"
+                        },
+                        "flag": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        },
+                        "known": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "t": {
+                            "type": "integer",
+                            "description": "Unix-Millisekunden"
+                          },
+                          "cc": {
+                            "type": "string"
+                          },
+                          "flag": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "x": {
+                            "type": "number"
+                          },
+                          "y": {
+                            "type": "number"
+                          },
+                          "ip": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string"
+                          },
+                          "group": {
+                            "type": "string",
+                            "enum": [
+                              "login",
+                              "exploit",
+                              "scan",
+                              "probe",
+                              "log"
+                            ]
+                          },
+                          "service": {
+                            "type": "string"
+                          },
+                          "port": {
+                            "type": "integer"
+                          },
+                          "source": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/dns64/records/import": {
       "post": {
         "tags": [

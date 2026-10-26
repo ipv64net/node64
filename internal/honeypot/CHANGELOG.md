@@ -16,6 +16,12 @@
 - Startseite der Web-Falle wählbar: Gateway-Terminal im Matrix-Stil (Standard) oder schlichtes Anmeldeformular. Gilt
   auch für Bots, die PROXY64 an den Honeypot gibt.
 
+- Live-Karte: Auf der Länderkarte der Übersicht fliegen Bögen von der Quelle eines Angriffs zu deinem Sensor (Farbe
+  je Art, Ziel pulsiert, Infos beim Überfahren), darunter die letzten Angriffe als Liste. Neue Angriffe zuerst; ist
+  gerade nichts Neues da, werden ältere aus der letzten Stunde blasser wiederholt (nur auf der Karte). Knopf „Live“
+  zum Anhalten, ohne Animation bei „Bewegung reduzieren“. Ziel ist das Land der öffentlichen IPv4 der Node. API
+  `GET /api/honeypot/live`.
+
 ### Geändert
 - „An ipv64 melden“ ist für neue Einrichtungen standardmäßig an (wirkt, sobald der zentrale API-Key eingetragen ist;
   gemeldet wird ab dem ersten Durchlauf, nichts von vorher). Ohne Key bleibt der Schalter beim Speichern unverändert.
