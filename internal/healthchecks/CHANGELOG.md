@@ -7,7 +7,7 @@
   „Docker-Container“. Danach wählt man das Proxmox-System bzw. den Docker-Host und die Maschine bzw. den Container aus
   dem letzten Abruf. Angelegt wird wie mit „Als Check führen“ (Intervall, Gruppe und Kanäle aus den Regeln, keine
   doppelte Meldung); der Name ist optional (leer = „System – Name“). Schon geführte Einträge sind markiert und
-  gesperrt. „Docker-Check anlegen“ auf der Docker-Seite wählt den Host gleich vor.
+  gesperrt. „Container überwachen“ auf der Seite eines Docker-Hosts wählt den Host gleich vor.
 
 ### Geändert
 - Der rohe Typ „Docker-Container“ (Containername von Hand) steht bei neuen Checks nicht mehr zur Wahl. Vorhandene

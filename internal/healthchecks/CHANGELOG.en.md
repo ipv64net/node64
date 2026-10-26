@@ -6,7 +6,7 @@
 - New check from a monitored system: the type list offers “Proxmox VE (VM, container, node)” and “Docker container”.
   Then you pick the Proxmox system or Docker host and the machine or container from the last poll. It is created like
   “also run as check” (interval, group and channels from the rules, no duplicate alert); the name is optional (empty =
-  “system – name”). Entries already kept as a check are marked and locked. “Add Docker check” on the Docker page
+  “system – name”). Entries already kept as a check are marked and locked. “Monitor a container” on a Docker host page
   preselects the host.
 
 ### Changed
