@@ -3,7 +3,8 @@
 ## 1.29.1 – 2026-10-26
 
 ### Geändert
-- Handy: Abfrage-Log und Upstream-Liste in den Einstellungen zeigen je Eintrag eine Karte statt einer breiten Tabelle;
+- Handy: Abfrage-Log, Upstream-Liste in den Einstellungen, eigene DNS-Einträge, Weiterleitungen, Umschreiben, Geräte
+  und Mitglieder der Gruppen zeigen je Eintrag eine Karte statt einer breiten Tabelle;
   die Upstream-Karten der Übersicht brechen IP-Adressen und URL um, statt aus dem Bild zu laufen.
 
 

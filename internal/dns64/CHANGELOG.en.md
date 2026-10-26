@@ -3,7 +3,8 @@
 ## 1.29.1 – 2026-10-26
 
 ### Changed
-- Phone: the query log and the upstream list in the settings show one card per entry instead of a wide table; the
+- Phone: the query log, the upstream list in the settings, custom DNS records, forwards, rewrites, devices and group
+  members show one card per entry instead of a wide table; the
   upstream cards on the overview wrap IP addresses and URL instead of running off the screen.
 
 

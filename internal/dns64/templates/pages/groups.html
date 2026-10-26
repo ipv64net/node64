@@ -84,7 +84,7 @@
 				</form>
 			</div>
 			{{if $g.Members}}<div class="table-responsive">
-				<table class="table table-sm align-middle mb-0 small">
+				<table class="table table-sm align-middle mb-0 small table-stack">
 					<thead><tr><th class="ps-3">{{$.T "dns64.groups.kind"}}</th><th>{{$.T "dns64.groups.value"}}</th><th>{{$.T "dns64.groups.label"}}</th><th></th></tr></thead>
 					<tbody>
 					{{range $g.Members}}<tr>
@@ -197,8 +197,8 @@
 			{{else if $d.Devices}}
 			{{if ne $d.Cfg.Anonymize "off"}}<div class="card-body small pb-0"><div class="alert alert-warning py-2 mb-0">{{.T "dns64.groups.anon_hint"}}</div></div>{{end}}
 			<div class="table-responsive">
-				<table class="table table-sm table-hover align-middle mb-0 small">
-					<thead><tr><th class="ps-3">{{.T "common.name"}}</th><th>IP</th><th>MAC</th><th class="text-end">{{.T "dns64.groups.queries"}}</th><th>{{.T "dns64.groups.last_seen"}}</th><th>{{.T "dns64.groups.group"}}</th></tr></thead>
+				<table class="table table-sm table-hover align-middle mb-0 small table-stack">
+					<thead><tr><th class="ps-3" data-nolabel>{{.T "common.name"}}</th><th>IP</th><th>MAC</th><th class="text-end">{{.T "dns64.groups.queries"}}</th><th>{{.T "dns64.groups.last_seen"}}</th><th>{{.T "dns64.groups.group"}}</th></tr></thead>
 					<tbody>
 					{{range $d.Devices}}<tr>
 						<td class="ps-3">{{if .Name}}{{.Name}}{{else}}<span class="text-body-tertiary">–</span>{{end}}</td>

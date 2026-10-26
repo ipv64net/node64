@@ -54,8 +54,8 @@
 			<form method="post">
 				<input type="hidden" name="_csrf" value="{{.CSRF}}">
 				<div class="table-responsive">
-					<table class="table table-sm table-hover align-middle mb-0 small">
-						<thead><tr><th class="ps-3">{{.T "dns64.forwards.domain"}}</th><th>{{.T "dns64.forwards.servers"}}</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
+					<table class="table table-sm table-hover align-middle mb-0 small table-stack">
+						<thead><tr><th class="ps-3" data-nolabel>{{.T "dns64.forwards.domain"}}</th><th>{{.T "dns64.forwards.servers"}}</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
 						<tbody>
 						{{range $d.Fwds}}<tr{{if not .Enabled}} class="text-body-tertiary"{{end}}>
 							<td class="ps-3 text-break"><span class="font-monospace">{{.Domain}}</span>{{if .LocalOnly}} <span class="badge text-bg-light" title="{{$.T "dns64.records.local_only"}}"><i class="bi bi-pin-angle"></i></span>{{end}}{{if .Comment}}<div class="text-body-secondary">{{.Comment}}</div>{{end}}</td>
@@ -81,8 +81,8 @@
 			{{if $d.Rws}}<form method="post">
 				<input type="hidden" name="_csrf" value="{{.CSRF}}">
 				<div class="table-responsive">
-					<table class="table table-sm table-hover align-middle mb-0 small">
-						<thead><tr><th class="ps-3">{{.T "dns64.forwards.rw_name"}}</th><th></th><th>{{.T "dns64.forwards.rw_target"}}</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
+					<table class="table table-sm table-hover align-middle mb-0 small table-stack">
+						<thead><tr><th class="ps-3" data-nolabel>{{.T "dns64.forwards.rw_name"}}</th><th></th><th>{{.T "dns64.forwards.rw_target"}}</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
 						<tbody>
 						{{range $d.Rws}}<tr{{if not .Enabled}} class="text-body-tertiary"{{end}}>
 							<td class="ps-3 text-break"><span class="font-monospace">{{.Name}}</span>{{if .Comment}}<div class="text-body-secondary">{{.Comment}}</div>{{end}}</td>

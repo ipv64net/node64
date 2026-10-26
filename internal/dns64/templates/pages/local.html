@@ -146,8 +146,8 @@
 			{{if $d.Records}}<form method="post">
 				<input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="back" value="{{$d.Back}}">
 				<div class="table-responsive">
-					<table class="table table-sm table-hover align-middle mb-0 small">
-						<thead><tr><th class="ps-3">{{.T "common.name"}}</th><th>{{.T "common.type"}}</th><th>{{.T "dns64.records.value"}}</th><th class="text-end">TTL</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
+					<table class="table table-sm table-hover align-middle mb-0 small table-stack">
+						<thead><tr><th class="ps-3" data-nolabel>{{.T "common.name"}}</th><th>{{.T "common.type"}}</th><th>{{.T "dns64.records.value"}}</th><th class="text-end">TTL</th><th>{{.T "common.status"}}</th><th></th></tr></thead>
 						<tbody>
 						{{range $d.Records}}<tr data-rec="{{.Name}} {{.Type}} {{.Value}} {{.Comment}}"{{if not .Enabled}} class="text-body-tertiary"{{end}}>
 							<td class="ps-3 text-break"><span class="font-monospace">{{.Name}}</span>{{if .Comment}}<div class="text-body-secondary">{{.Comment}}</div>{{end}}</td><td><span class="badge text-bg-light">{{.Type}}</span>{{if .NoPTR}} <span class="badge text-bg-light" title="{{$.T "dns64.records.no_ptr"}}">PTR <i class="bi bi-x"></i></span>{{end}}{{if .LocalOnly}} <span class="badge text-bg-light" title="{{$.T "dns64.records.local_only"}}"><i class="bi bi-pin-angle"></i></span>{{end}}{{if .Dynamic}} <span class="badge text-bg-light" title="{{$.T "dns64.records.dynamic"}}"><i class="bi bi-arrow-repeat"></i></span>{{end}}</td>
