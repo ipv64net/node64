@@ -339,9 +339,10 @@ html[data-fs="xl"] { font-size: 125%; }
 /* Live-Karte: Auswahl (feste Boegen), Hervorhebung, Logo, Vollbild mit Seitenleiste (Fullscreen API oder Klasse hp-fs) */
 .hp-map .hp-live-sel path { fill: none; stroke-linecap: round; stroke-opacity: .8; pointer-events: stroke; }
 .hp-map text { font-family: "Twemoji Country Flags", var(--bs-body-font-family); pointer-events: none; paint-order: stroke; stroke: var(--bs-body-bg); stroke-width: 2.4px; stroke-linejoin: round; }
-.hp-map text.hp-lbl { font-size: 10.5px; fill: var(--bs-body-color); opacity: .85; }
-.hp-map text.hp-lbl-dst { font-weight: 600; }
-.hp-map text.hp-name { font-size: 9px; fill: var(--bs-body-color); opacity: .4; text-anchor: middle; }
+.hp-map .hp-lbl rect { fill: rgba(33, 37, 41, .72); }
+.hp-map .hp-lbl text { fill: #f8f9fa; stroke: none; }
+.hp-map .hp-lbl-dst text { font-weight: 600; }
+.hp-map text.hp-name { fill: var(--bs-body-color); opacity: .4; text-anchor: middle; }
 .hp-map path.hp-hit { fill: #ffe08a; transition: fill .4s; }
 [data-bs-theme="dark"] .hp-map path.hp-hit { fill: #f5d76e; }
 .hp-live-strip { gap: .3rem 1rem; }

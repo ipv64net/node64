@@ -1,5 +1,11 @@
 # Changes – Honeypot64
 
+## 0.14.2 – 2026-10-26
+
+### Improved
+- Live map: labels smaller and in a dark grey, semi-transparent box; text always 10 px, however large the map is
+  (it was very large in full screen).
+
 ## 0.14.1 – 2026-10-26
 
 ### Improved

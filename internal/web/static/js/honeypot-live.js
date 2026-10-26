@@ -28,18 +28,29 @@
 	}
 
 	// Beschriftung (Flagge und Code) an einem Punkt; null, wenn sie eine andere ueberdecken wuerde
-	function label(x0, y0, text, dst) {
+	function label(X, Y, text, dst) {
 		if (!labelLayer) { return null; }
-		var x = x0 + 4, y = y0 + (dst ? 12 : -4), w = text.length * 5 + 4;
+		var k = unit(), x = X + 4 * k, y = Y + (dst ? 14 : -6) * k, w = (text.length * 6 + 6) * k;
 		for (var i = 0; i < boxes.length; i++) {
-			if (Math.abs(boxes[i].x - x) < Math.max(boxes[i].w, w) && Math.abs(boxes[i].y - y) < 12) { return null; }
+			if (Math.abs(boxes[i].x - x) < Math.max(boxes[i].w, w) + 2 * k && Math.abs(boxes[i].y - y) < 15 * k) { return null; }
 		}
-		var t = el("text", { x: x, y: y, "class": "hp-lbl" + (dst ? " hp-lbl-dst" : "") });
+		// kleiner Kasten (dunkelgrau, halbtransparent) mit Flagge und Code, 10 px unabhaengig von der Kartengroesse
+		var g = el("g", { "class": "hp-lbl" + (dst ? " hp-lbl-dst" : "") });
+		var r = el("rect", { x: x - 3 * k, y: y - 10 * k, width: w, height: 13 * k, rx: 2 * k });
+		var t = el("text", { x: x, y: y, "font-size": (10 * k).toFixed(2) });
 		t.textContent = text;
-		labelLayer.appendChild(t);
+		g.append(r, t);
+		labelLayer.appendChild(g);
+		try { var bb = t.getBBox(); if (bb.width) { w = bb.width + 6 * k; r.setAttribute("width", w); } } catch (e) { /* nicht sichtbar */ }
 		var box = { x: x, y: y, w: w };
 		boxes.push(box);
-		return function () { t.remove(); boxes = boxes.filter(function (b) { return b !== box; }); };
+		return function () { g.remove(); boxes = boxes.filter(function (b) { return b !== box; }); };
+	}
+
+	// Kartenmass je Bildschirmpixel (Beschriftung bleibt bei jeder Kartengroesse gleich gross)
+	function unit() {
+		var m = svg.getScreenCTM && svg.getScreenCTM();
+		return m && m.a > 0 ? 1 / m.a : 1;
 	}
 
 	// eigenes Land hell hervorheben, solange ein Bogen dorthin laeuft
@@ -55,12 +66,13 @@
 		namesLayer.replaceChildren();
 		var list = byCountry().slice(0, 12);
 		if (target && target.known) { list.unshift({ name: target.name, x: target.x, y: target.y }); }
-		var used = [];
+		var used = [], k = unit();
 		list.forEach(function (c) {
-			var tw = c.name.length * 3.9;
-			for (var i = 0; i < used.length; i++) { if (Math.abs(used[i][0] - c.x) < (used[i][2] + tw) / 2 + 2 && Math.abs(used[i][1] - c.y) < 9) { return; } }
+			var tw = c.name.length * 5.5 * k;
+			for (var i = 0; i < used.length; i++) { if (Math.abs(used[i][0] - c.x) < (used[i][2] + tw) / 2 + 2 * k && Math.abs(used[i][1] - c.y) < 13 * k) { return; } }
 			used.push([c.x, c.y, tw]);
-			var t = el("text", { x: c.x, y: c.y + 3, "class": "hp-name" });
+			var t = el("text", { x: c.x, y: c.y + 3 * k, "class": "hp-name", "font-size": (9.5 * k).toFixed(2) });
+			t.style.strokeWidth = (2.5 * k).toFixed(2);
 			t.textContent = c.name;
 			namesLayer.appendChild(t);
 		});
@@ -307,6 +319,7 @@
 		stage.classList.toggle("hp-fs", on);
 		document.body.style.overflow = on && !document.fullscreenElement ? "hidden" : "";
 		renderNow();
+		drawNames();
 	}
 	function toggleFull() {
 		if (isFull()) {
@@ -317,6 +330,8 @@
 			setFull(true);
 		}
 	}
+	var rsz = 0;
+	window.addEventListener("resize", function () { clearTimeout(rsz); rsz = setTimeout(drawNames, 300); });
 	if (stage && fullBtn) {
 		fullBtn.addEventListener("click", toggleFull);
 		var exit = stage.querySelector("[data-hp-live-exit]");

@@ -1,5 +1,11 @@
 # Änderungen – Honeypot64
 
+## 0.14.2 – 2026-10-26
+
+### Verbessert
+- Live-Karte: Beschriftung kleiner und in einem dunkelgrauen, halbtransparenten Kasten; Schrift immer 10 px, egal
+  wie groß die Karte gerade ist (vorher im Vollbild sehr groß).
+
 ## 0.14.1 – 2026-10-26
 
 ### Verbessert
