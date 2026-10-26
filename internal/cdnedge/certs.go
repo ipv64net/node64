@@ -305,6 +305,18 @@ func (s *Server) certRound(ctx context.Context, p *certPlan) {
 			want[n] = true
 			delete(p.goneSince, n)
 		}
+		for _, m := range []map[string]time.Time{p.missingSince, p.nextTry} { // Plan fuer entfernte Namen vergessen
+			for n := range m {
+				if !want[n] {
+					delete(m, n)
+				}
+			}
+		}
+		for n := range p.backoff {
+			if !want[n] {
+				delete(p.backoff, n)
+			}
+		}
 		for n := range s.certs.list() {
 			if want[n] {
 				continue

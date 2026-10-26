@@ -283,6 +283,14 @@ landen nur bei angemeldeten Streams (Name + Protokoll + Port), mit Blocklisten, 
 TCP-Verbindungen über den Portmapper (alle Modi) trennen die Server nach 1 Stunde ohne Daten in beide Richtungen
 (cdn64-edge 0.15.1).
 
+**Entfernte Namen auf den Servern (2026-10-26, cdn64-edge 0.18.1):** Verschwindet ein Name aus `edge/config` (gelöscht,
+Konto gelöscht, verwaister Tunnel von `bots/cdn64_orphans.php` aufgeräumt), lassen srv07/srv08 ihn beim nächsten
+Abruf fallen: Route weg, laufende Verbindungen (auch Portmapper) getrennt, Portmapper-Listener geschlossen, Tunnel
+ohne Eintrag getrennt (Token gilt nicht mehr), Cache-Einträge beim nächsten Durchlauf (jede Minute) gelöscht, Zähler
+je Name (`/health`, Metriken) und Zertifikats-Plan vergessen. Lokal gespeicherte Zertifikate (Modus 2) bleiben noch
+7 Tage (Schutz bei kurzzeitig fehlender Konfiguration), dann werden sie gelöscht; die verschlüsselte Ablage bei
+ipv64 entfernt ipv64 selbst.
+
 **Parallele Tunnel-Verbindungen (2026-10-23, PROXY64 1.26.0, cdn64-edge 0.18.0):** `user_class.cdn_tunnel_sessions`
 (Business/Company 4, sonst 1) geht als `sessions` an die Node (Tunnel in `GET /cdn64o`) und an die Server (Tunnels in
 `edge/config`). Die Node baut je Server so viele Verbindungen auf (Hello `slot` 0..n-1, jede mit eigenem Rückfall

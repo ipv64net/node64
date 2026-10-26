@@ -181,7 +181,9 @@ func (s *Server) apiOK() {
 // sind, werden getrennt.
 func (s *Server) applyConfig(c *apiConfig) {
 	s.apiCfg.Store(c)
-	s.routes.Store(newRoutes(s.cfg.Hosts, c))
+	rs := newRoutes(s.cfg.Hosts, c)
+	s.routes.Store(rs)
+	s.forgetGone(rs)
 	if n := s.recheckLive(); n > 0 { // gesperrt, entfernt, Liste geaendert: laufende Verbindungen trennen
 		s.log.Info("connections closed after config change", "count", n)
 	}
@@ -206,6 +208,29 @@ func (s *Server) applyConfig(c *apiConfig) {
 		s.log.Info("tunnel removed or blocked, disconnecting", "tunnel", p.Tunnel)
 		_ = p.Session.Close("tunnel removed")
 	}
+}
+
+// forgetGone vergisst die Zaehler von Namen, die es nicht mehr gibt (bei ipv64 geloescht, z. B. verwaiste Tunnel
+// aufgeraeumt) - sonst stuenden sie bis zum Neustart in /health und den Metriken. Ihr letzter, noch nicht gemeldeter
+// Traffic faellt weg; den Host gibt es bei ipv64 ja nicht mehr.
+func (s *Server) forgetGone(rs *routes) {
+	keep := map[string]bool{}
+	for _, e := range rs.exact {
+		keep[e.Name] = true
+	}
+	for _, e := range rs.wild {
+		keep[e.Name] = true
+	}
+	s.stats.mu.Lock()
+	s.apist.mu.Lock()
+	for n := range s.stats.m {
+		if !keep[n] {
+			delete(s.stats.m, n)
+			delete(s.apist.sent, n)
+		}
+	}
+	s.apist.mu.Unlock()
+	s.stats.mu.Unlock()
 }
 
 // tunnelAllowed: Tunnel ist in der festen Konfiguration oder bei ipv64 (nicht gesperrt).
