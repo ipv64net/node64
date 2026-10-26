@@ -8,7 +8,7 @@
 	var NS = "http://www.w3.org/2000/svg";
 	var $ = function (id) { return document.getElementById(id); };
 	var land = $("hlLand"), arcs = $("hlArcs"), selLayer = $("hlSel"), table = $("hlTable"), stage = $("hlStage");
-	var namesLayer = $("hlNames"), labelLayer = $("hlLabels"), strip = $("hlStrip");
+	var namesLayer = $("hlNames"), labelLayer = $("hlLabels"), strip = $("hlStrip"), mapEl = $("hlMap");
 	var pauseBtn = $("hlPause"), fullBtn = $("hlFull");
 	var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 	var names = window.Intl && Intl.DisplayNames ? new Intl.DisplayNames([lang], { type: "region" }) : null;
@@ -16,7 +16,7 @@
 	var nf = new Intl.NumberFormat(lang);
 	var MAX_LIVE = 12, PER_TICK = 3; // hoechstens so viele Boegen gleichzeitig / neue je Takt
 	var map = null, entries = [], fresh = [], seen = 0, running = true, replay = 0, shownIds = {}, live = [], sel = null;
-	var boxes = [], hits = {}; // belegte Flaechen der Beschriftungen, Boegen je Ziel-Land (Hervorhebung)
+	var boxes = [], hits = {}, lastBy = {}; // belegte Flaechen der Beschriftungen, Boegen je Ziel-Land, Laender (Namen)
 
 	function name(cc) { try { return names ? names.of(cc) : cc; } catch (e) { return cc; } }
 	function flag(cc) { return /^[A-Z]{2}$/.test(cc) ? String.fromCodePoint(0x1F1E6 + cc.charCodeAt(0) - 65, 0x1F1E6 + cc.charCodeAt(1) - 65) : ""; }
@@ -64,32 +64,46 @@
 
 	// Beschriftung (Flagge und Code) an einem Punkt; null, wenn sie eine andere ueberdecken wuerde
 	function label(p, text, dst) {
-		var x = p[0] + 4, y = p[1] + (dst ? 12 : -4), w = text.length * 5 + 4;
+		var X = p[0], Y = p[1];
+		var k = unit(), x = X + 4 * k, y = Y + (dst ? 14 : -6) * k, w = (text.length * 6 + 6) * k;
 		for (var i = 0; i < boxes.length; i++) {
-			if (Math.abs(boxes[i].x - x) < Math.max(boxes[i].w, w) && Math.abs(boxes[i].y - y) < 12) { return null; }
+			if (Math.abs(boxes[i].x - x) < Math.max(boxes[i].w, w) + 2 * k && Math.abs(boxes[i].y - y) < 15 * k) { return null; }
 		}
-		var t = el("text", { x: x, y: y, "class": "hl-lbl" + (dst ? " hl-lbl-dst" : "") });
+		// kleiner Kasten (dunkelgrau, halbtransparent) mit Flagge und Code, 10 px unabhaengig von der Kartengroesse
+		var g = el("g", { "class": "hl-lbl" + (dst ? " hl-lbl-dst" : "") });
+		var r = el("rect", { x: x - 3 * k, y: y - 10 * k, width: w, height: 13 * k, rx: 2 * k });
+		var t = el("text", { x: x, y: y, "font-size": (10 * k).toFixed(2) });
 		t.textContent = text;
-		labelLayer.appendChild(t);
+		g.append(r, t);
+		labelLayer.appendChild(g);
+		try { var bb = t.getBBox(); if (bb.width) { w = bb.width + 6 * k; r.setAttribute("width", w); } } catch (e) { /* nicht sichtbar */ }
 		var box = { x: x, y: y, w: w };
 		boxes.push(box);
-		return function () { t.remove(); boxes = boxes.filter(function (b) { return b !== box; }); };
+		return function () { g.remove(); boxes = boxes.filter(function (b) { return b !== box; }); };
+	}
+
+	// Kartenmass je Bildschirmpixel (Beschriftung bleibt bei jeder Kartengroesse gleich gross)
+	function unit() {
+		var m = mapEl.getScreenCTM && mapEl.getScreenCTM();
+		return m && m.a > 0 ? 1 / m.a : 1;
 	}
 
 	// schwache Laendernamen der aktiven Laender (Quelle oder Ziel) auf der Flaeche, ohne Ueberdeckung
 	function drawNames(byCountry) {
+		lastBy = byCountry;
 		namesLayer.replaceChildren();
 		var w = {};
 		Object.keys(byCountry || {}).forEach(function (cc) { w[cc] = byCountry[cc]; });
 		entries.forEach(function (e) { w[e.dst] = (w[e.dst] || 0) + e.n; });
-		var used = [];
+		var used = [], k = unit();
 		Object.keys(w).sort(function (a, b) { return w[b] - w[a]; }).slice(0, 14).forEach(function (cc) {
 			var c = map.countries[cc];
 			if (!c) { return; }
-			var n = name(cc), tw = n.length * 3.9;
-			for (var i = 0; i < used.length; i++) { if (Math.abs(used[i][0] - c.x) < (used[i][2] + tw) / 2 + 2 && Math.abs(used[i][1] - c.y) < 9) { return; } }
+			var n = name(cc), tw = n.length * 5.5 * k;
+			for (var i = 0; i < used.length; i++) { if (Math.abs(used[i][0] - c.x) < (used[i][2] + tw) / 2 + 2 * k && Math.abs(used[i][1] - c.y) < 13 * k) { return; } }
 			used.push([c.x, c.y, tw]);
-			var t = el("text", { x: c.x, y: c.y + 3, "class": "hl-name" });
+			var t = el("text", { x: c.x, y: c.y + 3 * k, "class": "hl-name", "font-size": (9.5 * k).toFixed(2) });
+			t.style.strokeWidth = (2.5 * k).toFixed(2);
 			t.textContent = n;
 			namesLayer.appendChild(t);
 		});
@@ -353,6 +367,7 @@
 		document.body.style.overflow = on && !document.fullscreenElement ? "hidden" : "";
 		renderNow();
 		renderPairs();
+		if (map) { drawNames(lastBy); }
 	}
 	function toggleFull() {
 		if (isFull()) {
@@ -364,6 +379,8 @@
 		}
 	}
 	fullBtn.addEventListener("click", toggleFull);
+	var rsz = 0;
+	window.addEventListener("resize", function () { clearTimeout(rsz); rsz = setTimeout(function () { if (map) { drawNames(lastBy); } }, 300); });
 	stage.querySelector("[data-hl-exit]").addEventListener("click", toggleFull);
 	document.addEventListener("fullscreenchange", function () { setFull(document.fullscreenElement === stage); });
 	document.addEventListener("keydown", function (ev) {

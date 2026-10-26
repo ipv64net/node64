@@ -117,9 +117,10 @@ function hl_t(string $de, string $en): string { global $hlEn; return $hlEn ? $en
 	/* Beschriftung: Flagge und Code an Quelle und Ziel (mit dem Bogen), schwache Laendernamen der aktiven Laender */
 	.hl-map text { font-family: "Twemoji Country Flags", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; pointer-events: none;
 		paint-order: stroke; stroke: var(--hl-sea); stroke-width: 2.4px; stroke-linejoin: round; }
-	.hl-map text.hl-lbl { font-size: 10.5px; fill: var(--hl-text); opacity: .85; }
-	.hl-map text.hl-lbl-dst { font-weight: 600; }
-	.hl-map text.hl-name { font-size: 9px; fill: var(--hl-text); opacity: .4; text-anchor: middle; }
+	.hl-map .hl-lbl rect { fill: rgba(33,37,41,.72); }
+	.hl-map .hl-lbl text { fill: #f8f9fa; stroke: none; }
+	.hl-map .hl-lbl-dst text { font-weight: 600; }
+	.hl-map text.hl-name { fill: var(--hl-text); opacity: .4; text-anchor: middle; }
 	.hl-map #hlLand path.hl-hit { fill: var(--hl-hit); transition: fill .4s; }
 	.hl-strip { gap: .3rem 1rem; }
 	.hl-strip b { font-weight: 600; }
@@ -168,5 +169,5 @@ function hl_t(string $de, string $en): string { global $hlEn; return $hlEn ? $en
 	'sel_empty' => hl_t('In der letzten Stunde keine Verbindungen.', 'No connections in the last hour.'),
 	'strip_top' => hl_t('Top-Herkunft', 'Top origins'), 'strip_pair' => hl_t('Häufigste Verbindung', 'Top connection'), 'strip_kind' => hl_t('Häufigste Art', 'Top kind'),
 	'strip_live' => hl_t('Bögen gerade', 'Arcs now')), JSON_UNESCAPED_UNICODE); ?>;</script>
-<script src="live.js?v=4"></script>
+<script src="live.js?v=5"></script>
 <?php include("../footer.php"); ?>
