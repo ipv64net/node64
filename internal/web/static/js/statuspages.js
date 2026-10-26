@@ -3,7 +3,7 @@
 (function () {
 	"use strict";
 
-	// Nach einem Knopf bei Gruppen/Eintraegen (formaction mit #sp-groups) sofort dorthin springen; der sanfte
+	// Nach einem Knopf bei den Eintraegen (formaction mit #sp-groups) sofort dorthin springen; der sanfte
 	// Bildlauf des Layouts bleibt nach dem Absenden sonst oben haengen
 	if (location.hash === "#sp-groups") {
 		window.addEventListener("load", function () {
@@ -67,8 +67,8 @@
 		all.classList.remove("d-none");
 		all.addEventListener("click", function () {
 			var v = visible();
-			var on = v.some(function (r) { var c = r.querySelector("input"); return c && !c.checked; });
-			v.forEach(function (r) { var c = r.querySelector("input"); if (c) { c.checked = on; } });
+			var on = v.some(function (r) { var c = r.querySelector("input"); return c && !c.disabled && !c.checked; });
+			v.forEach(function (r) { var c = r.querySelector("input"); if (c && !c.disabled) { c.checked = on; } });
 		});
 	}
 	apply();

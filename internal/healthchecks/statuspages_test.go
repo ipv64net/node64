@@ -146,82 +146,39 @@ func TestStatusPagesForm(t *testing.T) {
 		t.Fatalf("new form defaults: publish_node %v hc_groups %v", d.Page.PublishNode, d.Page.HCGroups)
 	}
 
-	// Gruppe anlegen (nur Formular, nichts gespeichert)
+	// Checks auswaehlen und hinzufuegen (nur Formular, nichts gespeichert); vorhandene nicht doppelt
 	v := baseForm(&StatusPage{Title: "Meine Dienste"})
-	v.Set("op", "gadd")
-	v.Set("new_group", "Webseiten")
+	v.Set("op", "add")
+	v["add_tok"] = []string{c, a}
 	if w := e.form("/healthchecks/status-pages/new", v); w.Code != 200 {
-		t.Fatalf("gadd: %d", w.Code)
+		t.Fatalf("add: %d", w.Code)
 	}
 	d := e.formData()
-	if !d.Dirty || len(d.Page.Groups) != 1 || d.Page.Groups[0].Name != "Webseiten" {
-		t.Fatalf("gadd: %+v", d.Page.Groups)
+	if !d.Dirty || len(d.PageList) != 2 || d.PageList[0].Token != a || d.PageList[0].Group != "Web" || d.PageList[1].Token != c {
+		t.Fatalf("add: %+v", d.PageList)
 	}
 	if list, _ := e.m.st.StatusPages(ctx); len(list) != 0 {
 		t.Fatal("op must not save")
 	}
-	// alle aus Tag "prod" hinzufuegen, dann eine zweite Gruppe mit Healthchecks-Gruppe "LAN"
-	v = baseForm(d.Page)
-	v.Set("op", "addtag")
-	v.Set("add_tag", "prod")
-	v.Set("add_to", "0")
-	e.form("/healthchecks/status-pages/new", v)
-	d = e.formData()
-	if len(d.Page.Groups[0].Items) != 2 {
-		t.Fatalf("addtag: %+v", d.Page.Groups)
-	}
-	v = baseForm(d.Page)
-	v.Set("op", "gadd")
-	v.Set("new_group", "Heimnetz")
-	e.form("/healthchecks/status-pages/new", v)
-	d = e.formData()
-	if d.AddTo != 1 {
-		t.Fatalf("new group should be preselected: %d", d.AddTo)
-	}
-	v = baseForm(d.Page)
-	v.Set("op", "addhcg")
-	v.Set("add_hcg", "LAN")
-	v.Set("add_to", "1")
-	e.form("/healthchecks/status-pages/new", v)
-	d = e.formData()
-	if len(d.Page.Groups) != 2 || len(d.Page.Groups[1].Items) != 1 || d.Page.Groups[1].Items[0].Token != c {
-		t.Fatalf("addhcg: %+v", d.Page.Groups)
-	}
-	// einzelne Auswahl: schon vorhandene Checks werden nicht doppelt eingetragen
 	v = baseForm(d.Page)
 	v.Set("op", "add")
-	v["add_tok"] = []string{a, c}
-	v.Set("add_to", "1")
+	v["add_tok"] = []string{a, b}
 	e.form("/healthchecks/status-pages/new", v)
 	d = e.formData()
-	if len(d.Page.Groups[1].Items) != 2 || d.Page.Groups[1].Items[1].Token != a {
-		t.Fatalf("add: %+v", d.Page.Groups[1])
+	if len(d.Page.Groups) != 1 || len(d.Page.Groups[0].Items) != 3 || d.Page.Groups[0].Items[2].Token != b {
+		t.Fatalf("add again: %+v", d.Page.Groups)
 	}
-	// Reihenfolge: Eintrag hoch, Gruppe runter, Eintrag entfernen
+	// Eintrag entfernen
 	v = baseForm(d.Page)
-	v.Set("op", "iup-1-1")
+	v.Set("op", "rm-1")
 	e.form("/healthchecks/status-pages/new", v)
 	d = e.formData()
-	if d.Page.Groups[1].Items[0].Token != a {
-		t.Fatalf("iup: %+v", d.Page.Groups[1])
-	}
-	v = baseForm(d.Page)
-	v.Set("op", "gdown-0")
-	e.form("/healthchecks/status-pages/new", v)
-	d = e.formData()
-	if d.Page.Groups[0].Name != "Heimnetz" || d.Page.Groups[1].Name != "Webseiten" {
-		t.Fatalf("gdown: %+v", d.Page.Groups)
-	}
-	v = baseForm(d.Page)
-	v.Set("op", "idel-0-0")
-	e.form("/healthchecks/status-pages/new", v)
-	d = e.formData()
-	if len(d.Page.Groups[0].Items) != 1 || d.Page.Groups[0].Items[0].Token != c {
-		t.Fatalf("idel: %+v", d.Page.Groups[0])
+	if len(d.PageList) != 2 || d.PageList[0].Token != a || d.PageList[1].Token != b {
+		t.Fatalf("rm: %+v", d.PageList)
 	}
 
 	// Speichern: Slug aus dem Titel, Anzeigename, Passwort
-	d.Page.Groups[1].Items[0].Label = "Shop"
+	d.Page.Groups[0].Items[0].Label = "Shop"
 	v = baseForm(d.Page)
 	v.Set("enabled", "on")
 	v.Set("noindex", "on")
@@ -241,7 +198,7 @@ func TestStatusPagesForm(t *testing.T) {
 	if p.Slug != "meine-dienste" || !p.Enabled || p.PublishNode || p.Accent != "#ff8800" || !p.HasPassword || !p.NoIndex || p.PoweredBy || !p.HCGroups {
 		t.Fatalf("saved: %+v", p)
 	}
-	if len(p.Groups) != 2 || p.Groups[1].Name != "Webseiten" || p.Groups[1].Items[0].Token != a || p.Groups[1].Items[0].Label != "Shop" || p.Groups[1].Items[1].Token != b {
+	if len(p.Groups) != 1 || p.Groups[0].Items[0].Token != a || p.Groups[0].Items[0].Label != "Shop" || p.Groups[0].Items[1].Token != b {
 		t.Fatalf("groups: %+v", p.Groups)
 	}
 	if loc := w.Header().Get("Location"); loc != "/healthchecks/status-pages/"+strconv.FormatInt(p.ID, 10)+"/edit" || !e.audited("status_page.create") {
@@ -297,7 +254,7 @@ func TestStatusPagesForm(t *testing.T) {
 		t.Fatalf("list: %+v", ld.Pages)
 	}
 	for _, r := range ld.Pages {
-		if r.ID == p.ID && (r.Items != 3 || r.URL != "") {
+		if r.ID == p.ID && (r.Items != 2 || r.URL != "") {
 			t.Fatalf("row: %+v", r)
 		}
 	}
@@ -499,8 +456,9 @@ func TestStatusPagesTemplates(t *testing.T) {
 	now := time.Now()
 	cases := map[string]any{
 		"status_pages": statusPagesData{Pages: []statusPageRow{{StatusPage: p, Items: 2, Open: 1, URL: "/status/s", Preview: "/x"}}},
-		"status_page_form": statusFormData{Page: p, Edit: true, Dirty: true, Errors: map[string]string{"slug": "x", "groups": "y"}, Error: "e", Names: map[string]string{"t1": "Check 1"}, Checks: []statusCheckOpt{{Token: "t1", Name: "Check 1", Tags: "a,b", Group: "G", OnPage: true, Paused: true}}, Tags: []string{"a"}, HCGroups: []string{"G"}, Layouts: []string{"list", "tiles", "compact"}, Themes: []string{"auto"}, DaysOpts: []int{30, 90}, Items: 2,
-			ResCards: []statusResCard{{Kind: "pve", Title: "nav.proxmox", Icon: "bi-hdd-stack", Hint: "h", Systems: []statusResSys{{Name: "lab", Items: []statusResOpt{{ID: "1-0", Value: "1|qemu/100", Name: "vm", Type: "pve.type.qemu"}, {ID: "1-1", Value: "1|node/pve", Name: "pve", Type: "pve.type.node", Token: "t1", OnPage: true}}}, {Name: "leer"}}}}},
+		"status_page_form": statusFormData{Page: p, Edit: true, Dirty: true, Errors: map[string]string{"slug": "x", "groups": "y"}, Error: "e", Names: map[string]string{"t1": "Check 1"},
+			Checks:   []statusCheckOpt{{Token: "t1", Value: "t1", Name: "Check 1", Tags: "a,b", Group: "G", OnPage: true, Paused: true}, {Res: true, Value: "1|qemu/100", Name: "vm", Group: "Proxmox VE", Sub: "lab", Type: "pve.type.qemu"}},
+			PageList: []statusPageItem{{Token: "t1", Name: "Check 1", Group: "G"}, {Token: "t2", Label: "L"}}, Tags: []string{"a"}, HCGroups: []string{"G"}, Layouts: []string{"list", "tiles", "compact"}, Themes: []string{"auto"}, DaysOpts: []int{30, 90}, Items: 2},
 		"status_page_notices": statusNoticesData{Page: p, Form: map[string]string{"level": "info"}, Open: []StatusNotice{{ID: 1, Title: "N", Level: "warning", CreatedAt: now, Updates: []StatusNoticeUpdate{{Time: now, Text: "x"}}}}, Resolved: []StatusNotice{{ID: 2, Title: "R", Level: "info", CreatedAt: now, ResolvedAt: now}}},
 	}
 	for name, data := range cases {
@@ -515,9 +473,10 @@ func TestStatusPagesTemplates(t *testing.T) {
 		if err := tpl.Execute(&buf, fakeView{Data: data, CSRF: "c", Version: "v"}); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		if name == "status_page_form" && (!strings.Contains(buf.String(), `name="it_tok" value="t1"`) || !strings.Contains(buf.String(), "statuspages.js") || !strings.Contains(buf.String(), "hc.status.hc_groups_active") ||
-			!strings.Contains(buf.String(), "/preview/logo?v=") || !strings.Contains(buf.String(), `enctype="multipart/form-data"`) ||
-			!strings.Contains(buf.String(), `id="sp-add-pve"`) || !strings.Contains(buf.String(), `name="add_res" value="1|qemu/100"`) || !strings.Contains(buf.String(), "hc.status.res_new") || !strings.Contains(buf.String(), "hc.status.res_none")) {
+		if name == "status_page_form" && (!strings.Contains(buf.String(), `name="it_tok" value="t1"`) || !strings.Contains(buf.String(), "statuspages.js") ||
+			!strings.Contains(buf.String(), "/preview/logo?v=") || !strings.Contains(buf.String(), `enctype="multipart/form-data"`) || !strings.Contains(buf.String(), `value="rm-1"`) ||
+			!strings.Contains(buf.String(), `name="add_res" value="1|qemu/100"`) || !strings.Contains(buf.String(), "hc.status.res_new") || !strings.Contains(buf.String(), "Proxmox VE · lab") ||
+			!strings.Contains(buf.String(), "data-sp-selall") || strings.Contains(buf.String(), "gr_name") || strings.Contains(buf.String(), "hc_groups")) {
 			t.Fatalf("form output: %s", buf.String())
 		}
 	}

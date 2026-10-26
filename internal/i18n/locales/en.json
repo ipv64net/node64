@@ -2633,7 +2633,9 @@
       "res_hint_docker": "Containers of your Docker hosts. Without a check one is created when adding (like “also run as check”).",
       "res_new": "new check",
       "res_new_hint": "No check yet – created when adding, with the notifications of the rules (no duplicate alerts).",
-      "res_none": "No data yet – the system is off or has not been queried yet."
+      "res_none": "No data yet – the system is off or has not been queried yet.",
+      "items_hint": "Grouped by the groups of the healthchecks (Proxmox VE and Docker per system). Empty display name = name of the check.",
+      "items_empty": "No entries yet – select checks below and add them."
     },
     "whois": {
       "target_hint": "Domain (example.de), IP address or network (192.0.2.1, 2001:db8::/32) or AS number (AS3320).",

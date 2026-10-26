@@ -649,11 +649,11 @@ func TestStatusHCGroups(t *testing.T) {
 	if strings.Join(got, " | ") != "Web:web1,Web zwei=up | DB:db1=down | :ohne=up" || v.Overall != "down" {
 		t.Fatalf("hc groups: %v (%s)", got, v.Overall)
 	}
-	// aus: Gruppen der Seite
+	// eigene Gruppen der Seite (alte Seiten, API) werden nicht mehr angezeigt: immer die Gruppen der Healthchecks
 	p.HCGroups = false
 	p = statusSavePage(t, m, p, "")
 	v, _ = m.statusView(context.Background(), p, "de")
-	if len(v.Groups) != 2 || v.Groups[0].Name != "Seite 1" {
+	if len(v.Groups) != 3 || v.Groups[0].Name != "Web" {
 		t.Fatalf("page groups: %+v", v.Groups)
 	}
 }

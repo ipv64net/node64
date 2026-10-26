@@ -1,5 +1,16 @@
 # Änderungen – Healthchecks
 
+## 2.36.0 – 2026-10-26
+
+### Geändert
+- Statusseiten: Eigene Gruppen der Seite entfallen. Die Seite gruppiert immer nach den Gruppen der Healthchecks, in
+  „Proxmox VE“ und „Docker“ mit dem Namen des Systems („Proxmox VE · Cluster“). Alte Seiten zeigen damit sofort diese
+  Gruppen; Auswahl, Reihenfolge und Anzeigenamen der Einträge bleiben.
+- Bearbeiten: „Einträge der Seite“ ist eine einfache Liste (Name, Gruppe, Anzeigename, Entfernen). „Checks hinzufügen“
+  ist eine einzige Liste für alle Checks und für Nodes, VMs, LXC und Container ohne Check – mit Suche (auch nach dem
+  System), Filter nach Gruppe und Tag, „Sichtbare auswählen“ und „Ausgewählte hinzufügen“. Einträge ohne Check werden
+  beim Hinzufügen wie bisher als Check angelegt. Der Schalter „Gruppen der Healthchecks übernehmen“ entfällt.
+
 ## 2.35.0 – 2026-10-26
 
 ### Neu

@@ -214,3 +214,24 @@ func (m *Module) subGroupOf(ctx context.Context, r *http.Request) func(row) stri
 		return h
 	}
 }
+
+// checkSystemOf: Name des Proxmox-Systems bzw. Docker-Hosts aus den Parametern eines Checks (params.system, "" = keiner).
+func checkSystemOf(c *Check) string {
+	if c == nil || (c.Type != checks.TypeProxmox && c.Type != checks.TypeDocker) {
+		return ""
+	}
+	var p struct {
+		System string `json:"system"`
+	}
+	_ = json.Unmarshal(c.Params, &p)
+	return strings.TrimSpace(p.System)
+}
+
+// statusGroupName: Gruppe eines Checks auf Statusseiten; in „Proxmox VE“ und „Docker“ mit dem Namen des Systems.
+func statusGroupName(c *Check) string {
+	g := strings.TrimSpace(c.Group)
+	if sys := checkSystemOf(c); sys != "" && sys != g && (g == pveCheckGroup || g == dockerCheckGroup) {
+		return g + " · " + sys
+	}
+	return g
+}

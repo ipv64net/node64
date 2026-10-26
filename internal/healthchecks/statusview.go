@@ -444,13 +444,11 @@ func (m *Module) statusDayAggs(ctx context.Context, tokens []string, n int, idx 
 	return out, nil
 }
 
-// statusGroupsFor: die Gruppen der Seite oder (HCGroups) alle Eintraege nach der Healthchecks-Gruppe ihres Checks.
-// Dann Gruppen in der Reihenfolge ihres ersten Auftretens, Eintraege in Seitenreihenfolge, Checks ohne Gruppe in
-// einer Gruppe ohne Namen am Ende; geloeschte Checks bilden keine Gruppe.
+// statusGroupsFor: alle Eintraege nach der Healthchecks-Gruppe ihres Checks (Proxmox VE und Docker mit dem Namen des
+// Systems; eigene Gruppen der Seite werden nicht mehr angezeigt). Gruppen in der Reihenfolge ihres ersten Auftretens,
+// Eintraege in Seitenreihenfolge, Checks ohne Gruppe in einer Gruppe ohne Namen am Ende; geloeschte Checks bilden
+// keine Gruppe.
 func statusGroupsFor(p *StatusPage, byTok map[string]*Check) []StatusGroup {
-	if !p.HCGroups {
-		return p.Groups
-	}
 	var out []StatusGroup
 	pos := map[string]int{}
 	var rest []StatusItem
@@ -460,7 +458,7 @@ func statusGroupsFor(p *StatusPage, byTok map[string]*Check) []StatusGroup {
 			if c == nil {
 				continue
 			}
-			name := strings.TrimSpace(c.Group)
+			name := statusGroupName(c)
 			if name == "" {
 				rest = append(rest, it)
 				continue

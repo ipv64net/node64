@@ -2633,7 +2633,9 @@
       "res_hint_docker": "Container deiner Docker-Hosts. Ohne Check wird beim Hinzufügen einer angelegt (wie „auch als Check führen“).",
       "res_new": "neuer Check",
       "res_new_hint": "Noch kein Check – wird beim Hinzufügen angelegt, mit den Benachrichtigungen der Regeln (keine doppelten Meldungen).",
-      "res_none": "Noch keine Daten – das System ist aus oder wurde noch nicht abgefragt."
+      "res_none": "Noch keine Daten – das System ist aus oder wurde noch nicht abgefragt.",
+      "items_hint": "Gruppiert wird nach den Gruppen der Healthchecks (Proxmox VE und Docker je System). Anzeigename leer = Name des Checks.",
+      "items_empty": "Noch keine Einträge – unten Checks auswählen und hinzufügen."
     },
     "whois": {
       "target_hint": "Domain (example.de), IP-Adresse bzw. Netz (192.0.2.1, 2001:db8::/32) oder AS-Nummer (AS3320).",

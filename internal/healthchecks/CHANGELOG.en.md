@@ -1,5 +1,16 @@
 # Changes – Healthchecks
 
+## 2.36.0 – 2026-10-26
+
+### Changed
+- Status pages: the page's own groups are gone. The page always groups by the healthchecks' groups, in “Proxmox VE”
+  and “Docker” with the system's name (“Proxmox VE · cluster”). Existing pages show these groups right away;
+  selection, order and display names of the entries stay.
+- Editing: “Entries” is a simple list (name, group, display name, remove). “Add checks” is a single list for all
+  checks and for nodes, VMs, LXC and containers without a check – with search (also by system), filters by group and
+  tag, “Select visible” and “Add selected”. Entries without a check are created as a check when added, as before. The
+  switch “Use the healthchecks' groups” is gone.
+
 ## 2.35.0 – 2026-10-26
 
 ### New

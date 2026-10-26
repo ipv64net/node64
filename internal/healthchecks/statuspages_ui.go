@@ -42,17 +42,18 @@ type statusCheckOpt struct {
 	Name   string
 	Tags   string // durch Komma getrennt (Filter)
 	Group  string // Healthchecks-Gruppe
+	Sub    string // Proxmox-System bzw. Docker-Host
 	Paused bool
 	OnPage bool // schon auf der Seite
+	// Node, Gast oder Container ohne Check: Value "<System-ID>|<Key>" (add_res), der Check wird beim Hinzufuegen angelegt
+	Res   bool
+	Value string
+	Type  string // i18n-Schluessel des Typs (pve.type.*)
 }
 
-// statusResCard ist die Auswahl der Proxmox-Systeme bzw. Docker-Hosts (nur, wenn es welche gibt).
-type statusResCard struct {
-	Kind    string // pve | docker
-	Title   string // i18n-Schluessel
-	Icon    string
-	Hint    string // i18n-Schluessel
-	Systems []statusResSys
+// statusPageItem ist ein Eintrag der Seite im Formular (eine Liste, gruppiert wird nach den Healthchecks-Gruppen).
+type statusPageItem struct {
+	Token, Name, Label, Group string
 }
 
 // statusResSys ist ein System bzw. Docker-Host mit Nodes, Gaesten bzw. Containern.
@@ -77,12 +78,11 @@ type statusFormData struct {
 	Dirty    bool // Gruppen/Eintraege geaendert, noch nicht gespeichert
 	Errors   map[string]string
 	Error    string
-	Checks   []statusCheckOpt
-	ResCards []statusResCard
+	Checks   []statusCheckOpt  // Auswahl: Checks und Nodes/Gaeste/Container ohne Check
+	PageList []statusPageItem  // Eintraege der Seite
 	Names    map[string]string // Token -> Name des Checks ("" = geloescht)
 	Tags     []string
 	HCGroups []string
-	AddTo    int
 	Layouts  []string
 	Themes   []string
 	DaysOpts []int
@@ -210,35 +210,49 @@ func (m *Module) renderStatusForm(w http.ResponseWriter, r *http.Request, status
 	d.Layouts, d.Themes, d.DaysOpts = []string{"list", "tiles", "compact"}, []string{"auto", "light", "dark"}, []int{30, 60, 90}
 	d.Names = map[string]string{}
 	on := map[string]bool{}
-	for _, g := range d.Page.Groups {
-		for _, it := range g.Items {
-			on[it.Token] = true
-			d.Items++
-		}
-	}
 	tags, groups := map[string]bool{}, map[string]bool{}
 	list, err := m.st.Checks(r.Context())
+	byTok := map[string]*Check{}
 	if err == nil {
 		for _, c := range list {
-			d.Names[c.Token] = c.Name
+			d.Names[c.Token], byTok[c.Token] = c.Name, c
 		}
 	}
-	linked := map[string]bool{} // Checks von Nodes, Gaesten und Containern stehen in deren Karte
-	for _, docker := range []bool{false, true} {
-		card := statusResCard{Kind: "pve", Title: "nav.proxmox", Icon: "bi-hdd-stack", Hint: "hc.status.res_hint_pve"}
-		if docker {
-			card = statusResCard{Kind: "docker", Title: "nav.docker", Icon: "bi-box-seam", Hint: "hc.status.res_hint_docker"}
-		}
-		if card.Systems = m.statusResources(r.Context(), docker, d.Names, on, linked); len(card.Systems) > 0 {
-			d.ResCards = append(d.ResCards, card)
-		}
-	}
-	if err == nil {
-		for _, c := range list {
-			if linked[c.Token] {
+	for _, g := range d.Page.Groups {
+		for _, it := range g.Items {
+			if on[it.Token] {
 				continue
 			}
-			d.Checks = append(d.Checks, statusCheckOpt{Token: c.Token, Name: c.Name, Tags: strings.Join(c.Tags, ","), Group: c.Group, Paused: c.Paused, OnPage: on[c.Token]})
+			on[it.Token] = true
+			pi := statusPageItem{Token: it.Token, Name: d.Names[it.Token], Label: it.Label}
+			if c := byTok[it.Token]; c != nil {
+				pi.Group = statusGroupName(c)
+			}
+			d.PageList = append(d.PageList, pi)
+		}
+	}
+	d.Items = len(d.PageList)
+	// Nodes, Gaeste und Container ohne Check (mit Check stehen sie unten als Check in der Liste)
+	linked := map[string]bool{}
+	for _, docker := range []bool{false, true} {
+		group := pveCheckGroup
+		if docker {
+			group = dockerCheckGroup
+		}
+		for _, sys := range m.statusResources(r.Context(), docker, d.Names, on, linked) {
+			for _, o := range sys.Items {
+				if o.Token != "" {
+					continue
+				}
+				d.Checks = append(d.Checks, statusCheckOpt{Name: o.Name, Group: group, Sub: sys.Name, Res: true, Value: o.Value, Type: o.Type})
+				groups[group] = true
+			}
+		}
+	}
+	if err == nil {
+		for _, c := range list {
+			d.Checks = append(d.Checks, statusCheckOpt{Token: c.Token, Value: c.Token, Name: c.Name, Tags: strings.Join(c.Tags, ","), Group: c.Group,
+				Sub: checkSystemOf(c), Paused: c.Paused, OnPage: on[c.Token]})
 			for _, t := range c.Tags {
 				tags[t] = true
 			}
@@ -247,11 +261,8 @@ func (m *Module) renderStatusForm(w http.ResponseWriter, r *http.Request, status
 			}
 		}
 	}
-	sort.Slice(d.Checks, func(i, j int) bool { return strings.ToLower(d.Checks[i].Name) < strings.ToLower(d.Checks[j].Name) })
+	sort.SliceStable(d.Checks, func(i, j int) bool { return strings.ToLower(d.Checks[i].Name) < strings.ToLower(d.Checks[j].Name) })
 	d.Tags, d.HCGroups = sortedKeys(tags), sortedKeys(groups)
-	if d.AddTo < 0 || d.AddTo >= len(d.Page.Groups) {
-		d.AddTo = 0
-	}
 	title := "hc.status.new"
 	if d.Edit {
 		title = "hc.status.edit"
@@ -268,14 +279,15 @@ func sortedKeys(m map[string]bool) []string {
 	return out
 }
 
-// statusPageFromForm uebernimmt die Felder des Formulars in p (Gruppen und Eintraege in der Reihenfolge des Formulars).
+// statusPageFromForm uebernimmt die Felder des Formulars in p. Die Eintraege stehen in einer Liste; die Seite gruppiert
+// nach den Gruppen der Healthchecks (statusGroupsFor), eigene Gruppen der Seite gibt es in der Oberflaeche nicht mehr.
 func statusPageFromForm(r *http.Request, p *StatusPage) {
 	v := func(k string) string { return strings.TrimSpace(r.PostFormValue(k)) }
 	on := func(k string) bool { return r.PostFormValue(k) == "on" }
 	p.Title, p.Slug = v("title"), strings.ToLower(v("slug"))
 	p.Description, p.Footer = strings.TrimSpace(r.PostFormValue("description")), strings.TrimSpace(r.PostFormValue("footer"))
 	p.Enabled, p.PublishNode, p.ShowUptime, p.ShowHistory, p.NoIndex, p.PoweredBy = on("enabled"), on("publish_node"), on("show_uptime"), on("show_history"), on("noindex"), on("powered_by")
-	p.HCGroups = on("hc_groups")
+	p.HCGroups = true
 	p.Layout, p.Theme, p.Lang = v("layout"), v("theme"), v("lang")
 	p.Accent = ""
 	if on("accent_on") {
@@ -285,22 +297,15 @@ func statusPageFromForm(r *http.Request, p *StatusPage) {
 	if n, err := strconv.Atoi(v("refresh_sec")); err == nil {
 		p.RefreshSec = n
 	}
-	names := r.PostForm["gr_name"]
-	p.Groups = make([]StatusGroup, len(names))
-	for i, n := range names {
-		p.Groups[i] = StatusGroup{Name: strings.TrimSpace(n), Items: []StatusItem{}}
-	}
-	gs, toks, lbls := r.PostForm["it_g"], r.PostForm["it_tok"], r.PostForm["it_lbl"]
+	g := StatusGroup{Items: []StatusItem{}}
+	toks, lbls := r.PostForm["it_tok"], r.PostForm["it_lbl"]
 	for i, tok := range toks {
-		if i >= len(gs) || i >= len(lbls) || tok == "" {
+		if i >= len(lbls) || tok == "" {
 			continue
 		}
-		gi, err := strconv.Atoi(gs[i])
-		if err != nil || gi < 0 || gi >= len(p.Groups) {
-			continue
-		}
-		p.Groups[gi].Items = append(p.Groups[gi].Items, StatusItem{Token: tok, Label: strings.TrimSpace(lbls[i])})
+		g.Items = append(g.Items, StatusItem{Token: tok, Label: strings.TrimSpace(lbls[i])})
 	}
+	p.Groups = []StatusGroup{g}
 }
 
 // statusFormOp wendet einen Knopf des Formulars auf die Gruppen und Eintraege an (ohne zu speichern).
@@ -410,114 +415,38 @@ func (m *Module) statusResTokens(r *http.Request, vals []string) ([]string, erro
 }
 
 func (m *Module) statusFormOp(ctx context.Context, r *http.Request, p *StatusPage, op string) error {
-	parts := strings.Split(op, "-")
-	num := func(i int) int {
-		if i >= len(parts) {
-			return -1
-		}
-		n, err := strconv.Atoi(parts[i])
-		if err != nil {
-			return -1
-		}
-		return n
+	if len(p.Groups) == 0 {
+		p.Groups = []StatusGroup{{Items: []StatusItem{}}}
 	}
-	gi := num(1)
-	okG := gi >= 0 && gi < len(p.Groups)
-	switch parts[0] {
-	case "gadd":
-		p.Groups = append(p.Groups, StatusGroup{Name: strings.TrimSpace(r.PostFormValue("new_group")), Items: []StatusItem{}})
-	case "gup":
-		if okG && gi > 0 {
-			p.Groups[gi-1], p.Groups[gi] = p.Groups[gi], p.Groups[gi-1]
+	g := &p.Groups[0]
+	if n, ok := strings.CutPrefix(op, "rm-"); ok { // Eintrag entfernen
+		if i, err := strconv.Atoi(n); err == nil && i >= 0 && i < len(g.Items) {
+			g.Items = append(g.Items[:i], g.Items[i+1:]...)
 		}
-	case "gdown":
-		if okG && gi < len(p.Groups)-1 {
-			p.Groups[gi+1], p.Groups[gi] = p.Groups[gi], p.Groups[gi+1]
-		}
-	case "gdel":
-		if okG {
-			p.Groups = append(p.Groups[:gi], p.Groups[gi+1:]...)
-		}
-	case "gsort":
-		if okG {
-			names := m.checkNames(ctx)
-			label := func(it StatusItem) string {
-				if it.Label != "" {
-					return strings.ToLower(it.Label)
-				}
-				return strings.ToLower(names[it.Token])
-			}
-			items := p.Groups[gi].Items
-			sort.SliceStable(items, func(a, b int) bool { return label(items[a]) < label(items[b]) })
-		}
-	case "iup", "idown", "idel":
-		if !okG {
-			return nil
-		}
-		items, ii := p.Groups[gi].Items, num(2)
-		if ii < 0 || ii >= len(items) {
-			return nil
-		}
-		switch {
-		case parts[0] == "iup" && ii > 0:
-			items[ii-1], items[ii] = items[ii], items[ii-1]
-		case parts[0] == "idown" && ii < len(items)-1:
-			items[ii+1], items[ii] = items[ii], items[ii+1]
-		case parts[0] == "idel":
-			p.Groups[gi].Items = append(items[:ii], items[ii+1:]...)
-		}
-	case "add", "addtag", "addhcg":
-		var opErr error
-		if parts[0] == "add" {
-			res, err := m.statusResTokens(r, r.PostForm["add_res"]) // vor dem Laden der Checks: legt fehlende an
-			for _, t := range res {
-				r.PostForm["add_tok"] = append(r.PostForm["add_tok"], t)
-			}
-			opErr = err
-		}
-		list, err := m.st.Checks(ctx)
-		if err != nil {
-			return err
-		}
-		want := map[string]bool{}
-		for _, t := range r.PostForm["add_tok"] {
-			want[t] = true
-		}
-		tag, hcg := r.PostFormValue("add_tag"), r.PostFormValue("add_hcg")
-		var toks []string
-		for _, c := range list {
-			switch {
-			case parts[0] == "add" && want[c.Token]:
-			case parts[0] == "addtag" && tag != "" && containsStr(c.Tags, tag):
-			case parts[0] == "addhcg" && hcg != "" && c.Group == hcg:
-			default:
-				continue
-			}
-			toks = append(toks, c.Token)
-		}
-		if len(toks) == 0 {
-			return opErr
-		}
-		if len(p.Groups) == 0 {
-			p.Groups = append(p.Groups, StatusGroup{Items: []StatusItem{}})
-		}
-		to, _ := strconv.Atoi(r.PostFormValue("add_to"))
-		if to < 0 || to >= len(p.Groups) {
-			to = 0
-		}
-		g := &p.Groups[to]
-		has := map[string]bool{}
-		for _, it := range g.Items {
-			has[it.Token] = true
-		}
-		for _, t := range toks {
-			if !has[t] {
-				g.Items, has[t] = append(g.Items, StatusItem{Token: t}), true
-			}
-		}
-		return opErr
+		return nil
 	}
-	return nil
+	if op != "add" {
+		return nil
+	}
+	toks, opErr := m.statusResTokens(r, r.PostForm["add_res"]) // Nodes, Gaeste, Container: fehlende Checks anlegen
+	list, err := m.st.Checks(ctx)
+	if err != nil {
+		return err
+	}
+	want := map[string]bool{}
+	for _, t := range append(r.PostForm["add_tok"], toks...) {
+		want[t] = true
+	}
+	has := map[string]bool{}
+	for _, it := range g.Items {
+		has[it.Token] = true
+	}
+	for _, c := range list {
+		if want[c.Token] && !has[c.Token] {
+			g.Items, has[c.Token] = append(g.Items, StatusItem{Token: c.Token}), true
+		}
+	}
+	return opErr
 }
 
 func containsStr(list []string, s string) bool {
@@ -527,16 +456,6 @@ func containsStr(list []string, s string) bool {
 		}
 	}
 	return false
-}
-
-func (m *Module) checkNames(ctx context.Context) map[string]string {
-	out := map[string]string{}
-	if list, err := m.st.Checks(ctx); err == nil {
-		for _, c := range list {
-			out[c.Token] = c.Name
-		}
-	}
-	return out
 }
 
 // statusPasswordArg macht aus der Eingabe das Argument fuer SaveStatusPage: "" = unveraendert, "-" = entfernen,
@@ -625,15 +544,11 @@ func (m *Module) pageStatusSave(w http.ResponseWriter, r *http.Request) {
 	}
 	statusPageFromForm(r, p)
 	d := statusFormData{Page: p, Edit: edit}
-	d.AddTo, _ = strconv.Atoi(r.PostFormValue("add_to"))
 	if op := r.PostFormValue("op"); op != "" && op != "save" {
 		if err := m.statusFormOp(ctx, r, p, op); err != nil {
 			d.Error = m.pveErrText(r, err)
 		}
 		d.Dirty = true
-		if strings.HasPrefix(op, "gadd") {
-			d.AddTo = len(p.Groups) - 1
-		}
 		m.renderStatusForm(w, r, http.StatusOK, d)
 		return
 	}
