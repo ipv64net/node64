@@ -38,7 +38,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.12.0"
+	version = "0.13.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -66,17 +66,19 @@ const KindNotifyNew = notify.KindHoneypotNew
 type ModuleConfig struct {
 	Profile string `json:"profile"` // minimal, standard, full, proxy oder custom (dann gilt Services)
 	Config
-	RetentionDays int   `json:"retention_days"` // Aufbewahrung der Ereignisse, Standard 7
-	MaxEvents     int64 `json:"max_events"`     // Obergrenze der gespeicherten Ereignisse, Standard 200000
-	NotifyNew     bool  `json:"notify_new"`     // Benachrichtigung bei neuen Angreifern (Standard aus)
-	Report        bool  `json:"report"`         // Meldung an ipv64 (Opt-in, Standard aus; braucht den zentralen API-Key)
+	RetentionDays int   `json:"retention_days"`   // Aufbewahrung der Ereignisse, Standard 7
+	MaxEvents     int64 `json:"max_events"`       // Obergrenze der gespeicherten Ereignisse, Standard 200000
+	NotifyNew     bool  `json:"notify_new"`       // Benachrichtigung bei neuen Angreifern (Standard aus)
+	Report        bool  `json:"report"`           // Meldung an ipv64 (Standard an; wirkt erst mit dem zentralen API-Key)
+	Expert        bool  `json:"expert,omitempty"` // Oberflaeche im Expertenmodus (alle Einstellungen); sonst einfacher Modus
 	// Ueberwachung der eigenen Anmeldung (login.go, Regel node64/login@1); leer = an mit Standardwerten
 	Login LoginConfig `json:"login,omitzero"`
 }
 
-// DefaultConfig: Profil standard mit Port-Scan-Erkennung, 7 Tage, ohne Benachrichtigung.
+// DefaultConfig: nur ueber PROXY64 mit Port-Scan-Erkennung, 7 Tage, ohne Benachrichtigung, Meldung an ipv64 an
+// (gemeldet wird ab dem ersten Durchlauf, nichts von vorher).
 func DefaultConfig() ModuleConfig {
-	return ModuleConfig{Profile: ProfileProxy, Config: Config{Scan: true}, RetentionDays: defaultRetentionDays, MaxEvents: DefaultMaxRows}
+	return ModuleConfig{Profile: ProfileProxy, Config: Config{Scan: true}, RetentionDays: defaultRetentionDays, MaxEvents: DefaultMaxRows, Report: true}
 }
 
 // sensorAPI ist, was das Modul vom Sensor braucht (Tests setzen einen Ersatz ein).
@@ -545,6 +547,12 @@ func (m *Module) validate(ctx context.Context, c *ModuleConfig) FieldErrors {
 	}
 	if c.Services == nil {
 		c.Services = []Service{}
+	}
+	if c.StartPage == StartGateway {
+		c.StartPage = "" // Standard
+	}
+	if c.StartPage != "" && c.StartPage != StartNeutral {
+		errs["start_page"] = "honeypot.err.start_page"
 	}
 	for _, p := range PersonaProblems(&c.Config) {
 		key := "personas"

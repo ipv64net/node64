@@ -439,7 +439,7 @@ func TestCatalogPageRender(t *testing.T) {
 		t.Fatalf("setup: %d", code)
 	}
 	p := modFreePort(t)
-	if _, err := m.SaveConfig(context.Background(), ModuleConfig{Profile: ProfileCustom, Config: Config{Services: []Service{{Service: SvcSSH, Port: p}}}}); err != nil {
+	if _, err := m.SaveConfig(context.Background(), ModuleConfig{Profile: ProfileCustom, Expert: true, Config: Config{Services: []Service{{Service: SvcSSH, Port: p}}}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := reg.Enable(context.Background(), Name); err != nil {
@@ -470,6 +470,33 @@ func TestCatalogPageRender(t *testing.T) {
 	}
 	if code, body = do("/api/honeypot/catalog", nil); code != 200 || !strings.Contains(body, `"entries"`) || !strings.Contains(body, `"state":"open"`) {
 		t.Fatalf("api: %d", code)
+	}
+
+	// einfacher Modus: umschalten, Vorlagen mit den Ports fuer den Router, Startseite; Meldung an ipv64 ohne Key unveraendert
+	if code, _ = do("/honeypot/settings", url.Values{"_csrf": {csrf[1]}, "ui_mode": {"simple"}}); code != http.StatusSeeOther || m.loadConfig(context.Background()).Expert {
+		t.Fatalf("mode simple: %d", code)
+	}
+	if code, body = do("/honeypot/settings", nil); code != 200 || !strings.Contains(body, "data-hp-simple") || strings.Contains(body, `name="catalog"`) ||
+		!strings.Contains(body, `id="sp-custom" value="custom" checked`) || !strings.Contains(body, "22/tcp") || !strings.Contains(body, "161/udp") ||
+		!strings.Contains(body, `<option value="gateway" selected>`) {
+		t.Fatalf("simple view: %d %s", code, body)
+	}
+	if code, _ = do("/honeypot/settings", url.Values{"_csrf": {csrf[1]}, "simple": {"1"}, "profile": {ProfileMinimal}, "start_page": {"bunt"}}); code != http.StatusUnprocessableEntity {
+		t.Fatalf("simple invalid start page: %d", code)
+	}
+	before := m.loadConfig(context.Background())
+	if code, _ = do("/honeypot/settings", url.Values{"_csrf": {csrf[1]}, "simple": {"1"}, "profile": {ProfileMinimal}, "start_page": {StartNeutral}, "notify_new": {"1"}}); code != http.StatusSeeOther {
+		t.Fatalf("simple save: %d", code)
+	}
+	if c := m.loadConfig(context.Background()); c.Profile != ProfileMinimal || c.StartPage != StartNeutral || !c.NotifyNew || c.Report != before.Report || c.Expert ||
+		c.RetentionDays != before.RetentionDays {
+		t.Fatalf("simple saved: %+v", c)
+	}
+	if code, _ = do("/honeypot/settings", url.Values{"_csrf": {csrf[1]}, "ui_mode": {"expert"}}); code != http.StatusSeeOther || !m.loadConfig(context.Background()).Expert {
+		t.Fatalf("mode expert: %d", code)
+	}
+	if _, body = do("/honeypot/settings", nil); !strings.Contains(body, `name="catalog"`) || !strings.Contains(body, `<option value="neutral" selected>`) {
+		t.Fatal("expert view after switch")
 	}
 
 	// dynamische Schluessel des Katalogs

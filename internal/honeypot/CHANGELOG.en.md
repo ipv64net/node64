@@ -1,5 +1,20 @@
 # Changes – Honeypot64
 
+## 0.13.0 – 2026-10-26
+
+### New
+- Simple mode and expert mode (switch at the top of the settings). Simple mode is the default: pick a template
+  (recommended: "Only via PROXY64"), with the list of ports to forward to the node in the router (e.g. 22/tcp,
+  161/udp), the start page of the web trap, notification and reporting to ipv64. All previous settings (single
+  services and ports, profiles, certificate, limits, log sensor, syslog, sign-in watch) are in expert mode.
+- Start page of the web trap selectable: gateway terminal in Matrix style (default) or a plain sign-in form. Also
+  applies to bots PROXY64 hands to the honeypot.
+
+### Changed
+- "Report to ipv64" is on by default for new setups (takes effect once the central API key is set; reporting starts
+  with the first run, nothing from before). Without a key, saving leaves the switch unchanged.
+
+
 ## 0.12.0 – 2026-10-26
 
 ### Changed

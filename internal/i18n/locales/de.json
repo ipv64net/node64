@@ -3952,7 +3952,8 @@
       "cert_many": "Höchstens {v1} Namen.",
       "cert_dns": "DNS-Ziel „{v1}“: öffentliche IPv4, IPv6 (je eine) oder ein Name für CNAME.",
       "login_threshold": "Schwelle: {v1} bis {v2} Fehlversuche.",
-      "login_window": "Zeitfenster: {v1} bis {v2} Minuten."
+      "login_window": "Zeitfenster: {v1} bis {v2} Minuten.",
+      "start_page": "Unbekannte Startseite."
     },
     "report": {
       "title": "Meldung an ipv64",
@@ -4240,6 +4241,33 @@
       "events": "{day} in 24 h, {week} in 7 Tagen",
       "counts": "Fehlversuche seit dem Start: {fails} gewertet, {local} lokal (nicht gemeldet)",
       "rule": "Schwelle {threshold} in {window} min"
+    },
+    "mode": {
+      "title": "Ansicht",
+      "simple": "Einfach",
+      "expert": "Experte",
+      "simple_hint": "Vorlage wählen, Ports im Router freigeben, fertig. Alle Einstellungen gibt es im Expertenmodus.",
+      "expert_hint": "Alle Einstellungen: einzelne Dienste und Ports, Profile, Zertifikat, Limits, Log-Sensor und Syslog."
+    },
+    "simple": {
+      "template": "Vorlage",
+      "recommended": "empfohlen",
+      "custom_hint": "Im Expertenmodus zusammengestellt. Wählst du hier eine Vorlage, ersetzt sie diese Auswahl.",
+      "desc": {
+        "proxy": "Der Honeypot öffnet keine eigenen Ports. Er bekommt von PROXY64 die Anfragen, die keinem Host zuzuordnen sind, und als schädlich erkannte – und meldet die Angreifer weiter.",
+        "minimal": "SSH und Web – die beiden meistangegriffenen Dienste.",
+        "standard": "Die üblichen Ziele von Bots: SSH, Telnet, Web, FTP, Mail, Datenbanken, RDP, VNC, MikroTik, Proxmox VE, MQTT.",
+        "full": "Alle Fallen, auch seltene Dienste und Web-Oberflächen – am besten auf einer eigenen Honeypot-Node."
+      },
+      "open_ports": "Im Router an diese Node weiterleiten:",
+      "no_ports": "Keine Ports nötig – PROXY64 muss laufen.",
+      "ports_hint": "Ports, die auf dieser Node schon belegt sind (z. B. 80/443 durch PROXY64, 53 durch DNS64, {ui} durch die Oberfläche), lässt der Honeypot aus. Welche Fallen wirklich offen sind, zeigt die Übersicht."
+    },
+    "start": {
+      "title": "Startseite der Web-Falle",
+      "gateway": "Gateway-Terminal (Matrix-Stil)",
+      "neutral": "Schlichtes Anmeldeformular",
+      "hint": "Was Bots auf „/“ sehen – auch die, die PROXY64 an den Honeypot gibt. Beide Formulare erfassen die eingegebenen Zugangsdaten."
     }
   },
   "pve": {

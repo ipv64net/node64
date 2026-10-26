@@ -3952,7 +3952,8 @@
       "cert_many": "At most {v1} names.",
       "cert_dns": "DNS target “{v1}”: public IPv4, IPv6 (one each) or a name for a CNAME.",
       "login_threshold": "Threshold: {v1} to {v2} failed logins.",
-      "login_window": "Time window: {v1} to {v2} minutes."
+      "login_window": "Time window: {v1} to {v2} minutes.",
+      "start_page": "Unknown start page."
     },
     "report": {
       "title": "Reporting to ipv64",
@@ -4240,6 +4241,33 @@
       "events": "{day} in 24 h, {week} in 7 days",
       "counts": "failed logins since start: {fails} counted, {local} local (not reported)",
       "rule": "threshold {threshold} in {window} min"
+    },
+    "mode": {
+      "title": "View",
+      "simple": "Simple",
+      "expert": "Expert",
+      "simple_hint": "Pick a template, forward the ports in your router, done. All settings are in expert mode.",
+      "expert_hint": "All settings: single services and ports, profiles, certificate, limits, log sensor and syslog."
+    },
+    "simple": {
+      "template": "Template",
+      "recommended": "recommended",
+      "custom_hint": "Put together in expert mode. Choosing a template here replaces this selection.",
+      "desc": {
+        "proxy": "The honeypot opens no ports of its own. PROXY64 hands it requests that match no host and requests recognised as malicious – and it reports the attackers.",
+        "minimal": "SSH and web – the two most attacked services.",
+        "standard": "The usual bot targets: SSH, Telnet, web, FTP, mail, databases, RDP, VNC, MikroTik, Proxmox VE, MQTT.",
+        "full": "All traps, including rare services and web interfaces – best on a dedicated honeypot node."
+      },
+      "open_ports": "Forward these to this node in your router:",
+      "no_ports": "No ports needed – PROXY64 has to be running.",
+      "ports_hint": "Ports already used on this node (e.g. 80/443 by PROXY64, 53 by DNS64, {ui} by the web interface) are left out. The overview shows which traps are really open."
+    },
+    "start": {
+      "title": "Start page of the web trap",
+      "gateway": "Gateway terminal (Matrix style)",
+      "neutral": "Plain sign-in form",
+      "hint": "What bots see on “/” – including those PROXY64 hands to the honeypot. Both forms record the credentials entered."
     }
   },
   "pve": {

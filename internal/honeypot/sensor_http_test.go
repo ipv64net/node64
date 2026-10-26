@@ -1,6 +1,7 @@
 package honeypot
 
 import (
+	"context"
 	"crypto/tls"
 	"io"
 	"net/http"
@@ -152,5 +153,26 @@ func TestDecoyGatewayPage(t *testing.T) {
 	}
 	if strings.Contains(sensorPageHTML("admin", false), "NODE-07") {
 		t.Error("other decoys must stay neutral")
+	}
+}
+
+// Startseite einstellbar: Gateway-Terminal (Standard) oder schlicht; gilt ab dem naechsten Apply.
+func TestSensorStartPage(t *testing.T) {
+	p := sensorFreePort(t)
+	cfg := Config{Services: []Service{{SvcHTTP, p, ""}}}
+	s, _ := sensorStart(t, cfg)
+	cl := &http.Client{Timeout: 5 * time.Second}
+	const browser = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
+	if _, body, _ := sensorGet(t, cl, "GET", "http://"+sensorAddrOf(p)+"/", browser, "", nil); !strings.Contains(body, "NODE-07") {
+		t.Fatal("default start page is not the gateway terminal")
+	}
+	cfg.StartPage = StartNeutral
+	s.Apply(context.Background(), cfg, nil)
+	_, body, _ := sensorGet(t, cl, "GET", "http://"+sensorAddrOf(p)+"/", browser, "", nil)
+	if strings.Contains(body, "NODE-07") || !strings.Contains(body, "<title>Sign in</title>") || !strings.Contains(body, `name="username"`) {
+		t.Fatalf("plain start page: %s", body)
+	}
+	if !strings.Contains(sensorPlainHTML(true), "Invalid username or password") {
+		t.Fatal("plain page without error after failed login")
 	}
 }

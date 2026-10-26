@@ -1,5 +1,21 @@
 # Änderungen – Honeypot64
 
+## 0.13.0 – 2026-10-26
+
+### Neu
+- Einfacher Modus und Expertenmodus (Umschalter oben in den Einstellungen). Der einfache Modus ist Standard: Vorlage
+  wählen (empfohlen: „Nur über PROXY64“), dazu die Liste der Ports, die im Router an die Node weiterzuleiten sind
+  (z. B. 22/tcp, 161/udp), Startseite der Web-Falle, Benachrichtigung und Meldung an ipv64. Alle bisherigen
+  Einstellungen (einzelne Dienste und Ports, Profile, Zertifikat, Limits, Log-Sensor, Syslog, Anmeldung) stehen im
+  Expertenmodus.
+- Startseite der Web-Falle wählbar: Gateway-Terminal im Matrix-Stil (Standard) oder schlichtes Anmeldeformular. Gilt
+  auch für Bots, die PROXY64 an den Honeypot gibt.
+
+### Geändert
+- „An ipv64 melden“ ist für neue Einrichtungen standardmäßig an (wirkt, sobald der zentrale API-Key eingetragen ist;
+  gemeldet wird ab dem ersten Durchlauf, nichts von vorher). Ohne Key bleibt der Schalter beim Speichern unverändert.
+
+
 ## 0.12.0 – 2026-10-26
 
 ### Geändert

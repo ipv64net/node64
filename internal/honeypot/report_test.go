@@ -555,10 +555,14 @@ func TestModuleReportOptIn(t *testing.T) {
 	m, _ := modTest(t, modFreePort(t))
 	ctx := context.Background()
 	c := m.loadConfig(ctx)
-	if c.Report {
-		t.Fatal("report must be off by default")
+	if !c.Report {
+		t.Fatal("report must be on by default")
 	}
-	// ohne Key: Einschalten abgelehnt
+	// ohne Key: Ausschalten geht, Einschalten abgelehnt
+	c.Report = false
+	if _, err := m.SaveConfig(ctx, c); err != nil {
+		t.Fatal(err)
+	}
 	c.Report = true
 	_, err := m.SaveConfig(ctx, c)
 	var fe FieldErrors

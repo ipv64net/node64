@@ -287,6 +287,10 @@ type settingsData struct {
 	KeySet    bool         // zentraler ipv64-API-Key eingetragen (sonst Meldung an ipv64 gesperrt)
 	Report    ReportStatus // Zustand der Meldung an ipv64
 
+	// Einfacher Modus: Vorlagen mit den Ports, die im Router weiterzuleiten sind, und Startseite der Web-Falle
+	Simple     []simpleProfile
+	StartPages []string
+
 	// Dienste-Katalog (catalog.go)
 	CatRows     []uiCatRow
 	CatExtras   []uiCatRow
@@ -418,6 +422,26 @@ func profileViews() []profileView {
 	return out
 }
 
+// simpleProfile: Vorlage im einfachen Modus mit den Ports fuer die Weiterleitung im Router ("22/tcp").
+type simpleProfile struct {
+	Key   string
+	Ports []string
+	Low   bool // Ports unter 1024 dabei
+}
+
+func simpleProfiles() []simpleProfile {
+	var out []simpleProfile
+	for _, p := range []string{ProfileProxy, ProfileMinimal, ProfileStandard, ProfileFull} {
+		sp := simpleProfile{Key: p}
+		for _, s := range Profiles[p] {
+			sp.Ports = append(sp.Ports, strconv.Itoa(s.Port)+"/"+string(svcProto(s.Service)))
+			sp.Low = sp.Low || s.Port < 1024
+		}
+		out = append(out, sp)
+	}
+	return out
+}
+
 // servicesText: eigene Dienste als Text fuer das Formular.
 func servicesText(list []Service) string {
 	var b strings.Builder
@@ -458,6 +482,7 @@ func parseServices(text string) []Service {
 // settingsView baut die Einstellungsseite. cf = Katalog wie eingegeben (nil = aus der Einstellung c).
 func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, errs map[string]string, lf *logForm, cf *catForm) settingsData {
 	d := settingsData{Tabs: tabsFor("settings"), Running: m.running() != nil, Cfg: c, Lines: lines, Profiles: profileViews(), Pages: Pages,
+		Simple: simpleProfiles(), StartPages: StartPages,
 		Errors: errs, MaxDays: maxRetentionDays, MinEvents: minMaxEvents, MaxEvents: maxMaxEvents,
 		LogFormats: cfgLogFormats, LogRoots: strings.Join(cfgLogRoots, ", "), LogSuggest: logSuggestions}
 	if d.Errors == nil {
@@ -523,6 +548,29 @@ func formInt(r *http.Request, name string) int {
 func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	c := m.loadConfig(ctx)
+	if v := r.PostFormValue("ui_mode"); v != "" { // Einfach/Experte umschalten (nur die Ansicht, sonst nichts)
+		c.Expert = v == "expert"
+		m.saveSettings(w, r, c, "", nil, nil, false)
+		return
+	}
+	_, key := m.api(ctx)
+	if r.PostFormValue("simple") != "" { // einfacher Modus: Vorlage, Startseite, Benachrichtigung, Meldung an ipv64
+		if p := r.PostFormValue("profile"); p != ProfileCustom && p != c.Profile {
+			if _, ok := Profiles[p]; ok {
+				selectionConfig(&c, Profiles[p])
+				if p == ProfileProxy {
+					c.Profile = ProfileProxy
+				}
+			}
+		}
+		c.StartPage = r.PostFormValue("start_page")
+		c.NotifyNew = r.PostFormValue("notify_new") != ""
+		if key != "" { // ohne Key ist der Schalter gesperrt und kommt nicht mit
+			c.Report = r.PostFormValue("report") != ""
+		}
+		m.saveSettings(w, r, c, "", nil, nil, false)
+		return
+	}
 	lines := r.PostFormValue("services")
 	var cf *catForm
 	textOpen := false
@@ -553,7 +601,12 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	}
 	c.Scan = r.PostFormValue("scan") != ""
 	c.NotifyNew = r.PostFormValue("notify_new") != ""
-	c.Report = r.PostFormValue("report") != ""
+	if key != "" { // ohne Key ist der Schalter gesperrt und kommt nicht mit
+		c.Report = r.PostFormValue("report") != ""
+	}
+	if _, ok := r.PostForm["start_page"]; ok {
+		c.StartPage = r.PostFormValue("start_page")
+	}
 	if r.PostFormValue("cert_form") != "" { // Zertifikat fuer Koeder-Namen (nur mit diesem Teil des Formulars)
 		c.CertID = int64(formInt(r, "cert_id"))
 		c.CertPorts = parsePorts(r.PostFormValue("cert_ports"))
@@ -571,7 +624,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 			lf.Files = append(lf.Files, logSuggestions[i])
 		}
 		d := m.settingsView(r, c, lines, nil, &lf, cf)
-		d.Unsaved = true
+		d.Unsaved, d.Cfg.Expert = true, true // Knopf im Expertenformular
 		m.g.Render(w, r, http.StatusOK, Name+"/settings", "honeypot.settings.title", d)
 		return
 	}
@@ -582,20 +635,26 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 			c.Profile = ProfileProxy
 		}
 		d := m.settingsView(r, c, "", nil, &lf, cf)
-		d.CatUnsaved = true
+		d.CatUnsaved, d.Cfg.Expert = true, true // Knopf im Expertenformular
 		m.g.Render(w, r, http.StatusOK, Name+"/settings", "honeypot.settings.title", d)
 		return
 	}
 	lf.apply(&c.Log)
-	saved, err := m.SaveConfig(ctx, c)
+	m.saveSettings(w, r, c, lines, &lf, cf, textOpen)
+}
+
+// saveSettings speichert c; bei Fehlern zeigt es das Formular wieder (lf/cf wie eingegeben, nil = aus c).
+func (m *Module) saveSettings(w http.ResponseWriter, r *http.Request, c ModuleConfig, lines string, lf *logForm, cf *catForm, textOpen bool) {
+	saved, err := m.SaveConfig(r.Context(), c)
 	var fe FieldErrors
 	if errors.As(err, &fe) {
 		errs := map[string]string{}
 		for k, v := range fe {
 			errs[k] = m.errText(r, v)
 		}
-		d := m.settingsView(r, saved, lines, errs, &lf, cf)
+		d := m.settingsView(r, saved, lines, errs, lf, cf)
 		d.TextOpen = textOpen
+		d.Cfg.Expert = d.Cfg.Expert || (r.PostFormValue("simple") == "" && r.PostFormValue("ui_mode") == "") // Fehler im Expertenformular dort zeigen
 		m.g.Render(w, r, http.StatusUnprocessableEntity, Name+"/settings", "honeypot.settings.title", d)
 		return
 	}

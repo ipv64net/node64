@@ -258,7 +258,7 @@ func TestDecoyPagesRender(t *testing.T) {
 		"password2": {"sehr geheimes passwort"}, "timezone": {"Europe/Berlin"}, "node_name": {"pi"}}); code != http.StatusSeeOther {
 		t.Fatalf("setup: %d", code)
 	}
-	if _, err := m.SaveConfig(context.Background(), ModuleConfig{Profile: ProfileCustom, Config: Config{Services: []Service{{Service: SvcHTTPS, Port: modFreePort(t)}}, CertID: 5}}); err != nil {
+	if _, err := m.SaveConfig(context.Background(), ModuleConfig{Profile: ProfileCustom, Expert: true, Config: Config{Services: []Service{{Service: SvcHTTPS, Port: modFreePort(t)}}, CertID: 5}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := reg.Enable(context.Background(), Name); err != nil {

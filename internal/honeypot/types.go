@@ -138,7 +138,19 @@ type Config struct {
 	CertPorts []int `json:"cert_ports,omitempty"`
 	// Log-Sensor und Syslog-Empfaenger (H5); leer = aus. Der Sensor (Fallen-Dienste) beachtet das Feld nicht.
 	Log LogConfig `json:"log,omitempty"`
+	// Startseite der Web-Falle ("/", auch der PROXY64-Koeder): "" bzw. StartGateway = Gateway-Terminal (Matrix-Stil),
+	// StartNeutral = schlichtes Anmeldeformular.
+	StartPage string `json:"start_page,omitempty"`
 }
+
+// Startseiten der Web-Falle (Config.StartPage).
+const (
+	StartGateway = "gateway"
+	StartNeutral = "neutral"
+)
+
+// StartPages: Auswahl in der Oberflaeche (Standard zuerst).
+var StartPages = []string{StartGateway, StartNeutral}
 
 // Profile: vorgegebene Dienste (Plan Abschnitt 1, Sensor-Profile; H1 nur Stufe 1).
 var Profiles = map[string][]Service{

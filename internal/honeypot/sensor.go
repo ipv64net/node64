@@ -49,6 +49,7 @@ type Sensor struct {
 	perIP  atomic.Int64
 	total  atomic.Int64
 	scanOn atomic.Bool
+	plain  atomic.Bool // Startseite der Web-Falle schlicht statt Gateway-Terminal (Config.StartPage)
 	scan   sensorScan
 
 	connMu sync.Mutex
@@ -125,6 +126,7 @@ func (s *Sensor) Apply(ctx context.Context, cfg Config, sink Sink) []ServiceStat
 	s.perIP.Store(int64(per))
 	s.total.Store(int64(total))
 	s.scanOn.Store(cfg.Scan)
+	s.plain.Store(cfg.StartPage == StartNeutral)
 	seed := cfg.Seed
 	if seed == "" && s.dir != "" { // Modus ohne Oberflaeche: Sensor-Kennung aus <dir>/sensor_id (wie die Meldung)
 		seed, _ = SensorIDFromFile(s.dir)

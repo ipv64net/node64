@@ -152,7 +152,11 @@ func (s *Sensor) serveHTTP(t *trapService, w http.ResponseWriter, r *http.Reques
 	case page != "":
 		h.Set("Content-Type", "text/html; charset=UTF-8")
 		h.Set("Cache-Control", "no-store")
-		_, _ = io.WriteString(w, sensorPageHTML(page, isLogin))
+		body := sensorPageHTML(page, isLogin)
+		if page == "generic" && s.plain.Load() {
+			body = sensorPlainHTML(isLogin)
+		}
+		_, _ = io.WriteString(w, body)
 	case strings.HasPrefix(r.URL.Path, "/."):
 		sensorHTTPError(w, r, persona, ps.id, t.key.Port, http.StatusForbidden)
 	default:
@@ -293,6 +297,11 @@ func sensorPageHTML(page string, failed bool) string {
 		title = "Administration"
 	}
 	return sensorFormHTML(title, title, title, action, userLabel, uf, pf, extra, failed)
+}
+
+// sensorPlainHTML: schlichte Startseite (Einstellung „Startseite: schlicht“ statt Gateway-Terminal).
+func sensorPlainHTML(failed bool) string {
+	return sensorFormHTML("Sign in", "Sign in", "Sign in", "", "Username", "username", "password", "", failed)
 }
 
 // sensorLoginHTML: schlichte Anmeldeseite einer Anwendung (Titel wie das Original, Formular neutral).
