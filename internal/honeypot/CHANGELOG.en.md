@@ -5,7 +5,7 @@
 ### Added
 - “Only via PROXY64” preset next to minimal, standard and full: the honeypot opens no ports of its own and only gets
   what PROXY64 passes on – requests that match no host and those recognised as malicious (blocklists, reported
-  attackers, exploit patterns, AI bots). Which kinds is set in PROXY64 under Access → Honeypot.
+  attackers, exploit patterns, AI bots). Which kinds is set in PROXY64 under Access lists → Honeypot64.
 
 ### Changed
 - “Only via PROXY64” is the new default. Anyone who already saved a preset or a custom selection keeps it.

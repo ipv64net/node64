@@ -4018,7 +4018,7 @@
       "persona_default": "(default)",
       "persona_hint": "The profile decides what a trap pretends to be: banner, headers, responses and certificate (e.g. nginx, Proxmox VE, OpenSSH Ubuntu, Dropbear, MariaDB). The default for port and decoy is preselected; every profile captures the same data.",
       "proxy_hint": "Only via PROXY64: the honeypot opens no ports of its own. It only gets what PROXY64 passes on – requests that match no host and those recognised as malicious (blocklists, reported attackers, exploit patterns, AI bots). Which kinds is set in PROXY64. Switching on services here turns it into a custom selection.",
-      "proxy_link": "PROXY64 → Access → Honeypot"
+      "proxy_link": "PROXY64 → Access lists → Honeypot64"
     },
     "geo": {
       "title": "Origin by country",

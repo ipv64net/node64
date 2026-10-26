@@ -4,7 +4,7 @@
 
 ### Added
 - Honeypot: requests recognised as malicious can get the Honeypot64 decoy instead of 403 – one switch per kind under
-  Access → Honeypot: IPs on the ipv64 blocklists, attackers reported by the honeypot, exploit patterns, AI bots/scanners
+  Access lists → Honeypot64: IPs on the ipv64 blocklists, attackers reported by the honeypot, exploit patterns, AI bots/scanners
   (all on by default) and country block (off by default). Overload (rate limits) never goes to the decoy. Only while the
   decoy is active and only for HTTP(S); TCP/UDP streams and TLS passthrough still reject.
 - If Honeypot64 runs with the “Only via PROXY64” preset, the decoy is switched on automatically.

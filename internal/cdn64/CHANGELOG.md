@@ -4,7 +4,7 @@
 
 ### Neu
 - Honeypot: Auch als schädlich erkannte Anfragen können statt 403 den Köder von Honeypot64 bekommen – je Art ein
-  Schalter unter Zugriff → Honeypot: IPs der ipv64-Blocklisten, vom Honeypot gemeldete Angreifer, Exploit-Muster,
+  Schalter unter Zugriffslisten → Honeypot64: IPs der ipv64-Blocklisten, vom Honeypot gemeldete Angreifer, Exploit-Muster,
   KI-Bots/Scanner (alle Standard an) und Ländersperre (Standard aus). Überlast (Rate-Limits) geht nie an den Köder.
   Gilt nur, solange der Köder aktiv ist, und nur für HTTP(S); TCP/UDP-Streams und TLS-Durchreichen weisen weiter ab.
 - Läuft Honeypot64 mit der Vorlage „Nur über PROXY64“, ist der Köder automatisch eingeschaltet.

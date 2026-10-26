@@ -4018,7 +4018,7 @@
       "persona_default": "(Standard)",
       "persona_hint": "Das Profil bestimmt, als was sich eine Falle ausgibt: Banner, Kopfzeilen, Antworten und Zertifikat (z. B. nginx, Proxmox VE, OpenSSH Ubuntu, Dropbear, MariaDB). Vorausgewählt ist der Standard für Port und Köder; erfasst wird bei jedem Profil dasselbe.",
       "proxy_hint": "Nur über PROXY64: Der Honeypot öffnet keine eigenen Ports. Er bekommt nur, was PROXY64 weitergibt – Anfragen, die keinem Host zuzuordnen sind, und als schädlich erkannte (Blocklisten, gemeldete Angreifer, Exploit-Muster, KI-Bots). Welche Arten, stellst du bei PROXY64 ein. Schaltest du hier Dienste ein, wird daraus eine eigene Auswahl.",
-      "proxy_link": "PROXY64 → Zugriff → Honeypot"
+      "proxy_link": "PROXY64 → Zugriffslisten → Honeypot64"
     },
     "geo": {
       "title": "Herkunft nach Land",

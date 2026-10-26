@@ -5,7 +5,7 @@
 ### Neu
 - Vorlage „Nur über PROXY64“ neben Minimal, Standard und Voll: Der Honeypot öffnet keine eigenen Ports und bekommt nur,
   was PROXY64 weitergibt – Anfragen, die keinem Host zuzuordnen sind, und als schädlich erkannte (Blocklisten, gemeldete
-  Angreifer, Exploit-Muster, KI-Bots). Welche Arten, stellt man bei PROXY64 unter Zugriff → Honeypot ein.
+  Angreifer, Exploit-Muster, KI-Bots). Welche Arten, stellt man bei PROXY64 unter Zugriffslisten → Honeypot64 ein.
 
 ### Geändert
 - „Nur über PROXY64“ ist die neue Voreinstellung. Wer schon eine Vorlage oder eigene Auswahl gespeichert hat, behält sie.
