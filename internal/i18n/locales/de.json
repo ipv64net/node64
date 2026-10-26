@@ -1470,7 +1470,36 @@
     "module_on": "an",
     "module_off": "aus",
     "module_open": "Öffnen",
-    "module_disable_confirm": "{name} ausschalten? Das Modul läuft dann nicht mehr und verschwindet aus dem Menü; die Einstellungen bleiben erhalten."
+    "module_disable_confirm": "{name} ausschalten? Das Modul läuft dann nicht mehr und verschwindet aus dem Menü; die Einstellungen bleiben erhalten.",
+    "upd": {
+      "running": "Läuft:",
+      "origin_image": "aus dem Image",
+      "origin_update": "Selbst-Update",
+      "image": "(Image: {version})",
+      "rolled_back": "Update auf {version} ist nicht stabil gelaufen – Node64 ist automatisch auf {back} zurückgegangen, mit der Datenbank von vor dem Update.",
+      "trial": "Version {version} läuft auf Probe: Nach 5 Minuten ohne Absturz gilt sie als gut, sonst geht Node64 automatisch zurück.",
+      "no_key": "Selbst-Update ist in diesem Build noch nicht freigeschaltet (kein Signaturschlüssel eingebaut). Prüfen und Hinweise gehen trotzdem.",
+      "mode": "Updates",
+      "mode_off": "Aus",
+      "mode_notify": "Nur prüfen und anzeigen",
+      "mode_auto": "Automatisch installieren",
+      "channel": "Kanal",
+      "channel_stable": "Stabil",
+      "channel_preview": "Vorschau (alpha/beta)",
+      "window": "Zeitfenster (automatisch)",
+      "hint": "Node64 aktualisiert sich ohne neues Image: Das Programm wird signiert von ipv64.net geladen und geprüft, die Datenbank vorher gesichert, dann startet Node64 in wenigen Sekunden neu (DNS64 ist so lange weg). Läuft die neue Version nicht stabil, geht es automatisch zurück. Zeitfenster in der Zeitzone der Node.",
+      "dev": "Entwicklungsstand: automatische Updates sind aus.",
+      "notes": "Hinweise",
+      "apply": "Jetzt aktualisieren",
+      "apply_confirm": "Node64 auf {version} aktualisieren? Node64 startet dabei neu (wenige Sekunden).",
+      "applying": "Version {version} ist geladen und geprüft – Node64 startet jetzt neu. Bitte die Seite in einigen Sekunden neu laden.",
+      "apply_failed": "Update nicht möglich: {error}",
+      "check": "Jetzt prüfen",
+      "check_failed": "Prüfung fehlgeschlagen: {error}",
+      "reset": "Zur Image-Version zurück",
+      "reset_confirm": "Zur Version aus dem Image ({version}) zurück? Node64 startet dabei neu.",
+      "reset_done": "Node64 startet jetzt mit der Version aus dem Image neu."
+    }
   },
   "audit": {
     "title": "Audit-Log",
@@ -2713,7 +2742,9 @@
       "docker_up": "🟢 Docker: {name} wieder in Ordnung",
       "docker_threshold": "🟠 Docker: {name} über der Schwelle",
       "docker_threshold_ok": "🟢 Docker: {name} wieder unter der Schwelle",
-      "docker_restarted": "🔄 Docker: {name} neu gestartet"
+      "docker_restarted": "🔄 Docker: {name} neu gestartet",
+      "update_ok": "✅ Node64 auf {name} aktualisiert",
+      "update_failed": "🔴 Node64-Update auf {name} fehlgeschlagen"
     },
     "body": {
       "quota_used": "Verbraucht: {used} von {limit} Online-Messungen heute",
@@ -2736,7 +2767,9 @@
     "text": {
       "dyndns_addr_failed": "Öffentliche {family}-Adresse {count}-mal hintereinander nicht ermittelt.",
       "dyndns_limit_reached": "ipv64: Tageslimit für Updates erreicht.",
-      "cluster_suspended": "Ausgesetzt: {reason}"
+      "cluster_suspended": "Ausgesetzt: {reason}",
+      "update_ok": "Node64 läuft stabil mit Version {version} (vorher {from}).",
+      "update_failed": "Die neue Version {version} ist nicht stabil gelaufen. Node64 läuft wieder mit {back}, die Datenbank von vor dem Update ist zurückgespielt."
     },
     "reason": {
       "traffic": "Traffic-Kontingent aufgebraucht",

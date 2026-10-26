@@ -215,13 +215,40 @@
 					<dt class="col-4">Backups</dt><dd class="col-8">{{$d.BackupDir}} · <a href="/settings/data">{{.T "nav.settings_data"}}</a></dd>
 				</dl>
 				<hr>
+				{{with $d.Upd}}{{$u := .}}
+				<div class="mb-2"><span class="fw-semibold">{{$.T "settings.upd.running"}}</span> {{$u.Running}}
+					{{if eq $u.Origin "update"}}<span class="badge text-bg-info">{{$.T "settings.upd.origin_update"}}</span> <span class="text-body-secondary">{{$.T "settings.upd.image" "version" $u.ImageVersion}}</span>{{else}}<span class="badge text-bg-light">{{$.T "settings.upd.origin_image"}}</span>{{end}}
+					<span class="text-body-secondary">· {{$u.Arch}}</span></div>
+				{{with $u.Rollback}}<div class="alert alert-danger py-2"><i class="bi bi-arrow-counterclockwise"></i> {{$.T "settings.upd.rolled_back" "version" .From "back" .To}} <span class="text-body-secondary">({{$.Time .At}})</span></div>{{end}}
+				{{with $u.Trial}}<div class="alert alert-warning py-2"><i class="bi bi-hourglass-split"></i> {{$.T "settings.upd.trial" "version" .Version}}</div>{{end}}
+				{{if not $u.KeysOK}}<div class="alert alert-secondary py-2"><i class="bi bi-key"></i> {{$.T "settings.upd.no_key"}}</div>{{end}}
+				<form method="post" action="/settings/updates" class="row g-2 align-items-end mb-2">
+					<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<div class="col-sm-4"><label class="form-label mb-1" for="updates_mode">{{$.T "settings.upd.mode"}}</label>
+						<select class="form-select form-select-sm" id="updates_mode" name="updates_mode">{{range $u.Modes}}<option value="{{.}}"{{if eq . $u.Mode}} selected{{end}}>{{$.T (print "settings.upd.mode_" .)}}</option>{{end}}</select></div>
+					<div class="col-sm-3"><label class="form-label mb-1" for="updates_channel">{{$.T "settings.upd.channel"}}</label>
+						<select class="form-select form-select-sm" id="updates_channel" name="updates_channel">{{range $u.Channels}}<option value="{{.}}"{{if eq . $u.Channel}} selected{{end}}>{{$.T (print "settings.upd.channel_" .)}}</option>{{end}}</select></div>
+					<div class="col-sm-3"><label class="form-label mb-1" for="updates_window">{{$.T "settings.upd.window"}}</label>
+						<input class="form-control form-control-sm" id="updates_window" name="updates_window" value="{{$u.Window}}" pattern="[0-2][0-9]:[0-5][0-9]-[0-2][0-9]:[0-5][0-9]" placeholder="03:00-05:00"></div>
+					<div class="col-sm-2"><button class="btn btn-outline-primary btn-sm w-100" type="submit">{{$.T "common.save"}}</button></div>
+					<div class="col-12 form-text mt-0">{{$.T "settings.upd.hint"}}{{if $u.Dev}} {{$.T "settings.upd.dev"}}{{end}}</div>
+				</form>
+				{{with $u.Latest}}{{if .Error}}<div class="small text-danger mb-2"><i class="bi bi-exclamation-triangle"></i> {{$.T "settings.upd.check_failed" "error" .Error}}</div>
+				{{else if .Newer}}<div class="alert alert-info py-2 d-flex flex-wrap align-items-center gap-2"><span class="me-auto">{{$.T "settings.update_available" "version" .Version}}{{with .URL}} <a href="{{.}}" target="_blank" rel="noopener">{{$.T "settings.upd.notes"}}</a>{{end}}</span>
+					{{if $u.KeysOK}}<form method="post" action="/settings/updates/apply" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-primary btn-sm" type="submit" data-confirm="{{$.T "settings.upd.apply_confirm" "version" .Version}}"><i class="bi bi-cloud-download"></i> {{$.T "settings.upd.apply"}}</button></form>{{end}}</div>
+				{{else}}<div class="text-body-secondary mb-2">{{$.T "settings.update_none" "version" .Version}} <span class="small">({{$.Time .CheckedAt}})</span></div>{{end}}{{end}}
+				<div class="d-flex flex-wrap gap-2">
+					<form method="post" action="/settings/updates/check" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-arrow-repeat"></i> {{$.T "settings.upd.check"}}</button></form>
+					{{if eq $u.Origin "update"}}<form method="post" action="/settings/updates/reset" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-outline-warning btn-sm" type="submit" data-confirm="{{$.T "settings.upd.reset_confirm" "version" $u.ImageVersion}}"><i class="bi bi-arrow-counterclockwise"></i> {{$.T "settings.upd.reset"}}</button></form>{{end}}
+				</div>
+				{{else}}
 				<form method="post" action="/settings/updates">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">
 					<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="updates_check" id="updates_check"{{if $d.UpdateOn}} checked{{end}}><label class="form-check-label" for="updates_check">{{.T "settings.updates_check"}}</label></div>
 					<div class="form-text mb-2">{{.T "settings.updates_hint"}}</div>
-					{{if $d.Update}}{{if index $d.Update "newer"}}<div class="alert alert-info py-2">{{.T "settings.update_available" "version" (index $d.Update "version")}}{{with index $d.Update "url"}} <a href="{{.}}" target="_blank" rel="noopener">Release</a>{{end}}</div>{{else}}<div class="text-body-secondary">{{.T "settings.update_none" "version" (index $d.Update "version")}}</div>{{end}}{{end}}
 					<button class="btn btn-outline-primary btn-sm mt-2" type="submit">{{.T "common.save"}}</button>
 				</form>
+				{{end}}
 			</div>
 		</div>
 	</div>

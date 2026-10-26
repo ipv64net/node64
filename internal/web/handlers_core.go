@@ -19,6 +19,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/logging"
 	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/selfupdate"
 	"github.com/ipv64net/node64/internal/store"
 	nodesync "github.com/ipv64net/node64/internal/sync"
 )
@@ -398,6 +399,7 @@ type settingsData struct {
 	TOTP       bool
 	UpdateOn   bool
 	Update     map[string]any
+	Upd        *updateView // Selbst-Update (nil = nicht verfuegbar)
 	LogModules map[string]string
 	Modules2   []string
 	HTTPSPort  int
@@ -449,6 +451,7 @@ func (s *Server) settingsView(r *http.Request) *View {
 	if raw := s.Store.SettingOr(ctx, "updates.latest", ""); raw != "" {
 		_ = json.Unmarshal([]byte(raw), &d.Update)
 	}
+	d.Upd = s.updateViewOf(ctx)
 	d.LogModules = map[string]string{}
 	for k, l := range s.Log.ModuleLevels() {
 		d.LogModules[k] = logging.LevelName(l)
@@ -471,12 +474,27 @@ func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) settingsUpdates(w http.ResponseWriter, r *http.Request) {
-	on := r.PostFormValue("updates_check") == "on"
-	_ = s.Store.SetSetting(r.Context(), "updates.check", map[bool]string{true: "1", false: "0"}[on])
-	if !on {
-		_ = s.Store.SetSetting(r.Context(), "updates.latest", "")
+	ctx := r.Context()
+	mode := r.PostFormValue("updates_mode")
+	if mode == "" { // altes Formular: nur der Schalter "pruefen"
+		mode = map[bool]string{true: "notify", false: "off"}[r.PostFormValue("updates_check") == "on"]
 	}
-	s.audit(r, "settings.updates", "", fmt.Sprintf("check=%v", on))
+	if !containsString(selfupdate.Modes, mode) {
+		mode = "off"
+	}
+	_ = s.Store.SetSetting(ctx, selfupdate.SetMode, mode)
+	on := mode != "off"
+	_ = s.Store.SetSetting(ctx, "updates.check", map[bool]string{true: "1", false: "0"}[on])
+	if ch := r.PostFormValue("updates_channel"); containsString(selfupdate.Channels, ch) {
+		_ = s.Store.SetSetting(ctx, selfupdate.SetChannel, ch)
+	}
+	if win := strings.TrimSpace(r.PostFormValue("updates_window")); selfupdate.ValidWindow(win) {
+		_ = s.Store.SetSetting(ctx, selfupdate.SetWindow, win)
+	}
+	if !on {
+		_ = s.Store.SetSetting(ctx, "updates.latest", "")
+	}
+	s.audit(r, "settings.updates", "", fmt.Sprintf("mode=%s", mode))
 	v := s.view(r, "settings.title")
 	s.flash(w, r, "success", v.T("common.saved"))
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)

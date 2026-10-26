@@ -1470,7 +1470,36 @@
     "module_on": "on",
     "module_off": "off",
     "module_open": "Open",
-    "module_disable_confirm": "Switch off {name}? The module stops running and disappears from the menu; its settings are kept."
+    "module_disable_confirm": "Switch off {name}? The module stops running and disappears from the menu; its settings are kept.",
+    "upd": {
+      "running": "Running:",
+      "origin_image": "from the image",
+      "origin_update": "self-update",
+      "image": "(image: {version})",
+      "rolled_back": "The update to {version} did not run stably – Node64 went back to {back} automatically, with the database from before the update.",
+      "trial": "Version {version} is on probation: after 5 minutes without a crash it counts as good, otherwise Node64 goes back automatically.",
+      "no_key": "Self-update is not enabled in this build yet (no signing key built in). Checking and notices still work.",
+      "mode": "Updates",
+      "mode_off": "Off",
+      "mode_notify": "Only check and show",
+      "mode_auto": "Install automatically",
+      "channel": "Channel",
+      "channel_stable": "Stable",
+      "channel_preview": "Preview (alpha/beta)",
+      "window": "Time window (automatic)",
+      "hint": "Node64 updates itself without a new image: the program is downloaded signed from ipv64.net and verified, the database is backed up first, then Node64 restarts within a few seconds (DNS64 is unavailable meanwhile). If the new version does not run stably, it goes back automatically. Time window in the node's time zone.",
+      "dev": "Development build: automatic updates are off.",
+      "notes": "Notes",
+      "apply": "Update now",
+      "apply_confirm": "Update Node64 to {version}? Node64 restarts (a few seconds).",
+      "applying": "Version {version} is downloaded and verified – Node64 is restarting now. Please reload the page in a few seconds.",
+      "apply_failed": "Update not possible: {error}",
+      "check": "Check now",
+      "check_failed": "Check failed: {error}",
+      "reset": "Back to the image version",
+      "reset_confirm": "Go back to the version from the image ({version})? Node64 restarts.",
+      "reset_done": "Node64 is restarting with the version from the image."
+    }
   },
   "audit": {
     "title": "Audit log",
@@ -2713,7 +2742,9 @@
       "docker_up": "🟢 Docker: {name} back to normal",
       "docker_threshold": "🟠 Docker: {name} above threshold",
       "docker_threshold_ok": "🟢 Docker: {name} below threshold again",
-      "docker_restarted": "🔄 Docker: {name} restarted"
+      "docker_restarted": "🔄 Docker: {name} restarted",
+      "update_ok": "✅ Node64 updated to {name}",
+      "update_failed": "🔴 Node64 update to {name} failed"
     },
     "body": {
       "quota_used": "Used: {used} of {limit} online checks today",
@@ -2736,7 +2767,9 @@
     "text": {
       "dyndns_addr_failed": "Public {family} address not determined {count} times in a row.",
       "dyndns_limit_reached": "ipv64: daily update limit reached.",
-      "cluster_suspended": "Suspended: {reason}"
+      "cluster_suspended": "Suspended: {reason}",
+      "update_ok": "Node64 runs stably with version {version} (before {from}).",
+      "update_failed": "The new version {version} did not run stably. Node64 runs {back} again, the database from before the update was restored."
     },
     "reason": {
       "traffic": "traffic quota used up",

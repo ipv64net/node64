@@ -35,6 +35,7 @@ import (
 	"github.com/ipv64net/node64/internal/peer"
 	"github.com/ipv64net/node64/internal/ports"
 	"github.com/ipv64net/node64/internal/secrets"
+	"github.com/ipv64net/node64/internal/selfupdate"
 	"github.com/ipv64net/node64/internal/store"
 	nodesync "github.com/ipv64net/node64/internal/sync"
 )
@@ -57,6 +58,7 @@ type Deps struct {
 	Edge       *edge.Edge           // gemeinsamer Eingang 80/443 (nil = nicht verfuegbar)
 	Certs      *certs.Manager       // Zertifikatsverwaltung (nil = nicht verfuegbar)
 	Box        *secrets.Box         // Verschluesselung von Geheimnissen (z. B. OIDC-Client-Secret)
+	Updater    *selfupdate.Updater  // Selbst-Update (nil = nicht verfuegbar)
 	Version    string
 	StartedAt  time.Time
 	// Restart beendet den Node kontrolliert (Docker startet ihn neu), z. B.
@@ -209,6 +211,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /settings/logging", s.auth(s.settingsLogging))
 	s.mux.Handle("POST /settings/data", s.auth(s.settingsData))
 	s.mux.Handle("POST /settings/updates", s.auth(s.settingsUpdates))
+	s.updateRoutes()
 	s.ipv64Routes()
 	if s.Notify != nil {
 		s.notifyRoutes()

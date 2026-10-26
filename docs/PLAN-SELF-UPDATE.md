@@ -102,3 +102,27 @@ die Daten bleiben, bei Problemen geht es automatisch zurück.
   bleibt, Port 53/443 gebunden, Daten da; kaputte Version → Rückfall nach 3 Starts; neueres Image → `/data/bin`
   wird ignoriert; `/data` mit noexec → memfd-Weg.
 - Proxmox-LXC/OCI auf node64-test-Umgebung, arm64 auf einem Pi.
+
+## 7. Stand und Release-Ablauf (2026-10-26)
+
+Umgesetzt (U1–U4, Oberfläche und API aus U3/U5): `internal/selfupdate` (Starter, Manifest, Download, Rückfall,
+Probezeit, stündliche Prüfung), `cmd/node64-release` (keygen, manifest, sign), Einstellungen → Über Node64,
+`GET /api/update`, `POST /api/update/check|apply`, Meldungen `update_ok`/`update_failed`, Job `release` in
+`.github/workflows/image.yml`. Ende-zu-Ende auf der Box geprüft: Update 90 → 91 in-place (Port 80 als Nicht-root
+weiter gebunden), kaputte 92 → nach 3 Starts automatisch zurück auf 91 samt Datenbank, Meldung einmal.
+
+Schlüssel: öffentlicher Teil in `internal/selfupdate/keys.go`; privater Teil nur in
+`C:\Users\denni\Documents\ipv64.net\node64-update-signing.key` (nicht im Repo).
+
+Einmalig (Dennis): Secret für den Build setzen
+
+    gh secret set NODE64_SIGNING_KEY --repo ipv64net/node64 < C:\Users\denni\Documents\ipv64.net\node64-update-signing.key
+
+Je Release (Tag `vX.Y.Z[-alpha.N]`): Artefakt `node64-release-vX…` aus GitHub Actions laden und hochladen nach
+
+- `https://ipv64.net/node64/releases/<version>/node64-linux-{amd64,arm64,armv7}`
+- `https://ipv64.net/node64/releases/<kanal>/manifest.json` und `manifest.json.sig`
+  (`preview` bei Vorab-Versionen, `stable` sonst; der Ordner `<kanal>` zeigt immer auf die neueste Version)
+
+Wichtig: Den Starter bekommen bestehende Nodes einmal per Image (erste Version mit Selbst-Update); ab dann geht es
+ohne Image.

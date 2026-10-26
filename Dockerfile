@@ -6,6 +6,8 @@ ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT
 ARG VERSION=dev
+# zusaetzliche oeffentliche Schluessel fuers Selbst-Update (nur Tests; der echte steht in internal/selfupdate/keys.go)
+ARG UPDATE_KEYS=
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
@@ -13,8 +15,9 @@ COPY . .
 # GOARM nur fuer arm setzen (arm64 meldet teils die Variante v8, die GOARM nicht kennt)
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     if [ "$TARGETARCH" = "arm" ] && [ -n "$TARGETVARIANT" ]; then export GOARM="${TARGETVARIANT#v}"; fi && \
+    KEYS=""; if [ -n "$UPDATE_KEYS" ]; then KEYS="-X github.com/ipv64net/node64/internal/selfupdate.PublicKeys=$UPDATE_KEYS"; fi && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags="-s -w -X main.Version=$VERSION" -o /out/node64 ./cmd/node64
+    go build -trimpath -ldflags="-s -w -X main.Version=$VERSION $KEYS" -o /out/node64 ./cmd/node64
 # Datenverzeichnis mit passenden Rechten fuer den Nicht-Root-Benutzer vorbereiten
 RUN mkdir -p /out/data && chown 65532:65532 /out/data
 # Ports unter 1024 (DNS64: 53, spaeter 853) und ICMP ohne Root: die Rechte bekommt nur das Binary, und nur als

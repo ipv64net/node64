@@ -70,6 +70,9 @@ const (
 	KindProxmoxRestarted   Kind = "proxmox_restarted"    // Gast bzw. Node neu gestartet (Hinweis)
 
 	KindQuota Kind = "quota" // Tageskontingent der Online-Checks erreicht (Account, vom hub)
+
+	KindUpdateOK     Kind = "update_ok"     // Node64 hat sich selbst aktualisiert (neue Version laeuft stabil)
+	KindUpdateFailed Kind = "update_failed" // Selbst-Update fehlgeschlagen, zurueck auf die vorige Version
 )
 
 // CheckInfo sind die Angaben zum Check, die in Nachrichten erscheinen.
@@ -118,9 +121,13 @@ func IsProxmox(k Kind) bool {
 	return k == KindProxmoxDown || k == KindProxmoxUp || k == KindProxmoxThreshold || k == KindProxmoxThresholdOK || k == KindProxmoxRestarted
 }
 
-// IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64, Zertifikate, CDN64 online, Cluster, Honeypot64, Proxmox VE).
+// IsUpdate: Meldung des Selbst-Updates.
+func IsUpdate(k Kind) bool { return k == KindUpdateOK || k == KindUpdateFailed }
+
+// IsModule: Meldung eines Moduls ohne Check (DynDNS, DNS64, Zertifikate, CDN64 online, Cluster, Honeypot64, Proxmox VE,
+// Selbst-Update).
 func IsModule(k Kind) bool {
-	return IsDynDNS(k) || IsDNS64(k) || IsCert(k) || IsCDN64(k) || IsCluster(k) || IsHoneypot(k) || IsProxmox(k)
+	return IsDynDNS(k) || IsDNS64(k) || IsCert(k) || IsCDN64(k) || IsCluster(k) || IsHoneypot(k) || IsProxmox(k) || IsUpdate(k)
 }
 
 // Message ist die fertig formulierte Nachricht fuer einen Sender.

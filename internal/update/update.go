@@ -67,7 +67,8 @@ func (c *Checker) Check(ctx context.Context) (*Info, error) {
 	return &info, nil
 }
 
-// Newer sagt, ob a eine hoehere Version als b ist (1.2.3, v1.2.3, 1.2.3-dev).
+// Newer sagt, ob a eine hoehere Version als b ist (1.2.3, v1.2.3, 0.12.0-alpha.16). Vorab-Kennungen zaehlen wie bei
+// SemVer (0.12.0-alpha.15 < 0.12.0-alpha.16 < 0.12.0); Entwicklungsstaende (-dev) gelten als gleich mit ihrem Release.
 func Newer(a, b string) bool {
 	pa, pb := parse(a), parse(b)
 	if pa == nil || pb == nil {
@@ -78,7 +79,53 @@ func Newer(a, b string) bool {
 			return pa[i] > pb[i]
 		}
 	}
-	return false
+	ra, rb := pre(a), pre(b)
+	if ra == "dev" || rb == "dev" || ra == rb {
+		return false
+	}
+	if ra == "" || rb == "" { // ohne Vorab-Kennung ist neuer
+		return ra == ""
+	}
+	return preLess(rb, ra)
+}
+
+// pre liefert die Vorab-Kennung ("alpha.16"; "dev" fuer Entwicklungsstaende, "" fuer Releases).
+func pre(v string) string {
+	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
+	if i := strings.IndexByte(v, '+'); i >= 0 {
+		v = v[:i]
+	}
+	i := strings.IndexByte(v, '-')
+	if i < 0 {
+		return ""
+	}
+	p := v[i+1:]
+	if p == "dev" || strings.HasPrefix(p, "dev.") || strings.HasSuffix(p, "-dev") {
+		return "dev"
+	}
+	return p
+}
+
+// preLess vergleicht zwei Vorab-Kennungen nach SemVer: Teil fuer Teil, Zahlen numerisch und vor Text, kuerzer zuerst.
+func preLess(a, b string) bool {
+	pa, pb := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(pa) && i < len(pb); i++ {
+		na, ea := strconv.Atoi(pa[i])
+		nb, eb := strconv.Atoi(pb[i])
+		switch {
+		case ea == nil && eb == nil:
+			if na != nb {
+				return na < nb
+			}
+		case ea == nil:
+			return true
+		case eb == nil:
+			return false
+		case pa[i] != pb[i]:
+			return pa[i] < pb[i]
+		}
+	}
+	return len(pa) < len(pb)
 }
 
 func parse(v string) []int {

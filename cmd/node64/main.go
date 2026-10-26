@@ -13,7 +13,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/ipv64net/node64/internal/netstat"
@@ -28,6 +27,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 	_ "time/tzdata" // Zeitzonen im Binary, das Laufzeit-Image hat keine
@@ -51,9 +51,9 @@ import (
 	"github.com/ipv64net/node64/internal/peer"
 	"github.com/ipv64net/node64/internal/ports"
 	"github.com/ipv64net/node64/internal/secrets"
+	"github.com/ipv64net/node64/internal/selfupdate"
 	"github.com/ipv64net/node64/internal/store"
 	nodesync "github.com/ipv64net/node64/internal/sync"
-	"github.com/ipv64net/node64/internal/update"
 	"github.com/ipv64net/node64/internal/web"
 )
 
@@ -72,17 +72,27 @@ func main() {
 			os.Exit(resetPassword(os.Args[2:]))
 		}
 	}
-	if err := run(); err != nil {
+	err := run()
+	if restartAfterStop.Load() { // Selbst-Update: sauber beendet, jetzt in-place neu (der Starter waehlt die Version)
+		if rerr := selfupdate.Reexec(); rerr != nil {
+			fmt.Fprintln(os.Stderr, "node: restart after update:", rerr)
+		}
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "node:", err)
 		os.Exit(1)
 	}
 }
+
+// restartAfterStop: run endete fuer einen Neustart (Selbst-Update).
+var restartAfterStop atomic.Bool
 
 func run() error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
+	selfupdate.Launch(cfg.DataDir, Version)                              // neuere geprueft abgelegte Version starten (exec), sonst weiter
 	if mode := strings.TrimSpace(os.Getenv("NODE64_MODE")); mode != "" { // z. B. honeypot: ohne Oberflaeche (honeypot_mode.go)
 		return runMode(cfg, mode)
 	}
@@ -372,7 +382,28 @@ func run() error {
 		}
 	}
 	defer syncClient.Stop(context.Background())
-	go updateLoop(ctx, st, log)
+	// Selbst-Update: stuendlich pruefen (Einstellung), Rueckfall bzw. Erfolg melden
+	upd := selfupdate.New(cfg.DataDir, Version)
+	upd.Backup = st.Backup
+	upd.Restart = func() { restartAfterStop.Store(true); stop() }
+	getSetting := func(k, d string) string { return st.SettingOr(ctx, k, d) }
+	nodeLoc := func() *time.Location {
+		if loc, err := time.LoadLocation(st.SettingOr(ctx, "node.timezone", "")); err == nil && st.SettingOr(ctx, "node.timezone", "") != "" {
+			return loc
+		}
+		return time.Local
+	}
+	go upd.Loop(ctx, getSetting, func(k, v string) error { return st.SetSetting(ctx, k, v) }, nodeLoc, logger.Slog().With("module", "update"))
+	go selfupdate.Watch(ctx, cfg.DataDir, Version, func(e selfupdate.Event) {
+		kind, data := notify.KindUpdateFailed, map[string]string{"text": "notify.text.update_failed", "version": e.Version, "back": e.Other}
+		if e.OK {
+			kind, data = notify.KindUpdateOK, map[string]string{"text": "notify.text.update_ok", "version": e.Version, "from": e.Other}
+		}
+		now := time.Now().UTC()
+		log.Info("self-update", "ok", e.OK, "version", e.Version, "other", e.Other)
+		dispatcher.Dispatch(notify.Alert{EventID: "update-" + string(kind) + "-" + strconv.FormatInt(now.UnixNano(), 36), Kind: kind, Time: now,
+			Check: notify.CheckInfo{Name: e.Version, NotifyDown: true, NotifyUp: true, Local: true}, Data: data})
+	})
 	go planLoop(ctx, ipv64Key, syncClient)
 	// Node-Uebersicht auf ipv64.net: anmelden; dort entfernt = Key und Verknuepfung lokal vergessen
 	go ipv64api.NewPresence(ipv64api.PresenceConfig{Client: ipv64Key.Client(), Key: ipv64Key.Get, Log: logger.Slog().With("module", "ipv64"),
@@ -390,7 +421,7 @@ func run() error {
 	srv, err := web.New(web.Deps{
 		Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: modules, Notify: nfStore, Dispatcher: dispatcher,
 		Sync: syncClient, Linker: syncClient, HC: hcModule, IPv64: ipv64Key, Peer: peerMgr, Version: Version, StartedAt: time.Now(), Restart: stop,
-		Ports: portReg, Edge: edgeSrv, Certs: certMgr, Box: box,
+		Ports: portReg, Edge: edgeSrv, Certs: certMgr, Box: box, Updater: upd,
 	})
 	if err != nil {
 		return err
@@ -399,42 +430,6 @@ func run() error {
 	err = srv.Run(ctx)
 	log.Info("node64 stopped")
 	return err
-}
-
-// updateLoop prueft taeglich auf neue Versionen, aber nur wenn der Nutzer es
-// in den Einstellungen eingeschaltet hat.
-func updateLoop(ctx context.Context, st *store.Store, log *slog.Logger) {
-	check := func() {
-		if st.SettingOr(ctx, "updates.check", "0") != "1" {
-			return
-		}
-		info, err := update.New(Version).Check(ctx)
-		if err != nil {
-			log.Debug("update check failed", "err", err)
-			return
-		}
-		b, _ := json.Marshal(info)
-		_ = st.SetSetting(ctx, "updates.latest", string(b))
-		if info.Newer {
-			log.Info("new node version available", "version", info.Version, "url", info.URL)
-		}
-	}
-	t := time.NewTicker(24 * time.Hour)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return
-	case <-time.After(2 * time.Minute):
-		check()
-	}
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			check()
-		}
-	}
 }
 
 // applyReset leert nach einem Zuruecksetzen (Merker node64.reset) das Datenverzeichnis; nur ein

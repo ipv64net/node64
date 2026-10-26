@@ -15,6 +15,10 @@ func TestNewer(t *testing.T) {
 	}{
 		{"1.2.3", "1.2.2", true}, {"v1.3.0", "1.2.9", true}, {"1.2.3", "1.2.3", false}, {"1.2.3-dev", "1.2.3", false},
 		{"2.0.0", "1.9.9", true}, {"0.4.0", "0.4.0-dev", false}, {"dev", "1.0.0", false}, {"1.0.0", "dev", false},
+		{"0.12.0-alpha.16", "0.12.0-alpha.15", true}, {"0.12.0-alpha.15", "0.12.0-alpha.16", false}, {"v0.12.0-alpha.10", "0.12.0-alpha.9", true},
+		{"0.12.0", "0.12.0-alpha.16", true}, {"0.12.0-alpha.16", "0.12.0", false}, {"0.12.0-beta.1", "0.12.0-alpha.20", true},
+		{"0.12.0-alpha.1.1", "0.12.0-alpha.1", true}, {"0.12.0-alpha", "0.12.0-alpha.1", false}, {"0.12.0-alpha.16", "0.11.181-dev", true},
+		{"0.12.0-alpha.16", "0.12.0-dev", false}, {"0.12.1-alpha.1", "0.12.0", true},
 	}
 	for _, c := range cases {
 		if got := Newer(c.a, c.b); got != c.want {

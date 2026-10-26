@@ -34,6 +34,8 @@ func TestNotifyLanguages(t *testing.T) {
 		{Kind: KindProxmoxDown, Data: map[string]string{"what": "docker_unreachable", "name": "10.10.0.7", "source": "docker"}},
 		{Kind: KindProxmoxDown, Data: map[string]string{"what": "unhealthy", "type": "docker", "name": "web", "source": "docker"}},
 		{Kind: KindQuota, Message: "100/100"},
+		{Kind: KindUpdateOK, Data: map[string]string{"text": "notify.text.update_ok", "version": "0.12.0", "from": "0.12.0-alpha.16"}},
+		{Kind: KindUpdateFailed, Data: map[string]string{"text": "notify.text.update_failed", "version": "0.12.0", "back": "0.12.0-alpha.16"}},
 	}
 	leftover := regexp.MustCompile(`\b(notify|pve|hc|docker|lang)\.[a-z_]+\.|\{[a-z_]+\}`)
 	german := regexp.MustCompile(`[äöüÄÖÜß]|\b(ist|nicht|wieder|Grund|Zeitpunkt|gestört)\b`)
@@ -96,7 +98,8 @@ func TestMailStatusMatchesKind(t *testing.T) {
 		KindCertFail: red, KindCDNOnlineDown: red, KindCDNOnlineBlocked: red, KindClusterDown: red, KindHoneypotWatch: red,
 		KindUp: green, KindProxmoxUp: green, KindProxmoxThresholdOK: green, KindDynOK: green, KindDNS64Up: green, KindCertOK: green,
 		KindCDNOnlineUp: green, KindClusterUp: green, KindRechecked: green,
-		KindDegraded: orange, KindFlappingStart: orange, KindProxmoxThreshold: orange, KindCertExpiry: orange, KindQuota: orange} {
+		KindDegraded: orange, KindFlappingStart: orange, KindProxmoxThreshold: orange, KindCertExpiry: orange, KindQuota: orange,
+		KindUpdateOK: green, KindUpdateFailed: red} {
 		for _, lang := range []string{"de", "en"} {
 			if c, label := mailStatus(k, lang); c != want || label == "" {
 				t.Errorf("%s [%s]: %s %q, want %s", k, lang, c, label, want)

@@ -61,3 +61,35 @@ jobs:
             VERSION=${{ steps.meta.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Selbst-Update: Programme je Architektur (wie im Image gebaut), Manifest und Signatur als Artefakt.
+  # Ohne Secret NODE64_SIGNING_KEY wird nicht signiert (Artefakt ohne manifest.json.sig).
+  # Hochladen nach https://ipv64.net/node64/releases/ (siehe docs/PLAN-SELF-UPDATE.md, Abschnitt Release).
+  release:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: build
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          mkdir -p dist/$V
+          for a in amd64 arm64 armv7; do
+            goarch=$a; goarm=""
+            if [ "$a" = "armv7" ]; then goarch=arm; goarm=7; fi
+            CGO_ENABLED=0 GOOS=linux GOARCH=$goarch GOARM=$goarm go build -trimpath -ldflags="-s -w -X main.Version=$V" -o dist/$V/node64-linux-$a ./cmd/node64
+          done
+          go run ./cmd/node64-release manifest -version "$V" -out dist/manifest.json dist/$V/node64-linux-*
+      - name: sign
+        env:
+          NODE64_SIGNING_KEY: ${{ secrets.NODE64_SIGNING_KEY }}
+        run: |
+          if [ -n "$NODE64_SIGNING_KEY" ]; then go run ./cmd/node64-release sign dist/manifest.json; else echo "no signing key - manifest not signed"; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node64-release-${{ github.ref_name }}
+          path: dist/
