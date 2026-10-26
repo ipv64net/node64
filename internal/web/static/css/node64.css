@@ -42,6 +42,9 @@
 	--bs-secondary-bg: #23282e;
 	--bs-border-color: #343a40;
 	--sidebar-bg: #1b1f24;
+	/* graue Schrift etwas heller als bei Bootstrap (0.75 / 0.5), besser lesbar */
+	--bs-secondary-color: rgba(222, 226, 230, .85);
+	--bs-tertiary-color: rgba(222, 226, 230, .65);
 }
 
 .btn-primary { --bs-btn-bg: var(--bs-primary); --bs-btn-border-color: var(--bs-primary); --bs-btn-hover-bg: #0069d9; --bs-btn-hover-border-color: #0062cc; --bs-btn-active-bg: #0062cc; }
@@ -59,7 +62,8 @@ a { color: var(--bs-primary); }
 [data-bs-theme="dark"] .logo-dark { display: inline; }
 
 /* Layout: Topbar, Sidebar links, Inhalt */
-.topbar { background: var(--bs-body-bg); min-height: 56px; position: sticky; top: 0; z-index: 1020; }
+/* Kopfzeile genau so hoch wie die Kante, an der die Seitenleiste klebt (sonst springt sie je nach Seitenlaenge) */
+.topbar { background: var(--bs-body-bg); min-height: 3.6rem; position: sticky; top: 0; z-index: 1020; }
 .app-body { min-height: calc(100vh - 3.6rem); }
 .sidebar { width: var(--sidebar-width); flex: 0 0 var(--sidebar-width); background: var(--sidebar-bg); position: sticky; top: 3.6rem; height: calc(100vh - 3.6rem); overflow-y: auto; scrollbar-width: thin; }
 .sidebar-offcanvas { width: var(--sidebar-width); }
