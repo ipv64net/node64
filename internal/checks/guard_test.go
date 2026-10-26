@@ -37,9 +37,9 @@ func TestDenyPrivate(t *testing.T) {
 	r := testRunner()
 	r.DenyPrivate = true
 	for _, d := range []Definition{
-		def(TypeHTTP, srv.URL, nil),                     // IP direkt
-		def(TypeHTTP, "http://intern.test/", nil),       // Hostname, der auf 127.0.0.1 zeigt
-		def(TypePort, "intern.test:6379", nil),          // Port-Check ins interne Netz
+		def(TypeHTTP, srv.URL, nil),               // IP direkt
+		def(TypeHTTP, "http://intern.test/", nil), // Hostname, der auf 127.0.0.1 zeigt
+		def(TypePort, "intern.test:6379", nil),    // Port-Check ins interne Netz
 		def(TypeDocker, "unix:///var/run/docker.sock", nil),
 	} {
 		res := r.Run(context.Background(), d)
