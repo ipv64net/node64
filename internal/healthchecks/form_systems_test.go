@@ -134,3 +134,26 @@ func TestCheckSystemLabel(t *testing.T) {
 		t.Fatalf("validate: %v", err)
 	}
 }
+
+// Docker-Host aus: Container „als Check“ werden pausiert wie bei Proxmox VE, wieder an: laufen weiter.
+func TestDockerPauseChecks(t *testing.T) {
+	fakeContainers(t, dockerHost, nil)
+	fakeDockerSource(t)
+	m, srv, _, _ := newDockerModuleRec(t, pveCore(t))
+	ctx := context.Background()
+	dockerAddLocal(t, srv)
+	id := dockerSysID(t, m)
+	pvePollNow(t, m, id)
+	sid := strconv.FormatInt(id, 10)
+	_, loc := dockerPost(t, srv, "/healthchecks/new", url.Values{"type": {"sys:docker"}, "sys_id_docker": {sid}, "sys_key_docker": {"docker/web"}})
+	tok := strings.TrimPrefix(loc, "/healthchecks/")
+	toggle := "/healthchecks/proxmox/system/" + sid + "/toggle"
+	dockerPost(t, srv, toggle, url.Values{})
+	if c, _ := m.st.Check(ctx, tok); c == nil || !c.Paused {
+		t.Fatalf("host off: check not paused: %+v", c)
+	}
+	dockerPost(t, srv, toggle, url.Values{})
+	if c, _ := m.st.Check(ctx, tok); c == nil || c.Paused {
+		t.Fatalf("host on: check still paused: %+v", c)
+	}
+}

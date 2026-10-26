@@ -1,5 +1,12 @@
 # Änderungen – Healthchecks
 
+## 2.36.2 – 2026-10-26
+
+### Geändert
+- Docker wie Proxmox VE: Wird die Überwachung eines Docker-Hosts ausgeschaltet (Pause), sind seine Container „als
+  Check“ pausiert und erscheinen so in der Check-Liste; beim Einschalten laufen sie wieder. Bisher prüften sie (außer
+  bei SSH/TLS) weiter selbst und blieben „in Ordnung“.
+
 ## 2.36.1 – 2026-10-26
 
 ### Geändert

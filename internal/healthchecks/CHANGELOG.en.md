@@ -1,5 +1,12 @@
 # Changes – Healthchecks
 
+## 2.36.2 – 2026-10-26
+
+### Changed
+- Docker like Proxmox VE: switching a Docker host's monitoring off (pause) pauses its containers kept as checks, and
+  the check list shows them as paused; switching it on resumes them. Before, they kept checking themselves (except
+  SSH/TLS) and stayed "OK".
+
 ## 2.36.1 – 2026-10-26
 
 ### Changed

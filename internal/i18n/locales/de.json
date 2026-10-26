@@ -4540,10 +4540,10 @@
     "setup_hint": "Docker-Socket erreichbar, der Host wird aber noch nicht überwacht.",
     "off_hint": "Die Docker-Überwachung wurde entfernt und wird nicht mehr automatisch eingerichtet.",
     "setup": "Docker-Host überwachen",
-    "disabled_hint": "Die Docker-Überwachung ist ausgeschaltet: keine Abfrage, keine Meldungen. Container „als Check“ prüfen weiter selbst (bei SSH bzw. TLS mit Zugangsdaten sind sie pausiert, sie brauchen die Verbindung der Überwachung).",
+    "disabled_hint": "Die Docker-Überwachung ist ausgeschaltet: keine Abfrage, keine Meldungen. Container „als Check“ sind pausiert.",
     "enable": "Überwachung einschalten",
     "disable": "Überwachung ausschalten",
-    "disable_confirm": "Docker-Überwachung ausschalten? Container „als Check“ laufen weiter (bei SSH bzw. TLS mit Zugangsdaten werden sie pausiert).",
+    "disable_confirm": "Docker-Überwachung ausschalten? Container „als Check“ werden pausiert.",
     "live": "Werte live",
     "kpi": {
       "bad": "Gestört",

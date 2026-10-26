@@ -700,7 +700,7 @@ func (m *Module) pveSetAsCheckNamed(r *http.Request, sys *proxmox.System, key st
 				dp.Host = h
 			}
 			params, _ = json.Marshal(dp)
-			group, paused = dockerCheckGroup, !sys.Enabled && dockerNeedsPoll(sys) // ssh/https: ohne Abfrage keine Verbindung
+			group = dockerCheckGroup
 			in.Name, in.Type, in.Target, in.Params, in.Tags = sys.Name+" – "+name, string(checks.TypeDocker), name, params, []string{"docker"}
 		}
 		if name != "" {
@@ -814,8 +814,8 @@ func (m *Module) pveSyncChecks(ctx context.Context, sys *proxmox.System, by stri
 				continue
 			}
 		}
-		// Docker-Checks fragen selbst und laufen weiter - ausser ssh/https, die die Verbindung der Abfrage brauchen
-		if pauseChanged && c.Paused == sys.Enabled && (!sys.IsDocker() || dockerNeedsPoll(sys)) {
+		// Checks „als Check“ folgen dem System: Ueberwachung aus = pausiert (auch Docker, wie Proxmox VE)
+		if pauseChanged && c.Paused == sys.Enabled {
 			if err := m.st.SetPaused(ctx, c.Token, !sys.Enabled, by); err != nil {
 				m.log.Error("proxmox check pause", "err", err)
 				continue
