@@ -42,10 +42,11 @@ type Report struct {
 
 // ReportSensor beschreibt den Sensor.
 type ReportSensor struct {
-	ID      string `json:"id"`      // fest je Installation (UUID), nicht die IP
-	Version string `json:"version"` // Programmversion
-	Profile string `json:"profile"` // minimal | standard | full | custom
-	Mode    string `json:"mode"`    // module | headless
+	ID      string `json:"id"`                // fest je Installation (UUID), nicht die IP
+	Version string `json:"version"`           // Programmversion
+	Profile string `json:"profile"`           // minimal | standard | full | custom
+	Mode    string `json:"mode"`              // module | headless
+	Country string `json:"country,omitempty"` // eingestellter Standort (ISO 3166-1), nur Anzeige (Live-Karte)
 }
 
 // ReportPeriod ist der gemeldete Zeitraum (UTC, start inklusive, end exklusive).

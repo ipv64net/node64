@@ -40,6 +40,7 @@ Bridge-Netz sehen manche Docker-Versionen statt der Angreifer die Adresse des Do
 | `NODE64_HONEYPOT_INFO_TOKEN` | – | erlaubt die Info-Seite auch von außerhalb privater Netze (mindestens 16 Zeichen) |
 | `NODE64_IPV64_KEY` | – | API-Key des ipv64-Accounts (16 bis 64 Buchstaben und Ziffern). Gesetzt = Meldung an ipv64 alle 10 Minuten; ein ungültiges Format verhindert den Start |
 | `NODE64_HONEYPOT_REPORT` | `1` | `0` schaltet die Meldung an ipv64 trotz Key ab; ohne Key ist sie immer aus |
+| `NODE64_HONEYPOT_COUNTRY` | – | Standort des Sensors als Ländercode (z. B. `SG`) für die Live-Karte auf ipv64.net; leer = automatisch aus der öffentlichen IPv4. Nur Anzeige, nicht für die Bewertung |
 | `NODE64_HONEYPOT_LOGS` | – | Log-Sensor: Komma-Liste, je Eintrag `pfad` oder `pfad=format`, z. B. `/host/log/auth.log=syslog,/host/log/nginx/*access.log=nginx`; Pfade absolut unterhalb von `/host/log`, `/var/log` oder `/data/logs`, Muster erlaubt, höchstens 32. Formate: `syslog`, `nginx`, `apache`, `caddy`, `nextcloud`, `vaultwarden`, `gitea`, `proxmox`, `homeassistant` (ohne = automatisch). Leer = aus; kein Profil schaltet ihn ein (siehe [Log-Sensor und Syslog](#log-sensor-und-syslog)) |
 | `NODE64_HONEYPOT_SYSLOG_PORT` | – | Syslog-Empfänger auf UDP und TCP, z. B. `514`; leer oder `0` = aus. Darf kein Fallen-Port und nicht der Info-Port sein |
 | `NODE64_HONEYPOT_SYSLOG_ALLOW` | private Netze | erlaubte Absender, Komma-Liste von IPs oder Netzen (CIDR), z. B. `192.168.1.1,10.0.0.0/8`; leer = private Netze und localhost |

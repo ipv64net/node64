@@ -49,6 +49,15 @@
 					{{with index $d.Errors "start_page"}}<div class="invalid-feedback">{{.}}</div>{{end}}
 					<div class="form-text">{{.T "honeypot.start.hint"}}</div>
 				</div>
+				<div class="mb-3">
+					<label class="form-label" for="country">{{.T "honeypot.country.title"}}</label>
+					<select class="form-select{{if index $d.Errors "country"}} is-invalid{{end}}" id="country" name="country">
+						<option value="">{{if $d.Detected}}{{.T "honeypot.country.auto_known" "name" $d.Detected}}{{else}}{{.T "honeypot.country.auto"}}{{end}}</option>
+						{{range $d.Countries}}<option value="{{.Code}}"{{if eq .Code $d.Cfg.Country}} selected{{end}}>{{.Flag}} {{.Name}}</option>{{end}}
+					</select>
+					{{with index $d.Errors "country"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "honeypot.country.hint"}}</div>
+				</div>
 				<div class="form-check mb-3">
 					<input class="form-check-input" type="checkbox" id="report" name="report" value="1"{{if $d.Cfg.Report}} checked{{end}}{{if not $d.KeySet}} disabled{{end}}>
 					<label class="form-check-label" for="report">{{.T "honeypot.settings.report"}}</label>{{.Doc "honeypot#melden"}}
@@ -165,6 +174,15 @@
 					</select>
 					{{with index $d.Errors "start_page"}}<div class="invalid-feedback">{{.}}</div>{{end}}
 					<div class="form-text">{{.T "honeypot.start.hint"}}</div>
+				</div>
+				<div class="mb-3">
+					<label class="form-label" for="country">{{.T "honeypot.country.title"}}</label>
+					<select class="form-select{{if index $d.Errors "country"}} is-invalid{{end}}" id="country" name="country">
+						<option value="">{{if $d.Detected}}{{.T "honeypot.country.auto_known" "name" $d.Detected}}{{else}}{{.T "honeypot.country.auto"}}{{end}}</option>
+						{{range $d.Countries}}<option value="{{.Code}}"{{if eq .Code $d.Cfg.Country}} selected{{end}}>{{.Flag}} {{.Name}}</option>{{end}}
+					</select>
+					{{with index $d.Errors "country"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "honeypot.country.hint"}}</div>
 				</div>
 				<div class="mb-3" id="zertifikat">
 					<input type="hidden" name="cert_form" value="1">

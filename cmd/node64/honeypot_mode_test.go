@@ -63,6 +63,13 @@ func TestHoneypotModeFromEnv(t *testing.T) {
 	if hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_REPORT": "1"})); err != nil || hc.Report {
 		t.Fatalf("report without key: %+v %v", hc, err)
 	}
+	// Standort fuer die Live-Karte: Laendercode (auch Kleinstaaten als fester Punkt), sonst Fehler
+	if hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_COUNTRY": "sg"})); err != nil || hc.Country != "SG" {
+		t.Fatalf("country: %+v %v", hc, err)
+	}
+	if _, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_COUNTRY": "XY"})); err == nil {
+		t.Fatal("unknown country must fail")
+	}
 
 	hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_SERVICES": "ssh:22, ssh:2222,http:80,https:443:wp-login,TCP:3389,",
 		"NODE64_HONEYPOT_RETENTION": "3d"}))

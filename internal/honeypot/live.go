@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,7 +50,8 @@ type LivePoint struct {
 	Name    string  `json:"name"`
 	X       float64 `json:"x"`
 	Y       float64 `json:"y"`
-	Known   bool    `json:"known"` // false = Land unbekannt, Ziel ist die Kartenmitte
+	Known   bool    `json:"known"`  // false = Land unbekannt, Ziel ist die Kartenmitte
+	Manual  bool    `json:"manual"` // Standort eingestellt (sonst aus der oeffentlichen IPv4)
 }
 
 // ownCountry: Land der oeffentlichen IPv4 (gemerkt; Fehler eine Minute, Erfolg 6 Stunden).
@@ -103,11 +105,46 @@ func fetchOwnIPv4(ctx context.Context) (netip.Addr, error) {
 	return netip.Addr{}, io.ErrUnexpectedEOF
 }
 
-// liveTarget: Ziel der Boegen (eigenes Land, sonst Kartenmitte).
-func liveTarget(ctx context.Context, lang string) LivePoint {
-	cc := ownCC.get(ctx)
+// ValidCountry: Laendercode, den die Karte kennt (Standort des Sensors).
+func ValidCountry(cc string) bool {
+	_, _, ok := worldmap.Centroid(cc)
+	return ok
+}
+
+// cached: zuletzt ermitteltes Land ohne neuen Abruf ("" = noch keins).
+func (o *ownCountry) cached() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.cc
+}
+
+// countryOpt ist ein Land in der Auswahl "Standort".
+type countryOpt struct{ Code, Flag, Name string }
+
+// countryOptions: alle Laender der Karte (Flaechen und feste Punkte), nach Namen sortiert.
+func countryOptions(lang string) []countryOpt {
+	var out []countryOpt
+	add := func(cc string) {
+		out = append(out, countryOpt{Code: cc, Flag: geoip.Flag(cc), Name: geoip.Name(cc, lang)})
+	}
+	for _, c := range worldmap.Countries() {
+		add(c.Code)
+	}
+	for cc := range worldmap.Points() {
+		add(cc)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// liveTarget: Ziel der Boegen (eingestellter Standort, sonst Land der oeffentlichen IPv4, sonst Kartenmitte).
+func liveTarget(ctx context.Context, lang, manual string) LivePoint {
+	cc := manual
+	if cc == "" {
+		cc = ownCC.get(ctx)
+	}
 	if x, y, ok := worldmap.Centroid(cc); ok {
-		return LivePoint{Country: cc, Flag: geoip.Flag(cc), Name: geoip.Name(cc, lang), X: x, Y: y, Known: true}
+		return LivePoint{Country: cc, Flag: geoip.Flag(cc), Name: geoip.Name(cc, lang), X: x, Y: y, Known: true, Manual: manual != ""}
 	}
 	vb := strings.Fields(worldmap.ViewBox())
 	w, h := 1000.0, 436.0
@@ -159,5 +196,5 @@ func (m *Module) apiLive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	apiJSON(w, http.StatusOK, map[string]any{"minutes": minutes, "target": liveTarget(r.Context(), lang), "events": ev, "now": time.Now().UnixMilli()})
+	apiJSON(w, http.StatusOK, map[string]any{"minutes": minutes, "target": liveTarget(r.Context(), lang, m.loadConfig(r.Context()).Country), "events": ev, "now": time.Now().UnixMilli()})
 }

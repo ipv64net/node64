@@ -1,5 +1,21 @@
 # Änderungen – Honeypot64
 
+## 0.14.0 – 2026-10-26
+
+### Neu
+- Live-Karte im Vollbild (Knopf neben „Live“, Esc beendet): Karte über den ganzen Bildschirm, Seitenleiste mit den
+  Bögen, die gerade zu sehen sind, und den häufigsten Herkunftsländern der letzten Stunde. Ein Klick auf ein Land
+  zeigt den Bogen fest und die Arten der Angriffe von dort. Node64-Logo in der Kartenecke.
+- Mehrere Bögen gleichzeitig (bis zu drei neue je Takt, höchstens zwölf auf der Karte), nur aus echten Angriffen;
+  Wiederholungen bleiben blasser und als Wiederholung markiert.
+- Standort des Sensors einstellbar („Standort des Sensors“: automatisch oder Land wählen; ohne Oberfläche
+  `NODE64_HONEYPOT_COUNTRY`), z. B. für Server eines Hosters im Ausland. Ziel der Bögen hier und – mit der Meldung an
+  ipv64 – auf der Live-Karte von ipv64.net. Nur Anzeige, nicht für die Bewertung.
+- Kleine Länder ohne Fläche auf der Karte (Singapur, Hongkong, Malta, Liechtenstein, Monaco u. a.) bekommen einen
+  festen Punkt: Bögen von und nach dort werden jetzt gezeichnet.
+- Länderdaten nach Standort: ipv64.net liefert die Länder jetzt aus DB-IP (Standort der Adresse statt Firmensitz des
+  Inhabers, Lücken aus den RIR-Daten). Hinweis „IP-Länderdaten: DB-IP.com“ an der Karte.
+
 ## 0.13.0 – 2026-10-26
 
 ### Neu

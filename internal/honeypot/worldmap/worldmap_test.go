@@ -83,4 +83,14 @@ func TestCentroid(t *testing.T) {
 	if _, _, ok := Centroid("XX"); ok {
 		t.Error("unknown country")
 	}
+	// Kleinstaaten als fester Punkt (Projektion wie die Karte, Kuestenpunkte der Nachbarn liegen auf 1-2 Einheiten
+	// genau): Singapur an der Suedspitze der Malaiischen Halbinsel, Malta suedlich von Sizilien, Hongkong an der
+	// Kueste Chinas; Laender mit Flaeche bleiben beim Schwerpunkt
+	in("SG", 786, 798, 246, 258)
+	itX, itY, _ := Centroid("IT")
+	in("MT", itX-10, itX+20, itY+10, itY+35)
+	in("HK", 806, 822, 175, 190)
+	if _, ok := Points()["DE"]; ok {
+		t.Error("DE must not be a fixed point")
+	}
 }

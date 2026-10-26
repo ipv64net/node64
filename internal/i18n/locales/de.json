@@ -3987,7 +3987,8 @@
       "cert_dns": "DNS-Ziel „{v1}“: öffentliche IPv4, IPv6 (je eine) oder ein Name für CNAME.",
       "login_threshold": "Schwelle: {v1} bis {v2} Fehlversuche.",
       "login_window": "Zeitfenster: {v1} bis {v2} Minuten.",
-      "start_page": "Unbekannte Startseite."
+      "start_page": "Unbekannte Startseite.",
+      "country": "Unbekanntes Land."
     },
     "report": {
       "title": "Meldung an ipv64",
@@ -4208,7 +4209,8 @@
       "more": "{count} weitere Länder",
       "unknown": "{count} Ereignisse ohne Land (privat oder unbekannt)",
       "data": "Länderdaten: Stand {time}",
-      "waiting": "Länderdaten werden geladen bzw. sind bei ipv64.net noch nicht verfügbar."
+      "waiting": "Länderdaten werden geladen bzw. sind bei ipv64.net noch nicht verfügbar.",
+      "attribution": "IP-Länderdaten: DB-IP.com"
     },
     "targets": {
       "title": "Was wurde angegriffen",
@@ -4311,7 +4313,20 @@
       "empty": "In der letzten Stunde keine Angriffe mit bekanntem Land.",
       "replay": "Wiederholung",
       "target": "Dein Sensor: {name}",
-      "target_unknown": "Dein Sensor (Land unbekannt)"
+      "target_unknown": "Dein Sensor (Land unbekannt)",
+      "full": "Vollbild",
+      "full_exit": "Vollbild beenden (Esc)",
+      "now": "Gerade auf der Karte",
+      "now_empty": "Gerade kein Bogen.",
+      "top": "Häufigste Herkunft (60 min) – anklicken",
+      "sel": "Angriffe aus {name}",
+      "sel_clear": "Auswahl aufheben"
+    },
+    "country": {
+      "title": "Standort des Sensors",
+      "auto": "Automatisch (aus der öffentlichen IPv4)",
+      "auto_known": "Automatisch – erkannt: {name}",
+      "hint": "Ziel der Bögen auf der Live-Karte, hier und auf ipv64.net. Nur nötig, wenn das erkannte Land nicht stimmt (z. B. Server eines Hosters im Ausland). Gilt nur für die Anzeige, nicht für die Bewertung der Angreifer."
     }
   },
   "pve": {

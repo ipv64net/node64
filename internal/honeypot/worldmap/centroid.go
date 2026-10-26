@@ -20,9 +20,12 @@ var centroids = sync.OnceValue(func() map[string][2]float64 {
 	return out
 })
 
-// Centroid liefert den Mittelpunkt eines Landes (ok = auf der Karte).
+// Centroid liefert den Mittelpunkt eines Landes (ok = auf der Karte, als Flaeche oder als fester Punkt, points.go).
 func Centroid(code string) (x, y float64, ok bool) {
 	p, ok := centroids()[code]
+	if !ok {
+		p, ok = smallPoints()[code]
+	}
 	return p[0], p[1], ok
 }
 

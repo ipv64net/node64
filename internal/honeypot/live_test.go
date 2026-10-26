@@ -31,11 +31,14 @@ func TestLiveEvents(t *testing.T) {
 	if err != nil || len(ev) != 1 || ev[0].Country != "US" || ev[0].Group != GroupLogin || ev[0].X <= 0 || ev[0].IP != "198.51.100.7" || ev[0].Source != SrcHoneypot {
 		t.Fatalf("events: %+v %v", ev, err)
 	}
-	if tg := liveTarget(ctx, "de"); !tg.Known || tg.Country != "DE" || tg.X <= 0 {
+	if tg := liveTarget(ctx, "de", ""); !tg.Known || tg.Country != "DE" || tg.X <= 0 || tg.Manual {
 		t.Fatalf("target: %+v", tg)
 	}
 	ownCC = &ownCountry{from: func(context.Context) (netip.Addr, error) { return netip.Addr{}, context.DeadlineExceeded }}
-	if tg := liveTarget(ctx, "de"); tg.Known || tg.X != 500 {
+	if tg := liveTarget(ctx, "de", "SG"); !tg.Known || tg.Country != "SG" || !tg.Manual {
+		t.Fatalf("eingestellter Standort: %+v", tg)
+	}
+	if tg := liveTarget(ctx, "de", ""); tg.Known || tg.X != 500 {
 		t.Fatalf("unknown target: %+v", tg)
 	}
 }

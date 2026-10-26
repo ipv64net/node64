@@ -1,5 +1,21 @@
 # Changes – Honeypot64
 
+## 0.14.0 – 2026-10-26
+
+### New
+- Live map in full screen (button next to "Live", Esc exits): map across the whole screen, side panel with the arcs
+  currently shown and the top countries of origin of the last hour. Clicking a country keeps its arc and shows the
+  kinds of attacks from there. Node64 logo in the corner of the map.
+- Several arcs at once (up to three new ones per tick, at most twelve on the map), only from real attacks; replays
+  stay fainter and are marked as replays.
+- Location of the sensor can be set ("Location of the sensor": automatic or pick a country; without web interface
+  `NODE64_HONEYPOT_COUNTRY`), e.g. for a hosting provider's server abroad. Target of the arcs here and – with the
+  report to ipv64 – on the live map of ipv64.net. Display only, not used for rating.
+- Small countries without an area on the map (Singapore, Hong Kong, Malta, Liechtenstein, Monaco and others) get a
+  fixed point: arcs from and to them are drawn now.
+- Country data by location: ipv64.net now delivers countries from DB-IP (location of the address instead of the
+  holder's head office, gaps from the RIR data). Notice "IP country data: DB-IP.com" at the map.
+
 ## 0.13.0 – 2026-10-26
 
 ### New

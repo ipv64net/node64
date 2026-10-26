@@ -290,6 +290,8 @@ type settingsData struct {
 	// Einfacher Modus: Vorlagen mit den Ports, die im Router weiterzuleiten sind, und Startseite der Web-Falle
 	Simple     []simpleProfile
 	StartPages []string
+	Countries  []countryOpt // Standort des Sensors (Live-Karte, Meldung an ipv64)
+	Detected   string       // automatisch erkanntes Land ("Flagge Name", "" = noch keins)
 
 	// Dienste-Katalog (catalog.go)
 	CatRows     []uiCatRow
@@ -482,11 +484,14 @@ func parseServices(text string) []Service {
 // settingsView baut die Einstellungsseite. cf = Katalog wie eingegeben (nil = aus der Einstellung c).
 func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, errs map[string]string, lf *logForm, cf *catForm) settingsData {
 	d := settingsData{Tabs: tabsFor("settings"), Running: m.running() != nil, Cfg: c, Lines: lines, Profiles: profileViews(), Pages: Pages,
-		Simple: simpleProfiles(), StartPages: StartPages,
+		Simple: simpleProfiles(), StartPages: StartPages, Countries: countryOptions(m.lang(r)),
 		Errors: errs, MaxDays: maxRetentionDays, MinEvents: minMaxEvents, MaxEvents: maxMaxEvents,
 		LogFormats: cfgLogFormats, LogRoots: strings.Join(cfgLogRoots, ", "), LogSuggest: logSuggestions}
 	if d.Errors == nil {
 		d.Errors = map[string]string{}
+	}
+	if cc := ownCC.cached(); cc != "" {
+		d.Detected = geoip.Flag(cc) + " " + geoip.Name(cc, m.lang(r))
 	}
 	form := logFormFrom(c.Log)
 	if lf != nil {
@@ -564,6 +569,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		c.StartPage = r.PostFormValue("start_page")
+		c.Country = r.PostFormValue("country")
 		c.NotifyNew = r.PostFormValue("notify_new") != ""
 		if key != "" { // ohne Key ist der Schalter gesperrt und kommt nicht mit
 			c.Report = r.PostFormValue("report") != ""
@@ -606,6 +612,9 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, ok := r.PostForm["start_page"]; ok {
 		c.StartPage = r.PostFormValue("start_page")
+	}
+	if _, ok := r.PostForm["country"]; ok {
+		c.Country = r.PostFormValue("country")
 	}
 	if r.PostFormValue("cert_form") != "" { // Zertifikat fuer Koeder-Namen (nur mit diesem Teil des Formulars)
 		c.CertID = int64(formInt(r, "cert_id"))

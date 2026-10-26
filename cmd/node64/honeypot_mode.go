@@ -60,6 +60,7 @@ type hpModeConfig struct {
 	APIBase   string           // NODE64_IPV64_API (leer = ipv64.net; nur fuer Tests)
 	Firewall  *firewall.Config // Firewall-Helfer (H6, NODE64_FIREWALL); nil = aus
 	Name      string           // Name in der Node-Uebersicht auf ipv64.net (NODE64_NAME, Standard Honeypot64)
+	Country   string           // Standort fuer die Live-Karte auf ipv64.net (NODE64_HONEYPOT_COUNTRY, "" = automatisch)
 }
 
 // runMode startet einen besonderen Betriebsmodus (NODE64_MODE). Bisher gibt es nur "honeypot".
@@ -155,6 +156,7 @@ func honeypotRun(ctx context.Context, cfg *config.Config, hc *hpModeConfig, base
 		Enabled:  func(context.Context) bool { return hc.Report },
 		Profile:  func(context.Context) string { return hpProfileLabel(hc) },
 		SensorID: func(context.Context) (string, error) { return honeypot.SensorIDFromFile(dir) },
+		Country:  func(context.Context) string { return hc.Country },
 		State:    honeypot.FileReportState(dir)})
 	repCtx, repStop := context.WithCancel(ctx)
 	repDone := make(chan struct{})
@@ -399,6 +401,9 @@ func honeypotModeFromEnv(getenv func(string) string) (*hpModeConfig, error) {
 		return nil, fmt.Errorf("NODE64_HONEYPOT_INFO_TOKEN must have at least %d characters", hpMinTokenLen)
 	}
 	hc.APIBase = get("NODE64_IPV64_API")
+	if hc.Country = strings.ToUpper(get("NODE64_HONEYPOT_COUNTRY")); hc.Country != "" && !honeypot.ValidCountry(hc.Country) {
+		return nil, fmt.Errorf("NODE64_HONEYPOT_COUNTRY %q is not a country code (ISO 3166-1 alpha-2, e.g. DE or SG)", get("NODE64_HONEYPOT_COUNTRY"))
+	}
 	switch strings.ToLower(get("NODE64_HONEYPOT_REPORT")) {
 	case "", "1", "true", "yes", "on":
 		hc.Report = hc.IPv64Key != ""

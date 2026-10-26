@@ -3987,7 +3987,8 @@
       "cert_dns": "DNS target “{v1}”: public IPv4, IPv6 (one each) or a name for a CNAME.",
       "login_threshold": "Threshold: {v1} to {v2} failed logins.",
       "login_window": "Time window: {v1} to {v2} minutes.",
-      "start_page": "Unknown start page."
+      "start_page": "Unknown start page.",
+      "country": "Unknown country."
     },
     "report": {
       "title": "Reporting to ipv64",
@@ -4208,7 +4209,8 @@
       "more": "{count} more countries",
       "unknown": "{count} events without country (private or unknown)",
       "data": "Country data as of {time}",
-      "waiting": "Country data is loading or not yet available from ipv64.net."
+      "waiting": "Country data is loading or not yet available from ipv64.net.",
+      "attribution": "IP country data: DB-IP.com"
     },
     "targets": {
       "title": "What was attacked",
@@ -4311,7 +4313,20 @@
       "empty": "No attacks with a known country in the last hour.",
       "replay": "replay",
       "target": "Your sensor: {name}",
-      "target_unknown": "Your sensor (country unknown)"
+      "target_unknown": "Your sensor (country unknown)",
+      "full": "Full screen",
+      "full_exit": "Exit full screen (Esc)",
+      "now": "On the map right now",
+      "now_empty": "No arc right now.",
+      "top": "Top origins (60 min) – click one",
+      "sel": "Attacks from {name}",
+      "sel_clear": "Clear selection"
+    },
+    "country": {
+      "title": "Location of the sensor",
+      "auto": "Automatic (from the public IPv4)",
+      "auto_known": "Automatic – detected: {name}",
+      "hint": "Target of the arcs on the live map, here and on ipv64.net. Only needed if the detected country is wrong (e.g. a hosting provider's server abroad). Affects only the display, not the rating of attackers."
     }
   },
   "pve": {

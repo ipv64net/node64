@@ -1,16 +1,20 @@
 // Honeypot64: Live-Karte – auf der Laenderkarte der Uebersicht fliegen Boegen von der Quelle eines Angriffs zum eigenen
-// Sensor (Daten: /api/honeypot/live, letzte 60 Minuten, jede Minute neu). Neue Angriffe zuerst; ist gerade nichts
-// Neues da, werden aeltere aus dem Zeitraum wiederholt (nur auf der Karte, die Liste zeigt nur echte Eintraege).
+// Sensor (Daten: /api/honeypot/live, letzte 60 Minuten, jede Minute neu). Neue Angriffe zuerst, mehrere gleichzeitig;
+// ist gerade nichts Neues da, werden aeltere aus dem Zeitraum wiederholt (nur auf der Karte, als Wiederholung markiert;
+// die Listen zeigen nur echte Eintraege). Vollbild mit Seitenleiste: laufende Boegen, haeufigste Herkunft (anklickbar:
+// feste Boegen und Arten aus diesem Land).
 (function () {
 	"use strict";
 	var svg = document.querySelector("[data-hp-live-map]");
 	if (!svg) { return; }
-	var layer = svg.querySelector("[data-hp-live-layer]");
-	var list = document.querySelector("[data-hp-live-list]");
-	var btn = document.querySelector("[data-hp-live-toggle]");
+	var $ = function (s) { return document.querySelector(s); };
+	var layer = svg.querySelector("[data-hp-live-layer]"), selLayer = svg.querySelector("[data-hp-live-sel]");
+	var list = $("[data-hp-live-list]"), btn = $("[data-hp-live-toggle]"), stage = $("[data-hp-live-stage]"), fullBtn = $("[data-hp-live-full]");
+	var nowBox = $("[data-hp-live-now]"), topBox = $("[data-hp-live-top]"), selBox = $("[data-hp-live-selbox]");
 	var NS = "http://www.w3.org/2000/svg";
 	var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-	var target = null, events = [], fresh = [], seen = 0, running = true, replay = 0, recent = [];
+	var MAX_LIVE = 12, PER_TICK = 3; // hoechstens so viele Boegen gleichzeitig / neue je Takt
+	var target = null, events = [], fresh = [], seen = 0, running = true, replay = 0, recent = [], live = [], sel = null;
 	var L = function (k) { return (list && list.getAttribute("data-l-" + k)) || ""; };
 	var timeFmt = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
@@ -20,15 +24,26 @@
 		return e;
 	}
 
+	function svc(e) { return e.service.toUpperCase() + (e.port ? " " + e.port : ""); }
+
 	function tip(e, rep) {
-		return e.flag + " " + e.name + " · " + e.ip + " · " + e.kind + " · " + e.service.toUpperCase() + (e.port ? " " + e.port : "") +
-			" · " + timeFmt.format(new Date(e.t)) + (rep ? " (" + L("replay") + ")" : "");
+		return e.flag + " " + e.name + " · " + e.ip + " · " + e.kind + " · " + svc(e) + " · " + timeFmt.format(new Date(e.t)) + (rep ? " (" + L("replay") + ")" : "");
+	}
+
+	// Bogen von (x1, y1) zum Ziel (Angriff aus dem eigenen Land: kleiner Bogen daneben)
+	function curve(x1, y1) {
+		var x2 = target.x, y2 = target.y, dx = x2 - x1, dy = y2 - y1, dist = Math.sqrt(dx * dx + dy * dy);
+		if (dist < 3) { x1 += 14; y1 -= 10; dist = 17; }
+		var cx = (x1 + x2) / 2, cy = (y1 + y2) / 2 - Math.max(18, dist * 0.35);
+		return "M" + x1 + " " + y1 + " Q" + cx + " " + cy + " " + x2 + " " + y2;
 	}
 
 	// Ziel: pulsierender Punkt am eigenen Standort
 	function drawTarget() {
 		var old = layer.querySelector(".hp-target");
 		if (old) { old.remove(); }
+		var label = $("[data-hp-live-target]");
+		if (label) { label.textContent = target && target.known ? "→ " + target.flag + " " + target.name : ""; }
 		if (!target) { return; }
 		var g = el("g", { "class": "hp-target" });
 		g.appendChild(el("circle", { cx: target.x, cy: target.y, r: 4, "class": "hp-target-ring" }));
@@ -41,31 +56,51 @@
 
 	function arc(e, rep) {
 		if (!target) { return; }
-		var x1 = e.x, y1 = e.y, x2 = target.x, y2 = target.y;
-		var dx = x2 - x1, dy = y2 - y1, dist = Math.sqrt(dx * dx + dy * dy);
-		if (dist < 3) { // Angriff aus dem eigenen Land: kleiner Kreis statt Bogen
-			x1 += 14; y1 -= 10; dist = 17;
-		}
-		var cx = (x1 + x2) / 2, cy = (y1 + y2) / 2 - Math.max(18, dist * 0.35);
-		var p = el("path", { d: "M" + x1 + " " + y1 + " Q" + cx + " " + cy + " " + x2 + " " + y2, "class": "hp-arc hp-g-" + e.group + (rep ? " hp-arc-replay" : "") });
+		var p = el("path", { d: curve(e.x, e.y), "class": "hp-arc hp-g-" + e.group + (rep ? " hp-arc-replay" : "") });
 		var t = el("title");
 		t.textContent = tip(e, rep);
 		p.appendChild(t);
 		var dot = el("circle", { cx: e.x, cy: e.y, r: 2, "class": "hp-src hp-g-" + e.group });
 		layer.insertBefore(p, layer.firstChild);
 		layer.insertBefore(dot, layer.firstChild);
-		var gone = function () { p.remove(); dot.remove(); };
+		var item = { e: e, rep: rep, path: p };
+		live.unshift(item);
+		renderNow();
+		var gone = function () {
+			p.remove(); dot.remove();
+			live = live.filter(function (x) { return x !== item; });
+			renderNow();
+		};
 		if (!reduce && p.animate && p.getTotalLength) {
 			var len = p.getTotalLength();
 			p.style.strokeDasharray = len;
 			p.animate([{ strokeDashoffset: len, opacity: 1 }, { strokeDashoffset: 0, opacity: 1, offset: 0.55 }, { strokeDashoffset: 0, opacity: 0 }],
-				{ duration: 2800, easing: "ease-out" }).onfinish = gone;
+				{ duration: 3200, easing: "ease-out" }).onfinish = gone;
 		} else {
-			setTimeout(gone, 2800);
+			setTimeout(gone, 3200);
 		}
 	}
 
-	// Liste: die letzten echten Angriffe (neueste oben)
+	function row(group, text, opts) {
+		var r = document.createElement("div");
+		r.className = "hp-live-row" + (opts && opts.rep ? " hp-live-rep" : "") + (opts && opts.click ? " hp-live-click" : "");
+		var dot = document.createElement("span");
+		dot.className = "hp-live-sw hp-g-" + group;
+		var txt = document.createElement("span");
+		txt.textContent = text;
+		r.append(dot, txt);
+		if (opts && opts.title) { r.title = opts.title; }
+		if (opts && opts.click) { r.addEventListener("click", opts.click); }
+		if (opts && opts.hot) {
+			r.addEventListener("mouseenter", function () { opts.hot(true); });
+			r.addEventListener("mouseleave", function () { opts.hot(false); });
+		}
+		return r;
+	}
+
+	function isFull() { return stage && stage.classList.contains("hp-fs"); }
+
+	// Liste unter der Karte: die letzten echten Angriffe (neueste oben)
 	function renderList() {
 		if (!list) { return; }
 		list.replaceChildren();
@@ -76,17 +111,70 @@
 		}
 		list.classList.remove("text-body-secondary");
 		recent.slice(0, 8).forEach(function (e) {
-			var row = document.createElement("div");
-			row.className = "hp-live-row";
-			var dot = document.createElement("span");
-			dot.className = "hp-live-sw hp-g-" + e.group;
-			var txt = document.createElement("span");
-			txt.textContent = timeFmt.format(new Date(e.t)) + " · " + e.flag + " " + e.cc + " · " + e.ip + " → " + e.service.toUpperCase() + (e.port ? " " + e.port : "") + " · " + e.kind;
-			txt.className = "font-monospace";
-			row.append(dot, txt);
-			row.title = e.name;
-			list.appendChild(row);
+			var r = row(e.group, timeFmt.format(new Date(e.t)) + " · " + e.flag + " " + e.cc + " · " + e.ip + " → " + svc(e) + " · " + e.kind, { title: e.name });
+			r.lastChild.className = "font-monospace";
+			list.appendChild(r);
 		});
+	}
+
+	// Seitenleiste (Vollbild): Boegen, die gerade zu sehen sind
+	function renderNow() {
+		if (!nowBox || !isFull()) { return; }
+		nowBox.replaceChildren();
+		if (!live.length) { nowBox.textContent = nowBox.getAttribute("data-l-empty"); return; }
+		live.slice(0, MAX_LIVE).forEach(function (it) {
+			var e = it.e;
+			nowBox.appendChild(row(e.group, timeFmt.format(new Date(e.t)) + " " + e.flag + " " + e.cc + " · " + e.ip + " · " + e.kind + " · " + svc(e) + (it.rep ? " (" + L("replay") + ")" : ""),
+				{ rep: it.rep, title: tip(e, it.rep), hot: function (on) { it.path.classList.toggle("hp-hot", on); } }));
+		});
+	}
+
+	// Herkunftslaender der letzten Stunde (Anzahl, staerkste Art-Gruppe)
+	function byCountry() {
+		var m = {};
+		events.forEach(function (e) {
+			var c = m[e.cc] || (m[e.cc] = { cc: e.cc, flag: e.flag, name: e.name, x: e.x, y: e.y, n: 0, groups: {}, kinds: {} });
+			c.n++;
+			c.groups[e.group] = (c.groups[e.group] || 0) + 1;
+			var k = e.kind + " · " + svc(e);
+			c.kinds[k] = c.kinds[k] || { n: 0, group: e.group };
+			c.kinds[k].n++;
+		});
+		return Object.keys(m).map(function (k) {
+			var c = m[k];
+			c.group = Object.keys(c.groups).sort(function (a, b) { return c.groups[b] - c.groups[a]; })[0];
+			return c;
+		}).sort(function (a, b) { return b.n - a.n; });
+	}
+
+	function renderTop() {
+		if (!topBox) { return; }
+		topBox.replaceChildren();
+		var cs = byCountry();
+		if (!cs.length) { topBox.textContent = L("empty"); return; }
+		cs.slice(0, 10).forEach(function (c) {
+			topBox.appendChild(row(c.group, c.flag + " " + c.name + " · " + c.n, { click: function () { select(sel === c.cc ? null : c.cc); } }));
+		});
+	}
+
+	// Auswahl eines Herkunftslands: fester Bogen und die Arten der Angriffe von dort
+	function select(cc) {
+		sel = cc;
+		selLayer.replaceChildren();
+		if (!selBox) { return; }
+		var c = cc && byCountry().filter(function (x) { return x.cc === cc; })[0];
+		if (!c || !target) { sel = null; selBox.hidden = true; return; }
+		var p = el("path", { d: curve(c.x, c.y), "class": "hp-g-" + c.group, "stroke-width": "3" });
+		var t = el("title"); t.textContent = c.flag + " " + c.name + " → " + target.flag + " " + target.name + " · " + c.n; p.appendChild(t);
+		selLayer.appendChild(p);
+		var title = $("[data-hp-live-seltitle]");
+		title.textContent = title.getAttribute("data-l-title").replace("{name}", c.flag + " " + c.name);
+		var box = $("[data-hp-live-sellist]");
+		box.replaceChildren();
+		Object.keys(c.kinds).sort(function (a, b) { return c.kinds[b].n - c.kinds[a].n; }).forEach(function (k) {
+			box.appendChild(row(c.kinds[k].group, k + " · " + c.kinds[k].n));
+		});
+		selBox.hidden = false;
 	}
 
 	function load() {
@@ -102,13 +190,24 @@
 			recent = (d.events || []).slice(0, 8);
 			drawTarget();
 			renderList();
+			renderTop();
+			if (sel) { select(sel); }
 		}).catch(function () {});
 	}
 
+	// Je Takt bis zu PER_TICK Boegen: zuerst neue Angriffe, sonst Wiederholung aus verschiedenen Laendern
 	function tick() {
 		if (!running || !target || document.hidden) { return; }
-		if (fresh.length) { arc(fresh.shift(), false); return; }
-		if (events.length) { arc(events[replay++ % events.length], true); }
+		var room = Math.min(PER_TICK, MAX_LIVE - live.length), batch = [], used = {}, tries = 0;
+		while (room > 0 && fresh.length) { batch.push([fresh.shift(), false]); room--; }
+		if (!batch.length) { room = Math.min(room, 1 + (Math.random() < 0.5 ? 1 : 0)); }
+		while (room > 0 && events.length && tries < Math.min(events.length, 20)) {
+			var e = events[replay++ % events.length]; tries++;
+			if (used[e.cc]) { continue; }
+			used[e.cc] = true;
+			batch.push([e, true]); room--;
+		}
+		batch.forEach(function (b, i) { setTimeout(function () { arc(b[0], b[1]); }, i * 300); });
 	}
 
 	if (btn) {
@@ -117,10 +216,36 @@
 			btn.setAttribute("aria-pressed", running ? "true" : "false");
 			btn.classList.toggle("btn-outline-danger", running);
 			btn.classList.toggle("btn-outline-secondary", !running);
-			if (!running) { layer.querySelectorAll(".hp-arc, .hp-src").forEach(function (x) { x.remove(); }); }
+			if (!running) { layer.querySelectorAll(".hp-arc, .hp-src").forEach(function (x) { x.remove(); }); live = []; renderNow(); }
 		});
 	}
+
+	// Vollbild: Fullscreen API, sonst (z. B. iPhone) die Karte ueber die ganze Seite legen
+	function setFull(on) {
+		stage.classList.toggle("hp-fs", on);
+		document.body.style.overflow = on && !document.fullscreenElement ? "hidden" : "";
+		renderNow();
+	}
+	function toggleFull() {
+		if (isFull()) {
+			if (document.fullscreenElement && document.exitFullscreen) { document.exitFullscreen(); } else { setFull(false); }
+		} else if (stage.requestFullscreen) {
+			stage.requestFullscreen().catch(function () { setFull(true); });
+		} else {
+			setFull(true);
+		}
+	}
+	if (stage && fullBtn) {
+		fullBtn.addEventListener("click", toggleFull);
+		var exit = stage.querySelector("[data-hp-live-exit]");
+		if (exit) { exit.addEventListener("click", toggleFull); }
+		document.addEventListener("fullscreenchange", function () { setFull(document.fullscreenElement === stage); });
+		document.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && isFull() && !document.fullscreenElement) { setFull(false); } });
+	}
+	var clear = $("[data-hp-live-selclear]");
+	if (clear) { clear.addEventListener("click", function () { select(null); }); }
+
 	load();
-	setInterval(tick, 1200);
+	setInterval(tick, 1100);
 	setInterval(function () { if (!document.hidden) { load(); } }, 60000);
 })();

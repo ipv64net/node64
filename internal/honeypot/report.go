@@ -174,6 +174,7 @@ type ReporterConfig struct {
 	Enabled  func(ctx context.Context) bool                       // Opt-in
 	Profile  func(ctx context.Context) string
 	SensorID func(ctx context.Context) (string, error)
+	Country  func(ctx context.Context) string // Standort des Sensors ("" = automatisch; nil = keiner)
 	State    ReportStateStore
 	Mode     string // module | headless
 	Version  string // Version der Node
@@ -415,6 +416,9 @@ func (r *Reporter) RunOnce(ctx context.Context) time.Duration {
 		}
 		rep.ReportID = id + "-" + strconv.FormatInt(start.Unix(), 10)
 		rep.Sensor = ReportSensor{ID: id, Version: r.cfg.Version, Profile: r.cfg.Profile(ctx), Mode: r.cfg.Mode}
+		if r.cfg.Country != nil {
+			rep.Sensor.Country = r.cfg.Country(ctx)
+		}
 		body, err := encodeReport(rep)
 		if err != nil {
 			return r.failed(fmt.Errorf("encode report: %w", err), 0, false)

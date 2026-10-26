@@ -38,7 +38,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.13.0"
+	version = "0.14.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -71,6 +71,9 @@ type ModuleConfig struct {
 	NotifyNew     bool  `json:"notify_new"`       // Benachrichtigung bei neuen Angreifern (Standard aus)
 	Report        bool  `json:"report"`           // Meldung an ipv64 (Standard an; wirkt erst mit dem zentralen API-Key)
 	Expert        bool  `json:"expert,omitempty"` // Oberflaeche im Expertenmodus (alle Einstellungen); sonst einfacher Modus
+	// Standort des Sensors fuer die Live-Karte (ISO 3166-1, "" = automatisch aus der oeffentlichen IPv4); geht mit
+	// der Meldung an ipv64 (Ziel der Portal-Live-Karte), nicht in die Bewertung
+	Country string `json:"country,omitempty"`
 	// Ueberwachung der eigenen Anmeldung (login.go, Regel node64/login@1); leer = an mit Standardwerten
 	Login LoginConfig `json:"login,omitzero"`
 }
@@ -154,6 +157,7 @@ func New(core *store.Store, log *slog.Logger, dataDir, nodeVersion string) *Modu
 	m.rep = NewReporter(ReporterConfig{Store: st, API: m.api, Enabled: func(ctx context.Context) bool { return m.loadConfig(ctx).Report },
 		Profile:  func(ctx context.Context) string { return m.loadConfig(ctx).Profile },
 		SensorID: func(ctx context.Context) (string, error) { return SensorIDFromSettings(ctx, core) },
+		Country:  func(ctx context.Context) string { return m.loadConfig(ctx).Country },
 		State:    SettingsReportState(core), Mode: "module", Version: nodeVersion, Log: l})
 	return m
 }
@@ -553,6 +557,9 @@ func (m *Module) validate(ctx context.Context, c *ModuleConfig) FieldErrors {
 	}
 	if c.StartPage != "" && c.StartPage != StartNeutral {
 		errs["start_page"] = "honeypot.err.start_page"
+	}
+	if c.Country = strings.ToUpper(strings.TrimSpace(c.Country)); c.Country != "" && !ValidCountry(c.Country) {
+		errs["country"] = "honeypot.err.country"
 	}
 	for _, p := range PersonaProblems(&c.Config) {
 		key := "personas"
