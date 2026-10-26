@@ -273,6 +273,11 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 		return false
 	}
 	login := g.list.LoginPage && len(g.list.Users) > 0
+	if login && r.TLS == nil && h.HTTPS() { // Login nie im Klartext: auf HTTPS (nur echtes Port-80-HTTP; CDN64 Modus 2 hat r.TLS)
+		u := "https://" + hostOnly(r.Host) + r.URL.RequestURI()
+		http.Redirect(w, r, u, http.StatusPermanentRedirect)
+		return false
+	}
 	if login && strings.HasPrefix(r.URL.Path, "/.node64/") { // Login-Seite: Anmelden und Abmelden gehoeren PROXY64
 		setReject(r, rejACL)
 		m.loginEndpoint(w, r, h, g, ip)

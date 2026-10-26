@@ -101,6 +101,20 @@ func TestAccessListLoginPage(t *testing.T) {
 	if lo.StatusCode != 303 || !strings.Contains(lo.Header.Get("Set-Cookie"), ck.Name+"=;") {
 		t.Fatalf("logout: %d %v", lo.StatusCode, lo.Header)
 	}
+	// Host mit HTTPS: Login nie im Klartext, HTTP geht auf HTTPS
+	h2 := newHost()
+	h2.Names, h2.TargetHost, h2.TargetPort, h2.AccessListID = []string{"login2.test"}, "127.0.0.1", h.TargetPort, a.ID
+	if err := e.m.saveHost(ctx, h2); err != nil {
+		t.Fatal(err)
+	}
+	r2, err := c.Get("http://login2.test/x?y=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r2.Body.Close()
+	if r2.StatusCode != http.StatusPermanentRedirect || r2.Header.Get("Location") != "https://login2.test/x?y=1" {
+		t.Fatalf("https redirect: %d %q", r2.StatusCode, r2.Header.Get("Location"))
+	}
 	// ohne Login-Seite: Browser-Dialog wie bisher, /.node64/ geht ans Ziel
 	a.LoginPage = false
 	if err := e.m.saveAccessList(ctx, a, []UserInput{{Username: "anna"}}); err != nil {

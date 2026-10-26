@@ -16,7 +16,8 @@
   Stil von Node64 an (hell/dunkel, Deutsch/Englisch nach Browser), danach hält ein signiertes Cookie die Sitzung
   (12 Stunden, „Angemeldet bleiben“ 30 Tage). Ein neues Passwort beendet bestehende Sitzungen, das Cookie geht nie an
   das Ziel, Fehlversuche zählen wie bisher (Sperre, Honeypot-Meldung). Basic Auth bleibt für Programme möglich;
-  Abmelden über /.node64/logout.
+  Abmelden über /.node64/logout (Knopf). Hat der Host ein Zertifikat, geht die Anmeldung von HTTP immer auf HTTPS;
+  ein unbekannter Benutzer dauert so lange wie ein falsches Passwort.
 
 ### Geändert
 - WebSockets zählen in der Statistik als beantwortet (101) statt als abgebrochen (4xx).

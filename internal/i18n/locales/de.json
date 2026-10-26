@@ -662,7 +662,7 @@
       "hint": "Nach 10 falschen Anmeldungen in 5 Minuten wird die IP 15 Minuten gesperrt (steht im Audit).",
       "help": "Typisch: nur aus dem Heimnetz („allow 192.168.0.0/16“) und von unterwegs mit Passwort – dann „eine Bedingung genügt“.",
       "login_page": "Login-Seite statt Browser-Dialog",
-      "login_page_hint": "Besucher melden sich auf einer eigenen Seite im Stil von Node64 an statt im Passwort-Fenster des Browsers; danach hält ein Cookie die Sitzung (12 Stunden, mit „Angemeldet bleiben“ 30 Tage). Ein neues Passwort beendet bestehende Sitzungen. Abmelden über /.node64/logout. Programme können sich weiter per Basic Auth anmelden. Am besten nur mit HTTPS (HTTPS erzwingen). Gilt auch über CDN64 Modus 1 und 2, nicht für Modus 3 (dort nur IP-Regeln).",
+      "login_page_hint": "Besucher melden sich auf einer eigenen Seite im Stil von Node64 an statt im Passwort-Fenster des Browsers; danach hält ein Cookie die Sitzung (12 Stunden, mit „Angemeldet bleiben“ 30 Tage). Ein neues Passwort beendet bestehende Sitzungen. Abmelden über /.node64/logout. Programme können sich weiter per Basic Auth anmelden. Hat der Host ein Zertifikat, geht die Anmeldung von HTTP immer auf HTTPS. Gilt auch über CDN64 Modus 1 und 2, nicht für Modus 3 (dort nur IP-Regeln).",
       "login_page_short": "Login-Seite"
     },
     "log": {

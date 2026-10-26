@@ -15,7 +15,9 @@
 - Access lists with a login page (switch "Login page instead of browser dialog"): visitors sign in on a page in the
   style of Node64 (light/dark, German/English by browser); a signed cookie then keeps the session (12 hours, 30 days
   with "stay signed in"). A new password ends existing sessions, the cookie never reaches the target, failed attempts
-  count as before (block, honeypot report). Basic Auth stays possible for programs; sign out via /.node64/logout.
+  count as before (block, honeypot report). Basic Auth stays possible for programs; sign out via /.node64/logout
+  (button). If the host has a certificate, signing in always moves from HTTP to HTTPS; an unknown user takes as long
+  as a wrong password.
 
 ### Changed
 - WebSockets count as answered (101) in the statistics instead of aborted (4xx).
