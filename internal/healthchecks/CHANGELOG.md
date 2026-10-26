@@ -1,5 +1,13 @@
 # Änderungen – Healthchecks
 
+## 2.37.2 – 2026-10-26
+
+### Geändert
+- Dashboard: Unter den Healthchecks-Kacheln stehen jetzt eigene Kachelzeilen für Proxmox VE (Systeme ok/gestört,
+  Gäste laufend/gestört) und Docker (Hosts ok/gestört, Container laufend/gestört), jeweils mit Link, Hinweis bei
+  nicht erreichbaren Systemen und letzter Störung. Die bisherige einzelne Proxmox-Karte entfällt; Docker hatte bisher
+  keine.
+
 ## 2.37.1 – 2026-10-26
 
 ### Geändert

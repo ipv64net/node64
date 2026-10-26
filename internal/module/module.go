@@ -170,6 +170,12 @@ type DashboardProvider interface {
 	Dashboard(ctx context.Context) (*DashboardInfo, error)
 }
 
+// BoardGroupsProvider liefert weitere Kachelzeilen fuer die Dashboard-Karte eines Moduls mit Checks (z. B. Proxmox VE
+// und Docker unter den Healthchecks); leer = keine.
+type BoardGroupsProvider interface {
+	BoardGroups(ctx context.Context) []BoardGroup
+}
+
 // CardProvider liefert eine kleine Karte mit Kennzahlen fuer das Dashboard (fuer Module ohne Checks).
 type CardProvider interface {
 	Card(ctx context.Context) (*Card, error)
@@ -243,6 +249,28 @@ type DashboardInfo struct {
 	Other     int
 	Unchecked int // nicht ueberwacht (seit 3 Intervallen keine Messung)
 	Incidents []IncidentInfo
+	Groups    []BoardGroup // weitere Kachelzeilen (BoardGroupsProvider)
+}
+
+// BoardGroup ist eine Kachelzeile unter den Checks (Titel mit Link, Kacheln, Hinweise).
+type BoardGroup struct {
+	TitleKey string
+	Icon     string
+	Path     string
+	Tiles    []BoardTile
+	Err      string    // Hinweis bei Stoerung (z. B. System nicht erreichbar)
+	Last     string    // letzte Stoerung (Name), leer = keine
+	LastAt   time.Time // Zeitpunkt der letzten Stoerung
+	LastWhat string    // Tooltip der letzten Stoerung
+}
+
+// BoardTile ist eine Kachel: Kind waehlt die Farbe (ok, down, warn, info, muted), Path den Link.
+type BoardTile struct {
+	LabelKey string
+	Value    int
+	Kind     string
+	Icon     string
+	Path     string
 }
 
 // IncidentInfo ist eine Stoerung in Kurzform.

@@ -4590,6 +4590,12 @@
       "load": "Auslastung aller Container",
       "hosts": "Docker-Hosts"
     },
+    "card": {
+      "hosts_ok": "Hosts ok",
+      "hosts_bad": "Hosts gestört",
+      "running": "Container laufend",
+      "bad": "Container gestört"
+    },
     "filter": {
       "running": "Laufend",
       "problem": "Gestört",

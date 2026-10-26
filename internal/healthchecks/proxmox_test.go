@@ -651,8 +651,8 @@ func TestPVEPagesAndWizard(t *testing.T) {
 		!strings.Contains(body, "pveum user token add node64@pve monitor --privsep 0") {
 		t.Fatalf("wizard: %d %s", code, body)
 	}
-	if c, _ := m.Card(context.Background()); c != nil {
-		t.Fatal("card without systems")
+	if g := m.BoardGroups(context.Background()); len(g) != 0 {
+		t.Fatal("dashboard tiles without systems")
 	}
 
 	// Assistent: Verbindung testen zeigt erst nur den Fingerabdruck (Token nicht gesendet); Speichern ohne
@@ -806,10 +806,11 @@ func TestPVEPagesAndWizard(t *testing.T) {
 	if resp.StatusCode != 422 || !strings.Contains(body, "pve.err.secret_reenter") || strings.Contains(body, "pve.form.probe_result") {
 		t.Fatalf("edit probe other address: %d %s", resp.StatusCode, body)
 	}
-	// Startseiten-Karte: nur ein Gast gestoert -> System ok, Gast gestoert (nicht doppelt)
-	card, err := m.Card(context.Background())
-	if err != nil || card == nil || card.Path != pvePath || len(card.Stats) < 4 || card.Stats[0].Value != 1 || card.Stats[1].Value != 0 || card.Stats[3].Value != 1 {
-		t.Fatalf("card: %+v %v", card, err)
+	// Kacheln auf dem Dashboard: nur ein Gast gestoert -> System ok, Gast gestoert (nicht doppelt)
+	groups := m.BoardGroups(context.Background())
+	if len(groups) != 1 || groups[0].Path != pvePath || len(groups[0].Tiles) != 4 || groups[0].Tiles[0].Value != 1 || groups[0].Tiles[1].Value != 0 ||
+		groups[0].Tiles[3].Value != 1 {
+		t.Fatalf("dashboard tiles: %+v", groups)
 	}
 	// Ausschalten und Loeschen ueber die Oberflaeche
 	resp, _ = pvePost(t, srv, sp+"/toggle", url.Values{"back": {"/healthchecks/proxmox"}})

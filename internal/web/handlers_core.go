@@ -348,6 +348,9 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if info != nil {
+			if g, ok := m.(module.BoardGroupsProvider); ok {
+				info.Groups = g.BoardGroups(ctx)
+			}
 			d.Boards = append(d.Boards, *info)
 		}
 	}

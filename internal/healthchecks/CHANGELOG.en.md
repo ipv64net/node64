@@ -1,5 +1,13 @@
 # Changes – Healthchecks
 
+## 2.37.2 – 2026-10-26
+
+### Changed
+- Dashboard: below the Healthchecks tiles there are now separate tile rows for Proxmox VE (systems OK/with problems,
+  guests running/with problems) and Docker (hosts OK/with problems, containers running/with problems), each with a
+  link, a note for unreachable systems and the last incident. The former single Proxmox card is gone; Docker had none
+  so far.
+
 ## 2.37.1 – 2026-10-26
 
 ### Changed

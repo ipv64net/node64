@@ -21,7 +21,7 @@ const (
 	csrfCookie    = "node64_csrf"
 	flashCookie   = "node64_flash"
 	themeCookie   = "node64_theme"
-	fontCookie    = "node64_fs" // Schriftgroesse: sm, lg, xl (leer = normal)
+	fontCookie    = "node64_fs"  // Schriftgroesse: sm, lg, xl (leer = normal)
 	navCookie     = "node64_nav" // "mini" = Seitenleiste eingeklappt (ab lg)
 	langCookie    = "node64_lang"
 

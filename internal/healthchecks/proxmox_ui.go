@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ipv64net/node64/internal/module"
 	"github.com/ipv64net/node64/internal/proxmox"
 )
 
@@ -1213,58 +1212,4 @@ func pveHostOf(addrs []string) string {
 		}
 	}
 	return ""
-}
-
-// ---------------------------------------------------------------- Startseiten-Karte
-
-// Card: Karte „Proxmox VE“ auf der Startseite (nur mit eingerichteten Systemen): Systeme ok/gestoert, Gaeste
-// laufend/gestoert, letzte Stoerung. Ein System zaehlt nur mit eigenem Problem (nicht erreichbar, Node offline,
-// Quorum weg) als gestoert; gestoerte Gaeste stehen allein unter "Gaeste gestoert" (sonst doppelt gezaehlt).
-func (m *Module) Card(ctx context.Context) (*module.Card, error) {
-	list, err := m.pve.st.Systems(ctx)
-	if err != nil || len(list) == 0 {
-		return nil, err
-	}
-	pve := list[:0:0]
-	for _, sys := range list {
-		if !sys.IsDocker() { // Docker-Hosts zaehlen nicht zur Proxmox-Karte
-			pve = append(pve, sys)
-		}
-	}
-	if len(pve) == 0 {
-		return nil, nil
-	}
-	c := &module.Card{TitleKey: "nav.proxmox", Icon: "bi-hdd-rack", Path: pvePath}
-	var ok, bad, running, guestsBad int64
-	var errs []string
-	for _, sys := range pve {
-		row := m.pveSysView(ctx, sys)
-		switch {
-		case row.SysProblem:
-			bad++
-			if row.Error != "" {
-				errs = append(errs, sys.Name+": "+row.Error)
-			}
-		case row.State == "ok" || row.State == "warn": // warn ohne eigenes Problem: nur Gaeste gestoert
-			ok++
-		}
-		running += int64(row.Running)
-		guestsBad += int64(row.Bad)
-	}
-	sysBad := module.CardStat{LabelKey: "pve.card.systems_bad", Value: bad}
-	if bad > 0 {
-		sysBad.Class = "text-danger"
-	}
-	gBad := module.CardStat{LabelKey: "pve.card.guests_bad", Value: guestsBad}
-	if guestsBad > 0 {
-		gBad.Class = "text-danger"
-	}
-	c.Stats = []module.CardStat{{LabelKey: "pve.card.systems_ok", Value: ok}, sysBad, {LabelKey: "pve.card.guests_running", Value: running}, gBad}
-	if inc := m.pveLastIncident(ctx); inc != nil {
-		c.Stats = append(c.Stats, module.CardStat{LabelKey: "pve.card.last", Text: inc.Name, Ago: inc.Time, Title: inc.What})
-	}
-	if len(errs) > 0 {
-		c.Err = strings.Join(errs, " · ")
-	}
-	return c, nil
 }

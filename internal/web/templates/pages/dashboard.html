@@ -30,7 +30,16 @@
 		{{if .Unchecked}}<div class="col-6 col-md"><a class="card stat stat-warn" href="{{.Path}}?state=unchecked"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "hc.state.unchecked"}}</div><div class="stat-value">{{.Unchecked}}</div></div><i class="bi bi-hourglass-split stat-icon"></i></div></a></div>{{end}}
 		<div class="col-6 col-md"><a class="card stat stat-muted" href="{{.Path}}?state=paused"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "dashboard.paused"}}</div><div class="stat-value">{{.Paused}}</div></div><i class="bi bi-pause-circle stat-icon"></i></div></a></div>
 		<div class="col-6 col-md"><a class="card stat stat-info" href="{{.Path}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "dashboard.other"}}</div><div class="stat-value">{{.Other}}</div></div><i class="bi bi-info-circle stat-icon"></i></div></a></div>
-	</div></div></div>
+	</div>
+	{{range $g := .Groups}}
+	<div class="d-flex align-items-center mt-3 mb-2 small fw-semibold"><span><i class="bi {{$g.Icon}} text-primary me-1"></i>{{$.T $g.TitleKey}}</span><a class="ms-auto text-body-secondary" href="{{$g.Path}}" title="{{$.T $g.TitleKey}}"><i class="bi bi-arrow-right"></i></a></div>
+	<div class="row g-2">
+		{{range $g.Tiles}}<div class="col-6 col-md"><a class="card stat stat-{{.Kind}}" href="{{if .Path}}{{.Path}}{{else}}{{$g.Path}}{{end}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T .LabelKey}}</div><div class="stat-value">{{.Value}}</div></div><i class="bi {{.Icon}} stat-icon"></i></div></a></div>{{end}}
+	</div>
+	{{with $g.Err}}<div class="alert alert-warning py-1 px-2 mt-2 mb-0 small"><i class="bi bi-exclamation-triangle"></i> {{.}}</div>{{end}}
+	{{if $g.Last}}<div class="small text-body-secondary mt-1"{{with $g.LastWhat}} title="{{.}}"{{end}}>{{$.T "pve.card.last"}}: {{$g.Last}} <span class="text-nowrap">{{$.Ago $g.LastAt}}</span></div>{{end}}
+	{{end}}
+	</div></div>
 	{{end}}{{else if eq $it.Kind "incidents"}}{{with $it.Board}}
 	<div class="card h-100">
 		<div class="card-header"><i class="bi bi-exclamation-triangle text-danger"></i> {{$.T "dashboard.last_incidents"}}</div>

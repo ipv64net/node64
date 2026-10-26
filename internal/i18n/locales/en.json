@@ -4590,6 +4590,12 @@
       "load": "Load of all containers",
       "hosts": "Docker hosts"
     },
+    "card": {
+      "hosts_ok": "Hosts OK",
+      "hosts_bad": "Hosts with problems",
+      "running": "Containers running",
+      "bad": "Containers with problems"
+    },
     "filter": {
       "running": "Running",
       "problem": "Problems",
