@@ -248,12 +248,14 @@ type logData struct {
 	Total    HostStat
 	Enabled  int // Hosts mit Einzel-Log
 	NoDB     bool
+	// DecoyActive: Honeypot-Koeder aktiv (Kennzahl "an den Honeypot" auch ohne Werte zeigen)
+	DecoyActive bool
 }
 
 func (m *Module) pageLog(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
-	f := LogFilter{Query: q.Get("q"), Limit: 100, Rejected: q.Get("status") == "r"}
+	f := LogFilter{Query: q.Get("q"), Limit: 100, Rejected: q.Get("status") == "r", Decoy: q.Get("status") == "d"}
 	f.HostID, _ = strconv.ParseInt(q.Get("host"), 10, 64)
 	f.Status, _ = strconv.Atoi(q.Get("status"))
 	f.Before, _ = strconv.ParseInt(q.Get("before"), 10, 64)
@@ -282,6 +284,7 @@ func (m *Module) pageLog(w http.ResponseWriter, r *http.Request) {
 		if len(d.Entries) == f.Limit {
 			d.Next = d.Entries[len(d.Entries)-1].ID
 		}
+		d.DecoyActive = m.hpDecoyActive()
 		d.Sums, _ = sdb.sums(ctx, time.Now().Add(-24*time.Hour))
 		for _, s := range d.Sums {
 			d.Total.Requests += s.Requests
@@ -291,6 +294,7 @@ func (m *Module) pageLog(w http.ResponseWriter, r *http.Request) {
 			d.Total.S5 += s.S5
 			d.Total.Bytes += s.Bytes
 			d.Total.Blocked += s.Blocked
+			d.Total.Decoy += s.Decoy
 		}
 	}
 	m.g.Render(w, r, http.StatusOK, Name+"/log", "cdn64.title", d)
@@ -503,7 +507,7 @@ func (m *Module) apiLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	f := LogFilter{Query: q.Get("q"), Rejected: q.Get("rejected") == "1" || q.Get("status") == "r"}
+	f := LogFilter{Query: q.Get("q"), Rejected: q.Get("rejected") == "1" || q.Get("status") == "r", Decoy: q.Get("decoy") == "1" || q.Get("status") == "d"}
 	f.HostID, _ = strconv.ParseInt(q.Get("host"), 10, 64)
 	f.Status, _ = strconv.Atoi(q.Get("status"))
 	f.Before, _ = strconv.ParseInt(q.Get("before"), 10, 64)
@@ -548,7 +552,8 @@ func (m *Module) apiStats(w http.ResponseWriter, r *http.Request) {
 	if pts == nil {
 		pts = []HourPoint{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"hours": hours, "hosts": byHost, "timeline": pts, "dropped": sdb.dropped.Load()})
+	writeJSON(w, http.StatusOK, map[string]any{"hours": hours, "hosts": byHost, "timeline": pts, "dropped": sdb.dropped.Load(),
+		"decoy_active": m.hpDecoyActive()})
 }
 
 func (m *Module) apiSettingsGet(w http.ResponseWriter, r *http.Request) {

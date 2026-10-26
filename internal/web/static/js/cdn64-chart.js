@@ -1,5 +1,6 @@
 // CDN64-Verkehr als Diagramm, gemeinsam fuer das Dashboard und die Uebersicht der Proxy-Hosts (beide sehen gleich
-// aus): Anfragen und Abgewiesene gestapelt, Datenmenge als Linie. Daten aus /api/cdn64/stats (je Stunde, UTC);
+// aus): beantwortete Anfragen, 4xx, Fehler (5xx), Abgewiesene und an den Honeypot Gegebene gestapelt, Datenmenge als
+// Linie. Daten aus /api/cdn64/stats (je Stunde, UTC);
 // Luecken werden aufgefuellt, ab 8 Tagen je Tag zusammengefasst. Vanilla-JS + Chart.js (lokal).
 (function () {
 	"use strict";
@@ -14,7 +15,8 @@
 		return (i ? n.toFixed(1) : n) + " " + u[i];
 	}
 
-	// series: Punkte {t, ok, blocked, req, bytes, err} ueber den ganzen Zeitraum
+	// series: Punkte {t, ok, c4, err, blocked, decoy, req, bytes} ueber den ganzen Zeitraum (ok = vom Ziel erfolgreich
+	// beantwortet; aeltere Stunden zaehlten Abgewiesene noch bei 4xx, daher nie unter 0)
 	function series(timeline, hours) {
 		var by = {};
 		(timeline || []).forEach(function (p) { by[new Date(p.hour).getTime()] = p; });
@@ -22,17 +24,17 @@
 		var out = [];
 		for (var i = hours - 1; i >= 0; i--) {
 			var t = now - i * 3600e3, p = by[t] || {};
-			var blocked = p.blocked || 0, conn = p.conn_blocked || 0;
-			// requests enthaelt die abgewiesenen Anfragen, nicht die abgewiesenen Verbindungen (conn_blocked)
-			out.push({ t: t, ok: Math.max(0, (p.requests || 0) - (blocked - conn)), blocked: blocked, req: p.requests || 0, bytes: p.bytes || 0,
-				err: (p["4xx"] || 0) + (p["5xx"] || 0) });
+			var blocked = p.blocked || 0, conn = p.conn_blocked || 0, decoy = p.decoy || 0, c4 = p["4xx"] || 0, err = p["5xx"] || 0;
+			// requests enthaelt die abgewiesenen und an den Koeder gegebenen Anfragen, nicht die abgewiesenen Verbindungen
+			out.push({ t: t, ok: Math.max(0, (p.requests || 0) - (blocked - conn) - decoy - c4 - err), c4: c4, err: err, blocked: blocked, decoy: decoy,
+				req: p.requests || 0, bytes: p.bytes || 0 });
 		}
 		if (hours <= 168) { return { pts: out, daily: false, hours: hours }; }
 		var days = [], cur = null;
 		out.forEach(function (p) {
 			var d = new Date(p.t); d.setHours(0, 0, 0, 0);
-			if (!cur || cur.t !== d.getTime()) { cur = { t: d.getTime(), ok: 0, blocked: 0, req: 0, bytes: 0, err: 0 }; days.push(cur); }
-			["ok", "blocked", "req", "bytes", "err"].forEach(function (k) { cur[k] += p[k]; });
+			if (!cur || cur.t !== d.getTime()) { cur = { t: d.getTime(), ok: 0, c4: 0, err: 0, blocked: 0, decoy: 0, req: 0, bytes: 0 }; days.push(cur); }
+			["ok", "c4", "err", "blocked", "decoy", "req", "bytes"].forEach(function (k) { cur[k] += p[k]; });
 		});
 		return { pts: days, daily: true, hours: hours };
 	}
@@ -42,17 +44,24 @@
 		return new Date(t).toLocaleString(locale, o);
 	}
 
-	// config: Chart.js-Einstellungen; L = Beschriftungen {requests, blocked, bytes}
-	function config(s, L) {
+	// config: Chart.js-Einstellungen; L = Beschriftungen {requests, c4, errors, blocked, decoy, bytes}. 4xx und Fehler
+	// erscheinen, wenn es welche gibt; "an den Honeypot" nur mit aktivem Koeder (showDecoy) oder Werten im Zeitraum.
+	function config(s, L, showDecoy) {
 		var pts = s.pts;
+		var any = function (k) { return pts.some(function (p) { return p[k] > 0; }); };
+		var bar = function (lbl, k, color) {
+			return { type: "bar", label: lbl, data: pts.map(function (p) { return p[k]; }), backgroundColor: color, borderRadius: 3, stack: "r", yAxisID: "y" };
+		};
+		var sets = [bar(L.requests, "ok", css("--bs-primary", "#0d6efd"))];
+		if (any("c4")) { sets.push(bar(L.c4 || "4xx", "c4", css("--bs-secondary-color", "#adb5bd"))); }
+		if (any("err")) { sets.push(bar(L.errors || "5xx", "err", css("--bs-warning", "#ffc107"))); }
+		sets.push(bar(L.blocked, "blocked", css("--bs-danger", "#dc3545")));
+		if (showDecoy || any("decoy")) { sets.push(bar(L.decoy || "Honeypot", "decoy", css("--bs-purple", "#6f42c1"))); }
+		sets.push({ type: "line", label: L.bytes, data: pts.map(function (p) { return p.bytes; }), borderColor: css("--bs-info", "#0dcaf0"), backgroundColor: css("--bs-info", "#0dcaf0"),
+			pointRadius: 0, tension: 0.3, yAxisID: "y1" });
 		return {
 			type: "bar",
-			data: { labels: pts.map(function (p) { return label(p.t, s); }), datasets: [
-				{ type: "bar", label: L.requests, data: pts.map(function (p) { return p.ok; }), backgroundColor: css("--bs-primary", "#0d6efd"), borderRadius: 3, stack: "r", yAxisID: "y" },
-				{ type: "bar", label: L.blocked, data: pts.map(function (p) { return p.blocked; }), backgroundColor: css("--bs-danger", "#dc3545"), borderRadius: 3, stack: "r", yAxisID: "y" },
-				{ type: "line", label: L.bytes, data: pts.map(function (p) { return p.bytes; }), borderColor: css("--bs-info", "#0dcaf0"), backgroundColor: css("--bs-info", "#0dcaf0"),
-					pointRadius: 0, tension: 0.3, yAxisID: "y1" }
-			] },
+			data: { labels: pts.map(function (p) { return label(p.t, s); }), datasets: sets },
 			options: {
 				responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: "index", intersect: false },
 				scales: {

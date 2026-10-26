@@ -178,8 +178,8 @@
 		return fetch("/api/cdn64/stats?hours=" + hours, { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
 			var C = window.Node64CDNChart;
 			var s = C.series(d.timeline, hours);
-			empty(card, !s.pts.some(function (p) { return p.req || p.blocked; }));
-			draw(canvas, "cdn64", C.config(s, { requests: t("requests"), blocked: t("rejected"), bytes: t("bytes") }));
+			empty(card, !s.pts.some(function (p) { return p.req || p.blocked || p.decoy; }));
+			draw(canvas, "cdn64", C.config(s, { requests: t("requests"), blocked: t("rejected"), bytes: t("bytes"), c4: t("c4"), errors: t("errors"), decoy: t("decoy") }, !!d.decoy_active));
 		});
 	}
 

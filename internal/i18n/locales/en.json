@@ -262,7 +262,10 @@
       "show": "Show",
       "up": "Move earlier",
       "down": "Move later",
-      "rejected": "Rejected"
+      "rejected": "Rejected",
+      "c4": "4xx (from target)",
+      "errors": "Errors (5xx)",
+      "decoy": "To honeypot"
     },
     "account": "ipv64 account",
     "api_ok": "API connected",
@@ -674,7 +677,8 @@
       "settings_hint": "Hourly counters are kept for 90 days. Rejections (blocklists, limits, bans, access lists, exploits) are always logged, even without the access log switched on; at most one entry per address and reason every 10 seconds, every one is counted. Stored in cdn64.db, not in the node backup.",
       "conn": "connection rejected",
       "rejected": "Rejected",
-      "rejected_hint": "Rejected in 24 hours: blocklists, limits, bans, access lists and exploit block. Click to show only these entries."
+      "rejected_hint": "Rejected in 24 hours: blocklists, limits, bans, access lists and exploit block. Click to show only these entries.",
+      "decoy": "to honeypot"
     },
     "dnsrec": {
       "create": "Create DNS record at ipv64",
@@ -699,7 +703,7 @@
       "all": "all hosts",
       "requests": "Requests",
       "bytes": "Traffic",
-      "errors": "Errors (4xx/5xx)",
+      "errors": "Errors (5xx)",
       "blocked": "Rejected",
       "blocked_hint": "In this period: blocklists, limits, bans, access lists and exploit block, including connections cut before the first request (only with “all hosts”). Details under Accesses.",
       "empty": "No requests in this period yet.",
@@ -707,7 +711,12 @@
       "range_168": "7 days",
       "range_720": "30 days",
       "last": "last {range}",
-      "col": "Requests ({range})"
+      "col": "Requests ({range})",
+      "errors_hint": "Real errors: the target answered with 5xx or was not reachable. 4xx answers of the target, rejected requests and requests diverted to the honeypot do not count.",
+      "c4": "4xx (from target)",
+      "c4_sub": "+ {n} × 4xx from target",
+      "decoy": "To honeypot",
+      "decoy_hint": "Given to the Honeypot64 decoy instead of being rejected (names matching no host and requests recognised as malicious, as set under Access lists → Honeypot64)."
     },
     "bl": {
       "title": "ipv64 blocklists",
@@ -850,7 +859,8 @@
       "acl": "access list",
       "honeypot": "reported by the honeypot",
       "geo": "country block",
-      "ai_bot": "AI bot"
+      "ai_bot": "AI bot",
+      "unknown": "no matching host"
     },
     "online": {
       "err_conf": "Check the tunnel settings: tunnel, token and at least one server (name, host).",
@@ -988,7 +998,10 @@
     "ai": {
       "list": "AI bots (user agent)",
       "entries": "{n} tokens, {users} of them user fetchers"
-    }
+    },
+    "c4": "{n} × 4xx",
+    "c4_hint": "Answers of the target with 4xx (e.g. not found, not logged in) – usually not an error, e.g. missing icons or expired logins.",
+    "decoyed": "{n} to honeypot"
   },
   "certs": {
     "title": "Certificates",

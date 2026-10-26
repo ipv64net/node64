@@ -185,12 +185,18 @@ func (m *Module) hpRoute(reason string) bool {
 }
 
 // hpDivert: abgewiesene Anfrage an den Koeder statt der Fehlerseite; false = nicht umgeleitet (Aufrufer weist ab).
+// Die Statistik zaehlt sie dann als "an den Honeypot" statt als abgewiesen.
 func (m *Module) hpDivert(w http.ResponseWriter, r *http.Request, client netip.Addr, reason string) bool {
-	if !m.hpRoute(reason) {
+	if !m.hpRoute(reason) || !m.hpServeDecoy(w, r, client) {
 		return false
 	}
-	return m.hpServeDecoy(w, r, client)
+	if p, ok := r.Context().Value(ctxDecoyKey{}).(*bool); ok {
+		*p = true
+	}
+	return true
 }
+
+type ctxDecoyKey struct{}
 
 // hpServeDecoy gibt die Anfrage dem Koeder (der liest die Quelle aus RemoteAddr "ip:port", Host bleibt).
 func (m *Module) hpServeDecoy(w http.ResponseWriter, r *http.Request, client netip.Addr) bool {
@@ -342,6 +348,10 @@ func (m *Module) hpUnknown(w http.ResponseWriter, r *http.Request, def http.Hand
 		return
 	}
 	if m.hpDecoyActive() && m.hpServeDecoy(sw, r, client) {
+		if sdb := m.stats2.Load(); sdb != nil { // Statistik: Host 0 = Anfragen ohne passenden Namen
+			sdb.add(hit{time: time.Now(), client: client, method: r.Method, host: hostOnly(r.Host), path: trunc(r.URL.RequestURI(), 500),
+				status: sw.code(), reason: "unknown", decoy: true})
+		}
 		return
 	}
 	def.ServeHTTP(sw, r)

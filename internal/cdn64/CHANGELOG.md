@@ -1,5 +1,19 @@
 # Änderungen – PROXY64
 
+## 1.29.0 – 2026-10-26
+
+### Geändert
+- Statistik: „Fehler“ sind nur noch echte Fehler – 5xx und „Ziel nicht erreichbar“. 4xx-Antworten des Ziels (nicht
+  gefunden, nicht angemeldet; z. B. fehlende Icons bei Bitwarden) stehen getrennt in Grau, von PROXY64 abgewiesene
+  Anfragen zählen nur noch unter „abgewiesen“ und nicht zusätzlich bei 4xx. Gilt für die Host-Tabelle, die Kennzahlen
+  und das Diagramm (auch auf dem Dashboard). Ältere Stunden enthalten Abgewiesenes noch bei 4xx.
+- Seite Zugriffslisten: Die Karte Honeypot64 steht rechts unter „Schutz vor Überlastung“ (kompakter).
+
+### Neu
+- „An Honeypot“: Anfragen, die statt einer Abweisung den Köder von Honeypot64 bekamen (unbekannte Namen und als
+  schädlich erkannte), zählen eigen – je Host in der Tabelle, als Kennzahl, im Diagramm (lila) und im Zugriffs-Log
+  (Kennzeichen und Filter). Sichtbar, solange der Köder aktiv ist oder es im Zeitraum Umleitungen gab.
+
 ## 1.28.0 – 2026-10-25
 
 ### Neu

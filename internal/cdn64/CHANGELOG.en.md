@@ -1,5 +1,19 @@
 # Changes – PROXY64
 
+## 1.29.0 – 2026-10-26
+
+### Changed
+- Statistics: “errors” are only real errors now – 5xx and “target not reachable”. 4xx answers of the target (not found,
+  not logged in; e.g. missing icons with Bitwarden) are shown separately in grey, requests rejected by PROXY64 only
+  count as “rejected” and no longer also as 4xx. Applies to the host table, the key figures and the chart (also on the
+  dashboard). Older hours still contain rejected requests in 4xx.
+- Access lists page: the Honeypot64 card sits on the right below “Overload protection” (more compact).
+
+### Added
+- “To honeypot”: requests that got the Honeypot64 decoy instead of a rejection (unknown names and those recognised as
+  malicious) are counted on their own – per host in the table, as a key figure, in the chart (purple) and in the access
+  log (marker and filter). Visible while the decoy is active or there were diversions in the period.
+
 ## 1.28.0 – 2026-10-25
 
 ### Added

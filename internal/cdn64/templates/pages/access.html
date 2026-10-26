@@ -50,7 +50,7 @@
 <form method="post" action="/cdn64/blocklists/token/delete" id="bl-token-delete" class="d-none"><input type="hidden" name="_csrf" value="{{.CSRF}}"></form>
 </div>
 <div class="col-lg-6">
-<form method="post" action="/cdn64/limits" class="card h-100" id="limits">
+<form method="post" action="/cdn64/limits" class="card" id="limits">
 	<input type="hidden" name="_csrf" value="{{.CSRF}}">
 	<div class="card-header d-flex flex-wrap align-items-center gap-2">
 		<span><i class="bi bi-speedometer2 text-primary"></i> {{.T "cdn64.lim.title"}}{{$.Doc "cdn64#rate-limits"}}</span>
@@ -105,10 +105,8 @@
 		<button class="btn btn-outline-secondary btn-sm" type="submit" name="reset" value="1" data-confirm="{{.T "cdn64.lim.reset_confirm"}}"><i class="bi bi-arrow-counterclockwise"></i> {{.T "cdn64.lim.reset"}}</button>
 	</div>
 </form>
-</div>
-</div>
 {{with $d.HP}}
-<form method="post" action="/cdn64/honeypot" class="card mb-3" id="honeypot">
+<form method="post" action="/cdn64/honeypot" class="card mt-3" id="honeypot">
 	<input type="hidden" name="_csrf" value="{{$.CSRF}}">
 	<div class="card-header d-flex flex-wrap align-items-center gap-2">
 		<span><i class="bi bi-bug text-primary"></i> {{$.T "cdn64.hp.title"}}{{$.Doc "cdn64#honeypot"}}</span>
@@ -156,6 +154,8 @@
 	<div class="card-footer"><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check2"></i> {{$.T "common.save"}}</button></div>
 </form>
 {{end}}
+</div>
+</div>
 <div class="card">
 	{{if not $d.Rows}}<div class="card-body text-center text-body-secondary py-5">
 		<div class="mb-2"><i class="bi bi-person-lock fs-2"></i></div>

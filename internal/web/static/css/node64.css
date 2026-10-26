@@ -301,3 +301,7 @@ html[data-fs="xl"] { font-size: 125%; }
 
 /* Unterpunkt im Menue (z. B. Healthchecks-Sync unter Healthchecks) */
 .nav-link.nav-sub { padding-left: 2.6rem; padding-top: .2rem; padding-bottom: .2rem; }
+
+/* PROXY64: an den Honeypot-Koeder gegebene Anfragen (lila wie im Diagramm) */
+.hp-decoy { color: var(--bs-purple, #6f42c1); }
+.hp-decoy-badge { background-color: var(--bs-purple, #6f42c1); color: #fff; }

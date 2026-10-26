@@ -394,3 +394,48 @@ func TestCompressionDefault(t *testing.T) {
 		t.Fatal("compression on for new proxy hosts only")
 	}
 }
+
+// Zaehlung: Statusklassen nur fuer Antworten des Ziels; abgewiesen und an den Honeypot getrennt; "Fehler" = 5xx.
+func TestStatsSplitDecoyAndErrors(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	s, err := openStats(dir, slog.New(slog.NewTextHandler(io.Discard, nil)), func() int { return 7 }, func() bool { return false })
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	ip := netip.MustParseAddr("203.0.113.9")
+	for _, h := range []hit{
+		{time: now, hostID: 1, client: ip, method: "GET", path: "/", status: 200},
+		{time: now, hostID: 1, client: ip, method: "GET", path: "/icons/x.png", status: 404},
+		{time: now, hostID: 1, client: ip, method: "GET", path: "/api", status: 502},
+		{time: now, hostID: 1, client: ip, method: "GET", path: "/.env", status: 403, reason: rejBlocklist},
+		{time: now, hostID: 1, client: ip, method: "GET", path: "/.git/config", status: 200, reason: rejExploit, decoy: true},
+		{time: now, hostID: 0, client: ip, method: "GET", host: "fremd.example", path: "/", status: 200, reason: "unknown", decoy: true},
+	} {
+		s.add(h)
+	}
+	s.close() // schreibt den Rest
+	s, err = openStats(dir, slog.New(slog.NewTextHandler(io.Discard, nil)), func() int { return 7 }, func() bool { return false })
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.close()
+	sums, err := s.sums(ctx, now.Add(-2*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := sums[1]
+	if h.Requests != 5 || h.S2 != 1 || h.S4 != 1 || h.S5 != 1 || h.Blocked != 1 || h.Decoy != 1 || h.Errors() != 1 {
+		t.Fatalf("host 1: %+v", h)
+	}
+	if sums[0].Decoy != 1 || sums[0].Blocked != 0 {
+		t.Fatalf("host 0: %+v", sums[0])
+	}
+	all, _ := s.entries(ctx, LogFilter{Limit: 50})
+	rej, _ := s.entries(ctx, LogFilter{Rejected: true, Limit: 50})
+	dec, _ := s.entries(ctx, LogFilter{Decoy: true, Limit: 50})
+	if len(rej) != 1 || rej[0].Reason != rejBlocklist || rej[0].Decoy || len(dec) != 2 || !dec[0].Decoy || len(all) != 3 {
+		t.Fatalf("log: all %d, rejected %+v, decoy %+v", len(all), rej, dec)
+	}
+}

@@ -138,6 +138,7 @@ func TestHoneypotBlock(t *testing.T) {
 func TestHoneypotRoute(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t)
+	e.m.SetDataDir(t.TempDir()) // Statistik (cdn64.db)
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "app") }))
 	defer backend.Close()
 	bu, _ := url.Parse(backend.URL)
@@ -176,6 +177,23 @@ func TestHoneypotRoute(t *testing.T) {
 	}
 	if code, body, _ := do(t, c, "GET", "https://app.test/ok"); code != http.StatusOK || body != "app" {
 		t.Fatalf("normal request: %d %q", code, body)
+	}
+	// Statistik: die umgeleitete Anfrage zaehlt "an den Honeypot", nicht als abgewiesen oder 4xx
+	if sdb := m.stats2.Load(); sdb == nil {
+		t.Fatal("stats db not open")
+	} else {
+		var hs HostStat
+		for i := 0; i < 60; i++ {
+			sums, _ := sdb.sums(ctx, time.Now().Add(-2*time.Hour))
+			if hs = sums[h.ID]; hs.Decoy > 0 {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		// davor: zwei 403 der Exploit-Sperre (ohne Honeypot bzw. Koeder aus) = abgewiesen, nicht 4xx
+		if hs.Decoy != 1 || hs.Blocked != 2 || hs.S4 != 0 || hs.S2 != 1 {
+			t.Fatalf("stats: %+v", hs)
+		}
 	}
 	// Weg Exploit aus: wieder 403
 	off := hpDefaultRoute()

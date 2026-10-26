@@ -349,16 +349,16 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		start := time.Now()
 		st.requests.Add(1)
 		client := h.Advanced.clientIP(r)
-		reject, authFail := new(string), new(bool)
+		reject, authFail, decoyed := new(string), new(bool), new(bool)
 		ctx := context.WithValue(context.WithValue(r.Context(), ctxClientKey{}, client), ctxRejectKey{}, reject)
-		r = r.WithContext(context.WithValue(ctx, ctxAuthFailKey{}, authFail))
+		r = r.WithContext(context.WithValue(context.WithValue(ctx, ctxAuthFailKey{}, authFail), ctxDecoyKey{}, decoyed))
 		sw := &statusWriter{ResponseWriter: w}
 		defer func() {
 			m.hpReport(r, client, true, sw.code(), *authFail)
 			if sdb := m.stats2.Load(); sdb != nil {
 				sdb.add(hit{time: start, hostID: h.ID, client: client, method: r.Method, host: hostOnly(r.Host), path: trunc(r.URL.RequestURI(), 500),
 					status: sw.code(), bytes: sw.bytes, ms: time.Since(start).Milliseconds(), ua: trunc(r.UserAgent(), 200), log: h.Advanced.AccessLog,
-					reason: *reject})
+					reason: *reject, decoy: *decoyed})
 			}
 		}()
 		if m.bl.Blocked(client) { // ipv64-Blocklisten (echte Client-IP hinter vertrauenswuerdigen Proxys)

@@ -41,6 +41,7 @@ CREATE INDEX IF NOT EXISTS access_host ON access(host_id, time);
 var statsColumns = []struct{ table, col, def string }{
 	{"hourly", "blocked", "INTEGER NOT NULL DEFAULT 0"}, // abgewiesen (Blocklisten, Limits, Sperren, Zugriffslisten, Exploits)
 	{"access", "reason", "TEXT NOT NULL DEFAULT ''"},    // Grund der Abweisung ("" = normal beantwortet)
+	{"hourly", "decoy", "INTEGER NOT NULL DEFAULT 0"},   // an den Honeypot-Koeder gegeben statt abgewiesen
 }
 
 // rejectLogEvery: je Adresse, Grund und Host hoechstens ein Log-Eintrag in diesem Abstand (Flut bleibt lesbar,
@@ -65,6 +66,7 @@ type hit struct {
 	log    bool   // ins Einzel-Log
 	reason string // abgewiesen: Grund (immer ins Log, gebremst)
 	conn   bool   // Verbindung vor der ersten Anfrage abgewiesen (zaehlt nicht als Anfrage)
+	decoy  bool   // statt abzuweisen an den Koeder von Honeypot64 gegeben (reason = Art, Host 0 = unbekannter Name)
 }
 
 type hourKey struct {
@@ -72,7 +74,9 @@ type hourKey struct {
 	hour string
 }
 
-type hourAgg struct{ requests, s2, s3, s4, s5, bytes, blocked int64 }
+// hourAgg: Zahlen einer Stunde. s2..s5 nur fuer Antworten des Ziels (nicht abgewiesen, nicht an den Koeder);
+// blocked = abgewiesen, decoy = an den Honeypot-Koeder gegeben.
+type hourAgg struct{ requests, s2, s3, s4, s5, bytes, blocked, decoy int64 }
 
 // statsDB ist die Datei cdn64.db mit Schreiber.
 type statsDB struct {
@@ -161,12 +165,17 @@ func (s *statsDB) writer() {
 			a = &hourAgg{}
 			agg[k] = a
 		}
-		if h.reason != "" {
+		switch {
+		case h.decoy:
+			a.decoy++
+		case h.reason != "":
 			a.blocked++
 		}
 		if !h.conn {
 			a.requests++
 			a.bytes += h.bytes
+		}
+		if !h.conn && !h.decoy && h.reason == "" { // Statusklassen nur fuer Antworten des Ziels
 			switch h.status / 100 {
 			case 1, 2:
 				a.s2++
@@ -230,15 +239,18 @@ func (s *statsDB) write(agg map[hourKey]*hourAgg, logs []hit) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 	for k, a := range agg {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO hourly (host_id, hour, requests, s2, s3, s4, s5, bytes, blocked) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		if _, err := tx.ExecContext(ctx, `INSERT INTO hourly (host_id, hour, requests, s2, s3, s4, s5, bytes, blocked, decoy) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(host_id, hour) DO UPDATE SET requests = requests + excluded.requests, s2 = s2 + excluded.s2, s3 = s3 + excluded.s3,
-			s4 = s4 + excluded.s4, s5 = s5 + excluded.s5, bytes = bytes + excluded.bytes, blocked = blocked + excluded.blocked`,
-			k.host, k.hour, a.requests, a.s2, a.s3, a.s4, a.s5, a.bytes, a.blocked); err != nil {
+			s4 = s4 + excluded.s4, s5 = s5 + excluded.s5, bytes = bytes + excluded.bytes, blocked = blocked + excluded.blocked, decoy = decoy + excluded.decoy`,
+			k.host, k.hour, a.requests, a.s2, a.s3, a.s4, a.s5, a.bytes, a.blocked, a.decoy); err != nil {
 			return err
 		}
 	}
 	anon := s.anon()
 	for _, h := range logs {
+		if h.decoy { // im Log: Art mit Kennzeichen "an den Koeder"
+			h.reason = decoyPrefix + h.reason
+		}
 		client := h.client.String()
 		if anon {
 			client = maskIP(h.client)
@@ -282,10 +294,15 @@ type HostStat struct {
 	S5       int64 `json:"5xx"`
 	Bytes    int64 `json:"bytes"`
 	Blocked  int64 `json:"blocked"` // abgewiesen; bei Host 0 Verbindungen vor der ersten Anfrage
+	Decoy    int64 `json:"decoy"`   // an den Honeypot-Koeder gegeben (statt abgewiesen); Host 0 = unbekannte Namen
 }
 
-// Errors: Antworten mit 4xx/5xx (wie die Kennzahl "Fehler" der Uebersicht).
-func (h HostStat) Errors() int64 { return h.S4 + h.S5 }
+// Errors: echte Fehler - 5xx des Ziels und "Ziel nicht erreichbar" (502). 4xx sind Antworten des Ziels (nicht
+// gefunden, nicht angemeldet) und stehen getrennt; Abgewiesenes und an den Koeder Gegebenes zaehlt nie dazu.
+func (h HostStat) Errors() int64 { return h.S5 }
+
+// decoyPrefix kennzeichnet im Zugriffs-Log Anfragen, die an den Koeder gingen ("decoy:<Art>").
+const decoyPrefix = "decoy:"
 
 // bucketFrom: erster Stunden-Eimer ab since. Die angebrochene Stunde von since zaehlt nicht mehr mit, die laufende
 // Stunde schon: since = jetzt - N Std. ergibt genau N Eimer (sonst waeren "24 Std." bis zu 25 Stunden). sums und
@@ -296,7 +313,7 @@ func bucketFrom(since time.Time) string {
 
 // sums: Zahlen je Host seit since, in vollen Stunden-Eimern (bucketFrom).
 func (s *statsDB) sums(ctx context.Context, since time.Time) (map[int64]HostStat, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT host_id, SUM(requests), SUM(s2), SUM(s3), SUM(s4), SUM(s5), SUM(bytes), SUM(blocked) FROM hourly WHERE hour >= ? GROUP BY host_id`,
+	rows, err := s.db.QueryContext(ctx, `SELECT host_id, SUM(requests), SUM(s2), SUM(s3), SUM(s4), SUM(s5), SUM(bytes), SUM(blocked), SUM(decoy) FROM hourly WHERE hour >= ? GROUP BY host_id`,
 		bucketFrom(since))
 	if err != nil {
 		return nil, err
@@ -306,7 +323,7 @@ func (s *statsDB) sums(ctx context.Context, since time.Time) (map[int64]HostStat
 	for rows.Next() {
 		var id int64
 		var h HostStat
-		if err := rows.Scan(&id, &h.Requests, &h.S2, &h.S3, &h.S4, &h.S5, &h.Bytes, &h.Blocked); err != nil {
+		if err := rows.Scan(&id, &h.Requests, &h.S2, &h.S3, &h.S4, &h.S5, &h.Bytes, &h.Blocked, &h.Decoy); err != nil {
 			return nil, err
 		}
 		out[id] = h
@@ -323,7 +340,7 @@ type HourPoint struct {
 
 // hours: Verlauf je Stunde (alle Hosts oder einer), ab bucketFrom(since) wie sums.
 func (s *statsDB) hours(ctx context.Context, hostID int64, since time.Time) ([]HourPoint, error) {
-	q := `SELECT hour, SUM(requests), SUM(s2), SUM(s3), SUM(s4), SUM(s5), SUM(bytes), SUM(blocked),
+	q := `SELECT hour, SUM(requests), SUM(s2), SUM(s3), SUM(s4), SUM(s5), SUM(bytes), SUM(blocked), SUM(decoy),
 		SUM(CASE WHEN host_id = 0 THEN blocked ELSE 0 END) FROM hourly WHERE hour >= ?`
 	args := []any{bucketFrom(since)}
 	if hostID > 0 {
@@ -339,7 +356,7 @@ func (s *statsDB) hours(ctx context.Context, hostID int64, since time.Time) ([]H
 	for rows.Next() {
 		var p HourPoint
 		var hour string
-		if err := rows.Scan(&hour, &p.Requests, &p.S2, &p.S3, &p.S4, &p.S5, &p.Bytes, &p.Blocked, &p.ConnBlocked); err != nil {
+		if err := rows.Scan(&hour, &p.Requests, &p.S2, &p.S3, &p.S4, &p.S5, &p.Bytes, &p.Blocked, &p.Decoy, &p.ConnBlocked); err != nil {
 			return nil, err
 		}
 		p.Hour, _ = time.Parse(time.RFC3339, hour)
@@ -362,13 +379,15 @@ type LogEntry struct {
 	Ms     int64     `json:"ms"`
 	UA     string    `json:"user_agent"`
 	Reason string    `json:"reason,omitempty"` // abgewiesen: blocklist, ban, conns, conn_rate, max_conns, req_rate, target, exploit, acl
+	Decoy  bool      `json:"decoy,omitempty"`  // an den Honeypot-Koeder gegeben (Reason = Art)
 }
 
 // LogFilter waehlt Eintraege aus.
 type LogFilter struct {
 	HostID   int64
 	Status   int    // 2, 3, 4, 5 = Klasse, 0 = alle
-	Rejected bool   // nur abgewiesene
+	Rejected bool   // nur abgewiesene (ohne die an den Koeder gegebenen)
+	Decoy    bool   // nur an den Honeypot-Koeder gegebene
 	Query    string // in Pfad, Client oder User-Agent
 	Before   int64  // Seiten: Eintraege mit kleinerer ID
 	Limit    int
@@ -382,7 +401,10 @@ func (s *statsDB) entries(ctx context.Context, f LogFilter) ([]LogEntry, error) 
 		args = append(args, f.HostID)
 	}
 	if f.Rejected {
-		q += ` AND reason <> ''`
+		q += ` AND reason <> '' AND reason NOT LIKE '` + decoyPrefix + `%'`
+	}
+	if f.Decoy {
+		q += ` AND reason LIKE '` + decoyPrefix + `%'`
 	}
 	if f.Status >= 1 && f.Status <= 5 {
 		q += ` AND status >= ? AND status < ?`
@@ -414,6 +436,9 @@ func (s *statsDB) entries(ctx context.Context, f LogFilter) ([]LogEntry, error) 
 			return nil, err
 		}
 		e.Time, _ = time.Parse(time.RFC3339Nano, t)
+		if r, ok := strings.CutPrefix(e.Reason, decoyPrefix); ok {
+			e.Reason, e.Decoy = r, true
+		}
 		out = append(out, e)
 	}
 	return out, rows.Err()

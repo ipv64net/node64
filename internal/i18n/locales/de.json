@@ -262,7 +262,10 @@
       "show": "Einblenden",
       "up": "Nach vorn",
       "down": "Nach hinten",
-      "rejected": "Abgewiesen"
+      "rejected": "Abgewiesen",
+      "c4": "4xx (vom Ziel)",
+      "errors": "Fehler (5xx)",
+      "decoy": "An Honeypot"
     },
     "account": "ipv64-Account",
     "api_ok": "API verbunden",
@@ -674,7 +677,8 @@
       "settings_hint": "Die Zähler je Stunde bleiben 90 Tage. Abweisungen (Blocklisten, Limits, Sperren, Zugriffslisten, Exploits) stehen immer im Log, auch ohne eingeschaltetes Zugriffs-Log; je Adresse und Grund höchstens ein Eintrag alle 10 Sekunden, gezählt wird jede. Gespeichert in cdn64.db, nicht im Backup der Node.",
       "conn": "Verbindung abgewiesen",
       "rejected": "Abgewiesen",
-      "rejected_hint": "Abgewiesen in 24 Stunden: Blocklisten, Limits, Sperren, Zugriffslisten und Exploit-Sperre. Klick zeigt nur diese Einträge."
+      "rejected_hint": "Abgewiesen in 24 Stunden: Blocklisten, Limits, Sperren, Zugriffslisten und Exploit-Sperre. Klick zeigt nur diese Einträge.",
+      "decoy": "an Honeypot"
     },
     "dnsrec": {
       "create": "DNS-Eintrag bei ipv64 anlegen",
@@ -699,7 +703,7 @@
       "all": "alle Hosts",
       "requests": "Anfragen",
       "bytes": "Datenverkehr",
-      "errors": "Fehler (4xx/5xx)",
+      "errors": "Fehler (5xx)",
       "blocked": "Abgewiesen",
       "blocked_hint": "Im Zeitraum: Blocklisten, Limits, Sperren, Zugriffslisten und Exploit-Sperre, auch Verbindungen, die vor der ersten Anfrage getrennt wurden (nur bei „alle Hosts“). Einzeln unter Zugriffe.",
       "empty": "Noch keine Anfragen im Zeitraum.",
@@ -707,7 +711,12 @@
       "range_168": "7 Tage",
       "range_720": "30 Tage",
       "last": "letzte {range}",
-      "col": "Anfragen ({range})"
+      "col": "Anfragen ({range})",
+      "errors_hint": "Echte Fehler: Das Ziel antwortete mit 5xx oder war nicht erreichbar. 4xx-Antworten des Ziels, Abgewiesenes und an den Honeypot Umgeleitetes zählen nicht dazu.",
+      "c4": "4xx (vom Ziel)",
+      "c4_sub": "+ {n} × 4xx vom Ziel",
+      "decoy": "An Honeypot",
+      "decoy_hint": "Statt abgewiesen an den Köder von Honeypot64 gegeben (nicht zuordenbare Namen und als schädlich erkannte Anfragen, je nach Einstellung unter Zugriffslisten → Honeypot64)."
     },
     "bl": {
       "title": "ipv64-Blocklisten",
@@ -850,7 +859,8 @@
       "acl": "Zugriffsliste",
       "honeypot": "vom Honeypot gemeldet",
       "geo": "Ländersperre",
-      "ai_bot": "KI-Bot"
+      "ai_bot": "KI-Bot",
+      "unknown": "kein passender Host"
     },
     "online": {
       "err_conf": "Tunnel-Daten prüfen: Tunnel, Token und mindestens ein Server (Name, Host).",
@@ -988,7 +998,10 @@
     "ai": {
       "list": "KI-Bots (User-Agent)",
       "entries": "{n} Kennungen, davon {users} Nutzer-Abrufe"
-    }
+    },
+    "c4": "{n} × 4xx",
+    "c4_hint": "Antworten des Ziels mit 4xx (z. B. nicht gefunden, nicht angemeldet) – meist kein Fehler, z. B. fehlende Icons oder abgelaufene Anmeldungen.",
+    "decoyed": "{n} an Honeypot"
   },
   "certs": {
     "title": "Zertifikate",
