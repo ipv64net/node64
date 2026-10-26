@@ -4320,7 +4320,12 @@
       "now_empty": "No arc right now.",
       "top": "Top origins (60 min) – click one",
       "sel": "Attacks from {name}",
-      "sel_clear": "Clear selection"
+      "sel_clear": "Clear selection",
+      "strip_events": "Attacks (60 min)",
+      "strip_countries": "Countries of origin",
+      "strip_top": "Top origins",
+      "strip_kind": "Top kind",
+      "strip_now": "Arcs now"
     },
     "country": {
       "title": "Location of the sensor",

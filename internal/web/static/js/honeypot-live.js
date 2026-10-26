@@ -11,10 +11,13 @@
 	var layer = svg.querySelector("[data-hp-live-layer]"), selLayer = svg.querySelector("[data-hp-live-sel]");
 	var list = $("[data-hp-live-list]"), btn = $("[data-hp-live-toggle]"), stage = $("[data-hp-live-stage]"), fullBtn = $("[data-hp-live-full]");
 	var nowBox = $("[data-hp-live-now]"), topBox = $("[data-hp-live-top]"), selBox = $("[data-hp-live-selbox]");
+	var namesLayer = svg.querySelector("[data-hp-live-names]"), labelLayer = svg.querySelector("[data-hp-live-labels]"), strip = $("[data-hp-live-strip]");
 	var NS = "http://www.w3.org/2000/svg";
 	var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 	var MAX_LIVE = 12, PER_TICK = 3; // hoechstens so viele Boegen gleichzeitig / neue je Takt
 	var target = null, events = [], fresh = [], seen = 0, running = true, replay = 0, recent = [], live = [], sel = null;
+	var boxes = [], hits = 0; // belegte Flaechen der Beschriftungen, laufende Boegen (eigenes Land hervorgehoben)
+	var nf = new Intl.NumberFormat(document.documentElement.lang || undefined);
 	var L = function (k) { return (list && list.getAttribute("data-l-" + k)) || ""; };
 	var timeFmt = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
@@ -22,6 +25,73 @@
 		var e = document.createElementNS(NS, name);
 		Object.keys(attrs || {}).forEach(function (k) { e.setAttribute(k, attrs[k]); });
 		return e;
+	}
+
+	// Beschriftung (Flagge und Code) an einem Punkt; null, wenn sie eine andere ueberdecken wuerde
+	function label(x0, y0, text, dst) {
+		if (!labelLayer) { return null; }
+		var x = x0 + 4, y = y0 + (dst ? 12 : -4), w = text.length * 5 + 4;
+		for (var i = 0; i < boxes.length; i++) {
+			if (Math.abs(boxes[i].x - x) < Math.max(boxes[i].w, w) && Math.abs(boxes[i].y - y) < 12) { return null; }
+		}
+		var t = el("text", { x: x, y: y, "class": "hp-lbl" + (dst ? " hp-lbl-dst" : "") });
+		t.textContent = text;
+		labelLayer.appendChild(t);
+		var box = { x: x, y: y, w: w };
+		boxes.push(box);
+		return function () { t.remove(); boxes = boxes.filter(function (b) { return b !== box; }); };
+	}
+
+	// eigenes Land hell hervorheben, solange ein Bogen dorthin laeuft
+	function hit(on) {
+		hits = Math.max(0, hits + (on ? 1 : -1));
+		var p = target && target.known ? svg.querySelector('path[data-cc="' + target.cc + '"]') : null;
+		if (p) { p.classList.toggle("hp-hit", hits > 0); }
+	}
+
+	// schwache Laendernamen der Herkunftslaender und des eigenen Lands, ohne Ueberdeckung
+	function drawNames() {
+		if (!namesLayer) { return; }
+		namesLayer.replaceChildren();
+		var list = byCountry().slice(0, 12);
+		if (target && target.known) { list.unshift({ name: target.name, x: target.x, y: target.y }); }
+		var used = [];
+		list.forEach(function (c) {
+			var tw = c.name.length * 3.9;
+			for (var i = 0; i < used.length; i++) { if (Math.abs(used[i][0] - c.x) < (used[i][2] + tw) / 2 + 2 && Math.abs(used[i][1] - c.y) < 9) { return; } }
+			used.push([c.x, c.y, tw]);
+			var t = el("text", { x: c.x, y: c.y + 3, "class": "hp-name" });
+			t.textContent = c.name;
+			namesLayer.appendChild(t);
+		});
+	}
+
+	// kompakte Zahlen unter der Karte (auch ohne Vollbild)
+	function renderStrip() {
+		if (!strip) { return; }
+		strip.replaceChildren();
+		var add = function (key, text) {
+			var sp = document.createElement("span"), b = document.createElement("span");
+			b.className = "fw-semibold";
+			b.textContent = strip.getAttribute("data-l-" + key) + ": ";
+			sp.append(b, document.createTextNode(text));
+			sp.setAttribute("data-k", key);
+			strip.appendChild(sp);
+		};
+		var cs = byCountry();
+		add("events", nf.format(events.length));
+		add("countries", nf.format(cs.length));
+		if (cs.length) { add("top", cs.slice(0, 3).map(function (c) { return c.flag + " " + c.cc + " " + nf.format(c.n); }).join(" · ")); }
+		var k = {};
+		events.forEach(function (e) { k[e.kind] = (k[e.kind] || 0) + 1; });
+		var kk = Object.keys(k).sort(function (a, b) { return k[b] - k[a]; })[0];
+		if (kk) { add("kind", kk + " (" + nf.format(k[kk]) + ")"); }
+		add("now", String(live.length));
+	}
+
+	function liveCount() {
+		var x = strip && strip.querySelector('[data-k="now"]');
+		if (x) { x.lastChild.textContent = String(live.length); }
 	}
 
 	function svc(e) { return e.service.toUpperCase() + (e.port ? " " + e.port : ""); }
@@ -65,11 +135,16 @@
 		layer.insertBefore(dot, layer.firstChild);
 		var item = { e: e, rep: rep, path: p };
 		live.unshift(item);
-		renderNow();
+		var la = label(e.x, e.y, e.flag + " " + e.cc, false), lb = target.known ? label(target.x, target.y, target.flag + " " + target.cc, true) : null;
+		hit(true);
+		renderNow(); liveCount();
 		var gone = function () {
 			p.remove(); dot.remove();
+			if (la) { la(); }
+			if (lb) { lb(); }
+			hit(false);
 			live = live.filter(function (x) { return x !== item; });
-			renderNow();
+			renderNow(); liveCount();
 		};
 		if (!reduce && p.animate && p.getTotalLength) {
 			var len = p.getTotalLength();
@@ -191,6 +266,8 @@
 			drawTarget();
 			renderList();
 			renderTop();
+			drawNames();
+			renderStrip();
 			if (sel) { select(sel); }
 		}).catch(function () {});
 	}
@@ -216,7 +293,12 @@
 			btn.setAttribute("aria-pressed", running ? "true" : "false");
 			btn.classList.toggle("btn-outline-danger", running);
 			btn.classList.toggle("btn-outline-secondary", !running);
-			if (!running) { layer.querySelectorAll(".hp-arc, .hp-src").forEach(function (x) { x.remove(); }); live = []; renderNow(); }
+			if (!running) {
+				layer.querySelectorAll(".hp-arc, .hp-src").forEach(function (x) { x.remove(); });
+				if (labelLayer) { labelLayer.replaceChildren(); }
+				boxes = []; live = []; hits = 1; hit(false);
+				renderNow(); liveCount();
+			}
 		});
 	}
 

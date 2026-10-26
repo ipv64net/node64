@@ -1,5 +1,13 @@
 # Änderungen – Honeypot64
 
+## 0.14.1 – 2026-10-26
+
+### Verbessert
+- Live-Karte beschriftet: Flagge und Ländercode an Quelle und Ziel jedes Bogens (blendet aus, wenn sie sich
+  überdecken würden), schwache Ländernamen der aktiven Länder, das eigene Land leuchtet, solange Bögen ankommen.
+- Kompakte Zahlen unter der Karte auch ohne Vollbild: Angriffe der letzten Stunde, Herkunftsländer, Top-3-Herkunft
+  mit Flagge, häufigste Art und Bögen gerade.
+
 ## 0.14.0 – 2026-10-26
 
 ### Neu

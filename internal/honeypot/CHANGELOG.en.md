@@ -1,5 +1,13 @@
 # Changes – Honeypot64
 
+## 0.14.1 – 2026-10-26
+
+### Improved
+- Live map labels: flag and country code at the source and target of each arc (hidden where they would overlap),
+  faint country names of the active countries, your own country lights up while arcs arrive.
+- Compact numbers below the map, also outside full screen: attacks of the last hour, countries of origin, top 3
+  origins with flag, top kind and arcs now.
+
 ## 0.14.0 – 2026-10-26
 
 ### New

@@ -4320,7 +4320,12 @@
       "now_empty": "Gerade kein Bogen.",
       "top": "Häufigste Herkunft (60 min) – anklicken",
       "sel": "Angriffe aus {name}",
-      "sel_clear": "Auswahl aufheben"
+      "sel_clear": "Auswahl aufheben",
+      "strip_events": "Angriffe (60 min)",
+      "strip_countries": "Herkunftsländer",
+      "strip_top": "Top-Herkunft",
+      "strip_kind": "Häufigste Art",
+      "strip_now": "Bögen gerade"
     },
     "country": {
       "title": "Standort des Sensors",
