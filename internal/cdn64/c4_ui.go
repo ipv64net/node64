@@ -294,6 +294,7 @@ func (m *Module) pageLog(w http.ResponseWriter, r *http.Request) {
 			d.Total.S4 += s.S4
 			d.Total.S5 += s.S5
 			d.Total.Bytes += s.Bytes
+			d.Total.BytesIn += s.BytesIn
 			d.Total.Blocked += s.Blocked
 			d.Total.Decoy += s.Decoy
 		}

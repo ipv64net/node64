@@ -1,5 +1,21 @@
 # Changes – PROXY64
 
+## 1.31.0 – 2026-10-26
+
+### New
+- Maintenance mode per proxy host ("Maintenance" tab, button in the list): the name stays reachable, visitors see a
+  maintenance page instead of the target – terminal in Matrix style (default), plain with a gear (light/dark) or own
+  HTML (up to 64 KB, preview). Response 503 with Retry-After, never cached; counts neither as rejected nor as error,
+  "maintenance mode" in the access log. Also via CDN64 mode 1 and 2, not for mode 3.
+- Traffic split by direction (visitor's view): download (target to visitor) and upload (visitor to target, e.g.
+  uploaded files), each as it goes over the wire; WebSockets in both directions. Two tiles at the top, "↓ … · ↑ …"
+  per host, two lines in the chart, also split on the access page and in the start page card. Upload is counted from
+  this version on (older hours download only).
+
+### Changed
+- WebSockets count as answered (101) in the statistics instead of aborted (4xx).
+
+
 ## 1.30.3 – 2026-10-26
 
 ### Changed

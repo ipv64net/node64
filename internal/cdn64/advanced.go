@@ -39,6 +39,11 @@ type Advanced struct {
 	AIBots          bool `json:"ai_bots,omitempty"`
 	AIBotsAllowUser bool `json:"ai_bots_allow_user,omitempty"`
 	AIRobots        bool `json:"ai_robots,omitempty"`
+
+	// Wartungsmodus (maintenance.go, nur Proxy-Hosts): Wartungsseite (503) statt Ziel
+	Maintenance      bool   `json:"maintenance,omitempty"`
+	MaintenanceStyle string `json:"maintenance_style,omitempty"` // matrix (Standard), gear oder custom
+	MaintenanceHTML  string `json:"maintenance_html,omitempty"`  // eigenes HTML (custom), hoechstens 64 KB
 }
 
 // Location ist ein Pfad mit eigenem Ziel (Custom Location).

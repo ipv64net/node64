@@ -265,7 +265,9 @@
       "rejected": "Rejected",
       "c4": "4xx (from target)",
       "errors": "Errors (5xx)",
-      "decoy": "To honeypot"
+      "decoy": "To honeypot",
+      "download": "Download (to visitors)",
+      "upload": "Upload (from visitors)"
     },
     "account": "ipv64 account",
     "api_ok": "API connected",
@@ -539,7 +541,9 @@
       "geo_many": "At most 60 countries per host.",
       "status_page": "Please choose a status page.",
       "pass_self": "Passthrough to this node's own web interface is not allowed – use a proxy host instead.",
-      "localdns_ip": "Please enter a valid IPv4 in the IPv4 field or IPv6 in the IPv6 field, reachable at home (no loopback or link-local address)."
+      "localdns_ip": "Please enter a valid IPv4 in the IPv4 field or IPv6 in the IPv6 field, reachable at home (no loopback or link-local address).",
+      "maint_html_size": "The maintenance page is too large (at most 64 KB, UTF-8).",
+      "maint_html_empty": "Please enter a page for \"Own HTML\"."
     },
     "help_title": "How it works",
     "help_ports": "The router forwards 80 and 443 (TCP, for HTTP/3 also 443/UDP) to this node. Node64 distributes the rest by domain name – also together with DNS64 in the same container.",
@@ -554,7 +558,9 @@
       "requests_24h": "Requests (24 h)",
       "traffic_24h": "Traffic (24 h)",
       "errors_24h": "5xx errors (24 h)",
-      "blocked_24h": "Rejected (24 h)"
+      "blocked_24h": "Rejected (24 h)",
+      "download_24h": "Download (24 h)",
+      "upload_24h": "Upload (24 h)"
     },
     "kind_new": {
       "proxy": "Add proxy host",
@@ -717,7 +723,12 @@
       "c4": "4xx (from target)",
       "c4_sub": "+ {n} × 4xx from target",
       "decoy": "To honeypot",
-      "decoy_hint": "Given to the Honeypot64 decoy instead of being rejected (names matching no host and requests recognised as malicious, as set under Access lists → Honeypot64)."
+      "decoy_hint": "Given to the Honeypot64 decoy instead of being rejected (names matching no host and requests recognised as malicious, as set under Access lists → Honeypot64).",
+      "down": "Download",
+      "up": "Upload",
+      "down_hint": "Data from the target to visitors (responses, WebSocket), as it goes over the wire (after compression).",
+      "up_hint": "Data from visitors to the target (uploaded files, forms, WebSocket).",
+      "updown_hint": "↓ Download: from the target to the visitor · ↑ Upload: from the visitor to the target"
     },
     "bl": {
       "title": "ipv64 blocklists",
@@ -861,7 +872,8 @@
       "honeypot": "reported by the honeypot",
       "geo": "country block",
       "ai_bot": "AI bot",
-      "unknown": "no matching host"
+      "unknown": "no matching host",
+      "maintenance": "maintenance mode"
     },
     "online": {
       "err_conf": "Check the tunnel settings: tunnel, token and at least one server (name, host).",
@@ -1025,6 +1037,24 @@
       "skipped": "Already present, unchanged: {list}.",
       "failed": "Adding to DNS64 failed: {error}",
       "excluded": "Not added (wildcard or main domain – DNS64 would also hide mail, TXT and other records there): {list}."
+    },
+    "maint": {
+      "tab": "Maintenance",
+      "on_badge": "Maintenance",
+      "on": "Maintenance mode active",
+      "on_hint": "The name stays reachable, visitors see a maintenance page instead of the target (HTTP 503 with Retry-After, never cached). Certificates keep renewing.",
+      "style": "Maintenance page",
+      "style_matrix": "Terminal in Matrix style",
+      "style_gear": "Gear (plain, light/dark)",
+      "style_custom": "Own HTML",
+      "preview": "Preview",
+      "html": "Own HTML",
+      "html_hint": "Only for \"Own HTML\": the complete page, at most 64 KB. Best embed images and fonts directly (data:), the target is not reachable during maintenance. The preview shows the saved version.",
+      "scope_hint": "Applies to this host on the node, also via CDN64 mode 1 and 2. With CDN64 mode 3 the server goes straight to the target – maintenance mode has no effect there.",
+      "on_title": "Switch maintenance mode on",
+      "off_title": "Switch maintenance mode off",
+      "flash_on": "Maintenance mode for {name} is on.",
+      "flash_off": "Maintenance mode for {name} is off."
     }
   },
   "certs": {
@@ -1671,7 +1701,8 @@
       "mcp_call": "MCP tool called",
       "mcp_settings": "MCP interface switched",
       "mcp_key_create": "MCP key created",
-      "mcp_key_revoke": "MCP key revoked"
+      "mcp_key_revoke": "MCP key revoked",
+      "cdn64_host_maintenance": "Maintenance mode switched"
     }
   },
   "logs": {

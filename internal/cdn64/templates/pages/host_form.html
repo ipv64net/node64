@@ -12,6 +12,7 @@
 				<ul class="nav nav-tabs card-header-tabs" role="tablist">
 					<li class="nav-item" role="presentation"><button class="nav-link active" type="button" data-bs-toggle="tab" data-bs-target="#tab-details" role="tab"><i class="bi bi-sliders"></i> {{.T "cdn64.tab_details"}}</button></li>
 					{{if eq $h.Kind "proxy"}}<li class="nav-item" role="presentation"><button class="nav-link{{if index $d.Errors "locations"}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-locations" role="tab"><i class="bi bi-signpost"></i> {{.T "cdn64.f.locations"}}</button></li>{{end}}
+					{{if eq $h.Kind "proxy"}}<li class="nav-item" role="presentation"><button class="nav-link{{if index $d.Errors "maintenance_html"}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-maint" role="tab"><i class="bi bi-cone-striped"></i> {{.T "cdn64.maint.tab"}}{{if $h.Advanced.Maintenance}} <span class="badge text-bg-warning">{{.T "cdn64.maint.on_badge"}}</span>{{end}}</button></li>{{end}}
 					{{if ne $h.Kind "passthrough"}}<li class="nav-item" role="presentation"><button class="nav-link{{if or (index $d.Errors "cert_id") (index $d.Errors "min_tls")}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-ssl" role="tab"><i class="bi bi-lock"></i> SSL</button></li>{{end}}
 					{{if ne $h.Kind "passthrough"}}<li class="nav-item" role="presentation"><button class="nav-link{{if index $d.Errors "advanced"}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-advanced" role="tab"><i class="bi bi-gear"></i> {{.T "cdn64.f.advanced"}}</button></li>{{end}}
 				</ul>
@@ -148,6 +149,25 @@
 					</div>
 					{{end}}
 					<div class="form-text">{{.T "cdn64.f.locations_more"}}</div>
+				</div>
+				{{end}}
+				{{if eq $h.Kind "proxy"}}
+				<div class="tab-pane fade" id="tab-maint" role="tabpanel">
+					<input type="hidden" name="has_maint" value="1">
+					<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" name="maint_on" id="maint_on"{{if $h.Advanced.Maintenance}} checked{{end}}><label class="form-check-label fw-semibold" for="maint_on">{{.T "cdn64.maint.on"}}</label></div>
+					<div class="form-text mb-3">{{.T "cdn64.maint.on_hint"}}</div>
+					<label class="form-label fw-semibold" for="maint_style">{{.T "cdn64.maint.style"}}</label>
+					<select class="form-select form-select-sm mb-1" id="maint_style" name="maint_style">
+						<option value="matrix"{{if or (eq $h.Advanced.MaintenanceStyle "matrix") (not $h.Advanced.MaintenanceStyle)}} selected{{end}}>{{.T "cdn64.maint.style_matrix"}}</option>
+						<option value="gear"{{if eq $h.Advanced.MaintenanceStyle "gear"}} selected{{end}}>{{.T "cdn64.maint.style_gear"}}</option>
+						<option value="custom"{{if eq $h.Advanced.MaintenanceStyle "custom"}} selected{{end}}>{{.T "cdn64.maint.style_custom"}}</option>
+					</select>
+					{{if $h.ID}}<div class="small mb-3">{{.T "cdn64.maint.preview"}}: <a href="/cdn64/hosts/{{$h.ID}}/maintenance/preview?style=matrix" target="_blank" rel="noopener">{{.T "cdn64.maint.style_matrix"}}</a> · <a href="/cdn64/hosts/{{$h.ID}}/maintenance/preview?style=gear" target="_blank" rel="noopener">{{.T "cdn64.maint.style_gear"}}</a>{{if $h.Advanced.MaintenanceHTML}} · <a href="/cdn64/hosts/{{$h.ID}}/maintenance/preview?style=custom" target="_blank" rel="noopener">{{.T "cdn64.maint.style_custom"}}</a>{{end}}</div>{{else}}<div class="mb-3"></div>{{end}}
+					<label class="form-label fw-semibold" for="maint_html">{{.T "cdn64.maint.html"}}</label>
+					<textarea class="form-control form-control-sm font-monospace{{if index $d.Errors "maintenance_html"}} is-invalid{{end}}" id="maint_html" name="maint_html" rows="8" spellcheck="false" placeholder="&lt;!doctype html&gt;&lt;html&gt;&lt;body&gt;&lt;h1&gt;Wartung&lt;/h1&gt;&lt;/body&gt;&lt;/html&gt;">{{$h.Advanced.MaintenanceHTML}}</textarea>
+					{{with index $d.Errors "maintenance_html"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "cdn64.maint.html_hint"}}</div>
+					<div class="alert alert-info small py-2 mt-3 mb-0"><i class="bi bi-info-circle"></i> {{.T "cdn64.maint.scope_hint"}}</div>
 				</div>
 				{{end}}
 				{{if ne $h.Kind "passthrough"}}

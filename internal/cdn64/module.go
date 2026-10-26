@@ -49,7 +49,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.30.3"
+	Version = "1.31.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -290,10 +290,11 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 				t.Requests += s.Requests
 				t.S5 += s.S5
 				t.Bytes += s.Bytes
+				t.BytesIn += s.BytesIn
 				t.Blocked += s.Blocked
 			}
 			c.Stats = append(c.Stats, module.CardStat{LabelKey: "cdn64.card.requests_24h", Value: t.Requests},
-				module.CardStat{LabelKey: "cdn64.card.traffic_24h", Value: t.Bytes, Bytes: true})
+				module.CardStat{LabelKey: "cdn64.card.download_24h", Value: t.Bytes, Bytes: true}, module.CardStat{LabelKey: "cdn64.card.upload_24h", Value: t.BytesIn, Bytes: true})
 			e5 := module.CardStat{LabelKey: "cdn64.card.errors_24h", Value: t.S5}
 			if t.Requests > 0 && t.S5 > 0 {
 				e5.Pct = float64(t.S5) * 100 / float64(t.Requests)

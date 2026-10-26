@@ -17,10 +17,11 @@
 		var q = "/api/cdn64/stats?hours=" + hours + (hostSel && hostSel.value !== "0" ? "&host=" + hostSel.value : "");
 		fetch(q, { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
 			var s = C.series(d.timeline, hours);
-			var sum = { req: 0, bytes: 0, err: 0, c4: 0, blocked: 0, decoy: 0 };
-			s.pts.forEach(function (p) { sum.req += p.req; sum.bytes += p.bytes; sum.err += p.err; sum.c4 += p.c4; sum.blocked += p.blocked; sum.decoy += p.decoy; });
+			var sum = { req: 0, bytes: 0, up: 0, err: 0, c4: 0, blocked: 0, decoy: 0 };
+			s.pts.forEach(function (p) { sum.req += p.req; sum.bytes += p.bytes; sum.up += p.up; sum.err += p.err; sum.c4 += p.c4; sum.blocked += p.blocked; sum.decoy += p.decoy; });
 			set("requests", C.nf.format(sum.req));
 			set("bytes", C.bytes(sum.bytes));
+			set("up", C.bytes(sum.up));
 			set("errors", C.nf.format(sum.err) + (sum.req ? " (" + (100 * sum.err / sum.req).toFixed(1) + " %)" : ""));
 			set("c4", L("c4-sub").replace("{n}", C.nf.format(sum.c4)));
 			set("blocked", C.nf.format(sum.blocked));
@@ -32,7 +33,7 @@
 			card.querySelector("[data-stats-empty]").classList.toggle("d-none", sum.req + sum.blocked + sum.decoy > 0);
 			rows(d.hosts || {});
 			if (chart) { chart.destroy(); }
-			chart = new window.Chart(canvas, C.config(s, { requests: L("requests"), blocked: L("blocked"), bytes: L("bytes"), c4: L("c4"), errors: L("errors"), decoy: L("decoy") }, showDecoy));
+			chart = new window.Chart(canvas, C.config(s, { requests: L("requests"), blocked: L("blocked"), bytes: L("bytes"), up: L("up"), c4: L("c4"), errors: L("errors"), decoy: L("decoy") }, showDecoy));
 		}).catch(function () { card.querySelector("[data-stats-empty]").classList.remove("d-none"); });
 	}
 
@@ -47,7 +48,7 @@
 			var err = h["5xx"] || 0, c4 = h["4xx"] || 0, dec = h.decoy || 0;
 			var v = function (k, text, show) { var el = td.querySelector('[data-v="' + k + '"]'); if (el) { el.textContent = text; el.classList.toggle("d-none", !show); } };
 			v("requests", C.nf.format(h.requests || 0), true);
-			v("bytes", C.bytes(h.bytes || 0), (h.bytes || 0) > 0);
+			v("bytes", "↓ " + C.bytes(h.bytes || 0) + " · ↑ " + C.bytes(h.bytes_in || 0), (h.bytes || 0) + (h.bytes_in || 0) > 0);
 			v("errors", L("errors-n").replace("{n}", C.nf.format(err)), err > 0);
 			v("c4", L("c4-n").replace("{n}", C.nf.format(c4)), c4 > 0);
 			v("blocked", L("blocked-n").replace("{n}", C.nf.format(h.blocked || 0)), (h.blocked || 0) > 0);

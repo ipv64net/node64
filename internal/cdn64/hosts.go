@@ -152,6 +152,9 @@ func (h *Host) normalize() error {
 	if err := h.Advanced.normalizeGeo(); err != nil {
 		return err
 	}
+	if err := h.Advanced.normalizeMaint(h.Kind); err != nil {
+		return err
+	}
 	if h.Locations == nil {
 		h.Locations = []Location{}
 	}

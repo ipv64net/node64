@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Wartung / Maintenance – {{HOST}}</title>
+<style>
+  :root{--bg:#f4f6f8;--fg:#1f2933;--dim:#616e7c;--acc:#0d6efd;--card:#fff}
+  @media(prefers-color-scheme:dark){:root{--bg:#111418;--fg:#e4e7eb;--dim:#9aa5b1;--acc:#6ea8fe;--card:#1b1f24}}
+  *{box-sizing:border-box;margin:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px}
+  .card{background:var(--card);border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.08);padding:40px 36px;max-width:520px;width:100%;text-align:center}
+  .gears{position:relative;width:150px;height:110px;margin:0 auto 24px}
+  .gears svg{position:absolute;fill:var(--acc)}
+  .g1{width:90px;height:90px;left:10px;top:12px;animation:r 6s linear infinite}
+  .g2{width:56px;height:56px;left:86px;top:0;opacity:.7;animation:r 4s linear infinite reverse}
+  @keyframes r{to{transform:rotate(360deg)}}
+  @media(prefers-reduced-motion:reduce){.g1,.g2{animation:none}}
+  h1{font-size:24px;margin-bottom:10px}
+  p{color:var(--dim);line-height:1.6;margin-bottom:6px}
+  .en{margin-top:18px;padding-top:18px;border-top:1px solid rgba(127,127,127,.2)}
+  .host{margin-top:22px;font-size:13px;color:var(--dim);word-break:break-all}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="gears" aria-hidden="true">
+    <svg class="g1" viewBox="0 0 100 100"><path d="M43 4h14l2 12a35 35 0 0 1 9 4l10-7 10 10-7 10a35 35 0 0 1 4 9l12 2v14l-12 2a35 35 0 0 1-4 9l7 10-10 10-10-7a35 35 0 0 1-9 4l-2 12H43l-2-12a35 35 0 0 1-9-4l-10 7-10-10 7-10a35 35 0 0 1-4-9L3 57V43l12-2a35 35 0 0 1 4-9l-7-10 10-10 10 7a35 35 0 0 1 9-4zm7 30a16 16 0 1 0 0 32 16 16 0 0 0 0-32z"/></svg>
+    <svg class="g2" viewBox="0 0 100 100"><path d="M43 4h14l2 12a35 35 0 0 1 9 4l10-7 10 10-7 10a35 35 0 0 1 4 9l12 2v14l-12 2a35 35 0 0 1-4 9l7 10-10 10-10-7a35 35 0 0 1-9 4l-2 12H43l-2-12a35 35 0 0 1-9-4l-10 7-10-10 7-10a35 35 0 0 1-4-9L3 57V43l12-2a35 35 0 0 1 4-9l-7-10 10-10 10 7a35 35 0 0 1 9-4zm7 30a16 16 0 1 0 0 32 16 16 0 0 0 0-32z"/></svg>
+  </div>
+  <h1>Wartungsarbeiten</h1>
+  <p>Diese Seite wird gerade gewartet und ist gleich wieder für dich da.</p>
+  <p>Bitte versuche es in ein paar Minuten noch einmal.</p>
+  <div class="en">
+    <h1>Under maintenance</h1>
+    <p>This site is undergoing maintenance and will be back shortly. Please try again in a few minutes.</p>
+  </div>
+  <div class="host">{{HOST}}</div>
+</div>
+</body>
+</html>

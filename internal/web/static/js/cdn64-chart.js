@@ -15,7 +15,8 @@
 		return (i ? n.toFixed(1) : n) + " " + u[i];
 	}
 
-	// series: Punkte {t, ok, c4, err, blocked, decoy, req, bytes} ueber den ganzen Zeitraum (ok = vom Ziel erfolgreich
+	// series: Punkte {t, ok, c4, err, blocked, decoy, req, bytes, up} ueber den ganzen Zeitraum (bytes = Download zum
+	// Besucher, up = Upload vom Besucher) (ok = vom Ziel erfolgreich
 	// beantwortet; aeltere Stunden zaehlten Abgewiesene noch bei 4xx, daher nie unter 0)
 	function series(timeline, hours) {
 		var by = {};
@@ -27,14 +28,14 @@
 			var blocked = p.blocked || 0, conn = p.conn_blocked || 0, decoy = p.decoy || 0, c4 = p["4xx"] || 0, err = p["5xx"] || 0;
 			// requests enthaelt die abgewiesenen und an den Koeder gegebenen Anfragen, nicht die abgewiesenen Verbindungen
 			out.push({ t: t, ok: Math.max(0, (p.requests || 0) - (blocked - conn) - decoy - c4 - err), c4: c4, err: err, blocked: blocked, decoy: decoy,
-				req: p.requests || 0, bytes: p.bytes || 0 });
+				req: p.requests || 0, bytes: p.bytes || 0, up: p.bytes_in || 0 });
 		}
 		if (hours <= 168) { return { pts: out, daily: false, hours: hours }; }
 		var days = [], cur = null;
 		out.forEach(function (p) {
 			var d = new Date(p.t); d.setHours(0, 0, 0, 0);
-			if (!cur || cur.t !== d.getTime()) { cur = { t: d.getTime(), ok: 0, c4: 0, err: 0, blocked: 0, decoy: 0, req: 0, bytes: 0 }; days.push(cur); }
-			["ok", "c4", "err", "blocked", "decoy", "req", "bytes"].forEach(function (k) { cur[k] += p[k]; });
+			if (!cur || cur.t !== d.getTime()) { cur = { t: d.getTime(), ok: 0, c4: 0, err: 0, blocked: 0, decoy: 0, req: 0, bytes: 0, up: 0 }; days.push(cur); }
+			["ok", "c4", "err", "blocked", "decoy", "req", "bytes", "up"].forEach(function (k) { cur[k] += p[k]; });
 		});
 		return { pts: days, daily: true, hours: hours };
 	}
@@ -44,7 +45,7 @@
 		return new Date(t).toLocaleString(locale, o);
 	}
 
-	// config: Chart.js-Einstellungen; L = Beschriftungen {requests, c4, errors, blocked, decoy, bytes}. 4xx und Fehler
+	// config: Chart.js-Einstellungen; L = Beschriftungen {requests, c4, errors, blocked, decoy, bytes, up}. 4xx und Fehler
 	// erscheinen, wenn es welche gibt; "an den Honeypot" nur mit aktivem Koeder (showDecoy) oder Werten im Zeitraum.
 	function config(s, L, showDecoy) {
 		var pts = s.pts;
@@ -59,6 +60,10 @@
 		if (showDecoy || any("decoy")) { sets.push(bar(L.decoy || "Honeypot", "decoy", css("--bs-purple", "#6f42c1"))); }
 		sets.push({ type: "line", label: L.bytes, data: pts.map(function (p) { return p.bytes; }), borderColor: css("--bs-info", "#0dcaf0"), backgroundColor: css("--bs-info", "#0dcaf0"),
 			pointRadius: 0, tension: 0.3, yAxisID: "y1" });
+		if (any("up")) {
+			sets.push({ type: "line", label: L.up || "Upload", data: pts.map(function (p) { return p.up; }), borderColor: css("--bs-success", "#198754"), backgroundColor: css("--bs-success", "#198754"),
+				pointRadius: 0, tension: 0.3, yAxisID: "y1", borderDash: [4, 3] });
+		}
 		return {
 			type: "bar",
 			data: { labels: pts.map(function (p) { return label(p.t, s); }), datasets: sets },

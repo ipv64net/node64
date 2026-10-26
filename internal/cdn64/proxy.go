@@ -1,6 +1,7 @@
 package cdn64
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -330,6 +331,7 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 	}
 	maxBody := int64(h.Advanced.MaxBodyMB) << 20
 	limited := !h.Advanced.NoLimits
+	maint := h.Kind == KindProxy && h.Advanced.Maintenance
 	var sl slots // gleichzeitige Anfragen an das Ziel
 	if c := m.lim.config(); h.Kind == KindProxy && limited && c.Enabled && c.TargetConns > 0 {
 		sl = make(slots, c.TargetConns)
@@ -357,7 +359,7 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			m.hpReport(r, client, true, sw.code(), *authFail)
 			if sdb := m.stats2.Load(); sdb != nil {
 				sdb.add(hit{time: start, hostID: h.ID, client: client, method: r.Method, host: hostOnly(r.Host), path: trunc(r.URL.RequestURI(), 500),
-					status: sw.code(), bytes: sw.bytes, ms: time.Since(start).Milliseconds(), ua: trunc(r.UserAgent(), 200), log: h.Advanced.AccessLog,
+					status: sw.code(), bytes: sw.bytes + sw.hjOut.Load(), in: sw.in.Load(), ms: time.Since(start).Milliseconds(), ua: trunc(r.UserAgent(), 200), log: h.Advanced.AccessLog,
 					reason: *reject, decoy: *decoyed})
 			}
 		}()
@@ -419,6 +421,11 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			}
 			return
 		}
+		if maint { // Wartungsmodus: Wartungsseite statt Ziel (im Log als "Wartung", nicht als Fehler des Ziels)
+			*reject = rejMaintenance
+			serveMaint(sw, r, &h.Advanced)
+			return
+		}
 		if maxBody > 0 {
 			if r.ContentLength > maxBody {
 				page(sw, http.StatusRequestEntityTooLarge)
@@ -442,6 +449,9 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 				return
 			}
 			defer sl.release()
+		}
+		if r.Body != nil && r.Body != http.NoBody { // Upload zaehlen (was das Ziel wirklich liest)
+			r.Body = &countBody{ReadCloser: r.Body, n: &sw.in}
 		}
 		next.ServeHTTP(sw, r)
 		if sw.status >= 500 && sw.status != http.StatusBadGateway { // 502 zaehlt der ErrorHandler schon
@@ -477,10 +487,12 @@ func trunc(s string, n int) string {
 type statusWriter struct {
 	http.ResponseWriter
 	status int
-	bytes  int64
+	bytes  int64        // Antwort an den Besucher
+	in     atomic.Int64 // Upload: Request-Body bzw. uebernommene Verbindung vom Besucher
+	hjOut  atomic.Int64 // uebernommene Verbindung zum Besucher (WebSocket)
 }
 
-// code: Status der Antwort (0 = abgebrochen bzw. WebSocket uebernommen).
+// code: Status der Antwort (0 = abgebrochen; ein uebernommener WebSocket hat 101).
 func (w *statusWriter) code() int {
 	if w.status == 0 {
 		return 499
@@ -510,8 +522,50 @@ func (w *statusWriter) Flush() {
 	}
 }
 
-// Unwrap: fuer http.ResponseController (WebSockets brauchen Hijack).
+// Unwrap: fuer http.ResponseController.
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// Hijack: WebSocket uebernehmen; was danach in beide Richtungen fliesst, zaehlt als Upload bzw. Download weiter.
+func (w *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	c, brw, err := http.NewResponseController(w.ResponseWriter).Hijack()
+	if err != nil {
+		return nil, nil, err
+	}
+	if w.status == 0 {
+		w.status = http.StatusSwitchingProtocols // sonst zaehlte der WebSocket als abgebrochen (499)
+	}
+	return &countConn{Conn: c, in: &w.in, out: &w.hjOut}, brw, nil
+}
+
+// countBody zaehlt den gelesenen Request-Body (Upload).
+type countBody struct {
+	io.ReadCloser
+	n *atomic.Int64
+}
+
+func (b *countBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	b.n.Add(int64(n))
+	return n, err
+}
+
+// countConn zaehlt eine uebernommene Verbindung: gelesen = vom Besucher (Upload), geschrieben = zum Besucher.
+type countConn struct {
+	net.Conn
+	in, out *atomic.Int64
+}
+
+func (c *countConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	c.in.Add(int64(n))
+	return n, err
+}
+
+func (c *countConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+	c.out.Add(int64(n))
+	return n, err
+}
 
 func peerIP(r *http.Request) netip.Addr {
 	ap, err := netip.ParseAddrPort(r.RemoteAddr)

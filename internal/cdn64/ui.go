@@ -33,6 +33,8 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("POST /cdn64/hosts/{id}/delete", page(m.pageDelete))
 	mux.Handle("POST /cdn64/hosts/{id}/enable", page(m.pageToggle))
 	mux.Handle("POST /cdn64/hosts/{id}/disable", page(m.pageToggle))
+	mux.Handle("POST /cdn64/hosts/{id}/maintenance", page(m.pageMaint))
+	mux.Handle("GET /cdn64/hosts/{id}/maintenance/preview", page(m.pageMaintPreview))
 	m.certRoutes(mux, page)
 	m.streamRoutes(mux, page)
 	m.c4Routes(mux, page)
@@ -520,6 +522,10 @@ func hostFromForm(r *http.Request, h *Host) {
 	if r.PostFormValue("has_ai") == "1" { // KI-Bots waren im Formular (Haken "Nutzer-Abrufe auch sperren" = nicht AllowUser)
 		h.Advanced.AIBots, h.Advanced.AIBotsAllowUser, h.Advanced.AIRobots = on("ai_bots"), !on("ai_bots_user"), on("ai_robots")
 	}
+	if r.PostFormValue("has_maint") == "1" { // Reiter Wartung war im Formular
+		h.Advanced.Maintenance, h.Advanced.MaintenanceStyle = on("maint_on"), r.PostFormValue("maint_style")
+		h.Advanced.MaintenanceHTML = strings.ReplaceAll(r.PostFormValue("maint_html"), "\r\n", "\n")
+	}
 	if h.Kind == KindPass {
 		h.CertID = CertNone
 	}
@@ -670,6 +676,53 @@ func (m *Module) pageToggle(w http.ResponseWriter, r *http.Request) {
 	}
 	m.g.Audit(r, action, strings.Join(h.Names, ","), "")
 	http.Redirect(w, r, listPath(h.Kind), http.StatusSeeOther)
+}
+
+// POST /cdn64/hosts/{id}/maintenance: Wartungsmodus des Hosts ein- bzw. ausschalten (Liste).
+func (m *Module) pageMaint(w http.ResponseWriter, r *http.Request) {
+	h, ok := m.hostFromPath(w, r)
+	if !ok {
+		return
+	}
+	if h.Kind != KindProxy {
+		http.Error(w, "maintenance mode only for proxy hosts", http.StatusBadRequest)
+		return
+	}
+	h.Advanced.Maintenance = !h.Advanced.Maintenance
+	if err := m.saveHost(r.Context(), h); err != nil {
+		var fe *FieldError
+		if errors.As(err, &fe) {
+			m.g.Flash(w, r, "danger", m.g.T(r, fe.Key))
+		} else {
+			m.g.Flash(w, r, "danger", err.Error())
+		}
+		http.Redirect(w, r, listPath(h.Kind), http.StatusSeeOther)
+		return
+	}
+	state := "off"
+	if h.Advanced.Maintenance {
+		state = "on"
+	}
+	m.g.Audit(r, "cdn64.host.maintenance", strings.Join(h.Names, ","), state)
+	m.g.Flash(w, r, "success", m.g.T(r, "cdn64.maint.flash_"+state, "name", h.Names[0]))
+	http.Redirect(w, r, listPath(h.Kind), http.StatusSeeOther)
+}
+
+// GET /cdn64/hosts/{id}/maintenance/preview?style=: Wartungsseite ansehen (Stil aus der Abfrage, sonst der des Hosts).
+// Eigenes HTML laeuft in einer Sandbox (eigener Ursprung): Skripte darin kommen nicht an die Oberflaeche von Node64.
+func (m *Module) pageMaintPreview(w http.ResponseWriter, r *http.Request) {
+	h, ok := m.hostFromPath(w, r)
+	if !ok {
+		return
+	}
+	style := r.URL.Query().Get("style")
+	if style != MaintMatrix && style != MaintGear && style != MaintCustom {
+		style = h.Advanced.MaintenanceStyle
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Security-Policy", "sandbox allow-scripts")
+	_, _ = w.Write([]byte(maintPage(style, h.Advanced.MaintenanceHTML, h.Names[0])))
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }

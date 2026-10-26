@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{HOST}} // maintenance</title>
+<style>
+  :root{--g:#00ff7f;--g2:#00b35a;--g3:#04361d;--bg:#020805;--dim:#4f8f6a;--y:#e6ff4d}
+  *{box-sizing:border-box;margin:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--g);font-family:"JetBrains Mono","Fira Code","Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
+    font-size:14px;overflow:hidden}
+  canvas{position:fixed;inset:0;z-index:0;opacity:.5}
+  .scan{position:fixed;inset:0;z-index:2;pointer-events:none;
+    background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px);mix-blend-mode:multiply}
+  .vig{position:fixed;inset:0;z-index:1;pointer-events:none;
+    background:radial-gradient(ellipse at center,rgba(2,8,5,.15) 0%,rgba(2,8,5,.85) 85%)}
+  .wrap{position:relative;z-index:3;height:100%;display:flex;align-items:center;justify-content:center;padding:24px}
+  .term{width:min(720px,100%);background:rgba(2,12,7,.88);border:1px solid var(--g2);border-radius:6px;
+    box-shadow:0 0 0 1px rgba(0,255,127,.08),0 0 38px rgba(0,255,127,.22),inset 0 0 40px rgba(0,255,127,.05)}
+  .bar{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--g3);color:var(--dim);font-size:12px}
+  .bar i{width:9px;height:9px;border-radius:50%;background:var(--g3);border:1px solid var(--g2)}
+  .bar span{margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .body{padding:22px 26px 26px}
+  h1{font-size:30px;letter-spacing:.18em;text-shadow:0 0 10px rgba(0,255,127,.8);margin-bottom:16px;word-break:break-word}
+  .line{color:var(--dim);margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .line b{color:var(--g);font-weight:600} .line b.w{color:var(--y)}
+  hr{border:0;border-top:1px dashed var(--g3);margin:16px 0}
+  .box{border:1px solid #8a7a00;color:var(--y);background:rgba(230,255,77,.04);padding:10px 12px;letter-spacing:.04em;line-height:1.6}
+  .prog{height:8px;border:1px solid var(--g3);margin:18px 0 6px;overflow:hidden}
+  .prog div{height:100%;width:30%;background:var(--g);box-shadow:0 0 12px rgba(0,255,127,.7);animation:p 2.4s ease-in-out infinite}
+  @keyframes p{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
+  .cur{display:inline-block;width:8px;height:15px;background:var(--g);vertical-align:-2px;animation:b 1s steps(2) infinite}
+  @keyframes b{50%{opacity:0}}
+  .foot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;color:var(--dim);font-size:11px;margin-top:14px}
+  @media(max-width:560px){h1{font-size:20px}}
+</style>
+</head>
+<body>
+<canvas id="m"></canvas>
+<div class="vig"></div><div class="scan"></div>
+<div class="wrap">
+  <div class="term">
+    <div class="bar"><i></i><i></i><i></i><span>{{HOST}} // maintenance</span></div>
+    <div class="body">
+      <h1>MAINTENANCE</h1>
+      <div class="line">[<b> OK </b>] incoming requests held</div>
+      <div class="line">[<b> OK </b>] data safe, nothing lost</div>
+      <div class="line">[<b class="w">WAIT</b>] maintenance in progress <span class="cur"></span></div>
+      <hr>
+      <div class="box">&gt; MAINTENANCE MODE ACTIVE. WE WILL BE BACK SHORTLY.<br>&gt; WARTUNGSMODUS AKTIV. WIR SIND GLEICH ZURÜCK.</div>
+      <div class="prog"><div></div></div>
+      <div class="foot"><span>HTTP 503 // retry later</span><span id="clk">--:--:-- UTC</span></div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var c=document.getElementById('m'),x=c.getContext('2d');
+  var chars='アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789ABCDEF<>/\\|=+*';
+  var fs=16,cols,drops;
+  function size(){c.width=innerWidth;c.height=innerHeight;cols=Math.ceil(c.width/fs);
+    drops=Array.from({length:cols},function(){return Math.random()*-60});}
+  size();addEventListener('resize',size);
+  function draw(){
+    x.fillStyle='rgba(2,8,5,.09)';x.fillRect(0,0,c.width,c.height);
+    x.font=fs+'px monospace';
+    for(var i=0;i<cols;i++){
+      x.fillStyle=Math.random()>.97?'#d6ffe8':'#00ff7f';
+      x.fillText(chars[Math.floor(Math.random()*chars.length)],i*fs,drops[i]*fs);
+      if(drops[i]*fs>c.height&&Math.random()>.975)drops[i]=0;
+      drops[i]+=.7;
+    }
+  }
+  setInterval(draw,50);
+  for(var k=0;k<120;k++)draw();
+  function t(){document.getElementById('clk').textContent=new Date().toISOString().slice(11,19)+' UTC'}
+  t();setInterval(t,1000);
+})();
+</script>
+</body>
+</html>

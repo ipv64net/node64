@@ -265,7 +265,9 @@
       "rejected": "Abgewiesen",
       "c4": "4xx (vom Ziel)",
       "errors": "Fehler (5xx)",
-      "decoy": "An Honeypot"
+      "decoy": "An Honeypot",
+      "download": "Download (zum Besucher)",
+      "upload": "Upload (vom Besucher)"
     },
     "account": "ipv64-Account",
     "api_ok": "API verbunden",
@@ -539,7 +541,9 @@
       "geo_many": "Höchstens 60 Länder je Host.",
       "status_page": "Bitte eine Statusseite wählen.",
       "pass_self": "Durchreichen auf die eigene Oberfläche geht nicht – dafür einen Proxy-Host anlegen.",
-      "localdns_ip": "Bitte eine gültige IPv4 im IPv4-Feld bzw. IPv6 im IPv6-Feld angeben, erreichbar im Heimnetz (keine Loopback- oder link-lokale Adresse)."
+      "localdns_ip": "Bitte eine gültige IPv4 im IPv4-Feld bzw. IPv6 im IPv6-Feld angeben, erreichbar im Heimnetz (keine Loopback- oder link-lokale Adresse).",
+      "maint_html_size": "Die Wartungsseite ist zu groß (höchstens 64 KB, UTF-8).",
+      "maint_html_empty": "Für „Eigenes HTML“ bitte eine Seite eintragen."
     },
     "help_title": "So funktioniert es",
     "help_ports": "Der Router leitet 80 und 443 (TCP, für HTTP/3 auch 443/UDP) auf diese Node weiter. Den Rest verteilt Node64 nach dem Domainnamen – auch zusammen mit DNS64 im selben Container.",
@@ -554,7 +558,9 @@
       "requests_24h": "Anfragen (24 h)",
       "traffic_24h": "Datenverkehr (24 h)",
       "errors_24h": "Fehler 5xx (24 h)",
-      "blocked_24h": "Abgewiesen (24 h)"
+      "blocked_24h": "Abgewiesen (24 h)",
+      "download_24h": "Download (24 h)",
+      "upload_24h": "Upload (24 h)"
     },
     "kind_new": {
       "proxy": "Proxy-Host anlegen",
@@ -717,7 +723,12 @@
       "c4": "4xx (vom Ziel)",
       "c4_sub": "+ {n} × 4xx vom Ziel",
       "decoy": "An Honeypot",
-      "decoy_hint": "Statt abgewiesen an den Köder von Honeypot64 gegeben (nicht zuordenbare Namen und als schädlich erkannte Anfragen, je nach Einstellung unter Zugriffslisten → Honeypot64)."
+      "decoy_hint": "Statt abgewiesen an den Köder von Honeypot64 gegeben (nicht zuordenbare Namen und als schädlich erkannte Anfragen, je nach Einstellung unter Zugriffslisten → Honeypot64).",
+      "down": "Download",
+      "up": "Upload",
+      "down_hint": "Daten vom Ziel zum Besucher (Antworten, WebSocket), so wie sie über die Leitung gehen (nach der Komprimierung).",
+      "up_hint": "Daten vom Besucher zum Ziel (hochgeladene Dateien, Formulare, WebSocket).",
+      "updown_hint": "↓ Download: vom Ziel zum Besucher · ↑ Upload: vom Besucher zum Ziel"
     },
     "bl": {
       "title": "ipv64-Blocklisten",
@@ -861,7 +872,8 @@
       "honeypot": "vom Honeypot gemeldet",
       "geo": "Ländersperre",
       "ai_bot": "KI-Bot",
-      "unknown": "kein passender Host"
+      "unknown": "kein passender Host",
+      "maintenance": "Wartungsmodus"
     },
     "online": {
       "err_conf": "Tunnel-Daten prüfen: Tunnel, Token und mindestens ein Server (Name, Host).",
@@ -1025,6 +1037,24 @@
       "skipped": "Schon vorhanden, unverändert: {list}.",
       "failed": "Eintragen in DNS64 fehlgeschlagen: {error}",
       "excluded": "Nicht eingetragen (Wildcard oder Hauptdomain – DNS64 würde dort auch Mail-, TXT- und andere Einträge verdecken): {list}."
+    },
+    "maint": {
+      "tab": "Wartung",
+      "on_badge": "Wartung",
+      "on": "Wartungsmodus aktiv",
+      "on_hint": "Der Name bleibt erreichbar, Besucher sehen statt des Ziels eine Wartungsseite (HTTP 503 mit Retry-After, wird nicht zwischengespeichert). Zertifikate erneuern sich weiter.",
+      "style": "Wartungsseite",
+      "style_matrix": "Terminal im Matrix-Stil",
+      "style_gear": "Zahnrad (schlicht, hell/dunkel)",
+      "style_custom": "Eigenes HTML",
+      "preview": "Vorschau",
+      "html": "Eigenes HTML",
+      "html_hint": "Nur bei „Eigenes HTML“: die komplette Seite, höchstens 64 KB. Bilder und Schriften am besten direkt einbetten (data:), das Ziel ist während der Wartung nicht erreichbar. Die Vorschau zeigt die gespeicherte Fassung.",
+      "scope_hint": "Gilt für diesen Host auf der Node, auch über CDN64 Modus 1 und 2. Bei CDN64 Modus 3 geht der Server direkt zum Ziel – dort wirkt der Wartungsmodus nicht.",
+      "on_title": "Wartungsmodus einschalten",
+      "off_title": "Wartungsmodus ausschalten",
+      "flash_on": "Wartungsmodus für {name} ist an.",
+      "flash_off": "Wartungsmodus für {name} ist aus."
     }
   },
   "certs": {
@@ -1671,7 +1701,8 @@
       "mcp_call": "MCP-Werkzeug aufgerufen",
       "mcp_settings": "MCP-Schnittstelle geschaltet",
       "mcp_key_create": "MCP-Schlüssel angelegt",
-      "mcp_key_revoke": "MCP-Schlüssel widerrufen"
+      "mcp_key_revoke": "MCP-Schlüssel widerrufen",
+      "cdn64_host_maintenance": "Wartungsmodus umgeschaltet"
     }
   },
   "logs": {

@@ -1,5 +1,21 @@
 # Änderungen – PROXY64
 
+## 1.31.0 – 2026-10-26
+
+### Neu
+- Wartungsmodus je Proxy-Host (Reiter „Wartung“, Knopf in der Liste): Der Name bleibt erreichbar, Besucher sehen eine
+  Wartungsseite statt des Ziels – Terminal im Matrix-Stil (Standard), schlicht mit Zahnrad (hell/dunkel) oder eigenes
+  HTML (bis 64 KB, Vorschau). Antwort 503 mit Retry-After, nie zwischengespeichert; zählt weder als abgewiesen noch
+  als Fehler, im Zugriffs-Log als „Wartungsmodus“. Gilt auch über CDN64 Modus 1 und 2, nicht für Modus 3.
+- Datenverkehr getrennt nach Richtung (Sicht des Besuchers): Download (vom Ziel zum Besucher) und Upload (vom
+  Besucher zum Ziel, z. B. hochgeladene Dateien), jeweils so, wie es über die Leitung geht; WebSockets in beide
+  Richtungen. Zwei Kacheln oben, je Host „↓ … · ↑ …“, zwei Linien im Diagramm, getrennt auch auf der Seite Zugriffe
+  und in der Karte auf der Startseite. Upload zählt ab diesem Stand (ältere Stunden nur Download).
+
+### Geändert
+- WebSockets zählen in der Statistik als beantwortet (101) statt als abgebrochen (4xx).
+
+
 ## 1.30.3 – 2026-10-26
 
 ### Geändert
