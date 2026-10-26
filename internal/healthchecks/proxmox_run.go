@@ -116,15 +116,6 @@ func (m *Module) pveStart(ctx context.Context) {
 	if len(list) > 0 {
 		m.log.Info("proxmox monitoring started", "systems", len(list))
 	}
-	if !rt.noRun { // Docker-Host mit erreichbarem Socket automatisch einrichten (docker_ui.go)
-		rt.wg.Add(1)
-		go func() {
-			defer rt.wg.Done()
-			if _, err := m.dockerEnsure(ctx, false); err != nil {
-				m.log.Debug("docker host not monitored", "err", err)
-			}
-		}()
-	}
 }
 
 // pveStop beendet alle Abfragen (Stop des Moduls).

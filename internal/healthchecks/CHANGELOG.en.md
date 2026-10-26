@@ -1,5 +1,17 @@
 # Changes – Healthchecks
 
+## 2.32.0 – 2026-10-26
+
+### Changed
+- Docker like Proxmox VE: the page always starts with the overview of the monitored Docker hosts (tiles, table with
+  state, containers, CPU/RAM, edit, off, delete), even with a single host; only a click opens the host.
+- The local Docker socket is no longer monitored automatically. It is only added when you add it (form “Add Docker
+  host” or button “Add this machine” in the overview). Without a host the overview shows an entry like Proxmox VE and
+  points to existing Docker checks in the check list. Existing hosts stay set up.
+- The host page shows the host's name and has a delete button; afterwards you return to the overview.
+- State of a system (Docker and Proxmox VE): “attention” is now “partly impaired” (single containers, guests or nodes
+  impaired), besides “OK” and “unreachable”.
+
 ## 2.31.0 – 2026-10-26
 
 ### Added

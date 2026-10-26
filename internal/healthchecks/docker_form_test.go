@@ -41,7 +41,7 @@ func TestDockerRemoteHosts(t *testing.T) {
 	fakeDockerSource(t)
 	m, srv, last, _ := newDockerModuleBox(t, pveCore(t), pveBox(t, 7))
 	ctx := context.Background()
-	dockerGetPage(t, srv, "/healthchecks/docker") // lokaler Host automatisch
+	dockerAddLocal(t, srv) // lokaler Host
 	body := dockerGetPage(t, srv, "/healthchecks/docker/new")
 	for _, want := range []string{"docker.conn.ssh", "docker.howto.s1", `id="dk-host"`, "docker.form.genkey"} {
 		if !strings.Contains(body, want) {
@@ -101,7 +101,7 @@ func TestDockerRemoteHosts(t *testing.T) {
 		t.Fatalf("doppelt: %d", code)
 	}
 
-	// Uebersicht ab zwei Hosts
+	// Uebersicht
 	body = dockerGetPage(t, srv, "/healthchecks/docker")
 	hd, ok := (*last).(dockerHostsData)
 	if !ok || len(hd.Hosts) != 2 || hd.Sum.Systems != 2 || !strings.Contains(body, `id="docker-hosts"`) || !strings.Contains(body, "far") || !strings.Contains(body, "docker.local") {
@@ -136,8 +136,8 @@ func TestDockerRemoteHosts(t *testing.T) {
 	if m.core.SettingOr(ctx, dockerSettingMonitor, "") == "off" {
 		t.Fatal("entfernter Fern-Host schaltet die lokale Einrichtung ab")
 	}
-	dockerGetPage(t, srv, "/healthchecks/docker")
-	if _, ok := (*last).(dockerData); !ok {
+	dockerGetPage(t, srv, "/healthchecks/docker") // auch mit einem Host zuerst die Uebersicht
+	if hd, ok := (*last).(dockerHostsData); !ok || len(hd.Hosts) != 1 || !hd.Hosts[0].Local {
 		t.Fatalf("ein Host: %T", *last)
 	}
 }

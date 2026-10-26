@@ -1,5 +1,18 @@
 # Änderungen – Healthchecks
 
+## 2.32.0 – 2026-10-26
+
+### Geändert
+- Docker wie Proxmox VE: Die Seite beginnt immer mit der Übersicht der überwachten Docker-Hosts (Kacheln, Tabelle mit
+  Zustand, Containern, CPU/RAM, Bearbeiten, Aus, Löschen), auch mit nur einem Host; erst ein Klick führt zum Host.
+- Der lokale Docker-Socket wird nicht mehr automatisch überwacht. Er kommt erst dazu, wenn er hinzugefügt wird
+  (Formular „Docker-Host hinzufügen“ oder Knopf „Diese Maschine hinzufügen“ in der Übersicht). Ohne Host zeigt die
+  Übersicht einen Einstieg wie Proxmox VE und verweist auf vorhandene Docker-Checks in der Check-Liste. Bestehende
+  Hosts bleiben eingerichtet.
+- Die Host-Seite zeigt den Namen des Hosts und hat einen Knopf zum Löschen; danach geht es zurück zur Übersicht.
+- Zustand eines Systems (Docker und Proxmox VE): „Hinweis“ heißt jetzt „teilweise gestört“ (einzelne Container, Gäste
+  oder Nodes gestört), daneben „in Ordnung“ und „nicht erreichbar“.
+
 ## 2.31.0 – 2026-10-26
 
 ### Neu

@@ -14,7 +14,7 @@ import (
 	"github.com/ipv64net/node64/internal/proxmox"
 )
 
-// Mehrere Docker-Hosts wie bei Proxmox VE: Uebersicht ab zwei Hosts (Kacheln ueber alle, Tabelle der Hosts) und das
+// Mehrere Docker-Hosts wie bei Proxmox VE: Uebersicht (Kacheln ueber alle, Tabelle der Hosts, leer mit Einstieg) und das
 // Formular fuer Hosts aus der Ferne (docker_remote.go im Paket proxmox): SSH zum Socket, Docker-API mit TLS (2376),
 // TCP bzw. docker-socket-proxy (2375) oder ein lokaler Socket. Kein Agent auf dem Host noetig.
 
@@ -43,6 +43,8 @@ type dockerHostsData struct {
 	Last    *pveIncident
 	LastURL string
 	NoBox   bool
+	Socket  bool // lokaler Socket erreichbar, aber nicht eingerichtet (Knopf "diese Maschine hinzufuegen")
+	Orphans int  // ohne Hosts: Docker-Checks, die nur in der Check-Liste stehen
 }
 
 func (m *Module) pageDockerHosts(w http.ResponseWriter, r *http.Request, list []*proxmox.System) {
@@ -75,6 +77,17 @@ func (m *Module) pageDockerHosts(w http.ResponseWriter, r *http.Request, list []
 	}
 	if d.Last != nil {
 		d.LastURL = pveResPath(d.Last.SystemID, d.Last.Key)
+	}
+	if dockerLocalOf(list) == nil {
+		cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		_, err := listContainers(cctx, "")
+		cancel()
+		d.Socket = err == nil
+	}
+	if len(list) == 0 {
+		if cs, err := m.dockerChecks(ctx); err == nil {
+			d.Orphans = len(cs)
+		}
 	}
 	m.g.Render(w, r, http.StatusOK, Name+"/docker_hosts", "nav.docker", d)
 }

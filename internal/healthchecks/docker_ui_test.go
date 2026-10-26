@@ -137,6 +137,16 @@ func dockerPost(t *testing.T, srv *httptest.Server, path string, form url.Values
 	return resp.StatusCode, resp.Header.Get("Location")
 }
 
+// dockerAddLocal richtet den lokalen Docker-Host ein (Knopf in der Uebersicht) und liefert den Pfad seiner Seite.
+func dockerAddLocal(t *testing.T, srv *httptest.Server) string {
+	t.Helper()
+	code, loc := dockerPost(t, srv, "/healthchecks/docker/enable", url.Values{})
+	if code != http.StatusSeeOther || !strings.HasPrefix(loc, "/healthchecks/docker/system/") {
+		t.Fatalf("add local: %d %q", code, loc)
+	}
+	return loc
+}
+
 func dockerSeed(t *testing.T, srv *httptest.Server) {
 	t.Helper()
 	for _, c := range []map[string]any{
@@ -157,13 +167,18 @@ var dockerHost = []checks.Container{
 	{ID: "cccccccccccc", Name: "cache", Image: "redis:7", State: "running", Status: "Up 5 minutes (unhealthy)", Created: 1700000000},
 }
 
-// Ohne laufende Abfrage (wartet): Containerliste direkt, Docker-Host automatisch eingerichtet.
+// Ohne laufende Abfrage (wartet): Containerliste direkt; der Host kommt erst nach dem Hinzufuegen.
 func TestDockerPage(t *testing.T) {
 	fakeContainers(t, dockerHost, nil)
 	srv, last := newDockerModule(t)
 	dockerSeed(t, srv)
 
-	body := dockerGetPage(t, srv, "/healthchecks/docker")
+	ov := dockerGetPage(t, srv, "/healthchecks/docker") // Uebersicht, nichts automatisch eingerichtet
+	if hd, ok := (*last).(dockerHostsData); !ok || len(hd.Hosts) != 0 || !hd.Socket || !strings.Contains(ov, "/healthchecks/docker/enable") || !strings.Contains(ov, "docker.empty") {
+		t.Fatalf("overview: %T %+v", *last, *last)
+	}
+	hp := dockerAddLocal(t, srv)
+	body := dockerGetPage(t, srv, hp)
 	d := (*last).(dockerData)
 	if d.Sys == nil || !d.Sys.IsDocker() || d.View.State != "pending" || d.Live {
 		t.Fatalf("system: %+v state=%s live=%v", d.Sys, d.View.State, d.Live)
@@ -199,19 +214,19 @@ func TestDockerPage(t *testing.T) {
 	}
 
 	// Filter
-	dockerGetPage(t, srv, "/healthchecks/docker?state=unwatched")
+	dockerGetPage(t, srv, hp+"?state=unwatched")
 	if d := (*last).(dockerData); len(d.Rows) != 2 || d.Rows[0].Name != "cache" || d.Rows[1].Name != "db" {
 		t.Fatalf("unwatched: %+v", d.Rows)
 	}
-	dockerGetPage(t, srv, "/healthchecks/docker?state=problem")
+	dockerGetPage(t, srv, hp+"?state=problem")
 	if d := (*last).(dockerData); len(d.Rows) != 2 { // cache (unhealthy), gone (fehlt)
 		t.Fatalf("problem: %d rows", len(d.Rows))
 	}
-	dockerGetPage(t, srv, "/healthchecks/docker?state=stopped")
+	dockerGetPage(t, srv, hp+"?state=stopped")
 	if d := (*last).(dockerData); len(d.Rows) != 1 || d.Rows[0].Name != "db" {
 		t.Fatalf("stopped: %+v", d.Rows)
 	}
-	dockerGetPage(t, srv, "/healthchecks/docker?q=postgres")
+	dockerGetPage(t, srv, hp+"?q=postgres")
 	if d := (*last).(dockerData); len(d.Rows) != 1 || d.Rows[0].Name != "db" {
 		t.Fatalf("search: %+v", d.Rows)
 	}
@@ -255,35 +270,36 @@ func TestDockerPage(t *testing.T) {
 	}
 }
 
+// Ohne Socket: leere Uebersicht ohne Knopf fuer diese Maschine, Hinweis auf die Docker-Checks der Check-Liste.
 func TestDockerPageNoSocket(t *testing.T) {
 	fakeContainers(t, nil, errors.New("dial unix /var/run/docker.sock: connect: no such file or directory – mount the socket"))
 	srv, last := newDockerModule(t)
 	dockerSeed(t, srv)
 	body := dockerGetPage(t, srv, "/healthchecks/docker")
-	d := (*last).(dockerData)
-	if d.Sys != nil || d.Socket || d.SocketErr == "" || d.Total != 0 || len(d.Rows) != 3 || d.Missing != 0 {
+	d := (*last).(dockerHostsData)
+	if len(d.Hosts) != 0 || d.Socket || d.Orphans != 3 {
 		t.Fatalf("no socket: %+v", d)
 	}
-	for _, r := range d.Rows {
-		if want := map[bool]string{true: "remote", false: "unknown"}[r.Name == "far"]; r.Kind != want {
-			t.Errorf("%s: kind %s, want %s", r.Name, r.Kind, want)
-		}
-	}
-	for _, s := range []string{"hc.docker.socket_missing", "/var/run/docker.sock:/var/run/docker.sock:ro", "mount the socket", "Web-Check"} {
+	for _, s := range []string{`id="docker-empty"`, "docker.orphans", "/healthchecks?type=docker", "/healthchecks/docker/new"} {
 		if !strings.Contains(body, s) {
 			t.Errorf("page lacks %q", s)
 		}
 	}
-	if strings.Contains(body, "/ascheck") || strings.Contains(body, "docker-setup") {
-		t.Error("as-check toggle or setup without socket")
+	if strings.Contains(body, "/healthchecks/docker/enable") || strings.Contains(body, "docker-kpi") {
+		t.Error("local button or kpi without socket/hosts")
 	}
 }
 
+// Socket erreichbar: trotzdem nichts automatisch, die Uebersicht bietet die Maschine an.
 func TestDockerPageEmpty(t *testing.T) {
 	fakeContainers(t, nil, nil)
-	srv, _ := newDockerModule(t)
-	if body := dockerGetPage(t, srv, "/healthchecks/docker"); !strings.Contains(body, "hc.docker.empty") {
-		t.Fatal("empty hint missing")
+	m, srv, _, _ := newDockerModuleRec(t, pveCore(t))
+	body := dockerGetPage(t, srv, "/healthchecks/docker")
+	if !strings.Contains(body, "docker.empty") || !strings.Contains(body, "/healthchecks/docker/enable") || strings.Contains(body, "docker.orphans") {
+		t.Fatal("empty overview")
+	}
+	if list, _ := m.dockerSystems(context.Background()); len(list) != 0 {
+		t.Fatalf("set up automatically: %d", len(list))
 	}
 }
 
@@ -411,7 +427,7 @@ func TestDockerMonitorLive(t *testing.T) {
 	api := fakeDockerSource(t)
 	m, srv, last, rec := newDockerModuleRec(t, pveCore(t))
 	dockerSeed(t, srv)
-	dockerGetPage(t, srv, "/healthchecks/docker") // richtet den Host ein
+	hp := dockerAddLocal(t, srv)
 	id := dockerSysID(t, m)
 	ctx := context.Background()
 
@@ -428,7 +444,7 @@ func TestDockerMonitorLive(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	pvePollNow(t, m, id)
 
-	body := dockerGetPage(t, srv, "/healthchecks/docker")
+	body := dockerGetPage(t, srv, hp)
 	d := (*last).(dockerData)
 	if !d.Live || d.Info == nil || d.Info.Name != "box" || d.Total != 4 || d.Bad != 2 || d.AsCheck != 1 { // cache + gone
 		t.Fatalf("live: live=%v total=%d bad=%d ascheck=%d", d.Live, d.Total, d.Bad, d.AsCheck)
@@ -576,7 +592,7 @@ func TestDockerMonitorLive(t *testing.T) {
 	if _, loc := dockerPost(t, srv, fmt.Sprintf("/healthchecks/proxmox/system/%d/toggle", id), url.Values{"back": {dockerPath}}); loc != dockerPath {
 		t.Fatalf("toggle back: %q", loc)
 	}
-	body = dockerGetPage(t, srv, "/healthchecks/docker")
+	body = dockerGetPage(t, srv, hp)
 	if d := (*last).(dockerData); d.Sys == nil || d.Sys.Enabled || d.View.State != "off" || !strings.Contains(body, "docker-off") {
 		t.Fatalf("off: %+v", d.Sys)
 	}
@@ -588,12 +604,13 @@ func TestDockerMonitorLive(t *testing.T) {
 		t.Fatalf("docker checks after delete: %d", len(list))
 	}
 	body = dockerGetPage(t, srv, "/healthchecks/docker")
-	if d := (*last).(dockerData); d.Sys != nil || !d.Off || !strings.Contains(body, "docker.off_hint") || !strings.Contains(body, "/healthchecks/docker/enable") {
-		t.Fatalf("after delete: %+v off=%v", d.Sys, d.Off)
+	if d := (*last).(dockerHostsData); len(d.Hosts) != 0 || !d.Socket || !strings.Contains(body, "/healthchecks/docker/enable") {
+		t.Fatalf("after delete: %+v", d)
 	}
-	if _, loc := dockerPost(t, srv, "/healthchecks/docker/enable", nil); loc != dockerPath {
-		t.Fatalf("enable: %q", loc)
+	if list, _ := m.dockerSystems(ctx); len(list) != 0 {
+		t.Fatal("recreated automatically")
 	}
+	dockerAddLocal(t, srv)
 	if id2 := dockerSysID(t, m); id2 == id {
 		t.Fatal("not recreated")
 	}
@@ -616,7 +633,7 @@ func TestDockerExportImport(t *testing.T) {
 	fakeDockerSource(t)
 	m, srv, _, _ := newDockerModuleRec(t, pveCore(t))
 	dockerSeed(t, srv)
-	dockerGetPage(t, srv, "/healthchecks/docker")
+	dockerAddLocal(t, srv)
 	id := dockerSysID(t, m)
 	pvePollNow(t, m, id) // verknuepft Web-Check
 	call(t, srv, "PUT", fmt.Sprintf("/api/healthchecks/docker/systems/%d/settings?key=docker/cache", id), map[string]any{"muted": true,

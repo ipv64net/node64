@@ -4247,7 +4247,7 @@
     },
     "sys_state": {
       "ok": "in Ordnung",
-      "warn": "Hinweis",
+      "warn": "teilweise gestört",
       "down": "nicht erreichbar",
       "error": "Fehler",
       "off": "aus",
@@ -4643,7 +4643,12 @@
       "hostkey": "Host-Key fehlt: „Verbindung testen“ und den Fingerabdruck bestätigen.",
       "host": "Host fehlt.",
       "duplicate": "Dieser Docker-Host ist schon eingerichtet."
-    }
+    },
+    "empty": "Noch kein Docker-Host eingerichtet.",
+    "empty_hint": "Füge den Docker-Socket dieser Maschine oder einen Host aus der Ferne hinzu (SSH, TLS oder docker-socket-proxy). Erst dann werden Container überwacht.",
+    "add_local": "Diese Maschine hinzufügen (lokaler Socket)",
+    "local_hint": "Der Docker-Socket dieser Maschine ist erreichbar, wird aber nicht überwacht.",
+    "orphans": "{count} Docker-Checks laufen ohne überwachten Host – in der Check-Liste"
   },
   "modinfo": {
     "healthchecks": {

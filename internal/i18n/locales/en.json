@@ -4247,7 +4247,7 @@
     },
     "sys_state": {
       "ok": "OK",
-      "warn": "attention",
+      "warn": "partly impaired",
       "down": "unreachable",
       "error": "error",
       "off": "off",
@@ -4643,7 +4643,12 @@
       "hostkey": "Host key missing: “Test connection” and confirm the fingerprint.",
       "host": "Host is missing.",
       "duplicate": "This Docker host is already set up."
-    }
+    },
+    "empty": "No Docker host set up yet.",
+    "empty_hint": "Add the Docker socket of this machine or a remote host (SSH, TLS or docker-socket-proxy). Only then containers are monitored.",
+    "add_local": "Add this machine (local socket)",
+    "local_hint": "The Docker socket of this machine is reachable but not monitored.",
+    "orphans": "{count} Docker checks run without a monitored host – see the check list"
   },
   "modinfo": {
     "healthchecks": {

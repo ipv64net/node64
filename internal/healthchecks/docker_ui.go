@@ -18,9 +18,9 @@ import (
 // Docker-Container: Seite unter /healthchecks/docker (Menuepunkt unter Healthchecks wie Proxmox VE). Der Docker-Host
 // ist ein System der Proxmox-Ueberwachung (Kind docker, internal/proxmox/docker.go): alle Container werden ueberwacht
 // (Zustand, CPU, RAM, Netz, Disk-I/O, Verlauf, Regeln mit Vererbung, Kanaele, Ruhezeiten); „Als Check fuehren“ legt
-// zusaetzlich einen Healthchecks-Check vom Typ docker an. Mit erreichbarem Socket wird der Host automatisch
-// eingerichtet (Einstellung docker.monitor = off nach dem Entfernen). Docker-Checks ohne Container erscheinen als
-// „Container fehlt“, Checks fuer andere Hosts als „andere Node/anderer Host“.
+// zusaetzlich einen Healthchecks-Check vom Typ docker an. Die Seite beginnt immer mit der Uebersicht der Hosts; auch
+// der lokale Socket wird erst ueberwacht, wenn er hinzugefuegt wird (Formular oder Knopf in der leeren Uebersicht).
+// Docker-Checks ohne Container erscheinen als „Container fehlt“, Checks fuer andere Hosts als „andere Node/anderer Host“.
 
 const (
 	dockerPath           = "/healthchecks/docker"
@@ -374,6 +374,9 @@ func (d dockerData) Crumb() string {
 	if d.Res != nil {
 		return d.Res.Row.Name
 	}
+	if d.Sys != nil {
+		return d.Sys.Name
+	}
 	return ""
 }
 
@@ -587,19 +590,13 @@ func dockerListHost(host string) string {
 	return host
 }
 
-// dockerSystemOf liefert den Docker-Host der Seite: {id} bzw. der lokale (eingerichtet, sonst automatisch) oder der
-// einzige eingerichtete.
+// dockerSystemOf liefert den Docker-Host der Seite: {id} bzw. ohne {id} der erste eingerichtete (nil = keiner).
 func (m *Module) dockerSystemOf(w http.ResponseWriter, r *http.Request) (*proxmox.System, bool) {
 	ctx := r.Context()
 	if r.PathValue("id") == "" {
-		sys, err := m.dockerEnsure(ctx, false)
-		if err != nil && sys == nil {
-			m.log.Debug("docker host not set up", "err", err)
-		}
-		if sys == nil {
-			if list, _ := m.dockerSystems(ctx); len(list) > 0 {
-				sys = list[0]
-			}
+		var sys *proxmox.System
+		if list, _ := m.dockerSystems(ctx); len(list) > 0 {
+			sys = list[0]
 		}
 		return sys, true
 	}
@@ -620,19 +617,14 @@ func (m *Module) dockerSystemOf(w http.ResponseWriter, r *http.Request) (*proxmo
 }
 
 func (m *Module) pageDocker(w http.ResponseWriter, r *http.Request) {
-	if r.PathValue("id") == "" { // ab zwei Hosts: Uebersicht wie Proxmox VE
-		if _, err := m.dockerEnsure(r.Context(), false); err != nil {
-			m.log.Debug("docker host not set up", "err", err)
-		}
+	if r.PathValue("id") == "" { // immer zuerst die Uebersicht wie Proxmox VE (auch mit einem oder keinem Host)
 		list, err := m.dockerSystems(r.Context())
 		if err != nil {
 			m.fail(w, r, err)
 			return
 		}
-		if len(list) > 1 {
-			m.pageDockerHosts(w, r, list)
-			return
-		}
+		m.pageDockerHosts(w, r, list)
+		return
 	}
 	sys, ok := m.dockerSystemOf(w, r)
 	if !ok {
@@ -701,6 +693,10 @@ func (m *Module) pageDockerEnable(w http.ResponseWriter, r *http.Request) {
 		m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
 	case err != nil:
 		m.g.Flash(w, r, "danger", m.g.T(r, "hc.docker.socket_missing", "host", checks.DefaultDockerHost())+" "+err.Error())
+	}
+	if sys != nil {
+		http.Redirect(w, r, dockerSysPath(sys.ID), http.StatusSeeOther)
+		return
 	}
 	http.Redirect(w, r, dockerPath, http.StatusSeeOther)
 }

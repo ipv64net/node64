@@ -7,7 +7,20 @@
 	<a class="btn btn-primary btn-sm" href="/healthchecks/docker/new"><i class="bi bi-plus-lg"></i> {{.T "docker.host.add"}}</a>
 </div>
 <p class="text-body-secondary small">{{.T "docker.hosts_hint"}}</p>
-
+{{if and $d.Socket $d.Hosts}}<div class="alert alert-info small d-flex flex-wrap align-items-center gap-2" id="docker-setup"><i class="bi bi-info-circle"></i> <span class="me-auto">{{.T "docker.local_hint"}}</span>
+	<form method="post" action="/healthchecks/docker/enable" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus-lg"></i> {{.T "docker.add_local"}}</button></form></div>{{end}}
+{{if not $d.Hosts}}
+<div class="card"><div class="card-body text-center text-body-secondary py-4" id="docker-empty">
+	<i class="bi bi-box-seam fs-1 d-block mb-2"></i>
+	<div>{{.T "docker.empty"}}</div>
+	<div class="small mt-1">{{.T "docker.empty_hint"}}</div>
+	<div class="mt-3 d-flex flex-wrap justify-content-center gap-2">
+		<a class="btn btn-primary" href="/healthchecks/docker/new"><i class="bi bi-plus-lg"></i> {{.T "docker.host.add"}}</a>
+		{{if $d.Socket}}<form method="post" action="/healthchecks/docker/enable" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-primary" type="submit"><i class="bi bi-hdd"></i> {{.T "docker.add_local"}}</button></form>{{end}}
+	</div>
+	{{if $d.Orphans}}<div class="small mt-3"><a href="/healthchecks?type=docker">{{.T "docker.orphans" "count" $d.Orphans}}</a></div>{{end}}
+</div></div>
+{{else}}
 <div class="row g-2 mb-3" id="docker-kpi">
 	<div class="col-6 col-md"><div class="card stat stat-primary"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "docker.kpi.hosts"}}</div><div class="stat-value">{{$s.Systems}}</div>{{if $s.SysBad}}<div class="stat-sub text-danger">{{.T "pve.kpi.sys_bad" "count" $s.SysBad}}</div>{{end}}</div><i class="bi bi-hdd-network stat-icon"></i></div></div></div>
 	<div class="col-6 col-md"><div class="card stat stat-info"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "hc.docker.kpi.total"}}</div><div class="stat-value">{{$s.Guests}}</div></div><i class="bi bi-box-seam stat-icon"></i></div></div></div>
@@ -41,4 +54,5 @@
 		</tbody>
 	</table></div>
 </div>
+{{end}}
 {{end}}
