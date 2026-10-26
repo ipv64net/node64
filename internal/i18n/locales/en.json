@@ -2231,7 +2231,9 @@
       "json": "JSON (API)",
       "dns": "DNS",
       "proxmox": "Proxmox VE",
-      "whois": "WHOIS / RDAP"
+      "whois": "WHOIS / RDAP",
+      "sys:proxmox": "Proxmox VE (VM, container, node)",
+      "sys:docker": "Docker container"
     },
     "json": {
       "rules": "Conditions",
@@ -2644,6 +2646,19 @@
       "contains": "Expected values (one per line)",
       "contains_hint": "Down when a value is missing (case-insensitive, part of the text is enough). With field: registrar, nameserver, status, org, country, city, netname, cidr, asn – e.g. “nameserver: ns1.example.org”. Without a field all values are searched.",
       "interval_hint": "WHOIS and RDAP servers limit queries: the check runs at most hourly, every 10 minutes while down. The values found (registrar, expiry, name servers or network, CIDR, AS, organisation, country, city) are shown under “Last measurement”."
+    },
+    "pick": {
+      "system_proxmox": "Proxmox system",
+      "system_docker": "Docker host",
+      "res_proxmox": "Machine",
+      "res_docker": "Container",
+      "taken": "already a check",
+      "none": "no entries (not polled yet?)",
+      "hint": "From the last poll of the system. The check takes interval, group and channels from the system's rules (like “also run as check”) and can be edited like any check afterwards.",
+      "no_systems_proxmox": "No Proxmox system set up yet. Add one first under",
+      "no_systems_docker": "No Docker host set up yet. Add one first under",
+      "name_auto": "empty = automatic (system – name)",
+      "err_res": "Please choose a machine or container."
     }
   },
   "notify": {

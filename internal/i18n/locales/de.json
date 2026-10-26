@@ -2231,7 +2231,9 @@
       "json": "JSON (API)",
       "dns": "DNS",
       "proxmox": "Proxmox VE",
-      "whois": "WHOIS / RDAP"
+      "whois": "WHOIS / RDAP",
+      "sys:proxmox": "Proxmox VE (VM, Container, Node)",
+      "sys:docker": "Docker-Container"
     },
     "json": {
       "rules": "Bedingungen",
@@ -2644,6 +2646,19 @@
       "contains": "Erwartete Angaben (je Zeile)",
       "contains_hint": "Gestört, wenn eine Angabe fehlt (Groß-/Kleinschreibung egal, Teiltext genügt). Mit Feld: registrar, nameserver, status, org, country, city, netname, cidr, asn – z. B. „nameserver: ns1.example.org“. Ohne Feld wird in allen Angaben gesucht.",
       "interval_hint": "WHOIS- und RDAP-Server begrenzen Abfragen: Der Check läuft höchstens stündlich, im gestörten Zustand alle 10 Minuten. Die gefundenen Angaben (Registrar, Ablauf, Nameserver bzw. Netz, CIDR, AS, Organisation, Land, Stadt) stehen unter „Letzte Messung“."
+    },
+    "pick": {
+      "system_proxmox": "Proxmox-System",
+      "system_docker": "Docker-Host",
+      "res_proxmox": "Maschine",
+      "res_docker": "Container",
+      "taken": "schon als Check",
+      "none": "keine Einträge (noch kein Abruf?)",
+      "hint": "Aus dem letzten Abruf des Systems. Der Check übernimmt Intervall, Gruppe und Kanäle aus den Regeln des Systems (wie „Als Check führen“) und lässt sich danach wie jeder Check bearbeiten.",
+      "no_systems_proxmox": "Noch kein Proxmox-System eingerichtet. Zuerst hinzufügen unter",
+      "no_systems_docker": "Noch kein Docker-Host eingerichtet. Zuerst hinzufügen unter",
+      "name_auto": "leer = automatisch (System – Name)",
+      "err_res": "Bitte eine Maschine bzw. einen Container auswählen."
     }
   },
   "notify": {

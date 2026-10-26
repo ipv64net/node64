@@ -606,6 +606,8 @@ type formData struct {
 	WhoisSources               []string
 	// Online-Messstellen des Accounts ohne diesen Check und Limit der Klasse (0 = unbegrenzt/unbekannt)
 	PointsUsed, PointsLimit int
+	// Neuer Check aus einem ueberwachten System (form_systems.go)
+	PickPVE, PickDocker []sysPick
 }
 
 type channelOpt struct {
@@ -1019,6 +1021,19 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 	if d.Form["type"] == string(checks.TypeProxmox) { // nur ueber Proxmox VE angelegt, hier nur bearbeiten
 		d.Types = append(append([]checks.Type{}, checks.Types...), checks.TypeProxmox)
 	}
+	if !d.Edit && !d.APIMode { // neu: Docker-Container und Proxmox-Maschinen aus den ueberwachten Systemen waehlen
+		d.Types = nil
+		for _, t := range checks.Types {
+			if t != checks.TypeDocker {
+				d.Types = append(d.Types, t)
+			}
+		}
+		d.Types = append(d.Types, sysTypePVE, sysTypeDocker)
+		d.PickPVE, d.PickDocker = m.sysPicks(r.Context(), false), m.sysPicks(r.Context(), true)
+		if d.Form["type"] == string(checks.TypeDocker) { // alte Links (?type=docker): Auswahl ueber den Docker-Host
+			d.Form["type"] = string(sysTypeDocker)
+		}
+	}
 	d.IPModes = []string{"auto", "ipv4", "ipv6", "both"}
 	d.DNSRecordTypes, d.DNSExpects = checks.DNSRecordTypes, checks.DNSExpects
 	d.WhoisSources = checks.WhoisSources
@@ -1084,6 +1099,9 @@ func (m *Module) pageForm(w http.ResponseWriter, r *http.Request) {
 		if v := strings.TrimSpace(r.URL.Query().Get("name")); v != "" {
 			d.Form["name"] = v
 		}
+		if v := strings.TrimSpace(r.URL.Query().Get("sys")); v != "" { // vorgewaehltes System (Docker-/Proxmox-Seite)
+			d.Form["sys_id_docker"], d.Form["sys_id_proxmox"] = v, v
+		}
 	}
 	m.formPage(w, r, http.StatusOK, d)
 }
@@ -1097,6 +1115,10 @@ func (m *Module) pageFormSubmit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
+		if kind, ok := strings.CutPrefix(r.PostFormValue("type"), "sys:"); ok && (kind == "proxmox" || kind == "docker") {
+			m.formSystemCheck(w, r, kind)
+			return
+		}
 		c = &Check{Token: NewToken()}
 	}
 	d := formData{Edit: edit, Token: c.Token}

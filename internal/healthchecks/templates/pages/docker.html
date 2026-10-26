@@ -24,7 +24,7 @@
 			{{if $d.Sys.Enabled}}<button class="btn btn-sm btn-outline-warning" type="submit" data-confirm="{{.T "docker.disable_confirm"}}"><i class="bi bi-pause-fill"></i> {{.T "docker.disable"}}</button>{{else}}<button class="btn btn-sm btn-outline-success" type="submit"><i class="bi bi-play-fill"></i> {{.T "docker.enable"}}</button>{{end}}</form>{{end}}
 		{{if $d.Sys}}<a class="btn btn-outline-primary btn-sm" href="{{$d.Path}}/edit" title="{{.T "docker.host.edit"}}"><i class="bi bi-pencil"></i></a>
 		<form method="post" action="{{$d.Act}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" title="{{.T "common.delete"}}" data-confirm="{{.T "docker.host.delete_confirm" "name" $d.Sys.Name}}"><i class="bi bi-trash"></i></button></form>{{end}}
-		<a class="btn btn-outline-primary btn-sm" href="/healthchecks/new?type=docker"><i class="bi bi-plus-lg"></i> {{.T "hc.docker.add"}}</a>
+		<a class="btn btn-outline-primary btn-sm" href="/healthchecks/new?type=sys:docker{{with $d.Sys}}&amp;sys={{.ID}}{{end}}"><i class="bi bi-plus-lg"></i> {{.T "hc.docker.add"}}</a>
 		<a class="btn btn-outline-primary btn-sm" href="/healthchecks/docker/new"><i class="bi bi-hdd-network"></i> {{.T "docker.host.add"}}</a>
 	</div>
 </div>

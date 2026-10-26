@@ -595,6 +595,11 @@ func (m *Module) pveResName(id int64, key string) string {
 // schon gemeldete Stoerung uebernimmt er (beginnt gestoert, meldet nur die Entwarnung); umgekehrt uebernimmt die
 // Engine die Stoerung eines gestoerten Checks, der entfernt wird (keine doppelte Meldung).
 func (m *Module) pveSetAsCheck(r *http.Request, sys *proxmox.System, key string, on bool) error {
+	return m.pveSetAsCheckNamed(r, sys, key, on, "")
+}
+
+// pveSetAsCheckNamed: wie pveSetAsCheck, mit eigenem Namen fuer einen neuen Check (leer = "System – Eintrag").
+func (m *Module) pveSetAsCheckNamed(r *http.Request, sys *proxmox.System, key string, on bool, name string) error {
 	ctx := r.Context()
 	if key == "" || !proxmox.ValidKey(key) {
 		return &proxmox.FieldError{Field: "key", Key: "pve.err.key"}
@@ -632,6 +637,9 @@ func (m *Module) pveSetAsCheck(r *http.Request, sys *proxmox.System, key string,
 			}
 			group, paused = dockerCheckGroup, !sys.Enabled && dockerNeedsPoll(sys) // ssh/https: ohne Abfrage keine Verbindung
 			in.Name, in.Type, in.Target, in.Params, in.Tags = sys.Name+" – "+name, string(checks.TypeDocker), name, params, []string{"docker"}
+		}
+		if name != "" {
+			in.Name = name
 		}
 		c := &Check{Token: NewToken(), UpdatedBy: m.actor(r)}
 		if err := m.apply(c, in, true); err != nil {

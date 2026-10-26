@@ -12,7 +12,36 @@
 				el.classList.toggle("d-none", !on);
 				el.querySelectorAll("input, select, textarea").forEach(function (i) { i.disabled = !on; });
 			});
+			// Check aus einem ueberwachten System (sys:proxmox, sys:docker): Name optional, Gruppe, Messstellen und
+			// Meldungen kommen vom System
+			var sys = t.indexOf("sys:") === 0;
+			document.querySelectorAll("[data-hide-types]").forEach(function (el) {
+				el.classList.toggle("d-none", el.getAttribute("data-hide-types").split(" ").indexOf(t) >= 0);
+			});
+			var nm = document.getElementById("name");
+			if (nm) { nm.required = !sys; nm.placeholder = sys ? (nm.getAttribute("data-auto") || "") : ""; }
 		};
+		// Auswahl System -> Maschine bzw. Container: nur die Eintraege des gewaehlten Systems, gefuehrte gesperrt
+		document.querySelectorAll("[data-pick]").forEach(function (box) {
+			var sysSel = box.querySelector("[data-pick-sys]"), resSel = box.querySelector("[data-pick-res]");
+			if (!sysSel || !resSel) { return; }
+			var filter = function () {
+				var none = resSel.querySelector("[data-none]"), cur = resSel.selectedOptions[0], first = null, any = false;
+				resSel.querySelectorAll("option[data-sys]").forEach(function (o) {
+					var mine = o.getAttribute("data-sys") === sysSel.value;
+					o.hidden = !mine;
+					o.disabled = !mine || o.hasAttribute("data-taken");
+					if (mine) { any = true; }
+					if (!o.disabled && !first) { first = o; }
+				});
+				if (none) { none.hidden = any; }
+				if (!cur || cur.disabled || cur.hidden) {
+					if (first) { first.selected = true; } else if (none) { none.selected = true; }
+				}
+			};
+			sysSel.addEventListener("change", filter);
+			filter();
+		});
 		// Testlauf von ipv64 vor dem Umhaengen: die Standorte messen die Eingabe einmal (gespeichert wird nichts)
 		var ot = document.getElementById("hc-otest");
 		if (ot) {

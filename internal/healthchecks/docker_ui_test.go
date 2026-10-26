@@ -62,7 +62,8 @@ func newDockerModuleBox(t *testing.T, core *store.Store, box *secrets.Box) (*Mod
 	t.Cleanup(func() { m.Stop(context.Background()) })
 	last := new(any)
 	var mu sync.Mutex
-	funcs := template.FuncMap{"split": strings.Fields, "ms": func(f float64) string { return fmt.Sprint(f) }}
+	funcs := template.FuncMap{"split": strings.Fields, "ms": func(f float64) string { return fmt.Sprint(f) }, "contains": strings.Contains, "join": strings.Join,
+		"add": func(a, b int) int { return a + b }, "sub": func(a, b int) int { return a - b }}
 	render := func(w http.ResponseWriter, r *http.Request, status int, page, titleKey string, data any) {
 		mu.Lock()
 		*last = data

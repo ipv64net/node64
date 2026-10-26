@@ -14,7 +14,7 @@
 				<div class="row g-3">
 					<div class="col-md-8">
 						<label class="form-label" for="name">{{.T "common.name"}}</label>
-						<div class="input-group"><span class="input-group-text"><i class="bi bi-tag"></i></span><input class="form-control" id="name" name="name" value="{{index $f "name"}}" maxlength="200" required autofocus></div>
+						<div class="input-group"><span class="input-group-text"><i class="bi bi-tag"></i></span><input class="form-control" id="name" name="name" value="{{index $f "name"}}" maxlength="200" required autofocus data-auto="{{.T "hc.pick.name_auto"}}"></div>
 					</div>
 					<div class="col-md-4">
 						<label class="form-label" for="hc-type">{{.T "common.type"}}</label>
@@ -36,21 +36,47 @@
 					<div class="col-12" data-types="push">
 						<div class="alert alert-info small mb-0">{{.T "hc.form.push_hint"}}</div>
 					</div>
+					{{if not $d.Edit}}<div class="col-12" data-types="sys:proxmox" data-pick="proxmox">
+						{{if $d.PickPVE}}<div class="row g-3">
+							<div class="col-md-5"><label class="form-label" for="pick-sys-proxmox">{{.T "hc.pick.system_proxmox"}}</label>
+								<div class="input-group"><span class="input-group-text"><i class="bi bi-hdd-rack"></i></span><select class="form-select" id="pick-sys-proxmox" name="sys_id_proxmox" data-pick-sys>{{range $d.PickPVE}}<option value="{{.ID}}"{{if eq (print .ID) (index $f "sys_id_proxmox")}} selected{{end}}>{{.Name}}</option>{{end}}</select></div></div>
+							<div class="col-md-7"><label class="form-label" for="pick-res-proxmox">{{.T "hc.pick.res_proxmox"}}</label>
+								<div class="input-group"><span class="input-group-text"><i class="bi bi-bullseye"></i></span><select class="form-select" id="pick-res-proxmox" name="sys_key_proxmox" data-pick-res required>
+									{{range $s := $d.PickPVE}}{{range .Res}}<option value="{{.Key}}" data-sys="{{$s.ID}}"{{if .Taken}} data-taken="1"{{end}}{{if eq .Key (index $f "sys_key_proxmox")}} selected{{end}}>{{$.T .TypeKey}}: {{.Name}}{{with .Detail}} ({{.}}){{end}}{{if .Taken}} – {{$.T "hc.pick.taken"}}{{end}}</option>{{end}}{{end}}
+									<option value="" data-none disabled>{{.T "hc.pick.none"}}</option>
+								</select></div></div>
+						</div>
+						<div class="form-text">{{.T "hc.pick.hint"}}</div>
+						{{else}}<div class="alert alert-info small mb-0"><i class="bi bi-hdd-rack"></i> {{.T "hc.pick.no_systems_proxmox"}} <a href="/healthchecks/proxmox">{{.T "nav.proxmox"}}</a></div>{{end}}
+					</div>{{end}}
+					{{if not $d.Edit}}<div class="col-12" data-types="sys:docker" data-pick="docker">
+						{{if $d.PickDocker}}<div class="row g-3">
+							<div class="col-md-5"><label class="form-label" for="pick-sys-docker">{{.T "hc.pick.system_docker"}}</label>
+								<div class="input-group"><span class="input-group-text"><i class="bi bi-box-seam"></i></span><select class="form-select" id="pick-sys-docker" name="sys_id_docker" data-pick-sys>{{range $d.PickDocker}}<option value="{{.ID}}"{{if eq (print .ID) (index $f "sys_id_docker")}} selected{{end}}>{{.Name}}</option>{{end}}</select></div></div>
+							<div class="col-md-7"><label class="form-label" for="pick-res-docker">{{.T "hc.pick.res_docker"}}</label>
+								<div class="input-group"><span class="input-group-text"><i class="bi bi-bullseye"></i></span><select class="form-select" id="pick-res-docker" name="sys_key_docker" data-pick-res required>
+									{{range $s := $d.PickDocker}}{{range .Res}}<option value="{{.Key}}" data-sys="{{$s.ID}}"{{if .Taken}} data-taken="1"{{end}}{{if eq .Key (index $f "sys_key_docker")}} selected{{end}}>{{$.T .TypeKey}}: {{.Name}}{{with .Detail}} ({{.}}){{end}}{{if .Taken}} – {{$.T "hc.pick.taken"}}{{end}}</option>{{end}}{{end}}
+									<option value="" data-none disabled>{{.T "hc.pick.none"}}</option>
+								</select></div></div>
+						</div>
+						<div class="form-text">{{.T "hc.pick.hint"}}</div>
+						{{else}}<div class="alert alert-info small mb-0"><i class="bi bi-box-seam"></i> {{.T "hc.pick.no_systems_docker"}} <a href="/healthchecks/docker">{{.T "nav.docker"}}</a></div>{{end}}
+					</div>{{end}}
 					{{if eq (index $f "type") "proxmox"}}<div class="col-12" data-types="proxmox">
 						<input type="hidden" name="pve_params" value="{{index $f "pve_params"}}">
 						<div class="alert alert-info small mb-0"><i class="bi bi-hdd-rack"></i> {{.T "pve.check.form_hint"}} <a href="/healthchecks/proxmox">{{.T "nav.proxmox"}}</a></div>
 					</div>{{end}}
-					<div class="col-md-6">
+					<div class="col-md-6" data-hide-types="sys:proxmox sys:docker">
 						<label class="form-label" for="group">{{.T "hc.group.label"}}</label>
 						<div class="input-group"><span class="input-group-text"><i class="bi bi-collection text-primary"></i></span><input class="form-control" id="group" name="group" value="{{index $f "group"}}" maxlength="100" list="hc-groups" placeholder="{{.T "hc.group.placeholder"}}"></div>
 						<datalist id="hc-groups">{{range $d.Groups}}<option value="{{.}}">{{end}}</datalist>
 						<div class="form-text">{{.T "hc.group.hint"}}</div>
 					</div>
-					<div class="col-md-6">
+					<div class="col-md-6" data-hide-types="sys:proxmox sys:docker">
 						<label class="form-label" for="tags">{{.T "hc.tags"}}</label>
 						<div class="input-group"><span class="input-group-text"><i class="bi bi-tags"></i></span><input class="form-control" id="tags" name="tags" value="{{index $f "tags"}}" placeholder="prod, web"></div>
 					</div>
-					{{if not $d.APIMode}}<div class="col-md-6">
+					{{if not $d.APIMode}}<div class="col-md-6" data-hide-types="sys:proxmox sys:docker">
 						<label class="form-label" for="parent">{{.T "hc.form.parent"}}</label>
 						<div class="input-group"><span class="input-group-text"><i class="bi bi-diagram-2"></i></span><select class="form-select" id="parent" name="parent">
 							<option value="">{{.T "common.none"}}</option>
@@ -58,7 +84,7 @@
 						</select></div>
 						<div class="form-text">{{.T "hc.form.parent_hint"}}</div>
 					</div>{{end}}
-					<div class="col-12">
+					<div class="col-12" data-hide-types="sys:proxmox sys:docker">
 						<label class="form-label" for="description">{{.T "hc.form.description"}}</label>
 						<textarea class="form-control" id="description" name="description" rows="2">{{index $f "description"}}</textarea>
 					</div>
@@ -237,7 +263,7 @@
 			</div></div>
 		</div>
 
-		<div class="card mb-3">
+		<div class="card mb-3" data-hide-types="sys:proxmox sys:docker">
 			<div class="card-header"><i class="bi bi-geo-alt-fill text-danger"></i> {{.T "hc.form.sources"}}{{$.Doc "healthchecks#execution"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-12"><label class="form-label" for="execution">{{.T "hc.form.execution"}}</label>
@@ -270,7 +296,7 @@
 			</div></div>
 		</div>
 
-		<div class="card mb-3">
+		<div class="card mb-3" data-hide-types="sys:proxmox sys:docker">
 			<div class="card-header"><i class="bi bi-bell-fill text-warning"></i> {{.T "hc.form.alerting"}}{{$.Doc "notifications#channels"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-6"><label class="form-label" for="retries">{{.T "hc.form.retries"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-arrow-repeat"></i></span><input class="form-control" type="number" id="retries" name="retries" value="{{index $f "retries"}}" min="0" max="10"></div><div class="form-text">{{.T "hc.form.retries_hint"}}</div></div>

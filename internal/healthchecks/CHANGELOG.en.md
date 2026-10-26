@@ -1,5 +1,18 @@
 # Changes – Healthchecks
 
+## 2.33.0 – 2026-10-26
+
+### New
+- New check from a monitored system: the type list offers “Proxmox VE (VM, container, node)” and “Docker container”.
+  Then you pick the Proxmox system or Docker host and the machine or container from the last poll. It is created like
+  “also run as check” (interval, group and channels from the rules, no duplicate alert); the name is optional (empty =
+  “system – name”). Entries already kept as a check are marked and locked. “Add Docker check” on the Docker page
+  preselects the host.
+
+### Changed
+- The raw type “Docker container” (container name typed by hand) is no longer offered for new checks. Existing Docker
+  checks stay and remain editable; API and import are unchanged.
+
 ## 2.32.0 – 2026-10-26
 
 ### Changed
