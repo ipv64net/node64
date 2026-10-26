@@ -87,6 +87,8 @@ type watchHit struct {
 	LastSeen  string    `json:"last_seen,omitempty"`
 	Created   string    `json:"created_at,omitempty"` // Zeitpunkt bei ipv64 (Text wie geliefert)
 	Fetched   time.Time `json:"fetched"`              // abgeholt
+	// Details: warum die IP aufgefallen ist (von ipv64; nil bei aelteren Treffern)
+	Details *ipv64api.ThreatWatchDetails `json:"details,omitempty"`
 }
 
 // watchState ist der Zustand der Fruehwarnung (Einstellung honeypot.watch).
@@ -238,7 +240,7 @@ func (m *Module) watchFetch(ctx context.Context, c *ipv64api.Client, key string,
 			}
 			known[a.ID] = true
 			h := watchHit{ID: a.ID, IP: a.IP, CIDR: a.CIDR, Source: a.Source, Listed: a.Listed, Score: a.Score, Kinds: a.Kinds,
-				FirstSeen: a.FirstSeen, LastSeen: a.LastSeen, Created: a.CreatedAt, Fetched: now.UTC()}
+				FirstSeen: a.FirstSeen, LastSeen: a.LastSeen, Created: a.CreatedAt, Fetched: now.UTC(), Details: a.Details}
 			if a.NetworkID != nil {
 				h.Label = labels[*a.NetworkID]
 			}
@@ -350,5 +352,33 @@ func hitLine(h watchHit) string {
 	if h.FirstSeen != "" || h.LastSeen != "" {
 		parts = append(parts, strings.Trim(h.FirstSeen+" – "+h.LastSeen, " –"))
 	}
-	return strings.Join(parts, " · ")
+	line := strings.Join(parts, " · ")
+	if why := hitWhy(h.Details); why != "" {
+		line += "\n  " + why
+	}
+	return line
+}
+
+// hitWhy: Details als Zeile ("honeypot ssh/22 ssh:bruteforce ×10 · log http/443 … – sensors 2, accounts 2"), "" ohne.
+func hitWhy(d *ipv64api.ThreatWatchDetails) string {
+	if d == nil {
+		return ""
+	}
+	var parts []string
+	for _, s := range d.Seen {
+		p := s.Origin + " " + s.Service
+		if s.Port > 0 {
+			p += "/" + strconv.Itoa(s.Port)
+		}
+		p += " " + s.Kind
+		if s.Rule != "" {
+			p += " (" + s.Rule + ")"
+		}
+		parts = append(parts, p+" ×"+strconv.FormatInt(s.Count, 10))
+	}
+	sum := "sensors " + strconv.Itoa(d.Sensors) + ", accounts " + strconv.Itoa(d.Accounts)
+	if len(parts) == 0 {
+		return sum
+	}
+	return strings.Join(parts, " · ") + " – " + sum
 }

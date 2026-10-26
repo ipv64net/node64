@@ -65,6 +65,30 @@ type ThreatWatchAlert struct {
 	FirstSeen string   `json:"first_seen"`
 	LastSeen  string   `json:"last_seen"`
 	CreatedAt string   `json:"created_at"`
+	// Details: warum die IP aufgefallen ist (nil bei aelteren Treffern bzw. aelterem Server)
+	Details *ThreatWatchDetails `json:"details,omitempty"`
+}
+
+// ThreatWatchDetails: Anzahlen und je Herkunft, Dienst, Port, Art und Regel (letzte 14 Tage, nie Sensoren oder Inhalte).
+type ThreatWatchDetails struct {
+	Accounts int               `json:"accounts"`
+	Sensors  int               `json:"sensors"`
+	Events   int64             `json:"events"`
+	Lists    []string          `json:"lists,omitempty"`
+	Reason   string            `json:"reason,omitempty"`
+	Seen     []ThreatWatchSeen `json:"seen,omitempty"`
+}
+
+// ThreatWatchSeen ist eine Zeile der Details (die haeufigsten zuerst).
+type ThreatWatchSeen struct {
+	Origin  string `json:"origin"` // honeypot, log, syslog
+	Service string `json:"service"`
+	Port    int    `json:"port"`
+	Kind    string `json:"kind"`
+	Rule    string `json:"rule,omitempty"`
+	Count   int64  `json:"count"`
+	Sensors int    `json:"sensors"`
+	Last    string `json:"last,omitempty"`
 }
 
 // ThreatWatchAlerts ist eine Seite Treffer (aelteste zuerst, hoechstens ThreatWatchPage); Next ist der Stand fuer

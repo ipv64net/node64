@@ -8,6 +8,9 @@
   161/udp), the start page of the web trap, notification and reporting to ipv64. All previous settings (single
   services and ports, profiles, certificate, limits, log sensor, syslog, sign-in watch) are in expert mode.
 - Phone: "Recent events" shows one card per event instead of a wide table.
+- Early warning with details: every hit says why the address was noticed – per origin (honeypot, log, syslog), service,
+  port, kind and rule with a count, plus sensors, accounts, events and lists (last 14 days, never sensors or content).
+  In the list of recent hits and in the notification (needs the current ipv64.net; older hits have no details).
 - Start page of the web trap selectable: gateway terminal in Matrix style (default) or a plain sign-in form. Also
   applies to bots PROXY64 hands to the honeypot.
 

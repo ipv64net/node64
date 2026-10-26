@@ -4032,7 +4032,8 @@
         "not_found": "The network is not (or no longer) registered at ipv64.",
         "invalid_id": "Invalid ID.",
         "api": "ipv64 reports an error: {error}"
-      }
+      },
+      "why_sum": "{sensors} sensors, {accounts} accounts, {events} events (14 days)"
     },
     "logs": {
       "title": "Log sensor and syslog",

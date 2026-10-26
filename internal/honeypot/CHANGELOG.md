@@ -9,6 +9,10 @@
   Einstellungen (einzelne Dienste und Ports, Profile, Zertifikat, Limits, Log-Sensor, Syslog, Anmeldung) stehen im
   Expertenmodus.
 - Handy: „Letzte Ereignisse“ zeigt je Ereignis eine Karte statt einer breiten Tabelle.
+- Frühwarnung mit Details: Jeder Treffer sagt, warum die Adresse aufgefallen ist – je Herkunft (Honeypot, Log, Syslog),
+  Dienst, Port, Art und Regel mit Anzahl, dazu Sensoren, Accounts, Ereignisse und Listen (letzte 14 Tage, nie
+  Sensoren oder Inhalte). In der Liste der letzten Treffer und in der Benachrichtigung (braucht den aktuellen Stand
+  von ipv64.net; ältere Treffer ohne Details).
 - Startseite der Web-Falle wählbar: Gateway-Terminal im Matrix-Stil (Standard) oder schlichtes Anmeldeformular. Gilt
   auch für Bots, die PROXY64 an den Honeypot gibt.
 

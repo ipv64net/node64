@@ -4032,7 +4032,8 @@
         "not_found": "Das Netz ist bei ipv64 nicht (mehr) eingetragen.",
         "invalid_id": "Ungültige Kennung.",
         "api": "ipv64 meldet einen Fehler: {error}"
-      }
+      },
+      "why_sum": "{sensors} Sensoren, {accounts} Accounts, {events} Ereignisse (14 Tage)"
     },
     "logs": {
       "title": "Log-Sensor und Syslog",

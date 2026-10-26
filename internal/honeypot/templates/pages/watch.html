@@ -97,14 +97,16 @@
 <div class="card" id="watch-hits">
 	<div class="card-header"><i class="bi bi-exclamation-diamond text-danger"></i> {{.T "honeypot.watch.hits"}}</div>
 	<div class="card-body">
-		{{if $d.Hits}}<div class="table-responsive" style="max-height:32rem"><table class="table table-sm align-middle small mb-0">
+		{{if $d.Hits}}<div class="table-responsive" style="max-height:32rem"><table class="table table-sm align-middle small mb-0 table-stack">
 			<thead><tr><th>{{.T "honeypot.watch.time"}}</th><th>{{.T "honeypot.watch.ip"}}</th><th>{{.T "honeypot.watch.network"}}</th><th>{{.T "honeypot.watch.score"}}</th><th>{{.T "honeypot.watch.kinds"}}</th><th>{{.T "honeypot.watch.seen"}}</th></tr></thead>
 			<tbody>{{range $d.Hits}}<tr>
 				<td class="text-nowrap">{{$.Time .At}}</td>
 				<td class="font-monospace text-nowrap">{{.IP}}</td>
 				<td class="text-break">{{if eq .Source "dyndns"}}<span class="badge text-bg-info">DynDNS</span> {{.Label}}{{else}}{{with .Label}}{{.}} {{end}}<span class="font-monospace text-body-secondary">{{.CIDR}}</span>{{end}}</td>
 				<td class="text-nowrap">{{.Score}}{{if .Listed}} <span class="badge text-bg-danger" title="{{$.T "honeypot.watch.listed_hint"}}">{{$.T "honeypot.watch.listed"}}</span>{{end}}</td>
-				<td class="font-monospace">{{join .Kinds ", "}}</td>
+				<td><span class="font-monospace">{{join .Kinds ", "}}</span>{{with .Details}}<div class="text-body-secondary mt-1" data-watch-why>
+					{{range .Seen}}<div><span class="badge text-bg-light">{{$.T (printf "honeypot.origin.%s" .Origin)}}</span> <span class="font-monospace">{{.Service}}{{if .Port}}/{{.Port}}{{end}} {{.Kind}}{{with .Rule}} ({{.}}){{end}}</span> ×{{.Count}}{{if .Last}} · {{.Last}}{{end}}</div>{{end}}
+					<div>{{$.T "honeypot.watch.why_sum" "sensors" .Sensors "accounts" .Accounts "events" .Events}}{{with .Lists}} · {{join . ", "}}{{end}}</div></div>{{end}}</td>
 				<td class="text-nowrap">{{.FirstSeen}}{{if and .LastSeen (ne .LastSeen .FirstSeen)}} – {{.LastSeen}}{{end}}</td>
 			</tr>{{end}}</tbody>
 		</table></div>

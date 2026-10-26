@@ -664,14 +664,16 @@ func TestWatchTemplate(t *testing.T) {
 		DynDNS:   []ipv64api.ThreatWatchDynDNS{{IP: "198.51.100.7", Domain: "x.ipv64.net"}},
 		State:    watchState{LastSuccess: time.Now(), NextAttempt: time.Now(), ErrorStatus: 401, LastError: "x", LastErrorAt: time.Now(), Total: 3},
 		Hits: []watchHitView{{watchHit: watchHit{ID: 1, IP: "203.0.113.9", CIDR: "203.0.113.0/24", Label: "Buero", Source: "network", Listed: true, Kinds: []string{"ssh:bruteforce"},
-			FirstSeen: "2026-10-19", LastSeen: "2026-10-20"}, At: time.Now()}, {watchHit: watchHit{ID: 2, IP: "198.51.100.7", Source: "dyndns"}}},
+			FirstSeen: "2026-10-19", LastSeen: "2026-10-20", Details: &ipv64api.ThreatWatchDetails{Sensors: 2, Accounts: 1, Events: 10, Lists: []string{"v64"},
+				Seen: []ipv64api.ThreatWatchSeen{{Origin: "honeypot", Service: "ssh", Port: 22, Kind: "ssh:bruteforce", Count: 10, Sensors: 2}}}}, At: time.Now()},
+			{watchHit: watchHit{ID: 2, IP: "198.51.100.7", Source: "dyndns"}}},
 		FormErr: "err", CIDR: "1.2.3.4"}
 	for i, d := range []watchData{full, {Tabs: tabsFor("watch")}, {KeySet: true, Err: "boom"}, {KeySet: true, AuthErr: true, Loaded: true, Full: true, Limits: ipv64api.ThreatWatchLimits{Max: 3}}} {
 		var b bytes.Buffer
 		if err := tpl.ExecuteTemplate(&b, "content", watchFakeView{Data: d, CSRF: "tok"}); err != nil {
 			t.Fatalf("case %d: %v", i, err)
 		}
-		if i == 0 && (strings.Contains(b.String(), "<b>Buero</b>") || !strings.Contains(b.String(), `action="/honeypot/watch/1/delete"`) || !strings.Contains(b.String(), `value="tok"`)) {
+		if i == 0 && (!strings.Contains(b.String(), "ssh/22 ssh:bruteforce") || !strings.Contains(b.String(), "honeypot.watch.why_sum") || strings.Contains(b.String(), "<b>Buero</b>") || !strings.Contains(b.String(), `action="/honeypot/watch/1/delete"`) || !strings.Contains(b.String(), `value="tok"`)) {
 			t.Fatalf("case 0 output:\n%s", b.String())
 		}
 		if i == 1 && (!strings.Contains(b.String(), "honeypot.watch.nokey") || strings.Contains(b.String(), `action="/honeypot/watch"`)) {
@@ -693,5 +695,19 @@ func TestWatchStateRoundTrip(t *testing.T) {
 	_ = e.m.core.SetSetting(ctx, setWatch, "{kaputt")
 	if s := e.m.watchLoad(ctx); s.Next != "" || len(s.Hits) != 0 {
 		t.Fatalf("broken state: %+v", s)
+	}
+}
+
+// Details eines Treffers in der Benachrichtigung: je Herkunft, Dienst, Port, Art, Regel und Anzahl, dazu Sensoren/Accounts.
+func TestHitLineDetails(t *testing.T) {
+	h := watchHit{IP: "203.0.113.9", CIDR: "203.0.113.0/24", Source: "network", Score: 40, Details: &ipv64api.ThreatWatchDetails{Sensors: 3, Accounts: 2,
+		Seen: []ipv64api.ThreatWatchSeen{{Origin: "honeypot", Service: "ssh", Port: 22, Kind: "ssh:bruteforce", Count: 10}, {Origin: "log", Service: "http", Port: 443, Kind: "http:bruteforce", Rule: "nginx/auth", Count: 4}}}}
+	want := "203.0.113.9 · 203.0.113.0/24 · Score 40\n  honeypot ssh/22 ssh:bruteforce ×10 · log http/443 http:bruteforce (nginx/auth) ×4 – sensors 3, accounts 2"
+	if got := hitLine(h); got != want {
+		t.Fatalf("got %q", got)
+	}
+	h.Details = nil
+	if got := hitLine(h); strings.Contains(got, "\n") {
+		t.Fatalf("without details: %q", got)
 	}
 }
