@@ -221,7 +221,8 @@ func newPVEModule(t *testing.T, core *store.Store, box *secrets.Box) (*Module, *
 	mux := http.NewServeMux()
 	pass := func(h http.Handler) http.Handler { return h }
 	m.Routes(mux, module.Guards{Enabled: pass, Auth: pass, Render: pveRender(t),
-		T: func(r *http.Request, key string, args ...any) string { return key },
+		T:     func(r *http.Request, key string, args ...any) string { return key },
+		Actor: func(*http.Request) string { return "test" },
 		Flash: func(w http.ResponseWriter, r *http.Request, kind, text string) {
 			w.Header().Add("X-Flash", kind+":"+text)
 		},
@@ -1016,7 +1017,7 @@ func TestPVEChannels(t *testing.T) {
 		strings.Contains(page, fmt.Sprintf(`id="pvech%d" checked`, b)) {
 		t.Fatalf("guest page own: %s", page)
 	}
-	if _, page := pveGet(t, srv, sp+"/res/qemu/100"); !strings.Contains(page, `value="" selected`) || !strings.Contains(page, "pve.rules.channels_default · pve.rules.from_node") {
+	if _, page := pveGet(t, srv, sp+"/res/qemu/100"); !strings.Contains(page, `value="" selected`) || !strings.Contains(page, "pve.rules.channels_default (std) · pve.rules.from_node") {
 		t.Fatalf("guest page inherited: %s", page)
 	}
 	if _, page := pveGet(t, srv, sp+"/res/lxc/200"); !strings.Contains(page, "ops · pve.rules.from_system") || !strings.Contains(page, fmt.Sprintf(`id="pvech%d" checked`, b)) {

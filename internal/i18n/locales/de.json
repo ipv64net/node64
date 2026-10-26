@@ -2397,7 +2397,11 @@
       "policy_hint": "Mit mehreren Messstellen (Node, Nürnberg, Falkenstein) legt diese Regel fest, wann der Check als gestört gilt. Meldet nur ein Teil eine Störung, ist der Check „teilweise gestört“.",
       "notify_degraded": "Auch bei „teilweise gestört“ benachrichtigen",
       "notify_degraded_hint": "Nur mit mehreren Messstellen relevant.",
-      "interval_min": "Lokal ab 5 s, online und hybrid ab 20 s."
+      "interval_min": "Lokal ab 5 s, online und hybrid ab 20 s.",
+      "channels_sys": "Dieser Check gehört zu „{item}“ auf {system}. Seine Kanäle legst du dort fest (Benachrichtigung → Kanäle) – sie gelten für den Check und für die Meldungen des Systems.",
+      "channels_sys_link": "Kanäle dort ändern",
+      "channels_now": "Es gelten",
+      "channels_hint_names": "Ohne Haken gelten die Standardkanäle: {names}."
     },
     "push": {
       "local": "Lokal (diese Node)",

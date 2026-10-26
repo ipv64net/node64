@@ -1,5 +1,15 @@
 # Changes – Healthchecks
 
+## 2.37.1 – 2026-10-26
+
+### Changed
+- Clear channels: for checks kept "as check" (Docker containers, Proxmox VMs) the channels are set only on the host or
+  container. "Edit check" shows them there read-only, with a link and the channels in effect. Before, they could also
+  be changed on the check, and the next save of the rules overwrote them again.
+- Without ticks the check form now names the default channels that apply (like the detail page). For host, node and
+  container, "inherited: default channels" also says which they are.
+
+
 ## 2.37.0 – 2026-10-26
 
 ### New

@@ -159,7 +159,7 @@ pveum acl modify / --tokens '{{$d.Sys.TokenID}}' --roles PVEAuditor</code></pre>
 					<option value=""{{if not $r.ChanOwn}} selected{{end}}>{{.T "pve.rules.inherit"}}</option>
 					<option value="own"{{if $r.ChanOwn}} selected{{end}}>{{.T "pve.rules.channels_own"}}</option>
 				</select></div>
-				<div class="col-md-6 small {{if $r.ChanOwn}}text-body-tertiary text-decoration-line-through{{else}}text-body-secondary{{end}}">{{.T "pve.rules.inherited"}}: {{if $r.ChanInh}}{{$r.ChanInh}}{{else}}{{.T "pve.rules.channels_default"}}{{end}} · {{.T $r.ChanFrom}}</div>
+				<div class="col-md-6 small {{if $r.ChanOwn}}text-body-tertiary text-decoration-line-through{{else}}text-body-secondary{{end}}">{{.T "pve.rules.inherited"}}: {{if $r.ChanInh}}{{$r.ChanInh}}{{else}}{{.T "pve.rules.channels_default"}}{{with $r.ChanDefault}} ({{.}}){{end}}{{end}} · {{.T $r.ChanFrom}}</div>
 			</div>{{end}}
 			{{range $r.Channels}}
 			<div class="form-check"><input class="form-check-input" type="checkbox" name="channels" value="{{.ID}}" id="pvech{{.ID}}"{{if .Selected}} checked{{end}}><label class="form-check-label" for="pvech{{.ID}}">{{.Name}} <span class="text-body-secondary small">{{$.T (print "nf.type." .Type)}}{{if .Default}} · {{$.T "nf.default"}}{{end}}</span></label></div>

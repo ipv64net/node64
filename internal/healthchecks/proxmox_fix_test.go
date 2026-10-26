@@ -105,6 +105,17 @@ func TestPVEAsCheckChannelsHandOverPaused(t *testing.T) {
 	if ck = pveCheckOf(t, m, id, "qemu/101"); resp.StatusCode != 303 || ck.Channels != nil {
 		t.Fatalf("form default channels: %v", ck.Channels)
 	}
+	// Check-Formular: Kanaele nur angezeigt (Standardkanaele mit Namen), Speichern laesst sie unveraendert
+	if code, page := pveGet(t, srv, "/healthchecks/"+ck.Token+"/edit"); code != 200 || !strings.Contains(page, "data-sys-channels") || !strings.Contains(page, "std") ||
+		!strings.Contains(page, pveResPath(id, "qemu/101")+"#rules") || strings.Contains(page, `name="channels"`) {
+		t.Fatalf("edit form: %d %s", code, page)
+	}
+	resp, _ = pvePost(t, srv, "/healthchecks/"+ck.Token+"/edit", map[string][]string{"name": {ck.Name}, "type": {"proxmox"}, "pve_params": {string(ck.Params)},
+		"interval_seconds": {"60"}, "retry_interval_seconds": {"20"}, "retries": {"1"}, "stabilize": {"3"}, "connect_timeout_seconds": {"5"},
+		"timeout_seconds": {"10"}, "notify_down": {"on"}, "channels": {fmt.Sprint(b)}})
+	if ck = pveCheckOf(t, m, id, "qemu/101"); resp.StatusCode != 303 || ck.Channels != nil {
+		t.Fatalf("edit keeps rule channels: %d %v", resp.StatusCode, ck.Channels)
+	}
 
 	// System abgeschaltet: neuer Check pausiert
 	if code, _ := call(t, srv, "PUT", "/api/healthchecks/proxmox/systems/"+fmt.Sprint(id), map[string]any{"enabled": false}); code != 200 {

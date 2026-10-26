@@ -235,3 +235,50 @@ func statusGroupName(c *Check) string {
 	}
 	return g
 }
+
+// sysChan: Kanaele eines Checks „als Check“ (Proxmox VE bzw. Docker). Sie kommen aus den Regeln des Systems und
+// werden dort gesetzt; das Check-Formular zeigt sie nur an.
+type sysChan struct {
+	Path, System, Item string
+	Docker             bool
+	Names              []string // wirksame Kanaele
+	Default            bool     // keine Auswahl in den Regeln: Standardkanaele
+}
+
+// sysChanOf liefert die Kanaele, wenn token ein Check „als Check“ eines Systems ist (sonst nil).
+func (m *Module) sysChanOf(ctx context.Context, token string) *sysChan {
+	if m.pve == nil || m.pve.st == nil || token == "" {
+		return nil
+	}
+	list, err := m.pve.st.Systems(ctx)
+	if err != nil {
+		return nil
+	}
+	for _, sys := range list {
+		set, err := m.pve.st.Settings(ctx, sys.ID)
+		if err != nil {
+			continue
+		}
+		for key, it := range set.Items {
+			if !it.AsCheck || it.CheckToken != token {
+				continue
+			}
+			sc := &sysChan{Path: pveResPath(sys.ID, key), System: sys.Name, Item: m.pveResName(sys.ID, key), Docker: sys.IsDocker()}
+			ids := m.pveChannels(ctx, set.Effective(key, m.pveNodeOf(sys.ID, key)).Channels)
+			sc.Default = len(ids) == 0
+			want := map[int64]bool{}
+			for _, id := range ids {
+				want[id] = true
+			}
+			if chans, err := m.channels(ctx); err == nil {
+				for _, ch := range chans {
+					if want[ch.ID] || (sc.Default && ch.Default) {
+						sc.Names = append(sc.Names, ch.Name)
+					}
+				}
+			}
+			return sc
+		}
+	}
+	return nil
+}

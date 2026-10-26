@@ -309,15 +309,22 @@
 					<div class="form-check"><input class="form-check-input" type="checkbox" name="invert" id="invert"{{if index $f "invert"}} checked{{end}}><label class="form-check-label" for="invert">{{.T "hc.form.invert"}}</label><div class="form-text">{{.T "hc.form.invert_hint"}}</div></div>
 					<div class="form-check"><input class="form-check-input" type="checkbox" name="paused" id="paused"{{if index $f "paused"}} checked{{end}}><label class="form-check-label" for="paused">{{.T "hc.form.paused"}}</label></div>
 				</div>
-				{{if $d.Channels}}
+				{{with $d.SysChan}}
+				<div class="col-12" data-sys-channels>
+					<label class="form-label">{{$.T "hc.form.channels"}}</label>
+					<div class="alert alert-info small mb-0"><i class="bi {{if .Docker}}bi-box-seam{{else}}bi-hdd-rack{{end}}"></i>
+						{{$.T "hc.form.channels_sys" "system" .System "item" .Item}} <a href="{{.Path}}#rules">{{$.T "hc.form.channels_sys_link"}}</a><br>
+						<strong>{{$.T "hc.form.channels_now"}}:</strong> {{if .Names}}{{range $i, $n := .Names}}{{if $i}}, {{end}}{{$n}}{{end}}{{else}}–{{end}}{{if .Default}} <span class="text-body-secondary">({{$.T "nf.default"}})</span>{{end}}</div>
+				</div>
+				{{else}}{{if $d.Channels}}
 				<div class="col-12">
 					<label class="form-label">{{.T "hc.form.channels"}}</label>
 					{{range $d.Channels}}
 					<div class="form-check"><input class="form-check-input" type="checkbox" name="channels" value="{{.ID}}" id="ch{{.ID}}"{{if .Selected}} checked{{end}}><label class="form-check-label" for="ch{{.ID}}">{{.Name}} <span class="text-body-secondary small">{{$.T (print "nf.type." .Type)}}{{if .Default}} · {{$.T "nf.default"}}{{end}}</span></label></div>
 					{{end}}
-					<div class="form-text">{{.T "hc.form.channels_hint"}}</div>
+					<div class="form-text">{{if $d.ChanDefault}}{{.T "hc.form.channels_hint_names" "names" $d.ChanDefault}}{{else}}{{.T "hc.form.channels_hint"}}{{end}}</div>
 				</div>
-				{{end}}
+				{{end}}{{end}}
 				<div class="col-6"><label class="form-label" for="repeat_minutes">{{.T "hc.form.repeat"}}</label><div class="input-group"><span class="input-group-text"><i class="bi bi-bell"></i></span><input class="form-control" type="number" id="repeat_minutes" name="repeat_minutes" value="{{index $f "repeat_minutes"}}" min="0" max="10080"><span class="input-group-text">min</span></div><div class="form-text">{{.T "hc.form.repeat_hint"}}</div></div>
 			</div></div>
 		</div>

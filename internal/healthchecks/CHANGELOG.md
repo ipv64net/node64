@@ -1,5 +1,15 @@
 # Änderungen – Healthchecks
 
+## 2.37.1 – 2026-10-26
+
+### Geändert
+- Kanäle eindeutig: Bei Checks „als Check“ (Docker-Container, Proxmox-VMs) legst du die Kanäle nur noch am Host bzw.
+  Container fest. „Check bearbeiten“ zeigt sie dort nur an, mit Link und den wirksamen Kanälen. Bisher ließen sie sich
+  auch am Check ändern, und das nächste Speichern der Regeln überschrieb sie wieder.
+- Ohne Haken nennt das Check-Formular jetzt die Standardkanäle, die dann gelten (wie die Detailseite). Bei Host,
+  Node und Container steht bei „geerbt: Standardkanäle“ ebenfalls, welche das sind.
+
+
 ## 2.37.0 – 2026-10-26
 
 ### Neu

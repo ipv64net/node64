@@ -609,19 +609,21 @@ func (d detailData) Crumb() string {
 }
 
 type formData struct {
-	Edit       bool
-	Token      string
-	Form       map[string]string
-	Errors     map[string]string
-	Types      []checks.Type
-	Parents    []*Check
-	Groups     []string           // vorhandene Gruppen (Vorschlaege)
-	Containers []checks.Container // Docker: Container des Hosts (Vorschlaege)
-	DockerErr  string
-	DockerHost string
-	IPModes    []string
-	Error      string
-	Channels   []channelOpt
+	Edit        bool
+	Token       string
+	Form        map[string]string
+	Errors      map[string]string
+	Types       []checks.Type
+	Parents     []*Check
+	Groups      []string           // vorhandene Gruppen (Vorschlaege)
+	Containers  []checks.Container // Docker: Container des Hosts (Vorschlaege)
+	DockerErr   string
+	DockerHost  string
+	IPModes     []string
+	Error       string
+	Channels    []channelOpt
+	ChanDefault string   // Namen der Standardkanaele (gelten ohne Auswahl)
+	SysChan     *sysChan // Check „als Check“ eines Systems: Kanaele kommen aus dessen Regeln
 	// Hybrid-Vorbereitung: Messstellen und Bewertung (aktiv erst mit ipv64-Verknuepfung)
 	Policies   []string
 	Locations  []string
@@ -1093,10 +1095,18 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 			selected[strings.TrimSpace(id)] = true
 		}
 		if chans, err := m.channels(r.Context()); err == nil {
+			var defs []string
 			for _, ch := range chans {
 				d.Channels = append(d.Channels, channelOpt{ID: ch.ID, Name: ch.Name, Type: string(ch.Type), Default: ch.Default, Selected: selected[strconv.FormatInt(ch.ID, 10)]})
+				if ch.Default {
+					defs = append(defs, ch.Name)
+				}
 			}
+			d.ChanDefault = strings.Join(defs, ", ")
 		}
+	}
+	if d.Edit {
+		d.SysChan = m.sysChanOf(r.Context(), d.Token)
 	}
 	if d.APIMode { // Online-Check bei ipv64: nur online, ohne lokale Kanaele, Eltern-Checks und Docker
 		d.Executions, d.Channels, d.Parents, d.Peers = []string{"online"}, nil, nil, nil
@@ -1157,6 +1167,9 @@ func (m *Module) pageFormSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	d := formData{Edit: edit, Token: c.Token}
 	in, err := checkFromForm(r)
+	if err == nil && edit && m.sysChanOf(ctx, c.Token) != nil {
+		in.Channels = nil // Kanaele kommen aus den Regeln des Systems (Formular zeigt sie nur an)
+	}
 	if err == nil {
 		c.UpdatedBy = m.g.Actor(r)
 		oldType := c.Type

@@ -600,11 +600,12 @@ type pveRulesForm struct {
 	Fields []pveRuleField
 	// Kanaele wie im Check-Formular (keine Auswahl = Standardkanaele): ChanOwn = eigene Auswahl dieser Ebene (System:
 	// immer), sonst geerbt; Channels zur Auswahl (vorgewaehlt: eigene bzw. geerbte), ChanInh die geerbten Namen
-	// (leer = Standardkanaele) mit Herkunft ChanFrom
-	ChanOwn  bool
-	Channels []channelOpt
-	ChanInh  string
-	ChanFrom string
+	// (leer = Standardkanaele) mit Herkunft ChanFrom, ChanDefault die Namen der Standardkanaele
+	ChanOwn     bool
+	Channels    []channelOpt
+	ChanInh     string
+	ChanFrom    string
+	ChanDefault string
 }
 
 type pveRuleDef struct {
@@ -784,14 +785,18 @@ func (m *Module) pveRulesChannels(ctx context.Context, f *pveRulesForm, set *pro
 	} else {
 		sel = inhSet
 	}
-	var names []string
+	var names, defs []string
 	for _, ch := range chans {
 		f.Channels = append(f.Channels, channelOpt{ID: ch.ID, Name: ch.Name, Type: string(ch.Type), Default: ch.Default, Selected: sel[ch.ID]})
 		if inhSet[ch.ID] {
 			names = append(names, ch.Name)
 		}
+		if ch.Default {
+			defs = append(defs, ch.Name)
+		}
 	}
 	f.ChanInh = strings.Join(names, ", ") // geloeschte Kanaele zaehlen nicht
+	f.ChanDefault = strings.Join(defs, ", ")
 }
 
 // pveRulesFromForm liest die Regeln einer Ebene aus dem Formular (leer = erben). Kanaele: Systemebene wie im

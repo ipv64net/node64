@@ -2397,7 +2397,11 @@
       "policy_hint": "With several measuring points (node, Nuremberg, Falkenstein) this rule decides when the check counts as down. If only some report a failure, the check is “partially down”.",
       "notify_degraded": "Also notify on \\u201cpartially down\\u201d",
       "notify_degraded_hint": "Only relevant with several measuring points.",
-      "interval_min": "Local from 5 s, online and hybrid from 20 s."
+      "interval_min": "Local from 5 s, online and hybrid from 20 s.",
+      "channels_sys": "This check belongs to “{item}” on {system}. Its channels are set there (notifications → channels) – they apply to the check and to the system's alerts.",
+      "channels_sys_link": "Change channels there",
+      "channels_now": "In effect",
+      "channels_hint_names": "Without ticks the default channels apply: {names}."
     },
     "push": {
       "local": "Local (this node)",
