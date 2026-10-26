@@ -176,7 +176,7 @@ func (m *Module) statusCounts(ctx context.Context) (items, open map[int64]int) {
 // newStatusPage: Standardwerte einer neuen Seite (wie in der Migration; abweichend davon auf dem Node-Port
 // veroeffentlicht, das ist der normale Weg, PROXY64 der optionale).
 func newStatusPage() *StatusPage {
-	return &StatusPage{PublishNode: true, Layout: "list", Theme: "auto", Days: 90, ShowUptime: true, ShowHistory: true, RefreshSec: 60, NoIndex: true, PoweredBy: true,
+	return &StatusPage{PublishNode: true, HCGroups: true, Layout: "list", Theme: "auto", Days: 90, ShowUptime: true, ShowHistory: true, RefreshSec: 60, NoIndex: true, PoweredBy: true,
 		Groups: []StatusGroup{}}
 }
 
@@ -280,14 +280,15 @@ func sortedKeys(m map[string]bool) []string {
 }
 
 // statusPageFromForm uebernimmt die Felder des Formulars in p. Die Eintraege stehen in einer Liste; die Seite gruppiert
-// nach den Gruppen der Healthchecks (statusGroupsFor), eigene Gruppen der Seite gibt es in der Oberflaeche nicht mehr.
+// nach den Gruppen der Healthchecks (statusGroupsFor, abschaltbar), eigene Gruppen der Seite gibt es in der Oberflaeche
+// nicht mehr.
 func statusPageFromForm(r *http.Request, p *StatusPage) {
 	v := func(k string) string { return strings.TrimSpace(r.PostFormValue(k)) }
 	on := func(k string) bool { return r.PostFormValue(k) == "on" }
 	p.Title, p.Slug = v("title"), strings.ToLower(v("slug"))
 	p.Description, p.Footer = strings.TrimSpace(r.PostFormValue("description")), strings.TrimSpace(r.PostFormValue("footer"))
 	p.Enabled, p.PublishNode, p.ShowUptime, p.ShowHistory, p.NoIndex, p.PoweredBy = on("enabled"), on("publish_node"), on("show_uptime"), on("show_history"), on("noindex"), on("powered_by")
-	p.HCGroups = true
+	p.HCGroups = on("hc_groups")
 	p.Layout, p.Theme, p.Lang = v("layout"), v("theme"), v("lang")
 	p.Accent = ""
 	if on("accent_on") {

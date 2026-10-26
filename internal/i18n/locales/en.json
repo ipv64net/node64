@@ -539,7 +539,7 @@
       "geo_many": "At most 60 countries per host.",
       "status_page": "Please choose a status page.",
       "pass_self": "Passthrough to this node's own web interface is not allowed – use a proxy host instead.",
-      "localdns_ip": "Please enter at least one valid IPv4 or IPv6 address."
+      "localdns_ip": "Please enter a valid IPv4 in the IPv4 field or IPv6 in the IPv6 field, reachable at home (no loopback or link-local address)."
     },
     "help_title": "How it works",
     "help_ports": "The router forwards 80 and 443 (TCP, for HTTP/3 also 443/UDP) to this node. Node64 distributes the rest by domain name – also together with DNS64 in the same container.",
@@ -1019,11 +1019,12 @@
       "intro": "Adds the names of this host as custom DNS records in DNS64 (no zone), pointing to the reverse proxy. Devices at home that ask DNS64 then go straight to the proxy instead of via the internet.",
       "v4": "IPv4 of the reverse proxy",
       "v6": "IPv6 of the reverse proxy (optional)",
-      "hint": "Suggested is the address you are using to open Node64, otherwise the node's LAN address. Names that already have a record of the same type or a CNAME stay unchanged. Edit and delete under DNS64 → Custom DNS records.",
+      "hint": "Suggested is the address you are using to open Node64, otherwise the node's LAN address. Names that already have a record of the same type or a CNAME stay unchanged; wildcards and main domains (example.com) are not added. Edit and delete under DNS64 → Custom DNS records.",
       "submit": "Add",
       "added": "{n} records added to DNS64.",
       "skipped": "Already present, unchanged: {list}.",
-      "failed": "Adding to DNS64 failed: {error}"
+      "failed": "Adding to DNS64 failed: {error}",
+      "excluded": "Not added (wildcard or main domain – DNS64 would also hide mail, TXT and other records there): {list}."
     }
   },
   "certs": {
@@ -2650,8 +2651,8 @@
         "logo": "Logo: only PNG, JPEG, WebP or SVG up to 256 KiB."
       },
       "on_node_title": "Reachable on the node port at /status/<address>",
-      "hc_groups": "Use the health check groups",
-      "hc_groups_hint": "The page shows the entries in the groups of the health checks; the groups here then only set selection and order.",
+      "hc_groups": "Group by Healthchecks groups",
+      "hc_groups_hint": "Headings are the Healthchecks groups, for Proxmox VE and Docker with the system name – they are publicly visible. Off: one list without headings.",
       "hc_groups_active": "“Use the health check groups” is on: the page shows the entries in the groups of the health checks. The groups here only set selection and order.",
       "logo": "Logo",
       "logo_hint": "PNG, JPEG, WebP or SVG, at most 256 KiB.",

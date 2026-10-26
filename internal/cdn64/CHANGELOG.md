@@ -1,5 +1,16 @@
 # Änderungen – PROXY64
 
+## 1.30.2 – 2026-10-26
+
+### Behoben
+- „Lokal in DNS64 eintragen“: Wildcards (*.example.de) und Hauptdomains (example.de) werden nicht mehr eingetragen –
+  DNS64 hätte dort Mail-, TXT- und andere Einträge im Heimnetz verdeckt. Das IPv4-Feld nimmt nur IPv4, das IPv6-Feld
+  nur IPv6; Loopback- und link-lokale Adressen werden abgelehnt (auch nicht mehr vorgeschlagen). Ausgeschaltete
+  DNS64-Einträge zählen nicht als vorhanden, ein schon vorhandener gleicher Eintrag wird übersprungen statt mit Fehler
+  abzubrechen. Die Rückwärtsauflösung der Proxy-Adresse bleibt unverändert (Eintrag ohne PTR).
+- Die Spalte mit den Namen bricht in der Host-Liste nicht mehr Buchstabe für Buchstabe um.
+
+
 ## 1.30.1 – 2026-10-26
 
 ### Behoben

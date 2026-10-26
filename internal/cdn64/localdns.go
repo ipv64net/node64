@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/netip"
 	"strings"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // Lokaler DNS (DNS64): Die Namen eines Hosts als eigene Eintraege (ohne Zone) auf die Adresse des Reverse-Proxys,
@@ -15,6 +17,7 @@ import (
 // LocalRecord ist ein eigener DNS64-Eintrag (Ausschnitt).
 type LocalRecord struct {
 	Name, Type, Value string
+	Enabled           bool
 }
 
 // LocalDNS ist der Zugriff auf die eigenen Eintraege von DNS64.
@@ -33,24 +36,34 @@ func (m *Module) ldns() LocalDNS {
 	return m.localDNS()
 }
 
-// localIndex: Name -> vorhandene Typen (A, AAAA, CNAME) in DNS64; nil = DNS64 aus.
+// localIndex: Name -> vorhandene Typen (A, AAAA, CNAME) eingeschalteter Eintraege in DNS64; nil = DNS64 aus.
 func (m *Module) localIndex(ctx context.Context) map[string]map[string]bool {
+	idx, _ := m.localRecords(ctx)
+	return idx
+}
+
+// localRecords: wie localIndex, dazu alle Eintraege (auch ausgeschaltete) als "name type wert".
+func (m *Module) localRecords(ctx context.Context) (map[string]map[string]bool, map[string]bool) {
 	l := m.ldns()
 	if l == nil {
-		return nil
+		return nil, nil
 	}
 	list, err := l.Records(ctx)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
-	idx := map[string]map[string]bool{}
+	idx, all := map[string]map[string]bool{}, map[string]bool{}
 	for _, r := range list {
+		all[r.Name+" "+r.Type+" "+r.Value] = true
+		if !r.Enabled {
+			continue // DNS64 beantwortet ihn nicht
+		}
 		if idx[r.Name] == nil {
 			idx[r.Name] = map[string]bool{}
 		}
 		idx[r.Name][r.Type] = true
 	}
-	return idx
+	return idx, all
 }
 
 // localCount: wie viele Namen des Hosts schon in DNS64 stehen (A, AAAA oder CNAME).
@@ -72,7 +85,7 @@ func (m *Module) localAddrs(r *http.Request) (v4, v6 string) {
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
-	if a, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil && !a.IsLoopback() {
+	if a, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil && a.Unmap().IsGlobalUnicast() { // nicht loopback/link-lokal
 		if a = a.Unmap(); a.Is4() {
 			v4 = a.String()
 		} else {
@@ -119,48 +132,68 @@ func virtualIf(name string) bool {
 	return false
 }
 
-// addLocal traegt die Namen des Hosts mit den Adressen in DNS64 ein. Ein Name, der schon einen Eintrag dieses Typs
-// oder einen CNAME hat, wird uebersprungen. Liefert angelegte und uebersprungene Eintraege.
-func (m *Module) addLocal(ctx context.Context, h *Host, v4, v6 string) (added int, skipped []string, err error) {
+// localName: Namen, die DNS64 als eigenen Eintrag beantworten darf. Wildcards und Hauptdomains nicht: DNS64
+// beantwortet einen eigenen Namen fuer alle Typen selbst, MX/TXT/CAA der Domain und Unternamen waeren verdeckt.
+func localName(name string) bool {
+	if strings.HasPrefix(name, "*") {
+		return false
+	}
+	if _, icann := publicsuffix.PublicSuffix(name); icann {
+		if apex, err := publicsuffix.EffectiveTLDPlusOne(name); err == nil && apex == name {
+			return false
+		}
+	}
+	return true
+}
+
+// addLocal traegt die Namen des Hosts mit den Adressen in DNS64 ein (IPv4-Feld nur A, IPv6-Feld nur AAAA, nur im
+// Heimnetz erreichbare Adressen). Ein Name, der schon einen eingeschalteten Eintrag dieses Typs oder einen CNAME hat
+// oder genau diesen Eintrag (auch ausgeschaltet), wird uebersprungen; Wildcards und Hauptdomains bleiben aussen vor.
+// Liefert angelegte, uebersprungene und ausgelassene Eintraege.
+func (m *Module) addLocal(ctx context.Context, h *Host, v4, v6 string) (added int, skipped, excluded []string, err error) {
 	l := m.ldns()
 	if l == nil {
-		return 0, nil, errors.New("DNS64 is switched off")
+		return 0, nil, nil, errors.New("DNS64 is switched off")
 	}
 	var want []LocalRecord
-	for _, s := range []string{v4, v6} {
+	for i, s := range []string{v4, v6} {
 		s = strings.TrimSpace(strings.Trim(strings.TrimSpace(s), "[]"))
 		if s == "" {
 			continue
 		}
 		a, err := netip.ParseAddr(s)
-		if err != nil || a.Zone() != "" {
-			return 0, nil, ferr("ip", "cdn64.err.localdns_ip")
+		if err != nil || a.Zone() != "" || a.Is4In6() || !a.IsGlobalUnicast() || a.Is4() != (i == 0) {
+			return 0, nil, nil, ferr("ip", "cdn64.err.localdns_ip")
 		}
 		typ := "AAAA"
-		if a = a.Unmap(); a.Is4() {
+		if a.Is4() {
 			typ = "A"
 		}
 		want = append(want, LocalRecord{Type: typ, Value: a.String()})
 	}
 	if len(want) == 0 {
-		return 0, nil, ferr("ip", "cdn64.err.localdns_ip")
+		return 0, nil, nil, ferr("ip", "cdn64.err.localdns_ip")
 	}
-	idx := m.localIndex(ctx)
+	idx, all := m.localRecords(ctx)
 	for _, name := range h.Names {
 		name = strings.ToLower(name)
+		if !localName(name) {
+			excluded = append(excluded, name)
+			continue
+		}
 		for _, w := range want {
-			if t := idx[name]; t["CNAME"] || t[w.Type] {
+			if t := idx[name]; t["CNAME"] || t[w.Type] || all[name+" "+w.Type+" "+w.Value] {
 				skipped = append(skipped, name+" "+w.Type)
 				continue
 			}
 			w.Name = name
 			if err := l.Add(ctx, w, "PROXY64"); err != nil {
-				return added, skipped, err
+				return added, skipped, excluded, err
 			}
 			added++
 		}
 	}
-	return added, skipped, nil
+	return added, skipped, excluded, nil
 }
 
 // POST /cdn64/hosts/{id}/localdns (ipv4, ipv6): Namen des Hosts in DNS64 eintragen.
@@ -170,8 +203,8 @@ func (m *Module) pageHostLocalDNS(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		back = listPath(h.Kind)
 		var added int
-		var skipped []string
-		added, skipped, err = m.addLocal(r.Context(), h, r.PostFormValue("ipv4"), r.PostFormValue("ipv6"))
+		var skipped, excluded []string
+		added, skipped, excluded, err = m.addLocal(r.Context(), h, r.PostFormValue("ipv4"), r.PostFormValue("ipv6"))
 		if added > 0 {
 			m.g.Audit(r, "cdn64.localdns", strings.Join(h.Names, ","), strings.TrimSpace(r.PostFormValue("ipv4")+" "+r.PostFormValue("ipv6")))
 		}
@@ -179,6 +212,9 @@ func (m *Module) pageHostLocalDNS(w http.ResponseWriter, r *http.Request) {
 			msg := m.g.T(r, "cdn64.localdns.added", "n", added)
 			if len(skipped) > 0 {
 				msg += " " + m.g.T(r, "cdn64.localdns.skipped", "list", strings.Join(skipped, ", "))
+			}
+			if len(excluded) > 0 {
+				msg += " " + m.g.T(r, "cdn64.localdns.excluded", "list", strings.Join(excluded, ", "))
 			}
 			m.g.Flash(w, r, map[bool]string{true: "success", false: "warning"}[added > 0], msg)
 		}

@@ -391,6 +391,28 @@ func TargetHost(def Definition) string {
 	return strings.Trim(t, "[]")
 }
 
+// WithoutUnknownParams entfernt Parameterfelder (oberste Ebene), die diese Version nicht kennt. Fuer Checks, die
+// eine neuere Node oder der Server geschrieben hat: sonst scheitert die Uebernahme an der strengen Pruefung.
+func WithoutUnknownParams(def Definition) json.RawMessage {
+	for range 20 {
+		err := Validate(def)
+		if err == nil || !strings.HasPrefix(err.Error(), "params: json: unknown field ") {
+			return def.Params
+		}
+		field, _ := strconv.Unquote(strings.TrimPrefix(err.Error(), "params: json: unknown field "))
+		var m map[string]json.RawMessage
+		if json.Unmarshal(def.Params, &m) != nil {
+			return def.Params
+		}
+		if _, ok := m[field]; !ok {
+			return def.Params
+		}
+		delete(m, field)
+		def.Params, _ = json.Marshal(m)
+	}
+	return def.Params
+}
+
 // Validate prueft Typ, Ziel und Parameter einer Definition.
 func Validate(def Definition) error {
 	switch def.Type {

@@ -25,35 +25,45 @@ func (f *fakeLocal) Add(_ context.Context, r LocalRecord, comment string) error 
 
 func TestAddLocal(t *testing.T) {
 	m := &Module{}
-	h := &Host{Names: []string{"cloud.example.de", "Alt.example.de", "*.wild.example.de"}}
-	if _, _, err := m.addLocal(context.Background(), h, "192.168.1.5", ""); err == nil {
+	h := &Host{Names: []string{"cloud.example.de", "Alt.example.de", "*.wild.example.de", "example.de", "nas.example.de", "box.lan"}}
+	ctx := context.Background()
+	if _, _, _, err := m.addLocal(ctx, h, "192.168.1.5", ""); err == nil {
 		t.Fatal("DNS64 aus: Fehler erwartet")
 	}
-	f := &fakeLocal{recs: []LocalRecord{{Name: "alt.example.de", Type: "CNAME", Value: "x.example.de"}, {Name: "cloud.example.de", Type: "AAAA", Value: "fd00::1"}}}
+	f := &fakeLocal{recs: []LocalRecord{{Name: "alt.example.de", Type: "CNAME", Value: "x.example.de", Enabled: true}, {Name: "cloud.example.de", Type: "AAAA", Value: "fd00::1", Enabled: true},
+		{Name: "nas.example.de", Type: "A", Value: "10.0.0.9"}, {Name: "nas.example.de", Type: "AAAA", Value: "fd00::5"}}} // nas: ausgeschaltet
 	m.SetLocalDNS(func() LocalDNS { return f })
 	var fe *FieldError
-	if _, _, err := m.addLocal(context.Background(), h, "", " "); !errors.As(err, &fe) {
-		t.Fatalf("ohne Adresse: %v", err)
+	for _, bad := range [][2]string{{"", " "}, {"fe80::1%eth0", ""}, {"", "192.168.1.6"}, {"fd00::5", ""}, {"", "fe80::1"}, {"127.0.0.1", ""}, {"0.0.0.0", ""}, {"", "::ffff:192.168.1.5"}} {
+		if _, _, _, err := m.addLocal(ctx, h, bad[0], bad[1]); !errors.As(err, &fe) {
+			t.Fatalf("%v: %v", bad, err)
+		}
 	}
-	if _, _, err := m.addLocal(context.Background(), h, "fe80::1%eth0", ""); !errors.As(err, &fe) {
-		t.Fatalf("Zone: %v", err)
-	}
-	added, skipped, err := m.addLocal(context.Background(), h, "192.168.1.5", "[fd00::5]")
+	added, skipped, excluded, err := m.addLocal(ctx, h, "192.168.1.5", "[fd00::5]")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"cloud.example.de A 192.168.1.5", "*.wild.example.de A 192.168.1.5", "*.wild.example.de AAAA fd00::5"}
-	if added != 3 || len(f.added) != 3 || f.added[0] != want[0] || f.added[1] != want[1] || f.added[2] != want[2] {
+	want := []string{"cloud.example.de A 192.168.1.5", "nas.example.de A 192.168.1.5", "box.lan A 192.168.1.5", "box.lan AAAA fd00::5"}
+	if added != 4 || strings.Join(f.added, "|") != strings.Join(want, "|") {
 		t.Fatalf("angelegt %d %v", added, f.added)
 	}
-	if len(skipped) != 3 { // cloud AAAA vorhanden, alt CNAME (A und AAAA)
+	if len(skipped) != 4 { // cloud AAAA vorhanden, alt CNAME (A und AAAA), nas AAAA genau so schon da (aus)
 		t.Fatalf("uebersprungen %v", skipped)
 	}
-	if n := localCount(m.localIndex(context.Background()), h.Names); n != 3 {
+	if strings.Join(excluded, ",") != "*.wild.example.de,example.de" {
+		t.Fatalf("ausgelassen %v", excluded)
+	}
+	if n := localCount(m.localIndex(ctx), h.Names); n != 2 { // ausgeschaltete zaehlen nicht (die neuen sind im Fake aus)
+		t.Fatalf("localCount aus %d", n)
+	}
+	for i := range f.recs[4:] {
+		f.recs[4+i].Enabled = true
+	}
+	if n := localCount(m.localIndex(ctx), h.Names); n != 4 { // cloud, alt, nas, box.lan
 		t.Fatalf("localCount %d", n)
 	}
 	// zweiter Klick: nichts Neues
-	if added, _, _ := m.addLocal(context.Background(), h, "192.168.1.5", ""); added != 0 {
+	if added, _, _, _ := m.addLocal(ctx, h, "192.168.1.5", ""); added != 0 {
 		t.Fatalf("doppelt angelegt: %d", added)
 	}
 }

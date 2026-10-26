@@ -142,7 +142,7 @@ func TestStatusPagesForm(t *testing.T) {
 	if w := e.do("GET", "/healthchecks/status-pages/new", nil, ""); w.Code != 200 || len(e.formData().Checks) != 3 {
 		t.Fatalf("new form: %d", w.Code)
 	}
-	if d := e.formData(); !d.Page.PublishNode || d.Page.HCGroups {
+	if d := e.formData(); !d.Page.PublishNode || !d.Page.HCGroups {
 		t.Fatalf("new form defaults: publish_node %v hc_groups %v", d.Page.PublishNode, d.Page.HCGroups)
 	}
 
@@ -352,7 +352,7 @@ func TestStatusPagesAPI(t *testing.T) {
 	}
 	id := strconv.FormatInt(p.ID, 10)
 	// Slug vergeben: 409
-	if !p.PublishNode || p.HCGroups {
+	if !p.PublishNode || !p.HCGroups {
 		t.Fatalf("api defaults: %s", body)
 	}
 	code, body = e.api("POST", "/api/status-pages", map[string]any{"title": "Nur Proxy", "publish_node": false, "hc_groups": true})
@@ -476,7 +476,7 @@ func TestStatusPagesTemplates(t *testing.T) {
 		if name == "status_page_form" && (!strings.Contains(buf.String(), `name="it_tok" value="t1"`) || !strings.Contains(buf.String(), "statuspages.js") ||
 			!strings.Contains(buf.String(), "/preview/logo?v=") || !strings.Contains(buf.String(), `enctype="multipart/form-data"`) || !strings.Contains(buf.String(), `value="rm-1"`) ||
 			!strings.Contains(buf.String(), `name="add_res" value="1|qemu/100"`) || !strings.Contains(buf.String(), "hc.status.res_new") || !strings.Contains(buf.String(), "Proxmox VE · lab") ||
-			!strings.Contains(buf.String(), "data-sp-selall") || strings.Contains(buf.String(), "gr_name") || strings.Contains(buf.String(), "hc_groups")) {
+			!strings.Contains(buf.String(), "data-sp-selall") || strings.Contains(buf.String(), "gr_name") || !strings.Contains(buf.String(), `name="hc_groups" id="sp-hcgroups" checked`)) {
 			t.Fatalf("form output: %s", buf.String())
 		}
 	}

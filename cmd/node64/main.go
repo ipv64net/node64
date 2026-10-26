@@ -746,12 +746,13 @@ func (d dnsLocal) Records(ctx context.Context) ([]cdn64.LocalRecord, error) {
 	list, err := d.m.Records(ctx)
 	out := make([]cdn64.LocalRecord, 0, len(list))
 	for _, r := range list {
-		out = append(out, cdn64.LocalRecord{Name: r.Name, Type: r.Type, Value: r.Value})
+		out = append(out, cdn64.LocalRecord{Name: r.Name, Type: r.Type, Value: r.Value, Enabled: r.Enabled})
 	}
 	return out, err
 }
 
 func (d dnsLocal) Add(ctx context.Context, r cdn64.LocalRecord, comment string) error {
-	_, err := d.m.AddRecord(ctx, dns64.Record{Name: r.Name, Type: r.Type, Value: r.Value, Comment: comment})
+	// NoPTR: die Rueckwaertssuche der Proxy-Adresse liefert weiter den Namen des Geraets, nicht einen der Hosts
+	_, err := d.m.AddRecord(ctx, dns64.Record{Name: r.Name, Type: r.Type, Value: r.Value, Comment: comment, NoPTR: true})
 	return err
 }

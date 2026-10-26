@@ -1,5 +1,20 @@
 # Changes – Healthchecks
 
+## 2.37.0 – 2026-10-26
+
+### New
+- Status pages: switch “Group by Healthchecks groups” (on by default). When off, the page shows one list without
+  headings – group names and the names of Proxmox VE and Docker systems stay internal.
+
+### Fixed
+- Checks written by a newer node or ipv64.net with additional parameters (such as the system name) are taken over
+  instead of rejected; unknown fields are dropped.
+- Docker kept as check: the Docker host's name (grouping) is kept when editing and when the host's address changes,
+  even while the host is unreachable.
+- New check from a system: after an input error the chosen VM or container stays selected, even if another system has
+  an entry with the same ID.
+
+
 ## 2.36.2 – 2026-10-26
 
 ### Changed

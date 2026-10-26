@@ -913,10 +913,11 @@ func (m *Module) dockerRetarget(ctx context.Context, old, sys *proxmox.System, b
 		if c.Type != checks.TypeDocker || dockerCheckHost(c) != oldHost {
 			continue
 		}
-		c.Params = nil
+		dp := checks.DockerParams{System: m.pveSystemLabel(sys)} // Systemname behalten (Gruppierung), auch ohne erfolgreiche Abfrage
 		if newHost != checks.DefaultDockerHost() {
-			c.Params, _ = json.Marshal(checks.DockerParams{Host: newHost})
+			dp.Host = newHost
 		}
+		c.Params, _ = json.Marshal(dp)
 		c.UpdatedBy = by
 		if err := m.st.Update(ctx, c); err != nil {
 			m.log.Error("docker check host", "err", err)

@@ -67,7 +67,9 @@ func (m *Module) ApplyWireCheck(ctx context.Context, w wire.Check, chanMap Chann
 	}
 	oldType := c.Type
 	grp := w.Group
-	in := checkJSON{Name: w.Name, Type: w.Type, Target: w.Target, Params: w.Params, IPMode: w.IPMode, Tags: w.Tags, Group: &grp, Description: w.Description,
+	// Felder neuerer Versionen (z. B. params.system) weglassen statt den ganzen Check abzulehnen
+	params := checks.WithoutUnknownParams(checks.Definition{Type: checks.Type(strings.ToLower(strings.TrimSpace(w.Type))), Target: strings.TrimSpace(w.Target), Params: w.Params})
+	in := checkJSON{Name: w.Name, Type: w.Type, Target: w.Target, Params: params, IPMode: w.IPMode, Tags: w.Tags, Group: &grp, Description: w.Description,
 		Execution: "local", Policy: w.Policy, Locations: w.Locations}
 	iv, riv, re, st, rp := w.IntervalSeconds, w.RetryIntervalSeconds, w.Retries, w.Stabilize, w.RepeatMinutes
 	ct, tt := w.ConnectTimeoutSeconds, w.TimeoutSeconds

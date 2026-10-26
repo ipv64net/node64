@@ -345,3 +345,16 @@ func TestDisplayTarget(t *testing.T) {
 		}
 	}
 }
+
+func TestWithoutUnknownParams(t *testing.T) {
+	def := Definition{Type: TypeTCP, Target: "example.com:443", Params: json.RawMessage(`{"port":443,"future":"x","later":1}`)}
+	got := WithoutUnknownParams(def)
+	def.Params = got
+	if err := Validate(def); err != nil || strings.Contains(string(got), "future") || !strings.Contains(string(got), "443") {
+		t.Fatalf("got %s (%v)", got, err)
+	}
+	ok := json.RawMessage(`{"port":443}`)
+	if g := WithoutUnknownParams(Definition{Type: TypeTCP, Target: "example.com:443", Params: ok}); string(g) != string(ok) {
+		t.Fatalf("valid params changed: %s", g)
+	}
+}

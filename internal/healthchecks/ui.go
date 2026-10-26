@@ -757,6 +757,7 @@ func formFromCheck(c *Check) map[string]string {
 		set("grace_seconds", "grace_seconds")
 	case checks.TypeDocker:
 		set("docker_host", "host")
+		set("docker_system", "system") // Anzeige-Name des Docker-Hosts bleibt beim Bearbeiten erhalten
 	case checks.TypeProxmox:
 		f["pve_params"] = string(c.Params) // System und Gast stehen fest (Proxmox VE → „als Check“)
 	case checks.TypeWhois:
@@ -970,6 +971,9 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 	case checks.TypeDocker:
 		if s := strings.TrimSpace(v("docker_host")); s != "" {
 			p["host"] = s
+		}
+		if s := v("docker_system"); s != "" {
+			p["system"] = s
 		}
 	case checks.TypeWhois:
 		if s := v("whois_source"); s != "" && s != "auto" {

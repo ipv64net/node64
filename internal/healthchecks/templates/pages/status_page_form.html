@@ -96,6 +96,8 @@
 						<div class="form-check"><input class="form-check-input" type="checkbox" name="show_uptime" id="sp-uptime"{{if $p.ShowUptime}} checked{{end}}><label class="form-check-label" for="sp-uptime">{{.T "hc.status.show_uptime"}}</label></div>
 						<div class="form-check"><input class="form-check-input" type="checkbox" name="show_history" id="sp-history"{{if $p.ShowHistory}} checked{{end}}><label class="form-check-label" for="sp-history">{{.T "hc.status.show_history"}}</label></div>
 						<div class="form-check"><input class="form-check-input" type="checkbox" name="powered_by" id="sp-powered"{{if $p.PoweredBy}} checked{{end}}><label class="form-check-label" for="sp-powered">{{.T "hc.status.powered_by"}}</label></div>
+						<div class="form-check"><input class="form-check-input" type="checkbox" name="hc_groups" id="sp-hcgroups"{{if $p.HCGroups}} checked{{end}}><label class="form-check-label" for="sp-hcgroups">{{.T "hc.status.hc_groups"}}</label>
+							<div class="form-text">{{.T "hc.status.hc_groups_hint"}}</div></div>
 					</div>
 					<div class="col-12">
 						<label class="form-label" for="sp-logo">{{.T "hc.status.logo"}}</label>

@@ -539,7 +539,7 @@
       "geo_many": "Höchstens 60 Länder je Host.",
       "status_page": "Bitte eine Statusseite wählen.",
       "pass_self": "Durchreichen auf die eigene Oberfläche geht nicht – dafür einen Proxy-Host anlegen.",
-      "localdns_ip": "Bitte mindestens eine gültige IPv4- oder IPv6-Adresse angeben."
+      "localdns_ip": "Bitte eine gültige IPv4 im IPv4-Feld bzw. IPv6 im IPv6-Feld angeben, erreichbar im Heimnetz (keine Loopback- oder link-lokale Adresse)."
     },
     "help_title": "So funktioniert es",
     "help_ports": "Der Router leitet 80 und 443 (TCP, für HTTP/3 auch 443/UDP) auf diese Node weiter. Den Rest verteilt Node64 nach dem Domainnamen – auch zusammen mit DNS64 im selben Container.",
@@ -1019,11 +1019,12 @@
       "intro": "Trägt die Namen dieses Hosts als eigene DNS-Einträge in DNS64 ein (ohne Zone), mit der Adresse des Reverse-Proxys. Geräte im Heimnetz, die DNS64 fragen, gehen dann direkt zum Proxy statt über das Internet.",
       "v4": "IPv4 des Reverse-Proxys",
       "v6": "IPv6 des Reverse-Proxys (optional)",
-      "hint": "Vorgeschlagen ist die Adresse, über die du Node64 gerade aufrufst, sonst die der Node im LAN. Namen mit vorhandenem Eintrag desselben Typs oder einem CNAME bleiben unverändert. Ändern und löschen unter DNS64 → Eigene DNS-Einträge.",
+      "hint": "Vorgeschlagen ist die Adresse, über die du Node64 gerade aufrufst, sonst die der Node im LAN. Namen mit vorhandenem Eintrag desselben Typs oder einem CNAME bleiben unverändert, Wildcards und Hauptdomains (example.de) werden nicht eingetragen. Ändern und löschen unter DNS64 → Eigene DNS-Einträge.",
       "submit": "Eintragen",
       "added": "{n} Einträge in DNS64 angelegt.",
       "skipped": "Schon vorhanden, unverändert: {list}.",
-      "failed": "Eintragen in DNS64 fehlgeschlagen: {error}"
+      "failed": "Eintragen in DNS64 fehlgeschlagen: {error}",
+      "excluded": "Nicht eingetragen (Wildcard oder Hauptdomain – DNS64 würde dort auch Mail-, TXT- und andere Einträge verdecken): {list}."
     }
   },
   "certs": {
@@ -2650,8 +2651,8 @@
         "logo": "Logo: nur PNG, JPEG, WebP oder SVG bis 256 KiB."
       },
       "on_node_title": "Auf dem Node-Port unter /status/<Adresse> erreichbar",
-      "hc_groups": "Gruppen der Healthchecks übernehmen",
-      "hc_groups_hint": "Die Seite zeigt die Einträge in den Gruppen der Healthchecks; die Gruppen hier legen dann nur Auswahl und Reihenfolge fest.",
+      "hc_groups": "Nach Gruppen der Healthchecks gliedern",
+      "hc_groups_hint": "Überschriften sind die Gruppen der Healthchecks, bei Proxmox VE und Docker mit dem Namen des Systems – sie sind öffentlich sichtbar. Aus: eine Liste ohne Überschriften.",
       "hc_groups_active": "„Gruppen der Healthchecks übernehmen“ ist an: Die Seite zeigt die Einträge in den Gruppen der Healthchecks. Die Gruppen hier legen nur Auswahl und Reihenfolge fest.",
       "logo": "Logo",
       "logo_hint": "PNG, JPEG, WebP oder SVG, höchstens 256 KiB.",

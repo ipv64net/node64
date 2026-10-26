@@ -1,5 +1,16 @@
 # Changes – PROXY64
 
+## 1.30.2 – 2026-10-26
+
+### Fixed
+- “Add to local DNS64”: wildcards (*.example.com) and main domains (example.com) are no longer added – DNS64 would
+  have hidden mail, TXT and other records there at home. The IPv4 field only takes IPv4, the IPv6 field only IPv6;
+  loopback and link-local addresses are rejected (and no longer suggested). Switched-off DNS64 records do not count as
+  present, and an identical existing record is skipped instead of aborting with an error. Reverse lookups of the proxy
+  address stay unchanged (record without PTR).
+- The names column of the host list no longer wraps letter by letter.
+
+
 ## 1.30.1 – 2026-10-26
 
 ### Fixed

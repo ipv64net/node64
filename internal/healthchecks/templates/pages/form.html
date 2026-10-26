@@ -42,7 +42,7 @@
 								<div class="input-group"><span class="input-group-text"><i class="bi bi-hdd-rack"></i></span><select class="form-select" id="pick-sys-proxmox" name="sys_id_proxmox" data-pick-sys>{{range $d.PickPVE}}<option value="{{.ID}}"{{if eq (print .ID) (index $f "sys_id_proxmox")}} selected{{end}}>{{.Name}}</option>{{end}}</select></div></div>
 							<div class="col-md-7"><label class="form-label" for="pick-res-proxmox">{{.T "hc.pick.res_proxmox"}}</label>
 								<div class="input-group"><span class="input-group-text"><i class="bi bi-bullseye"></i></span><select class="form-select" id="pick-res-proxmox" name="sys_key_proxmox" data-pick-res required>
-									{{range $s := $d.PickPVE}}{{range .Res}}<option value="{{.Key}}" data-sys="{{$s.ID}}"{{if .Taken}} data-taken="1"{{end}}{{if eq .Key (index $f "sys_key_proxmox")}} selected{{end}}>{{$.T .TypeKey}}: {{.Name}}{{with .Detail}} ({{.}}){{end}}{{if .Taken}} – {{$.T "hc.pick.taken"}}{{end}}</option>{{end}}{{end}}
+									{{range $s := $d.PickPVE}}{{range .Res}}<option value="{{.Key}}" data-sys="{{$s.ID}}"{{if .Taken}} data-taken="1"{{end}}{{if and (eq .Key (index $f "sys_key_proxmox")) (eq (print $s.ID) (index $f "sys_id_proxmox"))}} selected{{end}}>{{$.T .TypeKey}}: {{.Name}}{{with .Detail}} ({{.}}){{end}}{{if .Taken}} – {{$.T "hc.pick.taken"}}{{end}}</option>{{end}}{{end}}
 									<option value="" data-none disabled>{{.T "hc.pick.none"}}</option>
 								</select></div></div>
 						</div>
@@ -55,7 +55,7 @@
 								<div class="input-group"><span class="input-group-text"><i class="bi bi-box-seam"></i></span><select class="form-select" id="pick-sys-docker" name="sys_id_docker" data-pick-sys>{{range $d.PickDocker}}<option value="{{.ID}}"{{if eq (print .ID) (index $f "sys_id_docker")}} selected{{end}}>{{.Name}}</option>{{end}}</select></div></div>
 							<div class="col-md-7"><label class="form-label" for="pick-res-docker">{{.T "hc.pick.res_docker"}}</label>
 								<div class="input-group"><span class="input-group-text"><i class="bi bi-bullseye"></i></span><select class="form-select" id="pick-res-docker" name="sys_key_docker" data-pick-res required>
-									{{range $s := $d.PickDocker}}{{range .Res}}<option value="{{.Key}}" data-sys="{{$s.ID}}"{{if .Taken}} data-taken="1"{{end}}{{if eq .Key (index $f "sys_key_docker")}} selected{{end}}>{{$.T .TypeKey}}: {{.Name}}{{with .Detail}} ({{.}}){{end}}{{if .Taken}} – {{$.T "hc.pick.taken"}}{{end}}</option>{{end}}{{end}}
+									{{range $s := $d.PickDocker}}{{range .Res}}<option value="{{.Key}}" data-sys="{{$s.ID}}"{{if .Taken}} data-taken="1"{{end}}{{if and (eq .Key (index $f "sys_key_docker")) (eq (print $s.ID) (index $f "sys_id_docker"))}} selected{{end}}>{{$.T .TypeKey}}: {{.Name}}{{with .Detail}} ({{.}}){{end}}{{if .Taken}} – {{$.T "hc.pick.taken"}}{{end}}</option>{{end}}{{end}}
 									<option value="" data-none disabled>{{.T "hc.pick.none"}}</option>
 								</select></div></div>
 						</div>
@@ -234,6 +234,7 @@
 			<div class="card-body"><div class="row g-3">
 				<div class="col-12"><label class="form-label" for="docker_host">{{.T "hc.docker.host"}}</label>
 					<div class="input-group"><span class="input-group-text"><i class="bi bi-hdd-stack"></i></span><input class="form-control font-monospace" id="docker_host" name="docker_host" value="{{index $f "docker_host"}}" placeholder="{{$d.DockerHost}}"></div>
+					<input type="hidden" name="docker_system" value="{{index $f "docker_system"}}">
 					<div class="form-text">{{.T "hc.docker.host_hint"}}</div></div>
 				{{if $d.DockerErr}}<div class="col-12"><div class="alert alert-warning small mb-0"><i class="bi bi-exclamation-triangle"></i> {{$d.DockerErr}}</div></div>
 				{{else}}<div class="col-12 small text-body-secondary"><i class="bi bi-check-circle text-success"></i> {{.T "hc.docker.found" "count" (len $d.Containers)}}</div>{{end}}
