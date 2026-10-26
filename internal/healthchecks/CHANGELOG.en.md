@@ -31,8 +31,6 @@
   even while the host is unreachable.
 - New check from a system: after an input error the chosen VM or container stays selected, even if another system has
   an entry with the same ID.
-- SecNtfy: error messages now show the step (fetching the key or sending) and the server's response, even when it is
-  not JSON (e.g. on HTTP 401), instead of just “HTTP 401”. The device token stays redacted.
 
 
 ## 2.36.2 – 2026-10-26

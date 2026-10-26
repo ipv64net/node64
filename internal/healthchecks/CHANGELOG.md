@@ -31,8 +31,6 @@
   Hosts erhalten, auch wenn der Host gerade nicht erreichbar ist.
 - Neuer Check aus System: Nach einem Eingabefehler bleibt die gewählte VM bzw. der Container ausgewählt, auch wenn ein
   anderes System einen Eintrag mit derselben Kennung hat.
-- SecNtfy: Fehlermeldungen zeigen jetzt den Schritt (Schlüssel holen bzw. senden) und die Antwort des Servers, auch
-  wenn sie kein JSON ist (z. B. bei HTTP 401), statt nur „HTTP 401“. Das Geräte-Token bleibt geschwärzt.
 
 
 ## 2.36.2 – 2026-10-26

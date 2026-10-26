@@ -43,12 +43,11 @@ func (s secntfySender) Send(ctx context.Context, ch *Channel, m Message) error {
 		Status int
 		Token  string
 	}
-	raw, err := s.call(ctx, http.MethodGet, server+"/Message/Device", token, nil, &keyResp)
-	if err != nil {
+	if err := s.call(ctx, http.MethodGet, server+"/Message/Device", token, nil, &keyResp); err != nil {
 		return err
 	}
 	if keyResp.Status != 200 || keyResp.Token == "" {
-		return fmt.Errorf("secntfy: no public key for this device (status %d): %s", keyResp.Status, strings.ReplaceAll(secntfyBody(raw), token, "[redacted]"))
+		return fmt.Errorf("secntfy: no public key for this device (status %d)", keyResp.Status)
 	}
 	pub, err := secntfyKey(keyResp.Token)
 	if err != nil {
@@ -77,16 +76,14 @@ func (s secntfySender) Send(ctx context.Context, ch *Channel, m Message) error {
 		Status  int
 		Message string
 	}
-	raw, err = s.call(ctx, http.MethodPost, server+"/Message", token, payload, &res)
-	if err != nil {
+	if err := s.call(ctx, http.MethodPost, server+"/Message", token, payload, &res); err != nil {
 		return err
 	}
 	if res.Status < 200 || res.Status > 299 {
-		msg := res.Message
+		msg := strings.ReplaceAll(res.Message, token, "[redacted]")
 		if msg == "" {
-			msg = "rejected: " + secntfyBody(raw)
+			msg = "rejected"
 		}
-		msg = strings.ReplaceAll(msg, token, "[redacted]")
 		return fmt.Errorf("secntfy: %s (status %d)", msg, res.Status)
 	}
 	return nil
@@ -148,19 +145,18 @@ func secntfyCut(s string, maxBytes, maxChars int) string {
 	return strings.TrimRight(b.String(), " \n") + dots
 }
 
-// call fuehrt eine Anfrage aus und liefert die rohe Antwort (fuer Fehlermeldungen) mit.
-func (s secntfySender) call(ctx context.Context, method, u, token string, body, out any) ([]byte, error) {
+func (s secntfySender) call(ctx context.Context, method, u, token string, body, out any) error {
 	var rd io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		rd = bytes.NewReader(b)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, u, rd)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-NTFYME-DEVICE-KEY", token)
@@ -170,45 +166,19 @@ func (s secntfySender) call(ctx context.Context, method, u, token string, body, 
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(io.LimitReader(resp.Body, 16384))
-	step := method + " " + u // Schritt fuer die Fehlermeldung (ohne Server)
-	if i := strings.Index(u, "/Message"); i >= 0 {
-		step = method + " " + u[i:]
-	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		var e struct{ Message, Error, Detail, Title string }
-		_ = json.Unmarshal(rb, &e)
-		msg := e.Message
-		for _, x := range []string{e.Error, e.Detail, e.Title} {
-			if msg == "" {
-				msg = x
-			}
+		var e struct{ Message string }
+		if json.Unmarshal(rb, &e) == nil && e.Message != "" {
+			return fmt.Errorf("secntfy: HTTP %d: %s", resp.StatusCode, strings.ReplaceAll(e.Message, token, "[redacted]"))
 		}
-		if msg == "" {
-			msg = secntfyBody(rb) // keine JSON-Meldung: Antwort selbst (gekuerzt), damit der Grund sichtbar ist
-		}
-		if wa := resp.Header.Get("WWW-Authenticate"); wa != "" {
-			msg += " [WWW-Authenticate: " + wa + "]"
-		}
-		if msg == "" {
-			msg = "empty response"
-		}
-		return rb, fmt.Errorf("secntfy: %s: HTTP %d: %s", step, resp.StatusCode, strings.ReplaceAll(msg, token, "[redacted]"))
+		return fmt.Errorf("secntfy: HTTP %d", resp.StatusCode)
 	}
 	if err := json.Unmarshal(rb, out); err != nil {
-		return rb, fmt.Errorf("secntfy: %s: invalid JSON response: %s", step, strings.ReplaceAll(secntfyBody(rb), token, "[redacted]"))
+		return errors.New("secntfy: invalid JSON response")
 	}
-	return rb, nil
-}
-
-// secntfyBody: Antworttext fuer Fehlermeldungen, Leerraum zusammengefasst, hoechstens 300 Zeichen.
-func secntfyBody(b []byte) string {
-	t := strings.Join(strings.Fields(strings.ToValidUTF8(string(b), "?")), " ")
-	if r := []rune(t); len(r) > 300 {
-		t = string(r[:300]) + "…"
-	}
-	return t
+	return nil
 }

@@ -27,11 +27,6 @@ type secntfyServer struct {
 
 func (f *secntfyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	tok := r.Header.Get("X-NTFYME-DEVICE-KEY")
-	if tok == "NTFY-DEVICE-plain" { // Antwort ohne JSON (z. B. vom Proxy davor)
-		w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
-		http.Error(w, "Unauthorized: device "+tok+" revoked", 401)
-		return
-	}
 	if tok != "NTFY-DEVICE-abc123" {
 		w.WriteHeader(401)
 		_, _ = w.Write([]byte(`{"Status":401,"Message":"unknown device ` + tok + `"}`))
@@ -139,10 +134,6 @@ func TestSecNtfyErrors(t *testing.T) {
 	}
 	if err := send("NTFY-DEVICE-other"); err == nil || !strings.Contains(err.Error(), "HTTP 401") || strings.Contains(err.Error(), "NTFY-DEVICE-other") {
 		t.Fatalf("unknown device: %v", err)
-	}
-	if err := send("NTFY-DEVICE-plain"); err == nil || !strings.Contains(err.Error(), "GET /Message/Device: HTTP 401: Unauthorized: device [redacted] revoked") ||
-		!strings.Contains(err.Error(), `invalid_token`) || strings.Contains(err.Error(), "NTFY-DEVICE-plain") {
-		t.Fatalf("plain 401: %v", err)
 	}
 	f.status = 429
 	if err := send("NTFY-DEVICE-abc123"); err == nil || !strings.Contains(err.Error(), "status 429") || strings.Contains(err.Error(), "abc123") {
