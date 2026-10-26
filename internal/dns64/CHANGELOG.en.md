@@ -1,5 +1,10 @@
 # Changes – DNS64
 
+## 1.30.0 – 2026-10-26
+
+### Changed
+- Upstream mode "fastest": 1–6 servers can now be asked at the same time (previously 1–3, default stays 2).
+
 ## 1.29.1 – 2026-10-26
 
 ### Changed

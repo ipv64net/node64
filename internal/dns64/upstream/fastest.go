@@ -16,7 +16,7 @@ import (
 
 const (
 	DefaultTop = 2 // so viele Upstreams fragt "fastest" gleichzeitig
-	MaxTop     = 3
+	MaxTop     = 6
 
 	probeEvery = 30 * time.Second
 	minHedge   = 300 * time.Millisecond

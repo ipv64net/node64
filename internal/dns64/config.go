@@ -75,7 +75,7 @@ type config struct {
 	Router    string            `json:"router"`
 	Retention int               `json:"retention_days"`
 	UpMode    string            `json:"upstream_mode"`
-	UpCount   int               `json:"upstream_count"` // fastest: 1..3 gleichzeitig
+	UpCount   int               `json:"upstream_count"` // fastest: 1..6 gleichzeitig
 	Upstreams []upstreamSetting `json:"upstreams"`
 	Lists     []listSetting     `json:"lists"`
 	ListHours int               `json:"list_hours"`

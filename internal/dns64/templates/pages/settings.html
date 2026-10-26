@@ -122,7 +122,7 @@
 						<option value="ordered"{{if eq $d.Cfg.UpMode "ordered"}} selected{{end}}>{{.T "dns64.js.mode_ordered"}}</option>
 					</select>
 					<label class="small" for="count">{{.T "dns64.settings.up_count"}}</label>
-					<select class="form-select form-select-sm w-auto" id="count" name="count"><option value="1"{{if eq $d.Cfg.UpCount 1}} selected{{end}}>1</option><option value="2"{{if eq $d.Cfg.UpCount 2}} selected{{end}}>2</option><option value="3"{{if eq $d.Cfg.UpCount 3}} selected{{end}}>3</option></select>
+					<select class="form-select form-select-sm w-auto" id="count" name="count"><option value="1"{{if eq $d.Cfg.UpCount 1}} selected{{end}}>1</option><option value="2"{{if eq $d.Cfg.UpCount 2}} selected{{end}}>2</option><option value="3"{{if eq $d.Cfg.UpCount 3}} selected{{end}}>3</option><option value="4"{{if eq $d.Cfg.UpCount 4}} selected{{end}}>4</option><option value="5"{{if eq $d.Cfg.UpCount 5}} selected{{end}}>5</option><option value="6"{{if eq $d.Cfg.UpCount 6}} selected{{end}}>6</option></select>
 					<div class="form-text w-100 mt-0">{{.T "dns64.settings.up_mode_hint"}}</div>
 					<button class="btn btn-sm btn-primary ms-auto" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button>
 				</div>

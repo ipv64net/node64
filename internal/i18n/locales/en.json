@@ -3430,7 +3430,7 @@
       "up_remove_confirm": "Remove server “{name}”?",
       "up_mode": "Mode",
       "up_count": "at once",
-      "up_mode_hint": "Fastest: measures the ticked servers continuously and asks only the fastest (1–3) at once; the others are re-measured briefly every 30 s and step in when one hangs or fails. Parallel: every query to all (fast, but a lot of traffic). In order: always the first, the next only on error.",
+      "up_mode_hint": "Fastest: measures the ticked servers continuously and asks only the fastest (1–6) at once; the others are re-measured briefly every 30 s and step in when one hangs or fails. Parallel: every query to all (fast, but a lot of traffic). In order: always the first, the next only on error.",
       "up_add": "Custom server",
       "up_ips_ph": "Bootstrap IPs, e.g. 9.9.9.9, 149.112.112.112",
       "up_add_hint": "Plain DNS server: just the IP address, e.g. 8.8.8.8 (port 53) or 192.168.1.1:5353 – unencrypted. Encrypted: https://…/dns-query for DoH, tls://name[:853] for DoT, quic://name[:853] for DoQ. DNS64 needs the bootstrap IPs to reach an encrypted server without DNS (required when the address contains a name); the certificate is checked against the name.",

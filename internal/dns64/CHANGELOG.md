@@ -1,5 +1,11 @@
 # Änderungen – DNS64
 
+## 1.30.0 – 2026-10-26
+
+### Geändert
+- Upstream-Betriebsart „Schnellste“: gleichzeitig gefragt werden jetzt wahlweise 1–6 Server (bisher 1–3, Standard
+  bleibt 2).
+
 ## 1.29.1 – 2026-10-26
 
 ### Geändert

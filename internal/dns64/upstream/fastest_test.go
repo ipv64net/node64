@@ -126,3 +126,12 @@ func TestFastestHedge(t *testing.T) {
 		t.Fatalf("hedge took %v", d)
 	}
 }
+
+func TestSetTopBounds(t *testing.T) {
+	r := New(nil, ModeFastest)
+	for in, want := range map[int]int{0: 1, 3: 3, 6: 6, 9: MaxTop} {
+		if r.SetTop(in); r.Top() != want {
+			t.Errorf("SetTop(%d) = %d, want %d", in, r.Top(), want)
+		}
+	}
+}
