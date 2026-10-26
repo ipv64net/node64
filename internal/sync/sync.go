@@ -105,7 +105,7 @@ type Linker interface {
 	LinkPoll(ctx context.Context) (bool, error)
 	LinkCancel()
 	Unlink(ctx context.Context, keepChecks bool) error
-	Resolve(ctx context.Context, id int64, keepServer bool) error
+	Resolve(ctx context.Context, id int64, keep string) error
 	// TestServerChannel laesst ipv64 einen Testversand ueber einen Server-Kanal machen (Mail, SMS, App).
 	TestServerChannel(ctx context.Context, remoteID int64, lang string) error
 	// NodeInfoChanged: Name/Standort wurden in den Einstellungen geaendert, an ipv64 melden.
@@ -1256,14 +1256,24 @@ func (c *Live) poke() {
 
 // ---------------------------------------------------------------- Konflikte
 
-// Resolve entscheidet einen Konflikt: keepServer = Server-Version uebernehmen,
-// sonst die lokale Version erneut senden (mit der Server-Revision als Basis).
-func (c *Live) Resolve(ctx context.Context, id int64, keepServer bool) error {
+// Resolve entscheidet einen Konflikt (Ablehnung durch den hub):
+//   - "server": Server-Stand uebernehmen; hat der hub den Eintrag nicht (Grund bekannt, Server-Fassung leer), wird er
+//     hier geloescht. Bei alten Konflikten ohne Grund ist der Server-Stand unbekannt: dann nichts loeschen, nur erneut
+//     senden (der hub antwortet mit Grund und Stand).
+//   - "local": die lokale Fassung erneut senden (mit der Server-Revision als Basis).
+//   - "ignore": nur hier behalten - die Aenderung geht nicht mehr an den hub, der Eintrag bleibt lokal wie er ist.
+func (c *Live) Resolve(ctx context.Context, id int64, keep string) error {
 	cf, err := c.d.HC.ConflictByID(ctx, id)
 	if err != nil || cf == nil {
 		return errors.New("conflict not found")
 	}
-	if keepServer {
+	if keep == "server" && cf.ServerPayload == "" && cf.Error == "" {
+		keep = "local" // Server-Stand unbekannt: nicht loeschen, sondern erneut fragen
+	}
+	switch keep {
+	case "ignore":
+		c.logErr("OutboxDeleteEntity", c.d.HC.OutboxDeleteEntity(ctx, cf.Entity, cf.EntityID))
+	case "server":
 		if cf.ServerPayload == "" {
 			switch cf.Entity {
 			case "check":
@@ -1283,7 +1293,7 @@ func (c *Live) Resolve(ctx context.Context, id int64, keepServer bool) error {
 			c.applyChanges(ctx, []wire.Change{{Entity: cf.Entity, ID: c.remoteIDOf(ctx, cf), Op: "upsert", Revision: cf.ServerRevision, Data: json.RawMessage(cf.ServerPayload)}}, 0)
 		}
 		c.logErr("OutboxDeleteEntity", c.d.HC.OutboxDeleteEntity(ctx, cf.Entity, cf.EntityID))
-	} else {
+	default:
 		// lokale Version mit aktueller Server-Revision als Basis erneut einreihen
 		c.logErr("OutboxDeleteEntity", c.d.HC.OutboxDeleteEntity(ctx, cf.Entity, cf.EntityID))
 		op := cf.LocalOp

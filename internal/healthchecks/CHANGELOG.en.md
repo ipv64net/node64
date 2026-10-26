@@ -1,5 +1,18 @@
 # Changes – Healthchecks
 
+## 2.30.0 – 2026-10-26
+
+### Fixed
+- Healthchecks sync, conflicts: a conflict appears when ipv64 rejects a change of this node. So far the reason was
+  missing, every card said “deleted on the server”, and “Keep server version” deleted the entry here – even a check
+  ipv64 has (e.g. a Proxmox or Docker check). “Send my version” ran into the same rejection. Now:
+  - The card names the reason for the rejection and shows the current state at ipv64 (the hub sends it along).
+  - “Take ipv64 state” restores that state here; “Delete here” is only offered if ipv64 really does not have the entry.
+  - “Send again” sends the own version once more (e.g. after the limit was raised).
+  - New: “Keep here only” – the change stays on the node and is no longer sent to ipv64.
+  - Older conflicts without a stored reason are never deleted; “Send again” fetches reason and state.
+- “{count} conflicts” showed the placeholder instead of the number.
+
 ## 2.29.1 – 2026-10-25
 
 ### Changed

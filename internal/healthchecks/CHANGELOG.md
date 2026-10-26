@@ -1,5 +1,20 @@
 # Änderungen – Healthchecks
 
+## 2.30.0 – 2026-10-26
+
+### Behoben
+- Healthchecks-Sync, Konflikte: Ein Konflikt entsteht, wenn ipv64 eine Änderung dieser Node ablehnt. Bisher fehlte der
+  Grund, jede Karte zeigte „vom Server gelöscht“, und „Server-Version behalten“ löschte den Eintrag hier – auch einen
+  Check, den ipv64 längst hat (z. B. einen Proxmox- oder Docker-Check). „Meine Version senden“ führte zur selben
+  Ablehnung. Jetzt:
+  - Die Karte nennt den Grund der Ablehnung und zeigt den aktuellen Stand bei ipv64 (der hub schickt ihn mit).
+  - „ipv64-Stand übernehmen“ stellt diesen Stand hier wieder her; „Hier löschen“ gibt es nur, wenn ipv64 den Eintrag
+    wirklich nicht hat.
+  - „Erneut senden“ schickt die eigene Fassung noch einmal (z. B. nachdem das Limit erhöht wurde).
+  - Neu: „Nur hier behalten“ – die Änderung bleibt auf der Node und geht nicht mehr an ipv64.
+  - Ältere Konflikte ohne gespeicherten Grund werden nie gelöscht; „Erneut senden“ holt Grund und Stand nach.
+- „{count} Konflikte“ zeigte den Platzhalter statt der Zahl.
+
 ## 2.29.1 – 2026-10-25
 
 ### Geändert

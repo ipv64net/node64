@@ -149,7 +149,7 @@ func (s *Server) apiConflicts(w http.ResponseWriter, r *http.Request) {
 	for _, c := range list {
 		out = append(out, map[string]any{"id": c.ID, "entity": c.Entity, "entity_id": c.EntityID, "name": healthchecks.ConflictName(c),
 			"local_op": c.LocalOp, "local": json.RawMessage(orNull(c.LocalPayload)), "server": json.RawMessage(orNull(c.ServerPayload)),
-			"server_revision": c.ServerRevision, "created_at": c.CreatedAt})
+			"server_revision": c.ServerRevision, "created_at": c.CreatedAt, "error": c.Error})
 	}
 	writeJSON(w, 200, out)
 }
@@ -167,16 +167,16 @@ func (s *Server) apiConflictResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		Keep string `json:"keep"` // server (Standard) oder local
+		Keep string `json:"keep"` // server (Standard), local (erneut senden) oder ignore (nur hier behalten)
 	}
 	if !decodeJSON(w, r, &in) {
 		return
 	}
-	if in.Keep != "local" {
+	if in.Keep != "local" && in.Keep != "ignore" {
 		in.Keep = "server"
 	}
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err := s.Linker.Resolve(r.Context(), id, in.Keep == "server"); err != nil {
+	if err := s.Linker.Resolve(r.Context(), id, in.Keep); err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}

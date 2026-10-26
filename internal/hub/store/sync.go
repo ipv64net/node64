@@ -354,6 +354,18 @@ func (s *Store) Propose(ctx context.Context, userID int64, nodeID string, p wire
 	if err != nil {
 		return nil, err
 	}
+	if res.Error != "" && !strings.Contains(res.Error, "another account") {
+		// Ablehnung: aktuellen Stand des Eintrags mitschicken (leer = hier nicht vorhanden), damit die Node beide
+		// Fassungen zeigen und den Server-Stand wiederherstellen kann statt den Eintrag zu loeschen
+		_ = tx.Rollback()
+		if d, err := s.entityData(ctx, p.Entity, p.ID, nodeID, userID); err == nil && len(d) > 0 {
+			var x struct {
+				Revision int64 `json:"revision"`
+			}
+			_ = json.Unmarshal(d, &x)
+			res.Server, res.Revision = d, x.Revision
+		}
+	}
 	if res.Conflict || res.Error != "" {
 		return res, nil
 	}

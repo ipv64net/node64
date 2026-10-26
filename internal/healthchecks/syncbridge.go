@@ -417,6 +417,9 @@ type Conflict struct {
 	ServerPayload  string
 	ServerRevision int64
 	CreatedAt      time.Time
+	// Error: Grund, mit dem der hub die Aenderung abgelehnt hat ("" = alter Eintrag, Server-Stand unbekannt).
+	// Mit Grund und leerer ServerPayload hat der hub den Eintrag nicht.
+	Error string
 }
 
 func (m *Module) OutboxAdd(ctx context.Context, entity, id, op string, base int64, payload string) error {
@@ -497,13 +500,13 @@ func (m *Module) OutboxSetError(ctx context.Context, id int64, status, errText s
 }
 
 func (m *Module) ConflictAdd(ctx context.Context, c Conflict) error {
-	_, err := m.st.w.ExecContext(ctx, `INSERT OR REPLACE INTO hc_conflicts (entity, entity_id, local_op, local_payload, server_payload, server_revision, created_at) VALUES (?,?,?,?,?,?,?)`,
-		c.Entity, c.EntityID, c.LocalOp, c.LocalPayload, c.ServerPayload, c.ServerRevision, ft(time.Now()))
+	_, err := m.st.w.ExecContext(ctx, `INSERT OR REPLACE INTO hc_conflicts (entity, entity_id, local_op, local_payload, server_payload, server_revision, created_at, error) VALUES (?,?,?,?,?,?,?,?)`,
+		c.Entity, c.EntityID, c.LocalOp, c.LocalPayload, c.ServerPayload, c.ServerRevision, ft(time.Now()), c.Error)
 	return err
 }
 
 func (m *Module) Conflicts(ctx context.Context) ([]Conflict, error) {
-	rows, err := m.st.r.QueryContext(ctx, `SELECT id, entity, entity_id, local_op, local_payload, server_payload, server_revision, created_at FROM hc_conflicts ORDER BY id`)
+	rows, err := m.st.r.QueryContext(ctx, `SELECT id, entity, entity_id, local_op, local_payload, server_payload, server_revision, created_at, error FROM hc_conflicts ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -512,7 +515,7 @@ func (m *Module) Conflicts(ctx context.Context) ([]Conflict, error) {
 	for rows.Next() {
 		var c Conflict
 		var t string
-		if err := rows.Scan(&c.ID, &c.Entity, &c.EntityID, &c.LocalOp, &c.LocalPayload, &c.ServerPayload, &c.ServerRevision, &t); err != nil {
+		if err := rows.Scan(&c.ID, &c.Entity, &c.EntityID, &c.LocalOp, &c.LocalPayload, &c.ServerPayload, &c.ServerRevision, &t, &c.Error); err != nil {
 			return nil, err
 		}
 		c.CreatedAt = pt(t)

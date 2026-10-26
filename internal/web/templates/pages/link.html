@@ -124,18 +124,22 @@
 {{range $d.Conflicts}}
 <div class="card mb-3">
 	<div class="card-header d-flex justify-content-between align-items-center">
-		<span><strong>{{.Name}}</strong> <span class="badge text-bg-light">{{.Entity}}</span>{{if .Deleted}} <span class="badge text-bg-danger">{{$.T "link.server_deleted"}}</span>{{end}}</span>
+		<span><strong>{{.Name}}</strong> <span class="badge text-bg-light">{{.Entity}}</span>{{if .Deleted}} <span class="badge text-bg-secondary">{{$.T "link.server_missing"}}</span>{{end}}</span>
 		<span class="small text-body-secondary">{{$.Time .Created}}</span>
 	</div>
 	<div class="card-body">
+		{{if .Error}}<div class="alert alert-warning small py-2"><i class="bi bi-exclamation-triangle"></i> {{$.T "link.rejected"}} <span class="font-monospace">{{.Error}}</span></div>
+		{{else if .Unknown}}<div class="alert alert-secondary small py-2"><i class="bi bi-info-circle"></i> {{$.T "link.rejected_old"}}</div>{{end}}
 		<div class="row g-3">
 			<div class="col-md-6"><div class="small fw-semibold mb-1">{{$.T "link.local_version"}}</div><pre class="small bg-body-tertiary p-2 rounded" style="max-height:260px;overflow:auto">{{.Local}}</pre></div>
-			<div class="col-md-6"><div class="small fw-semibold mb-1">{{$.T "link.server_version"}}</div><pre class="small bg-body-tertiary p-2 rounded" style="max-height:260px;overflow:auto">{{if .Deleted}}–{{else}}{{.Server}}{{end}}</pre></div>
+			<div class="col-md-6"><div class="small fw-semibold mb-1">{{$.T "link.server_version"}}</div><pre class="small bg-body-tertiary p-2 rounded" style="max-height:260px;overflow:auto">{{if .Deleted}}{{$.T "link.server_missing"}}{{else if .Unknown}}{{$.T "link.server_unknown"}}{{else}}{{.Server}}{{end}}</pre></div>
 		</div>
 		<form method="post" action="/link/conflicts/{{.ID}}" class="d-flex gap-2 mt-2">
 			<input type="hidden" name="_csrf" value="{{$.CSRF}}">
-			<button class="btn btn-outline-primary btn-sm" name="keep" value="server">{{$.T "link.keep_server"}}</button>
-			<button class="btn btn-outline-secondary btn-sm" name="keep" value="local">{{$.T "link.keep_local"}}</button>
+			{{if .Deleted}}<button class="btn btn-outline-danger btn-sm" name="keep" value="server" data-confirm="{{$.T "link.delete_here_confirm"}}" title="{{$.T "link.delete_here_hint"}}">{{$.T "link.delete_here"}}</button>
+			{{else if not .Unknown}}<button class="btn btn-outline-primary btn-sm" name="keep" value="server" title="{{$.T "link.keep_server_hint"}}">{{$.T "link.keep_server"}}</button>{{end}}
+			<button class="btn btn-outline-secondary btn-sm" name="keep" value="local" title="{{$.T "link.keep_local_hint"}}">{{$.T "link.keep_local"}}</button>
+			<button class="btn btn-outline-secondary btn-sm" name="keep" value="ignore" title="{{$.T "link.keep_ignore_hint"}}">{{$.T "link.keep_ignore"}}</button>
 		</form>
 	</div>
 </div>

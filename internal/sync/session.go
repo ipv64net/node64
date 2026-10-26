@@ -475,7 +475,12 @@ func (s *session) replayOutbox() {
 			c.log.Warn("server rejected change", "entity", o.Entity, "id", checks.TokenHint(o.EntityID), "err", res.Error)
 			// Ablehnung (z. B. Limit): Eintrag bleibt mit Fehler stehen, blockiert aber nichts anderes
 			c.logErr("OutboxSetError", c.d.HC.OutboxSetError(ctx, o.ID, "conflict", res.Error))
-			c.logErr("ConflictAdd", c.d.HC.ConflictAdd(ctx, healthchecks.Conflict{Entity: o.Entity, EntityID: o.EntityID, LocalOp: o.Op, LocalPayload: o.Payload, ServerPayload: "", ServerRevision: 0}))
+			server := ""
+			if len(res.Server) > 0 && string(res.Server) != "null" {
+				server = string(res.Server)
+			}
+			c.logErr("ConflictAdd", c.d.HC.ConflictAdd(ctx, healthchecks.Conflict{Entity: o.Entity, EntityID: o.EntityID, LocalOp: o.Op, LocalPayload: o.Payload,
+				ServerPayload: server, ServerRevision: res.Revision, Error: res.Error}))
 		default:
 			s.applyAck(ctx, o, res)
 			c.logErr("OutboxDelete", c.d.HC.OutboxDelete(ctx, o.ID))
@@ -744,7 +749,7 @@ func (s *session) runCommand(cmd wire.Command) {
 			id = int64(v)
 		}
 		keep, _ := args["keep"].(string)
-		if err := c.Resolve(ctx, id, keep != "local"); err != nil {
+		if err := c.Resolve(ctx, id, keep); err != nil {
 			res.Error = err.Error()
 		} else {
 			res.OK = true

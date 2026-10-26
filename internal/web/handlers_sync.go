@@ -55,7 +55,9 @@ type conflictRow struct {
 	Name     string
 	Local    string
 	Server   string
-	Deleted  bool
+	Deleted  bool // der hub hat den Eintrag nicht (Grund bekannt, keine Server-Fassung)
+	Unknown  bool // alter Konflikt: Server-Stand unbekannt
+	Error    string
 	Created  time.Time
 	LocalOp  string
 	Revision int64
@@ -68,7 +70,7 @@ func (s *Server) linkPage(w http.ResponseWriter, r *http.Request) {
 		if list, err := s.HC.Conflicts(r.Context()); err == nil {
 			for _, c := range list {
 				d.Conflicts = append(d.Conflicts, conflictRow{ID: c.ID, Entity: c.Entity, Name: healthchecks.ConflictName(c), Local: pretty(c.LocalPayload), Server: pretty(c.ServerPayload),
-					Deleted: c.ServerPayload == "", Created: c.CreatedAt, LocalOp: c.LocalOp, Revision: c.ServerRevision})
+					Deleted: c.ServerPayload == "" && c.Error != "", Unknown: c.ServerPayload == "" && c.Error == "", Error: c.Error, Created: c.CreatedAt, LocalOp: c.LocalOp, Revision: c.ServerRevision})
 			}
 		}
 	}
@@ -255,8 +257,11 @@ func (s *Server) linkResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	keepServer := r.PostFormValue("keep") != "local"
-	if err := s.Linker.Resolve(r.Context(), id, keepServer); err != nil {
+	keep := r.PostFormValue("keep")
+	if keep != "local" && keep != "ignore" {
+		keep = "server"
+	}
+	if err := s.Linker.Resolve(r.Context(), id, keep); err != nil {
 		s.flash(w, r, "danger", err.Error())
 	} else {
 		s.flash(w, r, "success", s.tr(r, "link.conflict_resolved"))
