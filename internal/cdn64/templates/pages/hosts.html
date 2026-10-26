@@ -123,6 +123,7 @@
 			<td class="text-end pe-3 text-nowrap">
 				{{if .URL}}<a class="btn btn-sm btn-outline-secondary py-0" href="{{.URL}}" target="_blank" rel="noopener" title="{{$.T "cdn64.open"}}"><i class="bi bi-box-arrow-up-right"></i></a>{{end}}
 				{{if eq .Kind "proxy"}}{{if .Watch}}<a class="btn btn-sm btn-outline-success py-0" href="/healthchecks/{{(index .Watch 0).Token}}" title="{{$.T "cdn64.watch.open"}}"><i class="bi bi-heart-pulse-fill"></i></a>{{else}}<form method="post" action="/cdn64/hosts/{{.ID}}/healthcheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "cdn64.create_check"}}"><i class="bi bi-heart-pulse"></i></button></form>{{end}}{{end}}
+				{{if and (eq .Kind "proxy") $d.LocalOn}}<button type="button" class="btn btn-sm {{if and .LocalN (eq .LocalN (len .Names))}}btn-outline-success{{else}}btn-outline-secondary{{end}} py-0" data-bs-toggle="modal" data-bs-target="#cdn64-localdns" data-ldns-id="{{.ID}}" data-ldns-names="{{range $i, $n := .Names}}{{if $i}}, {{end}}{{$n}}{{end}}" title="{{if .LocalN}}{{$.T "cdn64.localdns.have" "n" .LocalN "total" (len .Names)}}{{else}}{{$.T "cdn64.localdns.title"}}{{end}}"><i class="bi {{if .LocalN}}bi-house-check-fill{{else}}bi-house{{end}}"></i></button>{{end}}
 				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/hosts/{{.ID}}" title="{{$.T "cdn64.edit"}}"><i class="bi bi-pencil"></i></a>
 				<form method="post" action="/cdn64/hosts/{{.ID}}/{{if .Enabled}}disable{{else}}enable{{end}}" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
 					<button class="btn btn-sm {{if .Enabled}}btn-outline-warning{{else}}btn-outline-success{{end}} py-0" type="submit" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause-fill{{else}}bi-play-fill{{end}}"></i></button></form>
@@ -164,15 +165,33 @@
 		</tbody>
 	</table></div>
 </div>{{end}}
+{{if $d.LocalOn}}<div class="modal fade" id="cdn64-localdns" tabindex="-1" aria-labelledby="cdn64-localdns-title" aria-hidden="true">
+	<div class="modal-dialog"><form class="modal-content" method="post" action="/cdn64" data-ldns-form><input type="hidden" name="_csrf" value="{{.CSRF}}">
+		<div class="modal-header"><h2 class="modal-title h5" id="cdn64-localdns-title"><i class="bi bi-house text-primary"></i> {{.T "cdn64.localdns.title"}}{{$.Doc "dns64#eigene-eintraege"}}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{.T "cdn64.online.close"}}"></button></div>
+		<div class="modal-body small">
+			<p>{{.T "cdn64.localdns.intro"}}</p>
+			<p class="font-monospace text-break mb-3" data-ldns-names></p>
+			<div class="row g-2">
+				<div class="col-sm-6"><label class="form-label mb-1" for="ldns-v4">{{.T "cdn64.localdns.v4"}}</label><input class="form-control form-control-sm font-monospace" id="ldns-v4" name="ipv4" value="{{$d.LocalV4}}" placeholder="192.168.1.10" autocomplete="off"></div>
+				<div class="col-sm-6"><label class="form-label mb-1" for="ldns-v6">{{.T "cdn64.localdns.v6"}}</label><input class="form-control form-control-sm font-monospace" id="ldns-v6" name="ipv6" value="{{$d.LocalV6}}" placeholder="fd00::10" autocomplete="off"></div>
+			</div>
+			<div class="form-text">{{.T "cdn64.localdns.hint"}}</div>
+		</div>
+		<div class="modal-footer"><button type="submit" class="btn btn-primary btn-sm">{{.T "cdn64.localdns.submit"}}</button><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{{.T "cdn64.online.close"}}</button></div>
+	</form></div>
+</div>{{end}}
 {{if $d.OnlineOn}}<div class="modal fade" id="cdn64-online" tabindex="-1" aria-labelledby="cdn64-online-title" aria-hidden="true" data-online-modal data-csrf="{{.CSRF}}" data-l="{{$d.OnlineL}}">
 	<div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
 		<div class="modal-header"><h2 class="modal-title h5" id="cdn64-online-title"><i class="bi bi-cloud-arrow-up text-primary"></i> {{.T "cdn64.online.col"}}{{$.Doc "cdn64-online#einrichtung"}}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{.T "cdn64.online.close"}}"></button></div>
 		<div class="modal-body">
 			<div data-online-setup>
 				<p class="small">{{.T "cdn64.online.intro"}}{{$.Doc "cdn64-online#schutz"}}</p>
+				<div class="small fw-semibold mb-1">{{.T "cdn64.online.ex_title"}}{{$.Doc "cdn64-online#welcher-modus"}}</div>
+				<div class="border rounded p-2 mb-2 c64o-pick" role="button" tabindex="0" data-online-pick="1"><div class="fw-semibold small">{{.T "cdn64.online.ex1_title"}}{{$.Doc "cdn64-online#modus-1"}}</div><div class="small text-body-secondary">{{.T "cdn64.online.ex1_text"}}</div><pre class="c64o-ascii mb-0 mt-1">{{.T "cdn64.online.ex1_art"}}</pre></div>
+				<div class="border rounded p-2 mb-2 c64o-pick" role="button" tabindex="0" data-online-pick="2"><div class="fw-semibold small">{{.T "cdn64.online.ex2_title"}}{{$.Doc "cdn64-online#modus-2"}}</div><div class="small text-body-secondary">{{.T "cdn64.online.ex2_text"}}</div><pre class="c64o-ascii mb-0 mt-1">{{.T "cdn64.online.ex2_art"}}</pre></div>
+				<div class="border border-dashed rounded p-2 mb-3 c64o-mode3"><div class="fw-semibold small">{{.T "cdn64.online.ex3_title"}}{{$.Doc "cdn64-online#modus-3"}}</div><div class="small text-body-secondary">{{.T "cdn64.online.ex3_text"}} <a href="https://ipv64.net/cdn64" target="_blank" rel="noopener">ipv64.net/cdn64 <i class="bi bi-box-arrow-up-right"></i></a></div><pre class="c64o-ascii mb-0 mt-1">{{.T "cdn64.online.ex3_art"}}</pre></div>
 				<div class="mb-2"><label class="form-label small mb-1" for="online-mode">{{.T "cdn64.online.mode"}}{{$.Doc "cdn64-online#welcher-modus"}}</label>
-					<select class="form-select form-select-sm" id="online-mode" data-online-mode><option value="1" selected>{{.T "cdn64.online.mode1"}}</option><option value="2">{{.T "cdn64.online.mode2"}}</option></select>
-					<div class="form-text">{{.T "cdn64.online.mode3_web"}} <a href="https://ipv64.net/cdn64" target="_blank" rel="noopener">ipv64.net/cdn64 <i class="bi bi-box-arrow-up-right"></i></a></div></div>
+					<select class="form-select form-select-sm" id="online-mode" data-online-mode><option value="1" selected>{{.T "cdn64.online.mode1"}}</option><option value="2">{{.T "cdn64.online.mode2"}}</option></select></div>
 				<div class="form-check small mb-3"><input class="form-check-input" type="checkbox" id="online-hc" data-online-hc><label class="form-check-label" for="online-hc">{{.T "cdn64.online.hc"}}</label></div>
 			</div>
 			<ol class="list-unstyled mb-0 small" data-online-steps></ol>

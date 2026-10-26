@@ -305,3 +305,9 @@ html[data-fs="xl"] { font-size: 125%; }
 /* PROXY64: an den Honeypot-Koeder gegebene Anfragen (lila wie im Diagramm) */
 .hp-decoy { color: var(--bs-purple, #6f42c1); }
 .hp-decoy-badge { background-color: var(--bs-purple, #6f42c1); color: #fff; }
+/* CDN64 einschalten: Modus-Erklaerung mit Skizze, Kasten waehlt den Modus */
+.c64o-ascii { font-size: .72rem; line-height: 1.25; white-space: pre; overflow-x: auto; color: var(--bs-secondary-color); }
+.c64o-pick { cursor: pointer; }
+.c64o-pick:hover, .c64o-pick:focus-visible { border-color: var(--bs-primary) !important; }
+.c64o-pick.active { border-color: var(--bs-primary) !important; background-color: var(--bs-primary-bg-subtle); }
+.c64o-mode3 { border-style: dashed !important; }

@@ -1,5 +1,15 @@
 # Änderungen – PROXY64
 
+## 1.30.0 – 2026-10-26
+
+### Neu
+- Host-Liste (Proxys): Knopf „Lokal in DNS64 eintragen“ (Haus-Symbol). Trägt die Namen des Hosts als eigene
+  DNS-Einträge in DNS64 ein (ohne Zone) – A und optional AAAA auf die Adresse des Reverse-Proxys. Vorgeschlagen ist die
+  Adresse, über die Node64 gerade aufgerufen wird, sonst die der Node im LAN. Vorhandene Einträge desselben Typs und
+  CNAMEs bleiben unverändert; ein grünes Haus zeigt, dass alle Namen schon lokal stehen. Nur, wenn DNS64 läuft.
+- Fenster „CDN64 einschalten“: Modus 1, 2 und 3 sind oben kurz erklärt, jeweils mit Skizze; ein Klick auf den Kasten
+  wählt den Modus. Modus 3 läuft ohne Node64 und verlinkt auf ipv64.net/cdn64.
+
 ## 1.29.0 – 2026-10-26
 
 ### Geändert

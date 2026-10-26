@@ -538,7 +538,8 @@
       "geo_none": "Für die Ländersperre mindestens ein Land angeben.",
       "geo_many": "Höchstens 60 Länder je Host.",
       "status_page": "Bitte eine Statusseite wählen.",
-      "pass_self": "Durchreichen auf die eigene Oberfläche geht nicht – dafür einen Proxy-Host anlegen."
+      "pass_self": "Durchreichen auf die eigene Oberfläche geht nicht – dafür einen Proxy-Host anlegen.",
+      "localdns_ip": "Bitte mindestens eine gültige IPv4- oder IPv6-Adresse angeben."
     },
     "help_title": "So funktioniert es",
     "help_ports": "Der Router leitet 80 und 443 (TCP, für HTTP/3 auch 443/UDP) auf diese Node weiter. Den Rest verteilt Node64 nach dem Domainnamen – auch zusammen mit DNS64 im selben Container.",
@@ -989,7 +990,17 @@
         "not_configured": "CDN64 ist für diesen Host nicht eingeschaltet.",
         "invalid_field": "Der Name ist ungültig.",
         "error": "Unerwarteter Fehler."
-      }
+      },
+      "ex_title": "Welcher Modus?",
+      "ex1_title": "Modus 1 – durchreichen (Standard)",
+      "ex1_text": "Die Server sind nur Briefträger: Sie lesen den Namen und reichen die verschlüsselte Verbindung durch den Tunnel. Entschlüsselt wird erst in deiner Node, Zertifikat und Schlüssel bleiben hier. Die richtige Wahl für fast alles.",
+      "ex1_art": "Besucher ══HTTPS══► srv07 / srv08 ══Tunnel══► Node64 ──► Dienst\n                    liest nur den Namen,      TLS endet hier,\n                    entschlüsselt nicht       dein Zertifikat",
+      "ex2_title": "Modus 2 – auf den Servern beenden",
+      "ex2_text": "Die Server öffnen die Verbindung (eigenes Zertifikat von Let's Encrypt), prüfen sie und sortieren schon dort aus: Blocklisten, Limits je IP, HTTP/3. Gut bei kleinem Upload oder viel unerwünschtem Verkehr. Nicht für Hosts mit „TLS durchreichen“.",
+      "ex2_art": "Besucher ══HTTPS══► srv07 / srv08 ══Tunnel══► Node64 ──► Dienst\n                    TLS endet hier,           Anfrage mit echter\n                    Blocklisten, IP-Limits    Besucher-IP",
+      "ex3_title": "Modus 3 – ohne Node64",
+      "ex3_text": "Die Server gehen direkt zu deinem Ziel, ohne Tunnel – das Ziel muss aus dem Internet erreichbar sein. Mit Cache auf den Servern und Portmapper. Läuft nicht über den Container und wird auf der Webseite eingerichtet:",
+      "ex3_art": "Besucher ══HTTPS══► srv07 / srv08 ══Internet══► dein Ziel\n                    Cache, Portmapper           öffentlich erreichbar,\n                                                ohne Node64 und Tunnel"
     },
     "status": {
       "off": "aus",
@@ -1001,7 +1012,19 @@
     },
     "c4": "{n} × 4xx",
     "c4_hint": "Antworten des Ziels mit 4xx (z. B. nicht gefunden, nicht angemeldet) – meist kein Fehler, z. B. fehlende Icons oder abgelaufene Anmeldungen.",
-    "decoyed": "{n} an Honeypot"
+    "decoyed": "{n} an Honeypot",
+    "localdns": {
+      "title": "Lokal in DNS64 eintragen",
+      "have": "{n} von {total} Namen stehen schon in DNS64 – weitere eintragen",
+      "intro": "Trägt die Namen dieses Hosts als eigene DNS-Einträge in DNS64 ein (ohne Zone), mit der Adresse des Reverse-Proxys. Geräte im Heimnetz, die DNS64 fragen, gehen dann direkt zum Proxy statt über das Internet.",
+      "v4": "IPv4 des Reverse-Proxys",
+      "v6": "IPv6 des Reverse-Proxys (optional)",
+      "hint": "Vorgeschlagen ist die Adresse, über die du Node64 gerade aufrufst, sonst die der Node im LAN. Namen mit vorhandenem Eintrag desselben Typs oder einem CNAME bleiben unverändert. Ändern und löschen unter DNS64 → Eigene DNS-Einträge.",
+      "submit": "Eintragen",
+      "added": "{n} Einträge in DNS64 angelegt.",
+      "skipped": "Schon vorhanden, unverändert: {list}.",
+      "failed": "Eintragen in DNS64 fehlgeschlagen: {error}"
+    }
   },
   "certs": {
     "title": "Zertifikate",

@@ -233,6 +233,13 @@ func run() error {
 		}
 		return out
 	})
+	// Knopf "lokal in DNS64 eintragen" in der Host-Liste
+	cdnModule.SetLocalDNS(func() cdn64.LocalDNS {
+		if !modules.IsRunning(dns64.Name) {
+			return nil
+		}
+		return dnsLocal{dnsModule}
+	})
 	cdnModule.SetStatusPages(statusPages{hc: hcModule, on: func() bool { return modules.IsRunning(healthchecks.Name) }}) // Hostart "Statusseite"
 	portReg.Provide(cdn64.Name, cdnModule.Claims)
 	portReg.ProvideOutbound(cdn64.Name, cdnModule.OutboundClaims) // Tunnel CDN64 online (ausgehend, nur Anzeige)
@@ -735,4 +742,21 @@ func planLoop(ctx context.Context, key *ipv64api.Key, sc *nodesync.Live) {
 		}
 		cancel()
 	}
+}
+
+// dnsLocal: eigene DNS64-Eintraege fuer PROXY64 (lokaler Zugriff auf die Namen eines Hosts).
+type dnsLocal struct{ m *dns64.Module }
+
+func (d dnsLocal) Records(ctx context.Context) ([]cdn64.LocalRecord, error) {
+	list, err := d.m.Records(ctx)
+	out := make([]cdn64.LocalRecord, 0, len(list))
+	for _, r := range list {
+		out = append(out, cdn64.LocalRecord{Name: r.Name, Type: r.Type, Value: r.Value})
+	}
+	return out, err
+}
+
+func (d dnsLocal) Add(ctx context.Context, r cdn64.LocalRecord, comment string) error {
+	_, err := d.m.AddRecord(ctx, dns64.Record{Name: r.Name, Type: r.Type, Value: r.Value, Comment: comment})
+	return err
 }

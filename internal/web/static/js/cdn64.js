@@ -101,6 +101,17 @@
 		provSync();
 	}
 
+	// Host-Liste: "lokal in DNS64 eintragen" fuellt Ziel und Namen des Fensters aus dem Knopf
+	var ldns = document.getElementById("cdn64-localdns");
+	if (ldns) {
+		ldns.addEventListener("show.bs.modal", function (e) {
+			var b = e.relatedTarget;
+			if (!b) { return; }
+			ldns.querySelector("[data-ldns-form]").setAttribute("action", "/cdn64/hosts/" + b.getAttribute("data-ldns-id") + "/localdns");
+			ldns.querySelector("[data-ldns-names]").textContent = b.getAttribute("data-ldns-names");
+		});
+	}
+
 	// Waehrend ein Zertifikat geholt wird: Seite alle paar Sekunden neu laden
 	var reload = document.querySelector("[data-reload]");
 	if (reload) {

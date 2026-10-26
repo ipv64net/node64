@@ -224,9 +224,22 @@
 		});
 	}
 
+	// Erklaerung der Modi: Kasten anklicken waehlt den Modus, die Auswahl markiert den Kasten
+	var picks = modalEl.querySelectorAll("[data-online-pick]");
+	function markPick() {
+		picks.forEach(function (p) { p.classList.toggle("active", p.getAttribute("data-online-pick") === modeSel.value); });
+	}
+	picks.forEach(function (p) {
+		var pick = function () { modeSel.value = p.getAttribute("data-online-pick"); markPick(); };
+		p.addEventListener("click", function (e) { if (!e.target.closest("a")) { pick(); } });
+		p.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+	});
+	modeSel.addEventListener("change", markPick);
+
 	function open(id, test, mode) {
 		hostID = id;
 		modeSel.value = mode === "2" ? "2" : "1"; // Modus 3 gibt es nur auf ipv64.net/cdn64
+		markPick();
 		onlyTest = test;
 		stepsEl.textContent = "";
 		setup.classList.toggle("d-none", test);

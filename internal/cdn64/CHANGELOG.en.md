@@ -1,5 +1,15 @@
 # Changes – PROXY64
 
+## 1.30.0 – 2026-10-26
+
+### New
+- Host list (proxies): button “Add to local DNS64” (house icon). Adds the names of the host as custom DNS records in
+  DNS64 (no zone) – A and optionally AAAA pointing to the reverse proxy. Suggested is the address Node64 is opened
+  with, otherwise the node's LAN address. Existing records of the same type and CNAMEs stay unchanged; a green house
+  shows that all names are already local. Only while DNS64 is running.
+- Dialog “Enable CDN64”: modes 1, 2 and 3 are explained briefly at the top, each with a sketch; clicking a box selects
+  the mode. Mode 3 runs without Node64 and links to ipv64.net/cdn64.
+
 ## 1.29.0 – 2026-10-26
 
 ### Changed

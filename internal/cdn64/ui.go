@@ -137,6 +137,7 @@ type hostRow struct {
 	ACLName  string
 	Watch    []Watch    // Healthchecks auf genau dieses Ziel
 	Online   *onlineRow // CDN64 online (nil = aus)
+	LocalN   int        // Namen, die schon in DNS64 stehen (lokaler Zugriff)
 
 	Status *StatusPageInfo // Hostart status: die Seite (nil = unbekannt bzw. Healthchecks aus)
 }
@@ -204,6 +205,9 @@ type listData struct {
 	Quota     *onlineQuota  // Kontingent bei ipv64 (nur wenn Namen eingeschaltet sind)
 	Others    []onlineOther // Namen des Accounts, die diese Node nicht verwaltet (Modus 3 von ipv64.net, andere Nodes)
 	OnlineL   string        // Texte fuer cdn64-online.js (JSON)
+	LocalOn   bool          // DNS64 laeuft (Knopf "lokal eintragen")
+	LocalV4   string        // vorgeschlagene Adressen des Reverse-Proxys
+	LocalV6   string
 }
 
 func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
@@ -234,6 +238,7 @@ func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
 	}
 	watch := m.watchIndex(ctx)
 	onl := m.onlineIndex(ctx, list)
+	ldns := m.localIndex(ctx)
 	pages := map[int64]*StatusPageInfo{}
 	for _, h := range list {
 		if h.Kind == KindStatus { // nur abfragen, wenn es Status-Hosts gibt
@@ -249,6 +254,7 @@ func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
 		st := m.statsOf(h.ID)
 		row := hostRow{Host: h, Reach: m.reach.get(h.ID), Requests: st.requests.Load(), Errors: st.errors.Load(), Blocked: st.blocked.Load(),
 			URL: firstURL(h), Cert: m.certFor(ctx, h, all), RouteErr: routeErr[h.ID], Day: day[h.ID], ACLName: acls[h.AccessListID], Online: onl[h.ID]}
+		row.LocalN = localCount(ldns, h.Names)
 		if h.probed() {
 			row.Watch = watch.of(h.TargetHost, h.TargetPort)
 		}
@@ -287,6 +293,9 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 	}
 	d := listData{Kind: kind, Tabs: tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError(), Pub: m.published(r.Context()), StatsOn: m.stats2.Load() != nil,
 		OnlineOn: m.online.api != nil && m.edge != nil, OnlineL: m.onlineStrings(r), LimitsOn: m.limLoad(r.Context()).Enabled}
+	if d.LocalOn = m.ldns() != nil; d.LocalOn {
+		d.LocalV4, d.LocalV6 = m.localAddrs(r)
+	}
 	rm := m.online.remote.Load()
 	if d.OnlineOn && (rm == nil || time.Since(rm.At) > time.Minute) { // auch ohne eigene Namen bald nachsehen (Modus 3)
 		m.online.want.Store(true)

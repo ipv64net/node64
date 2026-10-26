@@ -24,6 +24,7 @@ func (m *Module) c4Routes(mux *http.ServeMux, page func(http.HandlerFunc) http.H
 	mux.Handle("GET /cdn64/log", page(m.pageLog))
 	mux.Handle("POST /cdn64/log/settings", page(m.pageLogSettings))
 	mux.Handle("POST /cdn64/hosts/{id}/healthcheck", page(m.pageHostCheck))
+	mux.Handle("POST /cdn64/hosts/{id}/localdns", page(m.pageHostLocalDNS))
 	mux.Handle("POST /cdn64/streams/{id}/healthcheck", page(m.pageStreamCheck))
 	mux.Handle("POST /cdn64/blocklists", page(m.pageBlocklistsSave))
 	mux.Handle("POST /cdn64/blocklists/refresh", page(m.pageBlocklistsRefresh))
