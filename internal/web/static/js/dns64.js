@@ -210,11 +210,11 @@
 				var ok = s.requests === 0 || s.healthy;
 				var share = wins ? 100 * s.wins / wins : 0;
 				var card = el("div", { "class": "border rounded p-2" });
-				var title = el("div", { "class": "d-flex align-items-center gap-2" });
+				var title = el("div", { "class": "d-flex flex-wrap align-items-center gap-2" }); // Handy: IPs in eine eigene Zeile
 				title.append(el("b", {}, s.name), el("span", { "class": "badge text-bg-info" }, { doh: "DoH", dot: "DoT", doq: "DoQ" }[s.proto] || s.proto),
 					el("span", { "class": "badge " + (ok ? "text-bg-success" : "text-bg-danger") }, s.requests === 0 ? t("ready") : ok ? t("online") : t("disturbed")),
 					s.active ? el("span", { "class": "badge text-bg-primary" }, t("in_use")) : "",
-					el("span", { "class": "text-body-secondary ms-auto font-monospace" }, s.ips.join(", ")));
+					el("span", { "class": "text-body-secondary ms-auto font-monospace text-break" }, s.ips.join(", ")));
 				var stats = el("div", { "class": "d-flex flex-wrap gap-3 mt-1" });
 				[[t("avg"), s.avgMs ? pf.format(s.avgMs) + " ms" : "–"], [t("fastest"), pf.format(share) + " %"], [t("requests"), nf.format(s.requests)], [t("errors"), nf.format(s.errors)]].forEach(function (p) {
 					var sp = el("span", { "class": "text-body-secondary" }, p[0] + " ");
@@ -225,7 +225,7 @@
 				var fill = el("div", { "class": "progress-bar bg-info" });
 				fill.style.width = share + "%";
 				bar.append(fill);
-				card.append(title, el("div", { "class": "text-body-secondary text-truncate", title: s.url }, s.url), stats, bar);
+				card.append(title, el("div", { "class": "text-body-secondary text-break", title: s.url }, s.url), stats, bar);
 				if (s.lastError && !s.healthy) { card.append(el("div", { "class": "text-danger text-truncate", title: s.lastError }, t("last_error") + ": " + s.lastError)); }
 				box.append(card);
 			});

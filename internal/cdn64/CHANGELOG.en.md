@@ -1,5 +1,12 @@
 # Changes – PROXY64
 
+## 1.30.3 – 2026-10-26
+
+### Changed
+- Phone: the host list, "Other names in CDN64" and the access log show one card per entry (label left, content right)
+  instead of a wide table that needs scrolling sideways.
+
+
 ## 1.30.2 – 2026-10-26
 
 ### Fixed

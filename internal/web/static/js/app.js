@@ -210,6 +210,28 @@
 		refresh();
 	}
 
+	// Tabellen .table-stack (Handy: Karten, node64.css): Beschriftung je Zelle aus dem Tabellenkopf, auch fuer Zeilen,
+	// die ein Modulskript spaeter einfuegt. Kopfzellen mit data-nolabel bzw. ohne Text bekommen keine.
+	function stackLabels(table) {
+		var heads = [];
+		table.querySelectorAll("thead th").forEach(function (th) {
+			for (var i = 0; i < (th.colSpan || 1); i++) { heads.push(th.hasAttribute("data-nolabel") ? "" : th.textContent.trim()); }
+		});
+		table.querySelectorAll("tbody tr").forEach(function (tr) {
+			var col = 0;
+			Array.prototype.forEach.call(tr.cells, function (td) {
+				if (!td.hasAttribute("data-label") && heads[col]) { td.setAttribute("data-label", heads[col]); }
+				col += td.colSpan || 1;
+			});
+		});
+	}
+	document.querySelectorAll("table.table-stack").forEach(function (table) {
+		stackLabels(table);
+		if (window.MutationObserver && table.tBodies[0]) {
+			new MutationObserver(function () { stackLabels(table); }).observe(table.tBodies[0], { childList: true });
+		}
+	});
+
 	// Erfolgsmeldungen nach einigen Sekunden ausblenden
 	document.querySelectorAll(".alert-success.alert-dismissible").forEach(function (el) {
 		setTimeout(function () {

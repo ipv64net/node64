@@ -1,5 +1,12 @@
 # Änderungen – PROXY64
 
+## 1.30.3 – 2026-10-26
+
+### Geändert
+- Handy: Die Liste der Hosts, „Weitere Namen in CDN64“ und die Zugriffe zeigen je Eintrag eine Karte (Beschriftung
+  links, Inhalt rechts) statt einer breiten Tabelle zum Hin- und Herscrollen.
+
+
 ## 1.30.2 – 2026-10-26
 
 ### Behoben

@@ -7,6 +7,7 @@
   (recommended: "Only via PROXY64"), with the list of ports to forward to the node in the router (e.g. 22/tcp,
   161/udp), the start page of the web trap, notification and reporting to ipv64. All previous settings (single
   services and ports, profiles, certificate, limits, log sensor, syslog, sign-in watch) are in expert mode.
+- Phone: "Recent events" shows one card per event instead of a wide table.
 - Start page of the web trap selectable: gateway terminal in Matrix style (default) or a plain sign-in form. Also
   applies to bots PROXY64 hands to the honeypot.
 

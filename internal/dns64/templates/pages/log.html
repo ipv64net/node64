@@ -48,7 +48,7 @@
 		<div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="log-live" checked><label class="form-check-label small" for="log-live">{{.T "dns64.log.live"}}</label></div>
 	</div>
 	<div class="table-responsive">
-		<table class="table table-sm table-hover align-middle mb-0 small">
+		<table class="table table-sm table-hover align-middle mb-0 small table-stack">
 			<thead><tr><th>{{.T "common.time"}}</th><th>{{.T "dns64.log.client"}}</th><th>{{.T "dns64.log.domain"}}</th><th>{{.T "common.type"}}</th><th>{{.T "common.status"}}</th><th>{{.T "common.details"}}</th><th class="text-end">{{.T "dns64.log.duration"}}</th><th></th></tr></thead>
 			<tbody id="log-body"></tbody>
 		</table>

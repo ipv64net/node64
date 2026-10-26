@@ -102,8 +102,8 @@
 				<input type="hidden" name="_csrf" value="{{.CSRF}}">
 				<div class="card-body small pb-0"><p class="text-body-secondary">{{.T "dns64.settings.up_hint"}}</p></div>
 				<div class="table-responsive">
-					<table class="table table-sm align-middle mb-0 small">
-						<thead><tr><th class="ps-3">{{.T "dns64.lists.on"}}</th><th>{{.T "common.name"}}</th><th>{{.T "dns64.settings.up_ips"}}</th><th></th></tr></thead>
+					<table class="table table-sm align-middle mb-0 small table-stack">
+						<thead><tr><th class="ps-3">{{.T "dns64.lists.on"}}</th><th data-nolabel>{{.T "common.name"}}</th><th>{{.T "dns64.settings.up_ips"}}</th><th></th></tr></thead>
 						<tbody>
 						{{range $i, $u := $d.Cfg.Upstreams}}<tr>
 							<td class="ps-3"><input class="form-check-input" type="checkbox" name="on_{{$i}}" value="1"{{if $u.Enabled}} checked{{end}} aria-label="{{$u.Name}}"></td>

@@ -36,7 +36,7 @@
 			{{if not $d.Entries}}<div class="card-body text-body-secondary small">{{if eq $d.Enabled 0}}{{.T "cdn64.log.none_enabled"}}{{else}}{{.T "cdn64.log.empty"}}{{end}}</div>
 			{{else}}
 			<div class="table-responsive">
-			<table class="table table-sm table-hover align-middle mb-0 small">
+			<table class="table table-sm table-hover align-middle mb-0 small table-stack">
 				<thead><tr><th class="ps-3">{{.T "cdn64.log.time"}}</th><th>{{.T "cdn64.log.client"}}</th><th>{{.T "cdn64.log.request"}}</th><th>Status</th><th class="text-end">{{.T "cdn64.log.size"}}</th><th class="text-end pe-3">ms</th></tr></thead>
 				<tbody>
 				{{range $d.Entries}}

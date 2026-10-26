@@ -8,6 +8,7 @@
   (z. B. 22/tcp, 161/udp), Startseite der Web-Falle, Benachrichtigung und Meldung an ipv64. Alle bisherigen
   Einstellungen (einzelne Dienste und Ports, Profile, Zertifikat, Limits, Log-Sensor, Syslog, Anmeldung) stehen im
   Expertenmodus.
+- Handy: „Letzte Ereignisse“ zeigt je Ereignis eine Karte statt einer breiten Tabelle.
 - Startseite der Web-Falle wählbar: Gateway-Terminal im Matrix-Stil (Standard) oder schlichtes Anmeldeformular. Gilt
   auch für Bots, die PROXY64 an den Honeypot gibt.
 

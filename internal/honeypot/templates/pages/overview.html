@@ -182,7 +182,7 @@
 		</div>
 	</div>
 	<div class="card-body p-0">
-		{{if $d.Events}}<div class="table-responsive"><table class="table table-sm table-hover align-middle small mb-0">
+		{{if $d.Events}}<div class="table-responsive"><table class="table table-sm table-hover align-middle small mb-0 table-stack">
 			<thead><tr><th>{{.T "honeypot.events.time"}}</th><th>{{.T "honeypot.events.source"}}</th><th>{{.T "honeypot.events.origin"}}</th><th>{{.T "honeypot.events.service"}}</th><th>{{.T "honeypot.events.kind"}}</th><th>{{.T "honeypot.events.details"}}</th></tr></thead>
 			<tbody>{{range $d.Events}}<tr>
 				<td class="text-nowrap">{{$.Time .Time}}</td>

@@ -1,5 +1,12 @@
 # Changes – DNS64
 
+## 1.29.1 – 2026-10-26
+
+### Changed
+- Phone: the query log and the upstream list in the settings show one card per entry instead of a wide table; the
+  upstream cards on the overview wrap IP addresses and URL instead of running off the screen.
+
+
 ## 1.29.0 – 2026-10-26
 
 ### Added

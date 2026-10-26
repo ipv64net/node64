@@ -144,6 +144,26 @@ a { color: var(--bs-primary); }
 	.table-cards td.text-nowrap { white-space: normal !important; }
 }
 
+/* Breite Tabellen mit vielen Angaben je Zelle (PROXY64, DNS64, Honeypot): auf dem Handy je Zeile eine Karte,
+   Beschriftung links (aus dem Tabellenkopf, app.js), Inhalt rechts und frei umbrochen. Spalten ohne Kopftext oder
+   mit data-nolabel (Name, Knoepfe) nehmen die ganze Breite. */
+@media (max-width: 767.98px) {
+	.table-stack thead { display: none; }
+	.table-stack, .table-stack tbody, .table-stack tr { display: block; width: 100%; }
+	.table-stack tr { border: 1px solid var(--bs-border-color); border-radius: .375rem; margin: 0 .5rem .6rem; width: auto; padding: .4rem .6rem; }
+	.table-stack tbody tr:first-child { margin-top: .5rem; }
+	.table-stack td { display: block; position: relative; border: 0; padding: .15rem 0 .15rem 6.5rem !important; text-align: start !important;
+		white-space: normal !important; max-width: none !important; overflow-wrap: anywhere; min-height: 1.5rem; }
+	.table-stack td::before { content: attr(data-label); position: absolute; left: 0; top: .15rem; width: 6rem; font-weight: 600; font-family: var(--bs-body-font-family);
+		color: var(--bs-secondary-color); overflow-wrap: anywhere; }
+	.table-stack td:not([data-label]), .table-stack td[data-label=""] { padding-left: 0 !important; }
+	.table-stack td:not([data-label])::before, .table-stack td[data-label=""]::before { content: none; }
+	.table-stack td:empty { display: none; }
+	.table-stack td[colspan] { padding-left: 0 !important; }
+	.table-stack td[colspan]::before { content: none; }
+	.table-stack .text-truncate { white-space: normal !important; }
+}
+
 /* Kennzahl-Kacheln, ueberall gleich: Name klein oben, Wert gross darunter, Symbol rechts, farbiger Rand links.
    Alle Kacheln einer Reihe sind gleich hoch (Spalten strecken sich, die Karte fuellt die Spalte).
    Schmale Kacheln (container query) werden kompakter, sehr schmale zeigen kein Symbol. */

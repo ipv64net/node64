@@ -46,9 +46,9 @@
 	</div>
 	{{else}}
 	<div class="table-responsive">
-	<table class="table table-hover align-middle mb-0 small">
+	<table class="table table-hover align-middle mb-0 small table-stack">
 		<thead><tr>
-			<th class="ps-3" style="min-width:14rem">{{.T "cdn64.col.names"}}</th>{{if ne $d.Kind "dead"}}<th>{{.T "cdn64.col.target"}}</th>{{end}}<th>{{.T "cdn64.col.ssl"}}</th><th>{{.T "cdn64.col.options"}}</th>
+			<th class="ps-3" style="min-width:14rem" data-nolabel>{{.T "cdn64.col.names"}}</th>{{if ne $d.Kind "dead"}}<th>{{.T "cdn64.col.target"}}</th>{{end}}<th>{{.T "cdn64.col.ssl"}}</th><th>{{.T "cdn64.col.options"}}</th>
 			{{if eq $d.Kind "proxy"}}<th>{{.T "cdn64.col.reach"}}</th>{{end}}{{if $d.OnlineOn}}<th>{{.T "cdn64.online.col"}}</th>{{end}}<th class="text-end" data-stats-col>{{.T "cdn64.col.requests24"}}</th><th class="text-end pe-3"></th>
 		</tr></thead>
 		<tbody>
@@ -140,8 +140,8 @@
 {{with $d.Others}}<div class="card mt-3" id="cdn-others">
 	<div class="card-header small"><span class="fw-semibold"><i class="bi bi-cloud text-primary"></i> {{$.T "cdn64.online.others"}}</span>{{$.Doc "cdn64-online#modus-3"}}
 		<div class="text-body-secondary">{{$.T "cdn64.online.others_hint"}}</div></div>
-	<div class="table-responsive"><table class="table table-sm align-middle mb-0 small">
-		<thead><tr><th class="ps-3">{{$.T "cdn64.online.o_name"}}</th><th>{{$.T "cdn64.online.o_mode"}}</th><th>{{$.T "cdn64.online.o_target"}}</th><th>{{$.T "cdn64.online.o_status"}}</th><th class="text-end">{{$.T "cdn64.online.o_month"}}</th><th class="text-end pe-3"></th></tr></thead>
+	<div class="table-responsive"><table class="table table-sm align-middle mb-0 small table-stack">
+		<thead><tr><th class="ps-3" data-nolabel>{{$.T "cdn64.online.o_name"}}</th><th>{{$.T "cdn64.online.o_mode"}}</th><th>{{$.T "cdn64.online.o_target"}}</th><th>{{$.T "cdn64.online.o_status"}}</th><th class="text-end">{{$.T "cdn64.online.o_month"}}</th><th class="text-end pe-3"></th></tr></thead>
 		<tbody>{{range .}}
 		<tr{{if .Paused}} class="table-warning"{{end}}>
 			<td class="ps-3"><a class="font-monospace text-decoration-none" href="https://{{.FQDN}}" target="_blank" rel="noopener">{{.FQDN}}</a>{{if .Wildcard}} <span class="text-body-secondary" title="{{$.T "cdn64.online.o_wildcard"}}">+ *.</span>{{end}}</td>
