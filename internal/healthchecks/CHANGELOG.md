@@ -1,5 +1,17 @@
 # Änderungen – Healthchecks
 
+## 2.34.0 – 2026-10-26
+
+### Neu
+- Check-Liste: In den Gruppen „Proxmox VE“ und „Docker“ gibt es je Proxmox-System bzw. Docker-Host eine eigene
+  aufklappbare Untergruppe mit Zählern. Der Name kommt bei jedem Aufruf aus der Überwachung: bei Proxmox der
+  Clustername aus dem letzten Abruf (sonst der Name des Systems), bei Docker der Name des Hosts. Checks einer anderen
+  Node stehen unter deren Namen. Der Auf-/Zu-Zustand wird im Browser gemerkt.
+
+### Behoben (ipv64)
+- Proxmox- und WHOIS-Checks wurden beim Healthchecks-Sync abgelehnt („database error“): Der Datenbank bei ipv64
+  fehlten die Typen. SQL `hc2_check_types_proxmox_whois.sql` – danach im Healthchecks-Sync „Erneut senden“.
+
 ## 2.33.0 – 2026-10-26
 
 ### Neu

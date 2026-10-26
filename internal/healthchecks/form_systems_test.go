@@ -85,3 +85,23 @@ func TestFormSystemCheck(t *testing.T) {
 		t.Fatal("edit: docker type missing")
 	}
 }
+
+// Liste: in den Gruppen „Proxmox VE“ und „Docker“ je System bzw. Host eine Untergruppe, andere Gruppen unveraendert.
+func TestGroupRowsParts(t *testing.T) {
+	mk := func(name, group, sub, state string) row {
+		return row{Check: &Check{Name: name, Group: group, Description: sub}, State: state}
+	}
+	rows := []row{mk("a", "Proxmox VE", "Cluster B", "up"), mk("b", "Proxmox VE", "Cluster A", "down"), mk("c", "Proxmox VE", "", "up"),
+		mk("d", "Web", "", "up"), mk("e", "Proxmox VE", "Cluster B", "up")}
+	gs := groupRows(rows, []string{"Proxmox VE", "Web"}, "none", func(r row) string { return r.Check.Description })
+	if len(gs) != 2 || len(gs[0].Rows) != 4 || gs[0].Up != 3 || gs[0].Down != 1 {
+		t.Fatalf("groups: %+v", gs)
+	}
+	p := gs[0].Parts
+	if len(p) != 3 || p[0].Name != "" || len(p[0].Rows) != 1 || p[1].Name != "Cluster A" || p[1].Down != 1 || p[2].Name != "Cluster B" || len(p[2].Rows) != 2 {
+		t.Fatalf("parts: %+v", p)
+	}
+	if len(gs[1].Parts) != 1 || gs[1].Parts[0].Name != "" || len(gs[1].Parts[0].Rows) != 1 {
+		t.Fatalf("web parts: %+v", gs[1].Parts)
+	}
+}

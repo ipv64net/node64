@@ -107,11 +107,26 @@ func (r row) CertClass() string {
 	return "success"
 }
 
-// group ist ein Abschnitt der Liste (eine frei benannte Gruppe).
+// group ist ein Abschnitt der Liste (eine frei benannte Gruppe). Parts teilt sie weiter auf: in den Gruppen
+// „Proxmox VE“ und „Docker“ je System bzw. Docker-Host (aufklappbar), sonst ein Teil ohne Namen.
 type group struct {
 	Key, Name        string
 	Rows             []row
 	Up, Down, Others int
+	Parts            []group
+}
+
+// count zaehlt eine Zeile in die Zustaende der Gruppe.
+func (g *group) count(r row) {
+	g.Rows = append(g.Rows, r)
+	switch r.State {
+	case "up":
+		g.Up++
+	case "down", "flapping":
+		g.Down++
+	default:
+		g.Others++
+	}
 }
 
 type listData struct {
@@ -355,12 +370,13 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(d.AllGrps, func(i, j int) bool { return strings.ToLower(d.AllGrps[i]) < strings.ToLower(d.AllGrps[j]) })
 	sortRows(d.Rows, d.Sort, d.Dir == "desc")
 	d.Grouped = len(d.AllGrps) > 0
-	d.Groups = groupRows(d.Rows, d.AllGrps, m.g.T(r, "hc.group.none"))
+	d.Groups = groupRows(d.Rows, d.AllGrps, m.g.T(r, "hc.group.none"), m.subGroupOf(ctx, r))
 	m.g.Render(w, r, http.StatusOK, Name+"/list", "nav.healthchecks", d)
 }
 
-// groupRows verteilt die (schon sortierten) Zeilen auf Gruppen; Checks ohne Gruppe kommen zuletzt.
-func groupRows(rows []row, names []string, none string) []group {
+// groupRows verteilt die (schon sortierten) Zeilen auf Gruppen; Checks ohne Gruppe kommen zuletzt. sub liefert je
+// Zeile der Gruppen „Proxmox VE“ und „Docker“ den Namen des Systems bzw. Docker-Hosts (nil bzw. "" = kein Teil).
+func groupRows(rows []row, names []string, none string, sub func(row) string) []group {
 	idx := map[string]int{}
 	var out []group
 	for i, n := range names {
@@ -373,22 +389,36 @@ func groupRows(rows []row, names []string, none string) []group {
 		if !ok {
 			i = len(out) - 1
 		}
-		g := &out[i]
-		g.Rows = append(g.Rows, r)
-		switch r.State {
-		case "up":
-			g.Up++
-		case "down", "flapping":
-			g.Down++
-		default:
-			g.Others++
-		}
+		out[i].count(r)
 	}
 	res := out[:0]
 	for _, g := range out {
-		if len(g.Rows) > 0 {
-			res = append(res, g)
+		if len(g.Rows) == 0 {
+			continue
 		}
+		g.Parts = []group{{Key: g.Key + "-p", Rows: g.Rows}}
+		if sub != nil && (g.Name == pveCheckGroup || g.Name == dockerCheckGroup) {
+			parts, pi := []group{{Key: g.Key + "-p"}}, map[string]int{"": 0}
+			for _, r := range g.Rows {
+				n := sub(r)
+				i, ok := pi[n]
+				if !ok {
+					i = len(parts)
+					pi[n] = i
+					parts = append(parts, group{Key: g.Key + "-s" + strconv.Itoa(i), Name: n})
+				}
+				parts[i].count(r)
+			}
+			named := parts[1:]
+			sort.SliceStable(named, func(i, j int) bool { return strings.ToLower(named[i].Name) < strings.ToLower(named[j].Name) })
+			g.Parts = parts[:0]
+			for _, p := range parts {
+				if len(p.Rows) > 0 {
+					g.Parts = append(g.Parts, p)
+				}
+			}
+		}
+		res = append(res, g)
 	}
 	return res
 }

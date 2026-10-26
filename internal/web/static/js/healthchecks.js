@@ -233,18 +233,25 @@
 	// Gruppen auf- und zuklappen (Zustand im Browser gemerkt)
 	var closed = {};
 	try { closed = JSON.parse(localStorage.getItem("node64_hc_closed") || "{}"); } catch (e) { closed = {}; }
-	function setGroup(key, hide) {
-		document.querySelectorAll('tr[data-group-row="' + key + '"]').forEach(function (tr) { tr.classList.toggle("d-none", hide); });
+	// Untergruppen (Proxmox-System, Docker-Host): ihre Zeilen tragen data-sub-row; zugeklappt bleiben sie auch, wenn die
+	// Gruppe wieder aufgeht
+	function setGroup(key, hide, sub) {
 		var head = document.querySelector('tr.hc-group-row[data-group="' + key + '"]');
 		if (head) { head.classList.toggle("collapsed", hide); }
+		document.querySelectorAll('tr[' + (sub ? "data-sub-row" : "data-group-row") + '="' + key + '"]').forEach(function (tr) {
+			var s = !sub && tr.getAttribute("data-sub-row");
+			var subHead = s && document.querySelector('tr.hc-group-row[data-group="' + s + '"]');
+			var parent = sub && document.querySelector('tr.hc-group-row[data-group="' + tr.getAttribute("data-group-row") + '"]');
+			tr.classList.toggle("d-none", hide || !!(subHead && subHead.classList.contains("collapsed")) || !!(parent && parent.classList.contains("collapsed")));
+		});
 	}
 	var initGroups = function (root) { root.querySelectorAll(".hc-group-toggle").forEach(function (btn) {
-		var key = btn.getAttribute("data-group");
-		var name = btn.textContent.trim();
-		if (closed[name]) { setGroup(key, true); }
+		var key = btn.getAttribute("data-group"), sub = btn.hasAttribute("data-parent");
+		var name = btn.getAttribute("data-name") || btn.textContent.trim();
+		if (closed[name]) { setGroup(key, true, sub); }
 		btn.addEventListener("click", function () {
 			var hide = !btn.closest("tr").classList.contains("collapsed");
-			setGroup(key, hide);
+			setGroup(key, hide, sub);
 			if (hide) { closed[name] = 1; } else { delete closed[name]; }
 			try { localStorage.setItem("node64_hc_closed", JSON.stringify(closed)); } catch (e) {}
 		});

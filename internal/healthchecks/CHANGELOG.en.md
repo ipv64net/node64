@@ -1,5 +1,17 @@
 # Changes – Healthchecks
 
+## 2.34.0 – 2026-10-26
+
+### New
+- Check list: the groups “Proxmox VE” and “Docker” get a collapsible subgroup per Proxmox system or Docker host,
+  with counters. The name comes from the monitoring on every view: for Proxmox the cluster name from the last poll
+  (otherwise the system's name), for Docker the host's name. Checks of another node are listed under its name. The
+  open/closed state is remembered in the browser.
+
+### Fixed (ipv64)
+- Proxmox and WHOIS checks were rejected by the Healthchecks sync (“database error”): the database at ipv64 lacked
+  the types. SQL `hc2_check_types_proxmox_whois.sql` – then “Send again” in Healthchecks sync.
+
 ## 2.33.0 – 2026-10-26
 
 ### New

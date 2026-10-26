@@ -2659,6 +2659,11 @@
       "no_systems_docker": "No Docker host set up yet. Add one first under",
       "name_auto": "empty = automatic (system – name)",
       "err_res": "Please choose a machine or container."
+    },
+    "sub": {
+      "node": "Node {name}",
+      "other_node": "other node",
+      "unknown": "system no longer set up"
     }
   },
   "notify": {

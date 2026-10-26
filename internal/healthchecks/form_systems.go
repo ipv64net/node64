@@ -2,6 +2,7 @@ package healthchecks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
@@ -129,4 +130,70 @@ func (m *Module) formSystemCheck(w http.ResponseWriter, r *http.Request, kind st
 	}
 	m.g.Flash(w, r, "success", m.g.T(r, "pve.check.added"))
 	http.Redirect(w, r, "/healthchecks/"+tok, http.StatusSeeOther)
+}
+
+// subGroupOf liefert fuer die Liste je Check der Gruppen „Proxmox VE“ und „Docker“ die Untergruppe, jedes Mal frisch
+// aus der Ueberwachung: bei Proxmox der Clustername aus dem letzten Abruf (sonst der Name des Systems), bei Docker
+// der Name des Docker-Hosts. Checks einer anderen Node laufen unter deren Namen (deren System-IDs gelten hier nicht).
+func (m *Module) subGroupOf(ctx context.Context, r *http.Request) func(row) string {
+	systems := map[int64]*proxmox.System{}
+	byHost := map[string]*proxmox.System{}
+	if m.pve != nil && m.pve.st != nil {
+		if list, err := m.pve.st.Systems(ctx); err == nil {
+			for _, s := range list {
+				systems[s.ID] = s
+				if s.IsDocker() {
+					byHost[dockerSysHost(s)] = s
+				}
+			}
+		}
+	}
+	peers := map[string]string{}
+	for _, p := range m.peers(ctx) {
+		peers[p.ID] = p.Name
+	}
+	pveName := map[int64]string{}
+	return func(rw row) string {
+		c := rw.Check
+		if c == nil || (c.Type != checks.TypeProxmox && c.Type != checks.TypeDocker) {
+			return ""
+		}
+		if c.Foreign() {
+			for _, id := range c.Nodes {
+				if n := peers[id]; n != "" {
+					return m.g.T(r, "hc.sub.node", "name", n)
+				}
+			}
+			return m.g.T(r, "hc.sub.other_node")
+		}
+		if c.Type == checks.TypeProxmox {
+			var pp checks.ProxmoxParams
+			_ = json.Unmarshal(c.Params, &pp)
+			if n, ok := pveName[pp.SystemID]; ok {
+				return n
+			}
+			n := m.g.T(r, "hc.sub.unknown")
+			if sys := systems[pp.SystemID]; sys != nil && !sys.IsDocker() {
+				n = sys.Name
+				if s := m.pveLast(sys.ID); s != nil && s.Cluster != "" {
+					n = s.Cluster
+				}
+			}
+			pveName[pp.SystemID] = n
+			return n
+		}
+		var dp checks.DockerParams
+		_ = json.Unmarshal(c.Params, &dp)
+		h := strings.TrimSpace(dp.Host)
+		if h == "" {
+			h = checks.DefaultDockerHost()
+		}
+		if sys := byHost[h]; sys != nil {
+			return sys.Name
+		}
+		if h == checks.DefaultDockerHost() {
+			return m.g.T(r, "docker.local")
+		}
+		return h
+	}
 }

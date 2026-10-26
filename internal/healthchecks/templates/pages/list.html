@@ -101,9 +101,12 @@
 	{{range $g := $d.Groups}}
 	{{if $d.Grouped}}<tr class="hc-group-row" data-group="{{$g.Key}}"><td colspan="10"><button type="button" class="btn btn-link p-0 text-reset text-decoration-none hc-group-toggle" data-group="{{$g.Key}}"><i class="bi bi-chevron-down hc-group-chev"></i> <i class="bi bi-collection text-primary"></i> <strong>{{$g.Name}}</strong></button>
 		<span class="ms-2 small">{{if $g.Up}}<span class="badge text-bg-success">{{$g.Up}}</span> {{end}}{{if $g.Down}}<span class="badge text-bg-danger">{{$g.Down}}</span> {{end}}{{if $g.Others}}<span class="badge text-bg-secondary">{{$g.Others}}</span>{{end}}</span></td></tr>{{end}}
-	{{range $g.Rows}}
+	{{range $p := $g.Parts}}
+	{{if $p.Name}}<tr class="hc-group-row hc-sub-row" data-group="{{$p.Key}}" data-group-row="{{$g.Key}}"><td colspan="10"><button type="button" class="btn btn-link p-0 text-reset text-decoration-none hc-group-toggle" data-group="{{$p.Key}}" data-parent="{{$g.Key}}" data-name="{{$g.Name}} / {{$p.Name}}"><i class="bi bi-chevron-down hc-group-chev"></i> <i class="bi {{if eq $g.Name "Docker"}}bi-box-seam{{else}}bi-hdd-rack{{end}} text-secondary"></i> <strong>{{$p.Name}}</strong></button>
+		<span class="ms-2 small">{{if $p.Up}}<span class="badge text-bg-success">{{$p.Up}}</span> {{end}}{{if $p.Down}}<span class="badge text-bg-danger">{{$p.Down}}</span> {{end}}{{if $p.Others}}<span class="badge text-bg-secondary">{{$p.Others}}</span>{{end}}</span></td></tr>{{end}}
+	{{range $p.Rows}}
 	{{$c := .Check}}
-	<tr data-group-row="{{$g.Key}}"{{with .RowClass}} class="{{.}}"{{end}}>
+	<tr data-group-row="{{$g.Key}}"{{if $p.Name}} data-sub-row="{{$p.Key}}"{{end}}{{with .RowClass}} class="{{.}}"{{end}}>
 		<td data-label="" class="d-none d-md-table-cell"><input type="checkbox" class="form-check-input" name="tokens" value="{{$c.Token}}"></td>
 		<td data-label="{{$.T "common.status"}}" class="hc-c-status">
 			<span class="badge hc-state-{{.State}}">{{$.T (print "hc.state." .State)}}</span>
@@ -134,6 +137,7 @@
 			<a class="btn btn-sm btn-outline-primary" href="/healthchecks/{{$c.Token}}/edit" title="{{$.T "hc.edit"}}"><i class="bi bi-pencil"></i></a>
 		</td>
 	</tr>
+	{{end}}
 	{{end}}
 	{{end}}
 	</tbody>

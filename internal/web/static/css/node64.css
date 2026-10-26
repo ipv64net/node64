@@ -198,6 +198,7 @@ a.stat:hover { background: var(--bs-tertiary-bg); }
 .hc-group-row td { background: var(--bs-tertiary-bg) !important; padding: .45rem .75rem !important; }
 .hc-group-row.collapsed .hc-group-chev { transform: rotate(-90deg); }
 .hc-group-chev { display: inline-block; transition: transform .15s; }
+.hc-sub-row td { background: transparent !important; padding-left: 1.75rem !important; }
 @media (max-width: 767.98px) {
 	.table-cards.hc-table tr.hc-group-row { display: block; padding: .4rem .6rem; border: 0; background: transparent; margin: .75rem 0 .25rem; }
 	.table-cards.hc-table tr.hc-group-row td { display: block; background: transparent !important; padding: 0 !important; }
