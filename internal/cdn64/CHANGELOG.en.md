@@ -1,5 +1,10 @@
 # Changes – PROXY64
 
+## 1.32.1 – 2026-10-27
+
+### Changed
+- ipv64 blocklists: the v64 Blocklist is now listed at the top right after the combined list instead of at the end.
+
 ## 1.32.0 – 2026-10-27
 
 ### New

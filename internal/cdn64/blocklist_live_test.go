@@ -362,3 +362,22 @@ func TestBlocklistAutoToken(t *testing.T) {
 		t.Fatal("manual token must win")
 	}
 }
+
+// Reihenfolge: Gesamtlisten vorne, die v64 Blocklist direkt dahinter (in index.json steht sie am Ende).
+func TestParseBlIndexV64First(t *testing.T) {
+	raw := `{"lists":[{"id":"spamhaus_drop","files":{"all":"ipv64_blocklist_spamhaus_drop.txt"}},
+	 {"id":"feodo","files":{"all":"ipv64_blocklist_feodo.txt"}},
+	 {"id":"v64","category":"honeypot","files":{"all":"ipv64_blocklist_v64.txt"}}],
+	 "combined":[{"id":"all","files":{"all":"ipv64_blocklist_all.txt"}},{"id":"all_notor","files":{"all":"ipv64_blocklist_all_notor.txt"}}]}`
+	cat, _, err := parseBlIndex([]byte(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, b := range cat {
+		ids = append(ids, b.ID)
+	}
+	if strings.Join(ids, ",") != "all,all_notor,v64,spamhaus_drop,feodo" {
+		t.Fatalf("order: %v", ids)
+	}
+}
