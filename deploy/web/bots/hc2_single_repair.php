@@ -10,7 +10,7 @@
  */
 if(php_sapi_name() !== 'cli') { exit; }
 include(__DIR__ . "/../dbconnect.php");
-require_once __DIR__ . '/../dbconnect_hc2.php';
+if(!function_exists('hc2_pdo')) { require_once __DIR__ . '/../dbconnect_hc2.php'; } // auf dem Server steckt es schon in dbconnect.php
 require_once __DIR__ . '/../healthchecks2/hc2_lib.php';
 
 $db = hc2_pdo();
