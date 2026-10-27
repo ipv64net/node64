@@ -18984,13 +18984,12 @@
           },
           "lists": {
             "type": "object",
-            "description": "Größe der Listen: v64 und v64_<teilliste> (gelistete IPs, Live-Stand), honeypot_passwords, honeypot_usernames, honeypot_bad_useragents, honeypot_attack_paths (Einträge der Text-Listen)",
+            "description": "Größe der Listen: v64 (gelistete IPs, Live-Stand), honeypot_passwords, honeypot_usernames, honeypot_bad_useragents, honeypot_attack_paths (Einträge der Text-Listen)",
             "additionalProperties": {
               "type": "integer"
             },
             "example": {
               "v64": 812,
-              "v64_ssh": 640,
               "honeypot_passwords": 10000
             }
           },

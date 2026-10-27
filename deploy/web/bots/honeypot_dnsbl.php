@@ -45,8 +45,9 @@ const HPD_SKEW        = 3600;             // Teilliste weicht mehr als 1 h vom S
 const HPD_STALE       = 3 * 86400;        // Tagesstand aelter als 3 Tage: Warnung
 const HPD_INFO        = 'https://ipv64.net/honeypot/ip.php?ip=';
 
-// Rueckgabecodes je Liste (Dateien ipv64_blocklist_v64.txt bzw. ipv64_blocklist_v64_<liste>.txt); research nie
-const HPD_CODES = array('v64' => 2, 'ssh' => 3, 'web' => 4, 'mail' => 5, 'rdp' => 6, 'scanner' => 7);
+// Rueckgabecode der v64 Blocklist (Datei ipv64_blocklist_v64.txt); die Teillisten mit Codes 3-7 gibt es seit 2026-10
+// nicht mehr
+const HPD_CODES = array('v64' => 2);
 // Testeintraege nach RFC 5782 (Abschnitt 5): muessen immer antworten
 const HPD_TESTS = array('127.0.0.2', '::ffff:127.0.0.2');
 

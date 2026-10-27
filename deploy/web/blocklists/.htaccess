@@ -1,0 +1,7 @@
+# Honeypot64: Live-Stand der v64 Blocklist mit persoenlichem Listen-Token
+#   https://ipv64.net/blocklists/live/<token>/<datei>  ->  blocklists/live.php?t=<token>&f=<datei>
+# Eigene Datei im Ordner blocklists/, damit die .htaccess im Webroot unveraendert bleibt. Die Regeln des Webroots
+# (wiki/, homelab/, .php ohne Endung) gelten in diesem Ordner damit nicht mehr; hier liegen nur Listen und live.php.
+RewriteEngine On
+RewriteBase /blocklists/
+RewriteRule ^live/([A-Za-z0-9]{32})/([A-Za-z0-9_.-]+)$ live.php?t=$1&f=$2 [L]

@@ -188,12 +188,10 @@ function hps_compute(PDO $pdo, string $bldir, int $now, bool $rebuild = true): a
 	$o['top_kinds'] = array_map(fn($x) => array('kind' => $x['kind'], 'events' => (int)$x['e']),
 		hps_all($pdo, "SELECT kind, SUM(events) e FROM hp_daily WHERE day >= :d GROUP BY kind ORDER BY e DESC, kind LIMIT " . HPS_TOP_FULL, array('d' => $from7)));
 
-	// Groesse der Listen: v64 Blocklist und Teillisten (Live-Stand aus hp_scores), Text-Listen (Dateien)
+	// Groesse der Listen: v64 Blocklist (Live-Stand aus hp_scores), Text-Listen (Dateien)
 	$lists = array();
 	try {
-		$l = hps_one($pdo, "SELECT COALESCE(SUM(FIND_IN_SET('v64', lists) > 0), 0) v64, COALESCE(SUM(FIND_IN_SET('ssh', lists) > 0), 0) v64_ssh,
-			COALESCE(SUM(FIND_IN_SET('web', lists) > 0), 0) v64_web, COALESCE(SUM(FIND_IN_SET('mail', lists) > 0), 0) v64_mail, COALESCE(SUM(FIND_IN_SET('rdp', lists) > 0), 0) v64_rdp,
-			COALESCE(SUM(FIND_IN_SET('scanner', lists) > 0), 0) v64_scanner, COALESCE(SUM(FIND_IN_SET('research', lists) > 0), 0) v64_research FROM hp_scores WHERE listed = 1");
+		$l = hps_one($pdo, "SELECT COALESCE(SUM(FIND_IN_SET('v64', lists) > 0), 0) v64 FROM hp_scores WHERE listed = 1");
 		foreach($l as $k => $v) { $lists[$k] = (int)$v; }
 	} catch(Throwable $e) { error_log('hp_stats lists: ' . $e->getMessage()); }
 	foreach(hpl_index_entries($bldir) as $x) { $lists[$x['id']] = (int)$x['count']; }

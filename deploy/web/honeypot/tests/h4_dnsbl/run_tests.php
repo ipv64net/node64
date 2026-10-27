@@ -67,26 +67,22 @@ ok(hpd_name('127.0.0.2') === '2.0.0.127', 'Testeintrag 127.0.0.2 -> 2.0.0.127');
 ok(hpd_name('::ffff:127.0.0.2') === '2.0.0.0.0.0.f.7.f.f.f.f.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0', 'Testeintrag ::FFFF:7F00:2 (RFC 5782 IPv6)');
 ok(hpd_name('1.2.3') === null AND hpd_name('x') === null AND hpd_name('1.2.3.4/32') === null, 'ungueltige Eingaben -> null');
 
-// ---------------------------------------------------------------- 2. Codes je Art
+// ---------------------------------------------------------------- 2. Code (nur die v64 Blocklist, seit 2026-10 ohne Teillisten)
 
 echo "Codes\n";
 $e = hpd_entry('1.2.3.4', array('v64' => true));
-ok($e['a'] === '127.0.0.2', 'nur Hauptliste -> 127.0.0.2');
-$e = hpd_entry('1.2.3.4', array('v64' => true, 'mail' => true, 'ssh' => true));
-ok($e['a'] === '127.0.0.2,127.0.0.3,127.0.0.5', 'ssh + mail -> .2,.3,.5 (aufsteigend)');
-ok(str_contains($e['txt'], '(ssh,mail)') AND str_ends_with($e['txt'], 'https://ipv64.net/honeypot/ip.php?ip=1.2.3.4'), 'TXT mit Arten und Link');
-$e = hpd_entry('1.2.3.4', array('v64' => true, 'ssh' => true, 'web' => true, 'mail' => true, 'rdp' => true, 'scanner' => true, 'research' => true));
-ok($e['a'] === '127.0.0.2,127.0.0.3,127.0.0.4,127.0.0.5,127.0.0.6,127.0.0.7', 'alle Arten -> .2 bis .7, research ohne Code');
-ok(!str_contains($e['txt'], 'research'), 'research nicht im TXT');
-$e = hpd_entry('1.2.3.4', array('web' => true));
-ok($e['a'] === '127.0.0.2,127.0.0.4', '.2 immer dabei');
+ok($e['a'] === '127.0.0.2', 'v64 Blocklist -> 127.0.0.2');
+ok(str_ends_with($e['txt'], 'https://ipv64.net/honeypot/ip.php?ip=1.2.3.4') AND !str_contains($e['txt'], '('), 'TXT mit Link, ohne Arten');
+$e = hpd_entry('1.2.3.4', array('v64' => true, 'ssh' => true, 'research' => true));
+ok($e['a'] === '127.0.0.2', 'fruehere Teillisten geben keinen eigenen Code mehr');
+ok(HPD_CODES === array('v64' => 2), 'nur Code 2');
 ok(strlen(hpd_entry('2a01:4f8:ffff:ffff:ffff:ffff:ffff:ffff', array_fill_keys(array_keys(HPD_CODES), true))['txt']) <= 255, 'TXT hoechstens 255 Zeichen');
 ok(!in_array(1, HPD_CODES, true), 'Code 127.0.0.1 nie vergeben');
 
-$rr = hpd_rrsets('4.3.2.1', hpd_entry('1.2.3.4', array('v64' => true, 'ssh' => true)));
+$rr = hpd_rrsets('4.3.2.1', hpd_entry('1.2.3.4', array('v64' => true)));
 ok(count($rr) === 2 AND $rr[0]['type'] === 'A' AND $rr[1]['type'] === 'TXT', 'REPLACE: A + TXT');
 ok($rr[0]['name'] === '4.3.2.1.bl.ipv64.net.' AND $rr[0]['ttl'] === 300 AND $rr[0]['changetype'] === 'REPLACE', 'Name absolut, TTL 300');
-ok(array_column($rr[0]['records'], 'content') === array('127.0.0.2', '127.0.0.3'), 'A-Records 127.0.0.2 und .3');
+ok(array_column($rr[0]['records'], 'content') === array('127.0.0.2'), 'A-Record 127.0.0.2');
 ok($rr[1]['records'][0]['content'][0] === '"' AND str_ends_with($rr[1]['records'][0]['content'], '"'), 'TXT in Anfuehrungszeichen');
 $rr = hpd_rrsets('4.3.2.1', null);
 ok($rr[0]['changetype'] === 'DELETE' AND $rr[1]['changetype'] === 'DELETE' AND !isset($rr[0]['records']), 'DELETE: A + TXT ohne Records');
@@ -108,8 +104,8 @@ $s = hpd_read_source($dir, $now);
 ok($s['err'] === '', 'Tagesstand lesbar');
 ok(count($s['ips']) === 4, '4 Einzel-IPs aus der Hauptliste (Netz uebergangen)');
 ok($s['nets'] === 1 AND $s['bad'] === 0, 'Netz /24 gezaehlt, nichts ungueltig');
-ok(isset($s['ips']['4.3.2.1']['lists']['ssh'], $s['ips']['4.3.2.1']['lists']['mail']), 'Codes aus Teillisten');
-ok(!isset($s['ips'][hpd_name('6.6.6.6')]), 'nur in Teilliste -> nicht gelistet');
+ok(!isset($s['ips']['4.3.2.1']['lists']['ssh']) AND !$s['warn'], 'fruehere Teillisten-Dateien werden nicht gelesen, keine Warnung');
+ok(!isset($s['ips'][hpd_name('6.6.6.6')]), 'nur in alter Teilliste -> nicht gelistet');
 ok(!isset($s['ips'][hpd_name('9.9.9.9')]), 'research nie in der DNSBL');
 ok(isset($s['ips'][hpd_name('7.7.7.7')]), 'Zeile ohne Praefix angenommen');
 
@@ -124,9 +120,9 @@ ok(count($p->calls) === 1 AND $p->calls[0]['zone'] === 'bl.ipv64.net', 'ein PATC
 ok($p->a('2.0.0.127') === array('127.0.0.2'), 'Testeintrag 2.0.0.127 -> 127.0.0.2');
 ok($p->a('2.0.0.0.0.0.f.7.f.f.f.f.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0') === array('127.0.0.2'), 'IPv6-Testeintrag ::ffff:7f00:2');
 ok($p->a('1.0.0.127') === null, '1.0.0.127 nie gelistet');
-ok($p->a('4.3.2.1') === array('127.0.0.2', '127.0.0.3', '127.0.0.5'), '1.2.3.4 -> .2 .3 .5');
-ok($p->a('8.7.6.5') === array('127.0.0.2', '127.0.0.7'), '5.6.7.8 -> .2 .7 (scanner)');
-ok($p->a(hpd_name('2a01:4f8::1')) === array('127.0.0.2', '127.0.0.4'), 'IPv6 2a01:4f8::1 -> .2 .4 (web)');
+ok($p->a('4.3.2.1') === array('127.0.0.2'), '1.2.3.4 -> .2');
+ok($p->a('8.7.6.5') === array('127.0.0.2'), '5.6.7.8 -> .2');
+ok($p->a(hpd_name('2a01:4f8::1')) === array('127.0.0.2'), 'IPv6 2a01:4f8::1 -> .2');
 ok(str_contains((string)$p->txt('4.3.2.1'), 'ip.php?ip=1.2.3.4'), 'TXT mit Link');
 ok((int)$pdo->query("SELECT COUNT(*) FROM hp_dnsbl")->fetchColumn() === 6, 'Zustand: 6 Namen');
 ok($r['state'] === 0 AND $r['want'] === 4, 'Zahlen ohne Testeintraege');
@@ -149,11 +145,11 @@ source($dir, array(
 ), stamp());
 $p->calls = array();
 $r = hpd_run($pdo, $dir, array(), $p, $now);
-ok($r['ok'] AND $r['add'] === 1 AND $r['chg'] === 1 AND $r['del'] === 1 AND $r['same'] === 4, 'neu 1 (4.4.4.4), geaendert 1 (1.2.3.4 +web), entfernt 1 (5.6.7.8)');
+ok($r['ok'] AND $r['add'] === 1 AND $r['chg'] === 0 AND $r['del'] === 1 AND $r['same'] === 5, 'neu 1 (4.4.4.4), entfernt 1 (5.6.7.8), Rest gleich');
 $ch = array(); foreach($p->calls[0]['rrsets'] as $x) { $ch[$x['name'] . ' ' . $x['type']] = $x['changetype']; }
-ok(count($ch) === 6, 'nur 3 Namen (6 RRsets) geschrieben');
+ok(count($ch) === 4, 'nur 2 Namen (4 RRsets) geschrieben');
 ok(($ch['8.7.6.5.bl.ipv64.net. A'] ?? '') === 'DELETE' AND ($ch['8.7.6.5.bl.ipv64.net. TXT'] ?? '') === 'DELETE', 'entfernt per DELETE (A + TXT)');
-ok($p->a('4.3.2.1') === array('127.0.0.2', '127.0.0.3', '127.0.0.4', '127.0.0.5'), '1.2.3.4 jetzt .2 .3 .4 .5');
+ok($p->a('4.3.2.1') === array('127.0.0.2'), '1.2.3.4 weiter .2');
 ok($p->a('8.7.6.5') === null AND $p->txt('8.7.6.5') === null, '5.6.7.8 aus der Zone');
 ok($p->a('4.4.4.4') === array('127.0.0.2'), '4.4.4.4 neu');
 ok((int)$pdo->query("SELECT COUNT(*) FROM hp_dnsbl WHERE name = '8.7.6.5'")->fetchColumn() === 0, 'Zustand ohne 5.6.7.8');

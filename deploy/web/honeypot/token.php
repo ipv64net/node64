@@ -66,7 +66,7 @@ $classLive = (int)($cls['user_class'] ?? 1) !== 1;
 $live = $classLive || $contrib !== null && $contrib !== false;
 $base = 'https://ipv64.net/blocklists/live/';
 $examples = array('ipv64_blocklist_v64.txt' => 'v64 Blocklist (IPv4 + IPv6)', 'ipv64_blocklist_v4_v64.txt' => 'nur IPv4', 'ipv64_blocklist_v6_v64.txt' => 'nur IPv6',
-	'v64_mikrotik_v4_v64.rsc' => 'MikroTik (Adressliste IPv64-v64)', 'ipv64_blocklist_v64_ssh.txt' => 'Teilliste SSH/Telnet (ebenso _web, _mail, _rdp, _scanner, _research)');
+	'v64_mikrotik_v4_v64.rsc' => 'MikroTik (Adressliste IPv64-v64)', 'v64_mikrotik_v6_v64.rsc' => 'MikroTik IPv6');
 ?>
 	<?php echo $info; ?>
 	<div class="card mb-3"><div class="card-body">

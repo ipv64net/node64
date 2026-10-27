@@ -237,19 +237,16 @@ function index_entry(string $id, string $name, string $p, array $v4, array $v6, 
 }
 
 // ---------------------------------------------------------------
-// 0. v64 Blocklist (Honeypot64) aus hp_scores (bots/blocklist/honeypot_score.php), Hauptliste und Teillisten.
+// 0. v64 Blocklist (Honeypot64) aus hp_scores (bots/blocklist/honeypot_score.php), nur die eine Liste (die Teillisten
+//    v64_ssh, _web, _mail, _rdp, _scanner, _research gibt es seit 2026-10 nicht mehr, alte Dateien werden entfernt).
 //    Live-Stand bei jedem Lauf nach $LIVE (nicht oeffentlich, Abruf mit Listen-Token ueber blocklists/live.php),
 //    Tagesstand beim ersten Lauf eines UTC-Tages nach blocklists/ (frei fuer alle). Nicht in "all"/"all_notor".
 // ---------------------------------------------------------------
 const V64_LISTS = [
-	'v64'          => ['v64 Blocklist (Honeypot64)', 'Attackers confirmed by several independent Honeypot64 sensors (logins, exploits, scans); research scanners not included'],
-	'v64_ssh'      => ['v64 SSH/Telnet', 'Honeypot64: SSH and Telnet brute force'],
-	'v64_web'      => ['v64 Web', 'Honeypot64: web attacks (login pages, exploits, scans)'],
-	'v64_mail'     => ['v64 Mail', 'Honeypot64: mail login brute force'],
-	'v64_rdp'      => ['v64 RDP', 'Honeypot64: RDP brute force'],
-	'v64_scanner'  => ['v64 Scanner', 'Honeypot64: port scanners, probes and scanner user agents'],
-	'v64_research' => ['v64 Research Scanner', 'Honeypot64: research scanners (Shodan, Censys and others), not part of the v64 Blocklist'],
+	'v64' => ['v64 Blocklist (Honeypot64)', 'Attackers confirmed by several independent Honeypot64 sensors (logins, exploits, scans); research scanners not included'],
 ];
+// Dateien der frueheren Teillisten (Praefix + Name): ipv64_blocklist_v64_ssh.txt usw.
+const V64_OLD_PREFIX = ['ipv64_blocklist_v64_', 'ipv64_blocklist_v4_v64_', 'ipv64_blocklist_v6_v64_', 'v64_mikrotik_v4_v64_', 'v64_mikrotik_v6_v64_'];
 
 /** index.json-Eintraege der v64-Listen aus den oeffentlichen Dateien (Tagesstand) */
 function v64_index(string $OUT): array
@@ -287,6 +284,10 @@ try {
 			write_mikrotik("$dir/v64_mikrotik_v6_$f.rsc", $v6, 6, "IPv64-$f");
 		}
 		printf("%-22s %6d Netze (v4 %6d, v6 %4d) live%s\n", $f, count($nets), count($v4), count($v6), $daily ? " + Tagesstand" : "");
+	}
+	// fruehere Teillisten entfernen (live und Tagesstand), damit nichts Veraltetes mehr ausgeliefert wird
+	if(!$dry) {
+		foreach([$LIVE, $OUT] as $dir) { foreach(V64_OLD_PREFIX as $pre) { foreach(glob("$dir/$pre*") ?: [] as $old) { @unlink($old); } } }
 	}
 } catch(Throwable $e) {
 	echo "v64 Blocklist: nicht geschrieben (".$e->getMessage().")\n";

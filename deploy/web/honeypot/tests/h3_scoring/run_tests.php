@@ -174,6 +174,8 @@ check('--dry schreibt nichts', str_contains(cli("php $WEB/bots/blocklist/honeypo
 
 // ---------------------------------------------------------------- Generator
 echo "Generator\n";
+// fruehere Teillisten (bis 2026-10) liegen noch im Ordner: der Generator entfernt sie
+@file_put_contents("$PUB/ipv64_blocklist_v64_ssh.txt", "1.2.3.4/32\n"); @file_put_contents("$PUB/v64_mikrotik_v4_v64_research.rsc", "x\n");
 $o = gen();
 check('voller Lauf ohne Fehler', str_contains($o, 'Fertig') AND !preg_match('/Warning|Notice|Deprecated|Fatal/i', $o), $o);
 $v64 = lines("$PUB/ipv64_blocklist_v64.txt");
@@ -182,20 +184,18 @@ sort($expect);
 $got = $v64; sort($got);
 check('Tagesstand v64 = erwartete IPs', $got === $expect, $v64);
 check('research nicht in v64', !in_array('45.1.0.20/32', $v64, true));
-check('Teilliste research', lines("$PUB/ipv64_blocklist_v64_research.txt") === array('45.1.0.20/32'), lines("$PUB/ipv64_blocklist_v64_research.txt"));
-check('Teilliste ssh', lines("$PUB/ipv64_blocklist_v64_ssh.txt") === array('45.1.0.1/32', '45.1.0.5/32', '45.1.0.9/32', '45.1.0.14/32', '2a02:1::5/128'), lines("$PUB/ipv64_blocklist_v64_ssh.txt"));
-check('Teillisten web/mail/rdp/scanner', lines("$PUB/ipv64_blocklist_v64_web.txt") === array('45.1.0.30/32') AND lines("$PUB/ipv64_blocklist_v64_mail.txt") === array('45.1.0.31/32')
-	AND lines("$PUB/ipv64_blocklist_v64_rdp.txt") === array('45.1.0.32/32') AND lines("$PUB/ipv64_blocklist_v64_scanner.txt") === array('45.1.0.3/32', '45.1.0.50/32'));
+$old = array_merge(glob("$PUB/*v64_*") ?: array(), glob("$LIVE/*v64_*") ?: array());
+$old = array_filter($old, fn($f) => preg_match('/v64_(ssh|web|mail|rdp|scanner|research)\./', $f));
+check('keine Teillisten mehr (alte Dateien entfernt)', !$old, array_map('basename', $old));
 check('v4/v6 getrennt', lines("$PUB/ipv64_blocklist_v6_v64.txt") === array('2a02:1::5/128') AND count(lines("$PUB/ipv64_blocklist_v4_v64.txt")) === 9);
 $mk = (string)@file_get_contents("$PUB/v64_mikrotik_v4_v64.rsc");
 check('MikroTik Listenname IPv64-v64', str_contains($mk, 'remove [find list=IPv64-v64 ') AND str_contains($mk, 'add list=IPv64-v64 address=45.1.0.1/32'), substr($mk, 0, 300));
-check('MikroTik Teilliste IPv64-v64_ssh', str_contains((string)@file_get_contents("$PUB/v64_mikrotik_v4_v64_ssh.rsc"), 'list=IPv64-v64_ssh '));
-check('Live-Fassung im nicht oeffentlichen Ordner', lines("$LIVE/ipv64_blocklist_v64.txt") === $v64 AND is_file("$LIVE/v64_mikrotik_v6_v64_research.rsc"));
+check('Live-Fassung im nicht oeffentlichen Ordner', lines("$LIVE/ipv64_blocklist_v64.txt") === $v64 AND is_file("$LIVE/v64_mikrotik_v6_v64.rsc"));
 $all = lines("$PUB/ipv64_blocklist_all.txt");
 check('v64 nicht in all / all_notor', !in_array('45.1.0.1/32', $all, true) AND !in_array('45.1.0.1/32', lines("$PUB/ipv64_blocklist_all_notor.txt"), true) AND in_array('5.6.7.8/32', $all, true), $all);
 $idx = json_decode((string)@file_get_contents("$PUB/index.json"), true);
 $hp = array_values(array_filter($idx['lists'] ?? array(), fn($e) => ($e['category'] ?? '') === 'honeypot'));
-check('index.json: 7 Eintraege Kategorie honeypot, in_all false', count($hp) === 7 AND !array_filter($hp, fn($e) => $e['in_all'] !== false), array_column($hp, 'id'));
+check('index.json: 1 Eintrag Kategorie honeypot (nur v64), in_all false', count($hp) === 1 AND !array_filter($hp, fn($e) => $e['in_all'] !== false), array_column($hp, 'id'));
 $e = $hp[0] ?? array();
 check('index.json: v64 mit Anzahl, Lizenz, Dateien, live', ($e['id'] ?? '') === 'v64' AND $e['count'] === 10 AND $e['count_v4'] === 9 AND $e['count_v6'] === 1 AND $e['license'] !== ''
 	AND ($e['files']['mikrotik_v4'] ?? '') === 'v64_mikrotik_v4_v64.rsc' AND $e['live'] === true, $e);
@@ -207,7 +207,7 @@ check('index.json: jede genannte v64-Datei existiert', $ok);
 many(array(1, 2), '45.1.0.70', 'ssh:bruteforce');
 scorer();
 $o = gen('--only=v64');
-check('--only=v64 ohne Fehler', str_contains($o, 'Fertig (nur v64)') AND str_contains($o, 'index.json: 7 v64-Listen'), $o);
+check('--only=v64 ohne Fehler', str_contains($o, 'Fertig (nur v64)') AND str_contains($o, 'index.json: 1 v64-Listen'), $o);
 check('Live enthaelt neue IP', in_array('45.1.0.70/32', lines("$LIVE/ipv64_blocklist_v64.txt"), true));
 check('Tagesstand noch ohne neue IP (gleicher UTC-Tag)', !in_array('45.1.0.70/32', lines("$PUB/ipv64_blocklist_v64.txt"), true));
 $idx2 = json_decode((string)@file_get_contents("$PUB/index.json"), true);
@@ -233,8 +233,10 @@ $r = req('GET', "/blocklists/live/$T1/ipv64_blocklist_v64.txt");
 check('gleiche Datei sofort wieder: 429 mit Retry-After', $r['code'] === 429 AND (int)($r['h']['retry-after'] ?? 0) > 250 AND (int)$r['h']['retry-after'] <= 300, $r['code'] . ' ' . json_encode($r['h']));
 $r = req('GET', "/blocklists/live/$T1/ipv64_blocklist_v64.txt", array("If-None-Match: $etag"));
 check('mit passendem ETag: 304', $r['code'] === 304 AND $r['body'] === '', $r['code']);
-$r = req('GET', "/blocklists/live/$T1/v64_mikrotik_v4_v64_ssh.rsc");
-check('andere Datei: 200', $r['code'] === 200 AND str_contains($r['body'], 'IPv64-v64_ssh'), $r['code']);
+$r = req('GET', "/blocklists/live/$T1/v64_mikrotik_v4_v64.rsc");
+check('andere Datei: 200', $r['code'] === 200 AND str_contains($r['body'], 'IPv64-v64 '), $r['code']);
+$r = req('GET', "/blocklists/live/$T1/ipv64_blocklist_v64_ssh.txt");
+check('fruehere Teilliste: 404 Unknown list file', $r['code'] === 404 AND str_contains($r['body'], 'Unknown list file'), $r['code']);
 x("UPDATE hp_list_token_files SET last_at = ? WHERE userid = 1", array(gmdate('Y-m-d H:i:s', time() - 301)));
 $r = req('GET', "/blocklists/live/$T1/ipv64_blocklist_v64.txt");
 check('nach 5 Minuten wieder 200', $r['code'] === 200, $r['code']);
@@ -245,10 +247,10 @@ $r = req('GET', "/blocklists/live/$T2/ipv64_blocklist_v64.txt");
 check('Klasse VIP: live', $r['code'] === 200 AND ($r['h']['x-ipv64-list'] ?? '') === 'live' AND str_contains($r['body'], '45.1.0.1/32') AND !str_contains($r['body'], '45.1.0.70/32'), $r['code']);
 $r = req('GET', "/blocklists/live/$T8/ipv64_blocklist_v64.txt");
 check('Standard ohne Sensor: Tagesstand (200, X-IPv64-List daily)', $r['code'] === 200 AND ($r['h']['x-ipv64-list'] ?? '') === 'daily' AND $r['body'] === file_get_contents("$PUB/ipv64_blocklist_v64.txt"), $r['code'] . ' ' . json_encode($r['h']));
-$r = req('GET', "/blocklists/live/$T11/ipv64_blocklist_v64_research.txt");
+$r = req('GET', "/blocklists/live/$T11/ipv64_blocklist_v4_v64.txt");
 check('Standard, Sensor zuletzt vor 10 Tagen: daily', $r['code'] === 200 AND ($r['h']['x-ipv64-list'] ?? '') === 'daily', $r['code']);
 x("UPDATE users SET user_class = 3 WHERE id = 11");
-$r = req('GET', "/blocklists/live/$T11/ipv64_blocklist_v64_ssh.txt");
+$r = req('GET', "/blocklists/live/$T11/ipv64_blocklist_v6_v64.txt");
 check('Klasse geaendert: beim naechsten Abruf live', ($r['h']['x-ipv64-list'] ?? '') === 'live', $r['code']);
 $r = req('GET', "/blocklists/live/$T10/ipv64_blocklist_v64.txt");
 check('inaktiver Account: 404', $r['code'] === 404, $r['code']);
@@ -266,9 +268,9 @@ foreach(array('../../dbconnect.php', '../private/blocklists_live/ipv64_blocklist
 }
 $r = req('GET', "/blocklists/live/$T2/..%2F..%2Fdbconnect.php");
 check('Traversal im Pfad: 404', $r['code'] === 404, $r['code']);
-$r = req('POST', "/blocklists/live/$T2/ipv64_blocklist_v64_web.txt");
+$r = req('POST', "/blocklists/live/$T2/ipv64_blocklist_v4_v64.txt");
 check('POST: 405', $r['code'] === 405, $r['code']);
-$r = req('GET', "/blocklists/live/$T2/ipv64_blocklist_v64_mail.txt");
+$r = req('GET', "/blocklists/live/$T2/ipv64_blocklist_v4_v64.txt");
 check('Antwort text/plain, kein Cache oeffentlich', str_starts_with($r['h']['content-type'] ?? '', 'text/plain') AND str_contains($r['h']['cache-control'] ?? '', 'private'), $r['h']);
 
 // ---------------------------------------------------------------- token.php, Seiten
@@ -299,7 +301,7 @@ $r = req('GET', '/honeypot/index.php?as=1');
 check('honeypot/index.php: Karte Live-Listen mit Link', $r['code'] === 200 AND str_contains($r['body'], 'href="/honeypot/token.php"'), $r['code']);
 $r = req('GET', '/v64_blocklists.php');
 check('Listenseite: Zeile v64 Blocklist (Honeypot64) statt Coming soon', $r['code'] === 200 AND str_contains($r['body'], 'v64 Blocklist (Honeypot64)') AND !str_contains($r['body'], 'Coming soon')
-	AND str_contains($r['body'], 'ipv64_blocklist_v64_research.txt') AND str_contains($r['body'], '/honeypot/token.php'), substr($r['body'], 0, 300));
+	AND !str_contains($r['body'], 'ipv64_blocklist_v64_research.txt') AND !str_contains($r['body'], 'Sub-lists') AND str_contains($r['body'], '/honeypot/token.php'), substr($r['body'], 0, 300));
 
 // ---------------------------------------------------------------- Schwelle ab 20 aktiven Accounts
 echo "Schwelle ab 20 aktiven Accounts\n";

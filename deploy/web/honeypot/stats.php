@@ -200,9 +200,6 @@ $l = $o['lists'];
 		<div class="card-body p-0"><div class="table-responsive"><table class="table table-sm mb-0 small"><tbody>
 		<tr><td><a href="/v64_blocklists">v64 Blocklist</a> <small class="text-muted">(<?php echo hss_t('IPs, Tagesstand frei, Live-Stand für Beitragende und Klassen ab VIP', 'IPs, daily list free, live list for contributors and plans from VIP'); ?>)</small></td>
 			<td class="text-right"><?php echo hss_num($l['v64'] ?? 0); ?></td></tr>
-		<tr><td class="pl-4 text-muted"><?php $sub = array();
-			foreach(array('v64_ssh' => 'SSH/Telnet', 'v64_web' => 'Web', 'v64_mail' => 'Mail', 'v64_rdp' => 'RDP', 'v64_scanner' => 'Scanner', 'v64_research' => 'Research') as $id => $name) { $sub[] = hss_h($name) . ' ' . hss_num($l[$id] ?? 0); }
-			echo implode(' · ', $sub); ?></td><td></td></tr>
 		<?php foreach(HPL_DATA_LISTS as $id => [$name, $desc, $main, $more]) { ?>
 		<tr><td><a href="/blocklists/<?php echo hss_h($main); ?>" target="_blank" rel="noopener"><?php echo hss_h($main); ?></a>
 			<?php foreach($more as $f) { echo ' · <a href="/blocklists/' . hss_h($f) . '" target="_blank" rel="noopener">' . hss_h($f) . '</a>'; } ?></td>

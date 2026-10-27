@@ -59,26 +59,24 @@ check "Testeintrag 2.0.0.127 -> 127.0.0.2, TTL 300" 2.0.0.127.bl.ipv64.net A "30
 check "Testeintrag TXT" 2.0.0.127.bl.ipv64.net TXT "RFC 5782"
 check "1.0.0.127 nicht gelistet (NXDOMAIN)" 1.0.0.127.bl.ipv64.net A "Rcode: 3"
 check "IPv6-Testeintrag ::ffff:7f00:2" "$T6.bl.ipv64.net" A "127.0.0.2"
-check "1.2.3.4 -> 127.0.0.3 (ssh)" 4.3.2.1.bl.ipv64.net A "127.0.0.3"
-check "1.2.3.4 -> 127.0.0.5 (mail)" 4.3.2.1.bl.ipv64.net A "127.0.0.5"
 check "1.2.3.4 -> 127.0.0.2" 4.3.2.1.bl.ipv64.net A "127.0.0.2"
+check "1.2.3.4 ohne fruehere Teillisten-Codes (127.0.0.3)" 4.3.2.1.bl.ipv64.net A "127.0.0.3" nicht
 check "1.2.3.4 TXT mit Link" 4.3.2.1.bl.ipv64.net TXT "ip.php\?ip=1.2.3.4"
-check "5.6.7.8 -> 127.0.0.7 (scanner)" 8.7.6.5.bl.ipv64.net A "127.0.0.7"
-check "2a01:4f8::1 -> 127.0.0.4 (web)" "$V6.bl.ipv64.net" A "127.0.0.4"
+check "5.6.7.8 -> 127.0.0.2" 8.7.6.5.bl.ipv64.net A "127.0.0.2"
+check "2a01:4f8::1 -> 127.0.0.2" "$V6.bl.ipv64.net" A "127.0.0.2"
 check "9.9.9.9 (nur research) NXDOMAIN" 9.9.9.9.bl.ipv64.net A "Rcode: 3"
 check "11.0.4.200 (letzter Block) -> 127.0.0.2" 200.4.0.11.bl.ipv64.net A "127.0.0.2"
 N=$(names); if [ "$N" = "1205" ]; then echo "  ok   1205 Namen in der Zone"; else echo "  FAIL Namen in der Zone: $N"; FAILS=$((FAILS+1)); fi
-echo "--- Lauf 2 (Differenz: 1 neu, 1 geaendert, 1 entfernt)"
+echo "--- Lauf 2 (Differenz: 1 neu, 1 entfernt; nur noch ein Code, darum nichts geaendert)"
 OUT="$(P sync2)"; echo "$OUT"
-echo "$OUT" | grep -q "neu 1, geaendert 1, entfernt 1" && echo "  ok   Lauf 2: nur die Differenz" || { echo "  FAIL Lauf 2"; FAILS=$((FAILS+1)); }
+echo "$OUT" | grep -q "neu 1, geaendert 0, entfernt 1" && echo "  ok   Lauf 2: nur die Differenz" || { echo "  FAIL Lauf 2"; FAILS=$((FAILS+1)); }
 echo "--- Lauf 3 ohne Aenderung"
 OUT="$(P sync2)"; echo "$OUT"
 echo "$OUT" | grep -q "neu 0, geaendert 0, entfernt 0" && echo "  ok   Lauf 3: keine Unterschiede" || { echo "  FAIL Lauf 3 schreibt noch"; FAILS=$((FAILS+1)); }
 check "5.6.7.8 entfernt (NXDOMAIN)" 8.7.6.5.bl.ipv64.net A "Rcode: 3"
 check "5.6.7.8 TXT entfernt" 8.7.6.5.bl.ipv64.net TXT "Rcode: 3"
 check "4.4.4.4 neu" 4.4.4.4.bl.ipv64.net A "127.0.0.2"
-check "1.2.3.4 jetzt +web (127.0.0.4)" 4.3.2.1.bl.ipv64.net A "127.0.0.4"
-check "1.2.3.4 ohne mail (127.0.0.5)" 4.3.2.1.bl.ipv64.net A "127.0.0.5" nicht
+check "1.2.3.4 weiter 127.0.0.2" 4.3.2.1.bl.ipv64.net A "127.0.0.2"
 check "Testeintrag weiter da" 2.0.0.127.bl.ipv64.net A "127.0.0.2"
 N=$(names); if [ "$N" = "1205" ]; then echo "  ok   1205 Namen in der Zone"; else echo "  FAIL Namen in der Zone: $N"; FAILS=$((FAILS+1)); fi
 

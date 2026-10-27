@@ -18,7 +18,7 @@ const HPL_GAP      = 300;          // dieselbe Datei hoechstens alle 5 Minuten
 const HPL_WINDOW   = 300;          // Fenster fuer die Obergrenze ueber alle Dateien
 const HPL_MAX      = 60;           // Abrufe je Fenster
 const HPL_CONTRIB  = 7 * 86400;    // Beitragende: Meldung in den letzten 7 Tagen
-const HPL_LISTS    = array('v64', 'v64_ssh', 'v64_web', 'v64_mail', 'v64_rdp', 'v64_scanner', 'v64_research');
+const HPL_LISTS    = array('v64'); // nur die eine v64 Blocklist (Teillisten seit 2026-10 entfernt)
 
 function hpl_out(int $code, string $text, array $headers = array()): void {
 	http_response_code($code);
