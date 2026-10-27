@@ -201,6 +201,13 @@ a.stat:hover { background: var(--bs-tertiary-bg); }
 	.stat-value-sm { font-size: .95rem; }
 	.stat-icon { font-size: 1.4rem; }
 }
+/* Dashboard: Kennzahlen von Healthchecks, Proxmox VE und Docker kompakt (Zahl und Text in einer Zeile) */
+.dash-board .stat { border-left-width: 3px; }
+.dash-board .stat .card-body { gap: .4rem; padding: .3rem .55rem; }
+.dash-board .stat-text { display: flex; align-items: baseline; gap: .4rem; }
+.dash-board .stat-value { order: -1; flex: 0 0 auto; overflow: visible; font-size: 1.1rem; }
+.dash-board .stat-label { min-width: 0; font-size: .8rem; }
+.dash-board .stat-icon { font-size: 1rem; }
 /* Dashboard anpassen: Werkzeuge nur im Bearbeitungsmodus, ausgeblendete Kacheln dort blass */
 .dash-item { position: relative; }
 .dash-tools { display: none; position: absolute; top: .35rem; right: 1.1rem; z-index: 5; gap: .25rem; align-items: center; background: var(--bs-body-bg); border: 1px solid var(--bs-border-color); border-radius: .375rem; padding: .1rem .25rem; }

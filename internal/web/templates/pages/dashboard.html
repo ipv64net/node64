@@ -23,8 +23,8 @@
 		<button type="button" class="btn btn-sm btn-light py-0 px-1" data-dash="hide" title="{{$.T "dashboard.js.hide"}}"><i class="bi bi-eye"></i></button>
 	</div>
 	{{if eq $it.Kind "board"}}{{with $it.Board}}
-	<div class="card h-100"><div class="card-header"><i class="bi bi-heart-pulse text-danger"></i> {{$.T .TitleKey}}</div><div class="card-body py-2">
-	<div class="row g-2">
+	<div class="card h-100 dash-board"><div class="card-header"><i class="bi bi-heart-pulse text-danger"></i> {{$.T .TitleKey}}</div><div class="card-body py-2">
+	<div class="row g-1">
 		<div class="col-6 col-md"><a class="card stat stat-ok" href="{{.Path}}?state=up"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "dashboard.ok"}}</div><div class="stat-value">{{.OK}}</div></div><i class="bi bi-check-circle stat-icon"></i></div></a></div>
 		<div class="col-6 col-md"><a class="card stat stat-down" href="{{.Path}}?state=problem"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "dashboard.down"}}</div><div class="stat-value">{{.Down}}</div></div><i class="bi bi-exclamation-triangle stat-icon"></i></div></a></div>
 		{{if .Unchecked}}<div class="col-6 col-md"><a class="card stat stat-warn" href="{{.Path}}?state=unchecked"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "hc.state.unchecked"}}</div><div class="stat-value">{{.Unchecked}}</div></div><i class="bi bi-hourglass-split stat-icon"></i></div></a></div>{{end}}
@@ -32,8 +32,8 @@
 		<div class="col-6 col-md"><a class="card stat stat-info" href="{{.Path}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "dashboard.other"}}</div><div class="stat-value">{{.Other}}</div></div><i class="bi bi-info-circle stat-icon"></i></div></a></div>
 	</div>
 	{{range $g := .Groups}}
-	<div class="d-flex align-items-center mt-3 mb-2 small fw-semibold"><span><i class="bi {{$g.Icon}} text-primary me-1"></i>{{$.T $g.TitleKey}}</span><a class="ms-auto text-body-secondary" href="{{$g.Path}}" title="{{$.T $g.TitleKey}}"><i class="bi bi-arrow-right"></i></a></div>
-	<div class="row g-2">
+	<div class="d-flex align-items-center mt-2 mb-1 small fw-semibold"><span><i class="bi {{$g.Icon}} text-primary me-1"></i>{{$.T $g.TitleKey}}</span><a class="ms-auto text-body-secondary" href="{{$g.Path}}" title="{{$.T $g.TitleKey}}"><i class="bi bi-arrow-right"></i></a></div>
+	<div class="row g-1">
 		{{range $g.Tiles}}<div class="col-6 col-md"><a class="card stat stat-{{.Kind}}" href="{{if .Path}}{{.Path}}{{else}}{{$g.Path}}{{end}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T .LabelKey}}</div><div class="stat-value">{{.Value}}</div></div><i class="bi {{.Icon}} stat-icon"></i></div></a></div>{{end}}
 	</div>
 	{{with $g.Err}}<div class="alert alert-warning py-1 px-2 mt-2 mb-0 small"><i class="bi bi-exclamation-triangle"></i> {{.}}</div>{{end}}
