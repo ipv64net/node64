@@ -43,7 +43,7 @@ var builtinPlans = []Plan{
 	{ID: 4, Key: "business", Name: "Business", ClassName: "Business", PriceYearEUR: 100, UpgradeURL: "https://ipv64.net/account?account_class&type=business", Limits: map[string]*int{
 		"dyndns_domains": lim(50), "dyndns_updates_24h": nil, "own_domains": lim(10), "dyndns_ttl_s": lim(10), "healthchecks": lim(50),
 		"healthcheck_pings_24h": nil, "sms_24h": nil, "statistics_days": lim(180), "failover_policies": lim(25), "failover_monitors": lim(100),
-		"failover_rules": lim(100), "offline_pages": lim(25), "cdn_domains": lim(10), "cdn_traffic_gb": lim(20480), "cdn_bandwidth_mbit": nil, "cdn_mappings": lim(50), "cdn_tunnel_sessions": lim(4),
+		"failover_rules": lim(100), "offline_pages": lim(25), "cdn_domains": lim(10), "cdn_traffic_gb": lim(10240), "cdn_bandwidth_mbit": nil, "cdn_mappings": lim(50), "cdn_tunnel_sessions": lim(2),
 		"cloud_routers": lim(10), "vpn_gateways": lim(10), "vpn_peers": lim(20), "vpn_traffic_gb": lim(10240), "dns64_clients": lim(10), "log_days": lim(90)}},
 	{ID: 5, Key: "company", Name: "Company", ClassName: "Company", PriceYearEUR: 200, UpgradeURL: "https://ipv64.net/account?account_class&type=company", Limits: map[string]*int{
 		"dyndns_domains": lim(256), "dyndns_updates_24h": nil, "own_domains": lim(50), "dyndns_ttl_s": lim(10), "healthchecks": lim(250),
