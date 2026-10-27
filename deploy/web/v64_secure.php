@@ -134,7 +134,6 @@ $vsLang = $vsDe ? '?lang=de' : '';
 						<li><?php echo vs_t('<strong>Node64 PROXY64</strong> (reverse proxy): blocklists per click, the v64 Blocklist live automatically with your API key.', '<strong>Node64 PROXY64</strong> (Reverse Proxy): Blocklisten per Klick, die v64 Blocklist live automatisch über deinen API-Key.'); ?></li>
 						<li><?php echo vs_t('<strong>Node64 firewall helper</strong>: writes the v64 Blocklist into nftables on Linux hosts.', '<strong>Node64 Firewall-Helfer</strong>: trägt die v64 Blocklist in nftables auf Linux-Hosts ein.'); ?></li>
 						<li><?php echo vs_t('<strong>pfSense, OPNsense, MikroTik, FortiGate</strong>: as URL table or address list, see the integration guide.', '<strong>pfSense, OPNsense, MikroTik, FortiGate</strong>: als URL-Tabelle oder Adressliste, siehe Integrationsleitfaden.'); ?></li>
-						<li><?php echo vs_t('<strong>DNSBL</strong> for mail servers: <code>bl.ipv64.net</code> answers 127.0.0.2 for addresses on the v64 Blocklist.', '<strong>DNSBL</strong> für Mailserver: <code>bl.ipv64.net</code> antwortet 127.0.0.2 für Adressen auf der v64 Blocklist.'); ?></li>
 					</ul>
 					<p class="mb-1"><?php echo vs_t('Your forwarded traffic shrinks, applications no longer answer unwanted requests or fill log files, and spam, malware and brute force attacks drop noticeably.',
 						'Weitergeleiteter Verkehr wird deutlich weniger, Anwendungen beantworten keine unerwünschten Anfragen mehr und schreiben keine Logs voll, Spam, Malware und Brute-Force-Angriffe gehen spürbar zurück.'); ?></p>
