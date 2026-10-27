@@ -1,5 +1,14 @@
 # Changes – Honeypot64
 
+## 0.14.6 – 2026-10-27
+
+### Fixed
+- Report to ipv64: with the template "PROXY64 only" (`proxy`, the default), ipv64.net rejected the report
+  ("sensor.profile must be one of …", 422). The portal now accepts `proxy` (portal file `api_v2_honeypot.php`).
+- Log sensor: every file or pattern now has a "Remove" button (bin) that removes the row and saves right away. Before,
+  the only way was to clear the row.
+- The last report error is shown on the overview and settings pages only as long as no report was accepted after it.
+
 ## 0.14.5 – 2026-10-27
 
 ### New

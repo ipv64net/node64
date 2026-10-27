@@ -18343,7 +18343,8 @@
                   "minimal",
                   "standard",
                   "full",
-                  "custom"
+                  "custom",
+                  "proxy"
                 ]
               },
               "mode": {

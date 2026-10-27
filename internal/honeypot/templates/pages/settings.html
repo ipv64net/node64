@@ -276,13 +276,14 @@
 				<div class="mb-2">
 					<div class="form-label">{{.T "honeypot.logs.files"}}</div>
 					<div class="table-responsive"><table class="table table-sm align-middle mb-1">
-						<thead><tr><th>{{.T "honeypot.logs.path"}}</th><th style="width:11rem">{{.T "honeypot.logs.format"}}</th></tr></thead>
+						<thead><tr><th>{{.T "honeypot.logs.path"}}</th><th style="width:11rem">{{.T "honeypot.logs.format"}}</th><th style="width:1%"><span class="visually-hidden">{{.T "honeypot.logs.remove"}}</span></th></tr></thead>
 						<tbody>{{range $d.LogRows}}<tr>
 							<td><input type="text" class="form-control form-control-sm font-monospace{{if index $d.Errors "log_files"}} is-invalid{{end}}" name="log_path" value="{{.Path}}" placeholder="/host/log/auth.log" aria-label="{{$.T "honeypot.logs.path"}}"></td>
 							<td><select class="form-select form-select-sm" name="log_format" aria-label="{{$.T "honeypot.logs.format"}}">
 								<option value=""{{if not .Format}} selected{{end}}>{{$.T "honeypot.logs.format_auto"}}</option>
 								{{$f := .Format}}{{range $d.LogFormats}}<option value="{{.}}"{{if eq . $f}} selected{{end}}>{{.}}</option>{{end}}
 							</select></td>
+							<td>{{if .Path}}<button class="btn btn-sm btn-outline-danger" type="submit" name="log_remove" value="{{.Path}}" formnovalidate title="{{$.T "honeypot.logs.remove"}}" aria-label="{{$.T "honeypot.logs.remove"}}: {{.Path}}"><i class="bi bi-trash"></i></button>{{end}}</td>
 						</tr>{{end}}</tbody>
 					</table></div>
 					{{with index $d.Errors "log_files"}}<div class="text-danger small" style="white-space:pre-line">{{.}}</div>{{end}}
@@ -323,7 +324,7 @@
 					{{if .SensorID}}<dt class="col-6 fw-normal text-body-secondary">{{$.T "honeypot.report.sensor_id"}}</dt><dd class="col-6 font-monospace text-break">{{.SensorID}}</dd>{{end}}
 				</dl>
 				{{if .LastRejected}}<div class="text-warning-emphasis mt-2 text-break"><i class="bi bi-funnel"></i> {{$.T "honeypot.report.rejected" "count" .LastRejected "reasons" .RejectedText}}</div>{{end}}
-				{{if .LastError}}<div class="text-danger mt-2 text-break"><i class="bi bi-exclamation-triangle"></i> {{$.T "honeypot.report.last_error"}} ({{$.Time .LastErrorAt}}): {{.LastError}}</div>{{end}}
+				{{if and .LastError (.LastErrorAt.After .LastSuccess)}}<div class="text-danger mt-2 text-break"><i class="bi bi-exclamation-triangle"></i> {{$.T "honeypot.report.last_error"}} ({{$.Time .LastErrorAt}}): {{.LastError}}</div>{{end}}
 			{{end}}</div>
 		</div>
 		{{if $d.CertAvail}}<div class="card" id="cert-create">

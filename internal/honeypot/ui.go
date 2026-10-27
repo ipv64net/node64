@@ -627,6 +627,9 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	c.MaxConnsPerIP, c.MaxConnsTotal = formInt(r, "max_conns_per_ip"), formInt(r, "max_conns_total")
 	c.RetentionDays, c.MaxEvents = formInt(r, "retention_days"), int64(formInt(r, "max_events"))
 	lf := parseLogForm(r)
+	if v := r.PostFormValue("log_remove"); v != "" { // Datei bzw. Muster entfernen und gleich speichern
+		lf.Files = slices.DeleteFunc(lf.Files, func(f LogFile) bool { return f.Path == v })
+	}
 	if v := r.PostFormValue("log_suggest"); v != "" { // Vorschlag als Zeile uebernehmen, noch nicht speichern
 		if i, err := strconv.Atoi(v); err == nil && i >= 0 && i < len(logSuggestions) &&
 			!slices.ContainsFunc(lf.Files, func(f LogFile) bool { return f.Path == logSuggestions[i].Path }) {

@@ -665,6 +665,21 @@ func TestPagesRender(t *testing.T) {
 	if l := m.loadConfig(context.Background()).Log; len(l.Files) != 2 || l.Files[1].Format != "nginx" || strings.Join(l.SyslogAllow, ",") != "192.168.1.0/24,10.0.0.1/32" {
 		t.Fatalf("saved logs: %+v", l)
 	}
+	// Entfernen per Knopf: Zeile weg und gleich gespeichert
+	if code, _ = post("/honeypot/settings", url.Values{"_csrf": {csrf[1]}, "ui_mode": {"expert"}}); code != http.StatusSeeOther {
+		t.Fatalf("expert mode: %d", code)
+	}
+	if _, body = get("/honeypot/settings"); !strings.Contains(body, `name="log_remove" value="/host/log/auth.log"`) {
+		t.Fatal("remove button missing")
+	}
+	form.Set("log_remove", "/host/log/auth.log")
+	if code, _ = post("/honeypot/settings", form); code != http.StatusSeeOther {
+		t.Fatalf("remove log: %d", code)
+	}
+	form.Del("log_remove")
+	if l := m.loadConfig(context.Background()).Log; len(l.Files) != 1 || l.Files[0].Path != "/host/log/nginx/access.log" {
+		t.Fatalf("removed logs: %+v", l)
+	}
 	for _, path := range []string{"/honeypot/settings", "/honeypot?source=log", "/honeypot?source=bogus&range=7d"} {
 		if code, body := get(path); code != 200 || !strings.Contains(body, "logs") {
 			t.Fatalf("%s: %d", path, code)

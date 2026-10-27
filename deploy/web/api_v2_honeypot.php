@@ -44,7 +44,7 @@ const HP_SOURCES  = array('honeypot', 'log', 'syslog');
 const HP_KIND_RE    = '/^[a-z][a-z0-9-]{0,15}:[a-z][a-z0-9-]{0,23}(:[a-z0-9-]{1,24})?$/';
 const HP_SERVICE_RE = '/^[a-z][a-z0-9-]{0,15}$/';
 const HP_FP_RE      = '/^(ja4:[a-z0-9_]{1,64}|hassh:[0-9a-f]{32})$/D'; // H6: Fingerabdruck, sonst verworfen und gezaehlt
-const HP_PROFILES = array('minimal', 'standard', 'full', 'custom');
+const HP_PROFILES = array('minimal', 'standard', 'full', 'custom', 'proxy'); // proxy: nur ueber PROXY64 (Voreinstellung seit Honeypot64 0.11.0)
 const HP_MODES    = array('module', 'headless');
 
 // ---------------------------------------------------------------- Hilfen

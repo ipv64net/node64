@@ -171,6 +171,9 @@ foreach($cases as $name => [$mod, $want]) {
 	$r = post(report($C, time() - 5, $mod));
 	check("$name -> $want", $r['code'] === $want AND ($r['j']['code'] ?? '') !== '', code($r));
 }
+$P = hp_uuid();
+$r = post(report($P, time() - 5, function($r) { $r['sensor']['profile'] = 'proxy'; return $r; }));
+check('profile proxy (nur ueber PROXY64) -> 202', $r['code'] === 202 AND (one("SELECT profile FROM hp_sensors WHERE sensor_id = ?", array($P))['profile'] ?? '') === 'proxy', code($r));
 check('keine Zeile fuer den ungueltigen Sensor', one("SELECT sensor_id FROM hp_sensors WHERE sensor_id = ?", array($C)) === false);
 $r = req('POST', '/api_v2.php/honeypot/reports', '{"schema":1,', array());
 check('kaputtes JSON 400', $r['code'] === 400, code($r));
