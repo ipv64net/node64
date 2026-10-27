@@ -1,5 +1,13 @@
 # Änderungen – PROXY64
 
+## 1.34.1 – 2026-10-27
+
+### Geändert
+- Account-Klasse Business mit CDN64: 2 parallele Tunnel-Verbindungen je Server statt 4 und 10 TB CDN-Traffic im
+  Monat statt 20 TB. Company bleibt bei 4 Verbindungen und 20 TB. Die Werte kommen von ipv64.net (Portal-SQL
+  `business_cdn_limits.sql`); die Node passt die Zahl der Verbindungen beim nächsten Abgleich von selbst an. Der
+  eingebaute Ersatzstand der Tarifübersicht ist angeglichen.
+
 ## 1.34.0 – 2026-10-27
 
 ### Neu

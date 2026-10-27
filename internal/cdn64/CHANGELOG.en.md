@@ -1,5 +1,13 @@
 # Changes – PROXY64
 
+## 1.34.1 – 2026-10-27
+
+### Changed
+- Business plan with CDN64: 2 parallel tunnel connections per server instead of 4 and 10 TB CDN traffic per month
+  instead of 20 TB. Company stays at 4 connections and 20 TB. The values come from ipv64.net (portal SQL
+  `business_cdn_limits.sql`); the node adjusts the number of connections at the next sync by itself. The built-in
+  fallback of the plan overview matches.
+
 ## 1.34.0 – 2026-10-27
 
 ### New
