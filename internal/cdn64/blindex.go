@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -63,7 +64,8 @@ func parseBlIndex(raw []byte) ([]BlocklistInfo, []geoCountry, error) {
 	}
 	var out []BlocklistInfo
 	seen := map[string]bool{}
-	for _, e := range append(append([]blIndexEntry{}, ix.Combined...), ix.Lists...) {
+	nComb := 0 // Gesamtlisten vorne
+	for i, e := range append(append([]blIndexEntry{}, ix.Combined...), ix.Lists...) {
 		if !blIDRe.MatchString(e.ID) || !blFileRe.MatchString(e.Files.All) || strings.HasPrefix(e.Files.All, ".") || seen[e.ID] || e.Category == "doh" {
 			continue
 		}
@@ -80,9 +82,17 @@ func parseBlIndex(raw []byte) ([]BlocklistInfo, []geoCountry, error) {
 			info.Name = e.ID
 		}
 		out = append(out, info)
+		if i < len(ix.Combined) {
+			nComb = len(out)
+		}
 	}
 	if len(out) == 0 {
 		return nil, nil, errors.New("index without lists")
+	}
+	// v64 Blocklist (eigene Liste von ipv64.net) direkt hinter die Gesamtlisten, nicht ans Ende
+	if i := slices.IndexFunc(out, func(b BlocklistInfo) bool { return b.ID == "v64" }); i > nComb {
+		v := out[i]
+		out = slices.Insert(slices.Delete(out, i, i+1), nComb, v)
 	}
 	var cc []geoCountry
 	for _, c := range ix.Countries {
