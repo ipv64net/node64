@@ -4043,6 +4043,11 @@
             "default": false,
             "description": "Meldung an ipv64 (Opt-in): alle 10 Minuten Quell-IPs, Arten, Ports, Zugangsdaten aus dem Honeypot, Pfade, User-Agents, Fingerabdrücke (JA4, HASSH) und Payload-Anfang; nie die eigene IP, keine privaten/reservierten Quellen. Einschalten nur mit eingetragenem zentralem API-Key (sonst 400 mit fields.report)."
           },
+          "country": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$",
+            "description": "Standort des Sensors (ISO 3166-1 alpha-2, Land der Karte inkl. Kleinstaaten); leer = automatisch aus der öffentlichen IPv4. Ziel der Bögen der Live-Karte und – mit der Meldung als sensor.country – auf ipv64.net; nur Anzeige, nicht für die Bewertung. Unbekannt → 400 mit fields.country."
+          },
           "log": {
             "$ref": "#/components/schemas/Honeypot64LogConfig"
           },
@@ -17917,6 +17922,10 @@
                         },
                         "known": {
                           "type": "boolean"
+                        },
+                        "manual": {
+                          "type": "boolean",
+                          "description": "true = eingestellter Standort, sonst aus der öffentlichen IPv4"
                         }
                       }
                     },

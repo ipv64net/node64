@@ -1,6 +1,6 @@
 // Honeypot64: Live-Karte – auf der Laenderkarte der Uebersicht fliegen Boegen von der Quelle eines Angriffs zum eigenen
 // Sensor (Daten: /api/honeypot/live, letzte 60 Minuten, jede Minute neu). Neue Angriffe zuerst, mehrere gleichzeitig;
-// ist gerade nichts Neues da, werden aeltere aus dem Zeitraum wiederholt (nur auf der Karte, als Wiederholung markiert;
+// nur in einem Takt ohne neue Angriffe werden aeltere aus dem Zeitraum wiederholt (nur auf der Karte, als Wiederholung markiert;
 // die Listen zeigen nur echte Eintraege). Vollbild mit Seitenleiste: laufende Boegen, haeufigste Herkunft (anklickbar:
 // feste Boegen und Arten aus diesem Land).
 (function () {
@@ -16,7 +16,7 @@
 	var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 	var MAX_LIVE = 12, PER_TICK = 3; // hoechstens so viele Boegen gleichzeitig / neue je Takt
 	var target = null, events = [], fresh = [], seen = 0, running = true, replay = 0, recent = [], live = [], sel = null;
-	var boxes = [], hits = 0; // belegte Flaechen der Beschriftungen, laufende Boegen (eigenes Land hervorgehoben)
+	var labels = {}, hits = 0, gen = 0; // Beschriftungen je Text (mit Zaehler), Boegen zum eigenen Land, Takt-Generation (Pause)
 	var nf = new Intl.NumberFormat(document.documentElement.lang || undefined);
 	var L = function (k) { return (list && list.getAttribute("data-l-" + k)) || ""; };
 	var timeFmt = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -27,12 +27,17 @@
 		return e;
 	}
 
-	// Beschriftung (Flagge und Code) an einem Punkt; null, wenn sie eine andere ueberdecken wuerde
+	// Beschriftung (Flagge und Code) an einem Punkt; gleiche Beschriftung mehrerer Boegen wird geteilt (Zaehler) und erst
+	// mit dem letzten Bogen entfernt. null, wenn sie eine andere ueberdecken wuerde. Rueckgabe: Freigabe-Funktion
 	function label(X, Y, text, dst) {
 		if (!labelLayer) { return null; }
+		var key = (dst ? "d|" : "s|") + text;
+		if (labels[key]) { labels[key].n++; return release(key); }
 		var k = unit(), x = X + 4 * k, y = Y + (dst ? 14 : -6) * k, w = (text.length * 6 + 6) * k;
-		for (var i = 0; i < boxes.length; i++) {
-			if (Math.abs(boxes[i].x - x) < Math.max(boxes[i].w, w) + 2 * k && Math.abs(boxes[i].y - y) < 15 * k) { return null; }
+		var keys = Object.keys(labels);
+		for (var i = 0; i < keys.length; i++) {
+			var o = labels[keys[i]].box;
+			if (Math.abs(o.x - x) < Math.max(o.w, w) + 2 * k && Math.abs(o.y - y) < 15 * k) { return null; }
 		}
 		// kleiner Kasten (dunkelgrau, halbtransparent) mit Flagge und Code, 10 px unabhaengig von der Kartengroesse
 		var g = el("g", { "class": "hp-lbl" + (dst ? " hp-lbl-dst" : "") });
@@ -42,9 +47,17 @@
 		g.append(r, t);
 		labelLayer.appendChild(g);
 		try { var bb = t.getBBox(); if (bb.width) { w = bb.width + 6 * k; r.setAttribute("width", w); } } catch (e) { /* nicht sichtbar */ }
-		var box = { x: x, y: y, w: w };
-		boxes.push(box);
-		return function () { g.remove(); boxes = boxes.filter(function (b) { return b !== box; }); };
+		labels[key] = { g: g, box: { x: x, y: y, w: w }, n: 1 };
+		return release(key);
+	}
+
+	function release(key) {
+		var l = labels[key], done = false;
+		return function () {
+			if (done || labels[key] !== l) { return; } // schon frei oder nach einer Pause neu angelegt
+			done = true;
+			if (--l.n <= 0) { l.g.remove(); delete labels[key]; }
+		};
 	}
 
 	// Kartenmass je Bildschirmpixel (Beschriftung bleibt bei jeder Kartengroesse gleich gross)
@@ -53,11 +66,21 @@
 		return m && m.a > 0 ? 1 / m.a : 1;
 	}
 
-	// eigenes Land hell hervorheben, solange ein Bogen dorthin laeuft
+	// eigenes Land hell hervorheben, solange ein Bogen dorthin laeuft (Kleinstaat ohne Flaeche: der Zielpunkt)
+	function hitEl() {
+		if (!target || !target.known) { return null; }
+		return svg.querySelector('path[data-cc="' + target.cc + '"]') || layer.querySelector(".hp-target");
+	}
 	function hit(on) {
 		hits = Math.max(0, hits + (on ? 1 : -1));
-		var p = target && target.known ? svg.querySelector('path[data-cc="' + target.cc + '"]') : null;
+		var p = hitEl();
 		if (p) { p.classList.toggle("hp-hit", hits > 0); }
+	}
+	// Zaehler und Hervorhebung zuruecksetzen (Pause, Zielwechsel); laufende Boegen zaehlen danach nicht mehr ab
+	function resetHits() {
+		live.forEach(function (it) { it.hit = false; });
+		hits = 0;
+		svg.querySelectorAll(".hp-hit").forEach(function (x) { x.classList.remove("hp-hit"); });
 	}
 
 	// schwache Laendernamen der Herkunftslaender und des eigenen Lands, ohne Ueberdeckung
@@ -134,6 +157,7 @@
 		t.textContent = target.known ? L("target").replace("{name}", target.flag + " " + target.name) : L("unknown");
 		g.appendChild(t);
 		layer.appendChild(g);
+		if (hits > 0 && target.known && !svg.querySelector('path[data-cc="' + target.cc + '"]')) { g.classList.add("hp-hit"); }
 	}
 
 	function arc(e, rep) {
@@ -145,7 +169,7 @@
 		var dot = el("circle", { cx: e.x, cy: e.y, r: 2, "class": "hp-src hp-g-" + e.group });
 		layer.insertBefore(p, layer.firstChild);
 		layer.insertBefore(dot, layer.firstChild);
-		var item = { e: e, rep: rep, path: p };
+		var item = { e: e, rep: rep, path: p, hit: true };
 		live.unshift(item);
 		var la = label(e.x, e.y, e.flag + " " + e.cc, false), lb = target.known ? label(target.x, target.y, target.flag + " " + target.cc, true) : null;
 		hit(true);
@@ -154,7 +178,7 @@
 			p.remove(); dot.remove();
 			if (la) { la(); }
 			if (lb) { lb(); }
-			hit(false);
+			if (item.hit) { item.hit = false; hit(false); }
 			live = live.filter(function (x) { return x !== item; });
 			renderNow(); liveCount();
 		};
@@ -251,7 +275,7 @@
 		if (!selBox) { return; }
 		var c = cc && byCountry().filter(function (x) { return x.cc === cc; })[0];
 		if (!c || !target) { sel = null; selBox.hidden = true; return; }
-		var p = el("path", { d: curve(c.x, c.y), "class": "hp-g-" + c.group, "stroke-width": "3" });
+		var p = el("path", { d: curve(c.x, c.y), "class": "hp-g-" + c.group });
 		var t = el("title"); t.textContent = c.flag + " " + c.name + " → " + target.flag + " " + target.name + " · " + c.n; p.appendChild(t);
 		selLayer.appendChild(p);
 		var title = $("[data-hp-live-seltitle]");
@@ -266,7 +290,9 @@
 
 	function load() {
 		return fetch("/api/honeypot/live?minutes=60", { cache: "no-store", credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
-			target = d.target || null;
+			var t = d.target || null;
+			if (target && (!t || target.cc !== t.cc || target.known !== t.known)) { resetHits(); } // neues Ziel: alte Hervorhebung weg
+			target = t;
 			events = (d.events || []).slice().reverse(); // aelteste zuerst (Wiederholung in Zeitfolge)
 			var max = seen;
 			events.forEach(function (e) {
@@ -284,19 +310,22 @@
 		}).catch(function () {});
 	}
 
-	// Je Takt bis zu PER_TICK Boegen: zuerst neue Angriffe, sonst Wiederholung aus verschiedenen Laendern
+	// Je Takt bis zu PER_TICK Boegen: neue Angriffe; nur in einem Takt ohne neue 1-2 Wiederholungen aus verschiedenen
+	// Laendern. Die Boegen eines Takts starten versetzt; nach einer Pause (gen) faellt der Rest weg.
 	function tick() {
 		if (!running || !target || document.hidden) { return; }
-		var room = Math.min(PER_TICK, MAX_LIVE - live.length), batch = [], used = {}, tries = 0;
+		var room = Math.min(PER_TICK, MAX_LIVE - live.length), batch = [], used = {}, tries = 0, g = gen;
 		while (room > 0 && fresh.length) { batch.push([fresh.shift(), false]); room--; }
-		if (!batch.length) { room = Math.min(room, 1 + (Math.random() < 0.5 ? 1 : 0)); }
-		while (room > 0 && events.length && tries < Math.min(events.length, 20)) {
-			var e = events[replay++ % events.length]; tries++;
-			if (used[e.cc]) { continue; }
-			used[e.cc] = true;
-			batch.push([e, true]); room--;
+		if (!batch.length) {
+			room = Math.min(room, 1 + (Math.random() < 0.5 ? 1 : 0));
+			while (room > 0 && events.length && tries < Math.min(events.length, 20)) {
+				var e = events[replay++ % events.length]; tries++;
+				if (used[e.cc]) { continue; }
+				used[e.cc] = true;
+				batch.push([e, true]); room--;
+			}
 		}
-		batch.forEach(function (b, i) { setTimeout(function () { arc(b[0], b[1]); }, i * 300); });
+		batch.forEach(function (b, i) { setTimeout(function () { if (running && g === gen) { arc(b[0], b[1]); } }, i * 300); });
 	}
 
 	if (btn) {
@@ -306,9 +335,11 @@
 			btn.classList.toggle("btn-outline-danger", running);
 			btn.classList.toggle("btn-outline-secondary", !running);
 			if (!running) {
+				gen++;
+				resetHits();
 				layer.querySelectorAll(".hp-arc, .hp-src").forEach(function (x) { x.remove(); });
 				if (labelLayer) { labelLayer.replaceChildren(); }
-				boxes = []; live = []; hits = 1; hit(false);
+				labels = {}; live = [];
 				renderNow(); liveCount();
 			}
 		});

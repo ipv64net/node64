@@ -93,4 +93,10 @@ func TestCentroid(t *testing.T) {
 	if _, ok := Points()["DE"]; ok {
 		t.Error("DE must not be a fixed point")
 	}
+	// alle festen Punkte liegen in der Karte (Tuvalu lag rechts ausserhalb)
+	for cc, p := range Points() {
+		if p[0] < 0 || p[0] > 1000 || p[1] < 0 || p[1] > 436 {
+			t.Errorf("%s: %v outside the map", cc, p)
+		}
+	}
 }

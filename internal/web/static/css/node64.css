@@ -337,13 +337,15 @@ html[data-fs="xl"] { font-size: 125%; }
 .hp-live-sw.hp-g-scan { background: var(--bs-info); } .hp-live-sw.hp-g-log { background: var(--bs-primary); }
 .hp-live-sw.hp-g-probe { background: var(--bs-secondary); }
 /* Live-Karte: Auswahl (feste Boegen), Hervorhebung, Logo, Vollbild mit Seitenleiste (Fullscreen API oder Klasse hp-fs) */
-.hp-map .hp-live-sel path { fill: none; stroke-linecap: round; stroke-opacity: .8; pointer-events: stroke; }
+.hp-map .hp-live-sel path { fill: none; stroke-width: 3; stroke-linecap: round; stroke-opacity: .8; pointer-events: stroke; }
 .hp-map text { font-family: "Twemoji Country Flags", var(--bs-body-font-family); pointer-events: none; paint-order: stroke; stroke: var(--bs-body-bg); stroke-width: 2.4px; stroke-linejoin: round; }
+.hp-map .hp-lbl { pointer-events: none; } /* Klicks und Tooltips gehen an das Land darunter */
 .hp-map .hp-lbl rect { fill: rgba(33, 37, 41, .72); }
 .hp-map .hp-lbl text { fill: #f8f9fa; stroke: none; }
 .hp-map .hp-lbl-dst text { font-weight: 600; }
 .hp-map text.hp-name { fill: var(--bs-body-color); opacity: .4; text-anchor: middle; }
 .hp-map path.hp-hit { fill: #ffe08a; transition: fill .4s; }
+.hp-map .hp-live .hp-target.hp-hit .hp-target-dot { fill: #ffc107; } /* Kleinstaat ohne Flaeche: Zielpunkt leuchtet */
 [data-bs-theme="dark"] .hp-map path.hp-hit { fill: #f5d76e; }
 .hp-live-strip { gap: .3rem 1rem; }
 .hp-map .hp-live path.hp-hot { stroke-width: 4; stroke-opacity: 1; }

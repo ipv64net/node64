@@ -46,7 +46,9 @@ var smallPoints = sync.OnceValue(func() map[string][2]float64 {
 			continue // auf der Karte: Schwerpunkt der Flaeche
 		}
 		x, y := project(ll[0], ll[1])
-		out[cc] = [2]float64{math.Round((x*s+500)*10) / 10, math.Round((yn-y)*s*10) / 10}
+		// in der Karte halten: oestlich von Fidschi (z. B. Tuvalu bei 179,2 O) laege der Punkt sonst jenseits des Rands
+		px := min(max(math.Round((x*s+500)*10)/10, 3), 997)
+		out[cc] = [2]float64{px, math.Round((yn-y)*s*10) / 10}
 	}
 	return out
 })

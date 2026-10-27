@@ -42,3 +42,37 @@ func TestLiveEvents(t *testing.T) {
 		t.Fatalf("unknown target: %+v", tg)
 	}
 }
+
+// Laendernamen der Standort-Auswahl nach Sprache sortiert: Oesterreich zwischen Oman und Pakistan, nicht hinter Zypern.
+func TestCountryOptionsSorted(t *testing.T) {
+	pos := map[string]int{}
+	for i, c := range countryOptions("de") {
+		pos[c.Code] = i
+	}
+	if !(pos["OM"] < pos["AT"] && pos["AT"] < pos["PK"]) || !(pos["EG"] < pos["CY"]) {
+		t.Fatalf("order: OM %d AT %d PK %d EG %d CY %d", pos["OM"], pos["AT"], pos["PK"], pos["EG"], pos["CY"])
+	}
+}
+
+// Waehrend des Abrufs der eigenen IPv4 warten cached() und weitere get()-Aufrufe nicht (Einstellungsseite).
+func TestOwnCountryNoWaitDuringFetch(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{})
+	o := &ownCountry{from: func(context.Context) (netip.Addr, error) {
+		close(started)
+		<-release
+		return netip.Addr{}, context.DeadlineExceeded
+	}}
+	done := make(chan struct{})
+	go func() { o.get(context.Background()); close(done) }()
+	<-started
+	ok := make(chan struct{})
+	go func() { o.cached(); o.get(context.Background()); close(ok) }()
+	select {
+	case <-ok:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cached()/get() blocked during fetch")
+	}
+	close(release)
+	<-done
+}
