@@ -4812,6 +4812,14 @@
             "type": "string",
             "format": "date-time"
           },
+          "uid": {
+            "type": "string",
+            "description": "Kennung im Cluster (32 hex, gleich auf allen Nodes; ein Proxmox-Check traegt sie als params.system_uid)"
+          },
+          "home": {
+            "type": "string",
+            "description": "Node, die das System angelegt hat (Cluster, Bereich Proxmox VE bzw. Docker); fehlt = diese Node. Sie schickt die Meldungen der Ueberwachung."
+          },
           "has_secret": {
             "type": "boolean",
             "description": "Secret gespeichert und lesbar (false z. B. nach Import ohne Passwort oder mit anderem secret.key)"

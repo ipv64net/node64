@@ -43,6 +43,8 @@ type ProxmoxParams struct {
 	SystemID int64  `json:"system_id"`
 	Key      string `json:"key"`              // node/<name>, qemu/<vmid>, lxc/<vmid>
 	System   string `json:"system,omitempty"` // nur Anzeige: Clustername bzw. Name des Systems (Gruppierung, auch im Portal)
+	// Kennung des Systems im Cluster (32 hex): die ID ist je Node verschieden, gilt die Kennung, wenn gesetzt
+	SystemUID string `json:"system_uid,omitempty"`
 }
 
 // ProxmoxState ist der Stand eines Gasts bzw. Nodes aus der letzten Abfrage (geliefert von Runner.Proxmox).
@@ -78,8 +80,13 @@ func validateProxmox(def Definition) error {
 	if !pveCheckKey.MatchString(p.Key) {
 		return errors.New("key must look like node/<name>, qemu/<vmid> or lxc/<vmid>")
 	}
+	if p.SystemUID != "" && !pveUID.MatchString(p.SystemUID) {
+		return errors.New("system_uid must be 32 hex characters")
+	}
 	return nil
 }
+
+var pveUID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 type proxmoxChecker struct{ r *Runner }
 
@@ -92,6 +99,15 @@ func (c proxmoxChecker) Check(_ context.Context, def Definition, _ net.IP) Resul
 	if c.r == nil || c.r.Proxmox == nil {
 		res.Status, res.Reason, res.Message = Down, ReasonPVEUnreachable, "proxmox monitoring is not running"
 		return res
+	}
+	if p.SystemUID != "" && c.r.ProxmoxUID != nil {
+		id, ok := c.r.ProxmoxUID(p.SystemUID)
+		if !ok {
+			res.Status, res.Reason, res.Message = Down, ReasonPVEUnreachable, "proxmox system is not set up on this node (cluster: area Proxmox VE)"
+			return res
+		}
+		p.SystemID = id
+		res.Details["system_id"] = id
 	}
 	st := c.r.Proxmox(p.SystemID, p.Key)
 	if st.System != "" {

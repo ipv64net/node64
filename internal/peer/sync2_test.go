@@ -3,6 +3,7 @@ package peer
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -10,19 +11,28 @@ import (
 
 // fakeProv ist ein Modul mit zwei Bereichen (a, b), Eintraege als Text.
 type fakeProv struct {
-	n    *testNode
-	mu   sync.Mutex
-	data map[string]string // "bereich/id" -> Wert
+	n     *testNode
+	mod   string
+	items []ItemInfo
+	mu    sync.Mutex
+	data  map[string]string // "bereich/id" -> Wert
 }
 
 func newProv(n *testNode) *fakeProv {
-	p := &fakeProv{n: n, data: map[string]string{}}
+	p := &fakeProv{n: n, mod: "demo", items: []ItemInfo{{ID: "a"}, {ID: "b"}}, data: map[string]string{}}
+	n.m.RegisterProvider(p)
+	return p
+}
+
+// newHCProv: Bereiche des Healthchecks-Moduls ueber v2 (Proxmox VE, Docker) wie healthchecks/hccluster.
+func newHCProv(n *testNode) *fakeProv {
+	p := &fakeProv{n: n, mod: "healthchecks", items: []ItemInfo{{ID: "proxmox"}, {ID: "docker"}}, data: map[string]string{}}
 	n.m.RegisterProvider(p)
 	return p
 }
 
 func (p *fakeProv) ClusterModule() ModuleInfo {
-	return ModuleInfo{ID: "demo", TitleKey: "demo", Items: []ItemInfo{{ID: "a"}, {ID: "b"}}}
+	return ModuleInfo{ID: p.mod, TitleKey: p.mod, Items: p.items}
 }
 
 func (p *fakeProv) ClusterIDs(_ context.Context, item string) ([]string, error) {
@@ -30,8 +40,8 @@ func (p *fakeProv) ClusterIDs(_ context.Context, item string) ([]string, error) 
 	defer p.mu.Unlock()
 	var out []string
 	for k := range p.data {
-		if len(k) > 2 && k[:2] == item+"/" {
-			out = append(out, k[2:])
+		if id, ok := strings.CutPrefix(k, item+"/"); ok {
+			out = append(out, id)
 		}
 	}
 	return out, nil
@@ -58,7 +68,7 @@ func (p *fakeProv) ClusterApply(ctx context.Context, item, id string, data json.
 		p.data[item+"/"+id] = v
 	}
 	p.mu.Unlock()
-	p.n.m.ClusterChange(ctx, "demo", item, id, deleted) // Hook wie im echten Modul (Herkunft steckt in ctx)
+	p.n.m.ClusterChange(ctx, p.mod, item, id, deleted) // Hook wie im echten Modul (Herkunft steckt in ctx)
 	return nil
 }
 
@@ -71,7 +81,7 @@ func (p *fakeProv) set(item, id, v string) {
 		p.data[item+"/"+id] = v
 	}
 	p.mu.Unlock()
-	p.n.m.ClusterChange(context.Background(), "demo", item, id, v == "")
+	p.n.m.ClusterChange(context.Background(), p.mod, item, id, v == "")
 }
 
 func (p *fakeProv) get(item, id string) string {
@@ -235,5 +245,56 @@ func TestVersionSuspendAutoResume(t *testing.T) {
 	a.m.pingAll(ctx)
 	if x, _ = a.m.member(ctx, "node-b"); !x.Suspended() {
 		t.Fatal("identity suspension must stay")
+	}
+}
+
+// Proxmox VE und Docker: Bereiche des eingebauten Healthchecks-Moduls, aber ueber /peer/v2/sync (ohne Einstellung aus);
+// der eigene Weg (v1) sieht sie nicht, die Liste der Module bleibt ohne doppeltes Healthchecks.
+func TestClusterHealthchecksV2Items(t *testing.T) {
+	ctx := context.Background()
+	a, b := newNode(t, "node-a", "A", 522), newNode(t, "node-b", "B", 522)
+	newFake(a)
+	newFake(b)
+	pa, pb := newHCProv(a), newHCProv(b)
+	code, _, _ := a.m.StartPairing()
+	if err := b.m.Join(ctx, a.srv.URL, code, b.srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	waitMembers(t, a, "B")
+	mods := a.m.SyncModules(ctx)
+	if len(mods) != 2 || mods[0].ID != "healthchecks" || len(mods[0].Items) != 4 || mods[0].Items[2].ID != "proxmox" || mods[0].Items[2].Enabled {
+		t.Fatalf("modules: %+v", mods)
+	}
+	pa.data["proxmox/u1"] = "pve"
+	round2(a, b)
+	if pb.get("proxmox", "u1") != "" || len(a.m.HCItemMembers(ctx, "proxmox")) != 0 {
+		t.Fatal("proxmox is off by default")
+	}
+	for _, n := range []*testNode{a, b} {
+		if err := n.m.SetSync(ctx, "healthchecks", "proxmox", true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	round2(a, b)
+	if pb.get("proxmox", "u1") != "pve" {
+		t.Fatalf("proxmox system must reach B, got %q", pb.get("proxmox", "u1"))
+	}
+	pb.set("proxmox", "u1", "")
+	round2(a, b)
+	if pa.get("proxmox", "u1") != "" {
+		t.Fatal("delete must reach A")
+	}
+	x, _ := a.m.member(ctx, "node-b")
+	if w := a.m.v1Wants(a.m.syncCaps(ctx), *x); strings.Join(w, ",") != "checks,maintenance,settings" {
+		t.Fatalf("v1 items: %v", w)
+	}
+	if l := a.m.HCItemMembers(ctx, "proxmox"); len(l) != 1 || l[0].NodeID != "node-b" || len(a.m.HCItemMembers(ctx, "docker")) != 0 {
+		t.Fatalf("item members: %+v", l)
+	}
+	// Checks aus: kein Mitmessen, auch wenn der Bereich an ist
+	_ = b.m.SetSync(ctx, "healthchecks", "checks", false)
+	a.m.pingAll(ctx)
+	if len(a.m.HCItemMembers(ctx, "proxmox")) != 0 {
+		t.Fatal("without checks no item members")
 	}
 }

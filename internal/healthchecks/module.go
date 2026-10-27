@@ -73,6 +73,8 @@ type Module struct {
 	// Proxmox VE (proxmox_*.go): Schluessel fuer die Token-Secrets und Laufzeit der Abfragen
 	box *secrets.Box
 	pve *pveRuntime
+	// Proxmox VE und Docker ueber den Cluster (pvecluster.go)
+	cluster ClusterHooks
 }
 
 // New erzeugt das Modul. dispatcher und notifyStore duerfen nil sein (dann nur Log).
@@ -200,7 +202,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.37.3", Changelog: changelog, ChangelogEN: changelogEN}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.38.0", Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {
@@ -220,6 +222,7 @@ func (m *Module) Start(ctx context.Context) error {
 	runner := checks.NewRunner()
 	runner.PublicIP = m.publicIP
 	runner.Proxmox = m.pveLookup   // Check-Typ proxmox liest den letzten Stand der Proxmox-Abfrage
+	runner.ProxmoxUID = m.pveUIDOf // System ueber die Kennung im Cluster
 	runner.Docker = m.dockerRemote // Check-Typ docker: Hosts mit Zugangsdaten ueber die Verbindung der Docker-Abfrage
 	m.sched = scheduler.New(m.st, m.notifier, runner, m.log, scheduler.Options{})
 	list, err := m.st.Checks(ctx)
@@ -233,7 +236,8 @@ func (m *Module) Start(ctx context.Context) error {
 		rt := c.Runtime
 		m.sched.Upsert(c.SchedulerCheck(), &rt)
 	}
-	m.pveStart(ctx) // Proxmox VE: Abfrage der eingeschalteten Systeme (vor den Checks: Docker-Checks auf ssh/https nutzen sie)
+	m.pveStart(ctx)        // Proxmox VE: Abfrage der eingeschalteten Systeme (vor den Checks: Docker-Checks auf ssh/https nutzen sie)
+	m.pveBackfillUIDs(ctx) // Kennung der Systeme in aeltere Proxmox-Checks (Cluster)
 	m.sched.Start(ctx)
 	m.wg.Add(1)
 	go m.housekeeping(ctx)

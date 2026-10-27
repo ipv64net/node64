@@ -69,6 +69,7 @@ func (m *Module) ApplyWireCheck(ctx context.Context, w wire.Check, chanMap Chann
 	grp := w.Group
 	// Felder neuerer Versionen (z. B. params.system) weglassen statt den ganzen Check abzulehnen
 	params := checks.WithoutUnknownParams(checks.Definition{Type: checks.Type(strings.ToLower(strings.TrimSpace(w.Type))), Target: strings.TrimSpace(w.Target), Params: w.Params})
+	params = keepSystemUID(existing, params)
 	in := checkJSON{Name: w.Name, Type: w.Type, Target: w.Target, Params: params, IPMode: w.IPMode, Tags: w.Tags, Group: &grp, Description: w.Description,
 		Execution: "local", Policy: w.Policy, Locations: w.Locations}
 	iv, riv, re, st, rp := w.IntervalSeconds, w.RetryIntervalSeconds, w.Retries, w.Stabilize, w.RepeatMinutes
@@ -122,6 +123,9 @@ func (m *Module) ApplyWireCheck(ctx context.Context, w wire.Check, chanMap Chann
 		return err
 	}
 	nc, _ := m.st.Check(ctx, c.Token)
+	if nc != nil {
+		m.pveLinkCheck(ctx, nc) // Check eines Systems aus dem Cluster: beim System vermerken
+	}
 	if s := m.scheduler(); s != nil && nc != nil {
 		if nc.MeasuredHere() {
 			var rt *scheduler.Runtime

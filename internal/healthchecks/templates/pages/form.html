@@ -273,9 +273,9 @@
 				{{if $d.Peers}}
 				<div class="col-12" id="nodesbox"><label class="form-label">{{.T "hc.form.nodes"}}</label>
 					<input type="hidden" name="nodes_present" value="1">
-					{{range $d.Peers}}<div class="form-check"><input class="form-check-input" type="checkbox" name="nodes" value="{{.ID}}" id="node_{{.ID}}"{{if contains (index $f "nodes") .ID}} checked{{end}}><label class="form-check-label" for="node_{{.ID}}"><i class="bi bi-hdd-network text-primary"></i> {{.Name}}{{if .Self}} <span class="badge text-bg-success">{{$.T "hc.form.this_node"}}</span>{{end}}{{if .Location}} <span class="text-body-secondary small">· {{.Location}}</span>{{end}}{{if not .Online}} <span class="badge text-bg-secondary">offline</span>{{end}}</label></div>{{end}}
+					{{range $d.Peers}}<div class="form-check"><input class="form-check-input" type="checkbox" name="nodes" value="{{.ID}}" id="node_{{.ID}}"{{with .Cluster}} data-cl="{{.}}"{{end}}{{if contains (index $f "nodes") .ID}} checked{{end}}><label class="form-check-label" for="node_{{.ID}}"><i class="bi bi-hdd-network text-primary"></i> {{.Name}}{{if .Self}} <span class="badge text-bg-success">{{$.T "hc.form.this_node"}}</span>{{end}}{{if .Location}} <span class="text-body-secondary small">· {{.Location}}</span>{{end}}{{if not .Online}} <span class="badge text-bg-secondary">offline</span>{{end}}</label></div>{{end}}
 					<div class="form-text" data-types="http keyword json dns icmp tcp port cert push whois">{{.T "hc.form.nodes_hint"}}</div>
-					<div class="form-text text-warning-emphasis" data-types="docker">{{.T "hc.form.nodes_single"}}</div></div>
+					<div class="form-text text-warning-emphasis" data-types="docker proxmox">{{.T "hc.form.nodes_single"}}</div></div>
 				{{end}}
 				<div class="col-12" id="onlinebox"><div class="row g-3"><!-- nur bei online/beides (healthchecks.js) -->
 				<div class="col-12"><label class="form-label">{{.T "hc.form.locations"}}{{$.Doc "healthchecks#online-limits"}}</label>

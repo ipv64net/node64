@@ -1085,6 +1085,15 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 	}
 	if d.Linked || (m.groupPeers != nil && len(m.groupPeers(r.Context())) > 0) { // auch in der lokalen Gruppe ohne hub
 		d.Peers = m.peers(r.Context())
+		for _, item := range []string{ClusterItemProxmox, ClusterItemDocker} { // Docker/Proxmox: nur diese Nodes waehlbar
+			for _, p := range m.clusterMembers(r.Context(), item) {
+				for i := range d.Peers {
+					if d.Peers[i].ID == p.ID {
+						d.Peers[i].Cluster = strings.TrimSpace(d.Peers[i].Cluster + " " + item)
+					}
+				}
+			}
+		}
 		if d.Form["nodes"] == "" {
 			d.Form["nodes"] = selfNodeID() // neu bzw. bisher nur diese Node
 		}

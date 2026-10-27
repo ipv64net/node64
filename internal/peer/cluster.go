@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -59,10 +60,14 @@ type ModuleState struct {
 const setSync = "peer.sync" // {"module": {"enabled": true, "items": {"item": true}}}
 
 // Healthchecks und Benachrichtigungen sind fest eingebaut (eigener Weg /peer/v1/changes), die Bereiche schalten
-// die vorhandenen Eintragsarten (check, maintenance; settings = Benachrichtigungs-Einstellungen).
+// die vorhandenen Eintragsarten (check, maintenance; settings = Benachrichtigungs-Einstellungen). Die Systeme der
+// Proxmox-VE- und Docker-Ueberwachung (proxmox, docker; ohne Einstellung aus) laufen ueber den allgemeinen Weg
+// /peer/v2/sync: das Healthchecks-Modul meldet dafuer einen Provider mit der ID "healthchecks" an (v2Item).
 var healthchecksModule = ModuleInfo{ID: "healthchecks", TitleKey: "cluster.mod.healthchecks", Items: []ItemInfo{
 	{ID: "checks", TitleKey: "cluster.item.checks", Default: true},
 	{ID: "maintenance", TitleKey: "cluster.item.maintenance", Default: true},
+	{ID: "proxmox", TitleKey: "cluster.item.proxmox"},
+	{ID: "docker", TitleKey: "cluster.item.docker"},
 }}
 
 var notificationsModule = ModuleInfo{ID: "notifications", TitleKey: "cluster.mod.notifications", Items: []ItemInfo{
@@ -91,6 +96,24 @@ func (m *Manager) provider(id string) Provider {
 	return m.prov[id]
 }
 
+// v2Item: der Bereich laeuft ueber /peer/v2/sync (Provider des Moduls kennt ihn; bei Healthchecks nur die Bereiche
+// des Providers, die anderen laufen ueber den eigenen Weg).
+func (m *Manager) v2Item(module, item string) bool {
+	p := m.provider(module)
+	if p == nil {
+		return false
+	}
+	if !builtin(module) {
+		return true
+	}
+	for _, it := range p.ClusterModule().Items {
+		if it.ID == item {
+			return true
+		}
+	}
+	return false
+}
+
 type syncModCfg struct {
 	Enabled *bool           `json:"enabled,omitempty"`
 	Items   map[string]bool `json:"items,omitempty"`
@@ -111,7 +134,9 @@ func (m *Manager) modules() []ModuleInfo {
 	}
 	sort.Strings(ids)
 	for _, id := range ids {
-		out = append(out, m.prov[id].ClusterModule())
+		if !builtin(id) { // Provider eingebauter Module: Bereiche stehen schon oben
+			out = append(out, m.prov[id].ClusterModule())
+		}
 	}
 	m.mu.Unlock()
 	return out
@@ -207,10 +232,10 @@ func (m *Manager) syncOn(ctx context.Context, module, item string) bool {
 }
 
 // memberSyncOn: Bereich bei einem Mitglied eingeschaltet (laut letztem Ping). Nodes ohne Angabe (aeltere Version)
-// gleichen nur die Healthchecks ab.
+// gleichen nur die Checks und Wartungsfenster ab.
 func memberSyncOn(x Member, module, item string) bool {
 	if x.Sync == nil {
-		return module == "healthchecks"
+		return module == "healthchecks" && (item == "checks" || item == "maintenance")
 	}
 	for _, c := range x.Sync {
 		if c == module+"/"+item {
@@ -255,13 +280,13 @@ func splitCaps(s string) []string {
 	return out
 }
 
-// wants: Bereiche, die hier (own = syncCaps) und beim Mitglied eingeschaltet sind – module "" = alle Module
-// ausser Healthchecks als "modul/bereich" (Weg v2), sonst nur die Bereiche dieses Moduls ohne Praefix. Sortiert.
+// wants: Bereiche, die hier (own = syncCaps) und beim Mitglied eingeschaltet sind – module "" = alle Bereiche des
+// Wegs v2 als "modul/bereich", sonst nur die Bereiche dieses Moduls ohne Praefix. Sortiert.
 func (m *Manager) wants(own []string, x Member, module string) []string {
 	out := []string{}
 	for _, c := range own {
 		mod, item, _ := strings.Cut(c, "/")
-		if module == "" && builtin(mod) || module != "" && mod != module || !memberSyncOn(x, mod, item) {
+		if module == "" && !m.v2Item(mod, item) || module != "" && mod != module || !memberSyncOn(x, mod, item) {
 			continue
 		}
 		if module != "" {
@@ -285,6 +310,7 @@ func has(list []string, v string) bool {
 // v1Wants: Eintragsbereiche des eigenen Wegs (checks, maintenance, settings), die hier und beim Mitglied an sind.
 func (m *Manager) v1Wants(own []string, x Member) []string {
 	out := m.wants(own, x, "healthchecks")
+	out = slices.DeleteFunc(out, func(item string) bool { return m.v2Item("healthchecks", item) })
 	if has(own, "notifications/settings") && memberSyncOn(x, "notifications", "settings") {
 		out = append(out, "settings")
 	}
@@ -299,6 +325,22 @@ func (m *Manager) v1Members(ctx context.Context) []Member {
 	out := list[:0]
 	for _, x := range list {
 		if !x.Suspended() && len(m.v1Wants(own, x)) > 0 {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+// HCItemMembers: Mitglieder, mit denen die Checks und der Healthchecks-Bereich item (proxmox, docker) abgeglichen
+// werden (hier und dort eingeschaltet, nicht ausgesetzt) – sie koennen solche Checks mitmessen.
+func (m *Manager) HCItemMembers(ctx context.Context, item string) []Member {
+	if !m.syncOn(ctx, "healthchecks", item) {
+		return nil
+	}
+	list := m.hcMembers(ctx)
+	out := make([]Member, 0, len(list))
+	for _, x := range list {
+		if memberSyncOn(x, "healthchecks", item) {
 			out = append(out, x)
 		}
 	}

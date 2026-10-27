@@ -162,6 +162,9 @@ type Runner struct {
 	// Proxmox liefert den letzten Stand eines Gasts bzw. Nodes aus der Proxmox-Abfrage (Check-Typ proxmox); nil =
 	// Proxmox-Ueberwachung laeuft nicht (z. B. auf den ipv64-Servern).
 	Proxmox func(systemID int64, key string) ProxmoxState
+	// ProxmoxUID findet die lokale ID eines Systems ueber seine Kennung im Cluster (ProxmoxParams.SystemUID);
+	// nil = nur ueber die ID.
+	ProxmoxUID func(uid string) (int64, bool)
 	// Docker liefert die Verbindung der Docker-Ueberwachung zu einem Host (Check-Typ docker bei https:// bzw. ssh://
 	// mit Zugangsdaten); nil = keine.
 	Docker DockerRemote

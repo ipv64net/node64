@@ -133,12 +133,19 @@
 		var syncNodes = function () {
 			if (!nodesBox) { return; }
 			nodesBox.classList.toggle("d-none", !!exSel && exSel.value === "online");
-			var single = typeSel.value === "docker";
+			// Docker/Proxmox: diese Node und im Cluster die Nodes mit dem Bereich (data-cl); Docker nur ueber das Netz
+			var item = typeSel.value === "docker" || typeSel.value === "proxmox" ? typeSel.value : "";
+			var host = document.getElementById("docker_host");
+			if (item === "docker" && !(host && /^(tcp|https?|ssh):\/\//i.test(host.value.trim()))) { item = "local"; }
 			nodesBox.querySelectorAll("input[name=nodes]").forEach(function (cb) {
 				var own = cb.closest(".form-check").querySelector(".badge.text-bg-success");
-				if (single) { cb.checked = !!own; cb.disabled = true; } else { cb.disabled = false; }
+				var ok = !item || !!own || (" " + (cb.dataset.cl || "") + " ").indexOf(" " + item + " ") >= 0;
+				if (!ok) { cb.checked = false; }
+				cb.disabled = !ok;
 			});
 		};
+		var hostIn = document.getElementById("docker_host");
+		if (hostIn) { hostIn.addEventListener("input", function () { syncNodes(); }); }
 		// Online-Standorte und Online-Test nur, wenn ipv64 mitmisst (online oder beides)
 		var onlineBox = document.getElementById("onlinebox");
 		var syncOnline = function () { if (onlineBox && exSel) { onlineBox.classList.toggle("d-none", exSel.value === "local"); } };
