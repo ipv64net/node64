@@ -87,11 +87,12 @@ if (hc2_is_post() && hc2_csrf_ok()) {
 			}
 			$nid = '';
 		} elseif ($action === 'allow' || $action === 'forget') {
-			// Wieder zulassen bzw. endgueltig aus der Liste loeschen (nur entfernte Nodes); ein von uns gesperrter Sensor wird frei
+			// Wieder zulassen (ein von uns gesperrter Sensor wird frei) bzw. endgueltig aus der Liste loeschen (nur entfernte
+			// Nodes; der Sensor bleibt gesperrt, sonst stuende die Node als „nur Sensor“ gleich wieder in der Liste)
 			$reg = $loadReg($nid);
 			if (!$reg || $reg['removed_at'] === null) { $msg = 'Node nicht gefunden.'; }
 			else {
-				if ((int)$reg['sensor_disabled'] === 1 && $reg['sensor_id'] !== '') { $dbx("UPDATE hp_sensors SET disabled = 0 WHERE sensor_id = :s AND userid = :u AND disabled = 1", array('s' => $reg['sensor_id'], 'u' => $uid)); }
+				if ($action === 'allow' && (int)$reg['sensor_disabled'] === 1 && $reg['sensor_id'] !== '') { $dbx("UPDATE hp_sensors SET disabled = 0 WHERE sensor_id = :s AND userid = :u AND disabled = 1", array('s' => $reg['sensor_id'], 'u' => $uid)); }
 				$ids = array_values(array_unique(array_filter(array($reg['node_id'], $reg['sensor_id'])))); // auch der Eintrag "nur Sensor" derselben Node
 				$in = implode(',', array_map(fn($i) => ':i' . $i, array_keys($ids))); $p = array('u' => $uid); foreach ($ids as $i => $x) { $p['i' . $i] = $x; }
 				if ($action === 'allow') {
@@ -154,7 +155,9 @@ foreach ($dbq("SELECT *, last_seen >= UTC_TIMESTAMP() - INTERVAL 20 MINUTE AS fr
 	if ($r['removed_at'] !== null) { $gone[] = $row; } else { $rows[] = $row; }
 }
 foreach ($hubs as $h) { $row = array('id' => $h['node_id'], 'reg' => null, 'hub' => $h, 'sensor' => null, 'tunnel' => null); if (!empty($h['revoked_at'])) { $gone[] = $row; } else { $rows[] = $row; } } // meldet sich nur ueber die hubs
-foreach ($sensors as $x) { $rows[] = array('id' => $x['sensor_id'], 'reg' => null, 'hub' => null, 'sensor' => $x, 'tunnel' => null); } // nur Sensor (Modus ohne Oberflaeche, aeltere Container)
+foreach ($sensors as $x) { // nur Sensor (Modus ohne Oberflaeche, aeltere Container); gesperrt ohne Eintrag = geloescht
+	if ((int)$x['disabled'] === 0) { $rows[] = array('id' => $x['sensor_id'], 'reg' => null, 'hub' => null, 'sensor' => $x, 'tunnel' => null); }
+}
 $hubOn = fn($row) => $row['hub'] && empty($row['hub']['revoked_at']);
 $isOnline = fn($row) => !empty($row['reg']['fresh']) || ($hubOn($row) && (int)$row['hub']['online'] === 1) || (!empty($row['sensor']['fresh']) && !(int)$row['sensor']['disabled']) || !empty($row['tunnel']['fresh']);
 $kpi = array('all' => count($rows), 'online' => count(array_filter($rows, $isOnline)), 'hc' => count(array_filter($rows, $hubOn)), 'hp' => count(array_filter($rows, fn($r) => $r['sensor'] !== null)));
@@ -179,7 +182,7 @@ $tile = function(string $label, int $n, string $color, string $icon): string {
 				$name = $r['name'] ?? ($h['name'] ?? 'Honeypot-Sensor'); $loc = $r['location'] ?? ($h['location'] ?? '');
 				$mods = array_filter(explode(',', (string)($r['modules'] ?? ($h['modules'] ?? ($x ? 'honeypot' : ''))))); ?>
 			<tr>
-				<td><?php echo $hubOn($row) ? '<a href="nodes.php?node=' . hc2_h($h['node_id']) . '">' . hc2_h($name) . '</a>' : hc2_h($name); echo $isOnline($row) ? ' <i class="fa-solid fa-circle text-success small" title="online"></i>' : ' <i class="fa-solid fa-circle text-secondary small" title="offline"></i>';
+				<td><?php echo $hubOn($row) ? '<a href="nodes.php?node=' . hc2_h($h['node_id']) . '#details">' . hc2_h($name) . '</a>' : hc2_h($name); echo $isOnline($row) ? ' <i class="fa-solid fa-circle text-success small" title="online"></i>' : ' <i class="fa-solid fa-circle text-secondary small" title="offline"></i>';
 					if ($loc !== '') { echo '<br><small>' . hc2_h($loc) . '</small>'; }
 					if (($r['mode'] ?? ($x['mode'] ?? '')) === 'headless') { echo ' <span class="badge badge-light">ohne Oberfläche</span>'; }
 					if (!empty($h['proxy_via'])) { echo ' <span class="badge badge-light" title="meldet über eine andere Node des Clusters">über ' . hc2_h(hc2_node_label($nodeMap, $h['proxy_via']) ?: $h['proxy_via']) . '</span>'; } ?>
@@ -195,7 +198,7 @@ $tile = function(string $label, int $n, string $color, string $icon): string {
 				<td class="small"><?php if ($t) { echo $t['status'] === 'blocked' ? '<span class="badge badge-danger">gesperrt</span>' : ($t['fresh'] ? '<span class="badge badge-success">Tunnel verbunden</span>' : '<span class="badge badge-secondary">Tunnel getrennt</span>'); echo '<br><a href="/cdn64" class="text-muted">' . (int)$t['hosts'] . ' Name(n)</a>'; }
 					else { echo '<span class="text-muted">–</span>'; } ?></td>
 				<td><?php foreach ($mods as $m) { echo '<span class="badge badge-light mr-1">' . hc2_h($modNames[$m] ?? $m) . '</span>'; } ?></td>
-				<td class="text-nowrap text-right"><?php if ($hubOn($row)) { ?><a class="btn btn-sm btn-outline-secondary" href="nodes.php?node=<?php echo hc2_h($h['node_id']); ?>">Details</a> <?php } ?>
+				<td class="text-nowrap text-right"><?php if ($hubOn($row)) { ?><a class="btn btn-sm btn-outline-secondary" href="nodes.php?node=<?php echo hc2_h($h['node_id']); ?>#details">Details</a> <?php } ?>
 					<form method="post" class="d-inline" onsubmit="return confirm('Node „<?php echo hc2_h(addslashes($name)); ?>“ entfernen?\n\n– Healthchecks-Sync wird getrennt (Checks laufen online weiter, soweit möglich)\n– der Honeypot-Sensor wird gesperrt\n– meldet sich die Node wieder, löscht sie ihren API-Key und die Verknüpfung (lokale Daten bleiben)\n– CDN64-Namen laufen weiter, bis du sie ausschaltest\n\nRückgängig mit „Wieder zulassen“.');"><?php echo hc2_csrf_field(); ?>
 						<input type="hidden" name="action" value="remove"><input type="hidden" name="keep_checks" value="1"><?php if ($r || $h) { ?><input type="hidden" name="node_id" value="<?php echo hc2_h($row['id']); ?>"><?php } else { ?><input type="hidden" name="sensor_id" value="<?php echo hc2_h($x['sensor_id']); ?>"><?php } ?>
 						<button class="btn btn-sm btn-outline-danger" type="submit" title="Node entfernen"><i class="fa-solid fa-user-slash"></i> Entfernen</button></form></td>
@@ -231,7 +234,7 @@ $tile = function(string $label, int $n, string $color, string $icon): string {
 		$st = $pdo->prepare("SELECT * FROM hc2_commands WHERE node_id = :n ORDER BY id DESC LIMIT 10"); $st->execute(array('n' => $N)); $cmds = $st->fetchAll(PDO::FETCH_ASSOC);
 		$pills = hc2_pills_many(array_column($nchecks, 'token'), 20, $nodeMap);
 	?>
-	<div class="row">
+	<div class="row" id="details" style="scroll-margin-top:70px">
 		<div class="col-lg-8">
 			<div class="card shadow-sm mb-3">
 				<div class="card-header p-2 d-flex align-items-center"><span><i class="fa-solid fa-heart-pulse"></i> Checks von <?php echo hc2_h($detail['name']); ?> <span class="badge badge-secondary"><?php echo count($nchecks); ?></span></span>
