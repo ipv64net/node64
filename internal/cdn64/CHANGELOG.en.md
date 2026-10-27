@@ -1,5 +1,13 @@
 # Changes – PROXY64
 
+## 1.35.0 – 2026-10-27
+
+### Changed
+- Overload protection: new defaults. Connections per IP 100 instead of 200, connections in total 6000 instead of
+  10000, concurrent per target 100 instead of 200. Requests per IP (50/s, briefly 500) stay, so galleries and apps that
+  send many requests at once are not slowed down. Applies to nodes without their own saved values; saved values stay.
+- Hint at "Connections in total" on which value suits which device.
+
 ## 1.34.3 – 2026-10-27
 
 ### Changed

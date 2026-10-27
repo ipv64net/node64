@@ -841,7 +841,7 @@
       "target_conns": "Concurrent per target",
       "target_conns_hint": "requests to the service behind a proxy host; more wait up to 10 s, then 503. WebSockets do not count.",
       "max_conns": "Connections in total",
-      "max_conns_hint": "protects the node itself.",
+      "max_conns_hint": "protects the node itself. Small devices such as a Raspberry Pi rather 2000–3000, a NAS or PC up to 10000.",
       "ban_after": "Ban after",
       "ban_after_hint": "rejections within one minute.",
       "ban_minutes": "Ban (minutes)",

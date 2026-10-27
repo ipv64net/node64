@@ -50,9 +50,11 @@ type Limits struct {
 	ExemptLAN   bool `json:"exempt_lan"`   // private Adressen (Heimnetz) nie begrenzen
 }
 
-// DefaultLimits: grosszuegig fuer Browser, Apps und Sync-Clients, eng genug gegen Flooding von einer Adresse.
+// DefaultLimits: grosszuegig fuer Browser, Apps und Sync-Clients (auch mehrere Geraete hinter einer Adresse, Galerien
+// mit vielen Anfragen auf einmal), eng genug gegen Flooding von einer Adresse. Verbindungen insgesamt so, dass auch
+// kleine Geraete sie tragen; erst 60 Adressen mit je vollem Limit fuellen sie.
 func DefaultLimits() Limits {
-	return Limits{Enabled: true, ConnsPerIP: 200, ConnRate: 20, ReqRate: 50, ReqBurst: 500, MaxConns: 10000, TargetConns: 200,
+	return Limits{Enabled: true, ConnsPerIP: 100, ConnRate: 20, ReqRate: 50, ReqBurst: 500, MaxConns: 6000, TargetConns: 100,
 		BanAfter: 300, BanMinutes: 10, ExemptLAN: true}
 }
 
