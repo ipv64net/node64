@@ -1,5 +1,13 @@
 # Änderungen – PROXY64
 
+## 1.35.0 – 2026-10-27
+
+### Geändert
+- Schutz vor Überlastung: neue Standardwerte. Verbindungen je IP 100 statt 200, Verbindungen insgesamt 6000 statt
+  10000, gleichzeitig je Ziel 100 statt 200. Anfragen je IP (50/s, kurz 500) bleiben, damit Galerien und Apps mit vielen
+  Anfragen auf einmal nicht gebremst werden. Gilt für Nodes ohne eigene gespeicherte Werte; gespeicherte Werte bleiben.
+- Hinweis bei „Verbindungen insgesamt“, welcher Wert zu welchem Gerät passt.
+
 ## 1.34.3 – 2026-10-27
 
 ### Geändert

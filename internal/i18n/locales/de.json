@@ -841,7 +841,7 @@
       "target_conns": "Gleichzeitig je Ziel",
       "target_conns_hint": "Anfragen an den Dienst hinter einem Proxy-Host; weitere warten bis 10 s, dann 503. WebSockets zählen nicht.",
       "max_conns": "Verbindungen insgesamt",
-      "max_conns_hint": "schützt die Node selbst.",
+      "max_conns_hint": "schützt die Node selbst. Kleine Geräte wie ein Raspberry Pi eher 2000–3000, NAS oder PC auch 10000.",
       "ban_after": "Sperren nach",
       "ban_after_hint": "Abweisungen in einer Minute.",
       "ban_minutes": "Sperre (Minuten)",
