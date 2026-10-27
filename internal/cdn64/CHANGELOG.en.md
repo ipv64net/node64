@@ -1,5 +1,11 @@
 # Changes – PROXY64
 
+## 1.32.2 – 2026-10-27
+
+### Changed
+- Access lists: the card "Overload protection" is now called "DoS protection (denial of service) – overload
+  protection".
+
 ## 1.32.1 – 2026-10-27
 
 ### Changed

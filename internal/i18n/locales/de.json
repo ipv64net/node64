@@ -824,7 +824,7 @@
       "route_never": "Überlast (zu viele Anfragen oder Verbindungen) geht nie an den Köder – das ist Schutz, kein Angriff."
     },
     "lim": {
-      "title": "Schutz vor Überlastung",
+      "title": "DoS-Schutz (Denial of Service) – Schutz vor Überlastung",
       "hint": "Begrenzt Verbindungen und Anfragen je IP-Adresse (IPv6 je /64), wie beim HAProxy. Schützt die Node und alle Dienste hinter dem Proxy vor Request-Flooding und vielen Verbindungen von einer Adresse. Wer zu oft abprallt, wird für einige Minuten schon beim Verbindungsaufbau abgewiesen. Ausgenommen sind das Heimnetz (wenn eingeschaltet), die vertrauenswürdigen Proxys der Hosts (z. B. Cloudflare; dort zählt die echte Client-IP) und die Ausnahmen der Blocklisten. Die Standardwerte reichen für Browser, Apps und Sync-Clients.",
       "enabled": "Schutz eingeschaltet",
       "exempt_lan": "Heimnetz (private Adressen) nie begrenzen",

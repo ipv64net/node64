@@ -1,5 +1,11 @@
 # Änderungen – PROXY64
 
+## 1.32.2 – 2026-10-27
+
+### Geändert
+- Zugriffslisten: Die Karte „Schutz vor Überlastung“ heißt jetzt „DoS-Schutz (Denial of Service) – Schutz vor
+  Überlastung“.
+
 ## 1.32.1 – 2026-10-27
 
 ### Geändert
