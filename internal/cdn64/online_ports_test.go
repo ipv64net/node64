@@ -125,6 +125,9 @@ func TestOnlinePorts(t *testing.T) {
 	e.m.smu.Lock()
 	run := e.m.runs[su.ID]
 	e.m.smu.Unlock()
+	for i := 0; i < 300 && run.tunUDP.Load() != 0; i++ { // die vorige Sitzung endet asynchron (zaehlt sonst danach herunter)
+		time.Sleep(10 * time.Millisecond)
+	}
 	run.tunUDP.Store(udpMaxSessions)
 	u = open(tunnel.KindUDP, "app.test", sp)
 	_ = tunnel.WriteDatagram(u, []byte("x"))
