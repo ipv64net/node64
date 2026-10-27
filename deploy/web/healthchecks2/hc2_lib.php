@@ -237,7 +237,7 @@ function hc2_target_display(array $c): string {
 function hc2_target_badge(array $c): string {
 	$t = hc2_target_display($c);
 	$style = 'display:inline-flex;align-items:center;max-width:100%;padding:.2rem .55rem;border:1px solid #dee2e6;border-radius:50rem;background:#f8f9fa;font-weight:normal;font-size:.8rem';
-	if ($t === '') { return '<span class="badge" style="' . $style . '"><i class="fa-solid fa-circle-down text-muted mr-1"></i> Push / Heartbeat</span>'; }
+	if ($t === '') { return '<span class="badge hc2-tbadge" style="' . $style . '"><i class="fa-solid fa-circle-down text-muted mr-1"></i> Push / Heartbeat</span>'; }
 	$icon = array('tcp' => 'fa-plug', 'port' => 'fa-plug', 'icmp' => 'fa-tower-broadcast', 'cert' => 'fa-shield-halved', 'docker' => 'fa-box', 'dns' => 'fa-signs-post', 'whois' => 'fa-address-card')[$c['type']] ?? 'fa-bullseye';
 	$cls = 'text-muted'; $short = $t;
 	if ($c['type'] === 'dns') { $short = strtoupper((string)(hc2_check_params($c)['record_type'] ?? 'A')) . ' ' . rtrim($t, '.'); }
@@ -246,7 +246,7 @@ function hc2_target_badge(array $c): string {
 		$icon = $secure ? 'fa-lock' : 'fa-lock-open'; $cls = $secure ? 'text-success' : 'text-warning';
 		$short = rtrim(preg_replace('#^[a-z]+://#i', '', $t), '/');
 	}
-	return '<span class="badge" style="' . $style . '" title="' . hc2_h($t) . '"><i class="fa-solid ' . $icon . ' ' . $cls . ' mr-1"></i><span class="text-truncate text-monospace">' . hc2_h($short) . '</span></span>';
+	return '<span class="badge hc2-tbadge" style="' . $style . '" title="' . hc2_h($t) . '"><i class="fa-solid ' . $icon . ' ' . $cls . ' mr-1"></i><span class="text-truncate text-monospace">' . hc2_h($short) . '</span></span>';
 }
 
 /** Badge fuer einen Grund (OK gruen, Warnungen gelb, Fehler rot). */
@@ -910,6 +910,13 @@ function hc2_ui_assets(): string {
 .hc2-page .form-control:focus, .hc2-page .custom-select:focus { box-shadow: 0 0 0 .15rem rgba(0,123,255,.18); }
 .hc2-page .nav-pills .nav-link { border-radius: .5rem; }
 .hc2-page .btn { border-radius: .4rem; }
+/* Darkmode (css/darkmode.css setzt die Variablen): Tabellenflaeche, Kopfzeilen und Eingabe-Symbole nicht weiss */
+html[data-theme="dark"] .hc2-page .table-responsive { background: var(--dm-bg2); border-color: var(--dm-border); box-shadow: 0 .125rem .35rem rgba(0,0,0,.5) !important; }
+html[data-theme="dark"] .hc2-page .card-header { background: var(--dm-bg3); }
+html[data-theme="dark"] .hc2-page .table thead th { color: var(--dm-muted); }
+html[data-theme="dark"] .hc2-page .input-group-text { background: #2c333a; }
+html[data-theme="dark"] .hc2-tbadge { background: var(--dm-bg3) !important; border-color: var(--dm-border) !important; color: var(--dm-text); }
+html[data-theme="dark"] .hc2-page .input-group > .input-group-prepend + .form-control, html[data-theme="dark"] .hc2-page .input-group > .input-group-prepend + .custom-select { border-left-color: var(--dm-border); }
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
