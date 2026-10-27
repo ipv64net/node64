@@ -131,8 +131,9 @@ func TestParseAllowAndLists(t *testing.T) {
 	if _, err := ParseAllow("example.com"); err == nil {
 		t.Fatal("name accepted")
 	}
-	l, err := ParseLists("v64, V64_SSH,v64")
-	if err != nil || !slices.Equal(l, []string{"v64", "v64_ssh"}) {
+	// fruehere Teillisten der v64 Blocklist gelten als v64 (doppelt nur einmal)
+	l, err := ParseLists("v64, V64_SSH,v64,spamhaus_drop")
+	if err != nil || !slices.Equal(l, []string{"v64", "spamhaus_drop"}) {
 		t.Fatal(l, err)
 	}
 	if l, _ := ParseLists(""); !slices.Equal(l, []string{"v64"}) {

@@ -769,12 +769,6 @@
         "gcp": "Kundennetze von Google Cloud: sperrt Bots und Scanner aus Rechenzentren",
         "cloudflare": "Netze von Cloudflare: nicht einschalten, wenn ein Host hinter Cloudflare liegt",
         "v64": "Angreifer, die die ipv64-Honeypots der Community gemeldet haben, über alle Dienste",
-        "v64_ssh": "Angreifer auf SSH und Telnet aus den ipv64-Honeypots",
-        "v64_web": "Angreifer auf Webserver (Exploits, Login-Versuche) aus den ipv64-Honeypots",
-        "v64_mail": "Angreifer auf Mailserver (SMTP, IMAP, POP3) aus den ipv64-Honeypots",
-        "v64_rdp": "Angreifer auf Remote Desktop (RDP, VNC) aus den ipv64-Honeypots",
-        "v64_scanner": "Port-Scanner, die die ipv64-Honeypots abtasten",
-        "v64_research": "Scanner von Forschung und Suchmaschinen (z. B. Shodan, Censys): sperrt auch harmlose Erfassung",
         "ai_bots": "offizielle Netze der KI-Crawler (OpenAI, Perplexity, Common Crawl, Mistral, Google-Agent), auch Nutzer-Abrufe wie ChatGPT-User"
       },
       "cat": {

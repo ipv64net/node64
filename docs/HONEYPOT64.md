@@ -45,7 +45,7 @@ Bridge-Netz sehen manche Docker-Versionen statt der Angreifer die Adresse des Do
 | `NODE64_HONEYPOT_SYSLOG_PORT` | – | Syslog-Empfänger auf UDP und TCP, z. B. `514`; leer oder `0` = aus. Darf kein Fallen-Port und nicht der Info-Port sein |
 | `NODE64_HONEYPOT_SYSLOG_ALLOW` | private Netze | erlaubte Absender, Komma-Liste von IPs oder Netzen (CIDR), z. B. `192.168.1.1,10.0.0.0/8`; leer = private Netze und localhost |
 | `NODE64_FIREWALL` | – | `nftables` schaltet den [Firewall-Helfer](#firewall-helfer) ein (braucht `--cap-add NET_ADMIN` und `--network host`); leer oder `0` = aus |
-| `NODE64_FIREWALL_LISTS` | `v64` | Listen für die Firewall, Komma-Liste von IDs aus `index.json`, z. B. `v64_ssh,v64_web` |
+| `NODE64_FIREWALL_LISTS` | `v64` | Listen für die Firewall, Komma-Liste von IDs aus `index.json`, z. B. `v64,spamhaus_drop` (frühere Teillisten wie `v64_ssh` gelten als `v64`) |
 | `NODE64_FIREWALL_ALLOW` | – | eigene Netze, die nie gesperrt werden, Komma-Liste von IPs oder Netzen (CIDR) |
 | `NODE64_FIREWALL_KEEP` | `0` | `1` lässt die Tabelle `inet node64` beim Beenden stehen |
 | `NODE64_IPV64_LIST_TOKEN` | – | Listen-Token aus dem ipv64-Account (32 Zeichen): v64-Listen live statt im Tagesstand |
@@ -496,8 +496,8 @@ docker run -d --name honeypot64 --network host --cap-add NET_ADMIN --restart unl
   `blocklist_v6` (`ipv6_addr`, beide `flags interval`) und den Ketten `input` und `forward` (`priority filter - 10`,
   vor den üblichen Filterregeln, `policy accept`). Sie verwerfen nur Pakete, deren Absender im Set steht; alles
   andere geht unverändert an die vorhandene Firewall (ufw, firewalld, Docker). Anschauen: `nft list table inet node64`.
-- **Listen:** Standard ist die Gesamtliste `v64`; mit `NODE64_FIREWALL_LISTS` andere Listen aus `index.json`
-  (`v64_ssh`, `v64_web`, `v64_mail`, `v64_rdp`, `v64_scanner`, `v64_research`, auch fremde wie `spamhaus_drop`).
+- **Listen:** Standard ist die v64 Blocklist `v64` (seit 2026-10 die einzige v64-Liste, frühere Teillisten wie
+  `v64_ssh` gelten als `v64`); mit `NODE64_FIREWALL_LISTS` zusätzlich andere Listen aus `index.json` (z. B. `spamhaus_drop`).
   Ohne Listen-Token gilt der Tagesstand, mit `NODE64_IPV64_LIST_TOKEN` die Live-Fassung (alle Klassen außer
   Standard, siehe Plan Abschnitt 8); hat das Token keine Berechtigung, nimmt Node64 den Tagesstand.
 - **Aktualisierung:** alle 30 Minuten, nur bei Änderung (ETag/If-Modified-Since). Die Sets werden in einer

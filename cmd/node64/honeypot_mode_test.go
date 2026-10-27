@@ -548,13 +548,13 @@ func TestHoneypotModeFirewallFromEnv(t *testing.T) {
 		t.Fatal("off", err)
 	}
 	tok := "abcdefghijklmnopqrstuvwxyz012345"
-	hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_FIREWALL": "NFTables", "NODE64_FIREWALL_LISTS": "v64, v64_ssh",
+	hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_FIREWALL": "NFTables", "NODE64_FIREWALL_LISTS": "v64, v64_ssh, spamhaus_drop",
 		"NODE64_FIREWALL_ALLOW": "203.0.113.0/24,2001:db8::1", "NODE64_FIREWALL_KEEP": "1", "NODE64_IPV64_LIST_TOKEN": tok}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	fc := hc.Firewall
-	if fc == nil || fc.Mode != "nftables" || len(fc.Lists) != 2 || fc.Lists[1] != "v64_ssh" || len(fc.Allow) != 2 || !fc.Keep || fc.Token != tok {
+	if fc == nil || fc.Mode != "nftables" || len(fc.Lists) != 2 || fc.Lists[1] != "spamhaus_drop" || len(fc.Allow) != 2 || !fc.Keep || fc.Token != tok {
 		t.Fatalf("%+v", fc)
 	}
 	if hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_FIREWALL": "nftables"})); err != nil || hc.Firewall.Lists[0] != "v64" || hc.Firewall.Keep {

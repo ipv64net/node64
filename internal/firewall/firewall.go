@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/metrics"
 )
 
@@ -435,7 +436,7 @@ func ParseAllow(v string) ([]netip.Prefix, error) {
 	return out, nil
 }
 
-// ParseLists liest "v64,v64_ssh" (leer = v64).
+// ParseLists liest "v64,ai_bots" (leer = v64); fruehere Teillisten der v64 Blocklist (v64_ssh u. a.) gelten als v64.
 func ParseLists(v string) ([]string, error) {
 	var out []string
 	for _, item := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' || r == ';' }) {
@@ -443,6 +444,7 @@ func ParseLists(v string) ([]string, error) {
 		if !IDRe.MatchString(id) {
 			return nil, fmt.Errorf("%q is not a list id (letters, digits, _)", item)
 		}
+		id = ipv64api.V64ListID(id)
 		if !slices.Contains(out, id) {
 			out = append(out, id)
 		}

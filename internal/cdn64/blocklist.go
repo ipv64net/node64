@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/shield"
 )
 
@@ -62,9 +63,8 @@ var blKnown = map[string]string{"all": "IPv64 Gesamtliste", "all_notor": "IPv64 
 	"firehole_l1": "FireHOL Level 1", "blocklistde_all": "blocklist.de (alle)", "dshield1": "DShield", "tor_exit": "Tor Exit-Nodes",
 	"tor_all": "Tor (alle Relays)", "feodo": "abuse.ch Feodo Tracker", "et_compromised": "ET Compromised", "cins_army": "CINS Army",
 	"ipsum_l3": "IPsum Level 3", "aws": "Amazon AWS", "gcp": "Google Cloud", "cloudflare": "Cloudflare",
-	// ipv64 Honeypot (Kategorie honeypot, mit Listen-Token live)
-	"v64": "v64 Blocklist", "v64_ssh": "v64 SSH", "v64_web": "v64 Web", "v64_mail": "v64 Mail", "v64_rdp": "v64 RDP",
-	"v64_scanner": "v64 Scanner", "v64_research": "v64 Forschungs-Scanner",
+	// ipv64 Honeypot (Kategorie honeypot, mit Listen-Token live); nur die eine Liste, keine Teillisten mehr
+	"v64": "v64 Blocklist",
 	// offizielle Netze von KI-Crawlern (Kategorie ai, aibots.go fuer die User-Agent-Liste)
 	"ai_bots": "v64 KI-Bots (IP)"}
 
@@ -148,8 +148,9 @@ func (b *blocklists) Blocked(a netip.Addr) bool {
 func (m *Module) blEnabled(ctx context.Context) []string {
 	var out []string
 	for _, id := range strings.Split(m.core.SettingOr(ctx, setBlocklists, ""), ",") {
-		if m.bl.known(strings.TrimSpace(id)) {
-			out = append(out, strings.TrimSpace(id))
+		id = ipv64api.V64ListID(strings.TrimSpace(id)) // fruehere Teilliste der v64 Blocklist: die Hauptliste
+		if m.bl.known(id) && !slices.Contains(out, id) {
+			out = append(out, id)
 		}
 	}
 	return out
@@ -382,6 +383,7 @@ func (m *Module) blStates(ctx context.Context) []BlocklistState {
 func (m *Module) blSave(ctx context.Context, enabled []string, allow string) error {
 	var ids []string
 	for _, id := range enabled {
+		id = ipv64api.V64ListID(id)
 		if !m.bl.known(id) {
 			return ferr("blocklists", "cdn64.bl.err_list")
 		}
