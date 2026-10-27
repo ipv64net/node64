@@ -116,7 +116,7 @@ func (m *Module) pageStreams(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	m.g.Render(w, r, http.StatusOK, Name+"/streams", "cdn64.title", streamsData{Tabs: tabs("/cdn64/streams"), Streams: st, Pass: pass})
+	m.g.Render(w, r, http.StatusOK, Name+"/streams", "cdn64.title", streamsData{Tabs: m.tabs("/cdn64/streams"), Streams: st, Pass: pass})
 }
 
 type streamForm struct {
@@ -134,7 +134,7 @@ type streamForm struct {
 }
 
 func (m *Module) streamFormData(ctx context.Context, s *Stream, isNew bool) streamForm {
-	d := streamForm{Tabs: tabs("/cdn64/streams"), S: s, New: isNew, Errors: map[string]string{}, GeoText: strings.Join(s.GeoCountries, ", ")}
+	d := streamForm{Tabs: m.tabs("/cdn64/streams"), S: s, New: isNew, Errors: map[string]string{}, GeoText: strings.Join(s.GeoCountries, ", ")}
 	m.bl.mu.Lock()
 	d.Countries = m.bl.countries
 	m.bl.mu.Unlock()
@@ -273,7 +273,7 @@ type defaultData struct {
 }
 
 func (m *Module) pageDefault(w http.ResponseWriter, r *http.Request) {
-	d := defaultData{Tabs: tabs("/cdn64/default")}
+	d := defaultData{Tabs: m.tabs("/cdn64/default")}
 	if m.edge != nil {
 		d.Cfg = m.edge.Config()
 	}
@@ -303,7 +303,7 @@ func (m *Module) pageDefaultSave(w http.ResponseWriter, r *http.Request) {
 	cfg, err := m.saveDefault(r.Context(), r.PostFormValue("default"), r.PostFormValue("default_url"), r.PostFormValue("default_html"))
 	if err != nil {
 		cfg.Default, cfg.DefaultURL, cfg.DefaultPage = r.PostFormValue("default"), r.PostFormValue("default_url"), r.PostFormValue("default_html")
-		m.g.Render(w, r, http.StatusUnprocessableEntity, Name+"/default", "cdn64.default.title", defaultData{Tabs: tabs("/cdn64/default"), Cfg: cfg, Error: err.Error()})
+		m.g.Render(w, r, http.StatusUnprocessableEntity, Name+"/default", "cdn64.default.title", defaultData{Tabs: m.tabs("/cdn64/default"), Cfg: cfg, Error: err.Error()})
 		return
 	}
 	m.g.Audit(r, "edge.default", "", fmt.Sprintf("default=%s url=%q html_bytes=%d", cfg.Default, cfg.DefaultURL, len(cfg.DefaultPage)))

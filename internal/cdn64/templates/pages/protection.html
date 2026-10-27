@@ -1,0 +1,70 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><i class="bi bi-diagram-3 text-primary me-1"></i> {{.T "cdn64.title"}}{{$.Doc "cdn64-online#schutz"}}</h1>
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<div>
+		<h2 class="h5 mb-1"><i class="bi bi-shield-check text-success"></i> {{.T "cdn64.protection.head"}}</h2>
+		<div class="small text-body-secondary">{{.T "cdn64.protection.lead"}}</div>
+	</div>
+	<div class="btn-group btn-group-sm ms-auto" role="group" aria-label="{{.T "cdn64.protection.range"}}">
+		{{range $d.Ranges}}<a class="btn btn-outline-secondary py-0{{if eq . $d.Days}} active{{end}}" href="/cdn64/protection?days={{.}}"{{if eq . $d.Days}} aria-current="page"{{end}}>{{$.T (print "cdn64.protection.range_" .)}}</a>{{end}}
+	</div>
+</div>
+{{if $d.Error}}<div class="alert alert-warning small"><i class="bi bi-cloud-slash"></i> {{.T "cdn64.protection.unavailable"}} {{$d.Error}}</div>
+{{else}}{{with $d.P}}{{$per := $.T (print "cdn64.protection.period_" $d.Days)}}
+<div class="row g-2 mb-3">
+	<div class="col-6 col-md-3"><div class="card stat stat-down" title="{{$.T "cdn64.protection.k_blocked_hint"}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "cdn64.protection.k_blocked"}}</div><div class="stat-value" data-prot="blocked">{{$.Int $d.Blocked}}</div><div class="stat-sub">{{$per}}</div></div><i class="bi bi-shield-x stat-icon"></i></div></div></div>
+	<div class="col-6 col-md-3"><div class="card stat stat-warn" title="{{$.T "cdn64.protection.k_ips_hint"}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "cdn64.protection.k_ips"}}</div><div class="stat-value" data-prot="ips">{{$.Int .Totals.BlockedIPs}}</div><div class="stat-sub">{{$per}}</div></div><i class="bi bi-person-x stat-icon"></i></div></div></div>
+	<div class="col-6 col-md-3"><div class="card stat stat-info" title="{{$.T "cdn64.protection.k_overload_hint"}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "cdn64.protection.k_overload"}}</div><div class="stat-value" data-prot="overload">{{$.Int $d.Overload}}</div><div class="stat-sub">{{$per}}</div></div><i class="bi bi-speedometer2 stat-icon"></i></div></div></div>
+	<div class="col-6 col-md-3"><div class="card stat stat-ok" title="{{$.T "cdn64.protection.k_hidden_hint"}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "cdn64.protection.k_hidden"}}</div><div class="stat-value" data-prot="conns">{{$.Int .Totals.Conns}}</div><div class="stat-sub" data-prot="v4">{{$.T "cdn64.protection.k_v4" "n" ($.Int .Totals.ConnsV4)}}</div></div><i class="bi bi-incognito stat-icon"></i></div></div></div>
+</div>
+<div class="card mb-3">
+	<div class="card-header small fw-semibold"><i class="bi bi-bar-chart text-primary"></i> {{$.T "cdn64.protection.chart"}}</div>
+	<div class="card-body">{{if $d.Blocked}}<div class="dash-chart"><canvas data-prot-chart data-chart="{{$d.Chart}}" aria-label="{{$.T "cdn64.protection.chart"}}" role="img"></canvas></div>{{else}}<div class="small text-body-secondary">{{$.T "cdn64.protection.chart_empty"}}</div>{{end}}</div>
+</div>
+<div class="card mb-3">
+	<div class="card-header small fw-semibold"><i class="bi bi-hdd-network text-primary"></i> {{$.T "cdn64.protection.hosts"}}</div>
+	{{if $d.Rows}}<div class="table-responsive"><table class="table table-hover align-middle mb-0 small table-stack">
+		<thead><tr><th class="ps-3" data-nolabel>{{$.T "cdn64.protection.c_name"}}</th><th>{{$.T "cdn64.protection.c_mode"}}</th><th class="text-end">{{$.T "cdn64.protection.k_blocked"}}</th><th class="text-end">{{$.T "cdn64.protection.k_ips"}}</th><th class="text-end">{{$.T "cdn64.protection.k_overload"}}</th><th class="text-end">{{$.T "cdn64.protection.c_conns"}}</th><th>{{$.T "cdn64.protection.c_waf"}}</th><th class="pe-3">{{$.T "cdn64.protection.c_ja4"}}</th></tr></thead>
+		<tbody>{{range $d.Rows}}
+		<tr>
+			<td class="ps-3">{{if .Link}}<a class="font-monospace text-break" href="{{.Link}}"{{if .Ext}} target="_blank" rel="noopener" title="{{$.T "cdn64.online.o_edit"}}"{{end}}>{{.FQDN}}</a>{{else}}<span class="font-monospace text-break">{{.FQDN}}</span>{{end}}</td>
+			<td><span class="badge text-bg-light">{{$.T "cdn64.online.mode_badge" "n" .Mode}}</span></td>
+			<td class="text-end font-monospace{{if .Blocked}} text-danger{{end}}">{{$.Int .Blocked}}</td>
+			<td class="text-end font-monospace">{{$.Int .BlockedIPs}}</td>
+			<td class="text-end font-monospace">{{$.Int .Overload}}</td>
+			<td class="text-end font-monospace">{{$.Int .Conns}}{{if .ConnsV4}}<div class="text-body-secondary">{{$.T "cdn64.protection.k_v4" "n" ($.Int .ConnsV4)}}</div>{{end}}</td>
+			<td>{{if not .JA4}}–{{else if eq .Mode 1}}<span class="text-body-secondary" title="{{$.T "cdn64.protection.waf_mode1"}}">{{if .WAF}}{{$.T "cdn64.protection.on"}}{{else}}{{$.T "cdn64.protection.off"}}{{end}}*</span>{{else if .WAF}}<span class="badge text-bg-success">{{$.T "cdn64.protection.on"}}</span>{{else}}<span class="badge text-bg-secondary">{{$.T "cdn64.protection.off"}}</span>{{end}}</td>
+			<td class="pe-3">{{if .JA4}}<span class="badge {{if eq .JA4 "block"}}text-bg-success{{else if eq .JA4 "count"}}text-bg-info{{else}}text-bg-secondary{{end}}">{{$.T (print "cdn64.protection.ja4_" .JA4)}}</span>{{else}}–{{end}}</td>
+		</tr>{{end}}
+		</tbody>
+	</table></div>{{else}}<div class="card-body small text-body-secondary">{{$.T "cdn64.protection.hosts_empty"}}</div>{{end}}
+</div>
+<div class="row g-3 mb-3">
+	<div class="col-lg-6"><div class="card h-100">
+		<div class="card-header small"><span class="fw-semibold"><i class="bi bi-bug text-danger"></i> {{$.T "cdn64.protection.tools"}}</span>
+			<div class="text-body-secondary">{{$.T "cdn64.protection.tools_hint"}}</div></div>
+		{{if $d.Counting}}<div class="alert alert-info small m-2 mb-0 py-2"><i class="bi bi-hourglass-split"></i> {{$.T "cdn64.protection.tools_count"}}</div>{{end}}
+		{{if .JA4Top}}<div class="table-responsive"><table class="table table-sm align-middle mb-0 small table-stack">
+			<thead><tr><th class="ps-3" data-nolabel>{{$.T "cdn64.protection.c_tool"}}</th><th class="text-end pe-3">{{$.T "cdn64.protection.c_hits"}}</th></tr></thead>
+			<tbody>{{range .JA4Top}}<tr><td class="ps-3 font-monospace text-break">{{.JA4}}</td><td class="text-end pe-3 font-monospace">{{$.Int .Hits}}</td></tr>{{end}}</tbody>
+		</table></div>{{else}}<div class="card-body small text-body-secondary">{{$.T "cdn64.protection.tools_empty"}}</div>{{end}}
+	</div></div>
+	<div class="col-lg-6"><div class="card h-100 border-success-subtle" data-prot-without>
+		<div class="card-header small fw-semibold"><i class="bi bi-eye-slash text-success"></i> {{$.T "cdn64.protection.without"}}</div>
+		<div class="card-body small">
+			<p class="mb-2"><i class="bi bi-incognito text-success"></i> {{$.T "cdn64.protection.without_ip" "n" ($.Int .Totals.Conns)}}</p>
+			<p class="mb-3"><i class="bi bi-globe text-success"></i> {{$.T "cdn64.protection.without_v4" "n" ($.Int .Totals.ConnsV4)}}</p>
+			{{range $d.Modes}}<p class="mb-2"><span class="badge text-bg-light me-1">{{$.T "cdn64.online.mode_badge" "n" .}}</span>{{$.T (print "cdn64.protection.mode_" .)}}</p>{{end}}
+			<p class="text-body-secondary mb-0 mt-3">{{$.T "cdn64.protection.honest"}}</p>
+		</div>
+	</div></div>
+</div>
+{{end}}{{end}}
+{{end}}
+{{define "scripts"}}{{if and .Data.P .Data.Blocked}}<script src="/static/js/chart.umd.js"></script><script src="/static/js/cdn64-protection.js?v={{.Version}}"></script>{{end}}{{end}}

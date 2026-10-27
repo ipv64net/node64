@@ -41,6 +41,8 @@ type OnlineAPI interface {
 	AddMapping(ctx context.Context, id int64, name, transport string, targetPort int) ([]ipv64api.CDN64Mapping, error)
 	DeleteMapping(ctx context.Context, id, mapping int64) error
 	DeleteHost(ctx context.Context, id int64) error
+	Protection(ctx context.Context, days int) (*ipv64api.CDN64Protection, error)
+	SetProtection(ctx context.Context, id int64, waf *bool, ja4 string) error
 }
 
 // IPv64Online ist OnlineAPI ueber den zentralen API-Key.
@@ -82,6 +84,14 @@ func (o ipv64Online) DeleteMapping(ctx context.Context, id, mapping int64) error
 }
 func (o ipv64Online) DeleteHost(ctx context.Context, id int64) error {
 	return o.k.Client().CDN64DeleteHost(ctx, o.k.Get(ctx), id)
+}
+
+func (o ipv64Online) Protection(ctx context.Context, days int) (*ipv64api.CDN64Protection, error) {
+	return o.k.Client().CDN64Protection(ctx, o.k.Get(ctx), days)
+}
+func (o ipv64Online) SetProtection(ctx context.Context, id int64, waf *bool, ja4 string) error {
+	_, err := o.k.Client().CDN64SetProtection(ctx, o.k.Get(ctx), id, waf, ja4)
+	return err
 }
 
 // SetOnlineAPI haengt ipv64 an (nil = CDN64 online nicht verfuegbar).
@@ -921,27 +931,9 @@ func (m *Module) apiOnlinePause(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	list, err := m.onlineNames(r.Context())
+	ids, err := m.onlineHostIDs(r.Context(), h)
 	if err != nil {
 		m.onlineFail(w, r, err)
-		return
-	}
-	var ids []int64
-	for _, x := range list {
-		if x.HostID == h.ID {
-			ids = append(ids, x.RemoteID)
-		}
-	}
-	if len(ids) == 0 { // Namen des Hosts, die nicht von hier eingeschaltet sind (Modus 3, andere Node)
-		foreign := m.onlineForeign(r.Context())
-		for _, n := range h.Names {
-			if rh, ok := foreign[strings.ToLower(n)]; ok {
-				ids = append(ids, rh.ID)
-			}
-		}
-	}
-	if len(ids) == 0 {
-		m.onlineFail(w, r, errOnline("not_online"))
 		return
 	}
 	if err := m.onlinePause(r.Context(), ids, in.Paused); err != nil {
@@ -950,6 +942,33 @@ func (m *Module) apiOnlinePause(w http.ResponseWriter, r *http.Request) {
 	}
 	m.g.Audit(r, "cdn64.online.pause", h.Names[0], strconv.FormatBool(in.Paused))
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// onlineHostIDs: Namen eines Hosts bei ipv64 - von hier eingeschaltet, sonst die des Hosts in CDN64 (Modus 3, andere
+// Node).
+func (m *Module) onlineHostIDs(ctx context.Context, h *Host) ([]int64, error) {
+	list, err := m.onlineNames(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var ids []int64
+	for _, x := range list {
+		if x.HostID == h.ID {
+			ids = append(ids, x.RemoteID)
+		}
+	}
+	if len(ids) == 0 {
+		foreign := m.onlineForeign(ctx)
+		for _, n := range h.Names {
+			if rh, ok := foreign[strings.ToLower(n)]; ok {
+				ids = append(ids, rh.ID)
+			}
+		}
+	}
+	if len(ids) == 0 {
+		return nil, errOnline("not_online")
+	}
+	return ids, nil
 }
 
 // POST /api/cdn64/online/names/{rid}/pause {paused}: ein Name des Accounts, den diese Node nicht verwaltet (Modus 3
@@ -1034,6 +1053,8 @@ type onlineRow struct {
 	Target   *ipv64api.CDN64Target   // Modus 3: Ziel und Cache der Server
 	ACL      *ipv64api.CDN64ACL      // Erlauben-/Sperrliste auf den Servern (erster Name)
 	Mappings []ipv64api.CDN64Mapping // Portmapper der Namen (Modus 3 zum Ziel, Modus 1/2 zu Streams der Node)
+	WAF      bool                    // Muster-WAF (erster Name)
+	JA4      string                  // Angriffs-Werkzeuge: off, count, block ("" = Portal kennt den Schutz noch nicht)
 }
 
 // onlineMonth: was srv07/srv08 fuer die Namen eines Hosts im laufenden Monat gezaehlt haben.
@@ -1111,6 +1132,9 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 			r.Month.Rejected += tm.Rejected
 			r.Paused = r.Paused || rh.Paused
 			r.Mappings = append(r.Mappings, rh.Mappings...)
+			if r.JA4 == "" {
+				r.WAF, r.JA4 = rh.WAF, rh.JA4
+			}
 			if r.Status != "blocked" {
 				r.Status = rh.Status
 				if rh.BlockedReason != nil {
@@ -1135,7 +1159,7 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 			}
 			r := out[h.ID]
 			if r == nil {
-				r = &onlineRow{Foreign: true, RemoteID: rh.ID, Target: rh.Target, ACL: rh.ACL}
+				r = &onlineRow{Foreign: true, RemoteID: rh.ID, Target: rh.Target, ACL: rh.ACL, WAF: rh.WAF, JA4: rh.JA4}
 				out[h.ID] = r
 			}
 			r.Mappings = append(r.Mappings, rh.Mappings...)

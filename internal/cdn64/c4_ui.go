@@ -88,7 +88,7 @@ func (m *Module) pageACLs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	d := aclsData{Tabs: tabs("/cdn64/access"), BL: m.blView(r), Lim: m.limView(r.Context()), HP: m.hpView()}
+	d := aclsData{Tabs: m.tabs("/cdn64/access"), BL: m.blView(r), Lim: m.limView(r.Context()), HP: m.hpView()}
 	for _, a := range list {
 		d.Rows = append(d.Rows, aclRow{AccessList: a.public(), UsedBy: m.aclInUse(r.Context(), a.ID)})
 	}
@@ -114,7 +114,7 @@ func rulesText(rules []AccessRule) string {
 
 func (m *Module) pageACLNew(w http.ResponseWriter, r *http.Request) {
 	a := &AccessList{Users: []AccessUser{}, Rules: []AccessRule{}}
-	m.g.Render(w, r, http.StatusOK, Name+"/access_form", "cdn64.acl.new", aclForm{Tabs: tabs("/cdn64/access"), A: a, New: true,
+	m.g.Render(w, r, http.StatusOK, Name+"/access_form", "cdn64.acl.new", aclForm{Tabs: m.tabs("/cdn64/access"), A: a, New: true,
 		Rules: "allow 192.168.0.0/16\nallow 10.0.0.0/8\nallow 172.16.0.0/12\nallow fc00::/7\n", Errors: map[string]string{}})
 }
 
@@ -134,7 +134,7 @@ func (m *Module) pageACLEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	m.g.Render(w, r, http.StatusOK, Name+"/access_form", "cdn64.acl.edit", aclForm{Tabs: tabs("/cdn64/access"), A: a.public(), Rules: rulesText(a.Rules), Errors: map[string]string{}})
+	m.g.Render(w, r, http.StatusOK, Name+"/access_form", "cdn64.acl.edit", aclForm{Tabs: m.tabs("/cdn64/access"), A: a.public(), Rules: rulesText(a.Rules), Errors: map[string]string{}})
 }
 
 // parseRules: eine Regel je Zeile, "allow 192.168.0.0/16" oder "deny all".
@@ -197,7 +197,7 @@ func (m *Module) saveACLForm(w http.ResponseWriter, r *http.Request, a *AccessLi
 	a.LoginPage = r.PostFormValue("login_page") == "on"
 	a.Rules = parseRules(r.PostFormValue("rules"))
 	if err := m.saveAccessList(r.Context(), a, users); err != nil {
-		d := aclForm{Tabs: tabs("/cdn64/access"), A: a.public(), New: isNew, Rules: r.PostFormValue("rules"), Errors: map[string]string{}}
+		d := aclForm{Tabs: m.tabs("/cdn64/access"), A: a.public(), New: isNew, Rules: r.PostFormValue("rules"), Errors: map[string]string{}}
 		var fe *FieldError
 		if errors.As(err, &fe) {
 			d.Errors[fe.Field] = m.g.T(r, fe.Key, "name", fe.Name)
@@ -261,7 +261,7 @@ func (m *Module) pageLog(w http.ResponseWriter, r *http.Request) {
 	f.HostID, _ = strconv.ParseInt(q.Get("host"), 10, 64)
 	f.Status, _ = strconv.Atoi(q.Get("status"))
 	f.Before, _ = strconv.ParseInt(q.Get("before"), 10, 64)
-	d := logData{Tabs: tabs("/cdn64/log"), HostName: map[int64]string{}, Filter: f, Days: m.logDays(ctx),
+	d := logData{Tabs: m.tabs("/cdn64/log"), HostName: map[int64]string{}, Filter: f, Days: m.logDays(ctx),
 		Anon: m.core.SettingOr(ctx, setAnonymize, "off") == "mask"}
 	hosts, err := m.hosts(ctx)
 	if err != nil {

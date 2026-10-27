@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -38,6 +39,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	m.certRoutes(mux, page)
 	m.streamRoutes(mux, page)
 	m.c4Routes(mux, page)
+	m.protectionRoutes(mux, page)
 }
 
 // listPath: Liste der Hosts einer Art.
@@ -61,7 +63,8 @@ type tab struct {
 	Active               bool
 }
 
-func tabs(active string) []tab {
+// tabs: Reiter des Moduls; "CDN64 Statistik" nur mit CDN64-Namen im Konto (protectionOn).
+func (m *Module) tabs(active string) []tab {
 	t := []tab{{Path: "/cdn64", Icon: "bi-arrow-left-right", TitleKey: "cdn64.tab.hosts"},
 		{Path: "/cdn64/redirects", Icon: "bi-signpost-split", TitleKey: "cdn64.tab.redirects"},
 		{Path: "/cdn64/dead", Icon: "bi-sign-stop", TitleKey: "cdn64.tab.dead"},
@@ -71,6 +74,9 @@ func tabs(active string) []tab {
 		{Path: "/certificates", Icon: "bi-shield-lock", TitleKey: "cdn64.tab.certs"}, // Kernseite
 		{Path: "/cdn64/log", Icon: "bi-list-columns", TitleKey: "cdn64.tab.log"},
 		{Path: "/cdn64/default", Icon: "bi-question-square", TitleKey: "cdn64.tab.default"}}
+	if m.protectionOn() {
+		t = slices.Insert(t, 8, tab{Path: "/cdn64/protection", Icon: "bi-shield-check", TitleKey: "cdn64.tab.protection"}) // vor der Standardseite
+	}
 	for i := range t {
 		t[i].Active = t[i].Path == active
 	}
@@ -293,7 +299,7 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	d := listData{Kind: kind, Tabs: tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError(), Pub: m.published(r.Context()), StatsOn: m.stats2.Load() != nil,
+	d := listData{Kind: kind, Tabs: m.tabs(listPath(kind)), Rows: rows, EdgeErr: m.edgeError(), Pub: m.published(r.Context()), StatsOn: m.stats2.Load() != nil,
 		OnlineOn: m.online.api != nil && m.edge != nil, OnlineL: m.onlineStrings(r), LimitsOn: m.limLoad(r.Context()).Enabled}
 	if d.LocalOn = m.ldns() != nil; d.LocalOn {
 		d.LocalV4, d.LocalV6 = m.localAddrs(r)
@@ -400,7 +406,7 @@ func lines(text string) []string {
 }
 
 func (m *Module) form(ctx context.Context, h *Host, isNew bool) formData {
-	d := formData{Tabs: tabs(listPath(h.Kind)), Back: listPath(h.Kind), Host: h, Names: strings.Join(h.Names, "\n"), New: isNew, Errors: map[string]string{}}
+	d := formData{Tabs: m.tabs(listPath(h.Kind)), Back: listPath(h.Kind), Host: h, Names: strings.Join(h.Names, "\n"), New: isNew, Errors: map[string]string{}}
 	if m.certs != nil {
 		d.Certs, _ = m.certs.List(ctx)
 		d.ACME = m.certs.Account(ctx)
