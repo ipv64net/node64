@@ -1,5 +1,13 @@
 # Changes – PROXY64
 
+## 1.33.1 – 2026-10-27
+
+### Fixed
+- v64 Blocklist: after restarting several nodes of the same account, the list showed "HTTP 429". The list token
+  applies to the whole account, and ipv64.net allowed the same file only once every 5 minutes per token.
+  - The portal dropped that limit. At most 60 fetches per 5 minutes and token still apply.
+  - On a 429, PROXY64 keeps the current list and shows no error. Only without a list does it load the daily list.
+
 ## 1.33.0 – 2026-10-27
 
 ### New

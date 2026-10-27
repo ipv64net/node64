@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 
@@ -135,7 +136,19 @@ func (m *Module) blFetchHoneypot(ctx context.Context, id, file string) error {
 	}
 	list, same, err := m.blFetchFrom(ctx, id, "live/"+tok+"/"+file)
 	var he blHTTPError
-	if errors.As(err, &he) && (he == 401 || he == 403 || he == 404) {
+	if errors.As(err, &he) && he == http.StatusTooManyRequests {
+		m.bl.mu.Lock()
+		have := len(m.bl.nets[id]) > 0
+		if have {
+			m.bl.stateOf(id).Error = "" // gedrosselt (Token gilt fuer alle Nodes des Accounts): Stand bleibt, naechster Lauf holt neu
+		}
+		m.bl.mu.Unlock()
+		if have {
+			m.log.Info("cdn64 blocklist live throttled, keeping current list", "list", id)
+			return nil
+		}
+	}
+	if errors.As(err, &he) && (he == 401 || he == 403 || he == 404 || he == http.StatusTooManyRequests) {
 		if he == 404 && m.blTokenOf(ctx, setBlockToken) == "" {
 			// geholtes Token bei ipv64 unbekannt (z. B. neu erzeugt): verwerfen, beim naechsten Lauf neu holen
 			_ = m.core.SetSetting(ctx, setBlockTokenAuto, "")

@@ -1,5 +1,14 @@
 # Änderungen – PROXY64
 
+## 1.33.1 – 2026-10-27
+
+### Behoben
+- v64 Blocklist: Nach dem Neustart mehrerer Nodes desselben Accounts stand bei der Liste „HTTP 429“. Das Listen-Token
+  gilt für den ganzen Account, und ipv64.net ließ dieselbe Datei nur einmal alle 5 Minuten je Token zu.
+  - Das Portal hat diese Sperre aufgehoben. Es bleibt bei höchstens 60 Abrufen je 5 Minuten und Token.
+  - PROXY64 behält bei einem 429 den vorhandenen Stand und zeigt keinen Fehler. Nur ohne Stand lädt es den
+    Tagesstand.
+
 ## 1.33.0 – 2026-10-27
 
 ### Neu
