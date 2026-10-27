@@ -121,7 +121,7 @@
 						<button type="button" class="btn btn-sm btn-link py-0 ms-auto" data-hp-live-selclear title="{{.T "honeypot.live.sel_clear"}}" aria-label="{{.T "honeypot.live.sel_clear"}}"><i class="bi bi-x-lg"></i></button></div><div data-hp-live-sellist></div></div>
 				</div>
 				</div>
-				<div class="hp-live-strip small d-flex flex-wrap align-items-center mx-1 my-1" data-hp-live-strip data-l-events="{{.T "honeypot.live.strip_events"}}" data-l-countries="{{.T "honeypot.live.strip_countries"}}" data-l-top="{{.T "honeypot.live.strip_top"}}" data-l-kind="{{.T "honeypot.live.strip_kind"}}" data-l-now="{{.T "honeypot.live.strip_now"}}"></div>
+				<div class="hp-live-strip small d-flex flex-wrap align-items-center mx-1 my-1" data-hp-live-strip data-l-events="{{.T "honeypot.live.strip_events"}}" data-l-countries="{{.T "honeypot.live.strip_countries"}}" data-l-top="{{.T "honeypot.live.strip_top"}}" data-l-kind="{{.T "honeypot.live.strip_kind"}}"></div>
 				<div class="small text-body-secondary mx-1">{{.T "honeypot.map.hint"}}{{if $d.Map.Missing}} · {{.T "honeypot.map.missing" "count" $d.Map.Missing}}{{end}} · {{.T "honeypot.live.hint"}} · <a href="https://db-ip.com" target="_blank" rel="noopener">{{.T "honeypot.geo.attribution"}}</a></div>
 				<div class="hp-live-list small mt-2" data-hp-live-list data-l-empty="{{.T "honeypot.live.empty"}}" data-l-replay="{{.T "honeypot.live.replay"}}" data-l-target="{{.T "honeypot.live.target"}}" data-l-unknown="{{.T "honeypot.live.target_unknown"}}"></div>
 				{{else}}<p class="text-body-secondary small m-2">{{if $d.Geo.Loaded}}{{.T "honeypot.top.empty"}}{{else}}{{.T "honeypot.geo.waiting"}}{{end}}</p>{{end}}

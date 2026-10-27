@@ -152,13 +152,6 @@
 		entries.forEach(function (e) { k[e.kind] = (k[e.kind] || 0) + e.n; });
 		var kk = Object.keys(k).sort(function (a, b) { return k[b] - k[a]; })[0];
 		if (kk) { add(T.strip_kind, kk + " (" + nf.format(k[kk]) + ")"); }
-		var lv = add(T.strip_live, String(live.length));
-		lv.id = "hlStripLive";
-	}
-
-	function liveCount() {
-		var x = $("hlStripLive");
-		if (x) { x.lastChild.textContent = String(live.length); }
 	}
 
 	function tip(e, rep) {
@@ -177,14 +170,14 @@
 		live.unshift(item);
 		var la = label(a, flag(e.cc) + " " + e.cc, false), lb = label(b, flag(e.dst) + " " + e.dst, true);
 		hit(e.dst, true);
-		renderNow(); liveCount();
+		renderNow();
 		var gone = function () {
 			p.remove(); dot.remove(); ring.remove();
 			if (la) { la(); }
 			if (lb) { lb(); }
 			if (item.hit) { item.hit = false; hit(e.dst, false); }
 			live = live.filter(function (x) { return x !== item; });
-			renderNow(); liveCount();
+			renderNow();
 		};
 		if (!reduce && p.animate && p.getTotalLength) {
 			var len = p.getTotalLength();
@@ -375,7 +368,7 @@
 			live.forEach(function (it) { it.hit = false; });
 			arcs.replaceChildren(); labelLayer.replaceChildren(); labels = {}; live = []; hits = {};
 			land.querySelectorAll(".hl-hit").forEach(function (x) { x.classList.remove("hl-hit"); });
-			renderNow(); liveCount();
+			renderNow();
 		}
 	});
 

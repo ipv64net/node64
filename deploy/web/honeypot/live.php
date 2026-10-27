@@ -168,7 +168,6 @@ function hl_t(string $de, string $en): string { global $hlEn; return $hlEn ? $en
 	'full' => hl_t('Vollbild', 'Full screen'), 'full_exit' => hl_t('Vollbild beenden', 'Exit full screen'), 'now_empty' => hl_t('Gerade kein Bogen.', 'No arc right now.'),
 	'sel_country' => hl_t('Verbindungen von und nach {name}', 'Connections from and to {name}'), 'sel_pair' => hl_t('Verbindung {from} → {to}', 'Connection {from} → {to}'),
 	'sel_empty' => hl_t('In der letzten Stunde keine Verbindungen.', 'No connections in the last hour.'),
-	'strip_top' => hl_t('Top-Herkunft', 'Top origins'), 'strip_pair' => hl_t('Häufigste Verbindung', 'Top connection'), 'strip_kind' => hl_t('Häufigste Art', 'Top kind'),
-	'strip_live' => hl_t('Bögen gerade', 'Arcs now')), JSON_UNESCAPED_UNICODE); ?>;</script>
-<script src="live.js?v=6"></script>
+	'strip_top' => hl_t('Top-Herkunft', 'Top origins'), 'strip_pair' => hl_t('Häufigste Verbindung', 'Top connection'), 'strip_kind' => hl_t('Häufigste Art', 'Top kind')), JSON_UNESCAPED_UNICODE); ?>;</script>
+<script src="live.js?v=7"></script>
 <?php include("../footer.php"); ?>

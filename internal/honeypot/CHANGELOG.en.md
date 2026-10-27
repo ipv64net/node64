@@ -1,5 +1,10 @@
 # Changes – Honeypot64
 
+## 0.15.1 – 2026-10-27
+
+### Changed
+- Live map: the "Arcs now" figure in the bar below the map is gone (container and ipv64.net).
+
 ## 0.15.0 – 2026-10-27
 
 ### New

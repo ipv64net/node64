@@ -2353,7 +2353,7 @@
       "nodes": "Messende Nodes",
       "this_node": "diese Node",
       "nodes_hint": "Mehrere Nodes möglich, z. B. an verschiedenen Standorten oder mit Zugang über VPN. Jede gewählte Node misst den Check selbst und erscheint als eigene Messstelle.",
-      "nodes_single": "Docker-Checks gehören zu der Node, auf der der Container läuft, und sind nicht umhängbar.",
+      "nodes_single": "Docker- und Proxmox-Checks misst die Node mit dem System. Im Cluster mit eingeschaltetem Bereich „Proxmox VE“ bzw. „Docker“ (nur Docker-Hosts über das Netz) können die Nodes mitmessen, die den Bereich ebenfalls abgleichen.",
       "cert_min_days": "Zertifikat: warnen unter",
       "days": "Tagen",
       "cert_min_days_hint": "HTTPS: gestört melden, wenn das Zertifikat in weniger Tagen abläuft (0 = aus). Das Ablaufdatum wird immer mitgelesen.",
@@ -3082,6 +3082,8 @@
     "item": {
       "checks": "Checks",
       "maintenance": "Wartungsfenster",
+      "proxmox": "Proxmox VE – Systeme samt API-Token (die Nodes fragen sie mit ab und messen deren Checks mit)",
+      "docker": "Docker – Hosts über das Netz samt Zugangsdaten (lokaler Socket bleibt bei seiner Node)",
       "notify_settings": "Einstellungen (Ruhezeiten, Drossel, Bündeln)",
       "certificates": "Zertifikate",
       "acme": "ACME (Konto und CAs)",
@@ -4325,8 +4327,7 @@
       "strip_events": "Angriffe (60 min)",
       "strip_countries": "Herkunftsländer",
       "strip_top": "Top-Herkunft",
-      "strip_kind": "Häufigste Art",
-      "strip_now": "Bögen gerade"
+      "strip_kind": "Häufigste Art"
     },
     "country": {
       "title": "Standort des Sensors",

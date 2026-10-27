@@ -2353,7 +2353,7 @@
       "nodes": "Measuring nodes",
       "this_node": "this node",
       "nodes_hint": "Several nodes possible, e.g. at different sites or with VPN access. Every selected node measures the check itself and shows up as its own measuring point.",
-      "nodes_single": "Docker checks belong to the node that runs the container and cannot be moved.",
+      "nodes_single": "Docker and Proxmox checks are measured by the node with the system. In a cluster with the area “Proxmox VE” or “Docker” switched on (Docker hosts over the network only), the nodes that sync the area too can measure as well.",
       "cert_min_days": "Certificate: warn below",
       "days": "days",
       "cert_min_days_hint": "HTTPS: report down when the certificate expires in fewer days (0 = off). The expiry date is always read.",
@@ -3082,6 +3082,8 @@
     "item": {
       "checks": "Checks",
       "maintenance": "Maintenance windows",
+      "proxmox": "Proxmox VE – systems including API token (the nodes poll them too and measure their checks)",
+      "docker": "Docker – hosts over the network including credentials (a local socket stays with its node)",
       "notify_settings": "Settings (quiet hours, rate limit, batching)",
       "certificates": "Certificates",
       "acme": "ACME (account and CAs)",
@@ -4325,8 +4327,7 @@
       "strip_events": "Attacks (60 min)",
       "strip_countries": "Countries of origin",
       "strip_top": "Top origins",
-      "strip_kind": "Top kind",
-      "strip_now": "Arcs now"
+      "strip_kind": "Top kind"
     },
     "country": {
       "title": "Location of the sensor",
