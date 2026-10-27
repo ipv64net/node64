@@ -306,6 +306,9 @@ func TestBridgeModuleStartStop(t *testing.T) {
 	if !hpbridge.Wanted() { // Voreinstellung "Nur ueber PROXY64": PROXY64 soll seine Anfragen abgeben
 		t.Fatal("Vorlage proxy meldet sich nicht bei PROXY64")
 	}
+	if !hpbridge.BlockWanted() || !hpbridge.Blockers() { // Sofort-Sperre: Standard an (auch ohne Meldung an ipv64)
+		t.Fatal("Sofort-Sperre nicht gewuenscht")
+	}
 	// Koeder ohne eigene Fallen-Dienste (Einstellung nie gespeichert)
 	r := httptest.NewRequest(http.MethodGet, "/phpmyadmin/?pma_username=root&pma_password=toor", nil)
 	r.RemoteAddr = "8.8.8.8:5555"
@@ -335,7 +338,7 @@ func TestBridgeModuleStartStop(t *testing.T) {
 	if err := m.Stop(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if hpbridge.Decoy() != nil || hpbridge.AccessActive() || hpbridge.Wanted() {
+	if hpbridge.Decoy() != nil || hpbridge.AccessActive() || hpbridge.Wanted() || hpbridge.BlockWanted() {
 		t.Fatal("nach dem Stop noch angemeldet")
 	}
 }

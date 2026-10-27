@@ -55,6 +55,7 @@ func bridgeStart(log *slog.Logger, ls logSensorAPI, sink Sink, seed string) {
 // bridgeStop meldet beides ab (vor dem Stoppen der Sensoren).
 func bridgeStop() {
 	hpbridge.SetWanted(false)
+	hpbridge.SetBlockWanted(false)
 	hpbridge.SetDecoy(nil)
 	hpbridge.SetAccessSink(nil)
 }

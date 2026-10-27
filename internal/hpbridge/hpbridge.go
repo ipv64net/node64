@@ -10,7 +10,9 @@
 //     Regeln auswertet (Access). Inhalte der Seiten werden nie weitergegeben, gemeldet wird wie bei echten Logs
 //     nur IP, Art, Anzahl.
 //  3. Sofort-Sperre: Faellt eine IP im Honeypot auf (Falle oder Regel aus 2), meldet er sie hier (PublishBlock);
-//     PROXY64 sperrt sie lokal fuer eine Weile (SubscribeBlocks), ohne auf die v64 Blocklist zu warten.
+//     PROXY64 sperrt sie lokal fuer eine Weile (SubscribeBlocks), ohne auf die v64 Blocklist zu warten. Die Sperre
+//     schaltet PROXY64 selbst oder Honeypot64 (SetBlockWanted, Standard an: auch ohne Meldung an ipv64 schuetzt der
+//     Honeypot so den eigenen Proxy).
 package hpbridge
 
 import (
@@ -46,6 +48,7 @@ var (
 	decoy  atomic.Pointer[http.Handler]
 	access atomic.Pointer[func(Access)]
 	wanted atomic.Bool
+	block  atomic.Bool // Honeypot64 moechte die Sofort-Sperre
 
 	subMu sync.Mutex
 	subs  = map[int]func(Block){}
@@ -84,6 +87,20 @@ func SetWanted(on bool) { wanted.Store(on) }
 
 // Wanted: der Honeypot moechte den Verkehr von PROXY64 (dann gilt der Koeder als eingeschaltet). Nur PROXY64.
 func Wanted() bool { return wanted.Load() && Decoy() != nil }
+
+// SetBlockWanted: Honeypot64 moechte, dass PROXY64 auffaellige IPs lokal sperrt (Schalter im Honeypot). Nur
+// Honeypot64.
+func SetBlockWanted(on bool) { block.Store(on) }
+
+// BlockWanted: der Honeypot laeuft und moechte die Sofort-Sperre (gilt dann als eingeschaltet). Nur PROXY64.
+func BlockWanted() bool { return block.Load() }
+
+// Blockers: es gibt eine Abonnentin der Sperren (PROXY64 laeuft). Nur fuer die Anzeige im Honeypot.
+func Blockers() bool {
+	subMu.Lock()
+	defer subMu.Unlock()
+	return len(subs) > 0
+}
 
 // AccessActive: es gibt eine Auswertung (PROXY64 kann sich sonst die Arbeit sparen).
 func AccessActive() bool { return access.Load() != nil }

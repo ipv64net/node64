@@ -1,5 +1,14 @@
 # Änderungen – PROXY64
 
+## 1.33.0 – 2026-10-27
+
+### Neu
+- Sofort-Sperre aus dem Honeypot: Die gesperrten IPs stehen jetzt auch in der Datenbank und überstehen einen Neustart
+  (bisher nur im Speicher). „Freigeben“ entfernt den Eintrag auch dort.
+- Die Sofort-Sperre lässt sich auch im Honeypot einschalten („Erkannte Angreifer in PROXY64 sperren“, dort Standard
+  an). Unter Zugriffslisten → Honeypot64 steht dann „Eingeschaltet über Honeypot64“; der eigene Schalter bleibt für
+  die Sperre ohne diesen Haken.
+
 ## 1.32.2 – 2026-10-27
 
 ### Geändert

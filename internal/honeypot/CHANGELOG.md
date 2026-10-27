@@ -1,5 +1,14 @@
 # Änderungen – Honeypot64
 
+## 0.15.0 – 2026-10-27
+
+### Neu
+- Lokale Sperrliste: Neuer Haken „Erkannte Angreifer in PROXY64 sperren“, im einfachen und im Expertenmodus,
+  Standard an. IPs, die der Honeypot als Angreifer erkennt (Login-Versuche, Exploits, Port-Scans, Scanner), sperrt
+  PROXY64 sofort für alle Hosts und Streams. Das wirkt auch ohne Meldung an ipv64, so schützt der Honeypot den eigenen
+  Proxy direkt. Private Adressen und Ausnahmen werden nie gesperrt; Dauer (Standard 24 Stunden) und Liste mit
+  „Freigeben“ stehen unter PROXY64 → Zugriffslisten. Läuft PROXY64 nicht, weist die Einstellung darauf hin.
+
 ## 0.14.6 – 2026-10-27
 
 ### Behoben

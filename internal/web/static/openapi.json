@@ -4043,6 +4043,11 @@
             "default": false,
             "description": "Meldung an ipv64 (Opt-in): alle 10 Minuten Quell-IPs, Arten, Ports, Zugangsdaten aus dem Honeypot, Pfade, User-Agents, Fingerabdrücke (JA4, HASSH) und Payload-Anfang; nie die eigene IP, keine privaten/reservierten Quellen. Einschalten nur mit eingetragenem zentralem API-Key (sonst 400 mit fields.report)."
           },
+          "no_local_block": {
+            "type": "boolean",
+            "default": false,
+            "description": "true = erkannte Angreifer nicht lokal in PROXY64 sperren. Standard (false): IPs aus Login-Versuchen, Exploits, Port-Scans und Scannern sperrt PROXY64 sofort fuer alle Hosts und Streams (Dauer und Liste unter PROXY64), auch ohne Meldung an ipv64."
+          },
           "country": {
             "type": "string",
             "pattern": "^[A-Z]{2}$",

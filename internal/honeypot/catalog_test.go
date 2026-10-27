@@ -478,7 +478,7 @@ func TestCatalogPageRender(t *testing.T) {
 	}
 	if code, body = do("/honeypot/settings", nil); code != 200 || !strings.Contains(body, "data-hp-simple") || strings.Contains(body, `name="catalog"`) ||
 		!strings.Contains(body, `id="sp-custom" value="custom" checked`) || !strings.Contains(body, "22/tcp") || !strings.Contains(body, "161/udp") ||
-		!strings.Contains(body, `<option value="gateway" selected>`) {
+		!strings.Contains(body, `<option value="gateway" selected>`) || !strings.Contains(body, `id="local_block" name="local_block" value="1" checked`) {
 		t.Fatalf("simple view: %d %s", code, body)
 	}
 	if code, _ = do("/honeypot/settings", url.Values{"_csrf": {csrf[1]}, "simple": {"1"}, "profile": {ProfileMinimal}, "start_page": {"bunt"}}); code != http.StatusUnprocessableEntity {
@@ -489,8 +489,12 @@ func TestCatalogPageRender(t *testing.T) {
 		t.Fatalf("simple save: %d", code)
 	}
 	if c := m.loadConfig(context.Background()); c.Profile != ProfileMinimal || c.StartPage != StartNeutral || !c.NotifyNew || c.Report != before.Report || c.Expert ||
-		c.RetentionDays != before.RetentionDays {
+		c.RetentionDays != before.RetentionDays || !c.NoLocalBlock {
 		t.Fatalf("simple saved: %+v", c)
+	}
+	// Haken "Erkannte Angreifer in PROXY64 sperren" (Standard an, hier zuletzt ohne Haken gespeichert)
+	if code, _ = do("/honeypot/settings", url.Values{"_csrf": {csrf[1]}, "simple": {"1"}, "profile": {ProfileMinimal}, "start_page": {StartNeutral}, "local_block": {"1"}}); code != http.StatusSeeOther || m.loadConfig(context.Background()).NoLocalBlock {
+		t.Fatalf("simple local block: %d", code)
 	}
 	if code, _ = do("/honeypot/settings", url.Values{"_csrf": {csrf[1]}, "ui_mode": {"expert"}}); code != http.StatusSeeOther || !m.loadConfig(context.Background()).Expert {
 		t.Fatalf("mode expert: %d", code)

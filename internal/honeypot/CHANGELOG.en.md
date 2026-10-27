@@ -1,5 +1,14 @@
 # Changes – Honeypot64
 
+## 0.15.0 – 2026-10-27
+
+### New
+- Local block list: new option "Block detected attackers in PROXY64", in simple and expert mode, on by default. IPs the
+  honeypot detects as attackers (login attempts, exploits, port scans, scanners) are blocked by PROXY64 right away for
+  all hosts and streams. This works without reporting to ipv64, so the honeypot protects your own proxy directly.
+  Private addresses and exceptions are never blocked; duration (default 24 hours) and the list with "Unblock" are under
+  PROXY64 → Access lists. If PROXY64 is not running, the setting says so.
+
 ## 0.14.6 – 2026-10-27
 
 ### Fixed
