@@ -1,5 +1,12 @@
 # Änderungen – PROXY64
 
+## 1.34.2 – 2026-10-27
+
+### Behoben
+- Liste der Proxy-Hosts: Domains und Ziel brachen bei vielen Knöpfen und Hinweisen in den Nachbarspalten Zeichen für
+  Zeichen um. Sie brechen jetzt nur noch an Wortgrenzen um; reicht die Breite nicht, lässt sich die Tabelle seitlich
+  schieben.
+
 ## 1.34.1 – 2026-10-27
 
 ### Geändert

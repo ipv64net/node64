@@ -1,5 +1,11 @@
 # Changes – PROXY64
 
+## 1.34.2 – 2026-10-27
+
+### Fixed
+- Proxy host list: domains and target wrapped character by character when the neighbouring columns held many buttons
+  and badges. They now wrap at word boundaries only; if the width is not enough, the table scrolls sideways.
+
 ## 1.34.1 – 2026-10-27
 
 ### Changed
