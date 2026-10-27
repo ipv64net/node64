@@ -11,10 +11,11 @@
  *     wird bei jedem Abruf geprueft. Sonst der Tagesstand aus blocklists/ (kein Fehler). Kopfzeile X-IPv64-List: live|daily.
  *   - Unbekanntes Token oder inaktiver Account: 404 (PROXY64 faellt dann auf den Tagesstand zurueck).
  *   - Nur die Dateien der v64-Listen (feste Liste), der Pfad wird nie aus der Anfrage gebaut.
- *   - Dieselbe Datei hoechstens alle 5 Minuten je Token, sonst 429 mit Retry-After; If-None-Match mit passendem ETag
- *     gibt immer 304. Hoechstens 60 Abrufe je Token in 5 Minuten ueber alle Dateien.
+ *   - Hoechstens 60 Abrufe je Token in 5 Minuten ueber alle Dateien, sonst 429 mit Retry-After; If-None-Match mit
+ *     passendem ETag gibt immer 304. Keine Sperre mehr je Datei: das Token gilt fuer den Account, mehrere Nodes holen
+ *     dieselbe Datei kurz nacheinander (z. B. nach einem Neustart aller Container) - die bekamen sonst 429.
  */
-const HPL_GAP      = 300;          // dieselbe Datei hoechstens alle 5 Minuten
+const HPL_GAP      = 0;            // dieselbe Datei: kein Mindestabstand (frueher 5 Minuten, traf mehrere Nodes)
 const HPL_WINDOW   = 300;          // Fenster fuer die Obergrenze ueber alle Dateien
 const HPL_MAX      = 60;           // Abrufe je Fenster
 const HPL_CONTRIB  = 7 * 86400;    // Beitragende: Meldung in den letzten 7 Tagen
@@ -96,7 +97,7 @@ try {
 	if($wait <= 0 AND !$newWindow AND (int)$t['uses_in_window'] >= HPL_MAX) { $wait = HPL_WINDOW - ($now - $ws); }
 	if($wait > 0) {
 		$pdo->rollBack();
-		hpl_out(429, "Too many requests: fetch this list at most every 5 minutes. Retry in $wait seconds.", array_merge($common, array('Retry-After: ' . $wait)));
+		hpl_out(429, "Too many requests: at most " . HPL_MAX . " fetches per 5 minutes for this token. Retry in $wait seconds.", array_merge($common, array('Retry-After: ' . $wait)));
 	}
 	$q("UPDATE hp_list_tokens SET last_used = :n, uses_window_start = :ws, uses_in_window = :c WHERE userid = :u",
 		array('n' => $n, 'ws' => $newWindow ? $n : $t['uses_window_start'], 'c' => $newWindow ? 1 : (int)$t['uses_in_window'] + 1, 'u' => $uid));

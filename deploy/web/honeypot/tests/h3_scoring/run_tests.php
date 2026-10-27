@@ -230,7 +230,7 @@ $etag = $r['h']['etag'] ?? '';
 check('ETag und Last-Modified gesetzt', $etag !== '' AND isset($r['h']['last-modified']));
 check('last_used gesetzt', one("SELECT last_used FROM hp_list_tokens WHERE userid = 1")['last_used'] !== null);
 $r = req('GET', "/blocklists/live/$T1/ipv64_blocklist_v64.txt");
-check('gleiche Datei sofort wieder: 429 mit Retry-After', $r['code'] === 429 AND (int)($r['h']['retry-after'] ?? 0) > 250 AND (int)$r['h']['retry-after'] <= 300, $r['code'] . ' ' . json_encode($r['h']));
+check('gleiche Datei sofort wieder (zweite Node desselben Accounts): 200', $r['code'] === 200, $r['code'] . ' ' . json_encode($r['h']));
 $r = req('GET', "/blocklists/live/$T1/ipv64_blocklist_v64.txt", array("If-None-Match: $etag"));
 check('mit passendem ETag: 304', $r['code'] === 304 AND $r['body'] === '', $r['code']);
 $r = req('GET', "/blocklists/live/$T1/v64_mikrotik_v4_v64.rsc");

@@ -28,6 +28,7 @@ const (
 	tokLive   = "LiveToken0123456789abcdefABCDEFx" // 32 Zeichen, berechtigt
 	tokDaily  = "DailyToken123456789abcdefABCDEFx" // gueltig, aber Klasse Standard: Tagesstand mit Kopfzeile
 	tokDenied = "DeniedToken23456789abcdefABCDEFx" // widerrufen: 403
+	tokBusy   = "BusyToken0123456789abcdefABCDEFx" // gedrosselt: 429
 )
 
 // Katalog: Kategorie honeypot mit eigenen Namen/Uebersetzungen fuer bekannte IDs, Text aus index.json fuer neue.
@@ -101,6 +102,9 @@ func TestBlocklistLiveToken(t *testing.T) {
 		case "/live/" + tokDaily + "/ipv64_blocklist_v64.txt":
 			w.Header().Set("X-IPv64-List", "daily")
 			_, _ = w.Write([]byte("198.51.100.1\n"))
+		case "/live/" + tokBusy + "/ipv64_blocklist_v64.txt":
+			w.Header().Set("Retry-After", "120")
+			http.Error(w, "too many", http.StatusTooManyRequests)
 		default:
 			http.Error(w, "forbidden", http.StatusForbidden)
 		}
@@ -161,6 +165,17 @@ func TestBlocklistLiveToken(t *testing.T) {
 	}
 	if st := state(); st.Edition != "daily" || !st.LiveDenied || st.Entries != 1 {
 		t.Fatalf("daily header: %+v", st)
+	}
+
+	// gedrosselt (429, Token gilt fuer alle Nodes): vorhandener Stand bleibt, kein Fehler
+	if err := e.m.blSetToken(ctx, tokBusy); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.m.blFetch(ctx, "v64"); err != nil {
+		t.Fatal(err)
+	}
+	if st := state(); st.Edition != "daily" || st.Entries != 1 || st.Error != "" || st.LiveError != "" {
+		t.Fatalf("throttled with list: %+v", st)
 	}
 
 	// widerrufenes Token: 403 -> Tagesstand, Fehler sichtbar
