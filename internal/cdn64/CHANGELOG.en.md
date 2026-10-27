@@ -1,5 +1,12 @@
 # Changes – PROXY64
 
+## 1.34.3 – 2026-10-27
+
+### Changed
+- Proxy host list: the "Options" column now wraps and is narrower, for example with an access list. The healthcheck
+  badges get the freed space and wrap less often.
+- Traffic (↓/↑) without the separator dot: when the line wrapped it ended up at the start or end of a line.
+
 ## 1.34.2 – 2026-10-27
 
 ### Fixed
