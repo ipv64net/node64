@@ -62,7 +62,7 @@ zusammengeführt aus allen Honeypots), keine externe Datenbank.
 - Quelle ist die zusammengeführte Rangliste aller Honeypots (`hp_samples_fps`, `honeypot/hp_stats_lib.php`):
   30 Tage, nur Fingerabdrücke, die mindestens 2–3 verschiedene Accounts gemeldet haben (Schutz gegen Vergiften),
   bis 1000 Einträge. Daraus nur die `ja4:`-Einträge.
-- ipv64 erzeugt die Datei `ipv64_blocklist_ja4.txt`: eine Zeile je JA4, Kommentare mit `#`.
+- ipv64 erzeugt die Datei `ipv64_ja4.txt`: eine Zeile je JA4, Kommentare mit `#`.
 - Ausnahmeliste (von Dennis gepflegt, klein): Fingerabdrücke von Browsern und verbreiteten Bibliotheken
   (curl, Python, Go, Monitoring) kommen nie auf die Liste – Werte aus den eigenen CDN64-Zahlen der ersten Woche.
 - Erzeugt im vorhandenen Blocklisten-Job (keine neue Cron-Zeile), veröffentlicht unter `/blocklists/`, die Server
@@ -104,7 +104,7 @@ bringt dich weiter.**
 |---|---|---|
 | S1 | Zähler + Zuordnung zum Host, Meldung, SQL, `protection` in GET /cdn64o, 4 Zahlen im Portal | 2 Tage |
 | S2 | WAF-Muster (Modus 2/3), Schalter je Host | ½–1 Tag |
-| S3 | JA4: gemeinsames Paket, Liste `ipv64_blocklist_ja4.txt` bei ipv64, Laden/Zählen/Sperren auf den Servern (443) | 1½ Tage |
+| S3 | JA4: gemeinsames Paket, Liste `ipv64_ja4.txt` bei ipv64, Laden/Zählen/Sperren auf den Servern (443) | 1½ Tage |
 | S4 | Tab „CDN64 Statistik“ in PROXY64 inkl. `/cdn64o/protection` | 1½ Tage |
 
 Ausrollen: cdn64-edge 0.19.0 + Portal (eine SQL-Datei, `api_v2_cdn64o.php`, Blocklisten-Job, `cdn64.php`) +
