@@ -33,7 +33,7 @@ ELK, echte Shells).
 | Daten für spätere Auswertung (auch KI) | aufheben, mit gestuften Fristen (Abschnitt 4) |
 | Benutzernamen/Passwörter | **nur aus dem Honeypot**, nie aus echten Logs |
 | Melden | **nur über Node64** (keine Fremd-Meldungen aus Fail2ban/CrowdSec) |
-| DNS-Sperrliste | Zone **`bl.ipv64.net`** |
+| DNS-Sperrliste | entfallen (Entscheidung Dennis 2026-10-27: keine DNSBL `bl.ipv64.net`) |
 | Angebot | Stufen nach dem Muster von CrowdSec (Abschnitt 8) |
 | Zugang zur v64 Blocklist | **alle bekommen sie vollständig und frei**; frei = Tagesstand (einmal täglich, bis 24 h alt); **alle Klassen außer Standard** (`user_class` ≠ 1: VIP, Premium, Business, Company, Supporter) der Live-Stand nach jeder Bewertung (alle 30 min); Freigaben sind in beiden entfernt |
 
@@ -209,7 +209,7 @@ weg). Wird es groß, gehen die Meldungen in eine Analyse-Datenbank (z. B. ClickH
 | Teillisten je Art | `…_v64_ssh`, `…_v64_web`, `…_v64_mail`, `…_v64_rdp`, `…_v64_scanner` | gezielt je Dienst |
 | Forschungs-Scanner | `…_v64_research` | wer Shodan & Co. aussperren will |
 | **Schadhosts aus Payloads** | Domains und IPs, die Angreifer in Payloads nachladen (`wget http://…`, `${jndi:ldap://…}`), erst ab mehreren Accounts; IPs in die v64 Blocklist, Domains als Liste für DNS-Filter | DNS64, Pi-hole, AdGuard, Firewall – blockt die Nachlade-Server, falls ein Gerät doch befallen ist |
-| **DNSBL** | `<ip-rückwärts>.bl.ipv64.net` → `127.0.0.x` (Code je Art) | Mailserver (Postfix, rspamd), schnelle Prüfung ohne Listen-Download; über PowerDNS |
+| ~~DNSBL~~ | entfallen (2026-10-27): keine DNS-Sperrliste `bl.ipv64.net` | – |
 | **Änderungs-Feed** | API `GET /threat/feed?since=` (nur Änderungen, ETag) | große Abnehmer, Hoster, eigene Werkzeuge |
 | **IP-Auskunft** | Seite und API `GET /threat/ip/{ip}` | „Warum ist diese IP gelistet?“: Zeiten, Arten, Ports, Accounts, Vertrauenswert, Land/ASN |
 | **Passwortprüfung** | API mit k-Anonymität (`GET /threat/passwords/range/{erste 5 Zeichen SHA-1}`), wie HIBP | Login-/Registrierungsseiten prüfen ohne das Passwort preiszugeben |
@@ -244,8 +244,7 @@ gekürzte Liste. Unterschied ist nur die **Aktualität**:
   FortiGate können keine Kopfzeilen mitschicken, eine Adresse genügt ihnen. Das Token ist getrennt vom API-Key, im
   Account sichtbar und widerrufbar; geprüft wird die Klasse bei jedem Abruf (läuft sie ab, gibt es wieder den Tagesstand); Abrufe werden je Token begrenzt (z. B. höchstens alle 5 Minuten).
 - **Freigaben** wirken in der Live-Fassung sofort, im Tagesstand mit dem nächsten Stichtag.
-- **DNS-Sperrliste `bl.ipv64.net`:** liefert für alle den Tagesstand; Live-Antworten für eingetragene Mailserver-IPs
-  aller Klassen außer Standard (später).
+- ~~DNS-Sperrliste `bl.ipv64.net`~~: entfallen (Entscheidung Dennis 2026-10-27).
 - In `index.json` steht die freie Fassung; Node64/PROXY64 nimmt mit hinterlegtem Listen-Token automatisch die
   Live-Fassung.
 

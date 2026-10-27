@@ -3,7 +3,7 @@
 Öffentliche Statistik unter `/honeypot/stats.php` (Überblick für alle, volle Seite für alle Klassen außer Standard),
 API `GET /threat/stats`, Text-Listen mit Passwörtern, Benutzernamen, User-Agents (+ nginx-`map`) und Angriffs-Pfaden
 (+ nginx-`location`), Schutz gegen Vergiften (Proben zählen je Account). Planung: `docs/PLAN-NODE64-HONEYPOT64.md`
-(Abschnitte 7, 8, 10, 13). Die Teile **DNSBL** und **Leitfaden** haben eigene Anleitungen.
+(Abschnitte 7, 8, 10, 13). Der Teil **Leitfaden** hat eine eigene Anleitung (die DNSBL ist entfallen, 2026-10-27).
 
 Getestet in einer abgeschotteten Testumgebung auf der Testbox (MariaDB 10.5, PHP 8.3, echte `api_v2.php`, echter
 Generator, nginx 1.27 für `nginx -t` und Sperrtests mit der erzeugten map und dem location-Snippet): 89 + 25 Prüfungen,
