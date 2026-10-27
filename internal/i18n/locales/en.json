@@ -824,7 +824,7 @@
       "route_never": "Overload (too many requests or connections) never goes to the decoy – that is protection, not an attack."
     },
     "lim": {
-      "title": "Overload protection",
+      "title": "DoS protection (denial of service) – overload protection",
       "hint": "Limits connections and requests per IP address (IPv6 per /64), like HAProxy. Protects the node and every service behind the proxy against request flooding and many connections from one address. Addresses that hit the limits too often are rejected for a few minutes right when they connect. Exempt are the home network (if enabled), the trusted proxies of the hosts (e.g. Cloudflare; the real client IP counts there) and the blocklist exceptions. The defaults are fine for browsers, apps and sync clients.",
       "enabled": "Protection enabled",
       "exempt_lan": "Never limit the home network (private addresses)",
