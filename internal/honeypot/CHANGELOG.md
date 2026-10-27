@@ -1,5 +1,10 @@
 # Änderungen – Honeypot64
 
+## 0.15.1 – 2026-10-27
+
+### Geändert
+- Live-Karte: Die Angabe „Bögen gerade“ in der Leiste unter der Karte entfällt (Container und ipv64.net).
+
 ## 0.15.0 – 2026-10-27
 
 ### Neu

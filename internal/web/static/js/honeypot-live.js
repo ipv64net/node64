@@ -121,12 +121,6 @@
 		events.forEach(function (e) { k[e.kind] = (k[e.kind] || 0) + 1; });
 		var kk = Object.keys(k).sort(function (a, b) { return k[b] - k[a]; })[0];
 		if (kk) { add("kind", kk + " (" + nf.format(k[kk]) + ")"); }
-		add("now", String(live.length));
-	}
-
-	function liveCount() {
-		var x = strip && strip.querySelector('[data-k="now"]');
-		if (x) { x.lastChild.textContent = String(live.length); }
 	}
 
 	function svc(e) { return e.service.toUpperCase() + (e.port ? " " + e.port : ""); }
@@ -173,14 +167,14 @@
 		live.unshift(item);
 		var la = label(e.x, e.y, e.flag + " " + e.cc, false), lb = target.known ? label(target.x, target.y, target.flag + " " + target.cc, true) : null;
 		hit(true);
-		renderNow(); liveCount();
+		renderNow();
 		var gone = function () {
 			p.remove(); dot.remove();
 			if (la) { la(); }
 			if (lb) { lb(); }
 			if (item.hit) { item.hit = false; hit(false); }
 			live = live.filter(function (x) { return x !== item; });
-			renderNow(); liveCount();
+			renderNow();
 		};
 		if (!reduce && p.animate && p.getTotalLength) {
 			var len = p.getTotalLength();
@@ -340,7 +334,7 @@
 				layer.querySelectorAll(".hp-arc, .hp-src").forEach(function (x) { x.remove(); });
 				if (labelLayer) { labelLayer.replaceChildren(); }
 				labels = {}; live = [];
-				renderNow(); liveCount();
+				renderNow();
 			}
 		});
 	}
