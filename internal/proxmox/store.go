@@ -2,7 +2,9 @@ package proxmox
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net"
@@ -219,12 +221,12 @@ func validateDocker(sys *System, isNew bool) error {
 	return nil
 }
 
-const systemCols = `id, kind, name, addresses, token_id, secret, pin_sha256, interval_sec, enabled, created_at`
+const systemCols = `id, kind, name, addresses, token_id, secret, pin_sha256, interval_sec, enabled, created_at, uid, home`
 
 func (s *Store) scanSystem(row interface{ Scan(...any) error }) (*System, error) {
 	var sys System
 	var addrs, secret, created string
-	if err := row.Scan(&sys.ID, &sys.Kind, &sys.Name, &addrs, &sys.TokenID, &secret, &sys.PinSHA256, &sys.Interval, &sys.Enabled, &created); err != nil {
+	if err := row.Scan(&sys.ID, &sys.Kind, &sys.Name, &addrs, &sys.TokenID, &secret, &sys.PinSHA256, &sys.Interval, &sys.Enabled, &created, &sys.UID, &sys.Home); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(addrs), &sys.Addresses)
@@ -263,6 +265,29 @@ func (s *Store) System(ctx context.Context, id int64) (*System, error) {
 	return sys, err
 }
 
+// SystemByUID liefert ein System nach seiner Kennung im Cluster.
+func (s *Store) SystemByUID(ctx context.Context, uid string) (*System, error) {
+	if uid == "" {
+		return nil, ErrNotFound
+	}
+	sys, err := s.scanSystem(s.r.QueryRowContext(ctx, `SELECT `+systemCols+` FROM pve_systems WHERE uid = ?`, uid))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return sys, err
+}
+
+var reUID = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+// ValidUID: Kennung eines Systems (32 hex).
+func ValidUID(uid string) bool { return reUID.MatchString(uid) }
+
+func newUID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
 // SaveSystem legt ein System an (ID 0) oder aendert es. Beim Aendern behaelt ein leeres Secret das gespeicherte.
 // Das Secret wird nur verschluesselt gespeichert.
 func (s *Store) SaveSystem(ctx context.Context, sys *System) error {
@@ -278,9 +303,12 @@ func (s *Store) SaveSystem(ctx context.Context, sys *System) error {
 		if sys.Secret == DockerNoCreds {
 			sys.Secret = ""
 		}
+		if !ValidUID(sys.UID) { // neu hier: eigene Kennung (aus dem Cluster: die der anderen Node)
+			sys.UID = newUID()
+		}
 		res, err := s.w.ExecContext(ctx, `INSERT INTO pve_systems (kind, name, addresses, token_id, secret, pin_sha256, interval_sec, enabled,
-			created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-			sys.Kind, sys.Name, string(addrs), sys.TokenID, s.box.Encrypt(sys.Secret), sys.PinSHA256, sys.Interval, sys.Enabled, now, now)
+			created_at, updated_at, uid, home) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+			sys.Kind, sys.Name, string(addrs), sys.TokenID, s.box.Encrypt(sys.Secret), sys.PinSHA256, sys.Interval, sys.Enabled, now, now, sys.UID, sys.Home)
 		if err != nil {
 			return err
 		}

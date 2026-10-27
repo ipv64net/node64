@@ -34,6 +34,8 @@ type System struct {
 	Interval  int       `json:"interval"`             // Sekunden fuer cluster/resources (15–300, Standard 30)
 	Enabled   bool      `json:"enabled"`
 	Created   time.Time `json:"created"`
+	UID       string    `json:"uid"`            // Kennung im Cluster (32 hex, gleich auf allen Nodes)
+	Home      string    `json:"home,omitempty"` // Node, die das System angelegt hat (Cluster); leer = diese Node
 }
 
 // Guest-Typen und Node-Zustaende wie in der API.

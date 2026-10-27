@@ -263,6 +263,7 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 			}
 		}
 	}
+	prevNodes := c.Nodes
 	if in.Nodes != nil {
 		list, ok := cleanNodes(in.Nodes)
 		if !ok {
@@ -270,8 +271,11 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 		}
 		c.Nodes = list
 	}
-	if c.Execution == "online" || singleNode(c.Type) {
-		c.Nodes = nil // online: keine Nodes; Docker/Push: nur die Besitzer-Node
+	switch {
+	case c.Execution == "online":
+		c.Nodes = nil // online: keine Nodes
+	case singleNode(c.Type):
+		c.Nodes = m.clusterNodesOf(c, prevNodes) // Docker/Proxmox: nur die Besitzer-Node, im Cluster auch Nodes mit dem Bereich
 	}
 	if in.NotifyDegraded != nil {
 		c.NotifyDegraded = *in.NotifyDegraded

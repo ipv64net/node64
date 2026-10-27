@@ -126,7 +126,7 @@ func (m *Manager) seedSync(ctx context.Context) {
 		if p == nil {
 			continue
 		}
-		for _, it := range mi.Items {
+		for _, it := range p.ClusterModule().Items {
 			key := mi.ID + "/" + it.ID
 			m.pull.s2.mu.Lock()
 			done := m.pull.s2.seeded[key]
@@ -158,7 +158,7 @@ func (m *Manager) handleSync2(w http.ResponseWriter, r *http.Request, _ *Member,
 	own := m.syncCaps(ctx)
 	allowed := map[string]bool{}
 	for _, c := range splitCaps(r.URL.Query().Get("items")) {
-		if mod, _, _ := strings.Cut(c, "/"); !builtin(mod) && has(own, c) && m.provider(mod) != nil {
+		if mod, item, _ := strings.Cut(c, "/"); m.v2Item(mod, item) && has(own, c) {
 			allowed[c] = true
 		}
 	}

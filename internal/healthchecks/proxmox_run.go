@@ -531,6 +531,10 @@ func (m *Module) pveNotify(ctx context.Context, set *proxmox.SystemSettings, s *
 			_ = m.core.SetSetting(context.WithoutCancel(ctx), key, string(b))
 		}
 	}
+	if sys, err := m.pve.st.System(ctx, set.SystemID); err == nil && !m.pveNotifiesHere(ctx, sys) {
+		m.log.Info("proxmox event (home node notifies)", "system", set.Name, "key", ev.Key, "kind", ev.Kind, "what", ev.What)
+		return // System aus dem Cluster: meldet die Heim-Node (pvecluster.go)
+	}
 	m.log.Info("proxmox event", "system", set.Name, "key", ev.Key, "kind", ev.Kind, "what", ev.What)
 	if m.pve.alert != nil {
 		m.pve.alert(a)
@@ -685,7 +689,7 @@ func (m *Module) pveSetAsCheckNamed(r *http.Request, sys *proxmox.System, key st
 			it.AsCheck = true
 			return m.pve.st.SaveSettings(ctx, it)
 		}
-		params, _ := json.Marshal(checks.ProxmoxParams{SystemID: sys.ID, Key: key, System: m.pveSystemLabel(sys)})
+		params, _ := json.Marshal(checks.ProxmoxParams{SystemID: sys.ID, Key: key, System: m.pveSystemLabel(sys), SystemUID: sys.UID})
 		iv := int(pveCheckInterval(sys).Seconds())
 		riv := min(20, iv)
 		group := pveCheckGroup
@@ -838,7 +842,11 @@ func (m *Module) pveSyncChecks(ctx context.Context, sys *proxmox.System, by stri
 
 // pveDeleteSystem loescht ein System mit seinen Checks, Einstellungen und dem Verlauf.
 func (m *Module) pveDeleteSystem(r *http.Request, id int64) error {
-	ctx := r.Context()
+	return m.pveDeleteSystemBy(r.Context(), id, r)
+}
+
+// pveDeleteSystemBy: wie pveDeleteSystem; r nil = aus dem Cluster (ohne Eintrag im Audit-Log).
+func (m *Module) pveDeleteSystemBy(ctx context.Context, id int64, r *http.Request) error {
 	cs := m.pveSystemChecks(ctx, id)
 	sys, err := m.pve.st.System(ctx, id)
 	if err != nil {
@@ -856,13 +864,14 @@ func (m *Module) pveDeleteSystem(r *http.Request, id int64) error {
 		if s := m.scheduler(); s != nil {
 			s.Remove(c.Token)
 		}
-		if err := m.st.Delete(ctx, c.Token); err == nil {
+		if err := m.st.Delete(ctx, c.Token); err == nil && r != nil {
 			m.audit(r, "check.delete", c)
 		}
 	}
 	if err := m.pve.st.DeleteSystem(ctx, id); err != nil {
 		return err
 	}
+	m.pveClusterChanged(ctx, sys, sys, true)
 	for _, k := range []string{pveSettingLast, dockerSettingLast} {
 		if inc := m.lastIncident(ctx, k); inc != nil && inc.SystemID == id {
 			_ = m.core.SetSetting(ctx, k, "")
@@ -873,7 +882,11 @@ func (m *Module) pveDeleteSystem(r *http.Request, id int64) error {
 
 // pveSaveSystem legt ein System an bzw. aendert es und startet die Abfrage neu.
 func (m *Module) pveSaveSystem(r *http.Request, sys *proxmox.System) error {
-	ctx := r.Context()
+	return m.pveSaveSystemBy(r.Context(), sys, m.actor(r))
+}
+
+// pveSaveSystemBy: wie pveSaveSystem mit Urheber by (Aenderungen an den Checks; "cluster" aus dem Cluster).
+func (m *Module) pveSaveSystemBy(ctx context.Context, sys *proxmox.System, by string) error {
 	wasEnabled := true
 	var old *proxmox.System
 	if sys.ID != 0 {
@@ -892,7 +905,7 @@ func (m *Module) pveSaveSystem(r *http.Request, sys *proxmox.System) error {
 	}
 	pauseChanged := wasEnabled != sys.Enabled
 	if old != nil && sys.IsDocker() && dockerSysHost(old) != dockerSysHost(sys) {
-		pauseChanged = m.dockerRetarget(ctx, old, sys, m.actor(r)) || pauseChanged
+		pauseChanged = m.dockerRetarget(ctx, old, sys, by) || pauseChanged
 	}
 	if !sys.Enabled {
 		m.pveHalt(sys.ID)
@@ -900,7 +913,13 @@ func (m *Module) pveSaveSystem(r *http.Request, sys *proxmox.System) error {
 	} else {
 		m.pveReload(ctx, sys.ID)
 	}
-	m.pveSyncChecks(ctx, sys, m.actor(r), pauseChanged)
+	m.pveSyncChecks(ctx, sys, by, pauseChanged)
+	if sys.UID == "" { // neu angelegt: Kennung aus der Datenbank
+		if s, err := m.pve.st.System(ctx, sys.ID); err == nil {
+			sys.UID, sys.Home = s.UID, s.Home
+		}
+	}
+	m.pveClusterChanged(ctx, old, sys, false)
 	return nil
 }
 

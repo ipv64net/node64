@@ -215,7 +215,7 @@ func (m *Module) pveInsertNoSecret(ctx context.Context, sys *proxmox.System) err
 	now := store.Now()
 	sys.Enabled = false
 	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO pve_systems (kind, name, addresses, token_id, secret, pin_sha256, interval_sec, enabled,
-		created_at, updated_at) VALUES (?,?,?,?,'',?,?,0,?,?)`, sys.Kind, sys.Name, string(addrs), sys.TokenID, sys.PinSHA256, sys.Interval, now, now)
+		created_at, updated_at, uid) VALUES (?,?,?,?,'',?,?,0,?,?,lower(hex(randomblob(16))))`, sys.Kind, sys.Name, string(addrs), sys.TokenID, sys.PinSHA256, sys.Interval, now, now)
 	if err != nil {
 		return err
 	}

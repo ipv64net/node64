@@ -1,5 +1,24 @@
 # Änderungen – Healthchecks
 
+## 2.38.0 – 2026-10-27
+
+### Neu
+- Proxmox VE und Docker im Cluster: Unter Cluster → Healthchecks gibt es die Bereiche „Proxmox VE“ und „Docker“
+  (ohne Einstellung aus).
+  - Ist ein Bereich auf zwei Nodes an, gehen die Systeme samt API-Token bzw. Zugangsdaten an die andere Node. Dort
+    werden sie mit deren Schlüssel verschlüsselt gespeichert und ebenfalls abgefragt. Anlegen, Ändern und Löschen
+    werden abgeglichen.
+  - Docker nur für Hosts über das Netz (`tcp://`, `http(s)://`, `ssh://`); der lokale Socket bleibt bei seiner Node.
+  - Docker- und Proxmox-Checks können dann mehrere messende Nodes haben: Im Formular sind die Nodes wählbar, die den
+    Bereich (und die Checks) ebenfalls abgleichen. Abgleich, Bewertung und Benachrichtigung wie bei allen Checks des
+    Clusters; die Node, die den Check angelegt hat, bleibt vorn.
+  - Meldungen der Überwachung selbst (Gast gestoppt, Schwellen, System nicht erreichbar) schickt nur die Node, die das
+    System angelegt hat; ist sie nicht erreichbar, die erreichbare Node mit der kleinsten Kennung. Nichts kommt doppelt.
+  - Jedes System hat dafür eine Kennung im Cluster (`uid`), Proxmox-Checks tragen sie als `params.system_uid`; ältere
+    Checks bekommen sie beim Start.
+- hub: Docker- und Proxmox-Checks behalten die messenden Nodes, die die Node schickt (bisher immer nur die
+  Besitzer-Node). Nicht umhängbar und nie online bleiben sie.
+
 ## 2.37.3 – 2026-10-27
 
 ### Geändert

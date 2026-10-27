@@ -1,5 +1,23 @@
 # Changes – Healthchecks
 
+## 2.38.0 – 2026-10-27
+
+### New
+- Proxmox VE and Docker in the cluster: Cluster → Healthchecks has the new areas "Proxmox VE" and "Docker" (off by
+  default).
+  - With an area on at two nodes, the systems including API token or credentials go to the other node. There they are
+    stored encrypted with its key and polled too. Creating, changing and deleting are synced.
+  - Docker only for hosts over the network (`tcp://`, `http(s)://`, `ssh://`); a local socket stays with its node.
+  - Docker and Proxmox checks can then have several measuring nodes: the form offers the nodes that sync the area (and
+    the checks) too. Syncing, evaluation and notifications as for all cluster checks; the node that created the check
+    stays first.
+  - Notifications of the monitoring itself (guest stopped, thresholds, system unreachable) are sent only by the node
+    that created the system; if it is unreachable, by the reachable node with the smallest ID. Nothing is sent twice.
+  - For this every system has a cluster ID (`uid`); Proxmox checks carry it as `params.system_uid`; older checks get
+    it at start.
+- hub: Docker and Proxmox checks keep the measuring nodes the node sends (before, always only the owner node). They
+  still cannot be moved and never run online.
+
 ## 2.37.3 – 2026-10-27
 
 ### Changed

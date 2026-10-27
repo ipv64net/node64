@@ -22,6 +22,7 @@ type Peer struct {
 	Location string `json:"location"`
 	Online   bool   `json:"online"`
 	Self     bool   `json:"-"`
+	Cluster  string `json:"-"` // Bereiche, ueber die die Node Docker- bzw. Proxmox-Checks mitmessen kann ("proxmox docker")
 }
 
 // SettingPeers haelt die Nodes des Accounts (JSON, vom Sync-Client geschrieben).
@@ -53,7 +54,8 @@ func selfNodeID() string {
 }
 
 // singleNode: Docker-Checks gehoeren zur Node mit dem Container, Proxmox-Checks zur Node, die das System abfragt
-// (Push-Checks sind frei zuordenbar).
+// (Push-Checks sind frei zuordenbar). Im Cluster mit den Bereichen Proxmox VE bzw. Docker (Host ueber das Netz)
+// messen die Nodes mit, die den Bereich abgleichen (clusterNodesOf).
 func singleNode(t checks.Type) bool { return t == checks.TypeDocker || t == checks.TypeProxmox }
 
 // measures sagt, ob diese Node den Check misst (ohne Ausfuehrungsort).

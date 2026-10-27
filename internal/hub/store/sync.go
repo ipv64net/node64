@@ -469,7 +469,8 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 	} else if c.NodeID != "" {
 		nodeRef = c.NodeID
 	}
-	// Messende Nodes: nur aktive Nodes des Accounts; Docker bleibt bei genau einer Node
+	// Messende Nodes: nur aktive Nodes des Accounts; Docker/Proxmox bleiben bei ihrer Besitzer-Node (im Cluster der
+	// Node messen weitere Nodes mit, die das System kennen - die Liste kommt von der Node)
 	var nodeList []string
 	if c.Execution != "online" {
 		owner0 := ""
@@ -481,8 +482,8 @@ func (s *Store) proposeCheck(ctx context.Context, tx *sql.Tx, userID int64, node
 			return nil
 		}
 		nodeList = measuringNodes(c.Nodes, owner0)
-		if singleNodeType(c.Type) {
-			nodeList = measuringNodes(nil, owner0)
+		if singleNodeType(c.Type) && owner0 != "" && !inList(nodeList, owner0) {
+			nodeList = append([]string{owner0}, nodeList...) // Besitzerin bleibt vorn
 		}
 		if len(nodeList) > 20 {
 			res.Error = "at most 20 measuring nodes"
@@ -1191,8 +1192,8 @@ func measuringNodes(list []string, owner string) []string {
 	return out
 }
 
-// singleNodeType: der Docker-Socket bzw. die Proxmox-Abfrage gehoert zu genau einer Node (Push-Checks sind frei
-// zuordenbar).
+// singleNodeType: der Docker-Socket bzw. die Proxmox-Abfrage gehoert zu einer Besitzer-Node (nicht umhaengbar, nie
+// online); weitere messende Nodes nur, wenn die Node sie schickt (Cluster). Push-Checks sind frei zuordenbar.
 func singleNodeType(typ string) bool { return typ == "docker" || typ == "proxmox" }
 
 // sameAddress: dieselbe Adresse bzw. Nummer, nur anders geschrieben? Das Portal speichert Nummern als Ziffern
