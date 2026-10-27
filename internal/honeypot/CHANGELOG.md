@@ -1,5 +1,15 @@
 # Änderungen – Honeypot64
 
+## 0.14.6 – 2026-10-27
+
+### Behoben
+- Meldung an ipv64: Mit der Vorlage „Nur über PROXY64“ (`proxy`, Voreinstellung) lehnte ipv64.net die Meldung ab
+  („sensor.profile must be one of …“, 422). Das Portal nimmt `proxy` jetzt an (Portal-Datei `api_v2_honeypot.php`).
+- Log-Sensor: Jede eingetragene Datei bzw. jedes Muster hat jetzt einen Knopf „Entfernen“ (Papierkorb), der die Zeile
+  entfernt und gleich speichert. Bisher ging das nur, indem man die Zeile leerte.
+- Der letzte Fehler der Meldung steht in der Übersicht und den Einstellungen nur noch, solange danach keine Meldung
+  angenommen wurde.
+
 ## 0.14.5 – 2026-10-27
 
 ### Neu

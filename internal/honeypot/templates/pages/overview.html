@@ -53,7 +53,7 @@
 					{{if $d.Report.Active}}{{.T "honeypot.report.on"}} · {{.T "honeypot.report.last_success"}}: {{if $d.Report.LastSuccess.IsZero}}{{.T "honeypot.report.never"}}{{else}}{{.Time $d.Report.LastSuccess}}{{end}}
 					· {{.T "honeypot.report.sources"}}: {{.Int $d.Report.SourcesToday}} / {{.Int $d.Report.SourcesTotal}}
 					{{if $d.Report.LastRejected}}· <span class="text-warning-emphasis">{{.T "honeypot.report.rejected" "count" $d.Report.LastRejected "reasons" $d.Report.RejectedText}}</span>{{end}}
-					{{if $d.Report.LastError}}· <span class="text-danger" title="{{$d.Report.LastError}}">{{.T "honeypot.report.last_error"}}: {{.Time $d.Report.LastErrorAt}}</span>{{end}}
+					{{if and $d.Report.LastError ($d.Report.LastErrorAt.After $d.Report.LastSuccess)}}· <span class="text-danger" title="{{$d.Report.LastError}}">{{.T "honeypot.report.last_error"}}: {{.Time $d.Report.LastErrorAt}}</span>{{end}}
 					{{else}}<a href="/honeypot/settings">{{if $d.Report.KeySet}}{{.T "honeypot.report.off"}}{{else}}{{.T "honeypot.report.nokey"}}{{end}}</a>{{end}}
 				</div>
 				<div class="small text-body-secondary mt-1" id="logs-line"><i class="bi bi-journal-text"></i> {{.T "honeypot.logs.title"}}:
