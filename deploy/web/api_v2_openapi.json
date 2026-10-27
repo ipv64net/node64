@@ -12553,6 +12553,65 @@
         }
       }
     },
+    "/honeypot/list-token": {
+      "get": {
+        "tags": [
+          "Honeypot64"
+        ],
+        "summary": "Listen-Token für den Live-Stand der v64 Blocklist",
+        "operationId": "get_honeypot_list_token",
+        "description": "Persönliches Listen-Token (wie unter /honeypot/token.php). Fehlt es, wird es angelegt; ein vorhandenes bleibt. Abruf dann über base + Dateiname (z. B. ipv64_blocklist_v64.txt). live = Berechtigung jetzt (Klasse außer Standard oder Beitragende/r); ohne Berechtigung liefert die Live-Adresse den Tagesstand (Kopfzeile X-IPv64-List: daily). Token geheim halten.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ActAs"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Erfolgreich",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "token": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9]{32}$"
+                        },
+                        "live": {
+                          "type": "boolean"
+                        },
+                        "base": {
+                          "type": "string",
+                          "example": "https://ipv64.net/blocklists/live/<token>/"
+                        }
+                      },
+                      "required": [
+                        "token",
+                        "live",
+                        "base"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/E401"
+          },
+          "429": {
+            "$ref": "#/components/responses/E429"
+          }
+        }
+      }
+    },
     "/honeypot/stats": {
       "get": {
         "tags": [

@@ -235,6 +235,21 @@ check('stats: Top-Arten/Ports', ($s['top_kinds'][0]['kind'] ?? '') === 'ssh:brut
 $r = req('GET', '/api_v2.php/honeypot/stats', null, array(), K3);
 check('stats Account 3: Sensor umgezogen, Verlauf bleibt', $r['code'] === 200 AND ($r['j']['data']['events_7d'] ?? -1) === 21 AND ($r['j']['data']['sensors'] ?? -1) === 0, code($r));
 
+// ---------------------------------------------------------------- Listen-Token (Node64 holt es ueber den API-Key)
+echo "GET list-token
+";
+$r = req('GET', '/api_v2.php/honeypot/list-token');
+$t1 = (string)($r['j']['data']['token'] ?? '');
+check('list-token: 200, Token 32 Zeichen, Live-Adresse', $r['code'] === 200 AND preg_match('/^[A-Za-z0-9]{32}$/', $t1) === 1 AND ($r['j']['data']['base'] ?? '') === "https://ipv64.net/blocklists/live/$t1/", code($r));
+check('list-token: Beitragende/r (Sensor in 7 Tagen) -> live', ($r['j']['data']['live'] ?? null) === true, $r['j']['data'] ?? null);
+check('list-token: angelegt in hp_list_tokens', one("SELECT token FROM hp_list_tokens WHERE userid = 1")['token'] === $t1);
+$r = req('GET', '/api_v2.php/honeypot/list-token');
+check('list-token: zweiter Abruf gleiches Token (kein Widerruf)', ($r['j']['data']['token'] ?? '') === $t1);
+$r = req('GET', '/api_v2.php/honeypot/list-token', null, array(), K3);
+check('list-token: Standard ohne aktiven Sensor -> live false, eigenes Token', ($r['j']['data']['live'] ?? null) === false AND preg_match('/^[A-Za-z0-9]{32}$/', (string)($r['j']['data']['token'] ?? '')) === 1 AND ($r['j']['data']['token'] ?? '') !== $t1, $r['j']['data'] ?? null);
+$r = req('GET', '/api_v2.php/honeypot/list-token', null, array(), null);
+check('list-token ohne Key: 401', $r['code'] === 401, code($r));
+
 // ---------------------------------------------------------------- Seite
 echo "Seite honeypot/index.php\n";
 $r = req('GET', '/honeypot/index.php');

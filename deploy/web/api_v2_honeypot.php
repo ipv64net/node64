@@ -428,6 +428,27 @@ route('GET', '/honeypot/stats', function() {
 	));
 });
 
+/**
+ * GET /honeypot/list-token: persoenliches Listen-Token fuer den Live-Stand der v64 Blocklist (wie honeypot/token.php).
+ * Fehlt es, wird es angelegt; ein vorhandenes bleibt unveraendert (kein Widerruf). Node64 holt es damit selbst ueber den
+ * zentralen API-Key. live = Berechtigung jetzt (Klasse ausser Standard oder Beitragende/r, Sensor in 7 Tagen);
+ * blocklists/live.php prueft sie bei jedem Abruf neu und liefert ohne Berechtigung den Tagesstand.
+ */
+route('GET', '/honeypot/list-token', function() {
+	$u = uid(); $now = time();
+	$tok = (string)(q1("SELECT token FROM hp_list_tokens WHERE userid = :u", array('u' => $u))['token'] ?? '');
+	if(!preg_match('/^[A-Za-z0-9]{32}\z/', $tok)) {
+		$a = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'; $new = '';
+		for($i = 0; $i < 32; $i++) { $new .= $a[random_int(0, 61)]; }
+		q("INSERT INTO hp_list_tokens (userid, token, created_at, last_used, uses_window_start, uses_in_window) VALUES (:u, :t, :c, NULL, NULL, 0)
+			ON DUPLICATE KEY UPDATE token = token", array('u' => $u, 't' => $new, 'c' => hp_dt($now)));
+		$tok = (string)(q1("SELECT token FROM hp_list_tokens WHERE userid = :u", array('u' => $u))['token'] ?? '');
+	}
+	$live = (int)($GLOBALS['ME']['user_class'] ?? 1) !== 1
+		|| q1("SELECT 1 x FROM hp_sensors WHERE userid = :u AND disabled = 0 AND last_seen >= :d LIMIT 1", array('u' => $u, 'd' => hp_dt($now - 7 * 86400))) !== null;
+	ok(array('token' => $tok, 'live' => $live, 'base' => 'https://ipv64.net/blocklists/live/' . $tok . '/'));
+});
+
 // H6: weitere Endpunkte, ohne Aenderung an api_v2.php (dort ist nur diese Datei und die H3-H5-Dateien eingebunden)
 foreach(array('api_v2_threat_passwords.php', 'api_v2_threat_feed.php') as $hpH6File) { if(is_file(__DIR__ . "/$hpH6File")) { require_once __DIR__ . "/$hpH6File"; } }
 unset($hpH6File); // eingebunden im globalen Bereich von api_v2.php
