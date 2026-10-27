@@ -1,4 +1,8 @@
 <?php
+// Der Leitfaden steht jetzt in der Doku (ipv64_docs, /docs/blocklists/integration/). Liegt die Doku auf dem Server,
+// leitet diese Seite dorthin weiter (Sprungmarken wie #nftables bleiben erhalten); sonst bleibt sie wie bisher.
+$blgDoc = (($_GET['lang'] ?? '') === 'de') ? '/docs/blocklists/integration/' : '/docs/en/blocklists/integration/';
+if (is_file(__DIR__ . $blgDoc . 'index.html')) { header('Location: https://ipv64.net' . $blgDoc, true, 301); exit; }
 include("header.php");
 
 // Integrationsleitfaden fuer die IPv64-Blocklisten (Englisch, Deutsch mit ?lang=de).
