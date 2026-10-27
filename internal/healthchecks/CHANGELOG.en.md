@@ -1,5 +1,11 @@
 # Changes – Healthchecks
 
+## 2.37.3 – 2026-10-27
+
+### Changed
+- Dashboard: the tiles for Healthchecks, Proxmox VE and Docker are more compact. Number and label share one line, the
+  icon is smaller and the spacing tighter. The card needs about half the height.
+
 ## 2.37.2 – 2026-10-26
 
 ### Changed

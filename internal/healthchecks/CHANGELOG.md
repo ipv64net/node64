@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.37.3 – 2026-10-27
+
+### Geändert
+- Dashboard: Die Kacheln von Healthchecks, Proxmox VE und Docker sind kompakter. Zahl und Bezeichnung stehen in einer
+  Zeile, kleineres Symbol, weniger Abstand. Die Karte braucht etwa halb so viel Höhe.
+
 ## 2.37.2 – 2026-10-26
 
 ### Geändert
