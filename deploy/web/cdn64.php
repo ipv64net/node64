@@ -271,7 +271,14 @@ function c64w_target_fields(?array $t): void {
 					$st = $h['status'] === 'active' ? '<span class="badge badge-success">active</span>' : ($h['status'] === 'blocked' ? '<span class="badge badge-danger">blocked: ' . c64w_h($h['blocked_reason']) . '</span>' : '<span class="badge badge-warning">' . c64w_h($h['status']) . '</span>');
 					if(!empty($h['paused'])) { $st = '<span class="badge badge-secondary" title="Paused since ' . c64w_h($h['paused_at'] ?? '') . '"><i class="fa-solid fa-pause"></i> paused</span>'; }
 					if($h['acl']['default'] !== 'off') { $st .= ' <span class="badge badge-info">list</span>'; }
-					echo '<tr' . (!empty($h['paused']) ? ' class="table-warning"' : '') . '><td class="text-monospace">' . c64w_h($h['fqdn']) . '</td><td>' . c64w_h($modeName[$h['mode']] ?? $h['mode']) . '</td><td class="text-monospace text-break">' . c64w_h($tgt) . '</td><td>' . $st . '</td>';
+					// Schutz (30 Tage): nur 4 Zahlen, Details in Node64 (PROXY64 › CDN64 Statistik)
+					$pr = $h['protection'] ?? null; $nf = fn($n) => number_format((int)$n, 0, ',', '.');
+					$prot = $pr ? '<br><small class="text-muted text-nowrap"><i class="fa-solid fa-shield-halved"></i> '
+						. '<span title="Blocked before reaching your service: blocklists, allow/block list, overload, WAF, attack tools (JA4)">' . $nf($pr['blocked_list'] + $pr['blocked_acl'] + $pr['blocked_flood'] + $pr['blocked_limit'] + $pr['blocked_waf'] + $pr['blocked_ja4']) . ' blocked</span>'
+						. ' · <span title="Blocked IP addresses (IPv6 per /64)">' . $nf($pr['blocked_ips']) . ' IPs</span>'
+						. ' · <span title="Overload stopped: connection and request limits">' . $nf($pr['blocked_flood'] + $pr['blocked_limit']) . ' overload</span>'
+						. ' · <span title="Connections via CDN64 – your own address stayed hidden (of them via IPv4)">' . $nf($pr['conns']) . ' hidden (' . $nf($pr['conns_v4']) . ' IPv4)</span></small>' : '';
+					echo '<tr' . (!empty($h['paused']) ? ' class="table-warning"' : '') . '><td class="text-monospace">' . c64w_h($h['fqdn']) . $prot . '</td><td>' . c64w_h($modeName[$h['mode']] ?? $h['mode']) . '</td><td class="text-monospace text-break">' . c64w_h($tgt) . '</td><td>' . $st . '</td>';
 					echo '<td class="text-right text-nowrap">' . c64w_bytes($tm['bytes_in'] + $tm['bytes_out']) . ($tm['requests'] ? ' · ' . number_format($tm['requests'], 0, ',', '.') . ' req.' : '') . ($tm['rejected'] ? ' · <span class="text-danger">' . (int)$tm['rejected'] . ' rejected</span>' : '') . '</td>';
 					// Modus 1/2: verwaltet in Node64, hier nur ausschalten (Notfall, ohne Zugriff auf die Node)
 					echo (int)$h['mode'] !== 3 ? '<td class="text-right text-nowrap"><span class="text-muted mr-1" title="Target, mode, certificate and access lists are managed in Node64. Switching off here also removes it there."><i class="fa-solid fa-lock"></i> Node64</span>'
@@ -283,6 +290,7 @@ function c64w_target_fields(?array $t): void {
 				} ?>
 				</tbody>
 			</table>
+			<?php if(!empty($ov['hosts'])) { echo '<p class="text-muted small m-2"><i class="fa-solid fa-shield-halved"></i> Protection in the last 30 days. Details in Node64 under <i>PROXY64 › CDN64 statistics</i>.</p>'; } ?>
 		</div></div>
 	</div>
 	<div class="col-12 col-lg-6 pb-3">

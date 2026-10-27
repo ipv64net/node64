@@ -16,6 +16,8 @@
  *
  * Sicherung: nur, wenn sich gerade ein CDN64-Server meldet und in den letzten 15 Minuten irgendein Tunnel verbunden
  * war - sonst stammen alte last_seen eher von einem Ausfall bei ipv64 bzw. den Servern als von verwaisten Nodes.
+ *
+ * Ausserdem (immer, vor der Sicherung): JA4-Treffer (cdn64o_ja4) aelter als 35 Tage loeschen, in Stapeln.
  */
 if(php_sapi_name() !== 'cli') { exit; }
 include(__DIR__ . "/../dbconnect.php");
@@ -23,11 +25,23 @@ include(__DIR__ . "/../dbconnect.php");
 const C64X_AFTER   = 14; // Tage ohne Verbindung
 const C64X_CDN_TMP = 3;  // Markierung der Server-Eintraege in subdomain_records (wie C64O_CDN_TMP in api_v2_cdn64o.php)
 const C64X_TTL     = 10; // wie C64O_TTL
+const C64X_JA4_KEEP = 35;  // Tage cdn64o_ja4 (Statistik zeigt hoechstens 30)
+const C64X_BATCH   = 10000; // Zeilen je DELETE
 
 $dry = in_array('--dry', $argv, true);
 $l = $pdo->query("SELECT GET_LOCK('cdn64_orphans', 0) l")->fetch(PDO::FETCH_ASSOC);
 if((int)($l['l'] ?? 0) !== 1) { echo "laeuft bereits\n"; exit(0); }
 $q = function(string $sql, array $a = array()) use ($pdo): PDOStatement { $st = $pdo->prepare($sql); $st->execute($a); return $st; };
+
+// JA4-Treffer der Schutz-Statistik nur so lange wie noetig
+$cut = date('Y-m-d', time() - C64X_JA4_KEEP * 86400);
+if($dry) {
+	echo "cdn64o_ja4: " . (int)$q("SELECT COUNT(*) FROM cdn64o_ja4 WHERE day < :d", array('d' => $cut))->fetchColumn() . " Zeilen vor $cut (nur angezeigt)\n";
+} else {
+	$del = 0;
+	do { $c = $q("DELETE FROM cdn64o_ja4 WHERE day < :d LIMIT " . C64X_BATCH, array('d' => $cut))->rowCount(); $del += $c; } while($c >= C64X_BATCH);
+	if($del) { echo "cdn64o_ja4: $del Zeilen vor $cut geloescht\n"; }
+}
 
 $edge = (int)$q("SELECT COUNT(*) FROM cdn64o_edges WHERE disabled = 0 AND last_seen >= NOW() - INTERVAL 60 SECOND")->fetchColumn();
 $live = (int)$q("SELECT COUNT(*) FROM cdn64o_tunnels WHERE last_seen >= NOW() - INTERVAL 15 MINUTE")->fetchColumn();

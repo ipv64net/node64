@@ -19,6 +19,12 @@ const C64O_MODES        = array(1, 2, 3);  // 1 durchreichen, 2 terminieren (T5)
 const C64O_ACL_MAX      = 200;  // Eintraege je Liste
 const C64O_PORT_MIN     = 50000; // Portmapper: Ports der Server (wie beim alten CDN)
 const C64O_PORT_MAX     = 62000;
+const C64O_JA4_GLOBAL   = 'count'; // JA4 global: erste Woche nach dem Ausrollen nur zaehlen ('count'), danach 'block'
+const C64O_JA4_DAY_MAX  = 20;   // verschiedene JA4 je Host und Tag (cdn64o_ja4)
+// Schutz-Zaehler aus edge/report (Spalten in cdn64o_traffic) und Ausgabe protection (Feld => Spalte; rejected = Anfrage-Limit)
+const C64O_PROT_COLS    = array('blocked_list', 'blocked_acl', 'blocked_flood', 'blocked_waf', 'blocked_ja4', 'ja4_hits', 'blocked_ips', 'conns_v4');
+const C64O_PROT         = array('blocked_list' => 'blocked_list', 'blocked_acl' => 'blocked_acl', 'blocked_flood' => 'blocked_flood', 'blocked_limit' => 'rejected',
+	'blocked_waf' => 'blocked_waf', 'blocked_ja4' => 'blocked_ja4', 'ja4_hits' => 'ja4_hits', 'blocked_ips' => 'blocked_ips', 'conns' => 'conns', 'conns_v4' => 'conns_v4');
 
 // ---------------------------------------------------------------- Hilfen
 
@@ -73,7 +79,26 @@ function c64o_host_out(array $h): array {
 		'edges' => array_map('c64o_edge_out', c64o_edges()), 'traffic_month' => array('bytes_in' => (int)$tr['i'], 'bytes_out' => (int)$tr['o'], 'conns' => (int)$tr['c'], 'requests' => (int)$tr['r'], 'rejected' => (int)$tr['x']),
 		'created_via' => $h['created_via'], 'created_at' => iso($h['created_at']), 'updated_at' => iso($h['updated_at']),
 		'target' => (int)$h['mode'] === 3 ? c64o_target_out((int)$h['id']) : null, 'acl' => c64o_acl_out($h),
-		'mappings' => c64o_mappings_out((int)$h['id']));
+		'mappings' => c64o_mappings_out((int)$h['id']), 'waf' => (int)($h['waf'] ?? 1) === 1, 'ja4' => $h['ja4'] ?? 'block',
+		'protection' => c64o_prot_out(q1("SELECT " . c64o_prot_sum() . " FROM cdn64o_traffic WHERE host_id = :h AND day >= :d", array('h' => $h['id'], 'd' => c64o_since(30)))));
+}
+
+/** Erster Tag eines Zeitraums von $days Tagen (1 = heute). */
+function c64o_since(int $days): string { return date('Y-m-d', strtotime('-' . ($days - 1) . ' days')); }
+
+/** Summen der Schutz-Zaehler fuer SELECT (Namen wie in protection). */
+function c64o_prot_sum(): string { return implode(', ', array_map(fn($k, $c) => "COALESCE(SUM($c), 0) $k", array_keys(C64O_PROT), C64O_PROT)); }
+
+function c64o_prot_out(?array $r): array {
+	$o = array();
+	foreach(array_keys(C64O_PROT) as $k) { $o[$k] = (int)($r[$k] ?? 0); }
+	return $o;
+}
+
+/** JA4 fuer die Server: global 'count' (Startphase) macht aus 'block' des Hosts 'count'. */
+function c64o_ja4_eff(string $v): string {
+	if(!in_array($v, array('off', 'count', 'block'), true)) { $v = 'block'; }
+	return C64O_JA4_GLOBAL === 'count' && $v === 'block' ? 'count' : $v;
 }
 
 /** Portmapper eines Namens (Modus 3 direkt zum Ziel, Modus 1/2 durch den Tunnel zu einem Stream der Node). */
@@ -462,6 +487,30 @@ route('GET', '/cdn64o/stats', function() {
 			array('u' => uid(), 'd' => date('Y-m-d', strtotime('-' . ($days - 1) . ' days'))))));
 });
 
+/** GET /cdn64o/protection?days=1|7|30 (1 = heute): Schutz-Statistik des Accounts – Summen, je Tag, je Name, top 10 JA4. */
+route('GET', '/cdn64o/protection', function() {
+	$v = qp('days', '30');
+	if(!in_array($v, array('1', '7', '30'), true)) { fail(422, 'invalid_parameter', "Query parameter 'days' must be 1, 7 or 30."); }
+	$days = (int)$v; $u = uid(); $from = c64o_since($days);
+	$daily = array();
+	for($i = $days - 1; $i >= 0; $i--) { $d = date('Y-m-d', strtotime("-$i days")); $daily[$d] = array_merge(array('day' => $d), c64o_prot_out(null)); }
+	foreach(qa("SELECT day, " . c64o_prot_sum() . " FROM cdn64o_traffic WHERE userid = :u AND day >= :d GROUP BY day", array('u' => $u, 'd' => $from)) as $r) {
+		if(isset($daily[$r['day']])) { $daily[$r['day']] = array_merge(array('day' => $r['day']), c64o_prot_out($r)); }
+	}
+	$sum = array();
+	foreach(qa("SELECT host_id, " . c64o_prot_sum() . " FROM cdn64o_traffic WHERE userid = :u AND day >= :d GROUP BY host_id", array('u' => $u, 'd' => $from)) as $r) { $sum[(int)$r['host_id']] = $r; }
+	ok(array(
+		'days' => $days,
+		'ja4_global' => C64O_JA4_GLOBAL,
+		'totals' => c64o_prot_out(q1("SELECT " . c64o_prot_sum() . " FROM cdn64o_traffic WHERE userid = :u AND day >= :d", array('u' => $u, 'd' => $from))),
+		'daily' => array_values($daily),
+		'hosts' => array_map(fn($h) => array_merge(array('id' => (int)$h['id'], 'fqdn' => $h['fqdn'], 'mode' => (int)$h['mode']), c64o_prot_out($sum[(int)$h['id']] ?? null)),
+			qa("SELECT id, fqdn, mode FROM cdn64o_hosts WHERE userid = :u ORDER BY fqdn", array('u' => $u))),
+		'ja4_top' => array_map(fn($r) => array('ja4' => $r['ja4'], 'hits' => (int)$r['hits']),
+			qa("SELECT ja4, SUM(hits) hits FROM cdn64o_ja4 WHERE userid = :u AND day >= :d GROUP BY ja4 ORDER BY hits DESC, ja4 LIMIT 10", array('u' => $u, 'd' => $from))),
+	));
+});
+
 /** PUT /cdn64o/hosts/{id}/target {source, target, port, scheme, verify_tls, prefer_ipv6, frontend, cache_mb, cache_minutes}: nur Modus 3. */
 route('PUT', '/cdn64o/hosts/{id}/target', function($p) {
 	$h = c64o_find_host($p['id']);
@@ -534,9 +583,9 @@ route('GET', '/cdn64o/hosts/{id}/events', function($p) {
 		qa("SELECT * FROM cdn64o_events WHERE host_id = :h ORDER BY id DESC LIMIT 100", array('h' => $h['id']))));
 });
 
-/** PATCH /cdn64o/hosts/{id} {mode, tunnels: [ids], paused}. paused: die Server nehmen fuer den Namen nichts mehr an und
+/** PATCH /cdn64o/hosts/{id} {mode, tunnels: [ids], paused, waf, ja4}. paused: die Server nehmen fuer den Namen nichts mehr an und
  * trennen offene Verbindungen; DNS bleibt auf den Servern (die eigene Adresse bleibt verborgen), Einstellungen und
- * Statistik bleiben. */
+ * Statistik bleiben. waf: Muster-WAF (Modus 2/3), ja4: off|count|block (alle Modi, verrechnet mit C64O_JA4_GLOBAL). */
 route('PATCH', '/cdn64o/hosts/{id}', function($p) {
 	global $pdo;
 	$h = c64o_find_host($p['id']);
@@ -556,6 +605,13 @@ route('PATCH', '/cdn64o/hosts/{id}', function($p) {
 		foreach(array_values(array_unique($ids)) as $i => $tid) { q("INSERT INTO cdn64o_host_tunnels (host_id, tunnel_id, priority) VALUES (:h, :t, :p)", array('h' => $h['id'], 't' => $tid, 'p' => $i)); }
 	}
 	if($changed) { c64o_event((int)$h['id'], uid(), 'changed'); }
+	$waf = in_bool('waf'); $ja4 = in_str('ja4', false, 5);
+	if($ja4 !== null AND !in_array($ja4, array('off', 'count', 'block'), true)) { fail(422, 'invalid_field', "Field 'ja4' must be off, count or block.", array('field' => 'ja4')); }
+	if($waf !== null OR $ja4 !== null) {
+		$waf = $waf ?? (int)$h['waf'] === 1; $ja4 = $ja4 ?? $h['ja4'];
+		q("UPDATE cdn64o_hosts set waf = :w, ja4 = :j WHERE id = :h", array('w' => $waf ? 1 : 0, 'j' => $ja4, 'h' => $h['id']));
+		c64o_event((int)$h['id'], uid(), 'waf', 'waf ' . ($waf ? 'on' : 'off') . ', ja4 ' . $ja4);
+	}
 	if(($v = in_bool('paused')) !== null AND $v !== ((int)$h['paused'] === 1)) {
 		q("UPDATE cdn64o_hosts set paused = :p, paused_at = " . ($v ? "NOW()" : "NULL") . " WHERE id = :h", array('p' => $v ? 1 : 0, 'h' => $h['id']));
 		c64o_event((int)$h['id'], uid(), $v ? 'paused' : 'resumed');
@@ -616,13 +672,15 @@ route('GET', '/cdn64o/edge/config', function() {
 	foreach(qa("SELECT host_id, listen_port, transport, target_port FROM cdn64o_mappings ORDER BY transport, listen_port") as $r) {
 		$maps[(int)$r['host_id']][] = array('listen_port' => (int)$r['listen_port'], 'transport' => $r['transport'], 'target_port' => (int)$r['target_port']);
 	}
-	foreach(qa("SELECT id, userid, fqdn, wildcard, mode, status, blocked_reason, paused, acl_default FROM cdn64o_hosts WHERE status IN ('active', 'blocked') ORDER BY fqdn") as $h) {
+	foreach(qa("SELECT id, userid, fqdn, wildcard, mode, status, blocked_reason, paused, acl_default, waf, ja4 FROM cdn64o_hosts WHERE status IN ('active', 'blocked') ORDER BY fqdn") as $h) {
 		$x = array('id' => (int)$h['id'], 'name' => $h['fqdn'], 'wildcard' => (int)$h['wildcard'] === 1, 'mode' => (int)$h['mode'], 'userid' => (int)$h['userid'],
 			'tunnels' => $ht[(int)$h['id']] ?? array(),
 			'blocked' => (int)$h['paused'] === 1 ? 'paused' : ($h['status'] === 'blocked' ? ($h['blocked_reason'] ?: 'blocked') : '')); // Pause: Server sperren, DNS bleibt
 		if((int)$h['mode'] === 3) { $x['target'] = c64o_target_edge((int)$h['id']); }
 		if(isset($maps[(int)$h['id']])) { $x['mappings'] = $maps[(int)$h['id']]; } // Modus 1/2: durch den Tunnel
 		if($h['acl_default'] !== '') { $x['acl'] = array('default' => $h['acl_default'], 'list' => $acl[(int)$h['id']] ?? array()); }
+		$x['waf'] = (int)$h['waf'] === 1; // Muster-WAF (Modus 2/3)
+		$x['ja4'] = c64o_ja4_eff((string)$h['ja4']); // wirksam: mit dem globalen Start-Schalter verrechnet
 		$hosts[] = $x;
 		$users[(int)$h['userid']] = true;
 	}
@@ -646,8 +704,9 @@ route('GET', '/cdn64o/edge/config', function() {
 
 /**
  * POST /cdn64o/edge/report: {version, tunnels: [{id, node, node_version, transport, since}],
- * traffic: [{host_id, bytes_in, bytes_out, conns, rejected}]} – Zaehler seit der letzten Meldung. Danach wird das
- * Traffic-Kontingent der betroffenen Accounts geprueft (hartes Limit: Hosts auf blocked, neuer Monat: wieder frei).
+ * traffic: [{host_id, bytes_in, bytes_out, conns, requests, rejected, blocked_list, blocked_acl, blocked_flood, blocked_waf,
+ * blocked_ja4, ja4_hits, blocked_ips, conns_v4, ja4_top: [{ja4, hits}]}]} – Zaehler seit der letzten Meldung (fehlt = 0). Danach
+ * wird das Traffic-Kontingent der betroffenen Accounts geprueft (hartes Limit: Hosts auf blocked, neuer Monat: wieder frei).
  */
 route('POST', '/cdn64o/edge/report', function() {
 	$e = c64o_edge_auth();
@@ -666,10 +725,26 @@ route('POST', '/cdn64o/edge/report', function() {
 		if($h === null) { continue; }
 		$in = max(0, (int)($t['bytes_in'] ?? 0)); $out = max(0, (int)($t['bytes_out'] ?? 0));
 		$conns = max(0, (int)($t['conns'] ?? 0)); $rej = max(0, (int)($t['rejected'] ?? 0)); $req = max(0, (int)($t['requests'] ?? 0));
-		q("INSERT INTO cdn64o_traffic (host_id, userid, day, bytes_in, bytes_out, conns, requests, rejected) VALUES (:h, :u, :d, :i, :o, :c, :q, :r)
+		$prot = array();
+		foreach(C64O_PROT_COLS as $k) { $prot[$k] = max(0, (int)($t[$k] ?? 0)); } // Schutz-Zaehler (alte Server melden sie nicht)
+		q("INSERT INTO cdn64o_traffic (host_id, userid, day, bytes_in, bytes_out, conns, requests, rejected, " . implode(', ', C64O_PROT_COLS) . ")
+			VALUES (:h, :u, :d, :i, :o, :c, :q, :r, :" . implode(', :', C64O_PROT_COLS) . ")
 			ON DUPLICATE KEY UPDATE bytes_in = bytes_in + VALUES(bytes_in), bytes_out = bytes_out + VALUES(bytes_out), conns = conns + VALUES(conns),
-			requests = requests + VALUES(requests), rejected = rejected + VALUES(rejected)",
-			array('h' => $h['id'], 'u' => $h['userid'], 'd' => $day, 'i' => $in, 'o' => $out, 'c' => $conns, 'q' => $req, 'r' => $rej));
+			requests = requests + VALUES(requests), rejected = rejected + VALUES(rejected), " . implode(', ', array_map(fn($k) => "$k = $k + VALUES($k)", C64O_PROT_COLS)),
+			array_merge(array('h' => $h['id'], 'u' => $h['userid'], 'd' => $day, 'i' => $in, 'o' => $out, 'c' => $conns, 'q' => $req, 'r' => $rej), $prot));
+		// JA4-Treffer: hoechstens C64O_JA4_DAY_MAX verschiedene je Host und Tag, weitere verworfen
+		$top = is_array($t['ja4_top'] ?? null) ? array_slice($t['ja4_top'], 0, C64O_JA4_DAY_MAX) : array();
+		if($top) {
+			$have = array_flip(array_column(qa("SELECT ja4 FROM cdn64o_ja4 WHERE host_id = :h AND day = :d", array('h' => $h['id'], 'd' => $day)), 'ja4'));
+			foreach($top as $j) {
+				if(!is_array($j) OR !is_string($j['ja4'] ?? null) OR !preg_match('/^[a-z0-9_]{1,64}$/', $j['ja4'])) { continue; }
+				$hits = max(0, (int)($j['hits'] ?? 0));
+				if($hits === 0 OR (!isset($have[$j['ja4']]) AND count($have) >= C64O_JA4_DAY_MAX)) { continue; }
+				q("INSERT INTO cdn64o_ja4 (host_id, userid, day, ja4, hits) VALUES (:h, :u, :d, :j, :n) ON DUPLICATE KEY UPDATE hits = hits + VALUES(hits)",
+					array('h' => $h['id'], 'u' => $h['userid'], 'd' => $day, 'j' => $j['ja4'], 'n' => $hits));
+				$have[$j['ja4']] = true;
+			}
+		}
 		$users[(int)$h['userid']] = true;
 	}
 	// Namen, deren Domain es nicht mehr gibt (Domain oder Account auf ipv64.net geloescht): austragen, damit die Server sie

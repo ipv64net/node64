@@ -14,6 +14,7 @@
  *   ipv64_usernames.txt               Benutzernamen (bis 10 000)
  *   ipv64_bad_useragents.txt          User-Agents (bis 2 000)       ipv64_bad_useragents.nginx.map  map $http_user_agent $ipv64_bad_ua
  *   ipv64_attack_paths.txt            Pfade (bis 5 000)             ipv64_attack_paths.nginx.conf   location ~ "^(?:...)$" { return 403; }
+ *   ipv64_ja4.txt                     JA4 fuer die CDN64-Server (bis 1 000, ohne Praefix, abzueglich CDN64_JA4_EXCLUDE, # = Kommentar)
  * Inhalt: hp_sample_top (honeypot/hp_stats_lib.php): 30 Tage, nur ab N Accounts, bereinigt (keine Steuer-/Bidi-Zeichen,
  * keine E-Mail-Adressen, keine zufaelligen/sehr langen Strings, keine Browser-User-Agents, keine Allerweltspfade).
  * Danach: Eintraege in index.json unter "data" (honeypot_lists_index.php) und hp_sample_contrib aelter als 35 Tage loeschen.
@@ -28,6 +29,7 @@ ini_set('memory_limit', '512M');
 const HPL_CONTRIB_KEEP = 35;     // Tage hp_sample_contrib (Schwelle braucht 30)
 const HPL_BATCH        = 10000;  // Zeilen je DELETE
 const HPL_NGINX_TOKEN  = 3000;   // Bytes je regex-location (nginx: hoechstens 4096 je Parameter)
+const CDN64_JA4_EXCLUDE = array(); // JA4 von Browsern und verbreiteten Bibliotheken, die nie auf ipv64_ja4.txt kommen (pflegt Dennis)
 
 $OUT = realpath(__DIR__ . '/../blocklists');
 $dry = false; $extern = false;
@@ -118,8 +120,15 @@ try {
 	$flush();
 	hpl_write("$OUT/ipv64_attack_paths.nginx.conf", $conf);
 
-	printf("Passwoerter %d, Benutzernamen %d, User-Agents %d (map %d), Pfade %d (nginx %d in %d locations)\n",
-		count($top['pass']), count($top['user']), count($top['ua']), $nua, count($top['path']), count($paths), $nloc);
+	// JA4 fuer die CDN64-Server (docs/PLAN-CDN64-SCHUTZ.md): nur ja4:-Eintraege der Rangliste, ohne Praefix
+	$ja4 = array();
+	foreach(hps_top($pdo, 'fp', 1000) as $x) { if(str_starts_with($x['value'], 'ja4:')) { $ja4[substr($x['value'], 4)] = true; } }
+	$ja4 = array_values(array_diff(array_map('strval', array_keys($ja4)), CDN64_JA4_EXCLUDE));
+	hpl_write("$OUT/ipv64_ja4.txt", sprintf($head, 'JA4 TLS fingerprints of attack tools (CDN64)') . "# One JA4 per line, most seen first, from several independent accounts in 30 days\n"
+		. ($ja4 ? implode("\n", $ja4) . "\n" : ''));
+
+	printf("Passwoerter %d, Benutzernamen %d, User-Agents %d (map %d), Pfade %d (nginx %d in %d locations), JA4 %d\n",
+		count($top['pass']), count($top['user']), count($top['ua']), $nua, count($top['path']), count($paths), $nloc, count($ja4));
 
 	if(!$dry AND !$extern) {
 		// index.json: Eintraege unter "data" ersetzen (fehlt sie, kommen sie mit dem naechsten vollen Lauf des Generators hinein)
