@@ -200,16 +200,27 @@ func (s *Server) applyConfig(c *apiConfig) {
 	}
 	s.bw.setLimits(bw)
 	s.mu.Lock()
-	var drop []*tunnel.Peer
+	var drop, over []*tunnel.Peer
 	for id, list := range s.peers {
 		if !s.tunnelAllowed(id) {
 			drop = append(drop, list...)
+			continue
+		}
+		limit := s.sessionsFor(id) // Klasse abgesenkt (z. B. Business 4 -> 2): Verbindungen ueber der Grenze trennen
+		for _, p := range list {
+			if p.Slot >= limit {
+				over = append(over, p)
+			}
 		}
 	}
 	s.mu.Unlock()
 	for _, p := range drop {
 		s.log.Info("tunnel removed or blocked, disconnecting", "tunnel", p.Tunnel)
 		_ = p.Session.Close("tunnel removed")
+	}
+	for _, p := range over { // die Node verbindet den Slot neu, bekommt die Grenze und laesst ihn aus
+		s.log.Info("parallel session over the limit, disconnecting", "tunnel", p.Tunnel, "slot", p.Slot)
+		_ = p.Session.Close("session limit")
 	}
 }
 
