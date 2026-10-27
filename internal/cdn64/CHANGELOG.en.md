@@ -1,5 +1,12 @@
 # Changes – PROXY64
 
+## 1.31.1 – 2026-10-27
+
+### Changed
+- ipv64 blocklists: the v64 Blocklist is now a single list (ipv64.net no longer provides the sub-lists SSH, web,
+  mail, RDP, scanner and research scanner). If a sub-list was enabled, the v64 Blocklist applies now – no gap in
+  protection.
+
 ## 1.31.0 – 2026-10-26
 
 ### New

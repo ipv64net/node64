@@ -42,16 +42,14 @@ func TestParseBlIndexHoneypot(t *testing.T) {
 	if v := by["v64"]; v.Category != blCatHoneypot || v.Name != "v64 Blocklist" || v.Desc != "cdn64.bl.desc.v64" || v.Text == "" {
 		t.Fatalf("v64: %+v", v)
 	}
-	if v := by["v64_ssh"]; v.Name != "v64 SSH" || v.Desc != "cdn64.bl.desc.v64_ssh" {
+	if v := by["v64_ssh"]; v.Name != "v64 SSH" || v.Desc != "" || v.Text != "SSH attackers" { // keine eigene Uebersetzung mehr
 		t.Fatalf("v64_ssh: %+v", v)
 	}
 	if v := by["v64_neu"]; v.Category != blCatHoneypot || v.Desc != "" || v.Text != "Something new" || v.Name != "v64 new" {
 		t.Fatalf("v64_neu: %+v", v)
 	}
-	for _, id := range []string{"v64", "v64_ssh", "v64_web", "v64_mail", "v64_rdp", "v64_scanner", "v64_research"} {
-		if blKnown[id] == "" {
-			t.Errorf("blKnown without %s", id)
-		}
+	if blKnown["v64"] == "" || blKnown["v64_ssh"] != "" {
+		t.Error("blKnown: only v64 of the v64 lists")
 	}
 }
 
@@ -183,6 +181,13 @@ func TestBlocklistLiveToken(t *testing.T) {
 	// Netzfehler mit Token: Token nicht in Fehler, Zustand oder Log
 	if err := e.m.blSetToken(ctx, tokLive); err != nil {
 		t.Fatal(err)
+	}
+	// fruehere Teillisten der v64 Blocklist gelten als die Hauptliste (keine Luecke im Schutz)
+	if err := e.m.core.SetSetting(ctx, setBlocklists, "v64_ssh,v64_web"); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.m.blEnabled(ctx); len(got) != 1 || got[0] != "v64" {
+		t.Fatalf("old sub-lists: %v", got)
 	}
 	if err := e.m.core.SetSetting(ctx, setBlocklists, "v64"); err != nil {
 		t.Fatal(err)

@@ -33,7 +33,7 @@ const (
 )
 
 var (
-	// IDRe: Kennung einer Liste in index.json (v64, v64_ssh, …).
+	// IDRe: Kennung einer Liste in index.json (v64, ai_bots, …).
 	IDRe   = regexp.MustCompile(`^[a-z0-9_]{1,40}$`)
 	fileRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}\.txt$`)
 	// TokenRe: Format der Listen-Token (32 Zeichen, docs/PLAN-NODE64-HONEYPOT64.md Abschnitt 8).

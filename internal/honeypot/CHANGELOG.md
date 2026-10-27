@@ -1,5 +1,11 @@
 # Änderungen – Honeypot64
 
+## 0.14.4 – 2026-10-27
+
+### Geändert
+- Firewall-Helfer (Modus ohne Oberfläche): Die v64 Blocklist ist nur noch eine Liste; frühere Teillisten in
+  `NODE64_FIREWALL_LISTS` (z. B. `v64_ssh`) gelten als `v64`.
+
 ## 0.14.3 – 2026-10-27
 
 ### Behoben

@@ -769,12 +769,6 @@
         "gcp": "Google Cloud customer networks: blocks bots and scanners from data centers",
         "cloudflare": "Cloudflare networks: do not enable if a host is behind Cloudflare",
         "v64": "Attackers reported by the community's ipv64 honeypots, across all services",
-        "v64_ssh": "Attackers on SSH and Telnet from the ipv64 honeypots",
-        "v64_web": "Attackers on web servers (exploits, login attempts) from the ipv64 honeypots",
-        "v64_mail": "Attackers on mail servers (SMTP, IMAP, POP3) from the ipv64 honeypots",
-        "v64_rdp": "Attackers on remote desktop (RDP, VNC) from the ipv64 honeypots",
-        "v64_scanner": "Port scanners probing the ipv64 honeypots",
-        "v64_research": "Research and search engine scanners (e.g. Shodan, Censys): also blocks harmless indexing",
         "ai_bots": "official networks of AI crawlers (OpenAI, Perplexity, Common Crawl, Mistral, Google-Agent), including user fetchers such as ChatGPT-User"
       },
       "cat": {
