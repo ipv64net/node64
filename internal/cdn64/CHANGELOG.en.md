@@ -3,8 +3,10 @@
 ## 1.34.2 – 2026-10-27
 
 ### Fixed
-- Proxy host list: domains and target wrapped character by character when the neighbouring columns held many buttons
-  and badges. They now wrap at word boundaries only; if the width is not enough, the table scrolls sideways.
+- Proxy host list: the neighbouring columns squeezed domains and target to one character wide, so they wrapped
+  character by character. They now keep a minimum width. So that the table fits common screen widths (around
+  1440 pixels) without scrolling sideways, the healthcheck badges, the CDN64 details, the traffic (↓/↑) and the buttons
+  at the end of the row may wrap to a second line.
 
 ## 1.34.1 – 2026-10-27
 

@@ -3,9 +3,10 @@
 ## 1.34.2 – 2026-10-27
 
 ### Behoben
-- Liste der Proxy-Hosts: Domains und Ziel brachen bei vielen Knöpfen und Hinweisen in den Nachbarspalten Zeichen für
-  Zeichen um. Sie brechen jetzt nur noch an Wortgrenzen um; reicht die Breite nicht, lässt sich die Tabelle seitlich
-  schieben.
+- Liste der Proxy-Hosts: Domains und Ziel wurden von den Nachbarspalten auf ein Zeichen Breite gedrückt und brachen
+  Zeichen für Zeichen um. Sie behalten jetzt eine Mindestbreite. Damit die Tabelle bei üblichen Bildschirmbreiten
+  (etwa 1440 Pixel) ohne seitliches Schieben passt, dürfen die Healthcheck-Abzeichen, die Angaben zu CDN64, der
+  Datenverkehr (↓/↑) und die Knöpfe am Zeilenende in eine zweite Zeile umbrechen.
 
 ## 1.34.1 – 2026-10-27
 
