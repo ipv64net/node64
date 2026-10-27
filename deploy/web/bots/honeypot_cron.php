@@ -24,6 +24,7 @@ const HPC_JOBS = array(
 	'weekly'  => array('5', '*',      '../weekly_report/cron.php',         '', null), // Wochenbericht, verteilt ueber die Woche (6–21 Uhr)
 	'cdn64old' => array('23', '*',    'cdn64_orphans.php',                 '', null), // CDN64: Tunnel 14 Tage ohne Verbindung entfernen
 	'live'    => array('*/2', '*',    'honeypot_live.php',                 '', null), // Live-Karte: honeypot/live.json (letzte Stunde)
+	'hc2fix'  => array('*/10', '*',   'hc2_single_repair.php',             '', null), // Docker/Proxmox nie online: zurueck auf ihre Node
 );
 
 function hpc_match(string $spec, int $v): bool {

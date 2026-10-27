@@ -38,7 +38,8 @@ $revokeHub = function(string $nid, bool $keep) use ($pdo, $uid): string {
 		$rest = array_values(array_diff(hc2_check_nodes($c), array($nid)));
 		if ($rest) { hc2_set_check($uid, $c['token'], array('nodes' => implode(',', $rest), 'node_id' => (string)$c['node_id'] === $nid ? $rest[0] : $c['node_id'])); $moved++; continue; }
 		$acc = hc2_account($uid); $locs = array_filter(explode(',', $c['locations'])) ?: array_keys(hc2_locations());
-		$fits = $keep && !hc2_private_target($c['type'], $c['target']) && ($acc['healthcheck_limit'] <= 0 || hc2_online_used($uid, $c['token']) + count($locs) <= $acc['healthcheck_limit']);
+		// Docker/Proxmox nie online (Ziel ist ein Container bzw. Gast der Node, kein Netzziel): mit der Node geloescht
+		$fits = $keep && !hc2_single_node_type($c['type']) && !hc2_private_target($c['type'], $c['target']) && ($acc['healthcheck_limit'] <= 0 || hc2_online_used($uid, $c['token']) + count($locs) <= $acc['healthcheck_limit']);
 		if ($fits) { hc2_set_check($uid, $c['token'], array('execution' => 'online', 'node_id' => null, 'nodes' => '')); $kept++; } else { hc2_delete_check($uid, $c['token']); $dropped++; }
 	}
 	return ($moved ? $moved . ' Check(s) messen andere Nodes weiter. ' : '') . ($keep ? $kept . ' Check(s) laufen online weiter, ' . $dropped . ' gelöscht (privates Ziel oder Limit).' : $dropped . ' Check(s) der Node gelöscht.');

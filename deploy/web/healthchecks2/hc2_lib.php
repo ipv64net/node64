@@ -155,7 +155,7 @@ function hc2_check_nodes(array $c): array {
 	return $l;
 }
 /** Docker-Checks gehoeren zur Node mit dem Container; Push-Checks sind frei zuordenbar. */
-function hc2_single_node_type(string $type): bool { return $type === 'docker'; }
+function hc2_single_node_type(string $type): bool { return $type === 'docker' || $type === 'proxmox'; } // nur auf Nodes, nie online
 function hc2_same_list(array $a, array $b): bool { sort($a); sort($b); return array_values($a) === array_values($b); }
 function hc2_nodes_label(array $nodes, array $ids): string {
 	$o = array(); foreach ($ids as $id) { $o[] = hc2_node_label($nodes, $id) ?: 'Node'; }
@@ -542,16 +542,16 @@ function hc2_validate_check(array $in, int $userid, ?array $old): array {
 	if ($execution !== 'online') {
 		foreach ($nodeSel as $nid) { if (!isset($nodes[$nid])) { $err[] = 'Eine gewählte Node ist nicht (mehr) verknüpft.'; break; } }
 		if (!$nodeSel) { $err[] = 'Für lokale oder hybride Messung mindestens eine verbundene Node wählen.'; }
-		if (hc2_single_node_type($type) && count($nodeSel) > 1) { $err[] = 'Docker-Checks gehören zu genau einer Node (der mit dem Container).'; }
+		if (hc2_single_node_type($type) && count($nodeSel) > 1 && !($old && hc2_same_list(hc2_check_nodes($old), $nodeSel))) { $err[] = 'Docker- und Proxmox-Checks gehören zu ihrer Node (weitere Nodes nur über den Cluster in Node64).'; }
 		$nodeId = ($old && in_array((string)$old['node_id'], $nodeSel, true)) ? (string)$old['node_id'] : (string)($nodeSel[0] ?? '');
-		if ($type === 'docker' && $old && !empty($old['node_id']) && $nodeId !== (string)$old['node_id']) { $err[] = 'Docker-Checks gehören zur Node, auf der der Container läuft, und sind nicht umhängbar.'; }
+		if (hc2_single_node_type($type) && $old && !empty($old['node_id']) && $nodeId !== (string)$old['node_id']) { $err[] = 'Docker- und Proxmox-Checks gehören zu ihrer Node und sind nicht umhängbar.'; }
 	}
 	$sel = array(); foreach ((array)($in['locations'] ?? array_keys($locs)) as $l) { if (isset($locs[$l]) && !in_array($l, $sel, true)) { $sel[] = $l; } }
 	if (!$sel) { $sel = array_keys($locs); }
 	if (count($sel) > $acc['hc_locations']) { $sel = array_slice($sel, 0, $acc['hc_locations']); }
 	$policy = (string)($in['policy'] ?? 'all'); if (!in_array($policy, array('all','any','majority'), true)) { $policy = 'all'; }
-	if ($type === 'docker' && $execution !== 'local') { $err[] = 'Docker-Checks laufen nur lokal auf einer Node und sind nicht umhängbar.'; }
-	if ($execution !== 'local' && $type !== 'docker') {
+	if (hc2_single_node_type($type) && $execution !== 'local') { $err[] = 'Docker- und Proxmox-Checks laufen nur lokal auf ihrer Node, nie online.'; }
+	if ($execution !== 'local' && !hc2_single_node_type($type)) {
 		if (hc2_private_target($type, $target)) { $err[] = 'Online-Checks können keine privaten Ziele prüfen (Heimnetz, localhost, .local). Dafür eine Node nutzen.'; }
 		if ($type === 'dns' && hc2_dns_needs_node($p)) { $err[] = 'Ein DNS-Server im Heimnetz und „zeigt auf die öffentliche IP“ gehen nur lokal auf einer Node.'; }
 		$used = hc2_online_used($userid, $old['token'] ?? '');
@@ -670,7 +670,7 @@ function hc2_testrun_create(int $userid, array $c, string $target, $nodeIds, arr
 	$acc = hc2_account($userid); $nodes = hc2_nodes($userid);
 	$ids = array(); foreach ((array)$nodeIds as $x) { $x = (string)$x; if ($x !== '' && !in_array($x, $ids, true)) { $ids[] = $x; } }
 	if (!in_array($target, array('local','online','both'), true)) { return array('id' => 0, 'error' => 'Ungültiger Ausführungsort.'); }
-	if ($c['type'] === 'docker') { return array('id' => 0, 'error' => 'Docker-Checks laufen nur lokal auf ihrer Node und sind nicht umhängbar.'); }
+	if (hc2_single_node_type($c['type'])) { return array('id' => 0, 'error' => 'Docker- und Proxmox-Checks laufen nur lokal auf ihrer Node und sind nicht umhängbar.'); }
 	$nodeId = null;
 	if ($target !== 'online') {
 		if (!$ids) { return array('id' => 0, 'error' => 'Keine Node gewählt.'); }
