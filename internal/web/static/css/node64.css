@@ -134,8 +134,9 @@ a { color: var(--bs-primary); }
 
 /* Logs */
 .logbox { max-height: 70vh; overflow: auto; white-space: pre-wrap; word-break: break-all; background: var(--bs-tertiary-bg); }
-/* Tabellenzelle: nur an Wortgrenzen umbrechen, damit nowrap-Nachbarspalten sie nicht auf ein Zeichen Breite druecken (text-break erlaubt das) */
-.cell-wrap { overflow-wrap: break-word; word-break: normal; }
+/* Tabellenzelle mit langen Namen/URLs: bricht ueberall um, die Mindestbreite setzt der Tabellenkopf (min-width), damit
+   nowrap-Nachbarspalten sie nicht auf ein Zeichen Breite druecken */
+.cell-wrap { overflow-wrap: anywhere; word-break: normal; }
 
 /* Tabellen werden auf kleinen Bildschirmen zu Karten */
 @media (max-width: 767.98px) {
