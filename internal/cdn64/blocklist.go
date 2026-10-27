@@ -322,6 +322,7 @@ func (m *Module) blRefresh(ctx context.Context) {
 	if err := m.blFetchIndex(ctx); err != nil && ctx.Err() == nil {
 		m.log.Warn("cdn64 blocklist index not loaded", "err", err)
 	}
+	m.blAutoToken(ctx) // Live-Fassung der v64 Blocklist ohne Token von Hand
 	for _, id := range m.blEnabled(ctx) {
 		if err := m.blFetch(ctx, id); err != nil && ctx.Err() == nil {
 			m.log.Warn("cdn64 blocklist not loaded", "list", id, "err", err)

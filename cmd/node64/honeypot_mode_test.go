@@ -590,7 +590,7 @@ func TestHPInfoFirewall(t *testing.T) {
 	h.fw = &fakeFW{st: firewall.Status{Mode: "nftables", Active: true, V4: 12, V6: 3, Addresses4: 40, Updated: time.Now(), Changed: time.Now(), Allow: 2,
 		Lists: []firewall.ListStatus{{ID: "v64", Edition: "live", Entries: 15}, {ID: "v64_ssh", Edition: "daily", LiveDenied: true, Entries: 4}}}}
 	body = hpDo(h, "GET", "/", "127.0.0.1:1", map[string]string{"Accept-Language": "de"}).Body.String()
-	for _, s := range []string{"nftables inet node64", "IPv4 12 (40 Adressen) · IPv6 3", "live · 15", "Token ohne Berechtigung", "Tagesstand (ohne NODE64_IPV64_LIST_TOKEN)",
+	for _, s := range []string{"nftables inet node64", "IPv4 12 (40 Adressen) · IPv6 3", "live · 15", "Token ohne Berechtigung", "Tagesstand (kein Listen-Token)",
 		"beim Beenden gelöscht"} {
 		if !strings.Contains(body, s) {
 			t.Errorf("page lacks %q", s)

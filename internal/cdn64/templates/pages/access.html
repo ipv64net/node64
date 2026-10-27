@@ -39,7 +39,7 @@
 			<input class="form-control font-monospace" type="password" id="bl-token" name="token" autocomplete="new-password" maxlength="64" placeholder="{{if $d.BL.TokenSet}}••••••••••••••••{{else}}{{.T "cdn64.bl.token_placeholder"}}{{end}}">
 			{{if $d.BL.TokenSet}}<button class="btn btn-outline-danger" type="submit" form="bl-token-delete" data-confirm="{{.T "cdn64.bl.token_delete_confirm"}}" title="{{.T "common.delete"}}"><i class="bi bi-trash"></i></button>{{end}}
 		</div>
-		<div class="form-text">{{if $d.BL.TokenSet}}<span class="text-success"><i class="bi bi-check-circle"></i> {{.T "cdn64.bl.token_set"}}</span> {{end}}{{.T "cdn64.bl.token_hint"}}</div>
+		<div class="form-text">{{if $d.BL.TokenSet}}<span class="text-success"><i class="bi bi-check-circle"></i> {{.T "cdn64.bl.token_set"}}</span> {{else if $d.BL.TokenAuto}}<span class="text-success"><i class="bi bi-check-circle"></i> {{.T "cdn64.bl.token_auto"}}</span> {{end}}{{.T "cdn64.bl.token_hint"}}</div>
 	</div>
 	<div class="card-footer d-flex gap-2">
 		<button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-shield-check"></i> {{.T "common.save"}}</button>

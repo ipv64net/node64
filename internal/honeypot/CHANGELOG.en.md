@@ -1,5 +1,12 @@
 # Changes – Honeypot64
 
+## 0.14.5 – 2026-10-27
+
+### New
+- Firewall helper (mode without web interface): without `NODE64_IPV64_LIST_TOKEN`, Node64 fetches the list token at
+  start with `NODE64_IPV64_KEY`. Entitled accounts (contributors and all plans except Standard) automatically get the
+  live version of the v64 Blocklist, others the daily list.
+
 ## 0.14.4 – 2026-10-27
 
 ### Changed

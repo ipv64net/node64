@@ -1,5 +1,13 @@
 # Änderungen – PROXY64
 
+## 1.32.0 – 2026-10-27
+
+### Neu
+- v64 Blocklist live ohne Handarbeit: Ist kein Listen-Token von Hand eingetragen, holt PROXY64 es selbst über den
+  zentralen ipv64-API-Key (nur wenn die Liste „ipv64 Honeypot“ eingeschaltet ist). Wer berechtigt ist (Beitragende und
+  alle Klassen außer Standard), bekommt damit automatisch die Live-Fassung, sonst den Tagesstand; ändert sich die
+  Klasse, wechselt die Fassung beim nächsten Abruf von selbst. Ein Token von Hand geht weiter vor.
+
 ## 1.31.1 – 2026-10-27
 
 ### Geändert

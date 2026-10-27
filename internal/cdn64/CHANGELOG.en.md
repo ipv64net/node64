@@ -1,5 +1,13 @@
 # Changes – PROXY64
 
+## 1.32.0 – 2026-10-27
+
+### New
+- v64 Blocklist live without manual steps: if no list token is entered by hand, PROXY64 fetches it itself with the
+  central ipv64 API key (only when the "ipv64 Honeypot" list is enabled). Entitled accounts (contributors and all plans
+  except Standard) automatically get the live version, others the daily list; when the plan changes, the version
+  switches by itself with the next fetch. A token entered by hand still takes precedence.
+
 ## 1.31.1 – 2026-10-27
 
 ### Changed
