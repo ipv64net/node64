@@ -128,3 +128,49 @@ func TestParallelSessionsDefaultOne(t *testing.T) {
 		t.Fatalf("sessions: server %d, node %+v", n, st)
 	}
 }
+
+// Klasse abgesenkt (z. B. Business 4 -> 2): der Server trennt die Verbindungen ueber der neuen Grenze, die Node
+// laesst die Slots danach aus.
+func TestParallelSessionsLowered(t *testing.T) {
+	cf, kf, pool, _ := testCA(t, "edge.test")
+	tok := "node-token"
+	cfg := &Config{Name: "B", ListenHTTP: freeAddr(t), TunnelListen: freeAddr(t), TLSCert: cf, TLSKey: kf, DataDir: t.TempDir()}
+	b := startEdge(t, cfg, pool)
+	b.applyConfig(&apiConfig{Tunnels: []apiTunnel{{ID: "t1", TokenSHA256: sha256hex(tok), Sessions: 3}}})
+	node := tunnel.NewClient(tunnel.ClientConfig{Tunnel: "t1", Token: tok, RootCAs: pool, Sessions: 3,
+		Edges:   []tunnel.Edge{{Name: "B", Host: "127.0.0.1", Port: port(cfg.TunnelListen)}},
+		Handler: func(st tunnel.Stream, _ tunnel.Header) { _ = st.Close() }})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go node.Run(ctx)
+	n := func() int {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		return len(b.peers["t1"])
+	}
+	for i := 0; i < 200 && n() < 3; i++ {
+		time.Sleep(25 * time.Millisecond)
+	}
+	if n() != 3 {
+		t.Fatalf("sessions before: %d, want 3", n())
+	}
+	b.applyConfig(&apiConfig{Tunnels: []apiTunnel{{ID: "t1", TokenSHA256: sha256hex(tok), Sessions: 1}}})
+	for i := 0; i < 200 && n() != 1; i++ {
+		time.Sleep(25 * time.Millisecond)
+	}
+	for i := 0; i < 300; i++ { // die Node versucht die getrennten Slots neu (nach ihrer Wartezeit) und laesst sie aus
+		if st := node.Status(); len(st) == 1 && st[0].Wanted == 1 {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	b.mu.Lock()
+	list := append([]*tunnel.Peer(nil), b.peers["t1"]...)
+	b.mu.Unlock()
+	if len(list) != 1 || list[0].Slot != 0 {
+		t.Fatalf("sessions after lowering: %d", len(list))
+	}
+	if st := node.Status(); len(st) != 1 || st[0].Sessions != 1 || st[0].Wanted != 1 || !st[0].Connected {
+		t.Fatalf("node status: %+v", st)
+	}
+}
