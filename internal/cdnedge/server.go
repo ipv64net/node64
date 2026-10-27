@@ -49,6 +49,8 @@ type Server struct {
 	live       liveConns                 // offene Verbindungen je Name (live.go)
 	stats      *stats                    // je Name
 	guard      *guard                    // grober Schutz
+	peeking    atomic.Int64              // Blocklisten-Treffer, die gerade ihren Namen lesen (blockedPeek)
+	ja4List    atomic.Pointer[ja4Set]    // JA4 aus Honeypot64 (ja4.go)
 	local      *chanListener             // Port 80 ohne bekannten Namen -> eigene Seite
 	own        *chanListener             // Port 443 des eigenen Namens ohne Tunnel-ALPN (Browser) -> Infoseite
 	ownSrv     *http.Server              // Infoseite fuer own
@@ -75,7 +77,7 @@ type Server struct {
 func New(cfg *Config, log *slog.Logger, version string) *Server {
 	s := &Server{cfg: cfg, log: log, version: version, started: time.Now(), peers: map[string][]*tunnel.Peer{},
 		stats: &stats{m: map[string]*hostStat{}}, guard: newGuard(cfg.Shield), local: newChanListener(&net.TCPAddr{}),
-		apist: &apiState{sent: map[string][5]int64{}, client: &http.Client{Timeout: 30 * time.Second}}, bw: newBandwidth()}
+		apist: &apiState{sent: map[string][repN]int64{}, client: &http.Client{Timeout: 30 * time.Second}}, bw: newBandwidth()}
 	s.routes.Store(newRoutes(cfg.Hosts, nil))
 	s.certs = newCertStore(filepath.Join(cfg.DataDir, "certs"))
 	s.cache = newRespCache(filepath.Join(cfg.DataDir, "cache"), cfg.CacheTotalMB)
@@ -113,10 +115,11 @@ func (s *Server) Run(ctx context.Context) error {
 	s.log.Info("cdn64-edge listening", "http", ln.Addr().String(), "name", s.cfg.Name, "version", s.version)
 	errc := make(chan error, 2)
 	go func() { errc <- s.http.Serve(s.local) }()
-	go s.acceptLoop(ln, s.handle80)
+	go s.acceptLoop(ln, s.handle80, peek80)
 	bctx, bcancel := context.WithCancel(ctx)
 	defer bcancel()
 	go s.blocklistLoop(bctx)
+	go s.ja4Loop(bctx)
 	s.termInit()
 	go s.certLoop(bctx)
 	go s.apiLoop(bctx)
@@ -173,7 +176,7 @@ func (s *Server) Run(ctx context.Context) error {
 			return err
 		}
 		s.lns = append(s.lns, l)
-		go s.acceptLoop(l, s.handle443)
+		go s.acceptLoop(l, s.handle443, peek443)
 		s.log.Info("visitors listening", "https", l.Addr().String(), "hosts", len(s.cfg.Hosts))
 	}
 	if s.cfg.PeerListen != "" {

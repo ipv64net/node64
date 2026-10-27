@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/ipv64net/node64/internal/fingerprint"
 )
 
 // fpU16 haengt eine Liste von 16-Bit-Werten an.
@@ -91,7 +93,7 @@ func TestJA4SpecVector(t *testing.T) {
 	// t13d1516h2_002f,…,cca9_0005,000a,000b,000d,0012,0015,0017,001b,0023,002b,002d,0033,4469,ff01_0403,…,0601
 	const want = "t13d1516h2_8daaf6152771_e5627efa2ab1"
 	hello := fpClientHello(true, [][]byte{[]byte("h2"), []byte("http/1.1")})
-	if got := sensorJA4(hello); got != want {
+	if got := fingerprint.JA4(hello); got != want {
 		t.Fatalf("JA4 %q, erwartet %q", got, want)
 	}
 	// ein Record, auf zwei Records verteilt, byteweise mitgeschnitten
@@ -116,21 +118,10 @@ func TestJA4SpecVector(t *testing.T) {
 
 func TestJA4Variants(t *testing.T) {
 	// ohne SNI und ALPN: "i", "00"; Extensions-Zahl ohne die beiden
-	if got := sensorJA4(fpClientHello(false, nil)); got != "t13i151400_8daaf6152771_e5627efa2ab1" {
+	if got := fingerprint.JA4(fpClientHello(false, nil)); got != "t13i151400_8daaf6152771_e5627efa2ab1" {
 		t.Fatalf("ohne SNI/ALPN: %q", got)
 	}
-	// ALPN-Zeichen
-	for in, want := range map[string]string{"http/1.1": "h1", "h": "hh", "\xab\xcd": "ad", "x\x01": "71", "": "00"} {
-		if got := fpALPN([]byte(in)); got != want {
-			t.Fatalf("ALPN %q: %q, erwartet %q", in, got, want)
-		}
-	}
-	if !fpGrease(0x0a0a) || !fpGrease(0xfafa) || fpGrease(0x0a1a) || fpGrease(0x1301) {
-		t.Fatal("GREASE")
-	}
-	if fpCount(5) != "05" || fpCount(150) != "99" || fpTLSVersion(0x0303) != "12" || fpTLSVersion(1) != "00" {
-		t.Fatal("Hilfen")
-	}
+	// ALPN-Zeichen, GREASE und Hilfen: Tests in internal/fingerprint
 	// kaputt oder kein ClientHello: kein Fingerabdruck, kein Warten
 	for _, b := range [][]byte{
 		{0x16, 3, 1, 0, 4, 2, 0, 0, 0},         // ServerHello

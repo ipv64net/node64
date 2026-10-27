@@ -72,7 +72,7 @@ func TestAPIConfigAndReport(t *testing.T) {
 	defer hs.Close()
 	dir := t.TempDir()
 	cfg := &Config{Name: "B", ListenHTTP: freeAddr(t), ListenHTTPS: freeAddr(t), TunnelListen: freeAddr(t), TLSCert: cf, TLSKey: kf,
-		DataDir: dir, APIURL: hs.URL, APISecret: api.secret}
+		DataDir: dir, APIURL: hs.URL, APISecret: api.secret, Shield: ShieldConfig{BlocklistBase: hs.URL + "/blocklists/"}}
 	s := startEdge(t, cfg, pool)
 	for i := 0; i < 100 && s.apiCfg.Load() == nil; i++ {
 		time.Sleep(20 * time.Millisecond)

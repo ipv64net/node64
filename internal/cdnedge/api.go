@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -54,6 +55,8 @@ type apiHost struct {
 	Target   *apiTarget   `json:"target,omitempty"`   // Modus 3
 	ACL      *apiACL      `json:"acl,omitempty"`      // Erlauben-/Sperrliste (alle Modi)
 	Mappings []apiMapping `json:"mappings,omitempty"` // Portmapper (Modus 3 direkt, Modus 1/2 durch den Tunnel)
+	WAF      *bool        `json:"waf,omitempty"`      // Muster-WAF in Modus 2/3 (fehlt = an)
+	JA4      string       `json:"ja4,omitempty"`      // off | count | block (fehlt = count)
 }
 
 type apiState struct {
@@ -61,7 +64,7 @@ type apiState struct {
 	etag    string
 	lastOK  time.Time
 	lastErr string
-	sent    map[string][5]int64 // je Name zuletzt gemeldet: in, out, conns, requests, rejected
+	sent    map[string][repN]int64 // je Name zuletzt gemeldet (hostStat.counters)
 	client  *http.Client
 }
 
@@ -221,16 +224,21 @@ func (s *Server) forgetGone(rs *routes) {
 	for _, e := range rs.wild {
 		keep[e.Name] = true
 	}
+	gone := map[*hostStat]bool{}
 	s.stats.mu.Lock()
 	s.apist.mu.Lock()
-	for n := range s.stats.m {
+	for n, st := range s.stats.m {
 		if !keep[n] {
+			gone[st] = true // mit ihm die gesperrten IPs und JA4-Treffer seit der letzten Meldung
 			delete(s.stats.m, n)
 			delete(s.apist.sent, n)
 		}
 	}
 	s.apist.mu.Unlock()
 	s.stats.mu.Unlock()
+	if len(gone) > 0 { // Ueberlast nicht mehr bei vergessenen Namen zaehlen
+		s.guard.forget(gone)
+	}
 }
 
 // tunnelAllowed: Tunnel ist in der festen Konfiguration oder bei ipv64 (nicht gesperrt).
@@ -260,6 +268,21 @@ func (s *Server) apiReport(ctx context.Context) {
 		Conns    int64 `json:"conns"`
 		Requests int64 `json:"requests,omitempty"` // Modus 2
 		Rejected int64 `json:"rejected,omitempty"` // Modus 2: Anfrage-Limit
+		// Schutz (0.19.0): Differenzen bzw. Werte des Intervalls
+		BlockedList  int64      `json:"blocked_list,omitempty"`
+		BlockedACL   int64      `json:"blocked_acl,omitempty"`
+		BlockedFlood int64      `json:"blocked_flood,omitempty"`
+		BlockedWAF   int64      `json:"blocked_waf,omitempty"`
+		BlockedJA4   int64      `json:"blocked_ja4,omitempty"`
+		JA4Hits      int64      `json:"ja4_hits,omitempty"`
+		BlockedIPs   int64      `json:"blocked_ips,omitempty"` // verschiedene gesperrte IPs (IPv6 je /64)
+		ConnsV4      int64      `json:"conns_v4,omitempty"`
+		JA4Top       []ja4Entry `json:"ja4_top,omitempty"`
+	}
+	type sets struct {
+		st  *hostStat
+		ips map[netip.Addr]struct{}
+		ja4 map[string]int64
 	}
 	type tun struct {
 		ID          string `json:"id"`
@@ -274,8 +297,17 @@ func (s *Server) apiReport(ctx context.Context) {
 			ids[e.Name] = e.HostID
 		}
 	}
-	now := map[string][5]int64{}
+	now := map[string][repN]int64{}
 	var list []traffic
+	var taken []sets // gesperrte IPs und JA4-Treffer: bei einem Fehler zurueck (naechste Meldung)
+	ok := false
+	defer func() {
+		if !ok {
+			for _, x := range taken {
+				x.st.putSets(x.ips, x.ja4)
+			}
+		}
+	}()
 	s.stats.mu.Lock()
 	s.apist.mu.Lock()
 	for name, st := range s.stats.m {
@@ -283,14 +315,20 @@ func (s *Server) apiReport(ctx context.Context) {
 		if id == 0 {
 			continue
 		}
-		cur := [5]int64{st.BytesIn.Load(), st.BytesOut.Load(), st.Conns.Load(), st.Requests.Load(), st.Rejected.Load()}
+		cur := st.counters()
 		last := s.apist.sent[name]
-		var d [5]int64
+		var d [repN]int64
 		for i := range cur {
 			d[i] = cur[i] - last[i]
 		}
-		if d != [5]int64{} {
-			list = append(list, traffic{HostID: id, BytesIn: d[0], BytesOut: d[1], Conns: d[2], Requests: d[3], Rejected: d[4]})
+		ips, ja4 := st.takeSets()
+		if len(ips) > 0 || len(ja4) > 0 {
+			taken = append(taken, sets{st, ips, ja4})
+		}
+		if d != [repN]int64{} || len(ips) > 0 || len(ja4) > 0 {
+			list = append(list, traffic{HostID: id, BytesIn: d[0], BytesOut: d[1], Conns: d[2], Requests: d[3], Rejected: d[4],
+				BlockedList: d[5], BlockedACL: d[6], BlockedFlood: d[7], BlockedWAF: d[8], BlockedJA4: d[9], JA4Hits: d[10],
+				ConnsV4: d[11], BlockedIPs: int64(len(ips)), JA4Top: ja4Top(ja4)})
 		}
 		now[name] = cur
 	}
@@ -321,6 +359,7 @@ func (s *Server) apiReport(ctx context.Context) {
 		} `json:"data"`
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&out)
+	ok = true
 	s.apist.mu.Lock()
 	for k, v := range now {
 		s.apist.sent[k] = v

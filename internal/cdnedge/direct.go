@@ -230,7 +230,7 @@ func (s *Server) directDial(ctx context.Context, _, _ string) (net.Conn, error) 
 			last = errBadTarget
 			continue
 		}
-		st.Conns.Add(1)
+		st.conn(tq.ip)
 		return &termConn{Conn: c, st: st, bw: s.bw, uid: tq.re.UserID, noOut: true}, nil // Antwort zaehlt outCounter
 	}
 	st.NoTunnel.Add(1)
