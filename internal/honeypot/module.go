@@ -38,7 +38,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.14.6"
+	version = "0.15.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -71,6 +71,8 @@ type ModuleConfig struct {
 	NotifyNew     bool  `json:"notify_new"`       // Benachrichtigung bei neuen Angreifern (Standard aus)
 	Report        bool  `json:"report"`           // Meldung an ipv64 (Standard an; wirkt erst mit dem zentralen API-Key)
 	Expert        bool  `json:"expert,omitempty"` // Oberflaeche im Expertenmodus (alle Einstellungen); sonst einfacher Modus
+	// Erkannte Angreifer nicht lokal in PROXY64 sperren (Standard: sperren, auch ohne Meldung an ipv64)
+	NoLocalBlock bool `json:"no_local_block,omitempty"`
 	// Standort des Sensors fuer die Live-Karte (ISO 3166-1, "" = automatisch aus der oeffentlichen IPv4); geht mit
 	// der Meldung an ipv64 (Ziel der Portal-Live-Karte), nicht in die Bewertung
 	Country string `json:"country,omitempty"`
@@ -296,6 +298,7 @@ func (m *Module) applyLocked(ctx context.Context) {
 	}
 	cfg := m.loadConfig(ctx)
 	hpbridge.SetWanted(cfg.Profile == ProfileProxy) // PROXY64 gibt dann seine unzuordenbaren/schaedlichen Anfragen ab
+	hpbridge.SetBlockWanted(!cfg.NoLocalBlock)      // PROXY64 sperrt erkannte Angreifer lokal (Sofort-Sperre)
 	m.st.SetLimits(time.Duration(cfg.RetentionDays)*24*time.Hour, cfg.MaxEvents)
 	svcs, warns := m.resolve(ctx, cfg)
 	run := cfg.Config

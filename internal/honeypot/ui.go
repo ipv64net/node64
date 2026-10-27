@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/geoip"
+	"github.com/ipv64net/node64/internal/hpbridge"
 	"github.com/ipv64net/node64/internal/module"
 )
 
@@ -285,6 +286,7 @@ type settingsData struct {
 	MinEvents int
 	MaxEvents int
 	KeySet    bool         // zentraler ipv64-API-Key eingetragen (sonst Meldung an ipv64 gesperrt)
+	Proxy64   bool         // PROXY64 laeuft (nimmt die Sofort-Sperre ab)
 	Report    ReportStatus // Zustand der Meldung an ipv64
 
 	// Einfacher Modus: Vorlagen mit den Ports, die im Router weiterzuleiten sind, und Startseite der Web-Falle
@@ -506,6 +508,7 @@ func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, err
 	d.Syslog, d.LogLines, d.LogEvents = ls.Syslog, ls.Lines, ls.Events
 	_, key := m.api(r.Context())
 	d.KeySet, d.Report = key != "", m.rep.Status(r.Context())
+	d.Proxy64 = hpbridge.Blockers()
 	catf := catFormFrom(effectiveServices(c))
 	catf.withPersonas(c.Personas)
 	if cf != nil {
@@ -571,6 +574,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 		c.StartPage = r.PostFormValue("start_page")
 		c.Country = r.PostFormValue("country")
 		c.NotifyNew = r.PostFormValue("notify_new") != ""
+		c.NoLocalBlock = r.PostFormValue("local_block") == ""
 		if key != "" { // ohne Key ist der Schalter gesperrt und kommt nicht mit
 			c.Report = r.PostFormValue("report") != ""
 		}
@@ -607,6 +611,9 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	}
 	c.Scan = r.PostFormValue("scan") != ""
 	c.NotifyNew = r.PostFormValue("notify_new") != ""
+	if r.PostFormValue("local_block_form") != "" { // Sofort-Sperre in PROXY64 (nur mit diesem Teil des Formulars)
+		c.NoLocalBlock = r.PostFormValue("local_block") == ""
+	}
 	if key != "" { // ohne Key ist der Schalter gesperrt und kommt nicht mit
 		c.Report = r.PostFormValue("report") != ""
 	}

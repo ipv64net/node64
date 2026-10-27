@@ -120,6 +120,14 @@ func TestHoneypotBlock(t *testing.T) {
 	if len(list) != 1 || list[0].IP != bad.String() || list[0].Reason != "ssh:bruteforce" || time.Until(list[0].Until) < time.Hour {
 		t.Fatalf("list: %+v", list)
 	}
+	// Neustart: die Liste kommt aus cdn_hp_blocks zurueck
+	m.hp.mu.Lock()
+	m.hp.m = nil
+	m.hp.mu.Unlock()
+	m.hpRestore(ctx)
+	if l := m.hpList(); len(l) != 1 || l[0].IP != bad.String() || l[0].Reason != "ssh:bruteforce" || !m.hpBlocked(bad) {
+		t.Fatalf("restored: %+v", l)
+	}
 	if !m.hpUnblock(bad.String()) || m.hpBlocked(bad) {
 		t.Fatal("unblock")
 	}
@@ -130,6 +138,28 @@ func TestHoneypotBlock(t *testing.T) {
 	}
 	if err := m.hpSave(ctx, HoneypotSettings{Block: true, BlockHours: 1000}); err == nil {
 		t.Fatal("hours out of range")
+	}
+	m.hpRestore(ctx)
+	if len(m.hpList()) != 0 {
+		t.Fatal("switching off must clear the saved list")
+	}
+	// Schalter im Honeypot (Standard an): sperrt ohne eigenen Schalter, Abschalten hier leert die Liste dann nicht
+	hpbridge.SetBlockWanted(true)
+	defer hpbridge.SetBlockWanted(false)
+	hpbridge.PublishBlock(hpbridge.Block{IP: bad, Reason: "http:exploit"})
+	if !m.hpBlocked(bad) || !m.hpView().BlockWanted {
+		t.Fatal("block wanted by honeypot")
+	}
+	_ = m.hpSave(ctx, HoneypotSettings{})
+	if !m.hpBlocked(bad) {
+		t.Fatal("honeypot switch keeps the list")
+	}
+	if !m.hpUnblock(bad.String()) {
+		t.Fatal("unblock")
+	}
+	m.hpRestore(ctx)
+	if m.hpBlocked(bad) {
+		t.Fatal("unblock must remove the saved entry")
 	}
 }
 

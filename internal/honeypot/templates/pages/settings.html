@@ -65,6 +65,12 @@
 					{{if not $d.KeySet}}<div class="form-text mt-0 text-warning-emphasis"><i class="bi bi-lock"></i> {{.T "honeypot.settings.report_nokey"}} <a href="/settings#ipv64">{{.T "honeypot.settings.report_key_link"}}</a></div>{{end}}
 					{{with index $d.Errors "report"}}<div class="text-danger small">{{.}}</div>{{end}}
 				</div>
+				<div class="form-check mb-3">
+					<input class="form-check-input" type="checkbox" id="local_block" name="local_block" value="1"{{if not $d.Cfg.NoLocalBlock}} checked{{end}}>
+					<label class="form-check-label" for="local_block">{{.T "honeypot.settings.local_block"}}</label>{{.Doc "honeypot#lokal-sperren"}}
+					<div class="form-text mt-0">{{.T "honeypot.settings.local_block_hint"}} <a href="/cdn64/access#honeypot">{{.T "honeypot.settings.local_block_link"}}</a></div>
+					{{if not $d.Proxy64}}<div class="form-text mt-0 text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{.T "honeypot.settings.local_block_noproxy"}}</div>{{end}}
+				</div>
 				<div class="form-check">
 					<input class="form-check-input" type="checkbox" id="notify_new" name="notify_new" value="1"{{if $d.Cfg.NotifyNew}} checked{{end}}>
 					<label class="form-check-label" for="notify_new">{{.T "honeypot.settings.notify_new"}}</label>{{.Doc "honeypot#benachrichtigung"}}
@@ -241,6 +247,13 @@
 					<div class="form-text mt-0">{{.T "honeypot.settings.report_hint"}}</div>
 					{{if not $d.KeySet}}<div class="form-text mt-0 text-warning-emphasis"><i class="bi bi-lock"></i> {{.T "honeypot.settings.report_nokey"}} <a href="/settings#ipv64">{{.T "honeypot.settings.report_key_link"}}</a></div>{{end}}
 					{{with index $d.Errors "report"}}<div class="text-danger small">{{.}}</div>{{end}}
+				</div>
+				<input type="hidden" name="local_block_form" value="1">
+				<div class="form-check mt-3 mb-0">
+					<input class="form-check-input" type="checkbox" id="local_block_x" name="local_block" value="1"{{if not $d.Cfg.NoLocalBlock}} checked{{end}}>
+					<label class="form-check-label" for="local_block_x">{{.T "honeypot.settings.local_block"}}</label>{{.Doc "honeypot#lokal-sperren"}}
+					<div class="form-text mt-0">{{.T "honeypot.settings.local_block_hint"}} <a href="/cdn64/access#honeypot">{{.T "honeypot.settings.local_block_link"}}</a></div>
+					{{if not $d.Proxy64}}<div class="form-text mt-0 text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{.T "honeypot.settings.local_block_noproxy"}}</div>{{end}}
 				</div>
 				<hr>
 				<h2 class="h6" id="anmeldung"><i class="bi bi-person-lock text-primary"></i> {{.T "honeypot.login.title"}}{{.Doc "honeypot#node64-anmeldung"}}</h2>

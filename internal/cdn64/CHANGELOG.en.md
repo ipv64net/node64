@@ -1,5 +1,14 @@
 # Changes – PROXY64
 
+## 1.33.0 – 2026-10-27
+
+### New
+- Instant block from the honeypot: blocked IPs are now also stored in the database and survive a restart (before, only
+  in memory). "Unblock" removes the entry there too.
+- The instant block can also be switched on in the honeypot ("Block detected attackers in PROXY64", on by default
+  there). Access lists → Honeypot64 then shows "Switched on by Honeypot64"; the own switch remains for blocking
+  without that option.
+
 ## 1.32.2 – 2026-10-27
 
 ### Changed

@@ -25,12 +25,14 @@ type honeypotView struct {
 	DefaultClose bool `json:"default_close"`
 	// Wanted: Honeypot64 laeuft mit der Vorlage "Nur ueber PROXY64" - der Koeder gilt dann als eingeschaltet
 	Wanted bool `json:"proxy_only"`
+	// BlockWanted: Honeypot64 schaltet die Sofort-Sperre ein (Schalter im Honeypot, dort Standard an)
+	BlockWanted bool `json:"block_by_honeypot"`
 }
 
 func (m *Module) hpView() honeypotView {
 	return honeypotView{Settings: m.hpSettings(), Decoy: hpbridge.Decoy() != nil, Access: hpbridge.AccessActive(), Blocks: m.hpList(),
 		Rejected: m.hp.rejected.Load(), Decoyed: m.hp.decoyed.Load(), Reported: m.hp.reported.Load(),
-		DefaultClose: m.edge != nil && m.edge.Config().Default == edge.DefaultClose, Wanted: hpbridge.Wanted()}
+		DefaultClose: m.edge != nil && m.edge.Config().Default == edge.DefaultClose, Wanted: hpbridge.Wanted(), BlockWanted: hpbridge.BlockWanted()}
 }
 
 func hpAudit(s HoneypotSettings) string {

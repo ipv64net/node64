@@ -26,7 +26,9 @@ import (
 //     (hpbridge.Wanted), gilt der Koeder als eingeschaltet.
 //  3. Sofort-Sperre: IPs, die im Honeypot auffallen, sperrt PROXY64 lokal fuer eine einstellbare Dauer (Standard
 //     24 h) fuer alle Hosts und Streams - private Adressen, Ausnahmen der Blocklisten und vertrauenswuerdige Proxys
-//     der Hosts nie. Die Liste liegt im Speicher (hoechstens hpMaxBlocks Eintraege, laufen von selbst ab).
+//     der Hosts nie. Eingeschaltet hier oder im Honeypot (hpbridge.BlockWanted, dort Standard an). Die Liste liegt
+//     im Speicher und in cdn_hp_blocks (uebersteht einen Neustart; hoechstens hpMaxBlocks Eintraege, laufen von
+//     selbst ab).
 
 const (
 	setHoneypot     = "cdn64.honeypot" // HoneypotSettings als JSON
@@ -36,6 +38,7 @@ const (
 	rejHoneypot     = "honeypot" // Abweisung: vom Honeypot gemeldet
 	hpReasonMaxLen  = 80
 	hpSweepInterval = time.Minute
+	hpPurgeInterval = time.Hour // abgelaufene Eintraege aus cdn_hp_blocks loeschen
 )
 
 // HoneypotSettings: die drei Schalter und die Wege schaedlicher Anfragen.
@@ -80,6 +83,7 @@ type hpState struct {
 	m        map[netip.Addr]hpEntry
 	swept    time.Time
 	cancel   func() // Abo der Sperren
+	purged   time.Time
 	added    atomic.Int64
 	rejected atomic.Int64 // abgewiesene Verbindungen und Anfragen
 	decoyed  atomic.Int64 // an den Koeder gegebene Anfragen
@@ -109,7 +113,7 @@ func (m *Module) hpLoad(ctx context.Context) HoneypotSettings {
 
 var errHoneypotHours = errors.New("block_hours must be between 1 and 720")
 
-// hpSave speichert die Einstellungen; Sperre aus = Liste leeren.
+// hpSave speichert die Einstellungen; Sperre aus (auch im Honeypot) = Liste leeren.
 func (m *Module) hpSave(ctx context.Context, s HoneypotSettings) error {
 	if s.BlockHours < 0 || s.BlockHours > hpMaxHours {
 		return errHoneypotHours
@@ -120,12 +124,63 @@ func (m *Module) hpSave(ctx context.Context, s HoneypotSettings) error {
 		return err
 	}
 	m.hp.cfg.Store(&s)
-	if !s.Block {
+	if !s.Block && !hpbridge.BlockWanted() {
 		m.hp.mu.Lock()
 		m.hp.m = nil
 		m.hp.mu.Unlock()
+		if _, err := m.core.Writer().ExecContext(ctx, `DELETE FROM cdn_hp_blocks`); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// hpBlockOn: Sofort-Sperre eingeschaltet (hier oder im laufenden Honeypot).
+func (m *Module) hpBlockOn() bool { return m.hpSettings().Block || hpbridge.BlockWanted() }
+
+func hpTime(t time.Time) string { return t.UTC().Format(time.RFC3339) }
+
+// hpRestore laedt die noch gueltigen Sperren aus der Datenbank (Start des Moduls).
+func (m *Module) hpRestore(ctx context.Context) {
+	now := time.Now()
+	_, _ = m.core.Writer().ExecContext(ctx, `DELETE FROM cdn_hp_blocks WHERE until <= ?`, hpTime(now))
+	rows, err := m.core.Reader().QueryContext(ctx, `SELECT ip, reason, since, until FROM cdn_hp_blocks ORDER BY until DESC LIMIT ?`, hpMaxBlocks)
+	if err != nil {
+		m.log.Warn("cdn64 honeypot blocks not loaded", "err", err)
+		return
+	}
+	defer rows.Close()
+	list := map[netip.Addr]hpEntry{}
+	for rows.Next() {
+		var ip, reason, since, until string
+		if rows.Scan(&ip, &reason, &since, &until) != nil {
+			continue
+		}
+		a, err1 := netip.ParseAddr(ip)
+		s, err2 := time.Parse(time.RFC3339, since)
+		u, err3 := time.Parse(time.RFC3339, until)
+		if err1 == nil && err2 == nil && err3 == nil && now.Before(u) {
+			list[a] = hpEntry{reason: reason, since: s, until: u}
+		}
+	}
+	m.hp.mu.Lock()
+	m.hp.m, m.hp.purged = list, now
+	m.hp.mu.Unlock()
+}
+
+// hpPersist schreibt eine Sperre (gone: verdraengter Eintrag) und loescht ab und zu abgelaufene.
+func (m *Module) hpPersist(ip netip.Addr, e hpEntry, gone netip.Addr, purge bool) {
+	ctx, w := context.Background(), m.core.Writer()
+	if _, err := w.ExecContext(ctx, `INSERT INTO cdn_hp_blocks (ip, reason, since, until) VALUES (?,?,?,?)
+		ON CONFLICT(ip) DO UPDATE SET reason = excluded.reason, until = excluded.until`, ip.String(), e.reason, hpTime(e.since), hpTime(e.until)); err != nil {
+		m.log.Warn("cdn64 honeypot block not saved", "err", err)
+	}
+	if gone.IsValid() {
+		_, _ = w.ExecContext(ctx, `DELETE FROM cdn_hp_blocks WHERE ip = ?`, gone.String())
+	}
+	if purge {
+		_, _ = w.ExecContext(ctx, `DELETE FROM cdn_hp_blocks WHERE until <= ?`, hpTime(time.Now()))
+	}
 }
 
 func (m *Module) hpSettings() HoneypotSettings {
@@ -138,6 +193,7 @@ func (m *Module) hpSettings() HoneypotSettings {
 // hpStart: Sperren abonnieren und unbekannte Anfragen uebernehmen (bei Start des Moduls).
 func (m *Module) hpStart(ctx context.Context) {
 	m.hpLoad(ctx)
+	m.hpRestore(ctx)
 	m.hp.cancel = hpbridge.SubscribeBlocks(m.hpOnBlock)
 	if m.edge != nil {
 		m.edge.SetUnknown(m.hpUnknown, m.hpDecoyActive)
@@ -239,13 +295,13 @@ func (m *Module) hpExempt(ctx context.Context, ip netip.Addr) bool {
 func (m *Module) hpOnBlock(b hpbridge.Block) {
 	s := m.hpSettings()
 	ip := b.IP.Unmap()
-	if !s.Block || m.hpExempt(context.Background(), ip) {
+	if !m.hpBlockOn() || m.hpExempt(context.Background(), ip) {
 		return
 	}
 	now := time.Now()
 	e := hpEntry{reason: trunc(b.Reason, hpReasonMaxLen), since: now, until: now.Add(time.Duration(s.BlockHours) * time.Hour)}
+	var gone netip.Addr
 	m.hp.mu.Lock()
-	defer m.hp.mu.Unlock()
 	if m.hp.m == nil {
 		m.hp.m = map[netip.Addr]hpEntry{}
 	}
@@ -262,10 +318,17 @@ func (m *Module) hpOnBlock(b hpbridge.Block) {
 				}
 			}
 			delete(m.hp.m, first)
+			gone = first
 		}
 	}
 	m.hp.m[ip] = e
 	m.hp.added.Add(1)
+	purge := now.Sub(m.hp.purged) > hpPurgeInterval
+	if purge {
+		m.hp.purged = now
+	}
+	m.hp.mu.Unlock()
+	m.hpPersist(ip, e, gone, purge)
 }
 
 func (m *Module) hpSweepLocked(now time.Time) {
@@ -279,7 +342,7 @@ func (m *Module) hpSweepLocked(now time.Time) {
 
 // hpBlocked: IP gerade vom Honeypot gesperrt (zaehlt die Abweisung).
 func (m *Module) hpBlocked(ip netip.Addr) bool {
-	if !m.hpSettings().Block {
+	if !m.hpBlockOn() {
 		return false
 	}
 	ip, now := ip.Unmap(), time.Now()
@@ -318,11 +381,13 @@ func (m *Module) hpUnblock(s string) bool {
 		return false
 	}
 	m.hp.mu.Lock()
-	defer m.hp.mu.Unlock()
-	if _, ok := m.hp.m[ip.Unmap()]; !ok {
+	_, ok := m.hp.m[ip.Unmap()]
+	delete(m.hp.m, ip.Unmap())
+	m.hp.mu.Unlock()
+	if !ok {
 		return false
 	}
-	delete(m.hp.m, ip.Unmap())
+	_, _ = m.core.Writer().ExecContext(context.Background(), `DELETE FROM cdn_hp_blocks WHERE ip = ?`, ip.Unmap().String())
 	return true
 }
 
