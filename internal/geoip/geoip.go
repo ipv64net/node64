@@ -1,15 +1,15 @@
 // Package geoip ordnet IP-Adressen einem Land zu (Herkunft der Angreifer in Honeypot64). Die Daten kommen von
 // ipv64.net: country_ranges.txt.gz (gzip-Text, je Zeile "<CC> <erste IP> <letzte IP>", Kommentare mit #), taeglich
-// aus den Daten der Registrierungsstellen erzeugt und in blocklists/index.json als "geo" eingetragen. Keine fremde
-// GeoIP-Datenbank im Image.
+// nach dem Standort aus DB-IP "IP to Country Lite" (CC BY 4.0, Namensnennung an der Anzeige), Luecken aus den Daten
+// der Registrierungsstellen, in blocklists/index.json als "geo" eingetragen. Keine GeoIP-Datenbank im Image.
 //
 // Geladen wird nur, wenn ein Teil der Node es braucht (Start, z. B. beim Start von Honeypot64): zuerst aus dem
 // Zwischenspeicher <data>/geoip (sofort nutzbar), dann von ipv64.net und danach taeglich nur bei Aenderung (ETag,
 // If-Modified-Since). Fehler werden nur geloggt; fehlt die Datei bei ipv64 (404), gibt es einfach keine Laender.
 //
 // Speicher: sortierte Bereiche getrennt nach IPv4 (Anfang, Ende je uint32, Land uint16 = 10 Byte je Bereich) und
-// IPv6 (obere 64 Bit von Anfang und Ende, Land = 18 Byte je Bereich; die Registrierungsstellen vergeben nie
-// kleiner als /64), Suche per Binaersuche ohne Zuweisungen.
+// IPv6 (obere 64 Bit von Anfang und Ende, Land = 18 Byte je Bereich; feinere Bereiche als /64 fallen zusammen, der
+// erste gilt), Suche per Binaersuche ohne Zuweisungen.
 package geoip
 
 import (

@@ -870,7 +870,7 @@ var (
 {{if .Err}}<p class="bad">{{.T.StatsErr}}</p>{{end}}
 {{if .Map.Max}}<section class="card mapcard"><h2>{{.T.Map}}</h2><svg class="map" viewBox="{{.Map.ViewBox}}" role="img" aria-label="{{.T.Map}}">
 {{range .Map.Countries}}<path class="m{{.Level}}" d="{{.Path}}"><title>{{if .Count}}{{.Flag}} {{.Name}}: {{.Count}} {{$.T.MapEvents}}, {{.Sources}} IPs{{else}}{{.Name}}{{end}}</title></path>{{end}}
-</svg><p class="mut">{{.T.MapLegend}}:{{range .Map.Legend}} <span class="sw m{{.Level}}"></span> {{.From}}{{if ne .From .To}}–{{.To}}{{end}}{{end}}</p></section>{{end}}
+</svg><p class="mut">{{.T.MapLegend}}:{{range .Map.Legend}} <span class="sw m{{.Level}}"></span> {{.From}}{{if ne .From .To}}–{{.To}}{{end}}{{end}}</p><p class="mut"><a href="https://db-ip.com" target="_blank" rel="noopener">{{.T.GeoAttr}}</a></p></section>{{end}}
 <div class="grid">
 <section class="card"><h2>{{.T.Services}}</h2><div class="tw"><table><tr><th>{{.T.Service}}</th><th>Port</th><th>{{.T.State}}</th><th>{{.T.Conns}}</th></tr>
 {{range .Services}}<tr><td>{{.Service}}</td><td class="n">{{.Port}}</td><td>{{if .Listen}}<span class="ok">{{$.T.Open}}</span>{{else}}<span class="bad">{{$.T.Closed}}{{if .Error}}: {{short .Error}}{{end}}</span>{{end}}</td><td class="n">{{.Conns}}</td></tr>
@@ -905,7 +905,7 @@ var (
 <section class="card"><h2>{{.T.Countries}}</h2><div class="tw"><table>
 {{$max := 0}}{{range .Week.ByCountry}}{{if not $max}}{{$max = .Count}}{{end}}<tr><td><span class="cc" title="{{cname .Key $.Lang}}">{{flag .Key}} <small>{{.Key}}</small></span> {{cname .Key $.Lang}}<progress max="{{$max}}" value="{{.Count}}"></progress></td><td class="n">{{.Count}}<br><span class="mut">{{.Sources}} IPs</span></td></tr>
 {{else}}<tr><td class="mut">{{if .Geo.Loaded}}–{{else}}{{.T.NoGeo}}{{end}}</td></tr>{{end}}</table></div>
-{{if .Week.CountryUnknown}}<p class="mut">{{.T.NoCountry}}: {{.Week.CountryUnknown}}</p>{{end}}</section>
+{{if .Week.CountryUnknown}}<p class="mut">{{.T.NoCountry}}: {{.Week.CountryUnknown}}</p>{{end}}{{if .Geo.Loaded}}<p class="mut"><a href="https://db-ip.com" target="_blank" rel="noopener">{{.T.GeoAttr}}</a></p>{{end}}</section>
 {{template "list" (.L .T.Kinds .Week.ByKind)}}
 {{template "list" (.L .T.Origins .Week.BySource)}}
 {{template "list" (.L .T.Ports .Week.ByPort)}}
@@ -927,8 +927,8 @@ type hpTexts struct {
 	Logs, File, Lines, FileOK, FileErr, PermHint, Messages, Denied, LogNote, Origins string
 	// Firewall-Helfer (H6)
 	FW, FWWait, FWEntries, FWAddrs, FWUpdated, FWChanged, FWDenied, FWAllow, FWSkipped, FWLive, FWDaily, FWKeep, FWRemove string
-	// Herkunft der Angreifer
-	Countries, NoGeo, NoCountry string
+	// Herkunft der Angreifer (GeoAttr: Namensnennung der Laenderdaten, DB-IP Lite CC BY 4.0)
+	Countries, NoGeo, NoCountry, GeoAttr string
 	// Laenderkarte
 	Map, MapEvents, MapLegend string
 }
@@ -949,7 +949,7 @@ var hpTextsByLang = map[string]hpTexts{
 		FWLive: "Live-Listen mit Listen-Token, Abruf alle 30 Minuten.", FWDaily: "Tagesstand (ohne NODE64_IPV64_LIST_TOKEN), Abruf alle 30 Minuten.",
 		FWKeep: "Die Tabelle bleibt beim Beenden stehen.", FWRemove: "Die Tabelle wird beim Beenden gelöscht.",
 		Countries: "Herkunft nach Land (7 Tage)", NoGeo: "Noch keine Länderdaten von ipv64.net.", NoCountry: "Ereignisse ohne Land (privat oder unbekannt)",
-		Map: "Herkunft auf der Karte (7 Tage)", MapEvents: "Ereignisse", MapLegend: "Ereignisse je Land"},
+		GeoAttr: "IP-Länderdaten: DB-IP.com", Map: "Herkunft auf der Karte (7 Tage)", MapEvents: "Ereignisse", MapLegend: "Ereignisse je Land"},
 	"en": {Profile: "Profile", Uptime: "Uptime", Hits24: "Hits 24 h", Hits7: "Hits 7 days", Src24: "Source IPs 24 h", Src7: "Source IPs 7 days",
 		Logins7: "Login attempts 7 days", StatsErr: "Statistics currently not readable.", Services: "Services", Service: "Service", State: "State",
 		Conns: "Connections", Open: "open", Closed: "not open", None: "none", Scan: "Port scan detection", On: "on", Off: "off",
@@ -965,7 +965,7 @@ var hpTextsByLang = map[string]hpTexts{
 		FWLive: "Live lists with list token, fetched every 30 minutes.", FWDaily: "Daily lists (no NODE64_IPV64_LIST_TOKEN), fetched every 30 minutes.",
 		FWKeep: "The table stays when Node64 stops.", FWRemove: "The table is removed when Node64 stops.",
 		Countries: "Origin by country (7 days)", NoGeo: "No country data from ipv64.net yet.", NoCountry: "Events without country (private or unknown)",
-		Map: "Origin on the map (7 days)", MapEvents: "events", MapLegend: "Events per country"},
+		GeoAttr: "IP country data: DB-IP.com", Map: "Origin on the map (7 days)", MapEvents: "events", MapLegend: "Events per country"},
 }
 
 type hpList struct {

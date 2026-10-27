@@ -1,5 +1,20 @@
 # Changes – Honeypot64
 
+## 0.14.3 – 2026-10-27
+
+### Fixed
+- Live map: the fixed arc of a selected country of origin was only a hairline; now at full width.
+- Label boxes no longer catch clicks – clicking a country (event filter) works again.
+- "Pause" also stops arcs that were just scheduled; after a quick resume the highlight of your own country stays
+  correct. When the location changes, the old country no longer stays highlighted.
+- The label of your own country stays while arcs are still arriving (it flickered before).
+- Older attacks are replayed only in a tick without new attacks (as described), never twice.
+- Small country as location (e.g. Singapore): the target point lights up while arcs arrive.
+- Tuvalu was placed outside the right edge of the map.
+- Settings: the country list is sorted by language (Austria/Österreich at O, not after Cyprus), and the page no longer
+  waits up to 6 seconds while the node looks up its public IPv4.
+- Mode without web interface: notice "IP country data: DB-IP.com" at the map and country list of the info page.
+
 ## 0.14.2 – 2026-10-26
 
 ### Improved

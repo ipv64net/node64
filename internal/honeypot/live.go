@@ -14,6 +14,8 @@ import (
 
 	"github.com/ipv64net/node64/internal/geoip"
 	"github.com/ipv64net/node64/internal/honeypot/worldmap"
+	"golang.org/x/text/collate"
+	"golang.org/x/text/language"
 )
 
 // Live-Karte (Wunsch Dennis 2026-10-26): auf der Laenderkarte der Uebersicht fliegen Boegen von der Quelle eines
@@ -54,27 +56,38 @@ type LivePoint struct {
 	Manual  bool    `json:"manual"` // Standort eingestellt (sonst aus der oeffentlichen IPv4)
 }
 
-// ownCountry: Land der oeffentlichen IPv4 (gemerkt; Fehler eine Minute, Erfolg 6 Stunden).
+// ownCountry: Land der oeffentlichen IPv4 (gemerkt; Fehler eine Minute, Erfolg 6 Stunden). Abgerufen wird ausserhalb
+// der Sperre (bis 6 s): cached() und gleichzeitige Aufrufe warten nicht, sie bekommen den bisherigen Stand.
 type ownCountry struct {
-	mu   sync.Mutex
-	cc   string
-	at   time.Time
-	err  bool
-	from func(ctx context.Context) (netip.Addr, error)
+	mu       sync.Mutex
+	cc       string
+	at       time.Time
+	err      bool
+	fetching bool
+	from     func(ctx context.Context) (netip.Addr, error)
 }
 
 var ownCC = &ownCountry{from: fetchOwnIPv4}
 
 func (o *ownCountry) get(ctx context.Context) string {
 	o.mu.Lock()
-	defer o.mu.Unlock()
-	if !o.at.IsZero() && (time.Since(o.at) < time.Minute || (!o.err && time.Since(o.at) < 6*time.Hour)) {
-		return o.cc
+	if o.fetching || (!o.at.IsZero() && (time.Since(o.at) < time.Minute || (!o.err && time.Since(o.at) < 6*time.Hour))) {
+		cc := o.cc
+		o.mu.Unlock()
+		return cc
 	}
+	o.fetching = true
+	o.mu.Unlock()
 	a, err := o.from(ctx)
-	o.at, o.err = time.Now(), err != nil
+	cc := ""
 	if err == nil {
-		o.cc, _ = lookupCountry(a)
+		cc, _ = lookupCountry(a)
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.at, o.err, o.fetching = time.Now(), err != nil, false
+	if err == nil {
+		o.cc = cc
 	}
 	return o.cc
 }
@@ -133,7 +146,9 @@ func countryOptions(lang string) []countryOpt {
 	for cc := range worldmap.Points() {
 		add(cc)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	// nach Sprache sortiert (Oesterreich bei O, nicht hinter Zypern)
+	col := collate.New(language.Make(lang))
+	sort.Slice(out, func(i, j int) bool { return col.CompareString(out[i].Name, out[j].Name) < 0 })
 	return out
 }
 

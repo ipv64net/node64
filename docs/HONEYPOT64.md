@@ -250,8 +250,10 @@ Land“ zählt Ereignisse und verschiedene Quell-IPs je Land; die Übersicht im 
 wurde (je Dienst, Port und Art, nach Gruppe Login/Bruteforce, Exploit, Scan, Sondierung, Log/Syslog) und welche Köder
 und erkannten Geräte (`device=…`) getroffen wurden.
 
-Die Länderdaten kommen von ipv64.net (`blocklists/country_ranges.txt.gz`, täglich aus den Daten der
-Registrierungsstellen, eingetragen in `blocklists/index.json` als `geo`), keine fremde GeoIP-Datenbank. Geladen wird
+Die Länderdaten kommen von ipv64.net (`blocklists/country_ranges.txt.gz`, täglich aufbereitet nach dem Standort der
+Adressen aus DB-IP „IP to Country Lite“, Lücken aus den Daten der Registrierungsstellen, eingetragen in
+`blocklists/index.json` als `geo`; Lizenz CC BY 4.0, Hinweis „IP-Länderdaten: DB-IP.com“ an Karte und Länderliste).
+Node64 fragt dafür keinen fremden Dienst ab. Geladen wird
 nur, solange Honeypot64 läuft: beim Start sofort aus dem Zwischenspeicher `/data/geoip/`, danach von ipv64.net und
 täglich nur bei Änderung (ETag). Im Speicher belegen die Bereiche etwa 10 Byte je IPv4- und 18 Byte je IPv6-Bereich
 (einige MB). Das Land wird beim Auswerten nachgeschlagen, nicht gespeichert; neue Daten gelten sofort auch für ältere
@@ -298,7 +300,8 @@ Mit `NODE64_IPV64_KEY` meldet der Sensor alle 10 Minuten (mit kleinem Zufallsver
 **Übertragen werden:** je Quell-IP Art, Dienst, Port, Anzahl, erster und letzter Zeitpunkt; dazu Proben mit Anzahl:
 Zugangsdaten aus dem Honeypot (Benutzername und Passwort im Klartext, nur SSH, Telnet, HTTP/HTTPS), Pfade,
 User-Agents und der Anfang von Payloads (SHA-256 und höchstens 256 Bytes). Außerdem eine feste Sensor-Kennung
-(UUID, `honeypot/sensor_id`), Version, Profil und Modus. Die Daten fließen in die v64 Blocklist ein, sobald die
+(UUID, `honeypot/sensor_id`), Version, Profil und Modus, und – nur wenn eingestellt – der Standort des Sensors als
+Ländercode (`sensor.country`, Ziel der Bögen auf der öffentlichen Live-Karte). Die Daten fließen in die v64 Blocklist ein, sobald die
 Auswertung bei ipv64 läuft.
 
 **Nie übertragen:** die eigene öffentliche IP (ipv64 kennt sie aus der Verbindung) und Quellen aus privaten oder

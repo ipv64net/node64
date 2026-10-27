@@ -1,5 +1,20 @@
 # Änderungen – Honeypot64
 
+## 0.14.3 – 2026-10-27
+
+### Behoben
+- Live-Karte: Der feste Bogen eines ausgewählten Herkunftslands war nur eine Haarlinie; jetzt in voller Breite.
+- Beschriftungskästen fangen keine Klicks mehr ab – der Klick auf ein Land (Filter der Ereignisse) geht wieder durch.
+- „Anhalten“ stoppt auch Bögen, die gerade erst geplant waren; nach schnellem Fortsetzen bleibt die Hervorhebung des
+  eigenen Lands richtig. Bei einem Wechsel des Standorts bleibt das alte Land nicht mehr hervorgehoben.
+- Die Beschriftung des eigenen Lands bleibt stehen, solange noch Bögen ankommen (vorher flackerte sie).
+- Wiederholungen älterer Angriffe nur in einem Takt ohne neue Angriffe (wie beschrieben), nie doppelt.
+- Kleinstaat als Standort (z. B. Singapur): Der Zielpunkt leuchtet, solange Bögen ankommen.
+- Tuvalu lag rechts außerhalb der Karte.
+- Einstellungen: Die Länderauswahl ist nach Sprache sortiert (Österreich bei O, nicht hinter Zypern), und die Seite
+  wartet nicht mehr bis zu 6 Sekunden, während die Node ihre öffentliche IPv4 abfragt.
+- Modus ohne Oberfläche: Hinweis „IP-Länderdaten: DB-IP.com“ an Karte und Länderliste der Info-Seite.
+
 ## 0.14.2 – 2026-10-26
 
 ### Verbessert
