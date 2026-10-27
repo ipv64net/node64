@@ -56,14 +56,14 @@
 		{{range $d.Rows}}
 		<tr{{if not .Enabled}} class="opacity-50"{{else if and .Online .Online.Paused}} class="table-warning"{{end}}>
 			<td class="ps-3">
-				{{range $i, $n := .Names}}{{if $i}}<br>{{end}}<span class="font-monospace text-break">{{$n}}</span>{{end}}
+				{{range $i, $n := .Names}}{{if $i}}<br>{{end}}<span class="font-monospace cell-wrap">{{$n}}</span>{{end}}
 				{{if not .Enabled}}<div><span class="badge text-bg-secondary">{{$.T "cdn64.disabled"}}</span></div>{{end}}
 				{{if and (eq .Kind "proxy") .Advanced.Maintenance}}<div><span class="badge text-bg-warning" title="{{$.T "cdn64.maint.on_hint"}}"><i class="bi bi-cone-striped"></i> {{$.T "cdn64.maint.on_badge"}}</span></div>{{end}}
 				{{if .RouteErr}}<div class="text-danger">{{.RouteErr}}</div>{{end}}
 			</td>
-			{{if eq .Kind "proxy"}}<td class="font-monospace text-break">{{.Target}}</td>
-			{{else if eq .Kind "redirect"}}<td class="text-break"><span class="badge text-bg-light">{{.RedirectCode}}</span> <span class="font-monospace">{{if eq .RedirectScheme "auto"}}{{$.T "cdn64.redirect.auto_scheme"}}{{else}}{{.RedirectScheme}}://{{end}}{{.RedirectTarget}}{{if .PreservePath}}/…{{end}}</span></td>
-			{{else if eq .Kind "status"}}<td class="text-break">{{with .Status}}<i class="bi bi-clipboard-pulse me-1"></i>{{.Title}}{{if not .Enabled}} <span class="badge text-bg-secondary">{{$.T "cdn64.status.off"}}</span>{{end}}{{else}}<span class="badge text-bg-warning">{{$.T "cdn64.status.unknown" "id" .StatusPageID}}</span>{{end}}</td>{{end}}
+			{{if eq .Kind "proxy"}}<td class="font-monospace cell-wrap">{{.Target}}</td>
+			{{else if eq .Kind "redirect"}}<td class="cell-wrap"><span class="badge text-bg-light">{{.RedirectCode}}</span> <span class="font-monospace">{{if eq .RedirectScheme "auto"}}{{$.T "cdn64.redirect.auto_scheme"}}{{else}}{{.RedirectScheme}}://{{end}}{{.RedirectTarget}}{{if .PreservePath}}/…{{end}}</span></td>
+			{{else if eq .Kind "status"}}<td class="cell-wrap">{{with .Status}}<i class="bi bi-clipboard-pulse me-1"></i>{{.Title}}{{if not .Enabled}} <span class="badge text-bg-secondary">{{$.T "cdn64.status.off"}}</span>{{end}}{{else}}<span class="badge text-bg-warning">{{$.T "cdn64.status.unknown" "id" .StatusPageID}}</span>{{end}}</td>{{end}}
 			<td>{{with .Cert}}
 				{{if eq .State "http"}}<span class="badge text-bg-light">HTTP</span>
 				{{else if eq .State "ok"}}<span class="badge text-bg-success" title="{{.Name}}"><i class="bi bi-lock-fill"></i> {{$.T "cdn64.cert.days" "days" .Days}}</span>
