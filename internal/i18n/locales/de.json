@@ -779,7 +779,7 @@
       },
       "token": "Listen-Token für Live-Listen",
       "token_placeholder": "Listen-Token aus dem ipv64-Account (32 Zeichen)",
-      "token_hint": "Mit dem Listen-Token aus deinem ipv64-Account lädt PROXY64 die Listen „ipv64 Honeypot“ in der Live-Fassung (alle 30 Minuten neu bewertet), ohne Token den Tagesstand. Leer lassen = unverändert. Das Token wird verschlüsselt gespeichert und nicht exportiert.",
+      "token_hint": "Die Listen „ipv64 Honeypot“ (v64 Blocklist) lädt PROXY64 in der Live-Fassung (alle 30 Minuten neu bewertet), wenn dein Account dafür berechtigt ist (Beitragende und alle Klassen außer Standard), sonst den Tagesstand. Das Listen-Token holt PROXY64 dafür automatisch über den zentralen ipv64-API-Key; hier nur eintragen, wenn du ein anderes Token nutzen willst. Leer lassen = unverändert. Das Token wird verschlüsselt gespeichert und nicht exportiert.",
       "token_set": "Token hinterlegt.",
       "token_deleted": "Listen-Token gelöscht, die Honeypot-Listen kommen wieder im Tagesstand.",
       "token_delete_confirm": "Listen-Token löschen? Die Honeypot-Listen werden dann im Tagesstand geladen.",
@@ -787,7 +787,8 @@
       "edition_live": "live",
       "edition_daily": "Tagesstand",
       "live_denied": "Tagesstand – Token ohne Berechtigung",
-      "live_error": "Live-Abruf abgelehnt ({err}), Tagesstand geladen"
+      "live_error": "Live-Abruf abgelehnt ({err}), Tagesstand geladen",
+      "token_auto": "Token automatisch über den zentralen ipv64-API-Key geholt."
     },
     "hp": {
       "title": "Honeypot64",

@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/secrets"
 )
 
@@ -258,5 +259,106 @@ func TestBlocklistLiveToken(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), tokDaily) {
 		t.Fatal("token in log")
+	}
+}
+
+// tokenAPI: ipv64 mit zentralem API-Key, liefert das Listen-Token (OnlineAPI eingebettet: andere Aufrufe nicht noetig).
+type tokenAPI struct {
+	OnlineAPI
+	tok   string
+	calls atomic.Int64
+}
+
+func (a *tokenAPI) Ready(context.Context) bool { return true }
+func (a *tokenAPI) ListToken(context.Context) (*ipv64api.ListToken, error) {
+	a.calls.Add(1)
+	return &ipv64api.ListToken{Token: a.tok, Live: true}, nil
+}
+
+// Ohne Token von Hand holt PROXY64 das Listen-Token ueber den API-Key (nur mit eingeschalteter Honeypot-Liste, nur
+// einmal), laedt damit die Live-Fassung; ein Token von Hand geht vor; 404 verwirft das geholte Token.
+func TestBlocklistAutoToken(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	key := make([]byte, 32)
+	_, _ = rand.Read(key)
+	box, _ := secrets.New(key)
+	e.m.SetSecrets(box)
+	gone := atomic.Bool{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/index.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(testHoneypotIndex))
+		case "/ipv64_blocklist_v64.txt", "/ipv64_blocklist_feodo.txt":
+			_, _ = w.Write([]byte("198.51.100.1\n"))
+		case "/live/" + tokLive + "/ipv64_blocklist_v64.txt":
+			if gone.Load() {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("X-IPv64-List", "live")
+			_, _ = w.Write([]byte("198.51.100.1\n198.51.100.2\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	e.m.bl.base = srv.URL + "/"
+	e.m.SetDataDir(t.TempDir())
+	api := &tokenAPI{tok: tokLive}
+	e.m.SetOnlineAPI(api)
+	state := func() BlocklistState {
+		e.m.bl.mu.Lock()
+		defer e.m.bl.mu.Unlock()
+		return *e.m.bl.stateOf("v64")
+	}
+
+	// nur feodo eingeschaltet: kein Token holen (legt sonst bei ipv64 ohne Bedarf eins an)
+	if err := e.m.core.SetSetting(ctx, setBlocklists, "feodo"); err != nil {
+		t.Fatal(err)
+	}
+	e.m.blRefresh(ctx)
+	if api.calls.Load() != 0 || e.m.blToken(ctx) != "" {
+		t.Fatalf("token fetched without honeypot list: %d", api.calls.Load())
+	}
+
+	// v64 eingeschaltet: Token geholt, verschluesselt gemerkt, Live-Fassung; zweiter Lauf fragt nicht noch einmal
+	if err := e.m.core.SetSetting(ctx, setBlocklists, "v64"); err != nil {
+		t.Fatal(err)
+	}
+	e.m.blRefresh(ctx)
+	e.m.blRefresh(ctx)
+	if api.calls.Load() != 1 || e.m.blToken(ctx) != tokLive {
+		t.Fatalf("auto token: calls %d", api.calls.Load())
+	}
+	if v := e.m.core.SettingOr(ctx, setBlockTokenAuto, ""); !strings.HasPrefix(v, "enc:v1:") || strings.Contains(v, tokLive) {
+		t.Fatalf("auto token not encrypted: %q", v)
+	}
+	if st := state(); st.Edition != "live" || st.Entries != 2 {
+		t.Fatalf("live: %+v", st)
+	}
+	if v := e.m.blView(httptest.NewRequest(http.MethodGet, "/", nil)); v.TokenSet || !v.TokenAuto {
+		t.Fatalf("view: set %v auto %v", v.TokenSet, v.TokenAuto)
+	}
+
+	// Token bei ipv64 unbekannt (404): verworfen, Tagesstand, beim naechsten Lauf neu geholt
+	gone.Store(true)
+	e.m.blRefresh(ctx)
+	if e.m.core.SettingOr(ctx, setBlockTokenAuto, "") != "" || state().Edition != "daily" {
+		t.Fatalf("404 keeps auto token: %+v", state())
+	}
+	gone.Store(false)
+	e.m.blRefresh(ctx)
+	if api.calls.Load() != 2 || state().Edition != "live" {
+		t.Fatalf("refetch: calls %d %+v", api.calls.Load(), state())
+	}
+
+	// Token von Hand geht vor
+	if err := e.m.blSetToken(ctx, tokDaily); err != nil {
+		t.Fatal(err)
+	}
+	if e.m.blToken(ctx) != tokDaily {
+		t.Fatal("manual token must win")
 	}
 }

@@ -48,7 +48,7 @@ Bridge-Netz sehen manche Docker-Versionen statt der Angreifer die Adresse des Do
 | `NODE64_FIREWALL_LISTS` | `v64` | Listen für die Firewall, Komma-Liste von IDs aus `index.json`, z. B. `v64,spamhaus_drop` (frühere Teillisten wie `v64_ssh` gelten als `v64`) |
 | `NODE64_FIREWALL_ALLOW` | – | eigene Netze, die nie gesperrt werden, Komma-Liste von IPs oder Netzen (CIDR) |
 | `NODE64_FIREWALL_KEEP` | `0` | `1` lässt die Tabelle `inet node64` beim Beenden stehen |
-| `NODE64_IPV64_LIST_TOKEN` | – | Listen-Token aus dem ipv64-Account (32 Zeichen): v64-Listen live statt im Tagesstand |
+| `NODE64_IPV64_LIST_TOKEN` | – | Listen-Token aus dem ipv64-Account (32 Zeichen): v64 Blocklist live statt im Tagesstand. Meist unnötig: mit `NODE64_IPV64_KEY` holt Node64 das Token selbst |
 | `NODE64_DATA_DIR` | `/data` | Datenverzeichnis: Datenbank `node64.db`, Sensor-Dateien (SSH-Host-Schlüssel, TLS-Zertifikat, Sensor-Kennung `sensor_id`, Stand der Meldung `report_state.json`) unter `honeypot/` |
 | `NODE64_BIND_ADDR` | – | Adresse der Info-Seite (leer = alle) |
 | `NODE64_LOG_LEVEL`, `NODE64_LOG_FORMAT` | `info`, `text` | wie im normalen Betrieb |
@@ -498,8 +498,9 @@ docker run -d --name honeypot64 --network host --cap-add NET_ADMIN --restart unl
   andere geht unverändert an die vorhandene Firewall (ufw, firewalld, Docker). Anschauen: `nft list table inet node64`.
 - **Listen:** Standard ist die v64 Blocklist `v64` (seit 2026-10 die einzige v64-Liste, frühere Teillisten wie
   `v64_ssh` gelten als `v64`); mit `NODE64_FIREWALL_LISTS` zusätzlich andere Listen aus `index.json` (z. B. `spamhaus_drop`).
-  Ohne Listen-Token gilt der Tagesstand, mit `NODE64_IPV64_LIST_TOKEN` die Live-Fassung (alle Klassen außer
-  Standard, siehe Plan Abschnitt 8); hat das Token keine Berechtigung, nimmt Node64 den Tagesstand.
+  Mit `NODE64_IPV64_KEY` holt Node64 das Listen-Token selbst (oder `NODE64_IPV64_LIST_TOKEN` von Hand) und lädt die
+  Live-Fassung, wenn der Account berechtigt ist (Beitragende und alle Klassen außer Standard, siehe Plan Abschnitt 8);
+  sonst und ohne Token gilt der Tagesstand.
 - **Aktualisierung:** alle 30 Minuten, nur bei Änderung (ETag/If-Modified-Since). Die Sets werden in einer
   Transaktion geleert und neu gefüllt; es gibt keinen Moment ohne Schutz. Fehlt die Tabelle (z. B. nach
   `nft flush ruleset`), legt Node64 sie beim nächsten Abruf neu an. Die letzte Fassung liegt unter

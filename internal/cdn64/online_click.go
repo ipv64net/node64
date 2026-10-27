@@ -49,6 +49,11 @@ func IPv64Online(k *ipv64api.Key) OnlineAPI { return ipv64Online{k} }
 type ipv64Online struct{ k *ipv64api.Key }
 
 func (o ipv64Online) Ready(ctx context.Context) bool { return o.k != nil && o.k.Get(ctx) != "" }
+
+// ListToken: Listen-Token fuer die Live-Fassung der v64 Blocklist (blocklist_live.go).
+func (o ipv64Online) ListToken(ctx context.Context) (*ipv64api.ListToken, error) {
+	return o.k.Client().HoneypotListToken(ctx, o.k.Get(ctx))
+}
 func (o ipv64Online) Overview(ctx context.Context) (*ipv64api.CDN64Overview, error) {
 	return o.k.Client().CDN64(ctx, o.k.Get(ctx))
 }

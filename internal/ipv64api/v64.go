@@ -1,5 +1,7 @@
 package ipv64api
 
+import "context"
+
 // v64 Blocklist: seit 2026-10 gibt es nur noch die eine Liste "v64". Die frueheren Teillisten (nach Angriff) liefert
 // ipv64.net nicht mehr; eine gespeicherte Auswahl davon gilt als die v64 Blocklist (PROXY64, Firewall-Helfer).
 var v64Old = map[string]bool{"v64_ssh": true, "v64_web": true, "v64_mail": true, "v64_rdp": true, "v64_scanner": true, "v64_research": true}
@@ -10,4 +12,22 @@ func V64ListID(id string) string {
 		return "v64"
 	}
 	return id
+}
+
+// ListToken ist GET /honeypot/list-token: persoenliches Listen-Token fuer den Live-Stand der v64 Blocklist und die
+// Berechtigung jetzt (ipv64.net prueft sie bei jedem Abruf der Live-Adresse neu).
+type ListToken struct {
+	Token string `json:"token"`
+	Live  bool   `json:"live"`
+	Base  string `json:"base"`
+}
+
+// HoneypotListToken holt das Listen-Token des Accounts; fehlt es bei ipv64, wird es dort angelegt (ein vorhandenes
+// bleibt).
+func (c *Client) HoneypotListToken(ctx context.Context, key string) (*ListToken, error) {
+	var out ListToken
+	if err := c.get(ctx, key, "/honeypot/list-token", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }

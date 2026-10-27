@@ -266,6 +266,17 @@ func startHPFirewall(ctx context.Context, hc *hpModeConfig, dir string, log *slo
 	}
 	fc := *hc.Firewall
 	fc.CacheDir, fc.Version, fc.Log = filepath.Join(dir, "firewall"), Version, log
+	if fc.Token == "" && ipv64api.KeyRe.MatchString(hc.IPv64Key) {
+		// ohne NODE64_IPV64_LIST_TOKEN: Listen-Token ueber den API-Key holen (ipv64 entscheidet je Abruf live/Tagesstand)
+		tctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		lt, err := ipv64api.NewClient(hc.APIBase, "node64/"+Version).HoneypotListToken(tctx, hc.IPv64Key)
+		cancel()
+		if err == nil && firewall.TokenRe.MatchString(lt.Token) {
+			fc.Token = lt.Token
+		} else if err != nil {
+			log.Warn("firewall helper: list token not fetched with NODE64_IPV64_KEY, using daily lists", "err", err)
+		}
+	}
 	h, err := firewall.New(fc)
 	if err == nil {
 		err = h.Probe()
@@ -273,9 +284,9 @@ func startHPFirewall(ctx context.Context, hc *hpModeConfig, dir string, log *slo
 	if err != nil {
 		return nil, fmt.Errorf("NODE64_FIREWALL=%s: %w", fc.Mode, err)
 	}
-	edition := "daily lists (no NODE64_IPV64_LIST_TOKEN)"
+	edition := "daily lists (no list token)"
 	if fc.Token != "" {
-		edition = "live lists (list token)"
+		edition = "live lists if entitled (list token)"
 	}
 	log.Info("firewall helper on", "mode", fc.Mode, "table", "inet "+firewall.Table, "lists", strings.Join(fc.Lists, ","),
 		"edition", edition, "allow", len(fc.Allow), "keep", fc.Keep)
@@ -946,7 +957,7 @@ var hpTextsByLang = map[string]hpTexts{
 		LogNote: "Aus echten Logs werden nur IP, Art, Dienst, Port, Anzahl und Regel gemeldet.", Origins: "Quellen (7 Tage)",
 		FW: "Firewall-Helfer", FWWait: "noch nicht aktiv", FWEntries: "Einträge (Bereiche)", FWAddrs: "Adressen", FWUpdated: "Zuletzt geprüft",
 		FWChanged: "geändert", FWDenied: "Token ohne Berechtigung, Tagesstand", FWAllow: "Ausnahmen (NODE64_FIREWALL_ALLOW)", FWSkipped: "zu große Netze verworfen",
-		FWLive: "Live-Listen mit Listen-Token, Abruf alle 30 Minuten.", FWDaily: "Tagesstand (ohne NODE64_IPV64_LIST_TOKEN), Abruf alle 30 Minuten.",
+		FWLive: "Live-Listen mit Listen-Token (über NODE64_IPV64_KEY automatisch geholt oder NODE64_IPV64_LIST_TOKEN), ohne Berechtigung Tagesstand; Abruf alle 30 Minuten.", FWDaily: "Tagesstand (kein Listen-Token), Abruf alle 30 Minuten.",
 		FWKeep: "Die Tabelle bleibt beim Beenden stehen.", FWRemove: "Die Tabelle wird beim Beenden gelöscht.",
 		Countries: "Herkunft nach Land (7 Tage)", NoGeo: "Noch keine Länderdaten von ipv64.net.", NoCountry: "Ereignisse ohne Land (privat oder unbekannt)",
 		GeoAttr: "IP-Länderdaten: DB-IP.com", Map: "Herkunft auf der Karte (7 Tage)", MapEvents: "Ereignisse", MapLegend: "Ereignisse je Land"},
@@ -962,7 +973,7 @@ var hpTextsByLang = map[string]hpTexts{
 		LogNote: "From real logs only IP, kind, service, port, count and rule are reported.", Origins: "Sources (7 days)",
 		FW: "Firewall helper", FWWait: "not active yet", FWEntries: "Entries (ranges)", FWAddrs: "addresses", FWUpdated: "Last checked",
 		FWChanged: "changed", FWDenied: "token not entitled, daily list", FWAllow: "Exceptions (NODE64_FIREWALL_ALLOW)", FWSkipped: "networks too large, dropped",
-		FWLive: "Live lists with list token, fetched every 30 minutes.", FWDaily: "Daily lists (no NODE64_IPV64_LIST_TOKEN), fetched every 30 minutes.",
+		FWLive: "Live lists with list token (fetched automatically with NODE64_IPV64_KEY, or NODE64_IPV64_LIST_TOKEN), daily lists without entitlement; fetched every 30 minutes.", FWDaily: "Daily lists (no list token), fetched every 30 minutes.",
 		FWKeep: "The table stays when Node64 stops.", FWRemove: "The table is removed when Node64 stops.",
 		Countries: "Origin by country (7 days)", NoGeo: "No country data from ipv64.net yet.", NoCountry: "Events without country (private or unknown)",
 		GeoAttr: "IP country data: DB-IP.com", Map: "Origin on the map (7 days)", MapEvents: "events", MapLegend: "Events per country"},

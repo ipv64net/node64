@@ -779,7 +779,7 @@
       },
       "token": "List token for live lists",
       "token_placeholder": "List token from your ipv64 account (32 characters)",
-      "token_hint": "With the list token from your ipv64 account, PROXY64 loads the \"ipv64 Honeypot\" lists in their live version (re-scored every 30 minutes), without it the daily version. Leave empty = unchanged. The token is stored encrypted and not exported.",
+      "token_hint": "PROXY64 loads the \"ipv64 Honeypot\" lists (v64 Blocklist) in the live version (re-rated every 30 minutes) if your account is entitled (contributors and all plans except Standard), otherwise the daily list. PROXY64 fetches the list token for this automatically with the central ipv64 API key; only enter one here if you want to use a different token. Leave empty = unchanged. The token is stored encrypted and not exported.",
       "token_set": "Token stored.",
       "token_deleted": "List token deleted, the honeypot lists are back to the daily version.",
       "token_delete_confirm": "Delete the list token? The honeypot lists will then be loaded in the daily version.",
@@ -787,7 +787,8 @@
       "edition_live": "live",
       "edition_daily": "daily version",
       "live_denied": "daily version – token without entitlement",
-      "live_error": "live download rejected ({err}), daily version loaded"
+      "live_error": "live download rejected ({err}), daily version loaded",
+      "token_auto": "Token fetched automatically with the central ipv64 API key."
     },
     "hp": {
       "title": "Honeypot64",

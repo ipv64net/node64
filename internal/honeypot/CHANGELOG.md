@@ -1,5 +1,12 @@
 # Änderungen – Honeypot64
 
+## 0.14.5 – 2026-10-27
+
+### Neu
+- Firewall-Helfer (Modus ohne Oberfläche): Ohne `NODE64_IPV64_LIST_TOKEN` holt Node64 das Listen-Token beim Start über
+  `NODE64_IPV64_KEY`. Berechtigte Accounts (Beitragende und alle Klassen außer Standard) bekommen so automatisch die
+  Live-Fassung der v64 Blocklist, sonst den Tagesstand.
+
 ## 0.14.4 – 2026-10-27
 
 ### Geändert
