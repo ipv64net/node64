@@ -299,6 +299,19 @@ aus) und gibt neue Besucher-Streams an die Verbindung mit den wenigsten offenen 
 bei einem Fehler an die nächste. Grund: Lasttest 2026-10-23 – eine QUIC-Verbindung je Server deckelte Modus 1/2 bei
 etwa 650–830 Mbit/s (ein CPU-Kern). Nebenbei begrenzt das die Zahl der Verbindungen je Tunnel (vorher unbegrenzt).
 
+**Schutz-Zähler, Muster-WAF und JA4 (2026-10-27, cdn64-edge 0.19.0, Plan `docs/PLAN-CDN64-SCHUTZ.md`):** `edge/report`
+meldet je Host zusätzlich `blocked_list`, `blocked_acl`, `blocked_flood`, `blocked_waf`, `blocked_ja4`, `ja4_hits`,
+`conns_v4` (Differenzen), `blocked_ips` (verschiedene gesperrte IPs im Intervall, IPv6 je /64, höchstens 1000) und
+`ja4_top` (höchstens 20). Zuordnung zum Host: Blocklisten-Treffer lesen vor dem Schließen noch SNI bzw. Host-Kopf
+(≤ 1 s, ≤ 4 KB, höchstens 256 gleichzeitig), Überlast (Verbindungen je IP, Rate, insgesamt) zählt ohne weiteres Lesen
+beim zuletzt angefragten Host der IP, ohne Host nur gesamt; Zugriffsliste überall dort, wo sie geprüft wird (zählt
+nicht mehr als `rejected`, das bleibt das Anfrage-Limit). Muster-WAF nur Modus 2/3 vor der Weitergabe: einfache
+Textvergleiche auf Pfad (dekodiert, nicht bereinigt) und User-Agent, Treffer → 403 mit der Fehlerseite; je Host
+`waf` in `edge/config` (fehlt = an). JA4: in `handle443` einmal je Verbindung aus dem ohnehin gelesenen ClientHello
+(`internal/fingerprint`, gemeinsam mit Honeypot64), alle Modi auf TCP 443 (nicht QUIC); Liste `ipv64_ja4.txt` von
+`blocklist_base` (nur mit `api_url`, alle 30 min mit ETag, Zwischenspeicher `data_dir/blocklists/`), je Host `ja4` =
+`off` | `count` (Standard) | `block` (Verbindung zu).
+
 ### 8.4 Endpunkte für die Server (Server-Geheimnis, eigene Datei)
 
 | Methode | Pfad | Zweck |

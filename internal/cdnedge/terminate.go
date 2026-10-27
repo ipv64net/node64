@@ -37,6 +37,7 @@ type termReq struct {
 	re     *route
 	host   string
 	client string
+	ip     netip.Addr // Besucher (conns_v4)
 }
 
 type terminator struct {
@@ -262,15 +263,18 @@ func (s *Server) termCert(hello *tls.ClientHelloInfo) (*tls.Certificate, error) 
 // serveTerm: eine Anfrage nach Modus 2 - pruefen, begrenzen, an die Node.
 func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 	ap, aerr := netip.ParseAddrPort(r.RemoteAddr)
-	if aerr == nil && r.ProtoMajor == 3 && s.guard.set.Load().Has(ap.Addr().Unmap()) { // TCP prueft schon acceptLoop
-		s.guard.reject("blocklist")
-		s.mx.termReject("blocklist")
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return
-	}
 	host := hostOnly(r.Host)
 	rs := s.routes.Load()
 	re := rs.lookup(host)
+	if aerr == nil && r.ProtoMajor == 3 && s.guard.set.Load().Has(ap.Addr().Unmap()) { // TCP prueft schon acceptLoop
+		s.guard.reject("blocklist")
+		s.mx.termReject("blocklist")
+		if re != nil {
+			s.stats.of(re.Name).block(bList, ap.Addr())
+		}
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
 	if re == nil || (re.Mode != 2 && re.Mode != 3) || (r.TLS != nil && r.TLS.ServerName != "" && rs.lookup(r.TLS.ServerName) != re) ||
 		(r.TLS == nil && re.Mode != 3) {
 		s.mx.termReject("misdirected")
@@ -279,14 +283,14 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 	}
 	st := s.stats.of(re.Name)
 	if aerr == nil && !s.term.rl.allow(ap.Addr()) {
-		st.Rejected.Add(1)
+		st.block(bLimit, ap.Addr())
 		s.mx.termReject("req_rate")
 		w.Header().Set("Retry-After", "1")
 		http.Error(w, "too many requests", http.StatusTooManyRequests)
 		return
 	}
 	if aerr == nil && !re.ACL.allows(ap.Addr()) {
-		st.Rejected.Add(1)
+		st.block(bACL, ap.Addr())
 		s.mx.termReject("acl")
 		termPage(w, r, http.StatusForbidden, host, "Zugriff von dieser Adresse nicht erlaubt.", "Access from this address is not allowed.")
 		return
@@ -294,6 +298,12 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 	if re.Blocked != "" {
 		s.mx.termReject("blocked")
 		termPage(w, r, http.StatusServiceUnavailable, host, "Dieser Dienst ist vorübergehend nicht verfügbar.", "This service is temporarily unavailable.")
+		return
+	}
+	if re.WAF && wafHit(r) { // Muster-WAF (waf.go)
+		st.block(bWAF, ap.Addr())
+		s.mx.termReject("waf")
+		termPage(w, r, http.StatusForbidden, host, "Diese Anfrage wurde von der CDN64-WAF blockiert.", "This request was blocked by the CDN64 WAF.")
 		return
 	}
 	if s.term.h3 != nil && r.ProtoMajor < 3 {
@@ -306,7 +316,7 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 	cctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	defer s.track(re.Name, re.Mode, ap.Addr(), cancel)()
-	ctx := context.WithValue(cctx, termCtxKey{}, &termReq{re: re, host: host, client: r.RemoteAddr})
+	ctx := context.WithValue(cctx, termCtxKey{}, &termReq{re: re, host: host, client: r.RemoteAddr, ip: ap.Addr()})
 	if re.Mode == 3 { // Traffic: was zum Besucher geht (komprimiert bzw. aus dem Cache), nicht was vom Ziel kommt
 		s.serveCached(&outCounter{ResponseWriter: w, st: st, bw: s.bw, uid: re.UserID}, r.WithContext(ctx), re, s.term.dirC)
 		return
@@ -327,7 +337,7 @@ func (s *Server) termDial(ctx context.Context, _, _ string) (net.Conn, error) {
 			st.NoTunnel.Add(1)
 			return nil, err
 		}
-		st.Conns.Add(1)
+		st.conn(tq.ip)
 		return &termConn{Conn: ts, st: st, bw: s.bw, uid: tq.re.UserID}, nil
 	}
 	if pc := s.dialPeer(ctx, tunnel.KindHTTP, tq.host, 443, tq.client, nil); pc != nil { // der Nachbar zaehlt

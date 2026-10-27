@@ -209,15 +209,20 @@ func (f *qflow) run(re *route, sni string) {
 	defer f.close()
 	s := f.d.s
 	client := f.addr.String()
-	if re.Blocked != "" || !re.ACL.allows(f.addr.Addr()) {
+	if re.Blocked != "" {
 		return
 	}
-	release, why := s.guard.admit(f.addr.Addr())
+	st := s.stats.of(re.Name)
+	if !re.ACL.allows(f.addr.Addr()) {
+		st.block(bACL, f.addr.Addr())
+		return
+	}
+	release, gs, why := s.guard.admitG(f.addr.Addr(), st) // Abweisungen zaehlen bei diesem Namen
 	if why != "" {
 		return
 	}
 	defer release()
-	st := s.stats.of(re.Name)
+	gs.mark(st)
 	var conn net.Conn
 	counted := true // gezaehlt und begrenzt wird beim Server mit dem Tunnel
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -240,7 +245,7 @@ func (f *qflow) run(re *route, sni string) {
 	defer conn.Close()
 	defer s.track(re.Name, re.Mode, f.addr.Addr(), f.close)()
 	if counted {
-		st.Conns.Add(1)
+		st.conn(f.addr.Addr())
 	}
 	go func() { // Node -> Besucher
 		defer f.close()

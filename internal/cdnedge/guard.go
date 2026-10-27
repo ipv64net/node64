@@ -35,6 +35,14 @@ type gstate struct {
 	conns int
 	tok   float64
 	at    time.Time
+	host  atomic.Pointer[hostStat] // zuletzt angefragter Name dieser IP: dort zaehlt Ueberlast (ohne erneutes Lesen)
+}
+
+// mark merkt den angefragten Namen der IP (gs = nil: ohne Schutz-Zustand).
+func (gs *gstate) mark(st *hostStat) {
+	if gs != nil && gs.host.Load() != st {
+		gs.host.Store(st)
+	}
 }
 
 func newGuard(c ShieldConfig) *guard {
@@ -76,16 +84,29 @@ func (g *guard) reject(why string) {
 }
 
 func (g *guard) admit(a netip.Addr) (release func(), why string) {
+	release, _, why = g.admitG(a, nil)
+	return release, why
+}
+
+// admitG wie admit, dazu der Zustand der IP (gs.mark). Abweisungen zaehlen auch beim Namen: host, wenn er schon
+// bekannt ist (QUIC durchreichen, Portmapper UDP), sonst Ueberlast beim zuletzt angefragten Namen der IP; Blocklisten
+// ohne host zaehlt der Aufrufer (acceptLoop liest dafuer den Namen).
+func (g *guard) admitG(a netip.Addr, host *hostStat) (release func(), gs *gstate, why string) {
 	a = a.Unmap()
 	if g.set.Load().Has(a) {
 		g.reject("blocklist")
-		return nil, "blocklist"
-	}
-	if g.maxConns > 0 && g.open.Load() >= int64(g.maxConns) {
-		g.reject("max_conns")
-		return nil, "max_conns"
+		host.block(bList, a)
+		return nil, nil, "blocklist"
 	}
 	k, now := gkey(a), g.now()
+	if g.maxConns > 0 && g.open.Load() >= int64(g.maxConns) {
+		g.reject("max_conns")
+		g.mu.Lock()
+		st := g.ips[k]
+		g.mu.Unlock()
+		floodAt(host, st, a)
+		return nil, nil, "max_conns"
+	}
 	g.mu.Lock()
 	st := g.ips[k]
 	if st == nil {
@@ -99,11 +120,13 @@ func (g *guard) admit(a netip.Addr) (release func(), why string) {
 	case g.connsPerIP > 0 && st.conns >= g.connsPerIP:
 		g.mu.Unlock()
 		g.reject("conns")
-		return nil, "conns"
+		floodAt(host, st, a)
+		return nil, nil, "conns"
 	case g.rate > 0 && st.tok < 1:
 		g.mu.Unlock()
 		g.reject("conn_rate")
-		return nil, "conn_rate"
+		floodAt(host, st, a)
+		return nil, nil, "conn_rate"
 	}
 	if g.rate > 0 {
 		st.tok--
@@ -119,7 +142,26 @@ func (g *guard) admit(a netip.Addr) (release func(), why string) {
 			g.mu.Unlock()
 			g.open.Add(-1)
 		})
-	}, ""
+	}, st, ""
+}
+
+// floodAt zaehlt Ueberlast beim Namen: host, sonst der zuletzt angefragte Name der IP (st), sonst nirgends.
+func floodAt(host *hostStat, st *gstate, a netip.Addr) {
+	if host == nil && st != nil {
+		host = st.host.Load()
+	}
+	host.block(bFlood, a)
+}
+
+// forget vergisst gemerkte Namen, deren Zaehler weg sind (forgetGone).
+func (g *guard) forget(gone map[*hostStat]bool) {
+	g.mu.Lock()
+	for _, st := range g.ips {
+		if gone[st.host.Load()] {
+			st.host.Store(nil)
+		}
+	}
+	g.mu.Unlock()
 }
 
 // sweep raeumt ruhige Adressen weg (jede Minute).
@@ -142,10 +184,7 @@ func (s *Server) blocklistLoop(ctx context.Context) {
 	if len(ids) == 0 {
 		return
 	}
-	base := s.cfg.Shield.BlocklistBase
-	if base == "" {
-		base = "https://ipv64.net/blocklists/"
-	}
+	base := blocklistBase(s.cfg)
 	dir := filepath.Join(s.cfg.DataDir, "blocklists")
 	_ = os.MkdirAll(dir, 0o750)
 	client := &http.Client{Timeout: 60 * time.Second}
@@ -217,6 +256,14 @@ func (s *Server) blocklistLoop(ctx context.Context) {
 		case <-t.C:
 		}
 	}
+}
+
+// blocklistBase: Basis-URL der Listen (blocklist_base, Standard ipv64.net).
+func blocklistBase(c *Config) string {
+	if c.Shield.BlocklistBase != "" {
+		return c.Shield.BlocklistBase
+	}
+	return "https://ipv64.net/blocklists/"
 }
 
 func addrOf(a net.Addr) netip.Addr {

@@ -39,7 +39,7 @@ type edgeCounters struct {
 }
 
 // Abweisungen von Anfragen in Modus 2/3 (terminate.go).
-var termRejReasons = [...]string{"misdirected", "req_rate", "acl", "blocked", "blocklist"}
+var termRejReasons = [...]string{"misdirected", "req_rate", "acl", "blocked", "blocklist", "waf"}
 
 func termRejIndex(why string) int {
 	for i, r := range termRejReasons {

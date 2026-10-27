@@ -147,7 +147,7 @@ func (p *portmapper) apply(c *apiConfig) {
 			}
 			p.tcp[k.port] = ln
 			port := k.port
-			go p.s.acceptLoop(ln, func(c net.Conn) { p.serveTCP(port, c) })
+			go p.s.acceptLoop(ln, func(c net.Conn, gs *gstate) { p.serveTCP(port, c, gs) }, func(net.Conn) string { return p.portName(port) })
 		}
 		delete(p.failed, k)
 	}
@@ -197,17 +197,26 @@ func (p *portmapper) open() (tcp, udp int) {
 	return len(p.tcp), len(p.udp)
 }
 
-// resolve: aktueller Name und Ziel-Port eines Ports; nil = nicht (mehr) bedient oder gesperrt.
-func (p *portmapper) resolve(k pmKey, client netip.Addr) (*route, int) {
+// resolve: aktueller Name und Ziel-Port eines Ports; nil = nicht (mehr) bedient oder gesperrt. acl: Name, dessen Liste
+// den Besucher abweist (fuer die Zaehler).
+func (p *portmapper) resolve(k pmKey, client netip.Addr) (*route, int, *route) {
 	e, ok := (*p.want.Load())[k]
 	if !ok {
-		return nil, 0
+		return nil, 0, nil
 	}
 	re := p.s.routes.Load().lookup(e.name)
-	if re == nil || re.Mode == 3 && re.Target == nil || re.Blocked != "" || !re.ACL.allows(client) {
-		return nil, 0
+	if re == nil || re.Mode == 3 && re.Target == nil || re.Blocked != "" {
+		return nil, 0, nil
 	}
-	return re, e.port
+	if !re.ACL.allows(client) {
+		return nil, 0, re
+	}
+	return re, e.port, nil
+}
+
+// portName: Name eines TCP-Ports (Blocklisten-Treffer, ohne zu lesen).
+func (p *portmapper) portName(port int) string {
+	return (*p.want.Load())[pmKey{port: port}].name
 }
 
 var errNoPortTunnel = errors.New("portmapper: node not connected or without port mappings")
@@ -309,13 +318,17 @@ func (p *portmapper) dial(ctx context.Context, network string, re *route, port i
 
 // ---------------------------------------------------------------- TCP
 
-func (p *portmapper) serveTCP(port int, c net.Conn) {
-	re, tport := p.resolve(pmKey{port: port}, addrOf(c.RemoteAddr()))
+func (p *portmapper) serveTCP(port int, c net.Conn, gs *gstate) {
+	re, tport, denied := p.resolve(pmKey{port: port}, addrOf(c.RemoteAddr()))
 	if re == nil {
+		if denied != nil {
+			p.s.stats.of(denied.Name).block(bACL, addrOf(c.RemoteAddr()))
+		}
 		_ = c.Close()
 		return
 	}
 	st := p.s.stats.of(re.Name)
+	gs.mark(st)
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	up, counted, err := p.upstream(ctx, "tcp", re, tport, clientOf(c.RemoteAddr()))
 	cancel()
@@ -333,7 +346,7 @@ func (p *portmapper) serveTCP(port int, c net.Conn) {
 		tunnel.Join(vc, uc)
 		return
 	}
-	st.Conns.Add(1)
+	st.conn(addrOf(c.RemoteAddr()))
 	tunnel.Join(&meter{Conn: vc, n: &st.BytesIn, bw: p.s.bw, uid: re.UserID}, &meter{Conn: uc, n: &st.BytesOut, bw: p.s.bw, uid: re.UserID})
 }
 
@@ -403,6 +416,7 @@ type udpPort struct {
 	sess    map[netip.AddrPort]*udpSess
 	newTok  float64 // Kontingent neuer Sitzungen
 	newLast time.Time
+	aclLast netip.AddrPort // zuletzt nach der Liste abgewiesener Absender (je Absender einmal zaehlen, nicht je Datagramm)
 }
 
 type udpSess struct {
@@ -523,7 +537,7 @@ func (u *udpPort) newOK(now time.Time) bool {
 // session: bestehende Sitzung (solange Ziel und Name unveraendert) oder eine neue (Verbindung zum Ziel entsteht im
 // Hintergrund); nil = verwerfen.
 func (u *udpPort) session(from netip.AddrPort) *udpSess {
-	re, tport := u.p.resolve(pmKey{udp: true, port: u.port}, from.Addr())
+	re, tport, denied := u.p.resolve(pmKey{udp: true, port: u.port}, from.Addr())
 	u.mu.Lock()
 	s := u.sess[from]
 	if s != nil && (re == nil || s.gen != targetGen(re) || s.tport != tport) {
@@ -534,7 +548,14 @@ func (u *udpPort) session(from netip.AddrPort) *udpSess {
 		s = nil
 	}
 	if s != nil || re == nil {
+		count := s == nil && denied != nil && from != u.aclLast
+		if count {
+			u.aclLast = from
+		}
 		u.mu.Unlock()
+		if count {
+			u.p.s.stats.of(denied.Name).block(bACL, from.Addr())
+		}
 		return s
 	}
 	if len(u.sess) >= udpMaxSessions || !u.newOK(time.Now()) {
@@ -542,11 +563,13 @@ func (u *udpPort) session(from netip.AddrPort) *udpSess {
 		return nil
 	}
 	u.mu.Unlock()
-	release, why := u.p.s.guard.admit(from.Addr()) // wie eine Verbindung: Blocklisten, Grenzen je IP
+	st := u.p.s.stats.of(re.Name)
+	release, gs, why := u.p.s.guard.admitG(from.Addr(), st) // wie eine Verbindung: Blocklisten, Grenzen je IP
 	if why != "" {
 		return nil
 	}
-	s = &udpSess{gen: targetGen(re), tport: tport, st: u.p.s.stats.of(re.Name), uid: re.UserID, release: release}
+	gs.mark(st)
+	s = &udpSess{gen: targetGen(re), tport: tport, st: st, uid: re.UserID, release: release}
 	s.last.Store(time.Now().UnixNano())
 	u.mu.Lock()
 	if old := u.sess[from]; old != nil { // gleichzeitig angelegt: die vorhandene nehmen
@@ -581,7 +604,7 @@ func (u *udpPort) connect(from netip.AddrPort, s *udpSess, re *route, tport int)
 	s.up, s.queue, s.free = up, nil, !counted
 	s.mu.Unlock()
 	if counted {
-		s.st.Conns.Add(1)
+		s.st.conn(from.Addr())
 	}
 	for _, p := range q {
 		if _, err := up.Write(p); err == nil {

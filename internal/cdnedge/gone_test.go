@@ -18,7 +18,7 @@ func TestForgetGoneNames(t *testing.T) {
 	for _, n := range []string{"keep.test", "wild.test", "gone.test"} {
 		s.stats.of(n).BytesIn.Add(10)
 		s.apist.mu.Lock()
-		s.apist.sent[n] = [5]int64{5}
+		s.apist.sent[n] = [repN]int64{5}
 		s.apist.mu.Unlock()
 	}
 	p := newCertPlan()
