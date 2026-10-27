@@ -32,7 +32,7 @@ cp "$HERE/dbconnect_stub.php" "$STAGE/hp5w/web/dbconnect.php"
 cp "$HERE/header_stub.php" "$STAGE/hp5w/web/header.php"
 cp "$HP/tests/footer_stub.php" "$STAGE/hp5w/web/footer.php"
 cp "$HERE/run_tests.php" "$HERE/setup.sql" "$STAGE/hp5w/tests/"
-cp "$SQL/honeypot.sql" "$SQL/honeypot_h3_scoring.sql" "$SQL/honeypot_h5.sql" "$SQL/honeypot_watch_details.sql" "$STAGE/hp5w/sql/"
+cp "$SQL/honeypot.sql" "$SQL/honeypot_h3_scoring.sql" "$SQL/honeypot_h5.sql" "$SQL/honeypot_watch_details.sql" "$SQL/honeypot_sensor_country.sql" "$STAGE/hp5w/sql/"
 
 ssh agentbox 'rm -rf /tmp/hp5w'
 scp -q -r "$STAGE/hp5w" agentbox:/tmp/
@@ -58,6 +58,7 @@ $M < /tmp/hp5w/sql/honeypot_h5.sql
 $M < /tmp/hp5w/sql/honeypot_h5.sql   # mehrfach ausfuehrbar
 $M < /tmp/hp5w/sql/honeypot_watch_details.sql
 $M < /tmp/hp5w/sql/honeypot_watch_details.sql   # mehrfach ausfuehrbar
+$M < /tmp/hp5w/sql/honeypot_sensor_country.sql   # Standort des Sensors (api_v2_honeypot.php schreibt hp_sensors.country)
 echo "--- Tabellen"; docker exec hp5w-db mysql -uroot -php5wtest ipv64 -N -e "SHOW TABLES LIKE 'hp\_%'" | tr '\n' ' '; echo
 docker run -d --name hp5w-php --network hp5w-net -e HP5WTEST=1 -v /tmp/hp5w:/w -w /w/web hp5w-php:latest php -S 0.0.0.0:8080 -t /w/web >/dev/null
 sleep 1

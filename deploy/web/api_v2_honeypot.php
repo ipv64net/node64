@@ -152,7 +152,7 @@ function hp_parse(array $b, int $now): array {
 	if(!in_array($s['profile'] ?? null, HP_PROFILES, true)) { hp_bad('sensor.profile', "Field 'sensor.profile' must be one of " . implode(', ', HP_PROFILES) . "."); }
 	if(!in_array($s['mode'] ?? null, HP_MODES, true)) { hp_bad('sensor.mode', "Field 'sensor.mode' must be one of " . implode(', ', HP_MODES) . "."); }
 	// Standort (nur Live-Karte): fehlt oder ungueltig = automatisch, die Meldung wird deshalb nicht abgewiesen
-	$cc = (is_string($s['country'] ?? null) AND preg_match('/^[A-Z]{2}$/', $s['country']) AND $s['country'] !== 'ZZ') ? $s['country'] : null;
+	$cc = (is_string($s['country'] ?? null) AND preg_match('/^[A-Z]{2}\z/', $s['country']) AND $s['country'] !== 'ZZ') ? $s['country'] : null;
 
 	$p = $b['period'] ?? null;
 	if(!is_array($p)) { hp_bad('period', "Field 'period' must be an object."); }

@@ -19031,7 +19031,7 @@
               },
               "countries": {
                 "type": "array",
-                "description": "Herkunft nach Land: IPs der v64 Blocklist mit Sichtung in den letzten 30 Tagen je Land (Top 10, nach Anzahl IPs). Land aus den RIR-Daten (https://ipv64.net/blocklists/country_ranges.txt.gz).",
+                "description": "Herkunft nach Land: IPs der v64 Blocklist mit Sichtung in den letzten 30 Tagen je Land (Top 10, nach Anzahl IPs). Land nach Standort aus DB-IP Lite (CC BY 4.0, IP-Länderdaten: DB-IP.com), Lücken aus den RIR-Daten (https://ipv64.net/blocklists/country_ranges.txt.gz).",
                 "items": {
                   "type": "object",
                   "properties": {

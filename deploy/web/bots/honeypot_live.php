@@ -9,7 +9,8 @@
  * Liest die gemeldeten Quellen der letzten 60 Minuten (hp_report_sources, Index last_seen; hoechstens 3000 Zeilen) und
  * schreibt honeypot/live.json (statisch: Besucher der Seite loesen nie SQL aus). Je Eintrag: Zeit, Quelle maskiert
  * (IPv4 /24, IPv6 /48), Land der Quelle, Land des Sensors (nie Sensor, Account oder IP), Art, Dienst, Port, Anzahl.
- * Ziel-Land: eingestellter Standort des Sensors (hp_sensors.country, aus der Meldung), sonst Land der IP der Meldung.
+ * Ziel-Land: eingestellter Standort des Sensors (hp_sensors.country, aus der Meldung), wenn die Karte das Land kennt
+ * (honeypot/worldmap.json, Flaeche oder fester Punkt), sonst Land der IP der Meldung.
  * Keine Zugangsdaten. Weggelassen: Quellen, die selbst Sensor-IPs sind, und IPs, die die Bewertung als Infrastruktur,
  * CDN, Freigabe oder Kunden-IP kennzeichnet (hp_scores.reason). Laender aus blocklists/country_ranges.txt.gz in einem
  * Durchlauf (sortierte Bereiche, wenig Speicher; Standort nach DB-IP, Luecken aus den RIR-Daten). Die Meldungen kommen alle 10 Minuten: die Karte ist zeitversetzt.
@@ -47,6 +48,7 @@ foreach($rows as $r) {
 	if(($b = @inet_pton((string)$r['sensor_ip'])) !== false) { $need[$b] = true; }
 }
 $cc = hpl_countries(__DIR__ . '/../blocklists/country_ranges.txt.gz', array_keys($need));
+$known = hpl_map_countries(__DIR__ . '/../honeypot/worldmap.json');
 
 $agg = array(); $srcSet = array(); $dstSet = array(); $byCountry = array(); $events = 0; $skipped = 0;
 foreach($rows as $r) {
@@ -54,7 +56,7 @@ foreach($rows as $r) {
 	if(isset($sensor[$b]) OR isset($skip[$b])) { $skipped++; continue; }
 	$from = $cc[$b] ?? null;
 	$sb = @inet_pton((string)$r['sensor_ip']);
-	$to = preg_match('/^[A-Z]{2}$/', (string)$r['sensor_cc']) ? $r['sensor_cc'] : ($sb !== false ? ($cc[$sb] ?? null) : null);
+	$to = isset($known[(string)$r['sensor_cc']]) ? $r['sensor_cc'] : ($sb !== false ? ($cc[$sb] ?? null) : null);
 	if($from === null OR $to === null) { continue; }
 	$src = hpl_mask((string)$r['ip']);
 	$k = $src . '|' . $from . '|' . $to . '|' . $r['kind'] . '|' . $r['service'] . '|' . $r['port'];
@@ -86,6 +88,13 @@ $tmp = $file . '.tmp';
 if(file_put_contents($tmp, json_encode($out, JSON_UNESCAPED_SLASHES)) === false OR !rename($tmp, $file)) {
 	fwrite(STDERR, "live.json nicht geschrieben\n");
 	exit(1);
+}
+
+/** Laender der Karte (Flaechen und feste Punkte) aus worldmap.json -> [CC => true]; fehlt die Datei: leer */
+function hpl_map_countries(string $file): array {
+	$m = json_decode((string)@file_get_contents($file), true);
+	if(!is_array($m)) { return array(); }
+	return array_fill_keys(array_merge(array_keys($m['countries'] ?? array()), array_keys($m['points'] ?? array())), true);
 }
 
 /** Quelle maskieren: IPv4 /24 (203.0.113.x), IPv6 /48 (2001:db8:1::/48) */

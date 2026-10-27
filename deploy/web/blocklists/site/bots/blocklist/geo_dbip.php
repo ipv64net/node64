@@ -7,7 +7,8 @@
  * Luecken (Adressen ohne Land bei DB-IP) fuellen die RIR-Daten.
  *
  * Die Datei des laufenden Monats wird einmal geladen (Versuch hoechstens alle GDB_RETRY Sekunden) und im
- * Zwischenspeicher behalten; fehlt sie, gilt die neueste vorhandene. Ohne gueltige Datei: null (der Generator nimmt
+ * Zwischenspeicher behalten; fehlt sie oder ist sie unbrauchbar, gilt die naechstaeltere (eine unbrauchbare wird
+ * geloescht und spaeter neu geladen). Ohne gueltige Datei: null (der Generator nimmt
  * dann wie bisher nur die RIR-Daten). Die Laender-Blocklisten selbst bleiben bei den RIR-Daten.
  * Bereiche intern gepackt wie geo_key (erste IP . letzte IP . Land, IPv4 10 Byte, IPv6 34 Byte) - wenig Speicher.
  * Nur Konstanten und Funktionen; braucht geo_next aus dem Generator.
@@ -56,8 +57,8 @@ function gdb_download(string $month, string $path): bool
 	return rename($tmp, $path);
 }
 
-/** Neueste brauchbare Datei im Zwischenspeicher (laufenden Monat bei Bedarf laden), aeltere als die zwei neuesten loeschen */
-function gdb_file(string $dir, bool $fetch): ?string
+/** Dateien im Zwischenspeicher, neueste zuerst (laufenden Monat bei Bedarf laden), aeltere als die zwei neuesten loeschen */
+function gdb_files(string $dir, bool $fetch): array
 {
 	if(!is_dir($dir)) { @mkdir($dir, 0750, true); }
 	$month = gmdate('Y-m');
@@ -70,7 +71,7 @@ function gdb_file(string $dir, bool $fetch): ?string
 	$files = glob("$dir/dbip-country-lite-*.csv.gz") ?: array();
 	rsort($files, SORT_STRING);
 	foreach(array_slice($files, 2) as $f) { @unlink($f); }
-	return $files[0] ?? null;
+	return array_slice($files, 0, 2);
 }
 
 /** Vorige Adresse (Binaerstring - 1), null bei Unterlauf */
@@ -168,9 +169,11 @@ function gdb_fill(string $d, array $rir, int $w, int &$n, int &$filled): string
  *  $rir = [4 => geo_key-Liste, 6 => geo_key-Liste] aus den RIR-Laendernetzen. */
 function gdb_build(string $dir, bool $fetch, array $rir): ?array
 {
-	$file = gdb_file($dir, $fetch);
-	if($file === null) { return null; }
-	$d = gdb_ranges($file);
+	$d = null;
+	foreach(gdb_files($dir, $fetch) as $file) {
+		if(($d = gdb_ranges($file)) !== null) { break; }
+		@unlink($file); // unbrauchbar: weg, damit sie neu geladen wird (nach GDB_RETRY); naechstaeltere versuchen
+	}
 	if($d === null) { return null; }
 	$n4 = 0; $n6 = 0; $filled = 0;
 	$txt = gdb_fill($d[4], $rir[4] ?? array(), 4, $n4, $filled).gdb_fill($d[16], $rir[6] ?? array(), 16, $n6, $filled);

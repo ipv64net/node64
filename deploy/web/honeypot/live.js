@@ -1,6 +1,6 @@
 // Honeypot64 – Live-Karte auf ipv64.net (live.php): Weltkarte aus worldmap.json, Angriffe aus live.json (statisch, alle
-// 2 Minuten neu). Neue Eintraege zuerst als Boegen (mehrere gleichzeitig), sonst werden aeltere aus der letzten Stunde
-// wiederholt (blasser, als Wiederholung markiert); Tabelle und Listen zeigen nur echte Eintraege. Land anklicken: alle
+// 2 Minuten neu). Neue Eintraege zuerst als Boegen (mehrere gleichzeitig); nur in einem Takt ohne neue werden aeltere
+// aus der letzten Stunde wiederholt (blasser, als Wiederholung markiert); Tabelle und Listen zeigen nur echte Eintraege. Land anklicken: alle
 // Verbindungen von und nach dort. Vollbild mit Seitenleiste (laufende Boegen, haeufigste Verbindungen, Zahlen).
 (function () {
 	"use strict";
@@ -16,7 +16,7 @@
 	var nf = new Intl.NumberFormat(lang);
 	var MAX_LIVE = 12, PER_TICK = 3; // hoechstens so viele Boegen gleichzeitig / neue je Takt
 	var map = null, entries = [], fresh = [], seen = 0, running = true, replay = 0, shownIds = {}, live = [], sel = null;
-	var boxes = [], hits = {}, lastBy = {}; // belegte Flaechen der Beschriftungen, Boegen je Ziel-Land, Laender (Namen)
+	var labels = {}, hits = {}, lastBy = {}, gen = 0; // Beschriftungen je Text (Zaehler), Boegen je Ziel-Land, Laender (Namen), Takt-Generation
 
 	function name(cc) { try { return names ? names.of(cc) : cc; } catch (e) { return cc; } }
 	function flag(cc) { return /^[A-Z]{2}$/.test(cc) ? String.fromCodePoint(0x1F1E6 + cc.charCodeAt(0) - 65, 0x1F1E6 + cc.charCodeAt(1) - 65) : ""; }
@@ -42,32 +42,39 @@
 			var n = (byCountry || {})[cc] || 0;
 			// Stufen 1-5 logarithmisch wie in Node64 (staerkstes Land = 5)
 			var lvl = n <= 0 ? 0 : (max <= 1 ? 5 : Math.min(5, 1 + Math.floor(4.999 * Math.log(n) / Math.log(max))));
-			var cls = (lvl ? "hl-m" + lvl : "") + (sel && sel.cc === cc ? " hl-on" : "");
+			var cls = (lvl ? "hl-m" + lvl : "") + (sel && sel.cc === cc ? " hl-on" : "") + (hits[cc] > 0 ? " hl-hit" : "");
 			var p = el("path", { d: map.countries[cc].d, "class": cls, "data-cc": cc });
 			var t = el("title");
 			t.textContent = cn(cc) + (n ? ": " + nf.format(n) + " " + T.attacks : "");
 			p.appendChild(t);
 			land.appendChild(p);
 		});
-		// Kleinstaaten mit Angriffen als Punkt in der Farbe der Stufe
+		// Kleinstaaten mit Angriffen (Farbe der Stufe) oder als Ziel (Land des Sensors) als Punkt
+		var dsts = {};
+		entries.forEach(function (e) { dsts[e.dst] = true; });
 		Object.keys(map.points || {}).forEach(function (cc) {
 			var n = (byCountry || {})[cc] || 0;
-			if (!n) { return; }
-			var lvl = max <= 1 ? 5 : Math.min(5, 1 + Math.floor(4.999 * Math.log(n) / Math.log(max)));
-			var c = el("circle", { cx: map.points[cc].x, cy: map.points[cc].y, r: 2.6, "class": "hl-pt hl-m" + lvl + (sel && sel.cc === cc ? " hl-on" : ""), "data-cc": cc });
+			if (!n && !dsts[cc]) { return; }
+			var lvl = n <= 0 ? 0 : (max <= 1 ? 5 : Math.min(5, 1 + Math.floor(4.999 * Math.log(n) / Math.log(max))));
+			var c = el("circle", { cx: map.points[cc].x, cy: map.points[cc].y, r: 2.6, "data-cc": cc,
+				"class": "hl-pt" + (lvl ? " hl-m" + lvl : "") + (sel && sel.cc === cc ? " hl-on" : "") + (hits[cc] > 0 ? " hl-hit" : "") });
 			var t = el("title");
-			t.textContent = cn(cc) + ": " + nf.format(n) + " " + T.attacks;
+			t.textContent = cn(cc) + (n ? ": " + nf.format(n) + " " + T.attacks : "");
 			c.appendChild(t);
 			land.appendChild(c);
 		});
 	}
 
-	// Beschriftung (Flagge und Code) an einem Punkt; null, wenn sie eine andere ueberdecken wuerde
+	// Beschriftung (Flagge und Code) an einem Punkt; gleiche Beschriftung mehrerer Boegen wird geteilt (Zaehler) und erst
+	// mit dem letzten Bogen entfernt. null, wenn sie eine andere ueberdecken wuerde. Rueckgabe: Freigabe-Funktion
 	function label(p, text, dst) {
-		var X = p[0], Y = p[1];
+		var X = p[0], Y = p[1], key = (dst ? "d|" : "s|") + text;
+		if (labels[key]) { labels[key].n++; return release(key); }
 		var k = unit(), x = X + 4 * k, y = Y + (dst ? 14 : -6) * k, w = (text.length * 6 + 6) * k;
-		for (var i = 0; i < boxes.length; i++) {
-			if (Math.abs(boxes[i].x - x) < Math.max(boxes[i].w, w) + 2 * k && Math.abs(boxes[i].y - y) < 15 * k) { return null; }
+		var keys = Object.keys(labels);
+		for (var i = 0; i < keys.length; i++) {
+			var o = labels[keys[i]].box;
+			if (Math.abs(o.x - x) < Math.max(o.w, w) + 2 * k && Math.abs(o.y - y) < 15 * k) { return null; }
 		}
 		// kleiner Kasten (dunkelgrau, halbtransparent) mit Flagge und Code, 10 px unabhaengig von der Kartengroesse
 		var g = el("g", { "class": "hl-lbl" + (dst ? " hl-lbl-dst" : "") });
@@ -77,9 +84,17 @@
 		g.append(r, t);
 		labelLayer.appendChild(g);
 		try { var bb = t.getBBox(); if (bb.width) { w = bb.width + 6 * k; r.setAttribute("width", w); } } catch (e) { /* nicht sichtbar */ }
-		var box = { x: x, y: y, w: w };
-		boxes.push(box);
-		return function () { g.remove(); boxes = boxes.filter(function (b) { return b !== box; }); };
+		labels[key] = { g: g, box: { x: x, y: y, w: w }, n: 1 };
+		return release(key);
+	}
+
+	function release(key) {
+		var l = labels[key], done = false;
+		return function () {
+			if (done || labels[key] !== l) { return; } // schon frei oder nach einer Pause neu angelegt
+			done = true;
+			if (--l.n <= 0) { l.g.remove(); delete labels[key]; }
+		};
 	}
 
 	// Kartenmass je Bildschirmpixel (Beschriftung bleibt bei jeder Kartengroesse gleich gross)
@@ -97,22 +112,24 @@
 		entries.forEach(function (e) { w[e.dst] = (w[e.dst] || 0) + e.n; });
 		var used = [], k = unit();
 		Object.keys(w).sort(function (a, b) { return w[b] - w[a]; }).slice(0, 14).forEach(function (cc) {
-			var c = map.countries[cc];
+			var c = map.countries[cc], pt0 = !c && (map.points || {})[cc]; // Kleinstaat: Name links neben dem Punkt
+			c = c || pt0;
 			if (!c) { return; }
-			var n = name(cc), tw = n.length * 5.5 * k;
-			for (var i = 0; i < used.length; i++) { if (Math.abs(used[i][0] - c.x) < (used[i][2] + tw) / 2 + 2 * k && Math.abs(used[i][1] - c.y) < 13 * k) { return; } }
-			used.push([c.x, c.y, tw]);
-			var t = el("text", { x: c.x, y: c.y + 3 * k, "class": "hl-name", "font-size": (9.5 * k).toFixed(2) });
+			var n = name(cc), tw = n.length * 5.5 * k, cx = pt0 ? c.x - 5 * k - tw / 2 : c.x;
+			for (var i = 0; i < used.length; i++) { if (Math.abs(used[i][0] - cx) < (used[i][2] + tw) / 2 + 2 * k && Math.abs(used[i][1] - c.y) < 13 * k) { return; } }
+			used.push([cx, c.y, tw]);
+			var t = el("text", { x: pt0 ? c.x - 5 * k : c.x, y: c.y + 3 * k, "class": "hl-name", "font-size": (9.5 * k).toFixed(2) });
+			if (pt0) { t.style.textAnchor = "end"; }
 			t.style.strokeWidth = (2.5 * k).toFixed(2);
 			t.textContent = n;
 			namesLayer.appendChild(t);
 		});
 	}
 
-	// angegriffenes Land hell hervorheben, solange ein Bogen dorthin laeuft
+	// angegriffenes Land hell hervorheben, solange ein Bogen dorthin laeuft (Flaeche oder Punkt eines Kleinstaats)
 	function hit(cc, on) {
 		hits[cc] = Math.max(0, (hits[cc] || 0) + (on ? 1 : -1));
-		var p = land.querySelector('path[data-cc="' + cc + '"]');
+		var p = land.querySelector('[data-cc="' + cc + '"]');
 		if (p) { p.classList.toggle("hl-hit", hits[cc] > 0); }
 	}
 
@@ -156,7 +173,7 @@
 		var dot = el("circle", { cx: a[0], cy: a[1], r: 2.2, "class": "hl-src hl-g-" + e.group });
 		var ring = el("circle", { cx: b[0], cy: b[1], r: 4, "class": "hl-dst" });
 		arcs.append(p, dot, ring);
-		var item = { e: e, rep: rep, path: p };
+		var item = { e: e, rep: rep, path: p, hit: true };
 		live.unshift(item);
 		var la = label(a, flag(e.cc) + " " + e.cc, false), lb = label(b, flag(e.dst) + " " + e.dst, true);
 		hit(e.dst, true);
@@ -165,7 +182,7 @@
 			p.remove(); dot.remove(); ring.remove();
 			if (la) { la(); }
 			if (lb) { lb(); }
-			hit(e.dst, false);
+			if (item.hit) { item.hit = false; hit(e.dst, false); }
 			live = live.filter(function (x) { return x !== item; });
 			renderNow(); liveCount();
 		};
@@ -313,7 +330,6 @@
 			list.forEach(function (e) { if (seen && e.t > seen) { fresh.push(e); } if (e.t > max) { max = e.t; } });
 			entries = list.slice().reverse();
 			drawLand((d.stats || {}).by_country);
-			Object.keys(hits).forEach(function (cc) { if (hits[cc] > 0) { var hp = land.querySelector('path[data-cc="' + cc + '"]'); if (hp) { hp.classList.add("hl-hit"); } } });
 			drawNames((d.stats || {}).by_country);
 			stats(d.stats || {});
 			renderStrip(d.stats || {});
@@ -325,22 +341,23 @@
 		}).catch(function () { $("hlUpdated").textContent = T.unavailable; });
 	}
 
-	// Je Takt bis zu PER_TICK Boegen: zuerst neue Eintraege, sonst Wiederholung aelterer (verschiedene Verbindungen)
+	// Je Takt bis zu PER_TICK Boegen: neue Eintraege; nur in einem Takt ohne neue 1-2 Wiederholungen (verschiedene
+	// Verbindungen). Die Boegen eines Takts starten versetzt; nach einer Pause (gen) faellt der Rest weg.
 	function tick() {
 		if (!running || document.hidden || !map) { return; }
-		var room = Math.min(PER_TICK, MAX_LIVE - live.length), batch = [], used = {};
+		var room = Math.min(PER_TICK, MAX_LIVE - live.length), batch = [], used = {}, tries = 0, g = gen;
 		while (room > 0 && fresh.length) { batch.push([fresh.shift(), false]); room--; }
-		var tries = 0;
-		if (!batch.length) { room = Math.min(room, 2); }
-		while (room > 0 && entries.length && tries < entries.length && tries < 20) {
-			var e = entries[replay++ % entries.length]; tries++;
-			var k = e.cc + ">" + e.dst;
-			if (used[k]) { continue; }
-			used[k] = true;
-			batch.push([e, true]); room--;
-			if (batch.length >= 1 && entries.length > 1 && Math.random() < 0.5) { break; }
+		if (!batch.length) {
+			room = Math.min(room, Math.random() < 0.5 ? 1 : 2);
+			while (room > 0 && entries.length && tries < Math.min(entries.length, 20)) {
+				var e = entries[replay++ % entries.length]; tries++;
+				var k = e.cc + ">" + e.dst;
+				if (used[k]) { continue; }
+				used[k] = true;
+				batch.push([e, true]); room--;
+			}
 		}
-		batch.forEach(function (b, i) { setTimeout(function () { arc(b[0], b[1]); }, i * 300); });
+		batch.forEach(function (b, i) { setTimeout(function () { if (running && g === gen) { arc(b[0], b[1]); } }, i * 300); });
 	}
 
 	function setBadges() {
@@ -354,7 +371,9 @@
 		pauseBtn.innerHTML = running ? '<i class="fa-solid fa-pause"></i> ' + T.pause : '<i class="fa-solid fa-play"></i> ' + T.play;
 		setBadges();
 		if (!running) {
-			arcs.replaceChildren(); labelLayer.replaceChildren(); boxes = []; live = []; hits = {};
+			gen++;
+			live.forEach(function (it) { it.hit = false; });
+			arcs.replaceChildren(); labelLayer.replaceChildren(); labels = {}; live = []; hits = {};
 			land.querySelectorAll(".hl-hit").forEach(function (x) { x.classList.remove("hl-hit"); });
 			renderNow(); liveCount();
 		}
@@ -395,7 +414,7 @@
 	$("hlMap").addEventListener("click", function (ev) { if (ev.target === ev.currentTarget && sel) { select(null); } });
 	$("hlSelClear").addEventListener("click", function () { select(null); });
 
-	fetch("worldmap.json?v=2", { cache: "force-cache" }).then(function (r) { return r.json(); }).then(function (m) {
+	fetch("worldmap.json?v=3", { cache: "force-cache" }).then(function (r) { return r.json(); }).then(function (m) {
 		map = m;
 		$("hlMap").setAttribute("viewBox", m.viewBox);
 		drawLand({});

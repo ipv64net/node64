@@ -78,6 +78,8 @@ check('kein neuer Cron-Job noetig (HPC_JOBS unveraendert: score mit --only=v64)'
 echo "Generator (kleiner RIR-Testdatensatz)\n";
 $o = gen('--only=v64');
 check('--only=v64 schreibt keine country_ranges.txt.gz', !is_file($GZ) AND clean_out($o), $o);
+// kein DB-IP-Abruf aus dem Test: frischer Versuchs-Stempel im Zwischenspeicher (geo_dbip.php) -> Laenderdaten aus RIR
+@mkdir(dirname($WEB) . '/private/geo', 0777, true); touch(dirname($WEB) . '/private/geo/last_try');
 $t = microtime(true); $o = gen(); $dt = microtime(true) - $t;
 check('voller Lauf ohne PHP-Fehler, Zeile "Herkunft"', clean_out($o) AND preg_match('/Herkunft\s+7 Bereiche \(v4\s+5, v6\s+2\)/', $o), $o);
 echo "        (voller Lauf " . round($dt, 2) . " s, Speicher " . peak($o) . ")\n";
@@ -94,8 +96,8 @@ foreach($got as $l) { if(!preg_match('/^[A-Z]{2} \S+ \S+$/', $l)) { $ok = false;
 check('Format je Zeile "<CC> <erste IP> <letzte IP>", erste <= letzte', $ok);
 $idx = json_decode((string)file_get_contents($IDX), true);
 $g = $idx['geo'] ?? null;
-check('index.json "geo": file, updated (RFC 3339), ranges', is_array($g) AND $g['file'] === 'country_ranges.txt.gz' AND $g['ranges'] === 7
-	AND DateTime::createFromFormat(DATE_RFC3339, (string)$g['updated']) !== false AND count($g) === 3, $g);
+check('index.json "geo": file, updated (RFC 3339), ranges, source (RIR ohne DB-IP-Datei)', is_array($g) AND $g['file'] === 'country_ranges.txt.gz' AND $g['ranges'] === 7
+	AND DateTime::createFromFormat(DATE_RFC3339, (string)$g['updated']) !== false AND count($g) === 4 AND str_starts_with((string)($g['source'] ?? ''), 'RIR'), $g);
 check('index.json: Laender und Listen weiter da', count($idx['countries'] ?? array()) >= 4 AND isset($idx['lists']), array_keys($idx));
 $m1 = filemtime($GZ); sleep(1);
 $o = gen('--only=v64'); clearstatcache();

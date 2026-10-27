@@ -168,7 +168,8 @@ function split46(array $nets): array
 }
 
 // ---------------------------------------------------------------
-// Herkunft (Honeypot64, Node64 internal/geoip): country_ranges.txt.gz aus denselben Laendernetzen (bl_countries_ips)
+// Herkunft (Honeypot64, Node64 internal/geoip): country_ranges.txt.gz nach Standort aus DB-IP Lite (geo_dbip.php), Luecken
+// und Rueckfall aus denselben Laendernetzen wie die Laenderlisten (bl_countries_ips, RIR = Land des Inhabers)
 // ---------------------------------------------------------------
 /** Netz -> Sortierschluessel: erste IP . letzte IP . Land (IPv4 10 Byte, IPv6 34 Byte) */
 function geo_key(array $n, string $cc): string
@@ -416,7 +417,7 @@ echo "Laender: $geschrieben Dateisaetze geschrieben\n";
 $t0 = microtime(true); $geo4 = 0; $geo6 = 0; $geo_db = null;
 if(is_file(__DIR__."/geo_dbip.php")) {
 	require_once __DIR__."/geo_dbip.php";
-	$geo_db = gdb_build($extern ? "$OUT/geo_cache" : dirname(__DIR__, 3)."/private/geo", !$dry, $geo);
+	$geo_db = gdb_build($extern ? "$OUT/geo_cache" : dirname(__DIR__, 3)."/private/geo", !$dry && !$extern, $geo); // --out: nur vorhandener Cache
 }
 if($geo_db !== null) {
 	$geo_txt = $geo_db['txt']; $geo4 = $geo_db['n4']; $geo6 = $geo_db['n6'];

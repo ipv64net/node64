@@ -239,7 +239,7 @@ check('stats Account 3: Sensor umgezogen, Verlauf bleibt', $r['code'] === 200 AN
 echo "Seite honeypot/index.php\n";
 $r = req('GET', '/honeypot/index.php');
 check('Seite 200', $r['code'] === 200, code($r));
-check('Seite: Titel, Sensor, Doku-Link', str_contains($r['raw'], 'Honeypot64 – deine Sensoren') AND str_contains($r['raw'], substr($A, 0, 8)) AND str_contains($r['raw'], 'node64.de/docs/honeypot/'), substr($r['raw'], 0, 500));
+check('Seite: Titel, Sensoren zusammengefasst (seit 437d2db), Doku-Link', str_contains($r['raw'], 'Honeypot64 – deine Sensoren') AND preg_match('/<b>\d+ Sensor(en)?<\/b>/u', $r['raw']) AND str_contains($r['raw'], '/nodes.php') AND str_contains($r['raw'], 'node64.de/docs/honeypot/'), substr($r['raw'], 0, 500));
 check('Seite: keine Sensor-IP', !str_contains($r['raw'], SENSOR_IP));
 check('Seite: ssh:bruteforce in Top-Arten', str_contains($r['raw'], 'ssh:bruteforce'));
 $r = req('GET', '/honeypot/index.php?as=3');

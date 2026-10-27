@@ -35,7 +35,7 @@ cp "$HERE/header_stub.php" "$W/header.php"
 cp "$HERE/footer_stub.php" "$W/footer.php"
 cp "$HERE/run_tests.php" "$HERE/setup.sql" "$HERE/legacy.sql" "$R/tests/"
 cp "$HERE/nginx.conf" "$R/nginx.conf"
-cp "$SQL/honeypot.sql" "$SQL/honeypot_h3_scoring.sql" "$SQL/honeypot_h4_stats.sql" "$R/sql/"
+cp "$SQL/honeypot.sql" "$SQL/honeypot_h3_scoring.sql" "$SQL/honeypot_h4_stats.sql" "$SQL/honeypot_h6.sql" "$SQL/honeypot_sensor_country.sql" "$R/sql/"
 
 ssh agentbox 'rm -rf /tmp/hp4a'
 scp -q -r "$R" agentbox:/tmp/
@@ -63,6 +63,8 @@ $M < /tmp/hp4a/sql/honeypot_h3_scoring.sql
 $M < /tmp/hp4a/tests/legacy.sql
 $M < /tmp/hp4a/sql/honeypot_h4_stats.sql
 $M < /tmp/hp4a/sql/honeypot_h4_stats.sql   # mehrfach ausfuehrbar
+$M < /tmp/hp4a/sql/honeypot_h6.sql   # Fingerabdruecke (hp_samples_fps), seit H6 Teil der Annahme und der Listen
+$M < /tmp/hp4a/sql/honeypot_sensor_country.sql   # Standort des Sensors (api_v2_honeypot.php schreibt hp_sensors.country)
 echo "--- Tabellen"; docker exec hp4a-db mysql -uroot -php4atest ipv64 -N -e "SHOW TABLES LIKE 'hp\_%'" | tr '\n' ' '; echo
 D=/var/www/clients/client1/web58
 docker run -d --name hp4a-php --network hp4a-net -e HP4ATEST=1 -v /tmp/hp4a/web58:$D -v /tmp/hp4a/tests:/w/tests -v /tmp/hp4a/nginx:/w/nginx -w $D/web hp4a-php:latest \

@@ -208,7 +208,7 @@ check('oeffentlich: keine Suche, kein Export, keine neuen IPs', !str_contains($b
 check('HTML maskiert (<script> aus einem Pfad)', !str_contains($b, '<script>alert(1)</script>') AND str_contains($b, '&lt;script&gt;alert(1)&lt;/script&gt;'));
 check('Chart.js aus dem Portal, Verlauf 30 Tage', str_contains($b, '/js/chartjs/dist/chart.min.js') AND str_contains($b, 'hssTimeline') AND substr_count(json_encode(cache()['timeline'] ?? array()), '"day"') === 30);
 check('Verweis auf /honeypot/ und Groesse der Listen', str_contains($b, 'href="/honeypot/"') AND str_contains($b, 'ipv64_passwords.txt') AND str_contains($b, 'v64 Blocklist'));
-check('Land weggelassen (keine Daten)', !preg_match('/Land|Herkunft/u', $b));
+check('Herkunft nach Land ohne Daten: Hinweis statt Tabelle (seit H7)', str_contains($b, 'Herkunft nach Land') AND str_contains($b, 'Noch keine Daten.') AND !str_contains($b, '<th>Land</th>'));
 $std = page('as=1')['raw'];
 check('Klasse Standard eingeloggt: Ueberblick, Beitragender-Hinweis', !str_contains($std, 'name="q"') AND !str_contains($std, '45.9.9.9') AND str_contains($std, 'Danke für deinen Beitrag'));
 $vip = page('as=2');
