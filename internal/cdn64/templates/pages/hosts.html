@@ -49,7 +49,7 @@
 	<div class="table-responsive">
 	<table class="table table-hover align-middle mb-0 small table-stack">
 		<thead><tr>
-			<th class="ps-3" style="min-width:10rem" data-nolabel>{{.T "cdn64.col.names"}}</th>{{if ne $d.Kind "dead"}}<th style="min-width:9rem">{{.T "cdn64.col.target"}}</th>{{end}}<th>{{.T "cdn64.col.ssl"}}</th><th>{{.T "cdn64.col.options"}}</th>
+			<th class="ps-3" style="min-width:10rem" data-nolabel>{{.T "cdn64.col.names"}}</th>{{if ne $d.Kind "dead"}}<th style="min-width:9rem">{{.T "cdn64.col.target"}}</th>{{end}}<th>{{.T "cdn64.col.ssl"}}</th><th style="min-width:5rem">{{.T "cdn64.col.options"}}</th>
 			{{if eq $d.Kind "proxy"}}<th>{{.T "cdn64.col.reach"}}</th>{{end}}{{if $d.OnlineOn}}<th>{{.T "cdn64.online.col"}}</th>{{end}}<th class="text-end" data-stats-col>{{.T "cdn64.col.requests24"}}</th><th class="text-end pe-3" style="min-width:9.5rem"></th>
 		</tr></thead>
 		<tbody>
@@ -71,7 +71,7 @@
 				{{else if eq .State "expired"}}<span class="badge text-bg-danger" title="{{.Name}}"><i class="bi bi-unlock"></i> {{$.T "cdn64.cert.expired"}}</span>
 				{{else}}<span class="badge text-bg-danger" title="{{.Miss}}"><i class="bi bi-unlock"></i> {{$.T "cdn64.cert.missing"}}</span>{{end}}
 			{{end}}</td>
-			<td class="text-nowrap">
+			<td>
 				{{if .WebSockets}}<i class="bi bi-plug me-1" title="{{$.T "cdn64.f.websockets"}}"></i>{{end}}
 				{{if .BlockExploits}}<i class="bi bi-shield-check me-1" title="{{$.T "cdn64.f.block_exploits"}}"></i>{{end}}
 				{{if .Advanced.AIBots}}<i class="bi bi-robot me-1" title="{{$.T "cdn64.f.ai_bots"}}"></i>{{end}}
@@ -137,7 +137,7 @@
 					<button type="button" class="btn btn-sm btn-outline-danger py-0" data-c64o-off="{{.ID}}" data-name="{{index .Names 0}}" title="{{$.T "cdn64.online.off"}}"><i class="bi bi-cloud-slash"></i></button>
 				</div>
 			{{else}}<button type="button" class="btn btn-sm btn-outline-primary py-0 text-nowrap" data-c64o-on="{{.ID}}" title="{{$.T "cdn64.online.on_title"}}"><i class="bi bi-cloud-arrow-up"></i> {{$.T "cdn64.online.on"}}</button>{{end}}</td>{{end}}
-			<td class="text-end font-monospace" data-stats-row="{{.ID}}" title="{{$.T "cdn64.since_start" "n" .Requests}}"><span data-v="requests">{{$.Int .Day.Requests}}</span><div class="text-body-secondary{{if not (or .Day.Bytes .Day.BytesIn)}} d-none{{end}}" data-v="bytes" title="{{$.T "cdn64.stats.updown_hint"}}"><span class="text-nowrap">↓ {{$.Bytes .Day.Bytes}}</span> · <span class="text-nowrap">↑ {{$.Bytes .Day.BytesIn}}</span></div><div class="text-danger{{if not .Day.Errors}} d-none{{end}}" data-v="errors" title="{{$.T "cdn64.stats.errors_hint"}}">{{$.T "cdn64.errors" "n" ($.Int .Day.Errors)}}</div><div class="text-body-secondary{{if not .Day.S4}} d-none{{end}}" data-v="c4" title="{{$.T "cdn64.c4_hint"}}">{{$.T "cdn64.c4" "n" ($.Int .Day.S4)}}</div><div class="text-body-secondary{{if not .Day.Blocked}} d-none{{end}}" data-v="blocked">{{$.T "cdn64.blocked" "n" ($.Int .Day.Blocked)}}</div><div class="hp-decoy{{if not .Day.Decoy}} d-none{{end}}" data-v="decoy" title="{{$.T "cdn64.stats.decoy_hint"}}">{{$.T "cdn64.decoyed" "n" ($.Int .Day.Decoy)}}</div></td>
+			<td class="text-end font-monospace" data-stats-row="{{.ID}}" title="{{$.T "cdn64.since_start" "n" .Requests}}"><span data-v="requests">{{$.Int .Day.Requests}}</span><div class="text-body-secondary{{if not (or .Day.Bytes .Day.BytesIn)}} d-none{{end}}" data-v="bytes" title="{{$.T "cdn64.stats.updown_hint"}}"><span class="text-nowrap">↓ {{$.Bytes .Day.Bytes}}</span>&ensp;<span class="text-nowrap">↑ {{$.Bytes .Day.BytesIn}}</span></div><div class="text-danger{{if not .Day.Errors}} d-none{{end}}" data-v="errors" title="{{$.T "cdn64.stats.errors_hint"}}">{{$.T "cdn64.errors" "n" ($.Int .Day.Errors)}}</div><div class="text-body-secondary{{if not .Day.S4}} d-none{{end}}" data-v="c4" title="{{$.T "cdn64.c4_hint"}}">{{$.T "cdn64.c4" "n" ($.Int .Day.S4)}}</div><div class="text-body-secondary{{if not .Day.Blocked}} d-none{{end}}" data-v="blocked">{{$.T "cdn64.blocked" "n" ($.Int .Day.Blocked)}}</div><div class="hp-decoy{{if not .Day.Decoy}} d-none{{end}}" data-v="decoy" title="{{$.T "cdn64.stats.decoy_hint"}}">{{$.T "cdn64.decoyed" "n" ($.Int .Day.Decoy)}}</div></td>
 			<td class="text-end pe-3">
 				{{if .URL}}<a class="btn btn-sm btn-outline-secondary py-0" href="{{.URL}}" target="_blank" rel="noopener" title="{{$.T "cdn64.open"}}"><i class="bi bi-box-arrow-up-right"></i></a>{{end}}
 				{{if eq .Kind "proxy"}}{{if .Watch}}<a class="btn btn-sm btn-outline-success py-0" href="/healthchecks/{{(index .Watch 0).Token}}" title="{{$.T "cdn64.watch.open"}}"><i class="bi bi-heart-pulse-fill"></i></a>{{else}}<form method="post" action="/cdn64/hosts/{{.ID}}/healthcheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "cdn64.create_check"}}"><i class="bi bi-heart-pulse"></i></button></form>{{end}}{{end}}

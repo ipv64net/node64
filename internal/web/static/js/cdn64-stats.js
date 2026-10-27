@@ -48,9 +48,9 @@
 			var err = h["5xx"] || 0, c4 = h["4xx"] || 0, dec = h.decoy || 0;
 			var v = function (k, text, show) { var el = td.querySelector('[data-v="' + k + '"]'); if (el) { el.textContent = text; el.classList.toggle("d-none", !show); } };
 			v("requests", C.nf.format(h.requests || 0), true);
-			// geschuetzte Leerzeichen: umbrechen nur am Punkt zwischen den beiden Angaben (wie im Template)
+			// geschuetzte Leerzeichen: umbrechen nur zwischen den beiden Angaben (Halbgeviert, wie &ensp; im Template)
 			var nb = function (s) { return s.replace(/ /g, "\u00a0"); };
-			v("bytes", nb("↓ " + C.bytes(h.bytes || 0)) + " · " + nb("↑ " + C.bytes(h.bytes_in || 0)), (h.bytes || 0) + (h.bytes_in || 0) > 0);
+			v("bytes", nb("↓ " + C.bytes(h.bytes || 0)) + "\u2002" + nb("↑ " + C.bytes(h.bytes_in || 0)), (h.bytes || 0) + (h.bytes_in || 0) > 0);
 			v("errors", L("errors-n").replace("{n}", C.nf.format(err)), err > 0);
 			v("c4", L("c4-n").replace("{n}", C.nf.format(c4)), c4 > 0);
 			v("blocked", L("blocked-n").replace("{n}", C.nf.format(h.blocked || 0)), (h.blocked || 0) > 0);

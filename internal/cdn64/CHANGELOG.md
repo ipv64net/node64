@@ -1,5 +1,12 @@
 # Änderungen – PROXY64
 
+## 1.34.3 – 2026-10-27
+
+### Geändert
+- Liste der Proxy-Hosts: Die Spalte „Optionen“ bricht jetzt um und ist dadurch schmaler, z. B. mit einer
+  Zugriffsliste. Der frei werdende Platz geht an die Healthcheck-Abzeichen, sie brechen seltener um.
+- Datenverkehr (↓/↑) ohne Trennpunkt: Beim Umbruch stand er mal am Zeilenanfang, mal am Zeilenende.
+
 ## 1.34.2 – 2026-10-27
 
 ### Behoben
