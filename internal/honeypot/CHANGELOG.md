@@ -1,5 +1,11 @@
 # Änderungen – Honeypot64
 
+## 0.15.2 – 2026-10-27
+
+### Geändert
+- Live-Karte im Vollbild: Die Seitenleiste steht unten links über dem Pazifik statt oben rechts (sie verdeckte China
+  und Japan), das Logo oben links. Gilt im Container und auf ipv64.net.
+
 ## 0.15.1 – 2026-10-27
 
 ### Geändert
