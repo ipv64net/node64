@@ -38,12 +38,18 @@ function bl_status(string $updated): string { $old = $updated === '' || (time() 
 				</tr>
 			  </thead>
 				  <tbody>
-					<?php [$cnt, $upd] = bl_file_info('ipv64_blocklist_v64.txt'); ?>
+					<?php [$cnt, $upd] = bl_file_info('ipv64_blocklist_v64.txt');
+					// Live-Stand (nicht oeffentlicher Ordner neben web/): nur Anzahl und Alter, zum Vergleich mit dem Tagesstand
+					$lp = dirname(__DIR__) . '/private/blocklists_live/ipv64_blocklist_v64.txt';
+					[$lcnt, $lupd] = is_file($lp) ? array(count(file($lp, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES)), date('Y-m-d H:i:s', filemtime($lp))) : array(0, ''); ?>
 					<tr class="table-info">
 					<td><i class="fa-solid fa-crown text-warning"></i>
 					<td>v64 Blocklist (Honeypot64) <span class="badge badge-info">Honeypot</span> <span class="badge badge-light" title="Not part of the combined list &quot;All&quot;">not in All</span>
 					<br><small class="text-muted">Own data of IPv64.net: attackers confirmed by several independent Honeypot64 sensors. Daily list free for everyone;
-					live list (every 30 min) for contributors and plans from VIP: token at <a href="/honeypot/token.php">/honeypot/token.php</a></small>
+					live list (every 30 min) for contributors and plans from VIP: token at <a href="/honeypot/token.php">/honeypot/token.php</a>, automatic in Node64</small>
+					<?php if($lupd !== '') { ?><br><small><span class="badge badge-danger"><i class="fa-solid fa-bolt"></i> Live: <?php echo formatLargeNumber($lcnt);?> IPs</span>
+					updated <?php echo timeago2($lupd, date("Y-m-d H:i:s", time())); ?><?php if($lcnt > $cnt) { ?> – <strong><?php echo formatLargeNumber($lcnt - $cnt);?> more</strong> than the daily list<?php } ?>
+					· <a href="/v64_secure">why live?</a></small><?php } ?>
 					<td><span class="badge badge-dark" title="<?php echo $cnt;?>"><?php echo formatLargeNumber($cnt);?></span>
 					<td><?php echo bl_status($upd); ?>
 					<span class="badge badge-primary"> <?php echo $upd !== '' ? timeago2($upd,date("Y-m-d H:i:s",time())) : '-'; ?></span>
