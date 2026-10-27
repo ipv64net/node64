@@ -40,8 +40,13 @@ type fakeOnline struct {
 	calls    int                  // Abrufe von Overview
 	maps     map[int64][]ipv64api.CDN64Mapping
 	mapNext  int64
-	mapErr   error // naechstes AddMapping scheitert
-	sessions int   // parallele Verbindungen, die ipv64 der Klasse erlaubt
+	mapErr   error                     // naechstes AddMapping scheitert
+	sessions int                       // parallele Verbindungen, die ipv64 der Klasse erlaubt
+	prot     *ipv64api.CDN64Protection // Antwort von /cdn64o/protection
+	protErr  error                     // /cdn64o/protection scheitert
+	protDays []int                     // abgefragte Zeitraeume
+	waf      map[int64]bool            // WAF je Name (gesetzt ueber SetProtection)
+	ja4      map[int64]string          // JA4-Stufe je Name
 }
 
 func (f *fakeOnline) Ready(context.Context) bool { f.mu.Lock(); defer f.mu.Unlock(); return f.ready }
@@ -56,10 +61,14 @@ func (f *fakeOnline) Overview(context.Context) (*ipv64api.CDN64Overview, error) 
 		ov.Tunnels = append(ov.Tunnels, ipv64api.CDN64Tunnel{ID: id, Status: "active", Sessions: f.sessions})
 	}
 	for id, n := range f.hosts {
-		ov.Hosts = append(ov.Hosts, ipv64api.CDN64Host{ID: id, FQDN: n, Status: "active", Mode: max(f.modes[id], 1), Paused: f.paused[id], Mappings: f.maps[id]})
+		ov.Hosts = append(ov.Hosts, ipv64api.CDN64Host{ID: id, FQDN: n, Status: "active", Mode: max(f.modes[id], 1), Paused: f.paused[id], Mappings: f.maps[id],
+			WAF: f.waf[id], JA4: f.ja4[id]})
 	}
 	for _, h := range f.extra {
 		h.Paused = f.paused[h.ID]
+		if v, ok := f.ja4[h.ID]; ok {
+			h.WAF, h.JA4 = f.waf[h.ID], v
+		}
 		ov.Hosts = append(ov.Hosts, h)
 	}
 	return ov, nil
@@ -118,6 +127,43 @@ func (f *fakeOnline) SetPaused(_ context.Context, id int64, paused bool) error {
 		f.paused = map[int64]bool{}
 	}
 	f.paused[id] = paused
+	return nil
+}
+
+func (f *fakeOnline) Protection(_ context.Context, days int) (*ipv64api.CDN64Protection, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.protDays = append(f.protDays, days)
+	if f.protErr != nil {
+		return nil, f.protErr
+	}
+	if f.prot == nil {
+		return &ipv64api.CDN64Protection{Days: days, JA4Global: "count"}, nil
+	}
+	p := *f.prot
+	p.Days = days
+	return &p, nil
+}
+
+func (f *fakeOnline) SetProtection(_ context.Context, id int64, waf *bool, ja4 string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	known := f.hosts[id] != ""
+	for _, h := range f.extra {
+		known = known || h.ID == id
+	}
+	if !known {
+		return &ipv64api.APIError{Status: 404, Code: "cdn64o_host_not_found"}
+	}
+	if f.waf == nil {
+		f.waf, f.ja4 = map[int64]bool{}, map[int64]string{}
+	}
+	if waf != nil {
+		f.waf[id] = *waf
+	}
+	if ja4 != "" {
+		f.ja4[id] = ja4
+	}
 	return nil
 }
 

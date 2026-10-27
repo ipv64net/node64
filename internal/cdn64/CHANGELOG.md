@@ -1,5 +1,17 @@
 # Änderungen – PROXY64
 
+## 1.34.0 – 2026-10-27
+
+### Neu
+- Neuer Reiter „CDN64 Statistik“ (nur mit CDN64-Namen im Konto): was srv07/srv08 für dich abgewehrt haben – heute,
+  7 oder 30 Tage.
+  - Vier Kennzahlen: Abgewehrt, gesperrte IP-Adressen, Überlast abgefangen und Anschluss verborgen (davon über IPv4).
+  - Diagramm „Abgewehrt je Tag“ nach Grund: Blocklisten, Zugriffsliste, Überlast, WAF-Muster, Angriffs-Werkzeug (JA4).
+  - Tabelle je Name mit Modus, WAF und JA4-Stufe; ein Klick führt zum Host.
+  - Top Angriffs-Werkzeuge aus der Honeypot64-Datenbank von ipv64.net und der Kasten „Ohne CDN64“.
+- Proxy-Hosts: Der Schalter „Schutz auf den Servern“ (Schild neben der Pause) setzt je Host die WAF-Muster (Modus 2/3)
+  und die Angriffs-Werkzeuge (JA4: aus, nur zählen, sperren). Er erscheint, sobald ipv64.net den Schutz kennt.
+
 ## 1.33.1 – 2026-10-27
 
 ### Behoben

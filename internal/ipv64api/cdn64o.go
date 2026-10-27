@@ -55,6 +55,62 @@ type CDN64Host struct {
 	Target     *CDN64Target   `json:"target"`      // nur Modus 3
 	ACL        *CDN64ACL      `json:"acl"`
 	Mappings   []CDN64Mapping `json:"mappings"` // Portmapper (nur Modus 3)
+	WAF        bool           `json:"waf"`      // Muster-WAF in Modus 2/3 (Schalter des Namens)
+	JA4        string         `json:"ja4"`      // Angriffs-Werkzeuge (JA4): off, count, block ("" = Portal ohne Schutz-Statistik)
+	// Schutz der Server in den letzten 30 Tagen
+	Protection CDN64ProtectionCounts `json:"protection"`
+}
+
+// CDN64ProtectionCounts: was srv07/srv08 abgewehrt bzw. gezaehlt haben (je Name, Tag oder Konto).
+type CDN64ProtectionCounts struct {
+	BlockedList  int64 `json:"blocked_list"`  // Blocklisten
+	BlockedACL   int64 `json:"blocked_acl"`   // Zugriffsliste
+	BlockedFlood int64 `json:"blocked_flood"` // Ueberlast (Verbindungen je IP, Verbindungsrate)
+	BlockedLimit int64 `json:"blocked_limit"` // Anfrage-Limit (Modus 2/3)
+	BlockedWAF   int64 `json:"blocked_waf"`   // WAF-Muster
+	BlockedJA4   int64 `json:"blocked_ja4"`   // Angriffs-Werkzeug (JA4), gesperrt
+	JA4Hits      int64 `json:"ja4_hits"`      // Treffer der JA4-Liste (gesperrt oder nur gezaehlt)
+	BlockedIPs   int64 `json:"blocked_ips"`   // verschiedene gesperrte IP-Adressen (IPv6 je /64)
+	Conns        int64 `json:"conns"`         // Verbindungen ueber CDN64 (eigene Adresse verborgen)
+	ConnsV4      int64 `json:"conns_v4"`      // davon von IPv4-Besuchern
+}
+
+// Blocked: alles Abgewehrte zusammen.
+func (p CDN64ProtectionCounts) Blocked() int64 {
+	return p.BlockedList + p.BlockedACL + p.BlockedFlood + p.BlockedLimit + p.BlockedWAF + p.BlockedJA4
+}
+
+// Overload: Ueberlast abgefangen (Verbindungs-Grenzen und Anfrage-Limit).
+func (p CDN64ProtectionCounts) Overload() int64 { return p.BlockedFlood + p.BlockedLimit }
+
+// CDN64ProtectionDay: Zahlen eines Tages (YYYY-MM-DD).
+type CDN64ProtectionDay struct {
+	Day string `json:"day"`
+	CDN64ProtectionCounts
+}
+
+// CDN64ProtectionHost: Zahlen eines Namens im Zeitraum.
+type CDN64ProtectionHost struct {
+	ID   int64  `json:"id"`
+	FQDN string `json:"fqdn"`
+	Mode int    `json:"mode"`
+	CDN64ProtectionCounts
+}
+
+// CDN64JA4Hit: Angriffs-Werkzeug (JA4) und seine Treffer.
+type CDN64JA4Hit struct {
+	JA4  string `json:"ja4"`
+	Hits int64  `json:"hits"`
+}
+
+// CDN64Protection ist GET /cdn64o/protection (nur Namen des Kontos).
+type CDN64Protection struct {
+	Days      int                   `json:"days"`
+	JA4Global string                `json:"ja4_global"` // count = Startphase (nur zaehlen), block
+	Totals    CDN64ProtectionCounts `json:"totals"`
+	Daily     []CDN64ProtectionDay  `json:"daily"`
+	Hosts     []CDN64ProtectionHost `json:"hosts"`
+	JA4Top    []CDN64JA4Hit         `json:"ja4_top"` // haeufigste Treffer (hoechstens 10)
 }
 
 // CDN64ACL: Erlauben-/Sperrliste eines Namens auf den Servern (default off, allow, deny).
@@ -163,6 +219,31 @@ func (c *Client) CDN64SetMode(ctx context.Context, key string, id int64, mode in
 func (c *Client) CDN64SetPaused(ctx context.Context, key string, id int64, paused bool) (*CDN64Host, error) {
 	var out CDN64Host
 	if err := c.do(ctx, http.MethodPatch, key, "/cdn64o/hosts/"+strconv.FormatInt(id, 10), map[string]bool{"paused": paused}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CDN64Protection liefert die Schutz-Statistik des Kontos (days 1 = heute, 7, 30).
+func (c *Client) CDN64Protection(ctx context.Context, key string, days int) (*CDN64Protection, error) {
+	var out CDN64Protection
+	if err := c.get(ctx, key, "/cdn64o/protection?days="+strconv.Itoa(days), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CDN64SetProtection setzt WAF (nil = unveraendert) und JA4 (off, count, block; "" = unveraendert) eines Namens.
+func (c *Client) CDN64SetProtection(ctx context.Context, key string, id int64, waf *bool, ja4 string) (*CDN64Host, error) {
+	in := map[string]any{}
+	if waf != nil {
+		in["waf"] = *waf
+	}
+	if ja4 != "" {
+		in["ja4"] = ja4
+	}
+	var out CDN64Host
+	if err := c.do(ctx, http.MethodPatch, key, "/cdn64o/hosts/"+strconv.FormatInt(id, 10), in, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

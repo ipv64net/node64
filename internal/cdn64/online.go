@@ -58,6 +58,7 @@ type onlineState struct {
 	seen    map[string]int                    //
 	ports   [2]int                            // Tests: Besucher-Ports der Server (sonst 443, 80)
 	notify  func(notify.Alert)                // Meldungen (nil = keine)
+	prot    protectionCache                   // CDN64 Statistik (protection_ui.go)
 }
 
 // SetSecrets gibt den Schluessel fuer verschluesselt gespeicherte Werte (Tunnel-Token).

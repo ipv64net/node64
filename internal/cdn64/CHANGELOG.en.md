@@ -1,5 +1,17 @@
 # Changes – PROXY64
 
+## 1.34.0 – 2026-10-27
+
+### New
+- New tab "CDN64 statistics" (only with CDN64 names in the account): what srv07/srv08 blocked for you – today, 7 or
+  30 days.
+  - Four figures: blocked, blocked IP addresses, overload stopped and connection hidden (of which via IPv4).
+  - Chart "Blocked per day" by reason: blocklists, access list, overload, WAF patterns, attack tool (JA4).
+  - Table per name with mode, WAF and JA4 level; a click opens the host.
+  - Top attack tools from the Honeypot64 database of ipv64.net and the box "Without CDN64".
+- Proxy hosts: the switch "Protection on the servers" (shield next to pause) sets the WAF patterns (mode 2/3) and the
+  attack tools (JA4: off, count only, block) per host. It appears as soon as ipv64.net knows the protection.
+
 ## 1.33.1 – 2026-10-27
 
 ### Fixed

@@ -102,6 +102,14 @@
 				{{if eq .Online.Status "blocked"}}<div><span class="badge text-bg-danger">{{$.T "cdn64.online.blocked"}}{{with .Online.Reason}}: {{.}}{{end}}</span></div>{{else if eq .Online.Status "pending"}}<div><span class="badge text-bg-warning">{{$.T "cdn64.online.pending"}}</span></div>{{end}}
 				<div class="mt-1">
 					<button type="button" class="btn btn-sm {{if .Online.Paused}}btn-outline-success{{else}}btn-outline-warning{{end}} py-0" data-c64o-pause="{{.ID}}" data-paused="{{if .Online.Paused}}1{{end}}" data-name="{{index .Online.Names 0}}" title="{{if .Online.Paused}}{{$.T "cdn64.online.resume"}}{{else}}{{$.T "cdn64.online.pause"}}{{end}}"><i class="bi {{if .Online.Paused}}bi-play-circle{{else}}bi-pause-circle{{end}}"></i></button>
+					{{if .Online.JA4}}<div class="dropdown d-inline-block"><button type="button" class="btn btn-sm {{if or .Online.WAF (ne .Online.JA4 "off")}}btn-outline-success{{else}}btn-outline-secondary{{end}} py-0" data-bs-toggle="dropdown" data-bs-auto-close="outside" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false" title="{{$.T "cdn64.protection.sw_title"}}" data-c64o-prot="{{.ID}}"><i class="bi bi-shield-check"></i></button>
+						<form method="post" action="/cdn64/hosts/{{.ID}}/protection" class="dropdown-menu p-3 small" style="min-width:16rem"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
+							<div class="fw-semibold mb-2">{{$.T "cdn64.protection.sw_title"}}</div>
+							<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="waf" value="1" id="c64o-waf-{{.ID}}"{{if .Online.WAF}} checked{{end}}><label class="form-check-label" for="c64o-waf-{{.ID}}">{{$.T "cdn64.protection.sw_waf"}}</label></div>
+							<label class="form-label mb-1" for="c64o-ja4-{{.ID}}">{{$.T "cdn64.protection.sw_ja4"}}</label>
+							<select class="form-select form-select-sm mb-2" name="ja4" id="c64o-ja4-{{.ID}}"><option value="block"{{if eq .Online.JA4 "block"}} selected{{end}}>{{$.T "cdn64.protection.ja4_block"}}</option><option value="count"{{if eq .Online.JA4 "count"}} selected{{end}}>{{$.T "cdn64.protection.ja4_count"}}</option><option value="off"{{if eq .Online.JA4 "off"}} selected{{end}}>{{$.T "cdn64.protection.ja4_off"}}</option></select>
+							<div class="text-body-secondary mb-2">{{$.T "cdn64.protection.sw_hint"}}</div>
+							<button class="btn btn-sm btn-primary" type="submit">{{$.T "common.save"}}</button></form></div>{{end}}
 					{{if eq .Online.Mode 3}}<a class="btn btn-sm btn-outline-secondary py-0" href="https://ipv64.net/cdn64?edit={{.Online.RemoteID}}" target="_blank" rel="noopener" title="{{$.T "cdn64.online.o_edit"}}"><i class="bi bi-box-arrow-up-right"></i></a>{{end}}
 				</div>
 			{{else if .Online}}
@@ -116,6 +124,14 @@
 				<div class="mt-1">
 					<button type="button" class="btn btn-sm btn-outline-secondary py-0" data-c64o-test="{{.ID}}" title="{{$.T "cdn64.online.test"}}"><i class="bi bi-activity"></i></button>
 					<button type="button" class="btn btn-sm {{if .Online.Paused}}btn-outline-success{{else}}btn-outline-warning{{end}} py-0" data-c64o-pause="{{.ID}}" data-paused="{{if .Online.Paused}}1{{end}}" data-name="{{index .Names 0}}" title="{{if .Online.Paused}}{{$.T "cdn64.online.resume"}}{{else}}{{$.T "cdn64.online.pause"}}{{end}}"><i class="bi {{if .Online.Paused}}bi-play-circle{{else}}bi-pause-circle{{end}}"></i></button>
+					{{if .Online.JA4}}<div class="dropdown d-inline-block"><button type="button" class="btn btn-sm {{if or .Online.WAF (ne .Online.JA4 "off")}}btn-outline-success{{else}}btn-outline-secondary{{end}} py-0" data-bs-toggle="dropdown" data-bs-auto-close="outside" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false" title="{{$.T "cdn64.protection.sw_title"}}" data-c64o-prot="{{.ID}}"><i class="bi bi-shield-check"></i></button>
+						<form method="post" action="/cdn64/hosts/{{.ID}}/protection" class="dropdown-menu p-3 small" style="min-width:16rem"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
+							<div class="fw-semibold mb-2">{{$.T "cdn64.protection.sw_title"}}</div>
+							<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="waf" value="1" id="c64o-waf-{{.ID}}"{{if .Online.WAF}} checked{{end}}><label class="form-check-label" for="c64o-waf-{{.ID}}">{{$.T "cdn64.protection.sw_waf"}}</label></div>
+							<label class="form-label mb-1" for="c64o-ja4-{{.ID}}">{{$.T "cdn64.protection.sw_ja4"}}</label>
+							<select class="form-select form-select-sm mb-2" name="ja4" id="c64o-ja4-{{.ID}}"><option value="block"{{if eq .Online.JA4 "block"}} selected{{end}}>{{$.T "cdn64.protection.ja4_block"}}</option><option value="count"{{if eq .Online.JA4 "count"}} selected{{end}}>{{$.T "cdn64.protection.ja4_count"}}</option><option value="off"{{if eq .Online.JA4 "off"}} selected{{end}}>{{$.T "cdn64.protection.ja4_off"}}</option></select>
+							<div class="text-body-secondary mb-2">{{$.T "cdn64.protection.sw_hint"}}</div>
+							<button class="btn btn-sm btn-primary" type="submit">{{$.T "common.save"}}</button></form></div>{{end}}
 					<button type="button" class="btn btn-sm btn-outline-secondary py-0" data-c64o-on="{{.ID}}" data-c64o-mode="{{.Online.Mode}}" title="{{$.T "cdn64.online.change_mode"}}"><i class="bi bi-sliders"></i></button>
 					{{if .Online.Missing}}<button type="button" class="btn btn-sm btn-outline-primary py-0" data-c64o-on="{{.ID}}" title="{{$.T "cdn64.online.more_title"}}">{{$.T "cdn64.online.more" "n" .Online.Missing}}</button>{{end}}
 					<button type="button" class="btn btn-sm btn-outline-danger py-0" data-c64o-off="{{.ID}}" data-name="{{index .Names 0}}" title="{{$.T "cdn64.online.off"}}"><i class="bi bi-cloud-slash"></i></button>
