@@ -109,3 +109,47 @@ bringt dich weiter.**
 
 Ausrollen: cdn64-edge 0.19.0 + Portal (eine SQL-Datei, `api_v2_cdn64o.php`, Blocklisten-Job, `cdn64.php`) +
 PROXY64 – jeweils nur auf Dennis' Ansage.
+
+## 8. Schnittstelle (verbindlich für die Umsetzung, 2026-10-27)
+
+Gemeinsamer Vertrag für Server (cdnedge), Portal (`api_v2_cdn64o.php`) und PROXY64. Feldnamen exakt so.
+
+**Fingerabdruck-Paket:** `internal/fingerprint` (neu): `TLSHello(b []byte) (hello []byte, more bool)` und
+`JA4(hello []byte) string` – Code aus `internal/honeypot/sensor_fp.go` verschoben, Honeypot64 ruft ihn dort auf
+(Verhalten und Tests unverändert).
+
+**JA4-Liste:** `https://ipv64.net/blocklists/ipv64_ja4.txt` – je Zeile ein JA4 ohne Präfix (`t13d1516h2_8daaf6152771_e5627efa2ab1`),
+`#` = Kommentar, höchstens 1000 Zeilen. Erzeugt von `bots/honeypot_lists.php` aus `hps_top(..., 'fp', …)` (nur `ja4:`-Einträge),
+abzüglich `CDN64_JA4_EXCLUDE` (Konstante, leer zum Start). Server laden sie alle 30 min (ETag), Zwischenspeicher im
+DataDir, `blocklist_base` wie die Blocklisten.
+
+**edge/config – je Host (apiHost) neu:**
+- `waf` (bool, fehlt = an): Muster-WAF in Modus 2/3.
+- `ja4` (string `off` | `count` | `block`, fehlt = `count`): wirksamer Wert (Portal verrechnet den globalen
+  Start-Schalter `C64O_JA4_GLOBAL` = `count` mit dem Wert des Hosts).
+
+**edge/report – je Eintrag in `traffic` neu (Differenzen seit der letzten Meldung, 0 weglassen erlaubt):**
+`blocked_list`, `blocked_acl`, `blocked_flood`, `blocked_waf`, `blocked_ja4` (gesperrt), `ja4_hits` (Treffer der
+Liste, gesperrt oder nur gezählt), `blocked_ips` (verschiedene gesperrte IPs im Intervall, IPv6 je /64),
+`conns_v4` (Verbindungen von IPv4-Besuchern), `ja4_top` (`[{"ja4": "...", "hits": n}]`, höchstens 20).
+`rejected` (Anfrage-Limit) bleibt und zählt in der Anzeige zu „Überlast“.
+
+**SQL (`deploy/sql/cdn64_protection.sql`):**
+- `cdn64o_traffic` + `blocked_list`, `blocked_acl`, `blocked_flood`, `blocked_waf`, `blocked_ja4`, `ja4_hits`,
+  `blocked_ips`, `conns_v4` (bigint, Standard 0).
+- `cdn64o_hosts` + `waf` tinyint(1) Standard 1, `ja4` varchar(5) Standard `'block'`.
+- Neu `cdn64o_ja4` (host_id, userid, day, ja4 varchar(64), hits bigint; PK host_id+day+ja4; Index userid+day).
+  Höchstens 20 je Host und Tag, Aufräumen > 35 Tage in `bots/cdn64_orphans.php`.
+
+**API für die Node:**
+- `GET /cdn64o` → je Host zusätzlich `waf` (bool), `ja4` (gespeicherter Wert des Hosts), `protection` (30 Tage):
+  `{"blocked_list","blocked_acl","blocked_flood","blocked_limit","blocked_waf","blocked_ja4","ja4_hits","blocked_ips","conns","conns_v4"}`.
+- `PATCH /cdn64o/hosts/{id}` nimmt `waf` (bool) und `ja4` (`off`|`count`|`block`).
+- `GET /cdn64o/protection?days=1|7|30` (1 = heute) →
+  `{"days":n,"ja4_global":"count|block","totals":{…Felder wie protection…},"daily":[{"day":"YYYY-MM-DD",…Felder…}],
+  "hosts":[{"id","fqdn","mode",…Felder…}],"ja4_top":[{"ja4","hits"}]}` (nur Hosts des Kontos, top 10 JA4).
+
+**Erfassung auf den Servern:** Blocklisten-Treffer: vor dem Schließen SNI/Host lesen (≤ 1 s, ≤ 4 KB) und beim Host
+zählen; Überlast: zuletzt angefragter Host je IP (im `gstate`). JA4 in `handle443` aus den ohnehin gelesenen
+Bytes (alle Modi), Prüfung gegen die Liste per Map. Muster-WAF in Modus 2/3 vor der Weitergabe (nur
+`strings.Contains`/`HasSuffix` auf kleingeschriebenem Pfad und User-Agent, Listen aus Abschnitt 3).
