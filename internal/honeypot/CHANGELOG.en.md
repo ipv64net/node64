@@ -1,5 +1,11 @@
 # Changes – Honeypot64
 
+## 0.15.2 – 2026-10-27
+
+### Changed
+- Live map in full screen: the side panel sits bottom left over the Pacific instead of top right (it covered China and
+  Japan), the logo top left. Applies in the container and on ipv64.net.
+
 ## 0.15.1 – 2026-10-27
 
 ### Changed

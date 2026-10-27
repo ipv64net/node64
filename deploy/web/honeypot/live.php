@@ -153,8 +153,8 @@ function hl_t(string $de, string $en): string { global $hlEn; return $hlEn ? $en
 	.hl-stage.hl-fs { position: fixed; inset: 0; z-index: 1060; border-radius: 0; display: flex; align-items: center; justify-content: center; }
 	.hl-stage.hl-fs .hl-mapwrap { position: static; width: 100%; height: 100%; }
 	.hl-stage.hl-fs .hl-map { width: 100%; height: 100%; }
-	.hl-stage.hl-fs .hl-logo { left: 1rem; bottom: 1rem; } .hl-stage.hl-fs .hl-logo img { height: 30px; }
-	.hl-stage.hl-fs .hl-panel { position: absolute; top: 1rem; right: 1rem; width: 22rem; max-height: calc(100% - 2rem); overflow-y: auto; background: var(--hl-panel);
+	.hl-stage.hl-fs .hl-logo { left: 1rem; top: 1rem; bottom: auto; } .hl-stage.hl-fs .hl-logo img { height: 30px; }
+	.hl-stage.hl-fs .hl-panel { position: absolute; bottom: 1rem; left: 1rem; width: 22rem; max-height: calc(100% - 5rem); overflow-y: auto; background: var(--hl-panel);
 		border-radius: .4rem; padding: .7rem; box-shadow: 0 .25rem 1rem rgba(0,0,0,.25); backdrop-filter: blur(4px); }
 	html[data-theme="dark"] .hl-stage.hl-fs .hl-panel { color: #d8dde3; }
 	.hl-stage.hl-fs .hl-panel .hl-fs-only { display: block; }
