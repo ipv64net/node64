@@ -1,5 +1,17 @@
 # Änderungen – Healthchecks
 
+## 2.38.1 – 2026-10-27
+
+### Behoben
+- Docker- und Proxmox-Checks liefen nach dem Entfernen ihrer Node im Portal online bei ipv64 (Nürnberg, Falkenstein).
+  Das Portal stellte beim Entfernen alle Checks ohne privates Ziel auf „online“ um. Ein Container- oder Gastname zählt
+  aber nicht als privates Ziel.
+  - Jetzt misst der hub Docker- und Proxmox-Checks nie online, auch wenn sie so in der Datenbank stehen.
+  - Das Portal stellt sie nie auf online um und löscht sie stattdessen mit der Node. Proxmox gilt dort jetzt wie
+    Docker als „nur auf der Node“.
+  - Ein Job im Portal (alle 10 Minuten) holt solche Checks auf die Node zurück, die sie zuletzt gemessen hat.
+- Im Portal lässt sich ein Docker- oder Proxmox-Check mit mehreren messenden Nodes aus dem Cluster wieder bearbeiten.
+
 ## 2.38.0 – 2026-10-27
 
 ### Neu

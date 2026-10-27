@@ -66,8 +66,8 @@ func (c *Check) SchedulerCheck() scheduler.Check {
 // live: Standorte mit lebendem hub; Push-Checks wertet der erste lebende Standort des Checks aus
 // (faellt er aus, uebernimmt der naechste). nil = alle als lebend annehmen.
 func (c *Check) MeasuredHere(location string, live map[string]bool) bool {
-	if c.Deleted || (c.Execution != "online" && c.Execution != "both") {
-		return false
+	if c.Deleted || (c.Execution != "online" && c.Execution != "both") || singleNodeType(string(c.Type)) {
+		return false // Docker/Proxmox nie online (auch nicht, wenn sie dort gelandet sind)
 	}
 	if len(c.Locations) == 0 {
 		return false
