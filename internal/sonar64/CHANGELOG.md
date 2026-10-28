@@ -1,5 +1,12 @@
 # Änderungen – Sonar64
 
+## 0.1.1 – 2026-10-28
+
+### Behoben
+- Knoten mit IPv4 und IPv6 sprechen ipv64.net abwechselnd über beide Familien an. Bisher kannte ipv64.net oft nur die
+  IPv6-Adresse, und der Knoten wurde nie über IPv4 gemessen.
+- Scheitert der Abgleich von Rolle oder Budget, erscheint der Hinweis gleich zusammen mit dem Knoten.
+
 ## 0.1.0 – 2026-10-28
 
 Erste Fassung des Community-Messnetzes Sonar64 als optionales Modul (standardmäßig aus).

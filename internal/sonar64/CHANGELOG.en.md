@@ -1,5 +1,12 @@
 # Changes – Sonar64
 
+## 0.1.1 – 2026-10-28
+
+### Fixed
+- Nodes with IPv4 and IPv6 contact ipv64.net alternately over both families. Before, ipv64.net often knew only the IPv6
+  address and the node was never measured over IPv4.
+- If syncing role or budget fails, the notice now appears together with the node.
+
 ## 0.1.0 – 2026-10-28
 
 First version of the Sonar64 community measurement network as an optional module (off by default).

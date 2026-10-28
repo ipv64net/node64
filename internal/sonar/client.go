@@ -2,6 +2,9 @@ package sonar
 
 // HTTP zur API v2 von ipv64 (Vertrag Abschnitt 3). Antworten werden nur bis zu einer festen Groesse gelesen,
 // Anfragen haben ein Zeitlimit, Weiterleitungen werden nicht verfolgt (Token bleibt beim Ziel).
+// ipv64 kennt die IP eines Knotens nur aus der Verbindung, je Familie getrennt. Mit dem eingebauten HTTP-Client gehen
+// die Anfragen deshalb abwechselnd ueber IPv4 und IPv6; klappt der Verbindungsaufbau in einer Familie nicht, wird die
+// Anfrage normal (ohne feste Familie) wiederholt. Sonst kaeme ein Knoten mit IPv4 und IPv6 nur mit IPv6 in die Plaene.
 
 import (
 	"bytes"
@@ -15,6 +18,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 )
@@ -27,6 +31,7 @@ const (
 	planLimitAnchor = 8 << 20 // Anker: bis 2.000 Ziele je Runde
 	maxBody         = 250 << 10
 	requestTimeout  = 30 * time.Second
+	famDialTimeout  = 5 * time.Second // Verbindungsaufbau mit fester Familie, danach ohne
 )
 
 // APIError ist eine Fehlerantwort (RFC 9457) oder ein unerwarteter HTTP-Status.
@@ -48,6 +53,8 @@ func (e *APIError) Error() string {
 type client struct {
 	base string
 	http HTTPDoer
+	fam  [2]HTTPDoer // nur mit dem eingebauten Client: nur IPv4, nur IPv6 (sonst nil)
+	n    atomic.Uint32
 	ua   string
 }
 
@@ -56,6 +63,39 @@ func defaultHTTPClient() *http.Client {
 		Timeout:       requestTimeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
+}
+
+// familyHTTPClients sind zwei Clients, die nur ueber IPv4 bzw. nur ueber IPv6 verbinden.
+func familyHTTPClients() [2]HTTPDoer {
+	var out [2]HTTPDoer
+	for i, network := range []string{"tcp4", "tcp6"} {
+		d := &net.Dialer{Timeout: famDialTimeout}
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr.DialContext = func(ctx context.Context, _, addr string) (net.Conn, error) { return d.DialContext(ctx, network, addr) }
+		c := defaultHTTPClient()
+		c.Transport = tr
+		out[i] = c
+	}
+	return out
+}
+
+// do schickt req abwechselnd ueber IPv4 und IPv6 (falls eingerichtet). Scheitert nur der Verbindungsaufbau, geht die
+// Anfrage noch einmal ohne feste Familie (sie wurde dann nicht gesendet, auch ein POST ist also nicht doppelt).
+func (c *client) do(req *http.Request, body []byte) (*http.Response, error) {
+	f := c.fam[c.n.Add(1)%2]
+	if f == nil {
+		return c.http.Do(req)
+	}
+	resp, err := f.Do(req)
+	var op *net.OpError
+	if err == nil || !errors.As(err, &op) || op.Op != "dial" || req.Context().Err() != nil {
+		return resp, err
+	}
+	req = req.Clone(req.Context())
+	if body != nil {
+		req.Body = io.NopCloser(bytes.NewReader(body))
+	}
+	return c.http.Do(req)
 }
 
 // checkBase prueft die API-Adresse: https, oder http nur zu Loopback (Tests). Leer = DefaultAPIBase.
@@ -110,7 +150,7 @@ func (c *client) send(ctx context.Context, method, path, token string, hdr http.
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.ua)
-	resp, err := c.http.Do(req)
+	resp, err := c.do(req, body)
 	if err != nil {
 		var ne net.Error
 		if errors.As(err, &ne) && ne.Timeout() {
