@@ -25,11 +25,12 @@ const HPC_JOBS = array(
 	'cdn64old' => array('23', '*',    'cdn64_orphans.php',                 '', null), // CDN64: Tunnel 14 Tage ohne Verbindung entfernen
 	'live'    => array('*/2', '*',    'honeypot_live.php',                 '', null), // Live-Karte: honeypot/live.json (letzte Stunde)
 	'hc2fix'  => array('*/10', '*',   'hc2_single_repair.php',             '', null), // Docker/Proxmox nie online: zurueck auf ihre Node
-	's64plan'  => array('*/5', '*',   'sonar_plan.php',                    '', null), // Sonar64: Messplaene, Erreichbarkeit
-	's64out'   => array('2,7,12,17,22,27,32,37,42,47,52,57', '*', 'sonar_outages.php', '', null), // Sonar64: Stoerungen nach ASN/Region
-	's64roll'  => array('4', '*',     'sonar_rollup.php',                  '', null), // Sonar64: Stunden je Paar, Tage je ASN
-	's64trust' => array('21', '*',    'sonar_trust.php',                   '', null), // Sonar64: Pruefungen stuendlich, Stufen taeglich (02 Uhr UTC)
-	's64clean' => array('45', '3',    'sonar_cleanup.php',                 '', null), // Sonar64: Aufbewahrung
+	// Sonar64 pausiert (Dennis, 2026-10-28): Jobs aus, zum Fortsetzen die fuenf Zeilen wieder einkommentieren
+	// 's64plan'  => array('*/5', '*',   'sonar_plan.php',                    '', null), // Sonar64: Messplaene, Erreichbarkeit
+	// 's64out'   => array('2,7,12,17,22,27,32,37,42,47,52,57', '*', 'sonar_outages.php', '', null), // Sonar64: Stoerungen nach ASN/Region
+	// 's64roll'  => array('4', '*',     'sonar_rollup.php',                  '', null), // Sonar64: Stunden je Paar, Tage je ASN
+	// 's64trust' => array('21', '*',    'sonar_trust.php',                   '', null), // Sonar64: Pruefungen stuendlich, Stufen taeglich (02 Uhr UTC)
+	// 's64clean' => array('45', '3',    'sonar_cleanup.php',                 '', null), // Sonar64: Aufbewahrung
 );
 
 function hpc_match(string $spec, int $v): bool {
