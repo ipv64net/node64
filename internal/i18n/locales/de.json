@@ -3200,7 +3200,7 @@
     "title": "Cluster",
     "intro": "Optional: mehrere Nodes gleichen Einstellungen und Einträge direkt untereinander ab, auch in verschiedenen Netzen. Ohne Mitglieder findet kein Verkehr statt. Was abgeglichen wird, schaltest du je Modul und Bereich ein.",
     "tls_hint": "Die Verbindung zwischen den Nodes ist immer verschlüsselt (HTTPS, auch über den normalen Web-Port). Das Zertifikat muss nicht gültig sein, selbst signiert genügt – die Nodes erkennen sich an den Schlüsseln der Kopplung.",
-    "apikey_hint": "Achtung: Der API-Key gibt Vollzugriff auf deinen ipv64-Account. Eingeschaltet geht er im Klartext über die verschlüsselte Cluster-Verbindung an die anderen Nodes und ersetzt dort deren Key; Entfernen entfernt ihn überall. Angenommen wird nur ein Key desselben Accounts, jede Übernahme steht im Audit-Log.",
+    "apikey_hint": "Achtung: Der API-Key gibt Vollzugriff auf deinen ipv64-Account. Eingeschaltet geht er im Klartext über die verschlüsselte Cluster-Verbindung an die anderen Nodes und ersetzt dort deren Key; Entfernen entfernt ihn überall. Angenommen wird nur ein Key desselben Accounts – der Account einer Node ändert sich dadurch nie, eine Node ohne Account lehnt ab. Jede Übernahme steht im Audit-Log.",
     "node_settings_hint": "Zeitzone, Selbst-Update (Betriebsart, Kanal, Zeitfenster) und MCP an/aus. Nie abgeglichen: Name und Kennung der Node, Ports, Adressen, Zertifikate, Cluster- und Netz-Einstellungen.",
     "members": "Mitglieder",
     "account_self": "Diese Node gehört zum ipv64-Account #{account}.",

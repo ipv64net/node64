@@ -166,8 +166,10 @@ jüngere Änderung gewinnt.
   Cluster-Verbindung (HTTPS, an die Kopplung gebunden) und wird auf der empfangenden Node mit deren Schlüssel
   verschlüsselt. Eingeschaltet ersetzt ein neuer Key auf einer Node den Key der anderen.
 - Angenommen wird er nur, wenn die Account-ID des Keys gleich dem Account der empfangenden Node ist (wie ihn der
-  Cluster prüft: Healthchecks-Verknüpfung, sonst Key); hat die Node keinen (0), wird er angenommen und mit der
-  nächsten Abfrage bei ipv64 geprüft. Ein Key ohne Account-ID wird abgelehnt.
+  Cluster prüft: Healthchecks-Verknüpfung, sonst Key). Der Account einer Node ändert sich durch den Cluster nie: Hat
+  die Node keinen Account (0) oder einen anderen, wird der Key abgelehnt („cluster change not applied“ im Log). Ein
+  Key ohne Account-ID wird ebenfalls abgelehnt. Eine Node ohne Account bekommt den Key also nur, indem sie zuerst mit
+  demselben Account verknüpft wird (Healthchecks-Sync) oder der Key einmal von Hand eingetragen wird.
 - Übernommen wird über denselben Weg wie eine Eingabe in den Einstellungen (`ipv64api.Key`, Konto, Merker „entfernt“
   zurück); alles, was den Key nutzt (DynDNS, Healthchecks über die API, Meldungen …), liest ihn ohnehin frisch.
   Jede Übernahme steht im Audit-Log (`peer.ipv64_key`, `peer.ipv64_key_removed`, Bereich `sync`).
