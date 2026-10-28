@@ -47,6 +47,10 @@
     {
       "name": "Honeypot64",
       "description": "Leichter Low-Interaction-Honeypot (Modul Honeypot64): Fallen-Dienste, lokale Statistik und Einstellungen. Ist das Modul aus: 404. Prometheus-Kennzahlen stehen unter `GET /metrics` (`node64_honeypot_*`)."
+    },
+    {
+      "name": "Sonar64",
+      "description": "Community-Messnetz (Modul Sonar64, standardmäßig aus): Teilnahme per Opt-in mit dem zentralen ipv64-API-Key, Rolle, Budget, Ruhezeit, Profil bei ipv64, eigene Messungen und Pings gegen die Node. Ist das Modul aus: 404."
     }
   ],
   "security": [
@@ -5453,6 +5457,410 @@
         "required": [
           "name"
         ]
+      },
+      "Sonar64Status": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "key_set": {
+            "type": "boolean",
+            "description": "zentraler ipv64-API-Key eingetragen"
+          },
+          "participate": {
+            "type": "boolean"
+          },
+          "node": {
+            "type": "object",
+            "description": "Zustand des Knotens (Kern)",
+            "properties": {
+              "node_id": {
+                "type": "string"
+              },
+              "registered": {
+                "type": "boolean"
+              },
+              "mode": {
+                "type": "string"
+              },
+              "measured": {
+                "type": "boolean"
+              },
+              "budget": {
+                "type": "string"
+              },
+              "responder": {
+                "type": "boolean"
+              },
+              "plan_issued": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "plan_expires": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "anchors_only": {
+                "type": "boolean"
+              },
+              "paused": {
+                "type": "string",
+                "enum": [
+                  "uplink",
+                  "quiet",
+                  "no_plan",
+                  "budget"
+                ]
+              },
+              "sent_today": {
+                "type": "integer"
+              },
+              "last_report": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "buffered": {
+                "type": "integer"
+              },
+              "last_error": {
+                "type": "string"
+              }
+            }
+          },
+          "error": {
+            "type": "string"
+          },
+          "port_error": {
+            "type": "string",
+            "description": "UDP 6464 belegt: nur ausgehend"
+          },
+          "me": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "eigener Knoten bei ipv64 (GET /sonar/me)"
+          },
+          "me_error": {
+            "type": "string"
+          },
+          "trust": {
+            "type": "object",
+            "properties": {
+              "level": {
+                "type": "string",
+                "enum": [
+                  "new",
+                  "stable",
+                  "trusted",
+                  "pillar",
+                  "anchor",
+                  "quarantine"
+                ]
+              },
+              "class": {
+                "type": "string"
+              },
+              "next": {
+                "type": "string"
+              },
+              "pct": {
+                "type": "integer"
+              },
+              "days": {
+                "type": "integer"
+              },
+              "need_days": {
+                "type": "integer"
+              },
+              "uptime": {
+                "type": "number"
+              },
+              "need_uptime": {
+                "type": "number"
+              },
+              "need_measured": {
+                "type": "boolean"
+              }
+            }
+          },
+          "public_url": {
+            "type": "string",
+            "description": "öffentliche Knotenseite auf ipv64.net"
+          }
+        }
+      },
+      "Sonar64Recent": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "target": {
+                  "type": "string",
+                  "description": "Node-ID des Ziels (Anker a_<name>)"
+                },
+                "method": {
+                  "type": "string",
+                  "enum": [
+                    "icmp",
+                    "udp",
+                    "trace"
+                  ]
+                },
+                "fam": {
+                  "type": "integer"
+                },
+                "sent": {
+                  "type": "integer"
+                },
+                "recv": {
+                  "type": "integer"
+                },
+                "min": {
+                  "type": "number"
+                },
+                "avg": {
+                  "type": "number"
+                },
+                "max": {
+                  "type": "number"
+                },
+                "loss": {
+                  "type": "number",
+                  "description": "Prozent"
+                },
+                "err": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "inbound": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "string",
+                  "description": "Kurz-ID des Messenden (8 Hex)"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "fam": {
+                  "type": "integer"
+                },
+                "count": {
+                  "type": "integer"
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "responder": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Sonar64Inbound": {
+        "type": "object",
+        "properties": {
+          "ready": {
+            "type": "boolean"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "asname": {
+                  "type": "string"
+                },
+                "place": {
+                  "type": "string"
+                },
+                "trust": {
+                  "type": "string",
+                  "enum": [
+                    "new",
+                    "stable",
+                    "trusted",
+                    "pillar",
+                    "anchor",
+                    "quarantine"
+                  ]
+                },
+                "fam": {
+                  "type": "integer"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "avg": {
+                  "type": "number"
+                },
+                "loss": {
+                  "type": "number",
+                  "description": "Anteil 0..1"
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Sonar64Settings": {
+        "type": "object",
+        "properties": {
+          "participate": {
+            "type": "boolean"
+          },
+          "measured": {
+            "type": "boolean",
+            "description": "auch gemessen werden (UDP 6464)"
+          },
+          "budget": {
+            "type": "string",
+            "enum": [
+              "sparsam",
+              "normal",
+              "grosszuegig"
+            ]
+          },
+          "quiet": {
+            "type": "string",
+            "description": "Ruhezeit „von-bis“ in Stunden, z. B. 23-6; leer = keine"
+          },
+          "name": {
+            "type": "string"
+          },
+          "lat": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lon": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "access": {
+            "type": "string",
+            "enum": [
+              "fiber",
+              "dsl",
+              "cable",
+              "mobile",
+              "satellite",
+              "datacenter",
+              "other",
+              ""
+            ]
+          },
+          "device": {
+            "type": "string",
+            "enum": [
+              "node64",
+              "pi",
+              "mikrotik",
+              "linux",
+              "other",
+              ""
+            ]
+          }
+        }
+      },
+      "Sonar64SettingsPut": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "participate": {
+            "type": "boolean"
+          },
+          "measured": {
+            "type": "boolean"
+          },
+          "budget": {
+            "type": "string",
+            "enum": [
+              "sparsam",
+              "normal",
+              "grosszuegig"
+            ]
+          },
+          "quiet": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9 ._-]{3,32}$"
+          },
+          "lat": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "lon": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "clear_location": {
+            "type": "boolean",
+            "description": "Standort löschen"
+          },
+          "access": {
+            "type": "string",
+            "enum": [
+              "fiber",
+              "dsl",
+              "cable",
+              "mobile",
+              "satellite",
+              "datacenter",
+              "other"
+            ]
+          },
+          "device": {
+            "type": "string",
+            "enum": [
+              "node64",
+              "pi",
+              "mikrotik",
+              "linux",
+              "other"
+            ]
+          }
+        }
       }
     }
   },
@@ -17995,6 +18403,261 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sonar64/status": {
+      "get": {
+        "tags": [
+          "Sonar64"
+        ],
+        "summary": "Sonar64: Zustand des Knotens, eigener Knoten bei ipv64, Vertrauensstufe",
+        "description": "Ohne Teilnahme ist `node` leer. `me` enthält den genauen Standort (nur lokal für den Besitzer; öffentlich verschleiert ipv64 ihn auf etwa 1 km). Das Sonar-Token wird nie ausgegeben.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sonar64Status"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Modul aus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sonar64/recent": {
+      "get": {
+        "tags": [
+          "Sonar64"
+        ],
+        "summary": "Sonar64: letzte eigene Messungen und live auf UDP 6464 beantwortete Proben",
+        "description": "Neueste zuerst, ohne Ziel-Adressen (nur Node-ID des Ziels). Die Oberfläche fragt alle 5 Sekunden.",
+        "parameters": [
+          {
+            "name": "n",
+            "in": "query",
+            "description": "Anzahl (1–200, Standard 50)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sonar64Recent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "n ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Modul aus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sonar64/inbound": {
+      "get": {
+        "tags": [
+          "Sonar64"
+        ],
+        "summary": "Sonar64: wer hat mich gemessen (aus den Ergebnissen bei ipv64)",
+        "description": "Bis zu 5 Minuten verzögert, eine Minute zwischengespeichert, höchstens 500 Zeilen. `ready` = false, solange der Knoten nicht angemeldet ist.",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "description": "RFC 3339, höchstens 24 h zurück (Standard: letzte Stunde)",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sonar64Inbound"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "since ungültig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Modul aus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 nicht erreichbar",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sonar64/settings": {
+      "get": {
+        "tags": [
+          "Sonar64"
+        ],
+        "summary": "Sonar64: Einstellung (lokal) und Profil (bei ipv64)",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sonar64Settings"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Modul aus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Sonar64"
+        ],
+        "summary": "Sonar64 einstellen: Teilnahme, Rolle, Budget, Ruhezeit, Profil",
+        "description": "Fehlende Felder bleiben unverändert. `participate: true` braucht den zentralen ipv64-API-Key (legt beim ersten Mal ein Sonar-Token an). Profilfelder (Name, Standort, Anschlussart, Gerät) gehen an ipv64 und brauchen einen angemeldeten Knoten. `measured: true` öffnet UDP 6464; dann sehen einige andere Teilnehmer die öffentliche IP (nur im Messplan).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Sonar64SettingsPut"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sonar64Settings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "kein gültiges JSON oder unbekanntes Feld",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "kein API-Key bzw. Knoten noch nicht angemeldet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Feld ungültig (fields: Feld → Text)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "ipv64 meldet einen Fehler",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Modul aus",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

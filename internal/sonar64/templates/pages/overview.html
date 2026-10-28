@@ -1,0 +1,214 @@
+{{define "content"}}
+{{$d := .Data}}
+<style>.s64-gold{background:#c9a227;color:#212529}.s64-violet{background:#6f42c1;color:#fff}</style>
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><i class="bi bi-broadcast-pin text-primary"></i> {{.T "sonar64.title"}}</h1>
+	{{if $d.Settings.Participate}}<span class="badge {{$d.Trust.Class}}" id="s64-trust-badge">{{.T (printf "sonar64.trust.%s" $d.Trust.Level)}}</span>{{end}}
+	{{if $d.PublicURL}}<a class="ms-auto small" href="{{$d.PublicURL}}" target="_blank" rel="noopener" id="s64-public"><i class="bi bi-box-arrow-up-right"></i> {{.T "sonar64.public_link"}}</a>{{end}}
+</div>
+<p class="text-body-secondary small">{{.T "sonar64.intro"}}</p>
+
+<div class="row g-3">
+	<div class="col-xl-6">
+		<div class="card h-100" id="s64-participate">
+			<div class="card-header"><i class="bi bi-people text-primary"></i> {{.T "sonar64.participate.title"}}</div>
+			<div class="card-body">
+				{{if $d.Settings.Participate}}
+				<p class="mb-2"><span class="badge text-bg-success"><i class="bi bi-check-lg"></i> {{.T "sonar64.participate.on"}}</span></p>
+				<dl class="row small mb-0">
+					<dt class="col-5">{{.T "sonar64.status.node_id"}}</dt><dd class="col-7 font-monospace">{{if $d.Status.NodeID}}{{$d.Status.NodeID}}{{else}}–{{end}}</dd>
+					<dt class="col-5">{{.T "sonar64.status.registered"}}</dt><dd class="col-7">{{if $d.Registered}}{{.T "common.yes"}}{{else}}{{.T "common.no"}}{{end}}</dd>
+					<dt class="col-5">{{.T "sonar64.status.plan"}}</dt><dd class="col-7">{{if not $d.Status.PlanExpires.IsZero}}{{.T "sonar64.status.plan_until" "time" (.Time $d.Status.PlanExpires)}}{{else if $d.Status.AnchorsOnly}}{{.T "sonar64.status.anchors_only"}}{{else}}–{{end}}</dd>
+					{{if $d.Status.Paused}}<dt class="col-5">{{.T "sonar64.status.paused"}}</dt><dd class="col-7 text-warning-emphasis">{{.T (printf "sonar64.paused.%s" $d.Status.Paused)}}</dd>{{end}}
+					<dt class="col-5">{{.T "sonar64.status.sent_today"}}</dt><dd class="col-7">{{$d.Status.SentToday}}</dd>
+					<dt class="col-5">{{.T "sonar64.status.last_report"}}</dt><dd class="col-7">{{if not $d.Status.LastReport.IsZero}}{{.Ago $d.Status.LastReport}}{{else}}–{{end}}{{if $d.Status.Buffered}} <span class="text-body-secondary">({{.T "sonar64.status.buffered" "n" $d.Status.Buffered}})</span>{{end}}</dd>
+					<dt class="col-5">{{.T "sonar64.status.responder"}}</dt><dd class="col-7">{{if $d.Status.Responder}}<span class="text-success">{{.T "sonar64.status.responder_on" "port" $d.Port}}</span>{{else}}{{.T "sonar64.status.responder_off"}}{{end}}</dd>
+				</dl>
+				{{if $d.RunErr}}<div class="alert alert-warning small py-2 mt-2 mb-0" id="s64-run-error"><i class="bi bi-exclamation-triangle"></i> {{.T "sonar64.status.error"}} <span class="font-monospace">{{$d.RunErr}}</span></div>{{end}}
+				{{if $d.Status.LastError}}<div class="alert alert-warning small py-2 mt-2 mb-0"><i class="bi bi-exclamation-triangle"></i> {{.T "sonar64.status.error"}} <span class="font-monospace">{{$d.Status.LastError}}</span></div>{{end}}
+				{{if $d.PortErr}}<div class="alert alert-warning small py-2 mt-2 mb-0" id="s64-port-error"><i class="bi bi-router"></i> {{.T "sonar64.status.port_busy" "port" $d.Port}} <span class="font-monospace">{{$d.PortErr}}</span></div>{{end}}
+				<form method="post" action="/sonar64/participate" class="mt-3">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<input type="hidden" name="participate" value="0">
+					<button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{.T "sonar64.participate.off_confirm"}}"><i class="bi bi-power"></i> {{.T "sonar64.participate.leave"}}</button>
+				</form>
+				{{else}}
+				<p class="small">{{.T "sonar64.participate.text"}}</p>
+				<ul class="small text-body-secondary ps-3">
+					<li>{{.T "sonar64.participate.p1"}}</li>
+					<li>{{.T "sonar64.participate.p2"}}</li>
+					<li>{{.T "sonar64.participate.p3"}}</li>
+				</ul>
+				{{if not $d.KeySet}}<div class="alert alert-info small py-2" id="s64-nokey"><i class="bi bi-lock"></i> {{.T "sonar64.participate.nokey"}} <a href="/settings#ipv64">{{.T "sonar64.participate.key_link"}}</a></div>{{end}}
+				<form method="post" action="/sonar64/participate">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<input type="hidden" name="participate" value="1">
+					<button class="btn btn-success" type="submit"{{if not $d.KeySet}} disabled{{end}}><i class="bi bi-broadcast-pin"></i> {{.T "sonar64.participate.join"}}</button>
+				</form>
+				{{end}}
+			</div>
+		</div>
+	</div>
+
+	<div class="col-xl-6">
+		<div class="card h-100" id="s64-trust">
+			<div class="card-header"><i class="bi bi-award text-primary"></i> {{.T "sonar64.trust.title"}}</div>
+			<div class="card-body">
+				<p class="mb-2"><span class="badge {{$d.Trust.Class}}">{{.T (printf "sonar64.trust.%s" $d.Trust.Level)}}</span>
+					<span class="small text-body-secondary">{{.T (printf "sonar64.trust_hint.%s" $d.Trust.Level)}}</span></p>
+				{{if $d.Trust.Next}}
+				<div class="small mb-1">{{.T "sonar64.trust.next" "level" (.T (printf "sonar64.trust.%s" $d.Trust.Next))}}</div>
+				<div class="progress mb-2" role="progressbar" aria-label="{{.T "sonar64.trust.progress"}}" aria-valuenow="{{$d.Trust.Pct}}" aria-valuemin="0" aria-valuemax="100" style="height:.6rem">
+					<div class="progress-bar {{$d.Trust.Class}}" style="width:{{$d.Trust.Pct}}%"></div>
+				</div>
+				<div class="small text-body-secondary">{{.T "sonar64.trust.days" "n" $d.Trust.Days "need" $d.Trust.NeedDays}} · {{.T "sonar64.trust.uptime" "pct" (pct $d.Trust.Uptime) "need" (pct $d.Trust.NeedUptime)}}{{if $d.Trust.NeedMeasured}} · {{.T "sonar64.trust.need_measured"}}{{end}}</div>
+				{{else if eq $d.Trust.Level "quarantine"}}
+				<div class="small text-danger">{{.T "sonar64.trust.quarantine_text"}}</div>
+				{{end}}
+				{{if $d.Me}}<dl class="row small mt-3 mb-0">
+					{{if $d.Me.ASName4}}<dt class="col-5">{{.T "sonar64.me.provider4"}}</dt><dd class="col-7">AS{{$d.Me.ASN4}} {{$d.Me.ASName4}}</dd>{{end}}
+					{{if $d.Me.ASName6}}<dt class="col-5">{{.T "sonar64.me.provider6"}}</dt><dd class="col-7">AS{{$d.Me.ASN6}} {{$d.Me.ASName6}}</dd>{{end}}
+					<dt class="col-5">{{.T "sonar64.me.reach"}}</dt><dd class="col-7">IPv4 {{.T (printf "sonar64.reach.%s" (or $d.Me.Reach4 "none"))}} · IPv6 {{.T (printf "sonar64.reach.%s" (or $d.Me.Reach6 "none"))}}</dd>
+					{{if not $d.Me.Since.IsZero}}<dt class="col-5">{{.T "sonar64.me.since"}}</dt><dd class="col-7">{{.Date $d.Me.Since}}</dd>{{end}}
+				</dl>{{else if $d.MeErr}}<div class="small text-warning-emphasis mt-2">{{.T "sonar64.me.error"}} <span class="font-monospace">{{$d.MeErr}}</span></div>{{end}}
+			</div>
+		</div>
+	</div>
+
+	{{if $d.Settings.Participate}}
+	<div class="col-xl-6">
+		<form method="post" action="/sonar64/settings" class="card h-100" id="s64-settings" novalidate>
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-header"><i class="bi bi-sliders text-primary"></i> {{.T "sonar64.settings.title"}}</div>
+			<div class="card-body">
+				<div class="form-label fw-semibold">{{.T "sonar64.settings.role"}}</div>
+				<div class="form-check">
+					<input class="form-check-input" type="radio" name="measured" id="s64-out" value="0"{{if not $d.Settings.Measured}} checked{{end}}>
+					<label class="form-check-label" for="s64-out">{{.T "sonar64.settings.outbound"}}</label>
+					<div class="form-text mt-0">{{.T "sonar64.settings.outbound_hint"}}</div>
+				</div>
+				<div class="form-check mb-1">
+					<input class="form-check-input{{if index $d.Errors "measured"}} is-invalid{{end}}" type="radio" name="measured" id="s64-measured" value="1"{{if $d.Settings.Measured}} checked{{end}}>
+					<label class="form-check-label" for="s64-measured">{{.T "sonar64.settings.measured"}}</label>
+					<div class="form-text mt-0">{{.T "sonar64.settings.measured_hint" "port" $d.Port}}</div>
+					{{with index $d.Errors "measured"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+				</div>
+				<div class="alert alert-warning small py-2"><i class="bi bi-eye"></i> {{.T "sonar64.settings.measured_ip"}}</div>
+				<div class="mb-3">
+					<label class="form-label" for="s64-budget">{{.T "sonar64.settings.budget"}}</label>
+					<select class="form-select{{if index $d.Errors "budget"}} is-invalid{{end}}" id="s64-budget" name="budget">
+						{{range $d.Budgets}}<option value="{{.}}"{{if eq . $d.Settings.Budget}} selected{{end}}>{{$.T (printf "sonar64.budget.%s" .)}}</option>{{end}}
+					</select>
+					{{with index $d.Errors "budget"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "sonar64.settings.budget_hint"}}</div>
+				</div>
+				<div>
+					<label class="form-label" for="s64-quiet">{{.T "sonar64.settings.quiet"}}</label>
+					<input class="form-control{{if index $d.Errors "quiet"}} is-invalid{{end}}" id="s64-quiet" name="quiet" value="{{index $d.Form "quiet"}}" maxlength="5" placeholder="23-6" pattern="^([01]?[0-9]|2[0-3])-([01]?[0-9]|2[0-3])$">
+					{{with index $d.Errors "quiet"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "sonar64.settings.quiet_hint"}}</div>
+				</div>
+			</div>
+			<div class="card-footer text-end"><button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> {{.T "common.save"}}</button></div>
+		</form>
+	</div>
+
+	<div class="col-xl-6">
+		<form method="post" action="/sonar64/profile" class="card h-100" id="s64-profile" novalidate>
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-header"><i class="bi bi-person-badge text-primary"></i> {{.T "sonar64.profile.title"}}</div>
+			<div class="card-body">
+				{{if not $d.Registered}}<div class="alert alert-info small py-2"><i class="bi bi-hourglass-split"></i> {{.T "sonar64.profile.wait"}}</div>{{end}}
+				<div class="mb-3">
+					<label class="form-label" for="s64-name">{{.T "sonar64.profile.name"}}</label>
+					<input class="form-control{{if index $d.Errors "name"}} is-invalid{{end}}" id="s64-name" name="name" value="{{index $d.Form "name"}}" maxlength="32" pattern="[A-Za-z0-9 ._\-]{3,32}"{{if not $d.Registered}} disabled{{end}}>
+					{{with index $d.Errors "name"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "sonar64.profile.name_hint"}}</div>
+				</div>
+				<div class="row g-2 mb-1">
+					<div class="col-6">
+						<label class="form-label" for="s64-lat">{{.T "sonar64.profile.lat"}}</label>
+						<input class="form-control{{if index $d.Errors "lat"}} is-invalid{{end}}" id="s64-lat" name="lat" value="{{index $d.Form "lat"}}" inputmode="decimal" maxlength="24" placeholder="50.1109"{{if not $d.Registered}} disabled{{end}}>
+						{{with index $d.Errors "lat"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					</div>
+					<div class="col-6">
+						<label class="form-label" for="s64-lon">{{.T "sonar64.profile.lon"}}</label>
+						<input class="form-control{{if index $d.Errors "lon"}} is-invalid{{end}}" id="s64-lon" name="lon" value="{{index $d.Form "lon"}}" inputmode="decimal" maxlength="24" placeholder="8.6821"{{if not $d.Registered}} disabled{{end}}>
+						{{with index $d.Errors "lon"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					</div>
+				</div>
+				<div class="form-text mb-3"><i class="bi bi-geo-alt"></i> {{.T "sonar64.profile.location_hint"}}</div>
+				<div class="row g-2">
+					<div class="col-6">
+						<label class="form-label" for="s64-access">{{.T "sonar64.profile.access"}}</label>
+						<select class="form-select{{if index $d.Errors "access"}} is-invalid{{end}}" id="s64-access" name="access"{{if not $d.Registered}} disabled{{end}}>
+							<option value="">–</option>
+							{{range $d.Accesses}}<option value="{{.}}"{{if eq . (index $d.Form "access")}} selected{{end}}>{{$.T (printf "sonar64.access.%s" .)}}</option>{{end}}
+						</select>
+						{{with index $d.Errors "access"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					</div>
+					<div class="col-6">
+						<label class="form-label" for="s64-device">{{.T "sonar64.profile.device"}}</label>
+						<select class="form-select{{if index $d.Errors "device"}} is-invalid{{end}}" id="s64-device" name="device"{{if not $d.Registered}} disabled{{end}}>
+							{{range $d.Devices}}<option value="{{.}}"{{if eq . (index $d.Form "device")}} selected{{end}}>{{$.T (printf "sonar64.device.%s" .)}}</option>{{end}}
+						</select>
+						{{with index $d.Errors "device"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					</div>
+				</div>
+			</div>
+			<div class="card-footer text-end"><button class="btn btn-primary" type="submit"{{if not $d.Registered}} disabled{{end}}><i class="bi bi-check-lg"></i> {{.T "common.save"}}</button></div>
+		</form>
+	</div>
+
+	<div class="col-12">
+		<div class="card" id="s64-out-card">
+			<div class="card-header d-flex align-items-center gap-2"><i class="bi bi-arrow-up-right text-primary"></i> {{.T "sonar64.out.title"}}
+				<span class="ms-auto small text-body-secondary" data-s64-live-state>{{.T "sonar64.live"}}</span></div>
+			<div class="table-responsive">
+				<table class="table table-sm table-hover mb-0 align-middle">
+					<thead><tr><th>{{.T "sonar64.col.time"}}</th><th>{{.T "sonar64.col.target"}}</th><th>{{.T "sonar64.col.method"}}</th><th class="text-end">{{.T "sonar64.col.ms"}}</th><th class="text-end">{{.T "sonar64.col.loss"}}</th><th>{{.T "sonar64.col.note"}}</th></tr></thead>
+					<tbody data-s64-out data-l-empty="{{.T "sonar64.out.empty"}}">
+						{{range $d.Recent}}<tr><td class="text-nowrap">{{$.Time .At}}</td><td class="font-monospace">{{.Target}}</td><td>{{$.T (printf "sonar64.method.%s" .Method)}} · IPv{{.Family}}</td>
+							<td class="text-end" title="min {{ms .MinMs}} · max {{ms .MaxMs}}">{{if .Recv}}{{ms .AvgMs}}{{else}}–{{end}}</td><td class="text-end">{{pct .Loss}} %</td><td class="small text-body-secondary">{{.Error}}</td></tr>
+						{{else}}<tr><td colspan="6" class="text-body-secondary small">{{.T "sonar64.out.empty"}}</td></tr>{{end}}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+
+	<div class="col-12">
+		<div class="card" id="s64-in-card">
+			<div class="card-header"><i class="bi bi-arrow-down-left text-primary"></i> {{.T "sonar64.in.title"}}</div>
+			<div class="card-body pb-0"><p class="small text-body-secondary mb-2">{{if $d.Settings.Measured}}{{.T "sonar64.in.hint_measured"}}{{else}}{{.T "sonar64.in.hint_outbound"}}{{end}}</p></div>
+			{{if $d.Settings.Measured}}
+			<div class="px-3 small fw-semibold">{{.T "sonar64.in.live" "port" $d.Port}}</div>
+			<div class="table-responsive">
+				<table class="table table-sm table-hover mb-2 align-middle">
+					<thead><tr><th>{{.T "sonar64.col.time"}}</th><th>{{.T "sonar64.col.from"}}</th><th>{{.T "sonar64.col.family"}}</th><th class="text-end">{{.T "sonar64.col.count"}}</th></tr></thead>
+					<tbody data-s64-in-live data-l-empty="{{.T "sonar64.in.live_empty"}}">
+						{{range $d.InboundLive}}<tr><td class="text-nowrap">{{$.Time .At}}</td><td>{{if .Name}}{{.Name}} {{end}}<span class="font-monospace small text-body-secondary">{{.From}}</span></td><td>IPv{{.Family}}</td><td class="text-end">{{.Count}}</td></tr>
+						{{else}}<tr><td colspan="4" class="text-body-secondary small">{{.T "sonar64.in.live_empty"}}</td></tr>{{end}}
+					</tbody>
+				</table>
+			</div>
+			{{end}}
+			<div class="px-3 small fw-semibold">{{.T "sonar64.in.reported"}}</div>
+			<div class="table-responsive">
+				<table class="table table-sm table-hover mb-0 align-middle">
+					<thead><tr><th>{{.T "sonar64.col.time"}}</th><th>{{.T "sonar64.col.from"}}</th><th>{{.T "sonar64.col.provider"}}</th><th>{{.T "sonar64.col.place"}}</th><th>{{.T "sonar64.col.method"}}</th><th class="text-end">{{.T "sonar64.col.ms"}}</th><th class="text-end">{{.T "sonar64.col.loss"}}</th></tr></thead>
+					<tbody data-s64-in data-l-empty="{{.T "sonar64.in.empty"}}" data-l-wait="{{.T "sonar64.in.wait"}}" data-l-error="{{.T "sonar64.in.error"}}">
+						<tr><td colspan="7" class="text-body-secondary small">{{.T "sonar64.in.wait"}}</td></tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+	{{end}}
+</div>
+<div hidden data-s64-labels data-l-icmp="{{.T "sonar64.method.icmp"}}" data-l-udp="{{.T "sonar64.method.udp"}}" data-l-trace="{{.T "sonar64.method.trace"}}"
+	data-l-live="{{.T "sonar64.live"}}" data-l-paused="{{.T "sonar64.live_paused"}}"
+	data-l-trust-new="{{.T "sonar64.trust.new"}}" data-l-trust-stable="{{.T "sonar64.trust.stable"}}" data-l-trust-trusted="{{.T "sonar64.trust.trusted"}}"
+	data-l-trust-pillar="{{.T "sonar64.trust.pillar"}}" data-l-trust-anchor="{{.T "sonar64.trust.anchor"}}" data-l-trust-quarantine="{{.T "sonar64.trust.quarantine"}}"></div>
+{{end}}
+{{define "scripts"}}{{if .Data.Settings.Participate}}<script src="/sonar64/sonar64.js?v={{.Version}}"></script>{{end}}{{end}}

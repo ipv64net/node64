@@ -99,6 +99,7 @@
     "api": "API",
     "status_pages": "Statusseiten",
     "honeypot": "Honeypot64",
+    "sonar64": "Sonar64",
     "proxmox": "Proxmox VE",
     "settings_general": "Allgemein",
     "settings_ports": "Ports",
@@ -4990,6 +4991,182 @@
       "desc": "Lockvogel im Netz: erkennt Angreifer, die Zugangsdaten durchprobieren, und meldet sie an die IPv64-Blocklisten.",
       "h1": "Simuliert gängige Dienste wie SSH, Telnet und Web-Logins",
       "h2": "Frühwarnung und Beitrag zu den gemeinsamen Blocklisten"
+    }
+  },
+  "sonar64": {
+    "title": "Sonar64",
+    "intro": "Community-Messnetz: Knoten bei Teilnehmern zu Hause messen sich gegenseitig und die Anker von ipv64 – sparsam, nach einem signierten Plan von ipv64.net und innerhalb fester Grenzen. Die Ergebnisse zeigt die öffentliche Karte auf ipv64.net/sonar.",
+    "public_link": "Öffentliche Knotenseite",
+    "live": "live",
+    "live_paused": "pausiert",
+    "participate": {
+      "title": "Teilnahme",
+      "on": "Du nimmst teil",
+      "text": "Mit der Teilnahme wird diese Node ein Knoten von Sonar64. Sie misst Antwortzeiten zu anderen Knoten und zu den Ankern und meldet sie alle 5 Minuten signiert an ipv64.",
+      "p1": "Ziele kommen nur aus dem signierten Plan von ipv64, nie private Netze; wenige Pakete pro Sekunde, feste Tagesgrenze.",
+      "p2": "Öffentlich sind Anzeigename, Provider, Anschlussart, Vertrauensstufe und der auf etwa 1 km verschleierte Standort – nie deine IP-Adresse.",
+      "p3": "Standard ist „nur ausgehend“: Andere messen dich erst, wenn du „auch gemessen“ wählst.",
+      "nokey": "Für die Teilnahme braucht Node64 den zentralen ipv64-API-Key (daraus wird ein eigenes Sonar-Token).",
+      "key_link": "API-Key eintragen",
+      "join": "Teilnehmen",
+      "leave": "Teilnahme beenden",
+      "off_confirm": "Teilnahme an Sonar64 beenden? Die Node misst danach nicht mehr und antwortet nicht mehr auf UDP 6464."
+    },
+    "status": {
+      "node_id": "Node-ID",
+      "registered": "Angemeldet",
+      "plan": "Messplan",
+      "plan_until": "gültig bis {time}",
+      "anchors_only": "kein gültiger Plan – nur Anker",
+      "paused": "Pausiert",
+      "sent_today": "Pakete heute",
+      "last_report": "Letzte Meldung",
+      "buffered": "{n} noch nicht gemeldet",
+      "responder": "Antworter",
+      "responder_on": "UDP {port} offen",
+      "responder_off": "aus (nur ausgehend)",
+      "error": "Fehler:",
+      "port_busy": "UDP {port} ist belegt – die Node misst nur ausgehend."
+    },
+    "paused": {
+      "uplink": "eigene Leitung gestört",
+      "quiet": "Ruhezeit",
+      "no_plan": "kein Plan von ipv64",
+      "budget": "Tagesgrenze erreicht"
+    },
+    "trust": {
+      "title": "Vertrauensstufe",
+      "new": "Neu",
+      "stable": "Stabil",
+      "trusted": "Vertraut",
+      "pillar": "Säule",
+      "anchor": "Anker",
+      "quarantine": "Quarantäne",
+      "next": "Fortschritt zu „{level}“ (Richtwert)",
+      "progress": "Fortschritt zur nächsten Stufe",
+      "days": "{n} von {need} Tagen",
+      "uptime": "Verfügbarkeit {pct} % von {need} %",
+      "need_measured": "braucht „auch gemessen“",
+      "quarantine_text": "Deine Messungen zählen derzeit nicht (zu viele unplausible Werte). Die Node misst weiter; ipv64 prüft täglich neu."
+    },
+    "trust_hint": {
+      "new": "Weniger als 7 Tage dabei – deine Werte zählen noch wenig.",
+      "stable": "Zählt normal in den Auswertungen.",
+      "trusted": "Zählt doppelt und ist Bezugspunkt für Nachbarn.",
+      "pillar": "Referenzziel für neue Knoten, hohes Gewicht bei Störungen.",
+      "anchor": "Fester Messpunkt von ipv64.",
+      "quarantine": "Misst weiter, zählt aber nicht."
+    },
+    "me": {
+      "provider4": "Provider (IPv4)",
+      "provider6": "Provider (IPv6)",
+      "reach": "Erreichbar",
+      "since": "Dabei seit",
+      "error": "Knoten bei ipv64 nicht abrufbar:"
+    },
+    "reach": {
+      "none": "nicht gemessen",
+      "icmp": "ICMP",
+      "udp": "UDP 6464"
+    },
+    "settings": {
+      "title": "Messung",
+      "role": "Rolle",
+      "outbound": "Nur ausgehend",
+      "outbound_hint": "Die Node misst andere und die Anker, wird selbst aber nie als Ziel geplant.",
+      "measured": "Auch gemessen werden",
+      "measured_hint": "Die Node antwortet auf UDP {port} (Port im Router freigeben) bzw. der Router auf Ping. So wird auch deine Leitung gemessen.",
+      "measured_ip": "Dann sehen einige andere Teilnehmer deine öffentliche IP-Adresse (nur die Knoten, die dich laut Plan messen; nie öffentlich).",
+      "budget": "Budget",
+      "budget_hint": "Obergrenze je Runde (alle 5 Minuten) und Tag; ipv64 plant darunter.",
+      "quiet": "Ruhezeit",
+      "quiet_hint": "Stunden ohne Messung in Ortszeit, z. B. 23-6; leer = keine."
+    },
+    "budget": {
+      "sparsam": "Sparsam (8 Ziele je Runde)",
+      "normal": "Normal (15 Ziele je Runde)",
+      "grosszuegig": "Großzügig (20 Ziele je Runde)"
+    },
+    "profile": {
+      "title": "Profil auf ipv64.net",
+      "wait": "Die Node meldet sich gerade bei ipv64 an; danach lässt sich das Profil bearbeiten.",
+      "name": "Anzeigename",
+      "name_hint": "3–32 Zeichen: Buchstaben, Ziffern, Leerzeichen, Punkt, Unterstrich, Bindestrich. Öffentlich sichtbar.",
+      "lat": "Breitengrad",
+      "lon": "Längengrad",
+      "location_hint": "Der genaue Standort bleibt bei ipv64 (Plausibilitätsprüfung); öffentlich erscheint er im Umkreis von etwa 1 km verschleiert. Leer lassen = kein Standort.",
+      "access": "Anschlussart",
+      "device": "Gerät"
+    },
+    "access": {
+      "fiber": "Glasfaser",
+      "dsl": "DSL",
+      "cable": "Kabel",
+      "mobile": "LTE/5G",
+      "satellite": "Satellit (z. B. Starlink)",
+      "datacenter": "Rechenzentrum",
+      "other": "Sonstiges"
+    },
+    "device": {
+      "node64": "Node64",
+      "pi": "Raspberry Pi",
+      "mikrotik": "MikroTik",
+      "linux": "Linux-Rechner",
+      "other": "Sonstiges"
+    },
+    "method": {
+      "icmp": "ICMP",
+      "udp": "UDP 6464",
+      "trace": "Traceroute"
+    },
+    "col": {
+      "time": "Zeit",
+      "target": "Ziel",
+      "method": "Weg",
+      "ms": "ms",
+      "loss": "Verlust",
+      "note": "Hinweis",
+      "from": "Von",
+      "family": "Familie",
+      "count": "Pakete",
+      "provider": "Provider",
+      "place": "Ort"
+    },
+    "out": {
+      "title": "Pings von mir",
+      "empty": "Noch keine Messungen."
+    },
+    "in": {
+      "title": "Pings gegen mich",
+      "hint_measured": "Proben auf UDP 6464 erscheinen sofort; Pings an den Router (ICMP) kommen aus den Ergebnissen bei ipv64, bis zu 5 Minuten verzögert.",
+      "hint_outbound": "Nur ausgehend: Die Node wird nicht als Ziel geplant.",
+      "live": "Live auf UDP {port}",
+      "live_empty": "Noch keine Proben beantwortet.",
+      "reported": "Laut ipv64 (letzte Stunde)",
+      "empty": "Niemand hat dich in der letzten Stunde gemessen.",
+      "wait": "Noch keine Daten von ipv64.",
+      "error": "ipv64 gerade nicht erreichbar."
+    },
+    "err": {
+      "no_key": "Für die Teilnahme zuerst den zentralen ipv64-API-Key eintragen (Einstellungen).",
+      "token": "Sonar-Token konnte nicht angelegt werden: {error}",
+      "not_ready": "Die Node ist noch nicht bei ipv64 angemeldet – bitte gleich noch einmal versuchen.",
+      "not_joined": "Zuerst an Sonar64 teilnehmen.",
+      "api": "ipv64 meldet einen Fehler: {error}",
+      "budget": "Unbekanntes Budget.",
+      "quiet": "Ruhezeit als „von-bis“ in vollen Stunden angeben (z. B. 23-6), oder leer lassen.",
+      "port": "UDP {port} ist schon von einem anderen Teil belegt.",
+      "name": "3–32 Zeichen: Buchstaben, Ziffern, Leerzeichen, Punkt, Unterstrich, Bindestrich.",
+      "location": "Breiten- und Längengrad zusammen angeben oder beide leer lassen.",
+      "lat": "Breitengrad zwischen -90 und 90.",
+      "lon": "Längengrad zwischen -180 und 180.",
+      "access": "Unbekannte Anschlussart.",
+      "device": "Unbekanntes Gerät."
+    },
+    "flash": {
+      "participate_on": "Sonar64: Teilnahme eingeschaltet – die Node meldet sich bei ipv64 an.",
+      "participate_off": "Sonar64: Teilnahme beendet.",
+      "saved": "Sonar64: gespeichert."
     }
   }
 }
