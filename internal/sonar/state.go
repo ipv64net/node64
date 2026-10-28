@@ -1,7 +1,7 @@
 package sonar
 
 // Ablage im DataDir: sonar64.key (Ed25519-Seed, 0600) und sonar64.json (Node-ID, Seq, Tageszaehler, letzter Plan
-// mit ETag). Zusammen ein paar KB; geschrieben wird nur bei Meldung, neuem Plan und Anmeldung.
+// mit ETag). Zusammen ein paar KB; geschrieben wird nur bei Meldung, neuem Plan, Anmeldung und Beginn einer Runde.
 
 import (
 	"crypto/ed25519"
@@ -33,7 +33,8 @@ type persisted struct {
 	Seq       uint64    `json:"seq"`
 	Day       string    `json:"day,omitempty"` // UTC-Tag des Zaehlers
 	SentToday int       `json:"sent_today"`
-	PlanRaw   []byte    `json:"plan_raw,omitempty"` // exakte Bytes von plan (Base64 in JSON)
+	LastRound int64     `json:"last_round,omitempty"` // Beginn der zuletzt gemessenen Runde (Unix-ms): nach Neustart nicht doppelt
+	PlanRaw   []byte    `json:"plan_raw,omitempty"`   // exakte Bytes von plan (Base64 in JSON)
 	PlanKID   string    `json:"plan_kid,omitempty"`
 	PlanSig   string    `json:"plan_sig,omitempty"`
 	ETag      string    `json:"etag,omitempty"`
@@ -149,6 +150,8 @@ func (r *Runner) saveState() {
 	if r.cfg.DataDir == "" {
 		return
 	}
+	r.saveMu.Lock()
+	defer r.saveMu.Unlock()
 	r.mu.Lock()
 	st := r.st
 	r.mu.Unlock()

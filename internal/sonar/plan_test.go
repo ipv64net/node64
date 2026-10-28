@@ -32,6 +32,7 @@ func TestVerifyPlan(t *testing.T) {
 			{ID: "a_fsn", Addr: "1.2.3.4", Family: 4, Method: MethodICMP, Count: 3},
 			{ID: "a_nbg", Addr: "10.0.0.1", Family: 4, Method: MethodICMP, Count: 3},
 			{ID: "a_x", Addr: "1.2.3.5", Family: 4, Method: MethodTrace, Count: 1},
+			{ID: "nabc000node1", Addr: "1.2.3.6", Family: 4, Method: MethodUDP, Count: 3}, // kein Anker
 		}}
 	raw := mustJSON(t, p)
 	// Leerzeichen: es zaehlen die exakten Bytes

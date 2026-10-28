@@ -106,6 +106,9 @@ type Runner struct {
 	bucket  *bucket
 	wake    chan struct{} // Measured geaendert -> Antworter pruefen
 
+	saveMu sync.Mutex     // saveState nacheinander (Reihenfolge der Staende bleibt)
+	saves  sync.WaitGroup // Speichern im Hintergrund (Beginn einer Runde)
+
 	mu          sync.Mutex
 	st          persisted
 	registered  bool
@@ -113,7 +116,6 @@ type Runner struct {
 	budget      string
 	prober      Prober
 	plan        *activePlan
-	doneRounds  map[int64]bool
 	pauseNext   bool
 	uplink      bool
 	paused      string
@@ -121,10 +123,12 @@ type Runner struct {
 	bufOff      uint64    // absolute Position von buf[0]
 	inbuf       []Inbound //
 	inOff       uint64
+	inSending   uint64 // Ende (absolut) der Inbound-Eintraege einer laufenden Meldung: davor nichts mehr zusammenfassen
 	recent      []Result
 	recentIn    []Inbound
 	lastReport  time.Time
 	lastErr     string
+	planErr     string // Fehler beim Plan (bleibt sichtbar, auch wenn Meldungen klappen)
 	icmpDenied  bool
 	responder   responderIface
 	responderOn bool
@@ -139,12 +143,7 @@ func New(cfg Config) (*Runner, error) {
 	if cfg.Mode == "" {
 		cfg.Mode = ModeHeadless
 	}
-	if cfg.Version == "" {
-		cfg.Version = "dev"
-	}
-	if len(cfg.Version) > 32 {
-		cfg.Version = cfg.Version[:32]
-	}
+	cfg.Version = cleanVersion(cfg.Version)
 	switch cfg.Mode {
 	case ModeModule, ModeHeadless:
 		if !nodeTokenRe.MatchString(cfg.Token) {
@@ -199,11 +198,10 @@ func New(cfg Config) (*Runner, error) {
 		tokenID: tokenID(cfg.Token),
 		now:     time.Now, roundLen: RoundInterval, planEvery: 15 * time.Minute, reportEvery: 5 * time.Minute,
 		reportGap: 61 * time.Second, retryMin: time.Minute, tick: 2 * time.Second,
-		wake:       make(chan struct{}, 1),
-		measured:   cfg.Measured || cfg.Mode == ModeAnchor,
-		budget:     cfg.Budget,
-		doneRounds: map[int64]bool{},
-		uplink:     true,
+		wake:     make(chan struct{}, 1),
+		measured: cfg.Measured || cfg.Mode == ModeAnchor,
+		budget:   cfg.Budget,
+		uplink:   true,
 	}
 	if cfg.DataDir != "" {
 		if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
@@ -254,6 +252,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		}()
 	}
 	wg.Wait()
+	r.saves.Wait()
 	// Zum Schluss noch einmal melden (kurz), damit nichts verloren geht.
 	r.mu.Lock()
 	last := r.lastReport
@@ -277,6 +276,9 @@ func (r *Runner) Status() Status {
 		Responder: r.responderOn, Paused: r.paused, SentToday: r.sentTodayLocked(now), LastReport: r.lastReport,
 		Buffered: len(r.buf), LastError: r.lastErr,
 	}
+	if s.LastError == "" {
+		s.LastError = r.planErr
+	}
 	if p := r.plan; p != nil {
 		s.PlanIssued, s.PlanExpires = p.plan.Issued.UTC(), p.validUntil.UTC()
 		s.AnchorsOnly = !now.Before(p.validUntil) && now.Before(p.anchorsUntil)
@@ -284,10 +286,11 @@ func (r *Runner) Status() Status {
 	return s
 }
 
-// Recent liefert die letzten n eigenen Messungen (neueste zuerst) und die letzten n auf UDP 6464 beantworteten Proben.
-// Ziel-Adressen sind darin nicht enthalten (nur Target-ID).
+// Recent liefert die letzten n eigenen Messungen (neueste zuerst) und die letzten n auf UDP 6464 beantworteten Proben
+// (live: der Antworter wird dabei abgefragt). Ziel-Adressen sind darin nicht enthalten (nur Target-ID).
 func (r *Runner) Recent(n int) ([]Result, []Inbound) {
 	n = max(0, min(n, recentMax))
+	r.drainResponder()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	res := make([]Result, 0, min(n, len(r.recent)))
@@ -342,6 +345,30 @@ func (r *Runner) UpdateMe(ctx context.Context, m Me) (*Me, error) {
 	r.mu.Unlock()
 	r.signalWake()
 	return &out, nil
+}
+
+// cleanVersion bringt die Programmversion in die Form, die ipv64 annimmt ([0-9A-Za-z][0-9A-Za-z.+_~-]{0,31});
+// z. B. "0.1.0/node64-0.11.116" -> "0.1.0+node64-0.11.116". Sonst lehnt ipv64 die Anmeldung ab.
+func cleanVersion(v string) string {
+	b := make([]byte, 0, 32)
+	for i := 0; i < len(v) && len(b) < 32; i++ {
+		c := v[i]
+		switch {
+		case c >= '0' && c <= '9', c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
+		case len(b) == 0:
+			continue // erstes Zeichen muss Buchstabe oder Ziffer sein
+		case c == '.', c == '+', c == '_', c == '~', c == '-':
+		case c == '/':
+			c = '+'
+		default:
+			c = '-'
+		}
+		b = append(b, c)
+	}
+	if len(b) == 0 {
+		return "dev"
+	}
+	return string(b)
 }
 
 // checkMe prueft die schreibbaren Felder.
