@@ -77,7 +77,7 @@
 		fill(inb, d.rows, 7, function (tr, r) {
 			cell(tr, when(r.at), "text-nowrap");
 			var td = cell(tr, r.name || r.from);
-			if (r.trust) {
+			if (r.trust && /^[a-z]{1,12}$/.test(r.trust)) {
 				var b = document.createElement("span");
 				b.className = "badge ms-1 " + trustClass(r.trust);
 				b.textContent = L("trust-" + r.trust);
@@ -92,7 +92,8 @@
 	}
 
 	function trustClass(t) {
-		return { stable: "text-bg-primary", trusted: "text-bg-success", pillar: "s64-gold", anchor: "s64-violet", quarantine: "text-bg-danger" }[t] || "text-bg-secondary";
+		var c = { stable: "text-bg-primary", trusted: "text-bg-success", pillar: "s64-gold", anchor: "s64-violet", quarantine: "text-bg-danger" };
+		return Object.prototype.hasOwnProperty.call(c, t) ? c[t] : "text-bg-secondary";
 	}
 
 	function get(url, done, fail) {

@@ -116,6 +116,7 @@
 	<div class="col-xl-6">
 		<form method="post" action="/sonar64/profile" class="card h-100" id="s64-profile" novalidate>
 			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			{{if and $d.Me $d.Me.Lat}}<input type="hidden" name="had_loc" value="1">{{end}}
 			<div class="card-header"><i class="bi bi-person-badge text-primary"></i> {{.T "sonar64.profile.title"}}</div>
 			<div class="card-body">
 				{{if not $d.Registered}}<div class="alert alert-info small py-2"><i class="bi bi-hourglass-split"></i> {{.T "sonar64.profile.wait"}}</div>{{end}}

@@ -69,6 +69,8 @@ var (
 	nameRe  = regexp.MustCompile(`^[A-Za-z0-9 ._-]{3,32}$`)
 	slugRe  = regexp.MustCompile(`^[A-Za-z0-9_-]{1,40}$`)
 	quietRe = regexp.MustCompile(`^([01]?[0-9]|2[0-3])-([01]?[0-9]|2[0-3])$`)
+	// bei ipv64 fuer Knoten gesperrte Namensanfaenge (api_v2_sonar.php, PUT /sonar/me)
+	reservedRe = regexp.MustCompile(`(?i)^(anker|anchor|ipv64|sonar64|admin)`)
 
 	// Budgets, Anschlussarten und Geraete (Vertrag, Me)
 	Budgets  = []string{sonar.BudgetLow, sonar.BudgetNormal, sonar.BudgetHigh}
@@ -367,10 +369,15 @@ func (m *Module) syncLoop(ctx context.Context, rs *runState, r runnerAPI) {
 		}
 		cctx, cancel := context.WithTimeout(ctx, apiTimeout)
 		me, err := r.Me(cctx)
+		var upErr error
 		if err == nil && me != nil && (me.Measured != rs.cfg.Measured || me.Budget != rs.cfg.Budget) {
 			want := *me
 			want.Measured, want.Budget = rs.cfg.Measured, rs.cfg.Budget
-			me, err = r.UpdateMe(cctx, want)
+			if up, e := r.UpdateMe(cctx, want); e == nil {
+				me = up
+			} else {
+				upErr = e // geholten Knoten trotzdem zeigen, Abgleich in 2 min erneut
+			}
 		}
 		cancel()
 		if ctx.Err() != nil {
@@ -379,6 +386,13 @@ func (m *Module) syncLoop(ctx context.Context, rs *runState, r runnerAPI) {
 		m.setMe(me, err)
 		if err == nil && me != nil {
 			wait = meEvery
+			if upErr != nil {
+				m.log.Warn("sonar64 role/budget not synced", "err", upErr)
+				m.mu.Lock()
+				m.meErr = upErr.Error()
+				m.mu.Unlock()
+				wait = 4 * meRetry
+			}
 		}
 	}
 }
@@ -562,12 +576,12 @@ func (m *Module) SetParticipate(ctx context.Context, on bool) error {
 	if err := m.saveSettings(ctx, s); err != nil {
 		return err
 	}
-	if !on {
+	m.startRunnerLocked(ctx)
+	if !on { // erst nach dem Ende des Knotens leeren (sein Abgleich koennte sonst noch schreiben)
 		m.mu.Lock()
 		m.runErr, m.me, m.meAt, m.meErr, m.inRows, m.inKey = "", nil, time.Time{}, "", nil, ""
 		m.mu.Unlock()
 	}
-	m.startRunnerLocked(ctx)
 	return nil
 }
 
@@ -624,8 +638,10 @@ type Profile struct {
 func (p *Profile) validate() FieldErrors {
 	fe := FieldErrors{}
 	p.Name = strings.TrimSpace(p.Name)
-	if p.Name != "" && !nameRe.MatchString(p.Name) {
+	if p.Name != "" && (!nameRe.MatchString(p.Name) || strings.Contains(p.Name, "  ")) { // wie Kern und ipv64
 		fe["name"] = "sonar64.err.name"
+	} else if reservedRe.MatchString(p.Name) {
+		fe["name"] = "sonar64.err.name_reserved"
 	}
 	if (p.Lat == nil) != (p.Lon == nil) {
 		fe["lat"] = "sonar64.err.location"
@@ -686,6 +702,15 @@ func (m *Module) SaveProfile(ctx context.Context, p Profile) (*sonar.Me, error) 
 	}
 	want.Measured, want.Budget = rs.cfg.Measured, rs.cfg.Budget
 	me, err := r.UpdateMe(cctx, want)
+	var ae *sonar.APIError
+	if errors.As(err, &ae) { // Namensfehler von ipv64 am Feld zeigen
+		switch ae.Code {
+		case "name_taken":
+			return nil, FieldErrors{"name": "sonar64.err.name_taken"}
+		case "reserved_name":
+			return nil, FieldErrors{"name": "sonar64.err.name_reserved"}
+		}
+	}
 	if err != nil {
 		return nil, err
 	}

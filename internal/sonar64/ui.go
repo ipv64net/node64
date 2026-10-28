@@ -251,7 +251,8 @@ func (m *Module) pageProfile(w http.ResponseWriter, r *http.Request) {
 	if !ok2 {
 		fe["lon"] = "sonar64.err.lon"
 	}
-	p.ClearLoc = ok1 && ok2 && p.Lat == nil && p.Lon == nil
+	// Standort nur loeschen, wenn das Formular einen gezeigt hat (sonst war er nur noch nicht geladen)
+	p.ClearLoc = ok1 && ok2 && p.Lat == nil && p.Lon == nil && r.PostFormValue("had_loc") == "1"
 	var err error
 	if len(fe) == 0 {
 		_, err = m.SaveProfile(r.Context(), p)
