@@ -63,6 +63,23 @@
 			{{end}}
 		</div>
 	</div>
+	{{if $g.ACME}}
+	<div class="card mb-3 border-warning" id="acme">
+		<div class="card-header"><i class="bi bi-person-lock text-warning"></i> {{.T "cluster.acme_title"}}{{$.Doc "cluster#abgleich"}}</div>
+		<div class="card-body small">
+			<p class="text-body-secondary">{{.T "cluster.acme_hint"}}</p>
+			<ul class="list-group mb-0">{{range $g.ACME}}
+				<li class="list-group-item d-flex align-items-center gap-2 flex-wrap">
+					<div>
+						<span class="fw-semibold">{{if .Own}}{{$.T "cluster.acme_this_node"}}{{else}}{{.Name}}{{end}}</span> · {{.CA}} · {{if .Email}}{{.Email}}{{else}}<span class="text-body-secondary">{{$.T "cluster.acme_no_mail"}}</span>{{end}}
+						<div class="text-body-secondary">{{$.T "cluster.acme_created"}} {{if .CreatedAt.IsZero}}–{{else}}{{$.Time .CreatedAt}}{{end}} · <span class="font-monospace" title="{{.Thumbprint}}">{{slice .Thumbprint 0 16}}</span></div>
+					</div>
+					<form method="post" action="/cluster/acme" class="ms-auto m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="thumbprint" value="{{.Thumbprint}}"><button class="btn btn-sm btn-outline-primary" data-confirm="{{$.T "cluster.acme_confirm"}}"><i class="bi bi-check2-circle"></i> {{$.T "cluster.acme_use"}}</button></form>
+				</li>{{end}}
+			</ul>
+		</div>
+	</div>
+	{{end}}
 </div>
 <div class="col-lg-5">
 	<div class="card mb-3" id="add">

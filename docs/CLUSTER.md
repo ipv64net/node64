@@ -55,7 +55,7 @@ Healthchecks-Ablauf im Detail: [LOKALE-GRUPPE.md](LOKALE-GRUPPE.md). Code: `inte
 | Healthchecks bei der anderen Node aus | 5 min Ruhe statt alle 15 s (ein Anstoß holt trotzdem sofort) |
 | Konflikte | jüngere Änderung gewinnt (ms), Gleichstand: größere Node-Kennung der Urheberin |
 | Löschvermerke (v2) | 30 Tage |
-| Bereich neu eingeschaltet | Abholen ab Anfang (doppelt schadet nicht, die jüngere Änderung gewinnt) |
+| Bereich neu eingeschaltet | Abholen ab Anfang (doppelt schadet nicht, die jüngere Änderung gewinnt); genau gleiche Einträge werden dabei zusammengeführt (siehe unten) |
 
 ## Was abgeglichen wird
 
@@ -74,6 +74,36 @@ Benachrichtigungskanäle werden nicht abgeglichen. Neue Module hängen sich als 
 PROXY64 ist als Bereich geplant, aber zurückgestellt, bis die Nachfrage da ist:
 [PLAN-NODE64-CLUSTER-MODULE.md](PLAN-NODE64-CLUSTER-MODULE.md). DNS64: [PLAN-NODE64-DNS64-LOKAL.md](PLAN-NODE64-DNS64-LOKAL.md)
 (Einträge und Weiterleitungen mit „nur diese Node“ werden nie abgeglichen).
+
+### Zertifikate: gleiche Einträge und ACME-Konto
+
+**Zusammenführen:** Haben zwei Nodes beim Beitritt oder beim Einschalten eines Bereichs denselben Eintrag unter
+verschiedener uid, bleibt er einmal – auf allen Nodes mit der kleineren uid (die Node mit der größeren übernimmt sie,
+sobald sie die andere bekommt). Verweise der Zertifikate (ACME-Stelle, DNS-Zugang, CA) zeigen danach auf den
+verbliebenen Eintrag; eine zusammengeführte uid merkt sich die Node (`certs.cluster_alias`), damit Verweise anderer
+Nodes auf die alte uid weiter passen (Löschen geht nie über einen Alias). Zusammengeführt wird nur genau Gleiches:
+
+| Bereich | gleich, wenn |
+|---|---|
+| `certificates` | dasselbe Zertifikat (SHA-256 des ersten Zertifikats) **und** derselbe private Schlüssel |
+| `acme` (Stellen) | dieselbe Verzeichnis-URL **und** dasselbe EAB (KID und HMAC) oder beide ohne |
+| `dns_accounts` | derselbe Anbieter **und** dieselben Zugangsdaten (der Name zählt nicht) |
+| `cas` | dasselbe CA-Zertifikat **und** derselbe Schlüssel |
+
+Alles andere bleibt getrennt, auch bei gleichem Namen. Sonderfall: dieselbe ACME-Verzeichnis-URL mit anderem EAB
+kann es je Node nur einmal geben – sie wird nicht übernommen (Warnung „cluster change not applied“), Zertifikate mit
+dieser Stelle erneuert dann nur ihre Node.
+
+**ACME-Konto** (Eintrag `account` im Bereich `acme`): Hat die andere Node keins oder dasselbe (gleicher Schlüssel),
+gilt es überall (Mail und Annahme der Bedingungen gehen mit). Sind es verschiedene Konten, wird **nichts
+überschrieben**: Jede Node nutzt weiter ihr eigenes, die abweichenden stehen in `certs.acme_conflicts`, und die Seite
+`/cluster` zeigt unter den Abgleich-Einstellungen die Karte „ACME-Konto im Cluster“ mit Node, Stelle, Mail und
+Anlagedatum je Konto und „Dieses verwenden“ (API: `GET /api/group` → `acme_accounts`, Wahl mit
+`POST /api/group/acme` Body `{"thumbprint":"…"}`; Audit `cert.account.choose` mit den verworfenen Konten). Die Wahl
+(Zeitpunkt und die abgelösten Konten als Fingerabdruck des Schlüssels, `certs.acme_choice`) geht mit dem Konto an die
+anderen Nodes; wessen Konto abgelöst ist, übernimmt das gewählte, ein später eintreffendes altes Konto ändert nichts
+mehr. Bei zwei verschiedenen Wahlen gilt die jüngere. Ausgestellte Zertifikate bleiben gültig, erneuert wird mit dem
+gewählten Konto. Kommt später eine Node mit einem dritten Konto dazu, erscheint die Wahl erneut.
 
 ## Wenn eine Node weg ist
 

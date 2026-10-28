@@ -177,8 +177,10 @@ type Manager struct {
 	// issueTimeout: Zeitlimit eines Abrufs (ab der ACME-Sperre); manche Anbieter brauchen Minuten, bis TXT sichtbar ist
 	issueTimeout time.Duration
 
-	clSelf func() string // Cluster (cluster.go)
-	clHook ClusterHook
+	clSelf  func() string // Cluster (cluster.go)
+	clHook  ClusterHook
+	accMu   sync.Mutex // ACME-Konto im Cluster: Uebernahme und Wahl nacheinander (clusteraccount.go)
+	aliasMu sync.Mutex // zusammengefuehrte uids (cluster.go)
 }
 
 type loadedCert struct {

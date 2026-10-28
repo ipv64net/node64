@@ -167,6 +167,7 @@ func (m *Manager) accountKey(ctx context.Context) (crypto.Signer, error) {
 	if err := m.d.Store.SetSetting(ctx, setKey, m.d.Box.Encrypt(string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})))); err != nil {
 		return nil, err
 	}
+	_ = m.d.Store.SetSetting(ctx, setCreated, store.Now()) // Anzeige im Cluster, wenn Nodes verschiedene Konten haben
 	m.changedUID(ctx, ItemACME, clusterAccount, false)
 	return k, nil
 }

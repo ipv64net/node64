@@ -228,6 +228,21 @@ Import-PfxCertificate -FilePath cert.p12 -CertStoreLocation Cert:\LocalMachine\M
 *Systemsteuerung → Sicherheit → Zertifikat → Hinzufügen → Importieren*. Dort `privkey.pem`, `cert.pem` und
 `chain.pem` aus dem ZIP angeben.
 
+## Im Cluster
+
+Die Zertifikatsverwaltung lässt sich im Cluster abgleichen (Bereiche Zertifikate, ACME-Stellen samt Konto,
+DNS-Zugänge, eigene CAs; alle standardmäßig aus, siehe [CLUSTER.md](CLUSTER.md#zertifikate-gleiche-einträge-und-acme-konto)).
+
+- **Doppelte Einträge:** Haben beide Nodes beim Beitritt dasselbe schon, bleibt es einmal. „Dasselbe“ heißt genau
+  gleich: Zertifikat mit demselben Schlüssel, ACME-Stelle mit derselben URL und demselben EAB, DNS-Zugang mit demselben
+  Anbieter und denselben Zugangsdaten, CA mit demselben Zertifikat und Schlüssel. Nur ähnliche Einträge (gleicher Name,
+  anderer Schlüssel oder Zugang) bleiben getrennt.
+- **ACME-Konto (Let's Encrypt):** Ein gleiches Konto gilt einfach im ganzen Cluster. Haben Nodes verschiedene Konten
+  (z. B. andere Mail oder anderer Schlüssel), nutzt jede ihr eigenes weiter, bis du auf der Seite **Cluster** unter den
+  Abgleich-Einstellungen eines wählst („Dieses verwenden“). Danach gilt es überall; die anderen werden verworfen (im
+  Audit-Log vermerkt). Zertifikate, die mit einem verworfenen Konto ausgestellt wurden, bleiben gültig und werden ab
+  dann mit dem gewählten erneuert.
+
 ## Sicherung und Umzug
 
 - **Speicherung:** Zertifikate, Schlüssel, CAs, DNS-Zugänge und EAB-Daten liegen in `node64.db`. Die

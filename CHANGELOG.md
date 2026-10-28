@@ -6,6 +6,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 - Healthchecks: Proxmox-VE- und Docker-Checks zeigen eine echte Latenz (Ping zu Node, Gast bzw. Container, sonst die
   Antwortzeit der API) statt 0 ms.
+- Zertifikate/Cluster: Beim Beitritt gleiche Einträge (Zertifikat mit Schlüssel, ACME-Stelle mit EAB, DNS-Zugang,
+  CA) werden einmal zusammengeführt, nur Ähnliches bleibt getrennt; verschiedene ACME-Konten werden nicht mehr
+  überschrieben, sondern auf der Seite Cluster zur Wahl gestellt.
 
 ## 0.12.0-alpha.29 – 2026-10-28
 
