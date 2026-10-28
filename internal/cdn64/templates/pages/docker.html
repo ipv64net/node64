@@ -1,0 +1,99 @@
+{{define "content"}}
+{{$d := .Data}}
+{{$v := $d.View}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><i class="bi bi-diagram-3 text-primary me-1"></i> {{.T "cdn64.title"}}{{$.Doc "cdn64#docker"}}</h1>
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+<div class="row g-3">
+	<div class="col-xl-8">
+		<form method="post" action="/cdn64/docker" class="card mb-3">
+			<input type="hidden" name="_csrf" value="{{.CSRF}}">
+			<div class="card-header"><i class="bi bi-box-seam text-primary"></i> {{.T "cdn64.docker.title"}}</div>
+			<div class="card-body small">
+				<p class="text-body-secondary">{{.T "cdn64.docker.intro"}}</p>
+				<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" role="switch" name="docker" id="docker_on"{{if $d.On}} checked{{end}}><label class="form-check-label fw-semibold" for="docker_on">{{.T "cdn64.docker.on"}}</label></div>
+				<div class="form-text mb-3">{{.T "cdn64.docker.on_hint"}}</div>
+				<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" role="switch" name="traefik" id="docker_traefik"{{if $d.Traefik}} checked{{end}}><label class="form-check-label fw-semibold" for="docker_traefik">{{.T "cdn64.docker.traefik"}}</label></div>
+				<div class="form-text mb-3">{{.T "cdn64.docker.traefik_hint"}}</div>
+				<label class="form-label fw-semibold" for="docker_host">{{.T "cdn64.docker.host"}}</label>
+				<input class="form-control form-control-sm font-monospace{{if index $d.Errors "docker_host"}} is-invalid{{end}}" id="docker_host" name="docker_host" value="{{$d.Host}}" placeholder="{{$d.DefaultHost}}" maxlength="500">
+				{{with index $d.Errors "docker_host"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+				<div class="form-text mb-3">{{.T "cdn64.docker.host_hint"}}</div>
+				<label class="form-label fw-semibold" for="docker_cert">{{.T "cdn64.docker.cert"}}</label>
+				<select class="form-select form-select-sm{{if index $d.Errors "docker_cert"}} is-invalid{{end}}" id="docker_cert" name="docker_cert">
+					{{$cs := $d.Cert}}<option value=""{{if eq $cs ""}} selected{{end}}>{{.T "cdn64.docker.cert_none"}}</option>
+					{{if $d.CertsOn}}<option value="auto"{{if eq $cs "auto"}} selected{{end}}>{{.T "certs.src.auto"}}</option>
+					<option value="ipv64"{{if not $d.DNSKey}} disabled{{else if eq $cs "ipv64"}} selected{{end}}>{{.T "certs.src.ipv64"}}{{if not $d.DNSKey}} – {{.T "certs.why.nokey"}}{{end}}</option>
+					<option value="http"{{if eq $cs "http"}} selected{{end}}>{{.T "certs.src.http"}}</option>
+					{{range $d.DNS}}<option value="dns:{{.ID}}"{{if eq $cs (printf "dns:%d" .ID)}} selected{{end}}>{{$.T "certs.src.dns"}}: {{.Name}}</option>{{else}}<option value="dns" disabled>{{.T "certs.src.dns"}} – {{.T "certs.why.nodns"}}</option>{{end}}{{end}}
+				</select>
+				{{with index $d.Errors "docker_cert"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+				<div class="form-text">{{.T "cdn64.docker.cert_hint"}}</div>
+				{{if and $d.CertsOn (not $d.ACME.TOSAccepted)}}<div class="form-check mt-2" data-docker-tos>
+					<input class="form-check-input{{if index $d.Errors "docker_cert"}} is-invalid{{end}}" type="checkbox" id="accept_tos" name="accept_tos">
+					<label class="form-check-label" for="accept_tos">{{.T "certs.tos_accept"}} <a href="{{$d.ACME.TOSURL}}" target="_blank" rel="noopener">{{.T "certs.tos_link"}}</a></label>
+					<div class="form-text">{{.T "cdn64.docker.tos_hint"}}</div>
+				</div>{{end}}
+			</div>
+			<div class="card-footer"><button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button></div>
+		</form>
+
+		<div class="card">
+			<div class="card-header d-flex flex-wrap align-items-center gap-2"><span><i class="bi bi-boxes text-primary"></i> {{.T "cdn64.docker.containers"}}</span>
+				<span class="ms-auto small">{{if not $v.Enabled}}<span class="badge text-bg-secondary">{{.T "cdn64.docker.state_off"}}</span>
+				{{else if $v.Connected}}<span class="badge text-bg-success" title="{{$v.Host}}"><i class="bi bi-plug-fill"></i> {{.T "cdn64.docker.state_ok"}}</span>
+				{{else}}<span class="badge text-bg-danger" title="{{$v.Host}}"><i class="bi bi-exclamation-triangle"></i> {{.T "cdn64.docker.state_err"}}</span>{{end}}
+				{{if not $v.Synced.IsZero}}<span class="text-body-secondary ms-1">{{.T "cdn64.docker.synced" "time" ($.Time $v.Synced)}}</span>{{end}}</span>
+			</div>
+			{{if and $v.Enabled $v.Error}}<div class="card-body small pb-0"><div class="alert alert-danger py-2 mb-0" data-docker-error><span class="font-monospace">{{$v.Error}}</span><div class="mt-1">{{.T "cdn64.docker.error_hint"}}</div></div></div>{{end}}
+			{{if not $v.Enabled}}
+			<div class="card-body small text-body-secondary">{{.T "cdn64.docker.off_hint"}}</div>
+			{{else if not $v.Containers}}
+			<div class="card-body small text-body-secondary">{{.T "cdn64.docker.empty"}}</div>
+			{{else}}
+			<div class="table-responsive">
+			<table class="table table-hover align-middle mb-0 small table-stack">
+				<thead><tr><th class="ps-3" data-nolabel>{{.T "cdn64.docker.col.container"}}</th><th>{{.T "cdn64.docker.col.state"}}</th><th>{{.T "cdn64.docker.col.source"}}</th><th>{{.T "cdn64.col.names"}}</th><th>{{.T "cdn64.col.target"}}</th><th class="pe-3">{{.T "cdn64.docker.col.status"}}</th></tr></thead>
+				<tbody>
+				{{range $v.Containers}}
+				<tr data-docker-container="{{.Name}}">
+					<td class="ps-3 font-monospace cell-wrap">{{.Name}}</td>
+					<td><span class="badge {{if eq .State "running"}}text-bg-success{{else if or (eq .State "exited") (eq .State "dead")}}text-bg-danger{{else}}text-bg-light{{end}}">{{.State}}</span></td>
+					<td>{{if eq .Source "traefik"}}<span class="badge text-bg-light">Traefik</span>{{with .Router}} <span class="font-monospace">{{.}}</span>{{end}}{{else}}<span class="badge text-bg-light">node64</span>{{end}}</td>
+					<td>{{range $i, $n := .Names}}{{if $i}}<br>{{end}}<span class="font-monospace cell-wrap">{{$n}}</span>{{end}}</td>
+					<td class="font-monospace cell-wrap">{{.Target}}</td>
+					<td class="pe-3">{{if .HostID}}<a class="badge text-bg-success text-decoration-none" href="/cdn64/hosts/{{.HostID}}"><i class="bi bi-check-lg"></i> {{$.T "cdn64.docker.taken"}}</a>{{end}}
+						{{if .Problem}}<div class="text-danger">{{$.T .Problem "name" .ProblemName}}</div>{{else if not .HostID}}<span class="text-body-secondary">–</span>{{end}}</td>
+				</tr>
+				{{end}}
+				</tbody>
+			</table>
+			</div>
+			{{end}}
+		</div>
+	</div>
+	<div class="col-xl-4">
+		<div class="card"><div class="card-body small">
+			<div class="fw-semibold mb-1"><i class="bi bi-info-circle text-info"></i> {{.T "cdn64.docker.help_title"}}</div>
+			<p class="mb-2">{{.T "cdn64.docker.help_labels"}}</p>
+<pre class="bg-body-tertiary border rounded p-2 mb-2"><code>services:
+  whoami:
+    image: traefik/whoami
+    labels:
+      - node64.proxy.host=app.example.de
+      - node64.proxy.port=80
+    networks: [node64]
+networks:
+  node64:
+    external: true</code></pre>
+			<p class="mb-2">{{.T "cdn64.docker.help_network"}}</p>
+			<p class="mb-2">{{.T "cdn64.docker.help_socket"}}</p>
+			<p class="mb-0">{{.T "cdn64.docker.help_more"}} <a href="{{$.DocURL "cdn64#docker"}}" target="_blank" rel="noopener">{{.T "common.docs"}} <i class="bi bi-box-arrow-up-right"></i></a></p>
+		</div></div>
+	</div>
+</div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}

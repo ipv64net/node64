@@ -40,6 +40,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	m.streamRoutes(mux, page)
 	m.c4Routes(mux, page)
 	m.protectionRoutes(mux, page)
+	m.dockerRoutes(mux, page)
 }
 
 // listPath: Liste der Hosts einer Art.
@@ -63,7 +64,7 @@ type tab struct {
 	Active               bool
 }
 
-// tabs: Reiter des Moduls; "CDN64 Statistik" nur mit CDN64-Namen im Konto (protectionOn).
+// tabs: Reiter des Moduls; "CDN64 Statistik" nur mit CDN64-Namen im Konto (protectionOn), steht nach den Zugriffen.
 func (m *Module) tabs(active string) []tab {
 	t := []tab{{Path: "/cdn64", Icon: "bi-arrow-left-right", TitleKey: "cdn64.tab.hosts"},
 		{Path: "/cdn64/redirects", Icon: "bi-signpost-split", TitleKey: "cdn64.tab.redirects"},
@@ -73,9 +74,10 @@ func (m *Module) tabs(active string) []tab {
 		{Path: "/cdn64/access", Icon: "bi-person-lock", TitleKey: "cdn64.tab.access"},
 		{Path: "/certificates", Icon: "bi-shield-lock", TitleKey: "cdn64.tab.certs"}, // Kernseite
 		{Path: "/cdn64/log", Icon: "bi-list-columns", TitleKey: "cdn64.tab.log"},
+		{Path: "/cdn64/docker", Icon: "bi-box-seam", TitleKey: "cdn64.tab.docker"},
 		{Path: "/cdn64/default", Icon: "bi-question-square", TitleKey: "cdn64.tab.default"}}
 	if m.protectionOn() {
-		t = slices.Insert(t, 8, tab{Path: "/cdn64/protection", Icon: "bi-shield-check", TitleKey: "cdn64.tab.protection"}) // vor der Standardseite
+		t = slices.Insert(t, 8, tab{Path: "/cdn64/protection", Icon: "bi-shield-check", TitleKey: "cdn64.tab.protection"}) // nach den Zugriffen, vor Docker
 	}
 	for i := range t {
 		t[i].Active = t[i].Path == active
@@ -146,6 +148,8 @@ type hostRow struct {
 	Watch    []Watch    // Healthchecks auf genau dieses Ziel
 	Online   *onlineRow // CDN64 online (nil = aus)
 	LocalN   int        // Namen, die schon in DNS64 stehen (lokaler Zugriff)
+	Docker   string     // von Docker verwaltet: Container (Tooltip des Abzeichens), "" = von Hand angelegt
+	DockerRO bool       // ... und Docker-Labels an: nicht loeschbar (Schalter aus: loeschbar wie in der API)
 
 	Status *StatusPageInfo // Hostart status: die Seite (nil = unbekannt bzw. Healthchecks aus)
 }
@@ -263,6 +267,9 @@ func (m *Module) rows(ctx context.Context) ([]hostRow, error) {
 		row := hostRow{Host: h, Reach: m.reach.get(h.ID), Requests: st.requests.Load(), Errors: st.errors.Load(), Blocked: st.blocked.Load(),
 			URL: firstURL(h), Cert: m.certFor(ctx, h, all), RouteErr: routeErr[h.ID], Day: day[h.ID], ACLName: acls[h.AccessListID], Online: onl[h.ID]}
 		row.LocalN = localCount(ldns, h.Names)
+		if h.DockerContainer != "" {
+			row.Docker, row.DockerRO = m.dockerHostLabel(h), m.dockerOn(ctx)
+		}
 		if h.probed() {
 			row.Watch = watch.of(h.TargetHost, h.TargetPort)
 		}
@@ -367,6 +374,9 @@ type formData struct {
 	StatusOn    bool             // Healthchecks verfuegbar (Hostart status)
 	StatusPages []StatusPageInfo // Auswahl der Statusseite
 	StatusKnown bool             // gewaehlte Seite gibt es auf dieser Node
+
+	Docker   string // von Docker verwaltet: Container (Namen, Schema und Ziel gesperrt), "" = von Hand angelegt
+	DockerRO bool   // ... und Docker-Labels an: nicht loeschbar
 }
 
 // advText: die weiteren Optionen als Text fuer das Formular.
@@ -434,6 +444,9 @@ func (m *Module) form(ctx context.Context, h *Host, isNew bool) formData {
 		d.Adv.HostMode, d.Adv.HostValue = "custom", a.HostHeader
 	}
 	d.CFNets = strings.Join(CloudflareNets, "\n")
+	if h.DockerContainer != "" {
+		d.Docker, d.DockerRO = m.dockerHostLabel(h), m.dockerOn(ctx)
+	}
 	d.GeoText = strings.Join(a.GeoCountries, ", ")
 	m.bl.mu.Lock()
 	d.Countries = m.bl.countries
@@ -552,7 +565,11 @@ func (m *Module) pageUpdate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	old := *h
 	hostFromForm(r, h)
+	if h.DockerContainer != "" { // Namen, Schema und Ziel kommen aus den Docker-Labels (Formularwerte zaehlen nicht)
+		h.Names, h.Scheme, h.TargetHost, h.TargetPort, h.Kind = old.Names, old.Scheme, old.TargetHost, old.TargetPort, old.Kind
+	}
 	m.saveForm(w, r, h, false)
 }
 
@@ -655,6 +672,11 @@ func (m *Module) saveForm(w http.ResponseWriter, r *http.Request, h *Host, isNew
 func (m *Module) pageDelete(w http.ResponseWriter, r *http.Request) {
 	h, ok := m.hostFromPath(w, r)
 	if !ok {
+		return
+	}
+	if h.DockerContainer != "" && m.dockerOn(r.Context()) { // geloescht wird mit dem Label bzw. Container (docker.go)
+		m.g.Flash(w, r, "danger", m.g.T(r, "cdn64.docker.err.delete"))
+		http.Redirect(w, r, listPath(h.Kind), http.StatusSeeOther)
 		return
 	}
 	if err := m.deleteHost(r.Context(), h.ID); err != nil {

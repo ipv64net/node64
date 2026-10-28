@@ -280,7 +280,41 @@ Das Modul *PROXY64* (in den Einstellungen einschalten; technisch `cdn64`, daher 
 - **Statistik und Zugriffs-Log:** Anfragen je Host und Stunde (90 Tage) immer; das Einzel-Log ist je Host einschaltbar (1–90 Tage, IPs auf Wunsch gekürzt). Beides liegt in `/data/cdn64/cdn64.db`, im Backup nur mit *Statistik mitsichern*.
 - **Healthcheck dafür anlegen:** Ein Klick legt im Modul Healthchecks einen Check auf das Ziel an (HTTP oder TCP).
 - **Standardseite:** Für unbekannte Namen oder den Aufruf per IP antwortet Node64 mit 404, schließt die Verbindung, leitet weiter oder zeigt eine eigene HTML-Seite.
-- **API:** `GET /api/cdn64/status`, `POST /api/cdn64/check`, `GET|POST /api/cdn64/hosts` (`kind`: proxy, redirect, dead, passthrough), `GET|PUT|DELETE /api/cdn64/hosts/{id}`, `POST /api/cdn64/hosts/{id}/enable|disable`, `GET|POST /api/cdn64/streams`, `GET|PUT|DELETE /api/cdn64/streams/{id}`, `POST /api/cdn64/streams/{id}/enable|disable`, `GET|PUT /api/cdn64/default`, `GET|POST /api/cdn64/access-lists`, `GET|PUT|DELETE /api/cdn64/access-lists/{id}`, `GET /api/cdn64/log`, `GET /api/cdn64/stats`, `GET|PUT /api/cdn64/settings`, `POST /api/cdn64/hosts/{id}/healthcheck`, `POST /api/cdn64/streams/{id}/healthcheck`.
+- **API:** `GET /api/cdn64/status`, `POST /api/cdn64/check`, `GET|POST /api/cdn64/hosts` (`kind`: proxy, redirect, dead, passthrough), `GET|PUT|DELETE /api/cdn64/hosts/{id}`, `POST /api/cdn64/hosts/{id}/enable|disable`, `GET|POST /api/cdn64/streams`, `GET|PUT|DELETE /api/cdn64/streams/{id}`, `POST /api/cdn64/streams/{id}/enable|disable`, `GET|PUT /api/cdn64/default`, `GET|POST /api/cdn64/access-lists`, `GET|PUT|DELETE /api/cdn64/access-lists/{id}`, `GET /api/cdn64/log`, `GET /api/cdn64/stats`, `GET|PUT /api/cdn64/settings`, `POST /api/cdn64/hosts/{id}/healthcheck`, `POST /api/cdn64/streams/{id}/healthcheck`, `GET /api/cdn64/docker`.
+
+### Proxy-Hosts aus Docker-Labels
+
+Unter *PROXY64 → Docker* einschalten (standardmäßig aus). Dann legt PROXY64 für jeden Container mit Labels selbst einen
+Proxy-Host an, wie Traefik. Namen, Schema und Ziel kommen aus den Labels und sind im Formular gesperrt (Abzeichen
+**Docker**). Alles andere bleibt einstellbar und erhalten, auch CDN64 online – das wird nie per Label eingeschaltet.
+
+```yaml
+services:
+  node64:
+    # ... wie oben, dazu der Docker-Socket (siehe „Docker-Container prüfen“)
+    networks: [proxy]
+  whoami:
+    image: traefik/whoami
+    labels:
+      - node64.proxy.host=app.example.de,www.example.de
+      - node64.proxy.port=80        # optional, sonst der einzige freigegebene Port
+      # - node64.proxy.scheme=https
+      # - node64.proxy.network=proxy
+    networks: [proxy]
+networks:
+  proxy: {}
+```
+
+- **Netz:** PROXY64 spricht den Container direkt an. Node64 und Container brauchen ein gemeinsames Docker-Netz, oder
+  Node64 läuft mit `network_mode: host`; bei mehreren Netzen `node64.proxy.network` setzen.
+- **Socket:** wie bei der [Docker-Überwachung](#docker-container-prüfen) (`docker.sock` lesend und `group_add`); die
+  dortigen Sicherheitshinweise gelten auch hier. Mit [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy)
+  braucht PROXY64 `CONTAINERS=1` und `EVENTS=1`; die Adresse (z. B. `tcp://socket-proxy:2375`) unter *PROXY64 → Docker*
+  eintragen.
+- **Traefik-Labels** werden mitgelesen (abschaltbar): `Host(...)`-Regeln, Port und Schema des Service,
+  `traefik.docker.network`. Middlewares und Pfad-Regeln nicht.
+- **Container entfernt:** Der Host wird nach 2 Minuten gelöscht und bei CDN64 online abgemeldet; ein gestoppter
+  Container behält seinen Host. Details: [docs/CDN64.md](docs/CDN64.md#docker-labels).
 
 ## Honeypot64 (Fallen-Dienste)
 

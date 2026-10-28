@@ -1,5 +1,21 @@
 # Änderungen – PROXY64
 
+## 1.36.0 – 2026-10-28
+
+### Neu
+- Proxy-Hosts aus Docker-Labels: Container mit `node64.proxy.host` (Namen, durch Komma getrennt), dazu optional
+  `node64.proxy.port`, `node64.proxy.scheme` und `node64.proxy.network`, werden ohne Formular zu Proxy-Hosts. PROXY64
+  verbindet sich direkt mit dem Container (gemeinsames Docker-Netz, `network_mode: host` oder freigegebener Port). Neuer
+  Reiter **Docker** mit Schalter (standardmäßig aus), Docker-API (Standard wie die Docker-Überwachung, auch
+  docker-socket-proxy), Zertifikat für neue Docker-Hosts und Liste der Container mit Zustand und Hinweisen (Port fehlt,
+  Name schon vergeben, nicht erreichbar …).
+- Traefik-Labels mitlesen (für Umsteiger, abschaltbar): `Host(...)`-Regeln der Router, Port und Schema des Service sowie
+  `traefik.docker.network`. Middlewares und Pfad-Regeln werden nicht übernommen.
+- Abzeichen „Docker“ an solchen Hosts. Namen, Schema und Ziel sind im Formular gesperrt, Löschen geht nur über Label
+  bzw. Container; alles andere (CDN64 online, Zugriffsliste, Schutz, Zertifikat …) bleibt einstellbar und erhalten.
+- Container entfernt (oder Label weg): Der Host wird nach 2 Minuten Wartezeit gelöscht und bei CDN64 online abgemeldet.
+  Die Wartezeit fängt `docker compose up` ab. Gestoppte Container behalten ihren Host.
+
 ## 1.35.0 – 2026-10-27
 
 ### Geändert

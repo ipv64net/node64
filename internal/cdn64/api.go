@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("DELETE /api/cdn64/hosts/{id}", api(m.apiDelete))
 	mux.Handle("POST /api/cdn64/hosts/{id}/enable", api(m.apiToggle))
 	mux.Handle("POST /api/cdn64/hosts/{id}/disable", api(m.apiToggle))
+	mux.Handle("GET /api/cdn64/docker", api(m.apiDocker))
 	m.streamAPIRoutes(mux, api)
 	m.c4APIRoutes(mux, api)
 }
@@ -245,6 +247,7 @@ func (m *Module) apiCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.ID = 0
+	h.DockerContainer, h.DockerRouter = "", "" // Docker-Hosts legt nur der Abgleich an
 	if err := m.saveHost(r.Context(), h); err != nil {
 		m.apiFail(w, err)
 		return
@@ -260,11 +263,17 @@ func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, kind := h.ID, h.Kind
+	dc, dr := h.DockerContainer, h.DockerRouter
+	names, scheme, thost, tport := slices.Clone(h.Names), h.Scheme, h.TargetHost, h.TargetPort
 	req, ok := decode(w, r, h)
 	if !ok {
 		return
 	}
 	h.ID, h.Kind = id, kind // die Art bleibt
+	h.DockerContainer, h.DockerRouter = dc, dr
+	if dc != "" { // Docker-Host: Namen, Schema und Ziel kommen aus den Labels
+		h.Names, h.Scheme, h.TargetHost, h.TargetPort = names, scheme, thost, tport
+	}
 	if err := m.saveHost(r.Context(), h); err != nil {
 		m.apiFail(w, err)
 		return
@@ -277,6 +286,14 @@ func (m *Module) apiDelete(w http.ResponseWriter, r *http.Request) {
 	h, err := m.host(r.Context(), pathID(r))
 	if err != nil {
 		m.apiFail(w, err)
+		return
+	}
+	if h.DockerContainer != "" && m.dockerOn(r.Context()) { // Label bzw. Container entfernen (Schalter aus: loeschbar)
+		msg := "cdn64.docker.err.delete"
+		if m.g.Translate != nil {
+			msg = m.g.Translate("en", msg, "name", m.dockerHostLabel(h))
+		}
+		writeErr(w, http.StatusConflict, msg)
 		return
 	}
 	if err := m.deleteHost(r.Context(), h.ID); err != nil {
@@ -304,6 +321,11 @@ func (m *Module) apiToggle(w http.ResponseWriter, r *http.Request) {
 	}
 	m.g.Audit(r, action, strings.Join(h.Names, ","), "")
 	m.apiRow(w, r, h.ID, http.StatusOK)
+}
+
+// apiDocker: Stand des Abgleichs mit den Docker-Labels.
+func (m *Module) apiDocker(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, m.dockerView(r.Context()))
 }
 
 func (m *Module) apiCheck(w http.ResponseWriter, r *http.Request) {

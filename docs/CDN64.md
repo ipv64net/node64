@@ -278,6 +278,95 @@ Client, Proxy und Ziel liefen auf derselben Maschine.
 
 Wiederholen: `go test -tags loadtest -run TestLoad -v ./internal/cdn64/`
 
+## Docker-Labels
+
+Seit PROXY64 1.36.0 legt PROXY64 Proxy-Hosts auf Wunsch selbst aus den Labels der Container an – wie Traefik, ohne
+Formular. Einschalten unter *PROXY64 → Docker* (Schalter „Docker-Labels auswerten“, **standardmäßig aus**). Der Host ist
+danach ein ganz normaler Proxy-Host: Blocklisten, Zugriffslisten, WAF/JA4, Länder- und Ratensperren, Honeypot64,
+Zertifikate, CDN64 online und die Statistik greifen unverändert.
+
+| Label | Pflicht | Bedeutung |
+|---|---|---|
+| `node64.proxy.host` | ja | Namen, durch Komma getrennt (`app.example.de,www.example.de`) |
+| `node64.proxy.port` | nein | Port im Container; fehlt er, gilt der einzige freigegebene (`EXPOSE`) Port, sonst Hinweis „Port fehlt“ |
+| `node64.proxy.scheme` | nein | `http` (Standard) oder `https` |
+| `node64.proxy.network` | nein | Docker-Netz, über das PROXY64 den Container erreicht (bei mehreren Netzen) |
+
+```yaml
+services:
+  node64:
+    image: ghcr.io/ipv64net/node64:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    group_add:
+      - "996"   # stat -c %g /var/run/docker.sock
+    networks: [proxy]
+  whoami:
+    image: traefik/whoami
+    labels:
+      - node64.proxy.host=app.example.de
+      - node64.proxy.port=80
+    networks: [proxy]
+networks:
+  proxy: {}
+```
+
+- **Ein Container = ein Proxy-Host** (mehrere Namen möglich). Kennung ist der Container-Name, er bleibt bei
+  `docker compose up` gleich.
+- **Aus den Labels, im Formular gesperrt:** Namen, Schema, Ziel. Die Host-Liste zeigt das Abzeichen **Docker** (Tooltip:
+  Container), das Formular den Hinweis „Kommt aus den Docker-Labels von Container …“.
+- **In der Oberfläche einstellbar und bleibt erhalten** (Neustart, Neuanlegen): CDN64 online samt Modus,
+  Zugriffsliste, Schutz/WAF, Länder, Locations, Erweitert, Zertifikat, HTTP/2/3, HSTS. Ausschalten geht, Löschen nicht
+  (Label bzw. Container entfernen).
+- **CDN64 online** wird nur in der Oberfläche eingeschaltet, nie per Label.
+- **Zertifikat:** Unter *Docker* lässt sich ein Weg wählen (automatisch, ipv64 DNS-01, HTTP-01, DNS-Zugang), auf dem für
+  neue Docker-Hosts ein Zertifikat angefordert wird; die Nutzungsbedingungen von Let's Encrypt werden dort einmal
+  angenommen. Ohne Weg nimmt der Host ein passendes vorhandenes Zertifikat (z. B. Wildcard), sonst nur HTTP.
+
+**Ziel-Adresse.** PROXY64 verbindet sich direkt mit dem Container, nicht über freigegebene Ports. Reihenfolge:
+`node64.proxy.network` → gemeinsames Docker-Netz mit dem Node64-Container → bei Node64 mit `network_mode: host` die IP
+im (ersten) Bridge-Netz des Containers → freigegebener Port auf dem Docker-Host (über das Gateway). Geht nichts davon,
+wird der Host angelegt, zeigt aber „nicht erreichbar“ mit Hinweis. Die IP wird bei jedem Start neu gelesen.
+
+**Abgleich.** Beim Start und alle 5 Minuten die volle Liste, dazwischen lösen Docker-Ereignisse (`start`, `die`,
+`destroy`, `rename`) einen Abgleich aus. Die Seite *Docker* zeigt Verbindung, letzten Abgleich und alle Container mit
+Labels: übernommen (Link zum Host) oder der Grund, warum nicht.
+
+**Stopp, Entfernen, Update.**
+- Container gestoppt: Der Host bleibt, Besucher sehen 502 („Dienst nicht erreichbar“).
+- Container entfernt oder `node64.proxy.host` entfernt: Der Host wird nach **2 Minuten** Wartezeit gelöscht und bei
+  CDN64 online abgemeldet. Die Wartezeit fängt `docker compose up` ab (Container wird gelöscht und gleich mit gleichem
+  Namen neu angelegt) – Einstellungen und CDN64-Anmeldung bleiben so erhalten.
+- Docker nicht erreichbar oder Liste fehlerhaft: Es wird nichts gelöscht, nur der Fehler angezeigt.
+- War Node64 aus, als ein Container entfernt wurde, holt der nächste Abgleich das Löschen nach.
+
+**Konflikte.** Gehört ein Name schon zu einem von Hand angelegten Host, gewinnt dieser; der Container wird nicht
+übernommen (Hinweis). Zwei Container mit demselben Namen: der zuerst gesehene gewinnt. Stehen eigene und
+Traefik-Labels am selben Container, gelten nur die eigenen.
+
+**Traefik-Labels** (Schalter „Traefik-Labels mitlesen“, an, solange Docker-Labels an sind). Ausgewertet werden nur:
+- `traefik.enable` (`false` → ignorieren),
+- `traefik.http.routers.<r>.rule` mit `Host(...)`, auch mehrere mit `||` oder `` Host(`a`, `b`) ``; andere Regeln
+  (`PathPrefix`, `Headers` …) → Router übersprungen, Hinweis „Regel nicht unterstützt“,
+- `traefik.http.routers.<r>.service` bzw. der einzige Service,
+- `traefik.http.services.<s>.loadbalancer.server.port` und `.scheme`,
+- `traefik.docker.network`.
+
+Middlewares, Entrypoints, `tls.certresolver` (Zertifikate macht PROXY64) sowie TCP/UDP-Router werden ignoriert. Je
+Router entsteht ein Host.
+
+**Cluster.** Docker-Hosts gehören zu dem Docker-Host, auf dem die Node läuft, und werden nicht an andere Nodes verteilt.
+
+**Sicherheit.**
+- Wer den Docker-Socket hat, kann den Host steuern – auch mit `:ro`. PROXY64 sendet nur GET-Anfragen
+  (`/containers/json`, `/containers/{id}/json`, `/events`). Sicherer ist ein
+  [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) mit `CONTAINERS=1` und `EVENTS=1` (alles
+  andere aus); unter *Docker* dann z. B. `tcp://socket-proxy:2375` eintragen. Entfernte Docker-Hosts (SSH) gehen hier
+  nicht.
+- Wer Container starten darf, kann damit nur **lokale** Proxy-Hosts anlegen: nichts ins Internet stellen (CDN64 online
+  nur über die Oberfläche) und keine von Hand angelegten Hosts überschreiben.
+- Ziele sind nur Container auf diesem Docker-Host (Container-IP bzw. Gateway), nie beliebige Adressen aus einem Label.
+
 ## Umstieg vom Nginx Proxy Manager
 
 | NPM | PROXY64 |
@@ -306,6 +395,7 @@ Einen Import gibt es nicht (Entscheidung). Hosts werden neu angelegt; Zertifikat
 | Bereich | Endpunkte |
 |---|---|
 | Hosts, Streams, Standardseite | `/api/cdn64/hosts`, `/api/cdn64/streams`, `/api/cdn64/default` |
+| Docker-Labels | `GET /api/cdn64/docker` (Einstellungen, Verbindung, Container) |
 | Zugriffslisten, Log, Statistik, Einstellungen | `/api/cdn64/access-lists`, `/api/cdn64/log`, `/api/cdn64/stats`, `/api/cdn64/settings` |
 | ipv64-Blocklisten | `GET\|PUT /api/cdn64/blocklists`, `POST /api/cdn64/blocklists/refresh` |
 | Schutz vor Überlastung | `GET\|PUT /api/cdn64/limits`, `DELETE /api/cdn64/limits/bans/{ip}` |

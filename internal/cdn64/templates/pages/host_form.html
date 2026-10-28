@@ -3,6 +3,8 @@
 {{$h := $d.Host}}
 <h1 class="h4 mb-3"><i class="bi bi-diagram-3 text-primary me-1"></i> {{if $d.New}}{{.T (print "cdn64.kind_new." $h.Kind)}}{{else}}<span class="text-break">{{index $h.Names 0}}</span>{{end}}{{$.Doc "cdn64#optionen"}}</h1>
 {{with index $d.Errors "_"}}<div class="alert alert-danger small">{{.}}</div>{{end}}
+{{if $d.Docker}}<div class="alert alert-info small" data-docker-host><span class="badge text-bg-primary me-1"><i class="bi bi-box-seam"></i> {{.T "cdn64.docker.badge"}}</span> {{.T "cdn64.docker.form_hint" "name" $h.DockerContainer}}{{if $h.DockerRouter}} {{.T "cdn64.docker.form_router" "name" $h.DockerRouter}}{{end}}
+	<div class="text-body-secondary mt-1">{{.T "cdn64.docker.form_locked"}} <a href="/cdn64/docker">{{.T "cdn64.docker.form_link"}}</a></div></div>{{end}}
 <div class="row g-3">
 	<div class="col-xl-8">
 		<form method="post" action="{{if $d.New}}/cdn64/hosts{{else}}/cdn64/hosts/{{$h.ID}}{{end}}" class="card" id="host-form">
@@ -20,7 +22,7 @@
 			<div class="card-body small tab-content">
 				<div class="tab-pane fade show active" id="tab-details" role="tabpanel">
 					<label class="form-label fw-semibold" for="names">{{.T "cdn64.f.names"}}</label>
-					<textarea class="form-control form-control-sm font-monospace{{if index $d.Errors "names"}} is-invalid{{end}}" id="names" name="names" rows="3" required placeholder="nas.example.ipv64.de">{{$d.Names}}</textarea>
+					<textarea class="form-control form-control-sm font-monospace{{if index $d.Errors "names"}} is-invalid{{end}}" id="names" name="names" rows="3" required placeholder="nas.example.ipv64.de"{{if $d.Docker}} readonly{{end}}>{{$d.Names}}</textarea>
 					{{with index $d.Errors "names"}}<div class="invalid-feedback">{{.}}</div>{{end}}
 					<div class="form-text mb-3">{{.T "cdn64.f.names_hint"}}</div>
 					{{if eq $h.Kind "redirect"}}
@@ -66,12 +68,12 @@
 					{{else}}
 					<div class="row g-2 mb-1">
 						<div class="col-sm-3"><label class="form-label fw-semibold" for="scheme">{{.T "cdn64.f.scheme"}}</label>
-							<select class="form-select form-select-sm" id="scheme" name="scheme"><option value="http"{{if eq $h.Scheme "http"}} selected{{end}}>http</option><option value="https"{{if eq $h.Scheme "https"}} selected{{end}}>https</option></select></div>
+							<select class="form-select form-select-sm" id="scheme" name="scheme"{{if $d.Docker}} disabled{{end}}><option value="http"{{if eq $h.Scheme "http"}} selected{{end}}>http</option><option value="https"{{if eq $h.Scheme "https"}} selected{{end}}>https</option></select></div>
 						<div class="col-sm-6"><label class="form-label fw-semibold" for="target_host">{{.T "cdn64.f.target_host"}}</label>
-							<input class="form-control form-control-sm font-monospace{{if index $d.Errors "target_host"}} is-invalid{{end}}" id="target_host" name="target_host" value="{{$h.TargetHost}}" required placeholder="192.168.1.20" maxlength="253">
+							<input class="form-control form-control-sm font-monospace{{if index $d.Errors "target_host"}} is-invalid{{end}}" id="target_host" name="target_host" value="{{$h.TargetHost}}" required placeholder="192.168.1.20" maxlength="253"{{if $d.Docker}} readonly{{end}}>
 							{{with index $d.Errors "target_host"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
 						<div class="col-sm-3"><label class="form-label fw-semibold" for="target_port">{{.T "cdn64.f.target_port"}}</label>
-							<input class="form-control form-control-sm font-monospace{{if index $d.Errors "target_port"}} is-invalid{{end}}" type="number" min="1" max="65535" id="target_port" name="target_port" value="{{$h.TargetPort}}" required>
+							<input class="form-control form-control-sm font-monospace{{if index $d.Errors "target_port"}} is-invalid{{end}}" type="number" min="1" max="65535" id="target_port" name="target_port" value="{{$h.TargetPort}}" required{{if $d.Docker}} readonly{{end}}>
 							{{with index $d.Errors "target_port"}}<div class="invalid-feedback">{{.}}</div>{{end}}</div>
 					</div>
 					<div class="form-text mb-3">{{.T "cdn64.f.target_hint"}}</div>
@@ -257,7 +259,8 @@
 				<a class="btn btn-outline-secondary btn-sm" href="{{$d.Back}}">{{.T "common.cancel"}}</a>
 			</div>
 		</form>
-		{{if not $d.New}}<form method="post" action="/cdn64/hosts/{{$h.ID}}/delete" class="mt-2"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="{{.T "cdn64.delete_confirm" "name" (index $h.Names 0)}}"><i class="bi bi-trash"></i> {{.T "common.delete"}}</button></form>{{end}}
+		{{if $d.DockerRO}}<div class="form-text mt-2"><i class="bi bi-box-seam"></i> {{.T "cdn64.docker.err.delete"}}</div>
+		{{else if not $d.New}}<form method="post" action="/cdn64/hosts/{{$h.ID}}/delete" class="mt-2"><input type="hidden" name="_csrf" value="{{.CSRF}}"><button class="btn btn-outline-danger btn-sm" type="submit" data-confirm="{{.T "cdn64.delete_confirm" "name" (index $h.Names 0)}}"><i class="bi bi-trash"></i> {{.T "common.delete"}}</button></form>{{end}}
 	</div>
 	<div class="col-xl-4">
 		<div class="card"><div class="card-body small">
