@@ -132,10 +132,13 @@ function hpl_alert_out(array $r): array {
  * log, syslog), Dienst, Port, Art und Regel (hoechstens 8 Zeilen, die haeufigsten zuerst). Nie Sensor-Kennungen,
  * Accounts, Hostnamen oder Inhalte (Pfade, Zugangsdaten) – die Fruehwarnung darf keine Sensoren verraten.
  */
-function hpl_watch_details(PDO $pdo, array $s, int $now): string {
+function hpl_watch_details(PDO $pdo, array $s, int $now, bool $coarse = false): string {
 	$seen = array();
 	try {
-		foreach(hpr_all($pdo, "SELECT source, service, port, kind, rule, SUM(`count`) n, COUNT(DISTINCT sensor_id) sensors, MAX(last_seen) last
+		// grob (DynDNS-Treffer ohne Nachweis): ohne Port und Regel, letzte Sichtung nur auf den Tag (wie ip.php)
+		foreach(hpr_all($pdo, $coarse ? "SELECT source, service, 0 port, kind, '' rule, SUM(`count`) n, COUNT(DISTINCT sensor_id) sensors, DATE(MAX(last_seen)) last
+			FROM hp_report_sources WHERE ip_bin = :b AND last_seen >= :d GROUP BY source, service, kind ORDER BY n DESC LIMIT 8"
+			: "SELECT source, service, port, kind, rule, SUM(`count`) n, COUNT(DISTINCT sensor_id) sensors, MAX(last_seen) last
 			FROM hp_report_sources WHERE ip_bin = :b AND last_seen >= :d GROUP BY source, service, port, kind, rule ORDER BY n DESC LIMIT 8",
 			array('b' => $s['ip_bin'], 'd' => hpr_dt($now - 14 * 86400))) as $r) {
 			$seen[] = array('origin' => (string)$r['source'], 'service' => (string)$r['service'], 'port' => (int)$r['port'], 'kind' => (string)$r['kind'],

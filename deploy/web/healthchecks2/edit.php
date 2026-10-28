@@ -58,7 +58,7 @@ if (hc2_is_post()) {
 					$target = $row['execution']; $locSel = $row['locations'];
 					if ($moved) { $row['execution'] = $old['execution']; $row['node_id'] = $old['node_id']; $row['nodes'] = (string)$old['nodes']; $row['locations'] = $old['locations']; }
 					hc2_update_check($uid, $old['token'], $row);
-					if ($moved) { hc2_redirect(HC2_BASE . '/move.php?tokens=' . $old['token'] . '&to=' . $target . '&nodes=' . urlencode(implode(',', $newNodes)) . '&locations=' . urlencode($locSel) . '&auto=1'); }
+					if ($moved) { hc2_redirect(HC2_BASE . '/move.php?tokens=' . $old['token'] . '&to=' . $target . '&nodes=' . urlencode(implode(',', $newNodes)) . '&locations=' . urlencode($locSel) . '&auto=1&_csrf=' . urlencode((string)($_SESSION['hc2_csrf'] ?? ''))); }
 					hc2_flash('success', 'Check gespeichert.');
 					hc2_redirect(HC2_BASE . '/check.php?token=' . $old['token']);
 				}

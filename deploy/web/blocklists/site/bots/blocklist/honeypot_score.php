@@ -27,6 +27,10 @@
  *   - Nie listen: nicht oeffentliche Adressen und IPs der Sensoren (beide gar nicht in hp_scores), Infrastruktur von
  *     ipv64 (reason infra), Cloudflare (cdn), Freigaben aus hp_allowlist und hp_release_requests.protected_until
  *     (allowlist), IPs von ipv64-Kunden (aktuelle A/AAAA-Records, oeffentliche VPN-IPs: customer_ip, nur markiert).
+ *     customer_ip nur, wenn der Account des Records aktiv und aelter als HPS_CUSTOMER_AGE ist (ein frischer Account mit
+ *     einem Record auf die eigene Scanner-IP schuetzt nicht) und die IP unter HPS_CUSTOMER_MAX x Schwelle bleibt
+ *     (sehr viele unabhaengige Accounts: trotzdem listen). Ein Record ist kein Besitznachweis (jeder kann jede IP
+ *     eintragen); einen echten Nachweis (Update-Quell-IP der DynDNS-Aktualisierung) gibt die Datenbank noch nicht her.
  *   - H6: jede Aenderung der gelisteten IPs (neu, nicht mehr gelistet, andere Listen) kommt in derselben Transaktion nach
  *     hp_list_changes (Aenderungs-Feed GET /threat/feed, api_v2_threat_feed.php), Frist 30 Tage.
  *   - Herkunft: hp_scores.country (ISO 3166-1, NULL = unbekannt) aus blocklists/country_ranges.txt.gz (Standort nach DB-IP, Luecken RIR).
@@ -44,6 +48,8 @@ const HPS_CONF_MIN    = 50;          // ab so vielen IPs je Sensor zaehlt die Be
 const HPS_CONF_RATE   = 0.05;        // darunter: halbes Vertrauen
 const HPS_CHUNK       = 500;         // Zeilen je INSERT
 const HPS_CHANGES_KEEP = 30 * 86400; // H6: Aenderungs-Feed (hp_list_changes)
+const HPS_CUSTOMER_AGE = 14 * 86400; // customer_ip nur fuer Records von Accounts, die aelter sind (laenger als das Fenster)
+const HPS_CUSTOMER_MAX = 2;          // ab HPS_CUSTOMER_MAX x Schwelle (gewichtete Accounts) trotz Kunden-IP listen
 
 // Infrastruktur von ipv64, die nie gelistet wird (zusaetzlich zu hp_allowlist source=infra und den Server-Tabellen
 // cdn_server, vpn_gw_server, dns64_server, cdn64o_edges). Netze als CIDR, z. B. '203.0.113.0/24'.
@@ -364,9 +370,10 @@ if($out) {
 		if($bin !== false AND isset($cand[$bin])) { $customer[$bin] = true; }
 	};
 	if($cand) {
-		try { hps_stream("SELECT content ip FROM subdomain_records WHERE type IN ('A', 'AAAA') AND deactivated = 0", array(), $checkCustomer); }
+		$custSince = gmdate('Y-m-d H:i:s', $now - HPS_CUSTOMER_AGE); // Account aktiv und aelter als das Fenster
+		try { hps_stream("SELECT r.content ip FROM subdomain_records r JOIN users u ON u.id = r.userid WHERE r.type IN ('A', 'AAAA') AND r.deactivated = 0 AND u.account_status = '1' AND u.reg_date <= :o", array('o' => $custSince), $checkCustomer); }
 		catch(Throwable $e) { $warn[] = 'subdomain_records nicht lesbar'; }
-		try { hps_stream("SELECT ip FROM vpn_public_ips WHERE deleted = 0", array(), $checkCustomer); }
+		try { hps_stream("SELECT v.ip FROM vpn_public_ips v JOIN users u ON u.id = v.userid WHERE v.deleted = 0 AND u.account_status = '1' AND u.reg_date <= :o", array('o' => $custSince), $checkCustomer); }
 		catch(Throwable $e) { $warn[] = 'vpn_public_ips nicht lesbar'; }
 	}
 
@@ -381,7 +388,7 @@ if($out) {
 		if($why === null AND hps_in_nets($bin, $infra)) { $why = 'infra'; }
 		if($why === null AND hps_in_nets($bin, $cdn)) { $why = 'cdn'; }
 		if($why === null AND isset($released[$bin])) { $why = 'allowlist'; }
-		if($why === null AND isset($customer[$bin])) { $why = 'customer_ip'; } // TODO H5: Kunden warnen (Fruehwarnung), Pruefung durch Dennis
+		if($why === null AND isset($customer[$bin]) AND $out[$i]['eff'] < HPS_CUSTOMER_MAX * $T) { $why = 'customer_ip'; } // TODO H5: Kunden warnen (Fruehwarnung), Pruefung durch Dennis
 		$reason[$bin] = $why ?? 'threshold';
 	}
 	foreach($out as $x) {

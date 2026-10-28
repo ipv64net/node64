@@ -12,6 +12,19 @@ use PHPMailer\PHPMailer\SMTP;
 
 $mail = new PHPMailer();
 
+//Name in CDN64 online (Host vorhanden)? Dann sind die Originale absichtlich deaktiviert (Server-Eintraege stattdessen):
+//nie wieder aktivieren und keinen Ersatz-Record veroeffentlichen, sonst steht die Ursprungs-IP neben den Servern im DNS
+function failover_cdn64o_active($pdo, $record) {
+	try {
+		$st = $pdo->prepare("SELECT id FROM cdn64o_hosts WHERE subdomain_id = :s AND praefix = :p LIMIT 1");
+		$st->execute(array('s' => $record["subdomain_id"], 'p' => $record["praefix"]));
+		if($st->fetch() !== false) { return true; }
+		$st = $pdo->prepare("SELECT host_id FROM cdn64o_records WHERE record_id = :i AND role = 'original' LIMIT 1");
+		$st->execute(array('i' => $record["id"]));
+		return $st->fetch() !== false;
+	} catch (Throwable $e) { return false; }
+}
+
 //Alle 15 Sekunden Check ?
 for($bb=0;$bb<=2;$bb++)
 {
@@ -86,6 +99,7 @@ foreach($policies as $policy)
 				$result = $statement->execute(array('record_key' => $rule["subdomain_record_key"]));
 				$record = $statement->fetch();
 				if($record === false) { echo " Regel $rule[id]: Record fehlt"; continue; } //Original-Record geloescht
+				if(failover_cdn64o_active($pdo, $record)) { echo " Regel $rule[id]: CDN64 online aktiv, kein Ersatz-Record"; continue; }
 				
 				$chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 				$record_key = strval(substr(str_shuffle($chars),0,32));
@@ -243,8 +257,8 @@ foreach($policies as $policy)
 					continue;
 				}
 				
-				//Ist es CDN ?
-				if($record["cdn_token"] != 0) {
+				//Ist es CDN ? (altes CDN oder CDN64 online: Original bleibt deaktiviert)
+				if($record["cdn_token"] != 0 OR failover_cdn64o_active($pdo, $record)) {
 					$deactivated = 1;
 				}else{ $deactivated = 0;}
 				

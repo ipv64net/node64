@@ -417,10 +417,12 @@ route('DELETE', '/cdn64o/tunnels/{id}', function($p) {
 	global $pdo;
 	$t = c64o_find_tunnel($p['id']);
 	foreach(qa("SELECT h.* FROM cdn64o_hosts h JOIN cdn64o_host_tunnels ht ON ht.host_id = h.id WHERE ht.tunnel_id = :t", array('t' => $t['id'])) as $h) {
-		q("DELETE FROM cdn64o_host_tunnels WHERE host_id = :h AND tunnel_id = :t", array('h' => $h['id'], 't' => $t['id']));
-		if(q1("SELECT host_id FROM cdn64o_host_tunnels WHERE host_id = :h LIMIT 1", array('h' => $h['id'])) === null) { // letzter Tunnel: Host aus
-			c64o_dns_off($h);
-			c64o_host_purge($h); // auch Portmapper und Ziel, sonst zaehlen sie weiter und belegen Ports
+		if(q1("SELECT host_id FROM cdn64o_host_tunnels WHERE host_id = :h AND tunnel_id != :t LIMIT 1", array('h' => $h['id'], 't' => $t['id'])) === null) { // letzter Tunnel: Host aus
+			// wie DELETE /hosts/{id}: scheitert PowerDNS, bleiben Host und Tunnel, damit ein neuer Versuch die Server-Eintraege entfernt
+			if(!c64o_dns_off($h)) { fail(502, 'dns_update_failed', 'The DNS update for ' . $h['fqdn'] . ' failed. The tunnel was not removed, try again later.'); }
+			c64o_host_purge($h); // auch Portmapper und Ziel, sonst zaehlen sie weiter und belegen Ports (und die Zuordnung zum Tunnel)
+		} else {
+			q("DELETE FROM cdn64o_host_tunnels WHERE host_id = :h AND tunnel_id = :t", array('h' => $h['id'], 't' => $t['id']));
 		}
 	}
 	q("DELETE FROM cdn64o_tunnels WHERE id = :i AND userid = :u", array('i' => $t['id'], 'u' => uid()));
@@ -464,7 +466,8 @@ route('POST', '/cdn64o/hosts', function() {
 	if($t !== null) { q("INSERT INTO cdn64o_host_tunnels (host_id, tunnel_id) VALUES (:h, :t)", array('h' => $h['id'], 't' => $t['id'])); }
 	if($target !== null) { c64o_target_save((int)$h['id'], $target); }
 	if(!c64o_dns_on($h, $d)) {
-		c64o_dns_off($h);
+		// auch das Zuruecknehmen gescheitert: Host bleibt (pending), DELETE /hosts/{id} holt das DNS spaeter nach
+		if(!c64o_dns_off($h)) { fail(502, 'dns_update_failed', 'The DNS update failed and could not be rolled back. Remove the name (DELETE /cdn64o/hosts/' . $h['id'] . ') later to clean up.'); }
 		q("DELETE FROM cdn64o_host_tunnels WHERE host_id = :h", array('h' => $h['id']));
 		q("DELETE FROM cdn64o_targets WHERE host_id = :h", array('h' => $h['id']));
 		q("DELETE FROM cdn64o_hosts WHERE id = :h", array('h' => $h['id']));

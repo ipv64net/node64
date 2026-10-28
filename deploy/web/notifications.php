@@ -6,6 +6,7 @@
 ob_start(); // header.php gibt HTML aus; hc2_redirect()/hc2_json() verwerfen es
 include("header.php");
 require_once(__DIR__ . '/healthchecks2/hc2_lib.php');
+require_once(__DIR__ . '/honeypot/hp_release_lib.php'); // hpr_rl(): gleiche Toepfe wie rl_enforce() der API
 hc2_require_login();
 $uid = (int)$userid; $pdo = hc2_pdo(); $acc = hc2_account($uid); $types = hc2_channel_types(); $nodes = hc2_nodes($uid);
 $errors = array();
@@ -43,6 +44,7 @@ if (hc2_is_post() && hc2_csrf_ok()) {
 				hc2_flash('success', 'Kanal gespeichert.'); hc2_redirect('/notifications.php');
 			}
 		}
+		if (in_array($a, array('delete', 'toggle', 'default'), true) && $id > 0 && !hc2_channel($uid, $id)) { hc2_flash('danger', 'Kanal nicht gefunden.'); hc2_redirect('/notifications.php'); } // nur eigene Kanaele
 		if ($a === 'delete' && $id > 0) {
 			hc2_log_change($uid, 'channel', (string)$id, 'delete', 'portal');
 			foreach (hc2_checks($uid) as $c) { $ids = hc2_check_channels($c); if (in_array($id, $ids, true)) { hc2_set_check($uid, $c['token'], array('channels' => implode(',', array_diff($ids, array($id))))); } }
@@ -69,7 +71,8 @@ if (hc2_is_post() && hc2_csrf_ok()) {
 		}
 		if ($a === 'verify_send' && $id > 0) {
 			$ch = hc2_channel($uid, $id);
-			if ($ch && !(int)$ch['verified']) {
+			if ($ch && !(int)$ch['verified'] && !hpr_rl('hc2verify:' . $uid, 5, 5 / 3600)[0]) { hc2_flash('danger', 'Zu viele Codes angefordert. Bitte später erneut versuchen.'); }
+			elseif ($ch && !(int)$ch['verified']) {
 				$code = (string)random_int(100000, 999999);
 				$pdo->prepare("UPDATE hc2_channels SET verify_key = :k, verify_expires = UTC_TIMESTAMP(3) + INTERVAL 15 MINUTE WHERE id = :i AND userid = :u")->execute(array('k' => $code, 'i' => $id, 'u' => $uid));
 				$r = hc2_hub_call('/v1/portal/channel-test', array('userid' => $uid, 'channel_id' => $id, 'kind' => 'verify', 'code' => $code, 'lang' => $ch['lang']));
@@ -78,6 +81,7 @@ if (hc2_is_post() && hc2_csrf_ok()) {
 			hc2_redirect('/notifications.php?verify=' . $id);
 		}
 		if ($a === 'verify_check' && $id > 0) {
+			if (!hpr_rl('hc2verifycheck:' . $uid, 10, 10 / 3600)[0]) { hc2_flash('danger', 'Zu viele Versuche. Bitte später erneut versuchen.'); hc2_redirect('/notifications.php?verify=' . $id); }
 			$st = $pdo->prepare("SELECT verify_key, verify_expires FROM hc2_channels WHERE id = :i AND userid = :u AND deleted_at IS NULL"); $st->execute(array('i' => $id, 'u' => $uid)); $row = $st->fetch(PDO::FETCH_ASSOC);
 			$code = preg_replace('/[^0-9]/', '', (string)($_POST['code'] ?? ''));
 			if ($row && $row['verify_key'] && $code !== '' && hash_equals((string)$row['verify_key'], $code) && $row['verify_expires'] > gmdate('Y-m-d H:i:s')) {

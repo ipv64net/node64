@@ -16,8 +16,8 @@
  *                                       Treffers; ohne neue Treffer der uebergebene Stand bzw. bei leerem since die
  *                                       aktuelle Zeit (minus HPW_SAFETY). Der Client gibt next unveraendert zurueck.
  *
- * Netze ohne Nachweis (verified = false) bekommen nur Treffer fuer gelistete IPs (ohnehin oeffentlich); DynDNS-IPs des
- * Accounts gelten als nachgewiesen. Treffer erzeugt der Cron alle 30 Minuten nach der Bewertung.
+ * Netze ohne Nachweis (verified = false) und DynDNS-IPs des Accounts (ein Record ist kein Nachweis) bekommen nur Treffer
+ * fuer gelistete IPs (ohnehin oeffentlich), DynDNS-Details ohne Port und Regel. Treffer erzeugt der Cron alle 30 Minuten nach der Bewertung.
  * Limit je Account wie GET /threat/ip mit Key (eigener Topf).
  */
 require_once __DIR__ . '/honeypot/hp_limits_lib.php';

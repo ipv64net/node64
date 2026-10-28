@@ -12,6 +12,10 @@ $toLocal = function(?string $utc): string { if (!$utc) { return ''; } return hc2
 if (hc2_is_post() && hc2_csrf_ok()) {
 	$a = (string)($_POST['action'] ?? ''); $id = (int)($_POST['id'] ?? 0);
 	try {
+		if ($id > 0) { // nur eigene Wartungsfenster (loeschen, umschalten, bearbeiten)
+			$st = $pdo->prepare("SELECT id FROM hc2_maintenance WHERE id = :i AND userid = :u AND deleted_at IS NULL"); $st->execute(array('i' => $id, 'u' => $uid));
+			if (!$st->fetchColumn()) { hc2_flash('danger', 'Wartungsfenster nicht gefunden.'); hc2_redirect(HC2_BASE . '/maintenance.php'); }
+		}
 		if ($a === 'delete' && $id > 0) {
 			hc2_log_change($uid, 'maintenance', (string)$id, 'delete', 'portal');
 			hc2_flash('success', 'Wartungsfenster gelöscht.'); hc2_redirect(HC2_BASE . '/maintenance.php');

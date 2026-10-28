@@ -280,9 +280,10 @@ function hp_store(array $r, int $bytes, int $now): array {
 	try {
 		q("INSERT IGNORE INTO hp_sensors (sensor_id, userid, first_seen) VALUES (:s, :u, :t)", array('s' => $sid, 'u' => $u, 't' => hp_dt($now)));
 		$sen = q1("SELECT * FROM hp_sensors WHERE sensor_id = :s FOR UPDATE", array('s' => $sid));
-		if(q1("SELECT id FROM hp_reports WHERE report_id = :r AND day = :d", array('r' => $r['report_id'], 'd' => $day)) !== null) {
+		if(($dup = q1("SELECT id, period_end FROM hp_reports WHERE report_id = :r AND day = :d", array('r' => $r['report_id'], 'd' => $day))) !== null) {
 			$pdo->rollBack();
-			return array(200, array('duplicate' => true, 'report_id' => $r['report_id']));
+			// period_end: gespeichertes Ende; ein laengerer Zeitraum mit derselben ID schickt den Rest danach neu
+			return array(200, array('duplicate' => true, 'report_id' => $r['report_id'], 'period_end' => (int)strtotime($dup['period_end'] . ' UTC')));
 		}
 		if((int)$sen['disabled'] === 1) { fail(403, 'sensor_disabled', 'This sensor is disabled by ipv64.'); }
 		if((int)$sen['userid'] !== $u OR $sen['last_seen'] === null) { // neu oder an einen anderen Account umgezogen

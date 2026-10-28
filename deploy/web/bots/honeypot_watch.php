@@ -14,8 +14,9 @@
  *     je Netz eine Bereichssuche im Primaerschluessel von hp_scores (STRAIGHT_JOIN, auch bei vielen Netzen schnell).
  *     Ohne Nachweis (verified = 0) nur gelistete IPs.
  *   - DynDNS-IPs: aktuelle A/AAAA-Records des Accounts (dieselbe Quelle wie reason customer_ip in der Bewertung, ohne
- *     CDN-Hilfseintraege), gelten als nachgewiesen: jede Sichtung. Ausnahme: steht eine IP in Records von mehr als
- *     HPW_SHARED_MAX Accounts (geteilte Hosting-/Proxy-Adresse), zaehlt sie nicht als Nachweis (nur gelistet).
+ *     CDN-Hilfseintraege). Ein Record ist KEIN Nachweis (jeder kann jede IP eintragen; sonst liessen sich mit einem
+ *     Record auf die eigene Scanner-IP Sensoren finden): wie die IP-Auskunft nur gelistete IPs, Details grob (ohne
+ *     Port und Regel, Zeiten nur auf den Tag). HPW_SHARED_MAX zaehlt nur noch fuer die Statistik.
  * Je Account und IP hoechstens ein Treffer je 24 h, ausser die IP wird neu gelistet; nach 24 h nur bei neuer Sichtung
  * (hp_scores.last_seen spaeter als beim letzten Treffer). Passt eine IP mehrfach, gewinnt DynDNS, dann das kleinste Netz.
  * Hoechstens HPW_PER_RUN Treffer je Account und Lauf (gelistete und hohe Werte zuerst, der Rest folgt im naechsten Lauf).
@@ -98,7 +99,7 @@ foreach($owners as $bin => $users) {
 	$s = $seen[$bin];
 	$shared = count($users) > HPW_SHARED_MAX;
 	if($shared) { $nShared++; }
-	if($shared AND (int)$s['listed'] !== 1) { continue; }
+	if((int)$s['listed'] !== 1) { continue; } // DynDNS-Record ist kein Nachweis: nur gelistete IPs (wie ip.php)
 	foreach($users as $u => $domain) {
 		$nDyn++;
 		$add($u, $s, 'dyndns', null, inet_ntop($bin) . (strlen($bin) === 4 ? '/32' : '/128'), $domain, 1000);
@@ -154,7 +155,8 @@ if($dry) {
 $det = array(); // bin -> JSON
 foreach($new as $c) {
 	$s = $c['s'];
-	if(!isset($det[$s['ip_bin']])) { $det[$s['ip_bin']] = hpl_watch_details($pdo, $s, $now); }
+	$dk = $s['ip_bin'] . ($c['source'] === 'dyndns' ? '|grob' : '');
+	if(!isset($det[$dk])) { $det[$dk] = hpl_watch_details($pdo, $s, $now, $c['source'] === 'dyndns'); }
 }
 
 // ---------------------------------------------------------------- 5. Schreiben (ein Zeitstempel je Lauf, eine Transaktion)
@@ -165,9 +167,9 @@ try {
 	foreach(array_chunk($new, 250) as $chunk) {
 		$vals = array();
 		foreach($chunk as $c) {
-			$s = $c['s'];
+			$s = $c['s']; // first_seen/last_seen gibt hpl_alert_out() nur auf den Tag aus
 			array_push($vals, $c['u'], $s['ip'], bin2hex($s['ip_bin']), $c['net'], $c['source'], $c['cidr'], mb_substr($c['label'], 0, 255), (int)$s['listed'], (int)$s['score'],
-				$s['kinds'], $s['first_seen'], $s['last_seen'], $det[$s['ip_bin']], $ins);
+				$s['kinds'], $s['first_seen'], $s['last_seen'], $det[$s['ip_bin'] . ($c['source'] === 'dyndns' ? '|grob' : '')], $ins);
 		}
 		hpr_q($pdo, "INSERT INTO hp_watch_alerts (userid, ip, ip_bin, network_id, source, cidr, label, listed, score, kinds, first_seen, last_seen, details, created_at) VALUES "
 			. implode(',', array_fill(0, count($chunk), '(?,?,UNHEX(?),?,?,?,?,?,?,?,?,?,?,?)')), $vals);

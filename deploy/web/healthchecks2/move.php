@@ -9,7 +9,8 @@ $nodes = hc2_nodes($uid); $acc = hc2_account($uid); $locs = hc2_locations();
 $tokens = array(); foreach (explode(',', (string)($_GET['tokens'] ?? $_POST['tokens'] ?? '')) as $t) { if (preg_match('/^[A-Za-z0-9]{20,50}$/', $t)) { $tokens[] = $t; } }
 $checks = array(); foreach ($tokens as $t) { if ($c = hc2_check($uid, $t)) { $checks[] = $c; } }
 if (!$checks) { echo '<div class="container"><div class="alert alert-danger mt-3">Keine Checks gewählt.</div></div>'; include("../footer.php"); exit; }
-$to = (string)($_POST['to'] ?? $_GET['to'] ?? ($checks[0]['execution'] === 'online' ? 'local' : 'online'));
+$label = array('online' => 'Online bei ipv64', 'local' => 'Lokal auf Nodes', 'both' => 'Hybrid (Nodes + ipv64)');
+$to = (string)($_POST['to'] ?? $_GET['to'] ?? ''); if (!isset($label[$to])) { $to = $checks[0]['execution'] === 'online' ? 'local' : 'online'; }
 if (isset($_POST['nodes'])) { $nodesSel = (array)$_POST['nodes']; }
 elseif (isset($_GET['nodes'])) { $nodesSel = array_filter(explode(',', (string)$_GET['nodes'])); }
 elseif (isset($_GET['node'])) { $nodesSel = array((string)$_GET['node']); }
@@ -17,7 +18,7 @@ else { $nodesSel = hc2_check_nodes($checks[0]) ?: array_slice(array_keys($nodes)
 $nodesSel = array_values(array_unique(array_map('strval', $nodesSel)));
 $locSel = (array)($_POST['locations'] ?? array_filter(explode(',', (string)($_GET['locations'] ?? $checks[0]['locations']))));
 $runs = array(); $errors = array();
-$start = (hc2_is_post() && hc2_csrf_ok() && ($_POST['start'] ?? '') === '1') || (!hc2_is_post() && ($_GET['auto'] ?? '') === '1');
+$start = (hc2_is_post() && hc2_csrf_ok() && ($_POST['start'] ?? '') === '1') || (!hc2_is_post() && ($_GET['auto'] ?? '') === '1' && hc2_csrf_ok()); // auto=1 nur mit Token aus edit.php, sonst Formular
 if ($start) {
 	foreach ($checks as $c) {
 		if ($c['execution'] === $to && ($to === 'online' || hc2_same_list(hc2_check_nodes($c), $nodesSel)) && ($to === 'local' || implode(',', $locSel) === $c['locations'])) { $runs[] = array('token' => $c['token'], 'name' => $c['name'], 'id' => 0, 'skip' => 'unverändert'); continue; }
@@ -25,7 +26,6 @@ if ($start) {
 		$runs[] = array('token' => $c['token'], 'name' => $c['name'], 'id' => $r['id'], 'error' => $r['error']);
 	}
 }
-$label = array('online' => 'Online bei ipv64', 'local' => 'Lokal auf Nodes', 'both' => 'Hybrid (Nodes + ipv64)');
 ?>
 <p></p>
 <div class="container">
@@ -44,7 +44,7 @@ $label = array('online' => 'Online bei ipv64', 'local' => 'Lokal auf Nodes', 'bo
 				<div class="form-group col-12"><button class="btn btn-primary" type="submit"><i class="fa-solid fa-flask"></i> Testlauf starten</button> <a class="btn btn-outline-secondary" href="<?php echo count($checks) === 1 ? HC2_BASE . '/check.php?token=' . hc2_h($checks[0]['token']) : HC2_BASE . '/'; ?>">Abbrechen</a></div>
 			</form>
 			<?php } else { ?>
-			<p>Ziel: <strong><?php echo $label[$to] ?? $to; ?></strong><?php echo $to !== 'online' ? ' · Nodes ' . hc2_h(hc2_nodes_label($nodes, $nodesSel)) : ''; echo $to !== 'local' ? ' · Standorte ' . hc2_h(implode(', ', array_map(function($l) use ($locs) { return $locs[$l] ?? $l; }, $locSel))) : ''; ?></p>
+			<p>Ziel: <strong><?php echo hc2_h($label[$to] ?? $to); ?></strong><?php echo $to !== 'online' ? ' · Nodes ' . hc2_h(hc2_nodes_label($nodes, $nodesSel)) : ''; echo $to !== 'local' ? ' · Standorte ' . hc2_h(implode(', ', array_map(function($l) use ($locs) { return $locs[$l] ?? $l; }, $locSel))) : ''; ?></p>
 			<table class="table table-sm" id="runs"><thead><tr><th>Check</th><th>Status</th><th>Ergebnis</th></tr></thead><tbody>
 			<?php foreach ($runs as $r) { ?>
 				<tr data-id="<?php echo (int)$r['id']; ?>"><td><?php echo hc2_h($r['name']); ?></td>

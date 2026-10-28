@@ -812,6 +812,45 @@ function hc2_channel(int $userid, int $id, bool $withSecrets = false): ?array {
 	return null;
 }
 
+/**
+ * Ziele der Server-Kanaele (Webhook-/ntfy-/Gotify-/Matrix-/SecNtfy-URL, SMTP-Host): die hubs senden online, interne
+ * Ziele sind verboten (sonst SSRF auf Dienste der hubs). Oeffentlich = nicht privat, Loopback, Link-Local (auch
+ * Metadaten 169.254.169.254), ULA, CGNAT, Doku-/Benchmark-Netze, Multicast, reserviert; IPv4 in IPv6 (::ffff:, 64:ff9b::)
+ * wird als IPv4 geprueft. Der hub prueft beim Verbindungsaufbau zusaetzlich (DNS kann sich aendern).
+ */
+function hc2_ip_public(string $ip): bool {
+	$bin = @inet_pton($ip); if ($bin === false) { return false; }
+	if (strlen($bin) === 16 && (substr($bin, 0, 12) === str_repeat("\0", 10) . "\xff\xff" || substr($bin, 0, 12) === "\x00\x64\xff\x9b" . str_repeat("\0", 8))) { $bin = substr($bin, 12); }
+	$nets = strlen($bin) === 4
+		? array('0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12', '192.0.0.0/24', '192.0.2.0/24', '192.168.0.0/16', '198.18.0.0/15', '198.51.100.0/24', '203.0.113.0/24', '224.0.0.0/3')
+		: array('::/96', '100::/64', '2001:db8::/32', 'fc00::/7', 'fe80::/10', 'fec0::/10', 'ff00::/8');
+	foreach ($nets as $n) {
+		[$net, $len] = explode('/', $n); $nb = inet_pton($net); $len = (int)$len; $by = intdiv($len, 8); $bi = $len % 8;
+		if (substr($bin, 0, $by) !== substr($nb, 0, $by)) { continue; }
+		if ($bi && ((ord($bin[$by]) ^ ord($nb[$by])) & (0xff << (8 - $bi)) & 0xff)) { continue; }
+		return false;
+	}
+	return true;
+}
+/** Host eines Server-Kanals pruefen (IP-Literal oder Name, alle A/AAAA-Adressen); '' = in Ordnung, sonst Fehlertext. */
+function hc2_channel_host_error(string $host): string {
+	$h = strtolower(rtrim(trim(trim($host), '[]'), '.'));
+	if (filter_var($h, FILTER_VALIDATE_IP)) { return hc2_ip_public($h) ? '' : 'ist eine interne Adresse (online nicht erlaubt; interne Ziele über einen Kanal der Node)'; }
+	if (!preg_match('/^([a-z0-9_]([a-z0-9_-]*[a-z0-9_])?\.)+[a-z0-9-]*[a-z][a-z0-9-]*$/', $h) || strlen($h) > 253) { return 'ist kein gültiger öffentlicher Hostname'; }
+	foreach (array('.local', '.localhost', '.internal', '.lan', '.home.arpa', '.intranet') as $sfx) { if (substr($h, -strlen($sfx)) === $sfx) { return 'ist ein interner Name (online nicht erlaubt; interne Ziele über einen Kanal der Node)'; } }
+	$ips = @gethostbynamel($h) ?: array();
+	foreach ((@dns_get_record($h, DNS_AAAA) ?: array()) as $r) { if (!empty($r['ipv6'])) { $ips[] = $r['ipv6']; } }
+	if (!$ips) { return 'lässt sich nicht auflösen'; }
+	foreach ($ips as $ip) { if (!hc2_ip_public($ip)) { return 'zeigt auf eine interne Adresse (online nicht erlaubt; interne Ziele über einen Kanal der Node)'; } }
+	return '';
+}
+/** URL eines Server-Kanals pruefen (Schema, Host ohne Tricks mit @ oder \, Port 1-65535, Host oeffentlich). */
+function hc2_channel_url_error(string $url): string {
+	if (preg_match('/[\x00-\x20\x7f]/', $url) || !preg_match('#^https?://(?:[^@/?\#\\\\\s]*@)?(\[[0-9a-f:.]+\]|[^:/?\#\[\]@\\\\\s]+)(?::(\d{1,5}))?(?:[/?\#]|$)#i', $url, $m)) { return 'ist keine gültige Adresse'; }
+	if (isset($m[2]) && $m[2] !== '' && ((int)$m[2] < 1 || (int)$m[2] > 65535)) { return 'hat einen ungültigen Port'; }
+	return hc2_channel_host_error($m[1]);
+}
+
 /** Formular -> Konfiguration (Geheimnisse verschluesselt); liefert array('config_enc'=>json,'errors'=>[]). */
 function hc2_channel_config(string $type, array $in, ?array $old): array {
 	$types = hc2_channel_types(); $err = array(); $cfg = array();
@@ -827,6 +866,9 @@ function hc2_channel_config(string $type, array $in, ?array $old): array {
 		if ($v !== '' && ($f['kind'] ?? '') === 'email' && !filter_var($v, FILTER_VALIDATE_EMAIL)) { $err[] = $f['label'] . ' ist keine gültige E-Mail-Adresse.'; }
 		if ($v !== '' && ($f['kind'] ?? '') === 'url' && !preg_match('#^https?://#i', $v)) { $err[] = $f['label'] . ' muss mit http:// oder https:// beginnen.'; }
 		if ($v !== '' && $k === 'webhook_url' && in_array($type, array('slack', 'teams', 'discord'), true) && !preg_match('#^https://[^/\s]+/#i', $v)) { $err[] = $f['label'] . ' muss eine https-Adresse sein.'; }
+		if ($v !== '' && (($f['kind'] ?? '') === 'url' || $k === 'webhook_url') && preg_match('#^https?://#i', $v) && ($e = hc2_channel_url_error($v)) !== '') { $err[] = $f['label'] . ' ' . $e . '.'; } // keine internen Ziele (SSRF)
+		if ($type === 'smtp' && $k === 'host' && $v !== '' && ($e = hc2_channel_host_error($v)) !== '') { $err[] = $f['label'] . ' ' . $e . '.'; }
+		if ($type === 'smtp' && $k === 'port' && !in_array($v, array('25', '465', '587', '2525'), true)) { $err[] = 'Port: erlaubt sind 25, 465, 587 und 2525.'; }
 		if ($type === 'matrix' && $k === 'room' && $v !== '' && !preg_match('/^[!#][^:\s]+:\S+$/', $v)) { $err[] = 'Raum bitte als Raum-ID (!abc:matrix.org) oder Alias (#raum:matrix.org) angeben.'; }
 		if ($type === 'matrix' && $k === 'server') { $v = rtrim($v, '/'); }
 		if ($type === 'secntfy' && $k === 'server') { $v = rtrim($v, '/'); }
