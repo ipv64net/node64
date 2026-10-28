@@ -1,6 +1,6 @@
 # Cluster (Node64) – technische Referenz
 
-Stand 2026-10-19 (node64 0.11.117-dev, Healthchecks 2.16.0). Beschreibt, wie die Nodes eines Clusters miteinander
+Stand 2026-10-28 (Healthchecks 2.41.0; Bereiche Statusseiten, Kanäle, Zusammenführen exakter Doppel). Beschreibt, wie die Nodes eines Clusters miteinander
 sprechen: Ports, Ablauf, Zeiten, Grenzen und was passiert, wenn eine Node weg ist. Bedienung und Hintergrund für
 Anwender: node64.de unter `/docs/cluster/`. Entscheidungen und Commits: [PLAN-NODE64-CLUSTER.md](PLAN-NODE64-CLUSTER.md),
 Healthchecks-Ablauf im Detail: [LOKALE-GRUPPE.md](LOKALE-GRUPPE.md). Code: `internal/peer`.
@@ -28,7 +28,7 @@ Healthchecks-Ablauf im Detail: [LOKALE-GRUPPE.md](LOKALE-GRUPPE.md). Code: `inte
 | POST | `/peer/v1/poke` | „bei mir gibt es Neues“ → sofort abholen |
 | GET | `/peer/v1/measurements` | Messwerte der anderen Node (Healthchecks) |
 | GET | `/peer/v1/relay` | hub-Daten einer verknüpften Node für nicht verknüpfte |
-| GET | `/peer/v2/sync?since=&items=` | allgemeiner Abgleich der übrigen Module (Zertifikate; später PROXY64, DNS64) |
+| GET | `/peer/v2/sync?since=&items=` | allgemeiner Abgleich der übrigen Module und Bereiche (Zertifikate, DNS64, Proxmox VE/Docker, Statusseiten, Kanäle) |
 
 ## Sicherheit
 
@@ -50,7 +50,7 @@ Healthchecks-Ablauf im Detail: [LOKALE-GRUPPE.md](LOKALE-GRUPPE.md). Code: `inte
 | Mitglied gilt als offline | nach 2 min ohne Antwort |
 | Abholen (Pull) | alle 15 s, bei Änderungen sofort (Anstoß gebündelt, höchstens alle 0,5 s) |
 | Zeitlimit je Anfrage | 10 s (Ping, Anstoß 5 s), Protokoll-Seite 20 s, Messwerte/hub-Daten/v2 30 s |
-| Seitengröße | Protokoll 200 Einträge (bis 100 Seiten je Lauf), Messwerte 1000 (bis 50 Seiten) |
+| Seitengröße | Protokoll 200 Einträge (bis 100 Seiten je Lauf; v2 zusätzlich höchstens ~4 MiB Daten je Seite), Messwerte 1000 (bis 50 Seiten) |
 | Erstes Abholen der Messwerte | die letzten 24 h |
 | Healthchecks bei der anderen Node aus | 5 min Ruhe statt alle 15 s (ein Anstoß holt trotzdem sofort) |
 | Konflikte | jüngere Änderung gewinnt (ms), Gleichstand: größere Node-Kennung der Urheberin |
@@ -65,11 +65,37 @@ Bereich nur, wenn er auf **beiden** Nodes an ist (die abholende Node nennt ihre 
 | Modul | Bereiche | Standard | Weg |
 |---|---|---|---|
 | `healthchecks` | `checks` (mit Messwerten), `maintenance` | an | `/peer/v1/changes`, `/measurements`, `/relay` |
+| `healthchecks` | `proxmox`, `docker` (Systeme samt Zugang), `statuspages` | aus | `/peer/v2/sync` |
 | `notifications` | `settings` (Ruhezeiten, Drossel, Bündeln) | an | `/peer/v1/changes` |
+| `notifications` | `channels` (eigene Kanäle der Node samt Zugangsdaten) | aus | `/peer/v2/sync`, Zuordnung Check → Kanal mit den Checks |
 | `certs` | `certificates`, `acme`, `dns_accounts`, `cas` | aus | `/peer/v2/sync` |
 | `dns64` | `settings`, `lists`, `allowlist`, `records` (mit Zonen), `forwards` (mit Umschreiben), `groups`, `group_members` | aus | `/peer/v2/sync` |
 
-Benachrichtigungskanäle werden nicht abgeglichen. Neue Module hängen sich als Provider an `/peer/v2/sync`
+**Statusseiten** (`healthchecks/statuspages`): Kennung je Seite (`hc_status_pages.uid`, gleich auf allen Nodes; die
+lokale Nummer bleibt, PROXY64-Hosts verweisen weiter auf sie und gehören zu ihrer Node). Mit geht alles, was die Seite
+ausmacht: Slug, Titel, Texte, Layout/Design/Sprache/Farbe, Tage, Anzeige-Schalter, an/aus, Node-Port, noindex,
+Passwort (bcrypt-Hash), Gruppen mit den Checks in ihrer Reihenfolge und Anzeigenamen, Logo und Ankündigungen. Checks
+stehen über ihr Token auf der Seite – das ist auf allen Nodes gleich (Checks gleichen sich über das Token ab); ein Check,
+den es auf einer Node nicht gibt (Checks dort aus), fällt beim Anzeigen weg. Gleicher Slug mit anderem Inhalt unter
+anderer Kennung wird nicht übernommen (Warnung „cluster change not applied“ im Log), bis der Slug auf einer Node
+geändert ist.
+
+**Kanäle** (`notifications/channels`): Kennung je Kanal (`nf_channels.uid`). Nur die eigenen Kanäle der Node
+(`execution node`): nie die Kanäle des Portals (Platzhalter `execution server`, ipv64-Mail/-SMS/App), nicht der
+Browser-Kanal (gehört zur Oberfläche seiner Node) und keine mit „Geheimnis nur lokal“ (wird das eingeschaltet, gilt der
+Kanal im Cluster als gelöscht). Die Geheimnisse gehen im Klartext über die Cluster-Verbindung (HTTPS, an die Kopplung
+gebunden) und werden auf der empfangenden Node mit ihrem Schlüssel gespeichert. Je Node bleiben Server-ID/Revision
+(ipv64), letzter Versand und Fehler. Ein Kanal, dessen Geheimnisse sich hier nicht entschlüsseln lassen, geht mit dem
+Vermerk `incomplete` hinaus und wird drüben nicht übernommen. **Zuordnung Check → Kanal:** Checks verweisen lokal über
+die Kanal-Nummer (je Node verschieden); ist der Bereich auf beiden Seiten an, schickt `/peer/v1/changes` je Check die
+Kennungen seiner geteilten Kanäle mit (`channel_uids`, die abholende Node nennt dafür `channels` in `?items=`; beim
+Einschalten kommen die Checks von vorn). Die Empfängerin setzt die Kanäle aus diesen Kennungen und behält ihre Kanäle
+außerhalb des Clusters (z. B. die des Portals). Bei gleichem Stand des Checks (z. B. Bereich gerade eingeschaltet)
+werden die Kanäle beider Seiten vereint, ohne neue Änderung – beide landen beim selben Ergebnis. Ohne den Bereich
+bleiben die Kanäle je Node wie bisher. Gedacht vor allem für Nodes **ohne** Verbindung zu ipv64.net; verknüpfte Nodes
+bekommen die Kanäle des Portals über ipv64.net (Hinweis am Schalter).
+
+Neue Module hängen sich als Provider an `/peer/v2/sync`
 (`internal/peer/cluster.go`); eine ältere Node bekommt nie Eintragsarten, die sie nicht kennt.
 PROXY64 ist als Bereich geplant, aber zurückgestellt, bis die Nachfrage da ist:
 [PLAN-NODE64-CLUSTER-MODULE.md](PLAN-NODE64-CLUSTER-MODULE.md). DNS64: [PLAN-NODE64-DNS64-LOKAL.md](PLAN-NODE64-DNS64-LOKAL.md)
@@ -104,6 +130,29 @@ Anlagedatum je Konto und „Dieses verwenden“ (API: `GET /api/group` → `acme
 anderen Nodes; wessen Konto abgelöst ist, übernimmt das gewählte, ein später eintreffendes altes Konto ändert nichts
 mehr. Bei zwei verschiedenen Wahlen gilt die jüngere. Ausgestellte Zertifikate bleiben gültig, erneuert wird mit dem
 gewählten Konto. Kommt später eine Node mit einem dritten Konto dazu, erscheint die Wahl erneut.
+
+## Exakte Doppel beim Beitreten oder Einschalten
+
+Was auf zwei Nodes schon **vor** dem Abgleich exakt gleich angelegt war (verschiedene Kennungen, gleicher Inhalt),
+wird beim ersten Eintreffen zu einem Eintrag zusammengeführt. Regel auf jeder Node gleich, daher landen alle beim
+selben Ergebnis: **es gilt die kleinere Kennung**. Kommt ein Eintrag mit kleinerer Kennung, übernimmt der Eintrag hier
+sie (die lokale Nummer bleibt, Verweise bleiben gültig) und meldet die alte Kennung als gelöscht (neuer Zeitpunkt, so
+verschwindet sie auf allen Nodes); kommt einer mit größerer, bleibt alles und die andere Node übernimmt unsere.
+Zusammengeführt wird nur bei exakt gleichem Inhalt, nie bei bloß ähnlichen Einträgen:
+
+| Bereich | Exakt gleich heißt |
+|---|---|
+| Statusseiten | gleicher Slug und alles oben Genannte gleich (Logo-Inhalt ja, Zeitpunkt des Logos nein; Passwort-Hashes sind gesalzen, mit Passwort also praktisch nie gleich) |
+| Kanäle | Typ, Name, Konfiguration samt Geheimnissen (leer = nicht gesetzt), an/aus, Standard, Sprache, Ausfall/Entwarnung |
+| Proxmox VE, Docker | Art, Name, Adressen, Token-ID, Secret, Pin, Intervall, an/aus (Heim-Node zählt nicht); Proxmox-Checks mit der alten Kennung bekommen die neue (als Änderung) |
+| Wartungsfenster | nur lokale Fenster (ohne Server-ID): Name, Beginn, Ende, Wiederholung, Ende der Wiederholung, Checks, an/aus; das Fenster mit der größeren Kennung wird mit Löschvermerk entfernt |
+| Checks | **nie** – derselbe Check auf zwei Nodes sind zwei Messstellen (eigene Tokens, Verlauf und messende Node, beim hub eigene Checks) |
+| Zertifikate | eigene Regel, siehe „Zertifikate: gleiche Einträge und ACME-Konto“ |
+
+Grenzen: Doppel, die schon vor dieser Version über den Cluster auf beiden Nodes gelandet sind, werden nicht nachträglich
+zusammengeführt (einmal von Hand löschen). Bei drei und mehr Nodes kann eine Node, die das Doppel mit der größeren
+Kennung schon übernommen hatte, beim Löschvermerk die zugehörigen Checks eines Proxmox-Systems „als Check“ mit
+entfernen (wie bei jedem gelöschten System).
 
 ## Wenn eine Node weg ist
 

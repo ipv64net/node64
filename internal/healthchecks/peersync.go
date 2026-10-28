@@ -2,6 +2,7 @@ package healthchecks
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/ipv64net/node64/internal/wire"
@@ -45,6 +46,15 @@ func (m *Module) PeerCheck(ctx context.Context, token, self string) (*wire.Check
 	if c.Execution != "online" && len(w.Nodes) == 0 && (c.Owner == "" || c.Owner == "self") && self != "" {
 		w.Nodes = []string{self}
 	}
+	if m.notifyStore != nil { // Kanaele ueber ihre Kennung im Cluster (der Cluster laesst sie weg, wenn der Bereich aus ist)
+		uids := []string{}
+		for _, id := range c.Channels {
+			if uid := m.notifyStore.ClusterUIDOf(ctx, id); uid != "" {
+				uids = append(uids, uid)
+			}
+		}
+		w.ChannelUIDs = &uids
+	}
 	return &w, c.UpdatedAt, time.Time{}, nil
 }
 
@@ -69,10 +79,20 @@ func (m *Module) PeerTokens(ctx context.Context) []string {
 }
 
 // ApplyPeerCheck uebernimmt einen Check einer anderen Node, wenn ihre Aenderung juenger ist. Kanaele bleiben
-// je Node lokal; Sicht auf den Besitz (self/other/online) ergibt sich aus den messenden Nodes.
+// je Node lokal, ausser beide Nodes gleichen die Kanaele ab (w.ChannelUIDs): dann gelten die Kanaele der anderen
+// Node ueber ihre Kennung, Kanaele hier ausserhalb des Clusters (z. B. die des Portals) bleiben. Sicht auf den Besitz
+// (self/other/online) ergibt sich aus den messenden Nodes.
 func (m *Module) ApplyPeerCheck(ctx context.Context, w wire.Check, changedAt time.Time, origin, self string) (bool, error) {
 	cur, err := m.st.Check(ctx, w.Token)
 	if err != nil {
+		return false, err
+	}
+	if cur != nil && changedAt.Equal(cur.UpdatedAt) && w.ChannelUIDs != nil && m.notifyStore != nil {
+		// gleicher Stand (z. B. Kanaele gerade eingeschaltet): Kanaele beider Seiten vereinen, ohne neue Aenderung -
+		// beide Nodes kommen so zum selben Ergebnis
+		if both := m.peerChannels(ctx, cur.Channels, *w.ChannelUIDs, true); !slices.Equal(both, cur.Channels) {
+			_, err = m.st.w.ExecContext(ctx, `UPDATE hc_checks SET channels = ? WHERE token = ?`, joinInts(both), w.Token)
+		}
 		return false, err
 	}
 	if cur != nil && !changedAt.After(cur.UpdatedAt) {
@@ -98,12 +118,32 @@ func (m *Module) ApplyPeerCheck(ctx context.Context, w wire.Check, changedAt tim
 			w.Revision = 0 // Revision des hub nur uebernehmen, wenn sie neuer ist
 		}
 	}
+	if w.ChannelUIDs != nil && m.notifyStore != nil {
+		w.Channels = m.peerChannels(ctx, w.Channels, *w.ChannelUIDs, false)
+	}
 	pctx := WithPeer(ctx, origin, changedAt)
 	if err := m.ApplyWireCheck(pctx, w, nil); err != nil {
 		return false, err
 	}
 	_, err = m.st.w.ExecContext(ctx, `UPDATE hc_checks SET updated_at = ?, updated_by = ? WHERE token = ?`, ft(changedAt), "peer:"+origin, w.Token)
 	return true, err
+}
+
+// peerChannels: Kanaele eines Checks aus dem Cluster. keep = alle bisherigen behalten (vereinen), sonst nur die
+// ausserhalb des Clusters; dazu die Kanaele der Kennungen, die es hier gibt (eine noch fehlende faellt weg).
+func (m *Module) peerChannels(ctx context.Context, local []int64, uids []string, keep bool) []int64 {
+	out := []int64{}
+	for _, id := range local {
+		if (keep || m.notifyStore.ClusterUIDOf(ctx, id) == "") && !slices.Contains(out, id) {
+			out = append(out, id)
+		}
+	}
+	for _, uid := range uids {
+		if id := m.notifyStore.ClusterIDOf(ctx, uid); id > 0 && !slices.Contains(out, id) {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // DeletePeerCheck loescht einen Check, den eine andere Node geloescht hat (nicht, wenn er hier danach geaendert wurde).

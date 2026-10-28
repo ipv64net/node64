@@ -57,6 +57,7 @@
 						<input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="module" value="{{$m.ID}}"><input type="hidden" name="item" value="{{.ID}}">
 						<input class="form-check-input" type="checkbox" role="switch" name="enabled" id="sync_{{$m.ID}}_{{.ID}}"{{if .Enabled}} checked{{end}}{{if or (not $m.Available) (not $m.Enabled)}} disabled{{end}} data-autosubmit>
 						<label class="form-check-label" for="sync_{{$m.ID}}_{{.ID}}">{{$.T .TitleKey}}</label>
+						{{if .HintKey}}<div class="form-text mt-0">{{$.T .HintKey}}</div>{{end}}
 					</form>{{end}}
 				</div>
 			</div>

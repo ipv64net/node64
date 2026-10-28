@@ -22,19 +22,21 @@ func Migrations() ([]store.Migration, error) { return store.ReadMigrations(migra
 type Store struct {
 	w, r *sql.DB
 	box  *secrets.Box
+	// cluster meldet Aenderungen an Kanaelen, die ueber den Cluster gehen (cluster.go); nil = kein Cluster
+	cluster func(ctx context.Context, uid string, deleted bool)
 }
 
 func NewStore(core *store.Store, box *secrets.Box) *Store {
 	return &Store{w: core.Writer(), r: core.Reader(), box: box}
 }
 
-const channelCols = `id, type, name, config, enabled, is_default, lang, notify_down, notify_up, secret_only_local, execution, revision, created_at, updated_at, last_used_at, last_error, remote_id`
+const channelCols = `id, type, name, config, enabled, is_default, lang, notify_down, notify_up, secret_only_local, execution, revision, created_at, updated_at, last_used_at, last_error, remote_id, uid`
 
 func (s *Store) scan(row interface{ Scan(...any) error }) (*Channel, error) {
 	var c Channel
 	var cfg, created, updated, used string
 	var enabled, def, nd, nu, sol int
-	if err := row.Scan(&c.ID, &c.Type, &c.Name, &cfg, &enabled, &def, &c.Lang, &nd, &nu, &sol, &c.Execution, &c.Revision, &created, &updated, &used, &c.LastError, &c.RemoteID); err != nil {
+	if err := row.Scan(&c.ID, &c.Type, &c.Name, &cfg, &enabled, &def, &c.Lang, &nd, &nu, &sol, &c.Execution, &c.Revision, &created, &updated, &used, &c.LastError, &c.RemoteID, &c.UID); err != nil {
 		return nil, err
 	}
 	c.Enabled, c.Default, c.NotifyDown, c.NotifyUp, c.SecretOnlyLocal = enabled == 1, def == 1, nd == 1, nu == 1, sol == 1
@@ -44,6 +46,7 @@ func (s *Store) scan(row interface{ Scan(...any) error }) (*Channel, error) {
 		// Konfiguration bleibt sichtbar, Geheimnisse fehlen; der Fehler steht am Kanal
 		c.LastError = "config: " + err.Error()
 		m = map[string]string{}
+		c.cfgErr = true
 	}
 	c.Config = m
 	return &c, nil
@@ -125,13 +128,17 @@ func (s *Store) Insert(ctx context.Context, c *Channel) error {
 		return err
 	}
 	now := store.Now()
-	res, err := s.w.ExecContext(ctx, `INSERT INTO nf_channels (type, name, config, enabled, is_default, lang, notify_down, notify_up, secret_only_local, execution, created_at, updated_at, remote_id, revision)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, string(c.Type), c.Name, cfg, b2i(c.Enabled), b2i(c.Default), c.Lang, b2i(c.NotifyDown), b2i(c.NotifyUp), b2i(c.SecretOnlyLocal), c.Execution, now, now, c.RemoteID, max(c.Revision, 1))
+	if c.UID == "" { // neu hier: eigene Kennung (aus dem Cluster: die der anderen Node)
+		c.UID = newClusterUID()
+	}
+	res, err := s.w.ExecContext(ctx, `INSERT INTO nf_channels (type, name, config, enabled, is_default, lang, notify_down, notify_up, secret_only_local, execution, created_at, updated_at, remote_id, revision, uid)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, string(c.Type), c.Name, cfg, b2i(c.Enabled), b2i(c.Default), c.Lang, b2i(c.NotifyDown), b2i(c.NotifyUp), b2i(c.SecretOnlyLocal), c.Execution, now, now, c.RemoteID, max(c.Revision, 1), c.UID)
 	if err != nil {
 		return err
 	}
 	c.ID, _ = res.LastInsertId()
 	changed(ctx, c.ID, "upsert")
+	s.clusterChanged(ctx, nil, c)
 	return nil
 }
 
@@ -140,10 +147,18 @@ func (s *Store) Update(ctx context.Context, c *Channel) error {
 	if err != nil {
 		return err
 	}
+	var old *Channel
+	if s.cluster != nil {
+		old, _ = s.Channel(ctx, c.ID)
+	}
 	_, err = s.w.ExecContext(ctx, `UPDATE nf_channels SET type=?, name=?, config=?, enabled=?, is_default=?, lang=?, notify_down=?, notify_up=?, secret_only_local=?, revision=CASE WHEN ?>0 THEN ? ELSE revision+1 END, updated_at=? WHERE id=?`,
 		string(c.Type), c.Name, cfg, b2i(c.Enabled), b2i(c.Default), c.Lang, b2i(c.NotifyDown), b2i(c.NotifyUp), b2i(c.SecretOnlyLocal), c.Revision, c.Revision, store.Now(), c.ID)
 	if err == nil {
 		changed(ctx, c.ID, "upsert")
+		if old != nil {
+			c.UID = old.UID
+			s.clusterChanged(ctx, old, c)
+		}
 	}
 	return err
 }
@@ -151,9 +166,14 @@ func (s *Store) Update(ctx context.Context, c *Channel) error {
 func (s *Store) Delete(ctx context.Context, id int64) error {
 	var rid int64
 	_ = s.w.QueryRowContext(ctx, `SELECT remote_id FROM nf_channels WHERE id = ?`, id).Scan(&rid)
+	var old *Channel
+	if s.cluster != nil {
+		old, _ = s.Channel(ctx, id)
+	}
 	_, err := s.w.ExecContext(ctx, `DELETE FROM nf_channels WHERE id = ?`, id)
 	if err == nil {
 		changed(context.WithValue(ctx, deletedRemoteKey{}, rid), id, "delete")
+		s.clusterChanged(ctx, old, nil)
 	}
 	return err
 }

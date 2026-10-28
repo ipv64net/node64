@@ -3228,6 +3228,7 @@
     "empty": "No other nodes yet. Create a code on one node and join with it on the other.",
     "sync_title": "What is synced",
     "sync_hint": "An area is only synced with nodes that have it switched on as well – i.e. only if it is on on both nodes.",
+    "channels_hint": "Only needed without a connection to ipv64.net – linked nodes get the portal's channels via ipv64.net. Only the node's own channels are synced, never those of the portal.",
     "mod_unavailable": "(not active on this node)",
     "mod": {
       "healthchecks": "Healthchecks",
@@ -3240,7 +3241,9 @@
       "maintenance": "Maintenance windows",
       "proxmox": "Proxmox VE – systems including API token (the nodes poll them too and measure their checks)",
       "docker": "Docker – hosts over the network including credentials (a local socket stays with its node)",
+      "statuspages": "Status pages – with groups, logo, password and notices (checks by their token; PROXY64 hosts stay per node)",
       "notify_settings": "Settings (quiet hours, rate limit, batching)",
+      "notify_channels": "Channels – the node's own channels including credentials, checks keep their channels",
       "certificates": "Certificates",
       "acme": "ACME (account and CAs)",
       "dns_accounts": "DNS providers",

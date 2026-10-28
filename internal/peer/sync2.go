@@ -21,6 +21,9 @@ import (
 
 const tombstoneTTL = 30 * 24 * time.Hour
 
+// syncPageBytes: ab dieser Datenmenge endet eine Seite von /peer/v2/sync (die Antwort bleibt unter maxBody).
+const syncPageBytes = maxBody / 2
+
 type syncEntry struct {
 	Seq       int64           `json:"seq"`
 	Module    string          `json:"module"`
@@ -182,7 +185,12 @@ func (m *Manager) handleSync2(w http.ResponseWriter, r *http.Request, _ *Member,
 	if len(list) > pageSize {
 		list, out.More = list[:pageSize], true
 	}
+	size := 0
 	for _, e := range list {
+		if size > syncPageBytes { // grosse Eintraege (z. B. Logos der Statusseiten): Rest auf der naechsten Seite
+			out.More = true
+			break
+		}
 		if allowed[e.Module+"/"+e.Item] {
 			if !e.Deleted {
 				data, found, err := m.provider(e.Module).ClusterGet(ctx, e.Item, e.ID)
@@ -192,6 +200,7 @@ func (m *Manager) handleSync2(w http.ResponseWriter, r *http.Request, _ *Member,
 				}
 				if found {
 					e.Data = data
+					size += len(data)
 				} else {
 					e.Deleted = true // ohne Hook geloescht: der Stand ist „weg“
 				}

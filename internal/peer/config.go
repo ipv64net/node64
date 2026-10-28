@@ -261,6 +261,9 @@ func (m *Manager) handleChanges(w http.ResponseWriter, r *http.Request, from *Me
 		case err != nil:
 			continue
 		case chk != nil:
+			if !has(want, "channels") {
+				chk.ChannelUIDs = nil // Kanaele hier oder dort nicht im Cluster: Zuordnung bleibt je Node
+			}
 			c.Op, c.Check, c.ChangedAt = "upsert", chk, upd
 		default:
 			c.Op = "delete"
@@ -522,6 +525,9 @@ func (m *Manager) pullFrom(ctx context.Context, x Member) error {
 			var ok bool
 			switch {
 			case c.Op == "upsert" && c.Check != nil:
+				if !has(want, "channels") {
+					c.Check.ChannelUIDs = nil
+				}
 				ok, err = hc.ApplyPeerCheck(ctx, *c.Check, c.ChangedAt, c.Origin, self)
 			case c.Op == "delete":
 				ok, err = hc.DeletePeerCheck(ctx, c.ID, c.ChangedAt, c.Origin)

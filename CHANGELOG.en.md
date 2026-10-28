@@ -9,6 +9,8 @@ Short summary of what changes per version. Details per module are in the node un
 - Certificates/cluster: identical entries (certificate with key, ACME CA with EAB, DNS account, CA) are merged once
   when joining, merely similar ones stay separate; different ACME accounts are no longer overwritten but offered for
   choice on the cluster page.
+- Cluster: new areas "Status pages" and "Channels" (notifications, mainly for nodes without ipv64.net), off by
+  default; items set up exactly the same on two nodes beforehand are merged instead of appearing twice.
 
 ## 0.12.0-alpha.29 – 2026-10-28
 

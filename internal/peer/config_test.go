@@ -19,6 +19,7 @@ type fakeChecks struct {
 	del  map[string]time.Time
 	fwd  []string
 	self string
+	seen []wire.Check // alle angebotenen Checks (auch nicht uebernommene)
 }
 
 func newFake(n *testNode) *fakeChecks {
@@ -65,6 +66,7 @@ func (f *fakeChecks) PeerCheck(_ context.Context, token, _ string) (*wire.Check,
 
 func (f *fakeChecks) ApplyPeerCheck(_ context.Context, w wire.Check, at time.Time, origin, _ string) (bool, error) {
 	f.mu.Lock()
+	f.seen = append(f.seen, w)
 	if _, ok := f.chk[w.Token]; ok && !at.After(f.upd[w.Token]) {
 		f.mu.Unlock()
 		return false, nil

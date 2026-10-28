@@ -68,6 +68,8 @@ type Channel struct {
 	LastError       string
 	RemoteID        int64  // ID auf dem Server (Sync); 0 = nicht abgeglichen
 	NodeID          string // hub: Besitzer-Node eines Node-Kanals (Execution "node")
+	UID             string // Kennung im Cluster (gleich auf allen Nodes, cluster.go); hub: leer
+	cfgErr          bool   // Konfiguration nicht lesbar (Geheimnisse fehlen)
 }
 
 // Field beschreibt ein Konfigurationsfeld eines Kanaltyps (fuer Formular und Validierung).

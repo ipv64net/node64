@@ -49,6 +49,9 @@ type Check struct {
 	NodeID                string          `json:"node_id,omitempty"` // Besitzer-Node (local/both): bearbeitet, benachrichtigt
 	Nodes                 []string        `json:"nodes,omitempty"`   // messende Nodes (local/both); leer = nur die Besitzer-Node
 	Owner                 string          `json:"owner,omitempty"`   // self, other, online (nur Server -> Node)
+	// nur im Cluster (Node -> Node, Bereich notifications/channels): Kanaele ueber ihre Kennung im Cluster; nil = die
+	// Zuordnung bleibt je Node
+	ChannelUIDs *[]string `json:"channel_uids,omitempty"`
 }
 
 // Maintenance ist ein Wartungsfenster.

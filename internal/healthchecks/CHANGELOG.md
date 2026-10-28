@@ -2,6 +2,15 @@
 
 ## 2.41.0 – 2026-10-28
 
+### Neu
+- Cluster: Statusseiten lassen sich abgleichen (Bereich „Statusseiten“, standardmäßig aus) – mit Gruppen, Checks in
+  ihrer Reihenfolge, Optionen, Sichtbarkeit, Passwort, Logo und Ankündigungen. PROXY64-Hosts einer Statusseite
+  bleiben je Node. Gleicher Slug mit anderem Inhalt wird nicht übernommen (Hinweis im Log).
+- Cluster: Benachrichtigungskanäle lassen sich abgleichen (Bereich „Kanäle“ unter Benachrichtigungen, standardmäßig
+  aus) – nur die eigenen Kanäle der Node samt Zugangsdaten (auf der anderen Node mit deren Schlüssel gespeichert),
+  nie die des Portals, nicht der Browser-Kanal und keine mit „Geheimnis nur lokal“. Die Kanäle der Checks stimmen
+  dann auf jeder Node. Nötig vor allem für Nodes ohne Verbindung zu ipv64.net.
+
 ### Geändert
 - Proxmox VE und Docker: Checks zeigen eine echte Latenz statt 0 ms bzw. der Zeit der Docker-API – Ping zur Adresse
   des Nodes, Gasts bzw. Containers (ein Paket, höchstens 2 s), sonst die Antwortzeit der Proxmox- bzw. Docker-API.
@@ -9,6 +18,10 @@
   fehlgeschlagener Ping macht keinen Check rot.
   - Proxmox: Node-Adressen aus `cluster/status`; Adressen laufender Gäste als Check alle 5 Minuten über den Gast-Agent
     (VMs, Recht `VM.Monitor` bzw. ab PVE 9 `VM.GuestAgent.Audit`) bzw. `lxc/{vmid}/interfaces` (Container).
+- Cluster: Was auf zwei Nodes schon vorher exakt gleich angelegt war (Statusseite, Kanal, Proxmox-System,
+  Docker-Host, Wartungsfenster), wird beim Beitreten bzw. Einschalten des Bereichs zu einem Eintrag zusammengeführt
+  statt doppelt angelegt. Nur ähnliche Einträge bleiben getrennt. Checks werden nie zusammengeführt (gleicher Check
+  auf zwei Nodes = zwei Messstellen).
 
 ## 2.40.0 – 2026-10-28
 
