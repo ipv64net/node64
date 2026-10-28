@@ -47,6 +47,7 @@ type fakeRunner struct {
 	newErr   error
 	inSince  time.Time
 	inCalled int
+	updErr   error
 }
 
 func (f *fakeRunner) Run(ctx context.Context) error {
@@ -83,6 +84,9 @@ func (f *fakeRunner) UpdateMe(_ context.Context, m sonar.Me) (*sonar.Me, error) 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.updates = append(f.updates, m)
+	if f.updErr != nil {
+		return nil, f.updErr
+	}
 	f.me = m
 	c := m
 	return &c, nil
@@ -315,7 +319,7 @@ func TestSaveProfile(t *testing.T) {
 	_ = m.SetParticipate(ctx, true)
 	waitFor(t, "runner", func() bool { return m.runner() != nil })
 	lat, lon, bad := 50.1109123456, 8.6821, 91.0
-	for _, p := range []Profile{{Name: "ab"}, {Name: "<script>"}, {Lat: &lat}, {Lat: &bad, Lon: &lon}, {Access: "isdn"}, {Device: "toaster"}} {
+	for _, p := range []Profile{{Name: "ab"}, {Name: "<script>"}, {Name: "Mein  Pi"}, {Name: "admin-1"}, {Name: "Anker Pi"}, {Lat: &lat}, {Lat: &bad, Lon: &lon}, {Access: "isdn"}, {Device: "toaster"}} {
 		if _, err := m.SaveProfile(ctx, p); !errors.As(err, new(FieldErrors)) {
 			t.Fatalf("%+v: %v", p, err)
 		}
@@ -330,11 +334,51 @@ func TestSaveProfile(t *testing.T) {
 	if me, err = m.SaveProfile(ctx, Profile{ClearLoc: true}); err != nil || me.Lat != nil || me.Name != "Mein Knoten" {
 		t.Fatalf("clear: %+v %v", me, err)
 	}
+	// Namensfehler von ipv64 am Feld
 	f.mu.Lock()
+	f.updErr = &sonar.APIError{Status: 409, Code: "name_taken", Detail: "This name is already taken."}
+	f.mu.Unlock()
+	if _, err := m.SaveProfile(ctx, Profile{Name: "Sonar-2"}); !errors.As(err, new(FieldErrors)) || err.(FieldErrors)["name"] != "sonar64.err.name_taken" {
+		t.Fatalf("name taken: %v", err)
+	}
+	f.mu.Lock()
+	f.updErr = &sonar.APIError{Status: 502, Detail: "down"}
+	f.mu.Unlock()
+	if _, err := m.SaveProfile(ctx, Profile{Name: "Sonar-2"}); err == nil || errors.As(err, new(FieldErrors)) {
+		t.Fatalf("api error: %v", err)
+	}
+	f.mu.Lock()
+	f.updErr = nil
 	f.status.Registered = false
 	f.mu.Unlock()
 	if _, err := m.SaveProfile(ctx, Profile{Name: "Sonar-1"}); !errors.Is(err, ErrNotReady) {
 		t.Fatalf("not ready: %v", err)
+	}
+}
+
+// Abgleich Rolle/Budget scheitert: geholter Knoten bleibt sichtbar, Fehler dazu.
+func TestSyncKeepsMeOnUpdateError(t *testing.T) {
+	m, f, _ := modTest(t)
+	ctx := context.Background()
+	f.me.Budget = sonar.BudgetHigh // weicht von der lokalen Einstellung ab
+	f.updErr = errors.New("ipv64: HTTP 502")
+	_ = m.Start(ctx)
+	if err := m.SetParticipate(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "me", func() bool { return m.cachedMe() != nil })
+	m.mu.Lock()
+	meErr := m.meErr
+	m.mu.Unlock()
+	if me := m.cachedMe(); me.Name != "Sonar-Falke-42" || meErr == "" {
+		t.Fatalf("me %+v err %q", me, meErr)
+	}
+	// Austreten leert den Knoten auch nach einem spaeten Abgleich
+	if err := m.SetParticipate(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	if m.cachedMe() != nil {
+		t.Fatal("me kept after leaving")
 	}
 }
 
@@ -525,6 +569,22 @@ func TestPagesRender(t *testing.T) {
 	}
 	if me := m.cachedMe(); me == nil || me.Name != "Mein Pi" || me.Access != "dsl" || *me.Lon != 8.6 {
 		t.Fatalf("profile: %+v", me)
+	}
+	if _, body := get("/sonar64"); !strings.Contains(body, `name="had_loc" value="1"`) {
+		t.Fatal("had_loc missing")
+	}
+	// leere Felder ohne gezeigten Standort: Standort bleibt
+	if code, _ := post("/sonar64/profile", url.Values{"_csrf": {csrf[1]}, "name": {"Mein Pi"}, "lat": {""}, "lon": {""}}); code != http.StatusSeeOther {
+		t.Fatalf("save profile 2: %d", code)
+	}
+	if me := m.cachedMe(); me == nil || me.Lat == nil {
+		t.Fatalf("location lost: %+v", me)
+	}
+	if code, _ := post("/sonar64/profile", url.Values{"_csrf": {csrf[1]}, "name": {"Mein Pi"}, "lat": {""}, "lon": {""}, "had_loc": {"1"}}); code != http.StatusSeeOther {
+		t.Fatalf("save profile 3: %d", code)
+	}
+	if me := m.cachedMe(); me == nil || me.Lat != nil {
+		t.Fatalf("location kept: %+v", me)
 	}
 	if code, body := get("/sonar64"); code != 200 || !strings.Contains(body, `data-s64-in-live`) || !strings.Contains(body, `class="badge text-bg-primary"`) {
 		t.Fatalf("measured page: %d", code)
