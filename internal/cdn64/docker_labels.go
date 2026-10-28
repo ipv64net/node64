@@ -61,6 +61,7 @@ type dockerSpec struct {
 	// Traefik-Middlewares, die PROXY64 nicht selbst abbildet ("name@provider"): eine Zugriffsliste gleichen Namens
 	// wird zugewiesen; gibt es keine, kommt ein neuer Host ausgeschaltet (Schutz koennte fehlen).
 	Middlewares []string
+	Ignored     []string // harmlose Middlewares, die PROXY64 uebergeht (Hinweis in der Liste)
 }
 
 // dockerAccess: Zugriffsliste aus den Labels (node64.proxy.access bzw. Traefik-Middleware mit forwardAuth).
@@ -77,9 +78,22 @@ type dockerProblem struct {
 	Name   string // Wert dazu
 }
 
+// traefikShared: Middleware-Definitionen aller Container (Schluessel klein geschrieben).
+func traefikShared(all []map[string]string) map[string]string {
+	out := map[string]string{}
+	for _, labels := range all {
+		for k, v := range labels {
+			if k = strings.ToLower(strings.TrimSpace(k)); strings.HasPrefix(k, "traefik.http.middlewares.") {
+				out[k] = strings.TrimSpace(v)
+			}
+		}
+	}
+	return out
+}
+
 // dockerSpecs liest die Labels eines Containers. Stehen node64.proxy.* am Container, gelten nur diese (ein Host);
 // sonst mit traefik = true je Traefik-Router ein Host.
-func dockerSpecs(labels map[string]string, traefik bool) ([]dockerSpec, []dockerProblem) {
+func dockerSpecs(labels map[string]string, traefik bool, shared map[string]string) ([]dockerSpec, []dockerProblem) {
 	own := false
 	for k := range labels {
 		if strings.HasPrefix(k, labelProxyPrefix) {
@@ -95,7 +109,7 @@ func dockerSpecs(labels map[string]string, traefik bool) ([]dockerSpec, []docker
 		return []dockerSpec{s}, nil
 	}
 	if traefik {
-		return traefikSpecs(labels)
+		return traefikSpecs(labels, shared)
 	}
 	return nil, nil
 }

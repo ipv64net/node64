@@ -44,24 +44,24 @@ func TestDockerSpecs(t *testing.T) {
 		LabelProxyHost:                  "own.example.de",
 	}
 	// eigene Labels haben Vorrang vor Traefik
-	s, p := dockerSpecs(both, true)
+	s, p := dockerSpecs(both, true, nil)
 	if len(p) != 0 || len(s) != 1 || s[0].Source != dockerSrcNode64 || s[0].Names[0] != "own.example.de" {
 		t.Fatalf("own first: %+v %+v", s, p)
 	}
 	// fehlerhafte eigene Labels: kein Rueckfall auf Traefik
-	s, p = dockerSpecs(map[string]string{"traefik.http.routers.app.rule": "Host(`t.example.de`)", LabelProxyPort: "80"}, true)
+	s, p = dockerSpecs(map[string]string{"traefik.http.routers.app.rule": "Host(`t.example.de`)", LabelProxyPort: "80"}, true, nil)
 	if len(s) != 0 || len(p) != 1 || p[0].Key != dockerErrHost {
 		t.Fatalf("own invalid: %+v %+v", s, p)
 	}
-	s, p = dockerSpecs(traefik, true)
+	s, p = dockerSpecs(traefik, true, nil)
 	if len(p) != 0 || len(s) != 1 || s[0].Source != dockerSrcTraefik || s[0].Router != "app" {
 		t.Fatalf("traefik: %+v %+v", s, p)
 	}
 	// Traefik-Labels ausgeschaltet
-	if s, p = dockerSpecs(traefik, false); s != nil || p != nil {
+	if s, p = dockerSpecs(traefik, false, nil); s != nil || p != nil {
 		t.Fatalf("traefik off: %+v %+v", s, p)
 	}
-	if s, p = dockerSpecs(map[string]string{"com.docker.compose.service": "app"}, true); s != nil || p != nil {
+	if s, p = dockerSpecs(map[string]string{"com.docker.compose.service": "app"}, true, nil); s != nil || p != nil {
 		t.Fatalf("no labels: %+v %+v", s, p)
 	}
 }

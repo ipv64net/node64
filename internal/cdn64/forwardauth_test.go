@@ -257,7 +257,7 @@ func TestDockerTraefikForwardAuth(t *testing.T) {
 	// secure-headers@file, sso@file: keine Liste dazu -> Host ausgeschaltet, Hinweis, Formular nicht gesperrt;
 	// mit Liste "sso" wird sie zugewiesen (Host bleibt aus, bis man ihn einschaltet)
 	v := viewOf(e.m, "wiki")
-	if v.HostID == 0 || v.Problem != dockerErrMW || v.ProblemName != "secure-headers@file, sso@file" || v.Access != "" {
+	if v.HostID == 0 || v.Problem != dockerErrMW || v.ProblemName != "sso@file" || v.Access != "" || !slices.Equal(v.Ignored, []string{"secure-headers@file"}) {
 		t.Fatalf("wiki: %+v", v)
 	}
 	if w, _ := e.m.host(ctx, v.HostID); w.Enabled || w.AccessListID != 0 || e.m.dockerACLFrom(ctx, w) != "" {
