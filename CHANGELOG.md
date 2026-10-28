@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 0.12.0-alpha.29 – 2026-10-28
+
 - Sonar64: vorerst pausiert – das Modul ist nicht mehr sichtbar und lässt sich nicht einschalten.
 
 ## 0.12.0-alpha.28 – 2026-10-28
