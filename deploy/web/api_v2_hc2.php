@@ -99,7 +99,7 @@ function hc2_maint_out(array $m): array {
 		'tokens' => array_values(array_filter(explode(',', (string)$m['tokens']))), 'active' => (int)$m['active'] === 1, 'node_id' => $m['node_id'], 'revision' => (int)$m['revision']);
 }
 function hc2_node_out(array $n, bool $detail = false): array {
-	$o = array('node_id' => $n['node_id'], 'name' => $n['name'], 'location' => $n['location'], 'version' => $n['version'], 'timezone' => $n['timezone'], 'modules' => array_values(array_filter(explode(',', (string)$n['modules']))),
+	$o = array('node_id' => $n['node_id'], 'name' => $n['name'], 'location' => $n['location'], 'version' => $n['version'], 'timezone' => $n['timezone'], 'modules' => array_values(array_filter(explode(',', hc2_node_modules($n['modules'])))),
 		'remote_mgmt' => $n['remote_mgmt'], 'online' => (int)$n['online'] === 1, 'last_seen' => hc2_iso($n['last_seen']), 'last_sync' => hc2_iso($n['last_sync']), 'outbox_size' => (int)$n['outbox_size'],
 		'conflicts' => (int)$n['conflicts'], 'hub' => $n['node'] ?? '', 'linked_at' => hc2_iso($n['created_at']));
 	if ($detail) {

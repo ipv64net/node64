@@ -147,6 +147,8 @@ function hc2_nodes(int $userid, bool $fresh = false): array {
 	foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $n) { $out[$n['node_id']] = $n; }
 	return $cache[$userid] = $out;
 }
+/** Module einer Node zum Anzeigen (ohne den internen Marker notify-direct, den der hub fuer Healthchecks 2.40.0 speichert). */
+function hc2_node_modules($s): string { return implode(',', array_diff(array_filter(explode(',', (string)$s)), array('notify-direct'))); }
 /** Messende Nodes eines Checks (Spalte nodes; alte Checks: nur die Besitzer-Node). */
 function hc2_check_nodes(array $c): array {
 	if (($c['execution'] ?? 'online') === 'online') { return array(); }

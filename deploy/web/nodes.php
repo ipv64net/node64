@@ -180,7 +180,7 @@ $tile = function(string $label, int $n, string $color, string $icon): string {
 			<tbody>
 			<?php foreach ($rows as $row) { $r = $row['reg']; $h = $row['hub']; $x = $row['sensor']; $t = $row['tunnel'];
 				$name = $r['name'] ?? ($h['name'] ?? 'Honeypot-Sensor'); $loc = $r['location'] ?? ($h['location'] ?? '');
-				$mods = array_filter(explode(',', (string)($r['modules'] ?? ($h['modules'] ?? ($x ? 'honeypot' : ''))))); ?>
+				$mods = array_filter(explode(',', (string)($r['modules'] ?? (isset($h['modules']) ? hc2_node_modules($h['modules']) : ($x ? 'honeypot' : ''))))); ?>
 			<tr>
 				<td><?php echo $hubOn($row) ? '<a href="nodes.php?node=' . hc2_h($h['node_id']) . '#details">' . hc2_h($name) . '</a>' : hc2_h($name); echo $isOnline($row) ? ' <i class="fa-solid fa-circle text-success small" title="online"></i>' : ' <i class="fa-solid fa-circle text-secondary small" title="offline"></i>';
 					if ($loc !== '') { echo '<br><small>' . hc2_h($loc) . '</small>'; }
@@ -285,7 +285,7 @@ $tile = function(string $label, int $n, string $color, string $icon): string {
 						<dt class="col-5">Status</dt><dd class="col-7"><?php echo (int)$detail['online'] ? '<span class="badge badge-success">online</span> an ' . hc2_h($detail['node']) : '<span class="badge badge-warning">offline</span> seit ' . hc2_dt($detail['last_seen']); ?></dd>
 						<dt class="col-5">Version</dt><dd class="col-7"><?php echo hc2_h($detail['version']); ?></dd>
 						<dt class="col-5">Zeitzone</dt><dd class="col-7"><?php echo hc2_h($detail['timezone']); ?></dd>
-						<dt class="col-5">Module</dt><dd class="col-7"><?php echo hc2_h($detail['modules'] ?: '–'); ?></dd>
+						<dt class="col-5">Module</dt><dd class="col-7"><?php echo hc2_h(hc2_node_modules($detail['modules']) ?: '–'); ?></dd>
 						<dt class="col-5">Letzter Abgleich</dt><dd class="col-7"><?php echo hc2_dt($detail['last_sync']); ?></dd>
 						<dt class="col-5">Postausgang</dt><dd class="col-7"><?php echo (int)$detail['outbox_size']; ?> offen</dd>
 						<dt class="col-5">Verknüpft seit</dt><dd class="col-7"><?php echo hc2_dt($detail['created_at'], 'd.m.Y'); ?></dd>
