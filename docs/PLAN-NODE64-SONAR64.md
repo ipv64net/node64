@@ -1,6 +1,6 @@
 # Plan: Sonar64 – verteiltes Community-Messnetz (RIPE-Atlas-Idee)
 
-Stand 2026-10-28 (3. Fassung), Wunsch und Entscheidungen Dennis. **Nur Planung**, noch nichts umgesetzt.
+Stand 2026-10-28 (4. Fassung), Wunsch und Entscheidungen Dennis. **Nur Planung**, noch nichts umgesetzt.
 
 Knoten bei den Leuten zu Hause messen sich gegenseitig (Ping, später Traceroute), geordnet und sparsam nach einem
 zentralen Plan von ipv64.net. Ziel ist eine **lebendige Karte**: farbige Badges mit Millisekunden, Verbindungslinien,
@@ -20,8 +20,8 @@ Code wird nichts übernommen.
 |---|---|
 | Ansatz | **Community**: Karte, öffentliche Knoten, öffentliche Vertrauensstufen, sichtbarer Mehrwert für jeden Teilnehmer |
 | Bauweise | **eigenständig und leichtgewichtig**: ein Programm `sonar64`, das allein läuft (bis hinunter zum **Raspberry Pi Zero**, auch MikroTik-Container) |
-| Node64 | Sonar64 wird **optionales Modul**, aus und unsichtbar, bis man es einschaltet. Es kommt **erst auf Ansage von Dennis** in das Node64-Repo; bis dahin eigenes Projekt außerhalb |
-| Repo | eigener Ordner `ipv64.net/sonar64/`, eigenes Go-Modul `github.com/ipv64net/sonar64`, eigenes Git (lokal, Push nur auf Ansage) |
+| Node64 | Sonar64 ist ein **optionales Modul** im Node64-Repo, aus und unsichtbar, bis man es einschaltet |
+| Ohne Dashboard | dasselbe Programm läuft auch **allein ohne Oberfläche** („headless“): nur API-Code angeben, es meldet sich als Knoten mit eigener Node-ID an und misst. Als kleiner Einzelcontainer oder als einzelne Datei (Pi Zero) |
 | Anker | **dasselbe Programm im Anker-Modus**, völlig losgelöst von den hubs; neuer Anker an beliebigem Standort = Container starten. Start mit `hc-srv01` (Falkenstein) und `hc-srv02` (Nürnberg), nicht auf den CDN64-Servern |
 | Schnittstelle | nur die ipv64-API (v2) |
 | Teilnahme | Opt-in; wer nicht gemessen werden will, misst **nur ausgehend** und erscheint nie als Ziel |
@@ -33,18 +33,20 @@ Code wird nichts übernommen.
 ## 1. Bausteine
 
 ```
-sonar64/ (eigenes Projekt, Go-Modul github.com/ipv64net/sonar64)
-  sonar/            Kern: Plan holen, messen (ICMP, UDP 6464), Grenzen, Ergebnisse senden, Antworter auf 6464
-  cmd/sonar64/      eigenständiges Programm (Knoten- oder Anker-Modus), nur der Kern + Mini-Status
-Node64 (später, auf Ansage)
-  internal/sonar64  dünnes optionales Modul: bindet den Kern ein, Oberfläche (Menüpunkt, Live-Tabellen)
-ipv64.net           API v2 /sonar/*, Planer, Auswertung, öffentliche Seiten
+Node64-Repo (github.com/ipv64net/node64)
+  internal/sonar      Kern: Plan holen, messen (ICMP, UDP 6464), Grenzen, Ergebnisse senden, Antworter auf 6464
+  internal/sonar64    optionales Node64-Modul: bindet den Kern ein, Oberfläche (Menüpunkt, Live-Tabellen)
+  cmd/sonar64         eigenständiges Programm ohne Dashboard (Knoten- oder Anker-Modus): nur der Kern + Mini-Status
+ipv64.net             API v2 /sonar/*, Planer, Auswertung, öffentliche Seiten
 ```
 
-- **Ein Kern, drei Einsätze:** eigenständig (Pi Zero, MikroTik, beliebiger Linux-Rechner), als Anker, später als
-  Node64-Modul. Der Kern kennt Node64 nicht; Node64 bindet ihn ein, nicht umgekehrt.
-- **In Node64 optional:** Standard aus, ohne Einschalten kein Menüpunkt, kein Port, kein Verkehr. Erst wenn Dennis
-  sagt „Sonar64 ins Repo“, kommt das Modul (und die Abhängigkeit auf den Kern) in Node64.
+- **Ein Kern, drei Einsätze:** als Modul in Node64, allein ohne Dashboard (Pi Zero, MikroTik, beliebiger
+  Linux-Rechner), als Anker. Der Kern hängt von keinem anderen Node64-Modul ab; `cmd/sonar64` baut nur ihn ein,
+  deshalb bleibt die Datei klein.
+- **In Node64 optional:** Standard aus, ohne Einschalten kein Menüpunkt, kein Port, kein Verkehr.
+- **Ohne Dashboard:** `sonar64` startet mit einem API-Code (Sonar-Token), legt beim ersten Start seine **Node-ID**
+  und seinen Schlüssel an (ein paar KB in einem Datenordner) und läuft danach als dieser Knoten weiter, auch nach
+  Neustarts und Updates.
 - **Leichtgewichtig:** statisches Go-Binary ohne Fremdabhängigkeiten, Ziel < 10 MB und < 20 MB RAM, kein Speicher
   auf Platte nötig (nur Schlüssel und Zustand, ein paar KB), kaum CPU (wenige Pakete pro Sekunde).
 - **Raspberry Pi Zero:** der erste Pi Zero (W) ist ARMv6 mit 512 MB – Docker ist dort zu schwer. Deshalb gibt es
@@ -119,9 +121,31 @@ lassen.
 | Säule | gold | ≥ 180 Tage, sehr stabil, wird gemessen | Referenzziel für neue Knoten, hohes Gewicht in der Störungserkennung |
 | Anker | violett | von ipv64 betrieben oder freigegeben | feste Messpunkte |
 
-- Grundlagen: Dauer, Verfügbarkeit, Stabilität von IP/Provider, Plausibilität (Ergebnisse gegen den Median der anderen).
+- Grundlagen: Dauer, Verfügbarkeit, Stabilität von IP/Provider, Plausibilität (Abschnitt 6a).
 - Aufstieg langsam, **Abstufung sofort** bei unplausiblen Werten oder Manipulationsverdacht.
 - Ergebnisse mit dem Schlüssel des Knotens signiert, der Plan mit dem von ipv64.
+
+## 6a. Plausibilitätsprüfung
+
+Jede Meldung wird bei ipv64 geprüft, bevor sie zählt. Ein Knoten kann nur über sich selbst und seine Messungen
+lügen – und genau das fällt auf, weil jede Leitung von mehreren Seiten gemessen wird.
+
+| Prüfung | Was sie erkennt |
+|---|---|
+| **Signatur und Absender** | Meldungen nur mit dem Schlüssel des Knotens; die IP stammt aus der Verbindung, nicht aus einer Angabe |
+| **Nur geplante Messungen** | Ergebnisse nur für Ziele und Runden aus dem eigenen Plan; erfundene Ziele, zu viele Messungen, falsche Zeiten → verworfen |
+| **Physikalische Untergrenze** | Licht in der Faser schafft ~200 km je ms: Eine Antwortzeit unter 2 × Entfernung / 200 km/ms ist unmöglich (erkennt geschönte Werte und einen falschen Standort) |
+| **Anker als Wahrheit** | Beide Anker messen jeden Knoten selbst; was ein Knoten über die Anker meldet, muss zu dem passen, was die Anker über ihn messen |
+| **Standort gegen Laufzeit** | Antwortzeiten zu beiden Ankern müssen zum angegebenen Standort passen (grobe Ortung); ein Knoten „in München“ mit 1 ms nach Nürnberg fällt auf |
+| **Hin und zurück** | A→B und B→A sollten ähnlich sein; große, dauerhafte Unterschiede sprechen gegen eine Seite |
+| **Mehrheit der Messenden** | Jedes Ziel wird von mehreren gemessen; Werte weit weg vom Median der vertrauten Knoten zählen nicht |
+| **Erreichbarkeit** | Meldet ein Knoten Ziele als tot, die alle anderen erreichen, liegt es an ihm (Selbstbremse) oder an der Meldung |
+| **Zu glatte Werte** | Immer gleiche Zeiten, kein Jitter, nie Verlust → erzeugte statt gemessene Werte |
+| **Stichproben** | ipv64 mischt unauffällig Kontrollziele mit bekannten Werten (Anker) in Pläne; wer dort falsch meldet, meldet überall falsch |
+
+**Folgen:** Unplausible Meldungen werden verworfen und gezählt. Häufen sie sich, sinkt das Vertrauen, bis hin zu
+**Quarantäne** (misst weiter, zählt aber nicht und taucht nicht in Statistiken auf) und Ausschluss. Öffentliche Werte
+und die Störungserkennung rechnen ohnehin mit dem gewichteten Median, nie mit dem Wert eines einzelnen Knotens.
 
 ## 7. Community und Mehrwert
 
@@ -174,9 +198,8 @@ mit klarem Hinweis; Eintrag in der Datenschutzerklärung.
 
 | Phase | Inhalt |
 |---|---|
-| S0 | Projekt `sonar64` (Kern + Programm, Knoten + Anker), Binaries und Image, Installationsskript, API `/sonar/me` und Tokens, Anker auf hc-srv01/02, Provider-Erkennung, Selbsttest |
-| S1 | Messpläne, Ping-Netz mit Grenzen, Mini-Status, „Mein Knoten“ auf ipv64.net mit Live-Tabellen; Test auf Pi Zero |
-| S1b | **auf Ansage:** optionales Modul in Node64 mit Live-Tabellen |
+| S0 | Kern `internal/sonar`, Programm `cmd/sonar64` (Knoten + Anker, ohne Dashboard), Binaries und Image, Installationsskript, API `/sonar/me` und Tokens, Anker auf hc-srv01/02, Provider-Erkennung, Selbsttest |
+| S1 | Messpläne, Ping-Netz mit Grenzen und Plausibilitätsprüfung, optionales Node64-Modul mit Live-Tabellen, Mini-Status, „Mein Knoten“ auf ipv64.net; Test auf Pi Zero |
 | S2 | Öffentliche Karte mit Badges, Teilnehmerliste, Zahlen live |
 | S3 | Vertrauensstufen (öffentlich), Bestenliste, Provider-Matrix |
 | S4 | Störungserkennung nach Region und Provider, Meldungen an Teilnehmer |
