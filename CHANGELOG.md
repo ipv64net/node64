@@ -11,6 +11,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
   überschrieben, sondern auf der Seite Cluster zur Wahl gestellt.
 - Cluster: neue Bereiche „Statusseiten“ und „Kanäle“ (Benachrichtigungen, vor allem für Nodes ohne ipv64.net),
   standardmäßig aus; vorher auf zwei Nodes exakt gleich angelegte Einträge werden zusammengeführt statt doppelt.
+- Cluster: neues Modul „Node“ (standardmäßig aus) – ipv64-API-Key nur einmal eintragen (nur gleicher Account,
+  Übernahme im Audit-Log) und allgemeine Einstellungen (Zeitzone, Selbst-Update, MCP an/aus) abgleichen.
 
 ## 0.12.0-alpha.29 – 2026-10-28
 

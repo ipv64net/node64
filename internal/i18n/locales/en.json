@@ -1834,6 +1834,9 @@
       "peer_leave": "Left group",
       "peer_url": "Group address changed",
       "peer_remove": "Member removed",
+      "peer_ipv64_key": "API key taken from the cluster",
+      "peer_ipv64_key_removed": "API key removed via the cluster",
+      "peer_node_setting": "Setting taken from the cluster",
       "honeypot_config": "Honeypot64 settings changed",
       "honeypot_clear": "Honeypot64 events deleted",
       "honeypot_watch_add": "Early warning: network added",
@@ -3197,6 +3200,8 @@
     "title": "Cluster",
     "intro": "Optional: several nodes sync settings and entries directly with each other, even across different networks. Without members there is no traffic. You choose per module and area what is synced.",
     "tls_hint": "The connection between the nodes is always encrypted (HTTPS, also via the normal web port). The certificate does not need to be valid, self-signed is fine – the nodes recognise each other by the keys of the pairing.",
+    "apikey_hint": "Caution: the API key gives full access to your ipv64 account. When switched on it travels in plain text over the encrypted cluster connection to the other nodes and replaces their key; removing it removes it everywhere. Only a key of the same account is accepted, every takeover is recorded in the audit log.",
+    "node_settings_hint": "Time zone, self-update (mode, channel, time window) and MCP on/off. Never synced: node name and ID, ports, addresses, certificates, cluster and network settings.",
     "members": "Members",
     "account_self": "This node belongs to ipv64 account #{account}.",
     "account_none": "This node has no ipv64 account.",
@@ -3234,7 +3239,8 @@
       "healthchecks": "Healthchecks",
       "notifications": "Notifications",
       "certs": "Certificates",
-      "dns64": "DNS64"
+      "dns64": "DNS64",
+      "node": "Node"
     },
     "item": {
       "checks": "Checks",
@@ -3255,7 +3261,9 @@
       "dns64_forwards": "Forwarding and rewrites",
       "dns64_groups": "Device groups (rules, schedules, blocks)",
       "dns64_group_members": "Members of the device groups (belong to the site)",
-      "dns64_denylist": "Own blocklist"
+      "dns64_denylist": "Own blocklist",
+      "apikey": "ipv64 API key (applies to the whole account)",
+      "node_settings": "General settings (time zone, self-update, MCP on/off)"
     },
     "add_title": "Add another node",
     "add_hint": "Shows a code that you enter on the other node under “Join a cluster”.",

@@ -498,17 +498,12 @@ func (s *Server) settingsUpdates(w http.ResponseWriter, r *http.Request) {
 	if !containsString(selfupdate.Modes, mode) {
 		mode = "off"
 	}
-	_ = s.Store.SetSetting(ctx, selfupdate.SetMode, mode)
-	on := mode != "off"
-	_ = s.Store.SetSetting(ctx, "updates.check", map[bool]string{true: "1", false: "0"}[on])
+	_ = selfupdate.SaveMode(s.updateSet(ctx), mode)
 	if ch := r.PostFormValue("updates_channel"); containsString(selfupdate.Channels, ch) {
 		_ = s.Store.SetSetting(ctx, selfupdate.SetChannel, ch)
 	}
 	if win := strings.TrimSpace(r.PostFormValue("updates_window")); selfupdate.ValidWindow(win) {
 		_ = s.Store.SetSetting(ctx, selfupdate.SetWindow, win)
-	}
-	if !on {
-		_ = s.Store.SetSetting(ctx, "updates.latest", "")
 	}
 	s.audit(r, "settings.updates", "", fmt.Sprintf("mode=%s", mode))
 	v := s.view(r, "settings.title")

@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -49,6 +50,8 @@ type Store struct {
 
 	newerMu sync.Mutex
 	newer   map[string][]int // Scope -> angewendete, hier unbekannte Migrationen (SchemaNewer)
+
+	settingHook atomic.Pointer[func(ctx context.Context, key string)] // nach jedem SetSetting (core.go)
 }
 
 // Open oeffnet oder erzeugt die Datenbank.
