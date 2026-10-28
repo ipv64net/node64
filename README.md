@@ -326,6 +326,27 @@ Ohne Oberfläche als reiner Sensor (z. B. auf einem kleinen Raspberry Pi, auch a
 
 **Achtung:** Fallen-Dienste sind nur nützlich, wenn sie von außen erreichbar sind (Portfreigabe). Auf diesen Ports dürfen keine echten Dienste laufen.
 
+## Sonar64 (Community-Messnetz)
+
+Das Modul *Sonar64* (in den Einstellungen einschalten, standardmäßig aus) macht die Node zu einem Knoten des
+verteilten Messnetzes von ipv64.net: Knoten bei Teilnehmern zu Hause messen sich gegenseitig und die Anker von ipv64
+(Ping per ICMP oder UDP 6464), sparsam nach einem signierten Plan von ipv64.net und innerhalb fester Grenzen im Code
+(höchstens 20 Ziele je Runde, 2 Pakete/s, Tagesgrenze, nie private Ziele). Ohne Teilnahme kein Port und kein Verkehr.
+
+- **Teilnahme per Opt-in** auf der Seite *Sonar64*; braucht den zentralen ipv64-API-Key. Node64 legt damit ein eigenes
+  Sonar-Token an (verschlüsselt gespeichert).
+- **Rolle:** *nur ausgehend* (Standard) oder *auch gemessen* – dann antwortet die Node auf UDP 6464 (Port-Verwaltung,
+  Freigabe im Router) und einige andere Teilnehmer sehen im Messplan die öffentliche IP. Budget *sparsam*/*normal*/
+  *großzügig*, Ruhezeit (z. B. `23-6`).
+- **Profil bei ipv64:** Anzeigename, Standort (Breite/Länge; öffentlich im Umkreis von etwa 1 km verschleiert),
+  Anschlussart, Gerät. Vertrauensstufe (neu, stabil, vertraut, Säule, Anker, Quarantäne) mit Fortschritt und Link zur
+  öffentlichen Knotenseite.
+- **Live-Tabellen:** *Pings von mir* (alle 5 Sekunden) und *Pings gegen mich* (UDP 6464 sofort, sonst aus den
+  Ergebnissen bei ipv64). API: `/api/sonar64/status`, `recent`, `inbound`, `settings`.
+
+Dasselbe Messnetz läuft auch ohne Node64 als kleines eigenes Programm `sonar64` (z. B. Raspberry Pi Zero).
+Plan: [docs/PLAN-NODE64-SONAR64.md](docs/PLAN-NODE64-SONAR64.md).
+
 ## Betrieb
 
 - **Backup:** Unter *Einstellungen → Daten & Sicherung* gibt es ein vollständiges Backup als Archiv (`.n64backup`, mit Passwort verschlüsselt): Datenbank (alle Tabellen aller Module, auch Honeypot-Ereignisse und Proxmox-/Docker-Verlauf), Schlüssel der Node (`secret.key`), die Dateien der Module unter `/data` (z. B. DNS64-Freigaben und -Zertifikate, Honeypot-Hostschlüssel, -Zertifikat und Sensor-Kennung, TLS der Oberfläche), auf Wunsch auch die Statistik von DNS64 und PROXY64. Nicht enthalten sind Zwischenspeicher, die die Node neu lädt (Blocklisten, Länderdaten `geoip/`), und alte Sicherungen unter `/data/backups`. Damit lässt sich die Node auch auf einer neuen Maschine wiederherstellen (`POST /api/backup`). Die reine Datenbank (`GET /api/backup`) ist nur auf derselben Node vollständig nutzbar. Nach der Wiederherstellung startet der Node neu (Docker startet ihn mit `restart: unless-stopped` automatisch); was ersetzt wird, bleibt unter `/data/backups` (die letzten fünf Stände je Art). Vor jeder Migration entsteht dort ebenfalls ein Backup (die letzten fünf).

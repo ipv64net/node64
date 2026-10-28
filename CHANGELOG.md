@@ -4,6 +4,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Sonar64 (neu, optional, standardmäßig aus): Community-Messnetz – Teilnahme per Opt-in mit dem ipv64-API-Key, nur
+  ausgehend oder auch gemessen (UDP 6464), Budget, Ruhezeit, Profil mit verschleiertem Standort, Vertrauensstufe und
+  Live-Tabellen der Pings.
 - Sicherheit: Ergebnisse eines großen Code-Reviews behoben – u. a. Location-Zugriffslisten in PROXY64, Hosts über
   CDN64 nur noch unter dem freigegebenen Namen, Abstürze durch präparierte Pakete (Honeypot64 auf arm/v7, DNS64),
   Anmeldung (Speicher, Weiterleitung, X-Forwarded-For, CSRF), Backups ohne Programmdateien.

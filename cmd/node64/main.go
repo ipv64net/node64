@@ -53,6 +53,7 @@ import (
 	"github.com/ipv64net/node64/internal/ports"
 	"github.com/ipv64net/node64/internal/secrets"
 	"github.com/ipv64net/node64/internal/selfupdate"
+	"github.com/ipv64net/node64/internal/sonar64"
 	"github.com/ipv64net/node64/internal/store"
 	nodesync "github.com/ipv64net/node64/internal/sync"
 	"github.com/ipv64net/node64/internal/web"
@@ -268,6 +269,11 @@ func run() error {
 	hpModule.SetCerts(certMgr)                                        // gueltige Zertifikate fuer Koeder-Namen (optional)
 	portReg.Provide(honeypot.Name, hpModule.Claims)
 	modules.Register(hpModule)
+	s64Module := sonar64.New(st, logger.Slog(), box, cfg.DataDir, Version) // Sonar64 als Modul (standardmaessig aus, Teilnahme per Opt-in)
+	s64Module.SetKey(ipv64Key)                                             // Teilnahme legt mit dem zentralen API-Key ein Sonar-Token an
+	s64Module.SetPorts(portReg)                                            // UDP 6464 nur bei "auch gemessen"
+	portReg.Provide(sonar64.Name, s64Module.Claims)
+	modules.Register(s64Module)
 	modules.StartEnabled(ctx)
 	defer modules.StopAll()
 

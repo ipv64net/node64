@@ -99,6 +99,7 @@
     "api": "API",
     "status_pages": "Status pages",
     "honeypot": "Honeypot64",
+    "sonar64": "Sonar64",
     "proxmox": "Proxmox VE",
     "settings_general": "General",
     "settings_ports": "Ports",
@@ -4990,6 +4991,182 @@
       "desc": "A decoy in your network: detects attackers trying credentials and reports them to the IPv64 blocklists.",
       "h1": "Simulates common services such as SSH, Telnet and web logins",
       "h2": "Early warning and a contribution to the shared blocklists"
+    }
+  },
+  "sonar64": {
+    "title": "Sonar64",
+    "intro": "Community measurement network: nodes at participants' homes measure each other and the ipv64 anchors – sparingly, following a signed plan from ipv64.net and within fixed limits. The results appear on the public map at ipv64.net/sonar.",
+    "public_link": "Public node page",
+    "live": "live",
+    "live_paused": "paused",
+    "participate": {
+      "title": "Participation",
+      "on": "You are participating",
+      "text": "By participating, this node becomes a Sonar64 node. It measures response times to other nodes and to the anchors and reports them, signed, to ipv64 every 5 minutes.",
+      "p1": "Targets only come from the signed plan from ipv64, never private networks; a few packets per second, fixed daily limit.",
+      "p2": "Public are display name, provider, access type, trust level and the location blurred to about 1 km – never your IP address.",
+      "p3": "The default is \"outbound only\": others only measure you once you choose \"also measured\".",
+      "nokey": "To participate, Node64 needs the central ipv64 API key (a dedicated Sonar token is created from it).",
+      "key_link": "Enter API key",
+      "join": "Participate",
+      "leave": "Stop participating",
+      "off_confirm": "Stop participating in Sonar64? The node will no longer measure or answer on UDP 6464."
+    },
+    "status": {
+      "node_id": "Node ID",
+      "registered": "Registered",
+      "plan": "Measurement plan",
+      "plan_until": "valid until {time}",
+      "anchors_only": "no valid plan – anchors only",
+      "paused": "Paused",
+      "sent_today": "Packets today",
+      "last_report": "Last report",
+      "buffered": "{n} not reported yet",
+      "responder": "Responder",
+      "responder_on": "UDP {port} open",
+      "responder_off": "off (outbound only)",
+      "error": "Error:",
+      "port_busy": "UDP {port} is in use – the node only measures outbound."
+    },
+    "paused": {
+      "uplink": "own line disrupted",
+      "quiet": "quiet hours",
+      "no_plan": "no plan from ipv64",
+      "budget": "daily limit reached"
+    },
+    "trust": {
+      "title": "Trust level",
+      "new": "New",
+      "stable": "Stable",
+      "trusted": "Trusted",
+      "pillar": "Pillar",
+      "anchor": "Anchor",
+      "quarantine": "Quarantine",
+      "next": "Progress to \"{level}\" (estimate)",
+      "progress": "Progress to the next level",
+      "days": "{n} of {need} days",
+      "uptime": "Availability {pct} % of {need} %",
+      "need_measured": "needs \"also measured\"",
+      "quarantine_text": "Your measurements currently do not count (too many implausible values). The node keeps measuring; ipv64 re-checks daily."
+    },
+    "trust_hint": {
+      "new": "Less than 7 days in – your values count little so far.",
+      "stable": "Counts normally in the analysis.",
+      "trusted": "Counts double and is a reference for neighbours.",
+      "pillar": "Reference target for new nodes, high weight for outages.",
+      "anchor": "Fixed measurement point run by ipv64.",
+      "quarantine": "Keeps measuring but does not count."
+    },
+    "me": {
+      "provider4": "Provider (IPv4)",
+      "provider6": "Provider (IPv6)",
+      "reach": "Reachable",
+      "since": "Member since",
+      "error": "Node not retrievable from ipv64:"
+    },
+    "reach": {
+      "none": "not measured",
+      "icmp": "ICMP",
+      "udp": "UDP 6464"
+    },
+    "settings": {
+      "title": "Measurement",
+      "role": "Role",
+      "outbound": "Outbound only",
+      "outbound_hint": "The node measures others and the anchors but is never planned as a target itself.",
+      "measured": "Also be measured",
+      "measured_hint": "The node answers on UDP {port} (forward the port in your router) or the router answers pings. That way your line is measured as well.",
+      "measured_ip": "Then some other participants see your public IP address (only the nodes that measure you according to the plan; never public).",
+      "budget": "Budget",
+      "budget_hint": "Upper limit per round (every 5 minutes) and day; ipv64 plans below it.",
+      "quiet": "Quiet hours",
+      "quiet_hint": "Hours without measuring in local time, e.g. 23-6; empty = none."
+    },
+    "budget": {
+      "sparsam": "Low (8 targets per round)",
+      "normal": "Normal (15 targets per round)",
+      "grosszuegig": "Generous (20 targets per round)"
+    },
+    "profile": {
+      "title": "Profile on ipv64.net",
+      "wait": "The node is registering with ipv64; afterwards the profile can be edited.",
+      "name": "Display name",
+      "name_hint": "3–32 characters: letters, digits, space, dot, underscore, hyphen. Publicly visible.",
+      "lat": "Latitude",
+      "lon": "Longitude",
+      "location_hint": "The exact location stays with ipv64 (plausibility check); publicly it is shown blurred within about 1 km. Leave empty = no location.",
+      "access": "Access type",
+      "device": "Device"
+    },
+    "access": {
+      "fiber": "Fibre",
+      "dsl": "DSL",
+      "cable": "Cable",
+      "mobile": "LTE/5G",
+      "satellite": "Satellite (e.g. Starlink)",
+      "datacenter": "Data centre",
+      "other": "Other"
+    },
+    "device": {
+      "node64": "Node64",
+      "pi": "Raspberry Pi",
+      "mikrotik": "MikroTik",
+      "linux": "Linux computer",
+      "other": "Other"
+    },
+    "method": {
+      "icmp": "ICMP",
+      "udp": "UDP 6464",
+      "trace": "Traceroute"
+    },
+    "col": {
+      "time": "Time",
+      "target": "Target",
+      "method": "Path",
+      "ms": "ms",
+      "loss": "Loss",
+      "note": "Note",
+      "from": "From",
+      "family": "Family",
+      "count": "Packets",
+      "provider": "Provider",
+      "place": "Place"
+    },
+    "out": {
+      "title": "My pings",
+      "empty": "No measurements yet."
+    },
+    "in": {
+      "title": "Pings to me",
+      "hint_measured": "Probes on UDP 6464 appear instantly; pings to the router (ICMP) come from the results at ipv64, delayed by up to 5 minutes.",
+      "hint_outbound": "Outbound only: the node is not planned as a target.",
+      "live": "Live on UDP {port}",
+      "live_empty": "No probes answered yet.",
+      "reported": "According to ipv64 (last hour)",
+      "empty": "Nobody measured you in the last hour.",
+      "wait": "No data from ipv64 yet.",
+      "error": "ipv64 currently not reachable."
+    },
+    "err": {
+      "no_key": "To participate, first enter the central ipv64 API key (Settings).",
+      "token": "Sonar token could not be created: {error}",
+      "not_ready": "The node is not registered with ipv64 yet – please try again shortly.",
+      "not_joined": "Participate in Sonar64 first.",
+      "api": "ipv64 reports an error: {error}",
+      "budget": "Unknown budget.",
+      "quiet": "Enter quiet hours as \"from-to\" in full hours (e.g. 23-6), or leave empty.",
+      "port": "UDP {port} is already used by another part.",
+      "name": "3–32 characters: letters, digits, space, dot, underscore, hyphen.",
+      "location": "Enter latitude and longitude together or leave both empty.",
+      "lat": "Latitude between -90 and 90.",
+      "lon": "Longitude between -180 and 180.",
+      "access": "Unknown access type.",
+      "device": "Unknown device."
+    },
+    "flash": {
+      "participate_on": "Sonar64: participation switched on – the node is registering with ipv64.",
+      "participate_off": "Sonar64: participation stopped.",
+      "saved": "Sonar64: saved."
     }
   }
 }
