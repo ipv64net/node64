@@ -1,5 +1,17 @@
 # Changes – Honeypot64
 
+## 0.16.0 – 2026-10-28
+
+### Fixed
+- Overview: the numbers (events, source IPs, login attempts for 24 hours and 7 days) and the chart dropped after cleanup
+  once the limit of stored events was reached (issue #7). They now come from counters per minute and per source IP that
+  are only deleted after the retention period, so they stay complete. Existing events are taken over on update.
+
+### Changed
+- Hint on the overview when the limit is reached: rankings, map and event list then only go back to the oldest stored
+  event.
+- The limit is enforced every 10 minutes instead of hourly, so the database does not grow beyond it.
+
 ## 0.15.2 – 2026-10-27
 
 ### Changed

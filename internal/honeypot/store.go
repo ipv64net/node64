@@ -32,12 +32,12 @@ const (
 	DefaultRetention = 7 * 24 * time.Hour
 	DefaultMaxRows   = 200000 // Obergrenze der gespeicherten Ereignisse (aelteste fallen zuerst weg)
 
-	sinkBuffer   = 4096            // Puffer der Sink; voll = verwerfen und zaehlen
-	flushBatch   = 500             // hoechstens so viele Ereignisse je Transaktion; ab dieser Menge sofort schreiben
-	flushEvery   = 2 * time.Second // spaetestens so oft schreiben
-	purgeEvery   = time.Hour
-	purgeChunk   = 5000 // Loeschen in Stuecken, damit der Schreiber nicht lange blockiert
-	retryMax     = 3    // so oft wird ein fehlgeschlagener Stapel wiederholt, dann verworfen (blockiert sonst alles danach)
+	sinkBuffer   = 4096             // Puffer der Sink; voll = verwerfen und zaehlen
+	flushBatch   = 500              // hoechstens so viele Ereignisse je Transaktion; ab dieser Menge sofort schreiben
+	flushEvery   = 2 * time.Second  // spaetestens so oft schreiben
+	purgeEvery   = 10 * time.Minute // Obergrenze eng halten (Speicherplatz), die Zahlen kommen aus hp_minutes/hp_srcs
+	purgeChunk   = 5000             // Loeschen in Stuecken, damit der Schreiber nicht lange blockiert
+	retryMax     = 3                // so oft wird ein fehlgeschlagener Stapel wiederholt, dann verworfen (blockiert sonst alles danach)
 	defaultTop   = 10
 	dbTimeFormat = "2006-01-02T15:04:05.000Z" // feste Breite: Zeichenkettenvergleich = Zeitreihenfolge
 )
@@ -209,6 +209,33 @@ func (s *Store) write(ctx context.Context, batch []Event) error {
 			return err
 		}
 	}
+	// Zaehler je Minute und letzte Sichtung je Quell-IP: bleiben, wenn die Obergrenze einzelne Ereignisse loescht
+	mins := map[string][2]int64{}
+	srcs := map[string]string{}
+	for _, e := range batch {
+		ts := storeTime(e.Time)
+		c := mins[ts[:16]]
+		c[0]++
+		if storeIsLogin(e) {
+			c[1]++
+		}
+		mins[ts[:16]] = c
+		if src := storeSrc(e.Src); src != "" && ts > srcs[src] {
+			srcs[src] = ts
+		}
+	}
+	for k, c := range mins {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO hp_minutes (minute, events, logins) VALUES (?, ?, ?)
+			ON CONFLICT(minute) DO UPDATE SET events = events + excluded.events, logins = logins + excluded.logins`, k, c[0], c[1]); err != nil {
+			return err
+		}
+	}
+	for src, ts := range srcs {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO hp_srcs (src, last) VALUES (?, ?) ON CONFLICT(src) DO UPDATE SET last = MAX(last, excluded.last)`,
+			src, ts); err != nil {
+			return err
+		}
+	}
 	return tx.Commit()
 }
 
@@ -228,6 +255,13 @@ func (s *Store) Purge(ctx context.Context) (int64, error) {
 		if n < purgeChunk {
 			break
 		}
+	}
+	// Zaehler nur nach der Aufbewahrung (klein: eine Zeile je Minute bzw. Quell-IP)
+	if _, err := w.ExecContext(ctx, `DELETE FROM hp_minutes WHERE minute < ?`, cut[:16]); err != nil {
+		return total, err
+	}
+	if _, err := w.ExecContext(ctx, `DELETE FROM hp_srcs WHERE last < ?`, cut); err != nil {
+		return total, err
 	}
 	// Obergrenze: alles bis einschliesslich der (maxRows+1)-neuesten ID weg (IDs steigen mit dem Eingang).
 	var limitID sql.NullInt64
@@ -251,6 +285,50 @@ func (s *Store) Purge(ctx context.Context) (int64, error) {
 	return total, nil
 }
 
+// Totals liefert Ereignisse, Quell-IPs und Login-Versuche ab since aus den Zaehlern (unabhaengig von der Obergrenze).
+// Ereignisse zaehlen ab der angefangenen Minute, Quell-IPs genau.
+func (s *Store) Totals(ctx context.Context, since time.Time) (events, sources, logins int64, err error) {
+	from := storeTime(since)
+	r := s.st.Reader()
+	if err = r.QueryRowContext(ctx, `SELECT COALESCE(SUM(events), 0), COALESCE(SUM(logins), 0) FROM hp_minutes WHERE minute >= ?`, from[:16]).
+		Scan(&events, &logins); err != nil {
+		return
+	}
+	err = r.QueryRowContext(ctx, `SELECT COUNT(*) FROM hp_srcs WHERE last >= ?`, from).Scan(&sources)
+	return
+}
+
+// CountBetween zaehlt die Ereignisse in [from, to) aus den Zaehlern (je Minute).
+func (s *Store) CountBetween(ctx context.Context, from, to time.Time) (int64, error) {
+	var n int64
+	err := s.st.Reader().QueryRowContext(ctx, `SELECT COALESCE(SUM(events), 0) FROM hp_minutes WHERE minute >= ? AND minute < ?`,
+		storeTime(from)[:16], storeTime(to)[:16]).Scan(&n)
+	return n, err
+}
+
+// Capped: Die Obergrenze ist erreicht und hat Ereignisse nach since schon geloescht. oldest ist das aelteste noch
+// gespeicherte Ereignis (Ranglisten und Ereignisliste reichen nur bis dahin, die Zahlen sind vollstaendig).
+func (s *Store) Capped(ctx context.Context, since time.Time) (oldest time.Time, capped bool, err error) {
+	// nur was die Obergrenze geloescht hat, nicht die Aufbewahrung (die raeumt alle purgeEvery auf)
+	if lim := time.Now().Add(-time.Duration(s.retention.Load()) + 2*purgeEvery); since.Before(lim) {
+		since = lim
+	}
+	r := s.st.Reader()
+	var x int64
+	switch err = r.QueryRowContext(ctx, `SELECT id FROM hp_events ORDER BY id DESC LIMIT 1 OFFSET ?`, s.maxRows.Load()-1).Scan(&x); {
+	case err == sql.ErrNoRows:
+		return time.Time{}, false, nil
+	case err != nil:
+		return
+	}
+	var ts string
+	if err = r.QueryRowContext(ctx, `SELECT ts FROM hp_events ORDER BY id LIMIT 1`).Scan(&ts); err != nil {
+		return
+	}
+	oldest = storeParseTime(ts)
+	return oldest, oldest.After(since), nil
+}
+
 // Stats liefert die Auswertung ab since (Null oder aelter als die Aufbewahrung = ganze Aufbewahrung). top begrenzt
 // die Ranglisten (<= 0 = 10); ByService, ByPort und ByKind sind vollstaendig. Der Verlauf ist je Stunde, wenn der
 // Zeitraum hoechstens 48 Stunden umfasst, sonst je Tag (UTC), luckenlos mit Nullwerten.
@@ -263,11 +341,10 @@ func (s *Store) Stats(ctx context.Context, since time.Time, top int) (*Stats, er
 	if top <= 0 {
 		top = defaultTop
 	}
-	r := s.st.Reader()
 	from := storeTime(since)
 	out := &Stats{Since: since}
-	if err := r.QueryRowContext(ctx, `SELECT COUNT(*), COUNT(DISTINCT NULLIF(src, '')), COALESCE(SUM(login), 0) FROM hp_events WHERE ts >= ?`, from).
-		Scan(&out.Events, &out.Sources, &out.Logins); err != nil {
+	var err error
+	if out.Events, out.Sources, out.Logins, err = s.Totals(ctx, since); err != nil {
 		return nil, err
 	}
 	lists := []struct {
@@ -299,7 +376,6 @@ func (s *Store) Stats(ctx context.Context, since time.Time, top int) (*Stats, er
 	for i := range out.TopSources {
 		out.TopSources[i].Country = countryOf(out.TopSources[i].Key)
 	}
-	var err error
 	if out.ByCountry, out.CountryUnknown, err = s.byCountry(ctx, from); err != nil {
 		return nil, err
 	}
@@ -334,14 +410,14 @@ func (s *Store) counts(ctx context.Context, q string, args ...any) ([]Count, err
 }
 
 func (s *Store) timeline(ctx context.Context, since, now time.Time) ([]TimePoint, error) {
-	step, width := time.Hour, 13 // "2006-01-02T15"
+	step, width := time.Hour, 13 // "2006-01-02T15" (Zaehler je Minute, hp_minutes)
 	start := since.Truncate(time.Hour)
 	layout := "2006-01-02T15"
 	if now.Sub(since) > 48*time.Hour {
 		step, width, layout = 24*time.Hour, 10, "2006-01-02"
 		start = time.Date(since.Year(), since.Month(), since.Day(), 0, 0, 0, 0, time.UTC)
 	}
-	rows, err := s.st.Reader().QueryContext(ctx, `SELECT substr(ts, 1, ?) AS b, COUNT(*) FROM hp_events WHERE ts >= ? GROUP BY b`, width, storeTime(since))
+	rows, err := s.st.Reader().QueryContext(ctx, `SELECT substr(minute, 1, ?) AS b, SUM(events) FROM hp_minutes WHERE minute >= ? GROUP BY b`, width, storeTime(since)[:16])
 	if err != nil {
 		return nil, err
 	}

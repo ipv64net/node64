@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -211,6 +212,54 @@ func TestStorePurge(t *testing.T) {
 	}
 	if len(evs) != 4 || evs[0].Detail != "j" || evs[3].Detail != "g" {
 		t.Fatalf("kept %+v", evs)
+	}
+}
+
+// Die Obergrenze loescht einzelne Ereignisse, die Zahlen (Zaehler je Minute, Quell-IPs) bleiben vollstaendig;
+// Capped meldet das aelteste noch gespeicherte Ereignis (Issue #7: Zahlen sanken nach dem Aufraeumen).
+func TestStoreTotalsSurviveCap(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	sink := s.Sink()
+	now := time.Now()
+	for i := 0; i < 10; i++ {
+		sink(Event{Time: now.Add(time.Duration(i-30) * time.Minute), Service: SvcSSH, Port: 22, Kind: KindSSHBrute, Src: ip("192.0.2." + strconv.Itoa(i+1))})
+	}
+	sink(Event{Time: now.Add(-3 * time.Hour), Service: SvcHTTP, Port: 80, Kind: KindHTTPScan, Src: ip("192.0.2.1")})
+	if err := s.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, capped, err := s.Capped(ctx, now.Add(-24*time.Hour)); err != nil || capped {
+		t.Fatalf("not capped yet: %v %v", capped, err)
+	}
+	s.SetLimits(0, 4)
+	if n, err := s.Purge(ctx); err != nil || n != 7 {
+		t.Fatalf("purge n=%d err=%v", n, err)
+	}
+	ev, src, logins, err := s.Totals(ctx, now.Add(-24*time.Hour))
+	if err != nil || ev != 11 || src != 10 || logins != 10 {
+		t.Fatalf("totals after cap: events=%d sources=%d logins=%d err=%v", ev, src, logins, err)
+	}
+	if ev, src, _, _ = s.Totals(ctx, now.Add(-time.Hour)); ev != 10 || src != 10 {
+		t.Fatalf("totals 1h: events=%d sources=%d", ev, src)
+	}
+	if n, _ := s.CountBetween(ctx, now.Add(-4*time.Hour), now.Add(-2*time.Hour)); n != 1 {
+		t.Fatalf("count between: %d", n)
+	}
+	st, err := s.Stats(ctx, now.Add(-24*time.Hour), 10)
+	if err != nil || st.Events != 11 {
+		t.Fatalf("stats events %+v %v", st, err)
+	}
+	var sum int64
+	for _, p := range st.Timeline {
+		sum += p.Events
+	}
+	if sum != 11 {
+		t.Fatalf("timeline sum %d", sum)
+	}
+	oldest, capped, err := s.Capped(ctx, now.Add(-24*time.Hour))
+	if err != nil || !capped || !oldest.After(now.Add(-25*time.Minute)) {
+		t.Fatalf("capped %v %v %v", oldest, capped, err)
 	}
 }
 

@@ -1,5 +1,18 @@
 # Änderungen – Honeypot64
 
+## 0.16.0 – 2026-10-28
+
+### Behoben
+- Übersicht: Die Zahlen (Ereignisse, Quell-IPs, Login-Versuche für 24 Stunden und 7 Tage) und der Verlauf sanken nach
+  dem Aufräumen, sobald die Obergrenze der gespeicherten Ereignisse erreicht war (Issue #7). Sie kommen jetzt aus Zählern
+  je Minute und je Quell-IP, die nur nach der Aufbewahrung gelöscht werden, und bleiben vollständig. Bestehende Ereignisse
+  werden beim Update übernommen.
+
+### Geändert
+- Hinweis in der Übersicht, wenn die Obergrenze erreicht ist: Ranglisten, Karte und Ereignisliste reichen dann nur bis zum
+  ältesten gespeicherten Ereignis zurück.
+- Die Obergrenze wird alle 10 Minuten statt stündlich durchgesetzt, damit die Datenbank nicht darüber hinauswächst.
+
 ## 0.15.2 – 2026-10-27
 
 ### Geändert

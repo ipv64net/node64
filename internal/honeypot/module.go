@@ -38,7 +38,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.15.2"
+	version = "0.16.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -914,6 +914,11 @@ func (m *Module) ClearEvents(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	n, _ := res.RowsAffected()
+	for _, q := range []string{`DELETE FROM hp_minutes`, `DELETE FROM hp_srcs`} {
+		if _, err := m.core.Writer().ExecContext(ctx, q); err != nil {
+			return n, err
+		}
+	}
 	return n, nil
 }
 
@@ -1081,16 +1086,14 @@ func (m *Module) summary(ctx context.Context, since time.Time) (summaryCounts, e
 
 func storeSummary(ctx context.Context, st *Store, since time.Time) (summaryCounts, error) {
 	var s summaryCounts
-	err := st.st.Reader().QueryRowContext(ctx, `SELECT COUNT(*), COUNT(DISTINCT NULLIF(src, '')), COALESCE(SUM(login), 0) FROM hp_events WHERE ts >= ?`,
-		storeTime(since)).Scan(&s.Events, &s.Sources, &s.Logins)
+	var err error
+	s.Events, s.Sources, s.Logins, err = st.Totals(ctx, since)
 	return s, err
 }
 
 // storeCountBetween zaehlt die Ereignisse in [from, to) (Trend der Dashboard-Karte).
 func storeCountBetween(ctx context.Context, st *Store, from, to time.Time) (int64, error) {
-	var n int64
-	err := st.st.Reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM hp_events WHERE ts >= ? AND ts < ?`, storeTime(from), storeTime(to)).Scan(&n)
-	return n, err
+	return st.CountBetween(ctx, from, to)
 }
 
 // storeTopService liefert den Dienst mit den meisten Ereignissen ab from ("" = keine).

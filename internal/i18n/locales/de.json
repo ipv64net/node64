@@ -3902,6 +3902,7 @@
       "sources_7d": "Quell-IPs (7 Tage)",
       "logins_7d": "Login-Versuche (7 Tage)"
     },
+    "capped": "Obergrenze von {max} gespeicherten Ereignissen erreicht: Ranglisten, Karte und Ereignisliste reichen nur bis {time} zurück. Die Zahlen oben und der Verlauf sind vollständig. Die Grenze lässt sich unter Einstellungen erhöhen, das braucht mehr Speicherplatz.",
     "services": {
       "title": "Fallen-Dienste",
       "service": "Dienst",

@@ -89,7 +89,9 @@ type overviewData struct {
 	Services []ServiceStatus
 	Warnings []uiWarning
 	Counters CounterValues
-	Range    string // 24h oder 7d
+	Range    string    // 24h oder 7d
+	Capped   time.Time // Obergrenze erreicht: aeltestes gespeichertes Ereignis (Null = alles da)
+	CapMax   int64
 	Day      summaryCounts
 	Week     summaryCounts
 	Bars     []uiBar
@@ -178,6 +180,9 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 		st, err = m.st.Stats(ctx, now.Add(-span), 10)
 	}
 	if err == nil {
+		if oldest, capped, cerr := m.st.Capped(ctx, now.Add(-span)); cerr == nil && capped {
+			d.Capped, d.CapMax = oldest, m.st.maxRows.Load()
+		}
 		d.Bars, d.BarsMax = m.bars(r, st.Timeline, d.Range == "7d")
 		lang := m.lang(r)
 		d.Ranks = ranks(st, lang)
