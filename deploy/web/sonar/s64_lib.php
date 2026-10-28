@@ -218,26 +218,37 @@ function s64_median(array $v): ?float {
 	return $n % 2 ? (float)$v[$h] : ((float)$v[$h - 1] + (float)$v[$h]) / 2;
 }
 
+/** JSON-Objekte aus dem Datei-Cache: nicht leere als Array, leere bleiben stdClass (damit {} nicht zu [] wird). */
+function s64_cache_arr($v) {
+	if($v instanceof stdClass) { $v = (array)$v; if($v === array()) { return new stdClass(); } }
+	return is_array($v) ? array_map('s64_cache_arr', $v) : $v;
+}
+
 /**
  * Kleiner Zwischenspeicher fuer teure oeffentliche Antworten (APCu, sonst Datei im Temp-Ordner mit Sperre, damit
- * gleichzeitige Abrufe nur einmal rechnen). $fn liefert einen JSON-faehigen Wert.
+ * gleichzeitige Abrufe nur einmal rechnen). $fn liefert einen JSON-faehigen Wert. APCu: waehrend einer rechnet,
+ * bekommen die anderen den abgelaufenen Wert (bis 5 x ttl). Gehoert der Temp-Ordner nicht uns, wird nicht gespeichert.
  */
 function s64_cache(string $key, int $ttl, callable $fn) {
 	$k = 'ipv64_s64_' . sha1($key);
 	if(function_exists('apcu_enabled') AND apcu_enabled()) {
-		$v = apcu_fetch($k, $hit);
-		if($hit) { return $v; }
+		$e = apcu_fetch($k);
+		if(is_array($e) AND $e['t'] >= time() - $ttl) { return $e['v']; }
+		if(!apcu_add("$k.lock", 1, 30) AND is_array($e)) { return $e['v']; }
 		$v = $fn();
-		apcu_store($k, $v, $ttl);
+		apcu_store($k, array('t' => time(), 'v' => $v), 5 * $ttl);
+		apcu_delete("$k.lock");
 		return $v;
 	}
 	$dir = sys_get_temp_dir() . '/ipv64_s64_cache';
 	if(!is_dir($dir)) { @mkdir($dir, 0700, true); }
+	clearstatcache(true, $dir);
+	if(!is_dir($dir) OR (fileperms($dir) & 0022) !== 0 OR (function_exists('posix_geteuid') AND fileowner($dir) !== posix_geteuid())) { return $fn(); }
 	$f = "$dir/$k.json";
 	$read = function() use ($f, $ttl) {
 		if(!is_file($f) OR filemtime($f) < time() - $ttl) { return array(false, null); }
-		$d = json_decode((string)@file_get_contents($f), true);
-		return (is_array($d) && array_key_exists('v', $d)) ? array(true, $d['v']) : array(false, null);
+		$d = json_decode((string)@file_get_contents($f), false);
+		return ($d instanceof stdClass && property_exists($d, 'v')) ? array(true, s64_cache_arr($d->v)) : array(false, null);
 	};
 	[$hit, $v] = $read();
 	if($hit) { return $v; }

@@ -328,6 +328,8 @@ foreach(array(
 	'fremde node_id' => array(report($B, 1, $good), 422),
 	'seq 0' => array(report($A, 0, $good), 422),
 	'seq als Text' => array(report($A, 1, $good, array('seq' => '1')), 422),
+	'seq zu weit voraus' => array(report($A, (time() + 2 * 86400) * 1000, $good), 422),
+	'Zone +99:99' => array(report($A, 1, array(res($R0, $B, array('round' => gmdate('Y-m-d\TH:i:s', $R0) . '+99:99')))), 422),
 	'sent in der Zukunft' => array(report($A, 1, $good, array('sent' => iso(time() + 900))), 422),
 	'fam 5' => array(report($A, 1, array(res($R0, $B, array('fam' => 5)))), 422),
 	'method http' => array(report($A, 1, array(res($R0, $B, array('method' => 'http')))), 422),
@@ -365,6 +367,7 @@ $items = array(
 	res($R2 + 300, $B),                                                                                  // not_in_plan (Runde nicht im Plan, auch nicht +-1)
 	res($R0, $B, array('method' => 'udp')),                                                              // not_in_plan (Methode)
 	res($R0, $A),                                                                                        // not_in_plan (sich selbst)
+	res($R0 + 7, 'a_nbg', array('fam' => 6, 'at' => iso($R0 + 47))),                                     // not_in_plan (Anker, aber nicht auf dem 5-min-Raster)
 	res($R0, $B, array('at' => iso($R0 + 50))),                                                          // too_many (zweimal B in R0)
 	res($R1, $C, array('method' => 'udp', 'sent' => 5, 'recv' => 5, 'min' => 8.0, 'avg' => 9.0, 'max' => 10.0, 'jitter' => 0.5, 'at' => iso($R1 + 420))), // bad_time
 	res($R0, $C, array('fam' => 4, 'method' => 'icmp', 'sent' => 3, 'recv' => 4)),                       // bad_values (recv > sent)
@@ -372,13 +375,15 @@ $items = array(
 	res($R0, 'a_nbg', array('sent' => 0, 'recv' => 0, 'min' => 0, 'avg' => 0, 'max' => 0, 'jitter' => 0, 'err' => 'budget')), // not_measured
 );
 $rep = report($A, 1, $items, array('inbound' => array(array('from' => s64_short_id($B), 'fam' => 4, 'at' => iso(time() - 60), 'count' => 3),
+	array('from' => s64_short_id($B), 'fam' => 4, 'at' => iso(time() - 60), 'count' => 2),   // gleiche Runde: zusammengefasst
+	array('from' => 'deadbee0', 'fam' => 4, 'at' => iso(time() - 60), 'count' => 9),         // kein Knoten: verworfen
 	array('from' => 'deadbeef', 'fam' => 6, 'at' => iso(time() - 30 * 86400), 'count' => 2))));
 $r = post_report($rep, $skA, $TA);
 $d = $r['j']['data'] ?? array();
 $rs = (array)($d['reasons'] ?? array());
 check('Meldung 200', $r['code'] === 200, code($r));
 check('accepted 7 (6 Ergebnisse + 1 Trace)', ($d['accepted'] ?? null) === 7, $d);
-check('not_in_plan 4', ($rs['not_in_plan'] ?? 0) === 4, $rs);
+check('not_in_plan 5', ($rs['not_in_plan'] ?? 0) === 5, $rs);
 check('too_many 1', ($rs['too_many'] ?? 0) === 1, $rs);
 check('bad_time 1', ($rs['bad_time'] ?? 0) === 1, $rs);
 check('bad_values 1', ($rs['bad_values'] ?? 0) === 1, $rs);
@@ -386,7 +391,7 @@ check('too_smooth 1 (12. glatte Meldung)', ($rs['too_smooth'] ?? 0) === 1, $rs);
 check('not_measured 1', ($rs['not_measured'] ?? 0) === 1, $rs);
 check('rejected = Summe der Gruende', ($d['rejected'] ?? -1) === array_sum($rs), $d);
 $nA = one("SELECT * FROM sonar_nodes WHERE node_id = ?", array($A));
-check('seq, last_report, plaus_ok/bad', (int)$nA['last_seq'] === 1 AND $nA['last_report'] !== null AND (int)$nA['plaus_ok'] === 7 AND (int)$nA['plaus_bad'] === 8, $nA);
+check('seq, last_report, plaus_ok/bad', (int)$nA['last_seq'] === 1 AND $nA['last_report'] !== null AND (int)$nA['plaus_ok'] === 7 AND (int)$nA['plaus_bad'] === 9, $nA);
 $hl = json_decode((string)$nA['health'], true);
 check('health gespeichert, version uebernommen', ($hl['sent_today'] ?? 0) === 12 AND $hl['responder'] === true AND $nA['version'] === '0.1.0' AND $nA['mode'] === 'headless', $nA);
 check('ungueltige mit Grund gespeichert (bad_time, too_smooth)', (int)one("SELECT count(*) c FROM sonar_results WHERE src = ? AND valid = 0 AND reason IN ('bad_time', 'too_smooth')", array($A))['c'] === 2);
@@ -397,7 +402,7 @@ $tr = one("SELECT * FROM sonar_traces WHERE src = ?", array($A));
 $hops = json_decode((string)($tr['hops'] ?? '[]'), true);
 check('Trace gespeichert, Heimnetz-Hop ohne Adresse', $tr AND count($hops) === 4 AND !isset($hops[0]['addr']) AND $hops[1]['addr'] === '62.155.1.1' AND !isset($hops[2]['addr']), $hops);
 $ib = all("SELECT * FROM sonar_inbound WHERE node_id = ?", array($A));
-check('inbound gespeichert (zu alte verworfen)', count($ib) === 1 AND $ib[0]['from_short'] === s64_short_id($B) AND (int)$ib[0]['count'] === 3, $ib);
+check('inbound gespeichert (zusammengefasst, unbekannte und zu alte verworfen)', count($ib) === 1 AND $ib[0]['from_short'] === s64_short_id($B) AND (int)$ib[0]['count'] === 5, $ib);
 
 $r = post_report(report($A, 2, array(res($R1, $C, array('method' => 'udp', 'sent' => 5, 'recv' => 5, 'min' => 8.0, 'avg' => 9.0, 'max' => 10.0, 'jitter' => 0.5)))), $skA, $TA);
 check('zweite Meldung in 60 s 429', $r['code'] === 429 AND (int)($r['h']['retry-after'] ?? 0) > 0 AND (int)$r['h']['retry-after'] <= 60, code($r));
@@ -408,8 +413,8 @@ $r = post_report(report($A, 5, array_slice($items, 0, 2)), $skA, $TA);
 check('erneut gesendete Ergebnisse: duplicate', $r['code'] === 200 AND ($r['j']['data']['accepted'] ?? -1) === 0 AND (($r['j']['data']['reasons']['duplicate'] ?? 0) === 2), code($r));
 check('keine doppelten Zeilen', (int)one("SELECT count(*) c FROM sonar_results WHERE src = ? AND dst = ? AND `round` = ? AND fam = 4 AND method = 'icmp'", array($A, $B, gmdate('Y-m-d H:i:s', $R0)))['c'] === 1);
 
-// below_light und sofortige Abstufung: B (Muenchen) meldet A (Hamburg, 612 km, >= 6,1 ms) mit 1 ms
-exec_sql("UPDATE sonar_nodes set trust = 'trusted' WHERE node_id = ?", array($B));
+// below_light und sofortige Abstufung: B (Muenchen) meldet A (Hamburg, 612 km, >= 6,1 ms) mit 1 ms; A und C vertraut
+exec_sql("UPDATE sonar_nodes set trust = 'trusted' WHERE node_id IN (?, ?, ?)", array($B, $A, $C));
 $planB['rounds'][] = array('start' => iso($R1), 'targets' => array(array('id' => $A, 'addr' => IP_A, 'fam' => 4, 'method' => 'icmp', 'count' => 3),
 	array('id' => $C, 'addr' => '8.8.8.8', 'fam' => 4, 'method' => 'icmp', 'count' => 3), array('id' => 'a_fsn', 'addr' => IP_F, 'fam' => 4, 'method' => 'icmp', 'count' => 3)));
 exec_sql("UPDATE sonar_plans set body = ?, etag = 'etagb00000000002' WHERE node_id = ?", array(json_encode($planB), $B));
@@ -423,6 +428,16 @@ check('sofortige Abstufung trusted -> stable', $nB['trust'] === 'stable' AND (in
 $tl = one("SELECT * FROM sonar_trust_log WHERE node_id = ?", array($B));
 check('trust_log Eintrag', $tl AND $tl['old'] === 'trusted' AND $tl['new'] === 'stable' AND str_starts_with($tl['reason'], 'plaus_report'), $tl);
 check('below_light gespeichert valid=0', (int)one("SELECT count(*) c FROM sonar_results WHERE src = ? AND reason = 'below_light'", array($B))['c'] === 3);
+// Ziele mit unsicherem Standort (new): below_light zaehlt nicht gegen B (nur das gegen den Anker), keine Abstufung
+exec_sql("UPDATE sonar_nodes set trust = 'new' WHERE node_id IN (?, ?)", array($A, $C));
+exec_sql("UPDATE sonar_nodes set trust = 'trusted' WHERE node_id = ?", array($B));
+back_report($B);
+$fast2 = array_merge($fast, array('at' => iso($R2 + 40)));
+$r = post_report(report($B, 2, array(res($R2, $A, $fast2), res($R2, $C, $fast2), res($R2, 'a_fsn', $fast2))), $skB, $TB, IP_B);
+$nB = one("SELECT trust, plaus_bad FROM sonar_nodes WHERE node_id = ?", array($B));
+check('below_light gegen neue Ziele: keine Abstufung, plaus_bad nur +1 (Anker)', $r['code'] === 200 AND (($r['j']['data']['reasons']['below_light'] ?? 0) === 3)
+	AND $nB['trust'] === 'trusted' AND (int)$nB['plaus_bad'] === 4, array(code($r), $nB));
+exec_sql("UPDATE sonar_nodes set trust = 'stable' WHERE node_id = ?", array($B));
 // Anker meldet: Anker-Ziele ohne Plan nur icmp/udp, Trace nicht
 $r = post_report(report('a_fsn', 1, array(res($R0, 'a_nbg', array('fam' => 6, 'min' => 4.0, 'avg' => 4.5, 'max' => 5.0, 'jitter' => 0.3)),
 	res($R0, 'a_nbg', array('method' => 'trace', 'hops' => array())))), $skF, $TF, IP_F);
@@ -439,6 +454,8 @@ $r = req('GET', '/sonar/inbound?since=' . urlencode(iso(time() - 5 * 86400)), nu
 check('since > 24 h wird begrenzt', $r['code'] === 200 AND count($r['j']['data']) === 1, code($r));
 $r = req('GET', '/sonar/inbound?since=gestern', null, array(), $TA);
 check('since ungueltig 400', $r['code'] === 400, code($r));
+$r = req('GET', '/sonar/inbound?since=' . urlencode(gmdate('Y-m-d\TH:i:s') . '+99:99'), null, array(), $TA);
+check('since mit Zone +99:99 400', $r['code'] === 400, code($r));
 $r = req('GET', '/sonar/inbound?since=' . urlencode(iso(time() - 86400 + 60)), null, array(), $TB, IP_B);
 check('B: 13 Pings von A (too_smooth zaehlt nicht)', $r['code'] === 200 AND count($r['j']['data']) === 13 AND array_unique(array_column($r['j']['data'], 'from')) === array($A), code($r));
 
@@ -471,7 +488,9 @@ check('map Link A-B (beide Richtungen zusammen)', isset($lk[$kAB]) AND $lk[$kAB]
 check('map ohne Anker-Links', array_filter($mp['links'] ?? array(), fn($x) => str_starts_with($x['a'], 'a_') || str_starts_with($x['b'], 'a_')) === array());
 check('map offene Stoerung', count($mp['outages'] ?? array()) === 1 AND $mp['outages'][0]['key'] === '3320', $mp['outages'] ?? null);
 exec_sql("UPDATE sonar_nodes set last_seen = ? WHERE node_id = ?", array(s64_dt(time() - 3600), $C));
-check('map aus dem Cache (60 s)', isset(array_column(req('GET', '/sonar/public/map')['j']['data']['nodes'], null, 'id')[$C]));
+$r = req('GET', '/sonar/public/map');
+check('map aus dem Cache (60 s)', isset(array_column($r['j']['data']['nodes'], null, 'id')[$C]));
+check('map aus dem Cache: leeres anchor_ms bleibt {}', str_contains($r['raw'], '"anchor_ms":{}') AND !str_contains($r['raw'], '"anchor_ms":[]'), substr($r['raw'], 0, 600));
 clear_cache();
 check('map ohne offline-Knoten C', !isset(array_column(req('GET', '/sonar/public/map')['j']['data']['nodes'], null, 'id')[$C]));
 
@@ -532,6 +551,15 @@ $r = req('DELETE', '/sonar/tokens/' . $TA_ID, null, array(), K1);
 check('Token A loeschen 204', $r['code'] === 204, code($r));
 $nA = one("SELECT * FROM sonar_nodes WHERE node_id = ?", array($A));
 check('Knoten deaktiviert, IP und Standort geloescht', (int)$nA['active'] === 0 AND $nA['ip4'] === null AND $nA['lat'] === null AND $nA['pub_lat'] === null, $nA);
+check('Name und Slug frei', $nA['name'] === '~' . $A AND $nA['slug'] === '~' . $A, $nA);
+$r = jreq('PUT', '/sonar/me', array('name' => 'Hamburg Glasfaser'), $TB, IP_B);
+check('frei gewordener Name wieder vergeben', $r['code'] === 200 AND $r['j']['data']['slug'] === 'hamburg-glasfaser', code($r));
+for($i = 0, $r = null; $i < 15; $i++) {
+	$r = jreq('POST', '/sonar/tokens', array('name' => "kreis$i"), K1);
+	if($r['code'] !== 201) { break; }
+	req('DELETE', '/sonar/tokens/' . $r['j']['data']['id'], null, array(), K1);
+}
+check('Anlegen/Loeschen im Kreis: 21. Token in 24 h 429', $r['code'] === 429 AND $i === 10, array($i, code($r)));
 check('Token A danach 401', req('GET', '/sonar/me', null, array(), $TA)['code'] === 401);
 clear_cache();
 check('A nicht mehr oeffentlich', !in_array($A, array_column(req('GET', '/sonar/public/nodes')['j']['data'], 'id'), true));

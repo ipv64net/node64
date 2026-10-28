@@ -20,6 +20,7 @@ require_once __DIR__ . '/sonar/s64_lib.php';
 
 const S64_MAX_BODY    = 262144;  // 256 KiB, auch entpackt
 const S64_MAX_TOKENS  = 10;      // Knoten-Token je Account
+const S64_NEW_TOKENS  = 20;      // neue Knoten-Token je Account in 24 h (Anlegen/Loeschen im Kreis)
 const S64_MAX_RESULTS = 5000;    // Ergebnisse je Meldung (die Body-Grenze greift meist frueher)
 const S64_MAX_INBOUND = 500;
 const S64_MAX_HOPS    = 30;
@@ -67,16 +68,24 @@ function s64_is_list(array $a): bool { return $a === array() || array_keys($a) =
 /** RFC 3339 (wie Go time.Time, bis Nanosekunden) -> Unix-Zeit mit Nachkomma. */
 function s64_time($v, string $field): float {
 	if(!is_string($v) OR strlen($v) > 40 OR !preg_match('/^(\d{4}-\d\d-\d\d)[Tt](\d\d:\d\d:\d\d)(\.\d{1,9})?([Zz]|[+-]\d\d:\d\d)\z/', $v, $m)) { s64_bad($field, "Field '$field' must be an RFC 3339 timestamp."); }
-	$d = DateTime::createFromFormat('!Y-m-d H:i:s', $m[1] . ' ' . $m[2], new DateTimeZone(strtoupper($m[4]) === 'Z' ? 'UTC' : $m[4]));
-	if($d === false OR $d->format('Y-m-d H:i:s') !== $m[1] . ' ' . $m[2]) { s64_bad($field, "Field '$field' is not a valid time."); }
+	$d = s64_parse_dt($m);
+	if($d === null OR $d->format('Y-m-d H:i:s') !== $m[1] . ' ' . $m[2]) { s64_bad($field, "Field '$field' is not a valid time."); }
 	return $d->getTimestamp() + ($m[3] !== '' ? (float)('0' . $m[3]) : 0.0);
 }
 
 /** Zeit aus einem Plan (von ipv64 erzeugt) ohne Abbruch: Unix-Sekunden oder null. */
 function s64_plan_time($v): ?int {
 	if(!is_string($v) OR !preg_match('/^(\d{4}-\d\d-\d\d)[Tt](\d\d:\d\d:\d\d)(\.\d{1,9})?([Zz]|[+-]\d\d:\d\d)\z/', $v, $m)) { return null; }
-	$d = DateTime::createFromFormat('!Y-m-d H:i:s', $m[1] . ' ' . $m[2], new DateTimeZone(strtoupper($m[4]) === 'Z' ? 'UTC' : $m[4]));
-	return $d === false ? null : $d->getTimestamp();
+	$d = s64_parse_dt($m);
+	return $d === null ? null : $d->getTimestamp();
+}
+
+/** Datum/Uhrzeit/Zone aus den Treffern der RFC-3339-Muster; ungueltige Zone (z. B. +99:99) = null statt Ausnahme. */
+function s64_parse_dt(array $m): ?DateTime {
+	if(strtoupper($m[4]) !== 'Z' AND ((int)substr($m[4], 1, 2) > 14 OR (int)substr($m[4], 4, 2) > 59)) { return null; }
+	try { $d = DateTime::createFromFormat('!Y-m-d H:i:s', $m[1] . ' ' . $m[2], new DateTimeZone(strtoupper($m[4]) === 'Z' ? 'UTC' : $m[4])); }
+	catch(Throwable $e) { return null; }
+	return $d === false ? null : $d;
 }
 
 function s64_int($v, string $field, int $min, int $max): int {
@@ -184,10 +193,13 @@ function s64_top_raw(string $s): ?array {
 	return strspn($s, $ws, $i) === $n - $i ? $out : null;
 }
 
-/** IP der Verbindung (normalisiert) oder ''. */
+/** IP der Verbindung (normalisiert, ::ffff:a.b.c.d als IPv4) oder ''. */
 function s64_conn_ip(): string {
 	$ip = client_ip();
-	return (strlen($ip) <= 45 AND filter_var($ip, FILTER_VALIDATE_IP)) ? (string)inet_ntop(inet_pton($ip)) : '';
+	if(strlen($ip) > 45 OR !filter_var($ip, FILTER_VALIDATE_IP)) { return ''; }
+	$bin = inet_pton($ip);
+	if(strlen($bin) === 16 AND substr($bin, 0, 12) === str_repeat("\0", 10) . "\xff\xff") { $bin = substr($bin, 12); }
+	return (string)inet_ntop($bin);
 }
 
 /** Sonar-Token: s64_ bzw. s64a_ + 40 Zeichen [A-Za-z0-9]. */
@@ -340,6 +352,8 @@ route('POST', '/sonar/tokens', function() {
 	if(!preg_match('/^[\p{L}\p{N} ._:@()\/-]{1,64}\z/u', $name)) { fail(422, 'invalid_field', "Field 'name' may contain letters, digits, space and . _ : @ ( ) / -.", array('field' => 'name')); }
 	$n = (int)q1("SELECT count(*) c FROM sonar_tokens WHERE userid = :u AND kind = 'node' AND revoked_at IS NULL", array('u' => uid()))['c'];
 	if($n >= S64_MAX_TOKENS) { fail(403, 'limit_reached', 'At most ' . S64_MAX_TOKENS . ' Sonar tokens per account. Delete one first.', array('limit' => S64_MAX_TOKENS)); }
+	$n = (int)q1("SELECT count(*) c FROM sonar_tokens WHERE userid = :u AND kind = 'node' AND created_at >= :d", array('u' => uid(), 'd' => s64_dt(microtime(true) - 86400)))['c'];
+	if($n >= S64_NEW_TOKENS) { header('Retry-After: 3600'); fail(429, 'rate_limited', 'At most ' . S64_NEW_TOKENS . ' new Sonar tokens per account in 24 hours.', array('limit' => S64_NEW_TOKENS)); }
 	$tok = s64_new_token('s64_');
 	q("INSERT INTO sonar_tokens (userid, kind, name, token_hash, created_at) VALUES (:u, 'node', :n, :h, :t)",
 		array('u' => uid(), 'n' => $name, 'h' => hash('sha256', $tok), 't' => s64_dt()));
@@ -355,14 +369,18 @@ route('GET', '/sonar/tokens', function() {
 		qa("SELECT * FROM sonar_tokens WHERE userid = :u AND revoked_at IS NULL ORDER BY id", array('u' => uid()))));
 });
 
-/** DELETE /sonar/tokens/{id}: Token widerrufen, Knoten deaktivieren (IP und genauer Standort werden geloescht). */
+/**
+ * DELETE /sonar/tokens/{id}: Token widerrufen, Knoten deaktivieren (IP und genauer Standort werden geloescht). Name und
+ * Slug eines Knotens werden frei ("~" + node_id passt auf kein gueltiges Namens- oder Slug-Muster).
+ */
 route('DELETE', '/sonar/tokens/{id}', function($p) {
 	if(!ctype_digit($p['id']) OR strlen($p['id']) > 10) { fail(404, 'not_found', 'Token not found.'); }
 	$t = q1("SELECT * FROM sonar_tokens WHERE id = :i AND userid = :u AND revoked_at IS NULL", array('i' => (int)$p['id'], 'u' => uid()));
 	if($t === null) { fail(404, 'not_found', 'Token not found.'); }
 	q("UPDATE sonar_tokens set revoked_at = :t WHERE id = :i", array('t' => s64_dt(), 'i' => $t['id']));
 	q("UPDATE sonar_nodes set active = 0 WHERE token_id = :i", array('i' => $t['id']));
-	q("UPDATE sonar_nodes set ip4 = NULL, ip6 = NULL, lat = NULL, lon = NULL, pub_lat = NULL, pub_lon = NULL WHERE token_id = :i AND role = 'node'", array('i' => $t['id']));
+	q("UPDATE sonar_nodes set ip4 = NULL, ip6 = NULL, lat = NULL, lon = NULL, pub_lat = NULL, pub_lon = NULL, name = CONCAT('~', node_id), slug = CONCAT('~', node_id)
+		WHERE token_id = :i AND role = 'node'", array('i' => $t['id']));
 	add_log($GLOBALS['pdo'], uid(), "0", "Sonar64", "Sonar64 token " . (int)$t['id'] . " deleted via API v2.");
 	no_content();
 });
@@ -625,6 +643,8 @@ route('POST', '/sonar/results', function() {
 	if(($rep['node_id'] ?? null) !== $n['node_id']) { s64_bad('report.node_id', "Field 'report.node_id' does not belong to this token."); }
 	$seq = $rep['seq'] ?? null;
 	if(!is_int($seq) OR $seq < 1) { s64_bad('report.seq', "Field 'report.seq' must be a positive integer."); }
+	// seq = max(letzte + 1, Unix-ms): weiter als 1 Tag voraus haette den Knoten fuer immer ausgesperrt (409 replay)
+	if($seq > (int)(($now + 86400) * 1000)) { s64_bad('report.seq', "Field 'report.seq' is too far in the future (Unix milliseconds)."); }
 	$sent = s64_time($rep['sent'] ?? null, 'report.sent');
 	if($sent > $now + S64_SKEW OR $sent < $now - S64_BUFFER - 600) { s64_bad('report.sent', "Field 'report.sent' is too far from the current time (check the clock)."); }
 	$res = $rep['results'] ?? array();
@@ -645,7 +665,17 @@ route('POST', '/sonar/results', function() {
 		if($fam !== 4 AND $fam !== 6) { s64_bad("$f.fam", "$f.fam must be 4 or 6."); }
 		$at = s64_time($x['at'] ?? null, "$f.at");
 		$cnt = s64_int($x['count'] ?? null, "$f.count", 0, 1000000);
-		if($cnt > 0 AND $at <= $now + S64_SKEW AND $at >= $now - S64_BUFFER - 600) { $inbound[] = array($n['node_id'], $from, $fam, s64_dt($at), $cnt); }
+		if($cnt > 0 AND $at <= $now + S64_SKEW AND $at >= $now - S64_BUFFER - 600) {
+			$k = $from . '|' . $fam . '|' . intdiv((int)$at, S64_ROUND);
+			$inbound[$k] = array($n['node_id'], $from, $fam, max($at, $inbound[$k][3] ?? 0), ($inbound[$k][4] ?? 0) + $cnt);
+		}
+	}
+	// nur Absender, die es gibt (Kurz-ID eines aktiven Knotens); je Absender, Familie und Runde eine Zeile
+	if($inbound !== array()) {
+		$known = array_flip(s64_cache('short_ids', 300, fn() => array_map('s64_short_id', array_column(qa("SELECT node_id FROM sonar_nodes WHERE active = 1"), 'node_id'))));
+		$inbound = array_values(array_filter($inbound, fn($r) => isset($known[$r[1]])));
+		foreach($inbound as &$r) { $r[3] = s64_dt($r[3]); $r[4] = min($r[4], 1000000); }
+		unset($r);
 	}
 	$h = is_array($rep['health'] ?? null) ? $rep['health'] : array();
 	$hs = fn($k, $re) => (is_string($h[$k] ?? null) AND preg_match($re, $h[$k])) ? $h[$k] : '';
@@ -662,8 +692,8 @@ route('POST', '/sonar/results', function() {
 	$ids = array_values(array_unique(array_map(fn($x) => $x['target'], $items)));
 	$coords = array();
 	foreach(array_chunk($ids, 500) as $chunk) {
-		foreach(qa("SELECT node_id, lat, lon FROM sonar_nodes WHERE node_id IN (" . implode(',', array_fill(0, count($chunk), '?')) . ")", $chunk) as $c) {
-			if($c['lat'] !== null AND $c['lon'] !== null) { $coords[$c['node_id']] = array((float)$c['lat'], (float)$c['lon']); }
+		foreach(qa("SELECT node_id, lat, lon, trust FROM sonar_nodes WHERE node_id IN (" . implode(',', array_fill(0, count($chunk), '?')) . ")", $chunk) as $c) {
+			if($c['lat'] !== null AND $c['lon'] !== null) { $coords[$c['node_id']] = array((float)$c['lat'], (float)$c['lon'], in_array($c['trust'], array('anchor', 'pillar', 'trusted'), true)); }
 		}
 	}
 	$isAnchor = $n['role'] === 'anchor';
@@ -679,7 +709,7 @@ route('POST', '/sonar/results', function() {
 	}
 	usort($items, fn($a, $b) => $a['at'] <=> $b['at']);
 
-	$reasons = array(); $used = array(); $rows = array(); $bad = array(); $traces = array(); $checked = 0;
+	$reasons = array(); $used = array(); $rows = array(); $bad = array(); $traces = array(); $checked = 0; $soft = 0;
 	$why = function(string $r) use (&$reasons) { $reasons[$r] = ($reasons[$r] ?? 0) + 1; };
 	foreach($items as $x) {
 		if($x['sent'] === 0) { $why('not_measured'); continue; } // nicht gemessen (Budget, keine Rechte): kein Fehler
@@ -690,7 +720,7 @@ route('POST', '/sonar/results', function() {
 			foreach(array($R - S64_ROUND, $R + S64_ROUND) as $RR) {
 				if(isset($allowed[$RR . $tail]) AND ($key === null OR ($used[$RR . $tail] ?? 0) < $allowed[$RR . $tail])) { $key = $RR . $tail; }
 			}
-			if(isset($anchors[$x['target']]) AND $x['method'] !== 'trace' AND ($key === null OR ($used[$key] ?? 0) >= $allowed[$key])) { $key = 'A|' . $R . $tail; $allowed[$key] = 1; }
+			if(isset($anchors[$x['target']]) AND $x['method'] !== 'trace' AND $R % S64_ROUND === 0 AND ($key === null OR ($used[$key] ?? 0) >= $allowed[$key])) { $key = 'A|' . $R . $tail; $allowed[$key] = 1; }
 		}
 		if($key === null OR $x['target'] === $n['node_id']) { $why('not_in_plan'); continue; }
 		$used[$key] = ($used[$key] ?? 0) + 1;
@@ -711,7 +741,10 @@ route('POST', '/sonar/results', function() {
 		}
 		if($r !== null) {
 			$why($r);
-			if(in_array($r, S64_SUSPECT, true)) { $bad[] = $r; }
+			// below_light gegen ein Ziel mit unsicherem Standort (new/stable) kann auch am Ziel liegen (falscher Punkt auf der
+			// Karte): dann zaehlt es weder in plaus_bad noch fuer die Abstufung, damit ein Ziel ehrliche Messende nicht abstufen kann
+			if($r === 'below_light' AND !$coords[$x['target']][2]) { $soft++; }
+			elseif(in_array($r, S64_SUSPECT, true)) { $bad[] = $r; }
 			if(!in_array($r, S64_STORE_BAD, true) OR $x['method'] === 'trace') { continue; }
 		}
 		if($x['method'] === 'trace') {
@@ -744,6 +777,7 @@ route('POST', '/sonar/results', function() {
 		$ins('INSERT INTO sonar_inbound (node_id, from_short, fam, at, `count`)', '(?,?,?,?,?)', $inbound);
 		$nbad = 0;
 		foreach(S64_REASONS_BAD as $r) { $nbad += $reasons[$r] ?? 0; }
+		$nbad -= $soft;
 		$set = 'last_seq = :seq, last_report = :t, plaus_ok = plaus_ok + :ok, plaus_bad = plaus_bad + :bad, health = :h';
 		$p = array('seq' => $seq, 't' => s64_dt($now), 'ok' => $accepted, 'bad' => $nbad, 'h' => s64_json($health), 'i' => $n['id']);
 		if($health['version'] !== '') { $set .= ', version = :v'; $p['v'] = $health['version']; }
