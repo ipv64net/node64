@@ -17,6 +17,9 @@ für ipv64.net (`deploy/web`, PHP). Allgemeine Regeln (Sicherheit, Rollout, Uplo
 - Kleine, gezielte Änderungen; vorhandenen Stil übernehmen (deutsche Kommentare ohne Umlaute im Code, Kommentardichte
   wie die Umgebung). Keine Umbauten ohne Auftrag.
 - Jede nutzersichtbare Änderung: Modul-Version erhöhen und beide Changelogs ergänzen.
+- Zusätzlich öffentlicher Changelog in der Repo-Wurzel (`CHANGELOG.md`, `CHANGELOG.en.md`): je nutzersichtbarer
+  Änderung ein knapper Stichpunkt unter „Unveröffentlicht“ / „Unreleased“ (Modul vorne, keine Interna, Issue-Nummer
+  falls vorhanden). Beim Tag die Überschrift auf die Version und das Datum setzen und neu „Unveröffentlicht“ anlegen.
 - `gofmt` muss sauber sein.
 
 ## Prüfen
