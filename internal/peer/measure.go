@@ -2,6 +2,7 @@ package peer
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -29,7 +30,8 @@ const (
 	measPage   = 1000
 	firstSpan  = 24 * time.Hour
 	measPages  = 50
-	startFresh = -1 // ?since=-1: ab den letzten 24 h
+	startFresh = -1          // ?since=-1: ab den letzten 24 h
+	measBytes  = maxBody / 2 // Antwort einer Seite; darueber schnitte der Empfaenger ab (Signatur passte nicht)
 )
 
 type measOut struct {
@@ -68,7 +70,26 @@ func (m *Manager) handleMeasurements(w http.ResponseWriter, r *http.Request, fro
 		return
 	}
 	out.Items, out.Last, out.More = items, last, more
+	fitMeasPage(&out)
 	writeJSON(w, http.StatusOK, out)
+}
+
+// fitMeasPage begrenzt eine Seite auf measBytes (mindestens ein Messpunkt); der letzte enthaltene Messpunkt wird
+// dann zum Stand, der Rest folgt mit der naechsten Seite.
+func fitMeasPage(out *measOut) {
+	items := out.Items
+	out.Items = nil
+	b, _ := json.Marshal(out)
+	out.Items = items
+	size := len(b)
+	for i, it := range items {
+		ib, _ := json.Marshal(it)
+		if i > 0 && size+len(ib)+1 > measBytes {
+			out.Items, out.Last, out.More = items[:i], items[i-1].Seq, true
+			return
+		}
+		size += len(ib) + 1
+	}
 }
 
 // pullData holt Zustaende und neue Messpunkte einer Node.

@@ -112,6 +112,9 @@ var (
 )
 
 func (c *Live) runSession(ctx context.Context, hub string) error {
+	c.mu.Lock()
+	c.revHeld = false // die neue Sitzung liefert ab der gespeicherten Revision
+	c.mu.Unlock()
 	wsURL := strings.Replace(strings.Replace(hub, "https://", "wss://", 1), "http://", "ws://", 1) + "/v1/ws?since=" + strconv.FormatInt(c.getInt(SetRevision), 10)
 	dctx, dcancel := context.WithTimeout(ctx, 30*time.Second)
 	ws, resp, err := websocket.Dial(dctx, wsURL, &websocket.DialOptions{HTTPHeader: http.Header{"Authorization": {"Bearer " + c.token()}, "User-Agent": {"node64/" + c.d.Version}}, CompressionMode: websocket.CompressionDisabled})
@@ -122,7 +125,7 @@ func (c *Live) runSession(ctx context.Context, hub string) error {
 		}
 		return err
 	}
-	ws.SetReadLimit(1 << 20)
+	ws.SetReadLimit(maxReadBytes) // config grosser Accounts
 	sctx, cancel := context.WithCancel(ctx)
 	s := &session{c: c, ws: ws, ctx: sctx, cancel: cancel, hub: hub, waiters: map[int64]chan wire.Msg{}, ready: make(chan struct{})}
 	defer func() {
@@ -244,11 +247,15 @@ func (s *session) handle(m wire.Msg) error {
 		var in struct {
 			Revision int64         `json:"revision"`
 			Changes  []wire.Change `json:"changes"`
+			More     bool          `json:"more"` // grosse Konfiguration in Teilen: weitere folgen
 		}
-		if err := json.Unmarshal(m.Data, &in); err == nil {
+		err := json.Unmarshal(m.Data, &in)
+		if err == nil {
 			c.applyChanges(ctx, in.Changes, in.Revision)
 		}
-		s.markReady()
+		if err != nil || !in.More { // bereit erst mit dem letzten Teil (sonst liefe der Postausgang zu frueh)
+			s.markReady()
+		}
 		s.send(wire.Msg{T: "ack", ID: m.ID})
 	case "revision_gap":
 		c.log.Info("revision gap, full sync")
@@ -541,6 +548,8 @@ func (s *session) uploadMeasurements() {
 		if err != nil || len(batch) == 0 {
 			return
 		}
+		fetched := len(batch)
+		batch = chunks(shrinkMeasurements(batch))[0] // unter der Leselimite des hubs, der Rest in der naechsten Runde
 		m, err := s.request("measurements", map[string]any{"batch": batch})
 		if err != nil {
 			return
@@ -559,7 +568,7 @@ func (s *session) uploadMeasurements() {
 		c.mu.Lock()
 		c.lastSync = time.Now()
 		c.mu.Unlock()
-		if len(batch) < 500 {
+		if fetched < 500 && len(batch) == fetched {
 			return
 		}
 	}
@@ -573,14 +582,16 @@ func (s *session) uploadEvents() {
 		if err != nil || len(batch) == 0 {
 			return
 		}
-		m, err := s.request("events", map[string]any{"batch": batch})
-		if err != nil {
-			return
-		}
-		var a wire.Ack
-		_ = json.Unmarshal(m.Data, &a)
-		if a.Error != "" {
-			return
+		for _, part := range chunks(shrinkEvents(batch)) { // unter der Leselimite des hubs
+			m, err := s.request("events", map[string]any{"batch": part})
+			if err != nil {
+				return
+			}
+			var a wire.Ack
+			_ = json.Unmarshal(m.Data, &a)
+			if a.Error != "" {
+				return
+			}
 		}
 		c.setInt(SetEventID, newLast)
 		if len(batch) < 500 {
@@ -594,7 +605,11 @@ func (s *session) sendSnapshot() {
 	if len(items) == 0 {
 		return
 	}
-	_, _ = s.request("states", map[string]any{"items": items})
+	for _, part := range chunks(shrinkStates(items)) {
+		if _, err := s.request("states", map[string]any{"items": part}); err != nil {
+			return
+		}
+	}
 }
 
 func (s *session) flushStates() {
@@ -610,7 +625,13 @@ func (s *session) flushStates() {
 	}
 	c.states = map[string]wire.State{}
 	c.mu.Unlock()
-	if _, err := s.request("states", map[string]any{"items": items}); err != nil {
+	var err error
+	for _, part := range chunks(shrinkStates(items)) {
+		if _, err = s.request("states", map[string]any{"items": part}); err != nil {
+			break
+		}
+	}
+	if err != nil {
 		// zurueck in die Warteschlange
 		c.mu.Lock()
 		for _, st := range items {

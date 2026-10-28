@@ -182,10 +182,13 @@ func (p *peerConn) do(ctx context.Context, method, path string, body []byte, hdr
 	if err != nil {
 		return 0, nil, nil, err
 	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+	b, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	resp.Body.Close()
 	if err != nil {
 		return 0, nil, nil, err
+	}
+	if len(b) > maxBody { // abgeschnitten: die Signatur passte nicht, das ist aber kein Identitaetswechsel
+		return 0, nil, nil, fmt.Errorf("cluster answer larger than %d bytes", maxBody)
 	}
 	return resp.StatusCode, resp.Header, b, nil
 }
