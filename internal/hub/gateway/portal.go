@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -183,12 +185,46 @@ func (g *Gateway) sendChannelTest(ctx context.Context, ch *notify.Channel, userI
 	sctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
 	err := s.Send(sctx, ch, m)
-	errText := ""
-	if err != nil {
-		errText = err.Error()
+	errText := publicError(ch.Type, err) // auch im Protokoll: das sieht der Nutzer im Portal
+	if err != nil && errText != err.Error() {
+		g.log.Info("channel test failed", "channel", ch.ID, "type", ch.Type, "err", err)
 	}
 	// Zustellprotokoll und last_used/last_error wie beim Dispatcher
 	_ = g.nf.AddDelivery(ctx, notify.Delivery{Time: m.Time, EventID: m.EventID, ChannelID: ch.ID, Channel: ch.Name, Kind: string(m.Kind), OK: err == nil, Error: errText})
 	_ = g.nf.Touch(ctx, ch.ID, errText)
 	return errText, err == nil && ch.Execution == "node", 0
+}
+
+// Kanaltypen, deren Ziel fest ist (ipv64-Bruecke, feste Anbieter-Adresse) oder die der hub gar nicht selbst
+// aufruft: deren Fehlertexte gehen unveraendert an Portal und Node.
+var fixedTarget = map[notify.Type]bool{notify.TypeIPv64Mail: true, notify.TypeIPv64SMS: true, notify.TypeApp: true,
+	notify.TypeBrowser: true, notify.TypeHomeAssistant: true, notify.TypeTelegram: true, notify.TypePushover: true}
+
+var statusRe = regexp.MustCompile(`(?:HTTP|status) (\d{3})`)
+
+// publicError fasst Versandfehler grob zusammen. Bei Kanaelen mit frei waehlbarer Adresse (Webhook, ntfy,
+// Gotify, SMTP, Matrix ...) keine Antworttexte des Ziels weitergeben: sonst liesse sich der hub als
+// Abfragewerkzeug fuer fremde oder interne Adressen nutzen. Der volle Fehler steht nur im hub-Log.
+func publicError(t notify.Type, err error) string {
+	if err == nil {
+		return ""
+	}
+	if fixedTarget[t] {
+		return err.Error()
+	}
+	var dns *net.DNSError
+	var op *net.OpError
+	var ne net.Error
+	switch {
+	case errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout()):
+		return "delivery failed: timeout"
+	case errors.As(err, &dns):
+		return "delivery failed: host not found"
+	case errors.As(err, &op):
+		return "delivery failed: connection failed"
+	}
+	if m := statusRe.FindStringSubmatch(err.Error()); m != nil {
+		return "delivery failed: HTTP " + m[1]
+	}
+	return "delivery failed"
 }

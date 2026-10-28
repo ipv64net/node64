@@ -139,6 +139,8 @@ func run(cfgPath string) error {
 		// Eigener Kontext: beim Stopp-Signal sollen die Nodes erst "bye" bekommen (gw.Stop), nicht sofort EOF
 		gw.SetPortalSecret(portalSecret)
 		gw.SetTrusted(cfg.Limits.TrustedIPs)
+		realIP, _ := cfg.RealIPPrefixes() // in config.Load geprueft
+		gw.SetRealIPFrom(realIP)
 		if err := gw.Start(context.Background()); err != nil {
 			return fmt.Errorf("gateway: %w", err)
 		}
