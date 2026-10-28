@@ -9,7 +9,8 @@
  *   php sonar_trust.php --hours=<1..24> stuendliche Pruefung ueber mehr Stunden (Nachholen nach einer Pause)
  *   php sonar_trust.php --now=<ISO>    Zeitpunkt vorgeben (Tests)
  *
- * Stuendlich (letzte 3 volle Stunden, nur noch gueltige Ergebnisse; mehrfach ausfuehrbar):
+ * Stuendlich (letzte 7 volle Stunden, weil Knoten bis 6 h nachreichen; nur noch gueltige Ergebnisse; mehrfach
+ * ausfuehrbar):
  *  a) Anker-Wahrheit: Knoten->Anker (udp, Median der Stunde) gegen Anker->Knoten. Misst der Anker per udp bis zum
  *     Knoten: Abweichung > max(5 ms, 50 %) -> unplausibel. Misst er nur den Router (icmp): nur "schneller als der eigene
  *     Router" zaehlt (WLAN hinter dem Router ist kein Betrug).
@@ -33,7 +34,9 @@ if(!is_file(__DIR__ . '/../sonar/s64_lib.php')) { fwrite(STDERR, "sonar/s64_lib.
 require_once __DIR__ . '/../sonar/s64_lib.php';
 
 const S64T_TIME_LIMIT = 1500;
-const S64T_HOURS      = 3;        // stuendliche Pruefung: so viele volle Stunden
+const S64T_HOURS      = 7;        // stuendliche Pruefung: so viele volle Stunden (Knoten reichen bis 6 h nach)
+const S64T_IN_SLOT_MAX = 900;     // Proben-Zeilen eines Ankers je Runde, ab denen seine Meldung abgeschnitten sein kann
+const S64T_IN_COVER   = 0.9;      // Median-Anteil gemeldeter Proben, unter dem die Anker-Meldung unvollstaendig ist
 const S64T_MIN_TOTAL  = 20;       // Ergebnisse in 24 h, ab denen die Quote zaehlt
 const S64T_QUARANTINE = 0.30;
 const S64T_DEMOTE     = 0.10;
@@ -152,19 +155,33 @@ if($anchors) {
 			}
 		}
 		// b) beantwortete Proben der Anker (Puffer +-10 min, Abschnitte der Meldungen)
-		$inb = array(); $tot = array();
-		foreach(s64t_rows("SELECT node_id, from_short, fam, SUM(`count`) c FROM sonar_inbound WHERE node_id IN ($in) AND at >= ? AND at < ? GROUP BY node_id, from_short, fam",
+		$inb = array(); $tot = array(); $slot = array();
+		foreach(s64t_rows("SELECT node_id, from_short, fam, at, `count` c FROM sonar_inbound WHERE node_id IN ($in) AND at >= ? AND at < ?",
 			array_merge($anchors, array(s64t_db($h - 600), s64t_db($h + 4200)))) as $r) {
-			$inb[$r['node_id'] . '|' . $r['from_short'] . '|' . (int)$r['fam']] = (int)$r['c'];
+			$k = $r['node_id'] . '|' . $r['from_short'] . '|' . (int)$r['fam'];
+			$inb[$k] = ($inb[$k] ?? 0) + (int)$r['c'];
 			$tot[$r['node_id']] = ($tot[$r['node_id']] ?? 0) + (int)$r['c'];
+			$b = $r['node_id'] . '|' . intdiv((int)s64t_ts($r['at']), 300);
+			$slot[$b] = ($slot[$b] ?? 0) + 1;
 		}
+		// Vollstaendigkeit der Anker-Meldung: der Antworter merkt sich je Abfrage nur ~1.000 Absender, der Kern puffert
+		// begrenzt. Hat ein Anker in einer Runde fast so viele Zeilen oder fehlen bei der Mehrheit der Messenden Proben,
+		// ist seine Meldung unvollstaendig: dann fuer diesen Anker keine Aussage (sonst trifft es ehrliche Knoten).
+		$complete = array_fill_keys(array_keys($tot), true);
+		foreach($slot as $b => $c) { if($c >= S64T_IN_SLOT_MAX) { unset($complete[explode('|', $b)[0]]); } }
+		$cover = array();
 		foreach($recv as $k => $n) {
 			[$s, $a, $f] = explode('|', $k);
-			if($n < 10 OR empty($tot[$a])) { continue; } // Anker meldet keine Proben: keine Aussage
-			$c = $inb[$a . '|' . substr(hash('sha256', $s), 0, 8) . '|' . $f] ?? 0;
+			if($n >= 10) { $cover[$a][] = min(1.0, ($inb[$a . '|' . s64_short_id($s) . '|' . $f] ?? 0) / $n); }
+		}
+		foreach($cover as $a => $v) { if(count($v) >= 5 AND s64t_median($v) < S64T_IN_COVER) { unset($complete[$a]); } }
+		foreach($recv as $k => $n) {
+			[$s, $a, $f] = explode('|', $k);
+			if($n < 10 OR empty($complete[$a])) { continue; } // Anker meldet keine oder unvollstaendige Proben: keine Aussage
+			$c = $inb[$a . '|' . s64_short_id($s) . '|' . $f] ?? 0;
 			if($c < 0.5 * $n) { s64t_flag($s, array('dst' => $a, 'fam' => (int)$f, 'method' => 'udp'), $h, $h + 3600, 'inbound'); }
 		}
-		unset($down, $up, $ctl, $recv, $inb, $tot);
+		unset($down, $up, $ctl, $recv, $inb, $tot, $slot, $complete, $cover);
 	}
 }
 
@@ -180,14 +197,25 @@ while($r = $st->fetch(PDO::FETCH_ASSOC)) {
 	$pairs[$k][0][] = (float)$r['pa'];
 	$pairs[$k][1][] = (float)$r['pb'];
 }
+// Wird ein Knoten nur am Router gemessen (icmp), fehlt in B->A sein WLAN/LAN, das in seinen eigenen Messungen A->B
+// steckt: "A->B langsamer" ist dann kein Befund (wie bei der Anker-Wahrheit), nur das Unerklaerliche zaehlt.
+$udpReach = array(); // node|fam => true
+foreach($pdo->query("SELECT node_id, reach4, reach6 FROM sonar_nodes WHERE active = 1 AND role = 'node' AND (reach4 = 'udp' OR reach6 = 'udp')") as $r) {
+	if($r['reach4'] === 'udp') { $udpReach[$r['node_id'] . '|4'] = true; }
+	if($r['reach6'] === 'udp') { $udpReach[$r['node_id'] . '|6'] = true; }
+}
 $partners = array(); $asym = array(); // node => Partner => true
 foreach($pairs as $k => $v) {
 	if(count($v[0]) < 2) { continue; }
-	[$a, $b] = explode('|', $k);
+	[$a, $b, $f] = explode('|', $k);
 	$ma = s64t_median($v[0]); $mb = s64t_median($v[1]);
 	$partners[$a][$b] = $partners[$b][$a] = true;
-	if(abs($ma - $mb) > max(10.0, min($ma, $mb))) { $asym[$a][$b] = $asym[$b][$a] = true; }
+	$d = $ma - $mb;
+	if(abs($d) <= max(10.0, min($ma, $mb))) { continue; }
+	if(($d > 0 AND !isset($udpReach["$a|$f"])) OR ($d < 0 AND !isset($udpReach["$b|$f"]))) { continue; } // eigenes WLAN des nur per icmp Gemessenen
+	$asym[$a][$b] = $asym[$b][$a] = true;
 }
+unset($udpReach);
 foreach($asym as $x => $ps) {
 	if(count($ps) >= 3 AND count($partners[$x]) >= 4 AND count($ps) >= 0.5 * count($partners[$x])) {
 		s64t_flag($x, array('dst' => array_keys($ps)), $top - S64T_DAY, $top, 'asym');

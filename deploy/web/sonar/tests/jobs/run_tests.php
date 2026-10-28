@@ -64,7 +64,7 @@ const QOLD = 'nt0000000016';   // Quarantaene seit 4 Tagen, jetzt sauber
 const QNEW = 'nt0000000017';   // Quarantaene seit 1 Tag
 const FLAKY = 'nt0000000018';  // Verfuegbarkeit ~50 %
 const OFFL = 'nt0000000019';   // seit 2 h ohne Meldung
-const WIFI = 'nt0000000003';   // WLAN hinter dem Router (+6 ms eigene Messungen), Weg icmp
+const WIFI = 'nt0000000003';   // WLAN hinter dem Router (+25 ms eigene Messungen), Weg icmp
 const LTE = 'nt0000000041';
 const STAR = 'nt0000000052';
 
@@ -105,11 +105,11 @@ q("INSERT INTO sonar_trust_log (node_id, at, old, new, reason) VALUES (?, ?, 'st
 	array(QOLD, dt(T - 4 * DAY), QNEW, dt(T - DAY)));
 check('62 Knoten angelegt', (int)one("SELECT COUNT(*) FROM sonar_nodes") === 62);
 
-/** Modell-RTT (ms) von $s nach $d per $method; WLAN-Knoten misst selbst +6 ms. */
+/** Modell-RTT (ms) von $s nach $d per $method; WLAN-Knoten misst selbst +25 ms (nur am Router gemessen: Hin/Zurueck ungleich). */
 function rtt(string $s, string $d, string $method, int $round): float {
 	global $N;
 	$km = s64_distance_km($N[$s]['lat'], $N[$s]['lon'], $N[$d]['lat'], $N[$d]['lon']);
-	$v = $km / 100 * 1.5 + $N[$s]['acc'] + $N[$d]['acc'] + 2 + ($s === WIFI ? 6 : 0);
+	$v = $km / 100 * 1.5 + $N[$s]['acc'] + $N[$d]['acc'] + 2 + ($s === WIFI ? 25 : 0);
 	return round($v * (1 + ((crc32("$s|$d|$round") % 81) - 40) / 1000), 3);
 }
 $ids = array_values(array_filter(array_keys($N), function($x) use ($N) { return !$N[$x]['anchor']; }));
@@ -179,7 +179,7 @@ foreach(all("SELECT * FROM sonar_nodes") as $r) { $nodeRows[$r['node_id']] = $r;
 /** Pruefung aller Plaene: Grenzen, Ziele, Format. */
 function check_plans(array $P, string $tag): void {
 	global $nodeRows, $A;
-	$errs = array(); $cnt = array(); $anchorsIn = 0; $nodesCnt = 0;
+	$errs = array(); $cnt = array(); $cntAd = array(); $anchorsIn = 0; $nodesCnt = 0;
 	foreach($P as $m => $pl) {
 		$p = $pl['plan'];
 		if(($p['v'] ?? 0) !== 1 OR ($p['node_id'] ?? '') !== $m) { $errs[] = "$m Kopf"; continue; }
@@ -193,7 +193,7 @@ function check_plans(array $P, string $tag): void {
 			$s = strtotime($rd['start']);
 			if($s % 300 !== 0) { $errs[] = "$m Raster"; }
 			if(count($rd['targets']) > $budget) { $errs[] = "$m Budget " . count($rd['targets']) . ">$budget"; }
-			$hasA = array();
+			$hasA = array(); $addrIn = array();
 			$traces = 0;
 			foreach($rd['targets'] as $t) {
 				$d = $nodeRows[$t['id']] ?? null;
@@ -207,7 +207,9 @@ function check_plans(array $P, string $tag): void {
 				if((int)$d['measured'] !== 1) { $errs[] = "$m misst Opt-out {$t['id']}"; }
 				if(!$isA AND $d['trust'] === 'quarantine') { $errs[] = "$m misst Quarantaene {$t['id']}"; }
 				if(!$isA AND $t['method'] !== 'trace' AND $t['method'] !== $d['reach' . $t['fam']]) { $errs[] = "$m Methode {$t['id']} {$t['method']}"; }
-				if(!$isA) { $cnt[$s][$t['id']][$m] = true; $nodesCnt++; }
+				if(!$isA) { $cnt[$s][$t['id']][$m] = true; $cntAd[$s][$t['addr']][$m] = true; $nodesCnt++; }
+				if(!$isA AND isset($addrIn[$t['addr']]) AND $addrIn[$t['addr']] !== $t['id']) { $errs[] = "$m Adresse doppelt {$t['addr']}"; }
+				$addrIn[$t['addr']] = $t['id'];
 				if(str_contains((string)$nodeRows[$m]['health'], '"icmp_denied":true') AND $t['method'] !== 'udp') { $errs[] = "$m icmp trotz Verbot"; }
 			}
 			if($traces > 1) { $errs[] = "$m mehrere Traces in einer Runde"; }
@@ -218,6 +220,9 @@ function check_plans(array $P, string $tag): void {
 	foreach($cnt as $s => $byT) { foreach($byT as $t => $ms) { $maxPer = max($maxPer, count($ms)); } }
 	check("$tag: Grenzen, Adressen, keine privaten/Opt-out/Quarantaene-Ziele", $errs === array(), array_slice(array_unique($errs), 0, 8));
 	check("$tag: je Ziel und Runde hoechstens 10 Messende (max $maxPer)", $maxPer <= 10 AND $maxPer > 0);
+	$maxAd = 0;
+	foreach($cntAd as $s => $byA) { foreach($byA as $ad => $ms) { $maxAd = max($maxAd, count($ms)); } }
+	check("$tag: je Adresse und Runde hoechstens 10 Messende (max $maxAd)", $maxAd <= 10 AND $maxAd > 0);
 	check("$tag: Knoten messen beide Anker", $anchorsIn > 0);
 	check("$tag: Knoten messen Knoten ($nodesCnt)", $nodesCnt > 0);
 }
@@ -248,9 +253,12 @@ check('laufende Runde bleibt, eine neue angehaengt', $r2 === array_map('iso', ra
 // Opt-out wirkt sofort, auch in schon geplanten Runden
 q("UPDATE sonar_nodes SET measured = 0 WHERE node_id = 'nt0000000002'");
 q("UPDATE sonar_nodes SET last_seen = ? WHERE node_id <> ?", array(dt(T + 570), OFFL));
+q("UPDATE sonar_nodes SET last_seen = ? WHERE node_id = 'nt0000000005'", array(dt(T + 600 - 1000))); // seit > 15 min still
 job('plan', '--now=' . iso(T + 600));
+$st5 = all("SELECT issued, expires FROM sonar_plans WHERE node_id = 'nt0000000005'")[0] ?? null;
+check('nicht neu geplanter Plan (Knoten offline) wird nicht mehr ausgeliefert', $st5 !== null AND strtotime($st5['expires'] . ' UTC') <= T + 600, $st5);
 $hit = 0;
-foreach(plans() as $m => $pl) { foreach($pl['plan']['rounds'] as $rd) { foreach($rd['targets'] as $t) { if($t['id'] === 'nt0000000002') { $hit++; } } } }
+foreach(plans() as $m => $pl) { if(strtotime($pl['expires'] . ' UTC') <= T + 600) { continue; } foreach($pl['plan']['rounds'] as $rd) { foreach($rd['targets'] as $t) { if($t['id'] === 'nt0000000002') { $hit++; } } } }
 check('Opt-out: Knoten in keinem Plan mehr', $hit === 0, $hit);
 q("UPDATE sonar_nodes SET measured = 1 WHERE node_id = 'nt0000000002'");
 
@@ -305,6 +313,11 @@ check('mehrfach ausfuehrbar (nichts neu)', str_contains($out, 'Stunden neu 0'), 
 
 // ---------------------------------------------------------------- Vertrauen stuendlich
 echo "Vertrauen (stuendlich, 24 h nachholen)\n";
+// Anker-Meldung unvollstaendig (Grenze im Antworter): a_fsn fehlen in einer Stunde die Proben von 70 % der Knoten
+$hx = H - 5 * 3600;
+$drop = array(); foreach($ids as $s) { if(crc32("drop|$s") % 10 < 7) { $drop[] = s64_short_id($s); } }
+q("DELETE FROM sonar_inbound WHERE node_id = 'a_fsn' AND at >= ? AND at < ? AND from_short IN (" . implode(',', array_fill(0, count($drop), '?')) . ")",
+	array_merge(array(dt($hx - 600), dt($hx + 4200)), $drop));
 $pb = (int)one("SELECT plaus_bad FROM sonar_nodes WHERE node_id = ?", array(EVIL));
 // Teil A speichert below_light gegen Ziele mit unsicherem Standort (new/stable) mit valid=0, das zaehlt nicht
 q("UPDATE sonar_results SET valid = 0, reason = 'below_light' WHERE src = 'nt0000000021' AND dst LIKE 'nt%'");
@@ -443,8 +456,10 @@ for($i = 0; $i < 3000; $i++) {
 	$c = array_values($cities)[$i % 10];
 	$lat = $c[0] + (crc32("la$i") % 2000 - 1000) / 4000; $lon = $c[1] + (crc32("lo$i") % 2000 - 1000) / 4000;
 	if($i < 300) { $lat = 50.94 + ($i % 20) * 0.001; $lon = 6.96; } // 300 Knoten auf engem Raum (Zielgrenze)
+	$ip4 = sprintf('%d.%d.%d.%d', 80 + $i % 4, 128 + intdiv($i, 250) % 100, $i % 250 + 1, 7);
+	if($i < 300 AND $i % 10 === 0) { $ip4 = '80.200.0.7'; } // 30 Knoten hinter einer IP (CGNAT): Zielgrenze je Adresse
 	$rows[] = array(sprintf('ns%010d', $i), 1, $i, 'node', 'pk', "S $i", "s-$i", $lat, $lon, $i, 'fiber', 'pi', 1, array('sparsam', 'normal', 'grosszuegig')[$i % 3], 'headless',
-		sprintf('%d.%d.%d.%d', 80 + $i % 4, 128 + intdiv($i, 250) % 100, $i % 250 + 1, 7), $i % 2 ? sprintf('2003:%x::%x', $i + 1, $i + 1) : null, 3320 + $i % 4, 'AS', $i % 2 ? 3320 + $i % 4 : null, $i % 2 ? 'AS' : null, null,
+		$ip4, $i % 2 ? sprintf('2003:%x::%x', $i + 1, $i + 1) : null, 3320 + $i % 4, 'AS', $i % 2 ? 3320 + $i % 4 : null, $i % 2 ? 'AS' : null, null,
 		'udp', $i % 2 ? 'udp' : 'none', array('new', 'stable', 'trusted')[$i % 3], dt(T - 100 * DAY), dt(T - 30), null, 1);
 }
 bulk("INSERT INTO sonar_nodes (node_id, userid, token_id, role, pubkey, name, slug, lat, lon, jitter_seed, access, device, measured, budget, mode, ip4, ip6, asn4, asname4, asn6, asname6, place, reach4, reach6, trust, first_seen, last_seen, health, active)", 29, $rows);

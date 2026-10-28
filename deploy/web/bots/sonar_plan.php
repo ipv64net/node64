@@ -295,13 +295,18 @@ $have = array();     // node_id => slot => true (schon geplant)
 $controls = array(); // node_id => Kontrollziele
 $tcount = array();   // node_id => Ziele
 $cnt = array();      // slot => Ziel => Zahl der Messenden (ohne Anker)
+$cntA = array();     // slot => Adresse => Zahl der Messenden (mehrere Knoten hinter einer IP, z. B. CGNAT)
 foreach(array_chunk($ids, 200) as $chunk) {
 	foreach(s64p_prev($chunk) as $m => $row) {
 		foreach(s64p_retained($m, $row) as $s => $keep) {
 			$have[$m][$s] = true;
 			if(!$N[$m]['anchor']) {
-				$seenT = array();
-				foreach($keep as $t) { if(!$N[$t['id']]['anchor'] AND !isset($seenT[$t['id']])) { $seenT[$t['id']] = true; $cnt[$s][$t['id']] = ($cnt[$s][$t['id']] ?? 0) + 1; } }
+				$seenT = array(); $seenA = array();
+				foreach($keep as $t) {
+					if($N[$t['id']]['anchor']) { continue; }
+					if(!isset($seenT[$t['id']])) { $seenT[$t['id']] = true; $cnt[$s][$t['id']] = ($cnt[$s][$t['id']] ?? 0) + 1; }
+					if(!isset($seenA[$t['addr']])) { $seenA[$t['addr']] = true; $cntA[$s][$t['addr']] = ($cntA[$s][$t['addr']] ?? 0) + 1; }
+				}
 			}
 		}
 	}
@@ -360,13 +365,18 @@ foreach($slots as $s) {
 			}
 			$cands = s64p_candidates($m, $hour);
 			$mineT = array(); // Ziele dieses Knotens in dieser Runde
+			$mineA = array(); // Adresse => Ziel (eine Adresse nur fuer ein Ziel, zaehlt einmal)
 			// Traceroute: zwei Runden je Stunde, erst ein Anker, dann der naechste Nachbar (sonst ein Anker)
 			$t1 = s64p_hash('tr', $m, (string)$hour) % 6;
 			if($n['icmp'] AND count($list) < $budget AND ($idx === $t1 OR $idx === $t1 + 6)) {
 				$tr = null;
 				if($idx === $t1 + 6) {
 					foreach($cands as $e) {
-						if(($cnt[$s][$e[0]] ?? 0) < S64P_PER_TARGET) { $tr = $e; $cnt[$s][$e[0]] = ($cnt[$s][$e[0]] ?? 0) + 1; $mineT[$e[0]] = true; }
+						$ad = $N[$e[0]]['fams'][$e[1]];
+						if(($cnt[$s][$e[0]] ?? 0) < S64P_PER_TARGET AND ($cntA[$s][$ad] ?? 0) < S64P_PER_TARGET) {
+							$tr = $e; $cnt[$s][$e[0]] = ($cnt[$s][$e[0]] ?? 0) + 1; $mineT[$e[0]] = true;
+							$cntA[$s][$ad] = ($cntA[$s][$ad] ?? 0) + 1; $mineA[$ad] = $e[0];
+						}
 						break;
 					}
 				}
@@ -379,11 +389,15 @@ foreach($slots as $s) {
 			foreach($cands as $e) {
 				if(count($list) >= $budget) { break; }
 				[$t, $f, $meth] = $e;
+				$ad = $N[$t]['fams'][$f];
+				// hoechstens 10 Messende je Adresse (auch ueber mehrere Knoten hinter einer IP), dieselbe Adresse nicht doppelt
+				if(isset($mineA[$ad]) ? $mineA[$ad] !== $t : ($cntA[$s][$ad] ?? 0) >= S64P_PER_TARGET) { continue; }
 				if(!isset($mineT[$t])) { // zweite Familie desselben Ziels zaehlt nicht noch einmal
 					if(($cnt[$s][$t] ?? 0) >= S64P_PER_TARGET) { continue; }
 					$cnt[$s][$t] = ($cnt[$s][$t] ?? 0) + 1;
 					$mineT[$t] = true;
 				}
+				if(!isset($mineA[$ad])) { $cntA[$s][$ad] = ($cntA[$s][$ad] ?? 0) + 1; $mineA[$ad] = $t; }
 				$list[] = s64p_target($t, $f, $meth, S64P_COUNT);
 			}
 		}
@@ -421,6 +435,12 @@ foreach(array_chunk(array_keys($plans + $have), S64P_CHUNK) as $chunk) {
 
 // ---------------------------------------------------------------- 6. alte Plaene loeschen (enthalten IPs)
 $deleted = 0;
+if(!$dry AND !$aborted) {
+	// nicht neu geschriebene Plaene (Knoten offline oder nichts mehr zu planen) nicht mehr ausliefern: sie koennten
+	// Ziele enthalten, die nicht mehr erlaubt sind (Opt-out, Quarantaene, neue IP); sent_body bleibt fuer Teil A
+	$st = $pdo->prepare("UPDATE sonar_plans SET expires = ? WHERE expires > ? AND issued < ?");
+	$st->execute(array(s64p_db($now), s64p_db($now), s64p_db($now)));
+}
 if(!$dry) {
 	$st = $pdo->prepare("DELETE FROM sonar_plans WHERE expires < ? LIMIT 5000");
 	$st->execute(array(s64p_db($now - 3600)));
