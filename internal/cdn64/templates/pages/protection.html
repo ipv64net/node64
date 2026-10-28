@@ -17,6 +17,7 @@
 </div>
 {{if $d.Error}}<div class="alert alert-warning small"><i class="bi bi-cloud-slash"></i> {{.T "cdn64.protection.unavailable"}} {{$d.Error}}</div>
 {{else}}{{with $d.P}}{{$per := $.T (print "cdn64.protection.period_" $d.Days)}}
+{{if and (not $d.Blocked) (not .JA4Top)}}<div class="alert alert-info small" data-prot-nodata><i class="bi bi-hourglass-split"></i> {{$.T "cdn64.protection.nodata"}}</div>{{end}}
 <div class="row g-2 mb-3">
 	<div class="col-6 col-md-3"><div class="card stat stat-down" title="{{$.T "cdn64.protection.k_blocked_hint"}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "cdn64.protection.k_blocked"}}</div><div class="stat-value" data-prot="blocked">{{$.Int $d.Blocked}}</div><div class="stat-sub">{{$per}}</div></div><i class="bi bi-shield-x stat-icon"></i></div></div></div>
 	<div class="col-6 col-md-3"><div class="card stat stat-warn" title="{{$.T "cdn64.protection.k_ips_hint"}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "cdn64.protection.k_ips"}}</div><div class="stat-value" data-prot="ips">{{$.Int .Totals.BlockedIPs}}</div><div class="stat-sub">{{$per}}</div></div><i class="bi bi-person-x stat-icon"></i></div></div></div>

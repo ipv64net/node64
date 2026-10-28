@@ -1,5 +1,11 @@
 # Änderungen – PROXY64
 
+## 1.38.1 – 2026-10-28
+
+### Geändert
+- CDN64 Statistik: Ohne abgewehrte Zugriffe im Zeitraum erklärt ein Hinweis, dass auf den CDN64-Servern gezählt wird
+  und die Zahlen erscheinen, sobald dort etwas abgewehrt wird (vorher wirkte die Seite leer).
+
 ## 1.38.0 – 2026-10-28
 
 ### Neu

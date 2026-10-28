@@ -1,5 +1,11 @@
 # Changes – PROXY64
 
+## 1.38.1 – 2026-10-28
+
+### Changed
+- CDN64 statistics: without blocked requests in the period, a hint explains that counting happens on the CDN64 servers
+  and the figures appear as soon as something is blocked there (the page looked empty before).
+
 ## 1.38.0 – 2026-10-28
 
 ### New
