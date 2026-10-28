@@ -1,6 +1,7 @@
-// Package hccluster verbindet die Proxmox-VE- und Docker-Ueberwachung der Healthchecks mit dem Cluster
-// (internal/peer), ohne dass healthchecks von peer abhaengt: Provider fuer die Bereiche healthchecks/proxmox und
-// healthchecks/docker (Weg /peer/v2/sync) und die Mitglieder, die solche Checks mitmessen koennen.
+// Package hccluster verbindet die Proxmox-VE- und Docker-Ueberwachung und die Statusseiten der Healthchecks mit dem
+// Cluster (internal/peer), ohne dass healthchecks von peer abhaengt: Provider fuer die Bereiche healthchecks/proxmox,
+// healthchecks/docker und healthchecks/statuspages (Weg /peer/v2/sync) und die Mitglieder, die solche Checks
+// mitmessen koennen.
 package hccluster
 
 import (
@@ -17,6 +18,7 @@ func (p provider) ClusterModule() peer.ModuleInfo {
 	return peer.ModuleInfo{ID: "healthchecks", TitleKey: "cluster.mod.healthchecks", Items: []peer.ItemInfo{
 		{ID: healthchecks.ClusterItemProxmox, TitleKey: "cluster.item.proxmox"},
 		{ID: healthchecks.ClusterItemDocker, TitleKey: "cluster.item.docker"},
+		{ID: healthchecks.ClusterItemStatusPages, TitleKey: "cluster.item.statuspages"},
 	}}
 }
 

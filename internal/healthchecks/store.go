@@ -114,6 +114,8 @@ type Store struct {
 	OnAnyChange func(ctx context.Context, entity, id, op string)
 
 	OnStatusChange func() // Statusseiten geaendert (zwischengespeicherte Ansichten verwerfen)
+	// OnStatusCluster nach jeder Aenderung einer Statusseite (Kennung; auch Ankuendigungen und Logo) fuer den Cluster
+	OnStatusCluster func(ctx context.Context, uid string, deleted bool)
 	// Location liefert die Zeitzone der Node fuer wiederkehrende Wartungsfenster (nil = Zeitzone des Containers)
 	Location func() *time.Location
 }

@@ -37,6 +37,7 @@ type StatusPage struct {
 	CreatedAt   time.Time     `json:"created_at"`
 	UpdatedAt   time.Time     `json:"updated_at"`
 	hash        string        // gespeicherter bcrypt-Hash
+	UID         string        `json:"-"` // Kennung im Cluster (gleich auf allen Nodes, statuscluster.go)
 
 	HCGroups bool `json:"hc_groups"` // Eintraege nach den Gruppen der Healthchecks anzeigen (statt der Gruppen der Seite)
 
@@ -152,13 +153,13 @@ type StatusFieldError struct{ Field, Key string }
 func (e *StatusFieldError) Error() string { return e.Field + ": " + e.Key }
 
 const statusPageCols = `id, slug, title, description, footer, enabled, publish_node, layout, theme, lang, accent, days, show_uptime,
-	show_history, refresh_sec, password, noindex, powered_by, created_at, updated_at, hc_groups, logo_type, logo_updated`
+	show_history, refresh_sec, password, noindex, powered_by, created_at, updated_at, hc_groups, logo_type, logo_updated, uid`
 
 func scanStatusPage(row interface{ Scan(...any) error }) (*StatusPage, error) {
 	var p StatusPage
 	var ca, ua, lt, lu string
 	if err := row.Scan(&p.ID, &p.Slug, &p.Title, &p.Description, &p.Footer, &p.Enabled, &p.PublishNode, &p.Layout, &p.Theme, &p.Lang,
-		&p.Accent, &p.Days, &p.ShowUptime, &p.ShowHistory, &p.RefreshSec, &p.hash, &p.NoIndex, &p.PoweredBy, &ca, &ua, &p.HCGroups, &lt, &lu); err != nil {
+		&p.Accent, &p.Days, &p.ShowUptime, &p.ShowHistory, &p.RefreshSec, &p.hash, &p.NoIndex, &p.PoweredBy, &ca, &ua, &p.HCGroups, &lt, &lu, &p.UID); err != nil {
 		return nil, err
 	}
 	p.HasLogo, p.LogoUpdated = lt != "", pt(lu)
@@ -249,9 +250,12 @@ func (s *Store) SaveStatusPage(ctx context.Context, p *StatusPage, hash string) 
 	args := []any{p.Slug, p.Title, p.Description, p.Footer, p.Enabled, p.PublishNode, p.Layout, p.Theme, p.Lang, p.Accent, p.Days,
 		p.ShowUptime, p.ShowHistory, p.RefreshSec, p.NoIndex, p.PoweredBy, p.HCGroups}
 	if p.ID == 0 {
+		if p.UID == "" { // neu hier: eigene Kennung (aus dem Cluster: die der anderen Node)
+			p.UID = newUID()
+		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO hc_status_pages (slug, title, description, footer, enabled, publish_node, layout, theme, lang,
-			accent, days, show_uptime, show_history, refresh_sec, noindex, powered_by, hc_groups, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			append(args, now, now)...)
+			accent, days, show_uptime, show_history, refresh_sec, noindex, powered_by, hc_groups, created_at, updated_at, uid) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			append(args, now, now, p.UID)...)
 		if err != nil {
 			return err
 		}
@@ -305,6 +309,7 @@ func (s *Store) SaveStatusPage(ctx context.Context, p *StatusPage, hash string) 
 		return err
 	}
 	s.statusChanged()
+	s.statusCluster(ctx, p.ID)
 	return nil
 }
 
@@ -317,6 +322,7 @@ func (s *Store) statusPasswordHash(ctx context.Context, id int64) string {
 
 // DeleteStatusPage loescht eine Seite mit allem, was dazugehoert.
 func (s *Store) DeleteStatusPage(ctx context.Context, id int64) error {
+	uid := s.statusUID(ctx, id)
 	tx, err := s.w.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -343,6 +349,9 @@ func (s *Store) DeleteStatusPage(ctx context.Context, id int64) error {
 		return err
 	}
 	s.statusChanged()
+	if s.OnStatusCluster != nil && uid != "" {
+		s.OnStatusCluster(ctx, uid, true)
+	}
 	return nil
 }
 
@@ -419,6 +428,7 @@ func (s *Store) AddStatusNotice(ctx context.Context, pageID int64, title, level,
 		}
 	}
 	s.statusChanged()
+	s.statusCluster(ctx, pageID)
 	return id, nil
 }
 
@@ -448,11 +458,13 @@ func (s *Store) UpdateStatusNotice(ctx context.Context, id int64, level, text st
 		return err
 	}
 	s.statusChanged()
+	s.statusCluster(ctx, s.noticePage(ctx, id))
 	return nil
 }
 
 // DeleteStatusNotice loescht eine Ankuendigung.
 func (s *Store) DeleteStatusNotice(ctx context.Context, id int64) error {
+	page := s.noticePage(ctx, id)
 	if _, err := s.w.ExecContext(ctx, `DELETE FROM hc_status_notice_updates WHERE notice_id = ?`, id); err != nil {
 		return err
 	}
@@ -460,6 +472,7 @@ func (s *Store) DeleteStatusNotice(ctx context.Context, id int64) error {
 		return err
 	}
 	s.statusChanged()
+	s.statusCluster(ctx, page)
 	return nil
 }
 
@@ -468,6 +481,30 @@ func (s *Store) statusChanged() {
 	if s.OnStatusChange != nil {
 		s.OnStatusChange()
 	}
+}
+
+// statusCluster meldet eine geaenderte Seite an den Cluster (OnStatusCluster, statuscluster.go).
+func (s *Store) statusCluster(ctx context.Context, pageID int64) {
+	if s.OnStatusCluster == nil || pageID == 0 {
+		return
+	}
+	if uid := s.statusUID(ctx, pageID); uid != "" {
+		s.OnStatusCluster(ctx, uid, false)
+	}
+}
+
+// statusUID liefert die Kennung einer Seite im Cluster ("" = unbekannt).
+func (s *Store) statusUID(ctx context.Context, pageID int64) string {
+	var uid string
+	_ = s.w.QueryRowContext(ctx, `SELECT uid FROM hc_status_pages WHERE id = ?`, pageID).Scan(&uid)
+	return uid
+}
+
+// noticePage liefert die Seite einer Ankuendigung (0 = unbekannt).
+func (s *Store) noticePage(ctx context.Context, noticeID int64) int64 {
+	var id int64
+	_ = s.w.QueryRowContext(ctx, `SELECT page_id FROM hc_status_notices WHERE id = ?`, noticeID).Scan(&id)
+	return id
 }
 
 // ---------------------------------------------------------------- Logo
@@ -496,6 +533,7 @@ func (s *Store) SetStatusLogo(ctx context.Context, id int64, data []byte, ctype 
 		return ErrStatusPageNotFound
 	}
 	s.statusChanged()
+	s.statusCluster(ctx, id)
 	return nil
 }
 

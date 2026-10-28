@@ -20,7 +20,8 @@ import (
 type ItemInfo struct {
 	ID       string `json:"id"`
 	TitleKey string `json:"title_key"`
-	Default  bool   `json:"-"` // ohne Einstellung eingeschaltet
+	HintKey  string `json:"hint_key,omitempty"` // kurzer Hinweis unter dem Schalter ("" = keiner)
+	Default  bool   `json:"-"`                  // ohne Einstellung eingeschaltet
 }
 
 // ModuleInfo beschreibt ein Modul mit seinen Bereichen.
@@ -61,17 +62,20 @@ const setSync = "peer.sync" // {"module": {"enabled": true, "items": {"item": tr
 
 // Healthchecks und Benachrichtigungen sind fest eingebaut (eigener Weg /peer/v1/changes), die Bereiche schalten
 // die vorhandenen Eintragsarten (check, maintenance; settings = Benachrichtigungs-Einstellungen). Die Systeme der
-// Proxmox-VE- und Docker-Ueberwachung (proxmox, docker; ohne Einstellung aus) laufen ueber den allgemeinen Weg
-// /peer/v2/sync: das Healthchecks-Modul meldet dafuer einen Provider mit der ID "healthchecks" an (v2Item).
+// Proxmox-VE- und Docker-Ueberwachung (proxmox, docker), die Statusseiten (statuspages) und die
+// Benachrichtigungskanaele (channels; alle ohne Einstellung aus) laufen ueber den allgemeinen Weg /peer/v2/sync: die
+// Module melden dafuer einen Provider mit der ID "healthchecks" bzw. "notifications" an (v2Item).
 var healthchecksModule = ModuleInfo{ID: "healthchecks", TitleKey: "cluster.mod.healthchecks", Items: []ItemInfo{
 	{ID: "checks", TitleKey: "cluster.item.checks", Default: true},
 	{ID: "maintenance", TitleKey: "cluster.item.maintenance", Default: true},
 	{ID: "proxmox", TitleKey: "cluster.item.proxmox"},
 	{ID: "docker", TitleKey: "cluster.item.docker"},
+	{ID: "statuspages", TitleKey: "cluster.item.statuspages"},
 }}
 
 var notificationsModule = ModuleInfo{ID: "notifications", TitleKey: "cluster.mod.notifications", Items: []ItemInfo{
 	{ID: "settings", TitleKey: "cluster.item.notify_settings", Default: true},
+	{ID: "channels", TitleKey: "cluster.item.notify_channels", HintKey: "cluster.channels_hint"},
 }}
 
 // builtin: Module mit eigenem Weg (ohne Einstellung eingeschaltet, laufen mit dem Healthchecks-Modul).
@@ -308,11 +312,16 @@ func has(list []string, v string) bool {
 }
 
 // v1Wants: Eintragsbereiche des eigenen Wegs (checks, maintenance, settings), die hier und beim Mitglied an sind.
+// "channels": die Kanaele gehen ueber v2, die Zuordnung Check -> Kanal (Kennungen der Kanaele) aber mit den Checks;
+// der Eintrag laesst die Checks beim Einschalten von vorn abholen und sagt der liefernden Node, dass sie sie mitschickt.
 func (m *Manager) v1Wants(own []string, x Member) []string {
 	out := m.wants(own, x, "healthchecks")
 	out = slices.DeleteFunc(out, func(item string) bool { return m.v2Item("healthchecks", item) })
 	if has(own, "notifications/settings") && memberSyncOn(x, "notifications", "settings") {
 		out = append(out, "settings")
+	}
+	if has(own, "notifications/channels") && memberSyncOn(x, "notifications", "channels") && m.v2Item("notifications", "channels") {
+		out = append(out, "channels")
 	}
 	sort.Strings(out)
 	return out

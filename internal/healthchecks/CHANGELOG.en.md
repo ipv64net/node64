@@ -2,6 +2,15 @@
 
 ## 2.41.0 – 2026-10-28
 
+### New
+- Cluster: status pages can be synced (area "Status pages", off by default) – with groups, checks in their order,
+  options, visibility, password, logo and notices. PROXY64 hosts of a status page stay per node. The same slug with
+  different content is not taken over (note in the log).
+- Cluster: notification channels can be synced (area "Channels" under notifications, off by default) – only the
+  node's own channels including credentials (stored with the other node's key), never those of the portal, not the
+  browser channel and none with "secret only local". The channels of the checks are then correct on every node.
+  Needed mainly for nodes without a connection to ipv64.net.
+
 ### Changed
 - Proxmox VE and Docker: checks show a real latency instead of 0 ms or the Docker API time – ping to the address of
   the node, guest or container (one packet, at most 2 s), otherwise the response time of the Proxmox or Docker API.
@@ -9,6 +18,9 @@
   turns a check red.
   - Proxmox: node addresses from `cluster/status`; addresses of running guests as check every 5 minutes via the guest
     agent (VMs, privilege `VM.Monitor`, from PVE 9 `VM.GuestAgent.Audit`) or `lxc/{vmid}/interfaces` (containers).
+- Cluster: items that were already set up exactly the same on two nodes (status page, channel, Proxmox system, Docker
+  host, maintenance window) are merged into one when joining or switching the area on instead of appearing twice.
+  Merely similar items stay separate. Checks are never merged (the same check on two nodes = two measuring points).
 
 ## 2.40.0 – 2026-10-28
 

@@ -9,6 +9,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Zertifikate/Cluster: Beim Beitritt gleiche Einträge (Zertifikat mit Schlüssel, ACME-Stelle mit EAB, DNS-Zugang,
   CA) werden einmal zusammengeführt, nur Ähnliches bleibt getrennt; verschiedene ACME-Konten werden nicht mehr
   überschrieben, sondern auf der Seite Cluster zur Wahl gestellt.
+- Cluster: neue Bereiche „Statusseiten“ und „Kanäle“ (Benachrichtigungen, vor allem für Nodes ohne ipv64.net),
+  standardmäßig aus; vorher auf zwei Nodes exakt gleich angelegte Einträge werden zusammengeführt statt doppelt.
 
 ## 0.12.0-alpha.29 – 2026-10-28
 

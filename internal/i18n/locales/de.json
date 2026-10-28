@@ -3228,6 +3228,7 @@
     "empty": "Noch keine weiteren Nodes. Auf einer Node einen Code erzeugen und auf der anderen damit beitreten.",
     "sync_title": "Was wird abgeglichen",
     "sync_hint": "Ein Bereich wird nur mit Nodes abgeglichen, bei denen er ebenfalls eingeschaltet ist – also nur, wenn er auf beiden Nodes an ist.",
+    "channels_hint": "Nur nötig ohne Verbindung zu ipv64.net – verknüpfte Nodes bekommen die Kanäle des Portals über ipv64.net. Abgeglichen werden nur die eigenen Kanäle der Node, nie die des Portals.",
     "mod_unavailable": "(auf dieser Node nicht aktiv)",
     "mod": {
       "healthchecks": "Healthchecks",
@@ -3240,7 +3241,9 @@
       "maintenance": "Wartungsfenster",
       "proxmox": "Proxmox VE – Systeme samt API-Token (die Nodes fragen sie mit ab und messen deren Checks mit)",
       "docker": "Docker – Hosts über das Netz samt Zugangsdaten (lokaler Socket bleibt bei seiner Node)",
+      "statuspages": "Statusseiten – mit Gruppen, Logo, Passwort und Ankündigungen (Checks über ihr Token; PROXY64-Hosts bleiben je Node)",
       "notify_settings": "Einstellungen (Ruhezeiten, Drossel, Bündeln)",
+      "notify_channels": "Kanäle – eigene Kanäle der Node samt Zugangsdaten, Checks behalten ihre Kanäle",
       "certificates": "Zertifikate",
       "acme": "ACME (Konto und CAs)",
       "dns_accounts": "DNS-Anbieter",

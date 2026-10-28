@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"slices"
 	"strconv"
 	"time"
 
@@ -118,6 +119,17 @@ func (m *Module) ApplyPeerMaintenance(ctx context.Context, p PeerMaint, at time.
 			return 0, false, nil // hier nach dieser Aenderung geloescht
 		}
 	}
+	if id == 0 && p.ID == 0 { // neu hier und nur lokal: exaktes Doppel unter anderer Kennung zusammenfuehren
+		if dup := m.maintDup(ctx, p); dup != nil {
+			if dup.UID < p.UID {
+				return 0, false, nil // hier gilt die eigene Kennung, die andere Node uebernimmt sie
+			}
+			// fremde Kennung kleiner: das Fenster hier geht (Loeschvermerk mit neuem Zeitpunkt), das fremde kommt
+			if err := m.st.MaintenanceDelete(ctx, dup.ID); err != nil {
+				return 0, false, err
+			}
+		}
+	}
 	mw := Maintenance{ID: id, UID: p.UID, RemoteID: p.ID, Name: p.Name, StartAt: p.StartAt, EndAt: p.EndAt, Repeat: p.Repeat,
 		RepeatUntil: p.RepeatUntil, Tokens: p.Tokens, Active: p.Active}
 	if p.ID > 0 {
@@ -148,6 +160,33 @@ func (m *Module) ApplyPeerMaintenance(ctx context.Context, p PeerMaint, at time.
 		}
 	}
 	return mw.ID, true, nil
+}
+
+// maintDup sucht ein nur lokales Fenster (ohne Server-ID), das exakt gleich ist (Name, Beginn, Ende, Wiederholung,
+// Checks, an/aus), aber eine andere Kennung hat - z. B. auf beiden Nodes vor dem Cluster gleich angelegt.
+func (m *Module) maintDup(ctx context.Context, p PeerMaint) *Maintenance {
+	list, err := m.st.MaintenanceList(ctx)
+	if err != nil {
+		return nil
+	}
+	repeat := p.Repeat
+	if repeat == "" {
+		repeat = "none"
+	}
+	tokens := slices.Sorted(slices.Values(p.Tokens))
+	for i := range list {
+		x := &list[i]
+		if x.RemoteID != 0 {
+			continue
+		}
+		if x.Name == p.Name && x.StartAt.Equal(p.StartAt) && x.EndAt.Equal(p.EndAt) && x.Repeat == repeat && x.RepeatUntil.Equal(p.RepeatUntil) &&
+			x.Active == p.Active && slices.Equal(slices.Sorted(slices.Values(x.Tokens)), tokens) {
+			if x.UID = m.MaintUID(ctx, strconv.FormatInt(x.ID, 10)); x.UID != "" && x.UID != p.UID {
+				return x
+			}
+		}
+	}
+	return nil
 }
 
 // DeletePeerMaintenance loescht ein Fenster, das eine andere Node geloescht hat (nicht, wenn es hier danach

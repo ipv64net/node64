@@ -8,6 +8,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/checks"
 	"github.com/ipv64net/node64/internal/proxmox"
+	"github.com/ipv64net/node64/internal/scheduler"
 )
 
 // Proxmox VE und Docker ueber den Cluster (Bereiche healthchecks/proxmox und healthchecks/docker, ohne Einstellung
@@ -34,8 +35,16 @@ type ClusterHooks struct {
 	Members func(ctx context.Context, item string) []Peer
 }
 
-// SetCluster haengt den Cluster an (vor Start).
-func (m *Module) SetCluster(h ClusterHooks) { m.cluster = h }
+// SetCluster haengt den Cluster an (vor Start), auch fuer die Statusseiten (statuscluster.go).
+func (m *Module) SetCluster(h ClusterHooks) {
+	m.cluster = h
+	m.st.OnStatusCluster = nil
+	if h.Change != nil {
+		m.st.OnStatusCluster = func(ctx context.Context, uid string, deleted bool) {
+			h.Change(ctx, ClusterItemStatusPages, uid, deleted)
+		}
+	}
+}
 
 // clusterSystem ist ein System im Cluster. Das Secret steht nur im Cluster im Klartext (HTTPS, die Nodes melden sich
 // gegenseitig an) und wird auf der empfangenden Node mit ihrem Schluessel verschluesselt gespeichert.
@@ -134,6 +143,9 @@ func pveShared(sys *proxmox.System) bool {
 
 // ClusterIDs: Kennungen der geteilten Systeme eines Bereichs (erster Abgleich).
 func (m *Module) ClusterIDs(ctx context.Context, item string) ([]string, error) {
+	if item == ClusterItemStatusPages {
+		return m.statusClusterIDs(ctx)
+	}
 	list, err := m.pve.st.Systems(ctx)
 	if err != nil {
 		return nil, err
@@ -149,6 +161,9 @@ func (m *Module) ClusterIDs(ctx context.Context, item string) ([]string, error) 
 
 // ClusterGet liefert ein geteiltes System (found=false: gibt es nicht oder nicht mehr geteilt).
 func (m *Module) ClusterGet(ctx context.Context, item, id string) (json.RawMessage, bool, error) {
+	if item == ClusterItemStatusPages {
+		return m.statusClusterGet(ctx, id)
+	}
 	sys, err := m.pve.st.SystemByUID(ctx, id)
 	if errors.Is(err, proxmox.ErrNotFound) {
 		return nil, false, nil
@@ -173,6 +188,9 @@ var errClusterSystem = errors.New("cluster: system does not match the area")
 // ClusterApply uebernimmt ein System einer anderen Node (anlegen, aendern, loeschen). Die Abfrage startet bzw.
 // endet wie beim Speichern in der Oberflaeche; die Aenderung geht mit ihrer Herkunft (ctx) weiter an den Cluster.
 func (m *Module) ClusterApply(ctx context.Context, item, id string, data json.RawMessage, deleted bool) error {
+	if item == ClusterItemStatusPages {
+		return m.statusClusterApply(ctx, id, data, deleted)
+	}
 	if !proxmox.ValidUID(id) || item != ClusterItemProxmox && item != ClusterItemDocker {
 		return errClusterSystem
 	}
@@ -204,10 +222,90 @@ func (m *Module) ClusterApply(ctx context.Context, item, id string, data json.Ra
 	if sys.IsDocker() && sys.Secret == "" {
 		sys.Secret = proxmox.DockerNoCreds // ohne Zugangsdaten (sonst hiesse leer „behalten“)
 	}
+	if cur == nil { // neu hier: exaktes Doppel unter anderer Kennung zusammenfuehren (die kleinere gilt)
+		dup, err := m.pveDup(ctx, item, sys)
+		if err != nil {
+			return err
+		}
+		if dup != nil {
+			if dup.UID < id {
+				return nil // hier gilt die eigene Kennung, die andere Node uebernimmt sie
+			}
+			if err := m.pveAdoptUID(ctx, item, dup, id, sys.Home); err != nil {
+				return err
+			}
+			cur = dup
+		}
+	}
 	if cur != nil {
 		sys.ID = cur.ID
 	}
 	return m.pveSaveSystemBy(ctx, sys, "cluster")
+}
+
+// pveDup sucht ein geteiltes System des Bereichs, das exakt gleich ist (Art, Name, Adressen, Token, Secret, Pin,
+// Intervall, an/aus), aber eine andere Kennung hat - z. B. dasselbe Proxmox auf beiden Nodes vor dem Cluster
+// angelegt. Die Heim-Node zaehlt nicht zum Inhalt.
+func (m *Module) pveDup(ctx context.Context, item string, sys *proxmox.System) (*proxmox.System, error) {
+	list, err := m.pve.st.Systems(ctx)
+	if err != nil {
+		return nil, err
+	}
+	secret := func(s string) string {
+		if s == proxmox.DockerNoCreds {
+			return ""
+		}
+		return s
+	}
+	for _, s := range list {
+		if it, shared := pveClusterItem(s); it != item || !shared || !proxmox.ValidUID(s.UID) || s.UID == sys.UID {
+			continue
+		}
+		if s.Kind == sys.Kind && s.Name == sys.Name && slices.Equal(s.Addresses, sys.Addresses) && s.TokenID == sys.TokenID &&
+			secret(s.Secret) == secret(sys.Secret) && s.PinSHA256 == sys.PinSHA256 && s.Interval == sys.Interval && s.Enabled == sys.Enabled {
+			return s, nil
+		}
+	}
+	return nil, nil
+}
+
+// pveAdoptUID: ein System hier uebernimmt die (kleinere) Kennung seines exakten Doppels einer anderen Node. Die
+// lokale Nummer bleibt (Einstellungen, Verlauf, „als Check“); Proxmox-Checks mit der alten Kennung bekommen die neue
+// (als Aenderung, sie geht an den Cluster), die alte Kennung geht als geloescht hinaus.
+func (m *Module) pveAdoptUID(ctx context.Context, item string, sys *proxmox.System, uid, home string) error {
+	old := sys.UID
+	if _, err := m.st.w.ExecContext(ctx, `UPDATE pve_systems SET uid = ?, home = ? WHERE id = ?`, uid, home, sys.ID); err != nil {
+		return err
+	}
+	sys.UID, sys.Home = uid, home
+	if list, err := m.st.Checks(ctx); err == nil {
+		for _, c := range list {
+			var p checks.ProxmoxParams
+			if c.Type != checks.TypeProxmox || json.Unmarshal(c.Params, &p) != nil || p.SystemUID != old {
+				continue
+			}
+			p.SystemUID = uid
+			c.Params, _ = json.Marshal(p)
+			c.UpdatedBy = "cluster"
+			if err := m.st.Update(context.Background(), c); err != nil {
+				m.log.Warn("cluster merge: proxmox check", "err", err)
+				continue
+			}
+			if s := m.scheduler(); s != nil {
+				if nc, _ := m.st.Check(ctx, c.Token); nc != nil {
+					var rt *scheduler.Runtime // Zustand bleibt, nur die Kennung des Systems ist neu
+					if live, ok := s.Runtime(nc.Token); ok {
+						rt = &live
+					}
+					upsertSched(s, nc, rt)
+				}
+			}
+		}
+	}
+	if m.cluster.Change != nil {
+		m.cluster.Change(context.Background(), item, old, true) // neuer Zeitpunkt: die alte Kennung verschwindet ueberall
+	}
+	return nil
 }
 
 // pveNotifiesHere: diese Node schickt die Meldungen der Ueberwachung eines Systems (Heim-Node; ist sie nicht im

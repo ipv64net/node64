@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ipv64net/node64/internal/wire"
 )
 
 // fakeProv ist ein Modul mit zwei Bereichen (a, b), Eintraege als Text.
@@ -27,6 +29,13 @@ func newProv(n *testNode) *fakeProv {
 // newHCProv: Bereiche des Healthchecks-Moduls ueber v2 (Proxmox VE, Docker) wie healthchecks/hccluster.
 func newHCProv(n *testNode) *fakeProv {
 	p := &fakeProv{n: n, mod: "healthchecks", items: []ItemInfo{{ID: "proxmox"}, {ID: "docker"}}, data: map[string]string{}}
+	n.m.RegisterProvider(p)
+	return p
+}
+
+// newNFProv: Bereich der Benachrichtigungen ueber v2 (Kanaele) wie notify/nfcluster.
+func newNFProv(n *testNode) *fakeProv {
+	p := &fakeProv{n: n, mod: "notifications", items: []ItemInfo{{ID: "channels"}}, data: map[string]string{}}
 	n.m.RegisterProvider(p)
 	return p
 }
@@ -262,7 +271,7 @@ func TestClusterHealthchecksV2Items(t *testing.T) {
 	}
 	waitMembers(t, a, "B")
 	mods := a.m.SyncModules(ctx)
-	if len(mods) != 2 || mods[0].ID != "healthchecks" || len(mods[0].Items) != 4 || mods[0].Items[2].ID != "proxmox" || mods[0].Items[2].Enabled {
+	if len(mods) != 2 || mods[0].ID != "healthchecks" || len(mods[0].Items) != 5 || mods[0].Items[2].ID != "proxmox" || mods[0].Items[2].Enabled {
 		t.Fatalf("modules: %+v", mods)
 	}
 	pa.data["proxmox/u1"] = "pve"
@@ -296,5 +305,69 @@ func TestClusterHealthchecksV2Items(t *testing.T) {
 	a.m.pingAll(ctx)
 	if len(a.m.HCItemMembers(ctx, "proxmox")) != 0 {
 		t.Fatal("without checks no item members")
+	}
+}
+
+// Kanaele: Bereich notifications/channels ueber v2 (ohne Einstellung aus); die Kennungen der Kanaele an den Checks
+// gehen nur mit, wenn er auf beiden Seiten an ist, und beim Einschalten kommen die Checks von vorn.
+func TestClusterChannels(t *testing.T) {
+	ctx := context.Background()
+	a, b := newNode(t, "node-a", "A", 522), newNode(t, "node-b", "B", 522)
+	fa, fb := newFake(a), newFake(b)
+	pa, pb := newNFProv(a), newNFProv(b)
+	t0 := time.Now().Add(-time.Hour).UTC().Truncate(time.Millisecond)
+	pa.data["channels/u1"] = "kanal"
+	fa.chk["tok1"], fa.upd["tok1"] = wire.Check{Token: "tok1", Name: "web", Nodes: []string{"node-a"}, ChannelUIDs: &[]string{"u1"}}, t0
+	a.m.seed(ctx)
+	code, _, _ := a.m.StartPairing()
+	if err := b.m.Join(ctx, a.srv.URL, code, b.srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	waitMembers(t, a, "B")
+	lastSeen := func() *wire.Check {
+		fb.mu.Lock()
+		defer fb.mu.Unlock()
+		if len(fb.seen) == 0 {
+			return nil
+		}
+		w := fb.seen[len(fb.seen)-1]
+		return &w
+	}
+	round2(a, b)
+	if pb.get("channels", "u1") != "" {
+		t.Fatal("channels are off by default")
+	}
+	if w := lastSeen(); w == nil || w.Token != "tok1" || w.ChannelUIDs != nil {
+		t.Fatalf("check without channel uids while the area is off: %+v", w)
+	}
+	x, _ := a.m.member(ctx, "node-b")
+	if has(a.m.v1Wants(a.m.syncCaps(ctx), *x), "channels") {
+		t.Fatal("channels must not be in v1 wants")
+	}
+	// nur A an: weiterhin nichts
+	_ = a.m.SetSync(ctx, "notifications", "channels", true)
+	round2(a, b)
+	if pb.get("channels", "u1") != "" {
+		t.Fatal("B has channels off")
+	}
+	_ = b.m.SetSync(ctx, "notifications", "channels", true)
+	n := len(fb.seen)
+	round2(a, b)
+	if pb.get("channels", "u1") != "kanal" {
+		t.Fatalf("channel must reach B: %q", pb.get("channels", "u1"))
+	}
+	if w := lastSeen(); len(fb.seen) == n || w.ChannelUIDs == nil || len(*w.ChannelUIDs) != 1 || (*w.ChannelUIDs)[0] != "u1" {
+		t.Fatalf("check must come again with channel uids: %+v", w)
+	}
+	x, _ = a.m.member(ctx, "node-b")
+	if !has(a.m.v1Wants(a.m.syncCaps(ctx), *x), "channels") {
+		t.Fatal("channels in v1 wants")
+	}
+	// B schaltet wieder aus: neue Kanaele bleiben bei A
+	_ = b.m.SetSync(ctx, "notifications", "channels", false)
+	pa.set("channels", "u2", "neu")
+	round2(a, b)
+	if pb.get("channels", "u2") != "" {
+		t.Fatal("area off on B: nothing may arrive")
 	}
 }
