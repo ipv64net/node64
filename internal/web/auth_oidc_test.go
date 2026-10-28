@@ -28,6 +28,14 @@ type fakeIdP struct {
 	sub       string
 	nonce     string
 	challenge string
+	slash     bool // Issuer mit "/" am Ende (wie authentik)
+}
+
+func (f *fakeIdP) issuer() string {
+	if f.slash {
+		return f.srv.URL + "/"
+	}
+	return f.srv.URL
 }
 
 func newFakeIdP(t *testing.T) *fakeIdP {
@@ -37,7 +45,7 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
 		u := f.srv.URL
-		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": u, "authorization_endpoint": u + "/auth", "token_endpoint": u + "/token",
+		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": f.issuer(), "authorization_endpoint": u + "/auth", "token_endpoint": u + "/token",
 			"jwks_uri": u + "/jwks", "id_token_signing_alg_values_supported": []string{"RS256"}, "response_types_supported": []string{"code"}})
 	})
 	mux.HandleFunc("GET /jwks", func(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +63,7 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 			return
 		}
 		signer, _ := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: key}, (&jose.SignerOptions{}).WithHeader("kid", "k1"))
-		claims, _ := json.Marshal(map[string]any{"iss": f.srv.URL, "sub": sub, "aud": "node64", "exp": time.Now().Add(time.Hour).Unix(),
+		claims, _ := json.Marshal(map[string]any{"iss": f.issuer(), "sub": sub, "aud": "node64", "exp": time.Now().Add(time.Hour).Unix(),
 			"iat": time.Now().Unix(), "nonce": nonce, "email": sub + "@example.com"})
 		jws, _ := signer.Sign(claims)
 		idt, _ := jws.CompactSerialize()
@@ -140,5 +148,40 @@ func TestOIDCLinkAndLogin(t *testing.T) {
 	}
 	if resp, _ = a.get(t, cb); resp.Header.Get("Location") != "/login" {
 		t.Fatal("state must be single use")
+	}
+}
+
+// Issuer mit und ohne "/" am Ende: gespeichert wird wie eingegeben, Discovery und ID-Token passen in beiden
+// Schreibweisen (authentik hat den Schraegstrich, Authelia/Keycloak nicht).
+func TestOIDCIssuerTrailingSlash(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		slash        bool
+		input, store string
+	}{{"authentik as given", true, "/", "/"}, {"authentik without slash", true, "", ""}, {"authelia with slash", false, "/", "/"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			idp := newFakeIdP(t)
+			idp.slash = tc.slash
+			dir := t.TempDir()
+			box, _ := secrets.Load(filepath.Join(dir, "secret.key"))
+			a := newTestAppDeps(t, func(d *Deps) { d.Box = box })
+			loginAs(t, a, "admin", "sehr geheimes passwort")
+			_, body := a.get(t, "/settings/login")
+			csrf := csrfOf(t, body)
+			_, _ = a.post(t, "/settings/login/oidc", url.Values{"_csrf": {csrf}, "issuer": {idp.srv.URL + tc.input}, "client_id": {"node64"}, "client_secret": {"s3cret"}})
+			if got := a.store.SettingOr(t.Context(), setOIDCIssuer, ""); got != idp.srv.URL+tc.store {
+				t.Fatalf("stored issuer %q", got)
+			}
+			resp, _ := a.post(t, "/settings/login/oidc/link", url.Values{"_csrf": {csrf}})
+			cb := idp.authorize(t, resp.Header.Get("Location"), "alice")
+			resp, _ = a.get(t, cb)
+			if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/settings/login" {
+				t.Fatalf("link callback: %d %s", resp.StatusCode, resp.Header.Get("Location"))
+			}
+			u, _ := a.store.UserByName(t.Context(), "admin")
+			if ids, _ := a.store.Identities(t.Context(), u.ID); len(ids) != 1 || ids[0].Subject != "alice" {
+				t.Fatalf("identity not linked: %+v", ids)
+			}
+		})
 	}
 }
