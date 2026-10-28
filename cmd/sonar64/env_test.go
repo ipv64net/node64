@@ -117,6 +117,15 @@ func TestLoadEnvNoTokenInErrors(t *testing.T) {
 	}
 }
 
+func TestLoadEnvNoAPICredentialsInErrors(t *testing.T) {
+	for _, v := range []string{"https://user:geheim@ipv64.net/", "https://ipv64.net/?key=geheim"} {
+		_, err := loadEnv(env(map[string]string{"SONAR64_TOKEN": testNodeTok, "SONAR64_API": v}))
+		if err == nil || strings.Contains(err.Error(), "geheim") {
+			t.Fatalf("%s: error must not repeat the URL: %v", v, err)
+		}
+	}
+}
+
 func TestLoadEnvLogLevelOnError(t *testing.T) {
 	o, err := loadEnv(env(map[string]string{"SONAR64_LOG_LEVEL": "warn"}))
 	if err == nil || o.LogLevel != slog.LevelWarn {
