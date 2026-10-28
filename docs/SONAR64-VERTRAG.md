@@ -53,7 +53,10 @@ Teil A stellt in `s64_lib.php` die gemeinsamen Funktionen (Abschnitt 6); J und W
   die aktuellen Public Keys.
 - **Meldungs-Signatur:** Knoten signiert die exakten Bytes von `report` (Ed25519), ipv64 prüft mit dem gespeicherten
   Key. `seq` muss größer als die letzte angenommene sein (Wiederholschutz).
-- Die IP eines Knotens nimmt ipv64 nur aus der Verbindung (`REMOTE_ADDR`), nie aus Headern.
+- Die IP eines Knotens nimmt ipv64 nur aus der Verbindung (`REMOTE_ADDR`), nie aus Angaben des Knotens. ipv64 läuft
+  hinter einem internen Reverse Proxy: ist `REMOTE_ADDR` nicht öffentlich, zählt nur die vom Proxy angehängte letzte
+  `X-Forwarded-For`-Adresse (`client_ip()` der API v2). Wechselt die IP einer Familie, wird `reach4/6` auf `none`
+  gesetzt (die alte Adresse darf in keinen Plan mehr).
 
 ## 3. API v2 (`/api/v2/sonar/...`)
 
@@ -64,11 +67,11 @@ Antworten wie API v2 üblich `{ "data": … }`, Fehler RFC 9457. Zeiten ISO 8601
 | POST | `/sonar/tokens` | API-Key | `{name}` → `{id, token}` (Token nur hier im Klartext) |
 | GET | `/sonar/tokens` | API-Key | Liste `{id, name, node_id, created_at, last_used_at}` |
 | DELETE | `/sonar/tokens/{id}` | API-Key | Token und Knoten deaktivieren |
-| POST | `/sonar/register` | Sonar-Token | `Register` → `Me` (legt Knoten an, `node_id` = `n` + 11 `[a-z0-9]`, Anker `a_<name>`) |
+| POST | `/sonar/register` | Sonar-Token | `Register` → `Me` (legt Knoten an, `node_id` = `n` + 11 `[a-z0-9]`, Anker `a_<name>`); 201 neu, 200 Wiederholung mit gleichem Key, 409 `already_registered` mit anderem |
 | GET | `/sonar/me` | Sonar-Token | `Me` |
-| PUT | `/sonar/me` | Sonar-Token | `Me` (nur schreibbare Felder) → `Me` |
+| PUT | `/sonar/me` | Sonar-Token | `Me` (nur schreibbare Felder; fehlend oder leerer Text = unverändert) → `Me` |
 | GET | `/sonar/plan` | Sonar-Token | `SignedPlan`; `ETag`/`If-None-Match` → 304; 204 = kein Plan (pausieren erlaubt) |
-| POST | `/sonar/results` | Sonar-Token | `SignedReport` → `{accepted, rejected, reasons:{…}}`; höchstens 1 Meldung je 60 s, Nachreichen erlaubt (Puffer 6 h) |
+| POST | `/sonar/results` | Sonar-Token | `SignedReport` (genau die Schlüssel `report`, `sig`; gzip erlaubt) → 200 `{accepted, rejected, reasons:{…}}`; höchstens 1 Meldung je 60 s (429 + `Retry-After`), `seq` ≤ letzter → 409 `replay`, Nachreichen erlaubt (Puffer 6 h) |
 | GET | `/sonar/inbound?since=` | Sonar-Token | Liste `InboundRow` (höchstens 500, `since` ≤ 24 h zurück) |
 | GET | `/sonar/public/keys` | – | `{keys:[{kid, pubkey}]}` |
 | GET | `/sonar/public/map` | – | Abschnitt 5 |
@@ -87,6 +90,12 @@ Plausibilität beim Annehmen (Teil A, je Ergebnis; verworfen + Grund gezählt):
 `below_light` (Antwortzeit < 2 × Entfernung / 200 km/ms anhand der genauen Koordinaten, Toleranz 0,3 ms),
 `too_smooth` (≥ 5 Pakete, Jitter 0 und min = max über die letzten 12 Meldungen zum selben Ziel). Statistische
 Prüfungen (Median, Hin/Zurück, Anker-Wahrheit, Stichproben) macht Teil J.
+Umsetzung: „± eine Runde“ nur, wenn das Ziel in der gemeldeten Runde nicht im Plan steht; geprüft gegen die zwei
+zuletzt ausgelieferten Pläne; Anker sind per icmp/udp immer erlaubt (je Runde einmal). Weitere Gründe ohne
+`plaus_bad`: `not_measured` (sent = 0), `duplicate` (schon gespeichert). Mit `valid=0` gespeichert werden `bad_time`,
+`below_light`, `too_smooth`. Sofortige Abstufung um eine Stufe (pillar→trusted→stable→new, Eintrag in
+`sonar_trust_log`, Grund `plaus_report`), wenn in einer Meldung ≥ 3 und mehr als die Hälfte der geprüften Werte
+`bad_values`/`below_light`/`too_smooth` sind; Quarantäne setzt nur Teil J.
 
 ## 4. UDP 6464
 
@@ -122,17 +131,21 @@ Alle Zeiten `DATETIME(3)` UTC, `utf8mb4`.
   name VARCHAR(32) UNIQUE, slug VARCHAR(40) UNIQUE, lat DOUBLE NULL, lon DOUBLE NULL, pub_lat DOUBLE NULL,
   pub_lon DOUBLE NULL, jitter_seed INT, access VARCHAR(12), device VARCHAR(16), measured TINYINT, budget VARCHAR(12),
   mode VARCHAR(10), version VARCHAR(32), ip4 VARCHAR(45) NULL, ip6 VARCHAR(45) NULL, asn4 INT NULL,
-  asname4 VARCHAR(100) NULL, asn6 INT NULL, asname6 VARCHAR(100) NULL, place VARCHAR(80) NULL,
+  asname4 VARCHAR(100) NULL, asn6 INT NULL, asname6 VARCHAR(100) NULL, asn_at DATETIME(3) NULL (ASN-Cache),
+  place VARCHAR(80) NULL,
   reach4 ENUM('none','icmp','udp') DEFAULT 'none', reach6 …, trust ENUM('new','stable','trusted','pillar','anchor',
   'quarantine') DEFAULT 'new', score DOUBLE DEFAULT 0, uptime30 DOUBLE DEFAULT 0, plaus_ok INT, plaus_bad INT,
   last_seq BIGINT DEFAULT 0, first_seen, last_seen NULL, last_report NULL, last_plan NULL, health JSON NULL,
   active TINYINT DEFAULT 1)
 - `sonar_plans` (node_id PK, issued, expires, body MEDIUMTEXT (Plan-JSON ohne Signatur), etag CHAR(16),
-  controls TEXT (Ziel-IDs der Kontrollziele, nie ausgeliefert als solche))
+  controls TEXT (Ziel-IDs der Kontrollziele, nie ausgeliefert als solche), sent_etag, sent_body, prev_body, sent_at
+  (setzt nur `GET /sonar/plan`: zuletzt/davor ausgelieferter Plan); Teil J schreibt per `INSERT … ON DUPLICATE KEY
+  UPDATE` nur seine Spalten, nie `REPLACE`)
 - `sonar_results` (id PK, round DATETIME, src VARCHAR(16), dst VARCHAR(16), fam TINYINT, method VARCHAR(6),
   sent TINYINT, recv TINYINT, min_ms FLOAT, avg_ms FLOAT, max_ms FLOAT, jitter_ms FLOAT, at DATETIME(3),
-  valid TINYINT, reason VARCHAR(16) NULL, INDEX(dst, at), INDEX(src, at), INDEX(at)) – 7 Tage
-- `sonar_traces` (id PK, round, src, dst, fam, at, hops JSON) – 7 Tage
+  valid TINYINT, reason VARCHAR(16) NULL, UNIQUE(src, round, dst, fam, method), INDEX(dst, at), INDEX(src, at),
+  INDEX(at)) – 7 Tage; Spalten `round`, `count`, `old`, `new` in SQL mit Backticks
+- `sonar_traces` (id PK, round, src, dst, fam, at, hops JSON, UNIQUE(src, round, dst, fam)) – 7 Tage
 - `sonar_inbound` (id PK, node_id, from_short CHAR(8), fam, at, count) – 24 h (Live über UDP)
 - `sonar_pair_1h` (src, dst, fam, hour, n, avg_ms, p50_ms, loss, PRIMARY(src,dst,fam,hour)) – 90 Tage
 - `sonar_asn_1d` (day, asn_a, asn_b, fam, n, p50_ms, loss, PRIMARY(day,asn_a,asn_b,fam)) – dauerhaft
@@ -145,6 +158,9 @@ Gemeinsame Funktionen in `deploy/web/sonar/s64_lib.php` (Teil A): `s64_pdo()` (P
 `s64_light_min_ms(float $km): float` (= 2·km/200), `s64_asn_lookup(string $ip): array` (ASN + Name über
 Team-Cymru-DNS `origin(6).asn.cymru.com` / `asn.cymru.com`, Cache 24 h in der Knotenzeile, Fehler = null),
 `s64_is_public_ip(string $ip): bool`, `s64_plan_sign(string $planJson): array` (`kid`, `sig`), `s64_trust_label()`.
+`s64_pub_coords` liefert `[0 => lat, 1 => lon, 'lat' => …, 'lon' => …]`, `s64_asn_lookup` immer
+`{asn, name, prefix, cc}` (Fehler: `asn` = null). Dazu: `s64_dt()`/`s64_ts()`/`s64_iso()` (UTC, DATETIME(3)),
+`s64_median()`, `s64_short_id()`, `s64_plan_keys()`, `s64_trust_color()`, `s64_trust_weight()`, `s64_cache()`.
 
 ## 7. Planer und Vertrauen (Teil J)
 
