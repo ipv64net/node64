@@ -169,7 +169,7 @@
 		<tbody>
 		{{range $d.Rows}}
 		<tr>
-			<td class="ps-3 fw-semibold">{{.Name}}</td>
+			<td class="ps-3 fw-semibold">{{.Name}}{{if .Auth}} <span class="badge text-bg-info">{{$.T (printf "cdn64.acl.auth_%s" .Auth)}}</span>{{end}}{{if .Keys}} <span class="badge text-bg-secondary"><i class="bi bi-key"></i> {{len .Keys}}</span>{{end}}</td>
 			<td>{{len .Users}}</td>
 			<td>{{len .Rules}}</td>
 			<td>{{if .SatisfyAny}}{{$.T "cdn64.acl.any"}}{{else}}{{$.T "cdn64.acl.all"}}{{end}}{{if .PassAuth}} · {{$.T "cdn64.acl.pass_auth_short"}}{{end}}{{if .LoginPage}} · {{$.T "cdn64.acl.login_page_short"}}{{end}}</td>

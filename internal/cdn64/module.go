@@ -49,7 +49,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.36.0"
+	Version = "1.37.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -573,9 +573,15 @@ func (m *Module) importACLs(ctx context.Context, lists []*AccessList) (aclImport
 		}
 		ub, _ := json.Marshal(a.Users)
 		rb, _ := json.Marshal(a.Rules)
+		fb, _ := json.Marshal(a.Forward)
+		if a.Keys == nil {
+			a.Keys = []AccessKey{}
+		}
+		kb, _ := json.Marshal(a.Keys)
 		now := store.Now()
-		r, err := m.core.Writer().ExecContext(ctx, `INSERT INTO cdn_access_lists (name, satisfy_any, pass_auth, login_page, users, rules, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			a.Name, a.SatisfyAny, a.PassAuth, a.LoginPage, string(ub), string(rb), now, now)
+		r, err := m.core.Writer().ExecContext(ctx, `INSERT INTO cdn_access_lists (name, satisfy_any, pass_auth, login_page, users, rules, auth, forward, pass_user, api_keys, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			a.Name, a.SatisfyAny, a.PassAuth, a.LoginPage, string(ub), string(rb), a.Auth, string(fb), a.PassUser, string(kb), now, now)
 		if err != nil {
 			return res, err
 		}

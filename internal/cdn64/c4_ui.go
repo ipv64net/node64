@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -96,12 +97,30 @@ func (m *Module) pageACLs(w http.ResponseWriter, r *http.Request) {
 }
 
 type aclForm struct {
-	Tabs   []tab
-	A      *AccessList
-	New    bool
-	Rules  string
-	Error  string
-	Errors map[string]string
+	Tabs    []tab
+	A       *AccessList
+	New     bool
+	Rules   string
+	Error   string
+	Errors  map[string]string
+	Auths   []aclAuth // Auswahl "Anmeldung"
+	Headers string    // Antwort-Header des Anmeldedienstes, je Zeile
+}
+
+// aclAuth ist eine Wahl unter "Anmeldung" (Beispiel-Adresse fuer das Feld).
+type aclAuth struct{ Value, Example string }
+
+func aclAuths() []aclAuth {
+	out := []aclAuth{{Value: AuthUsers}}
+	for _, k := range []string{AuthAuthentik, AuthAuthelia, AuthOAuth2, AuthCustom} {
+		out = append(out, aclAuth{Value: k, Example: fwdPresets[k].Example})
+	}
+	return out
+}
+
+func (m *Module) aclFormData(r *http.Request, a *AccessList, isNew bool, rules string) aclForm {
+	return aclForm{Tabs: m.tabs("/cdn64/access"), A: a, New: isNew, Rules: rules, Errors: map[string]string{}, Auths: aclAuths(),
+		Headers: strings.Join(a.Forward.Headers, "\n")}
 }
 
 func rulesText(rules []AccessRule) string {
@@ -113,9 +132,9 @@ func rulesText(rules []AccessRule) string {
 }
 
 func (m *Module) pageACLNew(w http.ResponseWriter, r *http.Request) {
-	a := &AccessList{Users: []AccessUser{}, Rules: []AccessRule{}}
-	m.g.Render(w, r, http.StatusOK, Name+"/access_form", "cdn64.acl.new", aclForm{Tabs: m.tabs("/cdn64/access"), A: a, New: true,
-		Rules: "allow 192.168.0.0/16\nallow 10.0.0.0/8\nallow 172.16.0.0/12\nallow fc00::/7\n", Errors: map[string]string{}})
+	a := &AccessList{Users: []AccessUser{}, Rules: []AccessRule{}, Keys: []AccessKey{}}
+	m.g.Render(w, r, http.StatusOK, Name+"/access_form", "cdn64.acl.new", m.aclFormData(r, a, true,
+		"allow 192.168.0.0/16\nallow 10.0.0.0/8\nallow 172.16.0.0/12\nallow fc00::/7\n"))
 }
 
 func (m *Module) aclFromPath(w http.ResponseWriter, r *http.Request) (*AccessList, bool) {
@@ -134,7 +153,7 @@ func (m *Module) pageACLEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	m.g.Render(w, r, http.StatusOK, Name+"/access_form", "cdn64.acl.edit", aclForm{Tabs: m.tabs("/cdn64/access"), A: a.public(), Rules: rulesText(a.Rules), Errors: map[string]string{}})
+	m.g.Render(w, r, http.StatusOK, Name+"/access_form", "cdn64.acl.edit", m.aclFormData(r, a.public(), false, rulesText(a.Rules)))
 }
 
 // parseRules: eine Regel je Zeile, "allow 192.168.0.0/16" oder "deny all".
@@ -196,8 +215,30 @@ func (m *Module) saveACLForm(w http.ResponseWriter, r *http.Request, a *AccessLi
 	a.Name, a.SatisfyAny, a.PassAuth = r.PostFormValue("name"), r.PostFormValue("satisfy_any") == "1", r.PostFormValue("pass_auth") == "on"
 	a.LoginPage = r.PostFormValue("login_page") == "on"
 	a.Rules = parseRules(r.PostFormValue("rules"))
+	a.Auth, a.PassUser = r.PostFormValue("auth"), r.PostFormValue("pass_user") == "on"
+	a.Forward = ForwardAuth{Address: r.PostFormValue("fwd_address"), Headers: strings.Fields(r.PostFormValue("fwd_headers")),
+		Callback: r.PostFormValue("fwd_callback")}
+	// API-Keys: bestehende behalten (ausser "entfernen"), ein neuer mit Namen wird erzeugt und einmal angezeigt
+	removeKey := map[string]bool{}
+	for _, h := range r.PostForm["remove_key"] {
+		removeKey[h] = true
+	}
+	var keys []AccessKey
+	for _, k := range a.Keys {
+		if !removeKey[k.Hint] {
+			keys = append(keys, k)
+		}
+	}
+	newKey := ""
+	if n := strings.TrimSpace(r.PostFormValue("new_key")); n != "" {
+		var k AccessKey
+		k, newKey = newAccessKey(n)
+		keys = append(keys, k)
+	}
+	a.Keys = keys
 	if err := m.saveAccessList(r.Context(), a, users); err != nil {
-		d := aclForm{Tabs: m.tabs("/cdn64/access"), A: a.public(), New: isNew, Rules: r.PostFormValue("rules"), Errors: map[string]string{}}
+		d := m.aclFormData(r, a.public(), isNew, r.PostFormValue("rules"))
+		d.Headers = r.PostFormValue("fwd_headers")
 		var fe *FieldError
 		if errors.As(err, &fe) {
 			d.Errors[fe.Field] = m.g.T(r, fe.Key, "name", fe.Name)
@@ -211,7 +252,13 @@ func (m *Module) saveACLForm(w http.ResponseWriter, r *http.Request, a *AccessLi
 	if isNew {
 		action = "cdn64.acl.create"
 	}
-	m.g.Audit(r, action, a.Name, fmt.Sprintf("users=%d rules=%d satisfy_any=%v pass_auth=%v login_page=%v", len(a.Users), len(a.Rules), a.SatisfyAny, a.PassAuth, a.LoginPage))
+	m.g.Audit(r, action, a.Name, fmt.Sprintf("users=%d rules=%d satisfy_any=%v pass_auth=%v login_page=%v auth=%s keys=%d pass_user=%v", len(a.Users),
+		len(a.Rules), a.SatisfyAny, a.PassAuth, a.LoginPage, a.Auth, len(a.Keys), a.PassUser))
+	if newKey != "" { // nur jetzt sichtbar
+		m.g.Flash(w, r, "warning", m.g.T(r, "cdn64.acl.key_created", "key", newKey))
+		http.Redirect(w, r, "/cdn64/access/"+strconv.FormatInt(a.ID, 10), http.StatusSeeOther)
+		return
+	}
 	m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
 	http.Redirect(w, r, "/cdn64/access", http.StatusSeeOther)
 }
@@ -434,6 +481,11 @@ type aclInput struct {
 	LoginPage  *bool        `json:"login_page"`
 	Users      []UserInput  `json:"users"`
 	Rules      []AccessRule `json:"rules"`
+	Auth       *string      `json:"auth"`
+	Forward    *ForwardAuth `json:"forward"`
+	PassUser   *bool        `json:"pass_user"`
+	AddKey     string       `json:"add_key"`     // Name eines neuen API-Keys (der Key steht einmal in der Antwort)
+	RemoveKeys []string     `json:"remove_keys"` // Anfang (hint) der zu loeschenden Keys
 }
 
 func (m *Module) apiACLSave(w http.ResponseWriter, r *http.Request, a *AccessList, status int) {
@@ -457,6 +509,28 @@ func (m *Module) apiACLSave(w http.ResponseWriter, r *http.Request, a *AccessLis
 	if in.Rules != nil {
 		a.Rules = in.Rules
 	}
+	if in.Auth != nil {
+		a.Auth = *in.Auth
+	}
+	if in.Forward != nil {
+		a.Forward = *in.Forward
+	}
+	if in.PassUser != nil {
+		a.PassUser = *in.PassUser
+	}
+	var keys []AccessKey
+	for _, k := range a.Keys {
+		if !slices.Contains(in.RemoveKeys, k.Hint) {
+			keys = append(keys, k)
+		}
+	}
+	newKey := ""
+	if n := strings.TrimSpace(in.AddKey); n != "" {
+		var k AccessKey
+		k, newKey = newAccessKey(n)
+		keys = append(keys, k)
+	}
+	a.Keys = keys
 	users := in.Users
 	if users == nil { // unveraendert
 		for _, u := range a.Users {
@@ -471,8 +545,11 @@ func (m *Module) apiACLSave(w http.ResponseWriter, r *http.Request, a *AccessLis
 	if status == http.StatusCreated {
 		action = "cdn64.acl.create"
 	}
-	m.g.Audit(r, action, a.Name, fmt.Sprintf("users=%d rules=%d", len(a.Users), len(a.Rules)))
-	writeJSON(w, status, a.public())
+	m.g.Audit(r, action, a.Name, fmt.Sprintf("users=%d rules=%d auth=%s keys=%d", len(a.Users), len(a.Rules), a.Auth, len(a.Keys)))
+	writeJSON(w, status, struct {
+		*AccessList
+		Key string `json:"key,omitempty"` // neuer API-Key, nur in dieser Antwort
+	}{a.public(), newKey})
 }
 
 func (m *Module) apiACLCreate(w http.ResponseWriter, r *http.Request) {

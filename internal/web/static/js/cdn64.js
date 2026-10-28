@@ -3,6 +3,22 @@
 (function () {
 	"use strict";
 
+	// Zugriffsliste: Anmeldedienst (Adresse, Beispiel als Platzhalter), Login-Seite nur ohne Dienst
+	var auth = document.querySelector("[data-acl-auth]");
+	if (auth) {
+		var fwdBox = document.querySelector("[data-fwd-box]");
+		var loginBox = document.querySelector("[data-login-box]");
+		var addr = document.querySelector("[data-fwd-address]");
+		var authSync = function () {
+			var o = auth.options[auth.selectedIndex];
+			if (fwdBox) { fwdBox.classList.toggle("d-none", auth.value === ""); }
+			if (loginBox) { loginBox.classList.toggle("d-none", auth.value !== ""); }
+			if (addr) { addr.placeholder = (o && o.getAttribute("data-example")) || "http://…"; }
+		};
+		auth.addEventListener("change", authSync);
+		authSync();
+	}
+
 	// Rueckfrage vor Loeschen
 	document.querySelectorAll("[data-confirm]").forEach(function (b) {
 		b.addEventListener("click", function (e) {

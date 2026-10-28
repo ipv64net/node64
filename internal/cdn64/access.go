@@ -20,6 +20,7 @@ import (
 
 // Access Lists wie im NPM: Benutzer (Basic Auth, bcrypt) und IP-Regeln (in Reihenfolge, erster Treffer gilt,
 // ohne Treffer gesperrt). "Eine Bedingung genuegt" erlaubt IP oder Anmeldung, sonst braucht es beides.
+// Anmeldung = API-Key, Benutzer der Liste oder Anmeldedienst (Forward-Auth, forwardauth.go), in dieser Reihenfolge.
 // Fehlversuche bei der Anmeldung werden je IP begrenzt.
 
 const (
@@ -51,6 +52,10 @@ type AccessList struct {
 	LoginPage  bool         `json:"login_page"` // Anmeldung ueber eine Login-Seite statt des Browser-Dialogs (access_login.go)
 	Users      []AccessUser `json:"users"`
 	Rules      []AccessRule `json:"rules"`
+	Auth       string       `json:"auth"`      // Anmeldedienst (AuthAuthentik …), "" = Benutzer der Liste
+	Forward    ForwardAuth  `json:"forward"`   // Einstellung des Anmeldedienstes
+	PassUser   bool         `json:"pass_user"` // Remote-User, -Email, -Groups, -Name an das Ziel
+	Keys       []AccessKey  `json:"keys"`      // API-Keys
 	CreatedAt  time.Time    `json:"created_at"`
 	UpdatedAt  time.Time    `json:"updated_at"`
 }
@@ -61,6 +66,10 @@ func (a *AccessList) public() *AccessList {
 	cp.Users = make([]AccessUser, len(a.Users))
 	for i, u := range a.Users {
 		cp.Users[i] = AccessUser{Username: u.Username}
+	}
+	cp.Keys = make([]AccessKey, len(a.Keys))
+	for i, k := range a.Keys {
+		cp.Keys[i] = AccessKey{Name: k.Name, Hint: k.Hint, CreatedAt: k.CreatedAt}
 	}
 	return &cp
 }
@@ -103,13 +112,18 @@ func (a *AccessList) ipAllowed(ip netip.Addr) bool {
 // guard prueft Anfragen gegen eine Liste (eine Instanz je Liste, mit Cache fuer erfolgreiche Anmeldungen).
 type guard struct {
 	list  *AccessList
+	fwd   *fwdAuth // Anmeldedienst (nil = keiner)
 	mu    sync.Mutex
 	cache map[[32]byte]time.Time // sha256(user:pass) -> gueltig bis
 }
 
 func newGuard(a *AccessList) *guard {
 	a.prepare()
-	return &guard{list: a, cache: map[[32]byte]time.Time{}}
+	g := &guard{list: a, cache: map[[32]byte]time.Time{}}
+	if a.Auth != AuthUsers {
+		g.fwd = newFwdAuth(a.Auth, a.Forward)
+	}
+	return g
 }
 
 // authOK prueft Basic Auth (bcrypt nur einmal je Benutzer/Passwort in 5 Minuten).
@@ -150,30 +164,53 @@ func (g *guard) authOK(r *http.Request) (ok, tried bool) {
 // dummyHash: bcrypt-Wert ohne Benutzer, nur fuer gleiche Laufzeit bei unbekannten Namen.
 var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("node64-unknown-user"), bcrypt.DefaultCost)
 
-// decide: Zugriff erlaubt? Sonst 401 (Anmeldung koennte helfen) oder 403. key: Schluessel der Sitzungs-Cookies
-// (Login-Seite; nil = ohne).
-func (g *guard) decide(r *http.Request, ip netip.Addr, key []byte) (allowed bool, status int, failed bool) {
+// verdict ist das Ergebnis der Pruefung einer Anfrage.
+type verdict struct {
+	ok     bool
+	status int    // 401 (Anmeldung koennte helfen) oder 403, wenn nicht ok
+	failed bool   // falsche Anmeldedaten (zaehlt als Fehlversuch)
+	user   string // angemeldet als (Benutzer der Liste oder Name des API-Keys)
+	key    bool   // ueber einen API-Key
+	fwd    bool   // noch beim Anmeldedienst pruefen
+}
+
+// decide: Zugriff erlaubt? key: Schluessel der Sitzungs-Cookies (Login-Seite; nil = ohne).
+func (g *guard) decide(r *http.Request, ip netip.Addr, key []byte) verdict {
 	a := g.list
-	hasRules, hasUsers := len(a.Rules) > 0, len(a.Users) > 0
+	hasRules := len(a.Rules) > 0
 	ipOK := !hasRules || a.ipAllowed(ip)
-	authOK, tried := true, false
-	if hasUsers {
-		authOK, tried = g.authOK(r)
-		if !authOK && a.LoginPage && g.cookieOK(r, key) {
-			authOK = true
+	if len(a.Users) == 0 && len(a.Keys) == 0 && g.fwd == nil { // nur IP-Regeln
+		if ipOK {
+			return verdict{ok: true}
+		}
+		return verdict{status: http.StatusForbidden}
+	}
+	if a.SatisfyAny && hasRules && ipOK {
+		return verdict{ok: true}
+	}
+	if !ipOK && !a.SatisfyAny {
+		return verdict{status: http.StatusForbidden}
+	}
+	name, ok, tried := g.keyOK(r)
+	if ok {
+		return verdict{ok: true, user: name, key: true}
+	}
+	if !tried && len(a.Users) > 0 {
+		if ok, t := g.authOK(r); ok {
+			u, _, _ := r.BasicAuth()
+			return verdict{ok: true, user: u}
+		} else if t {
+			tried = true
+		} else if a.LoginPage && g.fwd == nil {
+			if u := g.cookieUser(r, key); u != "" {
+				return verdict{ok: true, user: u}
+			}
 		}
 	}
-	if a.SatisfyAny {
-		if (hasRules && ipOK) || (hasUsers && authOK) || (!hasRules && !hasUsers) {
-			return true, 0, false
-		}
-	} else if ipOK && authOK {
-		return true, 0, false
+	if !tried && g.fwd != nil {
+		return verdict{fwd: true}
 	}
-	if hasUsers && !authOK && (ipOK || a.SatisfyAny) {
-		return false, http.StatusUnauthorized, tried
-	}
-	return false, http.StatusForbidden, false
+	return verdict{status: http.StatusUnauthorized, failed: tried}
 }
 
 // failLimiter begrenzt Fehlversuche je IP.
@@ -224,16 +261,21 @@ func (l *failLimiter) failed(ip netip.Addr) bool {
 
 // ---------------------------------------------------------------- Datenbank
 
-const aclCols = `id, name, satisfy_any, pass_auth, login_page, users, rules, created_at, updated_at`
+const aclCols = `id, name, satisfy_any, pass_auth, login_page, users, rules, auth, forward, pass_user, api_keys, created_at, updated_at`
 
 func scanACL(row interface{ Scan(...any) error }) (*AccessList, error) {
 	var a AccessList
-	var users, rules, ca, ua string
-	if err := row.Scan(&a.ID, &a.Name, &a.SatisfyAny, &a.PassAuth, &a.LoginPage, &users, &rules, &ca, &ua); err != nil {
+	var users, rules, fwd, keys, ca, ua string
+	if err := row.Scan(&a.ID, &a.Name, &a.SatisfyAny, &a.PassAuth, &a.LoginPage, &users, &rules, &a.Auth, &fwd, &a.PassUser, &keys, &ca, &ua); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(users), &a.Users)
 	_ = json.Unmarshal([]byte(rules), &a.Rules)
+	_ = json.Unmarshal([]byte(fwd), &a.Forward)
+	_ = json.Unmarshal([]byte(keys), &a.Keys)
+	if a.Keys == nil {
+		a.Keys = []AccessKey{}
+	}
 	if a.Users == nil {
 		a.Users = []AccessUser{}
 	}
@@ -343,23 +385,39 @@ func (m *Module) saveAccessList(ctx context.Context, a *AccessList, users []User
 		}
 		rules = append(rules, AccessRule{Action: r.Action, CIDR: r.CIDR})
 	}
-	if len(out) == 0 && len(rules) == 0 {
+	a.Auth = strings.TrimSpace(a.Auth)
+	if a.Auth == AuthUsers {
+		a.Forward = ForwardAuth{}
+	} else {
+		if err := a.Forward.normalize(a.Auth); err != nil {
+			return err
+		}
+		a.LoginPage = false // die Anmeldeseite stellt der Dienst
+	}
+	if err := normalizeKeys(a); err != nil {
+		return err
+	}
+	if len(out) == 0 && len(rules) == 0 && a.Auth == AuthUsers && len(a.Keys) == 0 {
 		return ferr("rules", "cdn64.err.acl_empty")
 	}
 	a.Users, a.Rules = out, rules
 	ub, _ := json.Marshal(out)
 	rb, _ := json.Marshal(rules)
+	fb, _ := json.Marshal(a.Forward)
+	kb, _ := json.Marshal(a.Keys)
 	now := store.Now()
 	w := m.core.Writer()
 	if a.ID == 0 {
-		res, err := w.ExecContext(ctx, `INSERT INTO cdn_access_lists (name, satisfy_any, pass_auth, login_page, users, rules, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			a.Name, a.SatisfyAny, a.PassAuth, a.LoginPage, string(ub), string(rb), now, now)
+		res, err := w.ExecContext(ctx, `INSERT INTO cdn_access_lists (name, satisfy_any, pass_auth, login_page, users, rules, auth, forward, pass_user, api_keys, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			a.Name, a.SatisfyAny, a.PassAuth, a.LoginPage, string(ub), string(rb), a.Auth, string(fb), a.PassUser, string(kb), now, now)
 		if err != nil {
 			return err
 		}
 		a.ID, _ = res.LastInsertId()
-	} else if _, err := w.ExecContext(ctx, `UPDATE cdn_access_lists SET name = ?, satisfy_any = ?, pass_auth = ?, login_page = ?, users = ?, rules = ?, updated_at = ? WHERE id = ?`,
-		a.Name, a.SatisfyAny, a.PassAuth, a.LoginPage, string(ub), string(rb), now, a.ID); err != nil {
+	} else if _, err := w.ExecContext(ctx, `UPDATE cdn_access_lists SET name = ?, satisfy_any = ?, pass_auth = ?, login_page = ?, users = ?, rules = ?,
+		auth = ?, forward = ?, pass_user = ?, api_keys = ?, updated_at = ? WHERE id = ?`,
+		a.Name, a.SatisfyAny, a.PassAuth, a.LoginPage, string(ub), string(rb), a.Auth, string(fb), a.PassUser, string(kb), now, a.ID); err != nil {
 		return err
 	}
 	m.apply(ctx)

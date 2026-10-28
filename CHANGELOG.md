@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Zugriffslisten mit authentik, Authelia, oauth2-proxy oder eigenem Anmeldedienst (Forward-Auth), API-Keys für
+  Apps und Skripte, Benutzername auf Wunsch an das Ziel.
 - PROXY64: Proxy-Hosts aus Docker-Labels (`node64.proxy.host`/`port`, auf Wunsch auch Traefik-Labels), neuer Reiter
   Docker, standardmäßig aus.
 - PROXY64: neue Standardwerte beim Schutz vor Überlastung (weniger Verbindungen je IP und insgesamt), Hinweis zur

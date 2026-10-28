@@ -84,32 +84,35 @@ func (g *guard) loginToken(key []byte, user string, until time.Time) string {
 }
 
 // cookieOK: gueltige Sitzung dieser Liste im Cookie.
-func (g *guard) cookieOK(r *http.Request, key []byte) bool {
+func (g *guard) cookieOK(r *http.Request, key []byte) bool { return g.cookieUser(r, key) != "" }
+
+// cookieUser: Benutzer der gueltigen Sitzung dieser Liste im Cookie ("" = keine).
+func (g *guard) cookieUser(r *http.Request, key []byte) string {
 	c, err := r.Cookie(loginCookieName(g.list.ID))
 	if err != nil || key == nil {
-		return false
+		return ""
 	}
 	enc, sig, ok := strings.Cut(c.Value, ".")
 	if !ok {
-		return false
+		return ""
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(enc)
 	if err != nil || !hmac.Equal([]byte(sig), []byte(loginSign(key, string(raw)))) {
-		return false
+		return ""
 	}
 	f := strings.Split(string(raw), "|")
 	if len(f) != 4 || f[0] != strconv.FormatInt(g.list.ID, 10) {
-		return false
+		return ""
 	}
 	if exp, err := strconv.ParseInt(f[2], 10, 64); err != nil || time.Now().Unix() > exp {
-		return false
+		return ""
 	}
 	for _, u := range g.list.Users {
 		if u.Username == f[1] && userGen(u.Hash) == f[3] {
-			return true
+			return u.Username
 		}
 	}
-	return false
+	return ""
 }
 
 // loginEndpoint beantwortet /.node64/login (POST) und /.node64/logout.
