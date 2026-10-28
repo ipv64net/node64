@@ -1,6 +1,6 @@
 # Plan: Sonar64 – verteiltes Community-Messnetz (RIPE-Atlas-Idee)
 
-Stand 2026-10-28 (2. Fassung), Wunsch und Entscheidungen Dennis. **Nur Planung**, noch nichts umgesetzt.
+Stand 2026-10-28 (3. Fassung), Wunsch und Entscheidungen Dennis. **Nur Planung**, noch nichts umgesetzt.
 
 Knoten bei den Leuten zu Hause messen sich gegenseitig (Ping, später Traceroute), geordnet und sparsam nach einem
 zentralen Plan von ipv64.net. Ziel ist eine **lebendige Karte**: farbige Badges mit Millisekunden, Verbindungslinien,
@@ -19,7 +19,9 @@ Code wird nichts übernommen.
 | Thema | Entscheidung |
 |---|---|
 | Ansatz | **Community**: Karte, öffentliche Knoten, öffentliche Vertrauensstufen, sichtbarer Mehrwert für jeden Teilnehmer |
-| Bauweise | **eigenständig und leichtgewichtig**: ein Programm `sonar64`, das allein läuft (Container auch auf MikroTik, Raspberry Pi) **und** als Modul in Node64 steckt (gleicher Code) |
+| Bauweise | **eigenständig und leichtgewichtig**: ein Programm `sonar64`, das allein läuft (bis hinunter zum **Raspberry Pi Zero**, auch MikroTik-Container) |
+| Node64 | Sonar64 wird **optionales Modul**, aus und unsichtbar, bis man es einschaltet. Es kommt **erst auf Ansage von Dennis** in das Node64-Repo; bis dahin eigenes Projekt außerhalb |
+| Repo | eigener Ordner `ipv64.net/sonar64/`, eigenes Go-Modul `github.com/ipv64net/sonar64`, eigenes Git (lokal, Push nur auf Ansage) |
 | Anker | **dasselbe Programm im Anker-Modus**, völlig losgelöst von den hubs; neuer Anker an beliebigem Standort = Container starten. Start mit `hc-srv01` (Falkenstein) und `hc-srv02` (Nürnberg), nicht auf den CDN64-Servern |
 | Schnittstelle | nur die ipv64-API (v2) |
 | Teilnahme | Opt-in; wer nicht gemessen werden will, misst **nur ausgehend** und erscheint nie als Ziel |
@@ -31,17 +33,26 @@ Code wird nichts übernommen.
 ## 1. Bausteine
 
 ```
-internal/sonar      Kern: Plan holen, messen (ICMP, UDP 6464), Grenzen, Ergebnisse senden, Antworter auf 6464
-cmd/sonar64         eigenständiges Programm (Knoten- oder Anker-Modus), nur der Kern + Mini-Status
-Node64-Modul        derselbe Kern als Modul „Sonar64“ mit Oberfläche (Menüpunkt, Live-Tabellen)
+sonar64/ (eigenes Projekt, Go-Modul github.com/ipv64net/sonar64)
+  sonar/            Kern: Plan holen, messen (ICMP, UDP 6464), Grenzen, Ergebnisse senden, Antworter auf 6464
+  cmd/sonar64/      eigenständiges Programm (Knoten- oder Anker-Modus), nur der Kern + Mini-Status
+Node64 (später, auf Ansage)
+  internal/sonar64  dünnes optionales Modul: bindet den Kern ein, Oberfläche (Menüpunkt, Live-Tabellen)
 ipv64.net           API v2 /sonar/*, Planer, Auswertung, öffentliche Seiten
 ```
 
-- **Ein Kern, drei Einsätze:** im Node64-Container, als eigener kleiner Container, als Anker. Keine Abhängigkeit vom
-  hub-Code oder von anderen Node64-Modulen.
-- **Leichtgewichtig:** statisches Go-Binary, Image `FROM scratch`, Ziel < 10 MB Image und < 20 MB RAM, kein
-  Speicher auf Platte nötig (nur Schlüssel und Zustand, ein paar KB). Plattformen wie Node64: `amd64`, `arm64`,
-  `arm/v7` (MikroTik-Container, Raspberry Pi). Image `ghcr.io/ipv64net/sonar64`.
+- **Ein Kern, drei Einsätze:** eigenständig (Pi Zero, MikroTik, beliebiger Linux-Rechner), als Anker, später als
+  Node64-Modul. Der Kern kennt Node64 nicht; Node64 bindet ihn ein, nicht umgekehrt.
+- **In Node64 optional:** Standard aus, ohne Einschalten kein Menüpunkt, kein Port, kein Verkehr. Erst wenn Dennis
+  sagt „Sonar64 ins Repo“, kommt das Modul (und die Abhängigkeit auf den Kern) in Node64.
+- **Leichtgewichtig:** statisches Go-Binary ohne Fremdabhängigkeiten, Ziel < 10 MB und < 20 MB RAM, kein Speicher
+  auf Platte nötig (nur Schlüssel und Zustand, ein paar KB), kaum CPU (wenige Pakete pro Sekunde).
+- **Raspberry Pi Zero:** der erste Pi Zero (W) ist ARMv6 mit 512 MB – Docker ist dort zu schwer. Deshalb gibt es
+  `sonar64` **auch als einzelne Datei** mit systemd-Dienst und Installationsskript (ein Befehl), nicht nur als
+  Container. Plattformen: `linux/arm/v6` (Pi Zero/1), `arm/v7` (Pi 2/3, MikroTik), `arm64` (Pi Zero 2, Pi 4/5),
+  `amd64`. Container-Image `ghcr.io/ipv64net/sonar64` für alle außer `arm/v6`.
+- **ICMP ohne root:** über `cap_net_raw` am Binary bzw. Linux-„ping sockets“ (`net.ipv4.ping_group_range`), wie bei
+  Node64.
 - **Eigenständig ohne Oberfläche:** Einstellung über Umgebungsvariablen (`SONAR64_TOKEN`, `SONAR64_ROLE=node|anchor`,
   `SONAR64_MEASURED=1`, `SONAR64_BUDGET=sparsam|normal|grosszuegig`); Standort und Anschlussart setzt man auf
   ipv64.net. Ein Mini-Status auf Wunsch (`SONAR64_STATUS=:8064`, JSON und eine schlichte Seite: letzte Pings raus und
@@ -163,8 +174,9 @@ mit klarem Hinweis; Eintrag in der Datenschutzerklärung.
 
 | Phase | Inhalt |
 |---|---|
-| S0 | Kern `internal/sonar`, Programm `sonar64` (Knoten + Anker), Image, API `/sonar/me` und Tokens, Anker auf hc-srv01/02, Provider-Erkennung, Selbsttest |
-| S1 | Messpläne, Ping-Netz mit Grenzen, Modul in Node64 mit Live-Tabellen, „Mein Knoten“ auf ipv64.net |
+| S0 | Projekt `sonar64` (Kern + Programm, Knoten + Anker), Binaries und Image, Installationsskript, API `/sonar/me` und Tokens, Anker auf hc-srv01/02, Provider-Erkennung, Selbsttest |
+| S1 | Messpläne, Ping-Netz mit Grenzen, Mini-Status, „Mein Knoten“ auf ipv64.net mit Live-Tabellen; Test auf Pi Zero |
+| S1b | **auf Ansage:** optionales Modul in Node64 mit Live-Tabellen |
 | S2 | Öffentliche Karte mit Badges, Teilnehmerliste, Zahlen live |
 | S3 | Vertrauensstufen (öffentlich), Bestenliste, Provider-Matrix |
 | S4 | Störungserkennung nach Region und Provider, Meldungen an Teilnehmer |
@@ -174,4 +186,5 @@ mit klarem Hinweis; Eintrag in der Datenschutzerklärung.
 
 - Startwerte für Budget und Stufen nach den ersten Wochen nachjustieren.
 - MikroTik: kleinstes sinnvolles Gerät testen (RAM, Container-Paket, ICMP-Rechte im Container).
+- Pi Zero (ARMv6) als Referenz für „leichtgewichtig“: RAM, CPU und Laufzeit im Dauerbetrieb messen.
 - Karte später ggf. Europa.
