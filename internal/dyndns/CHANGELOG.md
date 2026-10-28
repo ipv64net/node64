@@ -1,5 +1,12 @@
 # Änderungen – DynDNS-Updater
 
+## 1.4.1 – 2026-10-28
+
+### Behoben
+- Rückfrage bei mehreren Namen: Auch der Server verlangt die Bestätigung, ohne sie wird nichts angelegt. Namen mit IPv4
+  und IPv6 „aus“ zählen nicht mit (sie werden ohnehin nicht angelegt). Ein Doppelklick auf „Ja, alle übernehmen“ sendet
+  nur einmal, nach dem Zurückblättern wird erneut gefragt.
+
 ## 1.4.0 – 2026-10-28
 
 ### Neu

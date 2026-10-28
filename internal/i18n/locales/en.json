@@ -2041,6 +2041,7 @@
       "confirm_count": "{n} names selected:",
       "confirm_more": "… and {n} more",
       "confirm_ok": "Yes, add all",
+      "confirm_needed": "Several names at once are only added after the confirmation. Reload the page and try again, or add the names one by one.",
       "update": "Update",
       "modes_hint": "Choose per name what gets updated; fixed addresses and the interface mode are available afterwards when editing. With \"prefix + interface ID\" the interface ID is taken from the existing AAAA record."
     },

@@ -2041,6 +2041,7 @@
       "confirm_count": "{n} Namen ausgewählt:",
       "confirm_more": "… und {n} weitere",
       "confirm_ok": "Ja, alle übernehmen",
+      "confirm_needed": "Mehrere Namen auf einmal werden nur nach der Rückfrage übernommen. Seite neu laden und erneut versuchen oder die Namen einzeln übernehmen.",
       "update": "Aktualisieren",
       "modes_hint": "Je Name wählst du hier, was aktualisiert wird; feste Adressen und Interface-Modus gibt es danach in der Bearbeitung. Bei „Präfix + Interface-ID“ wird die Interface-ID aus dem vorhandenen AAAA-Record übernommen."
     },
