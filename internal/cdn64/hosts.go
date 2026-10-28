@@ -68,6 +68,10 @@ type Host struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 
 	StatusPageID int64 `json:"status_page_id"` // Statusseite der Healthchecks (nur Hostart status)
+
+	// Von Docker verwaltet (docker.go): Namen, Schema und Ziel kommen aus den Labels des Containers, nur lesen.
+	DockerContainer string `json:"docker_container,omitempty"` // Container-Name ("" = von Hand angelegt)
+	DockerRouter    string `json:"docker_router,omitempty"`    // Traefik-Router ("" = node64.proxy.*)
 }
 
 // Target ist die Adresse des Ziels (scheme://host:port).
@@ -347,14 +351,14 @@ func isSingleLabel(s string) bool {
 
 const hostCols = `id, kind, names, enabled, scheme, target_host, target_port, websockets, block_exploits, cache_assets, cert_id, force_ssl, http2,
 	http3, hsts, hsts_subdomains, min_tls, verify_target, redirect_target, redirect_scheme, redirect_code, preserve_path, access_list_id, locations,
-	advanced, created_at, updated_at, status_page_id`
+	advanced, created_at, updated_at, status_page_id, docker_container, docker_router`
 
 func scanHost(row interface{ Scan(...any) error }) (*Host, error) {
 	var h Host
 	var names, locs, adv, ca, ua string
 	if err := row.Scan(&h.ID, &h.Kind, &names, &h.Enabled, &h.Scheme, &h.TargetHost, &h.TargetPort, &h.WebSockets, &h.BlockExploits, &h.CacheAssets,
 		&h.CertID, &h.ForceSSL, &h.HTTP2, &h.HTTP3, &h.HSTS, &h.HSTSSubdomains, &h.MinTLS, &h.VerifyTarget, &h.RedirectTarget, &h.RedirectScheme,
-		&h.RedirectCode, &h.PreservePath, &h.AccessListID, &locs, &adv, &ca, &ua, &h.StatusPageID); err != nil {
+		&h.RedirectCode, &h.PreservePath, &h.AccessListID, &locs, &adv, &ca, &ua, &h.StatusPageID, &h.DockerContainer, &h.DockerRouter); err != nil {
 		return nil, err
 	}
 	_ = json.Unmarshal([]byte(locs), &h.Locations)
@@ -446,8 +450,8 @@ func (m *Module) saveHost(ctx context.Context, h *Host) error {
 	if h.ID == 0 {
 		res, err := w.ExecContext(ctx, `INSERT INTO cdn_hosts (kind, names, enabled, scheme, target_host, target_port, websockets, block_exploits, cache_assets,
 			cert_id, force_ssl, http2, http3, hsts, hsts_subdomains, min_tls, verify_target, redirect_target, redirect_scheme, redirect_code, preserve_path,
-			access_list_id, locations, advanced, status_page_id, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
+			access_list_id, locations, advanced, status_page_id, created_at, updated_at, docker_container, docker_router)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now, h.DockerContainer, h.DockerRouter)...)
 		if err != nil {
 			return err
 		}
@@ -469,6 +473,29 @@ func (m *Module) saveHost(ctx context.Context, h *Host) error {
 	m.apply(ctx)
 	m.checkSoon(h.ID)
 	m.onlineKick() // entfernte Namen auch bei CDN64 online ausschalten
+	return nil
+}
+
+// setHostDocker setzt die Docker-Kennung eines Hosts (Container "" = wieder von Hand); saveHost aendert sie nicht.
+func (m *Module) setHostDocker(ctx context.Context, id int64, container, router string) error {
+	res, err := m.core.Writer().ExecContext(ctx, `UPDATE cdn_hosts SET docker_container = ?, docker_router = ?, updated_at = ? WHERE id = ?`,
+		container, router, store.Now(), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errNotFound
+	}
+	return nil
+}
+
+// dockerHostOf: der Docker-Host zu Container und Router (nil = keiner).
+func dockerHostOf(list []*Host, container, router string) *Host {
+	for _, h := range list {
+		if h.DockerContainer != "" && h.DockerContainer == container && h.DockerRouter == router {
+			return h
+		}
+	}
 	return nil
 }
 

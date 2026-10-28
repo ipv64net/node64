@@ -49,7 +49,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.35.0"
+	Version = "1.36.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -93,6 +93,7 @@ type Module struct {
 	dnsrec     DNSRecords      // DNS-Records bei ipv64 (nil = nicht verfuegbar)
 	localDNS   func() LocalDNS // eigene Eintraege in DNS64 (nil bzw. Ergebnis nil = DNS64 aus)
 	status     StatusPages     // Statusseiten der Healthchecks (nil = nicht verfuegbar)
+	dk         dockerState     // Proxy-Hosts aus Docker-Labels (docker.go)
 
 	sapply sync.Mutex // ein Abgleich der Streams gleichzeitig
 	smu    sync.Mutex // Streams (nur kurz halten)
@@ -110,6 +111,7 @@ func New(core *store.Store, log *slog.Logger, e *edge.Edge, c *certs.Manager, ve
 		cache: newAssetCache(cacheLimit), reach: newReacher(), runs: map[int64]*streamRun{}, sstats: map[int64]*streamStats{}, sreach: newReacher(),
 		acl: map[int64]*guard{}, authFail: newFailLimiter(), hostTr: map[int64]*http.Transport{}, bl: newBlocklists(), lim: newLimiter()}
 	m.online.kick = make(chan struct{}, 1)
+	m.dk.kick = make(chan struct{}, 1)
 	m.lim.onBan = func(ip netip.Addr, until time.Time) {
 		m.log.Warn("cdn64 limits: address banned", "ip", limShow(ip), "until", until.Format(time.RFC3339))
 	}
@@ -190,6 +192,8 @@ func (m *Module) Start(ctx context.Context) error {
 	go func() { defer m.wg.Done(); m.blLoop(ctx) }()
 	m.wg.Add(1)
 	go func() { defer m.wg.Done(); m.limLoop(ctx) }()
+	m.wg.Add(1)
+	go func() { defer m.wg.Done(); m.dockerLoop(ctx) }()
 	if m.edge != nil {
 		m.edge.SetBlocker(m.blockedAny)
 		m.edge.SetGate(m.gateOpen)

@@ -57,6 +57,7 @@
 		<tr{{if not .Enabled}} class="opacity-50"{{else if and .Online .Online.Paused}} class="table-warning"{{end}}>
 			<td class="ps-3">
 				{{range $i, $n := .Names}}{{if $i}}<br>{{end}}<span class="font-monospace cell-wrap">{{$n}}</span>{{end}}
+				{{if .Docker}}<div><a href="/cdn64/docker" class="badge text-bg-primary text-decoration-none" title="{{.Docker}}" data-docker-badge><i class="bi bi-box-seam"></i> {{$.T "cdn64.docker.badge"}}</a></div>{{end}}
 				{{if not .Enabled}}<div><span class="badge text-bg-secondary">{{$.T "cdn64.disabled"}}</span></div>{{end}}
 				{{if and (eq .Kind "proxy") .Advanced.Maintenance}}<div><span class="badge text-bg-warning" title="{{$.T "cdn64.maint.on_hint"}}"><i class="bi bi-cone-striped"></i> {{$.T "cdn64.maint.on_badge"}}</span></div>{{end}}
 				{{if .RouteErr}}<div class="text-danger">{{.RouteErr}}</div>{{end}}
@@ -146,8 +147,9 @@
 				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/hosts/{{.ID}}" title="{{$.T "cdn64.edit"}}"><i class="bi bi-pencil"></i></a>
 				<form method="post" action="/cdn64/hosts/{{.ID}}/{{if .Enabled}}disable{{else}}enable{{end}}" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
 					<button class="btn btn-sm {{if .Enabled}}btn-outline-warning{{else}}btn-outline-success{{end}} py-0" type="submit" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause-fill{{else}}bi-play-fill{{end}}"></i></button></form>
-				<form method="post" action="/cdn64/hosts/{{.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
-					<button class="btn btn-sm btn-outline-danger py-0" type="submit" data-confirm="{{$.T "cdn64.delete_confirm" "name" (index .Names 0)}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button></form>
+				{{if .DockerRO}}<span class="d-inline-block" tabindex="0" title="{{$.T "cdn64.docker.err.delete"}}"><button class="btn btn-sm btn-outline-secondary py-0" type="button" disabled aria-label="{{$.T "cdn64.docker.err.delete"}}"><i class="bi bi-trash"></i></button></span>
+				{{else}}<form method="post" action="/cdn64/hosts/{{.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<button class="btn btn-sm btn-outline-danger py-0" type="submit" data-confirm="{{$.T "cdn64.delete_confirm" "name" (index .Names 0)}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button></form>{{end}}
 			</td>
 		</tr>
 		{{end}}

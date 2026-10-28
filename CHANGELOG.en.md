@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: proxy hosts from Docker labels (`node64.proxy.host`/`port`, optionally Traefik labels too), new Docker tab,
+  off by default.
 - PROXY64: new defaults for overload protection (fewer connections per IP and in total), hint on the right value per
   device size.
 - Sign-in: SSO with authentik works, the issuer URL may end with "/" (#6).

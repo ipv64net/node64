@@ -105,6 +105,18 @@ func dockerHTTP(host string) (*http.Client, string, error) {
 	return nil, "", fmt.Errorf("unknown docker host %q (use unix://, tcp:// or http(s)://)", host)
 }
 
+// DockerClient: HTTP-Client (ohne Gesamt-Zeitlimit) und Basis-URL fuer unix://, tcp:// und http(s):// ohne
+// Zugangsdaten (PROXY64 Docker-Labels); ssh:// gibt es dort nicht.
+func DockerClient(host string) (*http.Client, string, error) {
+	if !ValidDockerHost(host) || DockerScheme(host) == "ssh" {
+		return nil, "", fmt.Errorf("unknown docker host %q (use unix://, tcp:// or http(s)://)", host)
+	}
+	return dockerHTTP(host)
+}
+
+// DockerHint erklaert typische Fehler beim Zugriff auf die Docker-API (wie die Docker-Ueberwachung).
+func DockerHint(host string, err error) string { return dockerHintFor(host, err) }
+
 // DockerPoller fragt einen Docker-Host ab (Source).
 type DockerPoller struct {
 	log      *slog.Logger
