@@ -237,7 +237,7 @@ function s64_cache(string $key, int $ttl, callable $fn) {
 	$read = function() use ($f, $ttl) {
 		if(!is_file($f) OR filemtime($f) < time() - $ttl) { return array(false, null); }
 		$d = json_decode((string)@file_get_contents($f), true);
-		return is_array($d) AND array_key_exists('v', $d) ? array(true, $d['v']) : array(false, null);
+		return (is_array($d) && array_key_exists('v', $d)) ? array(true, $d['v']) : array(false, null);
 	};
 	[$hit, $v] = $read();
 	if($hit) { return $v; }

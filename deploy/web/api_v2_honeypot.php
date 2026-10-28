@@ -453,3 +453,4 @@ route('GET', '/honeypot/list-token', function() {
 // H6: weitere Endpunkte, ohne Aenderung an api_v2.php (dort ist nur diese Datei und die H3-H5-Dateien eingebunden)
 foreach(array('api_v2_threat_passwords.php', 'api_v2_threat_feed.php') as $hpH6File) { if(is_file(__DIR__ . "/$hpH6File")) { require_once __DIR__ . "/$hpH6File"; } }
 unset($hpH6File); // eingebunden im globalen Bereich von api_v2.php
+if(is_file(__DIR__ . '/api_v2_sonar.php')) { require __DIR__ . '/api_v2_sonar.php'; } // Sonar64 (Pfade /sonar/...)
