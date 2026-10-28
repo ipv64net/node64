@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/miekg/dns"
 	"golang.org/x/net/publicsuffix"
 
 	"github.com/ipv64net/node64/internal/dns64/querylog"
@@ -78,6 +79,22 @@ func isLocalName(name string) bool {
 		}
 	}
 	return false
+}
+
+// tldQuery: Frage nach einer echten Top-Level-Domain (com, de), die validierende Resolver hinter Node64 fuer die
+// Kette stellen (DS, DNSKEY, NS, SOA). Sie geht an die Upstreams, obwohl einzelne Labels sonst lokal sind; Geraetenamen
+// wie "nas" oder "media" fragen weiter den Router (Adressen, PTR und alles andere).
+func tldQuery(name string, qtype uint16) bool {
+	switch qtype {
+	case dns.TypeDS, dns.TypeDNSKEY, dns.TypeNS, dns.TypeSOA, dns.TypeCDS, dns.TypeCDNSKEY, dns.TypeNSEC, dns.TypeNSEC3, dns.TypeNSEC3PARAM:
+	default:
+		return false
+	}
+	if name == "" || strings.Contains(name, ".") {
+		return false
+	}
+	ps, icann := publicsuffix.PublicSuffix(name)
+	return icann && ps == name
 }
 
 func remoteIP(a net.Addr) netip.Addr {

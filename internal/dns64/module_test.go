@@ -239,3 +239,26 @@ func TestDenylistAndSearchSuffix(t *testing.T) {
 		t.Fatalf("log reasons: %v", got)
 	}
 }
+
+// Neustart mit abgebrochenem Kontext der Anfrage (Client weg): DNS64 muss danach wieder laufen.
+func TestRestartWithCanceledContextKeepsDNS(t *testing.T) {
+	m, port := testModule(t)
+	if err := m.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if m.running() == nil {
+		t.Fatalf("not started: %s", m.startError())
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_ = m.restart(ctx)
+	if m.running() == nil {
+		t.Fatalf("dns stays off after restart with canceled context: %s", m.startError())
+	}
+	c := &dns.Client{Timeout: 2 * time.Second}
+	q := new(dns.Msg)
+	q.SetQuestion("nas.", dns.TypeA)
+	if _, _, err := c.Exchange(q, net.JoinHostPort("127.0.0.1", strconv.Itoa(port))); err != nil {
+		t.Fatalf("dns does not answer after restart: %v", err)
+	}
+}

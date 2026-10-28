@@ -1,5 +1,17 @@
 # Changes – DNS64
 
+## 1.31.0 – 2026-10-28
+
+### Fixed
+- An own CNAME and a rewrite pointing at each other no longer crash the service (SERVFAIL).
+- DNSSEC queries for top-level domains (DS/DNSKEY/NS/SOA, e.g. "com") go to the upstreams; device names without a dot
+  still go to the router.
+- Restarting after settings changes no longer leaves DNS off when stopping hangs or the request is cancelled.
+- Cache: CD bit kept separate, NXDOMAIN/NODATA behind a CNAME cached only briefly (SOA, at most 5 minutes), memory budget,
+  answers over 16 KB are not cached.
+- Plain upstreams (dns://) get a random query ID.
+- Dynamic updates (RFC 2136) are applied all or nothing; the cluster no longer reports bogus deletions.
+
 ## 1.30.0 – 2026-10-26
 
 ### Changed

@@ -22,6 +22,10 @@ import (
 
 const blockedTTL = 10
 
+// maxDepth begrenzt verschachtelte Aufloesungen (CNAME eigener Eintraege, Umschreiben): Eintrag und Umschreiben, die
+// aufeinander zeigen, enden mit SERVFAIL statt den Stack zu sprengen.
+const maxDepth = 8
+
 // Reason codes in the query log (translated in the UI).
 const ReasonStale = "stale" // served from cache after expiry, refreshed in the background
 
@@ -218,11 +222,11 @@ func (s *Server) Answer(r *dns.Msg, clientIP netip.Addr, proto string) *dns.Msg 
 	if s.Split != nil {
 		if rrs, ok := s.Split(name, q.Qtype, clientIP); ok {
 			entry.Status = querylog.StatusCustom
-			resp = s.custom(r, rrs, fromRouter)
+			resp = s.custom(r, rrs, fromRouter, 0)
 		}
 	}
 	if resp == nil {
-		resp = s.resolve(r, name, &entry, pol, fromRouter)
+		resp = s.resolve(r, name, &entry, pol, fromRouter, 0)
 	}
 	resp.Id = r.Id
 	entry.Rcode = dns.RcodeToString[resp.Rcode]
@@ -239,13 +243,18 @@ func (s *Server) Refused() Refused { return s.acl.stats() }
 
 // resolve beantwortet eine Anfrage; fromRouter: sie kommt vom Router selbst (lokale Namen dann nicht zurueck an ihn,
 // sonst kreisen sie, z. B. Router mit Node64 als Upstream oder Docker-Bridge mit veroeffentlichtem Port 53).
-func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, fromRouter bool) *dns.Msg {
+// depth: Tiefe verschachtelter Aufloesungen (CNAME eigener Eintraege, Umschreiben), ab maxDepth SERVFAIL.
+func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, fromRouter bool, depth int) *dns.Msg {
 	q := r.Question[0]
+	if depth > maxDepth { // Schleife aus eigenen Eintraegen und Umschreiben
+		e.Status = querylog.StatusError
+		return errorMsg(r, dns.RcodeServerFailure)
+	}
 
 	if s.Records != nil {
 		if rrs, ok := s.Records.Lookup(name, q.Qtype); ok {
 			e.Status = querylog.StatusCustom
-			return s.custom(r, rrs, fromRouter)
+			return s.custom(r, rrs, fromRouter, depth)
 		}
 	}
 
@@ -260,13 +269,13 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 
 	if s.Rewrite != nil {
 		if target, ok := s.Rewrite(name); ok {
-			return s.rewrite(r, name, target, e, p, fromRouter)
+			return s.rewrite(r, name, target, e, p, fromRouter, depth)
 		}
 	}
 	if s.Zone != nil {
 		if ans, ns, rcode, ok := s.Zone(name, q.Qtype); ok {
 			e.Status = querylog.StatusCustom
-			m := s.custom(r, ans, fromRouter)
+			m := s.custom(r, ans, fromRouter, depth)
 			m.Ns, m.Rcode = ns, rcode
 			return m
 		}
@@ -276,7 +285,7 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 		fwd = s.Forward(name)
 	}
 
-	if isLocalName(name) {
+	if isLocalName(name) && !tldQuery(name, q.Qtype) {
 		if fwd != nil { // eigene Weiterleitung vor dem Router, ungefiltert wie alle lokalen Namen
 			return s.forward(r, fwd, e, querylog.StatusLocal)
 		}
@@ -343,7 +352,7 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 	if p != nil && p.SafeSearch { // Suchmaschinen und YouTube kinderfreundlich (auch bei Freigaben der Gruppe)
 		if target := safeTarget(name, p.YouTube); target != "" {
 			e.Status, e.Reason = querylog.StatusAllowed, ReasonSafeSearch+target
-			return s.custom(r, []dns.RR{&dns.CNAME{Hdr: dns.RR_Header{Name: dns.Fqdn(name), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300}, Target: dns.Fqdn(target)}}, fromRouter)
+			return s.custom(r, []dns.RR{&dns.CNAME{Hdr: dns.RR_Header{Name: dns.Fqdn(name), Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300}, Target: dns.Fqdn(target)}}, fromRouter, depth)
 		}
 	}
 
@@ -459,15 +468,15 @@ func errorMsg(r *dns.Msg, rcode int) *dns.Msg {
 
 // custom answers from own records. A CNAME is followed: to further own records, otherwise like any query
 // (blocklists, cache, upstream), so the client gets the addresses in one answer. fromRouter: the query came from the
-// router itself (a local CNAME target is then not sent back to it, see resolve).
-func (s *Server) custom(r *dns.Msg, rrs []dns.RR, fromRouter bool) *dns.Msg {
+// router itself (a local CNAME target is then not sent back to it, see resolve). depth: see resolve.
+func (s *Server) custom(r *dns.Msg, rrs []dns.RR, fromRouter bool, depth int) *dns.Msg {
 	m := new(dns.Msg)
 	m.SetReply(r)
 	m.RecursionAvailable = true
 	m.Authoritative = true
 	m.Answer = rrs
 	qtype := r.Question[0].Qtype
-	for depth := 0; depth < 8 && qtype != dns.TypeCNAME && len(m.Answer) > 0; depth++ {
+	for i := 0; i < 8 && qtype != dns.TypeCNAME && len(m.Answer) > 0; i++ {
 		c, ok := m.Answer[len(m.Answer)-1].(*dns.CNAME)
 		if !ok {
 			break
@@ -480,7 +489,7 @@ func (s *Server) custom(r *dns.Msg, rrs []dns.RR, fromRouter bool) *dns.Msg {
 		sub := new(dns.Msg)
 		sub.SetQuestion(dns.Fqdn(target), qtype)
 		sub.RecursionDesired = true
-		resp := s.resolve(sub, target, &querylog.Entry{}, nil, fromRouter) // Ziel eines eigenen CNAME: globale Regeln
+		resp := s.resolve(sub, target, &querylog.Entry{}, nil, fromRouter, depth+1) // Ziel eines eigenen CNAME: globale Regeln
 		m.Answer = append(m.Answer, resp.Answer...)
 		m.Rcode = resp.Rcode
 		break

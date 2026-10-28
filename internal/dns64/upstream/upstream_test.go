@@ -217,3 +217,41 @@ func TestPresets(t *testing.T) {
 		t.Errorf("defaults = %+v", DefaultServers)
 	}
 }
+
+// dns:// bekommt eine eigene Zufalls-ID statt der des Clients (bei DoH/DoQ 0); der Client bekommt seine ID zurueck.
+func TestPlainUsesOwnID(t *testing.T) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := make(chan uint16, 4)
+	srv := &dns.Server{PacketConn: pc, Handler: dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
+		ids <- r.Id
+		m := new(dns.Msg)
+		m.SetReply(r)
+		_ = w.WriteMsg(m)
+	})}
+	go func() { _ = srv.ActivateAndServe() }()
+	defer srv.Shutdown()
+	host, port, _ := net.SplitHostPort(pc.LocalAddr().String())
+	p := newPlain(host, port)
+	nonZero := false
+	for i := 0; i < 2; i++ {
+		req := new(dns.Msg)
+		req.SetQuestion("example.com.", dns.TypeA)
+		req.Id = 0
+		resp, err := p.exchange(context.Background(), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.Id != 0 {
+			t.Fatalf("client id not restored: %d", resp.Id)
+		}
+		if <-ids != 0 {
+			nonZero = true
+		}
+	}
+	if !nonZero {
+		t.Fatal("upstream got the client id 0")
+	}
+}

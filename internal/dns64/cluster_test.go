@@ -2,6 +2,7 @@ package dns64
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -175,4 +176,39 @@ func mustForwardID(t *testing.T, m *Module, domain string) int64 {
 	}
 	t.Fatalf("no forward %s", domain)
 	return 0
+}
+
+// Gleichzeitige Aenderungen: ein aelterer Stand darf den neueren nicht ueberschreiben (sonst Meldungen geloeschter
+// Eintraege, die es noch gibt), und der gemeldete Stand entspricht am Ende der Datenbank.
+func TestClusterConcurrentChanges(t *testing.T) {
+	m, _ := testModule(t)
+	ctx := context.Background()
+	var l clLog
+	m.SetCluster(l.hook)
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := m.AddRecord(ctx, Record{Name: "h" + strconv.Itoa(i) + ".home.lan", Type: "A", Value: "192.168.1." + strconv.Itoa(i+1)}); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	for _, c := range l.take() {
+		if c.deleted {
+			t.Fatalf("bogus deletion reported: %+v", c)
+		}
+	}
+	cur, err := m.clCurrent(ctx, ItemRecords)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.clMu.Lock()
+	snap := m.clSnap[ItemRecords]
+	m.clMu.Unlock()
+	if len(snap) != len(cur) || len(cur) != 20 {
+		t.Fatalf("snapshot %d entries, database %d, want 20", len(snap), len(cur))
+	}
 }

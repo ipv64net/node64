@@ -1,5 +1,17 @@
 # Änderungen – DNS64
 
+## 1.31.0 – 2026-10-28
+
+### Behoben
+- Eigener CNAME und Umschreiben, die aufeinander zeigen, beenden den Dienst nicht mehr (SERVFAIL).
+- DNSSEC-Abfragen zu Top-Level-Domains (DS/DNSKEY/NS/SOA, z. B. „com“) gehen an die Upstreams; Gerätenamen ohne Punkt
+  gehen weiter an den Router.
+- Neustart nach Einstellungen lässt DNS nicht mehr aus, wenn das Stoppen hängt oder die Anfrage abbricht.
+- Cache: CD-Bit getrennt, NXDOMAIN/NODATA hinter CNAME nur kurz (SOA, höchstens 5 Minuten), Speicher-Budget, Antworten
+  über 16 KB werden nicht gespeichert.
+- Unverschlüsselte Upstreams (dns://) bekommen eine zufällige Anfrage-ID.
+- Dynamische Updates (RFC 2136) werden ganz oder gar nicht angewendet; Cluster meldet keine falschen Löschungen mehr.
+
 ## 1.30.0 – 2026-10-26
 
 ### Geändert

@@ -51,7 +51,7 @@ var migrationFS embed.FS
 
 const (
 	Name      = "dns64"
-	version   = "1.30.0"
+	version   = "1.31.0"
 	cacheSize = 20000
 
 	setPort      = "dns64.port"      // Port fuer DNS (UDP/TCP), Standard 53
@@ -110,6 +110,7 @@ type Module struct {
 	clMu      sync.Mutex                   // Cluster (cluster.go)
 	clHook    ClusterHook                  // nil = kein Cluster
 	clSnap    map[string]map[string]string // zuletzt gemeldeter Stand je Bereich
+	clGen     map[string]uint64            // Zaehler je Bereich: Stand getauscht (clChanged, clSetSnap)
 	clRestart *time.Timer                  // Neustart nach uebernommenen Einstellungen
 	recReload *time.Timer                  // Momentaufnahme nach Uebernahmen neu (records.go)
 }
@@ -415,14 +416,23 @@ func (m *Module) restart(ctx context.Context) error {
 	if !on {
 		return nil // aus: neue Einstellungen gelten beim naechsten Start
 	}
-	sctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	// eigener Kontext: eine abgebrochene Anfrage darf den Neustart nicht nach dem Stopp beenden (DNS bliebe aus)
+	sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	if err := m.stopLocked(sctx); err != nil {
-		return err
+	stopErr := m.stopLocked(sctx)
+	if stopErr != nil { // Hintergrundjobs haengen: trotzdem neu starten (sonst Wiederholversuch jede Minute)
+		m.log.Warn("dns64 stop before restart did not finish", "err", stopErr)
 	}
 	_ = m.startLocked()
 	if e := m.startError(); e != "" {
-		return errors.New(e)
+		if stopErr != nil {
+			m.mu.Lock()
+			m.lastErr = e + " (stop: " + stopErr.Error() + ")"
+			last := m.lastErr
+			m.errNow.Store(&last)
+			m.mu.Unlock()
+		}
+		return errors.Join(errors.New(e), stopErr)
 	}
 	return nil
 }

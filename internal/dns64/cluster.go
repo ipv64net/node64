@@ -81,22 +81,35 @@ func (m *Module) SetCluster(hook ClusterHook) {
 	m.clMu.Unlock()
 }
 
-// clChanged vergleicht einen Bereich mit dem zuletzt gemeldeten Stand und meldet die Unterschiede.
+// clChanged vergleicht einen Bereich mit dem zuletzt gemeldeten Stand und meldet die Unterschiede. Der Stand wird
+// ausserhalb von clMu gelesen; hat inzwischen ein anderer Aufruf getauscht (Zaehler clGen), wird neu gelesen, damit
+// ein aelterer Stand nie einen neueren ueberschreibt (sonst Meldungen geloeschter Eintraege, die es noch gibt).
 func (m *Module) clChanged(ctx context.Context, item string) {
-	m.clMu.Lock()
-	hook := m.clHook
-	m.clMu.Unlock()
-	if hook == nil {
-		return
+	var hook ClusterHook
+	var prev, cur map[string]string
+	for try := 0; ; try++ {
+		m.clMu.Lock()
+		hook = m.clHook
+		gen := m.clGen[item]
+		m.clMu.Unlock()
+		if hook == nil {
+			return
+		}
+		var err error
+		if cur, err = m.clCurrent(ctx, item); err != nil {
+			return
+		}
+		m.clMu.Lock()
+		if m.clGen[item] != gen && try < 8 {
+			m.clMu.Unlock()
+			continue
+		}
+		prev = m.clSnap[item]
+		m.clSnap[item] = cur
+		m.clBump(item)
+		m.clMu.Unlock()
+		break
 	}
-	cur, err := m.clCurrent(ctx, item)
-	if err != nil {
-		return
-	}
-	m.clMu.Lock()
-	prev := m.clSnap[item]
-	m.clSnap[item] = cur
-	m.clMu.Unlock()
 	for id, v := range cur {
 		if old, ok := prev[id]; !ok || old != v {
 			hook(ctx, item, id, false)
@@ -466,6 +479,15 @@ func (m *Module) clSetSnap(item, id, v string) {
 	} else {
 		m.clSnap[item][id] = v
 	}
+	m.clBump(item)
+}
+
+// clBump zaehlt den Stand eines Bereichs weiter (clMu gehalten).
+func (m *Module) clBump(item string) {
+	if m.clGen == nil {
+		m.clGen = map[string]uint64{}
+	}
+	m.clGen[item]++
 }
 
 func (m *Module) clApplyZone(ctx context.Context, name string, data json.RawMessage, deleted bool) error {
