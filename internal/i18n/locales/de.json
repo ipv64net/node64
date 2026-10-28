@@ -383,6 +383,7 @@
       "badge": "Docker",
       "form_hint": "Kommt aus den Docker-Labels von Container {name}.",
       "form_router": "(Traefik-Router {name})",
+      "form_access": "Kommt aus dem Docker-Label (Zugriffsliste „{name}“).",
       "form_locked": "Namen, Schema und Ziel sind deshalb gesperrt; alles andere lässt sich hier einstellen und bleibt erhalten.",
       "form_link": "Docker-Einstellungen",
       "help_title": "So geht's",

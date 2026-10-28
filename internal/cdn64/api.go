@@ -265,6 +265,7 @@ func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
 	id, kind := h.ID, h.Kind
 	dc, dr := h.DockerContainer, h.DockerRouter
 	names, scheme, thost, tport := slices.Clone(h.Names), h.Scheme, h.TargetHost, h.TargetPort
+	acl, aclLabel := h.AccessListID, m.dockerACLFrom(r.Context(), h) != ""
 	req, ok := decode(w, r, h)
 	if !ok {
 		return
@@ -273,6 +274,9 @@ func (m *Module) apiUpdate(w http.ResponseWriter, r *http.Request) {
 	h.DockerContainer, h.DockerRouter = dc, dr
 	if dc != "" { // Docker-Host: Namen, Schema und Ziel kommen aus den Labels
 		h.Names, h.Scheme, h.TargetHost, h.TargetPort = names, scheme, thost, tport
+		if aclLabel { // Zugriffsliste kommt aus den Labels
+			h.AccessListID = acl
+		}
 	}
 	if err := m.saveHost(r.Context(), h); err != nil {
 		m.apiFail(w, err)

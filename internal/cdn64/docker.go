@@ -55,6 +55,7 @@ type dockerState struct {
 
 	mu   sync.Mutex
 	view dockerView
+	acl  map[int64]string // Host -> Zugriffsliste aus den Labels (Feld in der Oberflaeche gesperrt)
 }
 
 // dockerContainerView ist ein Container mit Labels (bzw. ein Traefik-Router) fuer die Oberflaeche.
@@ -66,6 +67,7 @@ type dockerContainerView struct {
 	Names       []string `json:"names,omitempty"`
 	Target      string   `json:"target,omitempty"`  // scheme://ip:port ("" = keins)
 	HostID      int64    `json:"host_id,omitempty"` // 0 = nicht uebernommen
+	Access      string   `json:"access,omitempty"`  // Zugriffsliste aus den Labels ("" = in der Oberflaeche)
 	Problem     string   `json:"problem,omitempty"` // dockerErr* ("" = ok)
 	ProblemName string   `json:"problem_name,omitempty"`
 }
@@ -455,8 +457,15 @@ func (m *Module) dockerSync(ctx context.Context, hc *http.Client, base, host str
 		}
 	}
 	wait := m.dockerRemove(ctx, hosts, seen)
+	acl := map[int64]string{}
+	for _, v := range views {
+		if v.Access != "" && v.HostID > 0 {
+			acl[v.HostID] = v.Access
+		}
+	}
 	m.dk.mu.Lock()
 	m.dk.view.Connected, m.dk.view.Error, m.dk.view.Host, m.dk.view.Synced, m.dk.view.Containers = true, "", host, time.Now(), views
+	m.dk.acl = acl
 	m.dk.mu.Unlock()
 	return wait
 }
@@ -511,6 +520,9 @@ func (m *Module) dockerRemove(ctx context.Context, hosts []*Host, seen map[strin
 // Fehler nur bei Problemen mit der Datenbank (Probleme mit den Labels stehen in der Ansicht).
 func (m *Module) dockerApply(ctx context.Context, hosts *[]*Host, name string, c *dockerListC, in, self *dockerInspectC, s dockerSpec) (dockerContainerView, error) {
 	v := dockerContainerView{Name: name, State: c.State, Source: s.Source, Router: s.Router, Names: s.Names}
+	if s.Access != nil {
+		v.Access = s.Access.Name
+	}
 	h := dockerHostOf(*hosts, name, s.Router)
 	if h != nil {
 		v.HostID = h.ID
@@ -598,6 +610,16 @@ func (m *Module) dockerApply(ctx context.Context, hosts *[]*Host, name string, c
 		"was", strings.Join(h.Names, ",")+" "+h.Target())
 	*h = nh
 	return v, nil
+}
+
+// dockerACLFrom: Name der Zugriffsliste, die die Labels fuer diesen Host festlegen ("" = keine bzw. Labels aus).
+func (m *Module) dockerACLFrom(ctx context.Context, h *Host) string {
+	if h.DockerContainer == "" || !m.dockerOn(ctx) {
+		return ""
+	}
+	m.dk.mu.Lock()
+	defer m.dk.mu.Unlock()
+	return m.dk.acl[h.ID]
 }
 
 // dockerACL: Zugriffsliste aus den Labels (0 = keine angegeben). Eine Liste aus einer Traefik-Middleware mit
