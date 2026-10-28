@@ -1,5 +1,12 @@
 # Änderungen – DynDNS-Updater
 
+## 1.4.0 – 2026-10-28
+
+### Neu
+- Ziele aus dem Account: Sind mehr als ein Name ausgewählt, fragt „Auswahl übernehmen“ in einem Fenster nach. Es nennt
+  die Namen und warnt, dass der Updater bei allen gleich die Adresse dieses Anschlusses setzt und vorhandene A- und
+  AAAA-Einträge überschreibt.
+
 ## 1.3.2 – 2026-10-23
 
 ### Behoben

@@ -1,5 +1,12 @@
 # Changes – DynDNS updater
 
+## 1.4.0 – 2026-10-28
+
+### New
+- Targets from the account: if more than one name is selected, "Add selection" asks in a dialog. It lists the
+  names and warns that the updater immediately sets this connection's address for all of them and overwrites existing
+  A and AAAA records.
+
 ## 1.3.2 – 2026-10-23
 
 ### Fixed

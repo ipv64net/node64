@@ -2036,6 +2036,11 @@
       "ignored": "{family} wird bei ipv64 ignoriert",
       "hint": "Übernommen wird der Record-Token (sicherste Stufe). IPv4 und IPv6 werden je nach vorhandenen Records voreingestellt und lassen sich danach je Ziel ändern.",
       "submit": "Auswahl übernehmen",
+      "confirm_title": "Mehrere Namen übernehmen?",
+      "confirm_text": "Achtung: Der Updater setzt gleich nach dem Übernehmen bei allen ausgewählten Namen die aktuelle Adresse dieses Anschlusses (je nach gewähltem Modus IPv4 und/oder IPv6). Vorhandene A- und AAAA-Einträge werden dabei überschrieben – auch wenn sie heute auf andere Server zeigen.",
+      "confirm_count": "{n} Namen ausgewählt:",
+      "confirm_more": "… und {n} weitere",
+      "confirm_ok": "Ja, alle übernehmen",
       "update": "Aktualisieren",
       "modes_hint": "Je Name wählst du hier, was aktualisiert wird; feste Adressen und Interface-Modus gibt es danach in der Bearbeitung. Bei „Präfix + Interface-ID“ wird die Interface-ID aus dem vorhandenen AAAA-Record übernommen."
     },
