@@ -16,7 +16,19 @@ require_once __DIR__ . '/s64_lib.php';
 const S64M_MAX_TOKENS = 10;     // aktive Knoten-Token je Account (Vertrag Abschnitt 2)
 const S64M_ROWS       = 50;     // Zeilen je Tabelle
 
-function s64m_q(string $sql, array $p = array()): PDOStatement { global $pdo; $st = $pdo->prepare($sql); $st->execute($p); return $st; }
+/** Prepared Statement; Fehler immer als PDOException (auch wenn $pdo nicht im Ausnahme-Modus laeuft) */
+function s64m_q(string $sql, array $p = array()): PDOStatement {
+	global $pdo;
+	$st = $pdo->prepare($sql);
+	if($st === false OR !$st->execute($p)) {
+		$ei = ($st === false ? $pdo : $st)->errorInfo();
+		$e = new PDOException('sonar/me.php: ' . ($ei[2] ?? 'database error')); $e->errorInfo = $ei;
+		throw $e;
+	}
+	return $st;
+}
+/** Formular- oder URL-Feld nur als Text (Arrays wie name[]=x zaehlen als leer) */
+function s64m_in(array $src, string $k): string { return isset($src[$k]) && is_string($src[$k]) ? $src[$k] : ''; }
 /** UTC aus der DB -> Ortszeit der Seite */
 function s64m_time($utc): string {
 	if($utc === null OR $utc === '' OR str_starts_with((string)$utc, '0000')) { return '–'; }
@@ -93,7 +105,7 @@ function s64m_results_table(array $rows, bool $mine): void {
 s64w_head('me', s64w_t('Mein Knoten', 'My node'), s64w_t('Deine Sonar64-Knoten: Stufe, Messungen von dir und gegen dich, Standort und Sonar-Token. Gilt auch für Knoten ohne Oberfläche (Raspberry Pi, MikroTik, Container).',
 	'Your Sonar64 nodes: trust level, measurements from you and against you, location and Sonar tokens. Also for nodes without a dashboard (Raspberry Pi, MikroTik, container).'));
 
-if($userid == "") {
+if(!isset($userid) OR (int)$userid <= 0) { // 0 = ipv64 (Anker ohne Account), nie als Account behandeln
 	echo '<div class="alert alert-info" role="alert">' . s64w_h(s64w_t('Bitte zuerst anmelden.', 'Please log in first.')) . '</div>';
 	s64w_join();
 	s64w_foot(); include("../footer.php");
@@ -103,17 +115,22 @@ if($userid == "") {
 $u = (int)$userid; $now = time(); $msg = ''; $newToken = '';
 if(empty($_SESSION['s64m_csrf'])) { $_SESSION['s64m_csrf'] = bin2hex(random_bytes(16)); }
 $csrf = $_SESSION['s64m_csrf'];
-$sel = (string)($_POST['node'] ?? $_GET['node'] ?? '');
+// Einmalwert nur fuer "Token erzeugen": ein Neuladen der Antwortseite (POST erneut senden) legt kein zweites Token an
+if(empty($_SESSION['s64m_tn'])) { $_SESSION['s64m_tn'] = bin2hex(random_bytes(16)); }
+$sel = s64m_in($_POST, 'node') !== '' ? s64m_in($_POST, 'node') : s64m_in($_GET, 'node');
 if(!preg_match('/^(n[a-z0-9]{11}|a_[a-z0-9_-]{1,13})$/', $sel)) { $sel = ''; }
 $okMsg = fn(string $t, string $c = 'success') => '<div class="alert alert-' . $c . '" role="alert">' . s64w_h($t) . '</div>';
 
 try {
 	if($_SERVER['REQUEST_METHOD'] === 'POST') {
-		$act = (string)($_POST['action'] ?? '');
-		if(!hash_equals($csrf, (string)($_POST['csrf'] ?? ''))) {
+		$act = s64m_in($_POST, 'action');
+		if(!hash_equals($csrf, s64m_in($_POST, 'csrf'))) {
 			$msg = $okMsg(s64w_t('Sitzung abgelaufen, bitte noch einmal versuchen.', 'Session expired, please try again.'), 'danger');
+		} elseif($act === 'token_new' AND !hash_equals((string)$_SESSION['s64m_tn'], s64m_in($_POST, 'tn'))) {
+			$msg = $okMsg(s64w_t('Dieses Formular wurde schon abgeschickt – es wurde kein weiteres Token erzeugt.', 'This form was already sent – no further token was created.'), 'warning');
 		} elseif($act === 'token_new') {
-			$name = trim((string)($_POST['name'] ?? ''));
+			$_SESSION['s64m_tn'] = bin2hex(random_bytes(16));
+			$name = trim(s64m_in($_POST, 'name'));
 			if(!preg_match('/^[A-Za-z0-9 ._-]{1,32}$/', $name)) { $name = 'Sonar64'; }
 			$cnt = (int)s64m_q("SELECT COUNT(*) FROM sonar_tokens WHERE userid = :u AND kind = 'node' AND revoked_at IS NULL", array('u' => $u))->fetchColumn();
 			if($cnt >= S64M_MAX_TOKENS) {
@@ -131,7 +148,7 @@ try {
 				if(function_exists('add_log')) { add_log($pdo, $userid, "0", "Sonar64", "Sonar-Token erzeugt."); }
 			}
 		} elseif($act === 'token_revoke') {
-			$id = (int)($_POST['id'] ?? 0);
+			$id = ctype_digit(s64m_in($_POST, 'id')) ? (int)s64m_in($_POST, 'id') : 0;
 			$st = s64m_q("UPDATE sonar_tokens SET revoked_at = :t WHERE id = :id AND userid = :u AND kind = 'node' AND revoked_at IS NULL", array('t' => s64_dt(), 'id' => $id, 'u' => $u));
 			if($st->rowCount() > 0) { // wie DELETE /sonar/tokens/{id}: Knoten aus, IP und genauer Standort weg
 				s64m_q("UPDATE sonar_nodes SET active = 0 WHERE token_id = :id AND userid = :u", array('id' => $id, 'u' => $u));
@@ -141,10 +158,10 @@ try {
 			}
 		} elseif($act === 'node_save') {
 			$n = s64m_q("SELECT node_id, role, name, jitter_seed FROM sonar_nodes WHERE node_id = :n AND userid = :u AND active = 1", array('n' => $sel, 'u' => $u))->fetch(PDO::FETCH_ASSOC);
-			$name = trim((string)($_POST['name'] ?? ''));
-			$access = (string)($_POST['access'] ?? '');
-			$device = strtolower(trim((string)($_POST['device'] ?? '')));
-			$lat = s64m_coord((string)($_POST['lat'] ?? ''), 90); $lon = s64m_coord((string)($_POST['lon'] ?? ''), 180);
+			$name = trim(s64m_in($_POST, 'name'));
+			$access = s64m_in($_POST, 'access');
+			$device = strtolower(trim(s64m_in($_POST, 'device')));
+			$lat = s64m_coord(s64m_in($_POST, 'lat'), 90); $lon = s64m_coord(s64m_in($_POST, 'lon'), 180);
 			$err = '';
 			if(!$n OR $n['role'] !== 'node') { $err = s64w_t('Knoten nicht gefunden (Anker stellt ipv64 ein).', 'Node not found (anchors are set by ipv64).'); }
 			elseif(!preg_match('/^[A-Za-z0-9._-](?:[A-Za-z0-9._-]| (?! )){1,30}[A-Za-z0-9._-]\z/', $name)) { $err = s64w_t('Name: 3 bis 32 Zeichen aus A–Z, a–z, 0–9, Leerzeichen, Punkt, Unterstrich, Bindestrich (keine doppelten Leerzeichen).', 'Name: 3 to 32 characters from A–Z, a–z, 0–9, space, dot, underscore, hyphen (no double spaces).'); }
@@ -190,9 +207,21 @@ try {
 			FROM sonar_results r LEFT JOIN sonar_nodes n ON n.node_id = r.dst WHERE r.src = :n AND r.at >= :d ORDER BY r.at DESC LIMIT " . S64M_ROWS, $p)->fetchAll(PDO::FETCH_ASSOC);
 		$against = s64m_q("SELECT r.at, r.src peer, r.fam, r.method, r.sent, r.recv, r.min_ms, r.avg_ms, r.max_ms, r.valid, r.reason, n.name, n.slug, n.asname4, n.asname6, n.place
 			FROM sonar_results r LEFT JOIN sonar_nodes n ON n.node_id = r.src WHERE r.dst = :n AND r.at >= :d AND r.valid = 1 AND (n.trust IS NULL OR n.trust <> 'quarantine') ORDER BY r.at DESC LIMIT " . S64M_ROWS, $p)->fetchAll(PDO::FETCH_ASSOC);
-		$inbound = s64m_q("SELECT i.at, i.fam, i.count, i.from_short, n.name, n.slug, n.asname4, n.asname6 FROM sonar_inbound i
-			LEFT JOIN sonar_nodes n ON n.active = 1 AND CONVERT(LEFT(SHA2(n.node_id, 256), 8) USING ascii) = CONVERT(i.from_short USING ascii)
-			WHERE i.node_id = :n AND i.at >= :d ORDER BY i.at DESC LIMIT " . S64M_ROWS, $p)->fetchAll(PDO::FETCH_ASSOC);
+		// UDP 6464: erst die Zeilen (Index node_at), dann die hoechstens 50 Kurz-IDs in einem Durchgang ueber sonar_nodes
+		// zuordnen (statt SHA2 je Zeile x Knoten im JOIN)
+		$inbound = s64m_q("SELECT at, fam, `count`, from_short FROM sonar_inbound WHERE node_id = :n AND at >= :d ORDER BY at DESC LIMIT " . S64M_ROWS, $p)->fetchAll(PDO::FETCH_ASSOC);
+		$shorts = array_values(array_unique(array_filter(array_map(fn($r) => strtolower((string)$r['from_short']), $inbound), fn($x) => preg_match('/^[0-9a-f]{8}$/', $x))));
+		$byShort = array();
+		if($shorts !== array()) {
+			foreach(s64m_q("SELECT node_id, name, slug, asname4, asname6 FROM sonar_nodes WHERE active = 1 AND LEFT(SHA2(node_id, 256), 8) IN (" . implode(',', array_fill(0, count($shorts), '?')) . ")", $shorts)->fetchAll(PDO::FETCH_ASSOC) as $x) {
+				$byShort[s64_short_id((string)$x['node_id'])] = $x;
+			}
+		}
+		foreach($inbound as &$r) {
+			$x = $byShort[strtolower((string)$r['from_short'])] ?? array();
+			foreach(array('name', 'slug', 'asname4', 'asname6') as $k) { $r[$k] = $x[$k] ?? null; }
+		}
+		unset($r);
 	}
 } catch(Throwable $e) {
 	error_log('sonar/me.php: ' . $e->getMessage());
@@ -333,7 +362,7 @@ if(empty($nodes)) { ?>
 		<?php } ?>
 		</tbody></table></div>
 		<form method="post" class="form-inline small" style="gap:.5rem" action="<?php echo s64w_h(s64w_url('me.php')); ?>" autocomplete="off">
-			<input type="hidden" name="csrf" value="<?php echo s64w_h($csrf); ?>"><input type="hidden" name="action" value="token_new">
+			<input type="hidden" name="csrf" value="<?php echo s64w_h($csrf); ?>"><input type="hidden" name="action" value="token_new"><input type="hidden" name="tn" value="<?php echo s64w_h($_SESSION['s64m_tn']); ?>">
 			<label for="s64TokName"><?php echo s64w_h(s64w_t('Bezeichnung', 'Label')); ?></label>
 			<input class="form-control form-control-sm" id="s64TokName" name="name" maxlength="32" pattern="[A-Za-z0-9 ._\-]{1,32}" placeholder="<?php echo s64w_h(s64w_t('z. B. Pi Wohnzimmer', 'e.g. Pi living room')); ?>">
 			<button class="btn btn-sm btn-primary"><i class="fa-solid fa-plus"></i> <?php echo s64w_h(s64w_t('Token erzeugen', 'Create token')); ?></button>

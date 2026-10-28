@@ -8,7 +8,7 @@
  */
 include("../header.php");
 require_once __DIR__ . '/s64_web.php';
-$slug = (string)($_GET['slug'] ?? '');
+$slug = s64w_get('slug');
 if(!preg_match('/^[a-z0-9][a-z0-9_-]{0,39}$/', $slug)) { $slug = ''; }
 s64w_head('node', s64w_t('Knoten', 'Node'), s64w_t('Öffentliche Seite eines Sonar64-Knotens: Vertrauensstufe, Verfügbarkeit und die Laufzeit zu den Ankern – ein Beleg für die eigene Leitung, ohne IP-Adresse und mit verschleiertem Standort.',
 	'Public page of a Sonar64 node: trust level, availability and the round-trip time to the anchors – evidence for your own line, without IP address and with a blurred location.'), array('slug' => $slug));

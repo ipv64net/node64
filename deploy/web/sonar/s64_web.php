@@ -13,6 +13,8 @@ $s64wEn = (($_GET['lang'] ?? '') === 'en');
 function s64w_t(string $de, string $en): string { global $s64wEn; return $s64wEn ? $en : $de; }
 function s64w_h($s): string { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function s64w_lang(): string { global $s64wEn; return $s64wEn ? 'en' : 'de'; }
+/** URL-Parameter nur als Text (Arrays wie trust[]=x zaehlen als leer, keine "Array to string"-Warnung) */
+function s64w_get(string $k): string { return isset($_GET[$k]) && is_string($_GET[$k]) ? $_GET[$k] : ''; }
 
 /** Link auf eine Sonar-Seite, Sprache bleibt erhalten. */
 function s64w_url(string $page, array $q = array()): string {

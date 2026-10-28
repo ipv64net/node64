@@ -8,11 +8,11 @@
  */
 include("../header.php");
 require_once __DIR__ . '/s64_web.php';
-$fTrust = (string)($_GET['trust'] ?? '');
+$fTrust = s64w_get('trust');
 if(!in_array($fTrust, array('new', 'stable', 'trusted', 'pillar', 'anchor'), true)) { $fTrust = ''; }
-$fAsn = (string)($_GET['asn'] ?? '');
+$fAsn = s64w_get('asn');
 if(!preg_match('/^[0-9]{1,10}$/', $fAsn) OR (int)$fAsn < 1 OR (int)$fAsn > 4294967295) { $fAsn = ''; }
-$fQ = (string)($_GET['q'] ?? '');
+$fQ = s64w_get('q');
 if(!preg_match('/^[A-Za-z0-9 ._-]{1,32}$/', $fQ)) { $fQ = ''; }
 s64w_head('nodes', s64w_t('Teilnehmer', 'Participants'), s64w_t('Alle Knoten, die gerade mitmachen – mit Vertrauensstufe, Provider, Region und Verfügbarkeit. Ein Klick auf den Namen öffnet die öffentliche Knotenseite.',
 	'All nodes taking part – with trust level, provider, region and availability. Click a name for the public node page.'));

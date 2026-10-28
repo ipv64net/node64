@@ -627,6 +627,8 @@
 			var src = d && d.node && typeof d.node === 'object' ? Object.assign({}, d.node, { history: d.history }) : d;
 			var n = normNode(src);
 			if (!n) { msg.textContent = t('unavailable'); return; }
+			// Quarantaene erscheint nicht oeffentlich (wie Karte und Liste), auch wenn die Antwort sie liefert
+			if (n.trust === 'quarantine') { clear(msg); msg.appendChild(el('div', 'alert alert-warning', t('not_found'))); return; }
 			clear(msg); body.hidden = false;
 			function f(k) { return body.querySelector('[data-s64-f="' + k + '"]'); }
 			f('name').textContent = n.name;

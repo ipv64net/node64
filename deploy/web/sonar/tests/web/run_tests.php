@@ -42,6 +42,7 @@ function req(string $path, int $as = 0, ?array $post = null): array {
 	return array('code' => $code, 'raw' => $raw);
 }
 function csrf_of(string $html): string { return preg_match('/name="csrf" value="([0-9a-f]{32})"/', $html, $m) ? $m[1] : ''; }
+function tn_of(string $html): string { return preg_match('/name="tn" value="([0-9a-f]{32})"/', $html, $m) ? $m[1] : ''; }
 function clean(string $raw): bool { return !preg_match('/(Warning|Notice|Deprecated|Fatal error|Parse error|Uncaught)\b/', $raw); }
 
 // ---------------------------------------------------------------- Testdaten
@@ -120,6 +121,10 @@ $r = req('/sonar/nodes.php?q=a%22b&lang=en');
 check('Sprach-Link escaped', !str_contains($r['raw'], 'a"b') AND clean($r['raw']));
 $r = req('/sonar/node.php?slug=%3Cx%3E');
 check('Knotenseite: ungueltiger Slug -> Hinweis', str_contains($r['raw'], 'Kein gültiger Knoten') AND str_contains($r['raw'], 'data-slug=""') AND !str_contains($r['raw'], '<x>'));
+$r = req('/sonar/nodes.php?trust[]=stable&asn[]=1&q[x]=y&lang[]=en');
+check('Liste: Arrays als Parameter ohne Warnung', $r['code'] === 200 AND clean($r['raw']) AND !str_contains($r['raw'], 'selected>'), substr($r['raw'], 0, 300));
+$r = req('/sonar/node.php?slug[]=falke-1');
+check('Knotenseite: Array als Slug ohne Warnung', clean($r['raw']) AND str_contains($r['raw'], 'data-slug=""'));
 $r = req('/sonar/node.php?slug=falke-1&lang=en&x=%3Cy%3E');
 check('Knotenseite: Sprach-Link mit Slug, fremde Parameter weg', str_contains($r['raw'], 'href="node.php?slug=falke-1"') AND !str_contains($r['raw'], '<y>'));
 
@@ -157,23 +162,36 @@ check('me: Quarantaene erklaert', str_contains($r['raw'], 'Quarantäne: Der Knot
 $tokBefore = (int)one("SELECT count(*) c FROM sonar_tokens")['c'];
 $r = req('/sonar/me.php', 1, array('action' => 'token_new', 'name' => 'ohne csrf', 'csrf' => 'x'));
 check('me: ohne CSRF kein Token', str_contains($r['raw'], 'Sitzung abgelaufen') AND (int)one("SELECT count(*) c FROM sonar_tokens")['c'] === $tokBefore);
-$csrf = csrf_of(req('/sonar/me.php', 1)['raw']);
-check('me: CSRF-Feld', strlen($csrf) === 32);
+$r = req('/sonar/me.php?node[]=x', 1, array('action' => array('token_new'), 'csrf' => array('x'), 'name' => array('y')));
+check('me: Arrays im Formular ohne Warnung, nichts angelegt', $r['code'] === 200 AND clean($r['raw']) AND str_contains($r['raw'], 'Sitzung abgelaufen')
+	AND (int)one("SELECT count(*) c FROM sonar_tokens")['c'] === $tokBefore, substr($r['raw'], 0, 300));
+$h = req('/sonar/me.php', 1)['raw'];
+$csrf = csrf_of($h); $tn = tn_of($h);
+check('me: CSRF-Feld und Einmalwert', strlen($csrf) === 32 AND strlen($tn) === 32 AND $tn !== $csrf);
+$r = req('/sonar/me.php', 1, array('action' => 'token_new', 'name' => 'ohne tn', 'csrf' => $csrf));
+check('me: ohne Einmalwert kein Token', str_contains($r['raw'], 'schon abgeschickt') AND (int)one("SELECT count(*) c FROM sonar_tokens")['c'] === $tokBefore);
 // Token anlegen
-$r = req('/sonar/me.php', 1, array('action' => 'token_new', 'name' => 'Pi Wohnzimmer', 'csrf' => $csrf));
+$r = req('/sonar/me.php', 1, array('action' => 'token_new', 'name' => 'Pi Wohnzimmer', 'csrf' => $csrf, 'tn' => $tn));
 preg_match('/id="s64NewToken" value="(s64_[A-Za-z0-9]{40})"/', $r['raw'], $m);
 $tok = $m[1] ?? '';
 check('me: Token angezeigt (einmal)', $tok !== '' AND str_contains($r['raw'], 'SONAR64_TOKEN=' . $tok), substr($r['raw'], 0, 300));
 $row = one("SELECT * FROM sonar_tokens WHERE token_hash = ?", array(hash('sha256', $tok)));
 check('me: in der DB nur SHA-256', $row !== false AND (int)$row['userid'] === 1 AND $row['kind'] === 'node' AND $row['name'] === 'Pi Wohnzimmer' AND $row['node_id'] === null
 	AND (int)one("SELECT count(*) c FROM sonar_tokens WHERE token_hash = ? OR name = ?", array($tok, $tok))['c'] === 0);
+$tn2 = tn_of($r['raw']);
+$cntTok = (int)one("SELECT count(*) c FROM sonar_tokens")['c'];
+$r = req('/sonar/me.php', 1, array('action' => 'token_new', 'name' => 'Pi Wohnzimmer', 'csrf' => $csrf, 'tn' => $tn));
+check('me: Neuladen (gleicher Einmalwert) legt kein zweites Token an', str_contains($r['raw'], 'schon abgeschickt') AND !str_contains($r['raw'], 'id="s64NewToken"')
+	AND (int)one("SELECT count(*) c FROM sonar_tokens")['c'] === $cntTok AND strlen($tn2) === 32 AND $tn2 !== $tn);
 $r = req('/sonar/me.php', 1);
 check('me: Klartext nicht erneut sichtbar', !str_contains($r['raw'], $tok) AND str_contains($r['raw'], 'Pi Wohnzimmer') AND str_contains($r['raw'], 'noch nicht gestartet'));
-$r = req('/sonar/me.php', 1, array('action' => 'token_new', 'name' => '<script>', 'csrf' => $csrf));
+$r = req('/sonar/me.php', 1, array('action' => 'token_new', 'name' => '<script>', 'csrf' => $csrf, 'tn' => tn_of($r['raw'])));
 check('me: unzulaessige Bezeichnung -> Standard', one("SELECT name FROM sonar_tokens WHERE userid = 1 ORDER BY id DESC LIMIT 1")['name'] === 'Sonar64' AND !str_contains($r['raw'], '<script>'));
-for($i = 0; $i < 12; $i++) { $r = req('/sonar/me.php', 1, array('action' => 'token_new', 'name' => "n$i", 'csrf' => $csrf)); }
+for($i = 0; $i < 12; $i++) { $r = req('/sonar/me.php', 1, array('action' => 'token_new', 'name' => "n$i", 'csrf' => $csrf, 'tn' => tn_of($r['raw']))); }
 check('me: hoechstens 10 aktive Token', (int)one("SELECT count(*) c FROM sonar_tokens WHERE userid = 1 AND kind = 'node' AND revoked_at IS NULL")['c'] === 10 AND str_contains($r['raw'], 'Höchstens 10'));
 // Sperren: fremdes Token nicht, eigenes ja (Knoten aus, IP und Standort weg)
+$r = req('/sonar/me.php', 1, array('action' => 'token_revoke', 'id' => $tid['n2cccccccccc'] . 'x', 'csrf' => $csrf));
+check('me: Token-ID nur als Zahl', one("SELECT revoked_at FROM sonar_tokens WHERE id = ?", array($tid['n2cccccccccc']))['revoked_at'] === null AND clean($r['raw']));
 $r = req('/sonar/me.php', 1, array('action' => 'token_revoke', 'id' => $tid['n2cccccccccc'], 'csrf' => $csrf));
 check('me: fremdes Token bleibt', one("SELECT revoked_at FROM sonar_tokens WHERE id = ?", array($tid['n2cccccccccc']))['revoked_at'] === null
 	AND (int)one("SELECT active FROM sonar_nodes WHERE node_id = 'n2cccccccccc'")['active'] === 1);
