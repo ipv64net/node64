@@ -21,6 +21,8 @@
 	<ul class="mb-0 ps-3">{{range .}}<li>{{if .Skipped}}{{$.T "honeypot.ports.skipped" "service" .Service "port" .Port "owner" .OwnerName}}{{else}}{{$.T "honeypot.ports.shared" "service" .Service "port" .Port "owner" .OwnerName}}{{end}}</li>{{end}}</ul>
 </div>{{end}}
 
+{{if not $d.Capped.IsZero}}<div class="alert alert-warning small"><i class="bi bi-exclamation-triangle"></i> {{.T "honeypot.capped" "max" (.Int $d.CapMax) "time" (.Time $d.Capped)}}</div>{{end}}
+
 <div class="row g-3 mb-3">
 	<div class="col-6 col-md-4 col-xl-2"><div class="card stat stat-primary"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "honeypot.kpi.events_24h"}}</div><div class="stat-value">{{.Int $d.Day.Events}}</div></div><i class="bi bi-bug stat-icon"></i></div></div></div>
 	<div class="col-6 col-md-4 col-xl-2"><div class="card stat stat-info"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "honeypot.kpi.sources_24h"}}</div><div class="stat-value">{{.Int $d.Day.Sources}}</div></div><i class="bi bi-globe2 stat-icon"></i></div></div></div>

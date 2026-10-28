@@ -3902,6 +3902,7 @@
       "sources_7d": "Source IPs (7 days)",
       "logins_7d": "Login attempts (7 days)"
     },
+    "capped": "Limit of {max} stored events reached: rankings, map and event list only go back to {time}. The numbers above and the chart are complete. The limit can be raised under Settings, which needs more disk space.",
     "services": {
       "title": "Trap services",
       "service": "Service",
