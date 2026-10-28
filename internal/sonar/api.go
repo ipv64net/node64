@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -25,6 +26,13 @@ import (
 // ErrNotImplemented markiert Teile des Geruests, die noch fehlen (der Kern nutzt es nicht mehr; bleibt fuer das
 // Geruest von probe.go, bis der Teil Messung es ersetzt).
 var ErrNotImplemented = errors.New("sonar: not implemented")
+
+// ErrRevoked: ipv64 hat den Knoten abgemeldet (Token widerrufen oder Knoten gesperrt, Vertrag Abschnitt 10.2).
+// Me, UpdateMe und Inbound liefern ihn ohne Anfrage, solange der Zustand abgemeldet gilt.
+var ErrRevoked = errors.New("sonar: node signed off by ipv64")
+
+// errLeft: nach Leave bzw. Forget laeuft der Runner nicht mehr.
+var errLeft = errors.New("sonar: node has left (Leave)")
 
 // Config ist die Einstellung eines Knotens.
 type Config struct {
@@ -52,8 +60,8 @@ type Status struct {
 	Responder   bool      `json:"responder"` // UDP 6464 offen
 	PlanIssued  time.Time `json:"plan_issued,omitzero"`
 	PlanExpires time.Time `json:"plan_expires,omitzero"`
-	AnchorsOnly bool      `json:"anchors_only"` // kein gueltiger Plan, nur Anker
-	Paused      string    `json:"paused,omitempty"`
+	AnchorsOnly bool      `json:"anchors_only"`     // kein gueltiger Plan, nur Anker
+	Paused      string    `json:"paused,omitempty"` // uplink | quiet | no_plan | budget | revoked (von ipv64 abgemeldet)
 	SentToday   int       `json:"sent_today"`
 	LastReport  time.Time `json:"last_report,omitzero"`
 	Buffered    int       `json:"buffered"` // noch nicht gemeldete Ergebnisse
@@ -94,13 +102,15 @@ type Runner struct {
 	tokenID string
 
 	// Zeiten (Konstanten aus wire.go; Tests verkuerzen sie)
-	now         func() time.Time
-	roundLen    time.Duration
-	planEvery   time.Duration
-	reportEvery time.Duration
-	reportGap   time.Duration // Mindestabstand zweier Meldungen (Server: hoechstens 1 je 60 s)
-	retryMin    time.Duration
-	tick        time.Duration
+	now          func() time.Time
+	roundLen     time.Duration
+	planEvery    time.Duration
+	reportEvery  time.Duration
+	reportGap    time.Duration // Mindestabstand zweier Meldungen (Server: hoechstens 1 je 60 s)
+	heartbeat    time.Duration // Anker ohne Ergebnisse melden (Health) nur so oft
+	revokedEvery time.Duration // abgemeldet: so oft GET /sonar/me
+	retryMin     time.Duration
+	tick         time.Duration
 
 	running atomic.Bool
 	bucket  *bucket
@@ -133,6 +143,10 @@ type Runner struct {
 	responder   responderIface
 	responderOn bool
 	traces      []time.Time
+	revoked     bool               // von ipv64 abgemeldet (Vertrag 10.2)
+	left        bool               // Leave/Forget: nie wieder laufen, nichts mehr speichern
+	stopRun     context.CancelFunc // beendet den laufenden Run (Leave)
+	runDone     chan struct{}      // geschlossen, wenn Run endet
 }
 
 // New prueft die Einstellung und laedt bzw. erzeugt Schluessel und Node-ID im DataDir.
@@ -196,12 +210,16 @@ func New(cfg Config) (*Runner, error) {
 		cfg: cfg, log: cfg.Log, keys: pks, anchor: cfg.Mode == ModeAnchor,
 		api:     &client{base: base, http: hc, ua: "sonar64/" + cfg.Version},
 		tokenID: tokenID(cfg.Token),
-		now:     time.Now, roundLen: RoundInterval, planEvery: 15 * time.Minute, reportEvery: 5 * time.Minute,
-		reportGap: 61 * time.Second, retryMin: time.Minute, tick: 2 * time.Second,
+		now:     time.Now, roundLen: RoundInterval, planEvery: 2 * time.Minute, reportEvery: 5 * time.Minute,
+		reportGap: 61 * time.Second, heartbeat: 5 * time.Minute, revokedEvery: time.Hour, retryMin: time.Minute,
+		tick:     2 * time.Second,
 		wake:     make(chan struct{}, 1),
 		measured: cfg.Measured || cfg.Mode == ModeAnchor,
 		budget:   cfg.Budget,
 		uplink:   true,
+	}
+	if r.anchor { // Anker: Plan und Meldung jede Minute (neue Knoten schnell finden, Vertrag 10.1)
+		r.planEvery, r.reportEvery = time.Minute, time.Minute
 	}
 	if cfg.DataDir != "" {
 		if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
@@ -232,13 +250,26 @@ func New(cfg Config) (*Runner, error) {
 	return r, nil
 }
 
-// Run laeuft bis ctx endet: anmelden (Register, einmal), Plan holen (alle 15 min, ETag), Runden messen, alle 5 min
-// melden, Antworter auf UDP 6464 (wenn Measured).
+// Run laeuft bis ctx endet oder Leave/Forget ihn beendet: anmelden (Register, einmal), Plan holen (alle 2 min, Anker
+// jede Minute, ETag), Runden messen, alle 5 min melden (Anker jede Minute, wenn etwas zu melden ist), Antworter auf
+// UDP 6464 (wenn Measured). Meldet ipv64 den Knoten ab, ruht er (Status.Paused "revoked") und fragt stuendlich nach;
+// Run endet dabei nicht.
 func (r *Runner) Run(ctx context.Context) error {
 	if !r.running.CompareAndSwap(false, true) {
 		return errors.New("sonar: runner already running")
 	}
 	defer r.running.Store(false)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	r.mu.Lock()
+	if r.left {
+		r.mu.Unlock()
+		return errLeft
+	}
+	done := make(chan struct{})
+	r.stopRun, r.runDone = cancel, done
+	r.mu.Unlock()
+	defer close(done)
 	if err := r.ensureRegistered(ctx); err != nil {
 		return nil // nur bei Ende von ctx
 	}
@@ -255,9 +286,9 @@ func (r *Runner) Run(ctx context.Context) error {
 	r.saves.Wait()
 	// Zum Schluss noch einmal melden (kurz), damit nichts verloren geht.
 	r.mu.Lock()
-	last := r.lastReport
+	last, left := r.lastReport, r.left
 	r.mu.Unlock()
-	if r.now().Sub(last) >= r.reportGap {
+	if !left && r.now().Sub(last) >= r.reportGap {
 		fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		r.safe("final report", func() { r.report(fctx) })
@@ -278,6 +309,9 @@ func (r *Runner) Status() Status {
 	}
 	if s.LastError == "" {
 		s.LastError = r.planErr
+	}
+	if r.revoked {
+		s.Paused = "revoked"
 	}
 	if p := r.plan; p != nil {
 		s.PlanIssued, s.PlanExpires = p.plan.Issued.UTC(), p.validUntil.UTC()
@@ -308,8 +342,12 @@ func (r *Runner) Recent(n int) ([]Result, []Inbound) {
 
 // Me holt den eigenen Knoten von ipv64.
 func (r *Runner) Me(ctx context.Context) (*Me, error) {
+	if r.isRevoked() {
+		return nil, ErrRevoked
+	}
 	var m Me
 	if err := r.api.call(ctx, http.MethodGet, "/sonar/me", r.cfg.Token, nil, smallLimit, &m); err != nil {
+		r.noteRevoked(err)
 		return nil, err
 	}
 	return &m, nil
@@ -341,8 +379,12 @@ func (r *Runner) UpdateMe(ctx context.Context, m Me) (*Me, error) {
 	if err != nil {
 		return nil, err
 	}
+	if r.isRevoked() {
+		return nil, ErrRevoked
+	}
 	var out Me
 	if err := r.api.call(ctx, http.MethodPut, "/sonar/me", r.cfg.Token, mePut{meWrite: w, Lat: w.Lat, Lon: w.Lon}, smallLimit, &out); err != nil {
+		r.noteRevoked(err)
 		return nil, err
 	}
 	r.mu.Lock()
@@ -424,15 +466,72 @@ func (r *Runner) Inbound(ctx context.Context, since time.Time) ([]InboundRow, er
 	if since.After(now) {
 		since = now
 	}
+	if r.isRevoked() {
+		return nil, ErrRevoked
+	}
 	var rows []InboundRow
 	path := "/sonar/inbound?since=" + url.QueryEscape(since.UTC().Format(time.RFC3339))
 	if err := r.api.call(ctx, http.MethodGet, path, r.cfg.Token, nil, listLimit, &rows); err != nil {
+		r.noteRevoked(err)
 		return nil, err
 	}
 	if len(rows) > maxInboundRows {
 		rows = rows[:maxInboundRows]
 	}
 	return rows, nil
+}
+
+// Leave tritt aus Sonar64 aus (Vertrag 10.2): DELETE /sonar/me (2xx, 401 und 404 gelten als erledigt, auch fuer einen
+// schon abgemeldeten Knoten), danach wie Forget. Ist ipv64 nicht erreichbar oder antwortet anders, bleibt alles, wie
+// es ist (ein laufender Run laeuft weiter), und Leave liefert den Fehler. Wer trotzdem lokal austreten will, ruft
+// danach Forget: ipv64 meldet einen Knoten nach 30 Tagen ohne Meldung selbst ab (Token und Platz werden frei).
+func (r *Runner) Leave(ctx context.Context) error {
+	resp, err := r.api.send(ctx, http.MethodDelete, "/sonar/me", r.cfg.Token, nil, nil, smallLimit)
+	if err != nil {
+		return err
+	}
+	switch {
+	case resp.status >= 200 && resp.status <= 299, resp.status == http.StatusUnauthorized, resp.status == http.StatusNotFound:
+	default:
+		return apiError(resp)
+	}
+	r.log.Info("sonar64: signed off at ipv64")
+	return r.Forget()
+}
+
+// Forget tritt nur lokal aus, ohne ipv64 zu fragen: beendet einen laufenden Run (wartet hoechstens 20 s), verwirft die
+// Puffer und loescht sonar64.json und sonar64.key im DataDir (die Identitaet des Knotens ist danach weg). Der Runner
+// laesst sich danach nicht mehr starten; ein neuer Beitritt braucht New und ein neues Token.
+func (r *Runner) Forget() error {
+	r.mu.Lock()
+	r.left = true
+	stop, done := r.stopRun, r.runDone
+	r.bufOff, r.buf = r.bufOff+uint64(len(r.buf)), nil
+	r.inOff, r.inbuf = r.inOff+uint64(len(r.inbuf)), nil
+	r.mu.Unlock()
+	r.signalWake()
+	if stop != nil {
+		stop()
+		t := time.NewTimer(20 * time.Second)
+		select {
+		case <-done:
+		case <-t.C:
+			r.log.Warn("sonar64: runner did not stop in time, removing state anyway")
+		}
+		t.Stop()
+	}
+	if r.cfg.DataDir == "" {
+		return nil
+	}
+	r.saveMu.Lock() // saveState prueft left unter saveMu: danach schreibt niemand mehr
+	defer r.saveMu.Unlock()
+	var errs []error
+	for _, f := range []string{stateFile, keyFile} {
+		if err := os.Remove(filepath.Join(r.cfg.DataDir, f)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // CreateToken legt mit dem API-Key des Accounts ein Sonar-Token an (POST /sonar/tokens). Node64 nutzt das beim Opt-in.

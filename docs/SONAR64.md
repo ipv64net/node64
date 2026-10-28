@@ -36,8 +36,9 @@ curl -s -H "Authorization: Bearer <API-Key>" -H 'Content-Type: application/json'
 ```
 
 Beim ersten Start legt `sonar64` damit seine **Node-ID** und einen eigenen Schlüssel (Ed25519) im Datenordner an und
-bleibt danach dieser Knoten, auch nach Neustarts und Updates. Datenordner sichern = Knoten behalten; Token
-zurückziehen (`DELETE /sonar/tokens/{id}` oder im Portal) = Knoten abmelden.
+bleibt danach dieser Knoten, auch nach Neustarts und Updates. Datenordner sichern = Knoten behalten; austreten mit
+`sonar64 leave` oder Token zurückziehen (`DELETE /sonar/tokens/{id}` oder im Portal) = Knoten abmelden (Abschnitt 7a).
+Neue Knoten werden schnell aufgenommen: typisch nach etwa 15 Minuten, spätestens nach etwa 30 Minuten wird gemessen.
 
 Name, Standort (Punkt auf der Karte), Anschlussart und Gerät setzt man danach auf ipv64.net unter „Mein Knoten“.
 
@@ -70,9 +71,14 @@ Optionen beim Aufruf (als Umgebungsvariablen, werden in `/etc/sonar64.env` über
 ```sh
 sudo SONAR64_MEASURED=1 SONAR64_BUDGET=normal sh install.sh   # auch gemessen werden, Budget normal
 sudo SONAR64_VERSION=0.1.0 sh install.sh                     # bestimmte Version
-sudo sh install.sh --uninstall   # Dienst und Programm entfernen (Einstellung und Schlüssel bleiben)
+sudo sh install.sh --uninstall   # bei ipv64.net abmelden (sonar64 leave), Dienst und Programm entfernen
 sudo sh install.sh --purge       # zusätzlich Einstellung, Schlüssel und Node-ID löschen
 ```
+
+`--uninstall` und `--purge` melden den Knoten vorher bei ipv64.net ab (`sonar64 leave`, löscht Schlüssel und
+Node-ID und streicht das widerrufene Token aus `/etc/sonar64.env`; die übrigen Einstellungen bleiben). Ist
+ipv64.net dabei nicht erreichbar, gibt es nur eine Warnung, entfernt wird trotzdem; ipv64.net meldet den Knoten dann
+nach 30 Tagen ohne Meldung selbst ab.
 
 Das Token per Variable (`sudo SONAR64_TOKEN=s64_… sh install.sh`) landet in der Shell-Historie – die Abfrage ist
 sicherer. **Aktualisieren:** `sudo sh install.sh` erneut ausführen; Token und Einstellungen bleiben.
@@ -119,6 +125,9 @@ services:
 volumes:
   sonar64:
 ```
+
+- **Austreten:** `docker exec sonar64 /sonar64 leave` (meldet ab, löscht Schlüssel und Node-ID im Volume), danach den
+  Container entfernen (`docker rm -f sonar64`).
 
 ## 4. MikroTik (RouterOS 7, Container-Paket)
 
@@ -201,10 +210,13 @@ Firewall: ICMP-Echo und UDP 6464 eingehend (IPv4 und IPv6) erlauben. Ein Anker l
 Falsche Werte führen zu einem klaren Fehler beim Start (Exit-Code 2, der systemd-Dienst startet dann nicht
 endlos neu); das Token erscheint nie im Log.
 `sonar64 version` zeigt die Version, `sonar64 healthcheck` prüft den Mini-Status (Docker `HEALTHCHECK`; ohne
-`SONAR64_STATUS` immer gesund, solange der Prozess läuft).
+`SONAR64_STATUS` immer gesund, solange der Prozess läuft). `sonar64 leave` tritt aus (Abschnitt 7a; liest
+`SONAR64_TOKEN` und `SONAR64_DATA`, Exit 0 = abgemeldet, 1 = ipv64.net nicht erreichbar oder Fehler, 2 = falsche
+Einstellung).
 
 **Mini-Status** (nur mit `SONAR64_STATUS`): `GET /` schlichte Seite (aktualisiert sich alle 5 s), `GET /status`
-JSON mit Zustand und den letzten 50 Messungen raus und rein, `GET /health` (200 = läuft und angemeldet, sonst 503).
+JSON mit Zustand und den letzten 50 Messungen raus und rein, `GET /health` (200 = läuft und angemeldet, sonst 503;
+auch ein von ipv64.net abgemeldeter Knoten bleibt 200 mit `"paused":"revoked"`, damit er nicht endlos neu startet).
 Nur lesen, ohne Anmeldung – deshalb am besten nur an `127.0.0.1` oder im Heimnetz binden, nie ins Internet
 freigeben. Er enthält keine Geheimnisse und keine Adressen (auch keine Traceroute-Hops). Die volle Ansicht gibt es auf ipv64.net unter
 „Mein Knoten“.
@@ -219,6 +231,20 @@ freigeben. Er enthält keine Geheimnisse und keine Adressen (auch keine Tracerou
 - Der genaue Standort ist nur für den Besitzer sichtbar (und dient der Plausibilitätsprüfung).
 - Gemeldet werden nur Zusammenfassungen je Ziel (Min/Mittel/Max/Jitter/Verlust), keine Rohpakete und keine Daten
   aus dem Heimnetz.
+- Aufbewahrung bei ipv64.net: einzelne Messergebnisse 7 Tage, Stundenwerte 90 Tage; ein abgemeldeter Knoten wird
+  90 Tage nach der Abmeldung mit allen restlichen Messdaten endgültig gelöscht.
+
+## 7a. Austreten und Abmeldung
+
+- **Selbst austreten:** `sonar64 leave` (bzw. `install.sh --uninstall`, Node64: „Austreten“) meldet den Knoten bei
+  ipv64.net ab (`DELETE /sonar/me`): Token widerrufen, Knoten deaktiviert, IP und genauer Standort gelöscht, Name
+  frei. Lokal werden Schlüssel und Node-ID gelöscht. Wer wieder mitmachen will, braucht ein neues Token (neuer Knoten).
+- **Abmeldung durch ipv64.net:** Token im Portal zurückgezogen, Knoten gesperrt oder **30 Tage ohne Meldung** – dann
+  meldet ipv64.net den Knoten von selbst ab. Bemerkt `sonar64` das (Antwort `invalid_token` bzw. `node_disabled`),
+  misst er sofort nicht mehr, schließt UDP 6464, verwirft nicht gemeldete Ergebnisse und fragt nur noch einmal je
+  Stunde nach, ob die Abmeldung aufgehoben wurde (z. B. nach einem vorübergehend gesperrten Account). Das Programm
+  läuft dabei weiter (kein Neustart-Kreis), im Log steht `node signed off by ipv64`, im Mini-Status „abgemeldet“.
+  Dauerhaft beenden: Dienst bzw. Container entfernen; neu teilnehmen: neues Token eintragen.
 
 ## 8. Grenzen (fest im Programm, vom Server nicht änderbar)
 
@@ -226,6 +252,8 @@ freigeben. Er enthält keine Geheimnisse und keine Adressen (auch keine Tracerou
 - Höchstens 2 Pakete/s (Anker 50/s), höchstens 5 Pakete je Messung; Traceroute höchstens 2 je Stunde, TTL ≤ 30.
 - Tagesgrenze: sparsam 20.000, normal 40.000, großzügig 60.000 Pakete.
 - Nur Ziele aus dem von ipv64.net **signierten** Plan, nie private oder reservierte Adressen.
+- Plan alle 2 min abfragen (Anker jede Minute; unverändert nur eine kurze Antwort), Meldung alle 5 min (Anker jede
+  Minute, wenn es etwas zu melden gibt).
 - Ein Plan gilt höchstens 30 min; ohne neuen Plan nur noch die Anker, nach 2 h Pause. Ergebnisse werden bis 6 h
   gepuffert und nachgereicht.
 - Selbstbremse: ist die eigene Leitung gestört (≥ 80 % Verlust zu allen Ankern), pausiert der Knoten eine Runde.
@@ -241,5 +269,6 @@ freigeben. Er enthält keine Geheimnisse und keine Adressen (auch keine Tracerou
 | `data directory not usable` | Datenordner nicht beschreibbar (Volume-Rechte, Nutzer 65532) |
 | `an anchor token (s64a_) needs SONAR64_MODE=anchor` | Anker-Token mit `SONAR64_MODE=headless` |
 | `no plan key …` | Entwicklungsstand ohne eingebauten Plan-Schlüssel (dann `SONAR64_PLAN_KEY`) |
+| `node signed off by ipv64` | Token zurückgezogen, Knoten gesperrt oder 30 Tage ohne Meldung abgemeldet (Abschnitt 7a): neues Token eintragen |
 | ICMP-Messungen fehlen | `CAP_NET_RAW` fehlt (Container ohne `NET_RAW`); UDP 6464 geht trotzdem |
 | „gemessen“, aber nie per UDP erreichbar | Portfreigabe fehlt oder Docker leitet UDP 6464 über den `docker-proxy` (Absender = Gateway, wird nicht beantwortet): `--network host` |

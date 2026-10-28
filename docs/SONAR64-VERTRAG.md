@@ -207,10 +207,12 @@ Siehe `api.go` und `probe.go`. Zusätzlich gilt:
 - **Harte Grenzen im Kern** (Konstanten, nicht vom Server änderbar): Ziele je Runde sparsam 8 / normal 15 /
   großzügig 20 (Anker 2.000); höchstens 2 Pakete/s (Anker 50/s); Count ≤ 5; Traceroute ≤ 2/h, MaxTTL ≤ 30;
   Tagesgrenze sparsam 20.000 / normal 40.000 / großzügig 60.000 Pakete; private/reservierte Ziele nie.
-- **Ablauf:** Plan alle 15 min (ETag); Plan gilt höchstens 30 min; danach nur `Plan.Anchors` (zuletzt gültiger
-  Plan) bis 2 h, dann Pause; Meldung alle 5 min, Puffer 6 h (älteres verwerfen), höchstens 1.000 Ergebnisse je
-  Meldung (Rest nach ≥ 61 s), `seq` = max(letzte + 1, Unix-Millisekunden); Selbstbremse: in einer Runde zu
-  allen Ankern ≥ 80 % Verlust → nächste Runde Pause (`paused=uplink`).
+- **Ablauf:** Plan alle 2 min, Anker jede Minute (ETag, Jitter ±20 %, Abschnitt 10.1); Plan gilt höchstens 30 min;
+  danach nur `Plan.Anchors` (zuletzt gültiger Plan) bis 2 h, dann Pause; Meldung alle 5 min (Anker jede Minute, nur
+  wenn Ergebnisse oder `inbound` anliegen, sonst Health spätestens alle 5 min), Puffer 6 h (älteres verwerfen),
+  höchstens 1.000 Ergebnisse je Meldung (Rest nach ≥ 61 s), `seq` = max(letzte + 1, Unix-Millisekunden);
+  Selbstbremse: in einer Runde zu allen Ankern ≥ 80 % Verlust → nächste Runde Pause (`paused=uplink`). Abgemeldet
+  (Abschnitt 10.2): `paused=revoked`.
 - **Zustand im DataDir:** `sonar64.key`, `sonar64.json` (node_id, seq, letzter Plan + ETag). Ohne DataDir nur im
   Speicher.
 - **Kurz-ID:** erste 4 Byte von SHA-256(NodeID), hex klein.
@@ -272,14 +274,24 @@ sich nicht mehr melden, und ihre Messdaten altern automatisch heraus. Gilt vor d
   Zustand **abgemeldet**: sofort nicht mehr messen, Antworter (UDP 6464) schließen, Puffer verwerfen,
   `Status.Paused = "revoked"`, keine weiteren Anfragen außer einer Prüfung je Stunde (`GET /sonar/me`; bei 200 wieder
   normal, z. B. nach vorübergehend gesperrtem Account). `Run` endet dabei nicht (kein Neustart-Kreis im Container).
+  Umsetzung Go: 401/403 ohne genau diesen `code` (RFC 9457 `code`), 409 und 429 melden nicht ab. Ist der Knoten noch
+  nicht registriert, gilt bei der Prüfung auch 409 `not_registered` als „Token gilt wieder“ (dann `register`). `Me`,
+  `UpdateMe`, `Inbound` liefern im Zustand abgemeldet `sonar.ErrRevoked` ohne Anfrage.
 - **Kern `Leave(ctx) error`:** `DELETE /sonar/me` (204, 401 und 404 gelten als erledigt), danach Runner stoppen und
   `sonar64.json` + `sonar64.key` im DataDir löschen. Ohne Verbindung: Fehler zurück, lokal trotzdem löschen nur, wenn
   der Aufrufer es will (Parameter oder zweite Funktion – Go-Teil entscheidet, im Kommentar festhalten).
+  Entschieden: zweite Funktion `Forget() error` (nur lokal: Run beenden, Puffer verwerfen, beide Dateien löschen).
+  `Leave` ändert bei Fehler nichts (Run läuft weiter); nach `Leave`/`Forget` startet der Runner nicht mehr.
 - **Node64-Modul:** „Austreten“ und Node-Zurücksetzen rufen `Leave` (bei Fehler Hinweis: ipv64 meldet den Knoten
   nach 30 Tagen ohne Meldung selbst ab). Zustand `revoked` → Seite zeigt „Von ipv64.net abgemeldet“ mit „Neu
   teilnehmen“ (neues Token). i18n DE/EN.
 - **Programm `sonar64`:** Unterbefehl `sonar64 leave` (liest `SONAR64_TOKEN`, `SONAR64_DATA`), Exit 0 bei Erfolg;
   `install.sh --uninstall` ruft ihn vorher auf, wenn möglich (Fehler nur melden). Mini-Status zeigt „abgemeldet“.
+  Umsetzung: Exit 1 = ipv64 nicht erreichbar/Fehler (lokal bleibt alles), 2 = falsche Einstellung; nach Erfolg
+  streicht `install.sh` die Zeile `SONAR64_TOKEN` aus `/etc/sonar64.env`. `/health` bleibt bei `revoked` 200.
+- **Node64-Umsetzung:** „Austreten“ = `SetParticipate(false)` (auch `PUT /api/sonar64/settings` mit
+  `participate:false`) und `BeforeReset` (`module.Resetter`); ohne Verbindung `Forget` und Hinweis. „Neu
+  teilnehmen“ = `POST /sonar64/rejoin` (austreten, neues Token, neuer Knoten).
 
 ### 10.3 Aufräumen (`sonar_cleanup.php`, täglich)
 

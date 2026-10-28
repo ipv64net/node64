@@ -95,7 +95,7 @@ func (m *Module) apiInbound(w http.ResponseWriter, r *http.Request) {
 		since = t
 	}
 	rows, err := m.inboundRows(r.Context(), since)
-	if errors.Is(err, ErrNotReady) {
+	if errors.Is(err, ErrNotReady) || errors.Is(err, sonar.ErrRevoked) {
 		apiJSON(w, http.StatusOK, map[string]any{"rows": []sonar.InboundRow{}, "ready": false})
 		return
 	}
@@ -198,8 +198,8 @@ func (m *Module) apiSettingsPut(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if in.Participate != nil && !*in.Participate && cur.Participate { // ausschalten vor dem Speichern (kein Neustart)
-		if err := m.SetParticipate(ctx, false); err != nil {
+	if in.Participate != nil && !*in.Participate && cur.Participate { // austreten vor dem Speichern (kein Neustart)
+		if err := m.SetParticipate(ctx, false); err != nil && !errors.Is(err, ErrLeftLocally) { // lokal ausgetreten reicht
 			m.fail(w, err)
 			return
 		}

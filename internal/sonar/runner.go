@@ -86,28 +86,99 @@ func (r *Runner) signalWake() {
 	}
 }
 
-// jitter verteilt d um +-10 %.
+// jitter verteilt d um +-20 % (Abrufe vieler Knoten verteilen sich, Vertrag 10.1).
 func jitter(d time.Duration) time.Duration {
 	if d <= 0 {
 		return d
 	}
-	return d + time.Duration(rand.Int64N(int64(d)/5+1)) - d/10
+	return d + time.Duration(rand.Int64N(int64(d)*2/5+1)) - d/5
+}
+
+// ---- Abmeldung durch ipv64 (Vertrag 10.2) ----
+
+// revokedErr: ipv64 kennt das Token nicht mehr (401 invalid_token) oder hat den Knoten gesperrt (403
+// node_disabled). Anderes 401/403 (ohne diesen Code, z. B. von einem Proxy) und 429 zaehlen nicht.
+func revokedErr(err error) bool {
+	var e *APIError
+	if !errors.As(err, &e) {
+		return false
+	}
+	return e.Status == http.StatusUnauthorized && e.Code == "invalid_token" || e.Status == http.StatusForbidden && e.Code == "node_disabled"
+}
+
+func (r *Runner) isRevoked() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.revoked
+}
+
+// noteRevoked schaltet bei einer Abmeldung durch ipv64 in den Zustand abgemeldet: nichts mehr messen, Antworter zu,
+// Puffer verwerfen, nur noch stuendlich GET /sonar/me (checkBack). true = abgemeldet.
+func (r *Runner) noteRevoked(err error) bool {
+	if !revokedErr(err) {
+		return false
+	}
+	r.mu.Lock()
+	first := !r.revoked
+	r.revoked, r.paused, r.lastErr = true, "revoked", errText(err)
+	r.bufOff, r.buf = r.bufOff+uint64(len(r.buf)), nil
+	r.inOff, r.inbuf = r.inOff+uint64(len(r.inbuf)), nil
+	r.mu.Unlock()
+	if first {
+		r.signalWake() // Antworter schliessen
+		r.log.Warn("sonar64: node signed off by ipv64 - not measuring, checking again every hour", "err", errText(err))
+	}
+	return true
+}
+
+// checkBack fragt im Zustand abgemeldet, ob ipv64 den Knoten wieder annimmt (GET /sonar/me, z. B. nach einem
+// voruebergehend gesperrten Account): 200 bzw. 409 not_registered (Token gilt, noch ohne Knoten) = wieder normal.
+func (r *Runner) checkBack(ctx context.Context) {
+	resp, err := r.api.send(ctx, http.MethodGet, "/sonar/me", r.cfg.Token, nil, nil, smallLimit)
+	if err != nil {
+		r.log.Debug("sonar64: revocation check failed", "err", errText(err))
+		return
+	}
+	if resp.status != http.StatusOK && (resp.status != http.StatusConflict || apiError(resp).Code != "not_registered") {
+		r.setErr(apiError(resp))
+		return
+	}
+	r.mu.Lock()
+	r.revoked, r.paused, r.lastErr = false, "", ""
+	r.mu.Unlock()
+	r.signalWake() // Antworter wieder oeffnen (falls gemessen)
+	r.log.Info("sonar64: ipv64 accepts the node again")
+}
+
+// waitRevoked wartet im Zustand abgemeldet bis zur naechsten Pruefung und fuehrt sie aus. false = ctx beendet.
+func (r *Runner) waitRevoked(ctx context.Context) bool {
+	if sleepCtx(ctx, jitter(r.revokedEvery)) != nil {
+		return false
+	}
+	r.safe("revoked check", func() { r.checkBack(ctx) })
+	return true
 }
 
 // ---- Anmeldung ----
 
-// ensureRegistered meldet den Knoten einmal an (POST /sonar/register) und wiederholt mit wachsendem Abstand.
-// Fehler nur, wenn ctx endet.
+// ensureRegistered meldet den Knoten einmal an (POST /sonar/register) und wiederholt mit wachsendem Abstand
+// (abgemeldet: stuendlich pruefen). Fehler nur, wenn ctx endet.
 func (r *Runner) ensureRegistered(ctx context.Context) error {
-	r.mu.Lock()
-	done := r.registered
-	r.mu.Unlock()
-	if done {
-		r.safe("sync me", func() { r.syncMe(ctx) })
-		return nil
-	}
 	wait := r.retryMin
 	for {
+		if r.isRevoked() {
+			if !r.waitRevoked(ctx) {
+				return ctx.Err()
+			}
+			continue
+		}
+		r.mu.Lock()
+		done := r.registered
+		r.mu.Unlock()
+		if done {
+			r.safe("sync me", func() { r.syncMe(ctx) })
+			return nil
+		}
 		var err error
 		r.safe("register", func() { err = r.register(ctx) })
 		if err == nil {
@@ -115,6 +186,9 @@ func (r *Runner) ensureRegistered(ctx context.Context) error {
 			return nil
 		}
 		r.setErr(err)
+		if r.noteRevoked(err) {
+			continue
+		}
 		r.log.Warn("sonar64: register failed", "err", errText(err), "retry_in", wait)
 		if e := sleepCtx(ctx, jitter(wait)); e != nil {
 			return e
@@ -162,7 +236,7 @@ func (r *Runner) syncMe(ctx context.Context) {
 		return
 	}
 	w := meWrite{Measured: measured, Budget: budget}
-	if err := r.api.call(ctx, http.MethodPut, "/sonar/me", r.cfg.Token, w, smallLimit, nil); err != nil {
+	if err := r.api.call(ctx, http.MethodPut, "/sonar/me", r.cfg.Token, w, smallLimit, nil); err != nil && !r.noteRevoked(err) {
 		r.log.Warn("sonar64: cannot update settings at ipv64", "err", errText(err))
 	}
 }
@@ -210,6 +284,12 @@ func (r *Runner) restorePlan() {
 
 func (r *Runner) planLoop(ctx context.Context) {
 	for {
+		if r.isRevoked() { // abgemeldet: nur die stuendliche Pruefung, kein Plan
+			if !r.waitRevoked(ctx) {
+				return
+			}
+			continue
+		}
 		var next time.Duration
 		r.safe("plan", func() { next = r.fetchPlan(ctx) })
 		if next <= 0 {
@@ -260,6 +340,9 @@ func (r *Runner) fetchPlan(ctx context.Context) time.Duration {
 	case resp.status < 200 || resp.status > 299:
 		e := apiError(resp)
 		r.setPlanErr(e)
+		if r.noteRevoked(e) {
+			return jitter(r.planEvery)
+		}
 		if e.RetryAfter > 0 {
 			return min(max(e.RetryAfter, r.retryMin), time.Hour)
 		}
@@ -358,6 +441,8 @@ func (r *Runner) measureTick(ctx context.Context) {
 	start, targets, anchorsOnly, ok := r.dueRound(now)
 	prober := r.prober
 	switch {
+	case r.revoked:
+		r.paused, ok = "revoked", false
 	case !ok:
 	case prober == nil:
 		ok = false
@@ -476,8 +561,8 @@ func (r *Runner) runRound(ctx context.Context, prober Prober, start time.Time, t
 // measureOne prueft die Grenzen, misst ein Ziel und legt das Ergebnis ab.
 func (r *Runner) measureOne(ctx context.Context, prober Prober, round, deadline time.Time, t Target, icmpOK bool) (Result, bool) {
 	now := r.now()
-	if !now.Before(deadline) {
-		return Result{}, false // zu spaet, Runde vorbei
+	if !now.Before(deadline) || r.isRevoked() {
+		return Result{}, false // zu spaet, Runde vorbei bzw. abgemeldet
 	}
 	// doppelt pruefen (auch wenn Plan und Prober pruefen)
 	if _, ok := targetAddr(t); !ok || t.Count < 1 || t.Count > MaxCount || (t.Method == MethodTrace && (t.MaxTTL < 1 || t.MaxTTL > MaxTTL || t.Count > MaxTraceCount)) {
@@ -601,10 +686,13 @@ func cleanResult(res, base Result, packets int, started, now time.Time) Result {
 	return res
 }
 
-// store legt ein Ergebnis in Puffer und Recent ab.
+// store legt ein Ergebnis in Puffer und Recent ab (abgemeldet bzw. nach Leave: verwerfen).
 func (r *Runner) store(res Result) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.revoked || r.left {
+		return
+	}
 	if len(r.buf) >= maxBuffered {
 		r.buf = r.buf[1:]
 		r.bufOff++
@@ -652,7 +740,7 @@ func (r *Runner) report(ctx context.Context) (more bool, retry time.Duration) {
 	r.drainResponder()
 	now := r.now()
 	r.mu.Lock()
-	if !r.registered {
+	if !r.registered || r.revoked || r.left {
 		r.mu.Unlock()
 		return false, 0
 	}
@@ -667,6 +755,10 @@ func (r *Runner) report(ctx context.Context) (more bool, retry time.Duration) {
 		j++
 	}
 	r.inbuf, r.inOff = r.inbuf[j:], r.inOff+uint64(j)
+	if r.anchor && len(r.buf) == 0 && len(r.inbuf) == 0 && now.Sub(r.lastReport) < r.heartbeat {
+		r.mu.Unlock() // Anker melden jede Minute nur, wenn etwas zu melden ist (Health spaetestens nach heartbeat)
+		return false, 0
+	}
 	nRes := min(len(r.buf), 1000)
 	nIn := min(len(r.inbuf), maxInboundRows)
 	resAt, inAt := r.bufOff, r.inOff
@@ -739,6 +831,7 @@ func (r *Runner) report(ctx context.Context) (more bool, retry time.Duration) {
 	default:
 		e := apiError(resp)
 		r.setErr(e)
+		r.noteRevoked(e) // verwirft auch den Puffer
 		if e.RetryAfter > 0 {
 			retry = min(max(e.RetryAfter, r.reportGap), time.Hour)
 		}
@@ -788,7 +881,7 @@ var shortRe = regexp.MustCompile(`^[0-9a-f]{8}$`)
 func (r *Runner) wantResponder() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.anchor || r.measured
+	return !r.revoked && !r.left && (r.anchor || r.measured)
 }
 
 // respRun ist ein laufender Antworter.
@@ -890,7 +983,7 @@ func (r *Runner) drainResponder() {
 		}
 		x.At = x.At.UTC()
 		r.recentIn = append(r.recentIn, x)
-		if r.mergeInbound(x) {
+		if r.revoked || r.left || r.mergeInbound(x) { // abgemeldet: nichts mehr melden
 			continue
 		}
 		if len(r.inbuf) >= maxInboundBuf {

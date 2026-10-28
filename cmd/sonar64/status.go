@@ -102,8 +102,8 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 // pageScript zeigt den Zustand an (nur textContent, kein innerHTML mit Daten).
 const pageScript = `(function(){
 var de=(navigator.language||"").toLowerCase().indexOf("de")===0;
-var L=de?{st:"Zustand",out:"Pings von mir",inb:"Pings gegen mich (UDP 6464)",t:"Ziel",m:"Weg",ms:"ms",loss:"Verlust",at:"Zeit",from:"von",n:"Anzahl",none:"noch nichts",err:"nicht erreichbar"}
-:{st:"State",out:"My pings",inb:"Pings to me (UDP 6464)",t:"Target",m:"Path",ms:"ms",loss:"Loss",at:"Time",from:"from",n:"Count",none:"nothing yet",err:"unreachable"};
+var L=de?{st:"Zustand",out:"Pings von mir",inb:"Pings gegen mich (UDP 6464)",t:"Ziel",m:"Weg",ms:"ms",loss:"Verlust",at:"Zeit",from:"von",n:"Anzahl",none:"noch nichts",err:"nicht erreichbar",revoked:"abgemeldet (von ipv64.net) - misst nicht, prüft stündlich"}
+:{st:"State",out:"My pings",inb:"Pings to me (UDP 6464)",t:"Target",m:"Path",ms:"ms",loss:"Loss",at:"Time",from:"from",n:"Count",none:"nothing yet",err:"unreachable",revoked:"signed off (by ipv64.net) - not measuring, checking hourly"};
 function el(t,txt){var e=document.createElement(t);if(txt!==undefined)e.textContent=String(txt);return e}
 function tm(s){var d=new Date(s);return isNaN(d)?"":d.toLocaleTimeString()}
 function table(head,rows){var tb=el("table"),tr=el("tr");head.forEach(function(h){tr.appendChild(el("th",h))});tb.appendChild(tr);
@@ -111,7 +111,7 @@ if(!rows.length){var r=el("tr"),c=el("td",L.none);c.colSpan=head.length;r.append
 rows.forEach(function(row){var r=el("tr");row.forEach(function(v){r.appendChild(el("td",v))});tb.appendChild(r)});return tb}
 function show(d){var s=d.status||{},b=document.getElementById("app");b.replaceChildren();
 var kv=[["node",s.node_id||"-"],["version",d.version],["mode",s.mode],["measured",s.measured],["budget",s.budget],
-["responder",s.responder],["registered",s.registered],["anchors_only",s.anchors_only],["paused",s.paused||"-"],
+["responder",s.responder],["registered",s.registered],["anchors_only",s.anchors_only],["paused",s.paused==="revoked"?L.revoked:(s.paused||"-")],
 ["sent_today",s.sent_today],["buffered",s.buffered],["last_report",tm(s.last_report)],["last_error",s.last_error||"-"]];
 b.appendChild(el("h2",L.st));b.appendChild(table(["",""],kv));
 b.appendChild(el("h2",L.out));b.appendChild(table([L.t,L.m,L.ms,L.loss,L.at],(d.recent||[]).map(function(x){

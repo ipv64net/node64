@@ -18590,7 +18590,7 @@
           "Sonar64"
         ],
         "summary": "Sonar64 einstellen: Teilnahme, Rolle, Budget, Ruhezeit, Profil",
-        "description": "Fehlende Felder bleiben unverändert. `participate: true` braucht den zentralen ipv64-API-Key (legt beim ersten Mal ein Sonar-Token an). Profilfelder (Name, Standort, Anschlussart, Gerät) gehen an ipv64 und brauchen einen angemeldeten Knoten. `measured: true` öffnet UDP 6464; dann sehen einige andere Teilnehmer die öffentliche IP (nur im Messplan).",
+        "description": "Fehlende Felder bleiben unverändert. `participate: true` braucht den zentralen ipv64-API-Key (legt ein Sonar-Token an, wenn keins da ist); `participate: false` tritt aus (meldet den Knoten bei ipv64 ab und löscht Token, Schlüssel und Node-ID; ist ipv64 nicht erreichbar, nur lokal). Profilfelder (Name, Standort, Anschlussart, Gerät) gehen an ipv64 und brauchen einen angemeldeten Knoten. `measured: true` öffnet UDP 6464; dann sehen einige andere Teilnehmer die öffentliche IP (nur im Messplan).",
         "requestBody": {
           "required": true,
           "content": {

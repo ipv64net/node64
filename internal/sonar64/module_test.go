@@ -48,6 +48,29 @@ type fakeRunner struct {
 	inSince  time.Time
 	inCalled int
 	updErr   error
+	leaves   int
+	forgets  int
+	leaveErr error
+}
+
+func (f *fakeRunner) Leave(context.Context) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.leaves++
+	return f.leaveErr
+}
+
+func (f *fakeRunner) Forget() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.forgets++
+	return nil
+}
+
+func (f *fakeRunner) leaveCounts() (int, int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.leaves, f.forgets
 }
 
 func (f *fakeRunner) Run(ctx context.Context) error {
@@ -214,18 +237,28 @@ func TestParticipate(t *testing.T) {
 		t.Fatal("outbound only: no port")
 	}
 	waitFor(t, "me", func() bool { return m.cachedMe() != nil })
-	// aus und wieder an: kein zweites Token
+	// wieder an (laeuft schon): kein zweites Token
+	if err := m.SetParticipate(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if *tokens != 1 {
+		t.Fatalf("token created %d times", *tokens)
+	}
+	// austreten: bei ipv64 abmelden (Leave), Token weg; wieder teilnehmen = neues Token
 	if err := m.SetParticipate(ctx, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, running, _ := f.snapshot(); running != 0 || m.runner() != nil || m.cachedMe() != nil {
 		t.Fatal("runner must stop")
 	}
+	if l, fg := f.leaveCounts(); l != 1 || fg != 0 || m.core.SettingOr(ctx, setToken, "") != "" {
+		t.Fatalf("leave %d forget %d token %q", l, fg, m.core.SettingOr(ctx, setToken, ""))
+	}
 	if err := m.SetParticipate(ctx, true); err != nil {
 		t.Fatal(err)
 	}
-	if *tokens != 1 {
-		t.Fatalf("token created %d times", *tokens)
+	if *tokens != 2 {
+		t.Fatalf("token created %d times, want a new one after leaving", *tokens)
 	}
 	// Modul aus: Knoten aus
 	if err := m.Stop(ctx); err != nil {
@@ -234,6 +267,65 @@ func TestParticipate(t *testing.T) {
 	if _, _, running, _ := f.snapshot(); running != 0 {
 		t.Fatal("module stop must stop the runner")
 	}
+}
+
+// Austreten ohne Verbindung: lokal trotzdem (Forget), Hinweis ErrLeftLocally; Node-Reset tritt aus; Neu teilnehmen.
+func TestLeaveOfflineResetRejoin(t *testing.T) {
+	m, f, tokens := modTest(t)
+	ctx := context.Background()
+	_ = m.Start(ctx)
+	if err := m.BeforeReset(ctx); err != nil { // nie teilgenommen: nichts zu tun
+		t.Fatal(err)
+	}
+	if l, _ := f.leaveCounts(); l != 0 {
+		t.Fatal("leave without token")
+	}
+	if err := m.SetParticipate(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	f.leaveErr = errors.New("ipv64 not reachable")
+	f.mu.Unlock()
+	err := m.SetParticipate(ctx, false)
+	if !errors.Is(err, ErrLeftLocally) || !strings.Contains(err.Error(), "not reachable") {
+		t.Fatalf("offline leave: %v", err)
+	}
+	if l, fg := f.leaveCounts(); l != 1 || fg != 1 || m.LoadSettings(ctx).Participate || m.core.SettingOr(ctx, setToken, "") != "" {
+		t.Fatalf("offline leave: leave %d forget %d", l, fg)
+	}
+	// Node-Reset: tritt aus, Fehler als Hinweis
+	if err := m.SetParticipate(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.BeforeReset(ctx); err == nil || !strings.Contains(err.Error(), "30 days") {
+		t.Fatalf("reset offline: %v", err)
+	}
+	f.mu.Lock()
+	f.leaveErr = nil
+	f.mu.Unlock()
+	if err := m.SetParticipate(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.BeforeReset(ctx); err != nil || m.LoadSettings(ctx).Participate || m.core.SettingOr(ctx, setToken, "") != "" {
+		t.Fatalf("reset: %v", err)
+	}
+	// von ipv64 abgemeldet: Neu teilnehmen legt ein neues Token an
+	if err := m.SetParticipate(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "runner", func() bool { return m.runner() != nil })
+	f.mu.Lock()
+	f.status.Paused = "revoked"
+	f.mu.Unlock()
+	before := *tokens
+	leaves, _ := f.leaveCounts()
+	if err := m.Rejoin(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := f.leaveCounts(); *tokens != before+1 || l != leaves+1 || !m.LoadSettings(ctx).Participate {
+		t.Fatalf("rejoin: tokens %d leaves %d", *tokens, l)
+	}
+	waitFor(t, "runner after rejoin", func() bool { return m.runner() != nil })
 }
 
 // Ungueltiges Token von ipv64 wird nicht gespeichert.
@@ -635,6 +727,20 @@ func TestPagesRender(t *testing.T) {
 	if code, body := get("/api/sonar64/settings"); code != 200 || !strings.Contains(body, `"budget":"grosszuegig"`) {
 		t.Fatalf("get settings: %d %s", code, body)
 	}
+	// von ipv64 abgemeldet: Hinweis und „Neu teilnehmen“
+	f.mu.Lock()
+	f.status.Paused = "revoked"
+	f.mu.Unlock()
+	if code, body := get("/sonar64"); code != 200 || !strings.Contains(body, `id="s64-revoked"`) || !strings.Contains(body, `action="/sonar64/rejoin"`) {
+		t.Fatalf("revoked page: %d", code)
+	}
+	if code, _ := post("/sonar64/rejoin", url.Values{"_csrf": {csrf[1]}}); code != http.StatusSeeOther || !m.LoadSettings(context.Background()).Participate {
+		t.Fatalf("rejoin: %d", code)
+	}
+	f.mu.Lock()
+	f.status.Paused = ""
+	f.mu.Unlock()
+	waitFor(t, "runner after rejoin", func() bool { return m.runner() != nil })
 	if code, _ := do("PUT", "/api/sonar64/settings", `{"participate":false}`, hdr); code != 200 || m.LoadSettings(context.Background()).Participate {
 		t.Fatalf("leave: %d", code)
 	}
@@ -646,7 +752,8 @@ func TestPagesRender(t *testing.T) {
 	keys := map[string]bool{"nav.sonar64": true}
 	files, _ := filepath.Glob("templates/pages/*.html")
 	gofiles, _ := filepath.Glob("*.go")
-	skip := map[string]bool{setConfig: true, setToken: true, "sonar64.participate": true, "sonar64.settings": true, "sonar64.profile": true}
+	skip := map[string]bool{setConfig: true, setToken: true, "sonar64.participate": true, "sonar64.settings": true, "sonar64.profile": true,
+		"sonar64.rejoin": true, "sonar64.json": true, "sonar64.key": true}
 	for _, fn := range append(files, gofiles...) {
 		if strings.HasSuffix(fn, "_test.go") {
 			continue
@@ -674,7 +781,7 @@ func TestPagesRender(t *testing.T) {
 	for _, x := range Devices {
 		keys["sonar64.device."+x] = true
 	}
-	for _, x := range []string{"uplink", "quiet", "no_plan", "budget"} {
+	for _, x := range []string{"uplink", "quiet", "no_plan", "budget", "revoked"} {
 		keys["sonar64.paused."+x] = true
 	}
 	for _, x := range []string{"none", "icmp", "udp"} {

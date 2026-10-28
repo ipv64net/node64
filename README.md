@@ -343,6 +343,9 @@ verteilten Messnetzes von ipv64.net: Knoten bei Teilnehmern zu Hause messen sich
   öffentlichen Knotenseite.
 - **Live-Tabellen:** *Pings von mir* (alle 5 Sekunden) und *Pings gegen mich* (UDP 6464 sofort, sonst aus den
   Ergebnissen bei ipv64). API: `/api/sonar64/status`, `recent`, `inbound`, `settings`.
+- **Austreten** (auch beim Zurücksetzen der Node) meldet den Knoten bei ipv64.net ab und löscht Token, Schlüssel und
+  Node-ID. Meldet ipv64.net den Knoten ab (Token zurückgezogen, 30 Tage ohne Meldung), misst die Node nicht mehr und
+  zeigt *Neu teilnehmen*.
 
 Dasselbe Messnetz läuft auch ohne Node64 als kleines eigenes Programm `sonar64` (z. B. Raspberry Pi Zero).
 Plan: [docs/PLAN-NODE64-SONAR64.md](docs/PLAN-NODE64-SONAR64.md).

@@ -5015,8 +5015,15 @@
       "nokey": "To participate, Node64 needs the central ipv64 API key (a dedicated Sonar token is created from it).",
       "key_link": "Enter API key",
       "join": "Participate",
-      "leave": "Stop participating",
-      "off_confirm": "Stop participating in Sonar64? The node will no longer measure or answer on UDP 6464."
+      "leave": "Leave",
+      "off_confirm": "Leave Sonar64? The node signs off its Sonar64 node at ipv64.net, stops measuring and no longer answers on UDP 6464. Participating again later creates a new node."
+    },
+    "revoked": {
+      "title": "Signed off by ipv64.net",
+      "text": "ipv64.net has signed off this node (token revoked, node disabled or 30 days without reports). The node no longer measures, does not answer on UDP 6464 and checks once an hour whether the sign-off was lifted.",
+      "rejoin": "Participate again",
+      "rejoin_hint": "Creates a new Sonar token and a new node (new node ID, the trust level starts over).",
+      "rejoin_confirm": "Participate in Sonar64 again with a new node?"
     },
     "status": {
       "node_id": "Node ID",
@@ -5038,7 +5045,8 @@
       "uplink": "own line disrupted",
       "quiet": "quiet hours",
       "no_plan": "no plan from ipv64",
-      "budget": "daily limit reached"
+      "budget": "daily limit reached",
+      "revoked": "signed off by ipv64.net"
     },
     "trust": {
       "title": "Trust level",
@@ -5169,11 +5177,14 @@
       "lat": "Latitude between -90 and 90.",
       "lon": "Longitude between -180 and 180.",
       "access": "Unknown access type.",
-      "device": "Unknown device."
+      "device": "Unknown device.",
+      "revoked": "The node has been signed off by ipv64.net."
     },
     "flash": {
       "participate_on": "Sonar64: participation switched on – the node is registering with ipv64.",
-      "participate_off": "Sonar64: participation stopped.",
+      "participate_off": "Sonar64: left – the node is signed off at ipv64.net.",
+      "left_local": "Sonar64: left locally, but ipv64.net was not reachable ({error}). ipv64.net signs off the node after 30 days without reports.",
+      "rejoined": "Sonar64: registered again – the node signs up at ipv64 with a new node.",
       "saved": "Sonar64: saved."
     }
   }
