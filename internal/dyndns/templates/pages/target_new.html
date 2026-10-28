@@ -14,6 +14,7 @@
 			{{else}}
 			<form method="post" action="/dyndns/targets/new" data-pick-form>
 				<input type="hidden" name="_csrf" value="{{.CSRF}}">
+				<input type="hidden" name="confirm_many" value="">
 				<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards small">
 					<thead><tr><th style="width:1%" class="ps-3"><input type="checkbox" class="form-check-input" data-pick-all aria-label="all"></th><th>{{.T "dyn.targets.name"}}</th><th>A</th><th>AAAA</th><th>{{.T "dyn.pick.update"}}</th><th>{{.T "dyn.pick.note"}}</th></tr></thead>
 					<tbody>

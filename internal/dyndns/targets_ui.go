@@ -214,8 +214,18 @@ func (m *Module) pageTargetPick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	picks := map[string]pickChoice{}
+	n := 0 // Namen, die wirklich angelegt wuerden (IPv4 und IPv6 "aus" legt addPicked nicht an)
 	for _, k := range r.PostForm["pick"] {
-		picks[k] = pickChoice{Mode4: r.PostFormValue("m4:" + k), Mode6: r.PostFormValue("m6:" + k)}
+		c := pickChoice{Mode4: r.PostFormValue("m4:" + k), Mode6: r.PostFormValue("m6:" + k)}
+		picks[k] = c
+		if c.Mode4 != Mode4Off || c.Mode6 != Mode6Off {
+			n++
+		}
+	}
+	// Mehrere Namen auf einmal ueberschreiben deren A/AAAA: nur mit bestaetigter Rueckfrage (Fenster in dyndns.js)
+	if n > 1 && r.PostFormValue("confirm_many") != "1" {
+		m.back(w, r, "warning", m.g.T(r, "dyn.pick.confirm_needed"), "/dyndns/targets/new")
+		return
 	}
 	lctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	added, failed, err := m.addPicked(lctx, key, picks)

@@ -1,5 +1,12 @@
 # Changes – DynDNS updater
 
+## 1.4.1 – 2026-10-28
+
+### Fixed
+- Confirmation for several names: the server requires it too, without it nothing is added. Names with IPv4 and IPv6
+  "off" are not counted (they are not added anyway). A double click on "Yes, add all" submits only once; after going
+  back the question is asked again.
+
 ## 1.4.0 – 2026-10-28
 
 ### New

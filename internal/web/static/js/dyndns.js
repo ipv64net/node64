@@ -38,38 +38,51 @@
 		});
 	}
 
-	// Mehr als ein Name: Rueckfrage im Fenster, denn der Updater setzt bei allen sofort die Adresse dieses Anschlusses
+	// Mehr als ein Name: Rueckfrage im Fenster, denn der Updater setzt bei allen sofort die Adresse dieses Anschlusses.
+	// Der Server verlangt die Bestaetigung (confirm_many) ebenfalls. Namen mit IPv4 und IPv6 "aus" legt er nicht an.
 	var form = document.querySelector("[data-pick-form]");
 	var modalEl = document.querySelector("[data-pick-modal]");
 	if (form && modalEl && window.bootstrap) {
-		var confirmed = false;
+		var maxList = 20;
 		var modal = new window.bootstrap.Modal(modalEl);
+		var ok = modalEl.querySelector("[data-pick-confirm]");
+		var flag = form.querySelector('input[name="confirm_many"]');
+		var effective = function () {
+			return Array.prototype.filter.call(form.querySelectorAll('input[name="pick"]:checked'), function (c) {
+				var m4 = form.querySelector('select[name="m4:' + c.value + '"]');
+				var m6 = form.querySelector('select[name="m6:' + c.value + '"]');
+				return !(m4 && m6 && m4.value === "off" && m6.value === "off");
+			});
+		};
 		form.addEventListener("submit", function (e) {
-			var picked = form.querySelectorAll('input[name="pick"]:checked');
-			if (confirmed || picked.length < 2) { return; }
+			var picked = effective();
+			if (picked.length < 2) { return; }
 			e.preventDefault();
 			var count = modalEl.querySelector("[data-pick-count]");
 			count.textContent = count.getAttribute("data-text").replace("{n}", picked.length);
 			var list = modalEl.querySelector("[data-pick-list]");
 			list.textContent = "";
-			picked.forEach(function (c, i) {
-				if (i >= 20) { return; }
+			picked.slice(0, maxList).forEach(function (c) {
 				var li = document.createElement("li");
 				li.textContent = c.getAttribute("aria-label");
 				list.appendChild(li);
 			});
-			if (picked.length > 20) {
+			if (picked.length > maxList) {
 				var more = document.createElement("li");
 				more.className = "list-unstyled text-body-secondary";
-				more.textContent = list.getAttribute("data-more").replace("{n}", picked.length - 20);
+				more.textContent = list.getAttribute("data-more").replace("{n}", picked.length - maxList);
 				list.appendChild(more);
 			}
 			modal.show();
 		});
-		modalEl.querySelector("[data-pick-confirm]").addEventListener("click", function () {
-			confirmed = true;
-			modal.hide();
-			form.submit();
+		ok.addEventListener("click", function () {
+			ok.disabled = true; // kein zweites Absenden bei Doppelklick
+			if (flag) { flag.value = "1"; }
+			form.submit(); // loest kein submit-Ereignis aus
+		});
+		window.addEventListener("pageshow", function () { // Zurueckblaettern (bfcache): wieder bedienbar, neu bestaetigen
+			ok.disabled = false;
+			if (flag) { flag.value = ""; }
 		});
 	}
 })();
