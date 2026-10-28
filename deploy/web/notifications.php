@@ -103,7 +103,10 @@ if (hc2_is_post() && hc2_csrf_ok()) {
 }
 $channels = hc2_channels($uid); $settings = hc2_settings($uid);
 $verify = isset($_GET['verify']) ? hc2_channel($uid, (int)$_GET['verify']) : null;
-$st = $pdo->prepare("SELECT d.*, c.name cname FROM hc2_deliveries d LEFT JOIN hc2_channels c ON c.id = d.channel_id WHERE d.userid = :u ORDER BY d.id DESC LIMIT 40"); $st->execute(array('u' => $uid)); $deliveries = $st->fetchAll(PDO::FETCH_ASSOC);
+// Zustellungen der hubs/Nodes und Versand ueber die API v2 (Node64 ohne hub, z. B. Proxmox VE/Docker, Module)
+$st = $pdo->prepare("SELECT d.*, c.name cname FROM ((SELECT time, channel_id, kind, ok, error FROM hc2_deliveries WHERE userid = :u ORDER BY time DESC LIMIT 40)
+	UNION ALL (SELECT sent_at, channel_id, kind, ok, error FROM hc2_api_sends WHERE userid = :u2 ORDER BY sent_at DESC LIMIT 40)) d
+	LEFT JOIN hc2_channels c ON c.id = d.channel_id ORDER BY d.time DESC LIMIT 40"); $st->execute(array('u' => $uid, 'u2' => $uid)); $deliveries = $st->fetchAll(PDO::FETCH_ASSOC);
 $newType = (string)($_GET['new'] ?? $_POST['type'] ?? ''); if (!isset($types[$newType])) { $newType = ''; }
 $formType = $edit ? $edit['type'] : $newType;
 $fv = function(string $k) use ($edit) { return hc2_h($_POST['f_' . $k] ?? ($edit['config'][$k] ?? '')); };
