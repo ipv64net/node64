@@ -6,17 +6,14 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## 0.12.0-alpha.29 – 2026-10-28
 
-- Sonar64: paused for now – the module is no longer shown and cannot be switched on.
+- Internal improvements.
 
 ## 0.12.0-alpha.28 – 2026-10-28
 
-- Sonar64: nodes with IPv4 and IPv6 are measured in both families (also the program without dashboard).
+- Internal improvements.
 
 ## 0.12.0-alpha.27 – 2026-10-28
 
-- Sonar64 (new, optional, off by default): community measurement network – opt-in with the ipv64 API key, outbound
-  only or also measured (UDP 6464), budget, quiet hours, profile with blurred location, trust level and live tables of
-  the pings; leaving signs the node off at ipv64.net.
 - Security: fixed the findings of a large code review – among others PROXY64 location access lists, hosts via CDN64 only
   under the published name, crashes from crafted packets (Honeypot64 on arm/v7, DNS64), sign-in (memory, redirect,
   X-Forwarded-For, CSRF), backups without program files.
