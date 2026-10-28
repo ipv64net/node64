@@ -156,6 +156,7 @@ type Manager struct {
 	users  map[string]func(ctx context.Context) map[int64][]string
 	holds  map[string]bool
 	holdMu sync.Mutex       // refreshHold: Zaehlen und Halten/Loslassen zusammen (sonst Release trotz Zertifikat)
+	loadMu sync.Mutex       // reload und unload nacheinander (sonst setzt ein aelterer Stand loaded zurueck)
 	onChg  []func(id int64) // nach jeder neuen Ausstellung
 	stopLp context.CancelFunc
 	lpDone chan struct{}
@@ -173,6 +174,9 @@ type Manager struct {
 	loopFirst  time.Duration
 	loopEvery  time.Duration
 
+	// issueTimeout: Zeitlimit eines Abrufs (ab der ACME-Sperre); manche Anbieter brauchen Minuten, bis TXT sichtbar ist
+	issueTimeout time.Duration
+
 	clSelf func() string // Cluster (cluster.go)
 	clHook ClusterHook
 }
@@ -181,6 +185,37 @@ type loadedCert struct {
 	crt     *tls.Certificate
 	leaf    *x509.Certificate
 	staging bool
+	public  bool // Kette endet bei einer System-Root (z. B. Let's Encrypt), nicht eigene CA/selbst signiert
+}
+
+// rank: oeffentlich vertrauenswuerdig vor eigener CA/selbst signiert/hochgeladen, Test-Zertifikate zuletzt.
+func (l *loadedCert) rank() int {
+	switch {
+	case l.staging:
+		return 0
+	case l.public:
+		return 2
+	}
+	return 1
+}
+
+// trustRoots: Roots fuer publicTrust (austauschbar fuer Tests).
+var trustRoots = x509.SystemCertPool
+
+// publicTrust: ob die Kette des Zertifikats bei einer System-Root endet.
+func publicTrust(crt *tls.Certificate) bool {
+	roots, err := trustRoots()
+	if err != nil || roots == nil || crt.Leaf == nil {
+		return false
+	}
+	inter := x509.NewCertPool()
+	for _, der := range crt.Certificate[1:] {
+		if c, err := x509.ParseCertificate(der); err == nil {
+			inter.AddCert(c)
+		}
+	}
+	_, err = crt.Leaf.Verify(x509.VerifyOptions{Roots: roots, Intermediates: inter, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}})
+	return err == nil
 }
 
 // New legt die Verwaltung an und laedt die gueltigen Zertifikate.
@@ -191,7 +226,7 @@ func New(ctx context.Context, d Deps) (*Manager, error) {
 	base, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	m := &Manager{d: d, log: d.Log.With("module", "certs"), w: d.Store.Writer(), r: d.Store.Reader(), loaded: map[int64]*loadedCert{},
 		steps: map[int64]string{}, users: map[string]func(context.Context) map[int64][]string{}, holds: map[string]bool{}, reg: map[string]bool{},
-		base: base, cancel: cancel, cnameOf: lookupCNAME, loopFirst: time.Minute, loopEvery: time.Hour}
+		base: base, cancel: cancel, cnameOf: lookupCNAME, loopFirst: time.Minute, loopEvery: time.Hour, issueTimeout: 20 * time.Minute}
 	m.txtVisible = m.waitTXTFor // mit den eingestellten Resolvern
 	if err := m.reload(ctx); err != nil {
 		cancel()
@@ -353,8 +388,8 @@ func (m *Manager) usedBy(ctx context.Context) map[int64][]string {
 	return out
 }
 
-// ForName liefert ein gueltiges Zertifikat fuer den Namen (auch ueber Wildcard): echte vor Test-Zertifikaten,
-// sonst das am laengsten gueltige.
+// ForName liefert ein gueltiges Zertifikat fuer den Namen (auch ueber Wildcard): oeffentlich vertrauenswuerdige vor
+// eigener CA/selbst signierten, diese vor Test-Zertifikaten, sonst das am laengsten gueltige.
 func (m *Manager) ForName(name string) *tls.Certificate {
 	if id := m.MatchID(name); id > 0 {
 		return m.ByID(id)
@@ -373,7 +408,7 @@ func (m *Manager) MatchID(name string) int64 {
 		if now.Before(l.leaf.NotBefore) || now.After(l.leaf.NotAfter) || l.leaf.VerifyHostname(name) != nil {
 			continue
 		}
-		if best == nil || (best.staging && !l.staging) || (best.staging == l.staging && l.leaf.NotAfter.After(best.leaf.NotAfter)) {
+		if best == nil || l.rank() > best.rank() || (l.rank() == best.rank() && l.leaf.NotAfter.After(best.leaf.NotAfter)) {
 			best, id = l, i
 		}
 	}
@@ -393,6 +428,8 @@ func (m *Manager) ByID(id int64) *tls.Certificate {
 
 // reload liest alle Zertifikate mit Schluessel in den Speicher.
 func (m *Manager) reload(ctx context.Context) error {
+	m.loadMu.Lock() // Abfrage und Austausch zusammen: der zuletzt gelesene Stand gewinnt
+	defer m.loadMu.Unlock()
 	rows, err := m.r.QueryContext(ctx, `SELECT id, cert_pem, key_pem, staging FROM certs WHERE cert_pem != ''`)
 	if err != nil {
 		return err
@@ -416,7 +453,7 @@ func (m *Manager) reload(ctx context.Context) error {
 			m.log.Error("certificate not loadable", "id", id, "err", err)
 			continue
 		}
-		loaded[id] = &loadedCert{crt: &crt, leaf: crt.Leaf, staging: staging}
+		loaded[id] = &loadedCert{crt: &crt, leaf: crt.Leaf, staging: staging, public: !staging && publicTrust(&crt)}
 	}
 	if err := rows.Err(); err != nil {
 		return err
@@ -425,6 +462,15 @@ func (m *Manager) reload(ctx context.Context) error {
 	m.loaded = loaded
 	m.mu.Unlock()
 	return nil
+}
+
+// unload nimmt ein geloeschtes Zertifikat aus dem Speicher (nach einem laufenden reload, der es noch gelesen hat).
+func (m *Manager) unload(id int64) {
+	m.loadMu.Lock()
+	defer m.loadMu.Unlock()
+	m.mu.Lock()
+	delete(m.loaded, id)
+	m.mu.Unlock()
 }
 
 // ---------------------------------------------------------------- Konto
@@ -731,9 +777,7 @@ func (m *Manager) Delete(ctx context.Context, id int64, force bool) error {
 	if _, err := m.w.ExecContext(ctx, `DELETE FROM certs WHERE id = ?`, id); err != nil {
 		return err
 	}
-	m.mu.Lock()
-	delete(m.loaded, id)
-	m.mu.Unlock()
+	m.unload(id)
 	m.refreshHold(ctx)
 	m.changedUID(ctx, ItemCertificates, uid, true)
 	return nil

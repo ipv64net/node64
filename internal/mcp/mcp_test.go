@@ -390,6 +390,11 @@ func TestErrorsAndValidation(t *testing.T) {
 	if !res.IsError || !strings.Contains(raw, "not found") {
 		t.Fatalf("unknown check: %s", raw)
 	}
+	for _, ref := range []string{"AbCdEf", "AbCdEfGh1"} { // nur die Kurz-Id, kein Token-Anfang beliebiger Laenge
+		if raw, res := callTool(t, cs, "get_check", map[string]any{"check": ref}); !res.IsError || !strings.Contains(raw, "not found") {
+			t.Fatalf("token prefix %q must not match: %s", ref, raw)
+		}
+	}
 	_, res = callTool(t, cs, "check_history", map[string]any{"check": "Webseite", "range": "99y"})
 	if !res.IsError {
 		t.Fatal("enum not validated")

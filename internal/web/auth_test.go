@@ -44,7 +44,8 @@ func TestLoginLimiter(t *testing.T) {
 }
 
 func TestSafeNext(t *testing.T) {
-	cases := map[string]string{"": "/", "/settings": "/settings", "//evil.com": "/", "https://evil.com": "/", "/a\r\nb": "/"}
+	cases := map[string]string{"": "/", "/settings": "/settings", "//evil.com": "/", "https://evil.com": "/", "/a\r\nb": "/",
+		"/\t/evil.example": "/", "/ /evil.example": "/", "/\\evil.example": "/", "/a\x7fb": "/", "/settings?tab=1#x": "/settings?tab=1#x"}
 	for in, want := range cases {
 		if got := safeNext(in); got != want {
 			t.Errorf("safeNext(%q) = %q, want %q", in, got, want)

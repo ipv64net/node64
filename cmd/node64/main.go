@@ -571,10 +571,19 @@ func applyRestoreArchive(cfg *config.Config, log *slog.Logger) error {
 	keep := filepath.Join(cfg.BackupDir(), "pre-restore-"+time.Now().UTC().Format("20060102-150405"))
 	n := 0
 	err := filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil {
 			return err
 		}
 		rel, _ := filepath.Rel(src, p)
+		if top, _, _ := strings.Cut(filepath.ToSlash(rel), "/"); top == "bin" { // Programme des Selbst-Updates nie aus einem Archiv (der Starter fuehrt sie aus)
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
 		dst := filepath.Join(cfg.DataDir, rel)
 		if _, err := os.Stat(dst); err == nil {
 			if err := os.MkdirAll(filepath.Dir(filepath.Join(keep, rel)), 0o750); err != nil {

@@ -27,11 +27,12 @@ const (
 )
 
 // backupSkip: nicht ins Archiv (Caches, alte Sicherungen, Arbeitsdateien). geoip/ ist der Zwischenspeicher der
-// Laenderdaten (laedt die Node von ipv64.net neu), Blocklisten ebenso.
+// Laenderdaten (laedt die Node von ipv64.net neu), Blocklisten ebenso. bin/ gehoert zum Selbst-Update (Programmdateien,
+// Stand): ein Archiv darf keine alte Programmversion zurueckbringen.
 func backupSkip(rel string, dir bool) bool {
 	base := filepath.Base(rel)
 	switch {
-	case rel == "backups" || rel == "tmp" || rel == "geoip" || rel == RestoreDirName || strings.HasPrefix(base, ".backup-") || strings.HasPrefix(base, "restore."):
+	case rel == "backups" || rel == "tmp" || rel == "geoip" || rel == "bin" || rel == RestoreDirName || strings.HasPrefix(base, ".backup-") || strings.HasPrefix(base, "restore."):
 		return true
 	case dir && (base == "lists" || base == "blocklists" || strings.Contains(base, ".bak")):
 		return true
@@ -131,6 +132,7 @@ func (s *Server) backupArchiveDownload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveArchive(w http.ResponseWriter, r *http.Request, pw string, stats bool) {
+	longTransfer(w)
 	s.audit(r, "backup.download", "archive", fmt.Sprintf("stats=%t", stats))
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+archiveName()+`"`)
@@ -180,6 +182,7 @@ func (s *Server) restoreArchive(ctx context.Context, src io.Reader, password str
 		}
 		return 0, fmt.Errorf("%w: %v", errRestoreInvalid, err)
 	}
+	_ = os.RemoveAll(filepath.Join(stage, "bin")) // aeltere Archive enthielten noch das Selbst-Update (backupSkip)
 	if err := validateSQLite(ctx, filepath.Join(stage, "node64.db")); err != nil {
 		os.RemoveAll(stage)
 		return 0, fmt.Errorf("%w: %v", errRestoreInvalid, err)

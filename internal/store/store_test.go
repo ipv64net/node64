@@ -61,6 +61,25 @@ func TestMigrateIsIdempotentAndBacksUp(t *testing.T) {
 	}
 }
 
+// Aelteres Programm auf neuerem Schema: Start geht weiter, SchemaNewer meldet die unbekannten Versionen.
+func TestMigrateDetectsNewerSchema(t *testing.T) {
+	st := openTest(t)
+	ctx := context.Background()
+	ms := []Migration{{Version: 1, Name: "a", SQL: `CREATE TABLE t3 (id INTEGER PRIMARY KEY)`}, {Version: 2, Name: "b", SQL: `ALTER TABLE t3 ADD COLUMN x TEXT`}}
+	if err := st.Migrate(ctx, "mod", ms); err != nil {
+		t.Fatal(err)
+	}
+	if n := st.SchemaNewer(); len(n) != 0 {
+		t.Fatalf("nothing newer expected: %v", n)
+	}
+	if err := st.Migrate(ctx, "mod", ms[:1]); err != nil {
+		t.Fatalf("older program must still start: %v", err)
+	}
+	if n := st.SchemaNewer(); len(n["mod"]) != 1 || n["mod"][0] != 2 || len(n) != 1 {
+		t.Fatalf("newer schema not detected: %v", n)
+	}
+}
+
 func TestMigrationFailureRollsBack(t *testing.T) {
 	st := openTest(t)
 	ms := []Migration{{Version: 1, Name: "bad", SQL: `CREATE TABLE t2 (id INTEGER); INSERT INTO nope VALUES (1)`}}

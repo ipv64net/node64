@@ -32,13 +32,19 @@ func newDualListener(ln net.Listener, cfg *tls.Config) *dualListener {
 }
 
 func (d *dualListener) loop() {
+	var delay time.Duration
 	for {
 		c, err := d.Listener.Accept()
 		if err != nil {
-			var ne net.Error
-			if errors.As(err, &ne) && ne.Timeout() {
-				time.Sleep(50 * time.Millisecond)
-				continue
+			if !errors.Is(err, net.ErrClosed) {
+				// voruebergehend (z. B. zu viele offene Dateien): kurz warten und weiter annehmen, wie net/http
+				delay = min(max(2*delay, 5*time.Millisecond), time.Second)
+				select {
+				case <-time.After(delay):
+					continue
+				case <-d.done:
+					return
+				}
 			}
 			select {
 			case d.errc <- err:
@@ -46,6 +52,7 @@ func (d *dualListener) loop() {
 			}
 			return
 		}
+		delay = 0
 		go d.classify(c)
 	}
 }

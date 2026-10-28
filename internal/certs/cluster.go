@@ -588,9 +588,7 @@ func (m *Manager) clusterDeleteCert(ctx context.Context, uid string) error {
 	if _, err := m.w.ExecContext(ctx, `DELETE FROM certs WHERE id = ?`, id); err != nil {
 		return err
 	}
-	m.mu.Lock()
-	delete(m.loaded, id)
-	m.mu.Unlock()
+	m.unload(id)
 	m.refreshHold(ctx)
 	m.changedUID(ctx, ItemCertificates, uid, true)
 	return nil

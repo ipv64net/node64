@@ -158,7 +158,8 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	s.loginOptions(r, v)
 	ip := s.clientIP(r)
 	keys := []string{"ip:" + ipKey(ip), "user:" + strings.ToLower(f["username"])}
-	if wait := s.limiter.retryAfter(keys...); wait > 0 {
+	// Versuch vor der Passwortpruefung verbuchen (bei Erfolg zurueck): sonst kaemen parallele Anfragen alle durch
+	if wait := s.limiter.take(keys...); wait > 0 {
 		secs := int(wait.Seconds()) + 1
 		w.Header().Set("Retry-After", strconv.Itoa(secs))
 		v.Flash = &Flash{Kind: "warning", Text: v.T("login.ratelimited", "seconds", secs)}
@@ -167,6 +168,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	u, err := s.Store.UserByName(ctx, f["username"])
 	if err != nil {
+		s.limiter.refund(keys...)
 		s.fail(w, r, err)
 		return
 	}
@@ -175,7 +177,6 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 			// Zeit angleichen, damit Benutzernamen nicht ueber die Antwortzeit erratbar sind
 			VerifyPassword("$argon2id$v=19$m=65536,t=3,p=2$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", f["password"])
 		}
-		s.limiter.fail(keys...)
 		s.loginFailed(r, ip)
 		s.auditEntry(ctx, store.AuditEntry{Actor: truncate(f["username"], 64), Action: "login.failed", IP: ip})
 		s.log.Warn("login failed", "user", f["username"], "ip", ip)
@@ -183,6 +184,7 @@ func (s *Server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, http.StatusUnauthorized, "login", v)
 		return
 	}
+	s.limiter.refund(keys...)
 	pending := u.TOTPSecret != ""
 	if err := s.startSession(w, r, u.ID, pending); err != nil {
 		s.fail(w, r, err)
@@ -215,8 +217,19 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
+// safeNext: nur ein Pfad dieser Node. Steuer- und Leerzeichen nie, weil Browser z. B. TAB entfernen
+// ("/<TAB>/evil.example" wuerde zu "//evil.example").
 func safeNext(next string) string {
-	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.ContainsAny(next, "\\\r\n") {
+	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.ContainsRune(next, '\\') {
+		return "/"
+	}
+	for _, c := range next {
+		if c <= ' ' || c == 0x7f {
+			return "/"
+		}
+	}
+	u, err := url.Parse(next)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil || !strings.HasPrefix(u.Path, "/") || strings.HasPrefix(u.Path, "//") {
 		return "/"
 	}
 	return next
@@ -573,7 +586,7 @@ func (s *Server) settingsPassword(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	_ = s.Store.DeleteUserSessions(r.Context(), v.User.ID, currentSession(r).ID)
+	_ = s.Store.DeleteUserSessions(r.Context(), v.User.ID, sessionID(r))
 	s.audit(r, "settings.password", v.User.Username, "")
 	s.flash(w, r, "success", v.T("settings.password_changed"))
 	http.Redirect(w, r, "/settings", http.StatusSeeOther)

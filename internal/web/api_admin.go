@@ -94,6 +94,7 @@ func (s *Server) apiKeysDelete(w http.ResponseWriter, r *http.Request) {
 // apiRestore nimmt eine Datenbank oder ein Archiv (Body roh oder multipart-Feld "file"; Passwort des Archivs im
 // Feld "password" oder Header X-Backup-Password) und startet neu.
 func (s *Server) apiRestore(w http.ResponseWriter, r *http.Request) {
+	longTransfer(w)
 	src := io.Reader(r.Body)
 	pw := r.Header.Get("X-Backup-Password")
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {

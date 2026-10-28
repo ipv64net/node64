@@ -33,6 +33,7 @@ const (
 	ResetFileName   = "node64.reset" // Merker: beim naechsten Start das Datenverzeichnis leeren
 	maxUpload       = 1 << 30        // 1 GB fuer Datenbank-Wiederherstellung
 	maxImport       = 16 << 20
+	transferTimeout = 2 * time.Hour // Zeitlimit fuer Backup-Download und Wiederherstellung (longTransfer)
 )
 
 func (s *Server) backupRoutes() {
@@ -57,6 +58,7 @@ func bodyLimitFor(path string) int64 {
 
 // backupDownload liefert eine konsistente Kopie der Datenbank.
 func (s *Server) backupDownload(w http.ResponseWriter, r *http.Request) {
+	longTransfer(w)
 	tmp, err := os.CreateTemp(s.Cfg.DataDir, ".backup-*.db") // im Container gibt es kein /tmp
 	if err != nil {
 		s.fail(w, r, err)
@@ -76,6 +78,7 @@ func (s *Server) backupDownload(w http.ResponseWriter, r *http.Request) {
 
 // restoreUpload nimmt eine Datenbank zur Wiederherstellung an (Neustart danach).
 func (s *Server) restoreUpload(w http.ResponseWriter, r *http.Request) {
+	longTransfer(w)
 	v := s.view(r, "settings.title")
 	f, _, err := r.FormFile("file")
 	if err != nil {
