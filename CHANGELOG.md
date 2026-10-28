@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 0.12.0-alpha.26 – 2026-10-28
+
 - PROXY64: Die CDN64 Statistik erklärt, wenn es im Zeitraum noch keine Schutz-Zahlen gibt.
 - PROXY64: TLS nach BSI TR-02102-2 je Proxy-Host wählbar.
 - PROXY64: Zugriffslisten mit authentik, Authelia, oauth2-proxy oder eigenem Anmeldedienst (Forward-Auth), API-Keys für
