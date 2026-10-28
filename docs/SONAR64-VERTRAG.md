@@ -32,7 +32,7 @@ allen betroffenen Teilen, sonst nicht.
 | **N Node64-Modul** | `internal/sonar64/**` (Modul, Templates, CHANGELOG), eine Verdrahtung in `cmd/node64/main.go`, i18n-Block `sonar64` + `nav.sonar64` in `internal/i18n/locales/{de,en}.json`, Pfade `/api/sonar64/*` in `internal/web/static/openapi.json`, README-Abschnitt Sonar64, je ein Stichpunkt in `CHANGELOG.md`/`CHANGELOG.en.md` (Repo-Wurzel, „Unveröffentlicht“) |
 | **A API ipv64** | `deploy/web/api_v2_sonar.php`, `deploy/web/sonar/s64_lib.php`, `deploy/sql/sonar64.sql`, eine Zeile am Ende von `deploy/web/api_v2_honeypot.php` (`if(is_file(__DIR__ . '/api_v2_sonar.php')) { require __DIR__ . '/api_v2_sonar.php'; }`), `deploy/web/bots/sonar_keygen.php`, `deploy/web/bots/sonar_anchor_token.php`, Tests `deploy/web/sonar/tests/api/**` |
 | **J Jobs ipv64** | `deploy/web/bots/sonar_plan.php`, `sonar_rollup.php`, `sonar_trust.php`, `sonar_outages.php`, `sonar_cleanup.php`, Einträge in `HPC_JOBS` (`deploy/web/bots/honeypot_cron.php`), Tests `deploy/web/sonar/tests/jobs/**` |
-| **W Webseiten** | `deploy/web/sonar/index.php` (Karte), `nodes.php`, `node.php`, `top.php`, `me.php`, `sonar.js`, `sonar.css`, `de_map.json`, Tests `deploy/web/sonar/tests/web/**` |
+| **W Webseiten** | `deploy/web/sonar/index.php` (Karte), `nodes.php`, `node.php`, `top.php`, `me.php`, `s64_web.php` (gemeinsame Seitenteile), `sonar.js`, `sonar.css`, `de_map.json`, Tests `deploy/web/sonar/tests/web/**` |
 
 Teil A stellt in `s64_lib.php` die gemeinsamen Funktionen (Abschnitt 6); J und W benutzen nur diese plus eigene.
 
@@ -75,10 +75,10 @@ Antworten wie API v2 üblich `{ "data": … }`, Fehler RFC 9457. Zeiten ISO 8601
 | GET | `/sonar/inbound?since=` | Sonar-Token | Liste `InboundRow` (höchstens 500, `since` ≤ 24 h zurück) |
 | GET | `/sonar/public/keys` | – | `{keys:[{kid, pubkey}]}` |
 | GET | `/sonar/public/map` | – | Abschnitt 5 |
-| GET | `/sonar/public/nodes?trust=&asn=&q=` | – | Liste öffentlicher Knoten |
-| GET | `/sonar/public/node/{slug}` | – | Knoten mit Verlauf (7 Tage Anker-Latenz je Stunde) |
+| GET | `/sonar/public/nodes?trust=&asn=&q=` | – | Liste öffentlicher Knoten `{id, slug, name, role, trust, lat, lon, asn, asname, asn6, access, device, place, measured, reach4, reach6, ipv4, ipv6, since, last_seen, online, uptime30}` (lat/lon verschleiert, `ipv4/ipv6` nur bool) |
+| GET | `/sonar/public/node/{slug}` | – | Knoten wie in `nodes` + `anchor_ms:{a_…: ms}` + `history:{a_…: [{hour, fam, ms, loss, n}]}` (7 Tage je Stunde, `ms` = p50) |
 | GET | `/sonar/public/stats` | – | `{nodes_active, nodes_total, anchors, measurements_today, providers, regions, by_trust:{…}}` |
-| GET | `/sonar/public/top` | – | Bestenliste: zuverlässigste, längste Teilnahme, je Provider |
+| GET | `/sonar/public/top` | – | `{reliable:[…], longest:[…]` (je `{slug, name, trust, asname, uptime30, since}`, höchstens 20), `providers:[{asn, asname, nodes, online, best}]}` |
 | GET | `/sonar/public/matrix` | – | `{asns:[{asn,name}], cells:[{a,b,avg,n}]}` (Provider × Provider, Median der letzten 24 h) |
 | GET | `/sonar/public/outages?active=1` | – | Liste `{id, kind:"asn"|"region", key, label, started, ended, affected, total}` |
 
