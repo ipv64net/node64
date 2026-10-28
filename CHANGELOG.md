@@ -6,17 +6,14 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## 0.12.0-alpha.29 – 2026-10-28
 
-- Sonar64: vorerst pausiert – das Modul ist nicht mehr sichtbar und lässt sich nicht einschalten.
+- Interne Verbesserungen.
 
 ## 0.12.0-alpha.28 – 2026-10-28
 
-- Sonar64: Knoten mit IPv4 und IPv6 werden in beiden Familien gemessen (auch das Programm ohne Dashboard).
+- Interne Verbesserungen.
 
 ## 0.12.0-alpha.27 – 2026-10-28
 
-- Sonar64 (neu, optional, standardmäßig aus): Community-Messnetz – Teilnahme per Opt-in mit dem ipv64-API-Key, nur
-  ausgehend oder auch gemessen (UDP 6464), Budget, Ruhezeit, Profil mit verschleiertem Standort, Vertrauensstufe und
-  Live-Tabellen der Pings; Austreten meldet den Knoten bei ipv64.net ab.
 - Sicherheit: Ergebnisse eines großen Code-Reviews behoben – u. a. Location-Zugriffslisten in PROXY64, Hosts über
   CDN64 nur noch unter dem freigegebenen Namen, Abstürze durch präparierte Pakete (Honeypot64 auf arm/v7, DNS64),
   Anmeldung (Speicher, Weiterleitung, X-Forwarded-For, CSRF), Backups ohne Programmdateien.
