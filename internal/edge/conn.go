@@ -28,7 +28,10 @@ type virtual struct {
 func (e *Edge) virtualServers() *virtual {
 	e.vonce.Do(func() {
 		errLog := log.New(io.Discard, "", 0)
-		mark := func(ctx context.Context, _ net.Conn) context.Context {
+		mark := func(ctx context.Context, c net.Conn) context.Context {
+			if rc, ok := c.(*routedConn); ok && rc.host != "" {
+				ctx = context.WithValue(ctx, routedKey{}, rc.host)
+			}
 			return context.WithValue(ctx, virtualKey{}, true)
 		}
 		v := &virtual{tls: newChanListener(&net.TCPAddr{}), http: newChanListener(&net.TCPAddr{}), term: newChanListener(&net.TCPAddr{})}
@@ -50,7 +53,12 @@ func (e *Edge) virtualServers() *virtual {
 
 // ServeConn nimmt eine fertige Verbindung an wie eine auf Port 443 (port 443: TLS bzw. Durchreichen nach SNI) oder
 // Port 80. RemoteAddr der Verbindung muss die echte Gegenstelle sein. Kehrt sofort zurueck.
-func (e *Edge) ServeConn(c net.Conn, port int) {
+func (e *Edge) ServeConn(c net.Conn, port int) { e.ServeConnFor(c, port, "") }
+
+// ServeConnFor wie ServeConn fuer eine Verbindung, die der CDN64-Server fuer einen Namen durchreicht (SNI bzw.
+// Host-Kopf, "" = beliebig): Sie gilt nur fuer diesen Namen - anderes SNI wird getrennt, Anfragen fuer einen anderen
+// Host (auch per absoluter URL oder spaeter auf derselben Verbindung) bekommen 421.
+func (e *Edge) ServeConnFor(c net.Conn, port int, host string) {
 	e.mu.Lock()
 	closed := e.closed
 	e.mu.Unlock()
@@ -65,6 +73,9 @@ func (e *Edge) ServeConn(c net.Conn, port int) {
 		}
 	} else if c = e.admit(c); c == nil {
 		return
+	}
+	if host != "" {
+		c = &routedConn{Conn: c, host: routedName(host)}
 	}
 	v := e.virtualServers()
 	if v == nil { // Edge wird gerade beendet
@@ -88,6 +99,10 @@ const PortTerminated = -443
 
 // serveTerminated: wie HTTPS, mit dem Host-Kopf als Namen der Verbindung.
 func (e *Edge) serveTerminated(w http.ResponseWriter, r *http.Request) {
+	if !routedOK(r) {
+		misdirected(w)
+		return
+	}
 	r = r.WithContext(context.WithValue(r.Context(), terminatedKey{}, true))
 	r.TLS = &tls.ConnectionState{Version: tls.VersionTLS13, HandshakeComplete: true, ServerName: hostOf(r.Host)}
 	if _, routes := e.table.Load().lookup(hostOf(r.Host)); pick(routes, r.URL.Path, true) == nil {
@@ -98,6 +113,54 @@ func (e *Edge) serveTerminated(w http.ResponseWriter, r *http.Request) {
 }
 
 type terminatedKey struct{}
+
+type routedKey struct{}
+
+// routedConn: Verbindung aus dem Tunnel mit dem Namen, fuer den der CDN64-Server sie durchreicht (normalisiert).
+type routedConn struct {
+	net.Conn
+	host string
+}
+
+// CloseWrite: halb schliessen wie die Verbindung darunter (TLS durchreichen).
+func (c *routedConn) CloseWrite() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return c.Close()
+}
+
+// routedName: Name aus dem Tunnel-Kopf wie die Namen der Routen; nicht gueltig = passt zu keiner Anfrage.
+func routedName(h string) string {
+	if n, err := NormalizeName(h); err == nil {
+		return n
+	}
+	return "!" + h // kein gueltiger Name
+}
+
+// routedHost: Name der Verbindung aus dem Tunnel ("" = keine Vorgabe).
+func routedHost(c net.Conn) string {
+	if rc, ok := c.(*routedConn); ok {
+		return rc.host
+	}
+	return ""
+}
+
+// routedOK: Anfrage passt zum Namen, fuer den der CDN64-Server die Verbindung durchreicht. r.Host enthaelt bei
+// absoluter URL schon deren Host; URL.Host wird zusaetzlich geprueft.
+func routedOK(r *http.Request) bool {
+	want, _ := r.Context().Value(routedKey{}).(string)
+	if want == "" {
+		return true
+	}
+	return hostOf(r.Host) == want && (r.URL.Host == "" || hostOf(r.URL.Host) == want)
+}
+
+// misdirected: Anfrage gehoert nicht zu dieser Verbindung; danach wird die Verbindung geschlossen.
+func misdirected(w http.ResponseWriter) {
+	w.Header().Set("Connection", "close")
+	http.Error(w, "misdirected request", http.StatusMisdirectedRequest)
+}
 
 // terminatedReq: TLS endete schon auf dem CDN64-Server (Modus 2) - dort gibt es eigenes HTTP/3.
 func terminatedReq(r *http.Request) bool {

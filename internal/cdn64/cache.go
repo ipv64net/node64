@@ -35,6 +35,25 @@ type cacheEntry struct {
 	body    []byte
 	expires time.Time
 	stored  time.Time
+	autoCC  bool // Cache-Control hat PROXY64 ergaenzt (das Ziel sagte nichts)
+}
+
+// ctxProtectedKey: die Anfrage kam durch eine Zugriffsliste (proxy.go). Wert true = die Liste reicht Anmeldung oder
+// Benutzer an das Ziel (Antwort kann je Benutzer sein: kein Cache von PROXY64). Geschuetztes bekommt nie "public",
+// sonst lieferten geteilte Caches davor (z. B. Cloudflare) es ohne Anmeldung aus.
+type ctxProtectedKey struct{}
+
+func protectedOf(r *http.Request) (protected, personal bool) {
+	personal, protected = r.Context().Value(ctxProtectedKey{}).(bool)
+	return protected, personal
+}
+
+// browserCC: Cache-Control fuer den Browser, wenn das Ziel nichts sagt.
+func browserCC(protected bool) string {
+	if protected {
+		return "private, max-age=" + strconv.Itoa(browserMaxAge)
+	}
+	return "public, max-age=" + strconv.Itoa(browserMaxAge)
 }
 
 type assetCache struct {
@@ -178,6 +197,7 @@ type recorder struct {
 	over   bool
 	failed bool   // Schreibfehler zum Browser
 	origCC string // Cache-Control des Ziels (vor der Ergaenzung fuer den Browser)
+	prot   bool   // hinter einer Zugriffsliste: "private" statt "public"
 }
 
 func (w *recorder) WriteHeader(code int) {
@@ -189,7 +209,7 @@ func (w *recorder) WriteHeader(code int) {
 		w.status = code
 		w.origCC = w.Header().Get("Cache-Control")
 		if code == http.StatusOK && w.origCC == "" {
-			w.Header().Set("Cache-Control", "public, max-age="+strconv.Itoa(browserMaxAge))
+			w.Header().Set("Cache-Control", browserCC(w.prot))
 		}
 		w.Header().Set("X-Cache-Status", "MISS")
 	}
@@ -229,10 +249,18 @@ func (c *assetCache) cached(id int64, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		prot, personal := protectedOf(r)
 		key, ae := cacheKey(id, r), r.Header.Get("Accept-Encoding")
-		if e := c.get(key); e != nil && httpcompress.Acceptable(ae, e.header.Get("Content-Encoding")) {
+		var e *cacheEntry
+		if !personal {
+			e = c.get(key)
+		}
+		if e != nil && httpcompress.Acceptable(ae, e.header.Get("Content-Encoding")) {
 			for k, v := range e.header {
 				w.Header()[k] = v
+			}
+			if e.autoCC {
+				w.Header().Set("Cache-Control", browserCC(prot))
 			}
 			w.Header().Set("X-Cache-Status", "HIT")
 			w.Header().Set("Age", strconv.Itoa(int(time.Since(e.stored).Seconds())))
@@ -242,11 +270,11 @@ func (c *assetCache) cached(id int64, next http.Handler) http.Handler {
 			}
 			return
 		}
-		rec := &recorder{ResponseWriter: w}
+		rec := &recorder{ResponseWriter: w, prot: prot, over: personal} // je Benutzer: nur Cache-Control, nichts ablegen
 		r, body := httpcompress.Track(r)
 		next.ServeHTTP(rec, r)
 		// nur vollstaendig vom Ziel gelesen und ohne Fehler (abgebrochen: komprimiert ohne Content-Length nicht erkennbar)
-		if r.Method != http.MethodGet || rec.status != http.StatusOK || rec.over || rec.failed || !body.Complete() ||
+		if personal || r.Method != http.MethodGet || rec.status != http.StatusOK || rec.over || rec.failed || !body.Complete() ||
 			!httpcompress.Acceptable(ae, w.Header().Get("Content-Encoding")) {
 			return
 		}
@@ -265,6 +293,6 @@ func (c *assetCache) cached(id int64, next http.Handler) http.Handler {
 		hdr.Del("X-Cache-Status")
 		hdr.Del("Date")
 		now := time.Now()
-		c.put(&cacheEntry{key: key, host: id, status: rec.status, header: hdr, body: rec.buf, expires: now.Add(ttl), stored: now})
+		c.put(&cacheEntry{key: key, host: id, status: rec.status, header: hdr, body: rec.buf, expires: now.Add(ttl), stored: now, autoCC: rec.origCC == ""})
 	})
 }

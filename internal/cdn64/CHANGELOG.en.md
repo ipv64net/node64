@@ -1,5 +1,25 @@
 # Changes – PROXY64
 
+## 1.39.0 – 2026-10-28
+
+### Fixed
+- Locations: paths like `//admin`, `/./admin` or `/x/../admin` no longer bypass a location's access list (dot segments
+  are rejected with 400).
+- The login page also works on locations; credentials never reach the target, the session cookie no target of the host;
+  other cookies stay unchanged.
+- `CF-Connecting-IP` is only honoured from Cloudflare addresses, `X-Forwarded-For` is read across all header lines.
+- Protected content no longer gets `Cache-Control: public`; with user pass-through nothing is cached.
+- Access lists: "name:password" for an existing user changes the password; failed sign-ins count per /64 for IPv6,
+  expired blocks are cleaned up.
+- Target slot limit: only real WebSockets on allowed paths are exempt.
+- CDN64: tunnel connections are only valid for the published name (other host, absolute URL or different SNI → 421);
+  HTTP/3 through the tunnel counts toward connection limits only after the handshake.
+- CDN64 tunnel: a parallel connection rejected by the server is retried after 2–5 minutes.
+- Streams: if a port is busy only that protocol is retried, running connections stay up.
+- Port mapper: a failed removal at ipv64 no longer creates a duplicate mapping; concurrent setup no longer starts a
+  second tunnel.
+- Honeypot API: a rejected value leaves the active settings unchanged.
+
 ## 1.38.3 – 2026-10-28
 
 ### Changed

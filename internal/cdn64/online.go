@@ -101,9 +101,18 @@ func (m *Module) onlineStart(ctx context.Context) {
 	rctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	done := make(chan struct{})
 	m.online.mu.Lock()
+	oldCancel, oldDone := m.online.cancel, m.online.done // gleichzeitig gestartet: den anderen beenden (sonst laeuft er weiter)
 	m.online.client, m.online.cancel, m.online.done = cl, cancel, done
 	m.online.mu.Unlock()
 	go func() { defer close(done); cl.Run(rctx) }()
+	if oldCancel != nil {
+		oldCancel()
+		<-oldDone
+	}
+	if !m.isRunning() { // Modul inzwischen gestoppt (Stop hat den Tunnel evtl. schon vorher beendet)
+		m.onlineStop()
+		return
+	}
 	m.log.Info("cdn64 online: tunnel started", "tunnel", c.Tunnel, "edges", len(c.Edges), "sessions", max(sessions, 1))
 }
 
@@ -127,20 +136,22 @@ func (m *Module) onlineHandle(st tunnel.Stream, h tunnel.Header) {
 	}
 	c := &tunnelConn{Stream: st, remote: ra}
 	m.onlineSeen(h.Host)
+	// Der Server reicht fuer genau einen Namen durch (h.Host): nur der ist ueber diese Verbindung erreichbar, nicht
+	// andere (z. B. nur im Heimnetz veroeffentlichte) Namen per anderem SNI, absoluter URL oder spaeterer Anfrage.
 	switch h.Kind {
 	case tunnel.KindTLS:
-		m.edge.ServeConn(c, 443)
+		m.edge.ServeConnFor(c, 443, h.Host)
 	case tunnel.KindHTTP80:
-		m.edge.ServeConn(c, 80)
+		m.edge.ServeConnFor(c, 80, h.Host)
 	case tunnel.KindHTTP: // Modus 2: TLS endete auf dem Server
-		m.edge.ServeConn(c, edge.PortTerminated)
+		m.edge.ServeConnFor(c, edge.PortTerminated, h.Host)
 	case tunnel.KindQUIC: // Modus 1, HTTP/3: QUIC-Datagramme des Besuchers
 		ap, err := netip.ParseAddrPort(h.Client)
 		if err != nil {
 			_ = st.Close()
 			return
 		}
-		m.edge.ServeQUICStream(c, netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port()))
+		m.edge.ServeQUICStreamFor(c, netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port()), h.Host)
 	case tunnel.KindTCP, tunnel.KindUDP: // Portmapper Modus 1/2: an den Stream der Node
 		m.onlinePortStream(c, h)
 	default:
@@ -254,20 +265,26 @@ func (m *Module) apiOnlinePut(w http.ResponseWriter, r *http.Request) {
 		}
 		tok = oldTok
 	}
+	m.online.op.Lock() // nicht gleichzeitig mit Abgleich bzw. Einschalten (die starten den Tunnel auch)
 	if err := m.onlineSave(r.Context(), in.Tunnel, tok, in.Edges); err != nil {
+		m.online.op.Unlock()
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	m.g.Audit(r, "cdn64.online", in.Tunnel, "")
 	if m.isRunning() {
 		m.onlineStart(r.Context())
 	}
+	m.online.op.Unlock()
+	m.g.Audit(r, "cdn64.online", in.Tunnel, "")
 	m.apiOnlineGet(w, r)
 }
 
 func (m *Module) apiOnlineDelete(w http.ResponseWriter, r *http.Request) {
+	m.online.op.Lock()
 	m.onlineStop()
-	if err := m.core.SetSetting(r.Context(), setOnline, ""); err != nil {
+	err := m.core.SetSetting(r.Context(), setOnline, "")
+	m.online.op.Unlock()
+	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}

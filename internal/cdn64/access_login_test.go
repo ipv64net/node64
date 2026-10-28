@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -122,5 +124,95 @@ func TestAccessListLoginPage(t *testing.T) {
 	}
 	if code, _, hdr = get("/"); code != 401 || hdr.Get("WWW-Authenticate") == "" {
 		t.Fatalf("basic dialog: %d %v", code, hdr)
+	}
+	// ohne Login-Liste: /.node64/login geht trotzdem nie ans Ziel (Anmeldedaten)
+	if resp := post(url.Values{"username": {"anna"}, "password": {"geheim123"}}); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("login path without login list: %d", resp.StatusCode)
+	}
+}
+
+// Login-Seite an einer Location: das Formular geht an PROXY64 (nicht an das Ziel des Hosts), die Liste kommt aus dem
+// Formular; das Sitzungs-Cookie geht an kein Ziel, auch nicht an das offene des Hosts.
+func TestAccessListLoginLocation(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.enable(t)
+	var leaked atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/.node64/") {
+			leaked.Add(1)
+		}
+		_, _ = io.WriteString(w, "ziel "+r.URL.Path+" cookie="+r.Header.Get("Cookie"))
+	}))
+	t.Cleanup(srv.Close)
+	port := srv.Listener.Addr().(*net.TCPAddr).Port
+	a := &AccessList{Name: "Admin", LoginPage: true}
+	if err := e.m.saveAccessList(ctx, a, []UserInput{{Username: "anna", Password: "geheim123"}}); err != nil {
+		t.Fatal(err)
+	}
+	b := &AccessList{Name: "Fotos", LoginPage: true}
+	if err := e.m.saveAccessList(ctx, b, []UserInput{{Username: "ben", Password: "geheim456"}}); err != nil {
+		t.Fatal(err)
+	}
+	h := newHost()
+	h.Names, h.TargetHost, h.TargetPort, h.CertID = []string{"loc-login.test"}, "127.0.0.1", port, CertNone
+	h.Locations = []Location{{Path: "/admin", TargetHost: "127.0.0.1", TargetPort: port, AccessListID: a.ID},
+		{Path: "/fotos", TargetHost: "127.0.0.1", TargetPort: port, AccessListID: b.ID}}
+	if err := e.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	c := e.client(false)
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	code, body, _ := do(t, c, "GET", "http://loc-login.test/admin/x")
+	if code != 401 || !strings.Contains(body, `name="list" value="`+strconv.FormatInt(a.ID, 10)+`"`) {
+		t.Fatalf("login page of the location: %d %.200s", code, body)
+	}
+	resp, err := c.PostForm("http://loc-login.test/.node64/login", url.Values{"list": {strconv.FormatInt(a.ID, 10)}, "username": {"anna"},
+		"password": {"geheim123"}, "next": {"/admin/x"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 303 || len(resp.Cookies()) != 1 || resp.Cookies()[0].Name != loginCookieName(a.ID) {
+		t.Fatalf("login at location: %d %v", resp.StatusCode, resp.Header)
+	}
+	ck := resp.Cookies()[0]
+	if code, body, _ = do(t, c, "GET", "http://loc-login.test/admin/x", "Cookie", ck.Name+"="+ck.Value+`; q="a b"`); code != 200 ||
+		strings.Contains(body, ck.Name) || !strings.Contains(body, `q="a b"`) {
+		t.Fatalf("session at location: %d %q", code, body)
+	}
+	if code, body, _ = do(t, c, "GET", "http://loc-login.test/offen", "Cookie", ck.Name+"="+ck.Value); code != 200 || strings.Contains(body, ck.Name) {
+		t.Fatalf("cookie must not reach the open host target: %d %q", code, body)
+	}
+	if code, _, _ = do(t, c, "GET", "http://loc-login.test/fotos/", "Cookie", ck.Name+"="+ck.Value); code != 401 {
+		t.Fatalf("other list must not accept the session: %d", code)
+	}
+	// fremde oder fehlende Liste bei mehreren Login-Listen: abgelehnt, nie ans Ziel
+	if resp, err = c.PostForm("http://loc-login.test/.node64/login", url.Values{"list": {"999"}, "username": {"anna"}, "password": {"geheim123"}}); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unknown list: %d", resp.StatusCode)
+	}
+	if n := leaked.Load(); n != 0 {
+		t.Fatalf("login request reached the target %d times", n)
+	}
+}
+
+// Nur das Sitzungs-Cookie faellt heraus, die uebrigen Cookies bleiben Wort fuer Wort (auch in mehreren Zeilen).
+func TestStripLoginCookieRaw(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Add("Cookie", `a="x y"; n64_auth_7=tok; b=1`)
+	r.Header.Add("Cookie", "c=@{bad}; n64_auth_8=other")
+	stripLoginCookie(r, 7)
+	if got := r.Header.Values("Cookie"); len(got) != 1 || got[0] != `a="x y"; b=1; c=@{bad}; n64_auth_8=other` {
+		t.Fatalf("cookie: %q", got)
+	}
+	r = httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("Cookie", "n64_auth_7=tok")
+	stripLoginCookie(r, 7)
+	if _, ok := r.Header["Cookie"]; ok {
+		t.Fatal("empty cookie header must be removed")
 	}
 }

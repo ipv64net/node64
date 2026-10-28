@@ -413,6 +413,7 @@ func (m *Module) limLoop(ctx context.Context) {
 			return
 		case <-t.C:
 			m.lim.sweep()
+			m.authFail.sweep()
 		}
 	}
 }

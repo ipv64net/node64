@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -173,6 +174,19 @@ func TestLocations(t *testing.T) {
 	if code, _, _ := getJSON(t, c, "http://loc.test/admin/x"); code != 403 {
 		t.Fatalf("location access list: %d", code)
 	}
+	// Route nach dem bereinigten Pfad: kein Weg an der Zugriffsliste der Location vorbei, keiner aus forward_path heraus
+	for _, x := range []struct {
+		path string
+		code int
+	}{{"//admin/x", 403}, {"/admin//x", 403}, {"//admin", 403}, {"/./admin/x", 400}, {"/x/../admin/x", 400}, {"/%2e/admin/x", 400},
+		{"/x/%2E%2E/admin", 400}, {"/api/../admin", 400}, {"/api/..%2Fx", 400}} {
+		if code, _, _ := getJSON(t, c, "http://loc.test"+x.path); code != x.code {
+			t.Errorf("%s: %d, want %d", x.path, code, x.code)
+		}
+	}
+	if _, got, _ := getJSON(t, c, "http://loc.test//api//users/1"); got["tag"] != "b" || got["path"] != "/v1/users/1" {
+		t.Fatalf("double slashes with forward path: %v", got)
+	}
 	bad := newHost()
 	bad.Names, bad.TargetHost, bad.TargetPort = []string{"bad.test"}, "127.0.0.1", pa
 	bad.Locations = []Location{{Path: "/a", TargetHost: "127.0.0.1", TargetPort: pb}, {Path: "a/", TargetHost: "x", TargetPort: 1}}
@@ -196,7 +210,7 @@ func TestAdvancedOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := e.client(false)
-	code, got, hdr := getJSON(t, c, "http://adv.test/", "Cookie", "a=b", "CF-Connecting-IP", "203.0.113.9")
+	code, got, hdr := getJSON(t, c, "http://adv.test/", "Cookie", "a=b", "X-Forwarded-For", "203.0.113.9")
 	if code != 200 || got["custom"] != "hallo" || got["cookie"] != "" || got["host"] != "intern.lan" || got["real"] != "203.0.113.9" || got["xff"] != "203.0.113.9" {
 		t.Fatalf("request side: %d %v", code, got)
 	}
@@ -437,5 +451,77 @@ func TestStatsSplitDecoyAndErrors(t *testing.T) {
 	dec, _ := s.entries(ctx, LogFilter{Decoy: true, Limit: 50})
 	if len(rej) != 1 || rej[0].Reason != rejBlocklist || rej[0].Decoy || len(dec) != 2 || !dec[0].Decoy || len(all) != 3 {
 		t.Fatalf("log: all %d, rejected %+v, decoy %+v", len(all), rej, dec)
+	}
+}
+
+// Formular: "anna:neu" fuer einen bestehenden Benutzer setzt das neue Passwort (an seiner Stelle).
+func TestUsersFromFormNewPassword(t *testing.T) {
+	r := httptest.NewRequest("POST", "/", strings.NewReader(url.Values{"new_users": {"anna:neu\r\nbob:pw\nclara"}, "remove_user": {"dora"}}.Encode()))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	_ = r.ParseForm()
+	got := usersFromForm(r, &AccessList{Users: []AccessUser{{Username: "anna"}, {Username: "dora"}, {Username: "emil"}}})
+	want := []UserInput{{Username: "anna", Password: "neu"}, {Username: "emil"}, {Username: "bob", Password: "pw"}, {Username: "clara"}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("users: %+v", got)
+	}
+}
+
+// Fehlversuche: IPv6 je /64, Abgelaufenes faellt beim Aufraeumen heraus.
+func TestFailLimiterGrouped(t *testing.T) {
+	l := newFailLimiter()
+	for i := 0; i < authFailMax-1; i++ {
+		if l.failed(netip.MustParseAddr("2001:db8:1:2::" + strconv.Itoa(i+1))) {
+			t.Fatal("blocked too early")
+		}
+	}
+	if !l.failed(netip.MustParseAddr("2001:db8:1:2:ffff::1")) || !l.blocked(netip.MustParseAddr("2001:db8:1:2::abcd")) {
+		t.Fatal("same /64 must be blocked")
+	}
+	if l.blocked(netip.MustParseAddr("2001:db8:1:3::1")) {
+		t.Fatal("other /64 must stay open")
+	}
+	l.failed(netip.MustParseAddr("192.0.2.1"))
+	l.mu.Lock()
+	l.fail[limKey(netip.MustParseAddr("192.0.2.1"))] = []time.Time{time.Now().Add(-authFailWindow - time.Second)}
+	for k := range l.ban {
+		l.ban[k] = time.Now().Add(-time.Second)
+	}
+	l.mu.Unlock()
+	l.sweep()
+	if len(l.fail) != 0 || len(l.ban) != 0 {
+		t.Fatalf("sweep: %d fail, %d ban", len(l.fail), len(l.ban))
+	}
+}
+
+// Route nach dem bereinigten Pfad; Platz beim Ziel sparen nur echte WebSockets, wo sie erlaubt sind.
+func TestReqPathAndWebSocket(t *testing.T) {
+	for in, want := range map[string]string{"/": "/", "//admin": "/admin", "/a//b/": "/a/b/", "///": "/", "*": "*", "/a/b": "/a/b"} {
+		if got, ok := reqPath(in); !ok || got != want {
+			t.Errorf("%q: %q %v", in, got, ok)
+		}
+	}
+	for _, in := range []string{"/.", "/..", "/a/./b", "/a/../b", "/a/..", "/a\\..\\b"} {
+		if _, ok := reqPath(in); ok {
+			t.Errorf("%q must be refused", in)
+		}
+	}
+	h := newHost()
+	h.WebSockets = false
+	h.Locations = []Location{{Path: "/ws", WebSockets: true}, {Path: "/ws/plain"}}
+	for p, want := range map[string]bool{"/": false, "/ws": true, "//ws/x": true, "/ws/plain/x": false, "/wsx": false} {
+		if wsAt(h, p) != want {
+			t.Errorf("wsAt %q: want %v", p, want)
+		}
+	}
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("Upgrade", "foo")
+	r.Header.Set("Connection", "Upgrade")
+	if wsUpgrade(r) {
+		t.Error("other upgrade is no websocket")
+	}
+	r.Header.Set("Upgrade", "WebSocket")
+	r.Header.Set("Connection", "keep-alive, Upgrade")
+	if !wsUpgrade(r) {
+		t.Error("websocket not detected")
 	}
 }

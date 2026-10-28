@@ -73,6 +73,44 @@ func TestServeConn(t *testing.T) {
 	if string(b) != "app [2001:db8::5]:5555" {
 		t.Fatalf("80: %q", b)
 	}
+	// Verbindung fuer einen Namen (CDN64 Header.Host): andere Hosts per absoluter URL oder auf derselben Verbindung
+	// bekommen 421, anderes SNI wird getrennt
+	other := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "intern") })
+	if err := e.Set("lan", []Route{{Names: []string{"intern.test"}, Handler: other, HTTP: other}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, port := range []int{80, PortTerminated} {
+		served, cl = pair(t, "203.0.113.10:6000")
+		e.ServeConnFor(served, port, "App.Test")
+		_ = cl.SetDeadline(time.Now().Add(5 * time.Second))
+		br := bufio.NewReader(cl)
+		_, _ = io.WriteString(cl, "GET / HTTP/1.1\r\nHost: app.test\r\n\r\n")
+		if resp, err = http.ReadResponse(br, nil); err != nil || resp.StatusCode != 200 {
+			t.Fatalf("%d routed name: %v %v", port, resp, err)
+		}
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_, _ = io.WriteString(cl, "GET / HTTP/1.1\r\nHost: intern.test\r\n\r\n") // weitere Anfrage auf derselben Verbindung
+		if resp, err = http.ReadResponse(br, nil); err != nil || resp.StatusCode != http.StatusMisdirectedRequest {
+			t.Fatalf("%d keep-alive other host: %v %v", port, resp, err)
+		}
+		cl.Close()
+		served, cl = pair(t, "203.0.113.10:6001")
+		e.ServeConnFor(served, port, "app.test")
+		_ = cl.SetDeadline(time.Now().Add(5 * time.Second))
+		_, _ = io.WriteString(cl, "GET http://intern.test/ HTTP/1.1\r\nHost: app.test\r\n\r\n")
+		if resp, err = http.ReadResponse(bufio.NewReader(cl), nil); err != nil || resp.StatusCode != http.StatusMisdirectedRequest {
+			t.Fatalf("%d absolute URL: %v %v", port, resp, err)
+		}
+		cl.Close()
+	}
+	served, cl = pair(t, "203.0.113.10:6002")
+	e.ServeConnFor(served, 443, "app.test")
+	tc = tls.Client(cl, &tls.Config{ServerName: "intern.test", InsecureSkipVerify: true}) //nolint:gosec // Test
+	_ = tc.SetDeadline(time.Now().Add(5 * time.Second))
+	if err := tc.Handshake(); err == nil {
+		t.Fatal("other SNI than the routed name must be cut off")
+	}
+	tc.Close()
 	// Sperrliste: sofort getrennt
 	e.SetBlocker(func(a netip.Addr) bool { return a.String() == "198.51.100.1" })
 	served, cl = pair(t, "198.51.100.1:1")

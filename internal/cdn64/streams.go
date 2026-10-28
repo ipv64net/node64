@@ -336,10 +336,17 @@ func (m *Module) applyStreams(ctx context.Context) {
 		}
 	}
 	var stop []*streamRun
+	type retryRun struct {
+		r *streamRun
+		s *Stream
+	}
+	var retry []retryRun
 	for id, r := range m.runs {
-		if s, ok := want[id]; !ok || s.key() != r.key || len(r.errs) > 0 {
+		if s, ok := want[id]; !ok || s.key() != r.key {
 			stop = append(stop, r)
 			delete(m.runs, id)
+		} else if len(r.errs) > 0 { // Port war belegt: nur das fehlende Protokoll noch einmal versuchen
+			retry = append(retry, retryRun{r, s})
 		}
 	}
 	var start []*Stream
@@ -351,6 +358,9 @@ func (m *Module) applyStreams(ctx context.Context) {
 	m.smu.Unlock()
 	for _, r := range stop {
 		r.stop()
+	}
+	for _, x := range retry {
+		m.openStream(ctx, x.r, x.s)
 	}
 	for _, s := range start {
 		r := m.startStream(ctx, s)
@@ -373,6 +383,14 @@ func (m *Module) startStream(ctx context.Context, s *Stream) *streamRun {
 			return nil, errors.New("certificate not available")
 		}}
 	}
+	m.openStream(ctx, r, s)
+	return r
+}
+
+// openStream oeffnet die noch nicht offenen Ports eines Streams (m.sapply gehalten). Beim erneuten Versuch (Port
+// war belegt) bleiben das offene Protokoll und seine Verbindungen unberuehrt; r.tcp, r.udp und r.errs werden unter
+// m.smu gesetzt (Claims, Anzeige).
+func (m *Module) openStream(ctx context.Context, r *streamRun, s *Stream) {
 	addr := ":" + strconv.Itoa(s.ListenPort)
 	check := func(p ports.Proto) error {
 		if m.ports == nil {
@@ -380,35 +398,50 @@ func (m *Module) startStream(ctx context.Context, s *Stream) *streamRun {
 		}
 		return m.ports.Check(ctx, Name, []ports.Claim{{Owner: Name, Purpose: "Stream", Proto: p, Port: s.ListenPort, Active: true}})
 	}
-	if s.TCP {
+	errs := map[string]string{}
+	var tl net.Listener
+	var ul net.PacketConn
+	if s.TCP && r.tcp == nil {
 		if err := check(ports.TCP); err != nil {
-			r.errs["tcp"] = err.Error()
+			errs["tcp"] = err.Error()
 		} else if ln, err := net.Listen("tcp", addr); err != nil {
-			r.errs["tcp"] = err.Error()
+			errs["tcp"] = err.Error()
 		} else {
 			if r.tlsc != nil {
 				ln = tls.NewListener(ln, r.tlsc)
 			}
-			r.tcp = ln
-			r.wg.Add(1)
-			go func() { defer r.wg.Done(); m.serveTCP(r, s.target()) }()
+			tl = ln
 		}
 	}
-	if s.UDP {
+	if s.UDP && r.udp == nil {
 		if err := check(ports.UDP); err != nil {
-			r.errs["udp"] = err.Error()
+			errs["udp"] = err.Error()
 		} else if pc, err := net.ListenPacket("udp", addr); err != nil {
-			r.errs["udp"] = err.Error()
+			errs["udp"] = err.Error()
 		} else {
-			r.udp = pc
-			r.wg.Add(1)
-			go func() { defer r.wg.Done(); m.serveUDP(r, s.target()) }()
+			ul = pc
 		}
 	}
-	for p, e := range r.errs {
+	m.smu.Lock()
+	r.errs = errs
+	if tl != nil {
+		r.tcp = tl
+	}
+	if ul != nil {
+		r.udp = ul
+	}
+	m.smu.Unlock()
+	if tl != nil {
+		r.wg.Add(1)
+		go func() { defer r.wg.Done(); m.serveTCP(r, s.target()) }()
+	}
+	if ul != nil {
+		r.wg.Add(1)
+		go func() { defer r.wg.Done(); m.serveUDP(r, s.target()) }()
+	}
+	for p, e := range errs {
 		m.log.Warn("stream port not opened", "port", s.ListenPort, "proto", p, "err", e)
 	}
-	return r
 }
 
 func (m *Module) serveTCP(r *streamRun, target string) {

@@ -43,3 +43,28 @@ func TestAdvancedClientHeadersFixed(t *testing.T) {
 		t.Fatalf("client address: xff %q real %q", xff, real)
 	}
 }
+
+// CF-Connecting-IP gilt nur von Cloudflare selbst; X-Forwarded-For ueber alle Zeilen von rechts.
+func TestClientIPTrusted(t *testing.T) {
+	a := &Advanced{TrustedProxies: []string{"10.0.0.0/8", "172.64.0.0/13"}}
+	a.prepare()
+	for _, c := range []struct {
+		peer string
+		hdr  [][2]string
+		want string
+	}{
+		{"10.0.0.5:1", [][2]string{{"CF-Connecting-IP", "198.51.100.1"}}, "10.0.0.5"},       // LAN-Proxy reicht den Kopf nur durch
+		{"172.64.1.2:1", [][2]string{{"CF-Connecting-IP", "198.51.100.1"}}, "198.51.100.1"}, // Cloudflare
+		{"10.0.0.5:1", [][2]string{{"X-Forwarded-For", "198.51.100.9"}, {"X-Forwarded-For", "203.0.113.4, 10.0.0.7"}}, "203.0.113.4"},
+		{"203.0.113.50:1", [][2]string{{"X-Forwarded-For", "198.51.100.9"}}, "203.0.113.50"}, // nicht vertrauenswuerdig
+	} {
+		r := httptest.NewRequest("GET", "http://x.test/", nil)
+		r.RemoteAddr = c.peer
+		for _, h := range c.hdr {
+			r.Header.Add(h[0], h[1])
+		}
+		if got := a.clientIP(r).String(); got != c.want {
+			t.Errorf("%s %v: %s, want %s", c.peer, c.hdr, got, c.want)
+		}
+	}
+}

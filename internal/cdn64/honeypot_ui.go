@@ -77,6 +77,10 @@ func (m *Module) apiHoneypotGet(w http.ResponseWriter, r *http.Request) {
 // apiHoneypotPut: fehlende Felder bleiben, wie sie sind.
 func (m *Module) apiHoneypotPut(w http.ResponseWriter, r *http.Request) {
 	s := m.hpSettings()
+	if s.Route != nil { // eigene Kopie: die geltende Einstellung aendert erst hpSave (nach der Pruefung)
+		rt := *s.Route
+		s.Route = &rt
+	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<12)).Decode(&s); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return

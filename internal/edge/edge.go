@@ -845,6 +845,10 @@ func (e *Edge) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 
 // serveHTTP: Port 80 (ACME-Pruefungen, Weiterleitung auf HTTPS, reine HTTP-Abnehmer).
 func (e *Edge) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	if !routedOK(r) { // aus dem Tunnel: nur der Name, fuer den der CDN64-Server durchreicht
+		misdirected(w)
+		return
+	}
 	if nonce, ok := strings.CutPrefix(r.URL.Path, probePath); ok && e.probeHit(nonce) {
 		w.WriteHeader(http.StatusNoContent)
 		return

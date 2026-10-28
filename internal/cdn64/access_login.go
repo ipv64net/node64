@@ -124,6 +124,11 @@ func (m *Module) loginEndpoint(w http.ResponseWriter, r *http.Request, h *Host, 
 			return
 		}
 		http.SetCookie(w, &http.Cookie{Name: name, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode})
+		for _, c := range r.Cookies() { // auch die Sitzungen der anderen Listen dieses Namens (Locations)
+			if strings.HasPrefix(c.Name, loginCookieBase) && c.Name != name {
+				http.SetCookie(w, &http.Cookie{Name: c.Name, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode})
+			}
+		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
@@ -190,7 +195,7 @@ func loginPage(w http.ResponseWriter, r *http.Request, g *guard, next, user stri
 	}
 	repl := strings.NewReplacer("{{LANG}}", t("de", "en"), "{{TITLE}}", t("Anmeldung erforderlich", "Sign-in required"),
 		"{{HOST}}", html.EscapeString(hostOnly(r.Host)), "{{SUB}}", html.EscapeString(g.list.Name), "{{ERROR}}", errBox,
-		"{{ACTION}}", loginPath, "{{NEXT}}", html.EscapeString(next), "{{USER}}", t("Benutzername", "Username"),
+		"{{ACTION}}", loginPath, "{{LIST}}", strconv.FormatInt(g.list.ID, 10), "{{NEXT}}", html.EscapeString(next), "{{USER}}", t("Benutzername", "Username"),
 		"{{USERNAME}}", html.EscapeString(user), "{{PASS}}", t("Passwort", "Password"),
 		"{{REMEMBER}}", t("Angemeldet bleiben (30 Tage)", "Stay signed in (30 days)"), "{{SUBMIT}}", t("Anmelden", "Sign in"),
 		"{{FOOT}}", t("Geschützt mit PROXY64 · Node64", "Protected by PROXY64 · Node64"))
@@ -218,28 +223,42 @@ func logoutPage(w http.ResponseWriter, r *http.Request) {
 		label+`</button></form></body></html>`)
 }
 
-// stripLoginCookie entfernt das Sitzungs-Cookie, bevor die Anfrage zum Ziel geht.
+// hasLogin: die Liste meldet ueber die Login-Seite an (sonst Browser-Dialog bzw. Anmeldedienst).
+func (g *guard) hasLogin() bool { return g.list.LoginPage && len(g.list.Users) > 0 && g.fwd == nil }
+
+// hasLoginCookie: die Anfrage traegt (vermutlich) ein Sitzungs-Cookie einer Login-Seite.
+func hasLoginCookie(r *http.Request) bool {
+	for _, v := range r.Header.Values("Cookie") {
+		if strings.Contains(v, loginCookieBase) {
+			return true
+		}
+	}
+	return false
+}
+
+// stripLoginCookie entfernt das Sitzungs-Cookie, bevor die Anfrage zum Ziel geht. Die uebrigen Cookies bleiben
+// Wort fuer Wort (auch solche, die Go fuer ungueltig haelt, und Werte in Anfuehrungszeichen).
 func stripLoginCookie(r *http.Request, listID int64) {
 	name := loginCookieName(listID)
-	cs := r.Cookies()
-	keep := cs[:0]
+	var keep []string
 	found := false
-	for _, c := range cs {
-		if c.Name == name {
-			found = true
-			continue
+	for _, v := range r.Header.Values("Cookie") {
+		for _, part := range strings.Split(v, ";") {
+			part = strings.TrimSpace(part)
+			if n, _, _ := strings.Cut(part, "="); strings.TrimSpace(n) == name {
+				found = true
+				continue
+			}
+			if part != "" {
+				keep = append(keep, part)
+			}
 		}
-		keep = append(keep, c)
 	}
 	if !found {
 		return
 	}
 	r.Header.Del("Cookie")
 	if len(keep) > 0 {
-		parts := make([]string, len(keep))
-		for i, c := range keep {
-			parts[i] = c.Name + "=" + c.Value
-		}
-		r.Header.Set("Cookie", strings.Join(parts, "; "))
+		r.Header.Set("Cookie", strings.Join(keep, "; "))
 	}
 }

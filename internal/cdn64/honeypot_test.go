@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -256,5 +257,21 @@ func TestHoneypotRoute(t *testing.T) {
 	}
 	if s := m.hpSettings(); s.Route == nil || !s.Route.Blocklist || !s.Route.Honeypot || s.Route.Geo {
 		t.Fatalf("default route: %+v", s.Route)
+	}
+}
+
+// API: ein abgelehnter Wert (422) laesst die geltenden Wege unveraendert.
+func TestHoneypotPutRejectedKeepsRoute(t *testing.T) {
+	e := newEnv(t)
+	m := e.m
+	m.hpLoad(context.Background())
+	body := strings.NewReader(`{"block_hours":99999,"route":{"geo":true}}`)
+	rec := httptest.NewRecorder()
+	m.apiHoneypotPut(rec, httptest.NewRequest(http.MethodPut, "/api/v1/cdn64/honeypot", body))
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if s := m.hpSettings(); s.Route == nil || s.Route.Geo || !s.Route.Exploit {
+		t.Fatalf("live route changed: %+v", s.Route)
 	}
 }

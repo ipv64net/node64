@@ -217,3 +217,57 @@ func TestOnlinePorts(t *testing.T) {
 		t.Fatalf("name off error: %v", errs)
 	}
 }
+
+// Austragen scheitert (z. B. ipv64 kurz nicht erreichbar): kein neues Mapping fuer denselben Stream, solange das alte
+// noch angemeldet ist - sonst ginge seine ID verloren und es bliebe bei ipv64 verwaist.
+func TestOnlinePortsDeleteFails(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	f := &fakeOnline{ready: true, tunnels: map[string]bool{}, hosts: map[int64]string{}, modes: map[int64]int{},
+		edges: []ipv64api.CDN64Edge{{Name: "srv07", Host: "127.0.0.1", Port: 1, IPs: []string{"127.0.0.1"}}}}
+	e.m.SetOnlineAPI(f)
+	e.enable(t)
+	h := newHost()
+	h.Names, h.TargetHost, h.TargetPort = []string{"app.test"}, "93.184.216.34", 8080
+	if err := e.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := e.m.onlineEnable(ctx, h, 1); err != nil || len(res) != 1 || res[0].Result != "on" {
+		t.Fatalf("enable: %v %+v", err, res)
+	}
+	st := &Stream{Name: "Spiel", Enabled: true, ListenPort: freePort(t), TCP: true, TargetHost: "127.0.0.1", TargetPort: 9, OnlineName: "app.test"}
+	if err := e.m.saveStream(ctx, st); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := e.m.onlinePortRows(ctx)
+	list, _ := e.m.onlineNames(ctx)
+	rid := list[0].RemoteID
+	if len(rows) != 1 || len(f.maps[rid]) != 1 {
+		t.Fatalf("mapping: rows %+v remote %+v", rows, f.maps[rid])
+	}
+	old := rows[0].MappingID
+	f.mu.Lock()
+	f.delErr = &ipv64api.APIError{Status: 503, Code: "unavailable"}
+	f.mu.Unlock()
+	st.ListenPort = freePort(t)
+	if err := e.m.saveStream(ctx, st); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	n := len(f.maps[rid])
+	f.mu.Unlock()
+	if rows, _ := e.m.onlinePortRows(ctx); len(rows) != 1 || rows[0].MappingID != old || n != 1 {
+		t.Fatalf("delete failed: rows %+v remote %d", rows, n)
+	}
+	f.mu.Lock()
+	f.delErr = nil
+	f.mu.Unlock()
+	e.m.onlinePortsNow(ctx)
+	f.mu.Lock()
+	remote := append([]ipv64api.CDN64Mapping(nil), f.maps[rid]...)
+	f.mu.Unlock()
+	rows, _ = e.m.onlinePortRows(ctx)
+	if len(rows) != 1 || rows[0].MappingID == old || rows[0].TargetPort != st.ListenPort || len(remote) != 1 || remote[0].ID != rows[0].MappingID {
+		t.Fatalf("after retry: rows %+v remote %+v", rows, remote)
+	}
+}

@@ -539,7 +539,7 @@
       "adv_limits_hint": "Timeout: wie lange auf die Antwort des Ziels gewartet wird, 0 = ohne Grenze. Upload: größere Anfragen bekommen 413, 0 = unbegrenzt.",
       "adv_trusted": "Vertrauenswürdige Proxys davor",
       "adv_cloudflare": "Cloudflare-Netze einfügen",
-      "adv_trusted_hint": "Kommt eine Anfrage aus diesen Netzen, gilt die IP aus CF-Connecting-IP bzw. X-Forwarded-For als echte Client-IP (für Ziel, Zugriffslisten und Log). Sonst zählt immer die Gegenstelle der Verbindung.",
+      "adv_trusted_hint": "Kommt eine Anfrage aus diesen Netzen, gilt die IP aus X-Forwarded-For (von Cloudflare-Adressen auch CF-Connecting-IP) als echte Client-IP (für Ziel, Zugriffslisten und Log). Sonst zählt immer die Gegenstelle der Verbindung.",
       "adv_access_log": "Zugriffs-Log für diesen Host",
       "adv_access_log_hint": "Jede Anfrage einzeln unter „Zugriffe“. Die Zähler je Stunde laufen immer.",
       "adv_no_limits": "Ohne Limits je IP",

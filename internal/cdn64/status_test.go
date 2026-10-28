@@ -177,7 +177,7 @@ func TestStatusHostGeoAndBlocklist(t *testing.T) {
 		ip   string
 		code int
 	}{{"5.1.2.3", http.StatusForbidden}, {"198.51.100.7", http.StatusForbidden}, {"8.8.8.8", http.StatusOK}} {
-		if code, _, _ := do(t, c, "GET", "http://status.test/", "CF-Connecting-IP", x.ip); code != x.code {
+		if code, _, _ := do(t, c, "GET", "http://status.test/", "X-Forwarded-For", x.ip); code != x.code {
 			t.Fatalf("%s: %d, want %d", x.ip, code, x.code)
 		}
 	}
