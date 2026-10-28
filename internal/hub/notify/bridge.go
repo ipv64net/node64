@@ -177,7 +177,9 @@ func (r relaySender) Send(ctx context.Context, ch *notify.Channel, m notify.Mess
 // Senders liefert alle Sender des Servers: die der Node plus Bruecken-Typen;
 // Node-Kanaele werden weitergereicht.
 func Senders(version string, b *Bridge, st *Store) map[notify.Type]notify.Sender {
-	m := notify.Senders(version)
+	// Nur oeffentliche Ziele: die Kanal-Adressen (Webhook, ntfy, Gotify, SMTP, Matrix ...) bestimmt der Nutzer,
+	// der hub verbindet sich nie mit Loopback, privaten Netzen, Link-Local, ULA oder Metadaten-Adressen
+	m := notify.SendersPublicOnly(version)
 	m[notify.TypeIPv64Mail] = mailSender{b}
 	m[notify.TypeIPv64SMS] = smsSender{b, st}
 	m[notify.TypeApp] = appSender{b}

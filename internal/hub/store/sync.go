@@ -12,6 +12,7 @@ import (
 	"net/mail"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ipv64net/node64/internal/scheduler"
@@ -966,10 +967,21 @@ func (s *Store) IngestMeasurements(ctx context.Context, n *Node, batch []wire.Me
 	}
 	source := "node:" + n.ID
 	now := time.Now().UTC()
+	// nur Checks des eigenen Accounts annehmen; fremde Messpunkte verwerfen (aber bestaetigen)
+	toks := make([]string, 0, len(batch))
+	for _, m := range batch {
+		toks = append(toks, m.Token)
+	}
+	own, err := s.ownedTokens(ctx, n.UserID, toks)
+	if err != nil {
+		return nil, err
+	}
 	job := ingestJob{nodeID: n.ID, done: make(chan error, 1)}
 	var earliest time.Time
 	for _, m := range batch {
-		if m.Time.After(now.Add(5 * time.Minute)) {
+		if !own[m.Token] {
+			// nicht speichern
+		} else if m.Time.After(now.Add(5 * time.Minute)) {
 			ack.Rejected = append(ack.Rejected, m.Seq)
 		} else if m.Time.Before(now.AddDate(0, 0, -RawKeepDays)) {
 			// aelter als die Rohdaten-Partitionen: nicht speichern, aber bestaetigen
@@ -1014,6 +1026,82 @@ func (s *Store) IngestMeasurements(ctx context.Context, n *Node, batch []wire.Me
 		go s.aggregateLate(source, earliest, now)
 	}
 	return ack, nil
+}
+
+// tokenOwners merkt sich token -> userid fuer die Pruefung eingehender Messpunkte (nur gefundene Checks, 10 min).
+type tokenOwners struct {
+	mu sync.Mutex
+	m  map[string]tokenOwner
+}
+
+type tokenOwner struct {
+	uid int64
+	exp time.Time
+}
+
+// ownedTokens liefert aus tokens die Checks des Accounts userID (Cache, sonst eine Abfrage je Stapel).
+// Geloeschte Checks zaehlen mit: spaete Messpunkte eines eigenen Checks sind harmlos.
+func (s *Store) ownedTokens(ctx context.Context, userID int64, tokens []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	now := time.Now()
+	seen := map[string]bool{}
+	var miss []string
+	s.owners.mu.Lock()
+	for _, t := range tokens {
+		if t == "" || seen[t] {
+			continue
+		}
+		seen[t] = true
+		if e, ok := s.owners.m[t]; ok && now.Before(e.exp) {
+			if e.uid == userID {
+				out[t] = true
+			}
+			continue
+		}
+		miss = append(miss, t)
+	}
+	s.owners.mu.Unlock()
+	for len(miss) > 0 {
+		k := min(len(miss), 500)
+		part := miss[:k]
+		miss = miss[k:]
+		ph := make([]string, len(part))
+		args := make([]any, len(part))
+		for i, t := range part {
+			ph[i], args[i] = "?", t
+		}
+		rows, err := s.db.QueryContext(ctx, `SELECT token, userid FROM hc2_checks WHERE token IN (`+strings.Join(ph, ",")+`)`, args...)
+		if err != nil {
+			s.Metrics.add(&s.Metrics.DBErrors, 1)
+			return nil, err
+		}
+		found := map[string]int64{}
+		for rows.Next() {
+			var tok string
+			var uid int64
+			if err := rows.Scan(&tok, &uid); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			found[tok] = uid
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		s.owners.mu.Lock()
+		if s.owners.m == nil || len(s.owners.m) > 200000 {
+			s.owners.m = map[string]tokenOwner{}
+		}
+		for tok, uid := range found {
+			s.owners.m[tok] = tokenOwner{uid: uid, exp: now.Add(10 * time.Minute)}
+			if uid == userID {
+				out[tok] = true
+			}
+		}
+		s.owners.mu.Unlock()
+	}
+	return out, nil
 }
 
 // IngestStates uebernimmt Zustaende der Messstelle node:<id> und bewertet den Gesamtzustand neu.

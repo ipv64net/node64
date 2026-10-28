@@ -45,6 +45,7 @@ type Store struct {
 	maint      []Maintenance
 	nodeOnline map[string]onlineState
 	box        *secrets.Box // Kanal-Geheimnisse (Server-Schluessel), nil = nicht konfiguriert
+	owners     tokenOwners  // token -> userid fuer eingehende Messpunkte (sync.go)
 
 	meas   chan measurementRow
 	ingest chan ingestJob // Messpunkte der Nodes (ingest.go)

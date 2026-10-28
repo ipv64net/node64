@@ -44,6 +44,9 @@ type NodeToken struct {
 // ErrInvalidToken: Token unbekannt oder widerrufen.
 var ErrInvalidToken = errors.New("invalid node token")
 
+// ErrNodeOwned: die node_id ist (nicht getrennt) mit einem anderen Account verknuepft.
+var ErrNodeOwned = errors.New("node is linked to another account")
+
 const codeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // ohne 0/O/1/I
 
 func randomCode(n int) string {
@@ -120,6 +123,29 @@ func (s *Store) LinkPoll(ctx context.Context, in wire.LinkPoll) (*wire.Linked, e
 		rm = "full"
 	}
 	loc := location.String
+	// node_id kommt von der Node: eine aktive Node eines anderen Accounts darf nicht uebernommen werden
+	// (erst dort trennen). Wechselt der Account, gelten alte Tokens nicht mehr.
+	var oldUser int64
+	var oldRevoked sql.NullString
+	err = tx.QueryRowContext(ctx, `SELECT userid, revoked_at FROM hc2_nodes WHERE node_id = ? FOR UPDATE`, nodeID).Scan(&oldUser, &oldRevoked)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	if err == nil && oldUser != userid.Int64 {
+		if !oldRevoked.Valid {
+			// Code verbrauchen, damit die Node nicht bis zum Ablauf weiter fragt
+			if _, err := tx.ExecContext(ctx, `UPDATE hc2_link_codes SET consumed_at = ? WHERE code = ?`, nowStr(), strings.ToUpper(strings.ReplaceAll(in.Code, "-", ""))); err != nil {
+				return nil, err
+			}
+			if err := tx.Commit(); err != nil {
+				return nil, err
+			}
+			return nil, ErrNodeOwned
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE hc2_node_tokens SET revoked_at = ? WHERE node_id = ? AND revoked_at IS NULL`, nowStr(), nodeID); err != nil {
+			return nil, err
+		}
+	}
 	// Node anlegen oder reaktivieren (gleiche node_id = gleiche Installation)
 	if _, err := tx.ExecContext(ctx, `INSERT INTO hc2_nodes (userid, node_id, name, location, version, created_at, remote_mgmt) VALUES (?,?,?,?,?,?,?)
 		ON DUPLICATE KEY UPDATE userid = VALUES(userid), name = VALUES(name), location = VALUES(location), version = VALUES(version), remote_mgmt = VALUES(remote_mgmt), revoked_at = NULL, proxy_via = NULL`,

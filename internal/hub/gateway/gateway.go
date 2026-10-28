@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,12 +37,12 @@ type Gateway struct {
 	maxConns     int
 	portalSecret []byte
 	trusted      map[string]bool // IPs ohne Ratenlimit (Lasttest) // Portal -> hub (portal.go), gleiches Geheimnis wie die Bruecke
+	realIPFrom   []netip.Prefix  // Absender, deren X-Real-IP gilt (Reverse Proxy)
 
 	mu      sync.RWMutex
 	conns   map[string]*conn         // node_id -> Verbindung
 	byUser  map[int64]map[*conn]bool // userid -> Verbindungen
 	seen    map[string]bool          // Nodes mit Pong seit dem letzten Flush
-	sentCmd map[int64]bool           // bereits zugestellte Kommandos
 	lastLog int64
 	limiter *ipLimiter
 	wg      sync.WaitGroup
@@ -52,7 +53,8 @@ type Gateway struct {
 // New erzeugt das Gateway.
 func New(st *store.Store, nf *hubnotify.Store, senders map[notify.Type]notify.Sender, log *slog.Logger, version, location string, maxConns int) *Gateway {
 	return &Gateway{st: st, nf: nf, senders: senders, log: log.With("module", "gateway"), version: version, location: location, maxConns: maxConns,
-		conns: map[string]*conn{}, byUser: map[int64]map[*conn]bool{}, seen: map[string]bool{}, sentCmd: map[int64]bool{}, limiter: newIPLimiter()}
+		conns: map[string]*conn{}, byUser: map[int64]map[*conn]bool{}, seen: map[string]bool{}, limiter: newIPLimiter(),
+		realIPFrom: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("::1/128")}}
 }
 
 // Register haengt die Routen an den Multiplexer.
@@ -149,15 +151,28 @@ func readJSON(r *http.Request, v any, limit int64) error {
 	return json.Unmarshal(b, v)
 }
 
-// clientIP: hinter nginx auf localhost X-Real-IP, sonst RemoteAddr.
-func clientIP(r *http.Request) string {
+// SetRealIPFrom setzt die Absender, deren X-Real-IP gilt (config real_ip_from).
+func (g *Gateway) SetRealIPFrom(p []netip.Prefix) { g.realIPFrom = p }
+
+// clientIP: vom Reverse Proxy (real_ip_from) dessen X-Real-IP, sonst RemoteAddr.
+func (g *Gateway) clientIP(r *http.Request) string {
 	host, _, _ := net.SplitHostPort(r.RemoteAddr)
-	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
-		if x := strings.TrimSpace(r.Header.Get("X-Real-IP")); x != "" {
-			return x
+	if a, err := netip.ParseAddr(host); err == nil && g.fromProxy(a.Unmap()) {
+		// nur eine gueltige IP uebernehmen (landet in Ratenlimits, Log und Push-Messpunkten)
+		if x, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Real-IP"))); err == nil {
+			return x.Unmap().String()
 		}
 	}
 	return host
+}
+
+func (g *Gateway) fromProxy(a netip.Addr) bool {
+	for _, p := range g.realIPFrom {
+		if p.Contains(a) {
+			return true
+		}
+	}
+	return false
 }
 
 type ctxKey int
@@ -176,14 +191,14 @@ func (g *Gateway) auth(h http.HandlerFunc) http.Handler {
 		if tok == "" {
 			tok = r.URL.Query().Get("token") // WebSocket aus Browsern o. ae.
 		}
-		if !g.trusted[clientIP(r)] && !g.limiter.allow("auth:"+clientIP(r), 60, time.Minute) {
+		if !g.trusted[g.clientIP(r)] && !g.limiter.allow("auth:"+g.clientIP(r), 60, time.Minute) {
 			writeErr(w, http.StatusTooManyRequests, "too many requests")
 			return
 		}
 		n, err := g.st.NodeByToken(r.Context(), tok)
 		if err != nil {
 			if errors.Is(err, store.ErrInvalidToken) {
-				g.limiter.allow("bad:"+clientIP(r), 20, time.Minute)
+				g.limiter.allow("bad:"+g.clientIP(r), 20, time.Minute)
 				writeErr(w, http.StatusUnauthorized, "token_revoked")
 				return
 			}
@@ -197,7 +212,7 @@ func (g *Gateway) auth(h http.HandlerFunc) http.Handler {
 // ---------------------------------------------------------------- Erstverknuepfung
 
 func (g *Gateway) linkStart(w http.ResponseWriter, r *http.Request) {
-	if !g.limiter.allow("link:"+clientIP(r), 5, time.Minute) {
+	if !g.limiter.allow("link:"+g.clientIP(r), 5, time.Minute) {
 		writeErr(w, http.StatusTooManyRequests, "too many requests")
 		return
 	}
@@ -228,6 +243,11 @@ func (g *Gateway) linkPoll(w http.ResponseWriter, r *http.Request) {
 	out, err := g.st.LinkPoll(r.Context(), in)
 	if errors.Is(err, store.ErrInvalidToken) {
 		writeErr(w, http.StatusNotFound, "code unknown, expired or already used")
+		return
+	}
+	if errors.Is(err, store.ErrNodeOwned) {
+		g.log.Warn("link refused, node owned by another account", "ip", g.clientIP(r))
+		writeErr(w, http.StatusConflict, "node is linked to another account; unlink it there first")
 		return
 	}
 	if err != nil {
@@ -535,7 +555,7 @@ func (g *Gateway) push(w http.ResponseWriter, r *http.Request) {
 	if msg == "" {
 		msg = r.URL.Query().Get("message")
 	}
-	ok, err := g.st.PushIn(r.Context(), token, down, msg, clientIP(r))
+	ok, err := g.st.PushIn(r.Context(), token, down, msg, g.clientIP(r))
 	if errors.Is(err, store.ErrDailyLimit) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		fmt.Fprint(w, "Daily limit reached")

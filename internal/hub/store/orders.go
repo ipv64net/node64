@@ -32,19 +32,24 @@ func (s *Store) PendingCommands(ctx context.Context, nodeID string) ([]wire.Comm
 	return out, rows.Err()
 }
 
-// CommandDone traegt das Ergebnis ein.
-func (s *Store) CommandDone(ctx context.Context, r wire.CommandResult) error {
+// CommandDone traegt das Ergebnis ein. Nur Kommandos der meldenden Node (nodeID) und nur einmal;
+// sonst wird die Meldung ignoriert (fremde oder erledigte Kommandos).
+func (s *Store) CommandDone(ctx context.Context, nodeID string, r wire.CommandResult) error {
 	out := string(r.Output)
 	if r.Error != "" {
 		out = r.Error
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE hc2_commands SET done_at = ?, ok = ?, output = ? WHERE id = ?`, nowStr(), b2i(r.OK), truncate(out, 65000), r.ID); err != nil {
+	res, err := s.db.ExecContext(ctx, `UPDATE hc2_commands SET done_at = ?, ok = ?, output = ? WHERE id = ? AND node_id = ? AND done_at IS NULL`, nowStr(), b2i(r.OK), truncate(out, 65000), r.ID, nodeID)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
 		return err
 	}
 	// Gehoert das Kommando zu einem Testlauf (Umhaengen), Ergebnis dort als Messstelle "node" eintragen
 	var args sql.NullString
 	var cmdNode string
-	if err := s.db.QueryRowContext(ctx, `SELECT args, node_id FROM hc2_commands WHERE id = ? AND name = 'test_check'`, r.ID).Scan(&args, &cmdNode); err == nil && args.Valid {
+	if err := s.db.QueryRowContext(ctx, `SELECT args, node_id FROM hc2_commands WHERE id = ? AND node_id = ? AND name = 'test_check'`, r.ID, nodeID).Scan(&args, &cmdNode); err == nil && args.Valid {
 		var a struct {
 			TestrunID int64 `json:"testrun_id"`
 		}
@@ -120,9 +125,9 @@ func (s *Store) PendingSendOrders(ctx context.Context, nodeID string) ([]wire.Se
 	return out, nil
 }
 
-// SendOrderDone traegt das Ergebnis eines Sendeauftrags ein.
-func (s *Store) SendOrderDone(ctx context.Context, id int64, ok bool, errText string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE hc2_send_orders SET done_at = ?, ok = ?, error = ? WHERE id = ?`, nowStr(), b2i(ok), truncate(errText, 500), id)
+// SendOrderDone traegt das Ergebnis eines Sendeauftrags ein (nur Auftraege, die an nodeID gingen).
+func (s *Store) SendOrderDone(ctx context.Context, nodeID string, id int64, ok bool, errText string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE hc2_send_orders SET done_at = ?, ok = ?, error = ? WHERE id = ? AND node_id = ?`, nowStr(), b2i(ok), truncate(errText, 500), id, nodeID)
 	return err
 }
 

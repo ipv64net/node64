@@ -21,6 +21,9 @@ const (
 	pingEvery  = 30 * time.Second
 	writeWait  = 15 * time.Second
 	maxMsgSize = 1 << 20
+	// maxConfigChunk: Obergrenze je config-Nachricht. Unter 1 MB, damit auch Nodes mit altem Leselimit (1 MB)
+	// grosse Accounts bekommen; ein einzelner Eintrag darueber geht allein in eine Nachricht.
+	maxConfigChunk = 768 << 10
 )
 
 // conn ist eine Node-Verbindung.
@@ -31,9 +34,11 @@ type conn struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	sendQ   chan wire.Msg
-	lastRev int64
 	mu      sync.Mutex
+	lastRev int64 // unter mu: Leser, Worker und fanoutLoop greifen zu
 	closed  bool
+	pendMu  sync.Mutex     // deliverPending (hello und fanoutLoop)
+	sentCmd map[int64]bool // auf dieser Verbindung zugestellte, noch offene Kommandos (unter pendMu)
 	nextID  int64
 	work    chan wire.Msg // Nachrichten mit DB-Arbeit (Messpunkte usw.), eigener Worker je Verbindung
 	testing atomic.Bool   // laeuft gerade ein Kanal-Test dieser Node
@@ -46,6 +51,23 @@ func (c *conn) send(m wire.Msg) {
 		c.g.log.Warn("send queue full, closing", "node", c.node.ID)
 		c.close(websocket.StatusPolicyViolation, "slow consumer")
 	}
+}
+
+// rev liefert den Konfigurationsstand, den die Node ueber diese Verbindung hat.
+func (c *conn) rev() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.lastRev
+}
+
+// bumpRev hebt den Stand an (nie zurueck) und liefert den neuen Stand.
+func (c *conn) bumpRev(r int64) int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if r > c.lastRev {
+		c.lastRev = r
+	}
+	return c.lastRev
 }
 
 func (c *conn) close(code websocket.StatusCode, reason string) {
@@ -86,7 +108,7 @@ func (g *Gateway) ws(w http.ResponseWriter, r *http.Request) {
 	g.add(c)
 	defer g.remove(c)
 	_ = g.st.NodeSeen(ctx, n.ID, n.Token.ID)
-	g.log.Info("node connected", "node", n.Name, "user", n.UserID, "ip", clientIP(r), "since", since)
+	g.log.Info("node connected", "node", n.Name, "user", n.UserID, "ip", g.clientIP(r), "since", since)
 
 	c.work = make(chan wire.Msg, 64)
 	go c.writer()
@@ -105,7 +127,7 @@ func (c *conn) hello(ctx context.Context) {
 	c.send(wire.Msg{T: "hello", Data: raw(wire.Hello{ServerTime: time.Now().UTC(), Revision: rev, Account: acc, RemoteMgmt: n.RemoteMgmt, NodeName: n.Name, Location: n.Location, Endpoints: eps, Hub: g.location,
 		Features: []string{"proxy"}})})
 	// Aenderungen seit dem Stand der Node
-	changes, gap, err := g.st.ConfigSince(ctx, n.UserID, n.ID, c.lastRev)
+	changes, gap, err := g.st.ConfigSince(ctx, n.UserID, n.ID, c.rev())
 	if err != nil {
 		g.log.Error("config since failed", "node", n.ID, "err", err)
 		return
@@ -123,29 +145,56 @@ func (c *conn) hello(ctx context.Context) {
 	}
 }
 
+// sendConfig schickt Aenderungen in Teilen unter maxConfigChunk (die Node wendet jede config-Nachricht
+// fuer sich an). Teile vor dem letzten tragen "more" und den hoechsten Stand ihres Teils.
 func (c *conn) sendConfig(changes []wire.Change, rev int64) {
-	for _, ch := range changes {
-		if ch.Revision > c.lastRev {
-			c.lastRev = ch.Revision
+	parts := chunkChanges(changes, maxConfigChunk)
+	for i, part := range parts {
+		var top int64
+		for _, ch := range part {
+			top = max(top, ch.Revision)
 		}
+		if i < len(parts)-1 {
+			c.bumpRev(top)
+			c.send(wire.Msg{T: "config", Data: raw(map[string]any{"revision": top, "changes": part, "more": true})})
+			continue
+		}
+		c.send(wire.Msg{T: "config", Data: raw(map[string]any{"revision": c.bumpRev(max(top, rev)), "changes": part})})
 	}
-	if rev > c.lastRev {
-		c.lastRev = rev
-	}
-	c.send(wire.Msg{T: "config", Data: raw(map[string]any{"revision": c.lastRev, "changes": changes})})
 }
 
-// deliverPending schickt offene Kommandos und Sendeauftraege.
-func (c *conn) deliverPending(ctx context.Context) {
-	cmds, _ := c.g.st.PendingCommands(ctx, c.node.ID)
-	for _, cmd := range cmds {
-		c.g.mu.Lock()
-		sent := c.g.sentCmd[cmd.ID]
-		c.g.sentCmd[cmd.ID] = true
-		c.g.mu.Unlock()
-		if !sent {
-			c.send(wire.Msg{T: "command", Data: raw(cmd)})
+// chunkChanges teilt Aenderungen nach ihrer JSON-Groesse; liefert immer mindestens einen Teil.
+func chunkChanges(changes []wire.Change, limit int) [][]wire.Change {
+	var out [][]wire.Change
+	start, size := 0, 0
+	for i, ch := range changes {
+		n := len(ch.Data) + 256
+		if b, err := json.Marshal(ch); err == nil {
+			n = len(b) + 1
 		}
+		if i > start && size+n > limit {
+			out = append(out, changes[start:i])
+			start, size = i, 0
+		}
+		size += n
+	}
+	return append(out, changes[start:])
+}
+
+// deliverPending schickt offene Kommandos und Sendeauftraege. Kommandos merkt sich jede Verbindung
+// selbst: nach dem Neuverbinden kommt alles Offene erneut, erledigte fallen aus der Liste.
+func (c *conn) deliverPending(ctx context.Context) {
+	c.pendMu.Lock()
+	defer c.pendMu.Unlock()
+	if cmds, err := c.g.st.PendingCommands(ctx, c.node.ID); err == nil {
+		open := make(map[int64]bool, len(cmds))
+		for _, cmd := range cmds {
+			if !c.sentCmd[cmd.ID] {
+				c.send(wire.Msg{T: "command", Data: raw(cmd)})
+			}
+			open[cmd.ID] = true
+		}
+		c.sentCmd = open
 	}
 	orders, _ := c.g.st.PendingSendOrders(ctx, c.node.ID)
 	for _, o := range orders {
@@ -410,9 +459,7 @@ func (c *conn) handle(m wire.Msg) {
 			c.send(wire.Msg{T: "conflict", ID: m.ID, Data: raw(res)})
 			return
 		}
-		if res.Revision > c.lastRev {
-			c.lastRev = res.Revision
-		}
+		c.bumpRev(res.Revision)
 		c.ack(m.ID, res)
 	case "run_check":
 		// "Jetzt pruefen" an einer Node: die anderen messenden Nodes beauftragen
@@ -448,9 +495,7 @@ func (c *conn) handle(m wire.Msg) {
 			c.ack(m.ID, map[string]any{"ok": false, "error": "database error"})
 			return
 		}
-		if rev > c.lastRev {
-			c.lastRev = rev
-		}
+		c.bumpRev(rev)
 		c.ack(m.ID, map[string]any{"ok": true})
 	case "node_info":
 		// Name/Standort an der Node geaendert: Portal und andere Nodes (ueber config "node") sehen es sofort
@@ -468,9 +513,7 @@ func (c *conn) handle(m wire.Msg) {
 			c.ack(m.ID, map[string]any{"ok": false, "error": "database error"})
 			return
 		}
-		if rev > c.lastRev {
-			c.lastRev = rev
-		}
+		c.bumpRev(rev)
 		c.ack(m.ID, map[string]any{"ok": true})
 	case "status":
 		var st wire.Status
@@ -484,12 +527,12 @@ func (c *conn) handle(m wire.Msg) {
 			Error string `json:"error"`
 		}
 		if err := json.Unmarshal(m.Data, &r); err == nil {
-			_ = g.st.SendOrderDone(ctx, r.ID, r.OK, r.Error)
+			_ = g.st.SendOrderDone(ctx, n.ID, r.ID, r.OK, r.Error)
 		}
 	case "command_result":
 		var r wire.CommandResult
 		if err := json.Unmarshal(m.Data, &r); err == nil {
-			_ = g.st.CommandDone(ctx, r)
+			_ = g.st.CommandDone(ctx, n.ID, r)
 		}
 	case "notify":
 		c.handleNotify(ctx, m)
@@ -773,7 +816,7 @@ func (g *Gateway) fanoutLoop() {
 					}
 					g.mu.RUnlock()
 					for _, c := range list {
-						ch, gap, err := g.st.ConfigSince(ctx, uid, c.node.ID, c.lastRev)
+						ch, gap, err := g.st.ConfigSince(ctx, uid, c.node.ID, c.rev())
 						if err != nil {
 							continue
 						}

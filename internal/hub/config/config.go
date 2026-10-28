@@ -45,6 +45,11 @@ type Config struct {
 	// Prometheus fuer den Betreiber: eigener Port im internen Netz (z. B. 10.10.0.10:9464), nur fuer metrics_allow
 	MetricsListen string   `yaml:"metrics_listen"`
 	MetricsAllow  []string `yaml:"metrics_allow"` // IPs bzw. Netze, z. B. 10.10.0.0/24 (leer = jeder, der die Adresse erreicht)
+
+	// RealIPFrom: Absender, deren X-Real-IP gilt (Reverse Proxy). Leer = Loopback (bisheriges Verhalten).
+	// Sicherer: nginx mit "proxy_bind 127.0.0.2;" und hier [127.0.0.2] – dann zaehlen Anfragen, die der hub
+	// selbst an 127.0.0.1 stellt (z. B. ueber einen Webhook-Kanal), nicht als weitergereicht.
+	RealIPFrom []string `yaml:"real_ip_from"`
 }
 
 // Load liest und prueft die Datei.
@@ -84,13 +89,28 @@ func Load(path string) (*Config, error) {
 	if _, err := c.MetricsPrefixes(); err != nil {
 		return nil, err
 	}
+	if _, err := c.RealIPPrefixes(); err != nil {
+		return nil, err
+	}
 	return &c, nil
 }
 
 // MetricsPrefixes: metrics_allow als Netze (eine einzelne IP gilt als /32 bzw. /128).
 func (c *Config) MetricsPrefixes() ([]netip.Prefix, error) {
+	return prefixes("metrics_allow", c.MetricsAllow)
+}
+
+// RealIPPrefixes: real_ip_from als Netze; leer = Loopback.
+func (c *Config) RealIPPrefixes() ([]netip.Prefix, error) {
+	if len(c.RealIPFrom) == 0 {
+		return []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8"), netip.MustParsePrefix("::1/128")}, nil
+	}
+	return prefixes("real_ip_from", c.RealIPFrom)
+}
+
+func prefixes(key string, list []string) ([]netip.Prefix, error) {
 	var out []netip.Prefix
-	for _, a := range c.MetricsAllow {
+	for _, a := range list {
 		a = strings.TrimSpace(a)
 		if p, err := netip.ParsePrefix(a); err == nil {
 			out = append(out, p.Masked())
@@ -98,7 +118,7 @@ func (c *Config) MetricsPrefixes() ([]netip.Prefix, error) {
 		}
 		ip, err := netip.ParseAddr(a)
 		if err != nil {
-			return nil, fmt.Errorf("config: metrics_allow %q ist keine IP bzw. kein Netz", a)
+			return nil, fmt.Errorf("config: %s %q ist keine IP bzw. kein Netz", key, a)
 		}
 		out = append(out, netip.PrefixFrom(ip.Unmap(), ip.Unmap().BitLen()))
 	}
