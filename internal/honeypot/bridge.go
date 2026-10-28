@@ -174,14 +174,17 @@ func (b *bridgeBlocker) check(e Event) {
 	hpbridge.PublishBlock(hpbridge.Block{IP: ip, Reason: e.Kind, Until: now.Add(bridgeBlockFor)})
 }
 
-// bridgeBlockKind: Arten, die sofort sperren (Login-Versuche, Exploits, Port-Scan, Scanner-UA, SIP-Scanner) sowie
-// alle Ereignisse der Regeln proxy64/* (die liegen schon ueber ihren Schwellen). generic:probe, http:scan und
-// scanner:research einzeln sind zu schwach.
+// bridgeBlockKind: Arten, die sofort sperren (Login-Versuche, Exploits, Port-Scan, Scanner-UA) sowie alle Ereignisse
+// der Regeln proxy64/* (die liegen schon ueber ihren Schwellen). generic:probe, http:scan und scanner:research einzeln
+// sind zu schwach. Nie sperren die UDP-Fallen (SNMP, SIP): die Quelle eines UDP-Pakets ist ohne Handshake beliebig
+// faelschbar, sonst koennte jeder fremde IPs sperren lassen (gemeldet werden sie weiter, ipv64 bewertet zentral).
 func bridgeBlockKind(e Event) bool {
 	k := e.Kind
 	switch {
+	case k == KindSNMPBrute, k == KindSIPBrute, k == KindSIPScan:
+		return false
 	case strings.HasSuffix(k, "bruteforce"), strings.HasPrefix(k, KindHTTPExploit), strings.HasPrefix(k, KindDBExploit),
-		k == KindPortScan, k == KindBadUA, k == KindSIPScan:
+		k == KindPortScan, k == KindBadUA:
 		return true
 	}
 	return strings.HasPrefix(e.Rule, "proxy64/")

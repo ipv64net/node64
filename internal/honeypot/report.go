@@ -466,6 +466,12 @@ func (r *Reporter) RunOnce(ctx context.Context) time.Duration {
 		if res.Rejected > 0 {
 			r.cfg.Log.Info("honeypot report: ipv64 rejected some sources", "report_id", rep.ReportID, "rejected", res.Rejected, "reasons", res.RejectedReasons)
 		}
+		// schon bekannt, aber ipv64 hat einen kuerzeren Zeitraum (Stand ging hier verloren): nur bis dorthin
+		// vorruecken, der Rest geht gleich als neue Meldung hinterher (sonst fehlten diese Ereignisse bei ipv64)
+		if res.Duplicate && res.PeriodEnd > start.Unix() && res.PeriodEnd < ce.Unix() {
+			ce = time.Unix(res.PeriodEnd, 0).UTC()
+			res.Duplicate = false
+		}
 		if !r.advance(ctx, gen, ce, true) {
 			return regular
 		}

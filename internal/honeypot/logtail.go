@@ -238,6 +238,11 @@ func (t *logTailer) pollFileLocked(tf *logTailFile) {
 		t.setErr(tf, "is a directory")
 		return
 	}
+	if !fi.Mode().IsRegular() { // FIFO, Geraet, Socket: Open koennte blockieren (unter t.mu) bzw. nie enden
+		tf.close()
+		t.setErr(tf, "not a regular file")
+		return
+	}
 	if tf.f != nil {
 		if os.SameFile(fi, tf.id) {
 			if fi.Size() < tf.off { // gekuerzt (copytruncate): von vorn

@@ -226,7 +226,9 @@ func TestBridgeBlocks(t *testing.T) {
 		{ev("8.8.8.10", KindDBExploit, ""), true},
 		{ev("8.8.8.11", KindPortScan, ""), true},
 		{ev("8.8.8.12", KindBadUA, ""), true},
-		{ev("8.8.8.13", KindSIPScan, ""), true},
+		{ev("8.8.8.13", KindSIPScan, ""), false}, // UDP: Quelle faelschbar, keine Sofort-Sperre
+		{ev("8.8.8.13", KindSIPBrute, ""), false},
+		{ev("8.8.8.13", KindSNMPBrute, ""), false},
 		{ev("8.8.8.14", KindMailBrute, "postfix/sasl-bruteforce@1"), true},
 		{ev("8.8.8.15", KindProbe, ""), false},
 		{ev("8.8.8.16", KindHTTPScan, ""), false},

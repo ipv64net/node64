@@ -153,9 +153,64 @@ func TestFwRulesNegative(t *testing.T) {
 		"",
 		"<13>",
 		"srcip= remip= src_ip= login failure for user  from  via ",
+		// Angreifer-Text in fremden Zeilen (User-Agent eines Webservers per Syslog, Disconnect-Text) waehlt keine IP
+		`<190>Oct 11 22:14:15 web nginx: 203.0.113.1 - - [11/Oct/2026:22:14:15 +0200] "GET / HTTP/1.1" 200 1 "-" "x Web GUI authentication error for user 'x' from 9.9.9.9"`,
+		`<190>Oct 11 22:14:15 web nginx: 203.0.113.1 - - [11/Oct/2026:22:14:15 +0200] "GET / HTTP/1.1" 200 1 "-" "/index.php: webConfigurator authentication error for user 'x' from: 9.9.9.9"`,
+		`<190>Oct 11 22:14:15 web nginx: 203.0.113.1 - - [11/Oct/2026:22:14:15 +0200] "GET / HTTP/1.1" 200 1 "-" "login failure for user a from 9.9.9.9 via ssh`,
+		`<190>Oct 11 22:14:15 web nginx: 203.0.113.1 - - "-" logdesc="Admin login failed" srcip=9.9.9.9 method="https"`,
+		`<190>Oct 11 22:14:15 web nginx: 203.0.113.1 - - "-" action="ssl-login-fail" remip=9.9.9.9`,
+		`<190>Oct 11 22:14:15 web nginx: 203.0.113.1 - - "-" status="Failed" message="Admin login failed" log_subtype="Admin" src_ip=9.9.9.9`,
+		"<38>Oct 11 22:14:15 web nginx: Bad password attempt for 'x' from 9.9.9.9:22",
+		"<38>Oct 11 22:14:15 UAP dropbear[1234]: Exit before auth: Bad password attempt for 'ubnt' from 9.9.9.9:52341",
+		"<134>Oct 11 22:14:15 MikroTik web proxy: login failure for user admin from 9.9.9.9 via ssh",
 	} {
 		if hits := fwApply(t, line, now); len(hits) != 0 {
 			t.Errorf("%q: unerwartete Treffer %v", line, hits)
+		}
+	}
+}
+
+// Angreifer-Text in Werten (Benutzername) und Zeilen aus Webserver-Logs bzw. von PROXY64 waehlen keine IP.
+func TestFwRulesInjection(t *testing.T) {
+	now := time.Now()
+	for _, c := range []struct{ line, rule, ip string }{
+		{`<185>date=2026-10-11 logid="0100032002" logdesc="Admin login failed" user="x srcip=9.9.9.9 y" ui="https(198.51.100.20)" method="https" srcip=198.51.100.20 status="failed"`, "fortigate/admin-login", "198.51.100.20"},
+		{`<185>date=2026-10-11 user="a\" srcip=9.9.9.9 \"" logdesc="Admin login failed" method="https" srcip=198.51.100.21`, "fortigate/admin-login", "198.51.100.21"},
+		{`<30>device="SFW" log_component="GUI" log_subtype="Admin" status="Failed" user_name="x src_ip=9.9.9.9" src_ip=198.51.100.30 message="Admin login failed"`, "sophos/login", "198.51.100.30"},
+		{"<43>Oct 11 22:14:15 fw php-fpm[1]: /index.php: webConfigurator authentication error for user 'x from: 9.9.9.9' from: 203.0.113.5", "pfsense/login", "203.0.113.5"},
+		{"<38>Oct 11 22:14:15 UAP dropbear[1]: Bad password attempt for 'x from 9.9.9.9:1' from 198.51.100.40:52341", "unifi/ssh", "198.51.100.40"},
+	} {
+		hits := fwApply(t, c.line, now)
+		if h, ok := hits[c.rule]; len(hits) != 1 || !ok || h.Src != netip.MustParseAddr(c.ip) {
+			t.Errorf("%s: %v, want %s", c.rule, hits, c.ip)
+		}
+	}
+	// Webserver-Log bzw. PROXY64 (kein Syslog-Format): nie, auch wenn die Nachricht wie eine Firewall-Zeile aussieht
+	for _, format := range []string{"nginx", "caddy", "proxy64", ""} {
+		for _, msg := range []string{
+			"Web GUI authentication error for user 'x' from 9.9.9.9",
+			"login failure for user a from 9.9.9.9 via ssh",
+			`date=2026-10-11 logdesc="Admin login failed" method="https" srcip=9.9.9.9`,
+		} {
+			l := LogLine{Time: now, Origin: SrcLog, File: format, Format: format, Program: "dropbear", Message: msg}
+			for _, r := range fwRules(t) {
+				if _, ok := r.Match(&l); ok {
+					t.Errorf("%s/%q: Treffer %s", format, msg, r.ID)
+				}
+			}
+		}
+	}
+	// fwKV: Schluessel nur ausserhalb von Anfuehrungszeichen
+	for _, c := range []struct{ m, want string }{
+		{`a="srcip=1" srcip=2`, "2"},
+		{`a="x\" srcip=1" srcip=2`, "2"},
+		{`a=b,srcip="3" c=1`, "3"},
+		{`"srcip=1"`, ""},
+		{`=x srcip=4`, "4"},
+		{`a="unclosed srcip=1`, ""},
+	} {
+		if v, _ := fwKV(c.m, "srcip"); v != c.want {
+			t.Errorf("fwKV(%q) = %q, want %q", c.m, v, c.want)
 		}
 	}
 }

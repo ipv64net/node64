@@ -258,6 +258,25 @@ func TestSensorSNMPParseFuzz(t *testing.T) {
 	}
 }
 
+// Lange BER-Laengen (4 Bytes, oberstes Bit gesetzt): auf 32 Bit kein negativer Wert, keine Panik.
+func TestSensorSNMPBERLongLen(t *testing.T) {
+	for _, b := range [][]byte{
+		{0x30, 0x84, 0xFF, 0xFF, 0xFF, 0xFF},
+		{0x30, 0x84, 0x80, 0x00, 0x00, 0x00, 1, 2, 3},
+		{0x30, 0x84, 0x00, 0x00, 0x00, 0x02, 1},
+	} {
+		r := sensorSNMPBER{b: b}
+		if _, v := r.next(); v != nil || !r.bad {
+			t.Fatalf("%x: %x %v", b, v, r.bad)
+		}
+		sensorSNMPParse(b)
+	}
+	r := sensorSNMPBER{b: []byte{0x04, 0x84, 0, 0, 0, 2, 'a', 'b'}}
+	if tag, v := r.next(); r.bad || tag != 0x04 || string(v) != "ab" {
+		t.Fatalf("%x %q %v", tag, v, r.bad)
+	}
+}
+
 func TestSensorUDPLimit(t *testing.T) {
 	l := newSensorUDPLimit(time.Minute, 2)
 	now := time.Now()

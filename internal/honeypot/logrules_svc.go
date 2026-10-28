@@ -110,7 +110,9 @@ func matchSSHD(l *LogLine) (LogHit, bool) {
 	case strings.HasPrefix(m, "Failed password for "), strings.HasPrefix(m, "Failed keyboard-interactive"),
 		strings.HasPrefix(m, "Failed challenge-response"), strings.HasPrefix(m, "Invalid user "):
 		return logHitAfterLast(m, " from ")
-	case strings.Contains(m, "maximum authentication attempts exceeded for "):
+	case strings.HasPrefix(m, "error: maximum authentication attempts exceeded for "),
+		strings.HasPrefix(m, "maximum authentication attempts exceeded for "):
+		// nur am Anfang: "Received disconnect from ...: <Text des Clients>" darf keine IP unterschieben
 		return logHitAfterLast(m, " from ")
 	case strings.HasSuffix(m, "[preauth]") && (strings.HasPrefix(m, "Disconnected from authenticating user ") ||
 		strings.HasPrefix(m, "Connection closed by authenticating user ") ||
@@ -429,25 +431,29 @@ func matchPostfixSASL(l *LogLine) (LogHit, bool) {
 	if !strings.HasPrefix(l.Program, "postfix") {
 		return LogHit{}, false
 	}
+	// Nur an fester Stelle: "warning: <host>[<ip>]: SASL ..." bzw. "<queue-id>: client=<host>[<ip>], sasl_method=...";
+	// Text des Clients (HELO, Absender, Benutzername) steht immer dahinter und waehlt so keine IP aus.
 	m := l.Message
 	var h LogHit
-	if i := strings.Index(m, "]: SASL "); i > 0 && strings.Contains(m[i:], " authentication failed") {
-		j := strings.LastIndexByte(m[:i], '[')
-		if j < 0 {
+	if rest, ok := strings.CutPrefix(m, "warning: "); ok {
+		tok := logToken(rest) // "<host>[<ip>]:"
+		j := strings.IndexByte(tok, '[')
+		if j < 0 || !strings.HasSuffix(tok, "]:") || !strings.HasPrefix(rest[len(tok):], " SASL ") ||
+			!strings.Contains(rest[len(tok):], " authentication failed") {
 			return LogHit{}, false
 		}
-		a, ok := logAddr(m[j+1 : i])
+		a, ok := logAddr(tok[j+1 : len(tok)-2])
 		if !ok {
 			return LogHit{}, false
 		}
 		h.Src = a
-	} else if i := strings.Index(m, "client="); i >= 0 && strings.Contains(m, ", sasl_method=") {
-		rest := m[i:]
-		j, k := strings.IndexByte(rest, '['), strings.IndexByte(rest, ']')
-		if j < 0 || k < j {
+	} else if id := logToken(m); strings.HasSuffix(id, ":") && strings.HasPrefix(m[len(id):], " client=") {
+		tok := logToken(m[len(id)+len(" client="):]) // "<host>[<ip>],"
+		j := strings.IndexByte(tok, '[')
+		if j < 0 || !strings.HasSuffix(tok, "],") || !strings.HasPrefix(m[len(id)+len(" client=")+len(tok):], " sasl_method=") {
 			return LogHit{}, false
 		}
-		a, ok := logAddr(rest[j+1 : k])
+		a, ok := logAddr(tok[j+1 : len(tok)-2])
 		if !ok {
 			return LogHit{}, false
 		}
