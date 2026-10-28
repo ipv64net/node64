@@ -265,6 +265,18 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 		page(w, http.StatusForbidden)
 		return false
 	}
+	for _, n := range identityHeaders { // setzt nur PROXY64 (Benutzer an das Ziel melden), nie der Besucher
+		r.Header.Del(n)
+	}
+	if g.fwd != nil {
+		for _, n := range g.fwd.cfg.Headers {
+			r.Header.Del(n)
+		}
+		if g.fwd.isCallback(r.URL.Path) { // Rueckweg nach der Anmeldung gehoert dem Dienst
+			g.fwd.callback.ServeHTTP(w, r)
+			return false
+		}
+	}
 	ip := clientOf(r)
 	if m.authFail.blocked(ip) {
 		setReject(r, rejACL)
@@ -272,7 +284,7 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 		page(w, http.StatusTooManyRequests)
 		return false
 	}
-	login := g.list.LoginPage && len(g.list.Users) > 0
+	login := g.list.LoginPage && len(g.list.Users) > 0 && g.fwd == nil
 	if login && r.TLS == nil && h.HTTPS() { // Login nie im Klartext: auf HTTPS (nur echtes Port-80-HTTP; CDN64 Modus 2 hat r.TLS)
 		u := "https://" + hostOnly(r.Host) + r.URL.RequestURI()
 		http.Redirect(w, r, u, http.StatusPermanentRedirect)
@@ -287,16 +299,45 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 	if login {
 		key = m.loginKeyOf(r.Context())
 	}
-	ok, status, failed := g.decide(r, ip, key)
-	if ok {
+	v := g.decide(r, ip, key)
+	id := identity{user: v.user}
+	if v.fwd { // Anmeldedienst fragen; ohne Anmeldung hat er schon geantwortet (meist Weiterleitung zur Anmeldung)
+		res := g.fwd.check(w, r)
+		if res.err != nil {
+			if m.lim.warn("fwd|" + g.fwd.cfg.Address) {
+				m.log.Warn("access list: auth service not reachable", "list", g.list.Name, "address", g.fwd.cfg.Address, "err", res.err)
+			}
+			setReject(r, rejACL)
+			page(w, http.StatusBadGateway)
+			return false
+		}
+		if !res.ok {
+			setReject(r, rejACL)
+			return false
+		}
+		for _, n := range g.fwd.cfg.Headers {
+			if val := res.header.Values(n); len(val) > 0 {
+				r.Header[http.CanonicalHeaderKey(n)] = val
+			}
+		}
+		id, v.ok = identityOf(res.header), true
+	}
+	if v.ok {
+		if v.key {
+			stripKey(r)
+		}
 		if len(g.list.Users) > 0 && !g.list.PassAuth {
 			r.Header.Del("Authorization")
 		}
 		if login {
 			stripLoginCookie(r, g.list.ID)
 		}
+		if g.list.PassUser {
+			id.set(r.Header)
+		}
 		return true
 	}
+	status, failed := v.status, v.failed
 	if failed {
 		setAuthFail(r)
 	}

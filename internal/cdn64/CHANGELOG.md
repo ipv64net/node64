@@ -1,5 +1,18 @@
 # Änderungen – PROXY64
 
+## 1.37.0 – 2026-10-28
+
+### Neu
+- Zugriffslisten mit Anmeldedienst (Forward-Auth wie bei Traefik): Unter „Anmeldung“ authentik, Authelia, oauth2-proxy
+  oder ein eigener Dienst; meist reicht die Adresse, Antwort-Header und Rückweg (z. B. `/outpost.goauthentik.io/`) sind
+  vorbelegt. Nicht angemeldete Besucher landen auf der Anmeldeseite des Dienstes; ist er nicht erreichbar, antwortet
+  PROXY64 mit 502.
+- API-Keys je Zugriffsliste für Apps und Skripte: als `Authorization: Bearer …`, im Header `X-API-Key` oder als
+  Basic-Auth-Passwort. PROXY64 zeigt einen neuen Key einmal an und speichert nur den Hash; der Key geht nicht ans Ziel.
+- „Benutzer an das Ziel melden“: `Remote-User`, `Remote-Email`, `Remote-Groups` und `Remote-Name` aus dem
+  Anmeldedienst, der Anmeldung der Liste oder dem Namen des API-Keys. Vom Besucher mitgeschickte gleichnamige Header
+  (und die des Anmeldedienstes) entfernt PROXY64 immer.
+
 ## 1.36.0 – 2026-10-28
 
 ### Neu

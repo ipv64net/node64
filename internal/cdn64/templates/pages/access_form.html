@@ -12,12 +12,37 @@
 				<input class="form-control form-control-sm mb-3{{if index $d.Errors "name"}} is-invalid{{end}}" id="name" name="name" value="{{$a.Name}}" required maxlength="100">
 				{{with index $d.Errors "name"}}<div class="invalid-feedback d-block mb-2">{{.}}</div>{{end}}
 
+				<label class="form-label fw-semibold" for="auth">{{.T "cdn64.acl.auth"}}</label>
+				<select class="form-select form-select-sm mb-2{{if index $d.Errors "auth"}} is-invalid{{end}}" id="auth" name="auth" data-acl-auth>
+					{{range $d.Auths}}<option value="{{.Value}}" data-example="{{.Example}}"{{if eq .Value $a.Auth}} selected{{end}}>{{$.T (printf "cdn64.acl.auth_%s" (or .Value "users"))}}</option>{{end}}
+				</select>
+				<div class="mb-3{{if not $a.Auth}} d-none{{end}}" data-fwd-box>
+					<input class="form-control form-control-sm font-monospace{{if index $d.Errors "fwd_address"}} is-invalid{{end}}" name="fwd_address" value="{{$a.Forward.Address}}" placeholder="http://…" aria-label="{{.T "cdn64.acl.fwd_address"}}" data-fwd-address>
+					{{with index $d.Errors "fwd_address"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					<div class="form-text">{{.T "cdn64.acl.fwd_hint"}}{{$.Doc "cdn64#forward-auth"}}</div>
+					<details class="mt-1"{{if or (index $d.Errors "fwd_headers") (index $d.Errors "fwd_callback")}} open{{end}}><summary class="text-body-secondary">{{.T "cdn64.acl.fwd_more"}}</summary>
+						<label class="form-label mt-2 mb-1" for="fwd_headers">{{.T "cdn64.acl.fwd_headers"}}</label>
+						<textarea class="form-control form-control-sm font-monospace{{if index $d.Errors "fwd_headers"}} is-invalid{{end}}" id="fwd_headers" name="fwd_headers" rows="3" placeholder="{{.T "cdn64.acl.fwd_default"}}">{{$d.Headers}}</textarea>
+						{{with index $d.Errors "fwd_headers"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+						<label class="form-label mt-2 mb-1" for="fwd_callback">{{.T "cdn64.acl.fwd_callback"}}</label>
+						<input class="form-control form-control-sm font-monospace{{if index $d.Errors "fwd_callback"}} is-invalid{{end}}" id="fwd_callback" name="fwd_callback" value="{{$a.Forward.Callback}}" placeholder="{{.T "cdn64.acl.fwd_default"}}">
+						{{with index $d.Errors "fwd_callback"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+					</details>
+				</div>
+
 				<div class="fw-semibold mb-1">{{.T "cdn64.acl.users"}}</div>
 				{{if $a.Users}}<ul class="list-unstyled mb-2">{{range $a.Users}}<li class="d-flex align-items-center gap-2"><i class="bi bi-person"></i> <span class="font-monospace">{{.Username}}</span>
 					<span class="form-check ms-2"><input class="form-check-input" type="checkbox" name="remove_user" value="{{.Username}}" id="rm-{{.Username}}"><label class="form-check-label text-danger" for="rm-{{.Username}}">{{$.T "cdn64.acl.remove_user"}}</label></span></li>{{end}}</ul>{{end}}
 				<textarea class="form-control form-control-sm font-monospace{{if index $d.Errors "users"}} is-invalid{{end}}" name="new_users" rows="2" placeholder="name:passwort" autocomplete="off" aria-label="{{.T "cdn64.acl.new_users"}}"></textarea>
 				{{with index $d.Errors "users"}}<div class="invalid-feedback">{{.}}</div>{{end}}
 				<div class="form-text mb-3">{{.T "cdn64.acl.users_hint"}}</div>
+
+				<div class="fw-semibold mb-1">{{.T "cdn64.acl.keys"}}</div>
+				{{if $a.Keys}}<ul class="list-unstyled mb-2">{{range $a.Keys}}<li class="d-flex align-items-center gap-2"><i class="bi bi-key"></i> {{.Name}} <span class="font-monospace text-body-secondary">{{.Hint}}…</span>
+					<span class="form-check ms-2"><input class="form-check-input" type="checkbox" name="remove_key" value="{{.Hint}}" id="rk-{{.Hint}}"><label class="form-check-label text-danger" for="rk-{{.Hint}}">{{$.T "cdn64.acl.remove_user"}}</label></span></li>{{end}}</ul>{{end}}
+				<input class="form-control form-control-sm{{if index $d.Errors "keys"}} is-invalid{{end}}" name="new_key" maxlength="64" placeholder="{{.T "cdn64.acl.key_name"}}" aria-label="{{.T "cdn64.acl.key_name"}}" autocomplete="off">
+				{{with index $d.Errors "keys"}}<div class="invalid-feedback">{{.}}</div>{{end}}
+				<div class="form-text mb-3">{{.T "cdn64.acl.keys_hint"}}</div>
 
 				<label class="form-label fw-semibold" for="rules">{{.T "cdn64.acl.rules"}}</label>
 				<textarea class="form-control form-control-sm font-monospace{{if index $d.Errors "rules"}} is-invalid{{end}}" id="rules" name="rules" rows="6" placeholder="allow 192.168.0.0/16&#10;deny all">{{$d.Rules}}</textarea>
@@ -29,8 +54,10 @@
 				<div class="form-check mb-3"><input class="form-check-input" type="radio" name="satisfy_any" id="sat-any" value="1"{{if $a.SatisfyAny}} checked{{end}}><label class="form-check-label" for="sat-any">{{.T "cdn64.acl.any_long"}}</label></div>
 				<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="pass_auth" id="pass_auth"{{if $a.PassAuth}} checked{{end}}><label class="form-check-label" for="pass_auth">{{.T "cdn64.acl.pass_auth"}}</label>
 					<div class="form-text">{{.T "cdn64.acl.pass_auth_hint"}}</div></div>
-				<div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" name="login_page" id="login_page"{{if $a.LoginPage}} checked{{end}}><label class="form-check-label" for="login_page">{{.T "cdn64.acl.login_page"}}</label>
+				<div class="form-check form-switch mt-2{{if $a.Auth}} d-none{{end}}" data-login-box><input class="form-check-input" type="checkbox" name="login_page" id="login_page"{{if $a.LoginPage}} checked{{end}}><label class="form-check-label" for="login_page">{{.T "cdn64.acl.login_page"}}</label>
 					<div class="form-text">{{.T "cdn64.acl.login_page_hint"}}</div></div>
+				<div class="form-check form-switch mt-2"><input class="form-check-input" type="checkbox" name="pass_user" id="pass_user"{{if $a.PassUser}} checked{{end}}><label class="form-check-label" for="pass_user">{{.T "cdn64.acl.pass_user"}}</label>
+					<div class="form-text">{{.T "cdn64.acl.pass_user_hint"}}</div></div>
 			</div>
 			<div class="card-footer d-flex gap-2">
 				<button class="btn btn-primary btn-sm" type="submit">{{.T "common.save"}}</button>

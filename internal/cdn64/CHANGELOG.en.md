@@ -1,5 +1,18 @@
 # Changes – PROXY64
 
+## 1.37.0 – 2026-10-28
+
+### New
+- Access lists with an auth service (forward auth like Traefik): under "Sign-in" choose authentik, Authelia, oauth2-proxy
+  or an own service; usually the address is enough, response headers and callback (e.g. `/outpost.goauthentik.io/`) are
+  preset. Visitors who are not signed in land on the service's sign-in page; if it cannot be reached, PROXY64 answers
+  with 502.
+- API keys per access list for apps and scripts: as `Authorization: Bearer …`, in the `X-API-Key` header or as basic
+  auth password. PROXY64 shows a new key once and stores only its hash; the key is not passed to the target.
+- "Pass the user to the target": `Remote-User`, `Remote-Email`, `Remote-Groups` and `Remote-Name` from the auth service,
+  the list's sign-in or the API key's name. Headers of the same name sent by the visitor (and those of the auth service)
+  are always removed.
+
 ## 1.36.0 – 2026-10-28
 
 ### New
