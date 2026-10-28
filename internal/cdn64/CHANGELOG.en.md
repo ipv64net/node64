@@ -6,7 +6,8 @@
 - Access lists with an auth service (forward auth like Traefik): under "Sign-in" choose authentik, Authelia, oauth2-proxy
   or an own service; usually the address is enough, response headers and callback (e.g. `/outpost.goauthentik.io/`) are
   preset. Visitors who are not signed in land on the service's sign-in page; if it cannot be reached, PROXY64 answers
-  with 502.
+  with 502. The host needs HTTPS (Authelia requires it); if TLS already ends at a trusted proxy in front (e.g.
+  Cloudflare), PROXY64 still reports https to the service.
 - API keys per access list for apps and scripts: as `Authorization: Bearer …`, in the `X-API-Key` header or as basic
   auth password. PROXY64 shows a new key once and stores only its hash; the key is not passed to the target.
 - "Pass the user to the target": `Remote-User`, `Remote-Email`, `Remote-Groups` and `Remote-Name` from the auth service,

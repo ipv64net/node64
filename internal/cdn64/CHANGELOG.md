@@ -6,7 +6,8 @@
 - Zugriffslisten mit Anmeldedienst (Forward-Auth wie bei Traefik): Unter „Anmeldung“ authentik, Authelia, oauth2-proxy
   oder ein eigener Dienst; meist reicht die Adresse, Antwort-Header und Rückweg (z. B. `/outpost.goauthentik.io/`) sind
   vorbelegt. Nicht angemeldete Besucher landen auf der Anmeldeseite des Dienstes; ist er nicht erreichbar, antwortet
-  PROXY64 mit 502.
+  PROXY64 mit 502. Der Host braucht HTTPS (Authelia verlangt es); endet TLS schon bei einem vertrauenswürdigen Proxy
+  davor (z. B. Cloudflare), meldet PROXY64 dem Dienst trotzdem https.
 - API-Keys je Zugriffsliste für Apps und Skripte: als `Authorization: Bearer …`, im Header `X-API-Key` oder als
   Basic-Auth-Passwort. PROXY64 zeigt einen neuen Key einmal an und speichert nur den Hash; der Key geht nicht ans Ziel.
 - „Benutzer an das Ziel melden“: `Remote-User`, `Remote-Email`, `Remote-Groups` und `Remote-Name` aus dem

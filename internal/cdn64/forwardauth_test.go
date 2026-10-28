@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strconv"
@@ -272,5 +273,23 @@ func TestDockerTraefikForwardAuth(t *testing.T) {
 		if got := fwdKindOf(addr); got != want {
 			t.Fatalf("kind of %s: %s", addr, got)
 		}
+	}
+}
+
+// Hinter einem vertrauenswuerdigen Proxy (TLS endet dort) meldet PROXY64 dem Dienst https, sonst wie die Verbindung.
+func TestForwardAuthProtoBehindProxy(t *testing.T) {
+	var proto string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { proto = r.Header.Get("X-Forwarded-Proto") }))
+	t.Cleanup(srv.Close)
+	f := newFwdAuth(AuthAuthelia, ForwardAuth{Address: srv.URL})
+	r := httptest.NewRequest("GET", "http://app.test/", nil)
+	r.RemoteAddr = "10.0.0.1:1234"
+	r.Header.Set("X-Forwarded-Proto", "https")
+	if res := f.check(httptest.NewRecorder(), r); !res.ok || proto != "http" {
+		t.Fatalf("direct: %v %q", res.ok, proto)
+	}
+	r = r.WithContext(context.WithValue(r.Context(), ctxClientKey{}, netip.MustParseAddr("203.0.113.5")))
+	if res := f.check(httptest.NewRecorder(), r); !res.ok || proto != "https" {
+		t.Fatalf("behind trusted proxy: %v %q", res.ok, proto)
 	}
 }
