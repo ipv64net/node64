@@ -33,7 +33,20 @@ func (s *Store) SettingOr(ctx context.Context, key, def string) string {
 func (s *Store) SetSetting(ctx context.Context, key, value string) error {
 	_, err := s.w.ExecContext(ctx, `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, key, value, Now())
+	if f := s.settingHook.Load(); err == nil && f != nil {
+		(*f)(ctx, key)
+	}
 	return err
+}
+
+// SetSettingHook haengt einen Beobachter an jedes Schreiben einer Einstellung (z. B. Abgleich im Cluster, nodecfg);
+// er bekommt nur den Schluessel und laeuft nach dem Schreiben. Es gibt genau einen (nil = keiner).
+func (s *Store) SetSettingHook(f func(ctx context.Context, key string)) {
+	if f == nil {
+		s.settingHook.Store(nil)
+		return
+	}
+	s.settingHook.Store(&f)
 }
 
 // ---------------------------------------------------------------- Users

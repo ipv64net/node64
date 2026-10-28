@@ -35,6 +35,22 @@ func Mode(get Getter) string {
 	return "off"
 }
 
+// SaveMode speichert die Betriebsart samt alter Einstellung "nur pruefen"; aus verwirft das letzte Pruefergebnis
+// (Einstellungsseite und Cluster).
+func SaveMode(set func(k, v string) error, mode string) error {
+	on := mode != "off"
+	if err := set(SetMode, mode); err != nil {
+		return err
+	}
+	if err := set(setCheck, map[bool]string{true: "1", false: "0"}[on]); err != nil {
+		return err
+	}
+	if !on {
+		return set(SetLatest, "")
+	}
+	return nil
+}
+
 // Channel: Kanal (Standard: preview, solange die laufende Version eine Vorab-Version ist).
 func Channel(get Getter, running string) string {
 	switch c := get(SetChannel, ""); c {

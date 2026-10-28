@@ -70,6 +70,7 @@ Bereich nur, wenn er auf **beiden** Nodes an ist (die abholende Node nennt ihre 
 | `notifications` | `channels` (eigene Kanäle der Node samt Zugangsdaten) | aus | `/peer/v2/sync`, Zuordnung Check → Kanal mit den Checks |
 | `certs` | `certificates`, `acme`, `dns_accounts`, `cas` | aus | `/peer/v2/sync` |
 | `dns64` | `settings`, `lists`, `allowlist`, `records` (mit Zonen), `forwards` (mit Umschreiben), `groups`, `group_members` | aus | `/peer/v2/sync` |
+| `node` | `apikey` (zentraler ipv64-API-Key), `settings` (allgemeine Einstellungen der Node) | aus | `/peer/v2/sync` |
 
 **Statusseiten** (`healthchecks/statuspages`): Kennung je Seite (`hc_status_pages.uid`, gleich auf allen Nodes; die
 lokale Nummer bleibt, PROXY64-Hosts verweisen weiter auf sie und gehören zu ihrer Node). Mit geht alles, was die Seite
@@ -153,6 +154,48 @@ Grenzen: Doppel, die schon vor dieser Version über den Cluster auf beiden Nodes
 zusammengeführt (einmal von Hand löschen). Bei drei und mehr Nodes kann eine Node, die das Doppel mit der größeren
 Kennung schon übernommen hatte, beim Löschvermerk die zugehörigen Checks eines Proxmox-Systems „als Check“ mit
 entfernen (wie bei jedem gelöschten System).
+
+### Modul `node` (API-Key und allgemeine Einstellungen)
+
+Code: `internal/nodecfg` (Provider, Hülle `nodecfg/nodecluster`). Jeder Eintrag hat seinen eigenen Zeitpunkt, die
+jüngere Änderung gewinnt.
+
+**`apikey`** – Kennung `key`, Inhalt Key im Klartext plus Konto (`ipv64.account`).
+
+- **Achtung:** Der Key gibt Vollzugriff auf den ipv64-Account (Hinweis am Schalter). Er geht im Klartext über die
+  Cluster-Verbindung (HTTPS, an die Kopplung gebunden) und wird auf der empfangenden Node mit deren Schlüssel
+  verschlüsselt. Eingeschaltet ersetzt ein neuer Key auf einer Node den Key der anderen.
+- Angenommen wird er nur, wenn die Account-ID des Keys gleich dem Account der empfangenden Node ist (wie ihn der
+  Cluster prüft: Healthchecks-Verknüpfung, sonst Key); hat die Node keinen (0), wird er angenommen und mit der
+  nächsten Abfrage bei ipv64 geprüft. Ein Key ohne Account-ID wird abgelehnt.
+- Übernommen wird über denselben Weg wie eine Eingabe in den Einstellungen (`ipv64api.Key`, Konto, Merker „entfernt“
+  zurück); alles, was den Key nutzt (DynDNS, Healthchecks über die API, Meldungen …), liest ihn ohnehin frisch.
+  Jede Übernahme steht im Audit-Log (`peer.ipv64_key`, `peer.ipv64_key_removed`, Bereich `sync`).
+- Entfernen in den Einstellungen entfernt ihn auf allen Nodes mit eingeschaltetem Bereich. Entfernt ipv64.net die
+  Node (Node-Übersicht), gilt das nur für sie: kein Löschen für die anderen, und sie nimmt keinen Key aus dem Cluster
+  an, bis er auf ihr selbst eingetragen wird.
+- Grenze „Konto gleich oder 0“: Hängt der Account einer Node nur am Key (keine Healthchecks-Verknüpfung), ändert
+  Eintragen, Wechsel auf einen anderen Account oder Entfernen ihren Account – die anderen Nodes werden dann
+  ausgesetzt (`account_changed`), bevor etwas abgeglichen wird. Der Bereich hilft also vor allem, wenn alle Nodes
+  schon zum selben Account gehören.
+
+**`settings`** – Kennung = Einstellungsschlüssel, feste Liste (Whitelist in `nodecfg.go`, je Schlüssel mit Merker
+„geheim“: dann im Klartext übertragen und auf der empfangenden Node neu verschlüsselt):
+
+| Schlüssel | Prüfung | Nebenwirkung wie die Einstellungsseite |
+|---|---|---|
+| `node.timezone` | gültige Zeitzone | – |
+| `updates.mode` | `off`/`notify`/`auto` | `selfupdate.SaveMode`: `updates.check` mit, bei `off` `updates.latest` leeren |
+| `updates.channel` | `stable`/`preview` | – |
+| `updates.window` | `HH:MM-HH:MM` | – |
+| `mcp.enabled` | `0`/`1` | – |
+
+Erkannt wird eine Änderung beim Schreiben (Hook des Stores) am Inhalt (Prüfsumme in `nodecfg.seen`), ein
+unverändert gespeicherter Wert zählt nicht; beim Start gilt für neue bzw. geänderte Werte der Zeitpunkt aus der
+Datenbank. Gelöschte Einstellungen werden nicht übertragen. **Nie abgeglichen:** Name und Kennung der Node, Ports,
+Adressen, HTTPS/Zertifikate der Oberfläche, Datenverzeichnis, Cluster-Einstellungen, Netz-Einstellungen
+(Proxy-Netze, Forward-Auth …), Stand des Selbst-Updates. Prometheus hat keine Einstellungen (Zugriff über API-Keys),
+MCP-Schlüssel gehören zu den Benutzern (nur als Hash gespeichert), die Sprache ist je Benutzer.
 
 ## Wenn eine Node weg ist
 

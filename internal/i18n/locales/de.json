@@ -1834,6 +1834,9 @@
       "peer_leave": "Gruppe verlassen",
       "peer_url": "Adresse in der Gruppe geändert",
       "peer_remove": "Mitglied entfernt",
+      "peer_ipv64_key": "API-Key aus dem Cluster übernommen",
+      "peer_ipv64_key_removed": "API-Key über den Cluster entfernt",
+      "peer_node_setting": "Einstellung aus dem Cluster übernommen",
       "honeypot_config": "Honeypot64-Einstellungen geändert",
       "honeypot_clear": "Honeypot64-Ereignisse gelöscht",
       "honeypot_watch_add": "Frühwarnung: Netz eingetragen",
@@ -3197,6 +3200,8 @@
     "title": "Cluster",
     "intro": "Optional: mehrere Nodes gleichen Einstellungen und Einträge direkt untereinander ab, auch in verschiedenen Netzen. Ohne Mitglieder findet kein Verkehr statt. Was abgeglichen wird, schaltest du je Modul und Bereich ein.",
     "tls_hint": "Die Verbindung zwischen den Nodes ist immer verschlüsselt (HTTPS, auch über den normalen Web-Port). Das Zertifikat muss nicht gültig sein, selbst signiert genügt – die Nodes erkennen sich an den Schlüsseln der Kopplung.",
+    "apikey_hint": "Achtung: Der API-Key gibt Vollzugriff auf deinen ipv64-Account. Eingeschaltet geht er im Klartext über die verschlüsselte Cluster-Verbindung an die anderen Nodes und ersetzt dort deren Key; Entfernen entfernt ihn überall. Angenommen wird nur ein Key desselben Accounts, jede Übernahme steht im Audit-Log.",
+    "node_settings_hint": "Zeitzone, Selbst-Update (Betriebsart, Kanal, Zeitfenster) und MCP an/aus. Nie abgeglichen: Name und Kennung der Node, Ports, Adressen, Zertifikate, Cluster- und Netz-Einstellungen.",
     "members": "Mitglieder",
     "account_self": "Diese Node gehört zum ipv64-Account #{account}.",
     "account_none": "Diese Node hat keinen ipv64-Account.",
@@ -3234,7 +3239,8 @@
       "healthchecks": "Healthchecks",
       "notifications": "Benachrichtigungen",
       "certs": "Zertifikate",
-      "dns64": "DNS64"
+      "dns64": "DNS64",
+      "node": "Node"
     },
     "item": {
       "checks": "Checks",
@@ -3255,7 +3261,9 @@
       "dns64_forwards": "Weiterleitungen und Umschreiben",
       "dns64_groups": "Gerätegruppen (Regeln, Zeitpläne, Sperren)",
       "dns64_group_members": "Mitglieder der Gerätegruppen (gehören zum Standort)",
-      "dns64_denylist": "Eigene Sperrliste"
+      "dns64_denylist": "Eigene Sperrliste",
+      "apikey": "ipv64-API-Key (gilt für den ganzen Account)",
+      "node_settings": "Allgemeine Einstellungen (Zeitzone, Selbst-Update, MCP an/aus)"
     },
     "add_title": "Weitere Node aufnehmen",
     "add_hint": "Zeigt einen Code, den du auf der anderen Node unter „Einem Cluster beitreten“ eingibst.",

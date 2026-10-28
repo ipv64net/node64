@@ -44,12 +44,18 @@ type Key struct {
 	client *Client
 	log    *slog.Logger
 	ovc    overviewCache // Account-Uebersicht (overview.go)
+	// cluster meldet einen eingetragenen, geaenderten oder entfernten Key an den Cluster (nil = ohne, nodecfg)
+	cluster func(ctx context.Context, deleted bool)
 }
 
 // NewKey erzeugt die Ablage; box darf nil sein (dann unverschluesselt, nur Tests).
 func NewKey(st *store.Store, box *secrets.Box, client *Client, log *slog.Logger) *Key {
 	return &Key{st: st, box: box, client: client, log: log}
 }
+
+// SetCluster haengt den Cluster an (vor Start; nil = ohne). Die Entfernung durch ipv64.net (MarkRemoved) betrifft
+// nur diese Node und geht nicht an den Cluster.
+func (k *Key) SetCluster(f func(ctx context.Context, deleted bool)) { k.cluster = f }
 
 // Client liefert den API-Client.
 func (k *Key) Client() *Client { return k.client }
@@ -91,13 +97,6 @@ func (k *Key) Set(ctx context.Context, key string) (*Me, error) {
 	if err != nil {
 		return nil, err
 	}
-	stored := key
-	if k.box != nil {
-		stored = k.box.Encrypt(key)
-	}
-	if err := k.st.SetSetting(ctx, SetKey, stored); err != nil {
-		return nil, err
-	}
 	info := AccountInfo{ID: me.ID, Account: me.Account(), Plan: me.Plan.Name, CheckedAt: time.Now().UTC(), KeyName: me.Auth.KeyName}
 	if me.Auth.KeyID != nil { // Ablauf steht nur in der Liste der Keys
 		if keys, err := k.client.APIKeys(ctx, key); err == nil {
@@ -113,10 +112,38 @@ func (k *Key) Set(ctx context.Context, key string) (*Me, error) {
 			k.log.Warn("api key list not readable", "err", err)
 		}
 	}
+	if err := k.save(ctx, key, info); err != nil {
+		return nil, err
+	}
+	return me, nil
+}
+
+// SetFromCluster speichert einen Key, den eine andere Node des Clusters geprueft hat, mit deren Konto - auf demselben
+// Weg wie eine Eingabe (Set). Hier geprueft wird er mit der naechsten Abfrage bei ipv64 (RefreshPlan, RefreshIfStale).
+func (k *Key) SetFromCluster(ctx context.Context, key string, info AccountInfo) error {
+	if !KeyRe.MatchString(key) {
+		return ErrFormat
+	}
+	return k.save(ctx, key, info)
+}
+
+// save speichert einen geprueften Key verschluesselt mit seinem Konto; ein neuer Key geht an den Cluster.
+func (k *Key) save(ctx context.Context, key string, info AccountInfo) error {
+	old := k.Get(ctx)
+	stored := key
+	if k.box != nil {
+		stored = k.box.Encrypt(key)
+	}
+	if err := k.st.SetSetting(ctx, SetKey, stored); err != nil {
+		return err
+	}
 	raw, _ := json.Marshal(info)
 	_ = k.st.SetSetting(ctx, SetAccount, string(raw))
 	_ = k.st.SetSetting(ctx, SetRemoved, "") // neuer bzw. erneut geprueft Key: wieder melden (hello)
-	return me, nil
+	if k.cluster != nil && key != old {
+		k.cluster(ctx, false)
+	}
+	return nil
 }
 
 // Removed liefert, wann ipv64 diese Node entfernt hat (Null = nicht entfernt).
@@ -130,7 +157,7 @@ func (k *Key) MarkRemoved(ctx context.Context) error {
 	if err := k.st.SetSetting(ctx, SetRemoved, time.Now().UTC().Format(time.RFC3339)); err != nil {
 		return err
 	}
-	return k.Clear(ctx)
+	return k.clear(ctx)
 }
 
 // RefreshIfStale prueft den gespeicherten Key erneut, wenn die letzte Pruefung aelter als maxAge ist
@@ -176,8 +203,19 @@ func (k *Key) RefreshPlan(ctx context.Context) bool {
 	return true
 }
 
-// Clear entfernt den Key.
+// Clear entfernt den Key (auch auf den anderen Nodes des Clusters, wenn der Bereich dort an ist).
 func (k *Key) Clear(ctx context.Context) error {
+	had := k.st.SettingOr(ctx, SetKey, "") != ""
+	if err := k.clear(ctx); err != nil {
+		return err
+	}
+	if k.cluster != nil && had {
+		k.cluster(ctx, true)
+	}
+	return nil
+}
+
+func (k *Key) clear(ctx context.Context) error {
 	if err := k.st.SetSetting(ctx, SetKey, ""); err != nil {
 		return err
 	}

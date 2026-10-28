@@ -48,6 +48,8 @@ import (
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/logging"
 	"github.com/ipv64net/node64/internal/module"
+	"github.com/ipv64net/node64/internal/nodecfg"
+	"github.com/ipv64net/node64/internal/nodecfg/nodecluster"
 	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/notify/nfcluster"
 	"github.com/ipv64net/node64/internal/peer"
@@ -357,6 +359,8 @@ func run() error {
 	dns64cluster.Register(peerMgr, dnsModule)                                                                                  // DNS64 ueber den Cluster
 	hccluster.Register(peerMgr, hcModule)                                                                                      // Proxmox VE, Docker und Statusseiten ueber den Cluster
 	nfcluster.Register(peerMgr, nfStore)                                                                                       // Benachrichtigungskanaele ueber den Cluster
+	nodecluster.Register(peerMgr, nodecfg.New(nodecfg.Deps{Store: st, Box: box, Key: ipv64Key, Account: peerMgr.Account, Log: logger.Slog().With("module", "peer")}),
+		func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // API-Key und allgemeine Einstellungen ueber den Cluster
 	go peerMgr.Run(ctx)
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)
