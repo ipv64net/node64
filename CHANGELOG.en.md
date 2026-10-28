@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 0.12.0-alpha.29 – 2026-10-28
+
 - Sonar64: paused for now – the module is no longer shown and cannot be switched on.
 
 ## 0.12.0-alpha.28 – 2026-10-28
