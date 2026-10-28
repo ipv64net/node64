@@ -8,7 +8,13 @@
  *     registered             warten, bis Anker und Knoten angemeldet sind; Standorte setzen
  *     evil1 | evil2          gefaelschter Knoten (eigener Container): anmelden | Plan pruefen, Manipulation melden
  *     wait <anchors|pair>    warten auf Ergebnisse Knoten<->Anker bzw. Knoten->Knoten (udp)
+ *     mark | admit           Startzeit von n3 merken | schnelle Aufnahme: Start n3 bis zur ersten gueltigen Messung
  *     final                  Gesamtpruefung: Plan befolgt, Grenzen, Plausibilitaet, Jobs, oeffentliche Karte, Mini-Status
+ *     snap                   vor dem Abmelden: Zaehler merken, n3 auf der Karte und in Plaenen, n1 antwortet auf UDP
+ *     left                   nach "sonar64 leave" von n3: 401, Knoten aus, Name/Slug frei, nicht mehr oeffentlich
+ *     revoke | revoked       ipv64 meldet n1 ab (bots/sonar_node.php) | n1 abgemeldet: Mini-Status, kein Antworter
+ *     after                  nach einer Meldungsrunde: kein Plan mit n1/n3, plaus_bad unveraendert, n1 misst nicht mehr
+ *     cleanup                sonar_cleanup.php in 31 bzw. 121 Tagen: inaktive abmelden, spaeter samt Daten loeschen
  */
 if(php_sapi_name() !== 'cli' OR getenv('S64E') !== '1') { exit; }
 
@@ -20,7 +26,7 @@ const K1   = 'TestKeyAccountOne000000000000001';      // users.apikey, Account 1
 const NET  = '11.64.64.';                             // Adressen der Knoten: duerfen nie oeffentlich erscheinen
 // Alle Container laufen auf einer Box (RTT < 1 ms): die ehrlichen Knoten stehen deshalb wenige km neben dem Anker,
 // sonst waeren ihre Werte physikalisch unmoeglich (below_light). Der Faelscher steht in Koeln (~390 km).
-const LATLON = array('a_fsn' => array(50.47, 12.37), 'n1' => array(50.4831, 12.3517), 'n2' => array(50.4562, 12.3988), 'evil' => array(50.9400, 6.9500));
+const LATLON = array('a_fsn' => array(50.47, 12.37), 'n1' => array(50.4831, 12.3517), 'n2' => array(50.4562, 12.3988), 'n3' => array(50.4900, 12.3800), 'evil' => array(50.9400, 6.9500));
 
 $phase = $argv[1] ?? '';
 $pass = 0; $failed = 0;
@@ -66,6 +72,23 @@ function signed(array $report, string $sk): string {
 	$r = json_encode($report, JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
 	return '{"report":' . $r . ',"sig":"' . base64_encode(sodium_crypto_sign_detached($r, $sk)) . '"}';
 }
+/** Probe auf UDP 6464 (Vertrag Abschnitt 4); true = gueltige Antwort mit derselben Nonce. */
+function udp_probe(string $ip): bool {
+	for($i = 0; $i < 3; $i++) {
+		$s = @stream_socket_client("udp://$ip:6464", $en, $es, 2);
+		if($s === false) { return false; }
+		$nonce = random_bytes(8);
+		@fwrite($s, 'S64?' . "\x01\x01" . $nonce . hex2bin(substr(hash('sha256', 'e2e'), 0, 8)) . str_repeat("\0", 46));
+		stream_set_timeout($s, 2);
+		$a = @fread($s, 128);
+		fclose($s);
+		if(is_string($a) AND strlen($a) === 64 AND substr($a, 0, 4) === 'S64!' AND substr($a, 6, 8) === $nonce) { return true; }
+		usleep(400000);
+	}
+	return false;
+}
+function status(string $last): array { return req('http://' . NET . $last . ':8064', 'GET', '/status'); }
+function snap(): array { return json_decode(sec_get('snap.json'), true) ?: array(); }
 function done(): void { global $pass, $failed; echo "== $pass ok, $failed Fehler\n"; exit($failed > 0 ? 1 : 0); }
 
 // ---------------------------------------------------------------- setup
@@ -78,7 +101,7 @@ if($phase === 'setup') {
 	[$rc, $out] = cli('sonar_anchor_token.php --name=fsn');
 	check('Anker-Token per CLI', $rc === 0 AND preg_match('/^(s64a_[A-Za-z0-9]{40})$/m', $out, $t) === 1, 'rc ' . $rc);
 	sec_put('a_fsn.env', 'SONAR64_TOKEN=' . ($t[1] ?? '') . "\n");
-	foreach(array('n1', 'n2', 'evil') as $n) {
+	foreach(array('n1', 'n2', 'n3', 'evil') as $n) {
 		$r = req(LOC, 'POST', '/sonar/tokens', json_encode(array('name' => $n)), K1);
 		$tok = (string)($r['j']['data']['token'] ?? '');
 		check("Knoten-Token $n per POST /sonar/tokens", in_array($r['code'], array(200, 201), true) AND preg_match('/^s64_[A-Za-z0-9]{40}$/', $tok) === 1, $r['code']);
@@ -198,7 +221,7 @@ if($phase === 'wait') {
 		? array(array('a_fsn', $ids['n1'], null), array($ids['n1'], 'a_fsn', null), array($ids['n2'], 'a_fsn', null))
 		: array(array($ids['n2'], $ids['n1'], 'udp'));
 	$t0 = time(); $miss = $need;
-	while(time() - $t0 < ($what === 'pair' ? 2700 : 1200)) {
+	while(time() - $t0 < ($what === 'pair' ? 1800 : 900)) {
 		$miss = array();
 		foreach($need as [$s, $d, $m]) {
 			$q = "SELECT COUNT(*) c FROM sonar_results WHERE src = ? AND dst = ? AND valid = 1 AND recv > 0" . ($m ? " AND method = ?" : '');
@@ -210,6 +233,48 @@ if($phase === 'wait') {
 		sleep(15);
 	}
 	check("Ergebnisse $what angekommen (" . (time() - $t0) . ' s)', !$miss, $miss);
+	done();
+}
+
+// ---------------------------------------------------------------- schnelle Aufnahme (Vertrag 10.1)
+if($phase === 'mark') {
+	sec_put('n3.start', (string)time());
+	done();
+}
+if($phase === 'admit') {
+	db(); $ids = ids(); $t0 = (int)sec_get('n3.start'); $id = null;
+	for($i = 0; $i < 90 AND $id === null; $i++) {
+		$r = one("SELECT n.node_id FROM sonar_tokens t JOIN sonar_nodes n ON n.token_id = t.id WHERE t.name = 'n3' AND t.revoked_at IS NULL");
+		if($r) { $id = $r['node_id']; } else { sleep(2); }
+	}
+	check('angemeldet: n3 (' . (time() - $t0) . ' s nach dem Start)', $id !== null);
+	if($id === null) { done(); }
+	$ids['n3'] = $id;
+	sec_put('ids.json', json_encode($ids));
+	$n = one("SELECT jitter_seed, measured FROM sonar_nodes WHERE node_id = ?", array($id));
+	check('n3 gemessen', (int)$n['measured'] === 1, $n);
+	[$la, $lo] = LATLON['n3']; $p = s64_pub_coords($la, $lo, (int)$n['jitter_seed']);
+	db()->prepare("UPDATE sonar_nodes SET lat = ?, lon = ?, pub_lat = ?, pub_lon = ?, access = 'fiber', place = 'Treuen' WHERE node_id = ?")->execute(array($la, $lo, $p[0], $p[1], $id));
+	$r = req(API, 'PUT', '/sonar/me', json_encode(array('name' => 'e2e-drei')), sec_get('n3.tok'));
+	check('n3: Name per PUT /sonar/me', $r['code'] === 200 AND ($r['j']['data']['slug'] ?? '') === 'e2e-drei', code($r));
+	// erste gueltige Messung (at) durch einen Anker bzw. durch einen anderen Knoten (kein Anker)
+	$first = array('anchor' => null, 'node' => null);
+	while(time() - $t0 < 2400 AND ($first['anchor'] === null OR $first['node'] === null)) {
+		foreach(array('anchor' => "LEFT(src, 2) = 'a_'", 'node' => "LEFT(src, 2) <> 'a_'") as $k => $w) {
+			if($first[$k] === null) {
+				$r = one("SELECT src, at FROM sonar_results WHERE dst = ? AND valid = 1 AND recv > 0 AND $w ORDER BY at LIMIT 1", array($id));
+				if($r) { $first[$k] = array('src' => $r['src'], 's' => (int)strtotime($r['at'] . ' UTC') - $t0, 'seen' => time() - $t0); }
+			}
+		}
+		if($first['anchor'] === null OR $first['node'] === null) { sleep(10); }
+	}
+	$src = $first['node'] ? (array_search($first['node']['src'], $ids, true) ?: $first['node']['src']) : '-';
+	echo '  Aufnahme n3 (Start bis erste gueltige Messung): Anker ' . ($first['anchor'] ? $first['anchor']['s'] . ' s' : '-') . ', anderer Knoten (' . $src . ') '
+		. ($first['node'] ? $first['node']['s'] . ' s = ' . round($first['node']['s'] / 60, 1) . ' min (bei ipv64 nach ' . $first['node']['seen'] . ' s)' : '-') . "\n";
+	check('schnelle Aufnahme: Anker misst n3', $first['anchor'] !== null);
+	check('schnelle Aufnahme: anderer Knoten misst n3 in <= 30 min', $first['node'] !== null AND $first['node']['s'] <= 1800, $first);
+	if($first['node'] !== null AND $first['node']['s'] > 900) { echo "  Hinweis: Aufnahme ueber dem Ziel von 15 min\n"; }
+	check('n3: Weg sofort bekannt (reach4)', one("SELECT reach4 FROM sonar_nodes WHERE node_id = ?", array($id))['reach4'] !== 'none');
 	done();
 }
 
@@ -238,13 +303,19 @@ if($phase === 'final') {
 	// Plan befolgt: jede Messung steht in einem ausgelieferten Plan (sent_body/prev_body/body) oder ist ein Anker
 	foreach(array($n1, $n2, 'a_fsn') as $s) {
 		$k = array_search($s, $ids, true);
-		$p = one("SELECT body, sent_body, prev_body FROM sonar_plans WHERE node_id = ?", array($s));
+		$p = one("SELECT body, sent_body, prev_body, sent_hist FROM sonar_plans WHERE node_id = ?", array($s));
 		$planned = array(); $minR = PHP_INT_MAX;
 		foreach(array('body', 'sent_body', 'prev_body') as $c) {
 			foreach((json_decode((string)($p[$c] ?? ''), true)['rounds'] ?? array()) as $rd) {
 				$t = strtotime($rd['start']); $minR = min($minR, $t);
-				foreach($rd['targets'] as $tg) { $planned[$t . '|' . $tg['id'] . '|' . $tg['method']] = (int)$tg['count']; }
+				foreach($rd['targets'] as $tg) { $planned[$t . '|' . $tg['id'] . '|' . $tg['method']] = max($planned[$t . '|' . $tg['id'] . '|' . $tg['method']] ?? 0, (int)$tg['count']); }
 			}
+		}
+		// Plaene aendern sich jetzt oefter (Vertrag 10.1): alle ausgelieferten Fassungen der Runden der letzten 35 min
+		// (sent_hist kennt nur das Ziel, nicht die Paketzahl: dort gilt die harte Grenze von 5)
+		foreach((json_decode((string)($p['sent_hist'] ?? ''), true) ?: array()) as $hr => $hts) {
+			$minR = min($minR, (int)$hr);
+			foreach($hts as $hk => $hv) { [$tid, , $tm] = array_pad(explode('|', (string)$hk), 3, ''); $planned[$hr . '|' . $tid . '|' . $tm] ??= 5; }
 		}
 		$off = array(); $over = array();
 		foreach(all("SELECT `round`, dst, method, sent FROM sonar_results WHERE src = ?", array($s)) as $r) {
@@ -342,5 +413,149 @@ if($phase === 'final') {
 	check('n1 Mini-Status: Pings gegen mich (UDP live, n2 und Anker)', in_array(s64_short_id($n2), $froms, true) AND in_array(s64_short_id('a_fsn'), $froms, true), $froms);
 	done();
 }
+// ---------------------------------------------------------------- Abmelden (Vertrag 10.2)
+if($phase === 'snap') {
+	db(); $ids = ids(); $n3 = $ids['n3'] ?? 'x';
+	$c = array('t' => time());
+	foreach(array('a_fsn', $ids['n2']) as $s) { $c['bad'][$s] = (int)one("SELECT plaus_bad FROM sonar_nodes WHERE node_id = ?", array($s))['plaus_bad']; }
+	$c['ok_n2'] = (int)one("SELECT plaus_ok FROM sonar_nodes WHERE node_id = ?", array($ids['n2']))['plaus_ok'];
+	$r = one("SELECT name, slug FROM sonar_nodes WHERE node_id = ?", array($n3));
+	$c['name'] = $r['name'] ?? ''; $c['slug'] = $r['slug'] ?? '';
+	sec_put('snap.json', json_encode($c));
+	clear_cache();
+	$map = req(LOC, 'GET', '/sonar/public/map')['j']['data'] ?? array();
+	check('vorher: n3 auf der Karte', in_array($n3, array_column($map['nodes'] ?? array(), 'id'), true));
+	$plans = array_column(all("SELECT node_id, body FROM sonar_plans WHERE expires > UTC_TIMESTAMP()"), 'body', 'node_id');
+	check('vorher: n3 und n1 stehen im Plan des Ankers', str_contains((string)($plans['a_fsn'] ?? ''), '"' . $n3 . '"') AND str_contains((string)($plans['a_fsn'] ?? ''), '"' . $ids['n1'] . '"'));
+	$r = req(API, 'PUT', '/sonar/me', json_encode(array('name' => $c['name'])), sec_get('n2.tok'));
+	check('vorher: Name von n3 vergeben (409 name_taken)', $r['code'] === 409 AND str_contains($r['raw'], 'name_taken'), code($r));
+	check('vorher: n1 antwortet auf UDP 6464', udp_probe(NET . '11'));
+	done();
+}
+if($phase === 'left') {
+	db(); $ids = ids(); $n3 = $ids['n3']; $c = snap(); $tok = sec_get('n3.tok');
+	$r = req(API, 'GET', '/sonar/me', null, $tok);
+	check('leave: GET /sonar/me 401 invalid_token', $r['code'] === 401 AND str_contains($r['raw'], 'invalid_token'), code($r));
+	$r = req(API, 'GET', '/sonar/plan', null, $tok);
+	check('leave: GET /sonar/plan 401', $r['code'] === 401, code($r));
+	$n = one("SELECT active, disabled_at, name, slug, ip4, ip6, lat, lon, token_id FROM sonar_nodes WHERE node_id = ?", array($n3));
+	check('leave: Knoten active=0, disabled_at gesetzt', (int)$n['active'] === 0 AND $n['disabled_at'] !== null, $n);
+	check('leave: IP und genauer Standort weg', $n['ip4'] === null AND $n['ip6'] === null AND $n['lat'] === null AND $n['lon'] === null, $n);
+	check('leave: Name/Slug frei (~node_id)', $n['name'] === '~' . $n3 AND $n['slug'] === '~' . $n3, $n);
+	check('leave: Token widerrufen', one("SELECT revoked_at FROM sonar_tokens WHERE id = ?", array((int)$n['token_id']))['revoked_at'] !== null);
+	check('leave: Plan geloescht', one("SELECT COUNT(*) c FROM sonar_plans WHERE node_id = ?", array($n3))['c'] == 0);
+	$l = one("SELECT `new`, reason FROM sonar_trust_log WHERE node_id = ? ORDER BY id DESC LIMIT 1", array($n3));
+	check('leave: sonar_trust_log removed/leave', ($l['new'] ?? '') === 'removed' AND ($l['reason'] ?? '') === 'leave', $l);
+	clear_cache();
+	$map = req(LOC, 'GET', '/sonar/public/map')['j']['data'] ?? array();
+	check('leave: n3 nicht mehr auf der Karte', !in_array($n3, array_column($map['nodes'] ?? array(), 'id'), true) AND !str_contains(json_encode($map['links'] ?? array()), $n3));
+	$nodes = req(LOC, 'GET', '/sonar/public/nodes')['j']['data'] ?? array();
+	check('leave: n3 nicht in public/nodes', !in_array($n3, array_column($nodes, 'id'), true));
+	$r = req(LOC, 'GET', '/sonar/public/node/' . rawurlencode($c['slug']));
+	check('leave: alte Knotenseite 404', $r['code'] === 404, code($r));
+	// der frei gewordene Name laesst sich wieder vergeben (hier von n2)
+	$r = req(API, 'PUT', '/sonar/me', json_encode(array('name' => $c['name'])), sec_get('n2.tok'));
+	check('leave: Name wieder vergebbar (n2 uebernimmt ihn, gleicher Slug)', $r['code'] === 200 AND ($r['j']['data']['name'] ?? '') === $c['name'] AND ($r['j']['data']['slug'] ?? '') === $c['slug'], code($r));
+	done();
+}
+if($phase === 'revoke') {
+	db(); $ids = ids();
+	[$rc, $out] = cli('sonar_node.php --revoke=' . $ids['n1'] . ' --reason=e2e');
+	check('sonar_node.php --revoke (Exit 0)', $rc === 0 AND str_contains($out, $ids['n1'] . ' abgemeldet'), $out);
+	[$rc, $out] = cli('sonar_node.php --revoke=a_fsn');
+	check('sonar_node.php: Anker nur mit --force', $rc === 1 AND (int)one("SELECT active FROM sonar_nodes WHERE node_id = 'a_fsn'")['active'] === 1, $out);
+	[$rc, $out] = cli('sonar_node.php --list --inactive');
+	check('sonar_node.php --list --inactive zeigt n1 und n3 abgemeldet', $rc === 0 AND str_contains($out, $ids['n1']) AND str_contains($out, $ids['n3']) AND !preg_match('/s64a?_[A-Za-z0-9]{40}|' . preg_quote(NET, '/') . '/', $out), $out);
+	$n = one("SELECT active, disabled_at FROM sonar_nodes WHERE node_id = ?", array($ids['n1']));
+	check('revoke: n1 active=0, disabled_at gesetzt', (int)$n['active'] === 0 AND $n['disabled_at'] !== null, $n);
+	$l = one("SELECT `new`, reason FROM sonar_trust_log WHERE node_id = ? ORDER BY id DESC LIMIT 1", array($ids['n1']));
+	check('revoke: sonar_trust_log removed/admin e2e', ($l['new'] ?? '') === 'removed' AND ($l['reason'] ?? '') === 'admin e2e', $l);
+	$r = req(API, 'GET', '/sonar/me', null, sec_get('n1.tok'));
+	check('revoke: Token 401 invalid_token', $r['code'] === 401 AND str_contains($r['raw'], 'invalid_token'), code($r));
+	$c = snap(); $c['revoke'] = time(); sec_put('snap.json', json_encode($c));
+	done();
+}
+if($phase === 'revoked') {
+	db(); $ids = ids(); $c = snap(); $t0 = time(); $j = array();
+	while(time() - $t0 < 330) { // Plan alle 2 min +-20 %, dann 401
+		$j = status('11')['j'] ?? array();
+		if(($j['status']['paused'] ?? '') === 'revoked') { break; }
+		sleep(5);
+	}
+	check('n1 erkennt die Abmeldung (' . (time() - $c['revoke']) . ' s): Mini-Status paused=revoked', ($j['status']['paused'] ?? '') === 'revoked', $j['status'] ?? null);
+	sleep(3);
+	$j = status('11')['j'] ?? array();
+	check('n1: kein Antworter (Status responder=false)', ($j['status']['responder'] ?? true) === false, $j['status'] ?? null);
+	check('n1: UDP 6464 antwortet nicht mehr', !udp_probe(NET . '11'));
+	$h = req('http://' . NET . '11:8064', 'GET', '/health');
+	check('n1: /health bleibt 200', $h['code'] === 200, code($h));
+	$c['seen'] = time();
+	$c['recent'] = max(array_map(fn($x) => (int)strtotime(substr((string)$x['at'], 0, 19) . 'Z'), $j['recent'] ?? array()) ?: array(0));
+	sec_put('snap.json', json_encode($c));
+	done();
+}
+if($phase === 'after') {
+	db(); $ids = ids(); $c = snap(); $n1 = $ids['n1']; $n3 = $ids['n3'];
+	// Knoten melden alle 5 min, Anker jede Minute: eine volle Meldungsrunde nach dem Abmelden abwarten
+	$w = $c['t'] + 400 - time();
+	if($w > 0) { sleep($w); }
+	[$rc, $out] = cli('sonar_plan.php');
+	check('Planer nach dem Abmelden', $rc === 0, $out);
+	$bad = array();
+	foreach(all("SELECT node_id, body FROM sonar_plans WHERE expires > UTC_TIMESTAMP()") as $p) { // gueltige (ausgelieferte) Plaene
+		if(str_contains((string)$p['body'], '"' . $n1 . '"') OR str_contains((string)$p['body'], '"' . $n3 . '"')) { $bad[] = $p['node_id']; }
+	}
+	check('kein Plan enthaelt n1 oder n3 (auch nicht die laufende Runde)', !$bad, $bad);
+	check('keine Plaene fuer n1 und n3', one("SELECT COUNT(*) c FROM sonar_plans WHERE node_id IN (?, ?)", array($n1, $n3))['c'] == 0);
+	foreach($c['bad'] as $s => $b) {
+		$k = array_search($s, $ids, true);
+		$now = (int)one("SELECT plaus_bad FROM sonar_nodes WHERE node_id = ?", array($s))['plaus_bad'];
+		check("$k: plaus_bad unveraendert (not_allowed zaehlt nicht)", $now === $b, "$b -> $now");
+	}
+	// n1 und n3 waren die einzigen gemessenen Knoten: der Anker hat jetzt nichts mehr zu messen, n2 misst weiter den Anker
+	check('n2 meldet weiter (plaus_ok steigt)', (int)one("SELECT plaus_ok FROM sonar_nodes WHERE node_id = ?", array($ids['n2']))['plaus_ok'] > $c['ok_n2']);
+	$st = one("SELECT disabled_at FROM sonar_nodes WHERE node_id = ?", array($n3));
+	check('keine Ergebnisse zu n3 nach dem Abmelden gespeichert', one("SELECT COUNT(*) c FROM sonar_results WHERE dst = ? AND at > ?", array($n3, $st['disabled_at']))['c'] == 0);
+	check('keine neuen Ergebnisse von n1', one("SELECT COUNT(*) c FROM sonar_results WHERE src = ? AND at > ?", array($n1, s64_dt($c['revoke'])))['c'] == 0);
+	$j = status('11')['j'] ?? array();
+	$last = max(array_map(fn($x) => (int)strtotime(substr((string)$x['at'], 0, 19) . 'Z'), $j['recent'] ?? array()) ?: array(0));
+	check('n1 misst nicht mehr (Mini-Status: nichts Neues seit der Abmeldung)', ($j['status']['paused'] ?? '') === 'revoked' AND $last === $c['recent'] AND $last <= $c['seen'], array('last' => $last, 'vorher' => $c['recent']));
+	check('n1: Puffer verworfen', (int)($j['status']['buffered'] ?? -1) === 0, $j['status'] ?? null);
+	done();
+}
+
+// ---------------------------------------------------------------- Aufraeumen (Vertrag 10.3)
+if($phase === 'cleanup') {
+	db(); $ids = ids(); $n2 = $ids['n2']; $evil = sec_get('evil.id');
+	$all = array('n1' => $ids['n1'], 'n2' => $n2, 'n3' => $ids['n3'], 'evil' => $evil);
+	$tok = array(); foreach($all as $k => $id) { $tok[$k] = (int)one("SELECT token_id FROM sonar_nodes WHERE node_id = ?", array($id))['token_id']; }
+	$t31 = time() + 31 * 86400;
+	[$rc, $out] = cli('sonar_cleanup.php --now=' . iso($t31));
+	echo "  $out\n";
+	check('Aufraeumen +31 Tage laeuft', $rc === 0 AND !preg_match('/Fatal|Warning|Exception/i', $out), $out);
+	check('Aufraeumen +31 Tage: Anker nur Warnung', str_contains($out, 'WARNUNG Anker a_fsn') AND (int)one("SELECT active FROM sonar_nodes WHERE node_id = 'a_fsn'")['active'] === 1, $out);
+	foreach(array('n2' => $n2, 'evil' => $evil) as $k => $id) {
+		$n = one("SELECT active, disabled_at FROM sonar_nodes WHERE node_id = ?", array($id));
+		$l = one("SELECT `new`, reason FROM sonar_trust_log WHERE node_id = ? ORDER BY id DESC LIMIT 1", array($id));
+		check("Aufraeumen +31 Tage: $k inaktiv abgemeldet (removed/inactive)", (int)$n['active'] === 0 AND $n['disabled_at'] !== null AND ($l['reason'] ?? '') === 'inactive', array($n, $l));
+	}
+	$r = req(API, 'GET', '/sonar/me', null, sec_get('n2.tok'));
+	check('Aufraeumen +31 Tage: Token von n2 401', $r['code'] === 401, code($r));
+	[$rc, $out] = cli('sonar_cleanup.php --now=' . iso($t31 + 90 * 86400 + 3600));
+	echo "  $out\n";
+	check('Aufraeumen +121 Tage laeuft', $rc === 0 AND str_contains($out, 'sonar_nodes geloescht 4'), $out);
+	foreach($all as $k => $id) {
+		$left = array();
+		foreach(array('sonar_nodes' => 'node_id = ?', 'sonar_plans' => 'node_id = ?', 'sonar_trust_log' => 'node_id = ?', 'sonar_inbound' => 'node_id = ?',
+			'sonar_results' => 'src = ? OR dst = ?', 'sonar_traces' => 'src = ? OR dst = ?', 'sonar_pair_1h' => 'src = ? OR dst = ?') as $tb => $w) {
+			if((int)one("SELECT COUNT(*) c FROM $tb WHERE $w", substr_count($w, '?') === 2 ? array($id, $id) : array($id))['c'] > 0) { $left[] = $tb; }
+		}
+		if(one("SELECT id FROM sonar_tokens WHERE id = ?", array($tok[$k]))) { $left[] = 'sonar_tokens'; }
+		check("Aufraeumen +121 Tage: $k samt Daten geloescht", !$left, $left);
+	}
+	check('Aufraeumen +121 Tage: Anker bleibt (aktiv, Warnung)', str_contains($out, 'WARNUNG Anker a_fsn') AND (int)(one("SELECT active FROM sonar_nodes WHERE node_id = 'a_fsn'")['active'] ?? 0) === 1, $out);
+	done();
+}
+
 fwrite(STDERR, "Phase unbekannt\n");
 exit(2);

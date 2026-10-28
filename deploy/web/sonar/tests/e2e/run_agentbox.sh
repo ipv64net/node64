@@ -1,8 +1,10 @@
 #!/bin/bash
-# Sonar64 Ende-zu-Ende (Integration aller Teile) auf der Testbox (ssh agentbox), etwa 45-60 min:
+# Sonar64 Ende-zu-Ende (Integration aller Teile) auf der Testbox (ssh agentbox), etwa 35-45 min:
 #   echte sonar64-Binaries (Anker, Knoten n1 "auch gemessen", Knoten n2 "nur ausgehend") als Container gegen die
 #   API (api_v2_sonar.php im PHP-Builtin-Server), Planer und Jobs; dazu ein gefaelschter Knoten (PHP), der
-#   manipulierte Werte meldet.
+#   manipulierte Werte meldet. Vertrag 10: ein spaeter gestarteter Knoten n3 ("auch gemessen") misst die Zeit bis zur
+#   ersten Messung durch andere (schnelle Aufnahme), tritt dann mit "sonar64 leave" aus; ipv64 meldet n1 ab
+#   (bots/sonar_node.php --revoke); zuletzt raeumt sonar_cleanup.php in 31 bzw. 121 Tagen auf.
 # Abgeschottet: eigenes internes Docker-Netz s64e<zufall>-net ohne Weg nach aussen. Weil Knoten nur oeffentliche Ziele
 # messen und ipv64 nur oeffentliche IPs plant, liegt es in 11.64.64.0/24 (oeffentlicher Bereich, im internen Netz nur
 # auf dieser Box sichtbar). Eigene Test-DB (mariadb, Test-Passwort), Ordner /tmp/s64-e2e-<zufall>; am Ende wird alles
@@ -32,7 +34,7 @@ PY
 python "$STAGE/patch.py" "$API" > "$W/api_v2.php"
 cp "$WEB/api_v2_honeypot.php" "$WEB/api_v2_sonar.php" "$W/"
 cp "$WEB/sonar/s64_lib.php" "$W/sonar/"
-for f in sonar_keygen sonar_anchor_token sonar_plan sonar_rollup sonar_trust sonar_outages sonar_cleanup; do cp "$WEB/bots/$f.php" "$W/bots/"; done
+for f in sonar_keygen sonar_anchor_token sonar_plan sonar_rollup sonar_trust sonar_outages sonar_cleanup sonar_node; do cp "$WEB/bots/$f.php" "$W/bots/"; done
 cp "$HERE/dbconnect_stub.php" "$W/dbconnect.php"
 cp "$HERE/e2e.php" "$R/tests/"
 cp "$HERE/../api/setup.sql" "$R/tests/setup.sql"
@@ -45,16 +47,20 @@ scp -q -r "$R" agentbox:/tmp/
 
 ssh agentbox "RID=$RID bash -s" <<'REMOTE'
 set -u
-P="s64e$RID"; T="/tmp/s64-e2e-$RID"; D=/var/www/clients/client1/web58; NET="$P-net"; FAIL=0
+P="s64e$RID"; T="/tmp/s64-e2e-$RID"; D=/var/www/clients/client1/web58; NET="$P-net"; FAIL=0; OKS=0; T0=$(date +%s)
 cleanup() {
   [ -n "${PLANLOOP:-}" ] && kill $PLANLOOP 2>/dev/null
-  docker rm -f -v $P-a_fsn $P-n1 $P-n2 $P-evil $P-api $P-db >/dev/null 2>&1 || true
+  docker rm -f -v $P-a_fsn $P-n1 $P-n2 $P-n3 $P-n3l $P-evil $P-api $P-db >/dev/null 2>&1 || true
   docker network rm $NET >/dev/null 2>&1 || true
   rm -rf "$T"
 }
 trap cleanup EXIT
 # Ausgabe zeigen, FEHLER zaehlen
-run() { local out; out=$("$@" 2>&1); echo "$out"; case "$out" in *FEHLER*|*"PHP Fatal"*|*"PHP Warning"*|*"PHP Notice"*) FAIL=$((FAIL+1));; esac; }
+run() { local out; out=$("$@" 2>&1); echo "$out"; case "$out" in *FEHLER*|*"PHP Fatal"*|*"PHP Warning"*|*"PHP Notice"*) FAIL=$((FAIL+1));; esac
+  OKS=$((OKS + $(printf '%s\n' "$out" | grep -c '^  ok ' || true))); }
+# eigene Pruefungen der Shell (gleiches Format wie e2e.php)
+ok() { echo "  ok    $1"; OKS=$((OKS+1)); }
+bad() { echo "  FEHLER $1"; FAIL=$((FAIL+1)); }
 echo "--- php -l (c64o-php)"
 for f in $(cd $T && find . -name '*.php' | sort); do
   out=$(docker exec -i c64o-php php -l < "$T/$f" 2>&1) || { echo "FEHLER $f: $out"; FAIL=$((FAIL+1)); }
@@ -136,26 +142,50 @@ echo "--- Planer 1"; run $PLAN
 # danach wie im Betrieb (HPC_JOBS) alle 5 min, solange der Test laeuft
 ( while sleep 300; do $PLAN >/dev/null 2>&1 || echo "FEHLER Planer im Hintergrund"; done ) &
 PLANLOOP=$!
-docker restart -t 15 $P-a_fsn $P-n1 $P-n2 >/dev/null   # Plan sofort holen statt nach 15 min
+# Plan alle 2 min (Anker jede Minute, Vertrag 10.1): kein Neustart der Knoten mehr noetig
 echo "--- Faelscher meldet Manipulation"; run docker exec -e S64E=1 $P-evil php /w/tests/e2e.php evil2
 echo "--- warten: Knoten <-> Anker"; run $E2E wait anchors
-echo "--- Planer 2 (Erreichbarkeit aus den Anker-Messungen)"; run $PLAN
+echo "--- Planer 2"; run $PLAN
 docker exec $P-db mysql -uroot -ps64etest ipv64 -e "SELECT node_id, role, measured, reach4, trust FROM sonar_nodes" 2>/dev/null
-# Geplante Runden bleiben unveraendert: n1 kommt erst in neu angehaengte Runden (bis ~30 min spaeter)
-docker restart -t 15 $P-n2 >/dev/null
+# schnelle Aufnahme: n3 kommt in das laufende Netz (Planer nur noch im Hintergrund), gemessen ab dem Start
+echo "--- n3 starten (schnelle Aufnahme)"; run $E2E mark
+node n3 11.64.64.13 -e SONAR64_MEASURED=1
 echo "--- warten: n2 -> n1 (udp)"; run $E2E wait pair
+echo "--- warten: n3 gemessen"; run $E2E admit
 kill $PLANLOOP 2>/dev/null; wait $PLANLOOP 2>/dev/null
 echo "--- Planer 3"; run $PLAN
 echo "--- Gesamtpruefung"; run $E2E final
+
+echo "--- Abmelden: sonar64 leave (n3), dann ipv64 meldet n1 ab"
+run $E2E snap
+# wie install.sh --uninstall: Dienst stoppen, dann "sonar64 leave" mit Token und Datenordner
+docker stop -t 15 $P-n3 >/dev/null
+lout=$(docker run --rm --name $P-n3l --network $NET --ip 11.64.64.14 --user 65532:65532 --cap-drop ALL --read-only --security-opt no-new-privileges \
+  --env-file $T/sec/n3.env -e SONAR64_API=http://127.0.0.1:8080/api_v2.php -e SONAR64_PLAN_KEY="$PUB" -e SONAR64_DATA=/data \
+  -v $T/data/n3:/data -v $T/bin:/b:ro alpine:3.22 sh -c '/b/fwd 127.0.0.1:8080 11.64.64.2:8080 & sleep 1; /b/sonar64 leave' 2>&1); lrc=$?
+echo "$lout" | sed 's/s64_[A-Za-z0-9]*/s64_***/g'
+[ $lrc -eq 0 ] && ok "sonar64 leave: Exit 0" || bad "sonar64 leave: Exit $lrc"
+case "$lout" in *s64_*) bad "sonar64 leave: Ausgabe enthaelt ein Token";; *) ok "sonar64 leave: kein Token in der Ausgabe";; esac
+[ ! -e $T/data/n3/sonar64.key ] && [ ! -e $T/data/n3/sonar64.json ] && ok "sonar64 leave: sonar64.key und sonar64.json geloescht" || bad "sonar64 leave: Dateien noch da: $(ls -A $T/data/n3)"
+run $E2E left
+run $E2E revoke
+run $E2E revoked
+[ "$(docker inspect -f '{{.State.Running}} {{.RestartCount}}' $P-n1)" = "true 0" ] && ok "n1: Container laeuft weiter (kein Neustart)" || bad "n1: Container $(docker inspect -f '{{.State.Status}} {{.RestartCount}}' $P-n1)"
+echo "--- nach einer Meldungsrunde"; run $E2E after
+for n in a_fsn n2; do echo "  $n: $(docker logs $P-$n 2>&1 | grep -c 'not_allowed') Meldungen mit not_allowed"; done
+docker logs $P-n1 2>&1 | grep -q 'signed off by ipv64' && ok "n1: Log meldet die Abmeldung" || bad "n1: keine Abmeldung im Log"
+
+echo "--- Aufraeumen (sonar_cleanup.php in 31 / 121 Tagen)"; run $E2E cleanup
+
 echo "--- Knoten-Logs (Warnungen/Fehler)"
-for n in a_fsn n1 n2; do
+for n in a_fsn n1 n2 n3; do
   l=$(docker logs $P-$n 2>&1 | grep -E 'level=(WARN|ERROR)' | grep -v 'only for tests\|SONAR64_API is set\|plan key from SONAR64_PLAN_KEY' | head -10)
   [ -n "$l" ] && echo "$n: $l"
   docker logs $P-$n 2>&1 | grep -q 'plan rejected' && { echo "FEHLER $n: plan rejected"; FAIL=$((FAIL+1)); }
 done
 docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.CPUPerc}}' $P-a_fsn $P-n1 $P-n2
 echo "--- Server-Log (Warnungen/Fehler)"; docker logs $P-api 2>&1 | grep -iE 'error|warning|notice|deprecated' | head -30 || true
-echo "=== Ende-zu-Ende: $FAIL Abschnitte mit Fehlern"
+echo "=== Ende-zu-Ende: $OKS Pruefungen ok, $FAIL Abschnitte mit Fehlern, Laufzeit $(( ($(date +%s) - T0) / 60 )) min"
 docker volume rm s64e-gocache >/dev/null 2>&1 || true
 exit $FAIL
 REMOTE

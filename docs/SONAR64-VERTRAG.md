@@ -194,8 +194,9 @@ gelöscht, `sonar_trust_log` removed, `add_log` wenn geladen; genutzt von API, `
   Messende (auch je Ziel-Adresse, z. B. mehrere Knoten hinter einer CGNAT-IP; eine Adresse je Messendem und Runde nur einmal). Ziel nur mit `measured=1`, erreichbarem Weg (`reach4/6`) und Vertrauen ≠ quarantine. Methode: `udp`,
   wenn erreichbar, sonst `icmp`. Kontrollziele: in ~5 % der Pläne ein Anker zusätzlich, Werte gegen die Messung
   des Ankers prüfen. Traceroute: je Knoten höchstens 2 Ziele je Stunde (Anker oder Nachbar).
-  Runden liegen auf dem 5-min-Raster (UTC); schon geplante Runden (laufende und kommende) bleiben unverändert, jeder
-  Lauf hängt nur neue an (Plan = laufende + 6 kommende Runden; ein neuer Plan beginnt mit der nächsten Runde), nicht mehr erlaubte Ziele (Opt-out, Quarantäne, andere
+  Runden liegen auf dem 5-min-Raster (UTC); die laufende Runde bleibt unverändert, in schon geplanten kommenden Runden
+  bleiben die Ziele und freie Budget-Plätze werden aufgefüllt (Abschnitt 10.1), dazu hängt jeder Lauf neue Runden an
+  (Plan = laufende + 6 kommende Runden; ein neuer Plan beginnt mit der nächsten Runde), nicht mehr erlaubte Ziele (Opt-out, Quarantäne, andere
   IP/Weg) fallen sofort heraus. Anker messen gemessene Knoten bis 6 h nach dem letzten Kontakt (Störungen sehen).
   Kontrollziel = ein Anker per `icmp`; `controls` = JSON `[{round, id, fam}]`. Nicht neu geschriebene Pläne (Knoten
   offline, nichts zu planen) bekommen `expires` = jetzt (nicht mehr ausgeliefert, `sent_body` bleibt).
