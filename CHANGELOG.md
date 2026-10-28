@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 0.12.0-alpha.28 – 2026-10-28
+
 - Sonar64: Knoten mit IPv4 und IPv6 werden in beiden Familien gemessen (auch das Programm ohne Dashboard).
 
 ## 0.12.0-alpha.27 – 2026-10-28
