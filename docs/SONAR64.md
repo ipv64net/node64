@@ -99,6 +99,8 @@ docker run -d --name sonar64 --restart unless-stopped \
   UDP 6464 bzw. Linux-Ping-Sockets, soweit möglich.
 - **Gemessen werden** (`SONAR64_MEASURED=1`): UDP 6464 muss von außen erreichbar sein, also
   `-p 6464:6464/udp` und im Router eine Portfreigabe. Für IPv6 und genaue Werte besser `--network host`.
+  Der Antworter beantwortet nur öffentliche Absender: Läuft die Weiterleitung über den `docker-proxy` (häufig bei
+  IPv6 ohne `ip6tables`), sieht er nur das Docker-Gateway (z. B. `172.17.0.1`) und schweigt – dann `--network host`.
 - Docker Compose:
 
 ```yaml
@@ -240,3 +242,4 @@ freigeben. Er enthält keine Geheimnisse und keine Adressen (auch keine Tracerou
 | `an anchor token (s64a_) needs SONAR64_MODE=anchor` | Anker-Token mit `SONAR64_MODE=headless` |
 | `no plan key …` | Entwicklungsstand ohne eingebauten Plan-Schlüssel (dann `SONAR64_PLAN_KEY`) |
 | ICMP-Messungen fehlen | `CAP_NET_RAW` fehlt (Container ohne `NET_RAW`); UDP 6464 geht trotzdem |
+| „gemessen“, aber nie per UDP erreichbar | Portfreigabe fehlt oder Docker leitet UDP 6464 über den `docker-proxy` (Absender = Gateway, wird nicht beantwortet): `--network host` |
