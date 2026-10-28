@@ -62,6 +62,9 @@ import (
 // Version wird beim Build gesetzt: -ldflags "-X main.Version=1.2.3"
 var Version = "dev"
 
+// sonar64Enabled: Sonar64 ist vorerst pausiert (Code bleibt, Modul nicht registriert). Fuer eigene Builds auf true setzen.
+const sonar64Enabled = false
+
 func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -269,11 +272,13 @@ func run() error {
 	hpModule.SetCerts(certMgr)                                        // gueltige Zertifikate fuer Koeder-Namen (optional)
 	portReg.Provide(honeypot.Name, hpModule.Claims)
 	modules.Register(hpModule)
-	s64Module := sonar64.New(st, logger.Slog(), box, cfg.DataDir, Version) // Sonar64 als Modul (standardmaessig aus, Teilnahme per Opt-in)
-	s64Module.SetKey(ipv64Key)                                             // Teilnahme legt mit dem zentralen API-Key ein Sonar-Token an
-	s64Module.SetPorts(portReg)                                            // UDP 6464 nur bei "auch gemessen"
-	portReg.Provide(sonar64.Name, s64Module.Claims)
-	modules.Register(s64Module)
+	if sonar64Enabled { // Sonar64 pausiert (Dennis, 2026-10-28): ohne Registrierung unsichtbar und nicht einschaltbar
+		s64Module := sonar64.New(st, logger.Slog(), box, cfg.DataDir, Version) // Sonar64 als Modul (standardmaessig aus, Teilnahme per Opt-in)
+		s64Module.SetKey(ipv64Key)                                             // Teilnahme legt mit dem zentralen API-Key ein Sonar-Token an
+		s64Module.SetPorts(portReg)                                            // UDP 6464 nur bei "auch gemessen"
+		portReg.Provide(sonar64.Name, s64Module.Claims)
+		modules.Register(s64Module)
+	}
 	modules.StartEnabled(ctx)
 	defer modules.StopAll()
 
