@@ -378,10 +378,6 @@ Host, maßgeblich ist der mit den wenigsten nicht übernommenen Middlewares.
 
 **Cluster.** Docker-Hosts gehören zu dem Docker-Host, auf dem die Node läuft, und werden nicht an andere Nodes verteilt.
 
-**Export/Import.** Ein Import übernimmt Docker-Hosts als normale, von Hand angelegte Hosts (ohne Docker-Kennung).
-Laufen auf der neuen Box dieselben Container mit Labels, meldet *Docker* dann „Name gehört einem von Hand angelegten
-Host“ – den importierten Host löschen, beim nächsten Abgleich übernimmt ihn Docker wieder (Einstellungen neu setzen).
-
 **Sicherheit.**
 - Wer den Docker-Socket hat, kann den Host steuern – auch mit `:ro`. PROXY64 sendet nur GET-Anfragen
   (`/containers/json`, `/containers/{id}/json`, `/events`). Sicherer ist ein
