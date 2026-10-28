@@ -12,7 +12,7 @@ Alle Build-Stufen laufen auf der Plattform des Runners (Cross-Compile, kein QEMU
 
 | Auslöser | Image-Tags |
 |---|---|
-| Tag `v0.12.0-alpha.1` | `0.12.0-alpha.1` |
+| Tag `v0.12.0-alpha.1` | `0.12.0-alpha.1`, `latest` |
 | Tag `v0.12.0` | `0.12.0`, `0.12`, `latest` |
 | von Hand (Actions › image › Run workflow) | `edge`, `sha-<kurz>` |
 
