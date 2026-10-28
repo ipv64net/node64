@@ -387,6 +387,19 @@ func (c *Client) Get(ctx context.Context, path string, v any) error {
 	return e
 }
 
+// getFirst fragt nur die zuletzt funktionierende Adresse (ohne Failover): fuer Anfragen, deren Fehler auf jedem Node
+// gleich ausfallen (z. B. Gast-Agent nicht aktiv: 500).
+func (c *Client) getFirst(ctx context.Context, path string, v any) error {
+	o := c.order()
+	if len(o) == 0 {
+		return &Error{Kind: ErrUnreachable, Detail: "no address"}
+	}
+	if err := c.getOne(ctx, o[0], path, v); err != nil {
+		return err
+	}
+	return nil
+}
+
 // failover: lohnt sich eine andere Adresse?
 func pveFailover(e *Error) bool {
 	switch {

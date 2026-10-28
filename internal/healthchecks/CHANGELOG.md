@@ -1,5 +1,15 @@
 # Änderungen – Healthchecks
 
+## 2.41.0 – 2026-10-28
+
+### Geändert
+- Proxmox VE und Docker: Checks zeigen eine echte Latenz statt 0 ms bzw. der Zeit der Docker-API – Ping zur Adresse
+  des Nodes, Gasts bzw. Containers (ein Paket, höchstens 2 s), sonst die Antwortzeit der Proxmox- bzw. Docker-API.
+  Die Quelle steht im Rohergebnis (`latency_source`: `ping` oder `api`). Der Status bleibt unverändert, ein
+  fehlgeschlagener Ping macht keinen Check rot.
+  - Proxmox: Node-Adressen aus `cluster/status`; Adressen laufender Gäste als Check alle 5 Minuten über den Gast-Agent
+    (VMs, Recht `VM.Monitor` bzw. ab PVE 9 `VM.GuestAgent.Audit`) bzw. `lxc/{vmid}/interfaces` (Container).
+
 ## 2.40.0 – 2026-10-28
 
 ### Geändert

@@ -174,6 +174,11 @@ type Runner struct {
 
 	famMu    sync.Mutex
 	famCache map[string]famState
+
+	// ping misst die Latenz fuer Proxmox- und Docker-Checks (icmpChecker.rtt; Tests: austauschbar)
+	ping     func(ctx context.Context, ip net.IP, timeout time.Duration) (time.Duration, bool)
+	pingMu   sync.Mutex
+	pingFail map[string]time.Time // Adresse -> letzter Fehlschlag (pingLatency)
 }
 
 type famState struct {
@@ -185,7 +190,9 @@ type famState struct {
 func NewRunner() *Runner {
 	r := &Runner{checkers: map[Type]Checker{}, Resolver: net.DefaultResolver, Now: func() time.Time { return time.Now().UTC() }, famCache: map[string]famState{}}
 	r.FamilyProbe = probeFamily
-	for _, c := range []Checker{&httpChecker{}, &httpChecker{keyword: true}, &httpChecker{json: true}, &dnsChecker{r: r}, &tcpChecker{}, &portChecker{}, &certChecker{}, &icmpChecker{}, dockerChecker{r: r}, proxmoxChecker{r: r}, whoisChecker{r: r}} {
+	ic := &icmpChecker{}
+	r.ping = ic.rtt
+	for _, c := range []Checker{&httpChecker{}, &httpChecker{keyword: true}, &httpChecker{json: true}, &dnsChecker{r: r}, &tcpChecker{}, &portChecker{}, &certChecker{}, ic, dockerChecker{r: r}, proxmoxChecker{r: r}, whoisChecker{r: r}} {
 		r.checkers[c.Type()] = c
 	}
 	return r

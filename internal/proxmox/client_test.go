@@ -41,6 +41,7 @@ type fakePVE struct {
 	certs     map[string][]map[string]any // Node -> certificates/info
 	noCerts   bool                        // certificates/info: 403
 	version   string
+	ifaces    map[string]any // "node/qemu/vmid" bzw. "node/lxc/vmid" -> Antwort von agent/network-get-interfaces bzw. interfaces
 }
 
 func (f *fakePVE) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -105,6 +106,14 @@ func (f *fakePVE) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data = map[string]any{"status": "running", "qmpstatus": q}
+	case strings.HasPrefix(p, "/nodes/") && (strings.HasSuffix(p, "/agent/network-get-interfaces") || strings.HasSuffix(p, "/interfaces")):
+		parts := strings.Split(p, "/") // "", nodes, n, qemu|lxc, id, ...
+		d, ok := f.ifaces[parts[2]+"/"+parts[3]+"/"+parts[4]]
+		if !ok {
+			w.WriteHeader(http.StatusInternalServerError) // wie Proxmox ohne laufenden Gast-Agent
+			return
+		}
+		data = d
 	default:
 		w.WriteHeader(http.StatusNotImplemented)
 		return

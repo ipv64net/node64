@@ -4748,7 +4748,7 @@
       "rights_privsep": "Mit „Privilege Separation“ braucht das Token eigene Rechte:",
       "rights_secret": "Das Secret zeigt Proxmox nur einmal beim Anlegen an.",
       "about": "Was Node64 abfragt",
-      "about_text": "Nur lesend: cluster/resources im eingestellten Takt (ein Aufruf für alles), cluster/status jede Minute, qmpstatus laufender VMs alle 2 Minuten. Node64 startet, stoppt oder ändert in Proxmox nichts.",
+      "about_text": "Nur lesend: cluster/resources im eingestellten Takt (ein Aufruf für alles), cluster/status jede Minute, qmpstatus laufender VMs alle 2 Minuten, für Gäste als Check deren Adresse alle 5 Minuten (Gast-Agent bzw. LXC) für den Ping der Latenz. Node64 startet, stoppt oder ändert in Proxmox nichts.",
       "probe_confirm_first": "Das Token wurde noch nicht gesendet: erst den Fingerabdruck vergleichen und bestätigen, dann erneut „Verbindung testen“."
     },
     "warn_rights": "Dem Token fehlen Leserechte (Sys.Audit auf „/“) – Clustername, Quorum und Node-Zustand fehlen, ohne weitere Rechte auch VMs und Container.",

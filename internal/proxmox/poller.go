@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/url"
 	"sort"
 	"strconv"
@@ -22,6 +23,8 @@ import (
 //   qmpstatus          laufender VMs alle 2 min (hoechstens 4 gleichzeitig); VMs, deren letzter Wert nicht
 //                      „running“ ist, bei jeder Abfrage neu (hoechstens pveQMPRecheck), damit ein alter Wert
 //                      (angehalten, abgestuerzt) nach Fortsetzen bzw. Neustart nicht stehen bleibt
+//   Adressen           laufender Gaeste mit Check (WantIP) je Gast alle 5 min, hoechstens 8 je Abfrage (2 gleichzeitig):
+//                      QEMU agent/network-get-interfaces, LXC interfaces – fuer den Ping der Latenz (Check-Typ proxmox)
 // Jede Abfrage ergibt einen Snapshot (auch bei Fehler: OK=false, Error, keine Resources) und geht an fn.
 
 const (
@@ -34,6 +37,11 @@ const (
 	pveQMPRequestWait = 30 * time.Second // alle qmpstatus-Anfragen einer Runde zusammen
 	pveQMPRecheck     = 16               // VMs mit qmpstatus ungleich running je Abfrage neu fragen
 	pveLockGrace      = 4 * time.Hour    // gestoppter Gast mit Lock (Backup im Stopp-Modus, Migration): so lange neutral
+	pveIPEvery        = 5 * time.Minute  // Adresse eines Gasts so oft neu holen (auch nach Fehlern)
+	pveIPWant         = 10 * time.Minute // Gast gilt als gewuenscht, solange sein Check so kuerzlich gefragt hat
+	pveIPPerRound     = 8                // Adressen je Abfrage
+	pveIPParallel     = 2
+	pveIPRequestWait  = 8 * time.Second // alle Adress-Anfragen einer Runde zusammen
 )
 
 // ClampInterval bringt ein Intervall in die Grenzen (0 = Standard).
@@ -61,6 +69,7 @@ type Poller struct {
 
 	mu   sync.Mutex
 	last *Snapshot
+	want map[string]time.Time // Key -> letzte Frage eines Checks (WantIP)
 
 	// nur von der Abfrage-Schleife benutzt
 	version   string
@@ -77,6 +86,17 @@ type Poller struct {
 	failing   bool
 	warn      string // Rechte-Hinweis aus cluster/status (403)
 	paced     bool   // laeuft per Run (Takt mit schnellen Wiederholungen): Snapshot.Interval setzen
+
+	// Latenz der Checks (Check-Typ proxmox)
+	nodeIP  map[string]string     // Node -> IP aus cluster/status
+	guestIP map[string]pveGuestIP // Key -> Adresse des Gasts
+	apiLat  time.Duration         // Antwortzeit der letzten erfolgreichen Abfrage von cluster/resources
+}
+
+// pveGuestIP ist eine abgerufene Adresse eines Gasts (ip leer = keine bzw. Fehler) mit Node und Zeit des Abrufs.
+type pveGuestIP struct {
+	ip, node string
+	at       time.Time
 }
 
 // pvePrev ist der Stand einer Resource bei der letzten erfolgreichen Abfrage (Raten, Neustart, Lock).
@@ -119,7 +139,18 @@ func newPoller(log *slog.Logger, sys System, fn SnapshotFunc, c *Client, err err
 		nodeUp:   map[string]bool{},
 		qmp:      map[string]pveQMP{},
 		prev:     map[string]pvePrev{},
+		want:     map[string]time.Time{},
+		nodeIP:   map[string]string{},
+		guestIP:  map[string]pveGuestIP{},
 	}
+}
+
+// WantIP meldet, dass ein Check nach dem Gast fragt (Check-Typ proxmox): seine Adresse wird fuer den Ping der Latenz
+// geholt, solange er innerhalb von pveIPWant wieder fragt.
+func (p *Poller) WantIP(key string) {
+	p.mu.Lock()
+	p.want[key] = p.now()
+	p.mu.Unlock()
 }
 
 // Last ist der letzte Snapshot (nil vor der ersten Abfrage).
@@ -182,6 +213,7 @@ func (p *Poller) Poll(ctx context.Context) *Snapshot {
 		s.Address = p.client.Address()
 	}
 	s.Version, s.Cluster, s.Quorate = p.version, p.cluster, p.quorate
+	s.APILatency = p.apiLat
 	s.Warning = p.warn
 	if p.paced {
 		s.Interval = p.interval // Verzoegerung „nicht erreichbar“ auch zeitlich (Wiederholungen nach Fehlern sind schneller)
@@ -257,9 +289,11 @@ type pveVersion struct {
 // collect fuehrt die faelligen Abfragen aus und fuellt s.
 func (p *Poller) collect(ctx context.Context, now time.Time, s *Snapshot) error {
 	var raw []pveResource
+	start := time.Now()
 	if err := p.client.Get(ctx, "/cluster/resources", &raw); err != nil {
 		return err
 	}
+	p.apiLat = max(time.Since(start), time.Microsecond) // 0 = unbekannt (grobe Uhr, z. B. Windows)
 	// cluster/status: im Takt, oder sofort, wenn die Nodes in cluster/resources anders aussehen als zuletzt.
 	statusDue := p.statusAt.IsZero() || now.Sub(p.statusAt) >= pveStatusEvery
 	if !statusDue && len(p.nodeUp) > 0 {
@@ -292,6 +326,7 @@ func (p *Poller) collect(ctx context.Context, now time.Time, s *Snapshot) error 
 		p.fetchQMP(ctx, res, only)
 	}
 	p.evaluate(now, res)
+	p.fetchIPs(ctx, now, res)
 	s.Resources = res
 	return nil
 }
@@ -310,6 +345,12 @@ func (p *Poller) fetchStatus(ctx context.Context) {
 	cluster, quorate, up, ips := pveParseStatus(st)
 	p.cluster, p.quorate, p.nodeUp = cluster, quorate, up
 	p.client.SetLearned(ips)
+	p.nodeIP = map[string]string{}
+	for _, e := range st {
+		if e.Type == TypeNode && e.IP != "" {
+			p.nodeIP[e.Name] = e.IP
+		}
+	}
 	p.fetchCerts(ctx, st)
 }
 
@@ -655,4 +696,153 @@ func pveRate(old, cur, dt float64) float64 {
 		return 0
 	}
 	return (cur - old) / dt
+}
+
+// fetchIPs setzt die Adressen fuer den Ping der Latenz: Nodes aus cluster/status, laufende Gaeste, nach denen ein
+// Check fragt (WantIP), je Gast hoechstens alle pveIPEvery (auch nach Fehlern), je Abfrage hoechstens pveIPPerRound.
+// QEMU nur mit Gast-Agent (Recht VM.Monitor, ab PVE 9 VM.GuestAgent.Audit), LXC ueber /interfaces (VM.Audit). Fehler
+// bleiben still, die Latenz kommt dann aus der Antwortzeit der API. Nach evaluate aufrufen (State gesetzt).
+func (p *Poller) fetchIPs(ctx context.Context, now time.Time, res []Resource) {
+	p.mu.Lock()
+	want := map[string]bool{}
+	for k, t := range p.want {
+		if now.Sub(t) < pveIPWant {
+			want[k] = true
+		} else {
+			delete(p.want, k)
+		}
+	}
+	p.mu.Unlock()
+	type job struct {
+		key, path, node string
+		lxc             bool
+	}
+	var jobs []job
+	next := map[string]pveGuestIP{}
+	for i := range res {
+		r := &res[i]
+		if (r.Type != TypeQEMU && r.Type != TypeLXC) || r.Template || r.Status != "running" || r.State == StateUnknown || !want[r.Key()] {
+			continue
+		}
+		old, had := p.guestIP[r.Key()]
+		if had {
+			next[r.Key()] = old // bleibt, bis eine neue Abfrage gelingt
+		}
+		if (had && old.node == r.Node && now.Sub(old.at) < pveIPEvery) || len(jobs) >= pveIPPerRound {
+			continue
+		}
+		path := "/nodes/" + url.PathEscape(r.Node) + "/" + r.Type + "/" + strconv.Itoa(r.VMID)
+		if r.Type == TypeQEMU {
+			path += "/agent/network-get-interfaces"
+		} else {
+			path += "/interfaces"
+		}
+		jobs = append(jobs, job{r.Key(), path, r.Node, r.Type == TypeLXC})
+	}
+	if len(jobs) > 0 {
+		ctx, cancel := context.WithTimeout(ctx, pveIPRequestWait)
+		defer cancel()
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, pveIPParallel)
+		for _, j := range jobs {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(j job) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				var ip string
+				var err error
+				if j.lxc {
+					var l []pveLXCIface
+					if err = p.client.getFirst(ctx, j.path, &l); err == nil {
+						ip = pveLXCIP(l)
+					}
+				} else {
+					var a pveAgentIfaces
+					if err = p.client.getFirst(ctx, j.path, &a); err == nil {
+						ip = pveAgentIP(a)
+					}
+				}
+				if err != nil {
+					p.log.Debug("proxmox guest address failed", "guest", j.key, "err", err)
+				}
+				mu.Lock()
+				next[j.key] = pveGuestIP{ip: ip, node: j.node, at: now}
+				mu.Unlock()
+			}(j)
+		}
+		wg.Wait()
+	}
+	p.guestIP = next
+	for i := range res {
+		r := &res[i]
+		switch r.Type {
+		case TypeNode:
+			r.IP = p.nodeIP[r.Node]
+		case TypeQEMU, TypeLXC:
+			r.IP = next[r.Key()].ip
+		}
+	}
+}
+
+// pveAgentIfaces ist die Antwort von agent/network-get-interfaces (Ergebnis von guest-network-get-interfaces).
+type pveAgentIfaces struct {
+	Result []struct {
+		Name string `json:"name"`
+		IPs  []struct {
+			Addr string `json:"ip-address"`
+		} `json:"ip-addresses"`
+	} `json:"result"`
+}
+
+// pveLXCIface ist ein Eintrag von lxc/{vmid}/interfaces (inet/inet6 "a/praefix", neuere Versionen auch ip-addresses).
+type pveLXCIface struct {
+	Name  string `json:"name"`
+	Inet  string `json:"inet"`
+	Inet6 string `json:"inet6"`
+	IPs   []struct {
+		Addr string `json:"ip-address"`
+	} `json:"ip-addresses"`
+}
+
+func pveAgentIP(a pveAgentIfaces) string {
+	var l []string
+	for _, i := range a.Result {
+		for _, x := range i.IPs {
+			l = append(l, x.Addr)
+		}
+	}
+	return pvePickIP(l)
+}
+
+func pveLXCIP(ifs []pveLXCIface) string {
+	var l []string
+	for _, i := range ifs {
+		l = append(l, strings.Fields(strings.ReplaceAll(i.Inet+" "+i.Inet6, ",", " "))...)
+		for _, x := range i.IPs {
+			l = append(l, x.Addr)
+		}
+	}
+	return pvePickIP(l)
+}
+
+// pvePickIP waehlt die erste brauchbare IPv4 (ohne Loopback und Link-Local), sonst die erste globale IPv6 ("" =
+// keine). Adressen duerfen ein Praefix tragen (a/24).
+func pvePickIP(list []string) string {
+	v6 := ""
+	for _, s := range list {
+		s, _, _ = strings.Cut(strings.TrimSpace(s), "/")
+		ip := net.ParseIP(s)
+		if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() || ip.IsMulticast() {
+			continue
+		}
+		if ip.To4() != nil {
+			return ip.String()
+		}
+		if v6 == "" && ip.IsGlobalUnicast() {
+			v6 = ip.String()
+		}
+	}
+	return v6
 }

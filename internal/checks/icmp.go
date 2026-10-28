@@ -93,6 +93,73 @@ func (c *icmpChecker) Check(ctx context.Context, def Definition, ip net.IP) Resu
 	return fail(ReasonICMPDenied, msg, 0, details)
 }
 
+// rtt ist ein einzelner Ping fuer die Latenz anderer Check-Typen (Proxmox, Docker); false = keine Antwort, Fehler
+// bzw. ICMP nicht erlaubt.
+func (c *icmpChecker) rtt(ctx context.Context, ip net.IP, timeout time.Duration) (time.Duration, bool) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	for _, priv := range c.modes() {
+		stats, err := c.ping(ctx, ip, 1, timeout, priv)
+		if err != nil {
+			if permissionDenied(err) {
+				continue
+			}
+			return 0, false
+		}
+		c.remember(priv)
+		if stats.PacketsRecv == 0 {
+			return 0, false
+		}
+		return stats.AvgRtt, true
+	}
+	return 0, false
+}
+
+// Latenz anderer Check-Typen per Ping (Proxmox, Docker): hoechstens LatencyPingTimeout; nach einem Fehlschlag wird
+// die Adresse latencyPingPause lang nicht gepingt (ein nicht erreichbares Netz kostete sonst jeden Lauf den Timeout).
+const (
+	LatencyPingTimeout = 2 * time.Second
+	latencyPingPause   = 5 * time.Minute
+)
+
+// pingLatency pingt ip fuer die Latenz (nur Anzeige, nie fuer den Status); false = nicht gemessen.
+func (r *Runner) pingLatency(ctx context.Context, ip net.IP) (time.Duration, bool) {
+	if r == nil || r.ping == nil || ip == nil {
+		return 0, false
+	}
+	key, now := ip.String(), time.Now()
+	r.pingMu.Lock()
+	t, failed := r.pingFail[key]
+	r.pingMu.Unlock()
+	if failed && now.Sub(t) < latencyPingPause {
+		return 0, false
+	}
+	timeout := LatencyPingTimeout
+	if dl, ok := ctx.Deadline(); ok && time.Until(dl) < timeout {
+		timeout = time.Until(dl)
+	}
+	if timeout < 200*time.Millisecond {
+		return 0, false
+	}
+	d, ok := r.ping(ctx, ip, timeout)
+	r.pingMu.Lock()
+	defer r.pingMu.Unlock()
+	if ok {
+		delete(r.pingFail, key)
+		return d, true
+	}
+	if r.pingFail == nil {
+		r.pingFail = map[string]time.Time{}
+	}
+	for k, t := range r.pingFail {
+		if now.Sub(t) >= latencyPingPause {
+			delete(r.pingFail, k)
+		}
+	}
+	r.pingFail[key] = now
+	return 0, false
+}
+
 func (c *icmpChecker) modes() []bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
