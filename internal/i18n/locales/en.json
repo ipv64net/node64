@@ -402,6 +402,7 @@
         "dup": "The name already belongs to container {name} (the first one seen wins).",
         "rule": "Traefik router {name}: rule not supported (Host(…) only).",
         "service": "Traefik router {name}: no unique service or port.",
+        "access": "Access list \"{name}\" does not exist – create it under access lists with this name.",
         "delete": "Managed by Docker – remove the label or the container",
         "docker_host": "Invalid Docker API: unix:///path, tcp://host:port or http(s)://host:port.",
         "cert": "Invalid certificate method."

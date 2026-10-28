@@ -402,6 +402,7 @@
         "dup": "Der Name gehört schon zu Container {name} (der zuerst gesehene gewinnt).",
         "rule": "Traefik-Router {name}: Regel nicht unterstützt (nur Host(…)).",
         "service": "Traefik-Router {name}: kein eindeutiger Service bzw. Port.",
+        "access": "Zugriffsliste „{name}“ gibt es nicht – unter Zugriffslisten mit diesem Namen anlegen.",
         "delete": "Von Docker verwaltet – Label oder Container entfernen",
         "docker_host": "Ungültige Docker-API: unix:///pfad, tcp://host:port oder http(s)://host:port.",
         "cert": "Ungültiger Weg für das Zertifikat."

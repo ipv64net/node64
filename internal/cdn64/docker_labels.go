@@ -14,6 +14,7 @@ const (
 	LabelProxyPort    = "node64.proxy.port"    // Port im Container (fehlt: der einzige freigegebene Port)
 	LabelProxyScheme  = "node64.proxy.scheme"  // http (Standard) | https
 	LabelProxyNetwork = "node64.proxy.network" // Docker-Netz zum Container (fehlt: automatisch)
+	LabelProxyAccess  = "node64.proxy.access"  // Name einer Zugriffsliste (fehlt: in der Oberflaeche einstellbar)
 	labelProxyPrefix  = "node64.proxy."
 )
 
@@ -44,6 +45,7 @@ const (
 	dockerErrDup       = "cdn64.docker.err.dup"        // Name schon bei einem anderen Container ({name} = Container)
 	dockerErrRule      = "cdn64.docker.err.rule"       // Traefik-Regel nicht unterstuetzt (nur Host(...)) ({name} = Router)
 	dockerErrService   = "cdn64.docker.err.service"    // Traefik-Router ohne eindeutigen Service/Port ({name} = Router)
+	dockerErrAccess    = "cdn64.docker.err.access"     // Zugriffsliste aus dem Label gibt es nicht ({name} = Name); Host kommt trotzdem
 )
 
 // dockerSpec ist ein Proxy-Host aus den Labels eines Containers.
@@ -54,6 +56,14 @@ type dockerSpec struct {
 	Scheme  string   // http | https
 	Port    int      // 0 = aus den freigegebenen Ports des Containers bestimmen
 	Network string   // "" = automatisch
+	Access  *dockerAccess
+}
+
+// dockerAccess: Zugriffsliste aus den Labels (node64.proxy.access bzw. Traefik-Middleware mit forwardAuth).
+type dockerAccess struct {
+	Name    string       // Name der Liste
+	Auth    string       // Anmeldedienst, falls die Liste aus einer Traefik-Middleware angelegt wird
+	Forward *ForwardAuth // nil = Liste muss es schon geben
 }
 
 // dockerProblem ist ein Label bzw. Router, das nicht uebernommen wird.
@@ -106,5 +116,8 @@ func ownSpec(labels map[string]string) (dockerSpec, *dockerProblem) {
 		s.Scheme = v
 	}
 	s.Network = strings.TrimSpace(labels[LabelProxyNetwork])
+	if v := strings.TrimSpace(labels[LabelProxyAccess]); v != "" {
+		s.Access = &dockerAccess{Name: v}
+	}
 	return s, nil
 }
