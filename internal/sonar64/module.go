@@ -84,6 +84,8 @@ var (
 	ErrToken     = errors.New("sonar64: sonar token could not be created")
 	ErrNotReady  = errors.New("sonar64: node not registered yet")
 	ErrNotJoined = errors.New("sonar64: not participating")
+	// ErrLeftLocally: ausgetreten, aber ipv64 war nicht erreichbar (meldet den Knoten nach 30 Tagen ohne Meldung selbst ab)
+	ErrLeftLocally = errors.New("sonar64: left locally, ipv64 not reached")
 )
 
 // Settings ist die lokale Einstellung (Datenbank der Node, Schluessel sonar64.config). Name, Standort, Anschlussart
@@ -117,6 +119,8 @@ type runnerAPI interface {
 	Me(ctx context.Context) (*sonar.Me, error)
 	UpdateMe(ctx context.Context, m sonar.Me) (*sonar.Me, error)
 	Inbound(ctx context.Context, since time.Time) ([]sonar.InboundRow, error)
+	Leave(ctx context.Context) error
+	Forget() error
 }
 
 // runState ist ein laufender Knoten (Teilnahme an).
@@ -364,7 +368,7 @@ func (m *Module) syncLoop(ctx context.Context, rs *runState, r runnerAPI) {
 		case <-t.C:
 		}
 		wait = meRetry
-		if !r.Status().Registered {
+		if st := r.Status(); !st.Registered || st.Paused == "revoked" { // abgemeldet: der Kern fragt selbst stuendlich
 			continue
 		}
 		cctx, cancel := context.WithTimeout(ctx, apiTimeout)
@@ -545,13 +549,23 @@ func (m *Module) tokenName(ctx context.Context) string {
 	return strings.TrimSpace(b.String())
 }
 
-// SetParticipate schaltet die Teilnahme. Einschalten braucht den zentralen ipv64-API-Key und legt beim ersten Mal
-// das Sonar-Token an (verschluesselt gespeichert); Ausschalten beendet den Knoten, das Token bleibt (gleiche Node-ID
-// beim naechsten Mal).
+// SetParticipate schaltet die Teilnahme. Einschalten braucht den zentralen ipv64-API-Key und legt das Sonar-Token
+// an, wenn keins da ist (verschluesselt gespeichert). Ausschalten tritt aus (leaveLocked): der Knoten wird bei ipv64
+// abgemeldet, Token, Schluessel und Node-ID sind weg (beim naechsten Mal ein neuer Knoten). War ipv64 dabei nicht
+// erreichbar, ist trotzdem ausgeschaltet und der Fehler ist ErrLeftLocally.
 func (m *Module) SetParticipate(ctx context.Context, on bool) error {
 	m.ctl.Lock()
 	defer m.ctl.Unlock()
+	return m.setParticipateLocked(ctx, on)
+}
+
+// setParticipateLocked ist SetParticipate (m.ctl gehalten).
+func (m *Module) setParticipateLocked(ctx context.Context, on bool) error {
 	s := m.LoadSettings(ctx)
+	var leaveErr error
+	if !on {
+		leaveErr = m.leaveLocked(ctx)
+	}
 	if on {
 		key := m.apiKey(ctx)
 		if key == "" {
@@ -581,6 +595,77 @@ func (m *Module) SetParticipate(ctx context.Context, on bool) error {
 		m.mu.Lock()
 		m.runErr, m.me, m.meAt, m.meErr, m.inRows, m.inKey = "", nil, time.Time{}, "", nil, ""
 		m.mu.Unlock()
+	}
+	return leaveErr
+}
+
+// leaveLocked tritt aus (m.ctl gehalten, Vertrag 10.2): Knoten beenden, bei ipv64 abmelden (Leave: DELETE /sonar/me,
+// loescht sonar64.json und sonar64.key) und das Token vergessen. Klappt die Abmeldung nicht, wird trotzdem lokal
+// ausgetreten (Forget) und der Fehler kommt als ErrLeftLocally.
+func (m *Module) leaveLocked(ctx context.Context) error {
+	_ = m.stopRunnerLocked(ctx)
+	tok := m.token(ctx)
+	var leaveErr error
+	if tok != "" {
+		cfg := sonar.Config{APIBase: m.apiBase, Token: tok, DataDir: m.dir(), Mode: "module", Version: m.runVersion(), Log: m.log}
+		if m.dataDir == "" {
+			cfg.DataDir = ""
+		}
+		r, err := m.newRunner(cfg)
+		if err != nil {
+			leaveErr = err
+			if cfg.DataDir != "" { // z. B. kaputter Schluessel: lokal trotzdem aufraeumen
+				_ = os.Remove(filepath.Join(cfg.DataDir, "sonar64.json"))
+				_ = os.Remove(filepath.Join(cfg.DataDir, "sonar64.key"))
+			}
+		} else {
+			cctx, cancel := context.WithTimeout(ctx, apiTimeout)
+			leaveErr = r.Leave(cctx)
+			cancel()
+			if leaveErr != nil {
+				if err := r.Forget(); err != nil {
+					m.log.Warn("sonar64 local state not removed", "err", err)
+				}
+			}
+		}
+	}
+	if err := m.core.SetSetting(ctx, setToken, ""); err != nil {
+		return err
+	}
+	if leaveErr != nil {
+		m.log.Warn("sonar64 left locally, ipv64 not reached (signs off after 30 days without reports)", "err", leaveErr)
+		return fmt.Errorf("%w: %v", ErrLeftLocally, leaveErr)
+	}
+	if tok != "" {
+		m.log.Info("sonar64 node signed off at ipv64")
+	}
+	return nil
+}
+
+// Rejoin nimmt nach einer Abmeldung durch ipv64 neu teil: den alten Knoten austreten (bzw. lokal vergessen), ein neues
+// Sonar-Token anlegen und neu starten (neue Node-ID).
+func (m *Module) Rejoin(ctx context.Context) error {
+	m.ctl.Lock()
+	defer m.ctl.Unlock()
+	if m.apiKey(ctx) == "" {
+		return ErrNoKey
+	}
+	if err := m.setParticipateLocked(ctx, false); err != nil && !errors.Is(err, ErrLeftLocally) {
+		return err
+	}
+	return m.setParticipateLocked(ctx, true)
+}
+
+// BeforeReset (module.Resetter): vor "Node zuruecksetzen" aus Sonar64 austreten (auch bei ausgeschaltetem Modul).
+// Fehler nur als Hinweis; ipv64 meldet den Knoten nach 30 Tagen ohne Meldung selbst ab.
+func (m *Module) BeforeReset(ctx context.Context) error {
+	m.ctl.Lock()
+	defer m.ctl.Unlock()
+	if m.token(ctx) == "" && !m.LoadSettings(ctx).Participate {
+		return nil
+	}
+	if err := m.setParticipateLocked(ctx, false); err != nil {
+		return fmt.Errorf("node not signed off at ipv64 (ipv64 signs it off after 30 days without reports): %w", err)
 	}
 	return nil
 }

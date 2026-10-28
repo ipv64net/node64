@@ -5015,8 +5015,15 @@
       "nokey": "Für die Teilnahme braucht Node64 den zentralen ipv64-API-Key (daraus wird ein eigenes Sonar-Token).",
       "key_link": "API-Key eintragen",
       "join": "Teilnehmen",
-      "leave": "Teilnahme beenden",
-      "off_confirm": "Teilnahme an Sonar64 beenden? Die Node misst danach nicht mehr und antwortet nicht mehr auf UDP 6464."
+      "leave": "Austreten",
+      "off_confirm": "Aus Sonar64 austreten? Die Node meldet ihren Knoten bei ipv64.net ab, misst nicht mehr und antwortet nicht mehr auf UDP 6464. Wer später wieder teilnimmt, bekommt einen neuen Knoten."
+    },
+    "revoked": {
+      "title": "Von ipv64.net abgemeldet",
+      "text": "ipv64.net hat diesen Knoten abgemeldet (Token zurückgezogen, Knoten gesperrt oder 30 Tage ohne Meldung). Die Node misst nicht mehr, antwortet nicht auf UDP 6464 und prüft einmal je Stunde, ob die Abmeldung aufgehoben wurde.",
+      "rejoin": "Neu teilnehmen",
+      "rejoin_hint": "Legt ein neues Sonar-Token und einen neuen Knoten an (neue Node-ID, die Vertrauensstufe beginnt von vorn).",
+      "rejoin_confirm": "Mit einem neuen Knoten neu an Sonar64 teilnehmen?"
     },
     "status": {
       "node_id": "Node-ID",
@@ -5038,7 +5045,8 @@
       "uplink": "eigene Leitung gestört",
       "quiet": "Ruhezeit",
       "no_plan": "kein Plan von ipv64",
-      "budget": "Tagesgrenze erreicht"
+      "budget": "Tagesgrenze erreicht",
+      "revoked": "von ipv64.net abgemeldet"
     },
     "trust": {
       "title": "Vertrauensstufe",
@@ -5169,11 +5177,14 @@
       "lat": "Breitengrad zwischen -90 und 90.",
       "lon": "Längengrad zwischen -180 und 180.",
       "access": "Unbekannte Anschlussart.",
-      "device": "Unbekanntes Gerät."
+      "device": "Unbekanntes Gerät.",
+      "revoked": "Der Knoten ist von ipv64.net abgemeldet."
     },
     "flash": {
       "participate_on": "Sonar64: Teilnahme eingeschaltet – die Node meldet sich bei ipv64 an.",
-      "participate_off": "Sonar64: Teilnahme beendet.",
+      "participate_off": "Sonar64: ausgetreten – der Knoten ist bei ipv64.net abgemeldet.",
+      "left_local": "Sonar64: lokal ausgetreten, aber ipv64.net war nicht erreichbar ({error}). ipv64.net meldet den Knoten nach 30 Tagen ohne Meldung selbst ab.",
+      "rejoined": "Sonar64: neu angemeldet – die Node meldet sich mit einem neuen Knoten bei ipv64 an.",
       "saved": "Sonar64: gespeichert."
     }
   }

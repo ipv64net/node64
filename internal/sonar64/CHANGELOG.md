@@ -13,4 +13,10 @@ Erste Fassung des Community-Messnetzes Sonar64 als optionales Modul (standardmä
 - Vertrauensstufe als farbiges Abzeichen mit Fortschritt zur nächsten Stufe, Link zur öffentlichen Knotenseite.
 - Live-Tabellen „Pings von mir“ (alle 5 Sekunden) und „Pings gegen mich“ (UDP 6464 sofort, sonst aus den Ergebnissen
   bei ipv64).
+- Schnelle Aufnahme: Plan alle 2 Minuten (unverändert nur eine kurze Antwort), Meldung alle 5 Minuten.
+- „Austreten“ meldet den Knoten bei ipv64.net ab und löscht Token, Schlüssel und Node-ID; ist ipv64.net nicht
+  erreichbar, wird lokal trotzdem ausgetreten (ipv64.net meldet den Knoten nach 30 Tagen ohne Meldung selbst ab).
+  „Node zurücksetzen“ tritt ebenfalls aus.
+- Von ipv64.net abgemeldet (Token zurückgezogen, gesperrt, 30 Tage ohne Meldung): die Node misst nicht mehr, schließt
+  UDP 6464 und prüft stündlich; die Seite zeigt „Von ipv64.net abgemeldet“ mit „Neu teilnehmen“ (neues Token).
 - Lokale API `/api/sonar64/status`, `recent`, `inbound`, `settings`.

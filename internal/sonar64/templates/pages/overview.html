@@ -14,7 +14,16 @@
 			<div class="card-header"><i class="bi bi-people text-primary"></i> {{.T "sonar64.participate.title"}}</div>
 			<div class="card-body">
 				{{if $d.Settings.Participate}}
+				{{if $d.Revoked}}
+				<div class="alert alert-danger small py-2" id="s64-revoked"><i class="bi bi-x-octagon"></i> <strong>{{.T "sonar64.revoked.title"}}</strong><br>{{.T "sonar64.revoked.text"}}</div>
+				<form method="post" action="/sonar64/rejoin" class="mb-3">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<button class="btn btn-sm btn-success" type="submit"{{if not $d.KeySet}} disabled{{end}} data-confirm="{{.T "sonar64.revoked.rejoin_confirm"}}"><i class="bi bi-arrow-repeat"></i> {{.T "sonar64.revoked.rejoin"}}</button>
+					<div class="form-text">{{.T "sonar64.revoked.rejoin_hint"}}</div>
+				</form>
+				{{else}}
 				<p class="mb-2"><span class="badge text-bg-success"><i class="bi bi-check-lg"></i> {{.T "sonar64.participate.on"}}</span></p>
+				{{end}}
 				<dl class="row small mb-0">
 					<dt class="col-5">{{.T "sonar64.status.node_id"}}</dt><dd class="col-7 font-monospace">{{if $d.Status.NodeID}}{{$d.Status.NodeID}}{{else}}–{{end}}</dd>
 					<dt class="col-5">{{.T "sonar64.status.registered"}}</dt><dd class="col-7">{{if $d.Registered}}{{.T "common.yes"}}{{else}}{{.T "common.no"}}{{end}}</dd>
@@ -25,7 +34,7 @@
 					<dt class="col-5">{{.T "sonar64.status.responder"}}</dt><dd class="col-7">{{if $d.Status.Responder}}<span class="text-success">{{.T "sonar64.status.responder_on" "port" $d.Port}}</span>{{else}}{{.T "sonar64.status.responder_off"}}{{end}}</dd>
 				</dl>
 				{{if $d.RunErr}}<div class="alert alert-warning small py-2 mt-2 mb-0" id="s64-run-error"><i class="bi bi-exclamation-triangle"></i> {{.T "sonar64.status.error"}} <span class="font-monospace">{{$d.RunErr}}</span></div>{{end}}
-				{{if $d.Status.LastError}}<div class="alert alert-warning small py-2 mt-2 mb-0"><i class="bi bi-exclamation-triangle"></i> {{.T "sonar64.status.error"}} <span class="font-monospace">{{$d.Status.LastError}}</span></div>{{end}}
+				{{if and $d.Status.LastError (not $d.Revoked)}}<div class="alert alert-warning small py-2 mt-2 mb-0"><i class="bi bi-exclamation-triangle"></i> {{.T "sonar64.status.error"}} <span class="font-monospace">{{$d.Status.LastError}}</span></div>{{end}}
 				{{if $d.PortErr}}<div class="alert alert-warning small py-2 mt-2 mb-0" id="s64-port-error"><i class="bi bi-router"></i> {{.T "sonar64.status.port_busy" "port" $d.Port}} <span class="font-monospace">{{$d.PortErr}}</span></div>{{end}}
 				<form method="post" action="/sonar64/participate" class="mt-3">
 					<input type="hidden" name="_csrf" value="{{.CSRF}}">

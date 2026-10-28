@@ -145,7 +145,7 @@ func writeAtomic(p string, b []byte) error {
 	return os.Rename(tmp, p)
 }
 
-// saveState schreibt den Zustand (ohne DataDir nichts). Fehler nur ins Log.
+// saveState schreibt den Zustand (ohne DataDir und nach Leave/Forget nichts). Fehler nur ins Log.
 func (r *Runner) saveState() {
 	if r.cfg.DataDir == "" {
 		return
@@ -153,8 +153,11 @@ func (r *Runner) saveState() {
 	r.saveMu.Lock()
 	defer r.saveMu.Unlock()
 	r.mu.Lock()
-	st := r.st
+	st, left := r.st, r.left
 	r.mu.Unlock()
+	if left {
+		return
+	}
 	if err := writeState(r.cfg.DataDir, st); err != nil {
 		r.log.Warn("sonar64: cannot save state", "err", err)
 	}

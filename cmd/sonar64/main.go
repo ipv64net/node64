@@ -4,6 +4,7 @@
 //
 //	sonar64              Knoten starten (Einstellung ueber SONAR64_*-Umgebungsvariablen)
 //	sonar64 healthcheck  prueft den Mini-Status (fuer Docker HEALTHCHECK), Exit 0 = gesund
+//	sonar64 leave        tritt aus: bei ipv64.net abmelden, Schluessel und Zustand loeschen, Exit 0 = erledigt
 //	sonar64 version      zeigt die Version
 package main
 
@@ -39,8 +40,10 @@ func main() {
 			return
 		case "healthcheck":
 			os.Exit(healthcheck(os.Getenv))
+		case "leave":
+			os.Exit(leave(os.Getenv, os.Stdout, os.Stderr))
 		default:
-			fmt.Fprintln(os.Stderr, "usage: sonar64 [version|healthcheck]  (settings via SONAR64_* environment, see docs/SONAR64.md)")
+			fmt.Fprintln(os.Stderr, "usage: sonar64 [version|healthcheck|leave]  (settings via SONAR64_* environment, see docs/SONAR64.md)")
 			os.Exit(2)
 		}
 	}

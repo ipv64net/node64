@@ -31,6 +31,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	page := func(h http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(h)) }
 	mux.Handle("GET /sonar64", page(m.pageOverview))
 	mux.Handle("POST /sonar64/participate", page(m.pageParticipate))
+	mux.Handle("POST /sonar64/rejoin", page(m.pageRejoin))
 	mux.Handle("POST /sonar64/settings", page(m.pageSettings))
 	mux.Handle("POST /sonar64/profile", page(m.pageProfile))
 	mux.Handle("GET /sonar64/sonar64.js", page(m.serveJS)) // CSP: Skripte nur von der eigenen Adresse
@@ -99,6 +100,7 @@ type overviewData struct {
 	Status      sonar.Status
 	HasRunner   bool
 	Registered  bool
+	Revoked     bool // von ipv64 abgemeldet (Status.Paused "revoked")
 	RunErr      string
 	PortErr     string
 	Me          *sonar.Me
@@ -128,6 +130,7 @@ func (m *Module) overview(r *http.Request) *overviewData {
 		d.HasRunner = true
 		d.Status = rn.Status()
 		d.Registered = d.Status.Registered
+		d.Revoked = d.Status.Paused == "revoked"
 		res, in := rn.Recent(50)
 		d.Recent = resultViews(res)
 		m.mu.Lock()
@@ -170,13 +173,22 @@ func (m *Module) errText(r *http.Request, err error) string {
 		return m.g.T(r, "sonar64.err.not_ready")
 	case errors.Is(err, ErrNotJoined):
 		return m.g.T(r, "sonar64.err.not_joined")
+	case errors.Is(err, sonar.ErrRevoked):
+		return m.g.T(r, "sonar64.err.revoked")
 	}
 	return m.g.T(r, "sonar64.err.api", "error", err.Error())
 }
 
 func (m *Module) pageParticipate(w http.ResponseWriter, r *http.Request) {
 	on := r.PostFormValue("participate") == "1"
-	if err := m.SetParticipate(r.Context(), on); err != nil {
+	err := m.SetParticipate(r.Context(), on)
+	if errors.Is(err, ErrLeftLocally) { // ausgetreten, nur ipv64 nicht erreicht: Hinweis statt Fehler
+		m.g.Audit(r, "sonar64.participate", Name, "off (local)")
+		m.g.Flash(w, r, "warning", m.g.T(r, "sonar64.flash.left_local", "error", strings.TrimPrefix(err.Error(), ErrLeftLocally.Error()+": ")))
+		http.Redirect(w, r, "/sonar64", http.StatusSeeOther)
+		return
+	}
+	if err != nil {
 		m.log.Warn("sonar64 participation not changed", "on", on, "err", err)
 		m.g.Flash(w, r, "danger", m.errText(r, err))
 		http.Redirect(w, r, "/sonar64", http.StatusSeeOther)
@@ -188,6 +200,19 @@ func (m *Module) pageParticipate(w http.ResponseWriter, r *http.Request) {
 	}
 	m.g.Audit(r, "sonar64.participate", Name, state)
 	m.g.Flash(w, r, "success", m.g.T(r, "sonar64.flash.participate_"+state))
+	http.Redirect(w, r, "/sonar64", http.StatusSeeOther)
+}
+
+// pageRejoin: nach einer Abmeldung durch ipv64 mit neuem Token und neuem Knoten teilnehmen.
+func (m *Module) pageRejoin(w http.ResponseWriter, r *http.Request) {
+	if err := m.Rejoin(r.Context()); err != nil {
+		m.log.Warn("sonar64 rejoin failed", "err", err)
+		m.g.Flash(w, r, "danger", m.errText(r, err))
+		http.Redirect(w, r, "/sonar64", http.StatusSeeOther)
+		return
+	}
+	m.g.Audit(r, "sonar64.rejoin", Name, "")
+	m.g.Flash(w, r, "success", m.g.T(r, "sonar64.flash.rejoined"))
 	http.Redirect(w, r, "/sonar64", http.StatusSeeOther)
 }
 

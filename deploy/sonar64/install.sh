@@ -4,7 +4,8 @@
 #
 #   sudo sh install.sh                 neueste Version installieren bzw. aktualisieren (fragt nach dem Token)
 #   sudo SONAR64_TOKEN=s64_... sh install.sh
-#   sudo sh install.sh --uninstall     Dienst und Programm entfernen (Einstellung und Schluessel bleiben)
+#   sudo sh install.sh --uninstall     bei ipv64.net abmelden (sonar64 leave), Dienst und Programm entfernen
+#                                      (uebrige Einstellungen bleiben; klappt die Abmeldung nicht, auch Token und Schluessel)
 #   sudo sh install.sh --purge         zusaetzlich /etc/sonar64.env und /var/lib/sonar64 loeschen
 #
 # Variablen: SONAR64_VERSION (z. B. 0.1.0, Standard: neueste), SONAR64_TOKEN, SONAR64_MEASURED (0/1),
@@ -38,12 +39,27 @@ command -v systemctl >/dev/null 2>&1 || die "systemd is required (use the Docker
 case "${1:-}" in
 --uninstall | --purge)
 	systemctl disable --now sonar64.service 2>/dev/null || true
+	# vorher bei ipv64.net abmelden (Knoten und Token); ein Fehler wird nur gemeldet
+	LEFT=
+	TOK=$(sed -n 's/^SONAR64_TOKEN=//p' "$ENVF" 2>/dev/null | head -n 1)
+	API=$(sed -n 's/^SONAR64_API=//p' "$ENVF" 2>/dev/null | head -n 1)
+	if [ -x "$BIN" ] && [ -n "$TOK" ]; then
+		if SONAR64_TOKEN="$TOK" SONAR64_API="$API" SONAR64_DATA="$DATA" "$BIN" leave; then
+			LEFT=1
+			[ ! -f "$ENVF" ] || sed -i '/^SONAR64_TOKEN=/d' "$ENVF" # Token ist widerrufen
+		else
+			say "WARNING: could not sign off at ipv64.net - it signs off nodes without reports after 30 days"
+		fi
+	fi
+	TOK=
 	rm -f "$UNIT" "$BIN"
 	systemctl daemon-reload
 	if [ "$1" = --purge ]; then
 		rm -f "$ENVF"
 		rm -rf "$DATA" /var/lib/private/sonar64
 		say "removed (including settings, key and node ID)"
+	elif [ -n "$LEFT" ]; then
+		say "removed and signed off (other settings in $ENVF kept)"
 	else
 		say "removed (settings $ENVF and key in $DATA kept)"
 	fi

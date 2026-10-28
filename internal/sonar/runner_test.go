@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -91,6 +92,10 @@ type fakeAPI struct {
 	puts     []meWrite
 	rawPuts  []string
 	since    []string
+	token    string   // leer = testToken
+	revoked  int      // 401 = invalid_token, 403 = node_disabled auf allen Token-Pfaden
+	calls    []string // "METHOD /pfad"
+	delCode  int      // Status fuer DELETE /sonar/me (0 = 204)
 	srv      *httptest.Server
 }
 
@@ -115,8 +120,23 @@ func data(w http.ResponseWriter, v any) {
 func (f *fakeAPI) handle(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if r.URL.Path != "/sonar/tokens" && r.Header.Get("Authorization") != "Bearer "+testToken {
+	f.calls = append(f.calls, r.Method+" "+r.URL.Path)
+	tok := f.token
+	if tok == "" {
+		tok = testToken
+	}
+	if r.URL.Path != "/sonar/tokens" && r.Header.Get("Authorization") != "Bearer "+tok {
 		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if f.revoked != 0 && r.URL.Path != "/sonar/tokens" {
+		code := "invalid_token"
+		if f.revoked == http.StatusForbidden {
+			code = "node_disabled"
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(f.revoked)
+		io.WriteString(w, `{"title":"x","status":`+itoa(f.revoked)+`,"detail":"revoked","code":"`+code+`"}`)
 		return
 	}
 	switch r.URL.Path {
@@ -128,6 +148,14 @@ func (f *fakeAPI) handle(w http.ResponseWriter, r *http.Request) {
 		f.regs++
 		data(w, Me{NodeID: f.nodeID})
 	case "/sonar/me":
+		if r.Method == http.MethodDelete {
+			code := f.delCode
+			if code == 0 {
+				code = http.StatusNoContent
+			}
+			w.WriteHeader(code)
+			return
+		}
 		if r.Method == http.MethodPut {
 			var m meWrite
 			b, _ := io.ReadAll(r.Body)
@@ -247,6 +275,7 @@ func newTestRunner(t *testing.T, f *fakeAPI, dir string, p Prober, mod func(*Con
 	r.reportEvery = 150 * time.Millisecond
 	r.reportGap = 20 * time.Millisecond
 	r.retryMin = 30 * time.Millisecond
+	r.revokedEvery = 150 * time.Millisecond
 	r.tick = 10 * time.Millisecond
 	r.bucket = newBucket(1000, time.Now) // nur Tests: schneller als 2/s
 	return r
@@ -848,5 +877,277 @@ func TestInboundMerge(t *testing.T) {
 	r.mu.Unlock()
 	if n != 2 {
 		t.Fatalf("merged into a report in flight: %d", n)
+	}
+}
+
+func (f *fakeAPI) callsSince(i int) []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.calls[min(i, len(f.calls)):]...)
+}
+
+func (f *fakeAPI) set(fn func()) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fn()
+}
+
+// Abgemeldet (401 invalid_token): nicht mehr messen, Antworter zu, Puffer weg, nur GET /sonar/me; danach wieder normal.
+func TestRunnerRevokedAndBack(t *testing.T) {
+	fr := &fakeResponder{}
+	old := openResponder
+	openResponder = func(string, string) (responderIface, error) { return fr, nil }
+	defer func() { openResponder = old }()
+	f := newFakeAPI(t)
+	now := time.Now().UTC()
+	var rounds []Round
+	for i := range 60 {
+		rounds = append(rounds, Round{Start: now.Add(time.Duration(i) * time.Second), Targets: publicTargets(1, MethodICMP, 1)})
+	}
+	f.setPlan(testPlan(rounds...))
+	fp := &fakeProber{}
+	r := newTestRunner(t, f, t.TempDir(), fp, func(c *Config) { c.Measured = true })
+	r.planEvery = 200 * time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() { r.Run(ctx); close(done) }()
+	wait := func(what string, cond func() bool) {
+		t.Helper()
+		for i := 0; !cond(); i++ {
+			if i > 800 {
+				t.Fatalf("timeout: %s (status %+v)", what, r.Status())
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	wait("measuring", func() bool {
+		reps, _, _, _ := f.snapshot()
+		return len(fp.all()) >= 1 && r.Status().Responder && len(reps) > 0
+	})
+	f.set(func() { f.revoked = http.StatusUnauthorized })
+	wait("revoked", func() bool { st := r.Status(); return st.Paused == "revoked" && !st.Responder })
+	time.Sleep(50 * time.Millisecond)
+	n := len(fp.all())
+	f.mu.Lock()
+	mark := len(f.calls)
+	f.mu.Unlock()
+	time.Sleep(700 * time.Millisecond)
+	if len(fp.all()) != n {
+		t.Fatalf("measured while revoked: %d -> %d", n, len(fp.all()))
+	}
+	calls := f.callsSince(mark)
+	if len(calls) < 2 || len(calls) > 8 {
+		t.Fatalf("checks while revoked: %v", calls)
+	}
+	for _, c := range calls {
+		if c != "GET /sonar/me" {
+			t.Fatalf("request while revoked: %v", calls)
+		}
+	}
+	if st := r.Status(); st.Buffered != 0 || st.Responder {
+		t.Fatalf("status while revoked: %+v", st)
+	}
+	if _, err := r.Me(ctx); !errors.Is(err, ErrRevoked) {
+		t.Fatalf("me while revoked: %v", err)
+	}
+	fr.mu.Lock()
+	stopped := fr.stopped
+	fr.mu.Unlock()
+	if stopped == 0 {
+		t.Fatal("responder not closed")
+	}
+	select {
+	case <-done:
+		t.Fatal("Run ended while revoked")
+	default:
+	}
+	// Account wieder frei: normal weiter, Antworter wieder an
+	f.set(func() { f.revoked = 0 })
+	wait("back", func() bool { st := r.Status(); return st.Paused != "revoked" && st.Responder && len(fp.all()) > n })
+	cancel()
+	<-done
+}
+
+// Nur 401 invalid_token und 403 node_disabled melden ab; 401 ohne Code, 429 und 409 nicht.
+func TestRunnerRevokedCodes(t *testing.T) {
+	f := newFakeAPI(t)
+	r := newTestRunner(t, f, "", &fakeProber{}, nil)
+	ctx := context.Background()
+	if err := r.ensureRegistered(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, code := range []int{http.StatusUnauthorized, http.StatusTooManyRequests, http.StatusConflict, http.StatusForbidden} {
+		f.set(func() { f.planCode = code })
+		r.fetchPlan(ctx)
+		if r.isRevoked() {
+			t.Fatalf("%d without code revoked the node", code)
+		}
+	}
+	for _, c := range []struct {
+		status int
+		code   string
+		want   bool
+	}{{401, "invalid_token", true}, {403, "node_disabled", true}, {401, "unauthenticated", false}, {403, "invalid_token", false}, {429, "rate_limited", false}} {
+		if got := revokedErr(&APIError{Status: c.status, Code: c.code}); got != c.want {
+			t.Errorf("%d %s: %v", c.status, c.code, got)
+		}
+	}
+	f.set(func() { f.planCode = 0 })
+	r.store(Result{Target: "a_fsn", Family: 4, Method: MethodICMP, Sent: 1, Recv: 1, MinMs: 1, AvgMs: 1, MaxMs: 1, At: time.Now()})
+	f.set(func() { f.revoked = http.StatusForbidden })
+	r.fetchPlan(ctx)
+	if st := r.Status(); !r.isRevoked() || st.Paused != "revoked" || st.Buffered != 0 {
+		t.Fatalf("403 node_disabled: %+v", st)
+	}
+	r.checkBack(ctx)
+	if !r.isRevoked() {
+		t.Fatal("back while still disabled")
+	}
+	f.set(func() { f.revoked = 0 })
+	r.checkBack(ctx)
+	if r.isRevoked() || r.Status().Paused == "revoked" {
+		t.Fatal("not back after 200")
+	}
+
+	// noch nicht angemeldet und Token widerrufen: stuendlich (hier 150 ms) GET /sonar/me statt Register
+	f2 := newFakeAPI(t)
+	f2.revoked = http.StatusUnauthorized
+	r2 := newTestRunner(t, f2, "", &fakeProber{}, nil)
+	ctx2, cancel := context.WithTimeout(context.Background(), 600*time.Millisecond)
+	r2.Run(ctx2)
+	cancel()
+	calls := f2.callsSince(0)
+	if len(calls) < 3 || calls[0] != "POST /sonar/register" || r2.Status().Registered || r2.Status().Paused != "revoked" {
+		t.Fatalf("unregistered revoked: %v %+v", calls, r2.Status())
+	}
+	for _, c := range calls[1:] {
+		if c != "GET /sonar/me" {
+			t.Fatalf("unregistered revoked: %v", calls)
+		}
+	}
+	f2.set(func() { f2.revoked = 0 })
+	runFor(t, r2, func() bool { return r2.Status().Registered }, 5*time.Second)
+}
+
+// Leave: DELETE /sonar/me, Run endet, sonar64.json und sonar64.key weg; Fehler laesst alles stehen, Forget nur lokal.
+func TestRunnerLeave(t *testing.T) {
+	f := newFakeAPI(t)
+	dir := t.TempDir()
+	r := newTestRunner(t, f, dir, &fakeProber{}, nil)
+	ctx := context.Background()
+	done := make(chan error, 1)
+	go func() { done <- r.Run(ctx) }()
+	exists := func(d, name string) bool { _, err := os.Stat(filepath.Join(d, name)); return err == nil }
+	for i := 0; !r.Status().Registered || !exists(dir, stateFile); i++ {
+		if i > 500 {
+			t.Fatal("not registered")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	f.set(func() { f.delCode = http.StatusBadGateway })
+	if err := r.Leave(ctx); err == nil {
+		t.Fatal("leave with 502 must fail")
+	}
+	select {
+	case <-done:
+		t.Fatal("Run ended after a failed leave")
+	case <-time.After(50 * time.Millisecond):
+	}
+	if !exists(dir, stateFile) || !exists(dir, keyFile) {
+		t.Fatal("files removed after a failed leave")
+	}
+	f.set(func() { f.delCode = 0 })
+	if err := r.Leave(ctx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not end after leave")
+	}
+	time.Sleep(50 * time.Millisecond)
+	if exists(dir, stateFile) || exists(dir, keyFile) {
+		t.Fatal("state or key kept after leave")
+	}
+	deleted := false
+	for _, c := range f.callsSince(0) {
+		deleted = deleted || c == "DELETE /sonar/me"
+	}
+	if !deleted {
+		t.Fatalf("no DELETE /sonar/me: %v", f.callsSince(0))
+	}
+	if err := r.Run(ctx); !errors.Is(err, errLeft) {
+		t.Fatalf("run after leave: %v", err)
+	}
+
+	// 401 und 404 gelten als erledigt (schon abgemeldet)
+	for _, code := range []int{http.StatusUnauthorized, http.StatusNotFound} {
+		d := t.TempDir()
+		f.set(func() { f.delCode = code })
+		r := newTestRunner(t, f, d, &fakeProber{}, nil)
+		if err := r.Leave(ctx); err != nil || exists(d, keyFile) {
+			t.Fatalf("%d: %v", code, err)
+		}
+	}
+
+	// ohne Verbindung: Fehler, nichts geloescht; Forget loescht lokal
+	d := t.TempDir()
+	f2 := newFakeAPI(t)
+	r3 := newTestRunner(t, f2, d, &fakeProber{}, nil)
+	f2.srv.Close()
+	if err := r3.Leave(ctx); err == nil || !exists(d, keyFile) {
+		t.Fatalf("offline leave: %v", err)
+	}
+	if err := r3.Forget(); err != nil || exists(d, keyFile) {
+		t.Fatalf("forget: %v", err)
+	}
+}
+
+func TestIntervals(t *testing.T) {
+	n, err := New(Config{Token: testToken, Log: quietLog(), PlanKeys: []string{}})
+	if err != nil || n.planEvery != 2*time.Minute || n.reportEvery != 5*time.Minute || n.revokedEvery != time.Hour {
+		t.Fatalf("node: %v", err)
+	}
+	a, err := New(Config{Token: "s64a_0123456789abcdefghijABCDEFGHIJ0123456789", Mode: ModeAnchor, Log: quietLog(), PlanKeys: []string{}})
+	if err != nil || a.planEvery != time.Minute || a.reportEvery != time.Minute {
+		t.Fatalf("anchor: %v", err)
+	}
+	lo, hi := time.Hour, time.Duration(0)
+	for range 5000 {
+		d := jitter(time.Minute)
+		lo, hi = min(lo, d), max(hi, d)
+	}
+	if lo < 48*time.Second || hi > 72*time.Second || lo > 52*time.Second || hi < 68*time.Second {
+		t.Fatalf("jitter range %v..%v", lo, hi)
+	}
+}
+
+// Anker melden jede Minute nur, wenn etwas zu melden ist; Health spaetestens nach heartbeat.
+func TestAnchorReportsOnlyWithData(t *testing.T) {
+	const anchorTok = "s64a_0123456789abcdefghijABCDEFGHIJ0123456789"
+	f := newFakeAPI(t)
+	f.token = anchorTok
+	r := newTestRunner(t, f, "", &fakeProber{}, func(c *Config) { c.Mode, c.Token = ModeAnchor, anchorTok })
+	r.heartbeat = time.Hour
+	ctx := context.Background()
+	if err := r.ensureRegistered(ctx); err != nil {
+		t.Fatal(err)
+	}
+	count := func() int { reps, _, _, _ := f.snapshot(); return len(reps) }
+	r.report(ctx) // erste Meldung (Health)
+	r.report(ctx) // nichts zu melden
+	if n := count(); n != 1 {
+		t.Fatalf("reports %d, want 1", n)
+	}
+	r.store(Result{Round: time.Now().UTC(), Target: "nabc000000001", Family: 4, Method: MethodUDP, Sent: 1, Recv: 1, MinMs: 1, AvgMs: 1, MaxMs: 1, At: time.Now()})
+	r.report(ctx)
+	if n := count(); n != 2 {
+		t.Fatalf("reports %d, want 2", n)
+	}
+	r.heartbeat = 0
+	r.report(ctx)
+	if n := count(); n != 3 {
+		t.Fatalf("heartbeat: reports %d, want 3", n)
 	}
 }
