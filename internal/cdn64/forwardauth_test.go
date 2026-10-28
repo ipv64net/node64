@@ -227,6 +227,32 @@ func TestDockerTraefikForwardAuth(t *testing.T) {
 	if h.AccessListID != lists[0].ID {
 		t.Fatalf("app host without list: %+v", h)
 	}
+	// Liste aus dem Label: Auswahl im Formular gesperrt, Speichern in Oberflaeche und API aendert sie nicht
+	if e.m.dockerACLFrom(ctx, h) != "Traefik: authentik" {
+		t.Fatalf("acl from label: %q", e.m.dockerACLFrom(ctx, h))
+	}
+	if form := aiRender(t, "host_form.html", e.m.form(ctx, h, false)); !strings.Contains(form, `name="access_list_id" disabled data-docker-acl`) ||
+		!strings.Contains(form, "cdn64.docker.form_access") {
+		t.Fatal("host form does not lock the access list from the label")
+	}
+	e.m.g.Flash = func(http.ResponseWriter, *http.Request, string, string) {}
+	e.m.g.T = func(_ *http.Request, key string, _ ...any) string { return key }
+	e.m.g.Render = func(w http.ResponseWriter, _ *http.Request, st int, _, _ string, _ any) { w.WriteHeader(st) }
+	req := httptest.NewRequest("POST", "/cdn64/hosts/x", strings.NewReader(url.Values{"access_list_id": {"0"}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", strconv.FormatInt(h.ID, 10))
+	rec := httptest.NewRecorder()
+	e.m.pageUpdate(rec, req)
+	if got, _ := e.m.host(ctx, h.ID); rec.Code != http.StatusSeeOther || got.AccessListID != lists[0].ID {
+		t.Fatalf("form changed the label's list: %d %+v", rec.Code, got)
+	}
+	req = httptest.NewRequest("PUT", "/api/cdn64/hosts/x", strings.NewReader(`{"access_list_id":0}`))
+	req.SetPathValue("id", strconv.FormatInt(h.ID, 10))
+	rec = httptest.NewRecorder()
+	e.m.apiUpdate(rec, req)
+	if got, _ := e.m.host(ctx, h.ID); got.AccessListID != lists[0].ID {
+		t.Fatalf("api changed the label's list: %d %s %+v", rec.Code, rec.Body.String(), got)
+	}
 	// sso@file: Liste fehlt -> Host trotzdem, mit Hinweis; mit Liste "sso" wird sie zugewiesen
 	if v := viewOf(e.m, "wiki"); v.HostID == 0 || v.Problem != dockerErrAccess || v.ProblemName != "sso" {
 		t.Fatalf("wiki: %+v", v)

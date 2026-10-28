@@ -14,7 +14,8 @@
   are always removed.
 - Docker labels: `node64.proxy.access` assigns an access list by name. With Traefik labels a middleware with
   `forwardauth.address` automatically becomes the access list "Traefik: <name>" (preset by address); `name@file` refers to
-  a list of the same name. The router for `/outpost.goauthentik.io/` is no longer needed.
+  a list of the same name. The router for `/outpost.goauthentik.io/` is no longer needed. If the access list comes from
+  a label, it is locked in the form.
 
 ## 1.36.0 – 2026-10-28
 

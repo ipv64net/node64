@@ -99,12 +99,12 @@
 					{{end}}
 					{{if or (eq $h.Kind "proxy") (eq $h.Kind "redirect") (eq $h.Kind "status")}}
 					<label class="form-label fw-semibold mt-3" for="access_list_id">{{.T "cdn64.f.access_list"}}</label>
-					<select class="form-select form-select-sm{{if index $d.Errors "access_list_id"}} is-invalid{{end}}" id="access_list_id" name="access_list_id">
+					<select class="form-select form-select-sm{{if index $d.Errors "access_list_id"}} is-invalid{{end}}" id="access_list_id" name="access_list_id"{{if $d.DockerACL}} disabled data-docker-acl{{end}}>
 						<option value="0">{{.T "cdn64.f.access_public"}}</option>
 						{{range $d.ACLs}}<option value="{{.ID}}"{{if eq .ID $h.AccessListID}} selected{{end}}>{{.Name}}</option>{{end}}
 					</select>
 					{{with index $d.Errors "access_list_id"}}<div class="invalid-feedback">{{.}}</div>{{end}}
-					<div class="form-text">{{.T "cdn64.f.access_hint"}} <a href="/cdn64/access">{{.T "cdn64.tab.access"}}</a></div>
+					<div class="form-text">{{if $d.DockerACL}}<i class="bi bi-box-seam"></i> {{.T "cdn64.docker.form_access" "name" $d.DockerACL}}{{else}}{{.T "cdn64.f.access_hint"}}{{end}} <a href="/cdn64/access">{{.T "cdn64.tab.access"}}</a></div>
 					{{end}}
 					{{if ne $h.Kind "dead"}}
 					<input type="hidden" name="has_geo" value="1">

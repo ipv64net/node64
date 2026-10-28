@@ -14,7 +14,8 @@
   (und die des Anmeldedienstes) entfernt PROXY64 immer.
 - Docker-Labels: `node64.proxy.access` weist eine Zugriffsliste per Name zu. Bei Traefik-Labels wird eine Middleware
   mit `forwardauth.address` automatisch zur Zugriffsliste „Traefik: <Name>“ (Vorlage nach der Adresse); `name@file`
-  verweist auf eine Liste gleichen Namens. Der Router für `/outpost.goauthentik.io/` wird nicht mehr gebraucht.
+  verweist auf eine Liste gleichen Namens. Der Router für `/outpost.goauthentik.io/` wird nicht mehr gebraucht. Kommt die
+  Zugriffsliste aus einem Label, ist sie im Formular gesperrt.
 
 ## 1.36.0 – 2026-10-28
 

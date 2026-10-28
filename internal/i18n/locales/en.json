@@ -383,6 +383,7 @@
       "badge": "Docker",
       "form_hint": "Comes from the Docker labels of container {name}.",
       "form_router": "(Traefik router {name})",
+      "form_access": "Comes from the Docker label (access list \"{name}\").",
       "form_locked": "Names, scheme and target are therefore locked; everything else can be set here and is kept.",
       "form_link": "Docker settings",
       "help_title": "How it works",

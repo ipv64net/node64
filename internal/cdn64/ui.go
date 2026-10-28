@@ -375,8 +375,9 @@ type formData struct {
 	StatusPages []StatusPageInfo // Auswahl der Statusseite
 	StatusKnown bool             // gewaehlte Seite gibt es auf dieser Node
 
-	Docker   string // von Docker verwaltet: Container (Namen, Schema und Ziel gesperrt), "" = von Hand angelegt
-	DockerRO bool   // ... und Docker-Labels an: nicht loeschbar
+	Docker    string // von Docker verwaltet: Container (Namen, Schema und Ziel gesperrt), "" = von Hand angelegt
+	DockerRO  bool   // ... und Docker-Labels an: nicht loeschbar
+	DockerACL string // Zugriffsliste aus den Labels (Auswahl gesperrt)
 }
 
 // advText: die weiteren Optionen als Text fuer das Formular.
@@ -446,6 +447,7 @@ func (m *Module) form(ctx context.Context, h *Host, isNew bool) formData {
 	d.CFNets = strings.Join(CloudflareNets, "\n")
 	if h.DockerContainer != "" {
 		d.Docker, d.DockerRO = m.dockerHostLabel(h), m.dockerOn(ctx)
+		d.DockerACL = m.dockerACLFrom(ctx, h)
 	}
 	d.GeoText = strings.Join(a.GeoCountries, ", ")
 	m.bl.mu.Lock()
@@ -569,6 +571,9 @@ func (m *Module) pageUpdate(w http.ResponseWriter, r *http.Request) {
 	hostFromForm(r, h)
 	if h.DockerContainer != "" { // Namen, Schema und Ziel kommen aus den Docker-Labels (Formularwerte zaehlen nicht)
 		h.Names, h.Scheme, h.TargetHost, h.TargetPort, h.Kind = old.Names, old.Scheme, old.TargetHost, old.TargetPort, old.Kind
+		if m.dockerACLFrom(r.Context(), &old) != "" { // Zugriffsliste kommt aus den Labels
+			h.AccessListID = old.AccessListID
+		}
 	}
 	m.saveForm(w, r, h, false)
 }
