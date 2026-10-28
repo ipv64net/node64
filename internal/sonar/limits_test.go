@@ -4,6 +4,8 @@ import (
 	"context"
 	"math"
 	"net/netip"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 )
@@ -179,16 +181,36 @@ func TestCleanResult(t *testing.T) {
 	now := time.Now()
 	r := cleanResult(Result{Target: "evil", Method: "x", Sent: 50, Recv: 70, MinMs: math.NaN(), AvgMs: 5, MaxMs: math.Inf(1),
 		JitterMs: -1, Error: "<script>", At: now.Add(time.Hour)}, base, 3, now, now)
-	if r.Target != "a_fsn" || r.Method != MethodICMP || r.Sent != 3 || r.Recv != 3 || r.MinMs != 0 || r.MaxMs != 5 ||
+	// NaN/Inf als Antwortzeit: unbrauchbar, als nicht gemessen melden (sonst bad_values bei ipv64)
+	if r.Target != "a_fsn" || r.Method != MethodICMP || r.Sent != 0 || r.Recv != 0 || r.MinMs != 0 || r.MaxMs != 0 ||
 		r.JitterMs != 0 || r.Error != "error" || !r.At.Equal(now.UTC()) {
 		t.Fatalf("not cleaned: %+v", r)
 	}
+	r = cleanResult(Result{Sent: 5, Recv: 9, MinMs: 4, AvgMs: 3, MaxMs: 6, JitterMs: 50}, base, 5, now, now)
+	if r.Sent != 5 || r.Recv != 5 || r.MinMs != 3 || r.AvgMs != 3 || r.MaxMs != 6 || r.JitterMs != 3 || r.Error != "" {
+		t.Fatalf("values not consistent: %+v", r)
+	}
+	r = cleanResult(Result{Sent: 2, Recv: 2, MinMs: 0, AvgMs: 1, MaxMs: 2}, base, 5, now, now)
+	if r.Sent != 0 || r.Recv != 0 || r.Error != "invalid" {
+		t.Fatalf("zero rtt kept: %+v", r)
+	}
 	tb := base
 	tb.Method = MethodTrace
-	r = cleanResult(Result{Sent: 3, Recv: 3, Hops: []Hop{{TTL: 1, Addr: "192.168.1.1", RTTMs: 1}, {TTL: 2, Addr: "80.1.2.3", RTTMs: 5},
-		{TTL: 99, Addr: "1.1.1.1"}}}, tb, 90, now, now)
-	if len(r.Hops) != 2 || r.Hops[0].Addr != "" || r.Hops[1].Addr != "80.1.2.3" {
-		t.Fatalf("hops not cleaned: %+v", r.Hops)
+	r = cleanResult(Result{Sent: 3, Recv: 3, Hops: []Hop{{TTL: 3, Addr: "80.1.2.4", RTTMs: 6}, {TTL: 1, Addr: "192.168.1.1", RTTMs: 1},
+		{TTL: 2, Addr: "80.1.2.3", RTTMs: 5}, {TTL: 2, Addr: "80.9.9.9"}, {TTL: 99, Addr: "1.1.1.1"}}}, tb, 90, now, now)
+	if len(r.Hops) != 3 || r.Hops[0].Addr != "" || r.Hops[1].Addr != "80.1.2.3" || r.Hops[2].TTL != 3 {
+		t.Fatalf("hops not cleaned (sorted, unique TTL): %+v", r.Hops)
+	}
+}
+
+func TestCleanVersion(t *testing.T) {
+	for in, want := range map[string]string{
+		"": "dev", "0.1.0": "0.1.0", "0.1.0/node64-0.11.116-dev": "0.1.0+node64-0.11.116-dev", "v1 (test)": "v1--test-",
+		"(devel)": "devel-", "--": "dev", "\x00abc": "abc", strings.Repeat("9", 40): strings.Repeat("9", 32),
+	} {
+		if got := cleanVersion(in); got != want || !regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z.+_~-]{0,31}$`).MatchString(got) {
+			t.Errorf("%q: %q, want %q", in, got, want)
+		}
 	}
 }
 

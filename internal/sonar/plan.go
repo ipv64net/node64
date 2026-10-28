@@ -88,6 +88,9 @@ func verifyPlan(raw []byte, sig string, keys []ed25519.PublicKey, nodeID string,
 		if len(anchors) >= MaxAnchorTargets {
 			break
 		}
+		if !strings.HasPrefix(t.ID, "a_") {
+			continue // Rueckfall nur zu Ankern, nie zu Knoten
+		}
 		if c, err := cleanTarget(t, true); err == nil {
 			anchors = append(anchors, c)
 		}

@@ -68,6 +68,17 @@ func (r *Runner) setErr(err error) {
 	r.mu.Unlock()
 }
 
+// setPlanErr merkt einen Fehler beim Plan (nil = behoben).
+func (r *Runner) setPlanErr(err error) {
+	r.mu.Lock()
+	if err == nil {
+		r.planErr = ""
+	} else {
+		r.planErr = errText(err)
+	}
+	r.mu.Unlock()
+}
+
 func (r *Runner) signalWake() {
 	select {
 	case r.wake <- struct{}{}:
@@ -231,24 +242,24 @@ func (r *Runner) fetchPlan(ctx context.Context) time.Duration {
 	}
 	resp, err := r.api.send(ctx, http.MethodGet, "/sonar/plan", r.cfg.Token, hdr, nil, limit)
 	if err != nil {
-		r.setErr(err)
+		r.setPlanErr(err)
 		return r.retryMin
 	}
 	switch {
 	case resp.status == http.StatusNotModified:
-		r.setErr(nil)
+		r.setPlanErr(nil)
 		return jitter(r.planEvery)
 	case resp.status == http.StatusNoContent:
 		r.mu.Lock()
 		r.plan = nil
 		r.st.PlanRaw, r.st.PlanSig, r.st.PlanKID, r.st.ETag = nil, "", "", ""
-		r.lastErr = ""
+		r.planErr = ""
 		r.mu.Unlock()
 		r.saveState()
 		return jitter(r.planEvery)
 	case resp.status < 200 || resp.status > 299:
 		e := apiError(resp)
-		r.setErr(e)
+		r.setPlanErr(e)
 		if e.RetryAfter > 0 {
 			return min(max(e.RetryAfter, r.retryMin), time.Hour)
 		}
@@ -259,15 +270,15 @@ func (r *Runner) fetchPlan(ctx context.Context) time.Duration {
 	}
 	var sp SignedPlan
 	if err := unwrap(resp.body, &sp); err != nil {
-		r.setErr(err)
+		r.setPlanErr(err)
 		return r.retryMin
 	}
 	now := r.now()
 	p, err := verifyPlan(sp.Plan, sp.Sig, r.keys, nodeID, now)
 	if err != nil {
-		r.setErr(fmt.Errorf("plan rejected: %w", err))
+		r.setPlanErr(fmt.Errorf("plan rejected: %w", err))
 		r.log.Warn("sonar64: plan rejected", "err", err)
-		return r.retryMin
+		return jitter(r.planEvery) // nicht jede Minute neu laden (Anker-Plaene sind gross)
 	}
 	newTag := resp.header.Get("ETag")
 	if !etagRe.MatchString(newTag) {
@@ -281,7 +292,7 @@ func (r *Runner) fetchPlan(ctx context.Context) time.Duration {
 		return jitter(r.planEvery)
 	}
 	r.plan = ap
-	r.lastErr = ""
+	r.planErr = ""
 	if len(ap.raw) <= maxStoredPlan {
 		r.st.PlanRaw, r.st.PlanSig, r.st.PlanKID, r.st.ETag, r.st.PlanGot = ap.raw, ap.sig, ap.kid, ap.etag, now
 	} else {
@@ -304,37 +315,37 @@ func (r *Runner) measureLoop(ctx context.Context) {
 	}
 }
 
-// dueRound sucht die faellige Runde (Plan oder Anker-Rueckfall) und markiert sie als erledigt.
+// dueRound sucht die faellige Runde (Plan oder Anker-Rueckfall) und merkt sie als erledigt. Runden folgen mit
+// mindestens einer Rundenlaenge Abstand aufeinander (auch ein Plan mit ueberlappenden Runden misst nicht oefter),
+// die zuletzt gemessene steht im Zustand (nach Neustart nicht doppelt). r.mu gehalten.
 func (r *Runner) dueRound(now time.Time) (start time.Time, targets []Target, anchorsOnly bool, ok bool) {
 	p := r.plan
 	if p == nil || !now.Before(p.anchorsUntil) {
 		r.paused = "no_plan"
 		return
 	}
+	last := r.st.LastRound
+	if last > now.Add(r.roundLen).UnixMilli() {
+		last = 0 // Uhr wurde zurueckgestellt
+	}
+	due := func(s time.Time) bool {
+		return !now.Before(s) && now.Before(s.Add(r.roundLen)) && (last == 0 || s.UnixMilli() >= last+r.roundLen.Milliseconds())
+	}
 	if now.Before(p.validUntil) {
 		for _, rd := range p.plan.Rounds {
-			s := rd.Start
-			if !now.Before(s) && now.Before(s.Add(r.roundLen)) && !r.doneRounds[s.UnixMilli()] {
-				start, targets, ok = s, rd.Targets, true
+			if due(rd.Start) {
+				start, targets, ok = rd.Start, rd.Targets, true
 				break
 			}
 		}
 		if !ok && r.paused == "no_plan" {
 			r.paused = ""
 		}
-	} else {
-		s := now.UTC().Truncate(r.roundLen)
-		if !r.doneRounds[s.UnixMilli()] {
-			start, targets, anchorsOnly, ok = s, p.plan.Anchors, true, true
-		}
+	} else if s := now.UTC().Truncate(r.roundLen); due(s) {
+		start, targets, anchorsOnly, ok = s, p.plan.Anchors, true, true
 	}
 	if ok {
-		r.doneRounds[start.UnixMilli()] = true
-		for k := range r.doneRounds {
-			if k < now.Add(-3*time.Hour).UnixMilli() {
-				delete(r.doneRounds, k)
-			}
-		}
+		r.st.LastRound = start.UnixMilli()
 	}
 	return
 }
@@ -364,6 +375,12 @@ func (r *Runner) measureTick(ctx context.Context) {
 	if !ok {
 		return
 	}
+	// Runde vermerken (Neustart misst sie nicht noch einmal); im Hintergrund, die Runde wartet nicht auf die Platte
+	r.saves.Add(1)
+	go func() {
+		defer r.saves.Done()
+		r.saveState()
+	}()
 	ts := roundTargets(targets, lim.targets, self, anchorsOnly)
 	if len(ts) == 0 {
 		return
@@ -541,11 +558,19 @@ func cleanResult(res, base Result, packets int, started, now time.Time) Result {
 		return math.Round(v*1000) / 1000
 	}
 	res.MinMs, res.AvgMs, res.MaxMs, res.JitterMs = ms(res.MinMs), ms(res.AvgMs), ms(res.MaxMs), ms(res.JitterMs)
+	if res.Recv > 0 && res.Method != MethodTrace && (res.MinMs <= 0 || res.AvgMs <= 0 || res.MaxMs <= 0) {
+		// unbrauchbare Werte des Probers: als nicht gemessen melden (ipv64 wertete sie sonst als unplausibel)
+		res.Sent, res.Recv = 0, 0
+		if res.Error == "" {
+			res.Error = "invalid"
+		}
+	}
 	if res.Recv == 0 || res.Method == MethodTrace {
 		res.MinMs, res.AvgMs, res.MaxMs, res.JitterMs = 0, 0, 0, 0
 	} else {
 		res.MinMs = min(res.MinMs, res.AvgMs)
 		res.MaxMs = max(res.MaxMs, res.AvgMs)
+		res.JitterMs = min(res.JitterMs, res.MaxMs-res.MinMs)
 	}
 	if res.Error != "" && !errCodeRe.MatchString(res.Error) {
 		res.Error = "error"
@@ -553,13 +578,15 @@ func cleanResult(res, base Result, packets int, started, now time.Time) Result {
 	if res.Method != MethodTrace {
 		res.Hops = nil
 	} else {
-		hops := make([]Hop, 0, min(len(res.Hops), MaxTTL))
-		for _, h := range res.Hops {
+		in := append([]Hop(nil), res.Hops...)
+		sort.SliceStable(in, func(i, j int) bool { return in[i].TTL < in[j].TTL })
+		hops := make([]Hop, 0, min(len(in), MaxTTL))
+		for _, h := range in {
 			if len(hops) >= MaxTTL {
 				break
 			}
-			if h.TTL < 1 || h.TTL > MaxTTL {
-				continue
+			if h.TTL < 1 || h.TTL > MaxTTL || (len(hops) > 0 && hops[len(hops)-1].TTL == h.TTL) {
+				continue // ipv64 verlangt streng steigende TTL
 			}
 			h.RTTMs = ms(h.RTTMs)
 			if a, err := netip.ParseAddr(h.Addr); err != nil || !isPublicAddr(a) {
@@ -645,6 +672,7 @@ func (r *Runner) report(ctx context.Context) (more bool, retry time.Duration) {
 	resAt, inAt := r.bufOff, r.inOff
 	results := append([]Result{}, r.buf[:nRes]...)
 	inbound := append([]Inbound(nil), r.inbuf[:nIn]...)
+	r.inSending = inAt + uint64(nIn)
 	seq := max(r.st.Seq+1, uint64(max(now.UnixMilli(), 0)))
 	r.st.Seq = seq
 	paused := r.paused
@@ -662,6 +690,9 @@ func (r *Runner) report(ctx context.Context) (more bool, retry time.Duration) {
 		rep.Results, rep.Inbound = results, inbound
 		b, err := json.Marshal(rep)
 		if err != nil {
+			r.mu.Lock()
+			r.inSending = 0
+			r.mu.Unlock()
 			r.setErr(err)
 			return false, 0
 		}
@@ -683,6 +714,9 @@ func (r *Runner) report(ctx context.Context) (more bool, retry time.Duration) {
 	defer cancel()
 	resp, err := r.api.send(sctx, http.MethodPost, "/sonar/results", r.cfg.Token, nil, body, smallLimit)
 	if err != nil {
+		r.mu.Lock()
+		r.inSending = 0
+		r.mu.Unlock()
 		r.setErr(err)
 		return false, 0
 	}
@@ -711,6 +745,7 @@ func (r *Runner) report(ctx context.Context) (more bool, retry time.Duration) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.inSending = 0
 	if drop {
 		k := dropCount(r.bufOff, resAt, len(rep.Results), len(r.buf))
 		r.buf, r.bufOff = r.buf[k:], r.bufOff+uint64(k)
@@ -854,14 +889,37 @@ func (r *Runner) drainResponder() {
 			x.At = now
 		}
 		x.At = x.At.UTC()
+		r.recentIn = append(r.recentIn, x)
+		if r.mergeInbound(x) {
+			continue
+		}
 		if len(r.inbuf) >= maxInboundBuf {
 			r.inbuf = r.inbuf[1:]
 			r.inOff++
 		}
 		r.inbuf = append(r.inbuf, x)
-		r.recentIn = append(r.recentIn, x)
 	}
 	if len(r.recentIn) > 2*recentMax {
 		r.recentIn = append(r.recentIn[:0:0], r.recentIn[len(r.recentIn)-recentMax:]...)
 	}
+}
+
+// mergeInbound fasst x mit einem noch nicht gemeldeten Eintrag derselben Quelle, Familie und 5-Minuten-Spanne
+// zusammen (Recent fragt den Antworter alle paar Sekunden ab; die Meldung bleibt trotzdem klein). r.mu gehalten.
+func (r *Runner) mergeInbound(x Inbound) bool {
+	slot := x.At.Truncate(RoundInterval)
+	for i := len(r.inbuf) - 1; i >= 0 && i >= len(r.inbuf)-64; i-- {
+		if r.inOff+uint64(i) < r.inSending {
+			return false // gehoert zu einer laufenden Meldung
+		}
+		e := &r.inbuf[i]
+		if e.From == x.From && e.Family == x.Family && e.At.Truncate(RoundInterval).Equal(slot) {
+			e.Count = min(e.Count+x.Count, 1000000)
+			if x.At.After(e.At) {
+				e.At = x.At
+			}
+			return true
+		}
+	}
+	return false
 }

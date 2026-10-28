@@ -766,3 +766,69 @@ func TestCreateToken(t *testing.T) {
 		t.Fatal("plain http accepted")
 	}
 }
+
+func TestDueRoundSpacingAndRestart(t *testing.T) {
+	f := newFakeAPI(t)
+	dir := t.TempDir()
+	r := newTestRunner(t, f, dir, &fakeProber{}, nil)
+	r.roundLen = time.Minute
+	now := time.Now().UTC().Truncate(time.Minute)
+	ts := publicTargets(1, MethodICMP, 1)
+	p := testPlan(Round{Start: now, Targets: ts}, Round{Start: now.Add(10 * time.Second), Targets: ts},
+		Round{Start: now.Add(time.Minute), Targets: ts})
+	ap := &activePlan{plan: p, validUntil: now.Add(time.Hour), anchorsUntil: now.Add(2 * time.Hour)}
+	due := func(r *Runner, at time.Time) (time.Time, bool) {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		s, _, _, ok := r.dueRound(at)
+		return s, ok
+	}
+	r.plan = ap
+	if s, ok := due(r, now.Add(20*time.Second)); !ok || !s.Equal(now) {
+		t.Fatalf("first round: %v %v", s, ok)
+	}
+	if _, ok := due(r, now.Add(30*time.Second)); ok {
+		t.Fatal("overlapping round measured as well")
+	}
+	r.saveState()
+	// Neustart in derselben Runde: nicht noch einmal
+	r2 := newTestRunner(t, f, dir, &fakeProber{}, nil)
+	r2.roundLen, r2.plan = time.Minute, ap
+	if _, ok := due(r2, now.Add(40*time.Second)); ok {
+		t.Fatal("round measured again after restart")
+	}
+	if s, ok := due(r2, now.Add(61*time.Second)); !ok || !s.Equal(now.Add(time.Minute)) {
+		t.Fatalf("next round: %v %v", s, ok)
+	}
+	// Uhr zurueckgestellt: gespeicherte Runde in der Zukunft blockiert nicht
+	r2.st.LastRound = now.Add(48 * time.Hour).UnixMilli()
+	if _, ok := due(r2, now.Add(5*time.Second)); !ok {
+		t.Fatal("future last round blocks measuring")
+	}
+}
+
+func TestInboundMerge(t *testing.T) {
+	f := newFakeAPI(t)
+	r := newTestRunner(t, f, "", &fakeProber{}, nil)
+	r.responder = &fakeResponder{}
+	for range 3 {
+		r.Recent(5) // fragt den Antworter live ab
+	}
+	r.mu.Lock()
+	n, cnt, rin := len(r.inbuf), 0, len(r.recentIn)
+	if n > 0 {
+		cnt = r.inbuf[0].Count
+	}
+	r.inSending = r.inOff + uint64(len(r.inbuf)) // laufende Meldung: nicht mehr hineinzaehlen
+	r.mu.Unlock()
+	if n != 1 || cnt != 9 || rin != 3 {
+		t.Fatalf("inbuf %d (count %d), recent %d", n, cnt, rin)
+	}
+	r.drainResponder()
+	r.mu.Lock()
+	n = len(r.inbuf)
+	r.mu.Unlock()
+	if n != 2 {
+		t.Fatalf("merged into a report in flight: %d", n)
+	}
+}
