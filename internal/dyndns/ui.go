@@ -31,6 +31,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /dyndns", page(m.pageOverview))
 	mux.Handle("POST /dyndns/check", page(m.pageCheckNow))
 	mux.Handle("POST /dyndns/settings", page(m.pageSettings))
+	mux.Handle("POST /dyndns/cluster", page(m.pageCluster))
 	mux.Handle("GET /dyndns/history", page(m.pageHistory))
 	m.targetRoutes(mux, page)
 }
@@ -102,6 +103,7 @@ type overviewData struct {
 	Source6   string
 	Net       netInfo // Anschluss-Analyse (CGNAT/DS-Lite)
 	NetHops   string
+	Cluster   clusterView // zustaendige Node im Cluster
 }
 
 func (m *Module) famView(fam int, local []ifAddr) famView {
@@ -139,6 +141,7 @@ func (m *Module) pageOverview(w http.ResponseWriter, r *http.Request) {
 	d.List, _ = m.Targets(ctx)
 	d.Targets, d.Groups = len(d.List), groupTargets(d.List)
 	d.Idle = !m.hasActive(ctx)
+	d.Cluster = m.clusterView(ctx)
 	d.KeepC, d.KeepU = m.keepDays(ctx, SetKeepChecks, 30), m.keepDays(ctx, SetKeepUpdates, 365)
 	d.KeepCOpts, d.KeepUOpts = KeepChecksOptions, KeepUpdatesOptions
 	d.NotifyIP, d.NotifyErr, d.NotifyLim = m.notifyOn(ctx, SetNotifyIP), m.notifyOn(ctx, SetNotifyFail), m.notifyOn(ctx, SetNotifyLimit)
@@ -188,6 +191,19 @@ func (m *Module) pageSettings(w http.ResponseWriter, r *http.Request) {
 	m.audit(r, "dyndns.settings", "settings", "interval="+strconv.Itoa(s.Interval)+"m")
 	m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))
 	http.Redirect(w, r, "/dyndns#settings", http.StatusSeeOther)
+}
+
+// pageCluster waehlt die bevorzugte Node im Cluster.
+func (m *Module) pageCluster(w http.ResponseWriter, r *http.Request) {
+	id := r.PostFormValue("preferred")
+	if err := m.setPreferred(r.Context(), id); err != nil {
+		m.g.Flash(w, r, "danger", m.g.T(r, "dyn.cluster.invalid"))
+		http.Redirect(w, r, "/dyndns", http.StatusSeeOther)
+		return
+	}
+	m.audit(r, "dyndns.cluster", "preferred", id)
+	m.g.Flash(w, r, "success", m.g.T(r, "dyn.cluster.saved"))
+	http.Redirect(w, r, "/dyndns", http.StatusSeeOther)
 }
 
 func itoaList(l []int) []string {

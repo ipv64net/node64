@@ -147,6 +147,9 @@ func (m *Module) apiStatus(w http.ResponseWriter, r *http.Request) {
 		l := m.limit(ctx)
 		out["limit"] = map[string]any{"known": l.Known, "used": l.Used, "limit": l.Limit, "own_24h": l.Own24h, "checked_at": ts(l.At), "error": l.Err}
 	}
+	if v := m.clusterView(ctx); v.On { // im Cluster: zustaendige Node ("" = wird gerade bestimmt)
+		out["cluster"] = map[string]any{"leader": v.Leader, "this_node": v.Here, "preferred_node": v.Preferred}
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -266,6 +269,10 @@ func (m *Module) apiTargetUpdateNow(w http.ResponseWriter, r *http.Request) {
 	res, err := m.UpdateNow(r.Context(), t)
 	if errors.Is(err, ErrBusy) {
 		writeErr(w, http.StatusConflict, "an update round is running, try again in a few seconds")
+		return
+	}
+	if res == NowOther {
+		writeErr(w, http.StatusConflict, "another node of the cluster updates the names: "+m.clusterView(r.Context()).Leader)
 		return
 	}
 	m.audit(r, "dyndns.update_now", t.FQDN(), "")
@@ -465,6 +472,9 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 		if v, ok := in.Settings[k]; ok && m.core.SetSetting(ctx, k, v) == nil {
 			n++
 		}
+	}
+	if n > 0 {
+		m.clusterChanged(ctx, clusterSettingsID, false)
 	}
 	if len(in.Targets) == 0 {
 		return n, nil

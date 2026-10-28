@@ -108,6 +108,17 @@ Rahmen (entschieden, Dennis 2026-10-14):
 - IPv6 live abgenommen (Dev-Node, node64test.blog.ipv64.net): Adresse dieses Hosts, Präfix + Interface-ID und nur Präfix je mit HTTP 200, AAAA am Nameserver geprüft, zweite Runde ohne Aufruf. Dabei behoben: bei fehlgeschlagener Prüfung wird die alte Adresse nicht mehr gemeldet.
 - Offen: Dashboard-Kachel (Dashboard ist auf Healthchecks zugeschnitten), (erledigt) DynDNS-Meldungen über ipv64-Mail/-SMS laufen seit 2026-10-14 direkt über die API v2 (`POST /hc2/channels/{id}/send`, zentraler API-Key), nicht über die hubs; Ende-zu-Ende mit dem Testaccount abgenommen (Mail angekommen, Design passt).
 
+## Cluster (2026-10-28, DynDNS 1.5.0)
+
+- Bereich `dyndns/config` (Standard aus): Namen samt Token, Einstellungen und bevorzugte Node gehen an die Nodes, bei
+  denen der Bereich ebenfalls an ist; Laufzeitstand (gemeldete Adressen, Fehler, Pause, DNS-Stand) und Verlauf bleiben
+  je Node. Exakt gleiche Namen beider Nodes werden eins, derselbe Name mit anderer Einstellung bleibt je Node.
+- Nur eine Node aktualisiert alle Namen: die bevorzugte, sonst die kleinste Kennung unter den seit 5 min erreichbaren.
+  Fällt sie 2 min aus, übernimmt die nächste und meldet alle Namen einmal; eine zurückgekehrte Node übernimmt erst nach
+  5 min wieder. In verschiedenen Netzen zeigen die Namen dann auf den anderen Anschluss (gewollt: Ausfallsicherheit).
+- Seite DynDNS zeigt die zuständige Node und die Wahl der bevorzugten. Einzelheiten: [CLUSTER.md](CLUSTER.md)
+  („DynDNS: zuständige Node“). Code: `internal/dyndns/cluster.go`, `internal/dyndns/ddcluster`.
+
 ## Überblick: 6 Phasen
 
 | Phase | Inhalt | Abnahme (kurz) |

@@ -398,6 +398,9 @@ func (m *Module) pageTargetUpdate(w http.ResponseWriter, r *http.Request) {
 	case res == NowNothing:
 		m.back(w, r, "warning", m.g.T(r, "dyn.update.nothing", "name", t.FQDN()), back)
 		return
+	case res == NowOther:
+		m.back(w, r, "warning", m.g.T(r, "dyn.update.other", "node", m.clusterView(r.Context()).LeaderName), back)
+		return
 	}
 	m.audit(r, "dyndns.update_now", t.FQDN(), "")
 	if got, _ := m.Target(r.Context(), t.ID); got != nil && got.Status() == "error" {

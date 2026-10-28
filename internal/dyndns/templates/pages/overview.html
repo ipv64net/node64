@@ -80,6 +80,20 @@
 	<div class="col-lg-7 d-flex flex-column gap-3">
 		<div class="card">
 			<div class="card-header d-flex align-items-center"><span><i class="bi bi-globe text-primary"></i> {{.T "dyn.targets.title"}}{{.Doc "dyndns#ziele"}}</span><a class="btn btn-primary btn-sm ms-auto" href="/dyndns/targets/new"><i class="bi bi-plus-lg"></i> {{.T "dyn.targets.add"}}</a></div>
+			{{if $d.Cluster.On}}<div class="card-body small border-bottom py-2" id="cluster">
+				<div><i class="bi bi-diagram-3 text-info"></i> {{if $d.Cluster.Here}}{{.T "dyn.cluster.here"}}{{else if $d.Cluster.Leader}}{{.T "dyn.cluster.other" "node" $d.Cluster.LeaderName}}{{else}}{{.T "dyn.cluster.pending"}}{{end}} <a href="/cluster">{{.T "dyn.cluster.to_cluster"}}</a></div>
+				<form method="post" action="/dyndns/cluster" class="d-flex flex-wrap align-items-center gap-2 mt-2">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<label class="text-body-secondary" for="preferred">{{.T "dyn.cluster.preferred"}}</label>
+					<select class="form-select form-select-sm w-auto" id="preferred" name="preferred">
+						<option value="">{{.T "dyn.cluster.auto"}}</option>
+						<option value="{{$d.Cluster.Self}}"{{if eq $d.Cluster.Preferred $d.Cluster.Self}} selected{{end}}>{{.T "dyn.cluster.this_node"}}</option>
+						{{range $d.Cluster.Nodes}}<option value="{{.ID}}"{{if eq $d.Cluster.Preferred .ID}} selected{{end}}>{{.Name}}{{if not .Online}} ({{$.T "dyn.cluster.offline"}}){{end}}</option>{{end}}
+					</select>
+					<button class="btn btn-outline-primary btn-sm" type="submit">{{.T "common.save"}}</button>
+				</form>
+				<div class="form-text">{{.T "dyn.cluster.hint"}}</div>
+			</div>{{end}}
 			{{if not $d.Targets}}<div class="card-body small text-body-secondary">{{.T "dyn.targets.empty"}}</div>
 			{{else}}
 			<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards small">
