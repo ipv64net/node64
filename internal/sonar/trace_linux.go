@@ -92,9 +92,11 @@ func (t *dgramTracer) probe(ttl, k int, timeout time.Duration) traceReply {
 	}
 	start := time.Now()
 	if _, err := syscall.Write(t.fd, pkt); err != nil {
-		if err != syscall.ECONNREFUSED {
-			return traceReply{err: err}
-		}
+		// Mit IP_RECVERR setzt jede ICMP-Fehlermeldung sk_err, auch eine verspaetete Antwort der vorigen Probe
+		// (TTL abgelaufen = EHOSTUNREACH), die nach drain kam: loeschen und einmal wiederholen. Ein echter lokaler
+		// Fehler (keine Route) kommt beim zweiten Mal wieder.
+		_, _ = syscall.GetsockoptInt(t.fd, syscall.SOL_SOCKET, syscall.SO_ERROR)
+		start = time.Now()
 		if _, err := syscall.Write(t.fd, pkt); err != nil {
 			return traceReply{err: err}
 		}
