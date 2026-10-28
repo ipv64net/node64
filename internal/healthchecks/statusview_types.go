@@ -80,5 +80,8 @@ type StatusItemDetail struct {
 	Uptime30d float64           `json:"uptime_30d"`
 	Latency   float64           `json:"latency_ms"` // Mittel 24 h, -1 = keine Daten
 	Hours     []StatusViewDay   `json:"hours"`      // letzte 24 Stunden (Day = Stunde "2006-01-02T15")
-	Incidents []StatusViewIncid `json:"incidents"`  // letzte 5
+	Incidents []StatusViewIncid `json:"incidents"`  // letzte 5 (nur bei ShowHistory)
+	// Einstellungen der Seite: ohne ShowUptime sind Verfuegbarkeit und Latenz -1, ohne ShowHistory fehlen die Stoerungen
+	ShowUptime  bool `json:"show_uptime"`
+	ShowHistory bool `json:"show_history"`
 }

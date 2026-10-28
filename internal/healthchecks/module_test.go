@@ -249,6 +249,22 @@ func TestMaintenanceWindows(t *testing.T) {
 	if !scoped.Covers("abc", time.Now()) || scoped.Covers("def", time.Now()) {
 		t.Fatal("token scope wrong")
 	}
+	// nach der Zeitumstellung bleibt das Fenster bei derselben Ortszeit (03:00 Berlin: erst 01:00, dann 02:00 UTC)
+	if berlin, err := time.LoadLocation("Europe/Berlin"); err == nil {
+		dst := Maintenance{StartAt: time.Date(2026, 10, 20, 1, 0, 0, 0, time.UTC), EndAt: time.Date(2026, 10, 20, 2, 0, 0, 0, time.UTC), Repeat: "daily", Active: true}
+		if !dst.CoversIn("x", time.Date(2026, 10, 24, 1, 30, 0, 0, time.UTC), berlin) || !dst.CoversIn("x", time.Date(2026, 10, 28, 2, 30, 0, 0, time.UTC), berlin) ||
+			dst.CoversIn("x", time.Date(2026, 10, 28, 1, 30, 0, 0, time.UTC), berlin) {
+			t.Fatal("daily window must follow local time after DST")
+		}
+		dst.Repeat = "weekly"
+		if !dst.CoversIn("x", time.Date(2026, 10, 27, 2, 30, 0, 0, time.UTC), berlin) || dst.CoversIn("x", time.Date(2026, 10, 27, 1, 30, 0, 0, time.UTC), berlin) {
+			t.Fatal("weekly window must follow local time after DST")
+		}
+		occ := statusMaintOccurrences(dst, time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC), berlin)
+		if len(occ) != 1 || !occ[0].from.Equal(time.Date(2026, 10, 27, 2, 0, 0, 0, time.UTC)) {
+			t.Fatalf("occurrences after DST: %+v", occ)
+		}
+	}
 	code, _ = call(t, srv, "DELETE", fmt.Sprintf("/api/maintenance/%d", mw.ID), nil)
 	if code != 204 || m.st.InMaintenance(context.Background(), "any", in) {
 		t.Fatal("delete did not clear the window")
@@ -309,4 +325,50 @@ func TestAggregation(t *testing.T) {
 		t.Fatalf("1y stats: %v %+v", err, s)
 	}
 	_ = net.IPv4zero
+}
+
+// Der Tag an der Grenze der Rohdaten-Aufbewahrung darf beim naechsten Lauf nicht aus einem Rest neu berechnet werden.
+func TestAggregationBoundaryDay(t *testing.T) {
+	dir := t.TempDir()
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	core, err := store.Open(context.Background(), filepath.Join(dir, "node64.db"), filepath.Join(dir, "backups"), log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { core.Close() })
+	if err := core.Migrate(context.Background(), Name, New(core, log, nil, nil, "test").Migrations()); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	st := NewStore(core)
+	tok := NewToken()
+	now := time.Date(2026, 10, 28, 12, 30, 0, 0, time.UTC)
+	day := now.Add(-RawRetention).Truncate(24 * time.Hour)
+	for i := 0; i < 24; i++ {
+		if err := st.SaveMeasurement(ctx, scheduler.Measurement{Token: tok, Time: day.Add(time.Duration(i)*time.Hour + time.Minute), Status: checks.Up}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dayCount := func() int {
+		var n int
+		st.r.QueryRow(`SELECT count FROM hc_daily WHERE token = ?`, tok).Scan(&n)
+		return n
+	}
+	for _, at := range []time.Time{now, now.Add(time.Hour), now.Add(5 * time.Hour)} {
+		if err := st.Aggregate(ctx, at); err != nil {
+			t.Fatal(err)
+		}
+		if n := dayCount(); n != 24 {
+			t.Fatalf("%s: daily count=%d", at, n)
+		}
+	}
+	if err := st.Aggregate(ctx, now.Add(24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	var raw, hours, sum int
+	st.r.QueryRow(`SELECT count(*) FROM hc_measurements WHERE token = ?`, tok).Scan(&raw)
+	st.r.QueryRow(`SELECT count(*), sum(count) FROM hc_hourly WHERE token = ?`, tok).Scan(&hours, &sum)
+	if raw != 0 || hours != 24 || sum != 24 || dayCount() != 24 {
+		t.Fatalf("raw=%d hours=%d sum=%d daily=%d", raw, hours, sum, dayCount())
+	}
 }

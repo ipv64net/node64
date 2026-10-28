@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 )
 
@@ -55,6 +56,10 @@ func (d *Dispatcher) retry(ch *Channel, s Sender, m Message, n int) {
 			return
 		case <-t.C:
 		}
+		if !d.unchanged(d.ctx, ch) {
+			d.log.Info("notification retry dropped, channel deleted, disabled or changed", "channel", ch.Name, "kind", m.Kind)
+			return
+		}
 		sctx, cancel := context.WithTimeout(d.ctx, 30*time.Second)
 		err := s.Send(sctx, ch, m)
 		cancel()
@@ -63,4 +68,30 @@ func (d *Dispatcher) retry(ch *Channel, s Sender, m Message, n int) {
 			d.retry(ch, s, m, n+1)
 		}
 	}()
+}
+
+// unchanged laedt den Kanal vor einem erneuten Versuch neu: geloescht, abgeschaltet oder mit anderem Ziel bzw.
+// anderen Zugangsdaten = kein Versuch mit dem alten Stand. Ist die Liste gerade nicht lesbar, bleibt es beim Versuch.
+func (d *Dispatcher) unchanged(ctx context.Context, ch *Channel) bool {
+	same := func(list []*Channel) (found, ok bool) {
+		for _, c := range list {
+			if c.ID == ch.ID && c.Type == ch.Type {
+				return true, c.Enabled && maps.Equal(c.Config, ch.Config)
+			}
+		}
+		return false, false
+	}
+	list, err := d.st.ChannelsFor(ctx, ch.UserID)
+	if err != nil {
+		return true
+	}
+	if found, ok := same(list); found {
+		return ok
+	}
+	if _, _, remote := d.hooks(); remote != nil { // ipv64-Kanaele ohne Verknuepfung (ueber die API)
+		if found, ok := same(remote(ctx)); found {
+			return ok
+		}
+	}
+	return false
 }

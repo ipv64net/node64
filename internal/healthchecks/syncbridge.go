@@ -134,10 +134,26 @@ func (m *Module) ApplyWireCheck(ctx context.Context, w wire.Check, chanMap Chann
 					rt = &live
 				}
 			}
+			if rt == nil {
+				rt = m.adoptIncident(ctx, s, nc.Token)
+			}
 			s.Upsert(nc.SchedulerCheck(), rt)
 		} else {
 			s.Remove(nc.Token)
 		}
+	}
+	return nil
+}
+
+// adoptIncident: misst diese Node einen Check ab jetzt selbst (Besitzerwechsel), uebernimmt der Scheduler eine
+// offene Stoerung, die bisher ipv64 bzw. die andere Node gefuehrt hat (beendet sie beim naechsten up), statt sie
+// offen stehen zu lassen. nil = Check laeuft schon im Scheduler oder keine offene Stoerung.
+func (m *Module) adoptIncident(ctx context.Context, s *scheduler.Scheduler, token string) *scheduler.Runtime {
+	if _, live := s.Runtime(token); live {
+		return nil
+	}
+	if id := m.st.openIncidentID(ctx, token); id != 0 {
+		return &scheduler.Runtime{Incident: id}
 	}
 	return nil
 }
@@ -331,10 +347,11 @@ func (m *Module) TestDefinition(ctx context.Context, w wire.Check) []checks.Resu
 
 // ---------------------------------------------------------------- Messdaten-Export
 
-// MeasurementsAfter liefert Messpunkte eigener Checks mit node_seq > seq (aelteste zuerst).
+// MeasurementsAfter liefert Messpunkte eigener Checks mit node_seq > seq (aelteste zuerst),
+// ohne uebernommene Punkte anderer Messstellen (flags 8).
 func (m *Module) MeasurementsAfter(ctx context.Context, seq int64, limit int) ([]wire.Measurement, error) {
 	rows, err := m.st.r.QueryContext(ctx, `SELECT m.node_seq, m.token, m.time, m.status, m.latency_ms, m.reason, m.message, m.family, m.details, m.flags
-		FROM hc_measurements m JOIN hc_checks c ON c.token = m.token WHERE m.node_seq > ? AND (c.owner IN ('', 'self') OR (',' || c.nodes || ',') LIKE ?) ORDER BY m.node_seq LIMIT ?`, seq, "%,"+selfNodeID()+",%", limit)
+		FROM hc_measurements m JOIN hc_checks c ON c.token = m.token WHERE m.node_seq > ? AND (m.flags & 8) = 0 AND (c.owner IN ('', 'self') OR (',' || c.nodes || ',') LIKE ?) ORDER BY m.node_seq LIMIT ?`, seq, "%,"+selfNodeID()+",%", limit)
 	if err != nil {
 		return nil, err
 	}
@@ -583,7 +600,7 @@ func (m *Module) SetOwnerAllSelf(ctx context.Context) error {
 	if s := m.scheduler(); s != nil {
 		if list, err := m.st.Checks(ctx); err == nil {
 			for _, c := range list {
-				s.Upsert(c.SchedulerCheck(), nil)
+				s.Upsert(c.SchedulerCheck(), m.adoptIncident(ctx, s, c.Token))
 			}
 		}
 	}

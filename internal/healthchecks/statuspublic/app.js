@@ -35,11 +35,13 @@ function el(t, c, x) { var e = d.createElement(t); if (c) e.className = c; if (x
 function get(u) { return fetch(u, {cache: 'no-store', headers: {Accept: 'application/json'}}).then(function (r) { if (!r.ok) throw 0; return r.json(); }); }
 function show(p, j) {
 p.textContent = '';
+if (j.show_uptime !== false) {
 var g = el('div', 'dg');
 [[pct(j.uptime_24h), L.h24], [pct(j.uptime_7d), L.d7], [pct(j.uptime_30d), L.d30], [j.latency_ms >= 0 ? nf(j.latency_ms, 0) + ' ms' : '–', L.lat]].forEach(function (a) {
 var c = el('div'), v = el('b', 0, a[0]); if (a[0] == '–') v.title = L.nodata; c.appendChild(v); c.appendChild(el('span', 0, a[1])); g.appendChild(c);
 });
 p.appendChild(g);
+}
 if (set(j.since)) p.appendChild(el('p', 'mu', fmt(L.since, {t: ft(j.since)})));
 if (j.hours && j.hours.length) {
 p.appendChild(el('div', 'cap', L.hrs));
@@ -48,6 +50,7 @@ b.setAttribute('role', 'img'); b.setAttribute('aria-label', L.hrs);
 j.hours.forEach(function (x) { var g = B[x.state] || 'q', i = el(g); i.title = String(x.day).slice(11) + ':00 · ' + L.b[g] + (x.uptime >= 0 ? ' · ' + pct(x.uptime) : ''); b.appendChild(i); });
 p.appendChild(b);
 }
+if (j.show_history === false) return;
 var n = j.incidents || [];
 p.appendChild(el('div', 'cap', n.length ? L.inc : L.noinc));
 if (n.length) {

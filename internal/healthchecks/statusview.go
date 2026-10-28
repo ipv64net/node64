@@ -161,13 +161,20 @@ func (m *Module) statusEntryFor(ctx context.Context, p *StatusPage, lang string)
 func (m *Module) statusLocation(ctx context.Context) *time.Location {
 	if m.core != nil {
 		if tz := m.core.SettingOr(ctx, "node.timezone", ""); tz != "" {
+			if loc, ok := statusLocCache.Load(tz); ok {
+				return loc.(*time.Location)
+			}
 			if loc, err := time.LoadLocation(tz); err == nil {
+				statusLocCache.Store(tz, loc)
 				return loc
 			}
 		}
 	}
 	return time.Local
 }
+
+// statusLocCache: geladene Zeitzonen (wird je Messung fuer die Wartungsfenster gebraucht)
+var statusLocCache sync.Map
 
 // statusAgg zaehlt Messungen.
 type statusAgg struct{ count, up int }
@@ -287,8 +294,9 @@ func statusMinutes(ds []time.Duration) []int {
 	return out
 }
 
-// statusMaintOccurrences liefert die Termine eines Wartungsfensters, die [from, to) beruehren (wie Covers).
-func statusMaintOccurrences(mw Maintenance, from, to time.Time) []statusSpan {
+// statusMaintOccurrences liefert die Termine eines Wartungsfensters, die [from, to) beruehren (wie CoversIn,
+// Wiederholung nach der Wanduhr in loc).
+func statusMaintOccurrences(mw Maintenance, from, to time.Time, loc *time.Location) []statusSpan {
 	if !mw.Active || !mw.EndAt.After(mw.StartAt) {
 		return nil
 	}
@@ -307,20 +315,21 @@ func statusMaintOccurrences(mw Maintenance, from, to time.Time) []statusSpan {
 		}
 		return len(out) < 500
 	}
+	if loc == nil {
+		loc = time.UTC
+	}
+	start := mw.StartAt.In(loc)
 	switch mw.Repeat {
 	case "daily", "weekly":
-		step := 24 * time.Hour
-		if mw.Repeat == "weekly" {
-			step = 7 * 24 * time.Hour
-		}
+		days := maintRepeatDays(mw.Repeat)
 		k := 0
 		if from.After(mw.StartAt) {
-			k = max(int(from.Sub(mw.StartAt)/step)-1, 0)
+			k = max(int(from.Sub(mw.StartAt)/(time.Duration(days)*24*time.Hour))-1, 0)
 		}
-		for ; add(mw.StartAt.Add(time.Duration(k) * step)); k++ {
+		for ; add(start.AddDate(0, 0, k*days)); k++ {
 		}
 	case "monthly":
-		for k := 0; k < 1200 && add(mw.StartAt.AddDate(0, k, 0)); k++ {
+		for k := 0; k < 1200 && add(start.AddDate(0, k, 0)); k++ {
 		}
 	default:
 		add(mw.StartAt)
@@ -601,7 +610,7 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 	}
 	occ := make([][]statusSpan, len(wins))
 	for i, mw := range wins {
-		occ[i] = statusMaintOccurrences(mw, bounds[0], now)
+		occ[i] = statusMaintOccurrences(mw, bounds[0], now, loc)
 	}
 
 	// je Token einmal rechnen (ein Check kann mehrfach auf der Seite stehen)
@@ -615,7 +624,7 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 		c := byTok[tok]
 		inMaint := false
 		for _, mw := range wins {
-			if mw.Covers(tok, now) {
+			if mw.CoversIn(tok, now, loc) {
 				inMaint = true
 				break
 			}
@@ -629,8 +638,14 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 			a := statusPick(i, own[tok], remote[tok], remoteHourly[tok])
 			total.add(a)
 			x.bars[i] = statusBucket(labels[i], a, downs[i], maint[i])
+			if !p.ShowUptime {
+				x.bars[i].Uptime = -1 // Verfuegbarkeit aus: auch nicht in status.json, Badge und Quelltext
+			}
 		}
 		x.uptime = statusPct(total)
+		if !p.ShowUptime {
+			x.uptime = -1
+		}
 		tv[tok] = x
 	}
 
@@ -671,7 +686,7 @@ func (m *Module) buildStatusView(ctx context.Context, p *StatusPage, lang string
 
 	// Wartungen: laufende und die der naechsten 7 Tage (je Fenster der naechste Termin)
 	for _, mw := range wins {
-		next := statusMaintOccurrences(mw, now, now.Add(statusMaintAhead))
+		next := statusMaintOccurrences(mw, now, now.Add(statusMaintAhead), loc)
 		if len(next) == 0 {
 			continue
 		}
@@ -755,7 +770,7 @@ func (m *Module) statusItemDetail(ctx context.Context, p *StatusPage, itemID int
 	}
 	inMaint := false
 	for _, mw := range wins {
-		if mw.Covers(c.Token, now) {
+		if mw.CoversIn(c.Token, now, loc) {
 			inMaint = true
 			break
 		}
@@ -862,6 +877,10 @@ func (m *Module) statusItemDetail(ctx context.Context, p *StatusPage, itemID int
 	if latN > 0 {
 		d.Latency = math.Round(100*latSum/float64(latN)) / 100
 	}
+	if !p.ShowUptime { // Verfuegbarkeit aus: keine Messwerte nach aussen
+		d.Uptime24h, d.Uptime7d, d.Uptime30d, d.Latency = -1, -1, -1, -1
+	}
+	d.ShowUptime, d.ShowHistory = p.ShowUptime, p.ShowHistory
 
 	// 24 Stundenbalken (aelteste zuerst, die letzte Stunde endet jetzt)
 	bounds := make([]time.Time, 25)
@@ -877,15 +896,21 @@ func (m *Module) statusItemDetail(ctx context.Context, p *StatusPage, itemID int
 	downs := statusMinutes(statusOverlap(bounds, statusDownSpans(incs[c.Token], now)))
 	occ := make([][]statusSpan, len(wins))
 	for i, mw := range wins {
-		occ[i] = statusMaintOccurrences(mw, bounds[0], now)
+		occ[i] = statusMaintOccurrences(mw, bounds[0], now, loc)
 	}
 	maint := statusMaintCover(bounds, wins, occ, c.Token)
 	d.Hours = make([]StatusViewDay, 24)
 	for i := 0; i < 24; i++ {
 		d.Hours[i] = statusBucket(bounds[i].In(loc).Format("2006-01-02T15"), hourAgg[bounds[i].UTC().Format("2006-01-02T15")], downs[i], maint[i])
+		if !p.ShowUptime {
+			d.Hours[i].Uptime = -1
+		}
 	}
 
-	// letzte 5 Stoerungen (ohne Rohmeldung)
+	// letzte 5 Stoerungen (ohne Rohmeldung), nur mit Verlauf
+	if !p.ShowHistory {
+		return d, nil
+	}
 	list, err := m.st.Incidents(ctx, c.Token, 5)
 	if err != nil {
 		return nil, err

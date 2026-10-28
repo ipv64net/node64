@@ -151,7 +151,7 @@ func TestStatusDayBars(t *testing.T) {
 	statusIncident(t, m, b.Token, time.Date(2026, 10, 12, 10, 0, 0, 0, time.UTC), time.Date(2026, 10, 12, 10, 5, 0, 0, time.UTC))
 	statusDaily(t, m, b.Token, "2026-10-12", 100, 100)
 
-	p := statusSavePage(t, m, &StatusPage{Slug: "bars", Title: "Bars", Enabled: true, Days: 90, ShowHistory: true, Groups: []StatusGroup{
+	p := statusSavePage(t, m, &StatusPage{Slug: "bars", Title: "Bars", Enabled: true, Days: 90, ShowUptime: true, ShowHistory: true, Groups: []StatusGroup{
 		{Name: "G", Items: []StatusItem{{Token: a.Token, Label: "Web"}, {Token: b.Token}, {Token: empty.Token}}}}}, "")
 	v, err := m.statusView(context.Background(), p, "de")
 	if err != nil {
@@ -292,7 +292,7 @@ func TestStatusPublicRoutes(t *testing.T) {
 		LastReason: checks.ReasonConnectFailed})
 	statusIncident(t, m, c.Token, now.Add(-time.Minute), time.Time{})
 	statusMeasure(t, m, c.Token, now.Add(-time.Minute), false, 0)
-	p := statusSavePage(t, m, &StatusPage{Slug: "oeffentlich", Title: "Öffentlich", Enabled: false, ShowHistory: true,
+	p := statusSavePage(t, m, &StatusPage{Slug: "oeffentlich", Title: "Öffentlich", Enabled: false, ShowUptime: true, ShowHistory: true,
 		Groups: []StatusGroup{{Name: "Dienste", Items: []StatusItem{{Token: c.Token, Label: "Datenbank"}}}}}, "")
 	other := statusSavePage(t, m, &StatusPage{Slug: "andere", Title: "Andere", Enabled: true, PublishNode: true,
 		Groups: []StatusGroup{{Items: []StatusItem{{Token: c.Token}}}}}, "")
@@ -571,7 +571,7 @@ func TestStatusOnlineCheck(t *testing.T) {
 	}
 	statusSourceHourly(t, m, b.Token, "loc:nbg", "2026-10-17T10:00:00.000Z", 60, 60)
 
-	p := statusSavePage(t, m, &StatusPage{Slug: "online", Title: "Online", Enabled: true, Days: 30,
+	p := statusSavePage(t, m, &StatusPage{Slug: "online", Title: "Online", Enabled: true, Days: 30, ShowUptime: true,
 		Groups: []StatusGroup{{Items: []StatusItem{{Token: o.Token}, {Token: b.Token}}}}}, "")
 	v, err := m.statusView(context.Background(), p, "de")
 	if err != nil {
@@ -607,6 +607,22 @@ func TestStatusOnlineCheck(t *testing.T) {
 	db, _ := m.statusItemDetail(context.Background(), p, v.Groups[0].Items[1].ID, "de")
 	if db.Uptime24h != 100 {
 		t.Fatalf("both detail must not mix in remote points: %+v", db)
+	}
+	// Verfuegbarkeit und Verlauf aus: keine Werte in JSON und Badge, Balken behalten ihren Zustand
+	p.ShowUptime, p.ShowHistory = false, false
+	hv, err := m.buildStatusView(context.Background(), p, "de")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it := hv.Groups[0].Items[0]; it.Uptime != -1 || it.Bars[29].Uptime != -1 || it.Bars[29].State != "up" {
+		t.Fatalf("hidden uptime: %+v", it)
+	}
+	hd, err := m.statusItemDetail(context.Background(), p, v.Groups[0].Items[0].ID, "de")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hd.Uptime24h != -1 || hd.Uptime30d != -1 || hd.Latency != -1 || len(hd.Incidents) != 0 || hd.Hours[23].Uptime != -1 || hd.ShowUptime || hd.ShowHistory {
+		t.Fatalf("hidden detail: %+v", hd)
 	}
 }
 

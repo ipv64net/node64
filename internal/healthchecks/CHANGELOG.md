@@ -1,5 +1,23 @@
 # Änderungen – Healthchecks
 
+## 2.39.0 – 2026-10-28
+
+### Behoben
+- Wartungsfenster: Ein Ausfall, der in der Wartung beginnt und danach andauert, wird gemeldet; Erinnerungen und
+  Gruppenmeldungen pausieren in der Wartung; wiederkehrende Fenster behalten nach der Zeitumstellung ihre Uhrzeit.
+- Abhängige Checks melden den Ausfall, sobald der übergeordnete Check wieder läuft; Flattern, das gestört endet, kommt
+  als Ausfall statt „wieder stabil“.
+- Störungen werden zuverlässig beendet (Flattern, Pause/Fortsetzen, Besitzerwechsel) und nicht doppelt angelegt; Push
+  verliert bei abgebrochenen Anfragen nichts mehr.
+- Statusseiten: Ohne „Verfügbarkeit zeigen“ bzw. „Verlauf zeigen“ fehlen diese Daten auch in JSON und Badges.
+- Verlaufswerte am Rand der Aufbewahrung werden nicht mehr verfälscht; übernommene Messwerte anderer Messstellen gehen
+  nicht mehr als eigene an ipv64.
+- ICMP: Ein verlorener Ping zählt als Paketverlust statt als Zeitüberschreitung; HTTP/Keyword/JSON beachten einen
+  eigenen Host-Kopf (samt SNI).
+- Benachrichtigungen: Vorübergehende Fehler werden bei allen Kanaltypen erneut zugestellt, nicht mehr an gelöschte oder
+  geänderte Kanäle; Fehlertexte gekürzt.
+- Docker über unix-Socket: keine liegen gebliebenen Verbindungen mehr.
+
 ## 2.38.1 – 2026-10-27
 
 ### Behoben

@@ -1,5 +1,21 @@
 # Changes – Healthchecks
 
+## 2.39.0 – 2026-10-28
+
+### Fixed
+- Maintenance windows: an outage that starts during maintenance and continues afterwards is alerted; reminders and
+  group alerts pause during maintenance; recurring windows keep their local time across DST.
+- Dependent checks alert the outage once the parent is back; flapping that ends failed alerts as down instead of
+  "stable again".
+- Incidents are closed reliably (flapping, pause/resume, owner change) and not duplicated; push no longer loses data on
+  cancelled requests.
+- Status pages: with "show uptime"/"show history" off, that data is also left out of JSON and badges.
+- History values at the retention boundary are no longer distorted; relayed measurements are no longer uploaded as own.
+- ICMP: a lost ping counts as packet loss instead of a timeout; HTTP/keyword/JSON honour a custom Host header (incl. SNI).
+- Notifications: temporary errors are retried for all channel types, never to deleted or changed channels; error texts
+  shortened.
+- Docker via unix socket: no more leaked idle connections.
+
 ## 2.38.1 – 2026-10-27
 
 ### Fixed

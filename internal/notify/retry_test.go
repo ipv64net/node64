@@ -82,3 +82,49 @@ func TestRetryTemporary(t *testing.T) {
 	run(f)
 	wait(f, 1)
 }
+
+// Wird der Kanal zwischen den Versuchen geloescht, abgeschaltet oder geaendert, gibt es keinen Versuch mit dem alten Stand.
+func TestRetryReloadsChannel(t *testing.T) {
+	old := retryDelays
+	retryDelays = []time.Duration{100 * time.Millisecond, 100 * time.Millisecond, 100 * time.Millisecond}
+	t.Cleanup(func() { retryDelays = old })
+	for _, change := range []string{"delete", "update", "disable"} {
+		st := testStore(t)
+		bundle, _ := i18n.Load()
+		get := func(key, def string) string {
+			if key == SetBatchWindow {
+				return "0"
+			}
+			return def
+		}
+		f := &flaky{fails: 100, err: Temporary(errors.New("timeout"))}
+		d := NewDispatcher(st, map[Type]Sender{TypeWebhook: f}, bundle, get, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		d.Start(context.Background())
+		ch := addChannel(t, st, "hook", true)
+		d.Dispatch(Alert{EventID: "e1", Kind: KindDown, Check: CheckInfo{Token: "t", Name: "Web", NotifyDown: true, NotifyUp: true}})
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) && f.n() < 1 {
+			time.Sleep(5 * time.Millisecond)
+		}
+		ctx := context.Background()
+		var err error
+		switch change {
+		case "delete":
+			err = st.Delete(ctx, ch.ID)
+		case "update":
+			ch.Config["url"] = "http://y/"
+			err = st.Update(ctx, ch)
+		case "disable":
+			ch.Enabled = false
+			err = st.Update(ctx, ch)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(400 * time.Millisecond)
+		d.Stop()
+		if got := f.n(); got != 1 {
+			t.Fatalf("%s: attempts %d, want 1", change, got)
+		}
+	}
+}

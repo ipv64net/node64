@@ -239,7 +239,7 @@ func dockerConnect(sys System, seen func(fp string, trusted bool)) (*dockerConn,
 	if err != nil {
 		return nil, err
 	}
-	return &dockerConn{hc: hc, base: base, close: func() {}}, nil
+	return &dockerConn{hc: hc, base: base, close: hc.CloseIdleConnections}, nil
 }
 
 // dockerConnectTLS: Server per Pin (nur der Fingerabdruck des Leaf-Zertifikats), sonst CA bzw. System-CA mit Hostname.

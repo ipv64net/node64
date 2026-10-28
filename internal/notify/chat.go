@@ -92,7 +92,7 @@ func (s matrixSender) call(ctx context.Context, method, u, token string, body, o
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return err
+		return netErr(err)
 	}
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
@@ -102,7 +102,7 @@ func (s matrixSender) call(ctx context.Context, method, u, token string, body, o
 			Error string `json:"error"`
 		}
 		if json.Unmarshal(rb, &e) == nil && e.Code != "" {
-			return fmt.Errorf("matrix: %s %s", e.Code, e.Error)
+			return statusErr(resp.StatusCode, fmt.Errorf("matrix: %s %s", e.Code, excerpt(e.Error)))
 		}
 		return httpErr(resp.StatusCode, rb)
 	}

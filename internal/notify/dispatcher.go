@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ipv64net/node64/internal/i18n"
 )
@@ -1081,12 +1082,40 @@ func (d *Dispatcher) record(ctx context.Context, ch *Channel, m Message, err err
 		if len(errText) > 500 {
 			errText = errText[:500]
 		}
+		if userTarget(ch.Type) { // Ziel frei waehlbar: Antworttexte fremder Server nur kurz und ohne Geheimnisse
+			errText = errorText(err)
+		}
 		d.log.Warn("notification failed", "channel", ch.Name, "type", ch.Type, "kind", m.Kind, "err", errText)
 	} else {
 		d.log.Info("notification sent", "channel", ch.Name, "type", ch.Type, "kind", m.Kind, "check", m.Check.Name)
 	}
 	_ = d.st.AddDelivery(ctx, Delivery{EventID: m.EventID, ChannelID: ch.ID, Channel: ch.Name, Kind: string(m.Kind), CheckToken: m.Check.Token, Subject: m.Title, OK: err == nil, Error: errText})
 	_ = d.st.Touch(ctx, ch.ID, errText)
+}
+
+// userTarget: Kanaltypen, deren Ziel (Server, URL, Mailserver) der Nutzer frei angibt.
+func userTarget(t Type) bool {
+	switch t {
+	case TypeWebhook, TypeNtfy, TypeGotify, TypeIGotify, TypeSMTP, TypeMatrix, TypeSlack, TypeTeams, TypeDiscord, TypeSecNtfy:
+		return true
+	}
+	return false
+}
+
+// errorText: gespeicherter Fehlertext solcher Kanaele (gesperrtes Ziel nur allgemein, sonst ohne URLs und
+// Geheimnisse, hoechstens 300 Bytes).
+func errorText(err error) string {
+	if errors.Is(err, ErrPrivateTarget) {
+		return ErrPrivateTarget.Error()
+	}
+	s := RedactSecrets(RedactURLs(err.Error()))
+	if len(s) > 300 {
+		s = s[:300]
+		for len(s) > 0 && !utf8.ValidString(s) {
+			s = s[:len(s)-1]
+		}
+	}
+	return s
 }
 
 // urlRe findet Adressen in Fehlertexten (Fehler von net/http enthalten die komplette URL).

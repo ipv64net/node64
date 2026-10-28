@@ -108,6 +108,44 @@ func (c *httpChecker) Check(ctx context.Context, def Definition, ip net.IP) Resu
 		DisableKeepAlives:      true,
 		MaxResponseHeaderBytes: 64 << 10,
 	}
+	// Eigener Host-Kopf: net/http beachtet ihn nur ueber req.Host; SNI und
+	// Zertifikatspruefung folgen ihm beim Ursprungs-Host.
+	hostHeader := ""
+	for k, v := range p.Headers {
+		if strings.EqualFold(k, "Host") {
+			hostHeader = strings.TrimSpace(v)
+		}
+	}
+	if hostHeader != "" {
+		sni := hostHeader
+		if h, _, err := net.SplitHostPort(hostHeader); err == nil {
+			sni = h
+		}
+		sni = strings.Trim(sni, "[]")
+		transport.DialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, _, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+			conn, err := transport.DialContext(ctx, network, addr)
+			if err != nil {
+				return nil, err
+			}
+			cfg := transport.TLSClientConfig.Clone()
+			cfg.ServerName = host
+			if strings.EqualFold(host, origHost) {
+				cfg.ServerName = sni
+			}
+			hctx, cancel := context.WithTimeout(ctx, def.Timeouts.Connect)
+			defer cancel()
+			tc := tls.Client(conn, cfg)
+			if err := tc.HandshakeContext(hctx); err != nil {
+				conn.Close()
+				return nil, err
+			}
+			return tc, nil
+		}
+	}
 	defer transport.CloseIdleConnections()
 	client := &http.Client{
 		Transport: transport,
@@ -132,7 +170,13 @@ func (c *httpChecker) Check(ctx context.Context, def Definition, ip net.IP) Resu
 	req.Header.Set("User-Agent", UserAgent)
 	req.Header.Set("Accept", "*/*")
 	for k, v := range p.Headers {
+		if strings.EqualFold(k, "Host") {
+			continue
+		}
 		req.Header.Set(k, v)
+	}
+	if hostHeader != "" {
+		req.Host = hostHeader
 	}
 	if p.BasicUser != "" || p.BasicPassword != "" {
 		req.SetBasicAuth(p.BasicUser, p.BasicPassword)

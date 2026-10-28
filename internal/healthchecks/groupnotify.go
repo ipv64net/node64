@@ -168,6 +168,11 @@ func (m *Module) groupVerdict(ctx context.Context, c *Check) {
 	if !me {
 		return // eine andere Node der Gruppe meldet (ihren Stand uebernimmt diese Node beim Abgleich)
 	}
+	if m.st.InMaintenance(ctx, c.Token, time.Now()) {
+		// Wartung: gemeldeten Stand nicht fortschreiben, so meldet der naechste Abgleich nach dem Fenster,
+		// was sich geaendert hat (Ausfall dauert an bzw. wieder erreichbar)
+		return
+	}
 	old, oldSince := m.groupState(ctx, c.Token)
 	if overall == old || overall == scheduler.StatePending {
 		return // unveraendert bzw. noch keine Messung

@@ -166,16 +166,16 @@ func (s secntfySender) call(ctx context.Context, method, u, token string, body, 
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return err
+		return netErr(err)
 	}
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(io.LimitReader(resp.Body, 16384))
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		var e struct{ Message string }
 		if json.Unmarshal(rb, &e) == nil && e.Message != "" {
-			return fmt.Errorf("secntfy: HTTP %d: %s", resp.StatusCode, strings.ReplaceAll(e.Message, token, "[redacted]"))
+			return statusErr(resp.StatusCode, fmt.Errorf("secntfy: HTTP %d: %s", resp.StatusCode, excerpt(strings.ReplaceAll(e.Message, token, "[redacted]"))))
 		}
-		return fmt.Errorf("secntfy: HTTP %d", resp.StatusCode)
+		return statusErr(resp.StatusCode, fmt.Errorf("secntfy: HTTP %d", resp.StatusCode))
 	}
 	if err := json.Unmarshal(rb, out); err != nil {
 		return errors.New("secntfy: invalid JSON response")

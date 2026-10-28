@@ -12,12 +12,18 @@ import (
 	"net"
 	"net/http"
 	"net/mail"
+	"net/netip"
 	"net/smtp"
+	"net/textproto"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
+	"unicode/utf8"
+
+	"github.com/ipv64net/node64/internal/checks"
 )
 
 // Kind der Nachricht.
@@ -149,7 +155,121 @@ type Sender interface {
 	Send(ctx context.Context, ch *Channel, m Message) error
 }
 
-var httpClient = &http.Client{Timeout: 20 * time.Second}
+var (
+	httpClient         = &http.Client{Timeout: 20 * time.Second, Transport: newTransport(false)}
+	insecureHTTPClient = &http.Client{Timeout: 20 * time.Second, Transport: newTransport(true)}
+)
+
+// Sperre fuer interne Ziele (hub): Kanaele der Nutzer duerfen von den ipv64-Servern aus nur oeffentliche Adressen
+// erreichen. Geprueft wird die tatsaechlich gewaehlte Adresse beim Verbindungsaufbau, damit auch Hostnamen auf interne
+// Adressen und Weiterleitungen dorthin gesperrt sind (jede Verbindung, auch nach einem Redirect, laeuft hier durch).
+
+// ErrPrivateTarget: Ziel eines Kanals liegt im privaten oder reservierten Adressbereich (nur mit PublicOnly).
+var ErrPrivateTarget = errors.New("target resolves to a private or reserved address")
+
+type publicOnlyKey struct{}
+
+// WithPublicOnly markiert den Kontext eines Versands: nur oeffentliche Ziele.
+func WithPublicOnly(ctx context.Context) context.Context {
+	return context.WithValue(ctx, publicOnlyKey{}, true)
+}
+
+func publicOnly(ctx context.Context) bool { v, _ := ctx.Value(publicOnlyKey{}).(bool); return v }
+
+// dialer liefert den Dialer fuer einen Versand (mit Adresspruefung bei PublicOnly).
+func dialer(ctx context.Context, timeout time.Duration) *net.Dialer {
+	d := &net.Dialer{Timeout: timeout, KeepAlive: 30 * time.Second}
+	if publicOnly(ctx) {
+		d.Control = func(_, address string, _ syscall.RawConn) error {
+			ap, err := netip.ParseAddrPort(address)
+			if err != nil || !checks.PublicAddr(ap.Addr()) {
+				return ErrPrivateTarget
+			}
+			return nil
+		}
+	}
+	return d
+}
+
+// newTransport: gemeinsamer Transport der HTTP-Sender (einer je TLS-Einstellung, keine Verbindungen je Aufruf).
+// Versand mit PublicOnly laeuft ueber einen eigenen Transport mit eigenen Verbindungen, damit keine ungepruefte
+// Keep-Alive-Verbindung (z. B. eines Node-Kanals im selben Prozess) wiederverwendet wird.
+func newTransport(insecure bool) http.RoundTripper {
+	base := func(public bool) *http.Transport {
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if public {
+				ctx = WithPublicOnly(ctx)
+			}
+			return dialer(ctx, 15*time.Second).DialContext(ctx, network, addr)
+		}
+		if public {
+			tr.Proxy = nil // ueber einen Proxy liesse sich die Adresspruefung umgehen
+		}
+		if insecure {
+			tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // bewusst per Option
+		}
+		return tr
+	}
+	return guardTransport{open: base(false), public: base(true)}
+}
+
+// guardTransport waehlt den Transport nach dem Kontext der Anfrage (auch fuer Weiterleitungen).
+type guardTransport struct{ open, public *http.Transport }
+
+func (g guardTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if publicOnly(r.Context()) {
+		return g.public.RoundTrip(r)
+	}
+	return g.open.RoundTrip(r)
+}
+
+// publicOnlySender setzt die Sperre fuer interne Ziele in den Kontext des Versands.
+type publicOnlySender struct{ inner Sender }
+
+func (p publicOnlySender) Send(ctx context.Context, ch *Channel, m Message) error {
+	return p.inner.Send(WithPublicOnly(ctx), ch, m)
+}
+
+// SendersPublicOnly liefert die Sender wie Senders, die aber nur oeffentliche Adressen erreichen (ipv64-hub:
+// Kanaele der Nutzer, kein Zugriff auf interne Dienste der Server).
+func SendersPublicOnly(version string) map[Type]Sender {
+	out := map[Type]Sender{}
+	for t, s := range Senders(version) {
+		out[t] = publicOnlySender{s}
+	}
+	return out
+}
+
+// netErr kennzeichnet Netzwerkfehler (Zeitueberschreitung, Verbindung abgelehnt oder abgebrochen, DNS voruebergehend)
+// als voruebergehend; gesperrte Ziele, Zertifikats- und Adressfehler bleiben endgueltig.
+func netErr(err error) error {
+	if err == nil || errors.Is(err, ErrPrivateTarget) || IsTemporary(err) {
+		return err
+	}
+	var de *net.DNSError
+	if errors.As(err, &de) {
+		if de.IsTemporary || de.IsTimeout {
+			return Temporary(err)
+		}
+		return err
+	}
+	var ne net.Error
+	var oe *net.OpError
+	if errors.As(err, &ne) && ne.Timeout() || errors.As(err, &oe) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) ||
+		errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) {
+		return Temporary(err)
+	}
+	return err
+}
+
+// statusErr: Serverfehler (5xx) und 429 sind voruebergehend.
+func statusErr(status int, err error) error {
+	if status >= 500 || status == http.StatusTooManyRequests {
+		return Temporary(err)
+	}
+	return err
+}
 
 // Senders liefert die eingebauten Sender je Typ.
 func Senders(version string) map[Type]Sender {
@@ -193,7 +313,7 @@ func (p pushoverSender) Send(ctx context.Context, ch *Channel, m Message) error 
 	req.Header.Set("User-Agent", p.ua)
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return err
+		return netErr(err)
 	}
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
@@ -203,7 +323,7 @@ func (p pushoverSender) Send(ctx context.Context, ch *Channel, m Message) error 
 		}
 		_ = json.Unmarshal(rb, &e)
 		if len(e.Errors) > 0 {
-			return fmt.Errorf("pushover: %s", strings.Join(e.Errors, "; "))
+			return statusErr(resp.StatusCode, fmt.Errorf("pushover: %s", excerpt(strings.Join(e.Errors, "; "))))
 		}
 		return httpErr(resp.StatusCode, rb)
 	}
@@ -226,7 +346,7 @@ func postJSON(ctx context.Context, ua, u string, body any, headers map[string]st
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, netErr(err)
 	}
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
@@ -234,11 +354,20 @@ func postJSON(ctx context.Context, ua, u string, body any, headers map[string]st
 }
 
 func httpErr(status int, body []byte) error {
-	s := strings.TrimSpace(string(body))
+	return statusErr(status, fmt.Errorf("HTTP %d: %s", status, excerpt(string(body))))
+}
+
+// excerpt kuerzt Antworttexte fremder Server fuer Fehlermeldungen (hoechstens 200 Bytes, eine Zeile, gueltiges UTF-8).
+func excerpt(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
 	if len(s) > 200 {
 		s = s[:200]
+		for len(s) > 0 && !utf8.ValidString(s) {
+			s = s[:len(s)-1]
+		}
+		s += "..."
 	}
-	return fmt.Errorf("HTTP %d: %s", status, s)
+	return s
 }
 
 // ---------------------------------------------------------------- Telegram
@@ -262,7 +391,7 @@ func (t telegramSender) Send(ctx context.Context, ch *Channel, m Message) error 
 		}
 		_ = json.Unmarshal(rb, &e)
 		if e.Description != "" {
-			return fmt.Errorf("telegram: %s", e.Description)
+			return statusErr(status, fmt.Errorf("telegram: %s", excerpt(e.Description)))
 		}
 		return httpErr(status, rb)
 	}
@@ -338,7 +467,7 @@ func (n ntfySender) Send(ctx context.Context, ch *Channel, m Message) error {
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return err
+		return netErr(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -410,11 +539,11 @@ func (w webhookSender) Send(ctx context.Context, ch *Channel, m Message) error {
 	}
 	client := httpClient
 	if ch.Config["insecure_tls"] == "true" {
-		client = &http.Client{Timeout: 20 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} //nolint:gosec // bewusst per Option
+		client = insecureHTTPClient
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return netErr(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -450,7 +579,7 @@ func (h homeAssistantSender) Send(ctx context.Context, ch *Channel, m Message) e
 	req.Header.Set("User-Agent", h.ua)
 	client := httpClient
 	if ch.Config["verify_tls"] == "false" { // selbst signiertes Zertifikat im LAN
-		client = &http.Client{Timeout: 20 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} //nolint:gosec // bewusst per Option
+		client = insecureHTTPClient
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -459,11 +588,7 @@ func (h homeAssistantSender) Send(ctx context.Context, ch *Channel, m Message) e
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		rb, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		err := fmt.Errorf("home assistant: %s", redact(httpErr(resp.StatusCode, rb).Error()))
-		if resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests {
-			return Temporary(err)
-		}
-		return err
+		return statusErr(resp.StatusCode, fmt.Errorf("home assistant: %s", redact(httpErr(resp.StatusCode, rb).Error())))
 	}
 	return nil
 }
@@ -547,7 +672,20 @@ func manageURL(u string) string {
 
 type smtpSender struct{}
 
-func (smtpSender) Send(ctx context.Context, ch *Channel, m Message) error {
+// Send: Netzwerkfehler und SMTP-Antworten 4xx sind voruebergehend.
+func (s smtpSender) Send(ctx context.Context, ch *Channel, m Message) error {
+	err := s.send(ctx, ch, m)
+	var te *textproto.Error
+	if errors.As(err, &te) {
+		if te.Code >= 400 && te.Code < 500 {
+			return Temporary(err)
+		}
+		return err
+	}
+	return netErr(err)
+}
+
+func (smtpSender) send(ctx context.Context, ch *Channel, m Message) error {
 	host := ch.Config["host"]
 	port := ch.Config["port"]
 	if port == "" {
@@ -559,13 +697,14 @@ func (smtpSender) Send(ctx context.Context, ch *Channel, m Message) error {
 	if !ok {
 		deadline = time.Now().Add(30 * time.Second)
 	}
-	dialer := &net.Dialer{Timeout: 15 * time.Second, Deadline: deadline}
+	d := dialer(ctx, 15*time.Second)
+	d.Deadline = deadline
 	var conn net.Conn
 	var err error
 	if security == "tls" {
-		conn, err = tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
+		conn, err = tls.DialWithDialer(d, "tcp", addr, &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12})
 	} else {
-		conn, err = dialer.DialContext(ctx, "tcp", addr)
+		conn, err = d.DialContext(ctx, "tcp", addr)
 	}
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
