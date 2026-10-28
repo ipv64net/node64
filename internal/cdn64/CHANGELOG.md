@@ -1,5 +1,12 @@
 # Änderungen – PROXY64
 
+## 1.38.3 – 2026-10-28
+
+### Geändert
+- Traefik-Labels: Middlewares dürfen wie bei Traefik an einem anderen Container definiert sein (z. B. `authentik@docker`
+  am authentik-Container). Middlewares aus einer Datei mit eindeutig harmlosem Namen (Umleitung, Header, HSTS,
+  Komprimierung …) werden übergangen statt den Host auszuschalten; der Reiter Docker nennt sie („Übergangen“).
+
 ## 1.38.2 – 2026-10-28
 
 ### Behoben

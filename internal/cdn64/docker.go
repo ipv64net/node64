@@ -68,6 +68,7 @@ type dockerContainerView struct {
 	Target      string   `json:"target,omitempty"`  // scheme://ip:port ("" = keins)
 	HostID      int64    `json:"host_id,omitempty"` // 0 = nicht uebernommen
 	Access      string   `json:"access,omitempty"`  // Zugriffsliste aus den Labels ("" = in der Oberflaeche)
+	Ignored     []string `json:"ignored,omitempty"` // uebergangene harmlose Traefik-Middlewares
 	Problem     string   `json:"problem,omitempty"` // dockerErr* ("" = ok)
 	ProblemName string   `json:"problem_name,omitempty"`
 }
@@ -415,9 +416,14 @@ func (m *Module) dockerSync(ctx context.Context, hc *http.Client, base, host str
 	})
 	seen := map[string]bool{}
 	views := []dockerContainerView{}
+	all := make([]map[string]string, 0, len(list))
+	for i := range list {
+		all = append(all, list[i].Labels)
+	}
+	shared := traefikShared(all)
 	for i := range list {
 		c := &list[i]
-		specs, probs := dockerSpecs(c.Labels, traefik)
+		specs, probs := dockerSpecs(c.Labels, traefik, shared)
 		if len(specs) == 0 && len(probs) == 0 {
 			continue
 		}
@@ -519,7 +525,7 @@ func (m *Module) dockerRemove(ctx context.Context, hosts []*Host, seen map[strin
 // dockerApply legt den Host eines Containers an bzw. uebernimmt Namen, Schema und Ziel aus den Labels.
 // Fehler nur bei Problemen mit der Datenbank (Probleme mit den Labels stehen in der Ansicht).
 func (m *Module) dockerApply(ctx context.Context, hosts *[]*Host, name string, c *dockerListC, in, self *dockerInspectC, s dockerSpec) (dockerContainerView, error) {
-	v := dockerContainerView{Name: name, State: c.State, Source: s.Source, Router: s.Router, Names: s.Names}
+	v := dockerContainerView{Name: name, State: c.State, Source: s.Source, Router: s.Router, Names: s.Names, Ignored: s.Ignored}
 	h := dockerHostOf(*hosts, name, s.Router)
 	if h != nil {
 		v.HostID = h.ID

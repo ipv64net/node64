@@ -17,13 +17,13 @@ func TestDockerPageRender(t *testing.T) {
 	d := dockerData{Tabs: (&Module{}).tabs("/cdn64/docker"), On: true, Traefik: true, DefaultHost: "unix:///var/run/docker.sock", CertsOn: true,
 		Cert: "http", Errors: map[string]string{"docker_host": "bad host"},
 		View: dockerView{Enabled: true, Connected: true, Host: "unix:///var/run/docker.sock", Synced: time.Now(), Containers: []dockerContainerView{
-			{Name: "whoami", State: "running", Source: dockerSrcNode64, Names: []string{"app.example.de"}, Target: "http://172.18.0.5:80", HostID: 7},
+			{Name: "whoami", State: "running", Source: dockerSrcNode64, Names: []string{"app.example.de"}, Target: "http://172.18.0.5:80", HostID: 7, Ignored: []string{"hsts@file"}},
 			{Name: "legacy", State: "exited", Source: dockerSrcTraefik, Router: "web", Names: []string{"old.example.de"}, Problem: dockerErrRule, ProblemName: "web"},
 		}}}
 	body := renderPage(t, "docker.html", d)
 	for _, want := range []string{`action="/cdn64/docker"`, `name="docker" id="docker_on" checked`, `name="traefik" id="docker_traefik" checked`,
 		`name="docker_host"`, `placeholder="unix:///var/run/docker.sock"`, `bad host`, `value="http" selected`, `name="accept_tos"`,
-		`href="/cdn64/hosts/7"`, `data-docker-container="legacy"`, dockerErrRule, `cdn64.docker.state_ok`, `href="/cdn64/docker"`} {
+		`href="/cdn64/hosts/7"`, `data-docker-container="legacy"`, "data-docker-ignored", "cdn64.docker.ignored", dockerErrRule, `cdn64.docker.state_ok`, `href="/cdn64/docker"`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("docker page misses %s", want)
 		}

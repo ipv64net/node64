@@ -1,5 +1,12 @@
 # Changes – PROXY64
 
+## 1.38.3 – 2026-10-28
+
+### Changed
+- Traefik labels: middlewares may be defined on another container, as with Traefik (e.g. `authentik@docker` on the
+  authentik container). Middlewares from a file with a clearly harmless name (redirect, headers, HSTS, compression …)
+  are skipped instead of switching the host off; the Docker tab lists them ("Skipped").
+
 ## 1.38.2 – 2026-10-28
 
 ### Fixed

@@ -346,7 +346,8 @@ Labels: übernommen (Link zum Host) oder der Grund, warum nicht.
 - War Node64 aus, als ein Container entfernt wurde, holt der nächste Abgleich das Löschen nach.
 
 **Konflikte.** Gehört ein Name schon zu einem von Hand angelegten Host, gewinnt dieser; der Container wird nicht
-übernommen (Hinweis). Zwei Container mit demselben Namen: der zuerst gesehene gewinnt. Stehen eigene und
+übernommen (Hinweis). Nach einem Import (Export/Import auf eine andere Node) sind alle Hosts normale Hosts; damit Docker
+einen davon übernimmt, den Host löschen – der nächste Abgleich legt ihn aus den Labels neu an. Zwei Container mit demselben Namen: der zuerst gesehene gewinnt. Stehen eigene und
 Traefik-Labels am selben Container, gelten nur die eigenen.
 
 **Traefik-Labels** (Schalter „Traefik-Labels mitlesen“, an, solange Docker-Labels an sind). Ausgewertet werden nur:
@@ -362,7 +363,12 @@ Traefik-Labels am selben Container, gelten nur die eigenen.
   - Arten ohne Zugriffsschutz (`headers`, `redirectScheme`, `redirectRegex`, `compress`, `stripPrefix`, `addPrefix`,
     `replacePath`, `rateLimit`, `inFlightReq`, `retry`, `buffering`, `circuitBreaker`, `errors`, `contentType`) werden
     übergangen;
-  - alle anderen (`name@file`, `basicAuth`, `ipAllowList`, `chain`, nicht definierte) brauchen eine Zugriffsliste
+  - Middlewares dürfen wie bei Traefik an einem anderen Container definiert sein (z. B. `authentik@docker` am
+    authentik-Container);
+  - `name@file` u. Ä. (Art nicht sichtbar) mit eindeutig harmlosem Namen (`redirect…`, `…https…`, `…header…`, `hsts`,
+    `compress`, `strip…`, `ratelimit` …, aber nichts mit `auth`, `allow`, `ip`, `chain`, `secured` …) werden übergangen;
+    die Liste unter *Docker* nennt sie („Übergangen“);
+  - alle anderen (`basicAuth`, `ipAllowList`, `chain`, nicht einsehbare, nicht definierte) brauchen eine Zugriffsliste
     gleichen Namens, sonst kommt der Host ausgeschaltet.
 
 Entrypoints, `tls.certresolver` (Zertifikate macht PROXY64) sowie TCP/UDP-Router werden ignoriert. Router für

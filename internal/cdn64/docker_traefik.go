@@ -23,7 +23,9 @@ const (
 
 // traefikSpecs: je Traefik-Router mit Host(...)-Regel ein Host, sortiert nach Router-Name. Router mit gleichen Namen
 // und gleichem Ziel (z. B. http- und https-Router) ergeben nur einen Host (der alphabetisch erste Router).
-func traefikSpecs(labels map[string]string) ([]dockerSpec, []dockerProblem) {
+// shared: Middleware-Definitionen aller Container (traefik.http.middlewares.*, klein geschrieben) - wie bei Traefik
+// darf eine Middleware an einem anderen Container stehen (z. B. authentik am authentik-Container).
+func traefikSpecs(labels, shared map[string]string) ([]dockerSpec, []dockerProblem) {
 	l := make(map[string]string, len(labels))
 	for k, v := range labels {
 		l[strings.ToLower(strings.TrimSpace(k))] = strings.TrimSpace(v)
@@ -69,7 +71,7 @@ func traefikSpecs(labels map[string]string) ([]dockerSpec, []dockerProblem) {
 			continue
 		}
 		s := dockerSpec{Source: dockerSrcTraefik, Router: r, Names: names, Scheme: "http", Network: network}
-		s.Access, s.Middlewares = traefikMiddlewares(l, r)
+		s.Access, s.Middlewares, s.Ignored = traefikMiddlewares(l, shared, r)
 		if svc != "" {
 			p := traefikServicePrefix + svc + ".loadbalancer.server."
 			if v := l[p+"port"]; v != "" {
@@ -92,8 +94,8 @@ func traefikSpecs(labels map[string]string) ([]dockerSpec, []dockerProblem) {
 		if i, ok := seen[key]; ok {
 			// gleicher Host ueber mehrere Router (z. B. web mit Umleitung, websecure ohne): es gilt der mit den wenigsten
 			// nicht uebernommenen Middlewares - Traefik liefert den Dienst ueber diesen Router ja auch so aus
-			if len(s.Middlewares) < len(specs[i].Middlewares) {
-				specs[i].Access, specs[i].Middlewares = s.Access, s.Middlewares
+			if o := specs[i]; len(s.Middlewares) < len(o.Middlewares) || len(s.Middlewares) == len(o.Middlewares) && len(s.Ignored) < len(o.Ignored) {
+				specs[i].Access, specs[i].Middlewares, specs[i].Ignored = s.Access, s.Middlewares, s.Ignored
 			}
 			continue
 		}
@@ -109,9 +111,16 @@ var traefikHarmless = map[string]bool{"headers": true, "redirectscheme": true, "
 	"retry": true, "buffering": true, "circuitbreaker": true, "errors": true, "contenttype": true}
 
 // traefikMiddlewares: die erste Middleware des Routers mit forwardAuth in den Labels wird die Zugriffsliste
-// "Traefik: <name> (<host:port des Dienstes>)" (andere Adresse = andere Liste). Harmlose Arten (traefikHarmless)
-// bleiben unbeachtet; alle anderen (name@file, basicAuth, ipAllowList, chain, unbekannt) kommen nach rest.
-func traefikMiddlewares(l map[string]string, router string) (access *dockerAccess, rest []string) {
+// "Traefik: <name> (<host:port des Dienstes>)" (andere Adresse = andere Liste). Harmlose Arten (traefikHarmless) bzw.
+// nicht einsehbare mit harmlosem Namen (traefikHarmlessName) kommen nach ignored; alle anderen (basicAuth,
+// ipAllowList, chain, unbekannt) nach rest - sie brauchen eine Zugriffsliste gleichen Namens.
+func traefikMiddlewares(l, shared map[string]string, router string) (access *dockerAccess, rest, ignored []string) {
+	get := func(k string) string {
+		if v := l[k]; v != "" {
+			return v
+		}
+		return shared[k]
+	}
 	for _, mw := range strings.Split(l[traefikRouterPrefix+router+".middlewares"], ",") {
 		mw = strings.TrimSpace(mw)
 		name, provider, _ := strings.Cut(strings.ToLower(mw), "@")
@@ -120,9 +129,9 @@ func traefikMiddlewares(l map[string]string, router string) (access *dockerAcces
 		}
 		local := provider == "" || provider == "docker"
 		p := "traefik.http.middlewares." + name + "."
-		if addr := l[p+"forwardauth.address"]; addr != "" && local && access == nil {
+		if addr := get(p + "forwardauth.address"); addr != "" && local && access == nil {
 			var hs []string
-			for _, h := range strings.Split(l[p+"forwardauth.authresponseheaders"], ",") {
+			for _, h := range strings.Split(get(p+"forwardauth.authresponseheaders"), ",") {
 				if h = strings.TrimSpace(h); h != "" {
 					hs = append(hs, h)
 				}
@@ -134,12 +143,36 @@ func traefikMiddlewares(l map[string]string, router string) (access *dockerAcces
 			access = &dockerAccess{Name: "Traefik: " + name + " (" + host + ")", Auth: fwdKindOf(addr), Forward: &ForwardAuth{Address: addr, Headers: hs}}
 			continue
 		}
-		if kinds := traefikKinds(l, p); local && kinds != nil && allHarmless(kinds) {
-			continue
+		kinds := traefikKinds(l, p)
+		if kinds == nil {
+			kinds = traefikKinds(shared, p)
 		}
-		rest = append(rest, mw)
+		switch {
+		case local && kinds != nil && allHarmless(kinds), (!local || kinds == nil) && traefikHarmlessName(name):
+			ignored = append(ignored, mw)
+		default:
+			rest = append(rest, mw)
+		}
 	}
-	return access, rest
+	return access, rest, ignored
+}
+
+// traefikHarmlessName: Middleware, deren Art PROXY64 nicht sieht (Datei, anderer Anbieter), aber deren Name klar auf
+// Umleitung, Header, Komprimierung o. Ae. zeigt - nicht auf Zugang (auth, allow, ip, chain, secured ...).
+func traefikHarmlessName(n string) bool {
+	for _, k := range []string{"auth", "sso", "login", "allow", "white", "ip", "basic", "digest", "chain", "secured", "protect",
+		"private", "internal", "lan", "admin", "access", "deny", "block"} {
+		if strings.Contains(n, k) {
+			return false
+		}
+	}
+	for _, k := range []string{"redirect", "https", "header", "hsts", "compress", "gzip", "strip", "prefix", "ratelimit", "rate-limit",
+		"retry", "buffer", "cors", "error"} {
+		if strings.Contains(n, k) {
+			return true
+		}
+	}
+	return false
 }
 
 // traefikKinds: Arten einer in den Labels definierten Middleware (nil = nicht in den Labels).

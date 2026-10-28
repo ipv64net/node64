@@ -158,7 +158,7 @@ func TestTraefikSpecs(t *testing.T) {
 		}, []dockerSpec{spec("app", "http", 0, "", "app.example.de")}, nil},
 		{"no labels", map[string]string{"com.docker.compose.project": "x"}, nil, nil},
 	} {
-		specs, probs := traefikSpecs(c.labels)
+		specs, probs := traefikSpecs(c.labels, nil)
 		if !reflect.DeepEqual(specs, c.specs) {
 			t.Errorf("%s: specs %+v, want %+v", c.name, specs, c.specs)
 		}
@@ -184,14 +184,22 @@ func TestTraefikMiddlewares(t *testing.T) {
 		"traefik.http.middlewares.basic.basicauth.users":       "x:y",
 		"traefik.http.middlewares.lan.ipallowlist.sourcerange": "192.168.0.0/16",
 	}
-	a, rest := traefikMiddlewares(l, "app")
+	a, rest, ign := traefikMiddlewares(l, nil, "app")
 	if a == nil || a.Name != "Traefik: fa (authelia:9091)" || a.Auth != AuthAuthelia || a.Forward.Address != "http://authelia:9091/api/authz/forward-auth" {
 		t.Fatalf("access: %+v", a)
 	}
-	if !slices.Equal(rest, []string{"basic", "lan@docker", "chain-x@file", "gone"}) {
-		t.Fatalf("rest: %v", rest)
+	if !slices.Equal(rest, []string{"basic", "lan@docker", "chain-x@file", "gone"}) || !slices.Equal(ign, []string{"hdr@docker"}) {
+		t.Fatalf("rest: %v ignored: %v", rest, ign)
 	}
-	if a, rest := traefikMiddlewares(map[string]string{"traefik.http.routers.app.middlewares": "hdr", "traefik.http.middlewares.hdr.headers.x": "1"}, "app"); a != nil || rest != nil {
+	if a, rest, _ := traefikMiddlewares(map[string]string{"traefik.http.routers.app.middlewares": "hdr", "traefik.http.middlewares.hdr.headers.x": "1"}, nil, "app"); a != nil || rest != nil {
 		t.Fatalf("harmless only: %+v %v", a, rest)
+	}
+	// Datei-Middlewares mit harmlosem Namen uebergangen, mit Zugangs-Namen nicht; Definition an einem anderen Container
+	l2 := map[string]string{"traefik.http.routers.app.middlewares": "redirect-to-https@file, secure-headers@file, ip-allowlist@file, authentik@docker"}
+	shared := traefikShared([]map[string]string{{"traefik.http.middlewares.authentik.forwardAuth.address": "http://authentik-server:9000/outpost.goauthentik.io/auth/traefik"}})
+	a, rest, ign = traefikMiddlewares(l2, shared, "app")
+	if a == nil || a.Auth != AuthAuthentik || !slices.Equal(rest, []string{"ip-allowlist@file"}) ||
+		!slices.Equal(ign, []string{"redirect-to-https@file", "secure-headers@file"}) {
+		t.Fatalf("file/shared: %+v %v %v", a, rest, ign)
 	}
 }

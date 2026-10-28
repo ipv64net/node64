@@ -66,7 +66,8 @@
 					<td>{{range $i, $n := .Names}}{{if $i}}<br>{{end}}<span class="font-monospace cell-wrap">{{$n}}</span>{{end}}</td>
 					<td class="font-monospace cell-wrap">{{.Target}}</td>
 					<td class="pe-3">{{if .HostID}}<a class="badge text-bg-success text-decoration-none" href="/cdn64/hosts/{{.HostID}}"><i class="bi bi-check-lg"></i> {{$.T "cdn64.docker.taken"}}</a>{{end}}
-						{{if .Problem}}<div class="text-danger">{{$.T .Problem "name" .ProblemName}}</div>{{else if not .HostID}}<span class="text-body-secondary">–</span>{{end}}</td>
+						{{if .Problem}}<div class="text-danger">{{$.T .Problem "name" .ProblemName}}</div>{{else if not .HostID}}<span class="text-body-secondary">–</span>{{end}}
+						{{with .Ignored}}<div class="text-body-secondary" data-docker-ignored>{{$.T "cdn64.docker.ignored" "name" (join . ", ")}}</div>{{end}}</td>
 				</tr>
 				{{end}}
 				</tbody>
