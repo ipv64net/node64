@@ -171,6 +171,10 @@ type Live struct {
 	wake      chan struct{}
 	states    map[string]wire.State
 	ws        *session
+	// revHeld: eine Aenderung liess sich nicht anwenden, die Revision bleibt davor stehen (bis zur naechsten
+	// Sitzung, die ab dort neu liefert); applyFails zaehlt Fehlschlaege je Aenderung (dauerhafte werden uebergangen)
+	revHeld    bool
+	applyFails map[string]int
 }
 
 // New erzeugt den Client; Start installiert die Hooks.
@@ -895,17 +899,50 @@ func (c *Live) applyChanges(ctx context.Context, changes []wire.Change, revision
 		}
 		if err != nil {
 			c.log.Warn("apply change failed", "entity", ch.Entity, "id", checks.TokenHint(ch.ID), "op", ch.Op, "err", err)
+			if c.applyFailed(ch) {
+				c.log.Error("apply change failed repeatedly, skipped", "entity", ch.Entity, "id", checks.TokenHint(ch.ID), "op", ch.Op)
+			} else {
+				c.holdRevision() // nicht ueber die fehlgeschlagene Aenderung hinaus: die naechste Sitzung liefert ab hier neu
+			}
 		}
-		if ch.Revision > c.getInt(SetRevision) {
+		if ch.Revision > c.getInt(SetRevision) && !c.revisionHeld() {
 			c.setInt(SetRevision, ch.Revision)
 		}
 	}
-	if revision > c.getInt(SetRevision) {
+	if revision > c.getInt(SetRevision) && !c.revisionHeld() {
 		c.setInt(SetRevision, revision)
 	}
 	c.mu.Lock()
 	c.lastSync = time.Now()
 	c.mu.Unlock()
+}
+
+// maxApplyFails: so oft darf dieselbe Aenderung scheitern, bevor sie uebergangen wird (z. B. ungueltige Daten),
+// damit eine einzelne Aenderung den Abgleich nicht dauerhaft festhaelt.
+const maxApplyFails = 3
+
+// applyFailed zaehlt einen Fehlschlag; true = dauerhaft gescheitert (uebergehen).
+func (c *Live) applyFailed(ch wire.Change) bool {
+	key := ch.Entity + "|" + ch.ID + "|" + strconv.FormatInt(ch.Revision, 10)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.applyFails == nil {
+		c.applyFails = map[string]int{}
+	}
+	c.applyFails[key]++
+	return c.applyFails[key] >= maxApplyFails
+}
+
+func (c *Live) holdRevision() {
+	c.mu.Lock()
+	c.revHeld = true
+	c.mu.Unlock()
+}
+
+func (c *Live) revisionHeld() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.revHeld
 }
 
 func (c *Live) localIDFor(ctx context.Context, entity, remoteID string) string {
@@ -1477,16 +1514,31 @@ func (c *Live) ProxyData(ctx context.Context, node string, states []wire.State, 
 	if s == nil || !s.proxy.Load() {
 		return 0, errors.New("not connected to ipv64")
 	}
-	m, err := s.request("proxy_data", wire.ProxyData{Node: node, States: states, Batch: batch})
-	if err != nil {
-		return 0, err
+	// in Nachrichten unter der Leselimite des hubs (limit.go), Zustaende mit dem ersten Teil
+	var ack int64
+	parts := chunks(shrinkMeasurements(batch))
+	stParts := chunks(shrinkStates(states))
+	for i := 0; i < max(1, len(parts), len(stParts)); i++ {
+		var d wire.ProxyData
+		d.Node = node
+		if i < len(stParts) {
+			d.States = stParts[i]
+		}
+		if i < len(parts) {
+			d.Batch = parts[i]
+		}
+		m, err := s.request("proxy_data", d)
+		if err != nil {
+			return 0, err
+		}
+		var a wire.Ack
+		if err := json.Unmarshal(m.Data, &a); err != nil {
+			return 0, err
+		}
+		if a.Error != "" {
+			return 0, errors.New(a.Error)
+		}
+		ack = max(ack, a.AckSeq)
 	}
-	var a wire.Ack
-	if err := json.Unmarshal(m.Data, &a); err != nil {
-		return 0, err
-	}
-	if a.Error != "" {
-		return 0, errors.New(a.Error)
-	}
-	return a.AckSeq, nil
+	return ack, nil
 }
