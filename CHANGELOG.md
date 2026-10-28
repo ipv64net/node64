@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 0.12.0-alpha.27 – 2026-10-28
+
 - Sonar64 (neu, optional, standardmäßig aus): Community-Messnetz – Teilnahme per Opt-in mit dem ipv64-API-Key, nur
   ausgehend oder auch gemessen (UDP 6464), Budget, Ruhezeit, Profil mit verschleiertem Standort, Vertrauensstufe und
   Live-Tabellen der Pings; Austreten meldet den Knoten bei ipv64.net ab.
