@@ -1,12 +1,13 @@
 # Sonar64 ohne Dashboard (docs/SONAR64.md): Programme je Architektur als GitHub-Release und Image
-# ghcr.io/ipv64net/sonar64. Ausloeser: Tag sonar64-v<version> (z. B. sonar64-v0.1.0) oder von Hand (Actions >
-# sonar64 > Run workflow; dann nur Artefakt und Image-Tag edge, kein Release).
+# ghcr.io/ipv64net/sonar64. Ausloeser: das normale Node64-Versions-Tag v<version> (z. B. v0.12.0-alpha.27; Sonar64
+# hat keine eigenen Tags) oder von Hand (Actions > sonar64 > Run workflow; dann nur Artefakt und Image-Tag edge).
+# Die Programme haengen am GitHub-Release des Tags (wird angelegt, wenn es noch keins gibt).
 # Vorher laufen vet und die Tests des Kerns; schlagen sie fehl, entsteht nichts.
 name: sonar64
 
 on:
   push:
-    tags: ["sonar64-v*"]
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -45,7 +46,7 @@ jobs:
           go-version-file: go.mod
       - name: build
         run: |
-          if [ "${GITHUB_REF_TYPE}" = tag ]; then V="${GITHUB_REF_NAME#sonar64-v}"; else V="dev-${GITHUB_SHA::7}"; fi
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then V="${GITHUB_REF_NAME#v}"; else V="dev-${GITHUB_SHA::7}"; fi
           echo "VERSION=$V" >> "$GITHUB_ENV"
           mkdir -p dist
           for a in armv6 armv7 arm64 amd64; do
@@ -81,14 +82,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          V="${GITHUB_REF_NAME#sonar64-v}"
+          V="${GITHUB_REF_NAME#v}"
           pre=""; case "$V" in *-*) pre="--prerelease" ;; esac
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" dist/* --clobber
           else
-            gh release create "$GITHUB_REF_NAME" dist/* $pre --latest=false --verify-tag \
-              --title "Sonar64 $V" \
-              --notes "Sonar64 $V - standalone node/anchor without dashboard. Install: docs/SONAR64.md (install.sh checks SHA256SUMS). Image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/sonar64:$V"
+            gh release create "$GITHUB_REF_NAME" dist/* $pre --verify-tag \
+              --title "Node64 $V" \
+              --notes "Node64 $V - changes: CHANGELOG.md. Images: ghcr.io/${GITHUB_REPOSITORY}:$V and ghcr.io/${GITHUB_REPOSITORY_OWNER}/sonar64:$V. The sonar64-linux-* files are Sonar64 without dashboard (node or anchor, docs/SONAR64.md; install.sh checks SHA256SUMS)."
           fi
 
   image:
@@ -109,15 +110,14 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/sonar64
-          # Tag sonar64-v0.1.0 -> 0.1.0 und 0.1; "latest" nur fuer Versionen ohne Vorab-Kennung
+          # wie das Node64-Image: Tag v0.12.0-alpha.27 -> 0.12.0-alpha.27; "latest" nur fuer Versionen ohne Vorab-Kennung
           tags: |
-            type=match,pattern=sonar64-v(.*),group=1
-            type=match,pattern=sonar64-v(\d+\.\d+)\.\d+$,group=1
-            type=raw,value=latest,enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-rc') && !contains(github.ref_name, '-alpha') && !contains(github.ref_name, '-beta') }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref_name, '-') }}
             type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' }}
             type=sha,format=short,enable=${{ github.event_name == 'workflow_dispatch' }}
           flavor: |
-            latest=false
+            latest=auto
       - uses: docker/build-push-action@v6
         with:
           context: .

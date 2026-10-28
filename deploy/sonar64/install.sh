@@ -8,11 +8,11 @@
 #                                      (uebrige Einstellungen bleiben; klappt die Abmeldung nicht, auch Token und Schluessel)
 #   sudo sh install.sh --purge         zusaetzlich /etc/sonar64.env und /var/lib/sonar64 loeschen
 #
-# Variablen: SONAR64_VERSION (z. B. 0.1.0, Standard: neueste), SONAR64_TOKEN, SONAR64_MEASURED (0/1),
+# Variablen: SONAR64_VERSION (Node64-Version, z. B. 0.12.0-alpha.27, Standard: neueste), SONAR64_TOKEN, SONAR64_MEASURED (0/1),
 # SONAR64_BUDGET (sparsam|normal|grosszuegig), SONAR64_QUIET (z. B. 23-6). Nur Tests: SONAR64_SRC_DIR (Ordner mit
 # den Release-Dateien statt Download).
 #
-# Das Programm kommt aus den GitHub-Releases von ipv64net/node64 (Tag sonar64-v<version>) und wird gegen SHA256SUMS
+# Das Programm kommt aus den GitHub-Releases von ipv64net/node64 (normales Tag v<version>) und wird gegen SHA256SUMS
 # geprueft. Es laeuft als eigener Nutzer sonar64 mit nur CAP_NET_RAW (systemd-Haertung, MemoryMax=64M).
 set -eu
 
@@ -101,11 +101,11 @@ if [ -n "${SONAR64_SRC_DIR:-}" ]; then
 	VER="${VER:-local}"
 elif [ -z "$VER" ]; then
 	fetch "https://api.github.com/repos/$REPO/releases?per_page=50" "$TMP/releases.json" || die "cannot list releases"
-	# nur fertige Versionen (ohne -rc/-beta usw.); eine Vorabversion nur ueber SONAR64_VERSION
-	VER=$(grep -o '"tag_name": *"sonar64-v[0-9][0-9.]*"' "$TMP/releases.json" | head -n 1 | sed 's/.*"sonar64-v\([^"]*\)"/\1/')
-	[ -n "$VER" ] || die "no sonar64 release found"
+	# neueste fertige Version (ohne -rc/-alpha usw.); gibt es noch keine, die neueste Vorabversion
+	VER=$(grep -o '"tag_name": *"v[0-9][0-9.]*"' "$TMP/releases.json" | head -n 1 | sed 's/.*"v\([^"]*\)"/\1/')
+	[ -n "$VER" ] || VER=$(grep -o '"tag_name": *"v[0-9][0-9A-Za-z.+-]*"' "$TMP/releases.json" | head -n 1 | sed 's/.*"v\([^"]*\)"/\1/')
+	[ -n "$VER" ] || die "no release found"
 fi
-VER="${VER#sonar64-v}"
 VER="${VER#v}"
 match "$VER" '^[0-9A-Za-z][0-9A-Za-z.+-]{0,40}$' || die "invalid version"
 
@@ -114,7 +114,7 @@ get() { # get <datei>
 	if [ -n "${SONAR64_SRC_DIR:-}" ]; then
 		cp "$SONAR64_SRC_DIR/$1" "$TMP/$1" || die "missing $1 in SONAR64_SRC_DIR"
 	else
-		fetch "https://github.com/$REPO/releases/download/sonar64-v$VER/$1" "$TMP/$1" || die "download of $1 failed"
+		fetch "https://github.com/$REPO/releases/download/v$VER/$1" "$TMP/$1" || die "download of $1 failed"
 	fi
 }
 say "installing version $VER for $ARCH"
