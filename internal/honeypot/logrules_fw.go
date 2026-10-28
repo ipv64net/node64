@@ -27,6 +27,11 @@ import (
 //   - UniFi (dropbear): "Bad password attempt for 'ubnt' from 192.0.2.7:52341", "Login attempt for nonexistent user
 //     from 192.0.2.7:52341".
 //
+// Jede Regel gilt nur fuer Zeilen im Syslog-Format (fwSyslogLine; nie Webserver-Logs oder Zugriffe von PROXY64) und
+// erkennt die feste Meldung des Herstellers nur am Anfang der Nachricht bzw. Key=Value-Zeilen nur, wenn die Zeile
+// selbst mit key= beginnt: Text, den ein Angreifer in fremde Zeilen bringt (User-Agent, Benutzername, Disconnect-Text),
+// waehlt so keine IP aus.
+//
 // sshd-Zeilen (OpenSSH auf OPNsense/pfSense/UniFi OS) wertet die allgemeine sshd-Regel aus (logrules_svc.go); hier
 // nicht noch einmal, sonst zaehlte jede Zeile doppelt.
 
@@ -99,14 +104,22 @@ func init() {
 // --- MikroTik ---
 
 // fwMikrotik erkennt "login failure for user <name> from <ip> via <dienst>"; want waehlt den Dienst.
+// Die Meldung steht am Anfang der Nachricht (davor hoechstens die Topics, z. B. "system,error,critical"); der Name
+// steht in der Mitte, deshalb gelten das letzte " via " und das letzte " from " davor.
 func fwMikrotik(want func(via string) bool) func(*LogLine) (LogHit, bool) {
 	return func(l *LogLine) (LogHit, bool) {
-		m := l.Message
-		i := strings.Index(m, "login failure for user ")
-		if i < 0 {
+		if !fwSyslogLine(l) {
 			return LogHit{}, false
 		}
-		m = m[i:]
+		const msg = "login failure for user "
+		m := l.Message
+		if !strings.HasPrefix(m, msg) {
+			t := fwWord(m)
+			if !fwMikrotikTopics(t) || !strings.HasPrefix(m[len(t):], " "+msg) {
+				return LogHit{}, false
+			}
+			m = m[len(t)+1:]
+		}
 		v := strings.LastIndex(m, " via ")
 		if v < 0 {
 			return LogHit{}, false
@@ -122,6 +135,19 @@ func fwMikrotik(want func(via string) bool) func(*LogLine) (LogHit, bool) {
 		}
 		return LogHit{Src: ip, Port: fwMikrotikPort(via)}, true
 	}
+}
+
+// fwMikrotikTopics: Topics wie "system,error,critical" (Kleinbuchstaben, Ziffern, Kommas).
+func fwMikrotikTopics(t string) bool {
+	if t == "" || len(t) > 64 {
+		return false
+	}
+	for i := 0; i < len(t); i++ {
+		if c := t[i]; (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != ',' {
+			return false
+		}
+	}
+	return true
 }
 
 // fwMikrotikPort liefert den Standard-Port fuer "via ..." (0 = nicht ueber das Netz, z. B. local, mac-telnet).
@@ -147,28 +173,40 @@ func fwMikrotikPort(via string) int {
 
 // --- OPNsense / pfSense ---
 
+// Die Meldung steht am Anfang der Nachricht, davor hoechstens das Skript ("/index.php: ").
 func fwOPNsenseLogin(l *LogLine) (LogHit, bool) {
-	m := l.Message
-	i := fwIndexFold(m, "web gui authentication error for ")
-	if i < 0 {
-		i = fwIndexFold(m, "webgui authentication error for ")
-	}
-	if i < 0 {
+	if !fwSyslogLine(l) {
 		return LogHit{}, false
 	}
-	return fwAfterFrom(m[i:])
+	m := fwSkipScript(l.Message)
+	if !fwHasPrefixFold(m, "web gui authentication error for ") && !fwHasPrefixFold(m, "webgui authentication error for ") {
+		return LogHit{}, false
+	}
+	return fwAfterFrom(m)
 }
 
 func fwPfSenseLogin(l *LogLine) (LogHit, bool) {
-	m := l.Message
-	i := fwIndexFold(m, "webconfigurator authentication error for ")
-	if i < 0 {
+	if !fwSyslogLine(l) {
 		return LogHit{}, false
 	}
-	return fwAfterFrom(m[i:])
+	m := fwSkipScript(l.Message)
+	if !fwHasPrefixFold(m, "webconfigurator authentication error for ") {
+		return LogHit{}, false
+	}
+	return fwAfterFrom(m)
 }
 
-// fwAfterFrom nimmt die Adresse nach dem letzten " from " bzw. " from: ".
+// fwSkipScript entfernt ein fuehrendes "/<pfad>.php: " (OPNsense/pfSense schreiben das Skript vor die Meldung).
+func fwSkipScript(m string) string {
+	t := fwWord(m)
+	if len(t) > 2 && t[0] == '/' && strings.HasSuffix(t, ".php:") && len(m) > len(t) {
+		return m[len(t)+1:]
+	}
+	return m
+}
+
+// fwAfterFrom nimmt die Adresse nach dem letzten " from " bzw. " from: " (der Benutzername steht davor, die Adresse
+// am festen Ende der Meldung).
 func fwAfterFrom(m string) (LogHit, bool) {
 	f := strings.LastIndex(m, " from")
 	if f < 0 {
@@ -203,7 +241,7 @@ func newFwScan(pfsense bool) *fwScan {
 }
 
 func (s *fwScan) match(l *LogLine) (LogHit, bool) {
-	if l.Program != "filterlog" {
+	if l.Program != "filterlog" || !fwSyslogLine(l) {
 		return LogHit{}, false
 	}
 	src, port, ok := fwFilterlog(l.Message, s.pfsense)
@@ -310,7 +348,7 @@ func fwFilterlog(m string, pfsense bool) (netip.Addr, uint16, bool) {
 func fwFortiAdmin(ssh bool) func(*LogLine) (LogHit, bool) {
 	return func(l *LogLine) (LogHit, bool) {
 		m := l.Message
-		if !strings.Contains(m, "srcip=") {
+		if !fwKVLine(l) || !strings.Contains(m, "srcip=") {
 			return LogHit{}, false
 		}
 		d, _ := fwKV(m, "logdesc")
@@ -344,7 +382,7 @@ func fwFortiAdmin(ssh bool) func(*LogLine) (LogHit, bool) {
 // reason z. B. "sslvpn_login_unknown_user", "sslvpn_login_permission_denied").
 func fwFortiSSLVPN(l *LogLine) (LogHit, bool) {
 	m := l.Message
-	if !strings.Contains(m, "remip=") {
+	if !fwKVLine(l) || !strings.Contains(m, "remip=") {
 		return LogHit{}, false
 	}
 	a, _ := fwKV(m, "action")
@@ -363,7 +401,7 @@ func fwFortiSSLVPN(l *LogLine) (LogHit, bool) {
 // fwFortiIPsec erkennt IKE-Verhandlungsfehler (action="negotiate" status="negotiate_error").
 func fwFortiIPsec(l *LogLine) (LogHit, bool) {
 	m := l.Message
-	if !strings.Contains(m, "remip=") {
+	if !fwKVLine(l) || !strings.Contains(m, "remip=") {
 		return LogHit{}, false
 	}
 	a, _ := fwKV(m, "action")
@@ -390,7 +428,7 @@ func fwFortiIPsec(l *LogLine) (LogHit, bool) {
 func fwSophos(vpn bool) func(*LogLine) (LogHit, bool) {
 	return func(l *LogLine) (LogHit, bool) {
 		m := l.Message
-		if !strings.Contains(m, "src_ip=") {
+		if !fwKVLine(l) || !strings.Contains(m, "src_ip=") {
 			return LogHit{}, false
 		}
 		st, _ := fwKV(m, "status")
@@ -435,16 +473,15 @@ func fwSophosVPN(s string) bool {
 
 // --- UniFi (dropbear) ---
 
+// Nur Zeilen von dropbear, Meldung am Anfang; der Name steht davor, die Adresse am festen Ende (letztes " from ").
 func fwUniFiSSH(l *LogLine) (LogHit, bool) {
-	m := l.Message
-	i := strings.Index(m, "Bad password attempt for ")
-	if i < 0 {
-		i = strings.Index(m, "Login attempt for nonexistent user")
-	}
-	if i < 0 {
+	if l.Program != "dropbear" || !fwSyslogLine(l) {
 		return LogHit{}, false
 	}
-	m = m[i:]
+	m := l.Message
+	if !strings.HasPrefix(m, "Bad password attempt for ") && !strings.HasPrefix(m, "Login attempt for nonexistent user") {
+		return LogHit{}, false
+	}
 	f := strings.LastIndex(m, " from ")
 	if f < 0 {
 		return LogHit{}, false
@@ -474,6 +511,29 @@ func fwParseIPPort(s string) (netip.Addr, bool) {
 }
 
 // --- Hilfen (ohne Zuweisungen) ---
+
+// fwSyslogLine: Zeile im Syslog-Format (Syslog-Empfaenger oder Datei wie auth.log/filter.log); Webserver-Logs und
+// Zugriffe von PROXY64 (Format nginx, caddy, proxy64 ...) wertet keine Firewall-Regel aus.
+func fwSyslogLine(l *LogLine) bool { return l.Format == "syslog" }
+
+// fwKVLine: Key=Value-Zeile (FortiGate, Sophos) im Syslog-Format, die selbst mit key= beginnt (z. B. date=, device=);
+// eine andere Zeile, in der nur irgendwo "srcip=" steht (etwa ein User-Agent), zaehlt nicht.
+func fwKVLine(l *LogLine) bool {
+	if !fwSyslogLine(l) {
+		return false
+	}
+	m := l.Message
+	i := strings.IndexByte(m, '=')
+	if i <= 0 || i > 32 {
+		return false
+	}
+	for k := 0; k < i; k++ {
+		if c := m[k]; (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '_' && c != '-' {
+			return false
+		}
+	}
+	return true
+}
 
 // fwWord liefert das erste Wort (bis Leerzeichen).
 func fwWord(s string) string {
@@ -549,29 +609,58 @@ func fwAllDigits(s string) bool {
 	return true
 }
 
-// fwKV liefert den Wert zu key in einer key=value-Zeile (Wert in Anfuehrungszeichen oder bis zum Leerzeichen).
+// fwKV liefert den Wert zu key in einer key=value-Zeile (Wert in Anfuehrungszeichen oder bis zum Leerzeichen). Die
+// Zeile wird der Reihe nach zerlegt: Text in Anfuehrungszeichen (z. B. user="..." oder msg="...") gilt nie als
+// Schluessel, ein Angreifer kann so kein zweites srcip= unterschieben.
 func fwKV(m, key string) (string, bool) {
-	off := 0
-	for {
-		i := strings.Index(m[off:], key)
-		if i < 0 {
-			return "", false
-		}
-		i += off
-		j := i + len(key)
-		off = j
-		if j >= len(m) || m[j] != '=' || (i > 0 && m[i-1] != ' ' && m[i-1] != '\t' && m[i-1] != ',') {
+	for m != "" {
+		switch m[0] {
+		case ' ', '\t', ',':
+			m = m[1:]
+			continue
+		case '"':
+			_, m = fwQuoted(m)
 			continue
 		}
-		v := m[j+1:]
-		if len(v) > 0 && v[0] == '"' {
-			if k := strings.IndexByte(v[1:], '"'); k >= 0 {
-				return v[1 : k+1], true
-			}
-			return v[1:], true
+		j := 0
+		for j < len(m) && m[j] != '=' && m[j] != ' ' && m[j] != '\t' && m[j] != ',' && m[j] != '"' {
+			j++
 		}
-		return fwWord(v), true
+		if j == len(m) || m[j] != '=' {
+			m = m[j:]
+			continue
+		}
+		k, rest := m[:j], m[j+1:]
+		var v string
+		if rest != "" && rest[0] == '"' {
+			v, rest = fwQuoted(rest)
+		} else {
+			v = fwWord(rest)
+			if n := strings.IndexAny(rest, " \t,"); n >= 0 { // naechster Schluessel auch nach Komma
+				rest = rest[n:]
+			} else {
+				rest = ""
+			}
+		}
+		if k == key {
+			return v, true
+		}
+		m = rest
 	}
+	return "", false
+}
+
+// fwQuoted liefert den Inhalt von "..." am Anfang von s (\" zaehlt nicht als Ende) und den Rest; ohne Ende alles.
+func fwQuoted(s string) (in, rest string) {
+	for j := 1; j < len(s); j++ {
+		switch s[j] {
+		case '\\':
+			j++
+		case '"':
+			return s[1:j], s[j+1:]
+		}
+	}
+	return s[1:], ""
 }
 
 func fwKVPort(m, key string) (int, bool) {

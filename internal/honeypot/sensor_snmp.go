@@ -235,11 +235,16 @@ func (r *sensorSNMPBER) next() (byte, []byte) {
 			r.bad = true
 			return 0, nil
 		}
-		l = 0
+		var ul uint64 // uint64: 4 Laengenbytes laufen in int auf 32-Bit-Systemen (arm/v7) ins Negative
 		for _, c := range r.b[2 : 2+k] {
-			l = l<<8 | int(c)
+			ul = ul<<8 | uint64(c)
 		}
 		i += k
+		if ul > uint64(len(r.b)-i) {
+			r.bad = true
+			return 0, nil
+		}
+		l = int(ul)
 	}
 	if l > len(r.b)-i {
 		r.bad = true

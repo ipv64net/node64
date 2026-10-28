@@ -1,5 +1,16 @@
 # Changes – Honeypot64
 
+## 0.16.1 – 2026-10-28
+
+### Fixed
+- Sensor: fixed a crash from crafted lengths in MikroTik API and SNMP on 32-bit systems (arm/v7); parser errors no longer
+  stop the service.
+- Log rules: firewall rules apply only to the device's syslog lines; attacker text (user agent, user name, disconnect
+  text, HELO) no longer selects the IP in sshd and Postfix rules.
+- SNMP and SIP (UDP, spoofable source) no longer trigger an instant PROXY64 block; per-source limit per /64 for IPv6.
+- Report to ipv64: no events are lost when the stored state was lost.
+- The live map shows late events; the log sensor skips FIFOs and other special files.
+
 ## 0.16.0 – 2026-10-28
 
 ### Fixed

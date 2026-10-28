@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"math"
 	"net"
 	"strings"
 	"time"
@@ -180,7 +181,7 @@ func (a *sensorMTAPI) sentence() ([]string, error) {
 		if n == 0 {
 			return words, nil
 		}
-		if n > sensorMTAPIWord || len(words) >= sensorMTAPIWords {
+		if n < 0 || n > sensorMTAPIWord || len(words) >= sensorMTAPIWords {
 			return nil, errSensorMTAPIWord
 		}
 		w := make([]byte, n)
@@ -197,16 +198,17 @@ func sensorMTAPILen(br io.ByteReader) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	var n, k int
+	var n uint32 // uint32: 4 Laengenbytes passen auf 32-Bit-Systemen (arm/v7) nicht sicher in int
+	var k int
 	switch {
 	case b < 0x80:
 		return int(b), nil
 	case b < 0xC0:
-		n, k = int(b&0x3f), 1
+		n, k = uint32(b&0x3f), 1
 	case b < 0xE0:
-		n, k = int(b&0x1f), 2
+		n, k = uint32(b&0x1f), 2
 	case b < 0xF0:
-		n, k = int(b&0x0f), 3
+		n, k = uint32(b&0x0f), 3
 	case b == 0xF0:
 		k = 4
 	default:
@@ -217,9 +219,12 @@ func sensorMTAPILen(br io.ByteReader) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		n = n<<8 | int(x)
+		n = n<<8 | uint32(x)
 	}
-	return n, nil
+	if n > math.MaxInt32 { // passt nicht in int auf 32 Bit; so lang ist ohnehin kein Wort
+		return 0, errSensorMTAPIWord
+	}
+	return int(n), nil
 }
 
 // sensorMTAPIEnc haengt ein Wort mit Laengenkodierung an (eigene Woerter sind kurz).

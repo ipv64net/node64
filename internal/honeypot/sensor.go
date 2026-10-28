@@ -293,7 +293,11 @@ func (s *Sensor) openService(ctx context.Context, t *trapService, check func(str
 			return
 		}
 		s.wg.Add(1)
-		go func() { defer s.wg.Done(); p.Handle(s, t, pc) }()
+		go func() {
+			defer s.wg.Done()
+			for s.serveUDP(t, p, pc) { // nach einer Panik weiter lesen, bis pc geschlossen wird
+			}
+		}()
 		s.mu.Lock()
 		t.pc, t.err = pc, ""
 		s.mu.Unlock()
@@ -409,10 +413,32 @@ func (s *Sensor) serveLoop(tl *trapListener, handle func(*trapConn)) {
 				defer s.wg.Done()
 				tc := c.(*trapConn)
 				defer tc.Close()
+				defer s.recoverPanic(tl.t.key.Service) // ein Fehler im Parser darf nicht den ganzen Prozess beenden
 				handle(tc)
 			}()
 		}
 	}()
+}
+
+// serveUDP fuehrt den UDP-Dienst aus; true, wenn er mit einer Panik endete (ein Fehler im Parser darf nicht den
+// ganzen Prozess beenden, der Dienst laeuft danach weiter).
+func (s *Sensor) serveUDP(t *trapService, p *UDPProto, pc net.PacketConn) (panicked bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Error("honeypot service failed", "service", t.key.Service, "port", t.key.Port, "proto", "udp", "panic", r)
+			panicked = true
+		}
+	}()
+	p.Handle(s, t, pc)
+	return false
+}
+
+// recoverPanic faengt eine Panik in der Bearbeitung einer Verbindung ab und protokolliert sie (nur per defer nutzen);
+// die Verbindung schliesst der Aufrufer.
+func (s *Sensor) recoverPanic(service string) {
+	if r := recover(); r != nil {
+		s.log.Error("honeypot connection failed", "service", service, "panic", r)
+	}
 }
 
 // sensorListenErr kuerzt den Fehler auf den Kern (z. B. "bind: address already in use").
@@ -466,7 +492,7 @@ func (s *Sensor) admit(t *trapService, c net.Conn) *trapConn {
 	}
 	s.counters.Connections.Add(1)
 	t.conns.Add(1)
-	tc := &trapConn{Conn: c, s: s, t: t, src: src, srcPort: srcPort}
+	tc := &trapConn{Conn: c, raw: c, s: s, t: t, src: src, srcPort: srcPort}
 	switch t.key.Service {
 	case SvcSSH:
 		tc.left.Store(sensorSSHBudget)
@@ -497,6 +523,7 @@ func (s *Sensor) admit(t *trapService, c net.Conn) *trapConn {
 }
 
 func (s *Sensor) acquire(src netip.Addr) bool {
+	src = sensorLimitKey(src)
 	s.connMu.Lock()
 	defer s.connMu.Unlock()
 	if int64(s.nconns) >= s.total.Load() || int64(s.conns[src]) >= s.perIP.Load() {
@@ -508,6 +535,7 @@ func (s *Sensor) acquire(src netip.Addr) bool {
 }
 
 func (s *Sensor) release(src netip.Addr) {
+	src = sensorLimitKey(src)
 	s.connMu.Lock()
 	defer s.connMu.Unlock()
 	if n := s.conns[src]; n <= 1 {
@@ -516,6 +544,17 @@ func (s *Sensor) release(src netip.Addr) {
 		s.conns[src] = n - 1
 	}
 	s.nconns--
+}
+
+// sensorLimitKey ist der Schluessel fuer das Limit je Quelle: IPv4 die Adresse, IPv6 das /64 (sonst fuellt ein
+// einziger Anschluss mit wechselnden Adressen alle Plaetze).
+func sensorLimitKey(a netip.Addr) netip.Addr {
+	if a.Is6() && !a.Is4In6() {
+		if p, err := a.Prefix(64); err == nil {
+			return p.Addr()
+		}
+	}
+	return a
 }
 
 // sensorAddr liefert Quelle (IPv4 ohne ::ffff:) und Port.
@@ -537,6 +576,7 @@ func sensorAddr(a net.Addr) (netip.Addr, int) {
 // trapConn ist eine zugelassene Verbindung mit Byte-Budget; Close gibt das Limit frei.
 type trapConn struct {
 	net.Conn
+	raw     net.Conn // die angenommene Verbindung; Conn kann ein TLS-Dienst ersetzen, Close nutzt nur raw (kein Wettlauf)
 	s       *Sensor
 	t       *trapService
 	src     netip.Addr
@@ -567,7 +607,11 @@ func (c *trapConn) Read(p []byte) (int, error) {
 func (c *trapConn) Close() error {
 	var err error
 	c.once.Do(func() {
-		err = c.Conn.Close()
+		raw := c.raw
+		if raw == nil { // nur in Tests ohne admit
+			raw = c.Conn
+		}
+		err = raw.Close()
 		c.t.mu.Lock()
 		delete(c.t.active, c)
 		c.t.mu.Unlock()

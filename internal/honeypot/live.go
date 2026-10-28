@@ -180,7 +180,7 @@ func (m *Module) liveEvents(ctx context.Context, minutes int, lang string) ([]Li
 	out := []LiveEvent{}
 	for _, e := range list {
 		if e.Time.Before(since) {
-			break
+			continue // Liste nach id sortiert, nicht nach Zeit (Log-Zeilen mit eigener Zeit, Nachmeldungen)
 		}
 		cc := countryOf(e.Src.String())
 		x, y, ok := worldmap.Centroid(cc)

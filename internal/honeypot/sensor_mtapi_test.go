@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
+	mrand "math/rand/v2"
 	"net"
 	"reflect"
 	"strings"
@@ -254,9 +255,33 @@ func TestSensorMTAPILen(t *testing.T) {
 	if n, err := sensorMTAPILen(bufio.NewReader(bytes.NewReader([]byte{0xF0, 1, 2, 3, 4}))); err != nil || n != 0x01020304 {
 		t.Fatalf("5 Bytes: %x %v", n, err)
 	}
-	for _, b := range [][]byte{{0xF1}, {0xFF}, {0x81}, {0xF0, 1}} {
+	for _, b := range [][]byte{{0xF1}, {0xFF}, {0x81}, {0xF0, 1}, {0xF0, 0x80, 0, 0, 0}, {0xF0, 0xFF, 0xFF, 0xFF, 0xFF}} {
 		if _, err := sensorMTAPILen(bufio.NewReader(bytes.NewReader(b))); err == nil {
 			t.Fatalf("%x: kein Fehler", b)
 		}
+	}
+	// Zufaellige Laengen: nie negativ (auch auf 32 Bit), nie ueber 2^31-1
+	for i := 0; i < 5000; i++ {
+		b := make([]byte, 5)
+		for j := range b {
+			b[j] = byte(mrand.N(256))
+		}
+		if i%2 == 0 {
+			b[0] = 0xF0
+		}
+		if n, err := sensorMTAPILen(bufio.NewReader(bytes.NewReader(b))); err == nil && (n < 0 || n > 0x7fffffff) {
+			t.Fatalf("%x: %d", b, n)
+		}
+	}
+}
+
+// Ein Wort mit 4 Laengenbytes und gesetztem obersten Bit: Fehler statt Panik (TCP 8728: F0 80 00 00 00).
+func TestSensorMTAPIHugeWord(t *testing.T) {
+	p1, p2 := net.Pipe()
+	defer p1.Close()
+	defer p2.Close()
+	a := &sensorMTAPI{br: bufio.NewReader(bytes.NewReader([]byte{0xF0, 0x80, 0, 0, 0})), c: &trapConn{Conn: p1}, end: time.Now().Add(time.Minute)}
+	if _, err := a.sentence(); err == nil {
+		t.Fatal("kein Fehler")
 	}
 }

@@ -26,6 +26,7 @@ type HoneypotResult struct {
 	RejectedReasons map[string]int `json:"rejected_reasons"` // Grund -> Anzahl (z. B. not_public)
 	Duplicate       bool           `json:"duplicate"`
 	ReportID        string         `json:"report_id"`
+	PeriodEnd       int64          `json:"period_end,omitempty"` // bei Duplicate: Ende des bei ipv64 gespeicherten Zeitraums (Unix)
 }
 
 // maxRetryAfter begrenzt eine Wartezeit aus Retry-After (Schutz vor unsinnigen Werten).

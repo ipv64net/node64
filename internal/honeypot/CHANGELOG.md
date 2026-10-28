@@ -1,5 +1,16 @@
 # Änderungen – Honeypot64
 
+## 0.16.1 – 2026-10-28
+
+### Behoben
+- Sensor: Absturz durch manipulierte Längen bei MikroTik-API und SNMP auf 32-Bit-Systemen (arm/v7) behoben; Fehler beim
+  Zerlegen einer Verbindung beenden den Dienst nicht mehr.
+- Log-Regeln: Firewall-Regeln gelten nur für Syslog-Zeilen des Geräts; Text von Angreifern (User-Agent, Benutzername,
+  Disconnect-Text, HELO) bestimmt bei sshd und Postfix keine IP mehr.
+- SNMP und SIP (UDP, Absender fälschbar) sperren nicht mehr sofort über PROXY64; Limit je Quelle bei IPv6 je /64.
+- Meldung an ipv64: Ging der gespeicherte Stand verloren, fehlen keine Ereignisse mehr.
+- Live-Karte zeigt auch nachgemeldete Ereignisse; Log-Sensor übergeht FIFOs und andere Sonderdateien.
+
 ## 0.16.0 – 2026-10-28
 
 ### Behoben
