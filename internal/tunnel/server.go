@@ -206,6 +206,13 @@ func (s *Server) handshake(sess Session) {
 	s.slots[k] = p
 	s.mu.Unlock()
 	if old != nil {
+		// anderer Name oder andere Adresse: vermutlich zwei Nodes mit demselben Token (z. B. aus Backup geklont)
+		oh, _, _ := net.SplitHostPort(old.Session.RemoteAddr().String())
+		nh, _, _ := net.SplitHostPort(sess.RemoteAddr().String())
+		if old.Node != p.Node || oh != nh {
+			s.log().Warn("tunnel slot taken over, maybe two nodes with one token", "tunnel", h.Tunnel, "slot", h.Slot,
+				"old_node", old.Node, "old_from", oh, "node", p.Node, "from", nh)
+		}
 		_ = old.Session.Close("replaced")
 	}
 	s.log().Info("tunnel up", "tunnel", h.Tunnel, "node", h.Node, "slot", h.Slot, "transport", sess.Transport(), "from", sess.RemoteAddr().String())
