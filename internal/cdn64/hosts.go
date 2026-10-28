@@ -38,6 +38,9 @@ const (
 var redirectCodes = map[int]bool{300: true, 301: true, 302: true, 303: true, 307: true, 308: true}
 
 // Host ist ein Proxy-Host.
+// TLSBSI: Host.MinTLS fuer TLS nach BSI TR-02102-2 (TLS 1.2 und 1.3, Verfahren nach der Richtlinie, edge.Route.BSI).
+const TLSBSI = "bsi"
+
 type Host struct {
 	ID             int64      `json:"id"`
 	Kind           string     `json:"kind"`
@@ -55,7 +58,7 @@ type Host struct {
 	HTTP3          bool       `json:"http3"`
 	HSTS           bool       `json:"hsts"`
 	HSTSSubdomains bool       `json:"hsts_subdomains"`
-	MinTLS         string     `json:"min_tls"`                   // 1.2 | 1.3
+	MinTLS         string     `json:"min_tls"`                   // 1.2 | 1.3 | bsi (TLS nach BSI TR-02102-2)
 	VerifyTarget   bool       `json:"verify_target"`             // Zertifikat eines https-Ziels pruefen
 	RedirectTarget string     `json:"redirect_target,omitempty"` // Weiterleitung: Domain[:Port][/Pfad]
 	RedirectScheme string     `json:"redirect_scheme,omitempty"` // auto | http | https
@@ -174,7 +177,7 @@ func (h *Host) normalize() error {
 	if h.Kind == KindPass || h.Kind == KindDead {
 		h.AccessListID = 0
 	}
-	if h.MinTLS != "1.3" {
+	if h.MinTLS != "1.3" && h.MinTLS != TLSBSI {
 		h.MinTLS = "1.2"
 	}
 	if h.Kind != KindStatus {

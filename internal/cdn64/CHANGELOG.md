@@ -1,5 +1,14 @@
 # Änderungen – PROXY64
 
+## 1.38.0 – 2026-10-28
+
+### Neu
+- TLS nach BSI TR-02102-2 (Fassung 2026-01) je Proxy-Host: unter „Mindestens“ die Wahl „TLS 1.2/1.3 nach BSI
+  TR-02102-2“. TLS 1.2 dann nur mit ECDHE und AES-GCM (keine CBC-Suites, kein ChaCha20), Schlüsseleinigung nur über
+  P-256, P-384, P-521 und die hybriden ML-KEM-Verfahren (SecP256r1MLKEM768, SecP384r1MLKEM1024, X25519MLKEM768), kein
+  X25519 allein. Einzige Abweichung: Bei TLS 1.3 kann Go ChaCha20-Poly1305 wählen, wenn das Gerät keine AES-Hardware
+  hat oder der Client es vorzieht. Gilt dort, wo TLS auf der Node endet (nicht in CDN64 Modus 2).
+
 ## 1.37.0 – 2026-10-28
 
 ### Neu

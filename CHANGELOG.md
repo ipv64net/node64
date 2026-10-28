@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: TLS nach BSI TR-02102-2 je Proxy-Host wählbar.
 - PROXY64: Zugriffslisten mit authentik, Authelia, oauth2-proxy oder eigenem Anmeldedienst (Forward-Auth), API-Keys für
   Apps und Skripte, Benutzername auf Wunsch an das Ziel. Traefik-Middlewares mit forwardAuth werden übernommen.
 - PROXY64: Proxy-Hosts aus Docker-Labels (`node64.proxy.host`/`port`, auf Wunsch auch Traefik-Labels), neuer Reiter

@@ -125,6 +125,7 @@ type Route struct {
 	HTTP    http.Handler // Port 80; nil = Weiterleitung auf HTTPS (wenn Handler gesetzt), sonst 404
 	CertID  int64        // festes Zertifikat, 0 = passendes nach Namen
 	MinTLS  uint16       // tls.VersionTLS12 (Standard) oder tls.VersionTLS13
+	BSI     bool         // TLS nach BSI TR-02102-2 (bsiSuites, bsiGroups)
 	NoHTTP2 bool         // nur HTTP/1.1 ueber TCP
 	HTTP3   bool         // auch ueber HTTP/3 (wenn der Eingang es anbietet)
 	// Passthrough: TLS nicht hier beenden, sondern die Verbindung roh an dieses Ziel (host:port) geben (nur TCP,
@@ -746,6 +747,9 @@ func (e *Edge) configFor(hello *tls.ClientHelloInfo, quic bool) (*tls.Config, er
 	if rt.NoHTTP2 {
 		cfg.NextProtos = []string{"http/1.1"}
 	}
+	if rt.BSI {
+		cfg.CipherSuites, cfg.CurvePreferences = bsiSuites, bsiGroups
+	}
 	if quic {
 		if !rt.HTTP3 {
 			return nil, errors.New("http/3 not enabled for " + name)
@@ -963,3 +967,13 @@ func hostOf(h string) string {
 	n, _ := NormalizeName(h)
 	return n
 }
+
+// TLS nach BSI TR-02102-2 (Fassung 2026-01): TLS 1.2 nur ECDHE mit AES-GCM (Tabelle 3, ohne CBC), Gruppen nach
+// Tabelle 6/10 (NIST-Kurven, Brainpool bietet Go nicht an) und die hybriden ML-KEM-Verfahren, die das BSI schon jetzt
+// als TR-konform nennt; kein X25519 allein. Die TLS-1.3-Suites legt Go selbst fest (AES-GCM bevorzugt, ChaCha20 nur,
+// wenn der Client es vorzieht).
+var (
+	bsiSuites = []uint16{tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+		tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384}
+	bsiGroups = []tls.CurveID{tls.SecP256r1MLKEM768, tls.SecP384r1MLKEM1024, tls.X25519MLKEM768, tls.CurveP256, tls.CurveP384, tls.CurveP521}
+)
