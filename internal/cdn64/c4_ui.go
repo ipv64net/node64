@@ -181,8 +181,10 @@ func usersFromForm(r *http.Request, a *AccessList) []UserInput {
 	for _, n := range r.PostForm["remove_user"] {
 		remove[n] = true
 	}
+	at := map[string]int{} // bestehender Benutzer -> Stelle in out
 	for _, u := range a.Users {
 		if !remove[u.Username] {
+			at[u.Username] = len(out)
 			out = append(out, UserInput{Username: u.Username})
 		}
 	}
@@ -192,7 +194,12 @@ func usersFromForm(r *http.Request, a *AccessList) []UserInput {
 			continue
 		}
 		name, pass, _ := strings.Cut(line, ":")
-		out = append(out, UserInput{Username: strings.TrimSpace(name), Password: pass})
+		name = strings.TrimSpace(name)
+		if i, ok := at[name]; ok && pass != "" { // "anna:neu" fuer einen bestehenden Benutzer = neues Passwort
+			out[i].Password = pass
+			continue
+		}
+		out = append(out, UserInput{Username: name, Password: pass})
 	}
 	return out
 }

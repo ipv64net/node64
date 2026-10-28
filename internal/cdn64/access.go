@@ -213,18 +213,22 @@ func (g *guard) decide(r *http.Request, ip netip.Addr, key []byte) verdict {
 	return verdict{status: http.StatusUnauthorized, failed: tried}
 }
 
-// failLimiter begrenzt Fehlversuche je IP.
+// failLimiter begrenzt Fehlversuche je IP (IPv6 je /64 wie limKey, sonst wechselt ein Angreifer einfach die Adresse).
 type failLimiter struct {
 	mu   sync.Mutex
 	fail map[netip.Addr][]time.Time
 	ban  map[netip.Addr]time.Time
 }
 
+// authFailKeys: hoechstens so viele Adressen mit Fehlversuchen im Speicher (danach fallen zufaellige heraus).
+const authFailKeys = 50000
+
 func newFailLimiter() *failLimiter {
 	return &failLimiter{fail: map[netip.Addr][]time.Time{}, ban: map[netip.Addr]time.Time{}}
 }
 
 func (l *failLimiter) blocked(ip netip.Addr) bool {
+	ip = limKey(ip)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	until, ok := l.ban[ip]
@@ -237,6 +241,7 @@ func (l *failLimiter) blocked(ip netip.Addr) bool {
 
 // failed zaehlt einen Fehlversuch; true = die IP ist jetzt gesperrt (erstmals).
 func (l *failLimiter) failed(ip netip.Addr) bool {
+	ip = limKey(ip)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
@@ -247,8 +252,14 @@ func (l *failLimiter) failed(ip netip.Addr) bool {
 		}
 	}
 	list = append(list, now)
-	if len(l.fail) > 10000 { // Speicher begrenzen
-		l.fail = map[netip.Addr][]time.Time{}
+	if _, known := l.fail[ip]; !known && len(l.fail) >= authFailKeys { // Speicher begrenzen: erst Abgelaufenes, dann zufaellige
+		l.sweepLocked(now)
+		for k := range l.fail {
+			if len(l.fail) < authFailKeys {
+				break
+			}
+			delete(l.fail, k)
+		}
 	}
 	l.fail[ip] = list
 	if len(list) >= authFailMax {
@@ -257,6 +268,26 @@ func (l *failLimiter) failed(ip netip.Addr) bool {
 		return true
 	}
 	return false
+}
+
+// sweep entfernt abgelaufene Fehlversuche und Sperren (jede Minute aus limLoop).
+func (l *failLimiter) sweep() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.sweepLocked(time.Now())
+}
+
+func (l *failLimiter) sweepLocked(now time.Time) {
+	for k, list := range l.fail {
+		if len(list) == 0 || now.Sub(list[len(list)-1]) >= authFailWindow {
+			delete(l.fail, k)
+		}
+	}
+	for k, until := range l.ban {
+		if now.After(until) {
+			delete(l.ban, k)
+		}
+	}
 }
 
 // ---------------------------------------------------------------- Datenbank

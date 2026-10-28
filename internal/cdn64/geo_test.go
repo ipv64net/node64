@@ -128,7 +128,7 @@ func TestIndexAndGeoLoaded(t *testing.T) {
 	h := newHost()
 	h.Names, h.TargetHost, h.TargetPort = []string{"geo.test"}, "127.0.0.1", 9
 	h.Advanced.GeoMode, h.Advanced.GeoCountries = geoBlock, []string{"de"}
-	h.CertID, h.Advanced.TrustedProxies = CertNone, []string{"127.0.0.1"} // nur HTTP; echte Client-IP aus CF-Connecting-IP
+	h.CertID, h.Advanced.TrustedProxies = CertNone, []string{"127.0.0.1"} // nur HTTP; echte Client-IP aus X-Forwarded-For
 	if err := e.m.saveHost(ctx, h); err != nil {
 		t.Fatal(err)
 	}
@@ -153,10 +153,10 @@ func TestIndexAndGeoLoaded(t *testing.T) {
 		t.Fatal("geo")
 	}
 	c := e.client(false) // Proxy: 403 nach der echten Client-IP, andere Laender gehen bis zum (fehlenden) Ziel
-	if code, _, _ := do(t, c, "GET", "http://geo.test/", "CF-Connecting-IP", "5.1.2.3"); code != http.StatusForbidden {
+	if code, _, _ := do(t, c, "GET", "http://geo.test/", "X-Forwarded-For", "5.1.2.3"); code != http.StatusForbidden {
 		t.Fatalf("geo proxy: %d", code)
 	}
-	if code, _, _ := do(t, c, "GET", "http://geo.test/", "CF-Connecting-IP", "8.8.8.8"); code == http.StatusForbidden || code == 0 {
+	if code, _, _ := do(t, c, "GET", "http://geo.test/", "X-Forwarded-For", "8.8.8.8"); code == http.StatusForbidden || code == 0 {
 		t.Fatalf("other country: %d", code)
 	}
 	if e.m.bl.geo.blocked.Load() != 2 { // oben direkt geprueft + diese Anfrage

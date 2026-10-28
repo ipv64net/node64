@@ -142,19 +142,38 @@ func (a *Advanced) isTrusted(ip netip.Addr) bool {
 	return false
 }
 
+// cfNets: CloudflareNets fuer die Pruefung von CF-Connecting-IP.
+var cfNets = func() []netip.Prefix {
+	out := make([]netip.Prefix, 0, len(CloudflareNets))
+	for _, n := range CloudflareNets {
+		out = append(out, netip.MustParsePrefix(n))
+	}
+	return out
+}()
+
+func isCloudflare(ip netip.Addr) bool {
+	for _, p := range cfNets {
+		if p.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // clientIP: echte Gegenstelle; kommt sie von einem vertrauenswuerdigen Proxy, die Adresse aus CF-Connecting-IP
-// bzw. der letzte nicht vertrauenswuerdige Eintrag in X-Forwarded-For.
+// (nur, wenn die Gegenstelle selbst bei Cloudflare liegt - sonst koennte jeder andere vertrauenswuerdige Proxy den
+// Kopf einfach durchreichen) bzw. der letzte nicht vertrauenswuerdige Eintrag in X-Forwarded-For (alle Zeilen).
 func (a *Advanced) clientIP(r *http.Request) netip.Addr {
 	peer := peerIP(r)
 	if !peer.IsValid() || !a.isTrusted(peer) {
 		return peer
 	}
-	if v := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); v != "" {
+	if v := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); v != "" && isCloudflare(peer.Unmap()) {
 		if ip, err := netip.ParseAddr(v); err == nil {
 			return ip.Unmap()
 		}
 	}
-	parts := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+	parts := strings.Split(strings.Join(r.Header.Values("X-Forwarded-For"), ","), ",")
 	for i := len(parts) - 1; i >= 0; i-- {
 		ip, err := netip.ParseAddr(strings.TrimSpace(parts[i]))
 		if err != nil {

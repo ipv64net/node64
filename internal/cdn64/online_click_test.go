@@ -41,6 +41,7 @@ type fakeOnline struct {
 	maps     map[int64][]ipv64api.CDN64Mapping
 	mapNext  int64
 	mapErr   error                     // naechstes AddMapping scheitert
+	delErr   error                     // DeleteMapping scheitert (bis zurueckgesetzt)
 	sessions int                       // parallele Verbindungen, die ipv64 der Klasse erlaubt
 	prot     *ipv64api.CDN64Protection // Antwort von /cdn64o/protection
 	protErr  error                     // /cdn64o/protection scheitert
@@ -193,6 +194,9 @@ func (f *fakeOnline) AddMapping(_ context.Context, id int64, name, transport str
 func (f *fakeOnline) DeleteMapping(_ context.Context, id, mapping int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.delErr != nil {
+		return f.delErr
+	}
 	for i, x := range f.maps[id] {
 		if x.ID == mapping {
 			f.maps[id] = append(f.maps[id][:i], f.maps[id][i+1:]...)

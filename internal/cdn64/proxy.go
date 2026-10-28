@@ -12,6 +12,8 @@ import (
 	"net/http/httputil"
 	"net/netip"
 	"net/url"
+	"path"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -131,10 +133,11 @@ func (m *Module) reverseProxy(h *Host, t target, st *hostStats, tr http.RoundTri
 	rp := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(t.url)
-			if t.forward != "" { // /api/x -> /v1/x
-				rest := strings.TrimPrefix(strings.TrimPrefix(pr.In.URL.Path, t.prefix), "/")
+			if t.forward != "" { // /api/x -> /v1/x (vom bereinigten Pfad: ohne Punkt-Segmente, kein Weg aus forward heraus)
+				in, _ := reqPath(pr.In.URL.Path)
+				rest := strings.TrimPrefix(strings.TrimPrefix(in, t.prefix), "/")
 				pr.Out.URL.Path = t.forward
-				if rest != "" || strings.HasSuffix(pr.In.URL.Path, "/") {
+				if rest != "" || strings.HasSuffix(in, "/") {
 					pr.Out.URL.Path = strings.TrimSuffix(t.forward, "/") + "/" + rest
 				}
 				pr.Out.URL.RawPath = ""
@@ -222,7 +225,8 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 	}
 	routes := []route{{ws: h.WebSockets, acl: h.AccessListID, next: next}}
 	for _, l := range h.Locations {
-		var ln http.Handler = m.reverseProxy(h, target{url: mk(l.Scheme, l.TargetHost, l.TargetPort), prefix: l.Path, forward: l.ForwardPath}, st, tr)
+		prefix := path.Clean(l.Path)
+		var ln http.Handler = m.reverseProxy(h, target{url: mk(l.Scheme, l.TargetHost, l.TargetPort), prefix: prefix, forward: l.ForwardPath}, st, tr)
 		if h.Advanced.Gzip {
 			ln = httpcompress.Handler(ln, httpcompress.Options{})
 		}
@@ -230,14 +234,23 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 		if acl == 0 {
 			acl = h.AccessListID
 		}
-		routes = append(routes, route{prefix: l.Path, ws: l.WebSockets, acl: acl, next: ln})
+		routes = append(routes, route{prefix: prefix, ws: l.WebSockets, acl: acl, next: ln})
 	}
 	sort.SliceStable(routes, func(i, j int) bool { return len(routes[i].prefix) > len(routes[j].prefix) })
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Route nach dem bereinigten Pfad (//admin, %2e-Segmente); das Ziel bekommt den Pfad unveraendert (wie nginx).
+		// Gross-/Kleinschreibung zaehlt wie beim Ziel ueblich (/Admin ist nicht /admin).
+		p, ok := reqPath(r.URL.Path)
+		if !ok {
+			page(w, http.StatusBadRequest)
+			return
+		}
+		if strings.HasPrefix(p, "/.node64/") && m.loginRoute(w, r, h, routes, p) {
+			return
+		}
 		rt := &routes[len(routes)-1]
 		for i := range routes {
-			p := routes[i].prefix
-			if p == "" || r.URL.Path == p || strings.HasPrefix(r.URL.Path, p+"/") {
+			if routes[i].prefix == "" || pathIn(p, routes[i].prefix) {
 				rt = &routes[i]
 				break
 			}
@@ -249,8 +262,119 @@ func (m *Module) proxyHandler(h *Host, st *hostStats) http.Handler {
 		if !m.allowed(w, r, h, rt.acl) {
 			return
 		}
+		if rt.acl > 0 { // Cache: geschuetzte Antworten nie "public" (cache.go)
+			r = r.WithContext(context.WithValue(r.Context(), ctxProtectedKey{}, m.aclPersonal(rt.acl)))
+		}
+		if hasLoginCookie(r) { // Sitzungs-Cookies der Login-Listen dieses Hosts gehen an kein Ziel (auch nicht ans offene)
+			for _, g := range m.loginGuards(routes) {
+				stripLoginCookie(r, g.list.ID)
+			}
+		}
 		rt.next.ServeHTTP(w, r)
 	})
+}
+
+// reqPath: Pfad fuer die Wahl der Route, doppelte Schraegstriche zusammengefasst (Schraegstrich am Ende bleibt);
+// ok = false bei Punkt-Segmenten ("." und "..", auch kodiert oder mit Backslash), die Browser nie schicken.
+func reqPath(p string) (string, bool) {
+	if !strings.HasPrefix(p, "/") {
+		return p, true
+	}
+	for _, s := range strings.FieldsFunc(p, func(c rune) bool { return c == '/' || c == '\\' }) {
+		if s == "." || s == ".." {
+			return "", false
+		}
+	}
+	c := path.Clean(p)
+	if c != "/" && strings.HasSuffix(p, "/") {
+		c += "/"
+	}
+	return c, true
+}
+
+// pathIn: Pfad liegt unter dem Praefix einer Location.
+func pathIn(p, prefix string) bool { return p == prefix || strings.HasPrefix(p, prefix+"/") }
+
+// wsAt: WebSockets am Pfad erlaubt (Host bzw. die Location mit dem laengsten passenden Praefix).
+func wsAt(h *Host, p string) bool {
+	p, _ = reqPath(p)
+	ws, best := h.WebSockets, 0
+	for _, l := range h.Locations {
+		if pre := path.Clean(l.Path); len(pre) > best && pathIn(p, pre) {
+			ws, best = l.WebSockets, len(pre)
+		}
+	}
+	return ws
+}
+
+// wsUpgrade: echte WebSocket-Anfrage (Upgrade: websocket mit Connection: upgrade).
+func wsUpgrade(r *http.Request) bool {
+	return headerToken(r.Header, "Upgrade", "websocket") && headerToken(r.Header, "Connection", "upgrade")
+}
+
+func headerToken(hd http.Header, name, token string) bool {
+	for _, v := range hd.Values(name) {
+		for _, t := range strings.Split(v, ",") {
+			if strings.EqualFold(strings.TrimSpace(t), token) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// loginGuards: Listen mit Login-Seite unter den Routen eines Hosts (Host und Locations).
+func (m *Module) loginGuards(routes []route) []*guard {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []*guard
+	for _, rt := range routes {
+		if g := m.acl[rt.acl]; g != nil && g.hasLogin() && !slices.Contains(out, g) {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// aclPersonal: die Liste reicht Anmeldung oder Benutzer an das Ziel (Antwort kann je Benutzer verschieden sein).
+func (m *Module) aclPersonal(acl int64) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	g := m.acl[acl]
+	return g == nil || g.list.PassAuth || g.list.PassUser || g.fwd != nil
+}
+
+// loginRoute: /.node64/ gehoert PROXY64, sobald eine Liste des Hosts (auch die einer Location) die Login-Seite hat;
+// das Formular nennt seine Liste. /.node64/login geht nie an das Ziel. false = normal weiter.
+func (m *Module) loginRoute(w http.ResponseWriter, r *http.Request, h *Host, routes []route, p string) bool {
+	gs := m.loginGuards(routes)
+	if len(gs) == 0 {
+		if p == loginPath {
+			page(w, http.StatusNotFound)
+			return true
+		}
+		return false
+	}
+	g := gs[0]
+	if p == loginPath && r.Method == http.MethodPost && len(gs) > 1 {
+		r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
+		_ = r.ParseForm()
+		g = nil
+		for _, x := range gs {
+			if strconv.FormatInt(x.list.ID, 10) == r.PostFormValue("list") {
+				g = x
+			}
+		}
+		if g == nil {
+			page(w, http.StatusBadRequest)
+			return true
+		}
+	}
+	r.URL.Path, r.URL.RawPath = p, "" // geht nie ans Ziel
+	if m.allowed(w, r, h, g.list.ID) {
+		page(w, http.StatusNotFound)
+	}
+	return true
 }
 
 // allowed prueft die Zugriffsliste; false = Antwort ist schon geschrieben (401/403/429).
@@ -289,7 +413,7 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 		g.fwd.callback.ServeHTTP(w, r)
 		return false
 	}
-	login := g.list.LoginPage && len(g.list.Users) > 0 && g.fwd == nil
+	login := g.hasLogin()
 	if login && r.TLS == nil && h.HTTPS() { // Login nie im Klartext: auf HTTPS (nur echtes Port-80-HTTP; CDN64 Modus 2 hat r.TLS)
 		u := "https://" + hostOnly(r.Host) + r.URL.RequestURI()
 		http.Redirect(w, r, u, http.StatusPermanentRedirect)
@@ -504,7 +628,7 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		if hsts != "" && r.TLS != nil {
 			sw.Header().Set("Strict-Transport-Security", hsts)
 		}
-		if sl != nil && r.Header.Get("Upgrade") == "" { // WebSockets laufen lange und zaehlen nicht
+		if sl != nil && !(wsUpgrade(r) && wsAt(h, r.URL.Path)) { // WebSockets laufen lange und zaehlen nicht (nur, wo erlaubt)
 			if !sl.acquire(r.Context(), limQueueWait) {
 				if r.Context().Err() == nil {
 					*reject = rejTarget

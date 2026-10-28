@@ -146,6 +146,7 @@ func (m *Module) onlinePortsApply(ctx context.Context, ov *ipv64api.CDN64Overvie
 		_, _ = w.ExecContext(ctx, `DELETE FROM cdn_online_ports WHERE stream_id = ? AND transport = ?`, p.StreamID, p.Transport)
 	}
 	have := map[key]bool{}
+	pending := map[key]bool{} // altes Mapping noch nicht ausgetragen: kein neues, sonst ginge seine ID verloren
 	for _, p := range rows {
 		k := key{p.StreamID, p.Transport}
 		x, ok := wants[k]
@@ -157,10 +158,12 @@ func (m *Module) onlinePortsApply(ctx context.Context, ov *ipv64api.CDN64Overvie
 		}
 		if !gone {
 			if !ready {
+				pending[k] = true
 				continue // spaeter austragen
 			}
 			if err := a.DeleteMapping(ctx, p.RemoteID, p.MappingID); err != nil && !isNotFound(err) {
 				m.log.Warn("cdn64 online: port mapping not removed", "stream", p.StreamID, "port", p.ListenPort, "err", err)
+				pending[k] = true
 				continue
 			}
 		}
@@ -172,6 +175,9 @@ func (m *Module) onlinePortsApply(ctx context.Context, ov *ipv64api.CDN64Overvie
 		}
 		if !ready {
 			errs[k.id] = "no_api_key"
+			continue
+		}
+		if pending[k] { // beim naechsten Abgleich erst austragen, dann neu anmelden
 			continue
 		}
 		list, err := a.AddMapping(ctx, x.rid, mappingName(x.s), k.tr, x.s.ListenPort)

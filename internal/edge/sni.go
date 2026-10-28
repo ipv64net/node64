@@ -137,6 +137,12 @@ func (e *Edge) dispatch(conn net.Conn, tlsLn *chanListener) {
 		_ = conn.Close() // Pruefanfrage (published.go)
 		return
 	}
+	if want := routedHost(conn); want != "" { // aus dem Tunnel: nur der Name, fuer den der CDN64-Server durchreicht
+		if name, _ := NormalizeName(sni); name != want {
+			_ = conn.Close()
+			return
+		}
+	}
 	if name, err := NormalizeName(sni); err == nil {
 		if _, routes := e.table.Load().lookup(name); len(routes) > 0 {
 			for _, rt := range routes {

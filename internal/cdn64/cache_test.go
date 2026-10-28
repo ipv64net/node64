@@ -2,6 +2,7 @@ package cdn64
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"log/slog"
 	"net"
@@ -12,6 +13,39 @@ import (
 	"sync/atomic"
 	"testing"
 )
+
+// Hinter einer Zugriffsliste: nie "public" (geteilte Caches davor); reicht die Liste Benutzer an das Ziel, legt
+// PROXY64 nichts ab und liefert nichts aus dem Cache.
+func TestCacheProtected(t *testing.T) {
+	var hits atomic.Int64
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "text/css")
+		_, _ = io.WriteString(w, "body{}")
+	}))
+	defer up.Close()
+	port, _ := strconv.Atoi(up.URL[strings.LastIndex(up.URL, ":")+1:])
+	_, h := cacheModule(t, port)
+	get := func(prot any) http.Header {
+		req := httptest.NewRequest("GET", "http://app.test/x.css", nil)
+		if prot != nil {
+			req = req.WithContext(context.WithValue(req.Context(), ctxProtectedKey{}, prot))
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Header()
+	}
+	for i, x := range []struct {
+		prot      any
+		cc, cache string
+		hits      int64
+	}{{true, "private", "MISS", 1}, {false, "private", "MISS", 2}, {false, "private", "HIT", 2}, {nil, "public", "HIT", 2}, {true, "private", "MISS", 3}} {
+		hd := get(x.prot)
+		if !strings.HasPrefix(hd.Get("Cache-Control"), x.cc+",") || hd.Get("X-Cache-Status") != x.cache || hits.Load() != x.hits {
+			t.Fatalf("%d: %v hits %d", i, hd, hits.Load())
+		}
+	}
+}
 
 // cacheModule: nur was proxyHandler fuer Proxy, Komprimierung und Cache braucht.
 func cacheModule(t *testing.T, port int) (*Module, http.Handler) {
