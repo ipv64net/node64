@@ -102,6 +102,13 @@ lassen.
 - **Paarauswahl:** immer die Anker; geografische Nachbarn; gleicher und fremder Provider; rotierende Stichprobe,
   damit über den Tag jedes Paar vorkommt.
 - **Selbstbremse:** eigene Leitung gestört (kein Uplink, hoher Verlust zu den Ankern) → Pause.
+- **Wer entscheidet was:** Die **Verteilung macht allein ipv64** (Planer alle 5 min): wer wen, wann, mit welchem Weg
+  (ICMP oder UDP 6464), wie oft. Knoten wählen nie selbst Ziele und kennen nur die Adressen aus ihrem Plan. Lokal
+  entscheidet der Knoten nur: Versatz innerhalb der Runde, harte Grenzen, Selbstbremse, Ruhezeiten, Ablehnen
+  privater Ziele.
+- **Gültigkeit:** Ein Plan gilt 30 min. Ist ipv64 nicht erreichbar, misst der Knoten danach nur noch die Anker (feste,
+  im Programm bekannte Adressen); nach 2 h ohne neuen Plan pausiert er ganz. Ergebnisse werden bis 6 h gepuffert
+  und nachgereicht.
 
 ## 5. Messarten
 
