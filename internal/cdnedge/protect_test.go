@@ -25,7 +25,7 @@ import (
 // waitFor wartet bis zu 3 s auf eine Bedingung.
 func waitFor(t *testing.T, what string, ok func() bool) {
 	t.Helper()
-	for i := 0; i < 150; i++ {
+	for i := 0; i < 500; i++ { // bis 10 s: go test ./... laeuft unter Last
 		if ok() {
 			return
 		}
@@ -136,6 +136,8 @@ func TestProtectCounters(t *testing.T) {
 	if code := rawHTTP(t, cfg.ListenHTTP, "fl.test", "/", "x"); code != 200 {
 		t.Fatalf("fl.test: %d", code)
 	}
+	// erst den Platz dieser Anfrage frei: sonst zaehlt "slots taken" sie mit, hold2 wird abgewiesen und flood steht auf 2
+	waitFor(t, "slot of fl.test free", func() bool { return s.guard.open.Load() == 0 })
 	hold1, _ := net.Dial("tcp", cfg.ListenHTTP)
 	hold2, _ := net.Dial("tcp", cfg.ListenHTTP)
 	defer hold1.Close()
