@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -68,5 +69,57 @@ func TestDockerCheck(t *testing.T) {
 	}
 	if err := Validate(Definition{Type: TypeDocker, Target: "bad name!"}); err == nil {
 		t.Fatal("invalid container name accepted")
+	}
+}
+
+// Latenz: Ping zur Adresse des laufenden Containers, sonst die Antwortzeit der Docker-API; Status unveraendert.
+func TestDockerLatency(t *testing.T) {
+	nets := map[string]any{
+		"web":   map[string]any{"IPAddress": "", "Networks": map[string]any{"zz": map[string]any{"IPAddress": "172.18.0.9"}, "app": map[string]any{"IPAddress": "172.18.0.3"}}},
+		"host":  map[string]any{"IPAddress": "", "Networks": map[string]any{"host": map[string]any{"IPAddress": ""}}},
+		"v6":    map[string]any{"Networks": map[string]any{"app": map[string]any{"GlobalIPv6Address": "2001:db8::3"}}},
+		"lost":  map[string]any{"IPAddress": "172.17.0.7"},
+		"sick":  map[string]any{"IPAddress": "172.17.0.8"},
+		"pause": map[string]any{"IPAddress": "172.17.0.4"},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/containers/"), "/json")
+		st := map[string]any{"Status": "running", "Running": true}
+		switch name {
+		case "sick":
+			st["Health"] = map[string]any{"Status": "unhealthy"}
+		case "pause":
+			st["Paused"] = true
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"Id": "abcdef1234567890", "Name": "/" + name, "State": st, "NetworkSettings": nets[name]})
+	}))
+	defer srv.Close()
+	params, _ := json.Marshal(DockerParams{Host: srv.URL})
+	r := NewRunner()
+	var pinged []string
+	r.ping = func(_ context.Context, ip net.IP, _ time.Duration) (time.Duration, bool) {
+		pinged = append(pinged, ip.String())
+		return 2 * time.Millisecond, ip.String() != "172.17.0.7"
+	}
+	want := map[string]struct {
+		status Status
+		source string
+		ip     string
+	}{
+		"web": {Up, "ping", "172.18.0.3"}, "host": {Up, "api", ""}, "v6": {Up, "ping", "2001:db8::3"}, "lost": {Up, "api", "172.17.0.7"},
+		"sick": {Down, "ping", "172.17.0.8"}, "pause": {Down, "api", ""},
+	}
+	for name, w := range want {
+		pinged = nil
+		res := r.Run(context.Background(), Definition{Type: TypeDocker, Target: name, Params: params})
+		if len(res) != 1 || res[0].Status != w.status || res[0].Details["latency_source"] != w.source {
+			t.Fatalf("%s: %+v", name, res)
+		}
+		if w.source == "ping" && res[0].Latency != 2*time.Millisecond {
+			t.Fatalf("%s: latency %v", name, res[0].Latency)
+		}
+		if got := strings.Join(pinged, ","); got != w.ip {
+			t.Fatalf("%s: pinged %q, want %q", name, got, w.ip)
+		}
 	}
 }

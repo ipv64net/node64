@@ -4,6 +4,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Healthchecks: Proxmox-VE- und Docker-Checks zeigen eine echte Latenz (Ping zu Node, Gast bzw. Container, sonst die
+  Antwortzeit der API) statt 0 ms.
+
 ## 0.12.0-alpha.29 – 2026-10-28
 
 - Interne Verbesserungen.

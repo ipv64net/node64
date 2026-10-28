@@ -169,6 +169,35 @@ type dockerInspect struct {
 			} `json:"Log"`
 		} `json:"Health"`
 	} `json:"State"`
+	NetworkSettings struct {
+		IPAddress         string `json:"IPAddress"`
+		GlobalIPv6Address string `json:"GlobalIPv6Address"`
+		Networks          map[string]struct {
+			IPAddress         string `json:"IPAddress"`
+			GlobalIPv6Address string `json:"GlobalIPv6Address"`
+		} `json:"Networks"`
+	} `json:"NetworkSettings"`
+}
+
+// containerIP waehlt die Adresse fuer den Ping der Latenz: IPv4 vor IPv6, Standardnetz vor den Netzen nach Namen
+// (nil = keine, z. B. Netzmodus host).
+func (in *dockerInspect) containerIP() net.IP {
+	ns := &in.NetworkSettings
+	names := make([]string, 0, len(ns.Networks))
+	for n := range ns.Networks {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	v4, v6 := []string{ns.IPAddress}, []string{ns.GlobalIPv6Address}
+	for _, n := range names {
+		v4, v6 = append(v4, ns.Networks[n].IPAddress), append(v6, ns.Networks[n].GlobalIPv6Address)
+	}
+	for _, s := range append(v4, v6...) {
+		if ip := net.ParseIP(s); ip != nil && !ip.IsUnspecified() {
+			return ip
+		}
+	}
+	return nil
 }
 
 type dockerChecker struct{ r *Runner }
@@ -246,6 +275,14 @@ func (c dockerChecker) Check(ctx context.Context, def Definition, _ net.IP) Resu
 		res.Status, res.Reason, res.Message = Up, ReasonOK, "running, health: starting"+uptime
 	default:
 		res.Status, res.Reason, res.Message = Up, ReasonOK, "running (no healthcheck)"+uptime
+	}
+	// Latenz nur zur Anzeige: Ping zum laufenden Container, sonst die Antwortzeit der Docker-API
+	res.Details["latency_source"] = "api"
+	if ip := in.containerIP(); ip != nil && st.Running && !st.Paused {
+		res.Details["ip"] = ip.String()
+		if d, ok := c.r.pingLatency(ctx, ip); ok {
+			res.Latency, res.Details["latency_source"] = d, "ping"
+		}
 	}
 	return res
 }

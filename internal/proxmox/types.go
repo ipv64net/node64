@@ -95,6 +95,10 @@ type Resource struct {
 
 	Restarted bool `json:"restarted,omitempty"` // uptime ist zurueckgesprungen, obwohl weiter laufend
 
+	// IP fuer den Ping der Latenz (Check-Typ proxmox): Node aus cluster/status, laufender Gast ueber den Gast-Agent
+	// bzw. die LXC-Schnittstellen (nur Gaeste mit Check, siehe Poller.WantIP); leer = keine bekannt.
+	IP string `json:"ip,omitempty"`
+
 	// Nur Docker (Type docker): Key ist der Name (bleibt beim Neuanlegen), die ID wird mitgefuehrt.
 	ContainerID string            `json:"container_id,omitempty"` // 12 Zeichen
 	Image       string            `json:"image,omitempty"`
@@ -189,6 +193,9 @@ type Snapshot struct {
 	// Interval ist das Abfrageintervall des Pollers: die Verzoegerung „nicht erreichbar“ zaehlt auch zeitlich
 	// (schnelle Wiederholungen nach Fehlern verkuerzen sie nicht); nur von Run gesetzt, 0 = nur Abfragen zaehlen.
 	Interval time.Duration `json:"-"`
+	// APILatency ist die Antwortzeit der letzten erfolgreichen Abfrage von cluster/resources (Latenz der Checks ohne
+	// Ping).
+	APILatency time.Duration `json:"-"`
 }
 
 // Poller fragt ein System regelmaessig ab (poller.go). Neue Snapshots gehen an OnSnapshot.

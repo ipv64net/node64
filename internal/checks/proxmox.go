@@ -65,6 +65,10 @@ type ProxmoxState struct {
 	QMP       string
 	Lock      string
 	Uptime    int64
+	// Latenz (nur Anzeige): Adresse fuer den Ping (Node aus cluster/status, Gast ueber Gast-Agent bzw. LXC-
+	// Schnittstellen; leer = keine) und Antwortzeit der letzten erfolgreichen Abfrage von cluster/resources (Rueckfall)
+	IP         string
+	APILatency time.Duration
 }
 
 var pveCheckKey = regexp.MustCompile(`^(node/[A-Za-z0-9._-]{1,64}|(qemu|lxc)/[1-9][0-9]{0,9})$`)
@@ -92,7 +96,7 @@ type proxmoxChecker struct{ r *Runner }
 
 func (proxmoxChecker) Type() Type { return TypeProxmox }
 
-func (c proxmoxChecker) Check(_ context.Context, def Definition, _ net.IP) Result {
+func (c proxmoxChecker) Check(ctx context.Context, def Definition, _ net.IP) Result {
 	var p ProxmoxParams
 	_ = decode(def.Params, &p)
 	res := Result{Details: map[string]any{"system_id": p.SystemID, "key": p.Key}}
@@ -179,6 +183,17 @@ func (c proxmoxChecker) Check(_ context.Context, def Definition, _ net.IP) Resul
 		res.Status, res.Reason, res.Message = Down, ReasonPVEOffline, "node offline"
 	default:
 		res.Status, res.Reason, res.Message = Down, ReasonPVEUnknown, "state unknown"+ifNotEmpty(" (node ", st.Node)+ifNotEmpty("", closeIf(st.Node))
+	}
+	// Latenz nur zur Anzeige (der Status bleibt der Stand aus Proxmox): Ping zur Adresse des Gasts bzw. Nodes, sonst
+	// die Antwortzeit der API
+	if st.APILatency > 0 {
+		res.Latency, res.Details["latency_source"] = st.APILatency, "api"
+	}
+	if ip := net.ParseIP(st.IP); ip != nil && res.Status == Up {
+		res.Details["ip"] = st.IP
+		if d, ok := c.r.pingLatency(ctx, ip); ok {
+			res.Latency, res.Details["latency_source"] = d, "ping"
+		}
 	}
 	return res
 }

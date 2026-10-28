@@ -382,6 +382,8 @@ func TestPVERuntimeNotifyRestartAsCheck(t *testing.T) {
 	pvePollNow(t, m, id)
 	if res := runner.Run(context.Background(), c.Definition()); res[0].Status != checks.Up {
 		t.Fatalf("check up: %+v", res)
+	} else if res[0].Latency <= 0 || res[0].Details["latency_source"] != "api" { // ohne Gast-Adresse: Antwortzeit der API
+		t.Fatalf("check latency: %v %v", res[0].Latency, res[0].Details)
 	}
 	if al := rec.take(); len(al) != 0 {
 		t.Fatalf("as check: up reported by proxmox: %s", pveKinds(al))

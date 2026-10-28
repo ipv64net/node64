@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -135,5 +136,61 @@ func TestProxmoxCheckPendingAndLock(t *testing.T) {
 	state.State = "backup"
 	if res := r.Run(context.Background(), pveDef(3, "qemu/100")); res[0].Status != Up || !strings.Contains(res[0].Message, "guest stopped") {
 		t.Fatalf("backup stop mode: %+v", res)
+	}
+}
+
+// Latenz nur zur Anzeige: Ping zur Adresse aus dem Stand, sonst Antwortzeit der API; der Status bleibt der Stand aus
+// Proxmox, eine Adresse ohne Antwort wird eine Weile nicht mehr gepingt.
+func TestProxmoxLatency(t *testing.T) {
+	now := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	state := ProxmoxState{System: "lab", Polling: true, Reachable: true, Time: now, Interval: 30 * time.Second, Found: true,
+		Node: "pve1", State: "running", Status: "running", IP: "192.0.2.5", APILatency: 40 * time.Millisecond}
+	r := NewRunner()
+	r.Now = func() time.Time { return now }
+	r.Proxmox = func(int64, string) ProxmoxState { return state }
+	pings := map[string]int{}
+	r.ping = func(_ context.Context, ip net.IP, timeout time.Duration) (time.Duration, bool) {
+		pings[ip.String()]++
+		if timeout <= 0 || timeout > LatencyPingTimeout {
+			t.Errorf("ping timeout %v", timeout)
+		}
+		return 3 * time.Millisecond, ip.String() == "192.0.2.5"
+	}
+	run := func() Result {
+		t.Helper()
+		res := r.Run(context.Background(), pveDef(3, "qemu/100"))
+		if len(res) != 1 {
+			t.Fatalf("results: %+v", res)
+		}
+		return res[0]
+	}
+	if res := run(); res.Status != Up || res.Latency != 3*time.Millisecond || res.Details["latency_source"] != "ping" || res.Details["ip"] != "192.0.2.5" {
+		t.Fatalf("ping: %+v", res)
+	}
+	state.IP = ""
+	if res := run(); res.Status != Up || res.Latency != 40*time.Millisecond || res.Details["latency_source"] != "api" {
+		t.Fatalf("no ip: %+v", res)
+	}
+	state.IP = "192.0.2.6" // keine Antwort: Rueckfall, Status bleibt up, danach Pause fuer diese Adresse
+	for range 2 {
+		if res := run(); res.Status != Up || res.Reason != ReasonOK || res.Latency != 40*time.Millisecond || res.Details["latency_source"] != "api" {
+			t.Fatalf("ping failed: %+v", res)
+		}
+	}
+	if pings["192.0.2.6"] != 1 {
+		t.Fatalf("failed address pinged %d times", pings["192.0.2.6"])
+	}
+	state.State, state.Status, state.IP = "stopped", "stopped", "192.0.2.5" // gestoppt: kein Ping, Status aus Proxmox
+	before := pings["192.0.2.5"]
+	if res := run(); res.Status != Down || res.Reason != ReasonPVEStopped || res.Details["latency_source"] != "api" || pings["192.0.2.5"] != before {
+		t.Fatalf("stopped: %+v", res)
+	}
+	state.State, state.Status, state.APILatency = "online", "online", 0 // Node, Antwortzeit unbekannt
+	if res := run(); res.Status != Up || res.Latency != 3*time.Millisecond {
+		t.Fatalf("node ping: %+v", res)
+	}
+	state.IP = ""
+	if res := run(); res.Status != Up || res.Latency != 0 || res.Details["latency_source"] != nil {
+		t.Fatalf("no latency: %+v", res)
 	}
 }

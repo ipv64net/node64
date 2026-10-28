@@ -516,3 +516,68 @@ func TestPollerStaleLock(t *testing.T) {
 		t.Fatalf("running backup: %v", m["qemu/103"].State)
 	}
 }
+
+// Adressen fuer den Ping der Latenz: Nodes aus cluster/status, laufende Gaeste nur auf Wunsch eines Checks (WantIP),
+// je Gast hoechstens alle pveIPEvery; ohne Gast-Agent bleibt die Adresse leer. Dazu die Antwortzeit der API.
+func TestPollerGuestIPs(t *testing.T) {
+	f := newCluster()
+	f.ifaces = map[string]any{
+		"pve1/qemu/100": map[string]any{"result": []map[string]any{
+			{"name": "lo", "ip-addresses": []map[string]any{{"ip-address-type": "ipv4", "ip-address": "127.0.0.1", "prefix": 8}, {"ip-address-type": "ipv6", "ip-address": "::1"}}},
+			{"name": "eth0", "ip-addresses": []map[string]any{{"ip-address-type": "ipv6", "ip-address": "fe80::1"}, {"ip-address-type": "ipv6", "ip-address": "2001:db8::10"},
+				{"ip-address-type": "ipv4", "ip-address": "192.0.2.10", "prefix": 24}}},
+		}},
+		"pve2/lxc/200": []map[string]any{{"name": "lo", "inet": "127.0.0.1/8", "inet6": "::1/128"}, {"name": "eth0", "inet": "192.0.2.20/24", "inet6": "fe80::2/64"}},
+	}
+	srv := startTLS(t, f, "", nil)
+	clock := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
+	p := testPoller(t, testSys(pinOf(srv), srv.URL), nil, &clock)
+	ctx := context.Background()
+	const agent100, agent107 = "/nodes/pve1/qemu/100/agent/network-get-interfaces", "/nodes/pve1/qemu/107/agent/network-get-interfaces"
+	s := p.Poll(ctx)
+	m := byKey(s)
+	if m["node/pve1"].IP != "127.0.0.1" || m["node/pve2"].IP != "127.0.0.2" || m["qemu/100"].IP != "" || f.hit(agent100) != 0 || s.APILatency <= 0 {
+		t.Fatalf("first poll: %q %q %q hits %d api %v", m["node/pve1"].IP, m["node/pve2"].IP, m["qemu/100"].IP, f.hit(agent100), s.APILatency)
+	}
+	for _, k := range []string{"qemu/100", "lxc/200", "qemu/107", "qemu/106"} {
+		p.WantIP(k)
+	}
+	m = byKey(p.Poll(ctx))
+	if m["qemu/100"].IP != "192.0.2.10" || m["lxc/200"].IP != "192.0.2.20" || m["qemu/107"].IP != "" || m["qemu/106"].IP != "" {
+		t.Fatalf("addresses: %q %q %q %q", m["qemu/100"].IP, m["lxc/200"].IP, m["qemu/107"].IP, m["qemu/106"].IP)
+	}
+	if f.hit(agent100) != 1 || f.hit(agent107) != 1 || f.hit("/nodes/pve2/lxc/200/interfaces") != 1 || f.hit("/nodes/pve2/qemu/106/agent/network-get-interfaces") != 0 {
+		t.Fatalf("requests: %v", f.hits)
+	}
+	// innerhalb von pveIPEvery: keine neuen Anfragen, Adresse bleibt
+	clock = clock.Add(time.Minute)
+	if m = byKey(p.Poll(ctx)); m["qemu/100"].IP != "192.0.2.10" || f.hit(agent100) != 1 || f.hit(agent107) != 1 {
+		t.Fatalf("cached: %q hits %d", m["qemu/100"].IP, f.hit(agent100))
+	}
+	clock = clock.Add(pveIPEvery)
+	p.WantIP("qemu/100")
+	if m = byKey(p.Poll(ctx)); m["qemu/100"].IP != "192.0.2.10" || f.hit(agent100) != 2 {
+		t.Fatalf("refresh: %q hits %d", m["qemu/100"].IP, f.hit(agent100))
+	}
+	// kein Check fragt mehr: Adresse entfaellt, keine Anfragen
+	clock = clock.Add(pveIPWant)
+	if m = byKey(p.Poll(ctx)); m["qemu/100"].IP != "" || f.hit(agent100) != 2 {
+		t.Fatalf("not wanted: %q hits %d", m["qemu/100"].IP, f.hit(agent100))
+	}
+}
+
+func TestPickIP(t *testing.T) {
+	cases := map[string][]string{
+		"10.0.0.5":    {"127.0.0.1", "::1", "fe80::1", "169.254.1.1/16", "2001:db8::5", "10.0.0.5/24"},
+		"2001:db8::5": {"127.0.0.1", "fe80::1", "2001:db8::5/64", "fd00::1"},
+		"":            {"127.0.0.1/8", "::1/128", "fe80::2/64", "", "garbage"},
+	}
+	for want, list := range cases {
+		if got := pvePickIP(list); got != want {
+			t.Errorf("%v: %q, want %q", list, got, want)
+		}
+	}
+	if got := pveLXCIP([]pveLXCIface{{Name: "lo", Inet: "127.0.0.1/8"}, {Name: "eth0", Inet6: "2001:db8::7/64"}, {Name: "eth1", Inet: "192.168.1.4/24"}}); got != "192.168.1.4" {
+		t.Errorf("lxc: %q", got)
+	}
+}

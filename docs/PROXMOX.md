@@ -132,6 +132,14 @@ selbst, sondern liest den letzten Stand der Abfrage:
 - **down:** `pve_stopped`, `pve_paused`, `pve_suspended`, `pve_crashed`, `pve_offline`, `pve_unknown`,
   `pve_missing` (Gast nicht mehr vorhanden), `pve_unreachable` (System nicht erreichbar, aus oder Stand zu alt)
 
+**Latenz** (nur Anzeige, ändert den Status nie): Ping (ein Paket, höchstens 2 s) zur Adresse des Nodes (aus
+`cluster/status`) bzw. des laufenden Gasts; ohne Adresse oder Antwort die Antwortzeit der letzten Abfrage von
+`cluster/resources`. Die Quelle steht im Rohergebnis unter `latency_source` (`ping` bzw. `api`). Gast-Adressen holt
+Node64 nur für Gäste als Check, je Gast alle 5 Minuten: VMs über den Gast-Agent
+(`agent/network-get-interfaces`, braucht einen laufenden qemu-guest-agent und das Recht `VM.Monitor`, ab PVE 9
+`VM.GuestAgent.Audit`; `VM.Monitor` ist nicht in `PVEAuditor`), Container über `lxc/{vmid}/interfaces` (`VM.Audit`). Bevorzugt
+wird eine IPv4 ohne Loopback/Link-Local, sonst eine globale IPv6.
+
 Zustandsmeldungen (Ausfall/Entwarnung) kommen dann **nur über den Check**, Neustart und Schwellen weiter über
 Proxmox VE. Wie Docker-Checks laufen `proxmox`-Checks nur lokal auf der Node, die das System abfragt (nicht online,
 nicht auf andere Nodes verschiebbar). Ausschalten des Systems pausiert seine Checks, Löschen entfernt sie.

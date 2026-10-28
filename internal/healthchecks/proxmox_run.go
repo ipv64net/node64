@@ -601,18 +601,22 @@ func (m *Module) pveLookup(systemID int64, key string) checks.ProxmoxState {
 		return st
 	}
 	st.System, st.Polling, st.Interval, st.Started = pp.sys.Name, true, proxmox.ClampInterval(pp.sys.Interval), pp.started
+	if w, ok := pp.p.(interface{ WantIP(key string) }); ok {
+		w.WantIP(key) // Adresse des Gasts fuer den Ping der Latenz holen lassen
+	}
 	s := pp.p.Last()
 	if s == nil {
 		st.Last = m.pveCheckLast(systemID, key) // noch kein Stand: voriges Ergebnis des Checks bleibt
 		return st
 	}
-	st.Time, st.Reachable, st.Error = s.Time, s.OK, s.Error
+	st.Time, st.Reachable, st.Error, st.APILatency = s.Time, s.OK, s.Error, s.APILatency
 	for i := range s.Resources {
 		r := &s.Resources[i]
 		if r.Key() != key {
 			continue
 		}
 		st.Found, st.Name, st.Node, st.State, st.Status, st.QMP, st.Lock, st.Uptime = true, r.Name, r.Node, string(r.State), r.Status, r.QMP, r.Lock, r.Uptime
+		st.IP = r.IP
 		break
 	}
 	return st
