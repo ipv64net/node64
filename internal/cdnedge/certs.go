@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -65,6 +66,25 @@ func (c *certStore) get(name string) *tls.Certificate {
 		return e.tls
 	}
 	return nil
+}
+
+// covers: gueltiges Zertifikat des Namens, das auch host abdeckt. Bei Wildcard-Namen fehlt *.name, wenn es nach
+// gescheitertem DNS-01 per HTTP-01 nur fuer den Namen ausgestellt wurde: Unternamen dann nicht hier beenden.
+func (c *certStore) covers(name, host string) bool {
+	crt := c.get(name)
+	if crt == nil {
+		return false
+	}
+	if host = normName(host); host == "" || host == name {
+		return true
+	}
+	return crt.Leaf != nil && crt.Leaf.VerifyHostname(host) == nil
+}
+
+// hasWildcard: das Zertifikat des Namens enthaelt *.name.
+func (c *certStore) hasWildcard(name string) bool {
+	crt := c.get(name)
+	return crt != nil && crt.Leaf != nil && slices.Contains(crt.Leaf.DNSNames, "*."+name)
 }
 
 func (c *certStore) notAfter(name string) time.Time {
@@ -248,6 +268,10 @@ func (s *Server) apiPutCert(ctx context.Context, name string, certPEM, keyPEM []
 // braucht dann keine neue Bestellung, schont die Let's-Encrypt-Limits).
 const certKeep = 7 * 24 * time.Hour
 
+// certWildRetry: Wildcard-Name mit Zertifikat nur fuer den Namen (HTTP-01-Ausweg) - so oft (mit Verdopplung bis
+// 24 h) wird DNS-01 fuer *.name erneut versucht, statt bis zur Erneuerung zu warten.
+const certWildRetry = 6 * time.Hour
+
 type certPlan struct {
 	goneSince    map[string]time.Time
 	missingSince map[string]time.Time
@@ -331,9 +355,20 @@ func (s *Server) certRound(ctx context.Context, p *certPlan) {
 		}
 	}
 	for _, name := range names {
-		if time.Until(s.certs.notAfter(name)) > certRenewBefore {
+		valid := time.Until(s.certs.notAfter(name)) > certRenewBefore
+		_, wildName := s.routes.Load().wild[name]
+		wild := valid && wildName && !s.certs.hasWildcard(name) // nur per HTTP-01: frueher wieder DNS-01
+		if valid && !wild {
 			delete(p.missingSince, name)
 			continue
+		}
+		if wild {
+			if _, ok := p.nextTry[name]; !ok {
+				p.nextTry[name] = now.Add(certWildRetry)
+			}
+			if now.Before(p.nextTry[name]) {
+				continue
+			}
 		}
 		if s.cfg.CertKey != "" { // vielleicht hat der andere Server schon eins
 			if cp, kp, err := s.apiGetCert(ctx, name); err != nil {
@@ -341,7 +376,7 @@ func (s *Server) certRound(ctx context.Context, p *certPlan) {
 			} else if cp != nil {
 				if err := s.certs.put(name, cp, kp); err != nil {
 					s.log.Warn("cert from ipv64 unusable", "name", name, "err", err)
-				} else if time.Until(s.certs.notAfter(name)) > certRenewBefore {
+				} else if time.Until(s.certs.notAfter(name)) > certRenewBefore && (!wildName || s.certs.hasWildcard(name)) {
 					s.log.Info("certificate taken from ipv64", "name", name, "not_after", s.certs.notAfter(name))
 					delete(p.missingSince, name)
 					continue
@@ -352,6 +387,10 @@ func (s *Server) certRound(ctx context.Context, p *certPlan) {
 			p.missingSince[name] = now
 		}
 		primary := s.cfg.ACMEPrimary || s.cfg.CertKey == ""
+		if wild && !primary { // bestellt nur der erste Server, der andere holt es bei ipv64
+			p.nextTry[name] = now.Add(certWildRetry)
+			continue
+		}
 		if !primary && now.Sub(p.missingSince[name]) < 10*time.Minute {
 			continue
 		}
@@ -362,6 +401,9 @@ func (s *Server) certRound(ctx context.Context, p *certPlan) {
 		if err != nil {
 			b := max(p.backoff[name]*2, 5*time.Minute)
 			p.backoff[name] = min(b, 6*time.Hour)
+			if wild {
+				p.backoff[name] = min(max(p.backoff[name], certWildRetry), 24*time.Hour)
+			}
 			p.nextTry[name] = now.Add(p.backoff[name])
 			s.log.Warn("certificate not obtained", "name", name, "err", err, "retry", p.nextTry[name].Format(time.RFC3339))
 			continue

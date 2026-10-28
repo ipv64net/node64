@@ -121,8 +121,13 @@ func (s *Server) serveCached(w http.ResponseWriter, r *http.Request, re *route, 
 	}
 	cw := &captureWriter{ResponseWriter: w, s: s, now: now, limit: min(int64(cacheMaxObject), int64(t.cacheMB)<<20/4), get: r.Method == http.MethodGet, ae: ae}
 	r, cw.body = httpcompress.Track(r)
+	ok := false
+	defer func() { // auch bei panic(http.ErrAbortHandler) (Abbruch, Fehler des Ziels): Zwischendatei weg, panic laeuft weiter
+		cw.failed = cw.failed || !ok
+		cw.finish(re, key, t)
+	}()
 	next.ServeHTTP(cw, r.WithContext(context.WithValue(r.Context(), captureKey{}, cw)))
-	cw.finish(re, key, t)
+	ok = true
 }
 
 type captureKey struct{}
