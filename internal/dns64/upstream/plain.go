@@ -25,11 +25,17 @@ func newPlain(host, port string) *plain {
 }
 
 func (p *plain) exchange(ctx context.Context, req *dns.Msg) (*dns.Msg, error) {
+	// eigene Zufalls-ID: die des Clients ist bei DoH/DoQ 0 und damit unverschluesselt leicht zu faelschen
+	q := req.Copy()
+	q.Id = dns.Id()
 	c := &dns.Client{Net: "udp", Timeout: plainTimeout, UDPSize: dns.DefaultMsgSize}
-	resp, _, err := c.ExchangeContext(ctx, req, p.addr)
+	resp, _, err := c.ExchangeContext(ctx, q, p.addr)
 	if err == nil && resp.Truncated {
 		c = &dns.Client{Net: "tcp", Timeout: plainTimeout, Dialer: &net.Dialer{Timeout: 2 * time.Second}}
-		resp, _, err = c.ExchangeContext(ctx, req, p.addr)
+		resp, _, err = c.ExchangeContext(ctx, q, p.addr)
+	}
+	if err == nil {
+		resp.Id = req.Id
 	}
 	return resp, err
 }

@@ -32,12 +32,27 @@ func TestFromRouterNotBackViaRewriteOrCNAME(t *testing.T) {
 		q := new(dns.Msg)
 		q.SetQuestion(dns.Fqdn(name), dns.TypeA)
 		start := time.Now()
-		resp := s.resolve(q, name, &querylog.Entry{}, nil, true)
+		resp := s.resolve(q, name, &querylog.Entry{}, nil, true, 0)
 		if d := time.Since(start); d > time.Second {
 			t.Fatalf("%s: local target went to the router (%s)", name, d)
 		}
 		if resp.Rcode != dns.RcodeNameError && len(resp.Answer) > 1 {
 			t.Fatalf("%s: unexpected answer %v", name, resp)
+		}
+	}
+}
+
+// Eigener CNAME und Umschreiben, die aufeinander zeigen (y.lan CNAME x.example, x.example -> y.lan): SERVFAIL statt
+// endloser Rekursion (Stack-Ueberlauf beendete den Prozess).
+func TestRecordRewriteLoopServfail(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	s := &Server{Logger: log, Records: cnameRecords{"y.lan": "x.example"},
+		Rewrite: func(n string) (string, bool) { return "y.lan", n == "x.example" }}
+	for _, name := range []string{"y.lan", "x.example"} {
+		q := new(dns.Msg)
+		q.SetQuestion(dns.Fqdn(name), dns.TypeA)
+		if resp := s.resolve(q, name, &querylog.Entry{}, nil, false, 0); resp.Rcode != dns.RcodeServerFailure {
+			t.Fatalf("%s: rcode %s, want SERVFAIL", name, dns.RcodeToString[resp.Rcode])
 		}
 	}
 }

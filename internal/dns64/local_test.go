@@ -162,6 +162,19 @@ func TestDynamicUpdate(t *testing.T) {
 	if len(a) != 1 || a[0] != "192.168.1.51" {
 		t.Fatalf("A after replace = %v", a)
 	}
+	// ungueltiger Eintrag hinter einem gueltigen: FORMERR und nichts angewendet (alles oder nichts)
+	if rc := send(key, secret, func(u *dns.Msg) {
+		u.Insert([]dns.RR{rr("pc3.home.lan. 300 IN A 192.168.1.53")})
+		u.Ns = append(u.Ns, &dns.A{Hdr: dns.RR_Header{Name: "pc4.home.lan.", Rrtype: dns.TypeA, Class: dns.ClassCHAOS, Ttl: 300}, A: net.ParseIP("192.168.1.54")})
+	}); rc != dns.RcodeFormatError {
+		t.Fatalf("invalid class: %s", dns.RcodeToString[rc])
+	}
+	recs, _ = m.Records(ctx)
+	for _, r := range recs {
+		if r.Name == "pc3.home.lan" {
+			t.Fatal("update partly applied before FORMERR")
+		}
+	}
 	// ausserhalb der Zone, SOA-Aenderung
 	if rc := send(key, secret, func(u *dns.Msg) { u.Insert([]dns.RR{rr("x.other.lan. 300 IN A 10.0.0.1")}) }); rc != dns.RcodeNotZone {
 		t.Fatalf("not zone: %s", dns.RcodeToString[rc])

@@ -21,6 +21,9 @@ const (
 	staleTTL     = 30               // TTL in seconds handed out with stale answers (RFC 8767)
 	prefetchHits = 2                // hits before an entry is kept warm ahead of expiry
 	refreshRetry = 10 * time.Second // back-off before retrying a failed background refresh
+
+	bytesPerEntry = 1024     // Speicher-Budget je Platz (ungefaehre Groesse der Antworten), Antworten sind meist kleiner
+	maxEntryBytes = 16 << 10 // groessere Antworten werden nicht zwischengespeichert
 )
 
 // State says how an answer came out of the cache.
@@ -37,21 +40,24 @@ type entry struct {
 	stored    time.Time
 	expires   time.Time
 	ttl       time.Duration
+	size      int // ungefaehre Groesse der Antwort in Byte
 	hits      uint32
 	refreshAt time.Time // start of the last background refresh; zero = none
 }
 
 type Cache struct {
-	mu  sync.Mutex
-	m   map[string]*entry
-	max int
+	mu       sync.Mutex
+	m        map[string]*entry
+	max      int
+	bytes    int // Summe der Groessen aller Eintraege
+	maxBytes int
 
 	hits, misses, stale        uint64
 	refreshed, refreshFailures uint64
 }
 
 func New(max int) *Cache {
-	return &Cache{m: make(map[string]*entry, max), max: max}
+	return &Cache{m: make(map[string]*entry, max), max: max, maxBytes: max * bytesPerEntry}
 }
 
 func key(r *dns.Msg) string {
@@ -60,7 +66,11 @@ func key(r *dns.Msg) string {
 	if opt := r.IsEdns0(); opt != nil && opt.Do() {
 		do = "1"
 	}
-	return strings.ToLower(q.Name) + "|" + strconv.Itoa(int(q.Qtype)) + "|" + strconv.Itoa(int(q.Qclass)) + "|" + do
+	cd := "0" // CD=1: ungepruefte Antwort, nie an Clients mit CD=0
+	if r.CheckingDisabled {
+		cd = "1"
+	}
+	return strings.ToLower(q.Name) + "|" + strconv.Itoa(int(q.Qtype)) + "|" + strconv.Itoa(int(q.Qclass)) + "|" + do + cd
 }
 
 // Get returns a copy of the cached answer, or nil on a miss. refresh is true
@@ -74,7 +84,7 @@ func (c *Cache) Get(req *dns.Msg) (resp *dns.Msg, state State, refresh bool) {
 	c.mu.Lock()
 	e, ok := c.m[k]
 	if ok && now.After(e.expires.Add(staleWindow)) {
-		delete(c.m, k)
+		c.drop(k, e)
 		ok = false
 	}
 	if !ok {
@@ -131,24 +141,40 @@ func (c *Cache) Set(req, resp *dns.Msg) {
 	if ttl <= 0 {
 		return
 	}
+	size := resp.Len()
+	if size > maxEntryBytes {
+		return
+	}
 	now := time.Now()
-	e := &entry{msg: resp.Copy(), stored: now, expires: now.Add(ttl), ttl: ttl}
+	e := &entry{msg: resp.Copy(), stored: now, expires: now.Add(ttl), ttl: ttl, size: size}
 	k := key(req)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if old, ok := c.m[k]; ok {
 		e.hits = old.hits // keep popularity across refreshes
-	} else if len(c.m) >= c.max {
+		c.drop(k, old)
+	}
+	for len(c.m) > 0 && (len(c.m) >= c.max || c.bytes+size > c.maxBytes) {
 		c.evict(now)
 	}
 	c.m[k] = e
+	c.bytes += size
+}
+
+// drop entfernt einen Eintrag und zieht seine Groesse ab (c.mu gehalten).
+func (c *Cache) drop(k string, e *entry) {
+	delete(c.m, k)
+	c.bytes -= e.size
 }
 
 // Delete drops an entry, e.g. when a refresh revealed a blocked CNAME.
 func (c *Cache) Delete(req *dns.Msg) {
 	c.mu.Lock()
-	delete(c.m, key(req))
+	k := key(req)
+	if e, ok := c.m[k]; ok {
+		c.drop(k, e)
+	}
 	c.mu.Unlock()
 }
 
@@ -169,6 +195,7 @@ func (c *Cache) Flush() int {
 	defer c.mu.Unlock()
 	n := len(c.m)
 	clear(c.m)
+	c.bytes = 0
 	return n
 }
 
@@ -178,7 +205,7 @@ func (c *Cache) evict(now time.Time) {
 	removed := 0
 	for k, e := range c.m {
 		if now.After(e.expires.Add(staleWindow)) {
-			delete(c.m, k)
+			c.drop(k, e)
 			removed++
 		}
 		if removed >= 64 {
@@ -190,15 +217,15 @@ func (c *Cache) evict(now time.Time) {
 			return
 		}
 		if !now.Before(e.expires) {
-			delete(c.m, k)
+			c.drop(k, e)
 			removed++
 		}
 	}
-	for k := range c.m {
+	for k, e := range c.m {
 		if removed >= 16 {
 			return
 		}
-		delete(c.m, k)
+		c.drop(k, e)
 		removed++
 	}
 }
@@ -214,20 +241,39 @@ func ttlOf(m *dns.Msg) time.Duration {
 	for _, rr := range m.Answer {
 		take(rr.Header().Ttl)
 	}
-	if len(m.Answer) > 0 {
+	if len(m.Answer) > 0 && m.Rcode == dns.RcodeSuccess && hasAnswerFor(m) {
 		return min(time.Duration(lowest)*time.Second, maxTTL)
 	}
-	// Negative answer: RFC 2308 - the minimum of SOA TTL and SOA MINIMUM.
+	// Negative answer (auch NXDOMAIN/NODATA hinter einem CNAME): RFC 2308 - the minimum of SOA TTL and SOA MINIMUM.
+	soa := false
 	for _, rr := range m.Ns {
-		if soa, ok := rr.(*dns.SOA); ok {
-			take(soa.Hdr.Ttl)
-			take(soa.Minttl)
+		if s, ok := rr.(*dns.SOA); ok {
+			take(s.Hdr.Ttl)
+			take(s.Minttl)
+			soa = true
 		}
 	}
-	if !found {
-		return 0
+	if !soa {
+		return 0 // ohne SOA nicht negativ zwischenspeichern (RFC 2308 5)
 	}
 	return min(time.Duration(lowest)*time.Second, maxNegative)
+}
+
+// hasAnswerFor: die Antwort enthaelt Daten des gefragten Typs (sonst NODATA, z. B. nur die CNAME-Kette).
+func hasAnswerFor(m *dns.Msg) bool {
+	if len(m.Question) == 0 {
+		return true
+	}
+	qt := m.Question[0].Qtype
+	if qt == dns.TypeANY {
+		return true
+	}
+	for _, rr := range m.Answer {
+		if rr.Header().Rrtype == qt {
+			return true
+		}
+	}
+	return false
 }
 
 type Stats struct {

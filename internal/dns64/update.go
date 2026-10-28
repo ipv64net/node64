@@ -149,8 +149,23 @@ func (m *Module) Update(zone, key string, msg *dns.Msg) int {
 		if h.Rrtype != dns.TypeANY && !updateTypes[h.Rrtype] {
 			return dns.RcodeRefused // SOA, NS und andere Typen nicht per Update
 		}
+		switch h.Class { // alles pruefen, bevor etwas geschrieben wird (sonst halb angewendet)
+		case dns.ClassINET, dns.ClassNONE:
+			if _, ok := rrRecord(rr); !ok {
+				return dns.RcodeFormatError
+			}
+		case dns.ClassANY:
+		default:
+			return dns.RcodeFormatError
+		}
 	}
-	w := m.core.Writer()
+	// alle Aenderungen in einer Transaktion: klappt eine nicht, bleibt alles beim Alten
+	w, err := m.core.Writer().BeginTx(ctx, nil)
+	if err != nil {
+		m.log.Warn("dns update", "zone", zone, "err", err)
+		return dns.RcodeServerFailure
+	}
+	defer w.Rollback()
 	now := time.Now().UTC().Format(time.RFC3339)
 	for _, rr := range msg.Ns {
 		h := rr.Header()
@@ -164,7 +179,7 @@ func (m *Module) Update(zone, key string, msg *dns.Msg) int {
 				return dns.RcodeFormatError
 			}
 			var conflict int
-			_ = m.core.Reader().QueryRowContext(ctx, `SELECT COUNT(*) FROM dns64_records WHERE name = ? AND ((type = 'CNAME') != (? = 'CNAME'))`, r.Name, r.Type).Scan(&conflict)
+			_ = w.QueryRowContext(ctx, `SELECT COUNT(*) FROM dns64_records WHERE name = ? AND ((type = 'CNAME') != (? = 'CNAME'))`, r.Name, r.Type).Scan(&conflict)
 			if conflict > 0 {
 				continue // RFC 2136: CNAME neben anderen Typen wird still ignoriert
 			}
@@ -194,6 +209,10 @@ func (m *Module) Update(zone, key string, msg *dns.Msg) int {
 			m.log.Warn("dns update", "zone", zone, "err", err)
 			return dns.RcodeServerFailure
 		}
+	}
+	if err := w.Commit(); err != nil {
+		m.log.Warn("dns update", "zone", zone, "err", err)
+		return dns.RcodeServerFailure
 	}
 	if err := m.loadRecords(ctx); err != nil {
 		return dns.RcodeServerFailure
