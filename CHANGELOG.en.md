@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- DynDNS: confirmation when several names from the account are added at once.
+
 ## 0.12.0-alpha.26 – 2026-10-28
 
 - PROXY64: CDN64 statistics explain when there are no protection figures in the period yet.

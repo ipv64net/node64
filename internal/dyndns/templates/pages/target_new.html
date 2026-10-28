@@ -12,7 +12,7 @@
 			{{else if not $d.Names}}
 			<div class="card-body small text-body-secondary">{{.T "dyn.pick.empty"}}</div>
 			{{else}}
-			<form method="post" action="/dyndns/targets/new">
+			<form method="post" action="/dyndns/targets/new" data-pick-form>
 				<input type="hidden" name="_csrf" value="{{.CSRF}}">
 				<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards small">
 					<thead><tr><th style="width:1%" class="ps-3"><input type="checkbox" class="form-check-input" data-pick-all aria-label="all"></th><th>{{.T "dyn.targets.name"}}</th><th>A</th><th>AAAA</th><th>{{.T "dyn.pick.update"}}</th><th>{{.T "dyn.pick.note"}}</th></tr></thead>
@@ -40,6 +40,21 @@
 					<a class="btn btn-outline-secondary btn-sm" href="/dyndns">{{.T "common.cancel"}}</a>
 				</div>
 			</form>
+			<div class="modal fade" id="dyn-pick-confirm" tabindex="-1" aria-labelledby="dyn-pick-confirm-title" aria-hidden="true" data-pick-modal>
+				<div class="modal-dialog modal-dialog-scrollable"><div class="modal-content">
+					<div class="modal-header"><h2 class="modal-title h5" id="dyn-pick-confirm-title"><i class="bi bi-exclamation-triangle text-warning"></i> {{.T "dyn.pick.confirm_title"}}</h2>
+						<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{.T "common.cancel"}}"></button></div>
+					<div class="modal-body small">
+						<div class="alert alert-warning mb-2">{{.T "dyn.pick.confirm_text"}}</div>
+						<div class="fw-semibold mb-1" data-pick-count data-text="{{.T "dyn.pick.confirm_count"}}"></div>
+						<ul class="font-monospace mb-0 ps-3" data-pick-list data-more="{{.T "dyn.pick.confirm_more"}}"></ul>
+					</div>
+					<div class="modal-footer">
+						<button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">{{.T "common.cancel"}}</button>
+						<button type="button" class="btn btn-danger btn-sm" data-pick-confirm>{{.T "dyn.pick.confirm_ok"}}</button>
+					</div>
+				</div></div>
+			</div>
 			{{end}}
 		</div>
 	</div>

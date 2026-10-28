@@ -37,6 +37,41 @@
 			document.querySelectorAll('input[name="pick"]:not(:disabled)').forEach(function (c) { c.checked = all.checked; });
 		});
 	}
+
+	// Mehr als ein Name: Rueckfrage im Fenster, denn der Updater setzt bei allen sofort die Adresse dieses Anschlusses
+	var form = document.querySelector("[data-pick-form]");
+	var modalEl = document.querySelector("[data-pick-modal]");
+	if (form && modalEl && window.bootstrap) {
+		var confirmed = false;
+		var modal = new window.bootstrap.Modal(modalEl);
+		form.addEventListener("submit", function (e) {
+			var picked = form.querySelectorAll('input[name="pick"]:checked');
+			if (confirmed || picked.length < 2) { return; }
+			e.preventDefault();
+			var count = modalEl.querySelector("[data-pick-count]");
+			count.textContent = count.getAttribute("data-text").replace("{n}", picked.length);
+			var list = modalEl.querySelector("[data-pick-list]");
+			list.textContent = "";
+			picked.forEach(function (c, i) {
+				if (i >= 20) { return; }
+				var li = document.createElement("li");
+				li.textContent = c.getAttribute("aria-label");
+				list.appendChild(li);
+			});
+			if (picked.length > 20) {
+				var more = document.createElement("li");
+				more.className = "list-unstyled text-body-secondary";
+				more.textContent = list.getAttribute("data-more").replace("{n}", picked.length - 20);
+				list.appendChild(more);
+			}
+			modal.show();
+		});
+		modalEl.querySelector("[data-pick-confirm]").addEventListener("click", function () {
+			confirmed = true;
+			modal.hide();
+			form.submit();
+		});
+	}
 })();
 
 // Filter im Verlauf: bei Aenderung sofort anwenden

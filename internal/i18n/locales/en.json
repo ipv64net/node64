@@ -2036,6 +2036,11 @@
       "ignored": "{family} is ignored at ipv64",
       "hint": "The record token is used (safest level). IPv4 and IPv6 are preset from the existing records and can be changed per target afterwards.",
       "submit": "Add selection",
+      "confirm_title": "Add several names?",
+      "confirm_text": "Warning: right after adding, the updater sets the current address of this connection for all selected names (IPv4 and/or IPv6 depending on the chosen mode). Existing A and AAAA records are overwritten – even if they point to other servers today.",
+      "confirm_count": "{n} names selected:",
+      "confirm_more": "… and {n} more",
+      "confirm_ok": "Yes, add all",
       "update": "Update",
       "modes_hint": "Choose per name what gets updated; fixed addresses and the interface mode are available afterwards when editing. With \"prefix + interface ID\" the interface ID is taken from the existing AAAA record."
     },
