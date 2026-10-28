@@ -176,6 +176,8 @@ func (f *fwdAuth) check(w http.ResponseWriter, r *http.Request) fwdResult {
 	scheme := "http"
 	if r.TLS != nil {
 		scheme = "https"
+	} else if p := peerIP(r); p.IsValid() && clientOf(r) != p && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "https" // TLS endet schon beim vertrauenswuerdigen Proxy davor (z. B. Cloudflare); Authelia verlangt https
 	}
 	req.Header.Set("X-Forwarded-Method", r.Method)
 	req.Header.Set("X-Forwarded-Proto", scheme)
