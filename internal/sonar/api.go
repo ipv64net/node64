@@ -326,15 +326,23 @@ type meWrite struct {
 	Budget   string   `json:"budget"`
 }
 
+// mePut ist PUT /sonar/me aus UpdateMe: der Standort geht immer mit, nil = null = loeschen (ipv64 loescht nur bei
+// ausdruecklichem null; fehlende Felder bleiben unveraendert, so wie beim Abgleich in syncMe).
+type mePut struct {
+	meWrite
+	Lat *float64 `json:"lat"`
+	Lon *float64 `json:"lon"`
+}
+
 // UpdateMe setzt Name, Standort, Anschlussart, Geraet, Measured, Budget (PUT /sonar/me) und uebernimmt Measured
-// und Budget sofort lokal.
+// und Budget sofort lokal. Lat/Lon nil loescht den Standort.
 func (r *Runner) UpdateMe(ctx context.Context, m Me) (*Me, error) {
 	w, err := r.checkMe(m)
 	if err != nil {
 		return nil, err
 	}
 	var out Me
-	if err := r.api.call(ctx, http.MethodPut, "/sonar/me", r.cfg.Token, w, smallLimit, &out); err != nil {
+	if err := r.api.call(ctx, http.MethodPut, "/sonar/me", r.cfg.Token, mePut{meWrite: w, Lat: w.Lat, Lon: w.Lon}, smallLimit, &out); err != nil {
 		return nil, err
 	}
 	r.mu.Lock()

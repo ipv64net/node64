@@ -69,7 +69,7 @@ func TestLoadEnvAnchor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.Config.Mode != sonar.RoleAnchor || !o.Config.Measured {
+	if o.Config.Mode != sonar.RoleAnchor || !o.Config.Measured || o.Config.Budget != sonar.BudgetHigh {
 		t.Fatalf("anchor: %+v", o.Config)
 	}
 	if _, err := loadEnv(env(map[string]string{"SONAR64_TOKEN": testAnchorTok, "SONAR64_MODE": "anchor"})); err != nil {

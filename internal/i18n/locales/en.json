@@ -1878,7 +1878,8 @@
     "healthchecks": "Healthchecks",
     "dyndns": "DynDNS Updater",
     "proxy": "Reverse Proxy",
-    "link": "ipv64 Link"
+    "link": "ipv64 Link",
+    "sonar64": "Sonar64 (community measurement network)"
   },
   "ipv64key": {
     "title": "ipv64 API key",
@@ -4991,6 +4992,11 @@
       "desc": "A decoy in your network: detects attackers trying credentials and reports them to the IPv64 blocklists.",
       "h1": "Simulates common services such as SSH, Telnet and web logins",
       "h2": "Early warning and a contribution to the shared blocklists"
+    },
+    "sonar64": {
+      "desc": "Community measurement network: your node sparingly measures latency to other participants and the anchors, following a signed plan from ipv64 – visible on the map at ipv64.net/sonar.",
+      "h1": "Ping via ICMP and UDP 6464, fixed limits, never private targets",
+      "h2": "Outgoing only or also measured, location only shown blurred"
     }
   },
   "sonar64": {

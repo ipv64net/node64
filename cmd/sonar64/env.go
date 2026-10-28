@@ -93,6 +93,9 @@ func loadEnv(getenv func(string) string) (options, error) {
 	default:
 		errs = append(errs, fmt.Errorf("SONAR64_BUDGET %q is invalid (sparsam, normal or grosszuegig)", b))
 	}
+	if c.Mode == sonar.RoleAnchor {
+		c.Budget = sonar.BudgetHigh // wie bei ipv64 (Anker immer grosszuegig); es gelten die Anker-Grenzen des Kerns
+	}
 
 	if v := get("SONAR64_QUIET"); v != "" {
 		q, err := parseQuiet(v)
