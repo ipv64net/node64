@@ -72,6 +72,9 @@ type Runtime struct {
 	FlapSince       time.Time
 	DownSince       time.Time // Beginn der aktuellen Stoerung
 	Incident        int64     // offene Stoerung (ID aus dem Store), 0 = keine
+	// Unalerted: die laufende Stoerung wurde nicht gemeldet (begann in der Wartung oder nur abhaengig gestoert).
+	// Nicht gespeichert: nach einem Neustart gilt sie als gemeldet (wie bisher).
+	Unalerted bool
 }
 
 // Measurement ist ein Messpunkt (append-only).
@@ -150,6 +153,8 @@ type Options struct {
 
 type entry struct {
 	mu        sync.Mutex
+	rec       sync.Mutex // eine Auswertung (record) zur Zeit; Upsert wartet darauf
+	replaced  bool       // durch Upsert ersetzt: record wertet nicht mehr aus (e.mu)
 	check     Check
 	rt        Runtime
 	wake      chan struct{}
@@ -237,15 +242,33 @@ func (s *Scheduler) Stop() {
 // Upsert traegt einen Check ein oder ersetzt seine Konfiguration. rt ist der
 // gespeicherte Zustand (nil = neu).
 func (s *Scheduler) Upsert(c Check, rt *Runtime) {
+	// laufende Auswertung des alten Eintrags abwarten und ihn stilllegen: so kommt sein Zustand (offene Stoerung)
+	// vollstaendig herueber und er meldet nichts doppelt. Ohne s.mu, weil record s.entries liest (parentDown).
+	s.mu.RLock()
+	prev := s.entries[c.Token]
+	s.mu.RUnlock()
+	if prev != nil {
+		prev.rec.Lock()
+		prev.mu.Lock()
+		prev.replaced = true
+		prev.mu.Unlock()
+		prev.rec.Unlock()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if old, ok := s.entries[c.Token]; ok {
 		close(old.stop)
+		old.mu.Lock()
+		old.replaced = true
+		cp := old.rt
+		old.mu.Unlock()
 		if rt == nil {
-			old.mu.Lock()
-			cp := old.rt
-			old.mu.Unlock()
 			rt = &cp
+		} else {
+			// offene Stoerung fuehrt der laufende Eintrag (ein uebergebener Stand kann aelter sein)
+			given := *rt
+			given.Incident, given.Unalerted = cp.Incident, cp.Unalerted
+			rt = &given
 		}
 		delete(s.entries, c.Token)
 	}
@@ -319,29 +342,40 @@ func (s *Scheduler) Runtime(token string) (Runtime, bool) {
 
 // Push verarbeitet eine Heartbeat-Meldung. status leer = up.
 func (s *Scheduler) Push(ctx context.Context, token string, status checks.Status, msg string, details map[string]any) bool {
-	s.mu.RLock()
-	e, ok := s.entries[token]
-	s.mu.RUnlock()
-	if !ok || e.check.Def.Type != checks.TypePush {
-		return false
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	now := s.now()
-	m := Measurement{Token: token, Time: now, Status: checks.Up, Reason: checks.ReasonOK, Message: "push received", Details: details}
-	if status == checks.Down {
-		m.Status, m.Reason, m.Message = checks.Down, checks.ReasonPushDown, "push reported down"
+	// Zustand, Stoerung und Benachrichtigung nicht am Abbruch der Anfrage scheitern lassen
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+	defer cancel()
+	for try := 0; try < 2; try++ {
+		s.mu.RLock()
+		e, ok := s.entries[token]
+		s.mu.RUnlock()
+		if !ok || e.check.Def.Type != checks.TypePush {
+			return false
+		}
+		now := s.now()
+		m := Measurement{Token: token, Time: now, Status: checks.Up, Reason: checks.ReasonOK, Message: "push received", Details: details}
+		if status == checks.Down {
+			m.Status, m.Reason, m.Message = checks.Down, checks.ReasonPushDown, "push reported down"
+		}
+		if msg != "" {
+			m.Message = msg
+		}
+		e.mu.Lock()
+		e.rt.LastPush = now
+		e.mu.Unlock()
+		if !s.record(ctx, e, m) {
+			continue // Eintrag eben ersetzt: beim neuen auswerten
+		}
+		select {
+		case e.wake <- struct{}{}:
+		default:
+		}
+		return true
 	}
-	if msg != "" {
-		m.Message = msg
-	}
-	e.mu.Lock()
-	e.rt.LastPush = now
-	e.mu.Unlock()
-	s.record(ctx, e, m)
-	select {
-	case e.wake <- struct{}{}:
-	default:
-	}
-	return true
+	return false
 }
 
 func (s *Scheduler) launch(e *entry) {
@@ -471,10 +505,19 @@ func combine(c Check, results []checks.Result, now time.Time) Measurement {
 	return m
 }
 
-// record wendet den Zustandsautomaten an, speichert und benachrichtigt.
-func (s *Scheduler) record(ctx context.Context, e *entry, m Measurement) {
+// record wendet den Zustandsautomaten an, speichert und benachrichtigt. false = Eintrag inzwischen ersetzt
+// (Upsert), nichts ausgewertet.
+func (s *Scheduler) record(ctx context.Context, e *entry, m Measurement) bool {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	e.rec.Lock()
+	defer e.rec.Unlock()
+	e.mu.Lock()
+	replaced := e.replaced
+	e.mu.Unlock()
+	if replaced {
+		return false
 	}
 	m.Maintenance = s.st.InMaintenance(ctx, e.check.Token, m.Time)
 	parentDown := s.parentDown(e.check)
@@ -493,26 +536,36 @@ func (s *Scheduler) record(ctx context.Context, e *entry, m Measurement) {
 	if err := s.st.SaveMeasurement(ctx, m); err != nil {
 		s.log.Error("measurement not saved", "token", checks.TokenHint(e.check.Token), "err", err)
 	}
+	setIncident := func(id int64) {
+		e.mu.Lock()
+		e.rt.Incident = id
+		rt.Incident = id
+		e.mu.Unlock()
+	}
+	closeIncident := func(at time.Time) {
+		if err := s.st.CloseIncident(ctx, rt.Incident, at); err != nil {
+			// ID behalten, naechster Messpunkt versucht es erneut
+			s.log.Error("incident not closed", "token", checks.TokenHint(e.check.Token), "err", err)
+			return
+		}
+		setIncident(0)
+	}
+	closeTried := false
 	for i := range events {
 		ev := &events[i]
-		switch ev.Kind {
-		case EventDown:
+		switch {
+		case ev.Kind == EventDown && rt.Incident != 0:
+			ev.Incident = rt.Incident // Stoerung laeuft schon (Pause, Flattern, Wartung, abhaengig): weiterfuehren
+		case ev.Kind == EventDown:
 			if id, err := s.st.OpenIncident(ctx, e.check.Token, ev.Time, ev.Reason, ev.Message); err == nil {
 				ev.Incident = id
-				e.mu.Lock()
-				e.rt.Incident = id
-				rt.Incident = id
-				e.mu.Unlock()
+				setIncident(id)
 			}
-		case EventUp:
-			if rt.Incident != 0 {
-				_ = s.st.CloseIncident(ctx, rt.Incident, ev.Time)
-				ev.Incident = rt.Incident
-				e.mu.Lock()
-				e.rt.Incident = 0
-				rt.Incident = 0
-				e.mu.Unlock()
-			}
+		case ev.To == StateUp && rt.Incident != 0:
+			// jeder Wechsel nach up beendet die Stoerung (auch Ende des Flatterns, erste Messung nach Pause)
+			ev.Incident = rt.Incident
+			closeTried = true
+			closeIncident(ev.Time)
 		}
 		if err := s.st.SaveEvent(ctx, *ev); err != nil {
 			s.log.Error("event not saved", "token", checks.TokenHint(e.check.Token), "err", err)
@@ -522,10 +575,14 @@ func (s *Scheduler) record(ctx context.Context, e *entry, m Measurement) {
 			s.notifier.Notify(ctx, *ev, e.check)
 		}
 	}
+	if !closeTried && rt.State == StateUp && rt.Incident != 0 {
+		closeIncident(rt.Since) // frueher fehlgeschlagen: Ende ist der Wechsel nach up
+	}
 	if err := s.st.SaveRuntime(ctx, e.check.Token, rt); err != nil {
 		s.log.Error("runtime not saved", "token", checks.TokenHint(e.check.Token), "err", err)
 	}
 	s.log.Debug("check measured", "token", checks.TokenHint(e.check.Token), "status", m.Status, "latency_ms", m.Latency.Milliseconds(), "reason", m.Reason, "state", rt.State)
+	return true
 }
 
 // transition ist der Zustandsautomat; e.mu ist gehalten.
@@ -549,14 +606,22 @@ func (s *Scheduler) transition(e *entry, m *Measurement, parentDown bool) []Even
 			last = rt.Transitions[n-1]
 		}
 		if m.Time.Sub(last) >= s.opts.FlapCalm {
-			to := StateUp
-			if rt.LastStatus == checks.Down {
-				to = StateDown
-			}
-			ev := newEvent(EventFlappingEnd, to, m.Reason, fmt.Sprintf("stable again after %d changes", len(rt.Transitions)))
-			ev.Flaps = len(rt.Transitions)
+			flaps := len(rt.Transitions)
 			rt.FlapSince = time.Time{}
 			rt.Transitions = nil
+			switch {
+			case rt.LastStatus != checks.Down:
+				ev := newEvent(EventFlappingEnd, StateUp, m.Reason, fmt.Sprintf("stable again after %d changes", flaps))
+				ev.Flaps = flaps
+				rt.Unalerted = false
+			case parentDown:
+				newEvent(EventDependent, StateDependent, checks.ReasonDependencyDown, "parent check is down: "+rt.LastMessage).Silent = true
+			default:
+				// ruhig, aber gestoert: als Ausfall melden, nicht als "wieder stabil"
+				ev := newEvent(EventDown, StateDown, rt.LastReason, rt.LastMessage)
+				ev.Flaps = flaps
+				rt.Unalerted = ev.Silent // in der Wartung: nach dem Fenster melden
+			}
 		}
 	}
 	ok := m.Status == checks.Up
@@ -575,11 +640,20 @@ func (s *Scheduler) transition(e *entry, m *Measurement, parentDown bool) []Even
 			rt.Transitions = rt.Transitions[1:]
 		}
 		if len(rt.Transitions) > s.opts.FlapThreshold && rt.State != StateFlapping {
+			ev.Silent = true // Einzelmeldung geht in der Sammelmeldung auf (vor newEvent: append kann ev verschieben)
 			fev := newEvent(EventFlappingStart, StateFlapping, m.Reason, fmt.Sprintf("%d state changes within %s", len(rt.Transitions), s.opts.FlapWindow))
 			fev.Flaps = len(rt.Transitions)
 			rt.FlapSince = m.Time
-			ev.Silent = true // Einzelmeldung geht in der Sammelmeldung auf
 		}
+	}
+	// upEvent beendet eine Stoerung: gemeldet, wenn auch der Ausfall gemeldet wurde (auch in der Wartung),
+	// still, wenn er nie gemeldet wurde (begann in der Wartung, nur abhaengig gestoert)
+	upEvent := func() *Event {
+		ev := newEvent(EventUp, StateUp, checks.ReasonOK, m.Message)
+		ev.Duration = m.Time.Sub(rt.DownSince)
+		ev.Silent = rt.Unalerted
+		rt.Unalerted = false
+		return ev
 	}
 
 	switch rt.State {
@@ -596,6 +670,7 @@ func (s *Scheduler) transition(e *entry, m *Measurement, parentDown bool) []Even
 		if ok {
 			if rt.State == StatePending {
 				newEvent(EventUp, StateUp, checks.ReasonOK, m.Message).Silent = true
+				rt.Unalerted = false
 			}
 			return events
 		}
@@ -605,25 +680,35 @@ func (s *Scheduler) transition(e *entry, m *Measurement, parentDown bool) []Even
 		if parentDown {
 			m.Dependent = true
 			newEvent(EventDependent, StateDependent, checks.ReasonDependencyDown, "parent check is down: "+m.Message).Silent = true
+			rt.Unalerted = true // kein eigener Alarm, also spaeter auch kein "wieder erreichbar"
 			return events
 		}
 		ev := newEvent(EventDown, StateDown, m.Reason, m.Message)
+		rt.Unalerted = m.Maintenance // in der Wartung still: nach dem Fenster melden
 		markFlap(ev)
 		return events
 	case StateDown, StateDependent:
 		if !ok {
 			m.Dependent = rt.State == StateDependent || parentDown
-			if rt.State == StateDown && parentDown {
+			switch {
+			case rt.State == StateDown && parentDown:
 				// Ursache liegt weiter oben: ab jetzt abhaengig
 				m.Dependent = true
 				newEvent(EventDependent, StateDependent, checks.ReasonDependencyDown, "parent check is down").Silent = true
+			case rt.State == StateDependent && !parentDown && rt.ConsecutiveFail > e.check.Retries:
+				// uebergeordneter Check wieder da, dieser weiter gestoert: eigener Ausfall
+				m.Dependent = false
+				newEvent(EventDown, StateDown, m.Reason, m.Message)
+				rt.Unalerted = m.Maintenance
+			case rt.State == StateDown && rt.Unalerted && !m.Maintenance:
+				// Ausfall begann in der Wartung und dauert nach dem Fenster an: jetzt melden
+				newEvent(EventDown, StateDown, m.Reason, m.Message)
+				rt.Unalerted = false
 			}
 			return events
 		}
 		if e.check.Stabilize <= 1 {
-			ev := newEvent(EventUp, StateUp, checks.ReasonOK, m.Message)
-			ev.Duration = m.Time.Sub(rt.DownSince)
-			markFlap(ev)
+			markFlap(upEvent())
 			return events
 		}
 		newEvent(EventUp, StateStabilizing, checks.ReasonOK, m.Message).Silent = true
@@ -643,9 +728,7 @@ func (s *Scheduler) transition(e *entry, m *Measurement, parentDown bool) []Even
 			return events
 		}
 		if rt.ConsecutiveOK >= e.check.Stabilize {
-			ev := newEvent(EventUp, StateUp, checks.ReasonOK, m.Message)
-			ev.Duration = m.Time.Sub(rt.DownSince)
-			markFlap(ev)
+			markFlap(upEvent())
 		}
 		return events
 	}

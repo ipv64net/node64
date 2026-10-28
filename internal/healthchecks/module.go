@@ -82,6 +82,9 @@ func New(core *store.Store, log *slog.Logger, dispatcher *notify.Dispatcher, not
 	m := &Module{core: core, st: NewStore(core), log: log.With("module", Name), dispatcher: dispatcher, notifyStore: notifyStore, version: version, push: newPushLimiter(), reminders: map[string]time.Time{}}
 	m.notifier = m
 	m.st.OnStatusChange = m.statusFlush // Statusseiten: zwischengespeicherte Sichten verwerfen (statusview.go)
+
+	// wiederkehrende Wartungsfenster nach der Ortszeit der Node
+	m.st.Location = func() *time.Location { return m.statusLocation(context.Background()) }
 	m.publicIP = newPublicIP()
 	m.pve = newPVERuntime(m, nil) // ohne SetSecrets lassen sich keine Systeme speichern
 	setSelfStore(core)
@@ -152,11 +155,15 @@ func (m *Module) remind(ctx context.Context) {
 				continue
 			}
 			rt.State, rt.DownSince = m.groupState(ctx, c.Token)
+			rt.Unalerted = false // gemeldet wird der Gesamtzustand (groupVerdict)
 		} else if !c.MeasuredHere() || c.Foreign() {
 			continue // misst hier nicht oder gehoert einer anderen Node: meldet der hub bzw. die Besitzer-Node
 		}
 		if rt.State != scheduler.StateDown && rt.State != scheduler.StateFlapping {
 			continue
+		}
+		if rt.Unalerted || m.st.InMaintenance(ctx, c.Token, now) {
+			continue // Wartung bzw. Ausfall noch nicht gemeldet: keine Erinnerung
 		}
 		every := time.Duration(c.RepeatMinutes) * time.Minute
 		m.mu.Lock()
@@ -202,7 +209,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.38.1", Changelog: changelog, ChangelogEN: changelogEN}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.39.0", Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {
@@ -234,6 +241,9 @@ func (m *Module) Start(ctx context.Context) error {
 			continue
 		}
 		rt := c.Runtime
+		if rt.Incident == 0 {
+			rt.Incident = m.st.openIncidentID(ctx, c.Token) // z. B. nach Besitzerwechsel noch offen: weiterfuehren
+		}
 		m.sched.Upsert(c.SchedulerCheck(), &rt)
 	}
 	m.pveStart(ctx)        // Proxmox VE: Abfrage der eingeschalteten Systeme (vor den Checks: Docker-Checks auf ssh/https nutzen sie)

@@ -358,3 +358,41 @@ func TestWithoutUnknownParams(t *testing.T) {
 		t.Fatalf("valid params changed: %s", g)
 	}
 }
+
+func TestHTTPHostHeader(t *testing.T) {
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sni := ""
+		if r.TLS != nil {
+			sni = r.TLS.ServerName
+		}
+		w.Write([]byte("host=" + r.Host + " sni=" + sni))
+	})
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	r := testRunner()
+	base := strings.Replace(srv.URL, "127.0.0.1", "localhost", 1)
+	if res := one(t, r, def(TypeKeyword, base+"/", HTTPParams{Keyword: "host=vhost.test ", Headers: map[string]string{"host": "vhost.test"}})); res.Status != Up {
+		t.Fatalf("host header: %+v", res)
+	}
+	tsrv := httptest.NewTLSServer(h)
+	defer tsrv.Close()
+	tbase := strings.Replace(tsrv.URL, "127.0.0.1", "localhost", 1)
+	if res := one(t, r, def(TypeKeyword, tbase+"/", HTTPParams{InsecureTLS: true, Keyword: "host=example.com:8443 sni=example.com", Headers: map[string]string{"Host": "example.com:8443"}})); res.Status != Up {
+		t.Fatalf("host header tls: %+v", res)
+	}
+	// Zertifikatspruefung gegen den Host-Kopf (Kette des httptest-Zertifikats unbekannt)
+	if res := one(t, r, def(TypeHTTP, tbase+"/", HTTPParams{Headers: map[string]string{"Host": "example.com"}})); res.Reason != ReasonTLSFailed {
+		t.Fatalf("host header tls verify: %+v", res)
+	}
+}
+
+func TestPingTimeout(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if got := pingTimeout(ctx, 5*time.Second); got > 4600*time.Millisecond || got < 4*time.Second {
+		t.Fatalf("ping timeout must end before context: %v", got)
+	}
+	if got := pingTimeout(context.Background(), 300*time.Millisecond); got != 200*time.Millisecond {
+		t.Fatalf("short: %v", got)
+	}
+}

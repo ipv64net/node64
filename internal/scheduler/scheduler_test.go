@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -48,6 +49,7 @@ type memStore struct {
 	incidents    map[int64]bool
 	maintenance  bool
 	nextID       int64
+	failClose    bool // CloseIncident schlaegt fehl
 }
 
 func newMemStore() *memStore {
@@ -65,7 +67,10 @@ func (m *memStore) SaveRuntime(_ context.Context, t string, rt Runtime) error {
 	m.runtime[t] = rt
 	return nil
 }
-func (m *memStore) OpenIncident(context.Context, string, time.Time, checks.Reason, string) (int64, error) {
+func (m *memStore) OpenIncident(ctx context.Context, _ string, _ time.Time, _ checks.Reason, _ string) (int64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err // wie die Datenbank: abgebrochener Kontext schreibt nichts
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.nextID++
@@ -75,8 +80,24 @@ func (m *memStore) OpenIncident(context.Context, string, time.Time, checks.Reaso
 func (m *memStore) CloseIncident(_ context.Context, id int64, _ time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.failClose {
+		return errors.New("close failed")
+	}
 	m.incidents[id] = false
 	return nil
+}
+
+// open zaehlt die offenen Stoerungen.
+func (m *memStore) open() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, o := range m.incidents {
+		if o {
+			n++
+		}
+	}
+	return n
 }
 func (m *memStore) SaveEvent(_ context.Context, e Event) error {
 	m.mu.Lock()
@@ -434,4 +455,205 @@ func TestThrottleSkipsRun(t *testing.T) {
 	allow = true
 	mu.Unlock()
 	waitFor(t, func() bool { return st.count("a") >= 1 }, "measurement after throttle")
+}
+
+// feeder wertet Messpunkte direkt aus (ohne Goroutine, feste Zeiten).
+type feeder struct {
+	t   *testing.T
+	s   *Scheduler
+	st  *memStore
+	n   *memNotifier
+	now time.Time
+}
+
+func newFeeder(t *testing.T, opts Options, cs ...Check) *feeder {
+	s, st, n := newTestScheduler(t, &scripted{seq: []checks.Status{checks.Up}}, opts)
+	for _, c := range cs {
+		s.Upsert(c, nil) // nicht gestartet: keine Goroutinen
+	}
+	return &feeder{t: t, s: s, st: st, n: n, now: time.Date(2026, 10, 28, 10, 0, 0, 0, time.UTC)}
+}
+
+func (f *feeder) feed(token string, after time.Duration, status checks.Status) {
+	f.t.Helper()
+	f.now = f.now.Add(after)
+	f.s.mu.RLock()
+	e := f.s.entries[token]
+	f.s.mu.RUnlock()
+	m := Measurement{Token: token, Time: f.now, Status: status, Reason: checks.ReasonOK, Message: "ok"}
+	if status == checks.Down {
+		m.Reason, m.Message = checks.ReasonConnectFailed, "refused"
+	}
+	if !f.s.record(context.Background(), e, m) {
+		f.t.Fatal("entry replaced")
+	}
+}
+
+func (f *feeder) state(token string) State {
+	rt, _ := f.s.Runtime(token)
+	return rt.State
+}
+
+func (f *feeder) last() Event {
+	loud := f.n.loud()
+	if len(loud) == 0 {
+		return Event{}
+	}
+	return loud[len(loud)-1]
+}
+
+// Flattern endet gestoert: Ausfall melden (nicht "wieder stabil"), dieselbe Stoerung weiterfuehren; endet es up,
+// wird die Stoerung geschlossen.
+func TestFlappingEndsDownOrUp(t *testing.T) {
+	f := newFeeder(t, Options{FlapThreshold: 2, FlapWindow: time.Hour, FlapCalm: 10 * time.Minute}, httpCheck("f", 0, 1))
+	f.feed("f", 0, checks.Up)
+	f.feed("f", time.Minute, checks.Down)
+	f.feed("f", time.Minute, checks.Up)
+	f.feed("f", time.Minute, checks.Down) // dritter Wechsel: flattert, Stoerung offen
+	if f.state("f") != StateFlapping || f.st.open() != 1 {
+		t.Fatalf("state %s, open %d", f.state("f"), f.st.open())
+	}
+	f.feed("f", 11*time.Minute, checks.Down)
+	if ev := f.last(); ev.Kind != EventDown || ev.From != StateFlapping || ev.To != StateDown || ev.Incident == 0 {
+		t.Fatalf("calm but down must alarm as down: %+v", ev)
+	}
+	if f.state("f") != StateDown || f.st.open() != 1 || f.st.nextID != 2 {
+		t.Fatalf("state %s, open %d, incidents %d", f.state("f"), f.st.open(), f.st.nextID)
+	}
+	f.feed("f", time.Minute, checks.Up)
+	if ev := f.last(); ev.Kind != EventUp || f.st.open() != 0 {
+		t.Fatalf("up must close: %+v open %d", ev, f.st.open())
+	}
+
+	g := newFeeder(t, Options{FlapThreshold: 2, FlapWindow: time.Hour, FlapCalm: 10 * time.Minute}, httpCheck("g", 0, 1))
+	g.feed("g", 0, checks.Up)
+	g.feed("g", time.Minute, checks.Down)
+	g.feed("g", time.Minute, checks.Up)
+	g.feed("g", time.Minute, checks.Down)
+	g.feed("g", time.Minute, checks.Up)
+	g.feed("g", 11*time.Minute, checks.Up)
+	if ev := g.last(); ev.Kind != EventFlappingEnd || ev.To != StateUp || g.st.open() != 0 {
+		t.Fatalf("flapping end up must close the incident: %+v open %d", ev, g.st.open())
+	}
+}
+
+// Abhaengig gestoert, der uebergeordnete Check ist wieder da, dieser nicht: eigener Ausfall mit Alarm.
+// Erholt er sich dagegen, ohne je gemeldet zu sein, kommt kein "wieder erreichbar".
+func TestDependentBecomesDown(t *testing.T) {
+	child := httpCheck("k", 0, 1)
+	child.Parent = "p"
+	f := newFeeder(t, Options{}, httpCheck("p", 0, 1), child)
+	f.feed("p", 0, checks.Down)
+	f.feed("k", 0, checks.Up)
+	f.feed("k", time.Minute, checks.Down)
+	if f.state("k") != StateDependent {
+		t.Fatalf("state %s", f.state("k"))
+	}
+	f.feed("k", time.Minute, checks.Up)
+	if ev := f.last(); ev.Token == "k" {
+		t.Fatalf("recovery of a never alarmed outage must be silent: %+v", ev)
+	}
+	f.feed("k", time.Minute, checks.Down)
+	f.feed("p", time.Minute, checks.Up)
+	f.feed("k", time.Minute, checks.Down)
+	if ev := f.last(); ev.Token != "k" || ev.Kind != EventDown || ev.From != StateDependent || ev.Incident == 0 {
+		t.Fatalf("dependent -> down must alarm: %+v", ev)
+	}
+	f.feed("k", time.Minute, checks.Up)
+	if ev := f.last(); ev.Token != "k" || ev.Kind != EventUp || f.st.open() != 0 {
+		t.Fatalf("up after alarmed outage: %+v open %d", ev, f.st.open())
+	}
+}
+
+// Wartung: Ausfall im Fenster still, dauert er danach an, wird er gemeldet (dieselbe Stoerung); eine Erholung im
+// Fenster nach einem gemeldeten Ausfall wird gemeldet, eine nach einem stillen nicht.
+func TestMaintenanceEndAlarms(t *testing.T) {
+	f := newFeeder(t, Options{}, httpCheck("w", 0, 1))
+	f.feed("w", 0, checks.Up)
+	f.st.maintenance = true
+	f.feed("w", time.Minute, checks.Down)
+	f.feed("w", time.Minute, checks.Down)
+	if len(f.n.loud()) != 0 {
+		t.Fatalf("silent in maintenance: %+v", f.n.loud())
+	}
+	f.st.maintenance = false
+	f.feed("w", time.Minute, checks.Down)
+	if ev := f.last(); ev.Kind != EventDown || ev.Maintenance || ev.Incident != 1 {
+		t.Fatalf("still down after the window must alarm: %+v", ev)
+	}
+	f.feed("w", time.Minute, checks.Down)
+	if len(f.n.loud()) != 1 || f.st.nextID != 1 {
+		t.Fatalf("alarm once, one incident: %+v %d", f.n.loud(), f.st.nextID)
+	}
+	f.st.maintenance = true
+	f.feed("w", time.Minute, checks.Up)
+	if ev := f.last(); ev.Kind != EventUp || !ev.Maintenance || f.st.open() != 0 {
+		t.Fatalf("recovery after an alarmed outage must be announced: %+v", ev)
+	}
+	f.feed("w", time.Minute, checks.Down)
+	f.feed("w", time.Minute, checks.Up)
+	f.st.maintenance = false
+	f.feed("w", time.Minute, checks.Up)
+	if n := len(f.n.loud()); n != 2 {
+		t.Fatalf("outage inside the window must stay silent: %+v", f.n.loud())
+	}
+}
+
+// Pause/Fortsetzen und ein Ersetzen waehrend der Stoerung: keine zweite Stoerung, das alte Objekt wertet nicht mehr aus.
+func TestIncidentSurvivesUpsert(t *testing.T) {
+	c := httpCheck("u", 0, 1)
+	f := newFeeder(t, Options{}, c)
+	f.feed("u", 0, checks.Down)
+	f.s.mu.RLock()
+	old := f.s.entries["u"]
+	f.s.mu.RUnlock()
+	c.Paused = true
+	f.s.Upsert(c, nil)
+	c.Paused = false
+	f.s.Upsert(c, nil)
+	if f.s.record(context.Background(), old, Measurement{Token: "u", Time: f.now, Status: checks.Down}) {
+		t.Fatal("replaced entry must not record")
+	}
+	f.feed("u", time.Minute, checks.Down)
+	if f.st.nextID != 1 || f.st.open() != 1 {
+		t.Fatalf("incidents %d open %d", f.st.nextID, f.st.open())
+	}
+	f.feed("u", time.Minute, checks.Up)
+	if f.st.open() != 0 {
+		t.Fatal("first up after resume must close the incident")
+	}
+}
+
+// Schliessen schlaegt fehl: ID bleibt und der naechste Messpunkt schliesst.
+func TestCloseIncidentRetry(t *testing.T) {
+	f := newFeeder(t, Options{}, httpCheck("r", 0, 1))
+	f.feed("r", 0, checks.Down)
+	f.st.mu.Lock()
+	f.st.failClose = true
+	f.st.mu.Unlock()
+	f.feed("r", time.Minute, checks.Up)
+	if rt, _ := f.s.Runtime("r"); rt.Incident == 0 || f.st.open() != 1 {
+		t.Fatalf("incident id must be kept: %+v", rt)
+	}
+	f.st.mu.Lock()
+	f.st.failClose = false
+	f.st.mu.Unlock()
+	f.feed("r", time.Minute, checks.Up)
+	if rt, _ := f.s.Runtime("r"); rt.Incident != 0 || f.st.open() != 0 {
+		t.Fatalf("retry must close: %+v", rt)
+	}
+}
+
+// Push mit abgebrochener Anfrage: Stoerung und Alarm trotzdem.
+func TestPushIgnoresCancelledRequest(t *testing.T) {
+	c := Check{Token: "pc", Name: "pc", Def: checks.Definition{Token: "pc", Type: checks.TypePush}, Stabilize: 1}
+	f := newFeeder(t, Options{}, c)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if !f.s.Push(ctx, "pc", checks.Down, "", nil) {
+		t.Fatal("push")
+	}
+	if ev := f.last(); ev.Kind != EventDown || ev.Incident == 0 || f.st.open() != 1 {
+		t.Fatalf("push down with cancelled context: %+v", ev)
+	}
 }

@@ -114,6 +114,8 @@ type Store struct {
 	OnAnyChange func(ctx context.Context, entity, id, op string)
 
 	OnStatusChange func() // Statusseiten geaendert (zwischengespeicherte Ansichten verwerfen)
+	// Location liefert die Zeitzone der Node fuer wiederkehrende Wartungsfenster (nil = Zeitzone des Containers)
+	Location func() *time.Location
 }
 
 type remoteKey struct{}
@@ -404,12 +406,23 @@ func (s *Store) SaveRuntime(ctx context.Context, token string, rt scheduler.Runt
 	return err
 }
 
+// OpenIncident legt eine Stoerung an; ist fuer den Check schon eine offen, wird sie weitergefuehrt (nie zwei offene).
 func (s *Store) OpenIncident(ctx context.Context, token string, at time.Time, reason checks.Reason, message string) (int64, error) {
+	if id := s.openIncidentID(ctx, token); id != 0 {
+		return id, nil
+	}
 	res, err := s.w.ExecContext(ctx, `INSERT INTO hc_incidents (token, started_at, reason, message) VALUES (?,?,?,?)`, token, ft(at), string(reason), message)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+// openIncidentID liefert die offene Stoerung eines Checks (0 = keine).
+func (s *Store) openIncidentID(ctx context.Context, token string) int64 {
+	var id int64
+	_ = s.w.QueryRowContext(ctx, `SELECT id FROM hc_incidents WHERE token = ? AND ended_at = '' ORDER BY id DESC LIMIT 1`, token).Scan(&id)
+	return id
 }
 
 func (s *Store) CloseIncident(ctx context.Context, id int64, at time.Time) error {
@@ -818,7 +831,9 @@ func (s *Store) rawRetention() time.Duration {
 // Stundenwerte aelter als ihre Aufbewahrung (Standard ein Jahr) loeschen.
 // Idempotent, laeuft stuendlich.
 func (s *Store) Aggregate(ctx context.Context, now time.Time) error {
-	rawCut := ft(now.Add(-s.rawRetention()))
+	// Rohpunkte nur tageweise (UTC) loeschen: Tages- und Stundenwerte entstehen so immer aus vollstaendigen
+	// Tagen/Stunden und werden nicht von einem schrumpfenden Rest ueberschrieben
+	rawCut := ft(now.Add(-s.rawRetention()).UTC().Truncate(24 * time.Hour))
 	s.mu.RLock()
 	hourlyRet := s.hourlyRet
 	s.mu.RUnlock()
@@ -885,8 +900,11 @@ type Maintenance struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-// Covers sagt, ob das Fenster zum Zeitpunkt t den Check betrifft.
-func (m Maintenance) Covers(token string, t time.Time) bool {
+// Covers sagt, ob das Fenster zum Zeitpunkt t den Check betrifft (Wiederholung nach UTC).
+func (m Maintenance) Covers(token string, t time.Time) bool { return m.CoversIn(token, t, time.UTC) }
+
+// CoversIn wie Covers, Wiederholungen nach der Wanduhr in loc (bleibt nach der Zeitumstellung zur selben Uhrzeit).
+func (m Maintenance) CoversIn(token string, t time.Time, loc *time.Location) bool {
 	if !m.Active || !m.EndAt.After(m.StartAt) {
 		return false
 	}
@@ -906,25 +924,34 @@ func (m Maintenance) Covers(token string, t time.Time) bool {
 		return false
 	}
 	dur := m.EndAt.Sub(m.StartAt)
+	if loc == nil {
+		loc = time.UTC
+	}
 	switch m.Repeat {
 	case "daily", "weekly":
-		step := 24 * time.Hour
-		if m.Repeat == "weekly" {
-			step = 7 * 24 * time.Hour
-		}
+		days := maintRepeatDays(m.Repeat)
 		if t.Before(m.StartAt) {
 			return false
 		}
-		k := t.Sub(m.StartAt) / step
-		start := m.StartAt.Add(k * step)
-		return !t.Before(start) && t.Before(start.Add(dur))
+		// feste Schritte als Naeherung; die Zeitumstellung verschiebt hoechstens um eine Stunde, daher Nachbarn pruefen
+		k := int(t.Sub(m.StartAt) / (time.Duration(days) * 24 * time.Hour))
+		for _, n := range []int{k + 1, k, k - 1} {
+			if n < 0 {
+				continue
+			}
+			start := m.StartAt.In(loc).AddDate(0, 0, n*days)
+			if !t.Before(start) && t.Before(start.Add(dur)) {
+				return true
+			}
+		}
+		return false
 	case "monthly":
 		if t.Before(m.StartAt) {
 			return false
 		}
 		// immer vom Original rechnen, damit der 31. nicht nach einem kurzen Monat verrutscht
 		for k := 0; k < 1200; k++ {
-			start := m.StartAt.AddDate(0, k, 0)
+			start := m.StartAt.In(loc).AddDate(0, k, 0)
 			if start.After(t) {
 				return false
 			}
@@ -936,6 +963,14 @@ func (m Maintenance) Covers(token string, t time.Time) bool {
 	default:
 		return !t.Before(m.StartAt) && t.Before(m.EndAt)
 	}
+}
+
+// maintRepeatDays: Tage zwischen zwei Terminen (daily 1, weekly 7).
+func maintRepeatDays(repeat string) int {
+	if repeat == "weekly" {
+		return 7
+	}
+	return 1
 }
 
 func (s *Store) MaintenanceList(ctx context.Context) ([]Maintenance, error) {
@@ -1036,12 +1071,23 @@ func (s *Store) reloadMaintenance(ctx context.Context) {
 	s.mu.Unlock()
 }
 
+// location: Zeitzone fuer wiederkehrende Wartungsfenster (Zeitzone der Node).
+func (s *Store) location() *time.Location {
+	if s.Location != nil {
+		if loc := s.Location(); loc != nil {
+			return loc
+		}
+	}
+	return time.Local
+}
+
 // InMaintenance prueft gegen den Cache der Wartungsfenster.
 func (s *Store) InMaintenance(_ context.Context, token string, at time.Time) bool {
+	loc := s.location()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for _, m := range s.maint {
-		if m.Covers(token, at) {
+		if m.CoversIn(token, at, loc) {
 			return true
 		}
 	}

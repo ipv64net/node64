@@ -122,12 +122,40 @@ func (c *icmpChecker) ping(ctx context.Context, ip net.IP, count int, total time
 	pinger.SetPrivileged(privileged)
 	pinger.Count = count
 	pinger.Interval = 300 * time.Millisecond
-	pinger.Timeout = total
+	pinger.Timeout = pingTimeout(ctx, total)
 	pinger.Size = 56
 	if err := pinger.RunWithContext(ctx); err != nil {
+		// Laeuft der Check-Kontext ab, nachdem Pakete gesendet wurden, gilt die
+		// Statistik trotzdem (verlorene Antworten zaehlen als Verlust, nicht als Timeout)
+		stats := pinger.Statistics()
+		if errors.Is(err, context.DeadlineExceeded) && stats != nil && stats.PacketsSent > 0 {
+			return stats, nil
+		}
 		return nil, err
 	}
 	return pinger.Statistics(), nil
+}
+
+// pingTimeout endet etwas vor dem Check-Kontext, damit pro-bing regulaer mit
+// Statistik beendet statt mit DeadlineExceeded abzubrechen.
+func pingTimeout(ctx context.Context, total time.Duration) time.Duration {
+	margin := total / 10
+	if margin < 100*time.Millisecond {
+		margin = 100 * time.Millisecond
+	}
+	if margin > time.Second {
+		margin = time.Second
+	}
+	t := total - margin
+	if dl, ok := ctx.Deadline(); ok {
+		if until := time.Until(dl) - margin; until < t {
+			t = until
+		}
+	}
+	if t < 100*time.Millisecond {
+		t = 100 * time.Millisecond
+	}
+	return t
 }
 
 func permissionDenied(err error) bool {

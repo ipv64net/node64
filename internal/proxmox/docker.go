@@ -87,16 +87,32 @@ func ValidDockerHost(h string) bool {
 	return false
 }
 
+// unixTransports haelt je Socket einen Transport, damit wiederholte Aufrufe (Abfrage-Schleifen)
+// keine Leerlauf-Verbindungen und Goroutinen anhaeufen.
+var (
+	unixTransportsMu sync.Mutex
+	unixTransports   = map[string]*http.Transport{}
+)
+
+func unixTransport(sock string) *http.Transport {
+	unixTransportsMu.Lock()
+	defer unixTransportsMu.Unlock()
+	if tr, ok := unixTransports[sock]; ok {
+		return tr
+	}
+	tr := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "unix", sock)
+	}, MaxIdleConnsPerHost: dockerParallel, IdleConnTimeout: 90 * time.Second}
+	unixTransports[sock] = tr
+	return tr
+}
+
 // dockerHTTP baut HTTP-Client (ohne Gesamt-Zeitlimit, das setzen die Anfragen) und Basis-URL fuer einen Host.
 func dockerHTTP(host string) (*http.Client, string, error) {
 	switch {
 	case strings.HasPrefix(host, "unix://"):
-		sock := strings.TrimPrefix(host, "unix://")
-		tr := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", sock)
-		}, MaxIdleConnsPerHost: dockerParallel}
-		return &http.Client{Transport: tr}, "http://docker", nil
+		return &http.Client{Transport: unixTransport(strings.TrimPrefix(host, "unix://"))}, "http://docker", nil
 	case strings.HasPrefix(host, "tcp://"):
 		return &http.Client{}, "http://" + strings.TrimPrefix(host, "tcp://"), nil
 	case strings.HasPrefix(host, "http://"), strings.HasPrefix(host, "https://"):
