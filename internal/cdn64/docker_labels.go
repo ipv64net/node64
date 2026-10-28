@@ -45,7 +45,8 @@ const (
 	dockerErrDup       = "cdn64.docker.err.dup"        // Name schon bei einem anderen Container ({name} = Container)
 	dockerErrRule      = "cdn64.docker.err.rule"       // Traefik-Regel nicht unterstuetzt (nur Host(...)) ({name} = Router)
 	dockerErrService   = "cdn64.docker.err.service"    // Traefik-Router ohne eindeutigen Service/Port ({name} = Router)
-	dockerErrAccess    = "cdn64.docker.err.access"     // Zugriffsliste aus dem Label gibt es nicht ({name} = Name); Host kommt trotzdem
+	dockerErrAccess    = "cdn64.docker.err.access"     // Zugriffsliste aus dem Label gibt es nicht ({name} = Name); neuer Host ausgeschaltet
+	dockerErrMW        = "cdn64.docker.err.middleware" // Traefik-Middleware nicht uebernommen ({name} = Namen); neuer Host ausgeschaltet
 )
 
 // dockerSpec ist ein Proxy-Host aus den Labels eines Containers.
@@ -57,6 +58,9 @@ type dockerSpec struct {
 	Port    int      // 0 = aus den freigegebenen Ports des Containers bestimmen
 	Network string   // "" = automatisch
 	Access  *dockerAccess
+	// Traefik-Middlewares, die PROXY64 nicht selbst abbildet ("name@provider"): eine Zugriffsliste gleichen Namens
+	// wird zugewiesen; gibt es keine, kommt ein neuer Host ausgeschaltet (Schutz koennte fehlen).
+	Middlewares []string
 }
 
 // dockerAccess: Zugriffsliste aus den Labels (node64.proxy.access bzw. Traefik-Middleware mit forwardAuth).

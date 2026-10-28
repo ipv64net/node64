@@ -1,6 +1,8 @@
 package cdn64
 
 import (
+	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -8,9 +10,11 @@ import (
 
 // Traefik-Labels mitlesen (Phase D3, docs/PLAN-PROXY64-DOCKER.md Abschnitt 7). Ausgewertet werden nur
 // traefik.enable, traefik.http.routers.<r>.rule (nur Host(...)) und .service, traefik.http.services.<s>.loadbalancer
-// .server.port/.scheme und traefik.docker.network, dazu .middlewares mit forwardAuth (wird zur Zugriffsliste, Plan
-// docs/PLAN-PROXY64-FORWARDAUTH.md). Andere Middlewares, Entrypoints, TLS/Certresolver, Prioritaet sowie
-// TCP/UDP-Router bleiben unbeachtet; Router fuer den Rueckweg von authentik (/outpost.goauthentik.io/) braucht es nicht. Schluessel sind wie bei Traefik unabhaengig von Gross-/Kleinschreibung.
+// .server.port/.scheme und traefik.docker.network, dazu .middlewares (traefikMiddlewares: forwardAuth wird zur
+// Zugriffsliste, harmlose Arten wie headers bleiben unbeachtet, alle anderen verlangen eine Zugriffsliste gleichen
+// Namens, sonst kommt ein neuer Host ausgeschaltet; Plan docs/PLAN-PROXY64-FORWARDAUTH.md). Entrypoints,
+// TLS/Certresolver, Prioritaet sowie TCP/UDP-Router bleiben unbeachtet; Router fuer den Rueckweg von authentik
+// (/outpost.goauthentik.io/) braucht es nicht. Schluessel sind wie bei Traefik unabhaengig von Gross-/Kleinschreibung.
 
 const (
 	traefikRouterPrefix  = "traefik.http.routers."
@@ -44,7 +48,7 @@ func traefikSpecs(labels map[string]string) ([]dockerSpec, []dockerProblem) {
 	network := l["traefik.docker.network"]
 	var specs []dockerSpec
 	var probs []dockerProblem
-	seen := map[string]bool{} // Namensmenge + Ziel
+	seen := map[string]int{} // Namensmenge + Ziel -> Index in specs
 	for _, r := range routers {
 		if strings.Contains(l[traefikRouterPrefix+r+".rule"], "/outpost.goauthentik.io") { // Rueckweg macht die Zugriffsliste
 			continue
@@ -64,7 +68,8 @@ func traefikSpecs(labels map[string]string) ([]dockerSpec, []dockerProblem) {
 			probs = append(probs, dockerProblem{Router: r, Key: dockerErrService, Name: r})
 			continue
 		}
-		s := dockerSpec{Source: dockerSrcTraefik, Router: r, Names: names, Scheme: "http", Network: network, Access: traefikAccess(l, r)}
+		s := dockerSpec{Source: dockerSrcTraefik, Router: r, Names: names, Scheme: "http", Network: network}
+		s.Access, s.Middlewares = traefikMiddlewares(l, r)
 		if svc != "" {
 			p := traefikServicePrefix + svc + ".loadbalancer.server."
 			if v := l[p+"port"]; v != "" {
@@ -84,52 +89,79 @@ func traefikSpecs(labels map[string]string) ([]dockerSpec, []dockerProblem) {
 			}
 		}
 		key := strings.Join(nameSet(names), ",") + "|" + svc + "|" + s.Scheme + "|" + strconv.Itoa(s.Port)
-		if seen[key] {
+		if i, ok := seen[key]; ok {
+			// gleicher Host ueber mehrere Router (z. B. web mit Umleitung, websecure ohne): es gilt der mit den wenigsten
+			// nicht uebernommenen Middlewares - Traefik liefert den Dienst ueber diesen Router ja auch so aus
+			if len(s.Middlewares) < len(specs[i].Middlewares) {
+				specs[i].Access, specs[i].Middlewares = s.Access, s.Middlewares
+			}
 			continue
 		}
-		seen[key] = true
+		seen[key] = len(specs)
 		specs = append(specs, s)
 	}
 	return specs, probs
 }
 
-// traefikAccess: erste Middleware des Routers mit forwardAuth (Labels am Container) wird die Zugriffsliste
-// "Traefik: <name>"; eine Middleware aus einer Datei (name@file) bzw. ohne Labels verweist auf eine Liste mit diesem
-// Namen (z. B. "authentik"), die es in PROXY64 geben muss. Andere Middlewares bleiben unbeachtet.
-func traefikAccess(l map[string]string, router string) *dockerAccess {
-	var named *dockerAccess
+// traefikHarmless: Middleware-Arten ohne Zugriffsschutz (aendern nur Header, Pfade, Komprimierung, Takt ...).
+var traefikHarmless = map[string]bool{"headers": true, "redirectscheme": true, "redirectregex": true, "compress": true, "stripprefix": true,
+	"stripprefixregex": true, "addprefix": true, "replacepath": true, "replacepathregex": true, "ratelimit": true, "inflightreq": true,
+	"retry": true, "buffering": true, "circuitbreaker": true, "errors": true, "contenttype": true}
+
+// traefikMiddlewares: die erste Middleware des Routers mit forwardAuth in den Labels wird die Zugriffsliste
+// "Traefik: <name> (<host:port des Dienstes>)" (andere Adresse = andere Liste). Harmlose Arten (traefikHarmless)
+// bleiben unbeachtet; alle anderen (name@file, basicAuth, ipAllowList, chain, unbekannt) kommen nach rest.
+func traefikMiddlewares(l map[string]string, router string) (access *dockerAccess, rest []string) {
 	for _, mw := range strings.Split(l[traefikRouterPrefix+router+".middlewares"], ",") {
 		mw = strings.TrimSpace(mw)
-		name, provider, _ := strings.Cut(mw, "@")
+		name, provider, _ := strings.Cut(strings.ToLower(mw), "@")
 		if name == "" {
 			continue
 		}
-		p := "traefik.http.middlewares." + name + ".forwardauth."
-		if addr := l[p+"address"]; addr != "" && (provider == "" || provider == "docker") {
+		local := provider == "" || provider == "docker"
+		p := "traefik.http.middlewares." + name + "."
+		if addr := l[p+"forwardauth.address"]; addr != "" && local && access == nil {
 			var hs []string
-			for _, h := range strings.Split(l[p+"authresponseheaders"], ",") {
+			for _, h := range strings.Split(l[p+"forwardauth.authresponseheaders"], ",") {
 				if h = strings.TrimSpace(h); h != "" {
 					hs = append(hs, h)
 				}
 			}
-			return &dockerAccess{Name: "Traefik: " + name, Auth: fwdKindOf(addr), Forward: &ForwardAuth{Address: addr, Headers: hs}}
+			host := addr
+			if u, err := url.Parse(addr); err == nil && u.Host != "" {
+				host = u.Host
+			}
+			access = &dockerAccess{Name: "Traefik: " + name + " (" + host + ")", Auth: fwdKindOf(addr), Forward: &ForwardAuth{Address: addr, Headers: hs}}
+			continue
 		}
-		if named == nil && provider != "" && provider != "docker" && fwdName(name) {
-			named = &dockerAccess{Name: name}
+		if kinds := traefikKinds(l, p); local && kinds != nil && allHarmless(kinds) {
+			continue
 		}
+		rest = append(rest, mw)
 	}
-	return named
+	return access, rest
 }
 
-// fwdName: Middleware-Name, der nach einem Anmeldedienst klingt (nur solche verweisen auf eine Zugriffsliste).
-func fwdName(n string) bool {
-	n = strings.ToLower(n)
-	for _, k := range []string{"auth", "sso", "oauth", "login"} {
-		if strings.Contains(n, k) {
-			return true
+// traefikKinds: Arten einer in den Labels definierten Middleware (nil = nicht in den Labels).
+func traefikKinds(l map[string]string, prefix string) []string {
+	var out []string
+	for k := range l {
+		if r, ok := strings.CutPrefix(k, prefix); ok {
+			if kind, _, _ := strings.Cut(r, "."); kind != "" && !slices.Contains(out, kind) {
+				out = append(out, kind)
+			}
 		}
 	}
-	return false
+	return out
+}
+
+func allHarmless(kinds []string) bool {
+	for _, k := range kinds {
+		if !traefikHarmless[k] {
+			return false
+		}
+	}
+	return true
 }
 
 // fwdKindOf: Vorlage nach der Adresse des Dienstes.

@@ -97,3 +97,29 @@ func TestExportImportACLsSettingsCerts(t *testing.T) {
 		t.Fatalf("second import: n=%d err=%v", n, err)
 	}
 }
+
+// Import: Docker-Kennung der Quelle faellt weg, hier wird es ein normaler Host (sonst loeschte der Abgleich ihn).
+func TestImportDropsDockerOrigin(t *testing.T) {
+	ctx := context.Background()
+	src := newEnv(t)
+	src.enable(t)
+	h := newHost()
+	h.Names, h.TargetHost, h.TargetPort, h.CertID, h.DockerContainer = []string{"imp.test"}, "127.0.0.1", 80, CertNone, "web"
+	if err := src.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	exp, err := src.m.Export(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(exp)
+	dst := newEnv(t)
+	dst.enable(t)
+	if _, err := dst.m.Import(ctx, raw); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := dst.m.hosts(ctx)
+	if len(list) != 1 || list[0].DockerContainer != "" || list[0].DockerRouter != "" {
+		t.Fatalf("imported: %+v", list)
+	}
+}

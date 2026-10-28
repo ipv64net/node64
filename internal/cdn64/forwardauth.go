@@ -136,6 +136,7 @@ func newFwdAuth(kind string, cfg ForwardAuth) *fwdAuth {
 				pr.SetURL(base)
 				pr.Out.Host = pr.In.Host // der Dienst baut seine Weiterleitungen mit dem Namen des Hosts
 				pr.SetXForwarded()
+				pr.Out.Header.Set("X-Forwarded-Proto", fwdScheme(pr.In))
 				if ip := clientOf(pr.In); ip.IsValid() {
 					pr.Out.Header.Set("X-Forwarded-For", ip.String())
 				}
@@ -173,12 +174,8 @@ func (f *fwdAuth) check(w http.ResponseWriter, r *http.Request) fwdResult {
 			req.Header[k] = vs
 		}
 	}
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	} else if p := peerIP(r); p.IsValid() && clientOf(r) != p && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		scheme = "https" // TLS endet schon beim vertrauenswuerdigen Proxy davor (z. B. Cloudflare); Authelia verlangt https
-	}
+	req.Header.Del("Accept-Encoding") // Antwort unkomprimiert (Go entpackt selbst), sonst zerschnitte die Grenze den Datenstrom
+	scheme := fwdScheme(r)
 	req.Header.Set("X-Forwarded-Method", r.Method)
 	req.Header.Set("X-Forwarded-Proto", scheme)
 	req.Header.Set("X-Forwarded-Host", r.Host)
@@ -209,6 +206,18 @@ func (f *fwdAuth) check(w http.ResponseWriter, r *http.Request) fwdResult {
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, io.LimitReader(resp.Body, fwdMaxBody))
 	return fwdResult{}
+}
+
+// fwdScheme: Schema des Besuchers; endet TLS schon beim vertrauenswuerdigen Proxy davor (z. B. Cloudflare), dessen
+// X-Forwarded-Proto (Authelia und authentik verlangen https).
+func fwdScheme(r *http.Request) string {
+	if r.TLS != nil {
+		return "https"
+	}
+	if p := peerIP(r); p.IsValid() && clientOf(r) != p && strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
+		return "https"
+	}
+	return "http"
 }
 
 // first liefert den ersten gesetzten Header aus names.

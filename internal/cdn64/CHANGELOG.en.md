@@ -1,5 +1,20 @@
 # Changes – PROXY64
 
+## 1.38.2 – 2026-10-28
+
+### Fixed
+- Docker/Traefik labels: if the labels ask for protection PROXY64 cannot map (access list missing, middleware from a
+  file, basicAuth, ipAllowList, chain …), a new host is created switched off instead of unprotected online – with a
+  hint in the Docker tab. An access list of the same name is assigned. Harmless middlewares (headers, compress,
+  redirectScheme …) are ignored; with several routers for the same host the one with the fewest unmapped middlewares
+  applies.
+- The access list from a forwardAuth middleware is now called "Traefik: <name> (<service>)": another address gives a
+  separate list, changed response headers are updated.
+- Forward auth: the callback to the auth service honours IP rules and the ban after failed attempts and reports https
+  behind a trusted proxy (e.g. Cloudflare). Responses of the service arrive uncompressed.
+- A new API key is shown directly on the page instead of via the notice (which was stored in a cookie).
+- Import: hosts lose the Docker origin of the source and become normal hosts.
+
 ## 1.38.1 – 2026-10-28
 
 ### Changed

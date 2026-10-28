@@ -2,6 +2,7 @@ package cdn64
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -64,7 +65,7 @@ func TestTraefikSpecs(t *testing.T) {
 			"traefik.http.routers.whoami.tls.certresolver":          "le",
 			"traefik.http.routers.whoami.middlewares":               "auth@file",
 			"traefik.http.services.whoami.loadbalancer.server.port": "8080",
-		}, []dockerSpec{withAccess(spec("whoami", "http", 8080, "", "whoami.example.de"), "auth")}, nil}, // auth@file: Zugriffsliste "auth"
+		}, []dockerSpec{withMW(spec("whoami", "http", 8080, "", "whoami.example.de"), "auth@file")}, nil}, // auth@file: Zugriffsliste "auth" noetig
 		{"without enable and service", map[string]string{
 			"traefik.http.routers.app.rule": "Host(`app.example.de`)",
 		}, []dockerSpec{spec("app", "http", 0, "", "app.example.de")}, nil},
@@ -167,7 +168,30 @@ func TestTraefikSpecs(t *testing.T) {
 	}
 }
 
-func withAccess(s dockerSpec, list string) dockerSpec {
-	s.Access = &dockerAccess{Name: list}
+func withMW(s dockerSpec, mw ...string) dockerSpec {
+	s.Middlewares = mw
 	return s
+}
+
+// Middlewares: forwardAuth in den Labels -> Liste mit Adresse im Namen, harmlose Arten unbeachtet, alles andere
+// (Datei, basicAuth, ipAllowList, nicht definiert) muss als Zugriffsliste kommen.
+func TestTraefikMiddlewares(t *testing.T) {
+	l := map[string]string{
+		"traefik.http.routers.app.middlewares":                 "hdr@docker, fa, basic, lan@docker, chain-x@file, gone",
+		"traefik.http.middlewares.hdr.headers.stsseconds":      "3600",
+		"traefik.http.middlewares.hdr.compress":                "true",
+		"traefik.http.middlewares.fa.forwardauth.address":      "http://authelia:9091/api/authz/forward-auth",
+		"traefik.http.middlewares.basic.basicauth.users":       "x:y",
+		"traefik.http.middlewares.lan.ipallowlist.sourcerange": "192.168.0.0/16",
+	}
+	a, rest := traefikMiddlewares(l, "app")
+	if a == nil || a.Name != "Traefik: fa (authelia:9091)" || a.Auth != AuthAuthelia || a.Forward.Address != "http://authelia:9091/api/authz/forward-auth" {
+		t.Fatalf("access: %+v", a)
+	}
+	if !slices.Equal(rest, []string{"basic", "lan@docker", "chain-x@file", "gone"}) {
+		t.Fatalf("rest: %v", rest)
+	}
+	if a, rest := traefikMiddlewares(map[string]string{"traefik.http.routers.app.middlewares": "hdr", "traefik.http.middlewares.hdr.headers.x": "1"}, "app"); a != nil || rest != nil {
+		t.Fatalf("harmless only: %+v %v", a, rest)
+	}
 }

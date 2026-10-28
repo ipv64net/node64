@@ -272,16 +272,21 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 		for _, n := range g.fwd.cfg.Headers {
 			r.Header.Del(n)
 		}
-		if g.fwd.isCallback(r.URL.Path) { // Rueckweg nach der Anmeldung gehoert dem Dienst
-			g.fwd.callback.ServeHTTP(w, r)
-			return false
-		}
 	}
 	ip := clientOf(r)
 	if m.authFail.blocked(ip) {
 		setReject(r, rejACL)
 		w.Header().Set("Retry-After", strconv.Itoa(int(authBlockFor.Seconds())))
 		page(w, http.StatusTooManyRequests)
+		return false
+	}
+	if g.fwd != nil && g.fwd.isCallback(r.URL.Path) { // Rueckweg nach der Anmeldung gehoert dem Dienst (IP-Regeln gelten)
+		if len(g.list.Rules) > 0 && !g.list.SatisfyAny && !g.list.ipAllowed(ip) {
+			setReject(r, rejACL)
+			page(w, http.StatusForbidden)
+			return false
+		}
+		g.fwd.callback.ServeHTTP(w, r)
 		return false
 	}
 	login := g.list.LoginPage && len(g.list.Users) > 0 && g.fwd == nil

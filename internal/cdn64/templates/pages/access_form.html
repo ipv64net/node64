@@ -3,6 +3,7 @@
 {{$a := $d.A}}
 <h1 class="h4 mb-3"><i class="bi bi-diagram-3 text-primary me-1"></i> {{if $d.New}}{{.T "cdn64.acl.new"}}{{else}}{{$a.Name}}{{end}}{{$.Doc "cdn64#zugriffslisten"}}</h1>
 {{if $d.Error}}<div class="alert alert-danger small">{{$d.Error}}</div>{{end}}
+{{if $d.NewKey}}<div class="alert alert-warning small" data-new-key>{{.T "cdn64.acl.key_created_page"}}<div class="font-monospace user-select-all mt-1 text-break">{{$d.NewKey}}</div></div>{{end}}
 <div class="row g-3">
 	<div class="col-xl-8">
 		<form method="post" action="{{if $d.New}}/cdn64/access{{else}}/cdn64/access/{{$a.ID}}{{end}}" class="card">
