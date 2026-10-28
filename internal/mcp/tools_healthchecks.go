@@ -82,7 +82,8 @@ func (c *call) checkNames() map[string][2]string {
 	return out
 }
 
-// findCheck sucht einen Check nach Kurz-Id (Anfang des Tokens, mind. 6 Zeichen) oder genauem Namen.
+// findCheck sucht einen Check nach Kurz-Id (genau die Id aus list_checks), ganzem Token oder genauem Namen. Kein
+// beliebig langer Token-Anfang: sonst liesse sich der geheime Push-Token Zeichen fuer Zeichen erraten.
 func (c *call) findCheck(ref string) (obj, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
@@ -95,7 +96,7 @@ func (c *call) findCheck(ref string) (obj, error) {
 	var hits []obj
 	for _, e := range list {
 		m := asObj(e)
-		if len(ref) >= 6 && strings.HasPrefix(str(m, "token"), ref) {
+		if tok := str(m, "token"); tok != "" && (ref == tok || ref == shortID(tok)) {
 			hits = append(hits, m)
 		}
 	}

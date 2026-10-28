@@ -4,6 +4,13 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Sicherheit: Ergebnisse eines großen Code-Reviews behoben – u. a. Location-Zugriffslisten in PROXY64, Hosts über
+  CDN64 nur noch unter dem freigegebenen Namen, Abstürze durch präparierte Pakete (Honeypot64 auf arm/v7, DNS64),
+  Anmeldung (Speicher, Weiterleitung, X-Forwarded-For, CSRF), Backups ohne Programmdateien.
+- Healthchecks: Störungen, Wartungsfenster, abhängige Checks und Flattern melden zuverlässig; Statusseiten beachten
+  „Verfügbarkeit/Verlauf zeigen“ auch in JSON.
+- Sync und Cluster: große Datenmengen werden geteilt, der Abgleich bleibt nicht mehr hängen.
+- Selbst-Update und Zertifikate: sicherer Rückfall, Mindestversion gegen das Image, öffentliche Zertifikate vor eigener CA.
 - PROXY64: Docker/Traefik-Labels mit nicht abbildbarem Schutz ergeben einen ausgeschalteten Host statt eines
   ungeschützten; Korrekturen an Forward-Auth und API-Keys.
 - DynDNS: Sicherheitsabfrage, wenn mehrere Namen aus dem Account auf einmal übernommen werden.

@@ -26,9 +26,18 @@ func TestApplyRestoreArchive(t *testing.T) {
 	write(filepath.Join(src, "node64.db"), "neu")
 	write(filepath.Join(src, "secret.key"), "neuer-schluessel")
 	write(filepath.Join(src, "dns64", "allowlist.txt"), "example.org")
+	write(filepath.Join(dir, "bin", "state.json"), "eigener-stand")
+	write(filepath.Join(src, "bin", "state.json"), `{"current":"9.9.9"}`)
+	write(filepath.Join(src, "bin", "node64-9.9.9"), "fremdes-programm")
 
 	if err := applyRestore(cfg, log); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "bin", "node64-9.9.9")); err == nil {
+		t.Fatal("program from the archive placed under bin/")
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "bin", "state.json")); string(b) != "eigener-stand" {
+		t.Fatalf("bin/state.json replaced from the archive: %q", b)
 	}
 	for p, want := range map[string]string{"node64.db": "neu", "secret.key": "neuer-schluessel", "dns64/allowlist.txt": "example.org"} {
 		if b, _ := os.ReadFile(filepath.Join(dir, p)); string(b) != want {

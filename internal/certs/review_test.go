@@ -199,3 +199,75 @@ func TestIssueNowAfterClose(t *testing.T) {
 		t.Fatal("issuing after Close must fail")
 	}
 }
+
+// Oeffentlich vertrauenswuerdig vor selbst signiert, auch wenn das selbst signierte laenger gilt.
+func TestMatchPrefersPublicTrust(t *testing.T) {
+	ctx := context.Background()
+	root, rootKey := caCert(t, "Public Root", nil, nil, nil)
+	pool := x509.NewCertPool()
+	pool.AddCert(root)
+	old := trustRoots
+	trustRoots = func() (*x509.CertPool, error) { return pool, nil }
+	t.Cleanup(func() { trustRoots = old })
+	e := newEnv(t, nil)
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	tpl := &x509.Certificate{SerialNumber: big.NewInt(time.Now().UnixNano()), Subject: pkix.Name{CommonName: "web.example.org"}, DNSNames: []string{"web.example.org"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().AddDate(0, 0, 30), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	der, err := x509.CreateCertificate(rand.Reader, tpl, root, &key.PublicKey, rootKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kd, _ := x509.MarshalECPrivateKey(key)
+	pub, err := e.m.Upload(ctx, string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kd})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	selfPEM, selfKey := selfSignedPEM(t, 300, "web.example.org")
+	self, err := e.m.Upload(ctx, selfPEM, selfKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id := e.m.MatchID("web.example.org"); id != pub.ID {
+		t.Fatalf("matched %d, want public %d (self-signed %d)", id, pub.ID, self.ID)
+	}
+}
+
+// Wartet ein Abruf auf die ACME-Sperre, laeuft sein Zeitlimit noch nicht; ein Zeitlimit beim Abruf selbst haelt
+// den Fehler fest, meldet aber nichts und laesst den Status (naechster Lauf versucht es wieder).
+func TestQueuedIssueNotTimedOut(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, nil)
+	_ = e.m.SetAccount(ctx, "", true)
+	e.m.issueTimeout = time.Second
+	e.m.acme.Lock()
+	c, err := e.m.Create(ctx, Request{Names: []string{"q.home.ipv64.de"}, Source: SourceIPv64})
+	if err != nil {
+		e.m.acme.Unlock()
+		t.Fatal(err)
+	}
+	time.Sleep(1500 * time.Millisecond) // laenger als das Zeitlimit in der Warteschlange
+	e.m.acme.Unlock()
+	if got := wait(t, e.m, c.ID); got.Status != StatusValid {
+		t.Fatalf("queued issue: %s %s", got.Status, got.LastError)
+	}
+	e.m.issueTimeout = 200 * time.Millisecond
+	e.m.txtVisible = func(ctx context.Context, _, _, _ string) error { <-ctx.Done(); return ctx.Err() }
+	c2, err := e.m.Create(ctx, Request{Names: []string{"t.home.ipv64.de"}, Source: SourceIPv64})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 200; i++ {
+		got, _ := e.m.Get(ctx, c2.ID)
+		if got.Step == "" && got.LastError != "" {
+			if got.Status != StatusPending || !strings.Contains(got.LastError, "deadline") {
+				t.Fatalf("timeout: %s %s", got.Status, got.LastError)
+			}
+			if k := e.kinds(); len(k) != 0 {
+				t.Fatalf("no alert expected on timeout: %v", k)
+			}
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatal("timeout not recorded")
+}

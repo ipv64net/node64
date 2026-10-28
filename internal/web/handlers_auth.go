@@ -147,7 +147,7 @@ func (s *Server) twoFAEnable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.Store.SetSetting(ctx, key, "")
-	_ = s.Store.DeleteUserSessions(ctx, u.ID, currentSession(r).ID)
+	_ = s.Store.DeleteUserSessions(ctx, u.ID, sessionID(r))
 	s.audit(r, "twofa.enable", u.Username, "")
 	v.Data = twoFAData{Enabled: true, Recovery: codes}
 	v.Flash = &Flash{Kind: "success", Text: v.T("twofa.enabled")}

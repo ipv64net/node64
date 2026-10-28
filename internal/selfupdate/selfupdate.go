@@ -219,9 +219,17 @@ func (st *State) rollback(dataDir, imageVersion string) {
 	}
 	if st.Trial != nil && st.Trial.Backup != "" {
 		db := filepath.Join(dataDir, "node64.db")
-		if err := copyFile(filepath.Join(binDir(dataDir), st.Trial.Backup), db); err == nil {
+		backup := filepath.Join(binDir(dataDir), st.Trial.Backup)
+		if err := copyFile(backup, db); err == nil {
 			_ = os.Remove(db + "-wal")
 			_ = os.Remove(db + "-shm")
+		} else if _, serr := os.Stat(backup); serr == nil {
+			// Sicherung nicht zurueckgespielt: nach backups/ retten, damit cleanup sie nicht loescht
+			keep := filepath.Join(dataDir, "backups", st.Trial.Backup)
+			if os.MkdirAll(filepath.Dir(keep), 0o750) == nil && os.Rename(backup, keep) == nil {
+				backup = keep
+			}
+			fmt.Fprintf(os.Stderr, "node64: self-update rollback could not restore the database (%v), backup kept at %s\n", err, backup)
 		}
 	}
 	st.Current = ""
@@ -237,17 +245,24 @@ func (st *State) rollback(dataDir, imageVersion string) {
 	st.cleanup(dataDir) // fehlgeschlagenes Programm und die zurueckgespielte Sicherung weg
 }
 
-func copyFile(src, dst string) error {
+// copyFile kopiert src atomar nach dst (eigene Zwischendatei, fsync, rename). Die Zwischendatei darf nicht
+// node64.db.restore heissen: die setzt applyRestore beim Start als hochgeladene Datenbank ein.
+func copyFile(src, dst string) (err error) {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
-	tmp := dst + ".restore"
+	tmp := dst + ".rollback.tmp"
 	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o640)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmp) // keine halbe Kopie liegen lassen
+		}
+	}()
 	if _, err := io.Copy(out, in); err != nil {
 		out.Close()
 		return err
@@ -259,7 +274,14 @@ func copyFile(src, dst string) error {
 	if err := out.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp, dst)
+	if err := os.Rename(tmp, dst); err != nil {
+		return err
+	}
+	if d, derr := os.Open(filepath.Dir(dst)); derr == nil { // Umbenennung dauerhaft machen
+		_ = d.Sync()
+		d.Close()
+	}
+	return nil
 }
 
 // cleanup loescht Programme und Sicherungen, die nicht mehr gebraucht werden (behaelt Current und Previous).
@@ -487,11 +509,14 @@ func (u *Updater) Apply(ctx context.Context, m *Manifest) error {
 	u.mu.Unlock()
 	defer func() { u.mu.Lock(); u.busy = false; u.mu.Unlock() }()
 
-	run, _, _ := Running(u.Current)
+	run, _, img := Running(u.Current)
 	if !update.Newer(m.Version, run) {
 		return fmt.Errorf("version %s is not newer than %s", m.Version, run)
 	}
-	if m.MinVersion != "" && update.Newer(m.MinVersion, u.Current) {
+	if img == "" { // Image-Version unbekannt (aelterer Starter): eingebaute Version
+		img = u.Current
+	}
+	if m.MinVersion != "" && update.Newer(m.MinVersion, img) {
 		return fmt.Errorf("image too old: update the container image to %s or newer first", m.MinVersion)
 	}
 	f, ok := m.Files[Arch()]

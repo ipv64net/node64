@@ -45,9 +45,7 @@ func (m *Manager) start(id int64, reason string) error {
 			delete(m.steps, id)
 			m.mu.Unlock()
 		}()
-		ctx, cancel := context.WithTimeout(m.base, 20*time.Minute) // manche Anbieter brauchen Minuten, bis TXT sichtbar ist
-		defer cancel()
-		m.issue(ctx, id, reason)
+		m.issue(m.base, id, reason) // Zeitlimit setzt obtain erst nach der ACME-Sperre (Warten zaehlt nicht)
 	}()
 	return nil
 }
@@ -78,6 +76,15 @@ func (m *Manager) issue(ctx context.Context, id int64, reason string) {
 		msg := notify.RedactSecrets(err.Error()) // DNS-Provider liefern teils Zugangsdaten in Fehlertexten (z. B. URL mit token=)
 		if len(msg) > 500 {
 			msg = msg[:500]
+		}
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			// Zeitlimit: Fehler nur festhalten, Status bleibt; die Erneuerung versucht es beim naechsten Lauf
+			// wieder (nicht erst nach retryAfter) und meldet nichts
+			_, _ = m.w.ExecContext(context.WithoutCancel(ctx), `UPDATE certs SET last_error = ?, last_attempt = ?, updated_at = ? WHERE id = ?`,
+				msg, now, now, id)
+			m.changed(context.WithoutCancel(ctx), ItemCertificates, id)
+			m.log.Warn("certificate not obtained in time, retrying later", "cert", id, "names", c.Title(), "err", msg)
+			return
 		}
 		_, _ = m.w.ExecContext(context.WithoutCancel(ctx), `UPDATE certs SET status = ?, last_error = ?, last_attempt = ?, updated_at = ? WHERE id = ?`,
 			StatusError, msg, now, now, id)
@@ -166,14 +173,18 @@ func (m *Manager) accountKey(ctx context.Context) (crypto.Signer, error) {
 
 // obtain: Auftrag, Pruefungen je Name, Zertifikat.
 func (m *Manager) obtain(ctx context.Context, c *Cert) error {
-	if c.Source == SourceCA { // eigene CA: sofort, nicht hinter einem laufenden ACME-Abruf
+	if c.Source == SourceCA || c.Source == SourceSelf { // eigene CA: sofort, nicht hinter einem laufenden ACME-Abruf
+		ctx, cancel := context.WithTimeout(ctx, m.issueTimeout)
+		defer cancel()
+		if c.Source == SourceSelf {
+			return m.issueSelfSigned(ctx, c)
+		}
 		return m.issueFromCA(ctx, c)
-	}
-	if c.Source == SourceSelf {
-		return m.issueSelfSigned(ctx, c)
 	}
 	m.acme.Lock() // ACME nacheinander: schont die Rate-Limits und die ipv64-API
 	defer m.acme.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, m.issueTimeout) // erst nach der Sperre: wartende Abrufe laufen nicht ab
+	defer cancel()
 	if c.ACMECA == 0 && !m.Account(ctx).TOSAccepted {
 		return ErrTOS
 	}

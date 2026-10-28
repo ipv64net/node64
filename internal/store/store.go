@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -45,6 +46,9 @@ type Store struct {
 	backupDir string
 	log       *slog.Logger
 	backedUp  bool
+
+	newerMu sync.Mutex
+	newer   map[string][]int // Scope -> angewendete, hier unbekannte Migrationen (SchemaNewer)
 }
 
 // Open oeffnet oder erzeugt die Datenbank.
@@ -179,11 +183,14 @@ func (s *Store) Migrate(ctx context.Context, scope string, ms []Migration) error
 	rows.Close()
 
 	var pending []Migration
+	known := 0
 	for _, m := range ms {
 		if !applied[m.Version] {
 			pending = append(pending, m)
 		}
+		known = max(known, m.Version)
 	}
+	s.checkNewer(scope, applied, known)
 	if len(pending) == 0 {
 		return nil
 	}
@@ -206,6 +213,41 @@ func (s *Store) Migrate(ctx context.Context, scope string, ms []Migration) error
 		s.log.Info("migration applied", "scope", scope, "version", m.Version, "name", m.Name)
 	}
 	return nil
+}
+
+// checkNewer merkt Scopes, deren Datenbank Migrationen hat, die dieses Programm nicht kennt (aelteres Programm auf
+// neuerem Schema, z. B. nach einem Rueckfall ohne zurueckgespielte Sicherung). Kein Abbruch: ein Start-Verbot
+// wuerde die Node nach einem Rueckfall unbrauchbar machen; deutliche Warnung im Log und SchemaNewer fuer die Anzeige.
+func (s *Store) checkNewer(scope string, applied map[int]bool, known int) {
+	var newer []int
+	for v := range applied {
+		if v > known {
+			newer = append(newer, v)
+		}
+	}
+	if len(newer) == 0 {
+		return
+	}
+	sort.Ints(newer)
+	s.newerMu.Lock()
+	if s.newer == nil {
+		s.newer = map[string][]int{}
+	}
+	s.newer[scope] = newer
+	s.newerMu.Unlock()
+	s.log.Error("database schema is newer than this program: update Node64 or restore a matching backup",
+		"scope", scope, "known_version", known, "unknown_versions", fmt.Sprint(newer))
+}
+
+// SchemaNewer liefert je Scope die angewendeten Migrationen, die dieses Programm nicht kennt (leer = alles passt).
+func (s *Store) SchemaNewer() map[string][]int {
+	s.newerMu.Lock()
+	defer s.newerMu.Unlock()
+	out := make(map[string][]int, len(s.newer))
+	for k, v := range s.newer {
+		out[k] = append([]int(nil), v...)
+	}
+	return out
 }
 
 func (s *Store) applyMigration(ctx context.Context, scope string, m Migration) error {

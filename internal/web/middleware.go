@@ -51,6 +51,9 @@ func (s *Server) recoverer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
+				if rec == http.ErrAbortHandler { // Abbruch (z. B. unvollstaendiges Archiv): Verbindung schliessen statt Fehlerseite anhaengen
+					panic(rec)
+				}
 				s.log.Error("panic in handler", "err", rec, "path", r.URL.Path, "stack", string(debug.Stack()))
 				s.errorPage(w, r, http.StatusInternalServerError, "errors.internal")
 			}
@@ -193,8 +196,8 @@ func (s *Server) session(next http.Handler) http.Handler {
 
 		switch r.Method {
 		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-			if strings.HasPrefix(r.URL.Path, "/api/") && r.Header.Get("Authorization") != "" {
-				break // API-Key-Auth braucht kein CSRF
+			if viaAPIKey(r) {
+				break // API-Key-Auth braucht kein CSRF (ein anderer Authorization-Kopf, z. B. Basic vom Proxy, zaehlt nicht)
 			}
 			if r.URL.Path == "/mcp" && strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
 				break // MCP: nur mit Schluessel im Kopf (mcp.go), keine Sitzung
@@ -209,7 +212,14 @@ func (s *Server) session(next http.Handler) http.Handler {
 				break // Cluster: signierte Anfragen der anderen Nodes bzw. Kopplungscode (peer-Paket, alle Versionen)
 			}
 			tok := r.Header.Get("X-CSRF-Token")
-			if tok == "" {
+			if tok == "" && bodyLimitFor(r.URL.Path) > maxBody {
+				// Uploads (bis 1 GB): Formular erst lesen, wenn angemeldet, und nur als multipart (Datei auf Platte statt
+				// alles im Speicher); sonst muss der Token im Kopf stehen
+				if currentUser(r) != nil && strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+					longTransfer(w)
+					tok = r.PostFormValue("_csrf")
+				}
+			} else if tok == "" {
 				tok = r.PostFormValue("_csrf")
 			}
 			if subtle.ConstantTimeCompare([]byte(tok), []byte(csrf)) != 1 {
@@ -263,6 +273,14 @@ func currentSession(r *http.Request) *store.Session {
 	return s
 }
 
+// sessionID der aktuellen Sitzung; leer ohne Sitzung (Forward-Auth), dann enden beim Abmelden anderer Sitzungen alle.
+func sessionID(r *http.Request) string {
+	if s := currentSession(r); s != nil {
+		return s.ID
+	}
+	return ""
+}
+
 func csrfToken(r *http.Request) string {
 	t, _ := r.Context().Value(ctxCSRF).(string)
 	return t
@@ -294,21 +312,47 @@ func (s *Server) clearCookie(w http.ResponseWriter, r *http.Request, name string
 }
 
 // clientIP liefert die Adresse des Aufrufers; X-Forwarded-For nur, wenn
-// NODE64_TRUST_PROXY gesetzt ist.
+// NODE64_TRUST_PROXY gesetzt ist und die Verbindung von einem Proxy im eigenen Netz kommt.
 func (s *Server) clientIP(r *http.Request) string {
-	if s.Cfg.TrustProxyHeaders {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			first := strings.TrimSpace(strings.Split(xff, ",")[0])
-			if net.ParseIP(first) != nil {
-				return first
-			}
-		}
-	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
+	}
+	if s.Cfg.TrustProxyHeaders && localAddr(host) {
+		if ip := forwardedFor(r.Header.Values("X-Forwarded-For")); ip != "" {
+			return ip
+		}
 	}
 	return host
+}
+
+// localAddr: Loopback oder privates Netz (dort steht der eigene Reverse Proxy).
+func localAddr(host string) bool {
+	ip := net.ParseIP(host)
+	return ip != nil && (ip.IsLoopback() || ip.IsPrivate())
+}
+
+// forwardedFor nimmt aus X-Forwarded-For die rechte Adresse: die haengt der eigene Proxy an; alles links davon
+// kann der Client selbst geschickt haben.
+func forwardedFor(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	list := strings.Split(values[len(values)-1], ",")
+	last := strings.TrimSpace(list[len(list)-1])
+	if net.ParseIP(last) == nil {
+		return ""
+	}
+	return last
+}
+
+// longTransfer verlaengert die Zeitlimits der Verbindung fuer Backup-Download und Wiederherstellung (sonst brechen
+// grosse Dateien nach ReadTimeout/WriteTimeout des Servers ab).
+func longTransfer(w http.ResponseWriter) {
+	rc := http.NewResponseController(w)
+	until := time.Now().Add(transferTimeout)
+	_ = rc.SetReadDeadline(until)
+	_ = rc.SetWriteDeadline(until)
 }
 
 // startSession legt nach erfolgreichem Login eine neue Sitzung an. Mit

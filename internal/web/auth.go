@@ -23,13 +23,23 @@ const (
 	argonKeyLen  = 32
 )
 
+// argonSem begrenzt gleichzeitige argon2-Berechnungen (je 64 MiB): viele parallele Logins sollen nicht den Speicher
+// fuellen, weitere warten.
+var argonSem = make(chan struct{}, 2)
+
+func argonKey(password, salt []byte, t, m uint32, p uint8, n uint32) []byte {
+	argonSem <- struct{}{}
+	defer func() { <-argonSem }()
+	return argon2.IDKey(password, salt, t, m, p, n)
+}
+
 // HashPassword erzeugt einen argon2id-Hash im ueblichen PHC-Format.
 func HashPassword(password string) (string, error) {
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
-	key := argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
+	key := argonKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
 	return fmt.Sprintf("$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s", argonMemory, argonTime, argonThreads,
 		base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(key)), nil
 }
@@ -53,7 +63,7 @@ func VerifyPassword(hash, password string) bool {
 	if err != nil {
 		return false
 	}
-	got := argon2.IDKey([]byte(password), salt, t, m, p, uint32(len(want)))
+	got := argonKey([]byte(password), salt, t, m, p, uint32(len(want)))
 	return subtle.ConstantTimeCompare(got, want) == 1
 }
 
@@ -116,6 +126,38 @@ func (l *loginLimiter) fail(keys ...string) {
 		if b.tokens >= 1 {
 			b.tokens--
 		}
+	}
+}
+
+// take verbucht einen Versuch schon vor der Pruefung (0 = erlaubt, sonst die Wartezeit, dann ohne Verbrauch). So
+// kommen auch gleichzeitige Anfragen nicht ueber das Limit; nach Erfolg gibt refund den Versuch zurueck.
+func (l *loginLimiter) take(keys ...string) time.Duration {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	var wait time.Duration
+	for _, k := range keys {
+		if b := l.get(k, now); b.tokens < 1 {
+			wait = max(wait, time.Duration((1-b.tokens)/loginRefill*float64(time.Second)))
+		}
+	}
+	if wait > 0 {
+		return wait
+	}
+	for _, k := range keys {
+		l.buckets[k].tokens--
+	}
+	return 0
+}
+
+// refund gibt einen mit take verbuchten Versuch zurueck (erfolgreiche Anmeldung).
+func (l *loginLimiter) refund(keys ...string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := time.Now()
+	for _, k := range keys {
+		b := l.get(k, now)
+		b.tokens = min(loginBurst, b.tokens+1)
 	}
 }
 

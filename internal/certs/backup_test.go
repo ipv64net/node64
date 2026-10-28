@@ -64,6 +64,12 @@ func TestBackupRoundTrip(t *testing.T) {
 	if nb.m.ForName("backup.example.org") == nil { // im Speicher, ohne Neustart
 		t.Fatal("imported certificate not loaded")
 	}
+	nb.m.mu.Lock()
+	held, loop := nb.m.holds[holdSelf], nb.m.stopLp != nil
+	nb.m.mu.Unlock()
+	if !held || !loop { // vorher ohne Zertifikate: Erneuerung muss jetzt laufen
+		t.Fatalf("renewal not started after import: held %v loop %v", held, loop)
+	}
 	res2, err := nb.m.ImportAll(ctx, &back)
 	if err != nil || len(res2.Added) != 0 || res2.Skipped["certs"] != 1 || res2.CertIDs[c.ID] != newID {
 		t.Fatalf("second import: %+v %v", res2, err)

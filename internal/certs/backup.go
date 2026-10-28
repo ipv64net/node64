@@ -162,6 +162,7 @@ func (m *Manager) ImportAll(ctx context.Context, b *Backup) (*ImportResult, erro
 	if err := m.reload(ctx); err != nil {
 		return res, err
 	}
+	m.refreshHold(ctx) // Erneuerung auch auf Nodes, die vor dem Import keine Zertifikate hatten
 	for _, n := range news {
 		m.changed(ctx, n.item, n.id)
 	}

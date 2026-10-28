@@ -25,6 +25,8 @@ func TestBackupArchiveRoundTrip(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, "dns64", "lists"), 0o750)
 	os.WriteFile(filepath.Join(dir, "dns64", "allowlist.txt"), []byte("example.org\n"), 0o600)
 	os.WriteFile(filepath.Join(dir, "dns64", "lists", "big.txt"), []byte("cache"), 0o600)
+	os.MkdirAll(filepath.Join(dir, "bin"), 0o750) // Selbst-Update: gehoert nicht ins Archiv
+	os.WriteFile(filepath.Join(dir, "bin", "state.json"), []byte("{}"), 0o600)
 	_ = a.store.SetSetting(ctx, SettingNodeName, "Keller")
 	loginAs(t, a, "admin", "sehr geheimes passwort")
 	_, page := a.get(t, "/settings")
@@ -54,7 +56,7 @@ func TestBackupArchiveRoundTrip(t *testing.T) {
 			t.Fatalf("missing %s in %s", want, got)
 		}
 	}
-	if strings.Contains(got, "lists/") || strings.Contains(got, ".backup-") {
+	if strings.Contains(got, "lists/") || strings.Contains(got, ".backup-") || strings.Contains(got, "bin/") {
 		t.Fatalf("cache or temp in archive: %s", got)
 	}
 
