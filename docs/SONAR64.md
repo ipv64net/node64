@@ -9,8 +9,8 @@ ersten Pi Zero), als kleinen Docker-Container, als MikroTik-Container und als An
 stattdessen das Modul Sonar64 in der Oberfläche ein. Plan: [PLAN-NODE64-SONAR64.md](PLAN-NODE64-SONAR64.md),
 Schnittstellen: [SONAR64-VERTRAG.md](SONAR64-VERTRAG.md).
 
-> Stand: in Entwicklung, noch nicht veröffentlicht. Release-Dateien und Image entstehen mit dem ersten Tag
-> `sonar64-v<version>`.
+> Sonar64 hat keine eigenen Versionen: Programme und Image entstehen mit jedem Node64-Release (Tag `v<version>`,
+> Release-Dateien `sonar64-linux-*`, Image `ghcr.io/ipv64net/sonar64:<version>`).
 
 ## Auf einen Blick
 
@@ -58,7 +58,7 @@ Was das Skript tut:
 
 1. erkennt die Architektur (`armv6l`, `armv7l`, `aarch64`, `x86_64`),
 2. lädt `sonar64-linux-<arch>`, `sonar64.service` und `SHA256SUMS` aus dem neuesten fertigen
-   GitHub-Release (`ipv64net/node64`, Tag `sonar64-v*`, ohne Vorabversionen) und bricht ab, wenn eine Prüfsumme nicht passt,
+   GitHub-Release (`ipv64net/node64`, Tag `v*`; fertige Versionen vor Vorabversionen) und bricht ab, wenn eine Prüfsumme nicht passt,
 3. legt den Systemnutzer `sonar64` an (ohne Login, ohne Home),
 4. schreibt `/etc/sonar64.env` (nur root lesbar, `0600`) mit dem Token,
 5. installiert `/usr/local/bin/sonar64` und `/etc/systemd/system/sonar64.service` und startet den Dienst.
@@ -70,7 +70,7 @@ Optionen beim Aufruf (als Umgebungsvariablen, werden in `/etc/sonar64.env` über
 
 ```sh
 sudo SONAR64_MEASURED=1 SONAR64_BUDGET=normal sh install.sh   # auch gemessen werden, Budget normal
-sudo SONAR64_VERSION=0.1.0 sh install.sh                     # bestimmte Version
+sudo SONAR64_VERSION=0.12.0 sh install.sh                      # bestimmte Version
 sudo sh install.sh --uninstall   # bei ipv64.net abmelden (sonar64 leave), Dienst und Programm entfernen
 sudo sh install.sh --purge       # zusätzlich Einstellung, Schlüssel und Node-ID löschen
 ```
