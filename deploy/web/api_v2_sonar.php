@@ -892,12 +892,13 @@ route('GET', '/sonar/public/node/{slug}', function($p) {
 	s64_public_rl();
 	$slug = strtolower($p['slug']);
 	// erst pruefen, dann zwischenspeichern: unbekannte Slugs legen keine Cache-Dateien an
-	if(!preg_match('/^[a-z0-9-]{1,40}\z/', $slug) OR q1("SELECT id FROM sonar_nodes WHERE slug = :s AND active = 1 AND last_seen IS NOT NULL", array('s' => $slug)) === null) {
+	// Quarantaene wie in Karte und Liste nicht oeffentlich
+	if(!preg_match('/^[a-z0-9-]{1,40}\z/', $slug) OR q1("SELECT id FROM sonar_nodes WHERE slug = :s AND active = 1 AND last_seen IS NOT NULL AND trust != 'quarantine'", array('s' => $slug)) === null) {
 		fail(404, 'not_found', 'Node not found.');
 	}
 	$d = s64_cache('node:' . $slug, 60, function() use ($slug) {
 		$now = microtime(true);
-		$n = q1("SELECT * FROM sonar_nodes WHERE slug = :s AND active = 1 AND last_seen IS NOT NULL", array('s' => $slug));
+		$n = q1("SELECT * FROM sonar_nodes WHERE slug = :s AND active = 1 AND last_seen IS NOT NULL AND trust != 'quarantine'", array('s' => $slug));
 		if($n === null) { return null; }
 		$anchors = array_column(qa("SELECT node_id FROM sonar_nodes WHERE role = 'anchor' AND active = 1"), 'node_id');
 		$hist = array();

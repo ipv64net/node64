@@ -200,6 +200,7 @@ $nb = one("SELECT active, ip4, lat FROM sonar_nodes WHERE node_id = 'n1bbbbbbbbb
 check('me: eigenes Token gesperrt, Knoten aus, IP weg', str_contains($r['raw'], 'Token gesperrt') AND one("SELECT revoked_at FROM sonar_tokens WHERE id = ?", array($tid['n1bbbbbbbbbb']))['revoked_at'] !== null
 	AND (int)$nb['active'] === 0 AND $nb['ip4'] === null AND !str_contains($r['raw'], 'node=n1bbbbbbbbbb'));
 check('me: gesperrt in der Liste', str_contains($r['raw'], 'gesperrt'));
+check('me: Sperren gibt Name und Slug frei (wie DELETE /sonar/tokens)', one("SELECT name, slug FROM sonar_nodes WHERE node_id = 'n1bbbbbbbbbb'") === array('name' => '~n1bbbbbbbbbb', 'slug' => '~n1bbbbbbbbbb'));
 // Angaben speichern
 $save = fn(array $f, int $as = 1, string $node = 'n1aaaaaaaaaa') => req('/sonar/me.php?node=' . $node, $as, $f + array('action' => 'node_save', 'node' => $node, 'csrf' => $csrf,
 	'name' => 'Falke-1', 'access' => 'fiber', 'device' => 'pi', 'lat' => '50.123456', 'lon' => '8.654321'));

@@ -14,6 +14,7 @@ require_once __DIR__ . '/s64_web.php';
 require_once __DIR__ . '/s64_lib.php';
 
 const S64M_MAX_TOKENS = 10;     // aktive Knoten-Token je Account (Vertrag Abschnitt 2)
+const S64M_NEW_TOKENS = 20;     // neue Knoten-Token je Account in 24 h (Vertrag Abschnitt 2)
 const S64M_ROWS       = 50;     // Zeilen je Tabelle
 
 /** Prepared Statement; Fehler immer als PDOException (auch wenn $pdo nicht im Ausnahme-Modus laeuft) */
@@ -133,8 +134,12 @@ try {
 			$name = trim(s64m_in($_POST, 'name'));
 			if(!preg_match('/^[A-Za-z0-9 ._-]{1,32}$/', $name)) { $name = 'Sonar64'; }
 			$cnt = (int)s64m_q("SELECT COUNT(*) FROM sonar_tokens WHERE userid = :u AND kind = 'node' AND revoked_at IS NULL", array('u' => $u))->fetchColumn();
+			// wie POST /sonar/tokens: auch hoechstens S64M_NEW_TOKENS neue in 24 h (Anlegen/Sperren im Kreis)
+			$new = (int)s64m_q("SELECT COUNT(*) FROM sonar_tokens WHERE userid = :u AND kind = 'node' AND created_at >= :d", array('u' => $u, 'd' => s64_dt(microtime(true) - 86400)))->fetchColumn();
 			if($cnt >= S64M_MAX_TOKENS) {
 				$msg = $okMsg(s64w_t('Höchstens ' . S64M_MAX_TOKENS . ' aktive Sonar-Token je Account – bitte erst ein altes sperren.', 'At most ' . S64M_MAX_TOKENS . ' active Sonar tokens per account – please revoke an old one first.'), 'warning');
+			} elseif($new >= S64M_NEW_TOKENS) {
+				$msg = $okMsg(s64w_t('Höchstens ' . S64M_NEW_TOKENS . ' neue Sonar-Token in 24 Stunden – bitte später noch einmal.', 'At most ' . S64M_NEW_TOKENS . ' new Sonar tokens in 24 hours – please try again later.'), 'warning');
 			} else {
 				for($try = 0; ; $try++) {
 					$tok = s64m_new_token();
@@ -152,7 +157,8 @@ try {
 			$st = s64m_q("UPDATE sonar_tokens SET revoked_at = :t WHERE id = :id AND userid = :u AND kind = 'node' AND revoked_at IS NULL", array('t' => s64_dt(), 'id' => $id, 'u' => $u));
 			if($st->rowCount() > 0) { // wie DELETE /sonar/tokens/{id}: Knoten aus, IP und genauer Standort weg
 				s64m_q("UPDATE sonar_nodes SET active = 0 WHERE token_id = :id AND userid = :u", array('id' => $id, 'u' => $u));
-				s64m_q("UPDATE sonar_nodes SET ip4 = NULL, ip6 = NULL, lat = NULL, lon = NULL, pub_lat = NULL, pub_lon = NULL WHERE token_id = :id AND userid = :u AND role = 'node'", array('id' => $id, 'u' => $u));
+				s64m_q("UPDATE sonar_nodes SET ip4 = NULL, ip6 = NULL, lat = NULL, lon = NULL, pub_lat = NULL, pub_lon = NULL, name = CONCAT('~', node_id), slug = CONCAT('~', node_id)
+					WHERE token_id = :id AND userid = :u AND role = 'node'", array('id' => $id, 'u' => $u)); // Name und Slug wieder frei
 				if(function_exists('add_log')) { add_log($pdo, $userid, "0", "Sonar64", "Sonar-Token gesperrt."); }
 				$msg = $okMsg(s64w_t('Token gesperrt, der zugehörige Knoten ist abgemeldet.', 'Token revoked, the node using it is signed off.'), 'warning');
 			}

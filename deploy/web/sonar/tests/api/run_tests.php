@@ -505,6 +505,7 @@ $r = req('GET', '/sonar/public/nodes?q=hamburg');
 check('nodes q=hamburg', array_column($r['j']['data'] ?? array(), 'id') === array($A), code($r));
 if($dnsOk) { $r = req('GET', '/sonar/public/nodes?asn=19281'); check('nodes asn=19281', array_column($r['j']['data'] ?? array(), 'id') === array($A), code($r)); }
 check('nodes trust=quarantine 400', req('GET', '/sonar/public/nodes?trust=quarantine')['code'] === 400);
+check('node/{slug} in Quarantaene 404', req('GET', '/sonar/public/node/boese')['code'] === 404);
 check('nodes asn=abc 400', req('GET', '/sonar/public/nodes?asn=abc')['code'] === 400);
 
 $r = req('GET', '/sonar/public/node/hamburg-glasfaser');
