@@ -1,0 +1,132 @@
+# Sonar64 ohne Dashboard (docs/SONAR64.md): Programme je Architektur als GitHub-Release und Image
+# ghcr.io/ipv64net/sonar64. Ausloeser: Tag sonar64-v<version> (z. B. sonar64-v0.1.0) oder von Hand (Actions >
+# sonar64 > Run workflow; dann nur Artefakt und Image-Tag edge, kein Release).
+# Vorher laufen vet und die Tests des Kerns; schlagen sie fehl, entsteht nichts.
+name: sonar64
+
+on:
+  push:
+    tags: ["sonar64-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonar64-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./internal/sonar/... ./cmd/sonar64/...
+      - run: go test ./internal/sonar/... ./cmd/sonar64/...
+      - name: only the core is built in
+        run: |
+          other=$(go list -deps ./cmd/sonar64 | grep '^github.com/ipv64net/node64/' | grep -v -x -e 'github.com/ipv64net/node64/internal/sonar' -e 'github.com/ipv64net/node64/cmd/sonar64' || true)
+          if [ -n "$other" ]; then echo "cmd/sonar64 must only use internal/sonar, found:"; echo "$other"; exit 1; fi
+          ext=$(go list -deps ./cmd/sonar64 | grep -E '^[a-z0-9-]+\.[a-z]+/' | grep -v -e '^github.com/ipv64net/node64/' -e '^golang.org/x/net/' -e '^golang.org/x/sys/' || true)
+          if [ -n "$ext" ]; then echo "only the standard library and golang.org/x/net (with x/sys), found:"; echo "$ext"; exit 1; fi
+      - name: shell syntax
+        run: sh -n deploy/sonar64/install.sh
+
+  binaries:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: build
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then V="${GITHUB_REF_NAME#sonar64-v}"; else V="dev-${GITHUB_SHA::7}"; fi
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          mkdir -p dist
+          for a in armv6 armv7 arm64 amd64; do
+            goarch=$a; goarm=""
+            case $a in armv6) goarch=arm; goarm=6 ;; armv7) goarch=arm; goarm=7 ;; esac
+            CGO_ENABLED=0 GOOS=linux GOARCH=$goarch GOARM=$goarm \
+              go build -trimpath -ldflags="-s -w -X main.Version=$V" -o dist/sonar64-linux-$a ./cmd/sonar64
+          done
+          # Ziel: kleiner als 10 MB (Pi Zero)
+          size=$(stat -c %s dist/sonar64-linux-armv6)
+          echo "armv6: $size bytes"
+          if [ "$size" -ge 10485760 ]; then echo "sonar64-linux-armv6 is larger than 10 MB"; exit 1; fi
+          cp deploy/sonar64/install.sh deploy/sonar64/sonar64.service dist/
+          (cd dist && sha256sum sonar64-linux-* install.sh sonar64.service > SHA256SUMS && cat SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sonar64-${{ env.VERSION }}
+          path: dist/
+
+  release:
+    needs: binaries
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          V="${GITHUB_REF_NAME#sonar64-v}"
+          pre=""; case "$V" in *-*) pre="--prerelease" ;; esac
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* $pre --latest=false --verify-tag \
+              --title "Sonar64 $V" \
+              --notes "Sonar64 $V - standalone node/anchor without dashboard. Install: docs/SONAR64.md (install.sh checks SHA256SUMS). Image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/sonar64:$V"
+          fi
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/sonar64
+          # Tag sonar64-v0.1.0 -> 0.1.0 und 0.1; "latest" nur fuer Versionen ohne Vorab-Kennung
+          tags: |
+            type=match,pattern=sonar64-v(.*),group=1
+            type=match,pattern=sonar64-v(\d+\.\d+)\.\d+$,group=1
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-rc') && !contains(github.ref_name, '-alpha') && !contains(github.ref_name, '-beta') }}
+            type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=sha,format=short,enable=${{ github.event_name == 'workflow_dispatch' }}
+          flavor: |
+            latest=false
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.sonar64
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+          cache-from: type=gha,scope=sonar64
+          cache-to: type=gha,mode=max,scope=sonar64
