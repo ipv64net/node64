@@ -99,7 +99,18 @@ func oidcProvider(ctx context.Context, issuer string) (*oidc.Provider, error) {
 	defer cancel()
 	p, err := oidc.NewProvider(cctx, issuer)
 	if err != nil {
-		return nil, err
+		// Der Issuer muss Zeichen fuer Zeichen zum Discovery-Dokument (und zu "iss" im ID-Token) passen. Manche Anbieter
+		// haben einen Schraegstrich am Ende (authentik), andere nicht (Authelia, Keycloak): die andere Schreibweise
+		// versuchen, Discovery liegt bei beiden unter derselben Adresse.
+		alt := issuer + "/"
+		if strings.HasSuffix(issuer, "/") {
+			alt = strings.TrimRight(issuer, "/")
+		}
+		p2, err2 := oidc.NewProvider(cctx, alt)
+		if err2 != nil {
+			return nil, err
+		}
+		p = p2
 	}
 	oidcCache.issuer, oidcCache.p, oidcCache.at = issuer, p, time.Now()
 	return p, nil
@@ -325,7 +336,7 @@ func (s *Server) completeLogin(w http.ResponseWriter, r *http.Request, u *store.
 
 // oidcSave speichert die Einrichtung; ein leeres Secret laesst das gespeicherte stehen.
 func (s *Server) oidcSave(ctx context.Context, in oidcSettings, keepSecret bool) error {
-	in.Issuer = strings.TrimRight(strings.TrimSpace(in.Issuer), "/")
+	in.Issuer = strings.TrimSpace(in.Issuer) // wie eingegeben, auch mit "/" am Ende (authentik); s. oidcProvider
 	if in.Issuer != "" {
 		u, err := url.Parse(in.Issuer)
 		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
