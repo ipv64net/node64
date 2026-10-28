@@ -97,11 +97,11 @@ sudo nano /etc/sonar64.env && sudo systemctl restart sonar64
 docker run -d --name sonar64 --restart unless-stopped \
   -e SONAR64_TOKEN=s64_… \
   -v sonar64:/data \
-  ghcr.io/ipv64net/sonar64:0.12.0-alpha.27
+  ghcr.io/ipv64net/sonar64
 ```
 
-- Version: das neueste Node64-Release (GitHub-Releases von ipv64net/node64), hier 0.12.0-alpha.27. `latest` gibt es erst ab der
-  ersten Version ohne Vorab-Kennung (`-alpha`, `-rc` …).
+- `latest` ist immer das neueste Node64-Release (auch Vorabversionen); eine feste Version geht mit
+  `ghcr.io/ipv64net/sonar64:<version>`.
 - Das Image ist leer bis auf das Programm (`FROM scratch`), läuft als Nutzer `65532` und braucht nur `NET_RAW`
   (in Docker Standard). Fehlt das Recht (`--cap-drop NET_RAW`, Podman rootless), startet es trotzdem und misst über
   UDP 6464 bzw. Linux-Ping-Sockets, soweit möglich.
@@ -114,7 +114,7 @@ docker run -d --name sonar64 --restart unless-stopped \
 ```yaml
 services:
   sonar64:
-    image: ghcr.io/ipv64net/sonar64:0.12.0-alpha.27
+    image: ghcr.io/ipv64net/sonar64
     restart: unless-stopped
     network_mode: host          # IPv6 und UDP 6464 ohne NAT
     environment:
@@ -167,7 +167,7 @@ Flash mit genug Platz). Standard-Budget dort: `sparsam`.
    ```
 6. **Container anlegen und starten:**
    ```
-   /container/add remote-image=ghcr.io/ipv64net/sonar64:0.12.0-alpha.27 interface=veth-sonar64 envlist=sonar64 \
+   /container/add remote-image=ghcr.io/ipv64net/sonar64:latest interface=veth-sonar64 envlist=sonar64 \
        mounts=sonar64-data root-dir=usb1/sonar64 start-on-boot=yes logging=yes
    /container/start [find where tag~"sonar64"]
    /log/print where topics~"container"
@@ -188,7 +188,7 @@ Erreichbarkeit. Anker-Tokens (`s64a_…`) stellt nur ipv64.net aus (`php bots/so
 docker run -d --name sonar64-anchor --restart unless-stopped --network host \
   -e SONAR64_TOKEN=s64a_… \
   -v sonar64-anchor:/data \
-  ghcr.io/ipv64net/sonar64:0.12.0-alpha.27
+  ghcr.io/ipv64net/sonar64
 ```
 
 Mit einem Anker-Token schaltet `sonar64` von selbst in den Anker-Modus (`SONAR64_MODE=anchor` geht auch).
