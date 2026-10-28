@@ -1,0 +1,82 @@
+/* Sonar64 – Seiten unter /sonar (Teil W). Farben als Variablen, hell und dunkel (html[data-theme="dark"] aus header.php).
+ * Vertrauensstufen: Neu grau, Stabil blau, Vertraut gruen, Saeule gold, Anker violett (Plan Abschnitt 6).
+ * Latenz: < 15 ms gruen, < 30 hellgruen, < 60 orange, sonst rot. Keine externen Schriften oder Bilder. */
+.s64 { --s64-sea: #f4f7fa; --s64-land: #e3e7ec; --s64-edge: #c9d0d8; --s64-city: #6c757d; --s64-text: #343a40; --s64-card: rgba(255,255,255,.92);
+	--s64-new: #8a939b; --s64-stable: #2f7fd8; --s64-trusted: #2fa84f; --s64-pillar: #d4a017; --s64-anchor: #8a4fd8; --s64-quarantine: #6c3b3b;
+	--s64-l0: #9aa0a6; --s64-l1: #1f9d45; --s64-l2: #8bc34a; --s64-l3: #fd8c1a; --s64-l4: #dc3545; --s64-out: #dc3545; --s64-ring: #fff; }
+html[data-theme="dark"] .s64 { --s64-sea: #161a1f; --s64-land: #2b3138; --s64-edge: #3d454e; --s64-city: #9aa3ad; --s64-text: #e9ecef; --s64-card: rgba(27,31,36,.92);
+	--s64-new: #a3abb3; --s64-stable: #5aa2f0; --s64-trusted: #4cc56c; --s64-pillar: #f0c23a; --s64-anchor: #a97cf0; --s64-quarantine: #a86a6a;
+	--s64-l0: #7d848b; --s64-l1: #3cc061; --s64-l2: #a5d66a; --s64-l3: #ffa64a; --s64-l4: #ff6b78; --s64-out: #ff6b78; --s64-ring: #161a1f; }
+
+.s64-nav .nav-link { border-radius: 1rem; }
+.s64-stage { position: relative; background: var(--s64-sea); border-radius: .25rem; overflow: hidden; }
+.s64-stage.s64-zoomed { touch-action: none; } /* erst beim Vergroessern verschiebt Wischen die Karte statt die Seite */
+.s64-map { display: block; width: 100%; height: auto; max-height: 82vh; user-select: none; }
+.s64-map .s64-land { fill: var(--s64-land); stroke: var(--s64-edge); stroke-width: 1; stroke-linejoin: round; }
+.s64-map .s64-city circle { fill: var(--s64-city); opacity: .5; }
+.s64-map text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; pointer-events: none; }
+.s64-map .s64-city text { fill: var(--s64-city); opacity: .7; paint-order: stroke; stroke: var(--s64-sea); stroke-width: 3px; stroke-linejoin: round; }
+.s64-map .s64-link { fill: none; stroke-linecap: round; stroke-opacity: .45; }
+.s64-map .s64-link.s64-sel { stroke-opacity: .95; }
+.s64-map.s64-dim .s64-link:not(.s64-sel) { stroke-opacity: .12; }
+.s64-map .s64-mbadge rect { stroke: var(--s64-ring); stroke-width: .6; }
+.s64-map .s64-mbadge text { fill: #fff; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+.s64-map .s64-mbadge.s64-l2 text, .s64-map .s64-mbadge.s64-l3 text { fill: #1d2125; }
+.s64-map .s64-node { cursor: pointer; stroke: var(--s64-ring); }
+.s64-map .s64-node:focus { outline: none; stroke: var(--s64-text); }
+.s64-map .s64-node.s64-off { fill-opacity: .25; stroke-dasharray: 2 1.5; }
+.s64-map .s64-node.s64-hit { stroke: var(--s64-text); }
+.s64-map .s64-outring { fill: none; stroke: var(--s64-out); stroke-opacity: .9; }
+.s64-map .s64-outcell { fill: var(--s64-out); fill-opacity: .14; stroke: var(--s64-out); stroke-opacity: .5; stroke-dasharray: 4 3; }
+.s64-map .s64-dot { fill: var(--s64-text); }
+.s64-map .s64-pulse { fill: none; stroke-width: 1.2; transform-box: fill-box; transform-origin: center; animation: s64Pulse 1.6s ease-out forwards; }
+@keyframes s64Pulse { from { transform: scale(.5); opacity: .9; } to { transform: scale(3.2); opacity: 0; } }
+.s64-map .s64-pin { fill: var(--s64-out); stroke: var(--s64-ring); stroke-width: 1.5; }
+.s64-map .s64-pinring { fill: var(--s64-out); fill-opacity: .15; stroke: var(--s64-out); stroke-opacity: .5; }
+@media (prefers-reduced-motion: reduce) { .s64-map .s64-pulse { animation: none; opacity: 0; } }
+
+/* Farben je Stufe/Latenz (SVG: fill/stroke, HTML: Hintergrund) */
+.s64-map .s64-t-new { fill: var(--s64-new); } .s64-map .s64-t-stable { fill: var(--s64-stable); } .s64-map .s64-t-trusted { fill: var(--s64-trusted); }
+.s64-map .s64-t-pillar { fill: var(--s64-pillar); } .s64-map .s64-t-anchor { fill: var(--s64-anchor); } .s64-map .s64-t-quarantine { fill: var(--s64-quarantine); }
+.s64-map .s64-link.s64-l0 { stroke: var(--s64-l0); } .s64-map .s64-link.s64-l1 { stroke: var(--s64-l1); } .s64-map .s64-link.s64-l2 { stroke: var(--s64-l2); }
+.s64-map .s64-link.s64-l3 { stroke: var(--s64-l3); } .s64-map .s64-link.s64-l4 { stroke: var(--s64-l4); }
+.s64-map .s64-pulse.s64-l0 { stroke: var(--s64-l0); } .s64-map .s64-pulse.s64-l1 { stroke: var(--s64-l1); } .s64-map .s64-pulse.s64-l2 { stroke: var(--s64-l2); }
+.s64-map .s64-pulse.s64-l3 { stroke: var(--s64-l3); } .s64-map .s64-pulse.s64-l4 { stroke: var(--s64-l4); }
+.s64-map .s64-mbadge.s64-l0 rect { fill: var(--s64-l0); } .s64-map .s64-mbadge.s64-l1 rect { fill: var(--s64-l1); } .s64-map .s64-mbadge.s64-l2 rect { fill: var(--s64-l2); }
+.s64-map .s64-mbadge.s64-l3 rect { fill: var(--s64-l3); } .s64-map .s64-mbadge.s64-l4 rect { fill: var(--s64-l4); }
+
+.s64-badge { display: inline-block; padding: .1rem .45rem; border-radius: .7rem; font-size: 75%; font-weight: 600; color: #fff; line-height: 1.4; vertical-align: .1em; }
+.s64-badge.s64-t-new { background: var(--s64-new); } .s64-badge.s64-t-stable { background: var(--s64-stable); } .s64-badge.s64-t-trusted { background: var(--s64-trusted); }
+.s64-badge.s64-t-pillar { background: var(--s64-pillar); color: #1d2125; } .s64-badge.s64-t-anchor { background: var(--s64-anchor); } .s64-badge.s64-t-quarantine { background: var(--s64-quarantine); }
+.s64-ms { display: inline-block; padding: 0 .4rem; border-radius: .6rem; font-weight: 600; color: #fff; white-space: nowrap; }
+.s64-ms.s64-l0 { background: var(--s64-l0); } .s64-ms.s64-l1 { background: var(--s64-l1); } .s64-ms.s64-l2 { background: var(--s64-l2); color: #1d2125; }
+.s64-ms.s64-l3 { background: var(--s64-l3); color: #1d2125; } .s64-ms.s64-l4 { background: var(--s64-l4); }
+.s64-sw { display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; vertical-align: -.05rem; margin-right: .2rem; }
+.s64-sw.s64-t-new { background: var(--s64-new); } .s64-sw.s64-t-stable { background: var(--s64-stable); } .s64-sw.s64-t-trusted { background: var(--s64-trusted); }
+.s64-sw.s64-t-pillar { background: var(--s64-pillar); } .s64-sw.s64-t-anchor { background: var(--s64-anchor); }
+.s64-sw.s64-l1 { background: var(--s64-l1); border-radius: .15rem; } .s64-sw.s64-l2 { background: var(--s64-l2); border-radius: .15rem; }
+.s64-sw.s64-l3 { background: var(--s64-l3); border-radius: .15rem; } .s64-sw.s64-l4 { background: var(--s64-l4); border-radius: .15rem; }
+.s64-legend { gap: .2rem .7rem; }
+
+.s64-info { min-height: 6rem; }
+.s64-p-title { font-weight: 600; margin: .4rem 0 .2rem; }
+.s64-ticker { max-height: 22rem; overflow: hidden; }
+.s64-ticker .s64-row { display: flex; gap: .4rem; align-items: center; white-space: nowrap; overflow: hidden; padding: .05rem 0; animation: s64New 1.5s ease-out; }
+.s64-ticker .s64-row > span.s64-grow { overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; }
+@keyframes s64New { from { background: rgba(255, 193, 7, .25); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .s64-ticker .s64-row { animation: none; } }
+.s64-kv th { width: 40%; font-weight: 600; }
+.s64-table th[data-s64-sort] { cursor: pointer; white-space: nowrap; }
+.s64-table th.s64-asc::after { content: " \25B2"; font-size: 70%; } .s64-table th.s64-desc::after { content: " \25BC"; font-size: 70%; }
+.s64-mini { max-width: 18rem; margin: 0 auto; background: var(--s64-sea); border-radius: .25rem; }
+.s64-pick { max-width: 16rem; margin: .2rem 0 .4rem; background: var(--s64-sea); border-radius: .25rem; cursor: crosshair; }
+.s64-chart svg { display: block; width: 100%; height: auto; }
+.s64-chart .s64-grid { stroke: var(--s64-edge); stroke-width: 1; }
+.s64-chart text { fill: var(--s64-city); font-size: 11px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+.s64-chart .s64-series { fill: none; stroke-width: 1.8; stroke-linejoin: round; }
+.s64-chart .s64-cursor { stroke: var(--s64-text); stroke-opacity: .4; }
+.s64-c0 { stroke: #17a2b8; color: #17a2b8; } .s64-c1 { stroke: #e83e8c; color: #e83e8c; } .s64-c2 { stroke: #fd7e14; color: #fd7e14; } .s64-c3 { stroke: #6f42c1; color: #6f42c1; }
+.s64-matrix td, .s64-matrix th { text-align: center; white-space: nowrap; padding: .15rem .3rem; }
+.s64-matrix th.s64-rowh { text-align: left; }
+.s64-matrix th.s64-colh { writing-mode: vertical-rl; transform: rotate(180deg); max-height: 9rem; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.s64-pre { white-space: pre-wrap; word-break: break-all; background: rgba(127,127,127,.12); padding: .4rem; border-radius: .25rem; }
