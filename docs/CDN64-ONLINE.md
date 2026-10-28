@@ -312,6 +312,27 @@ Textvergleiche auf Pfad (dekodiert, nicht bereinigt) und User-Agent, Treffer →
 `blocklist_base` (nur mit `api_url`, alle 30 min mit ETag, Zwischenspeicher `data_dir/blocklists/`), je Host `ja4` =
 `off` | `count` (Standard) | `block` (Verbindung zu).
 
+**Review-Korrekturen (2026-10-28, cdn64-edge 0.20.0, PROXY64 1.39.0; Commits b25d3e8, 931f2bc):**
+- **Port 80 in Modus 1:** Die Verbindung geht nach dem Host der ersten Anfrage in den Tunnel. Jede weitere Anfrage
+  derselben Verbindung (Keep-Alive, absolute URL) wird mitgelesen (`hostgate.go`, gleicher Parser wie die Node) und
+  muss an denselben Namen gehen, sonst wird getrennt. Nach einem Upgrade (WebSocket) geht es roh weiter.
+- **QUIC auf 443 (HTTP/3 Modus 2/3, Tunnel):** Absender ohne nachgewiesene Adresse (vor dem Handschlag, also
+  fälschbar) belegen keinen Platz bei „Verbindungen je IP/insgesamt“, sondern ein eigenes UDP-Budget (¼ von
+  `max_conns`). Warten mehr als 64 Handschläge ohne Nachweis, verlangt der Server ein Retry (Adresse belegen, eine
+  Rundreise mehr). Nach dem Handschlag zählt die Verbindung wie TCP bis zu ihrem Ende.
+- **QUIC durchreichen (Modus 1, HTTP/3):** Bis der Besucher die Verbindungs-ID der Node zurückschickt (Nachweis, höchstens
+  10 s), darf die Node ihm höchstens 1500 B + 3 × Eingang schicken (keine Reflexion über gefälschte Absender);
+  Datagramme über 1500 B werden verworfen.
+- **Modus 2/3 auf Port 80:** Die Frontend-Stufe (bedienen, umleiten, ablehnen) gilt je Anfrage, nicht nur für die erste
+  Anfrage der Verbindung. Unternamen eines Wildcard-Namens nur mit Zertifikat, das sie abdeckt (HTTP-01-Ausweg ohne
+  `*.name`); DNS-01-Fehler werden nach 6–24 h erneut versucht.
+- **Tunnel:** Je Tunnel und Slot höchstens eine Verbindung – eine neue (Neuverbindung, alte noch nicht als tot
+  erkannt) ersetzt die alte. Öffnet eine Node selbst einen weiteren Stream (sie öffnet nur den Steuer-Stream), endet die
+  Verbindung; Rückstau vor der Anmeldung (TCP/yamux) 256. Ein vom Server abgelehnter Slot (Klasse abgesenkt) versucht
+  es nach 2–5 Minuten erneut, statt bis zum Neustart aus zu bleiben.
+- Außerdem: Platz im Schutz bis zum Ende der Verbindung (auch wenn sie an den Nachbarn bzw. die Terminierung
+  weitergereicht wurde), Cache-Zwischendatei bei Abbruch entfernt, QUIC-Einstellungen je Verbindung wieder wirksam.
+
 ### 8.4 Endpunkte für die Server (Server-Geheimnis, eigene Datei)
 
 | Methode | Pfad | Zweck |
