@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
@@ -53,6 +55,7 @@ func (s *Store) SetSettingHook(f func(ctx context.Context, key string)) {
 
 type User struct {
 	ID           int64
+	UID          string // Kennung im Cluster (gleich auf allen Nodes)
 	Username     string
 	PasswordHash string
 	TOTPSecret   string
@@ -62,12 +65,12 @@ type User struct {
 	LastLoginAt  time.Time
 }
 
-const userCols = `id, username, password_hash, totp_secret, lang, timezone, created_at, last_login_at`
+const userCols = `id, uid, username, password_hash, totp_secret, lang, timezone, created_at, last_login_at`
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
 	var u User
 	var created, last string
-	if err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.TOTPSecret, &u.Lang, &u.Timezone, &created, &last); err != nil {
+	if err := row.Scan(&u.ID, &u.UID, &u.Username, &u.PasswordHash, &u.TOTPSecret, &u.Lang, &u.Timezone, &created, &last); err != nil {
 		return nil, err
 	}
 	u.CreatedAt, u.LastLoginAt = ParseTime(created), ParseTime(last)
@@ -81,13 +84,52 @@ func (s *Store) UserCount(ctx context.Context) (int, error) {
 }
 
 func (s *Store) CreateUser(ctx context.Context, username, passwordHash, lang, tz string) (*User, error) {
-	res, err := s.w.ExecContext(ctx, `INSERT INTO users (username, password_hash, lang, timezone, created_at) VALUES (?, ?, ?, ?, ?)`,
-		username, passwordHash, lang, tz, Now())
+	uid := make([]byte, 16)
+	_, _ = rand.Read(uid)
+	res, err := s.w.ExecContext(ctx, `INSERT INTO users (uid, username, password_hash, lang, timezone, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		hex.EncodeToString(uid), username, passwordHash, lang, tz, Now())
 	if err != nil {
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
+	s.userChanged(ctx, id)
 	return s.UserByID(ctx, id)
+}
+
+// SetLoginCluster haengt den Cluster an Benutzer und Anmeldung an (internal/usercluster, vor dem Start; nil = ohne).
+func (s *Store) SetLoginCluster(f func(ctx context.Context, item, id string, deleted bool)) {
+	s.loginCluster = f
+}
+
+// LoginChanged meldet eine Aenderung an Benutzern oder Anmeldung (Bereich, Kennung) an den Cluster.
+func (s *Store) LoginChanged(ctx context.Context, item, id string, deleted bool) {
+	if s.loginCluster != nil && id != "" {
+		s.loginCluster(ctx, item, id, deleted)
+	}
+}
+
+// userChanged meldet einen geaenderten Benutzer an den Cluster (Bereich accounts).
+func (s *Store) userChanged(ctx context.Context, id int64) {
+	if s.loginCluster == nil {
+		return
+	}
+	var uid string
+	if s.r.QueryRowContext(ctx, `SELECT uid FROM users WHERE id = ?`, id).Scan(&uid) == nil {
+		s.LoginChanged(ctx, "accounts", uid, false)
+	}
+}
+
+// DeleteUser loescht einen Benutzer samt Sitzungen, Keys, Verknuepfungen und Passkeys; false = gab es nicht.
+func (s *Store) DeleteUser(ctx context.Context, id int64) (bool, error) {
+	u, err := s.UserByID(ctx, id)
+	if err != nil || u == nil {
+		return false, err
+	}
+	if _, err := s.w.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id); err != nil {
+		return false, err
+	}
+	s.LoginChanged(ctx, "accounts", u.UID, true)
+	return true, nil
 }
 
 func (s *Store) UserByID(ctx context.Context, id int64) (*User, error) {
@@ -130,16 +172,25 @@ func (s *Store) TouchUserLogin(ctx context.Context, id int64) error {
 
 func (s *Store) UpdateUserPrefs(ctx context.Context, id int64, lang, tz string) error {
 	_, err := s.w.ExecContext(ctx, `UPDATE users SET lang = ?, timezone = ? WHERE id = ?`, lang, tz, id)
+	if err == nil {
+		s.userChanged(ctx, id)
+	}
 	return err
 }
 
 func (s *Store) UpdateUserPassword(ctx context.Context, id int64, hash string) error {
 	_, err := s.w.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE id = ?`, hash, id)
+	if err == nil {
+		s.userChanged(ctx, id)
+	}
 	return err
 }
 
 func (s *Store) UpdateUserTOTP(ctx context.Context, id int64, secret string) error {
 	_, err := s.w.ExecContext(ctx, `UPDATE users SET totp_secret = ? WHERE id = ?`, secret, id)
+	if err == nil {
+		s.userChanged(ctx, id)
+	}
 	return err
 }
 

@@ -99,6 +99,24 @@
 		</div>
 	</div>
 </div>
+{{if gt (len $d.Users) 1}}
+<div class="col-lg-6">
+	<div class="card h-100" id="users">
+		<div class="card-header"><i class="bi bi-people text-primary"></i> {{.T "sso.users_title"}}</div>
+		<div class="card-body">
+			<p class="small text-body-secondary">{{.T "sso.users_hint"}}</p>
+			<ul class="list-group list-group-flush mb-0 small">
+			{{range $d.Users}}
+				<li class="list-group-item d-flex justify-content-between align-items-center px-0">
+					<span><strong>{{.Username}}</strong>{{if eq .ID $.User.ID}} <span class="badge text-bg-secondary">{{$.T "sso.user_you"}}</span>{{end}}{{if .TOTPSecret}} <span class="badge text-bg-success">2FA</span>{{end}}<br><span class="text-body-secondary">{{$.T "sso.user_last_login"}}: {{$.Ago .LastLoginAt}}</span></span>
+					{{if ne .ID $.User.ID}}<form method="post" action="/settings/login/users/{{.ID}}/delete" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-danger" type="submit" data-confirm="{{$.T "sso.user_delete_confirm" "name" .Username}}"><i class="bi bi-trash"></i></button></form>{{end}}
+				</li>
+			{{end}}
+			</ul>
+		</div>
+	</div>
+</div>
+{{end}}
 </div>
 {{end}}
 {{define "scripts"}}<script src="/static/js/passkey.js?v={{.Version}}"></script>{{end}}

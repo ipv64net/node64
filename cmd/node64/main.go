@@ -59,6 +59,7 @@ import (
 	"github.com/ipv64net/node64/internal/sonar64"
 	"github.com/ipv64net/node64/internal/store"
 	nodesync "github.com/ipv64net/node64/internal/sync"
+	"github.com/ipv64net/node64/internal/usercluster"
 	"github.com/ipv64net/node64/internal/web"
 )
 
@@ -361,6 +362,8 @@ func run() error {
 	nfcluster.Register(peerMgr, nfStore)                                                                                       // Benachrichtigungskanaele ueber den Cluster
 	nodecluster.Register(peerMgr, nodecfg.New(nodecfg.Deps{Store: st, Box: box, Key: ipv64Key, Account: peerMgr.Account, Log: logger.Slog().With("module", "peer")}),
 		func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // API-Key und allgemeine Einstellungen ueber den Cluster
+	userCluster := usercluster.New(st, box, logger.Slog().With("module", "peer"))
+	usercluster.Register(peerMgr, userCluster) // Benutzer und SSO-Einrichtung ueber den Cluster
 	go peerMgr.Run(ctx)
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)
@@ -444,6 +447,7 @@ func run() error {
 		Cfg: cfg, Store: st, Log: logger, I18n: bundle, Modules: modules, Notify: nfStore, Dispatcher: dispatcher,
 		Sync: syncClient, Linker: syncClient, HC: hcModule, IPv64: ipv64Key, Peer: peerMgr, Version: Version, StartedAt: time.Now(), Restart: stop,
 		Ports: portReg, Edge: edgeSrv, Certs: certMgr, Box: box, Updater: upd,
+		Users: userCluster,
 	})
 	if err != nil {
 		return err

@@ -69,6 +69,22 @@ Login-Seite steht dann „Mit Passkey anmelden“, ohne Benutzernamen.
   YubiKey.
 - Passwort und App-2FA bleiben daneben bestehen. Der Passkey ersetzt sie nicht.
 
+## Im Cluster (Bereich „Benutzer & Anmeldung“)
+
+Standardmäßig aus; einschalten auf der Seite **Cluster** auf beiden Nodes. Dann gelten die Benutzer (Passwort, App-2FA,
+Wiederherstellungscodes, Sprache, Zeitzone, verknüpfte SSO-Konten) und die SSO-Einrichtung (Issuer, Client-ID,
+Client-Secret, Beschriftung, Scopes) auf allen Nodes. **Je Node bleiben** Passkeys (an den Hostnamen gebunden),
+Sitzungen, API-Keys, die feste Rückleit-Adresse für SSO und Forward-Auth.
+
+- Gleichnamige Benutzer mit anderem Inhalt (z. B. zwei Erstinstallationen mit `admin` und verschiedenem Passwort)
+  werden nie überschrieben: Die Seite **Cluster** zeigt „Benutzer im Cluster: bitte wählen“, die gewählte Version gilt
+  danach überall. Die eigene Sitzung bleibt dabei bestehen.
+- Löschen (Liste „Benutzer dieser Node“ unter Anmeldung, ab zwei Benutzern) gilt auf allen Nodes – den letzten
+  Benutzer einer Node löscht der Cluster aber nie.
+- Ändert sich Passwort oder 2FA über den Cluster, enden die Sitzungen dieses Benutzers auf den anderen Nodes.
+
+Technische Einzelheiten: [CLUSTER.md](CLUSTER.md#benutzer--anmeldung-users).
+
 ## Passwort vergessen (Notfallzugang)
 
 Es gibt keinen Weg über die Oberfläche oder per E-Mail. Wer Zugriff auf den Docker-Host hat, setzt das Passwort per
@@ -85,3 +101,5 @@ docker exec node64 /node64 reset-password
 - Alle Sitzungen des Benutzers werden beendet; der Vorgang steht im Audit-Log (`settings.password`,
   „reset-password (Kommandozeile)“).
 - Mit docker compose: `docker compose exec node /node64 reset-password` (Dienstname wie in der compose-Datei).
+- Im Cluster gilt das neue Passwort nur auf dieser Node; damit es überall gilt, danach in der Oberfläche einmal das
+  Passwort ändern.

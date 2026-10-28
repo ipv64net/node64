@@ -72,6 +72,8 @@ Bereich nur, wenn er auf **beiden** Nodes an ist (die abholende Node nennt ihre 
 | `dns64` | `settings`, `lists`, `allowlist`, `records` (mit Zonen), `forwards` (mit Umschreiben), `groups`, `group_members` | aus | `/peer/v2/sync` |
 | `node` | `apikey` (zentraler ipv64-API-Key), `settings` (allgemeine Einstellungen der Node) | aus | `/peer/v2/sync` |
 
+| `users` | `accounts` (Benutzer samt Passwort-Hash, App-2FA, SSO-Verknüpfungen), `sso` (OIDC-Einrichtung samt Client-Secret) | aus | `/peer/v2/sync` |
+
 **Statusseiten** (`healthchecks/statuspages`): Kennung je Seite (`hc_status_pages.uid`, gleich auf allen Nodes; die
 lokale Nummer bleibt, PROXY64-Hosts verweisen weiter auf sie und gehören zu ihrer Node). Mit geht alles, was die Seite
 ausmacht: Slug, Titel, Texte, Layout/Design/Sprache/Farbe, Tage, Anzeige-Schalter, an/aus, Node-Port, noindex,
@@ -95,6 +97,61 @@ außerhalb des Clusters (z. B. die des Portals). Bei gleichem Stand des Checks (
 werden die Kanäle beider Seiten vereint, ohne neue Änderung – beide landen beim selben Ergebnis. Ohne den Bereich
 bleiben die Kanäle je Node wie bisher. Gedacht vor allem für Nodes **ohne** Verbindung zu ipv64.net; verknüpfte Nodes
 bekommen die Kanäle des Portals über ipv64.net (Hinweis am Schalter).
+
+### Benutzer & Anmeldung (`users`)
+
+Code: `internal/usercluster` (Provider), Hook in `internal/store` (`SetLoginCluster`), Wahl in
+`internal/web/cluster_users.go`. Node64 kennt **keine Rollen und kein Sperren**: jeder lokale Benutzer ist
+Administrator, „letzter Administrator“ heißt also „letzter Benutzer der Node“.
+
+| Was | Abgeglichen | Bleibt je Node |
+|---|---|---|
+| Benutzer (`accounts`, Kennung `users.uid`) | Name, Passwort-Hash, App-2FA-Geheimnis, gehashte Wiederherstellungscodes (ein verbrauchter Code gilt danach überall nicht mehr), Sprache, Zeitzone, Anlagedatum, verknüpfte SSO-Konten (Anbieter, Subject, Anzeige) | lokale Nummer, Passkeys (an Hostnamen/RP-ID gebunden), Sitzungen, letzte Anmeldung, API- und MCP-Keys, Sperren nach Fehlversuchen |
+| SSO (`sso`, ein Eintrag `oidc`) | Issuer, Client-ID, Client-Secret, Beschriftung, Scopes; „SSO entfernen“ entfernt es überall | feste Rückleit-Adresse (`auth.oidc.base_url`, enthält den eigenen Hostnamen) |
+| Forward-Auth | – | komplett (Proxy-Adressen und Kopf gehören zum Netz der Node) |
+| Zeitzone der Node (`node.timezone`) | – | ja (nur die Zeitzone des Benutzers geht mit) |
+
+Geheimes geht im Klartext über die Cluster-Verbindung (HTTPS, an die Kopplung gebunden) und wird gespeichert wie
+lokal: Passwort-Hash und 2FA-Geheimnis wie bisher in `users`, das Client-Secret mit dem Schlüssel der empfangenden
+Node verschlüsselt. Ein Secret, das sich hier nicht entschlüsseln lässt, geht als `incomplete` hinaus und wird drüben
+nicht übernommen.
+
+**Identität und Konflikte:**
+
+- Dieselbe Kennung auf beiden Seiten (der Benutzer kam schon über den Cluster): die jüngere Änderung gewinnt, als Ganzes.
+- Gleicher Name, andere Kennung, **exakt gleich** (Name ohne Groß/klein, Hash, 2FA-Geheimnis, Codes, Sprache, Zeitzone,
+  SSO-Konten): es gilt die kleinere Kennung; die Node mit der größeren übernimmt sie an Ort und Stelle (lokale Nummer,
+  Passkeys, Keys und Sitzungen bleiben). Anders als bei den übrigen Bereichen geht dabei **kein** Löschvermerk für die
+  alte Kennung hinaus (ein Löschvermerk könnte auf einer dritten Node einen Benutzer samt Passkeys löschen).
+- Gleicher Name, anderer Inhalt (z. B. anderes Passwort – bei zwei Erstinstallationen der Normalfall): **nichts wird
+  überschrieben**, jede Node behält ihren Benutzer. Die Abweichung steht in `users.cluster_conflicts` (Daten
+  verschlüsselt), im Audit (`user.cluster.conflict`) und auf `/cluster` in der Karte „Benutzer im Cluster: bitte
+  wählen“ (Node, 2FA, Zahl der SSO-Verknüpfungen, Anlagedatum, Kennung). API: `GET /api/group` → `user_conflicts`,
+  Wahl mit `POST /api/group/users` Body `{"uid":"…"}`; Audit `user.cluster.choose` mit den verworfenen Versionen.
+- Die Wahl ersetzt den Benutzer hier **an Ort und Stelle** (gleiche lokale Nummer, die eigene Sitzung bleibt) und geht
+  mit den abgelösten Kennungen (`users.cluster_replaces`) und dem Zeitpunkt (`cluster_chosen_at`) an die anderen
+  Nodes; wessen Benutzer darin abgelöst ist, ersetzt ihn ebenso an Ort und Stelle. Eine später eintreffende abgelöste
+  Version wird abgewiesen. Bei zwei verschiedenen Wahlen gilt die jüngere.
+- Wird ein Benutzer über den Cluster umbenannt und gibt es den neuen Namen hier schon unter anderer Kennung, gilt das
+  ebenfalls als Abweichung zur Wahl.
+
+**Schutzregeln:**
+
+1. Ein Löschen aus dem Cluster entfernt **nie den letzten Benutzer** einer Node (Audit `user.cluster.keep_last`,
+   Warnung im Log). Der Benutzer bleibt dann nur dort; ändert ihn dort später jemand, kommt er überall zurück.
+2. Weder Abgleich noch Wahl löschen einen Benutzer, um einen anderen einzusetzen: die Wahl ersetzt den Inhalt an Ort
+   und Stelle, die Sitzung der Person, die wählt, bleibt.
+3. Den eigenen Benutzer kann man auf der Seite Anmeldung nicht löschen (die Liste „Benutzer dieser Node“ erscheint ab
+   zwei Benutzern, Audit `user.delete`).
+4. Ändert eine Übernahme Passwort oder 2FA-Geheimnis, enden die Sitzungen dieses Benutzers auf der Node (wie beim
+   Ändern auf der Node selbst); er meldet sich mit dem neuen Passwort an.
+5. Gleiche SSO-Identität hier bei einem anderen Benutzer: diese Verknüpfung wird nicht übernommen (Warnung im Log).
+6. Aus dem Cluster übernommene Änderungen stehen im Audit-Log mit Herkunft `cluster` und Urheber `node:<Name>`
+   (`user.cluster.create|update|delete|merge|choice|keep_last`, `sso.cluster.update|delete`; Bereich „Anmeldung“).
+
+`reset-password` per Kommandozeile wirkt nur auf der eigenen Node (der Befehl läuft ohne Cluster); es gilt im Cluster
+erst, wenn das Passwort danach in der Oberfläche geändert wird. Bis dahin kann eine Änderung desselben Benutzers auf
+einer anderen Node es wieder überschreiben.
 
 Neue Module hängen sich als Provider an `/peer/v2/sync`
 (`internal/peer/cluster.go`); eine ältere Node bekommt nie Eintragsarten, die sie nicht kennt.
@@ -149,6 +206,7 @@ Zusammengeführt wird nur bei exakt gleichem Inhalt, nie bei bloß ähnlichen Ei
 | Wartungsfenster | nur lokale Fenster (ohne Server-ID): Name, Beginn, Ende, Wiederholung, Ende der Wiederholung, Checks, an/aus; das Fenster mit der größeren Kennung wird mit Löschvermerk entfernt |
 | Checks | **nie** – derselbe Check auf zwei Nodes sind zwei Messstellen (eigene Tokens, Verlauf und messende Node, beim hub eigene Checks) |
 | Zertifikate | eigene Regel, siehe „Zertifikate: gleiche Einträge und ACME-Konto“ |
+| Benutzer | eigene Regel ohne Löschvermerk, siehe „Benutzer & Anmeldung“ (Abweichungen zur Wahl) |
 
 Grenzen: Doppel, die schon vor dieser Version über den Cluster auf beiden Nodes gelandet sind, werden nicht nachträglich
 zusammengeführt (einmal von Hand löschen). Bei drei und mehr Nodes kann eine Node, die das Doppel mit der größeren

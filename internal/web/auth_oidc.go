@@ -14,6 +14,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/ipv64net/node64/internal/store"
+	"github.com/ipv64net/node64/internal/usercluster"
 )
 
 // Anmeldung ueber SSO per OpenID Connect (Authelia, Authentik, Keycloak, Pocket ID, Zitadel, …). Lokale Konten
@@ -370,6 +371,7 @@ func (s *Server) oidcSave(ctx context.Context, in oidcSettings, keepSecret bool)
 	oidcCache.Lock()
 	oidcCache.p = nil // neu einlesen
 	oidcCache.Unlock()
+	usercluster.SSOChanged(ctx, s.Store) // an die anderen Nodes (Bereich users/sso; die Rueckleit-Adresse bleibt je Node)
 	return nil
 }
 
