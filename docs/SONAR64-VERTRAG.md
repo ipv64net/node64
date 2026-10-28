@@ -231,3 +231,68 @@ Siehe `api.go` und `probe.go`. Zusätzlich gilt:
   **Pings von mir** (`Recent`, live alle 5 s) und **Pings gegen mich** (UDP live aus `Recent`, sonst `Inbound`);
   Link auf die öffentliche Knotenseite. API `/api/sonar64/status|recent|inbound|settings`.
 - Ports: UDP 6464 nur bei „auch gemessen“, über die Port-Verwaltung (`ports.Claim`) angemeldet.
+
+## 10. Nachtrag 2026-10-28: schneller aufnehmen, abmelden, aufräumen
+
+Entscheidung Dennis: neue Knoten deutlich schneller messen; Abmelden vom Knoten **und** von ipv64 aus; Knoten, die
+sich nicht mehr melden, und ihre Messdaten altern automatisch heraus. Gilt vor den Abschnitten 3, 6, 7 und 8.
+
+**Teile:** **PHP** = A + J + W (Dateien wie in Abschnitt 1, dazu neu `deploy/web/bots/sonar_node.php`),
+**Go** = K + M + P + N (Dateien wie in Abschnitt 1). E2E (`tests/e2e/**`) ergänzt die Integration danach.
+
+### 10.1 Schneller aufnehmen (Ziel: typisch ≤ 15 min, höchstens ~30 min vom ersten Start bis gemessen)
+
+- **Planer:** In schon geplanten **kommenden** Runden (Start > jetzt) werden freie Budget-Plätze mit neuen Zielen
+  aufgefüllt; vorhandene Ziele bleiben (nur hinzufügen, entfernt wird weiter nur, was nicht mehr erlaubt ist). Die
+  laufende Runde bleibt unverändert. Neue Ziele (noch keine gültige Messung von einem Nicht-Anker in den letzten
+  24 h) haben bei freien Plätzen Vorrang. Anker bekommen neu gemessene Knoten (`measured=1`) sofort in **alle**
+  kommenden Runden, auch ohne bekannten Weg (Weg finden). Ein neuer Knoten bekommt seinen Plan schon im ersten
+  Planer-Lauf nach `register` (nicht erst nach dem ersten Kontakt von 15 min).
+- **Erreichbarkeit sofort:** `POST /sonar/results` eines **Ankers** mit `recv > 0` (gültig) zu einem Knoten mit
+  `reach<fam>` = none bzw. `icmp` setzt `reach<fam>` sofort (`udp` vor `icmp`; nur hochstufen, herabstufen bleibt
+  beim Planer).
+- **Kern:** Plan alle **2 min** (Anker: jede Minute) mit ETag (304 ist billig), Jitter ±20 %. Meldung bei Knoten alle
+  5 min, bei Ankern jede Minute (nur wenn etwas zu melden ist). Grenzen aus Abschnitt 8 bleiben.
+- **API:** Rate-Limits so, dass 1 Plan-Abruf/min + 1 Meldung/min je Token sicher passt.
+- **Plausibilität:** Weil sich Pläne öfter ändern, darf ein ehrlicher Knoten nie `not_in_plan` bekommen, weil er
+  eine ältere Fassung gemessen hat: geprüft wird gegen alle in den letzten 35 min ausgelieferten Fassungen der
+  betroffenen Runde (z. B. Spalte `sent_hist` mit den Runden-Zielen der letzten Auslieferungen, klein halten), und
+  ein Ziel, das nur wegen „nicht mehr erlaubt“ herausfiel, zählt nicht in `plaus_bad`.
+
+### 10.2 Abmelden
+
+- **API `DELETE /sonar/me`** (Sonar-Token, Knoten und Anker): wirkt wie `DELETE /sonar/tokens/{id}` (Token widerrufen,
+  `active=0`, `disabled_at`, IP/genauer Standort weg, Name/Slug frei, Plan gelöscht) → 204. Danach liefert jedes
+  Token-Endpoint 401 `invalid_token`.
+- **ipv64 meldet ab:** Besitzer über `me.php` (Sperren, gibt es) bzw. `DELETE /sonar/tokens/{id}`; Dennis per CLI
+  `php bots/sonar_node.php --list [--inactive]`, `--show=<node_id|slug>`, `--revoke=<node_id|slug> [--reason=<text>]`
+  (Anker nur mit `--force`). Jede Abmeldung: Eintrag in `sonar_trust_log` (`new`=`removed`, `reason` =
+  `leave` | `owner` | `admin` | `inactive`) und `add_log` beim Account (wo es einen gibt).
+- **Kern erkennt die Abmeldung:** 401 `invalid_token` oder 403 `node_disabled` bei plan/results/me/register →
+  Zustand **abgemeldet**: sofort nicht mehr messen, Antworter (UDP 6464) schließen, Puffer verwerfen,
+  `Status.Paused = "revoked"`, keine weiteren Anfragen außer einer Prüfung je Stunde (`GET /sonar/me`; bei 200 wieder
+  normal, z. B. nach vorübergehend gesperrtem Account). `Run` endet dabei nicht (kein Neustart-Kreis im Container).
+- **Kern `Leave(ctx) error`:** `DELETE /sonar/me` (204, 401 und 404 gelten als erledigt), danach Runner stoppen und
+  `sonar64.json` + `sonar64.key` im DataDir löschen. Ohne Verbindung: Fehler zurück, lokal trotzdem löschen nur, wenn
+  der Aufrufer es will (Parameter oder zweite Funktion – Go-Teil entscheidet, im Kommentar festhalten).
+- **Node64-Modul:** „Austreten“ und Node-Zurücksetzen rufen `Leave` (bei Fehler Hinweis: ipv64 meldet den Knoten
+  nach 30 Tagen ohne Meldung selbst ab). Zustand `revoked` → Seite zeigt „Von ipv64.net abgemeldet“ mit „Neu
+  teilnehmen“ (neues Token). i18n DE/EN.
+- **Programm `sonar64`:** Unterbefehl `sonar64 leave` (liest `SONAR64_TOKEN`, `SONAR64_DATA`), Exit 0 bei Erfolg;
+  `install.sh --uninstall` ruft ihn vorher auf, wenn möglich (Fehler nur melden). Mini-Status zeigt „abgemeldet“.
+
+### 10.3 Aufräumen (`sonar_cleanup.php`, täglich)
+
+- **Inaktiv:** Knoten (`role=node`) ohne Kontakt (`last_seen`, sonst `first_seen`) seit **30 Tagen** → automatisch
+  abgemeldet wie 10.2 (`reason=inactive`). Anker nie automatisch, nur Warnung in der Ausgabe.
+- **Unbenutzte Token:** nie registriert (`node_id` NULL) und älter als 30 Tage → widerrufen (geben Plätze der 10 frei).
+- **Löschen:** deaktivierte Knoten 90 Tage nach `disabled_at` endgültig löschen: Zeile in `sonar_nodes`, `sonar_plans`,
+  restliche `sonar_results`/`sonar_traces`/`sonar_inbound` (src/dst/node_id), `sonar_pair_1h` (src oder dst),
+  `sonar_trust_log` des Knotens, das Token. Widerrufene Token ohne Knoten nach 90 Tagen löschen.
+- **Aufbewahrung neu:** `sonar_results`/`sonar_traces` 7 Tage, `sonar_inbound` 24 h, `sonar_pair_1h` 90 Tage,
+  `sonar_asn_1d` und `sonar_outages` 2 Jahre, `sonar_trust_log` 1 Jahr (bzw. mit dem Knoten). IP-Regeln aus
+  Abschnitt 6 bleiben.
+- **Datenbank:** neue Spalte `sonar_nodes.disabled_at DATETIME(3) NULL` (gesetzt bei jeder Deaktivierung, beim
+  Wieder-Aktivieren NULL) und Index darauf. Noch nicht live: direkt im `CREATE TABLE` ergänzen, SQL bleibt
+  mehrfach ausführbar.
+- Öffentliche Seiten zeigen nur aktive Knoten (wie bisher); Knoten ohne Meldung > 15 min erscheinen als offline.
