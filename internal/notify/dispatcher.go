@@ -93,6 +93,7 @@ type Dispatcher struct {
 	serverSends func() bool
 	apiSend     func(ctx context.Context, ch *Channel, m Message) error
 	linked      func() bool // Healthchecks-Sync mit ipv64 verknuepft (nil = unbekannt: nur Modul-Meldungen ueber die API)
+	hubDirect   func() bool // der hub ueberlaesst der Node die Meldungen ihrer Direct-Checks (wire.NotifyDirect)
 	apiReady    func() bool
 	remote      func(ctx context.Context) []*Channel
 }
@@ -144,6 +145,35 @@ func (d *Dispatcher) unlinked() bool {
 	fn := d.linked
 	d.hookMu.RUnlock()
 	return fn != nil && !fn()
+}
+
+// SetHubDirect meldet, ob der hub der Node die Meldungen ihrer nur hier gemessenen Checks (CheckInfo.Direct)
+// ueberlaesst: dann sendet die Node die ipv64-Kanaele ueber die API und ihre eigenen Kanaele selbst, der hub nur die
+// uebrigen Portal-Kanaele (deren Geheimnisse liegen nur bei ipv64).
+func (d *Dispatcher) SetHubDirect(fn func() bool) {
+	d.hookMu.Lock()
+	d.hubDirect = fn
+	d.hookMu.Unlock()
+}
+
+// direct: die Node sendet diesen Alert selbst (CheckInfo.Direct, der hub kann es, API-Key vorhanden).
+func (d *Dispatcher) direct(c CheckInfo) bool {
+	if !c.Direct || c.Local || d.sendServerChannels.Load() {
+		return false
+	}
+	d.hookMu.RLock()
+	fn, send, ready := d.hubDirect, d.apiSend, d.apiReady
+	d.hookMu.RUnlock()
+	return fn != nil && fn() && send != nil && ready != nil && ready()
+}
+
+// skipForNode (hub): Kanaele, die bei einem Direct-Alert die messende Node selbst sendet – ipv64-Kanaele (API) und
+// ihre eigenen Kanaele.
+func skipForNode(c CheckInfo, ch *Channel) bool {
+	if c.DirectNode == "" {
+		return false
+	}
+	return (ch.Execution == "server" && apiType(ch.Type)) || (ch.Execution == "node" && ch.NodeID == c.DirectNode)
 }
 
 // SetRemoteChannels liefert ohne Verknuepfung die ipv64-Kanaele des Accounts (nur lesend, nicht gespeichert).
@@ -353,14 +383,21 @@ func (d *Dispatcher) channelsFor(ctx context.Context, c CheckInfo) []*Channel {
 		want[id] = true
 	}
 	var out []*Channel
+	direct := d.direct(c)
 	for _, ch := range all {
 		if !ch.Enabled {
 			continue
 		}
-		if ch.Execution == "server" && !d.sendServerChannels.Load() && !d.viaAPI(c) {
-			continue // vom ipv64-hub gesendet
+		if skipForNode(c, ch) {
+			continue // hub: sendet die messende Node selbst
 		}
-		if !c.Local && !d.sendServerChannels.Load() && d.hubSends() {
+		if direct {
+			if ch.Execution == "server" && !apiType(ch.Type) {
+				continue // andere Portal-Kanaele (z. B. Webhook, Telegram) sendet der hub
+			}
+		} else if ch.Execution == "server" && !d.sendServerChannels.Load() && !d.viaAPI(c) {
+			continue // vom ipv64-hub gesendet
+		} else if !c.Local && !d.sendServerChannels.Load() && d.hubSends() {
 			continue // verknuepft und verbunden: der hub sendet (eigene Kanaele per Sendeauftrag), sonst kaeme alles doppelt
 		}
 		if len(want) > 0 {
@@ -1026,7 +1063,7 @@ func (d *Dispatcher) send(ctx context.Context, ch *Channel, m Message) {
 	var s Sender
 	ok := false
 	if send, _, _ := d.hooks(); ch.Execution == "server" && !d.sendServerChannels.Load() && send != nil && apiType(ch.Type) {
-		s, ok = apiSender(send), true // Server-Kanal direkt ueber die ipv64-API (nur Local-Alerts kommen hier an)
+		s, ok = apiSender(send), true // Server-Kanal direkt ueber die ipv64-API (nur Local-, Direct- und unverknuepft)
 	} else {
 		if ch.Execution == "server" && !d.sendServerChannels.Load() {
 			// anderer Portal-Kanal (z. B. Webhook, Telegram): die Node sendet selbst mit den Werten aus dem Sync;

@@ -66,7 +66,8 @@ type Channel struct {
 	UpdatedAt       time.Time
 	LastUsedAt      time.Time
 	LastError       string
-	RemoteID        int64 // ID auf dem Server (Sync); 0 = nicht abgeglichen
+	RemoteID        int64  // ID auf dem Server (Sync); 0 = nicht abgeglichen
+	NodeID          string // hub: Besitzer-Node eines Node-Kanals (Execution "node")
 }
 
 // Field beschreibt ein Konfigurationsfeld eines Kanaltyps (fuer Formular und Validierung).

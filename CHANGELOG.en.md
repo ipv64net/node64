@@ -17,6 +17,8 @@ Short summary of what changes per version. Details per module are in the node un
 - PROXY64: Docker/Traefik labels with protection that cannot be mapped give a switched-off host instead of an
   unprotected one; fixes to forward auth and API keys.
 - DynDNS: confirmation when several names from the account are added at once.
+- Healthchecks: checks measured only by this node are alerted by the node itself even when linked (ipv64 mail/SMS/app
+  via the API, own channels directly); other portal channels are still sent by ipv64.
 
 ## 0.12.0-alpha.26 – 2026-10-28
 

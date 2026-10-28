@@ -38,7 +38,8 @@ type session struct {
 
 	returnHome bool // Sitzung endet, weil der Stamm-hub wieder erreichbar ist
 
-	proxy atomic.Bool // der hub nimmt Stellvertreter-Nodes an (hello)
+	proxy  atomic.Bool // der hub nimmt Stellvertreter-Nodes an (hello)
+	direct atomic.Bool // der hub kann wire.NotifyDirect (hello)
 }
 
 // loop haelt die Verbindung mit Backoff und Jitter (1 s .. 60 s, +-30 %).
@@ -208,6 +209,12 @@ func (s *session) handle(m wire.Msg) error {
 				if f == "proxy" {
 					s.proxy.Store(true)
 				}
+				if f == wire.NotifyDirect {
+					s.direct.Store(true)
+				}
+			}
+			if !s.direct.Load() {
+				c.hubDirect.Store(false) // aelterer hub: er sendet alles selbst
 			}
 			if h.Hub != "" {
 				c.mu.Lock()
@@ -700,7 +707,18 @@ func (s *session) sendStatus() {
 	st := wire.Status{Version: c.d.Version, Modules: []string{"healthchecks"}, Timezone: c.d.Core.SettingOr(ctx, "node.timezone", "UTC"),
 		OutboxSize: c.d.HC.OutboxCount(ctx), Conflicts: c.d.HC.ConflictCount(ctx), LocalTime: time.Now(),
 		Name: c.d.Core.SettingOr(ctx, "node.name", ""), Location: c.d.Core.SettingOr(ctx, "node.location", "")}
-	_ = s.send(wire.Msg{T: "status", Data: mustJSON(st)})
+	// Meldungen der nur hier gemessenen Checks selbst senden: nur mit einem hub, der es kann, und mit API-Key
+	direct := s.direct.Load() && c.d.DirectNotify != nil && c.d.DirectNotify()
+	if direct {
+		st.Modules = append(st.Modules, wire.NotifyDirect)
+	}
+	err := s.send(wire.Msg{T: "status", Data: mustJSON(st)})
+	switch {
+	case !direct:
+		c.hubDirect.Store(false) // nicht (mehr) angekuendigt: der hub sendet wieder alles
+	case err == nil:
+		c.hubDirect.Store(true) // erst nach der Ankuendigung selbst senden (sonst sendet der hub noch alles: doppelt)
+	}
 }
 
 // ---------------------------------------------------------------- Kommandos und Sendeauftraege

@@ -1,5 +1,17 @@
 # Changes – Healthchecks
 
+## 2.40.0 – 2026-10-28
+
+### Changed
+- Notifications directly via the ipv64 API: checks measured only by this node (local, no other measuring points) are
+  alerted by the node itself even when linked – ipv64 mail, SMS and app via API v2, own channels directly (previously
+  as send orders via the hub). This applies to down, up, flapping and reminders.
+  - Other portal channels (e.g. webhook, Telegram) are still sent by the hub, their secrets stay at ipv64. For such
+    checks the hub now also sends reminders to these channels.
+  - Checks with online measurement or several measuring nodes (also in the cluster), and "not checked", alert as
+    before.
+  - Only with an API key and an updated hub; otherwise as before.
+
 ## 2.39.0 – 2026-10-28
 
 ### Fixed

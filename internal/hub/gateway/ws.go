@@ -125,7 +125,7 @@ func (c *conn) hello(ctx context.Context) {
 	eps, _ := g.st.Endpoints(ctx)
 	rev := g.st.CurrentRevision(ctx, n.UserID)
 	c.send(wire.Msg{T: "hello", Data: raw(wire.Hello{ServerTime: time.Now().UTC(), Revision: rev, Account: acc, RemoteMgmt: n.RemoteMgmt, NodeName: n.Name, Location: n.Location, Endpoints: eps, Hub: g.location,
-		Features: []string{"proxy"}})})
+		Features: []string{"proxy", wire.NotifyDirect}})})
 	// Aenderungen seit dem Stand der Node
 	changes, gap, err := g.st.ConfigSince(ctx, n.UserID, n.ID, c.rev())
 	if err != nil {

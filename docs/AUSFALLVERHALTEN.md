@@ -29,6 +29,8 @@ Während keine Verbindung besteht, misst die Node weiter, speichert Messpunkte u
 
 **Benachrichtigungen:** Verbunden und mit funktionierender Bestätigung sendet der hub (eigene Kanäle der Node per Sendeauftrag). Ist die Node nicht verbunden **oder** bestätigt der hub nichts mehr (z. B. weil seine Datenbank weg ist), sendet die Node ihre eigenen Kanäle selbst. Meldet die Node einen Zustand verspätet (älter als 5 min), trägt der hub ihn still nach, damit kein Alarm doppelt kommt.
 
+**Checks, die nur eine Node misst** (Healthchecks 2.40.0, lokal, Besitzer-Node, keine weiteren Messstellen): Die Node sendet Ausfall, Entwarnung, Flattern und Erinnerungen selbst – ipv64-Mail/-SMS/App über die API v2 (`/hc2/channels/{id}/send`), eigene Kanäle direkt –, auch verbunden und auch während einer Trennung. Der hub sendet dafür nur die übrigen Portal-Kanäle (Webhook, Telegram …, deren Geheimnisse nur bei ipv64 liegen) und Kanäle anderer Nodes; „wird nicht geprüft“/„wird wieder geprüft“ sendet er wie bisher ganz. Voraussetzung auf beiden Seiten: Der hub kündigt `notify-direct` im `hello` an, die Node meldet `notify-direct` in `status.modules` (nur mit API-Key, steht dann in `hc2_nodes.modules`). Ältere hubs oder Nodes: alles wie bisher.
+
 Auf hub-Seite gilt eine getrennte Node nach 60 s als offline; ihre Messstelle zählt dann in Hybrid-Checks nicht mehr mit.
 
 ## Online-Checks

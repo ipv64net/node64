@@ -78,7 +78,7 @@ func (s *Store) ChannelsFor(ctx context.Context, userID int64) ([]*notify.Channe
 		ch.Enabled, ch.Default, ch.NotifyDown, ch.NotifyUp = enabled == 1 && verified == 1, def == 1, nd == 1, nu == 1
 		ch.Execution = "server"
 		if nodeID.Valid && nodeID.String != "" {
-			ch.Execution = "node"
+			ch.Execution, ch.NodeID = "node", nodeID.String
 			s.mu.Lock()
 			s.nodeOf[ch.ID] = nodeID.String
 			s.mu.Unlock()
