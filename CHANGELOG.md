@@ -1,0 +1,15 @@
+# Changelog – Node64
+
+Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unter Einstellungen → Module.
+
+## Unveröffentlicht
+
+- PROXY64: neue Standardwerte beim Schutz vor Überlastung (weniger Verbindungen je IP und insgesamt), Hinweis zur
+  passenden Gerätegröße.
+- Anmeldung: SSO mit authentik funktioniert, die Issuer-URL darf mit „/“ enden (#6).
+- Honeypot64: Die Zahlen der Übersicht bleiben vollständig, auch wenn die Obergrenze gespeicherter Ereignisse erreicht
+  ist; dazu ein Hinweis (#7).
+
+## 0.12.0-alpha.25 – 2026-10-27
+
+- PROXY64: Die Liste der Proxy-Hosts passt auch auf schmaleren Bildschirmen.
