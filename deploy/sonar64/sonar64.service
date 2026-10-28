@@ -15,6 +15,8 @@ Environment=SONAR64_DATA=/var/lib/sonar64
 ExecStart=/usr/local/bin/sonar64
 Restart=on-failure
 RestartSec=30
+# Exit 2 = falsche Einstellung in /etc/sonar64.env: nicht endlos neu starten
+RestartPreventExitStatus=2
 # Daten (Schluessel, Node-ID, Zustand) nur hier, ein paar KB
 StateDirectory=sonar64
 StateDirectoryMode=0700

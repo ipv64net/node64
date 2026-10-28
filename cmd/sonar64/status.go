@@ -50,6 +50,10 @@ func statusHandler(src statusSource, running func() bool) http.Handler {
 		if res == nil {
 			res = []sonar.Result{}
 		}
+		// Traceroute-Hops enthalten Router-Adressen bis zum Ziel (letzter Hop = IP des Ziels): nie im Mini-Status
+		for i := range res {
+			res[i].Hops = nil
+		}
 		if in == nil {
 			in = []sonar.Inbound{}
 		}

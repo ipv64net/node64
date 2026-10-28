@@ -202,7 +202,8 @@ func parseStatusAddr(v string) (string, error) {
 func checkAPIBase(v string) error {
 	u, err := url.Parse(v)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return fmt.Errorf("%q is not a valid URL", v)
+		// Wert nicht wiederholen: er koennte Zugangsdaten enthalten (user:pass@, ?key=)
+		return errors.New("not a valid URL (scheme://host/path, without user, query or fragment)")
 	}
 	switch u.Scheme {
 	case "https":

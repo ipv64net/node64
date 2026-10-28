@@ -56,8 +56,8 @@ sudo sh install.sh       # fragt nach dem Token (Eingabe unsichtbar)
 Was das Skript tut:
 
 1. erkennt die Architektur (`armv6l`, `armv7l`, `aarch64`, `x86_64`),
-2. lädt `sonar64-linux-<arch>`, `sonar64.service` und `SHA256SUMS` aus dem neuesten GitHub-Release
-   (`ipv64net/node64`, Tag `sonar64-v*`) und bricht ab, wenn eine Prüfsumme nicht passt,
+2. lädt `sonar64-linux-<arch>`, `sonar64.service` und `SHA256SUMS` aus dem neuesten fertigen
+   GitHub-Release (`ipv64net/node64`, Tag `sonar64-v*`, ohne Vorabversionen) und bricht ab, wenn eine Prüfsumme nicht passt,
 3. legt den Systemnutzer `sonar64` an (ohne Login, ohne Home),
 4. schreibt `/etc/sonar64.env` (nur root lesbar, `0600`) mit dem Token,
 5. installiert `/usr/local/bin/sonar64` und `/etc/systemd/system/sonar64.service` und startet den Dienst.
@@ -196,14 +196,15 @@ Firewall: ICMP-Echo und UDP 6464 eingehend (IPv4 und IPv6) erlauben. Ein Anker l
 | `SONAR64_API` | – | nur für Tests (anderer API-Server; `http` nur zu Loopback) |
 | `SONAR64_PLAN_KEY` | – | nur für Tests, solange kein Plan-Schlüssel eingebaut ist |
 
-Falsche Werte führen zu einem klaren Fehler beim Start (Exit-Code 2); das Token erscheint nie im Log.
+Falsche Werte führen zu einem klaren Fehler beim Start (Exit-Code 2, der systemd-Dienst startet dann nicht
+endlos neu); das Token erscheint nie im Log.
 `sonar64 version` zeigt die Version, `sonar64 healthcheck` prüft den Mini-Status (Docker `HEALTHCHECK`; ohne
 `SONAR64_STATUS` immer gesund, solange der Prozess läuft).
 
 **Mini-Status** (nur mit `SONAR64_STATUS`): `GET /` schlichte Seite (aktualisiert sich alle 5 s), `GET /status`
 JSON mit Zustand und den letzten 50 Messungen raus und rein, `GET /health` (200 = läuft und angemeldet, sonst 503).
 Nur lesen, ohne Anmeldung – deshalb am besten nur an `127.0.0.1` oder im Heimnetz binden, nie ins Internet
-freigeben. Er enthält keine Geheimnisse und keine Ziel-Adressen. Die volle Ansicht gibt es auf ipv64.net unter
+freigeben. Er enthält keine Geheimnisse und keine Adressen (auch keine Traceroute-Hops). Die volle Ansicht gibt es auf ipv64.net unter
 „Mein Knoten“.
 
 ## 7. Datenschutz und Opt-in

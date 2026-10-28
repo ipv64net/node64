@@ -24,6 +24,12 @@ USR=sonar64
 
 say() { printf '%s\n' "sonar64: $*"; }
 die() { printf '%s\n' "sonar64: ERROR: $*" >&2; exit 1; }
+# match <wert> <muster>: genau eine Zeile, die ganz zum Muster passt (grep allein prueft jede Zeile einzeln)
+match() {
+	case "$1" in *'
+'*) return 1 ;; esac
+	printf '%s' "$1" | grep -Eq "$2"
+}
 
 [ "$(id -u)" = 0 ] || die "please run as root (sudo sh install.sh)"
 command -v systemctl >/dev/null 2>&1 || die "systemd is required (use the Docker image otherwise)"
@@ -79,12 +85,13 @@ if [ -n "${SONAR64_SRC_DIR:-}" ]; then
 	VER="${VER:-local}"
 elif [ -z "$VER" ]; then
 	fetch "https://api.github.com/repos/$REPO/releases?per_page=50" "$TMP/releases.json" || die "cannot list releases"
-	VER=$(grep -o '"tag_name": *"sonar64-v[^"]*"' "$TMP/releases.json" | head -n 1 | sed 's/.*"sonar64-v\([^"]*\)"/\1/')
+	# nur fertige Versionen (ohne -rc/-beta usw.); eine Vorabversion nur ueber SONAR64_VERSION
+	VER=$(grep -o '"tag_name": *"sonar64-v[0-9][0-9.]*"' "$TMP/releases.json" | head -n 1 | sed 's/.*"sonar64-v\([^"]*\)"/\1/')
 	[ -n "$VER" ] || die "no sonar64 release found"
 fi
 VER="${VER#sonar64-v}"
 VER="${VER#v}"
-printf '%s' "$VER" | grep -Eq '^[0-9A-Za-z][0-9A-Za-z.+-]{0,40}$' || die "invalid version"
+match "$VER" '^[0-9A-Za-z][0-9A-Za-z.+-]{0,40}$' || die "invalid version"
 
 # ---- laden und pruefen
 get() { # get <datei>
@@ -125,12 +132,12 @@ if [ -z "$TOKEN" ] && ! grep -q '^SONAR64_TOKEN=s64a\{0,1\}_' "$ENVF" 2>/dev/nul
 fi
 TOKEN=$(printf '%s' "$TOKEN" | tr -d ' \r\n\t')
 if [ -n "$TOKEN" ]; then
-	printf '%s' "$TOKEN" | grep -Eq '^s64a?_[A-Za-z0-9]{40}$' || die "the token has an invalid format (s64_ + 40 letters/digits)"
+	match "$TOKEN" '^s64a?_[A-Za-z0-9]{40}$' || die "the token has an invalid format (s64_ + 40 letters/digits)"
 fi
 opt() { # opt <name> <muster>: Wert aus der Umgebung pruefen
 	eval "v=\${$1:-}"
 	[ -z "$v" ] && return 0
-	printf '%s' "$v" | grep -Eq "$2" || die "$1 is invalid"
+	match "$v" "$2" || die "$1 is invalid"
 	printf '%s=%s\n' "$1" "$v"
 }
 NEW="$TMP/sonar64.env"

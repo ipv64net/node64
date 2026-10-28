@@ -62,6 +62,16 @@ func TestStatusJSON(t *testing.T) {
 	}
 }
 
+func TestStatusNoHopAddresses(t *testing.T) {
+	at := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	src := &fakeSource{res: []sonar.Result{{Round: at, Target: "nabc123def45", Family: 4, Method: "trace", At: at,
+		Hops: []sonar.Hop{{TTL: 1, Addr: "198.51.100.1", RTTMs: 1}, {TTL: 2, Addr: "203.0.113.9", RTTMs: 9}}}}}
+	body := get(t, statusHandler(src, func() bool { return true }), "GET", "/status").Body.String()
+	if strings.Contains(body, "198.51.100.1") || strings.Contains(body, "203.0.113.9") || strings.Contains(body, `"hops"`) {
+		t.Fatalf("status must not contain hop addresses: %s", body)
+	}
+}
+
 func TestStatusEmptyLists(t *testing.T) {
 	h := statusHandler(&fakeSource{}, func() bool { return true })
 	body := get(t, h, "GET", "/status").Body.String()
