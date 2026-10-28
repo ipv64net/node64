@@ -8,8 +8,9 @@ import (
 
 // Traefik-Labels mitlesen (Phase D3, docs/PLAN-PROXY64-DOCKER.md Abschnitt 7). Ausgewertet werden nur
 // traefik.enable, traefik.http.routers.<r>.rule (nur Host(...)) und .service, traefik.http.services.<s>.loadbalancer
-// .server.port/.scheme und traefik.docker.network. Middlewares, Entrypoints, TLS/Certresolver, Prioritaet sowie
-// TCP/UDP-Router bleiben unbeachtet. Schluessel sind wie bei Traefik unabhaengig von Gross-/Kleinschreibung.
+// .server.port/.scheme und traefik.docker.network, dazu .middlewares mit forwardAuth (wird zur Zugriffsliste, Plan
+// docs/PLAN-PROXY64-FORWARDAUTH.md). Andere Middlewares, Entrypoints, TLS/Certresolver, Prioritaet sowie
+// TCP/UDP-Router bleiben unbeachtet; Router fuer den Rueckweg von authentik (/outpost.goauthentik.io/) braucht es nicht. Schluessel sind wie bei Traefik unabhaengig von Gross-/Kleinschreibung.
 
 const (
 	traefikRouterPrefix  = "traefik.http.routers."
@@ -45,6 +46,9 @@ func traefikSpecs(labels map[string]string) ([]dockerSpec, []dockerProblem) {
 	var probs []dockerProblem
 	seen := map[string]bool{} // Namensmenge + Ziel
 	for _, r := range routers {
+		if strings.Contains(l[traefikRouterPrefix+r+".rule"], "/outpost.goauthentik.io") { // Rueckweg macht die Zugriffsliste
+			continue
+		}
 		names, ok := parseHostRule(l[traefikRouterPrefix+r+".rule"])
 		if !ok {
 			probs = append(probs, dockerProblem{Router: r, Key: dockerErrRule, Name: r})
@@ -60,7 +64,7 @@ func traefikSpecs(labels map[string]string) ([]dockerSpec, []dockerProblem) {
 			probs = append(probs, dockerProblem{Router: r, Key: dockerErrService, Name: r})
 			continue
 		}
-		s := dockerSpec{Source: dockerSrcTraefik, Router: r, Names: names, Scheme: "http", Network: network}
+		s := dockerSpec{Source: dockerSrcTraefik, Router: r, Names: names, Scheme: "http", Network: network, Access: traefikAccess(l, r)}
 		if svc != "" {
 			p := traefikServicePrefix + svc + ".loadbalancer.server."
 			if v := l[p+"port"]; v != "" {
@@ -87,6 +91,58 @@ func traefikSpecs(labels map[string]string) ([]dockerSpec, []dockerProblem) {
 		specs = append(specs, s)
 	}
 	return specs, probs
+}
+
+// traefikAccess: erste Middleware des Routers mit forwardAuth (Labels am Container) wird die Zugriffsliste
+// "Traefik: <name>"; eine Middleware aus einer Datei (name@file) bzw. ohne Labels verweist auf eine Liste mit diesem
+// Namen (z. B. "authentik"), die es in PROXY64 geben muss. Andere Middlewares bleiben unbeachtet.
+func traefikAccess(l map[string]string, router string) *dockerAccess {
+	var named *dockerAccess
+	for _, mw := range strings.Split(l[traefikRouterPrefix+router+".middlewares"], ",") {
+		mw = strings.TrimSpace(mw)
+		name, provider, _ := strings.Cut(mw, "@")
+		if name == "" {
+			continue
+		}
+		p := "traefik.http.middlewares." + name + ".forwardauth."
+		if addr := l[p+"address"]; addr != "" && (provider == "" || provider == "docker") {
+			var hs []string
+			for _, h := range strings.Split(l[p+"authresponseheaders"], ",") {
+				if h = strings.TrimSpace(h); h != "" {
+					hs = append(hs, h)
+				}
+			}
+			return &dockerAccess{Name: "Traefik: " + name, Auth: fwdKindOf(addr), Forward: &ForwardAuth{Address: addr, Headers: hs}}
+		}
+		if named == nil && provider != "" && provider != "docker" && fwdName(name) {
+			named = &dockerAccess{Name: name}
+		}
+	}
+	return named
+}
+
+// fwdName: Middleware-Name, der nach einem Anmeldedienst klingt (nur solche verweisen auf eine Zugriffsliste).
+func fwdName(n string) bool {
+	n = strings.ToLower(n)
+	for _, k := range []string{"auth", "sso", "oauth", "login"} {
+		if strings.Contains(n, k) {
+			return true
+		}
+	}
+	return false
+}
+
+// fwdKindOf: Vorlage nach der Adresse des Dienstes.
+func fwdKindOf(addr string) string {
+	switch a := strings.ToLower(addr); {
+	case strings.Contains(a, "/outpost.goauthentik.io/"):
+		return AuthAuthentik
+	case strings.Contains(a, "/api/authz/") || strings.Contains(a, "/api/verify"):
+		return AuthAuthelia
+	case strings.Contains(a, "/oauth2/"):
+		return AuthOAuth2
+	}
+	return AuthCustom
 }
 
 // nameSet: Namen kleingeschrieben, sortiert, ohne Doppelte (zum Vergleich von Routern).

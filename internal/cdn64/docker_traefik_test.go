@@ -64,7 +64,7 @@ func TestTraefikSpecs(t *testing.T) {
 			"traefik.http.routers.whoami.tls.certresolver":          "le",
 			"traefik.http.routers.whoami.middlewares":               "auth@file",
 			"traefik.http.services.whoami.loadbalancer.server.port": "8080",
-		}, []dockerSpec{spec("whoami", "http", 8080, "", "whoami.example.de")}, nil},
+		}, []dockerSpec{withAccess(spec("whoami", "http", 8080, "", "whoami.example.de"), "auth")}, nil}, // auth@file: Zugriffsliste "auth"
 		{"without enable and service", map[string]string{
 			"traefik.http.routers.app.rule": "Host(`app.example.de`)",
 		}, []dockerSpec{spec("app", "http", 0, "", "app.example.de")}, nil},
@@ -165,4 +165,9 @@ func TestTraefikSpecs(t *testing.T) {
 			t.Errorf("%s: problems %+v, want %+v", c.name, probs, c.probs)
 		}
 	}
+}
+
+func withAccess(s dockerSpec, list string) dockerSpec {
+	s.Access = &dockerAccess{Name: list}
+	return s
 }

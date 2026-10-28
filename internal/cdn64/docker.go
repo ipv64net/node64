@@ -563,10 +563,17 @@ func (m *Module) dockerApply(ctx context.Context, hosts *[]*Host, name string, c
 		}
 		return fail(fe.Key, fe.Name)
 	}
+	acl, aclOK := m.dockerACL(ctx, s.Access)
+	if !aclOK { // Liste aus dem Label fehlt: Host trotzdem, mit Hinweis
+		v.Problem, v.ProblemName = dockerErrAccess, s.Access.Name
+	}
 	if h == nil {
 		nh := newHost()
 		nh.Names, nh.Scheme, nh.TargetHost, nh.TargetPort = names, s.Scheme, addr, tport
 		nh.DockerContainer, nh.DockerRouter = name, s.Router
+		if acl > 0 {
+			nh.AccessListID = acl
+		}
 		if err := m.saveHost(ctx, nh); err != nil {
 			return saveErr(err)
 		}
@@ -576,11 +583,14 @@ func (m *Module) dockerApply(ctx context.Context, hosts *[]*Host, name string, c
 		m.dockerCert(ctx, nh)
 		return v, nil
 	}
-	if slices.Equal(h.Names, names) && h.Scheme == s.Scheme && h.TargetHost == addr && h.TargetPort == tport {
+	if acl == 0 {
+		acl = h.AccessListID // ohne Label: wie in der Oberflaeche eingestellt
+	}
+	if slices.Equal(h.Names, names) && h.Scheme == s.Scheme && h.TargetHost == addr && h.TargetPort == tport && h.AccessListID == acl {
 		return v, nil
 	}
-	nh := *h // nur Namen, Schema und Ziel; alles andere bleibt
-	nh.Names, nh.Scheme, nh.TargetHost, nh.TargetPort = names, s.Scheme, addr, tport
+	nh := *h // nur Namen, Schema, Ziel und Zugriffsliste aus den Labels; alles andere bleibt
+	nh.Names, nh.Scheme, nh.TargetHost, nh.TargetPort, nh.AccessListID = names, s.Scheme, addr, tport, acl
 	if err := m.saveHost(ctx, &nh); err != nil {
 		return saveErr(err)
 	}
@@ -588,6 +598,33 @@ func (m *Module) dockerApply(ctx context.Context, hosts *[]*Host, name string, c
 		"was", strings.Join(h.Names, ",")+" "+h.Target())
 	*h = nh
 	return v, nil
+}
+
+// dockerACL: Zugriffsliste aus den Labels (0 = keine angegeben). Eine Liste aus einer Traefik-Middleware mit
+// forwardAuth wird beim ersten Mal angelegt; ok = false, wenn die genannte Liste fehlt.
+func (m *Module) dockerACL(ctx context.Context, a *dockerAccess) (id int64, ok bool) {
+	if a == nil {
+		return 0, true
+	}
+	lists, err := m.accessLists(ctx)
+	if err != nil {
+		return 0, false
+	}
+	for _, l := range lists {
+		if strings.EqualFold(l.Name, a.Name) {
+			return l.ID, true
+		}
+	}
+	if a.Forward == nil {
+		return 0, false
+	}
+	nl := &AccessList{Name: a.Name, Auth: a.Auth, Forward: *a.Forward}
+	if err := m.saveAccessList(ctx, nl, nil); err != nil {
+		m.log.Warn("cdn64 docker: access list from traefik labels not created", "name", a.Name, "err", err)
+		return 0, false
+	}
+	m.log.Info("cdn64 docker: access list created from traefik labels", "name", nl.Name, "auth", nl.Auth, "address", nl.Forward.Address)
+	return nl.ID, true
 }
 
 // dockerPort: Port aus dem Label, sonst der einzige freigegebene TCP-Port (0 = keiner bzw. mehrere).

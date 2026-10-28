@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -191,5 +192,59 @@ func TestAccessFormForwardAuthRender(t *testing.T) {
 	}
 	if strings.Contains(body, key.Hash) || strings.Contains(body, `d-none" data-fwd-box`) {
 		t.Fatal("access form shows the key hash or hides the service box")
+	}
+}
+
+// Traefik-Labels: Middleware mit forwardAuth wird zur Zugriffsliste "Traefik: <name>" (Vorlage nach der Adresse), der
+// Router fuer den Rueckweg von authentik wird uebergangen; name@file verweist auf eine Liste mit diesem Namen.
+func TestDockerTraefikForwardAuth(t *testing.T) {
+	ctx := context.Background()
+	e, f := dockerEnv(t)
+	_ = e.st.SetSetting(ctx, setDockerCert, "http")
+	app := &fakeC{id: "c1", name: "app", state: "running", created: 1, nets: map[string]string{"proxy": "172.20.0.5"}, labels: map[string]string{
+		"traefik.enable":                                                     "true",
+		"traefik.http.routers.app.rule":                                      "Host(`app.example.test`)",
+		"traefik.http.routers.app.middlewares":                               "authentik@docker",
+		"traefik.http.routers.app-outpost.rule":                              "Host(`app.example.test`) && PathPrefix(`/outpost.goauthentik.io/`)",
+		"traefik.http.middlewares.authentik.forwardauth.address":             "http://authentik-server:9000/outpost.goauthentik.io/auth/traefik",
+		"traefik.http.middlewares.authentik.forwardauth.authResponseHeaders": "X-authentik-username, X-authentik-groups",
+		"traefik.http.services.app.loadbalancer.server.port":                 "8080"}}
+	wiki := &fakeC{id: "c2", name: "wiki", state: "running", created: 2, nets: map[string]string{"proxy": "172.20.0.6"}, labels: map[string]string{
+		"traefik.http.routers.wiki.rule":                      "Host(`wiki.example.test`)",
+		"traefik.http.routers.wiki.middlewares":               "secure-headers@file, sso@file",
+		"traefik.http.services.wiki.loadbalancer.server.port": "3000"}}
+	f.set(app, wiki)
+	dockerOnce(t, e.m)
+	if v := viewOf(e.m, "app"); v.HostID == 0 || v.Problem != "" {
+		t.Fatalf("app: %+v", v)
+	}
+	lists, _ := e.m.accessLists(ctx)
+	if len(lists) != 1 || lists[0].Name != "Traefik: authentik" || lists[0].Auth != AuthAuthentik || lists[0].Forward.Callback != "/outpost.goauthentik.io/" ||
+		!slices.Equal(lists[0].Forward.Headers, []string{"X-authentik-username", "X-authentik-groups"}) {
+		t.Fatalf("lists: %+v", lists)
+	}
+	h, _ := e.m.host(ctx, viewOf(e.m, "app").HostID)
+	if h.AccessListID != lists[0].ID {
+		t.Fatalf("app host without list: %+v", h)
+	}
+	// sso@file: Liste fehlt -> Host trotzdem, mit Hinweis; mit Liste "sso" wird sie zugewiesen
+	if v := viewOf(e.m, "wiki"); v.HostID == 0 || v.Problem != dockerErrAccess || v.ProblemName != "sso" {
+		t.Fatalf("wiki: %+v", v)
+	}
+	sso := &AccessList{Name: "SSO", Auth: AuthAuthelia, Forward: ForwardAuth{Address: "http://authelia:9091/api/authz/forward-auth"}}
+	if err := e.m.saveAccessList(ctx, sso, nil); err != nil {
+		t.Fatal(err)
+	}
+	dockerOnce(t, e.m)
+	if v := viewOf(e.m, "wiki"); v.Problem != "" {
+		t.Fatalf("wiki after list: %+v", v)
+	}
+	if w, _ := e.m.host(ctx, viewOf(e.m, "wiki").HostID); w.AccessListID != sso.ID {
+		t.Fatalf("wiki host without list: %+v", w)
+	}
+	for addr, want := range map[string]string{"http://a:9091/api/verify?rd=x": AuthAuthelia, "http://p:4180/oauth2/auth": AuthOAuth2, "http://x/check": AuthCustom} {
+		if got := fwdKindOf(addr); got != want {
+			t.Fatalf("kind of %s: %s", addr, got)
+		}
 	}
 }
