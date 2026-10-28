@@ -285,7 +285,9 @@ func run() error {
 				return errors.New("no ipv64 api key")
 			}
 			return ipv64Key.Client().HC2UnlinkNode(ctx, key, nodeID, keep)
-		}})
+		},
+		DirectNotify: ipv64Key.APIReady, // Meldungen der nur hier gemessenen Checks ueber die API v2 statt ueber den hub
+	})
 	// lokale Gruppe: Nodes desselben ipv64-Accounts gleichen direkt untereinander ab
 	if st.SettingOr(ctx, web.SettingNodeID, "") == "" { // Kennung der Node (sonst erst beim Setup-Assistenten oder Verknuepfen)
 		b := make([]byte, 24)
@@ -351,6 +353,7 @@ func run() error {
 	go peerMgr.Run(ctx)
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)
+	dispatcher.SetHubDirect(syncClient.HubDirect) // nur hier gemessene Checks: ipv64-Kanaele und eigene Kanaele selbst
 	// Meldungen der Module (z. B. DynDNS) ueber ipv64-Mail/-SMS direkt per API, ohne hub; ohne Verknuepfung die Kanaele des Accounts
 	dispatcher.SetAPISender(ipv64Key.SendNotification, ipv64Key.APIReady)
 	dispatcher.SetLinked(syncClient.Linked) // ohne Verknuepfung auch Healthchecks ueber die API

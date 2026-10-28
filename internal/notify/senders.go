@@ -94,6 +94,12 @@ type CheckInfo struct {
 	NotifyUp       bool
 	NotifyDegraded bool
 	Local          bool // immer ueber die lokalen Kanaele senden (der hub kennt den Anlass nicht, z. B. DynDNS)
+	// Direct (Node): Check, den nur diese Node misst. Kann der hub das (SetHubDirect), sendet die Node die
+	// ipv64-Kanaele ueber die API und ihre eigenen Kanaele selbst, die uebrigen Portal-Kanaele der hub.
+	Direct bool
+	// DirectNode (hub): diese Node sendet die ipv64-Kanaele und ihre eigenen Kanaele selbst (Direct), der hub
+	// nur die uebrigen Portal-Kanaele und die Kanaele anderer Nodes.
+	DirectNode string
 }
 
 // IsDynDNS: Meldung des DynDNS-Moduls.

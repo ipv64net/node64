@@ -1,5 +1,17 @@
 # Änderungen – Healthchecks
 
+## 2.40.0 – 2026-10-28
+
+### Geändert
+- Benachrichtigungen direkt über die ipv64 API: Checks, die nur diese Node misst (lokal, keine weiteren Messstellen),
+  meldet die Node auch verknüpft selbst – ipv64-Mail, -SMS und App über die API v2, eigene Kanäle direkt (bisher per
+  Sendeauftrag über den hub). Das gilt für Ausfall, Entwarnung, Flattern und Erinnerungen.
+  - Andere Portal-Kanäle (z. B. Webhook, Telegram) sendet weiter der hub, ihre Geheimnisse liegen nur bei ipv64. Für
+    solche Checks schickt der hub jetzt auch Erinnerungen an diese Kanäle.
+  - Checks mit Online-Messung oder mehreren messenden Nodes (auch im Cluster) sowie „wird nicht geprüft“ melden wie
+    bisher.
+  - Nur mit API-Key und neuem hub; sonst wie bisher.
+
 ## 2.39.0 – 2026-10-28
 
 ### Behoben

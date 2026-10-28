@@ -74,7 +74,7 @@ Zwei Kanaltypen, die nur verknüpft verfügbar sind und vom **Server** gesendet 
 - `ipv64_mail`: Mail von der ipv64-Infrastruktur, Standardkanal nach Verknüpfung, ohne eigene SMTP-Konfiguration. Empfänger: Account-Adresse oder bestätigte Integrations-Adresse.
 - `ipv64_sms`: SMS über das ipv64-Gateway (`send_sms` in dbconnect.php), Tageslimit `user_class.sms_limit` wie heute.
 
-Ablauf verknüpft: Node meldet Ereignis (`event_id`) → Server dedupliziert → ipv64-Kanäle sendet der Server, Agent-Kanäle bekommt der Node als Sendeauftrag über die Dauerverbindung. Ist der Node offline, sendet er seine Agent-Kanäle selbst (Fallback, bereits so gebaut) und ipv64 meldet den Node-Ausfall per Heartbeat.
+Ablauf verknüpft: Node meldet Ereignis (`event_id`) → Server dedupliziert → ipv64-Kanäle sendet der Server, Agent-Kanäle bekommt der Node als Sendeauftrag über die Dauerverbindung. Ist der Node offline, sendet er seine Agent-Kanäle selbst (Fallback, bereits so gebaut) und ipv64 meldet den Node-Ausfall per Heartbeat. Checks, die nur eine Node misst, meldet sie seit Healthchecks 2.40.0 selbst (ipv64-Kanäle über die API v2, eigene Kanäle direkt); der hub sendet dann nur die übrigen Portal-Kanäle (`notify-direct`, siehe AUSFALLVERHALTEN.md).
 
 ## 5. Reihenfolge der Umsetzung (Vorschlag)
 

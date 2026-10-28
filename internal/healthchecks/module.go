@@ -131,7 +131,24 @@ func (m *Module) Notify(ctx context.Context, e scheduler.Event, c scheduler.Chec
 }
 
 func alertInfo(c *Check) notify.CheckInfo {
-	return notify.CheckInfo{Token: c.Token, Name: c.Name, Type: string(c.Type), Target: c.Target, Critical: c.Critical, Channels: c.Channels, NotifyDown: c.NotifyDown, NotifyUp: c.NotifyUp}
+	return notify.CheckInfo{Token: c.Token, Name: c.Name, Type: string(c.Type), Target: c.Target, Critical: c.Critical, Channels: c.Channels, NotifyDown: c.NotifyDown, NotifyUp: c.NotifyUp,
+		Direct: c.onlyHere()}
+}
+
+// onlyHere: nur diese Node misst den Check (lokal, eigener Check, keine weiteren Messstellen). Dann meldet sie selbst
+// (ipv64-Kanaele ueber die API, eigene Kanaele), der hub nur die uebrigen Portal-Kanaele (notify.CheckInfo.Direct).
+func (c *Check) onlyHere() bool {
+	if (c.Execution != "" && c.Execution != "local") || (c.Owner != "" && c.Owner != "self") {
+		return false
+	}
+	switch len(c.Nodes) {
+	case 0:
+		return true
+	case 1:
+		id := selfNodeID()
+		return id != "" && c.Nodes[0] == id
+	}
+	return false
 }
 
 // remind schickt Erinnerungen fuer Checks, die laenger gestoert sind
@@ -209,7 +226,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.39.0", Changelog: changelog, ChangelogEN: changelogEN}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Path: "/healthchecks", Available: true, Order: 10, Version: "2.40.0", Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {

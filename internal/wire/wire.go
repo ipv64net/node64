@@ -11,6 +11,11 @@ import (
 // Token-Praefix der Node-Tokens.
 const TokenPrefix = "node64t_"
 
+// NotifyDirect: Benachrichtigungen von Checks, die nur eine Node misst, verschickt die Node selbst (ipv64-Kanaele
+// ueber die API v2, eigene Kanaele); der hub sendet dafuer nur die uebrigen Portal-Kanaele. Der hub kuendigt es in
+// Hello.Features an, die Node in Status.Modules (gespeichert in hc2_nodes.modules).
+const NotifyDirect = "notify-direct"
+
 // Check ist die Konfiguration eines Checks (ohne Laufzeitzustand).
 type Check struct {
 	Token                 string          `json:"token"`

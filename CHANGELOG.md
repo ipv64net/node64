@@ -17,6 +17,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - PROXY64: Docker/Traefik-Labels mit nicht abbildbarem Schutz ergeben einen ausgeschalteten Host statt eines
   ungeschützten; Korrekturen an Forward-Auth und API-Keys.
 - DynDNS: Sicherheitsabfrage, wenn mehrere Namen aus dem Account auf einmal übernommen werden.
+- Healthchecks: Checks, die nur diese Node misst, meldet sie auch verknüpft selbst (ipv64-Mail/-SMS/App über die
+  API, eigene Kanäle direkt); andere Portal-Kanäle sendet weiter ipv64.
 
 ## 0.12.0-alpha.26 – 2026-10-28
 

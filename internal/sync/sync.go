@@ -133,6 +133,8 @@ type Deps struct {
 	Modules Modules // nil = Module nicht automatisch einschalten
 	// UnlinkAPI trennt die Node ueber die ipv64 API v2, wenn kein hub erreichbar ist (nil = ohne API-Key)
 	UnlinkAPI func(ctx context.Context, nodeID string, keepChecks bool) error
+	// DirectNotify: die Node kann Benachrichtigungen ueber die API v2 selbst verschicken (API-Key da); nil = nein
+	DirectNotify func() bool
 }
 
 // Modules schaltet beim Verknuepfen das Healthchecks-Modul ein (sonst fehlen die Tabellen fuer die Checks von ipv64).
@@ -156,6 +158,9 @@ type Live struct {
 	pushQ         chan wire.Msg
 	infoGen       atomic.Int64 // zaehlt lokale Aenderungen von Name/Standort (refreshMe ueberschreibt sie nicht)
 	notifyGen     atomic.Int64 // zaehlt lokale Aenderungen der Benachrichtigungs-Einstellungen
+	// hubDirect: der hub kann wire.NotifyDirect und die Node hat es ihm gemeldet; bleibt nach einer Trennung stehen
+	// (der hub laesst dann bei spaet gemeldeten Zustaenden die Kanaele aus, die die Node selbst sendet)
+	hubDirect atomic.Bool
 
 	mu        sync.Mutex
 	connected bool
@@ -274,6 +279,12 @@ func (c *Live) ServerSends() bool {
 		return false
 	}
 	return c.ackBad.IsZero() || c.ackOK.After(c.ackBad)
+}
+
+// HubDirect (notify.Dispatcher.SetHubDirect): der hub ueberlaesst der Node die Meldungen ihrer nur hier gemessenen
+// Checks (verknuepft, hub mit wire.NotifyDirect, in der Statusmeldung angekuendigt, API-Key da).
+func (c *Live) HubDirect() bool {
+	return c.Linked() && c.hubDirect.Load() && c.d.DirectNotify != nil && c.d.DirectNotify()
 }
 
 func (c *Live) noteAck(ok bool) {
@@ -631,6 +642,7 @@ func (c *Live) clearLink(ctx context.Context) error {
 	c.mu.Lock()
 	c.connected, c.hub, c.lastErr = false, "", ""
 	c.mu.Unlock()
+	c.hubDirect.Store(false)
 	if m := c.d.Modules; m == nil || m.IsRunning(healthchecks.Name) { // ohne Modul gibt es keine Checks
 		if err := c.d.HC.SetOwnerAllSelf(ctx); err != nil {
 			return err

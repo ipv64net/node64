@@ -98,8 +98,15 @@ func (s *Store) ReloadMaintenance(ctx context.Context) error {
 // InMaintenance prueft gegen den Cache; nur Fenster des eigenen Accounts.
 func (s *Store) InMaintenance(_ context.Context, token string, at time.Time) bool {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
 	uid := s.users[token]
+	s.mu.RUnlock()
+	return s.InMaintenanceOf(uid, token, at)
+}
+
+// InMaintenanceOf prueft einen Check mit bekanntem Account (auch Checks, die dieser hub nicht misst).
+func (s *Store) InMaintenanceOf(uid int64, token string, at time.Time) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	for _, m := range s.maint {
 		if m.UserID == uid && m.Covers(token, at) {
 			return true

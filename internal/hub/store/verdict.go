@@ -8,6 +8,7 @@ import (
 
 	"github.com/ipv64net/node64/internal/checks"
 	"github.com/ipv64net/node64/internal/scheduler"
+	"github.com/ipv64net/node64/internal/wire"
 )
 
 // Reverdict berechnet den Gesamtzustand eines Checks aus allen Messstellen
@@ -194,6 +195,13 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		}
 		silent = len(proxies) > 0
 	}
+	// nur die Besitzer-Node misst (lokal): kann sie es, sendet sie ipv64-Kanaele und eigene Kanaele selbst
+	directTo := ""
+	if !silent && execution == "local" && directKind(kind) {
+		if directTo, err = directNode(ctx, tx, measuringNodes(splitList(nodesCol), ownerNode.String), ownerNode.String); err != nil {
+			return err
+		}
+	}
 	nowS := now.Format(TimeFormat)
 	var durationSec int64
 	ds := pt(downSince)
@@ -266,7 +274,7 @@ func (s *Store) Reverdict(ctx context.Context, token string) error {
 		}
 		s.OnOverall(OverallEvent{EventID: eventID, Token: token, UserID: userid, Name: name, Type: ctype, Target: target, Kind: kind, Time: now,
 			From: old, To: overall, Reason: reason, Message: message, Duration: time.Duration(durationSec) * time.Second,
-			Critical: critical == 1, Channels: chIDs, NotifyDown: nd == 1, NotifyUp: nu == 1, NotifyDegraded: ndeg == 1})
+			Critical: critical == 1, Channels: chIDs, NotifyDown: nd == 1, NotifyUp: nu == 1, NotifyDegraded: ndeg == 1, DirectNode: directTo})
 	}
 	return nil
 }
@@ -285,7 +293,38 @@ type OverallEvent struct {
 	Channels             []int64
 	NotifyDown, NotifyUp bool
 	NotifyDegraded       bool
-	Execution            string // nur bei Erinnerungen gesetzt (online, both)
+	Execution            string // nur bei Erinnerungen gesetzt (online, both, local)
+	// DirectNode: diese Node sendet ipv64-Kanaele und eigene Kanaele selbst (wire.NotifyDirect), der hub nur den Rest
+	DirectNode string
+}
+
+// directKind: Ereignisse, die eine Node bei ihren lokalen Checks selbst meldet ("nicht geprueft"/"wieder geprueft"
+// kennt nur der hub).
+func directKind(kind string) bool {
+	return kind == "down" || kind == "up" || kind == "flapping_start" || kind == "flapping_end"
+}
+
+// directNode liefert die Node, die die Meldungen eines lokalen Checks selbst verschickt: sie ist die Besitzerin, misst
+// als einzige und hat wire.NotifyDirect gemeldet (aeltere Nodes nicht: dann sendet der hub wie bisher alles).
+func directNode(ctx context.Context, q rowQuerier, measuring []string, owner string) (string, error) {
+	if owner == "" || len(measuring) != 1 || measuring[0] != owner {
+		return "", nil
+	}
+	rows, err := q.QueryContext(ctx, `SELECT modules FROM hc2_nodes WHERE node_id = ? AND revoked_at IS NULL AND proxy_via IS NULL`, owner)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var mods string
+		if err := rows.Scan(&mods); err != nil {
+			return "", err
+		}
+		if inList(splitList(mods), wire.NotifyDirect) {
+			return owner, nil
+		}
+	}
+	return "", rows.Err()
 }
 
 // eventKind leitet Ereignisart und Stille aus dem Wechsel ab. incidentOpen:
@@ -352,8 +391,14 @@ func diagnosis(down, up []string) string {
 // DueReminders liefert gestoerte Checks mit Wiederholung (repeat_minutes > 0).
 // Time = down_since, Duration = Wiederholungsabstand.
 func (s *Store) DueReminders(ctx context.Context) ([]OverallEvent, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT token, userid, name, type, target, critical, channels, notify_down, notify_up, notify_degraded, repeat_minutes, down_since, last_reason, last_message, execution
-		FROM hc2_checks WHERE deleted_at IS NULL AND repeat_minutes > 0 AND state IN ('down','flapping') AND execution IN ('online','both')
+	// lokale Checks nur, wenn ihre Node die eigenen Erinnerungen selbst schickt (wire.NotifyDirect): hier dann nur die
+	// uebrigen Portal-Kanaele (bei aelteren Nodes erinnert wie bisher niemand)
+	rows, err := s.db.QueryContext(ctx, `SELECT token, userid, name, type, target, critical, channels, notify_down, notify_up, notify_degraded, repeat_minutes, down_since, last_reason, last_message, execution,
+			COALESCE(node_id, '')
+		FROM hc2_checks WHERE deleted_at IS NULL AND repeat_minutes > 0 AND state IN ('down','flapping')
+		AND (execution IN ('online','both') OR (execution = 'local' AND node_id IS NOT NULL AND (nodes = '' OR nodes = node_id)
+			AND EXISTS (SELECT 1 FROM hc2_nodes d WHERE d.node_id = hc2_checks.node_id AND d.revoked_at IS NULL AND d.proxy_via IS NULL
+				AND FIND_IN_SET('`+wire.NotifyDirect+`', d.modules) > 0)))
 		AND NOT EXISTS (SELECT 1 FROM hc2_nodes n WHERE n.userid = hc2_checks.userid AND n.proxy_via IS NOT NULL AND n.revoked_at IS NULL
 			AND (FIND_IN_SET(n.node_id, hc2_checks.nodes) > 0 OR n.node_id = hc2_checks.node_id))`) // Stellvertreter: die Gruppe erinnert
 	if err != nil {
@@ -365,10 +410,13 @@ func (s *Store) DueReminders(ctx context.Context) ([]OverallEvent, error) {
 	for rows.Next() {
 		var e OverallEvent
 		var critical, nd, nu, ndeg, repeat int
-		var channels string
+		var channels, owner string
 		var ds, reason, msg sql.NullString
-		if err := rows.Scan(&e.Token, &e.UserID, &e.Name, &e.Type, &e.Target, &critical, &channels, &nd, &nu, &ndeg, &repeat, &ds, &reason, &msg, &e.Execution); err != nil {
+		if err := rows.Scan(&e.Token, &e.UserID, &e.Name, &e.Type, &e.Target, &critical, &channels, &nd, &nu, &ndeg, &repeat, &ds, &reason, &msg, &e.Execution, &owner); err != nil {
 			return nil, err
+		}
+		if e.Execution == "local" {
+			e.DirectNode = owner
 		}
 		e.Critical, e.NotifyDown, e.NotifyUp, e.NotifyDegraded = critical == 1, nd == 1, nu == 1, ndeg == 1
 		e.Time, e.Duration, e.Reason, e.Message, e.Kind = pt(ds), time.Duration(repeat)*time.Minute, reason.String, msg.String, "reminder"
