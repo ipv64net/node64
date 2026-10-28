@@ -114,7 +114,7 @@ get() { # get <datei>
 	if [ -n "${SONAR64_SRC_DIR:-}" ]; then
 		cp "$SONAR64_SRC_DIR/$1" "$TMP/$1" || die "missing $1 in SONAR64_SRC_DIR"
 	else
-		fetch "https://github.com/$REPO/releases/download/v$VER/$1" "$TMP/$1" || die "download of $1 failed"
+		fetch "https://github.com/$REPO/releases/download/v$VER/$1" "$TMP/$1" || die "download of $1 failed (release v$VER without Sonar64 files? set SONAR64_VERSION)"
 	fi
 }
 say "installing version $VER for $ARCH"
