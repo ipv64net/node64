@@ -227,7 +227,7 @@ func TestParticipate(t *testing.T) {
 	waitFor(t, "runner", func() bool { _, _, running, _ := f.snapshot(); return running == 1 })
 	cfg, _, _, _ := f.snapshot()
 	if cfg.Mode != "module" || cfg.Token != testToken || cfg.Measured || cfg.Budget != sonar.BudgetLow || cfg.DataDir != filepath.Join(m.dataDir, Name) ||
-		cfg.Version != "0.1.0/node64-test" {
+		cfg.Version != version+"/node64-test" {
 		t.Fatalf("config: %+v", cfg)
 	}
 	if fi, err := os.Stat(cfg.DataDir); err != nil || fi.Mode().Perm() != 0o700 {
