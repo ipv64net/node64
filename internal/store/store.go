@@ -51,7 +51,8 @@ type Store struct {
 	newerMu sync.Mutex
 	newer   map[string][]int // Scope -> angewendete, hier unbekannte Migrationen (SchemaNewer)
 
-	settingHook atomic.Pointer[func(ctx context.Context, key string)] // nach jedem SetSetting (core.go)
+	settingHook  atomic.Pointer[func(ctx context.Context, key string)]    // nach jedem SetSetting (core.go)
+	loginCluster func(ctx context.Context, item, id string, deleted bool) // Benutzer & Anmeldung im Cluster (nil = ohne)
 }
 
 // Open oeffnet oder erzeugt die Datenbank.

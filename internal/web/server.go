@@ -38,6 +38,7 @@ import (
 	"github.com/ipv64net/node64/internal/selfupdate"
 	"github.com/ipv64net/node64/internal/store"
 	nodesync "github.com/ipv64net/node64/internal/sync"
+	"github.com/ipv64net/node64/internal/usercluster"
 )
 
 // Deps sind die Abhaengigkeiten der Oberflaeche.
@@ -59,6 +60,7 @@ type Deps struct {
 	Certs      *certs.Manager       // Zertifikatsverwaltung (nil = nicht verfuegbar)
 	Box        *secrets.Box         // Verschluesselung von Geheimnissen (z. B. OIDC-Client-Secret)
 	Updater    *selfupdate.Updater  // Selbst-Update (nil = nicht verfuegbar)
+	Users      *usercluster.Cluster // Benutzer & Anmeldung im Cluster (nil = ohne; Wahl bei gleichnamigen Benutzern)
 	Version    string
 	StartedAt  time.Time
 	// Restart beendet den Node kontrolliert (Docker startet ihn neu), z. B.

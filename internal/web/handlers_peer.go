@@ -30,6 +30,8 @@ type groupData struct {
 	HTTPSPort int    // eigener HTTPS-Port, 0 = keiner (der HTTP-Port spricht auch TLS, dualport.go)
 	Modules   []peer.ModuleState
 	ACME      []acmeRow // verschiedene ACME-Konten im Cluster zur Wahl (leer = keine Abweichung)
+	// gleichnamige, verschiedene Benutzer zur Wahl (cluster_users.go)
+	Users []userConflictRow
 }
 
 // acmeRow ist ein ACME-Konto zur Wahl mit dem Namen der Node.
@@ -64,6 +66,7 @@ func (s *Server) peerRoutes() {
 	s.mux.Handle("POST /cluster/{id}/url", s.auth(s.groupURL))
 	s.mux.Handle("POST /cluster/{id}/resume", s.auth(s.groupResume))
 	s.mux.Handle("POST /cluster/acme", s.auth(s.groupACME))
+	s.mux.Handle("POST /cluster/users", s.auth(s.groupUsers))
 }
 
 func (s *Server) clusterPage(w http.ResponseWriter, r *http.Request) {
@@ -100,6 +103,7 @@ func (s *Server) groupView(r *http.Request) groupData {
 		g.Members = append(g.Members, row)
 	}
 	g.ACME = s.acmeChoices(ctx, list)
+	g.Users = s.userChoices(ctx, list)
 	g.Code, g.CodeExp = s.Peer.PairingCode()
 	g.Linked = s.Peer.LinkedSelf()
 	_, g.Forwarder, g.FwdSelf = s.Peer.Forwarder(ctx)

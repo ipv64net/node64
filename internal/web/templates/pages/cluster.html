@@ -81,6 +81,26 @@
 		</div>
 	</div>
 	{{end}}
+	{{if $g.Users}}
+	<div class="card mb-3 border-warning" id="users">
+		<div class="card-header"><i class="bi bi-people text-warning"></i> {{.T "cluster.users_title"}}{{$.Doc "cluster#abgleich"}}</div>
+		<div class="card-body small">
+			<p class="text-body-secondary">{{.T "cluster.users_choose_hint"}}</p>
+			{{range $g.Users}}
+			<div class="fw-semibold mb-1">{{.Username}}</div>
+			<ul class="list-group mb-3">{{range .Versions}}
+				<li class="list-group-item d-flex align-items-center gap-2 flex-wrap">
+					<div>
+						<span class="fw-semibold">{{if .Own}}{{$.T "cluster.acme_this_node"}}{{else}}{{.Name}}{{end}}</span>{{if .TwoFA}} · <span class="badge text-bg-success">2FA</span>{{end}}{{if .Identities}} · {{$.T "cluster.users_sso" "count" .Identities}}{{end}}
+						<div class="text-body-secondary">{{$.T "cluster.acme_created"}} {{if .CreatedAt.IsZero}}–{{else}}{{$.Time .CreatedAt}}{{end}} · <span class="font-monospace" title="{{.UID}}">{{slice .UID 0 12}}</span></div>
+					</div>
+					<form method="post" action="/cluster/users" class="ms-auto m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="uid" value="{{.UID}}"><button class="btn btn-sm btn-outline-primary" data-confirm="{{$.T "cluster.users_confirm"}}"><i class="bi bi-check2-circle"></i> {{$.T "cluster.users_use"}}</button></form>
+				</li>{{end}}
+			</ul>
+			{{end}}
+		</div>
+	</div>
+	{{end}}
 </div>
 <div class="col-lg-5">
 	<div class="card mb-3" id="add">

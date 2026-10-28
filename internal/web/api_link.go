@@ -44,6 +44,7 @@ func (s *Server) apiLinkRoutes() {
 	s.mux.Handle("POST /api/group/members/{id}/resume", s.auth(s.apiGroupMemberResume))
 	s.mux.Handle("PUT /api/group/sync", s.auth(s.apiGroupSync))
 	s.mux.Handle("POST /api/group/acme", s.auth(s.apiGroupACME))
+	s.mux.Handle("POST /api/group/users", s.auth(s.apiGroupUsers))
 	s.mux.Handle("GET /api/logging", s.auth(s.apiLoggingGet))
 	s.mux.Handle("PUT /api/logging", s.auth(s.apiLoggingPut))
 	s.mux.Handle("GET /api/retention", s.auth(s.apiRetentionGet))
@@ -296,6 +297,7 @@ func (s *Server) apiGroupGet(w http.ResponseWriter, r *http.Request) {
 	if code, exp := s.Peer.PairingCode(); code != "" {
 		out["code"], out["code_expires"] = code, exp
 	}
+	out["user_conflicts"] = userConflictsAPI(s.userChoices(ctx, list))
 	writeJSON(w, 200, out)
 }
 

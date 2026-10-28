@@ -13,6 +13,9 @@ Short summary of what changes per version. Details per module are in the node un
   default; items set up exactly the same on two nodes beforehand are merged instead of appearing twice.
 - Cluster: new module “Node” (off by default) – enter the ipv64 API key only once (same account only, takeover in
   the audit log) and sync general settings (time zone, self-update, MCP on/off).
+- Cluster: new area "Users & login" (users with password, 2FA and SSO links, SSO setup), off by default; passkeys,
+  sessions and forward auth stay per node, users with the same name but different content are offered for choice on
+  the cluster page, the last user of a node is never deleted. Other users of the node can be deleted under Login.
 
 ## 0.12.0-alpha.29 – 2026-10-28
 

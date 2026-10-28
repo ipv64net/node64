@@ -20,6 +20,7 @@ func (s *Server) ssoRoutes() {
 	s.mux.Handle("POST /settings/login/passkeys/begin", s.auth(s.passkeyRegisterBegin))
 	s.mux.Handle("POST /settings/login/passkeys/finish", s.auth(s.passkeyRegisterFinish))
 	s.mux.Handle("POST /settings/login/passkeys/{id}/delete", s.auth(s.passkeyDelete))
+	s.mux.Handle("POST /settings/login/users/{id}/delete", s.auth(s.userDelete)) // cluster_users.go
 	s.mux.HandleFunc("POST /login/passkey/begin", s.passkeyLoginBegin)
 	s.mux.HandleFunc("POST /login/passkey/finish", s.passkeyLoginFinish)
 }
@@ -36,6 +37,8 @@ type loginMethodsData struct {
 	Passkeys   []store.Passkey
 	PKHost     string // Hostname dieser Anfrage (Passkeys gelten nur dafuer)
 	PKOK       bool   // Passkeys sind unter dieser Adresse moeglich (Name statt IP, HTTPS)
+	// alle Benutzer dieser Node (Liste nur bei mehreren, z. B. aus dem Cluster)
+	Users []*store.User
 }
 
 func (s *Server) loginMethodsView(r *http.Request) *View {
@@ -52,6 +55,7 @@ func (s *Server) loginMethodsView(r *http.Request) *View {
 	d.Passkeys, _ = s.Store.Passkeys(ctx, v.User.ID, "")
 	_, host, pkErr := s.relyingParty(r)
 	d.PKHost, d.PKOK = host, pkErr == nil
+	d.Users, _ = s.Store.Users(ctx)
 	v.Data = d
 	return v
 }

@@ -13,6 +13,10 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
   standardmäßig aus; vorher auf zwei Nodes exakt gleich angelegte Einträge werden zusammengeführt statt doppelt.
 - Cluster: neues Modul „Node“ (standardmäßig aus) – ipv64-API-Key nur einmal eintragen (nur gleicher Account,
   Übernahme im Audit-Log) und allgemeine Einstellungen (Zeitzone, Selbst-Update, MCP an/aus) abgleichen.
+- Cluster: neuer Bereich „Benutzer & Anmeldung“ (Benutzer mit Passwort, 2FA und SSO-Verknüpfungen, SSO-Einrichtung),
+  standardmäßig aus; Passkeys, Sitzungen und Forward-Auth bleiben je Node, gleichnamige verschiedene Benutzer stehen
+  auf der Seite Cluster zur Wahl, der letzte Benutzer einer Node wird nie gelöscht. Unter Anmeldung lassen sich andere
+  Benutzer der Node löschen.
 
 ## 0.12.0-alpha.29 – 2026-10-28
 

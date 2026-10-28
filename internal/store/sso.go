@@ -27,11 +27,14 @@ func (s *Store) LinkIdentity(ctx context.Context, userID int64, provider, subjec
 		return ErrIdentityTaken
 	case err == nil:
 		_, err = s.w.ExecContext(ctx, `UPDATE user_identities SET label = ? WHERE provider = ? AND subject = ?`, label, provider, subject)
-		return err
 	case !errors.Is(err, sql.ErrNoRows):
 		return err
+	default:
+		_, err = s.w.ExecContext(ctx, `INSERT INTO user_identities (user_id, provider, subject, label, created_at) VALUES (?,?,?,?,?)`, userID, provider, subject, label, Now())
 	}
-	_, err = s.w.ExecContext(ctx, `INSERT INTO user_identities (user_id, provider, subject, label, created_at) VALUES (?,?,?,?,?)`, userID, provider, subject, label, Now())
+	if err == nil {
+		s.userChanged(ctx, userID) // Verknuepfungen gehoeren zum Benutzer (Cluster)
+	}
 	return err
 }
 
@@ -79,6 +82,9 @@ func (s *Store) UnlinkIdentity(ctx context.Context, userID, id int64) (bool, err
 		return false, err
 	}
 	n, _ := res.RowsAffected()
+	if n > 0 {
+		s.userChanged(ctx, userID)
+	}
 	return n > 0, nil
 }
 
