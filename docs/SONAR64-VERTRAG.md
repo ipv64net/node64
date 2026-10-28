@@ -39,7 +39,8 @@ Teil A stellt in `s64_lib.php` die gemeinsamen Funktionen (Abschnitt 6); J und W
 ## 2. Anmeldung und Schlüssel
 
 - **Sonar-Token:** `s64_` + 40 Zeichen `[A-Za-z0-9]` (Knoten), `s64a_` + 40 (Anker). In der DB nur
-  `SHA-256` hex. Knoten-Token per `POST /sonar/tokens` (API-Key des Accounts), höchstens 10 je Account;
+  `SHA-256` hex. Knoten-Token per `POST /sonar/tokens` (API-Key des Accounts), höchstens 10 je Account und höchstens
+  20 neue je 24 h (429); Löschen gibt Name und Slug des Knotens frei (`~<node_id>`);
   Anker-Token nur per CLI `php bots/sonar_anchor_token.php --name=<anker>` (Dennis).
 - **Header:** `Authorization: Bearer <token>`. Die Routen `/sonar/register|me|plan|results|inbound` sind in
   `route(..., true)` (öffentlich) eingetragen und prüfen das Token selbst; `/sonar/tokens` nutzt die normale
@@ -91,11 +92,14 @@ Plausibilität beim Annehmen (Teil A, je Ergebnis; verworfen + Grund gezählt):
 `too_smooth` (≥ 5 Pakete, Jitter 0 und min = max über die letzten 12 Meldungen zum selben Ziel). Statistische
 Prüfungen (Median, Hin/Zurück, Anker-Wahrheit, Stichproben) macht Teil J.
 Umsetzung: „± eine Runde“ nur, wenn das Ziel in der gemeldeten Runde nicht im Plan steht; geprüft gegen die zwei
-zuletzt ausgelieferten Pläne; Anker sind per icmp/udp immer erlaubt (je Runde einmal). Weitere Gründe ohne
+zuletzt ausgelieferten Pläne; Anker sind per icmp/udp immer erlaubt (je Runde auf dem 5-min-Raster einmal). Weitere Gründe ohne
 `plaus_bad`: `not_measured` (sent = 0), `duplicate` (schon gespeichert). Mit `valid=0` gespeichert werden `bad_time`,
 `below_light`, `too_smooth`. Sofortige Abstufung um eine Stufe (pillar→trusted→stable→new, Eintrag in
 `sonar_trust_log`, Grund `plaus_report`), wenn in einer Meldung ≥ 3 und mehr als die Hälfte der geprüften Werte
-`bad_values`/`below_light`/`too_smooth` sind; Quarantäne setzt nur Teil J.
+`bad_values`/`below_light`/`too_smooth` sind; Quarantäne setzt nur Teil J. `below_light` gegen ein Ziel mit Stufe
+`new`/`stable` (Standort unsicher, Fehler kann am Ziel liegen) wird gezählt und mit `valid=0` gespeichert, zählt aber
+weder in `plaus_bad` noch für die Abstufung. `seq` höchstens Unix-ms + 1 Tag. `inbound`: nur Kurz-IDs aktiver Knoten,
+je Absender, Familie und Runde zusammengefasst.
 
 ## 4. UDP 6464
 
