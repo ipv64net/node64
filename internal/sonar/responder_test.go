@@ -1,10 +1,13 @@
 package sonar
 
 import (
+	"context"
 	"net"
 	"net/netip"
 	"testing"
 	"time"
+
+	"golang.org/x/net/ipv6"
 )
 
 func netAddrPort(ip string, port uint16) netip.AddrPort {
@@ -189,4 +192,134 @@ func TestNewResponderNeedsID(t *testing.T) {
 	if err := r.Close(); err != nil {
 		t.Fatal("zweites Close:", err)
 	}
+}
+
+// An der Wildcard gebunden antwortet der Antworter von der Adresse, an die die Anfrage ging: Anfrage an 127.0.0.2
+// von 127.0.0.1 - ohne IP_PKTINFO kaeme die Antwort von 127.0.0.1 und der verbundene Socket verwuerfe sie.
+func TestResponderReplyFromDst(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		network  string
+		from, to string
+	}{{"ipv4", "udp4", "127.0.0.1", "127.0.0.2"}, {"ipv6", "udp6", "::1", "::1"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, err := NewResponder(":0", "nresp")
+			if err != nil {
+				t.Skip(err)
+			}
+			if r.pkt == 0 {
+				_ = r.Close()
+				t.Skip("keine Zieladresse je Paket auf diesem System")
+			}
+			r.loopback = true // nur Test: Loopback-Quellen erlauben
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan error, 1)
+			go func() { done <- r.Run(ctx) }()
+			defer func() {
+				cancel()
+				<-done
+			}()
+			port := r.LocalAddr().(*net.UDPAddr).Port
+			c, err := net.DialUDP(tc.network, &net.UDPAddr{IP: net.ParseIP(tc.from)},
+				&net.UDPAddr{IP: net.ParseIP(tc.to), Port: port})
+			if err != nil {
+				t.Skip(err)
+			}
+			defer c.Close()
+			req := make([]byte, s64PacketLen)
+			s64Encode(req, s64MagicReq, [8]byte{9}, [4]byte{1})
+			buf := make([]byte, 128)
+			for try := 0; try < 3; try++ {
+				if _, err := c.Write(req); err != nil {
+					t.Skip(err)
+				}
+				_ = c.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+				if n, err := c.Read(buf); err == nil {
+					if nonce, s, ok := s64Parse(buf[:n], s64MagicResp); !ok || nonce != [8]byte{9} || s != udpShortID("nresp") {
+						t.Fatalf("Antwort ungueltig: %x", buf[:n])
+					}
+					return
+				}
+			}
+			t.Fatalf("keine Antwort von %s (Quelle der Antwort falsch?)", tc.to)
+		})
+	}
+}
+
+func TestResponderDstOf(t *testing.T) {
+	r, err := NewResponder(":0", "nresp")
+	if err != nil {
+		t.Skip(err)
+	}
+	defer r.Close()
+	if r.pkt == 0 {
+		t.Skip("keine Zieladresse je Paket auf diesem System")
+	}
+	c, err := net.DialUDP("udp4", nil, &net.UDPAddr{IP: net.IPv4(127, 0, 0, 3), Port: r.LocalAddr().(*net.UDPAddr).Port})
+	if err != nil {
+		t.Skip(err)
+	}
+	defer c.Close()
+	if _, err := c.Write(make([]byte, s64PacketLen)); err != nil {
+		t.Fatal(err)
+	}
+	_ = r.conn.SetReadDeadline(time.Now().Add(time.Second))
+	buf, oob := make([]byte, 128), make([]byte, 128)
+	_, oobn, _, _, err := r.conn.ReadMsgUDPAddrPort(buf, oob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst, ok := r.dstOf(oob[:oobn])
+	if !ok || dst.Unmap() != netip.MustParseAddr("127.0.0.3") {
+		t.Fatalf("Zieladresse %v (%v), want 127.0.0.3", dst, ok)
+	}
+	if r.pkt == 6 {
+		a := dst.As16()
+		copy(r.oob6[r.off6:], a[:])
+		var cm ipv6.ControlMessage
+		if err := cm.Parse(r.oob6); err != nil || !cm.Dst.Equal(net.IPv4(127, 0, 0, 3)) {
+			t.Fatalf("IPV6_PKTINFO-Vorlage: %v %v", cm.Dst, err)
+		}
+	}
+}
+
+// Reiner IPv4-Socket (System ohne IPv6): IP_PKTINFO statt IPV6_PKTINFO.
+func TestResponderReplyFromDstIPv4Socket(t *testing.T) {
+	c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero})
+	if err != nil {
+		t.Skip(err)
+	}
+	r := &Responder{conn: c, short: udpShortID("nresp"), loopback: true, lim: newRespLimiter(), seen: map[respKey]*Inbound{}}
+	r.initPktinfo()
+	if r.pkt != 4 {
+		_ = r.Close()
+		t.Skip("kein IP_PKTINFO auf diesem System")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- r.Run(ctx) }()
+	defer func() {
+		cancel()
+		<-done
+	}()
+	cl, err := net.DialUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)},
+		&net.UDPAddr{IP: net.IPv4(127, 0, 0, 2), Port: c.LocalAddr().(*net.UDPAddr).Port})
+	if err != nil {
+		t.Skip(err)
+	}
+	defer cl.Close()
+	req := make([]byte, s64PacketLen)
+	s64Encode(req, s64MagicReq, [8]byte{5}, [4]byte{1})
+	buf := make([]byte, 128)
+	for try := 0; try < 3; try++ {
+		_, _ = cl.Write(req)
+		_ = cl.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+		if n, err := cl.Read(buf); err == nil {
+			if _, _, ok := s64Parse(buf[:n], s64MagicResp); !ok {
+				t.Fatalf("Antwort ungueltig: %x", buf[:n])
+			}
+			return
+		}
+	}
+	t.Fatal("keine Antwort von 127.0.0.2")
 }

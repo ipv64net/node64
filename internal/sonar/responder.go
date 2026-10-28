@@ -4,8 +4,12 @@ package sonar
 // einer gleich grossen Antwort "S64!". Grenzen: je Quelle 5 Pakete/s (IPv6 je /64), gesamt 50 Pakete/s, Rest wird
 // still verworfen. Keine Antwort an private/reservierte Quellen oder Quellports < 1024 (keine Reflexion auf Dienste).
 // Nur wenn der Antworter selbst an Loopback gebunden ist (Tests), beantwortet er Loopback-Quellen.
+// An der Wildcard gebunden antwortet er von genau der Adresse, an die die Anfrage ging (IP_PKTINFO/IPV6_PKTINFO):
+// sonst waehlt der Kernel die Quelle, und bei mehreren Adressen (IPv6 mit Privacy Extensions, Zusatz-IPs) verwirft
+// der verbundene Socket des Messenden die Antwort.
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"encoding/hex"
@@ -16,6 +20,9 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 )
 
 // Grenzen des Antworters (fest).
@@ -34,6 +41,12 @@ type Responder struct {
 	short    [4]byte
 	loopback bool // an Loopback gebunden: Loopback-Quellen erlaubt (Tests)
 	lim      *respLimiter
+
+	// Zieladresse je Paket (nur aus Run benutzt): 0 = aus, 4 = IP_PKTINFO (IPv4-Socket), 6 = IPV6_PKTINFO
+	// (Dual-Stack, IPv4 als gemappte Adresse). oob6 ist die Vorlage fuer IPV6_PKTINFO, die Adresse steht ab off6.
+	pkt  int
+	oob6 []byte
+	off6 int
 
 	mu   sync.Mutex
 	seen map[respKey]*Inbound
@@ -63,13 +76,87 @@ func NewResponder(addr, nodeID string) (*Responder, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Responder{
+	r := &Responder{
 		conn:     c,
 		short:    udpShortID(nodeID),
 		loopback: ua.IP != nil && ua.IP.IsLoopback(),
 		lim:      newRespLimiter(),
 		seen:     map[respKey]*Inbound{},
-	}, nil
+	}
+	if ua.IP == nil || ua.IP.IsUnspecified() {
+		r.initPktinfo()
+	}
+	return r, nil
+}
+
+// respMarker ist ein Platzhalter, um die Lage der Adresse in IPV6_PKTINFO zu finden (gemappte Adressen setzt
+// golang.org/x/net/ipv6 dort nicht selbst ein).
+var respMarker = [16]byte{0xff, 0x0f, 'S', '6', '4', 'p', 'k', 't', 'i', 'n', 'f', 'o', 0x53, 0x36, 0x34, 0x21}
+
+// initPktinfo schaltet die Zieladresse je Paket ein, wenn das System es kann (sonst wie bisher ohne).
+func (r *Responder) initPktinfo() {
+	la, _ := r.conn.LocalAddr().(*net.UDPAddr)
+	if la == nil {
+		return
+	}
+	if la.IP.To4() != nil {
+		if ipv4.NewPacketConn(r.conn).SetControlMessage(ipv4.FlagDst, true) == nil {
+			r.pkt = 4
+		}
+		return
+	}
+	if ipv6.NewPacketConn(r.conn).SetControlMessage(ipv6.FlagDst, true) != nil {
+		return
+	}
+	oob := (&ipv6.ControlMessage{Src: respMarker[:]}).Marshal()
+	if off := bytes.Index(oob, respMarker[:]); off >= 0 {
+		r.pkt, r.oob6, r.off6 = 6, oob, off
+	}
+}
+
+// dstOf liest die Zieladresse der Anfrage aus den Steuerdaten (Dual-Stack: IPv4 gemappt).
+func (r *Responder) dstOf(oob []byte) (netip.Addr, bool) {
+	var ip net.IP
+	switch r.pkt {
+	case 4:
+		var cm ipv4.ControlMessage
+		if cm.Parse(oob) != nil {
+			return netip.Addr{}, false
+		}
+		ip = cm.Dst
+	case 6:
+		var cm ipv6.ControlMessage
+		if cm.Parse(oob) != nil {
+			return netip.Addr{}, false
+		}
+		ip = cm.Dst
+	}
+	a, ok := netip.AddrFromSlice(ip)
+	return a, ok && a.IsValid() && !a.IsUnspecified()
+}
+
+// reply sendet die Antwort, wenn moeglich von der Zieladresse der Anfrage. Anfragen an Multicast- oder
+// Broadcast-Adressen bleiben unbeantwortet. Lehnt der Kernel die Quelladresse ab, antwortet er ohne Vorgabe.
+func (r *Responder) reply(out []byte, to netip.AddrPort, oob []byte) {
+	if r.pkt != 0 {
+		if dst, ok := r.dstOf(oob); ok {
+			if u := dst.Unmap(); u.IsMulticast() || u == netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
+				return
+			}
+			var cm []byte
+			if r.pkt == 6 {
+				a := dst.As16()
+				copy(r.oob6[r.off6:], a[:])
+				cm = r.oob6
+			} else {
+				cm = (&ipv4.ControlMessage{Src: dst.AsSlice()}).Marshal()
+			}
+			if _, _, err := r.conn.WriteMsgUDPAddrPort(out, cm, to); err == nil {
+				return
+			}
+		}
+	}
+	_, _ = r.conn.WriteToUDPAddrPort(out, to)
 }
 
 // LocalAddr ist die gebundene Adresse (Log, Tests).
@@ -88,9 +175,17 @@ func (r *Responder) Run(ctx context.Context) error {
 	defer r.Close()
 	buf := make([]byte, 2*s64PacketLen) // groessere Pakete fallen durch die Laengenpruefung
 	var out [s64PacketLen]byte
+	var oob [128]byte
 	fails := 0
 	for {
-		n, src, err := r.conn.ReadFromUDPAddrPort(buf)
+		var n, oobn int
+		var src netip.AddrPort
+		var err error
+		if r.pkt != 0 {
+			n, oobn, _, src, err = r.conn.ReadMsgUDPAddrPort(buf, oob[:])
+		} else {
+			n, src, err = r.conn.ReadFromUDPAddrPort(buf)
+		}
 		if err != nil {
 			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
 				return nil
@@ -103,7 +198,7 @@ func (r *Responder) Run(ctx context.Context) error {
 		}
 		fails = 0
 		if r.answer(buf[:n], src, time.Now(), out[:]) {
-			_, _ = r.conn.WriteToUDPAddrPort(out[:], src)
+			r.reply(out[:], src, oob[:oobn])
 		}
 	}
 }
