@@ -71,9 +71,10 @@ Antworten wie API v2 üblich `{ "data": … }`, Fehler RFC 9457. Zeiten ISO 8601
 | DELETE | `/sonar/tokens/{id}` | API-Key | Token und Knoten deaktivieren |
 | POST | `/sonar/register` | Sonar-Token | `Register` → `Me` (legt Knoten an, `node_id` = `n` + 11 `[a-z0-9]`, Anker `a_<name>`); 201 neu, 200 Wiederholung mit gleichem Key, 409 `already_registered` mit anderem |
 | GET | `/sonar/me` | Sonar-Token | `Me` |
+| DELETE | `/sonar/me` | Sonar-Token | abmelden wie `DELETE /sonar/tokens/{id}` (auch Anker, auch vor `register`) → 204; danach jedes Token-Endpoint 401 `invalid_token` |
 | PUT | `/sonar/me` | Sonar-Token | `Me` (nur schreibbare Felder; fehlend oder leerer Text = unverändert, Standort löschen nur mit `lat` und `lon` ausdrücklich `null`; `UpdateMe` im Kern sendet den Standort immer mit) → `Me` |
 | GET | `/sonar/plan` | Sonar-Token | `SignedPlan`; `ETag`/`If-None-Match` → 304; 204 = kein Plan (pausieren erlaubt) |
-| POST | `/sonar/results` | Sonar-Token | `SignedReport` (genau die Schlüssel `report`, `sig`; gzip erlaubt) → 200 `{accepted, rejected, reasons:{…}}`; höchstens 1 Meldung je 60 s (429 + `Retry-After`), `seq` ≤ letzter → 409 `replay`, Nachreichen erlaubt (Puffer 6 h) |
+| POST | `/sonar/results` | Sonar-Token | `SignedReport` (genau die Schlüssel `report`, `sig`; gzip erlaubt) → 200 `{accepted, rejected, reasons:{…}}`; höchstens 1 Meldung je Minute (Abstand < 50 s → 429 + `Retry-After`), `seq` ≤ letzter → 409 `replay`, Nachreichen erlaubt (Puffer 6 h) |
 | GET | `/sonar/inbound?since=` | Sonar-Token | Liste `InboundRow` (höchstens 500, `since` ≤ 24 h zurück) |
 | GET | `/sonar/public/keys` | – | `{keys:[{kid, pubkey}]}` |
 | GET | `/sonar/public/map` | – | Abschnitt 5 |
@@ -85,6 +86,8 @@ Antworten wie API v2 üblich `{ "data": … }`, Fehler RFC 9457. Zeiten ISO 8601
 | GET | `/sonar/public/outages?active=1` | – | Liste `{id, kind:"asn"|"region", key, label, started, ended, affected, total}` |
 
 Öffentliche Antworten: `Cache-Control: public, max-age=60`; nie IPs, nie genaue Koordinaten, nie Account-Daten.
+Ratenbegrenzung je Token 120 Anfragen Spitze, 30/min Dauer; je IP 120 Spitze, 60/min Dauer (1 Plan-Abruf + 1 Meldung je
+Minute passt sicher, auch für mehrere Knoten hinter einer IP).
 
 Plausibilität beim Annehmen (Teil A, je Ergebnis; verworfen + Grund gezählt):
 `not_in_plan` (Ziel/Runde nicht im zuletzt ausgelieferten Plan ± eine Runde), `too_many` (mehr als im Plan),
@@ -92,9 +95,13 @@ Plausibilität beim Annehmen (Teil A, je Ergebnis; verworfen + Grund gezählt):
 `below_light` (Antwortzeit < 2 × Entfernung / 200 km/ms anhand der genauen Koordinaten, Toleranz 0,3 ms),
 `too_smooth` (≥ 5 Pakete, Jitter 0 und min = max über die letzten 12 Meldungen zum selben Ziel). Statistische
 Prüfungen (Median, Hin/Zurück, Anker-Wahrheit, Stichproben) macht Teil J.
-Umsetzung: „± eine Runde“ nur, wenn das Ziel in der gemeldeten Runde nicht im Plan steht; geprüft gegen die zwei
-zuletzt ausgelieferten Pläne; Anker sind per icmp/udp immer erlaubt (je Runde auf dem 5-min-Raster einmal). Weitere Gründe ohne
-`plaus_bad`: `not_measured` (sent = 0), `duplicate` (schon gespeichert). Mit `valid=0` gespeichert werden `bad_time`,
+Umsetzung: „± eine Runde“ nur, wenn das Ziel in der gemeldeten Runde nicht im Plan steht; geprüft gegen alle
+ausgelieferten Fassungen der Runden der letzten 35 min (`sonar_plans.sent_hist`) und die zwei zuletzt ausgelieferten
+Pläne; Anker sind per icmp/udp immer erlaubt (je Runde auf dem 5-min-Raster einmal). Weitere Gründe ohne
+`plaus_bad`: `not_measured` (sent = 0), `duplicate` (schon gespeichert), `not_allowed` (stand im Plan, ist aber nicht
+mehr erlaubt: Ziel abgemeldet, Opt-out oder Adresse laut Plan ≠ aktuelle; nicht gespeichert). Meldet ein **Anker** ein
+gültiges Ergebnis mit `recv > 0` zu einem Knoten (Adresse laut Plan = aktuelle), wird `reach<fam>` sofort hochgestuft
+(`udp` vor `icmp`; herabstufen nur der Planer). Mit `valid=0` gespeichert werden `bad_time`,
 `below_light`, `too_smooth`. Sofortige Abstufung um eine Stufe (pillar→trusted→stable→new, Eintrag in
 `sonar_trust_log`, Grund `plaus_report`), wenn in einer Meldung ≥ 3 und mehr als die Hälfte der geprüften Werte
 `bad_values`/`below_light`/`too_smooth` sind; Quarantäne setzt nur Teil J. `below_light` gegen ein Ziel mit Stufe
@@ -141,11 +148,13 @@ Alle Zeiten `DATETIME(3)` UTC, `utf8mb4`.
   reach4 ENUM('none','icmp','udp') DEFAULT 'none', reach6 …, trust ENUM('new','stable','trusted','pillar','anchor',
   'quarantine') DEFAULT 'new', score DOUBLE DEFAULT 0, uptime30 DOUBLE DEFAULT 0, plaus_ok INT, plaus_bad INT,
   last_seq BIGINT DEFAULT 0, first_seen, last_seen NULL, last_report NULL, last_plan NULL, health JSON NULL,
-  active TINYINT DEFAULT 1)
+  active TINYINT DEFAULT 1, disabled_at DATETIME(3) NULL (gesetzt bei jeder Deaktivierung, `s64_leave()`; beim
+  Wieder-Aktivieren NULL; Index))
 - `sonar_plans` (node_id PK, issued, expires, body MEDIUMTEXT (Plan-JSON ohne Signatur), etag CHAR(16),
-  controls TEXT (Ziel-IDs der Kontrollziele, nie ausgeliefert als solche), sent_etag, sent_body, prev_body, sent_at
-  (setzt nur `GET /sonar/plan`: zuletzt/davor ausgelieferter Plan); Teil J schreibt per `INSERT … ON DUPLICATE KEY
-  UPDATE` nur seine Spalten, nie `REPLACE`)
+  controls TEXT (Ziel-IDs der Kontrollziele, nie ausgeliefert als solche), sent_etag, sent_body, prev_body, sent_at,
+  sent_hist MEDIUMTEXT (setzt nur `GET /sonar/plan`: zuletzt/davor ausgelieferter Plan, `sent_hist` = alle
+  ausgelieferten Fassungen der Runden ab jetzt − 35 min zusammengefasst `{"<Runde Unix>": {"<Ziel>|<fam>|<Methode>":
+  [Anzahl, "<Adresse>"]}}`); Teil J schreibt per `INSERT … ON DUPLICATE KEY UPDATE` nur seine Spalten, nie `REPLACE`)
 - `sonar_results` (id PK, round DATETIME, src VARCHAR(16), dst VARCHAR(16), fam TINYINT, method VARCHAR(6),
   sent TINYINT, recv TINYINT, min_ms FLOAT, avg_ms FLOAT, max_ms FLOAT, jitter_ms FLOAT, at DATETIME(3),
   valid TINYINT, reason VARCHAR(16) NULL, UNIQUE(src, round, dst, fam, method), INDEX(dst, at), INDEX(src, at),
@@ -153,10 +162,15 @@ Alle Zeiten `DATETIME(3)` UTC, `utf8mb4`.
 - `sonar_traces` (id PK, round, src, dst, fam, at, hops JSON, UNIQUE(src, round, dst, fam)) – 7 Tage
 - `sonar_inbound` (id PK, node_id, from_short CHAR(8), fam, at, count) – 24 h (Live über UDP)
 - `sonar_pair_1h` (src, dst, fam, hour, n, avg_ms, p50_ms, loss, PRIMARY(src,dst,fam,hour)) – 90 Tage
-- `sonar_asn_1d` (day, asn_a, asn_b, fam, n, p50_ms, loss, PRIMARY(day,asn_a,asn_b,fam)) – dauerhaft
+- `sonar_asn_1d` (day, asn_a, asn_b, fam, n, p50_ms, loss, PRIMARY(day,asn_a,asn_b,fam)) – 2 Jahre
 - `sonar_outages` (id PK, kind ENUM('asn','region'), keyval VARCHAR(32), label VARCHAR(120), started, ended NULL,
-  affected INT, total INT)
-- `sonar_trust_log` (id PK, node_id, at, old, new, reason VARCHAR(64))
+  affected INT, total INT) – 2 Jahre nach `ended` (offene bleiben)
+- `sonar_trust_log` (id PK, node_id, at, old, new VARCHAR(12), reason VARCHAR(64), INDEX(at)) – 1 Jahr bzw. bis der
+  Knoten gelöscht wird; Abmeldung: `new` = `removed`, `reason` = `leave` | `owner` | `admin[ <Text>]` | `inactive`
+- Aufräumen (`sonar_cleanup.php`, Abschnitt 10.3): Knoten ohne Kontakt seit 30 Tagen abmelden (Anker nur Warnung),
+  nie registrierte Token nach 30 Tagen widerrufen, deaktivierte Knoten 90 Tage nach `disabled_at` mit allen Zeilen
+  (Plan, Ergebnisse, Traces, Proben, Stundenwerte, Vertrauens-Log, Token) löschen, widerrufene Token ohne Knoten nach
+  90 Tagen löschen.
 
 Gemeinsame Funktionen in `deploy/web/sonar/s64_lib.php` (Teil A): `s64_pdo()` (PDO wie die anderen Bots),
 `s64_pub_coords(float $lat, float $lon, int $seed): array` (fester Versatz ≤ 1 km), `s64_distance_km(...)`,
@@ -165,7 +179,11 @@ Team-Cymru-DNS `origin(6).asn.cymru.com` / `asn.cymru.com`, Cache 24 h in der Kn
 `s64_is_public_ip(string $ip): bool`, `s64_plan_sign(string $planJson): array` (`kid`, `sig`), `s64_trust_label()`.
 `s64_pub_coords` liefert `[0 => lat, 1 => lon, 'lat' => …, 'lon' => …]`, `s64_asn_lookup` immer
 `{asn, name, prefix, cc}` (Fehler: `asn` = null). Dazu: `s64_dt()`/`s64_ts()`/`s64_iso()` (UTC, DATETIME(3)),
-`s64_median()`, `s64_short_id()`, `s64_plan_keys()`, `s64_trust_color()`, `s64_trust_weight()`, `s64_cache()`.
+`s64_median()`, `s64_short_id()`, `s64_plan_keys()`, `s64_trust_color()`, `s64_trust_weight()`, `s64_cache()`,
+`s64_exec()`, `s64_leave(PDO $pdo, int $tokenId, string $reason, ?float $now = null): ?string` (Abmelden, Abschnitt
+10.2: Token widerrufen, Knoten des Tokens deaktivieren, IPs weg, bei Knoten auch genauer Standort, Name/Slug frei, Plan
+gelöscht, `sonar_trust_log` removed, `add_log` wenn geladen; genutzt von API, `me.php`, `bots/sonar_node.php`,
+`bots/sonar_cleanup.php`).
 
 ## 7. Planer und Vertrauen (Teil J)
 
