@@ -33,6 +33,7 @@ allen betroffenen Teilen, sonst nicht.
 | **A API ipv64** | `deploy/web/api_v2_sonar.php`, `deploy/web/sonar/s64_lib.php`, `deploy/sql/sonar64.sql`, eine Zeile am Ende von `deploy/web/api_v2_honeypot.php` (`if(is_file(__DIR__ . '/api_v2_sonar.php')) { require __DIR__ . '/api_v2_sonar.php'; }`), `deploy/web/bots/sonar_keygen.php`, `deploy/web/bots/sonar_anchor_token.php`, Tests `deploy/web/sonar/tests/api/**` |
 | **J Jobs ipv64** | `deploy/web/bots/sonar_plan.php`, `sonar_rollup.php`, `sonar_trust.php`, `sonar_outages.php`, `sonar_cleanup.php`, Einträge in `HPC_JOBS` (`deploy/web/bots/honeypot_cron.php`), Tests `deploy/web/sonar/tests/jobs/**` |
 | **W Webseiten** | `deploy/web/sonar/index.php` (Karte), `nodes.php`, `node.php`, `top.php`, `me.php`, `s64_web.php` (gemeinsame Seitenteile), `sonar.js`, `sonar.css`, `de_map.json`, Tests `deploy/web/sonar/tests/web/**` |
+| **Integration** | Ende-zu-Ende-Pruefung `deploy/web/sonar/tests/e2e/**` (echte Binaries, API, Jobs auf der Box); kleine Korrekturen ueber Teilgrenzen nur mit Vermerk hier |
 
 Teil A stellt in `s64_lib.php` die gemeinsamen Funktionen (Abschnitt 6); J und W benutzen nur diese plus eigene.
 
@@ -70,7 +71,7 @@ Antworten wie API v2 üblich `{ "data": … }`, Fehler RFC 9457. Zeiten ISO 8601
 | DELETE | `/sonar/tokens/{id}` | API-Key | Token und Knoten deaktivieren |
 | POST | `/sonar/register` | Sonar-Token | `Register` → `Me` (legt Knoten an, `node_id` = `n` + 11 `[a-z0-9]`, Anker `a_<name>`); 201 neu, 200 Wiederholung mit gleichem Key, 409 `already_registered` mit anderem |
 | GET | `/sonar/me` | Sonar-Token | `Me` |
-| PUT | `/sonar/me` | Sonar-Token | `Me` (nur schreibbare Felder; fehlend oder leerer Text = unverändert) → `Me` |
+| PUT | `/sonar/me` | Sonar-Token | `Me` (nur schreibbare Felder; fehlend oder leerer Text = unverändert, Standort löschen nur mit `lat` und `lon` ausdrücklich `null`; `UpdateMe` im Kern sendet den Standort immer mit) → `Me` |
 | GET | `/sonar/plan` | Sonar-Token | `SignedPlan`; `ETag`/`If-None-Match` → 304; 204 = kein Plan (pausieren erlaubt) |
 | POST | `/sonar/results` | Sonar-Token | `SignedReport` (genau die Schlüssel `report`, `sig`; gzip erlaubt) → 200 `{accepted, rejected, reasons:{…}}`; höchstens 1 Meldung je 60 s (429 + `Retry-After`), `seq` ≤ letzter → 409 `replay`, Nachreichen erlaubt (Puffer 6 h) |
 | GET | `/sonar/inbound?since=` | Sonar-Token | Liste `InboundRow` (höchstens 500, `since` ≤ 24 h zurück) |
@@ -176,7 +177,7 @@ Team-Cymru-DNS `origin(6).asn.cymru.com` / `asn.cymru.com`, Cache 24 h in der Kn
   wenn erreichbar, sonst `icmp`. Kontrollziele: in ~5 % der Pläne ein Anker zusätzlich, Werte gegen die Messung
   des Ankers prüfen. Traceroute: je Knoten höchstens 2 Ziele je Stunde (Anker oder Nachbar).
   Runden liegen auf dem 5-min-Raster (UTC); schon geplante Runden (laufende und kommende) bleiben unverändert, jeder
-  Lauf hängt nur neue an (Plan = laufende + 6 kommende Runden), nicht mehr erlaubte Ziele (Opt-out, Quarantäne, andere
+  Lauf hängt nur neue an (Plan = laufende + 6 kommende Runden; ein neuer Plan beginnt mit der nächsten Runde), nicht mehr erlaubte Ziele (Opt-out, Quarantäne, andere
   IP/Weg) fallen sofort heraus. Anker messen gemessene Knoten bis 6 h nach dem letzten Kontakt (Störungen sehen).
   Kontrollziel = ein Anker per `icmp`; `controls` = JSON `[{round, id, fam}]`. Nicht neu geschriebene Pläne (Knoten
   offline, nichts zu planen) bekommen `expires` = jetzt (nicht mehr ausgeliefert, `sent_body` bleibt).
