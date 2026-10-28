@@ -20,7 +20,7 @@
     },
     {
       "name": "Cluster",
-      "description": "Nodes mit demselben ipv64-Account oder alle ohne Account, Abgleich je Modul und Bereich über HTTPS (früher „Lokale Gruppe“)"
+      "description": "Nodes mit demselben ipv64-Account oder ohne Account (nie zwei verschiedene), Abgleich je Modul und Bereich über HTTPS (früher „Lokale Gruppe“)"
     },
     {
       "name": "Verknüpfung",

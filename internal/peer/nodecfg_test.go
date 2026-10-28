@@ -2,6 +2,7 @@ package peer
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"strings"
@@ -26,7 +27,7 @@ func (nodeProv) ClusterModule() ModuleInfo {
 func newNodeCfg(n *testNode, id string) *ipv64api.Key {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	key := ipv64api.NewKey(n.m.d.Core, n.m.d.Box, ipv64api.NewClient("http://127.0.0.1:1", "test"), log) // ipv64 nie gefragt
-	c := nodecfg.New(nodecfg.Deps{Store: n.m.d.Core, Box: n.m.d.Box, Key: key, Account: n.m.Account, Log: log})
+	c := nodecfg.New(nodecfg.Deps{Store: n.m.d.Core, Box: n.m.d.Box, Key: key, Account: n.m.Account, ClusterAccount: n.m.ClusterAccount, Log: log})
 	n.m.RegisterProvider(nodeProv{c})
 	c.SetCluster(func(ctx context.Context, item, eid string, deleted bool, at time.Time) {
 		if !at.IsZero() {
@@ -118,5 +119,62 @@ func TestNodeCfgCluster(t *testing.T) {
 	round2(a, b, c)
 	if kb.Get(ctx) != "" || kc.Get(ctx) != "" {
 		t.Fatal("area off: key must not be exchanged")
+	}
+}
+
+// Node ohne Account uebernimmt den API-Key (Dennis: gleicher Account oder keiner): danach haben beide den Account
+// des Keys, nichts wird ausgesetzt; eine Node mit anderem Account kommt nicht dazu; Entfernen (X→0) laesst alle aktiv.
+func TestNodeCfgKeyToNodeWithoutAccount(t *testing.T) {
+	ctx := context.Background()
+	a, b, y := newNode(t, "node-a", "A", 0), newNode(t, "node-b", "B", 0), newNode(t, "node-y", "Y", 0)
+	keys := map[*testNode]*ipv64api.Key{}
+	for _, n := range []*testNode{a, b, y} {
+		k := newNodeCfg(n, n.m.d.NodeID())
+		keys[n] = k
+		n.m.d.AccountID = func() int64 { return int64(k.Info(context.Background()).ID) } // wie main.go: Account vom Key
+	}
+	ka, kb := keys[a], keys[b]
+	const key = "AAAAbbbbCCCCdddd1111"
+	if err := ka.SetFromCluster(ctx, key, ipv64api.AccountInfo{ID: 522, Account: "dennis"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = keys[y].SetFromCluster(ctx, "YYYYyyyyYYYYyyyy9999", ipv64api.AccountInfo{ID: 999, Account: "other"})
+	pair(t, a, b) // A (522) und B (ohne)
+	waitMembers(t, a, "B")
+	for _, n := range []*testNode{a, b} {
+		for _, item := range []string{"", nodecfg.ItemAPIKey} {
+			if err := n.m.SetSync(ctx, nodecfg.ModuleID, item, true); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	round2(a, b)
+	if kb.Get(ctx) != key || b.m.Account() != 522 {
+		t.Fatalf("B must take the key: account=%d", b.m.Account())
+	}
+	for _, n := range []*testNode{a, b} {
+		wantActive(t, n, 1)
+	}
+	if x := memberOf(t, a, "node-b"); x.AccountID != 522 || x.SelfAccount != 522 {
+		t.Fatalf("A sees B: %+v", x)
+	}
+	if x := memberOf(t, b, "node-a"); x.AccountID != 522 || x.SelfAccount != 522 {
+		t.Fatalf("B sees A: %+v", x)
+	}
+	// eine Node mit anderem Account kommt nicht dazu
+	code, _, _ := a.m.StartPairing()
+	if err := y.m.Join(ctx, a.srv.URL, code, y.srv.URL); !errors.Is(err, ErrAccountMismatch) {
+		t.Fatalf("Y (999) joins: %v", err)
+	}
+	// Entfernen auf B (X→0 auf beiden): alle bleiben aktiv
+	if err := kb.Clear(ctx); err != nil {
+		t.Fatal(err)
+	}
+	round2(a, b)
+	if ka.Get(ctx) != "" || a.m.Account() != 0 || b.m.Account() != 0 {
+		t.Fatalf("removal must reach A: accounts %d/%d", a.m.Account(), b.m.Account())
+	}
+	for _, n := range []*testNode{a, b} {
+		wantActive(t, n, 1)
 	}
 }

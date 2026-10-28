@@ -11,8 +11,11 @@ Short summary of what changes per version. Details per module are in the node un
   choice on the cluster page.
 - Cluster: new areas "Status pages" and "Channels" (notifications, mainly for nodes without ipv64.net), off by
   default; items set up exactly the same on two nodes beforehand are merged instead of appearing twice.
-- Cluster: new module “Node” (off by default) – enter the ipv64 API key only once (same account only, takeover in
-  the audit log) and sync general settings (time zone, self-update, MCP on/off).
+- Cluster: new module “Node” (off by default) – enter the ipv64 API key only once (same account or the node has none
+  yet, never another one; takeover in the audit log) and sync general settings (time zone, self-update, MCP on/off).
+- Cluster: nodes without an ipv64 account can join a cluster with an account; a node getting the cluster's account
+  (e.g. via the API key) or losing it no longer suspends anything. Two different accounts in one cluster are still
+  never possible.
 - Cluster: new area "Users & login" (users with password, 2FA and SSO links, SSO setup), off by default; passkeys,
   sessions and forward auth stay per node, users with the same name but different content are offered for choice on
   the cluster page, the last user of a node is never deleted. Other users of the node can be deleted under Login.

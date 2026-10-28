@@ -86,8 +86,8 @@ func (m *Manager) callAny(ctx context.Context, x Member, method, path string, in
 }
 
 // verify prueft eine eingehende signierte Anfrage (bind = Exporter der eigenen TLS-Verbindung) und liefert die
-// Absenderin. Passt der Account nicht, wird sie ausgesetzt; ausgesetzte Mitglieder duerfen nur noch pingen (fuer
-// das Wiederaufnehmen) und sich bzw. diese Node abmelden.
+// Absenderin. Passt ihr Account nicht zum Cluster (anderer als dessen Account, 0 passt immer), wird sie ausgesetzt;
+// ausgesetzte Mitglieder duerfen nur noch pingen (fuer das Wiederaufnehmen) und sich bzw. diese Node abmelden.
 func (m *Manager) verify(r *http.Request, body, bind []byte) (*Member, int, error) {
 	ctx := r.Context()
 	x, err := m.member(ctx, r.Header.Get(hdrNode))
@@ -121,11 +121,14 @@ func (m *Manager) verify(r *http.Request, body, bind []byte) (*Member, int, erro
 	}
 	acc, _ := strconv.ParseInt(accS, 10, 64)
 	mismatch := false
-	if own := m.d.AccountID(); m.accountChanged(ctx, *x) {
+	if m.accountChanged(ctx, *x) {
 		x.State, mismatch = stateSuspended, true
-	} else if acc != own || x.AccountID != own {
+	} else if !compatible(acc, m.ClusterAccount(ctx)) { // der signierte Account: gleich oder 0, nie ein anderer
 		m.suspend(ctx, *x, ReasonAccountMismatch, "account of the other node does not match")
 		x.State, mismatch = stateSuspended, true
+	} else if acc != x.AccountID && !x.Suspended() { // passend geaendert (z. B. 0→X): vermerken
+		_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET account_id = ? WHERE node_id = ?`, acc, x.NodeID)
+		x.AccountID = acc
 	}
 	if x.Suspended() && !suspendedMay(r, body, m.d.NodeID(), x.NodeID) {
 		if mismatch {
@@ -266,13 +269,15 @@ func (m *Manager) CancelPairing() {
 }
 
 // Join tritt ueber eine Node des Clusters bei (addr = deren Adresse, selfURL = Adresse dieser Node; beide werden
-// https, die eigene mit dem HTTPS-Port). Gleicher Account auf beiden Seiten, auch beide ohne (0).
+// https, die eigene mit dem HTTPS-Port). Die Accounts beider Cluster muessen passen: gleich oder eine Seite ohne (0).
+// Gesendet wird der Account des Clusters (eigener, sonst der der Mitglieder), damit eine Node ohne Account keine
+// zwei Accounts verbindet.
 func (m *Manager) Join(ctx context.Context, addr, code, selfURL string) error {
 	port := m.httpsPort()
 	if port <= 0 {
 		return ErrNoHTTPS
 	}
-	acc := m.d.AccountID()
+	acc := m.ClusterAccount(ctx)
 	addr = httpsURL(addr)
 	nonce := make([]byte, 16)
 	_, _ = rand.Read(nonce)
@@ -320,8 +325,11 @@ func (m *Manager) Join(ctx context.Context, addr, code, selfURL string) error {
 	if out.Nonce != req.Nonce || subtle.ConstantTimeCompare([]byte(out.mac(code, p.bind)), []byte(out.MAC)) != 1 {
 		return ErrCode // Antwort nicht von einer Node, die den Code kennt (oder nicht ueber diese Verbindung)
 	}
-	if out.AccountID != acc {
+	if !compatible(out.AccountID, acc) {
 		return ErrAccountMismatch
+	}
+	if acc == 0 {
+		acc = out.AccountID
 	}
 	if out.NodeID == m.d.NodeID() {
 		return ErrSelf
@@ -329,9 +337,12 @@ func (m *Manager) Join(ctx context.Context, addr, code, selfURL string) error {
 	if err := m.upsert(ctx, Member{NodeID: out.NodeID, Name: out.Name, URL: addr, PubKey: out.PubKey, AccountID: out.AccountID}, m.d.NodeID()); err != nil {
 		return err
 	}
-	m.activate(ctx, out.NodeID, acc) // neu gekoppelt: auch ein vorher ausgesetztes Mitglied ist wieder aktiv
+	m.activate(ctx, out.NodeID, out.AccountID) // neu gekoppelt: auch ein vorher ausgesetztes Mitglied ist wieder aktiv
 	for _, x := range out.Members {
-		if x.AccountID == acc {
+		if compatible(x.AccountID, acc) {
+			if acc == 0 {
+				acc = x.AccountID
+			}
 			_ = m.upsert(ctx, x, out.NodeID)
 		}
 	}
@@ -381,12 +392,12 @@ func (m *Manager) handlePair(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "code wrong or expired"})
 		return
 	}
-	own, port := m.d.AccountID(), m.httpsPort()
+	own, port := m.ClusterAccount(r.Context()), m.httpsPort()
 	switch {
 	case port <= 0:
 		writeJSON(w, http.StatusConflict, map[string]string{"error": ErrNoHTTPS.Error()})
 		return
-	case in.AccountID != own: // gleicher Account oder beide ohne (0); gemischt geht nicht
+	case !compatible(in.AccountID, own): // gleicher Account oder eine Seite ohne (0); nie zwei verschiedene
 		m.d.Log.Warn("peer pairing rejected (account)", "node", in.Name, "account", in.AccountID)
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "account mismatch"})
 		return
@@ -413,7 +424,7 @@ func (m *Manager) handlePair(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
 		return
 	}
-	m.activate(r.Context(), in.NodeID, own)
+	m.activate(r.Context(), in.NodeID, in.AccountID)
 	// eigene Adresse: so, wie die neue Node diese gerade per TLS erreicht hat
 	out := pairMsg{NodeID: m.d.NodeID(), Name: m.d.NodeName(), URL: httpsURL(r.Host), PubKey: m.PublicKey(), AccountID: own,
 		Version: m.d.Version, HTTPSPort: port, Nonce: in.Nonce}
@@ -466,7 +477,7 @@ func (m *Manager) handleMembers(w http.ResponseWriter, r *http.Request, from *Me
 	ctx := r.Context()
 	switch op.Op {
 	case "add":
-		if op.Member.AccountID != m.d.AccountID() {
+		if !compatible(op.Member.AccountID, m.ClusterAccount(ctx)) {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "account mismatch"})
 			return
 		}

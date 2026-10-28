@@ -1,12 +1,13 @@
-// Package peer ist der Cluster (frueher lokale Gruppe): Nodes desselben ipv64-Accounts (oder alle ohne Account)
-// koppeln sich per Code und gleichen direkt untereinander ab (nur HTTPS, auch in verschiedenen Netzen),
-// zusaetzlich zum hub.
+// Package peer ist der Cluster (frueher lokale Gruppe): Nodes desselben ipv64-Accounts (Nodes ohne Account duerfen
+// dazu, nie zwei verschiedene Accounts) koppeln sich per Code und gleichen direkt untereinander ab (nur HTTPS, auch
+// in verschiedenen Netzen), zusaetzlich zum hub.
 //
 // Vertrauen: jede Node hat ein Ed25519-Schluesselpaar. Gekoppelt wird mit einem Code, den Node A zeigt und
 // der auf Node B eingegeben wird; beide beweisen per HMAC, dass sie den Code kennen (er geht nie im Klartext
 // ueber das Netz) und tauschen ihre Schluessel. Danach ist jede Anfrage und jede Antwort signiert und an die
-// TLS-Verbindung gebunden (transport.go), und der ipv64-Account der Absenderin muss bei jeder Anfrage mit dem
-// eigenen uebereinstimmen. Aendert sich etwas Grundlegendes, wird das Mitglied ausgesetzt (suspend.go).
+// TLS-Verbindung gebunden (transport.go), und der ipv64-Account der Absenderin muss bei jeder Anfrage zum Cluster
+// passen (gleich oder 0, siehe compatible). Aendert sich etwas Grundlegendes, wird das Mitglied ausgesetzt
+// (suspend.go).
 package peer
 
 import (
@@ -77,7 +78,7 @@ type Member struct {
 	Sync      []string  `json:"-"` // eingeschaltete Cluster-Bereiche "modul/bereich" laut Ping (nil = aeltere Version)
 	State     string    `json:"-"` // "" bzw. "active", "suspended" (suspend.go)
 	Reason    string    `json:"-"` // Grund der Aussetzung (Kennung, z. B. account_changed)
-	// SelfAccount: eigener Account zum Zeitpunkt der Kopplung (aendert er sich, wird das Mitglied ausgesetzt)
+	// SelfAccount: eigener Account bei der Kopplung (passend geaendert wird er nachgefuehrt, sonst ausgesetzt)
 	SelfAccount int64 `json:"-"`
 }
 
@@ -158,7 +159,7 @@ func New(ctx context.Context, d Deps) (*Manager, error) {
 	return m, d.Core.SetSetting(ctx, setKey, v)
 }
 
-// Account ist der ipv64-Account dieser Node (0 = keiner, dann nur mit Nodes ohne Account).
+// Account ist der ipv64-Account dieser Node (0 = keiner; passt zu jedem Cluster, siehe compatible).
 func (m *Manager) Account() int64 { return m.d.AccountID() }
 
 // PublicKey der eigenen Node (base64).
@@ -243,8 +244,9 @@ func (m *Manager) seen(ctx context.Context, nodeID string, info pingInfo, err er
 	if info.Sync != nil {
 		caps = joinCaps(info.Sync)
 	}
-	_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET last_seen = ?, last_error = '', version = ?, linked = ?, sync = ?, name = CASE WHEN ? != '' THEN ? ELSE name END WHERE node_id = ?`,
-		fmtTime(time.Now()), trunc(info.Version, 32), info.Linked, caps, info.Name, trunc(info.Name, 100), nodeID)
+	// account_id: der aktuelle Account des Mitglieds (passend geaendert, z. B. 0→X nach Uebernahme des API-Keys)
+	_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET last_seen = ?, last_error = '', version = ?, linked = ?, sync = ?, account_id = ?, name = CASE WHEN ? != '' THEN ? ELSE name END WHERE node_id = ?`,
+		fmtTime(time.Now()), trunc(info.Version, 32), info.Linked, caps, info.AccountID, info.Name, trunc(info.Name, 100), nodeID)
 }
 
 // linkedSelf: diese Node ist mit dem hub verknuepft.
@@ -285,7 +287,7 @@ func (m *Manager) Run(ctx context.Context) {
 }
 
 func (m *Manager) pingAll(ctx context.Context) {
-	m.checkAccount(ctx) // eigener Account geaendert: Mitglieder der alten Kopplung aussetzen
+	m.checkAccount(ctx) // eigener Account geaendert: passend vermerken, sonst Mitglieder der alten Kopplung aussetzen
 	if list, err := m.Members(ctx); err == nil {
 		for _, x := range list { // nur wegen alter Version ausgesetzt: nach deren Update von selbst wieder aktiv
 			if x.Suspended() && x.Reason == ReasonVersionTooOld {
@@ -302,7 +304,7 @@ func (m *Manager) pingAll(ctx context.Context) {
 		case err == nil && out.NodeID != x.NodeID:
 			m.suspend(ctx, x, ReasonIdentityChanged, "other node at this address")
 			continue
-		case err == nil && out.AccountID != m.d.AccountID():
+		case err == nil && !compatible(out.AccountID, m.ClusterAccount(ctx)): // anderer Account als der des Clusters
 			m.suspend(ctx, x, ReasonAccountMismatch, "account of the other node does not match")
 			continue
 		}

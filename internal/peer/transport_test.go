@@ -62,23 +62,53 @@ func mitm(t *testing.T, to *testNode) *httptest.Server {
 	return s
 }
 
+// wantActive: alle Mitglieder aktiv, Pings ohne Fehler.
+func wantActive(t *testing.T, n *testNode, count int) {
+	t.Helper()
+	wantPingOK(t, n)
+	if got := len(n.m.activeMembers(context.Background())); got != count {
+		t.Fatalf("%s: %d active members, want %d", n.m.d.NodeName(), got, count)
+	}
+}
+
+// Accounts im Cluster: gleich oder eine Node ohne (0), nie zwei verschiedene.
 func TestClusterWithoutAccount(t *testing.T) {
 	ctx := context.Background()
 	a, b := newNode(t, "node-a", "A", 0), newNode(t, "node-b", "B", 0)
-	x := newNode(t, "node-x", "X", 522)
+	x, y := newNode(t, "node-x", "X", 522), newNode(t, "node-y", "Y", 999)
 	pair(t, a, b) // beide ohne ipv64
 	waitMembers(t, a, "B")
 	wantPingOK(t, a)
 	wantPingOK(t, b)
-	// gemischt geht nicht, in beide Richtungen
+	// eine Node mit Account darf zu Nodes ohne
+	pair(t, a, x)
+	waitMembers(t, a, "B", "X")
+	waitMembers(t, b, "A", "X")
+	waitMembers(t, x, "A", "B")
+	for _, n := range []*testNode{a, b, x} {
+		wantActive(t, n, 2)
+	}
+	if acc := b.m.ClusterAccount(ctx); acc != 522 {
+		t.Fatalf("cluster account seen by B: %d", acc)
+	}
+	// ein zweiter Account nie, auch nicht ueber eine Node ohne Account (in beide Richtungen)
 	code, _, _ := a.m.StartPairing()
-	if err := x.m.Join(ctx, a.srv.URL, code, x.srv.URL); !errors.Is(err, ErrAccountMismatch) {
-		t.Fatalf("X (522) joins A (0): %v", err)
+	if err := y.m.Join(ctx, a.srv.URL, code, y.srv.URL); !errors.Is(err, ErrAccountMismatch) {
+		t.Fatalf("Y (999) joins A (0, cluster 522): %v", err)
 	}
-	code, _, _ = x.m.StartPairing()
-	if err := a.m.Join(ctx, x.srv.URL, code, a.srv.URL); !errors.Is(err, ErrAccountMismatch) {
-		t.Fatalf("A (0) joins X (522): %v", err)
+	code, _, _ = y.m.StartPairing()
+	if err := b.m.Join(ctx, y.srv.URL, code, b.srv.URL); !errors.Is(err, ErrAccountMismatch) {
+		t.Fatalf("B (0, cluster 522) joins Y (999): %v", err)
 	}
+	// eine Node ohne Account bekommt einen anderen: ausgesetzt, die anderen arbeiten weiter
+	b.acc = 999
+	b.m.pingAll(ctx)
+	wantState(t, b, "node-x", ReasonAccountChanged)
+	a.m.pingAll(ctx)
+	x.m.pingAll(ctx)
+	wantState(t, a, "node-b", ReasonAccountMismatch)
+	wantState(t, x, "node-b", ReasonAccountMismatch)
+	wantState(t, a, "node-x", "")
 }
 
 func TestClusterHTTPSOnly(t *testing.T) {
@@ -238,23 +268,32 @@ func TestClusterAccountMovesTogether(t *testing.T) {
 	a, b := newNode(t, "node-a", "A", 0), newNode(t, "node-b", "B", 0)
 	pair(t, a, b)
 	waitMembers(t, a, "B")
-	// beide verknuepfen sich mit ipv64 (0 -> 777): ausgesetzt, nach dem Wiederaufnehmen mit dem neuen Account
-	a.acc, b.acc = 777, 777
-	a.m.pingAll(ctx)
-	b.m.pingAll(ctx)
-	wantState(t, a, "node-b", ReasonAccountChanged)
-	wantState(t, b, "node-a", ReasonAccountChanged)
-	if err := a.m.Resume(ctx, "node-b"); err != nil {
-		t.Fatal(err)
+	// A verknuepft sich mit ipv64 (0 -> 777): passt (B ohne), nichts ausgesetzt; dann B ebenso
+	a.acc = 777
+	wantActive(t, a, 1)
+	wantActive(t, b, 1)
+	if x := memberOf(t, b, "node-a"); x.AccountID != 777 || x.SelfAccount != 0 {
+		t.Fatalf("B sees A: %+v", x)
 	}
-	if err := b.m.Resume(ctx, "node-a"); err != nil {
-		t.Fatal(err)
-	}
+	b.acc = 777
+	wantActive(t, b, 1)
+	wantActive(t, a, 1)
 	if x := memberOf(t, a, "node-b"); x.AccountID != 777 || x.SelfAccount != 777 || x.Suspended() {
-		t.Fatalf("after resume: %+v", x)
+		t.Fatalf("A sees B: %+v", x)
 	}
-	wantPingOK(t, a)
-	wantPingOK(t, b)
+	// A verliert den Account (Key entfernt, 777 -> 0): passt weiter
+	a.acc = 0
+	wantActive(t, a, 1)
+	wantActive(t, b, 1)
+	if x := memberOf(t, b, "node-a"); x.AccountID != 0 {
+		t.Fatalf("B sees A without account: %+v", x)
+	}
+	// A bekommt danach einen anderen als der Cluster (0 -> 888, B hat 777): A setzt aus, B ebenso
+	a.acc = 888
+	a.m.pingAll(ctx)
+	wantState(t, a, "node-b", ReasonAccountChanged)
+	b.m.pingAll(ctx)
+	wantState(t, b, "node-a", ReasonAccountMismatch)
 }
 
 func TestNonceReplay(t *testing.T) {

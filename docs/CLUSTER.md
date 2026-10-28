@@ -40,7 +40,16 @@ Healthchecks-Ablauf im Detail: [LOKALE-GRUPPE.md](LOKALE-GRUPPE.md). Code: `inte
 - Wiederholungsschutz: jede Nonce wird im Zeitfenster gemerkt, eine Wiederholung → `401 replayed request`.
 - Größe: Body höchstens 8 MiB, Beitritt 1 MiB.
 - Beitrittscode: 8 Zeichen, 10 min gültig, einmal verwendbar, nach 5 Fehlversuchen verworfen.
-- Account: alle Mitglieder gleicher ipv64-Account oder alle ohne (0). Er steht in jeder Signatur.
+- Account: alle Mitglieder gleicher ipv64-Account oder ohne (0); zwei verschiedene Accounts nie. Zwei Accounts passen,
+  wenn sie gleich sind oder einer 0 ist; geprüft wird gegen den Account des Clusters (der eigene, sonst der eines
+  aktiven Mitglieds). Er steht in jeder Signatur (geprüft wie oben, nie ein anderer Account angenommen).
+- Beitritt: Beide Seiten senden den Account ihres Clusters (nicht nur den eigenen), damit eine Node ohne Account nie
+  zwei Accounts verbindet: X tritt zu Nodes ohne Account bei, Y nicht zu einem Cluster mit X – auch nicht über eine
+  Node ohne Account.
+- Eigener Account ändert sich: 0→X (X wie im Cluster oder dort noch keiner) und X→0 (Key entfernt, Verknüpfung
+  gelöst) werden nur vermerkt; X→Y setzt alle Mitglieder aus (`account_changed`). Meldet ein Mitglied einen anderen
+  Account als den des Clusters, wird es ausgesetzt (`account_mismatch`); passend geänderte Accounts (z. B. 0→X)
+  werden beim Ping bzw. mit der nächsten Anfrage nachgeführt.
 
 ## Zeiten und Grenzen
 
@@ -261,21 +270,20 @@ jüngere Änderung gewinnt.
 - **Achtung:** Der Key gibt Vollzugriff auf den ipv64-Account (Hinweis am Schalter). Er geht im Klartext über die
   Cluster-Verbindung (HTTPS, an die Kopplung gebunden) und wird auf der empfangenden Node mit deren Schlüssel
   verschlüsselt. Eingeschaltet ersetzt ein neuer Key auf einer Node den Key der anderen.
-- Angenommen wird er nur, wenn die Account-ID des Keys gleich dem Account der empfangenden Node ist (wie ihn der
-  Cluster prüft: Healthchecks-Verknüpfung, sonst Key). Der Account einer Node ändert sich durch den Cluster nie: Hat
-  die Node keinen Account (0) oder einen anderen, wird der Key abgelehnt („cluster change not applied“ im Log). Ein
-  Key ohne Account-ID wird ebenfalls abgelehnt. Eine Node ohne Account bekommt den Key also nur, indem sie zuerst mit
-  demselben Account verknüpft wird (Healthchecks-Sync) oder der Key einmal von Hand eingetragen wird.
+- Angenommen wird er nur bei gleichem Account oder wenn die Node noch keinen hat; nie ein anderer Account. Genau:
+  Account-ID des Keys gleich dem Account der empfangenden Node (wie ihn der Cluster prüft: Healthchecks-Verknüpfung,
+  sonst Key), oder die Node hat keinen (0) und der Account des Clusters ist derselbe bzw. es gibt dort noch keinen.
+  Sonst wird der Key abgelehnt („cluster change not applied“ im Log), ebenso ein Key ohne Account-ID. Eine Node ohne
+  Account gehört nach der Übernahme zum Account des Keys; das setzt niemanden aus (0→X passt, siehe Sicherheit).
 - Übernommen wird über denselben Weg wie eine Eingabe in den Einstellungen (`ipv64api.Key`, Konto, Merker „entfernt“
   zurück); alles, was den Key nutzt (DynDNS, Healthchecks über die API, Meldungen …), liest ihn ohnehin frisch.
   Jede Übernahme steht im Audit-Log (`peer.ipv64_key`, `peer.ipv64_key_removed`, Bereich `sync`).
 - Entfernen in den Einstellungen entfernt ihn auf allen Nodes mit eingeschaltetem Bereich. Entfernt ipv64.net die
   Node (Node-Übersicht), gilt das nur für sie: kein Löschen für die anderen, und sie nimmt keinen Key aus dem Cluster
   an, bis er auf ihr selbst eingetragen wird.
-- Grenze „Konto gleich oder 0“: Hängt der Account einer Node nur am Key (keine Healthchecks-Verknüpfung), ändert
-  Eintragen, Wechsel auf einen anderen Account oder Entfernen ihren Account – die anderen Nodes werden dann
-  ausgesetzt (`account_changed`), bevor etwas abgeglichen wird. Der Bereich hilft also vor allem, wenn alle Nodes
-  schon zum selben Account gehören.
+- Hängt der Account einer Node nur am Key (keine Healthchecks-Verknüpfung), ändern Eintragen und Entfernen ihren
+  Account (0→X, X→0) – das passt und setzt nichts aus. Nur ein Key eines anderen Accounts (X→Y, von Hand eingetragen)
+  setzt die anderen Nodes aus (`account_changed`).
 
 **`settings`** – Kennung = Einstellungsschlüssel, feste Liste (Whitelist in `nodecfg.go`, je Schlüssel mit Merker
 „geheim“: dann im Klartext übertragen und auf der empfangenden Node neu verschlüsselt):
@@ -343,7 +351,8 @@ nicht miteinander).
 ## Ausgesetzte Nodes
 
 Grundlegende Änderung → ausgesetzt: keine Anfragen mehr an sie, ihre Anfragen werden mit 403 abgelehnt; die anderen
-arbeiten weiter. Gründe: `account_changed`, `account_mismatch`, `identity_changed`, `tls_binding`,
+arbeiten weiter. Gründe: `account_changed` (eigener Account auf einen anderen als den des Clusters, X→Y),
+`account_mismatch` (Mitglied meldet einen anderen Account als den des Clusters), `identity_changed`, `tls_binding`,
 `version_too_old`. Zurück nur mit „Wieder aufnehmen“ (prüft erneut) – außer `version_too_old`: wird beim nächsten
 Ping nach dem Update der anderen Node von selbst wieder aktiv (gestaffeltes Update).
 
