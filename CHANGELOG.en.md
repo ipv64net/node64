@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 0.12.0-alpha.27 – 2026-10-28
+
 - Sonar64 (new, optional, off by default): community measurement network – opt-in with the ipv64 API key, outbound
   only or also measured (UDP 6464), budget, quiet hours, profile with blurred location, trust level and live tables of
   the pings; leaving signs the node off at ipv64.net.
