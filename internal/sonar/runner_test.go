@@ -89,6 +89,7 @@ type fakeAPI struct {
 	results  int // Status fuer /results (0 = 200)
 	me       Me
 	puts     []meWrite
+	rawPuts  []string
 	since    []string
 	srv      *httptest.Server
 }
@@ -129,8 +130,10 @@ func (f *fakeAPI) handle(w http.ResponseWriter, r *http.Request) {
 	case "/sonar/me":
 		if r.Method == http.MethodPut {
 			var m meWrite
-			json.NewDecoder(r.Body).Decode(&m)
+			b, _ := io.ReadAll(r.Body)
+			json.Unmarshal(b, &m)
 			f.puts = append(f.puts, m)
+			f.rawPuts = append(f.rawPuts, string(b))
 			f.me.Measured, f.me.Budget = m.Measured, m.Budget
 		}
 		data(w, f.me)
@@ -568,6 +571,21 @@ func TestRunnerResponderAndUpdateMe(t *testing.T) {
 	m, err := r.UpdateMe(ctx, Me{Name: "Mein Knoten", Lat: &lat, Lon: &lon, Access: "fiber", Device: "pi", Measured: false, Budget: BudgetNormal})
 	if err != nil || m.NodeID != testNodeID {
 		t.Fatalf("update me: %v", err)
+	}
+	f.mu.Lock()
+	sync0, last := f.rawPuts[0], f.rawPuts[len(f.rawPuts)-1]
+	f.mu.Unlock()
+	if strings.Contains(sync0, `"lat"`) || !strings.Contains(last, `"lat":50.1`) {
+		t.Fatalf("location in PUT /sonar/me: sync %s, update %s", sync0, last)
+	}
+	if _, err := r.UpdateMe(ctx, Me{Measured: false, Budget: BudgetNormal}); err != nil {
+		t.Fatalf("clear location: %v", err)
+	}
+	f.mu.Lock()
+	last = f.rawPuts[len(f.rawPuts)-1]
+	f.mu.Unlock()
+	if !strings.Contains(last, `"lat":null`) || !strings.Contains(last, `"lon":null`) || strings.Contains(last, `"name"`) {
+		t.Fatalf("clear location must send lat/lon null: %s", last)
 	}
 	wait("responder off", func() bool { return !r.Status().Responder })
 	if st := r.Status(); st.Measured || st.Budget != BudgetNormal {

@@ -1878,7 +1878,8 @@
     "healthchecks": "Healthchecks",
     "dyndns": "DynDNS-Updater",
     "proxy": "Reverse-Proxy",
-    "link": "ipv64-Verknüpfung"
+    "link": "ipv64-Verknüpfung",
+    "sonar64": "Sonar64 (Community-Messnetz)"
   },
   "ipv64key": {
     "title": "ipv64-API-Key",
@@ -4991,6 +4992,11 @@
       "desc": "Lockvogel im Netz: erkennt Angreifer, die Zugangsdaten durchprobieren, und meldet sie an die IPv64-Blocklisten.",
       "h1": "Simuliert gängige Dienste wie SSH, Telnet und Web-Logins",
       "h2": "Frühwarnung und Beitrag zu den gemeinsamen Blocklisten"
+    },
+    "sonar64": {
+      "desc": "Community-Messnetz: Deine Node misst sparsam nach einem signierten Plan von ipv64 die Latenz zu anderen Teilnehmern und zu den Ankern – sichtbar auf der Karte unter ipv64.net/sonar.",
+      "h1": "Ping über ICMP und UDP 6464, feste Grenzen, nie private Ziele",
+      "h2": "Nur ausgehend oder auch gemessen werden, Standort öffentlich nur verschleiert"
     }
   },
   "sonar64": {
