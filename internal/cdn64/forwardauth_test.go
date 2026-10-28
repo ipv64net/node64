@@ -183,7 +183,7 @@ func TestAccessFormForwardAuthRender(t *testing.T) {
 	key, _ := newAccessKey("Handy-App")
 	a := &AccessList{ID: 3, Name: "SSO", Auth: AuthAuthentik, PassUser: true, Keys: []AccessKey{key},
 		Forward: ForwardAuth{Address: "http://authentik-server:9000/outpost.goauthentik.io/auth/traefik", Callback: "/outpost.goauthentik.io/"}}
-	body := renderPage(t, "access_form.html", (&Module{}).aclFormData(nil, a.public(), false, ""))
+	body := renderPage(t, "access_form.html", (&Module{}).aclFormData(a.public(), false, ""))
 	for _, want := range []string{`name="auth" data-acl-auth`, `value="authentik" data-example="` + fwdPresets[AuthAuthentik].Example + `" selected`,
 		`value="http://authentik-server:9000/outpost.goauthentik.io/auth/traefik"`, `name="new_key"`, `value="` + key.Hint + `"`,
 		`name="pass_user" id="pass_user" checked`, `d-none" data-login-box`} {
@@ -220,7 +220,7 @@ func TestDockerTraefikForwardAuth(t *testing.T) {
 		t.Fatalf("app: %+v", v)
 	}
 	lists, _ := e.m.accessLists(ctx)
-	if len(lists) != 1 || lists[0].Name != "Traefik: authentik" || lists[0].Auth != AuthAuthentik || lists[0].Forward.Callback != "/outpost.goauthentik.io/" ||
+	if len(lists) != 1 || lists[0].Name != "Traefik: authentik (authentik-server:9000)" || lists[0].Auth != AuthAuthentik || lists[0].Forward.Callback != "/outpost.goauthentik.io/" ||
 		!slices.Equal(lists[0].Forward.Headers, []string{"X-authentik-username", "X-authentik-groups"}) {
 		t.Fatalf("lists: %+v", lists)
 	}
@@ -229,7 +229,7 @@ func TestDockerTraefikForwardAuth(t *testing.T) {
 		t.Fatalf("app host without list: %+v", h)
 	}
 	// Liste aus dem Label: Auswahl im Formular gesperrt, Speichern in Oberflaeche und API aendert sie nicht
-	if e.m.dockerACLFrom(ctx, h) != "Traefik: authentik" {
+	if e.m.dockerACLFrom(ctx, h) != "Traefik: authentik (authentik-server:9000)" {
 		t.Fatalf("acl from label: %q", e.m.dockerACLFrom(ctx, h))
 	}
 	if form := aiRender(t, "host_form.html", e.m.form(ctx, h, false)); !strings.Contains(form, `name="access_list_id" disabled data-docker-acl`) ||
@@ -254,9 +254,14 @@ func TestDockerTraefikForwardAuth(t *testing.T) {
 	if got, _ := e.m.host(ctx, h.ID); got.AccessListID != lists[0].ID {
 		t.Fatalf("api changed the label's list: %d %s %+v", rec.Code, rec.Body.String(), got)
 	}
-	// sso@file: Liste fehlt -> Host trotzdem, mit Hinweis; mit Liste "sso" wird sie zugewiesen
-	if v := viewOf(e.m, "wiki"); v.HostID == 0 || v.Problem != dockerErrAccess || v.ProblemName != "sso" {
+	// secure-headers@file, sso@file: keine Liste dazu -> Host ausgeschaltet, Hinweis, Formular nicht gesperrt;
+	// mit Liste "sso" wird sie zugewiesen (Host bleibt aus, bis man ihn einschaltet)
+	v := viewOf(e.m, "wiki")
+	if v.HostID == 0 || v.Problem != dockerErrMW || v.ProblemName != "secure-headers@file, sso@file" || v.Access != "" {
 		t.Fatalf("wiki: %+v", v)
+	}
+	if w, _ := e.m.host(ctx, v.HostID); w.Enabled || w.AccessListID != 0 || e.m.dockerACLFrom(ctx, w) != "" {
+		t.Fatalf("wiki host must be off and unlocked: %+v", w)
 	}
 	sso := &AccessList{Name: "SSO", Auth: AuthAuthelia, Forward: ForwardAuth{Address: "http://authelia:9091/api/authz/forward-auth"}}
 	if err := e.m.saveAccessList(ctx, sso, nil); err != nil {
@@ -266,8 +271,34 @@ func TestDockerTraefikForwardAuth(t *testing.T) {
 	if v := viewOf(e.m, "wiki"); v.Problem != "" {
 		t.Fatalf("wiki after list: %+v", v)
 	}
-	if w, _ := e.m.host(ctx, viewOf(e.m, "wiki").HostID); w.AccessListID != sso.ID {
+	if w, _ := e.m.host(ctx, viewOf(e.m, "wiki").HostID); w.AccessListID != sso.ID || w.Enabled {
 		t.Fatalf("wiki host without list: %+v", w)
+	}
+	// andere Adresse in den Labels: neue Liste (alte bleibt), geaenderte Antwort-Header werden nachgezogen
+	f.mu.Lock()
+	app.labels["traefik.http.middlewares.authentik.forwardauth.address"] = "http://ak2:9000/outpost.goauthentik.io/auth/traefik"
+	f.mu.Unlock()
+	dockerOnce(t, e.m)
+	h2, _ := e.m.host(ctx, h.ID)
+	nl, _ := e.m.accessList(ctx, h2.AccessListID)
+	if nl == nil || nl.Name != "Traefik: authentik (ak2:9000)" || nl.Forward.Address != "http://ak2:9000/outpost.goauthentik.io/auth/traefik" {
+		t.Fatalf("new address: %+v", nl)
+	}
+	f.mu.Lock()
+	app.labels["traefik.http.middlewares.authentik.forwardauth.authResponseHeaders"] = "X-authentik-username"
+	f.mu.Unlock()
+	dockerOnce(t, e.m)
+	if nl, _ = e.m.accessList(ctx, h2.AccessListID); !slices.Equal(nl.Forward.Headers, []string{"X-authentik-username"}) {
+		t.Fatalf("headers not updated: %+v", nl.Forward)
+	}
+	// Liste aus node64.proxy.access fehlt: neuer Host ausgeschaltet
+	f.set(app, wiki, &fakeC{id: "c3", name: "own", state: "running", created: 3, nets: map[string]string{"proxy": "172.20.0.7"},
+		labels: map[string]string{LabelProxyHost: "own.example.test", LabelProxyPort: "80", LabelProxyAccess: "Gibt es nicht"}})
+	dockerOnce(t, e.m)
+	if v := viewOf(e.m, "own"); v.Problem != dockerErrAccess || v.ProblemName != "Gibt es nicht" {
+		t.Fatalf("own: %+v", v)
+	} else if o, _ := e.m.host(ctx, v.HostID); o == nil || o.Enabled {
+		t.Fatalf("own host must be off: %+v", o)
 	}
 	for addr, want := range map[string]string{"http://a:9091/api/verify?rd=x": AuthAuthelia, "http://p:4180/oauth2/auth": AuthOAuth2, "http://x/check": AuthCustom} {
 		if got := fwdKindOf(addr); got != want {
@@ -291,5 +322,73 @@ func TestForwardAuthProtoBehindProxy(t *testing.T) {
 	r = r.WithContext(context.WithValue(r.Context(), ctxClientKey{}, netip.MustParseAddr("203.0.113.5")))
 	if res := f.check(httptest.NewRecorder(), r); !res.ok || proto != "https" {
 		t.Fatalf("behind trusted proxy: %v %q", res.ok, proto)
+	}
+}
+
+// Rueckweg des Dienstes: IP-Regeln gelten ("beides noetig"), hinter vertrauenswuerdigem Proxy meldet er https.
+func TestForwardAuthCallbackRules(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.enable(t)
+	var proto string
+	ak := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proto = r.Header.Get("X-Forwarded-Proto")
+		_, _ = w.Write([]byte("callback"))
+	}))
+	t.Cleanup(ak.Close)
+	port := headerBackend(t)
+	a := &AccessList{Name: "SSO", Auth: AuthAuthentik, Rules: []AccessRule{{Action: "deny", CIDR: "127.0.0.0/8"}, {Action: "allow", CIDR: "all"}},
+		Forward: ForwardAuth{Address: ak.URL + "/outpost.goauthentik.io/auth/traefik"}}
+	if err := e.m.saveAccessList(ctx, a, nil); err != nil {
+		t.Fatal(err)
+	}
+	h := newHost()
+	h.Names, h.TargetHost, h.TargetPort, h.CertID, h.AccessListID = []string{"cb.test"}, "127.0.0.1", port, CertNone, a.ID
+	if err := e.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	c := e.client(false)
+	if code, _, _ := do(t, c, "GET", "http://cb.test/outpost.goauthentik.io/callback"); code != http.StatusForbidden {
+		t.Fatalf("denied ip reached the callback: %d", code)
+	}
+	// Proto am Rueckweg: hinter vertrauenswuerdigem Proxy https
+	g := newGuard(a)
+	r := httptest.NewRequest("GET", "http://cb.test/outpost.goauthentik.io/callback", nil)
+	r.RemoteAddr = "10.0.0.1:1234"
+	r.Header.Set("X-Forwarded-Proto", "https")
+	r = r.WithContext(context.WithValue(r.Context(), ctxClientKey{}, netip.MustParseAddr("203.0.113.5")))
+	g.fwd.callback.ServeHTTP(httptest.NewRecorder(), r)
+	if proto != "https" {
+		t.Fatalf("callback proto behind proxy: %q", proto)
+	}
+}
+
+// Neuer API-Key: steht in der Antwort-Seite, nie im Hinweis-Cookie.
+func TestAccessKeyShownOnce(t *testing.T) {
+	e := newEnv(t)
+	e.enable(t)
+	var flash []string
+	var shown aclForm
+	e.m.g.Flash = func(_ http.ResponseWriter, _ *http.Request, _, text string) { flash = append(flash, text) }
+	e.m.g.T = func(_ *http.Request, key string, args ...any) string { return key }
+	e.m.g.Audit = func(*http.Request, string, string, string) {}
+	e.m.g.Render = func(w http.ResponseWriter, _ *http.Request, st int, _, _ string, d any) {
+		shown, _ = d.(aclForm)
+		w.WriteHeader(st)
+	}
+	req := httptest.NewRequest("POST", "/cdn64/access", strings.NewReader(url.Values{"name": {"Keys"}, "new_key": {"Skript"}, "satisfy_any": {"1"}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	e.m.pageACLCreate(rec, req)
+	if rec.Code != http.StatusOK || !strings.HasPrefix(shown.NewKey, keyPrefix) || shown.A == nil || shown.A.ID == 0 || shown.New {
+		t.Fatalf("key page: %d %+v", rec.Code, shown)
+	}
+	for _, f := range flash {
+		if strings.Contains(f, keyPrefix) {
+			t.Fatal("api key in flash cookie")
+		}
+	}
+	if body := renderPage(t, "access_form.html", shown); !strings.Contains(body, shown.NewKey) || !strings.Contains(body, "data-new-key") {
+		t.Fatal("key not on the page")
 	}
 }

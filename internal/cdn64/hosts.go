@@ -37,10 +37,10 @@ const (
 
 var redirectCodes = map[int]bool{300: true, 301: true, 302: true, 303: true, 307: true, 308: true}
 
-// Host ist ein Proxy-Host.
 // TLSBSI: Host.MinTLS fuer TLS nach BSI TR-02102-2 (TLS 1.2 und 1.3, Verfahren nach der Richtlinie, edge.Route.BSI).
 const TLSBSI = "bsi"
 
+// Host ist ein Proxy-Host.
 type Host struct {
 	ID             int64      `json:"id"`
 	Kind           string     `json:"kind"`

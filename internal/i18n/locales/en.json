@@ -403,7 +403,8 @@
         "dup": "The name already belongs to container {name} (the first one seen wins).",
         "rule": "Traefik router {name}: rule not supported (Host(…) only).",
         "service": "Traefik router {name}: no unique service or port.",
-        "access": "Access list \"{name}\" does not exist – create it under access lists with this name.",
+        "access": "Access list \"{name}\" does not exist – new host created switched off. Create a list with this name or choose one in the host, then switch it on.",
+        "middleware": "PROXY64 does not take over middleware {name} – new host created switched off. Create an access list with this name or choose one in the host, then switch it on.",
         "delete": "Managed by Docker – remove the label or the container",
         "docker_host": "Invalid Docker API: unix:///path, tcp://host:port or http(s)://host:port.",
         "cert": "Invalid certificate method."
@@ -745,7 +746,7 @@
       "keys": "API keys",
       "key_name": "New API key: name, e.g. \"phone app\"",
       "keys_hint": "For apps and scripts: as \"Authorization: Bearer …\", in the X-API-Key header or as password.",
-      "key_created": "New API key – copy it now, it will not be shown again: {key}",
+      "key_created_page": "New API key – copy it now, it will not be shown again:",
       "pass_user": "Pass the user to the target",
       "pass_user_hint": "Sets Remote-User, Remote-Email and Remote-Groups (for \"trusted header SSO\")."
     },

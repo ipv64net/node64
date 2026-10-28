@@ -105,6 +105,7 @@ type aclForm struct {
 	Errors  map[string]string
 	Auths   []aclAuth // Auswahl "Anmeldung"
 	Headers string    // Antwort-Header des Anmeldedienstes, je Zeile
+	NewKey  string    // eben angelegter API-Key (nur in dieser Antwort, nie in einem Cookie)
 }
 
 // aclAuth ist eine Wahl unter "Anmeldung" (Beispiel-Adresse fuer das Feld).
@@ -118,7 +119,7 @@ func aclAuths() []aclAuth {
 	return out
 }
 
-func (m *Module) aclFormData(r *http.Request, a *AccessList, isNew bool, rules string) aclForm {
+func (m *Module) aclFormData(a *AccessList, isNew bool, rules string) aclForm {
 	return aclForm{Tabs: m.tabs("/cdn64/access"), A: a, New: isNew, Rules: rules, Errors: map[string]string{}, Auths: aclAuths(),
 		Headers: strings.Join(a.Forward.Headers, "\n")}
 }
@@ -133,7 +134,7 @@ func rulesText(rules []AccessRule) string {
 
 func (m *Module) pageACLNew(w http.ResponseWriter, r *http.Request) {
 	a := &AccessList{Users: []AccessUser{}, Rules: []AccessRule{}, Keys: []AccessKey{}}
-	m.g.Render(w, r, http.StatusOK, Name+"/access_form", "cdn64.acl.new", m.aclFormData(r, a, true,
+	m.g.Render(w, r, http.StatusOK, Name+"/access_form", "cdn64.acl.new", m.aclFormData(a, true,
 		"allow 192.168.0.0/16\nallow 10.0.0.0/8\nallow 172.16.0.0/12\nallow fc00::/7\n"))
 }
 
@@ -153,7 +154,7 @@ func (m *Module) pageACLEdit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	m.g.Render(w, r, http.StatusOK, Name+"/access_form", "cdn64.acl.edit", m.aclFormData(r, a.public(), false, rulesText(a.Rules)))
+	m.g.Render(w, r, http.StatusOK, Name+"/access_form", "cdn64.acl.edit", m.aclFormData(a.public(), false, rulesText(a.Rules)))
 }
 
 // parseRules: eine Regel je Zeile, "allow 192.168.0.0/16" oder "deny all".
@@ -237,7 +238,7 @@ func (m *Module) saveACLForm(w http.ResponseWriter, r *http.Request, a *AccessLi
 	}
 	a.Keys = keys
 	if err := m.saveAccessList(r.Context(), a, users); err != nil {
-		d := m.aclFormData(r, a.public(), isNew, r.PostFormValue("rules"))
+		d := m.aclFormData(a.public(), isNew, r.PostFormValue("rules"))
 		d.Headers = r.PostFormValue("fwd_headers")
 		var fe *FieldError
 		if errors.As(err, &fe) {
@@ -254,9 +255,10 @@ func (m *Module) saveACLForm(w http.ResponseWriter, r *http.Request, a *AccessLi
 	}
 	m.g.Audit(r, action, a.Name, fmt.Sprintf("users=%d rules=%d satisfy_any=%v pass_auth=%v login_page=%v auth=%s keys=%d pass_user=%v", len(a.Users),
 		len(a.Rules), a.SatisfyAny, a.PassAuth, a.LoginPage, a.Auth, len(a.Keys), a.PassUser))
-	if newKey != "" { // nur jetzt sichtbar
-		m.g.Flash(w, r, "warning", m.g.T(r, "cdn64.acl.key_created", "key", newKey))
-		http.Redirect(w, r, "/cdn64/access/"+strconv.FormatInt(a.ID, 10), http.StatusSeeOther)
+	if newKey != "" { // nur in dieser Antwort sichtbar (kein Flash: der liegt in einem Cookie)
+		d := m.aclFormData(a.public(), false, rulesText(a.Rules))
+		d.NewKey = newKey
+		m.g.Render(w, r, http.StatusOK, Name+"/access_form", "cdn64.acl.edit", d)
 		return
 	}
 	m.g.Flash(w, r, "success", m.g.T(r, "common.saved"))

@@ -403,7 +403,8 @@
         "dup": "Der Name gehört schon zu Container {name} (der zuerst gesehene gewinnt).",
         "rule": "Traefik-Router {name}: Regel nicht unterstützt (nur Host(…)).",
         "service": "Traefik-Router {name}: kein eindeutiger Service bzw. Port.",
-        "access": "Zugriffsliste „{name}“ gibt es nicht – unter Zugriffslisten mit diesem Namen anlegen.",
+        "access": "Zugriffsliste „{name}“ gibt es nicht – neuer Host ausgeschaltet angelegt. Liste mit diesem Namen anlegen oder im Host eine wählen, dann einschalten.",
+        "middleware": "Middleware {name} übernimmt PROXY64 nicht – neuer Host ausgeschaltet angelegt. Eine Zugriffsliste mit diesem Namen anlegen oder im Host eine wählen, dann einschalten.",
         "delete": "Von Docker verwaltet – Label oder Container entfernen",
         "docker_host": "Ungültige Docker-API: unix:///pfad, tcp://host:port oder http(s)://host:port.",
         "cert": "Ungültiger Weg für das Zertifikat."
@@ -745,7 +746,7 @@
       "keys": "API-Keys",
       "key_name": "Neuer API-Key: Name, z. B. „Handy-App“",
       "keys_hint": "Für Apps und Skripte: als „Authorization: Bearer …“, im Header X-API-Key oder als Passwort.",
-      "key_created": "Neuer API-Key – jetzt kopieren, er wird nicht wieder angezeigt: {key}",
+      "key_created_page": "Neuer API-Key – jetzt kopieren, er wird nicht wieder angezeigt:",
       "pass_user": "Benutzer an das Ziel melden",
       "pass_user_hint": "Setzt Remote-User, Remote-Email und Remote-Groups (für „Trusted Header SSO“)."
     },

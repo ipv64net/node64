@@ -1,5 +1,20 @@
 # Änderungen – PROXY64
 
+## 1.38.2 – 2026-10-28
+
+### Behoben
+- Docker/Traefik-Labels: Verlangen die Labels Schutz, den PROXY64 nicht abbilden kann (Zugriffsliste fehlt,
+  Middleware aus einer Datei, basicAuth, ipAllowList, chain …), wird ein neuer Host ausgeschaltet angelegt statt
+  ungeschützt online – mit Hinweis im Reiter Docker. Eine Zugriffsliste gleichen Namens wird zugewiesen. Harmlose
+  Middlewares (headers, compress, redirectScheme …) bleiben unbeachtet; bei mehreren Routern für denselben Host gilt der
+  mit den wenigsten nicht übernommenen Middlewares.
+- Die Zugriffsliste aus einer forwardAuth-Middleware heißt jetzt „Traefik: <Name> (<Dienst>)“: eine andere Adresse
+  ergibt eine eigene Liste, geänderte Antwort-Header werden nachgezogen.
+- Forward-Auth: Der Rückweg zum Anmeldedienst beachtet IP-Regeln und die Sperre nach Fehlversuchen und meldet hinter
+  einem vertrauenswürdigen Proxy (z. B. Cloudflare) https. Antworten des Dienstes kommen unkomprimiert.
+- Neuer API-Key erscheint direkt auf der Seite statt über den Hinweis (der in einem Cookie lag).
+- Import: Hosts verlieren die Docker-Kennung der Quelle und werden normale Hosts.
+
 ## 1.38.1 – 2026-10-28
 
 ### Geändert

@@ -49,7 +49,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.38.1"
+	Version = "1.38.2"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -488,7 +488,8 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	for _, h := range f.Hosts {
 		oldID := h.ID
 		h.ID = 0
-		h.AccessListID = acl.ids[h.AccessListID] // unbekannt -> 0 (keine)
+		h.DockerContainer, h.DockerRouter = "", "" // gehoeren zu den Containern der Quelle: hier ein normaler Host
+		h.AccessListID = acl.ids[h.AccessListID]   // unbekannt -> 0 (keine)
 		for i := range h.Locations {
 			h.Locations[i].AccessListID = acl.ids[h.Locations[i].AccessListID]
 		}

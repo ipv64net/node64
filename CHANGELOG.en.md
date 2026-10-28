@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: Docker/Traefik labels with protection that cannot be mapped give a switched-off host instead of an
+  unprotected one; fixes to forward auth and API keys.
 - DynDNS: confirmation when several names from the account are added at once.
 
 ## 0.12.0-alpha.26 – 2026-10-28
