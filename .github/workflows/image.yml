@@ -42,14 +42,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
-          # Tag v0.12.0-alpha.1 -> 0.12.0-alpha.1; "latest" nur fuer Versionen ohne Vorab-Kennung
+          # Tag v0.12.0-alpha.1 -> 0.12.0-alpha.1; "latest" fuer jedes Versions-Tag (auch Alpha, Wunsch Dennis)
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref_name, '-') }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' }}
             type=sha,format=short,enable=${{ github.event_name == 'workflow_dispatch' }}
           flavor: |
-            latest=auto
+            latest=false
       - uses: docker/build-push-action@v6
         with:
           context: .
