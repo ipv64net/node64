@@ -61,6 +61,9 @@ type Module struct {
 
 	startedAt time.Time // Start des Moduls (Anschluss-Analyse danach neu, z. B. nach Wechsel des Netzwerkmodus)
 
+	cluster ClusterHooks // Abgleich und zustaendige Node im Cluster (cluster.go); leer = kein Cluster
+	cl      clusterState
+
 	stMu      sync.Mutex
 	fam       [2]famState // [0] IPv4, [1] IPv6
 	lim       limitInfo   // Update-Limit des Accounts (mit API-Key)
@@ -106,7 +109,7 @@ func (m *Module) adoptOldKey(ctx context.Context) {
 
 func (m *Module) Info() module.Info {
 	return module.Info{Name: Name, TitleKey: "nav.dyndns", Icon: "bi-globe", Image: "dyndns64.webp", Path: "/dyndns", Available: true, Order: 20,
-		Version: "1.4.1", Changelog: changelog, ChangelogEN: changelogEN}
+		Version: "1.5.0", Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {

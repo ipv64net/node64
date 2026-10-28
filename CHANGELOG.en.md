@@ -16,6 +16,8 @@ Short summary of what changes per version. Details per module are in the node un
 - Cluster: new area "Users & login" (users with password, 2FA and SSO links, SSO setup), off by default; passkeys,
   sessions and forward auth stay per node, users with the same name but different content are offered for choice on
   the cluster page, the last user of a node is never deleted. Other users of the node can be deleted under Login.
+- DynDNS/cluster: new area "DynDNS" (off by default) syncs names and settings; only one node updates at a time, if it
+  fails another one takes over automatically (preferred node selectable on the DynDNS page).
 
 ## 0.12.0-alpha.29 – 2026-10-28
 

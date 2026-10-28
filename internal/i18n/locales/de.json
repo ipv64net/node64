@@ -2132,7 +2132,21 @@
       "failed": "{name}: Update fehlgeschlagen ({error}).",
       "paused": "{name} pausiert: {reason}.",
       "busy": "Gerade läuft ein Abgleich. Bitte in ein paar Sekunden noch einmal.",
-      "nothing": "{name}: nichts zu melden – für die gewählten Modi ist gerade keine aktuelle Adresse bekannt."
+      "nothing": "{name}: nichts zu melden – für die gewählten Modi ist gerade keine aktuelle Adresse bekannt.",
+      "other": "Im Cluster aktualisiert die Node „{node}“ die Namen. Dort aktualisieren oder diese Node als bevorzugte wählen."
+    },
+    "cluster": {
+      "here": "Cluster: Diese Node aktualisiert die Namen für alle Nodes des Clusters.",
+      "other": "Cluster: Die Node „{node}“ aktualisiert die Namen, diese Node nur bei deren Ausfall.",
+      "pending": "Cluster: Die zuständige Node wird gerade bestimmt.",
+      "to_cluster": "Cluster",
+      "preferred": "Bevorzugte Node",
+      "auto": "automatisch (kleinste Kennung)",
+      "this_node": "diese Node",
+      "offline": "nicht erreichbar",
+      "hint": "Fällt die zuständige Node länger als 2 Minuten aus, übernimmt eine andere. Eine zurückgekehrte Node übernimmt erst wieder, wenn sie 5 Minuten erreichbar ist. Stehen die Nodes in verschiedenen Netzen, zeigen die Namen dann auf den anderen Anschluss.",
+      "saved": "Bevorzugte Node gespeichert.",
+      "invalid": "Diese Node gehört nicht zum DynDNS-Bereich des Clusters."
     },
     "limit": {
       "used": "DynDNS-Updates heute: {used} von {limit}",
@@ -3252,6 +3266,7 @@
     "sync_title": "Was wird abgeglichen",
     "sync_hint": "Ein Bereich wird nur mit Nodes abgeglichen, bei denen er ebenfalls eingeschaltet ist – also nur, wenn er auf beiden Nodes an ist.",
     "channels_hint": "Nur nötig ohne Verbindung zu ipv64.net – verknüpfte Nodes bekommen die Kanäle des Portals über ipv64.net. Abgeglichen werden nur die eigenen Kanäle der Node, nie die des Portals.",
+    "dyndns_hint": "Nur eine Node meldet die Adressen an ipv64 (bevorzugte Node auf der Seite DynDNS). Fällt sie aus, übernimmt eine andere – in einem anderen Netz zeigen die Namen dann auf deren Anschluss.",
     "mod_unavailable": "(auf dieser Node nicht aktiv)",
     "users_hint": "Gleichnamige Benutzer, die sich unterscheiden (z. B. anderes Passwort), werden nie überschrieben: Sie stehen auf dieser Seite zur Wahl. Der letzte Benutzer einer Node wird nie gelöscht.",
     "users_title": "Benutzer im Cluster: bitte wählen",
@@ -3267,7 +3282,8 @@
       "certs": "Zertifikate",
       "dns64": "DNS64",
       "node": "Node",
-      "users": "Benutzer & Anmeldung"
+      "users": "Benutzer & Anmeldung",
+      "dyndns": "DynDNS"
     },
     "item": {
       "checks": "Checks",
@@ -3292,7 +3308,8 @@
       "apikey": "ipv64-API-Key (gilt für den ganzen Account)",
       "node_settings": "Allgemeine Einstellungen (Zeitzone, Selbst-Update, MCP an/aus)",
       "user_accounts": "Benutzer – mit Passwort, App-2FA und SSO-Verknüpfungen (Passkeys, Sitzungen und API-Keys bleiben je Node)",
-      "user_sso": "SSO (OIDC) – Anbieter samt Client-Secret (Rückleit-Adresse und Forward-Auth bleiben je Node)"
+      "user_sso": "SSO (OIDC) – Anbieter samt Client-Secret (Rückleit-Adresse und Forward-Auth bleiben je Node)",
+      "dyndns_config": "Namen und Einstellungen – samt Tokens; es aktualisiert immer nur eine Node"
     },
     "add_title": "Weitere Node aufnehmen",
     "add_hint": "Zeigt einen Code, den du auf der anderen Node unter „Einem Cluster beitreten“ eingibst.",

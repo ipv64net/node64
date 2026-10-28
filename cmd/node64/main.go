@@ -40,6 +40,7 @@ import (
 	"github.com/ipv64net/node64/internal/dns64"
 	"github.com/ipv64net/node64/internal/dns64/dns64cluster"
 	"github.com/ipv64net/node64/internal/dyndns"
+	"github.com/ipv64net/node64/internal/dyndns/ddcluster"
 	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/healthchecks/hccluster"
@@ -363,7 +364,8 @@ func run() error {
 	nodecluster.Register(peerMgr, nodecfg.New(nodecfg.Deps{Store: st, Box: box, Key: ipv64Key, Account: peerMgr.Account, Log: logger.Slog().With("module", "peer")}),
 		func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // API-Key und allgemeine Einstellungen ueber den Cluster
 	userCluster := usercluster.New(st, box, logger.Slog().With("module", "peer"))
-	usercluster.Register(peerMgr, userCluster) // Benutzer und SSO-Einrichtung ueber den Cluster
+	usercluster.Register(peerMgr, userCluster)                                                                                 // Benutzer und SSO-Einrichtung ueber den Cluster
+	ddcluster.Register(peerMgr, dynModule, func() string { return st.SettingOr(context.Background(), web.SettingNodeID, "") }) // DynDNS ueber den Cluster
 	go peerMgr.Run(ctx)
 	dispatcher.SetSendServerChannels(st.SettingOr(ctx, nodesync.SetLocalNotif, "0") == "1")
 	dispatcher.SetServerSends(syncClient.ServerSends)

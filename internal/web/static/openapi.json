@@ -7586,7 +7586,7 @@
           "DynDNS"
         ],
         "summary": "Stand: öffentliche IPv4/IPv6 und Präfix, Anschluss-Hinweis (CGNAT/DS-Lite), Ziele nach Status, Update-Limit",
-        "description": "`limit` nur mit ipv64-API-Key (Einstellungen): `used`/`limit` des Accounts (0 = unbegrenzt) und `own_24h` = Aufrufe dieser Node. `connection.suspect`: cgnat oder dslite, wenn die ersten Stationen ins Internet darauf hindeuten (nicht sicher erkennbar). Ohne eingeschaltetes Ziel ruht die regelmäßige Prüfung; POST /dyndns/check prüft trotzdem.",
+        "description": "`limit` nur mit ipv64-API-Key (Einstellungen): `used`/`limit` des Accounts (0 = unbegrenzt) und `own_24h` = Aufrufe dieser Node. `connection.suspect`: cgnat oder dslite, wenn die ersten Stationen ins Internet darauf hindeuten (nicht sicher erkennbar). Ohne eingeschaltetes Ziel ruht die regelmäßige Prüfung; POST /dyndns/check prüft trotzdem. `cluster` nur mit dem Cluster-Bereich DynDNS und weiteren Nodes: `leader` = Kennung der Node, die die Namen aktualisiert (leer = wird gerade bestimmt), `this_node`, `preferred_node`.",
         "responses": {
           "200": {
             "description": "OK"
@@ -7816,7 +7816,7 @@
           "DynDNS"
         ],
         "summary": "Jetzt aktualisieren",
-        "description": "Meldet die Adresse sofort an ipv64, auch ohne Änderung (kostet Update-Limit), und hebt eine automatische Pause auf. Antwort {\"result\": \"sent\" | \"nothing\", \"target\": ...}; \"nothing\": für die Modi ist gerade keine aktuelle Adresse bekannt. 409, wenn gerade eine Runde läuft.",
+        "description": "Meldet die Adresse sofort an ipv64, auch ohne Änderung (kostet Update-Limit), und hebt eine automatische Pause auf. Antwort {\"result\": \"sent\" | \"nothing\", \"target\": ...}; \"nothing\": für die Modi ist gerade keine aktuelle Adresse bekannt. 409, wenn gerade eine Runde läuft oder im Cluster eine andere Node die Namen aktualisiert.",
         "responses": {
           "200": {
             "description": "OK"

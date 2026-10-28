@@ -62,6 +62,7 @@ type Target struct {
 	DNSAt      time.Time
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+	UID        string // Kennung im Cluster (gleich auf allen Nodes, cluster.go)
 }
 
 // FQDN ist der volle Name.
@@ -201,14 +202,14 @@ func in(s string, list []string) bool {
 // ---------------------------------------------------------------- Speicher
 
 const targetCols = `id, domain, host, record_id, token_kind, token, mode4, fixed4, mode6, fixed6, suffix6, iface, enabled, paused,
-	last_ip4, last_ip6, last_prefix, last_ok_at, last_error, last_err_at, dns_state, dns_at, created_at, updated_at`
+	last_ip4, last_ip6, last_prefix, last_ok_at, last_error, last_err_at, dns_state, dns_at, created_at, updated_at, uid`
 
 func (m *Module) scanTarget(row interface{ Scan(...any) error }) (*Target, error) {
 	var t Target
 	var enabled int
 	var okAt, errAt, dnsAt, created, updated string
 	if err := row.Scan(&t.ID, &t.Domain, &t.Host, &t.RecordID, &t.TokenKind, &t.Token, &t.Mode4, &t.Fixed4, &t.Mode6, &t.Fixed6, &t.Suffix6, &t.Iface, &enabled, &t.Paused,
-		&t.LastIP4, &t.LastIP6, &t.LastPrefix, &okAt, &t.LastError, &errAt, &t.DNSState, &dnsAt, &created, &updated); err != nil {
+		&t.LastIP4, &t.LastIP6, &t.LastPrefix, &okAt, &t.LastError, &errAt, &t.DNSState, &dnsAt, &created, &updated, &t.UID); err != nil {
 		return nil, err
 	}
 	t.Enabled = enabled == 1
@@ -217,7 +218,7 @@ func (m *Module) scanTarget(row interface{ Scan(...any) error }) (*Target, error
 	if m.box != nil {
 		plain, err := m.box.Decrypt(t.Token)
 		if err != nil {
-			return nil, fmt.Errorf("token of %s: %w", t.FQDN(), err)
+			return nil, fmt.Errorf("%w %s: %w", errToken, t.FQDN(), err)
 		}
 		t.Token = plain
 	}
@@ -258,6 +259,9 @@ func (m *Module) Target(ctx context.Context, id int64) (*Target, error) {
 	return t, err
 }
 
+// errToken: Token nicht entschluesselbar (z. B. anderer Schluessel nach Wiederherstellung).
+var errToken = errors.New("token of")
+
 // ErrExists: Domain + Host gibt es schon.
 var ErrExists = errors.New("target exists")
 
@@ -267,8 +271,11 @@ func (m *Module) InsertTarget(ctx context.Context, t *Target) error {
 		return err
 	}
 	now := store.Now()
-	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dyn_targets (domain, host, record_id, token_kind, token, mode4, fixed4, mode6, fixed6, suffix6, iface, enabled, created_at, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, t.Domain, t.Host, t.RecordID, t.TokenKind, m.seal(t.Token), t.Mode4, t.Fixed4, t.Mode6, t.Fixed6, t.Suffix6, t.Iface, b2i(t.Enabled), now, now)
+	if t.UID == "" { // neu hier: eigene Kennung (aus dem Cluster: die der anderen Node)
+		t.UID = newClusterUID()
+	}
+	res, err := m.core.Writer().ExecContext(ctx, `INSERT INTO dyn_targets (domain, host, record_id, token_kind, token, mode4, fixed4, mode6, fixed6, suffix6, iface, enabled, created_at, updated_at, uid)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, t.Domain, t.Host, t.RecordID, t.TokenKind, m.seal(t.Token), t.Mode4, t.Fixed4, t.Mode6, t.Fixed6, t.Suffix6, t.Iface, b2i(t.Enabled), now, now, t.UID)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return ErrExists
@@ -276,6 +283,7 @@ func (m *Module) InsertTarget(ctx context.Context, t *Target) error {
 		return err
 	}
 	t.ID, _ = res.LastInsertId()
+	m.clusterChanged(ctx, t.UID, false)
 	return nil
 }
 
@@ -286,11 +294,18 @@ func (m *Module) UpdateTarget(ctx context.Context, t *Target) error {
 	}
 	_, err := m.core.Writer().ExecContext(ctx, `UPDATE dyn_targets SET record_id = ?, token_kind = ?, token = ?, mode4 = ?, fixed4 = ?, mode6 = ?, fixed6 = ?, suffix6 = ?, iface = ?,
 		enabled = ?, paused = ?, updated_at = ? WHERE id = ?`, t.RecordID, t.TokenKind, m.seal(t.Token), t.Mode4, t.Fixed4, t.Mode6, t.Fixed6, t.Suffix6, t.Iface, b2i(t.Enabled), t.Paused, store.Now(), t.ID)
+	if err == nil {
+		m.clusterChanged(ctx, m.uidOf(ctx, t.ID), false)
+	}
 	return err
 }
 
 // DeleteTarget loescht ein Ziel; der Verlauf bleibt (mit Namen) erhalten.
 func (m *Module) DeleteTarget(ctx context.Context, id int64) error {
+	uid := m.uidOf(ctx, id)
 	_, err := m.core.Writer().ExecContext(ctx, `DELETE FROM dyn_targets WHERE id = ?`, id)
+	if err == nil {
+		m.clusterChanged(ctx, uid, true)
+	}
 	return err
 }

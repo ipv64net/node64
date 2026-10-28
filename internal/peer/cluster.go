@@ -153,7 +153,7 @@ func (m *Manager) SyncModules(ctx context.Context) []ModuleState {
 	var out []ModuleState
 	for _, mi := range m.modules() {
 		c := cfg[mi.ID]
-		st := ModuleState{ModuleInfo: mi, Available: !builtin(mi.ID) || m.checks() != nil, Enabled: builtin(mi.ID), Items: []ItemState{}}
+		st := ModuleState{ModuleInfo: mi, Available: (!builtin(mi.ID) || m.checks() != nil) && m.running(mi.ID), Enabled: builtin(mi.ID), Items: []ItemState{}}
 		if c.Enabled != nil {
 			st.Enabled = *c.Enabled
 		}
@@ -167,6 +167,13 @@ func (m *Manager) SyncModules(ctx context.Context) []ModuleState {
 		out = append(out, st)
 	}
 	return out
+}
+
+// running: ein Provider kann melden, dass sein Modul hier gerade nicht laeuft (ClusterRunning); seine Bereiche sind
+// dann aus (z. B. DynDNS: eine Node mit ausgeschaltetem Modul wird nie zustaendig).
+func (m *Manager) running(id string) bool {
+	r, ok := m.provider(id).(interface{ ClusterRunning() bool })
+	return !ok || r.ClusterRunning()
 }
 
 // SetSync schaltet ein Modul (item "") oder einen Bereich.
@@ -350,6 +357,22 @@ func (m *Manager) HCItemMembers(ctx context.Context, item string) []Member {
 	out := make([]Member, 0, len(list))
 	for _, x := range list {
 		if memberSyncOn(x, "healthchecks", item) {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+// AreaMembers: Mitglieder, mit denen der Bereich module/item abgeglichen wird (hier und dort eingeschaltet, nicht
+// ausgesetzt); nil, wenn er hier aus ist.
+func (m *Manager) AreaMembers(ctx context.Context, module, item string) []Member {
+	if !m.syncOn(ctx, module, item) {
+		return nil
+	}
+	list, _ := m.Members(ctx)
+	out := make([]Member, 0, len(list))
+	for _, x := range list {
+		if !x.Suspended() && memberSyncOn(x, module, item) {
 			out = append(out, x)
 		}
 	}

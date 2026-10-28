@@ -1,6 +1,6 @@
 # Cluster (Node64) – technische Referenz
 
-Stand 2026-10-28 (Healthchecks 2.41.0; Bereiche Statusseiten, Kanäle, Zusammenführen exakter Doppel). Beschreibt, wie die Nodes eines Clusters miteinander
+Stand 2026-10-28 (Healthchecks 2.41.0, DynDNS 1.5.0; Bereiche Statusseiten, Kanäle, DynDNS, Zusammenführen exakter Doppel). Beschreibt, wie die Nodes eines Clusters miteinander
 sprechen: Ports, Ablauf, Zeiten, Grenzen und was passiert, wenn eine Node weg ist. Bedienung und Hintergrund für
 Anwender: node64.de unter `/docs/cluster/`. Entscheidungen und Commits: [PLAN-NODE64-CLUSTER.md](PLAN-NODE64-CLUSTER.md),
 Healthchecks-Ablauf im Detail: [LOKALE-GRUPPE.md](LOKALE-GRUPPE.md). Code: `internal/peer`.
@@ -73,6 +73,8 @@ Bereich nur, wenn er auf **beiden** Nodes an ist (die abholende Node nennt ihre 
 | `node` | `apikey` (zentraler ipv64-API-Key), `settings` (allgemeine Einstellungen der Node) | aus | `/peer/v2/sync` |
 
 | `users` | `accounts` (Benutzer samt Passwort-Hash, App-2FA, SSO-Verknüpfungen), `sso` (OIDC-Einrichtung samt Client-Secret) | aus | `/peer/v2/sync` |
+
+| `dyndns` | `config` (Namen samt Token, Einstellungen, bevorzugte und zuständige Node) | aus | `/peer/v2/sync`; nur eine Node aktualisiert (siehe „DynDNS: zuständige Node“) |
 
 **Statusseiten** (`healthchecks/statuspages`): Kennung je Seite (`hc_status_pages.uid`, gleich auf allen Nodes; die
 lokale Nummer bleibt, PROXY64-Hosts verweisen weiter auf sie und gehören zu ihrer Node). Mit geht alles, was die Seite
@@ -159,6 +161,41 @@ PROXY64 ist als Bereich geplant, aber zurückgestellt, bis die Nachfrage da ist:
 [PLAN-NODE64-CLUSTER-MODULE.md](PLAN-NODE64-CLUSTER-MODULE.md). DNS64: [PLAN-NODE64-DNS64-LOKAL.md](PLAN-NODE64-DNS64-LOKAL.md)
 (Einträge und Weiterleitungen mit „nur diese Node“ werden nie abgeglichen).
 
+### DynDNS: zuständige Node
+
+**Abgeglichen** (`dyndns/config`, Kennung je Name `dyn_targets.uid`): Domain, Host, Record-ID, Token-Art und Token
+(Klartext über die Cluster-Verbindung, auf der Empfängerin mit ihrem Schlüssel gespeichert), Modi IPv4/IPv6, feste
+Adressen, Interface-ID, Interface, an/aus; die Einstellungen (Prüfabstand, Prüf-URLs, Aufbewahrung, Benachrichtigungen,
+bevorzugte Node; eine Node ohne gespeicherte Einstellungen schickt keine Vorgaben hinaus) und die zuständige Node
+(Eintrag `leader`). **Je Node** bleiben: ermittelte Adressen, Anschluss-Analyse, je Name zuletzt gemeldete Adressen,
+Fehler, automatische Pause und DNS-Stand, Verlauf (Prüfungen, Aufrufe), Tageslimit-Zählung. Ein Token, das sich hier
+nicht entschlüsseln lässt, geht als `incomplete` hinaus und wird drüben nicht übernommen. Derselbe Name mit anderer
+Einstellung unter anderer Kennung wird nicht übernommen (Warnung „cluster change not applied“), jede Node behält ihren
+Stand, bis er auf einer Seite angeglichen oder gelöscht ist; exakt gleiche Namen werden zusammengeführt (unten).
+
+**Nur eine Node aktualisiert** die Namen (alle Namen gemeinsam), sonst überschreiben sich Nodes gegenseitig. Die
+anderen ermitteln weiter ihre Adressen (Anzeige, Meldung „Adresse gewechselt“), rufen aber `update.php` nicht auf;
+„Jetzt aktualisieren“ lehnen sie ab (API 409). Regeln (`internal/dyndns/cluster.go`):
+
+| Was | Regel |
+|---|---|
+| Kandidaten | diese Node und die Mitglieder mit dem Bereich hier und dort an, nicht ausgesetzt, DynDNS-Modul läuft (sonst meldet die Node den Bereich nicht im Ping) |
+| gewünschte Node | die **bevorzugte** (Seite DynDNS, Einstellung `dyndns.preferred_node`, geht mit), sonst die **kleinste Kennung** – jeweils nur unter Mitgliedern, die seit **5 min** ununterbrochen erreichbar sind (beim ersten Blick nach dem Start Erreichbare gelten als stabil) |
+| zuständige Node | steht im Eintrag `leader` (Einstellung `dyndns.cluster_leader`); sie bleibt es, solange die anderen sie erreichen |
+| Ausfall | zuständige Node **2 min** ohne Antwort (Karenz des Clusters, 4 Pings), ausgesetzt, Bereich oder Modul dort aus → die gewünschte Node trägt sich ein und meldet sofort alle Namen (Blick auf die Mitglieder alle 30 s) |
+| Rückkehr | die zuständige Node gibt erst ab, wenn die gewünschte **5 min** erreichbar ist (kein Hin und Her); nur die zuständige gibt ab, nur die gewünschte übernimmt |
+| Start | eine Node mit Mitgliedern im Bereich aktualisiert die erste **1 min** nicht (erst den Stand der anderen abholen) |
+| Übernahme | die neue Node vergisst die zuletzt gemeldeten Adressen und meldet jeden Namen einmal (die Namen zeigen evtl. noch auf die alte Node) |
+| Bereich aus / allein | jede Node aktualisiert ihre Namen selbst wie ohne Cluster |
+
+**Verschiedene Netze** (verschiedene öffentliche IPs): Nach einer Übernahme zeigen die Namen auf den Anschluss der neuen
+Node – das ist der Zweck (Ausfallsicherheit über Standorte); Namen, die immer auf einen Standort zeigen sollen, nicht
+über den Cluster führen oder die Node dort bevorzugen. **Getrennte Teile** (Split-Brain): Jeder Teil hält seine
+zuständige Node, beide aktualisieren – in verschiedenen Netzen wechseln die Namen dann hin und her (die Erkennung
+„von außen geändert“ pausiert sie nach mehreren Wechseln). Nach der Wiederverbindung gilt der jüngere `leader`-Eintrag,
+danach greift wieder die Regel oben. Seite DynDNS: Karte der Namen zeigt, welche Node aktualisiert, und die Wahl der
+bevorzugten Node (`POST /dyndns/cluster`); `GET /api/dyndns/status` → `cluster`.
+
 ### Zertifikate: gleiche Einträge und ACME-Konto
 
 **Zusammenführen:** Haben zwei Nodes beim Beitritt oder beim Einschalten eines Bereichs denselben Eintrag unter
@@ -202,6 +239,7 @@ Zusammengeführt wird nur bei exakt gleichem Inhalt, nie bei bloß ähnlichen Ei
 |---|---|
 | Statusseiten | gleicher Slug und alles oben Genannte gleich (Logo-Inhalt ja, Zeitpunkt des Logos nein; Passwort-Hashes sind gesalzen, mit Passwort also praktisch nie gleich) |
 | Kanäle | Typ, Name, Konfiguration samt Geheimnissen (leer = nicht gesetzt), an/aus, Standard, Sprache, Ausfall/Entwarnung |
+| DynDNS-Namen | Domain, Host, Record-ID, Token-Art, Token, Modi, feste Adressen, Interface-ID, Interface, an/aus (Laufzeitstand und Verlauf zählen nicht und bleiben) |
 | Proxmox VE, Docker | Art, Name, Adressen, Token-ID, Secret, Pin, Intervall, an/aus (Heim-Node zählt nicht); Proxmox-Checks mit der alten Kennung bekommen die neue (als Änderung) |
 | Wartungsfenster | nur lokale Fenster (ohne Server-ID): Name, Beginn, Ende, Wiederholung, Ende der Wiederholung, Checks, an/aus; das Fenster mit der größeren Kennung wird mit Löschvermerk entfernt |
 | Checks | **nie** – derselbe Check auf zwei Nodes sind zwei Messstellen (eigene Tokens, Verlauf und messende Node, beim hub eigene Checks) |
@@ -292,6 +330,7 @@ letzten Stand, es läuft also nicht über), und alle landen beim selben Ergebnis
 | Benachrichtigungen | **jede Seite meldet für sich** – Checks, die auf beiden Seiten gemessen werden, können doppelt gemeldet werden (verknüpft mit ipv64 bewertet und meldet der hub, dann nicht) | wieder genau eine Node |
 | Meldung „Node nicht erreichbar“ | jede Seite meldet die Nodes der anderen | Entwarnung von denselben Nodes |
 | Zertifikate | ist die zuständige Node auf der anderen Seite, erneuert diese Seite ab einem Drittel der Frist selbst | jüngeres Zertifikat gewinnt überall (höchstens einmal doppelt bestellt) |
+| DynDNS | jede Seite hat eine zuständige Node und aktualisiert (verschiedene Netze: die Namen wechseln) | jüngerer `leader`-Eintrag gilt, wieder genau eine Node |
 | Mitglieder entfernen/aufnehmen | erreicht nur die eigene Seite | nicht automatisch nachgeholt: entfernte Node auf der anderen Seite ggf. dort auch entfernen |
 
 **Beispiel drei Nodes, A+B getrennt von C:** A und B gleichen weiter untereinander ab und melden als Paar

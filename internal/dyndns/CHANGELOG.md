@@ -1,5 +1,18 @@
 # Änderungen – DynDNS-Updater
 
+## 1.5.0 – 2026-10-28
+
+### Neu
+- Cluster: neuer Bereich „DynDNS“ (Standard aus). Namen samt Token und die Einstellungen gehen an die anderen Nodes;
+  zuletzt gemeldete Adressen, Fehler, Pausen und Verlauf bleiben je Node. Vorher auf zwei Nodes exakt gleich angelegte
+  Namen werden eins, derselbe Name mit anderer Einstellung bleibt je Node.
+- Im Cluster aktualisiert immer nur eine Node die Namen: die bevorzugte, sonst die mit der kleinsten Kennung. Fällt
+  sie länger als 2 Minuten aus, übernimmt eine andere und meldet alle Namen einmal; eine zurückgekehrte Node übernimmt
+  erst nach 5 Minuten Erreichbarkeit wieder. Stehen die Nodes in verschiedenen Netzen, zeigen die Namen dann auf den
+  anderen Anschluss.
+- Seite DynDNS: Karte der Namen zeigt, welche Node aktualisiert, mit Wahl der bevorzugten Node. „Jetzt aktualisieren“
+  geht nur auf der zuständigen Node. API: `GET /api/dyndns/status` liefert `cluster`.
+
 ## 1.4.1 – 2026-10-28
 
 ### Behoben

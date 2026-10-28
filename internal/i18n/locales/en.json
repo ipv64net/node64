@@ -2132,7 +2132,21 @@
       "failed": "{name}: update failed ({error}).",
       "paused": "{name} paused: {reason}.",
       "busy": "A sync is running right now. Please try again in a few seconds.",
-      "nothing": "{name}: nothing to report, no current address is known for the selected modes."
+      "nothing": "{name}: nothing to report, no current address is known for the selected modes.",
+      "other": "In the cluster the node “{node}” updates the names. Update there or choose this node as preferred."
+    },
+    "cluster": {
+      "here": "Cluster: this node updates the names for all nodes of the cluster.",
+      "other": "Cluster: the node “{node}” updates the names, this node only if it fails.",
+      "pending": "Cluster: the responsible node is being determined.",
+      "to_cluster": "Cluster",
+      "preferred": "Preferred node",
+      "auto": "automatic (smallest ID)",
+      "this_node": "this node",
+      "offline": "unreachable",
+      "hint": "If the responsible node is gone for more than 2 minutes, another one takes over. A returning node only takes over again after it has been reachable for 5 minutes. If the nodes are in different networks, the names then point to the other connection.",
+      "saved": "Preferred node saved.",
+      "invalid": "This node is not part of the DynDNS area of the cluster."
     },
     "limit": {
       "used": "DynDNS updates today: {used} of {limit}",
@@ -3252,6 +3266,7 @@
     "sync_title": "What is synced",
     "sync_hint": "An area is only synced with nodes that have it switched on as well – i.e. only if it is on on both nodes.",
     "channels_hint": "Only needed without a connection to ipv64.net – linked nodes get the portal's channels via ipv64.net. Only the node's own channels are synced, never those of the portal.",
+    "dyndns_hint": "Only one node reports the addresses to ipv64 (preferred node on the DynDNS page). If it fails, another one takes over – in a different network the names then point to its connection.",
     "mod_unavailable": "(not active on this node)",
     "users_hint": "Users with the same name that differ (e.g. another password) are never overwritten: they are offered for choice on this page. The last user of a node is never deleted.",
     "users_title": "Users in the cluster: please choose",
@@ -3267,7 +3282,8 @@
       "certs": "Certificates",
       "dns64": "DNS64",
       "node": "Node",
-      "users": "Users & login"
+      "users": "Users & login",
+      "dyndns": "DynDNS"
     },
     "item": {
       "checks": "Checks",
@@ -3292,7 +3308,8 @@
       "apikey": "ipv64 API key (applies to the whole account)",
       "node_settings": "General settings (time zone, self-update, MCP on/off)",
       "user_accounts": "Users – with password, app 2FA and SSO links (passkeys, sessions and API keys stay per node)",
-      "user_sso": "SSO (OIDC) – provider including client secret (redirect address and forward auth stay per node)"
+      "user_sso": "SSO (OIDC) – provider including client secret (redirect address and forward auth stay per node)",
+      "dyndns_config": "Names and settings – including tokens; only one node updates at a time"
     },
     "add_title": "Add another node",
     "add_hint": "Shows a code that you enter on the other node under “Join a cluster”.",

@@ -17,6 +17,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
   standardmäßig aus; Passkeys, Sitzungen und Forward-Auth bleiben je Node, gleichnamige verschiedene Benutzer stehen
   auf der Seite Cluster zur Wahl, der letzte Benutzer einer Node wird nie gelöscht. Unter Anmeldung lassen sich andere
   Benutzer der Node löschen.
+- DynDNS/Cluster: neuer Bereich „DynDNS“ (standardmäßig aus) gleicht Namen und Einstellungen ab; es aktualisiert immer
+  nur eine Node, fällt sie aus, übernimmt automatisch eine andere (bevorzugte Node auf der Seite DynDNS wählbar).
 
 ## 0.12.0-alpha.29 – 2026-10-28
 

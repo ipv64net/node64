@@ -78,6 +78,7 @@ var ErrBusy = errors.New("update already running")
 const (
 	NowSent    = "sent"    // an ipv64 gemeldet
 	NowNothing = "nothing" // nichts zu melden (keine aktuelle Adresse fuer die Modi)
+	NowOther   = "other"   // im Cluster aktualisiert eine andere Node die Namen
 )
 
 // Automatische Pausen werden nach dieser Zeit erneut versucht (badauth nur mit neuem Token).
@@ -230,6 +231,9 @@ func (m *Module) runUpdates(ctx context.Context) {
 // UpdateNow gleicht ein Ziel sofort ab und meldet es auch ohne Abweichung (Knopf "Jetzt aktualisieren").
 // Laeuft gerade eine Runde, kommt ErrBusy (statt zu warten und die Zeit des Aufrufers zu verbrauchen).
 func (m *Module) UpdateNow(ctx context.Context, t *Target) (string, error) {
+	if v := m.clusterView(ctx); v.On && v.Leader != "" && !v.Here {
+		return NowOther, nil // sonst setzte diese Node die Adresse ihres Anschlusses gegen die zustaendige
+	}
 	if !m.upd.run.TryLock() {
 		return "", ErrBusy
 	}

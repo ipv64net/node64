@@ -50,6 +50,7 @@ func (m *Module) saveSettings(ctx context.Context, s moduleSettings) error {
 			return err
 		}
 	}
+	m.clusterChanged(ctx, clusterSettingsID, false)
 	return nil
 }
 

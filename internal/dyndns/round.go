@@ -87,6 +87,8 @@ func (m *Module) loop(ctx context.Context) {
 	defer t.Stop()
 	prune := time.NewTicker(time.Hour)
 	defer prune.Stop()
+	watch := time.NewTicker(clusterTick) // Cluster: zustaendige Node ausgefallen -> gleich uebernehmen
+	defer watch.Stop()
 	next := func() time.Duration {
 		iv := m.interval()
 		return iv + time.Duration(rand.Int64N(int64(iv/10)+1)) - iv/20
@@ -99,7 +101,9 @@ func (m *Module) loop(ctx context.Context) {
 			if m.hasActive(ctx) { // ohne aktive Ziele ruht das Modul (keine Abfragen, keine Protokollzeilen)
 				m.round(ctx)
 				m.maybeAnalyze(ctx)
-				m.runUpdates(ctx)
+				if lead, _ := m.clusterLead(ctx); lead { // im Cluster aktualisiert nur die zustaendige Node
+					m.runUpdates(ctx)
+				}
 				m.refreshLimit(ctx, limitEvery)
 			}
 			t.Reset(next())
@@ -107,7 +111,9 @@ func (m *Module) loop(ctx context.Context) {
 			m.round(ctx)
 			if m.hasActive(ctx) {
 				m.maybeAnalyze(ctx)
-				m.runUpdates(ctx)
+				if lead, _ := m.clusterLead(ctx); lead {
+					m.runUpdates(ctx)
+				}
 				m.refreshLimit(ctx, limitEvery)
 			}
 			close(done)
@@ -118,6 +124,10 @@ func (m *Module) loop(ctx context.Context) {
 				}
 			}
 			t.Reset(next())
+		case <-watch.C:
+			if _, became := m.clusterLead(ctx); became && m.hasActive(ctx) {
+				m.runUpdates(ctx) // gerade zustaendig geworden: nicht bis zur naechsten Runde warten
+			}
 		case <-prune.C:
 			m.prune(ctx)
 		}
