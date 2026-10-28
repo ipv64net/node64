@@ -4,8 +4,8 @@
 //
 //   - apikey: der zentrale ipv64-API-Key samt Konto. Er geht im Klartext ueber die Cluster-Verbindung (HTTPS, an die
 //     Kopplung gebunden) und wird auf der empfangenden Node mit ihrem Schluessel verschluesselt. Uebernommen wird er
-//     nur, wenn er zum Account dieser Node gehoert (keiner = 0: uebernehmen, geprueft wird er mit der naechsten
-//     Abfrage bei ipv64). Eine auf ipv64.net entfernte Node nimmt keinen Key an.
+//     nur, wenn er zum Account dieser Node gehoert - der Account darf sich dadurch nie aendern (Dennis): eine Node
+//     ohne Account (0) nimmt keinen an. Eine auf ipv64.net entfernte Node nimmt keinen Key an.
 //   - settings: eine feste Liste allgemeiner Einstellungen (settings), je Schluessel mit eigenem Zeitpunkt. Nie
 //     dabei: Name und Kennung der Node, Ports, Adressen, Zertifikate, Cluster und alles, was am Netz haengt.
 package nodecfg
@@ -317,7 +317,7 @@ func (c *Cluster) applyKey(ctx context.Context, data json.RawMessage, deleted bo
 		return nil
 	}
 	own := c.d.Account()
-	if in.Account.ID <= 0 || own != 0 && own != int64(in.Account.ID) {
+	if in.Account.ID <= 0 || own <= 0 || own != int64(in.Account.ID) { // der Account der Node darf sich nicht aendern
 		return fmt.Errorf("%w (key: %d, this node: %d)", ErrAccount, in.Account.ID, own)
 	}
 	if in.Key == k.Get(ctx) {

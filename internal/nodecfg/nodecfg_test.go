@@ -111,7 +111,7 @@ const keyA = "AAAAbbbbCCCCdddd1111"
 // (Konto, Merker „entfernt“ zurueck), Audit; anderer Account abgelehnt; Entfernen kommt an; ipv64.net-Entfernung nicht.
 func TestAPIKeyCluster(t *testing.T) {
 	ctx := context.Background()
-	a, b := newTestNode(t, 522), newTestNode(t, 0)
+	a, b := newTestNode(t, 522), newTestNode(t, 522)
 	a.attach()
 	b.attach()
 	info := ipv64api.AccountInfo{ID: 522, Account: "dennis", Plan: "Pro", KeyName: "node", CheckedAt: time.Now().UTC().Truncate(time.Second)}
@@ -152,6 +152,12 @@ func TestAPIKeyCluster(t *testing.T) {
 	c.attach()
 	if err := transfer(t, a, c, []change{{item: ItemAPIKey, id: keyID}}); !errors.Is(err, ErrAccount) || c.key.Get(ctx) != "" {
 		t.Fatalf("other account must be rejected: %v", err)
+	}
+	// Node ohne Account: abgelehnt (der Account darf sich durch den Cluster nicht aendern)
+	z := newTestNode(t, 0)
+	z.attach()
+	if err := transfer(t, a, z, []change{{item: ItemAPIKey, id: keyID}}); !errors.Is(err, ErrAccount) || z.key.Get(ctx) != "" {
+		t.Fatalf("node without account must reject the key: %v", err)
 	}
 	// Key ohne Account-Kennung: abgelehnt
 	raw, _ := json.Marshal(keyData{Key: "ZZZZzzzzZZZZzzzz9999", Account: ipv64api.AccountInfo{Account: "x"}})
