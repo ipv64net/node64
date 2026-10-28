@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 0.12.0-alpha.26 – 2026-10-28
+
 - PROXY64: CDN64 statistics explain when there are no protection figures in the period yet.
 - PROXY64: TLS per BSI TR-02102-2 selectable per proxy host.
 - PROXY64: access lists with authentik, Authelia, oauth2-proxy or an own auth service (forward auth), API keys for apps
