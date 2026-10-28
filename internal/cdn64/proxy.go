@@ -742,6 +742,7 @@ func (m *Module) routeFor(h *Host) edge.Route {
 		return rt
 	}
 	rt := edge.Route{Names: h.Names, NoHTTP2: !h.HTTP2, HTTP3: h.HTTP3, MinTLS: tls.VersionTLS12}
+	rt.BSI = h.MinTLS == TLSBSI
 	if h.MinTLS == "1.3" {
 		rt.MinTLS = tls.VersionTLS13
 	}
