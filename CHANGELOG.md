@@ -11,8 +11,12 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
   überschrieben, sondern auf der Seite Cluster zur Wahl gestellt.
 - Cluster: neue Bereiche „Statusseiten“ und „Kanäle“ (Benachrichtigungen, vor allem für Nodes ohne ipv64.net),
   standardmäßig aus; vorher auf zwei Nodes exakt gleich angelegte Einträge werden zusammengeführt statt doppelt.
-- Cluster: neues Modul „Node“ (standardmäßig aus) – ipv64-API-Key nur einmal eintragen (nur gleicher Account,
-  Übernahme im Audit-Log) und allgemeine Einstellungen (Zeitzone, Selbst-Update, MCP an/aus) abgleichen.
+- Cluster: neues Modul „Node“ (standardmäßig aus) – ipv64-API-Key nur einmal eintragen (gleicher Account oder die
+  Node hat noch keinen, nie ein anderer; Übernahme im Audit-Log) und allgemeine Einstellungen (Zeitzone,
+  Selbst-Update, MCP an/aus) abgleichen.
+- Cluster: Nodes ohne ipv64-Account können einem Cluster mit Account beitreten; bekommt eine Node den Account des
+  Clusters (z. B. durch den API-Key) oder verliert sie ihn, wird nichts mehr ausgesetzt. Zwei verschiedene Accounts
+  in einem Cluster gibt es weiterhin nie.
 - Cluster: neuer Bereich „Benutzer & Anmeldung“ (Benutzer mit Passwort, 2FA und SSO-Verknüpfungen, SSO-Einrichtung),
   standardmäßig aus; Passkeys, Sitzungen und Forward-Auth bleiben je Node, gleichnamige verschiedene Benutzer stehen
   auf der Seite Cluster zur Wahl, der letzte Benutzer einer Node wird nie gelöscht. Unter Anmeldung lassen sich andere

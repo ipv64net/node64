@@ -30,6 +30,7 @@ type testNode struct {
 	key *ipv64api.Key
 	c   *Cluster
 	acc int64
+	cl  int64 // Account des Clusters (ohne eigenen)
 
 	mu      sync.Mutex
 	changes []change
@@ -64,7 +65,13 @@ func newTestNode(t *testing.T, acc int64) *testNode {
 	n := &testNode{st: st, box: box, acc: acc}
 	// API nie erreichbar: der Abgleich darf ipv64 nicht fragen
 	n.key = ipv64api.NewKey(st, box, ipv64api.NewClient("http://127.0.0.1:1", "test"), log)
-	n.c = New(Deps{Store: st, Box: box, Key: n.key, Account: func() int64 { return n.acc }, Log: log})
+	n.c = New(Deps{Store: st, Box: box, Key: n.key, Account: func() int64 { return n.acc }, Log: log,
+		ClusterAccount: func(context.Context) int64 {
+			if n.acc != 0 {
+				return n.acc
+			}
+			return n.cl
+		}})
 	return n
 }
 
@@ -153,11 +160,21 @@ func TestAPIKeyCluster(t *testing.T) {
 	if err := transfer(t, a, c, []change{{item: ItemAPIKey, id: keyID}}); !errors.Is(err, ErrAccount) || c.key.Get(ctx) != "" {
 		t.Fatalf("other account must be rejected: %v", err)
 	}
-	// Node ohne Account: abgelehnt (der Account darf sich durch den Cluster nicht aendern)
+	// Node ohne Account: nimmt den Key, wenn der Cluster denselben oder noch keinen Account hat
+	for _, cl := range []int64{0, 522} {
+		z := newTestNode(t, 0)
+		z.cl = cl
+		z.attach()
+		if err := transfer(t, a, z, []change{{item: ItemAPIKey, id: keyID}}); err != nil || z.key.Get(ctx) != keyA || z.key.Info(ctx).ID != 522 {
+			t.Fatalf("node without account (cluster %d) must take the key: %v", cl, err)
+		}
+	}
+	// ... aber nie, wenn der Cluster einen anderen hat
 	z := newTestNode(t, 0)
+	z.cl = 999
 	z.attach()
 	if err := transfer(t, a, z, []change{{item: ItemAPIKey, id: keyID}}); !errors.Is(err, ErrAccount) || z.key.Get(ctx) != "" {
-		t.Fatalf("node without account must reject the key: %v", err)
+		t.Fatalf("key of another account than the cluster's must be rejected: %v", err)
 	}
 	// Key ohne Account-Kennung: abgelehnt
 	raw, _ := json.Marshal(keyData{Key: "ZZZZzzzzZZZZzzzz9999", Account: ipv64api.AccountInfo{Account: "x"}})

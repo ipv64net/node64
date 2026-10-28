@@ -37,6 +37,7 @@ func (m *Manager) pushProxies(ctx context.Context, list []Member) {
 	items := []wire.ProxyNode{}
 	byID := map[string]Member{}
 	for _, x := range list {
+		// streng: nur Mitglieder desselben Accounts; eine Node ohne Account im Cluster wird nicht beim hub angemeldet
 		if x.Linked || acc <= 0 || x.AccountID != acc {
 			continue
 		}

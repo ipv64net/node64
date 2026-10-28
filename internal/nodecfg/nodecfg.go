@@ -4,8 +4,8 @@
 //
 //   - apikey: der zentrale ipv64-API-Key samt Konto. Er geht im Klartext ueber die Cluster-Verbindung (HTTPS, an die
 //     Kopplung gebunden) und wird auf der empfangenden Node mit ihrem Schluessel verschluesselt. Uebernommen wird er
-//     nur, wenn er zum Account dieser Node gehoert - der Account darf sich dadurch nie aendern (Dennis): eine Node
-//     ohne Account (0) nimmt keinen an. Eine auf ipv64.net entfernte Node nimmt keinen Key an.
+//     nur bei gleichem Account oder wenn die Node noch keinen hat (0) und der Key zum Account des Clusters passt
+//     (Dennis: gleicher Account oder keiner, nie ein anderer). Eine auf ipv64.net entfernte Node nimmt keinen Key an.
 //   - settings: eine feste Liste allgemeiner Einstellungen (settings), je Schluessel mit eigenem Zeitpunkt. Nie
 //     dabei: Name und Kennung der Node, Ports, Adressen, Zertifikate, Cluster und alles, was am Netz haengt.
 package nodecfg
@@ -43,7 +43,7 @@ const (
 
 var (
 	errItem = errors.New("cluster: unknown node area or setting")
-	// ErrAccount: der Key gehoert nicht zum Account dieser Node.
+	// ErrAccount: der Key gehoert zu einem anderen Account als dem dieser Node bzw. des Clusters.
 	ErrAccount = errors.New("cluster: api key of another ipv64 account")
 )
 
@@ -105,7 +105,9 @@ type Deps struct {
 	Box     *secrets.Box  // nil = unverschluesselt (nur Tests)
 	Key     *ipv64api.Key // zentraler API-Key (nil = Bereich apikey ohne Inhalt)
 	Account func() int64  // ipv64-Account dieser Node (wie der Cluster ihn prueft), 0 = keiner
-	Log     *slog.Logger
+	// ClusterAccount: Account des Clusters (eigener, sonst der eines Mitglieds; 0 = keiner), nil = keiner
+	ClusterAccount func(ctx context.Context) int64
+	Log            *slog.Logger
 }
 
 // Cluster liefert und uebernimmt die Eintraege des Moduls.
@@ -316,8 +318,9 @@ func (c *Cluster) applyKey(ctx context.Context, data json.RawMessage, deleted bo
 	if in.Incomplete {
 		return nil
 	}
-	own := c.d.Account()
-	if in.Account.ID <= 0 || own <= 0 || own != int64(in.Account.ID) { // der Account der Node darf sich nicht aendern
+	// gleicher Account oder die Node hat noch keinen (dann muss der Key zum Cluster passen); nie ein anderer Account
+	own, acc := c.d.Account(), int64(in.Account.ID)
+	if acc <= 0 || own != acc && (own != 0 || !c.clusterFits(ctx, acc)) {
 		return fmt.Errorf("%w (key: %d, this node: %d)", ErrAccount, in.Account.ID, own)
 	}
 	if in.Key == k.Get(ctx) {
@@ -329,6 +332,15 @@ func (c *Cluster) applyKey(ctx context.Context, data json.RawMessage, deleted bo
 	c.audit(ctx, "peer.ipv64_key", in.Account.Account, "account="+in.Account.Account)
 	c.d.Log.Info("ipv64 api key taken from the cluster", "account", in.Account.ID)
 	return nil
+}
+
+// clusterFits: der Account acc passt zum Cluster (dessen Account ist derselbe oder es hat noch keiner einen).
+func (c *Cluster) clusterFits(ctx context.Context, acc int64) bool {
+	if c.d.ClusterAccount == nil {
+		return true
+	}
+	ref := c.d.ClusterAccount(ctx)
+	return ref == 0 || ref == acc
 }
 
 func (c *Cluster) applySetting(ctx context.Context, s *Setting, data json.RawMessage, deleted bool) error {
