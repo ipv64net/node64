@@ -1,0 +1,42 @@
+# syntax=docker/dockerfile:1
+# Sonar64 ohne Dashboard (Knoten oder Anker), Anleitung docs/SONAR64.md. Bauen:
+#   docker build -f Dockerfile.sonar64 --build-arg VERSION=0.1.0 -t sonar64 .
+
+# ---- Build (reines Go, kein CGO, Cross-Compile ueber TARGETOS/TARGETARCH; arm/v7 ueber TARGETVARIANT -> GOARM=7).
+#      Nur der Kern internal/sonar wird eingebaut; go build laedt nur die Module, die er braucht.
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
+ARG TARGETOS
+ARG TARGETARCH
+ARG TARGETVARIANT
+ARG VERSION=dev
+WORKDIR /src
+COPY go.mod go.sum ./
+COPY internal/sonar ./internal/sonar
+COPY cmd/sonar64 ./cmd/sonar64
+# GOARM nur fuer arm setzen (arm64 meldet teils die Variante v8, die GOARM nicht kennt)
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    if [ "$TARGETARCH" = "arm" ] && [ -n "$TARGETVARIANT" ]; then export GOARM="${TARGETVARIANT#v}"; fi && \
+    CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags="-s -w -X main.Version=$VERSION" -o /out/sonar64 ./cmd/sonar64
+# Datenverzeichnis (Schluessel, Node-ID, Zustand: ein paar KB) fuer den Nicht-Root-Benutzer vorbereiten
+RUN mkdir -p /out/data && chown 65532:65532 /out/data && chmod 0700 /out/data
+# ICMP ohne Root: nur cap_net_raw, und nur als "erlaubt" (+p). sonar64 schaltet es beim Start selbst scharf; fehlt
+# es im Container (cap_drop, MikroTik), startet es trotzdem und misst dann ueber UDP 6464 bzw. Ping-Sockets.
+RUN apk add --no-cache libcap && setcap cap_net_raw=+p /out/sonar64
+
+# ---- CA-Zertifikate (architekturunabhaengig, Zeitzonen sind im Binary eingebettet)
+FROM --platform=$BUILDPLATFORM alpine:3.22 AS certs
+RUN apk add --no-cache ca-certificates
+
+# ---- Laufzeit: leeres Image, nur das Binary
+FROM scratch
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=build /out/sonar64 /sonar64
+COPY --from=build --chown=65532:65532 /out/data /data
+USER 65532:65532
+ENV SONAR64_DATA=/data
+VOLUME ["/data"]
+# UDP-Echo, nur mit SONAR64_MEASURED=1 bzw. im Anker-Modus; Mini-Status nur mit SONAR64_STATUS (z. B. :8064)
+EXPOSE 6464/udp
+HEALTHCHECK --interval=60s --timeout=5s --start-period=60s --retries=3 CMD ["/sonar64", "healthcheck"]
+ENTRYPOINT ["/sonar64"]

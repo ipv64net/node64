@@ -1,0 +1,53 @@
+# Sonar64-Knoten ohne Docker (Raspberry Pi Zero, Pi, Linux). Installiert von deploy/sonar64/install.sh,
+# Einstellung in /etc/sonar64.env (0600), Anleitung docs/SONAR64.md.
+[Unit]
+Description=Sonar64 community measurement node (ipv64.net)
+Documentation=https://github.com/ipv64net/node64/blob/main/docs/SONAR64.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=sonar64
+Group=sonar64
+EnvironmentFile=/etc/sonar64.env
+Environment=SONAR64_DATA=/var/lib/sonar64
+ExecStart=/usr/local/bin/sonar64
+Restart=on-failure
+RestartSec=30
+# Daten (Schluessel, Node-ID, Zustand) nur hier, ein paar KB
+StateDirectory=sonar64
+StateDirectoryMode=0700
+UMask=0077
+# ICMP ohne root: nur dieses eine Recht
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+NoNewPrivileges=yes
+# Haertung
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Grenzen (Pi Zero: 512 MB RAM)
+MemoryMax=64M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target
