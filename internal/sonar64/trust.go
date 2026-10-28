@@ -29,7 +29,7 @@ type trustStep struct {
 var trustSteps = []trustStep{
 	{TrustStable, 7, 0.90, false},
 	{TrustTrusted, 60, 0.97, false},
-	{TrustPillar, 180, 0.97, true},
+	{TrustPillar, 180, 0.99, true},
 }
 
 // trustView ist die Vertrauensstufe fuer die Oberflaeche.

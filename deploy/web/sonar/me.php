@@ -267,7 +267,7 @@ if(empty($nodes)) { ?>
 	$days = $cur['first_seen'] ? max(0, (int)floor(($now - strtotime($cur['first_seen'] . ' UTC')) / 86400)) : 0;
 	$up = (float)$cur['uptime30'];
 	// Fortschritt zur naechsten Stufe (Startwerte Plan Abschnitt 6)
-	$next = match((string)$cur['trust']) { 'new' => array('stable', 7, 0.90), 'stable' => array('trusted', 60, 0.97), 'trusted' => array('pillar', 180, 0.97), default => null };
+	$next = match((string)$cur['trust']) { 'new' => array('stable', 7, 0.90), 'stable' => array('trusted', 60, 0.97), 'trusted' => array('pillar', 180, 0.99), default => null };
 	?>
 	<div class="row">
 		<div class="col-12 col-lg-7 pb-3"><div class="card h-100"><div class="card-body p-3">
