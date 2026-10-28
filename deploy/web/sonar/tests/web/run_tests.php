@@ -199,6 +199,9 @@ $r = req('/sonar/me.php', 1, array('action' => 'token_revoke', 'id' => $tid['n1b
 $nb = one("SELECT active, ip4, lat FROM sonar_nodes WHERE node_id = 'n1bbbbbbbbbb'");
 check('me: eigenes Token gesperrt, Knoten aus, IP weg', str_contains($r['raw'], 'Token gesperrt') AND one("SELECT revoked_at FROM sonar_tokens WHERE id = ?", array($tid['n1bbbbbbbbbb']))['revoked_at'] !== null
 	AND (int)$nb['active'] === 0 AND $nb['ip4'] === null AND !str_contains($r['raw'], 'node=n1bbbbbbbbbb'));
+$nb = one("SELECT disabled_at, name, slug, lat FROM sonar_nodes WHERE node_id = 'n1bbbbbbbbbb'");
+check('me: Sperren wie DELETE /sonar/tokens (s64_leave): disabled_at, Name/Slug frei, Standort weg, trust_log owner', $nb['disabled_at'] !== null AND $nb['name'] === '~n1bbbbbbbbbb'
+	AND $nb['slug'] === '~n1bbbbbbbbbb' AND $nb['lat'] === null AND (one("SELECT reason FROM sonar_trust_log WHERE node_id = 'n1bbbbbbbbbb' AND `new` = 'removed'")['reason'] ?? '') === 'owner', $nb);
 check('me: gesperrt in der Liste', str_contains($r['raw'], 'gesperrt'));
 check('me: Sperren gibt Name und Slug frei (wie DELETE /sonar/tokens)', one("SELECT name, slug FROM sonar_nodes WHERE node_id = 'n1bbbbbbbbbb'") === array('name' => '~n1bbbbbbbbbb', 'slug' => '~n1bbbbbbbbbb'));
 // Angaben speichern

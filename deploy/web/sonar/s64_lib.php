@@ -11,6 +11,7 @@
  *   s64_is_public_ip($ip)             oeffentliche Unicast-Adresse?
  *   s64_plan_sign($planJson)          Ed25519-Signatur des Plans (kid, sig)
  *   s64_trust_label($trust, $lang)    Anzeigename der Vertrauensstufe
+ *   s64_leave($pdo, $tokenId, $reason) Knoten abmelden (Token widerrufen, Knoten aus; Vertrag 10.2)
  *
  * Alle Zeiten UTC: s64_dt() schreibt DATETIME(3), s64_iso() gibt ISO 8601 aus. Nie NOW() in SQL verwenden.
  */
@@ -21,6 +22,7 @@ const S64_BUDGETS = array('sparsam', 'normal', 'grosszuegig');
 const S64_MODES = array('module', 'headless', 'anchor');
 const S64_NODE_RE = '/^(n[a-z0-9]{11}|a_[a-z0-9]{2,12})\z/';
 const S64_ONLINE = 1800; // online = Kontakt in den letzten 30 Minuten
+const S64_LEAVE = array('leave', 'owner', 'admin', 'inactive'); // Gruende einer Abmeldung (sonar_trust_log.reason, new = removed)
 
 /** PDO der Hauptdatenbank (dbconnect.php im Webroot, wie die anderen Bots). In der API ist $pdo schon da. */
 function s64_pdo(): PDO {
@@ -189,6 +191,65 @@ function s64_plan_sign(string $planJson): array {
 	if($sk === null) { throw new RuntimeException('sonar: plan key missing (php bots/sonar_keygen.php)'); }
 	$pk = sodium_crypto_sign_publickey_from_secretkey($sk);
 	return array('kid' => s64_kid($pk), 'sig' => base64_encode(sodium_crypto_sign_detached($planJson, $sk)));
+}
+
+/** Prepared Statement; Fehler immer als Ausnahme (auch wenn $pdo nicht im Ausnahme-Modus laeuft). */
+function s64_exec(PDO $pdo, string $sql, array $p = array()): PDOStatement {
+	$st = $pdo->prepare($sql);
+	if($st === false OR !$st->execute($p)) {
+		$ei = ($st === false ? $pdo : $st)->errorInfo();
+		throw new RuntimeException('sonar: ' . ($ei[2] ?? 'database error'));
+	}
+	return $st;
+}
+
+/**
+ * Abmelden (Vertrag 10.2), gemeinsam fuer DELETE /sonar/me, DELETE /sonar/tokens/{id}, me.php, bots/sonar_node.php
+ * und bots/sonar_cleanup.php: Token widerrufen; der Knoten dieses Tokens wird deaktiviert (disabled_at), IPs weg, Plan
+ * geloescht, Eintrag in sonar_trust_log (new = removed, reason = $reason). Knoten (nicht Anker) verlieren auch den genauen
+ * Standort, Name und Slug werden frei ("~" + node_id passt auf kein gueltiges Namens- oder Slug-Muster). $reason beginnt
+ * mit leave | owner | admin | inactive (danach optional Text, zusammen hoechstens 64 Zeichen). add_log beim Account, wenn
+ * es einen gibt und add_log geladen ist (API, Seiten, Bots ueber dbconnect.php). Mehrfacher Aufruf schadet nicht.
+ * Rueckgabe: node_id des jetzt deaktivierten Knotens oder null.
+ */
+function s64_leave(PDO $pdo, int $tokenId, string $reason, ?float $now = null): ?string {
+	$why = explode(' ', $reason, 2)[0];
+	if(!in_array($why, S64_LEAVE, true)) { throw new InvalidArgumentException('sonar: unknown leave reason'); }
+	$reason = mb_substr($reason, 0, 64);
+	$t = s64_dt($now ?? microtime(true));
+	$own = !$pdo->inTransaction();
+	if($own) { $pdo->beginTransaction(); }
+	try {
+		$tok = s64_exec($pdo, "SELECT id, userid, revoked_at FROM sonar_tokens WHERE id = ? FOR UPDATE", array($tokenId))->fetch(PDO::FETCH_ASSOC);
+		$revoked = false;
+		if($tok !== false AND $tok['revoked_at'] === null) { s64_exec($pdo, "UPDATE sonar_tokens SET revoked_at = ? WHERE id = ?", array($t, $tokenId)); $revoked = true; }
+		$n = s64_exec($pdo, "SELECT node_id, userid, role, trust FROM sonar_nodes WHERE token_id = ? AND active = 1 FOR UPDATE", array($tokenId))->fetch(PDO::FETCH_ASSOC);
+		$nid = null;
+		if($n !== false) {
+			$nid = (string)$n['node_id'];
+			s64_exec($pdo, "UPDATE sonar_nodes SET active = 0, disabled_at = ?, ip4 = NULL, ip6 = NULL, reach4 = 'none', reach6 = 'none'"
+				. ($n['role'] === 'node' ? ", lat = NULL, lon = NULL, pub_lat = NULL, pub_lon = NULL, name = CONCAT('~', node_id), slug = CONCAT('~', node_id)" : '')
+				. " WHERE node_id = ?", array($t, $nid));
+			s64_exec($pdo, "DELETE FROM sonar_plans WHERE node_id = ?", array($nid));
+			s64_exec($pdo, "INSERT INTO sonar_trust_log (node_id, at, `old`, `new`, reason) VALUES (?, ?, ?, 'removed', ?)", array($nid, $t, $n['trust'], $reason));
+		}
+		if($own) { $pdo->commit(); }
+	} catch(Throwable $e) {
+		if($own AND $pdo->inTransaction()) { $pdo->rollBack(); }
+		throw $e;
+	}
+	$uid = $n !== false ? (int)$n['userid'] : ($tok !== false ? (int)$tok['userid'] : 0);
+	if(($revoked OR $nid !== null) AND $uid > 0 AND function_exists('add_log')) {
+		$txt = trim(substr($reason, strlen($why)));
+		$msg = match($why) {
+			'leave' => "Sonar64-Knoten $nid hat sich abgemeldet.",
+			'owner' => "Sonar64-Token $tokenId gesperrt" . ($nid !== null ? ", Knoten $nid abgemeldet." : '.'),
+			'admin' => 'Sonar64-' . ($nid !== null ? "Knoten $nid" : "Token $tokenId") . ' von ipv64.net abgemeldet' . ($txt !== '' ? ' (' . htmlspecialchars($txt) . ')' : '') . '.',
+			default => 'Sonar64-' . ($nid !== null ? "Knoten $nid" : "Token $tokenId") . ' nach 30 Tagen ohne Meldung abgemeldet.',
+		};
+		add_log($pdo, $uid, "0", "Sonar64", $msg);
+	}
+	return $nid;
 }
 
 /** Anzeigename einer Vertrauensstufe (de/en). */

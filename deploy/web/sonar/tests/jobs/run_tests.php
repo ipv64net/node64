@@ -241,12 +241,25 @@ check('Nachbarn: Koelner Knoten misst Koelner Knoten', count(array_intersect($ko
 q("UPDATE sonar_nodes SET last_seen = ? WHERE node_id <> ?", array(dt(T + 270), OFFL));
 job('plan', '--now=' . iso(T + 300));
 $P2 = plans();
-$same = 0; $diff = 0;
-foreach($P as $m => $pl) {
-	$old = array(); foreach($pl['plan']['rounds'] as $rd) { $old[$rd['start']] = $rd['targets']; }
-	foreach($P2[$m]['plan']['rounds'] as $rd) { if(isset($old[$rd['start']])) { $old[$rd['start']] === $rd['targets'] ? $same++ : $diff++; } }
+/** Ziele einer Runde als "Ziel|fam|Methode". */
+function tkeys(array $targets): array { return array_map(function($t) { return $t['id'] . '|' . $t['fam'] . '|' . $t['method']; }, $targets); }
+/** Vergleich zweier Planstaende: Runden in beiden -> [gleich, nur ergaenzt, Ziel verloren]. */
+function stable(array $A, array $B): array {
+	$same = 0; $added = 0; $lost = 0;
+	foreach($A as $m => $pl) {
+		if(!isset($B[$m])) { continue; }
+		$old = array(); foreach($pl['plan']['rounds'] as $rd) { $old[$rd['start']] = $rd['targets']; }
+		foreach($B[$m]['plan']['rounds'] as $rd) {
+			if(!isset($old[$rd['start']])) { continue; }
+			if($old[$rd['start']] === $rd['targets']) { $same++; }
+			elseif(array_slice($rd['targets'], 0, count($old[$rd['start']])) === $old[$rd['start']]) { $added++; }
+			else { $lost++; }
+		}
+	}
+	return array($same, $added, $lost);
 }
-check("Runden bleiben stabil ($same gleich, $diff anders)", $diff === 0 AND $same > 0);
+[$same, $added, $lost] = stable($P, $P2);
+check("Runden bleiben stabil: vorhandene Ziele bleiben ($same gleich, $added ergaenzt, $lost verloren)", $lost === 0 AND $same > 0);
 $r2 = array_column($P2['nt0000000001']['plan']['rounds'], 'start');
 check('laufende Runde bleibt, eine neue angehaengt', $r2 === array_map('iso', range(H + 300, H + 7 * 300, 300)), $r2);
 
@@ -261,6 +274,56 @@ $hit = 0;
 foreach(plans() as $m => $pl) { if(strtotime($pl['expires'] . ' UTC') <= T + 600) { continue; } foreach($pl['plan']['rounds'] as $rd) { foreach($rd['targets'] as $t) { if($t['id'] === 'nt0000000002') { $hit++; } } } }
 check('Opt-out: Knoten in keinem Plan mehr', $hit === 0, $hit);
 q("UPDATE sonar_nodes SET measured = 1 WHERE node_id = 'nt0000000002'");
+
+// Auffuellen (Vertrag 10.1): neuer gemessener Knoten X (Weg bekannt, z. B. durch die Sofortstufe der API, noch von keinem
+// Knoten gemessen) und frisch angemeldeter Knoten Y; zweiter Lauf zum selben Zeitpunkt haengt keine Runde an, fuellt nur auf
+$X = 'nt0000000099'; $Y = 'nt0000000098';
+$before = plans();
+q("UPDATE sonar_nodes SET budget = 'grosszuegig' WHERE node_id IN ('nt0000000021', 'nt0000000022')"); // freie Plaetze sicher
+q("INSERT INTO sonar_nodes (node_id, userid, token_id, role, pubkey, name, slug, lat, lon, jitter_seed, access, device, measured, budget, mode, ip4, asn4, asname4, place, reach4, reach6, trust, first_seen, last_seen, health, active) VALUES
+	(?, 1099, 199, 'node', 'pk', 'Node X', 'node-x', 52.51, 13.39, 99, 'fiber', 'pi', 1, 'normal', 'headless', '80.250.0.99', 3320, 'Deutsche Telekom AG', 'Berlin', 'udp', 'none', 'new', ?, ?, '{}', 1),
+	(?, 1098, 198, 'node', 'pk', 'Node Y', 'node-y', 48.14, 11.58, 98, 'dsl', 'pi', 0, 'sparsam', 'headless', '80.250.0.98', 3320, 'Deutsche Telekom AG', 'Muenchen', 'none', 'none', 'new', ?, ?, NULL, 1)",
+	array($X, dt(T + 400), dt(T + 590), $Y, dt(T + 590), dt(T + 590)));
+$out = job('plan', '--now=' . iso(T + 600));
+echo "  $out\n";
+$P3 = plans();
+$nodeRows = array(); foreach(all("SELECT * FROM sonar_nodes") as $r) { $nodeRows[$r['node_id']] = $r; }
+check_plans(array_filter($P3, function($pl) { return strtotime($pl['expires'] . ' UTC') > T + 600; }), 'Plan aufgefuellt');
+preg_match('/aufgefuellt (\d+)\), .*\(neu (\d+)\)/', $out, $mf);
+check('Lauf meldet aufgefuellte Runden und neue Ziele', (int)($mf[1] ?? 0) > 0 AND (int)($mf[2] ?? 0) === 1, $out);
+[$same, $added, $lost] = stable($before, $P3);
+check("auffuellen: vorhandene Ziele bleiben ($same gleich, $added ergaenzt, $lost verloren)", $lost === 0 AND $added > 0);
+$curR = iso(intdiv(T + 600, 300) * 300); $curSame = 0; $curDiff = 0;
+foreach($before as $m => $pl) {
+	$o = null; foreach($pl['plan']['rounds'] as $rd) { if($rd['start'] === $curR) { $o = $rd['targets']; } }
+	if($o === null OR !isset($P3[$m])) { continue; }
+	foreach($P3[$m]['plan']['rounds'] as $rd) { if($rd['start'] === $curR) { $rd['targets'] === $o ? $curSame++ : $curDiff++; } }
+}
+check("laufende Runde unveraendert ($curSame)", $curDiff === 0 AND $curSame > 0);
+$xBy = array(); // Runde => Messende von X (ohne Anker), nur schon vorher geplante Runden
+foreach($P3 as $m => $pl) {
+	if(str_starts_with($m, 'a_')) { continue; }
+	$had = array(); foreach($before[$m]['plan']['rounds'] ?? array() as $rd) { $had[$rd['start']] = true; }
+	foreach($pl['plan']['rounds'] as $rd) { if(isset($had[$rd['start']]) AND in_array($X, array_column($rd['targets'], 'id'), true)) { $xBy[$rd['start']][$m] = true; } }
+}
+$xMax = $xBy ? max(array_map('count', $xBy)) : 0;
+check('neues Ziel X sofort in schon geplanten kommenden Runden (' . count($xBy) . ' Runden, bis ' . $xMax . ' Messende)', count($xBy) >= 5 AND $xMax >= 3 AND $xMax <= 10 AND !isset($xBy[$curR]), array_map('count', $xBy));
+$ax = 0; $ay = 0;
+foreach(array('a_fsn', 'a_nbg') as $a) {
+	foreach($P3[$a]['plan']['rounds'] as $rd) {
+		if($rd['start'] === $curR) { continue; }
+		$ids3 = array_column($rd['targets'], 'id');
+		if(in_array($X, $ids3, true)) { $ax++; }
+		if(in_array($Y, $ids3, true)) { $ay++; }
+	}
+}
+check("Anker messen X in allen kommenden Runden ($ax von 12), Y (nur ausgehend) nicht", $ax === 12 AND $ay === 0, array($ax, $ay));
+check('frisch angemeldeter Knoten Y hat gleich einen Plan (6 Runden)', isset($P3[$Y]) AND count($P3[$Y]['plan']['rounds']) === 6 AND strtotime($P3[$Y]['expires'] . ' UTC') > T + 600, $P3[$Y]['plan']['rounds'] ?? null);
+q("DELETE FROM sonar_nodes WHERE node_id IN (?, ?)", array($X, $Y));
+q("DELETE FROM sonar_plans WHERE node_id IN (?, ?)", array($X, $Y));
+q("UPDATE sonar_nodes SET budget = 'sparsam' WHERE node_id = 'nt0000000021'");
+q("UPDATE sonar_nodes SET budget = 'normal' WHERE node_id = 'nt0000000022'");
+$nodeRows = array(); foreach(all("SELECT * FROM sonar_nodes") as $r) { $nodeRows[$r['node_id']] = $r; }
 
 // eine Stunde: Traceroute hoechstens 2 je Knoten und Stunde, Kontrollziele
 $slots = array(); // Knoten => Runde => Ziele (letzter Stand)
@@ -418,17 +481,73 @@ q("INSERT INTO sonar_inbound (node_id, from_short, fam, at, `count`) VALUES ('a_
 q("INSERT INTO sonar_traces (`round`, src, dst, fam, at, hops) VALUES (?, 'nt0000000001', 'a_fsn', 4, ?, '[]')", array(dt(T - 8 * DAY), dt(T - 8 * DAY)));
 q("INSERT INTO sonar_pair_1h (src, dst, fam, hour, n) VALUES ('nt0000000001', 'a_fsn', 4, ?, 1)", array(dt(H - 91 * DAY)));
 q("INSERT INTO sonar_plans (node_id, issued, expires, body, etag) VALUES ('nt0000000001', ?, ?, '{}', 'x'), ('nt0000000002', ?, ?, '{}', 'y')", array(dt(T - 7200), dt(T - 5400), dt(T), dt(T + 1800)));
-q("UPDATE sonar_nodes SET active = 0, last_seen = ? WHERE node_id = 'nt0000000059'", array(dt(T - 8 * DAY)));
+q("UPDATE sonar_nodes SET active = 0, last_seen = ?, disabled_at = ? WHERE node_id = 'nt0000000054'", array(dt(T - 8 * DAY), dt(T - 8 * DAY)));
 q("UPDATE sonar_nodes SET last_seen = ? WHERE node_id = 'nt0000000058'", array(dt(T - 91 * DAY)));
+// Vertrag 10.3: inaktiv 30 Tage -> abmelden (auch nur first_seen), Anker nur Warnung; deaktiviert ohne Zeitpunkt -> jetzt
+q("UPDATE sonar_nodes SET last_seen = NULL, first_seen = ? WHERE node_id = 'nt0000000055'", array(dt(T - 31 * DAY)));
+q("UPDATE sonar_nodes SET last_seen = ? WHERE node_id = 'nt0000000057'", array(dt(T - 29 * DAY)));
+q("UPDATE sonar_nodes SET last_seen = ? WHERE node_id = 'a_nbg'", array(dt(T - 31 * DAY)));
+q("UPDATE sonar_nodes SET active = 0, disabled_at = NULL WHERE node_id = 'nt0000000053'");
+q("UPDATE sonar_nodes SET active = 0, disabled_at = ? WHERE node_id = 'nt0000000056'", array(dt(T - 89 * DAY)));
+// deaktiviert seit > 90 Tagen: nt59 mit allen Daten loeschen (Ziel-Stundenwert kurz nach der Deaktivierung)
+$dis59 = T - 90 * DAY - 17280; $h59 = intdiv(T - 89 * DAY - 43200, 3600) * 3600;
+q("UPDATE sonar_nodes SET active = 0, last_seen = ?, disabled_at = ? WHERE node_id = 'nt0000000059'", array(dt($dis59), dt($dis59)));
+q("INSERT INTO sonar_results (`round`, src, dst, fam, method, sent, recv, at) VALUES (?, 'nt0000000059', 'a_fsn', 4, 'udp', 5, 5, ?), (?, 'a_fsn', 'nt0000000059', 4, 'udp', 5, 5, ?)",
+	array(dt(T - DAY), dt(T - DAY), dt(T - DAY), dt(T - DAY)));
+q("INSERT INTO sonar_traces (`round`, src, dst, fam, at, hops) VALUES (?, 'nt0000000059', 'a_fsn', 4, ?, '[]'), (?, 'nt0000000001', 'nt0000000059', 4, ?, '[]')", array(dt(T - DAY), dt(T - DAY), dt(T - DAY), dt(T - DAY)));
+q("INSERT INTO sonar_inbound (node_id, from_short, fam, at, `count`) VALUES ('nt0000000059', 'abcdef02', 4, ?, 5)", array(dt(T - 3600)));
+q("INSERT INTO sonar_pair_1h (src, dst, fam, hour, n) VALUES ('nt0000000059', 'a_fsn', 4, ?, 1), ('nt0000000001', 'nt0000000059', 4, ?, 1), ('nt0000000001', 'nt0000000002', 4, ?, 1)",
+	array(dt(H - 10 * DAY), dt($h59), dt($h59)));
+q("INSERT INTO sonar_trust_log (node_id, at, old, new, reason) VALUES ('nt0000000059', ?, 'stable', 'removed', 'owner'), ('nt0000000020', ?, 'new', 'stable', 'daily'), ('nt0000000020', ?, 'stable', 'trusted', 'daily')",
+	array(dt($dis59), dt(T - 366 * DAY), dt(T - 300 * DAY)));
+q("INSERT INTO sonar_plans (node_id, issued, expires, body, etag) VALUES ('nt0000000059', ?, ?, '{}', 'z')", array(dt(T), dt(T + 1800)));
+// Token: 159/160 zu nt59 (loeschen), 170 unbenutzt 31 Tage (widerrufen), 171 unbenutzt 29 Tage, 172 widerrufen ohne Knoten
+// 91 Tage (loeschen), 156 widerrufen 91 Tage, gehoert aber zu nt56 (bleibt), 174 widerrufen 89 Tage (bleibt), 158 zu nt58
+$tk = function(int $id, ?string $node, int $created, ?int $revoked) { q("INSERT INTO sonar_tokens (id, userid, kind, name, token_hash, node_id, created_at, revoked_at) VALUES (?, 1, 'node', 't', ?, ?, ?, ?)",
+	array($id, hash('sha256', "tok$id"), $node, dt($created), $revoked === null ? null : dt($revoked))); };
+$tk(159, 'nt0000000059', T - 200 * DAY, (int)$dis59); $tk(160, 'nt0000000059', T - 300 * DAY, T - 200 * DAY); $tk(170, null, T - 31 * DAY, null); $tk(171, null, T - 29 * DAY, null);
+$tk(172, null, T - 120 * DAY, T - 91 * DAY); $tk(156, 'nt0000000056', T - 120 * DAY, T - 91 * DAY); $tk(174, null, T - 120 * DAY, T - 89 * DAY); $tk(158, 'nt0000000058', T - 200 * DAY, null);
+q("INSERT INTO sonar_asn_1d (day, asn_a, asn_b, fam, n) VALUES (?, 1, 2, 4, 1), (?, 1, 2, 4, 1)", array(gmdate('Y-m-d', T - 731 * DAY), gmdate('Y-m-d', T - 700 * DAY)));
+q("INSERT INTO sonar_outages (kind, keyval, label, started, ended) VALUES ('asn', '1', 'alt', ?, ?), ('asn', '2', 'lang offen', ?, NULL), ('asn', '3', 'juenger', ?, ?)",
+	array(dt(T - 740 * DAY), dt(T - 731 * DAY), dt(T - 800 * DAY), dt(T - 700 * DAY), dt(T - 699 * DAY)));
+// Stundenwerte als Ziel entstehen nach der Deaktivierung nicht mehr (Planer nimmt inaktive Ziele heraus): die aus den Testdaten weg
+q("DELETE FROM sonar_pair_1h WHERE dst = 'nt0000000059' AND hour >= ?", array(dt($dis59 + DAY)));
+$n59 = (int)one("SELECT COUNT(*) FROM sonar_results WHERE src = 'nt0000000059' OR dst = 'nt0000000059'");
 $cntR = (int)one("SELECT COUNT(*) FROM sonar_results");
+$cntO = (int)one("SELECT COUNT(*) FROM sonar_outages");
+$out = job('cleanup', '--dry --now=' . iso(T));
+check('--dry aendert nichts', str_starts_with($out, 'NUR ANZEIGEN') AND (int)one("SELECT COUNT(*) FROM sonar_results") === $cntR AND (int)one("SELECT active FROM sonar_nodes WHERE node_id = 'nt0000000058'") === 1, $out);
 $out = job('cleanup', '--now=' . iso(T));
 echo "  $out\n";
-check('Ergebnisse > 7 Tage weg, Rest bleibt', (int)one("SELECT COUNT(*) FROM sonar_results WHERE at < ?", array(dt(T - 7 * DAY))) === 0 AND (int)one("SELECT COUNT(*) FROM sonar_results") === $cntR - 1);
+check('Ergebnisse > 7 Tage weg, Rest bleibt', (int)one("SELECT COUNT(*) FROM sonar_results WHERE at < ?", array(dt(T - 7 * DAY))) === 0 AND (int)one("SELECT COUNT(*) FROM sonar_results") === $cntR - 1 - $n59, array($cntR, $n59));
+$st = array(); foreach(all("SELECT node_id, active, disabled_at, ip4 FROM sonar_nodes WHERE node_id IN ('nt0000000053', 'nt0000000055', 'nt0000000057', 'nt0000000058', 'a_nbg')") as $r) { $st[$r['node_id']] = $r; }
+check('inaktiv seit 30 Tagen abgemeldet (auch nur first_seen), 29 Tage bleibt', (int)$st['nt0000000058']['active'] === 0 AND $st['nt0000000058']['disabled_at'] === dt(T) . '.000'
+	AND (int)$st['nt0000000055']['active'] === 0 AND (int)$st['nt0000000057']['active'] === 1, $st);
+check('Abmeldung: Token widerrufen, trust_log removed/inactive', one("SELECT revoked_at FROM sonar_tokens WHERE id = 158") !== null
+	AND one("SELECT reason FROM sonar_trust_log WHERE node_id = 'nt0000000058' AND new = 'removed'") === 'inactive', $out);
+check('Anker nie automatisch, nur Warnung', (int)$st['a_nbg']['active'] === 1 AND str_contains($out, 'WARNUNG Anker a_nbg seit 31 Tagen'), $out);
+check('deaktiviert ohne Zeitpunkt: disabled_at gesetzt', $st['nt0000000053']['disabled_at'] === dt(T) . '.000', $st['nt0000000053']);
+check('unbenutzte Token: 31 Tage widerrufen, 29 Tage nicht', one("SELECT revoked_at FROM sonar_tokens WHERE id = 170") !== null AND one("SELECT revoked_at FROM sonar_tokens WHERE id = 171") === null);
+$left59 = array();
+foreach(array('sonar_nodes' => 'node_id', 'sonar_results' => "src = ? OR dst", 'sonar_traces' => "src = ? OR dst", 'sonar_inbound' => 'node_id', 'sonar_pair_1h' => "src = ? OR dst",
+	'sonar_trust_log' => 'node_id', 'sonar_plans' => 'node_id', 'sonar_tokens' => 'node_id') as $tb => $w) {
+	$n = (int)one("SELECT COUNT(*) FROM $tb WHERE $w = ?", str_contains($w, '?') ? array('nt0000000059', 'nt0000000059') : array('nt0000000059'));
+	if($n > 0) { $left59[$tb] = $n; }
+}
+check('deaktiviert > 90 Tage: Knoten und alle Daten geloescht', $left59 === array() AND (int)one("SELECT COUNT(*) FROM sonar_tokens WHERE id IN (159, 160)") === 0, $left59);
+check('deaktiviert 89 Tage bleibt, fremder Stundenwert bleibt', (int)one("SELECT COUNT(*) FROM sonar_nodes WHERE node_id = 'nt0000000056'") === 1
+	AND (int)one("SELECT COUNT(*) FROM sonar_pair_1h WHERE src = 'nt0000000001' AND dst = 'nt0000000002' AND hour = ?", array(dt($h59))) === 1);
+check('widerrufene Token ohne Knoten nach 90 Tagen geloescht, mit Knoten oder juenger bleiben',
+	one("SELECT GROUP_CONCAT(id ORDER BY id) FROM sonar_tokens WHERE id IN (156, 172, 174)") === '156,174');
+check('Aufbewahrung: ASN-Tage und beendete Stoerungen 2 Jahre, offene bleiben', one("SELECT GROUP_CONCAT(day) FROM sonar_asn_1d WHERE asn_a = 1") === gmdate('Y-m-d', T - 700 * DAY)
+	AND (int)one("SELECT COUNT(*) FROM sonar_outages") === $cntO - 1 AND (int)one("SELECT COUNT(*) FROM sonar_outages WHERE keyval = '2'") === 1);
+check('Aufbewahrung: trust_log 1 Jahr', (int)one("SELECT COUNT(*) FROM sonar_trust_log WHERE node_id = 'nt0000000020' AND at < ?", array(dt(T - 365 * DAY))) === 0
+	AND (int)one("SELECT COUNT(*) FROM sonar_trust_log WHERE node_id = 'nt0000000020' AND at = ?", array(dt(T - 300 * DAY) . '.000')) === 1);
 check('Proben > 24 h, Traces > 7 Tage, Stundenwerte > 90 Tage weg', (int)one("SELECT COUNT(*) FROM sonar_inbound WHERE at < ?", array(dt(T - DAY))) === 0
 	AND (int)one("SELECT COUNT(*) FROM sonar_traces") === 0 AND (int)one("SELECT COUNT(*) FROM sonar_pair_1h WHERE hour < ?", array(dt(H - 90 * DAY))) === 0
 	AND (int)one("SELECT COUNT(*) FROM sonar_pair_1h") > 1000);
 check('abgelaufener Plan weg, gueltiger bleibt', one("SELECT GROUP_CONCAT(node_id) FROM sonar_plans") === 'nt0000000002');
-check('IPs: deaktiviert > 7 Tage und 90 Tage ohne Meldung entfernt', one("SELECT CONCAT_WS(',', ip4, ip6) FROM sonar_nodes WHERE node_id = 'nt0000000059'") === ''
+check('IPs: deaktiviert > 7 Tage und 90 Tage ohne Meldung entfernt', one("SELECT CONCAT_WS(',', ip4, ip6) FROM sonar_nodes WHERE node_id = 'nt0000000054'") === ''
 	AND one("SELECT ip4 FROM sonar_nodes WHERE node_id = 'nt0000000058'") === null AND one("SELECT ip4 FROM sonar_nodes WHERE node_id = 'nt0000000057'") !== null);
 check('Log und Stoerungen bleiben', (int)one("SELECT COUNT(*) FROM sonar_trust_log") > 0 AND (int)one("SELECT COUNT(*) FROM sonar_outages") > 0);
 

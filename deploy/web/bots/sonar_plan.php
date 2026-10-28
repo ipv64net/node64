@@ -9,13 +9,16 @@
  *
  * 1. Erreichbarkeit reach4/6 der gemessenen Knoten aus den Anker-Messungen der letzten Stunde (udp vor icmp, keine
  *    Anker-Messung = alter Stand).
- * 2. Je aktivem Knoten (online <= 15 min) ein Plan mit den Runden der naechsten 30 min (5-min-Raster, UTC). Runden, die
- *    schon geplant sind (laufende und kommende), bleiben unveraendert und werden nur um neue ergaenzt; Ziele, die nicht
- *    mehr gemessen werden duerfen (Opt-out, Quarantaene, andere IP, anderer Weg), fallen sofort heraus.
- *    Knoten: Anker, Kontrollziel (~5 %), Traceroute (2 je Stunde), 3 Nachbarn, gleicher und fremder ASN, Stichprobe
- *    (deterministisch ueber Knoten + Stunde), hoechstens Budget-Ziele je Runde und 10 Messende je Ziel und Runde.
+ * 2. Je aktivem Knoten (online <= 15 min, also auch gleich nach register) ein Plan mit den Runden der naechsten 30 min
+ *    (5-min-Raster, UTC). Die laufende Runde bleibt unveraendert; in schon geplanten kommenden Runden bleiben die Ziele,
+ *    freie Budget-Plaetze werden mit weiteren Zielen aufgefuellt (Vertrag 10.1); dazu kommt je Lauf eine neue Runde.
+ *    Ziele, die nicht mehr gemessen werden duerfen (Opt-out, Quarantaene, andere IP, anderer Weg), fallen sofort heraus.
+ *    Knoten: Anker, Kontrollziel (~5 %), Traceroute (2 je Stunde), neue Ziele (noch keine gueltige Messung von einem
+ *    Nicht-Anker in 24 h) mit Vorrang, 3 Nachbarn, gleicher und fremder ASN, Stichprobe (deterministisch ueber
+ *    Knoten + Stunde), hoechstens Budget-Ziele je Runde und 10 Messende je Ziel und Runde.
  *    Anker: alle gemessenen Knoten (auch ohne Weg, um ihn zu finden, und bis 6 h nach der letzten Meldung, damit
- *    sonar_outages.php Ausfaelle sieht) und die anderen Anker, hoechstens 2.000 je Runde.
+ *    sonar_outages.php Ausfaelle sieht; neu gemessene sofort in allen kommenden Runden) und die anderen Anker,
+ *    hoechstens 2.000 je Runde.
  * 3. Abgelaufene Plaene und Plaene deaktivierter Knoten loeschen (enthalten IPs).
  */
 if(php_sapi_name() !== 'cli') { exit; }
@@ -135,6 +138,15 @@ while($r = $st->fetch(PDO::FETCH_ASSOC)) {
 	}
 	$N[$id] = $n;
 }
+// neue Ziele: noch keine gueltige Messung von einem Nicht-Anker in den letzten 24 h (Vorrang bei freien Plaetzen)
+$newT = array();
+foreach(array_chunk($pool, 500) as $chunk) {
+	$st = $pdo->prepare("SELECT n.node_id FROM sonar_nodes n WHERE n.node_id IN (" . s64p_in($chunk) . ") AND NOT EXISTS (SELECT 1 FROM sonar_results r
+		WHERE r.dst = n.node_id AND r.at >= ? AND r.valid = 1 AND r.src NOT LIKE 'a\\_%')");
+	$st->execute(array_merge($chunk, array(s64p_db($now - 86400))));
+	foreach($st->fetchAll(PDO::FETCH_COLUMN) as $id) { $newT[$id] = true; }
+}
+$newList = array_values(array_filter($pool, function($t) use ($newT) { return isset($newT[$t]); }));
 
 /** Quadrat der Entfernung (gleichabstaendig, nur zum Sortieren). */
 function s64p_d2(array $a, array $b): float {
@@ -211,11 +223,12 @@ function s64p_anchors_for(string $m): array {
 /** Kandidaten eines Knotens fuer eine Stunde (gleich fuer alle Runden der Stunde, damit Paare Stundenwerte bekommen;
  * ohne Zwischenspeicher, im Betrieb kommt je Lauf nur eine Runde dazu). */
 function s64p_candidates(string $m, int $hour): array {
-	global $N, $pool, $byAsn;
+	global $N, $pool, $byAsn, $newList;
 	$h = (string)$hour;
 	$ok = function($t) use ($m) { return s64p_entries($m, $t) !== array(); };
 	$asn = $N[$m]['asn'];
-	$order = s64p_nearest($m, S64P_NEIGHBORS, $ok);
+	$order = s64p_pick($newList, "new|$m|$h", $N[$m]['budget'], $ok); // neue Ziele zuerst
+	$order = array_merge($order, s64p_nearest($m, S64P_NEIGHBORS, $ok));
 	if($asn !== null) { $order = array_merge($order, s64p_pick($byAsn[$asn] ?? array(), "same|$m|$h", 1, $ok)); }
 	$order = array_merge($order, s64p_pick($pool, "foreign|$m|$h", 1, function($t) use ($N, $ok, $asn) { return $N[$t]['asn'] !== $asn AND $ok($t); }));
 	$order = array_merge($order, s64p_pick($pool, "sample|$m|$h", $N[$m]['budget'] * S64P_SAMPLE, $ok));
@@ -296,10 +309,15 @@ $controls = array(); // node_id => Kontrollziele
 $tcount = array();   // node_id => Ziele
 $cnt = array();      // slot => Ziel => Zahl der Messenden (ohne Anker)
 $cntA = array();     // slot => Adresse => Zahl der Messenden (mehrere Knoten hinter einer IP, z. B. CGNAT)
+$part = array();     // node_id => slot => Ziele einer kommenden Runde mit freien Plaetzen ("Ziel|fam|Methode|Adresse" je Zeile)
+$addl = array();     // node_id => slot => dort aufgefuellte Ziele
 foreach(array_chunk($ids, 200) as $chunk) {
 	foreach(s64p_prev($chunk) as $m => $row) {
 		foreach(s64p_retained($m, $row) as $s => $keep) {
 			$have[$m][$s] = true;
+			if($s > $cur AND count($keep) < $N[$m]['budget']) {
+				$part[$m][$s] = implode("\n", array_map(function($t) { return $t['id'] . '|' . (int)$t['fam'] . '|' . $t['method'] . '|' . $t['addr']; }, $keep));
+			}
 			if(!$N[$m]['anchor']) {
 				$seenT = array(); $seenA = array();
 				foreach($keep as $t) {
@@ -312,8 +330,9 @@ foreach(array_chunk($ids, 200) as $chunk) {
 	}
 }
 
-// ---------------------------------------------------------------- 4. neue Runden planen
+// ---------------------------------------------------------------- 4. neue Runden planen, kommende auffuellen
 $newRounds = 0;
+$filled = 0;
 $aborted = false;
 foreach($slots as $s) {
 	$hour = intdiv($s, 3600);
@@ -321,19 +340,31 @@ foreach($slots as $s) {
 	$order = $ids;
 	usort($order, function($a, $b) use ($s) { return s64p_hash($a, (string)$s) <=> s64p_hash($b, (string)$s); });
 	foreach($order as $m) {
-		if(isset($have[$m][$s])) { continue; }
+		$fill = $part[$m][$s] ?? null; // schon geplant mit freien Plaetzen: nur Ziele dazu (Anker, Kontrollziel, Trace hat die Runde schon)
+		if(isset($have[$m][$s]) AND $fill === null) { continue; }
 		if(microtime(true) > $deadline) { $aborted = true; break 2; }
 		$n = $N[$m];
 		$list = array();
+		$exN = 0; $exK = array(); // vorhandene Ziele der Runde: Zahl, "Ziel|fam|Methode" und "Ziel|fam"
+		$mineT = array(); // Ziele dieses Knotens in dieser Runde
+		$mineA = array(); // Adresse => Ziel (eine Adresse nur fuer ein Ziel, zaehlt einmal)
+		if($fill !== null) {
+			unset($part[$m][$s]);
+			foreach(explode("\n", $fill) as $l) {
+				[$t, $f, $meth, $ad] = explode('|', $l, 4);
+				$exN++; $exK["$t|$f|$meth"] = true; $exK["$t|$f"] = true;
+				if(!$N[$t]['anchor']) { $mineT[$t] = true; $mineA[$ad] = $t; }
+			}
+		}
 		if($n['anchor']) {
 			// andere Anker, dann alle gemessenen Knoten (Weg suchen: ohne bekannten Weg abwechselnd, sonst bekannter
-			// Weg und in jeder 6. Runde der andere)
-			foreach(s64p_anchors_for($m) as $a) { foreach($n['fams'] as $f => $ip) { if(isset($N[$a]['fams'][$f])) { $list[] = s64p_target($a, $f, 'udp', S64P_COUNT_ANCHOR); } } }
+			// Weg und in jeder 6. Runde der andere); beim Auffuellen nur, was in der Runde noch fehlt
+			foreach(s64p_anchors_for($m) as $a) { foreach($n['fams'] as $f => $ip) { if(isset($N[$a]['fams'][$f]) AND !isset($exK["$a|$f"])) { $list[] = s64p_target($a, $f, 'udp', S64P_COUNT_ANCHOR); } } }
 			$nodes = array();
 			foreach($N as $t => $tn) {
 				if($tn['anchor'] OR !$tn['measured']) { continue; }
 				foreach($n['fams'] as $f => $ip) {
-					if(!isset($tn['fams'][$f])) { continue; }
+					if(!isset($tn['fams'][$f]) OR isset($exK["$t|$f"])) { continue; }
 					$alt = (s64p_hash('disc', $t) + $idx) % 6 === 0;
 					$known = $tn['reach'][$f];
 					if($known === 'none') { $meth = (s64p_hash('alt', $t) + $idx) % 2 === 0 ? 'udp' : 'icmp'; }
@@ -341,37 +372,38 @@ foreach($slots as $s) {
 					$nodes[] = array(s64p_hash('a', $m, $t, (string)$hour), s64p_target($t, $f, $meth, S64P_COUNT_ANCHOR));
 				}
 			}
-			$room = S64P_ANCHOR_MAX - count($list);
+			$room = S64P_ANCHOR_MAX - $exN - count($list);
 			if(count($nodes) > $room) {
 				usort($nodes, function($a, $b) { return $a[0] <=> $b[0]; });
 				$nodes = array_slice($nodes, 0, max(0, $room));
 			}
 			foreach($nodes as $e) { $list[] = $e[1]; }
 		} else {
-			$budget = $n['budget'];
-			$anchorMax = max(2, intdiv($budget, 2));
+			$budget = $n['budget'] - $exN; // freie Plaetze
 			$mine = s64p_anchors_for($m);
-			foreach($mine as $a) {
-				foreach($n['fams'] as $f => $ip) {
-					if(isset($N[$a]['fams'][$f]) AND count($list) < $anchorMax) { $list[] = s64p_target($a, $f, 'udp', S64P_COUNT); }
+			if($fill === null) {
+				$anchorMax = max(2, intdiv($budget, 2));
+				foreach($mine as $a) {
+					foreach($n['fams'] as $f => $ip) {
+						if(isset($N[$a]['fams'][$f]) AND count($list) < $anchorMax) { $list[] = s64p_target($a, $f, 'udp', S64P_COUNT); }
+					}
+				}
+				// Kontrollziel: in ~5 % der Knoten-Stunden einmal ein Anker per icmp (Pruefung in sonar_trust.php)
+				if($mine AND $n['icmp'] AND count($list) < $budget AND s64p_hash('ctl', $m, (string)$hour) % 100 < S64P_CONTROL_PCT
+					AND s64p_hash('ctlslot', $m, (string)$hour) % 12 === $idx) {
+					$a = $mine[s64p_hash('ctla', $m, (string)$hour) % count($mine)];
+					$f = isset($N[$a]['fams'][4], $n['fams'][4]) ? 4 : 6;
+					if(isset($N[$a]['fams'][$f], $n['fams'][$f])) { $list[] = s64p_target($a, $f, 'icmp', S64P_COUNT); }
 				}
 			}
-			// Kontrollziel: in ~5 % der Knoten-Stunden einmal ein Anker per icmp (Pruefung in sonar_trust.php)
-			if($mine AND $n['icmp'] AND count($list) < $budget AND s64p_hash('ctl', $m, (string)$hour) % 100 < S64P_CONTROL_PCT
-				AND s64p_hash('ctlslot', $m, (string)$hour) % 12 === $idx) {
-				$a = $mine[s64p_hash('ctla', $m, (string)$hour) % count($mine)];
-				$f = isset($N[$a]['fams'][4], $n['fams'][4]) ? 4 : 6;
-				if(isset($N[$a]['fams'][$f], $n['fams'][$f])) { $list[] = s64p_target($a, $f, 'icmp', S64P_COUNT); }
-			}
 			$cands = s64p_candidates($m, $hour);
-			$mineT = array(); // Ziele dieses Knotens in dieser Runde
-			$mineA = array(); // Adresse => Ziel (eine Adresse nur fuer ein Ziel, zaehlt einmal)
-			// Traceroute: zwei Runden je Stunde, erst ein Anker, dann der naechste Nachbar (sonst ein Anker)
+			// Traceroute: zwei Runden je Stunde, erst ein Anker, dann der naechste Nachbar (sonst ein Anker; kein neues Ziel)
 			$t1 = s64p_hash('tr', $m, (string)$hour) % 6;
-			if($n['icmp'] AND count($list) < $budget AND ($idx === $t1 OR $idx === $t1 + 6)) {
+			if($fill === null AND $n['icmp'] AND count($list) < $budget AND ($idx === $t1 OR $idx === $t1 + 6)) {
 				$tr = null;
 				if($idx === $t1 + 6) {
 					foreach($cands as $e) {
+						if(isset($newT[$e[0]])) { continue; }
 						$ad = $N[$e[0]]['fams'][$e[1]];
 						if(($cnt[$s][$e[0]] ?? 0) < S64P_PER_TARGET AND ($cntA[$s][$ad] ?? 0) < S64P_PER_TARGET) {
 							$tr = $e; $cnt[$s][$e[0]] = ($cnt[$s][$e[0]] ?? 0) + 1; $mineT[$e[0]] = true;
@@ -389,6 +421,7 @@ foreach($slots as $s) {
 			foreach($cands as $e) {
 				if(count($list) >= $budget) { break; }
 				[$t, $f, $meth] = $e;
+				if(isset($exK["$t|$f|$meth"])) { continue; } // steht schon in der Runde
 				$ad = $N[$t]['fams'][$f];
 				// hoechstens 10 Messende je Adresse (auch ueber mehrere Knoten hinter einer IP), dieselbe Adresse nicht doppelt
 				if(isset($mineA[$ad]) ? $mineA[$ad] !== $t : ($cntA[$s][$ad] ?? 0) >= S64P_PER_TARGET) { continue; }
@@ -401,7 +434,8 @@ foreach($slots as $s) {
 				$list[] = s64p_target($t, $f, $meth, S64P_COUNT);
 			}
 		}
-		if($list) { s64p_store($m, $s, $list); $newRounds++; }
+		if($list AND $fill !== null) { $addl[$m][$s] = $list; $filled++; }
+		elseif($list) { s64p_store($m, $s, $list); $newRounds++; }
 	}
 }
 
@@ -413,7 +447,10 @@ foreach(array_chunk(array_keys($plans + $have), S64P_CHUNK) as $chunk) {
 	$prev = s64p_prev(array_keys(array_intersect_key($have, array_flip($chunk))) ?: array(''));
 	if(!$dry) { $pdo->beginTransaction(); }
 	foreach($chunk as $m) {
-		if(isset($prev[$m])) { foreach(s64p_retained($m, $prev[$m]) as $s => $keep) { if(!isset($plans[$m][$s])) { s64p_store($m, $s, $keep); } } }
+		if(isset($prev[$m])) {
+			foreach(s64p_retained($m, $prev[$m]) as $s => $keep) { if(!isset($plans[$m][$s])) { s64p_store($m, $s, isset($addl[$m][$s]) ? array_merge($keep, $addl[$m][$s]) : $keep); } }
+		}
+		unset($addl[$m]);
 		if(empty($plans[$m])) { continue; }
 		ksort($plans[$m]);
 		$rounds = array();
@@ -448,6 +485,6 @@ if(!$dry) {
 	$st = $pdo->query("DELETE p FROM sonar_plans p JOIN sonar_nodes n ON n.node_id = p.node_id WHERE n.active = 0");
 	$deleted += $st->rowCount();
 }
-printf("%sPlaene %d (Ziele %d, neue Runden %d), Anker %d, Ziele moeglich %d, Weg geaendert %d, geloescht %d, Speicher %.1f MB%s\n",
-	$dry ? 'NUR ANZEIGEN: ' : '', $written, $targets, $newRounds, count($anchors), count($pool), $reachChanged, $deleted,
+printf("%sPlaene %d (Ziele %d, neue Runden %d, aufgefuellt %d), Anker %d, Ziele moeglich %d (neu %d), Weg geaendert %d, geloescht %d, Speicher %.1f MB%s\n",
+	$dry ? 'NUR ANZEIGEN: ' : '', $written, $targets, $newRounds, $filled, count($anchors), count($pool), count($newList), $reachChanged, $deleted,
 	memory_get_peak_usage() / 1048576, $aborted ? ', ABGEBROCHEN (Zeitgrenze)' : '');

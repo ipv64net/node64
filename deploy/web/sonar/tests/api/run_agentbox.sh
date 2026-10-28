@@ -27,7 +27,7 @@ PY
 python "$STAGE/patch.py" "$API" > "$W/api_v2.php"
 cp "$WEB/api_v2_honeypot.php" "$WEB/api_v2_sonar.php" "$W/"
 cp "$WEB/sonar/s64_lib.php" "$W/sonar/"
-cp "$WEB/bots/sonar_keygen.php" "$WEB/bots/sonar_anchor_token.php" "$W/bots/"
+cp "$WEB/bots/sonar_keygen.php" "$WEB/bots/sonar_anchor_token.php" "$WEB/bots/sonar_node.php" "$W/bots/"
 cp "$HERE/dbconnect_stub.php" "$W/dbconnect.php"
 cp "$HERE/run_tests.php" "$HERE/setup.sql" "$R/tests/"
 cp "$SQL/sonar64.sql" "$R/sql/"

@@ -1,6 +1,6 @@
 <?php
 /**
- * Pruefung von api_v2_sonar.php, sonar/s64_lib.php, bots/sonar_keygen.php und bots/sonar_anchor_token.php in der
+ * Pruefung von api_v2_sonar.php, sonar/s64_lib.php, bots/sonar_keygen.php, bots/sonar_anchor_token.php und bots/sonar_node.php in der
  * Testumgebung s64a* (run_agentbox.sh). Spricht die API ueber den PHP-Builtin-Server an und prueft die Tabellen direkt.
  *
  *   S64ATEST=1 S64ADB=<db> php run_tests.php http://127.0.0.1:8080 /var/www/clients/client1/web58/web
@@ -351,6 +351,7 @@ for($i = 11; $i >= 1; $i--) {
 $planA6 = $plan; $planA6['rounds'][0]['targets'][] = array('id' => $B, 'addr' => '2606:4700::1111', 'fam' => 6, 'method' => 'icmp', 'count' => 5);
 $planA6['rounds'][0]['targets'][] = array('id' => $C, 'addr' => '8.8.8.8', 'fam' => 4, 'method' => 'icmp', 'count' => 3);
 exec_sql("UPDATE sonar_plans set body = ?, etag = 'etag000000000002' WHERE node_id = ?", array(json_encode($planA6, JSON_UNESCAPED_SLASHES), $A));
+exec_sql("UPDATE sonar_nodes set ip6 = '2606:4700::1111' WHERE node_id = ?", array($B)); // Adresse laut Plan = aktuelle (sonst not_allowed)
 req('GET', '/sonar/plan', null, array(), $TA);
 check('zweiter Plan: prev_body = erster', one("SELECT prev_body FROM sonar_plans WHERE node_id = ?", array($A))['prev_body'] === $body);
 
@@ -411,7 +412,12 @@ $r = post_report(report($A, 1, array()), $skA, $TA);
 check('seq wiederholt 409 replay', $r['code'] === 409 AND ($r['j']['code'] ?? '') === 'replay' AND ($r['j']['last_seq'] ?? 0) === 1, code($r));
 $r = post_report(report($A, 5, array_slice($items, 0, 2)), $skA, $TA);
 check('erneut gesendete Ergebnisse: duplicate', $r['code'] === 200 AND ($r['j']['data']['accepted'] ?? -1) === 0 AND (($r['j']['data']['reasons']['duplicate'] ?? 0) === 2), code($r));
-check('keine doppelten Zeilen', (int)one("SELECT count(*) c FROM sonar_results WHERE src = ? AND dst = ? AND `round` = ? AND fam = 4 AND method = 'icmp'", array($A, $B, gmdate('Y-m-d H:i:s', $R0)))['c'] === 1);
+exec_sql("UPDATE sonar_nodes set last_report = ? WHERE node_id = ?", array(s64_dt(time() - 51), $A));
+$r = post_report(report($A, 6, array()), $skA, $TA);
+check('Meldung jede Minute passt (Abstand 51 s)', $r['code'] === 200, code($r));
+$codes = array(); for($i = 0; $i < 5; $i++) { $codes[] = req('GET', '/sonar/plan', null, array('If-None-Match: "x"'), $TA)['code']; }
+check('Plan-Abruf mehrmals je Minute ohne 429', !in_array(429, $codes, true), $codes);
+check('keine doppelten Zeilen',(int)one("SELECT count(*) c FROM sonar_results WHERE src = ? AND dst = ? AND `round` = ? AND fam = 4 AND method = 'icmp'", array($A, $B, gmdate('Y-m-d H:i:s', $R0)))['c'] === 1);
 
 // below_light und sofortige Abstufung: B (Muenchen) meldet A (Hamburg, 612 km, >= 6,1 ms) mit 1 ms; A und C vertraut
 exec_sql("UPDATE sonar_nodes set trust = 'trusted' WHERE node_id IN (?, ?, ?)", array($B, $A, $C));
@@ -458,6 +464,23 @@ $r = req('GET', '/sonar/inbound?since=' . urlencode(gmdate('Y-m-d\TH:i:s') . '+9
 check('since mit Zone +99:99 400', $r['code'] === 400, code($r));
 $r = req('GET', '/sonar/inbound?since=' . urlencode(iso(time() - 86400 + 60)), null, array(), $TB, IP_B);
 check('B: 13 Pings von A (too_smooth zaehlt nicht)', $r['code'] === 200 AND count($r['j']['data']) === 13 AND array_unique(array_column($r['j']['data'], 'from')) === array($A), code($r));
+
+// ---------------------------------------------------------------- Erreichbarkeit sofort
+echo "Erreichbarkeit\n";
+// Anker erreicht A per udp, B per icmp; C mit anderer Adresse als im Plan (IP gewechselt) nicht
+check('vorher: reach4 none', one("SELECT GROUP_CONCAT(reach4 ORDER BY node_id) r FROM sonar_nodes WHERE node_id IN (?, ?, ?)", array($A, $B, $C))['r'] === 'none,none,none');
+$planF = array('v' => 1, 'node_id' => 'a_fsn', 'issued' => iso($now - 60), 'expires' => iso($now + 1500), 'rounds' => array(array('start' => iso($R0), 'targets' => array(
+	array('id' => $A, 'addr' => IP_A, 'fam' => 4, 'method' => 'udp', 'count' => 3), array('id' => $B, 'addr' => IP_B, 'fam' => 4, 'method' => 'icmp', 'count' => 3),
+	array('id' => $C, 'addr' => '8.8.8.9', 'fam' => 4, 'method' => 'icmp', 'count' => 3)))), 'anchors' => array());
+exec_sql("INSERT INTO sonar_plans (node_id, issued, expires, body, etag) VALUES ('a_fsn', ?, ?, ?, 'etagf00000000001')", array(s64_dt($now - 60), s64_dt($now + 1500), json_encode($planF, JSON_UNESCAPED_SLASHES)));
+check('Anker-Plan 200', req('GET', '/sonar/plan', null, array(), $TF, IP_F)['code'] === 200);
+back_report('a_fsn');
+$pbF = (int)one("SELECT plaus_bad FROM sonar_nodes WHERE node_id = 'a_fsn'")['plaus_bad'];
+$r = post_report(report('a_fsn', 2, array(res($R0, $A, array('method' => 'udp')), res($R0, $B), res($R0, $C))), $skF, $TF, IP_F);
+$rr = array(); foreach(all("SELECT node_id, reach4 FROM sonar_nodes WHERE node_id IN (?, ?, ?)", array($A, $B, $C)) as $x) { $rr[$x['node_id']] = $x['reach4']; }
+check('Anker-Meldung: reach4 sofort udp bzw. icmp, andere Adresse nicht (not_allowed)', $r['code'] === 200 AND ($r['j']['data']['accepted'] ?? 0) === 2
+	AND ($r['j']['data']['reasons']['not_allowed'] ?? 0) === 1 AND $rr[$A] === 'udp' AND $rr[$B] === 'icmp' AND $rr[$C] === 'none', array(code($r), $rr));
+check('not_allowed zaehlt nicht in plaus_bad', (int)one("SELECT plaus_bad FROM sonar_nodes WHERE node_id = 'a_fsn'")['plaus_bad'] === $pbF);
 
 // ---------------------------------------------------------------- Oeffentlich
 echo "Oeffentlich\n";
@@ -546,6 +569,62 @@ $leak = array_filter($secret, fn($s) => str_contains($pubAll, $s));
 check('oeffentlich: keine IPs, genauen Koordinaten, Account- oder Schluesseldaten', $leak === array(), array_values($leak));
 check('oeffentlich: POST nicht erlaubt 405', req('POST', '/sonar/public/map', '{}')['code'] === 405);
 
+// ---------------------------------------------------------------- aeltere Planfassung (Vertrag 10.1)
+echo "Aeltere Planfassung\n";
+$F = intdiv(time(), 300) * 300; $Rh = $F - 1500; $Rold = $F - 2400;
+$mk = fn(array $rounds) => json_encode(array('v' => 1, 'node_id' => $A, 'issued' => iso(time() - 60), 'expires' => iso(time() + 1500), 'rounds' => $rounds, 'anchors' => array()), JSON_UNESCAPED_SLASHES);
+$tB = array('id' => $B, 'addr' => IP_B, 'fam' => 4, 'method' => 'icmp', 'count' => 3);
+$tC = array('id' => $C, 'addr' => '8.8.8.8', 'fam' => 4, 'method' => 'udp', 'count' => 3);
+$versions = array( // v1 mit B, danach ohne (B gilt als nachgereicht gemessen), v3 ist die zuletzt, v2 die davor ausgelieferte
+	$mk(array(array('start' => iso($Rold), 'targets' => array($tC)), array('start' => iso($Rh), 'targets' => array($tB, $tC)), array('start' => iso($Rh + 300), 'targets' => array($tB)))),
+	$mk(array(array('start' => iso($Rh), 'targets' => array($tC)))),
+	$mk(array(array('start' => iso($Rh), 'targets' => array($tC)), array('start' => iso($Rh + 600), 'targets' => array($tC)))));
+foreach($versions as $i => $v) {
+	exec_sql("UPDATE sonar_plans set issued = ?, expires = ?, body = ?, etag = ? WHERE node_id = ?", array(s64_dt(time() - 60), s64_dt(time() + 1500), $v, sprintf('etagh%011d', $i), $A));
+	req('GET', '/sonar/plan', null, array(), $TA);
+}
+$hist = json_decode((string)one("SELECT sent_hist FROM sonar_plans WHERE node_id = ?", array($A))['sent_hist'], true);
+check('sent_hist: Runde mit B aus der ersten Fassung, Runden aelter als 35 min nicht', isset($hist[$Rh]["$B|4|icmp"], $hist[$Rh + 300]["$B|4|icmp"]) AND $hist[$Rh]["$B|4|icmp"] === array(1, IP_B) AND !isset($hist[$Rold]), $hist);
+check('sent_hist klein (' . strlen(json_encode($hist)) . ' Byte)', strlen(json_encode($hist)) < 1000);
+$pbA = (int)one("SELECT plaus_bad FROM sonar_nodes WHERE node_id = ?", array($A))['plaus_bad'];
+back_report($A);
+$r = post_report(report($A, 10, array(res($Rh, $B), res($Rh, $C, array('method' => 'udp')))), $skA, $TA);
+check('aeltere Fassung gemessen: angenommen, kein not_in_plan', $r['code'] === 200 AND ($r['j']['data']['accepted'] ?? 0) === 2 AND ($r['j']['data']['rejected'] ?? -1) === 0, code($r));
+exec_sql("UPDATE sonar_nodes set measured = 0 WHERE node_id = ?", array($B)); // B nicht mehr erlaubt (Opt-out)
+back_report($A);
+$r = post_report(report($A, 11, array(res($Rh + 300, $B), res($Rh + 300, $C))), $skA, $TA); // C per icmp stand in keiner Fassung
+check('herausgefallenes Ziel (Opt-out): not_allowed; nie geplantes: not_in_plan', $r['code'] === 200 AND ($r['j']['data']['reasons']['not_allowed'] ?? 0) === 1
+	AND ($r['j']['data']['reasons']['not_in_plan'] ?? 0) === 1 AND ($r['j']['data']['accepted'] ?? -1) === 0, code($r));
+check('plaus_bad nur +1 (not_in_plan, nicht not_allowed)', (int)one("SELECT plaus_bad FROM sonar_nodes WHERE node_id = ?", array($A))['plaus_bad'] === $pbA + 1);
+exec_sql("UPDATE sonar_nodes set measured = 1 WHERE node_id = ?", array($B));
+
+// ---------------------------------------------------------------- DELETE /sonar/me (Vertrag 10.2)
+echo "DELETE /sonar/me\n";
+$TD = jreq('POST', '/sonar/tokens', array('name' => 'D'), K2)['j']['data']['token'] ?? '';
+$kpD = sodium_crypto_sign_keypair();
+$D = jreq('POST', '/sonar/register', array('pubkey' => base64_encode(sodium_crypto_sign_publickey($kpD)), 'version' => '0.1.0', 'mode' => 'headless'), $TD, '8.8.4.4')['j']['data']['node_id'] ?? '';
+jreq('PUT', '/sonar/me', array('lat' => 52.52, 'lon' => 13.405, 'name' => 'Berlin Test'), $TD, '8.8.4.4');
+exec_sql("INSERT INTO sonar_plans (node_id, issued, expires, body, etag) VALUES (?, ?, ?, '{}', 'etagd00000000001')", array($D, s64_dt(time() - 60), s64_dt(time() + 1500)));
+$r = req('DELETE', '/sonar/me', null, array(), $TD, '8.8.4.4');
+check('DELETE /sonar/me 204', $r['code'] === 204 AND $r['raw'] === '', code($r));
+$nD = one("SELECT * FROM sonar_nodes WHERE node_id = ?", array($D));
+check('abgemeldet: aus, disabled_at, IP/Standort weg, Name/Slug frei', $D !== '' AND (int)$nD['active'] === 0 AND $nD['disabled_at'] !== null AND $nD['ip4'] === null
+	AND $nD['lat'] === null AND $nD['pub_lat'] === null AND $nD['name'] === '~' . $D AND $nD['slug'] === '~' . $D, $nD);
+check('Token widerrufen, Plan geloescht', one("SELECT revoked_at FROM sonar_tokens WHERE node_id = ?", array($D))['revoked_at'] !== null
+	AND one("SELECT node_id FROM sonar_plans WHERE node_id = ?", array($D)) === false);
+$tl = one("SELECT * FROM sonar_trust_log WHERE node_id = ? AND `new` = 'removed'", array($D));
+check('trust_log removed / leave', $tl AND $tl['reason'] === 'leave' AND $tl['old'] === 'new', $tl);
+foreach(array(array('GET', '/sonar/me', null), array('GET', '/sonar/plan', null), array('DELETE', '/sonar/me', null),
+	array('POST', '/sonar/register', json_encode(array('pubkey' => base64_encode(sodium_crypto_sign_publickey($kpD)), 'version' => '0.1.0', 'mode' => 'headless')))) as [$m, $p, $b]) {
+	$r = req($m, $p, $b, array(), $TD, '8.8.4.4');
+	check("danach $m $p 401 invalid_token", $r['code'] === 401 AND ($r['j']['code'] ?? '') === 'invalid_token', code($r));
+}
+$r = post_report(report($D, 1, array()), sodium_crypto_sign_secretkey($kpD), $TD, '8.8.4.4');
+check('danach POST /sonar/results 401', $r['code'] === 401, code($r));
+$TE = jreq('POST', '/sonar/tokens', array('name' => 'E'), K2)['j']['data']['token'] ?? '';
+$r = req('DELETE', '/sonar/me', null, array(), $TE, '8.8.4.4');
+check('DELETE /sonar/me vor register: 204, Token widerrufen', $r['code'] === 204 AND one("SELECT revoked_at FROM sonar_tokens WHERE token_hash = ?", array(hash('sha256', $TE)))['revoked_at'] !== null, code($r));
+
 // ---------------------------------------------------------------- Token loeschen
 echo "Token loeschen\n";
 $r = req('DELETE', '/sonar/tokens/' . $TA_ID, null, array(), K1);
@@ -553,6 +632,8 @@ check('Token A loeschen 204', $r['code'] === 204, code($r));
 $nA = one("SELECT * FROM sonar_nodes WHERE node_id = ?", array($A));
 check('Knoten deaktiviert, IP und Standort geloescht', (int)$nA['active'] === 0 AND $nA['ip4'] === null AND $nA['lat'] === null AND $nA['pub_lat'] === null, $nA);
 check('Name und Slug frei', $nA['name'] === '~' . $A AND $nA['slug'] === '~' . $A, $nA);
+check('disabled_at, Plan weg, trust_log removed/owner', $nA['disabled_at'] !== null AND one("SELECT node_id FROM sonar_plans WHERE node_id = ?", array($A)) === false
+	AND (one("SELECT reason FROM sonar_trust_log WHERE node_id = ? AND `new` = 'removed'", array($A))['reason'] ?? '') === 'owner');
 $r = jreq('PUT', '/sonar/me', array('name' => 'Hamburg Glasfaser'), $TB, IP_B);
 check('frei gewordener Name wieder vergeben', $r['code'] === 200 AND $r['j']['data']['slug'] === 'hamburg-glasfaser', code($r));
 for($i = 0, $r = null; $i < 15; $i++) {
@@ -564,6 +645,40 @@ check('Anlegen/Loeschen im Kreis: 21. Token in 24 h 429', $r['code'] === 429 AND
 check('Token A danach 401', req('GET', '/sonar/me', null, array(), $TA)['code'] === 401);
 clear_cache();
 check('A nicht mehr oeffentlich', !in_array($A, array_column(req('GET', '/sonar/public/nodes')['j']['data'], 'id'), true));
+
+// ---------------------------------------------------------------- Admin-CLI bots/sonar_node.php (Vertrag 10.2)
+echo "Admin-CLI\n";
+[$rc, $out] = cli('sonar_node.php --list');
+check('--list: aktive Knoten (B, Anker), ohne A', $rc === 0 AND str_contains($out, $B) AND str_contains($out, 'a_fsn') AND !str_contains($out, $A), $out);
+[$rc, $out] = cli('sonar_node.php --list --inactive');
+check('--list --inactive: abgemeldete (A, D)', $rc === 0 AND str_contains($out, $A) AND str_contains($out, $D) AND str_contains($out, 'abgemeldet') AND !str_contains($out, $B), $out);
+[$rc, $out] = cli('sonar_node.php --show=hamburg-glasfaser');
+check('--show per Slug', $rc === 0 AND preg_match('/^node_id\s+' . $B . '$/m', $out) === 1 AND str_contains($out, 'token') AND !str_contains($out, $TB), $out);
+[$rc, $out] = cli('sonar_node.php --show=' . escapeshellarg("x'; DROP TABLE sonar_nodes; --"));
+check('--show mit ungueltigem Schluessel abgelehnt', $rc === 1 AND (int)one("SELECT count(*) c FROM sonar_nodes")['c'] > 0, $out);
+[$rc, $out] = cli('sonar_node.php --revoke=a_nbg');
+check('--revoke Anker ohne --force abgelehnt', $rc === 1 AND (int)one("SELECT active FROM sonar_nodes WHERE node_id = 'a_nbg'")['active'] === 1, $out);
+[$rc, $out] = cli('sonar_node.php --revoke=' . $C . ' ' . escapeshellarg('--reason=Missbrauch <b>gemeldet</b>'));
+$nC = one("SELECT active, disabled_at, ip4 FROM sonar_nodes WHERE node_id = ?", array($C));
+check('--revoke Knoten: aus, IP weg', $rc === 0 AND (int)$nC['active'] === 0 AND $nC['disabled_at'] !== null AND $nC['ip4'] === null, array($out, $nC));
+check('--revoke: trust_log admin mit Grund (bereinigt)', (one("SELECT reason FROM sonar_trust_log WHERE node_id = ? AND `new` = 'removed'", array($C))['reason'] ?? '') === 'admin Missbrauch bgemeldet/b', $out);
+check('--revoke: Token danach 401', req('GET', '/sonar/me', null, array(), $TC, '8.8.8.8')['code'] === 401);
+[$rc, $out] = cli('sonar_node.php --revoke=' . $C);
+check('--revoke zweimal: schon abgemeldet', $rc === 0 AND str_contains($out, 'schon abgemeldet'), $out);
+[$rc, $out] = cli('sonar_node.php --revoke=a_nbg --force');
+check('--revoke Anker mit --force: aus, alle Anker-Token widerrufen', $rc === 0 AND (int)one("SELECT active FROM sonar_nodes WHERE node_id = 'a_nbg'")['active'] === 0
+	AND (int)one("SELECT count(*) c FROM sonar_tokens WHERE kind = 'anchor' AND name = 'nbg' AND revoked_at IS NULL")['c'] === 0, $out);
+check('Anker-Token danach 401', req('GET', '/sonar/me', null, array(), $TN2, IP_N)['code'] === 401);
+[$rc, $out] = cli('sonar_anchor_token.php --name=nbg');
+preg_match('/^(s64a_[A-Za-z0-9]{40})$/m', $out, $m); $TN3 = $m[1] ?? '';
+$kpN = sodium_crypto_sign_keypair();
+$r = jreq('POST', '/sonar/register', array('pubkey' => base64_encode(sodium_crypto_sign_publickey($kpN)), 'version' => '0.1.2', 'mode' => 'anchor'), $TN3, IP_N);
+$nN = one("SELECT active, disabled_at, lat FROM sonar_nodes WHERE node_id = 'a_nbg'");
+check('Anker mit neuem Token wieder aktiv: disabled_at NULL, Standort bleibt', $r['code'] === 201 AND (int)$nN['active'] === 1 AND $nN['disabled_at'] === null AND (float)$nN['lat'] === 49.45, array(code($r), $nN));
+[$rc, $out] = cli('sonar_node.php --show=gibtsnicht');
+check('--show unbekannt rc 1', $rc === 1, $out);
+[$rc, $out] = cli('sonar_node.php');
+check('ohne Option: Aufruf, rc 1', $rc === 1 AND str_contains($out, 'Aufruf'), $out);
 
 echo "\n$pass ok, $failed Fehler\n";
 exit($failed > 0 ? 1 : 0);

@@ -154,12 +154,9 @@ try {
 			}
 		} elseif($act === 'token_revoke') {
 			$id = ctype_digit(s64m_in($_POST, 'id')) ? (int)s64m_in($_POST, 'id') : 0;
-			$st = s64m_q("UPDATE sonar_tokens SET revoked_at = :t WHERE id = :id AND userid = :u AND kind = 'node' AND revoked_at IS NULL", array('t' => s64_dt(), 'id' => $id, 'u' => $u));
-			if($st->rowCount() > 0) { // wie DELETE /sonar/tokens/{id}: Knoten aus, IP und genauer Standort weg
-				s64m_q("UPDATE sonar_nodes SET active = 0 WHERE token_id = :id AND userid = :u", array('id' => $id, 'u' => $u));
-				s64m_q("UPDATE sonar_nodes SET ip4 = NULL, ip6 = NULL, lat = NULL, lon = NULL, pub_lat = NULL, pub_lon = NULL, name = CONCAT('~', node_id), slug = CONCAT('~', node_id)
-					WHERE token_id = :id AND userid = :u AND role = 'node'", array('id' => $id, 'u' => $u)); // Name und Slug wieder frei
-				if(function_exists('add_log')) { add_log($pdo, $userid, "0", "Sonar64", "Sonar-Token gesperrt."); }
+			$st = s64m_q("SELECT id FROM sonar_tokens WHERE id = :id AND userid = :u AND kind = 'node' AND revoked_at IS NULL", array('id' => $id, 'u' => $u));
+			if($st->fetch() !== false) { // wie DELETE /sonar/tokens/{id} (s64_leave): Knoten aus, IP und genauer Standort weg, Name/Slug frei, add_log
+				s64_leave($pdo, $id, 'owner');
 				$msg = $okMsg(s64w_t('Token gesperrt, der zugehörige Knoten ist abgemeldet.', 'Token revoked, the node using it is signed off.'), 'warning');
 			}
 		} elseif($act === 'node_save') {

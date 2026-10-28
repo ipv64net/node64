@@ -5,7 +5,7 @@
  * Node64-Repo (Abschnitte 2, 3, 5, 6), Go-Formate internal/sonar/wire.go. Tabellen sonar_* (deploy/sql/sonar64.sql).
  *
  *   POST/GET /sonar/tokens, DELETE /sonar/tokens/{id}       API-Key des Accounts
- *   POST /sonar/register, GET/PUT /sonar/me, GET /sonar/plan, POST /sonar/results, GET /sonar/inbound
+ *   POST /sonar/register, GET/PUT/DELETE /sonar/me, GET /sonar/plan, POST /sonar/results, GET /sonar/inbound
  *                                                           Sonar-Token (Bearer), prueft diese Datei selbst
  *   GET /sonar/public/keys|map|nodes|node/{slug}|stats|top|matrix|outages   ohne Anmeldung, Cache 60 s
  *
@@ -24,12 +24,13 @@ const S64_NEW_TOKENS  = 20;      // neue Knoten-Token je Account in 24 h (Anlege
 const S64_MAX_RESULTS = 5000;    // Ergebnisse je Meldung (die Body-Grenze greift meist frueher)
 const S64_MAX_INBOUND = 500;
 const S64_MAX_HOPS    = 30;
-const S64_REPORT_GAP  = 60;      // hoechstens eine Meldung je 60 s
+const S64_REPORT_GAP  = 50;      // hoechstens eine Meldung je Minute (Abstand >= 50 s, damit "jede Minute" mit Schwankung passt)
 const S64_BUFFER      = 21600;   // Nachreichen bis 6 h
 const S64_SKEW        = 300;     // Uhrzeit des Knotens darf 5 min vorgehen
 const S64_ROUND       = 300;     // Runde 5 min
 const S64_LIGHT_TOL   = 0.3;     // Toleranz below_light in ms
 const S64_SMOOTH_N    = 12;      // too_smooth: so viele glatte Meldungen in Folge
+const S64_HIST        = 2100;    // sent_hist: ausgelieferte Fassungen der Runden der letzten 35 min (und der kommenden)
 const S64_REASONS_BAD = array('not_in_plan', 'too_many', 'bad_time', 'bad_values', 'below_light', 'too_smooth'); // zaehlen in plaus_bad
 const S64_SUSPECT     = array('bad_values', 'below_light', 'too_smooth'); // Manipulationsverdacht: sofortige Abstufung
 const S64_STORE_BAD   = array('bad_time', 'below_light', 'too_smooth');   // werden mit valid=0 gespeichert (Teil J)
@@ -370,18 +371,14 @@ route('GET', '/sonar/tokens', function() {
 });
 
 /**
- * DELETE /sonar/tokens/{id}: Token widerrufen, Knoten deaktivieren (IP und genauer Standort werden geloescht). Name und
- * Slug eines Knotens werden frei ("~" + node_id passt auf kein gueltiges Namens- oder Slug-Muster).
+ * DELETE /sonar/tokens/{id}: Token widerrufen, Knoten deaktivieren (s64_leave: IP und genauer Standort werden geloescht,
+ * Name und Slug frei, Plan weg, sonar_trust_log removed/owner).
  */
 route('DELETE', '/sonar/tokens/{id}', function($p) {
 	if(!ctype_digit($p['id']) OR strlen($p['id']) > 10) { fail(404, 'not_found', 'Token not found.'); }
 	$t = q1("SELECT * FROM sonar_tokens WHERE id = :i AND userid = :u AND revoked_at IS NULL", array('i' => (int)$p['id'], 'u' => uid()));
 	if($t === null) { fail(404, 'not_found', 'Token not found.'); }
-	q("UPDATE sonar_tokens set revoked_at = :t WHERE id = :i", array('t' => s64_dt(), 'i' => $t['id']));
-	q("UPDATE sonar_nodes set active = 0 WHERE token_id = :i", array('i' => $t['id']));
-	q("UPDATE sonar_nodes set ip4 = NULL, ip6 = NULL, lat = NULL, lon = NULL, pub_lat = NULL, pub_lon = NULL, name = CONCAT('~', node_id), slug = CONCAT('~', node_id)
-		WHERE token_id = :i AND role = 'node'", array('i' => $t['id']));
-	add_log($GLOBALS['pdo'], uid(), "0", "Sonar64", "Sonar64 token " . (int)$t['id'] . " deleted via API v2.");
+	s64_leave($GLOBALS['pdo'], (int)$t['id'], 'owner'); // mit add_log
 	no_content();
 });
 
@@ -421,7 +418,7 @@ route('POST', '/sonar/register', function() {
 			$old = q1("SELECT n.*, t.revoked_at trev FROM sonar_nodes n LEFT JOIN sonar_tokens t ON t.id = n.token_id WHERE n.node_id = :n FOR UPDATE", array('n' => $id));
 			if($old !== null) { // Token-Wechsel des Ankers: Knoten bleibt, neuer Schluessel und neue seq
 				if($old['trev'] === null AND (int)$old['token_id'] !== (int)$t['id']) { fail(409, 'anchor_in_use', 'This anchor is bound to another active token (revoke it first).'); }
-				q("UPDATE sonar_nodes set token_id = :t, userid = :u, pubkey = :p, version = :v, mode = :m, last_seq = 0, active = 1 WHERE id = :i",
+				q("UPDATE sonar_nodes set token_id = :t, userid = :u, pubkey = :p, version = :v, mode = :m, last_seq = 0, active = 1, disabled_at = NULL WHERE id = :i",
 					array('t' => $t['id'], 'u' => (int)$t['userid'], 'p' => $pk, 'v' => $ver, 'm' => $mode, 'i' => $old['id']));
 			} else {
 				$name = 'Anker-' . strtoupper($t['name']);
@@ -452,6 +449,16 @@ route('POST', '/sonar/register', function() {
 route('GET', '/sonar/me', function() {
 	[, $n] = s64_node_auth();
 	ok(s64_me_out($n));
+}, true); // Sonar-Token, prueft s64_auth
+
+/**
+ * DELETE /sonar/me: abmelden (Knoten und Anker, auch vor register) wie DELETE /sonar/tokens/{id}; danach liefert jeder
+ * Token-Endpunkt 401 invalid_token. -> 204
+ */
+route('DELETE', '/sonar/me', function() {
+	[$t] = s64_auth();
+	s64_leave($GLOBALS['pdo'], (int)$t['id'], 'leave');
+	no_content();
 }, true); // Sonar-Token, prueft s64_auth
 
 /**
@@ -528,9 +535,9 @@ route('GET', '/sonar/plan', function() {
 	$etag = (string)$pl['etag'];
 	$hdr = array('ETag: "' . $etag . '"');
 	q("UPDATE sonar_nodes set last_plan = :t WHERE id = :i", array('t' => s64_dt($now), 'i' => $n['id']));
-	if($pl['sent_etag'] !== $etag) { // zuletzt und davor ausgelieferter Plan (Pruefung der Meldungen)
-		q("UPDATE sonar_plans set prev_body = sent_body, sent_body = body, sent_etag = etag, sent_at = :t WHERE node_id = :n AND etag = :e",
-			array('t' => s64_dt($now), 'n' => $n['node_id'], 'e' => $etag));
+	if($pl['sent_etag'] !== $etag) { // zuletzt und davor ausgelieferter Plan, alle Fassungen der letzten Runden (Pruefung der Meldungen)
+		q("UPDATE sonar_plans set prev_body = sent_body, sent_body = body, sent_etag = etag, sent_at = :t, sent_hist = :h WHERE node_id = :n AND etag = :e",
+			array('t' => s64_dt($now), 'h' => s64_hist_merge($pl['sent_hist'], $plan, $now), 'n' => $n['node_id'], 'e' => $etag));
 	}
 	foreach(explode(',', (string)($_SERVER['HTTP_IF_NONE_MATCH'] ?? '')) as $x) {
 		$x = trim($x);
@@ -590,24 +597,56 @@ function s64_parse_result($x, string $f): array {
 	return $r;
 }
 
-/** Erlaubte Messungen aus den zuletzt ausgelieferten Plaenen: "Runde|Ziel|fam|Methode" => Anzahl. */
+/** Ziele je Runde eines Plans: Runde (Unix) => "Ziel|fam|Methode" => array(Anzahl, Adresse). */
+function s64_plan_rounds($plan): array {
+	$out = array();
+	if(!is_array($plan) OR !is_array($plan['rounds'] ?? null)) { return $out; }
+	foreach($plan['rounds'] as $r) {
+		$R = is_array($r) ? s64_plan_time($r['start'] ?? null) : null;
+		if($R === null OR !is_array($r['targets'] ?? null)) { continue; }
+		foreach($r['targets'] as $x) {
+			if(!is_array($x) OR !is_string($x['id'] ?? null)) { continue; }
+			$k = $x['id'] . '|' . (int)($x['fam'] ?? 0) . '|' . (string)($x['method'] ?? '');
+			$out[$R][$k] = array(($out[$R][$k][0] ?? 0) + 1, is_string($x['addr'] ?? null) ? substr($x['addr'], 0, 45) : '');
+		}
+	}
+	return $out;
+}
+
+/**
+ * sent_hist: alle ausgelieferten Fassungen je Runde zusammengefasst (hoechste Anzahl, letzte Adresse), nur Runden ab
+ * jetzt - 35 min. Der Planer fuellt kommende Runden auf und nimmt nicht mehr Erlaubtes heraus; wer eine aeltere Fassung
+ * gemessen hat, bekommt so kein not_in_plan.
+ */
+function s64_hist_merge(?string $old, array $plan, float $now): string {
+	$h = ($old !== null AND $old !== '') ? json_decode($old, true, 8) : array();
+	$h = is_array($h) ? $h : array();
+	foreach(s64_plan_rounds($plan) as $R => $keys) {
+		foreach($keys as $k => $v) { $h[$R][$k] = array(max((int)($h[$R][$k][0] ?? 0), $v[0]), $v[1]); }
+	}
+	foreach(array_keys($h) as $R) { if(!is_int($R) OR $R < $now - S64_HIST OR !is_array($h[$R])) { unset($h[$R]); } }
+	ksort($h);
+	return s64_json((object)$h);
+}
+
+/**
+ * Erlaubte Messungen aus den ausgelieferten Plaenen (sent_hist, zuletzt und davor ausgelieferter Plan):
+ * "Runde|Ziel|fam|Methode" => array(Anzahl, Adresse laut Plan).
+ */
 function s64_plan_allowed(?array $pl): array {
 	$allowed = array();
+	$add = function(int $R, string $k, int $c, string $addr) use (&$allowed) {
+		$k = $R . '|' . $k;
+		$allowed[$k] = array(max($allowed[$k][0] ?? 0, $c), $addr !== '' ? $addr : ($allowed[$k][1] ?? ''));
+	};
+	$hist = is_string($pl['sent_hist'] ?? null) ? json_decode($pl['sent_hist'], true, 8) : null;
+	foreach(is_array($hist) ? $hist : array() as $R => $keys) {
+		if(!is_int($R) OR !is_array($keys)) { continue; }
+		foreach($keys as $k => $v) { if(is_array($v) AND is_int($v[0] ?? null)) { $add($R, (string)$k, $v[0], is_string($v[1] ?? null) ? $v[1] : ''); } }
+	}
 	foreach(array($pl['sent_body'] ?? null, $pl['prev_body'] ?? null) as $body) {
 		if(!is_string($body) OR $body === '') { continue; }
-		$p = json_decode($body, true, 16);
-		if(!is_array($p) OR !is_array($p['rounds'] ?? null)) { continue; }
-		foreach($p['rounds'] as $r) {
-			$R = is_array($r) ? s64_plan_time($r['start'] ?? null) : null;
-			if($R === null OR !is_array($r['targets'] ?? null)) { continue; }
-			$seen = array();
-			foreach($r['targets'] as $x) {
-				if(!is_array($x) OR !is_string($x['id'] ?? null)) { continue; }
-				$k = $R . '|' . $x['id'] . '|' . (int)($x['fam'] ?? 0) . '|' . (string)($x['method'] ?? '');
-				$seen[$k] = ($seen[$k] ?? 0) + 1;
-			}
-			foreach($seen as $k => $c) { $allowed[$k] = max($allowed[$k] ?? 0, $c); }
-		}
+		foreach(s64_plan_rounds(json_decode($body, true, 16)) as $R => $keys) { foreach($keys as $k => $v) { $add($R, $k, $v[0], $v[1]); } }
 	}
 	return $allowed;
 }
@@ -686,14 +725,15 @@ route('POST', '/sonar/results', function() {
 		'icmp_denied' => ($h['icmp_denied'] ?? false) === true);
 
 	// Plan, Anker und Koordinaten der Ziele
-	$allowed = s64_plan_allowed(q1("SELECT sent_body, prev_body FROM sonar_plans WHERE node_id = :n", array('n' => $n['node_id'])));
+	$allowed = s64_plan_allowed(q1("SELECT sent_body, prev_body, sent_hist FROM sonar_plans WHERE node_id = :n", array('n' => $n['node_id'])));
 	$anchors = array();
 	foreach(qa("SELECT node_id FROM sonar_nodes WHERE role = 'anchor' AND active = 1") as $a) { $anchors[$a['node_id']] = true; }
 	$ids = array_values(array_unique(array_map(fn($x) => $x['target'], $items)));
-	$coords = array();
+	$coords = array(); $tgt = array(); // Ziele: Koordinaten; noch erlaubt (aktiv, gemessen) und aktuelle Adressen
 	foreach(array_chunk($ids, 500) as $chunk) {
-		foreach(qa("SELECT node_id, lat, lon, trust FROM sonar_nodes WHERE node_id IN (" . implode(',', array_fill(0, count($chunk), '?')) . ")", $chunk) as $c) {
+		foreach(qa("SELECT node_id, role, lat, lon, trust, active, measured, ip4, ip6, reach4, reach6 FROM sonar_nodes WHERE node_id IN (" . implode(',', array_fill(0, count($chunk), '?')) . ")", $chunk) as $c) {
 			if($c['lat'] !== null AND $c['lon'] !== null) { $coords[$c['node_id']] = array((float)$c['lat'], (float)$c['lon'], in_array($c['trust'], array('anchor', 'pillar', 'trusted'), true)); }
+			$tgt[$c['node_id']] = $c;
 		}
 	}
 	$isAnchor = $n['role'] === 'anchor';
@@ -709,7 +749,7 @@ route('POST', '/sonar/results', function() {
 	}
 	usort($items, fn($a, $b) => $a['at'] <=> $b['at']);
 
-	$reasons = array(); $used = array(); $rows = array(); $bad = array(); $traces = array(); $checked = 0; $soft = 0;
+	$reasons = array(); $used = array(); $rows = array(); $bad = array(); $traces = array(); $checked = 0; $soft = 0; $reachUp = array();
 	$why = function(string $r) use (&$reasons) { $reasons[$r] = ($reasons[$r] ?? 0) + 1; };
 	foreach($items as $x) {
 		if($x['sent'] === 0) { $why('not_measured'); continue; } // nicht gemessen (Budget, keine Rechte): kein Fehler
@@ -718,13 +758,16 @@ route('POST', '/sonar/results', function() {
 		if(isset($allowed[$R . $tail])) { $key = $R . $tail; }
 		else {
 			foreach(array($R - S64_ROUND, $R + S64_ROUND) as $RR) {
-				if(isset($allowed[$RR . $tail]) AND ($key === null OR ($used[$RR . $tail] ?? 0) < $allowed[$RR . $tail])) { $key = $RR . $tail; }
+				if(isset($allowed[$RR . $tail]) AND ($key === null OR ($used[$RR . $tail] ?? 0) < $allowed[$RR . $tail][0])) { $key = $RR . $tail; }
 			}
-			if(isset($anchors[$x['target']]) AND $x['method'] !== 'trace' AND $R % S64_ROUND === 0 AND ($key === null OR ($used[$key] ?? 0) >= $allowed[$key])) { $key = 'A|' . $R . $tail; $allowed[$key] = 1; }
+			if(isset($anchors[$x['target']]) AND $x['method'] !== 'trace' AND $R % S64_ROUND === 0 AND ($key === null OR ($used[$key] ?? 0) >= $allowed[$key][0])) { $key = 'A|' . $R . $tail; $allowed[$key] = array(1, ''); }
 		}
 		if($key === null OR $x['target'] === $n['node_id']) { $why('not_in_plan'); continue; }
+		// stand im Plan, ist aber nicht mehr erlaubt (abgemeldet, Opt-out, andere IP): verwerfen, zaehlt nicht in plaus_bad
+		$tg = $tgt[$x['target']] ?? null; $ad = $allowed[$key][1];
+		if($tg === null OR (int)$tg['active'] !== 1 OR ($tg['role'] === 'node' AND (int)$tg['measured'] !== 1) OR ($ad !== '' AND $ad !== $tg['ip' . $x['fam']])) { $why('not_allowed'); continue; }
 		$used[$key] = ($used[$key] ?? 0) + 1;
-		if($used[$key] > $allowed[$key]) { $why('too_many'); continue; }
+		if($used[$key] > $allowed[$key][0]) { $why('too_many'); continue; }
 		$checked++;
 		$r = null;
 		if($x['at'] < $R - 60 OR $x['at'] > $R + S64_ROUND + 60 OR $x['at'] > $now + S64_SKEW OR $R < $now - S64_BUFFER - 600) { $r = 'bad_time'; }
@@ -750,6 +793,10 @@ route('POST', '/sonar/results', function() {
 		if($x['method'] === 'trace') {
 			$traces[] = array(gmdate('Y-m-d H:i:s', $R), $n['node_id'], $x['target'], $x['fam'], s64_dt($x['at']), s64_json($x['hops']));
 			continue;
+		}
+		// Anker erreicht einen Knoten (gueltig, Adresse laut Plan = aktuelle): Weg sofort hochstufen (udp vor icmp)
+		if($isAnchor AND $r === null AND $x['recv'] > 0 AND $tg['role'] === 'node' AND $ad !== '' AND $tg['reach' . $x['fam']] !== 'udp' AND ($x['method'] === 'udp' OR $tg['reach' . $x['fam']] === 'none')) {
+			$reachUp[$x['fam']][$x['method']][$x['target']] = true;
 		}
 		$rows[] = array(gmdate('Y-m-d H:i:s', $R), $n['node_id'], $x['target'], $x['fam'], $x['method'], $x['sent'], $x['recv'],
 			round($x['min'], 3), round($x['avg'], 3), round($x['max'], 3), round($x['jitter'], 3), s64_dt($x['at']), $r === null ? 1 : 0, $r);
@@ -783,6 +830,15 @@ route('POST', '/sonar/results', function() {
 		if($health['version'] !== '') { $set .= ', version = :v'; $p['v'] = $health['version']; }
 		if($health['mode'] !== '' AND ($health['mode'] === 'anchor') === $isAnchor) { $set .= ', mode = :m'; $p['m'] = $health['mode']; }
 		q("UPDATE sonar_nodes set $set WHERE id = :i", $p);
+		// Erreichbarkeit sofort (nur hochstufen; herabstufen bleibt beim Planer)
+		foreach($reachUp as $fam => $byM) {
+			foreach(array('udp', 'icmp') as $m) {
+				foreach(array_chunk(array_keys($byM[$m] ?? array()), 500) as $chunk) {
+					q("UPDATE sonar_nodes set reach$fam = '$m' WHERE role = 'node' AND active = 1 AND measured = 1 AND reach$fam " . ($m === 'udp' ? "!= 'udp'" : "= 'none'")
+						. " AND node_id IN (" . implode(',', array_fill(0, count($chunk), '?')) . ")", $chunk);
+				}
+			}
+		}
 		// sofortige Abstufung bei Manipulationsverdacht (mehr als die Haelfte der geprueften Werte unmoeglich); Quarantaene macht Teil J
 		$down = array('pillar' => 'trusted', 'trusted' => 'stable', 'stable' => 'new');
 		if(count($bad) >= 3 AND count($bad) * 2 > $checked AND isset($down[$lock['trust']])) {

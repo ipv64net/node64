@@ -7,7 +7,8 @@
 -- IPs (ip4/ip6) sind intern: nie oeffentlich ausgeben, nur im Plan der Knoten, die messen sollen.
 --
 -- Aufbewahrung (bots/sonar_cleanup.php): sonar_results/sonar_traces 7 Tage, sonar_inbound 24 h, sonar_pair_1h 90 Tage,
--- sonar_asn_1d/sonar_outages/sonar_trust_log dauerhaft.
+-- sonar_asn_1d/sonar_outages 2 Jahre, sonar_trust_log 1 Jahr. Knoten ohne Kontakt seit 30 Tagen werden abgemeldet,
+-- deaktivierte Knoten 90 Tage nach disabled_at samt ihren Daten geloescht (Vertrag Abschnitt 10.3).
 
 -- Sonar-Token (s64_ + 40 bzw. Anker s64a_ + 40). Nur SHA-256 (hex) gespeichert.
 CREATE TABLE IF NOT EXISTS `sonar_tokens` (
@@ -69,6 +70,7 @@ CREATE TABLE IF NOT EXISTS `sonar_nodes` (
   `last_plan` datetime(3) DEFAULT NULL,
   `health` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (`health` IS NULL OR json_valid(`health`)),
   `active` tinyint(4) NOT NULL DEFAULT 1,
+  `disabled_at` datetime(3) DEFAULT NULL,             -- deaktiviert seit (s64_leave), beim Wieder-Aktivieren NULL
   PRIMARY KEY (`id`),
   UNIQUE KEY `node_id` (`node_id`),
   UNIQUE KEY `name` (`name`),
@@ -76,12 +78,14 @@ CREATE TABLE IF NOT EXISTS `sonar_nodes` (
   KEY `userid` (`userid`),
   KEY `token_id` (`token_id`),
   KEY `active_seen` (`active`, `last_seen`),
-  KEY `trust` (`trust`)
+  KEY `trust` (`trust`),
+  KEY `disabled_at` (`disabled_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Aktueller Plan je Knoten (Planer schreibt node_id/issued/expires/body/etag/controls per INSERT ... ON DUPLICATE KEY
 -- UPDATE, kein REPLACE). sent_* / prev_body setzt GET /sonar/plan: zuletzt und davor ausgelieferter Plan, gegen die
--- POST /sonar/results prueft (not_in_plan, too_many).
+-- POST /sonar/results prueft (not_in_plan, too_many). sent_hist: alle ausgelieferten Fassungen der Runden der letzten
+-- 35 min und der kommenden zusammengefasst, {"<Runde Unix>": {"<Ziel>|<fam>|<Methode>": [Anzahl, "<Adresse>"]}}.
 CREATE TABLE IF NOT EXISTS `sonar_plans` (
   `node_id` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   `issued` datetime(3) NOT NULL,
@@ -93,6 +97,7 @@ CREATE TABLE IF NOT EXISTS `sonar_plans` (
   `sent_body` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
   `prev_body` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
   `sent_at` datetime(3) DEFAULT NULL,
+  `sent_hist` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL,
   PRIMARY KEY (`node_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -163,7 +168,7 @@ CREATE TABLE IF NOT EXISTS `sonar_pair_1h` (
   KEY `hour` (`hour`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Tageswerte je Provider-Paar (bots/sonar_rollup.php), dauerhaft.
+-- Tageswerte je Provider-Paar (bots/sonar_rollup.php), 2 Jahre.
 CREATE TABLE IF NOT EXISTS `sonar_asn_1d` (
   `day` date NOT NULL,
   `asn_a` int(10) unsigned NOT NULL,
@@ -175,7 +180,7 @@ CREATE TABLE IF NOT EXISTS `sonar_asn_1d` (
   PRIMARY KEY (`day`, `asn_a`, `asn_b`, `fam`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Stoerungen nach Provider (ASN) oder Region (bots/sonar_outages.php), dauerhaft.
+-- Stoerungen nach Provider (ASN) oder Region (bots/sonar_outages.php), 2 Jahre nach dem Ende.
 CREATE TABLE IF NOT EXISTS `sonar_outages` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `kind` enum('asn','region') NOT NULL,
@@ -190,7 +195,8 @@ CREATE TABLE IF NOT EXISTS `sonar_outages` (
   KEY `started` (`started`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Aenderungen der Vertrauensstufe (Jobs und sofortige Abstufung der API), dauerhaft.
+-- Aenderungen der Vertrauensstufe (Jobs und sofortige Abstufung der API) und Abmeldungen (new = removed, reason
+-- leave | owner | admin | inactive), 1 Jahr bzw. bis der Knoten geloescht wird.
 CREATE TABLE IF NOT EXISTS `sonar_trust_log` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `node_id` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -199,5 +205,6 @@ CREATE TABLE IF NOT EXISTS `sonar_trust_log` (
   `new` varchar(12) NOT NULL,
   `reason` varchar(64) NOT NULL DEFAULT '',
   PRIMARY KEY (`id`),
-  KEY `node_at` (`node_id`, `at`)
+  KEY `node_at` (`node_id`, `at`),
+  KEY `at` (`at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
