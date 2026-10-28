@@ -174,7 +174,8 @@ Siehe `api.go` und `probe.go`. Zusätzlich gilt:
   großzügig 20 (Anker 2.000); höchstens 2 Pakete/s (Anker 50/s); Count ≤ 5; Traceroute ≤ 2/h, MaxTTL ≤ 30;
   Tagesgrenze sparsam 20.000 / normal 40.000 / großzügig 60.000 Pakete; private/reservierte Ziele nie.
 - **Ablauf:** Plan alle 15 min (ETag); Plan gilt höchstens 30 min; danach nur `Plan.Anchors` (zuletzt gültiger
-  Plan) bis 2 h, dann Pause; Meldung alle 5 min, Puffer 6 h (älteres verwerfen); Selbstbremse: in einer Runde zu
+  Plan) bis 2 h, dann Pause; Meldung alle 5 min, Puffer 6 h (älteres verwerfen), höchstens 1.000 Ergebnisse je
+  Meldung (Rest nach ≥ 61 s), `seq` = max(letzte + 1, Unix-Millisekunden); Selbstbremse: in einer Runde zu
   allen Ankern ≥ 80 % Verlust → nächste Runde Pause (`paused=uplink`).
 - **Zustand im DataDir:** `sonar64.key`, `sonar64.json` (node_id, seq, letzter Plan + ETag). Ohne DataDir nur im
   Speicher.
