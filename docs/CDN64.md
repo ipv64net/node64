@@ -291,6 +291,7 @@ Zertifikate, CDN64 online und die Statistik greifen unverändert.
 | `node64.proxy.port` | nein | Port im Container; fehlt er, gilt der einzige freigegebene (`EXPOSE`) Port, sonst Hinweis „Port fehlt“ |
 | `node64.proxy.scheme` | nein | `http` (Standard) oder `https` |
 | `node64.proxy.network` | nein | Docker-Netz, über das PROXY64 den Container erreicht (bei mehreren Netzen) |
+| `node64.proxy.access` | nein | Name einer Zugriffsliste (seit 1.37.0); fehlt das Label, wird die Liste in der Oberfläche gewählt |
 
 ```yaml
 services:
@@ -316,8 +317,12 @@ networks:
 - **Aus den Labels, im Formular gesperrt:** Namen, Schema, Ziel. Die Host-Liste zeigt das Abzeichen **Docker** (Tooltip:
   Container), das Formular den Hinweis „Kommt aus den Docker-Labels von Container …“.
 - **In der Oberfläche einstellbar und bleibt erhalten** (Neustart, Neuanlegen): CDN64 online samt Modus,
-  Zugriffsliste, Schutz/WAF, Länder, Locations, Erweitert, Zertifikat, HTTP/2/3, HSTS. Ausschalten geht, Löschen nicht
-  (Label bzw. Container entfernen).
+  Zugriffsliste (außer sie kommt per Label, dann ist das Feld gesperrt), Schutz/WAF, Länder, Locations, Erweitert,
+  Zertifikat, HTTP/2/3, HSTS. Ausschalten geht, Löschen nur bei ausgeschaltetem Schalter „Docker-Labels auswerten“
+  (sonst Label bzw. Container entfernen).
+- **Schutz fehlt → Host aus** (seit 1.38.2): Verlangt ein Label eine Zugriffsliste, die es nicht gibt, oder eine
+  Traefik-Middleware, die PROXY64 nicht abbilden kann, wird ein neuer Host **ausgeschaltet** angelegt (Hinweis unter
+  *Docker*), damit ein Dienst nie ungeschützt erreichbar wird. Ein vorhandener Host behält seine bisherige Liste.
 - **CDN64 online** wird nur in der Oberfläche eingeschaltet, nie per Label.
 - **Zertifikat:** Unter *Docker* lässt sich ein Weg wählen (automatisch, ipv64 DNS-01, HTTP-01, DNS-Zugang), auf dem für
   neue Docker-Hosts ein Zertifikat angefordert wird; die Nutzungsbedingungen von Let's Encrypt werden dort einmal
@@ -350,12 +355,26 @@ Traefik-Labels am selben Container, gelten nur die eigenen.
   (`PathPrefix`, `Headers` …) → Router übersprungen, Hinweis „Regel nicht unterstützt“,
 - `traefik.http.routers.<r>.service` bzw. der einzige Service,
 - `traefik.http.services.<s>.loadbalancer.server.port` und `.scheme`,
-- `traefik.docker.network`.
+- `traefik.docker.network`,
+- `traefik.http.routers.<r>.middlewares` (seit 1.37.0/1.38.2):
+  - Middleware mit `forwardAuth` in den Labels → Zugriffsliste „Traefik: <name> (<Adresse>)“ mit Anmeldedienst
+    (Forward-Auth), Antwort-Header werden übernommen;
+  - Arten ohne Zugriffsschutz (`headers`, `redirectScheme`, `redirectRegex`, `compress`, `stripPrefix`, `addPrefix`,
+    `replacePath`, `rateLimit`, `inFlightReq`, `retry`, `buffering`, `circuitBreaker`, `errors`, `contentType`) werden
+    übergangen;
+  - alle anderen (`name@file`, `basicAuth`, `ipAllowList`, `chain`, nicht definierte) brauchen eine Zugriffsliste
+    gleichen Namens, sonst kommt der Host ausgeschaltet.
 
-Middlewares, Entrypoints, `tls.certresolver` (Zertifikate macht PROXY64) sowie TCP/UDP-Router werden ignoriert. Je
-Router entsteht ein Host.
+Entrypoints, `tls.certresolver` (Zertifikate macht PROXY64) sowie TCP/UDP-Router werden ignoriert. Router für
+`/outpost.goauthentik.io/` übergeht PROXY64 (das macht die Zugriffsliste selbst). Je Router entsteht ein Host; zwei
+Router mit denselben Namen und demselben Dienst (z. B. `web` mit Umleitung auf HTTPS und `websecure`) ergeben einen
+Host, maßgeblich ist der mit den wenigsten nicht übernommenen Middlewares.
 
 **Cluster.** Docker-Hosts gehören zu dem Docker-Host, auf dem die Node läuft, und werden nicht an andere Nodes verteilt.
+
+**Export/Import.** Ein Import übernimmt Docker-Hosts als normale, von Hand angelegte Hosts (ohne Docker-Kennung).
+Laufen auf der neuen Box dieselben Container mit Labels, meldet *Docker* dann „Name gehört einem von Hand angelegten
+Host“ – den importierten Host löschen, beim nächsten Abgleich übernimmt ihn Docker wieder (Einstellungen neu setzen).
 
 **Sicherheit.**
 - Wer den Docker-Socket hat, kann den Host steuern – auch mit `:ro`. PROXY64 sendet nur GET-Anfragen
