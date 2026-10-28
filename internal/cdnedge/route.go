@@ -266,10 +266,9 @@ func (s *Server) acceptLoop(ln net.Listener, handle func(c net.Conn, gs *gstate)
 			_ = c.Close()
 			continue
 		}
-		go func() {
-			defer release()
-			handle(c, gs)
-		}()
+		// der Platz gilt, bis die Verbindung geschlossen wird - auch nach der Weitergabe an einen eigenen Server
+		// (Modus 2/3, eigene Seite), sonst zaehlten conns_per_ip und max_conns dort nicht
+		go handle(&guardConn{Conn: c, release: release}, gs)
 	}
 }
 
@@ -345,7 +344,7 @@ func (s *Server) handle443(c net.Conn, gs *gstate) {
 		}
 	}
 	if re != nil && re.Mode == 3 { // Modus 3: TLS endet hier (Stufe 1 = nur HTTP)
-		if re.Target.frontend <= 1 || !s.certs.has(re.Name) {
+		if re.Target.frontend <= 1 || !s.certs.covers(re.Name, sni) {
 			_ = c.Close()
 			return
 		}
@@ -357,7 +356,7 @@ func (s *Server) handle443(c net.Conn, gs *gstate) {
 		s.term.tls.push(&prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)})
 		return
 	}
-	if re != nil && re.Mode == 2 && s.certs.has(re.Name) { // Modus 2: TLS endet hier
+	if re != nil && re.Mode == 2 && s.certs.covers(re.Name, sni) { // Modus 2: TLS endet hier (sonst durchreichen)
 		s.term.tls.push(&prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)})
 		return
 	}
@@ -376,7 +375,7 @@ func (s *Server) handle80(c net.Conn, gs *gstate) {
 		gs.mark(s.stats.of(re.Name))
 		if re.Mode == 3 { // Modus 3: je nach Stufe bedienen, umleiten oder abweisen
 			pc := &prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)}
-			switch frontendPlain(re.Target, s.certs.has(re.Name)) {
+			switch frontendPlain(re.Target, s.certs.covers(re.Name, host)) {
 			case "serve":
 				s.term.plain.push(pc)
 			case "redirect":
@@ -388,7 +387,7 @@ func (s *Server) handle80(c net.Conn, gs *gstate) {
 			}
 			return
 		}
-		if re.Mode == 2 && s.certs.has(re.Name) { // Modus 2: auf HTTPS umleiten
+		if re.Mode == 2 && s.certs.covers(re.Name, host) { // Modus 2: auf HTTPS umleiten
 			s.term.http.push(&prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(data), c)})
 			return
 		}
@@ -469,6 +468,10 @@ func (s *Server) forward(c net.Conn, kind, host string, port int, data []byte, c
 		_ = c.Close()
 		return
 	}
+	var vc net.Conn = c
+	if kind == tunnel.KindHTTP80 { // jede Anfrage pruefen: Keep-Alive und absolute URLs nur an diesen Namen (hostgate.go)
+		vc, data = newHostGate(c, data, host), nil
+	}
 	if len(data) > 0 {
 		if _, err := ts.Write(data); err != nil {
 			_ = ts.Close()
@@ -479,7 +482,7 @@ func (s *Server) forward(c net.Conn, kind, host string, port int, data []byte, c
 	}
 	st.conn(ip)
 	defer s.track(re.Name, re.Mode, ip, func() { _ = c.Close(); _ = ts.Close() })()
-	tunnel.Join(&meter{Conn: c, n: &st.BytesIn, bw: s.bw, uid: re.UserID}, &meter{Conn: ts, n: &st.BytesOut, bw: s.bw, uid: re.UserID})
+	tunnel.Join(&meter{Conn: vc, n: &st.BytesIn, bw: s.bw, uid: re.UserID}, &meter{Conn: ts, n: &st.BytesOut, bw: s.bw, uid: re.UserID})
 }
 
 // meter zaehlt gelesene Bytes laufend (Meldung jede Minute, auch bei langen Verbindungen) und haelt das

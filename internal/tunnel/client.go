@@ -75,6 +75,7 @@ type Client struct {
 	st       map[string][]*edgeState                    // je Server eine Verbindung je Slot
 	resolve  func(ctx context.Context, e Edge) []net.IP // Tests: feste Adressen
 	forceTCP bool                                       // Tests: nur der Ausweichweg
+	offWait  time.Duration                              // Tests: Pause eines abgelehnten Slots (Standard 2-5 Minuten)
 }
 
 type edgeState struct {
@@ -185,7 +186,8 @@ func (c *Client) update(name string, slot int, f func(s *edgeState)) {
 	c.mu.Unlock()
 }
 
-// errSlotOff: der Server erlaubt diesem Tunnel weniger Verbindungen; der Slot bleibt aus.
+// errSlotOff: der Server erlaubt diesem Tunnel weniger Verbindungen; der Slot bleibt aus und versucht es nach einer
+// Pause erneut (Wechsel der Klasse, Neustart des Servers waehrend eines Updates).
 var errSlotOff = errors.New("session limit of the server")
 
 // errRejected: der Server hat die Anmeldung abgelehnt (kein UDP-Problem).
@@ -204,7 +206,15 @@ func (c *Client) loop(ctx context.Context, e Edge, slot int) {
 		if errors.Is(err, errSlotOff) {
 			c.update(e.Name, slot, func(s *edgeState) { s.off, s.Connected, s.LastError = true, false, err.Error() })
 			c.cfg.Log.Info("tunnel: parallel session not allowed by the server", "edge", e.Name, "slot", slot)
-			return
+			wait := c.offWait
+			if wait <= 0 {
+				wait = 2*time.Minute + rand.N(3*time.Minute)
+			}
+			select {
+			case <-ctx.Done():
+			case <-time.After(wait):
+			}
+			continue
 		}
 		if err == nil {
 			if _, p, perr := net.SplitHostPort(sess.RemoteAddr().String()); perr == nil {
@@ -391,7 +401,7 @@ func (c *Client) hello(ctx context.Context, sess Session, edge string, slot int)
 // serve nimmt Daten-Streams an, bis die Verbindung endet.
 func (c *Client) serve(ctx context.Context, e Edge, slot int, sess Session) {
 	c.update(e.Name, slot, func(s *edgeState) {
-		s.Connected, s.Transport, s.Addr, s.Since, s.LastError, s.sess = true, sess.Transport(), sess.RemoteAddr().String(), time.Now(), "", sess
+		s.Connected, s.Transport, s.Addr, s.Since, s.LastError, s.sess, s.off = true, sess.Transport(), sess.RemoteAddr().String(), time.Now(), "", sess, false
 		s.RTTms = float64(sess.RTT().Microseconds()) / 1000
 		s.Reconnects++
 	})

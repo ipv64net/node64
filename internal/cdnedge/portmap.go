@@ -564,11 +564,11 @@ func (u *udpPort) session(from netip.AddrPort) *udpSess {
 	}
 	u.mu.Unlock()
 	st := u.p.s.stats.of(re.Name)
-	release, gs, why := u.p.s.guard.admitG(from.Addr(), st) // wie eine Verbindung: Blocklisten, Grenzen je IP
+	// UDP-Absender koennen gefaelscht sein: Sperrliste und eigenes UDP-Budget, nicht die Grenzen der Verbindungen
+	release, why := u.p.s.guard.admitUDP(from.Addr(), st)
 	if why != "" {
 		return nil
 	}
-	gs.mark(st)
 	s = &udpSess{gen: targetGen(re), tport: tport, st: st, uid: re.UserID, release: release}
 	s.last.Store(time.Now().UnixNano())
 	u.mu.Lock()

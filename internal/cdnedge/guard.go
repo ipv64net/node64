@@ -25,6 +25,7 @@ type guard struct {
 	mu                                sync.Mutex
 	ips                               map[netip.Addr]*gstate
 	open                              atomic.Int64
+	udpOpen                           atomic.Int64 // UDP-Absender ohne Nachweis der Adresse (admitUDP)
 	rejected                          atomic.Int64
 	rej                               [len(guardReasons)]atomic.Int64 // je Grund (Prometheus)
 	set                               atomic.Pointer[shield.Set]
@@ -143,6 +144,55 @@ func (g *guard) admitG(a netip.Addr, host *hostStat) (release func(), gs *gstate
 			g.open.Add(-1)
 		})
 	}, st, ""
+}
+
+// admitUDP: UDP-Absender ohne Nachweis seiner Adresse (Portmapper UDP, QUIC vor dem Handschlag bzw. vor der
+// Antwort des Besuchers). Er koennte gefaelscht sein: geprueft wird nur die Sperrliste, und er belegt keinen Platz
+// bei den Verbindungen je IP und insgesamt (sonst fuellen gefaelschte Absender die Grenzen aller Accounts), sondern
+// in einem eigenen, kleineren Budget (ein Viertel von max_conns).
+func (g *guard) admitUDP(a netip.Addr, host *hostStat) (release func(), why string) {
+	a = a.Unmap()
+	if g.set.Load().Has(a) {
+		g.reject("blocklist")
+		host.block(bList, a)
+		return nil, "blocklist"
+	}
+	if n, m := g.udpOpen.Add(1), g.udpMax(); m > 0 && n > m {
+		g.udpOpen.Add(-1)
+		g.reject("max_conns")
+		host.block(bFlood, a)
+		return nil, "max_conns"
+	}
+	var once sync.Once
+	return func() { once.Do(func() { g.udpOpen.Add(-1) }) }, ""
+}
+
+// udpMax: Budget fuer admitUDP (0 = ohne Grenze).
+func (g *guard) udpMax() int64 {
+	if g.maxConns <= 0 {
+		return 0
+	}
+	return int64(max(g.maxConns/4, 1))
+}
+
+// guardConn gibt den Platz im Schutz erst frei, wenn die Verbindung geschlossen wird - auch wenn sie an einen
+// anderen Server weitergereicht wurde (Modus 2/3, eigene Seite), der sie spaeter schliesst.
+type guardConn struct {
+	net.Conn
+	release func()
+}
+
+func (c *guardConn) Close() error {
+	err := c.Conn.Close()
+	c.release()
+	return err
+}
+
+func (c *guardConn) CloseWrite() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return c.Close()
 }
 
 // floodAt zaehlt Ueberlast beim Namen: host, sonst der zuletzt angefragte Name der IP (st), sonst nirgends.

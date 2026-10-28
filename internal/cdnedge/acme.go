@@ -24,8 +24,8 @@ import (
 // ipv64 (POST /cdn64o/edge/acme-txt, nur fuer Modus-2-Namen); auf den Servern liegt kein PowerDNS- und kein
 // API-Key eines Nutzers. Vor der Pruefung wartet der Server, bis alle Nameserver der Zone den Eintrag liefern.
 // Scheitert DNS-01, gibt es per HTTP-01 ein Zertifikat nur fuer "name" (der DNS des Namens zeigt auf die Server; den
-// Token bekommt auch der Nachbar, weil Let's Encrypt einen der beiden fragt). Die naechste Erneuerung versucht
-// wieder DNS-01.
+// Token bekommt auch der Nachbar, weil Let's Encrypt einen der beiden fragt). Fuer Wildcard-Namen versucht der
+// Server DNS-01 danach alle paar Stunden erneut (certWildRetry); bis dahin enden Unternamen nicht hier (covers).
 
 // obtain: Zertifikat und Schluessel (PEM) fuer name und *.name, sonst nur name. Zertifizierungsstelle nach
 // acmeca.go (Let's Encrypt, an der Grenze bzw. nach "rateLimited" ZeroSSL).
@@ -96,6 +96,9 @@ func (s *Server) obtainWith(ctx context.Context, ca, name string) ([]byte, []byt
 		return cp, kp, nil
 	}
 	if rateLimited(err) {
+		return nil, nil, err
+	}
+	if time.Until(s.certs.notAfter(name)) > certRenewBefore { // frueher Versuch fuer *.name (certs.go): das vorhandene bleibt
 		return nil, nil, err
 	}
 	s.log.Warn("dns-01 failed, trying http-01 (name only, no wildcard)", "name", name, "ca", ca, "err", err)

@@ -49,12 +49,13 @@ type Server struct {
 	Down     func(p *Peer) // Node getrennt
 	Log      *slog.Logger  // nil = still
 
-	mu   sync.Mutex
-	wg   sync.WaitGroup
-	ql   []*quic.Listener
-	tl   []net.Listener
-	conf func() *quic.Config // Tests: eigene Einstellungen
-	auth time.Duration       // Zeit fuer die Anmeldung (Standard 5 s, G7)
+	mu    sync.Mutex
+	wg    sync.WaitGroup
+	slots map[string]*Peer // je Tunnel und Slot die angemeldete Verbindung (eine neue ersetzt die alte)
+	ql    []*quic.Listener
+	tl    []net.Listener
+	conf  func() *quic.Config // Tests: eigene Einstellungen
+	auth  time.Duration       // Zeit fuer die Anmeldung (Standard 5 s, G7)
 }
 
 func (s *Server) log() *slog.Logger {
@@ -194,10 +195,30 @@ func (s *Server) handshake(sess Session) {
 	}
 	_ = ctrl.SetDeadline(time.Time{})
 	p := &Peer{Tunnel: h.Tunnel, Node: h.Node, Version: h.NodeVersion, Caps: h.Caps, Slot: h.Slot, Since: time.Now(), Session: sess, ctrl: ctrl}
+	// Je Tunnel und Slot hoechstens eine Verbindung: eine neue (Neuverbindung, alte noch nicht als tot erkannt)
+	// ersetzt die alte - so bleiben es nie mehr Verbindungen als die Grenze der Klasse.
+	k := h.Tunnel + "/" + strconv.Itoa(h.Slot)
+	s.mu.Lock()
+	if s.slots == nil {
+		s.slots = map[string]*Peer{}
+	}
+	old := s.slots[k]
+	s.slots[k] = p
+	s.mu.Unlock()
+	if old != nil {
+		_ = old.Session.Close("replaced")
+	}
 	s.log().Info("tunnel up", "tunnel", h.Tunnel, "node", h.Node, "slot", h.Slot, "transport", sess.Transport(), "from", sess.RemoteAddr().String())
 	if s.Up != nil {
 		s.Up(p)
 	}
+	go func() { // die Node oeffnet nur den Steuer-Stream: jeder weitere ist ein Fehler, die Verbindung endet (Speicher)
+		if st, err := sess.AcceptStream(context.Background()); err == nil {
+			_ = st.Close()
+			_ = sess.Close("unexpected stream")
+			s.log().Warn("tunnel closed: node opened a stream", "tunnel", h.Tunnel, "slot", h.Slot)
+		}
+	}()
 	// Steuer-Stream lesen, bis die Verbindung endet (die Node schickt derzeit nichts mehr)
 	go func() {
 		var m Control
@@ -206,6 +227,11 @@ func (s *Server) handshake(sess Session) {
 		_ = sess.Close("control closed")
 	}()
 	<-sess.Done()
+	s.mu.Lock()
+	if s.slots[k] == p {
+		delete(s.slots, k)
+	}
+	s.mu.Unlock()
 	s.log().Info("tunnel down", "tunnel", h.Tunnel, "transport", sess.Transport())
 	if s.Down != nil {
 		s.Down(p)

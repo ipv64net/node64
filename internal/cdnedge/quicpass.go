@@ -19,13 +19,24 @@ import (
 // Datagramme dieses Besuchers (Adresse:Port) roh durch den Tunnel der Node (Stream "quic", Datagramme mit
 // Laengenpraefix) - TLS und HTTP/3 enden erst in der Node, wie bei TCP. Alles andere (HTTP/3 fuer Modus 2/3, der
 // Tunnel ueber 443) geht unveraendert an quic-go. Ohne Tunnel hier geht der Stream ueber den Nachbarn.
+//
+// Die Adresse eines Besuchers kann gefaelscht sein, bis er auf eine Antwort der Node reagiert: sein Paket traegt dann
+// die Verbindungs-ID, die die Node gewaehlt hat (Source Connection ID ihrer langen Pakete) - die kennt nur, wer die
+// Antwort bekommen hat. Bis dahin zaehlt der Fluss nur im UDP-Budget (guard.admitUDP), die Node darf ihm hoechstens
+// qpFree + qpAmp x Eingang schicken (keine Reflexion) und nach qpProveIn ist Schluss. Ruhig ist ein Fluss nach den
+// Paketen des Besuchers (die Node haelt ihn nicht offen).
 
 const (
 	qpPendMax   = 4096             // Besucher, deren ClientHello gerade gelesen wird
 	qpPendPkts  = 8                // so viele Datagramme warten hoechstens auf den Namen
 	qpPendAge   = 3 * time.Second  // danach an quic-go
 	qpFlowIdle  = 60 * time.Second // ruhiger Fluss: Stream zu
-	qpFlowQueue = 512              // Datagramme in Richtung Node, die warten duerfen
+	qpFlowQueue = 512              // Datagramme in Richtung Node, die warten duerfen (hoechstens qpMaxDgram gross)
+	qpMaxDgram  = 1500             // groessere Datagramme gibt es bei QUIC praktisch nicht: verwerfen
+	qpProveIn   = 10 * time.Second // so lange darf ein Besucher brauchen, um seine Adresse nachzuweisen
+	qpMinCID    = 4                // kuerzere IDs der Node taugen nicht als Nachweis
+	qpAmp       = 3                // vor dem Nachweis: Node -> Besucher hoechstens qpFree + 3 x Eingang (wie RFC 9000 8.1)
+	qpFree      = 1500
 )
 
 // quicDemux ist die PacketConn fuer quic-go (ReadFrom ruft nur eine Goroutine von quic-go).
@@ -54,12 +65,20 @@ type qpend struct {
 }
 
 type qflow struct {
-	d    *quicDemux
-	addr netip.AddrPort
-	q    chan []byte
-	last atomic.Int64
-	once sync.Once
-	done chan struct{}
+	d       *quicDemux
+	addr    netip.AddrPort
+	st      *hostStat
+	q       chan []byte
+	last    atomic.Int64 // letztes Paket des Besuchers
+	born    time.Time
+	in, out atomic.Int64           // Bytes vom bzw. zum Besucher
+	proven  atomic.Bool            // Adresse nachgewiesen
+	scid    atomic.Pointer[[]byte] // Verbindungs-ID der Node (aus ihren langen Paketen)
+	mu      sync.Mutex
+	rel     func() // Platz: erst im UDP-Budget, nach dem Nachweis im guard
+	relDone bool
+	once    sync.Once
+	done    chan struct{}
 }
 
 func newQUICDemux(s *Server, c *net.UDPConn) *quicDemux {
@@ -85,10 +104,12 @@ func (d *quicDemux) ReadFrom(p []byte) (int, net.Addr, error) {
 		f := d.flows[ap]
 		d.mu.Unlock()
 		if f != nil {
-			f.toNode(pkt)
+			if n <= qpMaxDgram {
+				f.toNode(pkt)
+			}
 			continue
 		}
-		if d.pend[ap] != nil || quicsni.IsInitial(pkt) {
+		if n <= qpMaxDgram && (d.pend[ap] != nil || quicsni.IsInitial(pkt)) {
 			d.sniff(ap, append([]byte(nil), pkt...))
 			continue
 		}
@@ -148,9 +169,10 @@ func (d *quicDemux) decide(ap netip.AddrPort, sni string) {
 	}
 	pe := d.pend[ap]
 	delete(d.pend, ap)
-	f := &qflow{d: d, addr: ap, q: make(chan []byte, qpFlowQueue), done: make(chan struct{})}
+	f := &qflow{d: d, addr: ap, st: d.s.stats.of(re.Name), q: make(chan []byte, qpFlowQueue), born: time.Now(), done: make(chan struct{})}
 	f.last.Store(time.Now().UnixNano())
 	for _, p := range pe.pkts {
+		f.in.Add(int64(len(p)))
 		f.q <- p
 	}
 	d.mu.Lock()
@@ -175,7 +197,7 @@ func (d *quicDemux) sweep() {
 	d.mu.Lock()
 	var idle []*qflow
 	for _, f := range d.flows {
-		if f.last.Load() < cut {
+		if f.last.Load() < cut || (!f.proven.Load() && now.Sub(f.born) > qpProveIn) {
 			idle = append(idle, f)
 		}
 	}
@@ -187,10 +209,85 @@ func (d *quicDemux) sweep() {
 
 func (f *qflow) toNode(pkt []byte) {
 	f.last.Store(time.Now().UnixNano())
+	f.in.Add(int64(len(pkt)))
+	if !f.proven.Load() && f.answers(pkt) {
+		f.prove()
+	}
 	select {
 	case f.q <- append([]byte(nil), pkt...):
 	default: // Node kommt nicht hinterher: verwerfen (QUIC wiederholt)
 	}
+}
+
+// answers: Paket des Besuchers an die Verbindungs-ID, die die Node gewaehlt hat (lang: Destination Connection ID
+// genau, kurz: deren Anfang).
+func (f *qflow) answers(p []byte) bool {
+	idp := f.scid.Load()
+	if idp == nil || len(p) < 6 {
+		return false
+	}
+	id := *idp
+	if p[0]&0x80 != 0 {
+		l := int(p[5])
+		return 6+l <= len(p) && bytes.Equal(p[6:6+l], id)
+	}
+	return len(p) >= 1+len(id) && bytes.Equal(p[1:1+len(id)], id)
+}
+
+// prove: Adresse nachgewiesen - der Fluss zaehlt ab jetzt wie eine Verbindung (Grenzen je IP und insgesamt).
+func (f *qflow) prove() {
+	if f.proven.Swap(true) {
+		return
+	}
+	rel, gs, why := f.d.s.guard.admitG(f.addr.Addr(), f.st)
+	if why != "" {
+		f.close()
+		return
+	}
+	gs.mark(f.st)
+	f.mu.Lock()
+	old, done := f.rel, f.relDone
+	f.rel = rel
+	f.mu.Unlock()
+	if old != nil {
+		old()
+	}
+	if done {
+		rel()
+	}
+}
+
+// setRel bzw. dropRel: Platz des Flusses merken bzw. am Ende freigeben.
+func (f *qflow) setRel(r func()) {
+	f.mu.Lock()
+	f.rel = r
+	f.mu.Unlock()
+}
+
+func (f *qflow) dropRel() {
+	f.mu.Lock()
+	r := f.rel
+	f.rel, f.relDone = nil, true
+	f.mu.Unlock()
+	if r != nil {
+		r()
+	}
+}
+
+// nodeSCID: Source Connection ID eines langen QUIC-Pakets der Node (nil = keins bzw. Version Negotiation).
+func nodeSCID(p []byte) []byte {
+	if len(p) < 7 || p[0]&0x80 == 0 || (p[1]|p[2]|p[3]|p[4]) == 0 {
+		return nil
+	}
+	i := 6 + int(p[5])
+	if i >= len(p) {
+		return nil
+	}
+	l := int(p[i])
+	if l > 20 || i+1+l > len(p) {
+		return nil
+	}
+	return p[i+1 : i+1+l]
 }
 
 func (f *qflow) close() {
@@ -212,17 +309,17 @@ func (f *qflow) run(re *route, sni string) {
 	if re.Blocked != "" {
 		return
 	}
-	st := s.stats.of(re.Name)
+	st := f.st
 	if !re.ACL.allows(f.addr.Addr()) {
 		st.block(bACL, f.addr.Addr())
 		return
 	}
-	release, gs, why := s.guard.admitG(f.addr.Addr(), st) // Abweisungen zaehlen bei diesem Namen
+	release, why := s.guard.admitUDP(f.addr.Addr(), st) // Adresse noch nicht nachgewiesen; Abweisungen beim Namen
 	if why != "" {
 		return
 	}
-	defer release()
-	gs.mark(st)
+	f.setRel(release)
+	defer f.dropRel()
 	var conn net.Conn
 	counted := true // gezaehlt und begrenzt wird beim Server mit dem Tunnel
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -255,10 +352,19 @@ func (f *qflow) run(re *route, sni string) {
 			if err != nil {
 				return
 			}
-			f.last.Store(time.Now().UnixNano())
+			if !f.proven.Load() { // vor dem Nachweis: ID der Node merken, Antwort begrenzen (gefaelschter Absender)
+				if id := nodeSCID(buf[:n]); len(id) >= qpMinCID && (f.scid.Load() == nil || !bytes.Equal(*f.scid.Load(), id)) {
+					id = append([]byte(nil), id...)
+					f.scid.Store(&id)
+				}
+				if f.out.Load()+int64(n) > qpFree+qpAmp*f.in.Load() {
+					continue
+				}
+			}
 			if _, err := f.d.c.WriteToUDPAddrPort(buf[:n], f.addr); err != nil && errors.Is(err, net.ErrClosed) {
 				return
 			}
+			f.out.Add(int64(n))
 			if counted {
 				st.BytesOut.Add(int64(n))
 				s.bw.take(re.UserID, n)

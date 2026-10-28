@@ -116,11 +116,12 @@ func (s *Server) listenUDP443() {
 	qc.MaxIncomingStreams = 200 // Besucher (HTTP/3) und Tunnel teilen sich den Port; die Node oeffnet nur den Steuer-Stream
 	qc.KeepAlivePeriod = 0      // die Node haelt ihren Tunnel selbst wach
 	gq := newQUICGate(s.guard)
-	qc.GetConfigForClient = func(info *quic.ClientInfo) (*quic.Config, error) { // Sperrliste und Limits je IP vor dem Handschlag
-		if !gq.admit(info.RemoteAddr) {
+	conn := qc.Clone()                                                          // nil wuerde quic-go die Standardwerte nehmen lassen (Streams, Fristen)
+	qc.GetConfigForClient = func(info *quic.ClientInfo) (*quic.Config, error) { // Sperrliste und Limits vor dem Handschlag
+		if !gq.admit(info.RemoteAddr, info.AddrVerified) {
 			return nil, errors.New("rejected")
 		}
-		return nil, nil
+		return conn, nil
 	}
 	ua, err := net.ResolveUDPAddr("udp", s.cfg.ListenHTTPS)
 	var uc *net.UDPConn
@@ -133,7 +134,7 @@ func (s *Server) listenUDP443() {
 	}
 	t.qd = newQUICDemux(s, uc)
 	s.qd.Store(t.qd)
-	t.qtr = &quic.Transport{Conn: t.qd}
+	t.qtr = &quic.Transport{Conn: t.qd, VerifySourceAddress: gq.verify} // unter Last erst Retry (Adresse nachweisen)
 	ln, err := t.qtr.Listen(conf, qc)
 	if err != nil {
 		_ = uc.Close()
@@ -147,7 +148,10 @@ func (s *Server) listenUDP443() {
 			if err != nil {
 				return
 			}
-			gq.hold(c)
+			if !gq.hold(c) {
+				_ = c.CloseWithError(0, "")
+				continue
+			}
 			switch c.ConnectionState().TLS.NegotiatedProtocol {
 			case tunnel.ALPN:
 				s.tun.ServeQUICConn(c)
@@ -164,55 +168,93 @@ func (s *Server) listenUDP443() {
 	}()
 }
 
-// quicGate: der grobe Schutz (guard) fuer QUIC auf 443 - beim ersten Paket (vor TLS) zaehlt die Verbindung, frei
-// wird sie mit ihrem Ende; kommt kein Handschlag zustande, nach 15 s.
+// quicGate: der grobe Schutz (guard) fuer QUIC auf 443. Beim ersten Paket (vor TLS) ist die Absender-Adresse noch
+// nicht nachgewiesen (gefaelscht moeglich): sie zaehlt dann nur im kleineren UDP-Budget (guard.admitUDP), nicht bei
+// den Verbindungen je IP und insgesamt. Mit nachgewiesener Adresse (Token aus Retry bzw. NEW_TOKEN, oder fertiger
+// Handschlag) zaehlt sie wie eine TCP-Verbindung bis zu ihrem Ende. Kommt kein Handschlag zustande, frei nach 15 s.
+// Warten viele Handschlaege, verlangt quic-go erst ein Retry (verify).
 type quicGate struct {
-	g   *guard
-	mu  sync.Mutex
-	rel map[string]func()
+	g    *guard
+	mu   sync.Mutex
+	rel  map[string]qgSlot
+	pend atomic.Int64 // Handschlaege ohne nachgewiesene Adresse
 }
 
-func newQUICGate(g *guard) *quicGate { return &quicGate{g: g, rel: map[string]func(){}} }
+type qgSlot struct {
+	release  func()
+	verified bool // Platz im guard (sonst im UDP-Budget)
+}
 
-func (q *quicGate) admit(a net.Addr) bool {
-	release, why := q.g.admit(addrOf(a))
-	if why != "" {
-		return false
+// qgRetryAt: ab so vielen offenen Handschlaegen ohne Nachweis muessen neue Besucher ihre Adresse per Retry belegen.
+const qgRetryAt = 64
+
+func newQUICGate(g *guard) *quicGate { return &quicGate{g: g, rel: map[string]qgSlot{}} }
+
+// verify (Transport.VerifySourceAddress): Retry verlangen?
+func (q *quicGate) verify(net.Addr) bool { return q.pend.Load() >= qgRetryAt }
+
+func (q *quicGate) admit(a net.Addr, verified bool) bool {
+	var slot qgSlot
+	if verified {
+		release, why := q.g.admit(addrOf(a))
+		if why != "" {
+			return false
+		}
+		slot = qgSlot{release: release, verified: true}
+	} else {
+		release, why := q.g.admitUDP(addrOf(a), nil)
+		if why != "" {
+			return false
+		}
+		q.pend.Add(1)
+		var once sync.Once
+		slot = qgSlot{release: func() { once.Do(func() { q.pend.Add(-1); release() }) }}
 	}
 	k := a.String()
 	q.mu.Lock()
-	if old := q.rel[k]; old != nil {
-		old()
-	}
-	q.rel[k] = release
+	old := q.rel[k]
+	q.rel[k] = slot
 	q.mu.Unlock()
+	if old.release != nil {
+		old.release()
+	}
 	time.AfterFunc(15*time.Second, func() { q.take(k, nil) })
 	return true
 }
 
 // take: Platz der Adresse holen (nil = freigeben, wenn ihn noch niemand genommen hat).
-func (q *quicGate) take(k string, keep *func()) {
+func (q *quicGate) take(k string, keep *qgSlot) {
 	q.mu.Lock()
 	r := q.rel[k]
 	delete(q.rel, k)
 	q.mu.Unlock()
-	if r == nil {
+	if r.release == nil {
 		return
 	}
 	if keep != nil {
 		*keep = r
 		return
 	}
-	r()
+	r.release()
 }
 
-// hold: angenommene Verbindung haelt ihren Platz bis zum Ende.
-func (q *quicGate) hold(c *quic.Conn) {
-	var r func()
+// hold: angenommene Verbindung haelt ihren Platz bis zum Ende. Der Handschlag hat die Adresse nachgewiesen: ein Platz
+// im UDP-Budget (oder keiner mehr) wird zu einem im guard; false = abgewiesen (Grenzen je IP bzw. insgesamt).
+func (q *quicGate) hold(c *quic.Conn) bool {
+	var r qgSlot
 	q.take(c.RemoteAddr().String(), &r)
-	if r != nil {
-		go func() { <-c.Context().Done(); r() }()
+	if !r.verified {
+		if r.release != nil {
+			r.release()
+		}
+		release, why := q.g.admit(addrOf(c.RemoteAddr()))
+		if why != "" {
+			return false
+		}
+		r.release = release
 	}
+	go func() { <-c.Context().Done(); r.release() }()
+	return true
 }
 
 // isPublicName: der eigene Name des Servers (Tunnel auf 443 statt Besucher).
@@ -255,6 +297,9 @@ func (s *Server) termCert(hello *tls.ClientHelloInfo) (*tls.Certificate, error) 
 		return nil, errors.New("unknown name")
 	}
 	if c := s.certs.get(re.Name); c != nil {
+		if !s.certs.covers(re.Name, hello.ServerName) { // Unternamen ohne *.name im Zertifikat (HTTP-01-Ausweg)
+			return nil, errors.New("certificate does not cover the name")
+		}
 		return c, nil
 	}
 	return nil, errors.New("no certificate yet")
@@ -280,6 +325,23 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 		s.mx.termReject("misdirected")
 		http.Error(w, "misdirected request", http.StatusMisdirectedRequest)
 		return
+	}
+	if r.TLS == nil { // Port 80 mit Keep-Alive: jede Anfrage nach der Stufe ihres Namens (wie handle80)
+		switch frontendPlain(re.Target, s.certs.covers(re.Name, host)) {
+		case "serve":
+		case "redirect":
+			termRedirect(w, r)
+			return
+		case "off":
+			s.mx.termReject("misdirected")
+			w.Header().Set("Connection", "close")
+			http.Error(w, "misdirected request", http.StatusMisdirectedRequest)
+			return
+		default:
+			w.Header().Set("Connection", "close")
+			s.refuseHTTP(w, r)
+			return
+		}
 	}
 	st := s.stats.of(re.Name)
 	if aerr == nil && !s.term.rl.allow(ap.Addr()) {
