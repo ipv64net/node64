@@ -175,15 +175,25 @@ Team-Cymru-DNS `origin(6).asn.cymru.com` / `asn.cymru.com`, Cache 24 h in der Kn
   Messende. Ziel nur mit `measured=1`, erreichbarem Weg (`reach4/6`) und Vertrauen ≠ quarantine. Methode: `udp`,
   wenn erreichbar, sonst `icmp`. Kontrollziele: in ~5 % der Pläne ein Anker zusätzlich, Werte gegen die Messung
   des Ankers prüfen. Traceroute: je Knoten höchstens 2 Ziele je Stunde (Anker oder Nachbar).
+  Runden liegen auf dem 5-min-Raster (UTC); schon geplante Runden (laufende und kommende) bleiben unverändert, jeder
+  Lauf hängt nur neue an (Plan = laufende + 6 kommende Runden), nicht mehr erlaubte Ziele (Opt-out, Quarantäne, andere
+  IP/Weg) fallen sofort heraus. Anker messen gemessene Knoten bis 6 h nach dem letzten Kontakt (Störungen sehen).
+  Kontrollziel = ein Anker per `icmp`; `controls` = JSON `[{round, id, fam}]`.
 - **Erreichbarkeit:** aus den Anker-Messungen der letzten Stunde (`reach4/6`).
 - **Verdichtung** (`sonar_rollup.php`, stündlich): `sonar_pair_1h`, `sonar_asn_1d`; Median über gültige Ergebnisse,
   gewichtet nach Vertrauen (new 0,2 · stable 1 · trusted 2 · pillar 3 · anchor 3).
 - **Vertrauen** (`sonar_trust.php`, täglich + sofortige Abstufung aus Teil A über `plaus_bad`): Stufen laut Plan
   Abschnitt 6; Abweichung vom gewichteten Median > max(5 ms, 50 %) in > 20 % der Messungen → Abstufung; Anker-Wahrheit
   (Knoten→Anker vs. Anker→Knoten > max(5 ms, 50 %)) → plaus_bad; Quarantäne bei > 30 % unplausibel über 24 h.
+  Umsetzung: stündlich Prüfungen (letzte 3 h, Abstufung sofort), täglich 02 Uhr UTC Verfügbarkeit, Median und Aufstieg
+  (höchstens eine Stufe je 24 h). Teil J setzt statistisch unplausible Ergebnisse auf `valid=0` mit `reason`
+  `anchor_truth` | `inbound` (mehr udp-Antworten eines Ankers gemeldet, als der Anker in `sonar_inbound` beantwortet
+  hat; **Anker melden `inbound`**) | `control` | `asym` und erhöht `plaus_bad`. Quote = gespeicherte `valid=0` der
+  letzten 24 h ohne `below_light` gegen Ziele new/stable.
 - **Störungen** (`sonar_outages.php`, alle 5 min): je ASN und je Region (Raster 0,5° bzw. Bundesland über
   Koordinaten) mit ≥ 5 Knoten: ≥ 50 % in 10 min nicht erreichbar (für die Anker) oder Median-Latenz > 3× Wochenmittel
-  → Störung offen; Ende, wenn < 20 % betroffen.
+  → Störung offen; Ende, wenn < 20 % betroffen. Region: `keyval` = Südwestecke des Rasters `"50.5,6.5"`, `label` =
+  häufigster `place` (sonst Rastermitte).
 - **Aufräumen** (`sonar_cleanup.php`, täglich): Aufbewahrung laut Abschnitt 6.
 
 ## 8. Go-Schnittstelle (Teil K/M liefern, P/N nutzen)
