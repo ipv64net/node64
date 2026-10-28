@@ -1151,3 +1151,28 @@ func TestAnchorReportsOnlyWithData(t *testing.T) {
 		t.Fatalf("heartbeat: reports %d, want 3", n)
 	}
 }
+
+// Abwechselnd IPv4/IPv6: der Server lauscht nur auf 127.0.0.1, also scheitert jeder zweite Verbindungsaufbau (tcp6)
+// und die Anfrage geht ohne feste Familie noch einmal - mit vollstaendigem Body und genau einmal beim Server.
+func TestClientFamilyFallback(t *testing.T) {
+	var mu sync.Mutex
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		got = append(got, string(b))
+		mu.Unlock()
+		w.Write([]byte(`{"data":{"ok":true}}`))
+	}))
+	defer srv.Close()
+	c := &client{base: srv.URL, http: defaultHTTPClient(), fam: familyHTTPClients(), ua: "t"}
+	for i := 0; i < 4; i++ {
+		var out struct{ OK bool }
+		if err := c.call(context.Background(), http.MethodPost, "/sonar/results", testToken, map[string]int{"n": i}, smallLimit, &out); err != nil || !out.OK {
+			t.Fatalf("call %d: %v %v", i, out, err)
+		}
+	}
+	if strings.Join(got, ",") != `{"n":0},{"n":1},{"n":2},{"n":3}` {
+		t.Fatalf("server got %q", got)
+	}
+}

@@ -43,7 +43,7 @@ var changelogEN string
 const Name = "sonar64"
 
 const (
-	version = "0.1.0"
+	version = "0.1.1"
 
 	setConfig   = "sonar64.config" // lokale Einstellung als JSON (Settings)
 	setToken    = "sonar64.token"  // Sonar-Token, verschluesselt
@@ -387,14 +387,11 @@ func (m *Module) syncLoop(ctx context.Context, rs *runState, r runnerAPI) {
 		if ctx.Err() != nil {
 			return
 		}
-		m.setMe(me, err)
+		m.setMe(me, err, upErr)
 		if err == nil && me != nil {
 			wait = meEvery
 			if upErr != nil {
 				m.log.Warn("sonar64 role/budget not synced", "err", upErr)
-				m.mu.Lock()
-				m.meErr = upErr.Error()
-				m.mu.Unlock()
 				wait = 4 * meRetry
 			}
 		}
@@ -411,7 +408,8 @@ func (m *Module) setRunErr(err error) {
 	m.runErr = err.Error()
 }
 
-func (m *Module) setMe(me *sonar.Me, err error) {
+// setMe merkt den geholten Knoten; upErr (Abgleich gescheitert) wird zusammen mit ihm sichtbar.
+func (m *Module) setMe(me *sonar.Me, err, upErr error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err != nil {
@@ -421,6 +419,9 @@ func (m *Module) setMe(me *sonar.Me, err error) {
 	if me != nil {
 		c := *me
 		m.me, m.meAt, m.meErr = &c, time.Now(), ""
+		if upErr != nil {
+			m.meErr = upErr.Error()
+		}
 	}
 }
 
@@ -799,7 +800,7 @@ func (m *Module) SaveProfile(ctx context.Context, p Profile) (*sonar.Me, error) 
 	if err != nil {
 		return nil, err
 	}
-	m.setMe(me, nil)
+	m.setMe(me, nil, nil)
 	return me, nil
 }
 

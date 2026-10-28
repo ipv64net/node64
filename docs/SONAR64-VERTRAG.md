@@ -58,7 +58,8 @@ Teil A stellt in `s64_lib.php` die gemeinsamen Funktionen (Abschnitt 6); J und W
 - Die IP eines Knotens nimmt ipv64 nur aus der Verbindung (`REMOTE_ADDR`), nie aus Angaben des Knotens. ipv64 läuft
   hinter einem internen Reverse Proxy: ist `REMOTE_ADDR` nicht öffentlich, zählt nur die vom Proxy angehängte letzte
   `X-Forwarded-For`-Adresse (`client_ip()` der API v2). Wechselt die IP einer Familie, wird `reach4/6` auf `none`
-  gesetzt (die alte Adresse darf in keinen Plan mehr).
+  gesetzt (die alte Adresse darf in keinen Plan mehr). Damit ipv64 bei Dual-Stack beide Adressen kennt, schickt der
+  Kern seine Anfragen abwechselnd über IPv4 und IPv6 (scheitert der Verbindungsaufbau, ohne feste Familie).
 
 ## 3. API v2 (`/api/v2/sonar/...`)
 

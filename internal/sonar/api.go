@@ -203,12 +203,13 @@ func New(cfg Config) (*Runner, error) {
 		cfg.Log.Warn("sonar64: no plan key - plans cannot be verified, nothing will be measured")
 	}
 	hc := cfg.HTTPClient
+	var fam [2]HTTPDoer
 	if hc == nil {
-		hc = defaultHTTPClient()
+		hc, fam = defaultHTTPClient(), familyHTTPClients()
 	}
 	r := &Runner{
 		cfg: cfg, log: cfg.Log, keys: pks, anchor: cfg.Mode == ModeAnchor,
-		api:     &client{base: base, http: hc, ua: "sonar64/" + cfg.Version},
+		api:     &client{base: base, http: hc, fam: fam, ua: "sonar64/" + cfg.Version},
 		tokenID: tokenID(cfg.Token),
 		now:     time.Now, roundLen: RoundInterval, planEvery: 2 * time.Minute, reportEvery: 5 * time.Minute,
 		reportGap: 61 * time.Second, heartbeat: 5 * time.Minute, revokedEvery: time.Hour, retryMin: time.Minute,

@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Sonar64: nodes with IPv4 and IPv6 are measured in both families (also the program without dashboard).
+
 ## 0.12.0-alpha.27 – 2026-10-28
 
 - Sonar64 (new, optional, off by default): community measurement network – opt-in with the ipv64 API key, outbound
