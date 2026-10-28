@@ -2,14 +2,17 @@ package certs
 
 import (
 	"context"
+	"crypto"
+	"crypto/sha256"
 	"crypto/tls"
-	"crypto/x509"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"maps"
 	"net/url"
 	"strings"
 	"time"
@@ -124,6 +127,12 @@ func (m *Manager) uidOf(ctx context.Context, table string, id int64) string {
 		_ = m.r.QueryRowContext(ctx, `SELECT uid FROM `+table+` WHERE id = ?`, id).Scan(&uid)
 	}
 	return uid
+}
+
+func (m *Manager) idOfDirectory(ctx context.Context, dir string) int64 {
+	var id int64
+	_ = m.r.QueryRowContext(ctx, `SELECT id FROM cert_acme_cas WHERE directory = ?`, dir).Scan(&id)
+	return id
 }
 
 func (m *Manager) idOf(ctx context.Context, table, uid string) int64 {
@@ -287,12 +296,6 @@ type clusterACME struct {
 	CreatedAt string `json:"created_at"`
 }
 
-type clusterACMEAccount struct {
-	Email string `json:"email"`
-	TOSAt string `json:"tos_at,omitempty"`
-	Key   string `json:"key"`
-}
-
 type clusterDNS struct {
 	Name      string `json:"name"`
 	Provider  string `json:"provider"`
@@ -390,15 +393,11 @@ func (m *Manager) clusterGetCert(ctx context.Context, uid string) (*clusterCert,
 
 func (m *Manager) clusterGetACME(ctx context.Context, uid string) (any, error) {
 	if uid == clusterAccount {
-		sealed := m.d.Store.SettingOr(ctx, setKey, "")
-		if sealed == "" {
-			return nil, nil
-		}
-		key, err := m.d.Box.Decrypt(sealed)
-		if err != nil {
+		a, _, err := m.ownAccount(ctx)
+		if a == nil || err != nil {
 			return nil, err
 		}
-		return &clusterACMEAccount{Email: m.d.Store.SettingOr(ctx, setEmail, ""), TOSAt: m.d.Store.SettingOr(ctx, setTOS, ""), Key: key}, nil
+		return a, nil
 	}
 	var a clusterACME
 	var sealed string
@@ -446,32 +445,129 @@ func (m *Manager) ClusterApply(ctx context.Context, item, uid string, data json.
 	return ErrClusterItem
 }
 
-// match sucht den Eintrag zur uid, sonst einen gleichen Eintrag (natuerlicher Schluessel, query liefert id, uid)
-// unter anderer uid. Damit beide Seiten dieselbe uid bekommen, gilt die kleinere: ist die fremde kleiner, uebernimmt
-// der Eintrag hier sie (Zertifikate, die darauf verweisen, gehen neu hinaus), sonst bleibt alles und keep ist true
-// (die andere Node uebernimmt unsere uid, sobald sie sie bekommt).
-func (m *Manager) match(ctx context.Context, table, uid, refCol, query string, args ...any) (id int64, keep bool, err error) {
+// match sucht den Eintrag zur uid, sonst einen genau gleichen Eintrag unter anderer uid: query liefert id, uid
+// der Kandidaten, same prueft jeden (nur genau Gleiches wird zusammengefuehrt, Aehnliches mit gleichem Namen bleibt
+// getrennt). Damit beide Seiten dieselbe uid bekommen, gilt die kleinere: ist die fremde kleiner, uebernimmt der
+// Eintrag hier sie (Zertifikate, die darauf verweisen, gehen neu hinaus), sonst bleibt alles und keep ist true mit der
+// id des Eintrags hier (die andere Node uebernimmt unsere uid, sobald sie sie bekommt).
+func (m *Manager) match(ctx context.Context, table, uid, refCol, query string, same func(id int64) bool, args ...any) (id int64, keep bool, err error) {
 	if id = m.idOf(ctx, table, uid); id != 0 || query == "" {
 		return id, false, nil
 	}
-	var local string
-	err = m.r.QueryRowContext(ctx, query, args...).Scan(&id, &local)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, false, nil
-	}
+	rows, err := m.r.QueryContext(ctx, query, args...)
 	if err != nil {
 		return 0, false, err
 	}
+	type cand struct {
+		id  int64
+		uid string
+	}
+	var list []cand
+	for rows.Next() {
+		var c cand
+		if err := rows.Scan(&c.id, &c.uid); err != nil {
+			rows.Close()
+			return 0, false, err
+		}
+		list = append(list, c)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return 0, false, err
+	}
+	var local string
+	for _, c := range list { // mehrere gleiche hier: die kleinste uid (auf allen Nodes dieselbe Wahl)
+		if c.uid != "" && (local == "" || c.uid < local) && same(c.id) {
+			id, local = c.id, c.uid
+		}
+	}
+	if id == 0 {
+		return 0, false, nil
+	}
 	if uid >= local {
-		return 0, true, nil
+		m.addAlias(ctx, table, uid, local)
+		return id, true, nil
 	}
 	if _, err := m.w.ExecContext(ctx, `UPDATE `+table+` SET uid = ? WHERE id = ?`, uid, id); err != nil {
 		return 0, false, err
 	}
+	m.addAlias(ctx, table, local, uid)
 	if refCol != "" {
 		m.refsChanged(ctx, refCol, id)
 	}
 	return id, false, nil
+}
+
+const setAlias = "certs.cluster_alias" // zusammengefuehrte uids je Tabelle: {"tabelle": {"alt": "neu"}}
+
+// addAlias merkt sich eine zusammengefuehrte uid: Verweise anderer Nodes auf die alte (z. B. von einer dritten Node,
+// die noch nicht umgestellt hat) zeigen so auf den verbliebenen Eintrag. Loeschen geht nie ueber einen Alias.
+func (m *Manager) addAlias(ctx context.Context, table, old, cur string) {
+	m.aliasMu.Lock()
+	defer m.aliasMu.Unlock()
+	al := map[string]map[string]string{}
+	_ = json.Unmarshal([]byte(m.d.Store.SettingOr(ctx, setAlias, "{}")), &al)
+	if al[table] == nil {
+		al[table] = map[string]string{}
+	}
+	if al[table][old] == cur {
+		return
+	}
+	al[table][old] = cur
+	if b, err := json.Marshal(al); err == nil {
+		_ = m.d.Store.SetSetting(ctx, setAlias, string(b))
+	}
+}
+
+// refID: lokale ID des Verweisziels, auch ueber eine zusammengefuehrte uid (0 = hier nicht vorhanden).
+func (m *Manager) refID(ctx context.Context, table, uid string) int64 {
+	if id := m.idOf(ctx, table, uid); id != 0 || uid == "" {
+		return id
+	}
+	al := map[string]map[string]string{}
+	_ = json.Unmarshal([]byte(m.d.Store.SettingOr(ctx, setAlias, "{}")), &al)
+	for i := 0; i < 5 && al[table][uid] != ""; i++ { // auch mehrfach zusammengefuehrt
+		uid = al[table][uid]
+		if id := m.idOf(ctx, table, uid); id != 0 {
+			return id
+		}
+	}
+	return 0
+}
+
+// leafFingerprint: SHA-256 des ersten Zertifikats im PEM ("" = keins).
+func leafFingerprint(certPEM string) string {
+	rest := []byte(certPEM)
+	for {
+		var b *pem.Block
+		if b, rest = pem.Decode(rest); b == nil {
+			return ""
+		}
+		if b.Type == "CERTIFICATE" {
+			sum := sha256.Sum256(b.Bytes)
+			return hex.EncodeToString(sum[:])
+		}
+	}
+}
+
+// sameCertKey: der Eintrag (certs oder cert_cas) hat dasselbe Zertifikat (Fingerabdruck) und denselben privaten
+// Schluessel.
+func (m *Manager) sameCertKey(ctx context.Context, table string, id int64, fp string, key crypto.PrivateKey) bool {
+	var certPEM, sealed string
+	if m.r.QueryRowContext(ctx, `SELECT cert_pem, key_pem FROM `+table+` WHERE id = ?`, id).Scan(&certPEM, &sealed) != nil || sealed == "" || fp == "" || leafFingerprint(certPEM) != fp {
+		return false
+	}
+	raw, err := m.d.Box.Decrypt(sealed)
+	if err != nil {
+		return false
+	}
+	pair, err := tls.X509KeyPair([]byte(certPEM), []byte(raw))
+	if err != nil {
+		return false
+	}
+	k, ok := pair.PrivateKey.(interface{ Equal(crypto.PrivateKey) bool })
+	return ok && k.Equal(key)
 }
 
 // refsChanged meldet die Zertifikate, die auf einen Eintrag verweisen (dessen uid sich geaendert hat).
@@ -510,17 +606,20 @@ func (m *Manager) clusterApplyCert(ctx context.Context, uid string, data json.Ra
 		return invalid("names", "1 to %d names", maxNames)
 	}
 	var fp string
+	var key crypto.PrivateKey
 	if in.CertPEM != "" {
-		if _, err := tls.X509KeyPair([]byte(in.CertPEM), []byte(in.KeyPEM)); err != nil {
+		pair, err := tls.X509KeyPair([]byte(in.CertPEM), []byte(in.KeyPEM))
+		if err != nil {
 			return invalid("cert", "certificate and key do not fit: %v", err)
 		}
-		fp = in.CertPEM
+		fp, key = leafFingerprint(in.CertPEM), pair.PrivateKey
 	}
 	query := ""
-	if fp != "" {
-		query = `SELECT id, uid FROM certs WHERE cert_pem = ?`
+	if fp != "" { // gleich = dasselbe Zertifikat mit demselben Schluessel (nicht nur dieselben Namen)
+		query = `SELECT id, uid FROM certs WHERE cert_pem != ''`
 	}
-	id, keep, err := m.match(ctx, "certs", uid, "", query, fp)
+	owned := m.ownedIDs(ctx)
+	id, keep, err := m.match(ctx, "certs", uid, "", query, func(id int64) bool { return !owned[id] && m.sameCertKey(ctx, "certs", id, fp, key) })
 	if err != nil || keep {
 		return err
 	}
@@ -533,7 +632,7 @@ func (m *Manager) clusterApplyCert(ctx context.Context, uid string, data json.Ra
 	} else if renewer == "" {
 		renewer = "unknown"
 	}
-	dns, ca, acmeCA := m.idOf(ctx, "cert_dns_accounts", in.DNSAccount), m.idOf(ctx, "cert_cas", in.CA), m.idOf(ctx, "cert_acme_cas", in.ACMECA)
+	dns, ca, acmeCA := m.refID(ctx, "cert_dns_accounts", in.DNSAccount), m.refID(ctx, "cert_cas", in.CA), m.refID(ctx, "cert_acme_cas", in.ACMECA)
 	sealed := ""
 	if in.KeyPEM != "" {
 		sealed = m.d.Box.Encrypt(in.KeyPEM)
@@ -627,36 +726,6 @@ func (m *Manager) resolveRefs(ctx context.Context, col, refCol, uid string, id i
 	return err
 }
 
-func (m *Manager) clusterApplyAccount(ctx context.Context, data json.RawMessage) error {
-	var in clusterACMEAccount
-	if err := json.Unmarshal(data, &in); err != nil {
-		return invalid("data", "%v", err)
-	}
-	b, _ := pem.Decode([]byte(in.Key))
-	if b == nil {
-		return invalid("key", "account key unreadable")
-	}
-	if _, err := x509.ParseECPrivateKey(b.Bytes); err != nil {
-		return invalid("key", "account key unreadable")
-	}
-	if err := m.d.Store.SetSetting(ctx, setKey, m.d.Box.Encrypt(in.Key)); err != nil {
-		return err
-	}
-	if err := m.d.Store.SetSetting(ctx, setEmail, strings.TrimSpace(in.Email)); err != nil {
-		return err
-	}
-	if in.TOSAt != "" && m.d.Store.SettingOr(ctx, setTOS, "") == "" {
-		if err := m.d.Store.SetSetting(ctx, setTOS, in.TOSAt); err != nil {
-			return err
-		}
-	}
-	m.mu.Lock()
-	m.reg = map[string]bool{} // anderes Konto: beim naechsten Abruf anmelden
-	m.mu.Unlock()
-	m.changedUID(ctx, ItemACME, clusterAccount, false)
-	return nil
-}
-
 func (m *Manager) clusterApplyACME(ctx context.Context, uid string, data json.RawMessage) error {
 	var in clusterACME
 	if err := json.Unmarshal(data, &in); err != nil {
@@ -666,9 +735,30 @@ func (m *Manager) clusterApplyACME(ctx context.Context, uid string, data json.Ra
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || strings.TrimSpace(in.Name) == "" {
 		return invalid("directory", "invalid")
 	}
-	id, keep, err := m.match(ctx, "cert_acme_cas", uid, "acme_ca", `SELECT id, uid FROM cert_acme_cas WHERE directory = ?`, in.Directory)
-	if err != nil || keep {
+	// gleich = dasselbe Verzeichnis mit demselben EAB (oder beide ohne)
+	id, keep, err := m.match(ctx, "cert_acme_cas", uid, "acme_ca", `SELECT id, uid FROM cert_acme_cas WHERE directory = ?`, func(id int64) bool {
+		var kid, sealed, hmac string
+		if m.r.QueryRowContext(ctx, `SELECT eab_kid, eab_hmac FROM cert_acme_cas WHERE id = ?`, id).Scan(&kid, &sealed) != nil || kid != in.EABKID {
+			return false
+		}
+		if sealed != "" {
+			var err error
+			if hmac, err = m.d.Box.Decrypt(sealed); err != nil {
+				return false
+			}
+		}
+		return hmac == in.EABHMAC
+	}, in.Directory)
+	if err != nil {
 		return err
+	}
+	if keep {
+		return m.resolveRefs(ctx, "acme_ca", "ref_acme_ca", uid, id)
+	}
+	if id == 0 && m.idOfDirectory(ctx, in.Directory) != 0 {
+		// dasselbe Verzeichnis mit anderem EAB: nicht zusammenfuehren (das Verzeichnis gibt es je Node nur einmal),
+		// Zertifikate mit dieser Stelle erneuert hier keiner
+		return invalid("directory", "this CA exists here with a different EAB, not merged")
 	}
 	sealed := ""
 	if in.EABHMAC != "" {
@@ -718,9 +808,26 @@ func (m *Manager) clusterApplyDNS(ctx context.Context, uid string, data json.Raw
 			return invalid("config", "%v", err)
 		}
 	}
-	id, keep, err := m.match(ctx, "cert_dns_accounts", uid, "dns_account", `SELECT id, uid FROM cert_dns_accounts WHERE name = ? AND provider = ?`, in.Name, in.Provider)
-	if err != nil || keep {
+	// gleich = derselbe Anbieter mit denselben Zugangsdaten (der Name zaehlt nicht)
+	id, keep, err := m.match(ctx, "cert_dns_accounts", uid, "dns_account", `SELECT id, uid FROM cert_dns_accounts WHERE provider = ?`, func(id int64) bool {
+		var sealed string
+		if m.r.QueryRowContext(ctx, `SELECT config FROM cert_dns_accounts WHERE id = ?`, id).Scan(&sealed) != nil {
+			return false
+		}
+		var local map[string]string
+		if sealed != "" {
+			raw, err := m.d.Box.Decrypt(sealed)
+			if err != nil || json.Unmarshal([]byte(raw), &local) != nil {
+				return false
+			}
+		}
+		return maps.Equal(local, vals)
+	}, in.Provider)
+	if err != nil {
 		return err
+	}
+	if keep {
+		return m.resolveRefs(ctx, "dns_account", "ref_dns_account", uid, id)
 	}
 	sealed := ""
 	if in.Config != "" {
@@ -758,12 +865,18 @@ func (m *Manager) clusterApplyCA(ctx context.Context, uid string, data json.RawM
 	if strings.TrimSpace(in.Name) == "" {
 		return invalid("name", "required")
 	}
-	if _, err := tls.X509KeyPair([]byte(in.CertPEM), []byte(in.KeyPEM)); err != nil {
+	pair, err := tls.X509KeyPair([]byte(in.CertPEM), []byte(in.KeyPEM))
+	if err != nil {
 		return invalid("cert", "CA certificate and key do not fit: %v", err)
 	}
-	id, keep, err := m.match(ctx, "cert_cas", uid, "ca_id", `SELECT id, uid FROM cert_cas WHERE cert_pem = ?`, in.CertPEM)
-	if err != nil || keep {
+	// gleich = dasselbe CA-Zertifikat mit demselben Schluessel
+	fp := leafFingerprint(in.CertPEM)
+	id, keep, err := m.match(ctx, "cert_cas", uid, "ca_id", `SELECT id, uid FROM cert_cas`, func(id int64) bool { return m.sameCertKey(ctx, "cert_cas", id, fp, pair.PrivateKey) })
+	if err != nil {
 		return err
+	}
+	if keep {
+		return m.resolveRefs(ctx, "ca_id", "ref_ca", uid, id)
 	}
 	if in.CreatedAt == "" {
 		in.CreatedAt = store.Now()

@@ -6,6 +6,9 @@ Short summary of what changes per version. Details per module are in the node un
 
 - Healthchecks: Proxmox VE and Docker checks show a real latency (ping to node, guest or container, otherwise the API
   response time) instead of 0 ms.
+- Certificates/cluster: identical entries (certificate with key, ACME CA with EAB, DNS account, CA) are merged once
+  when joining, merely similar ones stay separate; different ACME accounts are no longer overwritten but offered for
+  choice on the cluster page.
 
 ## 0.12.0-alpha.29 – 2026-10-28
 

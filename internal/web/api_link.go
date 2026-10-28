@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/certs"
 	"github.com/ipv64net/node64/internal/healthchecks"
 	"github.com/ipv64net/node64/internal/ipv64api"
 	"github.com/ipv64net/node64/internal/logging"
@@ -42,6 +43,7 @@ func (s *Server) apiLinkRoutes() {
 	s.mux.Handle("DELETE /api/group/members/{id}", s.auth(s.apiGroupMemberRemove))
 	s.mux.Handle("POST /api/group/members/{id}/resume", s.auth(s.apiGroupMemberResume))
 	s.mux.Handle("PUT /api/group/sync", s.auth(s.apiGroupSync))
+	s.mux.Handle("POST /api/group/acme", s.auth(s.apiGroupACME))
 	s.mux.Handle("GET /api/logging", s.auth(s.apiLoggingGet))
 	s.mux.Handle("PUT /api/logging", s.auth(s.apiLoggingPut))
 	s.mux.Handle("GET /api/retention", s.auth(s.apiRetentionGet))
@@ -290,7 +292,7 @@ func (s *Server) apiGroupGet(w http.ResponseWriter, r *http.Request) {
 	}
 	_, fwd, fwdSelf := s.Peer.Forwarder(ctx)
 	out := map[string]any{"account_id": s.Peer.Account(), "linked": s.Peer.LinkedSelf(), "members": members, "forwarder": fwd, "forwarder_self": fwdSelf,
-		"sync_modules": s.Peer.SyncModules(ctx), "https_port": s.Cfg.HTTPSPort}
+		"sync_modules": s.Peer.SyncModules(ctx), "https_port": s.Cfg.HTTPSPort, "acme_accounts": acmeAPI(s.acmeChoices(ctx, list))}
 	if code, exp := s.Peer.PairingCode(); code != "" {
 		out["code"], out["code_expires"] = code, exp
 	}
@@ -477,6 +479,49 @@ func (s *Server) apiGroupSync(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "peer.sync", syncTarget(in.Module, in.Item), "enabled="+strconv.FormatBool(*in.Enabled))
 	writeJSON(w, 200, map[string]any{"sync_modules": s.Peer.SyncModules(r.Context())})
+}
+
+// acmeAPI: verschiedene ACME-Konten im Cluster fuer die API (leer = keine Abweichung).
+func acmeAPI(list []acmeRow) []map[string]any {
+	out := make([]map[string]any, 0, len(list))
+	for _, c := range list {
+		out = append(out, map[string]any{"thumbprint": c.Thumbprint, "node_id": c.Node, "node_name": c.Name, "email": c.Email, "ca": c.CA,
+			"created_at": c.CreatedAt, "own": c.Own})
+	}
+	return out
+}
+
+// apiGroupACME waehlt bei verschiedenen ACME-Konten im Cluster eines fuer alle (Fingerabdruck aus acme_accounts).
+func (s *Server) apiGroupACME(w http.ResponseWriter, r *http.Request) {
+	if s.Peer == nil || s.Certs == nil {
+		writeErr(w, http.StatusServiceUnavailable, "not available")
+		return
+	}
+	var in struct {
+		Thumbprint string `json:"thumbprint"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if in.Thumbprint == "" {
+		writeErr(w, http.StatusUnprocessableEntity, "thumbprint is required")
+		return
+	}
+	dropped, err := s.chooseACME(r, in.Thumbprint)
+	if errors.Is(err, certs.ErrAccountChoice) {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if err != nil {
+		s.log.Error("cluster acme choice", "err", err)
+		writeErr(w, 500, "database error")
+		return
+	}
+	out := make([]map[string]any, 0, len(dropped))
+	for _, d := range dropped {
+		out = append(out, map[string]any{"thumbprint": d.Thumbprint, "node_id": d.Node, "email": d.Email})
+	}
+	writeJSON(w, 200, map[string]any{"chosen": in.Thumbprint, "dropped": out})
 }
 
 // ---------------------------------------------------------------- Log-Level und Datenhaltung
