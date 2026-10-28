@@ -1162,6 +1162,7 @@
       "k_v4": "via IPv4: {n}",
       "chart": "Blocked per day by reason",
       "chart_empty": "Nothing was blocked in this period.",
+      "nodata": "No protection figures in this period yet. Counting happens on the CDN64 servers (srv07/srv08); the figures appear as soon as something is blocked there for your names – blocklists, access list, overload, WAF or known attack tools.",
       "r_list": "Blocklists",
       "r_acl": "Access list",
       "r_overload": "Overload",

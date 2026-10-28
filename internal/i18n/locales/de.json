@@ -1162,6 +1162,7 @@
       "k_v4": "davon über IPv4: {n}",
       "chart": "Abgewehrt je Tag nach Grund",
       "chart_empty": "In diesem Zeitraum wurde nichts abgewehrt.",
+      "nodata": "Noch keine Schutz-Zahlen in diesem Zeitraum. Gezählt wird auf den CDN64-Servern (srv07/srv08); die Zahlen erscheinen, sobald dort für deine Namen etwas abgewehrt wird – Blocklisten, Zugriffsliste, Überlast, WAF oder bekannte Angriffs-Werkzeuge.",
       "r_list": "Blocklisten",
       "r_acl": "Zugriffsliste",
       "r_overload": "Überlast",

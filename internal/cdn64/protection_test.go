@@ -108,6 +108,15 @@ func TestProtection(t *testing.T) {
 	if strings.Contains(body, "cdn64.protection.mode_1") {
 		t.Fatal("sentence for mode 1 without names in mode 1")
 	}
+	if strings.Contains(body, "data-prot-nodata") {
+		t.Fatal("no-data hint although something was blocked")
+	}
+	// ohne Zahlen (z. B. Server noch ohne Schutz-Zaehler): Hinweis statt leerer Seite
+	empty := d
+	empty.P, empty.Blocked = &ipv64api.CDN64Protection{}, 0
+	if eb := renderPage(t, "protection.html", empty); !strings.Contains(eb, "data-prot-nodata") || !strings.Contains(eb, "cdn64.protection.nodata") {
+		t.Fatal("page without figures misses the no-data hint")
+	}
 
 	// Liste der Proxy-Hosts: Schalter mit dem Stand von ipv64
 	rows, _ := e.m.rowsOf(ctx, KindProxy)
