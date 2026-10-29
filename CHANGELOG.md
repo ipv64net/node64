@@ -10,6 +10,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - PROXY64: Bandbreite je Proxy-Host, „TLS durchreichen“ und Stream – Download und Upload in Mbit/s begrenzen (Standard unbegrenzt),
   darüber wird gebremst statt getrennt.
 - PROXY64: Streams in einer Tabelle – Namen nur für Streams mit CDN64-Stand und ihren Ports zusammen.
+- Zertifikate: Domain und Wildcard über DuckDNS, Hurricane Electric oder RFC2136 klappen wieder (diese Anbieter
+  halten nur einen TXT-Wert und werden wieder nacheinander geprüft). Die DNS-01-Prüfung verlangt auch über
+  öffentliche Resolver mehrere stabile Runden, und ein Wert, der kurz vor der Frist stabil wird, gilt noch.
 
 ## 0.12.0-alpha.31 – 2026-10-29
 

@@ -219,10 +219,30 @@ func (m *Manager) obtain(ctx context.Context, c *Cert) error {
 		return fmt.Errorf("order: %w", err)
 	}
 	// erst alle Pruefungen vorbereiten (TXT bzw. Token), dann pruefen lassen: Domain und *.Domain teilen sich den
-	// TXT-Namen; nacheinander saehe Let's Encrypt beim zweiten noch den ersten Wert im Cache („Incorrect TXT record“)
+	// TXT-Namen; nacheinander saehe Let's Encrypt beim zweiten noch den ersten Wert im Cache („Incorrect TXT record“).
+	// Ausnahme: lego-Anbieter mit nur einem TXT-Wert je Name (Sequential: duckdns, hurricane, rfc2136) – dort
+	// ueberschriebe das zweite Setzen das erste; sie laufen wie bei lego nacheinander mit der Pause des Anbieters.
 	type pending struct {
 		name, uri string
 		chal      *acme.Challenge
+	}
+	validate := func(p pending) error {
+		m.step(c.ID, "validate")
+		if _, err := cl.Accept(ctx, p.chal); err != nil {
+			return fmt.Errorf("%s: accept: %w", p.name, err)
+		}
+		if _, err := cl.WaitAuthorization(ctx, p.uri); err != nil {
+			return fmt.Errorf("%s: validation: %w", p.name, err)
+		}
+		return nil
+	}
+	seq, seqWait := false, time.Duration(0)
+	if c.Source == SourceDNS {
+		if prov, err := m.dnsProvider(ctx, c.DNSAccount); err == nil {
+			if s, ok := prov.(interface{ Sequential() time.Duration }); ok {
+				seq, seqWait = true, s.Sequential()
+			}
+		}
 	}
 	var todo []pending
 	var cleanups []func()
@@ -231,6 +251,7 @@ func (m *Manager) obtain(ctx context.Context, c *Cert) error {
 			f()
 		}
 	}()
+	solved := 0
 	for _, u := range order.AuthzURLs {
 		z, err := cl.GetAuthorization(ctx, u)
 		if err != nil {
@@ -239,20 +260,32 @@ func (m *Manager) obtain(ctx context.Context, c *Cert) error {
 		if z.Status == acme.StatusValid {
 			continue
 		}
+		if seq && solved > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(seqWait):
+			}
+		}
 		name, chal, cleanup, err := m.present(ctx, cl, c, z)
 		if err != nil {
 			return err
+		}
+		if seq {
+			err := validate(pending{name, z.URI, chal})
+			cleanup()
+			if err != nil {
+				return err
+			}
+			solved++
+			continue
 		}
 		cleanups = append(cleanups, cleanup)
 		todo = append(todo, pending{name, z.URI, chal})
 	}
 	for _, p := range todo {
-		m.step(c.ID, "validate")
-		if _, err := cl.Accept(ctx, p.chal); err != nil {
-			return fmt.Errorf("%s: accept: %w", p.name, err)
-		}
-		if _, err := cl.WaitAuthorization(ctx, p.uri); err != nil {
-			return fmt.Errorf("%s: validation: %w", p.name, err)
+		if err := validate(p); err != nil {
+			return err
 		}
 	}
 	m.step(c.ID, "certificate")
