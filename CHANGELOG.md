@@ -7,6 +7,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Cluster: Ein abgelehnter Eintrag (z. B. Statusseite mit gleichem Slug, Benutzer zur Wahl) wird alle 5 Minuten
   erneut versucht und kommt an, sobald der Konflikt auf einer Seite gelöst ist – vorher erst, wenn er sich drüben
   wieder änderte.
+- Healthchecks: Proxmox VE und Docker – „Gestoppt ist richtig“ an einem gestoppten bzw. beendeten Gast, der als
+  Störung gilt: ein Klick, und der Zustand ist in Ordnung (ohne Entwarnung). Ein Backup, das einen gestoppten Gast
+  kurz startet, macht ihn nicht mehr zum „soll laufen“ (vorher Fehlalarm „gestoppt“ nach dem Backup).
 
 ## 0.12.0-alpha.30 – 2026-10-28
 

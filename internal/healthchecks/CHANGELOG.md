@@ -1,5 +1,20 @@
 # Änderungen – Healthchecks
 
+## 2.42.0 – 2026-10-29
+
+### Neu
+- Proxmox VE und Docker: „Gestoppt ist richtig“ – an einem Gast bzw. Container, der als gestört gilt, weil er
+  gestoppt bzw. beendet ist (Zeile der Systemseite und Seite des Gasts). Setzt „Gestoppt ist eine Störung“ auf nein:
+  sofort in Ordnung, eine gemeldete Störung erledigt sich still (keine Entwarnung), die letzte Störung auf der
+  Startseite verschwindet, wenn es dieser Gast war. Zurücknehmen in den Einstellungen des Gasts. Audit `proxmox.ack`;
+  API über die Einstellungen (`expect_running: false`). Das gilt auch, wenn die Einstellung von Hand bzw. per API auf
+  nein gesetzt wird.
+
+### Behoben
+- Proxmox VE: Ein Backup, das einen gestoppten Gast kurz startet (Lock `backup`), machte ihn zum „lief schon
+  einmal“ – danach meldete Node64 „gestoppt“, obwohl sich nichts geändert hatte. Laufen mit Lock und die Abfrage direkt
+  nach einem Lock zählen nicht mehr als Lauf (Messwerte werden weiter aufgezeichnet).
+
 ## 2.41.0 – 2026-10-28
 
 ### Neu

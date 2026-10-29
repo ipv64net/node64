@@ -1867,6 +1867,7 @@
       "proxmox_probe": "Proxmox connection tested",
       "proxmox_settings": "Proxmox rules changed",
       "proxmox_settings_reset": "Proxmox rules reset",
+      "proxmox_ack": "Proxmox/Docker: stopped is correct",
       "mcp_call": "MCP tool called",
       "mcp_settings": "MCP interface switched",
       "mcp_key_create": "MCP key created",
@@ -4560,6 +4561,7 @@
     }
   },
   "pve": {
+    "ack": {"btn": "Stopped is correct", "title": "The guest should not run – the state is fine (undo in the settings: “Stopped is a problem: automatic”)", "confirm": "Is stopped the correct state? The guest then counts as “should not run” and the problem clears without an all-clear message. Undo in the guest settings (“Stopped is a problem: automatic”).", "done": "Noted: stopped is correct. Undo in the guest settings (“Stopped is a problem: automatic”).", "hint": "Problem because stopped – the guest has run before or should run. If stopped is the correct state, confirm here.", "active_hint": "Stopped is the correct state here (“Stopped is a problem: no”) – no problem. Undo in the settings below (“Stopped is a problem: automatic”).", "off_title": "Should not run (stopped is correct)"},
     "ev": {
       "down": {
         "crashed": "{type} “{name}” crashed ({detail}).",
@@ -4891,6 +4893,7 @@
     "removed_settings": "Go to the API key"
   },
   "docker": {
+    "ack": {"hint": "Problem because exited – the container has run before or should run. If exited is the correct state, confirm here."},
     "page_hint": "All containers of this host are monitored through the Docker socket like Proxmox guests: state, CPU, RAM, network and disk I/O with history, rules and channels. “Keep as check” additionally creates a Healthchecks check (status pages, sync, uptime). The label node64.nomonitor=true excludes a container.",
     "setup_hint": "The Docker socket is reachable, but the host is not monitored yet.",
     "off_hint": "Docker monitoring was removed and is no longer set up automatically.",

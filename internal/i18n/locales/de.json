@@ -1867,6 +1867,7 @@
       "proxmox_probe": "Proxmox-Verbindung getestet",
       "proxmox_settings": "Proxmox-Regeln geändert",
       "proxmox_settings_reset": "Proxmox-Regeln zurückgesetzt",
+      "proxmox_ack": "Proxmox/Docker: gestoppt ist richtig",
       "mcp_call": "MCP-Werkzeug aufgerufen",
       "mcp_settings": "MCP-Schnittstelle geschaltet",
       "mcp_key_create": "MCP-Schlüssel angelegt",
@@ -4560,6 +4561,7 @@
     }
   },
   "pve": {
+    "ack": {"btn": "Gestoppt ist richtig", "title": "Der Gast soll nicht laufen – Zustand ist in Ordnung (zurücknehmen in den Einstellungen: „Gestoppt ist eine Störung: automatisch“)", "confirm": "Gestoppt ist der richtige Zustand? Der Gast gilt dann als „soll nicht laufen“, die Störung erledigt sich ohne Entwarnung. Zurücknehmen in den Einstellungen des Gasts („Gestoppt ist eine Störung: automatisch“).", "done": "Gemerkt: gestoppt ist richtig. Zurücknehmen in den Einstellungen des Gasts („Gestoppt ist eine Störung: automatisch“).", "hint": "Gestört, weil gestoppt – der Gast lief schon einmal bzw. soll laufen. Ist gestoppt der richtige Zustand, hier bestätigen.", "active_hint": "Gestoppt ist hier der richtige Zustand („Gestoppt ist eine Störung: nein“) – keine Störung. Zurücknehmen in den Einstellungen unten („Gestoppt ist eine Störung: automatisch“).", "off_title": "Soll nicht laufen (gestoppt ist richtig)"},
     "ev": {
       "down": {
         "crashed": "{type} „{name}“ ist abgestürzt ({detail}).",
@@ -4891,6 +4893,7 @@
     "removed_settings": "Zum API-Key"
   },
   "docker": {
+    "ack": {"hint": "Gestört, weil beendet – der Container lief schon einmal bzw. soll laufen. Ist beendet der richtige Zustand, hier bestätigen."},
     "page_hint": "Alle Container dieses Hosts werden über den Docker-Socket überwacht wie Proxmox-Gäste: Zustand, CPU, RAM, Netz und Disk-I/O mit Verlauf, Regeln und Kanälen. „Als Check führen“ legt zusätzlich einen Healthchecks-Check an (Statusseiten, Sync, Uptime). Label node64.nomonitor=true schließt einen Container aus.",
     "setup_hint": "Docker-Socket erreichbar, der Host wird aber noch nicht überwacht.",
     "off_hint": "Die Docker-Überwachung wurde entfernt und wird nicht mehr automatisch eingerichtet.",

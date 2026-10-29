@@ -52,16 +52,19 @@ func (s *Store) SetRetention(rawDays, hourlyDays int) {
 	s.mu.Unlock()
 }
 
-// pveGuestRan sagt, ob ein Gast gestartet ist (laeuft, angehalten, abgestuerzt, mit Lock laufend).
+// pveGuestRan sagt, ob ein Gast von sich aus laeuft (laeuft, angehalten, abgestuerzt) – dann gilt er als „lief schon
+// einmal“ (ExpectRunning automatisch). Mit Lock bzw. direkt nach einem Lock nicht: Proxmox startet einen gestoppten
+// Gast fuers Backup kurz (lock=backup), danach waere er sonst „gestoppt, obwohl erwartet“.
 func pveGuestRan(r *Resource) bool {
 	if r.Type == TypeDocker { // beendet mit Fehler ist kein Lauf (alte Container wuerden sonst sofort erwartet)
 		return r.Status == "running" || r.Status == "paused" || r.Status == "restarting"
 	}
+	if r.AfterLock {
+		return false
+	}
 	switch r.State {
 	case StateRunning, StatePaused, StateSuspended, StateError:
 		return true
-	case StateBackup, StateLocked: // Lock auch bei gestoppten Gaesten (Backup im Stopp-Modus, Offline-Migration)
-		return r.Status != "stopped"
 	}
 	return false
 }
@@ -77,7 +80,13 @@ func pveRecordable(r *Resource) bool {
 	if r.Type == TypeDocker {
 		return r.Status == "running" // Werte (stats) nur von laufenden Containern
 	}
-	return pveGuestRan(r)
+	switch r.State {
+	case StateRunning, StatePaused, StateSuspended, StateError:
+		return true
+	case StateBackup, StateLocked: // Lock auch bei gestoppten Gaesten (Backup im Stopp-Modus, Offline-Migration)
+		return r.Status != "stopped"
+	}
+	return false
 }
 
 func pveRatio(v, max int64) int64 {
@@ -158,7 +167,7 @@ func (s *Store) Record(ctx context.Context, snap *Snapshot) error {
 			pveRateInt(r.NetIn), pveRateInt(r.NetOut), pveRateInt(r.DiskRead), pveRateInt(r.DiskWrite)); err != nil {
 			return err
 		}
-		if r.Type != TypeNode && !seen[key] {
+		if r.Type != TypeNode && !seen[key] && pveGuestRan(r) {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO pve_settings (system_id, key, seen_running, updated_at) VALUES (?,?,1,?)
 				ON CONFLICT(system_id, key) DO UPDATE SET seen_running = 1`, snap.SystemID, key, store.Now()); err != nil {
 				return err

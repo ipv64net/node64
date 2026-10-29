@@ -89,7 +89,7 @@ Wert gilt und woher es kommt („Standard“, „vom System geerbt“, „vom No
 | Regel | Standard | Bedeutung |
 |---|---|---|
 | Absturz | an | qmpstatus internal-error/guest-panicked/io-error – sofort, ohne Verzögerung |
-| Gestoppt | an | nur wenn „erwartet läuft“: automatisch, sobald der Gast einmal lief; je Gast fest einstellbar |
+| Gestoppt | an | nur wenn „erwartet läuft“: automatisch, sobald der Gast einmal von sich aus lief (nicht mit Lock bzw. in der Abfrage direkt danach – ein Backup startet gestoppte Gäste kurz); je Gast fest einstellbar |
 | Angehalten / Suspendiert | an | qmpstatus paused bzw. Lock/qmpstatus suspended |
 | Node offline | an | Node laut cluster/status offline; seine Gäste melden dann nichts einzeln |
 | System nicht erreichbar | an | API antwortet nicht (alle Adressen) |
@@ -120,6 +120,16 @@ eigenen Arten:
 
 Gemeldete Störungen überstehen einen Neustart der Node: Nach dem Start kommt keine zweite Meldung, nur die
 Entwarnung, sobald es wieder passt.
+
+**„Gestoppt ist richtig“:** Ist ein Gast (bzw. Docker-Container) gestört, weil er gestoppt bzw. beendet ist, bietet
+die Zeile auf der Systemseite und die Seite des Gasts den Knopf „Gestoppt ist richtig“. Er setzt beim Gast „Gestoppt
+ist eine Störung“ auf **nein** (`expect_running: false`): Die Zeile ist sofort in Ordnung, eine gemeldete Störung
+erledigt sich mit der nächsten Abfrage **still** (keine Entwarnung, es war keine Störung), die letzte Störung auf der
+Startseite verschwindet, wenn es dieser Gast war. Läuft der Gast später wieder, ist das normal grün. Zurücknehmen in
+den Einstellungen des Gasts („Gestoppt ist eine Störung: automatisch“). Audit `proxmox.ack`. Gilt je Node (die
+Einstellungen der Gäste gehen nicht über den Cluster). Nicht bei Gästen „als Check“ – deren Check misst den Zustand
+selbst. API: `PUT /api/healthchecks/proxmox/systems/{id}/settings?key=qemu/103` mit `{"expect_running": false}`
+(`null` = wieder automatisch).
 
 ## Als Check führen
 
@@ -161,7 +171,7 @@ Unter `/api/healthchecks/proxmox` (Anmeldung wie die übrige API, siehe `/api/do
 | POST | `/probe` | Verbindung testen (Fingerabdruck, Version, Nodes, Gäste) |
 | GET | `/systems/{id}/resources` | Nodes und Gäste der letzten Abfrage |
 | GET | `/systems/{id}/series?key=qemu/101&range=24h` | Verlauf (`1h`, `24h`, `7d`, `30d`) |
-| GET / PUT / DELETE | `/systems/{id}/settings[?key=…]` | Einstellungen und wirksame Regeln / Ebene setzen (`as_check` legt den Check an; `rules.channels`: fehlt = erben, `[]` = Standardkanäle, sonst Kanal-IDs) / zurücksetzen |
+| GET / PUT / DELETE | `/systems/{id}/settings[?key=…]` | Einstellungen und wirksame Regeln / Ebene setzen (`as_check` legt den Check an; `rules.channels`: fehlt = erben, `[]` = Standardkanäle, sonst Kanal-IDs; Gast: `expect_running` `true`/`false`/`null`, `false` = „gestoppt ist richtig“) / zurücksetzen |
 
 ## Prometheus
 

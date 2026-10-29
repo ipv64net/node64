@@ -94,6 +94,9 @@ type Resource struct {
 	DiskWrite float64 `json:"disk_write"`
 
 	Restarted bool `json:"restarted,omitempty"` // uptime ist zurueckgesprungen, obwohl weiter laufend
+	// AfterLock: die vorige Abfrage hatte einen Lock (Backup, Migration …) – ein jetzt laufender Gast kann noch der
+	// fuers Backup gestartete sein und zaehlt noch nicht als „lief schon einmal“.
+	AfterLock bool `json:"-"`
 
 	// IP fuer den Ping der Latenz (Check-Typ proxmox): Node aus cluster/status, laufender Gast ueber den Gast-Agent
 	// bzw. die LXC-Schnittstellen (nur Gaeste mit Check, siehe Poller.WantIP); leer = keine bekannt.

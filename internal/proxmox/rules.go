@@ -133,8 +133,9 @@ func pveMetrics(r *Resource) (v [3]float64, ok [3]bool) {
 //   - System nicht erreichbar (snap.OK = false) nach Verzoegerung → down/unreachable, wieder erreichbar → up.
 //   - Node offline → down/offline; seine Gaeste melden nichts einzeln (Zustand unbekannt, Stand bleibt erhalten).
 //   - Gast abgestuerzt (StateError) → down/crashed sofort; angehalten/suspendiert/gestoppt nach Verzoegerung.
-//     Gestoppt nur, wenn erwartet (ExpectRunning bzw. automatisch: lief schon einmal); eine Abfrage direkt nach
-//     einem Lock zaehlt nicht (Backup im Stopp-Modus, Migration). Lock ohne Stopp ist kein Ausfall.
+//     Gestoppt nur, wenn erwartet (ExpectRunning bzw. automatisch: lief schon einmal, ohne Lock); eine Abfrage direkt
+//     nach einem Lock zaehlt nicht (Backup im Stopp-Modus, Migration). Lock ohne Stopp ist kein Ausfall. Wird
+//     ExpectRunning auf aus gesetzt („gestoppt ist richtig“), erledigt sich eine offene Stoerung still (ohne Entwarnung).
 //   - Neustart (Resource.Restarted) → restarted.
 //   - Schwellen CPU/RAM/Disk: mindestens Delay Abfragen und Minutes Minuten ueber der Grenze → threshold,
 //     Delay Abfragen darunter → threshold_ok.
@@ -239,6 +240,7 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 
 		// Zustand: bad = Stoerung, good = in Ordnung, sonst neutral (zaehlt nicht, keine Entwarnung)
 		what, bad, good := "", false, false
+		quiet := false // gestoppt bzw. beendet und soll fest nicht laufen: offene Stoerung still erledigen
 		delay := max(rule.Delay, 1)
 		if !guest {
 			switch r.State {
@@ -251,6 +253,7 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 			expect := rs.ran || (it != nil && it.SeenRunning)
 			if it != nil && it.ExpectRunning != nil {
 				expect = *it.ExpectRunning
+				quiet = !expect && (r.State == StateStopped || r.Type == TypeDocker && r.DockerDown())
 			}
 			switch r.State {
 			case StateRunning:
@@ -310,7 +313,9 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 			}
 			rs.bad, rs.down, rs.notified, rs.what = 0, false, false, ""
 		default:
-			if !rs.down {
+			if quiet { // „gestoppt ist richtig“ (ExpectRunning aus): ohne Entwarnung, es war keine Stoerung
+				rs.bad, rs.down, rs.notified, rs.what = 0, false, false, ""
+			} else if !rs.down {
 				rs.bad = 0
 			}
 		}

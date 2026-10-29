@@ -6,6 +6,9 @@ Short summary of what changes per version. Details per module are in the node un
 
 - Cluster: a rejected entry (e.g. status page with the same slug, user to choose) is retried every 5 minutes and
   arrives once the conflict is resolved on one side – before, only after it changed again on the other node.
+- Healthchecks: Proxmox VE and Docker – "Stopped is correct" on a stopped or exited guest shown as a problem: one
+  click and the state is fine (no all-clear message). A backup that briefly starts a stopped guest no longer makes it
+  "should run" (previously a false "stopped" alert after the backup).
 
 ## 0.12.0-alpha.30 – 2026-10-28
 
