@@ -3,6 +3,9 @@
 ## 2.42.0 – 2026-10-29
 
 ### New
+- Cluster: a node that is not linked can create, edit and move online and hybrid checks when a linked node of the
+  cluster is reachable (it forwards the change to ipv64). Before, it refused ("need the ipv64 link"), even for
+  renaming an online check.
 - Proxmox VE and Docker: "Stopped is correct" – on a guest or container shown as a problem because it is stopped or
   exited (row on the system page and the guest page). Sets "Stopped is a problem" to no: fine immediately, a reported
   problem clears silently (no all-clear message), the last problem on the start page disappears if it was this guest.

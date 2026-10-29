@@ -229,7 +229,7 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 			if singleNode(c.Type) {
 				return errors.New("execution: " + string(c.Type) + " checks run only locally on this node")
 			}
-			if m.linked == nil || !m.linked() {
+			if !m.onlineOK() {
 				return errors.New("execution: online and hybrid need the ipv64 link")
 			}
 			if c.Type != checks.TypePush && checks.IsPrivateTarget(string(c.Type), c.Target) {

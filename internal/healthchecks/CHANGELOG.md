@@ -3,6 +3,9 @@
 ## 2.42.0 – 2026-10-29
 
 ### Neu
+- Cluster: Eine nicht verknüpfte Node kann Online- und Hybrid-Checks anlegen, ändern und dorthin verschieben, wenn
+  eine verknüpfte Node des Clusters erreichbar ist (sie reicht die Änderung an ipv64 weiter). Vorher lehnte sie das ab
+  („need the ipv64 link“), auch beim bloßen Umbenennen eines Online-Checks.
 - Proxmox VE und Docker: „Gestoppt ist richtig“ – an einem Gast bzw. Container, der als gestört gilt, weil er
   gestoppt bzw. beendet ist (Zeile der Systemseite und Seite des Gasts). Setzt „Gestoppt ist eine Störung“ auf nein:
   sofort in Ordnung, eine gemeldete Störung erledigt sich still (keine Entwarnung), die letzte Störung auf der

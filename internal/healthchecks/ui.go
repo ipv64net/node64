@@ -633,6 +633,7 @@ type formData struct {
 	// Tageskontingent: Vorschau im Formular (Verbrauch der uebrigen Checks, heute, Limit, Standorte je Check)
 	ProjOther, QuotaToday, QuotaLimit, AccLocs int
 	APIMode                                    bool // Online-Check direkt ueber die API v2 (online_api.go)
+	ViaCluster                                 bool // nicht verknuepft: Online/Hybrid ueber die weiterreichende Node des Clusters
 	// DNS-Check: Auswahl im Formular
 	DNSRecordTypes, DNSExpects []string
 	WhoisSources               []string
@@ -1075,6 +1076,7 @@ func (m *Module) formPage(w http.ResponseWriter, r *http.Request, status int, d 
 	d.WhoisSources = checks.WhoisSources
 	d.Policies, d.Locations, d.Executions = Policies, KnownLocations, []string{"local", "online", "both"}
 	d.Linked = m.linked != nil && m.linked()
+	d.ViaCluster = !d.Linked && m.onlineOK()
 	if d.Linked && m.quota != nil {
 		d.QuotaToday, d.QuotaLimit, d.AccLocs = m.quota()
 		d.ProjOther = m.DailyProjection(r.Context(), d.Token, d.AccLocs)

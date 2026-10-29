@@ -380,6 +380,13 @@ func run() error {
 		return ipv64Key.RemoteChannels(ctx)
 	})
 	hcModule.SetLinked(syncClient.Linked)
+	hcModule.SetViaCluster(func() bool { // nicht verknuepft: eine verknuepfte Node des Clusters reicht weiter
+		if syncClient.Linked() {
+			return false
+		}
+		id, _, self := peerMgr.Forwarder(context.Background())
+		return id != "" && !self
+	})
 	hcModule.SetQuota(syncClient.Quota)
 	hcModule.SetAccount(func() (string, int) { st := syncClient.State(); return st.Plan, st.OnlineLimit })
 	hcModule.SetAPI(ipv64Key) // Online-Checks direkt ueber die API v2, solange kein Sync besteht

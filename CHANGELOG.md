@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Healthchecks/Cluster: Nodes ohne eigene ipv64-Verknüpfung können Online- und Hybrid-Checks anlegen und ändern,
+  wenn eine verknüpfte Node im Cluster erreichbar ist.
 - Cluster: Tritt eine Node mit API-Key einem Cluster bei, in dem der Key vorher entfernt wurde, übernehmen die
   anderen ihren Key – vorher verlor die beitretende Node ihn. Wechselt eine Node ohne Key in einen anderen Cluster,
   entfernt sie dort keinen Key mehr.

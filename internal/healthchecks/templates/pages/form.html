@@ -268,8 +268,8 @@
 			<div class="card-header"><i class="bi bi-geo-alt-fill text-danger"></i> {{.T "hc.form.sources"}}{{$.Doc "healthchecks#execution"}}</div>
 			<div class="card-body"><div class="row g-3">
 				<div class="col-12"><label class="form-label" for="execution">{{.T "hc.form.execution"}}</label>
-					<div class="input-group"><span class="input-group-text"><i class="bi bi-geo"></i></span><select class="form-select" id="execution" name="execution">{{range $d.Executions}}<option value="{{.}}"{{if eq . (index $f "execution")}} selected{{end}}{{if and (ne . "local") (not $d.Linked) (not $d.APIMode)}} disabled{{end}}>{{$.T (print "hc.execution." .)}}</option>{{end}}</select></div>
-					{{if and (not $d.Linked) (not $d.APIMode)}}<div class="form-text">{{.T "hc.form.sources_hint"}} <a href="/link">{{.T "hc.api.sync_link"}}</a></div>{{end}}</div>
+					<div class="input-group"><span class="input-group-text"><i class="bi bi-geo"></i></span><select class="form-select" id="execution" name="execution">{{range $d.Executions}}<option value="{{.}}"{{if eq . (index $f "execution")}} selected{{end}}{{if and (ne . "local") (not $d.Linked) (not $d.APIMode) (not $d.ViaCluster)}} disabled{{end}}>{{$.T (print "hc.execution." .)}}</option>{{end}}</select></div>
+					{{if and (not $d.Linked) (not $d.APIMode) (not $d.ViaCluster)}}<div class="form-text">{{.T "hc.form.sources_hint"}} <a href="/link">{{.T "hc.api.sync_link"}}</a></div>{{end}}</div>
 				{{if $d.Peers}}
 				<div class="col-12" id="nodesbox"><label class="form-label">{{.T "hc.form.nodes"}}</label>
 					<input type="hidden" name="nodes_present" value="1">
@@ -279,7 +279,7 @@
 				{{end}}
 				<div class="col-12" id="onlinebox"><div class="row g-3"><!-- nur bei online/beides (healthchecks.js) -->
 				<div class="col-12"><label class="form-label">{{.T "hc.form.locations"}}{{$.Doc "healthchecks#online-limits"}}</label>
-					{{range $i, $l := $d.Locations}}{{$over := and $d.Linked (gt $d.AccLocs 0) (ge $i $d.AccLocs)}}<div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="locations" value="{{$l}}" id="loc_{{$l}}"{{if and (contains (index $f "locations") $l) (not $over)}} checked{{end}}{{if or (and (not $d.Linked) (not $d.APIMode)) $over}} disabled{{end}}><label class="form-check-label" for="loc_{{$l}}">{{$.T (print "hc.location." $l)}}{{if $over}} <span class="badge text-bg-secondary">{{$.T "hc.form.loc_class"}}</span>{{end}}</label></div>{{end}}
+					{{range $i, $l := $d.Locations}}{{$over := and $d.Linked (gt $d.AccLocs 0) (ge $i $d.AccLocs)}}<div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="locations" value="{{$l}}" id="loc_{{$l}}"{{if and (contains (index $f "locations") $l) (not $over)}} checked{{end}}{{if or (and (not $d.Linked) (not $d.APIMode) (not $d.ViaCluster)) $over}} disabled{{end}}><label class="form-check-label" for="loc_{{$l}}">{{$.T (print "hc.location." $l)}}{{if $over}} <span class="badge text-bg-secondary">{{$.T "hc.form.loc_class"}}</span>{{end}}</label></div>{{end}}
 					<div class="form-text">{{.T "hc.form.locations_hint"}} <a href="/plans">{{.T "plans.title"}}</a></div>
 					{{if and $d.Linked $d.PointsLimit}}<div class="form-text{{if ge $d.PointsUsed $d.PointsLimit}} text-danger{{end}}">{{.T "hc.form.points_used" "used" $d.PointsUsed "limit" $d.PointsLimit}}</div>{{end}}
 					{{if and $d.Linked $d.QuotaLimit}}<div class="small mt-1" id="hc-proj" data-other="{{$d.ProjOther}}" data-today="{{$d.QuotaToday}}" data-limit="{{$d.QuotaLimit}}" data-acclocs="{{$d.AccLocs}}"
