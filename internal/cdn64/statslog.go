@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ipv64net/node64/internal/store"
 	_ "modernc.org/sqlite" // Treiber (registriert "sqlite")
 )
 
@@ -106,6 +107,7 @@ func openStats(dir string, log *slog.Logger, days func() int, anon func() bool) 
 		db.Close()
 		return nil, fmt.Errorf("cdn64.db: %w", err)
 	}
+	store.PrivateFiles(path) // Zugriffs-Statistik mit IPs: nur der Node-Benutzer
 	for _, c := range statsColumns {
 		var n int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, c.table, c.col).Scan(&n); err != nil {
