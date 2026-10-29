@@ -75,7 +75,7 @@ func (s *Server) termInit() {
 	hs := &http.Server{Handler: http.HandlerFunc(s.serveTerm), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second,
 		MaxHeaderBytes: 64 << 10, ErrorLog: discard,
 		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, NextProtos: []string{"h2", "http/1.1"}, GetCertificate: s.termCert}}
-	redir := &http.Server{Handler: http.HandlerFunc(termRedirect), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second,
+	redir := &http.Server{Handler: http.HandlerFunc(s.termRedirect), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second,
 		MaxHeaderBytes: 16 << 10, ErrorLog: discard}
 	plain := &http.Server{Handler: http.HandlerFunc(s.serveTerm), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second,
 		MaxHeaderBytes: 64 << 10, ErrorLog: discard}
@@ -330,7 +330,7 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 		switch frontendPlain(re.Target, s.certs.covers(re.Name, host)) {
 		case "serve":
 		case "redirect":
-			termRedirect(w, r)
+			s.termRedirect(w, r)
 			return
 		case "off":
 			s.mx.termReject("misdirected")
@@ -421,9 +421,16 @@ func (s *Server) termError(w http.ResponseWriter, r *http.Request, err error) {
 		"The server behind this address is not reachable right now. Please try again later.")
 }
 
-// termRedirect: Port 80 eines Modus-2-Namens -> HTTPS.
-func termRedirect(w http.ResponseWriter, r *http.Request) {
+// termRedirect: Port 80 eines Modus-2/3-Namens -> HTTPS. Nur auf eigene Namen: bei einer Anfrage in absoluter Form
+// (GET http://andere.example/ ...) ist r.Host der Name aus der URL, nicht der, nach dem die Verbindung kam - sonst
+// leitete der Server auf beliebige Ziele weiter (Test 2026-10-29).
+func (s *Server) termRedirect(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "close")
+	if re := s.routes.Load().lookup(hostOnly(r.Host)); re == nil || (re.Mode != 2 && re.Mode != 3) {
+		s.mx.termReject("misdirected")
+		http.Error(w, "misdirected request", http.StatusMisdirectedRequest)
+		return
+	}
 	http.Redirect(w, r, "https://"+hostOnly(r.Host)+r.URL.RequestURI(), http.StatusMovedPermanently)
 }
 

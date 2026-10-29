@@ -336,7 +336,10 @@ Textvergleiche auf Pfad (dekodiert, nicht bereinigt) und User-Agent, Treffer →
 **Test 2026-10-29 (cdn64-edge 0.20.1, nicht ausgerollt):** DNS-01 gilt am Server erst als sichtbar, wenn alle
 erreichbaren Adressen aller Nameserver alle Werte 3 Runden hintereinander liefern (`waitTXTOn`, wie die Node seit
 6f73e6b) – ns1/ns2.ipv64.net liefern kurz nach dem Anlegen abwechselnd alt/leer und neu, vorher reichte je
-Nameserver ein Treffer an der ersten Adresse.
+Nameserver ein Treffer an der ersten Adresse. Außerdem: Umleitung Port 80 → HTTPS nur auf eigene Namen (eine Anfrage in
+absoluter Form `GET http://andere.example/` leitete dorthin weiter – offene Weiterleitung); ist die Node offline und
+hat auch der Nachbar keinen Tunnel, antwortet der Nachbar auf Port 80 mit der Fehlerseite (vorher trennte er still,
+der Besucher bekam bei Modus 1 auf Port 80 nichts).
 
 ### 8.4 Endpunkte für die Server (Server-Geheimnis, eigene Datei)
 
