@@ -218,6 +218,19 @@ func (m *Manager) obtain(ctx context.Context, c *Cert) error {
 	if err != nil {
 		return fmt.Errorf("order: %w", err)
 	}
+	// erst alle Pruefungen vorbereiten (TXT bzw. Token), dann pruefen lassen: Domain und *.Domain teilen sich den
+	// TXT-Namen; nacheinander saehe Let's Encrypt beim zweiten noch den ersten Wert im Cache („Incorrect TXT record“)
+	type pending struct {
+		name, uri string
+		chal      *acme.Challenge
+	}
+	var todo []pending
+	var cleanups []func()
+	defer func() {
+		for _, f := range cleanups {
+			f()
+		}
+	}()
 	for _, u := range order.AuthzURLs {
 		z, err := cl.GetAuthorization(ctx, u)
 		if err != nil {
@@ -226,8 +239,20 @@ func (m *Manager) obtain(ctx context.Context, c *Cert) error {
 		if z.Status == acme.StatusValid {
 			continue
 		}
-		if err := m.authorize(ctx, cl, c, z); err != nil {
+		name, chal, cleanup, err := m.present(ctx, cl, c, z)
+		if err != nil {
 			return err
+		}
+		cleanups = append(cleanups, cleanup)
+		todo = append(todo, pending{name, z.URI, chal})
+	}
+	for _, p := range todo {
+		m.step(c.ID, "validate")
+		if _, err := cl.Accept(ctx, p.chal); err != nil {
+			return fmt.Errorf("%s: accept: %w", p.name, err)
+		}
+		if _, err := cl.WaitAuthorization(ctx, p.uri); err != nil {
+			return fmt.Errorf("%s: validation: %w", p.name, err)
 		}
 	}
 	m.step(c.ID, "certificate")
@@ -261,8 +286,9 @@ func (m *Manager) obtain(ctx context.Context, c *Cert) error {
 	return m.storeIssued(ctx, c.ID, c.Names, string(chain), leaf, key)
 }
 
-// authorize beantwortet die Pruefung fuer einen Namen.
-func (m *Manager) authorize(ctx context.Context, cl *acme.Client, c *Cert, z *acme.Authorization) error {
+// present bereitet die Pruefung fuer einen Namen vor (TXT-Record bzw. HTTP-Token, sichtbar) und liefert die
+// Aufraeumfunktion; bei einem Fehler ist schon aufgeraeumt.
+func (m *Manager) present(ctx context.Context, cl *acme.Client, c *Cert, z *acme.Authorization) (string, *acme.Challenge, func(), error) {
 	name := z.Identifier.Value
 	if z.Wildcard {
 		name = "*." + name
@@ -278,22 +304,22 @@ func (m *Manager) authorize(ctx context.Context, cl *acme.Client, c *Cert, z *ac
 		}
 	}
 	if chal == nil {
-		return fmt.Errorf("%s: no %s challenge offered", name, want)
+		return "", nil, nil, fmt.Errorf("%s: no %s challenge offered", name, want)
 	}
 	var cleanup func()
 	if c.Source == SourceDNS { // anderer Anbieter ueber lego: der Anbieter setzt und loescht den TXT-Record selbst
 		prov, err := m.dnsProvider(ctx, c.DNSAccount)
 		if err != nil {
-			return err
+			return "", nil, nil, err
 		}
 		ka, err := cl.HTTP01ChallengeResponse(chal.Token) // Key-Authorization (Token.Fingerabdruck)
 		if err != nil {
-			return err
+			return "", nil, nil, err
 		}
 		base := strings.TrimPrefix(name, "*.")
 		m.step(c.ID, "txt")
 		if err := prov.Present(base, chal.Token, ka); err != nil {
-			return fmt.Errorf("%s: dns provider: %w", name, err)
+			return "", nil, nil, fmt.Errorf("%s: dns provider: %w", name, err)
 		}
 		cleanup = func() {
 			if err := prov.CleanUp(base, chal.Token, ka); err != nil {
@@ -303,28 +329,28 @@ func (m *Manager) authorize(ctx context.Context, cl *acme.Client, c *Cert, z *ac
 		val, err := cl.DNS01ChallengeRecord(chal.Token)
 		if err != nil {
 			cleanup()
-			return err
+			return "", nil, nil, err
 		}
 		m.step(c.ID, "dns")
 		if err := m.txtVisible(ctx, base, "_acme-challenge."+base, val); err != nil {
 			cleanup()
-			return fmt.Errorf("%s: %w", name, err)
+			return "", nil, nil, fmt.Errorf("%s: %w", name, err)
 		}
 	} else if want == "http-01" {
 		ka, err := cl.HTTP01ChallengeResponse(chal.Token)
 		if err != nil {
-			return err
+			return "", nil, nil, err
 		}
 		m.step(c.ID, "http")
 		release, err := m.d.HTTP.Present(chal.Token, ka)
 		if err != nil {
-			return fmt.Errorf("%s: %w", name, err)
+			return "", nil, nil, fmt.Errorf("%s: %w", name, err)
 		}
 		cleanup = release
 	} else {
 		val, err := cl.DNS01ChallengeRecord(chal.Token)
 		if err != nil {
-			return err
+			return "", nil, nil, err
 		}
 		zone, prefix, fqdn := "", "", ""
 		if c.Source == SourceAlias {
@@ -332,13 +358,13 @@ func (m *Manager) authorize(ctx context.Context, cl *acme.Client, c *Cert, z *ac
 			prefix, fqdn = aliasTarget(c.AliasZone, c.AliasPrefix)
 		} else {
 			if zone, prefix, err = m.ipv64Target(ctx, name); err != nil {
-				return err
+				return "", nil, nil, err
 			}
 			fqdn = prefix + "." + zone
 		}
 		m.step(c.ID, "txt")
 		if err := m.d.DNS.AddTXT(ctx, zone, prefix, val); err != nil {
-			return fmt.Errorf("ipv64 TXT record: %w", err)
+			return "", nil, nil, fmt.Errorf("ipv64 TXT record: %w", err)
 		}
 		cleanup = func() {
 			dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
@@ -350,18 +376,10 @@ func (m *Manager) authorize(ctx context.Context, cl *acme.Client, c *Cert, z *ac
 		m.step(c.ID, "dns")
 		if err := m.txtVisible(ctx, zone, fqdn, val); err != nil {
 			cleanup()
-			return fmt.Errorf("%s: %w", name, err)
+			return "", nil, nil, fmt.Errorf("%s: %w", name, err)
 		}
 	}
-	defer cleanup()
-	m.step(c.ID, "validate")
-	if _, err := cl.Accept(ctx, chal); err != nil {
-		return fmt.Errorf("%s: accept: %w", name, err)
-	}
-	if _, err := cl.WaitAuthorization(ctx, z.URI); err != nil {
-		return fmt.Errorf("%s: validation: %w", name, err)
-	}
-	return nil
+	return name, chal, cleanup, nil
 }
 
 // ---------------------------------------------------------------- Erneuerung
