@@ -51,6 +51,7 @@ type Module struct {
 	wg         sync.WaitGroup
 	push       *pushLimiter
 	linked     func() bool                      // ipv64-Verknuepfung aktiv (Sync-Phase), nil = standalone
+	viaCluster func() bool                      // nicht verknuepft, aber eine verknuepfte Node des Clusters reicht an ipv64 weiter
 	quota      func() (today, limit, locs int)  // Tageskontingent der Online-Checks, nil = standalone
 	api        *ipv64api.Key                    // zentraler API-Key: Online-Checks ohne Sync (online_api.go)
 	groupRole  GroupRole                        // lokale Gruppe: wer benachrichtigt (groupnotify.go), nil = keine Gruppe
@@ -205,6 +206,15 @@ func (m *Module) Store() *Store { return m.st }
 
 // SetLinked meldet, ob die Node mit ipv64 verknuepft ist (schaltet Online/Hybrid im Formular frei).
 func (m *Module) SetLinked(fn func() bool) { m.linked = fn }
+
+// SetViaCluster meldet, ob eine verknuepfte Node des Clusters die Aenderungen dieser (nicht verknuepften) Node an ipv64
+// weiterreicht: dann gehen Online- und Hybrid-Checks auch hier (anlegen, aendern, verschieben).
+func (m *Module) SetViaCluster(fn func() bool) { m.viaCluster = fn }
+
+// onlineOK: Online- und Hybrid-Checks sind moeglich (verknuepft oder ueber den Cluster).
+func (m *Module) onlineOK() bool {
+	return m.linked != nil && m.linked() || m.viaCluster != nil && m.viaCluster()
+}
 
 // SetQuota liefert das Tageskontingent der Online-Checks (Hinweis in der Uebersicht).
 func (m *Module) SetQuota(fn func() (today, limit, locs int)) { m.quota = fn }

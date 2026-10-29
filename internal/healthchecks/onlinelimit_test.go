@@ -32,3 +32,24 @@ func TestOnlineLimitOnSave(t *testing.T) {
 		t.Fatalf("locations per check: %d %s", code, b)
 	}
 }
+
+// Nicht verknuepft: Online und Hybrid nur, wenn eine verknuepfte Node des Clusters weiterreicht.
+func TestOnlineViaCluster(t *testing.T) {
+	m, srv := newTestModule(t)
+	m.SetLinked(func() bool { return false })
+	via := false
+	m.SetViaCluster(func() bool { return via })
+	mk := func(name, exec string) (int, string) {
+		code, b := call(t, srv, "POST", "/api/checks", map[string]any{"name": name, "type": "http", "target": "https://example.org", "execution": exec})
+		return code, string(b)
+	}
+	if code, b := mk("ohne", "online"); code != 422 || !strings.Contains(b, "ipv64 link") {
+		t.Fatalf("without link and cluster: %d %s", code, b)
+	}
+	via = true
+	for _, exec := range []string{"online", "both"} {
+		if code, b := mk("ueber cluster "+exec, exec); code != 201 {
+			t.Fatalf("via cluster %s: %d %s", exec, code, b)
+		}
+	}
+}

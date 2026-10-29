@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Healthchecks/cluster: nodes without their own ipv64 link can create and edit online and hybrid checks when a
+  linked node in the cluster is reachable.
 - Cluster: when a node with an API key joins a cluster in which the key was removed earlier, the others take its
   key – before, the joining node lost it. A node without a key that moves to another cluster no longer removes the
   key there.

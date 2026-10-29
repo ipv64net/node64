@@ -54,7 +54,9 @@ Diagramm und Verlauf funktionieren dadurch unverändert.
 
 - **Änderungen vom hub:** Verknüpfte Nodes bekommen sie direkt vom hub und übernehmen sie nicht noch einmal aus der
   Gruppe, damit nichts hin und her pendelt.
-- **Änderungen von Nodes ohne Sync:** Genau eine verknüpfte Node reicht sie an den hub weiter. Das ist die mit
+- **Änderungen von Nodes ohne Sync:** Genau eine verknüpfte Node reicht sie an den hub weiter. Ist eine solche Node
+  erreichbar, kann eine Node ohne Sync auch Online- und Hybrid-Checks anlegen, ändern und verschieben (Healthchecks
+  2.42.0, `SetViaCluster`); ohne sie bleibt es bei lokalen Checks bzw. den Online-Checks über die API v2. Das ist die mit
   der kleinsten Kennung unter den erreichbaren verknüpften Nodes; die Gruppen-Karte zeigt, welche es ist.
 - **Checks von Nodes ohne Sync (Stellvertreter-Nodes):** Die weiterreichende Node meldet alle Mitglieder ohne
   Sync beim hub als Stellvertreter-Nodes an (`hc2_nodes.proxy_via` = ihre Kennung, kein Token) und reicht deren
