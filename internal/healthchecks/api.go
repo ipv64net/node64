@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -118,6 +119,9 @@ func (m *Module) toJSON(c *Check, r *http.Request) checkJSON {
 			scheme = "https"
 		}
 		out.PushURL = scheme + "://" + r.Host + "/api/push/" + c.Token
+		if c.Execution == "online" { // misst nur ipv64: dort pushen (ohne Verknuepfung reicht die Node nicht weiter)
+			out.PushURL = OnlinePushURL + c.Token
+		}
 	}
 	return out
 }
@@ -231,6 +235,13 @@ func (m *Module) apply(c *Check, in checkJSON, create bool) error {
 			}
 			if !m.onlineOK() {
 				return errors.New("execution: online and hybrid need the ipv64 link")
+			}
+			// ueber den Cluster (nicht verknuepft): die Grenzen des Accounts kommen ueber den API-Key; ohne sie nicht
+			// online verschieben bzw. anlegen (der hub lehnte sonst erst bei der weiterreichenden Node ab)
+			if !(m.linked != nil && m.linked()) && c.Execution != in.Execution && m.account != nil {
+				if plan, _ := m.account(); plan == "" {
+					return errors.New("execution: the limits of the ipv64 account are not readable right now (API key?) – try again later")
+				}
 			}
 			if c.Type != checks.TypePush && checks.IsPrivateTarget(string(c.Type), c.Target) {
 				return errors.New("execution: ipv64 cannot check private targets (home network, localhost, .local) from outside – keep this check local")
@@ -929,8 +940,15 @@ func (m *Module) apiPush(w http.ResponseWriter, r *http.Request) {
 	if s := m.scheduler(); s != nil {
 		measured = s.Push(r.Context(), token, status, msg, details)
 	}
-	// Push-Checks sind von ueberall ausloesbar: weitere Messstellen (andere Nodes, ipv64) ueber den hub informieren
-	if m.pushFwd != nil && m.linked != nil && m.linked() {
+	// Push-Checks sind von ueberall ausloesbar: weitere Messstellen (andere Nodes, ipv64) ueber den hub informieren;
+	// nicht verknuepft (Online/Hybrid ueber den Cluster) direkt an die Push-Adresse bei ipv64
+	if m.pushFwd == nil || m.linked == nil || !m.linked() {
+		if m.viaCluster != nil && m.viaCluster() {
+			if c, _ := m.st.Check(r.Context(), token); c != nil && c.Type == checks.TypePush && c.Execution != "local" {
+				go m.pushOnline(token, status == checks.Down, msg)
+			}
+		}
+	} else {
 		if c, _ := m.st.Check(r.Context(), token); c != nil && c.Type == checks.TypePush && (c.Execution != "local" || len(c.Nodes) > 1 || !c.MeasuredHere()) {
 			from, _ := details["from"].(string)
 			if !m.pushFwd(token, status == checks.Down, msg, from) && !measured {
@@ -944,6 +962,40 @@ func (m *Module) apiPush(w http.ResponseWriter, r *http.Request) {
 		m.log.Debug("push not measured here", "token", checks.TokenHint(token))
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// onlinePushBase ist die Push-Adresse bei ipv64 (Variable fuer Tests).
+var onlinePushBase = OnlinePushURL
+
+// pushOnline gibt einen hier empfangenen Push ohne eigene Verknuepfung direkt an ipv64 weiter (health.php wie ein
+// Push von aussen); Fehler nur im Log.
+func (m *Module) pushOnline(token string, down bool, msg string) {
+	q := url.Values{}
+	if down {
+		q.Set("status", "down")
+	}
+	if msg != "" {
+		q.Set("msg", msg)
+	}
+	u := onlinePushBase + url.QueryEscape(token)
+	if len(q) > 0 {
+		u += "&" + q.Encode()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		m.log.Warn("push to ipv64 failed", "token", checks.TokenHint(token), "err", strings.ReplaceAll(err.Error(), token, checks.TokenHint(token)))
+		return
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		m.log.Warn("push to ipv64 failed", "token", checks.TokenHint(token), "status", resp.StatusCode)
+	}
 }
 
 // ---------------------------------------------------------------- Audit

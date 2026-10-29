@@ -11,13 +11,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipv64net/node64/internal/checks"
 	"github.com/ipv64net/node64/internal/logging"
 	"github.com/ipv64net/node64/internal/store"
 )
 
 // API-Log (Opt-in, Einstellungen > Logging): jede Anfrage an /api/ als eine Zeile im Log (Logs-Seite und
 // Container-Ausgabe), unabhaengig vom Log-Level. Nur Methode, Pfad, Status, Dauer, Groesse und Herkunft; keine
-// Inhalte, Geheimnisse in der Query werden maskiert. Aus kostet es nur einen atomaren Vergleich je Anfrage.
+// Inhalte, Geheimnisse in der Query und Check-Tokens im Pfad werden maskiert. Aus kostet es nur einen atomaren Vergleich je Anfrage.
 
 const (
 	settingAPILog = "web.api_log" // off, keys (nur per API-Key), all (auch die Oberflaeche)
@@ -75,7 +76,7 @@ func (s *Server) apiLog(next http.Handler) http.Handler {
 			if status == 0 {
 				status = http.StatusOK
 			}
-			attrs := []slog.Attr{slog.String("module", "api"), slog.String("method", r.Method), slog.String("path", r.URL.Path)}
+			attrs := []slog.Attr{slog.String("module", "api"), slog.String("method", r.Method), slog.String("path", apiLogPath(r.URL.Path))}
 			if q := apiLogQuery(r.URL.Query()); q != "" {
 				attrs = append(attrs, slog.String("query", q))
 			}
@@ -91,6 +92,20 @@ func (s *Server) apiLog(next http.Handler) http.Handler {
 		}()
 		next.ServeHTTP(rec, r)
 	})
+}
+
+// apiLogPath: Pfad fuer das Log, Check-Tokens gekuerzt (/api/push/{token}, /api/checks/{token} ...: der Token ist
+// zugleich die Push-Berechtigung). Gekuerzt wird jedes lange Segment aus Buchstaben/Ziffern, wie checks.TokenHint.
+func apiLogPath(p string) string {
+	parts := strings.Split(p, "/")
+	for i, s := range parts {
+		if len(s) >= 20 && strings.IndexFunc(s, func(r rune) bool {
+			return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_')
+		}) < 0 {
+			parts[i] = checks.TokenHint(s)
+		}
+	}
+	return strings.Join(parts, "/")
 }
 
 // apiLogQuery: Query fuer das Log, Werte geheimer Parameter (token, key, secret ...) maskiert.

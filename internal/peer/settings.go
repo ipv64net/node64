@@ -90,7 +90,7 @@ func (m *Manager) applySettings(ctx context.Context, c change) int {
 // Forwarder: Node, die Aenderungen von Nodes ohne Sync an ipv64 weiterreicht (Anzeige; self = diese Node,
 // leer = keine Node der Gruppe ist verknuepft und erreichbar).
 func (m *Manager) Forwarder(ctx context.Context) (id, name string, self bool) {
-	if m.linkedSelf() {
+	if m.linkedSelf() && m.syncOn(ctx, "healthchecks", "checks") { // wie forwarder
 		id, name, self = m.d.NodeID(), m.d.NodeName(), true
 	}
 	list := m.hcMembers(ctx)

@@ -201,3 +201,38 @@ func TestHubKnows(t *testing.T) {
 		t.Fatal("the only linked node forwards changes of unlinked nodes")
 	}
 }
+
+// Weiterreichen und Anzeige (Forwarder) nach derselben Regel: nur verknuepfte Mitglieder mit Healthchecks-Abgleich,
+// die kleinste Kennung gewinnt. A (kleinste Kennung, verknuepft, Abgleich aus) reicht nicht weiter; B schon, und die
+// nicht verknuepfte U sieht B (vorher sah U B, B hielt aber A fuer zustaendig und niemand reichte weiter).
+func TestForwarderRule(t *testing.T) {
+	ctx := context.Background()
+	a, b, u := newNode(t, "node-a", "A", 522), newNode(t, "node-b", "B", 522), newNode(t, "node-u", "U", 522)
+	for _, n := range []*testNode{a, b, u} {
+		newFake(n)
+	}
+	pair(t, a, b)
+	pair(t, a, u)
+	waitMembers(t, a, "B", "U")
+	waitMembers(t, b, "A", "U")
+	a.m.d.Linked = func() bool { return true }
+	b.m.d.Linked = func() bool { return true }
+	if err := a.m.SetSync(ctx, "healthchecks", "checks", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []*testNode{a, b, u} {
+		n.m.pingAll(ctx)
+	}
+	if a.m.forwarder(ctx) {
+		t.Fatal("A has the healthchecks area off and must not forward")
+	}
+	if !b.m.forwarder(ctx) {
+		t.Fatal("B is the linked member with the area on and must forward")
+	}
+	if id, _, self := u.m.Forwarder(ctx); id != "node-b" || self {
+		t.Fatalf("U must see B as forwarder, got %q", id)
+	}
+	if id, _, self := a.m.Forwarder(ctx); id != "" || self {
+		t.Fatalf("A (area off) shows no forwarder, got %q", id)
+	}
+}

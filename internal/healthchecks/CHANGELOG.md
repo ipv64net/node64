@@ -1,5 +1,22 @@
 # Änderungen – Healthchecks
 
+## 2.43.0 – 2026-10-29
+
+### Neu
+- Cluster: Nodes ohne eigene Verknüpfung reichen Pushes für Online- und Hybrid-Checks direkt an ipv64 weiter
+  (Push-Adresse bei ipv64); die Detailseite zeigt dort auch die Push-Adresse bei ipv64. Reine Online-Push-Checks
+  nennen in der API (`push_url`) die Adresse bei ipv64.
+
+### Behoben
+- Cluster: Online- und Hybrid-Checks auf Nodes ohne eigene Verknüpfung prüfen die Grenzen des Accounts (Standorte
+  je Check, Online-Messstellen) über den API-Key (`GET /hc2/account`); sind sie nicht lesbar, wird nichts online
+  angelegt bzw. verschoben. Vorher nahm die Node alles an, der hub lehnte erst bei der weiterreichenden Node ab und
+  der Check wurde nirgends gemessen.
+- Cluster: Weiterreichende Node und Anzeige nach derselben Regel (verknüpft, erreichbar, Healthchecks-Abgleich an,
+  kleinste Kennung). Vorher konnte eine Node ohne Abgleich als zuständig gelten und niemand reichte weiter.
+- API-Log: Check-Tokens im Pfad (`/api/push/…`, `/api/checks/…`) werden gekürzt (sie sind zugleich die
+  Push-Berechtigung).
+
 ## 2.42.0 – 2026-10-29
 
 ### Behoben

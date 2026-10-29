@@ -13,6 +13,9 @@ Short summary of what changes per version. Details per module are in the node un
 - Certificates: domain plus wildcard via DuckDNS, Hurricane Electric or RFC2136 work again (these providers hold only
   one TXT value and are checked one after another again). The DNS-01 check also requires several stable rounds via
   public resolvers, and a value that becomes stable shortly before the deadline still counts.
+- Health checks/cluster: nodes without their own link check the account limits for online and hybrid checks and
+  forward pushes directly to ipv64; the forwarding node is determined the same way everywhere.
+- API log: check tokens in the path are shortened.
 
 ## 0.12.0-alpha.31 – 2026-10-29
 

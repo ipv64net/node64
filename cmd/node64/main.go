@@ -380,15 +380,34 @@ func run() error {
 		return ipv64Key.RemoteChannels(ctx)
 	})
 	hcModule.SetLinked(syncClient.Linked)
-	hcModule.SetViaCluster(func() bool { // nicht verknuepft: eine verknuepfte Node des Clusters reicht weiter
+	viaCluster := func() bool { // nicht verknuepft: eine verknuepfte Node des Clusters reicht weiter
 		if syncClient.Linked() {
 			return false
 		}
 		id, _, self := peerMgr.Forwarder(context.Background())
 		return id != "" && !self
+	}
+	hcModule.SetViaCluster(viaCluster)
+	// Grenzen des Accounts: verknuepft aus dem Sync, ueber den Cluster aus der API v2 (GET /hc2/account mit dem
+	// API-Key); ohne lesbare Grenzen meldet account() keinen Tarif und Online-Checks werden nicht angelegt
+	hcModule.SetQuota(func() (int, int, int) {
+		if !syncClient.Linked() && viaCluster() {
+			if l, ok := ipv64Key.HCLimits(context.Background()); ok {
+				return l.ChecksToday, l.ChecksPerDay, l.Locations
+			}
+		}
+		return syncClient.Quota()
 	})
-	hcModule.SetQuota(syncClient.Quota)
-	hcModule.SetAccount(func() (string, int) { st := syncClient.State(); return st.Plan, st.OnlineLimit })
+	hcModule.SetAccount(func() (string, int) {
+		if !syncClient.Linked() && viaCluster() {
+			if l, ok := ipv64Key.HCLimits(context.Background()); ok {
+				return l.Plan, l.OnlinePoints
+			}
+			return "", 0
+		}
+		st := syncClient.State()
+		return st.Plan, st.OnlineLimit
+	})
 	hcModule.SetAPI(ipv64Key) // Online-Checks direkt ueber die API v2, solange kein Sync besteht
 	hcModule.SetPushForward(syncClient.ForwardPush)
 	hcModule.SetRunRemote(syncClient.RunRemote)
