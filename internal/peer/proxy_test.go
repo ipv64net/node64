@@ -143,6 +143,13 @@ func TestProxyNodes(t *testing.T) {
 	if last := hub.reg[len(hub.reg)-1]; len(last) != 0 {
 		t.Fatalf("linked member still registered: %+v", last)
 	}
+	// B ist wieder Stellvertreter (z. B. Cluster verlassen und neu gekoppelt): seine Checks gehen erneut an den hub,
+	// auch ohne Neustart (Test 2026-10-29: Aenderungen aus der Trennzeit blieben sonst in der Gruppe)
+	_, _ = a.m.db.ExecContext(ctx, `UPDATE peer_members SET linked = 0 WHERE node_id = 'node-b'`)
+	a.m.pushProxies(ctx, mustMembers(t, a))
+	if len(fwd) != 4 {
+		t.Fatalf("returning member: held checks must be forwarded again: %v", fwd)
+	}
 }
 
 func mustMembers(t *testing.T, n *testNode) []Member {
