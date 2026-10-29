@@ -2,6 +2,11 @@
 
 ## 2.42.0 – 2026-10-29
 
+### Fixed
+- Linked node: a change from the portal or the API (e.g. a new online check) made at the same moment as a change on
+  this node never arrived on this node, not even after reconnecting. The revision now only advances when it follows
+  directly (node and hub).
+
 ### New
 - Cluster: a node that is not linked can create, edit and move online and hybrid checks when a linked node of the
   cluster is reachable (it forwards the change to ipv64). Before, it refused ("need the ipv64 link"), even for

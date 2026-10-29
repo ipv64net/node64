@@ -2,6 +2,11 @@
 
 ## 2.42.0 – 2026-10-29
 
+### Behoben
+- Verknüpfte Node: Eine Änderung aus dem Portal oder der API (z. B. neuer Online-Check), die im selben Moment wie
+  eine Änderung an dieser Node entstand, kam auf dieser Node nie an – auch nicht nach einem Neuverbinden. Der Stand
+  springt jetzt nur noch direkt anschließend weiter (Node und hub).
+
 ### Neu
 - Cluster: Eine nicht verknüpfte Node kann Online- und Hybrid-Checks anlegen, ändern und dorthin verschieben, wenn
   eine verknüpfte Node des Clusters erreichbar ist (sie reicht die Änderung an ipv64 weiter). Vorher lehnte sie das ab

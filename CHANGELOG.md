@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Healthchecks: Eine Änderung aus dem Portal, die gleichzeitig mit einer Änderung an der Node entstand, ging auf der
+  Node verloren; sie kommt jetzt an (braucht auch die neuen hubs).
 - Einstellungen → Logging: „API-Anfragen protokollieren“ (Opt-in: aus, nur per API-Key oder alle). Jede Anfrage an
   /api/ steht dann als Zeile im Log mit Methode, Pfad, Status, Dauer, IP, Benutzer und Name des API-Keys – ohne
   Inhalte, Geheimnisse maskiert. Auch über `PUT /api/logging` (`api_log`).

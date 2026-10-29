@@ -70,6 +70,18 @@ func (c *conn) bumpRev(r int64) int64 {
 	return c.lastRev
 }
 
+// bumpRevNext hebt den Stand nur an, wenn r direkt anschliesst (Stand+1): die Revision einer eigenen Aenderung der
+// Node. Liegt dazwischen eine fremde Aenderung (Portal, API, andere Node), bleibt der Stand - fanoutLoop schickt dann
+// beide; sonst gaelte die fremde fuer diese Node als schon geliefert und kaeme nie an.
+func (c *conn) bumpRevNext(r int64) int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if r == c.lastRev+1 {
+		c.lastRev = r
+	}
+	return c.lastRev
+}
+
 func (c *conn) close(code websocket.StatusCode, reason string) {
 	c.mu.Lock()
 	if c.closed {
@@ -459,7 +471,7 @@ func (c *conn) handle(m wire.Msg) {
 			c.send(wire.Msg{T: "conflict", ID: m.ID, Data: raw(res)})
 			return
 		}
-		c.bumpRev(res.Revision)
+		c.bumpRevNext(res.Revision)
 		c.ack(m.ID, res)
 	case "run_check":
 		// "Jetzt pruefen" an einer Node: die anderen messenden Nodes beauftragen
@@ -495,7 +507,7 @@ func (c *conn) handle(m wire.Msg) {
 			c.ack(m.ID, map[string]any{"ok": false, "error": "database error"})
 			return
 		}
-		c.bumpRev(rev)
+		c.bumpRevNext(rev)
 		c.ack(m.ID, map[string]any{"ok": true})
 	case "node_info":
 		// Name/Standort an der Node geaendert: Portal und andere Nodes (ueber config "node") sehen es sofort
@@ -513,7 +525,7 @@ func (c *conn) handle(m wire.Msg) {
 			c.ack(m.ID, map[string]any{"ok": false, "error": "database error"})
 			return
 		}
-		c.bumpRev(rev)
+		c.bumpRevNext(rev)
 		c.ack(m.ID, map[string]any{"ok": true})
 	case "status":
 		var st wire.Status
