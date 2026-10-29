@@ -249,3 +249,59 @@ func TestBandwidthStream(t *testing.T) {
 		t.Fatal("streams page misses the bandwidth badge")
 	}
 }
+
+// TLS durchreichen mit Grenze: die verschluesselte Verbindung laeuft gebremst durch, ohne Grenze sofort.
+func TestBandwidthPassthrough(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.enable(t)
+	big := make([]byte, 250000)
+	_, _ = crand.Read(big)
+	backend := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(big) }))
+	defer backend.Close()
+	bu, _ := url.Parse(backend.URL)
+	bport, _ := strconv.Atoi(bu.Port())
+	h := newHostKind(KindPass)
+	h.Names, h.TargetHost, h.TargetPort = []string{"pass.test"}, "127.0.0.1", bport
+	h.Advanced.BWDownMbit = 1
+	if err := e.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	get := func() time.Duration {
+		t.Helper()
+		c := e.client(false)
+		c.Timeout = 20 * time.Second
+		start := time.Now()
+		resp, err := c.Get("https://pass.test/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if len(b) != len(big) {
+			t.Fatalf("passthrough: %d bytes", len(b))
+		}
+		return time.Since(start)
+	}
+	if d := get(); d < 1500*time.Millisecond {
+		t.Fatalf("limited passthrough not shaped: %v", d)
+	}
+	h.Advanced.BWDownMbit = 0
+	if err := e.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	if d := get(); d > time.Second {
+		t.Fatalf("unlimited passthrough: %v", d)
+	}
+	h.Advanced.BWUpMbit = 2
+	if err := e.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	if form := aiRender(t, "host_form.html", e.m.form(ctx, h, false)); !strings.Contains(form, `name="has_bw"`) || !strings.Contains(form, `name="adv_bw_up" value="2"`) {
+		t.Fatal("passthrough form misses the bandwidth")
+	}
+	rows, _ := e.m.rowsOf(ctx, KindPass)
+	if page := renderPage(t, "streams.html", streamsData{Pass: rows}); !strings.Contains(page, "↓∞ ↑2 Mbit/s") {
+		t.Fatal("passthrough list misses the bandwidth badge")
+	}
+}

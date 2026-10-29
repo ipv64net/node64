@@ -68,7 +68,7 @@ und keinem Modul:
 | Proxy-Host | Domain(s) → Ziel `http(s)://host:port` | WebSockets, Block Common Exploits, Cache Assets, Locations, Zugriffsliste, Erweitert (u. a. Bandbreite) |
 | Weiterleitung | Domain(s) → andere Domain | 301/302/303/307/308, Pfad mitnehmen, Schema wie Anfrage oder fest |
 | 404-Host | Domain(s) → „nicht gefunden“ | z. B. für stillgelegte Namen |
-| TLS durchreichen | Name auf 443 → Dienst mit eigenem Zertifikat | Node64 entschlüsselt nicht; Port 80 leitet auf HTTPS |
+| TLS durchreichen | Name auf 443 → Dienst mit eigenem Zertifikat | Node64 entschlüsselt nicht; Port 80 leitet auf HTTPS; Bandbreite |
 | Stream | Port (TCP/UDP) → Ziel | optional TLS-Abschluss (TCP), Bandbreite; UDP-Sitzungen enden nach 60 s ohne Pakete |
 | Name nur für Streams | Name ohne Ziel (`kind` `stream`) | nur für den CDN64-Portmapper (Modus 1): keine Route, über den Tunnel schließt die Node 80/443/QUIC sofort |
 
@@ -76,7 +76,8 @@ und keinem Modul:
 `bw_up_mbit`, 0 = unbegrenzt, Standard). Alle Anfragen des Hosts teilen sich je Richtung einen Token-Eimer
 (`bandwidth.go`, Eimer ≈ 1/10 s, 16 KiB–1 MiB): bis zur Grenze ungebremst, darüber wartet jede Anfrage auf ihren
 Anteil, getrennt wird nichts. Gilt für Antworten (auch aus dem Cache), Request-Bodys und WebSockets, lokal und über
-CDN64 (Modus 1/2). Nicht für „TLS durchreichen“.
+CDN64 (Modus 1/2). „TLS durchreichen“ (ab 1.43.0) nutzt dieselben Felder (Formular ohne Reiter Erweitert, `has_bw`):
+der Eingang umhüllt die rohe Verbindung (`edge.Route.Wrap`), verschlüsselt bleibt sie.
 
 **Bandbreite je Stream (ab 1.42.0):** `bw_down_mbit` / `bw_up_mbit` am Stream, eigener Eimer je Stream für alle
 Verbindungen (lokal und über den CDN64-Portmapper). TCP wird beim Kopieren gebremst (mit Grenze nicht mehr roh), UDP

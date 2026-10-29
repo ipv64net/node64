@@ -1,5 +1,11 @@
 # Änderungen – PROXY64
 
+## 1.43.0 – 2026-10-29
+
+### Neu
+- Bandbreite auch für „TLS durchreichen“: Download und Upload höchstens so viele Mbit/s, leer = unbegrenzt. Die
+  Verbindung bleibt verschlüsselt und wird nur gebremst weitergereicht, lokal und über CDN64. Abzeichen in der Liste.
+
 ## 1.42.0 – 2026-10-29
 
 ### Neu

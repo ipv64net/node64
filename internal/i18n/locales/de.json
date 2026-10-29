@@ -515,6 +515,7 @@
       "dead_hint": "Dieser Host antwortet auf alle Anfragen mit einer neutralen Seite „404“. Mit Zertifikat auch per HTTPS.",
       "stream_hint": "Nur der Name, ohne Ziel: Schalte ihn bei CDN64 ein (Modus 1) und wähle ihn dann im Stream unter „Über CDN64 aus dem Internet erreichbar“. Auf Port 80 und 443 antwortet unter diesem Namen nichts – weder hier noch über srv07/srv08.",
       "pass_hint": "Die Verbindung wird nach dem Namen roh an dieses Ziel gegeben, ohne sie hier zu entschlüsseln – das Ziel braucht ein eigenes Zertifikat. Auf Port 80 gibt es eine Weiterleitung auf HTTPS.",
+      "pass_bw_hint": "Bandbreite dieses Namens für alle Verbindungen zusammen, leer oder 0 = unbegrenzt. Darüber wird gebremst, nichts getrennt; die Verbindung bleibt verschlüsselt und wird nur langsamer weitergereicht. Gilt auch über CDN64.",
       "locations": "Locations",
       "advanced": "Erweitert",
       "access_list": "Zugriffsliste",

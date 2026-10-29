@@ -4,7 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
-- PROXY64: bandwidth per proxy host and per stream – limit download and upload in Mbit/s (unlimited by default), above
+- PROXY64: bandwidth per proxy host, "TLS pass-through" and stream – limit download and upload in Mbit/s (unlimited by default), above
   it traffic is slowed down instead of cut off.
 - PROXY64: streams in one table – names for streams only with their CDN64 state and their ports together.
 
