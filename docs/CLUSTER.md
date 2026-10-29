@@ -64,7 +64,7 @@ Healthchecks-Ablauf im Detail: [LOKALE-GRUPPE.md](LOKALE-GRUPPE.md). Code: `inte
 | Healthchecks bei der anderen Node aus | 5 min Ruhe statt alle 15 s (ein Anstoß holt trotzdem sofort) |
 | Konflikte | jüngere Änderung gewinnt (ms), Gleichstand: größere Node-Kennung der Urheberin |
 | Löschvermerke (v2) | 30 Tage |
-| Abgelehnter Eintrag (v2, „cluster change not applied“) | alle 5 min erneut abgeholt, bis er angenommen wird (Warnung einmal je Stand, danach Debug); der Stand der Abholung läuft trotzdem weiter, die Stelle bleibt über Neustarts gemerkt (`peer_members.retry2`); mit dem Update auf diesen Stand holt jede Node einmal alles neu ab |
+| Abgelehnter Eintrag (v2, „cluster change not applied“) | erneut abgeholt nach 5 min, danach mit doppeltem Abstand bis 6 h, nach jeder Änderung auf dieser Node gleich wieder, bis er angenommen wird (Warnung einmal je Stand, danach Debug); der Stand der Abholung läuft trotzdem weiter, die Stelle bleibt über Neustarts gemerkt (`peer_members.retry2`); mit dem Update auf diesen Stand holt jede Node einmal alles neu ab |
 | Bereich neu eingeschaltet | Abholen ab Anfang (doppelt schadet nicht, die jüngere Änderung gewinnt); genau gleiche Einträge werden dabei zusammengeführt (siehe unten) |
 
 ## Was abgeglichen wird
@@ -279,12 +279,15 @@ jüngere Änderung gewinnt.
 - Übernommen wird über denselben Weg wie eine Eingabe in den Einstellungen (`ipv64api.Key`, Konto, Merker „entfernt“
   zurück); alles, was den Key nutzt (DynDNS, Healthchecks über die API, Meldungen …), liest ihn ohnehin frisch.
   Jede Übernahme steht im Audit-Log (`peer.ipv64_key`, `peer.ipv64_key_removed`, Bereich `sync`).
-- Bei jeder neuen Kopplung meldet jede beteiligte Node mit Key diesen mit dem Zeitpunkt der Kopplung
-  (`nodecfg.ClusterJoined`, Schnittstelle `peer.Joiner`): Der Zeitpunkt eines Keys reist sonst beim Weiterreichen mit,
-  und ein jüngerer Löschvermerk im Cluster würde den Key der beitretenden Node entfernen, statt dass die Nodes ohne
-  Key ihn übernehmen. Eine Node **ohne** Key nimmt dabei ihren Löschvermerk des Keys aus dem Protokoll: Ein Entfernen
-  in einem Cluster löscht so nie den Key in einem anderen, in den eine Node danach wechselt (gesehen im Test
-  2026-10-29: Node wechselte mit Vermerk in einen anderen Cluster, dessen Node verlor ihren Key).
+- **Beitritt:** Eine beitretende Node **ohne** Key nimmt ihren Löschvermerk des Keys aus dem Protokoll
+  (`nodecfg.ClusterJoined`, Schnittstelle `peer.Joiner`, nur auf der beitretenden Node): Ein Entfernen in einem
+  Cluster löscht so nie den Key in einem anderen. Die annehmende Node ändert nichts – ihre Vermerke müssen auch
+  Mitglieder erreichen, die gerade nicht erreichbar sind. Bringt die beitretende Node einen Key mit, gilt der jüngere
+  Stand: Ein neuerer Key im Cluster gewinnt, ein älterer verliert.
+- **Mitgebrachter Key gegen älteres Entfernen:** Kommt ein Löschvermerk, der älter ist als die Verbindung dieser Node zur
+  entfernenden Node (`peer.WithMemberSince`, `peer_members.added_at`), und stammt der Key hier nicht schon aus diesem
+  Cluster (selbst eingetragen oder von einer Node außerhalb), bleibt der Key und wird neu gemeldet – die Nodes ohne Key
+  übernehmen ihn (Dennis' Regel). Ein späteres, bewusstes Entfernen im gemeinsamen Cluster wirkt normal.
 - Entfernen in den Einstellungen entfernt ihn auf allen Nodes mit eingeschaltetem Bereich. Entfernt ipv64.net die
   Node (Node-Übersicht), gilt das nur für sie: kein Löschen für die anderen, und sie nimmt keinen Key aus dem Cluster
   an, bis er auf ihr selbst eingetragen wird.

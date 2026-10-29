@@ -4,6 +4,9 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Cluster: when pairing, an outdated API key no longer wins over a newer one in the cluster, and removing the key
+  also reaches members that were unreachable while a new node was paired. Rejected entries are retried with a growing
+  interval (up to 6 h) and are no longer lost when fetching is interrupted.
 - PROXY64: bandwidth per proxy host, "TLS pass-through" and stream – limit download and upload in Mbit/s (unlimited by default), above
   it traffic is slowed down instead of cut off.
 - PROXY64: streams in one table – names for streams only with their CDN64 state and their ports together.

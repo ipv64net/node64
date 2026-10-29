@@ -44,10 +44,10 @@ type Provider interface {
 	ClusterApply(ctx context.Context, item, id string, data json.RawMessage, deleted bool) error
 }
 
-// Joiner kann ein Provider zusaetzlich erfuellen: nach jeder neuen Kopplung auf beiden Seiten aufgerufen (vor dem
-// ersten Abgleich), z. B. um Eintraege, die ab dem Beitritt gelten sollen, mit dem jetzigen Zeitpunkt zu melden.
-// forget nennt Eintraege ("bereich/kennung"), deren Loeschvermerk hier nicht in den neuen Cluster gehen soll (er
-// wird aus dem Protokoll genommen; ein vorhandener Eintrag bleibt).
+// Joiner kann ein Provider zusaetzlich erfuellen: auf der beitretenden Node nach dem Beitritt aufgerufen (vor dem
+// ersten Abgleich). forget nennt Eintraege ("bereich/kennung"), deren Loeschvermerk nicht in den neuen Cluster gehen
+// soll (er wird aus dem Protokoll genommen; ein vorhandener Eintrag bleibt). Die annehmende Node ruft es nicht: ihre
+// Vermerke gehoeren zu ihrem Cluster und muessen auch Mitglieder erreichen, die gerade nicht erreichbar sind.
 type Joiner interface {
 	ClusterJoined(ctx context.Context) (forget []string)
 }
@@ -300,6 +300,28 @@ type clusterOrigin struct {
 // WithClusterOrigin markiert eine von einer anderen Node uebernommene Aenderung (Urheberin, Zeitpunkt).
 func WithClusterOrigin(ctx context.Context, node string, at time.Time) context.Context {
 	return context.WithValue(ctx, originKey{}, clusterOrigin{node, at})
+}
+
+type sinceKey struct{}
+
+// WithMemberSince: seit wann diese Node mit der Urheberin der Aenderung verbunden ist (peer_members.added_at, ist sie
+// kein Mitglied mehr: des liefernden Mitglieds); damit kann ein Provider Aenderungen erkennen, die aelter sind als die
+// Verbindung (z. B. ein Loeschvermerk aus der Zeit vor dem Beitritt).
+func WithMemberSince(ctx context.Context, at time.Time) context.Context {
+	return context.WithValue(ctx, sinceKey{}, at)
+}
+
+// MemberSince liefert ihn (ok=false: unbekannt).
+func MemberSince(ctx context.Context) (time.Time, bool) {
+	at, ok := ctx.Value(sinceKey{}).(time.Time)
+	return at, ok && !at.IsZero()
+}
+
+// superseded: ClusterApply hat die Aenderung bewusst nicht uebernommen und den eigenen Stand neu gemeldet - kein
+// Fehler, keine Wiederholung und kein Eintrag des fremden Stands im Protokoll.
+func superseded(err error) bool {
+	var s interface{ Superseded() bool }
+	return errors.As(err, &s) && s.Superseded()
 }
 
 // ClusterOrigin liefert Urheberin und Zeitpunkt einer uebernommenen Aenderung.
