@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ipv64net/node64/internal/store"
 	_ "modernc.org/sqlite"
 )
 
@@ -139,6 +140,7 @@ func Open(path string, retention time.Duration, log *slog.Logger) (*Store, error
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
+	store.PrivateFiles(path) // Abfrageprotokoll mit Geraeten und Domains: nur der Node-Benutzer
 	for _, q := range addColumns {
 		if _, err := db.Exec(q); err != nil && !strings.Contains(err.Error(), "duplicate column") {
 			db.Close()

@@ -4,6 +4,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Sicherheit: Datenbanken (Node, DNS64-Abfrageprotokoll, PROXY64-Statistik) und ihre Backups sind nur noch für den
+  Node-Benutzer lesbar (vorher 0644, auf dem Host für jeden Benutzer lesbar); bestehende Dateien werden beim Start
+  angepasst.
 - Zertifikate: Domain und Wildcard zusammen (`example.ipv64.de` + `*.example.ipv64.de`) über DNS-01 scheiterten an
   Let's Encrypt („Incorrect TXT record“); beide Prüfwerte werden jetzt gleichzeitig gesetzt.
 - Healthchecks: Eine Änderung aus dem Portal, die gleichzeitig mit einer Änderung an der Node entstand, ging auf der

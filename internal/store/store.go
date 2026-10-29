@@ -85,6 +85,8 @@ func Open(ctx context.Context, path, backupDir string, log *slog.Logger) (*Store
 		s.Close()
 		return nil, err
 	}
+	PrivateFiles(path)
+	privateBackups(backupDir)
 	return s, nil
 }
 
@@ -278,8 +280,11 @@ func (s *Store) Backup(ctx context.Context, dest string) error {
 	}
 	_ = os.Remove(dest)
 	q := "VACUUM INTO '" + strings.ReplaceAll(filepath.ToSlash(dest), "'", "''") + "'"
-	_, err := s.w.ExecContext(ctx, q)
-	return err
+	if _, err := s.w.ExecContext(ctx, q); err != nil {
+		return err
+	}
+	PrivateFiles(dest)
+	return nil
 }
 
 // BackupBeforeMigration legt ein Backup unter backupDir an und behaelt die
