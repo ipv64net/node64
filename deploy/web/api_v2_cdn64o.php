@@ -19,7 +19,7 @@ const C64O_MODES        = array(1, 2, 3);  // 1 durchreichen, 2 terminieren (T5)
 const C64O_ACL_MAX      = 200;  // Eintraege je Liste
 const C64O_PORT_MIN     = 50000; // Portmapper: Ports der Server (wie beim alten CDN)
 const C64O_PORT_MAX     = 62000;
-const C64O_JA4_GLOBAL   = 'count'; // JA4 global: erste Woche nach dem Ausrollen nur zaehlen ('count'), danach 'block'
+const C64O_JA4_GLOBAL   = 'block'; // JA4 global: 'block' (seit 2026-10-29); 'count' = nur zaehlen (Startphase, Notbremse)
 const C64O_JA4_DAY_MAX  = 20;   // verschiedene JA4 je Host und Tag (cdn64o_ja4)
 // Schutz-Zaehler aus edge/report (Spalten in cdn64o_traffic) und Ausgabe protection (Feld => Spalte; rejected = Anfrage-Limit)
 const C64O_PROT_COLS    = array('blocked_list', 'blocked_acl', 'blocked_flood', 'blocked_waf', 'blocked_ja4', 'ja4_hits', 'blocked_ips', 'conns_v4');
