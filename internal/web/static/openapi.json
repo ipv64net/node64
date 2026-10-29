@@ -2342,6 +2342,18 @@
             },
             "maxItems": 60,
             "description": "ISO-Ländercodes, z. B. [\"DE\",\"AT\"]"
+          },
+          "bw_down_mbit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "Bandbreite zum Besucher in Mbit/s fuer alle Verbindungen des Streams zusammen, 0 = unbegrenzt (gebremst, nicht getrennt)"
+          },
+          "bw_up_mbit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "Bandbreite vom Besucher in Mbit/s, 0 = unbegrenzt"
           }
         }
       },
@@ -2434,6 +2446,18 @@
             },
             "maxItems": 60,
             "description": "ISO-Ländercodes, z. B. [\"DE\",\"AT\"]"
+          },
+          "bw_down_mbit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "Bandbreite zum Besucher in Mbit/s fuer alle Verbindungen des Streams zusammen, 0 = unbegrenzt (gebremst, nicht getrennt)"
+          },
+          "bw_up_mbit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "Bandbreite vom Besucher in Mbit/s, 0 = unbegrenzt"
           }
         }
       },

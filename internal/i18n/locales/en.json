@@ -702,7 +702,10 @@
         "hint": "Target in the home network. A port can only be opened once per protocol.",
         "tls": "Terminate TLS here (TCP only)",
         "tls_none": "No – forward raw",
-        "tls_hint": "With a certificate the stream accepts TLS and forwards unencrypted to the target."
+        "tls_hint": "With a certificate the stream accepts TLS and forwards unencrypted to the target.",
+        "bw_hint": "Bandwidth of this stream for all connections together, empty or 0 = unlimited. Above it traffic is slowed down: TCP waits, UDP packets wait in the port buffer (when it is full the system drops them, as on a full line). Also applies via CDN64. A new limit applies to new TCP connections, a changed one at once.",
+
+        "bw_title": "Bandwidth of the stream (download/upload)"
       },
       "help_ports": "Forward the port (TCP and/or UDP) on the router to this node. Ports below 1024 work without root thanks to the image's capabilities.",
       "help_docker": "With host networking Node64 opens the port directly. In bridge mode the port must also be published on the container (-p)."

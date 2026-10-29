@@ -229,11 +229,15 @@ func streamFromForm(r *http.Request, s *Stream) {
 	if r.PostFormValue("has_geo") == "1" { // Laendersperre war im Formular
 		s.GeoMode, s.GeoCountries = r.PostFormValue("geo_mode"), lines(r.PostFormValue("geo_countries"))
 	}
+	if r.PostFormValue("has_bw") == "1" { // Bandbreite war im Formular
+		s.BWDownMbit, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("bw_down")))
+		s.BWUpMbit, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("bw_up")))
+	}
 }
 
 func (s *Stream) summary() string {
-	return fmt.Sprintf("listen=%d tcp=%v udp=%v target=%s tls_cert=%d enabled=%v geo=%s:%s", s.ListenPort, s.TCP, s.UDP, s.target(), s.TLSCertID, s.Enabled,
-		s.GeoMode, strings.Join(s.GeoCountries, ","))
+	return fmt.Sprintf("listen=%d tcp=%v udp=%v target=%s tls_cert=%d enabled=%v geo=%s:%s bw=%d/%d", s.ListenPort, s.TCP, s.UDP, s.target(), s.TLSCertID, s.Enabled,
+		s.GeoMode, strings.Join(s.GeoCountries, ","), s.BWDownMbit, s.BWUpMbit)
 }
 
 func (m *Module) pageStreamCreate(w http.ResponseWriter, r *http.Request) {

@@ -69,14 +69,19 @@ und keinem Modul:
 | Weiterleitung | Domain(s) → andere Domain | 301/302/303/307/308, Pfad mitnehmen, Schema wie Anfrage oder fest |
 | 404-Host | Domain(s) → „nicht gefunden“ | z. B. für stillgelegte Namen |
 | TLS durchreichen | Name auf 443 → Dienst mit eigenem Zertifikat | Node64 entschlüsselt nicht; Port 80 leitet auf HTTPS |
-| Stream | Port (TCP/UDP) → Ziel | optional TLS-Abschluss (TCP); UDP-Sitzungen enden nach 60 s ohne Pakete |
+| Stream | Port (TCP/UDP) → Ziel | optional TLS-Abschluss (TCP), Bandbreite; UDP-Sitzungen enden nach 60 s ohne Pakete |
 | Name nur für Streams | Name ohne Ziel (`kind` `stream`) | nur für den CDN64-Portmapper (Modus 1): keine Route, über den Tunnel schließt die Node 80/443/QUIC sofort |
 
 **Bandbreite je Proxy-Host (Erweitert, ab 1.41.0):** Download und Upload höchstens n Mbit/s (`advanced.bw_down_mbit`,
 `bw_up_mbit`, 0 = unbegrenzt, Standard). Alle Anfragen des Hosts teilen sich je Richtung einen Token-Eimer
 (`bandwidth.go`, Eimer ≈ 1/10 s, 16 KiB–1 MiB): bis zur Grenze ungebremst, darüber wartet jede Anfrage auf ihren
 Anteil, getrennt wird nichts. Gilt für Antworten (auch aus dem Cache), Request-Bodys und WebSockets, lokal und über
-CDN64 (Modus 1/2). Nicht für Streams und „TLS durchreichen“.
+CDN64 (Modus 1/2). Nicht für „TLS durchreichen“.
+
+**Bandbreite je Stream (ab 1.42.0):** `bw_down_mbit` / `bw_up_mbit` am Stream, eigener Eimer je Stream für alle
+Verbindungen (lokal und über den CDN64-Portmapper). TCP wird beim Kopieren gebremst (mit Grenze nicht mehr roh), UDP
+wartet je Paket – weitere Pakete stehen solange im Puffer des Ports, ist er voll, verwirft das System. Ändern startet
+den Stream nicht neu; eine geänderte Grenze gilt sofort, eine neue (vorher unbegrenzt) für neue TCP-Verbindungen.
 
 **Das Ziel bekommt:**
 - den Namen, unter dem der Besucher kam (einstellbar);

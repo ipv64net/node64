@@ -118,7 +118,11 @@ func TestOnlinePorts(t *testing.T) {
 	if err != nil || string(buf[:n]) != "U:ping" {
 		t.Fatalf("udp via tunnel: %q %v", buf[:n], err)
 	}
-	if s := e.m.streamStatsOf(st.ID); s.conns.Load() != 1 || s.bytesIn.Load() != 2 {
+	s := e.m.streamStatsOf(st.ID)
+	for i := 0; i < 200 && s.bytesIn.Load() == 0; i++ { // gezaehlt wird, wenn beide Richtungen fertig sind (unter Last spaeter)
+		time.Sleep(10 * time.Millisecond)
+	}
+	if s.conns.Load() != 1 || s.bytesIn.Load() != 2 {
 		t.Fatalf("stream stats: conns %d in %d", s.conns.Load(), s.bytesIn.Load())
 	}
 	// Grenze je Stream: volle UDP-Sitzungen -> neue werden geschlossen

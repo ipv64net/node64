@@ -49,6 +49,10 @@ type Stream struct {
 	// Laendersperre wie bei Hosts (geo.go): "" = aus, block, allow; aendern startet den Stream nicht neu
 	GeoMode      string   `json:"geo_mode,omitempty"`
 	GeoCountries []string `json:"geo_countries,omitempty"`
+
+	// Bandbreite (bandwidth.go) in Mbit/s, 0 = unbegrenzt; aendern startet den Stream nicht neu
+	BWDownMbit int `json:"bw_down_mbit,omitempty"` // zum Besucher
+	BWUpMbit   int `json:"bw_up_mbit,omitempty"`   // vom Besucher
 }
 
 func (s *Stream) target() string { return net.JoinHostPort(s.TargetHost, strconv.Itoa(s.TargetPort)) }
@@ -86,6 +90,9 @@ func (s *Stream) normalize() error {
 	if s.TLSCertID < 0 || (s.TLSCertID > 0 && !s.TCP) {
 		return ferr("tls_cert_id", "cdn64.err.stream_tls")
 	}
+	if s.BWDownMbit < 0 || s.BWDownMbit > bwMaxMbit || s.BWUpMbit < 0 || s.BWUpMbit > bwMaxMbit {
+		return ferr("bw", "cdn64.err.bandwidth")
+	}
 	return normalizeGeo(&s.GeoMode, &s.GeoCountries)
 }
 
@@ -107,12 +114,14 @@ func (s *Stream) claims(active map[string]bool) []ports.Claim {
 
 // ---------------------------------------------------------------- Datenbank
 
-const streamCols = `id, name, enabled, listen_port, tcp, udp, target_host, target_port, tls_cert_id, created_at, updated_at, geo_mode, geo_countries, online_name`
+const streamCols = `id, name, enabled, listen_port, tcp, udp, target_host, target_port, tls_cert_id, created_at, updated_at, geo_mode, geo_countries, online_name,
+	bw_down_mbit, bw_up_mbit`
 
 func scanStream(row interface{ Scan(...any) error }) (*Stream, error) {
 	var s Stream
 	var ca, ua, geo string
-	if err := row.Scan(&s.ID, &s.Name, &s.Enabled, &s.ListenPort, &s.TCP, &s.UDP, &s.TargetHost, &s.TargetPort, &s.TLSCertID, &ca, &ua, &s.GeoMode, &geo, &s.OnlineName); err != nil {
+	if err := row.Scan(&s.ID, &s.Name, &s.Enabled, &s.ListenPort, &s.TCP, &s.UDP, &s.TargetHost, &s.TargetPort, &s.TLSCertID, &ca, &ua, &s.GeoMode, &geo, &s.OnlineName,
+		&s.BWDownMbit, &s.BWUpMbit); err != nil {
 		return nil, err
 	}
 	if geo != "" {
@@ -173,17 +182,18 @@ func (m *Module) saveStream(ctx context.Context, s *Stream) error {
 	}
 	now := store.Now()
 	w := m.core.Writer()
-	args := []any{s.Name, s.Enabled, s.ListenPort, s.TCP, s.UDP, s.TargetHost, s.TargetPort, s.TLSCertID, s.GeoMode, strings.Join(s.GeoCountries, ","), s.OnlineName}
+	args := []any{s.Name, s.Enabled, s.ListenPort, s.TCP, s.UDP, s.TargetHost, s.TargetPort, s.TLSCertID, s.GeoMode, strings.Join(s.GeoCountries, ","), s.OnlineName,
+		s.BWDownMbit, s.BWUpMbit}
 	if s.ID == 0 {
 		res, err := w.ExecContext(ctx, `INSERT INTO cdn_streams (name, enabled, listen_port, tcp, udp, target_host, target_port, tls_cert_id, geo_mode, geo_countries,
-			online_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
+			online_name, bw_down_mbit, bw_up_mbit, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append(args, now, now)...)
 		if err != nil {
 			return err
 		}
 		s.ID, _ = res.LastInsertId()
 	} else {
 		res, err := w.ExecContext(ctx, `UPDATE cdn_streams SET name = ?, enabled = ?, listen_port = ?, tcp = ?, udp = ?, target_host = ?, target_port = ?,
-			tls_cert_id = ?, geo_mode = ?, geo_countries = ?, online_name = ?, updated_at = ? WHERE id = ?`, append(args, now, s.ID)...)
+			tls_cert_id = ?, geo_mode = ?, geo_countries = ?, online_name = ?, bw_down_mbit = ?, bw_up_mbit = ?, updated_at = ? WHERE id = ?`, append(args, now, s.ID)...)
 		if err != nil {
 			return err
 		}
@@ -249,6 +259,7 @@ type streamRun struct {
 	wg     sync.WaitGroup
 
 	geo atomic.Pointer[Stream] // Laendersperre (GeoMode, GeoCountries), bei jedem Abgleich neu gesetzt
+	bw  atomic.Pointer[bwPair] // Bandbreite (nil = unbegrenzt), bei jedem Abgleich neu gesetzt
 }
 
 // streamGeoBlocked: Laendersperre des Streams; abgewiesen wird mit Statistik wie bei den Blocklisten.
@@ -329,10 +340,16 @@ func (m *Module) applyStreams(ctx context.Context) {
 		}
 		m.geoNeedStreams(active)
 	}
+	ids := make(map[int64]bool, len(want))
+	for id := range want {
+		ids[id] = true
+	}
+	m.sbw.keepIDs(ids)
 	m.smu.Lock()
-	for id, r := range m.runs { // Laendersperre gilt ohne Neustart
+	for id, r := range m.runs { // Laendersperre und Bandbreite gelten ohne Neustart
 		if s, ok := want[id]; ok {
 			r.geo.Store(s)
+			r.bw.Store(m.sbw.of(id, s.BWDownMbit, s.BWUpMbit))
 		}
 	}
 	var stop []*streamRun
@@ -364,6 +381,7 @@ func (m *Module) applyStreams(ctx context.Context) {
 	}
 	for _, s := range start {
 		r := m.startStream(ctx, s)
+		r.bw.Store(m.sbw.of(s.ID, s.BWDownMbit, s.BWUpMbit))
 		m.smu.Lock()
 		m.runs[s.ID] = r
 		m.smu.Unlock()
@@ -490,6 +508,9 @@ func (m *Module) streamPipe(r *streamRun, c net.Conn, target string, release fun
 	}
 	r.stats.conns.Add(1)
 	r.stats.active.Add(1)
+	if bw := r.bw.Load(); bw != nil { // mit Grenze gebremst kopieren (ohne Grenze roh wie bisher)
+		c = &bwConn{Conn: c, bw: bw}
+	}
 	in, out := edge.Pipe(c, up)
 	r.stats.active.Add(-1)
 	r.stats.bytesIn.Add(in)
@@ -576,6 +597,9 @@ func (m *Module) serveUDP(r *streamRun, target string) {
 					}
 					s.last.Store(time.Now().UnixNano())
 					r.stats.bytesUp.Add(int64(k))
+					if bw := r.bw.Load(); bw != nil {
+						_ = bwWait(context.Background(), bw.down, k) // gebremst: weitere Antworten warten im Socket zum Ziel
+					}
 					if _, err := r.udp.WriteTo(b[:k], client); err != nil {
 						return
 					}
@@ -585,6 +609,9 @@ func (m *Module) serveUDP(r *streamRun, target string) {
 		mu.Unlock()
 		s.last.Store(time.Now().UnixNano())
 		r.stats.bytesIn.Add(int64(n))
+		if bw := r.bw.Load(); bw != nil {
+			_ = bwWait(context.Background(), bw.up, n) // gebremst: weitere Pakete warten im Puffer des Ports
+		}
 		_, _ = s.up.Write(buf[:n])
 	}
 }

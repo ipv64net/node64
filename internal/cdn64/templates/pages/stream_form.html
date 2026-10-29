@@ -57,6 +57,17 @@
 				</div>
 				{{if $d.Countries}}<datalist id="geo-cc">{{range $d.Countries}}<option value="{{.Code}}">{{.Name}}</option>{{end}}</datalist>{{end}}
 				<div class="form-text mb-3">{{.T "cdn64.f.geo_hint"}}</div>
+				<input type="hidden" name="has_bw" value="1">
+				<div class="row g-2 mb-1" data-bw>
+					<div class="col-md-4"><label class="form-label fw-semibold" for="bw_down"><i class="bi bi-cloud-download"></i> {{.T "cdn64.f.adv_bw_down"}}</label>
+						<div class="input-group input-group-sm"><input class="form-control{{if index $d.Errors "bw"}} is-invalid{{end}}" type="number" min="0" max="100000" id="bw_down" name="bw_down" value="{{if $s.BWDownMbit}}{{$s.BWDownMbit}}{{end}}" placeholder="{{.T "cdn64.f.adv_bw_unlimited"}}" data-bw-mbit><span class="input-group-text">Mbit/s</span></div>
+						<div class="form-text" data-bw-mb></div></div>
+					<div class="col-md-4"><label class="form-label fw-semibold" for="bw_up"><i class="bi bi-cloud-upload"></i> {{.T "cdn64.f.adv_bw_up"}}</label>
+						<div class="input-group input-group-sm"><input class="form-control{{if index $d.Errors "bw"}} is-invalid{{end}}" type="number" min="0" max="100000" id="bw_up" name="bw_up" value="{{if $s.BWUpMbit}}{{$s.BWUpMbit}}{{end}}" placeholder="{{.T "cdn64.f.adv_bw_unlimited"}}" data-bw-mbit><span class="input-group-text">Mbit/s</span></div>
+						<div class="form-text" data-bw-mb></div></div>
+				</div>
+				{{with index $d.Errors "bw"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
+				<div class="form-text mb-3">{{.T "cdn64.streams.f.bw_hint"}}</div>
 				<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="enabled" id="enabled"{{if $s.Enabled}} checked{{end}}><label class="form-check-label" for="enabled">{{.T "cdn64.f.enabled"}}</label></div>
 			</div>
 			<div class="card-footer d-flex gap-2">

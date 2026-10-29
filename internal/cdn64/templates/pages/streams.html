@@ -89,6 +89,7 @@
 			<td class="ps-3"><span class="font-monospace">{{.ListenPort}}</span>
 				{{if .TCP}}<span class="badge text-bg-light">TCP</span>{{end}}{{if .UDP}}<span class="badge text-bg-light">UDP</span>{{end}}
 				{{if .Name}}<div class="text-body-secondary">{{.Name}}</div>{{end}}
+				{{if or .BWDownMbit .BWUpMbit}}<div><span class="badge text-bg-light" title="{{$v.T "cdn64.streams.f.bw_title"}}" data-bw-badge><i class="bi bi-speedometer"></i> {{if .BWDownMbit}}↓{{.BWDownMbit}}{{else}}↓∞{{end}} {{if .BWUpMbit}}↑{{.BWUpMbit}}{{else}}↑∞{{end}} Mbit/s</span></div>{{end}}
 				{{if not .Enabled}}<div><span class="badge text-bg-secondary">{{$v.T "cdn64.disabled"}}</span></div>{{end}}
 				{{range $p, $e := .Errors}}<div class="text-danger text-break">{{$p}}: {{$e}}</div>{{end}}
 				{{range .Online}}<div class="mt-1" title="{{$v.T "cdn64.streams.online_title"}}"><i class="bi bi-cloud-arrow-up text-primary"></i> <span class="font-monospace">{{.Name}}:{{.ListenPort}}</span> <span class="badge text-bg-light">{{if eq .Transport "udp"}}UDP{{else}}TCP{{end}}</span></div>{{end}}

@@ -49,7 +49,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.41.0"
+	Version = "1.42.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -90,6 +90,7 @@ type Module struct {
 	bl         *blocklists     // ipv64-Blocklisten
 	lim        *limiter        // Schutz vor Ueberlastung
 	bw         bwSet           // Bandbreite je Proxy-Host (bandwidth.go)
+	sbw        bwSet           // ... und je Stream
 	hp         hpState         // Honeypot64: Koeder, Zugriffe, Sofort-Sperre (honeypot.go)
 	online     onlineState     // CDN64 online (Tunnel zu srv07/srv08)
 	dnsrec     DNSRecords      // DNS-Records bei ipv64 (nil = nicht verfuegbar)
