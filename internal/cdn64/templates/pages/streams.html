@@ -2,8 +2,8 @@
 {{$d := .Data}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
 	<h1 class="h4 mb-0"><i class="bi bi-diagram-3 text-primary me-1"></i> {{.T "cdn64.title"}}</h1>
-	<div class="ms-auto d-flex gap-2">
-		<a class="btn btn-sm btn-outline-primary" href="/cdn64/streamnames"><i class="bi bi-cloud-arrow-up"></i> {{.T "cdn64.streams.names_btn"}}</a>
+	<div class="ms-auto d-flex flex-wrap gap-2">
+		<a class="btn btn-sm btn-outline-primary" href="/cdn64/hosts/new?kind=stream"><i class="bi bi-cloud-plus"></i> {{.T "cdn64.kind_new.stream"}}</a>
 		<a class="btn btn-sm btn-outline-primary" href="/cdn64/hosts/new?kind=passthrough"><i class="bi bi-plus-lg"></i> {{.T "cdn64.kind_new.passthrough"}}</a>
 		<a class="btn btn-sm btn-primary" href="/cdn64/streams/new"><i class="bi bi-plus-lg"></i> {{.T "cdn64.streams.new"}}</a>
 	</div>
@@ -12,42 +12,35 @@
 	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
 </ul>
 <div class="card mb-3">
-	<div class="card-header"><i class="bi bi-ethernet text-primary"></i> {{.T "cdn64.streams.title"}}</div>
-	{{if not $d.Streams}}<div class="card-body text-body-secondary small">{{.T "cdn64.streams.empty"}}</div>
+	<div class="card-header"><i class="bi bi-ethernet text-primary"></i> {{.T "cdn64.streams.title"}}{{$.Doc "cdn64-online#portmapper"}}</div>
+	{{if $d.Names}}<div class="card-body small text-body-secondary pb-0">{{.T "cdn64.streamnames.list_hint"}}</div>{{end}}
+	{{if not (or $d.Streams $d.Names)}}<div class="card-body text-body-secondary small">{{.T "cdn64.streams.empty"}}</div>
 	{{else}}
 	<div class="table-responsive">
 	<table class="table table-hover align-middle mb-0 small">
 		<thead><tr><th class="ps-3">{{.T "cdn64.streams.col.port"}}</th><th>{{.T "cdn64.col.target"}}</th><th>TLS</th><th>{{.T "cdn64.col.reach"}}</th>
 			<th class="text-end">{{.T "cdn64.streams.col.conns"}}</th><th class="text-end">{{.T "cdn64.streams.col.traffic"}}</th><th class="text-end pe-3"></th></tr></thead>
 		<tbody>
-		{{range $d.Streams}}
-		<tr{{if not .Enabled}} class="opacity-50"{{end}}>
-			<td class="ps-3"><span class="font-monospace">{{.ListenPort}}</span>
-				{{if .TCP}}<span class="badge text-bg-light">TCP</span>{{end}}{{if .UDP}}<span class="badge text-bg-light">UDP</span>{{end}}
-				{{if .Name}}<div class="text-body-secondary">{{.Name}}</div>{{end}}
-				{{if not .Enabled}}<div><span class="badge text-bg-secondary">{{$.T "cdn64.disabled"}}</span></div>{{end}}
-				{{range $p, $e := .Errors}}<div class="text-danger text-break">{{$p}}: {{$e}}</div>{{end}}
-				{{range .Online}}<div class="mt-1" title="{{$.T "cdn64.streams.online_title"}}"><i class="bi bi-cloud-arrow-up text-primary"></i> <span class="font-monospace">{{.Name}}:{{.ListenPort}}</span> <span class="badge text-bg-light">{{if eq .Transport "udp"}}UDP{{else}}TCP{{end}}</span></div>{{end}}
-				{{with .OnlineErr}}<div class="text-danger text-break"><i class="bi bi-cloud-slash"></i> {{$.T (print "cdn64.online.e." .)}}</div>{{end}}</td>
-			<td class="font-monospace text-break">{{.TargetHost}}:{{.TargetPort}}</td>
-			<td>{{if .TLSCertID}}<span class="badge text-bg-success" title="{{.CertName}}"><i class="bi bi-lock-fill"></i></span>{{else}}<span class="text-body-secondary">–</span>{{end}}</td>
-			<td>{{if .Enabled}}{{with .Reach}}
-				{{if eq .State "up"}}<span class="badge text-bg-success">{{$.T "cdn64.reach.up" "ms" .Ms}}</span>
-				{{else if eq .State "slow"}}<span class="badge text-bg-warning">{{$.T "cdn64.reach.slow" "ms" .Ms}}</span>
-				{{else if eq .State "down"}}<span class="badge text-bg-danger" title="{{.Error}}">{{$.T "cdn64.reach.down"}}</span>
-				{{else}}<span class="badge text-bg-light">{{$.T "cdn64.reach.unknown"}}</span>{{end}}{{end}}{{end}}</td>
-			<td class="text-end font-monospace">{{$.Int .Stats.Conns}}{{if .Stats.Active}}<div class="text-body-secondary">{{$.T "cdn64.streams.active" "n" .Stats.Active}}</div>{{end}}</td>
-			<td class="text-end font-monospace">{{$.Bytes .Stats.BytesIn}} / {{$.Bytes .Stats.BytesUp}}</td>
+		{{range $d.Names}}{{$n := index .Row.Names 0}}
+		<tr class="table-light{{if not .Row.Enabled}} opacity-50{{end}}" data-stream-name="{{.Row.ID}}">
+			<td class="ps-3" colspan="3"><i class="bi bi-cloud-arrow-up text-primary"></i> <span class="font-monospace fw-semibold text-break">{{$n}}</span>
+				<span class="badge text-bg-light" title="{{$.T "cdn64.streamnames.no_http"}}">{{$.T "cdn64.streams.name_badge"}}</span>
+				{{if not .Row.Enabled}}<span class="badge text-bg-secondary">{{$.T "cdn64.disabled"}}</span>{{end}}</td>
+			<td colspan="3">{{if $d.OnlineOn}}{{template "c64o_cell" (dict "V" $ "R" .Row)}}{{else}}<span class="text-body-secondary">{{$.T "cdn64.streams.f.online_empty"}}</span>{{end}}</td>
 			<td class="text-end pe-3 text-nowrap">
-				{{if .TCP}}<form method="post" action="/cdn64/streams/{{.ID}}/healthcheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "cdn64.create_check"}}"><i class="bi bi-heart-pulse"></i></button></form>{{end}}
-				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/streams/{{.ID}}" title="{{$.T "cdn64.streams.edit"}}"><i class="bi bi-pencil"></i></a>
-				<form method="post" action="/cdn64/streams/{{.ID}}/{{if .Enabled}}disable{{else}}enable{{end}}" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
-					<button class="btn btn-sm {{if .Enabled}}btn-outline-warning{{else}}btn-outline-success{{end}} py-0" type="submit" title="{{if .Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause-fill{{else}}bi-play-fill{{end}}"></i></button></form>
-				<form method="post" action="/cdn64/streams/{{.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
-					<button class="btn btn-sm btn-outline-danger py-0" type="submit" data-confirm="{{$.T "cdn64.streams.delete_confirm" "port" .ListenPort}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button></form>
+				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/streams/new?online_name={{$n}}" title="{{$.T "cdn64.streams.add_port"}}"><i class="bi bi-plus-lg"></i> {{$.T "cdn64.streams.col.port"}}</a>
+				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/hosts/{{.Row.ID}}" title="{{$.T "cdn64.edit"}}"><i class="bi bi-pencil"></i></a>
+				<form method="post" action="/cdn64/hosts/{{.Row.ID}}/{{if .Row.Enabled}}disable{{else}}enable{{end}}" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<button class="btn btn-sm {{if .Row.Enabled}}btn-outline-warning{{else}}btn-outline-success{{end}} py-0" type="submit" title="{{if .Row.Enabled}}{{$.T "common.disable"}}{{else}}{{$.T "common.enable"}}{{end}}"><i class="bi {{if .Row.Enabled}}bi-pause-fill{{else}}bi-play-fill{{end}}"></i></button></form>
+				<form method="post" action="/cdn64/hosts/{{.Row.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
+					<button class="btn btn-sm btn-outline-danger py-0" type="submit" data-confirm="{{$.T "cdn64.delete_confirm" "name" $n}}" title="{{$.T "common.delete"}}"><i class="bi bi-trash"></i></button></form>
 			</td>
 		</tr>
+		{{range .Streams}}{{template "stream_row" (dict "V" $ "S" .)}}{{else}}
+		<tr><td class="ps-4 text-body-secondary" colspan="7">{{$.T "cdn64.streams.name_noport"}} <a href="/cdn64/streams/new?online_name={{$n}}">{{$.T "cdn64.streams.add_port"}}</a></td></tr>{{end}}
 		{{end}}
+		{{if and $d.Names $d.Local}}<tr class="table-light"><td class="ps-3" colspan="7"><i class="bi bi-house"></i> {{.T "cdn64.streams.group_local"}}</td></tr>{{end}}
+		{{range $d.Local}}{{template "stream_row" (dict "V" $ "S" .)}}{{end}}
 		</tbody>
 	</table>
 	</div>
@@ -88,5 +81,34 @@
 	{{end}}
 </div>
 <p class="small text-body-secondary mt-2">{{.T "cdn64.streams.hint"}}</p>
+{{if $d.OnlineOn}}{{template "c64o_modal" (dict "V" $ "L" $d.OnlineL "S" true)}}{{end}}
 {{end}}
-{{define "scripts"}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{end}}
+{{define "scripts"}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{if .Data.OnlineOn}}<script src="/static/js/cdn64-online.js?v={{.Version}}"></script>{{end}}{{end}}
+{{define "stream_row"}}{{$v := .V}}{{with .S}}
+		<tr{{if not .Enabled}} class="opacity-50"{{end}}>
+			<td class="ps-3"><span class="font-monospace">{{.ListenPort}}</span>
+				{{if .TCP}}<span class="badge text-bg-light">TCP</span>{{end}}{{if .UDP}}<span class="badge text-bg-light">UDP</span>{{end}}
+				{{if .Name}}<div class="text-body-secondary">{{.Name}}</div>{{end}}
+				{{if not .Enabled}}<div><span class="badge text-bg-secondary">{{$v.T "cdn64.disabled"}}</span></div>{{end}}
+				{{range $p, $e := .Errors}}<div class="text-danger text-break">{{$p}}: {{$e}}</div>{{end}}
+				{{range .Online}}<div class="mt-1" title="{{$v.T "cdn64.streams.online_title"}}"><i class="bi bi-cloud-arrow-up text-primary"></i> <span class="font-monospace">{{.Name}}:{{.ListenPort}}</span> <span class="badge text-bg-light">{{if eq .Transport "udp"}}UDP{{else}}TCP{{end}}</span></div>{{end}}
+				{{with .OnlineErr}}<div class="text-danger text-break"><i class="bi bi-cloud-slash"></i> {{$v.T (print "cdn64.online.e." .)}}</div>{{end}}</td>
+			<td class="font-monospace text-break">{{.TargetHost}}:{{.TargetPort}}</td>
+			<td>{{if .TLSCertID}}<span class="badge text-bg-success" title="{{.CertName}}"><i class="bi bi-lock-fill"></i></span>{{else}}<span class="text-body-secondary">–</span>{{end}}</td>
+			<td>{{if .Enabled}}{{with .Reach}}
+				{{if eq .State "up"}}<span class="badge text-bg-success">{{$v.T "cdn64.reach.up" "ms" .Ms}}</span>
+				{{else if eq .State "slow"}}<span class="badge text-bg-warning">{{$v.T "cdn64.reach.slow" "ms" .Ms}}</span>
+				{{else if eq .State "down"}}<span class="badge text-bg-danger" title="{{.Error}}">{{$v.T "cdn64.reach.down"}}</span>
+				{{else}}<span class="badge text-bg-light">{{$v.T "cdn64.reach.unknown"}}</span>{{end}}{{end}}{{end}}</td>
+			<td class="text-end font-monospace">{{$v.Int .Stats.Conns}}{{if .Stats.Active}}<div class="text-body-secondary">{{$v.T "cdn64.streams.active" "n" .Stats.Active}}</div>{{end}}</td>
+			<td class="text-end font-monospace">{{$v.Bytes .Stats.BytesIn}} / {{$v.Bytes .Stats.BytesUp}}</td>
+			<td class="text-end pe-3 text-nowrap">
+				{{if .TCP}}<form method="post" action="/cdn64/streams/{{.ID}}/healthcheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$v.CSRF}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$v.T "cdn64.create_check"}}"><i class="bi bi-heart-pulse"></i></button></form>{{end}}
+				<a class="btn btn-sm btn-outline-primary py-0" href="/cdn64/streams/{{.ID}}" title="{{$v.T "cdn64.streams.edit"}}"><i class="bi bi-pencil"></i></a>
+				<form method="post" action="/cdn64/streams/{{.ID}}/{{if .Enabled}}disable{{else}}enable{{end}}" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$v.CSRF}}">
+					<button class="btn btn-sm {{if .Enabled}}btn-outline-warning{{else}}btn-outline-success{{end}} py-0" type="submit" title="{{if .Enabled}}{{$v.T "common.disable"}}{{else}}{{$v.T "common.enable"}}{{end}}"><i class="bi {{if .Enabled}}bi-pause-fill{{else}}bi-play-fill{{end}}"></i></button></form>
+				<form method="post" action="/cdn64/streams/{{.ID}}/delete" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$v.CSRF}}">
+					<button class="btn btn-sm btn-outline-danger py-0" type="submit" data-confirm="{{$v.T "cdn64.streams.delete_confirm" "port" .ListenPort}}" title="{{$v.T "common.delete"}}"><i class="bi bi-trash"></i></button></form>
+			</td>
+		</tr>
+		{{end}}{{end}}

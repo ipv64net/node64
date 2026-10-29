@@ -1,5 +1,12 @@
 # Änderungen – PROXY64
 
+## 1.40.1 – 2026-10-29
+
+### Geändert
+- Streams: Eine Tabelle statt zwei – jeder Name nur für Streams steht mit seinem CDN64-Stand (Modus, Server, Testen,
+  Pausieren, Ausschalten) als Zeile über seinen Ports, „+ Port“ legt einen Stream gleich mit dem Namen an. Darunter
+  folgen die Streams ohne eigenen Namen. Die eigene Seite „Namen für Streams“ entfällt.
+
 ## 1.40.0 – 2026-10-29
 
 ### Neu

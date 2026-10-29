@@ -102,6 +102,40 @@ type streamsData struct {
 	Tabs    []tab
 	Streams []streamRow
 	Pass    []hostRow
+
+	// eine Tabelle: Namen nur fuer Streams mit CDN64 und ihren Ports, danach die Streams ohne eigenen Namen
+	Names    []streamName
+	Local    []streamRow
+	OnlineOn bool   // CDN64 verfuegbar (ipv64 angebunden)
+	OnlineL  string // Texte fuer cdn64-online.js (JSON)
+}
+
+// streamName: Name nur fuer Streams (Host der Art stream) und die Streams, die ihn als CDN64-Namen nutzen.
+type streamName struct {
+	Row     hostRow
+	Streams []streamRow
+}
+
+// groupStreams ordnet die Streams ihren Namen nur fuer Streams zu; die uebrigen (nur hier oder Name eines anderen
+// Hosts) bleiben fuer sich.
+func groupStreams(names []hostRow, list []streamRow) ([]streamName, []streamRow) {
+	out := make([]streamName, len(names))
+	idx := map[string]int{}
+	for i, n := range names {
+		out[i].Row = n
+		for _, name := range n.Names {
+			idx[name] = i
+		}
+	}
+	var local []streamRow
+	for _, s := range list {
+		if i, ok := idx[strings.ToLower(s.OnlineName)]; ok && s.OnlineName != "" {
+			out[i].Streams = append(out[i].Streams, s)
+			continue
+		}
+		local = append(local, s)
+	}
+	return out, local
 }
 
 func (m *Module) pageStreams(w http.ResponseWriter, r *http.Request) {
@@ -116,7 +150,17 @@ func (m *Module) pageStreams(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	m.g.Render(w, r, http.StatusOK, Name+"/streams", "cdn64.title", streamsData{Tabs: m.tabs("/cdn64/streams"), Streams: st, Pass: pass})
+	names, err := m.rowsOf(ctx, KindStream)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	d := streamsData{Tabs: m.tabs("/cdn64/streams"), Streams: st, Pass: pass, OnlineOn: m.online.api != nil && m.edge != nil}
+	d.Names, d.Local = groupStreams(names, st)
+	if d.OnlineOn {
+		d.OnlineL = m.onlineStrings(r)
+	}
+	m.g.Render(w, r, http.StatusOK, Name+"/streams", "cdn64.title", d)
 }
 
 type streamForm struct {
@@ -147,7 +191,9 @@ func (m *Module) streamFormData(ctx context.Context, s *Stream, isNew bool) stre
 }
 
 func (m *Module) pageStreamNew(w http.ResponseWriter, r *http.Request) {
-	m.g.Render(w, r, http.StatusOK, Name+"/stream_form", "cdn64.streams.new", m.streamFormData(r.Context(), newStream(), true))
+	s := newStream()
+	s.OnlineName = strings.ToLower(strings.TrimSpace(r.URL.Query().Get("online_name"))) // "Port hinzufuegen" am Namen
+	m.g.Render(w, r, http.StatusOK, Name+"/stream_form", "cdn64.streams.new", m.streamFormData(r.Context(), s, true))
 }
 
 func (m *Module) streamFromPath(w http.ResponseWriter, r *http.Request) (*Stream, bool) {

@@ -128,6 +128,7 @@ func (s *Server) parseTemplates() error {
 		"split":    strings.Fields,
 		"contains": strings.Contains,
 		"darkimg":  darkImage,
+		"dict":     dict,
 		"seq": func(n int) []int {
 			out := make([]int, n)
 			for i := range out {
@@ -174,6 +175,11 @@ func (s *Server) parseTemplates() error {
 			t, err := template.New("layout.html").Funcs(funcs).ParseFS(templateFS, "templates/layout.html", "templates/partials/*.html")
 			if err != nil {
 				return err
+			}
+			if ps, _ := fs.Glob(mfs, "partials/*.html"); len(ps) > 0 { // Bausteine des Moduls fuer mehrere Seiten
+				if _, err := t.ParseFS(mfs, "partials/*.html"); err != nil {
+					return fmt.Errorf("module partials %s: %w", part.name, err)
+				}
 			}
 			if _, err := t.ParseFS(mfs, p); err != nil {
 				return fmt.Errorf("module template %s: %w", name, err)

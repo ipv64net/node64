@@ -668,7 +668,10 @@
     },
     "streams": {
       "title": "Streams (TCP/UDP)",
-      "names_btn": "Namen für Streams",
+      "name_badge": "nur Streams",
+      "add_port": "Port hinzufügen",
+      "name_noport": "Noch kein Port unter diesem Namen.",
+      "group_local": "Ohne eigenen Namen für Streams (nur hier oder über den Namen eines Proxy-Hosts)",
       "online_title": "Über CDN64: Port der Server (srv07/srv08), der zu diesem Stream geht",
       "new": "Stream anlegen",
       "edit": "Stream bearbeiten",
@@ -701,8 +704,7 @@
     "streamnames": {
       "no_http": "Kein HTTP/HTTPS – nur für Streams",
       "online_hint": "Name nur für Streams: Er läuft in Modus 1 durch den Tunnel, HTTP und HTTPS bleiben zu. Danach im Stream diesen Namen wählen – srv07/srv08 öffnen dafür einen Port.",
-      "list_hint": "Diese Namen beantworten weder HTTP noch HTTPS; über CDN64 sind nur die Ports der Streams erreichbar, die sie nutzen.",
-      "to_streams": "Zu den Streams"
+      "list_hint": "Diese Namen beantworten weder HTTP noch HTTPS; über CDN64 sind nur die Ports der Streams erreichbar, die sie nutzen."
     },
     "pass": {
       "title": "TLS durchreichen (Port 443 nach Namen)",

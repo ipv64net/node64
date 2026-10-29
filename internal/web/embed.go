@@ -25,3 +25,14 @@ func darkImage(name string) string {
 	}
 	return name
 }
+
+// dict: Werte fuer einen Baustein ({{template "x" (dict "A" 1 "B" .)}}); Schluessel und Wert im Wechsel.
+func dict(kv ...any) map[string]any {
+	m := make(map[string]any, len(kv)/2)
+	for i := 0; i+1 < len(kv); i += 2 {
+		if k, ok := kv[i].(string); ok {
+			m[k] = kv[i+1]
+		}
+	}
+	return m
+}

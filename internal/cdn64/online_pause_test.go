@@ -178,6 +178,15 @@ func (tplView) Time(t time.Time) string       { return t.Format(time.RFC3339) }
 func (tplView) Date(t time.Time) string       { return t.Format(time.DateOnly) }
 func (tplView) Ago(time.Time) string          { return "" }
 
+// tplDict wie "dict" der Oberflaeche (web).
+func tplDict(kv ...any) map[string]any {
+	m := map[string]any{}
+	for i := 0; i+1 < len(kv); i += 2 {
+		m[kv[i].(string)] = kv[i+1]
+	}
+	return m
+}
+
 func renderHosts(t *testing.T, d listData) string {
 	t.Helper()
 	return renderPage(t, "hosts.html", d)
@@ -185,7 +194,7 @@ func renderHosts(t *testing.T, d listData) string {
 
 func renderPage(t *testing.T, file string, d any) string {
 	t.Helper()
-	tp, err := template.New(file).Funcs(template.FuncMap{"join": strings.Join}).ParseFS(templateFS, "templates/pages/"+file)
+	tp, err := template.New(file).Funcs(template.FuncMap{"join": strings.Join, "dict": tplDict}).ParseFS(templateFS, "templates/partials/*.html", "templates/pages/"+file)
 	if err != nil {
 		t.Fatal(err)
 	}

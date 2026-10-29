@@ -151,7 +151,7 @@ func TestOnlinePorts(t *testing.T) {
 	if len(srows[0].Online) != 1 || srows[0].Online[0].ListenPort < 50000 || srows[0].Online[0].Name != "app.test" {
 		t.Fatalf("stream row: %+v", srows[0].Online)
 	}
-	page := renderPage(t, "streams.html", streamsData{Streams: srows})
+	page := renderPage(t, "streams.html", streamsData{Streams: srows, Local: srows})
 	if !strings.Contains(page, "app.test:"+strconv.Itoa(srows[0].Online[0].ListenPort)) {
 		t.Fatal("streams page misses the server port")
 	}

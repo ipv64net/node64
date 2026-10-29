@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Streams in einer Tabelle – Namen nur für Streams mit CDN64-Stand und ihren Ports zusammen.
+
 ## 0.12.0-alpha.31 – 2026-10-29
 
 - Datenbank: Vor Migrationen bleiben die letzten drei Backups liegen statt fünf (spart je Node mehrere Hundert MB).

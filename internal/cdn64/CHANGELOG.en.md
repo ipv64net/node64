@@ -1,5 +1,12 @@
 # Changes – PROXY64
 
+## 1.40.1 – 2026-10-29
+
+### Changed
+- Streams: one table instead of two – each name for streams only is a row with its CDN64 state (mode, servers, test,
+  pause, switch off) above its ports, "+ Port" adds a stream with the name already set. Streams without an own name
+  follow below. The separate page "Names for streams" is gone.
+
 ## 1.40.0 – 2026-10-29
 
 ### New

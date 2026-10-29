@@ -123,28 +123,43 @@ func TestStreamOnlyHost(t *testing.T) {
 		t.Fatalf("tcp via tunnel: %q", out)
 	}
 
-	// Oberflaeche: Liste ohne Ziel/Zertifikat, Dialog nur Modus 1 ohne Healthcheck; Formular nur Name und Schalter
+	// Oberflaeche: eine Tabelle - Name mit CDN64 (Dialog nur Modus 1 ohne Healthcheck), darunter seine Ports
 	rows, err := e.m.rowsOf(ctx, KindStream)
-	if err != nil || len(rows) != 1 {
-		t.Fatalf("rows: %v %d", err, len(rows))
+	if err != nil || len(rows) != 1 || rows[0].Online == nil {
+		t.Fatalf("rows: %v %+v", err, rows)
 	}
-	page := renderHosts(t, listData{Kind: KindStream, Rows: rows, OnlineOn: true})
-	for _, want := range []string{"cdn64.streamnames.no_http", "data-online-stream", "cdn64.streamnames.list_hint", "cdn64.kind_new.stream"} {
+	srows, _ := e.m.streamRows(ctx)
+	d := streamsData{Streams: srows, OnlineOn: true}
+	d.Names, d.Local = groupStreams(rows, srows)
+	if len(d.Names) != 1 || len(d.Names[0].Streams) != 1 || len(d.Local) != 0 {
+		t.Fatalf("groups: %+v local %d", d.Names, len(d.Local))
+	}
+	page := renderPage(t, "streams.html", d)
+	for _, want := range []string{`data-stream-name="` + strconv.FormatInt(h.ID, 10) + `"`, "cdn64.streams.name_badge", `data-c64o-test="` + strconv.FormatInt(h.ID, 10) + `"`,
+		"data-online-stream", "cdn64.streamnames.list_hint", "/cdn64/streams/new?online_name=game.test", `<span class="font-monospace">` + strconv.Itoa(sp) + `</span>`} {
 		if !strings.Contains(page, want) {
-			t.Fatalf("list misses %s", want)
+			t.Fatalf("streams page misses %s", want)
 		}
 	}
-	for _, not := range []string{`<option value="2">`, "data-online-hc", "cdn64.col.target", "cdn64.cert.missing"} {
+	for _, not := range []string{`<option value="2">`, "data-online-hc", "cdn64.streams.group_local", "data-c64o-prot"} {
 		if strings.Contains(page, not) {
-			t.Fatalf("list must not have %s", not)
+			t.Fatalf("streams page must not have %s", not)
 		}
+	}
+	if strings.Index(page, `data-stream-name=`) > strings.Index(page, `<span class="font-monospace">`+strconv.Itoa(sp)+`</span>`) {
+		t.Fatal("port is not listed under its name")
+	}
+	// Stream ohne eigenen Namen: eigene Gruppe darunter
+	d.Names, d.Local = groupStreams(rows, append(srows, streamRow{Stream: &Stream{ID: 99, ListenPort: 1234, TCP: true, Enabled: true, TargetHost: "10.0.0.2", TargetPort: 22}}))
+	if page := renderPage(t, "streams.html", d); !strings.Contains(page, "cdn64.streams.group_local") || !strings.Contains(page, ">1234<") {
+		t.Fatal("local stream group missing")
 	}
 	form := aiRender(t, "host_form.html", e.m.form(ctx, got, false))
 	if !strings.Contains(form, "data-stream-hint") || strings.Contains(form, `id="tab-ssl"`) || strings.Contains(form, `name="target_host"`) ||
 		strings.Contains(form, `name="geo_mode"`) {
 		t.Fatal("host form for streams only shows more than name and switch")
 	}
-	if tabs := e.m.tabs(listPath(KindStream)); !tabs[4].Active || tabs[4].Path != "/cdn64/streams" {
-		t.Fatalf("tab: %+v", tabs[4])
+	if listPath(KindStream) != "/cdn64/streams" {
+		t.Fatalf("back to %s", listPath(KindStream))
 	}
 }
