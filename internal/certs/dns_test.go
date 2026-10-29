@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/netip"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -219,5 +220,33 @@ func TestParseCheckResolvers(t *testing.T) {
 		if _, err := ParseCheckResolvers(bad); err == nil {
 			t.Fatalf("%q accepted", bad)
 		}
+	}
+}
+
+// Liefert ein Nameserver-Verbund kurz nach dem Anlegen abwechselnd neu und leer (Cache vor mehreren Backends), gilt
+// der Wert erst als sichtbar, wenn er mehrere Runden hintereinander ueberall da ist (Test 2026-10-29: Let's Encrypt
+// fand sonst „No TXT record“ bzw. den alten Wert).
+func TestWaitTXTFlapping(t *testing.T) {
+	var mu sync.Mutex
+	n := 0
+	flap := func(w dns.ResponseWriter, r *dns.Msg) { // die ersten 6 Antworten wechseln, danach immer der Wert
+		mu.Lock()
+		n++
+		val := "token"
+		if n <= 6 && n%2 == 0 {
+			val = ""
+		}
+		mu.Unlock()
+		answer(true, val)(w, r)
+	}
+	addr := testNS(t, flap, flap)
+	fastTXT(t, []nameserver{{Name: "ns1.test", Addrs: []string{addr}}}, 2*time.Second)
+	if err := waitTXT(context.Background(), "example.org", "_acme-challenge.example.org", "token"); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if n < 6+stableRounds {
+		t.Fatalf("returned after %d answers while the record was still flapping", n)
 	}
 }

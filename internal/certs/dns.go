@@ -277,6 +277,12 @@ var publicCheck = publicTXT
 // directRounds: so viele Runden ohne zustaendige Antwort, dann zusaetzlich ueber oeffentliche Resolver pruefen.
 const directRounds = 3
 
+// stableRounds: so viele Runden hintereinander muessen alle erreichbaren Adressen aller Nameserver den Wert liefern.
+// Ein Nameserver-Verbund mit Cache (z. B. PowerDNS hinter einem Verteiler) liefert kurz nach dem Anlegen abwechselnd
+// alt/leer und neu; ein einzelner Treffer genuegte nicht – die CA fragte von mehreren Standorten und fand nichts bzw.
+// den alten Wert (Test 2026-10-29 mit ns1/ns2.ipv64.net). Variable fuer Tests.
+var stableRounds = 3
+
 // waitTXT wartet, bis alle Nameserver der Zone den TXT-Record ausliefern (ipv64 schreibt nach einigen Sekunden).
 // Erreicht die Node keinen Nameserver direkt (Port 53 nach aussen gesperrt oder auf einen eigenen Resolver
 // umgeleitet, in Heimnetzen haeufig), genuegt es, wenn oeffentliche Resolver ueber DoH den Wert liefern - die fragen
@@ -289,30 +295,41 @@ func waitTXT(ctx context.Context, zone, fqdn, want string) error {
 	deadline := time.Now().Add(waitDNS)
 	var details []string
 	var pubErr error
+	stable := 0
 	for round := 1; ; round++ {
 		ok, auth := 0, false
 		details = details[:0]
-		for _, ns := range servers { // ein Nameserver gilt, sobald eine seiner Adressen (v4 oder v6) liefert
-			st, detail := txtUnreachable, ""
+		// ein Nameserver gilt, wenn eine seiner Adressen (v4 oder v6) liefert und keine erreichbare Adresse noch ohne
+		// den Wert antwortet (nicht erreichbare Familien zaehlen nicht, z. B. kein IPv6)
+		for _, ns := range servers {
+			st, detail, missing := txtUnreachable, "", ""
 			for _, a := range ns.Addrs {
-				if s, d := queryTXT(ctx, a, fqdn, want); s >= st {
+				s, d := queryTXT(ctx, a, fqdn, want)
+				if s >= st {
 					st, detail = s, d
 				}
-				if st == txtFound {
-					break
+				if s == txtMissing && missing == "" {
+					missing = d
 				}
 			}
 			if st >= txtMissing {
 				auth = true
 			}
-			if st == txtFound {
+			if st == txtFound && missing == "" {
 				ok++
 			} else {
+				if missing != "" {
+					detail = missing
+				}
 				details = append(details, ns.Name+": "+detail)
 			}
 		}
 		if ok == len(servers) {
-			return nil
+			if stable++; stable >= stableRounds {
+				return nil
+			}
+		} else {
+			stable = 0
 		}
 		if !auth && round >= directRounds {
 			found, err := publicCheck(ctx, fqdn, want)

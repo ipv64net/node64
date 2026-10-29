@@ -8,7 +8,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
   Node-Benutzer lesbar (vorher 0644, auf dem Host für jeden Benutzer lesbar); bestehende Dateien werden beim Start
   angepasst.
 - Zertifikate: Domain und Wildcard zusammen (`example.ipv64.de` + `*.example.ipv64.de`) über DNS-01 scheiterten an
-  Let's Encrypt („Incorrect TXT record“); beide Prüfwerte werden jetzt gleichzeitig gesetzt.
+  Let's Encrypt („Incorrect TXT record“); beide Prüfwerte werden jetzt gleichzeitig gesetzt, und Node64 wartet, bis
+  alle Nameserver den Wert mehrmals hintereinander liefern (die ipv64-Nameserver liefern kurz nach dem Anlegen
+  abwechselnd alt und neu).
 - Healthchecks: Eine Änderung aus dem Portal, die gleichzeitig mit einer Änderung an der Node entstand, ging auf der
   Node verloren; sie kommt jetzt an (braucht auch die neuen hubs).
 - Healthchecks/Cluster: Änderungen einer nicht verknüpften Node aus der Zeit außerhalb des Clusters kommen nach dem
