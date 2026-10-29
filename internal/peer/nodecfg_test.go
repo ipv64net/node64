@@ -203,4 +203,34 @@ func TestNodeCfgKeyToNodeWithoutAccount(t *testing.T) {
 	if kz.Get(ctx) != zkey || ka.Get(ctx) != zkey || kb.Get(ctx) != zkey {
 		t.Fatalf("key of the joining node must win: a=%q b=%q z=%q", ka.Get(ctx), kb.Get(ctx), kz.Get(ctx))
 	}
+
+	// Ein Entfernen in einem Cluster loescht nie den Key in einem anderen: B entfernt den Key (Vermerk juenger als der
+	// Key von W), verlaesst den Cluster und tritt W bei - W behaelt seinen Key, B uebernimmt ihn
+	w := newNode(t, "node-w", "W", 0)
+	kw := newNodeCfg(w, w.m.d.NodeID())
+	w.m.d.AccountID = func() int64 { return int64(kw.Info(context.Background()).ID) }
+	const wkey = "WWWWwwwwWWWWwwww5555"
+	if err := kw.SetFromCluster(ctx, wkey, ipv64api.AccountInfo{ID: 522, Account: "dennis"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range []string{"", nodecfg.ItemAPIKey} {
+		if err := w.m.SetSync(ctx, nodecfg.ModuleID, item, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(5 * time.Millisecond)
+	if err := kb.Clear(ctx); err != nil {
+		t.Fatal(err)
+	}
+	round2(a, b, z)
+	if err := b.m.Leave(ctx); err != nil {
+		t.Fatal(err)
+	}
+	pair(t, w, b)
+	waitMembers(t, w, "B")
+	round2(w, b)
+	round2(w, b)
+	if kw.Get(ctx) != wkey || kb.Get(ctx) != wkey {
+		t.Fatalf("deletion must not travel into another cluster: w=%q b=%q", kw.Get(ctx), kb.Get(ctx))
+	}
 }

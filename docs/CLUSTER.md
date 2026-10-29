@@ -282,7 +282,9 @@ jüngere Änderung gewinnt.
 - Bei jeder neuen Kopplung meldet jede beteiligte Node mit Key diesen mit dem Zeitpunkt der Kopplung
   (`nodecfg.ClusterJoined`, Schnittstelle `peer.Joiner`): Der Zeitpunkt eines Keys reist sonst beim Weiterreichen mit,
   und ein jüngerer Löschvermerk im Cluster würde den Key der beitretenden Node entfernen, statt dass die Nodes ohne
-  Key ihn übernehmen.
+  Key ihn übernehmen. Eine Node **ohne** Key nimmt dabei ihren Löschvermerk des Keys aus dem Protokoll: Ein Entfernen
+  in einem Cluster löscht so nie den Key in einem anderen, in den eine Node danach wechselt (gesehen im Test
+  2026-10-29: Node wechselte mit Vermerk in einen anderen Cluster, dessen Node verlor ihren Key).
 - Entfernen in den Einstellungen entfernt ihn auf allen Nodes mit eingeschaltetem Bereich. Entfernt ipv64.net die
   Node (Node-Übersicht), gilt das nur für sie: kein Löschen für die anderen, und sie nimmt keinen Key aus dem Cluster
   an, bis er auf ihr selbst eingetragen wird.

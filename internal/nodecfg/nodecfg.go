@@ -334,17 +334,23 @@ func (c *Cluster) applyKey(ctx context.Context, data json.RawMessage, deleted bo
 	return nil
 }
 
-// ClusterJoined (peer.Joiner): neue Kopplung - ein hier eingetragener Key gilt ab jetzt. So uebernimmt eine Node ohne
-// Key ihn auch dann, wenn dort vorher ein Key entfernt wurde und der Loeschvermerk juenger ist als der Zeitpunkt, zu
-// dem der Key irgendwo eingetragen wurde (der Zeitpunkt reist beim Weiterreichen mit).
-func (c *Cluster) ClusterJoined(ctx context.Context) {
+// ClusterJoined (peer.Joiner): neue Kopplung - ein hier eingetragener Key gilt ab jetzt, ohne Key geht der
+// Loeschvermerk des Keys nicht in den neuen Cluster. So uebernimmt eine Node ohne Key ihn auch dann, wenn vorher ein
+// Key entfernt wurde und der Loeschvermerk juenger ist als der Zeitpunkt, zu dem der Key irgendwo eingetragen wurde
+// (der Zeitpunkt reist beim Weiterreichen mit), und ein Entfernen in einem Cluster loescht nie den Key in einem
+// anderen, in den eine Node danach wechselt.
+func (c *Cluster) ClusterJoined(ctx context.Context) []string {
 	c.mu.Lock()
 	change := c.change
 	c.mu.Unlock()
-	if change == nil || c.d.Key == nil || c.d.Key.Get(ctx) == "" || !c.d.Key.Removed(ctx).IsZero() {
-		return
+	if change == nil || c.d.Key == nil {
+		return nil
+	}
+	if c.d.Key.Get(ctx) == "" || !c.d.Key.Removed(ctx).IsZero() {
+		return []string{ItemAPIKey + "/" + keyID}
 	}
 	change(ctx, ItemAPIKey, keyID, false, time.Now())
+	return nil
 }
 
 // clusterFits: der Account acc passt zum Cluster (dessen Account ist derselbe oder es hat noch keiner einen).
