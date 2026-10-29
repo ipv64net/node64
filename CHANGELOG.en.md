@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: streams in one table – names for streams only with their CDN64 state and their ports together.
+
 ## 0.12.0-alpha.31 – 2026-10-29
 
 - Database: the last three backups before migrations are kept instead of five (saves several hundred MB per node).

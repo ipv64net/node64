@@ -21,7 +21,9 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /cdn64/redirects", page(m.listOf(KindRedirect)))
 	mux.Handle("GET /cdn64/dead", page(m.listOf(KindDead)))
 	mux.Handle("GET /cdn64/status", page(m.listOf(KindStatus)))
-	mux.Handle("GET /cdn64/streamnames", page(m.listOf(KindStream)))
+	mux.Handle("GET /cdn64/streamnames", page(func(w http.ResponseWriter, r *http.Request) { // jetzt in der Tabelle der Streams
+		http.Redirect(w, r, "/cdn64/streams", http.StatusMovedPermanently)
+	}))
 	mux.Handle("GET /cdn64/default", page(m.pageDefault))
 	mux.Handle("POST /cdn64/default", page(m.pageDefaultSave))
 	mux.Handle("GET /proxy", page(func(w http.ResponseWriter, r *http.Request) {
@@ -51,12 +53,10 @@ func listPath(kind string) string {
 		return "/cdn64/redirects"
 	case KindDead:
 		return "/cdn64/dead"
-	case KindPass:
+	case KindPass, KindStream:
 		return "/cdn64/streams"
 	case KindStatus:
 		return "/cdn64/status"
-	case KindStream:
-		return "/cdn64/streamnames"
 	}
 	return "/cdn64"
 }
@@ -81,9 +81,6 @@ func (m *Module) tabs(active string) []tab {
 		{Path: "/cdn64/default", Icon: "bi-question-square", TitleKey: "cdn64.tab.default"}}
 	if m.protectionOn() {
 		t = slices.Insert(t, 8, tab{Path: "/cdn64/protection", Icon: "bi-shield-check", TitleKey: "cdn64.tab.protection"}) // nach den Zugriffen, vor Docker
-	}
-	if active == "/cdn64/streamnames" { // Namen nur fuer Streams gehoeren zum Reiter Streams
-		active = "/cdn64/streams"
 	}
 	for i := range t {
 		t[i].Active = t[i].Path == active

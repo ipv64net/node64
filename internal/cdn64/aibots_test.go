@@ -342,7 +342,7 @@ func TestAIBotsTemplates(t *testing.T) {
 // aiRender wie renderPage, mit den Funktionen, die host_form.html braucht.
 func aiRender(t *testing.T, file string, d any) string {
 	t.Helper()
-	tp, err := template.New(file).Funcs(template.FuncMap{"join": strings.Join, "split": strings.Fields}).ParseFS(templateFS, "templates/pages/"+file)
+	tp, err := template.New(file).Funcs(template.FuncMap{"join": strings.Join, "split": strings.Fields, "dict": tplDict}).ParseFS(templateFS, "templates/partials/*.html", "templates/pages/"+file)
 	if err != nil {
 		t.Fatal(err)
 	}
