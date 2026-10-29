@@ -451,9 +451,7 @@ func (s *Server) forward(c net.Conn, kind, host string, port int, data []byte, c
 			return
 		}
 		st.NoTunnel.Add(1)
-		if !fromPeer {
-			unreachableReply(c, kind, host, data)
-		}
+		unreachableReply(c, kind, host, data) // auch fuer den Nachbarn: der Besucher haengt an dieser Verbindung
 		_ = c.Close()
 		return
 	}
@@ -462,9 +460,7 @@ func (s *Server) forward(c net.Conn, kind, host string, port int, data []byte, c
 	cancel()
 	if err != nil {
 		st.NoTunnel.Add(1)
-		if !fromPeer {
-			unreachableReply(c, kind, host, data)
-		}
+		unreachableReply(c, kind, host, data)
 		_ = c.Close()
 		return
 	}
@@ -608,9 +604,10 @@ func (s *Server) servePeer(ln net.Listener) {
 				_ = c.Close()
 				return
 			}
+			// schon gelesene Bytes des Besuchers als data: forward gibt sie in den Tunnel bzw. braucht sie fuer die
+			// Fehlerseite (Sprache), wenn auch hier kein Tunnel da ist
 			rest, _ := br.Peek(br.Buffered())
-			pc := &prefixConn{Conn: c, r: io.MultiReader(bytes.NewReader(append([]byte(nil), rest...)), c)}
-			s.forward(pc, h.Kind, h.Host, h.Port, nil, h.Client, true)
+			s.forward(c, h.Kind, h.Host, h.Port, append([]byte(nil), rest...), h.Client, true)
 		}()
 	}
 }

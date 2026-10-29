@@ -161,3 +161,20 @@ func TestCertCovers(t *testing.T) {
 		t.Fatal("wildcard certificate")
 	}
 }
+
+// Umleitung auf HTTPS nur fuer eigene Namen: eine Anfrage in absoluter Form an einen anderen Namen bekommt 421 statt
+// einer Weiterleitung dorthin (offene Weiterleitung, Test 2026-10-29).
+func TestTermRedirectOwnNames(t *testing.T) {
+	s := New(&Config{DataDir: t.TempDir()}, slog.New(slog.DiscardHandler), "test")
+	s.routes.Store(newRoutes(nil, &apiConfig{Hosts: []apiHost{{ID: 1, Name: "m2.test", Mode: 2, Tunnels: []string{"t1"}}}}))
+	w := httptest.NewRecorder()
+	s.termRedirect(w, httptest.NewRequest("GET", "http://m2.test/a?b=1", nil))
+	if w.Code != http.StatusMovedPermanently || w.Header().Get("Location") != "https://m2.test/a?b=1" {
+		t.Fatalf("own name: %d %q", w.Code, w.Header().Get("Location"))
+	}
+	w = httptest.NewRecorder()
+	s.termRedirect(w, httptest.NewRequest("GET", "http://evil.example/x", nil)) // r.Host = Name aus der URL
+	if w.Code != http.StatusMisdirectedRequest || w.Header().Get("Location") != "" {
+		t.Fatalf("absolute form to another name must not redirect: %d %q", w.Code, w.Header().Get("Location"))
+	}
+}
