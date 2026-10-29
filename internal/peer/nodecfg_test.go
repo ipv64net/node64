@@ -139,7 +139,15 @@ func TestNodeCfgKeyToNodeWithoutAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = keys[y].SetFromCluster(ctx, "YYYYyyyyYYYYyyyy9999", ipv64api.AccountInfo{ID: 999, Account: "other"})
-	pair(t, a, b) // A (522) und B (ohne)
+	z := newNode(t, "node-z", "Z", 0) // tritt spaeter mit einem frueher eingetragenen Key bei
+	kz := newNodeCfg(z, z.m.d.NodeID())
+	z.m.d.AccountID = func() int64 { return int64(kz.Info(context.Background()).ID) }
+	const zkey = "ZZZZzzzzZZZZzzzz7777"
+	if err := kz.SetFromCluster(ctx, zkey, ipv64api.AccountInfo{ID: 522, Account: "dennis"}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(5 * time.Millisecond) // Zeitpunkt des Keys auf Z vor dem Entfernen unten
+	pair(t, a, b)                    // A (522) und B (ohne)
 	waitMembers(t, a, "B")
 	for _, n := range []*testNode{a, b} {
 		for _, item := range []string{"", nodecfg.ItemAPIKey} {
@@ -176,5 +184,23 @@ func TestNodeCfgKeyToNodeWithoutAccount(t *testing.T) {
 	}
 	for _, n := range []*testNode{a, b} {
 		wantActive(t, n, 1)
+	}
+	// Z bringt einen Key mit, der vor dem Entfernen eingetragen wurde: beim Beitritt gilt er ab jetzt, A und B
+	// uebernehmen ihn (der aeltere Zeitpunkt des Keys verliert sonst gegen den Loeschvermerk)
+	if err := z.m.SetSync(ctx, nodecfg.ModuleID, "", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := z.m.SetSync(ctx, nodecfg.ModuleID, nodecfg.ItemAPIKey, true); err != nil {
+		t.Fatal(err)
+	}
+	code, _, _ = a.m.StartPairing()
+	if err := z.m.Join(ctx, a.srv.URL, code, z.srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	waitMembers(t, a, "B", "Z")
+	round2(a, b, z)
+	round2(a, b, z)
+	if kz.Get(ctx) != zkey || ka.Get(ctx) != zkey || kb.Get(ctx) != zkey {
+		t.Fatalf("key of the joining node must win: a=%q b=%q z=%q", ka.Get(ctx), kb.Get(ctx), kz.Get(ctx))
 	}
 }

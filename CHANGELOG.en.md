@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Cluster: when a node with an API key joins a cluster in which the key was removed earlier, the others take its
+  key – before, the joining node lost it.
 - Cluster: a rejected entry (e.g. status page with the same slug, user to choose) is retried every 5 minutes and
   arrives once the conflict is resolved on one side – before, only after it changed again on the other node.
 - Healthchecks: Proxmox VE and Docker – "Stopped is correct" on a stopped or exited guest shown as a problem: one
