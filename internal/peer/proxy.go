@@ -115,8 +115,8 @@ func (m *Manager) proxyData(ctx context.Context, h Hub, x Member, hubAck int64) 
 	return nil
 }
 
-// forwardHeld reicht Checks mit einem Mitglied unter den messenden Nodes an den hub weiter – einmal je Mitglied und
-// Prozess, sobald der hub es als Stellvertreter-Node fuehrt. Neue Checks und Aenderungen (z. B. das Mitglied als
+// forwardHeld reicht Checks mit einem Mitglied unter den messenden Nodes an den hub weiter – einmal je Mitglied, sobald
+// der hub es als Stellvertreter-Node fuehrt (und erneut, wenn es nach einer Pause wieder Stellvertreter wird). Neue Checks und Aenderungen (z. B. das Mitglied als
 // weitere messende Node) blieben bis dahin in der Gruppe, weil der hub das Mitglied nicht kannte.
 func (m *Manager) forwardHeld(ctx context.Context, acks map[string]int64) {
 	hc := m.checks()
@@ -127,6 +127,11 @@ func (m *Manager) forwardHeld(ctx context.Context, acks map[string]int64) {
 	m.mu.Lock()
 	if m.proxied == nil {
 		m.proxied = map[string]bool{}
+	}
+	for id := range m.proxied { // nicht mehr Stellvertreter (Mitglied weg, vom hub widerrufen): beim Wiederkommen erneut
+		if _, ok := acks[id]; !ok || !known[id] {
+			delete(m.proxied, id)
+		}
 	}
 	fresh := map[string]bool{}
 	for id := range acks {

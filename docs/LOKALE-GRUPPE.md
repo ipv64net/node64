@@ -62,7 +62,8 @@ Diagramm und Verlauf funktionieren dadurch unverändert.
   Sync beim hub als Stellvertreter-Nodes an (`hc2_nodes.proxy_via` = ihre Kennung, kein Token) und reicht deren
   Zustände und Messpunkte weiter (Nachrichten `proxies` und `proxy_data`, alle 15 s). Damit erscheinen auch
   Checks, die solche Nodes messen, mit Messwerten im Portal. Checks, die bisher in der Gruppe blieben, schickt sie
-  einmal an den hub, sobald er das Mitglied führt.
+  einmal an den hub, sobald er das Mitglied führt – und erneut, wenn das Mitglied nach einer Pause (Cluster verlassen,
+  widerrufen) wieder Stellvertreter-Node wird; so kommen auch Änderungen aus der Zwischenzeit ins Portal.
   - Der hub zeigt diese Checks nur an und benachrichtigt nicht (auch keine Erinnerungen): das macht weiter die
     Gruppe, sonst käme jede Meldung doppelt.
   - Online ist eine Stellvertreter-Node, solange die weiterreichende Node sie als erreichbar meldet (nach 3 Minuten

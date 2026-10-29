@@ -6,6 +6,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 - Healthchecks: a change from the portal made at the same time as a change on the node was lost on the node; it now
   arrives (also needs the new hubs).
+- Healthchecks/cluster: changes of a node without link made outside the cluster reach the portal right after
+  rejoining (before only after a restart).
 - Settings → Logging: "Log API requests" (opt-in: off, API key only or all). Every request to /api/ then shows up
   as a log line with method, path, status, duration, IP, user and API key name – no contents, secrets masked. Also
   via `PUT /api/logging` (`api_log`).
