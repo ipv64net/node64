@@ -1,5 +1,13 @@
 # Änderungen – PROXY64
 
+## 1.41.0 – 2026-10-29
+
+### Neu
+- Bandbreite je Proxy-Host (Erweitert): Download und Upload höchstens so viele Mbit/s (MB/s stehen daneben), leer = unbegrenzt
+  (Standard). Alle Besucher des Hosts teilen sich die Grenze; darüber wird gebremst und gewartet, nichts getrennt. Gilt
+  auch für WebSockets und über CDN64. In der Liste zeigt ein Abzeichen die Grenze. API: `advanced.bw_down_mbit` /
+  `bw_up_mbit`.
+
 ## 1.40.1 – 2026-10-29
 
 ### Geändert

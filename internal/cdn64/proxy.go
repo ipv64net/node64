@@ -522,6 +522,10 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		}
 	}
 	maxBody := int64(h.Advanced.MaxBodyMB) << 20
+	var bw *bwPair // Bandbreite des Hosts (nur Proxy-Hosts), geteilt von allen Anfragen
+	if h.Kind == KindProxy {
+		bw = m.bw.of(h.ID, h.Advanced.BWDownMbit, h.Advanced.BWUpMbit)
+	}
 	limited := !h.Advanced.NoLimits
 	maint := h.Kind == KindProxy && h.Advanced.Maintenance
 	var sl slots // gleichzeitige Anfragen an das Ziel
@@ -546,7 +550,7 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		reject, authFail, decoyed := new(string), new(bool), new(bool)
 		ctx := context.WithValue(context.WithValue(r.Context(), ctxClientKey{}, client), ctxRejectKey{}, reject)
 		r = r.WithContext(context.WithValue(context.WithValue(ctx, ctxAuthFailKey{}, authFail), ctxDecoyKey{}, decoyed))
-		sw := &statusWriter{ResponseWriter: w}
+		sw := &statusWriter{ResponseWriter: w, bw: bw, ctx: r.Context()}
 		defer func() {
 			m.hpReport(r, client, true, sw.code(), *authFail)
 			if sdb := m.stats2.Load(); sdb != nil {
@@ -642,8 +646,12 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 			}
 			defer sl.release()
 		}
-		if r.Body != nil && r.Body != http.NoBody { // Upload zaehlen (was das Ziel wirklich liest)
-			r.Body = &countBody{ReadCloser: r.Body, n: &sw.in}
+		if r.Body != nil && r.Body != http.NoBody { // Upload zaehlen (was das Ziel wirklich liest), mit Bandbreite des Hosts
+			if bw != nil {
+				r.Body = &bwBody{ReadCloser: r.Body, ctx: r.Context(), l: bw.up, n: &sw.in}
+			} else {
+				r.Body = &countBody{ReadCloser: r.Body, n: &sw.in}
+			}
 		}
 		next.ServeHTTP(sw, r)
 		if sw.status >= 500 && sw.status != http.StatusBadGateway { // 502 zaehlt der ErrorHandler schon
@@ -682,6 +690,9 @@ type statusWriter struct {
 	bytes  int64        // Antwort an den Besucher
 	in     atomic.Int64 // Upload: Request-Body bzw. uebernommene Verbindung vom Besucher
 	hjOut  atomic.Int64 // uebernommene Verbindung zum Besucher (WebSocket)
+
+	bw  *bwPair         // Bandbreite des Hosts (nil = unbegrenzt)
+	ctx context.Context // der Anfrage: Warten auf Bandbreite endet mit ihr
 }
 
 // code: Status der Antwort (0 = abgebrochen; ein uebernommener WebSocket hat 101).
@@ -703,7 +714,13 @@ func (w *statusWriter) Write(b []byte) (int, error) {
 	if w.status == 0 {
 		w.status = http.StatusOK
 	}
-	n, err := w.ResponseWriter.Write(b)
+	var n int
+	var err error
+	if w.bw != nil {
+		n, err = bwWrite(w.ctx, w.bw.down, w.ResponseWriter, b)
+	} else {
+		n, err = w.ResponseWriter.Write(b)
+	}
 	w.bytes += int64(n)
 	return n, err
 }
@@ -726,7 +743,11 @@ func (w *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if w.status == 0 {
 		w.status = http.StatusSwitchingProtocols // sonst zaehlte der WebSocket als abgebrochen (499)
 	}
-	return &countConn{Conn: c, in: &w.in, out: &w.hjOut}, brw, nil
+	var cc net.Conn = &countConn{Conn: c, in: &w.in, out: &w.hjOut}
+	if w.bw != nil {
+		cc = &bwConn{Conn: cc, bw: w.bw}
+	}
+	return cc, brw, nil
 }
 
 // countBody zaehlt den gelesenen Request-Body (Upload).
@@ -803,6 +824,7 @@ func (m *Module) apply(ctx context.Context) {
 	}
 	guards := m.guards(ctx)
 	m.limExempt(ctx, list)
+	m.bw.keep(list)
 	m.mu.Lock()
 	m.acl = guards
 	m.mu.Unlock()

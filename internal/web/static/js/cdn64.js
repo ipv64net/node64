@@ -128,6 +128,17 @@
 		});
 	}
 
+	// Bandbreite je Proxy-Host: neben Mbit/s die MB/s zeigen
+	document.querySelectorAll("[data-bw-mbit]").forEach(function (inp) {
+		var out = inp.closest("div[class^=col]").querySelector("[data-bw-mb]");
+		var show = function () {
+			var v = parseFloat(inp.value);
+			out.textContent = v > 0 ? "≈ " + (v / 8).toLocaleString(undefined, { maximumFractionDigits: 2 }) + " MB/s" : "";
+		};
+		inp.addEventListener("input", show);
+		show();
+	});
+
 	// Waehrend ein Zertifikat geholt wird: Seite alle paar Sekunden neu laden
 	var reload = document.querySelector("[data-reload]");
 	if (reload) {

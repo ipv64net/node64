@@ -540,6 +540,8 @@ func hostFromForm(r *http.Request, h *Host) {
 		}
 		a.TimeoutSeconds, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_timeout")))
 		a.MaxBodyMB, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_max_body")))
+		a.BWDownMbit, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_bw_down")))
+		a.BWUpMbit, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_bw_up")))
 		a.NoBuffering, a.Gzip, a.AccessLog, a.NoLimits = on("adv_no_buffering"), on("adv_gzip"), on("adv_access_log"), on("adv_no_limits")
 		a.TrustedProxies = lines(r.PostFormValue("adv_trusted"))
 	}

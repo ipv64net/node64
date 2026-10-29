@@ -203,6 +203,15 @@
 						</div>
 					</div>
 					<div class="form-text mb-3">{{.T "cdn64.f.adv_limits_hint"}}</div>
+					<div class="row g-2 mb-1" data-bw>
+						<div class="col-md-3"><label class="form-label fw-semibold" for="adv_bw_down"><i class="bi bi-cloud-download"></i> {{.T "cdn64.f.adv_bw_down"}}</label>
+							<div class="input-group input-group-sm"><input class="form-control" type="number" min="0" max="100000" id="adv_bw_down" name="adv_bw_down" value="{{if $h.Advanced.BWDownMbit}}{{$h.Advanced.BWDownMbit}}{{end}}" placeholder="{{.T "cdn64.f.adv_bw_unlimited"}}" data-bw-mbit><span class="input-group-text">Mbit/s</span></div>
+							<div class="form-text" data-bw-mb></div></div>
+						<div class="col-md-3"><label class="form-label fw-semibold" for="adv_bw_up"><i class="bi bi-cloud-upload"></i> {{.T "cdn64.f.adv_bw_up"}}</label>
+							<div class="input-group input-group-sm"><input class="form-control" type="number" min="0" max="100000" id="adv_bw_up" name="adv_bw_up" value="{{if $h.Advanced.BWUpMbit}}{{$h.Advanced.BWUpMbit}}{{end}}" placeholder="{{.T "cdn64.f.adv_bw_unlimited"}}" data-bw-mbit><span class="input-group-text">Mbit/s</span></div>
+							<div class="form-text" data-bw-mb></div></div>
+					</div>
+					<div class="form-text mb-3">{{.T "cdn64.f.adv_bw_hint"}}</div>
 					{{end}}
 					<label class="form-label fw-semibold" for="adv_trusted">{{.T "cdn64.f.adv_trusted"}}</label>
 					<textarea class="form-control form-control-sm font-monospace mb-1" id="adv_trusted" name="adv_trusted" rows="3" placeholder="173.245.48.0/20" data-trusted>{{$d.Adv.Trusted}}</textarea>
