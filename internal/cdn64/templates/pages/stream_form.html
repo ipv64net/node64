@@ -42,7 +42,8 @@
 					<option value="">{{.T "cdn64.streams.f.online_none"}}</option>
 					{{range $d.OnlineNames}}<option value="{{.Name}}"{{if eq $s.OnlineName .Name}} selected{{end}}>{{.Name}} ({{$.T "cdn64.online.mode_badge" "n" .Mode}})</option>{{end}}
 				</select>
-				<div class="form-text mb-3">{{if $d.OnlineNames}}{{.T "cdn64.streams.f.online_hint"}}{{else}}{{.T "cdn64.streams.f.online_empty"}}{{end}}</div>{{end}}
+				<div class="form-text mb-3">{{if $d.OnlineNames}}{{.T "cdn64.streams.f.online_hint"}}{{else}}{{.T "cdn64.streams.f.online_empty"}}{{end}}
+					<a href="/cdn64/streamnames" data-stream-names>{{.T "cdn64.streams.f.online_new"}}</a></div>{{end}}
 				<input type="hidden" name="has_geo" value="1">
 				<label class="form-label fw-semibold" for="geo_mode">{{.T "cdn64.f.geo"}}{{$.Doc "cdn64#laendersperre"}}</label>
 				<div class="row g-2">

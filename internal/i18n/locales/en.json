@@ -513,6 +513,7 @@
       "redirect_hint": "Domain, optionally with port and path (e.g. www.example.com/new). \"Same as request\" uses http or https as the visitor came.",
       "preserve_path": "Keep path and query",
       "dead_hint": "This host answers every request with a neutral \"404\" page. With a certificate also via HTTPS.",
+      "stream_hint": "Just the name, without a target: switch it on at CDN64 (mode 1), then pick it in the stream under “Reachable from the internet via CDN64”. Nothing answers on ports 80 and 443 under this name – neither here nor via srv07/srv08.",
       "pass_hint": "The connection is handed raw to this target by name, without decrypting it here – the target needs its own certificate. Port 80 redirects to HTTPS.",
       "locations": "Locations",
       "advanced": "Advanced",
@@ -583,6 +584,7 @@
       "redirect_code": "Unknown HTTP code.",
       "redirect_self": "A redirection to itself would loop.",
       "pass_wildcard": "Passthrough does not support wildcards.",
+      "stream_wildcard": "Wildcards are not possible for streams.",
       "stream_name": "Name at most 100 characters.",
       "stream_proto": "Choose TCP and/or UDP.",
       "stream_tls": "TLS only works with TCP.",
@@ -642,6 +644,7 @@
       "proxy": "Add proxy host",
       "redirect": "Add redirection",
       "dead": "Add 404 host",
+      "stream": "Add name for streams only",
       "passthrough": "TLS passthrough",
       "status": "Connect status page"
     },
@@ -649,6 +652,7 @@
       "proxy": "No proxy hosts yet. A proxy host forwards requests for a domain to a service in your home network.",
       "redirect": "No redirections yet. A redirection sends visitors of one domain to another (e.g. old domain to new).",
       "dead": "No 404 hosts yet. A 404 host deliberately answers a domain with \"not found\", e.g. for retired names.",
+      "stream": "No names for streams only yet. Such a name brings streams (TCP/UDP) to the internet via CDN64 without any proxy host: no target, and nothing answers on ports 80 and 443 under the name.",
       "passthrough": "Nothing passed through yet.",
       "status": "No status pages on their own domain yet. Such a host shows a Healthchecks status page under a domain – with certificate, blocklists, country blocking and limits, optionally also via CDN64."
     },
@@ -664,6 +668,7 @@
     },
     "streams": {
       "title": "Streams (TCP/UDP)",
+      "names_btn": "Names for streams",
       "online_title": "Via CDN64: port of the servers (srv07/srv08) that leads to this stream",
       "new": "Add stream",
       "edit": "Edit stream",
@@ -679,7 +684,8 @@
       "hint": "Streams occupy their port per protocol; Settings → Ports shows overlaps. UDP sessions end after 60 s without packets.",
       "f": {
         "name": "Name (optional)",
-        "online_empty": "Switch a host on in CDN64 in mode 1 or 2 first; then the stream can be reached via its name.",
+        "online_empty": "First switch on a host at CDN64 in mode 1 or 2, or add a name for streams only and switch it on; then the stream can be reached via that name.",
+        "online_new": "Add a name for streams only (without proxy host)",
         "online_hint": "srv07/srv08 open a port for this stream and pass connections through the encrypted tunnel to this node (port mapping). No port has to be open at home, your address stays hidden. The server port is shown in the list after saving; it counts towards the port mapping quota.",
         "online_none": "no, only here",
         "online": "Reachable from the internet via CDN64",
@@ -691,6 +697,12 @@
       },
       "help_ports": "Forward the port (TCP and/or UDP) on the router to this node. Ports below 1024 work without root thanks to the image's capabilities.",
       "help_docker": "With host networking Node64 opens the port directly. In bridge mode the port must also be published on the container (-p)."
+    },
+    "streamnames": {
+      "no_http": "No HTTP/HTTPS – streams only",
+      "online_hint": "Name for streams only: it runs through the tunnel in mode 1, HTTP and HTTPS stay closed. Then pick this name in the stream – srv07/srv08 open a port for it.",
+      "list_hint": "These names answer neither HTTP nor HTTPS; via CDN64 only the ports of the streams using them are reachable.",
+      "to_streams": "To the streams"
     },
     "pass": {
       "title": "TLS passthrough (port 443 by name)",
@@ -1087,6 +1099,7 @@
         "tunnel_down": "The node cannot reach srv07/srv08. Allow outgoing UDP or TCP 7844 (firewall, router).",
         "mode_not_available": "This mode is not available yet.",
         "mode2_passthrough": "TLS pass-through only works with mode 1 (the target terminates TLS itself).",
+        "mode2_stream": "Names for streams only support mode 1 – there is no HTTPS for the servers to terminate.",
         "target_not_public": "Mode 3 needs a publicly reachable target (public IP or name). For targets in the home network use mode 1 or 2.",
         "mode3_web": "Mode 3 (directly to the target, without tunnel) is only available on the website: ipv64.net/cdn64. For targets in your home network use mode 1 or 2.",
         "no_target_records": "The name has no public A/AAAA record to use as target.",

@@ -49,7 +49,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.39.0"
+	Version = "1.40.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -64,6 +64,7 @@ type Module struct {
 	g       module.Guards
 
 	applyMu    sync.Mutex
+	streamOnly atomic.Pointer[map[string]bool] // Namen der Hosts "nur Streams" (apply): ueber den Tunnel kein HTTP/HTTPS
 	mu         sync.Mutex
 	running    bool
 	startedAt  time.Time

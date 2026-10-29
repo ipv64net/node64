@@ -136,6 +136,10 @@ func (m *Module) onlineHandle(st tunnel.Stream, h tunnel.Header) {
 	}
 	c := &tunnelConn{Stream: st, remote: ra}
 	m.onlineSeen(h.Host)
+	if h.Kind != tunnel.KindTCP && h.Kind != tunnel.KindUDP && m.isStreamOnly(h.Host) { // nur Streams: kein HTTP/HTTPS
+		_ = st.Close()
+		return
+	}
 	// Der Server reicht fuer genau einen Namen durch (h.Host): nur der ist ueber diese Verbindung erreichbar, nicht
 	// andere (z. B. nur im Heimnetz veroeffentlichte) Namen per anderem SNI, absoluter URL oder spaeterer Anfrage.
 	switch h.Kind {
@@ -157,6 +161,15 @@ func (m *Module) onlineHandle(st tunnel.Stream, h tunnel.Header) {
 	default:
 		_ = st.Close()
 	}
+}
+
+// isStreamOnly: der Name gehoert zu einem Host "nur Streams".
+func (m *Module) isStreamOnly(name string) bool {
+	if h, _, err := net.SplitHostPort(name); err == nil {
+		name = h
+	}
+	only := m.streamOnly.Load()
+	return only != nil && (*only)[strings.ToLower(name)]
 }
 
 // onlineHTTP3: geht HTTP/3 fuer Modus 1 ueber die Server (Tunnel laeuft, alle verbundenen Server reichen QUIC durch)?

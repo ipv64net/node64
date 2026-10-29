@@ -15,8 +15,8 @@
 					<li class="nav-item" role="presentation"><button class="nav-link active" type="button" data-bs-toggle="tab" data-bs-target="#tab-details" role="tab"><i class="bi bi-sliders"></i> {{.T "cdn64.tab_details"}}</button></li>
 					{{if eq $h.Kind "proxy"}}<li class="nav-item" role="presentation"><button class="nav-link{{if index $d.Errors "locations"}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-locations" role="tab"><i class="bi bi-signpost"></i> {{.T "cdn64.f.locations"}}</button></li>{{end}}
 					{{if eq $h.Kind "proxy"}}<li class="nav-item" role="presentation"><button class="nav-link{{if index $d.Errors "maintenance_html"}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-maint" role="tab"><i class="bi bi-cone-striped"></i> {{.T "cdn64.maint.tab"}}{{if $h.Advanced.Maintenance}} <span class="badge text-bg-warning">{{.T "cdn64.maint.on_badge"}}</span>{{end}}</button></li>{{end}}
-					{{if ne $h.Kind "passthrough"}}<li class="nav-item" role="presentation"><button class="nav-link{{if or (index $d.Errors "cert_id") (index $d.Errors "min_tls")}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-ssl" role="tab"><i class="bi bi-lock"></i> SSL</button></li>{{end}}
-					{{if ne $h.Kind "passthrough"}}<li class="nav-item" role="presentation"><button class="nav-link{{if index $d.Errors "advanced"}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-advanced" role="tab"><i class="bi bi-gear"></i> {{.T "cdn64.f.advanced"}}</button></li>{{end}}
+					{{if and (ne $h.Kind "passthrough") (ne $h.Kind "stream")}}<li class="nav-item" role="presentation"><button class="nav-link{{if or (index $d.Errors "cert_id") (index $d.Errors "min_tls")}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-ssl" role="tab"><i class="bi bi-lock"></i> SSL</button></li>{{end}}
+					{{if and (ne $h.Kind "passthrough") (ne $h.Kind "stream")}}<li class="nav-item" role="presentation"><button class="nav-link{{if index $d.Errors "advanced"}} text-danger{{end}}" type="button" data-bs-toggle="tab" data-bs-target="#tab-advanced" role="tab"><i class="bi bi-gear"></i> {{.T "cdn64.f.advanced"}}</button></li>{{end}}
 				</ul>
 			</div>
 			<div class="card-body small tab-content">
@@ -40,6 +40,8 @@
 					<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" name="block_exploits" id="block_exploits"{{if $h.BlockExploits}} checked{{end}}><label class="form-check-label" for="block_exploits">{{.T "cdn64.f.block_exploits"}}</label></div>
 					{{else if eq $h.Kind "dead"}}
 					<p class="text-body-secondary">{{.T "cdn64.f.dead_hint"}}</p>
+					{{else if eq $h.Kind "stream"}}
+					<p class="text-body-secondary" data-stream-hint>{{.T "cdn64.f.stream_hint"}}</p>
 					{{else if eq $h.Kind "passthrough"}}
 					<div class="row g-2 mb-1">
 						<div class="col-sm-9"><label class="form-label fw-semibold" for="target_host">{{.T "cdn64.f.target_host"}}</label>
@@ -86,7 +88,7 @@
 						<div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="websockets" id="websockets"{{if $h.WebSockets}} checked{{end}}><label class="form-check-label" for="websockets">{{.T "cdn64.f.websockets"}}</label></div><div class="form-text">{{.T "cdn64.f.websockets_hint"}}</div></div>
 					</div>
 					{{end}}
-					{{if $d.IPv64}}
+					{{if and $d.IPv64 (ne $h.Kind "stream")}}
 					<div class="border rounded p-2 mt-3">
 						<div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="dns_create" id="dns_create"><label class="form-check-label fw-semibold" for="dns_create">{{.T "cdn64.dnsrec.create"}}</label></div>
 						<div class="row g-2 mt-1">
@@ -106,7 +108,7 @@
 					{{with index $d.Errors "access_list_id"}}<div class="invalid-feedback">{{.}}</div>{{end}}
 					<div class="form-text">{{if $d.DockerACL}}<i class="bi bi-box-seam"></i> {{.T "cdn64.docker.form_access" "name" $d.DockerACL}}{{else}}{{.T "cdn64.f.access_hint"}}{{end}} <a href="/cdn64/access">{{.T "cdn64.tab.access"}}</a></div>
 					{{end}}
-					{{if ne $h.Kind "dead"}}
+					{{if and (ne $h.Kind "dead") (ne $h.Kind "stream")}}
 					<input type="hidden" name="has_geo" value="1">
 					<label class="form-label fw-semibold mt-3" for="geo_mode">{{.T "cdn64.f.geo"}}{{$.Doc "cdn64#laendersperre"}}</label>
 					<div class="row g-2">
@@ -172,7 +174,7 @@
 					<div class="alert alert-info small py-2 mt-3 mb-0"><i class="bi bi-info-circle"></i> {{.T "cdn64.maint.scope_hint"}}</div>
 				</div>
 				{{end}}
-				{{if ne $h.Kind "passthrough"}}
+				{{if and (ne $h.Kind "passthrough") (ne $h.Kind "stream")}}
 				<div class="tab-pane fade" id="tab-advanced" role="tabpanel">
 					<input type="hidden" name="has_advanced" value="1">
 					{{with index $d.Errors "advanced"}}<div class="alert alert-danger py-1">{{.}}</div>{{end}}
@@ -211,7 +213,7 @@
 				</div>
 				{{end}}
 
-				{{if ne $h.Kind "passthrough"}}<div class="tab-pane fade" id="tab-ssl" role="tabpanel">
+				{{if and (ne $h.Kind "passthrough") (ne $h.Kind "stream")}}<div class="tab-pane fade" id="tab-ssl" role="tabpanel">
 					<label class="form-label fw-semibold" for="cert_id">{{.T "cdn64.f.cert"}}</label>
 					<select class="form-select form-select-sm{{if index $d.Errors "cert_id"}} is-invalid{{end}}" id="cert_id" name="cert_id" data-cert-select>
 						<option value="0"{{if eq $h.CertID 0}} selected{{end}}>{{.T "cdn64.f.cert_auto"}}</option>

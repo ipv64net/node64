@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: names for streams only – a stream (TCP/UDP) goes to the internet via CDN64 without a proxy host or target;
+  neither HTTP nor HTTPS answers under the name.
 - Security: databases (node, DNS64 query log, PROXY64 statistics) and their backups are readable only by the node
   user (before 0644, readable by every user on the host); existing files are fixed at startup.
 - Certificates: domain plus wildcard (`example.ipv64.de` + `*.example.ipv64.de`) via DNS-01 failed at Let's Encrypt

@@ -355,6 +355,9 @@ func (m *Module) onlineEnable(ctx context.Context, h *Host, mode int) ([]onlineR
 	if mode == 2 && h.Kind == KindPass {
 		return nil, errOnline("mode2_passthrough")
 	}
+	if mode == 2 && h.Kind == KindStream { // ohne HTTPS gibt es auf den Servern nichts zu beenden
+		return nil, errOnline("mode2_stream")
+	}
 	c, err := m.onlineEnsureTunnel(ctx)
 	if err != nil {
 		return nil, err
@@ -567,11 +570,11 @@ func (m *Module) onlineSync(ctx context.Context) {
 				continue
 			}
 			removed = true
-		case h.Kind == KindPass && remote[x.RemoteID].Mode == 2: // z. B. auf der Webseite gewechselt: geht hier nicht
+		case (h.Kind == KindPass || h.Kind == KindStream) && remote[x.RemoteID].Mode == 2: // z. B. auf der Webseite gewechselt: geht hier nicht
 			if err := a.SetMode(ctx, x.RemoteID, 1); err != nil {
-				m.log.Warn("cdn64 online: mode 2 not reset for a passthrough host", "name", x.Name, "err", err)
+				m.log.Warn("cdn64 online: mode 2 not reset", "name", x.Name, "kind", h.Kind, "err", err)
 			} else {
-				m.log.Warn("cdn64 online: mode 2 is not possible for TLS passthrough, switched back to 1", "name", x.Name)
+				m.log.Warn("cdn64 online: mode 2 is not possible for this host kind, switched back to 1", "name", x.Name, "kind", h.Kind)
 				_, _ = m.core.Writer().ExecContext(ctx, `UPDATE cdn_online SET mode = 1 WHERE name = ?`, x.Name)
 			}
 		case remote[x.RemoteID].Mode != x.Mode && remote[x.RemoteID].Mode > 0: // anderswo gewechselt: hier uebernehmen
@@ -650,6 +653,8 @@ type onlineTest struct {
 	DNS    []string      `json:"dns"`                   // Antwort eines oeffentlichen Resolvers
 	DNSOK  bool          `json:"dns_ok"`                // zeigt auf die Server
 	Route  string        `json:"route_error,omitempty"` // Host hier nicht geroutet (z. B. Name von DNS64 belegt)
+
+	StreamOnly bool `json:"stream_only,omitempty"` // Host "nur Streams": kein HTTP/HTTPS, nur Ports der Streams
 }
 
 func (m *Module) onlinePorts() (int, int) {
@@ -673,6 +678,7 @@ func (m *Module) onlineSelfTest(ctx context.Context, h *Host) ([]onlineTest, err
 	for _, x := range list {
 		useTLS = useTLS || (x.HostID == h.ID && x.Mode >= 2) // Modus 2/3: TLS auf den Servern, auch fuer reine HTTP-Hosts
 	}
+	streamOnly := h.Kind == KindStream
 	m.mu.Lock()
 	routeErr := m.routeErr[h.ID]
 	m.mu.Unlock()
@@ -681,7 +687,7 @@ func (m *Module) onlineSelfTest(ctx context.Context, h *Host) ([]onlineTest, err
 		if x.HostID != h.ID {
 			continue
 		}
-		t := onlineTest{Name: x.Name, TLS: useTLS, Probes: []onlineProbe{}, Route: routeErr}
+		t := onlineTest{Name: x.Name, TLS: useTLS, Probes: []onlineProbe{}, Route: routeErr, StreamOnly: streamOnly}
 		allIPs := map[string]bool{}
 		for _, e := range c.Edges {
 			ips := e.IPs
@@ -690,7 +696,7 @@ func (m *Module) onlineSelfTest(ctx context.Context, h *Host) ([]onlineTest, err
 			}
 			for _, ip := range ips {
 				allIPs[ip] = true
-				t.Probes = append(t.Probes, m.onlineProbeOne(ctx, e.Name, ip, x.Name, useTLS, x.Mode != 3))
+				t.Probes = append(t.Probes, m.onlineProbeOne(ctx, e.Name, ip, x.Name, useTLS, x.Mode != 3, streamOnly))
 			}
 		}
 		t.DNS = publicLookup(ctx, x.Name)
@@ -702,7 +708,8 @@ func (m *Module) onlineSelfTest(ctx context.Context, h *Host) ([]onlineTest, err
 	return out, nil
 }
 
-func (m *Module) onlineProbeOne(ctx context.Context, edgeName, ip, name string, useTLS, viaTunnel bool) onlineProbe {
+// streamOnly: Host "nur Streams" - die Node schliesst die Verbindung ohne Antwort, es zaehlt, dass sie ankommt.
+func (m *Module) onlineProbeOne(ctx context.Context, edgeName, ip, name string, useTLS, viaTunnel, streamOnly bool) onlineProbe {
 	p := onlineProbe{Edge: edgeName, Addr: ip, Family: "ipv4"}
 	if strings.Contains(ip, ":") {
 		p.Family = "ipv6"
@@ -749,7 +756,7 @@ func (m *Module) onlineProbeOne(ctx context.Context, edgeName, ip, name string, 
 	}
 	_, _ = io.WriteString(conn, "HEAD / HTTP/1.1\r\nHost: "+name+"\r\nUser-Agent: Node64-CDN64-Selftest\r\nConnection: close\r\n\r\n")
 	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
-	if err != nil && !useTLS { // bei TLS genuegt der Handschlag (Durchreichen), die Antwort ist Sache des Ziels
+	if err != nil && !useTLS && !streamOnly { // bei TLS genuegt der Handschlag (Durchreichen), die Antwort ist Sache des Ziels
 		p.Error = err.Error()
 		return p
 	}
@@ -871,7 +878,7 @@ func (m *Module) apiOnlineEnable(w http.ResponseWriter, r *http.Request) {
 			on = append(on, res[i].Name)
 		}
 	}
-	if in.Healthcheck && len(on) > 0 {
+	if in.Healthcheck && len(on) > 0 && h.Kind != KindStream { // nur Streams: nichts fuer einen HTTP-Check
 		out.Check, err = m.onlineCheck(r, h, on[0])
 		if err != nil {
 			out.CheckError = err.Error()

@@ -808,11 +808,19 @@ func (m *Module) apply(ctx context.Context) {
 	m.mu.Unlock()
 	errs := map[int64]string{}
 	var active []*Host
+	only := map[string]bool{}
 	for _, h := range list {
+		if h.Kind == KindStream { // nur Streams: keine Route, PROXY64 kennt den Namen auf 80/443 nicht
+			for _, n := range h.Names {
+				only[n] = true
+			}
+			continue
+		}
 		if h.Enabled {
 			active = append(active, h)
 		}
 	}
+	m.streamOnly.Store(&only)
 	m.geoNeed(active)
 	m.aiNeed(active)
 	for {
@@ -929,7 +937,7 @@ func (m *Module) certUsers(ctx context.Context) map[int64][]string {
 
 // hostOfName: fuer Anzeigen (Link auf den ersten Namen).
 func firstURL(h *Host) string {
-	if strings.HasPrefix(h.Names[0], "*.") {
+	if strings.HasPrefix(h.Names[0], "*.") || h.Kind == KindStream {
 		return ""
 	}
 	if h.HTTPS() {
