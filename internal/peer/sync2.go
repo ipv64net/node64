@@ -47,7 +47,20 @@ type sync2State struct {
 	busy   map[string]*sync.Mutex
 	seeded map[string]bool // "modul/bereich": vorhandene Eintraege seit dem Start im Protokoll
 	swept  time.Time
+	retry  map[string]sync2Retry // je Mitglied: abgelehnte Eintraege erneut abholen
+	warned map[string]bool       // Ablehnung schon gemeldet (Mitglied, Eintrag, Zeitpunkt): Wiederholungen nur Debug
 }
+
+// sync2Retry: ab Nummer from (exklusiv) erneut abholen, sobald faellig. Eine Ablehnung (z. B. Statusseite mit
+// gleichem Slug, Benutzer zur Wahl, Key eines anderen Accounts) kann sich hier aufloesen, ohne dass sich der Eintrag
+// drueben aendert; der Stand (cursor2) laeuft trotzdem weiter.
+type sync2Retry struct {
+	from int64
+	due  time.Time
+}
+
+// sync2RetryEvery: Abstand der Wiederholungen abgelehnter Eintraege (Variable fuer Tests).
+var sync2RetryEvery = 5 * time.Minute
 
 // registerSync2 haengt den Endpunkt an (aus Register).
 func (m *Manager) registerSync2(mux *http.ServeMux) {
@@ -269,16 +282,22 @@ func (m *Manager) pullSync2From(ctx context.Context, x Member, wants []string) e
 		_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET cursor2 = 0, sync_seen2 = ? WHERE node_id = ?`, items, x.NodeID)
 	}
 	self, applied := m.d.NodeID(), 0
+	since, retried, failed := cursor, false, int64(-1)
+	m.pull.s2.mu.Lock()
+	if r, ok := m.pull.s2.retry[x.NodeID]; ok && r.from < cursor && !time.Now().Before(r.due) {
+		since, retried = r.from, true
+	}
+	m.pull.s2.mu.Unlock()
 	for page := 0; page < 100; page++ {
 		var out syncOut
 		cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		err := m.call(cctx, x, http.MethodGet, "/peer/v2/sync?since="+strconv.FormatInt(cursor, 10)+"&items="+url.QueryEscape(items), nil, &out)
+		err := m.call(cctx, x, http.MethodGet, "/peer/v2/sync?since="+strconv.FormatInt(since, 10)+"&items="+url.QueryEscape(items), nil, &out)
 		cancel()
 		if err != nil {
 			return err
 		}
 		if out.Head < cursor { // Protokoll der anderen Node neu: von vorn
-			cursor = 0
+			cursor, since = 0, 0
 			continue
 		}
 		for _, e := range out.Items {
@@ -294,24 +313,72 @@ func (m *Manager) pullSync2From(ctx context.Context, x Member, wants []string) e
 				continue
 			}
 			if err := p.ClusterApply(WithClusterOrigin(ctx, e.Origin, e.ChangedAt), e.Item, e.ID, e.Data, e.Deleted); err != nil {
-				m.d.Log.Warn("cluster change not applied", "from", x.Name, "module", e.Module, "item", e.Item, "err", err)
+				if m.firstReject(x.NodeID + "|" + e.Module + "/" + e.Item + "/" + e.ID + "|" + fmtTime(e.ChangedAt)) {
+					m.d.Log.Warn("cluster change not applied", "from", x.Name, "module", e.Module, "item", e.Item, "err", err)
+				} else {
+					m.d.Log.Debug("cluster change not applied", "from", x.Name, "module", e.Module, "item", e.Item, "err", err)
+				}
+				if failed < 0 || e.Seq-1 < failed {
+					failed = e.Seq - 1
+				}
 				continue
 			}
 			if _, err := m.logSync(e.Module, e.Item, e.ID, e.Deleted, e.Origin, e.ChangedAt); err == nil {
 				applied++
 			}
 		}
-		if out.Last > cursor {
-			cursor = out.Last
+		if out.Last > since {
+			since = out.Last
+		}
+		if since > cursor {
+			cursor = since
 			_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET cursor2 = ? WHERE node_id = ?`, cursor, x.NodeID)
 		}
 		if !out.More {
 			break
 		}
 	}
+	m.setRetry(x.NodeID, failed, retried)
 	if applied > 0 {
 		m.d.Log.Info("cluster entries updated", "from", x.Name, "changes", applied)
 		m.pokeSoon() // an die anderen weiterreichen
 	}
 	return nil
+}
+
+// setRetry merkt abgelehnte Eintraege eines Mitglieds zum erneuten Abholen (failed = Nummer davor, -1 = keine).
+// Nach einer Wiederholung gilt nur ihr Ergebnis; sonst bleibt eine offene Wiederholung samt Termin.
+func (m *Manager) setRetry(node string, failed int64, retried bool) {
+	s := &m.pull.s2
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.retry == nil {
+		s.retry = map[string]sync2Retry{}
+	}
+	r, ok := s.retry[node]
+	switch {
+	case failed < 0 && retried:
+		delete(s.retry, node)
+	case failed < 0:
+	case retried || !ok:
+		s.retry[node] = sync2Retry{from: failed, due: time.Now().Add(sync2RetryEvery)}
+	case failed < r.from:
+		r.from = failed
+		s.retry[node] = r
+	}
+}
+
+// firstReject: diese Ablehnung (Mitglied, Eintrag, Zeitpunkt) zum ersten Mal - dann Warnung, sonst nur Debug.
+func (m *Manager) firstReject(key string) bool {
+	s := &m.pull.s2
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.warned == nil || len(s.warned) > 10000 {
+		s.warned = map[string]bool{}
+	}
+	if s.warned[key] {
+		return false
+	}
+	s.warned[key] = true
+	return true
 }
