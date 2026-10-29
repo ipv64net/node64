@@ -148,7 +148,7 @@ func TestPublicError(t *testing.T) {
 	}
 }
 
-// Eigene Aenderung der Node (propose, settings, node_info) hebt den Stand nur an, wenn sie direkt anschliesst: eine
+// Angenommener Vorschlag der Node (propose) hebt den Stand nur an, wenn sie direkt anschliesst: eine
 // fremde Aenderung dazwischen (Portal/API, Revision 11) bleibt offen und kommt mit fanoutLoop (Test 2026-10-29).
 func TestBumpRevNext(t *testing.T) {
 	c := &conn{g: &Gateway{log: slog.New(slog.NewTextHandler(io.Discard, nil))}, node: &store.Node{ID: "n"}, lastRev: 10}

@@ -16,6 +16,9 @@
   kleinste Kennung). Vorher konnte eine Node ohne Abgleich als zuständig gelten und niemand reichte weiter.
 - API-Log: Check-Tokens im Pfad (`/api/push/…`, `/api/checks/…`) werden gekürzt (sie sind zugleich die
   Push-Berechtigung).
+- Verknüpfte Node: Nach einer Änderung von Ruhezeiten/Grenzen oder Name/Standort an der Node blieb ihr
+  Konfigurationsstand bis zum Neuverbinden stehen; der hub schickt die Änderung jetzt zurück. Der einmalige Abgleich
+  nach dem Update von 2.42.0 läuft als voller Abgleich, der auch im Portal gelöschte Checks entfernt.
 
 ## 2.42.0 – 2026-10-29
 
