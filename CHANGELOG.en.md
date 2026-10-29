@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Database: the last three backups before migrations are kept instead of five (saves several hundred MB per node).
 - PROXY64: names for streams only – a stream (TCP/UDP) goes to the internet via CDN64 without a proxy host or target;
   neither HTTP nor HTTPS answers under the name.
 - Security: databases (node, DNS64 query log, PROXY64 statistics) and their backups are readable only by the node
