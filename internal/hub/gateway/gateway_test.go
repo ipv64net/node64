@@ -147,3 +147,15 @@ func TestPublicError(t *testing.T) {
 		t.Fatal("nil error")
 	}
 }
+
+// Eigene Aenderung der Node (propose, settings, node_info) hebt den Stand nur an, wenn sie direkt anschliesst: eine
+// fremde Aenderung dazwischen (Portal/API, Revision 11) bleibt offen und kommt mit fanoutLoop (Test 2026-10-29).
+func TestBumpRevNext(t *testing.T) {
+	c := &conn{g: &Gateway{log: slog.New(slog.NewTextHandler(io.Discard, nil))}, node: &store.Node{ID: "n"}, lastRev: 10}
+	if c.bumpRevNext(12) != 10 {
+		t.Fatal("gap: own revision 12 must not skip 11")
+	}
+	if c.bumpRevNext(11) != 11 || c.bumpRevNext(11) != 11 {
+		t.Fatal("next revision must be taken once")
+	}
+}

@@ -542,7 +542,9 @@ func (s *session) applyAck(ctx context.Context, o healthchecks.Outbox, res wire.
 			}
 		}
 	}
-	if res.Revision > c.getInt(SetRevision) {
+	// nur direkt anschliessend: liegt eine fremde Aenderung dazwischen (Portal, API), kommt sie mit der naechsten
+	// Konfiguration vom hub; ein Sprung auf res.Revision liesse sie auch nach einem Neuverbinden aus
+	if res.Revision == c.getInt(SetRevision)+1 {
 		c.setInt(SetRevision, res.Revision)
 	}
 }
