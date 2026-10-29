@@ -5,7 +5,8 @@
 ### Behoben
 - Verknüpfte Node: Eine Änderung aus dem Portal oder der API (z. B. neuer Online-Check), die im selben Moment wie
   eine Änderung an dieser Node entstand, kam auf dieser Node nie an – auch nicht nach einem Neuverbinden. Der Stand
-  springt jetzt nur noch direkt anschließend weiter (Node und hub).
+  springt jetzt nur noch direkt anschließend weiter (Node und hub). Nach dem Update holt jede verknüpfte Node ihren
+  Konfigurationsstand einmal von vorn ab, damit früher übersprungene Änderungen ankommen.
 - Cluster: Änderungen einer Node ohne Verknüpfung, die sie während einer Trennung gemacht hat, kamen nach dem
   Wiederkoppeln erst nach einem Neustart der weiterreichenden Node ins Portal; jetzt sofort.
 

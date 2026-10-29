@@ -5,7 +5,8 @@
 ### Fixed
 - Linked node: a change from the portal or the API (e.g. a new online check) made at the same moment as a change on
   this node never arrived on this node, not even after reconnecting. The revision now only advances when it follows
-  directly (node and hub).
+  directly (node and hub). After the update every linked node fetches its configuration once from the start, so
+  changes skipped earlier arrive.
 - Cluster: changes a node without link made while separated only reached the portal after the forwarding node
   restarted; now right after rejoining.
 

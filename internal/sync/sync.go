@@ -62,6 +62,8 @@ const (
 	SetPendSecret    = "sync.pending_secret"
 	SetPendExp       = "sync.pending_expires"
 	SetLocalNotif    = "sync.local_notifications" // "1": Node alarmiert ihre Kanaele auch verknuepft
+
+	setRevResync = "sync.rev_resync_1" // einmal von vorn abgeholt (Revisions-Fix 2.42.0)
 )
 
 // State beschreibt den Verbindungszustand fuer die Anzeige im UI.
@@ -386,6 +388,12 @@ func (c *Live) Start(ctx context.Context) error {
 	c.d.HC.Store().OnRuntime = c.onRuntime
 	notify.OnChange = c.onChannelChange
 	if c.Linked() {
+		// einmal den Konfigurationsstand von vorn holen: bis Healthchecks 2.42.0 konnte eine gleichzeitige Aenderung aus
+		// Portal/API uebersprungen werden und kam sonst nie an (die juengere Revision gewinnt, doppelt schadet nicht)
+		if c.setting(setRevResync, "") == "" {
+			c.setInt(SetRevision, 0)
+			c.set(setRevResync, "1")
+		}
 		c.startLoop(ctx)
 	} else if code := c.setting(SetPendCode, ""); code != "" {
 		if exp, err := time.Parse(time.RFC3339, c.setting(SetPendExp, "")); err == nil && time.Now().Before(exp) {
