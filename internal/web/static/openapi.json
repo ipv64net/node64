@@ -1981,9 +1981,10 @@
               "redirect",
               "dead",
               "passthrough",
-              "status"
+              "status",
+              "stream"
             ],
-            "description": "Art; nur beim Anlegen, Standard proxy. status = Statusseite der Healthchecks (status_page_id)"
+            "description": "Art; nur beim Anlegen, Standard proxy. status = Statusseite der Healthchecks (status_page_id), stream = nur Name fuer Streams (CDN64-Portmapper, kein HTTP/HTTPS)"
           },
           "redirect_target": {
             "type": "string",
@@ -2062,9 +2063,10 @@
               "redirect",
               "dead",
               "passthrough",
-              "status"
+              "status",
+              "stream"
             ],
-            "description": "Art; nur beim Anlegen, Standard proxy. status = Statusseite der Healthchecks (status_page_id)"
+            "description": "Art; nur beim Anlegen, Standard proxy. status = Statusseite der Healthchecks (status_page_id), stream = nur Name fuer Streams (CDN64-Portmapper, kein HTTP/HTTPS)"
           },
           "names": {
             "type": "array",
@@ -12632,7 +12634,8 @@
                 "redirect",
                 "dead",
                 "passthrough",
-                "status"
+                "status",
+                "stream"
               ]
             }
           }

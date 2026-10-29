@@ -196,7 +196,7 @@
 				if (n.probes.some(function (p) { return p.other_node; })) { s.line(t("other_node"), "text-danger"); }
 				if (n.probes.some(function (p) { return p.trusted === false; })) { s.line(t("untrusted"), "text-warning-emphasis"); }
 				s.line(n.dns_ok ? t("dns_ok") : t("dns_wait"));
-				if (!url) { url = (n.tls ? "https://" : "http://") + n.name; }
+				if (!url) { url = n.stream_only ? n.name : (n.tls ? "https://" : "http://") + n.name; } // nur Streams: kein HTTP
 			});
 			if (okAny && okAll) {
 				s.ok();

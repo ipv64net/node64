@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Namen nur für Streams – ein Stream (TCP/UDP) geht über CDN64 ins Internet, ohne Proxy-Host und ohne Ziel;
+  unter dem Namen antwortet weder HTTP noch HTTPS.
 - Sicherheit: Datenbanken (Node, DNS64-Abfrageprotokoll, PROXY64-Statistik) und ihre Backups sind nur noch für den
   Node-Benutzer lesbar (vorher 0644, auf dem Host für jeden Benutzer lesbar); bestehende Dateien werden beim Start
   angepasst.

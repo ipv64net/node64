@@ -283,6 +283,13 @@ landen nur bei angemeldeten Streams (Name + Protokoll + Port), mit Blocklisten, 
 TCP-Verbindungen über den Portmapper (alle Modi) trennen die Server nach 1 Stunde ohne Daten in beide Richtungen
 (cdn64-edge 0.15.1).
 
+**Namen nur für Streams (2026-10-29, PROXY64 1.40.0):** Host-Art `stream` – nur Namen, kein Ziel, kein Zertifikat.
+Er wird wie jeder Host in Modus 1 eingeschaltet (Modus 2 abgelehnt `mode2_stream`, auf der Webseite gesetzter Modus 2
+wird zurückgestellt), kein HTTP-Healthcheck. PROXY64 legt dafür keine Route an; Streams `tls`/`http80`/`http`/`quic`
+aus dem Tunnel für den Namen schließt die Node sofort (`isStreamOnly`, gezählt für den Selbsttest, der dann nur das
+Ankommen prüft). Nur `tcp`/`udp` des Portmappers landen bei den Streams. Portal und Server bleiben unverändert: die
+Server reichen 80/443 für den Namen weiter wie bei jedem Modus-1-Namen, die Node antwortet nicht.
+
 **Entfernte Namen auf den Servern (2026-10-26, cdn64-edge 0.18.1):** Verschwindet ein Name aus `edge/config` (gelöscht,
 Konto gelöscht, verwaister Tunnel von `bots/cdn64_orphans.php` aufgeräumt), lassen srv07/srv08 ihn beim nächsten
 Abruf fallen: Route weg, laufende Verbindungen (auch Portmapper) getrennt, Portmapper-Listener geschlossen, Tunnel

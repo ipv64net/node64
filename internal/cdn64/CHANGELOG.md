@@ -1,5 +1,13 @@
 # Änderungen – PROXY64
 
+## 1.40.0 – 2026-10-29
+
+### Neu
+- Namen nur für Streams: Unter Streams → „Namen für Streams“ legt man einen Namen ohne Ziel an, schaltet ihn bei CDN64
+  ein (nur Modus 1) und wählt ihn im Stream. So geht ein TCP/UDP-Port über srv07/srv08 ins Internet, ohne dass unter
+  dem Namen ein Proxy-Host antwortet: Auf Port 80 und 443 schließt die Node Verbindungen über den Tunnel sofort, hier
+  gibt es keine Route. Neue Host-Art `stream` in der API.
+
 ## 1.39.0 – 2026-10-28
 
 ### Behoben

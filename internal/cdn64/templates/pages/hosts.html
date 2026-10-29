@@ -49,7 +49,7 @@
 	<div class="table-responsive">
 	<table class="table table-hover align-middle mb-0 small table-stack">
 		<thead><tr>
-			<th class="ps-3" style="min-width:10rem" data-nolabel>{{.T "cdn64.col.names"}}</th>{{if ne $d.Kind "dead"}}<th style="min-width:9rem">{{.T "cdn64.col.target"}}</th>{{end}}<th>{{.T "cdn64.col.ssl"}}</th><th style="min-width:5rem">{{.T "cdn64.col.options"}}</th>
+			<th class="ps-3" style="min-width:10rem" data-nolabel>{{.T "cdn64.col.names"}}</th>{{if and (ne $d.Kind "dead") (ne $d.Kind "stream")}}<th style="min-width:9rem">{{.T "cdn64.col.target"}}</th>{{end}}<th>{{.T "cdn64.col.ssl"}}</th><th style="min-width:5rem">{{.T "cdn64.col.options"}}</th>
 			{{if eq $d.Kind "proxy"}}<th>{{.T "cdn64.col.reach"}}</th>{{end}}{{if $d.OnlineOn}}<th>{{.T "cdn64.online.col"}}</th>{{end}}<th class="text-end" data-stats-col>{{.T "cdn64.col.requests24"}}</th><th class="text-end pe-3" style="min-width:9.5rem"></th>
 		</tr></thead>
 		<tbody>
@@ -67,6 +67,7 @@
 			{{else if eq .Kind "status"}}<td class="cell-wrap">{{with .Status}}<i class="bi bi-clipboard-pulse me-1"></i>{{.Title}}{{if not .Enabled}} <span class="badge text-bg-secondary">{{$.T "cdn64.status.off"}}</span>{{end}}{{else}}<span class="badge text-bg-warning">{{$.T "cdn64.status.unknown" "id" .StatusPageID}}</span>{{end}}</td>{{end}}
 			<td>{{with .Cert}}
 				{{if eq .State "http"}}<span class="badge text-bg-light">HTTP</span>
+				{{else if eq .State "stream"}}<span class="text-body-secondary" title="{{$.T "cdn64.streamnames.no_http"}}">–</span>
 				{{else if eq .State "ok"}}<span class="badge text-bg-success" title="{{.Name}}"><i class="bi bi-lock-fill"></i> {{$.T "cdn64.cert.days" "days" .Days}}</span>
 				{{else if eq .State "soon"}}<span class="badge text-bg-warning" title="{{.Name}}"><i class="bi bi-lock-fill"></i> {{$.T "cdn64.cert.days" "days" .Days}}</span>
 				{{else if eq .State "expired"}}<span class="badge text-bg-danger" title="{{.Name}}"><i class="bi bi-unlock"></i> {{$.T "cdn64.cert.expired"}}</span>
@@ -103,7 +104,7 @@
 				{{if eq .Online.Status "blocked"}}<div><span class="badge text-bg-danger">{{$.T "cdn64.online.blocked"}}{{with .Online.Reason}}: {{.}}{{end}}</span></div>{{else if eq .Online.Status "pending"}}<div><span class="badge text-bg-warning">{{$.T "cdn64.online.pending"}}</span></div>{{end}}
 				<div class="mt-1 text-nowrap">
 					<button type="button" class="btn btn-sm {{if .Online.Paused}}btn-outline-success{{else}}btn-outline-warning{{end}} py-0" data-c64o-pause="{{.ID}}" data-paused="{{if .Online.Paused}}1{{end}}" data-name="{{index .Online.Names 0}}" title="{{if .Online.Paused}}{{$.T "cdn64.online.resume"}}{{else}}{{$.T "cdn64.online.pause"}}{{end}}"><i class="bi {{if .Online.Paused}}bi-play-circle{{else}}bi-pause-circle{{end}}"></i></button>
-					{{if .Online.JA4}}<div class="dropdown d-inline-block"><button type="button" class="btn btn-sm {{if or .Online.WAF (ne .Online.JA4 "off")}}btn-outline-success{{else}}btn-outline-secondary{{end}} py-0" data-bs-toggle="dropdown" data-bs-auto-close="outside" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false" title="{{$.T "cdn64.protection.sw_title"}}" data-c64o-prot="{{.ID}}"><i class="bi bi-shield-check"></i></button>
+					{{if and .Online.JA4 (ne .Kind "stream")}}<div class="dropdown d-inline-block"><button type="button" class="btn btn-sm {{if or .Online.WAF (ne .Online.JA4 "off")}}btn-outline-success{{else}}btn-outline-secondary{{end}} py-0" data-bs-toggle="dropdown" data-bs-auto-close="outside" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false" title="{{$.T "cdn64.protection.sw_title"}}" data-c64o-prot="{{.ID}}"><i class="bi bi-shield-check"></i></button>
 						<form method="post" action="/cdn64/hosts/{{.ID}}/protection" class="dropdown-menu p-3 small" style="min-width:16rem"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
 							<div class="fw-semibold mb-2">{{$.T "cdn64.protection.sw_title"}}</div>
 							<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="waf" value="1" id="c64o-waf-{{.ID}}"{{if .Online.WAF}} checked{{end}}><label class="form-check-label" for="c64o-waf-{{.ID}}">{{$.T "cdn64.protection.sw_waf"}}</label></div>
@@ -125,7 +126,7 @@
 				<div class="mt-1 text-nowrap">
 					<button type="button" class="btn btn-sm btn-outline-secondary py-0" data-c64o-test="{{.ID}}" title="{{$.T "cdn64.online.test"}}"><i class="bi bi-activity"></i></button>
 					<button type="button" class="btn btn-sm {{if .Online.Paused}}btn-outline-success{{else}}btn-outline-warning{{end}} py-0" data-c64o-pause="{{.ID}}" data-paused="{{if .Online.Paused}}1{{end}}" data-name="{{index .Names 0}}" title="{{if .Online.Paused}}{{$.T "cdn64.online.resume"}}{{else}}{{$.T "cdn64.online.pause"}}{{end}}"><i class="bi {{if .Online.Paused}}bi-play-circle{{else}}bi-pause-circle{{end}}"></i></button>
-					{{if .Online.JA4}}<div class="dropdown d-inline-block"><button type="button" class="btn btn-sm {{if or .Online.WAF (ne .Online.JA4 "off")}}btn-outline-success{{else}}btn-outline-secondary{{end}} py-0" data-bs-toggle="dropdown" data-bs-auto-close="outside" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false" title="{{$.T "cdn64.protection.sw_title"}}" data-c64o-prot="{{.ID}}"><i class="bi bi-shield-check"></i></button>
+					{{if and .Online.JA4 (ne .Kind "stream")}}<div class="dropdown d-inline-block"><button type="button" class="btn btn-sm {{if or .Online.WAF (ne .Online.JA4 "off")}}btn-outline-success{{else}}btn-outline-secondary{{end}} py-0" data-bs-toggle="dropdown" data-bs-auto-close="outside" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false" title="{{$.T "cdn64.protection.sw_title"}}" data-c64o-prot="{{.ID}}"><i class="bi bi-shield-check"></i></button>
 						<form method="post" action="/cdn64/hosts/{{.ID}}/protection" class="dropdown-menu p-3 small" style="min-width:16rem"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
 							<div class="fw-semibold mb-2">{{$.T "cdn64.protection.sw_title"}}</div>
 							<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="waf" value="1" id="c64o-waf-{{.ID}}"{{if .Online.WAF}} checked{{end}}><label class="form-check-label" for="c64o-waf-{{.ID}}">{{$.T "cdn64.protection.sw_waf"}}</label></div>
@@ -209,11 +210,12 @@
 				<p class="small">{{.T "cdn64.online.intro"}}{{$.Doc "cdn64-online#schutz"}}</p>
 				<div class="small fw-semibold mb-1">{{.T "cdn64.online.ex_title"}}{{$.Doc "cdn64-online#welcher-modus"}}</div>
 				<div class="border rounded p-2 mb-2 c64o-pick" role="button" tabindex="0" data-online-pick="1"><div class="fw-semibold small">{{.T "cdn64.online.ex1_title"}}{{$.Doc "cdn64-online#modus-1"}}</div><div class="small text-body-secondary">{{.T "cdn64.online.ex1_text"}}</div><pre class="c64o-ascii mb-0 mt-1">{{.T "cdn64.online.ex1_art"}}</pre></div>
-				<div class="border rounded p-2 mb-2 c64o-pick" role="button" tabindex="0" data-online-pick="2"><div class="fw-semibold small">{{.T "cdn64.online.ex2_title"}}{{$.Doc "cdn64-online#modus-2"}}</div><div class="small text-body-secondary">{{.T "cdn64.online.ex2_text"}}</div><pre class="c64o-ascii mb-0 mt-1">{{.T "cdn64.online.ex2_art"}}</pre></div>
+				{{if eq $d.Kind "stream"}}<div class="alert alert-info small py-2" data-online-stream>{{.T "cdn64.streamnames.online_hint"}}</div>{{end}}
+				<div class="border rounded p-2 mb-2 c64o-pick{{if eq $d.Kind "stream"}} d-none{{end}}" role="button" tabindex="0" data-online-pick="2"><div class="fw-semibold small">{{.T "cdn64.online.ex2_title"}}{{$.Doc "cdn64-online#modus-2"}}</div><div class="small text-body-secondary">{{.T "cdn64.online.ex2_text"}}</div><pre class="c64o-ascii mb-0 mt-1">{{.T "cdn64.online.ex2_art"}}</pre></div>
 				<div class="border border-dashed rounded p-2 mb-3 c64o-mode3"><div class="fw-semibold small">{{.T "cdn64.online.ex3_title"}}{{$.Doc "cdn64-online#modus-3"}}</div><div class="small text-body-secondary">{{.T "cdn64.online.ex3_text"}} <a href="https://ipv64.net/cdn64" target="_blank" rel="noopener">ipv64.net/cdn64 <i class="bi bi-box-arrow-up-right"></i></a></div><pre class="c64o-ascii mb-0 mt-1">{{.T "cdn64.online.ex3_art"}}</pre></div>
 				<div class="mb-2"><label class="form-label small mb-1" for="online-mode">{{.T "cdn64.online.mode"}}{{$.Doc "cdn64-online#welcher-modus"}}</label>
-					<select class="form-select form-select-sm" id="online-mode" data-online-mode><option value="1" selected>{{.T "cdn64.online.mode1"}}</option><option value="2">{{.T "cdn64.online.mode2"}}</option></select></div>
-				<div class="form-check small mb-3"><input class="form-check-input" type="checkbox" id="online-hc" data-online-hc><label class="form-check-label" for="online-hc">{{.T "cdn64.online.hc"}}</label></div>
+					<select class="form-select form-select-sm" id="online-mode" data-online-mode><option value="1" selected>{{.T "cdn64.online.mode1"}}</option>{{if ne $d.Kind "stream"}}<option value="2">{{.T "cdn64.online.mode2"}}</option>{{end}}</select></div>
+				{{if ne $d.Kind "stream"}}<div class="form-check small mb-3"><input class="form-check-input" type="checkbox" id="online-hc" data-online-hc><label class="form-check-label" for="online-hc">{{.T "cdn64.online.hc"}}</label></div>{{end}}
 			</div>
 			<ol class="list-unstyled mb-0 small" data-online-steps></ol>
 		</div>
@@ -234,6 +236,6 @@
 		<div class="small mt-1 {{if .Short}}text-warning-emphasis{{else}}text-body-secondary{{end}}">{{if .Short}}<i class="bi bi-exclamation-triangle"></i> {{$.T "cdn64.online.q_short" "date" ($.Date .EmptyAt) "n" ($.Bytes .Projected)}}{{else if .Projected}}{{$.T "cdn64.online.q_ok" "n" ($.Bytes .Projected)}}{{else}}{{$.T "cdn64.online.q_early"}}{{end}}</div>
 	</div><i class="bi bi-arrow-down-up stat-icon"></i></div></div></div>
 </div>{{end}}
-<p class="small text-body-secondary mt-2">{{if eq $d.Kind "proxy"}}{{.T "cdn64.list_hint"}}{{else}}{{.T "cdn64.list_hint_other"}}{{end}}{{if $d.CacheN}} · {{.T "cdn64.cache_info" "n" $d.CacheN "size" (.Bytes $d.CacheB)}}{{end}}</p>
+<p class="small text-body-secondary mt-2">{{if eq $d.Kind "proxy"}}{{.T "cdn64.list_hint"}}{{else if eq $d.Kind "stream"}}{{.T "cdn64.streamnames.list_hint"}} <a href="/cdn64/streams">{{.T "cdn64.streamnames.to_streams"}}</a>{{else}}{{.T "cdn64.list_hint_other"}}{{end}}{{if $d.CacheN}} · {{.T "cdn64.cache_info" "n" $d.CacheN "size" (.Bytes $d.CacheB)}}{{end}}</p>
 {{end}}
 {{define "scripts"}}{{if and (eq .Data.Kind "proxy") .Data.StatsOn}}<script src="/static/js/chart.umd.js"></script><script src="/static/js/cdn64-chart.js?v={{.Version}}"></script><script src="/static/js/cdn64-stats.js?v={{.Version}}"></script>{{end}}<script src="/static/js/cdn64.js?v={{.Version}}"></script>{{if .Data.OnlineOn}}<script src="/static/js/cdn64-online.js?v={{.Version}}"></script>{{end}}{{end}}

@@ -513,6 +513,7 @@
       "redirect_hint": "Domain, optional mit Port und Pfad (z. B. www.example.com/neu). „Wie die Anfrage“ nimmt http oder https so, wie der Besucher kam.",
       "preserve_path": "Pfad und Abfrage mitnehmen",
       "dead_hint": "Dieser Host antwortet auf alle Anfragen mit einer neutralen Seite „404“. Mit Zertifikat auch per HTTPS.",
+      "stream_hint": "Nur der Name, ohne Ziel: Schalte ihn bei CDN64 ein (Modus 1) und wähle ihn dann im Stream unter „Über CDN64 aus dem Internet erreichbar“. Auf Port 80 und 443 antwortet unter diesem Namen nichts – weder hier noch über srv07/srv08.",
       "pass_hint": "Die Verbindung wird nach dem Namen roh an dieses Ziel gegeben, ohne sie hier zu entschlüsseln – das Ziel braucht ein eigenes Zertifikat. Auf Port 80 gibt es eine Weiterleitung auf HTTPS.",
       "locations": "Locations",
       "advanced": "Erweitert",
@@ -583,6 +584,7 @@
       "redirect_code": "Unbekannter HTTP-Code.",
       "redirect_self": "Eine Weiterleitung auf sich selbst wäre eine Schleife.",
       "pass_wildcard": "Beim Durchreichen geht keine Wildcard.",
+      "stream_wildcard": "Für Streams geht keine Wildcard.",
       "stream_name": "Name höchstens 100 Zeichen.",
       "stream_proto": "TCP und/oder UDP wählen.",
       "stream_tls": "TLS geht nur bei TCP.",
@@ -642,6 +644,7 @@
       "proxy": "Proxy-Host anlegen",
       "redirect": "Weiterleitung anlegen",
       "dead": "404-Host anlegen",
+      "stream": "Name nur für Streams anlegen",
       "passthrough": "TLS durchreichen",
       "status": "Statusseite verbinden"
     },
@@ -649,6 +652,7 @@
       "proxy": "Noch keine Proxy-Hosts. Ein Proxy-Host leitet Anfragen für eine Domain an einen Dienst im Heimnetz weiter.",
       "redirect": "Noch keine Weiterleitungen. Eine Weiterleitung schickt Besucher einer Domain auf eine andere (z. B. alte Domain auf neue).",
       "dead": "Noch keine 404-Hosts. Ein 404-Host beantwortet eine Domain bewusst mit „nicht gefunden“, z. B. für stillgelegte Namen.",
+      "stream": "Noch keine Namen nur für Streams. So ein Name bringt Streams (TCP/UDP) über CDN64 ins Internet, ganz ohne Proxy-Host: kein Ziel, und auf Port 80 und 443 antwortet unter dem Namen nichts.",
       "passthrough": "Noch nichts durchgereicht.",
       "status": "Noch keine Statusseiten auf eigener Domain. Ein solcher Host zeigt eine Statusseite der Healthchecks unter einer Domain – mit Zertifikat, Blocklisten, Ländersperre und Limits, auf Wunsch auch über CDN64."
     },
@@ -664,6 +668,7 @@
     },
     "streams": {
       "title": "Streams (TCP/UDP)",
+      "names_btn": "Namen für Streams",
       "online_title": "Über CDN64: Port der Server (srv07/srv08), der zu diesem Stream geht",
       "new": "Stream anlegen",
       "edit": "Stream bearbeiten",
@@ -679,7 +684,8 @@
       "hint": "Streams belegen ihren Port je Protokoll; die Übersicht unter Einstellungen → Ports zeigt Überschneidungen. UDP-Sitzungen enden nach 60 s ohne Pakete.",
       "f": {
         "name": "Name (optional)",
-        "online_empty": "Erst einen Host bei CDN64 in Modus 1 oder 2 einschalten, dann lässt sich der Stream über dessen Namen erreichen.",
+        "online_empty": "Erst einen Host bei CDN64 in Modus 1 oder 2 einschalten oder einen Namen nur für Streams anlegen und einschalten, dann lässt sich der Stream über diesen Namen erreichen.",
+        "online_new": "Name nur für Streams anlegen (ohne Proxy-Host)",
         "online_hint": "srv07/srv08 öffnen für diesen Stream einen Port und reichen Verbindungen durch den verschlüsselten Tunnel hierher (Portmapper). Zu Hause muss kein Port offen sein, deine Adresse bleibt verborgen. Der Port der Server steht nach dem Speichern in der Liste; er zählt zum Kontingent für Portmapper.",
         "online_none": "nein, nur hier",
         "online": "Über CDN64 aus dem Internet erreichbar",
@@ -691,6 +697,12 @@
       },
       "help_ports": "Im Router den Port (TCP und/oder UDP) auf diese Node weiterleiten. Ports unter 1024 gehen dank der Rechte im Image auch ohne Root.",
       "help_docker": "Mit Host-Netzwerk öffnet Node64 den Port direkt. Im Bridge-Modus muss der Port zusätzlich beim Container freigegeben sein (-p)."
+    },
+    "streamnames": {
+      "no_http": "Kein HTTP/HTTPS – nur für Streams",
+      "online_hint": "Name nur für Streams: Er läuft in Modus 1 durch den Tunnel, HTTP und HTTPS bleiben zu. Danach im Stream diesen Namen wählen – srv07/srv08 öffnen dafür einen Port.",
+      "list_hint": "Diese Namen beantworten weder HTTP noch HTTPS; über CDN64 sind nur die Ports der Streams erreichbar, die sie nutzen.",
+      "to_streams": "Zu den Streams"
     },
     "pass": {
       "title": "TLS durchreichen (Port 443 nach Namen)",
@@ -1087,6 +1099,7 @@
         "tunnel_down": "Die Node erreicht srv07/srv08 nicht. Ausgehend UDP oder TCP 7844 erlauben (Firewall, Router).",
         "mode_not_available": "Dieser Modus ist noch nicht verfügbar.",
         "mode2_passthrough": "TLS durchreichen geht nur mit Modus 1 (das Ziel beendet TLS selbst).",
+        "mode2_stream": "Namen nur für Streams gehen nur mit Modus 1 – es gibt kein HTTPS, das die Server beenden könnten.",
         "target_not_public": "Modus 3 braucht ein öffentlich erreichbares Ziel (öffentliche IP oder Name). Für Ziele im Heimnetz Modus 1 oder 2 nehmen.",
         "mode3_web": "Modus 3 (direkt zum Ziel, ohne Tunnel) gibt es nur auf der Webseite: ipv64.net/cdn64. Für Ziele im Heimnetz Modus 1 oder 2 nehmen.",
         "no_target_records": "Für den Namen gibt es keinen öffentlichen A/AAAA-Eintrag als Ziel.",

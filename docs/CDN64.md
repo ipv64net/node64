@@ -70,6 +70,7 @@ und keinem Modul:
 | 404-Host | Domain(s) → „nicht gefunden“ | z. B. für stillgelegte Namen |
 | TLS durchreichen | Name auf 443 → Dienst mit eigenem Zertifikat | Node64 entschlüsselt nicht; Port 80 leitet auf HTTPS |
 | Stream | Port (TCP/UDP) → Ziel | optional TLS-Abschluss (TCP); UDP-Sitzungen enden nach 60 s ohne Pakete |
+| Name nur für Streams | Name ohne Ziel (`kind` `stream`) | nur für den CDN64-Portmapper (Modus 1): keine Route, über den Tunnel schließt die Node 80/443/QUIC sofort |
 
 **Das Ziel bekommt:**
 - den Namen, unter dem der Besucher kam (einstellbar);

@@ -33,6 +33,7 @@ const (
 	KindDead     = "dead"        // antwortet immer mit 404
 	KindPass     = "passthrough" // TLS durchreichen (das Ziel beendet TLS selbst)
 	KindStatus   = "status"      // Statusseite der Healthchecks (StatusPageID)
+	KindStream   = "stream"      // nur Streams: CDN64-Name fuer den Portmapper, kein HTTP/HTTPS, kein Ziel
 )
 
 var redirectCodes = map[int]bool{300: true, 301: true, 302: true, 303: true, 307: true, 308: true}
@@ -97,12 +98,15 @@ func newHostKind(kind string) *Host {
 	if kind == KindPass {
 		h.Scheme, h.TargetPort, h.CertID = "https", 443, CertNone
 	}
+	if kind == KindStream {
+		h.TargetPort, h.CertID, h.WebSockets, h.HTTP2, h.HTTP3 = 0, CertNone, false, false, false
+	}
 	h.Advanced.Gzip = kind == KindProxy // Komprimierung fuer neue Proxy-Hosts an
 	return h
 }
 
 func validKind(k string) bool {
-	return k == KindProxy || k == KindRedirect || k == KindDead || k == KindPass || k == KindStatus
+	return k == KindProxy || k == KindRedirect || k == KindDead || k == KindPass || k == KindStatus || k == KindStream
 }
 
 // FieldError ist ein Fehler in einem Feld (Formular, API 422); Key ist der Text, Name ein Wert dazu.
@@ -152,7 +156,7 @@ func (h *Host) normalize() error {
 	if err := h.Advanced.normalize(); err != nil {
 		return err
 	}
-	if h.Kind == KindDead { // 404-Host: nichts zu schuetzen
+	if h.Kind == KindDead || h.Kind == KindStream { // 404-Host bzw. nur Streams: nichts zu schuetzen (Streams haben eigene Sperren)
 		h.Advanced.GeoMode = ""
 	}
 	h.Advanced.normalizeAI(h.Kind)
@@ -174,7 +178,7 @@ func (h *Host) normalize() error {
 	if h.AccessListID < 0 {
 		h.AccessListID = 0
 	}
-	if h.Kind == KindPass || h.Kind == KindDead {
+	if h.Kind == KindPass || h.Kind == KindDead || h.Kind == KindStream {
 		h.AccessListID = 0
 	}
 	if h.MinTLS != "1.3" && h.MinTLS != TLSBSI {
@@ -192,6 +196,16 @@ func (h *Host) normalize() error {
 		return h.normalizeTLS()
 	case KindDead:
 		h.TargetHost, h.TargetPort, h.WebSockets, h.CacheAssets, h.BlockExploits = "", 0, false, false, false
+		return h.normalizeTLS()
+	case KindStream: // nur der Name fuer Streams (CDN64-Portmapper): PROXY64 beantwortet ihn weder auf 80 noch auf 443
+		h.TargetHost, h.TargetPort, h.WebSockets, h.CacheAssets, h.BlockExploits = "", 0, false, false, false
+		h.Scheme, h.CertID, h.HTTP2, h.HTTP3, h.RedirectTarget = "http", CertNone, false, false, ""
+		h.Advanced = Advanced{}
+		for _, n := range h.Names {
+			if strings.HasPrefix(n, "*.") {
+				return ferr("names", "cdn64.err.stream_wildcard")
+			}
+		}
 		return h.normalizeTLS()
 	case KindStatus: // Seite kommt aus den Healthchecks: kein Ziel, keine Weiterleitung
 		if h.StatusPageID <= 0 {
@@ -552,6 +566,8 @@ func (h *Host) summary() string {
 		return fmt.Sprintf("kind=status page=%d enabled=%v cert=%d force_ssl=%v acl=%d", h.StatusPageID, h.Enabled, h.CertID, h.ForceSSL, h.AccessListID)
 	case KindPass:
 		return fmt.Sprintf("kind=passthrough target=%s enabled=%v", net.JoinHostPort(h.TargetHost, strconv.Itoa(h.TargetPort)), h.Enabled)
+	case KindStream:
+		return fmt.Sprintf("kind=stream enabled=%v", h.Enabled)
 	}
 	return fmt.Sprintf("target=%s enabled=%v ws=%v exploits=%v cache=%v cert=%d force_ssl=%v http2=%v http3=%v hsts=%v tls=%s acl=%d locations=%d", h.Target(),
 		h.Enabled, h.WebSockets, h.BlockExploits, h.CacheAssets, h.CertID, h.ForceSSL, h.HTTP2, h.HTTP3, h.HSTS, h.MinTLS, h.AccessListID, len(h.Locations))
