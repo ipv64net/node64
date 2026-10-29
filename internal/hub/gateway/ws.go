@@ -70,8 +70,8 @@ func (c *conn) bumpRev(r int64) int64 {
 	return c.lastRev
 }
 
-// bumpRevNext hebt den Stand nur an, wenn r direkt anschliesst (Stand+1): die Revision einer eigenen Aenderung der
-// Node. Liegt dazwischen eine fremde Aenderung (Portal, API, andere Node), bleibt der Stand - fanoutLoop schickt dann
+// bumpRevNext hebt den Stand nur an, wenn r direkt anschliesst (Stand+1): die Revision eines angenommenen Vorschlags
+// der Node (die Node zieht im Ack ebenso nur bei Stand+1 nach). Liegt dazwischen eine fremde Aenderung (Portal, API, andere Node), bleibt der Stand - fanoutLoop schickt dann
 // beide; sonst gaelte die fremde fuer diese Node als schon geliefert und kaeme nie an.
 func (c *conn) bumpRevNext(r int64) int64 {
 	c.mu.Lock()
@@ -471,7 +471,9 @@ func (c *conn) handle(m wire.Msg) {
 			c.send(wire.Msg{T: "conflict", ID: m.ID, Data: raw(res)})
 			return
 		}
-		c.bumpRevNext(res.Revision)
+		if res.Error == "" {
+			c.bumpRevNext(res.Revision)
+		}
 		c.ack(m.ID, res)
 	case "run_check":
 		// "Jetzt pruefen" an einer Node: die anderen messenden Nodes beauftragen
@@ -501,13 +503,13 @@ func (c *conn) handle(m wire.Msg) {
 				clean[k] = nv
 			}
 		}
-		rev, err := g.st.SetAccountSettings(ctx, n.UserID, clean)
+		// Stand nicht anheben: fanoutLoop schickt die Aenderung zurueck, erst damit zieht die Node ihre Revision nach
+		_, err := g.st.SetAccountSettings(ctx, n.UserID, clean)
 		if err != nil {
 			g.log.Error("settings from node failed", "node", n.ID, "err", err)
 			c.ack(m.ID, map[string]any{"ok": false, "error": "database error"})
 			return
 		}
-		c.bumpRevNext(rev)
 		c.ack(m.ID, map[string]any{"ok": true})
 	case "node_info":
 		// Name/Standort an der Node geaendert: Portal und andere Nodes (ueber config "node") sehen es sofort
@@ -519,13 +521,12 @@ func (c *conn) handle(m wire.Msg) {
 			c.ack(m.ID, map[string]any{"ok": false, "error": "name required"})
 			return
 		}
-		rev, err := g.st.RenameNode(ctx, n.UserID, n.ID, strings.TrimSpace(in.Name), strings.TrimSpace(in.Location))
+		_, err := g.st.RenameNode(ctx, n.UserID, n.ID, strings.TrimSpace(in.Name), strings.TrimSpace(in.Location))
 		if err != nil {
 			g.log.Error("node rename failed", "node", n.ID, "err", err)
 			c.ack(m.ID, map[string]any{"ok": false, "error": "database error"})
 			return
 		}
-		c.bumpRevNext(rev)
 		c.ack(m.ID, map[string]any{"ok": true})
 	case "status":
 		var st wire.Status

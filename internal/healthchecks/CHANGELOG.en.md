@@ -16,6 +16,9 @@
   Before, a node without sync could count as responsible and nobody forwarded.
 - API log: check tokens in the path (`/api/push/…`, `/api/checks/…`) are shortened (they are also the push
   credential).
+- Linked node: after changing quiet hours/limits or name/location on the node, its configuration state stood still
+  until reconnecting; the hub now sends the change back. The one-time sync after the update from 2.42.0 runs as a
+  full sync that also removes checks deleted in the portal.
 
 ## 2.42.0 – 2026-10-29
 

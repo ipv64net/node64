@@ -362,6 +362,14 @@ func (s *session) afterConnect() {
 			s.c.set("sync.channel_config_v1", "1")
 		}
 	}
+	if s.c.setting(setRevResync, "") == "" {
+		// einmalig alles abgleichen: bis Healthchecks 2.42.0 konnte eine gleichzeitige Aenderung aus Portal/API
+		// uebersprungen werden und kam sonst nie an. fullSync stellt auch geloeschte Eintraege richtig, ein Abholen ab
+		// Revision 0 nicht (das Aenderungsprotokoll des hubs ist gekuerzt)
+		if err := s.c.fullSync(s.ctx); err == nil {
+			s.c.set(setRevResync, "1")
+		}
+	}
 	go s.c.refreshMe(context.Background()) // Name, Standort und Nodes des Accounts aktualisieren
 	s.replayOutbox()
 	s.uploadMeasurements()
