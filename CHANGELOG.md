@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 0.12.0-alpha.32 – 2026-10-29
+
 - Cluster: Beim Koppeln gewinnt kein veralteter API-Key mehr gegen einen neueren im Cluster, und ein Entfernen des
   Keys erreicht auch Mitglieder, die beim Koppeln einer neuen Node gerade nicht erreichbar waren. Abgelehnte Einträge
   werden mit wachsendem Abstand (bis 6 h) erneut versucht und gehen bei einem Abbruch des Abholens nicht mehr verloren.
@@ -16,6 +18,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Healthchecks/Cluster: Nodes ohne eigene Verknüpfung prüfen bei Online- und Hybrid-Checks die Grenzen des Accounts
   und reichen Pushes direkt an ipv64 weiter; die zuständige weiterreichende Node wird überall gleich bestimmt.
 - API-Log: Check-Tokens im Pfad werden gekürzt.
+- Healthchecks: Nach einer Änderung von Ruhezeiten, Grenzen oder Name an einer verknüpften Node blieb ihr Stand bis
+  zum Neuverbinden stehen; einmaliger voller Abgleich nach dem Update.
 
 ## 0.12.0-alpha.31 – 2026-10-29
 

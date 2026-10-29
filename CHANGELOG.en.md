@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 0.12.0-alpha.32 – 2026-10-29
+
 - Cluster: when pairing, an outdated API key no longer wins over a newer one in the cluster, and removing the key
   also reaches members that were unreachable while a new node was paired. Rejected entries are retried with a growing
   interval (up to 6 h) and are no longer lost when fetching is interrupted.
@@ -16,6 +18,8 @@ Short summary of what changes per version. Details per module are in the node un
 - Health checks/cluster: nodes without their own link check the account limits for online and hybrid checks and
   forward pushes directly to ipv64; the forwarding node is determined the same way everywhere.
 - API log: check tokens in the path are shortened.
+- Health checks: after changing quiet hours, limits or the name on a linked node, its state stood still until
+  reconnecting; one-time full sync after the update.
 
 ## 0.12.0-alpha.31 – 2026-10-29
 
