@@ -2,6 +2,7 @@ package peer
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -22,6 +23,13 @@ func (nodeProv) ClusterModule() ModuleInfo {
 		mi.Items = append(mi.Items, ItemInfo{ID: it.ID, TitleKey: it.TitleKey, HintKey: it.HintKey})
 	}
 	return mi
+}
+
+// ClusterApply wie nodecluster: Zeitpunkt und Beginn der Verbindung an nodecfg weiterreichen.
+func (p nodeProv) ClusterApply(ctx context.Context, item, id string, data json.RawMessage, deleted bool) error {
+	_, at, _ := ClusterOrigin(ctx)
+	since, _ := MemberSince(ctx)
+	return p.Cluster.ClusterApply(nodecfg.WithApplyInfo(ctx, at, since), item, id, data, deleted)
 }
 
 func newNodeCfg(n *testNode, id string) *ipv64api.Key {
@@ -232,5 +240,58 @@ func TestNodeCfgKeyToNodeWithoutAccount(t *testing.T) {
 	round2(w, b)
 	if kw.Get(ctx) != wkey || kb.Get(ctx) != wkey {
 		t.Fatalf("deletion must not travel into another cluster: w=%q b=%q", kw.Get(ctx), kb.Get(ctx))
+	}
+}
+
+// Beim Koppeln gewinnt kein veralteter Key gegen einen neueren im Cluster, und die annehmende Node behaelt ihre
+// Loeschvermerke fuer Mitglieder, die gerade nicht erreichbar sind (Review alpha.31).
+func TestNodeCfgJoinKeepsNewerKeyAndRemoval(t *testing.T) {
+	ctx := context.Background()
+	mk := func(id, name string) (*testNode, *ipv64api.Key) {
+		n := newNode(t, id, name, 0)
+		k := newNodeCfg(n, n.m.d.NodeID())
+		n.m.d.AccountID = func() int64 { return int64(k.Info(context.Background()).ID) }
+		for _, item := range []string{"", nodecfg.ItemAPIKey} {
+			if err := n.m.SetSync(ctx, nodecfg.ModuleID, item, true); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return n, k
+	}
+	acc := ipv64api.AccountInfo{ID: 522, Account: "dennis"}
+	const k1, k2 = "K1K1k1k1K1K1k1k10001", "K2K2k2k2K2K2k2k20002"
+
+	// 1) Z bringt den alten K1 mit, der Cluster nutzt den neueren K2: alle behalten bzw. bekommen K2
+	z, kz := mk("node-z", "Z")
+	_ = kz.SetFromCluster(ctx, k1, acc)
+	time.Sleep(5 * time.Millisecond)
+	a, ka := mk("node-a", "A")
+	b, kb := mk("node-b", "B")
+	_ = ka.SetFromCluster(ctx, k2, acc)
+	pair(t, a, b)
+	waitMembers(t, a, "B")
+	round2(a, b)
+	pair(t, a, z)
+	waitMembers(t, a, "B", "Z")
+	round2(a, b, z)
+	round2(a, b, z)
+	if ka.Get(ctx) != k2 || kb.Get(ctx) != k2 || kz.Get(ctx) != k2 {
+		t.Fatalf("newer cluster key must win: a=%q b=%q z=%q", ka.Get(ctx), kb.Get(ctx), kz.Get(ctx))
+	}
+
+	// 2) A entfernt den Key, B ist dabei nicht erreichbar (holt nicht ab); N ohne Key koppelt ueber A.
+	// A behaelt den Loeschvermerk, B bekommt das Entfernen spaeter, und der Key kommt nicht zurueck.
+	if err := ka.Clear(ctx); err != nil {
+		t.Fatal(err)
+	}
+	n, kn := mk("node-n", "N")
+	pair(t, a, n)
+	waitMembers(t, a, "B", "Z", "N")
+	round2(a, b, z, n)
+	round2(a, b, z, n)
+	for name, k := range map[string]*ipv64api.Key{"A": ka, "B": kb, "Z": kz, "N": kn} {
+		if k.Get(ctx) != "" {
+			t.Fatalf("removal must reach every member and must not come back: %s still has a key", name)
+		}
 	}
 }

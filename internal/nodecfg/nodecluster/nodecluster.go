@@ -4,6 +4,7 @@ package nodecluster
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/ipv64net/node64/internal/nodecfg"
@@ -14,6 +15,13 @@ import (
 type provider struct{ *nodecfg.Cluster }
 
 func (p provider) ClusterModule() peer.ModuleInfo { return Module() }
+
+// ClusterApply reicht Zeitpunkt der Aenderung und Beginn der Verbindung zum liefernden Mitglied an nodecfg weiter.
+func (p provider) ClusterApply(ctx context.Context, item, id string, data json.RawMessage, deleted bool) error {
+	_, at, _ := peer.ClusterOrigin(ctx)
+	since, _ := peer.MemberSince(ctx)
+	return p.Cluster.ClusterApply(nodecfg.WithApplyInfo(ctx, at, since), item, id, data, deleted)
+}
 
 // Module: das Modul mit seinen Bereichen (alle ohne Einstellung aus).
 func Module() peer.ModuleInfo {

@@ -305,6 +305,18 @@ func (c *Cluster) applyKey(ctx context.Context, data json.RawMessage, deleted bo
 		if c.d.Store.SettingOr(ctx, ipv64api.SetKey, "") == "" {
 			return nil
 		}
+		// entfernt, bevor diese Node mit der entfernenden Node verbunden war (im Cluster vor dem Beitritt): der Key
+		// hier gilt weiter und geht an die Nodes ohne Key (Dennis: die Node ohne Key
+		// uebernimmt ihn). Ein spaeter, bewusstes Entfernen im gemeinsamen Cluster wirkt wie bisher.
+		if at, since := applyInfoOf(ctx); !at.IsZero() && !since.IsZero() && at.Before(since) {
+			c.mu.Lock()
+			change := c.change
+			c.mu.Unlock()
+			if change != nil {
+				change(ctx, ItemAPIKey, keyID, false, time.Now())
+			}
+			return supersededError{}
+		}
 		if err := k.Clear(ctx); err != nil { // wie das Entfernen in den Einstellungen
 			return err
 		}
@@ -334,23 +346,40 @@ func (c *Cluster) applyKey(ctx context.Context, data json.RawMessage, deleted bo
 	return nil
 }
 
-// ClusterJoined (peer.Joiner): neue Kopplung - ein hier eingetragener Key gilt ab jetzt, ohne Key geht der
-// Loeschvermerk des Keys nicht in den neuen Cluster. So uebernimmt eine Node ohne Key ihn auch dann, wenn vorher ein
-// Key entfernt wurde und der Loeschvermerk juenger ist als der Zeitpunkt, zu dem der Key irgendwo eingetragen wurde
-// (der Zeitpunkt reist beim Weiterreichen mit), und ein Entfernen in einem Cluster loescht nie den Key in einem
-// anderen, in den eine Node danach wechselt.
+// ClusterJoined (peer.Joiner, nur auf der beitretenden Node): ohne Key geht der Loeschvermerk des Keys nicht in den
+// neuen Cluster - ein Entfernen in einem Cluster loescht nie den Key in einem anderen, und die Node uebernimmt den Key
+// des neuen Clusters (ohne eigenen Eintrag gewinnt dessen Stand). Einen vorhandenen Key meldet sie nicht neu: ein
+// neuerer Key im Cluster gewinnt wie immer nach Zeitpunkt; steht dort nur ein aelterer Loeschvermerk, gilt applyKey.
 func (c *Cluster) ClusterJoined(ctx context.Context) []string {
-	c.mu.Lock()
-	change := c.change
-	c.mu.Unlock()
-	if change == nil || c.d.Key == nil {
+	if c.d.Key == nil {
 		return nil
 	}
 	if c.d.Key.Get(ctx) == "" || !c.d.Key.Removed(ctx).IsZero() {
 		return []string{ItemAPIKey + "/" + keyID}
 	}
-	change(ctx, ItemAPIKey, keyID, false, time.Now())
 	return nil
+}
+
+// supersededError: Loeschvermerk aelter als die Verbindung zum liefernden Mitglied, der eigene Key gilt weiter und ist
+// neu gemeldet (peer behandelt das nicht als Fehler, Superseded).
+type supersededError struct{}
+
+func (supersededError) Error() string    { return "key removal predates the membership, own key kept" }
+func (supersededError) Superseded() bool { return true }
+
+type applyKeyT struct{}
+
+type applyInfo struct{ at, since time.Time }
+
+// WithApplyInfo: Zeitpunkt der uebernommenen Aenderung und seit wann diese Node mit dem liefernden Mitglied verbunden
+// ist (setzt der Cluster-Adapter nodecluster aus peer.ClusterOrigin und peer.MemberSince).
+func WithApplyInfo(ctx context.Context, at, since time.Time) context.Context {
+	return context.WithValue(ctx, applyKeyT{}, applyInfo{at, since})
+}
+
+func applyInfoOf(ctx context.Context) (at, since time.Time) {
+	i, _ := ctx.Value(applyKeyT{}).(applyInfo)
+	return i.at, i.since
 }
 
 // clusterFits: der Account acc passt zum Cluster (dessen Account ist derselbe oder es hat noch keiner einen).

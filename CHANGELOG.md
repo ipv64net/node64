@@ -4,6 +4,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Cluster: Beim Koppeln gewinnt kein veralteter API-Key mehr gegen einen neueren im Cluster, und ein Entfernen des
+  Keys erreicht auch Mitglieder, die beim Koppeln einer neuen Node gerade nicht erreichbar waren. Abgelehnte Einträge
+  werden mit wachsendem Abstand (bis 6 h) erneut versucht und gehen bei einem Abbruch des Abholens nicht mehr verloren.
 - PROXY64: Bandbreite je Proxy-Host, „TLS durchreichen“ und Stream – Download und Upload in Mbit/s begrenzen (Standard unbegrenzt),
   darüber wird gebremst statt getrennt.
 - PROXY64: Streams in einer Tabelle – Namen nur für Streams mit CDN64-Stand und ihren Ports zusammen.
