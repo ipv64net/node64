@@ -46,8 +46,10 @@ type Provider interface {
 
 // Joiner kann ein Provider zusaetzlich erfuellen: nach jeder neuen Kopplung auf beiden Seiten aufgerufen (vor dem
 // ersten Abgleich), z. B. um Eintraege, die ab dem Beitritt gelten sollen, mit dem jetzigen Zeitpunkt zu melden.
+// forget nennt Eintraege ("bereich/kennung"), deren Loeschvermerk hier nicht in den neuen Cluster gehen soll (er
+// wird aus dem Protokoll genommen; ein vorhandener Eintrag bleibt).
 type Joiner interface {
-	ClusterJoined(ctx context.Context)
+	ClusterJoined(ctx context.Context) (forget []string)
 }
 
 // joined ruft ClusterJoined der Provider, die es haben.
@@ -59,8 +61,14 @@ func (m *Manager) joined(ctx context.Context) {
 	}
 	m.mu.Unlock()
 	for _, p := range list {
-		if j, ok := p.(Joiner); ok {
-			j.ClusterJoined(ctx)
+		j, ok := p.(Joiner)
+		if !ok {
+			continue
+		}
+		for _, f := range j.ClusterJoined(ctx) {
+			item, id, _ := strings.Cut(f, "/")
+			_, _ = m.db.ExecContext(ctx, `DELETE FROM cluster_log WHERE module = ? AND item = ? AND entity_id = ? AND deleted = 1`,
+				p.ClusterModule().ID, item, id)
 		}
 	}
 }

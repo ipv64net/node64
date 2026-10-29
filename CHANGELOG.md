@@ -5,7 +5,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 ## Unveröffentlicht
 
 - Cluster: Tritt eine Node mit API-Key einem Cluster bei, in dem der Key vorher entfernt wurde, übernehmen die
-  anderen ihren Key – vorher verlor die beitretende Node ihn.
+  anderen ihren Key – vorher verlor die beitretende Node ihn. Wechselt eine Node ohne Key in einen anderen Cluster,
+  entfernt sie dort keinen Key mehr.
 - Cluster: Ein abgelehnter Eintrag (z. B. Statusseite mit gleichem Slug, Benutzer zur Wahl) wird alle 5 Minuten
   erneut versucht und kommt an, sobald der Konflikt auf einer Seite gelöst ist – vorher erst, wenn er sich drüben
   wieder änderte.
