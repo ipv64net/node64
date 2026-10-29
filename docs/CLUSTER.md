@@ -64,7 +64,7 @@ Healthchecks-Ablauf im Detail: [LOKALE-GRUPPE.md](LOKALE-GRUPPE.md). Code: `inte
 | Healthchecks bei der anderen Node aus | 5 min Ruhe statt alle 15 s (ein Anstoß holt trotzdem sofort) |
 | Konflikte | jüngere Änderung gewinnt (ms), Gleichstand: größere Node-Kennung der Urheberin |
 | Löschvermerke (v2) | 30 Tage |
-| Abgelehnter Eintrag (v2, „cluster change not applied“) | alle 5 min erneut abgeholt, bis er angenommen wird (Warnung einmal je Stand, danach Debug); der Stand der Abholung läuft trotzdem weiter |
+| Abgelehnter Eintrag (v2, „cluster change not applied“) | alle 5 min erneut abgeholt, bis er angenommen wird (Warnung einmal je Stand, danach Debug); der Stand der Abholung läuft trotzdem weiter, die Stelle bleibt über Neustarts gemerkt (`peer_members.retry2`); mit dem Update auf diesen Stand holt jede Node einmal alles neu ab |
 | Bereich neu eingeschaltet | Abholen ab Anfang (doppelt schadet nicht, die jüngere Änderung gewinnt); genau gleiche Einträge werden dabei zusammengeführt (siehe unten) |
 
 ## Was abgeglichen wird

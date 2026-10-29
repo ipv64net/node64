@@ -47,17 +47,13 @@ type sync2State struct {
 	busy   map[string]*sync.Mutex
 	seeded map[string]bool // "modul/bereich": vorhandene Eintraege seit dem Start im Protokoll
 	swept  time.Time
-	retry  map[string]sync2Retry // je Mitglied: abgelehnte Eintraege erneut abholen
-	warned map[string]bool       // Ablehnung schon gemeldet (Mitglied, Eintrag, Zeitpunkt): Wiederholungen nur Debug
+	due    map[string]time.Time // je Mitglied: naechste Wiederholung abgelehnter Eintraege (fehlt = sofort)
+	warned map[string]bool      // Ablehnung schon gemeldet (Mitglied, Eintrag, Zeitpunkt): Wiederholungen nur Debug
 }
 
-// sync2Retry: ab Nummer from (exklusiv) erneut abholen, sobald faellig. Eine Ablehnung (z. B. Statusseite mit
-// gleichem Slug, Benutzer zur Wahl, Key eines anderen Accounts) kann sich hier aufloesen, ohne dass sich der Eintrag
-// drueben aendert; der Stand (cursor2) laeuft trotzdem weiter.
-type sync2Retry struct {
-	from int64
-	due  time.Time
-}
+// Abgelehnte Eintraege (z. B. Statusseite mit gleichem Slug, Benutzer zur Wahl, Key eines anderen Accounts) koennen
+// sich hier aufloesen, ohne dass sich der Eintrag drueben aendert. peer_members.retry2 haelt die Nummer vor dem
+// ersten abgelehnten Eintrag (-1 = keiner); ab dort wird erneut abgeholt, der Stand (cursor2) laeuft trotzdem weiter.
 
 // sync2RetryEvery: Abstand der Wiederholungen abgelehnter Eintraege (Variable fuer Tests).
 var sync2RetryEvery = 5 * time.Minute
@@ -273,19 +269,19 @@ func (m *Manager) pullSync2From(ctx context.Context, x Member, wants []string) e
 		return nil
 	}
 	defer lock.Unlock()
-	var cursor int64
+	var cursor, retry int64
 	var seen string
-	_ = m.db.QueryRowContext(ctx, `SELECT cursor2, sync_seen2 FROM peer_members WHERE node_id = ?`, x.NodeID).Scan(&cursor, &seen)
+	_ = m.db.QueryRowContext(ctx, `SELECT cursor2, sync_seen2, retry2 FROM peer_members WHERE node_id = ?`, x.NodeID).Scan(&cursor, &seen, &retry)
 	items := joinCaps(wants)
 	if seen != items { // Bereiche geaendert: von vorn (die juengere Aenderung gewinnt, doppelt schadet nicht)
-		cursor = 0
-		_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET cursor2 = 0, sync_seen2 = ? WHERE node_id = ?`, items, x.NodeID)
+		cursor, retry = 0, -1
+		_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET cursor2 = 0, retry2 = -1, sync_seen2 = ? WHERE node_id = ?`, items, x.NodeID)
 	}
 	self, applied := m.d.NodeID(), 0
 	since, retried, failed := cursor, false, int64(-1)
 	m.pull.s2.mu.Lock()
-	if r, ok := m.pull.s2.retry[x.NodeID]; ok && r.from < cursor && !time.Now().Before(r.due) {
-		since, retried = r.from, true
+	if retry >= 0 && retry < cursor && !time.Now().Before(m.pull.s2.due[x.NodeID]) {
+		since, retried = retry, true
 	}
 	m.pull.s2.mu.Unlock()
 	for page := 0; page < 100; page++ {
@@ -338,7 +334,7 @@ func (m *Manager) pullSync2From(ctx context.Context, x Member, wants []string) e
 			break
 		}
 	}
-	m.setRetry(x.NodeID, failed, retried)
+	m.setRetry(ctx, x.NodeID, retry, failed, retried)
 	if applied > 0 {
 		m.d.Log.Info("cluster entries updated", "from", x.Name, "changes", applied)
 		m.pokeSoon() // an die anderen weiterreichen
@@ -346,25 +342,29 @@ func (m *Manager) pullSync2From(ctx context.Context, x Member, wants []string) e
 	return nil
 }
 
-// setRetry merkt abgelehnte Eintraege eines Mitglieds zum erneuten Abholen (failed = Nummer davor, -1 = keine).
-// Nach einer Wiederholung gilt nur ihr Ergebnis; sonst bleibt eine offene Wiederholung samt Termin.
-func (m *Manager) setRetry(node string, failed int64, retried bool) {
-	s := &m.pull.s2
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.retry == nil {
-		s.retry = map[string]sync2Retry{}
-	}
-	r, ok := s.retry[node]
+// setRetry merkt abgelehnte Eintraege eines Mitglieds zum erneuten Abholen (old = bisherige Nummer, failed = Nummer
+// vor dem ersten abgelehnten Eintrag dieses Laufs, -1 = keine). Nach einer Wiederholung gilt nur ihr Ergebnis; sonst
+// bleibt eine offene Wiederholung samt Termin.
+func (m *Manager) setRetry(ctx context.Context, node string, old, failed int64, retried bool) {
+	next := old
 	switch {
 	case failed < 0 && retried:
-		delete(s.retry, node)
+		next = -1
 	case failed < 0:
-	case retried || !ok:
-		s.retry[node] = sync2Retry{from: failed, due: time.Now().Add(sync2RetryEvery)}
-	case failed < r.from:
-		r.from = failed
-		s.retry[node] = r
+	case retried || old < 0 || failed < old:
+		next = failed
+	}
+	if failed >= 0 && (retried || old < 0) {
+		s := &m.pull.s2
+		s.mu.Lock()
+		if s.due == nil {
+			s.due = map[string]time.Time{}
+		}
+		s.due[node] = time.Now().Add(sync2RetryEvery)
+		s.mu.Unlock()
+	}
+	if next != old {
+		_, _ = m.db.ExecContext(ctx, `UPDATE peer_members SET retry2 = ? WHERE node_id = ?`, next, node)
 	}
 }
 

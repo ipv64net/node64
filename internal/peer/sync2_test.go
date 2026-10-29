@@ -227,11 +227,9 @@ func TestClusterSync2Retry(t *testing.T) {
 	if pb.get("a", "1") != "abgelehnt" {
 		t.Fatalf("rejected entry must be retried, got %q", pb.get("a", "1"))
 	}
-	b.m.pull.s2.mu.Lock()
-	_, open := b.m.pull.s2.retry[a.m.d.NodeID()]
-	b.m.pull.s2.mu.Unlock()
-	if open {
-		t.Fatal("retry must be cleared")
+	var retry int64
+	if err := b.m.db.QueryRow(`SELECT retry2 FROM peer_members WHERE node_id = ?`, a.m.d.NodeID()).Scan(&retry); err != nil || retry != -1 {
+		t.Fatalf("retry must be cleared: %d %v", retry, err)
 	}
 }
 
