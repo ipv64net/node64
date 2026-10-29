@@ -334,6 +334,19 @@ func (c *Cluster) applyKey(ctx context.Context, data json.RawMessage, deleted bo
 	return nil
 }
 
+// ClusterJoined (peer.Joiner): neue Kopplung - ein hier eingetragener Key gilt ab jetzt. So uebernimmt eine Node ohne
+// Key ihn auch dann, wenn dort vorher ein Key entfernt wurde und der Loeschvermerk juenger ist als der Zeitpunkt, zu
+// dem der Key irgendwo eingetragen wurde (der Zeitpunkt reist beim Weiterreichen mit).
+func (c *Cluster) ClusterJoined(ctx context.Context) {
+	c.mu.Lock()
+	change := c.change
+	c.mu.Unlock()
+	if change == nil || c.d.Key == nil || c.d.Key.Get(ctx) == "" || !c.d.Key.Removed(ctx).IsZero() {
+		return
+	}
+	change(ctx, ItemAPIKey, keyID, false, time.Now())
+}
+
 // clusterFits: der Account acc passt zum Cluster (dessen Account ist derselbe oder es hat noch keiner einen).
 func (c *Cluster) clusterFits(ctx context.Context, acc int64) bool {
 	if c.d.ClusterAccount == nil {

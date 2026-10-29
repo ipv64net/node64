@@ -44,6 +44,27 @@ type Provider interface {
 	ClusterApply(ctx context.Context, item, id string, data json.RawMessage, deleted bool) error
 }
 
+// Joiner kann ein Provider zusaetzlich erfuellen: nach jeder neuen Kopplung auf beiden Seiten aufgerufen (vor dem
+// ersten Abgleich), z. B. um Eintraege, die ab dem Beitritt gelten sollen, mit dem jetzigen Zeitpunkt zu melden.
+type Joiner interface {
+	ClusterJoined(ctx context.Context)
+}
+
+// joined ruft ClusterJoined der Provider, die es haben.
+func (m *Manager) joined(ctx context.Context) {
+	m.mu.Lock()
+	list := make([]Provider, 0, len(m.prov))
+	for _, p := range m.prov {
+		list = append(list, p)
+	}
+	m.mu.Unlock()
+	for _, p := range list {
+		if j, ok := p.(Joiner); ok {
+			j.ClusterJoined(ctx)
+		}
+	}
+}
+
 // ItemState ist ein Bereich mit seinem Schalter auf dieser Node.
 type ItemState struct {
 	ItemInfo

@@ -346,6 +346,7 @@ func (m *Manager) Join(ctx context.Context, addr, code, selfURL string) error {
 			_ = m.upsert(ctx, x, out.NodeID)
 		}
 	}
+	m.joined(ctx)
 	m.d.Log.Info("joined cluster", "via", out.Name, "members", len(out.Members)+1)
 	go func() {
 		m.pingAll(context.Background())
@@ -434,6 +435,7 @@ func (m *Manager) handlePair(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	out.MAC = out.mac(code, bind)
+	m.joined(r.Context())
 	m.d.Log.Info("node joined cluster", "node", in.Name, "url", url)
 	m.auditPeer(r.Context(), in.Name, "peer.joined", in.Name, url)
 	go m.gossip(context.Background(), memberOp{Op: "add", Member: newcomer}, in.NodeID) // die anderen lernen die neue Node kennen
