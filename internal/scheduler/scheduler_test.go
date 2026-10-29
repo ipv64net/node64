@@ -110,6 +110,14 @@ func (m *memStore) InMaintenance(context.Context, string, time.Time) bool {
 	defer m.mu.Unlock()
 	return m.maintenance
 }
+
+// state ist der zuletzt gespeicherte Zustand. SaveRuntime ist der letzte Schritt von record: anders als
+// Scheduler.Runtime (Zustand schon gesetzt, Ereignisse und Meldungen noch unterwegs) ist dann alles geschrieben.
+func (m *memStore) state(token string) State {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.runtime[token].State
+}
 func (m *memStore) count(token string) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -228,10 +236,7 @@ func TestStabilizingFallsBackWithoutAlarm(t *testing.T) {
 	s, st, n := newTestScheduler(t, fake, Options{})
 	s.Upsert(httpCheck("b", 0, 3), nil)
 	s.Start(context.Background())
-	waitFor(t, func() bool {
-		rt, _ := s.Runtime("b")
-		return rt.State == StateUp
-	}, "up after stabilization")
+	waitFor(t, func() bool { return st.state("b") == StateUp }, "up after stabilization")
 	kinds := st.kinds("b")
 	// down, stabilizing, unstable (zurueck auf down), stabilizing, up
 	if len(kinds) != 5 || kinds[2] != "unstable" || kinds[4] != EventUp {
@@ -247,14 +252,9 @@ func TestFlapping(t *testing.T) {
 	s, st, n := newTestScheduler(t, fake, Options{FlapThreshold: 2, FlapWindow: time.Hour, FlapCalm: 80 * time.Millisecond})
 	s.Upsert(httpCheck("c", 0, 1), nil)
 	s.Start(context.Background())
-	waitFor(t, func() bool {
-		rt, _ := s.Runtime("c")
-		return rt.State == StateFlapping
-	}, "flapping")
-	waitFor(t, func() bool {
-		rt, _ := s.Runtime("c")
-		return rt.State == StateUp
-	}, "calm again")
+	// gespeicherter Zustand: erst flapping, dann up (vorher gespeichertes up zaehlt nicht)
+	waitFor(t, func() bool { return st.state("c") == StateFlapping }, "flapping")
+	waitFor(t, func() bool { return st.state("c") == StateUp }, "calm again")
 	kinds := st.kinds("c")
 	var start, end bool
 	for _, k := range kinds {
