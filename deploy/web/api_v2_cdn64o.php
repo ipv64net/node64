@@ -289,8 +289,13 @@ function c64o_host_purge(array $h): void {
 
 function c64o_dns_off(array $h): bool {
 	$u = (int)$h['userid']; $sid = (int)$h['subdomain_id']; $p = $h['praefix'];
-	foreach(qa("SELECT record_id, role FROM cdn64o_records WHERE host_id = :h", array('h' => $h['id'])) as $r) {
+	$d = q1("SELECT * FROM subdomains WHERE id = :i", array('i' => $sid));
+	foreach(qa("SELECT r.record_id, r.role, s.type, s.content FROM cdn64o_records r LEFT JOIN subdomain_records s ON s.id = r.record_id
+		WHERE r.host_id = :h ORDER BY r.role = 'edge' DESC", array('h' => $h['id'])) as $r) {
 		if($r['role'] === 'edge') {
+			// ueber del_record_name wie die API: entfernt auch das letzte RRset bei PowerDNS (ohne eigene A/AAAA blieben
+			// die Server sonst im DNS stehen, weil do_zone_update ohne Eintraege nichts ersetzt); die Zeile danach sicher weg
+			if($d !== null AND $r['content'] !== null) { quiet(fn() => del_record_name($GLOBALS['pdo'], $u, domain_name($d), $p, $r['type'], $r['content'])); }
 			q("DELETE FROM subdomain_records WHERE id = :i AND cdn_tmp = :m", array('i' => $r['record_id'], 'm' => C64O_CDN_TMP));
 		} else {
 			q("UPDATE subdomain_records set deactivated = 0 WHERE id = :i", array('i' => $r['record_id']));
