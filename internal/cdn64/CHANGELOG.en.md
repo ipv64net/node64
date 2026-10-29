@@ -1,5 +1,13 @@
 # Changes – PROXY64
 
+## 1.41.0 – 2026-10-29
+
+### New
+- Bandwidth per proxy host (Advanced): download and upload at most this many Mbit/s (MB/s shown next to it), empty =
+  unlimited (default). All visitors of the host share the limit; above it traffic is slowed down and queued, nothing is
+  cut off. Also applies to WebSockets and via CDN64. A badge in the list shows the limit. API: `advanced.bw_down_mbit` /
+  `bw_up_mbit`.
+
 ## 1.40.1 – 2026-10-29
 
 ### Changed

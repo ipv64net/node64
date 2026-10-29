@@ -28,6 +28,8 @@ type Advanced struct {
 	TrustedProxies  []string `json:"trusted_proxies,omitempty"`  // echte Client-IP aus diesen Proxys (z. B. Cloudflare)
 	AccessLog       bool     `json:"access_log,omitempty"`       // jede Anfrage protokollieren
 	NoLimits        bool     `json:"no_limits,omitempty"`        // ohne Anfrage-Limit je IP und ohne Platzgrenze beim Ziel
+	BWDownMbit      int      `json:"bw_down_mbit,omitempty"`     // Bandbreite zum Besucher (Download) in Mbit/s, 0 = unbegrenzt (bandwidth.go)
+	BWUpMbit        int      `json:"bw_up_mbit,omitempty"`       // Bandbreite vom Besucher (Upload) in Mbit/s, 0 = unbegrenzt
 	trusted         []netip.Prefix
 
 	// Laendersperre (geo.go): "" = aus, block = diese Laender sperren, allow = nur diese Laender zulassen
@@ -107,6 +109,9 @@ func (a *Advanced) normalize() error {
 	}
 	if a.TimeoutSeconds < 0 || a.TimeoutSeconds > 86400 || a.MaxBodyMB < 0 || a.MaxBodyMB > 1<<20 {
 		return &FieldError{Field: "advanced", Key: "cdn64.err.limits"}
+	}
+	if a.BWDownMbit < 0 || a.BWDownMbit > bwMaxMbit || a.BWUpMbit < 0 || a.BWUpMbit > bwMaxMbit {
+		return &FieldError{Field: "advanced", Key: "cdn64.err.bandwidth"}
 	}
 	var nets []string
 	for _, n := range a.TrustedProxies {

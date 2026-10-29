@@ -2522,6 +2522,18 @@
           "max_body_mb": {
             "type": "integer"
           },
+          "bw_down_mbit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "Bandbreite zum Besucher (Download) in Mbit/s fuer alle Anfragen des Hosts zusammen, 0 = unbegrenzt; darueber wird gebremst (Warteschlange), nicht getrennt"
+          },
+          "bw_up_mbit": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "Bandbreite vom Besucher (Upload) in Mbit/s, 0 = unbegrenzt"
+          },
           "no_buffering": {
             "type": "boolean"
           },

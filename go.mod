@@ -26,6 +26,7 @@ require (
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/text v0.43.0
+	golang.org/x/time v0.15.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.60.1
 	software.sslmate.com/src/go-pkcs12 v0.7.1
@@ -82,7 +83,6 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.51.0 // indirect
 	gopkg.in/ini.v1 v1.67.1 // indirect
 	modernc.org/libc v1.77.1 // indirect

@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Bandbreite je Proxy-Host – Download und Upload in Mbit/s begrenzen (Standard unbegrenzt), darüber wird
+  gebremst statt getrennt.
 - PROXY64: Streams in einer Tabelle – Namen nur für Streams mit CDN64-Stand und ihren Ports zusammen.
 
 ## 0.12.0-alpha.31 – 2026-10-29
