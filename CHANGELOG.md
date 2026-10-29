@@ -4,6 +4,10 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Cluster: Ein abgelehnter Eintrag (z. B. Statusseite mit gleichem Slug, Benutzer zur Wahl) wird alle 5 Minuten
+  erneut versucht und kommt an, sobald der Konflikt auf einer Seite gelöst ist – vorher erst, wenn er sich drüben
+  wieder änderte.
+
 ## 0.12.0-alpha.30 – 2026-10-28
 
 - Healthchecks: Proxmox-VE- und Docker-Checks zeigen eine echte Latenz (Ping zu Node, Gast bzw. Container, sonst die

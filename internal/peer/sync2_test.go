@@ -3,6 +3,7 @@ package peer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -18,6 +19,7 @@ type fakeProv struct {
 	items []ItemInfo
 	mu    sync.Mutex
 	data  map[string]string // "bereich/id" -> Wert
+	deny  map[string]bool   // "bereich/id": ClusterApply lehnt ab
 }
 
 func newProv(n *testNode) *fakeProv {
@@ -69,6 +71,10 @@ func (p *fakeProv) ClusterGet(_ context.Context, item, id string) (json.RawMessa
 
 func (p *fakeProv) ClusterApply(ctx context.Context, item, id string, data json.RawMessage, deleted bool) error {
 	p.mu.Lock()
+	if p.deny[item+"/"+id] {
+		p.mu.Unlock()
+		return errors.New("rejected")
+	}
 	if deleted {
 		delete(p.data, item+"/"+id)
 	} else {
@@ -176,6 +182,56 @@ func TestClusterSync2(t *testing.T) {
 	// unbekannter Bereich wird abgelehnt
 	if err := a.m.SetSync(ctx, "demo", "zz", true); err != ErrUnknownSync {
 		t.Fatalf("unknown item: %v", err)
+	}
+}
+
+// Abgelehnte Eintraege (z. B. gleicher Slug mit anderem Inhalt) werden erneut abgeholt, ohne dass sie sich drueben
+// aendern; der Stand laeuft trotzdem weiter.
+func TestClusterSync2Retry(t *testing.T) {
+	ctx := context.Background()
+	old := sync2RetryEvery
+	sync2RetryEvery = 0
+	t.Cleanup(func() { sync2RetryEvery = old })
+	a, b := newNode(t, "node-a", "A", 522), newNode(t, "node-b", "B", 522)
+	pa, pb := newProv(a), newProv(b)
+	code, _, _ := a.m.StartPairing()
+	if err := b.m.Join(ctx, a.srv.URL, code, b.srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	waitMembers(t, a, "B")
+	for _, n := range []*testNode{a, b} {
+		if err := n.m.SetSync(ctx, "demo", "", true); err != nil {
+			t.Fatal(err)
+		}
+		if err := n.m.SetSync(ctx, "demo", "a", true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pb.mu.Lock()
+	pb.deny = map[string]bool{"a/1": true}
+	pb.mu.Unlock()
+	pa.set("a", "1", "abgelehnt")
+	pa.set("a", "2", "danach")
+	round2(a, b)
+	if pb.get("a", "1") != "" || pb.get("a", "2") != "danach" {
+		t.Fatalf("a/1=%q a/2=%q", pb.get("a", "1"), pb.get("a", "2"))
+	}
+	round2(a, b) // weiter abgelehnt: bleibt offen
+	if pb.get("a", "1") != "" {
+		t.Fatal("still rejected")
+	}
+	pb.mu.Lock()
+	pb.deny = nil // Konflikt hier geloest (z. B. Slug umbenannt)
+	pb.mu.Unlock()
+	round2(a, b)
+	if pb.get("a", "1") != "abgelehnt" {
+		t.Fatalf("rejected entry must be retried, got %q", pb.get("a", "1"))
+	}
+	b.m.pull.s2.mu.Lock()
+	_, open := b.m.pull.s2.retry[a.m.d.NodeID()]
+	b.m.pull.s2.mu.Unlock()
+	if open {
+		t.Fatal("retry must be cleared")
 	}
 }
 

@@ -64,6 +64,7 @@ Healthchecks-Ablauf im Detail: [LOKALE-GRUPPE.md](LOKALE-GRUPPE.md). Code: `inte
 | Healthchecks bei der anderen Node aus | 5 min Ruhe statt alle 15 s (ein Anstoß holt trotzdem sofort) |
 | Konflikte | jüngere Änderung gewinnt (ms), Gleichstand: größere Node-Kennung der Urheberin |
 | Löschvermerke (v2) | 30 Tage |
+| Abgelehnter Eintrag (v2, „cluster change not applied“) | alle 5 min erneut abgeholt, bis er angenommen wird (Warnung einmal je Stand, danach Debug); der Stand der Abholung läuft trotzdem weiter |
 | Bereich neu eingeschaltet | Abholen ab Anfang (doppelt schadet nicht, die jüngere Änderung gewinnt); genau gleiche Einträge werden dabei zusammengeführt (siehe unten) |
 
 ## Was abgeglichen wird
@@ -92,7 +93,7 @@ Passwort (bcrypt-Hash), Gruppen mit den Checks in ihrer Reihenfolge und Anzeigen
 stehen über ihr Token auf der Seite – das ist auf allen Nodes gleich (Checks gleichen sich über das Token ab); ein Check,
 den es auf einer Node nicht gibt (Checks dort aus), fällt beim Anzeigen weg. Gleicher Slug mit anderem Inhalt unter
 anderer Kennung wird nicht übernommen (Warnung „cluster change not applied“ im Log), bis der Slug auf einer Node
-geändert ist.
+geändert ist (spätestens 5 min danach kommt die Seite an, siehe „Zeiten und Grenzen“).
 
 **Kanäle** (`notifications/channels`): Kennung je Kanal (`nf_channels.uid`). Nur die eigenen Kanäle der Node
 (`execution node`): nie die Kanäle des Portals (Platzhalter `execution server`, ipv64-Mail/-SMS/App), nicht der

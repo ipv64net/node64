@@ -4,6 +4,9 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Cluster: a rejected entry (e.g. status page with the same slug, user to choose) is retried every 5 minutes and
+  arrives once the conflict is resolved on one side – before, only after it changed again on the other node.
+
 ## 0.12.0-alpha.30 – 2026-10-28
 
 - Healthchecks: Proxmox VE and Docker checks show a real latency (ping to node, guest or container, otherwise the API
