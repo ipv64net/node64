@@ -1,5 +1,13 @@
 # Changes – PROXY64
 
+## 1.42.0 – 2026-10-29
+
+### New
+- Bandwidth per stream: download and upload at most this many Mbit/s (MB/s next to it), empty = unlimited (default).
+  All connections of the stream share the limit; TCP is slowed down, UDP packets wait in the port buffer. Applies
+  locally and via the CDN64 port mapper, changing it does not restart the stream. Badge in the list, API
+  `bw_down_mbit` / `bw_up_mbit`.
+
 ## 1.41.0 – 2026-10-29
 
 ### New

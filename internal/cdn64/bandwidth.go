@@ -10,7 +10,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// Bandbreite je Proxy-Host (Advanced.BWDownMbit/BWUpMbit, 0 = unbegrenzt): alle Anfragen eines Hosts teilen sich
+// Bandbreite je Proxy-Host (Advanced.BWDownMbit/BWUpMbit) bzw. je Stream (Stream.BWDownMbit/BWUpMbit), 0 = unbegrenzt: alle Anfragen eines Hosts teilen sich
 // je Richtung einen Token-Eimer. Bis zur Grenze laeuft alles normal, darueber wartet jede Anfrage auf ihren Anteil
 // (Warteschlange) - getrennt wird nichts. Gilt fuer Antworten, Uploads und uebernommene Verbindungen (WebSocket),
 // lokal wie ueber CDN64.
@@ -56,6 +56,11 @@ func (s *bwSet) keep(list []*Host) {
 	for _, h := range list {
 		ids[h.ID] = true
 	}
+	s.keepIDs(ids)
+}
+
+// keepIDs vergisst Grenzen aller anderen Kennungen (Streams: die laufenden).
+func (s *bwSet) keepIDs(ids map[int64]bool) {
 	s.mu.Lock()
 	for id := range s.m {
 		if !ids[id] {
@@ -149,6 +154,14 @@ func (c *bwConn) Read(p []byte) (int, error) {
 
 func (c *bwConn) Write(p []byte) (int, error) {
 	return bwWrite(context.Background(), c.bw.down, c.Conn, p)
+}
+
+// CloseWrite: halb schliessen wie die Verbindung darunter (Streams, edge.Pipe).
+func (c *bwConn) CloseWrite() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		return cw.CloseWrite()
+	}
+	return c.Conn.Close()
 }
 
 // bwBody: Request-Body (Upload) mit der Grenze des Hosts.

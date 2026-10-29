@@ -317,6 +317,9 @@ func (m *Module) streamUDPTunnel(r *streamRun, c net.Conn) {
 			}
 			last.Store(time.Now().UnixNano())
 			r.stats.bytesUp.Add(int64(n))
+			if bw := r.bw.Load(); bw != nil {
+				_ = bwWait(context.Background(), bw.down, n)
+			}
 			if err := tunnel.WriteDatagram(c, b[:n]); err != nil {
 				return
 			}
@@ -345,6 +348,9 @@ func (m *Module) streamUDPTunnel(r *streamRun, c net.Conn) {
 		}
 		last.Store(time.Now().UnixNano())
 		r.stats.bytesIn.Add(int64(n))
+		if bw := r.bw.Load(); bw != nil {
+			_ = bwWait(context.Background(), bw.up, n)
+		}
 		_, _ = up.Write(buf[:n])
 	}
 	end()

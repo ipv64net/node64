@@ -6,6 +6,7 @@ import (
 	crand "crypto/rand"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -133,5 +134,118 @@ func TestBandwidthProxyHost(t *testing.T) {
 	var fe *FieldError
 	if err := e.m.saveHost(ctx, h); !errors.As(err, &fe) || fe.Key != "cdn64.err.bandwidth" {
 		t.Fatalf("too high: %v", err)
+	}
+}
+
+// Stream mit Grenze: TCP zum Besucher und UDP vom Besucher gebremst, ohne Grenze sofort; kein Neustart beim Aendern.
+func TestBandwidthStream(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.enable(t)
+	big := make([]byte, 250000)
+	_, _ = crand.Read(big)
+	tl, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tl.Close()
+	go func() {
+		for {
+			c, err := tl.Accept()
+			if err != nil {
+				return
+			}
+			go func() { _, _ = c.Write(big); c.Close() }()
+		}
+	}()
+	ul, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ul.Close()
+	var got atomic.Int64
+	go func() {
+		b := make([]byte, 64<<10)
+		for {
+			n, _, err := ul.ReadFrom(b)
+			if err != nil {
+				return
+			}
+			got.Add(int64(n))
+		}
+	}()
+	_, tport, _ := net.SplitHostPort(tl.Addr().String())
+	_, uport, _ := net.SplitHostPort(ul.LocalAddr().String())
+	sp := freePort(t)
+	st := &Stream{Enabled: true, ListenPort: sp, TCP: true, TargetHost: "127.0.0.1", BWDownMbit: 1}
+	st.TargetPort, _ = strconv.Atoi(tport)
+	if err := e.m.saveStream(ctx, st); err != nil {
+		t.Fatal(err)
+	}
+	su := &Stream{Enabled: true, ListenPort: sp, UDP: true, TargetHost: "127.0.0.1", BWUpMbit: 1}
+	su.TargetPort, _ = strconv.Atoi(uport)
+	if err := e.m.saveStream(ctx, su); err != nil {
+		t.Fatal(err)
+	}
+	download := func() time.Duration {
+		t.Helper()
+		c, err := net.Dial("tcp", "127.0.0.1:"+strconv.Itoa(sp))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		_ = c.SetDeadline(time.Now().Add(10 * time.Second))
+		start := time.Now()
+		b, _ := io.ReadAll(c)
+		if len(b) != len(big) {
+			t.Fatalf("tcp: %d bytes", len(b))
+		}
+		return time.Since(start)
+	}
+	if d := download(); d < 1500*time.Millisecond {
+		t.Fatalf("limited tcp not shaped: %v", d)
+	}
+	uc, err := net.Dial("udp", "127.0.0.1:"+strconv.Itoa(sp))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer uc.Close()
+	start := time.Now()
+	for i := 0; i < 12; i++ { // 120 000 B in 0,55 s gesendet, bei 125 000 B/s erst nach gut 0,8 s durch (Puffer klein halten)
+		_, _ = uc.Write(make([]byte, 10000))
+		time.Sleep(50 * time.Millisecond)
+	}
+	for i := 0; i < 500 && got.Load() < 120000; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if d := time.Since(start); got.Load() != 120000 || d < 750*time.Millisecond {
+		t.Fatalf("limited udp: %d bytes in %v", got.Load(), d)
+	}
+	e.m.smu.Lock()
+	run := e.m.runs[st.ID]
+	e.m.smu.Unlock()
+	st.BWDownMbit = 0
+	if err := e.m.saveStream(ctx, st); err != nil {
+		t.Fatal(err)
+	}
+	e.m.smu.Lock()
+	same := e.m.runs[st.ID] == run
+	e.m.smu.Unlock()
+	if d := download(); !same || d > time.Second {
+		t.Fatalf("unlimited tcp: restart=%v %v", !same, d)
+	}
+	st.BWUpMbit = -1
+	var fe *FieldError
+	if err := e.m.saveStream(ctx, st); !errors.As(err, &fe) || fe.Key != "cdn64.err.bandwidth" {
+		t.Fatalf("negative: %v", err)
+	}
+	// Oberflaeche: Felder im Formular, Abzeichen in der Liste
+	fd := e.m.streamFormData(ctx, su, false)
+	if form := renderPage(t, "stream_form.html", fd); !strings.Contains(form, `name="bw_up" value="1"`) {
+		t.Fatal("stream form misses the bandwidth")
+	}
+	srows, _ := e.m.streamRows(ctx)
+	if page := renderPage(t, "streams.html", streamsData{Streams: srows, Local: srows}); !strings.Contains(page, "↓∞ ↑1 Mbit/s") {
+		t.Fatal("streams page misses the bandwidth badge")
 	}
 }

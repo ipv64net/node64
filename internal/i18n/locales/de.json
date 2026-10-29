@@ -702,7 +702,10 @@
         "hint": "Ziel im Heimnetz. Ein Port lässt sich je Protokoll nur einmal öffnen.",
         "tls": "TLS hier beenden (nur TCP)",
         "tls_none": "Nein – roh weiterreichen",
-        "tls_hint": "Mit Zertifikat nimmt der Stream TLS an und reicht unverschlüsselt an das Ziel weiter."
+        "tls_hint": "Mit Zertifikat nimmt der Stream TLS an und reicht unverschlüsselt an das Ziel weiter.",
+        "bw_hint": "Bandbreite dieses Streams für alle Verbindungen zusammen, leer oder 0 = unbegrenzt. Darüber wird gebremst: TCP wartet, UDP-Pakete warten im Puffer des Ports (ist er voll, verwirft das System wie bei einer vollen Leitung). Gilt auch über CDN64. Eine neue Grenze gilt für neue TCP-Verbindungen, eine geänderte sofort.",
+
+        "bw_title": "Bandbreite des Streams (Download/Upload)"
       },
       "help_ports": "Im Router den Port (TCP und/oder UDP) auf diese Node weiterleiten. Ports unter 1024 gehen dank der Rechte im Image auch ohne Root.",
       "help_docker": "Mit Host-Netzwerk öffnet Node64 den Port direkt. Im Bridge-Modus muss der Port zusätzlich beim Container freigegeben sein (-p)."

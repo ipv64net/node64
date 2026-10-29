@@ -1,5 +1,13 @@
 # Änderungen – PROXY64
 
+## 1.42.0 – 2026-10-29
+
+### Neu
+- Bandbreite je Stream: Download und Upload höchstens so viele Mbit/s (MB/s daneben), leer = unbegrenzt (Standard).
+  Alle Verbindungen des Streams teilen sich die Grenze; TCP wird gebremst, UDP-Pakete warten im Puffer des Ports. Gilt
+  lokal und über den CDN64-Portmapper, Ändern startet den Stream nicht neu. Abzeichen in der Liste, API
+  `bw_down_mbit` / `bw_up_mbit`.
+
 ## 1.41.0 – 2026-10-29
 
 ### Neu
