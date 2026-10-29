@@ -87,6 +87,7 @@ type Server struct {
 	mcpLimit   *ipLimiter // Rate-Limit je MCP-Schluessel
 
 	loginWatch atomic.Pointer[LoginWatcher] // Fehlversuche an Honeypot64 (login_watch.go), nil = keiner
+	apiLogOn   atomic.Int32                 // API-Log: apiLogOff, apiLogKeys, apiLogAll (api_log.go)
 
 	mu      sync.Mutex
 	servers []*http.Server
@@ -102,11 +103,12 @@ func New(d Deps) (*Server, error) {
 		d.Certs.SetUsers("web", s.uiCertUsers)
 	}
 	s.loadUICert(context.Background())
+	s.loadAPILog(context.Background())
 	if err := s.parseTemplates(); err != nil {
 		return nil, err
 	}
 	s.routes()
-	s.handler = s.recoverer(s.securityHeaders(s.rateLimit(s.bodyLimit(s.session(s.mux)))))
+	s.handler = s.recoverer(s.securityHeaders(s.rateLimit(s.bodyLimit(s.session(s.apiLog(s.mux))))))
 	if err := s.uiRoute(context.Background()); err != nil { // Oberflaeche unter eigenem Namen (Eingang)
 		s.log.Warn("web interface not registered at the edge", "err", err)
 	}
@@ -211,6 +213,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /settings/password", s.auth(s.settingsPassword))
 	s.mux.Handle("POST /settings/modules", s.auth(s.settingsModules))
 	s.mux.Handle("POST /settings/logging", s.auth(s.settingsLogging))
+	s.mux.Handle("POST /settings/api-log", s.auth(s.settingsAPILog))
 	s.mux.Handle("POST /settings/data", s.auth(s.settingsData))
 	s.mux.Handle("POST /settings/updates", s.auth(s.settingsUpdates))
 	s.updateRoutes()

@@ -10497,6 +10497,15 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "api_log": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "keys",
+                        "all"
+                      ],
+                      "description": "API-Log: jede Anfrage an /api/ als Zeile im Log (off = aus, keys = nur per API-Key, all = auch die Oberfläche); unabhängig vom Level, ohne Inhalte"
                     }
                   }
                 }
@@ -10509,7 +10518,7 @@
         "tags": [
           "Node"
         ],
-        "summary": "Log-Level ändern",
+        "summary": "Log-Level und API-Log ändern",
         "requestBody": {
           "required": false,
           "content": {
@@ -10536,6 +10545,15 @@
                       "type": "string",
                       "description": "Level oder inherit"
                     }
+                  },
+                  "api_log": {
+                    "type": "string",
+                    "enum": [
+                      "off",
+                      "keys",
+                      "all"
+                    ],
+                    "description": "API-Log umschalten (leer = unverändert): off, keys, all; bleibt nach einem Neustart erhalten"
                   }
                 }
               }
@@ -10564,6 +10582,15 @@
                       "additionalProperties": {
                         "type": "string"
                       }
+                    },
+                    "api_log": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "keys",
+                        "all"
+                      ],
+                      "description": "API-Log: jede Anfrage an /api/ als Zeile im Log (off = aus, keys = nur per API-Key, all = auch die Oberfläche); unabhängig vom Level, ohne Inhalte"
                     }
                   }
                 }
@@ -10571,7 +10598,7 @@
             }
           },
           "422": {
-            "description": "ungültiges Level oder unbekanntes Modul (siehe known_modules)",
+            "description": "ungültiges Level, unbekanntes Modul (siehe known_modules) oder ungültiger Wert für api_log",
             "content": {
               "application/json": {
                 "schema": {

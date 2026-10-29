@@ -59,6 +59,14 @@ func (l *Logger) Handler() slog.Handler { return &handler{l: l, base: l.base} }
 // Slog liefert einen fertigen *slog.Logger.
 func (l *Logger) Slog() *slog.Logger { return slog.New(l.Handler()) }
 
+// Record schreibt eine Zeile (Info) unabhaengig vom Log-Level, fuer ausdruecklich eingeschaltete Protokolle wie das
+// API-Log. Geheimnisse werden wie sonst maskiert.
+func (l *Logger) Record(ctx context.Context, msg string, attrs ...slog.Attr) {
+	r := slog.NewRecord(time.Now(), slog.LevelInfo, msg, 0)
+	r.AddAttrs(attrs...)
+	_ = l.base.Handle(ctx, r)
+}
+
 // Level ist das aktuelle globale Level.
 func (l *Logger) Level() slog.Level {
 	l.mu.RLock()

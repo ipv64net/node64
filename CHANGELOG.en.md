@@ -4,6 +4,9 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Settings → Logging: "Log API requests" (opt-in: off, API key only or all). Every request to /api/ then shows up
+  as a log line with method, path, status, duration, IP, user and API key name – no contents, secrets masked. Also
+  via `PUT /api/logging` (`api_log`).
 - Healthchecks/cluster: nodes without their own ipv64 link can create and edit online and hybrid checks when a
   linked node in the cluster is reachable.
 - Cluster: when a node with an API key joins a cluster in which the key was removed earlier, the others take its
