@@ -33,6 +33,7 @@ func (m *Module) pveRoutes(mux *http.ServeMux, page func(http.HandlerFunc) http.
 	mux.Handle("POST "+pvePath+"/system/{id}/toggle", page(m.pagePVEToggle))
 	mux.Handle("POST "+pvePath+"/system/{id}/settings", page(m.pagePVESettings))
 	mux.Handle("POST "+pvePath+"/system/{id}/ascheck", page(m.pagePVEAsCheck))
+	mux.Handle("POST "+pvePath+"/system/{id}/ack", page(m.pagePVEAck))
 	mux.Handle("GET "+pvePath+"/system/{id}/res/{type}/{name}", page(m.pagePVEResource))
 }
 
@@ -116,6 +117,8 @@ type pveResRow struct {
 	Muted      bool
 	AsCheck    bool
 	CheckToken string
+	Ack        bool // gestoert, weil gestoppt bzw. beendet: „gestoppt ist richtig“ anbieten (ExpectRunning aus)
+	ExpectOff  bool // fest „soll nicht laufen“ (zuruecknehmen in den Einstellungen des Gasts)
 	Measured   bool // Werte aussagekraeftig (laeuft bzw. online)
 	CPU        string
 	Mem        string
@@ -214,6 +217,8 @@ func pveRow(id int64, r proxmox.Resource, set *proxmox.SystemSettings) pveResRow
 	if row.Excluded {
 		row.Bad = false
 	}
+	row.ExpectOff = it != nil && it.ExpectRunning != nil && !*it.ExpectRunning
+	row.Ack = row.Bad && !row.AsCheck && !row.Muted && (r.State == proxmox.StateStopped || docker && r.DockerDown())
 	row.Measured = r.Measurable() // wie die Regeln (Schwellen)
 	if row.Measured {
 		row.CPU = pvePctText(r.CPU * 100)
@@ -909,6 +914,7 @@ func (m *Module) pagePVESettings(w http.ResponseWriter, r *http.Request) {
 			case "0":
 				f := false
 				it.ExpectRunning = &f
+				m.pveAckIncident(ctx, sys.ID, key)
 			default:
 				it.ExpectRunning = nil
 			}
@@ -929,6 +935,54 @@ func pveKeySuffix(key string) string {
 		return ""
 	}
 	return " / " + key
+}
+
+// pagePVEAck: „gestoppt ist richtig“ – der Gast bzw. Container soll nicht laufen (ExpectRunning aus). Die Zeile ist
+// sofort in Ordnung, eine offene Stoerung erledigt sich mit der naechsten Abfrage still (Regeln, ohne Entwarnung).
+// Zuruecknehmen in den Einstellungen des Gasts („Gestoppt ist eine Störung: automatisch“).
+func (m *Module) pagePVEAck(w http.ResponseWriter, r *http.Request) {
+	sys := m.pveSystemOf(w, r)
+	if sys == nil {
+		return
+	}
+	ctx := r.Context()
+	key := strings.TrimSpace(r.PostFormValue("key"))
+	back := r.PostFormValue("back")
+	if !(strings.HasPrefix(back, pvePath+"/") || strings.HasPrefix(back, dockerPath)) || strings.Contains(back, "//") {
+		back = pveKeyPath(sys.Kind, sys.ID, "")
+	}
+	if key == "" || !proxmox.ValidKey(key) || pveLevel(key) != "guest" {
+		http.Error(w, "invalid key", http.StatusBadRequest)
+		return
+	}
+	set, err := m.pve.st.Settings(ctx, sys.ID)
+	if err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	it := set.Item(key)
+	if it == nil {
+		it = &proxmox.Settings{SystemID: sys.ID, Key: key}
+	}
+	f := false
+	it.ExpectRunning = &f
+	if err := m.pve.st.SaveSettings(ctx, it); err != nil {
+		m.fail(w, r, err)
+		return
+	}
+	m.pveAckIncident(ctx, sys.ID, key)
+	m.auditText(r, "proxmox.ack", sys.Name+pveKeySuffix(key))
+	m.g.Flash(w, r, "success", m.g.T(r, "pve.ack.done"))
+	http.Redirect(w, r, back, http.StatusSeeOther)
+}
+
+// pveAckIncident: Gast soll nicht laufen – war er die letzte Stoerung (Startseite), gilt sie als erledigt.
+func (m *Module) pveAckIncident(ctx context.Context, systemID int64, key string) {
+	for _, k := range []string{pveSettingLast, dockerSettingLast} {
+		if inc := m.lastIncident(ctx, k); inc != nil && inc.SystemID == systemID && inc.Key == key {
+			_ = m.core.SetSetting(ctx, k, "")
+		}
+	}
 }
 
 // pagePVEAsCheck schaltet „auch als Check fuehren“.

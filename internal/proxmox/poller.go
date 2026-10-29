@@ -684,6 +684,7 @@ func (p *Poller) evaluate(now time.Time, res []Resource) {
 			}
 			// Nach einer Migration laeuft der Gast in einem neuen Prozess auf dem anderen Node (Uptime neu) – kein Neustart.
 			r.Restarted = old.up && up && r.Uptime < old.uptime && old.node == r.Node
+			r.AfterLock = old.lock != ""
 		}
 		next[r.Key()] = cur
 	}

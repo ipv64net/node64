@@ -26,6 +26,8 @@
 </div>
 {{if not $d.Found}}<div class="alert alert-warning small"><i class="bi bi-question-circle"></i> {{if $d.Reach}}{{.T "pve.res_missing"}}{{else}}{{.T "pve.res_nodata"}}{{end}}</div>{{end}}
 {{if $r.AsCheck}}<div class="alert alert-info small py-2"><i class="bi bi-heart-pulse"></i> {{.T "pve.check.active_hint"}}</div>{{end}}
+{{if $r.Ack}}<div class="alert alert-danger small py-2 d-flex align-items-center justify-content-between flex-wrap gap-2"><span><i class="bi bi-exclamation-triangle"></i> {{.T "pve.ack.hint"}}</span><form method="post" action="{{$d.SysPath}}/ack" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="key" value="{{$d.Key}}"><input type="hidden" name="back" value="{{$r.Path}}"><button class="btn btn-sm btn-outline-secondary" type="submit" data-confirm="{{.T "pve.ack.confirm"}}"><i class="bi bi-check2-circle"></i> {{.T "pve.ack.btn"}}</button></form></div>
+{{else if $r.ExpectOff}}<div class="alert alert-light border small py-2"><i class="bi bi-check2-circle"></i> {{.T "pve.ack.active_hint"}}</div>{{end}}
 
 {{if $d.Found}}
 <div class="row g-2 mb-3">

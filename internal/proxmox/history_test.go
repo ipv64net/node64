@@ -70,6 +70,21 @@ func TestHistoryRecordMerge(t *testing.T) {
 	if ss.Item("lxc/300") != nil || ss.Item("node/pve1") != nil || ss.Item("qemu/900") != nil {
 		t.Fatalf("falsch gemerkt: %+v", ss.Items)
 	}
+	// Backup eines gestoppten Gasts (laeuft nur mit Lock) und die Abfrage direkt danach: Werte ja, „lief schon“ nein
+	bk := pveHGuest(TypeQEMU, 103, 0.1, 100, 0)
+	bk.State, bk.Lock = StateBackup, "backup"
+	after := pveHGuest(TypeQEMU, 104, 0.1, 100, 0)
+	after.AfterLock = true
+	if err := s.Record(ctx, &Snapshot{SystemID: sys.ID, Time: base.Add(50 * time.Second), OK: true, Resources: []Resource{bk, after}}); err != nil {
+		t.Fatal(err)
+	}
+	if pts, _ := s.Series(ctx, sys.ID, "qemu/103", base, base.Add(time.Hour)); len(pts) != 1 {
+		t.Fatalf("Werte waehrend Backup: %+v", pts)
+	}
+	ss, _ = s.Settings(ctx, sys.ID)
+	if ss.Item("qemu/103") != nil || ss.Item("qemu/104") != nil {
+		t.Fatalf("Backup bzw. nach Lock als gelaufen gemerkt: %+v %+v", ss.Item("qemu/103"), ss.Item("qemu/104"))
+	}
 	// Einstellungen behalten seen_running
 	if err := s.SaveSettings(ctx, &Settings{SystemID: sys.ID, Key: "qemu/100", Muted: true}); err != nil {
 		t.Fatal(err)

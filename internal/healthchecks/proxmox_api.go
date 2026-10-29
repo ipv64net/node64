@@ -432,6 +432,9 @@ func (m *Module) apiPVESettingsPut(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		it.ExpectRunning = v
+		if v != nil && !*v { // „gestoppt ist richtig“: wie der Knopf in der Oberflaeche
+			m.pveAckIncident(ctx, sys.ID, key)
+		}
 	}
 	if in.Rules != nil {
 		it.Rules = *in.Rules

@@ -3,6 +3,7 @@ package healthchecks
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -304,5 +305,79 @@ func TestPVEPageFilterAndRates(t *testing.T) {
 	// gestoerter System-Zustand nur bei eigenem Problem (Karte)
 	if row := m.pveSysView(context.Background(), &proxmox.System{ID: id, Enabled: true}); row.State != "warn" || row.SysProblem {
 		t.Fatalf("row: %s %v", row.State, row.SysProblem)
+	}
+}
+
+// „Gestoppt ist richtig“: Knopf an der gestoerten Zeile, Stoerung erledigt sich still, letzte Stoerung weg.
+func TestPVEAckStopped(t *testing.T) {
+	fake := newPVEFake()
+	fsrv := startPVEFake(t, fake)
+	m, srv, rec := newPVEModule(t, pveCore(t), pveBox(t, 1))
+	ctx := context.Background()
+	id := pveCreate(t, srv, fsrv)
+	sp := pveResPath(id, "")
+	pvePollNow(t, m, id) // db (qemu/101) laeuft: „lief schon einmal“
+	fake.set("qemu/101", "status", "stopped")
+	pvePollNow(t, m, id)
+	pvePollNow(t, m, id)
+	down := false
+	for _, a := range rec.take() {
+		if a.Kind == notify.KindProxmoxDown && a.Check.Target == "qemu/101" {
+			down = true
+		}
+	}
+	if !down {
+		t.Fatal("keine Meldung „gestoppt“")
+	}
+	if inc := m.pveLastIncident(ctx); inc == nil || inc.Key != "qemu/101" {
+		t.Fatalf("letzte Stoerung: %+v", inc)
+	}
+	ackForm := `name="key" value="qemu/101"><input type="hidden" name="back" value="` + sp + `"><button class="btn btn-sm btn-outline-secondary py-0"`
+	_, body := pveGet(t, srv, sp)
+	if !strings.Contains(body, `action="`+sp+`/ack"`) || !strings.Contains(body, ackForm) || !strings.Contains(body, "pve.ack.btn") {
+		t.Fatalf("Knopf fehlt: %s", body)
+	}
+	if _, body = pveGet(t, srv, pveResPath(id, "qemu/101")); !strings.Contains(body, "pve.ack.hint") {
+		t.Fatalf("Gastseite ohne Hinweis: %s", body)
+	}
+	// nur Gaeste
+	if resp, _ := pvePost(t, srv, sp+"/ack", url.Values{"key": {"node/pve1"}}); resp.StatusCode != 400 {
+		t.Fatalf("Node: %d", resp.StatusCode)
+	}
+	resp, _ := pvePost(t, srv, sp+"/ack", url.Values{"key": {"qemu/101"}, "back": {sp}})
+	if resp.StatusCode != 303 || resp.Header.Get("Location") != sp || !strings.Contains(resp.Header.Get("X-Flash"), "success:pve.ack.done") {
+		t.Fatalf("ack: %d %v", resp.StatusCode, resp.Header)
+	}
+	set, _ := m.pve.st.Settings(ctx, id)
+	if it := set.Item("qemu/101"); it == nil || it.ExpectRunning == nil || *it.ExpectRunning {
+		t.Fatalf("ExpectRunning: %+v", it)
+	}
+	if inc := m.pveLastIncident(ctx); inc != nil {
+		t.Fatalf("letzte Stoerung noch da: %+v", inc)
+	}
+	rec.mu.Lock()
+	audited := slices.Contains(rec.audit, "proxmox.ack lab / qemu/101")
+	rec.mu.Unlock()
+	if !audited {
+		t.Fatalf("Audit: %v", rec.audit)
+	}
+	_, body = pveGet(t, srv, sp)
+	if strings.Contains(body, ackForm) || !strings.Contains(body, "pve.ack.off_title") {
+		t.Fatalf("nach ack: %s", body)
+	}
+	if _, body = pveGet(t, srv, pveResPath(id, "qemu/101")); !strings.Contains(body, "pve.ack.active_hint") || strings.Contains(body, "pve.ack.hint") {
+		t.Fatalf("Gastseite nach ack: %s", body)
+	}
+	// still erledigt: keine Entwarnung, auch nicht, wenn er spaeter wieder laeuft
+	pvePollNow(t, m, id)
+	if _, ok := m.pve.engine.Outage(id, "qemu/101"); ok {
+		t.Fatal("Stoerung noch offen")
+	}
+	fake.set("qemu/101", "status", "running")
+	pvePollNow(t, m, id)
+	for _, a := range rec.take() {
+		if a.Check.Target == "qemu/101" {
+			t.Fatalf("Meldung nach ack: %+v", a)
+		}
 	}
 }

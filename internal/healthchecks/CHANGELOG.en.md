@@ -1,5 +1,19 @@
 # Changes – Healthchecks
 
+## 2.42.0 – 2026-10-29
+
+### New
+- Proxmox VE and Docker: "Stopped is correct" – on a guest or container shown as a problem because it is stopped or
+  exited (row on the system page and the guest page). Sets "Stopped is a problem" to no: fine immediately, a reported
+  problem clears silently (no all-clear message), the last problem on the start page disappears if it was this guest.
+  Undo in the guest settings. Audit `proxmox.ack`; API via the settings (`expect_running: false`). This also applies
+  when the setting is set to no by hand or via the API.
+
+### Fixed
+- Proxmox VE: A backup that briefly starts a stopped guest (lock `backup`) marked it as "has run before" – afterwards
+  Node64 reported "stopped" although nothing had changed. Running with a lock and the poll right after a lock no longer
+  count as a run (metrics are still recorded).
+
 ## 2.41.0 – 2026-10-28
 
 ### New

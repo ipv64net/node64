@@ -182,6 +182,56 @@ func TestRulesLock(t *testing.T) {
 	p.expect(p.snap(true, mig), "up:stopped:qemu/100") // laeuft (mit Lock) wieder
 }
 
+// Backup eines gestoppten Gasts: Proxmox startet ihn kurz (lock=backup) – danach ist „gestoppt“ keine Stoerung.
+func TestRulesBackupOfStoppedGuest(t *testing.T) {
+	p := newPveRun(t)
+	p.snap(true, pveVM(103, StateStopped))
+	bk := pveVM(103, StateBackup)
+	bk.Lock = "backup"
+	p.expect(p.snap(true, bk), "")
+	p.expect(p.snap(true, bk), "")
+	after := pveVM(103, StateRunning) // Lock schon weg, VM noch nicht beendet
+	after.AfterLock = true
+	p.expect(p.snap(true, after), "")
+	for i := 0; i < 4; i++ {
+		p.expect(p.snap(true, pveVM(103, StateStopped)), "")
+	}
+	// laeuft spaeter von sich aus: dann gilt er als „lief schon einmal“
+	p.snap(true, pveVM(103, StateRunning))
+	p.snap(true, pveVM(103, StateStopped))
+	p.expect(p.snap(true, pveVM(103, StateStopped)), "down:stopped:qemu/103")
+}
+
+// „Gestoppt ist richtig“: ExpectRunning aus erledigt eine offene Stoerung still, auch spaeter keine Entwarnung.
+func TestRulesAckStopped(t *testing.T) {
+	p := newPveRun(t)
+	p.snap(true, pveVM(103, StateRunning))
+	p.snap(true, pveVM(103, StateStopped))
+	p.expect(p.snap(true, pveVM(103, StateStopped)), "down:stopped:qemu/103")
+	if _, ok := p.e.Outage(1, "qemu/103"); !ok {
+		t.Fatal("Stoerung nicht gemerkt")
+	}
+	p.item("qemu/103").ExpectRunning = pveBool(false)
+	p.expect(p.snap(true, pveVM(103, StateStopped)), "")
+	if _, ok := p.e.Outage(1, "qemu/103"); ok {
+		t.Fatal("Stoerung nach „gestoppt ist richtig“ noch offen")
+	}
+	if es := p.e.Export(1); es != nil && es.Res["qemu/103"].What != "" {
+		t.Fatalf("Export: %+v", es)
+	}
+	p.expect(p.snap(true, pveVM(103, StateRunning)), "") // laeuft wieder: keine Entwarnung (war keine Stoerung)
+	p.expect(p.snap(true, pveVM(103, StateStopped)), "")
+	// Docker: beendet mit Fehler, soll nicht laufen
+	d := newPveRun(t)
+	run := Resource{Type: TypeDocker, Name: "web", State: StateRunning, Status: "running"}
+	ex := Resource{Type: TypeDocker, Name: "web", State: StateError, Status: "exited", Detail: DockerExited, ExitCode: 1}
+	d.snap(true, run)
+	d.expect(d.snap(true, ex), "down:exited:docker/web")
+	d.item("docker/web").ExpectRunning = pveBool(false)
+	d.expect(d.snap(true, ex), "")
+	d.expect(d.snap(true, run), "")
+}
+
 func TestRulesNodeOffline(t *testing.T) {
 	p := newPveRun(t)
 	p.snap(true, pveNode("pve1", true), pveVM(100, StateRunning))

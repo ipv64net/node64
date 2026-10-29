@@ -85,6 +85,8 @@
 			<td data-label="{{$.T "hc.docker.state"}}"><span class="badge {{.Class}}">{{$.T .Label}}</span>
 				{{with .R.Health}}<span class="badge {{if eq . "unhealthy"}}text-bg-danger{{else if eq . "starting"}}text-bg-warning{{else}}text-bg-light{{end}}">{{$.T (print "hc.docker.health." .)}}</span>{{end}}
 				{{if .Excluded}}<span class="badge text-bg-light" title="node64.nomonitor=true">{{$.T "pve.excluded"}}</span>{{end}}
+				{{if .ExpectOff}}<i class="bi bi-check2-circle text-body-secondary" title="{{$.T "pve.ack.off_title"}}"></i>{{end}}
+				{{if and $d.Sys .Found}}{{if .Ack}} <form method="post" action="{{$d.Act}}/ack" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="key" value="{{.Key}}"><input type="hidden" name="back" value="{{or $d.Path "/healthchecks/docker"}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "pve.ack.title"}}" data-confirm="{{$.T "pve.ack.confirm"}}"><i class="bi bi-check2-circle"></i> {{$.T "pve.ack.btn"}}</button></form>{{end}}{{end}}
 				{{if .R.Restarts}}<div class="small text-body-secondary">{{$.T "docker.restarts"}}: {{.R.Restarts}}</div>{{end}}
 				{{if and .Found (eq .R.Status "exited")}}<div class="small text-body-secondary">{{$.T "docker.exit_code"}}: {{.R.ExitCode}}{{if .R.OOMKilled}} · OOM{{end}}</div>{{end}}</td>
 			<td data-label="CPU" class="text-end text-nowrap">{{or .CPU "–"}}</td>
@@ -139,6 +141,8 @@
 </div>
 {{if not $r.Found}}<div class="alert alert-warning small"><i class="bi bi-question-circle"></i> {{if $x.Reach}}{{.T "docker.res_missing"}}{{else}}{{.T "pve.res_nodata"}}{{end}}</div>{{end}}
 {{if $r.AsCheck}}<div class="alert alert-info small py-2"><i class="bi bi-heart-pulse"></i> {{.T "docker.check.active_hint"}}</div>{{end}}
+{{if and $r.Found $r.Ack}}<div class="alert alert-danger small py-2 d-flex align-items-center justify-content-between flex-wrap gap-2"><span><i class="bi bi-exclamation-triangle"></i> {{.T "docker.ack.hint"}}</span><form method="post" action="{{$d.Act}}/ack" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="key" value="{{$x.Key}}"><input type="hidden" name="back" value="{{$r.Path}}"><button class="btn btn-sm btn-outline-secondary" type="submit" data-confirm="{{.T "pve.ack.confirm"}}"><i class="bi bi-check2-circle"></i> {{.T "pve.ack.btn"}}</button></form></div>
+{{else if $r.ExpectOff}}<div class="alert alert-light border small py-2"><i class="bi bi-check2-circle"></i> {{.T "pve.ack.active_hint"}}</div>{{end}}
 
 {{if $r.Found}}
 <div class="row g-2 mb-3">
