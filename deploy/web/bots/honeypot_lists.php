@@ -29,7 +29,29 @@ ini_set('memory_limit', '512M');
 const HPL_CONTRIB_KEEP = 35;     // Tage hp_sample_contrib (Schwelle braucht 30)
 const HPL_BATCH        = 10000;  // Zeilen je DELETE
 const HPL_NGINX_TOKEN  = 3000;   // Bytes je regex-location (nginx: hoechstens 4096 je Parameter)
-const CDN64_JA4_EXCLUDE = array(); // JA4 von Browsern und verbreiteten Bibliotheken, die nie auf ipv64_ja4.txt kommen (pflegt Dennis)
+// JA4 von Browsern und verbreiteten Bibliotheken, die nie auf ipv64_ja4.txt kommen (pflegt Dennis). Gemessen 2026-10-29 mit
+// Standard-Clients (mit SNI): Go net/http (auch Node64-/hub-Healthchecks!), curl, wget, Python, Node, Java, Chromium. Go mit
+// eigenem Transport stand auf Rang 27 und 119 der Liste und wurde von den CDN64-Servern getrennt.
+const CDN64_JA4_EXCLUDE = array(
+	// Go crypto/tls (net/http, eigener Transport ohne bzw. mit HTTP/2) - 1.21, 1.23, 1.26/1.27
+	't13d191000_9dc949149365_e7c285222651', 't13d1911h2_9dc949149365_e7c285222651',
+	't13d131000_f57a46bbacb6_e7c285222651', 't13d1311h2_f57a46bbacb6_e7c285222651',
+	't13d131100_f57a46bbacb6_f50d94e863eb', 't13d1312h2_f57a46bbacb6_f50d94e863eb',
+	// curl (Debian 12, Ubuntu 20.04-24.04, Alpine 3.18-3.22, curlimages), auch --http1.1
+	't13d3112h2_e8f1e7e78f70_b26ce05bbdd6', 't13d3112h1_e8f1e7e78f70_b26ce05bbdd6',
+	't13d3113h2_e8f1e7e78f70_ce5650b735ce', 't13d3113h1_e8f1e7e78f70_ce5650b735ce',
+	't13d3112h2_e8f1e7e78f70_6bebaf5329ac', 't13d3112h1_e8f1e7e78f70_6bebaf5329ac',
+	't13d3012h2_1d37bd780c83_882d495ac381', 't13d3012h1_1d37bd780c83_882d495ac381',
+	// wget (Debian, Alpine/busybox)
+	't13d291300_723694b0fccc_899037bd0b8c', 't13d311000_e8f1e7e78f70_1f22a2ca17c4', 't13d311000_e8f1e7e78f70_518fb456ca59',
+	't13d301100_1d37bd780c83_8e6e362c5eac',
+	// Python urllib/requests/httpx/aiohttp (3.9-3.13)
+	't13d171100_ab0a1bf427ad_8e6e362c5eac', 't13d1712h1_ab0a1bf427ad_882d495ac381', 't13d1712h1_ab0a1bf427ad_8e6e362c5eac',
+	// Node https/fetch (18-22)
+	't13d591000_a33745022dd6_1f22a2ca17c4', 't13d521100_b262b3658495_8e6e362c5eac', 't13d5212h1_b262b3658495_8e6e362c5eac',
+	// Java HttpClient 21, Chromium 124 (headless)
+	't13d311200_1d947a95fc68_7e1102d2036b', 't13d3113h2_1d947a95fc68_7e1102d2036b', 't13d1516h2_8daaf6152771_02713d6af862',
+);
 
 $OUT = realpath(__DIR__ . '/../blocklists');
 $dry = false; $extern = false;

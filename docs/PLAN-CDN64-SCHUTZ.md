@@ -120,7 +120,9 @@ Gemeinsamer Vertrag für Server (cdnedge), Portal (`api_v2_cdn64o.php`) und PROX
 
 **JA4-Liste:** `https://ipv64.net/blocklists/ipv64_ja4.txt` – je Zeile ein JA4 ohne Präfix (`t13d1516h2_8daaf6152771_e5627efa2ab1`),
 `#` = Kommentar, höchstens 1000 Zeilen. Erzeugt von `bots/honeypot_lists.php` aus `hps_top(..., 'fp', …)` (nur `ja4:`-Einträge),
-abzüglich `CDN64_JA4_EXCLUDE` (Konstante, leer zum Start). Server laden sie alle 30 min (ETag), Zwischenspeicher im
+abzüglich `CDN64_JA4_EXCLUDE` (Konstante; seit 2026-10-29 mit 26 gemessenen JA4 von Go net/http, curl, wget,
+Python, Node, Java und Chromium – Go mit eigenem Transport stand auf Rang 27 und 119 und traf auch die
+Node64-/hub-Healthchecks). Server laden sie alle 30 min (ETag), Zwischenspeicher im
 DataDir, `blocklist_base` wie die Blocklisten.
 
 **edge/config – je Host (apiHost) neu:**
