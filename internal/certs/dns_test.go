@@ -250,3 +250,34 @@ func TestWaitTXTFlapping(t *testing.T) {
 		t.Fatalf("returned after %d answers while the record was still flapping", n)
 	}
 }
+
+// Ohne zustaendige Antwort (Port 53 umgeleitet) muessen auch die oeffentlichen Resolver mehrere Runden hintereinander
+// den Wert liefern; ein einzelner Treffer genuegt nicht (Review 2026-10-29).
+func TestWaitTXTPublicStable(t *testing.T) {
+	addr := testNS(t, answer(false, ""), answer(false, "")) // umgeleitet: nie zustaendig
+	fastTXT(t, []nameserver{{Name: "ns1.test", Addrs: []string{addr}}}, 2*time.Second)
+	seq := []bool{true, false, true, true, true}
+	calls := 0
+	publicCheck = func(context.Context, string, string) (bool, error) {
+		calls++
+		if calls > len(seq) {
+			return true, nil
+		}
+		return seq[calls-1], nil
+	}
+	if err := waitTXT(context.Background(), "example.org", "_acme-challenge.example.org", "token"); err != nil {
+		t.Fatal(err)
+	}
+	if calls != len(seq) {
+		t.Fatalf("public check must need %d stable rounds, returned after %d calls", stableRounds, calls)
+	}
+}
+
+// Laeuft bei Fristablauf gerade eine stabile Folge, wird sie zu Ende geprueft statt mit „0 of N“ abzubrechen.
+func TestWaitTXTDeadlineFinishesStableRun(t *testing.T) {
+	addr := testNS(t, answer(true, "token"), answer(true, "token"))
+	fastTXT(t, []nameserver{{Name: "ns1.test", Addrs: []string{addr}}}, time.Millisecond)
+	if err := waitTXT(context.Background(), "example.org", "_acme-challenge.example.org", "token"); err != nil {
+		t.Fatalf("stable run at the deadline must finish: %v", err)
+	}
+}

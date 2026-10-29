@@ -348,6 +348,11 @@ absoluter Form `GET http://andere.example/` leitete dorthin weiter – offene We
 hat auch der Nachbar keinen Tunnel, antwortet der Nachbar auf Port 80 mit der Fehlerseite (vorher trennte er still,
 der Besucher bekam bei Modus 1 auf Port 80 nichts).
 
+**Review 2026-10-29 (cdn64-edge 0.20.2, nicht ausgerollt):** Beim DNS-01-Warten zählt nur eine zuständige Antwort
+(AA, NOERROR/NXDOMAIN) als „Wert fehlt“; REFUSED, SERVFAIL oder eine nicht zuständige Antwort einer Adresse zählen wie
+keine Antwort und halten den Nameserver nicht mehr bis zur Frist auf; abgeschnittene Antworten werden per TCP
+wiederholt. Läuft bei Fristablauf gerade eine stabile Folge, wird sie zu Ende geprüft.
+
 ### 8.4 Endpunkte für die Server (Server-Geheimnis, eigene Datei)
 
 | Methode | Pfad | Zweck |

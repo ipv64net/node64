@@ -10,6 +10,9 @@ Short summary of what changes per version. Details per module are in the node un
 - PROXY64: bandwidth per proxy host, "TLS pass-through" and stream – limit download and upload in Mbit/s (unlimited by default), above
   it traffic is slowed down instead of cut off.
 - PROXY64: streams in one table – names for streams only with their CDN64 state and their ports together.
+- Certificates: domain plus wildcard via DuckDNS, Hurricane Electric or RFC2136 work again (these providers hold only
+  one TXT value and are checked one after another again). The DNS-01 check also requires several stable rounds via
+  public resolvers, and a value that becomes stable shortly before the deadline still counts.
 
 ## 0.12.0-alpha.31 – 2026-10-29
 

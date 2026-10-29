@@ -295,7 +295,7 @@ func waitTXT(ctx context.Context, zone, fqdn, want string) error {
 	deadline := time.Now().Add(waitDNS)
 	var details []string
 	var pubErr error
-	stable := 0
+	stable, pubStable, seen := 0, 0, false // Runden hintereinander mit dem Wert (direkt, ueber oeffentliche Resolver)
 	for round := 1; ; round++ {
 		ok, auth := 0, false
 		details = details[:0]
@@ -325,21 +325,35 @@ func waitTXT(ctx context.Context, zone, fqdn, want string) error {
 			}
 		}
 		if ok == len(servers) {
+			seen = true
 			if stable++; stable >= stableRounds {
 				return nil
 			}
 		} else {
 			stable = 0
 		}
+		// oeffentliche Resolver ebenso mehrere Runden hintereinander: einer erwischt sonst den Verbund im neuen Stand,
+		// Let's Encrypt danach den alten
 		if !auth && round >= directRounds {
 			found, err := publicCheck(ctx, fqdn, want)
 			if found {
-				return nil
+				seen = true
+				if pubStable++; pubStable >= stableRounds {
+					return nil
+				}
+			} else {
+				pubStable = 0
 			}
 			pubErr = err
+		} else {
+			pubStable = 0
 		}
-		if time.Now().After(deadline) {
+		// Frist um: laeuft gerade eine stabile Folge, wird sie noch zu Ende geprueft (hoechstens stableRounds-1 Runden)
+		if time.Now().After(deadline) && stable == 0 && pubStable == 0 {
 			msg := fmt.Sprintf("TXT record %s not visible on %d of %d nameservers after %s (%s)", fqdn, len(servers)-ok, len(servers), waitDNS, strings.Join(details, "; "))
+			if seen {
+				msg = fmt.Sprintf("TXT record %s not stable after %s: it was visible everywhere but then missing again (%s)", fqdn, waitDNS, strings.Join(details, "; "))
+			}
 			if !auth {
 				msg += "; the nameservers cannot be queried directly from here (outgoing port 53 blocked or redirected to a local resolver?)"
 				if pubErr != nil {

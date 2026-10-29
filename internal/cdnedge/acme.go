@@ -401,7 +401,8 @@ func waitTXTOn(ctx context.Context, servers [][]string, fqdn string, want []stri
 		} else {
 			stable = 0
 		}
-		if time.Now().After(deadline) {
+		// Frist um: laeuft gerade eine stabile Folge, wird sie noch zu Ende geprueft (hoechstens txtStableRounds-1 Runden)
+		if time.Now().After(deadline) && stable == 0 {
 			return fmt.Errorf("TXT not visible on %d of %d nameservers", len(servers)-ok, len(servers))
 		}
 		select {
@@ -413,18 +414,25 @@ func waitTXTOn(ctx context.Context, servers [][]string, fqdn string, want []stri
 }
 
 const (
-	txtNoAnswer = iota // Adresse nicht erreichbar
-	txtNotAll          // Antwort ohne alle Werte
+	txtNoAnswer = iota // Adresse nicht erreichbar oder keine zustaendige Antwort
+	txtNotAll          // zustaendige Antwort ohne alle Werte
 	txtAll             // alle Werte da
 )
 
-// txtState fragt einen Nameserver direkt (ohne Rekursion).
+// txtState fragt einen Nameserver direkt (ohne Rekursion). Nur eine zustaendige Antwort (AA, NOERROR/NXDOMAIN) zaehlt
+// als „Wert fehlt“; REFUSED, SERVFAIL oder eine nicht zustaendige Antwort (umgeleitet) zaehlen wie keine Antwort, sonst
+// hielte eine einzelne falsch eingerichtete Adresse den Nameserver bis zur Frist auf. Abgeschnitten: per TCP nochmal.
 func txtState(ctx context.Context, server, fqdn string, want []string) int {
 	q := new(dns.Msg)
 	q.SetQuestion(dns.Fqdn(fqdn), dns.TypeTXT)
 	q.RecursionDesired = false
-	r, _, err := (&dns.Client{Timeout: 3 * time.Second}).ExchangeContext(ctx, q, server)
-	if err != nil || r == nil {
+	c := &dns.Client{Timeout: 3 * time.Second}
+	r, _, err := c.ExchangeContext(ctx, q, server)
+	if err == nil && r != nil && r.Truncated {
+		c.Net = "tcp"
+		r, _, err = c.ExchangeContext(ctx, q, server)
+	}
+	if err != nil || r == nil || r.Truncated || !r.Authoritative || r.Rcode != dns.RcodeSuccess && r.Rcode != dns.RcodeNameError {
 		return txtNoAnswer
 	}
 	have := map[string]bool{}

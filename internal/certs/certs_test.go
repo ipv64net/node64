@@ -512,3 +512,48 @@ func TestIssueViaDNSProvider(t *testing.T) {
 		t.Fatal("providers missing")
 	}
 }
+
+// fakeSeqLego haelt wie DuckDNS/Hurricane/rfc2136 nur einen TXT-Wert je Name (Setzen ersetzt) und meldet sich ueber
+// Sequential() als nacheinander zu loesen.
+type fakeSeqLego struct{ dns *fakeDNS }
+
+func (f fakeSeqLego) Present(domain, _, keyAuth string) error {
+	h := sha256.Sum256([]byte(keyAuth))
+	f.dns.mu.Lock()
+	defer f.dns.mu.Unlock()
+	f.dns.txt["_acme-challenge."+domain] = []string{base64.RawURLEncoding.EncodeToString(h[:])}
+	f.dns.added++
+	return nil
+}
+
+func (f fakeSeqLego) CleanUp(domain, _, _ string) error {
+	f.dns.mu.Lock()
+	defer f.dns.mu.Unlock()
+	delete(f.dns.txt, "_acme-challenge."+domain)
+	return nil
+}
+
+func (fakeSeqLego) Sequential() time.Duration { return 10 * time.Millisecond }
+
+// Anbieter mit nur einem TXT-Wert: Domain + *.Domain gelingen, weil sie nacheinander geprueft werden (Review
+// 2026-10-29: alle vorbereiten, dann pruefen, liess das zweite Setzen das erste ueberschreiben).
+func TestIssueViaSequentialDNSProvider(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, nil)
+	_ = e.m.SetAccount(ctx, "", true)
+	e.m.provider = func(string, map[string]string) (challenge.Provider, error) { return fakeSeqLego{dns: e.dns}, nil }
+	acc := &DNSAccount{Name: "Duck", Provider: "cloudflare"}
+	if err := e.m.SaveDNSAccount(ctx, acc, map[string]string{"token": "t"}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := e.m.Create(ctx, Request{Names: []string{"fremd.example", "*.fremd.example"}, Source: SourceDNS, DNSAccount: acc.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c = wait(t, e.m, c.ID); c.Status != StatusValid || c.LastError != "" {
+		t.Fatalf("sequential provider: %+v", c)
+	}
+	if e.dns.added != 2 || e.dns.records() != 0 {
+		t.Fatalf("TXT: added %d, left %d", e.dns.added, e.dns.records())
+	}
+}
