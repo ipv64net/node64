@@ -204,6 +204,17 @@
 					<button class="btn btn-primary" type="submit">{{.T "common.save"}}</button>
 					<a class="btn btn-outline-secondary" href="/logs">{{.T "logs.title"}}</a>
 				</form>
+				<hr>
+				<form method="post" action="/settings/api-log">
+					<input type="hidden" name="_csrf" value="{{.CSRF}}">
+					<label class="form-label" for="api_log">{{.T "settings.api_log"}}</label>
+					<div class="input-group" style="max-width:24rem"><span class="input-group-text"><i class="bi bi-code-slash"></i></span><select class="form-select" id="api_log" name="api_log" data-autosubmit>
+						<option value="off"{{if eq $d.APILog "off"}} selected{{end}}>{{.T "settings.api_log_off"}}</option>
+						<option value="keys"{{if eq $d.APILog "keys"}} selected{{end}}>{{.T "settings.api_log_keys"}}</option>
+						<option value="all"{{if eq $d.APILog "all"}} selected{{end}}>{{.T "settings.api_log_all"}}</option>
+					</select></div>
+					<p class="form-text mb-0">{{.T "settings.api_log_hint"}}</p>
+				</form>
 			</div>
 		</div>
 		<div class="card" id="about">

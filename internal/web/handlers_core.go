@@ -417,6 +417,7 @@ type settingsData struct {
 	Update     map[string]any
 	Upd        *updateView // Selbst-Update (nil = nicht verfuegbar)
 	LogModules map[string]string
+	APILog     string // API-Log: off, keys, all (api_log.go)
 	Modules2   []string
 	HTTPSPort  int
 	Reach      *reachView        // Karte Erreichbarkeit dieser Node
@@ -473,6 +474,7 @@ func (s *Server) settingsView(r *http.Request) *View {
 		d.LogModules[k] = logging.LevelName(l)
 	}
 	d.Modules2 = logModuleNames
+	d.APILog = s.APILogMode()
 	d.Reach, d.Moved = s.reachData(ctx), settingsMoved
 	v.Data = d
 	v.Form = map[string]string{"node_name": d.NodeName, "location": d.Location, "lang": v.User.Lang, "timezone": v.User.Timezone, "level": d.LogLevel}

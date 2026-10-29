@@ -533,7 +533,7 @@ func (s *Server) apiLoggingGet(w http.ResponseWriter, r *http.Request) {
 	for name, lvl := range s.Log.ModuleLevels() {
 		mods[name] = logging.LevelName(lvl)
 	}
-	writeJSON(w, 200, map[string]any{"level": logging.LevelName(s.Log.Level()), "modules": mods, "known_modules": logModuleNames})
+	writeJSON(w, 200, map[string]any{"level": logging.LevelName(s.Log.Level()), "modules": mods, "known_modules": logModuleNames, "api_log": s.APILogMode()})
 }
 
 func (s *Server) apiLoggingPut(w http.ResponseWriter, r *http.Request) {
@@ -541,8 +541,13 @@ func (s *Server) apiLoggingPut(w http.ResponseWriter, r *http.Request) {
 		Level        string            `json:"level"`         // global: debug, info, warn, error
 		ResetMinutes int               `json:"reset_minutes"` // debug nach so vielen Minuten zuruecksetzen (0 = nie)
 		Modules      map[string]string `json:"modules"`       // je Modul: Level oder "inherit"
+		APILog       string            `json:"api_log"`       // jede API-Anfrage ins Log: off, keys, all (leer = unveraendert)
 	}
 	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if _, ok := apiLogMode(in.APILog); in.APILog != "" && !ok {
+		writeErr(w, http.StatusUnprocessableEntity, "api_log must be off, keys or all")
 		return
 	}
 	valid := func(l string) bool {
@@ -587,6 +592,14 @@ func (s *Server) apiLoggingPut(w http.ResponseWriter, r *http.Request) {
 			s.Log.SetModuleLevel(mod, &lvl)
 		}
 		s.audit(r, "logging.module", mod, l)
+	}
+	if in.APILog != "" {
+		if err := s.setAPILog(r.Context(), in.APILog); err != nil {
+			s.log.Error("api log setting", "err", err)
+			writeErr(w, 500, "database error")
+			return
+		}
+		s.audit(r, "logging.api", in.APILog, "")
 	}
 	s.apiLoggingGet(w, r)
 }

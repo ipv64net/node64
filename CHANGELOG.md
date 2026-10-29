@@ -4,6 +4,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Einstellungen → Logging: „API-Anfragen protokollieren“ (Opt-in: aus, nur per API-Key oder alle). Jede Anfrage an
+  /api/ steht dann als Zeile im Log mit Methode, Pfad, Status, Dauer, IP, Benutzer und Name des API-Keys – ohne
+  Inhalte, Geheimnisse maskiert. Auch über `PUT /api/logging` (`api_log`).
 - Healthchecks/Cluster: Nodes ohne eigene ipv64-Verknüpfung können Online- und Hybrid-Checks anlegen und ändern,
   wenn eine verknüpfte Node im Cluster erreichbar ist.
 - Cluster: Tritt eine Node mit API-Key einem Cluster bei, in dem der Key vorher entfernt wurde, übernehmen die
