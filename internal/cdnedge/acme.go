@@ -362,19 +362,44 @@ var waitTXT = func(ctx context.Context, name, fqdn string, want []string) error 
 	if len(servers) == 0 {
 		return errors.New("no nameservers found for " + name)
 	}
-	deadline := time.Now().Add(3 * time.Minute)
+	return waitTXTOn(ctx, servers, fqdn, want, 3*time.Minute)
+}
+
+// txtStableRounds: so viele Runden hintereinander muessen alle erreichbaren Adressen aller Nameserver alle Werte
+// liefern. ns1/ns2.ipv64.net liefern kurz nach dem Anlegen abwechselnd alt/leer und neu; ein einzelner Treffer
+// genuegte nicht (wie internal/certs, Test 2026-10-29). Variablen fuer Tests.
+var (
+	txtStableRounds = 3
+	txtEvery        = 3 * time.Second
+)
+
+// waitTXTOn: ein Nameserver gilt, wenn eine seiner Adressen alle Werte liefert und keine erreichbare Adresse ohne sie
+// antwortet (nicht erreichbare Adressen bzw. Familien zaehlen nicht).
+func waitTXTOn(ctx context.Context, servers [][]string, fqdn string, want []string, wait time.Duration) error {
+	deadline := time.Now().Add(wait)
+	stable := 0
 	for {
 		ok := 0
 		for _, addrs := range servers {
+			found, missing := false, false
 			for _, a := range addrs {
-				if hasAllTXT(ctx, a, fqdn, want) {
-					ok++
-					break
+				switch txtState(ctx, a, fqdn, want) {
+				case txtAll:
+					found = true
+				case txtNotAll:
+					missing = true
 				}
+			}
+			if found && !missing {
+				ok++
 			}
 		}
 		if ok == len(servers) {
-			return nil
+			if stable++; stable >= txtStableRounds {
+				return nil
+			}
+		} else {
+			stable = 0
 		}
 		if time.Now().After(deadline) {
 			return fmt.Errorf("TXT not visible on %d of %d nameservers", len(servers)-ok, len(servers))
@@ -382,18 +407,25 @@ var waitTXT = func(ctx context.Context, name, fqdn string, want []string) error 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(3 * time.Second):
+		case <-time.After(txtEvery):
 		}
 	}
 }
 
-func hasAllTXT(ctx context.Context, server, fqdn string, want []string) bool {
+const (
+	txtNoAnswer = iota // Adresse nicht erreichbar
+	txtNotAll          // Antwort ohne alle Werte
+	txtAll             // alle Werte da
+)
+
+// txtState fragt einen Nameserver direkt (ohne Rekursion).
+func txtState(ctx context.Context, server, fqdn string, want []string) int {
 	q := new(dns.Msg)
 	q.SetQuestion(dns.Fqdn(fqdn), dns.TypeTXT)
 	q.RecursionDesired = false
 	r, _, err := (&dns.Client{Timeout: 3 * time.Second}).ExchangeContext(ctx, q, server)
 	if err != nil || r == nil {
-		return false
+		return txtNoAnswer
 	}
 	have := map[string]bool{}
 	for _, rr := range r.Answer {
@@ -403,8 +435,8 @@ func hasAllTXT(ctx context.Context, server, fqdn string, want []string) bool {
 	}
 	for _, w := range want {
 		if !have[w] {
-			return false
+			return txtNotAll
 		}
 	}
-	return true
+	return txtAll
 }

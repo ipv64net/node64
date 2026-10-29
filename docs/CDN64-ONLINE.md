@@ -333,6 +333,11 @@ Textvergleiche auf Pfad (dekodiert, nicht bereinigt) und User-Agent, Treffer →
 - Außerdem: Platz im Schutz bis zum Ende der Verbindung (auch wenn sie an den Nachbarn bzw. die Terminierung
   weitergereicht wurde), Cache-Zwischendatei bei Abbruch entfernt, QUIC-Einstellungen je Verbindung wieder wirksam.
 
+**Test 2026-10-29 (cdn64-edge 0.20.1, nicht ausgerollt):** DNS-01 gilt am Server erst als sichtbar, wenn alle
+erreichbaren Adressen aller Nameserver alle Werte 3 Runden hintereinander liefern (`waitTXTOn`, wie die Node seit
+6f73e6b) – ns1/ns2.ipv64.net liefern kurz nach dem Anlegen abwechselnd alt/leer und neu, vorher reichte je
+Nameserver ein Treffer an der ersten Adresse.
+
 ### 8.4 Endpunkte für die Server (Server-Geheimnis, eigene Datei)
 
 | Methode | Pfad | Zweck |
