@@ -271,6 +271,7 @@ type fakeDNS struct {
 	txt     map[string][]string // fqdn -> Werte
 	cname   map[string]string
 	added   int
+	peak    int // hoechste Zahl gleichzeitiger Werte unter einem Namen
 }
 
 func newFakeDNS(domains ...string) *fakeDNS {

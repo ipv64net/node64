@@ -42,6 +42,7 @@ func (f *fakeDNS) AddTXT(_ context.Context, domain, prefix, value string) error 
 	fq := prefix + "." + domain
 	f.txt[fq] = append(f.txt[fq], value)
 	f.added++
+	f.peak = max(f.peak, len(f.txt[fq]))
 	return nil
 }
 
@@ -192,6 +193,26 @@ func TestIssueIPv64WithWildcard(t *testing.T) {
 	}
 	if len(e.kinds()) != 0 {
 		t.Fatalf("no alerts expected: %v", e.kinds())
+	}
+}
+
+// Domain und *.Domain teilen sich den TXT-Namen: beide Werte stehen gleichzeitig, eine echte CA saehe sonst beim
+// zweiten den ersten aus dem Cache (Test 2026-10-29 mit Let's Encrypt Staging: „Incorrect TXT record“).
+func TestIssueApexAndWildcard(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, nil)
+	if err := e.m.SetAccount(ctx, "admin@example.test", true); err != nil {
+		t.Fatal(err)
+	}
+	c, err := e.m.Create(ctx, Request{Names: []string{"home.ipv64.de", "*.home.ipv64.de"}, Source: SourceIPv64})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c = wait(t, e.m, c.ID); c.Status != StatusValid {
+		t.Fatalf("issued: %+v", c)
+	}
+	if e.dns.peak != 2 || e.dns.records() != 0 {
+		t.Fatalf("both TXT values must be present at once and removed afterwards: peak %d, left %d", e.dns.peak, e.dns.records())
 	}
 }
 

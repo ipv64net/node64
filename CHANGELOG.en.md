@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Certificates: domain plus wildcard (`example.ipv64.de` + `*.example.ipv64.de`) via DNS-01 failed at Let's Encrypt
+  ("Incorrect TXT record"); both challenge values are now set at the same time.
 - Healthchecks: a change from the portal made at the same time as a change on the node was lost on the node; it now
   arrives (also needs the new hubs).
 - Healthchecks/cluster: changes of a node without link made outside the cluster reach the portal right after
