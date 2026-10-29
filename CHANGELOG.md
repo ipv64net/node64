@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Datenbank: Vor Migrationen bleiben die letzten drei Backups liegen statt fünf (spart je Node mehrere Hundert MB).
 - PROXY64: Namen nur für Streams – ein Stream (TCP/UDP) geht über CDN64 ins Internet, ohne Proxy-Host und ohne Ziel;
   unter dem Namen antwortet weder HTTP noch HTTPS.
 - Sicherheit: Datenbanken (Node, DNS64-Abfrageprotokoll, PROXY64-Statistik) und ihre Backups sind nur noch für den

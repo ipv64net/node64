@@ -288,7 +288,7 @@ func (s *Store) Backup(ctx context.Context, dest string) error {
 }
 
 // BackupBeforeMigration legt ein Backup unter backupDir an und behaelt die
-// letzten fuenf.
+// letzten drei (je Stand die ganze Datenbank, auf grossen Nodes Hunderte MB).
 func (s *Store) BackupBeforeMigration(ctx context.Context) (string, error) {
 	name := "agent-" + time.Now().UTC().Format("20060102-150405") + "-pre-migration.db"
 	dest := filepath.Join(s.backupDir, name)
@@ -296,7 +296,7 @@ func (s *Store) BackupBeforeMigration(ctx context.Context) (string, error) {
 		return "", err
 	}
 	s.log.Info("backup written before migration", "file", dest)
-	s.pruneBackups("-pre-migration.db", 5)
+	s.pruneBackups("-pre-migration.db", 3)
 	return dest, nil
 }
 
