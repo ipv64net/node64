@@ -13,6 +13,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - Zertifikate: Domain und Wildcard über DuckDNS, Hurricane Electric oder RFC2136 klappen wieder (diese Anbieter
   halten nur einen TXT-Wert und werden wieder nacheinander geprüft). Die DNS-01-Prüfung verlangt auch über
   öffentliche Resolver mehrere stabile Runden, und ein Wert, der kurz vor der Frist stabil wird, gilt noch.
+- Healthchecks/Cluster: Nodes ohne eigene Verknüpfung prüfen bei Online- und Hybrid-Checks die Grenzen des Accounts
+  und reichen Pushes direkt an ipv64 weiter; die zuständige weiterreichende Node wird überall gleich bestimmt.
+- API-Log: Check-Tokens im Pfad werden gekürzt.
 
 ## 0.12.0-alpha.31 – 2026-10-29
 

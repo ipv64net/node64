@@ -65,6 +65,21 @@ func TestAPILog(t *testing.T) {
 			t.Fatalf("secret in log: %s", l)
 		}
 	}
+	// Check-Tokens im Pfad (zugleich Push-Berechtigung) nur gekuerzt
+	const tok = "AbCdEfGhIjKlMnOpQrStUvWxYz012345"
+	call("GET", "/api/checks/"+tok, "")
+	call("GET", "/api/push/"+tok, "")
+	for _, l := range a.s.Log.Lines(200) {
+		if strings.Contains(l, tok) {
+			t.Fatalf("token in log: %s", l)
+		}
+	}
+	if !logged("path=/api/checks/AbCdEf…") {
+		t.Fatalf("check path not logged shortened: %v", a.s.Log.Lines(5))
+	}
+	if got := apiLogPath("/api/push/" + tok + "/fail"); got != "/api/push/AbCdEf…/fail" {
+		t.Fatalf("apiLogPath: %q", got)
+	}
 	// Oberflaeche (Sitzung) im Modus "keys" nicht, im Modus "all" schon
 	a.get(t, "/api/status")
 	if logged("path=/api/status") {

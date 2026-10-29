@@ -1,5 +1,22 @@
 # Changes – Healthchecks
 
+## 2.43.0 – 2026-10-29
+
+### New
+- Cluster: nodes without their own link forward pushes for online and hybrid checks directly to ipv64 (push address
+  at ipv64); the detail page also shows the push address at ipv64. Online-only push checks give the ipv64 address as
+  `push_url` in the API.
+
+### Fixed
+- Cluster: online and hybrid checks on nodes without their own link check the account limits (locations per check,
+  online measuring points) via the API key (`GET /hc2/account`); if they are not readable, nothing is created or
+  moved online. Before, the node accepted everything, the hub rejected it only at the forwarding node and the check
+  was measured nowhere.
+- Cluster: forwarding node and display follow the same rule (linked, reachable, health check sync on, smallest id).
+  Before, a node without sync could count as responsible and nobody forwarded.
+- API log: check tokens in the path (`/api/push/…`, `/api/checks/…`) are shortened (they are also the push
+  credential).
+
 ## 2.42.0 – 2026-10-29
 
 ### Fixed

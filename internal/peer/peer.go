@@ -253,14 +253,14 @@ func (m *Manager) seen(ctx context.Context, nodeID string, info pingInfo, err er
 func (m *Manager) linkedSelf() bool { return m.d.Linked != nil && m.d.Linked() }
 
 // forwarder: diese Node reicht Aenderungen nicht verknuepfter Nodes an den hub weiter (genau eine: die mit der
-// kleinsten Kennung unter den erreichbaren verknuepften Nodes, damit der hub nichts doppelt bekommt).
+// kleinsten Kennung unter den erreichbaren verknuepften Nodes mit eingeschaltetem Healthchecks-Abgleich - nur die
+// holen die Checks der anderen ab; dieselbe Regel wie Forwarder, damit Anzeige und Weiterreichen uebereinstimmen).
 func (m *Manager) forwarder(ctx context.Context) bool {
-	if !m.linkedSelf() {
+	if !m.linkedSelf() || !m.syncOn(ctx, "healthchecks", "checks") {
 		return false
 	}
 	self := m.d.NodeID()
-	list, _ := m.Members(ctx)
-	for _, x := range list {
+	for _, x := range m.hcMembers(ctx) {
 		if x.Linked && x.Online() && x.NodeID < self {
 			return false
 		}
