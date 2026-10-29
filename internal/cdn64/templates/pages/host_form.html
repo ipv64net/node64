@@ -53,6 +53,16 @@
 					</div>
 					<input type="hidden" name="scheme" value="https"><input type="hidden" name="cert_id" value="-1">
 					<div class="form-text mb-3">{{.T "cdn64.f.pass_hint"}}</div>
+					<input type="hidden" name="has_bw" value="1">
+					<div class="row g-2 mb-1" data-bw>
+						<div class="col-md-4"><label class="form-label fw-semibold" for="adv_bw_down"><i class="bi bi-cloud-download"></i> {{.T "cdn64.f.adv_bw_down"}}</label>
+							<div class="input-group input-group-sm"><input class="form-control" type="number" min="0" max="100000" id="adv_bw_down" name="adv_bw_down" value="{{if $h.Advanced.BWDownMbit}}{{$h.Advanced.BWDownMbit}}{{end}}" placeholder="{{.T "cdn64.f.adv_bw_unlimited"}}" data-bw-mbit><span class="input-group-text">Mbit/s</span></div>
+							<div class="form-text" data-bw-mb></div></div>
+						<div class="col-md-4"><label class="form-label fw-semibold" for="adv_bw_up"><i class="bi bi-cloud-upload"></i> {{.T "cdn64.f.adv_bw_up"}}</label>
+							<div class="input-group input-group-sm"><input class="form-control" type="number" min="0" max="100000" id="adv_bw_up" name="adv_bw_up" value="{{if $h.Advanced.BWUpMbit}}{{$h.Advanced.BWUpMbit}}{{end}}" placeholder="{{.T "cdn64.f.adv_bw_unlimited"}}" data-bw-mbit><span class="input-group-text">Mbit/s</span></div>
+							<div class="form-text" data-bw-mb></div></div>
+					</div>
+					<div class="form-text mb-3">{{.T "cdn64.f.pass_bw_hint"}}</div>
 					{{else if eq $h.Kind "status"}}
 					<label class="form-label fw-semibold" for="status_page_id">{{.T "cdn64.f.status_page"}}</label>
 					{{if $d.StatusOn}}

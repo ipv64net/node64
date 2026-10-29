@@ -515,6 +515,7 @@
       "dead_hint": "This host answers every request with a neutral \"404\" page. With a certificate also via HTTPS.",
       "stream_hint": "Just the name, without a target: switch it on at CDN64 (mode 1), then pick it in the stream under “Reachable from the internet via CDN64”. Nothing answers on ports 80 and 443 under this name – neither here nor via srv07/srv08.",
       "pass_hint": "The connection is handed raw to this target by name, without decrypting it here – the target needs its own certificate. Port 80 redirects to HTTPS.",
+      "pass_bw_hint": "Bandwidth of this name for all connections together, empty or 0 = unlimited. Above it traffic is slowed down, nothing is cut off; the connection stays encrypted and is only passed on more slowly. Also applies via CDN64.",
       "locations": "Locations",
       "advanced": "Advanced",
       "access_list": "Access list",

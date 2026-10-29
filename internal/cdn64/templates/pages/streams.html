@@ -57,7 +57,8 @@
 		<tbody>
 		{{range $d.Pass}}
 		<tr{{if not .Enabled}} class="opacity-50"{{end}}>
-			<td class="ps-3">{{range $i, $n := .Names}}{{if $i}}<br>{{end}}<span class="font-monospace text-break">{{$n}}</span>{{end}}{{if .RouteErr}}<div class="text-danger">{{.RouteErr}}</div>{{end}}</td>
+			<td class="ps-3">{{range $i, $n := .Names}}{{if $i}}<br>{{end}}<span class="font-monospace text-break">{{$n}}</span>{{end}}{{if .RouteErr}}<div class="text-danger">{{.RouteErr}}</div>{{end}}
+				{{if or .Advanced.BWDownMbit .Advanced.BWUpMbit}}<div><span class="badge text-bg-light" title="{{$.T "cdn64.f.adv_bw_title"}}" data-bw-badge><i class="bi bi-speedometer"></i> {{if .Advanced.BWDownMbit}}↓{{.Advanced.BWDownMbit}}{{else}}↓∞{{end}} {{if .Advanced.BWUpMbit}}↑{{.Advanced.BWUpMbit}}{{else}}↑∞{{end}} Mbit/s</span></div>{{end}}</td>
 			<td class="font-monospace text-break">{{.TargetHost}}:{{.TargetPort}}</td>
 			<td>{{if .Enabled}}{{with .Reach}}
 				{{if eq .State "up"}}<span class="badge text-bg-success">{{$.T "cdn64.reach.up" "ms" .Ms}}</span>

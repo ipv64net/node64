@@ -132,6 +132,8 @@ type Route struct {
 	// Handler bleibt nil). Count zaehlt durchgereichte Verbindungen (optional).
 	Passthrough string
 	Count       func()
+	// Wrap umhuellt beim Durchreichen die Verbindung des Besuchers vor dem Kopieren (z. B. Bandbreite); nil = roh.
+	Wrap func(net.Conn) net.Conn
 	// GetCert liefert das Zertifikat fuer diese Route bei jedem Handshake (z. B. die eigene CA von DNS64, Wechsel
 	// ohne Neuanmeldung); nil = CertID bzw. passendes Zertifikat nach Namen.
 	GetCert func(*tls.ClientHelloInfo) (*tls.Certificate, error)

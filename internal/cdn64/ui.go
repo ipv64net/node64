@@ -526,6 +526,10 @@ func hostFromForm(r *http.Request, h *Host) {
 				TargetPort: port, ForwardPath: r.PostFormValue(k + "forward"), WebSockets: on(k + "ws"), AccessListID: acl})
 		}
 	}
+	if r.PostFormValue("has_bw") == "1" { // Bandbreite ohne Reiter Erweitert (TLS durchreichen)
+		h.Advanced.BWDownMbit, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_bw_down")))
+		h.Advanced.BWUpMbit, _ = strconv.Atoi(strings.TrimSpace(r.PostFormValue("adv_bw_up")))
+	}
 	if r.PostFormValue("has_advanced") == "1" { // Reiter Erweitert war im Formular
 		a := &h.Advanced
 		a.RequestHeaders, a.RequestRemove = parseHeaders(r.PostFormValue("adv_req_set")), lines(r.PostFormValue("adv_req_del"))

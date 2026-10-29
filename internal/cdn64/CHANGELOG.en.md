@@ -1,5 +1,11 @@
 # Changes – PROXY64
 
+## 1.43.0 – 2026-10-29
+
+### New
+- Bandwidth for "TLS pass-through" too: download and upload at most this many Mbit/s, empty = unlimited. The connection
+  stays encrypted and is only passed on more slowly, locally and via CDN64. Badge in the list.
+
 ## 1.42.0 – 2026-10-29
 
 ### New

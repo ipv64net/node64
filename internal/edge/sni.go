@@ -184,6 +184,9 @@ func (e *Edge) passthrough(conn net.Conn, data []byte, rt *Route) {
 	if rt.Count != nil {
 		rt.Count()
 	}
+	if rt.Wrap != nil {
+		conn = rt.Wrap(conn)
+	}
 	Pipe(conn, up)
 }
 

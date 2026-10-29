@@ -879,6 +879,9 @@ func (m *Module) routeFor(h *Host) edge.Route {
 		st := m.statsOf(h.ID)
 		rt := edge.Route{Names: h.Names, Passthrough: net.JoinHostPort(h.TargetHost, strconv.Itoa(h.TargetPort)), Count: func() { st.requests.Add(1) },
 			HTTP: http.HandlerFunc(m.toHTTPS)}
+		if bw := m.bw.of(h.ID, h.Advanced.BWDownMbit, h.Advanced.BWUpMbit); bw != nil { // Bandbreite: roh, aber gebremst
+			rt.Wrap = func(c net.Conn) net.Conn { return &bwConn{Conn: c, bw: bw} }
+		}
 		// gesperrte IPs (der Eingang laesst sie mit Weg an den Koeder durch - TLS gehoert hier dem Ziel, also kein
 		// Koeder) und Laendersperre: Verbindung gleich nach dem ersten TLS-Paket schliessen
 		rt.Allow = func(ip netip.Addr) bool {
