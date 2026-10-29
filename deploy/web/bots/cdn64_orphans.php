@@ -47,24 +47,46 @@ $edge = (int)$q("SELECT COUNT(*) FROM cdn64o_edges WHERE disabled = 0 AND last_s
 $live = (int)$q("SELECT COUNT(*) FROM cdn64o_tunnels WHERE last_seen >= NOW() - INTERVAL 15 MINUTE")->fetchColumn();
 if($edge === 0 OR $live === 0) { echo "kein CDN64-Server bzw. kein verbundener Tunnel gerade - nichts geprueft\n"; exit(0); }
 
-// wie c64o_dns_off: Server-Eintraege loeschen, Originale wieder aktivieren, an PowerDNS; false, wenn PowerDNS ablehnt
+// wie c64o_dns_off/c64o_edges_off: Originale wieder aktivieren, Server-Eintraege entfernen, an PowerDNS; bleibt fuer
+// einen Typ kein aktiver Eintrag, ersetzt do_zone_update nichts (die Server blieben bei PowerDNS) - dann je Eintrag
+// del_record_name wie die API. false, wenn PowerDNS ablehnt (der Eintrag bleibt samt Zuordnung fuer den naechsten Lauf)
 $dnsOff = function(array $h) use ($q, $pdo): bool {
-	foreach($q("SELECT record_id, role FROM cdn64o_records WHERE host_id = :h", array('h' => $h['id']))->fetchAll(PDO::FETCH_ASSOC) as $r) {
-		if($r['role'] === 'edge') {
-			$q("DELETE FROM subdomain_records WHERE id = :i AND cdn_tmp = :m", array('i' => $r['record_id'], 'm' => C64X_CDN_TMP));
-		} else {
-			$q("UPDATE subdomain_records set deactivated = 0 WHERE id = :i", array('i' => $r['record_id']));
+	$u = (int)$h['userid']; $sid = (int)$h['subdomain_id']; $p = $h['praefix'];
+	$d = $q("SELECT * FROM subdomains WHERE id = :i", array('i' => $sid))->fetch(PDO::FETCH_ASSOC);
+	$dn = $d ? ($d['owndomain'] == 1 ? $d['maindomain'] : $d['subdomainname'] . '.' . $d['maindomain']) : null; // wie domain_name() in api_v2.php
+	$call = function(callable $fn) { // Ausgaben von dbconnect.php unterdruecken, Fehler = nicht geklappt
+		ob_start();
+		try { return $fn(); }
+		catch(Throwable $e) { return false; }
+		finally { ob_end_clean(); }
+	};
+	$gone = function(array $r) use ($q, $h): void {
+		$q("DELETE FROM subdomain_records WHERE id = :i AND cdn_tmp = :m", array('i' => $r['record_id'], 'm' => C64X_CDN_TMP));
+		$q("DELETE FROM cdn64o_records WHERE host_id = :h AND record_id = :r", array('h' => $h['id'], 'r' => $r['record_id']));
+	};
+	$edges = array();
+	foreach($q("SELECT r.record_id, r.role, s.type, s.content FROM cdn64o_records r LEFT JOIN subdomain_records s ON s.id = r.record_id
+		WHERE r.host_id = :h", array('h' => $h['id']))->fetchAll(PDO::FETCH_ASSOC) as $r) {
+		if($r['role'] === 'edge') { if($r['type'] === null) { $gone($r); } else { $edges[] = $r; } continue; }
+		$q("UPDATE subdomain_records set deactivated = 0 WHERE id = :i", array('i' => $r['record_id']));
+		$q("DELETE FROM cdn64o_records WHERE host_id = :h AND record_id = :r", array('h' => $h['id'], 'r' => $r['record_id']));
+	}
+	$ok = true;
+	foreach(array('A', 'AAAA') as $t) {
+		$mine = array_values(array_filter($edges, fn($r) => $r['type'] === $t));
+		$ids = array_map(fn($r) => (int)$r['record_id'], $mine);
+		$rest = (int)$q("SELECT COUNT(*) FROM subdomain_records WHERE subdomain_id = :s AND praefix = :p AND type = :t AND COALESCE(deactivated, 0) = 0"
+			. ($ids ? " AND id NOT IN (" . implode(',', $ids) . ")" : ""), array('s' => $sid, 'p' => $p, 't' => $t))->fetchColumn();
+		if($rest > 0) {
+			foreach($mine as $r) { $gone($r); }
+			if(!$call(fn() => do_zone_update($pdo, $u, $sid, $t, (string)C64X_TTL, $p))) { $ok = false; echo "  DNS " . $h['fqdn'] . " $t: abgelehnt\n"; }
+			continue;
+		}
+		foreach($mine as $r) {
+			$res = $dn !== null ? $call(fn() => del_record_name($pdo, $u, $dn, $p, $t, $r['content'])) : null;
+			if((string)$res === '1') { $gone($r); } else { $ok = false; echo "  DNS " . $h['fqdn'] . " $t " . $r['content'] . ": nicht entfernt\n"; }
 		}
 	}
-	$ok = true; $err = null;
-	foreach(array('A', 'AAAA') as $t) {
-		ob_start();
-		try { if(!do_zone_update($pdo, (int)$h['userid'], (int)$h['subdomain_id'], $t, (string)C64X_TTL, $h['praefix'])) { $ok = false; } }
-		catch(Throwable $e) { $ok = false; $err = $e->getMessage(); }
-		finally { ob_end_clean(); }
-		if(!$ok) { echo "  DNS " . $h['fqdn'] . " $t: " . ($err ?? 'abgelehnt') . "\n"; break; }
-	}
-	if($ok) { $q("DELETE FROM cdn64o_records WHERE host_id = :h", array('h' => $h['id'])); }
 	return $ok;
 };
 // wie c64o_host_purge: alles eines Namens
