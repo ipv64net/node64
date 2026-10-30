@@ -560,6 +560,7 @@ type sshStdioConn struct {
 	stderr   *sshErrBuf
 	d        *dockerSSH // scheitert der Befehl, gleich wieder die Weiterleitung versuchen
 	got      atomic.Bool
+	wmu      sync.Mutex // x/crypto/ssh: Write und CloseWrite (stdin schliessen) nicht gleichzeitig
 	once     sync.Once
 	waitOnce sync.Once
 	waited   chan struct{}
@@ -577,7 +578,9 @@ func (c *sshStdioConn) Read(p []byte) (int, error) {
 }
 
 func (c *sshStdioConn) Write(p []byte) (int, error) {
+	c.wmu.Lock()
 	n, err := c.w.Write(p)
+	c.wmu.Unlock()
 	if err != nil && !c.got.Load() { // Befehl schon beendet (nicht gefunden, keine Rechte)
 		return n, c.failed(err)
 	}
@@ -605,7 +608,10 @@ func (c *sshStdioConn) failed(err error) error {
 
 func (c *sshStdioConn) Close() error {
 	c.once.Do(func() {
-		_ = c.w.Close()
+		if c.wmu.TryLock() { // haengt ein Write (volles Fenster), beendet s.Close die Sitzung auch ohne EOF
+			_ = c.w.Close()
+			c.wmu.Unlock()
+		}
 		_ = c.s.Close()
 	})
 	return nil
