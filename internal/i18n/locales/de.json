@@ -3680,6 +3680,7 @@
       "port": "DNS-Port",
       "bind": "Adresse",
       "bind_all": "alle Adressen (IPv4 und IPv6)",
+      "bind_one": "Feste Adresse: DNS64 lauscht nur auf dieser einen Adresse. Geräte der anderen IP-Familie (z. B. IPv6-Clients bei einer IPv4-Adresse) bekommen dann kein DNS; leer lassen für IPv4 und IPv6.",
       "port_hint": "UDP und TCP. Geräte im Heimnetz verwenden die IP dieses Hosts als DNS-Server, das geht nur mit Port 53. Andere Ports sind für Tests oder wenn 53 schon belegt ist.",
       "router": "Router für lokale Namen",
       "router_auto": "automatisch (Default-Gateway)",

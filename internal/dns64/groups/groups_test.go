@@ -78,10 +78,14 @@ func TestResolver(t *testing.T) {
 	if r.For(netip.MustParseAddr("2001:db8::abcd")).MAC != "02:11:22:33:44:55" {
 		t.Fatal("mac missing")
 	}
-	for _, bad := range []Member{{Kind: KindMAC, Value: "zz"}, {Kind: KindIP, Value: "x"}, {Kind: KindNet, Value: "0.0.0.0/0"}, {Kind: "other", Value: "1.2.3.4"}} {
+	for _, bad := range []Member{{Kind: KindMAC, Value: "zz"}, {Kind: KindIP, Value: "x"}, {Kind: KindNet, Value: "0.0.0.0/0"}, {Kind: KindNet, Value: "::ffff:0.0.0.0/96"}, {Kind: "other", Value: "1.2.3.4"}} {
 		if Normalize(&bad) {
 			t.Errorf("accepted %+v", bad)
 		}
+	}
+	// ::ffff:-Netz wird zum IPv4-Netz, sonst traefe es nie
+	if m4 := (Member{Kind: KindNet, Value: "::ffff:192.168.40.0/120"}); !Normalize(&m4) || m4.Value != "192.168.40.0/24" {
+		t.Errorf("4in6 net: %q", m4.Value)
 	}
 }
 

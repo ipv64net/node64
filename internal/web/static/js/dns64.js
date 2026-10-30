@@ -229,7 +229,7 @@
 				if (s.lastError && !s.healthy) { card.append(el("div", { "class": "text-danger text-truncate", title: s.lastError }, t("last_error") + ": " + s.lastError)); }
 				box.append(card);
 			});
-			var addr = (d.localDNS || "").replace(/:53$/, "");
+			var addr = (d.localDNS || "").replace(/:53$/, "").replace(/^\[(.*)\]$/, "$1");
 			$("local-dns").textContent = d.localDNS ? t(d.localSource === "auto" ? "router_auto" : "router_config", { addr: addr }) : t("router_none");
 		});
 	}

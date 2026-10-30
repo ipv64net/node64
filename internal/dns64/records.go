@@ -223,7 +223,7 @@ func normalizeRecord(r *Record) error {
 	switch r.Type {
 	case "A", "AAAA":
 		a, err := netip.ParseAddr(strings.Trim(r.Value, "[]"))
-		if err != nil || (r.Type == "A") != a.Is4() {
+		if err != nil || (r.Type == "A") != a.Is4() || a.Zone() != "" || a.Is4In6() { // Zone/::ffff: passen nicht in DNS
 			return errCfg("err_ip_" + strings.ToLower(r.Type))
 		}
 		r.Value = a.String()

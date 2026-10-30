@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,7 +23,8 @@ var localSuffixes = []string{
 	".fritz.box", ".speedport.ip",
 	// reverse lookups for private address ranges
 	".10.in-addr.arpa", ".168.192.in-addr.arpa", ".254.169.in-addr.arpa", ".127.in-addr.arpa",
-	".d.f.ip6.arpa", ".8.e.f.ip6.arpa", ".9.e.f.ip6.arpa", ".a.e.f.ip6.arpa", ".b.e.f.ip6.arpa",
+	".c.f.ip6.arpa", ".d.f.ip6.arpa", ".8.e.f.ip6.arpa", ".9.e.f.ip6.arpa", ".a.e.f.ip6.arpa", ".b.e.f.ip6.arpa",
+	".1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.ip6.arpa", // ::1
 }
 
 // ReasonSearch: das Geraet hat an eine oeffentliche Domain seine Suchdomain gehaengt (z. B. example.com.home.local),
@@ -79,6 +81,49 @@ func isLocalName(name string) bool {
 		}
 	}
 	return false
+}
+
+// ownPTR: Rueckwaertssuche fuer eine globale IPv6-Adresse aus einem angeschlossenen Netz (das eigene /64). Die
+// Namen kennt nur der Router, wie bei privaten Adressen; oeffentliche Upstreams sollen sie nicht sehen.
+func (a *clientACL) ownPTR(name string, qtype uint16) bool {
+	if a == nil || qtype != dns.TypePTR {
+		return false
+	}
+	ip, ok := arpa6(name)
+	if !ok {
+		return false
+	}
+	a.mu.RLock()
+	nets := a.nets // von allowed() je Anfrage aktuell gehalten
+	a.mu.RUnlock()
+	for _, p := range nets {
+		if p.Addr().Is6() && p.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// arpa6 liest die Adresse aus einem vollstaendigen ip6.arpa-Namen (32 Nibbles).
+func arpa6(name string) (netip.Addr, bool) {
+	v6, ok := strings.CutSuffix(name, ".ip6.arpa")
+	if !ok {
+		return netip.Addr{}, false
+	}
+	p := strings.Split(v6, ".")
+	if len(p) != 32 {
+		return netip.Addr{}, false
+	}
+	var b [16]byte
+	for i := 0; i < 32; i++ {
+		x := p[31-i]
+		n, err := strconv.ParseUint(x, 16, 8)
+		if err != nil || len(x) != 1 {
+			return netip.Addr{}, false
+		}
+		b[i/2] |= byte(n) << (4 * (1 - i%2))
+	}
+	return netip.AddrFrom16(b), true
 }
 
 // tldQuery: Frage nach einer echten Top-Level-Domain (com, de), die validierende Resolver hinter Node64 fuer die

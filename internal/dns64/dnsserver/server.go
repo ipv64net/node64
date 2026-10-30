@@ -285,7 +285,8 @@ func (s *Server) resolve(r *dns.Msg, name string, e *querylog.Entry, p *Policy, 
 		fwd = s.Forward(name)
 	}
 
-	if isLocalName(name) && !tldQuery(name, q.Qtype) {
+	ownNet := s.Local != nil && s.Local.Addr() != "" && s.acl.ownPTR(name, q.Qtype) // nur mit Router umleiten
+	if (isLocalName(name) || ownNet) && !tldQuery(name, q.Qtype) {
 		if fwd != nil { // eigene Weiterleitung vor dem Router, ungefiltert wie alle lokalen Namen
 			return s.forward(r, fwd, e, querylog.StatusLocal)
 		}

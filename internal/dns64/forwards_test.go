@@ -3,6 +3,7 @@ package dns64
 import (
 	"context"
 	"net"
+	"net/url"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -40,13 +41,27 @@ func TestNormalizeServerAndReverseZone(t *testing.T) {
 			t.Errorf("checkUpstream(%q) = %q %q %v; want %q", in, s.URL, s.Name, err, want)
 		}
 	}
-	for _, bad := range []string{"dns://dns.google", "dns.google", "8.8.8.8:0", "https://"} {
+	for _, bad := range []string{"dns://dns.google", "dns.google", "8.8.8.8:0", "https://", "[fe80::1%eth0]:0"} {
 		if err := checkUpstream(&upstream.Server{URL: bad}); err == nil {
 			t.Errorf("checkUpstream(%q) accepted", bad)
 		}
 	}
 	if serverLabel("dns://192.168.1.1:53") != "192.168.1.1" || serverLabel("dns://[fd00::1]:5353") != "[fd00::1]:5353" {
 		t.Error("serverLabel")
+	}
+	// Link-Local mit Zone: %25 in der URL, der Leser holt die Zone wieder heraus
+	const zoned = "dns://[fe80::1%25eth0]:53"
+	for _, in := range []string{"fe80::1%eth0", "[fe80::1%eth0]:53", zoned} {
+		if got, err := normalizeServer(in); err != nil || got != zoned {
+			t.Errorf("normalizeServer(%q) = %q, %v; want %q", in, got, err, zoned)
+		}
+		s := upstream.Server{URL: in}
+		if err := checkUpstream(&s); err != nil || s.URL != zoned || s.Name != "[fe80::1%eth0]:53" {
+			t.Errorf("checkUpstream(%q) = %q %q %v", in, s.URL, s.Name, err)
+		}
+	}
+	if u, err := url.Parse(zoned); err != nil || u.Hostname() != "fe80::1%eth0" || u.Port() != "53" || upstream.Proto(zoned) != "dns" || serverLabel(zoned) != "fe80::1%eth0" {
+		t.Errorf("zone lesen: %v %v", u, err)
 	}
 	for in, want := range map[string]string{"192.168.0.0/16": "168.192.in-addr.arpa", "10.0.0.0/8": "10.in-addr.arpa", "fd00::/8": "d.f.ip6.arpa", "2001:db8::/32": "8.b.d.0.1.0.0.2.ip6.arpa"} {
 		if got, ok := reverseZone(in); !ok || got != want {

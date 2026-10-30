@@ -406,14 +406,21 @@ func (c *config) validate() error {
 
 func parsePrefix(s string) (netip.Prefix, error) {
 	s = strings.TrimSpace(s)
-	if p, err := netip.ParsePrefix(s); err == nil {
-		return p.Masked(), nil
-	}
-	a, err := netip.ParseAddr(s)
+	p, err := netip.ParsePrefix(s)
 	if err != nil {
-		return netip.Prefix{}, err
+		a, err := netip.ParseAddr(s)
+		if err != nil {
+			return netip.Prefix{}, err
+		}
+		p = netip.PrefixFrom(a, a.BitLen())
 	}
-	return netip.PrefixFrom(a, a.BitLen()), nil
+	if p = p.Masked(); p.Addr().Is4In6() { // ::ffff:10.8.0.0/112 -> 10.8.0.0/16 (Clients kommen ohne ::ffff:)
+		if p.Bits() < 96 {
+			return netip.Prefix{}, errors.New("ipv4-mapped prefix shorter than /96")
+		}
+		p = netip.PrefixFrom(p.Addr().Unmap(), p.Bits()-96)
+	}
+	return p, nil
 }
 
 // checkUpstream: https:// (DoH), tls:// (DoT) oder quic:// (DoQ); Bootstrap-IPs noetig, wenn der Host kein IP
@@ -424,7 +431,7 @@ func checkUpstream(s *upstream.Server) error {
 	if plain, ok := plainUpstream(s.URL); ok {
 		s.URL, s.IPs = plain, nil
 		if s.Name == "" {
-			s.Name = strings.TrimPrefix(plain, "dns://")
+			s.Name, _ = url.PathUnescape(strings.TrimPrefix(plain, "dns://"))
 		}
 		return nil
 	}
@@ -462,14 +469,23 @@ func plainUpstream(raw string) (string, bool) {
 	raw = strings.TrimSpace(raw)
 	if h, ok := strings.CutPrefix(raw, "dns://"); ok {
 		raw = strings.TrimSuffix(h, "/")
-	}
-	if a, err := netip.ParseAddr(strings.Trim(raw, "[]")); err == nil {
-		return "dns://" + netip.AddrPortFrom(a.Unmap(), 53).String(), true
+		if h, err := url.PathUnescape(raw); err == nil {
+			raw = h // Zone gespeichert als %25 (dns://[fe80::1%25eth0]:53)
+		}
 	}
 	if ap, err := netip.ParseAddrPort(raw); err == nil && ap.Port() != 0 {
-		return "dns://" + netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port()).String(), true
+		return plainURL(netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port())), true
+	}
+	// zuerst mit Port: sonst haelt ParseAddr "]:53" fuer einen Teil der Zone
+	if a, err := netip.ParseAddr(strings.Trim(raw, "[]")); err == nil && !strings.ContainsAny(a.Zone(), "[]:") {
+		return plainURL(netip.AddrPortFrom(a.Unmap(), 53)), true
 	}
 	return "", false
+}
+
+// plainURL baut dns://ip:port; url.URL maskiert die Zone einer Link-Local-Adresse (%25), sonst scheitert url.Parse.
+func plainURL(ap netip.AddrPort) string {
+	return (&url.URL{Scheme: "dns", Host: ap.String()}).String()
 }
 
 func checkListURL(raw string) error {

@@ -43,6 +43,7 @@
 							<div class="input-group"><span class="input-group-text"><i class="bi bi-ethernet"></i></span><input type="text" class="form-control font-monospace" id="bind" name="bind" value="{{$d.Cfg.Bind}}" placeholder="{{.T "dns64.settings.bind_all"}}"></div>
 						</div>
 						<div class="col-12 form-text mt-1">{{.T "dns64.settings.port_hint"}}</div>
+						{{if and $d.Cfg.Bind (ne $d.Cfg.Bind "::")}}<div class="col-12 form-text text-warning mt-0"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.settings.bind_one"}}</div>{{end}}
 						<div class="col-12">
 							<label class="form-label" for="router">{{.T "dns64.settings.router"}}{{.Doc "dns64#lokale-namen"}}</label>
 							<div class="input-group"><span class="input-group-text"><i class="bi bi-router"></i></span><input type="text" class="form-control font-monospace" id="router" name="router" value="{{$d.Cfg.Router}}" placeholder="{{.T "dns64.settings.router_auto"}}"></div>

@@ -139,10 +139,19 @@ func Normalize(m *Member) bool {
 		m.Value = a.Unmap().WithZone("").String()
 	case KindNet:
 		p, err := netip.ParsePrefix(v)
-		if err != nil || p.Bits() == 0 {
+		if err != nil {
 			return false
 		}
-		m.Value = p.Masked().String()
+		if p = p.Masked(); p.Addr().Is4In6() { // ::ffff:192.168.1.0/120 -> 192.168.1.0/24 (Clients kommen ohne ::ffff:)
+			if p.Bits() < 96 {
+				return false
+			}
+			p = netip.PrefixFrom(p.Addr().Unmap(), p.Bits()-96)
+		}
+		if p.Bits() == 0 {
+			return false
+		}
+		m.Value = p.String()
 	default:
 		return false
 	}
