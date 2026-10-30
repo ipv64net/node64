@@ -57,15 +57,40 @@ func (s *Set) Has(a netip.Addr) bool {
 	return i > 0 && s.v6[i-1].Contains(a)
 }
 
+// NormPrefix bringt ein Netz in die Form, in der Adressen geprueft werden (die kommen entmappt an): IPv4-gemappte
+// Netze (::ffff:a.b.c.d/n, n >= 96) werden zu IPv4-Netzen, Zonen fallen weg, Host-Bits werden genullt. false bei
+// ungueltigen Netzen und gemappten kuerzer als /96 (die passen auf keine IPv4-Adresse sinnvoll).
+func NormPrefix(p netip.Prefix) (netip.Prefix, bool) {
+	if !p.IsValid() {
+		return netip.Prefix{}, false
+	}
+	a, bits := p.Addr().WithZone(""), p.Bits()
+	if a.Is4In6() {
+		if bits < 96 {
+			return netip.Prefix{}, false
+		}
+		a, bits = a.Unmap(), bits-96
+	}
+	return netip.PrefixFrom(a, bits).Masked(), true
+}
+
 // BuildSet fasst die Netze aller Listen zusammen (IPv4 als sortierte Bereiche, IPv6 ohne enthaltene Netze).
 func BuildSet(lists [][]netip.Prefix, allow []netip.Prefix) *Set {
-	s := &Set{allow: allow}
+	s := &Set{}
+	for _, p := range allow {
+		if p, ok := NormPrefix(p); ok {
+			s.allow = append(s.allow, p)
+		}
+	}
 	var v4 []v4Range
 	var v6 []netip.Prefix
 	for _, l := range lists {
 		s.total += len(l)
 		for _, p := range l {
-			p = p.Masked()
+			p, ok := NormPrefix(p)
+			if !ok {
+				continue
+			}
 			if p.Addr().Is4() {
 				lo := v4u(p.Addr())
 				hi := lo | (uint32(1)<<(32-p.Bits()) - 1)
@@ -127,11 +152,16 @@ func ParseList(r io.Reader) ([]netip.Prefix, error) {
 		if f := strings.Fields(line); len(f) > 0 {
 			line = f[0]
 		}
-		if p, err := netip.ParsePrefix(line); err == nil {
-			out = append(out, p.Masked())
-		} else if a, err := netip.ParseAddr(line); err == nil {
-			a = a.Unmap()
-			out = append(out, netip.PrefixFrom(a, a.BitLen()))
+		p, err := netip.ParsePrefix(line)
+		if err != nil {
+			a, err2 := netip.ParseAddr(line)
+			if err2 != nil {
+				continue
+			}
+			p = netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen())
+		}
+		if p, ok := NormPrefix(p); ok {
+			out = append(out, p)
 		}
 	}
 	return out, sc.Err()

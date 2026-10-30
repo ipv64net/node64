@@ -1,5 +1,24 @@
 # Changes – PROXY64
 
+## 1.45.1 – 2026-10-30
+
+### Fixed
+- IPv4-mapped networks (`::ffff:203.0.113.0/120`) in the block and allow list, access lists and trusted proxies now
+  apply to the IPv4 addresses (before they never matched). Also for the ipv64 blocklists.
+- Block and allow list reject addresses with a zone (`fe80::1%eth0`); otherwise the portal refused the whole list
+  and no block reached the CDN64 servers.
+- Honeypot blocks cover the whole IPv6 /64 (like the blocks of the DoS protection); changing the address inside the
+  own network no longer gets around them. Existing blocks are taken over.
+- DoS protection: when the address table is full (e.g. a flood from many IPv6 networks), new addresses are counted
+  coarser (IPv6 per /48, IPv4 per /24) and finally together instead of passing without a limit.
+- "Never limit the home network" and honeypot blocks: devices in the home network that come with their global IPv6
+  address (same /64 as Node64) now count as home network.
+- X-Forwarded-For from trusted proxies: entries with port or brackets (`[2001:db8::1]:51234`) are recognised; before,
+  the proxy's address counted as the client.
+- Link-local client addresses with a zone now match networks (access lists, limits).
+- Redirect to HTTPS with an IPv6 address in the Host header gives a valid URL.
+- Docker: containers in IPv6-only networks are reachable via the IPv6 gateway.
+
 ## 1.45.0 – 2026-10-30
 
 ### New

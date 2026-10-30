@@ -275,3 +275,37 @@ func TestHoneypotPutRejectedKeepsRoute(t *testing.T) {
 		t.Fatalf("live route changed: %+v", s.Route)
 	}
 }
+
+// Sofort-Sperre je IPv6-/64: ein Adresswechsel im Netz hilft nicht; Anzeige und Aufheben als /64; alte Eintraege je
+// Adresse gelten nach dem Neustart fuers /64.
+func TestHoneypotBlock64(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.enable(t)
+	m := e.m
+	if err := m.hpSave(ctx, HoneypotSettings{Block: true, BlockHours: 2}); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = m.hpSave(ctx, HoneypotSettings{}) }()
+	hpbridge.PublishBlock(hpbridge.Block{IP: netip.MustParseAddr("2001:db8:5:6::1"), Reason: "ssh"})
+	if !m.hpBlocked(netip.MustParseAddr("2001:db8:5:6::99")) || m.hpBlocked(netip.MustParseAddr("2001:db8:5:7::1")) {
+		t.Fatal("block per /64")
+	}
+	if l := m.hpList(); len(l) != 1 || l[0].IP != "2001:db8:5:6::/64" {
+		t.Fatalf("list: %+v", l)
+	}
+	if !m.hpUnblock("2001:db8:5:6::/64") || m.hpBlocked(netip.MustParseAddr("2001:db8:5:6::1")) {
+		t.Fatal("unblock /64")
+	}
+	now := time.Now()
+	if _, err := e.st.Writer().ExecContext(ctx, `INSERT INTO cdn_hp_blocks (ip, reason, since, until) VALUES (?,?,?,?)`,
+		"2001:db8:5:6::1", "old", hpTime(now), hpTime(now.Add(time.Hour))); err != nil {
+		t.Fatal(err)
+	}
+	m.hpRestore(ctx)
+	var n int
+	_ = e.st.Reader().QueryRowContext(ctx, `SELECT count(*) FROM cdn_hp_blocks WHERE ip = '2001:db8:5:6::'`).Scan(&n)
+	if !m.hpBlocked(netip.MustParseAddr("2001:db8:5:6::2")) || n != 1 {
+		t.Fatalf("old entry per address: blocked %v, rows %d", m.hpBlocked(netip.MustParseAddr("2001:db8:5:6::2")), n)
+	}
+}

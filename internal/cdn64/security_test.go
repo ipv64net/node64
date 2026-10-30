@@ -67,6 +67,23 @@ func TestDenyList(t *testing.T) {
 	if err := e.m.blListsSave(ctx, nil, str("kein-netz")); err == nil {
 		t.Fatal("bad line")
 	}
+	if err := e.m.blListsSave(ctx, nil, str("fe80::1%eth0")); err == nil { // Zone: das Portal lehnte die Liste ab
+		t.Fatal("zone must be rejected")
+	}
+	if err := e.m.blListsSave(ctx, str("::ffff:127.0.0.1"), str("::ffff:198.51.100.0/120")); err != nil {
+		t.Fatal(err)
+	}
+	if !e.m.bl.Denied(netip.MustParseAddr("198.51.100.1")) {
+		t.Fatal("ipv4-mapped network must block ipv4 clients")
+	}
+	acl := &AccessList{Rules: []AccessRule{{Action: "allow", CIDR: "::ffff:10.1.0.0/112"}}}
+	acl.prepare()
+	if p, err := parsePrefix("::ffff:10.1.0.0/112"); err != nil || p.String() != "10.1.0.0/16" || !acl.ipAllowed(netip.MustParseAddr("10.1.2.3")) {
+		t.Fatalf("access rule with mapped network: %v %v", p, err)
+	}
+	if _, err := parsePrefix("::ffff:10.1.0.0/80"); err == nil {
+		t.Fatal("mapped network shorter than /96")
+	}
 	if err := e.m.blListsSave(ctx, str(""), str("")); err != nil {
 		t.Fatal(err)
 	}

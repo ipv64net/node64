@@ -180,14 +180,24 @@ func (a *Advanced) clientIP(r *http.Request) netip.Addr {
 	}
 	parts := strings.Split(strings.Join(r.Header.Values("X-Forwarded-For"), ","), ",")
 	for i := len(parts) - 1; i >= 0; i-- {
-		ip, err := netip.ParseAddr(strings.TrimSpace(parts[i]))
+		ip, err := xffAddr(parts[i])
 		if err != nil {
 			break
 		}
-		ip = ip.Unmap()
 		if !a.isTrusted(ip) {
 			return ip
 		}
 	}
 	return peer
+}
+
+// xffAddr: Eintrag aus X-Forwarded-For - Adresse, auch mit Port ("[2001:db8::1]:443", "192.0.2.1:80") oder in
+// Klammern ("[2001:db8::1]"); entmappt und ohne Zone.
+func xffAddr(s string) (netip.Addr, error) {
+	s = strings.TrimSpace(s)
+	if ap, err := netip.ParseAddrPort(s); err == nil {
+		return ap.Addr().Unmap().WithZone(""), nil
+	}
+	a, err := netip.ParseAddr(strings.Trim(s, "[]"))
+	return a.Unmap().WithZone(""), err
 }

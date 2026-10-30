@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/netip"
+	"slices"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -18,7 +19,8 @@ import (
 const (
 	setLimits     = "cdn64.limits"
 	limStrikeSpan = time.Minute // Fenster fuer "abgewiesen" bis zur Sperre
-	limMaxIPs     = 100000      // darueber werden neue IPs nicht mehr einzeln gezaehlt (nur noch insgesamt)
+	limMaxIPs     = 100000      // darueber werden neue IPs groeber gezaehlt (je IPv6-/48 bzw. IPv4-/24)
+	limMaxNets    = 10000       // darueber zaehlen alle weiteren neuen Adressen gemeinsam (limiter.over)
 )
 
 var limQueueWait = 10 * time.Second // so lange wartet eine Anfrage auf einen freien Platz beim Ziel (Tests kuerzer)
@@ -88,6 +90,7 @@ type ipState struct {
 	at       time.Time // letzte Auffuellung der Eimer
 	strikes  int
 	strikeAt time.Time
+	shared   bool // Ersatz-Zaehler bei voller Tabelle (mehrere Adressen): zaehlt, sperrt aber nicht
 }
 
 type limiter struct {
@@ -95,6 +98,9 @@ type limiter struct {
 	exempt   atomic.Pointer[[]netip.Prefix] // Ausnahmen der Blocklisten und vertrauenswuerdige Proxys
 	mu       sync.Mutex
 	ips      map[netip.Addr]*ipState
+	nets     map[netip.Addr]*ipState // Ersatz-Zaehler je IPv6-/48 bzw. IPv4-/24, wenn ips voll ist
+	over     *ipState                // gemeinsamer Zaehler, wenn auch nets voll ist
+	lan      lanNets
 	bans     map[netip.Addr]time.Time
 	nbans    atomic.Int32
 	conns    atomic.Int64 // offen insgesamt (am Eingang und bei Streams)
@@ -106,7 +112,7 @@ type limiter struct {
 }
 
 func newLimiter() *limiter {
-	l := &limiter{ips: map[netip.Addr]*ipState{}, bans: map[netip.Addr]time.Time{}, now: time.Now, warned: map[string]time.Time{}}
+	l := &limiter{ips: map[netip.Addr]*ipState{}, nets: map[netip.Addr]*ipState{}, bans: map[netip.Addr]time.Time{}, now: time.Now, warned: map[string]time.Time{}}
 	d := DefaultLimits()
 	l.cfg.Store(&d)
 	return l
@@ -133,7 +139,7 @@ func limShow(k netip.Addr) string {
 
 func (l *limiter) exempted(c *Limits, a netip.Addr) bool {
 	a = a.Unmap()
-	if !a.IsValid() || c.ExemptLAN && (a.IsPrivate() || a.IsLoopback() || a.IsLinkLocalUnicast()) {
+	if !a.IsValid() || c.ExemptLAN && (a.IsPrivate() || a.IsLoopback() || a.IsLinkLocalUnicast() || l.lan.has(a)) {
 		return true
 	}
 	if ex := l.exempt.Load(); ex != nil {
@@ -146,16 +152,37 @@ func (l *limiter) exempted(c *Limits, a netip.Addr) bool {
 	return false
 }
 
-// stateLocked liefert den Zaehler einer Adresse und fuellt die Eimer auf (nil = Tabelle voll).
+// stateLocked liefert den Zaehler einer Adresse und fuellt die Eimer auf (nie nil). Ist die Tabelle voll (z. B. eine
+// Flut aus vielen IPv6-/64), zaehlt ein groeberer Ersatz-Zaehler je IPv6-/48 bzw. IPv4-/24 und, wenn auch die voll
+// sind, ein gemeinsamer fuer alle weiteren neuen Adressen - neue Clients laufen so nie ohne Limit durch.
 func (l *limiter) stateLocked(c *Limits, k netip.Addr, now time.Time) *ipState {
+	fresh := func(shared bool) *ipState {
+		return &ipState{connTok: float64(c.ConnRate * 10), reqTok: float64(c.ReqBurst), at: now, shared: shared}
+	}
 	st := l.ips[k]
-	if st == nil {
-		if len(l.ips) >= limMaxIPs {
-			return nil
-		}
-		st = &ipState{connTok: float64(c.ConnRate * 10), reqTok: float64(c.ReqBurst), at: now}
+	if st == nil && len(l.ips) < limMaxIPs {
+		st = fresh(false)
 		l.ips[k] = st
 		return st
+	}
+	if st == nil {
+		bits := 24
+		if k.Is6() {
+			bits = 48
+		}
+		p, _ := k.Prefix(bits)
+		if st = l.nets[p.Addr()]; st == nil {
+			if len(l.nets) < limMaxNets {
+				st = fresh(true)
+				l.nets[p.Addr()] = st
+				return st
+			}
+			if l.over == nil {
+				l.over = fresh(true)
+				return l.over
+			}
+			st = l.over
+		}
 	}
 	if dt := now.Sub(st.at).Seconds(); dt > 0 {
 		st.connTok = min(st.connTok+dt*float64(c.ConnRate), float64(c.ConnRate*10))
@@ -168,7 +195,7 @@ func (l *limiter) stateLocked(c *Limits, k netip.Addr, now time.Time) *ipState {
 // strikeLocked zaehlt eine Abweisung; nach BanAfter in einer Minute wird die Adresse gesperrt.
 func (l *limiter) strikeLocked(c *Limits, k netip.Addr, st *ipState, now time.Time) {
 	l.rejected.Add(1)
-	if st == nil || c.BanAfter <= 0 {
+	if st == nil || st.shared || c.BanAfter <= 0 {
 		return
 	}
 	if now.Sub(st.strikeAt) > limStrikeSpan {
@@ -202,10 +229,6 @@ func (l *limiter) open(a netip.Addr) (release func(), reason string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	st := l.stateLocked(c, k, now)
-	if st == nil {
-		l.conns.Add(1)
-		return func() { l.conns.Add(-1) }, ""
-	}
 	if c.ConnsPerIP > 0 && st.conns >= c.ConnsPerIP {
 		l.strikeLocked(c, k, st, now)
 		return nil, rejConns
@@ -252,9 +275,6 @@ func (l *limiter) request(a netip.Addr) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	st := l.stateLocked(c, k, now)
-	if st == nil {
-		return true
-	}
 	if st.reqTok < 1 {
 		l.strikeLocked(c, k, st, now)
 		return false
@@ -328,10 +348,15 @@ func (l *limiter) sweep() {
 	now := l.now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	for k, st := range l.ips {
-		if st.conns == 0 && now.Sub(st.at) > 2*limStrikeSpan {
-			delete(l.ips, k)
+	for _, m := range []map[netip.Addr]*ipState{l.ips, l.nets} {
+		for k, st := range m {
+			if st.conns == 0 && now.Sub(st.at) > 2*limStrikeSpan {
+				delete(m, k)
+			}
 		}
+	}
+	if l.over != nil && l.over.conns == 0 && now.Sub(l.over.at) > 2*limStrikeSpan {
+		l.over = nil
 	}
 	for k, t := range l.bans {
 		if !now.Before(t) {
@@ -488,7 +513,58 @@ func (m *Module) connOpen(a netip.Addr, where string) (func(), bool) {
 
 func netAddr(a net.Addr) netip.Addr {
 	if ap, err := netip.ParseAddrPort(a.String()); err == nil {
-		return ap.Addr().Unmap()
+		return ap.Addr().Unmap().WithZone("") // fe80::5%eth0: ohne Zone, sonst passt kein Netz
 	}
 	return netip.Addr{}
+}
+
+// lanNets: die /64 der globalen IPv6-Adressen der eigenen Schnittstellen (ohne Docker, Bruecken, VMs). Geraete im
+// Heimnetz kommen per IPv6 oft mit ihrer globalen Adresse statt ULA und gelten damit trotzdem als Heimnetz. Wird
+// hoechstens einmal je Minute neu gelesen.
+type lanNets struct {
+	mu   sync.Mutex
+	at   time.Time
+	nets []netip.Prefix
+}
+
+func (n *lanNets) has(a netip.Addr) bool {
+	if !a.Is6() || !a.IsGlobalUnicast() {
+		return false
+	}
+	n.mu.Lock()
+	if now := time.Now(); now.Sub(n.at) > time.Minute {
+		n.nets, n.at = ifNets64(), now
+	}
+	nets := n.nets
+	n.mu.Unlock()
+	for _, p := range nets {
+		if p.Contains(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// ifNets64: /64 der globalen IPv6-Adressen eigener (nicht virtueller) Schnittstellen.
+func ifNets64() []netip.Prefix {
+	var out []netip.Prefix
+	ifs, _ := net.Interfaces()
+	for _, ifc := range ifs {
+		if ifc.Flags&net.FlagUp == 0 || ifc.Flags&net.FlagLoopback != 0 || virtualIf(ifc.Name) {
+			continue
+		}
+		list, _ := ifc.Addrs()
+		for _, x := range list {
+			n, ok := x.(*net.IPNet)
+			if !ok {
+				continue
+			}
+			if a, ok := netip.AddrFromSlice(n.IP); ok && a.Is6() && !a.Is4In6() && a.IsGlobalUnicast() && !a.IsPrivate() {
+				if p, err := a.Prefix(64); err == nil && !slices.Contains(out, p) {
+					out = append(out, p)
+				}
+			}
+		}
+	}
+	return out
 }

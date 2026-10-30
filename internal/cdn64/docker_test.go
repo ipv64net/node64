@@ -388,6 +388,8 @@ func TestDockerTarget(t *testing.T) {
 		{"stopped", dockerSpec{}, in(false, "bridge", map[string]dockerNet{"b-net": {}}), self, "", 0, ""},
 		{"no target", dockerSpec{}, in(true, "bridge", map[string]dockerNet{"x": {IPAddress: "10.3.0.3"}}), self, "", 0, dockerErrNoTarget},
 		{"unknown network", dockerSpec{Network: "nope"}, c, self, "", 0, dockerErrNetwork},
+		{"container host mode, node in ipv6-only network", dockerSpec{}, in(true, "host", map[string]dockerNet{"host": {}}),
+			in(true, "bridge", map[string]dockerNet{"v6": {GlobalIPv6Address: "fd00:1::2", IPv6Gateway: "fd00:1::1"}}), "fd00:1::1", 80, ""},
 	}
 	for _, tc := range cases {
 		addr, port, key, _ := dockerTarget(tc.s, tc.c, tc.self, 80)

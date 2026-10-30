@@ -304,6 +304,7 @@ type dockerNet struct {
 	IPAddress         string `json:"IPAddress"`
 	GlobalIPv6Address string `json:"GlobalIPv6Address"`
 	Gateway           string `json:"Gateway"`
+	IPv6Gateway       string `json:"IPv6Gateway"`
 }
 
 func (n dockerNet) ip() string {
@@ -343,11 +344,16 @@ func (in *dockerInspectC) netNames() []string {
 	return out
 }
 
-// gateway: Docker-Gateway des ersten Netzes (Adresse des Docker-Hosts aus Sicht des Containers).
+// gateway: Docker-Gateway des ersten Netzes (Adresse des Docker-Hosts aus Sicht des Containers); in reinen
+// IPv6-Netzen das IPv6-Gateway.
 func (in *dockerInspectC) gateway() string {
 	for _, k := range in.netNames() {
-		if gw := in.NetworkSettings.Networks[k].Gateway; gw != "" {
-			return gw
+		n := in.NetworkSettings.Networks[k]
+		if n.Gateway != "" {
+			return n.Gateway
+		}
+		if n.IPv6Gateway != "" {
+			return n.IPv6Gateway
 		}
 	}
 	return ""
