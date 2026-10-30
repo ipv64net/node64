@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 0.12.0-alpha.35 – 2026-10-30
+
 - Healthchecks: Proxmox- und Docker-Checks lassen sich beim Bearbeiten von Hand einer anderen Untergruppe zuordnen,
   z. B. wenn zwei Proxmox-Cluster gleich heißen.
 
