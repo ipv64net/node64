@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 0.12.0-alpha.34 – 2026-10-30
+
 - IPv6: thorough check that IPv4 and IPv6 are treated alike. Blocks and limits count IPv6 per /64 (honeypot blocks
   in PROXY64, password lockout of status pages, honeypot sensors SIP/SNMP); IPv4-mapped networks (`::ffff:…/N`) in
   block, allow and access lists now match; X-Forwarded-For with `[IPv6]:port` is recognised.
