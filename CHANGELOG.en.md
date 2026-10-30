@@ -4,6 +4,18 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- IPv6: thorough check that IPv4 and IPv6 are treated alike. Blocks and limits count IPv6 per /64 (honeypot blocks
+  in PROXY64, password lockout of status pages, honeypot sensors SIP/SNMP); IPv4-mapped networks (`::ffff:…/N`) in
+  block, allow and access lists now match; X-Forwarded-For with `[IPv6]:port` is recognised.
+- PROXY64: with a full address table the DoS protection counts coarser instead of without a limit; home network
+  devices with a global IPv6 address count as home network; Docker containers in IPv6-only networks are reachable.
+- Health checks: IPv6 addresses without brackets for Proxmox VE/PBS, Docker and HTTP checks are recognised
+  correctly; names like `fcbayern.com` no longer count as private targets, `::ffff:10.0.0.1` and similar do.
+- DNS64: upstreams with a link-local address (`fe80::1%eth0`), device setup via an IPv6 address, PTR for the own
+  IPv6 network and AAAA records improved; notice when a fixed bind address covers only IPv4 or IPv6.
+- DynDNS: a fixed IPv6 address written differently (e.g. upper case) no longer causes needless updates.
+- Honeypot64: the own location is determined via IPv6 when there is no IPv4.
+
 ## 0.12.0-alpha.33 – 2026-10-30
 
 - PROXY64: New "Security" tab for blocklists, DoS protection and Honeypot64. "Access lists" now has an allow list and
