@@ -177,6 +177,7 @@ function hp_parse(array $b, int $now): array {
 		$ip = is_string($x['ip'] ?? null) ? $x['ip'] : '';
 		$bin = (strlen($ip) <= 45 AND filter_var($ip, FILTER_VALIDATE_IP)) ? inet_pton($ip) : false;
 		if($bin === false) { hp_bad("$f.ip", "$f.ip is not a valid IP address."); }
+		if(strlen($bin) === 16 AND substr($bin, 0, 12) === str_repeat("\0", 10) . "\xff\xff") { $bin = substr($bin, 12); } // ::ffff:a.b.c.d -> IPv4
 		$kind = $x['kind'] ?? null;
 		if(!is_string($kind) OR !preg_match('/^[a-z0-9-]{1,16}(:[a-z0-9-]{1,16}){1,2}$/', $kind)) { hp_bad("$f.kind", "$f.kind is invalid."); }
 		$svc = $x['service'] ?? null;

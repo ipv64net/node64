@@ -28,7 +28,7 @@ function hpi_alert(string $type, string $html): string { return '<div class="ale
 /** Drossel der Auskunft: eingeloggt je Account, sonst je Client-IP (gleiche Toepfe wie die API). */
 function hpi_limit(): bool {
 	global $hpiUid, $hpiClient;
-	[$ok] = $hpiUid > 0 ? hpr_rl('threat:user:' . $hpiUid, HPR_RL_KEY_CAP, HPR_RL_KEY_REFILL) : hpr_rl('threat:anon:' . $hpiClient, HPR_RL_ANON_CAP, HPR_RL_ANON_REFILL);
+	[$ok] = $hpiUid > 0 ? hpr_rl('threat:user:' . $hpiUid, HPR_RL_KEY_CAP, HPR_RL_KEY_REFILL) : hpr_rl('threat:anon:' . hpr_rl_key($hpiClient), HPR_RL_ANON_CAP, HPR_RL_ANON_REFILL);
 	return $ok;
 }
 
@@ -66,7 +66,7 @@ try {
 				elseif($hpiUid === 0 AND (strlen($form['email']) > 254 OR !filter_var($form['email'], FILTER_VALIDATE_EMAIL))) { $err = hpi_t('Bitte eine gültige E-Mail-Adresse angeben.', 'Please enter a valid e-mail address.'); }
 				else {
 					$since = hpr_dt($now - 86400);
-					$chash = hash('sha256', 'hpr|' . $hpiClient);
+					$chash = hash('sha256', 'hpr|' . hpr_rl_key($hpiClient)); // IPv6 je /64
 					$n1 = (int)hpr_one($pdo, "SELECT COUNT(*) c FROM hp_release_requests WHERE client_hash = :h AND created_at >= :d", array('h' => $chash, 'd' => $since))['c'];
 					$n2 = $hpiUid > 0 ? (int)hpr_one($pdo, "SELECT COUNT(*) c FROM hp_release_requests WHERE userid = :u AND created_at >= :d", array('u' => $hpiUid, 'd' => $since))['c']
 						: (int)hpr_one($pdo, "SELECT COUNT(*) c FROM hp_release_requests WHERE email = :e AND created_at >= :d", array('e' => $form['email'], 'd' => $since))['c'];

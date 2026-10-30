@@ -70,12 +70,26 @@ function hpr_token(): string {
 
 // ---------------------------------------------------------------- Adressen
 
-/** Genau eine IPv4/IPv6-Adresse (kein Netz, keine Zone), normalisiert; sonst null. */
+/** Genau eine IPv4/IPv6-Adresse (kein Netz, keine Zone), normalisiert (::ffff:a.b.c.d -> IPv4); sonst null. */
 function hpr_ip(string $in): ?string {
 	$in = trim($in);
 	if($in === '' OR strlen($in) > 45 OR !preg_match('/^[0-9A-Fa-f:.]+$/', $in) OR !filter_var($in, FILTER_VALIDATE_IP)) { return null; }
 	$b = inet_pton($in);
-	return $b === false ? null : inet_ntop($b);
+	return $b === false ? null : inet_ntop(hpr_unmap($b));
+}
+
+/** Binaerform: IPv4-gemappte IPv6 (::ffff:a.b.c.d) -> IPv4 (4 Byte), sonst unveraendert. */
+function hpr_unmap(string $bin): string {
+	return (strlen($bin) === 16 AND substr($bin, 0, 12) === str_repeat("\0", 10) . "\xff\xff") ? substr($bin, 12) : $bin;
+}
+
+/** Schluessel der Drosseln je Client: IPv4 die Adresse (auch ::ffff:-gemappt), IPv6 das /64 (sonst umgeht ein Wechsel
+ * der Adresse im eigenen Netz das Limit); ungueltig -> Eingabe. */
+function hpr_rl_key(string $ip): string {
+	$b = @inet_pton($ip);
+	if($b === false) { return $ip; }
+	$b = hpr_unmap($b);
+	return strlen($b) === 16 ? inet_ntop(substr($b, 0, 8) . str_repeat("\0", 8)) . '/64' : inet_ntop($b);
 }
 
 /** Adresse in einem der Netze? (gleiche Familie) */
@@ -110,6 +124,7 @@ function hpr_cidr(string $in): ?array {
 	if($ip === null) { return null; }
 	$b = inet_pton($ip); $max = strlen($b) * 8;
 	$len = isset($m[2]) ? (int)$m[2] : $max;
+	if(isset($m[2]) AND strlen($b) === 4 AND strlen((string)@inet_pton($m[1])) === 16) { $len -= 96; } // ::ffff:a.b.c.d/n -> IPv4 /n-96
 	if($len < 0 OR $len > $max) { return null; }
 	$start = ''; $end = '';
 	for($i = 0; $i < strlen($b); $i++) {

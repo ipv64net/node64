@@ -22,7 +22,7 @@ route('GET', '/threat/ip/{ip}', function($p) {
 		authenticate();
 		rl_enforce('threat:user:' . uid(), HPR_RL_KEY_CAP, HPR_RL_KEY_REFILL, 'IP lookups');
 	} else {
-		rl_enforce('threat:anon:' . client_ip(), HPR_RL_ANON_CAP, HPR_RL_ANON_REFILL, 'IP lookups without API key');
+		rl_enforce('threat:anon:' . hpr_rl_key(client_ip()), HPR_RL_ANON_CAP, HPR_RL_ANON_REFILL, 'IP lookups without API key');
 	}
 	$ip = hpr_ip((string)($p['ip'] ?? ''));
 	if($ip === null) { fail(422, 'invalid_ip', 'Give exactly one IPv4 or IPv6 address (no networks, no zone).', array('field' => 'ip')); }

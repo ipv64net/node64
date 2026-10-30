@@ -60,6 +60,11 @@ function net_parse(string $s): ?array
 	if($len < 0 OR $len > $bits) { return null; }
 	$bin = inet_pton($s);
 	if($bin === false) { return null; }
+	// ::ffff:a.b.c.d (IPv4-gemappt) -> IPv4, Praefix -96 (kuerzer als /96 verwerfen)
+	if($v === 6 AND substr($bin, 0, 12) === str_repeat("\0", 10)."\xff\xff") {
+		if($len < 96) { return null; }
+		$v = 4; $bin = substr($bin, 12); $len -= 96;
+	}
 	// Hostbits loeschen
 	$bin = $bin & net_mask($len, strlen($bin));
 	return ['v' => $v, 'bin' => $bin, 'len' => $len];
@@ -108,8 +113,11 @@ $BOGONS = array_map('net_parse', [
 	'0.0.0.0/8','10.0.0.0/8','100.64.0.0/10','127.0.0.0/8','169.254.0.0/16','172.16.0.0/12',
 	'192.0.0.0/24','192.0.2.0/24','192.168.0.0/16','198.18.0.0/15','198.51.100.0/24','203.0.113.0/24',
 	'224.0.0.0/4','240.0.0.0/4',
-	'::/128','::1/128','::ffff:0:0/96','64:ff9b::/96','100::/64','2001:db8::/32','fc00::/7','fe80::/10','ff00::/8',
+	'::/128','::1/128','64:ff9b::/96','100::/64','2001:db8::/32','fc00::/7','fe80::/10','ff00::/8',
 ]);
+// ::ffff:0:0/96 von Hand: net_parse wandelt gemappte Adressen in IPv4 (hier wuerde 0.0.0.0/0 daraus); faengt kuerzere
+// IPv6-Netze, die den gemappten Bereich umfassen
+$BOGONS[] = ['v' => 6, 'bin' => inet_pton('::ffff:0:0'), 'len' => 96];
 function net_is_bogon(array $n): bool
 {
 	global $BOGONS;
