@@ -45,6 +45,8 @@ type ProxmoxParams struct {
 	System   string `json:"system,omitempty"` // nur Anzeige: Clustername bzw. Name des Systems (Gruppierung, auch im Portal)
 	// Kennung des Systems im Cluster (32 hex): die ID ist je Node verschieden, gilt die Kennung, wenn gesetzt
 	SystemUID string `json:"system_uid,omitempty"`
+	// System von Hand gesetzt (Untergruppe im Check-Formular): die Node uebernimmt den Clusternamen nicht mehr
+	SystemCustom bool `json:"system_custom,omitempty"`
 }
 
 // ProxmoxState ist der Stand eines Gasts bzw. Nodes aus der letzten Abfrage (geliefert von Runner.Proxmox).

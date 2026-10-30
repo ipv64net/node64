@@ -44,6 +44,8 @@ const (
 type DockerParams struct {
 	Host   string `json:"host,omitempty"`   // unix:///var/run/docker.sock (Standard), tcp://host:2375, http(s)://...
 	System string `json:"system,omitempty"` // nur Anzeige: Name des Docker-Hosts in der Ueberwachung (Gruppierung, auch im Portal)
+	// System von Hand gesetzt (Untergruppe im Check-Formular): die Node uebernimmt den Namen des Hosts nicht mehr
+	SystemCustom bool `json:"system_custom,omitempty"`
 }
 
 // DefaultDockerHost: NODE64_DOCKER_HOST oder der uebliche Socket.

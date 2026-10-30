@@ -2973,8 +2973,11 @@
       "err_res": "Bitte eine Maschine bzw. einen Container auswählen."
     },
     "sub": {
+      "hint": "Untergruppe in „Proxmox VE“ bzw. „Docker“, z. B. wenn zwei Cluster gleich heißen. Leer = automatisch.",
+      "label": "Untergruppe (System)",
       "node": "Node {name}",
       "other_node": "andere Node",
+      "placeholder": "automatisch: Clustername bzw. Name des Systems",
       "unknown": "System nicht mehr eingerichtet"
     }
   },

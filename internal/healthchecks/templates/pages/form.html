@@ -72,6 +72,11 @@
 						<datalist id="hc-groups">{{range $d.Groups}}<option value="{{.}}">{{end}}</datalist>
 						<div class="form-text">{{.T "hc.group.hint"}}</div>
 					</div>
+					<div class="col-md-6" data-types="proxmox docker">
+						<label class="form-label" for="sys_label">{{.T "hc.sub.label"}}</label>
+						<div class="input-group"><span class="input-group-text"><i class="bi bi-diagram-3"></i></span><input class="form-control" id="sys_label" name="sys_label" value="{{index $f "sys_label"}}" maxlength="100" placeholder="{{.T "hc.sub.placeholder"}}"></div>
+						<div class="form-text">{{.T "hc.sub.hint"}}</div>
+					</div>
 					<div class="col-md-6" data-hide-types="sys:proxmox sys:docker">
 						<label class="form-label" for="tags">{{.T "hc.tags"}}</label>
 						<div class="input-group"><span class="input-group-text"><i class="bi bi-tags"></i></span><input class="form-control" id="tags" name="tags" value="{{index $f "tags"}}" placeholder="prod, web"></div>

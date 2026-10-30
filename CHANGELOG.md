@@ -4,6 +4,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Healthchecks: Proxmox- und Docker-Checks lassen sich beim Bearbeiten von Hand einer anderen Untergruppe zuordnen,
+  z. B. wenn zwei Proxmox-Cluster gleich heißen.
+
 ## 0.12.0-alpha.34 – 2026-10-30
 
 - IPv6: Durchgehende Prüfung auf gleiche Behandlung von IPv4 und IPv6. Sperren und Limits zählen IPv6 je /64

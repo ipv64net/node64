@@ -320,14 +320,14 @@ func (m *Module) pveCheckLabels(ctx context.Context, set *proxmox.SystemSettings
 		switch c.Type {
 		case checks.TypeProxmox:
 			var p checks.ProxmoxParams
-			if json.Unmarshal(c.Params, &p) != nil || p.System == label {
+			if json.Unmarshal(c.Params, &p) != nil || p.System == label || p.SystemCustom {
 				continue
 			}
 			p.System = label
 			raw, _ = json.Marshal(p)
 		case checks.TypeDocker:
 			var p checks.DockerParams
-			if len(c.Params) > 0 && json.Unmarshal(c.Params, &p) != nil || p.System == label {
+			if len(c.Params) > 0 && json.Unmarshal(c.Params, &p) != nil || p.System == label || p.SystemCustom {
 				continue
 			}
 			p.System = label
@@ -946,6 +946,10 @@ func (m *Module) dockerRetarget(ctx context.Context, old, sys *proxmox.System, b
 			continue
 		}
 		dp := checks.DockerParams{System: m.pveSystemLabel(sys)} // Systemname behalten (Gruppierung), auch ohne erfolgreiche Abfrage
+		var prev checks.DockerParams
+		if json.Unmarshal(c.Params, &prev) == nil && prev.SystemCustom { // von Hand gesetzte Untergruppe bleibt
+			dp.System, dp.SystemCustom = prev.System, true
+		}
 		if newHost != checks.DefaultDockerHost() {
 			dp.Host = newHost
 		}

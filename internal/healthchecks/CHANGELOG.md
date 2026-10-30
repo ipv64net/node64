@@ -1,5 +1,12 @@
 # Änderungen – Healthchecks
 
+## 2.48.0 – 2026-10-30
+
+### Neu
+- Proxmox VE und Docker: Beim Bearbeiten eines Checks lässt sich die Untergruppe (System) von Hand setzen, z. B. wenn
+  zwei Proxmox-Cluster gleich heißen. Sie bleibt bei jedem Abruf erhalten und gilt auch im Portal; leer = wieder
+  automatisch (Clustername bzw. Name des Systems).
+
 ## 2.47.1 – 2026-10-30
 
 ### Behoben

@@ -90,6 +90,7 @@ func newDockerModuleBox(t *testing.T, core *store.Store, box *secrets.Box) (*Mod
 		T:        func(r *http.Request, key string, args ...any) string { return key },
 		Lang:     func(*http.Request) string { return "de" },
 		Timezone: func(*http.Request) *time.Location { return time.UTC },
+		Actor:    func(*http.Request) string { return "test" },
 		Flash: func(w http.ResponseWriter, r *http.Request, kind, text string) {
 			w.Header().Add("X-Flash", kind+":"+text)
 		},

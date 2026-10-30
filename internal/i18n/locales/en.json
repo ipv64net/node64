@@ -2973,8 +2973,11 @@
       "err_res": "Please choose a machine or container."
     },
     "sub": {
+      "hint": "Subgroup in “Proxmox VE” or “Docker”, e.g. when two clusters have the same name. Empty = automatic.",
+      "label": "Subgroup (system)",
       "node": "Node {name}",
       "other_node": "other node",
+      "placeholder": "automatic: cluster name or name of the system",
       "unknown": "system no longer set up"
     }
   },
