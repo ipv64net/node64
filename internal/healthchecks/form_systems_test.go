@@ -209,3 +209,59 @@ func TestDockerPauseChecks(t *testing.T) {
 		t.Fatalf("host on: check still paused: %+v", c)
 	}
 }
+
+// „Alle als Check aufnehmen“: jeder Container des letzten Abrufs ohne nomonitor bekommt einen Check, schon gefuehrte
+// bleiben, ein zweiter Klick legt nichts doppelt an.
+func TestAsCheckAll(t *testing.T) {
+	fakeContainers(t, dockerHost, nil)
+	fakeDockerSource(t)
+	m, srv, last, _ := newDockerModuleRec(t, pveCore(t))
+	ctx := context.Background()
+	dockerAddLocal(t, srv)
+	id := dockerSysID(t, m)
+	pvePollNow(t, m, id)
+	act := "/healthchecks/proxmox/system/" + strconv.FormatInt(id, 10)
+	dockerPost(t, srv, act+"/ascheck", url.Values{"key": {"docker/web"}, "on": {"1"}})
+	s := m.pveLast(id)
+	want := 0
+	for i := range s.Resources {
+		if !s.Resources[i].Excluded() && s.Resources[i].Type != "node" {
+			want++
+		}
+	}
+	if want < 2 {
+		t.Fatalf("test needs at least 2 containers: %d", want)
+	}
+	body := dockerGetPage(t, srv, dockerSysPath(id))
+	if d := (*last).(dockerData); d.Add != want-1 || !strings.Contains(body, act+"/ascheck-all") {
+		t.Fatalf("page: add %d (want %d)", d.Add, want-1)
+	}
+	set, _ := m.pve.st.Settings(ctx, id)
+	webTok := set.Item("docker/web").CheckToken
+	count := func() int {
+		set, _ := m.pve.st.Settings(ctx, id)
+		n := 0
+		for i := range s.Resources {
+			if it := set.Item(s.Resources[i].Key()); it != nil && it.AsCheck && it.CheckToken != "" {
+				n++
+			}
+		}
+		return n
+	}
+	if _, loc := dockerPost(t, srv, act+"/ascheck-all", url.Values{"scope": {"guests"}, "back": {dockerSysPath(id)}}); loc != dockerSysPath(id) || count() != want {
+		t.Fatalf("all: %q %d/%d", loc, count(), want)
+	}
+	set, _ = m.pve.st.Settings(ctx, id)
+	if set.Item("docker/web").CheckToken != webTok {
+		t.Fatal("existing check replaced")
+	}
+	list, _ := m.st.Checks(ctx)
+	dockerPost(t, srv, act+"/ascheck-all", url.Values{"scope": {"guests"}})
+	if again, _ := m.st.Checks(ctx); len(again) != len(list) {
+		t.Fatalf("second click: %d -> %d checks", len(list), len(again))
+	}
+	dockerGetPage(t, srv, dockerSysPath(id))
+	if d := (*last).(dockerData); d.Add != 0 {
+		t.Fatalf("after: add %d", d.Add)
+	}
+}

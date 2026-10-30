@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Healthchecks: Bei Proxmox VE und Docker nimmt ein Knopf alle Gäste bzw. Container eines Systems auf einmal als
+  Check auf.
 - PROXY64: Mit Log-Level Debug steht im Zugriffs-Log alles ungebremst – auch Hosts ohne Einzel-Log, unbekannte
   Namen, TLS-Fehler und Stream-Verbindungen.
 - Honeypot64: Zugriffe von der eigenen öffentlichen IP werden nicht mehr gemeldet; eigenes Ausprobieren landet so

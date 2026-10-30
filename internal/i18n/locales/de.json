@@ -4839,7 +4839,12 @@
       "added": "Check angelegt.",
       "removed": "Check entfernt.",
       "active_hint": "Wird als Check geführt: Ausfall und Entwarnung meldet der Check (mit seinen Kanälen), Neustart und Schwellen meldet Proxmox VE.",
-      "form_hint": "System und Gast dieses Checks legst du unter Proxmox VE fest."
+      "form_hint": "System und Gast dieses Checks legst du unter Proxmox VE fest.",
+      "all": "Alle als Check aufnehmen ({count})",
+      "all_confirm": "{count} Einträge auf einmal als Check aufnehmen? Jeder bekommt einen eigenen Check mit den Kanälen der Regeln.",
+      "all_added": "{count} Checks angelegt.",
+      "all_none": "Alle Einträge werden schon als Check geführt.",
+      "all_partial": "{added} Checks angelegt, {failed} nicht: {error}"
     },
     "rule": {
       "crashed": "Absturz (qmpstatus)",

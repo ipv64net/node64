@@ -33,6 +33,7 @@ func (m *Module) pveRoutes(mux *http.ServeMux, page func(http.HandlerFunc) http.
 	mux.Handle("POST "+pvePath+"/system/{id}/toggle", page(m.pagePVEToggle))
 	mux.Handle("POST "+pvePath+"/system/{id}/settings", page(m.pagePVESettings))
 	mux.Handle("POST "+pvePath+"/system/{id}/ascheck", page(m.pagePVEAsCheck))
+	mux.Handle("POST "+pvePath+"/system/{id}/ascheck-all", page(m.pagePVEAsCheckAll))
 	mux.Handle("POST "+pvePath+"/system/{id}/ack", page(m.pagePVEAck))
 	mux.Handle("GET "+pvePath+"/system/{id}/res/{type}/{name}", page(m.pagePVEResource))
 }
@@ -430,6 +431,8 @@ type pveSystemData struct {
 	DS        []pbsDSRow    // Proxmox Backup Server: Datastores (nur Anzeige)
 	Storages  []pveStoreRow // Proxmox VE: Speicher (nur Anzeige)
 	PBS       *proxmox.PBSInfo
+	AddNodes  int // Nodes bzw. Gaeste, die noch nicht als Check gefuehrt werden (Knopf „alle aufnehmen“)
+	AddGuests int
 }
 
 // pbsDSRow ist ein Datastore eines PBS in der Tabelle (Farben nach den Regeln „Datastore belegt ab“ und „voll in
@@ -578,13 +581,20 @@ func (m *Module) pagePVESystem(w http.ResponseWriter, r *http.Request) {
 		for _, res := range d.Snap.Resources {
 			row := pveRow(sys.ID, res, d.Settings)
 			row.Spark = sparks[row.Key]
+			add := !row.Excluded && !row.AsCheck
 			if res.Type == proxmox.TypeNode {
+				if add {
+					d.AddNodes++
+				}
 				row.GuestsOn = perNode[res.Node]
 				d.NodeRows = append(d.NodeRows, row)
 				d.NodeNames = append(d.NodeNames, res.Node)
 				continue
 			}
 			d.Total++
+			if add {
+				d.AddGuests++
+			}
 			if pveMatch(row, d.Filter) {
 				d.GuestRows = append(d.GuestRows, row)
 			}
@@ -1144,6 +1154,56 @@ func (m *Module) pagePVEAsCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		m.g.Flash(w, r, "success", m.g.T(r, map[bool]string{true: "pve.check.added", false: "pve.check.removed"}[on]))
+	}
+	http.Redirect(w, r, back, http.StatusSeeOther)
+}
+
+// pagePVEAsCheckAll nimmt alle Nodes (scope=nodes) bzw. alle Gaeste und Container (sonst) des letzten Abrufs als
+// Check auf, die es noch nicht sind (ohne Vorlagen und nomonitor) - wie einzeln ueber pveSetAsCheck.
+func (m *Module) pagePVEAsCheckAll(w http.ResponseWriter, r *http.Request) {
+	sys := m.pveSystemOf(w, r)
+	if sys == nil {
+		return
+	}
+	back := r.PostFormValue("back")
+	if !(strings.HasPrefix(back, pvePath+"/") || strings.HasPrefix(back, dockerPath)) || strings.Contains(back, "//") {
+		back = pveKeyPath(sys.Kind, sys.ID, "")
+	}
+	nodes := r.PostFormValue("scope") == "nodes"
+	set, _ := m.pve.st.Settings(r.Context(), sys.ID)
+	added, failed := 0, 0
+	var firstErr error
+	if s := m.pveLast(sys.ID); s != nil {
+		for i := range s.Resources {
+			res := &s.Resources[i]
+			if res.Excluded() || (res.Type == proxmox.TypeNode) != nodes {
+				continue
+			}
+			if it := set.Item(res.Key()); it != nil && it.AsCheck && it.CheckToken != "" {
+				continue
+			}
+			if err := m.pveSetAsCheck(r, sys, res.Key(), true); err != nil {
+				failed++
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			added++
+		}
+	}
+	switch {
+	case failed > 0:
+		msg := firstErr.Error()
+		var fe *proxmox.FieldError
+		if errors.As(firstErr, &fe) {
+			msg = m.g.T(r, fe.Key)
+		}
+		m.g.Flash(w, r, "warning", m.g.T(r, "pve.check.all_partial", "added", added, "failed", failed, "error", msg))
+	case added == 0:
+		m.g.Flash(w, r, "info", m.g.T(r, "pve.check.all_none"))
+	default:
+		m.g.Flash(w, r, "success", m.g.T(r, "pve.check.all_added", "count", added))
 	}
 	http.Redirect(w, r, back, http.StatusSeeOther)
 }

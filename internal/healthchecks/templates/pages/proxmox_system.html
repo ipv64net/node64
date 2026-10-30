@@ -49,7 +49,7 @@ pveum acl modify / --tokens '{{$d.Sys.TokenID}}' --roles PVEAuditor</code></pre>
 
 {{if $d.NodeRows}}
 <div class="card mb-3">
-	<div class="card-header"><i class="bi bi-hdd-stack text-primary"></i> {{.T "pve.nodes"}} <span class="badge text-bg-secondary">{{$d.NodesOnline}}/{{$d.Nodes}}</span></div>
+	<div class="card-header">{{if $d.AddNodes}}<form method="post" action="{{$d.Path}}/ascheck-all" class="float-end m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="scope" value="nodes"><input type="hidden" name="back" value="{{$d.Path}}"><button class="btn btn-sm btn-outline-primary py-0" type="submit" data-confirm="{{$.T "pve.check.all_confirm" "count" $d.AddNodes}}"><i class="bi bi-heart-pulse"></i> {{$.T "pve.check.all" "count" $d.AddNodes}}</button></form>{{end}}<i class="bi bi-hdd-stack text-primary"></i> {{.T "pve.nodes"}} <span class="badge text-bg-secondary">{{$d.NodesOnline}}/{{$d.Nodes}}</span></div>
 	<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards hc-table">
 		<thead><tr><th>{{.T "common.name"}}</th><th>{{.T "common.status"}}</th><th class="text-end">CPU</th><th class="text-end">RAM</th><th class="text-end">Disk</th>{{if $d.Sys.IsPBS}}<th>{{.T "pve.net"}}</th>{{end}}<th>{{.T "pve.uptime"}}</th><th>{{.T "pve.cpu_1h"}}</th>{{if not $d.Sys.IsPBS}}<th class="text-end">{{.T "pve.guests"}}</th>{{end}}<th class="text-end">{{.T "pve.as_check"}}</th></tr></thead>
 		<tbody>
@@ -126,7 +126,7 @@ pveum acl modify / --tokens '{{$d.Sys.TokenID}}' --roles PVEAuditor</code></pre>
 	{{else}}<div class="card-body small text-body-secondary">{{.T "pve.storage.empty"}}</div>{{end}}
 </div>
 <div class="card mb-3">
-	<div class="card-header"><i class="bi bi-boxes text-primary"></i> {{.T "pve.guests"}} <span class="badge text-bg-secondary">{{len $d.GuestRows}}{{if ne (len $d.GuestRows) $d.Total}}/{{$d.Total}}{{end}}</span></div>
+	<div class="card-header">{{if $d.AddGuests}}<form method="post" action="{{$d.Path}}/ascheck-all" class="float-end m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="scope" value="guests"><input type="hidden" name="back" value="{{$d.Path}}"><button class="btn btn-sm btn-outline-primary py-0" type="submit" data-confirm="{{$.T "pve.check.all_confirm" "count" $d.AddGuests}}"><i class="bi bi-heart-pulse"></i> {{$.T "pve.check.all" "count" $d.AddGuests}}</button></form>{{end}}<i class="bi bi-boxes text-primary"></i> {{.T "pve.guests"}} <span class="badge text-bg-secondary">{{len $d.GuestRows}}{{if ne (len $d.GuestRows) $d.Total}}/{{$d.Total}}{{end}}</span></div>
 	<div class="card-body pb-0">
 		<form method="get" action="{{$d.Path}}" class="row g-2 mb-2 align-items-end">
 			<div class="col-12 col-md-4"><input class="form-control form-control-sm" type="search" name="q" value="{{$f.q}}" placeholder="{{.T "common.search"}} …"></div>

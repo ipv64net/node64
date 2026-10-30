@@ -72,6 +72,7 @@
 	{{if $d.All}}{{.T "hc.docker.empty_filter"}}{{else}}{{.T "hc.docker.empty"}}{{end}}
 </div></div>
 {{else}}
+{{if and $d.Sys $d.Add}}<div class="d-flex justify-content-end mb-2"><form method="post" action="{{$d.Act}}/ascheck-all" class="m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="scope" value="guests"><input type="hidden" name="back" value="{{or $d.Path "/healthchecks/docker"}}"><button class="btn btn-sm btn-outline-primary" type="submit" data-confirm="{{.T "pve.check.all_confirm" "count" $d.Add}}"><i class="bi bi-heart-pulse"></i> {{.T "pve.check.all" "count" $d.Add}}</button></form></div>{{end}}
 <div class="card mb-3">
 	<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards hc-table" id="docker-table">
 		<thead><tr><th>{{.T "hc.docker.container"}}</th><th>{{.T "hc.docker.state"}}</th><th class="text-end">CPU</th><th class="text-end">RAM</th><th class="d-none d-lg-table-cell">{{.T "pve.net"}}</th><th class="d-none d-md-table-cell">{{.T "pve.uptime"}}</th><th class="d-none d-lg-table-cell">{{.T "pve.cpu_1h"}}</th><th>{{.T "hc.docker.check"}}</th><th class="text-end">{{.T "pve.as_check"}}</th></tr></thead>

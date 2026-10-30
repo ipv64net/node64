@@ -1,5 +1,12 @@
 # Changes – Healthchecks
 
+## 2.49.0 – 2026-10-30
+
+### New
+- Proxmox VE, PBS and Docker: button “Add all as checks” above the nodes, guests or containers of a system. It creates
+  a check at once for every entry that is not kept as a check yet (like “as check” one by one; templates and
+  `nomonitor` are left out). It shows how many there are and asks first.
+
 ## 2.48.0 – 2026-10-30
 
 ### New
