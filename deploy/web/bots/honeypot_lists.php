@@ -14,7 +14,8 @@
  *   ipv64_usernames.txt               Benutzernamen (bis 10 000)
  *   ipv64_bad_useragents.txt          User-Agents (bis 2 000)       ipv64_bad_useragents.nginx.map  map $http_user_agent $ipv64_bad_ua
  *   ipv64_attack_paths.txt            Pfade (bis 5 000)             ipv64_attack_paths.nginx.conf   location ~ "^(?:...)$" { return 403; }
- *   ipv64_ja4.txt                     JA4 fuer die CDN64-Server (bis 1 000, ohne Praefix, abzueglich CDN64_JA4_EXCLUDE, # = Kommentar)
+ *   ipv64_ja4.txt                     JA4 fuer die CDN64-Server (bis 1 000, ohne Praefix, abzueglich CDN64_JA4_EXCLUDE und
+ *                                     CDN64_JA4_BROWSER_CIPHERS, # = Kommentar)
  * Inhalt: hp_sample_top (honeypot/hp_stats_lib.php): 30 Tage, nur ab N Accounts, bereinigt (keine Steuer-/Bidi-Zeichen,
  * keine E-Mail-Adressen, keine zufaelligen/sehr langen Strings, keine Browser-User-Agents, keine Allerweltspfade).
  * Danach: Eintraege in index.json unter "data" (honeypot_lists_index.php) und hp_sample_contrib aelter als 35 Tage loeschen.
@@ -52,6 +53,10 @@ const CDN64_JA4_EXCLUDE = array(
 	// Java HttpClient 21, Chromium 124 (headless)
 	't13d311200_1d947a95fc68_7e1102d2036b', 't13d3113h2_1d947a95fc68_7e1102d2036b', 't13d1516h2_8daaf6152771_02713d6af862',
 );
+// Cipher-Teil (Mitte) des JA4 der Browser: jeder JA4 damit faellt weg, egal welche Version und Erweiterungen. Ein JA4
+// erkennt die Software, keinen Angreifer - Browser (und Headless-Browser) sind nie sperrbar. Gemessen 2026-10-30 mit
+// curl_cffi: Chrome 116-136, Edge, Chromium (auch headless) 8daaf6152771; Firefox 133/135 5b57614c22b0; Safari 15.5-18 (macOS, iOS) a09f3c656075.
+const CDN64_JA4_BROWSER_CIPHERS = array('8daaf6152771', '5b57614c22b0', 'a09f3c656075');
 
 $OUT = realpath(__DIR__ . '/../blocklists');
 $dry = false; $extern = false;
@@ -145,7 +150,8 @@ try {
 	// JA4 fuer die CDN64-Server (docs/PLAN-CDN64-SCHUTZ.md): nur ja4:-Eintraege der Rangliste, ohne Praefix
 	$ja4 = array();
 	foreach(hps_top($pdo, 'fp', 1000) as $x) { if(str_starts_with($x['value'], 'ja4:')) { $ja4[substr($x['value'], 4)] = true; } }
-	$ja4 = array_values(array_diff(array_map('strval', array_keys($ja4)), CDN64_JA4_EXCLUDE));
+	$ja4 = array_values(array_filter(array_diff(array_map('strval', array_keys($ja4)), CDN64_JA4_EXCLUDE),
+		fn($j) => !in_array(explode('_', $j)[1] ?? '', CDN64_JA4_BROWSER_CIPHERS, true)));
 	hpl_write("$OUT/ipv64_ja4.txt", sprintf($head, 'JA4 TLS fingerprints of attack tools (CDN64)') . "# One JA4 per line, most seen first, from several independent accounts in 30 days\n"
 		. ($ja4 ? implode("\n", $ja4) . "\n" : ''));
 

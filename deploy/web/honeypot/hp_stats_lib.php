@@ -25,6 +25,7 @@ const HPS_DAYS        = 30;      // Fenster fuer Ranglisten, Schwelle und Listen
 const HPS_TTL         = 600;     // Cache: hoechstens alle 10 Minuten neu rechnen
 const HPS_CAP_DAY     = 10000;   // je Account, Tag und Probe hoechstens so viele Zaehler
 const HPS_ACTIVE_LOW  = 20;      // unter so vielen aktiven Accounts (Meldung in 7 Tagen) Schwelle 2, sonst 3
+const HPS_FP_MIN      = 3;       // Fingerabdruecke (JA4/HASSH) immer ab 3 Accounts: erkennen Software, keinen Angreifer
 const HPS_TOP_PUBLIC  = 10;      // Ueberblick (alle)
 const HPS_TOP_FULL    = 100;     // volle Seite (Klassen ausser Standard)
 const HPS_KEEP        = array('pass' => 10000, 'user' => 10000, 'path' => 5000, 'ua' => 2000, 'fp' => 1000); // Eintraege je Rangliste
@@ -126,7 +127,7 @@ function hps_rebuild_top(PDO $pdo, int $n, int $now): array {
 		// CAST AS BINARY: Gross-/Kleinschreibung und Leerzeichen am Ende unterscheiden (die Spalten sind _general_ci)
 		$rows = hps_all($pdo, "SELECT CAST(s.`$col` AS BINARY) t, SUM(LEAST(k.cnt, " . HPS_CAP_DAY . ")) e, COUNT(DISTINCT k.userid) a, MAX(s.last_seen) ls
 			FROM hp_sample_contrib k JOIN `$tab` s ON s.day = k.day AND s.key_hash = k.key_hash
-			WHERE k.kind = :k AND k.day >= :d GROUP BY t HAVING a >= " . (int)$n . " ORDER BY e DESC, a DESC, t LIMIT " . (HPS_KEEP[$kind] * 3),
+			WHERE k.kind = :k AND k.day >= :d GROUP BY t HAVING a >= " . ($kind === 'fp' ? max($n, HPS_FP_MIN) : $n) . " ORDER BY e DESC, a DESC, t LIMIT " . (HPS_KEEP[$kind] * 3),
 			array('k' => $ck, 'd' => $from));
 		$keep = array();
 		foreach($rows as $r) {
