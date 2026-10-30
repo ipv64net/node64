@@ -276,7 +276,7 @@ function c64o_dns_on(array $h, array $d): bool {
 		}
 	}
 	$ok = true;
-	foreach(array('A', 'AAAA') as $t) { if(!quiet(fn() => do_zone_update($GLOBALS['pdo'], $u, $sid, $t, (string)C64O_TTL, $p))) { $ok = false; } }
+	foreach(array('A', 'AAAA') as $t) { if(!c64o_zone($u, $sid, $t, $p, $h['fqdn'])) { $ok = false; } }
 	return $ok;
 }
 
@@ -300,38 +300,36 @@ function c64o_dns_off(array $h): bool {
 	return c64o_edges_off($h, $edges, true);
 }
 
+/** do_zone_update fuer einen Namen und Typ; lehnt PowerDNS ab, steht seine Antwort (Ausgabe von zone_update) im Fehlerlog. */
+function c64o_zone(int $u, int $sid, string $t, string $p, string $fqdn): bool {
+	ob_start();
+	try { $ok = (bool)do_zone_update($GLOBALS['pdo'], $u, $sid, $t, (string)C64O_TTL, $p); }
+	catch(Throwable $e) { $ok = false; echo $e->getMessage(); }
+	$out = trim((string)ob_get_clean());
+	if(!$ok) { error_log("cdn64o: DNS $fqdn $t failed: " . substr($out, 0, 300)); }
+	return $ok;
+}
+
 /**
- * Server-Eintraege eines Namens entfernen und an PowerDNS geben ($recs: Zeilen mit record_id, type, content). Bleibt fuer
- * einen Typ ein aktiver Eintrag (eigene Originale, anderer Server), ersetzt do_zone_update das RRset (ein Aufruf je
- * Typ); bleibt keiner, ersetzt do_zone_update nichts und die Server blieben bei PowerDNS stehen - dann je Eintrag
- * del_record_name wie die API, das auch das letzte RRset entfernt. Ein Eintrag, dessen Entfernen PowerDNS ablehnt,
- * bleibt samt Zuordnung fuer den naechsten Versuch (Rueckgabe false). $all: auch Typen ohne Server-Eintrag an PowerDNS
- * (nach dem Wiederaktivieren der Originale).
+ * Server-Eintraege eines Namens entfernen und an PowerDNS geben ($recs: Zeilen mit record_id, type, content), ein
+ * do_zone_update je Typ: es ersetzt das RRset durch die verbleibenden aktiven Eintraege (eigene Originale, anderer
+ * Server) bzw. loescht es, wenn keiner bleibt. Lehnt PowerDNS ab, Rueckgabe false; die Zeilen sind dann schon weg, ein
+ * erneuter Aufruf schickt den Stand noch einmal. $all: auch Typen ohne Server-Eintrag an PowerDNS (nach dem
+ * Wiederaktivieren der Originale bzw. beim Neuversuch).
  */
 function c64o_edges_off(array $h, array $recs, bool $all): bool {
 	$u = (int)$h['userid']; $sid = (int)$h['subdomain_id']; $p = $h['praefix'];
-	$d = q1("SELECT * FROM subdomains WHERE id = :i", array('i' => $sid));
-	$gone = function(array $r) use ($h): void {
-		q("DELETE FROM subdomain_records WHERE id = :i AND cdn_tmp = :m", array('i' => $r['record_id'], 'm' => C64O_CDN_TMP));
-		q("DELETE FROM cdn64o_records WHERE host_id = :h AND record_id = :r", array('h' => $h['id'], 'r' => $r['record_id']));
-	};
-	foreach($recs as $r) { if($r['type'] === null) { $gone($r); } } // Zeile gibt es nicht mehr: nur die Zuordnung
 	$ok = true;
 	foreach(array('A', 'AAAA') as $t) {
-		$mine = array_values(array_filter($recs, fn($r) => $r['type'] === $t));
-		$ids = array_map(fn($r) => (int)$r['record_id'], $mine);
-		$rest = (int)(q1("SELECT COUNT(*) c FROM subdomain_records WHERE subdomain_id = :s AND praefix = :p AND type = :t AND COALESCE(deactivated, 0) = 0"
-			. ($ids ? " AND id NOT IN (" . implode(',', $ids) . ")" : ""), array('s' => $sid, 'p' => $p, 't' => $t))['c'] ?? 0);
-		if($rest > 0) {
-			if(!$mine AND !$all) { continue; }
-			foreach($mine as $r) { $gone($r); }
-			if(!quiet(fn() => do_zone_update($GLOBALS['pdo'], $u, $sid, $t, (string)C64O_TTL, $p))) { $ok = false; }
-			continue;
-		}
+		$mine = array_filter($recs, fn($r) => $r['type'] === $t);
 		foreach($mine as $r) {
-			$res = $d !== null ? quiet(fn() => del_record_name($GLOBALS['pdo'], $u, domain_name($d), $p, $t, $r['content'])) : null;
-			if((string)$res === '1') { $gone($r); } else { $ok = false; }
+			q("DELETE FROM subdomain_records WHERE id = :i AND cdn_tmp = :m", array('i' => $r['record_id'], 'm' => C64O_CDN_TMP));
+			q("DELETE FROM cdn64o_records WHERE host_id = :h AND record_id = :r", array('h' => $h['id'], 'r' => $r['record_id']));
 		}
+		if(($mine OR $all) AND !c64o_zone($u, $sid, $t, $p, $h['fqdn'])) { $ok = false; }
+	}
+	foreach($recs as $r) { // Zeile gibt es nicht mehr: nur die Zuordnung
+		if($r['type'] === null) { q("DELETE FROM cdn64o_records WHERE host_id = :h AND record_id = :r", array('h' => $h['id'], 'r' => $r['record_id'])); }
 	}
 	return $ok;
 }
@@ -392,7 +390,7 @@ function c64o_edge_dns(array $e, bool $on): void {
 					array('s' => $sid, 'u' => $u, 'dn' => domain_name($d), 'p' => $p, 'c' => $ip, 't' => C64O_TTL, 'ty' => $type, 'k' => token32(), 'm' => C64O_CDN_TMP));
 				q("INSERT INTO cdn64o_records (host_id, record_id, role) VALUES (:h, :r, 'edge')", array('h' => $h['id'], 'r' => $GLOBALS['pdo']->lastInsertId()));
 			}
-			foreach(array('A', 'AAAA') as $t) { quiet(fn() => do_zone_update($GLOBALS['pdo'], $u, $sid, $t, (string)C64O_TTL, $p)); }
+			foreach(array('A', 'AAAA') as $t) { c64o_zone($u, $sid, $t, $p, $h['fqdn']); }
 		} else {
 			// war dieser Server der letzte Eintrag eines Typs (anderer noch ausgetragen), entfernt c64o_edges_off das RRset
 			$recs = qa("SELECT r.record_id, s.type, s.content FROM cdn64o_records r JOIN subdomain_records s ON s.id = r.record_id
