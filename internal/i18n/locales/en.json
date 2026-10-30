@@ -4717,6 +4717,8 @@
     "deleted": "Proxmox system deleted.",
     "not_found": "Proxmox system not found.",
     "version": "Version",
+    "update_hint": "Update available: installed {installed}, available {latest}. Just a hint, no notification.",
+    "update_major_hint": "New major version available: installed {installed}, available {latest}. Just a hint, no notification.",
     "cluster": "Cluster",
     "single": "single node",
     "quorum_ok": "quorum",

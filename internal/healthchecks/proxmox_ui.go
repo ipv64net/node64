@@ -56,6 +56,7 @@ type pveSysRow struct {
 	CPUCores    float64 // belegte Kerne der Nodes (online)
 	CPUMax      float64
 	Mem, MemMax int64
+	Update      *verUpdate // neuere Version von Proxmox VE bzw. Docker (nur Hinweis, latest.go)
 }
 
 // CPUText: belegte CPU bezogen auf die Kerne (Nodes bzw. Docker-Host), "" ohne Werte.
@@ -268,6 +269,7 @@ func (m *Module) pveSysView(ctx context.Context, sys *proxmox.System) pveSysRow 
 		return row
 	}
 	row.State = "ok"
+	row.Update = latestUpdate(sys.Kind, s.Version)
 	for _, r := range s.Resources {
 		x := pveRow(sys.ID, r, set)
 		if r.Type == proxmox.TypeNode {

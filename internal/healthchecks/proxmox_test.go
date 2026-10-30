@@ -710,6 +710,13 @@ func TestPVEPagesAndWizard(t *testing.T) {
 	if code != 200 || !strings.Contains(body, `href="`+sp+`"`) || !strings.Contains(body, "pve.sys_state.warn") || !strings.Contains(body, "8.2.4") || !strings.Contains(body, "pve.quorum_ok") {
 		t.Fatalf("overview: %s", body)
 	}
+	if strings.Contains(body, "bi-arrow-up-circle") { // neueste Version unbekannt: kein Hinweis
+		t.Fatalf("update badge without known version: %s", body)
+	}
+	latestSet(t, "pve/8", "8.4.14") // neuere Version in der eigenen Linie: nur das kleine Badge
+	if _, body := pveGet(t, srv, "/healthchecks/proxmox"); !strings.Contains(body, "bi-arrow-up-circle") || !strings.Contains(body, "8.4.14") || !strings.Contains(body, "pve.update_hint") {
+		t.Fatalf("update badge: %s", body)
+	}
 	for _, want := range []string{`id="pve-kpi"`, "pve.kpi.nodes", "pve.kpi.load", "CPU "} { // Kacheln ueber alle Systeme
 		if !strings.Contains(body, want) {
 			t.Fatalf("overview kpi: %q missing", want)

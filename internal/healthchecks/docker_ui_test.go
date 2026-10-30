@@ -467,6 +467,11 @@ func TestDockerMonitorLive(t *testing.T) {
 			t.Errorf("page lacks %q", s)
 		}
 	}
+	// Uebersicht: neuere Docker-Version bekannt -> nur das kleine Badge an der Version
+	latestSet(t, "docker", "28.5.1")
+	if ov := dockerGetPage(t, srv, "/healthchecks/docker"); !strings.Contains(ov, "Docker 27.3.1") || !strings.Contains(ov, "bi-arrow-up-circle") || !strings.Contains(ov, "28.5.1") || !strings.Contains(ov, "pve.update_major_hint") {
+		t.Errorf("overview update badge: %s", ov)
+	}
 
 	// Containerseite
 	body = dockerGetPage(t, srv, fmt.Sprintf("/healthchecks/docker/system/%d/c/cache", id))
