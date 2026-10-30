@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 0.12.0-alpha.36 – 2026-10-30
+
 - Honeypot64: New traps for ADB, Modbus, Siemens S7 and BACnet (read only, reply never larger than the request).
 - Notifications: SecNtfy is now called “IPv64 App”; you only enter the device token, the server is fixed.
 - Healthchecks: Own channels for a single VM, container or node are saved again, even if the field still said
