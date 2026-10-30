@@ -1,7 +1,7 @@
 <?php
 /**
  * IPv64.net – Wochenbericht: einmal pro Woche eine Mail je Account mit dem Stand seiner Dienste (Domains/DynDNS,
- * Healthchecks 2.0, CDN64, Cloud Router, Konto). Abschaltbar in den Kontoeinstellungen (users.weekly_report, Standard
+ * Healthchecks 2.0, CDN64 samt Schutz-Zahlen, Honeypot64, Cloud Router, Konto). Abschaltbar in den Kontoeinstellungen (users.weekly_report, Standard
  * an) und per Ein-Klick-Abmeldung (List-Unsubscribe). Verteilt ueber die Woche: jeder Account hat einen festen Termin
  * (Wochentag und Stunde zwischen 6 und 21 Uhr), der Cron (weekly_report/cron.php ueber bots/honeypot_cron.php, stuendlich)
  * schickt allen, deren Termin in dieser Woche erreicht ist und die noch nichts bekommen haben.
@@ -84,7 +84,7 @@ function wr_collect(PDO $pdo, int $userid, int $now): ?array {
 	$d = array('userid' => $userid, 'email' => (string)$u['email'], 'name' => trim((string)($u['username'] ?? '')),
 		'lang' => (($u['weekly_report_lang'] ?? 'de') === 'en') ? 'en' : 'de', 'from' => $since, 'to' => $now, 'week' => wr_week($now),
 		'class' => (string)($cls['name'] ?? ''), 'valid_until' => (string)($u['class_valid_until'] ?? ''), 'class_id' => (int)$u['user_class'],
-		'domains' => null, 'hc' => null, 'cdn' => null, 'vpn' => null, 'issues' => array(), 'errors' => array());
+		'domains' => null, 'hc' => null, 'cdn' => null, 'hp' => null, 'vpn' => null, 'issues' => array(), 'errors' => array());
 	$lim = function(string $k) use ($cls) { return (int)($cls[$k] ?? 0); };
 
 	// Konto: Klasse laeuft bald ab (bezahlte Klassen)
@@ -188,6 +188,11 @@ function wr_collect(PDO $pdo, int $userid, int $now): ?array {
 			$st = $pdo->prepare("SELECT kind, COUNT(*) n FROM cdn64o_events WHERE userid = :u AND time >= :s GROUP BY kind");
 			$st->execute(array('u' => $userid, 's' => date('Y-m-d H:i:s', $since)));
 			foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) { $ev[$r['kind']] = (int)$r['n']; }
+			// Schutz-Zaehler der CDN64-Server (wie GET /cdn64o/protection und Node64 "CDN64 Statistik")
+			$st = $pdo->prepare("SELECT COALESCE(SUM(blocked_list), 0) `list`, COALESCE(SUM(blocked_acl), 0) acl, COALESCE(SUM(blocked_flood + rejected), 0) overload,
+				COALESCE(SUM(blocked_waf), 0) waf, COALESCE(SUM(blocked_ja4), 0) ja4, COALESCE(SUM(conns), 0) conns FROM cdn64o_traffic WHERE userid = :u AND day >= :d");
+			$st->execute(array('u' => $userid, 'd' => date('Y-m-d', $since)));
+			$prot = array_map('intval', $st->fetch(PDO::FETCH_ASSOC) ?: array());
 			$rows = array(); $weekB = 0.0; $weekR = 0; $blocked = 0;
 			foreach ($hosts as $h) {
 				$t = $tw[(int)$h['id']] ?? array(0.0, 0);
@@ -198,11 +203,31 @@ function wr_collect(PDO $pdo, int $userid, int $now): ?array {
 			}
 			usort($rows, function($a, $b) { return ($a['state'] === 'blocked' ? 0 : 1) <=> ($b['state'] === 'blocked' ? 0 : 1) ?: $b['bytes'] <=> $a['bytes']; });
 			$d['cdn'] = array('rows' => $rows, 'week_bytes' => $weekB, 'week_requests' => $weekR, 'month_bytes' => $monthB, 'limit_bytes' => $limitB,
-				'tunnels_on' => $tun[0], 'tunnels' => $tun[1], 'events' => $ev, 'blocked' => $blocked);
+				'tunnels_on' => $tun[0], 'tunnels' => $tun[1], 'events' => $ev, 'blocked' => $blocked, 'prot' => $prot);
 			if ($blocked > 0) { $d['issues'][] = array('cdn_blocked', $blocked); }
 			elseif ($limitB > 0 && $monthB >= 0.8 * $limitB) { $d['issues'][] = array('cdn_traffic', (int)round(100 * $monthB / $limitB)); }
 		}
 	} catch (Throwable $e) { $d['errors'][] = 'cdn64: ' . $e->getMessage(); }
+
+	// Honeypot64: nur mit einem Sensor, der in den 7 Tagen gemeldet hat (Zeiten in hp_* sind UTC)
+	try {
+		$st = $pdo->prepare("SELECT COUNT(*) FROM hp_sensors WHERE userid = :u AND disabled = 0 AND last_seen >= :s");
+		$st->execute(array('u' => $userid, 's' => gmdate('Y-m-d H:i:s', $since)));
+		$sensors = (int)$st->fetchColumn();
+		if ($sensors > 0) {
+			$st = $pdo->prepare("SELECT COALESCE(SUM(events), 0) FROM hp_daily WHERE userid = :u AND day >= :d");
+			$st->execute(array('u' => $userid, 'd' => gmdate('Y-m-d', $since)));
+			$events = (int)$st->fetchColumn();
+			$st = $pdo->prepare("SELECT COUNT(DISTINCT r.ip_bin) n, COUNT(DISTINCT CASE WHEN s.listed = 1 THEN r.ip_bin END) listed FROM hp_report_sources r
+				LEFT JOIN hp_scores s ON s.ip_bin = r.ip_bin WHERE r.userid = :u AND r.last_seen >= :s");
+			$st->execute(array('u' => $userid, 's' => gmdate('Y-m-d H:i:s', $since)));
+			$src = $st->fetch(PDO::FETCH_ASSOC) ?: array();
+			$st = $pdo->prepare("SELECT COUNT(DISTINCT key_hash) FROM hp_sample_contrib WHERE kind = 'fp' AND day >= :d AND userid = :u");
+			$st->execute(array('u' => $userid, 'd' => gmdate('Y-m-d', $since)));
+			$d['hp'] = array('sensors' => $sensors, 'events' => $events, 'sources' => (int)($src['n'] ?? 0), 'listed' => (int)($src['listed'] ?? 0),
+				'fps' => (int)$st->fetchColumn());
+		}
+	} catch (Throwable $e) { $d['errors'][] = 'honeypot: ' . $e->getMessage(); }
 
 	// Cloud Router
 	try {
@@ -227,7 +252,7 @@ function wr_collect(PDO $pdo, int $userid, int $now): ?array {
 }
 
 /** Hat der Account etwas, worueber es sich zu berichten lohnt? (Sonst keine Mail.) */
-function wr_has_content(array $d): bool { return $d['domains'] !== null || $d['hc'] !== null || $d['cdn'] !== null || $d['vpn'] !== null; }
+function wr_has_content(array $d): bool { return $d['domains'] !== null || $d['hc'] !== null || $d['cdn'] !== null || $d['hp'] !== null || $d['vpn'] !== null; }
 
 // ---------------------------------------------------------------- Texte
 
@@ -252,6 +277,15 @@ function wr_t(string $lang, string $key, ...$a): string {
 			'cdn' => 'CDN64', 'cdn_week' => 'Traffic in 7 Tagen', 'cdn_req' => 'Anfragen in 7 Tagen', 'cdn_month' => 'Traffic im Monat', 'cdn_tun' => 'Nodes verbunden',
 			'col_name' => 'Name', 'col_mode' => 'Modus', 'col_traffic' => 'Traffic', 'col_req' => 'Anfragen',
 			'cs_active' => 'aktiv', 'cs_pending' => 'wird eingerichtet', 'cs_blocked' => 'gesperrt', 'cs_paused' => 'pausiert',
+			'prot_head' => 'Von CDN64 geschützt', 'prot_blocked' => '%s Angriffe und unerwünschte Zugriffe haben deine Dienste nie erreicht (%s).',
+			'prot_hidden' => 'Bei %s Verbindungen blieb deine eigene IP-Adresse verborgen.',
+			'r_list' => 'Blocklisten', 'r_acl' => 'Zugriffsliste', 'r_overload' => 'Überlast', 'r_waf' => 'WAF-Muster', 'r_ja4' => 'Angriffs-Werkzeuge',
+			'hp' => 'Honeypot64', 'hp_head' => 'Danke für deine Honeypot64-Meldungen',
+			'hp_line' => 'Deine %d Sensor(en) haben in 7 Tagen %s Zugriffe von %s Adressen gemeldet.',
+			'hp_listed' => '%s dieser Adressen stehen auf der v64 Blocklist und werden damit für alle gesperrt.',
+			'hp_fps' => '%s Werkzeug-Fingerabdrücke (JA4/HASSH) kamen von dir.',
+			'hp_quiet' => 'Deine %d Sensor(en) waren in den 7 Tagen in Bereitschaft – gemeldet wurde nichts, auch das ist ein gutes Zeichen.',
+			'hp_thanks' => 'Vielen Dank, dass du deine Beobachtungen teilst – damit hilfst du, die Blocklisten zu führen und Angriffs-Werkzeuge zu erkennen.',
 			'vpn' => 'Cloud Router', 'vpn_month' => 'Traffic im Monat', 'col_gw' => 'Gateway',
 			'vs_active' => 'aktiv', 'vs_paused' => 'pausiert', 'vs_setup' => 'wird eingerichtet', 'vs_limited' => 'gedrosselt (Limit)',
 			'more' => 'und %d weitere', 'open' => 'Öffnen', 'of' => 'von', 'unlimited' => 'unbegrenzt',
@@ -277,6 +311,15 @@ function wr_t(string $lang, string $key, ...$a): string {
 			'cdn' => 'CDN64', 'cdn_week' => 'Traffic in 7 days', 'cdn_req' => 'Requests in 7 days', 'cdn_month' => 'Traffic this month', 'cdn_tun' => 'Nodes connected',
 			'col_name' => 'Name', 'col_mode' => 'Mode', 'col_traffic' => 'Traffic', 'col_req' => 'Requests',
 			'cs_active' => 'active', 'cs_pending' => 'being set up', 'cs_blocked' => 'blocked', 'cs_paused' => 'paused',
+			'prot_head' => 'Protected by CDN64', 'prot_blocked' => '%s attacks and unwanted requests never reached your services (%s).',
+			'prot_hidden' => 'Your own IP address stayed hidden for %s connections.',
+			'r_list' => 'blocklists', 'r_acl' => 'access list', 'r_overload' => 'overload', 'r_waf' => 'WAF patterns', 'r_ja4' => 'attack tools',
+			'hp' => 'Honeypot64', 'hp_head' => 'Thank you for your Honeypot64 reports',
+			'hp_line' => 'Your %d sensor(s) reported %s hits from %s addresses in 7 days.',
+			'hp_listed' => '%s of these addresses are on the v64 blocklist and are blocked for everyone.',
+			'hp_fps' => '%s tool fingerprints (JA4/HASSH) came from you.',
+			'hp_quiet' => 'Your %d sensor(s) stood by for the 7 days – nothing was reported, which is a good sign too.',
+			'hp_thanks' => 'Thank you for sharing your observations – you help keep the blocklists up to date and detect attack tools.',
 			'vpn' => 'Cloud Router', 'vpn_month' => 'Traffic this month', 'col_gw' => 'Gateway',
 			'vs_active' => 'active', 'vs_paused' => 'paused', 'vs_setup' => 'being set up', 'vs_limited' => 'throttled (limit)',
 			'more' => 'and %d more', 'open' => 'Open', 'of' => 'of', 'unlimited' => 'unlimited',
@@ -340,6 +383,16 @@ function wr_render(array $d, string $token): array {
 		$html .= '</table></td></tr>';
 	};
 	$red = '#d63939'; $green = '#2fb344'; $orange = '#f59f00';
+	// gruener Kasten mit Symbol (Emoji statt Bild: keine externen Inhalte), fuer Schutz und Dank
+	$badge = function(string $icon, string $head, array $lines) use (&$html, &$text, $ink, $green) {
+		$html .= '<tr><td style="padding:10px 24px 0 24px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ebf7ee;border-left:4px solid ' . $green . '"><tr>'
+			. '<td width="34" valign="top" style="padding:10px 0 10px 12px;font-size:22px;line-height:1">' . $icon . '</td>'
+			. '<td style="padding:10px 12px;font-size:14px;color:' . $ink . '"><b style="color:' . $green . '">' . wr_h($head) . '</b>';
+		foreach ($lines as $l) { $html .= '<br>' . wr_h($l); }
+		$html .= '</td></tr></table></td></tr>';
+		$text .= "\n" . $head . "\n";
+		foreach ($lines as $l) { $text .= '  ' . $l . "\n"; }
+	};
 
 	// Kopf, Anrede und Hinweise
 	$greeting = $d['name'] !== '' ? $t('hello', $d['name']) : $t('hello0');
@@ -400,12 +453,31 @@ function wr_render(array $d, string $token): array {
 			$t('cdn_month') => wr_bytes($cd['month_bytes'], $L) . ' ' . $t('of') . ' ' . ($cd['limit_bytes'] > 0 ? wr_bytes($cd['limit_bytes'], $L) : $t('unlimited')));
 		if ($cd['tunnels'] > 0) { $kv[$t('cdn_tun')] = $cd['tunnels_on'] . ' ' . $t('of') . ' ' . $cd['tunnels']; }
 		$facts($kv);
+		$pr = $cd['prot']; $why = array(); $sum = 0;
+		foreach (array('list', 'waf', 'ja4', 'overload', 'acl') as $k) {
+			$n = (int)($pr[$k] ?? 0); $sum += $n;
+			if ($n > 0) { $why[] = $t('r_' . $k) . ' ' . wr_num($n, 0, $L); }
+		}
+		$lines = array();
+		if ($sum > 0) { $lines[] = $t('prot_blocked', wr_num($sum, 0, $L), implode(', ', $why)); }
+		if ((int)($pr['conns'] ?? 0) > 0) { $lines[] = $t('prot_hidden', wr_num((int)$pr['conns'], 0, $L)); }
+		if ($lines) { $badge('&#x1F6E1;&#xFE0F;', $t('prot_head'), $lines); }
 		$rows = array();
 		foreach (array_slice($cd['rows'], 0, WR_LIST_MAX) as $r) {
 			$c = $r['state'] === 'blocked' ? $red : ($r['state'] === 'active' ? $green : $muted);
 			$rows[] = array($r['name'], (string)$r['mode'], array($t('cs_' . $r['state']), $c), wr_bytes($r['bytes'], $L));
 		}
 		$table(array($t('col_name'), $t('col_mode'), $t('col_state'), $t('col_traffic')), $rows, count($cd['rows']));
+	}
+
+	// Honeypot64
+	if ($hp = $d['hp']) {
+		$h2($t('hp'), WR_BASE . '/honeypot/');
+		$lines = array($hp['events'] > 0 ? $t('hp_line', $hp['sensors'], wr_num($hp['events'], 0, $L), wr_num($hp['sources'], 0, $L)) : $t('hp_quiet', $hp['sensors']));
+		if ($hp['listed'] > 0) { $lines[] = $t('hp_listed', wr_num($hp['listed'], 0, $L)); }
+		if ($hp['fps'] > 0) { $lines[] = $t('hp_fps', wr_num($hp['fps'], 0, $L)); }
+		$lines[] = $t('hp_thanks');
+		$badge('&#x1F49A;', $t('hp_head'), $lines);
 	}
 
 	// Cloud Router
