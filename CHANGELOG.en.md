@@ -15,6 +15,7 @@ Short summary of what changes per version. Details per module are in the node un
   IPv6 network and AAAA records improved; notice when a fixed bind address covers only IPv4 or IPv6.
 - DynDNS: a fixed IPv6 address written differently (e.g. upper case) no longer causes needless updates.
 - Honeypot64: the own location is determined via IPv6 when there is no IPv4.
+- v64 Blocklist: IPv6 is scored and listed per /64; changing the address inside the own network no longer escapes the list.
 
 ## 0.12.0-alpha.33 – 2026-10-30
 
