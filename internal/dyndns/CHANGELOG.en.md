@@ -1,5 +1,12 @@
 # Changes – DynDNS updater
 
+## 1.5.1 – 2026-10-30
+
+### Fixed
+- A fixed IPv6 address is stored in canonical form (e.g. `2a01:04F8::1` as `2a01:4f8::1`). Before, the name always
+  looked different from DNS, causing needless updates and the state "redirected". IPv4-mapped addresses (`::ffff:…`)
+  are rejected as fixed IPv6.
+
 ## 1.5.0 – 2026-10-28
 
 ### New

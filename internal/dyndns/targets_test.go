@@ -205,6 +205,16 @@ func TestNormalize(t *testing.T) {
 			t.Errorf("%s: got %v want %q", name, err, c.want)
 		}
 	}
+	// feste Adressen werden kanonisch gespeichert, ::ffff:-Adressen gelten nicht als IPv6
+	tg := base()
+	tg.Mode6, tg.Fixed6 = Mode6Fixed, "2a01:04F8:0:0::1"
+	if err := tg.Normalize(); err != nil || tg.Fixed6 != "2a01:4f8::1" {
+		t.Errorf("fixed6 kanonisch: %q %v", tg.Fixed6, err)
+	}
+	tg.Mode6, tg.Fixed6 = Mode6Fixed, "::ffff:8.8.8.8"
+	if err := tg.Normalize(); err == nil || err.Error() != "fixed6" {
+		t.Errorf("fixed6 4in6: %v", err)
+	}
 	a, err := withSuffix(netip.MustParsePrefix("2a01:4f8:1:2::/64"), "::1a2b:3c4d:5e6f:7a8b")
 	if err != nil || a.String() != "2a01:4f8:1:2:1a2b:3c4d:5e6f:7a8b" {
 		t.Fatalf("withSuffix: %s %v", a, err)
