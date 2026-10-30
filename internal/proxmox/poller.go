@@ -257,6 +257,10 @@ type pveResource struct {
 	Lock      string `json:"lock"`
 	Tags      string `json:"tags"`
 	HAState   string `json:"hastate"`
+	Storage   string `json:"storage"`    // nur type storage
+	Plugin    string `json:"plugintype"` // nur type storage
+	Content   string `json:"content"`    // nur type storage
+	Shared    pveNum `json:"shared"`     // nur type storage
 	CPU       pveNum `json:"cpu"`
 	MaxCPU    pveNum `json:"maxcpu"`
 	Mem       pveNum `json:"mem"`
@@ -328,6 +332,7 @@ func (p *Poller) collect(ctx context.Context, now time.Time, s *Snapshot) error 
 	p.evaluate(now, res)
 	p.fetchIPs(ctx, now, res)
 	s.Resources = res
+	s.Storages = pveStorages(raw)
 	return nil
 }
 
@@ -476,6 +481,49 @@ func (p *Poller) build(raw []pveResource) []Resource {
 			return a.Node < b.Node
 		}
 		return a.VMID < b.VMID
+	})
+	return out
+}
+
+// pveStorages macht aus cluster/resources die Speicher: lokale je Node, gemeinsame (shared) nur einmal – verfuegbar,
+// sobald ein Node ihn so meldet (Belegung von dort). Sortiert: lokale nach Node und Name, danach die gemeinsamen.
+func pveStorages(raw []pveResource) []PVEStorage {
+	var out []PVEStorage
+	shared := map[string]int{}
+	for _, r := range raw {
+		if r.Type != "storage" {
+			continue
+		}
+		s := PVEStorage{Storage: r.Storage, Node: r.Node, Shared: r.Shared != 0, Type: r.Plugin, Content: r.Content, Status: r.Status,
+			Total: int64(r.MaxDisk), Used: int64(r.Disk)}
+		if s.Storage == "" {
+			if i := strings.LastIndexByte(r.ID, '/'); i >= 0 {
+				s.Storage = r.ID[i+1:]
+			}
+		}
+		if !s.Shared {
+			out = append(out, s)
+			continue
+		}
+		s.Node = ""
+		if i, ok := shared[s.Storage]; ok {
+			if !out[i].Available() && s.Available() {
+				out[i] = s
+			}
+			continue
+		}
+		shared[s.Storage] = len(out)
+		out = append(out, s)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.Shared != b.Shared {
+			return !a.Shared
+		}
+		if a.Node != b.Node {
+			return a.Node < b.Node
+		}
+		return a.Storage < b.Storage
 	})
 	return out
 }

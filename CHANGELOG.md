@@ -13,6 +13,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
   geschätzt voll), Backups und fehlgeschlagene Tasks zur Information.
 - Healthchecks: Proxmox Backup Server – Alarm, wenn ein Datastore voll wird („belegt ab“, Standard 90 %) bzw.
   laut Schätzung bald voll ist („voll in weniger als … Tagen“, Standard aus).
+- Healthchecks: Proxmox VE zeigt alle Speicher (lokale je Node, gemeinsame einmal) mit Belegung und meldet volle
+  Speicher („Speicher belegt ab“, Standard 90 %).
 
 ## 0.12.0-alpha.32 – 2026-10-29
 

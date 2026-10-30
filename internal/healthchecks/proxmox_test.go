@@ -65,6 +65,13 @@ func newPVEFake() *pveFake {
 			g("qemu", 102, "pve1", "app", "running", nil),
 			g("lxc", 200, "pve2", "ct", "running", nil),
 			g("qemu", 9000, "pve1", "tpl", "stopped", map[string]any{"template": 1}),
+			{"id": "storage/pve1/local-lvm", "type": "storage", "node": "pve1", "storage": "local-lvm", "status": "available",
+				"plugintype": "lvmthin", "content": "images,rootdir", "disk": 40 << 30, "maxdisk": 100 << 30, "shared": 0},
+			{"id": "storage/pve2/usb", "type": "storage", "node": "pve2", "storage": "usb", "status": "unknown", "plugintype": "dir", "shared": 0},
+			{"id": "storage/pve1/nas", "type": "storage", "node": "pve1", "storage": "nas", "status": "available", "plugintype": "nfs",
+				"content": "backup", "disk": 60 << 30, "maxdisk": 100 << 30, "shared": 1},
+			{"id": "storage/pve2/nas", "type": "storage", "node": "pve2", "storage": "nas", "status": "available", "plugintype": "nfs",
+				"content": "backup", "disk": 60 << 30, "maxdisk": 100 << 30, "shared": 1},
 		},
 		qmp: map[string]string{"pve1/100": "running", "pve2/101": "running", "pve1/102": "guest-panicked"},
 	}
@@ -725,10 +732,14 @@ func TestPVEPagesAndWizard(t *testing.T) {
 	}
 	code, body = pveGet(t, srv, sp)
 	for _, want := range []string{`id="pve-sys-kpi"`, "pve.kpi.nodes", "pve.kpi.load", "?state=problem", "pve1", "web", "app", "guest-panicked", "pve.state.error", "pve.template", `name="key" value="qemu/100"`, "pve-spark", "pve.rules.level_system",
-		`name="r_unreachable"`, "pve.rules.from_default"} {
+		`name="r_unreachable"`, "pve.rules.from_default",
+		`id="pve-storage"`, "pve.storage.title", "local-lvm", "lvmthin", "images,rootdir", "pve.storage.shared", "pve.storage.unavailable", "40 %", "pve.rule.storage"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("system page: %q missing: %s", want, body)
 		}
+	}
+	if strings.Count(body, ">nas<") != 1 || strings.Contains(body, "pve.rule.datastore_days") || strings.Contains(body, "pve.pbs.datastores") {
+		t.Fatalf("system page: shared storage twice or PBS rules on PVE: %s", body)
 	}
 	if strings.Contains(body, "[{") || strings.Contains(body, "&lt;nil&gt;") { // Kachel „Gaeste“ zeigte die Liste statt der Zahl
 		t.Fatalf("system kpi shows a raw value: %s", body)

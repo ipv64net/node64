@@ -1,5 +1,13 @@
 # Änderungen – Healthchecks
 
+## 2.47.0 – 2026-10-30
+
+### Neu
+- Proxmox VE: Speicher auf der Systemseite – alle Speicher aus dem Cluster (local, local-lvm, ZFS, NFS, Ceph …), lokale
+  je Node, gemeinsame nur einmal, mit Typ, Inhalt, Belegung und Größe; nicht verfügbare stehen mit Hinweis da. Die
+  Regel „Speicher belegt ab“ (Standard 90 %, Systemebene) meldet einen vollen Speicher wie die Datastores eines PBS,
+  je Speicher, Entwarnung 2 Prozentpunkte unter der Grenze. Auch in der API (`storages`).
+
 ## 2.46.0 – 2026-10-30
 
 ### Neu

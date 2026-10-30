@@ -45,20 +45,21 @@ func (m *Module) pveAPIRoutes(mux *http.ServeMux, api func(http.HandlerFunc) htt
 // pveSystemJSON ist ein System in der API (ohne Secret) mit seinem Zustand.
 type pveSystemJSON struct {
 	*proxmox.System
-	HasSecret   bool             `json:"has_secret"`
-	State       string           `json:"state"` // ok, warn, down, error, off, pending
-	Error       string           `json:"error,omitempty"`
-	Version     string           `json:"version,omitempty"`
-	Cluster     string           `json:"cluster,omitempty"`
-	Quorate     *bool            `json:"quorate,omitempty"`
-	Address     string           `json:"address,omitempty"`
-	LastPoll    *time.Time       `json:"last_poll,omitempty"`
-	Nodes       int              `json:"nodes"`
-	NodesOnline int              `json:"nodes_online"`
-	Guests      int              `json:"guests"`
-	Running     int              `json:"guests_running"`
-	Bad         int              `json:"guests_bad"`
-	PBS         *proxmox.PBSInfo `json:"pbs,omitempty"` // nur Proxmox Backup Server: Datastores
+	HasSecret   bool                 `json:"has_secret"`
+	State       string               `json:"state"` // ok, warn, down, error, off, pending
+	Error       string               `json:"error,omitempty"`
+	Version     string               `json:"version,omitempty"`
+	Cluster     string               `json:"cluster,omitempty"`
+	Quorate     *bool                `json:"quorate,omitempty"`
+	Address     string               `json:"address,omitempty"`
+	LastPoll    *time.Time           `json:"last_poll,omitempty"`
+	Nodes       int                  `json:"nodes"`
+	NodesOnline int                  `json:"nodes_online"`
+	Guests      int                  `json:"guests"`
+	Running     int                  `json:"guests_running"`
+	Bad         int                  `json:"guests_bad"`
+	PBS         *proxmox.PBSInfo     `json:"pbs,omitempty"`      // nur Proxmox Backup Server: Datastores
+	Storages    []proxmox.PVEStorage `json:"storages,omitempty"` // nur Proxmox VE: Speicher
 }
 
 func (m *Module) pveJSON(ctx context.Context, sys *proxmox.System) pveSystemJSON {
@@ -68,6 +69,7 @@ func (m *Module) pveJSON(ctx context.Context, sys *proxmox.System) pveSystemJSON
 	if s := row.Snap; s != nil {
 		t := s.Time
 		out.LastPoll, out.Version, out.Cluster, out.Quorate, out.Address, out.PBS = &t, s.Version, s.Cluster, s.Quorate, s.Address, s.PBS
+		out.Storages = s.Storages
 	}
 	return out
 }

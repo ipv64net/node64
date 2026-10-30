@@ -36,6 +36,7 @@ const (
 	// Proxmox Backup Server: Datastore belegt ab Prozent bzw. voll in weniger als N Tagen (Event.Detail = Datastore)
 	WhatDatastore     = "datastore"
 	WhatDatastoreFull = "datastore_full"
+	WhatStorage       = "storage" // Proxmox VE: Speicher belegt ab (Regel datastore)
 	// Docker-Container (gleiche Werte wie Resource.Detail; Regel „Absturz“, ohne Verzoegerung)
 	WhatUnhealthy  = DockerUnhealthy
 	WhatRestarting = DockerRestarting
@@ -395,7 +396,11 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 		}
 	}
 	if snap.PBS != nil {
-		st.evalDatastores(snap.PBS.Datastores, sysRule, now, sysName, add)
+		st.evalDatastores(snap.PBS.Datastores, sysRule, now, sysName, false, add)
+	} else if snap.OK && snap.Docker == nil {
+		r := sysRule
+		r.DatastoreDays = 0 // „voll in N Tagen“ gibt es bei Proxmox VE nicht
+		st.evalDatastores(pveStorageDS(snap.Storages), r, now, sysName, true, add)
 	}
 	return evs
 }
@@ -404,7 +409,9 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 // ueber der Grenze -> threshold, Delay Abfragen deutlich darunter (pbsDSHyst) -> threshold_ok. Ein Datastore ohne
 // Werte (Fehler, nicht eingehaengt) aendert nichts; „voll in N Tagen“ gilt nur mit einer Schaetzung in der Zukunft,
 // ohne Schaetzung (Belegung sinkt bzw. bleibt gleich) zaehlt er als darunter.
-func (st *pveSysState) evalDatastores(list []PBSDatastore, rule Rule, now time.Time, sysName string, add func(Event)) {
+//
+// storage: Speicher eines Proxmox VE (pveStorageDS) statt Datastores eines PBS – andere Ursache (WhatStorage) und Text.
+func (st *pveSysState) evalDatastores(list []PBSDatastore, rule Rule, now time.Time, sysName string, storage bool, add func(Event)) {
 	if st.ds == nil {
 		st.ds = map[string]*pbsDSState{}
 	}
@@ -422,6 +429,9 @@ func (st *pveSysState) evalDatastores(list []PBSDatastore, rule Rule, now time.T
 			okPct = false
 		}
 		lbl := "Datastore „" + d.Store + "“"
+		if storage {
+			lbl = "Speicher „" + d.Store + "“"
+		}
 		for m := 0; m < 2; m++ {
 			ts := &ds.thr[m]
 			var limit, v float64
@@ -452,7 +462,9 @@ func (st *pveSysState) evalDatastores(list []PBSDatastore, rule Rule, now time.T
 				continue
 			}
 			what := WhatDatastore
-			if m == 1 {
+			if storage {
+				what = WhatStorage
+			} else if m == 1 {
 				what = WhatDatastoreFull
 			}
 			if over {
@@ -499,6 +511,23 @@ func (st *pveSysState) evalDatastores(list []PBSDatastore, rule Rule, now time.T
 			delete(st.ds, k) // Datastore entfernt: Stand verwerfen
 		}
 	}
+}
+
+// pveStorageDS macht aus den Speichern eines Proxmox VE Eintraege fuer evalDatastores (Store = Key, nicht verfuegbar =
+// ohne Werte).
+func pveStorageDS(list []PVEStorage) []PBSDatastore {
+	out := make([]PBSDatastore, 0, len(list))
+	for _, s := range list {
+		d := PBSDatastore{Store: s.Key(), Total: s.Total, Used: s.Used, Avail: s.Total - s.Used}
+		if !s.Available() {
+			d.Error = s.Status
+			if d.Error == "" {
+				d.Error = "unknown"
+			}
+		}
+		out = append(out, d)
+	}
+	return out
 }
 
 // DatastoreAlarm sagt, welche Datastore-Schwellen eines Systems gemeldet sind (Anzeige): Store -> belegt, voll bald.

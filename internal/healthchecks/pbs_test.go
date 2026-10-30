@@ -240,9 +240,13 @@ func TestPBSDatastoreRules(t *testing.T) {
 			t.Fatalf("system page: %q missing: %s", want, body)
 		}
 	}
-	// Proxmox VE: keine Datastore-Regeln
-	if f := pveRulesFor(&proxmox.SystemSettings{Kind: proxmox.KindPVE}, "", "", ""); strings.Contains(fmt.Sprint(f.Fields), "datastore") {
-		t.Fatalf("pve rules: %+v", f.Fields)
+	// Proxmox VE: nur „Speicher belegt ab“ (ohne „voll in N Tagen“), Docker keine
+	if f := fmt.Sprint(pveRulesFor(&proxmox.SystemSettings{Kind: proxmox.KindPVE}, "", "", "").Fields); !strings.Contains(f, "pve.rule.storage") ||
+		strings.Contains(f, "datastore_days") {
+		t.Fatalf("pve rules: %s", f)
+	}
+	if f := fmt.Sprint(pveRulesFor(&proxmox.SystemSettings{Kind: proxmox.KindDocker}, "", "", "").Fields); strings.Contains(f, "datastore") {
+		t.Fatalf("docker rules: %s", f)
 	}
 
 	// ungueltige Tage werden abgewiesen; voll in weniger als 10 Tagen (main: 5 Tage), Grenze 99 %

@@ -176,6 +176,38 @@ func (r *Resource) MemPercent() (float64, bool) {
 	return float64(r.Mem) * 100 / float64(r.MaxMem), true
 }
 
+// PVEStorage ist ein Speicher aus cluster/resources (local, local-lvm, ZFS, NFS, Ceph …). Gemeinsame Speicher (shared)
+// stehen nur einmal da (Node leer), lokale je Node.
+type PVEStorage struct {
+	Storage string `json:"storage"`
+	Node    string `json:"node,omitempty"`
+	Shared  bool   `json:"shared,omitempty"`
+	Type    string `json:"type,omitempty"`    // plugintype: dir, lvmthin, zfspool, nfs, rbd …
+	Content string `json:"content,omitempty"` // images,rootdir,iso …
+	Status  string `json:"status,omitempty"`  // available, unknown …
+	Total   int64  `json:"total"`
+	Used    int64  `json:"used"`
+}
+
+// Key: gemeinsam nur der Name, lokal Node/Name (Event-ID und Regel-Stand je Speicher).
+func (s PVEStorage) Key() string {
+	if s.Shared || s.Node == "" {
+		return s.Storage
+	}
+	return s.Node + "/" + s.Storage
+}
+
+// Available: der Speicher ist laut Proxmox verfuegbar (sonst keine Belegung).
+func (s PVEStorage) Available() bool { return s.Status == "available" }
+
+// UsedPercent: Belegung in Prozent; ok = verfuegbar und Groesse bekannt.
+func (s PVEStorage) UsedPercent() (float64, bool) {
+	if !s.Available() || s.Total <= 0 || s.Used < 0 {
+		return 0, false
+	}
+	return float64(s.Used) * 100 / float64(s.Total), true
+}
+
 // DiskPercent liefert die Disk-Belegung in Prozent; ok = Wert vorhanden (bei QEMU nur mit Gast-Agent, sonst 0).
 func (r *Resource) DiskPercent() (float64, bool) {
 	if r.MaxDisk <= 0 || (r.Disk <= 0 && r.Type == TypeQEMU) {
@@ -186,18 +218,19 @@ func (r *Resource) DiskPercent() (float64, bool) {
 
 // Snapshot ist der Stand eines Systems nach einer Abfrage.
 type Snapshot struct {
-	SystemID  int64       `json:"system_id"`
-	Time      time.Time   `json:"time"`
-	OK        bool        `json:"ok"`              // API erreichbar
-	Error     string      `json:"error,omitempty"` // letzter Fehler (z. B. „401 token invalid“, „certificate mismatch“)
-	Address   string      `json:"address"`         // zuletzt erfolgreich benutzte Adresse
-	Version   string      `json:"version,omitempty"`
-	Cluster   string      `json:"cluster,omitempty"` // Clustername, leer bei Einzel-Node
-	Quorate   *bool       `json:"quorate,omitempty"`
-	Warning   string      `json:"warning,omitempty"` // erreichbar, aber eingeschraenkt (z. B. Token ohne Leserechte: Gaeste fehlen)
-	Resources []Resource  `json:"resources"`
-	Docker    *DockerInfo `json:"docker,omitempty"` // nur Docker-Host: /info
-	PBS       *PBSInfo    `json:"pbs,omitempty"`    // nur Proxmox Backup Server: Datastores
+	SystemID  int64        `json:"system_id"`
+	Time      time.Time    `json:"time"`
+	OK        bool         `json:"ok"`              // API erreichbar
+	Error     string       `json:"error,omitempty"` // letzter Fehler (z. B. „401 token invalid“, „certificate mismatch“)
+	Address   string       `json:"address"`         // zuletzt erfolgreich benutzte Adresse
+	Version   string       `json:"version,omitempty"`
+	Cluster   string       `json:"cluster,omitempty"` // Clustername, leer bei Einzel-Node
+	Quorate   *bool        `json:"quorate,omitempty"`
+	Warning   string       `json:"warning,omitempty"` // erreichbar, aber eingeschraenkt (z. B. Token ohne Leserechte: Gaeste fehlen)
+	Resources []Resource   `json:"resources"`
+	Docker    *DockerInfo  `json:"docker,omitempty"`   // nur Docker-Host: /info
+	PBS       *PBSInfo     `json:"pbs,omitempty"`      // nur Proxmox Backup Server: Datastores
+	Storages  []PVEStorage `json:"storages,omitempty"` // nur Proxmox VE: Speicher aus cluster/resources (nur Anzeige)
 	// Interval ist das Abfrageintervall des Pollers: die Verzoegerung „nicht erreichbar“ zaehlt auch zeitlich
 	// (schnelle Wiederholungen nach Fehlern verkuerzen sie nicht); nur von Run gesetzt, 0 = nur Abfragen zaehlen.
 	Interval time.Duration `json:"-"`

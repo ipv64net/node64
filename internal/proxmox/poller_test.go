@@ -57,6 +57,18 @@ func TestPollerClusterStates(t *testing.T) {
 	if len(s.Resources) != 14 {
 		t.Fatalf("resources %d (storage must be filtered)", len(s.Resources))
 	}
+	// Speicher: lokale je Node (auch nicht verfuegbare), der gemeinsame nur einmal mit den Werten des verfuegbaren Nodes
+	var st []string
+	for _, x := range s.Storages {
+		pct, ok := x.UsedPercent()
+		st = append(st, fmt.Sprintf("%s:%s:%v:%.0f", x.Key(), x.Status, ok, pct))
+	}
+	if got := strings.Join(st, " "); got != "pve1/local:available:false:0 pve1/local-lvm:available:true:95 pve2/local:available:true:30 pve3/local:unknown:false:0 nfs:available:true:25" {
+		t.Errorf("storages: %s", got)
+	}
+	if lvm := s.Storages[1]; lvm.Type != "lvmthin" || lvm.Content != "images,rootdir" || lvm.Total != 100<<30 || s.Storages[4].Node != "" || !s.Storages[4].Shared {
+		t.Errorf("storage fields: %+v %+v", lvm, s.Storages[4])
+	}
 	if s.Resources[0].Key() != "node/pve1" || s.Resources[3].Key() != "qemu/100" {
 		t.Fatalf("order: %s %s", s.Resources[0].Key(), s.Resources[3].Key())
 	}
