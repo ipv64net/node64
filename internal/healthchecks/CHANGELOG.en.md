@@ -1,5 +1,14 @@
 # Changes – Healthchecks
 
+## 2.46.0 – 2026-10-30
+
+### New
+- Proxmox Backup Server: usage alarm for datastores. Two rules on the system level of the PBS, valid for all
+  datastores: "Datastore used from" (default 90 %) and "Datastore full in less than … days" (from the PBS estimate,
+  default off). Notifications work like the node thresholds (delay, channels of the system), one per datastore; the
+  all-clear comes only 2 percentage points or 2 days past the limit. Datastores above the limit are marked red in the
+  table. Backups, tasks and services stay display only.
+
 ## 2.45.0 – 2026-10-30
 
 ### New

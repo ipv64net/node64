@@ -4648,12 +4648,16 @@
       "threshold": {
         "cpu": "{type} “{name}”: CPU {value} % (limit {limit} %).",
         "mem": "{type} “{name}”: RAM {value} % (limit {limit} %).",
-        "disk": "{type} “{name}”: disk {value} % (limit {limit} %)."
+        "disk": "{type} “{name}”: disk {value} % (limit {limit} %).",
+        "datastore": "Proxmox Backup Server “{name}”: datastore “{detail}” is {value} % full (limit {limit} %).",
+        "datastore_full": "Proxmox Backup Server “{name}”: datastore “{detail}” is expected to be full in {value} days (limit {limit} days)."
       },
       "threshold_ok": {
         "cpu": "{type} “{name}”: CPU below {limit} % again ({value} %).",
         "mem": "{type} “{name}”: RAM below {limit} % again ({value} %).",
-        "disk": "{type} “{name}”: disk below {limit} % again ({value} %)."
+        "disk": "{type} “{name}”: disk below {limit} % again ({value} %).",
+        "datastore": "Proxmox Backup Server “{name}”: datastore “{detail}” below {limit} % again ({value} %).",
+        "datastore_full": "Proxmox Backup Server “{name}”: datastore “{detail}” no longer full in less than {limit} days."
       },
       "restarted": {
         "guest": "{type} “{name}” was restarted.",
@@ -4715,7 +4719,9 @@
       "hint": "Proxmox Backup Servers can be monitored too: the host system (CPU, RAM, disk, network, I/O) and the datastores for display.",
       "host": "Host",
       "datastores": "Datastores",
-      "ds_info": "display only, no notifications",
+      "ds_info": "usage notifies by the rules, everything else is display only",
+      "ds_over": "Above the limit “Datastore used from” (notification)",
+      "ds_full_over": "Full in fewer days than set (notification)",
       "ds_used": "Usage",
       "ds_size": "Size",
       "ds_free": "Free",
@@ -4743,7 +4749,7 @@
       "rights": "Create a read-only token in the PBS",
       "rights_hint": "On the backup server as root (shell) – read rights only (role Audit):",
       "rights_secret": "The PBS shows the secret only once when creating it.",
-      "about_text": "Read-only at the set interval: host status (CPU, RAM, root disk, uptime), the last minute value from the RRD (network, disk I/O), the services proxmox-backup and proxmox-backup-proxy and the datastore usage; every 10 minutes the version, available updates (apt), backups per datastore across all namespaces and failed tasks. Only the host system is monitored – datastores, backups and tasks are for information only. Node64 changes nothing in the PBS."
+      "about_text": "Read-only at the set interval: host status (CPU, RAM, root disk, uptime), the last minute value from the RRD (network, disk I/O), the services proxmox-backup and proxmox-backup-proxy and the datastore usage; every 10 minutes the version, available updates (apt), backups per datastore across all namespaces and failed tasks. Notifications cover the host system and the datastore usage (rules “Datastore used from” and “Datastore full in less than … days”); backups and tasks are for information only. Node64 changes nothing in the PBS."
     },
     "edit": "Edit system",
     "enable": "Switch on",
@@ -4823,6 +4829,8 @@
       "mem": "RAM above",
       "disk": "Disk above (containers or with guest agent)",
       "delay": "Delay",
+      "datastore": "Datastore used from",
+      "datastore_days": "Datastore full in less than",
       "channels": "Channels"
     },
     "rules": {
@@ -4850,6 +4858,7 @@
       "from_system": "inherited from the system",
       "from_node": "inherited from the node",
       "polls": "polls",
+      "days": "days",
       "reset": "Inherit all",
       "reset_confirm": "Reset the own rules of this level?",
       "channels_own": "own selection",
@@ -4872,6 +4881,7 @@
       "interval": "Interval between 15 and 300 seconds.",
       "threshold": "Threshold 0–100 % and 0–1440 minutes.",
       "delay": "Delay 1–60 polls.",
+      "datastore_days": "Datastore full in less than: 0–3650 days (0 = off).",
       "key": "Unknown guest or node.",
       "no_box": "No key (secret.key) loaded – token secrets cannot be stored encrypted.",
       "channels": "Channels: invalid selection (at most 100).",

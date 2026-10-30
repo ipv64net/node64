@@ -503,7 +503,7 @@ func (m *Module) pveNotify(ctx context.Context, set *proxmox.SystemSettings, s *
 			break
 		}
 	}
-	a := notify.Alert{EventID: "pve-" + strconv.FormatInt(set.SystemID, 10) + "-" + ev.Key + "-" + ev.Kind + "-" + strconv.FormatInt(at.UnixNano(), 36),
+	a := notify.Alert{EventID: "pve-" + strconv.FormatInt(set.SystemID, 10) + "-" + ev.Key + "-" + ev.Kind + pveEventSub(ev) + "-" + strconv.FormatInt(at.UnixNano(), 36),
 		Kind: kind, Time: at.UTC(), Reason: ev.What, Data: data,
 		Check: notify.CheckInfo{Name: name, Type: string(pveCheckType(set.Kind)), Target: ev.Key, NotifyDown: true, NotifyUp: true, Local: true,
 			Channels: m.pveChannels(ctx, set.Effective(ev.Key, node).Channels)}}
@@ -541,6 +541,14 @@ func (m *Module) pveNotify(ctx context.Context, set *proxmox.SystemSettings, s *
 	} else if m.dispatcher != nil {
 		m.dispatcher.Dispatch(a)
 	}
+}
+
+// pveEventSub unterscheidet mehrere Ereignisse derselben Ebene in einer Abfrage (Datastores eines PBS).
+func pveEventSub(ev proxmox.Event) string {
+	if ev.What == proxmox.WhatDatastore || ev.What == proxmox.WhatDatastoreFull {
+		return "-" + ev.What + "-" + ev.Detail
+	}
+	return ""
 }
 
 // pveChannels liefert die Kanaele einer Meldung aus der wirksamen Regel ohne geloeschte Kanaele (nil = Standardkanaele,

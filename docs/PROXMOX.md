@@ -187,10 +187,27 @@ Hostnamen liefert sie mit der Rolle Audit nicht; angezeigt wird der Name des Sys
 | 10 min | `/admin/datastore/{store}/namespace`, `…/groups?ns=` | Gruppen, Snapshots, letztes Backup je Datastore über alle Namespaces (höchstens 50) |
 | 10 min | `/nodes/localhost/tasks?errors=1&since=…` | fehlgeschlagene Tasks der letzten 7 Tage (höchstens 10) |
 
-Überwacht (Regeln, Benachrichtigung, „als Check“ mit dem Typ `proxmox`, nur lokal) wird nur das Host-System: nicht
-erreichbar, Neustart, Schwellen für CPU, RAM und Disk. Datastores, Backups, Tasks und Dienste stehen nur zur
-Information da – keine Regeln, keine Meldungen. „Geschätzt voll“ ist die Schätzung des PBS (lineare Regression über
-den letzten Monat); liegt sie in der Vergangenheit, sinkt die Belegung oder bleibt gleich („nicht absehbar“).
+Überwacht (Regeln, Benachrichtigung, „als Check“ mit dem Typ `proxmox`, nur lokal) werden das Host-System – nicht
+erreichbar, Neustart, Schwellen für CPU, RAM und Disk – und der Füllstand der Datastores. Backups, Tasks und Dienste
+stehen nur zur Information da – keine Regeln, keine Meldungen. „Geschätzt voll“ ist die Schätzung des PBS (lineare
+Regression über den letzten Monat); liegt sie in der Vergangenheit, sinkt die Belegung oder bleibt gleich („nicht
+absehbar“).
+
+**Füllstand der Datastores** (Regeln nur auf der Systemebene eines PBS, gelten für alle Datastores; API
+`rules.datastore` bzw. `rules.datastore_days`):
+
+| Regel | Standard | meldet |
+|---|---|---|
+| Datastore belegt ab | 90 % (0 = aus; Minuten wie bei den Schwellen) | `proxmox_threshold` mit Ursache `datastore`, z. B. „Datastore „main“ 92 % belegt (Grenze 90 %)“ |
+| Datastore voll in weniger als | aus (0) – Tage | `proxmox_threshold` mit Ursache `datastore_full`, z. B. „voraussichtlich in 9 Tagen voll (Grenze 14 Tage)“ |
+
+Wie die Schwellen der Nodes: gemeldet nach der Verzögerung (Abfragen, ggf. Minuten), über die Kanäle des Systems,
+je Datastore eine Meldung (Datastore im Text). Die Entwarnung (`proxmox_threshold_ok`) kommt erst deutlich unter der
+Grenze – 2 Prozentpunkte bzw. 2 Tage darüber – nach derselben Verzögerung, damit es nicht flattert. „Voll in weniger
+als“ zählt nur mit einer Schätzung in der Zukunft; ohne Schätzung bzw. „nicht absehbar“ gilt der Datastore als in
+Ordnung. Ein Datastore mit Fehler bzw. nicht eingehängt ändert nichts; wird die Grenze geändert, beginnt die Regel neu
+(ohne Meldung). In der Tabelle der Systemseite sind Datastores über der Grenze bzw. mit gemeldeter Schwelle rot
+markiert. Der Gesamtzustand des Host-Checks ändert sich dadurch nicht.
 
 ## API
 

@@ -11,6 +11,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
   (nur Hinweis, keine Meldung).
 - Healthchecks: Proxmox Backup Server überwachen – Host-System wie ein Proxmox-Node, dazu Datastores (Belegung,
   geschätzt voll), Backups und fehlgeschlagene Tasks zur Information.
+- Healthchecks: Proxmox Backup Server – Alarm, wenn ein Datastore voll wird („belegt ab“, Standard 90 %) bzw.
+  laut Schätzung bald voll ist („voll in weniger als … Tagen“, Standard aus).
 
 ## 0.12.0-alpha.32 – 2026-10-29
 

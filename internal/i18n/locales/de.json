@@ -4648,12 +4648,16 @@
       "threshold": {
         "cpu": "{type} „{name}“: CPU {value} % (Grenze {limit} %).",
         "mem": "{type} „{name}“: RAM {value} % (Grenze {limit} %).",
-        "disk": "{type} „{name}“: Disk {value} % (Grenze {limit} %)."
+        "disk": "{type} „{name}“: Disk {value} % (Grenze {limit} %).",
+        "datastore": "Proxmox Backup Server „{name}“: Datastore „{detail}“ zu {value} % belegt (Grenze {limit} %).",
+        "datastore_full": "Proxmox Backup Server „{name}“: Datastore „{detail}“ voraussichtlich in {value} Tagen voll (Grenze {limit} Tage)."
       },
       "threshold_ok": {
         "cpu": "{type} „{name}“: CPU wieder unter {limit} % ({value} %).",
         "mem": "{type} „{name}“: RAM wieder unter {limit} % ({value} %).",
-        "disk": "{type} „{name}“: Disk wieder unter {limit} % ({value} %)."
+        "disk": "{type} „{name}“: Disk wieder unter {limit} % ({value} %).",
+        "datastore": "Proxmox Backup Server „{name}“: Datastore „{detail}“ wieder unter {limit} % ({value} %).",
+        "datastore_full": "Proxmox Backup Server „{name}“: Datastore „{detail}“ nicht mehr in weniger als {limit} Tagen voll."
       },
       "restarted": {
         "guest": "{type} „{name}“ wurde neu gestartet.",
@@ -4715,7 +4719,9 @@
       "hint": "Proxmox Backup Server lassen sich ebenso überwachen: das Host-System (CPU, RAM, Disk, Netz, I/O) und die Datastores zur Anzeige.",
       "host": "Host",
       "datastores": "Datastores",
-      "ds_info": "nur Anzeige, keine Meldungen",
+      "ds_info": "Füllstand mit Meldung nach den Regeln, sonst nur Anzeige",
+      "ds_over": "Über der Grenze „Datastore belegt ab“ (Meldung)",
+      "ds_full_over": "Voll in weniger Tagen als eingestellt (Meldung)",
       "ds_used": "Belegung",
       "ds_size": "Größe",
       "ds_free": "Frei",
@@ -4743,7 +4749,7 @@
       "rights": "Leser-Token im PBS anlegen",
       "rights_hint": "Auf dem Backup Server als root (Shell) – nur Leserechte (Rolle Audit):",
       "rights_secret": "Das Secret zeigt der PBS nur einmal beim Anlegen an.",
-      "about_text": "Nur lesend im eingestellten Takt: Host-Status (CPU, RAM, Root-Disk, Uptime), der letzte Minutenwert aus der RRD (Netz, Disk-I/O), die Dienste proxmox-backup und proxmox-backup-proxy und die Belegung der Datastores; alle 10 Minuten Version, verfügbare Updates (apt), Backups je Datastore über alle Namespaces und fehlgeschlagene Tasks. Überwacht wird nur das Host-System – Datastores, Backups und Tasks stehen nur zur Information da. Node64 ändert im PBS nichts."
+      "about_text": "Nur lesend im eingestellten Takt: Host-Status (CPU, RAM, Root-Disk, Uptime), der letzte Minutenwert aus der RRD (Netz, Disk-I/O), die Dienste proxmox-backup und proxmox-backup-proxy und die Belegung der Datastores; alle 10 Minuten Version, verfügbare Updates (apt), Backups je Datastore über alle Namespaces und fehlgeschlagene Tasks. Gemeldet werden das Host-System und der Füllstand der Datastores (Regeln „Datastore belegt ab“ und „Datastore voll in weniger als … Tagen“); Backups und Tasks stehen nur zur Information da. Node64 ändert im PBS nichts."
     },
     "edit": "System bearbeiten",
     "enable": "Einschalten",
@@ -4823,6 +4829,8 @@
       "mem": "RAM über",
       "disk": "Disk über (nur Container bzw. mit Gast-Agent)",
       "delay": "Verzögerung",
+      "datastore": "Datastore belegt ab",
+      "datastore_days": "Datastore voll in weniger als",
       "channels": "Kanäle"
     },
     "rules": {
@@ -4850,6 +4858,7 @@
       "from_system": "vom System geerbt",
       "from_node": "vom Node geerbt",
       "polls": "Abfragen",
+      "days": "Tagen",
       "reset": "Alles erben",
       "reset_confirm": "Eigene Regeln dieser Ebene zurücksetzen?",
       "channels_own": "eigene Auswahl",
@@ -4872,6 +4881,7 @@
       "interval": "Intervall zwischen 15 und 300 Sekunden.",
       "threshold": "Schwelle 0–100 % und 0–1440 Minuten.",
       "delay": "Verzögerung 1–60 Abfragen.",
+      "datastore_days": "Datastore voll in weniger als: 0–3650 Tage (0 = aus).",
       "key": "Unbekannter Gast bzw. Node.",
       "no_box": "Kein Schlüssel (secret.key) geladen – Token-Secrets lassen sich nicht verschlüsselt speichern.",
       "channels": "Kanäle: ungültige Auswahl (höchstens 100).",

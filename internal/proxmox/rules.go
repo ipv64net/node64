@@ -33,6 +33,9 @@ const (
 	WhatCPU         = "cpu"
 	WhatMem         = "mem"
 	WhatDisk        = "disk"
+	// Proxmox Backup Server: Datastore belegt ab Prozent bzw. voll in weniger als N Tagen (Event.Detail = Datastore)
+	WhatDatastore     = "datastore"
+	WhatDatastoreFull = "datastore_full"
 	// Docker-Container (gleiche Werte wie Resource.Detail; Regel „Absturz“, ohne Verzoegerung)
 	WhatUnhealthy  = DockerUnhealthy
 	WhatRestarting = DockerRestarting
@@ -68,7 +71,17 @@ type pveSysState struct {
 	notified bool
 	since    time.Time
 	res      map[string]*pveResState
+	ds       map[string]*pbsDSState // PBS: Datastore -> Schwellen
 }
+
+// pbsDSState sind die Schwellen eines Datastores: [0] belegt ab Prozent, [1] voll in weniger als N Tagen.
+type pbsDSState struct {
+	thr    [2]pveThrState
+	limits [2]float64
+}
+
+// pbsDSHyst: Entwarnung erst so weit unter der Grenze (Prozentpunkte bzw. Tage), damit es nicht flattert.
+const pbsDSHyst = 2
 
 // Engine wertet die Regeln aus (thread-sicher).
 type Engine struct {
@@ -381,7 +394,128 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 			delete(st.res, k) // geloescht, ausgeschlossen oder stumm: Stand verwerfen
 		}
 	}
+	if snap.PBS != nil {
+		st.evalDatastores(snap.PBS.Datastores, sysRule, now, sysName, add)
+	}
 	return evs
+}
+
+// evalDatastores wertet die Datastore-Regeln eines PBS aus wie die Schwellen der Nodes: Delay Abfragen (und Minutes)
+// ueber der Grenze -> threshold, Delay Abfragen deutlich darunter (pbsDSHyst) -> threshold_ok. Ein Datastore ohne
+// Werte (Fehler, nicht eingehaengt) aendert nichts; „voll in N Tagen“ gilt nur mit einer Schaetzung in der Zukunft,
+// ohne Schaetzung (Belegung sinkt bzw. bleibt gleich) zaehlt er als darunter.
+func (st *pveSysState) evalDatastores(list []PBSDatastore, rule Rule, now time.Time, sysName string, add func(Event)) {
+	if st.ds == nil {
+		st.ds = map[string]*pbsDSState{}
+	}
+	delay := max(rule.Delay, 1)
+	seen := map[string]bool{}
+	for _, d := range list {
+		seen[d.Store] = true
+		ds := st.ds[d.Store]
+		if ds == nil {
+			ds = &pbsDSState{}
+			st.ds[d.Store] = ds
+		}
+		pct, okPct := d.UsedPercent()
+		if d.Error != "" || d.Mount == "notmounted" {
+			okPct = false
+		}
+		lbl := "Datastore „" + d.Store + "“"
+		for m := 0; m < 2; m++ {
+			ts := &ds.thr[m]
+			var limit, v float64
+			var minutes int
+			var over, under bool // ueber der Grenze bzw. deutlich darunter (Entwarnung)
+			switch m {
+			case 0:
+				limit, minutes, v = rule.Datastore.Percent, rule.Datastore.Minutes, pct
+				over, under = v >= limit, v < limit-pbsDSHyst
+			default:
+				limit = float64(rule.DatastoreDays)
+				if t, ok := d.FullTime(now); ok {
+					v = math.Floor(t.Sub(now).Hours() / 24)
+					over, under = v < limit, v >= limit+pbsDSHyst
+				} else {
+					v, under = -1, true
+				}
+			}
+			if limit <= 0 || (ts.fired && ds.limits[m] != limit) {
+				*ts = pveThrState{} // aus bzw. Grenze geaendert: ohne Meldung zuruecksetzen
+				continue
+			}
+			if !okPct {
+				ts.above, ts.below = 0, 0 // keine Werte: Dauer beginnt neu, Meldung bleibt offen
+				if !ts.fired {
+					ts.since = time.Time{}
+				}
+				continue
+			}
+			what := WhatDatastore
+			if m == 1 {
+				what = WhatDatastoreFull
+			}
+			if over {
+				ts.below = 0
+				ts.above++
+				if ts.since.IsZero() {
+					ts.since = now
+				}
+				if !ts.fired && ts.above >= delay && now.Sub(ts.since) >= time.Duration(minutes)*time.Minute {
+					ts.fired = true
+					ds.limits[m] = limit
+					txt := fmt.Sprintf("%s: %s %s belegt (Grenze %s)", sysName, lbl, pvePct(v), pvePct(limit))
+					if m == 1 {
+						txt = fmt.Sprintf("%s: %s voraussichtlich in %.0f Tagen voll (Grenze %.0f Tage)", sysName, lbl, v, limit)
+					}
+					add(Event{Name: sysName, Kind: KindThreshold, What: what, Value: pveRound1(v), Limit: limit, Since: ts.since,
+						Text: txt, Detail: d.Store})
+				}
+				continue
+			}
+			if !ts.fired {
+				*ts = pveThrState{}
+				continue
+			}
+			if !under { // zwischen Grenze und Entwarnung: weder zaehlen noch melden
+				ts.below = 0
+				continue
+			}
+			ts.below++
+			if ts.below >= delay {
+				txt := fmt.Sprintf("%s: %s wieder unter %s (%s)", sysName, lbl, pvePct(limit), pvePct(v))
+				if m == 1 {
+					txt = fmt.Sprintf("%s: %s nicht mehr in weniger als %.0f Tagen voll", sysName, lbl, limit)
+					v = max(v, 0)
+				}
+				add(Event{Name: sysName, Kind: KindThresholdOK, What: what, Value: pveRound1(v), Limit: limit, Since: ts.since,
+					Text: txt, Detail: d.Store})
+				*ts = pveThrState{}
+			}
+		}
+	}
+	for k := range st.ds {
+		if !seen[k] {
+			delete(st.ds, k) // Datastore entfernt: Stand verwerfen
+		}
+	}
+}
+
+// DatastoreAlarm sagt, welche Datastore-Schwellen eines Systems gemeldet sind (Anzeige): Store -> belegt, voll bald.
+func (e *Engine) DatastoreAlarm(systemID int64) map[string][2]bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	st := e.sys[systemID]
+	if st == nil || len(st.ds) == 0 {
+		return nil
+	}
+	out := map[string][2]bool{}
+	for k, ds := range st.ds {
+		if ds.thr[0].fired || ds.thr[1].fired {
+			out[k] = [2]bool{ds.thr[0].fired, ds.thr[1].fired}
+		}
+	}
+	return out
 }
 
 // Outage liefert, ob fuer key eine Stoerung gemeldet ist (seit wann) – beim Einschalten von AsCheck uebernimmt der
@@ -457,6 +591,8 @@ type EngineState struct {
 	Down  bool                      `json:"down,omitempty"` // „nicht erreichbar“ gemeldet
 	Since time.Time                 `json:"since,omitempty"`
 	Res   map[string]EngineResState `json:"res,omitempty"` // Key → gemeldeter Stand
+	// DS: PBS-Datastore → gemeldete Schwellen (datastore, datastore_full)
+	DS map[string]map[string]EngineThr `json:"ds,omitempty"`
 }
 
 // EngineResState ist der gemeldete Stand eines Nodes oder Gasts.
@@ -504,7 +640,20 @@ func (e *Engine) Export(systemID int64) *EngineState {
 			out.Res[k] = x
 		}
 	}
-	if !out.Down && out.Res == nil {
+	for k, ds := range st.ds {
+		for m, w := range []string{WhatDatastore, WhatDatastoreFull} {
+			if ds.thr[m].fired {
+				if out.DS == nil {
+					out.DS = map[string]map[string]EngineThr{}
+				}
+				if out.DS[k] == nil {
+					out.DS[k] = map[string]EngineThr{}
+				}
+				out.DS[k][w] = EngineThr{Limit: ds.limits[m], Since: ds.thr[m].since}
+			}
+		}
+	}
+	if !out.Down && out.Res == nil && out.DS == nil {
 		return nil
 	}
 	return out
@@ -534,6 +683,19 @@ func (e *Engine) Import(systemID int64, s *EngineState) {
 			}
 		}
 		st.res[k] = rs
+	}
+	for k, thr := range s.DS {
+		ds := &pbsDSState{}
+		for m, w := range []string{WhatDatastore, WhatDatastoreFull} {
+			if t, ok := thr[w]; ok && t.Limit > 0 {
+				ds.thr[m] = pveThrState{since: t.Since, above: 1, fired: true}
+				ds.limits[m] = t.Limit
+			}
+		}
+		if st.ds == nil {
+			st.ds = map[string]*pbsDSState{}
+		}
+		st.ds[k] = ds
 	}
 	e.sys[systemID] = st
 }

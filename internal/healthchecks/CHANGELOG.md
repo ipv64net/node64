@@ -1,5 +1,14 @@
 # Änderungen – Healthchecks
 
+## 2.46.0 – 2026-10-30
+
+### Neu
+- Proxmox Backup Server: Füllstand-Alarm für Datastores. Zwei Regeln auf der Systemebene des PBS, gültig für alle
+  Datastores: „Datastore belegt ab“ (Standard 90 %) und „Datastore voll in weniger als … Tagen“ (aus der Schätzung des
+  PBS, Standard aus). Gemeldet wird wie bei den Schwellen der Nodes (Verzögerung, Kanäle des Systems), je Datastore;
+  die Entwarnung kommt erst 2 Prozentpunkte bzw. 2 Tage über der Grenze. Datastores über der Grenze sind in der
+  Tabelle rot markiert. Backups, Tasks und Dienste bleiben reine Anzeige.
+
 ## 2.45.0 – 2026-10-30
 
 ### Neu

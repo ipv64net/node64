@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/checks"
+	"github.com/ipv64net/node64/internal/notify"
 	"github.com/ipv64net/node64/internal/proxmox"
 )
 
@@ -192,5 +193,83 @@ func TestPBSCluster(t *testing.T) {
 	got, err := mB.pve.st.SystemByUID(ctx, sys.UID)
 	if err != nil || !got.IsPBS() || got.Addresses[0] != "https://pbs.lan:8007" || got.Secret != pveTestSecret {
 		t.Fatalf("system on B: %+v %v", got, err)
+	}
+}
+
+// Fuellstand der Datastores: Regeln nur beim PBS (Systemebene), Meldung ueber den normalen Weg (Schwelle), Markierung
+// in der Tabelle, API mit den Regelfeldern.
+func TestPBSDatastoreRules(t *testing.T) {
+	fsrv := pbsFake(t)
+	core := pveCore(t)
+	m, srv, rec := newPVEModule(t, core, pveBox(t, 1))
+	code, b := call(t, srv, "POST", "/api/healthchecks/proxmox/systems", map[string]any{"kind": "pbs", "addresses": []string{fsrv.URL},
+		"token_id": "node64@pbs!monitor", "secret": pveTestSecret, "pin_sha256": pvePinOf(fsrv), "interval": 30})
+	if code != http.StatusCreated {
+		t.Fatalf("create: %d %s", code, b)
+	}
+	var created struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.Unmarshal(b, &created)
+	id := created.ID
+	sp := fmt.Sprintf("/healthchecks/proxmox/system/%d", id)
+	ds := func() map[string]string { // Ursache -> Art der Meldungen zu Datastores
+		out := map[string]string{}
+		for _, a := range rec.take() {
+			if w := a.Data["what"]; w == proxmox.WhatDatastore || w == proxmox.WhatDatastoreFull {
+				out[w+":"+a.Data["detail"]] = string(a.Kind)
+				if !strings.Contains(a.EventID, "-"+w+"-"+a.Data["detail"]+"-") || a.Data["path"] != sp {
+					t.Fatalf("alert: %+v", a)
+				}
+			}
+		}
+		return out
+	}
+
+	// Standard 90 %: main (95 %) meldet nach der Verzoegerung (2 Abfragen), archive (25 %) nicht
+	pvePollNow(t, m, id)
+	pvePollNow(t, m, id)
+	if got := ds(); len(got) != 1 || got["datastore:main"] != string(notify.KindProxmoxThreshold) {
+		t.Fatalf("alerts: %v", got)
+	}
+
+	// Systemseite: Regeln „belegt ab“ und „voll in weniger als … Tagen“, main markiert
+	_, body := pveGet(t, srv, sp)
+	for _, want := range []string{`name="r_datastore"`, `name="r_datastore_days"`, "pve.rules.days", "pve.pbs.ds_over"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("system page: %q missing: %s", want, body)
+		}
+	}
+	// Proxmox VE: keine Datastore-Regeln
+	if f := pveRulesFor(&proxmox.SystemSettings{Kind: proxmox.KindPVE}, "", "", ""); strings.Contains(fmt.Sprint(f.Fields), "datastore") {
+		t.Fatalf("pve rules: %+v", f.Fields)
+	}
+
+	// ungueltige Tage werden abgewiesen; voll in weniger als 10 Tagen (main: 5 Tage), Grenze 99 %
+	resp, _ := pvePost(t, srv, sp+"/settings", url.Values{"key": {""}, "op": {"save"}, "r_datastore_days": {"-3"}})
+	if !strings.Contains(resp.Header.Get("X-Flash"), "danger:pve.err.datastore_days") {
+		t.Fatalf("invalid days: %v", resp.Header)
+	}
+	pvePost(t, srv, sp+"/settings", url.Values{"key": {""}, "op": {"save"}, "r_datastore": {"99"}, "r_datastore_days": {"10"}})
+	set, _ := m.pve.st.Settings(context.Background(), id)
+	if r := set.Effective("", ""); r.Datastore.Percent != 99 || r.DatastoreDays != 10 {
+		t.Fatalf("rule: %+v", r)
+	}
+	pvePollNow(t, m, id)
+	pvePollNow(t, m, id)
+	// Grenze von 90 auf 99 % geaendert: still zurueckgesetzt (wie bei den Host-Schwellen); voll bald meldet
+	if got := ds(); len(got) != 1 || got["datastore_full:main"] != string(notify.KindProxmoxThreshold) {
+		t.Fatalf("alerts: %v", got)
+	}
+	_, body = pveGet(t, srv, sp)
+	if !strings.Contains(body, "pve.pbs.ds_full_over") || strings.Contains(body, "pve.pbs.ds_over") {
+		t.Fatalf("marks: %s", body)
+	}
+
+	// API: Regelfelder schreiben und lesen
+	code, b = call(t, srv, "PUT", fmt.Sprintf("/api/healthchecks/proxmox/systems/%d/settings", id), map[string]any{
+		"rules": map[string]any{"datastore": map[string]any{"percent": 80, "minutes": 0}, "datastore_days": 0}})
+	if code != 200 || !strings.Contains(string(b), `"datastore":{"percent":80,"minutes":0}`) || !strings.Contains(string(b), `"datastore_days":0`) {
+		t.Fatalf("api settings: %d %s", code, b)
 	}
 }
