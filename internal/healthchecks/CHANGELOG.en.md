@@ -1,5 +1,13 @@
 # Changes – Healthchecks
 
+## 2.44.0 – 2026-10-30
+
+### New
+- Proxmox VE and Docker: the overview shows a small badge next to the version when a newer version exists (tooltip:
+  installed and available; a new major version is named separately). Just a hint – no notification, no event, no
+  state. Node64 checks at most twice a day: Docker in the stable package directory at download.docker.com, Proxmox VE
+  the pve-manager version in the pve-no-subscription repository.
+
 ## 2.43.0 – 2026-10-29
 
 ### New

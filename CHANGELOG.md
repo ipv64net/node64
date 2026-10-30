@@ -7,6 +7,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 - PROXY64: Neuer Reiter „Sicherheit“ für Blocklisten, DoS-Schutz und Honeypot64. Unter „Zugriffslisten“ gibt es
   jetzt eine Freigabeliste und eine eigene Sperrliste für alle Namen; Sperren des Honeypots lassen sich dort
   aufheben oder dauerhaft freigeben. Die Sperrliste gilt auch auf den CDN64-Servern.
+- Healthchecks: Proxmox VE und Docker zeigen in der Übersicht ein kleines Badge, wenn es eine neuere Version gibt
+  (nur Hinweis, keine Meldung).
 
 ## 0.12.0-alpha.32 – 2026-10-29
 

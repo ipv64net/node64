@@ -39,7 +39,7 @@
 				<div class="small text-body-secondary text-truncate font-monospace" style="max-width:22rem">{{range .Sys.Addresses}}{{.}}{{end}}</div></td>
 			<td data-label="{{$.T "common.status"}}"><span class="badge {{.Class}}">{{$.T (print "pve.sys_state." .State)}}</span>
 				{{if .Error}}<div class="small text-danger text-break">{{.Error}}</div>{{end}}</td>
-			<td data-label="{{$.T "pve.version"}}">{{with .Info}}Docker {{.Version}}<div class="small text-body-secondary">{{.Name}}</div>{{end}}</td>
+			<td data-label="{{$.T "pve.version"}}">{{with .Info}}Docker {{.Version}}{{end}}{{with .Update}} <span class="badge text-bg-info fw-normal" title="{{if .Major}}{{$.T "pve.update_major_hint" "installed" .Installed "latest" .Latest}}{{else}}{{$.T "pve.update_hint" "installed" .Installed "latest" .Latest}}{{end}}"><i class="bi bi-arrow-up-circle"></i> {{.Latest}}</span>{{end}}{{with .Info}}<div class="small text-body-secondary">{{.Name}}</div>{{end}}</td>
 			<td data-label="{{$.T "docker.containers"}}" class="text-end text-nowrap">{{if .Guests}}<span class="text-success" title="{{$.T "pve.running"}}"><i class="bi bi-play-fill"></i>{{.Running}}</span>{{if .Bad}} <span class="text-danger fw-semibold" title="{{$.T "pve.bad"}}"><i class="bi bi-exclamation-octagon"></i>{{.Bad}}</span>{{end}} <span class="text-body-secondary">/ {{.Guests}}</span>{{else}}–{{end}}</td>
 			<td data-label="CPU · RAM" class="d-none d-md-table-cell small text-nowrap">{{if .CPUMax}}{{.CPUText}} · {{$.Bytes .Mem}}{{else}}–{{end}}</td>
 			<td data-label="{{$.T "pve.last_poll"}}" class="small text-nowrap">{{with .Snap}}{{$.Ago .Time}}{{else}}–{{end}} <span class="text-body-secondary">· {{.Sys.Interval}} s</span></td>
