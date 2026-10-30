@@ -35,7 +35,7 @@ func (s *Sensor) handleSNMP(t *trapService, pc net.PacketConn) {
 	pair := newSensorUDPLimit(time.Minute, 1)
 	perSrc := newSensorUDPLimit(time.Minute, sensorSNMPPerSrc)
 	sensorUDPServe(pc, sensorSNMPMax, func(b []byte, from netip.AddrPort) []byte {
-		ip := from.Addr().Unmap().String()
+		ip := sensorLimitKey(from.Addr().Unmap()).String() // IPv6 je /64
 		m, ok := sensorSNMPParse(b)
 		var e Event
 		var key string

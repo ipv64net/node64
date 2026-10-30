@@ -4609,7 +4609,7 @@
     },
     "country": {
       "title": "Standort des Sensors",
-      "auto": "Automatisch (aus der öffentlichen IPv4)",
+      "auto": "Automatisch (aus der öffentlichen IPv4, sonst IPv6)",
       "auto_known": "Automatisch – erkannt: {name}",
       "hint": "Ziel der Bögen auf der Live-Karte, hier und auf ipv64.net. Nur nötig, wenn das erkannte Land nicht stimmt (z. B. Server eines Hosters im Ausland). Gilt nur für die Anzeige, nicht für die Bewertung der Angreifer."
     }

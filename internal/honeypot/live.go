@@ -21,7 +21,8 @@ import (
 // Live-Karte (Wunsch Dennis 2026-10-26): auf der Laenderkarte der Uebersicht fliegen Boegen von der Quelle eines
 // Angriffs zum eigenen Sensor. Daten aus GET /api/honeypot/live (Ereignisse der letzten Minuten mit Land und
 // Kartenpunkt); das Zeichnen und das Wiederholen aelterer Eintraege bei wenig Verkehr macht honeypot-live.js. Ziel
-// ist das Land der oeffentlichen IPv4 der Node (bei ipv64.net erfragt wie im DynDNS-Modul, 6 Stunden gemerkt).
+// ist das Land der oeffentlichen IPv4 der Node, ohne IPv4 der IPv6 (bei ipv64.net erfragt wie im DynDNS-Modul,
+// 6 Stunden gemerkt).
 
 const (
 	liveDefaultMin = 60
@@ -56,8 +57,9 @@ type LivePoint struct {
 	Manual  bool    `json:"manual"` // Standort eingestellt (sonst aus der oeffentlichen IPv4)
 }
 
-// ownCountry: Land der oeffentlichen IPv4 (gemerkt; Fehler eine Minute, Erfolg 6 Stunden). Abgerufen wird ausserhalb
-// der Sperre (bis 6 s): cached() und gleichzeitige Aufrufe warten nicht, sie bekommen den bisherigen Stand.
+// ownCountry: Land der oeffentlichen IPv4, ohne IPv4 der IPv6 (gemerkt; Fehler eine Minute, Erfolg 6 Stunden).
+// Abgerufen wird ausserhalb der Sperre (je Adressfamilie bis 6 s): cached() und gleichzeitige Aufrufe warten nicht,
+// sie bekommen den bisherigen Stand.
 type ownCountry struct {
 	mu       sync.Mutex
 	cc       string
@@ -67,7 +69,7 @@ type ownCountry struct {
 	from     func(ctx context.Context) (netip.Addr, error)
 }
 
-var ownCC = &ownCountry{from: fetchOwnIPv4}
+var ownCC = &ownCountry{from: fetchOwnAddr}
 
 func (o *ownCountry) get(ctx context.Context) string {
 	o.mu.Lock()
@@ -92,14 +94,23 @@ func (o *ownCountry) get(ctx context.Context) string {
 	return o.cc
 }
 
-// fetchOwnIPv4 fragt die oeffentliche IPv4 bei ipv64.net ab (erzwungen ueber IPv4).
-func fetchOwnIPv4(ctx context.Context) (netip.Addr, error) {
+// fetchOwnAddr fragt die oeffentliche IPv4 bei ipv64.net ab; ohne IPv4 (reiner IPv6-Anschluss) einmal die IPv6.
+func fetchOwnAddr(ctx context.Context) (netip.Addr, error) {
+	a, err := fetchOwnIP(ctx, "tcp4", "https://ipv4.ipv64.net/ipcheck.php?ipv4")
+	if err != nil {
+		a, err = fetchOwnIP(ctx, "tcp6", "https://ipv6.ipv64.net/ipcheck.php?ipv6")
+	}
+	return a, err
+}
+
+// fetchOwnIP fragt die oeffentliche Adresse bei ipv64.net ab (erzwungen ueber network "tcp4" bzw. "tcp6").
+func fetchOwnIP(ctx context.Context, network, url string) (netip.Addr, error) {
 	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
 	defer cancel()
 	d := &net.Dialer{Timeout: 5 * time.Second}
 	cl := &http.Client{Transport: &http.Transport{DisableKeepAlives: true,
-		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) { return d.DialContext(ctx, "tcp4", addr) }}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://ipv4.ipv64.net/ipcheck.php?ipv4", nil)
+		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) { return d.DialContext(ctx, network, addr) }}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return netip.Addr{}, err
 	}
@@ -110,9 +121,10 @@ func fetchOwnIPv4(ctx context.Context) (netip.Addr, error) {
 	}
 	defer resp.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-	for _, f := range strings.FieldsFunc(string(b), func(r rune) bool { return !(r >= '0' && r <= '9' || r == '.') }) {
-		if a, err := netip.ParseAddr(f); err == nil && a.Is4() {
-			return a, nil
+	hex := func(r rune) bool { return r >= '0' && r <= '9' || r >= 'a' && r <= 'f' || r >= 'A' && r <= 'F' }
+	for _, f := range strings.FieldsFunc(string(b), func(r rune) bool { return !(hex(r) || r == '.' || r == ':') }) {
+		if a, err := netip.ParseAddr(f); err == nil && a.Unmap().Is4() == (network == "tcp4") {
+			return a.Unmap(), nil
 		}
 	}
 	return netip.Addr{}, io.ErrUnexpectedEOF

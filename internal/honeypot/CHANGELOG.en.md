@@ -1,5 +1,12 @@
 # Changes – Honeypot64
 
+## 0.16.2 – 2026-10-30
+
+### Fixed
+- SIP and SNMP: the per-source limit now really applies per /64 for IPv6; rotating addresses from one network no longer
+  fill the table and blind the sensors for everyone else.
+- Live map: without a public IPv4 (IPv6-only connection) the location is detected from the public IPv6.
+
 ## 0.16.1 – 2026-10-28
 
 ### Fixed

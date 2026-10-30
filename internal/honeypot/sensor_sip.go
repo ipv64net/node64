@@ -34,7 +34,7 @@ const (
 func (s *Sensor) handleSIP(t *trapService, pc net.PacketConn) {
 	lim := newSensorUDPLimit(time.Minute, sensorSIPPerSrc)
 	sensorUDPServe(pc, sensorSIPMax, func(b []byte, from netip.AddrPort) []byte {
-		if !lim.allow(from.Addr().Unmap().String(), time.Now()) {
+		if !lim.allow(sensorLimitKey(from.Addr().Unmap()).String(), time.Now()) {
 			return nil
 		}
 		t.conns.Add(1)

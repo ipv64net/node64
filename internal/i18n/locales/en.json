@@ -4609,7 +4609,7 @@
     },
     "country": {
       "title": "Location of the sensor",
-      "auto": "Automatic (from the public IPv4)",
+      "auto": "Automatic (from the public IPv4, otherwise IPv6)",
       "auto_known": "Automatic – detected: {name}",
       "hint": "Target of the arcs on the live map, here and on ipv64.net. Only needed if the detected country is wrong (e.g. a hosting provider's server abroad). Affects only the display, not the rating of attackers."
     }
