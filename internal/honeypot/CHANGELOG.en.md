@@ -1,5 +1,12 @@
 # Changes – Honeypot64
 
+## 0.16.3 – 2026-10-30
+
+### Fixed
+- Connections from the own public IPv4 or the own IPv6 /64 are no longer reported to ipv64, just like LAN
+  connections: neither as a source nor with their samples. Trying things out yourself (e.g. with the browser) no
+  longer counts as a contribution to the rankings and the JA4 list.
+
 ## 0.16.2 – 2026-10-30
 
 ### Fixed

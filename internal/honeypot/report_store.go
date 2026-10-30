@@ -48,6 +48,24 @@ func reportable(a netip.Addr) bool {
 	return true
 }
 
+// ownAddr: a ist eine eigene oeffentliche Adresse (IPv4 genau, IPv6 im selben /64). Zugriffe von dort sind eigenes
+// Ausprobieren, keine Angriffe - weder Quelle noch Probe (sonst zaehlt z. B. der JA4 des eigenen Browsers).
+func ownAddr(a netip.Addr, own []netip.Addr) bool {
+	a = a.Unmap().WithZone("")
+	for _, o := range own {
+		o = o.Unmap()
+		switch {
+		case o.Is4() && a == o:
+			return true
+		case o.Is6() && a.Is6():
+			if p, err := o.Prefix(64); err == nil && p.Contains(a) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // hasEvents: es gibt Ereignisse mit Quell-IP in [start, end) (guenstig ueber den Index auf ts).
 func (s *Store) hasEvents(ctx context.Context, start, end time.Time) (bool, error) {
 	var n int
@@ -59,8 +77,9 @@ func (s *Store) hasEvents(ctx context.Context, start, end time.Time) (bool, erro
 // BuildReport baut den Bericht fuer [start, end): Quellen je (src, kind, service, port, source, rule) mit Anzahl und
 // erstem/letztem Zeitpunkt, dazu Proben (Zugangsdaten, Pfade, User-Agents, Fingerabdruecke, Payloads; nur aus dem Honeypot), jeweils
 // haeufigste zuerst und auf die Grenzen
-// aus report_types.go gekuerzt (Rest in Dropped). ReportID und Sensor setzt der Aufrufer.
-func (s *Store) BuildReport(ctx context.Context, start, end time.Time) (*Report, error) {
+// aus report_types.go gekuerzt (Rest in Dropped). ReportID und Sensor setzt der Aufrufer. own: eigene oeffentliche
+// Adressen, sie bleiben wie private lokal.
+func (s *Store) BuildReport(ctx context.Context, start, end time.Time, own ...netip.Addr) (*Report, error) {
 	start, end = start.UTC(), end.UTC()
 	rep := &Report{Schema: ReportSchema, Period: ReportPeriod{Start: start, End: end}, Sources: []ReportSource{}}
 	from, to := storeTime(start), storeTime(end)
@@ -79,7 +98,7 @@ func (s *Store) BuildReport(ctx context.Context, start, end time.Time) (*Report,
 			return nil, err
 		}
 		total++
-		if a, err := netip.ParseAddr(src); err != nil || !reportable(a) {
+		if a, err := netip.ParseAddr(src); err != nil || !reportable(a) || ownAddr(a, own) {
 			private = append(private, src)
 		}
 	}

@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"math/big"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"sort"
@@ -174,7 +175,8 @@ type ReporterConfig struct {
 	Enabled  func(ctx context.Context) bool                       // Opt-in
 	Profile  func(ctx context.Context) string
 	SensorID func(ctx context.Context) (string, error)
-	Country  func(ctx context.Context) string // Standort des Sensors ("" = automatisch; nil = keiner)
+	Country  func(ctx context.Context) string       // Standort des Sensors ("" = automatisch; nil = keiner)
+	OwnAddrs func(ctx context.Context) []netip.Addr // eigene oeffentliche Adressen, nicht melden (nil = keine)
 	State    ReportStateStore
 	Mode     string // module | headless
 	Version  string // Version der Node
@@ -392,6 +394,10 @@ func (r *Reporter) RunOnce(ctx context.Context) time.Duration {
 	if err != nil {
 		return r.failed(fmt.Errorf("read events: %w", err), 0, false)
 	}
+	var own []netip.Addr
+	if r.cfg.OwnAddrs != nil {
+		own = r.cfg.OwnAddrs(ctx)
+	}
 	// je Durchlauf hoechstens eine angenommene Meldung (Rate-Limit bei ipv64); verworfene bzw. schon bekannte
 	// Stuecke zaehlen dort nicht, danach geht es gleich weiter
 	for start.Before(end) {
@@ -410,7 +416,7 @@ func (r *Reporter) RunOnce(ctx context.Context) time.Duration {
 			ce = p.End // Wiederholung: genau derselbe Zeitraum (gleiche report_id)
 		}
 		r.mu.Unlock()
-		rep, err := r.cfg.Store.BuildReport(ctx, start, ce)
+		rep, err := r.cfg.Store.BuildReport(ctx, start, ce, own...)
 		if err != nil {
 			return r.failed(fmt.Errorf("build report: %w", err), 0, false)
 		}
