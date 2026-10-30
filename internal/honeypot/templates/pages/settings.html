@@ -38,7 +38,7 @@
 					<label class="form-check-label" for="sp-{{.Key}}"><strong>{{$.T (printf "honeypot.profile.%s" .Key)}}</strong>{{if eq .Key "proxy"}} <span class="badge text-bg-success">{{$.T "honeypot.simple.recommended"}}</span>{{end}}</label>
 					<div class="form-text mt-0">{{$.T (printf "honeypot.simple.desc.%s" .Key)}}</div>
 					<div class="small mt-1">{{if .Ports}}<i class="bi bi-router"></i> {{$.T "honeypot.simple.open_ports"}} <span class="font-monospace">{{join .Ports ", "}}</span>{{if .Low}}<div class="form-text mt-0"><i class="bi bi-shield-lock"></i> {{$.T "honeypot.cat.low_hint"}}</div>{{end}}
-						{{else}}<i class="bi bi-diagram-3"></i> {{$.T "honeypot.simple.no_ports"}} <a href="/cdn64/access#honeypot">{{$.T "honeypot.cat.proxy_link"}}</a>{{end}}</div>
+						{{else}}<i class="bi bi-diagram-3"></i> {{$.T "honeypot.simple.no_ports"}} <a href="/cdn64/security#honeypot">{{$.T "honeypot.cat.proxy_link"}}</a>{{end}}</div>
 				</div>{{end}}
 				<div class="alert alert-info small py-2 mt-2"><i class="bi bi-lightbulb"></i> {{.T "honeypot.simple.ports_hint" "ui" (or $d.UIPorts "8080")}}</div>
 				<div class="mb-3">
@@ -68,7 +68,7 @@
 				<div class="form-check mb-3">
 					<input class="form-check-input" type="checkbox" id="local_block" name="local_block" value="1"{{if not $d.Cfg.NoLocalBlock}} checked{{end}}>
 					<label class="form-check-label" for="local_block">{{.T "honeypot.settings.local_block"}}</label>{{.Doc "honeypot#lokal-sperren"}}
-					<div class="form-text mt-0">{{.T "honeypot.settings.local_block_hint"}} <a href="/cdn64/access#honeypot">{{.T "honeypot.settings.local_block_link"}}</a></div>
+					<div class="form-text mt-0">{{.T "honeypot.settings.local_block_hint"}} <a href="/cdn64/security#honeypot">{{.T "honeypot.settings.local_block_link"}}</a></div>
 					{{if not $d.Proxy64}}<div class="form-text mt-0 text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{.T "honeypot.settings.local_block_noproxy"}}</div>{{end}}
 				</div>
 				<div class="form-check">
@@ -98,7 +98,7 @@
 						{{range $d.CatPresets}}<button class="btn btn-sm btn-outline-secondary" type="submit" name="preset" value="{{.}}" formnovalidate>{{$.T (printf "honeypot.cat.preset.%s" .)}}</button>{{end}}
 					</div>
 					{{if eq $d.Cfg.Profile "proxy"}}<input type="hidden" name="proxy_only" value="1">
-					<div class="alert alert-info small py-2"><i class="bi bi-diagram-3"></i> {{.T "honeypot.cat.proxy_hint"}} <a href="/cdn64/access#honeypot">{{.T "honeypot.cat.proxy_link"}}</a></div>{{end}}
+					<div class="alert alert-info small py-2"><i class="bi bi-diagram-3"></i> {{.T "honeypot.cat.proxy_hint"}} <a href="/cdn64/security#honeypot">{{.T "honeypot.cat.proxy_link"}}</a></div>{{end}}
 					{{if $d.CatUnsaved}}<div class="alert alert-info small py-2"><i class="bi bi-info-circle"></i> {{.T "honeypot.cat.unsaved"}}</div>{{end}}
 					{{with index $d.Errors "profile"}}<div class="text-danger small">{{.}}</div>{{end}}
 					{{with index $d.Errors "services"}}<div class="alert alert-danger small py-2 mb-2" style="white-space:pre-line">{{.}}</div>{{end}}
@@ -252,7 +252,7 @@
 				<div class="form-check mt-3 mb-0">
 					<input class="form-check-input" type="checkbox" id="local_block_x" name="local_block" value="1"{{if not $d.Cfg.NoLocalBlock}} checked{{end}}>
 					<label class="form-check-label" for="local_block_x">{{.T "honeypot.settings.local_block"}}</label>{{.Doc "honeypot#lokal-sperren"}}
-					<div class="form-text mt-0">{{.T "honeypot.settings.local_block_hint"}} <a href="/cdn64/access#honeypot">{{.T "honeypot.settings.local_block_link"}}</a></div>
+					<div class="form-text mt-0">{{.T "honeypot.settings.local_block_hint"}} <a href="/cdn64/security#honeypot">{{.T "honeypot.settings.local_block_link"}}</a></div>
 					{{if not $d.Proxy64}}<div class="form-text mt-0 text-warning-emphasis"><i class="bi bi-exclamation-triangle"></i> {{.T "honeypot.settings.local_block_noproxy"}}</div>{{end}}
 				</div>
 				<hr>

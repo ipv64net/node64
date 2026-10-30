@@ -1,5 +1,15 @@
 # Änderungen – PROXY64
 
+## 1.44.0 – 2026-10-30
+
+### Neu
+- Reiter „Sicherheit“: ipv64-Blocklisten, DoS-Schutz und Honeypot64 stehen jetzt dort.
+- Reiter „Zugriffslisten“ mit Freigabeliste (Whitelist, früher „Ausnahmen“ der Blocklisten) und eigener Sperrliste
+  (Blacklist): Adressen oder Netze, die für alle Proxy-Hosts, „TLS durchreichen“ und Streams abgewiesen werden, lokal
+  und über CDN64; die Freigabeliste geht vor. Darunter die automatischen Sperren von Honeypot und DoS-Schutz mit
+  „Entsperren“ und „Freigeben“ (hebt die Sperre auf und trägt die Adresse in die Freigabeliste ein). Die
+  Zugriffslisten je Host bleiben darunter. API: `deny` in `/api/cdn64/blocklists`.
+
 ## 1.43.0 – 2026-10-29
 
 ### Neu

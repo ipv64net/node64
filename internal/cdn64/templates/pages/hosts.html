@@ -78,7 +78,7 @@
 				{{if .BlockExploits}}<i class="bi bi-shield-check me-1" title="{{$.T "cdn64.f.block_exploits"}}"></i>{{end}}
 				{{if .Advanced.AIBots}}<i class="bi bi-robot me-1" title="{{$.T "cdn64.f.ai_bots"}}"></i>{{end}}
 				{{if or .Advanced.BWDownMbit .Advanced.BWUpMbit}}<span class="badge text-bg-light me-1" title="{{$.T "cdn64.f.adv_bw_title"}}" data-bw-badge><i class="bi bi-speedometer"></i> {{if .Advanced.BWDownMbit}}↓{{.Advanced.BWDownMbit}}{{else}}↓∞{{end}} {{if .Advanced.BWUpMbit}}↑{{.Advanced.BWUpMbit}}{{else}}↑∞{{end}} Mbit/s</span>{{end}}
-				{{if and $d.LimitsOn (not .Advanced.NoLimits)}}<a href="/cdn64/access#limits" class="text-reset text-decoration-none"><i class="bi bi-speedometer2 me-1" title="{{$.T "cdn64.f.limits_on"}}"></i></a>{{end}}
+				{{if and $d.LimitsOn (not .Advanced.NoLimits)}}<a href="/cdn64/security#limits" class="text-reset text-decoration-none"><i class="bi bi-speedometer2 me-1" title="{{$.T "cdn64.f.limits_on"}}"></i></a>{{end}}
 				{{if .CacheAssets}}<i class="bi bi-lightning-charge me-1" title="{{$.T "cdn64.f.cache_assets"}}"></i>{{end}}
 				{{if .ForceSSL}}<i class="bi bi-arrow-up-right-square me-1" title="{{$.T "cdn64.f.force_ssl"}}"></i>{{end}}
 				{{if .HSTS}}<i class="bi bi-shield-lock me-1" title="HSTS"></i>{{end}}

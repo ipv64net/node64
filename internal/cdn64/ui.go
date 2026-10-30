@@ -75,12 +75,13 @@ func (m *Module) tabs(active string) []tab {
 		{Path: "/cdn64/status", Icon: "bi-clipboard-pulse", TitleKey: "cdn64.tab.status"},
 		{Path: "/cdn64/streams", Icon: "bi-ethernet", TitleKey: "cdn64.tab.streams"},
 		{Path: "/cdn64/access", Icon: "bi-person-lock", TitleKey: "cdn64.tab.access"},
+		{Path: "/cdn64/security", Icon: "bi-shield-shaded", TitleKey: "cdn64.tab.security"},
 		{Path: "/certificates", Icon: "bi-shield-lock", TitleKey: "cdn64.tab.certs"}, // Kernseite
 		{Path: "/cdn64/log", Icon: "bi-list-columns", TitleKey: "cdn64.tab.log"},
 		{Path: "/cdn64/docker", Icon: "bi-box-seam", TitleKey: "cdn64.tab.docker"},
 		{Path: "/cdn64/default", Icon: "bi-question-square", TitleKey: "cdn64.tab.default"}}
 	if m.protectionOn() {
-		t = slices.Insert(t, 8, tab{Path: "/cdn64/protection", Icon: "bi-shield-check", TitleKey: "cdn64.tab.protection"}) // nach den Zugriffen, vor Docker
+		t = slices.Insert(t, 9, tab{Path: "/cdn64/protection", Icon: "bi-shield-check", TitleKey: "cdn64.tab.protection"}) // nach den Zugriffen, vor Docker
 	}
 	for i := range t {
 		t[i].Active = t[i].Path == active

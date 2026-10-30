@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-// Seite (Karte auf dem Reiter Zugriffslisten) und API: Schutz vor Ueberlastung.
+// Seite (Karte auf dem Reiter Sicherheit, Sperren in der Sperrliste) und API: Schutz vor Ueberlastung.
 
 type limitsView struct {
 	Limits   Limits `json:"limits"`
@@ -38,7 +38,7 @@ func (m *Module) pageLimitsSave(w http.ResponseWriter, r *http.Request) {
 		m.g.Audit(r, "cdn64.limits", limAudit(c), "")
 		m.g.Flash(w, r, "success", m.g.T(r, "cdn64.lim.saved"))
 	}
-	http.Redirect(w, r, "/cdn64/access#limits", http.StatusSeeOther)
+	http.Redirect(w, r, "/cdn64/security#limits", http.StatusSeeOther)
 }
 
 func (m *Module) pageLimitsUnban(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +47,7 @@ func (m *Module) pageLimitsUnban(w http.ResponseWriter, r *http.Request) {
 		m.g.Audit(r, "cdn64.limits.unban", ip, "")
 		m.g.Flash(w, r, "success", m.g.T(r, "cdn64.lim.unbanned", "ip", ip))
 	}
-	http.Redirect(w, r, "/cdn64/access#limits", http.StatusSeeOther)
+	http.Redirect(w, r, "/cdn64/access#sperrliste", http.StatusSeeOther)
 }
 
 func limAudit(c Limits) string {

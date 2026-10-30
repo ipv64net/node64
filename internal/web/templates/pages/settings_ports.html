@@ -106,7 +106,7 @@
 						{{if .Config.DefaultPage}}<option value="html"{{if eq .Config.Default "html"}} selected{{end}}>{{$.T "ports.edge_default_html"}}</option>{{end}}
 					</select>
 					<div class="form-text mb-2">{{$.T "ports.edge_hint"}} <a href="/cdn64/default">{{$.T "ports.edge_default_link"}}</a></div>
-					{{if .UnknownReplaced}}<div class="alert alert-warning py-2 small"><i class="bi bi-bug"></i> {{$.T "ports.edge_decoy"}} <a href="/cdn64/access#honeypot" class="alert-link">{{$.T "ports.edge_decoy_link"}}</a></div>{{end}}
+					{{if .UnknownReplaced}}<div class="alert alert-warning py-2 small"><i class="bi bi-bug"></i> {{$.T "ports.edge_decoy"}} <a href="/cdn64/security#honeypot" class="alert-link">{{$.T "ports.edge_decoy_link"}}</a></div>{{end}}
 					<div class="form-text mb-2"><i class="bi bi-info-circle"></i> {{$.T "ports.edge_ui_moved"}} <a href="/settings#reach">{{$.T "settings.reach"}}</a></div>
 					<button class="btn btn-primary btn-sm" type="submit">{{$.T "common.save"}}</button>
 				</form>

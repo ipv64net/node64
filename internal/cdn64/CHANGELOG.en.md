@@ -1,5 +1,15 @@
 # Changes – PROXY64
 
+## 1.44.0 – 2026-10-30
+
+### New
+- "Security" tab: ipv64 blocklists, DoS protection and Honeypot64 are now there.
+- "Access lists" tab with an allow list (whitelist, formerly the blocklist "exceptions") and your own block list
+  (blacklist): addresses or networks rejected for all proxy hosts, "TLS pass-through" and streams, locally and via
+  CDN64; the allow list takes precedence. Below it the automatic blocks by the honeypot and the DoS protection with
+  "Unblock" and "Allow" (lifts the block and adds the address to the allow list). The access lists per host stay
+  below. API: `deny` in `/api/cdn64/blocklists`.
+
 ## 1.43.0 – 2026-10-29
 
 ### New

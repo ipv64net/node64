@@ -28,7 +28,9 @@ import (
 
 const (
 	setBlocklists  = "cdn64.blocklists"      // eingeschaltete Listen (Komma)
-	setBlockAllow  = "cdn64.blocklist_allow" // Ausnahmen (Netze, Zeilen)
+	setBlockAllow  = "cdn64.blocklist_allow" // Freigabeliste: Ausnahmen (Netze, Zeilen)
+	setBlockDeny   = "cdn64.blocklist_deny"  // eigene Sperrliste (Netze, Zeilen; Reiter Zugriffslisten)
+	blockNetsMax   = 5000                    // Zeilen je Freigabe-/Sperrliste
 	blocklistBase  = "https://ipv64.net/blocklists/"
 	blocklistEvery = 30 * time.Minute
 	blocklistMax   = 32 << 20 // je Liste
@@ -116,7 +118,9 @@ type blocklists struct {
 	nets    map[string][]netip.Prefix // je Liste (geladen)
 	state   map[string]*BlocklistState
 	etag    map[string]string
-	blocked atomic.Int64 // abgewiesene Verbindungen/Anfragen seit dem Start
+	blocked atomic.Int64               // abgewiesene Verbindungen/Anfragen seit dem Start
+	deny    atomic.Pointer[shield.Set] // eigene Sperrliste (ohne Freigabeliste; nil = leer)
+	denied  atomic.Int64               // davon abgewiesen seit dem Start
 	kick    chan struct{}
 	base    string // Basis-URL (Tests setzen einen eigenen Server)
 	client  *http.Client
@@ -145,6 +149,15 @@ func (b *blocklists) Blocked(a netip.Addr) bool {
 	return false
 }
 
+// Denied: Adresse steht in der eigenen Sperrliste (und nicht in der Freigabeliste).
+func (b *blocklists) Denied(a netip.Addr) bool {
+	if b.deny.Load().Has(a) {
+		b.denied.Add(1)
+		return true
+	}
+	return false
+}
+
 func (m *Module) blEnabled(ctx context.Context) []string {
 	var out []string
 	for _, id := range strings.Split(m.core.SettingOr(ctx, setBlocklists, ""), ",") {
@@ -156,9 +169,13 @@ func (m *Module) blEnabled(ctx context.Context) []string {
 	return out
 }
 
-func (m *Module) blAllow(ctx context.Context) []netip.Prefix {
+func (m *Module) blAllow(ctx context.Context) []netip.Prefix { return m.blNets(ctx, setBlockAllow) }
+
+func (m *Module) blDeny(ctx context.Context) []netip.Prefix { return m.blNets(ctx, setBlockDeny) }
+
+func (m *Module) blNets(ctx context.Context, key string) []netip.Prefix {
 	var out []netip.Prefix
-	for _, l := range strings.Fields(m.core.SettingOr(ctx, setBlockAllow, "")) {
+	for _, l := range strings.Fields(m.core.SettingOr(ctx, key, "")) {
 		if p, err := netip.ParsePrefix(l); err == nil {
 			out = append(out, p.Masked())
 		} else if a, err := netip.ParseAddr(l); err == nil {
@@ -194,6 +211,11 @@ func (m *Module) blRebuild(ctx context.Context) {
 		set = nil
 	}
 	b.set.Store(set)
+	deny := shield.BuildSet([][]netip.Prefix{m.blDeny(ctx)}, allow) // die Freigabeliste geht vor
+	if deny.Total() == 0 {
+		deny = nil
+	}
+	b.deny.Store(deny)
 }
 
 // blLoadCache liest die zwischengespeicherten Listen (beim Start: Schutz sofort, ohne auf ipv64 zu warten).
@@ -392,14 +414,9 @@ func (m *Module) blSave(ctx context.Context, enabled []string, allow string) err
 			ids = append(ids, id)
 		}
 	}
-	var lines []string
-	for _, l := range strings.Fields(allow) {
-		if _, err := netip.ParsePrefix(l); err != nil {
-			if _, err := netip.ParseAddr(l); err != nil {
-				return ferr("allow", "cdn64.bl.err_allow")
-			}
-		}
-		lines = append(lines, l)
+	lines, ok := netLines(allow)
+	if !ok {
+		return ferr("allow", "cdn64.bl.err_allow")
 	}
 	if err := m.core.SetSetting(ctx, setBlocklists, strings.Join(ids, ",")); err != nil {
 		return err
@@ -412,4 +429,54 @@ func (m *Module) blSave(ctx context.Context, enabled []string, allow string) err
 		m.limExempt(ctx, list)
 	}
 	return nil
+}
+
+// netLines: Adressen oder Netze je Zeile; false bei einer ungueltigen Zeile oder zu vielen.
+func netLines(s string) ([]string, bool) {
+	var lines []string
+	for _, l := range strings.Fields(s) {
+		if _, err := netip.ParsePrefix(l); err != nil {
+			if _, err := netip.ParseAddr(l); err != nil {
+				return nil, false
+			}
+		}
+		if !slices.Contains(lines, l) {
+			lines = append(lines, l)
+		}
+	}
+	return lines, len(lines) <= blockNetsMax
+}
+
+// blListsSave speichert Freigabeliste und eigene Sperrliste (nil = unveraendert) und baut die Sperren neu.
+func (m *Module) blListsSave(ctx context.Context, allow, deny *string) error {
+	for _, l := range []struct {
+		in        *string
+		key, form string
+	}{{allow, setBlockAllow, "allow"}, {deny, setBlockDeny, "deny"}} {
+		if l.in == nil {
+			continue
+		}
+		lines, ok := netLines(*l.in)
+		if !ok {
+			return ferr(l.form, "cdn64.sec.err_nets")
+		}
+		if err := m.core.SetSetting(ctx, l.key, strings.Join(lines, "\n")); err != nil {
+			return err
+		}
+	}
+	m.blRebuild(ctx)
+	if list, err := m.hosts(ctx); err == nil { // die Freigabeliste gilt auch fuer die Limits
+		m.limExempt(ctx, list)
+	}
+	return nil
+}
+
+// blAllowAdd traegt eine Adresse oder ein Netz in die Freigabeliste ein (Freigeben einer automatischen Sperre).
+func (m *Module) blAllowAdd(ctx context.Context, s string) error {
+	cur := m.core.SettingOr(ctx, setBlockAllow, "")
+	if slices.Contains(strings.Fields(cur), s) {
+		return nil
+	}
+	cur = strings.TrimSpace(cur + "\n" + s)
+	return m.blListsSave(ctx, &cur, nil)
 }

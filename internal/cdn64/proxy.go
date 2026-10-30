@@ -559,6 +559,12 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 					reason: *reject, decoy: *decoyed})
 			}
 		}()
+		if m.bl.Denied(client) { // eigene Sperrliste (echte Client-IP hinter vertrauenswuerdigen Proxys)
+			*reject = rejDeny
+			st.blocked.Add(1)
+			page(sw, http.StatusForbidden)
+			return
+		}
 		if m.bl.Blocked(client) { // ipv64-Blocklisten (echte Client-IP hinter vertrauenswuerdigen Proxys)
 			*reject = rejBlocklist
 			st.blocked.Add(1)
@@ -887,6 +893,8 @@ func (m *Module) routeFor(h *Host) edge.Route {
 		rt.Allow = func(ip netip.Addr) bool {
 			reason := ""
 			switch {
+			case m.bl.Denied(ip):
+				reason = rejDeny
 			case m.bl.Blocked(ip):
 				reason = rejBlocklist
 			case m.hpBlocked(ip):
