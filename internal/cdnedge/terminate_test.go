@@ -97,7 +97,9 @@ func TestTerminate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go node.Run(ctx)
-	for i := 0; i < 200 && b.peer("t1") == nil; i++ {
+	// Frist statt fester Rundenzahl: unter Last (go test ./... -race) brauchen QUIC-Handschlag und Anmeldung, bei
+	// einem gescheiterten ersten Versuch samt Wartezeit des Clients, deutlich laenger als 5 s
+	for deadline := time.Now().Add(30 * time.Second); b.peer("t1") == nil && time.Now().Before(deadline); {
 		time.Sleep(25 * time.Millisecond)
 	}
 	if b.peer("t1") == nil {
