@@ -29,6 +29,7 @@ var limQueueWait = 10 * time.Second // so lange wartet eine Anfrage auf einen fr
 const (
 	rejBlocklist = "blocklist" // ipv64-Blocklisten
 	rejDeny      = "deny"      // eigene Sperrliste
+	rejStream    = "stream"    // kein Abweisen: Stream-Verbindung im Debug-Log
 	rejBan       = "ban"       // gesperrt wegen Ueberlastung
 	rejConns     = "conns"     // zu viele Verbindungen je IP
 	rejConnRate  = "conn_rate" // zu viele neue Verbindungen je IP
@@ -451,7 +452,7 @@ func (m *Module) rejectConn(a netip.Addr, reason, where string) {
 		m.overload(rejMaxConns, "")
 	}
 	if sdb := m.stats2.Load(); sdb != nil {
-		sdb.add(hit{time: time.Now(), client: a.Unmap(), method: "-", host: where, reason: reason, conn: true})
+		sdb.add(hit{time: time.Now(), client: a.Unmap(), method: "-", host: where, reason: reason, conn: true, all: m.debug()})
 	}
 }
 

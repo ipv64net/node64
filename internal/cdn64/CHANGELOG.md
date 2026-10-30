@@ -1,5 +1,14 @@
 # Änderungen – PROXY64
 
+## 1.46.0 – 2026-10-30
+
+### Neu
+- Zugriffs-Log mit Log-Level Debug (unter Einstellungen, für alle Module oder nur PROXY64): Dann steht alles
+  ungebremst im Log – jede Anfrage auch ohne Einzel-Log des Hosts, jede Abweisung ohne die Bremse von 10 Sekunden je
+  Adresse, dazu Anfragen an unbekannte Namen, gescheiterte TLS-Handshakes, Verbindungen ohne gültiges TLS,
+  durchgereichtes TLS und Stream-Verbindungen (TCP mit Daten und Dauer, UDP je neuer Sitzung). Diese Zusätze stehen
+  nur im Log und ändern die Zahlen nicht. Die Log-Seite zeigt, wenn Debug an ist.
+
 ## 1.45.1 – 2026-10-30
 
 ### Behoben

@@ -7,6 +7,7 @@
 	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
 </ul>
 {{if $d.NoDB}}<div class="alert alert-warning small">{{.T "cdn64.log.no_db"}}</div>{{else}}
+{{if $d.Debug}}<div class="alert alert-info small"><i class="bi bi-bug"></i> {{.T "cdn64.log.debug_on"}} <a href="/settings">{{.T "nav.settings"}}</a></div>{{end}}
 <div class="row g-3 mb-3">
 	<div class="col-6 col-md-3 col-xxl"><div class="card stat stat-primary"><div class="card-body"><div class="stat-text"><div class="stat-label">{{.T "cdn64.log.req24"}}</div><div class="stat-value">{{.Int $d.Total.Requests}}</div></div><i class="bi bi-globe stat-icon"></i></div></div></div>
 	<div class="col-6 col-md-3 col-xxl"><div class="card stat stat-ok"><div class="card-body"><div class="stat-text"><div class="stat-label">2xx</div><div class="stat-value">{{.Int $d.Total.S2}}</div></div><i class="bi bi-check-circle stat-icon"></i></div></div></div>
@@ -43,8 +44,8 @@
 				<tr>
 					<td class="ps-3 text-nowrap">{{$.Time .Time}}</td>
 					<td class="font-monospace">{{.Client}}</td>
-					{{if eq .Status 0}}<td class="text-body-secondary"><i class="bi bi-plug"></i> {{$.T "cdn64.log.conn"}}{{with .Host}} · <span class="font-monospace">{{.}}</span>{{end}}</td>
-					<td><span class="badge text-bg-danger">{{$.T (print "cdn64.reject." .Reason)}}</span></td>
+					{{if eq .Status 0}}<td class="text-body-secondary"><i class="bi bi-plug"></i> {{$.T "cdn64.log.conn"}}{{if and (ne .Method "-") (ne .Method "")}} <span class="badge text-bg-light">{{.Method}}</span>{{end}}{{with .Host}} · <span class="font-monospace">{{.}}</span>{{end}}{{with .Path}} <span class="font-monospace small text-break">{{.}}</span>{{end}}</td>
+					<td><span class="badge {{if or (eq .Reason "stream") (eq .Reason "passthrough")}}text-bg-light{{else}}text-bg-danger{{end}}">{{$.T (print "cdn64.reject." .Reason)}}</span></td>
 					{{else}}<td class="text-break" title="{{.UA}}"><span class="badge text-bg-light">{{.Method}}</span> <span class="font-monospace">{{.Host}}{{.Path}}</span></td>
 					<td class="text-nowrap"><span class="badge {{if lt .Status 300}}text-bg-success{{else if lt .Status 400}}text-bg-light{{else if lt .Status 500}}text-bg-warning{{else}}text-bg-danger{{end}}">{{.Status}}</span>{{if .Decoy}} <span class="badge hp-decoy-badge" title="{{$.T "cdn64.stats.decoy_hint"}}"><i class="bi bi-bug"></i> {{$.T "cdn64.log.decoy"}}</span>{{end}}{{if .Reason}} <span class="badge {{if .Decoy}}text-bg-light{{else}}text-bg-danger{{end}}">{{$.T (print "cdn64.reject." .Reason)}}</span>{{end}}</td>{{end}}
 					<td class="text-end font-monospace">{{$.Bytes .Bytes}}</td>

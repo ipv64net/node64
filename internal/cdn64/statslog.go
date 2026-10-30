@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/store"
 	_ "modernc.org/sqlite" // Treiber (registriert "sqlite")
 )
@@ -53,6 +54,55 @@ const (
 	rejectLogMax   = 600
 )
 
+// debug: Log-Level Debug (fuer alle Module oder nur PROXY64) - dann kommt alles ungebremst ins Zugriffs-Log, auch
+// ohne Einzel-Log des Hosts, dazu unbekannte Namen, TLS-Fehler, durchgereichtes TLS und Stream-Verbindungen.
+func (m *Module) debug() bool { return m.log.Enabled(context.Background(), slog.LevelDebug) }
+
+// watchEdge: Debug-Beobachter des Eingangs (edge.SetWatch) - nur ins Log, nicht in die Zaehler.
+func (m *Module) watchEdge(ip netip.Addr, host, method, path string, status int, kind string) {
+	if !m.debug() {
+		return
+	}
+	if sdb := m.stats2.Load(); sdb != nil {
+		sdb.add(hit{time: time.Now(), client: ip.Unmap(), method: method, host: host, path: trunc(path, 500), status: status, reason: kind,
+			conn: status == 0, all: true, only: true})
+	}
+}
+
+// countHit zaehlt eine Anfrage bzw. Abweisung in die Stunde ihres Hosts.
+func countHit(agg map[hourKey]*hourAgg, h hit) {
+	k := hourKey{h.hostID, h.time.UTC().Truncate(time.Hour).Format(time.RFC3339)}
+	a := agg[k]
+	if a == nil {
+		a = &hourAgg{}
+		agg[k] = a
+	}
+	switch {
+	case h.decoy:
+		a.decoy++
+	case h.reason == rejMaintenance: // Wartungsseite: weder abgewiesen noch Fehler des Ziels
+	case h.reason != "":
+		a.blocked++
+	}
+	if !h.conn {
+		a.requests++
+		a.bytes += h.bytes
+		a.in += h.in
+	}
+	if !h.conn && !h.decoy && h.reason == "" { // Statusklassen nur fuer Antworten des Ziels
+		switch h.status / 100 {
+		case 1, 2:
+			a.s2++
+		case 3:
+			a.s3++
+		case 4:
+			a.s4++
+		default:
+			a.s5++
+		}
+	}
+}
+
 // hit ist eine beantwortete Anfrage.
 type hit struct {
 	time   time.Time
@@ -70,6 +120,8 @@ type hit struct {
 	reason string // abgewiesen: Grund (immer ins Log, gebremst)
 	conn   bool   // Verbindung vor der ersten Anfrage abgewiesen (zaehlt nicht als Anfrage)
 	decoy  bool   // statt abzuweisen an den Koeder von Honeypot64 gegeben (reason = Art, Host 0 = unbekannter Name)
+	all    bool   // Log-Level Debug: ungebremst ins Log (m.debug)
+	only   bool   // nur ins Log, nicht in die Zaehler (Debug: unbekannte Namen, TLS-Fehler, Streams)
 }
 
 type hourKey struct {
@@ -163,37 +215,12 @@ func (s *statsDB) writer() {
 		agg, logs = map[hourKey]*hourAgg{}, logs[:0]
 	}
 	addHit := func(h hit) {
-		k := hourKey{h.hostID, h.time.UTC().Truncate(time.Hour).Format(time.RFC3339)}
-		a := agg[k]
-		if a == nil {
-			a = &hourAgg{}
-			agg[k] = a
+		if !h.only {
+			countHit(agg, h)
 		}
-		switch {
-		case h.decoy:
-			a.decoy++
-		case h.reason == rejMaintenance: // Wartungsseite: weder abgewiesen noch Fehler des Ziels
-		case h.reason != "":
-			a.blocked++
-		}
-		if !h.conn {
-			a.requests++
-			a.bytes += h.bytes
-			a.in += h.in
-		}
-		if !h.conn && !h.decoy && h.reason == "" { // Statusklassen nur fuer Antworten des Ziels
-			switch h.status / 100 {
-			case 1, 2:
-				a.s2++
-			case 3:
-				a.s3++
-			case 4:
-				a.s4++
-			default:
-				a.s5++
-			}
-		}
-		if h.reason != "" { // immer ins Log, aber gebremst
+		if h.all { // Debug: alles, ungebremst
+			logs = append(logs, h)
+		} else if h.reason != "" { // immer ins Log, aber gebremst
 			key := h.client.String() + "|" + h.reason + "|" + strconv.FormatInt(h.hostID, 10)
 			if m := h.time.Truncate(time.Minute); !m.Equal(rejMinute) {
 				rejMinute, rejN = m, 0
@@ -409,7 +436,7 @@ func (s *statsDB) entries(ctx context.Context, f LogFilter) ([]LogEntry, error) 
 		args = append(args, f.HostID)
 	}
 	if f.Rejected {
-		q += ` AND reason <> '' AND reason NOT LIKE '` + decoyPrefix + `%'`
+		q += ` AND reason <> '' AND reason NOT LIKE '` + decoyPrefix + `%' AND reason NOT IN ('` + rejStream + `', '` + edge.WatchPassthrough + `')` // Debug: keine Abweisungen
 	}
 	if f.Decoy {
 		q += ` AND reason LIKE '` + decoyPrefix + `%'`

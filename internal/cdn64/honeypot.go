@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ipv64net/node64/internal/edge"
 	"github.com/ipv64net/node64/internal/hpbridge"
 )
 
@@ -431,7 +432,8 @@ func (m *Module) hpUnknown(w http.ResponseWriter, r *http.Request, def http.Hand
 	if m.hpDecoyActive() && m.hpServeDecoy(sw, r, client) {
 		if sdb := m.stats2.Load(); sdb != nil { // Statistik: Host 0 = Anfragen ohne passenden Namen
 			sdb.add(hit{time: time.Now(), client: client, method: r.Method, host: hostOnly(r.Host), path: trunc(r.URL.RequestURI(), 500),
-				status: sw.code(), reason: "unknown", decoy: true})
+				status: sw.code(), reason: "unknown", decoy: true, all: m.debug()})
+			edge.MarkWatched(r) // steht schon im Log (Debug-Beobachter des Eingangs)
 		}
 		return
 	}

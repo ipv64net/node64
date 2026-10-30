@@ -511,12 +511,26 @@ func (m *Module) streamPipe(r *streamRun, c net.Conn, target string, release fun
 	if bw := r.bw.Load(); bw != nil { // mit Grenze gebremst kopieren (ohne Grenze roh wie bisher)
 		c = &bwConn{Conn: c, bw: bw}
 	}
+	start := time.Now()
 	in, out := edge.Pipe(c, up)
 	r.stats.active.Add(-1)
 	r.stats.bytesIn.Add(in)
 	r.stats.bytesUp.Add(out)
 	r.untrack(c)
 	r.untrack(up)
+	m.streamLog(r, "TCP", netAddr(c.RemoteAddr()), in, out, time.Since(start))
+}
+
+// streamLog: Log-Level Debug - Stream-Verbindung bzw. neue UDP-Sitzung ins Zugriffs-Log (nur Log, nicht gezaehlt).
+func (m *Module) streamLog(r *streamRun, proto string, ip netip.Addr, in, out int64, d time.Duration) {
+	if !m.debug() {
+		return
+	}
+	if sdb := m.stats2.Load(); sdb != nil {
+		port, _, _ := strings.Cut(r.key, "|")
+		sdb.add(hit{time: time.Now().Add(-d), client: ip.Unmap(), method: proto, host: "stream :" + port, path: " → " + r.target,
+			bytes: out, in: in, ms: d.Milliseconds(), reason: rejStream, conn: true, all: true, only: true})
+	}
 }
 
 // serveUDP: je Client eine Sitzung mit eigenem Socket zum Ziel; nach 60 s ohne Pakete faellt sie weg.
@@ -583,6 +597,7 @@ func (m *Module) serveUDP(r *streamRun, target string) {
 			}
 			s = &session{up: up}
 			sessions[key] = s
+			m.streamLog(r, "UDP", netAddr(addr), 0, 0, 0)
 			r.stats.conns.Add(1)
 			r.stats.active.Add(1)
 			r.wg.Add(1)

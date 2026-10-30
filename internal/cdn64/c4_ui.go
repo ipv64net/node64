@@ -313,6 +313,7 @@ type logData struct {
 	NoDB     bool
 	// DecoyActive: Honeypot-Koeder aktiv (Kennzahl "an den Honeypot" auch ohne Werte zeigen)
 	DecoyActive bool
+	Debug       bool // Log-Level Debug: alles ungebremst im Log
 }
 
 func (m *Module) pageLog(w http.ResponseWriter, r *http.Request) {
@@ -323,7 +324,7 @@ func (m *Module) pageLog(w http.ResponseWriter, r *http.Request) {
 	f.Status, _ = strconv.Atoi(q.Get("status"))
 	f.Before, _ = strconv.ParseInt(q.Get("before"), 10, 64)
 	d := logData{Tabs: m.tabs("/cdn64/log"), HostName: map[int64]string{}, Filter: f, Days: m.logDays(ctx),
-		Anon: m.core.SettingOr(ctx, setAnonymize, "off") == "mask"}
+		Anon: m.core.SettingOr(ctx, setAnonymize, "off") == "mask", Debug: m.debug()}
 	hosts, err := m.hosts(ctx)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

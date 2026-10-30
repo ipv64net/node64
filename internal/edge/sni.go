@@ -130,6 +130,7 @@ func (e *Edge) dispatch(conn net.Conn, tlsLn *chanListener) {
 	sni, data, ok := peekHello(conn)
 	_ = conn.SetReadDeadline(time.Time{})
 	if !ok {
+		e.watched(addrIP(conn.RemoteAddr()), "", "-", "", 0, WatchNoTLS)
 		_ = conn.Close() // kein TLS
 		return
 	}
@@ -147,6 +148,7 @@ func (e *Edge) dispatch(conn net.Conn, tlsLn *chanListener) {
 		if _, routes := e.table.Load().lookup(name); len(routes) > 0 {
 			for _, rt := range routes {
 				if rt.Passthrough != "" {
+					e.watched(addrIP(conn.RemoteAddr()), name, "-", "", 0, WatchPassthrough)
 					e.passthrough(conn, data, rt)
 					return
 				}

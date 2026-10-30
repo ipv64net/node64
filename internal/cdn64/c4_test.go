@@ -17,6 +17,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ipv64net/node64/internal/edge"
 )
 
 // echoBackend antwortet mit dem, was beim Ziel ankommt.
@@ -523,5 +525,63 @@ func TestReqPathAndWebSocket(t *testing.T) {
 	r.Header.Set("Connection", "keep-alive, Upgrade")
 	if !wsUpgrade(r) {
 		t.Error("websocket not detected")
+	}
+}
+
+// Log-Level Debug: alles ungebremst ins Zugriffs-Log - auch ohne Einzel-Log des Hosts, Abweisungen ohne Bremse,
+// unbekannte Namen und TLS-Fehler (nur Log, nicht gezaehlt).
+func TestDebugAccessLog(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	e.m.SetDataDir(t.TempDir())
+	e.m.log = slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	e.enable(t)
+	port, _ := echoBackend(t, "a")
+	h := newHost()
+	h.Names, h.TargetHost, h.TargetPort, h.CertID = []string{"dbg.test"}, "127.0.0.1", port, CertNone
+	if err := e.m.saveHost(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	c := e.client(false)
+	do(t, c, "GET", "http://dbg.test/eins")
+	do(t, c, "GET", "http://fremd.test/zwei")
+	e.m.watchEdge(netipMust("203.0.114.8"), "", "-", "EOF", 0, edge.WatchTLS) // wie vom Eingang (dort: edge.TestEdgeWatch)
+	sdb := e.m.stats2.Load()
+	for i := 0; i < 3; i++ { // gleiche Abweisung kurz hintereinander: ohne Debug nur ein Eintrag
+		sdb.add(hit{time: time.Now(), client: netipMust("203.0.114.9"), method: "-", reason: rejDeny, conn: true, all: e.m.debug()})
+	}
+	var list []LogEntry
+	want := func(l []LogEntry) bool {
+		var own, unk, tlsErr, deny int
+		for _, x := range l {
+			switch {
+			case x.HostID == h.ID && x.Path == "/eins":
+				own++
+			case x.Reason == "unknown" && x.Path == "/zwei" && x.Status == http.StatusNotFound:
+				unk++
+			case x.Reason == edge.WatchTLS && x.Path == "EOF":
+				tlsErr++
+			case x.Reason == rejDeny:
+				deny++
+			}
+		}
+		return own == 1 && unk == 1 && tlsErr == 1 && deny == 3
+	}
+	for i := 0; i < 50; i++ {
+		list, _ = sdb.entries(ctx, LogFilter{})
+		if want(list) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !want(list) {
+		t.Fatalf("log: %+v", list)
+	}
+	sums, err := sdb.sums(ctx, time.Now().Add(-2*time.Hour))
+	if err != nil || sums[h.ID].Requests != 1 || sums[0].Requests != 0 {
+		t.Fatalf("sums (unbekannte Namen und TLS-Fehler nur im Log): %+v %v", sums, err)
+	}
+	if rej, _ := sdb.entries(ctx, LogFilter{Rejected: true}); len(rej) != 5 { // 3x deny, unknown, tls
+		t.Fatalf("rejected: %+v", rej)
 	}
 }

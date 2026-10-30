@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: With log level debug, the request log contains everything without throttling – also hosts without request
+  log, unknown names, TLS errors and stream connections.
 - Honeypot64: Connections from the own public IP are no longer reported, so trying things out yourself no longer ends
   up in the rankings or the JA4 list.
 
