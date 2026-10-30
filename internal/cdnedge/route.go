@@ -102,13 +102,20 @@ func (re *route) allows(ip netip.Addr) bool {
 	return true
 }
 
-// prefixes: Adressen oder Netze (ungueltige Eintraege fallen weg).
+// prefixes: Adressen oder Netze (ungueltige Eintraege und Adressen mit Zone fallen weg). Besucher kommen entmappt an:
+// ::ffff:a.b.c.d/N gilt deshalb als IPv4-Netz /N-96, kleinere 4in6-Netze fallen weg.
 func prefixes(list []string) []netip.Prefix {
 	var out []netip.Prefix
 	for _, s := range list {
 		if p, err := netip.ParsePrefix(s); err == nil {
+			if a := p.Addr(); a.Is4In6() {
+				if p.Bits() < 96 {
+					continue
+				}
+				p = netip.PrefixFrom(a.Unmap(), p.Bits()-96)
+			}
 			out = append(out, p.Masked())
-		} else if ip, err := netip.ParseAddr(s); err == nil {
+		} else if ip, err := netip.ParseAddr(s); err == nil && ip.Zone() == "" {
 			out = append(out, netip.PrefixFrom(ip.Unmap(), ip.Unmap().BitLen()))
 		}
 	}

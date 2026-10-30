@@ -264,8 +264,19 @@ func newVirtPacketConn() *virtPacketConn {
 		pending: map[netip.Addr]int{}, pendingMx: quicPendingMax}
 }
 
+// pendingKey: Besucher fuer quicPendingPerIP - IPv4 je Adresse, IPv6 je /64 (sonst belegt ein /64 alle Plaetze).
+func pendingKey(ip netip.Addr) netip.Addr {
+	ip = ip.Unmap()
+	if ip.Is6() {
+		p, _ := ip.Prefix(64)
+		return p.Addr()
+	}
+	return ip
+}
+
 // reserve: Platz fuer einen Stream ohne fertigen Handshake (false = Grenze erreicht).
 func (p *virtPacketConn) reserve(ip netip.Addr) bool {
+	ip = pendingKey(ip)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.pendingN >= p.pendingMx || p.pending[ip] >= quicPendingPerIP {
@@ -277,6 +288,7 @@ func (p *virtPacketConn) reserve(ip netip.Addr) bool {
 }
 
 func (p *virtPacketConn) unreserve(ip netip.Addr) {
+	ip = pendingKey(ip)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.pending[ip] <= 1 {

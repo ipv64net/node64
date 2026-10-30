@@ -125,8 +125,17 @@ function c64o_mapping_port(int $hostId, string $tr, int $targetPort, ?int $wish)
 
 // ---------------------------------------------------------------- Modus 3: Ziel, Liste
 
+/** Adresse in einheitlicher Schreibweise (inet_ntop), ::ffff:a.b.c.d als IPv4; '' = keine Adresse (auch mit Zone). */
+function c64o_norm_ip(string $ip): string {
+	if(!filter_var($ip, FILTER_VALIDATE_IP)) { return ''; }
+	$bin = inet_pton($ip);
+	if(strlen($bin) === 16 AND substr($bin, 0, 12) === "\0\0\0\0\0\0\0\0\0\0\xff\xff") { $bin = substr($bin, 12); }
+	return (string)inet_ntop($bin);
+}
+
 /** Oeffentliche Unicast-Adresse (kein privates, reserviertes, CGNAT-, Dokumentations- oder Server-Netz). */
 function c64o_public_ip(string $ip): bool {
+	$ip = c64o_norm_ip($ip);
 	if(!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) { return false; }
 	$bin = inet_pton($ip);
 	$in = function(string $cidr) use ($bin): bool {
@@ -137,7 +146,7 @@ function c64o_public_ip(string $ip): bool {
 		return $bits === 0 OR ((ord($bin[$bytes]) ^ ord($n[$bytes])) & (0xff << (8 - $bits)) & 0xff) === 0;
 	};
 	foreach(array('100.64.0.0/10', '192.0.0.0/24', '192.0.2.0/24', '198.18.0.0/15', '198.51.100.0/24', '203.0.113.0/24', '2001:db8::/32', '64:ff9b::/96', '2002::/16', '2001::/32', 'fc00::/7', 'fe80::/10') as $c) { if($in($c)) { return false; } }
-	foreach(c64o_edges(true) as $e) { if($ip === $e['ipv4'] OR $ip === $e['ipv6']) { return false; } }
+	foreach(c64o_edges(true) as $e) { if($ip === c64o_norm_ip((string)$e['ipv4']) OR $ip === c64o_norm_ip((string)$e['ipv6'])) { return false; } }
 	return true;
 }
 
@@ -219,13 +228,19 @@ function c64o_acl_out(array $h): array {
 		'list' => array_column(qa("SELECT cidr FROM cdn64o_acl WHERE host_id = :h ORDER BY id", array('h' => $h['id'])), 'cidr'));
 }
 
-/** IP oder Netz (IPv4/IPv6) wie im alten CDN. */
+/** IP oder Netz (IPv4/IPv6) wie im alten CDN, normalisiert; ::ffff:a.b.c.d/N als IPv4 /N-96 (kleinere abgelehnt), Zone abgelehnt. */
 function c64o_cidr(string $v): ?string {
 	$v = strtolower(trim($v));
-	if(filter_var($v, FILTER_VALIDATE_IP)) { return $v; }
+	if(str_contains($v, '%')) { return null; }
+	if(filter_var($v, FILTER_VALIDATE_IP)) { return c64o_norm_ip($v); }
 	if(preg_match('#^([0-9a-f:.]+)/(\d{1,3})$#', $v, $m) AND filter_var($m[1], FILTER_VALIDATE_IP)) {
-		$max = str_contains($m[1], ':') ? 128 : 32;
-		if((int)$m[2] <= $max) { return $m[1] . '/' . (int)$m[2]; }
+		$ip = c64o_norm_ip($m[1]); $len = (int)$m[2];
+		if(str_contains($m[1], ':') AND !str_contains($ip, ':')) { // 4in6
+			if($len < 96 OR $len > 128) { return null; }
+			$len -= 96;
+		}
+		$max = str_contains($ip, ':') ? 128 : 32;
+		if($len <= $max) { return $ip . '/' . $len; }
 	}
 	return null;
 }
