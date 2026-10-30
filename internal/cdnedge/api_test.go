@@ -74,7 +74,8 @@ func TestAPIConfigAndReport(t *testing.T) {
 	cfg := &Config{Name: "B", ListenHTTP: freeAddr(t), ListenHTTPS: freeAddr(t), TunnelListen: freeAddr(t), TLSCert: cf, TLSKey: kf,
 		DataDir: dir, APIURL: hs.URL, APISecret: api.secret, Shield: ShieldConfig{BlocklistBase: hs.URL + "/blocklists/"}}
 	s := startEdge(t, cfg, pool)
-	for i := 0; i < 100 && s.apiCfg.Load() == nil; i++ {
+	// applyConfig setzt apiCfg vor routes: auf die Namen selbst warten (mit Frist, unter Last langsamer)
+	for deadline := time.Now().Add(10 * time.Second); s.routes.Load().lookup("x.api.test") == nil && time.Now().Before(deadline); {
 		time.Sleep(20 * time.Millisecond)
 	}
 	if s.routes.Load().lookup("x.api.test") == nil || s.routes.Load().lookup("api.test").HostID != 7 {

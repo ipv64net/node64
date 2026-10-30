@@ -137,6 +137,10 @@ func TestPortmap(t *testing.T) {
 		t.Fatalf("udp mapping: %q %q", a, b)
 	}
 	st := s.stats.of("p.test")
+	// Zaehler steigen erst nach dem Weiterleiten der Antwort: mit Frist warten
+	for deadline := time.Now().Add(5 * time.Second); st.BytesOut.Load() < 4+6+6 && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
 	if st.Conns.Load() != 3 || st.BytesIn.Load() != 2+3+3 || st.BytesOut.Load() != 4+6+6 {
 		t.Fatalf("stats: conns %d in %d out %d", st.Conns.Load(), st.BytesIn.Load(), st.BytesOut.Load())
 	}
