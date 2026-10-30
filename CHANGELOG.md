@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Healthchecks: Eigene Kanäle für eine einzelne VM, einen Container oder Node werden wieder gespeichert, auch wenn das
+  Feld noch auf „erben“ stand.
 - Honeypot64: Fallen können „verwundbar wirken“ und zeigen dann ältere, bekannt verwundbare Versionen (z. B. Apache
   2.4.49, OpenSSH 8.2p1); zieht mehr gezielte Angriffe an.
 - Healthchecks: Bei Proxmox VE lässt sich auch ein Node als „offline ist richtig“ markieren (Wartung); wieder online,

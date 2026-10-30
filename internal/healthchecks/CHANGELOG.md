@@ -1,5 +1,12 @@
 # Änderungen – Healthchecks
 
+## 2.50.1 – 2026-10-30
+
+### Behoben
+- Proxmox VE, PBS und Docker: Kanäle einer einzelnen VM, eines Containers oder eines Nodes wurden nicht gespeichert,
+  wenn das Feld darüber noch auf „erben“ stand – die Meldung „gespeichert“ kam trotzdem. Ein geänderter Haken stellt
+  jetzt auf „eigene Kanäle“ um, und auch ohne JavaScript gilt eine geänderte Auswahl als eigene.
+
 ## 2.50.0 – 2026-10-30
 
 ### Neu

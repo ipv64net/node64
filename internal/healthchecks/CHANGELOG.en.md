@@ -1,5 +1,12 @@
 # Changes – Healthchecks
 
+## 2.50.1 – 2026-10-30
+
+### Fixed
+- Proxmox VE, PBS and Docker: channels of a single VM, container or node were not saved while the field above still
+  said “inherit” – the message “saved” appeared anyway. Changing a box now switches to “own channels”, and a changed
+  selection also counts as own without JavaScript.
+
 ## 2.50.0 – 2026-10-30
 
 ### New

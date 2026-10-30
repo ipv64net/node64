@@ -1,5 +1,14 @@
 // Proxmox VE: Graphen der Detailseite (CPU, RAM/Disk, Netz, Disk-I/O) aus /api/healthchecks/proxmox/.../series.
 // Vanilla-JS + Chart.js (lokal, wie die Healthchecks-Diagramme); Farben aus den Bootstrap-Variablen (hell/dunkel).
+// Kanaele einer Node bzw. eines Gasts: ein geaenderter Haken heisst eigene Auswahl („erben“ -> „eigene Kanaele“).
+document.addEventListener("change", function (ev) {
+	"use strict";
+	var t = ev.target;
+	if (!t || t.name !== "channels" || !t.form) { return; }
+	var mode = t.form.querySelector('select[name="ch_mode"]');
+	if (mode && mode.value !== "own") { mode.value = "own"; }
+});
+
 (function () {
 	"use strict";
 	var box = document.getElementById("pve-charts");
