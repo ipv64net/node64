@@ -464,6 +464,34 @@ func TestStatusPassword(t *testing.T) {
 	}
 }
 
+// Passwortsperre: IPv6 je /64 (Adresswechsel im Netz hilft nicht), v4-gemappt wie IPv4; volle Tabelle entfernt nur
+// abgelaufene bzw. den aeltesten Eintrag, laufende Sperren bleiben.
+func TestStatusLoginKey(t *testing.T) {
+	m := &Module{}
+	for i := 0; i < statusLoginFails; i++ {
+		m.statusLoginFailed("2001:db8:1:2::" + strconv.Itoa(i+1))
+	}
+	if m.statusLoginAllowed("2001:db8:1:2:abcd::99") || !m.statusLoginAllowed("2001:db8:1:3::1") {
+		t.Fatal("ipv6 /64")
+	}
+	for i := 0; i < statusLoginFails; i++ {
+		m.statusLoginFailed("::ffff:192.0.2.7")
+	}
+	if m.statusLoginAllowed("192.0.2.7") || !m.statusLoginAllowed("192.0.2.8") {
+		t.Fatal("v4-mapped")
+	}
+	s := m.statusState()
+	s.mu.Lock()
+	for i := len(s.fails); i < 10000; i++ {
+		s.fails["x"+strconv.Itoa(i)] = &statusFail{n: 1, since: time.Now().Add(-time.Hour)}
+	}
+	s.mu.Unlock()
+	m.statusLoginFailed("198.51.100.1")
+	if m.statusLoginAllowed("2001:db8:1:2::1") || m.statusLoginAllowed("192.0.2.7") || len(s.fails) != 3 {
+		t.Fatalf("prune: %d entries", len(s.fails))
+	}
+}
+
 func TestStatusCache(t *testing.T) {
 	m, _ := newStatusModule(t)
 	now := statusFixNow(t, m)

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -47,6 +48,14 @@ func (c *httpChecker) Type() Type {
 func parseURL(s string) (*url.URL, error) {
 	s = strings.TrimSpace(s)
 	if !strings.Contains(s, "://") {
+		// IPv6 ohne Schema und Klammern (2001:db8::1[/pfad]): sonst gilt der letzte Block als Port
+		i := strings.IndexAny(s, "/?#")
+		if i < 0 {
+			i = len(s)
+		}
+		if a, err := netip.ParseAddr(s[:i]); err == nil && a.Is6() {
+			s = "[" + strings.Replace(s[:i], "%", "%25", 1) + "]" + s[i:] // Zone wie in einer URL kodieren
+		}
 		s = "http://" + s
 	}
 	u, err := url.Parse(s)

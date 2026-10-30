@@ -1,5 +1,23 @@
 # Changes – Healthchecks
 
+## 2.47.1 – 2026-10-30
+
+### Fixed
+- IPv6 targets: internal addresses are also detected in other notations (`::ffff:10.0.0.1`, `[::ffff:7f00:1]`,
+  `0:0:0:0:0:0:0:1`, `::`, `fe90::1`, site-local `fec0::/10`, IPv4-compatible `::/96`, CGNAT and documentation
+  ranges). Names such as `fcbayern.com` or `fdroid.org` no longer count as internal.
+- HTTP target as IPv6 without scheme and brackets (`2001:db8::1`): the last block was read as the port.
+- Proxmox VE/PBS: an address as IPv6 without brackets (`fd00::10`) became `[fd00:]:10`; Docker: `tcp://fd00::1`
+  without brackets was accepted and is now rejected (`tcp://[fd00::1]:2375`).
+- Link-local targets with a zone (`fe80::1%eth0`) are rejected with a clear message for ICMP, TCP/port, certificate
+  and HTTP; the zone was lost during resolution.
+- Status pages: the lock after wrong passwords applies per /64 for IPv6 (changing the address within the network no
+  longer helps), v4-mapped addresses count as IPv4. A full table only drops expired or the oldest entry, active locks
+  stay.
+- Online (hubs): the limit per target host counts an IPv6 address in any notation as the same target.
+- Portal: internal IPv6 targets detected as in the node; a DNS server given as IPv6 without brackets (`fd00::53`) is
+  no longer cut off.
+
 ## 2.47.0 – 2026-10-30
 
 ### New

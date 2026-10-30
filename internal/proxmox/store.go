@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"slices"
@@ -86,6 +87,9 @@ func normalizeAddress(s, defPort string) (string, bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return "", false
+	}
+	if a, err := netip.ParseAddr(s); err == nil && a.Is6() { // IPv6 ohne Klammern (fd00::10), sonst gilt der letzte Block als Port
+		s = "[" + a.String() + "]" // mit Zone scheitert url.Parse unten: abgelehnt
 	}
 	if !strings.Contains(s, "://") {
 		s = "https://" + s

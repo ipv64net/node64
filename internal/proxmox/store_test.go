@@ -149,6 +149,7 @@ func TestValidateSystem(t *testing.T) {
 		{"Port 0", func(s *System) { s.Addresses = []string{"https://pve:0"} }, "addresses"},
 		{"Port zu gross", func(s *System) { s.Addresses = []string{"pve:70000"} }, "addresses"},
 		{"IPv6", func(s *System) { s.Addresses = []string{"[fd00::1]"} }, ""},
+		{"IPv6 mit Zone", func(s *System) { s.Addresses = []string{"fe80::1%eth0"} }, "addresses"},
 		{"Token ohne !", func(s *System) { s.TokenID = "root@pam" }, "token_id"},
 		{"Token ohne @", func(s *System) { s.TokenID = "root!mon" }, "token_id"},
 		{"ohne Secret", func(s *System) { s.Secret = "" }, "secret"},
@@ -177,6 +178,13 @@ func TestValidateSystem(t *testing.T) {
 	ValidateSystem(&s, true)
 	if s.PinSHA256 != strings.Repeat("ab", 32) || s.Addresses[0] != "https://[fd00::1]:8006" {
 		t.Fatalf("normalisiert: %q %q", s.PinSHA256, s.Addresses)
+	}
+	// IPv6 ohne Klammern: ganze Adresse ist der Host, Port der Standard
+	if a, ok := NormalizeAddress("fd00::10"); !ok || a != "https://[fd00::10]:8006" {
+		t.Fatalf("ipv6 ohne klammern: %q %v", a, ok)
+	}
+	if a, ok := NormalizeAddressFor(KindPBS, " 2001:DB8::1 "); !ok || a != "https://[2001:db8::1]:8007" {
+		t.Fatalf("ipv6 ohne klammern pbs: %q %v", a, ok)
 	}
 	s = ok()
 	s.Secret = ""

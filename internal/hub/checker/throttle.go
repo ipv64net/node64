@@ -2,6 +2,7 @@ package checker
 
 import (
 	"log/slog"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -68,6 +69,9 @@ func (t *throttle) allow(c scheduler.Check) bool {
 	host := strings.ToLower(strings.TrimSuffix(checks.TargetHost(c.Def), "."))
 	if host == "" {
 		host = strings.ToLower(c.Def.Target)
+	}
+	if a, err := netip.ParseAddr(host); err == nil { // eine Adresse, ein Eimer (2001:0db8::1 = 2001:db8::1, ::ffff:1.2.3.4 = 1.2.3.4)
+		host = a.Unmap().String()
 	}
 	now := t.now()
 	t.mu.Lock()

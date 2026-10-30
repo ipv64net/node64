@@ -315,7 +315,7 @@ function hc2_checks(int $userid): array {
 function hc2_check_params(array $c): array { $p = json_decode((string)($c['params'] ?? '{}'), true); return is_array($p) ? $p : array(); }
 function hc2_check_channels(array $c): array { $o = array(); foreach (explode(',', (string)($c['channels'] ?? '')) as $x) { if ($x !== '' && is_numeric($x)) { $o[] = (int)$x; } } return $o; }
 
-/** Privates Ziel? (RFC 1918, ULA, Loopback, Link-Local, .local, localhost) – online verboten. */
+/** Privates Ziel? (Adressen wie hc2_ip_public: RFC 1918, ULA, Loopback, Link-Local, CGNAT, reserviert, auch ::ffff:; .local, localhost) – online verboten. */
 function hc2_private_target(string $type, string $target): bool {
 	$t = trim($target);
 	if ($t === '' || $type === 'push') { return false; }
@@ -325,14 +325,10 @@ function hc2_private_target(string $type, string $target): bool {
 	elseif (preg_match('/^\[([^\]]+)\](?::\d+)?$/', $t, $m)) { $host = $m[1]; }
 	elseif (substr_count($t, ':') === 1) { $host = explode(':', $t)[0]; }
 	$host = strtolower(trim($host, '[]'));
+	$host = explode('%', $host)[0]; // Zone (fe80::1%eth0 bzw. %25 in URLs)
 	if ($host === '' ) { return false; }
 	if ($host === 'localhost' || substr($host, -6) === '.local' || substr($host, -10) === '.localhost' || substr($host, -9) === '.internal') { return true; }
-	if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-		return !filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) || strncmp($host, '169.254.', 8) === 0 || strncmp($host, '100.64.', 7) === 0;
-	}
-	if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
-		return $host === '::1' || preg_match('/^f[cd][0-9a-f]{2}:/', $host) || preg_match('/^fe[89ab][0-9a-f]:/', $host);
-	}
+	if (filter_var($host, FILTER_VALIDATE_IP)) { return !hc2_ip_public($host); }
 	return false;
 }
 
@@ -397,7 +393,9 @@ function hc2_dns_server(string $s): string {
 function hc2_dns_needs_node(array $p): bool {
 	if (($p['expect'] ?? '') === 'public_ip') { return true; }
 	if (($p['resolver'] ?? '') === 'server') {
-		$ip = trim(preg_replace('/:\d+$/', '', preg_replace('/^\[(.*)\](:\d+)?$/', '$1', (string)($p['server'] ?? ''))), '[]');
+		$ip = trim((string)($p['server'] ?? ''));
+		// Port nur bei [v6]:port oder genau einem ':' abtrennen (IPv6 ohne Klammern wie fd00::53 bleibt ganz)
+		if (preg_match('/^\[(.*)\](:\d+)?$/', $ip, $m)) { $ip = $m[1]; } elseif (substr_count($ip, ':') === 1) { $ip = explode(':', $ip)[0]; }
 		return $ip !== '' && hc2_private_target('icmp', $ip);
 	}
 	return false;
