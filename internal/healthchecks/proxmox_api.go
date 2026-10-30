@@ -45,19 +45,20 @@ func (m *Module) pveAPIRoutes(mux *http.ServeMux, api func(http.HandlerFunc) htt
 // pveSystemJSON ist ein System in der API (ohne Secret) mit seinem Zustand.
 type pveSystemJSON struct {
 	*proxmox.System
-	HasSecret   bool       `json:"has_secret"`
-	State       string     `json:"state"` // ok, warn, down, error, off, pending
-	Error       string     `json:"error,omitempty"`
-	Version     string     `json:"version,omitempty"`
-	Cluster     string     `json:"cluster,omitempty"`
-	Quorate     *bool      `json:"quorate,omitempty"`
-	Address     string     `json:"address,omitempty"`
-	LastPoll    *time.Time `json:"last_poll,omitempty"`
-	Nodes       int        `json:"nodes"`
-	NodesOnline int        `json:"nodes_online"`
-	Guests      int        `json:"guests"`
-	Running     int        `json:"guests_running"`
-	Bad         int        `json:"guests_bad"`
+	HasSecret   bool             `json:"has_secret"`
+	State       string           `json:"state"` // ok, warn, down, error, off, pending
+	Error       string           `json:"error,omitempty"`
+	Version     string           `json:"version,omitempty"`
+	Cluster     string           `json:"cluster,omitempty"`
+	Quorate     *bool            `json:"quorate,omitempty"`
+	Address     string           `json:"address,omitempty"`
+	LastPoll    *time.Time       `json:"last_poll,omitempty"`
+	Nodes       int              `json:"nodes"`
+	NodesOnline int              `json:"nodes_online"`
+	Guests      int              `json:"guests"`
+	Running     int              `json:"guests_running"`
+	Bad         int              `json:"guests_bad"`
+	PBS         *proxmox.PBSInfo `json:"pbs,omitempty"` // nur Proxmox Backup Server: Datastores
 }
 
 func (m *Module) pveJSON(ctx context.Context, sys *proxmox.System) pveSystemJSON {
@@ -66,13 +67,14 @@ func (m *Module) pveJSON(ctx context.Context, sys *proxmox.System) pveSystemJSON
 		Guests: row.Guests, Running: row.Running, Bad: row.Bad}
 	if s := row.Snap; s != nil {
 		t := s.Time
-		out.LastPoll, out.Version, out.Cluster, out.Quorate, out.Address = &t, s.Version, s.Cluster, s.Quorate, s.Address
+		out.LastPoll, out.Version, out.Cluster, out.Quorate, out.Address, out.PBS = &t, s.Version, s.Cluster, s.Quorate, s.Address, s.PBS
 	}
 	return out
 }
 
-// pveSystemIn ist der Body beim Anlegen/Aendern.
+// pveSystemIn ist der Body beim Anlegen/Aendern (Kind nur beim Anlegen und Testen: pve oder pbs).
 type pveSystemIn struct {
+	Kind      string   `json:"kind"`
 	Name      *string  `json:"name"`
 	Addresses []string `json:"addresses"`
 	TokenID   *string  `json:"token_id"`
@@ -134,13 +136,9 @@ func (m *Module) pveAPISystem(w http.ResponseWriter, r *http.Request) *proxmox.S
 	return sys
 }
 
-// apiPVESystems: Proxmox-Systeme (?kind=docker bzw. all: auch Docker-Hosts).
+// apiPVESystems: Proxmox-Systeme, VE und Backup Server (?kind=pve, pbs, docker bzw. all: auch Docker-Hosts).
 func (m *Module) apiPVESystems(w http.ResponseWriter, r *http.Request) {
-	kind := r.URL.Query().Get("kind")
-	if kind == "" {
-		kind = proxmox.KindPVE
-	}
-	m.pveListJSON(w, r, kind)
+	m.pveListJSON(w, r, r.URL.Query().Get("kind"))
 }
 
 // apiDockerSystems: Docker-Hosts.
@@ -156,7 +154,7 @@ func (m *Module) pveListJSON(w http.ResponseWriter, r *http.Request, kind string
 	}
 	out := make([]pveSystemJSON, 0, len(list))
 	for _, sys := range list {
-		if kind == "all" || sys.Kind == kind {
+		if kind == "all" || sys.Kind == kind || kind == "" && !sys.IsDocker() {
 			out = append(out, m.pveJSON(r.Context(), sys))
 		}
 	}
@@ -200,9 +198,12 @@ func (m *Module) apiPVECreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sys := &proxmox.System{Interval: proxmox.DefaultInterval, Enabled: true}
+	if !pveKindIn(w, in.Kind, sys) {
+		return
+	}
 	in.apply(sys)
 	if strings.TrimSpace(sys.Name) == "" {
-		sys.Name = pveHostOf(sys.Addresses)
+		sys.Name = pveHostOf(sys.Kind, sys.Addresses)
 	}
 	if err := m.pveSaveSystem(r, sys); err != nil {
 		m.pveAPIErr(w, err)
@@ -258,6 +259,9 @@ func (m *Module) apiPVEProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sys := proxmox.System{Name: "probe", Interval: proxmox.DefaultInterval}
+	if in.SystemID <= 0 && !pveKindIn(w, in.Kind, &sys) {
+		return
+	}
 	var old *proxmox.System
 	if in.SystemID > 0 {
 		var err error
@@ -486,4 +490,18 @@ func (m *Module) pveNodeOf(id int64, key string) string {
 		}
 	}
 	return ""
+}
+
+// pveKindIn setzt die Art eines neuen Systems aus der API ("" = pve; Docker-Hosts haben eigene Endpunkte).
+func pveKindIn(w http.ResponseWriter, kind string, sys *proxmox.System) bool {
+	switch kind {
+	case "", proxmox.KindPVE:
+		sys.Kind = proxmox.KindPVE
+	case proxmox.KindPBS:
+		sys.Kind = proxmox.KindPBS
+	default:
+		writeErr(w, http.StatusUnprocessableEntity, "kind must be pve or pbs (docker hosts: /api/healthchecks/docker)")
+		return false
+	}
+	return true
 }

@@ -9,6 +9,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
   aufheben oder dauerhaft freigeben. Die Sperrliste gilt auch auf den CDN64-Servern.
 - Healthchecks: Proxmox VE und Docker zeigen in der Übersicht ein kleines Badge, wenn es eine neuere Version gibt
   (nur Hinweis, keine Meldung).
+- Healthchecks: Proxmox Backup Server überwachen – Host-System wie ein Proxmox-Node, dazu Datastores (Belegung,
+  geschätzt voll), Backups und fehlgeschlagene Tasks zur Information.
 
 ## 0.12.0-alpha.32 – 2026-10-29
 

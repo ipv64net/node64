@@ -61,6 +61,7 @@ const (
 	MinInterval     = 15
 	MaxInterval     = 300
 	DefaultPort     = "8006"
+	DefaultPortPBS  = "8007"
 	maxAddresses    = 16
 	maxChannels     = 100 // Kanaele je Ebene
 )
@@ -71,7 +72,17 @@ var (
 )
 
 // NormalizeAddress prueft eine Adresse und liefert sie als https://host:port (ohne Pfad). Ohne Port gilt 8006.
-func NormalizeAddress(s string) (string, bool) {
+func NormalizeAddress(s string) (string, bool) { return normalizeAddress(s, DefaultPort) }
+
+// NormalizeAddressFor: wie NormalizeAddress, ohne Port gilt der der Art (PBS 8007).
+func NormalizeAddressFor(kind, s string) (string, bool) {
+	if kind == KindPBS {
+		return normalizeAddress(s, DefaultPortPBS)
+	}
+	return normalizeAddress(s, DefaultPort)
+}
+
+func normalizeAddress(s, defPort string) (string, bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return "", false
@@ -85,7 +96,7 @@ func NormalizeAddress(s string) (string, bool) {
 	}
 	port := u.Port()
 	if port == "" {
-		port = DefaultPort
+		port = defPort
 	}
 	if p, err := strconv.Atoi(port); err != nil || p < 1 || p > 65535 {
 		return "", false
@@ -105,7 +116,7 @@ func SameEndpoint(a, b *System) bool {
 	norm := func(l []string) []string {
 		var out []string
 		for _, x := range l {
-			if n, ok := NormalizeAddress(x); ok && !slices.Contains(out, n) {
+			if n, ok := NormalizeAddressFor(a.Kind, x); ok && !slices.Contains(out, n) {
 				out = append(out, n)
 			}
 		}
@@ -128,7 +139,7 @@ func ValidateSystem(sys *System, isNew bool) error {
 	switch sys.Kind {
 	case "":
 		sys.Kind = KindPVE
-	case KindPVE:
+	case KindPVE, KindPBS:
 	case KindDocker:
 		return validateDocker(sys, isNew)
 	default:
@@ -140,7 +151,7 @@ func ValidateSystem(sys *System, isNew bool) error {
 		if strings.TrimSpace(a) == "" {
 			continue
 		}
-		n, ok := NormalizeAddress(a)
+		n, ok := NormalizeAddressFor(sys.Kind, a)
 		if !ok {
 			return pveFerr("addresses", "pve.err.address")
 		}

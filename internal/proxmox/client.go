@@ -64,7 +64,7 @@ func (e *Error) Error() string {
 	case errors.Is(e.Kind, ErrToken):
 		b.WriteString("401 token invalid – check token ID (user@realm!tokenid) and secret")
 	case errors.Is(e.Kind, ErrPermission):
-		b.WriteString("403 permission denied – the token lacks rights: grant role PVEAuditor on path / to the token")
+		b.WriteString("403 permission denied – the token lacks rights: grant role PVEAuditor (Backup Server: Audit) on path / to the token")
 	case errors.Is(e.Kind, ErrCertMismatch):
 		b.WriteString("certificate mismatch – the fingerprint differs from the pinned one")
 	case errors.Is(e.Kind, ErrCertInvalid):
@@ -139,8 +139,12 @@ func newClient(sys System, roots *x509.CertPool, dialTO, reqTO time.Duration) (*
 	if !ok {
 		return nil, fmt.Errorf("fingerprint must be 64 hex digits (SHA-256), got %q", sys.PinSHA256)
 	}
+	auth := "PVEAPIToken=" + strings.TrimSpace(sys.TokenID) + "=" + sys.Secret
+	if sys.IsPBS() {
+		auth = "PBSAPIToken=" + strings.TrimSpace(sys.TokenID) + ":" + sys.Secret // PBS: Doppelpunkt vor dem Secret
+	}
 	c := &Client{
-		auth:   "PVEAPIToken=" + strings.TrimSpace(sys.TokenID) + "=" + sys.Secret,
+		auth:   auth,
 		pin:    pin,
 		roots:  roots,
 		dialTO: dialTO,
@@ -154,9 +158,9 @@ func newClient(sys System, roots *x509.CertPool, dialTO, reqTO time.Duration) (*
 		if strings.TrimSpace(a) == "" {
 			continue
 		}
-		n, ok := NormalizeAddress(a)
+		n, ok := NormalizeAddressFor(sys.Kind, a)
 		if !ok {
-			return nil, fmt.Errorf("invalid address %q (use https://host:8006)", a)
+			return nil, fmt.Errorf("invalid address %q (use https://host:8006, PBS :8007)", a)
 		}
 		if !slices.Contains(c.addrs, n) {
 			c.addrs = append(c.addrs, n)

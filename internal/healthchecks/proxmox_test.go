@@ -168,6 +168,7 @@ func (pveView) T(key string, args ...any) string {
 func (pveView) Doc(string) template.HTML             { return "" }
 func (pveView) Time(t time.Time) string              { return t.Format(time.RFC3339) }
 func (pveView) Ago(t time.Time) string               { return "ago:" + t.Format(time.RFC3339) }
+func (pveView) Date(t time.Time) string              { return t.Format("2006-01-02") }
 func (pveView) Duration(d time.Duration) string      { return d.String() }
 func (pveView) Bytes(n int64) string                 { return fmt.Sprintf("%dB", n) }
 func (pveView) Float(f float64, decimals int) string { return fmt.Sprint(f) }

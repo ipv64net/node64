@@ -9,6 +9,8 @@ Short summary of what changes per version. Details per module are in the node un
   applies on the CDN64 servers.
 - Health checks: Proxmox VE and Docker show a small badge in the overview when a newer version exists (just a hint,
   no notification).
+- Health checks: monitor Proxmox Backup Server – the host system like a Proxmox node, plus datastores (usage,
+  estimated full), backups and failed tasks for information.
 
 ## 0.12.0-alpha.32 – 2026-10-29
 

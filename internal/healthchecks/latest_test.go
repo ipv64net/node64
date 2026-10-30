@@ -50,23 +50,32 @@ func TestLatestSources(t *testing.T) {
 	zw := gzip.NewWriter(&gz)
 	_, _ = zw.Write([]byte("Package: pve-manager\nVersion: 9.0.10\n\nPackage: pve-docs\nVersion: 9.9.9\n\nPackage: pve-manager\nVersion: 9.0.11\nArchitecture: amd64\n\n"))
 	_ = zw.Close()
+	var gzb bytes.Buffer
+	zb := gzip.NewWriter(&gzb)
+	_, _ = zb.Write([]byte("Package: proxmox-backup-server\nVersion: 4.0.10-1\n\nPackage: proxmox-backup-client\nVersion: 4.9.9-1\n\nPackage: proxmox-backup-server\nVersion: 4.0.11-2\n\n"))
+	_ = zb.Close()
 	fetch := func(_ context.Context, url string) (io.ReadCloser, error) {
 		switch {
 		case strings.Contains(url, "download.docker.com"):
 			return io.NopCloser(strings.NewReader(`<a href="docker-27.5.1.tgz">x</a> <a href="docker-28.10.0.tgz">x</a> <a href="docker-28.9.1.tgz">x</a> <a href="docker-rootless-extras-29.0.0.tgz">x</a>`)), nil
-		case strings.Contains(url, "/trixie/pve-no-subscription/"):
+		case strings.Contains(url, "/debian/pve/dists/trixie/pve-no-subscription/"):
 			return io.NopCloser(bytes.NewReader(gz.Bytes())), nil
+		case strings.Contains(url, "/debian/pbs/dists/trixie/pbs-no-subscription/"):
+			return io.NopCloser(bytes.NewReader(gzb.Bytes())), nil
 		}
 		return nil, errors.New("404")
 	}
 	if v, err := latestDocker(context.Background(), fetch); err != nil || v != "28.10.0" {
 		t.Fatalf("docker: %q %v", v, err)
 	}
-	if v, err := latestPVE(context.Background(), fetch, 9); err != nil || v != "9.0.11" {
+	if v, err := latestPVE(context.Background(), fetch, pveRepo, 9); err != nil || v != "9.0.11" {
 		t.Fatalf("pve: %q %v", v, err)
 	}
-	if _, err := latestPVE(context.Background(), fetch, 7); err == nil {
+	if _, err := latestPVE(context.Background(), fetch, pveRepo, 7); err == nil {
 		t.Fatal("unknown major must fail")
+	}
+	if v, err := latestPVE(context.Background(), fetch, pbsRepo, 4); err != nil || v != "4.0.11" { // proxmox-backup-client zaehlt nicht
+		t.Fatalf("pbs: %q %v", v, err)
 	}
 }
 
@@ -91,5 +100,16 @@ func TestLatestUpdate(t *testing.T) {
 	}
 	if u := latestUpdate(proxmox.KindPVE, ""); u != nil {
 		t.Fatal("no version, no badge")
+	}
+	latestSet(t, "pbs/3", "3.4.7")
+	latestSet(t, "pbs/4", "4.0.11")
+	if u := latestUpdate(proxmox.KindPBS, "3.4.7"); u == nil || u.Latest != "4.0.11" || !u.Major {
+		t.Fatalf("pbs major: %+v", u)
+	}
+	if u := latestUpdate(proxmox.KindPBS, "4.0.10"); u == nil || u.Latest != "4.0.11" || u.Major {
+		t.Fatalf("pbs patch: %+v", u)
+	}
+	if u := latestUpdate(proxmox.KindPBS, "4.0.11"); u != nil {
+		t.Fatalf("pbs current: %+v", u)
 	}
 }

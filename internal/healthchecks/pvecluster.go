@@ -216,7 +216,7 @@ func (m *Module) ClusterApply(ctx context.Context, item, id string, data json.Ra
 	if sys.Home == selfNodeID() {
 		sys.Home = ""
 	}
-	if it, shared := pveClusterItem(sys); it != item || !shared || sys.Kind != proxmox.KindPVE && sys.Kind != proxmox.KindDocker {
+	if it, shared := pveClusterItem(sys); it != item || !shared || sys.Kind != proxmox.KindPVE && sys.Kind != proxmox.KindPBS && sys.Kind != proxmox.KindDocker {
 		return errClusterSystem
 	}
 	if sys.IsDocker() && sys.Secret == "" {

@@ -1,5 +1,15 @@
 # Changes – Healthchecks
 
+## 2.45.0 – 2026-10-30
+
+### New
+- Proxmox Backup Server: under Health checks → Proxmox VE there is now an "Add Proxmox Backup Server" button next to
+  "Add Proxmox VE" (API token with role Audit, port 8007, fingerprint as with Proxmox VE). The host system is monitored
+  like a Proxmox node: CPU, RAM, root disk, network and disk I/O with history, rules (reachable, restart, thresholds)
+  and optionally as a check. For information only: datastores with usage, "estimated full", dedup factor, groups,
+  snapshots and last backup across all namespaces, failed tasks of the last 7 days and the services
+  proxmox-backup/proxmox-backup-proxy. For a PBS the version badge comes from its own package list (apt).
+
 ## 2.44.0 – 2026-10-30
 
 ### New

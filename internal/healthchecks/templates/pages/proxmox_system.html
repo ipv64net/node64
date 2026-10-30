@@ -5,10 +5,11 @@
 	<div>
 		<h1 class="h4 mb-1"><i class="bi bi-hdd-rack text-primary me-1"></i> {{$d.Sys.Name}} <span class="badge {{$d.Class}}">{{.T (print "pve.sys_state." $d.State)}}</span>{{$.Doc "proxmox"}}</h1>
 		<div class="small text-body-secondary d-flex flex-wrap gap-2">
-			{{with $d.Snap}}{{if .Version}}<span class="badge text-bg-light">PVE {{.Version}}</span>{{end}}{{if .Cluster}}<span class="badge text-bg-light"><i class="bi bi-diagram-3"></i> {{.Cluster}}</span>{{end}}{{end}}
+			{{with $d.Snap}}{{if .Version}}<span class="badge text-bg-light">{{if $d.Sys.IsPBS}}PBS{{else}}PVE{{end}} {{.Version}}</span>{{end}}{{end}}{{with $d.Update}}<span class="badge text-bg-info fw-normal" title="{{if .Major}}{{$.T "pve.update_major_hint" "installed" .Installed "latest" .Latest}}{{else}}{{$.T "pve.update_hint" "installed" .Installed "latest" .Latest}}{{end}}"><i class="bi bi-arrow-up-circle"></i> {{.Latest}}</span>{{end}}{{with $d.Snap}}{{if .Cluster}}<span class="badge text-bg-light"><i class="bi bi-diagram-3"></i> {{.Cluster}}</span>{{end}}{{end}}
 			{{if eq $d.Quorum "ok"}}<span class="badge text-bg-success">{{.T "pve.quorum_ok"}}</span>{{else if eq $d.Quorum "lost"}}<span class="badge text-bg-danger">{{.T "pve.quorum_lost"}}</span>{{else if $d.ClusterUnknown}}<span class="badge text-bg-secondary" title="{{.T "pve.cluster_unknown_hint"}}"><i class="bi bi-diagram-3"></i> {{.T "pve.cluster_unknown"}}</span>{{end}}
 			{{with $d.Snap}}{{if .Address}}<code>{{.Address}}</code>{{end}} <span>{{$.T "pve.last_poll"}}: {{$.Ago .Time}}</span>{{end}}
 			<span>{{.T "pve.interval"}}: {{$d.Sys.Interval}} s</span>
+			{{with $d.PBS}}{{range .Services}}<span class="badge {{if eq .State "running"}}text-bg-light{{else}}text-bg-danger{{end}}" title="{{$.T "pve.pbs.service"}}"><i class="bi bi-gear"></i> {{.Name}}: {{.State}}</span>{{end}}{{end}}
 			{{if $d.Sys.PinSHA256}}<span title="{{$d.PinFmt}}"><i class="bi bi-pin-angle"></i> {{.T "pve.pinned"}}</span>{{end}}
 		</div>
 	</div>
@@ -25,19 +26,23 @@
 {{else if eq $d.State "error"}}<div class="alert alert-danger small"><i class="bi bi-key"></i> <strong>{{.T "pve.sys_state.error"}}:</strong> {{$d.Error}} <a href="{{$d.Path}}/edit">{{.T "pve.edit"}}</a></div>
 {{else if eq $d.State "down"}}<div class="alert alert-danger small"><i class="bi bi-plug"></i> <strong>{{.T "pve.unreachable"}}:</strong> {{$d.Error}}</div>
 {{else if eq $d.State "pending"}}<div class="alert alert-info small"><i class="bi bi-hourglass-split"></i> {{.T "pve.pending"}}</div>{{end}}
-{{with $d.Snap}}{{if .Warning}}<div class="alert alert-warning small" id="pve-rights"><i class="bi bi-shield-exclamation"></i> <strong>{{$.T "pve.warn_rights"}}</strong> {{$.T "pve.warn_rights_fix"}}<div class="font-monospace text-break mt-1">{{.Warning}}</div>
+{{with $d.Snap}}{{if .Warning}}{{if $d.Sys.IsPBS}}<div class="alert alert-warning small" id="pve-rights"><i class="bi bi-shield-exclamation"></i> <strong>{{$.T "pve.pbs.warn_rights"}}</strong> {{$.T "pve.pbs.warn_rights_fix"}}<div class="font-monospace text-break mt-1">{{.Warning}}</div>
+	<pre class="p-2 rounded bg-body-tertiary mt-2 mb-0" style="white-space:pre-wrap;word-break:break-all"><code id="pve-rights-cmd">proxmox-backup-manager acl update / Audit --auth-id '{{$d.Sys.TokenID}}'</code></pre>
+	<button class="btn btn-outline-secondary btn-sm mt-1" type="button" data-copy-target="#pve-rights-cmd"><i class="bi bi-clipboard"></i> {{$.T "common.copy"}}</button></div>{{else}}<div class="alert alert-warning small" id="pve-rights"><i class="bi bi-shield-exclamation"></i> <strong>{{$.T "pve.warn_rights"}}</strong> {{$.T "pve.warn_rights_fix"}}<div class="font-monospace text-break mt-1">{{.Warning}}</div>
 	{{if $d.TokenName}}<div class="mt-2">{{$.T "pve.warn_rights_cmd"}}</div>
 	<pre class="p-2 rounded bg-body-tertiary mt-1 mb-0" style="white-space:pre-wrap;word-break:break-all"><code id="pve-rights-cmd">pveum user token permissions {{$d.TokenUser}} {{$d.TokenName}} --path /
 pveum acl modify / --users '{{$d.TokenUser}}' --roles PVEAuditor
 pveum acl modify / --tokens '{{$d.Sys.TokenID}}' --roles PVEAuditor</code></pre>
-	<button class="btn btn-outline-secondary btn-sm mt-1" type="button" data-copy-target="#pve-rights-cmd"><i class="bi bi-clipboard"></i> {{$.T "common.copy"}}</button>{{end}}</div>{{end}}{{end}}
+	<button class="btn btn-outline-secondary btn-sm mt-1" type="button" data-copy-target="#pve-rights-cmd"><i class="bi bi-clipboard"></i> {{$.T "common.copy"}}</button>{{end}}</div>{{end}}{{end}}{{end}}
 
+{{with $d.PBS}}{{with .ServicesDown}}<div class="alert alert-danger small" id="pbs-services"><i class="bi bi-gear"></i> <strong>{{$.T "pve.pbs.services_down"}}:</strong> {{join . ", "}}</div>{{end}}{{end}}
 {{with $d.Snap}}{{if .OK}}
 <div class="row g-2 mb-3" id="pve-sys-kpi">
 	<div class="col-6 col-md"><div class="card stat {{if lt $d.NodesOnline $d.Nodes}}stat-down{{else}}stat-ok{{end}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "pve.kpi.nodes"}}</div><div class="stat-value">{{$d.NodesOnline}} / {{$d.Nodes}}</div><div class="stat-sub">{{if .Cluster}}{{.Cluster}}{{if eq $d.Quorum "ok"}} · {{$.T "pve.quorum_ok"}}{{else if eq $d.Quorum "lost"}} · {{$.T "pve.quorum_lost"}}{{end}}{{else if $d.ClusterUnknown}}{{$.T "pve.cluster_unknown"}}{{else}}{{$.T "pve.single"}}{{end}}</div></div><i class="bi bi-server stat-icon"></i></div></div></div>
-	<div class="col-6 col-md"><a class="card stat stat-primary" href="{{$d.Path}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "pve.guests"}}</div><div class="stat-value">{{$d.Guests}}</div></div><i class="bi bi-boxes stat-icon"></i></div></a></div>
+	{{if $d.Sys.IsPBS}}<div class="col-6 col-md"><a class="card stat stat-primary" href="#pbs-ds"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "pve.pbs.datastores"}}</div><div class="stat-value">{{len $d.DS}}</div></div><i class="bi bi-database stat-icon"></i></div></a></div>
+	{{else}}<div class="col-6 col-md"><a class="card stat stat-primary" href="{{$d.Path}}"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "pve.guests"}}</div><div class="stat-value">{{$d.Guests}}</div></div><i class="bi bi-boxes stat-icon"></i></div></a></div>
 	<div class="col-6 col-md"><a class="card stat stat-ok" href="{{$d.Path}}?state=running"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "pve.kpi.running"}}</div><div class="stat-value">{{$d.Running}}</div><div class="stat-sub">{{$.T "pve.kpi.of" "count" $d.Guests}}</div></div><i class="bi bi-play-circle stat-icon"></i></div></a></div>
-	<div class="col-6 col-md"><a class="card stat {{if $d.Bad}}stat-down{{else}}stat-muted{{end}}" href="{{$d.Path}}?state=problem"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "pve.kpi.bad"}}</div><div class="stat-value">{{$d.Bad}}</div></div><i class="bi bi-exclamation-triangle stat-icon"></i></div></a></div>
+	<div class="col-6 col-md"><a class="card stat {{if $d.Bad}}stat-down{{else}}stat-muted{{end}}" href="{{$d.Path}}?state=problem"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "pve.kpi.bad"}}</div><div class="stat-value">{{$d.Bad}}</div></div><i class="bi bi-exclamation-triangle stat-icon"></i></div></a></div>{{end}}
 	<div class="col-12 col-md"><div class="card stat stat-muted"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "pve.kpi.load"}}</div><div class="stat-value stat-value-sm">CPU {{or $d.CPUText "–"}} · RAM {{if $d.MemMax}}{{$.Bytes $d.Mem}} / {{$.Bytes $d.MemMax}}{{else}}–{{end}}</div>{{if $d.CPUMax}}<div class="stat-sub">{{$.T "pve.kpi.cores" "count" $d.CPUMax}}</div>{{end}}</div><i class="bi bi-speedometer2 stat-icon"></i></div></div></div>
 </div>
 {{end}}{{end}}
@@ -46,18 +51,19 @@ pveum acl modify / --tokens '{{$d.Sys.TokenID}}' --roles PVEAuditor</code></pre>
 <div class="card mb-3">
 	<div class="card-header"><i class="bi bi-hdd-stack text-primary"></i> {{.T "pve.nodes"}} <span class="badge text-bg-secondary">{{$d.NodesOnline}}/{{$d.Nodes}}</span></div>
 	<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards hc-table">
-		<thead><tr><th>{{.T "common.name"}}</th><th>{{.T "common.status"}}</th><th class="text-end">CPU</th><th class="text-end">RAM</th><th class="text-end">Disk</th><th>{{.T "pve.uptime"}}</th><th>{{.T "pve.cpu_1h"}}</th><th class="text-end">{{.T "pve.guests"}}</th><th class="text-end">{{.T "pve.as_check"}}</th></tr></thead>
+		<thead><tr><th>{{.T "common.name"}}</th><th>{{.T "common.status"}}</th><th class="text-end">CPU</th><th class="text-end">RAM</th><th class="text-end">Disk</th>{{if $d.Sys.IsPBS}}<th>{{.T "pve.net"}}</th>{{end}}<th>{{.T "pve.uptime"}}</th><th>{{.T "pve.cpu_1h"}}</th>{{if not $d.Sys.IsPBS}}<th class="text-end">{{.T "pve.guests"}}</th>{{end}}<th class="text-end">{{.T "pve.as_check"}}</th></tr></thead>
 		<tbody>
 		{{range $d.NodeRows}}
 		<tr{{if .Bad}} class="hc-row-down"{{end}}>
-			<td data-label="{{$.T "common.name"}}"><a href="{{.Path}}" class="fw-semibold">{{.R.Node}}</a>{{if .Muted}} <i class="bi bi-bell-slash text-body-secondary" title="{{$.T "pve.muted"}}"></i>{{end}}</td>
+			<td data-label="{{$.T "common.name"}}"><a href="{{.Path}}" class="fw-semibold">{{if $d.Sys.IsPBS}}{{.R.Name}}{{else}}{{.R.Node}}{{end}}</a>{{if .Muted}} <i class="bi bi-bell-slash text-body-secondary" title="{{$.T "pve.muted"}}"></i>{{end}}</td>
 			<td data-label="{{$.T "common.status"}}"><span class="badge {{.Class}}">{{$.T .Label}}</span></td>
 			<td data-label="CPU" class="text-end text-nowrap">{{or .CPU "–"}}</td>
 			<td data-label="RAM" class="text-end text-nowrap">{{or .Mem "–"}}</td>
 			<td data-label="Disk" class="text-end text-nowrap">{{or .Disk "–"}}</td>
+			{{if $d.Sys.IsPBS}}<td data-label="{{$.T "pve.net"}}" class="small text-nowrap">{{if .Rates}}↓ {{$.Bytes .NetIn}}/s · ↑ {{$.Bytes .NetOut}}/s{{else}}–{{end}}</td>{{end}}
 			<td data-label="{{$.T "pve.uptime"}}" class="small text-nowrap">{{if .Uptime}}{{$.Duration .Uptime}}{{else}}–{{end}}</td>
 			<td data-label="{{$.T "pve.cpu_1h"}}" class="text-primary">{{.Spark}}</td>
-			<td data-label="{{$.T "pve.guests"}}" class="text-end">{{.GuestsOn}}</td>
+			{{if not $d.Sys.IsPBS}}<td data-label="{{$.T "pve.guests"}}" class="text-end">{{.GuestsOn}}</td>{{end}}
 			<td data-label="{{$.T "pve.as_check"}}" class="text-end"><form method="post" action="{{$d.Path}}/ascheck" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="key" value="{{.Key}}"><input type="hidden" name="back" value="{{$d.Path}}">{{if .AsCheck}}<input type="hidden" name="on" value="0"><a class="btn btn-sm btn-link p-0 me-1" href="/healthchecks/{{.CheckToken}}" title="{{$.T "pve.check.open"}}"><i class="bi bi-heart-pulse"></i></a><button class="btn btn-sm btn-success py-0" type="submit" title="{{$.T "pve.check.remove"}}" data-confirm="{{$.T "pve.check.remove_confirm"}}"><i class="bi bi-toggle-on"></i></button>{{else}}<input type="hidden" name="on" value="1"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "pve.check.add"}}"><i class="bi bi-toggle-off"></i></button>{{end}}</form></td>
 		</tr>
 		{{end}}
@@ -66,7 +72,39 @@ pveum acl modify / --tokens '{{$d.Sys.TokenID}}' --roles PVEAuditor</code></pre>
 </div>
 {{end}}
 
-{{if $d.Snap}}{{if $d.Snap.OK}}
+{{if $d.Sys.IsPBS}}{{if $d.Snap}}{{if $d.Snap.OK}}
+<div class="card mb-3" id="pbs-ds">
+	<div class="card-header"><i class="bi bi-database text-primary"></i> {{.T "pve.pbs.datastores"}} <span class="badge text-bg-secondary">{{len $d.DS}}</span> <span class="small text-body-secondary">· {{.T "pve.pbs.ds_info"}}</span></div>
+	{{if $d.DS}}
+	<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards hc-table">
+		<thead><tr><th>{{.T "common.name"}}</th><th style="min-width:12rem">{{.T "pve.pbs.ds_used"}}</th><th class="text-end">{{.T "pve.pbs.ds_size"}}</th><th class="text-end">{{.T "pve.pbs.ds_free"}}</th><th>{{.T "pve.pbs.ds_full"}}</th><th class="text-end">{{.T "pve.pbs.ds_groups"}}</th><th class="text-end">{{.T "pve.pbs.ds_snapshots"}}</th><th>{{.T "pve.pbs.ds_last"}}</th><th class="text-end" title="{{.T "pve.pbs.ds_dedup_hint"}}">{{.T "pve.pbs.ds_dedup"}}</th></tr></thead>
+		<tbody>
+		{{range $d.DS}}
+		<tr>
+			<td data-label="{{$.T "common.name"}}"><span class="fw-semibold">{{.Store}}</span>{{if eq .Backend "s3"}} <span class="badge text-bg-light">S3</span>{{end}}{{if eq .Mount "notmounted"}} <span class="badge text-bg-secondary">{{$.T "pve.pbs.ds_unmounted"}}</span>{{end}}
+				{{if .Error}}<div class="small text-danger text-break">{{.Error}}</div>{{end}}</td>
+			<td data-label="{{$.T "pve.pbs.ds_used"}}">{{if .Pct}}<div class="d-flex align-items-center gap-2"><div class="progress flex-grow-1" style="height:.5rem" role="progressbar" aria-valuenow="{{printf "%.0f" .PctVal}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{.Class}}" style="width:{{printf "%.1f" .PctVal}}%"></div></div><span class="small text-nowrap">{{.Pct}}</span></div><div class="small text-body-secondary">{{$.Bytes .Used}}</div>{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.pbs.ds_size"}}" class="text-end text-nowrap">{{if gt .Total 0}}{{$.Bytes .Total}}{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.pbs.ds_free"}}" class="text-end text-nowrap">{{if ge .Avail 0}}{{$.Bytes .Avail}}{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.pbs.ds_full"}}" class="small text-nowrap">{{if not .FullAt.IsZero}}<span{{if .FullSoon}} class="text-warning-emphasis fw-semibold"{{end}} title="{{$.T "pve.pbs.ds_full_hint"}}">{{$.Date .FullAt}}</span>{{else if .NoFull}}<span class="text-body-secondary" title="{{$.T "pve.pbs.ds_full_hint"}}">{{$.T "pve.pbs.ds_full_none"}}</span>{{else}}<span class="text-body-secondary">–</span>{{end}}</td>
+			<td data-label="{{$.T "pve.pbs.ds_groups"}}" class="text-end">{{if .Known}}{{.Groups}}{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.pbs.ds_snapshots"}}" class="text-end">{{if .Known}}{{.Snapshots}}{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.pbs.ds_last"}}" class="small text-nowrap">{{if not .Last.IsZero}}<span title="{{$.Time .Last}}">{{$.Ago .Last}}</span>{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.pbs.ds_dedup"}}" class="text-end text-nowrap">{{if .DedupTxt}}{{.DedupTxt}}×{{else}}–{{end}}</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table></div>
+	{{else}}<div class="card-body small text-body-secondary">{{.T "pve.pbs.ds_empty"}}</div>{{end}}
+</div>
+{{with $d.PBS}}<div class="card mb-3" id="pbs-tasks">
+	<div class="card-header"><i class="bi bi-list-task text-primary"></i> {{$.T "pve.pbs.tasks"}} <span class="badge {{if .Failed}}text-bg-warning{{else}}text-bg-secondary{{end}}">{{len .Failed}}</span> <span class="small text-body-secondary">· {{$.T "pve.pbs.ds_info"}}</span></div>
+	{{if .Failed}}<div class="table-responsive"><table class="table table-sm align-middle mb-0 table-cards hc-table">
+		<thead><tr><th>{{$.T "pve.pbs.task_type"}}</th><th>{{$.T "pve.pbs.task_id"}}</th><th>{{$.T "pve.pbs.task_start"}}</th><th>{{$.T "common.status"}}</th></tr></thead>
+		<tbody>{{range .Failed}}<tr><td data-label="{{$.T "pve.pbs.task_type"}}" class="text-nowrap">{{.Type}}</td><td data-label="{{$.T "pve.pbs.task_id"}}" class="small text-break">{{.ID}}</td><td data-label="{{$.T "pve.pbs.task_start"}}" class="small text-nowrap">{{$.Ago .StartTime}}</td><td data-label="{{$.T "common.status"}}" class="small text-danger text-break">{{.Status}}</td></tr>{{end}}</tbody>
+	</table></div>{{else}}<div class="card-body small text-body-secondary">{{$.T "pve.pbs.tasks_none"}}</div>{{end}}
+</div>{{end}}
+{{end}}{{end}}{{else}}{{if $d.Snap}}{{if $d.Snap.OK}}
 <div class="card mb-3">
 	<div class="card-header"><i class="bi bi-boxes text-primary"></i> {{.T "pve.guests"}} <span class="badge text-bg-secondary">{{len $d.GuestRows}}{{if ne (len $d.GuestRows) $d.Total}}/{{$d.Total}}{{end}}</span></div>
 	<div class="card-body pb-0">
@@ -113,7 +151,7 @@ pveum acl modify / --tokens '{{$d.Sys.TokenID}}' --roles PVEAuditor</code></pre>
 	</table></div>
 	{{else}}<div class="card-body pt-0 small text-body-secondary">{{if $d.Total}}{{.T "pve.no_match"}}{{else}}{{.T "pve.no_guests"}}{{end}}</div>{{end}}
 </div>
-{{end}}{{end}}
+{{end}}{{end}}{{end}}
 
 {{template "pverules" $}}
 {{end}}

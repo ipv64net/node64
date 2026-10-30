@@ -4,13 +4,13 @@
 {{$e := $d.Errors}}
 {{$act := "/healthchecks/proxmox/new"}}{{if $d.Edit}}{{$act = print "/healthchecks/proxmox/system/" $s.ID "/edit"}}{{end}}
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-	<h1 class="h4 mb-0 me-auto"><i class="bi {{if $d.Edit}}bi-pencil-square{{else}}bi-plus-circle{{end}} text-primary me-1"></i> {{if $d.Edit}}{{.T "pve.edit"}}: {{$s.Name}}{{else}}{{.T "pve.add"}}{{end}}{{$.Doc "proxmox"}}</h1>
+	<h1 class="h4 mb-0 me-auto"><i class="bi {{if $d.Edit}}bi-pencil-square{{else}}bi-plus-circle{{end}} text-primary me-1"></i> {{if $d.Edit}}{{.T "pve.edit"}}: {{$s.Name}}{{if $d.PBS}} <span class="badge text-bg-light">PBS</span>{{end}}{{else if $d.PBS}}{{.T "pve.pbs.add"}}{{else}}{{.T "pve.add"}}{{end}}{{if $d.PBS}}{{$.Doc "proxmox#proxmox-backup-server"}}{{else}}{{$.Doc "proxmox"}}{{end}}</h1>
 	{{if $d.Edit}}<a class="btn btn-outline-secondary btn-sm" href="/healthchecks/proxmox/system/{{$s.ID}}"><i class="bi bi-arrow-left"></i> {{.T "common.back"}}</a>{{end}}
 </div>
 {{if $d.NoBox}}<div class="alert alert-danger small"><i class="bi bi-key"></i> {{.T "pve.err.no_box"}}</div>{{end}}
 {{if $d.Error}}<div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle"></i> {{$d.Error}}</div>{{end}}
 <form method="post" action="{{$act}}" autocomplete="off">
-<input type="hidden" name="_csrf" value="{{.CSRF}}">
+<input type="hidden" name="_csrf" value="{{.CSRF}}">{{if not $d.Edit}}<input type="hidden" name="kind" value="{{$s.Kind}}">{{end}}
 <button type="submit" name="op" value="save" class="visually-hidden" tabindex="-1" aria-hidden="true">{{.T "common.save"}}</button>
 <div class="row g-3">
 	<div class="col-lg-7">
@@ -19,13 +19,13 @@
 			<div class="card-body"><div class="row g-3">
 				<div class="col-12">
 					<label class="form-label" for="pve-addresses">{{.T "pve.form.addresses"}}</label>
-					<textarea class="form-control font-monospace{{if index $e "addresses"}} is-invalid{{end}}" id="pve-addresses" name="addresses" rows="2" required placeholder="https://pve1.lan:8006">{{$d.Addresses}}</textarea>
+					<textarea class="form-control font-monospace{{if index $e "addresses"}} is-invalid{{end}}" id="pve-addresses" name="addresses" rows="2" required placeholder="{{if $d.PBS}}https://pbs.lan:8007{{else}}https://pve1.lan:8006{{end}}">{{$d.Addresses}}</textarea>
 					{{with index $e "addresses"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
-					<div class="form-text">{{.T "pve.form.addresses_hint"}}</div>
+					<div class="form-text">{{if $d.PBS}}{{.T "pve.pbs.addresses_hint"}}{{else}}{{.T "pve.form.addresses_hint"}}{{end}}</div>
 				</div>
 				<div class="col-md-6">
 					<label class="form-label" for="pve-token">{{.T "pve.form.token_id"}}</label>
-					<input class="form-control font-monospace{{if index $e "token_id"}} is-invalid{{end}}" id="pve-token" name="token_id" value="{{$s.TokenID}}" required placeholder="node64@pve!monitor" maxlength="200">
+					<input class="form-control font-monospace{{if index $e "token_id"}} is-invalid{{end}}" id="pve-token" name="token_id" value="{{$s.TokenID}}" required placeholder="{{if $d.PBS}}node64@pbs!monitor{{else}}node64@pve!monitor{{end}}" maxlength="200">
 					{{with index $e "token_id"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
 				</div>
 				<div class="col-md-6">
@@ -46,7 +46,10 @@
 			<div class="card-body small">
 				{{if .Error}}<div class="alert alert-danger py-2 mb-2 text-break">{{.Error}}</div>{{end}}
 				{{if .NeedConfirm}}<div class="alert alert-warning py-2 mb-2"><i class="bi bi-shield-exclamation"></i> {{$.T "pve.form.probe_confirm_first"}}</div>{{end}}
-				{{if .OK}}<dl class="row mb-2">
+				{{if and .OK $d.PBS}}<dl class="row mb-2">
+					<dt class="col-sm-4">{{$.T "pve.version"}}</dt><dd class="col-sm-8">{{.Version}}</dd>
+					<dt class="col-sm-4">{{$.T "pve.pbs.datastores"}}</dt><dd class="col-sm-8">{{.Datastores}}</dd>
+				</dl>{{else if .OK}}<dl class="row mb-2">
 					<dt class="col-sm-4">{{$.T "pve.version"}}</dt><dd class="col-sm-8">{{.Version}}</dd>
 					<dt class="col-sm-4">{{$.T "pve.cluster"}}</dt><dd class="col-sm-8">{{if .Cluster}}{{.Cluster}}{{else if gt (len .Nodes) 1}}{{$.T "pve.cluster_unknown"}}{{else}}{{$.T "pve.single"}}{{end}}</dd>
 					<dt class="col-sm-4">{{$.T "pve.nodes"}}</dt><dd class="col-sm-8">{{join .Nodes ", "}}</dd>
@@ -76,7 +79,7 @@
 			<div class="card-body"><div class="row g-3">
 				<div class="col-md-6">
 					<label class="form-label" for="pve-name">{{.T "common.name"}}</label>
-					<input class="form-control{{if index $e "name"}} is-invalid{{end}}" id="pve-name" name="name" value="{{$s.Name}}" maxlength="100" placeholder="{{.T "pve.form.name_hint"}}">
+					<input class="form-control{{if index $e "name"}} is-invalid{{end}}" id="pve-name" name="name" value="{{$s.Name}}" maxlength="100" placeholder="{{if $d.PBS}}{{.T "pve.pbs.name_hint"}}{{else}}{{.T "pve.form.name_hint"}}{{end}}">
 					{{with index $e "name"}}<div class="invalid-feedback d-block">{{.}}</div>{{end}}
 				</div>
 				<div class="col-md-3">
@@ -102,7 +105,21 @@
 	</div>
 
 	<div class="col-lg-5">
+		{{if $d.PBS}}<div class="card mb-3">
+			<div class="card-header"><i class="bi bi-terminal text-primary"></i> {{.T "pve.pbs.rights"}}</div>
+			<div class="card-body small">
+				<p>{{.T "pve.pbs.rights_hint"}}</p>
+				<pre class="p-2 rounded bg-body-tertiary mb-2"><code>proxmox-backup-manager user create {{$d.User}}
+proxmox-backup-manager user generate-token {{$d.User}} {{$d.TokenName}}
+proxmox-backup-manager acl update / Audit --auth-id '{{$d.User}}!{{$d.TokenName}}'</code></pre>
+				<p class="mb-0 text-body-secondary">{{.T "pve.pbs.rights_secret"}}</p>
+			</div>
+		</div>
 		<div class="card mb-3">
+			<div class="card-header"><i class="bi bi-info-circle text-primary"></i> {{.T "pve.form.about"}}</div>
+			<div class="card-body small text-body-secondary">{{.T "pve.pbs.about_text"}}</div>
+		</div>
+		{{else}}<div class="card mb-3">
 			<div class="card-header"><i class="bi bi-terminal text-primary"></i> {{.T "pve.form.rights"}}</div>
 			<div class="card-body small">
 				<p>{{.T "pve.form.rights_hint"}}</p>
@@ -118,7 +135,7 @@ pveum aclmod / -token '{{$d.User}}!{{$d.TokenName}}' -role PVEAuditor</code></pr
 		<div class="card mb-3">
 			<div class="card-header"><i class="bi bi-info-circle text-primary"></i> {{.T "pve.form.about"}}</div>
 			<div class="card-body small text-body-secondary">{{.T "pve.form.about_text"}}</div>
-		</div>
+		</div>{{end}}
 	</div>
 </div>
 </form>
