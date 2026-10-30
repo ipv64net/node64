@@ -331,10 +331,10 @@ func TestAIBotsTemplates(t *testing.T) {
 	}
 	v := blocklistsView{Lists: []BlocklistState{{BlocklistInfo: BlocklistInfo{ID: "ai_bots", Name: "v64 KI-Bots (IP)", Category: "ai", Desc: "cdn64.bl.desc.ai_bots"}}},
 		AIBots: AIBotsState{Needed: true, Entries: 193, Users: 53, Updated: time.Now(), Blocked: 7}}
-	body = aiRender(t, "access.html", aclsData{BL: v})
+	body = aiRender(t, "security.html", securityData{BL: v})
 	for _, want := range []string{"cdn64.bl.cat.ai", "cdn64.ai.list", "cdn64.ai.entries"} {
 		if !strings.Contains(body, want) {
-			t.Fatalf("access page misses %q", want)
+			t.Fatalf("security page misses %q", want)
 		}
 	}
 }

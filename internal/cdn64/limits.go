@@ -26,6 +26,7 @@ var limQueueWait = 10 * time.Second // so lange wartet eine Anfrage auf einen fr
 // Gruende fuer Abweisungen (Statistik, Zugriffs-Log; Texte unter cdn64.reject.*).
 const (
 	rejBlocklist = "blocklist" // ipv64-Blocklisten
+	rejDeny      = "deny"      // eigene Sperrliste
 	rejBan       = "ban"       // gesperrt wegen Ueberlastung
 	rejConns     = "conns"     // zu viele Verbindungen je IP
 	rejConnRate  = "conn_rate" // zu viele neue Verbindungen je IP
@@ -443,7 +444,7 @@ func (m *Module) overload(kind, host string) {
 	}
 }
 
-// blockedAny: ipv64-Blocklisten oder gesperrt wegen Ueberlastung (am Eingang vor TLS).
+// blockedAny: eigene Sperrliste, ipv64-Blocklisten oder gesperrt wegen Ueberlastung (am Eingang vor TLS).
 func (m *Module) blockedAny(a netip.Addr) bool {
 	return m.connBlocked(a, "")
 }
@@ -451,6 +452,8 @@ func (m *Module) blockedAny(a netip.Addr) bool {
 func (m *Module) connBlocked(a netip.Addr, where string) bool {
 	web := where == "" // Web-Eingang: mit Weg an den Koeder bleibt die Verbindung offen, die Anfrage bekommt ihn
 	switch {
+	case m.bl.Denied(a):
+		m.rejectConn(a, rejDeny, where)
 	case m.lim.banned(a):
 		m.rejectConn(a, rejBan, where)
 	case m.bl.Blocked(a):

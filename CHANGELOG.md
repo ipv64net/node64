@@ -4,6 +4,10 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- PROXY64: Neuer Reiter „Sicherheit“ für Blocklisten, DoS-Schutz und Honeypot64. Unter „Zugriffslisten“ gibt es
+  jetzt eine Freigabeliste und eine eigene Sperrliste für alle Namen; Sperren des Honeypots lassen sich dort
+  aufheben oder dauerhaft freigeben.
+
 ## 0.12.0-alpha.32 – 2026-10-29
 
 - Cluster: Beim Koppeln gewinnt kein veralteter API-Key mehr gegen einen neueren im Cluster, und ein Entfernen des

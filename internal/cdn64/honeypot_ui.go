@@ -11,7 +11,7 @@ import (
 	"github.com/ipv64net/node64/internal/hpbridge"
 )
 
-// Seite (Karte auf dem Reiter Zugriffslisten) und API: PROXY64 und Honeypot64.
+// Seite (Karte auf dem Reiter Sicherheit, Sperren in der Sperrliste) und API: PROXY64 und Honeypot64.
 
 type honeypotView struct {
 	Settings HoneypotSettings `json:"settings"`
@@ -58,7 +58,7 @@ func (m *Module) pageHoneypotSave(w http.ResponseWriter, r *http.Request) {
 		m.g.Audit(r, "cdn64.honeypot", hpAudit(m.hpSettings()), "")
 		m.g.Flash(w, r, "success", m.g.T(r, "cdn64.hp.saved"))
 	}
-	http.Redirect(w, r, "/cdn64/access#honeypot", http.StatusSeeOther)
+	http.Redirect(w, r, "/cdn64/security#honeypot", http.StatusSeeOther)
 }
 
 func (m *Module) pageHoneypotUnblock(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +67,7 @@ func (m *Module) pageHoneypotUnblock(w http.ResponseWriter, r *http.Request) {
 		m.g.Audit(r, "cdn64.honeypot.unblock", ip, "")
 		m.g.Flash(w, r, "success", m.g.T(r, "cdn64.hp.unblocked", "ip", ip))
 	}
-	http.Redirect(w, r, "/cdn64/access#honeypot", http.StatusSeeOther)
+	http.Redirect(w, r, "/cdn64/access#sperrliste", http.StatusSeeOther)
 }
 
 func (m *Module) apiHoneypotGet(w http.ResponseWriter, r *http.Request) {

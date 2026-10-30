@@ -8,154 +8,52 @@
 	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
 </ul>
 <div class="row g-3 mb-3">
-<div class="col-lg-6">
-<form method="post" action="/cdn64/blocklists" class="card h-100" id="blocklists">
+<div class="col-lg-5">
+<form method="post" action="/cdn64/access/lists" class="card h-100" id="freigabeliste">
 	<input type="hidden" name="_csrf" value="{{.CSRF}}">
 	<div class="card-header d-flex flex-wrap align-items-center gap-2">
-		<span><img src="/static/img/ipv64_logo.svg" alt="" height="16" class="logo logo-light me-1 align-text-bottom"><img src="/static/img/ipv64_logo_white.svg" alt="" height="16" class="logo logo-dark me-1 align-text-bottom"> {{.T "cdn64.bl.title"}}{{$.Doc "cdn64#blocklisten"}}</span>
-		{{if $d.BL.Active}}<span class="badge text-bg-success"><i class="bi bi-shield-check"></i> {{.T "cdn64.bl.active"}}</span>{{else}}<span class="badge text-bg-light">{{.T "cdn64.bl.off"}}</span>{{end}}
-		<span class="ms-auto small text-body-secondary" title="{{.T "cdn64.bl.blocked_hint"}}"><i class="bi bi-slash-circle"></i> {{.T "cdn64.bl.blocked" "n" ($.Int $d.BL.Blocked)}}</span>
+		<span><i class="bi bi-check2-circle text-success"></i> {{.T "cdn64.sec.allow_title"}}</span>
+		<span class="ms-auto small text-body-secondary">{{.T "cdn64.sec.entries" "n" (len $d.Allow)}}</span>
 	</div>
 	<div class="card-body small">
-		<p class="text-body-secondary">{{.T "cdn64.bl.hint"}}</p>
-		<div class="row g-2">
-		{{range $d.BL.Lists}}
-			<div class="col-sm-6"><div class="border rounded p-2 h-100">
-				<div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" role="switch" name="list" value="{{.ID}}" id="bl-{{.ID}}"{{if .Enabled}} checked{{end}}>
-					<label class="form-check-label fw-semibold" for="bl-{{.ID}}">{{.Name}}</label>{{if or (eq .Category "tor") (eq .Category "cloud")}} <span class="badge text-bg-light">{{$.T (print "cdn64.bl.cat." .Category)}}</span>{{else if eq .Category "honeypot"}} <span class="badge text-bg-primary"><i class="bi bi-bug"></i> {{$.T "cdn64.bl.cat.honeypot"}}</span>{{else if eq .Category "ai"}} <span class="badge text-bg-light"><i class="bi bi-robot"></i> {{$.T "cdn64.bl.cat.ai"}}</span>{{end}}</div>
-				<div class="text-body-secondary">{{if .Desc}}{{$.T .Desc}}{{else if .Text}}{{.Text}}{{else}}{{$.T (print "cdn64.bl.desc." .ID)}}{{end}}{{if .License}} <span class="text-nowrap">· {{.License}}</span>{{end}}</div>
-				<div class="mt-1">{{if .Error}}<span class="text-danger"><i class="bi bi-exclamation-triangle"></i> {{.Error}}</span>{{else if .Entries}}<span class="font-monospace">{{$.Int .Entries}}</span> {{$.T "cdn64.bl.entries"}}{{if not .Updated.IsZero}} · {{$.T "cdn64.bl.updated" "ago" ($.Ago .Updated)}}{{end}}{{else if .Enabled}}<span class="text-body-secondary">{{$.T "cdn64.bl.loading"}}</span>{{end}}</div>
-				{{if and .Enabled .Edition}}<div class="mt-1">{{if eq .Edition "live"}}<span class="badge text-bg-success">{{$.T "cdn64.bl.edition_live"}}</span>{{else}}<span class="badge text-bg-light">{{$.T "cdn64.bl.edition_daily"}}</span>{{end}}{{if .LiveDenied}} <span class="text-warning-emphasis"><i class="bi bi-exclamation-circle"></i> {{$.T "cdn64.bl.live_denied"}}</span>{{end}}{{if .LiveError}} <span class="text-danger"><i class="bi bi-exclamation-triangle"></i> {{$.T "cdn64.bl.live_error" "err" .LiveError}}</span>{{end}}</div>{{end}}
-			</div></div>
-		{{end}}
-		</div>
-		{{if $d.BL.Countries}}<div class="mt-2 text-body-secondary"><i class="bi bi-globe2"></i> {{.T "cdn64.bl.geo"}}: {{range $i, $c := $d.BL.Countries}}{{if $i}} · {{end}}<span class="font-monospace">{{$c.Code}}</span> {{if $c.Error}}<span class="text-danger" title="{{$c.Error}}"><i class="bi bi-exclamation-triangle"></i></span>{{else if $c.Entries}}{{$.Int $c.Entries}}{{else}}…{{end}}{{end}} · {{.T "cdn64.bl.blocked" "n" ($.Int $d.BL.GeoBlocked)}}</div>{{end}}
-		{{with $d.BL.AIBots}}{{if or .Needed .Entries}}<div class="mt-2 text-body-secondary"><i class="bi bi-robot"></i> {{$.T "cdn64.ai.list"}}{{$.Doc "cdn64#ki-bots"}}: {{if .Error}}<span class="text-danger" title="{{.Error}}"><i class="bi bi-exclamation-triangle"></i></span> {{end}}{{if .Entries}}{{$.T "cdn64.ai.entries" "n" ($.Int .Entries) "users" ($.Int .Users)}}{{if not .Updated.IsZero}} · {{$.T "cdn64.bl.updated" "ago" ($.Ago .Updated)}}{{end}}{{else}}{{$.T "cdn64.bl.loading"}}{{end}} · {{$.T "cdn64.bl.blocked" "n" ($.Int .Blocked)}}</div>{{end}}{{end}}
-		<label class="form-label mt-3" for="bl-allow">{{.T "cdn64.bl.allow"}}</label>
-		<textarea class="form-control form-control-sm font-monospace" id="bl-allow" name="allow" rows="2" placeholder="203.0.113.7&#10;2001:db8::/48">{{join $d.BL.Allow "\n"}}</textarea>
-		<div class="form-text">{{.T "cdn64.bl.allow_hint"}}</div>
-		<label class="form-label mt-3" for="bl-token"><i class="bi bi-key"></i> {{.T "cdn64.bl.token"}}</label>
-		<div class="input-group input-group-sm">
-			<input class="form-control font-monospace" type="password" id="bl-token" name="token" autocomplete="new-password" maxlength="64" placeholder="{{if $d.BL.TokenSet}}••••••••••••••••{{else}}{{.T "cdn64.bl.token_placeholder"}}{{end}}">
-			{{if $d.BL.TokenSet}}<button class="btn btn-outline-danger" type="submit" form="bl-token-delete" data-confirm="{{.T "cdn64.bl.token_delete_confirm"}}" title="{{.T "common.delete"}}"><i class="bi bi-trash"></i></button>{{end}}
-		</div>
-		<div class="form-text">{{if $d.BL.TokenSet}}<span class="text-success"><i class="bi bi-check-circle"></i> {{.T "cdn64.bl.token_set"}}</span> {{else if $d.BL.TokenAuto}}<span class="text-success"><i class="bi bi-check-circle"></i> {{.T "cdn64.bl.token_auto"}}</span> {{end}}{{.T "cdn64.bl.token_hint"}}</div>
+		<p class="text-body-secondary">{{.T "cdn64.sec.allow_hint"}}</p>
+		<textarea class="form-control form-control-sm font-monospace" id="allow" name="allow" rows="6" placeholder="203.0.113.7&#10;2001:db8::/48">{{join $d.Allow "\n"}}</textarea>
+		<div class="form-text">{{.T "cdn64.sec.nets_hint"}}</div>
 	</div>
-	<div class="card-footer d-flex gap-2">
-		<button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-shield-check"></i> {{.T "common.save"}}</button>
-		<button class="btn btn-outline-secondary btn-sm" type="submit" formaction="/cdn64/blocklists/refresh"><i class="bi bi-arrow-repeat"></i> {{.T "cdn64.bl.refresh"}}</button>
-		<a class="btn btn-link btn-sm ms-auto" href="https://ipv64.net/v64_blocklists" target="_blank" rel="noopener">{{.T "cdn64.bl.about"}} <i class="bi bi-box-arrow-up-right"></i></a>
-	</div>
+	<div class="card-footer"><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button></div>
 </form>
-<form method="post" action="/cdn64/blocklists/token/delete" id="bl-token-delete" class="d-none"><input type="hidden" name="_csrf" value="{{.CSRF}}"></form>
 </div>
-<div class="col-lg-6">
-<form method="post" action="/cdn64/limits" class="card" id="limits">
+<div class="col-lg-7">
+<form method="post" action="/cdn64/access/lists" class="card h-100" id="sperrliste">
 	<input type="hidden" name="_csrf" value="{{.CSRF}}">
 	<div class="card-header d-flex flex-wrap align-items-center gap-2">
-		<span><i class="bi bi-speedometer2 text-primary"></i> {{.T "cdn64.lim.title"}}{{$.Doc "cdn64#rate-limits"}}</span>
-		{{if $d.Lim.Limits.Enabled}}<span class="badge text-bg-success"><i class="bi bi-shield-check"></i> {{.T "cdn64.bl.active"}}</span>{{else}}<span class="badge text-bg-light">{{.T "cdn64.bl.off"}}</span>{{end}}
-		<span class="ms-auto small text-body-secondary" title="{{.T "cdn64.lim.rejected_hint"}}"><i class="bi bi-slash-circle"></i> {{.T "cdn64.bl.blocked" "n" ($.Int $d.Lim.Rejected)}} · {{.T "cdn64.lim.open" "n" ($.Int $d.Lim.Conns)}}</span>
+		<span><i class="bi bi-slash-circle text-danger"></i> {{.T "cdn64.sec.deny_title"}}</span>
+		<span class="ms-auto small text-body-secondary" title="{{.T "cdn64.bl.blocked_hint"}}"><i class="bi bi-slash-circle"></i> {{.T "cdn64.bl.blocked" "n" ($.Int $d.Denied)}}</span>
 	</div>
 	<div class="card-body small">
-		<p class="text-body-secondary">{{.T "cdn64.lim.hint"}}</p>
-		<div class="d-flex flex-wrap gap-4 mb-3">
-			<div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="lim_enabled" id="lim-enabled"{{if $d.Lim.Limits.Enabled}} checked{{end}}>
-				<label class="form-check-label fw-semibold" for="lim-enabled">{{.T "cdn64.lim.enabled"}}</label></div>
-			<div class="form-check form-switch"><input class="form-check-input" type="checkbox" role="switch" name="lim_exempt_lan" id="lim-exempt-lan"{{if $d.Lim.Limits.ExemptLAN}} checked{{end}}>
-				<label class="form-check-label" for="lim-exempt-lan">{{.T "cdn64.lim.exempt_lan"}}</label></div>
-		</div>
-		<div class="row g-3">
-			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-conns_per_ip">{{.T "cdn64.lim.conns_per_ip"}}</label>
-				<input class="form-control form-control-sm" type="number" min="0" id="lim-conns_per_ip" name="lim_conns_per_ip" value="{{$d.Lim.Limits.ConnsPerIP}}">
-				<div class="form-text">{{.T "cdn64.lim.conns_per_ip_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.ConnsPerIP}}</div></div>
-			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-conn_rate">{{.T "cdn64.lim.conn_rate"}}</label>
-				<input class="form-control form-control-sm" type="number" min="0" id="lim-conn_rate" name="lim_conn_rate" value="{{$d.Lim.Limits.ConnRate}}">
-				<div class="form-text">{{.T "cdn64.lim.conn_rate_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.ConnRate}}</div></div>
-			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-req_rate">{{.T "cdn64.lim.req_rate"}}</label>
-				<input class="form-control form-control-sm" type="number" min="0" id="lim-req_rate" name="lim_req_rate" value="{{$d.Lim.Limits.ReqRate}}">
-				<div class="form-text">{{.T "cdn64.lim.req_rate_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.ReqRate}}</div></div>
-			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-req_burst">{{.T "cdn64.lim.req_burst"}}</label>
-				<input class="form-control form-control-sm" type="number" min="0" id="lim-req_burst" name="lim_req_burst" value="{{$d.Lim.Limits.ReqBurst}}">
-				<div class="form-text">{{.T "cdn64.lim.req_burst_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.ReqBurst}}</div></div>
-			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-target_conns">{{.T "cdn64.lim.target_conns"}}</label>
-				<input class="form-control form-control-sm" type="number" min="0" id="lim-target_conns" name="lim_target_conns" value="{{$d.Lim.Limits.TargetConns}}">
-				<div class="form-text">{{.T "cdn64.lim.target_conns_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.TargetConns}}</div></div>
-			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-max_conns">{{.T "cdn64.lim.max_conns"}}</label>
-				<input class="form-control form-control-sm" type="number" min="0" id="lim-max_conns" name="lim_max_conns" value="{{$d.Lim.Limits.MaxConns}}">
-				<div class="form-text">{{.T "cdn64.lim.max_conns_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.MaxConns}}</div></div>
-			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-ban_after">{{.T "cdn64.lim.ban_after"}}</label>
-				<input class="form-control form-control-sm" type="number" min="0" id="lim-ban_after" name="lim_ban_after" value="{{$d.Lim.Limits.BanAfter}}">
-				<div class="form-text">{{.T "cdn64.lim.ban_after_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.BanAfter}}</div></div>
-			<div class="col-sm-6"><label class="form-label fw-semibold" for="lim-ban_minutes">{{.T "cdn64.lim.ban_minutes"}}</label>
-				<input class="form-control form-control-sm" type="number" min="0" id="lim-ban_minutes" name="lim_ban_minutes" value="{{$d.Lim.Limits.BanMinutes}}">
-				<div class="form-text">{{.T "cdn64.lim.ban_minutes_hint"}} {{.T "cdn64.lim.default" "n" $d.Lim.Defaults.BanMinutes}}</div></div>
-		</div>
-		<div class="form-text mt-2">{{.T "cdn64.lim.zero_hint"}}</div>
-		{{if $d.Lim.Bans}}
-		<h3 class="h6 mt-3">{{.T "cdn64.lim.bans"}}</h3>
-		<table class="table table-sm align-middle mb-0"><tbody>
-		{{range $d.Lim.Bans}}<tr><td class="font-monospace">{{.IP}}</td><td class="text-body-secondary">{{$.T "cdn64.lim.until" "time" ($.Time .Until)}}</td>
-			<td class="text-end"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" formaction="/cdn64/limits/unban" name="ip" value="{{.IP}}"><i class="bi bi-unlock"></i> {{$.T "cdn64.lim.unban"}}</button></td></tr>{{end}}
-		</tbody></table>
-		{{end}}
-	</div>
-	<div class="card-footer d-flex gap-2">
-		<button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-shield-check"></i> {{.T "common.save"}}</button>
-		<button class="btn btn-outline-secondary btn-sm" type="submit" name="reset" value="1" data-confirm="{{.T "cdn64.lim.reset_confirm"}}"><i class="bi bi-arrow-counterclockwise"></i> {{.T "cdn64.lim.reset"}}</button>
-	</div>
-</form>
-{{with $d.HP}}
-<form method="post" action="/cdn64/honeypot" class="card mt-3" id="honeypot">
-	<input type="hidden" name="_csrf" value="{{$.CSRF}}">
-	<div class="card-header d-flex flex-wrap align-items-center gap-2">
-		<span><i class="bi bi-bug text-primary"></i> {{$.T "cdn64.hp.title"}}{{$.Doc "cdn64#honeypot"}}</span>
-		{{if or .Decoy .Access}}<span class="badge text-bg-success"><i class="bi bi-check-circle"></i> {{$.T "cdn64.hp.running"}}</span>{{else}}<span class="badge text-bg-light">{{$.T "cdn64.hp.not_running"}}</span>{{end}}
-		<span class="ms-auto small text-body-secondary"><i class="bi bi-slash-circle"></i> {{$.T "cdn64.bl.blocked" "n" ($.Int .Rejected)}} · {{$.T "cdn64.hp.counts" "decoy" ($.Int .Decoyed) "access" ($.Int .Reported)}}</span>
-	</div>
-	<div class="card-body small">
-		<p class="text-body-secondary">{{$.T "cdn64.hp.hint"}}</p>
-		<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="hp_decoy" id="hp-decoy"{{if .Settings.Decoy}} checked{{end}}>
-			<label class="form-check-label fw-semibold" for="hp-decoy">{{$.T "cdn64.hp.decoy"}}</label>
-			<div class="form-text">{{$.T "cdn64.hp.decoy_hint"}}{{if and .Settings.Decoy (not .Decoy)}} <span class="text-warning-emphasis">{{$.T "cdn64.hp.decoy_missing"}}</span>{{end}}</div>
-			<div class="form-text{{if .DefaultClose}} text-warning-emphasis fw-semibold{{end}}">{{if .DefaultClose}}<i class="bi bi-exclamation-triangle"></i> {{end}}{{$.T "cdn64.hp.decoy_visible"}}</div></div>
-		{{if .Wanted}}<div class="alert alert-info py-2 mb-2"><i class="bi bi-diagram-3"></i> {{$.T "cdn64.hp.wanted"}} <a href="/honeypot/settings#dienste">{{$.T "cdn64.hp.wanted_link"}}</a></div>{{end}}
-		<input type="hidden" name="hp_route_form" value="1">
-		<div class="ms-4 mb-3" id="hp-route">
-			<div class="fw-semibold mb-1">{{$.T "cdn64.hp.route"}}</div>
-			<div class="form-text mt-0 mb-1">{{$.T "cdn64.hp.route_hint"}}</div>
-			{{with .Settings.Route}}
-			<div class="form-check"><input class="form-check-input" type="checkbox" name="hp_route_blocklist" id="hp-route-blocklist"{{if .Blocklist}} checked{{end}}><label class="form-check-label" for="hp-route-blocklist">{{$.T "cdn64.hp.route_blocklist"}}</label></div>
-			<div class="form-check"><input class="form-check-input" type="checkbox" name="hp_route_honeypot" id="hp-route-honeypot"{{if .Honeypot}} checked{{end}}><label class="form-check-label" for="hp-route-honeypot">{{$.T "cdn64.hp.route_honeypot"}}</label></div>
-			<div class="form-check"><input class="form-check-input" type="checkbox" name="hp_route_exploit" id="hp-route-exploit"{{if .Exploit}} checked{{end}}><label class="form-check-label" for="hp-route-exploit">{{$.T "cdn64.hp.route_exploit"}}</label></div>
-			<div class="form-check"><input class="form-check-input" type="checkbox" name="hp_route_ai_bot" id="hp-route-ai-bot"{{if .AIBot}} checked{{end}}><label class="form-check-label" for="hp-route-ai-bot">{{$.T "cdn64.hp.route_ai_bot"}}</label></div>
-			<div class="form-check"><input class="form-check-input" type="checkbox" name="hp_route_geo" id="hp-route-geo"{{if .Geo}} checked{{end}}><label class="form-check-label" for="hp-route-geo">{{$.T "cdn64.hp.route_geo"}}</label></div>
-			{{end}}
-			<div class="form-text">{{$.T "cdn64.hp.route_never"}}</div>
-		</div>
-		<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="hp_access" id="hp-access"{{if .Settings.Access}} checked{{end}}>
-			<label class="form-check-label fw-semibold" for="hp-access">{{$.T "cdn64.hp.access"}}</label>
-			<div class="form-text">{{$.T "cdn64.hp.access_hint"}}{{if and .Settings.Access (not .Access)}} <span class="text-warning-emphasis">{{$.T "cdn64.hp.access_missing"}}</span>{{end}}</div></div>
-		<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="hp_block" id="hp-block"{{if .Settings.Block}} checked{{end}}>
-			<label class="form-check-label fw-semibold" for="hp-block">{{$.T "cdn64.hp.block"}}</label>
-			<div class="form-text">{{$.T "cdn64.hp.block_hint"}}</div>
-			{{if .BlockWanted}}<div class="form-text text-success"><i class="bi bi-check-circle"></i> {{$.T "cdn64.hp.block_wanted"}} <a href="/honeypot/settings">{{$.T "cdn64.hp.wanted_link"}}</a></div>{{end}}</div>
-		<div class="row g-3 mb-2"><div class="col-sm-4"><label class="form-label fw-semibold" for="hp-hours">{{$.T "cdn64.hp.hours"}}</label>
-			<input class="form-control form-control-sm" type="number" min="1" max="720" id="hp-hours" name="hp_block_hours" value="{{.Settings.BlockHours}}">
-			<div class="form-text">{{$.T "cdn64.hp.hours_hint"}}</div></div></div>
-		<div class="form-text">{{$.T "cdn64.hp.needs"}}</div>
-		{{if .Blocks}}
-		<h3 class="h6 mt-3">{{$.T "cdn64.hp.blocks" "n" (len .Blocks)}}</h3>
+		<p class="text-body-secondary">{{.T "cdn64.sec.deny_hint"}}</p>
+		<textarea class="form-control form-control-sm font-monospace" id="deny" name="deny" rows="4" placeholder="198.51.100.23&#10;2001:db8:bad::/48">{{join $d.Deny "\n"}}</textarea>
+		<div class="form-text">{{.T "cdn64.sec.nets_hint"}}</div>
+		<h3 class="h6 mt-3">{{.T "cdn64.sec.auto_title" "n" (len $d.Auto)}}</h3>
+		<p class="text-body-secondary mb-2">{{.T "cdn64.sec.auto_hint"}} <a href="/cdn64/security">{{.T "cdn64.tab.security"}}</a></p>
+		{{if $d.Auto}}
 		<div class="table-responsive" style="max-height:20rem"><table class="table table-sm align-middle mb-0"><tbody>
-		{{range .Blocks}}<tr><td class="font-monospace">{{.IP}}</td><td class="text-body-secondary">{{.Reason}}</td><td class="text-body-secondary">{{$.T "cdn64.lim.until" "time" ($.Time .Until)}}</td>
-			<td class="text-end"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" formaction="/cdn64/honeypot/unblock" name="ip" value="{{.IP}}"><i class="bi bi-unlock"></i> {{$.T "cdn64.lim.unban"}}</button></td></tr>{{end}}
+		{{range $d.Auto}}<tr><td class="font-monospace">{{.IP}}</td>
+			<td>{{if eq .From "honeypot"}}<span class="badge text-bg-primary"><i class="bi bi-bug"></i> {{$.T "cdn64.sec.from_honeypot"}}</span>{{else}}<span class="badge text-bg-warning"><i class="bi bi-speedometer2"></i> {{$.T "cdn64.sec.from_ban"}}</span>{{end}}{{if .Reason}} <span class="text-body-secondary">{{.Reason}}</span>{{end}}</td>
+			<td class="text-body-secondary">{{$.T "cdn64.lim.until" "time" ($.Time .Until)}}</td>
+			<td class="text-end text-nowrap">
+				<button class="btn btn-sm btn-outline-secondary py-0" type="submit" formaction="{{if eq .From "honeypot"}}/cdn64/honeypot/unblock{{else}}/cdn64/limits/unban{{end}}" name="ip" value="{{.IP}}" title="{{$.T "cdn64.sec.unblock_title"}}"><i class="bi bi-unlock"></i> {{$.T "cdn64.sec.unblock"}}</button>
+				<button class="btn btn-sm btn-outline-success py-0" type="submit" formaction="/cdn64/access/release?from={{.From}}" name="ip" value="{{.IP}}" title="{{$.T "cdn64.sec.release_title"}}"><i class="bi bi-check2-circle"></i> {{$.T "cdn64.sec.release"}}</button></td></tr>{{end}}
 		</tbody></table></div>
-		{{end}}
+		{{else}}<div class="text-body-secondary"><i class="bi bi-check-circle"></i> {{.T "cdn64.sec.auto_none"}}</div>{{end}}
 	</div>
-	<div class="card-footer"><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check2"></i> {{$.T "common.save"}}</button></div>
+	<div class="card-footer"><button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-check2"></i> {{.T "common.save"}}</button></div>
 </form>
-{{end}}
 </div>
+</div>
+<div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+	<h2 class="h6 mb-0"><i class="bi bi-person-lock text-primary"></i> {{.T "cdn64.sec.acl_title"}}</h2>
+	<span class="small text-body-secondary">{{.T "cdn64.sec.acl_hint"}}</span>
 </div>
 <div class="card">
 	{{if not $d.Rows}}<div class="card-body text-center text-body-secondary py-5">

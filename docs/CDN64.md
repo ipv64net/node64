@@ -138,11 +138,19 @@ Host ausschalten.
 
 ## Zugriffslisten und Sicherheit
 
-- **Zugriffslisten:**
+- **Reiter *Zugriffslisten*:**
+  - **Freigabeliste (Whitelist):** IPs oder Netze, die PROXY64 nie sperrt – weder über die Sperrliste noch über
+    Blocklisten, Ländersperre, Honeypot oder Limits (Einstellung `cdn64.blocklist_allow`, früher „Ausnahmen“ der
+    Blocklisten). Die Zugriffslisten der Hosts gelten trotzdem.
+  - **Sperrliste (Blacklist):** eigene IPs oder Netze (höchstens 5000), für alle Proxy-Hosts, Durchreich-Hosts und
+    Streams am Eingang abgewiesen, lokal und über CDN64; Grund `deny` im Log. Darunter die automatischen Sperren von
+    Honeypot und Limits mit „Entsperren“ und „Freigeben“ (hebt die Sperre auf und trägt die Adresse in die
+    Freigabeliste ein). API: `deny` in `GET|PUT /api/cdn64/blocklists`.
+- **Zugriffslisten je Host (Freigabe):**
   - Benutzer (bcrypt) und IP-Regeln (erster Treffer gilt, ohne Treffer gesperrt).
   - „Beides nötig“ oder „eine Bedingung genügt“.
   - Nach 10 Fehlversuchen in 5 Minuten ist die IP 15 Minuten gesperrt; die Sperre steht im Audit.
-- **ipv64-Blocklisten (Reiter *Zugriffslisten*):**
+- **ipv64-Blocklisten (Reiter *Sicherheit*):**
   - Listen schadhafter IPs von ipv64.net per Schalter: Gesamtliste (empfohlen), Spamhaus DROP, FireHOL Level 1,
     blocklist.de, DShield und Tor-Exits; IPv4 und IPv6.
   - Gilt für alle Proxy-Hosts, Durchreich-Hosts und Streams. Abgewiesen wird an erster Stelle: beim
@@ -150,9 +158,9 @@ Host ausschalten.
     Proxy (Cloudflare) zählt zusätzlich die echte Client-IP.
   - Aktualisierung alle 30 Minuten (ETag), Zwischenspeicher in `/data/cdn64/blocklists`; ist ipv64.net nicht
     erreichbar, gilt der letzte Stand weiter.
-  - Ausnahmen (IPs oder Netze) werden nie gesperrt. Der Zähler „abgewiesen“ steht auf der Karte und in der
-    Statistik.
-- **Schutz vor Überlastung (Reiter *Zugriffslisten*):** wie Stick-Tables und `maxconn` beim HAProxy, ab Werk
+  - Die Freigabeliste (Reiter *Zugriffslisten*) wird nie gesperrt. Der Zähler „abgewiesen“ steht auf der Karte und
+    in der Statistik.
+- **Schutz vor Überlastung (Reiter *Sicherheit*):** wie Stick-Tables und `maxconn` beim HAProxy, ab Werk
   eingeschaltet. Gezählt wird je IPv4-Adresse bzw. je IPv6-/64.
 
   | Limit | Standard | Wirkung |
@@ -165,7 +173,7 @@ Host ausschalten.
   | Sperre | nach 300 Abweisungen in 1 Minute | 10 Minuten schon beim Verbindungsaufbau abgewiesen |
 
   - Ausgenommen: das Heimnetz (private Adressen, abschaltbar), die vertrauenswürdigen Proxys aller Hosts (dort
-    zählt die echte Client-IP) und die Ausnahmen der Blocklisten. Je Host unter *Erweitert* „Ohne Limits je IP“
+    zählt die echte Client-IP) und die Freigabeliste. Je Host unter *Erweitert* „Ohne Limits je IP“
     (Anfrage-Limit und Grenze je Ziel entfallen, Verbindungs-Limits und Sperren bleiben).
   - Gilt für Proxy-Hosts, Weiterleitungen, 404-Hosts, durchgereichtes TLS (nur Verbindungen) und TCP-Streams.
   - 0 schaltet ein einzelnes Limit ab. Gesperrte Adressen stehen in der Karte und lassen sich freigeben; jede
@@ -199,7 +207,7 @@ Host ausschalten.
 
 ## Honeypot64 (Opt-in)
 
-Karte **Honeypot64** auf dem Reiter Zugriffslisten (`/cdn64/access#honeypot`, API `GET/PUT /api/cdn64/honeypot`).
+Karte **Honeypot64** auf dem Reiter Sicherheit (`/cdn64/security#honeypot`, API `GET/PUT /api/cdn64/honeypot`).
 Drei Schalter, alle standardmäßig aus; wirken nur, wenn das Modul Honeypot64 auf derselben Node läuft (Verbindung über
 `internal/hpbridge`, keiner der beiden Teile kennt den anderen):
 
@@ -207,7 +215,7 @@ Drei Schalter, alle standardmäßig aus; wirken nur, wenn das Modul Honeypot64 a
 |---|---|
 | Unbekannte Anfragen an den Honeypot | Anfragen ohne passenden Host (nur IP, fremde Domain, unbekannter Name, Port 80 und 443) bekommt der Web-Köder statt der Standardseite. Für unbekannte Namen gilt das Ersatz-Zertifikat – auch wenn als Standard „schließen“ eingestellt ist, solange der Köder da ist. |
 | Zugriffe an den Honeypot geben | Je Anfrage (bekannte Hosts und unbekannte) gehen nur Metadaten an den Log-Sensor: Client-IP (nach den vertrauenswürdigen Proxys des Hosts), Host, bekannt ja/nein, Methode, Pfad ohne Abfrage, Status, TLS, fehlgeschlagene Anmeldung an der Zugriffsliste, User-Agent (nur zur Einordnung). Nie Inhalte. |
-| Angreifer aus dem Honeypot sofort sperren | IPs, die der Honeypot meldet, sperrt PROXY64 für alle Hosts und Streams (Dauer einstellbar, 1–720 h, Standard 24 h), ohne auf die v64 Blocklist zu warten. Nie gesperrt: private Adressen, CGNAT, Ausnahmen der Blocklisten, vertrauenswürdige Proxys der Hosts. Liste im Speicher, höchstens 50 000 Einträge (voll: die am frühesten ablaufende weicht), nach einem Neustart leer. In der Karte mit Grund und Ende, einzeln aufhebbar (`DELETE /api/cdn64/honeypot/blocks/{ip}`). Ausschalten leert die Liste. |
+| Angreifer aus dem Honeypot sofort sperren | IPs, die der Honeypot meldet, sperrt PROXY64 für alle Hosts und Streams (Dauer einstellbar, 1–720 h, Standard 24 h), ohne auf die v64 Blocklist zu warten. Nie gesperrt: private Adressen, CGNAT, die Freigabeliste, vertrauenswürdige Proxys der Hosts. Liste im Speicher, höchstens 50 000 Einträge (voll: die am frühesten ablaufende weicht), nach einem Neustart leer. In der Sperrliste (Reiter Zugriffslisten) mit Grund und Ende, einzeln aufhebbar oder freizugeben (`DELETE /api/cdn64/honeypot/blocks/{ip}`). Ausschalten leert die Liste. |
 
 Abweisungen erscheinen in Statistik und Protokoll mit dem Grund „vom Honeypot gemeldet“. Prometheus:
 `node64_cdn64_honeypot_blocks`, `…_rejected_total`, `…_blocks_total`, `…_decoy_total`, `…_reported_total` (nur, wenn

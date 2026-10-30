@@ -18,6 +18,9 @@ import (
 func (m *Module) c4Routes(mux *http.ServeMux, page func(http.HandlerFunc) http.Handler) {
 	mux.Handle("GET /cdn64/access", page(m.pageACLs))
 	mux.Handle("GET /cdn64/access/new", page(m.pageACLNew))
+	mux.Handle("POST /cdn64/access/lists", page(m.pageNetListsSave))
+	mux.Handle("POST /cdn64/access/release", page(m.pageRelease))
+	mux.Handle("GET /cdn64/security", page(m.pageSecurity))
 	mux.Handle("POST /cdn64/access", page(m.pageACLCreate))
 	mux.Handle("GET /cdn64/access/{id}", page(m.pageACLEdit))
 	mux.Handle("POST /cdn64/access/{id}", page(m.pageACLUpdate))
@@ -76,11 +79,12 @@ type aclRow struct {
 }
 
 type aclsData struct {
-	Tabs []tab
-	Rows []aclRow
-	BL   blocklistsView
-	Lim  limitsView
-	HP   honeypotView
+	Tabs   []tab
+	Rows   []aclRow
+	Allow  []string    // Freigabeliste
+	Deny   []string    // eigene Sperrliste
+	Denied int64       // davon abgewiesen seit dem Start
+	Auto   []autoBlock // automatische Sperren (Honeypot, DoS-Schutz)
 }
 
 func (m *Module) pageACLs(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +93,8 @@ func (m *Module) pageACLs(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	d := aclsData{Tabs: m.tabs("/cdn64/access"), BL: m.blView(r), Lim: m.limView(r.Context()), HP: m.hpView()}
+	bl := m.blView(r)
+	d := aclsData{Tabs: m.tabs("/cdn64/access"), Allow: bl.Allow, Deny: bl.Deny, Denied: bl.Denied, Auto: m.autoBlocks()}
 	for _, a := range list {
 		d.Rows = append(d.Rows, aclRow{AccessList: a.public(), UsedBy: m.aclInUse(r.Context(), a.ID)})
 	}

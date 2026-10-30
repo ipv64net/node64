@@ -2973,7 +2973,18 @@
             "items": {
               "type": "string"
             },
-            "description": "Ausnahmen: IP-Adressen oder Netze"
+            "description": "Freigabeliste: IP-Adressen oder Netze, die nie gesperrt werden (auch nicht von Sperrliste, Ländersperre, Honeypot und Limits)"
+          },
+          "deny": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "eigene Sperrliste: IP-Adressen oder Netze, für alle Hosts und Streams abgewiesen (die Freigabeliste geht vor)"
+          },
+          "denied": {
+            "type": "integer",
+            "description": "von der eigenen Sperrliste abgewiesen seit dem Start"
           },
           "blocked": {
             "type": "integer",
@@ -14884,7 +14895,7 @@
         "tags": [
           "PROXY64"
         ],
-        "summary": "ipv64-Blocklisten ein-/ausschalten, Ausnahmen setzen",
+        "summary": "ipv64-Blocklisten ein-/ausschalten, Freigabeliste und eigene Sperrliste setzen",
         "description": "Abgewiesen wird am Eingang vor TLS und vor jeder Zugriffsliste, für Proxy-Hosts, Durchreich-Hosts und Streams. Die Listen kommen von ipv64.net und werden alle 30 Minuten aktualisiert. Listen der Kategorie honeypot (v64 Blocklist) lädt PROXY64 mit hinterlegtem Listen-Token in der Live-Fassung, sonst den Tagesstand.",
         "requestBody": {
           "required": true,
@@ -14903,7 +14914,15 @@
                     "type": "array",
                     "items": {
                       "type": "string"
-                    }
+                    },
+                    "description": "Freigabeliste (wird zusammen mit enabled gesetzt)"
+                  },
+                  "deny": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "eigene Sperrliste, höchstens 5000 Zeilen; fehlt = unverändert. Wird nur deny (und/oder token) gesendet, bleiben eingeschaltete Listen und Freigabeliste unverändert."
                   },
                   "token": {
                     "type": "string",
