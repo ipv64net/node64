@@ -1,5 +1,13 @@
 # Änderungen – PROXY64
 
+## 1.45.0 – 2026-10-30
+
+### Neu
+- Die Sperrliste gilt auch auf den CDN64-Servern: Die Node schickt Sperr- und Freigabeliste für ihren Tunnel an
+  ipv64 (bei jeder Änderung, je Liste die ersten 1000 Einträge). Die Server weisen diese Adressen für alle Namen in
+  Modus 1 und 2 schon beim Verbindungsaufbau ab, auch an den Portmappern und für offene Verbindungen; die
+  Freigabeliste geht vor. Braucht das aktuelle ipv64-Portal und die aktuellen CDN64-Server.
+
 ## 1.44.0 – 2026-10-30
 
 ### Neu

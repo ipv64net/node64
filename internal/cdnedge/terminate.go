@@ -351,7 +351,7 @@ func (s *Server) serveTerm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "too many requests", http.StatusTooManyRequests)
 		return
 	}
-	if aerr == nil && !re.ACL.allows(ap.Addr()) {
+	if aerr == nil && !re.allows(ap.Addr()) {
 		st.block(bACL, ap.Addr())
 		s.mx.termReject("acl")
 		termPage(w, r, http.StatusForbidden, host, "Zugriff von dieser Adresse nicht erlaubt.", "Access from this address is not allowed.")

@@ -1,5 +1,13 @@
 # Changes – PROXY64
 
+## 1.45.0 – 2026-10-30
+
+### New
+- The block list also applies on the CDN64 servers: the node sends block and allow list for its tunnel to ipv64 (on
+  every change, the first 1000 entries of each list). The servers reject these addresses for all names in modes 1
+  and 2 right at connection setup, also at the port mappings and for open connections; the allow list takes
+  precedence. Needs the current ipv64 portal and the current CDN64 servers.
+
 ## 1.44.0 – 2026-10-30
 
 ### New

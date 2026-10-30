@@ -59,6 +59,7 @@ type onlineState struct {
 	ports   [2]int                            // Tests: Besucher-Ports der Server (sonst 443, 80)
 	notify  func(notify.Alert)                // Meldungen (nil = keine)
 	prot    protectionCache                   // CDN64 Statistik (protection_ui.go)
+	lists   string                            // letzter Fehler beim Schicken der Listen (online_lists.go; unter op)
 }
 
 // SetSecrets gibt den Schluessel fuer verschluesselt gespeicherte Werte (Tunnel-Token).

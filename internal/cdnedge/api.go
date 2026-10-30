@@ -42,6 +42,9 @@ type apiTunnel struct {
 	UserID      int    `json:"userid"`
 	Blocked     bool   `json:"blocked"`
 	Sessions    int    `json:"sessions"` // parallele Verbindungen der Klasse (Business/Company; 0 = eine)
+	// Sperr- und Freigabeliste der Node (PROXY64, Reiter Zugriffslisten): gelten fuer alle Namen des Tunnels
+	Deny  []string `json:"deny,omitempty"`
+	Allow []string `json:"allow,omitempty"`
 }
 
 type apiHost struct {

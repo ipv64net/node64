@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/ipv64net/node64/internal/edge"
+	"github.com/ipv64net/node64/internal/shield"
 	"github.com/ipv64net/node64/internal/tunnel"
 )
 
@@ -36,8 +37,9 @@ type route struct {
 	Mode    int    // 1 = durchreichen, 2 = TLS endet hier (terminate.go), 3 = direkt zum Ziel (direct.go)
 	Target  *target
 	ACL     *acl
-	WAF     bool   // Muster-WAF (Modus 2/3, waf.go)
-	JA4     string // ja4Off | ja4Count | ja4Block (ja4.go)
+	Deny    []*shield.Set // Sperrlisten der Nodes hinter den Tunnels (ohne deren Freigabeliste)
+	WAF     bool          // Muster-WAF (Modus 2/3, waf.go)
+	JA4     string        // ja4Off | ja4Count | ja4Block (ja4.go)
 }
 
 // routes: Name -> route (exakt oder *.domain).
@@ -60,6 +62,12 @@ func newRoutes(static []HostEntry, api *apiConfig) *routes {
 		}
 	}
 	if api != nil {
+		deny := map[string]*shield.Set{} // je Tunnel
+		for _, t := range api.Tunnels {
+			if set := shield.BuildSet([][]netip.Prefix{prefixes(t.Deny)}, prefixes(t.Allow)); set.Total() > 0 {
+				deny[t.ID] = set
+			}
+		}
 		for _, h := range api.Hosts {
 			n := normName(h.Name)
 			if n == "" || h.Mode < 1 || h.Mode > 3 || (h.Mode == 3 && h.Target == nil) {
@@ -67,6 +75,11 @@ func newRoutes(static []HostEntry, api *apiConfig) *routes {
 			}
 			e := &route{Name: n, Tunnels: h.Tunnels, HostID: h.ID, UserID: h.UserID, Blocked: h.Blocked, Mode: h.Mode,
 				Target: newTarget(h.Target), ACL: newACL(h.ACL), WAF: h.WAF == nil || *h.WAF, JA4: ja4Mode(h.JA4)}
+			for _, t := range h.Tunnels {
+				if set := deny[t]; set != nil {
+					e.Deny = append(e.Deny, set)
+				}
+			}
 			r.exact[n] = e
 			if h.Wildcard {
 				r.wild[n] = e
@@ -74,6 +87,32 @@ func newRoutes(static []HostEntry, api *apiConfig) *routes {
 		}
 	}
 	return r
+}
+
+// allows: Liste des Namens und Sperrlisten der Nodes (abgewiesen wird als Zugriffsliste).
+func (re *route) allows(ip netip.Addr) bool {
+	if !re.ACL.allows(ip) {
+		return false
+	}
+	for _, set := range re.Deny {
+		if set.Has(ip) {
+			return false
+		}
+	}
+	return true
+}
+
+// prefixes: Adressen oder Netze (ungueltige Eintraege fallen weg).
+func prefixes(list []string) []netip.Prefix {
+	var out []netip.Prefix
+	for _, s := range list {
+		if p, err := netip.ParsePrefix(s); err == nil {
+			out = append(out, p.Masked())
+		} else if ip, err := netip.ParseAddr(s); err == nil {
+			out = append(out, netip.PrefixFrom(ip.Unmap(), ip.Unmap().BitLen()))
+		}
+	}
+	return out
 }
 
 // lookup: route fuer einen Namen (nil = unbekannt).
@@ -348,7 +387,7 @@ func (s *Server) handle443(c net.Conn, gs *gstate) {
 			_ = c.Close()
 			return
 		}
-		if ip := addrOf(c.RemoteAddr()); !re.ACL.allows(ip) {
+		if ip := addrOf(c.RemoteAddr()); !re.allows(ip) {
 			st.block(bACL, ip)
 			_ = c.Close()
 			return
@@ -440,7 +479,7 @@ func (s *Server) forward(c net.Conn, kind, host string, port int, data []byte, c
 		ip = ap.Addr()
 	}
 	st := s.stats.of(re.Name)
-	if ip.IsValid() && !re.ACL.allows(ip) { // Liste (Modus 1: nur nach IP)
+	if ip.IsValid() && !re.allows(ip) { // Listen (Modus 1: nur nach IP)
 		st.block(bACL, ip)
 		blockedReply(c, kind, host, data)
 		return

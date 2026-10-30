@@ -146,6 +146,10 @@ Host ausschalten.
     Streams am Eingang abgewiesen, lokal und über CDN64; Grund `deny` im Log. Darunter die automatischen Sperren von
     Honeypot und Limits mit „Entsperren“ und „Freigeben“ (hebt die Sperre auf und trägt die Adresse in die
     Freigabeliste ein). API: `deny` in `GET|PUT /api/cdn64/blocklists`.
+  - **Auf den CDN64-Servern (1.45):** die Node schickt beide Listen beim Abgleich für ihren Tunnel an ipv64
+    (`PUT /cdn64o/tunnels/{id}/lists`, nur bei Änderung, je Liste die ersten 1000 Einträge). Die Server weisen für
+    alle Namen des Tunnels (Modus 1/2, auch Portmapper und offene Verbindungen) schon beim Verbindungsaufbau ab und
+    zählen es als Zugriffsliste; die Freigabeliste geht vor.
 - **Zugriffslisten je Host (Freigabe):**
   - Benutzer (bcrypt) und IP-Regeln (erster Treffer gilt, ohne Treffer gesperrt).
   - „Beides nötig“ oder „eine Bedingung genügt“.
