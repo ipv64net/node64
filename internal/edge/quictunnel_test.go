@@ -154,3 +154,23 @@ func TestQUICPending(t *testing.T) {
 		t.Fatalf("after release: %v %d", p.pending, p.pendingN)
 	}
 }
+
+// IPv6: die Grenze je Besucher gilt je /64 (ein /64 darf nicht alle Plaetze belegen).
+func TestQUICPendingIPv6Prefix(t *testing.T) {
+	p := newVirtPacketConn()
+	for i := range quicPendingPerIP {
+		if !p.reserve(netip.AddrFrom16([16]byte{0x20, 0x01, 0x0d, 0xb8, 15: byte(i + 1)})) {
+			t.Fatal("reserve within the limit")
+		}
+	}
+	if p.reserve(netip.MustParseAddr("2001:db8::ffff:1")) {
+		t.Fatal("per /64 limit")
+	}
+	if !p.reserve(netip.MustParseAddr("2001:db8:0:1::1")) {
+		t.Fatal("other /64")
+	}
+	p.unreserve(netip.MustParseAddr("2001:db8::abcd"))
+	if !p.reserve(netip.MustParseAddr("2001:db8::1234")) || len(p.pending) != 2 || p.pendingN != quicPendingPerIP+1 {
+		t.Fatalf("after release: %v %d", p.pending, p.pendingN)
+	}
+}

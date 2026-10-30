@@ -355,6 +355,13 @@ der Besucher bekam bei Modus 1 auf Port 80 nichts).
 keine Antwort und halten den Nameserver nicht mehr bis zur Frist auf; abgeschnittene Antworten werden per TCP
 wiederholt. Läuft bei Fristablauf gerade eine stabile Folge, wird sie zu Ende geprüft.
 
+**IPv6-Review 2026-10-30 (cdn64-edge 0.20.4, nicht ausgerollt):** Zugriffsliste je Name und Sperr-/Freigabeliste je
+Tunnel nehmen `::ffff:a.b.c.d/N` als IPv4-Netz `/N-96` (Besucher kommen entmappt an, vorher griff so ein Eintrag nie);
+kleinere 4in6-Netze und Adressen mit Zone fallen weg. Das Portal speichert Listeneinträge normalisiert (`inet_ntop`,
+4in6 als IPv4, Zone und 4in6 unter /96 → 422) und vergleicht Ziele in Modus 3 normalisiert mit den Server-Adressen
+(auch `::ffff:100.64.0.1` gilt als nicht öffentlich). Node: offene HTTP/3-Handshakes über den Tunnel je Besucher bei
+IPv6 je /64 begrenzt (vorher je Adresse – ein /64 konnte alle 1024 Plätze belegen).
+
 ### 8.4 Endpunkte für die Server (Server-Geheimnis, eigene Datei)
 
 | Methode | Pfad | Zweck |

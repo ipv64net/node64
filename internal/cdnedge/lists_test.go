@@ -45,3 +45,26 @@ func TestTunnelLists(t *testing.T) {
 		t.Fatalf("allow list must win: %d", n)
 	}
 }
+
+// 4in6-Netze und Adressen mit Zone: ::ffff:a.b.c.d/N gilt als IPv4 /N-96 (Besucher kommen entmappt), kleinere
+// 4in6-Netze und Zonen fallen weg.
+func TestPrefixes4in6(t *testing.T) {
+	got := prefixes([]string{"::ffff:203.0.113.0/120", "::ffff:198.51.100.7/128", "::ffff:0.0.0.0/80", "fe80::1%eth0", "::ffff:192.0.2.1"})
+	want := []netip.Prefix{netip.MustParsePrefix("203.0.113.0/24"), netip.MustParsePrefix("198.51.100.7/32"), netip.MustParsePrefix("192.0.2.1/32")}
+	if len(got) != len(want) {
+		t.Fatalf("prefixes: %v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("prefixes: %v", got)
+		}
+	}
+	rs := newRoutes(nil, &apiConfig{Tunnels: []apiTunnel{{ID: "t1", Deny: []string{"::ffff:203.0.113.0/120"}}},
+		Hosts: []apiHost{{ID: 1, Name: "a.test", Mode: 2, Tunnels: []string{"t1"}, ACL: &apiACL{Default: "allow", List: []string{"::ffff:198.51.100.0/120"}}}}})
+	a := rs.lookup("a.test")
+	for ip, want := range map[string]bool{"203.0.113.9": false, "198.51.100.1": false, "192.0.2.1": true} {
+		if got := a.allows(netip.MustParseAddr(ip)); got != want {
+			t.Errorf("%s: %v", ip, got)
+		}
+	}
+}
