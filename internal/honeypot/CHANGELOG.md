@@ -1,5 +1,13 @@
 # Änderungen – Honeypot64
 
+## 0.17.0 – 2026-10-30
+
+### Neu
+- „Verwundbar wirken“ je Falle (Dienste-Katalog, Spalte „Verwundbar“; ohne Oberfläche `NODE64_HONEYPOT_VULNERABLE`):
+  http, https, ssh und mysql zeigen dann ältere, bekannt verwundbare Versionen – z. B. Apache 2.4.49/2.4.50, nginx
+  1.18/1.14 mit PHP 7.4, OpenSSH 8.2p1/7.9p1, Webmin 1.890–1.920, Grafana 8.0–8.3, MySQL 5.7 bzw. MariaDB 10.3.
+  Standard aus. Zieht mehr gezielte Scanner und Exploit-Versuche an; erfasst wird gleich, niemand kommt hinein.
+
 ## 0.16.3 – 2026-10-30
 
 ### Behoben

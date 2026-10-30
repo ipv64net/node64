@@ -195,6 +195,7 @@ type catRow struct {
 	Port    string
 	Page    string
 	Persona string // Dienst-Profil ("" = Standard fuer Port und Koeder)
+	Old     bool   // „verwundbar wirken“ (Config.Vulnerable)
 }
 
 // catForm ist der Katalog im Formular: Rows in Katalog-Reihenfolge, Extras = eigene Eintraege.
@@ -277,6 +278,33 @@ func (f *catForm) withPersonas(set map[string]string) {
 	}
 }
 
+// withOld traegt „verwundbar wirken“ (Schluessel dienst:port) in die Zeilen ein.
+func (f *catForm) withOld(list []string) {
+	set := map[string]bool{}
+	for _, k := range list {
+		set[k] = true
+	}
+	for _, rows := range [][]catRow{f.Rows, f.Extras} {
+		for i := range rows {
+			if p, err := strconv.Atoi(rows[i].Port); err == nil {
+				rows[i].Old = set[PersonaKey(rows[i].Service, p)]
+			}
+		}
+	}
+}
+
+// vulnerable liefert die eingeschalteten Zeilen, die verwundbar wirken sollen (nil = keine).
+func (f catForm) vulnerable() []string {
+	var out []string
+	for _, r := range append(append([]catRow(nil), f.Rows...), f.Extras...) {
+		if p, err := strconv.Atoi(r.Port); err == nil && r.On && r.Old && OldVersions(r.Service) && !slices.Contains(out, PersonaKey(r.Service, p)) {
+			out = append(out, PersonaKey(r.Service, p))
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // personas liefert die Profile der eingeschalteten Zeilen, die vom Standard abweichen (nil = alle Standard).
 func (f catForm) personas() map[string]string {
 	out := map[string]string{}
@@ -293,15 +321,16 @@ func (f catForm) personas() map[string]string {
 	return out
 }
 
-// parseCatForm liest den Katalog aus dem Formular: je Zeile on_<i>, port_<i>, page_<i>, persona_<i>; eigene Zeilen
-// xsvc_<j>, xport_<j>, xpage_<j>, xpersona_<j> (Anzahl in xn). Der Dienst einer Zeile kommt aus dem Katalog.
+// parseCatForm liest den Katalog aus dem Formular: je Zeile on_<i>, port_<i>, page_<i>, persona_<i>, old_<i>; eigene
+// Zeilen xsvc_<j>, xport_<j>, xpage_<j>, xpersona_<j>, xold_<j> (Anzahl in xn). Der Dienst einer Zeile kommt aus dem Katalog.
 func parseCatForm(r *http.Request) catForm {
 	cat := Catalog()
 	f := catForm{Rows: make([]catRow, len(cat))}
 	for i, e := range cat {
 		n := strconv.Itoa(i)
 		f.Rows[i] = catRow{On: r.PostFormValue("on_"+n) != "", Service: e.Service, Port: strings.TrimSpace(r.PostFormValue("port_" + n)),
-			Page: strings.ToLower(strings.TrimSpace(r.PostFormValue("page_" + n))), Persona: strings.ToLower(strings.TrimSpace(r.PostFormValue("persona_" + n)))}
+			Page: strings.ToLower(strings.TrimSpace(r.PostFormValue("page_" + n))), Persona: strings.ToLower(strings.TrimSpace(r.PostFormValue("persona_" + n))),
+			Old: r.PostFormValue("old_"+n) != ""}
 		if e.Service != SvcHTTP && e.Service != SvcHTTPS {
 			f.Rows[i].Page = ""
 		}
@@ -310,7 +339,8 @@ func parseCatForm(r *http.Request) catForm {
 	for j := 0; j < min(xn, catMaxExtras); j++ {
 		n := strconv.Itoa(j)
 		x := catRow{On: true, Service: strings.ToLower(strings.TrimSpace(r.PostFormValue("xsvc_" + n))), Port: strings.TrimSpace(r.PostFormValue("xport_" + n)),
-			Page: strings.ToLower(strings.TrimSpace(r.PostFormValue("xpage_" + n))), Persona: strings.ToLower(strings.TrimSpace(r.PostFormValue("xpersona_" + n)))}
+			Page: strings.ToLower(strings.TrimSpace(r.PostFormValue("xpage_" + n))), Persona: strings.ToLower(strings.TrimSpace(r.PostFormValue("xpersona_" + n))),
+			Old: r.PostFormValue("xold_"+n) != ""}
 		if x.Service != "" || x.Port != "" {
 			f.Extras = append(f.Extras, x)
 		}
@@ -429,6 +459,9 @@ type CatalogItem struct {
 	Persona        string   `json:"persona,omitempty"`
 	DefaultPersona string   `json:"default_persona,omitempty"`
 	Personas       []string `json:"personas,omitempty"`
+	// „verwundbar wirken“: eingeschaltet bzw. fuer den Dienst moeglich
+	Vulnerable     bool `json:"vulnerable,omitempty"`
+	VulnerableAble bool `json:"vulnerable_available,omitempty"`
 	CatalogState
 }
 
@@ -459,6 +492,7 @@ func (m *Module) catalogInfo(ctx context.Context, tr func(string) string) Catalo
 	c := m.loadConfig(ctx)
 	f := catFormFrom(effectiveServices(c))
 	f.withPersonas(c.Personas)
+	f.withOld(c.Vulnerable)
 	st := m.catStates(ctx)
 	if tr == nil {
 		tr = func(k string) string { return k }
@@ -474,6 +508,7 @@ func (m *Module) catalogInfo(ctx context.Context, tr func(string) string) Catalo
 		it := CatalogItem{Service: e.Service, Port: p, DefaultPort: e.Port, Page: r.Page, Proto: e.Proto, Group: e.Group,
 			Description: tr(e.DescKey), Profiles: e.Profiles, On: r.On, CatalogState: st.state(e.Service, p)}
 		it.personaItem(r.Persona)
+		it.Vulnerable, it.VulnerableAble = r.Old && OldVersions(e.Service), OldVersions(e.Service)
 		out.Entries = append(out.Entries, it)
 	}
 	for _, r := range f.Extras {
@@ -482,6 +517,7 @@ func (m *Module) catalogInfo(ctx context.Context, tr func(string) string) Catalo
 		it := CatalogItem{Service: s.Service, Port: p, Page: s.Page, Proto: string(svcProto(s.Service)), Group: catalogGroup(s),
 			Description: tr(catalogDesc(s)), On: true, CatalogState: st.state(s.Service, p)}
 		it.personaItem(r.Persona)
+		it.Vulnerable, it.VulnerableAble = r.Old && OldVersions(s.Service), OldVersions(s.Service)
 		out.Extra = append(out.Extra, it)
 	}
 	return out
@@ -501,6 +537,7 @@ type uiCatRow struct {
 	OwnerName  string
 	Personas   []uiPersona // Auswahl des Dienst-Profils (leer = keine)
 	PersonaSel string      // ausgewaehltes Profil (eingestellt oder Standard)
+	OldAble    bool        // „verwundbar wirken“ moeglich
 }
 
 // uiPersona ist ein Eintrag der Profil-Auswahl.
@@ -512,7 +549,8 @@ type uiPersona struct {
 // catView baut die Zeilen der Tabelle (Katalog und eigene Eintraege, dazu leere Zeilen zum Ergaenzen).
 func (m *Module) catView(r *http.Request, f catForm, st catStates) (rows, extras []uiCatRow, low bool) {
 	row := func(i int, cr catRow, group, desc string) uiCatRow {
-		u := uiCatRow{Index: i, catRow: cr, Group: group, DescKey: desc, Proto: string(svcProto(cr.Service)), Web: cr.Service == SvcHTTP || cr.Service == SvcHTTPS}
+		u := uiCatRow{Index: i, catRow: cr, Group: group, DescKey: desc, Proto: string(svcProto(cr.Service)), Web: cr.Service == SvcHTTP || cr.Service == SvcHTTPS,
+			OldAble: OldVersions(cr.Service)}
 		if p, err := strconv.Atoi(cr.Port); err == nil && cr.Service != "" {
 			u.CatalogState = st.state(cr.Service, p)
 			u.Low = p > 0 && p < 1024

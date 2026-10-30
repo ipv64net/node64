@@ -54,7 +54,7 @@ func sensorSSHConfig(persona string, id *sensorIdent, keys *sensorSSHKeys) (stri
 
 func (s *Sensor) handleSSH(c *trapConn, keys *sensorSSHKeys) {
 	p := s.personas()
-	banner, algos, hostKeys := sensorSSHConfig(p.of(c.t.key), p.id, keys)
+	banner, algos, hostKeys := sensorSSHConfig(p.of(c.t.key), p.identFor(c.t.key), keys)
 	_ = c.SetDeadline(time.Now().Add(sensorSSHTimeout))
 	attempts := 0
 	var client string

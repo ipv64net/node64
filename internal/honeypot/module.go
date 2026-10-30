@@ -38,7 +38,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.16.3"
+	version = "0.17.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -343,7 +343,7 @@ func (m *Module) seed(ctx context.Context) string {
 
 // ident liefert die Identitaet der Fallen (Hostname usw.) fuer die Oberflaeche.
 func (m *Module) ident(ctx context.Context, c ModuleConfig) *sensorIdent {
-	return newSensorPersonas(m.seed(ctx), c.Hostname, c.Personas).id
+	return newSensorPersonas(m.seed(ctx), c.Hostname, c.Personas, nil).id
 }
 
 // syslogCheck fragt die Port-Verwaltung, ob UDP und TCP auf port frei sind (aktive Ports anderer Teile).

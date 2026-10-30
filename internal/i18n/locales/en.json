@@ -4263,6 +4263,8 @@
       "syslog_allow_many": "At most {v1} allowed senders.",
       "hostname": "“{v1}” is not a valid hostname (a–z, 0–9, hyphen, dots between labels).",
       "persona": "There is no profile “{v2}” for “{v1}”.",
+      "vulnerable": "“{v1}” cannot look vulnerable (service:port of http, https, ssh or mysql).",
+      "vulnerable_many": "At most {v1} entries that look vulnerable.",
       "persona_many": "At most {v1} profiles.",
       "cert": "Certificate #{v1} does not exist in the certificate manager.",
       "cert_ports": "Invalid ports: {v1} (1–65535).",
@@ -4487,6 +4489,8 @@
       },
       "persona": "Profile",
       "persona_default": "(default)",
+      "old": "Vulnerable",
+      "old_hint": "Look vulnerable: the trap shows older, known vulnerable versions (e.g. Apache 2.4.49, OpenSSH 8.2p1, Webmin 1.890, Grafana 8.3, MySQL 5.7, PHP 7.4). This attracts more targeted scanners and exploit attempts; capturing stays the same, nobody gets in.",
       "persona_hint": "The profile decides what a trap pretends to be: banner, headers, responses and certificate (e.g. nginx, Proxmox VE, OpenSSH Ubuntu, Dropbear, MariaDB). The default for port and decoy is preselected; every profile captures the same data.",
       "proxy_hint": "Only via PROXY64: the honeypot opens no ports of its own. It only gets what PROXY64 passes on – requests that match no host and those recognised as malicious (blocklists, reported attackers, exploit patterns, AI bots). Which kinds is set in PROXY64. Switching on services here turns it into a custom selection.",
       "proxy_link": "PROXY64 → Security → Honeypot64"

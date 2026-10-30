@@ -134,7 +134,7 @@ func (s *Sensor) Apply(ctx context.Context, cfg Config, sink Sink) []ServiceStat
 	if seed == "" {
 		seed = s.seed
 	}
-	s.persona.Store(newSensorPersonas(seed, cfg.Hostname, cfg.Personas)) // gilt ab der naechsten Verbindung
+	s.persona.Store(newSensorPersonas(seed, cfg.Hostname, cfg.Personas, cfg.Vulnerable)) // gilt ab der naechsten Verbindung
 	s.certCfg.Store(&sensorCertCfg{id: cfg.CertID, ports: slices.Clone(cfg.CertPorts)})
 	if !cfg.Scan {
 		s.scan.reset()

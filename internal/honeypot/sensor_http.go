@@ -143,12 +143,13 @@ func (s *Sensor) serveHTTP(t *trapService, w http.ResponseWriter, r *http.Reques
 	}
 
 	h := w.Header()
-	sensorHTTPHeaders(h, persona, ps.id)
+	pid := ps.identFor(t.key) // aeltere Versionen, wenn der Port verwundbar wirken soll
+	sensorHTTPHeaders(h, persona, pid)
 	switch {
 	case dev != nil && !owasp && persona != PersonaWebmin: // Webmin: Login-Seite der Anwendung
 		dev.reply(w, isLogin)
 	case !web:
-		sensorHTTPApp(w, r, persona, ps.id, isLogin)
+		sensorHTTPApp(w, r, persona, pid, isLogin)
 	case page != "":
 		h.Set("Content-Type", "text/html; charset=UTF-8")
 		h.Set("Cache-Control", "no-store")
@@ -158,9 +159,9 @@ func (s *Sensor) serveHTTP(t *trapService, w http.ResponseWriter, r *http.Reques
 		}
 		_, _ = io.WriteString(w, body)
 	case strings.HasPrefix(r.URL.Path, "/."):
-		sensorHTTPError(w, r, persona, ps.id, t.key.Port, http.StatusForbidden)
+		sensorHTTPError(w, r, persona, pid, t.key.Port, http.StatusForbidden)
 	default:
-		sensorHTTPError(w, r, persona, ps.id, t.key.Port, http.StatusNotFound)
+		sensorHTTPError(w, r, persona, pid, t.key.Port, http.StatusNotFound)
 	}
 }
 

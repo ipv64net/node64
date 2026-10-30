@@ -131,7 +131,10 @@ type Config struct {
 	// sensor_id im Datenverzeichnis des Sensors, wie im Modus ohne Oberflaeche).
 	Personas map[string]string `json:"personas,omitempty"`
 	Hostname string            `json:"hostname,omitempty"`
-	Seed     string            `json:"-"`
+	// „Verwundbar wirken“ (H8): je "dienst:port" aeltere, bekannt verwundbare Versionen in Banner und Kopfzeilen
+	// (nur Dienste mit OldVersions; Standard aus). Zieht gezielte Scanner an; erfasst wird gleich.
+	Vulnerable []string `json:"vulnerable,omitempty"`
+	Seed       string   `json:"-"`
 	// Gueltiges Zertifikat fuer Koeder-Namen (sensor_cert.go): Kennung in der zentralen Zertifikatsverwaltung (0 = aus,
 	// alle Fallen selbst signiert) und Ports, die es auch bei Profilen mit selbst signiertem Zertifikat zeigen.
 	CertID    int64 `json:"cert_id,omitempty"`

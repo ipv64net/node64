@@ -42,7 +42,7 @@ func (s *Sensor) handleMySQL(c *trapConn) {
 		salt[i] = byte(0x21 + rand.N(94)) // druckbar, ohne NUL
 	}
 	p := s.personas()
-	if d.write(sensorMySQLPacket(0, sensorMySQLGreeting(sensorMySQLProfileFor(p.of(c.t.key), p.id), 10+rand.Uint32N(90000), salt))) != nil {
+	if d.write(sensorMySQLPacket(0, sensorMySQLGreeting(sensorMySQLProfileFor(p.of(c.t.key), p.identFor(c.t.key)), 10+rand.Uint32N(90000), salt))) != nil {
 		return
 	}
 	seq, body, bad := d.mysqlRead()
@@ -158,6 +158,13 @@ type sensorMySQLProfile struct {
 // 10.11 als Paket der Distribution bzw. 11.4 wie das offizielle Image (mysql_native_password, utf8mb4_general_ci,
 // Version mit "5.5.5-" davor wie bei MariaDB ueblich). Patch-Stand je Sensor.
 func sensorMySQLProfileFor(persona string, id *sensorIdent) sensorMySQLProfile {
+	if id.old { // „verwundbar wirken“: MariaDB 10.3 (Debian 10) bzw. MySQL 5.7, beide ohne Sicherheits-Updates
+		if persona == PersonaMariaDB || persona == PersonaMariaDB11 {
+			return sensorMySQLProfile{version: "5.5.5-10.3." + id.choose("mariadb-old", "27", "31", "34") + "-MariaDB-0+deb10u1", caps: 0x81bff75e,
+				charset: 45, plugin: sensorMySQLNative, ext: 0x1d}
+		}
+		return sensorMySQLProfile{version: "5.7." + id.choose("mysql-old", "33", "36", "40") + "-log", caps: 0x81fff7ff, charset: 33, plugin: sensorMySQLNative}
+	}
 	switch persona {
 	case PersonaMariaDB:
 		v := "5.5.5-10.11." + id.choose("mariadb", "6", "11", "13", "14") + "-MariaDB-0+deb12u1"

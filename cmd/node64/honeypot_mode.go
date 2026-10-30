@@ -442,7 +442,8 @@ func honeypotModeFromEnv(getenv func(string) string) (*hpModeConfig, error) {
 const hpMaxName = 64
 
 // parseHPPersonas liest die Dienst-Profile (NODE64_HONEYPOT_PERSONAS, z. B. "ssh:22=dropbear,http:8080=apache"), den
-// Hostnamen der Fallen (NODE64_HONEYPOT_HOSTNAME, leer = aus der Sensor-Kennung) und den Namen in der Node-Uebersicht
+// Hostnamen der Fallen (NODE64_HONEYPOT_HOSTNAME, leer = aus der Sensor-Kennung), „verwundbar wirken“
+// (NODE64_HONEYPOT_VULNERABLE, z. B. "ssh:22,http:80") und den Namen in der Node-Uebersicht
 // auf ipv64.net (NODE64_NAME, leer = Honeypot64). Gleiche Pruefung wie im Modul; Profile nur fuer aktive Fallen.
 func parseHPPersonas(get func(string) string, hc *hpModeConfig) error {
 	if v := get("NODE64_HONEYPOT_PERSONAS"); v != "" {
@@ -465,8 +466,16 @@ func parseHPPersonas(get func(string) string, hc *hpModeConfig) error {
 		hc.Sensor.Personas = m
 	}
 	hc.Sensor.Hostname = get("NODE64_HONEYPOT_HOSTNAME")
+	if v := get("NODE64_HONEYPOT_VULNERABLE"); v != "" { // „verwundbar wirken“: dienst:port, Komma-Liste
+		hc.Sensor.Vulnerable = strings.Split(v, ",")
+	}
 	if err := honeypot.ValidatePersonas(&hc.Sensor); err != nil {
-		return fmt.Errorf("NODE64_HONEYPOT_PERSONAS / NODE64_HONEYPOT_HOSTNAME: %w", err)
+		return fmt.Errorf("NODE64_HONEYPOT_PERSONAS / NODE64_HONEYPOT_HOSTNAME / NODE64_HONEYPOT_VULNERABLE: %w", err)
+	}
+	for _, k := range hc.Sensor.Vulnerable {
+		if !slices.ContainsFunc(hc.Sensor.Services, func(s honeypot.Service) bool { return honeypot.PersonaKey(s.Service, s.Port) == k }) {
+			return fmt.Errorf("NODE64_HONEYPOT_VULNERABLE: %s is not an active trap (see NODE64_HONEYPOT_PROFILE / NODE64_HONEYPOT_SERVICES)", k)
+		}
 	}
 	keys := make([]string, 0, len(hc.Sensor.Personas))
 	for k := range hc.Sensor.Personas {

@@ -4263,6 +4263,8 @@
       "syslog_allow_many": "Höchstens {v1} erlaubte Absender.",
       "hostname": "„{v1}“ ist kein gültiger Hostname (a–z, 0–9, Bindestrich, Punkte zwischen den Teilen).",
       "persona": "Profil „{v2}“ gibt es für „{v1}“ nicht.",
+      "vulnerable": "„{v1}“ kann nicht verwundbar wirken (dienst:port von http, https, ssh oder mysql).",
+      "vulnerable_many": "Höchstens {v1} Einträge mit „verwundbar wirken“.",
       "persona_many": "Höchstens {v1} Profile.",
       "cert": "Zertifikat #{v1} gibt es in der Zertifikatsverwaltung nicht.",
       "cert_ports": "Ungültige Ports: {v1} (1–65535).",
@@ -4487,6 +4489,8 @@
       },
       "persona": "Profil",
       "persona_default": "(Standard)",
+      "old": "Verwundbar",
+      "old_hint": "Verwundbar wirken: Die Falle zeigt ältere, bekannt verwundbare Versionen (z. B. Apache 2.4.49, OpenSSH 8.2p1, Webmin 1.890, Grafana 8.3, MySQL 5.7, PHP 7.4). Das zieht mehr gezielte Scanner und Exploit-Versuche an; erfasst wird gleich, niemand kommt hinein.",
       "persona_hint": "Das Profil bestimmt, als was sich eine Falle ausgibt: Banner, Kopfzeilen, Antworten und Zertifikat (z. B. nginx, Proxmox VE, OpenSSH Ubuntu, Dropbear, MariaDB). Vorausgewählt ist der Standard für Port und Köder; erfasst wird bei jedem Profil dasselbe.",
       "proxy_hint": "Nur über PROXY64: Der Honeypot öffnet keine eigenen Ports. Er bekommt nur, was PROXY64 weitergibt – Anfragen, die keinem Host zuzuordnen sind, und als schädlich erkannte (Blocklisten, gemeldete Angreifer, Exploit-Muster, KI-Bots). Welche Arten, stellst du bei PROXY64 ein. Schaltest du hier Dienste ein, wird daraus eine eigene Auswahl.",
       "proxy_link": "PROXY64 → Sicherheit → Honeypot64"
