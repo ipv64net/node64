@@ -150,6 +150,9 @@ func (m *Module) planFor(t *Target) plan {
 		}
 	case Mode6Fixed:
 		p.IP6 = t.Fixed6
+		if a, err := netip.ParseAddr(t.Fixed6); err == nil {
+			p.IP6 = a.String() // aeltere Eintraege sind evtl. nicht kanonisch gespeichert
+		}
 	}
 	return p
 }

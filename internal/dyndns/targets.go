@@ -135,14 +135,18 @@ func (t *Target) Normalize() error {
 		return errors.New("mode_none")
 	}
 	if t.Mode4 == Mode4Fixed {
-		if a, err := netip.ParseAddr(t.Fixed4); err != nil || !a.Is4() || !publicAddr(a) {
+		a, err := netip.ParseAddr(t.Fixed4)
+		if err != nil || !a.Is4() || !publicAddr(a) {
 			return errors.New("fixed4")
 		}
+		t.Fixed4 = a.String() // kanonisch, wird spaeter als Text mit der DNS-Antwort verglichen
 	}
 	if t.Mode6 == Mode6Fixed {
-		if a, err := netip.ParseAddr(t.Fixed6); err != nil || !a.Is6() || !publicAddr(a) {
+		a, err := netip.ParseAddr(t.Fixed6)
+		if err != nil || !a.Is6() || a.Is4In6() || !publicAddr(a) {
 			return errors.New("fixed6")
 		}
+		t.Fixed6 = a.String() // kanonisch (Kleinbuchstaben, gekuerzt) wie die DNS-Antwort
 	}
 	if t.Mode6 == Mode6Suffix {
 		s, err := normSuffix(t.Suffix6)

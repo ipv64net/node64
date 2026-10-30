@@ -1,5 +1,12 @@
 # Änderungen – DynDNS-Updater
 
+## 1.5.1 – 2026-10-30
+
+### Behoben
+- Feste IPv6-Adresse wird einheitlich gespeichert (z. B. `2a01:04F8::1` als `2a01:4f8::1`). Vorher galt der Name
+  dauerhaft als abweichend, es gab unnötige Updates und den Zustand „umgeleitet“. IPv4-gemappte Adressen
+  (`::ffff:…`) werden als feste IPv6 abgelehnt.
+
 ## 1.5.0 – 2026-10-28
 
 ### Neu
