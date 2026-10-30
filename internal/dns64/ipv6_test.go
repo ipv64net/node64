@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"html/template"
 	"net"
+	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -81,5 +84,40 @@ func TestDualStack(t *testing.T) {
 		if err := c.validate(); err != nil {
 			t.Fatalf("router %q: %v", r, err)
 		}
+	}
+}
+
+// IPv6-Feinheiten: Host-Kopf ohne Port, Zone der Client-Adresse, AAAA mit Zone oder ::ffff:, ::ffff:-Netze.
+func TestIPv6Edges(t *testing.T) {
+	m, _ := testModule(t)
+	c := m.loadConfig(context.Background())
+	c.Names, c.CertMode = nil, certSelf
+	r := httptest.NewRequest("GET", "/dns64/encrypted", nil)
+	r.Host = "[fd00::5]"
+	if v := m.encView(r, c); v.Host != "fd00::5" || strings.Contains(v.DoHURL, "[[") || v.DoQURL != "quic://[fd00::5]:"+strconv.Itoa(c.DoTPort) {
+		t.Errorf("encView: %q %q %q", v.Host, v.DoHURL, v.DoQURL)
+	}
+	if a := clientAddr(&net.UDPAddr{IP: net.ParseIP("fe80::1"), Port: 853, Zone: "eth0"}); a.String() != "fe80::1" {
+		t.Errorf("clientAddr: %s", a)
+	}
+	for v, ok := range map[string]bool{"FD00::0010": true, "fe80::1%eth0": false, "::ffff:192.168.1.1": false} {
+		rec := Record{Name: "nas.home.lan", Type: "AAAA", Value: v}
+		if err := normalizeRecord(&rec); (err == nil) != ok || (ok && rec.Value != "fd00::10") {
+			t.Errorf("AAAA %s: %v %q", v, err, rec.Value)
+		}
+	}
+	for in, want := range map[string]string{"::ffff:10.8.0.0/112": "10.8.0.0/16", "::ffff:10.8.0.1": "10.8.0.1/32", "fd00::/8": "fd00::/8"} {
+		if p, err := parsePrefix(in); err != nil || p.String() != want {
+			t.Errorf("parsePrefix(%s) = %s %v", in, p, err)
+		}
+	}
+	if _, err := parsePrefix("::ffff:0:0/90"); err != nil {
+		t.Errorf("/90 ist kein ::ffff:-Netz mehr (maskiert): %v", err)
+	}
+	if p, err := parsePrefix("::ffff:0.0.0.0/96"); err != nil || p.Bits() != 0 { // 0.0.0.0/0, beim Speichern abgelehnt
+		t.Errorf("parsePrefix /96 = %s %v", p, err)
+	}
+	if _, err := template.New("s").Funcs(template.FuncMap{"join": strings.Join}).ParseFS(templateFS, "templates/pages/settings.html"); err != nil {
+		t.Fatal(err) // Warnung bei fester Bind-Adresse
 	}
 }

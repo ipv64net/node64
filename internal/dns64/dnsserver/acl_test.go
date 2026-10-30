@@ -2,7 +2,10 @@ package dnsserver
 
 import (
 	"net/netip"
+	"strings"
 	"testing"
+
+	"github.com/miekg/dns"
 )
 
 func TestAttachedAllowed(t *testing.T) {
@@ -34,5 +37,27 @@ func TestRefusedCounted(t *testing.T) {
 	}
 	if r := a.stats(); r.Count != 3 || r.LastIP.String() != "203.0.113.9" || r.LastAt.IsZero() {
 		t.Fatalf("stats = %+v", r)
+	}
+}
+
+// Rueckwaertssuche: globale IPv6 des angeschlossenen /64 gilt als lokal (Router), fremde nicht; fc00::/8 und ::1 sind
+// immer lokal.
+func TestOwnPTR(t *testing.T) {
+	a := &clientACL{nets: []netip.Prefix{netip.MustParsePrefix("2001:db8:1:2::/64"), netip.MustParsePrefix("192.168.1.0/24")}}
+	rev := func(ip string) string { r, _ := dns.ReverseAddr(ip); return strings.TrimSuffix(r, ".") }
+	if ip, ok := arpa6(rev("2001:db8:1:2::abcd")); !ok || ip != netip.MustParseAddr("2001:db8:1:2::abcd") {
+		t.Fatalf("arpa6 = %v %v", ip, ok)
+	}
+	if !a.ownPTR(rev("2001:db8:1:2::5"), dns.TypePTR) || a.ownPTR(rev("2001:db8:9::5"), dns.TypePTR) ||
+		a.ownPTR(rev("2001:db8:1:2::5"), dns.TypeA) || a.ownPTR(rev("192.168.1.5"), dns.TypePTR) {
+		t.Error("ownPTR")
+	}
+	if (*clientACL)(nil).ownPTR(rev("2001:db8:1:2::5"), dns.TypePTR) {
+		t.Error("nil acl")
+	}
+	for _, ip := range []string{"fc00::1", "::1", "fd00::1"} {
+		if !isLocalName(rev(ip)) {
+			t.Errorf("%s reverse not local", ip)
+		}
 	}
 }

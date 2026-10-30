@@ -1,5 +1,20 @@
 # Änderungen – DNS64
 
+## 1.31.1 – 2026-10-30
+
+### Behoben
+- Klassische DNS-Server mit Link-Local-Adresse und Zone (`fe80::1%eth0`) als Upstream oder Weiterleitung funktionieren;
+  vorher scheiterten alle Anfragen an sie still.
+- Seite Verschlüsselt: Aufruf über eine IPv6-Adresse ohne Port (`[fd00::5]`) ergibt wieder gültige DoH-/DoQ-Adressen und
+  ein gültiges iOS-Profil.
+- Rückwärtssuche für die globalen IPv6-Adressen des eigenen Heimnetzes geht an den Router statt an öffentliche
+  Upstreams (wenn ein Router bekannt ist); `fc00::/8` und `::1` gelten ebenfalls als lokal.
+- DoH/DoQ über Link-Local-Adressen: Gruppenregeln greifen wieder.
+- Eigene AAAA-Einträge mit Zone oder `::ffff:`-Adresse werden abgelehnt.
+- Netze in Gruppen und weitere Client-Netze als `::ffff:`-Präfix werden in IPv4-Netze umgerechnet (trafen vorher nie).
+- Einstellungen: Hinweis, wenn eine feste Adresse eingetragen ist – Geräte der anderen IP-Familie bekommen dann kein DNS.
+- Anzeige des Router-DNS ohne eckige Klammern bei IPv6.
+
 ## 1.31.0 – 2026-10-28
 
 ### Behoben

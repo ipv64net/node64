@@ -150,7 +150,7 @@ func (x *encrypted) stop(ctx context.Context) {
 
 func clientAddr(a net.Addr) netip.Addr {
 	if ap, err := netip.ParseAddrPort(a.String()); err == nil {
-		return ap.Addr().Unmap()
+		return ap.Addr().Unmap().WithZone("") // ohne Zone (fe80::1%eth0), sonst greifen Gruppenregeln nicht
 	}
 	return netip.Addr{}
 }

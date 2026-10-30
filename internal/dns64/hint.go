@@ -54,7 +54,7 @@ func (m *Module) offNow(ip netip.Addr) bool {
 // hintPage zeigt, fuer welche Gruppe das Internet aus ist und bis wann.
 func (m *Module) hintPage(w http.ResponseWriter, r *http.Request) {
 	ip, _ := netip.ParseAddrPort(r.RemoteAddr)
-	p := m.policy(ip.Addr().Unmap())
+	p := m.policy(ip.Addr().Unmap().WithZone(""))
 	if p == nil {
 		http.NotFound(w, r)
 		return

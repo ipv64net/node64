@@ -148,10 +148,10 @@ func normalizeServer(s string) (string, error) {
 	s = strings.TrimSpace(s)
 	if !strings.Contains(s, "://") {
 		if ap, err := netip.ParseAddrPort(s); err == nil {
-			return "dns://" + netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port()).String(), nil
+			return plainURL(netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port())), nil
 		}
-		if a, err := netip.ParseAddr(strings.Trim(s, "[]")); err == nil {
-			return "dns://" + netip.AddrPortFrom(a.Unmap(), 53).String(), nil
+		if a, err := netip.ParseAddr(strings.Trim(s, "[]")); err == nil && !strings.ContainsAny(a.Zone(), "[]:") {
+			return plainURL(netip.AddrPortFrom(a.Unmap(), 53)), nil
 		}
 		return "", errCfg("err_fwd_server")
 	}
@@ -187,6 +187,9 @@ func netJoin(host, port string) string {
 // serverLabel: Anzeige eines Servers (dns://192.168.1.1:53 -> 192.168.1.1).
 func serverLabel(s string) string {
 	if rest, ok := strings.CutPrefix(s, "dns://"); ok {
+		if r, err := url.PathUnescape(rest); err == nil {
+			rest = r // Zone (%25)
+		}
 		if ap, err := netip.ParseAddrPort(rest); err == nil && ap.Port() == 53 {
 			return ap.Addr().String()
 		}

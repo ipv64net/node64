@@ -85,6 +85,7 @@ func (m *Module) encView(r *http.Request, c config) encView {
 		if h, _, err := net.SplitHostPort(r.Host); err == nil {
 			v.Host = h
 		}
+		v.Host = strings.Trim(v.Host, "[]") // IPv6 ohne Port ("[fd00::5]"): hostPort/dohURL klammern selbst
 	}
 	m.mu.Lock()
 	v.MigErr = m.migErr
