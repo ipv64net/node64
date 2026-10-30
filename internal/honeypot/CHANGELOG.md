@@ -1,5 +1,12 @@
 # Änderungen – Honeypot64
 
+## 0.16.2 – 2026-10-30
+
+### Behoben
+- SIP und SNMP: Das Limit je Quelle gilt bei IPv6 jetzt wirklich je /64; wechselnde Adressen aus einem Netz füllen die
+  Tabelle nicht mehr und machen die Sensoren für alle anderen blind.
+- Live-Karte: Ohne öffentliche IPv4 (reiner IPv6-Anschluss) wird der Standort über die öffentliche IPv6 erkannt.
+
 ## 0.16.1 – 2026-10-28
 
 ### Behoben
