@@ -24,6 +24,10 @@
  *     Quelle: honeypot 1.0, log 0.8, syslog 0.7; Alter: bis 1 Tag 1.0, dann linear bis 0.25 nach 14 Tagen.
  *     Der Wert ist Auskunft (IP-Auskunft, Sortierung); ob gelistet wird, entscheidet die Schwelle.
  *   - Rausfallen: ohne Treffer in 14 Tagen faellt die IP aus dem Fenster und ihre Zeile wird geloescht.
+ *   - IPv6 je /64: Meldungen aller Adressen eines /64 zaehlen zusammen (wer im eigenen Netz die Adresse wechselt, entgeht
+ *     der Schwelle nicht). Jede Adresse behaelt ihre Zeile in hp_scores (Wert, Accounts und Listen des ganzen /64, Arten,
+ *     Ereignisse und Zeiten der Adresse); der Generator gibt IPv6 als /64 aus. Freigaben, Infrastruktur, CDN und
+ *     Kunden-IPs gelten fuer das ganze /64, in dem sie liegen.
  *   - Nie listen: nicht oeffentliche Adressen und IPs der Sensoren (beide gar nicht in hp_scores), Infrastruktur von
  *     ipv64 (reason infra), Cloudflare (cdn), Freigaben aus hp_allowlist und hp_release_requests.protected_until
  *     (allowlist), IPs von ipv64-Kunden (aktuelle A/AAAA-Records, oeffentliche VPN-IPs: customer_ip, nur markiert).
@@ -127,6 +131,22 @@ function hps_mask(string $bin, int $len): string {
 
 function hps_in_nets(string $bin, array $nets): bool {
 	foreach($nets as [$n, $len]) { if(strlen($n) === strlen($bin) AND hps_mask($bin, $len) === $n) { return true; } }
+	return false;
+}
+
+/** Schluessel der Bewertung: IPv4 die Adresse, IPv6 das /64 (die ersten 8 Byte) */
+function hps_netkey(string $bin): string { return strlen($bin) === 16 ? substr($bin, 0, 8) : $bin; }
+
+/** Bereich der Bewertung [Anfang, Ende]: IPv4 die Adresse, IPv6 das /64 */
+function hps_netrange(string $bin): array {
+	return strlen($bin) === 16 ? array(substr($bin, 0, 8) . str_repeat("\0", 8), substr($bin, 0, 8) . str_repeat("\xff", 8)) : array($bin, $bin);
+}
+
+/** Wie hps_in_nets, bei IPv6 auch Netze ab /64 im selben /64 (z. B. ein Server von ipv64 im Netz des Angreifers) */
+function hps_net_overlap(string $bin, array $nets): bool {
+	if(hps_in_nets($bin, $nets)) { return true; }
+	if(strlen($bin) !== 16) { return false; }
+	foreach($nets as [$n, $len]) { if(strlen($n) === 16 AND $len >= 64 AND substr($n, 0, 8) === substr($bin, 0, 8)) { return true; } }
 	return false;
 }
 
@@ -281,27 +301,34 @@ foreach($sensorUser as $s => $u) {
 }
 unset($total, $conf);
 
-// ---------------------------------------------------------------- 3. Bewertung je IP (zweiter Durchlauf)
+// ---------------------------------------------------------------- 3. Bewertung je IP bzw. IPv6-/64 (zweiter Durchlauf)
 
+// Die Zeilen kommen nach ip_bin sortiert; die Adressen eines /64 stehen dabei hintereinander (IPv4 hat 4 Byte und
+// sortiert vor jedem 16-Byte-Wert mit gleichem Anfang). Je Netz: Gruppen, Schwelle und Wert ueber alle Adressen.
 $out = array(); $skipped = array('not_public' => 0, 'sensor' => 0);
-$cur = null; $acc = null;
-$finish = function() use (&$acc, &$out, &$skipped, $isSensorIp, $trust, $find, $now, $T, $Tstrong) {
-	$bin = $acc['bin'];
-	if(!hps_public_ip($bin)) { $skipped['not_public']++; return; }
-	if($isSensorIp($bin)) { $skipped['sensor']++; return; }
+$cur = null; $net = array();
+$finish = function() use (&$net, &$out, &$skipped, $isSensorIp, $trust, $find, $now, $T, $Tstrong) {
+	$ips = array();
+	foreach($net as $bin => $rows) {
+		if(!hps_public_ip($bin)) { $skipped['not_public']++; continue; }
+		if($isSensorIp($bin)) { $skipped['sensor']++; continue; }
+		$ips[$bin] = $rows;
+	}
+	if(!$ips) { return; }
 	// je Gruppe: Vertrauen (hoechstes der meldenden Sensoren), bester Beitrag zum Wert, Klassen
-	$g = array(); $sensors = array(); $kinds = array(); $events = 0; $first = PHP_INT_MAX; $last = 0;
-	foreach($acc['rows'] as $r) {
-		$t = $trust[$r['sensor_id']] ?? 0.0;
-		$sensors[$r['sensor_id']] = true; $kinds[$r['kind']] = true; $events += (int)$r['ev'];
-		$first = min($first, strtotime($r['f'] . ' UTC')); $last = max($last, strtotime($r['l'] . ' UTC'));
-		if($t <= 0) { continue; }
-		$k = $find((int)$r['userid']); $cls = hps_class($r['kind']);
-		if(!isset($g[$k])) { $g[$k] = array('t' => 0.0, 's' => 0.0, 'main' => 0.0, 'strong' => 0.0, 'research' => 0.0); }
-		$g[$k]['s'] = max($g[$k]['s'], $t * HPS_KIND_W[$cls] * (HPS_SRC_W[$r['source']] ?? 0.7) * hps_age(strtotime($r['l'] . ' UTC'), $now));
-		if($cls === 'research') { $g[$k]['research'] = max($g[$k]['research'], $t); }
-		else { $g[$k]['main'] = max($g[$k]['main'], $t); }
-		if($cls === 'strong') { $g[$k]['strong'] = max($g[$k]['strong'], $t); }
+	$g = array(); $kindsNet = array();
+	foreach($ips as $rows) {
+		foreach($rows as $r) {
+			$kindsNet[$r['kind']] = true;
+			$t = $trust[$r['sensor_id']] ?? 0.0;
+			if($t <= 0) { continue; }
+			$k = $find((int)$r['userid']); $cls = hps_class($r['kind']);
+			if(!isset($g[$k])) { $g[$k] = array('t' => 0.0, 's' => 0.0, 'main' => 0.0, 'strong' => 0.0, 'research' => 0.0); }
+			$g[$k]['s'] = max($g[$k]['s'], $t * HPS_KIND_W[$cls] * (HPS_SRC_W[$r['source']] ?? 0.7) * hps_age(strtotime($r['l'] . ' UTC'), $now));
+			if($cls === 'research') { $g[$k]['research'] = max($g[$k]['research'], $t); }
+			else { $g[$k]['main'] = max($g[$k]['main'], $t); }
+			if($cls === 'strong') { $g[$k]['strong'] = max($g[$k]['strong'], $t); }
+		}
 	}
 	$S = 0.0; $eff = 0.0; $strong = 0.0; $res = 0.0;
 	foreach($g as $x) { $S += $x['s']; $eff += $x['main']; $strong += $x['strong']; $res += $x['research']; }
@@ -311,23 +338,34 @@ $finish = function() use (&$acc, &$out, &$skipped, $isSensorIp, $trust, $find, $
 	$lists = array();
 	if($main) {
 		$lists[] = 'v64';
-		foreach(array_keys($kinds) as $kd) { if(hps_class($kd) !== 'research') { foreach(hps_sublists($kd) as $l) { $lists[$l] = $l; } } }
+		foreach(array_keys($kindsNet) as $kd) { if(hps_class($kd) !== 'research') { foreach(hps_sublists($kd) as $l) { $lists[$l] = $l; } } }
 	}
 	if($research) { $lists[] = 'research'; }
-	$kinds = array_keys($kinds); sort($kinds);
-	$ks = ''; foreach($kinds as $kd) { if(strlen($ks) + strlen($kd) + 1 > 255) { break; } $ks .= ($ks === '' ? '' : ',') . $kd; }
-	$out[] = array('bin' => $bin, 'family' => strlen($bin) === 4 ? 4 : 6, 'score' => (int)min(100, round(100 * (1 - exp(-$S / 1.5)))),
-		'accounts' => count($g), 'eff' => $eff, 'strong' => $strong, 'sensors' => count($sensors), 'events' => $events, 'kinds' => $ks,
-		'lists' => array_values(array_unique($lists)), 'first' => $first, 'last' => $last, 'cand' => ($main || $research));
+	$lists = array_values(array_unique($lists));
+	$score = (int)min(100, round(100 * (1 - exp(-$S / 1.5))));
+	// je Adresse eine Zeile: Arten, Sensoren, Ereignisse und Zeiten der Adresse, Bewertung des Netzes
+	foreach($ips as $bin => $rows) {
+		$sensors = array(); $kinds = array(); $events = 0; $first = PHP_INT_MAX; $last = 0;
+		foreach($rows as $r) {
+			$sensors[$r['sensor_id']] = true; $kinds[$r['kind']] = true; $events += (int)$r['ev'];
+			$first = min($first, strtotime($r['f'] . ' UTC')); $last = max($last, strtotime($r['l'] . ' UTC'));
+		}
+		$kinds = array_keys($kinds); sort($kinds);
+		$ks = ''; foreach($kinds as $kd) { if(strlen($ks) + strlen($kd) + 1 > 255) { break; } $ks .= ($ks === '' ? '' : ',') . $kd; }
+		$out[] = array('bin' => $bin, 'family' => strlen($bin) === 4 ? 4 : 6, 'score' => $score,
+			'accounts' => count($g), 'eff' => $eff, 'strong' => $strong, 'sensors' => count($sensors), 'events' => $events, 'kinds' => $ks,
+			'lists' => $lists, 'first' => $first, 'last' => $last, 'cand' => ($main || $research));
+	}
 };
 hps_stream("SELECT ip_bin, userid, sensor_id, kind, source, SUM(`count`) ev, MIN(first_seen) f, MAX(last_seen) l
 	FROM hp_report_sources WHERE last_seen >= :w GROUP BY ip_bin, userid, sensor_id, kind, source ORDER BY ip_bin", array('w' => $w14),
-	function($r) use (&$cur, &$acc, $finish) {
-		if($cur !== null AND $r['ip_bin'] !== $cur) { $finish(); }
-		if($r['ip_bin'] !== $cur) { $cur = $r['ip_bin']; $acc = array('bin' => $r['ip_bin'], 'rows' => array()); }
-		$acc['rows'][] = $r;
+	function($r) use (&$cur, &$net, $finish) {
+		$k = hps_netkey($r['ip_bin']);
+		if($cur !== null AND $k !== $cur) { $finish(); $net = array(); }
+		$cur = $k;
+		$net[$r['ip_bin']][] = $r;
 	});
-if($acc !== null) { $finish(); }
+if($net) { $finish(); }
 
 // ---------------------------------------------------------------- 4. Nie listen (nur fuer IPs ueber der Schwelle)
 
@@ -344,9 +382,9 @@ if($out) {
 			if(strlen($x['ip_start']) === strlen($x['ip_end']) AND strlen($x['ip_start']) > 0) { $ranges[] = $x; }
 		}
 	} catch(Throwable $e) { $warn[] = 'hp_allowlist nicht lesbar (' . $e->getMessage() . ')'; }
-	$released = array();
+	$released = array(); // Schluessel hps_netkey: eine Freigabe gilt fuer das ganze IPv6-/64
 	try {
-		foreach(hps_q("SELECT ip_bin FROM hp_release_requests WHERE protected_until > :n", array('n' => $run))->fetchAll(PDO::FETCH_COLUMN) as $b) { $released[$b] = true; }
+		foreach(hps_q("SELECT ip_bin FROM hp_release_requests WHERE protected_until > :n", array('n' => $run))->fetchAll(PDO::FETCH_COLUMN) as $b) { $released[hps_netkey($b)] = true; }
 	} catch(Throwable $e) { $warn[] = 'hp_release_requests nicht lesbar (' . $e->getMessage() . ')'; }
 	// Infrastruktur: Konstante und Server-Tabellen
 	$infra = array_values(array_filter(array_map('hps_net', HPS_INFRA_NETS)));
@@ -363,11 +401,13 @@ if($out) {
 	catch(Throwable $e) { $warn[] = 'bl_cloudflare nicht lesbar'; }
 	if(!$cdn) { $warn[] = 'keine Cloudflare-Netze (bl_cloudflare leer)'; }
 	// Kunden: aktuelle A/AAAA-Records (DynDNS) und oeffentliche VPN-IPs; Text kann unterschiedlich geschrieben sein -> binaer vergleichen
-	$customer = array();
-	$checkCustomer = function($r) use (&$customer, $cand) {
+	$customer = array(); // Schluessel hps_netkey wie $candNet
+	$candNet = array();
+	foreach($cand as $bin => $i) { $candNet[hps_netkey($bin)] = true; }
+	$checkCustomer = function($r) use (&$customer, $candNet) {
 		$ip = trim((string)$r['ip']);
 		$bin = filter_var($ip, FILTER_VALIDATE_IP) ? inet_pton($ip) : false;
-		if($bin !== false AND isset($cand[$bin])) { $customer[$bin] = true; }
+		if($bin !== false AND isset($candNet[hps_netkey($bin)])) { $customer[hps_netkey($bin)] = true; }
 	};
 	if($cand) {
 		$custSince = gmdate('Y-m-d H:i:s', $now - HPS_CUSTOMER_AGE); // Account aktiv und aelter als das Fenster
@@ -379,16 +419,17 @@ if($out) {
 
 	foreach($cand as $bin => $i) {
 		$why = null;
+		[$ns, $ne] = hps_netrange($bin); // IPv6: Bereich trifft das /64
 		foreach($ranges as $x) {
-			if(strlen($x['ip_start']) === strlen($bin) AND strcmp($bin, $x['ip_start']) >= 0 AND strcmp($bin, $x['ip_end']) <= 0) {
+			if(strlen($x['ip_start']) === strlen($bin) AND strcmp($x['ip_start'], $ne) <= 0 AND strcmp($x['ip_end'], $ns) >= 0) {
 				$w = $x['source'] === 'infra' ? 'infra' : ($x['source'] === 'cdn' ? 'cdn' : 'allowlist');
 				if($why === null OR array_search($w, array('infra', 'cdn', 'allowlist')) < array_search($why, array('infra', 'cdn', 'allowlist'))) { $why = $w; }
 			}
 		}
-		if($why === null AND hps_in_nets($bin, $infra)) { $why = 'infra'; }
-		if($why === null AND hps_in_nets($bin, $cdn)) { $why = 'cdn'; }
-		if($why === null AND isset($released[$bin])) { $why = 'allowlist'; }
-		if($why === null AND isset($customer[$bin]) AND $out[$i]['eff'] < HPS_CUSTOMER_MAX * $T) { $why = 'customer_ip'; } // TODO H5: Kunden warnen (Fruehwarnung), Pruefung durch Dennis
+		if($why === null AND hps_net_overlap($bin, $infra)) { $why = 'infra'; }
+		if($why === null AND hps_net_overlap($bin, $cdn)) { $why = 'cdn'; }
+		if($why === null AND isset($released[hps_netkey($bin)])) { $why = 'allowlist'; }
+		if($why === null AND isset($customer[hps_netkey($bin)]) AND $out[$i]['eff'] < HPS_CUSTOMER_MAX * $T) { $why = 'customer_ip'; } // TODO H5: Kunden warnen (Fruehwarnung), Pruefung durch Dennis
 		$reason[$bin] = $why ?? 'threshold';
 	}
 	foreach($out as $x) {

@@ -93,6 +93,10 @@ many(array(1, 2), '45.1.0.30', 'http:exploit:sqli');        // N: web
 many(array(1, 3), '45.1.0.31', 'mail:auth-bruteforce');     // N: mail
 many(array(1, 3), '45.1.0.32', 'rdp:bruteforce');           // N: rdp
 many(array(1, 2), '2a02:1::5', 'ssh:bruteforce');           // N: IPv6
+src(1, '2a02:2::1', 'ssh:bruteforce'); src(2, '2a02:2::2', 'ssh:bruteforce'); // Q: IPv6 je /64 - zwei Adressen, zusammen gelistet
+src(1, '2a02:3::1', 'ssh:bruteforce'); src(2, '2a02:3::2', 'ssh:bruteforce'); // Q2: Freigabe einer anderen Adresse im /64
+src(1, '2a02:4::1', 'ssh:bruteforce'); src(2, '2a02:4:0:1::1', 'ssh:bruteforce'); // Q3: verschiedene /64 -> nicht
+many(array(1, 2), '2a01:4f8:1:2::77', 'ssh:bruteforce');    // Q4: Kunden-AAAA im selben /64
 many(array(1, 9), '45.1.0.40', 'ssh:bruteforce');           // O: neuer Account zaehlt halb -> nicht
 many(array(1, 10), '45.1.0.41', 'ssh:bruteforce');          // O2: inaktiver Account zaehlt nicht
 many(array(1, 2, 3), '45.1.0.50', 'generic:probe');         // P: nur Verbindungsaufbau, 3 Accounts
@@ -105,6 +109,7 @@ x("INSERT INTO hp_allowlist (cidr, ip_start, ip_end, reason, source, created_at)
 x("INSERT INTO hp_allowlist (cidr, ip_start, ip_end, reason, source, `until`, created_at) VALUES ('45.1.0.1/32', INET6_ATON('45.1.0.1'), INET6_ATON('45.1.0.1'), 'abgelaufen', 'manual', ?, NOW())", array(dt(1)));
 x("INSERT INTO hp_release_requests (ip, ip_bin, reason, status, created_at, protected_until) VALUES ('45.1.0.8', INET6_ATON('45.1.0.8'), 'x', 'released', NOW(), ?)", array(dt(-20)));
 x("INSERT INTO hp_release_requests (ip, ip_bin, reason, status, created_at, protected_until) VALUES ('45.1.0.9', INET6_ATON('45.1.0.9'), 'x', 'released', NOW(), ?)", array(dt(1)));
+x("INSERT INTO hp_release_requests (ip, ip_bin, reason, status, created_at, protected_until) VALUES ('2a02:3::99', INET6_ATON('2a02:3::99'), 'x', 'released', NOW(), ?)", array(dt(-20)));
 x("INSERT INTO subdomain_records (userid, domainname, content, type) VALUES (3, 'kunde.ipv64.net', '45.1.0.10', 'A'), (3, 'kunde.ipv64.net', '2A01:04F8:0001:0002:0000:0000:0000:0010', 'AAAA'),
 	(3, 'alt.ipv64.net', '45.1.0.32', 'A')");
 x("UPDATE subdomain_records SET deactivated = 1 WHERE domainname = 'alt.ipv64.net'"); // deaktiviert: zaehlt nicht
@@ -158,6 +163,14 @@ $s = score('45.1.0.21');
 check('M2: Research 2 Accounts -> nicht', $s AND (int)$s['listed'] === 0, $s);
 check('N: web/mail/rdp', (score('45.1.0.30')['lists'] ?? '') === 'v64,web' AND (score('45.1.0.31')['lists'] ?? '') === 'v64,mail' AND (score('45.1.0.32')['lists'] ?? '') === 'v64,rdp',
 	array(score('45.1.0.30')['lists'] ?? '', score('45.1.0.31')['lists'] ?? '', score('45.1.0.32')['lists'] ?? ''));
+$a = score('2a02:2::1'); $b = score('2a02:2::2');
+check('Q: IPv6 je /64 - zwei Adressen mit je einem Account zusammen gelistet', $a AND $b AND (int)$a['listed'] === 1 AND (int)$b['listed'] === 1 AND (int)$a['accounts'] === 2 AND $a['lists'] === 'v64,ssh', array($a, $b));
+$a = score('2a02:3::1'); $b = score('2a02:3::2');
+check('Q2: Freigabe einer Adresse gilt fuer das /64', $a AND $b AND (int)$a['listed'] === 0 AND $a['reason'] === 'allowlist' AND $b['reason'] === 'allowlist', array($a, $b));
+$a = score('2a02:4::1'); $b = score('2a02:4:0:1::1');
+check('Q3: verschiedene /64 zaehlen getrennt', $a AND $b AND (int)$a['listed'] === 0 AND (int)$b['listed'] === 0 AND (int)$a['accounts'] === 1, array($a, $b));
+$s = score('2a01:4f8:1:2::77');
+check('Q4: Kunden-AAAA im selben /64 -> customer_ip', $s AND (int)$s['listed'] === 0 AND $s['reason'] === 'customer_ip', $s);
 $s = score('45.1.0.40');
 check('O: neuer Account zaehlt halb (1.5 < 2) -> nicht', $s AND (int)$s['listed'] === 0 AND (float)$s['strong_eff'] === 1.5, $s);
 $s = score('45.1.0.41');
@@ -179,7 +192,7 @@ echo "Generator\n";
 $o = gen();
 check('voller Lauf ohne Fehler', str_contains($o, 'Fertig') AND !preg_match('/Warning|Notice|Deprecated|Fatal/i', $o), $o);
 $v64 = lines("$PUB/ipv64_blocklist_v64.txt");
-$expect = array('45.1.0.1/32', '45.1.0.3/32', '45.1.0.5/32', '45.1.0.9/32', '45.1.0.14/32', '45.1.0.30/32', '45.1.0.31/32', '45.1.0.32/32', '45.1.0.50/32', '2a02:1::5/128');
+$expect = array('45.1.0.1/32', '45.1.0.3/32', '45.1.0.5/32', '45.1.0.9/32', '45.1.0.14/32', '45.1.0.30/32', '45.1.0.31/32', '45.1.0.32/32', '45.1.0.50/32', '2a02:1::/64', '2a02:2::/64');
 sort($expect);
 $got = $v64; sort($got);
 check('Tagesstand v64 = erwartete IPs', $got === $expect, $v64);
@@ -187,7 +200,7 @@ check('research nicht in v64', !in_array('45.1.0.20/32', $v64, true));
 $old = array_merge(glob("$PUB/*v64_*") ?: array(), glob("$LIVE/*v64_*") ?: array());
 $old = array_filter($old, fn($f) => preg_match('/v64_(ssh|web|mail|rdp|scanner|research)\./', $f));
 check('keine Teillisten mehr (alte Dateien entfernt)', !$old, array_map('basename', $old));
-check('v4/v6 getrennt', lines("$PUB/ipv64_blocklist_v6_v64.txt") === array('2a02:1::5/128') AND count(lines("$PUB/ipv64_blocklist_v4_v64.txt")) === 9);
+check('v4/v6 getrennt, IPv6 als /64 (zwei Adressen eines /64 ein Eintrag)', lines("$PUB/ipv64_blocklist_v6_v64.txt") === array('2a02:1::/64', '2a02:2::/64') AND count(lines("$PUB/ipv64_blocklist_v4_v64.txt")) === 9);
 $mk = (string)@file_get_contents("$PUB/v64_mikrotik_v4_v64.rsc");
 check('MikroTik Listenname IPv64-v64', str_contains($mk, 'remove [find list=IPv64-v64 ') AND str_contains($mk, 'add list=IPv64-v64 address=45.1.0.1/32'), substr($mk, 0, 300));
 check('Live-Fassung im nicht oeffentlichen Ordner', lines("$LIVE/ipv64_blocklist_v64.txt") === $v64 AND is_file("$LIVE/v64_mikrotik_v6_v64.rsc"));
@@ -197,7 +210,7 @@ $idx = json_decode((string)@file_get_contents("$PUB/index.json"), true);
 $hp = array_values(array_filter($idx['lists'] ?? array(), fn($e) => ($e['category'] ?? '') === 'honeypot'));
 check('index.json: 1 Eintrag Kategorie honeypot (nur v64), in_all false', count($hp) === 1 AND !array_filter($hp, fn($e) => $e['in_all'] !== false), array_column($hp, 'id'));
 $e = $hp[0] ?? array();
-check('index.json: v64 mit Anzahl, Lizenz, Dateien, live', ($e['id'] ?? '') === 'v64' AND $e['count'] === 10 AND $e['count_v4'] === 9 AND $e['count_v6'] === 1 AND $e['license'] !== ''
+check('index.json: v64 mit Anzahl, Lizenz, Dateien, live', ($e['id'] ?? '') === 'v64' AND $e['count'] === 11 AND $e['count_v4'] === 9 AND $e['count_v6'] === 2 AND $e['license'] !== ''
 	AND ($e['files']['mikrotik_v4'] ?? '') === 'v64_mikrotik_v4_v64.rsc' AND $e['live'] === true, $e);
 check('index.json: Live-Adresse', ($idx['live']['base'] ?? '') === 'https://ipv64.net/blocklists/live/{token}/', $idx['live'] ?? null);
 $ok = true; foreach($hp as $x) { foreach($x['files'] as $f) { if(!is_file("$PUB/$f")) { $ok = false; } } }

@@ -249,6 +249,7 @@ function index_entry(string $id, string $name, string $p, array $v4, array $v6, 
 //    v64_ssh, _web, _mail, _rdp, _scanner, _research gibt es seit 2026-10 nicht mehr, alte Dateien werden entfernt).
 //    Live-Stand bei jedem Lauf nach $LIVE (nicht oeffentlich, Abruf mit Listen-Token ueber blocklists/live.php),
 //    Tagesstand beim ersten Lauf eines UTC-Tages nach blocklists/ (frei fuer alle). Nicht in "all"/"all_notor".
+//    IPv6 als /64 (die Bewertung zaehlt je /64, honeypot_score.php); mehrere Adressen eines /64 ergeben einen Eintrag.
 // ---------------------------------------------------------------
 const V64_LISTS = [
 	'v64' => ['v64 Blocklist (Honeypot64)', 'Attackers confirmed by several independent Honeypot64 sensors (logins, exploits, scans); research scanners not included'],
@@ -277,7 +278,10 @@ $v64_index = [];
 try {
 	$v64 = array_fill_keys(array_keys(V64_LISTS), []);
 	foreach($pdo->query("SELECT ip, lists FROM hp_scores WHERE listed = 1")->fetchAll(PDO::FETCH_ASSOC) as $r) {
-		foreach(explode(',', (string)$r["lists"]) as $l) { $id = ($l === 'v64') ? 'v64' : "v64_$l"; if(isset($v64[$id])) { $v64[$id][] = $r["ip"]; } }
+		$ip = (string)$r["ip"];
+		$b = str_contains($ip, ':') ? @inet_pton($ip) : false;
+		if($b !== false AND strlen($b) === 16) { $ip = inet_ntop(substr($b, 0, 8) . str_repeat("\0", 8)) . '/64'; }
+		foreach(explode(',', (string)$r["lists"]) as $l) { $id = ($l === 'v64') ? 'v64' : "v64_$l"; if(isset($v64[$id])) { $v64[$id][] = $ip; } }
 	}
 	$daily = $v64_daily || !is_file("$OUT/ipv64_blocklist_v64.txt") || gmdate('Y-m-d', filemtime("$OUT/ipv64_blocklist_v64.txt")) !== gmdate('Y-m-d');
 	if(!$dry AND !is_dir($LIVE)) { mkdir($LIVE, 0755, true); }

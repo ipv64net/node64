@@ -213,6 +213,12 @@ function hpr_lookup(PDO $pdo, string $ip): array {
 	}
 	try {
 		$s = hpr_one($pdo, "SELECT * FROM hp_scores WHERE ip_bin = UNHEX(:b)", array('b' => bin2hex($bin)));
+		// IPv6: gelistet wird das ganze /64 (honeypot_score.php) - ohne eigene Zeile gilt die hoechste Zeile im /64
+		if(strlen($bin) === 16 AND ($s === null OR (int)$s['listed'] !== 1)) {
+			$n = hpr_one($pdo, "SELECT * FROM hp_scores WHERE ip_bin >= UNHEX(:s) AND ip_bin <= UNHEX(:e) AND LENGTH(ip_bin) = 16 AND listed = 1
+				ORDER BY score DESC LIMIT 1", array('s' => bin2hex(substr($bin, 0, 8) . str_repeat("\0", 8)), 'e' => bin2hex(substr($bin, 0, 8) . str_repeat("\xff", 8))));
+			if($n !== null) { $s = $n; }
+		}
 	} catch(RuntimeException $e) {
 		error_log('hp_release: hp_scores nicht lesbar: ' . $e->getMessage()); // Bewertung noch nicht eingespielt
 		$s = null;
@@ -230,7 +236,7 @@ function hpr_lookup(PDO $pdo, string $ip): array {
 	if(isset($s['asn']) AND (int)$s['asn'] > 0) { $out['asn'] = (int)$s['asn']; }
 	foreach(hpr_all($pdo, "SELECT service, port FROM hp_report_sources WHERE ip_bin = UNHEX(:b) AND last_seen >= :d AND port > 0
 		GROUP BY service, port HAVING COUNT(DISTINCT userid) >= :n ORDER BY SUM(`count`) DESC LIMIT 10",
-		array('b' => bin2hex($bin), 'd' => hpr_dt($now - HPR_PORT_DAYS * 86400), 'n' => HPR_PORT_MIN_ACCOUNTS)) as $p) {
+		array('b' => bin2hex((string)$s['ip_bin']), 'd' => hpr_dt($now - HPR_PORT_DAYS * 86400), 'n' => HPR_PORT_MIN_ACCOUNTS)) as $p) {
 		$out['ports'][] = array('service' => $p['service'], 'port' => (int)$p['port']);
 	}
 	return $out;
