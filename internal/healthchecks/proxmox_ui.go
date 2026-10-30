@@ -431,29 +431,45 @@ type pveSystemData struct {
 	PBS       *proxmox.PBSInfo
 }
 
-// pbsDSRow ist ein Datastore eines PBS in der Tabelle (nur Anzeige, keine Regeln).
+// pbsDSRow ist ein Datastore eines PBS in der Tabelle (Farben nach den Regeln „Datastore belegt ab“ und „voll in
+// weniger als N Tagen“).
 type pbsDSRow struct {
 	proxmox.PBSDatastore
 	Pct      string    // Belegung in Prozent ("" = unbekannt)
 	PctVal   float64   // fuer den Balken
-	Class    string    // Farbe des Balkens (nur Hinweis)
+	Class    string    // Farbe des Balkens
+	Over     bool      // ueber der Grenze „belegt ab“ bzw. gemeldet
 	FullAt   time.Time // geschaetzt voll (Null = keine Schaetzung bzw. nicht absehbar)
-	FullSoon bool      // in weniger als 30 Tagen
+	FullSoon bool      // in weniger als N Tagen (Regel; aus = 30 Tage, nur Hinweis)
+	FullOver bool      // Regel „voll in weniger als N Tagen“ greift bzw. ist gemeldet
 	NoFull   bool      // Schaetzung in der Vergangenheit: Belegung sinkt oder bleibt gleich
 	Last     time.Time // letztes Backup (Null = keins bzw. unbekannt)
 	DedupTxt string    // Dedup-Faktor, z. B. "2.5"
 }
 
-func pbsDSRows(list []proxmox.PBSDatastore, now time.Time) []pbsDSRow {
+// pbsDSRows baut die Tabelle; rule ist die wirksame Regel des Systems, alarm die gemeldeten Schwellen der Engine.
+func pbsDSRows(list []proxmox.PBSDatastore, rule proxmox.Rule, alarm map[string][2]bool, now time.Time) []pbsDSRow {
 	out := make([]pbsDSRow, 0, len(list))
+	limit := rule.Datastore.Percent
+	warn := 75.0
+	if limit > 0 {
+		warn = math.Min(warn, limit-10)
+	}
+	days := rule.DatastoreDays
+	soon := 30 * 24 * time.Hour
+	if days > 0 {
+		soon = time.Duration(days) * 24 * time.Hour
+	}
 	for _, ds := range list {
 		row := pbsDSRow{PBSDatastore: ds, Class: "bg-success"}
+		a := alarm[ds.Store]
 		if v, ok := ds.UsedPercent(); ok {
 			row.Pct, row.PctVal = pvePctText(v), math.Min(v, 100)
+			row.Over = a[0] || (limit > 0 && v >= limit)
 			switch {
-			case v >= 90:
+			case row.Over || (limit <= 0 && v >= 90):
 				row.Class = "bg-danger"
-			case v >= 75:
+			case v >= warn:
 				row.Class = "bg-warning"
 			}
 		}
@@ -464,10 +480,12 @@ func pbsDSRows(list []proxmox.PBSDatastore, now time.Time) []pbsDSRow {
 			row.DedupTxt = strconv.FormatFloat(ds.Dedup, 'f', 1, 64)
 		}
 		if t, ok := ds.FullTime(now); ok {
-			row.FullAt, row.FullSoon = t, t.Sub(now) < 30*24*time.Hour
+			row.FullAt, row.FullSoon = t, t.Sub(now) < soon
+			row.FullOver = days > 0 && row.FullSoon
 		} else if ds.Full > 0 {
 			row.NoFull = true
 		}
+		row.FullOver = row.FullOver || a[1]
 		out = append(out, row)
 	}
 	return out
@@ -511,7 +529,7 @@ func (m *Module) pagePVESystem(w http.ResponseWriter, r *http.Request) {
 	d.Rules = pveRulesFor(d.Settings, "", "", d.Path+"/settings")
 	m.pveRulesChannels(ctx, &d.Rules, d.Settings, "", "")
 	if d.Snap != nil && d.Snap.OK && d.Snap.PBS != nil {
-		d.DS, d.PBS = pbsDSRows(d.Snap.PBS.Datastores, time.Now()), d.Snap.PBS
+		d.DS, d.PBS = pbsDSRows(d.Snap.PBS.Datastores, d.Settings.Effective("", ""), m.pve.engine.DatastoreAlarm(sys.ID), time.Now()), d.Snap.PBS
 	}
 	if d.Snap != nil && d.Snap.OK {
 		sparks := m.pveSparks(ctx, sys.ID)
@@ -646,6 +664,7 @@ type pveRuleField struct {
 	Inh    string // geerbter Wert (Anzeige)
 	InhKey string // bool: i18n-Schluessel des geerbten Werts
 	From   string // i18n-Schluessel der Herkunft (Standard, System, Node)
+	Unit   string // int: i18n-Schluessel der Einheit (leer = Abfragen)
 }
 
 // pveRulesForm ist das Regelformular einer Ebene.
@@ -691,7 +710,13 @@ var pveRuleDefs = []pveRuleDef{
 	{name: "mem", kind: "thr", levels: "sng", t: func(r *proxmox.RuleSet) **proxmox.Threshold { return &r.Mem }, rt: func(r proxmox.Rule) proxmox.Threshold { return r.Mem }},
 	{name: "disk", kind: "thr", levels: "sng", t: func(r *proxmox.RuleSet) **proxmox.Threshold { return &r.Disk }, rt: func(r proxmox.Rule) proxmox.Threshold { return r.Disk }},
 	{name: "delay", kind: "int", levels: "sng", i: func(r *proxmox.RuleSet) **int { return &r.Delay }, ri: func(r proxmox.Rule) int { return r.Delay }},
+	// nur Proxmox Backup Server (Systemebene): Datastores
+	{name: "datastore", kind: "thr", levels: "s", t: func(r *proxmox.RuleSet) **proxmox.Threshold { return &r.Datastore }, rt: func(r proxmox.Rule) proxmox.Threshold { return r.Datastore }},
+	{name: "datastore_days", kind: "int", levels: "s", i: func(r *proxmox.RuleSet) **int { return &r.DatastoreDays }, ri: func(r proxmox.Rule) int { return r.DatastoreDays }},
 }
+
+// pveRuleDS: Regel nur fuer Datastores eines Proxmox Backup Servers.
+func pveRuleDS(name string) bool { return strings.HasPrefix(name, "datastore") }
 
 func pveLevel(key string) string {
 	switch {
@@ -757,6 +782,9 @@ func pveRulesFor(set *proxmox.SystemSettings, key, node, action string) pveRules
 		if pbs && (rd.name == "crashed" || rd.name == "stopped" || rd.name == "paused" || rd.name == "suspended") {
 			continue // PBS: keine Gaeste
 		}
+		if !pbs && pveRuleDS(rd.name) {
+			continue // Datastores gibt es nur beim PBS
+		}
 		fl := pveRuleField{Name: rd.name, Label: "pve.rule." + rd.name, Kind: rd.kind, From: "pve.rules.from_default"}
 		if docker && (rd.name == "crashed" || rd.name == "unreachable") {
 			fl.Label = "docker.rule." + rd.name
@@ -803,6 +831,12 @@ func pveRulesFor(set *proxmox.SystemSettings, key, node, action string) pveRules
 				}
 			}
 			fl.Inh = strconv.Itoa(v)
+			if rd.name == "datastore_days" {
+				fl.Unit = "pve.rules.days"
+				if v <= 0 {
+					fl.Inh, fl.InhKey = "", "common.off"
+				}
+			}
 			if own != nil {
 				if p := *rd.i(own); p != nil {
 					fl.Own = strconv.Itoa(*p)
@@ -918,7 +952,11 @@ func pveRulesFromForm(r *http.Request, level string) (proxmox.RuleSet, error) {
 			}
 			n, err := strconv.Atoi(v)
 			if err != nil {
-				return rs, &proxmox.FieldError{Field: rd.name, Key: "pve.err.delay"}
+				key := "pve.err.delay"
+				if rd.name == "datastore_days" {
+					key = "pve.err.datastore_days"
+				}
+				return rs, &proxmox.FieldError{Field: rd.name, Key: key}
 			}
 			*rd.i(&rs) = &n
 		}

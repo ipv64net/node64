@@ -420,6 +420,9 @@ type RuleSet struct {
 	Mem         *Threshold `json:"mem,omitempty"`
 	Disk        *Threshold `json:"disk,omitempty"`
 	Delay       *int       `json:"delay,omitempty"` // erst nach N Abfragen melden (1 = sofort)
+	// nur Proxmox Backup Server (Systemebene, alle Datastores): belegt ab Prozent bzw. voll in weniger als N Tagen
+	Datastore     *Threshold `json:"datastore,omitempty"`
+	DatastoreDays *int       `json:"datastore_days,omitempty"` // 0 = aus
 	// Channels: Kanaele der Meldungen wie bei Checks; nil = erben, leere Liste = Standardkanaele, sonst diese Kanaele
 	Channels *[]int64 `json:"channels,omitempty"`
 }
@@ -438,12 +441,15 @@ type Rule struct {
 	Disk        Threshold `json:"disk"`
 	Delay       int       `json:"delay"`
 	Channels    []int64   `json:"channels"` // wirksame Kanaele; leer = Standardkanaele
+	// PBS: Datastore belegt ab (Prozent 0 = aus) bzw. voll in weniger als DatastoreDays Tagen (0 = aus)
+	Datastore     Threshold `json:"datastore"`
+	DatastoreDays int       `json:"datastore_days"`
 }
 
 // DefaultRule sind die Standardwerte der Systemebene.
 func DefaultRule() Rule {
 	return Rule{Crashed: true, Stopped: true, Paused: true, Suspended: true, Offline: true, Unreachable: true, Restarted: true,
-		CPU: Threshold{90, 10}, Mem: Threshold{95, 10}, Disk: Threshold{90, 0}, Delay: 2, Channels: []int64{}}
+		CPU: Threshold{90, 10}, Mem: Threshold{95, 10}, Disk: Threshold{90, 0}, Delay: 2, Channels: []int64{}, Datastore: Threshold{90, 0}}
 }
 
 // Apply ueberschreibt r mit den gesetzten Werten von rs.
@@ -472,6 +478,12 @@ func (r Rule) Apply(rs RuleSet) Rule {
 	if rs.Delay != nil {
 		r.Delay = *rs.Delay
 	}
+	if rs.Datastore != nil {
+		r.Datastore = *rs.Datastore
+	}
+	if rs.DatastoreDays != nil {
+		r.DatastoreDays = *rs.DatastoreDays
+	}
 	if rs.Channels != nil {
 		r.Channels = append([]int64{}, (*rs.Channels)...)
 	}
@@ -483,13 +495,16 @@ func (rs *RuleSet) Validate() error {
 	for _, t := range []struct {
 		f string
 		v *Threshold
-	}{{"cpu", rs.CPU}, {"mem", rs.Mem}, {"disk", rs.Disk}} {
+	}{{"cpu", rs.CPU}, {"mem", rs.Mem}, {"disk", rs.Disk}, {"datastore", rs.Datastore}} {
 		if t.v != nil && (t.v.Percent < 0 || t.v.Percent > 100 || t.v.Minutes < 0 || t.v.Minutes > 1440) {
 			return pveFerr(t.f, "pve.err.threshold")
 		}
 	}
 	if rs.Delay != nil && (*rs.Delay < 1 || *rs.Delay > 60) {
 		return pveFerr("delay", "pve.err.delay")
+	}
+	if rs.DatastoreDays != nil && (*rs.DatastoreDays < 0 || *rs.DatastoreDays > 3650) {
+		return pveFerr("datastore_days", "pve.err.datastore_days")
 	}
 	if rs.Channels != nil { // doppelte entfernen, sortieren
 		ids := []int64{}
