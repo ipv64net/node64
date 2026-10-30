@@ -164,6 +164,43 @@ function hps_search(PDO $pdo, string $kind, string $q, int $limit = HPS_TOP_FULL
 			array('k' => $kind, 'q' => '%' . addcslashes($q, '%_\\') . '%')));
 }
 
+// ---------------------------------------------------------------- Deckung mit anderen Blocklisten
+
+/** Netzadresse: Hostbits ab $len loeschen (Binaerstring wie inet_pton) */
+function hps_mask(string $b, int $len): string {
+	$m = '';
+	for($i = 0; $i < strlen($b); $i++) { $k = max(0, min(8, $len - $i * 8)); $m .= chr($k === 0 ? 0 : (0xFF << (8 - $k)) & 0xFF); }
+	return $b & $m;
+}
+
+/**
+ * Deckung der v64 Blocklist (Live-Stand) mit den anderen Angreifer-Listen bei ipv64 (blocklisten.category attack und
+ * botnet, auch die nicht in "all"; ohne Tor, Cloud, DoH, KI-Bots): wie viele IPs stehen auf mindestens einer davon
+ * (als Adresse oder in einem Netz). Die uebrigen kennt nur Honeypot64. Je Praefixlaenge eine Hash-Menge der Netze.
+ */
+function hps_coverage(PDO $pdo): array {
+	$nets = array(); $names = array();
+	foreach(hps_all($pdo, "SELECT name, db_name FROM blocklisten WHERE category IN ('attack', 'botnet') AND disabled = 0 ORDER BY name") as $l) {
+		if(!preg_match('/^[a-z0-9_]+$/', (string)$l['db_name'])) { continue; }
+		$names[] = (string)$l['name'];
+		foreach(hps_q($pdo, "SELECT ip FROM `" . $l['db_name'] . "`")->fetchAll(PDO::FETCH_COLUMN) as $s) {
+			$p = explode('/', trim((string)$s, " \t\r\n[]"), 2);
+			$b = @inet_pton(trim($p[0], '[]'));
+			if($b === false OR (isset($p[1]) AND !ctype_digit($p[1]))) { continue; }
+			$len = min(isset($p[1]) ? (int)$p[1] : 128, strlen($b) * 8);
+			$nets[strlen($b)][$len][hps_mask($b, $len)] = true;
+		}
+	}
+	$n = 0; $hit = 0;
+	foreach(hps_q($pdo, "SELECT ip FROM hp_scores WHERE listed = 1 AND FIND_IN_SET('v64', lists) > 0")->fetchAll(PDO::FETCH_COLUMN) as $s) {
+		$b = @inet_pton((string)$s);
+		if($b === false) { continue; }
+		$n++;
+		foreach($nets[strlen($b)] ?? array() as $len => $set) { if(isset($set[hps_mask($b, $len)])) { $hit++; break; } }
+	}
+	return array('ips' => $n, 'on_other_lists' => $hit, 'only_v64' => $n - $hit, 'lists' => $names);
+}
+
 // ---------------------------------------------------------------- Ueberblick
 
 /** Alles fuer Seite und API berechnen (ohne Cache). $rebuild = Ranglisten neu aufbauen. */
@@ -196,6 +233,7 @@ function hps_compute(PDO $pdo, string $bldir, int $now, bool $rebuild = true): a
 	} catch(Throwable $e) { error_log('hp_stats lists: ' . $e->getMessage()); }
 	foreach(hpl_index_entries($bldir) as $x) { $lists[$x['id']] = (int)$x['count']; }
 	$o['lists'] = $lists;
+	try { $o['coverage'] = hps_coverage($pdo); } catch(Throwable $e) { error_log('hp_stats coverage: ' . $e->getMessage()); }
 
 	$o['top'] = array();
 	foreach(HPS_TOPKEYS as $kind => $key) { $o['top'][$key] = hps_top($pdo, $kind, HPS_TOP_FULL); }

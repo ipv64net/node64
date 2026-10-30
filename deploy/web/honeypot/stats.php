@@ -142,15 +142,23 @@ if($o === null) {
 	exit;
 }
 $l = $o['lists'];
+// Deckung: Anteil der v64-IPs, die auf keiner anderen Angreifer-Liste bei ipv64 stehen (hps_coverage)
+$cv = $o['coverage'] ?? null; $cvSub = '';
+if(is_array($cv) AND (int)$cv['ips'] > 0) {
+	$cvTip = hss_num($cv['only_v64']) . ' ' . hss_t('von', 'of') . ' ' . hss_num($cv['ips']) . ' ' . hss_t('IPs stehen auf keiner anderen Angreifer-Liste bei IPv64.net', 'IPs are on no other attacker list at IPv64.net')
+		. ' (' . implode(', ', $cv['lists']) . '), ' . hss_num($cv['on_other_lists']) . ' ' . hss_t('auch dort', 'also there');
+	$cvSub = '<span title="' . hss_h($cvTip) . '"><b>' . (int)round(100 * $cv['only_v64'] / $cv['ips']) . ' %</b> ' . hss_t('nur bei uns, auf keiner anderen Blocklist', 'only here, on no other blocklist') . '</span>';
+}
 ?>
 	<div class="row">
-		<?php foreach(array(array(hss_t('Sensoren aktiv (7 Tage)', 'Active sensors (7 days)'), hss_num($o['sensors']['active_7d']) . ' <small class="text-muted">/ ' . hss_num($o['sensors']['online']) . ' online</small>', 'fa-satellite-dish', 'success'),
-			array(hss_t('Beitragende Accounts (7 Tage)', 'Contributing accounts (7 days)'), hss_num($o['threshold']['active_accounts_7d']), 'fa-users', 'secondary'),
-			array(hss_t('Angriffe 24 h', 'Attacks 24 h'), hss_num($o['attacks_24h']['events']), 'fa-bug', 'primary'),
-			array(hss_t('Angreifer-IPs 24 h', 'Attacker IPs 24 h'), hss_num($o['attacks_24h']['sources']), 'fa-earth-europe', 'info'),
-			array(hss_t('v64 Blocklist (live)', 'v64 Blocklist (live)'), hss_num($l['v64'] ?? 0), 'fa-ban', 'danger')) as [$label, $val, $icon, $color]) { ?>
+		<?php foreach(array(array(hss_t('Sensoren aktiv (7 Tage)', 'Active sensors (7 days)'), hss_num($o['sensors']['active_7d']) . ' <small class="text-muted">/ ' . hss_num($o['sensors']['online']) . ' online</small>', 'fa-satellite-dish', 'success', ''),
+			array(hss_t('Beitragende Accounts (7 Tage)', 'Contributing accounts (7 days)'), hss_num($o['threshold']['active_accounts_7d']), 'fa-users', 'secondary', ''),
+			array(hss_t('Angriffe 24 h', 'Attacks 24 h'), hss_num($o['attacks_24h']['events']), 'fa-bug', 'primary', ''),
+			array(hss_t('Angreifer-IPs 24 h', 'Attacker IPs 24 h'), hss_num($o['attacks_24h']['sources']), 'fa-earth-europe', 'info', ''),
+			array(hss_t('v64 Blocklist (live)', 'v64 Blocklist (live)'), hss_num($l['v64'] ?? 0), 'fa-ban', 'danger', $cvSub)) as [$label, $val, $icon, $color, $sub]) { ?>
 		<div class="col-6 col-md pb-3"><div class="card bg-light h-100" style="border-left:4px solid var(--<?php echo $color; ?>)"><div class="card-body p-2"><i class="fa-solid <?php echo $icon; ?> fa-2xl float-right pt-4 text-<?php echo $color; ?>"></i>
-			<p class="lead m-0"><?php echo hss_h($label); ?></p><p class="card-text h3"><?php echo $val; ?></p>
+			<p class="lead m-0"><?php echo hss_h($label); ?></p><p class="card-text h3<?php echo $sub !== '' ? ' mb-0' : ''; ?>"><?php echo $val; ?></p>
+			<?php if($sub !== '') { echo '<p class="small text-muted m-0">' . $sub . '</p>'; } ?>
 		</div></div></div>
 		<?php } ?>
 	</div>
