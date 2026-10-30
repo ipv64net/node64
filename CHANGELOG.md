@@ -4,6 +4,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Honeypot64: Zugriffe von der eigenen öffentlichen IP werden nicht mehr gemeldet; eigenes Ausprobieren landet so
+  nicht mehr in den Ranglisten oder der JA4-Liste.
+
 ## 0.12.0-alpha.35 – 2026-10-30
 
 - Healthchecks: Proxmox- und Docker-Checks lassen sich beim Bearbeiten von Hand einer anderen Untergruppe zuordnen,

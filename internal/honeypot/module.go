@@ -38,7 +38,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.16.2"
+	version = "0.16.3"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -160,6 +160,7 @@ func New(core *store.Store, log *slog.Logger, dataDir, nodeVersion string) *Modu
 		Profile:  func(ctx context.Context) string { return m.loadConfig(ctx).Profile },
 		SensorID: func(ctx context.Context) (string, error) { return SensorIDFromSettings(ctx, core) },
 		Country:  func(ctx context.Context) string { return m.loadConfig(ctx).Country },
+		OwnAddrs: OwnAddrs(),
 		State:    SettingsReportState(core), Mode: "module", Version: nodeVersion, Log: l})
 	return m
 }

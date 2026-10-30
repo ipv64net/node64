@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"net"
+	"net/netip"
 	"regexp"
 	"strconv"
 	"testing"
@@ -303,5 +304,42 @@ func TestStoreFingerprint(t *testing.T) {
 	f := rep.Samples.Fingerprints
 	if len(f) != 2 || f[0] != (ReportKey{Key: ja4, Count: 3}) || f[1] != (ReportKey{Key: hassh, Count: 1}) {
 		t.Fatalf("Proben: %+v", f)
+	}
+}
+
+// Eigene oeffentliche Adressen (IPv4 genau, IPv6 je /64) bleiben wie private lokal: keine Quelle, keine Probe - sonst
+// zaehlt der JA4 des eigenen Browsers beim Ausprobieren als Beitrag des Accounts.
+func TestBuildReportOwnAddrs(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+	end := time.Now().UTC().Truncate(time.Second)
+	start := end.Add(-10 * time.Minute)
+	chrome, tool := "ja4:t13d1517h2_8daaf6152771_cb7bf5808d99", "ja4:t13i190800_9dc949149365_97f8aa674fd9"
+	repWrite(t, s,
+		Event{Time: start.Add(time.Minute), Service: SvcHTTPS, Port: 443, Kind: KindHTTPScan, Src: ip("203.0.114.7"), Path: "/x", Fingerprint: chrome},
+		Event{Time: start.Add(time.Minute), Service: SvcHTTPS, Port: 443, Kind: KindHTTPScan, Src: ip("2a02:8070:1:2::99"), Path: "/x", Fingerprint: chrome},
+		Event{Time: start.Add(2 * time.Minute), Service: SvcHTTPS, Port: 443, Kind: KindHTTPScan, Src: ip("2a02:8070:1:3::1"), Path: "/y", Fingerprint: tool},
+		Event{Time: start.Add(2 * time.Minute), Service: SvcHTTPS, Port: 443, Kind: KindHTTPScan, Src: ip("45.83.64.1"), Path: "/y", Fingerprint: tool},
+	)
+	rep, err := s.BuildReport(ctx, start, end, netip.MustParseAddr("203.0.114.7"), netip.MustParseAddr("2a02:8070:1:2::1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := rep.Samples.Fingerprints; len(f) != 1 || f[0] != (ReportKey{Key: tool, Count: 2}) {
+		t.Fatalf("Proben: %+v", f)
+	}
+	if len(rep.Sources) != 2 || reportIPs(rep) != 2 {
+		t.Fatalf("Quellen: %+v", rep.Sources)
+	}
+	for _, x := range rep.Sources {
+		if x.IP == "203.0.114.7" || x.IP == "2a02:8070:1:2::99" {
+			t.Fatalf("eigene Adresse gemeldet: %+v", x)
+		}
+	}
+	if rep, err = s.BuildReport(ctx, start, end); err != nil || len(rep.Samples.Fingerprints) != 2 || len(rep.Sources) != 4 {
+		t.Fatalf("ohne eigene Adressen: %+v %v", rep, err)
+	}
+	if !ownAddr(netip.MustParseAddr("::ffff:203.0.114.7"), []netip.Addr{netip.MustParseAddr("203.0.114.7")}) || ownAddr(netip.MustParseAddr("203.0.114.8"), []netip.Addr{netip.MustParseAddr("203.0.114.7")}) {
+		t.Fatal("ownAddr IPv4")
 	}
 }

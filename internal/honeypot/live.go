@@ -103,6 +103,35 @@ func fetchOwnAddr(ctx context.Context) (netip.Addr, error) {
 	return a, err
 }
 
+// OwnAddrs liefert die eigenen oeffentlichen Adressen (IPv4 und IPv6, je was erreichbar ist) fuer die Meldung
+// (ReporterConfig.OwnAddrs): gemerkt 30 Minuten, nach einem Fehlschlag 5 Minuten; bis dahin gilt der bisherige Stand.
+func OwnAddrs() func(ctx context.Context) []netip.Addr {
+	var mu sync.Mutex
+	var addrs []netip.Addr
+	var next time.Time
+	return func(ctx context.Context) []netip.Addr {
+		mu.Lock()
+		defer mu.Unlock()
+		if time.Now().Before(next) {
+			return addrs
+		}
+		var got []netip.Addr
+		if a, err := fetchOwnIP(ctx, "tcp4", "https://ipv4.ipv64.net/ipcheck.php?ipv4"); err == nil {
+			got = append(got, a)
+		}
+		if a, err := fetchOwnIP(ctx, "tcp6", "https://ipv6.ipv64.net/ipcheck.php?ipv6"); err == nil {
+			got = append(got, a)
+		}
+		next = time.Now().Add(30 * time.Minute)
+		if len(got) == 0 {
+			next = time.Now().Add(5 * time.Minute)
+			return addrs
+		}
+		addrs = got
+		return addrs
+	}
+}
+
 // fetchOwnIP fragt die oeffentliche Adresse bei ipv64.net ab (erzwungen ueber network "tcp4" bzw. "tcp6").
 func fetchOwnIP(ctx context.Context, network, url string) (netip.Addr, error) {
 	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)

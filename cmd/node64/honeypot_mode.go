@@ -157,6 +157,7 @@ func honeypotRun(ctx context.Context, cfg *config.Config, hc *hpModeConfig, base
 		Profile:  func(context.Context) string { return hpProfileLabel(hc) },
 		SensorID: func(context.Context) (string, error) { return honeypot.SensorIDFromFile(dir) },
 		Country:  func(context.Context) string { return hc.Country },
+		OwnAddrs: honeypot.OwnAddrs(),
 		State:    honeypot.FileReportState(dir)})
 	repCtx, repStop := context.WithCancel(ctx)
 	repDone := make(chan struct{})

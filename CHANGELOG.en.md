@@ -4,6 +4,9 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Honeypot64: Connections from the own public IP are no longer reported, so trying things out yourself no longer ends
+  up in the rankings or the JA4 list.
+
 ## 0.12.0-alpha.35 – 2026-10-30
 
 - Healthchecks: Proxmox and Docker checks can be assigned to a different subgroup by hand when editing, e.g. when two

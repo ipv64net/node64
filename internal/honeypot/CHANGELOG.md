@@ -1,5 +1,12 @@
 # Änderungen – Honeypot64
 
+## 0.16.3 – 2026-10-30
+
+### Behoben
+- Zugriffe von der eigenen öffentlichen IPv4 bzw. aus dem eigenen IPv6-/64 werden nicht mehr an ipv64 gemeldet, wie
+  schon Zugriffe aus dem LAN: weder als Quelle noch mit ihren Proben. Eigenes Ausprobieren (z. B. mit dem Browser)
+  zählt so nicht mehr als Beitrag zu den Ranglisten und zur JA4-Liste.
+
 ## 0.16.2 – 2026-10-30
 
 ### Behoben
