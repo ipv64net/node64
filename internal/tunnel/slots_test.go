@@ -58,11 +58,16 @@ func TestTunnelSlotReplacedAndExtraStream(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("slots: %d", n)
 	}
-	st, err := s2.OpenStream(context.Background())
-	if err != nil {
-		t.Fatal(err)
+	select {
+	case <-s2.Done():
+		t.Fatal("new session of the slot closed")
+	default:
 	}
-	_, _ = st.Write([]byte("x"))
+	// yamux wartet in OpenStream nur auf das Absenden des SYN; unter Last hat der Server den Stream dann schon
+	// angenommen und die Sitzung beendet ("session shutdown") - beides ist die erwartete Reaktion
+	if st, err := s2.OpenStream(context.Background()); err == nil {
+		_, _ = st.Write([]byte("x"))
+	}
 	if !closedSoon(s2) {
 		t.Fatal("session with an unexpected stream not closed")
 	}
