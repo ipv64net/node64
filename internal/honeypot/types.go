@@ -65,6 +65,10 @@ const (
 	SvcMTAPI   = "mikrotik-api" // MikroTik API (8728, TLS 8729)
 	SvcSNMP    = "snmp"         // UDP
 	SvcSIP     = "sip"          // UDP
+	SvcADB     = "adb"          // Android Debug Bridge (5555), H8
+	SvcModbus  = "modbus"       // Modbus/TCP (502), H8
+	SvcS7      = "s7"           // Siemens S7comm, ISO-on-TCP (102), H8
+	SvcBACnet  = "bacnet"       // BACnet/IP (47808), UDP, H8
 
 	KindFTPBrute    = "ftp:bruteforce"
 	KindVNCBrute    = "vnc:bruteforce"
@@ -74,6 +78,9 @@ const (
 	KindSIPBrute    = "sip:bruteforce"    // REGISTER mit Anmeldedaten
 	KindSIPScan     = "sip:scan"          // OPTIONS/INVITE-Scanner (friendly-scanner, sipvicious)
 	KindDBExploit   = "db:exploit"        // z. B. Redis CONFIG SET/SLAVEOF, MSSQL xp_cmdshell
+	KindICSScan     = "ics:scan"          // Modbus, S7, BACnet: lesen, Erkennung (H8)
+	KindICSExploit  = "ics:exploit"       // Modbus, S7, BACnet: schreiben, steuern, CPU starten/stoppen (H8)
+	KindIoTExploit  = "iot:exploit"       // ADB shell/exec/sync, Befehle von Botnetzen (H8)
 )
 
 // Event ist ein Ereignis eines Fallen-Dienstes. Felder, die fuer den Dienst nicht passen, bleiben leer.
@@ -168,7 +175,8 @@ var Profiles = map[string][]Service{
 		{SvcVNC, 5900, ""}, {SvcRedis, 6379, ""}, {SvcHTTPS, 8006, "pve"}, {SvcHTTPS, 8007, "pbs"}, {SvcHTTP, 5000, "nas"}, {SvcHTTPS, 5001, "nas"},
 		{SvcHTTP, 3000, "grafana"}, {SvcHTTP, 8123, "homeassistant"}, {SvcHTTPS, 9443, "portainer"}, {SvcHTTPS, 10000, "webmin"}, {SvcHTTPS, 10443, "sslvpn"}, {SvcHTTPS, 4444, ""},
 		{SvcHTTP, 9200, "elastic"}, {SvcHTTPS, 10250, "kubelet"}, {SvcTCP, 27017, ""},
-		{SvcTCP, 8291, ""}, {SvcMTAPI, 8728, ""}, {SvcMTAPI, 8729, ""}, {SvcSNMP, 161, ""}, {SvcSIP, 5060, ""}},
+		{SvcTCP, 8291, ""}, {SvcMTAPI, 8728, ""}, {SvcMTAPI, 8729, ""}, {SvcSNMP, 161, ""}, {SvcSIP, 5060, ""},
+		{SvcADB, 5555, ""}, {SvcModbus, 502, ""}, {SvcS7, 102, ""}, {SvcBACnet, 47808, ""}},
 }
 
 // Pages: Koeder auf HTTP/HTTPS. Bewusst schlichte, neutrale Login-Formulare ohne Logos, Markennamen oder

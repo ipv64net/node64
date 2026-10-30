@@ -1,5 +1,14 @@
 # Änderungen – Honeypot64
 
+## 0.18.0 – 2026-10-30
+
+### Neu
+- Neue Fallen (Dienste-Katalog, Gruppe Router/IoT, im Profil „full“): ADB 5555 (offene Android-Boxen, Ziel von
+  Botnetzen), Modbus/TCP 502, Siemens S7 102 und BACnet/IP 47808/udp. Die Industrie-Fallen lesen nur und erfassen die
+  Anfrage (lesen = `ics:scan`, schreiben oder steuern = `ics:exploit`); Antworten sind nie größer als die Anfrage,
+  BACnet antwortet gar nicht. ADB nimmt die Verbindung an, notiert angeforderte Befehle als `iot:exploit` und schließt
+  sofort – ausgeführt oder geladen wird nichts.
+
 ## 0.17.0 – 2026-10-30
 
 ### Neu

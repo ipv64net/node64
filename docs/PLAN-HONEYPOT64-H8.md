@@ -84,5 +84,6 @@ häufigsten.
 ## Stand
 
 - Phase 5: siehe CHANGELOG Honeypot64 0.17.0.
-- Phase 4: offen.
-- Phase 3: offen.
+- Phase 4: Protokoll-Fallen ADB, Modbus, S7, BACnet in Honeypot64 0.18.0. Die erweiterten HTTP-Köder (VPN-Gateways,
+  Kameras, DevOps-Dienste) und TR-069 sind zurückgestellt.
+- Phase 3: zurückgestellt (nicht in dieser Sitzung umgesetzt).

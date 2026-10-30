@@ -23,7 +23,8 @@ var CatalogGroups = []string{"remote", "web", "mail", "db", "iot", "other"}
 // catalogPorts: Standardports je Dienst (fuer Dienste ohne Eintrag im Profil full und als Vorschlag).
 var catalogPorts = map[string]int{SvcSSH: 22, SvcTelnet: 23, SvcHTTP: 80, SvcHTTPS: 443, SvcTCP: 445, SvcFTP: 21, SvcSMTP: 25,
 	SvcIMAP: 143, SvcPOP3: 110, SvcMySQL: 3306, SvcPostgre: 5432, SvcMSSQL: 1433, SvcRedis: 6379, SvcVNC: 5900, SvcMQTT: 1883,
-	SvcMTAPI: 8728, SvcSNMP: 161, SvcSIP: 5060, SvcRDP: 3389, SvcWinbox: 8291, SvcSMTPS: 465, SvcIMAPS: 993, SvcPOP3S: 995}
+	SvcMTAPI: 8728, SvcSNMP: 161, SvcSIP: 5060, SvcRDP: 3389, SvcWinbox: 8291, SvcSMTPS: 465, SvcIMAPS: 993, SvcPOP3S: 995,
+	SvcADB: 5555, SvcModbus: 502, SvcS7: 102, SvcBACnet: 47808}
 
 // catalogTCP: beliebige TCP-Ports, die im Katalog fuer einen bestimmten Dienst stehen (Gruppe, Beschreibung).
 var catalogTCP = map[int]string{445: "other", 27017: "db", 8291: "iot"}
@@ -69,7 +70,7 @@ func catalogGroup(s Service) string {
 		return "mail"
 	case SvcMySQL, SvcPostgre, SvcMSSQL, SvcRedis:
 		return "db"
-	case SvcMTAPI, SvcSNMP, SvcSIP, SvcMQTT, SvcWinbox:
+	case SvcMTAPI, SvcSNMP, SvcSIP, SvcMQTT, SvcWinbox, SvcADB, SvcModbus, SvcS7, SvcBACnet:
 		return "iot"
 	case SvcTCP:
 		if g := catalogTCP[s.Port]; g != "" {
