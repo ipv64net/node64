@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Healthchecks: For Proxmox VE and Docker, one button adds all guests or containers of a system as checks at once.
 - PROXY64: With log level debug, the request log contains everything without throttling – also hosts without request
   log, unknown names, TLS errors and stream connections.
 - Honeypot64: Connections from the own public IP are no longer reported, so trying things out yourself no longer ends

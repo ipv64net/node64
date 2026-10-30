@@ -4839,7 +4839,12 @@
       "added": "Check created.",
       "removed": "Check removed.",
       "active_hint": "Kept as a check: outage and recovery are notified by the check (with its channels), restarts and thresholds by Proxmox VE.",
-      "form_hint": "System and guest of this check are set under Proxmox VE."
+      "form_hint": "System and guest of this check are set under Proxmox VE.",
+      "all": "Add all as checks ({count})",
+      "all_confirm": "Add {count} entries as checks at once? Each gets its own check with the channels of the rules.",
+      "all_added": "{count} checks created.",
+      "all_none": "All entries are already kept as checks.",
+      "all_partial": "{added} checks created, {failed} not: {error}"
     },
     "rule": {
       "crashed": "Crash (qmpstatus)",

@@ -1,5 +1,12 @@
 # Änderungen – Healthchecks
 
+## 2.49.0 – 2026-10-30
+
+### Neu
+- Proxmox VE, PBS und Docker: Knopf „Alle als Check aufnehmen“ über den Nodes, den Gästen bzw. den Containern eines
+  Systems. Er legt für alle Einträge, die noch nicht als Check geführt werden, auf einmal einen Check an (wie einzeln
+  über „als Check“; Vorlagen und `nomonitor` bleiben außen vor). Er zeigt, wie viele es sind, und fragt vorher nach.
+
 ## 2.48.0 – 2026-10-30
 
 ### Neu

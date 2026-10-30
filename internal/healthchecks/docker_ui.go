@@ -349,6 +349,7 @@ type dockerData struct {
 	Missing   int
 	Watched   int // Docker-Checks
 	AsCheck   int // davon als Check gefuehrt
+	Add       int // Container, die noch nicht als Check gefuehrt werden (Knopf „alle aufnehmen“)
 	All       int // Zeilen ohne Filter
 	Filter    map[string]string
 	States    []string
@@ -524,6 +525,8 @@ func (m *Module) dockerCollect(r *http.Request, sys *proxmox.System) (dockerData
 			}
 			if dr.Linked {
 				d.AsCheck++
+			} else if !dr.Excluded {
+				d.Add++
 			}
 		}
 		if dr.Kind == "missing" {
