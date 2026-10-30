@@ -4624,6 +4624,17 @@
     }
   },
   "pve": {
+    "ack_node": {
+      "btn": "Offline ist richtig",
+      "title": "Der Node ist absichtlich aus (z. B. Wartung) – keine Störung, bis er wieder online ist",
+      "confirm": "Ist der Node absichtlich offline (z. B. Wartung)? Dann gilt das nicht als Störung, eine offene Störung erledigt sich ohne Entwarnung. Sobald der Node wieder online ist, wird er wieder normal überwacht.",
+      "done": "Gemerkt: Node absichtlich offline. Sobald er wieder online ist, wird er wieder normal überwacht.",
+      "hint": "Gestört, weil offline. Ist der Node absichtlich aus (z. B. Wartung), hier bestätigen.",
+      "active_hint": "Absichtlich offline (Wartung) – keine Störung. Sobald der Node wieder online ist, wird er wieder normal überwacht.",
+      "off_title": "Absichtlich offline (Wartung) – keine Störung",
+      "undo": "Doch als Störung melden",
+      "undone": "Zurückgenommen: offline ist wieder eine Störung."
+    },
     "ack": {"btn": "Gestoppt ist richtig", "title": "Der Gast soll nicht laufen – Zustand ist in Ordnung (zurücknehmen in den Einstellungen: „Gestoppt ist eine Störung: automatisch“)", "confirm": "Gestoppt ist der richtige Zustand? Der Gast gilt dann als „soll nicht laufen“, die Störung erledigt sich ohne Entwarnung. Zurücknehmen in den Einstellungen des Gasts („Gestoppt ist eine Störung: automatisch“).", "done": "Gemerkt: gestoppt ist richtig. Zurücknehmen in den Einstellungen des Gasts („Gestoppt ist eine Störung: automatisch“).", "hint": "Gestört, weil gestoppt – der Gast lief schon einmal bzw. soll laufen. Ist gestoppt der richtige Zustand, hier bestätigen.", "active_hint": "Gestoppt ist hier der richtige Zustand („Gestoppt ist eine Störung: nein“) – keine Störung. Zurücknehmen in den Einstellungen unten („Gestoppt ist eine Störung: automatisch“).", "off_title": "Soll nicht laufen (gestoppt ist richtig)"},
     "ev": {
       "down": {

@@ -56,7 +56,7 @@ pveum acl modify / --tokens '{{$d.Sys.TokenID}}' --roles PVEAuditor</code></pre>
 		{{range $d.NodeRows}}
 		<tr{{if .Bad}} class="hc-row-down"{{end}}>
 			<td data-label="{{$.T "common.name"}}"><a href="{{.Path}}" class="fw-semibold">{{if $d.Sys.IsPBS}}{{.R.Name}}{{else}}{{.R.Node}}{{end}}</a>{{if .Muted}} <i class="bi bi-bell-slash text-body-secondary" title="{{$.T "pve.muted"}}"></i>{{end}}</td>
-			<td data-label="{{$.T "common.status"}}"><span class="badge {{.Class}}">{{$.T .Label}}</span></td>
+			<td data-label="{{$.T "common.status"}}"><span class="badge {{.Class}}">{{$.T .Label}}</span>{{if .ExpectOff}} <i class="bi bi-tools text-body-secondary" title="{{$.T "pve.ack_node.off_title"}}"></i>{{end}}{{if .Ack}} <form method="post" action="{{$d.Path}}/ack" class="d-inline m-0"><input type="hidden" name="_csrf" value="{{$.CSRF}}"><input type="hidden" name="key" value="{{.Key}}"><input type="hidden" name="back" value="{{$d.Path}}"><button class="btn btn-sm btn-outline-secondary py-0" type="submit" title="{{$.T "pve.ack_node.title"}}" data-confirm="{{$.T "pve.ack_node.confirm"}}"><i class="bi bi-tools"></i> {{$.T "pve.ack_node.btn"}}</button></form>{{end}}</td>
 			<td data-label="CPU" class="text-end text-nowrap">{{or .CPU "–"}}</td>
 			<td data-label="RAM" class="text-end text-nowrap">{{or .Mem "–"}}</td>
 			<td data-label="Disk" class="text-end text-nowrap">{{or .Disk "–"}}</td>

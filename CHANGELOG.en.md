@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Healthchecks: In Proxmox VE a node can also be marked as “offline is fine” (maintenance); once online again, it is
+  monitored normally again.
 - Healthchecks: For Proxmox VE and Docker, one button adds all guests or containers of a system as checks at once.
 - PROXY64: With log level debug, the request log contains everything without throttling – also hosts without request
   log, unknown names, TLS errors and stream connections.

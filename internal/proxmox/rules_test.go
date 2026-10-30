@@ -250,6 +250,25 @@ func TestRulesNodeOffline(t *testing.T) {
 	p.expect(p.snap(true, pveNode("pve1", true), pveVM(100, StateStopped)), "down:stopped:qemu/100")
 }
 
+// Node absichtlich offline (Wartung, ExpectRunning aus): keine Stoerung; eine offene erledigt sich still, ohne Entwarnung.
+func TestRulesNodeMaintenance(t *testing.T) {
+	p := newPveRun(t)
+	off := false
+	p.snap(true, pveNode("pve1", true), pveNode("pve2", true))
+	p.item("node/pve2").ExpectRunning = &off
+	for i := 0; i < 4; i++ {
+		p.expect(p.snap(true, pveNode("pve1", true), pveNode("pve2", false)), "")
+	}
+	p.expect(p.snap(true, pveNode("pve1", true), pveNode("pve2", true)), "") // wieder da: keine Entwarnung
+	// gemeldete Stoerung, danach „offline ist richtig“: still erledigt
+	p.set.Items["node/pve2"].ExpectRunning = nil
+	p.snap(true, pveNode("pve1", true), pveNode("pve2", false))
+	p.expect(p.snap(true, pveNode("pve1", true), pveNode("pve2", false)), "down:offline:node/pve2")
+	p.set.Items["node/pve2"].ExpectRunning = &off
+	p.expect(p.snap(true, pveNode("pve1", true), pveNode("pve2", false)), "")
+	p.expect(p.snap(true, pveNode("pve1", true), pveNode("pve2", true)), "")
+}
+
 func TestRulesRestartedAsCheckMuted(t *testing.T) {
 	p := newPveRun(t)
 	p.snap(true, pveVM(100, StateRunning), pveVM(101, StateRunning))

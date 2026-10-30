@@ -340,9 +340,26 @@ func TestPVEAckStopped(t *testing.T) {
 	if _, body = pveGet(t, srv, pveResPath(id, "qemu/101")); !strings.Contains(body, "pve.ack.hint") {
 		t.Fatalf("Gastseite ohne Hinweis: %s", body)
 	}
-	// nur Gaeste
-	if resp, _ := pvePost(t, srv, sp+"/ack", url.Values{"key": {"node/pve1"}}); resp.StatusCode != 400 {
-		t.Fatalf("Node: %d", resp.StatusCode)
+	// Gaeste und Nodes (Wartung), nicht das System
+	if resp, _ := pvePost(t, srv, sp+"/ack", url.Values{"key": {""}}); resp.StatusCode != 400 {
+		t.Fatalf("System: %d", resp.StatusCode)
+	}
+	if resp, _ := pvePost(t, srv, sp+"/ack", url.Values{"key": {"node/pve1"}, "back": {sp}}); resp.StatusCode != 303 || !strings.Contains(resp.Header.Get("X-Flash"), "success:pve.ack_node.done") {
+		t.Fatalf("Node: %d %v", resp.StatusCode, resp.Header)
+	}
+	if set, _ := m.pve.st.Settings(context.Background(), id); set.Item("node/pve1").ExpectRunning == nil || *set.Item("node/pve1").ExpectRunning {
+		t.Fatalf("Node: %+v", set.Item("node/pve1"))
+	}
+	pvePollNow(t, m, id) // Node ist online: Wartung vorbei, Markierung faellt weg
+	if set, _ := m.pve.st.Settings(context.Background(), id); set.Item("node/pve1").ExpectRunning != nil {
+		t.Fatalf("Node online, Markierung bleibt: %+v", set.Item("node/pve1"))
+	}
+	pvePost(t, srv, sp+"/ack", url.Values{"key": {"node/pve1"}})
+	if resp, _ := pvePost(t, srv, sp+"/ack", url.Values{"key": {"node/pve1"}, "undo": {"1"}, "back": {sp}}); resp.StatusCode != 303 || !strings.Contains(resp.Header.Get("X-Flash"), "success:pve.ack_node.undone") {
+		t.Fatalf("Node undo: %d %v", resp.StatusCode, resp.Header)
+	}
+	if set, _ := m.pve.st.Settings(context.Background(), id); set.Item("node/pve1").ExpectRunning != nil {
+		t.Fatalf("Node undo: %+v", set.Item("node/pve1"))
 	}
 	resp, _ := pvePost(t, srv, sp+"/ack", url.Values{"key": {"qemu/101"}, "back": {sp}})
 	if resp.StatusCode != 303 || resp.Header.Get("Location") != sp || !strings.Contains(resp.Header.Get("X-Flash"), "success:pve.ack.done") {

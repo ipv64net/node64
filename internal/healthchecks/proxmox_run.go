@@ -278,12 +278,35 @@ func (m *Module) pveSnapshot(ctx context.Context, s *proxmox.Snapshot) {
 	}
 	m.pveCheckLabels(ctx, set, s)
 	evs := rt.engine.Evaluate(s, set)
+	m.pveNodesBack(ctx, set, s)
 	m.pvePersist(ctx, s.SystemID)
 	for _, ev := range evs {
 		m.pveNotify(ctx, set, s, ev)
 	}
 	if err := rt.st.Record(ctx, s); err != nil && ctx.Err() == nil {
 		m.log.Error("proxmox history", "system", set.Name, "err", err)
+	}
+}
+
+// pveNodesBack: Ein Node mit „offline ist richtig“ (Wartung) ist wieder online - die Markierung faellt weg, ein
+// spaeterer Ausfall meldet sich wieder.
+func (m *Module) pveNodesBack(ctx context.Context, set *proxmox.SystemSettings, s *proxmox.Snapshot) {
+	if !s.OK {
+		return
+	}
+	for i := range s.Resources {
+		r := &s.Resources[i]
+		if r.Type != proxmox.TypeNode || r.State != proxmox.StateOnline {
+			continue
+		}
+		if it := set.Item(r.Key()); it != nil && it.ExpectRunning != nil && !*it.ExpectRunning {
+			it.ExpectRunning = nil
+			if err := m.pve.st.SaveSettings(ctx, it); err != nil {
+				m.log.Warn("proxmox node back online", "system", set.Name, "node", r.Node, "err", err)
+				continue
+			}
+			m.log.Info("proxmox node back online, maintenance mark removed", "system", set.Name, "node", r.Node)
+		}
 	}
 }
 

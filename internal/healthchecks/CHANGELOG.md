@@ -1,5 +1,14 @@
 # Änderungen – Healthchecks
 
+## 2.50.0 – 2026-10-30
+
+### Neu
+- Proxmox VE und PBS: „Offline ist richtig“ auch für Nodes, z. B. wenn ein Host eines Clusters zur Wartung aus ist.
+  Der Knopf steht beim offline gemeldeten Node in der Liste und auf seiner Seite. Danach gilt der Node nicht als
+  Störung, eine offene Störung erledigt sich ohne Entwarnung. Sobald der Node wieder online ist, fällt die Markierung
+  von selbst weg und er wird wieder normal überwacht. Zurücknehmen geht auf der Seite des Nodes, über die API mit
+  `expect_running`.
+
 ## 2.49.0 – 2026-10-30
 
 ### Neu

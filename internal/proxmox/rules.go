@@ -146,6 +146,8 @@ func pveMetrics(r *Resource) (v [3]float64, ok [3]bool) {
 //
 //   - System nicht erreichbar (snap.OK = false) nach Verzoegerung → down/unreachable, wieder erreichbar → up.
 //   - Node offline → down/offline; seine Gaeste melden nichts einzeln (Zustand unbekannt, Stand bleibt erhalten).
+//     Mit ExpectRunning aus („offline ist richtig“, Wartung) keine Stoerung, eine offene erledigt sich still; wieder
+//     online setzt die Node das zurueck (healthchecks: pveNodesBack).
 //   - Gast abgestuerzt (StateError) → down/crashed sofort; angehalten/suspendiert/gestoppt nach Verzoegerung.
 //     Gestoppt nur, wenn erwartet (ExpectRunning bzw. automatisch: lief schon einmal, ohne Lock); eine Abfrage direkt
 //     nach einem Lock zaehlt nicht (Backup im Stopp-Modus, Migration). Lock ohne Stopp ist kein Ausfall. Wird
@@ -264,6 +266,9 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 				good = true
 			default:
 				what, bad = WhatOffline, rule.Offline
+				if it != nil && it.ExpectRunning != nil && !*it.ExpectRunning { // „offline ist richtig“ (Wartung)
+					bad, quiet = false, true
+				}
 			}
 		} else {
 			expect := rs.ran || (it != nil && it.SeenRunning)

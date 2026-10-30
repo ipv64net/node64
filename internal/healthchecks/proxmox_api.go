@@ -431,7 +431,7 @@ func (m *Module) apiPVESettingsPut(w http.ResponseWriter, r *http.Request) {
 	if in.Muted != nil {
 		it.Muted = *in.Muted
 	}
-	if key != "" && pveLevel(key) == "guest" && len(in.ExpectRunning) > 0 {
+	if key != "" && pveLevel(key) != "system" && len(in.ExpectRunning) > 0 { // Gast: gestoppt ist richtig; Node: Wartung
 		var v *bool
 		if err := json.Unmarshal(in.ExpectRunning, &v); err != nil {
 			writeErr(w, http.StatusBadRequest, "expect_running must be true, false or null")
