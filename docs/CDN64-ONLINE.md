@@ -216,6 +216,7 @@ Besucher ──► srv07/srv08 (TLS endet hier, Schutz) ──► Ziel des Nutze
 | `cdn64o_host_tunnels` | Modus 1/2: welche Tunnels einen Host bedienen (`host_id`, `tunnel_id`, `priority`) – mehrere Nodes je Host möglich (G3) |
 | `cdn64o_targets` | nur Modus 3: `host_id`, `source` (records/fest), `target` (IP oder Hostname), `port`, `scheme` (http/https), `verify_tls`, `prefer_ipv6`, `frontend` (https/nur http), `websocket`, `cache_mb` |
 | `cdn64o_acl` | Erlauben-/Sperrliste je Host (alle Modi auf den Servern; Modus 1 nur IP-basiert) |
+| `cdn64o_tunnel_lists` | Sperr- und Freigabeliste je Tunnel aus PROXY64 (`deny`/`allow`, gilt für alle Namen des Tunnels) |
 | `cdn64o_mappings` | Portmapper (Modus 3): `host_id`, `listen_port`, `transport` (tcp/udp), `target_port`, Server-Zuteilung |
 | `cdn64o_records` | DNS-Umstellung: `host_id`, `record_id` (→ `subdomain_records.id`), `role` (angelegt für Server / Original deaktiviert) – statt der Spalten `cdn_tmp`/`cdn_token` des alten CDN |
 | `cdn64o_edges` | `id`, `name`, `hostname`, `ipv4`, `ipv6`, `secret_hash`, `last_seen`, `version`, `disabled` |
@@ -256,6 +257,7 @@ deaktivieren) – die Zuordnung steht aber nur in `cdn64o_records`, nie in den S
 | POST | `/cdn64o/hosts` | `{fqdn, mode, wildcard, tunnel_id}` bzw. bei Modus 3 `{fqdn, mode: 3, target…}` einschalten: Klasse/Kontingent prüfen, Domain gehört dem Account, nicht im alten CDN, DNS umstellen |
 | PUT | `/cdn64o/hosts/{id}/target` | Modus 3: Ziel, Port, Schema, Optionen ändern |
 | GET/PUT | `/cdn64o/hosts/{id}/acl` | Erlauben-/Sperrliste |
+| GET/PUT | `/cdn64o/tunnels/{id}/lists` | Sperr- und Freigabeliste des Tunnels (Node, je höchstens 1000; in `edge/config` je Tunnel `deny`/`allow`) |
 | GET | `/cdn64o/hosts/{id}` | Status mit Schritten |
 | PATCH | `/cdn64o/hosts/{id}` | Modus wechseln; `{paused: true\|false}` pausiert bzw. setzt fort (alle Modi) |
 | DELETE | `/cdn64o/hosts/{id}` | ausschalten: DNS zurück, Zertifikat auf den Servern löschen |

@@ -5,7 +5,8 @@ Short summary of what changes per version. Details per module are in the node un
 ## Unreleased
 
 - PROXY64: New "Security" tab for blocklists, DoS protection and Honeypot64. "Access lists" now has an allow list and
-  your own block list for all names; honeypot blocks can be lifted or allowed permanently there.
+  your own block list for all names; honeypot blocks can be lifted or allowed permanently there. The block list also
+  applies on the CDN64 servers.
 
 ## 0.12.0-alpha.32 – 2026-10-29
 

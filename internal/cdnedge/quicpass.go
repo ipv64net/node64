@@ -310,7 +310,7 @@ func (f *qflow) run(re *route, sni string) {
 		return
 	}
 	st := f.st
-	if !re.ACL.allows(f.addr.Addr()) {
+	if !re.allows(f.addr.Addr()) {
 		st.block(bACL, f.addr.Addr())
 		return
 	}

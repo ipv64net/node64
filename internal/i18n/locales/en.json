@@ -979,7 +979,7 @@
       "allow_hint": "PROXY64 never blocks these addresses and networks: not via your block list, the ipv64 blocklists, the country block, the honeypot or the DoS protection. The access lists of the hosts still apply.",
       "allow_moved": "Exceptions ({n}) are in the",
       "deny_title": "Block list (blacklist)",
-      "deny_hint": "PROXY64 rejects these addresses and networks for all proxy hosts, “TLS passthrough” and streams, locally and via CDN64, right when they connect. The allow list takes precedence.",
+      "deny_hint": "PROXY64 rejects these addresses and networks for all proxy hosts, “TLS passthrough” and streams right when they connect. Via CDN64 the CDN64 servers already reject them (there the first 1000 entries of each list). The allow list takes precedence.",
       "nets_hint": "One IP address or network per line (e.g. 203.0.113.7 or 2001:db8::/48), at most 5000.",
       "entries": "{n} entries",
       "auto_title": "Blocked automatically ({n})",

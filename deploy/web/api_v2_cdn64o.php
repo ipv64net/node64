@@ -17,6 +17,7 @@ const C64O_EDGE_STALE   = 45;   // Sekunden ohne Abruf: Server gilt als ausgefal
 const C64O_EDGE_BACK    = 30;   // Sekunden wieder da: Adressen wieder eintragen
 const C64O_MODES        = array(1, 2, 3);  // 1 durchreichen, 2 terminieren (T5), 3 direkt zum Ziel (T7)
 const C64O_ACL_MAX      = 200;  // Eintraege je Liste
+const C64O_LIST_MAX     = 1000; // Sperr-/Freigabeliste je Tunnel (PROXY64 Zugriffslisten), Eintraege je Liste
 const C64O_PORT_MIN     = 50000; // Portmapper: Ports der Server (wie beim alten CDN)
 const C64O_PORT_MAX     = 62000;
 const C64O_JA4_GLOBAL   = 'block'; // JA4 global: 'block' (seit 2026-10-29); 'count' = nur zaehlen (Startphase, Notbremse)
@@ -445,6 +446,40 @@ route('POST', '/cdn64o/tunnels/{id}/token', function($p) {
 	ok($o);
 });
 
+/** Sperr- und Freigabeliste eines Tunnels (Node, PROXY64 Zugriffslisten). */
+function c64o_lists_out(string $tid): array {
+	$o = array('deny' => array(), 'allow' => array());
+	foreach(qa("SELECT kind, cidr FROM cdn64o_tunnel_lists WHERE tunnel_id = :t ORDER BY kind, cidr", array('t' => $tid)) as $r) { $o[$r['kind']][] = $r['cidr']; }
+	return $o;
+}
+
+/**
+ * GET|PUT /cdn64o/tunnels/{id}/lists {deny: [IP oder Netz], allow: [...]}: die Server weisen Adressen der Sperrliste fuer
+ * alle Namen des Tunnels ab (alle Modi, beim Verbindungsaufbau, als Zugriffsliste gezaehlt); die Freigabeliste geht vor.
+ * PUT ersetzt beide Listen; ein fehlendes Feld bleibt.
+ */
+route('GET', '/cdn64o/tunnels/{id}/lists', function($p) { ok(c64o_lists_out(c64o_find_tunnel($p['id'])['id'])); });
+route('PUT', '/cdn64o/tunnels/{id}/lists', function($p) {
+	$t = c64o_find_tunnel($p['id']);
+	$set = array();
+	foreach(array('deny', 'allow') as $k) {
+		$list = in_list($k);
+		if($list === null) { continue; }
+		if(count($list) > C64O_LIST_MAX) { fail(422, 'list_too_long', 'At most ' . C64O_LIST_MAX . ' entries.', array('field' => $k)); }
+		$clean = array();
+		foreach($list as $v) {
+			if(($c = c64o_cidr((string)$v)) === null) { fail(422, 'invalid_field', "Entry '$v' is not an IP address or network.", array('field' => $k)); }
+			$clean[$c] = true;
+		}
+		$set[$k] = array_keys($clean);
+	}
+	foreach($set as $k => $list) {
+		q("DELETE FROM cdn64o_tunnel_lists WHERE tunnel_id = :t AND kind = :k", array('t' => $t['id'], 'k' => $k));
+		foreach($list as $c) { q("INSERT INTO cdn64o_tunnel_lists (tunnel_id, kind, cidr) VALUES (:t, :k, :c)", array('t' => $t['id'], 'k' => $k, 'c' => $c)); }
+	}
+	ok(c64o_lists_out($t['id']));
+});
+
 route('DELETE', '/cdn64o/tunnels/{id}', function($p) {
 	global $pdo;
 	$t = c64o_find_tunnel($p['id']);
@@ -458,6 +493,7 @@ route('DELETE', '/cdn64o/tunnels/{id}', function($p) {
 		}
 	}
 	q("DELETE FROM cdn64o_tunnels WHERE id = :i AND userid = :u", array('i' => $t['id'], 'u' => uid()));
+	try { q("DELETE FROM cdn64o_tunnel_lists WHERE tunnel_id = :t", array('t' => $t['id'])); } catch(Throwable $e) {} // Tabelle fehlt: nichts zu tun
 	add_log($pdo, uid(), "0", "CDN64 online", "Tunnel " . $t['id'] . " entfernt.");
 	no_content();
 });
@@ -694,10 +730,19 @@ route('GET', '/cdn64o/edge/config', function() {
 	if($steady) { c64o_edge_watch(); }
 	$tunnels = array();
 	$cls = array(); // Klasse je Account (parallele Verbindungen)
+	$lists = array(); // Sperr- und Freigabeliste je Tunnel
+	try { // Tabelle fehlt (cdn64_lists.sql noch nicht eingespielt): ohne Listen, die Server laufen weiter
+		foreach(qa("SELECT tunnel_id, kind, cidr FROM cdn64o_tunnel_lists ORDER BY tunnel_id, kind, cidr") as $r) { $lists[$r['tunnel_id']][$r['kind']][] = $r['cidr']; }
+	} catch(Throwable $e) { $lists = array(); }
 	foreach(qa("SELECT id, userid, token_hash, status FROM cdn64o_tunnels ORDER BY id") as $t) {
 		$u = (int)$t['userid'];
 		if(!isset($cls[$u])) { $cls[$u] = q1("SELECT c.* FROM users u JOIN user_class c ON c.id = u.user_class WHERE u.id = :u", array('u' => $u)) ?? array(); }
-		$tunnels[] = array('id' => $t['id'], 'token_sha256' => $t['token_hash'], 'userid' => $u, 'blocked' => $t['status'] !== 'active', 'sessions' => c64o_sessions($cls[$u]));
+		$x = array('id' => $t['id'], 'token_sha256' => $t['token_hash'], 'userid' => $u, 'blocked' => $t['status'] !== 'active', 'sessions' => c64o_sessions($cls[$u]));
+		if(!empty($lists[$t['id']]['deny'])) { // Freigabeliste nur zusammen mit einer Sperrliste (sonst ohne Wirkung)
+			$x['deny'] = $lists[$t['id']]['deny'];
+			if(!empty($lists[$t['id']]['allow'])) { $x['allow'] = $lists[$t['id']]['allow']; }
+		}
+		$tunnels[] = $x;
 	}
 	$ht = array();
 	foreach(qa("SELECT host_id, tunnel_id FROM cdn64o_host_tunnels ORDER BY host_id, priority, tunnel_id") as $r) { $ht[(int)$r['host_id']][] = $r['tunnel_id']; }
@@ -790,6 +835,7 @@ route('POST', '/cdn64o/edge/report', function() {
 		c64o_event((int)$h['id'], (int)$h['userid'], 'disabled', 'domain deleted');
 	}
 	q("DELETE t FROM cdn64o_tunnels t LEFT JOIN users u ON u.id = t.userid WHERE u.id IS NULL");
+	try { q("DELETE l FROM cdn64o_tunnel_lists l LEFT JOIN cdn64o_tunnels t ON t.id = l.tunnel_id WHERE t.id IS NULL"); } catch(Throwable $e) {} // Tabelle fehlt: nichts zu tun
 	// Kontingent: auch Accounts mit wegen Traffic gesperrten Hosts pruefen (neuer Monat, hoehere Klasse)
 	foreach(qa("SELECT DISTINCT userid FROM cdn64o_hosts WHERE status = 'blocked' AND blocked_reason = 'traffic'") as $r) { $users[(int)$r['userid']] = true; }
 	$changed = 0;

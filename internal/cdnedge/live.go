@@ -45,7 +45,7 @@ func (s *Server) recheckLive() int {
 	s.live.mu.Lock()
 	for l := range s.live.m {
 		re := rs.lookup(l.name)
-		if re == nil || re.Mode != l.mode || re.Blocked != "" || (l.client.IsValid() && !re.ACL.allows(l.client)) {
+		if re == nil || re.Mode != l.mode || re.Blocked != "" || (l.client.IsValid() && !re.allows(l.client)) {
 			delete(s.live.m, l)
 			cut = append(cut, l.cancel)
 		}

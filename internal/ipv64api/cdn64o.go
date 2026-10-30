@@ -233,6 +233,17 @@ func (c *Client) CDN64Protection(ctx context.Context, key string, days int) (*CD
 	return &out, nil
 }
 
+// CDN64SetLists setzt Freigabe- und Sperrliste eines Tunnels (die Server weisen fuer alle seine Namen ab).
+func (c *Client) CDN64SetLists(ctx context.Context, key, tunnelID string, allow, deny []string) error {
+	in := map[string][]string{"allow": allow, "deny": deny}
+	for k, v := range in {
+		if v == nil {
+			in[k] = []string{}
+		}
+	}
+	return c.do(ctx, http.MethodPut, key, "/cdn64o/tunnels/"+url.PathEscape(tunnelID)+"/lists", in, nil)
+}
+
 // CDN64SetProtection setzt WAF (nil = unveraendert) und JA4 (off, count, block; "" = unveraendert) eines Namens.
 func (c *Client) CDN64SetProtection(ctx context.Context, key string, id int64, waf *bool, ja4 string) (*CDN64Host, error) {
 	in := map[string]any{}

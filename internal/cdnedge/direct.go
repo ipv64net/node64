@@ -91,15 +91,7 @@ func newACL(a *apiACL) *acl {
 	if a == nil || (a.Default != "allow" && a.Default != "deny") {
 		return nil
 	}
-	x := &acl{allowAll: a.Default == "allow"}
-	for _, s := range a.List {
-		if p, err := netip.ParsePrefix(s); err == nil {
-			x.list = append(x.list, p.Masked())
-		} else if ip, err := netip.ParseAddr(s); err == nil {
-			x.list = append(x.list, netip.PrefixFrom(ip.Unmap(), ip.Unmap().BitLen()))
-		}
-	}
-	return x
+	return &acl{allowAll: a.Default == "allow", list: prefixes(a.List)}
 }
 
 // allows: darf die Adresse den Namen erreichen?

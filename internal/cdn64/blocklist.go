@@ -468,6 +468,7 @@ func (m *Module) blListsSave(ctx context.Context, allow, deny *string) error {
 	if list, err := m.hosts(ctx); err == nil { // die Freigabeliste gilt auch fuer die Limits
 		m.limExempt(ctx, list)
 	}
+	m.onlineKick() // auch auf die CDN64-Server
 	return nil
 }
 

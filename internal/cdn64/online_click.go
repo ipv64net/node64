@@ -52,6 +52,11 @@ type ipv64Online struct{ k *ipv64api.Key }
 
 func (o ipv64Online) Ready(ctx context.Context) bool { return o.k != nil && o.k.Get(ctx) != "" }
 
+// SetLists: Freigabe- und Sperrliste fuer die CDN64-Server (online_lists.go).
+func (o ipv64Online) SetLists(ctx context.Context, tunnelID string, allow, deny []string) error {
+	return o.k.Client().CDN64SetLists(ctx, o.k.Get(ctx), tunnelID, allow, deny)
+}
+
 // ListToken: Listen-Token fuer die Live-Fassung der v64 Blocklist (blocklist_live.go).
 func (o ipv64Online) ListToken(ctx context.Context) (*ipv64api.ListToken, error) {
 	return o.k.Client().HoneypotListToken(ctx, o.k.Get(ctx))
@@ -590,6 +595,7 @@ func (m *Module) onlineSync(ctx context.Context) {
 		return
 	}
 	if c != nil {
+		m.onlineListsSync(ctx, c.Tunnel)
 		for _, t := range ov.Tunnels {
 			if cur := m.core.SettingOr(ctx, setOnlineSessions, "1"); t.ID == c.Tunnel && t.Sessions > 0 && strconv.Itoa(t.Sessions) != cur {
 				// Klasse geaendert (z. B. Business): so viele parallele Verbindungen je Server aufbauen

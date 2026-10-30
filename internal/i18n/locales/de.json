@@ -979,7 +979,7 @@
       "allow_hint": "Diese Adressen und Netze sperrt PROXY64 nie: nicht über die eigene Sperrliste, die ipv64-Blocklisten, die Ländersperre, den Honeypot oder den DoS-Schutz. Die Zugriffslisten der Hosts gelten trotzdem.",
       "allow_moved": "Ausnahmen ({n}) stehen in der",
       "deny_title": "Sperrliste (Blacklist)",
-      "deny_hint": "Diese Adressen und Netze weist PROXY64 für alle Proxy-Hosts, „TLS durchreichen“ und Streams ab, lokal und über CDN64, gleich beim Verbindungsaufbau. Die Freigabeliste geht vor.",
+      "deny_hint": "Diese Adressen und Netze weist PROXY64 für alle Proxy-Hosts, „TLS durchreichen“ und Streams gleich beim Verbindungsaufbau ab. Über CDN64 weisen schon die CDN64-Server ab (dort die ersten 1000 Einträge je Liste). Die Freigabeliste geht vor.",
       "nets_hint": "Eine IP-Adresse oder ein Netz je Zeile (z. B. 203.0.113.7 oder 2001:db8::/48), höchstens 5000.",
       "entries": "{n} Einträge",
       "auto_title": "Automatisch gesperrt ({n})",

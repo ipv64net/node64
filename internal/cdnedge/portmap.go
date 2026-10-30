@@ -208,7 +208,7 @@ func (p *portmapper) resolve(k pmKey, client netip.Addr) (*route, int, *route) {
 	if re == nil || re.Mode == 3 && re.Target == nil || re.Blocked != "" {
 		return nil, 0, nil
 	}
-	if !re.ACL.allows(client) {
+	if !re.allows(client) {
 		return nil, 0, re
 	}
 	return re, e.port, nil
