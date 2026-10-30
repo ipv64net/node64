@@ -1,5 +1,13 @@
 # Changes – Healthchecks
 
+## 2.50.0 – 2026-10-30
+
+### New
+- Proxmox VE and PBS: “Offline is fine” for nodes too, e.g. when a host of a cluster is off for maintenance. The
+  button appears next to a node reported offline in the list and on its page. The node then does not count as an
+  incident, an open incident is closed without an all-clear. As soon as the node is online again, the mark is removed
+  automatically and it is monitored normally again. Undo on the node's page, via the API with `expect_running`.
+
 ## 2.49.0 – 2026-10-30
 
 ### New

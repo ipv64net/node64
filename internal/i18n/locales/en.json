@@ -4624,6 +4624,17 @@
     }
   },
   "pve": {
+    "ack_node": {
+      "btn": "Offline is fine",
+      "title": "The node is off on purpose (e.g. maintenance) – no incident until it is online again",
+      "confirm": "Is the node offline on purpose (e.g. maintenance)? Then it does not count as an incident, an open incident is closed without an all-clear. As soon as the node is online again, it is monitored normally again.",
+      "done": "Noted: node offline on purpose. As soon as it is online again, it is monitored normally again.",
+      "hint": "Incident because offline. If the node is off on purpose (e.g. maintenance), confirm here.",
+      "active_hint": "Offline on purpose (maintenance) – no incident. As soon as the node is online again, it is monitored normally again.",
+      "off_title": "Offline on purpose (maintenance) – no incident",
+      "undo": "Report as incident after all",
+      "undone": "Undone: offline is an incident again."
+    },
     "ack": {"btn": "Stopped is correct", "title": "The guest should not run – the state is fine (undo in the settings: “Stopped is a problem: automatic”)", "confirm": "Is stopped the correct state? The guest then counts as “should not run” and the problem clears without an all-clear message. Undo in the guest settings (“Stopped is a problem: automatic”).", "done": "Noted: stopped is correct. Undo in the guest settings (“Stopped is a problem: automatic”).", "hint": "Problem because stopped – the guest has run before or should run. If stopped is the correct state, confirm here.", "active_hint": "Stopped is the correct state here (“Stopped is a problem: no”) – no problem. Undo in the settings below (“Stopped is a problem: automatic”).", "off_title": "Should not run (stopped is correct)"},
     "ev": {
       "down": {

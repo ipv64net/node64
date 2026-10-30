@@ -214,6 +214,9 @@ func pveRow(id int64, r proxmox.Resource, set *proxmox.SystemSettings) pveResRow
 		if docker && r.DockerDown() && !pveExpected(it) { // beendet, soll aber nicht laufen: wie die Regeln
 			row.Class, row.Bad = "text-bg-secondary", false
 		}
+		if r.Type == proxmox.TypeNode && it != nil && it.ExpectRunning != nil && !*it.ExpectRunning { // Wartung
+			row.Class, row.Bad = "text-bg-secondary", false
+		}
 	default:
 		row.Class = "text-bg-secondary"
 	}
@@ -221,7 +224,8 @@ func pveRow(id int64, r proxmox.Resource, set *proxmox.SystemSettings) pveResRow
 		row.Bad = false
 	}
 	row.ExpectOff = it != nil && it.ExpectRunning != nil && !*it.ExpectRunning
-	row.Ack = row.Bad && !row.AsCheck && !row.Muted && (r.State == proxmox.StateStopped || docker && r.DockerDown())
+	row.Ack = row.Bad && !row.AsCheck && !row.Muted && (r.State == proxmox.StateStopped || docker && r.DockerDown() ||
+		r.Type == proxmox.TypeNode && r.State == proxmox.StateOffline)
 	row.Measured = r.Measurable() // wie die Regeln (Schwellen)
 	if row.Measured {
 		row.CPU = pvePctText(r.CPU * 100)
@@ -1099,7 +1103,8 @@ func (m *Module) pagePVEAck(w http.ResponseWriter, r *http.Request) {
 	if !(strings.HasPrefix(back, pvePath+"/") || strings.HasPrefix(back, dockerPath)) || strings.Contains(back, "//") {
 		back = pveKeyPath(sys.Kind, sys.ID, "")
 	}
-	if key == "" || !proxmox.ValidKey(key) || pveLevel(key) != "guest" {
+	level := pveLevel(key)
+	if key == "" || !proxmox.ValidKey(key) || level == "system" {
 		http.Error(w, "invalid key", http.StatusBadRequest)
 		return
 	}
@@ -1112,15 +1117,30 @@ func (m *Module) pagePVEAck(w http.ResponseWriter, r *http.Request) {
 	if it == nil {
 		it = &proxmox.Settings{SystemID: sys.ID, Key: key}
 	}
+	undo := level == "node" && r.PostFormValue("undo") == "1" // Node: Wartung zuruecknehmen (Gaeste: Einstellungen)
 	f := false
 	it.ExpectRunning = &f
+	if undo {
+		it.ExpectRunning = nil
+	}
 	if err := m.pve.st.SaveSettings(ctx, it); err != nil {
 		m.fail(w, r, err)
 		return
 	}
-	m.pveAckIncident(ctx, sys.ID, key)
-	m.auditText(r, "proxmox.ack", sys.Name+pveKeySuffix(key))
-	m.g.Flash(w, r, "success", m.g.T(r, "pve.ack.done"))
+	msg := "pve.ack.done"
+	switch {
+	case undo:
+		m.auditText(r, "proxmox.ack_undo", sys.Name+pveKeySuffix(key))
+		msg = "pve.ack_node.undone"
+	case level == "node":
+		m.pveAckIncident(ctx, sys.ID, key)
+		m.auditText(r, "proxmox.ack", sys.Name+pveKeySuffix(key))
+		msg = "pve.ack_node.done"
+	default:
+		m.pveAckIncident(ctx, sys.ID, key)
+		m.auditText(r, "proxmox.ack", sys.Name+pveKeySuffix(key))
+	}
+	m.g.Flash(w, r, "success", m.g.T(r, msg))
 	http.Redirect(w, r, back, http.StatusSeeOther)
 }
 

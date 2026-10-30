@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Healthchecks: Bei Proxmox VE lässt sich auch ein Node als „offline ist richtig“ markieren (Wartung); wieder online,
+  wird er wieder normal überwacht.
 - Healthchecks: Bei Proxmox VE und Docker nimmt ein Knopf alle Gäste bzw. Container eines Systems auf einmal als
   Check auf.
 - PROXY64: Mit Log-Level Debug steht im Zugriffs-Log alles ungebremst – auch Hosts ohne Einzel-Log, unbekannte
