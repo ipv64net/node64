@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Honeypot64: Neue Fallen für ADB, Modbus, Siemens S7 und BACnet (nur lesen, Antwort nie größer als die Anfrage).
 - Benachrichtigungen: SecNtfy heißt jetzt „IPv64 App“; nur noch der Geräte-Token wird eingetragen, der Server ist fest.
 - Healthchecks: Eigene Kanäle für eine einzelne VM, einen Container oder Node werden wieder gespeichert, auch wenn das
   Feld noch auf „erben“ stand.

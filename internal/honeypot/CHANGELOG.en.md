@@ -1,5 +1,14 @@
 # Changes – Honeypot64
 
+## 0.18.0 – 2026-10-30
+
+### New
+- New traps (service catalog, group router/IoT, in profile “full”): ADB 5555 (open Android boxes, targeted by
+  botnets), Modbus/TCP 502, Siemens S7 102 and BACnet/IP 47808/udp. The industrial traps only read and record the
+  request (reading = `ics:scan`, writing or controlling = `ics:exploit`); replies are never larger than the request,
+  BACnet does not reply at all. ADB accepts the connection, records requested commands as `iot:exploit` and closes
+  right away – nothing is executed or downloaded.
+
 ## 0.17.0 – 2026-10-30
 
 ### New
