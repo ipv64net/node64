@@ -18,6 +18,8 @@
 - Link-local client addresses with a zone now match networks (access lists, limits).
 - Redirect to HTTPS with an IPv6 address in the Host header gives a valid URL.
 - Docker: containers in IPv6-only networks are reachable via the IPv6 gateway.
+- CDN64 tunnel: pending HTTP/3 handshakes (mode 1) are limited per /64 for IPv6 instead of per address; a single
+  network can no longer take all slots.
 
 ## 1.45.0 – 2026-10-30
 

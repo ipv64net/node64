@@ -19,6 +19,8 @@
 - Link-lokale Client-Adressen mit Zone passen jetzt auf Netze (Zugriffslisten, Limits).
 - Umleitung auf HTTPS mit einer IPv6-Adresse im Host-Kopf ergibt eine gültige URL.
 - Docker: Container in reinen IPv6-Netzen sind über das IPv6-Gateway erreichbar.
+- CDN64-Tunnel: Offene HTTP/3-Verbindungsaufbauten (Modus 1) werden bei IPv6 je /64 begrenzt statt je Adresse;
+  ein einzelnes Netz kann die Plätze nicht mehr allein belegen.
 
 ## 1.45.0 – 2026-10-30
 
