@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Healthchecks: Own channels for a single VM, container or node are saved again, even if the field still said
+  “inherit”.
 - Honeypot64: Traps can “look vulnerable” and then show older, known vulnerable versions (e.g. Apache 2.4.49, OpenSSH
   8.2p1); attracts more targeted attacks.
 - Healthchecks: In Proxmox VE a node can also be marked as “offline is fine” (maintenance); once online again, it is

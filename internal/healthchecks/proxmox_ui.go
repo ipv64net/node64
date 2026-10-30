@@ -732,6 +732,7 @@ type pveRulesForm struct {
 	// (leer = Standardkanaele) mit Herkunft ChanFrom, ChanDefault die Namen der Standardkanaele
 	ChanOwn     bool
 	Channels    []channelOpt
+	ChanShown   string // angezeigte Haken beim Erben (IDs mit Komma): geaendert = eigene Auswahl, auch ohne ch_mode
 	ChanInh     string
 	ChanFrom    string
 	ChanDefault string
@@ -937,9 +938,12 @@ func (m *Module) pveRulesChannels(ctx context.Context, f *pveRulesForm, set *pro
 	} else {
 		sel = inhSet
 	}
-	var names, defs []string
+	var names, defs, shown []string
 	for _, ch := range chans {
 		f.Channels = append(f.Channels, channelOpt{ID: ch.ID, Name: ch.Name, Type: string(ch.Type), Default: ch.Default, Selected: sel[ch.ID]})
+		if sel[ch.ID] {
+			shown = append(shown, strconv.FormatInt(ch.ID, 10))
+		}
 		if inhSet[ch.ID] {
 			names = append(names, ch.Name)
 		}
@@ -949,14 +953,45 @@ func (m *Module) pveRulesChannels(ctx context.Context, f *pveRulesForm, set *pro
 	}
 	f.ChanInh = strings.Join(names, ", ") // geloeschte Kanaele zaehlen nicht
 	f.ChanDefault = strings.Join(defs, ", ")
+	if !f.ChanOwn {
+		f.ChanShown = strings.Join(shown, ",")
+	}
+}
+
+// pveChanChanged: Beim Erben wurden die angezeigten Haken geaendert (ch_shown fehlt bei alten Formularen: nein).
+func pveChanChanged(r *http.Request) bool {
+	shown, ok := r.PostForm["ch_shown"]
+	if !ok {
+		return false
+	}
+	was := map[string]bool{}
+	for _, v := range strings.Split(strings.Join(shown, ","), ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			was[v] = true
+		}
+	}
+	now := map[string]bool{}
+	for _, v := range r.PostForm["channels"] {
+		now[strings.TrimSpace(v)] = true
+	}
+	if len(now) != len(was) {
+		return true
+	}
+	for v := range now {
+		if !was[v] {
+			return true
+		}
+	}
+	return false
 }
 
 // pveRulesFromForm liest die Regeln einer Ebene aus dem Formular (leer = erben). Kanaele: Systemebene wie im
-// Check-Formular (keine Auswahl = Standardkanaele), Node/Gast nur mit ch_mode=own (sonst erben).
+// Check-Formular (keine Auswahl = Standardkanaele), Node/Gast mit ch_mode=own oder wenn die Haken von den beim
+// Erben angezeigten (ch_shown) abweichen - sonst erben.
 func pveRulesFromForm(r *http.Request, level string) (proxmox.RuleSet, error) {
 	var rs proxmox.RuleSet
 	_ = r.ParseForm()
-	if (level != "system" && r.PostFormValue("ch_mode") == "own") || (level == "system" && len(r.PostForm["channels"]) > 0) {
+	if (level != "system" && (r.PostFormValue("ch_mode") == "own" || pveChanChanged(r))) || (level == "system" && len(r.PostForm["channels"]) > 0) {
 		ids := []int64{}
 		for _, v := range r.PostForm["channels"] {
 			n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)

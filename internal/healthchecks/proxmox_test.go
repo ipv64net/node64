@@ -1009,7 +1009,17 @@ func TestPVEChannels(t *testing.T) {
 	if resp, _ := pvePost(t, srv, sp+"/settings", url.Values{"key": {"qemu/100"}, "ch_mode": {"own"}, "channels": {"x"}}); !strings.Contains(resp.Header.Get("X-Flash"), "danger:pve.err.channels") {
 		t.Fatalf("invalid channel: %v", resp.Header)
 	}
+	// Gast im Modus „erben“, Haken geaendert (ch_shown = angezeigte geerbte Auswahl): wird eigene Auswahl;
+	// unveraendert abgeschickt bleibt er beim Erben
+	pvePost(t, srv, sp+"/settings", url.Values{"key": {"lxc/201"}, "ch_shown": {fmt.Sprint(b)}, "channels": {fmt.Sprint(c)}, "op": {"save"}})
+	pvePost(t, srv, sp+"/settings", url.Values{"key": {"lxc/202"}, "ch_shown": {fmt.Sprint(b)}, "channels": {fmt.Sprint(b)}, "op": {"save"}})
 	set, _ := m.pve.st.Settings(ctx, id)
+	if it := set.Item("lxc/201"); it == nil || it.Rules.Channels == nil || fmt.Sprint(*it.Rules.Channels) != fmt.Sprint([]int64{c}) {
+		t.Fatalf("changed boxes while inheriting: %+v", it)
+	}
+	if it := set.Item("lxc/202"); it != nil && it.Rules.Channels != nil {
+		t.Fatalf("unchanged boxes while inheriting: %+v", it)
+	}
 	if it := set.Item("node/pve1"); it == nil || it.Rules.Channels == nil || len(*it.Rules.Channels) != 0 {
 		t.Fatalf("node channels: %+v", it)
 	}

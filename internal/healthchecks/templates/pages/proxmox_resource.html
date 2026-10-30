@@ -106,7 +106,7 @@
 				<div class="col-md-6"><select class="form-select form-select-sm" name="ch_mode" aria-label="{{.T "pve.rule.channels"}}">
 					<option value=""{{if not $r.ChanOwn}} selected{{end}}>{{.T "pve.rules.inherit"}}</option>
 					<option value="own"{{if $r.ChanOwn}} selected{{end}}>{{.T "pve.rules.channels_own"}}</option>
-				</select></div>
+				</select>{{if not $r.ChanOwn}}<input type="hidden" name="ch_shown" value="{{$r.ChanShown}}">{{end}}</div>
 				<div class="col-md-6 small {{if $r.ChanOwn}}text-body-tertiary text-decoration-line-through{{else}}text-body-secondary{{end}}">{{.T "pve.rules.inherited"}}: {{if $r.ChanInh}}{{$r.ChanInh}}{{else}}{{.T "pve.rules.channels_default"}}{{with $r.ChanDefault}} ({{.}}){{end}}{{end}} · {{.T $r.ChanFrom}}</div>
 			</div>{{end}}
 			{{range $r.Channels}}
