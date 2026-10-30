@@ -15,7 +15,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net"
 	"net/http"
@@ -188,6 +187,7 @@ type Edge struct {
 	vq       *virtQUIC
 	tunH3    atomic.Pointer[func() bool]
 	unk      atomic.Pointer[unknownHook] // Anfragen ohne passenden Namen (SetUnknown)
+	watch    atomic.Pointer[WatchFunc]   // Debug-Beobachter (SetWatch, watch.go)
 	probes   sync.Map                    // Pruefwerte "auf dem Docker-Host veroeffentlicht?" (published.go) -> angekommen
 	pub      atomic.Pointer[pubCache]
 	fallback struct {
@@ -663,7 +663,7 @@ func (e *Edge) startLocked(name string) error {
 	}
 	addr := net.JoinHostPort(strings.Trim(e.cfg.Bind, "[]"), strconv.Itoa(c.Port))
 	l := e.lst[name]
-	errLog := log.New(io.Discard, "", 0) // Handshake-Fehler von Scannern gehoeren nicht ins Log
+	errLog := e.errLog() // Handshake-Fehler von Scannern gehoeren nicht ins Log (nur an den Debug-Beobachter)
 	switch name {
 	case "http", "https":
 		ln, err := net.Listen("tcp", addr)
@@ -914,6 +914,14 @@ func (e *Edge) serveFallbackHTTP(t *table, w http.ResponseWriter, r *http.Reques
 
 // unknown: Antwort fuer unbekannte Namen (ueber SetUnknown, sonst die Standardseite).
 func (e *Edge) unknown(w http.ResponseWriter, r *http.Request) {
+	if e.watch.Load() != nil {
+		e.watchUnknown(w, r, e.unknownServe)
+		return
+	}
+	e.unknownServe(w, r)
+}
+
+func (e *Edge) unknownServe(w http.ResponseWriter, r *http.Request) {
 	if h := e.unk.Load(); h != nil {
 		h.f(w, r, http.HandlerFunc(e.unknownDefault))
 		return

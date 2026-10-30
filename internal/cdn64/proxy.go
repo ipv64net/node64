@@ -554,9 +554,10 @@ func (m *Module) handlerFor(h *Host, st *hostStats) http.Handler {
 		defer func() {
 			m.hpReport(r, client, true, sw.code(), *authFail)
 			if sdb := m.stats2.Load(); sdb != nil {
+				dbg := m.debug()
 				sdb.add(hit{time: start, hostID: h.ID, client: client, method: r.Method, host: hostOnly(r.Host), path: trunc(r.URL.RequestURI(), 500),
-					status: sw.code(), bytes: sw.bytes + sw.hjOut.Load(), in: sw.in.Load(), ms: time.Since(start).Milliseconds(), ua: trunc(r.UserAgent(), 200), log: h.Advanced.AccessLog,
-					reason: *reject, decoy: *decoyed})
+					status: sw.code(), bytes: sw.bytes + sw.hjOut.Load(), in: sw.in.Load(), ms: time.Since(start).Milliseconds(), ua: trunc(r.UserAgent(), 200), log: h.Advanced.AccessLog || dbg,
+					reason: *reject, decoy: *decoyed, all: dbg})
 			}
 		}()
 		if m.bl.Denied(client) { // eigene Sperrliste (echte Client-IP hinter vertrauenswuerdigen Proxys)

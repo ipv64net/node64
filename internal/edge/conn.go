@@ -3,8 +3,6 @@ package edge
 import (
 	"context"
 	"crypto/tls"
-	"io"
-	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -27,7 +25,7 @@ type virtual struct {
 
 func (e *Edge) virtualServers() *virtual {
 	e.vonce.Do(func() {
-		errLog := log.New(io.Discard, "", 0)
+		errLog := e.errLog()
 		mark := func(ctx context.Context, c net.Conn) context.Context {
 			if rc, ok := c.(*routedConn); ok && rc.host != "" {
 				ctx = context.WithValue(ctx, routedKey{}, rc.host)

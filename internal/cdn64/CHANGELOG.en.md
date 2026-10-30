@@ -1,5 +1,14 @@
 # Changes – PROXY64
 
+## 1.46.0 – 2026-10-30
+
+### New
+- Request log with log level debug (under Settings, for all modules or only PROXY64): everything is then logged
+  without throttling – every request even without the host's request log, every rejection without the 10-second
+  brake per address, plus requests for unknown names, failed TLS handshakes, connections without valid TLS,
+  passed-through TLS and stream connections (TCP with data and duration, UDP per new session). These additions are
+  only in the log and do not change the numbers. The log page shows when debug is on.
+
 ## 1.45.1 – 2026-10-30
 
 ### Fixed

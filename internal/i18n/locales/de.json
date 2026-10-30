@@ -789,6 +789,7 @@
       "req24": "Anfragen 24 h",
       "traffic": "Daten 24 h",
       "all_hosts": "Alle Hosts",
+      "debug_on": "Log-Level Debug ist an: Jede Anfrage steht ungebremst im Log, auch ohne Einzel-Log des Hosts, dazu unbekannte Namen, TLS-Fehler, durchgereichtes TLS und Stream-Verbindungen. Zurück auf Info unter",
       "not_logged": "ohne Einzel-Log",
       "all_status": "Alle",
       "search": "Pfad, Client oder User-Agent",
@@ -1013,7 +1014,11 @@
       "geo": "Ländersperre",
       "ai_bot": "KI-Bot",
       "unknown": "kein passender Host",
-      "maintenance": "Wartungsmodus"
+      "maintenance": "Wartungsmodus",
+      "tls": "TLS-Handshake gescheitert",
+      "no_tls": "kein TLS bzw. ungültiges ClientHello",
+      "passthrough": "TLS durchgereicht",
+      "stream": "Stream-Verbindung"
     },
     "online": {
       "err_conf": "Tunnel-Daten prüfen: Tunnel, Token und mindestens ein Server (Name, Host).",

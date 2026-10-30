@@ -789,6 +789,7 @@
       "req24": "Requests 24 h",
       "traffic": "Data 24 h",
       "all_hosts": "All hosts",
+      "debug_on": "Log level debug is on: every request is logged without throttling, even without the host’s request log, plus unknown names, TLS errors, passed-through TLS and stream connections. Back to info under",
       "not_logged": "no access log",
       "all_status": "All",
       "search": "Path, client or user agent",
@@ -1013,7 +1014,11 @@
       "geo": "country block",
       "ai_bot": "AI bot",
       "unknown": "no matching host",
-      "maintenance": "maintenance mode"
+      "maintenance": "maintenance mode",
+      "tls": "TLS handshake failed",
+      "no_tls": "no TLS or invalid ClientHello",
+      "passthrough": "TLS passed through",
+      "stream": "stream connection"
     },
     "online": {
       "err_conf": "Check the tunnel settings: tunnel, token and at least one server (name, host).",

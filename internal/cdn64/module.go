@@ -49,7 +49,7 @@ var changelogEN string
 
 const (
 	Name    = "cdn64"
-	Version = "1.45.1"
+	Version = "1.46.0"
 )
 
 const cacheLimit = 64 << 20 // Asset-Cache aller Hosts zusammen
@@ -201,6 +201,7 @@ func (m *Module) Start(ctx context.Context) error {
 		m.edge.SetBlocker(m.blockedAny)
 		m.edge.SetGate(m.gateOpen)
 		m.edge.SetTunnelHTTP3(m.onlineHTTP3)
+		m.edge.SetWatch(m.watchEdge)
 	}
 	m.hpStart(ctx)
 	m.log.Info("cdn64 started")
@@ -226,6 +227,7 @@ func (m *Module) Stop(ctx context.Context) error {
 		m.edge.SetBlocker(nil)
 		m.edge.SetGate(nil)
 		m.edge.SetTunnelHTTP3(nil)
+		m.edge.SetWatch(nil)
 	}
 	m.applyMu.Unlock()
 	m.stopStreams()
