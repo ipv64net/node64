@@ -277,15 +277,12 @@ function wr_t(string $lang, string $key, ...$a): string {
 			'cdn' => 'CDN64', 'cdn_week' => 'Traffic in 7 Tagen', 'cdn_req' => 'Anfragen in 7 Tagen', 'cdn_month' => 'Traffic im Monat', 'cdn_tun' => 'Nodes verbunden',
 			'col_name' => 'Name', 'col_mode' => 'Modus', 'col_traffic' => 'Traffic', 'col_req' => 'Anfragen',
 			'cs_active' => 'aktiv', 'cs_pending' => 'wird eingerichtet', 'cs_blocked' => 'gesperrt', 'cs_paused' => 'pausiert',
-			'prot_head' => 'Von CDN64 geschützt', 'prot_blocked' => '%s Angriffe und unerwünschte Zugriffe haben deine Dienste nie erreicht (%s).',
-			'prot_hidden' => 'Bei %s Verbindungen blieb deine eigene IP-Adresse verborgen.',
+			'prot_blocked' => 'Von CDN64 abgewehrt (7 Tage)', 'prot_hidden' => 'Eigene IP-Adresse verborgen', 'prot_conns' => '%s Verbindungen',
 			'r_list' => 'Blocklisten', 'r_acl' => 'Zugriffsliste', 'r_overload' => 'Überlast', 'r_waf' => 'WAF-Muster', 'r_ja4' => 'Angriffs-Werkzeuge',
-			'hp' => 'Honeypot64', 'hp_head' => 'Danke für deine Honeypot64-Meldungen',
-			'hp_line' => 'Deine %d Sensor(en) haben in 7 Tagen %s Zugriffe von %s Adressen gemeldet.',
-			'hp_listed' => '%s dieser Adressen stehen auf der v64 Blocklist und werden damit für alle gesperrt.',
-			'hp_fps' => '%s Werkzeug-Fingerabdrücke (JA4/HASSH) kamen von dir.',
-			'hp_quiet' => 'Deine %d Sensor(en) waren in den 7 Tagen in Bereitschaft – gemeldet wurde nichts, auch das ist ein gutes Zeichen.',
-			'hp_thanks' => 'Vielen Dank, dass du deine Beobachtungen teilst – damit hilfst du, die Blocklisten zu führen und Angriffs-Werkzeuge zu erkennen.',
+			'hp' => 'Honeypot64', 'hp_sensors' => 'Sensoren aktiv', 'hp_events' => 'Gemeldete Zugriffe (7 Tage)', 'hp_sources' => 'Angreifer-Adressen',
+			'hp_listed' => 'davon auf der v64 Blocklist', 'hp_fps' => 'Fingerabdrücke beigetragen (JA4/HASSH)',
+			'thanks_head' => 'Danke, dass du IPv64.net nutzt', 'thanks' => 'Wenn dir IPv64.net gefällt, empfiehl uns gerne weiter.',
+			'thanks_hp' => 'Und danke für deine Honeypot64-Meldungen – sie helfen, die Blocklisten zu führen und Angriffs-Werkzeuge zu erkennen.',
 			'vpn' => 'Cloud Router', 'vpn_month' => 'Traffic im Monat', 'col_gw' => 'Gateway',
 			'vs_active' => 'aktiv', 'vs_paused' => 'pausiert', 'vs_setup' => 'wird eingerichtet', 'vs_limited' => 'gedrosselt (Limit)',
 			'more' => 'und %d weitere', 'open' => 'Öffnen', 'of' => 'von', 'unlimited' => 'unbegrenzt',
@@ -311,15 +308,12 @@ function wr_t(string $lang, string $key, ...$a): string {
 			'cdn' => 'CDN64', 'cdn_week' => 'Traffic in 7 days', 'cdn_req' => 'Requests in 7 days', 'cdn_month' => 'Traffic this month', 'cdn_tun' => 'Nodes connected',
 			'col_name' => 'Name', 'col_mode' => 'Mode', 'col_traffic' => 'Traffic', 'col_req' => 'Requests',
 			'cs_active' => 'active', 'cs_pending' => 'being set up', 'cs_blocked' => 'blocked', 'cs_paused' => 'paused',
-			'prot_head' => 'Protected by CDN64', 'prot_blocked' => '%s attacks and unwanted requests never reached your services (%s).',
-			'prot_hidden' => 'Your own IP address stayed hidden for %s connections.',
-			'r_list' => 'blocklists', 'r_acl' => 'access list', 'r_overload' => 'overload', 'r_waf' => 'WAF patterns', 'r_ja4' => 'attack tools',
-			'hp' => 'Honeypot64', 'hp_head' => 'Thank you for your Honeypot64 reports',
-			'hp_line' => 'Your %d sensor(s) reported %s hits from %s addresses in 7 days.',
-			'hp_listed' => '%s of these addresses are on the v64 blocklist and are blocked for everyone.',
-			'hp_fps' => '%s tool fingerprints (JA4/HASSH) came from you.',
-			'hp_quiet' => 'Your %d sensor(s) stood by for the 7 days – nothing was reported, which is a good sign too.',
-			'hp_thanks' => 'Thank you for sharing your observations – you help keep the blocklists up to date and detect attack tools.',
+			'prot_blocked' => 'Blocked by CDN64 (7 days)', 'prot_hidden' => 'Own IP address hidden', 'prot_conns' => '%s connections',
+			'r_list' => 'Blocklists', 'r_acl' => 'Access list', 'r_overload' => 'Overload', 'r_waf' => 'WAF patterns', 'r_ja4' => 'Attack tools',
+			'hp' => 'Honeypot64', 'hp_sensors' => 'Active sensors', 'hp_events' => 'Reported hits (7 days)', 'hp_sources' => 'Attacker addresses',
+			'hp_listed' => 'of these on the v64 blocklist', 'hp_fps' => 'Fingerprints contributed (JA4/HASSH)',
+			'thanks_head' => 'Thank you for using IPv64.net', 'thanks' => 'If you like IPv64.net, feel free to recommend us.',
+			'thanks_hp' => 'And thank you for your Honeypot64 reports – they help keep the blocklists up to date and detect attack tools.',
 			'vpn' => 'Cloud Router', 'vpn_month' => 'Traffic this month', 'col_gw' => 'Gateway',
 			'vs_active' => 'active', 'vs_paused' => 'paused', 'vs_setup' => 'being set up', 'vs_limited' => 'throttled (limit)',
 			'more' => 'and %d more', 'open' => 'Open', 'of' => 'of', 'unlimited' => 'unlimited',
@@ -383,9 +377,9 @@ function wr_render(array $d, string $token): array {
 		$html .= '</table></td></tr>';
 	};
 	$red = '#d63939'; $green = '#2fb344'; $orange = '#f59f00';
-	// gruener Kasten mit Symbol (Emoji statt Bild: keine externen Inhalte), fuer Schutz und Dank
+	// gruener Kasten mit Symbol (Emoji statt Bild: keine externen Inhalte), fuer den Dank am Ende
 	$badge = function(string $icon, string $head, array $lines) use (&$html, &$text, $ink, $green) {
-		$html .= '<tr><td style="padding:10px 24px 0 24px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ebf7ee;border-left:4px solid ' . $green . '"><tr>'
+		$html .= '<tr><td style="padding:18px 24px 0 24px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ebf7ee;border-left:4px solid ' . $green . '"><tr>'
 			. '<td width="34" valign="top" style="padding:10px 0 10px 12px;font-size:22px;line-height:1">' . $icon . '</td>'
 			. '<td style="padding:10px 12px;font-size:14px;color:' . $ink . '"><b style="color:' . $green . '">' . wr_h($head) . '</b>';
 		foreach ($lines as $l) { $html .= '<br>' . wr_h($l); }
@@ -452,16 +446,15 @@ function wr_render(array $d, string $token): array {
 		$kv = array($t('cdn_week') => wr_bytes($cd['week_bytes'], $L), $t('cdn_req') => wr_num($cd['week_requests'], 0, $L),
 			$t('cdn_month') => wr_bytes($cd['month_bytes'], $L) . ' ' . $t('of') . ' ' . ($cd['limit_bytes'] > 0 ? wr_bytes($cd['limit_bytes'], $L) : $t('unlimited')));
 		if ($cd['tunnels'] > 0) { $kv[$t('cdn_tun')] = $cd['tunnels_on'] . ' ' . $t('of') . ' ' . $cd['tunnels']; }
-		$facts($kv);
+		// Schutz der CDN64-Server: Summe mit Schild, darunter je Grund (nur Gruende mit Treffern)
 		$pr = $cd['prot']; $why = array(); $sum = 0;
 		foreach (array('list', 'waf', 'ja4', 'overload', 'acl') as $k) {
 			$n = (int)($pr[$k] ?? 0); $sum += $n;
-			if ($n > 0) { $why[] = $t('r_' . $k) . ' ' . wr_num($n, 0, $L); }
+			if ($n > 0) { $why['– ' . $t('r_' . $k)] = wr_num($n, 0, $L); }
 		}
-		$lines = array();
-		if ($sum > 0) { $lines[] = $t('prot_blocked', wr_num($sum, 0, $L), implode(', ', $why)); }
-		if ((int)($pr['conns'] ?? 0) > 0) { $lines[] = $t('prot_hidden', wr_num((int)$pr['conns'], 0, $L)); }
-		if ($lines) { $badge('&#x1F6E1;&#xFE0F;', $t('prot_head'), $lines); }
+		if ($sum > 0) { $kv["\u{1F6E1}\u{FE0F} " . $t('prot_blocked')] = wr_num($sum, 0, $L); $kv += $why; }
+		if ((int)($pr['conns'] ?? 0) > 0) { $kv[$t('prot_hidden')] = $t('prot_conns', wr_num((int)$pr['conns'], 0, $L)); }
+		$facts($kv);
 		$rows = array();
 		foreach (array_slice($cd['rows'], 0, WR_LIST_MAX) as $r) {
 			$c = $r['state'] === 'blocked' ? $red : ($r['state'] === 'active' ? $green : $muted);
@@ -473,12 +466,14 @@ function wr_render(array $d, string $token): array {
 	// Honeypot64
 	if ($hp = $d['hp']) {
 		$h2($t('hp'), WR_BASE . '/honeypot/');
-		$lines = array($hp['events'] > 0 ? $t('hp_line', $hp['sensors'], wr_num($hp['events'], 0, $L), wr_num($hp['sources'], 0, $L)) : $t('hp_quiet', $hp['sensors']));
-		if ($hp['listed'] > 0) { $lines[] = $t('hp_listed', wr_num($hp['listed'], 0, $L)); }
-		if ($hp['fps'] > 0) { $lines[] = $t('hp_fps', wr_num($hp['fps'], 0, $L)); }
-		$lines[] = $t('hp_thanks');
-		$badge('&#x1F49A;', $t('hp_head'), $lines);
+		$kv = array($t('hp_sensors') => (string)$hp['sensors'], $t('hp_events') => wr_num($hp['events'], 0, $L), $t('hp_sources') => wr_num($hp['sources'], 0, $L));
+		if ($hp['sources'] > 0) { $kv[$t('hp_listed')] = wr_num($hp['listed'], 0, $L); }
+		if ($hp['fps'] > 0) { $kv[$t('hp_fps')] = wr_num($hp['fps'], 0, $L); }
+		$facts($kv);
 	}
+
+	// Dank am Ende (mit Honeypot64 auch fuer die Meldungen)
+	$badge('&#x1F49A;', $t('thanks_head'), $d['hp'] ? array($t('thanks'), $t('thanks_hp')) : array($t('thanks')));
 
 	// Cloud Router
 	if ($vp = $d['vpn']) {
