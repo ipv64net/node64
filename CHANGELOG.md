@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 0.12.0-alpha.34 – 2026-10-30
+
 - IPv6: Durchgehende Prüfung auf gleiche Behandlung von IPv4 und IPv6. Sperren und Limits zählen IPv6 je /64
   (Honeypot-Sperren in PROXY64, Passwortsperre der Statusseiten, Honeypot-Sensoren SIP/SNMP); IPv4-gemappte Netze
   (`::ffff:…/N`) in Sperr-, Freigabe- und Zugriffslisten greifen jetzt; X-Forwarded-For mit `[IPv6]:Port` wird erkannt.
