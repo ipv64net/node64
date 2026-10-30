@@ -78,8 +78,8 @@ if($exp !== '' AND $o !== null) {
 		$csv = array(array('day_utc', 'events'));
 		foreach($o['timeline'] as $r) { $csv[] = array($r['day'], $r['events']); }
 	} elseif($exp === 'new_ips') {
-		$csv = array(array('ip', 'score', 'accounts', 'kinds', 'lists', 'listed_since_utc'));
-		foreach($o['new_ips_today']['items'] as $r) { $csv[] = array($r['ip'], $r['score'], $r['accounts'], implode(' ', $r['kinds']), implode(' ', $r['lists']), $r['listed_since']); }
+		$csv = array(array('ip', 'score', 'accounts', 'kinds', 'lists', 'listed_since_utc', 'country'));
+		foreach($o['new_ips_today']['items'] as $r) { $csv[] = array($r['ip'], $r['score'], $r['accounts'], implode(' ', $r['kinds']), implode(' ', $r['lists']), $r['listed_since'], $r['country'] ?? ''); }
 	} elseif($exp === 'new_paths') {
 		$csv = array(array('path', 'events', 'accounts'));
 		foreach($o['new_paths_today'] as $r) { $csv[] = array($r['value'], $r['events'], $r['accounts']); }
@@ -243,9 +243,11 @@ if(is_array($cv) AND (int)$cv['ips'] > 0) {
 		<span class="badge badge-secondary"><?php echo hss_num($ni['count']); ?></span>
 		<a class="float-right small" href="<?php echo hss_h(hss_url(array('export' => 'new_ips'))); ?>">CSV</a></div>
 		<div class="card-body p-0"><?php if(!$ni['items']) { echo '<p class="text-muted small p-3 mb-0">' . hss_t('Heute noch keine neuen IPs.', 'No new IPs today yet.') . '</p>'; } else { ?>
-		<div class="table-responsive"><table class="table table-sm table-striped mb-0 small"><thead><tr><th>IP</th><th class="text-right">Score</th><th class="text-right">Accounts</th><th><?php echo hss_t('Arten', 'Kinds'); ?></th><th><?php echo hss_t('Listen', 'Lists'); ?></th><th><?php echo hss_t('seit', 'since'); ?></th></tr></thead><tbody>
+		<div class="table-responsive"><table class="table table-sm table-striped mb-0 small"><thead><tr><th>IP</th><th><?php echo hss_t('Land', 'Country'); ?></th><th class="text-right">Score</th><th class="text-right">Accounts</th><th><?php echo hss_t('Arten', 'Kinds'); ?></th><th><?php echo hss_t('Listen', 'Lists'); ?></th><th><?php echo hss_t('seit', 'since'); ?></th></tr></thead><tbody>
 		<?php foreach($ni['items'] as $x) {
-			echo '<tr><td><a href="/honeypot/ip.php?' . hss_h(http_build_query(array('ip' => $x['ip']) + ($hssEn ? array('lang' => 'en') : array()))) . '"><code>' . hss_h($x['ip']) . '</code></a></td><td class="text-right">' . (int)$x['score']
+			echo '<tr><td><a href="/honeypot/ip.php?' . hss_h(http_build_query(array('ip' => $x['ip']) + ($hssEn ? array('lang' => 'en') : array()))) . '"><code>' . hss_h($x['ip']) . '</code></a></td><td style="white-space:nowrap">' . (($cc = (string)($x['country'] ?? '')) !== ''
+				? '<span style="font-size:1.25em" title="' . hss_h(hss_country($cc)) . '">' . hss_flag($cc) . '</span> <small class="text-muted">' . hss_h($cc) . '</small>' : '<span class="text-muted">–</span>')
+				. '</td><td class="text-right">' . (int)$x['score']
 				. '</td><td class="text-right">' . (int)$x['accounts'] . '</td><td>' . hss_h(implode(', ', $x['kinds'])) . '</td><td>' . hss_h(implode(', ', $x['lists'])) . '</td><td>' . hss_h(hss_time($x['listed_since'])) . '</td></tr>';
 		} ?>
 		</tbody></table></div><?php } ?></div></div>

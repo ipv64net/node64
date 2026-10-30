@@ -251,8 +251,9 @@ function hps_compute(PDO $pdo, string $bldir, int $now, bool $rebuild = true): a
 	try {
 		$o['new_ips_today']['count'] = (int)hps_one($pdo, "SELECT COUNT(*) n FROM hp_scores WHERE listed = 1 AND listed_since >= :t", array('t' => $today . ' 00:00:00'))['n'];
 		$o['new_ips_today']['items'] = array_map(fn($x) => array('ip' => $x['ip'], 'score' => (int)$x['score'], 'accounts' => (int)$x['accounts'],
-			'kinds' => $x['kinds'] === '' ? array() : explode(',', $x['kinds']), 'lists' => $x['lists'] === '' ? array() : explode(',', $x['lists']), 'listed_since' => hps_iso($x['listed_since'])),
-			hps_all($pdo, "SELECT ip, score, accounts, kinds, lists, listed_since FROM hp_scores WHERE listed = 1 AND listed_since >= :t ORDER BY score DESC, accounts DESC, ip LIMIT " . HPS_TOP_FULL,
+			'kinds' => $x['kinds'] === '' ? array() : explode(',', $x['kinds']), 'lists' => $x['lists'] === '' ? array() : explode(',', $x['lists']), 'listed_since' => hps_iso($x['listed_since']),
+			'country' => strtoupper((string)($x['country'] ?? ''))), // Herkunft (DB-IP), "" = unbekannt
+			hps_all($pdo, "SELECT ip, score, accounts, kinds, lists, listed_since, country FROM hp_scores WHERE listed = 1 AND listed_since >= :t ORDER BY score DESC, accounts DESC, ip LIMIT " . HPS_TOP_FULL,
 				array('t' => $today . ' 00:00:00')));
 	} catch(Throwable $e) { error_log('hp_stats new ips: ' . $e->getMessage()); }
 
