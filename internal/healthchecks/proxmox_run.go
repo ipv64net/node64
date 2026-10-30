@@ -543,9 +543,10 @@ func (m *Module) pveNotify(ctx context.Context, set *proxmox.SystemSettings, s *
 	}
 }
 
-// pveEventSub unterscheidet mehrere Ereignisse derselben Ebene in einer Abfrage (Datastores eines PBS).
+// pveEventSub unterscheidet mehrere Ereignisse derselben Ebene in einer Abfrage (Datastores eines PBS, Speicher eines
+// Proxmox VE).
 func pveEventSub(ev proxmox.Event) string {
-	if ev.What == proxmox.WhatDatastore || ev.What == proxmox.WhatDatastoreFull {
+	if ev.What == proxmox.WhatDatastore || ev.What == proxmox.WhatDatastoreFull || ev.What == proxmox.WhatStorage {
 		return "-" + ev.What + "-" + ev.Detail
 	}
 	return ""

@@ -427,7 +427,8 @@ type pveSystemData struct {
 	NodeNames []string
 	States    []string
 	Rules     pveRulesForm
-	DS        []pbsDSRow // Proxmox Backup Server: Datastores (nur Anzeige)
+	DS        []pbsDSRow    // Proxmox Backup Server: Datastores (nur Anzeige)
+	Storages  []pveStoreRow // Proxmox VE: Speicher (nur Anzeige)
 	PBS       *proxmox.PBSInfo
 }
 
@@ -465,13 +466,7 @@ func pbsDSRows(list []proxmox.PBSDatastore, rule proxmox.Rule, alarm map[string]
 		a := alarm[ds.Store]
 		if v, ok := ds.UsedPercent(); ok {
 			row.Pct, row.PctVal = pvePctText(v), math.Min(v, 100)
-			row.Over = a[0] || (limit > 0 && v >= limit)
-			switch {
-			case row.Over || (limit <= 0 && v >= 90):
-				row.Class = "bg-danger"
-			case v >= warn:
-				row.Class = "bg-warning"
-			}
+			row.Class, row.Over = pveFill(v, limit, warn, a[0])
 		}
 		if ds.LastBackup > 0 {
 			row.Last = time.Unix(ds.LastBackup, 0)
@@ -486,6 +481,45 @@ func pbsDSRows(list []proxmox.PBSDatastore, rule proxmox.Rule, alarm map[string]
 			row.NoFull = true
 		}
 		row.FullOver = row.FullOver || a[1]
+		out = append(out, row)
+	}
+	return out
+}
+
+// pveFill: Farbe des Balkens und „ueber der Grenze“ (Regel „belegt ab“ limit, 0 = aus: rot ab 90 %; gelb ab warn).
+func pveFill(v, limit, warn float64, alarmed bool) (string, bool) {
+	over := alarmed || (limit > 0 && v >= limit)
+	switch {
+	case over || (limit <= 0 && v >= 90):
+		return "bg-danger", over
+	case v >= warn:
+		return "bg-warning", over
+	}
+	return "bg-success", over
+}
+
+// pveStoreRow ist ein Speicher eines Proxmox VE in der Tabelle (Farben nach der Regel „Speicher belegt ab“).
+type pveStoreRow struct {
+	proxmox.PVEStorage
+	Pct    string  // Belegung in Prozent ("" = unbekannt bzw. nicht verfuegbar)
+	PctVal float64 // fuer den Balken
+	Class  string  // Farbe des Balkens
+	Over   bool    // ueber der Grenze bzw. gemeldet
+}
+
+// pveStoreRows baut die Speicher-Tabelle; alarm sind die gemeldeten Schwellen der Engine (Key des Speichers).
+func pveStoreRows(list []proxmox.PVEStorage, rule proxmox.Rule, alarm map[string][2]bool) []pveStoreRow {
+	limit, warn := rule.Datastore.Percent, 75.0
+	if limit > 0 {
+		warn = math.Min(warn, limit-10)
+	}
+	out := make([]pveStoreRow, 0, len(list))
+	for _, s := range list {
+		row := pveStoreRow{PVEStorage: s}
+		if v, ok := s.UsedPercent(); ok {
+			row.Pct, row.PctVal = pvePctText(v), math.Min(v, 100)
+			row.Class, row.Over = pveFill(v, limit, warn, alarm[s.Key()][0])
+		}
 		out = append(out, row)
 	}
 	return out
@@ -530,6 +564,8 @@ func (m *Module) pagePVESystem(w http.ResponseWriter, r *http.Request) {
 	m.pveRulesChannels(ctx, &d.Rules, d.Settings, "", "")
 	if d.Snap != nil && d.Snap.OK && d.Snap.PBS != nil {
 		d.DS, d.PBS = pbsDSRows(d.Snap.PBS.Datastores, d.Settings.Effective("", ""), m.pve.engine.DatastoreAlarm(sys.ID), time.Now()), d.Snap.PBS
+	} else if d.Snap != nil && d.Snap.OK {
+		d.Storages = pveStoreRows(d.Snap.Storages, d.Settings.Effective("", ""), m.pve.engine.DatastoreAlarm(sys.ID))
 	}
 	if d.Snap != nil && d.Snap.OK {
 		sparks := m.pveSparks(ctx, sys.ID)
@@ -715,7 +751,8 @@ var pveRuleDefs = []pveRuleDef{
 	{name: "datastore_days", kind: "int", levels: "s", i: func(r *proxmox.RuleSet) **int { return &r.DatastoreDays }, ri: func(r proxmox.Rule) int { return r.DatastoreDays }},
 }
 
-// pveRuleDS: Regel nur fuer Datastores eines Proxmox Backup Servers.
+// pveRuleDS: Regel fuer Datastores eines Proxmox Backup Servers; „datastore“ (belegt ab) gilt auch fuer die Speicher
+// eines Proxmox VE.
 func pveRuleDS(name string) bool { return strings.HasPrefix(name, "datastore") }
 
 func pveLevel(key string) string {
@@ -782,10 +819,13 @@ func pveRulesFor(set *proxmox.SystemSettings, key, node, action string) pveRules
 		if pbs && (rd.name == "crashed" || rd.name == "stopped" || rd.name == "paused" || rd.name == "suspended") {
 			continue // PBS: keine Gaeste
 		}
-		if !pbs && pveRuleDS(rd.name) {
-			continue // Datastores gibt es nur beim PBS
+		if pveRuleDS(rd.name) && (docker || (!pbs && rd.name != "datastore")) {
+			continue // Datastores beim PBS; Proxmox VE nur „Speicher belegt ab“, Docker keins
 		}
 		fl := pveRuleField{Name: rd.name, Label: "pve.rule." + rd.name, Kind: rd.kind, From: "pve.rules.from_default"}
+		if !pbs && rd.name == "datastore" {
+			fl.Label = "pve.rule.storage"
+		}
 		if docker && (rd.name == "crashed" || rd.name == "unreachable") {
 			fl.Label = "docker.rule." + rd.name
 		}

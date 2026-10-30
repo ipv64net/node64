@@ -4650,14 +4650,16 @@
         "mem": "{type} „{name}“: RAM {value} % (Grenze {limit} %).",
         "disk": "{type} „{name}“: Disk {value} % (Grenze {limit} %).",
         "datastore": "Proxmox Backup Server „{name}“: Datastore „{detail}“ zu {value} % belegt (Grenze {limit} %).",
-        "datastore_full": "Proxmox Backup Server „{name}“: Datastore „{detail}“ voraussichtlich in {value} Tagen voll (Grenze {limit} Tage)."
+        "datastore_full": "Proxmox Backup Server „{name}“: Datastore „{detail}“ voraussichtlich in {value} Tagen voll (Grenze {limit} Tage).",
+        "storage": "Proxmox VE „{name}“: Speicher „{detail}“ zu {value} % belegt (Grenze {limit} %)."
       },
       "threshold_ok": {
         "cpu": "{type} „{name}“: CPU wieder unter {limit} % ({value} %).",
         "mem": "{type} „{name}“: RAM wieder unter {limit} % ({value} %).",
         "disk": "{type} „{name}“: Disk wieder unter {limit} % ({value} %).",
         "datastore": "Proxmox Backup Server „{name}“: Datastore „{detail}“ wieder unter {limit} % ({value} %).",
-        "datastore_full": "Proxmox Backup Server „{name}“: Datastore „{detail}“ nicht mehr in weniger als {limit} Tagen voll."
+        "datastore_full": "Proxmox Backup Server „{name}“: Datastore „{detail}“ nicht mehr in weniger als {limit} Tagen voll.",
+        "storage": "Proxmox VE „{name}“: Speicher „{detail}“ wieder unter {limit} % ({value} %)."
       },
       "restarted": {
         "guest": "{type} „{name}“ wurde neu gestartet.",
@@ -4714,6 +4716,19 @@
     "empty": "Noch kein Proxmox-System eingerichtet.",
     "empty_hint": "Du brauchst die Adresse eines Nodes (https://…:8006) und ein API-Token mit Leserechten (Rolle PVEAuditor).",
     "add": "Proxmox VE hinzufügen",
+    "storage": {
+      "title": "Speicher",
+      "info": "lokale Speicher je Node, gemeinsame einmal · nur Anzeige",
+      "node": "Node",
+      "type": "Typ",
+      "content": "Inhalt",
+      "used": "Belegung",
+      "size": "Größe",
+      "shared": "gemeinsam",
+      "unavailable": "nicht verfügbar",
+      "over": "Über der Grenze „Speicher belegt ab“",
+      "empty": "Keine Speicher sichtbar. Der Token braucht dafür Datastore.Audit (z. B. Rolle PVEAuditor)."
+    },
     "pbs": {
       "add": "Proxmox Backup Server hinzufügen",
       "hint": "Proxmox Backup Server lassen sich ebenso überwachen: das Host-System (CPU, RAM, Disk, Netz, I/O) und die Datastores zur Anzeige.",
@@ -4830,6 +4845,7 @@
       "disk": "Disk über (nur Container bzw. mit Gast-Agent)",
       "delay": "Verzögerung",
       "datastore": "Datastore belegt ab",
+      "storage": "Speicher belegt ab",
       "datastore_days": "Datastore voll in weniger als",
       "channels": "Kanäle"
     },

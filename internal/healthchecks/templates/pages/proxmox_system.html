@@ -105,6 +105,26 @@ pveum acl modify / --tokens '{{$d.Sys.TokenID}}' --roles PVEAuditor</code></pre>
 	</table></div>{{else}}<div class="card-body small text-body-secondary">{{$.T "pve.pbs.tasks_none"}}</div>{{end}}
 </div>{{end}}
 {{end}}{{end}}{{else}}{{if $d.Snap}}{{if $d.Snap.OK}}
+<div class="card mb-3" id="pve-storage">
+	<div class="card-header"><i class="bi bi-hdd-stack text-primary"></i> {{.T "pve.storage.title"}} <span class="badge text-bg-secondary">{{len $d.Storages}}</span> <span class="small text-body-secondary">· {{.T "pve.storage.info"}}</span></div>
+	{{if $d.Storages}}
+	<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 table-cards hc-table">
+		<thead><tr><th>{{.T "common.name"}}</th><th>{{.T "pve.storage.node"}}</th><th>{{.T "pve.storage.type"}}</th><th>{{.T "pve.storage.content"}}</th><th style="min-width:12rem">{{.T "pve.storage.used"}}</th><th class="text-end">{{.T "pve.storage.size"}}</th></tr></thead>
+		<tbody>
+		{{range $d.Storages}}
+		<tr>
+			<td data-label="{{$.T "common.name"}}"><span class="fw-semibold">{{.Storage}}</span>{{if not .Available}} <span class="badge text-bg-secondary" title="{{.Status}}">{{$.T "pve.storage.unavailable"}}</span>{{end}}</td>
+			<td data-label="{{$.T "pve.storage.node"}}">{{if .Shared}}<span class="badge text-bg-info">{{$.T "pve.storage.shared"}}</span>{{else}}{{.Node}}{{end}}</td>
+			<td data-label="{{$.T "pve.storage.type"}}" class="small">{{if .Type}}{{.Type}}{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.storage.content"}}" class="small text-break">{{if .Content}}{{.Content}}{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.storage.used"}}">{{if .Pct}}<div class="d-flex align-items-center gap-2"><div class="progress flex-grow-1" style="height:.5rem" role="progressbar" aria-valuenow="{{printf "%.0f" .PctVal}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{.Class}}" style="width:{{printf "%.1f" .PctVal}}%"></div></div><span class="small text-nowrap{{if .Over}} text-danger fw-semibold{{end}}"{{if .Over}} title="{{$.T "pve.storage.over"}}"{{end}}>{{if .Over}}<i class="bi bi-exclamation-triangle-fill"></i> {{end}}{{.Pct}}</span></div><div class="small text-body-secondary">{{$.Bytes .Used}}</div>{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.storage.size"}}" class="text-end text-nowrap">{{if gt .Total 0}}{{$.Bytes .Total}}{{else}}–{{end}}</td>
+		</tr>
+		{{end}}
+		</tbody>
+	</table></div>
+	{{else}}<div class="card-body small text-body-secondary">{{.T "pve.storage.empty"}}</div>{{end}}
+</div>
 <div class="card mb-3">
 	<div class="card-header"><i class="bi bi-boxes text-primary"></i> {{.T "pve.guests"}} <span class="badge text-bg-secondary">{{len $d.GuestRows}}{{if ne (len $d.GuestRows) $d.Total}}/{{$d.Total}}{{end}}</span></div>
 	<div class="card-body pb-0">

@@ -1,5 +1,13 @@
 # Changes – Healthchecks
 
+## 2.47.0 – 2026-10-30
+
+### New
+- Proxmox VE: storage on the system page – all storage of the cluster (local, local-lvm, ZFS, NFS, Ceph …), local
+  storage per node, shared storage once, with type, content, usage and size; unavailable storage is shown with a hint.
+  The rule "Storage used from" (default 90 %, system level) reports full storage like the datastores of a PBS, one per
+  storage, all-clear 2 percentage points below the limit. Also in the API (`storages`).
+
 ## 2.46.0 – 2026-10-30
 
 ### New

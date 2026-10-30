@@ -71,6 +71,13 @@ Zertifikate der Nodes). Sieht das Token keine Gäste, warnt „Verbindung testen
 - **System:** Nodes und Gäste als Tabelle mit Name, ID, Typ (VM/Container), Node, Zustand (inkl. Backup, Lock,
   Absturz mit qmpstatus), CPU, RAM, Disk, Netz, Laufzeit, CPU-Verlauf der letzten Stunde und Schalter „als Check“.
   Filter nach Zustand (u. a. „gestört“), Node, Typ und Suche (Name, ID, Tags). Darunter die Regeln des Systems.
+- **Speicher** (Systemseite, ab Healthchecks 2.47.0): alle Einträge `storage` aus `cluster/resources` – lokale je Node
+  (`Node/Name`), gemeinsame (`shared`, z. B. NFS, Ceph) nur einmal mit den Werten eines Nodes, der sie als verfügbar
+  meldet; Typ (`plugintype`), Inhalt, Belegung und Größe. Nicht verfügbare Speicher stehen mit Hinweis da. Ohne
+  `Datastore.Audit` (Rolle PVEAuditor) liefert Proxmox keine Speicher. Regel **„Speicher belegt ab“**
+  (`rules.datastore`, Systemebene, Standard 90 %, 0 = aus): Meldung `proxmox_threshold` mit Ursache `storage` je
+  Speicher, Entwarnung erst 2 Prozentpunkte unter der Grenze; ein nicht verfügbarer Speicher ändert nichts. In der API
+  unter `storages`.
 - **Gast bzw. Node**: aktuelle Werte, Graphen für 1 h, 24 h, 7 Tage und 30 Tage (CPU mit Spitze, RAM und
   Disk, Netz rein/raus, Disk lesen/schreiben) und die Regeln dieser Ebene.
 
