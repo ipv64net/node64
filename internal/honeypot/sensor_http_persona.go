@@ -29,8 +29,14 @@ func sensorHTTPHeaders(h http.Header, persona string, id *sensorIdent) {
 	switch persona {
 	case PersonaNginx:
 		h.Set("Server", id.nginxServer())
+		if v := id.poweredBy(); v != "" {
+			h.Set("X-Powered-By", v)
+		}
 	case PersonaApache:
 		h.Set("Server", id.apacheServer())
+		if v := id.poweredBy(); v != "" {
+			h.Set("X-Powered-By", v)
+		}
 	case PersonaNAS:
 		h.Set("Server", "nginx")
 	case PersonaPVE:
@@ -38,7 +44,7 @@ func sensorHTTPHeaders(h http.Header, persona string, id *sensorIdent) {
 		h.Set("Cache-Control", "max-age=0")
 		h.Set("Pragma", "no-cache")
 	case PersonaWebmin:
-		h.Set("Server", "MiniServ/"+id.choose("webmin", "2.105", "2.202", "2.302", "2.402"))
+		h.Set("Server", "MiniServ/"+id.webminVersion())
 	case PersonaHA:
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("X-Content-Type-Options", "nosniff")
@@ -108,7 +114,7 @@ func sensorHTTPApp(w http.ResponseWriter, r *http.Request, persona string, id *s
 	case PersonaGrafana:
 		switch {
 		case p == "/api/health":
-			ver := id.choose("grafana", "10.4.12", "11.2.2", "11.3.1", "11.5.2", "12.0.2")
+			ver := id.grafanaVersion()
 			sensorHTTPWrite(w, http.StatusOK, "application/json", "{\n  \"commit\": \""+sensorStableHex("grafana-"+ver, 40)+
 				"\",\n  \"database\": \"ok\",\n  \"version\": \""+ver+"\"\n}")
 		case p == "/login" && r.Method == http.MethodPost:

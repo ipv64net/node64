@@ -1,5 +1,13 @@
 # Changes – Honeypot64
 
+## 0.17.0 – 2026-10-30
+
+### New
+- “Look vulnerable” per trap (service catalog, column “Vulnerable”; headless `NODE64_HONEYPOT_VULNERABLE`): http,
+  https, ssh and mysql then show older, known vulnerable versions – e.g. Apache 2.4.49/2.4.50, nginx 1.18/1.14 with
+  PHP 7.4, OpenSSH 8.2p1/7.9p1, Webmin 1.890–1.920, Grafana 8.0–8.3, MySQL 5.7 or MariaDB 10.3. Off by default.
+  Attracts more targeted scanners and exploit attempts; capturing stays the same, nobody gets in.
+
 ## 0.16.3 – 2026-10-30
 
 ### Fixed

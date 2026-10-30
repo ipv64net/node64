@@ -516,6 +516,7 @@ func (m *Module) settingsView(r *http.Request, c ModuleConfig, lines string, err
 	d.Proxy64 = hpbridge.Blockers()
 	catf := catFormFrom(effectiveServices(c))
 	catf.withPersonas(c.Personas)
+	catf.withOld(c.Vulnerable)
 	if cf != nil {
 		catf = *cf
 	}
@@ -594,6 +595,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 		sel := parseServices(lines)
 		f := catFormFrom(sel)
 		f.withPersonas(c.Personas)
+		f.withOld(c.Vulnerable)
 		cf, textOpen = &f, true
 		selectionConfig(&c, sel)
 	case r.PostFormValue("catalog") != "": // Tabelle der Dienste
@@ -604,6 +606,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 			c.Profile = ProfileProxy
 		}
 		c.Personas = f.personas()
+		c.Vulnerable = f.vulnerable()
 		lines = ""
 	default: // Formular ohne Tabelle (Profil und Textliste, z. B. aus Skripten)
 		c.Profile = r.PostFormValue("profile")

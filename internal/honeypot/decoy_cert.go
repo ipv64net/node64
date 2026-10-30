@@ -162,7 +162,7 @@ func CertUses(c Config, list []Service, seed string) []string {
 	if c.CertID <= 0 {
 		return nil
 	}
-	ps := newSensorPersonas(seed, c.Hostname, c.Personas)
+	ps := newSensorPersonas(seed, c.Hostname, c.Personas, c.Vulnerable)
 	var out []string
 	for _, s := range list {
 		k := sensorKey{Service: s.Service, Port: s.Port, Page: s.Page}

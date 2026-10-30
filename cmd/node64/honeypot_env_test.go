@@ -22,6 +22,16 @@ func TestHoneypotEnvPersonas(t *testing.T) {
 	if hc.Sensor.Hostname != "web01.example.net" || hc.Name != "Keller-Pi ✓" {
 		t.Fatalf("hostname/name: %q %q", hc.Sensor.Hostname, hc.Name)
 	}
+	// „verwundbar wirken“: nur aktive Fallen mit aelteren Versionen (http, https, ssh, mysql)
+	if hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_VULNERABLE": " SSH:22,http:80"})); err != nil ||
+		strings.Join(hc.Sensor.Vulnerable, ",") != "http:80,ssh:22" {
+		t.Fatalf("vulnerable: %+v %v", hc, err)
+	}
+	for env, want := range map[string]string{"ssh:2200": "ssh:2200 is not an active trap", "telnet:23": "cannot look vulnerable"} {
+		if _, err := honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_VULNERABLE": env})); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("vulnerable %q: %v", env, err)
+		}
+	}
 	// eigene Dienste: Profil fuer einen Port der Liste
 	if hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_SERVICES": "https:8443,ssh:22", "NODE64_HONEYPOT_PERSONAS": "https:8443=pve"})); err != nil ||
 		hc.Sensor.Personas["https:8443"] != "pve" {

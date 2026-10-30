@@ -469,3 +469,58 @@ func TestPersonaConfig(t *testing.T) {
 		}
 	}
 }
+
+// „Verwundbar wirken“ (H8): aeltere Versionen nur auf den gewaehlten Ports, Pruefung der Einstellung.
+func TestSensorVulnerable(t *testing.T) {
+	p1, p2, p3 := sensorFreePort(t), sensorFreePort(t), sensorFreePort(t)
+	cfg := Config{Seed: personaTestSeed, Services: []Service{{SvcHTTP, p1, ""}, {SvcHTTP, p2, ""}, {SvcSSH, p3, ""}},
+		Personas:   map[string]string{PersonaKey(SvcHTTP, p1): PersonaApache, PersonaKey(SvcHTTP, p2): PersonaApache},
+		Vulnerable: []string{PersonaKey(SvcHTTP, p1), PersonaKey(SvcSSH, p3)}}
+	_, rec := sensorStart(t, cfg)
+	cl := personaClient()
+	_, _, h := sensorGet(t, cl, "GET", "http://"+sensorAddrOf(p1)+"/nichtda", "curl/8", "", nil)
+	if s := h.Get("Server"); (s != "Apache/2.4.49 (Unix)" && s != "Apache/2.4.50 (Unix)") || !strings.HasPrefix(h.Get("X-Powered-By"), "PHP/7.4.") {
+		t.Fatalf("alt: %v", h)
+	}
+	_, _, h = sensorGet(t, cl, "GET", "http://"+sensorAddrOf(p2)+"/nichtda", "curl/8", "", nil)
+	if s := h.Get("Server"); strings.Contains(s, "2.4.49") || strings.Contains(s, "2.4.50") || h.Get("X-Powered-By") != "" {
+		t.Fatalf("normal: %v", h)
+	}
+	banner, _, _ := personaKexInit(t, p3)
+	if !strings.HasPrefix(banner, "SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.") && !strings.HasPrefix(banner, "SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u") {
+		t.Fatalf("ssh: %q", banner)
+	}
+	rec.wait(t, func(e Event) bool { return e.Port == p1 })
+
+	id := newSensorIdent(personaTestSeed, "", nil)
+	old := *id
+	old.old = true
+	if v := old.grafanaVersion(); !strings.HasPrefix(v, "8.") || id.grafanaVersion() == v {
+		t.Fatalf("grafana: %s / %s", v, id.grafanaVersion())
+	}
+	if v := old.webminVersion(); !strings.HasPrefix(v, "1.") {
+		t.Fatalf("webmin: %s", v)
+	}
+	if pr := sensorMySQLProfileFor(PersonaMySQL, &old); !strings.HasPrefix(pr.version, "5.7.") {
+		t.Fatalf("mysql: %s", pr.version)
+	}
+	if pr := sensorMySQLProfileFor(PersonaMariaDB, &old); !strings.HasPrefix(pr.version, "5.5.5-10.3.") {
+		t.Fatalf("mariadb: %s", pr.version)
+	}
+
+	c := Config{Vulnerable: []string{" SSH:22 ", "http:80", "ssh:22", "redis:6379", "x"}}
+	probs := PersonaProblems(&c)
+	if strings.Join(c.Vulnerable, ",") != "http:80,ssh:22" || len(probs) != 2 || !strings.HasPrefix(probs[0], "honeypot.err.vulnerable|") {
+		t.Fatalf("config: %v %v", c.Vulnerable, probs)
+	}
+	f := catForm{Rows: []catRow{{On: true, Service: SvcSSH, Port: "22", Old: true}, {On: false, Service: SvcHTTP, Port: "80", Old: true},
+		{On: true, Service: SvcRedis, Port: "6379", Old: true}}}
+	if v := f.vulnerable(); strings.Join(v, ",") != "ssh:22" {
+		t.Fatalf("form: %v", v)
+	}
+	f.Rows[0].Old = false
+	f.withOld([]string{"ssh:22"})
+	if !f.Rows[0].Old || f.Rows[1].Old {
+		t.Fatalf("withOld: %+v", f.Rows)
+	}
+}

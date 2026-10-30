@@ -71,6 +71,12 @@ var (
 		5001: PersonaNAS, 9200: PersonaElastic}
 )
 
+// personaOld: Dienste, die „verwundbar wirken“ koennen (aeltere Versionen in Banner bzw. Kopfzeilen).
+var personaOld = map[string]bool{SvcHTTP: true, SvcHTTPS: true, SvcSSH: true, SvcMySQL: true}
+
+// OldVersions: der Dienst kann aeltere, bekannt verwundbare Versionen zeigen (Config.Vulnerable).
+func OldVersions(service string) bool { return personaOld[service] }
+
 // PersonasFor liefert die waehlbaren Profile eines Dienstes (nil = keine Auswahl).
 func PersonasFor(service string) []string { return personaList[service] }
 
@@ -121,6 +127,7 @@ func PersonaProblems(c *Config) []string {
 	if c.Hostname != "" && !ValidHostname(c.Hostname) {
 		out = append(out, "honeypot.err.hostname|"+storeClip(c.Hostname, 80))
 	}
+	out = append(out, vulnerableProblems(c)...)
 	if len(c.Personas) == 0 {
 		c.Personas = nil
 		return out
@@ -153,11 +160,38 @@ func PersonaProblems(c *Config) []string {
 	return out
 }
 
+// vulnerableProblems normalisiert Config.Vulnerable (klein, sortiert, ohne Doppelte; nur Dienste mit OldVersions).
+func vulnerableProblems(c *Config) []string {
+	if len(c.Vulnerable) > 128 {
+		return []string{"honeypot.err.vulnerable_many|128"}
+	}
+	var out, keep []string
+	seen := map[string]bool{}
+	for _, k := range c.Vulnerable {
+		k = strings.ToLower(strings.TrimSpace(k))
+		if k == "" || seen[k] {
+			continue
+		}
+		svc, port, ok := parsePersonaKey(k)
+		if !ok || !OldVersions(svc) {
+			out = append(out, "honeypot.err.vulnerable|"+storeClip(k, 40))
+			continue
+		}
+		seen[k] = true
+		keep = append(keep, PersonaKey(svc, port))
+	}
+	sort.Strings(keep)
+	c.Vulnerable = keep
+	return out
+}
+
 // personaErrEN: englische Texte fuer den Modus ohne Oberflaeche (dort gibt es keine Uebersetzung).
 var personaErrEN = map[string]string{
-	"honeypot.err.hostname":     "hostname %q is not valid (letters, digits, - and dots)",
-	"honeypot.err.persona":      "profile %[2]q is not available for %[1]q (service:port=profile, e.g. ssh:22=dropbear)",
-	"honeypot.err.persona_many": "at most %s profiles",
+	"honeypot.err.hostname":        "hostname %q is not valid (letters, digits, - and dots)",
+	"honeypot.err.persona":         "profile %[2]q is not available for %[1]q (service:port=profile, e.g. ssh:22=dropbear)",
+	"honeypot.err.persona_many":    "at most %s profiles",
+	"honeypot.err.vulnerable":      "%q cannot look vulnerable (service:port of http, https, ssh or mysql, e.g. ssh:22)",
+	"honeypot.err.vulnerable_many": "at most %s entries that look vulnerable",
 }
 
 // ValidatePersonas prueft und normalisiert Profile und Hostname wie das Modul, Fehler auf Englisch (Modus ohne
@@ -204,6 +238,7 @@ type sensorIdent struct {
 	domain string
 	distro string // debian, ubuntu
 	set    bool   // Hostname eingestellt (nicht erzeugt)
+	old    bool   // „verwundbar wirken“: aeltere, bekannt verwundbare Versionen (Kopie je Port, sensorPersonas.identFor)
 }
 
 // Bausteine erzeugter Hostnamen und Domains (wie haeufige Server-Namen).
@@ -288,18 +323,53 @@ func (id *sensorIdent) fqdn() string { return id.host + "." + id.domain }
 func (id *sensorIdent) ubuntu() bool { return id.distro == "ubuntu" }
 
 // Versionen je Sensor (plausible, veroeffentlichte Staende; der Seed waehlt innerhalb der Reihe).
+// Mit old aeltere Staende mit bekannten Luecken (nur die Kennung; die Falle bleibt dieselbe): nginx 1.18/1.14
+// (CVE-2021-23017), Apache 2.4.49/2.4.50 (CVE-2021-41773/42013), OpenSSH 8.2p1/7.9p1, Webmin 1.890-1.920
+// (CVE-2019-15107), Grafana 8.0-8.3.0 (CVE-2021-43798), MySQL 5.7 bzw. MariaDB 10.3, dazu PHP 7.4 als X-Powered-By.
 func (id *sensorIdent) nginxServer() string {
-	if id.ubuntu() {
+	switch {
+	case id.old && id.ubuntu():
+		return "nginx/1.18.0 (Ubuntu)"
+	case id.old:
+		return "nginx/1.14.2"
+	case id.ubuntu():
 		return "nginx/1.24.0 (Ubuntu)"
 	}
 	return "nginx/1.22.1"
 }
 
 func (id *sensorIdent) apacheServer() string {
+	if id.old {
+		return "Apache/2.4." + id.choose("apache-old", "49", "50") + " (Unix)"
+	}
 	if id.ubuntu() {
 		return "Apache/2.4.58 (Ubuntu)"
 	}
 	return "Apache/2.4." + id.choose("apache", "62", "65") + " (Debian)"
+}
+
+// poweredBy: X-Powered-By der Webserver-Profile ("" = keiner; nur „verwundbar wirken“).
+func (id *sensorIdent) poweredBy() string {
+	if !id.old {
+		return ""
+	}
+	return "PHP/7.4." + id.choose("php-old", "3", "21", "33")
+}
+
+// webminVersion: MiniServ-Version (Server-Kopf von Webmin).
+func (id *sensorIdent) webminVersion() string {
+	if id.old {
+		return id.choose("webmin-old", "1.890", "1.900", "1.910", "1.920")
+	}
+	return id.choose("webmin", "2.105", "2.202", "2.302", "2.402")
+}
+
+// grafanaVersion: Version in /api/health.
+func (id *sensorIdent) grafanaVersion() string {
+	if id.old {
+		return id.choose("grafana-old", "8.0.6", "8.1.7", "8.2.5", "8.3.0")
+	}
+	return id.choose("grafana", "10.4.12", "11.2.2", "11.3.1", "11.5.2", "12.0.2")
 }
 
 // osIssue ist /etc/issue.net (Telnet-Login unter Linux).
@@ -312,6 +382,15 @@ func (id *sensorIdent) osIssue() string {
 
 // sshBanner liefert die Versionskennung zum Profil (OpenSSH folgt der Distribution).
 func (id *sensorIdent) sshBanner(persona string) string {
+	if id.old {
+		switch {
+		case persona == PersonaDropbear:
+			return "SSH-2.0-dropbear_" + id.choose("dropbear-old", "2019.78", "2020.81")
+		case persona == PersonaOpenSSHUbuntu || persona != PersonaOpenSSHDebian && id.ubuntu():
+			return "SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0." + id.choose("ssh-ubuntu-old", "1", "3", "5")
+		}
+		return "SSH-2.0-OpenSSH_7.9p1 Debian-10+deb10u" + id.choose("ssh-debian-old", "1", "2")
+	}
 	switch persona {
 	case PersonaDropbear:
 		return "SSH-2.0-dropbear_" + id.choose("dropbear", "2024.84", "2024.85", "2024.86")
@@ -336,20 +415,38 @@ func (id *sensorIdent) telnetHost(persona string) string {
 
 // sensorPersonas ist der Stand der Profile im Sensor (bei Apply ersetzt, je Verbindung gelesen).
 type sensorPersonas struct {
-	id  *sensorIdent
-	set map[string]string // "dienst:port" -> Profil (nur gueltige)
-	web string            // fest fuer alle HTTP/HTTPS-Dienste ("" = je Port; PROXY64-Koeder: nginx)
+	id    *sensorIdent
+	idOld *sensorIdent      // wie id, mit aelteren Versionen („verwundbar wirken“)
+	set   map[string]string // "dienst:port" -> Profil (nur gueltige)
+	old   map[string]bool   // "dienst:port" wirkt verwundbar
+	web   string            // fest fuer alle HTTP/HTTPS-Dienste ("" = je Port; PROXY64-Koeder: nginx)
 }
 
-func newSensorPersonas(seed, hostname string, personas map[string]string) *sensorPersonas {
-	p := &sensorPersonas{set: map[string]string{}}
+func newSensorPersonas(seed, hostname string, personas map[string]string, vulnerable []string) *sensorPersonas {
+	p := &sensorPersonas{set: map[string]string{}, old: map[string]bool{}}
 	for k, v := range personas {
 		if svc, port, ok := parsePersonaKey(k); ok && personaValid(svc, v) {
 			p.set[PersonaKey(svc, port)] = v
 		}
 	}
+	for _, k := range vulnerable {
+		if svc, port, ok := parsePersonaKey(strings.ToLower(strings.TrimSpace(k))); ok && OldVersions(svc) {
+			p.old[PersonaKey(svc, port)] = true
+		}
+	}
 	p.id = newSensorIdent(seed, hostname, p.set)
+	o := *p.id
+	o.old = true
+	p.idOld = &o
 	return p
+}
+
+// identFor liefert die Identitaet fuer einen Dienst (mit aelteren Versionen, wenn er verwundbar wirken soll).
+func (p *sensorPersonas) identFor(k sensorKey) *sensorIdent {
+	if p.old[PersonaKey(k.Service, k.Port)] {
+		return p.idOld
+	}
+	return p.id
 }
 
 // of liefert das Profil eines Dienstes (eingestellt oder Standard).
@@ -368,5 +465,5 @@ func (s *Sensor) personas() *sensorPersonas {
 	if p := s.persona.Load(); p != nil {
 		return p
 	}
-	return newSensorPersonas(s.seed, "", nil)
+	return newSensorPersonas(s.seed, "", nil, nil)
 }
