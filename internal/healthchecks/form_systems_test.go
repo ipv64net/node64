@@ -110,7 +110,7 @@ func TestGroupRowsParts(t *testing.T) {
 func TestCheckSystemLabel(t *testing.T) {
 	fakeContainers(t, dockerHost, nil)
 	fakeDockerSource(t)
-	m, srv, _, _ := newDockerModuleRec(t, pveCore(t))
+	m, srv, last, _ := newDockerModuleRec(t, pveCore(t))
 	ctx := context.Background()
 	dockerAddLocal(t, srv)
 	id := dockerSysID(t, m)
@@ -132,6 +132,58 @@ func TestCheckSystemLabel(t *testing.T) {
 	}
 	if err := checks.Validate((&Check{Type: checks.TypeDocker, Target: "web", Params: []byte(`{"system":"Heimserver"}`)}).Definition()); err != nil {
 		t.Fatalf("validate: %v", err)
+	}
+	// Untergruppe von Hand: bleibt beim naechsten Abruf, leer = wieder automatisch
+	edit := func(label string) *Check {
+		c, _ := m.st.Check(ctx, tok)
+		form := url.Values{}
+		for k, v := range formFromCheck(c) {
+			form.Set(k, v)
+		}
+		form.Del("locations") // lokaler Check; im Formular einzelne Felder, nicht die Liste
+		form.Set("sys_label", label)
+		if code, loc := dockerPost(t, srv, "/healthchecks/"+tok+"/edit", form); code != http.StatusSeeOther {
+			t.Fatalf("edit %q: %d %s %+v", label, code, loc, *last)
+		}
+		pvePollNow(t, m, id)
+		c, _ = m.st.Check(ctx, tok)
+		return c
+	}
+	if c := edit("Standort B"); c == nil || !strings.Contains(string(c.Params), `"system":"Standort B","system_custom":true`) {
+		t.Fatalf("custom: %s", c.Params)
+	}
+	if err := checks.Validate((&Check{Type: checks.TypeDocker, Target: "web", Params: []byte(`{"system":"Standort B","system_custom":true}`)}).Definition()); err != nil {
+		t.Fatalf("validate custom: %v", err)
+	}
+	if c := edit(""); c == nil || !strings.Contains(string(c.Params), `"system":"Heimserver"`) || strings.Contains(string(c.Params), "system_custom") {
+		t.Fatalf("auto again: %s", c.Params)
+	}
+}
+
+// Proxmox-Check: Untergruppe von Hand im Formular, die Liste gruppiert danach; leer = wieder automatisch.
+func TestProxmoxSubgroupCustom(t *testing.T) {
+	raw := `{"system_id":3,"key":"qemu/100","system":"Cluster 1","system_uid":"` + strings.Repeat("a", 32) + `"}`
+	in, err := checkFromForm(formRequest(url.Values{"name": {"vm"}, "type": {"proxmox"}, "pve_params": {raw}, "sys_label": {" Cluster 1 Berlin "}}))
+	if err != nil || !strings.Contains(string(in.Params), `"system":"Cluster 1 Berlin","system_uid"`) || !strings.Contains(string(in.Params), `"system_custom":true`) || in.Target != "qemu/100" {
+		t.Fatalf("custom: %s %v", in.Params, err)
+	}
+	c := &Check{Type: checks.TypeProxmox, Target: in.Target, Params: in.Params, Group: pveCheckGroup}
+	if err := checks.Validate(c.Definition()); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	f := formFromCheck(c)
+	if f["sys_label"] != "Cluster 1 Berlin" {
+		t.Fatalf("form back: %q", f["sys_label"])
+	}
+	fakeContainers(t, dockerHost, nil)
+	fakeDockerSource(t)
+	m, _, _, _ := newDockerModuleRec(t, pveCore(t))
+	if n := m.subGroupOf(context.Background(), nil)(row{Check: c}); n != "Cluster 1 Berlin" {
+		t.Fatalf("sub: %q", n)
+	}
+	in, err = checkFromForm(formRequest(url.Values{"name": {"vm"}, "type": {"proxmox"}, "pve_params": {f["pve_params"]}, "sys_label": {""}}))
+	if err != nil || strings.Contains(string(in.Params), "system_custom") || strings.Contains(string(in.Params), "Berlin") {
+		t.Fatalf("auto again: %s %v", in.Params, err)
 	}
 }
 

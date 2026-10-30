@@ -135,7 +135,7 @@ func (m *Module) formSystemCheck(w http.ResponseWriter, r *http.Request, kind st
 // subGroupOf liefert fuer die Liste je Check der Gruppen „Proxmox VE“ und „Docker“ die Untergruppe, jedes Mal frisch
 // aus der Ueberwachung: bei Proxmox der Clustername aus dem letzten Abruf (sonst der Name des Systems), bei Docker
 // der Name des Docker-Hosts. Checks einer anderen Node: Name des Systems aus ihren Parametern (Docker mit der Node),
-// sonst die Node (deren System-IDs gelten hier nicht).
+// sonst die Node (deren System-IDs gelten hier nicht). Von Hand gesetzt (params.system_custom) gilt immer params.system.
 func (m *Module) subGroupOf(ctx context.Context, r *http.Request) func(row) string {
 	systems := map[int64]*proxmox.System{}
 	byHost := map[string]*proxmox.System{}
@@ -161,9 +161,13 @@ func (m *Module) subGroupOf(ctx context.Context, r *http.Request) func(row) stri
 		}
 		if c.Foreign() { // Name des Systems aus den Parametern (setzt die andere Node), sonst die Node
 			var p struct {
-				System string `json:"system"`
+				System       string `json:"system"`
+				SystemCustom bool   `json:"system_custom"`
 			}
 			_ = json.Unmarshal(c.Params, &p)
+			if p.SystemCustom && p.System != "" {
+				return p.System
+			}
 			node := ""
 			for _, id := range c.Nodes {
 				if n := peers[id]; n != "" {
@@ -186,6 +190,9 @@ func (m *Module) subGroupOf(ctx context.Context, r *http.Request) func(row) stri
 		if c.Type == checks.TypeProxmox {
 			var pp checks.ProxmoxParams
 			_ = json.Unmarshal(c.Params, &pp)
+			if pp.SystemCustom && pp.System != "" { // Untergruppe von Hand gesetzt
+				return pp.System
+			}
 			if n, ok := pveName[pp.SystemID]; ok {
 				return n
 			}
@@ -201,6 +208,9 @@ func (m *Module) subGroupOf(ctx context.Context, r *http.Request) func(row) stri
 		}
 		var dp checks.DockerParams
 		_ = json.Unmarshal(c.Params, &dp)
+		if dp.SystemCustom && dp.System != "" {
+			return dp.System
+		}
 		h := strings.TrimSpace(dp.Host)
 		if h == "" {
 			h = checks.DefaultDockerHost()
@@ -213,6 +223,15 @@ func (m *Module) subGroupOf(ctx context.Context, r *http.Request) func(row) stri
 		}
 		return h
 	}
+}
+
+// sysLabel: von Hand gesetzte Untergruppe eines Proxmox- bzw. Docker-Checks (getrimmt, hoechstens 100 Zeichen).
+func sysLabel(s string) string {
+	s = strings.TrimSpace(s)
+	if r := []rune(s); len(r) > 100 {
+		s = strings.TrimSpace(string(r[:100]))
+	}
+	return s
 }
 
 // checkSystemOf: Name des Proxmox-Systems bzw. Docker-Hosts aus den Parametern eines Checks (params.system, "" = keiner).

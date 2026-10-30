@@ -761,8 +761,16 @@ func formFromCheck(c *Check) map[string]string {
 	case checks.TypeDocker:
 		set("docker_host", "host")
 		set("docker_system", "system") // Anzeige-Name des Docker-Hosts bleibt beim Bearbeiten erhalten
+		var dp checks.DockerParams
+		if json.Unmarshal(c.Params, &dp) == nil && dp.SystemCustom {
+			f["sys_label"], f["docker_system"] = dp.System, "" // leer gespeichert: der naechste Abruf setzt den Host
+		}
 	case checks.TypeProxmox:
 		f["pve_params"] = string(c.Params) // System und Gast stehen fest (Proxmox VE → „als Check“)
+		var pp checks.ProxmoxParams
+		if json.Unmarshal(c.Params, &pp) == nil && pp.SystemCustom {
+			f["sys_label"] = pp.System
+		}
 	case checks.TypeWhois:
 		var wp checks.WhoisParams
 		_ = json.Unmarshal(c.Params, &wp)
@@ -978,6 +986,9 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 		if s := v("docker_system"); s != "" {
 			p["system"] = s
 		}
+		if s := sysLabel(v("sys_label")); s != "" { // Untergruppe von Hand
+			p["system"], p["system_custom"] = s, true
+		}
 	case checks.TypeWhois:
 		if s := v("whois_source"); s != "" && s != "auto" {
 			p["source"] = s
@@ -1025,6 +1036,13 @@ func checkFromForm(r *http.Request) (checkJSON, error) {
 		var pp checks.ProxmoxParams
 		if err := json.Unmarshal([]byte(v("pve_params")), &pp); err != nil {
 			return in, fmt.Errorf("proxmox: %w", err)
+		}
+		// Untergruppe von Hand; leer = wieder automatisch (der naechste Abruf setzt den Clusternamen)
+		if pp.SystemCustom {
+			pp.System, pp.SystemCustom = "", false
+		}
+		if s := sysLabel(v("sys_label")); s != "" {
+			pp.System, pp.SystemCustom = s, true
 		}
 		in.Target = pp.Key
 		in.Params, _ = json.Marshal(pp)

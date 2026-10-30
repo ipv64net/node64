@@ -1,5 +1,12 @@
 # Changes – Healthchecks
 
+## 2.48.0 – 2026-10-30
+
+### New
+- Proxmox VE and Docker: when editing a check, the subgroup (system) can be set by hand, e.g. when two Proxmox
+  clusters have the same name. It is kept on every poll and also applies in the portal; empty = automatic again
+  (cluster name or name of the system).
+
 ## 2.47.1 – 2026-10-30
 
 ### Fixed

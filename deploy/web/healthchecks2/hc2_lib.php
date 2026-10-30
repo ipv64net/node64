@@ -485,7 +485,7 @@ function hc2_validate_check(array $in, int $userid, ?array $old): array {
 		case 'docker':
 			if (!preg_match('/^\/?[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/', $target)) { $err[] = 'Containername oder -ID fehlt (Buchstaben, Ziffern, _ . -).'; }
 			if (($h = trim((string)($in['docker_host'] ?? ''))) !== '') { if (!preg_match('#^(unix|tcp|https?)://#', $h)) { $err[] = 'Docker-Host muss mit unix://, tcp:// oder http(s):// beginnen.'; } else { $p['host'] = $h; } }
-			if (($sy = trim((string)($in['docker_system'] ?? ''))) !== '') { $p['system'] = mb_substr($sy, 0, 200); } // Anzeige-Name des Docker-Hosts (setzt die Node)
+			if (($sy = trim((string)($in['docker_system'] ?? ''))) !== '') { $p['system'] = mb_substr($sy, 0, 200); if (!empty($in['system_custom'])) { $p['system_custom'] = true; } } // Anzeige-Name des Docker-Hosts (setzt die Node, von Hand gesetzt in Node64 bleibt)
 			break;
 		case 'whois':
 			// Domain, IP/Netz oder AS-Nummer; Auskunft per RDAP, sonst WHOIS (Port 43) – wie im Container (internal/checks/whois.go)

@@ -17,7 +17,7 @@ $f = array('type' => 'http', 'name' => '', 'target' => '', 'interval_sec' => 60,
 	'tags' => '', 'group_name' => '', 'description' => '', 'parent_token' => '', 'channels' => array(), 'repeat_minutes' => 0, 'notify_down' => 1, 'notify_up' => 1, 'notify_degraded' => 0, 'critical' => 0, 'invert' => 0, 'paused' => 0,
 	'execution' => 'online', 'node_id' => (string)($_GET['node'] ?? ''), 'nodes' => isset($_GET['node']) ? array((string)$_GET['node']) : array_slice(array_keys($nodes), 0, 1), 'locations' => array_slice(array_keys($locs), 0, $acc['hc_locations']), 'policy' => 'all',
 	'method' => 'GET', 'accept_status' => '200-299', 'follow_redirects' => 1, 'max_redirects' => 5, 'keyword' => '', 'keyword_absent' => 0, 'basic_user' => '', 'basic_password' => '', 'headers' => '', 'body' => '', 'insecure_tls' => 0, 'cert_min_days' => 14,
-	'count' => 3, 'max_loss_percent' => 0, 'max_latency_ms' => 0, 'port' => '', 'send' => '', 'expect' => '', 'tls' => 0, 'min_days' => 14, 'server_name' => '', 'skip_chain' => 0, 'skip_hostname' => 0, 'period_seconds' => 3600, 'grace_seconds' => 600, 'docker_host' => '', 'docker_system' => '',
+	'count' => 3, 'max_loss_percent' => 0, 'max_latency_ms' => 0, 'port' => '', 'send' => '', 'expect' => '', 'tls' => 0, 'min_days' => 14, 'server_name' => '', 'skip_chain' => 0, 'skip_hostname' => 0, 'period_seconds' => 3600, 'grace_seconds' => 600, 'docker_host' => '', 'docker_system' => '', 'system_custom' => 0,
 	'json_rules' => '', 'json_any' => 0, 'dns_record_type' => 'A', 'dns_resolver' => 'system', 'dns_server' => '', 'dns_expect' => 'any', 'dns_values' => '', 'dns_dnssec' => 0, 'dns_min_ttl' => 0,
 	'whois_source' => 'auto', 'whois_min_days' => 14, 'whois_contains' => '');
 if ($f['node_id'] !== '' && isset($nodes[$f['node_id']])) { $f['execution'] = 'local'; }
@@ -161,7 +161,7 @@ $others = array_filter(hc2_checks($uid), function($c) use ($old) { return !$old 
 						</div>
 						<!-- Docker -->
 						<div class="form-row" data-type="docker">
-							<div class="form-group col-12"><label>Docker-Host (leer = Standard der Node)</label><input class="form-control text-monospace" name="docker_host" value="<?php echo $val('docker_host'); ?>" placeholder="unix:///var/run/docker.sock"><input type="hidden" name="docker_system" value="<?php echo $val('docker_system'); ?>"></div>
+							<div class="form-group col-12"><label>Docker-Host (leer = Standard der Node)</label><input class="form-control text-monospace" name="docker_host" value="<?php echo $val('docker_host'); ?>" placeholder="unix:///var/run/docker.sock"><input type="hidden" name="docker_system" value="<?php echo $val('docker_system'); ?>"><input type="hidden" name="system_custom" value="<?php echo $val('system_custom'); ?>"></div>
 							<div class="col-12"><div class="alert alert-info small">Ziel = Name oder ID des Containers auf der Node. Docker-Checks laufen nur lokal auf der gewählten Node und sind nicht umhängbar.</div></div>
 						</div>
 						<!-- Push -->

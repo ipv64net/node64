@@ -88,6 +88,7 @@ $subOf = function(array $c) use ($nodes): string {
 	if (!in_array($c['group_name'], array('Proxmox VE', 'Docker'), true) || !in_array($c['type'], array('proxmox', 'docker'), true)) { return ''; }
 	$sys = trim((string)(hc2_check_params($c)['system'] ?? ''));
 	$nid = hc2_check_nodes($c)[0] ?? ''; $node = isset($nodes[$nid]) ? (string)$nodes[$nid]['name'] : '';
+	if ($sys !== '' && !empty(hc2_check_params($c)['system_custom'])) { return $sys; } // Untergruppe von Hand (Node64)
 	if ($c['type'] === 'proxmox') { return $sys !== '' ? $sys : ($node !== '' ? 'Node ' . $node : 'Proxmox VE'); }
 	return $sys !== '' ? $sys . ($node !== '' ? ' · ' . $node : '') : ($node !== '' ? 'Node ' . $node : 'Docker');
 };
