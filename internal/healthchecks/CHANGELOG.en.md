@@ -1,5 +1,13 @@
 # Changes – Healthchecks
 
+## 2.51.0 – 2026-10-30
+
+### Changed
+- Notifications: the channel “SecNtfy (encrypted)” is now called “IPv64 App” (type `app`). As before you enter the
+  device token (`NTFY-DEVICE-…`), optionally with critical alerts. The server (api.secntfy.app) is fixed and no longer
+  in the form. Existing SecNtfy channels are switched over automatically. The node and the hubs send the app
+  themselves, end-to-end encrypted; the former route via ipv64 (Firebase) is gone.
+
 ## 2.50.1 – 2026-10-30
 
 ### Fixed

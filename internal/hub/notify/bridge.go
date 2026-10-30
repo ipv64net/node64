@@ -143,16 +143,6 @@ func (s smsSender) Send(ctx context.Context, ch *notify.Channel, msg notify.Mess
 }
 
 // appSender: Push an die ipv64-App (Firebase) ueber die Bruecke.
-type appSender struct{ b *Bridge }
-
-func (a appSender) Send(ctx context.Context, ch *notify.Channel, msg notify.Message) error {
-	tok := strings.TrimSpace(ch.Config["device_token"])
-	if tok == "" {
-		return errors.New("app: no device token")
-	}
-	return a.b.Send(ctx, bridgeRequest{Type: "app", To: tok, Subject: msg.Title, Text: msg.Check.Name, UpDown: updown(msg.Kind), UserID: ch.UserID, EventID: msg.EventID})
-}
-
 // relaySender: Node-Kanaele (Execution "node") werden als Sendeauftrag an die
 // Node gegeben, alle anderen direkt gesendet.
 type relaySender struct {
@@ -182,7 +172,6 @@ func Senders(version string, b *Bridge, st *Store) map[notify.Type]notify.Sender
 	m := notify.SendersPublicOnly(version)
 	m[notify.TypeIPv64Mail] = mailSender{b}
 	m[notify.TypeIPv64SMS] = smsSender{b, st}
-	m[notify.TypeApp] = appSender{b}
 	// Browser-Kanaele gibt es nur an der Node; der hub reicht sie als Sendeauftrag weiter
 	m[notify.TypeBrowser] = nodeOnlySender{}
 	// Home Assistant steht im LAN der Node: der hub ruft keine solchen Adressen auf

@@ -431,7 +431,7 @@ func (s *Server) channelToggle(w http.ResponseWriter, r *http.Request) {
 // serverOnly: Kanaele, die nur der ipv64-hub zustellen kann.
 func serverOnly(ch *notify.Channel) bool {
 	switch ch.Type {
-	case notify.TypeIPv64Mail, notify.TypeIPv64SMS, notify.TypeApp:
+	case notify.TypeIPv64Mail, notify.TypeIPv64SMS:
 		return true
 	}
 	return ch.Execution == "server"

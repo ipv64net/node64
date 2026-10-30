@@ -124,7 +124,7 @@ func (f fakeChannels) ChannelsFor(context.Context, int64) ([]*Channel, error) { 
 func (f fakeChannels) AddDelivery(context.Context, Delivery) error            { return nil }
 func (f fakeChannels) Touch(context.Context, int64, string) error             { return nil }
 
-// hub: bei einem Direct-Alert laesst er die ipv64-Kanaele und die Kanaele der messenden Node aus und sendet nur die
+// hub: bei einem Direct-Alert laesst er die ipv64-Kanaele (Mail, SMS) und die Kanaele der messenden Node aus und sendet nur die
 // uebrigen Portal-Kanaele und Kanaele anderer Nodes; ohne DirectNode alles wie bisher.
 func TestHubSkipsDirectNodeChannels(t *testing.T) {
 	bundle, err := i18n.Load()
@@ -147,7 +147,7 @@ func TestHubSkipsDirectNodeChannels(t *testing.T) {
 		t.Fatalf("without direct node: %v", got)
 	}
 	c.DirectNode = "a"
-	if got := chanNames(d.channelsFor(ctx, c)); !sameNames(got, "hook", "telegram", "node-b") {
+	if got := chanNames(d.channelsFor(ctx, c)); !sameNames(got, "app", "hook", "telegram", "node-b") { // IPv64 App (SecNtfy) sendet der hub wie Telegram
 		t.Fatalf("direct node a: %v", got)
 	}
 }

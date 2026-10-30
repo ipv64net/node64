@@ -30,17 +30,19 @@ const (
 	TypeSlack    Type = "slack"   // Incoming Webhook
 	TypeTeams    Type = "teams"   // Workflows-Webhook (die alten Office-365-Connectoren gibt es seit Mai 2026 nicht mehr)
 	TypeMatrix   Type = "matrix"  // Client-Server-API: Homeserver, Zugriffstoken eines Bot-Kontos, Raum
-	TypeSecNtfy  Type = "secntfy" // SecNtfy: Ende-zu-Ende verschluesselt (RSA mit dem Schluessel des Geraets)
+	TypeSecNtfy  Type = "secntfy" // frueher eigener Typ, jetzt TypeApp (wird beim Pruefen und per Migration umgestellt)
 	// Home Assistant: Webhook-Ausloeser einer Automation (nur von der Node gesendet, HA steht im LAN)
 	TypeHomeAssistant Type = "homeassistant"
 	// Server-Typen: Versand ueber ipv64.net (im Node erst nach Verknuepfung)
 	TypeIPv64Mail Type = "ipv64_mail"
 	TypeIPv64SMS  Type = "ipv64_sms"
-	TypeApp       Type = "app"
+	// IPv64 App: Push ueber SecNtfy (api.secntfy.app), Ende-zu-Ende verschluesselt mit dem Schluessel des Geraets.
+	// Sendet die Node bzw. der hub selbst (frueher ueber ipv64/Firebase).
+	TypeApp Type = "app"
 )
 
 // Types in Anzeigereihenfolge.
-var Types = []Type{TypeBrowser, TypeSMTP, TypeTelegram, TypeDiscord, TypeSlack, TypeTeams, TypeMatrix, TypeNtfy, TypeGotify, TypePushover, TypeSecNtfy, TypeHomeAssistant, TypeWebhook}
+var Types = []Type{TypeBrowser, TypeSMTP, TypeTelegram, TypeDiscord, TypeSlack, TypeTeams, TypeMatrix, TypeNtfy, TypeGotify, TypePushover, TypeApp, TypeHomeAssistant, TypeWebhook}
 
 // Planned sind Kanaele, die ipv64.net nach der Verknuepfung bereitstellt:
 // Mail ohne eigenen SMTP-Server und SMS ueber das ipv64-Gateway. Sie werden
@@ -124,15 +126,13 @@ var Fields = map[Type][]Field{
 		{Key: "token", Secret: true, Required: true, Kind: "password"},
 		{Key: "room", Required: true},
 	},
-	TypeSecNtfy: {
+	TypeApp: { // Server fest (secntfyServer), nicht einstellbar
 		{Key: "device_key", Secret: true, Required: true, Kind: "password"},
-		{Key: "server", Kind: "url", Default: "https://api.secntfy.app", Required: true},
 		{Key: "critical", Kind: "bool"},
 	},
 	TypeBrowser:   {},
 	TypeIPv64Mail: {{Key: "email", Required: true}},
 	TypeIPv64SMS:  {{Key: "number", Required: true}},
-	TypeApp:       {{Key: "device_token", Secret: true, Required: true, Kind: "password"}},
 	TypeWebhook: {
 		{Key: "url", Kind: "url", Required: true},
 		{Key: "method", Kind: "select", Options: []string{"POST", "PUT", "GET"}, Default: "POST"},
@@ -168,6 +168,9 @@ func (c *Channel) Validate() error { return c.validate(false) }
 func (c *Channel) ValidateKeepSecrets() error { return c.validate(true) }
 
 func (c *Channel) validate(keepSecrets bool) error {
+	if c.Type == TypeSecNtfy { // alter Name der IPv64 App (API, Import)
+		c.Type = TypeApp
+	}
 	fields, ok := Fields[c.Type]
 	if !ok {
 		return fmt.Errorf("unknown channel type %q", c.Type)
@@ -248,8 +251,8 @@ func (c *Channel) validate(keepSecrets bool) error {
 			return errors.New("room must be a room ID (!abc:example.org) or an alias (#room:example.org)")
 		}
 	}
-	if c.Type == TypeSecNtfy {
-		c.Config["server"] = strings.TrimRight(c.Config["server"], "/")
+	if c.Type == TypeApp {
+		delete(c.Config, "server") // fest: secntfyServer
 		if v := strings.TrimSpace(c.Config["device_key"]); v != "" || !keepSecrets {
 			if !validSecntfyToken(v) {
 				return errors.New("device_key must be a SecNtfy device token (NTFY-DEVICE-…)")
@@ -361,8 +364,6 @@ func (c *Channel) Summary() string {
 		return strings.TrimRight(g("server"), "/") + "/" + g("topic")
 	case TypeGotify, TypeIGotify:
 		return g("server")
-	case TypeSecNtfy:
-		return "SecNtfy"
 	case TypePushover:
 		if g("device") != "" {
 			return "Pushover (" + g("device") + ")"
@@ -373,7 +374,7 @@ func (c *Channel) Summary() string {
 	case TypeIPv64SMS:
 		return "+" + g("number") + " via ipv64.net"
 	case TypeApp:
-		return "ipv64 App"
+		return "IPv64 App"
 	case TypeWebhook:
 		return g("method") + " " + g("url")
 	case TypeHomeAssistant:

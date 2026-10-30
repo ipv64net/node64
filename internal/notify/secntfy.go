@@ -23,18 +23,17 @@ import (
 // wird nur hier, die anderen Kanaele bekommen die volle Meldung.
 
 const (
-	secntfyDefaultServer = "https://api.secntfy.app"
-	secntfyTokenPrefix   = "NTFY-DEVICE-"
-	secntfyMaxText       = 150 // Zeichen (Vorgabe der Bibliothek)
+	secntfyTokenPrefix = "NTFY-DEVICE-"
+	secntfyMaxText     = 150 // Zeichen (Vorgabe der Bibliothek)
 )
+
+// secntfyServer: Server der IPv64 App, fest und nicht einstellbar (Variable nur fuer Tests).
+var secntfyServer = "https://api.secntfy.app"
 
 type secntfySender struct{ ua string }
 
 func (s secntfySender) Send(ctx context.Context, ch *Channel, m Message) error {
-	server := strings.TrimRight(ch.Config["server"], "/")
-	if server == "" {
-		server = secntfyDefaultServer
-	}
+	server := secntfyServer
 	token := strings.TrimSpace(ch.Config["device_key"])
 	if !validSecntfyToken(token) {
 		return errors.New("secntfy: device token must start with " + secntfyTokenPrefix)

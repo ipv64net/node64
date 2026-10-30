@@ -1099,8 +1099,9 @@ func (d *Dispatcher) send(ctx context.Context, ch *Channel, m Message) {
 	}
 }
 
-// apiType: Kanaltypen, die die ipv64-API zustellt (die anderen Portal-Kanaele sendet die Node selbst).
-func apiType(t Type) bool { return t == TypeIPv64Mail || t == TypeIPv64SMS || t == TypeApp }
+// apiType: Kanaltypen, die die ipv64-API zustellt (die anderen Portal-Kanaele sendet die Node selbst, auch die
+// IPv64 App ueber SecNtfy).
+func apiType(t Type) bool { return t == TypeIPv64Mail || t == TypeIPv64SMS }
 
 // apiSender macht aus der Versandfunktion einen Sender.
 type apiSender func(ctx context.Context, ch *Channel, m Message) error
@@ -1133,7 +1134,7 @@ func (d *Dispatcher) record(ctx context.Context, ch *Channel, m Message, err err
 // userTarget: Kanaltypen, deren Ziel (Server, URL, Mailserver) der Nutzer frei angibt.
 func userTarget(t Type) bool {
 	switch t {
-	case TypeWebhook, TypeNtfy, TypeGotify, TypeIGotify, TypeSMTP, TypeMatrix, TypeSlack, TypeTeams, TypeDiscord, TypeSecNtfy:
+	case TypeWebhook, TypeNtfy, TypeGotify, TypeIGotify, TypeSMTP, TypeMatrix, TypeSlack, TypeTeams, TypeDiscord:
 		return true
 	}
 	return false
