@@ -6,6 +6,9 @@
 //
 // Docker: ein Docker-Host ist ein System der Art KindDocker (docker.go), seine Container sind Gaeste vom Typ
 // TypeDocker (Key docker/<name>). Regeln, Verlauf, Einstellungen und Benachrichtigung sind dieselben.
+//
+// Proxmox Backup Server: ein System der Art KindPBS (pbs.go) mit genau einem Node und ohne Gaeste; seine Datastores
+// stehen nur zur Anzeige im Snapshot (Snapshot.PBS).
 package proxmox
 
 import (
@@ -20,12 +23,13 @@ import (
 const (
 	KindPVE    = "pve"
 	KindDocker = "docker"
+	KindPBS    = "pbs"
 )
 
 // System ist ein eingerichtetes Proxmox-System (Einzel-Node oder Cluster) bzw. ein Docker-Host (Kind docker).
 type System struct {
 	ID        int64     `json:"id"`
-	Kind      string    `json:"kind"`                 // pve (Standard) oder docker
+	Kind      string    `json:"kind"`                 // pve (Standard), docker oder pbs
 	Name      string    `json:"name"`                 // Anzeigename (Standard: Clustername bzw. Node-Name)
 	Addresses []string  `json:"addresses"`            // https://host:8006 – eine reicht, weitere Nodes kommen aus cluster/status; Docker: unix:///var/run/docker.sock
 	TokenID   string    `json:"token_id"`             // user@realm!tokenid
@@ -193,6 +197,7 @@ type Snapshot struct {
 	Warning   string      `json:"warning,omitempty"` // erreichbar, aber eingeschraenkt (z. B. Token ohne Leserechte: Gaeste fehlen)
 	Resources []Resource  `json:"resources"`
 	Docker    *DockerInfo `json:"docker,omitempty"` // nur Docker-Host: /info
+	PBS       *PBSInfo    `json:"pbs,omitempty"`    // nur Proxmox Backup Server: Datastores
 	// Interval ist das Abfrageintervall des Pollers: die Verzoegerung „nicht erreichbar“ zaehlt auch zeitlich
 	// (schnelle Wiederholungen nach Fehlern verkuerzen sie nicht); nur von Run gesetzt, 0 = nur Abfragen zaehlen.
 	Interval time.Duration `json:"-"`
@@ -220,6 +225,9 @@ func NewSource(log *slog.Logger, sys System, fn SnapshotFunc) Source {
 	if sys.IsDocker() {
 		return NewDockerPoller(log, sys, fn)
 	}
+	if sys.IsPBS() {
+		return NewPBSPoller(log, sys, fn)
+	}
 	return NewPoller(log, sys, fn)
 }
 
@@ -232,6 +240,7 @@ type ProbeResult struct {
 	Cluster     string   `json:"cluster,omitempty"`
 	Nodes       []string `json:"nodes,omitempty"`
 	Guests      int      `json:"guests"`
+	Datastores  int      `json:"datastores,omitempty"` // nur PBS
 	CertSHA256  string   `json:"cert_sha256"`
 	CertSubject string   `json:"cert_subject,omitempty"`
 	CertTrusted bool     `json:"cert_trusted"`           // von der System-CA bestaetigt

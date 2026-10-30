@@ -3,16 +3,17 @@
 <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
 	<h1 class="h4 mb-0 me-auto"><i class="bi bi-hdd-rack text-primary me-1"></i> {{.T "nav.proxmox"}}{{$.Doc "proxmox"}}</h1>
 	<a class="btn btn-outline-secondary btn-sm" href="/healthchecks/proxmox" title="{{.T "logs.refresh"}}"><i class="bi bi-arrow-clockwise"></i></a>
-	{{if not $d.NoBox}}<a class="btn btn-primary btn-sm" href="/healthchecks/proxmox/new"><i class="bi bi-plus-lg"></i> {{.T "pve.add"}}</a>{{end}}
+	{{if not $d.NoBox}}<a class="btn btn-primary btn-sm" href="/healthchecks/proxmox/new"><i class="bi bi-plus-lg"></i> {{.T "pve.add"}}</a>
+	<a class="btn btn-outline-primary btn-sm" href="/healthchecks/proxmox/new?kind=pbs" id="pbs-add"><i class="bi bi-plus-lg"></i> {{.T "pve.pbs.add"}}</a>{{end}}
 </div>
-<p class="text-body-secondary small">{{.T "pve.hint"}}</p>
+<p class="text-body-secondary small">{{.T "pve.hint"}} {{.T "pve.pbs.hint"}}</p>
 {{if $d.NoBox}}<div class="alert alert-danger small"><i class="bi bi-key"></i> {{.T "pve.err.no_box"}}</div>{{end}}
 {{if not $d.Systems}}
 <div class="card"><div class="card-body text-center text-body-secondary py-4">
 	<i class="bi bi-hdd-rack fs-1 d-block mb-2"></i>
 	<div>{{.T "pve.empty"}}</div>
 	<div class="small mt-1">{{.T "pve.empty_hint"}}</div>
-	{{if not $d.NoBox}}<div class="mt-3"><a class="btn btn-primary" href="/healthchecks/proxmox/new"><i class="bi bi-plus-lg"></i> {{.T "pve.add"}}</a></div>{{end}}
+	{{if not $d.NoBox}}<div class="mt-3 d-flex flex-wrap justify-content-center gap-2"><a class="btn btn-primary" href="/healthchecks/proxmox/new"><i class="bi bi-plus-lg"></i> {{.T "pve.add"}}</a><a class="btn btn-outline-primary" href="/healthchecks/proxmox/new?kind=pbs"><i class="bi bi-plus-lg"></i> {{.T "pve.pbs.add"}}</a></div>{{end}}
 </div></div>
 {{else}}
 {{$s := $d.Sum}}
@@ -29,14 +30,14 @@
 		<tbody>
 		{{range $d.Systems}}
 		<tr{{if eq .State "off"}} class="text-body-tertiary"{{else if or (eq .State "down") (eq .State "error")}} class="hc-row-down"{{else if eq .State "warn"}} class="hc-row-warn"{{end}}>
-			<td data-label="{{$.T "common.name"}}"><a href="{{.Path}}" class="fw-semibold">{{.Sys.Name}}</a>{{if .Sys.PinSHA256}} <i class="bi bi-pin-angle text-body-secondary" title="{{$.T "pve.pinned"}}"></i>{{end}}
+			<td data-label="{{$.T "common.name"}}"><a href="{{.Path}}" class="fw-semibold">{{.Sys.Name}}</a>{{if .Sys.IsPBS}} <span class="badge text-bg-light" title="Proxmox Backup Server">PBS</span>{{end}}{{if .Sys.PinSHA256}} <i class="bi bi-pin-angle text-body-secondary" title="{{$.T "pve.pinned"}}"></i>{{end}}
 				<div class="small text-body-secondary text-truncate" style="max-width:22rem">{{range $i, $a := .Sys.Addresses}}{{if $i}}, {{end}}{{$a}}{{end}}</div></td>
 			<td data-label="{{$.T "common.status"}}"><span class="badge {{.Class}}">{{$.T (print "pve.sys_state." .State)}}</span>
 				{{if .Error}}<div class="small text-danger text-break">{{.Error}}</div>{{end}}</td>
 			<td data-label="{{$.T "pve.version"}}">{{with .Snap}}{{.Version}}{{end}}{{with .Update}} <span class="badge text-bg-info fw-normal" title="{{if .Major}}{{$.T "pve.update_major_hint" "installed" .Installed "latest" .Latest}}{{else}}{{$.T "pve.update_hint" "installed" .Installed "latest" .Latest}}{{end}}"><i class="bi bi-arrow-up-circle"></i> {{.Latest}}</span>{{end}}</td>
-			<td data-label="{{$.T "pve.cluster"}}">{{with .Snap}}{{if .Cluster}}{{.Cluster}} {{end}}{{end}}{{if eq .Quorum "ok"}}<span class="badge text-bg-success">{{$.T "pve.quorum_ok"}}</span>{{else if eq .Quorum "lost"}}<span class="badge text-bg-danger">{{$.T "pve.quorum_lost"}}</span>{{else if .ClusterUnknown}}<span class="badge text-bg-secondary" title="{{$.T "pve.cluster_unknown_hint"}}"><i class="bi bi-diagram-3"></i> {{$.T "pve.cluster_unknown"}}</span>{{else if .Snap}}<span class="text-body-secondary small">{{$.T "pve.single"}}</span>{{end}}</td>
+			<td data-label="{{$.T "pve.cluster"}}">{{if .Sys.IsPBS}}<span class="text-body-secondary small">–</span>{{else}}{{with .Snap}}{{if .Cluster}}{{.Cluster}} {{end}}{{end}}{{if eq .Quorum "ok"}}<span class="badge text-bg-success">{{$.T "pve.quorum_ok"}}</span>{{else if eq .Quorum "lost"}}<span class="badge text-bg-danger">{{$.T "pve.quorum_lost"}}</span>{{else if .ClusterUnknown}}<span class="badge text-bg-secondary" title="{{$.T "pve.cluster_unknown_hint"}}"><i class="bi bi-diagram-3"></i> {{$.T "pve.cluster_unknown"}}</span>{{else if .Snap}}<span class="text-body-secondary small">{{$.T "pve.single"}}</span>{{end}}{{end}}</td>
 			<td data-label="{{$.T "pve.nodes"}}" class="text-end">{{if .Nodes}}<span class="{{if lt .NodesOnline .Nodes}}text-danger fw-semibold{{end}}">{{.NodesOnline}}/{{.Nodes}}</span>{{else}}–{{end}}</td>
-			<td data-label="{{$.T "pve.guests"}}" class="text-end text-nowrap">{{if .Guests}}<span class="text-success" title="{{$.T "pve.running"}}"><i class="bi bi-play-fill"></i>{{.Running}}</span>{{if .Bad}} <span class="text-danger fw-semibold" title="{{$.T "pve.bad"}}"><i class="bi bi-exclamation-octagon"></i>{{.Bad}}</span>{{end}} <span class="text-body-secondary">/ {{.Guests}}</span>{{else}}–{{end}}</td>
+			<td data-label="{{$.T "pve.guests"}}" class="text-end text-nowrap">{{if .Sys.IsPBS}}{{if .Snap}}<span class="text-body-secondary" title="{{$.T "pve.pbs.datastores"}}"><i class="bi bi-database"></i> {{.Datastores}}</span>{{else}}–{{end}}{{else if .Guests}}<span class="text-success" title="{{$.T "pve.running"}}"><i class="bi bi-play-fill"></i>{{.Running}}</span>{{if .Bad}} <span class="text-danger fw-semibold" title="{{$.T "pve.bad"}}"><i class="bi bi-exclamation-octagon"></i>{{.Bad}}</span>{{end}} <span class="text-body-secondary">/ {{.Guests}}</span>{{else}}–{{end}}</td>
 			<td data-label="{{$.T "pve.last_poll"}}" class="small text-nowrap">{{with .Snap}}{{$.Ago .Time}}{{else}}–{{end}} <span class="text-body-secondary">· {{.Sys.Interval}} s</span></td>
 			<td data-label="{{$.T "common.actions"}}" class="text-end text-nowrap">
 				<a class="btn btn-sm btn-outline-primary" href="{{.Path}}/edit" title="{{$.T "pve.edit"}}"><i class="bi bi-pencil"></i></a>

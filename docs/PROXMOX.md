@@ -160,15 +160,47 @@ nicht auf andere Nodes verschiebbar). Ausschalten des Systems pausiert seine Che
 Stundenwerte so lange wie „Stundenwerte aufbewahren“ (`hc.hourly_days`, 0 = unbegrenzt) – dieselben lokalen
 Einstellungen wie die Healthchecks.
 
+## Proxmox Backup Server
+
+Rechts oben auf der Seite Proxmox VE: „Proxmox Backup Server hinzufügen“ (`/healthchecks/proxmox/new?kind=pbs`). Der
+Assistent ist derselbe wie bei Proxmox VE (Adresse, Token, Test, Fingerabdruck bestätigen); ohne Port gilt 8007, der
+Kopf heißt `Authorization: PBSAPIToken=user@realm!tokenid:secret`.
+
+Token auf dem PBS (nur lesen, Rolle **Audit** auf `/` – darin stecken Sys.Audit und Datastore.Audit):
+
+```
+proxmox-backup-manager user create node64@pbs
+proxmox-backup-manager user generate-token node64@pbs monitor
+proxmox-backup-manager acl update / Audit --auth-id 'node64@pbs!monitor'
+```
+
+Ein PBS ist ein System der Art `pbs` mit genau einem Node (Key `node/localhost`, wie die PBS-API ihn nennt – den
+Hostnamen liefert sie mit der Rolle Audit nicht; angezeigt wird der Name des Systems) und ohne Gäste.
+
+| Takt | Endpunkt | wofür |
+|---|---|---|
+| Intervall | `/nodes/localhost/status` | CPU, RAM, Root-Disk, Uptime (Neustart) |
+| Intervall | `/nodes/localhost/rrd?timeframe=hour&cf=AVERAGE` | letzter Minutenwert: Netz (`netin`/`netout`), Disk-I/O (`read_bytes`/`write_bytes`) |
+| Intervall | `/nodes/localhost/services` | `proxmox-backup`, `proxmox-backup-proxy` (Anzeige, rot wenn nicht `running`) |
+| Intervall | `/status/datastore-usage` | Größe, Belegung, `estimated-full-date`, Dedup (`gc-status`: `index-data-bytes` / `disk-bytes`) |
+| 10 min | `/version`, `/nodes/localhost/apt/update` | Version (`4.2` + Release `6` = 4.2.6); verfügbare Version von `proxmox-backup-server` für das Badge |
+| 10 min | `/admin/datastore/{store}/namespace`, `…/groups?ns=` | Gruppen, Snapshots, letztes Backup je Datastore über alle Namespaces (höchstens 50) |
+| 10 min | `/nodes/localhost/tasks?errors=1&since=…` | fehlgeschlagene Tasks der letzten 7 Tage (höchstens 10) |
+
+Überwacht (Regeln, Benachrichtigung, „als Check“ mit dem Typ `proxmox`, nur lokal) wird nur das Host-System: nicht
+erreichbar, Neustart, Schwellen für CPU, RAM und Disk. Datastores, Backups, Tasks und Dienste stehen nur zur
+Information da – keine Regeln, keine Meldungen. „Geschätzt voll“ ist die Schätzung des PBS (lineare Regression über
+den letzten Monat); liegt sie in der Vergangenheit, sinkt die Belegung oder bleibt gleich („nicht absehbar“).
+
 ## API
 
 Unter `/api/healthchecks/proxmox` (Anmeldung wie die übrige API, siehe `/api/docs`):
 
 | Methode | Pfad | |
 |---|---|---|
-| GET / POST | `/systems` | Liste (mit Zustand, ohne Secret) / anlegen |
+| GET / POST | `/systems` | Liste (Proxmox VE und Backup Server, mit Zustand, ohne Secret; `?kind=pve`, `pbs`, `all`) / anlegen (`kind`: `pve` Standard, `pbs`); beim PBS steht unter `pbs` der Stand der Datastores, Dienste und Tasks |
 | GET / PUT / DELETE | `/systems/{id}` | lesen / Teiländerung (leeres `secret` behält es) / löschen |
-| POST | `/probe` | Verbindung testen (Fingerabdruck, Version, Nodes, Gäste) |
+| POST | `/probe` | Verbindung testen (Fingerabdruck, Version, Nodes, Gäste; mit `kind: pbs` Version und Zahl der Datastores) |
 | GET | `/systems/{id}/resources` | Nodes und Gäste der letzten Abfrage |
 | GET | `/systems/{id}/series?key=qemu/101&range=24h` | Verlauf (`1h`, `24h`, `7d`, `30d`) |
 | GET / PUT / DELETE | `/systems/{id}/settings[?key=…]` | Einstellungen und wirksame Regeln / Ebene setzen (`as_check` legt den Check an; `rules.channels`: fehlt = erben, `[]` = Standardkanäle, sonst Kanal-IDs; Gast: `expect_running` `true`/`false`/`null`, `false` = „gestoppt ist richtig“) / zurücksetzen |

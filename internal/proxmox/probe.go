@@ -33,7 +33,7 @@ func probe(ctx context.Context, sys System, roots *x509.CertPool, dialTO, reqTO 
 	// Zertifikat von der ersten erreichbaren Adresse.
 	var addrs []string
 	for _, a := range sys.Addresses {
-		if n, ok := NormalizeAddress(a); ok {
+		if n, ok := NormalizeAddressFor(sys.Kind, a); ok {
 			addrs = append(addrs, n)
 		}
 	}
@@ -77,6 +77,10 @@ func probe(ctx context.Context, sys System, roots *x509.CertPool, dialTO, reqTO 
 	c, err := newClient(test, roots, dialTO, reqTO)
 	if err != nil {
 		res.Error = err.Error()
+		return res
+	}
+	if sys.IsPBS() {
+		pbsProbe(ctx, c, sys, &res)
 		return res
 	}
 	var v pveVersion

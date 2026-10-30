@@ -174,6 +174,8 @@ func (e *Engine) Evaluate(snap *Snapshot, set *SystemSettings) []Event {
 	sysWord := "Proxmox"
 	if set != nil && set.Kind == KindDocker {
 		sysWord = "Docker"
+	} else if set != nil && set.Kind == KindPBS {
+		sysWord = "Proxmox Backup Server"
 	}
 	var evs []Event
 	add := func(ev Event) {

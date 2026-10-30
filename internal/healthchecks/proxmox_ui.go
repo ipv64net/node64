@@ -56,7 +56,8 @@ type pveSysRow struct {
 	CPUCores    float64 // belegte Kerne der Nodes (online)
 	CPUMax      float64
 	Mem, MemMax int64
-	Update      *verUpdate // neuere Version von Proxmox VE bzw. Docker (nur Hinweis, latest.go)
+	Update      *verUpdate // neuere Version von Proxmox VE, Backup Server bzw. Docker (nur Hinweis, latest.go)
+	Datastores  int        // Proxmox Backup Server: sichtbare Datastores
 }
 
 // CPUText: belegte CPU bezogen auf die Kerne (Nodes bzw. Docker-Host), "" ohne Werte.
@@ -229,7 +230,7 @@ func pveRow(id int64, r proxmox.Resource, set *proxmox.SystemSettings) pveResRow
 		if v, ok := r.DiskPercent(); ok {
 			row.Disk = pvePctText(v)
 		}
-		if r.Type != proxmox.TypeNode {
+		if r.Type != proxmox.TypeNode || set != nil && set.Kind == proxmox.KindPBS { // PBS: Netz und I/O aus der RRD
 			row.Rates = true
 			row.NetIn, row.NetOut, row.DiskRd, row.DiskWr = pveRate(r.NetIn), pveRate(r.NetOut), pveRate(r.DiskRead), pveRate(r.DiskWrite)
 		}
@@ -243,7 +244,7 @@ func (m *Module) pveSysView(ctx context.Context, sys *proxmox.System) pveSysRow 
 	row := pveSysRow{Sys: sys, Path: pveKeyPath(sys.Kind, sys.ID, "")}
 	set, _ := m.pve.st.Settings(ctx, sys.ID)
 	if set == nil {
-		set = &proxmox.SystemSettings{SystemID: sys.ID, Name: sys.Name}
+		set = &proxmox.SystemSettings{SystemID: sys.ID, Name: sys.Name, Kind: sys.Kind}
 	}
 	row.Settings = set
 	pp, reason := m.pvePollOf(sys.ID)
@@ -270,6 +271,12 @@ func (m *Module) pveSysView(ctx context.Context, sys *proxmox.System) pveSysRow 
 	}
 	row.State = "ok"
 	row.Update = latestUpdate(sys.Kind, s.Version)
+	if s.PBS != nil {
+		row.Datastores = len(s.PBS.Datastores)
+		if s.PBS.UpdateOK { // PBS: was apt auf diesem System anbietet (genauer als das Repository)
+			row.Update = aptUpdate(s.Version, s.PBS.Update)
+		}
+	}
 	for _, r := range s.Resources {
 		x := pveRow(sys.ID, r, set)
 		if r.Type == proxmox.TypeNode {
@@ -420,6 +427,50 @@ type pveSystemData struct {
 	NodeNames []string
 	States    []string
 	Rules     pveRulesForm
+	DS        []pbsDSRow // Proxmox Backup Server: Datastores (nur Anzeige)
+	PBS       *proxmox.PBSInfo
+}
+
+// pbsDSRow ist ein Datastore eines PBS in der Tabelle (nur Anzeige, keine Regeln).
+type pbsDSRow struct {
+	proxmox.PBSDatastore
+	Pct      string    // Belegung in Prozent ("" = unbekannt)
+	PctVal   float64   // fuer den Balken
+	Class    string    // Farbe des Balkens (nur Hinweis)
+	FullAt   time.Time // geschaetzt voll (Null = keine Schaetzung bzw. nicht absehbar)
+	FullSoon bool      // in weniger als 30 Tagen
+	NoFull   bool      // Schaetzung in der Vergangenheit: Belegung sinkt oder bleibt gleich
+	Last     time.Time // letztes Backup (Null = keins bzw. unbekannt)
+	DedupTxt string    // Dedup-Faktor, z. B. "2.5"
+}
+
+func pbsDSRows(list []proxmox.PBSDatastore, now time.Time) []pbsDSRow {
+	out := make([]pbsDSRow, 0, len(list))
+	for _, ds := range list {
+		row := pbsDSRow{PBSDatastore: ds, Class: "bg-success"}
+		if v, ok := ds.UsedPercent(); ok {
+			row.Pct, row.PctVal = pvePctText(v), math.Min(v, 100)
+			switch {
+			case v >= 90:
+				row.Class = "bg-danger"
+			case v >= 75:
+				row.Class = "bg-warning"
+			}
+		}
+		if ds.LastBackup > 0 {
+			row.Last = time.Unix(ds.LastBackup, 0)
+		}
+		if ds.Dedup > 0 {
+			row.DedupTxt = strconv.FormatFloat(ds.Dedup, 'f', 1, 64)
+		}
+		if t, ok := ds.FullTime(now); ok {
+			row.FullAt, row.FullSoon = t, t.Sub(now) < 30*24*time.Hour
+		} else if ds.Full > 0 {
+			row.NoFull = true
+		}
+		out = append(out, row)
+	}
+	return out
 }
 
 func (d pveSystemData) Crumb() string { return d.Sys.Name }
@@ -459,6 +510,9 @@ func (m *Module) pagePVESystem(w http.ResponseWriter, r *http.Request) {
 	d.Filter = map[string]string{"state": q.Get("state"), "node": q.Get("node"), "type": q.Get("type"), "q": strings.TrimSpace(q.Get("q"))}
 	d.Rules = pveRulesFor(d.Settings, "", "", d.Path+"/settings")
 	m.pveRulesChannels(ctx, &d.Rules, d.Settings, "", "")
+	if d.Snap != nil && d.Snap.OK && d.Snap.PBS != nil {
+		d.DS, d.PBS = pbsDSRows(d.Snap.PBS.Datastores, time.Now()), d.Snap.PBS
+	}
 	if d.Snap != nil && d.Snap.OK {
 		sparks := m.pveSparks(ctx, sys.ID)
 		perNode := map[string]int{}
@@ -665,6 +719,7 @@ func pveRulesFor(set *proxmox.SystemSettings, key, node, action string) pveRules
 	level := pveLevel(key)
 	f := pveRulesForm{Level: level, Key: key, Action: action, Text: level}
 	docker := set != nil && set.Kind == proxmox.KindDocker
+	pbs := set != nil && set.Kind == proxmox.KindPBS
 	if docker {
 		f.Text = map[string]string{"system": "docker_system", "guest": "container"}[level]
 	}
@@ -698,6 +753,9 @@ func pveRulesFor(set *proxmox.SystemSettings, key, node, action string) pveRules
 		}
 		if docker && (rd.name == "suspended" || rd.name == "offline" || rd.name == "disk") {
 			continue // gibt es bei Docker nicht
+		}
+		if pbs && (rd.name == "crashed" || rd.name == "stopped" || rd.name == "paused" || rd.name == "suspended") {
+			continue // PBS: keine Gaeste
 		}
 		fl := pveRuleField{Name: rd.name, Label: "pve.rule." + rd.name, Kind: rd.kind, From: "pve.rules.from_default"}
 		if docker && (rd.name == "crashed" || rd.name == "unreachable") {
@@ -1081,8 +1139,9 @@ type pveFormData struct {
 	Errors     map[string]string
 	Error      string
 	NoBox      bool
-	User       string // fuer die pveum-Befehle
+	User       string // fuer die pveum- bzw. proxmox-backup-manager-Befehle
 	TokenName  string
+	PBS        bool // Proxmox Backup Server
 	MinIv      int
 	MaxIv      int
 }
@@ -1097,7 +1156,10 @@ func (d pveFormData) Crumb() string {
 func (m *Module) pveFormData(sys *proxmox.System, edit bool) pveFormData {
 	d := pveFormData{Sys: sys, Edit: edit, Addresses: strings.Join(sys.Addresses, "\n"), NoBox: m.pve.box == nil, Errors: map[string]string{},
 		MinIv: proxmox.MinInterval, MaxIv: proxmox.MaxInterval, PinFmt: pveFingerprint(sys.PinSHA256)}
-	d.User, d.TokenName = "node64@pve", "monitor"
+	d.User, d.TokenName, d.PBS = "node64@pve", "monitor", sys.IsPBS()
+	if d.PBS {
+		d.User = "node64@pbs"
+	}
 	if u, t, ok := strings.Cut(sys.TokenID, "!"); ok && u != "" && t != "" {
 		d.User, d.TokenName = u, t
 	}
@@ -1105,7 +1167,7 @@ func (m *Module) pveFormData(sys *proxmox.System, edit bool) pveFormData {
 }
 
 func (m *Module) pagePVEForm(w http.ResponseWriter, r *http.Request) {
-	sys := &proxmox.System{Interval: proxmox.DefaultInterval, Enabled: true}
+	sys := &proxmox.System{Kind: pveFormKind(r.URL.Query().Get("kind")), Interval: proxmox.DefaultInterval, Enabled: true}
 	edit := r.PathValue("id") != ""
 	if edit {
 		if sys = m.pveSystemOf(w, r); sys == nil {
@@ -1124,13 +1186,24 @@ func (m *Module) pagePVEForm(w http.ResponseWriter, r *http.Request) {
 
 func (m *Module) renderPVEForm(w http.ResponseWriter, r *http.Request, status int, d pveFormData) {
 	title := "pve.add"
+	if d.PBS {
+		title = "pve.pbs.add"
+	}
 	if d.Edit {
 		title = "pve.edit"
 	}
 	m.g.Render(w, r, status, Name+"/proxmox_form", title, d)
 }
 
-// pveSystemFromForm liest die Felder des Formulars in sys (Secret leer = beim Bearbeiten behalten).
+// pveFormKind: Art eines neuen Systems aus dem Formular (pbs, sonst Proxmox VE).
+func pveFormKind(v string) string {
+	if v == proxmox.KindPBS {
+		return proxmox.KindPBS
+	}
+	return proxmox.KindPVE
+}
+
+// pveSystemFromForm liest die Felder des Formulars in sys (Secret leer = beim Bearbeiten behalten; die Art bleibt).
 func pveSystemFromForm(r *http.Request, sys *proxmox.System) {
 	sys.Name = strings.TrimSpace(r.PostFormValue("name"))
 	sys.Addresses = strings.FieldsFunc(r.PostFormValue("addresses"), func(c rune) bool { return c == '\n' || c == '\r' || c == ',' || c == ' ' })
@@ -1158,7 +1231,9 @@ func (m *Module) pagePVESave(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, dockerSysPath(old.ID)+"/edit", http.StatusSeeOther)
 			return
 		}
-		sys.ID, sys.Created, stored = old.ID, old.Created, old.Secret
+		sys.ID, sys.Created, sys.Kind, stored = old.ID, old.Created, old.Kind, old.Secret
+	} else {
+		sys.Kind = pveFormKind(r.PostFormValue("kind"))
 	}
 	pveSystemFromForm(r, sys)
 	d := m.pveFormData(sys, edit)
@@ -1236,7 +1311,7 @@ func (m *Module) pagePVESave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if sys.Name == "" {
-		sys.Name = pveHostOf(sys.Addresses)
+		sys.Name = pveHostOf(sys.Kind, sys.Addresses)
 	}
 	if err := m.pveSaveSystem(r, sys); err != nil {
 		var fe *proxmox.FieldError
@@ -1257,9 +1332,9 @@ func (m *Module) pagePVESave(w http.ResponseWriter, r *http.Request) {
 }
 
 // pveHostOf: Name aus der ersten Adresse (Host ohne Port).
-func pveHostOf(addrs []string) string {
+func pveHostOf(kind string, addrs []string) string {
 	for _, a := range addrs {
-		if n, ok := proxmox.NormalizeAddress(a); ok {
+		if n, ok := proxmox.NormalizeAddressFor(kind, a); ok {
 			h := strings.TrimPrefix(n, "https://")
 			if i := strings.LastIndex(h, ":"); i > 0 {
 				h = h[:i]
