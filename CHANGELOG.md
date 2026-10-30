@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Benachrichtigungen: SecNtfy heißt jetzt „IPv64 App“; nur noch der Geräte-Token wird eingetragen, der Server ist fest.
 - Healthchecks: Eigene Kanäle für eine einzelne VM, einen Container oder Node werden wieder gespeichert, auch wenn das
   Feld noch auf „erben“ stand.
 - Honeypot64: Fallen können „verwundbar wirken“ und zeigen dann ältere, bekannt verwundbare Versionen (z. B. Apache

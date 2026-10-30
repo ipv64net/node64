@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Notifications: SecNtfy is now called “IPv64 App”; you only enter the device token, the server is fixed.
 - Healthchecks: Own channels for a single VM, container or node are saved again, even if the field still said
   “inherit”.
 - Honeypot64: Traps can “look vulnerable” and then show older, known vulnerable versions (e.g. Apache 2.4.49, OpenSSH

@@ -751,8 +751,9 @@ function hc2_channel_types(): array {
 			array('key' => 'email', 'label' => 'E-Mail-Adresse', 'required' => true, 'kind' => 'email'))),
 		'ipv64_sms' => array('label' => 'SMS (ipv64)', 'icon' => 'fa-mobile-screen', 'verify' => true, 'fields' => array(
 			array('key' => 'number', 'label' => 'Mobilnummer mit Ländervorwahl, z. B. +49 177 1234567 oder 0049 177 1234567', 'required' => true, 'kind' => 'text'))),
-		'app' => array('label' => 'IPv64 App (Push)', 'icon' => 'fa-bell', 'fields' => array(
-			array('key' => 'device_token', 'label' => 'Geräte-Token aus der App', 'required' => true, 'secret' => true, 'kind' => 'password'))),
+		'app' => array('label' => 'IPv64 App', 'icon' => 'fa-mobile-screen-button', 'hint' => 'Push-Nachrichten an die IPv64 App, Ende-zu-Ende verschlüsselt: Titel und Text werden mit dem Schlüssel deines Geräts verschlüsselt, nur das Gerät kann sie lesen. Geräte-Token (NTFY-DEVICE-…) aus der IPv64 App eintragen. Lange Meldungen kommen in der App gekürzt an (Text höchstens 150 Zeichen).', 'fields' => array(
+			array('key' => 'device_key', 'label' => 'Geräte-Token aus der IPv64 App (NTFY-DEVICE-…)', 'required' => true, 'secret' => true, 'kind' => 'password'),
+			array('key' => 'critical', 'label' => 'Störungen als kritischen Alarm senden (kommt auch im Lautlos-Modus durch)', 'kind' => 'bool'))),
 		'telegram' => array('label' => 'Telegram', 'icon' => 'fa-paper-plane', 'fields' => array(
 			array('key' => 'bot_token', 'label' => 'Bot-Token', 'required' => true, 'secret' => true, 'kind' => 'password'), array('key' => 'chat_id', 'label' => 'Chat-ID', 'required' => true, 'kind' => 'text'),
 			array('key' => 'silent', 'label' => 'Lautlos senden', 'kind' => 'bool'))),
@@ -774,10 +775,6 @@ function hc2_channel_types(): array {
 		'pushover' => array('label' => 'Pushover', 'icon' => 'fa-bell', 'fields' => array(
 			array('key' => 'user_key', 'label' => 'User-Key', 'required' => true, 'secret' => true, 'kind' => 'password'), array('key' => 'app_token', 'label' => 'App-Token', 'required' => true, 'secret' => true, 'kind' => 'password'), array('key' => 'device', 'label' => 'Gerät (optional)', 'kind' => 'text'),
 			array('key' => 'priority_down', 'label' => 'Priorität bei Störung', 'kind' => 'select', 'options' => array('-2','-1','0','1','2'), 'default' => '1'), array('key' => 'priority_up', 'label' => 'Priorität bei Entwarnung', 'kind' => 'select', 'options' => array('-2','-1','0','1','2'), 'default' => '0'))),
-		'secntfy' => array('label' => 'SecNtfy (verschlüsselt)', 'icon' => 'fa-user-shield', 'hint' => 'Ende-zu-Ende verschlüsselte Push-Nachrichten: Titel und Text werden mit dem Schlüssel deines Geräts verschlüsselt. Geräte-Token (NTFY-DEVICE-…) aus der SecNtfy-App eintragen. Lange Meldungen kommen bei SecNtfy gekürzt an (Text höchstens 150 Zeichen).', 'fields' => array(
-			array('key' => 'device_key', 'label' => 'Geräte-Token (NTFY-DEVICE-…)', 'required' => true, 'secret' => true, 'kind' => 'password'),
-			array('key' => 'server', 'label' => 'Server', 'required' => true, 'kind' => 'url', 'default' => 'https://api.secntfy.app'),
-			array('key' => 'critical', 'label' => 'Störungen als kritischen Alarm senden (kommt auch im Lautlos-Modus durch)', 'kind' => 'bool'))),
 		'webhook' => array('label' => 'Webhook', 'icon' => 'fa-link', 'fields' => array(
 			array('key' => 'url', 'label' => 'URL', 'required' => true, 'kind' => 'url'), array('key' => 'method', 'label' => 'Methode', 'kind' => 'select', 'options' => array('POST','PUT','GET'), 'default' => 'POST'),
 			array('key' => 'headers', 'label' => 'Zusätzliche Header (eine je Zeile: Name: Wert)', 'kind' => 'textarea', 'secret' => true), array('key' => 'body', 'label' => 'Eigener Body (leer = JSON-Standard)', 'kind' => 'textarea'),
@@ -813,7 +810,7 @@ function hc2_channel(int $userid, int $id, bool $withSecrets = false): ?array {
 }
 
 /**
- * Ziele der Server-Kanaele (Webhook-/ntfy-/Gotify-/Matrix-/SecNtfy-URL, SMTP-Host): die hubs senden online, interne
+ * Ziele der Server-Kanaele (Webhook-/ntfy-/Gotify-/Matrix-URL, SMTP-Host): die hubs senden online, interne
  * Ziele sind verboten (sonst SSRF auf Dienste der hubs). Oeffentlich = nicht privat, Loopback, Link-Local (auch
  * Metadaten 169.254.169.254), ULA, CGNAT, Doku-/Benchmark-Netze, Multicast, reserviert; IPv4 in IPv6 (::ffff:, 64:ff9b::)
  * wird als IPv4 geprueft. Der hub prueft beim Verbindungsaufbau zusaetzlich (DNS kann sich aendern).
@@ -871,8 +868,7 @@ function hc2_channel_config(string $type, array $in, ?array $old): array {
 		if ($type === 'smtp' && $k === 'port' && !in_array($v, array('25', '465', '587', '2525'), true)) { $err[] = 'Port: erlaubt sind 25, 465, 587 und 2525.'; }
 		if ($type === 'matrix' && $k === 'room' && $v !== '' && !preg_match('/^[!#][^:\s]+:\S+$/', $v)) { $err[] = 'Raum bitte als Raum-ID (!abc:matrix.org) oder Alias (#raum:matrix.org) angeben.'; }
 		if ($type === 'matrix' && $k === 'server') { $v = rtrim($v, '/'); }
-		if ($type === 'secntfy' && $k === 'server') { $v = rtrim($v, '/'); }
-		if ($type === 'secntfy' && $k === 'device_key' && $v !== '' && !preg_match('/^NTFY-DEVICE-[^\x00-\x20\x7f]+$/', $v)) { $err[] = 'Geräte-Token muss mit NTFY-DEVICE- beginnen.'; }
+		if ($type === 'app' && $k === 'device_key' && $v !== '' && !preg_match('/^NTFY-DEVICE-[^\x00-\x20\x7f]+$/', $v)) { $err[] = 'Geräte-Token muss mit NTFY-DEVICE- beginnen.'; } // IPv64 App (SecNtfy, Server fest im hub)
 		if ($type === 'ipv64_sms' && $k === 'number') {
 			$plus = strpos($v, '+') === 0; $v = preg_replace('/[^0-9]/', '', $v);
 			if (!$plus && strpos($v, '0') === 0 && strpos($v, '00') !== 0) { $err[] = 'Mobilnummer bitte mit Ländervorwahl angeben, z. B. +49 177 1234567.'; }

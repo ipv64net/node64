@@ -1,7 +1,8 @@
 <?php
 /**
- * Healthchecks 2.0: gemeinsamer Versand ueber ipv64 (Mail, SMS, App) fuer die hub-Bruecke (hc2_send.php)
- * und die API v2 (POST /hc2/channels/{id}/send). Nutzt send_mail(), send_sms(), send_firebase() aus
+ * Healthchecks 2.0: gemeinsamer Versand ueber ipv64 (Mail, SMS) fuer die hub-Bruecke (hc2_send.php)
+ * und die API v2 (POST /hc2/channels/{id}/send). Die IPv64 App sendet der hub bzw. die Node selbst (SecNtfy).
+ * Nutzt send_mail() und send_sms() aus
  * dbconnect.php; $pdo ist die Verbindung der Webseite. Liefert '' bei Erfolg, sonst eine kurze Fehlermeldung.
  */
 
@@ -27,9 +28,6 @@ function hc2_deliver($pdo, string $type, string $to, string $subject, string $te
 		case 'sms':
 			if (!preg_match('/^[0-9]{6,20}$/', $to)) { return 'invalid number'; }
 			send_sms($pdo, json_encode(array('completenumber' => $to)), mb_substr($text, 0, 300), $updown, $userid);
-			return '';
-		case 'app':
-			send_firebase($pdo, json_encode(array('devicetoken' => $to)), mb_substr($text !== '' ? $text : $subject, 0, 200), $updown);
 			return '';
 	}
 	return 'unknown type';

@@ -19,6 +19,7 @@ if (hc2_is_post() && hc2_csrf_ok()) {
 	try {
 		if ($a === 'save') {
 			$type = $edit ? $edit['type'] : (string)($_POST['type'] ?? '');
+			if ($type === 'secntfy') { $type = 'app'; } // alter Name der IPv64 App
 			$name = mb_substr(trim((string)($_POST['name'] ?? '')), 0, 100);
 			if ($name === '') { $errors[] = 'Name fehlt.'; }
 			if (!isset($types[$type])) { $errors[] = 'Unbekannter Kanaltyp.'; }

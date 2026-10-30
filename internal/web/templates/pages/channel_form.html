@@ -23,7 +23,7 @@
 				{{if eq (print $d.Type) "slack"}}<div class="alert alert-info small py-2"><i class="bi bi-slack"></i> {{.T "nf.slack_hint"}}{{.Doc "notifications#slack"}}</div>{{end}}
 				{{if eq (print $d.Type) "teams"}}<div class="alert alert-info small py-2"><i class="bi bi-microsoft-teams"></i> {{.T "nf.teams_hint"}}{{.Doc "notifications#teams"}}</div>{{end}}
 				{{if eq (print $d.Type) "matrix"}}<div class="alert alert-info small py-2"><i class="bi bi-chat-square-dots"></i> {{.T "nf.matrix_hint"}}{{.Doc "notifications#matrix"}}</div>{{end}}
-				{{if eq (print $d.Type) "secntfy"}}<div class="alert alert-info small py-2"><i class="bi bi-shield-lock"></i> {{.T "nf.secntfy_hint"}}{{.Doc "notifications#secntfy"}}</div>{{end}}
+				{{if eq (print $d.Type) "app"}}<div class="alert alert-info small py-2"><i class="bi bi-shield-lock"></i> {{.T "nf.app_hint"}}{{.Doc "notifications#ipv64-app"}}</div>{{end}}
 				{{range $d.Fields}}
 				{{$key := print "cfg_" .Key}}
 				<div class="mb-3">

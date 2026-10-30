@@ -15,8 +15,8 @@ import (
 	"unicode/utf8"
 )
 
-// secntfyServer bildet api.secntfy.app nach: Schluessel zum Geraete-Token, Nachricht entschluesseln.
-type secntfyServer struct {
+// secntfyFake bildet api.secntfy.app nach: Schluessel zum Geraete-Token, Nachricht entschluesseln.
+type secntfyFake struct {
 	key    *rsa.PrivateKey
 	pkcs1  bool // Schluessel als PKCS#1 statt SubjectPublicKeyInfo
 	status int  // Status in der Antwort auf POST /Message
@@ -25,7 +25,7 @@ type secntfyServer struct {
 	plain  []map[string]string
 }
 
-func (f *secntfyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (f *secntfyFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	tok := r.Header.Get("X-NTFYME-DEVICE-KEY")
 	if tok != "NTFY-DEVICE-abc123" {
 		w.WriteHeader(401)
@@ -65,22 +65,25 @@ func (f *secntfyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func newSecntfy(t *testing.T) (*secntfyServer, *httptest.Server) {
+func newSecntfy(t *testing.T) (*secntfyFake, *httptest.Server) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &secntfyServer{key: key}
+	f := &secntfyFake{key: key}
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
+	old := secntfyServer
+	secntfyServer = srv.URL
+	t.Cleanup(func() { secntfyServer = old })
 	return f, srv
 }
 
 // Titel, Text und Bild kommen verschluesselt an und lassen sich mit dem Schluessel des Geraets lesen; kritisch nur bei
 // Stoerung und eingeschaltetem Schalter.
 func TestSecNtfySend(t *testing.T) {
-	f, srv := newSecntfy(t)
-	ch := &Channel{Type: TypeSecNtfy, Config: map[string]string{"server": srv.URL + "/", "device_key": "NTFY-DEVICE-abc123", "critical": "true"}}
+	f, _ := newSecntfy(t)
+	ch := &Channel{Type: TypeApp, Config: map[string]string{"device_key": "NTFY-DEVICE-abc123", "critical": "true"}}
 	s := secntfySender{"node64/test"}
 	if err := s.Send(context.Background(), ch, Message{Kind: KindDown, Title: "Check web ist gestört", Text: "Grund: Timeout\n\nSeit: 12:00"}); err != nil {
 		t.Fatal(err)
@@ -103,8 +106,8 @@ func TestSecNtfySend(t *testing.T) {
 
 // Nur SecNtfy kuerzt: Text hoechstens 150 Zeichen, Titel passend zum RSA-Block, jeweils mit „...“ an Zeichengrenzen.
 func TestSecNtfyCut(t *testing.T) {
-	f, srv := newSecntfy(t)
-	ch := &Channel{Type: TypeSecNtfy, Config: map[string]string{"server": srv.URL, "device_key": "NTFY-DEVICE-abc123"}}
+	f, _ := newSecntfy(t)
+	ch := &Channel{Type: TypeApp, Config: map[string]string{"device_key": "NTFY-DEVICE-abc123"}}
 	long := strings.Repeat("Störung äöü ", 40)
 	if err := (secntfySender{"t"}).Send(context.Background(), ch, Message{Kind: KindDown, Title: strings.Repeat("ü", 200), Text: long}); err != nil {
 		t.Fatal(err)
@@ -123,10 +126,10 @@ func TestSecNtfyCut(t *testing.T) {
 
 // Fehler: falscher Token (vor jeder Anfrage), unbekanntes Geraet, Ablehnung – der Token steht in keiner Meldung.
 func TestSecNtfyErrors(t *testing.T) {
-	f, srv := newSecntfy(t)
+	f, _ := newSecntfy(t)
 	s := secntfySender{"t"}
 	send := func(tok string) error {
-		ch := &Channel{Type: TypeSecNtfy, Config: map[string]string{"server": srv.URL, "device_key": tok}}
+		ch := &Channel{Type: TypeApp, Config: map[string]string{"device_key": tok}}
 		return s.Send(context.Background(), ch, Message{Kind: KindTest, Title: "Test", Text: "x"})
 	}
 	if err := send("abc"); err == nil || !strings.Contains(err.Error(), "NTFY-DEVICE-") {
@@ -139,12 +142,13 @@ func TestSecNtfyErrors(t *testing.T) {
 	if err := send("NTFY-DEVICE-abc123"); err == nil || !strings.Contains(err.Error(), "status 429") || strings.Contains(err.Error(), "abc123") {
 		t.Fatalf("rejected: %v", err)
 	}
-	c := &Channel{Type: TypeSecNtfy, Name: "x", Config: map[string]string{"server": "https://api.secntfy.app/", "device_key": "token"}}
+	// alter Typ secntfy wird zu app, ein gespeicherter Server faellt weg (fest)
+	c := &Channel{Type: TypeSecNtfy, Name: "x", Config: map[string]string{"server": "https://example.org/", "device_key": "token"}}
 	if err := c.Validate(); err == nil {
 		t.Fatal("invalid token accepted")
 	}
 	c.Config["device_key"] = " NTFY-DEVICE-abc "
-	if err := c.Validate(); err != nil || c.Config["device_key"] != "NTFY-DEVICE-abc" || c.Config["server"] != "https://api.secntfy.app" {
-		t.Fatalf("validate: %v %v", err, c.Config)
+	if err := c.Validate(); err != nil || c.Type != TypeApp || c.Config["device_key"] != "NTFY-DEVICE-abc" || c.Config["server"] != "" {
+		t.Fatalf("validate: %v %s %v", err, c.Type, c.Config)
 	}
 }

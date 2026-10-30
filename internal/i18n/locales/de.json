@@ -3121,7 +3121,8 @@
       "slack": "Slack",
       "teams": "Microsoft Teams",
       "matrix": "Matrix",
-      "secntfy": "SecNtfy (verschlüsselt)"
+      "secntfy": "IPv64 App",
+      "app": "IPv64 App"
     },
     "field": {
       "email": "E-Mail-Adresse",
@@ -3210,7 +3211,7 @@
     "verify_sent": "Code gesendet – bitte innerhalb von 15 Minuten eingeben.",
     "verify_ok": "Kanal bestätigt.",
     "verify_failed": "Code falsch oder abgelaufen.",
-    "secntfy_hint": "SecNtfy stellt Push-Nachrichten Ende-zu-Ende verschlüsselt zu: Titel und Text werden mit dem Schlüssel deines Geräts verschlüsselt, nur das Gerät kann sie lesen. Trag den Geräte-Token aus der SecNtfy-App ein. Ein verschlüsselter Block fasst wenig – lange Meldungen kommen bei SecNtfy gekürzt an (Text höchstens 150 Zeichen), alle anderen Kanäle bekommen sie vollständig."
+    "app_hint": "Push-Nachrichten an die IPv64 App, Ende-zu-Ende verschlüsselt: Titel und Text werden mit dem Schlüssel deines Geräts verschlüsselt, nur das Gerät kann sie lesen. Trag den Geräte-Token aus der IPv64 App ein (NTFY-DEVICE-…). Ein verschlüsselter Block fasst wenig – lange Meldungen kommen in der App gekürzt an (Text höchstens 150 Zeichen), alle anderen Kanäle bekommen sie vollständig."
   },
   "day": {
     "1": "Mo",

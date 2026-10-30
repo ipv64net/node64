@@ -353,6 +353,7 @@ route('GET', '/hc2/channels/{id}', function($p) { $ch = hc2_channel(uid(), (int)
 function hc2_channel_save(?array $old): array {
 	$b = body(); $types = hc2_channel_types(); $acc = hc2_account(uid());
 	$type = $old ? $old['type'] : (string)($b['type'] ?? '');
+	if ($type === 'secntfy') { $type = 'app'; } // alter Name der IPv64 App
 	if (!isset($types[$type])) { fail(422, 'invalid_type', 'type must be one of ' . implode(', ', array_keys($types)) . '.', array('field' => 'type')); }
 	$name = in_str('name', !$old, 100) ?? $old['name'];
 	$in = array(); foreach ((array)($b['config'] ?? array()) as $k => $v) { $in['f_' . $k] = is_bool($v) ? ($v ? '1' : '') : (string)$v; }
@@ -396,10 +397,10 @@ route('DELETE', '/hc2/channels/{id}', function($p) {
 	foreach (hc2_checks(uid()) as $c) { $ids = hc2_check_channels($c); if (in_array((int)$ch['id'], $ids, true)) { hc2_set_check(uid(), $c['token'], array('channels' => implode(',', array_diff($ids, array((int)$ch['id']))))); } }
 	no_content();
 });
-// Direkter Versand ueber einen ipv64-Kanal (Mail, SMS, App) ohne hub, z. B. fuer DynDNS-Meldungen einer Node.
+// Direkter Versand ueber einen ipv64-Kanal (Mail, SMS) ohne hub, z. B. fuer DynDNS-Meldungen einer Node.
 // Empfaenger nur aus dem verifizierten Kanal; Tageslimit SMS wie beim hub (hc2_sms_counter), Rate-Limit je Account,
 // doppelte event_id innerhalb von 24 h wird nicht erneut verschickt.
-const HC2_API_SEND_TYPES = array('ipv64_mail' => 'mail', 'ipv64_sms' => 'sms', 'app' => 'app');
+const HC2_API_SEND_TYPES = array('ipv64_mail' => 'mail', 'ipv64_sms' => 'sms'); // IPv64 App: hub bzw. Node direkt ueber SecNtfy
 const HC2_API_SEND_PER_DAY = 200;
 /** SMS heute noch uebrig; null = unbegrenzt (user_class.sms_limit 0 wie in api_v2.php, z. B. Business/Company). */
 function hc2_sms_left(int $userid): ?int {

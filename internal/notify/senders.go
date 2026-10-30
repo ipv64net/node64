@@ -284,7 +284,8 @@ func Senders(version string) map[Type]Sender {
 		TypeSMTP: smtpSender{}, TypeTelegram: telegramSender{ua}, TypeDiscord: discordSender{ua},
 		TypeNtfy: ntfySender{ua}, TypeGotify: gotifySender{ua}, TypeIGotify: gotifySender{ua}, TypeWebhook: webhookSender{ua}, TypePushover: pushoverSender{ua},
 		TypeBrowser: browserSender{}, TypeHomeAssistant: homeAssistantSender{ua},
-		TypeSlack: slackSender{ua}, TypeTeams: teamsSender{ua}, TypeMatrix: matrixSender{ua}, TypeSecNtfy: secntfySender{ua},
+		TypeSlack: slackSender{ua}, TypeTeams: teamsSender{ua}, TypeMatrix: matrixSender{ua}, TypeApp: secntfySender{ua},
+		TypeSecNtfy: secntfySender{ua}, // alter Name der IPv64 App (Portal-Kanaele bis zur Umstellung)
 	}
 }
 
