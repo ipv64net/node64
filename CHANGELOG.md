@@ -15,6 +15,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
   eigene IPv6-Netz und AAAA-Einträge verbessert; Hinweis, wenn eine feste Bind-Adresse nur IPv4 oder IPv6 abdeckt.
 - DynDNS: Eine feste IPv6-Adresse in anderer Schreibweise (z. B. Großbuchstaben) löst keine unnötigen Updates mehr aus.
 - Honeypot64: Der eigene Standort wird ohne IPv4 über IPv6 ermittelt.
+- v64 Blocklist: IPv6 wird je /64 bewertet und gelistet; ein Adresswechsel im eigenen Netz entgeht der Liste nicht.
 
 ## 0.12.0-alpha.33 – 2026-10-30
 
