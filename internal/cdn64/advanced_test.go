@@ -56,7 +56,10 @@ func TestClientIPTrusted(t *testing.T) {
 		{"10.0.0.5:1", [][2]string{{"CF-Connecting-IP", "198.51.100.1"}}, "10.0.0.5"},       // LAN-Proxy reicht den Kopf nur durch
 		{"172.64.1.2:1", [][2]string{{"CF-Connecting-IP", "198.51.100.1"}}, "198.51.100.1"}, // Cloudflare
 		{"10.0.0.5:1", [][2]string{{"X-Forwarded-For", "198.51.100.9"}, {"X-Forwarded-For", "203.0.113.4, 10.0.0.7"}}, "203.0.113.4"},
-		{"203.0.113.50:1", [][2]string{{"X-Forwarded-For", "198.51.100.9"}}, "203.0.113.50"}, // nicht vertrauenswuerdig
+		{"203.0.113.50:1", [][2]string{{"X-Forwarded-For", "198.51.100.9"}}, "203.0.113.50"},   // nicht vertrauenswuerdig
+		{"10.0.0.5:1", [][2]string{{"X-Forwarded-For", "[2001:db8::1]:51234"}}, "2001:db8::1"}, // IPv6 mit Port
+		{"10.0.0.5:1", [][2]string{{"X-Forwarded-For", "[2001:db8::2], 10.0.0.7"}}, "2001:db8::2"},
+		{"[fe80::5%eth0]:1", nil, "fe80::5"}, // Zone der Gegenstelle faellt weg
 	} {
 		r := httptest.NewRequest("GET", "http://x.test/", nil)
 		r.RemoteAddr = c.peer

@@ -356,3 +356,49 @@ func TestStatsAddColumns(t *testing.T) {
 		t.Fatalf("entries: %+v %v", l, err)
 	}
 }
+
+// Volle Tabelle (Adressflut): neue Adressen zaehlen je /48 bzw. /24, zuletzt alle gemeinsam - nie ohne Limit, und
+// gemeinsame Zaehler sperren nicht.
+func TestLimiterFull(t *testing.T) {
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	l := newLimiter()
+	l.now = func() time.Time { return now }
+	c := Limits{Enabled: true, ReqRate: 1, ReqBurst: 2, BanAfter: 1, BanMinutes: 10}
+	l.cfg.Store(&c)
+	for i := 0; i < limMaxIPs; i++ {
+		l.ips[netip.AddrFrom4([4]byte{10, byte(i >> 16), byte(i >> 8), byte(i)})] = &ipState{}
+	}
+	a, b := netip.MustParseAddr("2001:db8:1:1::1"), netip.MustParseAddr("2001:db8:1:2::1") // gleiches /48
+	if !l.request(a) || !l.request(b) || l.request(a) {
+		t.Fatal("full table: new addresses must share the /48 counter")
+	}
+	if l.nbans.Load() != 0 {
+		t.Fatal("shared counter must not ban")
+	}
+	for i := len(l.nets); i < limMaxNets; i++ {
+		l.nets[netip.AddrFrom4([4]byte{11, byte(i >> 8), byte(i), 0})] = &ipState{}
+	}
+	x, y := netip.MustParseAddr("198.51.100.1"), netip.MustParseAddr("2001:db8:9::1")
+	if !l.request(x) || !l.request(y) || l.request(x) {
+		t.Fatal("full nets: all new addresses share one counter")
+	}
+	if r, why := l.open(x); why != "" || r == nil {
+		t.Fatalf("open on shared counter: %q", why)
+	} else {
+		r()
+	}
+}
+
+// Heimnetz per IPv6-GUA: die /64 der eigenen Schnittstellen gelten als LAN (nur mit ExemptLAN); Zone faellt weg.
+func TestLimiterLAN64(t *testing.T) {
+	l := newLimiter()
+	l.lan.nets, l.lan.at = []netip.Prefix{netip.MustParsePrefix("2001:db8:aa:1::/64")}, time.Now()
+	on := Limits{Enabled: true, ExemptLAN: true}
+	if !l.exempted(&on, netip.MustParseAddr("2001:db8:aa:1::5")) || l.exempted(&on, netip.MustParseAddr("2001:db8:aa:2::5")) ||
+		l.exempted(&Limits{Enabled: true}, netip.MustParseAddr("2001:db8:aa:1::5")) {
+		t.Fatal("own /64 counts as LAN only with ExemptLAN")
+	}
+	if a := netAddr(&net.TCPAddr{IP: net.ParseIP("fe80::5"), Zone: "eth0", Port: 1}); a != netip.MustParseAddr("fe80::5") {
+		t.Fatalf("zone: %v", a)
+	}
+}

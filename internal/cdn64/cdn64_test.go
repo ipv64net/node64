@@ -460,3 +460,19 @@ func TestHostAPIRequestCertificate(t *testing.T) {
 		t.Fatal("without ipv64 key: http-01")
 	}
 }
+
+// Umleitung auf HTTPS mit IPv6-Literal im Host-Kopf: genau ein Paar Klammern, Port faellt weg.
+func TestToHTTPSIPv6(t *testing.T) {
+	for host, want := range map[string]string{
+		"[2001:db8::1]": "https://[2001:db8::1]/a?b", "[2001:db8::1]:80": "https://[2001:db8::1]/a?b",
+		"app.test:80": "https://app.test/a?b", "192.0.2.1": "https://192.0.2.1/a?b",
+	} {
+		r := httptest.NewRequest("GET", "http://x/a?b", nil)
+		r.Host = host
+		w := httptest.NewRecorder()
+		(&Module{}).toHTTPS(w, r)
+		if got := w.Header().Get("Location"); got != want {
+			t.Errorf("%s: %s, want %s", host, got, want)
+		}
+	}
+}

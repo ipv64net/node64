@@ -39,3 +39,23 @@ kein-netz
 		t.Fatal("nil set blocks nothing")
 	}
 }
+
+// IPv4-gemappte Netze gelten fuer IPv4 (Adressen kommen entmappt an); gemappte kuerzer als /96 und Zonen fallen weg.
+func TestNormPrefix(t *testing.T) {
+	for in, want := range map[string]string{
+		"::ffff:203.0.113.0/120": "203.0.113.0/24", "::ffff:0.0.0.0/96": "0.0.0.0/0", "::ffff:1.2.3.4/80": "",
+		"2001:db8::7/64": "2001:db8::/64", "192.0.2.9/24": "192.0.2.0/24",
+	} {
+		got, ok := NormPrefix(netip.MustParsePrefix(in))
+		if (want == "") == ok || ok && got.String() != want {
+			t.Errorf("%s: %v %v, want %q", in, got, ok, want)
+		}
+	}
+	list, _ := ParseList(strings.NewReader("::ffff:203.0.113.0/120 # Netz\n::ffff:198.51.100.7\n"))
+	s := BuildSet([][]netip.Prefix{list, {netip.MustParsePrefix("::ffff:192.0.2.0/120")}}, []netip.Prefix{netip.MustParsePrefix("::ffff:203.0.113.9/128")})
+	for ip, want := range map[string]bool{"203.0.113.5": true, "198.51.100.7": true, "192.0.2.1": true, "203.0.113.9": false, "198.51.100.8": false} {
+		if got := s.Has(netip.MustParseAddr(ip)); got != want {
+			t.Errorf("mapped %s: %v, want %v", ip, got, want)
+		}
+	}
+}

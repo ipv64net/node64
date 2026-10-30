@@ -15,6 +15,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/ipv64net/node64/internal/shield"
 	"github.com/ipv64net/node64/internal/store"
 )
 
@@ -86,7 +87,10 @@ func parsePrefix(s string) (netip.Prefix, error) {
 		return netip.MustParsePrefix("::/0"), nil
 	}
 	if p, err := netip.ParsePrefix(s); err == nil {
-		return p.Masked(), nil
+		if p, ok := shield.NormPrefix(p); ok { // ::ffff:a.b.c.d/n gilt fuer IPv4 (Clients kommen entmappt an)
+			return p, nil
+		}
+		return netip.Prefix{}, errors.New("invalid ipv4-mapped prefix")
 	}
 	a, err := netip.ParseAddr(s)
 	if err != nil {

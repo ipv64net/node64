@@ -64,7 +64,7 @@ func hpDefaultRoute() HoneypotRoute {
 	return HoneypotRoute{Blocklist: true, Honeypot: true, Exploit: true, AIBot: true}
 }
 
-// HoneypotBlock: eine lokal gesperrte IP.
+// HoneypotBlock: eine lokal gesperrte IP (IPv6 als /64, wie die Sperren des DoS-Schutzes).
 type HoneypotBlock struct {
 	IP     string    `json:"ip"`
 	Reason string    `json:"reason"`
@@ -151,6 +151,7 @@ func (m *Module) hpRestore(ctx context.Context) {
 	}
 	defer rows.Close()
 	list := map[netip.Addr]hpEntry{}
+	var moved []netip.Addr // alte Eintraege je IPv6-Adresse (vor 1.45.1): unter dem /64 neu speichern
 	for rows.Next() {
 		var ip, reason, since, until string
 		if rows.Scan(&ip, &reason, &since, &until) != nil {
@@ -160,12 +161,21 @@ func (m *Module) hpRestore(ctx context.Context) {
 		s, err2 := time.Parse(time.RFC3339, since)
 		u, err3 := time.Parse(time.RFC3339, until)
 		if err1 == nil && err2 == nil && err3 == nil && now.Before(u) {
-			list[a] = hpEntry{reason: reason, since: s, until: u}
+			k := limKey(a)
+			if k != a {
+				moved = append(moved, a)
+			}
+			if old, ok := list[k]; !ok || old.until.Before(u) {
+				list[k] = hpEntry{reason: reason, since: s, until: u}
+			}
 		}
 	}
 	m.hp.mu.Lock()
 	m.hp.m, m.hp.purged = list, now
 	m.hp.mu.Unlock()
+	for _, a := range moved {
+		m.hpPersist(limKey(a), list[limKey(a)], a, false)
+	}
 }
 
 // hpPersist schreibt eine Sperre (gone: verdraengter Eintrag) und loescht ab und zu abgelaufene.
@@ -273,7 +283,7 @@ func (m *Module) hpServeDecoy(w http.ResponseWriter, r *http.Request, client net
 
 // hpExempt: Adressen, die nie gesperrt werden (privat, CGNAT, Ausnahmen der Blocklisten, Proxys der Hosts).
 func (m *Module) hpExempt(ctx context.Context, ip netip.Addr) bool {
-	if !ip.IsValid() || !ip.IsGlobalUnicast() || ip.IsPrivate() || cgnat.Contains(ip) {
+	if !ip.IsValid() || !ip.IsGlobalUnicast() || ip.IsPrivate() || cgnat.Contains(ip) || m.lim.lan.has(ip) {
 		return true
 	}
 	for _, p := range m.blAllow(ctx) {
@@ -291,13 +301,15 @@ func (m *Module) hpExempt(ctx context.Context, ip netip.Addr) bool {
 	return false
 }
 
-// hpOnBlock: Sperre aus dem Honeypot (nur mit eingeschalteter Sofort-Sperre).
+// hpOnBlock: Sperre aus dem Honeypot (nur mit eingeschalteter Sofort-Sperre). IPv6 je /64 (limKey): sonst genuegte
+// ein Adresswechsel im eigenen Netz, und eine Adressflut fuellte die Tabelle.
 func (m *Module) hpOnBlock(b hpbridge.Block) {
 	s := m.hpSettings()
-	ip := b.IP.Unmap()
+	ip := b.IP.Unmap().WithZone("")
 	if !m.hpBlockOn() || m.hpExempt(context.Background(), ip) {
 		return
 	}
+	ip = limKey(ip)
 	now := time.Now()
 	e := hpEntry{reason: trunc(b.Reason, hpReasonMaxLen), since: now, until: now.Add(time.Duration(s.BlockHours) * time.Hour)}
 	var gone netip.Addr
@@ -345,7 +357,7 @@ func (m *Module) hpBlocked(ip netip.Addr) bool {
 	if !m.hpBlockOn() {
 		return false
 	}
-	ip, now := ip.Unmap(), time.Now()
+	ip, now := limKey(ip), time.Now()
 	m.hp.mu.Lock()
 	e, ok := m.hp.m[ip]
 	if now.Sub(m.hp.swept) > hpSweepInterval {
@@ -366,7 +378,7 @@ func (m *Module) hpList() []HoneypotBlock {
 	out := make([]HoneypotBlock, 0, len(m.hp.m))
 	for ip, e := range m.hp.m {
 		if now.Before(e.until) {
-			out = append(out, HoneypotBlock{IP: ip.String(), Reason: e.reason, Since: e.since, Until: e.until})
+			out = append(out, HoneypotBlock{IP: limShow(ip), Reason: e.reason, Since: e.since, Until: e.until})
 		}
 	}
 	m.hp.mu.Unlock()
@@ -374,20 +386,24 @@ func (m *Module) hpList() []HoneypotBlock {
 	return out
 }
 
-// hpUnblock hebt eine Sperre auf.
+// hpUnblock hebt eine Sperre auf (IP oder /64).
 func (m *Module) hpUnblock(s string) bool {
-	ip, err := netip.ParseAddr(strings.TrimSpace(s))
-	if err != nil {
+	s = strings.TrimSpace(s)
+	var ip netip.Addr
+	if p, err := netip.ParsePrefix(s); err == nil {
+		ip = p.Addr()
+	} else if ip, err = netip.ParseAddr(s); err != nil {
 		return false
 	}
+	ip = limKey(ip)
 	m.hp.mu.Lock()
-	_, ok := m.hp.m[ip.Unmap()]
-	delete(m.hp.m, ip.Unmap())
+	_, ok := m.hp.m[ip]
+	delete(m.hp.m, ip)
 	m.hp.mu.Unlock()
 	if !ok {
 		return false
 	}
-	_, _ = m.core.Writer().ExecContext(context.Background(), `DELETE FROM cdn_hp_blocks WHERE ip = ?`, ip.Unmap().String())
+	_, _ = m.core.Writer().ExecContext(context.Background(), `DELETE FROM cdn_hp_blocks WHERE ip = ?`, ip.String())
 	return true
 }
 

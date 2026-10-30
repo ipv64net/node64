@@ -1,5 +1,25 @@
 # Änderungen – PROXY64
 
+## 1.45.1 – 2026-10-30
+
+### Behoben
+- IPv4-gemappte Netze (`::ffff:203.0.113.0/120`) in Sperr- und Freigabeliste, Zugriffslisten und
+  vertrauenswürdigen Proxys gelten jetzt für die IPv4-Adressen (vorher griffen sie nie). Gilt auch für die
+  ipv64-Blocklisten.
+- Sperr- und Freigabeliste lehnen Adressen mit Zone (`fe80::1%eth0`) ab; das Portal wies sonst die ganze Liste ab
+  und keine Sperre kam auf die CDN64-Server.
+- Honeypot-Sperren gelten bei IPv6 für das ganze /64 (wie die Sperren des DoS-Schutzes); ein Adresswechsel im
+  eigenen Netz umgeht sie nicht mehr. Bestehende Sperren werden übernommen.
+- DoS-Schutz: Ist die Tabelle der Adressen voll (z. B. bei einer Flut aus vielen IPv6-Netzen), zählen neue Adressen
+  gröber (IPv6 je /48, IPv4 je /24) und zuletzt gemeinsam, statt ohne Limit durchzukommen.
+- „Heimnetz nie begrenzen“ und Honeypot-Sperre: Geräte im Heimnetz, die per IPv6 mit ihrer globalen Adresse
+  kommen (gleiches /64 wie Node64), gelten jetzt als Heimnetz.
+- X-Forwarded-For von vertrauenswürdigen Proxys: Einträge mit Port oder Klammern (`[2001:db8::1]:51234`) werden
+  erkannt; vorher galt die Adresse des Proxys als Client.
+- Link-lokale Client-Adressen mit Zone passen jetzt auf Netze (Zugriffslisten, Limits).
+- Umleitung auf HTTPS mit einer IPv6-Adresse im Host-Kopf ergibt eine gültige URL.
+- Docker: Container in reinen IPv6-Netzen sind über das IPv6-Gateway erreichbar.
+
 ## 1.45.0 – 2026-10-30
 
 ### Neu

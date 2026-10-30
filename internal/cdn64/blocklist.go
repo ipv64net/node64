@@ -177,7 +177,9 @@ func (m *Module) blNets(ctx context.Context, key string) []netip.Prefix {
 	var out []netip.Prefix
 	for _, l := range strings.Fields(m.core.SettingOr(ctx, key, "")) {
 		if p, err := netip.ParsePrefix(l); err == nil {
-			out = append(out, p.Masked())
+			if p, ok := shield.NormPrefix(p); ok { // ::ffff:a.b.c.d/n gilt fuer IPv4
+				out = append(out, p)
+			}
 		} else if a, err := netip.ParseAddr(l); err == nil {
 			out = append(out, netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()))
 		}
@@ -432,14 +434,17 @@ func (m *Module) blSave(ctx context.Context, enabled []string, allow string) err
 	return nil
 }
 
-// netLines: Adressen oder Netze je Zeile; false bei einer ungueltigen Zeile oder zu vielen.
+// netLines: Adressen oder Netze je Zeile; false bei einer ungueltigen Zeile oder zu vielen. Adressen mit Zone
+// (fe80::1%eth0) sind ungueltig (das Portal lehnte sonst die ganze Liste ab), gemappte Netze kuerzer als /96 auch.
 func netLines(s string) ([]string, bool) {
 	var lines []string
 	for _, l := range strings.Fields(s) {
-		if _, err := netip.ParsePrefix(l); err != nil {
-			if _, err := netip.ParseAddr(l); err != nil {
+		if p, err := netip.ParsePrefix(l); err == nil {
+			if _, ok := shield.NormPrefix(p); !ok {
 				return nil, false
 			}
+		} else if a, err := netip.ParseAddr(l); err != nil || a.Zone() != "" {
+			return nil, false
 		}
 		if !slices.Contains(lines, l) {
 			lines = append(lines, l)

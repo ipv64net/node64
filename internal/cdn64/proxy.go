@@ -415,7 +415,7 @@ func (m *Module) allowed(w http.ResponseWriter, r *http.Request, h *Host, acl in
 	}
 	login := g.hasLogin()
 	if login && r.TLS == nil && h.HTTPS() { // Login nie im Klartext: auf HTTPS (nur echtes Port-80-HTTP; CDN64 Modus 2 hat r.TLS)
-		u := "https://" + hostOnly(r.Host) + r.URL.RequestURI()
+		u := "https://" + urlHost(r.Host) + r.URL.RequestURI()
 		http.Redirect(w, r, u, http.StatusPermanentRedirect)
 		return false
 	}
@@ -683,6 +683,15 @@ func hostOnly(h string) string {
 	return h
 }
 
+// urlHost: Host-Kopf ohne Port fuer eine URL; ein IPv6-Literal steht immer genau einmal in Klammern.
+func urlHost(h string) string {
+	h = strings.Trim(hostOnly(h), "[]")
+	if strings.Contains(h, ":") {
+		return "[" + h + "]"
+	}
+	return h
+}
+
 func trunc(s string, n int) string {
 	if len(s) > n {
 		return s[:n]
@@ -791,7 +800,7 @@ func peerIP(r *http.Request) netip.Addr {
 	if err != nil {
 		return netip.Addr{}
 	}
-	return ap.Addr().Unmap()
+	return ap.Addr().Unmap().WithZone("") // fe80::5%eth0: ohne Zone, sonst passt kein Netz
 }
 
 var pageText = map[int]string{
@@ -981,13 +990,7 @@ func firstURL(h *Host) string {
 
 // toHTTPS leitet auf HTTPS um (Port aus Sicht der Besucher).
 func (m *Module) toHTTPS(w http.ResponseWriter, r *http.Request) {
-	host := r.Host
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		host = h
-	}
-	if strings.Contains(host, ":") {
-		host = "[" + host + "]"
-	}
+	host := urlHost(r.Host)
 	if m.edge != nil {
 		if p := m.edge.Config().Public(); p != 443 {
 			host += ":" + strconv.Itoa(p)
