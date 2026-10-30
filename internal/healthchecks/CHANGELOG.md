@@ -1,5 +1,23 @@
 # Änderungen – Healthchecks
 
+## 2.47.1 – 2026-10-30
+
+### Behoben
+- IPv6 bei Zielen: Interne Adressen werden auch in anderer Schreibweise erkannt (`::ffff:10.0.0.1`,
+  `[::ffff:7f00:1]`, `0:0:0:0:0:0:0:1`, `::`, `fe90::1`, site-local `fec0::/10`, IPv4-kompatibel `::/96`, CGNAT und
+  Doku-Netze). Namen wie `fcbayern.com` oder `fdroid.org` gelten nicht mehr als intern.
+- HTTP-Ziel als IPv6 ohne Schema und Klammern (`2001:db8::1`): der letzte Block wurde als Port gelesen.
+- Proxmox VE/PBS: Adresse als IPv6 ohne Klammern (`fd00::10`) wurde zu `[fd00:]:10`; Docker: `tcp://fd00::1` ohne
+  Klammern galt als gültig und wird jetzt abgelehnt (`tcp://[fd00::1]:2375`).
+- Link-local-Ziele mit Zone (`fe80::1%eth0`) werden bei ICMP, TCP/Port, Zertifikat und HTTP mit klarer Meldung
+  abgelehnt; die Zone ging bei der Auflösung verloren.
+- Statusseiten: Die Sperre nach falschen Passwörtern gilt bei IPv6 je /64 (Adresswechsel im Netz hilft nicht mehr),
+  v4-gemappte Adressen wie IPv4. Eine volle Tabelle löscht nur abgelaufene bzw. den ältesten Eintrag, laufende
+  Sperren bleiben.
+- Online (hubs): Die Bremse je Zielhost zählt eine IPv6-Adresse in jeder Schreibweise als dasselbe Ziel.
+- Portal: interne IPv6-Ziele wie in der Node erkannt; DNS-Server als IPv6 ohne Klammern (`fd00::53`) wird nicht mehr
+  abgeschnitten.
+
 ## 2.47.0 – 2026-10-30
 
 ### Neu

@@ -32,6 +32,8 @@ var reserved = []netip.Prefix{
 	netip.MustParsePrefix("2001::/32"),       // Teredo
 	netip.MustParsePrefix("2001:db8::/32"),   // Doku
 	netip.MustParsePrefix("2002::/16"),       // 6to4 (kann auf interne IPv4 zeigen)
+	netip.MustParsePrefix("fec0::/10"),       // site-local (veraltet, intern)
+	netip.MustParsePrefix("::/96"),           // IPv4-kompatibel (veraltet)
 }
 
 // PublicAddr: Adresse ist oeffentlich erreichbar (kein privates, lokales, reserviertes oder Multicast-Netz).

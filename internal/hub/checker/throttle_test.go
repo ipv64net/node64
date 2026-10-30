@@ -35,6 +35,13 @@ func TestThrottle(t *testing.T) {
 	if th.allow(chk("http://OPFER.example:8080/x")) { // gleicher Host, andere Schreibweise/Port
 		t.Fatal("same host not counted")
 	}
+	// IPv6/v4-gemappt: gleiche Adresse in anderer Schreibweise teilt den Eimer
+	for _, v := range []string{"http://[2001:db8::1]/", "http://[2001:0db8:0:0::1]/", "https://[::ffff:192.0.2.1]/", "https://192.0.2.1/"} {
+		th.allow(chk(v))
+	}
+	if n := len(th.targets); n != 4 { // opfer, anderes, 2001:db8::1, 192.0.2.1
+		t.Fatalf("ipv6 keys not canonical: %d targets", n)
+	}
 	now = now.Add(5 * time.Second)
 	ok = 0
 	for i := 0; i < 10; i++ {

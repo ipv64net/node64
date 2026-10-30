@@ -423,6 +423,9 @@ func WithoutUnknownParams(def Definition) json.RawMessage {
 	return def.Params
 }
 
+// errZone: Ziel mit Zone (fe80::1%eth0) – die Aufloesung reicht nur die Adresse weiter, die Zone ginge verloren.
+var errZone = errors.New("link-local addresses with zone are not supported")
+
 // Validate prueft Typ, Ziel und Parameter einer Definition.
 func Validate(def Definition) error {
 	switch def.Type {
@@ -433,6 +436,9 @@ func Validate(def Definition) error {
 		}
 		if u.Hostname() == "" {
 			return errors.New("url has no host")
+		}
+		if strings.Contains(u.Hostname(), "%") {
+			return errZone
 		}
 		var p HTTPParams
 		if err := decode(def.Params, &p); err != nil {
@@ -457,6 +463,9 @@ func Validate(def Definition) error {
 		if host == "" {
 			return errors.New("target host is required")
 		}
+		if strings.Contains(host, "%") {
+			return errZone
+		}
 		var p TCPParams
 		if err := decode(def.Params, &p); err != nil {
 			return err
@@ -471,6 +480,9 @@ func Validate(def Definition) error {
 		if TargetHost(def) == "" {
 			return errors.New("target host is required")
 		}
+		if strings.Contains(TargetHost(def), "%") {
+			return errZone
+		}
 		var p CertParams
 		if err := decode(def.Params, &p); err != nil {
 			return err
@@ -481,6 +493,9 @@ func Validate(def Definition) error {
 	case TypeICMP:
 		if TargetHost(def) == "" {
 			return errors.New("target host is required")
+		}
+		if strings.Contains(TargetHost(def), "%") {
+			return errZone
 		}
 		var p ICMPParams
 		if err := decode(def.Params, &p); err != nil {

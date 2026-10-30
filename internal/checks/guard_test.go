@@ -22,9 +22,26 @@ func TestPublicAddr(t *testing.T) {
 	}
 	for _, s := range []string{"10.10.0.11", "10.100.0.110", "127.0.0.1", "172.16.0.1", "192.168.1.1", "169.254.1.1", "100.64.0.1", "0.0.0.0",
 		"0.1.2.3", "198.18.0.1", "240.0.0.1", "255.255.255.255", "224.0.0.1", "::1", "::", "fd00::1", "fe80::1", "::ffff:10.0.0.1",
-		"64:ff9b::a00:1", "2002:a00:1::1", "2001:db8::1", "ff02::1"} {
+		"64:ff9b::a00:1", "2002:a00:1::1", "2001:db8::1", "ff02::1", "fec0::1", "::a00:1", "::8.8.8.8"} {
 		if PublicAddr(netip.MustParseAddr(s)) {
 			t.Errorf("%s should not be public", s)
+		}
+	}
+}
+
+// IsPrivateTarget: Adressen nach PublicAddr (auch v4-gemappt, ausgeschrieben, mit Zone), Namen nur localhost/.local.
+func TestIsPrivateTargetIPv6(t *testing.T) {
+	for _, c := range [][2]string{{"http", "http://[::ffff:7f00:1]/"}, {"icmp", "::ffff:10.0.0.1"}, {"icmp", "0:0:0:0:0:0:0:1"},
+		{"icmp", "::"}, {"icmp", "fe90::1"}, {"icmp", "fe80::1%eth0"}, {"tcp", "[fd00::1]:22"}, {"http", "https://u:p@[fec0::1]:8443/x"},
+		{"http", "2001:db8::1"}, {"tcp", "100.64.1.2:80"}, {"dns", "nas.local."}, {"http", "http://localhost:8080/"}} {
+		if !IsPrivateTarget(c[0], c[1]) {
+			t.Errorf("%s %s should be private", c[0], c[1])
+		}
+	}
+	for _, c := range [][2]string{{"dns", "fcbayern.com"}, {"http", "https://fdroid.org/"}, {"icmp", "fe.example.org"},
+		{"tcp", "[2606:4700:4700::1111]:53"}, {"http", "2a01:4f8:c014:46b::1"}, {"tcp", "1.1.1.1:53"}} {
+		if IsPrivateTarget(c[0], c[1]) {
+			t.Errorf("%s %s should be public", c[0], c[1])
 		}
 	}
 }

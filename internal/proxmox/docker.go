@@ -82,7 +82,8 @@ func ValidDockerHost(h string) bool {
 		return strings.HasPrefix(strings.TrimPrefix(h, "unix://"), "/")
 	case strings.HasPrefix(h, "tcp://"), strings.HasPrefix(h, "http://"), strings.HasPrefix(h, "https://"):
 		u, err := url.Parse(strings.Replace(h, "tcp://", "http://", 1))
-		return err == nil && u.Host != "" && u.User == nil
+		// IPv6 nur in Klammern: tcp://fd00::1 wuerde sonst zu Host fd00: und Port 1
+		return err == nil && u.Host != "" && u.User == nil && (strings.HasPrefix(u.Host, "[") || strings.Count(u.Host, ":") <= 1)
 	}
 	return false
 }

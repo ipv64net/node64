@@ -15,6 +15,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/netip"
 	"sort"
 	"strconv"
 	"strings"
@@ -503,7 +504,21 @@ func (m *Module) statusClientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
+// statusFailKey liefert den Schluessel der Sperre: IPv4 (auch v4-gemappt) je Adresse, IPv6 je /64.
+func statusFailKey(ip string) string {
+	a, err := netip.ParseAddr(ip)
+	if err != nil {
+		return ip
+	}
+	a = a.Unmap().WithZone("")
+	if a.Is4() {
+		return a.String()
+	}
+	return netip.PrefixFrom(a, 64).Masked().String()
+}
+
 func (m *Module) statusLoginAllowed(ip string) bool {
+	ip = statusFailKey(ip)
 	s := m.statusState()
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -512,11 +527,23 @@ func (m *Module) statusLoginAllowed(ip string) bool {
 }
 
 func (m *Module) statusLoginFailed(ip string) {
+	ip = statusFailKey(ip)
 	s := m.statusState()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if len(s.fails) > 10000 {
-		s.fails = map[string]*statusFail{}
+	if len(s.fails) >= 10000 {
+		// Tabelle voll: erst abgelaufene Eintraege entfernen, reicht das nicht, den aeltesten
+		var oldest string
+		for k, f := range s.fails {
+			if time.Since(f.since) > statusLoginWindow {
+				delete(s.fails, k)
+			} else if oldest == "" || f.since.Before(s.fails[oldest].since) {
+				oldest = k
+			}
+		}
+		if len(s.fails) >= 10000 && oldest != "" {
+			delete(s.fails, oldest)
+		}
 	}
 	f := s.fails[ip]
 	if f == nil || time.Since(f.since) > statusLoginWindow {

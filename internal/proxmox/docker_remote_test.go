@@ -306,9 +306,14 @@ func TestDockerRemoteValidate(t *testing.T) {
 	if _, addr, sock, _ := dockerSSHTarget("ssh://a@[fd00::1]:2222/run/user/1000/docker.sock"); addr != "[fd00::1]:2222" || sock != "/run/user/1000/docker.sock" {
 		t.Fatalf("ssh target v6: %q %q", addr, sock)
 	}
-	for _, h := range []string{"ssh://10.0.0.5", "ssh://a:pw@10.0.0.5", "ssh://a@", "tcp://a@host:2375"} {
+	for _, h := range []string{"ssh://10.0.0.5", "ssh://a:pw@10.0.0.5", "ssh://a@", "tcp://a@host:2375", "tcp://fd00::1", "https://fd00::1:2376"} {
 		if ValidDockerHost(h) {
 			t.Errorf("%s gilt als gueltig", h)
+		}
+	}
+	for _, h := range []string{"tcp://[fd00::1]:2375", "https://[fd00::1]:2376", "tcp://10.0.0.5:2375", "http://docker-proxy:2375"} {
+		if !ValidDockerHost(h) {
+			t.Errorf("%s gilt als ungueltig", h)
 		}
 	}
 	hex := strings.Repeat("0a", 32)

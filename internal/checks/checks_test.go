@@ -309,6 +309,20 @@ func TestValidate(t *testing.T) {
 			t.Errorf("%s %s: expected error", d.Type, d.Target)
 		}
 	}
+	// Zone (fe80::1%eth0) wird abgelehnt, die Aufloesung wuerde sie verlieren
+	for _, d := range []Definition{def(TypeICMP, "fe80::1%eth0", nil), def(TypeTCP, "[fe80::1%eth0]:22", nil),
+		def(TypeHTTP, "http://[fe80::1%25eth0]/", nil), def(TypeHTTP, "fe80::1%eth0/x", nil)} {
+		if err := Validate(d); err != errZone {
+			t.Errorf("%s %s: want errZone, got %v", d.Type, d.Target, err)
+		}
+	}
+	// IPv6 ohne Schema und Klammern: ganze Adresse ist der Host, kein Port
+	for in, want := range map[string]string{"2001:db8::1": "[2001:db8::1]", "2001:db8::1/x?y": "[2001:db8::1]", "[2001:db8::1]:8080": "[2001:db8::1]:8080",
+		"example.com:8080/x": "example.com:8080", "https://[::1]/": "[::1]"} {
+		if u, err := parseURL(in); err != nil || u.Host != want {
+			t.Errorf("parseURL(%q) = %v, %v; want host %s", in, u, err, want)
+		}
+	}
 	if ranges, _ := parseStatusRanges(" 301, 200-204 "); len(ranges) != 2 || ranges[0].lo != 200 || !statusAccepted(301, ranges) || statusAccepted(205, ranges) {
 		t.Fatalf("status ranges: %+v", ranges)
 	}
