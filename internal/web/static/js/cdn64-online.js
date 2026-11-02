@@ -322,6 +322,40 @@
 			window.setTimeout(function () { window.location.reload(); }, 3000);
 		}
 	} catch (e) { /* kein Speicher */ }
+	// Verbindungen im Aufbau (Spinner in der Spalte CDN64): alle 2,5 s den Stand holen und nur diese Anzeige nachziehen -
+	// Abzeichen je Server, Spinner mit "x von y"; steht alles (oder ist ein Server ausgefallen), endet die Abfrage
+	function badge(b, e, anyUp) {
+		var st = e.connected ? "success" : (anyUp ? "info" : "danger");
+		b.className = "badge text-bg-" + st + " me-1";
+		b.textContent = e.name + " ";
+		b.appendChild(el("i", "bi " + (e.connected || anyUp ? "bi-check-lg" : "bi-x-lg")));
+		if (e.sessions > 1) { b.appendChild(document.createTextNode(" ")); b.appendChild(el("span", "fw-normal", "×" + e.sessions)); }
+	}
+	function watchConns() {
+		if (!document.querySelector("[data-c64o-pending]")) { return; }
+		var rounds = 0;
+		var tick = function () {
+			api("GET", "/api/cdn64/online").then(function (v) {
+				var anyUp = (v.edges || []).some(function (e) { return e.connected; });
+				(v.edges || []).forEach(function (e) {
+					document.querySelectorAll("[data-c64o-edge]").forEach(function (b) {
+						if (b.getAttribute("data-c64o-edge") === e.name) { badge(b, e, anyUp); }
+					});
+				});
+				document.querySelectorAll("[data-c64o-pending]").forEach(function (s) {
+					s.title = (s.getAttribute("data-fmt") || "").split("{up}").join(String(v.conns_up)).split("{want}").join(String(v.conns_wanted));
+					if (!v.pending) { s.remove(); }
+				});
+				if (!v.pending) {
+					document.querySelectorAll("[data-c64o-pending-btn]").forEach(function (s) { s.replaceWith(el("i", "bi bi-hdd-network")); });
+					return;
+				}
+				if (++rounds < 60) { window.setTimeout(tick, 2500); } // hoechstens 2,5 Minuten
+			}, function () { if (++rounds < 60) { window.setTimeout(tick, 2500); } });
+		};
+		window.setTimeout(tick, 2500);
+	}
+	watchConns();
 	startBtn.addEventListener("click", function () { if (!busy) { run(); } });
 	modalEl.addEventListener("hidden.bs.modal", function () { if (changed) { window.location.reload(); } });
 })();

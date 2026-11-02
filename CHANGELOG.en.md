@@ -8,7 +8,8 @@ Short summary of what changes per version. Details per module are in the node un
   dark.
 - PROXY64: Business and Company choose per tunnel in the CDN64 column how many CDN64 servers it uses and how many
   connections per server; changes keep the remaining connections running.
-- PROXY64: buttons in the CDN64 column show a spinner while saving.
+- PROXY64: buttons in the CDN64 column show a spinner while saving; the column itself shows a spinner until all
+  connections to the CDN64 servers are up.
 - PROXY64: When the list of CDN64 servers changes, tunnels to the remaining servers keep running without
   interruption.
 - Interface: hint texts much shorter (details are in the docs); the API page shows a short sentence instead of the long

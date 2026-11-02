@@ -227,6 +227,10 @@ type onlineView struct {
 	SyncError  string               `json:"sync_error,omitempty"`
 	UDPBuffer  int                  `json:"udp_buffer,omitempty"` // net.core.rmem_max
 	UDPLow     bool                 `json:"udp_buffer_low"`       // zu klein fuer volle QUIC-Geschwindigkeit
+	// Verbindungen: aufgebaut und eingestellt (Server x Verbindungen je Server), Pending = noch im Aufbau
+	Up      int  `json:"conns_up"`
+	Want    int  `json:"conns_wanted"`
+	Pending bool `json:"pending"`
 }
 
 func (m *Module) onlineStatus(ctx context.Context) onlineView {
@@ -255,6 +259,7 @@ func (m *Module) onlineStatus(ctx context.Context) onlineView {
 	m.online.mu.Unlock()
 	if cl != nil {
 		v.Edges = cl.Status()
+		v.Up, v.Want, v.Pending = onlinePending(v.Edges, time.Now())
 	}
 	return v
 }

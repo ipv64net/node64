@@ -67,6 +67,8 @@ type EdgeStatus struct {
 	Caps       []string  `json:"caps,omitempty"`        // Faehigkeiten des Servers (Welcome)
 	Sessions   int       `json:"sessions"`              // verbundene parallele Verbindungen
 	Wanted     int       `json:"sessions_wanted"`       // gewuenschte (Konfiguration bzw. Grenze des Servers)
+	Slots      int       `json:"slots"`                 // eingestellte Verbindungen (Sessions der Node, auch vom Server abgelehnte)
+	Changed    time.Time `json:"changed,omitzero"`      // letzte Aenderung einer Verbindung (verbunden, getrennt, angelegt)
 }
 
 // Client haelt die Tunnels zu allen Servern.
@@ -106,8 +108,13 @@ func NewClient(cfg ClientConfig) *Client {
 
 func (c *Client) addStates(e Edge) {
 	for range c.cfg.Sessions {
-		c.st[e.Name] = append(c.st[e.Name], &edgeState{EdgeStatus: EdgeStatus{Name: e.Name, Host: e.Host}})
+		c.st[e.Name] = append(c.st[e.Name], newState(e))
 	}
+}
+
+// newState: Verbindung noch nicht aufgebaut, "getrennt seit" jetzt (Anzeige "im Aufbau" in der Node).
+func newState(e Edge) *edgeState {
+	return &edgeState{EdgeStatus: EdgeStatus{Name: e.Name, Host: e.Host, Since: time.Now()}}
 }
 
 // Run haelt zu jedem Server cfg.Sessions Tunnel-Verbindungen, bis ctx endet.
@@ -148,7 +155,7 @@ func (c *Client) SetSessions(n int) {
 	for _, e := range c.cfg.Edges {
 		for len(c.st[e.Name]) < n {
 			slot := len(c.st[e.Name])
-			c.st[e.Name] = append(c.st[e.Name], &edgeState{EdgeStatus: EdgeStatus{Name: e.Name, Host: e.Host}})
+			c.st[e.Name] = append(c.st[e.Name], newState(e))
 			if c.runCtx != nil {
 				c.startSlotLocked(e, slot)
 			}
@@ -216,8 +223,11 @@ func (c *Client) Status() []EdgeStatus {
 			}
 		}
 		x := base.EdgeStatus
-		x.Streams, x.Total, x.Reconnects, x.Sessions, x.Wanted = 0, 0, 0, 0, 0
+		x.Streams, x.Total, x.Reconnects, x.Sessions, x.Wanted, x.Slots = 0, 0, 0, 0, 0, len(slots)
 		for _, s := range slots {
+			if s.Since.After(x.Changed) {
+				x.Changed = s.Since
+			}
 			x.Streams += s.streams.Load()
 			x.Total += s.total.Load()
 			x.Reconnects += s.Reconnects

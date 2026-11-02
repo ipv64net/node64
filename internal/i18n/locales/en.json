@@ -1083,6 +1083,7 @@
       "servers_intro": "The tunnel of this node runs with all its names over this many CDN64 servers, with this many connections per server. One server per location comes first; if one is down for more than 3 minutes, another one stands in.",
       "servers_now": "Now: {list} · {n} connection(s) per server",
       "servers_sessions": "Connections per server",
+      "conns_pending": "Connections being set up: {up} of {want} up",
       "servers_sessions_n": "{n} per server",
       "servers_count": "Number of servers",
       "servers_all": "All servers (including future ones)",

@@ -1068,10 +1068,13 @@ type onlineRow struct {
 	Missing int // Namen des Hosts, die (noch) nicht eingeschaltet sind (ohne Platzhalter)
 	Edges   []onlineBadge
 	Via     string // schwaechster Weg der verbundenen Server: quic, quic443, tls ("" = keiner verbunden)
-	Status  string // active, blocked, pending ("" = noch kein Abgleich)
-	Reason  string
-	Paused  bool        // mindestens ein Name pausiert (Server nehmen nichts an, DNS bleibt)
-	Month   onlineMonth // Zahlen der Server in diesem Monat (aus dem letzten Abgleich)
+	// Up/Want: aufgebaute und eingestellte Verbindungen (Server x Verbindungen je Server); Pending: noch im Aufbau (Spinner)
+	Up, Want int
+	Pending  bool
+	Status   string // active, blocked, pending ("" = noch kein Abgleich)
+	Reason   string
+	Paused   bool        // mindestens ein Name pausiert (Server nehmen nichts an, DNS bleibt)
+	Month    onlineMonth // Zahlen der Server in diesem Monat (aus dem letzten Abgleich)
 	// Foreign: die Namen sind in CDN64, aber nicht von dieser Node eingeschaltet - Modus 3 (auf ipv64.net eingerichtet)
 	// oder Tunnel einer anderen Node. Die Zeile zeigt nur den Stand und bietet Pause; einschalten geht hier nicht.
 	Foreign  bool
@@ -1112,12 +1115,14 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 	}
 	var badges []onlineBadge
 	via := ""
+	conUp, conWant, pending := 0, 0, false
 	m.online.mu.Lock()
 	cl := m.online.client
 	m.online.mu.Unlock()
 	if cl != nil {
 		up := false
 		st := cl.Status()
+		conUp, conWant, pending = onlinePending(st, time.Now())
 		for _, e := range st {
 			up = up || e.Connected
 		}
@@ -1144,7 +1149,7 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 	for _, x := range list {
 		r := out[x.HostID]
 		if r == nil {
-			r = &onlineRow{Edges: badges, Via: via}
+			r = &onlineRow{Edges: badges, Via: via, Up: conUp, Want: conWant, Pending: pending}
 			out[x.HostID] = r
 		}
 		r.Names = append(r.Names, x.Name)
@@ -1279,6 +1284,22 @@ func (m *Module) onlineStrings(r *http.Request) string {
 }
 
 // ---------------------------------------------------------------- Meldungen
+
+// onlineBuilding: so lange gilt ein Server nach einer Aenderung (Start, Speichern, Einschalten, Abbruch) als im Aufbau;
+// stehen dann nicht alle Verbindungen, ist er ausgefallen bzw. lehnt sie ab - die Spalte zeigt ihn ohne Spinner.
+const onlineBuilding = 60 * time.Second
+
+// onlinePending: aufgebaute und eingestellte Verbindungen aller Server; pending = mindestens ein Server im Aufbau.
+func onlinePending(st []tunnel.EdgeStatus, now time.Time) (up, want int, pending bool) {
+	for _, e := range st {
+		up += e.Sessions
+		want += e.Slots
+		if e.Sessions < e.Slots && now.Sub(e.Changed) < onlineBuilding {
+			pending = true
+		}
+	}
+	return up, want, pending
+}
 
 // onlineGrace: so lange darf der Tunnel weg sein, bevor gemeldet wird (Neustarts der Server, kurze Netzaussetzer).
 const onlineGrace = 3 * time.Minute

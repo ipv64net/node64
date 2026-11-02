@@ -8,7 +8,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
   dunkel.
 - PROXY64: Business und Company wählen in der Spalte CDN64 je Tunnel, über wie viele CDN64-Server er läuft und mit
   wie vielen Verbindungen je Server; Änderungen laufen ohne Unterbrechung der bleibenden Verbindungen.
-- PROXY64: Knöpfe der Spalte CDN64 zeigen beim Speichern einen Spinner.
+- PROXY64: Knöpfe der Spalte CDN64 zeigen beim Speichern einen Spinner; die Spalte selbst zeigt einen Spinner, bis alle
+  Verbindungen zu den CDN64-Servern stehen.
 - PROXY64: Ändert sich die Liste der CDN64-Server, laufen die Tunnel zu den bleibenden Servern ohne Unterbrechung
   weiter.
 - Oberfläche: Hinweistexte deutlich kürzer (Einzelheiten stehen in der Doku); die API-Seite zeigt statt der langen

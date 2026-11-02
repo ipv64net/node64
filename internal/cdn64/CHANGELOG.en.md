@@ -12,6 +12,10 @@
   does not know the new limit yet, the node retries after 15 seconds instead of 2–5 minutes.
 - CDN64: buttons show a spinner while saving and stay locked meanwhile (switch on, switch off, pause, protection,
   servers and connections); after “servers and connections” the page reloads 3 seconds later.
+- CDN64: spinner in the CDN64 column while not all connections are up yet (servers × connections per server) – after
+  saving, switching on, a restart or a drop; the tooltip shows “x of y”. The page then checks every 2.5 seconds and
+  only updates this display. A server that has not been fully connected for more than a minute (failed) stops
+  spinning.
 - Texts name the CDN64 servers generally instead of srv07/srv08.
 
 ## 1.46.1 – 2026-11-02

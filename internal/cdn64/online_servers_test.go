@@ -7,8 +7,10 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ipv64net/node64/internal/ipv64api"
+	"github.com/ipv64net/node64/internal/tunnel"
 )
 
 func TestServersView(t *testing.T) {
@@ -123,5 +125,38 @@ func TestOnlineServersPage(t *testing.T) {
 	d.Servers = newServersView(&ipv64api.CDN64Servers{Count: 2, Max: 2, Total: 4, Assigned: []string{"srv07", "srv08"}})
 	if body = renderHosts(t, d); strings.Contains(body, "#cdn64-servers") || strings.Contains(body, `name="count"`) {
 		t.Fatal("fixed plan: no button expected")
+	}
+}
+
+// Spinner in der Spalte CDN64: solange ein Server nicht alle eingestellten Verbindungen hat und sich an ihm in der
+// letzten Minute etwas geaendert hat (Start, Speichern, Abbruch); ein laenger ausgefallener Server dreht nicht endlos.
+func TestOnlinePending(t *testing.T) {
+	now := time.Now()
+	st := []tunnel.EdgeStatus{{Name: "srv07", Sessions: 4, Slots: 4, Changed: now}, {Name: "srv08", Sessions: 1, Slots: 4, Changed: now.Add(-10 * time.Second)}}
+	if up, want, p := onlinePending(st, now); up != 5 || want != 8 || !p {
+		t.Fatalf("building: %d/%d %v", up, want, p)
+	}
+	st[1].Changed = now.Add(-2 * time.Minute) // seit zwei Minuten unvollstaendig: ausgefallen bzw. abgelehnt
+	if _, _, p := onlinePending(st, now); p {
+		t.Fatal("long-down server must not spin")
+	}
+	st[1].Sessions = 4
+	if up, want, p := onlinePending(st, now); up != 8 || want != 8 || p {
+		t.Fatalf("complete: %d/%d %v", up, want, p)
+	}
+	h := newHost()
+	h.ID, h.Names = 9, []string{"p.test"}
+	row := hostRow{Host: h, Online: &onlineRow{Mode: 1, Names: h.Names, Status: "active", Up: 1, Want: 4, Pending: true,
+		Edges: []onlineBadge{{Name: "srv08", State: "direct", Sessions: 1}}}}
+	sv := newServersView(&ipv64api.CDN64Servers{Count: 1, Max: 4, All: true, Total: 4, Selectable: true, Assigned: []string{"srv08"}, Sessions: 4, SessionsMax: 4})
+	body := renderHosts(t, listData{Kind: KindProxy, OnlineOn: true, Rows: []hostRow{row}, Servers: sv})
+	for _, want := range []string{"data-c64o-pending ", `data-c64o-pending-btn`, `data-c64o-edge="srv08"`, "1×4", `data-fmt="cdn64.online.conns_pending"`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("page misses %q", want)
+		}
+	}
+	row.Online.Pending = false
+	if body = renderHosts(t, listData{Kind: KindProxy, OnlineOn: true, Rows: []hostRow{row}, Servers: sv}); strings.Contains(body, "data-c64o-pending") {
+		t.Fatal("no spinner once all connections are up")
 	}
 }

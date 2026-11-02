@@ -100,6 +100,9 @@ func TestSetSessions(t *testing.T) {
 		t.Fatal("no second session")
 	}
 	waitFor(t, "two sessions", func() bool { return c.Status()[0].Sessions == 2 })
+	if s := c.Status()[0]; s.Slots != 2 || time.Since(s.Changed) > 10*time.Second { // Anzeige "im Aufbau" der Node
+		t.Fatalf("slots/changed: %+v", s)
+	}
 	select {
 	case <-p0.Session.Done():
 		t.Fatal("first session closed")
