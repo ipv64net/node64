@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 0.12.0-alpha.37 – 2026-11-02
+
 - Oberfläche: Healthchecks, Honeypot64 und PROXY64 zeigen ihre eigenen Logos (Menü, Dashboard, Seitenköpfe), hell und
   dunkel.
 - PROXY64: Business und Company wählen in der Spalte CDN64 je Tunnel, über wie viele CDN64-Server er läuft und mit
