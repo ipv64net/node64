@@ -37,9 +37,10 @@ type route struct {
 	Mode    int    // 1 = durchreichen, 2 = TLS endet hier (terminate.go), 3 = direkt zum Ziel (direct.go)
 	Target  *target
 	ACL     *acl
-	Deny    []*shield.Set // Sperrlisten der Nodes hinter den Tunnels (ohne deren Freigabeliste)
-	WAF     bool          // Muster-WAF (Modus 2/3, waf.go)
-	JA4     string        // ja4Off | ja4Count | ja4Block (ja4.go)
+	Deny    []*shield.Set   // Sperrlisten der Nodes hinter den Tunnels (ohne deren Freigabeliste)
+	Edges   map[string]bool // Server der Tunnels (Name, Hostname, Adressen): dort ist der Tunnel, dialPeer fragt sie zuerst
+	WAF     bool            // Muster-WAF (Modus 2/3, waf.go)
+	JA4     string          // ja4Off | ja4Count | ja4Block (ja4.go)
 }
 
 // routes: Name -> route (exakt oder *.domain).
@@ -63,9 +64,17 @@ func newRoutes(static []HostEntry, api *apiConfig) *routes {
 	}
 	if api != nil {
 		deny := map[string]*shield.Set{} // je Tunnel
+		edges := map[string][]string{}   // je Tunnel: Server des Accounts mit Hostname und Adressen
+		keys := map[string][]string{}
+		for _, e := range api.Edges {
+			keys[e.Name] = append([]string{e.Host}, e.IPs...)
+		}
 		for _, t := range api.Tunnels {
 			if set := shield.BuildSet([][]netip.Prefix{prefixes(t.Deny)}, prefixes(t.Allow)); set.Total() > 0 {
 				deny[t.ID] = set
+			}
+			for _, n := range t.Edges {
+				edges[t.ID] = append(append(edges[t.ID], n), keys[n]...)
 			}
 		}
 		for _, h := range api.Hosts {
@@ -78,6 +87,15 @@ func newRoutes(static []HostEntry, api *apiConfig) *routes {
 			for _, t := range h.Tunnels {
 				if set := deny[t]; set != nil {
 					e.Deny = append(e.Deny, set)
+				}
+				for _, k := range edges[t] {
+					if k == "" {
+						continue
+					}
+					if e.Edges == nil {
+						e.Edges = map[string]bool{}
+					}
+					e.Edges[k] = true
 				}
 			}
 			r.exact[n] = e
@@ -596,7 +614,7 @@ func (s *Server) viaPeer(c net.Conn, kind, host string, port int, data []byte, c
 
 // dialPeer: Verbindung zu einem Nachbarn, der die Daten in seinen Tunnel gibt (nil = keiner erreichbar).
 func (s *Server) dialPeer(ctx context.Context, kind, host string, port int, client string, data []byte) net.Conn {
-	for _, p := range s.cfg.Peers {
+	for _, p := range s.peerOrder(host) {
 		h, _, _ := net.SplitHostPort(p.Addr)
 		d := &tls.Dialer{NetDialer: &net.Dialer{Timeout: 3 * time.Second}, Config: &tls.Config{ServerName: h, RootCAs: s.peerRoots, MinVersion: tls.VersionTLS13}}
 		dctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -614,6 +632,25 @@ func (s *Server) dialPeer(ctx context.Context, kind, host string, port int, clie
 		return pc
 	}
 	return nil
+}
+
+// peerOrder: Nachbarn, zu denen die Node des Namens ihren Tunnel hat (Server des Accounts), zuerst, dann die uebrigen.
+// Der Nachbar gibt nicht weiter: ohne Tunnel dort bekaeme der Besucher die Fehlerseite.
+func (s *Server) peerOrder(host string) []PeerEntry {
+	re := s.routes.Load().lookup(host)
+	if re == nil || len(re.Edges) == 0 {
+		return s.cfg.Peers
+	}
+	var first, rest []PeerEntry
+	for _, p := range s.cfg.Peers {
+		h, _, _ := net.SplitHostPort(p.Addr)
+		if re.Edges[p.Name] || re.Edges[h] {
+			first = append(first, p)
+		} else {
+			rest = append(rest, p)
+		}
+	}
+	return append(first, rest...)
 }
 
 // servePeer: Verbindungen vom Nachbarn annehmen (Geheimnis pruefen) und in den eigenen Tunnel geben.

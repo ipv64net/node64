@@ -385,6 +385,30 @@ warten.
 - Modus 3 mit Ziel „aus dem DNS-Eintrag“: Ändert DynDNS das deaktivierte Original, schreibt ipv64 die neue Adresse in
   die Server-Konfiguration (Hook im DynDNS-Update oder Abgleich im Config-Endpunkt).
 
+**Server je Account (2026-11-02, Portal + cdn64-edge 0.20.5, nicht ausgerollt):** Mit vier Servern baute jede Node zu
+allen Servern Verbindungen auf (Company 4×4). Jetzt teilt das Portal je Account Server nach Klasse zu
+(`user_class.cdn_edges`, 0 = alle; `cdn_edges_pick` = Anzahl wählbar, `cdn64o_accounts.edges`): Free 1, Supporter
+(auch VIP/Premium) 2, Business 1–2, Company 1–alle. Zuteilung fest in `cdn64o_user_edges`: je Standort
+(`cdn64o_edges.location`, nbg/fsn) zuerst einer, jeweils der mit den wenigsten Accounts (gezählt nur Accounts mit
+Namen oder Tunnel); weniger → die zuerst zugeteilten bleiben, je Standort einer. Ausgefallen (G6, `withdrawn`) oder in
+Wartung (`disabled`): Ersatz am selben Standort bis zur Rückkehr; die Node behält den Tunnel zum ausgefallenen.
+- Node: `GET /cdn64o`, `POST /cdn64o/tunnels` und `.../token` liefern nur die Server des Accounts in `edges` – die Node
+  übernimmt Änderungen ohne neue Version (Abgleich jede Minute). `edge/config` liefert weiter alle Server, je Tunnel
+  aber `edges` (Namen): ein Server ohne den Tunnel fragt beim Weiterreichen (`dialPeer`) zuerst diese Nachbarn
+  (Name oder Adresse aus `edges`), dann die übrigen. Ohne das liefe ein Besucher mit altem DNS-Eintrag beim falschen
+  Nachbarn auf die Fehlerseite (der Nachbar reicht nicht weiter). Ältere Edges ignorieren das Feld.
+- DNS: `c64o_dns_sync` gleicht je Name Soll (Server des Accounts ohne ausgefallene) und Ist (`cdn64o_records` role
+  edge) ab, nur geänderte Typen gehen an PowerDNS. Aufgerufen bei Ausfall/Rückkehr (G6, alle Namen), `PUT
+  /cdn64o/servers`, erstem Namen eines Accounts, `GET /cdn64o` bzw. `/cdn64o/servers`, wenn sich die Zuteilung ändert
+  (Klassenwechsel), und höchstens alle 10 min aus `edge/config` für alle Namen (15 s je Lauf; neue Server, Wartung).
+  `withdrawn = 1` für neue Server ist damit nicht mehr nötig. Ereignis `servers_changed`.
+- Modus 3: dieselben Server wie der Account – eine Regel für alle Modi, die Klasse wirkt auch ohne Node, die
+  Bandbreitengrenze je Account verteilt sich auf weniger Server; der Ersatz bei Ausfall gilt genauso.
+- API: `GET|PUT /cdn64o/servers {count}`, `servers` in `GET /cdn64o`, `/plans` mit `cdn_edges` und
+  `cdn_edges_selectable`; Auswahlfeld auf `cdn64.php` (Zeile *Servers*). SQL `deploy/sql/cdn64_servers.sql`; ohne
+  SQL läuft alles wie bisher (alle Server). Doku für ipv64.net/docs liegt als `docs/ipv64_docs-cdn64-servers.patch`
+  bereit (mit der Übergabe einspielen: `git -C ../ipv64_docs apply ../ipv64_container/docs/ipv64_docs-cdn64-servers.patch`).
+
 ### 8.6 Webseite ipv64.net
 
 - **Neue Seite** (z. B. `cdn64.php`, Menü „CDN64“), getrennt von `cdn.php`:

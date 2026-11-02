@@ -30,10 +30,14 @@ type apiConfig struct {
 	Tunnels   []apiTunnel    `json:"tunnels"`
 	Hosts     []apiHost      `json:"hosts"`
 	Bandwidth map[string]int `json:"bandwidth_mbit"` // Account -> Mbit/s
-	Edges     []struct {
-		Name string   `json:"name"`
-		IPs  []string `json:"ips"`
-	} `json:"edges"` // die Server selbst (nie Ziel in Modus 3)
+	Edges     []apiEdge      `json:"edges"`          // die Server selbst (nie Ziel in Modus 3)
+}
+
+// apiEdge: ein CDN64-Server (edges in edge/config).
+type apiEdge struct {
+	Name string   `json:"name"`
+	Host string   `json:"host"`
+	IPs  []string `json:"ips"`
 }
 
 type apiTunnel struct {
@@ -42,6 +46,8 @@ type apiTunnel struct {
 	UserID      int    `json:"userid"`
 	Blocked     bool   `json:"blocked"`
 	Sessions    int    `json:"sessions"` // parallele Verbindungen der Klasse (Business/Company; 0 = eine)
+	// Server des Accounts (Namen, Klasse): nur zu diesen baut die Node den Tunnel auf (leer = alle)
+	Edges []string `json:"edges,omitempty"`
 	// Sperr- und Freigabeliste der Node (PROXY64, Reiter Zugriffslisten): gelten fuer alle Namen des Tunnels
 	Deny  []string `json:"deny,omitempty"`
 	Allow []string `json:"allow,omitempty"`

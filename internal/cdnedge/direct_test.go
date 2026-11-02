@@ -191,10 +191,7 @@ func TestDirect(t *testing.T) {
 
 func TestPublicTarget(t *testing.T) {
 	s := New(&Config{Name: "A", DataDir: t.TempDir()}, slog.New(slog.DiscardHandler), "test")
-	s.apiCfg.Store(&apiConfig{Edges: []struct {
-		Name string   `json:"name"`
-		IPs  []string `json:"ips"`
-	}{{Name: "srv07", IPs: []string{"91.99.98.96", "2a01:4f8:1c18:5887::1"}}}})
+	s.apiCfg.Store(&apiConfig{Edges: []apiEdge{{Name: "srv07", IPs: []string{"91.99.98.96", "2a01:4f8:1c18:5887::1"}}}})
 	for ip, want := range map[string]bool{"1.1.1.1": true, "2606:4700::1111": true, "178.203.252.242": true,
 		"10.0.0.1": false, "192.168.1.1": false, "172.16.0.1": false, "100.64.1.1": false, "127.0.0.1": false, "0.0.0.0": false, "169.254.1.1": false,
 		"::1": false, "fe80::1": false, "fd00::1": false, "2001:db8::1": false, "::ffff:10.0.0.1": false, "64:ff9b::a00:1": false,
