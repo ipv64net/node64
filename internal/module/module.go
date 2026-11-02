@@ -242,6 +242,7 @@ func BarClassOf(pct float64, warn bool) string {
 type DashboardInfo struct {
 	Module    string
 	TitleKey  string
+	Image     string // Logo unter /static/img (sonst Icon)
 	Path      string
 	OK        int
 	Down      int

@@ -23,7 +23,7 @@
 		<button type="button" class="btn btn-sm btn-light py-0 px-1" data-dash="hide" title="{{$.T "dashboard.js.hide"}}"><i class="bi bi-eye"></i></button>
 	</div>
 	{{if eq $it.Kind "board"}}{{with $it.Board}}
-	<div class="card h-100 dash-board"><div class="card-header"><i class="bi bi-heart-pulse text-danger"></i> {{$.T .TitleKey}}</div><div class="card-body py-2">
+	<div class="card h-100 dash-board"><div class="card-header">{{if .Image}}<img src="/static/img/{{.Image}}" alt="{{$.T .TitleKey}}" height="18" class="align-text-bottom logo logo-light"><img src="/static/img/{{darkimg .Image}}" alt="{{$.T .TitleKey}}" height="18" class="align-text-bottom logo logo-dark">{{else}}<i class="bi bi-heart-pulse text-danger"></i> {{$.T .TitleKey}}{{end}}</div><div class="card-body py-2">
 	<div class="row g-1">
 		<div class="col-6 col-md"><a class="card stat stat-ok" href="{{.Path}}?state=up"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "dashboard.ok"}}</div><div class="stat-value">{{.OK}}</div></div><i class="bi bi-check-circle stat-icon"></i></div></a></div>
 		<div class="col-6 col-md"><a class="card stat stat-down" href="{{.Path}}?state=problem"><div class="card-body"><div class="stat-text"><div class="stat-label">{{$.T "dashboard.down"}}</div><div class="stat-value">{{.Down}}</div></div><i class="bi bi-exclamation-triangle stat-icon"></i></div></a></div>
@@ -128,7 +128,7 @@
 			<ul class="list-unstyled mb-0 small">
 			{{range $d.Modules}}
 				<li class="d-flex justify-content-between py-1">
-					<span><i class="bi {{.Info.Icon}}"></i> {{$.T .Info.TitleKey}}{{if .Info.Version}} <a href="/settings/modules" class="text-body-secondary text-decoration-none font-monospace">v{{.Info.Version}}</a>{{end}}</span>
+					<span>{{if .Info.Image}}<img src="/static/img/{{.Info.Image}}" alt="{{$.T .Info.TitleKey}}" height="18" class="align-text-bottom logo logo-light"><img src="/static/img/{{darkimg .Info.Image}}" alt="{{$.T .Info.TitleKey}}" height="18" class="align-text-bottom logo logo-dark">{{else}}<i class="bi {{.Info.Icon}}"></i> {{$.T .Info.TitleKey}}{{end}}{{if .Info.Version}} <a href="/settings/modules" class="text-body-secondary text-decoration-none font-monospace">v{{.Info.Version}}</a>{{end}}</span>
 					{{if not .Info.Available}}<span class="badge text-bg-light">{{$.T "nav.soon"}}</span>
 					{{else if .Running}}<span class="badge text-bg-success">{{$.T "common.running"}}</span>
 					{{else if and .Enabled .LastError}}<span class="badge text-bg-danger" title="{{.LastError}}">{{$.T "common.error"}}</span>

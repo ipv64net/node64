@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Oberfläche: Healthchecks, Honeypot64 und PROXY64 zeigen ihre eigenen Logos (Menü, Dashboard, Seitenköpfe), hell und
+  dunkel.
 - PROXY64: Unter den Proxy-Hosts zeigt eine Kachel die CDN64-Server des Kontos; Business und Company wählen dort die
   Anzahl.
 - PROXY64: Ändert sich die Liste der CDN64-Server, laufen die Tunnel zu den bleibenden Servern ohne Unterbrechung

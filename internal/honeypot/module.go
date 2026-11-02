@@ -203,7 +203,7 @@ func (m *Module) SetNotifier(f func(notify.Alert)) { m.notifier = f }
 func (m *Module) Store() *Store { return m.st }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.honeypot", Icon: "bi-bug", Path: "/honeypot", Available: true, Order: 50,
+	return module.Info{Name: Name, TitleKey: "nav.honeypot", Icon: "bi-bug", Image: "honeypot64.svg", Path: "/honeypot", Available: true, Order: 50,
 		Version: version, Changelog: changelog, ChangelogEN: changelogEN}
 }
 
@@ -984,7 +984,7 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 // Card liefert die Dashboard-Karte (module.CardProvider): Zahlen der letzten 24 Stunden mit Trend gegenueber den
 // 24 Stunden davor, Top-3-Laender, meistangegriffener Dienst, Fallen-Ports, Meldung an ipv64 und PROXY64.
 func (m *Module) Card(ctx context.Context) (*module.Card, error) {
-	c := &module.Card{TitleKey: "nav.honeypot", Icon: "bi-bug", Path: "/honeypot"}
+	c := &module.Card{TitleKey: "nav.honeypot", Icon: "bi-bug", Image: "honeypot64.svg", Path: "/honeypot"}
 	open, errs := 0, 0
 	var errText []string
 	for _, s := range m.Status() {

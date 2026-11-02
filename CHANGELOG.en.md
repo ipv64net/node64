@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Interface: Healthchecks, Honeypot64 and PROXY64 show their own logos (menu, dashboard, page headers), light and
+  dark.
 - PROXY64: a tile below the proxy hosts shows the account’s CDN64 servers; Business and Company choose the number
   there.
 - PROXY64: When the list of CDN64 servers changes, tunnels to the remaining servers keep running without

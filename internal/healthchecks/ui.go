@@ -1445,7 +1445,7 @@ func (m *Module) Dashboard(ctx context.Context) (*module.DashboardInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	info := &module.DashboardInfo{Module: Name, TitleKey: "nav.healthchecks", Path: "/healthchecks"}
+	info := &module.DashboardInfo{Module: Name, TitleKey: "nav.healthchecks", Image: "health64.svg", Path: "/healthchecks"}
 	names := map[string]string{}
 	for _, c := range list {
 		names[c.Token] = c.Name
