@@ -253,7 +253,7 @@ func (m *Module) onlineEnsureTunnel(ctx context.Context) (*onlineConf, error) {
 					return nil, err
 				}
 				if m.isRunning() {
-					m.onlineStart(ctx)
+					m.onlineSetEdges(ctx, edges)
 				}
 			} else if m.isRunning() && !m.onlineRunning() {
 				m.onlineStart(ctx)
@@ -607,7 +607,7 @@ func (m *Module) onlineSync(ctx context.Context) {
 			if edges := toEdges(ov.Edges); t.ID == c.Tunnel && len(edges) > 0 && !sameEdges(c.Edges, edges) {
 				if err := m.onlineSave(ctx, c.Tunnel, tok, edges); err == nil && m.isRunning() {
 					m.log.Info("cdn64 online: server list changed", "edges", len(edges))
-					m.onlineStart(ctx)
+					m.onlineSetEdges(ctx, edges)
 				}
 			}
 		}

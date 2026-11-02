@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net"
+	"slices"
 	"sort"
 	"strconv"
 	"sync"
@@ -76,6 +77,9 @@ type Client struct {
 	resolve  func(ctx context.Context, e Edge) []net.IP // Tests: feste Adressen
 	forceTCP bool                                       // Tests: nur der Ausweichweg
 	offWait  time.Duration                              // Tests: Pause eines abgelehnten Slots (Standard 2-5 Minuten)
+	runCtx   context.Context                            // waehrend Run (nil = nicht gestartet bzw. beendet)
+	cancels  map[string]context.CancelFunc              // je Server: seine Verbindungen beenden (SetEdges)
+	wg       sync.WaitGroup
 }
 
 type edgeState struct {
@@ -92,25 +96,77 @@ func NewClient(cfg ClientConfig) *Client {
 		cfg.Log = slog.New(slog.DiscardHandler)
 	}
 	cfg.Sessions = min(max(cfg.Sessions, 1), MaxSessions)
-	c := &Client{cfg: cfg, st: map[string][]*edgeState{}, resolve: addrs, forceTCP: cfg.TCPOnly}
+	c := &Client{cfg: cfg, st: map[string][]*edgeState{}, resolve: addrs, forceTCP: cfg.TCPOnly, cancels: map[string]context.CancelFunc{}}
 	for _, e := range cfg.Edges {
-		for range cfg.Sessions {
-			c.st[e.Name] = append(c.st[e.Name], &edgeState{EdgeStatus: EdgeStatus{Name: e.Name, Host: e.Host}})
-		}
+		c.addStates(e)
 	}
 	return c
 }
 
+func (c *Client) addStates(e Edge) {
+	for range c.cfg.Sessions {
+		c.st[e.Name] = append(c.st[e.Name], &edgeState{EdgeStatus: EdgeStatus{Name: e.Name, Host: e.Host}})
+	}
+}
+
 // Run haelt zu jedem Server cfg.Sessions Tunnel-Verbindungen, bis ctx endet.
 func (c *Client) Run(ctx context.Context) {
-	var wg sync.WaitGroup
+	c.mu.Lock()
+	c.runCtx = ctx
 	for _, e := range c.cfg.Edges {
-		for slot := range c.cfg.Sessions {
-			wg.Add(1)
-			go func() { defer wg.Done(); c.loop(ctx, e, slot) }()
+		c.startLocked(e)
+	}
+	c.mu.Unlock()
+	<-ctx.Done()
+	c.mu.Lock()
+	c.runCtx = nil // SetEdges startet danach nichts mehr
+	c.mu.Unlock()
+	c.wg.Wait()
+}
+
+// startLocked startet die Verbindungen zu einem Server (c.mu gehalten, waehrend Run).
+func (c *Client) startLocked(e Edge) {
+	ectx, cancel := context.WithCancel(c.runCtx)
+	c.cancels[e.Name] = cancel
+	for slot := range c.cfg.Sessions {
+		c.wg.Add(1)
+		go func() { defer c.wg.Done(); c.loop(ectx, e, slot) }()
+	}
+}
+
+// SetEdges aendert die Serverliste, ohne die Verbindungen zu bleibenden Servern zu trennen: neue Server kommen dazu,
+// entfernte (oder mit geaenderter Adresse) werden getrennt. So bleibt der Tunnel bei Ersatz und Rueckkehr eines
+// Servers ohne Aussetzer.
+func (c *Client) SetEdges(edges []Edge) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	keep := map[string]bool{}
+	for _, e := range edges {
+		for _, o := range c.cfg.Edges {
+			if o.Name == e.Name && o.Host == e.Host && o.Port == e.Port && slices.Equal(o.IPs, e.IPs) {
+				keep[e.Name] = true
+			}
 		}
 	}
-	wg.Wait()
+	for _, o := range c.cfg.Edges {
+		if !keep[o.Name] {
+			if cancel := c.cancels[o.Name]; cancel != nil {
+				cancel()
+			}
+			delete(c.cancels, o.Name)
+			delete(c.st, o.Name)
+		}
+	}
+	for _, e := range edges {
+		if keep[e.Name] {
+			continue
+		}
+		c.addStates(e)
+		if c.runCtx != nil {
+			c.startLocked(e)
+		}
+	}
+	c.cfg.Edges = slices.Clone(edges)
 }
 
 // Status: Zustand je Server in der Reihenfolge der Konfiguration; mehrere Verbindungen zusammengefasst (Angaben der
@@ -182,7 +238,9 @@ func (c *Client) AllHave(capability string) bool {
 
 func (c *Client) update(name string, slot int, f func(s *edgeState)) {
 	c.mu.Lock()
-	f(c.st[name][slot])
+	if l := c.st[name]; slot < len(l) { // Server per SetEdges entfernt: nichts mehr anzeigen
+		f(l[slot])
+	}
 	c.mu.Unlock()
 }
 
@@ -425,7 +483,10 @@ func (c *Client) serve(ctx context.Context, e Edge, slot int, sess Session) {
 		}
 	}()
 	c.mu.Lock()
-	es := c.st[e.Name][slot]
+	es := &edgeState{} // Server inzwischen entfernt: Zaehler ins Leere
+	if l := c.st[e.Name]; slot < len(l) {
+		es = l[slot]
+	}
 	c.mu.Unlock()
 	for {
 		st, err := sess.AcceptStream(sctx)

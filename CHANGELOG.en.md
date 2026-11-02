@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: When the list of CDN64 servers changes, tunnels to the remaining servers keep running without
+  interruption.
 - Interface: hint texts much shorter (details are in the docs); the API page shows a short sentence instead of the long
   description, endpoint details as a tooltip.
 - Honeypot64: Reporting to ipv64 now also works without an API key – anonymously, without an account; without a key

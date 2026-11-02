@@ -1,5 +1,12 @@
 # Changes – PROXY64
 
+## 1.46.1 – 2026-11-02
+
+### Changed
+- CDN64: When the list of servers changes (servers per account, stand-in during a longer outage, return), new servers
+  join the tunnel and removed ones are dropped – connections to the remaining servers keep running without
+  interruption. Before, the tunnel to all servers restarted.
+
 ## 1.46.0 – 2026-10-30
 
 ### New

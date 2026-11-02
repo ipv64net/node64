@@ -117,6 +117,19 @@ func (m *Module) onlineStart(ctx context.Context) {
 	m.log.Info("cdn64 online: tunnel started", "tunnel", c.Tunnel, "edges", len(c.Edges), "sessions", max(sessions, 1))
 }
 
+// onlineSetEdges gibt eine neue Serverliste an den laufenden Tunnel (Server je Account, Ersatz bei Ausfall): die
+// Verbindungen zu bleibenden Servern laufen weiter. Laeuft keiner, startet er neu.
+func (m *Module) onlineSetEdges(ctx context.Context, edges []tunnel.Edge) {
+	m.online.mu.Lock()
+	cl := m.online.client
+	m.online.mu.Unlock()
+	if cl == nil {
+		m.onlineStart(ctx)
+		return
+	}
+	cl.SetEdges(edges)
+}
+
 func (m *Module) onlineStop() {
 	m.online.mu.Lock()
 	cancel, done := m.online.cancel, m.online.done

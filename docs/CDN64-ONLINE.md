@@ -385,13 +385,17 @@ warten.
 - Modus 3 mit Ziel „aus dem DNS-Eintrag“: Ändert DynDNS das deaktivierte Original, schreibt ipv64 die neue Adresse in
   die Server-Konfiguration (Hook im DynDNS-Update oder Abgleich im Config-Endpunkt).
 
-**Server je Account (2026-11-02, Portal + cdn64-edge 0.20.5, nicht ausgerollt):** Mit vier Servern baute jede Node zu
+**Server je Account (2026-11-02, Portal + cdn64-edge 0.20.5 + PROXY64 1.46.1, nicht ausgerollt):** Mit vier Servern baute jede Node zu
 allen Servern Verbindungen auf (Company 4×4). Jetzt teilt das Portal je Account Server nach Klasse zu
 (`user_class.cdn_edges`, 0 = alle; `cdn_edges_pick` = Anzahl wählbar, `cdn64o_accounts.edges`): Free 1, Supporter
 (auch VIP/Premium) 2, Business 1–2, Company 1–alle. Zuteilung fest in `cdn64o_user_edges`: je Standort
 (`cdn64o_edges.location`, nbg/fsn) zuerst einer, jeweils der mit den wenigsten Accounts (gezählt nur Accounts mit
-Namen oder Tunnel); weniger → die zuerst zugeteilten bleiben, je Standort einer. Ausgefallen (G6, `withdrawn`) oder in
-Wartung (`disabled`): Ersatz am selben Standort bis zur Rückkehr; die Node behält den Tunnel zum ausgefallenen.
+Namen oder Tunnel); weniger → die zuerst zugeteilten bleiben, je Standort einer. In Wartung (`disabled`) oder länger
+als 3 min aus dem DNS (G6, `withdrawn_at`, `C64O_EDGE_SUBST`; Dennis: ein Neustart soll nichts umbauen): Ersatz am
+selben Standort bis zur Rückkehr, einmal je Ausfall angestoßen (`c64o_edge_replace`, Ereignis `edge_replaced`); vorher
+tragen die übrigen Server des Accounts, mit einem Server (Free) ist der Name so lange weg. Die Node behält den Tunnel
+zum ausgefallenen. PROXY64 1.46.1: Die Node übernimmt eine neue Liste per `tunnel.Client.SetEdges` – neue Server
+kommen dazu, entfernte fallen weg, die Verbindungen zu den bleibenden laufen weiter (bisher Neustart aller Tunnel).
 - Node: `GET /cdn64o`, `POST /cdn64o/tunnels` und `.../token` liefern nur die Server des Accounts in `edges` – die Node
   übernimmt Änderungen ohne neue Version (Abgleich jede Minute). `edge/config` liefert weiter alle Server, je Tunnel
   aber `edges` (Namen): ein Server ohne den Tunnel fragt beim Weiterreichen (`dialPeer`) zuerst diese Nachbarn
