@@ -185,9 +185,12 @@
 		<div class="modal-header"><h2 class="modal-title h5" id="cdn64-servers-title"><i class="bi bi-hdd-network text-primary"></i> {{$.T "cdn64.online.q_servers"}}{{$.Doc "cdn64-online#server-je-konto"}}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{$.T "cdn64.online.close"}}"></button></div>
 		<div class="modal-body small">
 			<p>{{$.T "cdn64.online.servers_intro"}}</p>
-			<p class="mb-2">{{$.T "cdn64.online.servers_now" "list" .Names}}</p>
+			<p class="mb-2">{{$.T "cdn64.online.servers_now" "list" .Names "n" .CurSessions}}</p>
 			<label class="form-label mb-1" for="cdn64-servers-count">{{$.T "cdn64.online.servers_count"}}</label>
 			<select class="form-select form-select-sm" id="cdn64-servers-count" name="count">{{$cur := .Current}}{{range .Options}}<option value="{{.}}"{{if eq . $cur}} selected{{end}}>{{if eq . 0}}{{$.T "cdn64.online.servers_all"}}{{else}}{{$.T "cdn64.online.servers_n" "n" .}}{{end}}</option>{{end}}</select>
+			{{if .SessionOptions}}<label class="form-label mb-1 mt-2" for="cdn64-servers-sessions">{{$.T "cdn64.online.servers_sessions"}}</label>
+			<select class="form-select form-select-sm" id="cdn64-servers-sessions" name="sessions">{{$cs := .CurSessions}}{{range .SessionOptions}}<option value="{{.}}"{{if eq . $cs}} selected{{end}}>{{$.T "cdn64.online.servers_sessions_n" "n" .}}</option>{{end}}</select>
+			{{else}}<input type="hidden" name="sessions" value="{{.CurSessions}}">{{end}}
 			<div class="form-text">{{$.T "cdn64.online.servers_hint"}}</div>
 		</div>
 		<div class="modal-footer"><button type="submit" class="btn btn-primary btn-sm">{{$.T "common.save"}}</button><button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{{$.T "cdn64.online.close"}}</button></div>

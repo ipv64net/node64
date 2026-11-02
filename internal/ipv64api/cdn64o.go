@@ -148,12 +148,16 @@ type CDN64Quota struct {
 // CDN64Servers sind die Server eines Tunnels (Anzahl nach Klasse; Business und Company waehlen je Tunnel).
 type CDN64Servers struct {
 	Count      int      `json:"count"`      // zugeteilt
+	Choice     int      `json:"choice"`     // gewaehlt (0 = Hoechstwert bzw. alle, auch kuenftige)
 	Max        int      `json:"max"`        // hoechstens waehlbar
 	All        bool     `json:"all"`        // Klasse ohne Obergrenze (alle, auch kuenftige)
 	Total      int      `json:"total"`      // Server insgesamt
 	Selectable bool     `json:"selectable"` // Anzahl waehlbar
 	Assigned   []string `json:"assigned"`
 	Active     []string `json:"active"` // gerade im DNS (ohne ausgefallene, mit Ersatz)
+	// Verbindungen je Server: wirksam und hoechstens waehlbar (Grenze der Klasse)
+	Sessions    int `json:"sessions"`
+	SessionsMax int `json:"sessions_max"`
 }
 
 // CDN64Overview ist GET /cdn64o.
@@ -237,10 +241,11 @@ func (c *Client) CDN64SetPaused(ctx context.Context, key string, id int64, pause
 	return &out, nil
 }
 
-// CDN64SetServers setzt die Anzahl der Server eines Tunnels (Business/Company; 0 = alle, auch kuenftige).
-func (c *Client) CDN64SetServers(ctx context.Context, key, tunnelID string, count int) (*CDN64Servers, error) {
+// CDN64SetServers setzt Server (0 = alle, auch kuenftige) und Verbindungen je Server eines Tunnels (Business/Company).
+func (c *Client) CDN64SetServers(ctx context.Context, key, tunnelID string, count, sessions int) (*CDN64Servers, error) {
 	var out CDN64Servers
-	if err := c.do(ctx, http.MethodPut, key, "/cdn64o/tunnels/"+url.PathEscape(tunnelID)+"/servers", map[string]int{"count": count}, &out); err != nil {
+	in := map[string]int{"count": count, "sessions": sessions}
+	if err := c.do(ctx, http.MethodPut, key, "/cdn64o/tunnels/"+url.PathEscape(tunnelID)+"/servers", in, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

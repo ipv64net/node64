@@ -25,10 +25,19 @@ func TestServersView(t *testing.T) {
 	if !slices.Equal(v.Options, []int{1, 2}) || v.Current != 2 {
 		t.Fatalf("business: %+v", v)
 	}
-	// Company: 1 bis 3, dann "alle (auch kuenftige)" statt 4; alle zugeteilt = Option 0
-	v = newServersView(&ipv64api.CDN64Servers{Count: 4, Max: 4, All: true, Total: 4, Selectable: true, Assigned: []string{"srv07", "srv08", "srv09", "srv10"}})
-	if !slices.Equal(v.Options, []int{1, 2, 3, 0}) || v.Current != 0 {
+	// Company: 1 bis alle Server (waechst mit), dazu "alle (auch kuenftige)" = 0; Verbindungen 1 bis 4
+	v = newServersView(&ipv64api.CDN64Servers{Count: 4, Max: 4, All: true, Total: 4, Selectable: true, Assigned: []string{"srv07", "srv08", "srv09", "srv10"},
+		Sessions: 2, SessionsMax: 4})
+	if !slices.Equal(v.Options, []int{1, 2, 3, 4, 0}) || v.Current != 0 || !slices.Equal(v.SessionOptions, []int{1, 2, 3, 4}) || v.CurSessions != 2 {
 		t.Fatalf("company: %+v", v)
+	}
+	v = newServersView(&ipv64api.CDN64Servers{Count: 4, Choice: 4, Max: 4, All: true, Total: 4, Selectable: true, Sessions: 1, SessionsMax: 4})
+	if v.Current != 4 {
+		t.Fatalf("company, 4 chosen (not all): %+v", v)
+	}
+	// Free: fest 1x1, keine Auswahl der Verbindungen
+	if v = newServersView(&ipv64api.CDN64Servers{Count: 1, Max: 1, Total: 4, Sessions: 1, SessionsMax: 1}); v.SessionOptions != nil || v.CurSessions != 1 {
+		t.Fatalf("free: %+v", v)
 	}
 }
 
@@ -39,7 +48,7 @@ func TestOnlineServersPage(t *testing.T) {
 	e := newEnv(t)
 	all := []ipv64api.CDN64Edge{{Name: "srv07", Host: "127.0.0.1", Port: 1, IPs: []string{"127.0.0.1"}}, {Name: "srv08", Host: "127.0.0.1", Port: 2, IPs: []string{"127.0.0.1"}}}
 	f := &fakeOnline{ready: true, tunnels: map[string]bool{}, hosts: map[int64]string{}, modes: map[int64]int{}, edges: all,
-		servers: &ipv64api.CDN64Servers{Count: 2, Max: 4, All: true, Total: 4, Selectable: true, Assigned: []string{"srv07", "srv08"}}}
+		servers: &ipv64api.CDN64Servers{Count: 2, Max: 4, All: true, Total: 4, Selectable: true, Assigned: []string{"srv07", "srv08"}, Sessions: 1, SessionsMax: 4}}
 	e.m.SetOnlineAPI(f)
 	e.enable(t)
 	h := newHost()
@@ -66,7 +75,7 @@ func TestOnlineServersPage(t *testing.T) {
 	e.m.g.T = func(_ *http.Request, key string, _ ...any) string { return key }
 	e.m.g.Audit = func(*http.Request, string, string, string) {}
 	post := func(count string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest("POST", "/cdn64/online/servers", strings.NewReader("count="+count))
+		req := httptest.NewRequest("POST", "/cdn64/online/servers", strings.NewReader("count="+count+"&sessions=2"))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		rec := httptest.NewRecorder()
 		e.m.pageOnlineServers(rec, req)
@@ -75,8 +84,19 @@ func TestOnlineServersPage(t *testing.T) {
 	if rec := post("3"); rec.Code != http.StatusSeeOther || !strings.HasPrefix(flash, "success") || !slices.Equal(f.setCount, []int{3}) || !slices.Equal(f.setTun, []string{tun}) {
 		t.Fatalf("set 3: %d %q %v %v", rec.Code, flash, f.setCount, f.setTun)
 	}
-	if s := e.m.onlineServers(ctx, e.m.online.remote.Load().Data); s == nil || s.Count != 3 {
+	if s := e.m.onlineServers(ctx, e.m.online.remote.Load().Data); s == nil || s.Count != 3 || s.CurSessions != 2 {
 		t.Fatalf("remote not updated: %+v", s)
+	}
+	// Verbindungen je Server: die Node uebernimmt sie beim Abgleich, ohne den Tunnel neu zu starten
+	e.m.online.mu.Lock()
+	cl := e.m.online.client
+	e.m.online.mu.Unlock()
+	e.m.onlineSync(ctx)
+	e.m.online.mu.Lock()
+	cl2 := e.m.online.client
+	e.m.online.mu.Unlock()
+	if cl == nil || cl2 != cl || cl.Status()[0].Wanted != 2 || e.m.core.SettingOr(ctx, setOnlineSessions, "") != "2" {
+		t.Fatalf("sessions not applied in place: same client %v, %+v", cl2 == cl, cl.Status())
 	}
 	if post("x"); !strings.HasPrefix(flash, "danger") || len(f.setCount) != 1 {
 		t.Fatalf("invalid: %q %v", flash, f.setCount)
@@ -91,7 +111,8 @@ func TestOnlineServersPage(t *testing.T) {
 	row := hostRow{Host: h, Online: &onlineRow{Mode: 1, Names: h.Names, Status: "active"}}
 	d := listData{Kind: KindProxy, OnlineOn: true, Rows: []hostRow{row}, Servers: newServersView(f.servers)}
 	body := renderHosts(t, d)
-	for _, want := range []string{`data-bs-target="#cdn64-servers"`, `id="cdn64-servers"`, `action="/cdn64/online/servers"`, `<option value="3" selected>`, `<option value="0">`, "cdn64.online.servers_now"} {
+	for _, want := range []string{`data-bs-target="#cdn64-servers"`, `id="cdn64-servers"`, `action="/cdn64/online/servers"`, `<option value="3" selected>`, `<option value="0">`, "cdn64.online.servers_now",
+		`name="sessions"`, "cdn64.online.servers_sessions_n", "3×2"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("page misses %q", want)
 		}

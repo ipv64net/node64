@@ -79,7 +79,7 @@ func (f *fakeOnline) Overview(context.Context) (*ipv64api.CDN64Overview, error) 
 	return ov, nil
 }
 
-func (f *fakeOnline) SetServers(_ context.Context, tunnel string, n int) (*ipv64api.CDN64Servers, error) {
+func (f *fakeOnline) SetServers(_ context.Context, tunnel string, n, sessions int) (*ipv64api.CDN64Servers, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.setCount, f.setTun = append(f.setCount, n), append(f.setTun, tunnel)
@@ -91,8 +91,8 @@ func (f *fakeOnline) SetServers(_ context.Context, tunnel string, n int) (*ipv64
 		n = len(all)
 	}
 	s := *f.servers
-	s.Count, s.Assigned = n, all[:n]
-	f.servers = &s
+	s.Count, s.Assigned, s.Choice, s.Sessions = n, all[:n], n, sessions
+	f.servers, f.sessions = &s, sessions
 	return &s, nil
 }
 

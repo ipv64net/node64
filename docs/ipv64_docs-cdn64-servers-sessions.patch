@@ -1,0 +1,148 @@
+diff --git a/pages/cdn64.de.html b/pages/cdn64.de.html
+index a3001fe..05173bb 100644
+--- a/pages/cdn64.de.html
++++ b/pages/cdn64.de.html
+@@ -37,14 +37,14 @@
+ <ul>
+ 	<li><strong>Mehrere Server per DNS:</strong> Das DNS nennt die Adressen der Edge-Server deines Kontos. Ab zwei Servern liegt einer in Nürnberg und einer in Falkenstein; Besucher verteilen sich automatisch auf sie.</li>
+ 	<li><strong>Server fällt aus:</strong> Meldet sich ein Edge-Server 45 Sekunden lang nicht bei IPv64.net und antwortet er auch nicht auf eine direkte Prüfung, nimmt IPv64.net seine Adressen aus dem DNS – solange ein anderer Server erreichbar ist. Bis dahin tragen die übrigen Server deines Kontos. Bleibt er länger als 3 Minuten weg (also nicht nur ein Neustart), springt für Konten, denen er zugeteilt ist, ein anderer Server ein, möglichst am selben Standort: Das DNS bekommt dessen Adressen, Node64 verbindet sich binnen einer Minute zusätzlich dorthin – ohne die Verbindungen zu den anderen Servern zu unterbrechen. Hat dein Konto nur einen Server (Free), ist der Name bis dahin nicht erreichbar. Ist der Server wieder 30 Sekunden da, gilt wieder die alte Zuteilung.</li>
+-	<li><strong>Parallele Verbindungen:</strong> Je nach Kontoklasse baut Node64 zu jedem Server mehrere parallele Tunnel-Verbindungen auf (Business: 2, Company: 4, siehe <a href="#kontingent">Kontingent</a>). Die Server geben neue Besucher an die am wenigsten belastete Verbindung.</li>
++	<li><strong>Parallele Verbindungen:</strong> Je nach Kontoklasse baut Node64 zu jedem Server mehrere parallele Tunnel-Verbindungen auf (Business bis 2, Company bis 4, je Tunnel wählbar; siehe <a href="#server-je-tunnel">Server je Tunnel</a>). Die Server geben neue Besucher an die am wenigsten belastete Verbindung.</li>
+ 	<li><strong>Mehrere Tunnel für einen Namen:</strong> Ein Name kann mehreren Tunneln (also mehreren Node64-Instanzen) zugeordnet sein. Die Reihenfolge ist die Priorität: Es bedient der erste Tunnel, der gerade verbunden ist. Das ist eine Ausfallreserve, keine Lastverteilung zwischen den Nodes. Festlegen lässt sich die Liste über die <a href="{{u "cdn64/api"}}#name-aendern">API</a> (Feld <code>tunnels</code>).</li>
+ </ul>
+ <h3 id="server-je-tunnel">Server je Tunnel</h3>
+-<p>Nicht jeder Tunnel nutzt alle Edge-Server. Die Kontoklasse legt fest, wie viele es sind: Free 1, Home / Supporter 2, Business wählbar 1 oder 2, Company wählbar 1 bis alle (mit „alle“ auch künftige Server). Die Zahl gilt je Node64-Tunnel für alle Namen dieses Tunnels. Namen in Modus 3 (ohne Tunnel) nutzen die Höchstzahl der Klasse.</p>
++<p>Nicht jeder Tunnel nutzt alle Edge-Server. Die Kontoklasse legt fest, wie viele es sind: Free 1, Home / Supporter 2, Business wählbar 1 oder 2, Company wählbar 1 bis alle (die Auswahl wächst mit der Zahl der Server; „alle“ schließt künftige Server ein). Dazu wählen Business (1–2) und Company (1–4) die Verbindungen je Server, z. B. 1 Server mit 1 Verbindung oder 3 Server mit je 2 Verbindungen. Free (1 Server, 1 Verbindung) und Supporter (2 Server, je 1 Verbindung) sind fest. Die Werte gelten je Node64-Tunnel für alle Namen dieses Tunnels. Namen in Modus 3 (ohne Tunnel) nutzen die Höchstzahl der Klasse.</p>
+ <ul>
+ 	<li><strong>Zuteilung:</strong> IPv64.net teilt die Server automatisch zu – je Standort zuerst einer, jeweils der mit den wenigsten Tunneln. Die Zuteilung bleibt fest, bis sich die Anzahl ändert. Welche Server ein Tunnel gerade nutzt, zeigt Node64 in der Spalte <em>CDN64</em> der Proxy-Hosts.</li>
+-	<li><strong>Anzahl wählen (Business, Company):</strong> in Node64 unter <em>PROXY64 → Proxy-Hosts</em> in der Spalte <em>CDN64</em> (Knopf mit der Zahl der Server) oder per <a href="{{u "cdn64/api"}}#server">API</a>, je Tunnel. Danach stellt IPv64.net das DNS der Namen dieses Tunnels um; Node64 verbindet sich binnen einer Minute zu den neuen Servern, die Verbindungen zu den bleibenden laufen weiter.</li>
++	<li><strong>Server und Verbindungen wählen (Business, Company):</strong> in Node64 unter <em>PROXY64 → Proxy-Hosts</em> in der Spalte <em>CDN64</em> (Knopf mit der Zahl der Server) oder per <a href="{{u "cdn64/api"}}#server">API</a>, je Tunnel. Danach stellt IPv64.net das DNS der Namen dieses Tunnels um; Node64 verbindet sich binnen einer Minute zu den neuen Servern, die Verbindungen zu den bleibenden laufen weiter.</li>
+ 	<li><strong>Mehrere Tunnel für einen Namen:</strong> Das DNS nennt die Server des ersten Tunnels. Die Reserve-Tunnel verbinden sich zusätzlich zu diesen Servern, damit sie einspringen können.</li>
+ 	<li><strong>Klasse gewechselt:</strong> Die neue Anzahl gilt binnen weniger Minuten; bleiben Server übrig, behält der Tunnel die zuerst zugeteilten.</li>
+ 	<li><strong>Alter DNS-Eintrag beim Besucher:</strong> Landet ein Besucher noch bei einem Server, den der Tunnel nicht mehr nutzt, reicht dieser ihn an einen Server mit deinem Tunnel weiter.</li>
+@@ -213,7 +213,7 @@
+ 		<tr><td>Cache je Name (Modus 3)</td><td>16 MB</td><td>256 MB</td><td>1024 MB</td><td>4096 MB</td></tr>
+ 		<tr><td>Bandbreite (alle Server zusammen)</td><td>50 Mbit/s</td><td>1 Gbit/s</td><td>unbegrenzt</td><td>unbegrenzt</td></tr>
+ 		<tr><td>Edge-Server je Tunnel (<a href="#server-je-tunnel">Server je Tunnel</a>)</td><td>1</td><td>2</td><td>1–2, wählbar</td><td>1 bis alle, wählbar</td></tr>
+-		<tr><td>Tunnel-Verbindungen je Server</td><td>1</td><td>1</td><td>2 parallel</td><td>4 parallel</td></tr>
++		<tr><td>Tunnel-Verbindungen je Server</td><td>1</td><td>1</td><td>1–2, wählbar</td><td>1–4, wählbar</td></tr>
+ 		<tr><td>Traffic pro Monat (ein + aus)</td><td>10 GB</td><td>100 GB</td><td>10 TB</td><td>20 TB</td></tr>
+ 	</tbody>
+ </table></div>
+diff --git a/pages/cdn64.en.html b/pages/cdn64.en.html
+index 7033e84..32716bd 100644
+--- a/pages/cdn64.en.html
++++ b/pages/cdn64.en.html
+@@ -37,14 +37,14 @@
+ <ul>
+ 	<li><strong>Several servers via DNS:</strong> DNS returns the addresses of your account's edge servers. From two servers on, one is in Nuremberg and one in Falkenstein; visitors are spread across them automatically.</li>
+ 	<li><strong>A server fails:</strong> if an edge server does not report to IPv64.net for 45 seconds and does not answer a direct check either, IPv64.net removes its addresses from DNS – as long as another server is reachable. Until then the other servers of your account carry the load. If it stays away for more than 3 minutes (so not just a restart), another server stands in for the accounts it is assigned to, preferably at the same location: DNS gets that server's addresses, and Node64 additionally connects to it within a minute – without interrupting the connections to the other servers. If your account has only one server (Free), the name is unreachable until then. Once the server is back for 30 seconds, the previous assignment applies again.</li>
+-	<li><strong>Parallel connections:</strong> depending on your account class, Node64 opens several parallel tunnel connections to each server (Business: 2, Company: 4, see <a href="#kontingent">quota</a>). The servers hand new visitors to the least loaded connection.</li>
++	<li><strong>Parallel connections:</strong> depending on your account class, Node64 opens several parallel tunnel connections to each server (Business up to 2, Company up to 4, your choice per tunnel; see <a href="#server-je-tunnel">servers per tunnel</a>). The servers hand new visitors to the least loaded connection.</li>
+ 	<li><strong>Several tunnels for one name:</strong> a name can be assigned to several tunnels (i.e. several Node64 instances). The order is the priority: the first tunnel that is currently connected serves the name. This is a fallback, not load balancing between nodes. You set the list via the <a href="{{u "cdn64/api"}}#name-aendern">API</a> (field <code>tunnels</code>).</li>
+ </ul>
+ <h3 id="server-je-tunnel">Servers per tunnel</h3>
+-<p>Not every tunnel uses all edge servers. Your account class decides how many: Free 1, Home / Supporter 2, Business 1 or 2 (your choice), Company 1 to all (your choice; “all” includes future servers). The number applies per Node64 tunnel to all names of that tunnel. Names in mode 3 (without a tunnel) use the highest number of the class.</p>
++<p>Not every tunnel uses all edge servers. Your account class decides how many: Free 1, Home / Supporter 2, Business 1 or 2 (your choice), Company 1 to all (your choice; the list grows with the number of servers, “all” includes future servers). In addition, Business (1–2) and Company (1–4) choose the connections per server, e.g. 1 server with 1 connection or 3 servers with 2 connections each. Free (1 server, 1 connection) and Supporter (2 servers, 1 connection each) are fixed. The values apply per Node64 tunnel to all names of that tunnel. Names in mode 3 (without a tunnel) use the highest number of the class.</p>
+ <ul>
+ 	<li><strong>Assignment:</strong> IPv64.net assigns the servers automatically – one per location first, each time the one with the fewest tunnels. The assignment stays fixed until the number changes. Node64 shows the servers a tunnel currently uses in the <em>CDN64</em> column of the proxy hosts.</li>
+-	<li><strong>Choosing the number (Business, Company):</strong> in Node64 under <em>PROXY64 → Proxy hosts</em> in the <em>CDN64</em> column (button with the number of servers) or via the <a href="{{u "cdn64/api"}}#server">API</a>, per tunnel. IPv64.net then updates the DNS of the names of this tunnel; Node64 connects to the new servers within a minute, connections to the remaining ones keep running.</li>
++	<li><strong>Choosing servers and connections (Business, Company):</strong> in Node64 under <em>PROXY64 → Proxy hosts</em> in the <em>CDN64</em> column (button with the number of servers) or via the <a href="{{u "cdn64/api"}}#server">API</a>, per tunnel. IPv64.net then updates the DNS of the names of this tunnel; Node64 connects to the new servers within a minute, connections to the remaining ones keep running.</li>
+ 	<li><strong>Several tunnels for one name:</strong> DNS names the servers of the first tunnel. The backup tunnels additionally connect to these servers so they can take over.</li>
+ 	<li><strong>Class changed:</strong> the new number applies within a few minutes; the tunnel keeps the servers assigned first.</li>
+ 	<li><strong>Old DNS answer at the visitor:</strong> if a visitor still reaches a server the tunnel no longer uses, that server passes them on to a server with your tunnel.</li>
+@@ -213,7 +213,7 @@
+ 		<tr><td>Cache per name (mode 3)</td><td>16 MB</td><td>256 MB</td><td>1024 MB</td><td>4096 MB</td></tr>
+ 		<tr><td>Bandwidth (all servers together)</td><td>50 Mbit/s</td><td>1 Gbit/s</td><td>unlimited</td><td>unlimited</td></tr>
+ 		<tr><td>Edge servers per tunnel (<a href="#server-je-tunnel">servers per tunnel</a>)</td><td>1</td><td>2</td><td>1–2, your choice</td><td>1 to all, your choice</td></tr>
+-		<tr><td>Tunnel connections per server</td><td>1</td><td>1</td><td>2 parallel</td><td>4 parallel</td></tr>
++		<tr><td>Tunnel connections per server</td><td>1</td><td>1</td><td>1–2, your choice</td><td>1–4, your choice</td></tr>
+ 		<tr><td>Traffic per month (in + out)</td><td>10 GB</td><td>100 GB</td><td>10 TB</td><td>20 TB</td></tr>
+ 	</tbody>
+ </table></div>
+diff --git a/pages/cdn64_api.de.html b/pages/cdn64_api.de.html
+index 80cdd7f..fbf707d 100644
+--- a/pages/cdn64_api.de.html
++++ b/pages/cdn64_api.de.html
+@@ -78,20 +78,23 @@ X-API-Key: DEIN_API_KEY</code></pre>
+ </table></div>
+ 
+ <h2 id="server">Edge-Server eines Tunnels: GET und PUT /cdn64o/tunnels/{id}/servers</h2>
+-<p>Wie viele Edge-Server ein Tunnel nutzt, legt die Kontoklasse fest (<a href="{{u "cdn64"}}#server-je-tunnel">Server je Tunnel</a>). <code>GET</code> zeigt die Zuteilung, mit <code>PUT</code> wählen Business (1 oder 2) und Company (1 bis alle) die Anzahl für diesen Tunnel. Node64 bietet dafür einen Knopf in der Spalte <em>CDN64</em>.</p>
++<p>Wie viele Edge-Server ein Tunnel nutzt, legt die Kontoklasse fest (<a href="{{u "cdn64"}}#server-je-tunnel">Server je Tunnel</a>). <code>GET</code> zeigt die Zuteilung, mit <code>PUT</code> wählen Business (1 oder 2 Server, 1 oder 2 Verbindungen) und Company (1 bis alle Server, 1 bis 4 Verbindungen) für diesen Tunnel die Anzahl der Server (<code>count</code>) und die Verbindungen je Server (<code>sessions</code>). Ein fehlendes Feld bleibt. Node64 bietet dafür einen Knopf in der Spalte <em>CDN64</em>.</p>
+ <pre><code>curl -X PUT "https://ipv64.net/api/v2/cdn64o/tunnels/tn_DEINE_TUNNEL_ID/servers" -H "Authorization: Bearer DEIN_API_KEY" \
+-  -H "Content-Type: application/json" -d '{"count": 2}'</code></pre>
++  -H "Content-Type: application/json" -d '{"count": 3, "sessions": 2}'</code></pre>
+ <pre><code>{
+   "data": {
+-    "count": 2, "max": 4, "all": true, "total": 4, "selectable": true,
+-    "assigned": ["…", "…"],
+-    "active": ["…", "…"]
++    "count": 3, "choice": 3, "max": 4, "all": true, "total": 4, "selectable": true,
++    "assigned": ["…", "…", "…"],
++    "active": ["…", "…", "…"],
++    "sessions": 2, "sessions_max": 4
+   }
+ }</code></pre>
+ <div class="table-responsive"><table class="table table-sm">
+ 	<thead><tr><th>Feld</th><th>Bedeutung</th></tr></thead>
+ 	<tbody>
+-		<tr><td><code>count</code></td><td>Anzahl der Server des Tunnels; im <code>PUT</code> die gewünschte Anzahl, bei Company <code>0</code> = alle (auch künftige Server)</td></tr>
++		<tr><td><code>count</code></td><td>Anzahl der Server des Tunnels; im <code>PUT</code> die gewünschte Anzahl, bei Company <code>0</code> = alle (auch künftige Server). Eine Zahl bleibt fest, auch wenn Server dazukommen.</td></tr>
++		<tr><td><code>choice</code></td><td>die gewählte Anzahl (<code>0</code> = Höchstwert der Klasse bzw. bei Company alle)</td></tr>
++		<tr><td><code>sessions</code>, <code>sessions_max</code></td><td>Verbindungen je Server (im <code>PUT</code> die gewünschte Zahl) und höchstens wählbar laut Klasse</td></tr>
+ 		<tr><td><code>max</code>, <code>total</code></td><td>höchstens wählbar bzw. Zahl der Edge-Server insgesamt</td></tr>
+ 		<tr><td><code>all</code></td><td><code>true</code>: die Klasse darf alle Server nutzen (Company)</td></tr>
+ 		<tr><td><code>selectable</code></td><td><code>true</code>: die Anzahl ist wählbar (Business, Company)</td></tr>
+@@ -305,7 +308,7 @@ curl -X DELETE "https://ipv64.net/api/v2/cdn64o/hosts/42/mappings/7" -H "Authori
+ 	<li><code>DELETE /cdn64o/tunnels/{id}</code> entfernt den Tunnel (<code>204</code>). Namen, die an keinem anderen Tunnel mehr hängen, werden dabei ausgeschaltet – mit DNS zurück, Ziel, Zugriffsliste und Portmapper. Lehnt der DNS-Server das ab, kommt <code>502</code> (<code>dns_update_failed</code>); Tunnel und Name bleiben, damit du es später erneut versuchen kannst.</li>
+ </ul>
+ <p id="tunnel-listen"><code>GET</code> und <code>PUT /cdn64o/tunnels/{id}/lists</code> lesen bzw. setzen die Sperrliste (<code>deny</code>) und die Freigabeliste (<code>allow</code>) des Tunnels: IP-Adressen und Netze (IPv4/IPv6, CIDR), je Liste höchstens 1000 (sonst <code>422</code>, <code>list_too_long</code>). Einträge werden einheitlich gespeichert, IPv4-gemappte Netze als IPv4; Adressen mit Zone ergeben <code>422</code>. Die Edge-Server weisen Adressen der Sperrliste für alle Namen des Tunnels schon beim Verbindungsaufbau ab, die Freigabeliste geht vor. <code>PUT</code> ersetzt die gesendeten Listen, ein fehlendes Feld bleibt. Node64 hält beide Listen mit den Listen unter <em>PROXY64 → Zugriffslisten</em> gleich.</p>
+-<p>Das Tunnel-Objekt (auch in <code>GET /cdn64o</code>) enthält <code>id</code> (z. B. <code>tn_…</code>), <code>name</code>, <code>node_id</code>, <code>status</code>, <code>created_at</code>, <code>last_seen</code> (letzte Verbindung zu einem Edge-Server), <code>last_edge</code>, <code>node_version</code>, <code>sessions</code> (parallele Verbindungen je Server laut Kontoklasse), <code>edges</code> (die Server, zu denen der Tunnel verbindet) und <code>servers</code> (Zuteilung, siehe <a href="#server">Edge-Server eines Tunnels</a>).</p>
++<p>Das Tunnel-Objekt (auch in <code>GET /cdn64o</code>) enthält <code>id</code> (z. B. <code>tn_…</code>), <code>name</code>, <code>node_id</code>, <code>status</code>, <code>created_at</code>, <code>last_seen</code> (letzte Verbindung zu einem Edge-Server), <code>last_edge</code>, <code>node_version</code>, <code>sessions</code> (parallele Verbindungen je Server: gewählt bis zur Grenze der Kontoklasse), <code>edges</code> (die Server, zu denen der Tunnel verbindet) und <code>servers</code> (Zuteilung, siehe <a href="#server">Edge-Server eines Tunnels</a>).</p>
+ <pre><code>curl -X DELETE "https://ipv64.net/api/v2/cdn64o/tunnels/tn_DEINE_TUNNEL_ID" -H "Authorization: Bearer DEIN_API_KEY"</code></pre>
+ <div class="callout warn"><div class="callout-title">Token schützen</div><p>Mit dem Tunnel-Token kann sich eine Node als dein Tunnel bei den Edge-Servern anmelden. Gib ihn nicht weiter. Ist er bekannt geworden, stelle einen neuen aus.</p></div>
+ 
+diff --git a/pages/cdn64_api.en.html b/pages/cdn64_api.en.html
+index 99d7f81..aed5c45 100644
+--- a/pages/cdn64_api.en.html
++++ b/pages/cdn64_api.en.html
+@@ -78,20 +78,23 @@ X-API-Key: DEIN_API_KEY</code></pre>
+ </table></div>
+ 
+ <h2 id="server">Edge servers of a tunnel: GET and PUT /cdn64o/tunnels/{id}/servers</h2>
+-<p>Your account class decides how many edge servers a tunnel uses (<a href="{{u "cdn64"}}#server-je-tunnel">servers per tunnel</a>). <code>GET</code> shows the assignment; with <code>PUT</code>, Business (1 or 2) and Company (1 to all) choose the number for this tunnel. Node64 offers a button for this in the <em>CDN64</em> column.</p>
++<p>Your account class decides how many edge servers a tunnel uses (<a href="{{u "cdn64"}}#server-je-tunnel">servers per tunnel</a>). <code>GET</code> shows the assignment; with <code>PUT</code>, Business (1 or 2 servers, 1 or 2 connections) and Company (1 to all servers, 1 to 4 connections) choose for this tunnel the number of servers (<code>count</code>) and the connections per server (<code>sessions</code>). A missing field stays. Node64 offers a button for this in the <em>CDN64</em> column.</p>
+ <pre><code>curl -X PUT "https://ipv64.net/api/v2/cdn64o/tunnels/tn_YOUR_TUNNEL_ID/servers" -H "Authorization: Bearer YOUR_API_KEY" \
+-  -H "Content-Type: application/json" -d '{"count": 2}'</code></pre>
++  -H "Content-Type: application/json" -d '{"count": 3, "sessions": 2}'</code></pre>
+ <pre><code>{
+   "data": {
+-    "count": 2, "max": 4, "all": true, "total": 4, "selectable": true,
+-    "assigned": ["…", "…"],
+-    "active": ["…", "…"]
++    "count": 3, "choice": 3, "max": 4, "all": true, "total": 4, "selectable": true,
++    "assigned": ["…", "…", "…"],
++    "active": ["…", "…", "…"],
++    "sessions": 2, "sessions_max": 4
+   }
+ }</code></pre>
+ <div class="table-responsive"><table class="table table-sm">
+ 	<thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+ 	<tbody>
+-		<tr><td><code>count</code></td><td>number of servers of the tunnel; in a <code>PUT</code> the number you want, for Company <code>0</code> = all (including future servers)</td></tr>
++		<tr><td><code>count</code></td><td>number of servers of the tunnel; in a <code>PUT</code> the number you want, for Company <code>0</code> = all (including future servers). A number stays fixed even when servers are added.</td></tr>
++		<tr><td><code>choice</code></td><td>the chosen number (<code>0</code> = highest of the class, or all for Company)</td></tr>
++		<tr><td><code>sessions</code>, <code>sessions_max</code></td><td>connections per server (in a <code>PUT</code> the number you want) and the highest choice of the class</td></tr>
+ 		<tr><td><code>max</code>, <code>total</code></td><td>highest number you can choose and number of edge servers overall</td></tr>
+ 		<tr><td><code>all</code></td><td><code>true</code>: the class may use all servers (Company)</td></tr>
+ 		<tr><td><code>selectable</code></td><td><code>true</code>: the number can be chosen (Business, Company)</td></tr>
+@@ -305,7 +308,7 @@ curl -X DELETE "https://ipv64.net/api/v2/cdn64o/hosts/42/mappings/7" -H "Authori
+ 	<li><code>DELETE /cdn64o/tunnels/{id}</code> removes the tunnel (<code>204</code>). Names that are no longer assigned to any other tunnel are switched off – DNS back, target, access list and port mappings removed. If the DNS server rejects this, you get <code>502</code> (<code>dns_update_failed</code>); tunnel and name stay so you can try again later.</li>
+ </ul>
+ <p id="tunnel-listen"><code>GET</code> and <code>PUT /cdn64o/tunnels/{id}/lists</code> read and set the block list (<code>deny</code>) and the allow list (<code>allow</code>) of the tunnel: IP addresses and networks (IPv4/IPv6, CIDR), at most 1000 per list (otherwise <code>422</code>, <code>list_too_long</code>). Entries are stored normalised, IPv4-mapped networks as IPv4; addresses with a zone give <code>422</code>. The edge servers reject addresses on the block list for all names of the tunnel right at connection setup; the allow list takes precedence. <code>PUT</code> replaces the lists sent, a missing field stays. Node64 keeps both lists in line with the lists under <em>PROXY64 → Access lists</em>.</p>
+-<p>The tunnel object (also in <code>GET /cdn64o</code>) contains <code>id</code> (e.g. <code>tn_…</code>), <code>name</code>, <code>node_id</code>, <code>status</code>, <code>created_at</code>, <code>last_seen</code> (last connection to an edge server), <code>last_edge</code>, <code>node_version</code>, <code>sessions</code> (parallel connections per server according to the account class), <code>edges</code> (the servers the tunnel connects to) and <code>servers</code> (assignment, see <a href="#server">edge servers of a tunnel</a>).</p>
++<p>The tunnel object (also in <code>GET /cdn64o</code>) contains <code>id</code> (e.g. <code>tn_…</code>), <code>name</code>, <code>node_id</code>, <code>status</code>, <code>created_at</code>, <code>last_seen</code> (last connection to an edge server), <code>last_edge</code>, <code>node_version</code>, <code>sessions</code> (parallel connections per server: chosen up to the limit of the account class), <code>edges</code> (the servers the tunnel connects to) and <code>servers</code> (assignment, see <a href="#server">edge servers of a tunnel</a>).</p>
+ <pre><code>curl -X DELETE "https://ipv64.net/api/v2/cdn64o/tunnels/tn_DEINE_TUNNEL_ID" -H "Authorization: Bearer DEIN_API_KEY"</code></pre>
+ <div class="callout warn"><div class="callout-title">Protect the token</div><p>With the tunnel token a node can log in to the edge servers as your tunnel. Do not share it. If it has leaked, issue a new one.</p></div>
+ 

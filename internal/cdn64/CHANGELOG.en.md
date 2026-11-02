@@ -4,8 +4,10 @@
 
 ### New
 - CDN64: button in the CDN64 column (Business and Company): a dialog chooses how many CDN64 servers the tunnel of this
-  node uses with all its names (Business 1–2, Company 1 to all, including future ones); Free and Supporter have a fixed
-  number. The node only connects to the servers of its tunnel. Needs the portal with “servers per tunnel”.
+  node uses with all its names (Business 1–2, Company 1 to all – the list grows with the servers, plus “all, including
+  future ones”) and how many connections per server (Business 1–2, Company 1–4). Free (1×1) and Supporter (2×1) are
+  fixed. The node only connects to the servers of its tunnel; changed connections are added or dropped without
+  disconnecting the others. Needs the portal with “servers per tunnel”.
 - Texts name the CDN64 servers generally instead of srv07/srv08.
 
 ## 1.46.1 – 2026-11-02

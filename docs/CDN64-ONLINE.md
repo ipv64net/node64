@@ -424,6 +424,14 @@ einspielen). DNS eines Namens = Server seines ersten Tunnels; Reserve-Tunnel ver
 PROXY64 1.47.0: Die Node nimmt die Server ihres Tunnels (`tunnelEdges`), ein Knopf in der Spalte CDN64 (nur
 Business/Company) öffnet den Dialog `#cdn64-servers`.
 
+**Verbindungen je Tunnel (2026-11-02 abends, Dennis: maximale Flexibilität):** Im selben Dialog wählen Business (1–2)
+und Company (1–4) die Verbindungen je Server (`cdn64o_tunnels.sessions`, 0 = Grenze der Klasse,
+`deploy/sql/cdn64_servers_sessions.sql` VOR dem PHP); `PUT /cdn64o/tunnels/{id}/servers {count, sessions}` (fehlendes
+Feld bleibt). Company: eine gewählte Zahl bleibt fest, auch wenn Server dazukommen, `0` = alle (auch künftige).
+Tunnel-Objekt und `edge/config` liefern `sessions` je Tunnel (`c64o_tunnel_sessions`), die Edges brauchen nichts Neues.
+Die Node übernimmt neue Verbindungen ohne Neustart (`tunnel.Client.SetSessions`: überzählige Slots enden, neue kommen
+dazu). `cdn64.php` zeigt je Tunnel Server und Verbindungen, ohne Auswahl.
+
 ### 8.6 Webseite ipv64.net
 
 - **Neue Seite** (z. B. `cdn64.php`, Menü „CDN64“), getrennt von `cdn.php`:

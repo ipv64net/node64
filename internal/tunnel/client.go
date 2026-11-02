@@ -78,7 +78,7 @@ type Client struct {
 	forceTCP bool                                       // Tests: nur der Ausweichweg
 	offWait  time.Duration                              // Tests: Pause eines abgelehnten Slots (Standard 2-5 Minuten)
 	runCtx   context.Context                            // waehrend Run (nil = nicht gestartet bzw. beendet)
-	cancels  map[string]context.CancelFunc              // je Server: seine Verbindungen beenden (SetEdges)
+	cancels  map[string][]context.CancelFunc            // je Server und Slot: Verbindung beenden (SetEdges, SetSessions)
 	wg       sync.WaitGroup
 }
 
@@ -96,7 +96,7 @@ func NewClient(cfg ClientConfig) *Client {
 		cfg.Log = slog.New(slog.DiscardHandler)
 	}
 	cfg.Sessions = min(max(cfg.Sessions, 1), MaxSessions)
-	c := &Client{cfg: cfg, st: map[string][]*edgeState{}, resolve: addrs, forceTCP: cfg.TCPOnly, cancels: map[string]context.CancelFunc{}}
+	c := &Client{cfg: cfg, st: map[string][]*edgeState{}, resolve: addrs, forceTCP: cfg.TCPOnly, cancels: map[string][]context.CancelFunc{}}
 	for _, e := range cfg.Edges {
 		c.addStates(e)
 	}
@@ -126,12 +126,42 @@ func (c *Client) Run(ctx context.Context) {
 
 // startLocked startet die Verbindungen zu einem Server (c.mu gehalten, waehrend Run).
 func (c *Client) startLocked(e Edge) {
-	ectx, cancel := context.WithCancel(c.runCtx)
-	c.cancels[e.Name] = cancel
 	for slot := range c.cfg.Sessions {
-		c.wg.Add(1)
-		go func() { defer c.wg.Done(); c.loop(ectx, e, slot) }()
+		c.startSlotLocked(e, slot)
 	}
+}
+
+func (c *Client) startSlotLocked(e Edge, slot int) {
+	sctx, cancel := context.WithCancel(c.runCtx)
+	c.cancels[e.Name] = append(c.cancels[e.Name], cancel)
+	c.wg.Add(1)
+	go func() { defer c.wg.Done(); c.loop(sctx, e, slot) }()
+}
+
+// SetSessions aendert die Zahl der parallelen Verbindungen je Server (Auswahl je Tunnel), ohne die bleibenden zu
+// trennen: zusaetzliche kommen dazu, ueberzaehlige (die hoechsten Slots) werden beendet.
+func (c *Client) SetSessions(n int) {
+	n = min(max(n, 1), MaxSessions)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, e := range c.cfg.Edges {
+		for len(c.st[e.Name]) < n {
+			slot := len(c.st[e.Name])
+			c.st[e.Name] = append(c.st[e.Name], &edgeState{EdgeStatus: EdgeStatus{Name: e.Name, Host: e.Host}})
+			if c.runCtx != nil {
+				c.startSlotLocked(e, slot)
+			}
+		}
+		for len(c.st[e.Name]) > n {
+			last := len(c.st[e.Name]) - 1
+			if l := c.cancels[e.Name]; last < len(l) {
+				l[last]()
+				c.cancels[e.Name] = l[:last]
+			}
+			c.st[e.Name] = c.st[e.Name][:last]
+		}
+	}
+	c.cfg.Sessions = n
 }
 
 // SetEdges aendert die Serverliste, ohne die Verbindungen zu bleibenden Servern zu trennen: neue Server kommen dazu,
@@ -150,7 +180,7 @@ func (c *Client) SetEdges(edges []Edge) {
 	}
 	for _, o := range c.cfg.Edges {
 		if !keep[o.Name] {
-			if cancel := c.cancels[o.Name]; cancel != nil {
+			for _, cancel := range c.cancels[o.Name] {
 				cancel()
 			}
 			delete(c.cancels, o.Name)

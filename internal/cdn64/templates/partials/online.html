@@ -20,7 +20,7 @@
 							<div class="text-body-secondary mb-2">{{$v.T "cdn64.protection.sw_hint"}}</div>
 							<button class="btn btn-sm btn-primary" type="submit">{{$v.T "common.save"}}</button></form></div>{{end}}
 					<button type="button" class="btn btn-sm btn-outline-secondary py-0" data-c64o-on="{{.ID}}" data-c64o-mode="{{.Online.Mode}}" title="{{$v.T "cdn64.online.change_mode"}}"><i class="bi bi-sliders"></i></button>
-					{{with $.SV}}{{if .Selectable}}<button type="button" class="btn btn-sm btn-outline-secondary py-0 text-nowrap" data-bs-toggle="modal" data-bs-target="#cdn64-servers" title="{{$v.T "cdn64.online.servers_title" "list" .Names}}"><i class="bi bi-hdd-network"></i> {{len .Assigned}}</button>{{end}}{{end}}
+					{{with $.SV}}{{if .Selectable}}<button type="button" class="btn btn-sm btn-outline-secondary py-0 text-nowrap" data-bs-toggle="modal" data-bs-target="#cdn64-servers" title="{{$v.T "cdn64.online.servers_title" "list" .Names}}"><i class="bi bi-hdd-network"></i> {{len .Assigned}}{{if gt .CurSessions 1}}×{{.CurSessions}}{{end}}</button>{{end}}{{end}}
 					{{if .Online.Missing}}<button type="button" class="btn btn-sm btn-outline-primary py-0" data-c64o-on="{{.ID}}" title="{{$v.T "cdn64.online.more_title"}}">{{$v.T "cdn64.online.more" "n" .Online.Missing}}</button>{{end}}
 					<button type="button" class="btn btn-sm btn-outline-danger py-0" data-c64o-off="{{.ID}}" data-name="{{index .Names 0}}" title="{{$v.T "cdn64.online.off"}}"><i class="bi bi-cloud-slash"></i></button>
 				</div>

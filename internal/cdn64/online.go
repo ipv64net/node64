@@ -130,6 +130,18 @@ func (m *Module) onlineSetEdges(ctx context.Context, edges []tunnel.Edge) {
 	cl.SetEdges(edges)
 }
 
+// onlineSetSessions gibt die Zahl der Verbindungen je Server an den laufenden Tunnel; laeuft keiner, startet er neu.
+func (m *Module) onlineSetSessions(ctx context.Context, n int) {
+	m.online.mu.Lock()
+	cl := m.online.client
+	m.online.mu.Unlock()
+	if cl == nil {
+		m.onlineStart(ctx)
+		return
+	}
+	cl.SetSessions(n)
+}
+
 func (m *Module) onlineStop() {
 	m.online.mu.Lock()
 	cancel, done := m.online.cancel, m.online.done

@@ -73,3 +73,45 @@ func TestSetEdges(t *testing.T) {
 		t.Fatal("started after Run ended")
 	}
 }
+
+// Verbindungen je Server aendern (Auswahl je Tunnel): eine zweite kommt dazu, die erste bleibt; zurueck auf eine
+// beendet nur die zweite.
+func TestSetSessions(t *testing.T) {
+	f := newFixture(t)
+	f.srv.Sessions = func(string) int { return 4 }
+	c := f.client("secret", false, func(st Stream, h Header) { _ = st.Close() })
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go c.Run(ctx)
+	var p0 *Peer
+	select {
+	case p0 = <-f.peers:
+	case <-time.After(10 * time.Second):
+		t.Fatal("no tunnel")
+	}
+	c.SetSessions(2)
+	var p1 *Peer
+	select {
+	case p1 = <-f.peers:
+	case <-time.After(10 * time.Second):
+		t.Fatal("no second session")
+	}
+	waitFor(t, "two sessions", func() bool { return c.Status()[0].Sessions == 2 })
+	select {
+	case <-p0.Session.Done():
+		t.Fatal("first session closed")
+	default:
+	}
+	c.SetSessions(1)
+	select {
+	case <-p1.Session.Done():
+	case <-time.After(10 * time.Second):
+		t.Fatal("second session still open")
+	}
+	waitFor(t, "one session", func() bool { s := c.Status()[0]; return s.Sessions == 1 && s.Wanted == 1 })
+	select {
+	case <-p0.Session.Done():
+		t.Fatal("first session closed")
+	default:
+	}
+}

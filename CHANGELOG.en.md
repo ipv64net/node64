@@ -6,7 +6,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 - Interface: Healthchecks, Honeypot64 and PROXY64 show their own logos (menu, dashboard, page headers), light and
   dark.
-- PROXY64: Business and Company choose per tunnel in the CDN64 column how many CDN64 servers it uses.
+- PROXY64: Business and Company choose per tunnel in the CDN64 column how many CDN64 servers it uses and how many
+  connections per server; changes keep the remaining connections running.
 - PROXY64: When the list of CDN64 servers changes, tunnels to the remaining servers keep running without
   interruption.
 - Interface: hint texts much shorter (details are in the docs); the API page shows a short sentence instead of the long
