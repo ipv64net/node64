@@ -413,6 +413,17 @@ kommen dazu, entfernte fallen weg, die Verbindungen zu den bleibenden laufen wei
   SQL läuft alles wie bisher (alle Server). Doku für ipv64.net/docs liegt als `docs/ipv64_docs-cdn64-servers.patch`
   bereit (mit der Übergabe einspielen: `git -C ../ipv64_docs apply ../ipv64_container/docs/ipv64_docs-cdn64-servers.patch`).
 
+**Server je Tunnel (2026-11-02 abends, Dennis: je Tunnel einstellbar, Knopf in der Spalte CDN64 von Node64, keine
+Kachel/kein Feld auf ipv64.net):** Die Zuteilung gehört jetzt dem Tunnel (`cdn64o_edge_assign.owner` = Tunnel-ID;
+Namen in Modus 3 bzw. ohne Tunnel: `u:<userid>` mit der Höchstzahl der Klasse), gewählte Anzahl in
+`cdn64o_tunnels.edges` (`deploy/sql/cdn64_servers_tunnel.sql`, übernimmt die Zuteilung je Account; VOR dem PHP
+einspielen). DNS eines Namens = Server seines ersten Tunnels; Reserve-Tunnel verbinden zusätzlich zu diesen
+(`c64o_tunnel_edges`). `GET /cdn64o` liefert in `edges` die Server des Tunnels der fragenden Node
+(`X-Node64-Node` → `node64_nodes.tunnel_id`, sonst alle Tunnel des Kontos zusammen), jedes Tunnel-Objekt `edges` und
+`servers`; `GET|PUT /cdn64o/tunnels/{id}/servers` ersetzt `/cdn64o/servers`, die Auswahl auf `cdn64.php` fällt weg.
+PROXY64 1.47.0: Die Node nimmt die Server ihres Tunnels (`tunnelEdges`), ein Knopf in der Spalte CDN64 (nur
+Business/Company) öffnet den Dialog `#cdn64-servers`.
+
 ### 8.6 Webseite ipv64.net
 
 - **Neue Seite** (z. B. `cdn64.php`, Menü „CDN64“), getrennt von `cdn.php`:

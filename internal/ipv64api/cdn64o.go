@@ -29,6 +29,8 @@ type CDN64Tunnel struct {
 	Token    string      `json:"token,omitempty"`
 	Edges    []CDN64Edge `json:"edges,omitempty"`
 	Sessions int         `json:"sessions,omitempty"` // parallele Verbindungen je Server (Klasse; Business/Company mehrere)
+	// Servers: Server dieses Tunnels (nil = Portal ohne Server je Tunnel); Edges sind dann die Server, zu denen er verbindet
+	Servers *CDN64Servers `json:"servers,omitempty"`
 }
 
 // CDN64Host ist ein eingeschalteter Name.
@@ -143,7 +145,7 @@ type CDN64Quota struct {
 	BandwidthMbit int `json:"bandwidth_mbit"` // 0 = frei
 }
 
-// CDN64Servers sind die Server des Kontos (Anzahl nach Klasse; Business und Company waehlen).
+// CDN64Servers sind die Server eines Tunnels (Anzahl nach Klasse; Business und Company waehlen je Tunnel).
 type CDN64Servers struct {
 	Count      int      `json:"count"`      // zugeteilt
 	Max        int      `json:"max"`        // hoechstens waehlbar
@@ -160,7 +162,6 @@ type CDN64Overview struct {
 	Edges   []CDN64Edge   `json:"edges"`
 	Tunnels []CDN64Tunnel `json:"tunnels"`
 	Hosts   []CDN64Host   `json:"hosts"`
-	Servers *CDN64Servers `json:"servers,omitempty"` // nil = Portal ohne Server je Konto
 }
 
 // CDN64 liefert Kontingent, Server, Tunnels und Namen des Accounts.
@@ -236,10 +237,10 @@ func (c *Client) CDN64SetPaused(ctx context.Context, key string, id int64, pause
 	return &out, nil
 }
 
-// CDN64SetServers setzt die Anzahl der Server des Kontos (Business/Company; 0 = alle, auch kuenftige).
-func (c *Client) CDN64SetServers(ctx context.Context, key string, count int) (*CDN64Servers, error) {
+// CDN64SetServers setzt die Anzahl der Server eines Tunnels (Business/Company; 0 = alle, auch kuenftige).
+func (c *Client) CDN64SetServers(ctx context.Context, key, tunnelID string, count int) (*CDN64Servers, error) {
 	var out CDN64Servers
-	if err := c.do(ctx, http.MethodPut, key, "/cdn64o/servers", map[string]int{"count": count}, &out); err != nil {
+	if err := c.do(ctx, http.MethodPut, key, "/cdn64o/tunnels/"+url.PathEscape(tunnelID)+"/servers", map[string]int{"count": count}, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

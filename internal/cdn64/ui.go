@@ -222,7 +222,7 @@ type listData struct {
 	OnlineOn  bool          // CDN64 online verfuegbar (ipv64 angebunden)
 	LimitsOn  bool          // Schutz vor Ueberlastung (Rate-Limits) eingeschaltet
 	Quota     *onlineQuota  // Kontingent bei ipv64 (nur wenn Namen eingeschaltet sind)
-	Servers   *serversView  // Server des Kontos (nur mit Kontingent und Portal mit Server je Konto)
+	Servers   *serversView  // Server des eigenen Tunnels (Knopf in der Spalte CDN64; nur Portal mit Server je Tunnel)
 	Others    []onlineOther // Namen des Accounts, die diese Node nicht verwaltet (Modus 3 von ipv64.net, andere Nodes)
 	OnlineL   string        // Texte fuer cdn64-online.js (JSON)
 	LocalOn   bool          // DNS64 laeuft (Knopf "lokal eintragen")
@@ -326,7 +326,7 @@ func (m *Module) pageHosts(w http.ResponseWriter, r *http.Request, kind string) 
 	}
 	if rm != nil && rm.Data != nil && len(rm.Data.Hosts) > 0 && kind == KindProxy { // Kontingent nur unter den Proxy-Hosts
 		d.Quota = newOnlineQuota(rm.Data.Quota, time.Now())
-		d.Servers = newServersView(rm.Data.Servers)
+		d.Servers = m.onlineServers(r.Context(), rm.Data)
 		if d.OnlineOn {
 			d.Others = m.onlineOthers(r.Context())
 		}

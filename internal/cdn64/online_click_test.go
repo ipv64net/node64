@@ -48,8 +48,10 @@ type fakeOnline struct {
 	protDays []int                     // abgefragte Zeitraeume
 	waf      map[int64]bool            // WAF je Name (gesetzt ueber SetProtection)
 	ja4      map[int64]string          // JA4-Stufe je Name
-	servers  *ipv64api.CDN64Servers    // Server je Konto (nil = altes Portal)
+	servers  *ipv64api.CDN64Servers    // Server je Tunnel (nil = altes Portal)
 	setCount []int                     // Aufrufe von SetServers
+	setTun   []string                  // Tunnel der Aufrufe von SetServers
+	tunEdges []ipv64api.CDN64Edge      // Server je Tunnel (nil = nur die Liste der Uebersicht)
 }
 
 func (f *fakeOnline) Ready(context.Context) bool { f.mu.Lock(); defer f.mu.Unlock(); return f.ready }
@@ -61,7 +63,7 @@ func (f *fakeOnline) Overview(context.Context) (*ipv64api.CDN64Overview, error) 
 	ov.Quota.Domains.Limit = 5
 	f.calls++
 	for id := range f.tunnels {
-		ov.Tunnels = append(ov.Tunnels, ipv64api.CDN64Tunnel{ID: id, Status: "active", Sessions: f.sessions})
+		ov.Tunnels = append(ov.Tunnels, ipv64api.CDN64Tunnel{ID: id, Status: "active", Sessions: f.sessions, Servers: f.servers, Edges: f.tunEdges})
 	}
 	for id, n := range f.hosts {
 		ov.Hosts = append(ov.Hosts, ipv64api.CDN64Host{ID: id, FQDN: n, Status: "active", Mode: max(f.modes[id], 1), Paused: f.paused[id], Mappings: f.maps[id],
@@ -74,14 +76,13 @@ func (f *fakeOnline) Overview(context.Context) (*ipv64api.CDN64Overview, error) 
 		}
 		ov.Hosts = append(ov.Hosts, h)
 	}
-	ov.Servers = f.servers
 	return ov, nil
 }
 
-func (f *fakeOnline) SetServers(_ context.Context, n int) (*ipv64api.CDN64Servers, error) {
+func (f *fakeOnline) SetServers(_ context.Context, tunnel string, n int) (*ipv64api.CDN64Servers, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.setCount = append(f.setCount, n)
+	f.setCount, f.setTun = append(f.setCount, n), append(f.setTun, tunnel)
 	if f.servers == nil || !f.servers.Selectable {
 		return nil, &ipv64api.APIError{Status: 403, Code: "plan_not_allowed"}
 	}

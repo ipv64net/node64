@@ -52,9 +52,9 @@ type ipv64Online struct{ k *ipv64api.Key }
 
 func (o ipv64Online) Ready(ctx context.Context) bool { return o.k != nil && o.k.Get(ctx) != "" }
 
-// SetServers: Anzahl der CDN64-Server des Kontos (Business/Company, 0 = alle).
-func (o ipv64Online) SetServers(ctx context.Context, count int) (*ipv64api.CDN64Servers, error) {
-	return o.k.Client().CDN64SetServers(ctx, o.k.Get(ctx), count)
+// SetServers: Anzahl der CDN64-Server eines Tunnels (Business/Company, 0 = alle).
+func (o ipv64Online) SetServers(ctx context.Context, tunnel string, count int) (*ipv64api.CDN64Servers, error) {
+	return o.k.Client().CDN64SetServers(ctx, o.k.Get(ctx), tunnel, count)
 }
 
 // SetLists: Freigabe- und Sperrliste fuer die CDN64-Server (online_lists.go).
@@ -217,6 +217,14 @@ func toEdges(list []ipv64api.CDN64Edge) []tunnel.Edge {
 	return out
 }
 
+// tunnelEdges: Server des eigenen Tunnels (Server je Tunnel, Portal ab Anzahl je Tunnel), sonst die Liste der Uebersicht.
+func tunnelEdges(ov *ipv64api.CDN64Overview, t ipv64api.CDN64Tunnel) []tunnel.Edge {
+	if e := toEdges(t.Edges); len(e) > 0 {
+		return e
+	}
+	return toEdges(ov.Edges)
+}
+
 func sameEdges(a, b []tunnel.Edge) bool {
 	return slices.EqualFunc(a, b, func(x, y tunnel.Edge) bool {
 		return x.Name == y.Name && x.Host == y.Host && x.Port == y.Port && slices.Equal(x.IPs, y.IPs)
@@ -252,7 +260,7 @@ func (m *Module) onlineEnsureTunnel(ctx context.Context) (*onlineConf, error) {
 			if t.Status != "active" {
 				return nil, errOnline("tunnel_blocked")
 			}
-			if edges := toEdges(ov.Edges); len(edges) > 0 && !sameEdges(c.Edges, edges) {
+			if edges := tunnelEdges(ov, t); len(edges) > 0 && !sameEdges(c.Edges, edges) {
 				c.Edges = edges
 				if err := m.onlineSave(ctx, c.Tunnel, tok, edges); err != nil {
 					return nil, err
@@ -609,7 +617,7 @@ func (m *Module) onlineSync(ctx context.Context) {
 					m.onlineStart(ctx)
 				}
 			}
-			if edges := toEdges(ov.Edges); t.ID == c.Tunnel && len(edges) > 0 && !sameEdges(c.Edges, edges) {
+			if edges := tunnelEdges(ov, t); t.ID == c.Tunnel && len(edges) > 0 && !sameEdges(c.Edges, edges) {
 				if err := m.onlineSave(ctx, c.Tunnel, tok, edges); err == nil && m.isRunning() {
 					m.log.Info("cdn64 online: server list changed", "edges", len(edges))
 					m.onlineSetEdges(ctx, edges)
