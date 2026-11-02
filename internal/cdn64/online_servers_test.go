@@ -112,7 +112,7 @@ func TestOnlineServersPage(t *testing.T) {
 	d := listData{Kind: KindProxy, OnlineOn: true, Rows: []hostRow{row}, Servers: newServersView(f.servers)}
 	body := renderHosts(t, d)
 	for _, want := range []string{`data-bs-target="#cdn64-servers"`, `id="cdn64-servers"`, `action="/cdn64/online/servers"`, `<option value="3" selected>`, `<option value="0">`, "cdn64.online.servers_now",
-		`name="sessions"`, "cdn64.online.servers_sessions_n", "3×2"} {
+		`name="sessions"`, "cdn64.online.servers_sessions_n", "3×2", `data-c64o-busy data-c64o-reload`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("page misses %q", want)
 		}

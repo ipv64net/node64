@@ -8,6 +8,10 @@
   „alle, auch künftige“) und wie viele Verbindungen je Server (Business 1–2, Company 1–4). Free (1×1) und Supporter
   (2×1) sind fest. Die Node verbindet sich nur noch zu den Servern ihres Tunnels; geänderte Verbindungen kommen dazu
   bzw. fallen weg, ohne die übrigen zu trennen. Braucht das Portal mit „Server je Tunnel“.
+- CDN64: Mehr Verbindungen je Server stehen binnen Sekunden: Lehnt ein Server eine zusätzliche Verbindung ab, weil er
+  die neue Grenze noch nicht kennt, versucht die Node es nach 15 Sekunden erneut statt erst nach 2–5 Minuten.
+- CDN64: Knöpfe zeigen beim Speichern einen Spinner und sind so lange gesperrt (Einschalten, Ausschalten, Pause, Schutz,
+  Server und Verbindungen); nach „Server und Verbindungen“ lädt die Seite 3 Sekunden später neu.
 - Texte nennen die CDN64-Server allgemein statt srv07/srv08.
 
 ## 1.46.1 – 2026-11-02

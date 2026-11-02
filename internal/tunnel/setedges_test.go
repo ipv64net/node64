@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -77,8 +78,10 @@ func TestSetEdges(t *testing.T) {
 // Verbindungen je Server aendern (Auswahl je Tunnel): eine zweite kommt dazu, die erste bleibt; zurueck auf eine
 // beendet nur die zweite.
 func TestSetSessions(t *testing.T) {
-	f := newFixture(t)
-	f.srv.Sessions = func(string) int { return 4 }
+	f0 := newFixture(t)
+	var four atomic.Int64
+	four.Store(4)
+	f := limitFixture(t, f0, &four)
 	c := f.client("secret", false, func(st Stream, h Header) { _ = st.Close() })
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -114,4 +117,72 @@ func TestSetSessions(t *testing.T) {
 		t.Fatal("first session closed")
 	default:
 	}
+}
+
+// Server und Verbindungen im selben Abgleich (Auswahl 1x4 nach 3x1): beide Reihenfolgen, dazu ein neuer Server mit
+// gleichzeitiger Erhoehung - der bleibende bzw. neue Server bekommt alle vier Verbindungen. Die Server kennen die hoehere
+// Grenze erst kurz danach (Konfiguration alle 10 s): die abgelehnten Slots versuchen es bald erneut, nicht erst in Minuten.
+func TestSetSessionsAndEdges(t *testing.T) {
+	for _, order := range []string{"sessions-first", "edges-first", "new-edge"} {
+		t.Run(order, func(t *testing.T) {
+			f0 := newFixture(t)
+			var limit atomic.Int64
+			limit.Store(1)
+			f1, f2 := limitFixture(t, f0, &limit), limitFixture(t, f0, &limit)
+			a := Edge{Name: "a", Host: "edge.test", Port: f1.addrQ.(*net.UDPAddr).Port}
+			b := Edge{Name: "b", Host: "edge.test", Port: f2.addrQ.(*net.UDPAddr).Port}
+			start := []Edge{a, b}
+			if order == "new-edge" {
+				start = []Edge{a}
+			}
+			c := NewClient(ClientConfig{Tunnel: "t1", Token: "secret", Node: "test", Edges: start, RootCAs: f1.pool, Handler: func(st Stream, h Header) { _ = st.Close() }})
+			c.resolve = func(context.Context, Edge) []net.IP { return []net.IP{net.ParseIP("127.0.0.1")} }
+			c.offQuick, c.offWait = 300*time.Millisecond, time.Hour // nur der schnelle Weg darf hier wirken
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			go c.Run(ctx)
+			waitFor(t, "started", func() bool {
+				for _, s := range c.Status() {
+					if !s.Connected {
+						return false
+					}
+				}
+				return true
+			})
+			switch order {
+			case "sessions-first":
+				c.SetSessions(4)
+				c.SetEdges([]Edge{b})
+			case "edges-first":
+				c.SetEdges([]Edge{b})
+				c.SetSessions(4)
+			case "new-edge":
+				c.SetSessions(4)
+				c.SetEdges([]Edge{b})
+			}
+			time.Sleep(200 * time.Millisecond)
+			limit.Store(4) // die Server haben die neue Konfiguration
+			waitFor(t, "four sessions on b", func() bool {
+				s := c.Status()
+				return len(s) == 1 && s[0].Name == "b" && s[0].Sessions == 4 && s[0].Wanted == 4
+			})
+		})
+	}
+}
+
+// limitFixture: weiterer Test-Server mit dem Zertifikat von f und einer Grenze der Verbindungen je Tunnel, gesetzt vor
+// dem Start (sonst liest der Handshake das Feld waehrend des Setzens).
+func limitFixture(t *testing.T, f *fixture, limit *atomic.Int64) *fixture {
+	t.Helper()
+	g := &fixture{peers: make(chan *Peer, 16), pool: f.pool}
+	g.srv = &Server{Name: "e", TLS: f.srv.TLS, Auth: f.srv.Auth, Up: func(p *Peer) { g.peers <- p }, Sessions: func(string) int { return int(limit.Load()) }}
+	var err error
+	if g.addrQ, err = g.srv.ServeQUIC("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	if g.addrT, err = g.srv.ServeTCP("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(g.srv.Close)
+	return g
 }

@@ -83,7 +83,7 @@ func TestTunnelSlotRetry(t *testing.T) {
 		Edges:   []Edge{{Name: "e1", Host: "edge.test", Port: f.addrT.(*net.TCPAddr).Port}},
 		Handler: func(st Stream, _ Header) { _ = st.Close() }})
 	c.resolve = func(context.Context, Edge) []net.IP { return []net.IP{net.ParseIP("127.0.0.1")} }
-	c.forceTCP, c.offWait = true, 200*time.Millisecond
+	c.forceTCP, c.offWait, c.offQuick = true, 200*time.Millisecond, 200*time.Millisecond
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go c.Run(ctx)

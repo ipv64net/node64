@@ -8,6 +8,10 @@
   future ones”) and how many connections per server (Business 1–2, Company 1–4). Free (1×1) and Supporter (2×1) are
   fixed. The node only connects to the servers of its tunnel; changed connections are added or dropped without
   disconnecting the others. Needs the portal with “servers per tunnel”.
+- CDN64: more connections per server are up within seconds: if a server rejects an additional connection because it
+  does not know the new limit yet, the node retries after 15 seconds instead of 2–5 minutes.
+- CDN64: buttons show a spinner while saving and stay locked meanwhile (switch on, switch off, pause, protection,
+  servers and connections); after “servers and connections” the page reloads 3 seconds later.
 - Texts name the CDN64 servers generally instead of srv07/srv08.
 
 ## 1.46.1 – 2026-11-02

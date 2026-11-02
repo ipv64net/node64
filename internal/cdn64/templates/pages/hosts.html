@@ -106,7 +106,7 @@
 				<div class="mt-1 text-nowrap">
 					<button type="button" class="btn btn-sm {{if .Online.Paused}}btn-outline-success{{else}}btn-outline-warning{{end}} py-0" data-c64o-pause="{{.ID}}" data-paused="{{if .Online.Paused}}1{{end}}" data-name="{{index .Online.Names 0}}" title="{{if .Online.Paused}}{{$.T "cdn64.online.resume"}}{{else}}{{$.T "cdn64.online.pause"}}{{end}}"><i class="bi {{if .Online.Paused}}bi-play-circle{{else}}bi-pause-circle{{end}}"></i></button>
 					{{if and .Online.JA4 (ne .Kind "stream")}}<div class="dropdown d-inline-block"><button type="button" class="btn btn-sm {{if or .Online.WAF (ne .Online.JA4 "off")}}btn-outline-success{{else}}btn-outline-secondary{{end}} py-0" data-bs-toggle="dropdown" data-bs-auto-close="outside" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false" title="{{$.T "cdn64.protection.sw_title"}}" data-c64o-prot="{{.ID}}"><i class="bi bi-shield-check"></i></button>
-						<form method="post" action="/cdn64/hosts/{{.ID}}/protection" class="dropdown-menu p-3 small" style="min-width:16rem"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
+						<form method="post" action="/cdn64/hosts/{{.ID}}/protection" class="dropdown-menu p-3 small" style="min-width:16rem" data-c64o-busy><input type="hidden" name="_csrf" value="{{$.CSRF}}">
 							<div class="fw-semibold mb-2">{{$.T "cdn64.protection.sw_title"}}</div>
 							<div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" role="switch" name="waf" value="1" id="c64o-waf-{{.ID}}"{{if .Online.WAF}} checked{{end}}><label class="form-check-label" for="c64o-waf-{{.ID}}">{{$.T "cdn64.protection.sw_waf"}}</label></div>
 							<label class="form-label mb-1" for="c64o-ja4-{{.ID}}">{{$.T "cdn64.protection.sw_ja4"}}</label>
@@ -181,7 +181,7 @@
 </div>{{end}}
 {{if $d.OnlineOn}}{{template "c64o_modal" (dict "V" $ "L" $d.OnlineL "S" false)}}{{end}}
 {{with $d.Servers}}{{if .Selectable}}<div class="modal fade" id="cdn64-servers" tabindex="-1" aria-labelledby="cdn64-servers-title" aria-hidden="true">
-	<div class="modal-dialog"><form class="modal-content" method="post" action="/cdn64/online/servers"><input type="hidden" name="_csrf" value="{{$.CSRF}}">
+	<div class="modal-dialog"><form class="modal-content" method="post" action="/cdn64/online/servers" data-c64o-busy data-c64o-reload><input type="hidden" name="_csrf" value="{{$.CSRF}}">
 		<div class="modal-header"><h2 class="modal-title h5" id="cdn64-servers-title"><i class="bi bi-hdd-network text-primary"></i> {{$.T "cdn64.online.q_servers"}}{{$.Doc "cdn64-online#server-je-konto"}}</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{$.T "cdn64.online.close"}}"></button></div>
 		<div class="modal-body small">
 			<p>{{$.T "cdn64.online.servers_intro"}}</p>

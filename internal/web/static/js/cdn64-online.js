@@ -41,6 +41,29 @@
 		});
 	}
 
+	// Knopf waehrend einer Aktion: gesperrt mit Spinner (Symbol-Knopf: statt des Symbols, Text-Knopf: davor); bei einem
+	// Fehler wieder wie vorher
+	function busyOn(b) {
+		if (b.hasAttribute("aria-busy")) { return; }
+		b.disabled = true;
+		b.setAttribute("aria-busy", "true");
+		b.c64oHTML = b.innerHTML;
+		var sp = el("span", "spinner-border spinner-border-sm");
+		sp.setAttribute("aria-hidden", "true");
+		if (b.textContent.trim()) {
+			sp.classList.add("me-1");
+			b.insertBefore(sp, b.firstChild);
+		} else {
+			b.textContent = "";
+			b.appendChild(sp);
+		}
+	}
+	function busyOff(b) {
+		b.disabled = false;
+		b.removeAttribute("aria-busy");
+		if (b.c64oHTML !== undefined) { b.innerHTML = b.c64oHTML; }
+	}
+
 	function el(tag, cls, text) {
 		var x = document.createElement(tag);
 		if (cls) { x.className = cls; }
@@ -212,14 +235,14 @@
 
 	function run() {
 		busy = true;
-		startBtn.disabled = true;
+		busyOn(startBtn);
 		setup.classList.add("d-none");
 		stepsEl.textContent = "";
 		var chain = onlyTest ? Promise.resolve() : account().then(tunnel).then(names);
 		chain.then(function () { return selftest(onlyTest ? 0 : 3); }).catch(function () { return null; }).then(function () {
 			busy = false;
 			onlyTest = true; // danach: erneut testen
-			startBtn.disabled = false;
+			busyOff(startBtn);
 			startBtn.textContent = t("retest");
 		});
 	}
@@ -257,11 +280,11 @@
 	document.querySelectorAll("[data-c64o-off]").forEach(function (b) {
 		b.addEventListener("click", function () {
 			if (!window.confirm(t("off_confirm", { name: b.getAttribute("data-name") || "" }))) { return; }
-			b.disabled = true;
+			busyOn(b);
 			api("DELETE", "/api/cdn64/hosts/" + b.getAttribute("data-c64o-off") + "/online").then(function () {
 				window.location.reload();
 			}, function (e) {
-				b.disabled = false;
+				busyOff(b);
 				window.alert(e.message);
 			});
 		});
@@ -273,15 +296,32 @@
 			if (pause && !window.confirm(t("pause_confirm", { name: b.getAttribute("data-name") || "" }))) { return; }
 			var path = b.hasAttribute("data-c64o-pause") ? "/api/cdn64/hosts/" + b.getAttribute("data-c64o-pause") + "/online/pause"
 				: "/api/cdn64/online/names/" + b.getAttribute("data-c64o-rpause") + "/pause";
-			b.disabled = true;
+			busyOn(b);
 			api("POST", path, { paused: pause }).then(function () {
 				window.location.reload();
 			}, function (e) {
-				b.disabled = false;
+				busyOff(b);
 				window.alert(e.message);
 			});
 		});
 	});
+	// Formulare mit Wartezeit (Server und Verbindungen je Tunnel, Schutz): Spinner im Knopf. Nach "Server und Verbindungen"
+	// laedt die Seite 3 s spaeter noch einmal, dann zeigt die Spalte CDN64 die neuen Verbindungen.
+	document.querySelectorAll("form[data-c64o-busy]").forEach(function (f) {
+		f.addEventListener("submit", function () {
+			var b = f.querySelector("[type=submit]");
+			if (b) { busyOn(b); }
+			if (f.hasAttribute("data-c64o-reload")) {
+				try { window.sessionStorage.setItem("c64o-reload", "1"); } catch (e) { /* ohne Speicher: nur kein zweites Laden */ }
+			}
+		});
+	});
+	try {
+		if (window.sessionStorage.getItem("c64o-reload")) {
+			window.sessionStorage.removeItem("c64o-reload");
+			window.setTimeout(function () { window.location.reload(); }, 3000);
+		}
+	} catch (e) { /* kein Speicher */ }
 	startBtn.addEventListener("click", function () { if (!busy) { run(); } });
 	modalEl.addEventListener("hidden.bs.modal", function () { if (changed) { window.location.reload(); } });
 })();

@@ -77,6 +77,7 @@ type Client struct {
 	resolve  func(ctx context.Context, e Edge) []net.IP // Tests: feste Adressen
 	forceTCP bool                                       // Tests: nur der Ausweichweg
 	offWait  time.Duration                              // Tests: Pause eines abgelehnten Slots (Standard 2-5 Minuten)
+	offQuick time.Duration                              // Tests: Pause nach den ersten Ablehnungen (Standard 15 s)
 	runCtx   context.Context                            // waehrend Run (nil = nicht gestartet bzw. beendet)
 	cancels  map[string][]context.CancelFunc            // je Server und Slot: Verbindung beenden (SetEdges, SetSessions)
 	wg       sync.WaitGroup
@@ -288,14 +289,23 @@ func (c *Client) loop(ctx context.Context, e Edge, slot int) {
 	quicFails := 0
 	var lastQUIC time.Time
 	port := 0 // zuletzt erfolgreicher Port (0 = noch keiner)
+	offs := 0 // Ablehnungen wegen der Grenze des Servers in Folge
 	for ctx.Err() == nil {
 		useTCP := c.forceTCP || quicFails >= 2 && time.Since(lastQUIC) < 5*time.Minute // alle 5 Minuten QUIC erneut versuchen
 		sess, err := c.connect(ctx, e, slot, useTCP, port)
 		if errors.Is(err, errSlotOff) {
 			c.update(e.Name, slot, func(s *edgeState) { s.off, s.Connected, s.LastError = true, false, err.Error() })
 			c.cfg.Log.Info("tunnel: parallel session not allowed by the server", "edge", e.Name, "slot", slot)
+			// Die ersten zwei Male bald erneut: die Server holen ihre Konfiguration alle 10 s, eine eben erhoehte Grenze
+			// (Klasse, Auswahl je Tunnel) kennen sie also gleich. Danach selten (Grenze bleibt, Neustart des Servers).
+			offs++
 			wait := c.offWait
-			if wait <= 0 {
+			if offs <= 2 {
+				wait = c.offQuick
+				if wait <= 0 {
+					wait = 15 * time.Second
+				}
+			} else if wait <= 0 {
 				wait = 2*time.Minute + rand.N(3*time.Minute)
 			}
 			select {
@@ -305,6 +315,7 @@ func (c *Client) loop(ctx context.Context, e Edge, slot int) {
 			continue
 		}
 		if err == nil {
+			offs = 0
 			if _, p, perr := net.SplitHostPort(sess.RemoteAddr().String()); perr == nil {
 				port, _ = strconv.Atoi(p)
 			}
