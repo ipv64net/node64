@@ -4,6 +4,11 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- v64 Blocklist: Eine Adresse wird erst ab drei unabhängigen Accounts gelistet, für jede Art von Angriff (vorher
+  reichten bei wenigen Accounts zwei mit Anmeldeversuchen); ab 151 meldenden Accounts 2 % ohne Sprung.
+- v64 Blocklist: Ein Sensor, der anonym und mit Key gemeldet hat, zählt nicht mehr doppelt; Forschungs-Scanner gelten in der
+  IP-Auskunft nicht mehr als gelistet.
+
 ## 0.12.0-alpha.37 – 2026-11-02
 
 - Oberfläche: Healthchecks, Honeypot64 und PROXY64 zeigen ihre eigenen Logos (Menü, Dashboard, Seitenköpfe), hell und

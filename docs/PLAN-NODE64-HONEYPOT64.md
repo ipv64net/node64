@@ -191,8 +191,8 @@ weg). Wird es groß, gehen die Meldungen in eine Analyse-Datenbank (z. B. ClickH
 
   | aktive Accounts | aufgenommen ab |
   |---|---|
-  | bis 200 | 3 Accounts (seit 2026-11-02 auch mit Login/Exploit, wie JA4) |
-  | über 200 | 2 % der aktiven Accounts, mindestens 3, höchstens 10 |
+  | bis 150 | 3 Accounts (seit 2026-11-02 für jede Art, auch Login/Exploit, wie JA4) |
+  | über 150 | 2 % der aktiven Accounts (aufgerundet, ohne Sprung), höchstens 10 |
 
 - **Vertrauenswert 0–100** je IP. Rausfallen ohne neue Treffer nach 14 Tagen.
 - **Nie listen:** reservierte Netze, Sensoren, Infrastruktur von ipv64, große CDNs, Freigaben.

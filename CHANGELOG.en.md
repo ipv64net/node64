@@ -4,6 +4,12 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- v64 Blocklist: an address is only listed once three independent accounts have reported it, for every type of attack
+  (previously two with login attempts were enough while few accounts were reporting); from 151 reporting accounts 2 %
+  without a jump.
+- v64 Blocklist: a sensor that reported both anonymously and with a key no longer counts twice; research scanners no
+  longer show as listed in the IP lookup.
+
 ## 0.12.0-alpha.37 – 2026-11-02
 
 - Interface: Healthchecks, Honeypot64 and PROXY64 show their own logos (menu, dashboard, page headers), light and
