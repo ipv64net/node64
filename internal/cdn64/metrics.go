@@ -65,7 +65,7 @@ func (m *Module) Metrics(ctx context.Context, w *metrics.Writer) {
 func (m *Module) onlineMetrics(ctx context.Context, w *metrics.Writer) {
 	if names, err := m.onlineNames(ctx); err == nil {
 		for _, x := range names {
-			w.Gauge("node64_cdn64_online_name", "Name switched on at srv07/srv08 (always 1, mode in the label)", 1,
+			w.Gauge("node64_cdn64_online_name", "Name switched on at the CDN64 servers (always 1, mode in the label)", 1,
 				"host_id", strconv.FormatInt(x.HostID, 10), "name", x.Name, "mode", strconv.Itoa(x.Mode))
 		}
 	}
@@ -97,7 +97,7 @@ func (m *Module) onlineMetrics(ctx context.Context, w *metrics.Writer) {
 	for _, h := range r.Data.Hosts {
 		w.Gauge("node64_cdn64_online_host_status", "State at ipv64 (always 1, state in the label: active, pending, blocked)", 1,
 			"name", h.FQDN, "mode", strconv.Itoa(h.Mode), "status", h.Status)
-		w.Gauge("node64_cdn64_online_host_traffic_month_bytes", "Traffic through srv07/srv08 this month (in + out)",
+		w.Gauge("node64_cdn64_online_host_traffic_month_bytes", "Traffic through the CDN64 servers this month (in + out)",
 			float64(h.TrafficMonth.BytesIn+h.TrafficMonth.BytesOut), "name", h.FQDN)
 	}
 }

@@ -42,7 +42,7 @@
     },
     {
       "name": "PROXY64",
-      "description": "PROXY64 – Reverse-Proxy (Modul-ID cdn64): Proxy-Hosts über den gemeinsamen Eingang, Erreichbarkeit der Ziele; dazu CDN64 (Veröffentlichen über srv07/srv08). Nur bei eingeschaltetem Modul."
+      "description": "PROXY64 – Reverse-Proxy (Modul-ID cdn64): Proxy-Hosts über den gemeinsamen Eingang, Erreichbarkeit der Ziele; dazu CDN64 (Veröffentlichen über die CDN64-Server). Nur bei eingeschaltetem Modul."
     },
     {
       "name": "Honeypot64",
@@ -15410,7 +15410,7 @@
         "tags": [
           "PROXY64"
         ],
-        "summary": "Namen des Hosts bei CDN64 einschalten (DNS zeigt auf srv07/srv08)",
+        "summary": "Namen des Hosts bei CDN64 einschalten (DNS zeigt auf die CDN64-Server)",
         "parameters": [
           {
             "name": "id",
