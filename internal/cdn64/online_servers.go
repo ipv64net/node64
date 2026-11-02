@@ -45,11 +45,18 @@ func newServersView(s *ipv64api.CDN64Servers) *serversView {
 	for n := 1; n <= top; n++ {
 		v.Options = append(v.Options, n)
 	}
+	// vorgewaehlt ist die Wahl, nicht die Zahl der Zuteilungen (beim Lastausgleich kurz eine mehr): sonst schreibt ein
+	// Speichern nur der Verbindungen eine andere Anzahl fest
+	switch {
+	case s.Choice > 0:
+		v.Current = min(s.Choice, top)
+	case s.All:
+		v.Current = 0
+	default:
+		v.Current = top // 0 = Hoechstwert der Klasse
+	}
 	if s.All {
 		v.Options = append(v.Options, 0)
-		if s.Choice == 0 {
-			v.Current = 0
-		}
 	}
 	for n := 1; s.SessionsMax > 1 && n <= s.SessionsMax; n++ {
 		v.SessionOptions = append(v.SessionOptions, n)

@@ -3,6 +3,7 @@
 ## 1.47.0 – 2026-11-02
 
 ### New
+- Own logo (light and dark) in the menu, dashboard and page headers; shorter hint texts.
 - CDN64: button in the CDN64 column (Business and Company): a dialog chooses how many CDN64 servers the tunnel of this
   node uses with all its names (Business 1–2, Company 1 to all – the list grows with the servers, plus “all, including
   future ones”) and how many connections per server (Business 1–2, Company 1–4). Free (1×1) and Supporter (2×1) are

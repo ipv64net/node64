@@ -3,10 +3,12 @@
 ## 0.19.0 – 2026-11-02
 
 ### New
+- Own logo (light and dark) in the menu, dashboard and page header; shorter hint texts.
 - Reporting to ipv64 also without an API key: anonymous, without an account, only with the sensor ID (no node ID).
   Without a key the node only reports once “Report to ipv64” is ticked there explicitly; with a key nothing changes.
   At ipv64 all anonymous reports count together as one account with half trust (they confirm, but never list on
-  their own). Without UI: `NODE64_HONEYPOT_REPORT=1` without `NODE64_IPV64_KEY` reports anonymously.
+  their own). Without UI: `NODE64_HONEYPOT_REPORT=anon` without `NODE64_IPV64_KEY` reports anonymously
+  (`1` stays off without a key so existing sensors don't start reporting unasked).
 
 ## 0.18.0 – 2026-10-30
 

@@ -59,7 +59,7 @@
 					<div class="form-text">{{.T "honeypot.country.hint"}}</div>
 				</div>
 				<div class="form-check mb-3">
-					<input class="form-check-input" type="checkbox" id="report" name="report" value="1"{{if $d.Report.Enabled}} checked{{end}}>
+					<input class="form-check-input" type="checkbox" id="report" name="report" value="1"{{if and $d.Cfg.Report (or $d.KeySet $d.Cfg.ReportAnon)}} checked{{end}}>
 					<label class="form-check-label" for="report">{{.T "honeypot.settings.report"}}</label>{{.Doc "honeypot#melden"}}
 					<div class="form-text mt-0">{{.T "honeypot.settings.report_hint"}}</div>
 					{{if not $d.KeySet}}<div class="form-text mt-0"><i class="bi bi-incognito"></i> {{.T "honeypot.settings.report_anon"}} <a href="/settings#ipv64">{{.T "honeypot.settings.report_key_link"}}</a></div>{{end}}
@@ -244,7 +244,7 @@
 					<div class="form-text mt-0">{{.T "honeypot.settings.notify_hint"}} <a href="/notifications">{{.T "nav.notifications"}}</a></div>
 				</div>
 				<div class="form-check mt-3">
-					<input class="form-check-input" type="checkbox" id="report" name="report" value="1"{{if $d.Report.Enabled}} checked{{end}}>
+					<input class="form-check-input" type="checkbox" id="report" name="report" value="1"{{if and $d.Cfg.Report (or $d.KeySet $d.Cfg.ReportAnon)}} checked{{end}}>
 					<label class="form-check-label" for="report">{{.T "honeypot.settings.report"}}</label>{{.Doc "honeypot#melden"}}
 					<div class="form-text mt-0">{{.T "honeypot.settings.report_hint"}}</div>
 					{{if not $d.KeySet}}<div class="form-text mt-0"><i class="bi bi-incognito"></i> {{.T "honeypot.settings.report_anon"}} <a href="/settings#ipv64">{{.T "honeypot.settings.report_key_link"}}</a></div>{{end}}

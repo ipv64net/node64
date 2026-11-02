@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.51.1 – 2026-11-02
+
+### Geändert
+- Eigenes Logo (hell und dunkel) in Menü, Dashboard und Seitenkopf.
+- Kürzere Hinweistexte (Healthchecks, Proxmox VE, Docker); Einzelheiten stehen in der Doku.
+
 ## 2.51.0 – 2026-10-30
 
 ### Geändert

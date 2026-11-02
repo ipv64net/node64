@@ -1,5 +1,10 @@
 # Changes – DNS64
 
+## 1.31.2 – 2026-11-02
+
+### Changed
+- Shorter hint texts; details are in the docs.
+
 ## 1.31.1 – 2026-10-30
 
 ### Fixed

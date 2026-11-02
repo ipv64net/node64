@@ -1,5 +1,11 @@
 # Changes – Healthchecks
 
+## 2.51.1 – 2026-11-02
+
+### Changed
+- Own logo (light and dark) in the menu, dashboard and page header.
+- Shorter hint texts (health checks, Proxmox VE, Docker); details are in the docs.
+
 ## 2.51.0 – 2026-10-30
 
 ### Changed

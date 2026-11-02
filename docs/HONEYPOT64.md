@@ -17,7 +17,7 @@ docker run -d --name honeypot64 --network host --restart unless-stopped \
   -v honeypot64:/data ghcr.io/ipv64net/node64
 ```
 
-Ohne `NODE64_IPV64_KEY` bleiben alle Ereignisse lokal, außer mit `NODE64_HONEYPOT_REPORT=1` (anonym, siehe [Meldung an ipv64](#meldung-an-ipv64)).
+Ohne `NODE64_IPV64_KEY` bleiben alle Ereignisse lokal, außer mit `NODE64_HONEYPOT_REPORT=anon` (anonym, siehe [Meldung an ipv64](#meldung-an-ipv64)).
 
 Das Image gibt es für `linux/amd64`, `linux/arm64` und `linux/arm/v7` (ältere Raspberry Pi, viele NAS).
 
@@ -40,7 +40,7 @@ Bridge-Netz sehen manche Docker-Versionen statt der Angreifer die Adresse des Do
 | `NODE64_HONEYPOT_INFO_PORT` | `9064` | Port der Info-Seite, `0` = aus; darf kein Fallen-Port sein |
 | `NODE64_HONEYPOT_INFO_TOKEN` | – | erlaubt die Info-Seite auch von außerhalb privater Netze (mindestens 16 Zeichen) |
 | `NODE64_IPV64_KEY` | – | API-Key des ipv64-Accounts (16 bis 64 Buchstaben und Ziffern). Gesetzt = Meldung an ipv64 alle 10 Minuten; ein ungültiges Format verhindert den Start |
-| `NODE64_HONEYPOT_REPORT` | – | `0` schaltet die Meldung an ipv64 trotz Key ab; `1` ohne Key meldet anonym; leer = mit Key an, ohne Key aus |
+| `NODE64_HONEYPOT_REPORT` | – | `0` schaltet die Meldung an ipv64 trotz Key ab; `anon` meldet ohne Key anonym; leer oder `1` = mit Key an, ohne Key aus |
 | `NODE64_HONEYPOT_COUNTRY` | – | Standort des Sensors als Ländercode (z. B. `SG`) für die Live-Karte auf ipv64.net; leer = automatisch aus der öffentlichen IPv4. Nur Anzeige, nicht für die Bewertung |
 | `NODE64_HONEYPOT_LOGS` | – | Log-Sensor: Komma-Liste, je Eintrag `pfad` oder `pfad=format`, z. B. `/host/log/auth.log=syslog,/host/log/nginx/*access.log=nginx`; Pfade absolut unterhalb von `/host/log`, `/var/log` oder `/data/logs`, Muster erlaubt, höchstens 32. Formate: `syslog`, `nginx`, `apache`, `caddy`, `nextcloud`, `vaultwarden`, `gitea`, `proxmox`, `homeassistant` (ohne = automatisch). Leer = aus; kein Profil schaltet ihn ein (siehe [Log-Sensor und Syslog](#log-sensor-und-syslog)) |
 | `NODE64_HONEYPOT_SYSLOG_PORT` | – | Syslog-Empfänger auf UDP und TCP, z. B. `514`; leer oder `0` = aus. Darf kein Fallen-Port und nicht der Info-Port sein |
@@ -299,11 +299,13 @@ Mit `NODE64_IPV64_KEY` meldet der Sensor alle 10 Minuten (mit kleinem Zufallsver
 „An ipv64 melden“ unter Honeypot64 → Einstellungen (mit dem zentralen API-Key der Node Standard an).
 
 **Anonym (ohne API-Key, ab Honeypot64 0.19.0):** Ohne Key meldet der Sensor nur, wenn es ausdrücklich eingeschaltet
-ist – im Modul mit dem Haken „An ipv64 melden“, ohne Oberfläche mit `NODE64_HONEYPOT_REPORT=1`. Die Meldung geht ohne
+ist – im Modul mit dem Haken „An ipv64 melden“, ohne Oberfläche mit `NODE64_HONEYPOT_REPORT=anon`. Die Meldung geht ohne
 `Authorization` und ohne Node-Kennung; ipv64 ordnet sie keinem Account zu. Die Absender-IP speichert ipv64 nur am
-Sensor (damit sie nie selbst gelistet wird, und für die Grenze von 3 anonymen Sensoren je IP) und löscht sie nach
+Sensor (für die Grenze von 3 anonymen Sensoren je IP bzw. IPv6-/64, höchstens 3 neue je Tag, und die Live-Karte) und löscht sie nach
 30 Tagen ohne Meldung. Alle anonymen Sensoren zählen in der Bewertung zusammen wie **ein** Account mit halbem
-Vertrauen: Sie bestätigen Angreifer, bringen eine IP aber nie allein auf die v64 Blocklist. Live-Stand der Liste und
+Vertrauen: Sie bestätigen Angreifer, bringen eine IP aber nie allein auf die v64 Blocklist. Eine anonyme Meldung nimmt die eigene
+Absender-IP nicht von der Liste aus (anders als bei Sensoren mit Account), und anonyme Sensoren zählen nicht als weiterer
+Account für die öffentlichen Ranglisten. Live-Stand der Liste und
 Statistik im Portal gibt es nur mit Account.
 
 **Übertragen werden:** je Quell-IP Art, Dienst, Port, Anzahl, erster und letzter Zeitpunkt; dazu Proben mit Anzahl:

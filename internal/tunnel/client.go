@@ -144,6 +144,9 @@ func (c *Client) startLocked(e Edge) {
 
 func (c *Client) startSlotLocked(e Edge, slot int) {
 	sctx, cancel := context.WithCancel(c.runCtx)
+	if l := c.st[e.Name]; slot < len(l) { // der Zustand dieses Slots: eine beendete Verbindung schreibt nie in einen neu angelegten
+		sctx = context.WithValue(sctx, ownState{}, l[slot])
+	}
 	c.cancels[e.Name] = append(c.cancels[e.Name], cancel)
 	c.wg.Add(1)
 	go func() { defer c.wg.Done(); c.loop(sctx, e, slot) }()
@@ -280,10 +283,18 @@ func (c *Client) AllHave(capability string) bool {
 	return n > 0
 }
 
-func (c *Client) update(name string, slot int, f func(s *edgeState)) {
+// ownState: Kontext-Schluessel fuer den Zustand, zu dem eine Slot-Goroutine gehoert (startSlotLocked).
+type ownState struct{}
+
+// update aendert den Zustand eines Slots - nur, wenn er noch der der Goroutine ist (ctx): Nach SetEdges mit neuer
+// Adresse oder SetSessions runter und wieder hoch gibt es unter Name und Slot einen neuen Zustand, in den eine noch
+// laufende alte Verbindung (z. B. im Handschlag) nicht mehr schreiben darf.
+func (c *Client) update(ctx context.Context, name string, slot int, f func(s *edgeState)) {
 	c.mu.Lock()
 	if l := c.st[name]; slot < len(l) { // Server per SetEdges entfernt: nichts mehr anzeigen
-		f(l[slot])
+		if own, ok := ctx.Value(ownState{}).(*edgeState); !ok || own == l[slot] {
+			f(l[slot])
+		}
 	}
 	c.mu.Unlock()
 }
@@ -307,7 +318,7 @@ func (c *Client) loop(ctx context.Context, e Edge, slot int) {
 		useTCP := c.forceTCP || quicFails >= 2 && time.Since(lastQUIC) < 5*time.Minute // alle 5 Minuten QUIC erneut versuchen
 		sess, err := c.connect(ctx, e, slot, useTCP, port)
 		if errors.Is(err, errSlotOff) {
-			c.update(e.Name, slot, func(s *edgeState) { s.off, s.Connected, s.LastError = true, false, err.Error() })
+			c.update(ctx, e.Name, slot, func(s *edgeState) { s.off, s.Connected, s.LastError = true, false, err.Error() })
 			c.cfg.Log.Info("tunnel: parallel session not allowed by the server", "edge", e.Name, "slot", slot)
 			// Die ersten zwei Male bald erneut: die Server holen ihre Konfiguration alle 10 s, eine eben erhoehte Grenze
 			// (Klasse, Auswahl je Tunnel) kennen sie also gleich. Danach selten (Grenze bleibt, Neustart des Servers).
@@ -353,7 +364,7 @@ func (c *Client) loop(ctx context.Context, e Edge, slot int) {
 		if ctx.Err() != nil {
 			break
 		}
-		c.update(e.Name, slot, func(s *edgeState) {
+		c.update(ctx, e.Name, slot, func(s *edgeState) {
 			s.LastError, s.UDPBlocked = err.Error(), quicFails >= 2
 			if s.Connected || s.Since.IsZero() {
 				s.Since = time.Now()
@@ -368,7 +379,7 @@ func (c *Client) loop(ctx context.Context, e Edge, slot int) {
 		}
 		backoff = min(backoff*2, time.Minute)
 	}
-	c.update(e.Name, slot, func(s *edgeState) { s.Connected, s.sess = false, nil })
+	c.update(ctx, e.Name, slot, func(s *edgeState) { s.Connected, s.sess = false, nil })
 }
 
 // addrs: Adressen des Servers, IPv6 zuerst (Zielgruppe nur IPv6), bei DNS-Fehler die hinterlegten IPs.
@@ -497,7 +508,10 @@ func (c *Client) hello(ctx context.Context, sess Session, edge string, slot int)
 	if slot > 0 && w.Sessions == 0 { // aelterer Server: nur eine Verbindung je Tunnel sinnvoll
 		return errSlotOff
 	}
-	c.update(edge, slot, func(s *edgeState) { s.Caps = w.Caps })
+	if ctx.Err() != nil { // waehrend des Handschlags beendet (Slot entfernt): nicht als verbunden melden
+		return ctx.Err()
+	}
+	c.update(ctx, edge, slot, func(s *edgeState) { s.Caps = w.Caps })
 	_ = ctrl.SetDeadline(time.Time{})
 	go func() { // Steuer-Nachrichten des Servers
 		var m Control
@@ -512,7 +526,7 @@ func (c *Client) hello(ctx context.Context, sess Session, edge string, slot int)
 
 // serve nimmt Daten-Streams an, bis die Verbindung endet.
 func (c *Client) serve(ctx context.Context, e Edge, slot int, sess Session) {
-	c.update(e.Name, slot, func(s *edgeState) {
+	c.update(ctx, e.Name, slot, func(s *edgeState) {
 		s.Connected, s.Transport, s.Addr, s.Since, s.LastError, s.sess, s.off = true, sess.Transport(), sess.RemoteAddr().String(), time.Now(), "", sess, false
 		s.RTTms = float64(sess.RTT().Microseconds()) / 1000
 		s.Reconnects++
@@ -532,14 +546,16 @@ func (c *Client) serve(ctx context.Context, e Edge, slot int, sess Session) {
 				return
 			case <-t.C:
 				rtt := float64(sess.RTT().Microseconds()) / 1000
-				c.update(e.Name, slot, func(s *edgeState) { s.RTTms = rtt })
+				c.update(sctx, e.Name, slot, func(s *edgeState) { s.RTTms = rtt })
 			}
 		}
 	}()
 	c.mu.Lock()
-	es := &edgeState{} // Server inzwischen entfernt: Zaehler ins Leere
+	es := &edgeState{} // Server inzwischen entfernt (oder Slot neu angelegt): Zaehler ins Leere
 	if l := c.st[e.Name]; slot < len(l) {
-		es = l[slot]
+		if own, ok := ctx.Value(ownState{}).(*edgeState); !ok || own == l[slot] {
+			es = l[slot]
+		}
 	}
 	c.mu.Unlock()
 	for {

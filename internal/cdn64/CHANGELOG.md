@@ -3,6 +3,7 @@
 ## 1.47.0 – 2026-11-02
 
 ### Neu
+- Eigenes Logo (hell und dunkel) in Menü, Dashboard und Seitenköpfen; kürzere Hinweistexte.
 - CDN64: Knopf in der Spalte CDN64 (Business und Company): Ein Dialog wählt, über wie viele CDN64-Server der Tunnel
   dieser Node mit allen seinen Namen läuft (Business 1–2, Company 1 bis alle – die Liste wächst mit den Servern, dazu
   „alle, auch künftige“) und wie viele Verbindungen je Server (Business 1–2, Company 1–4). Free (1×1) und Supporter

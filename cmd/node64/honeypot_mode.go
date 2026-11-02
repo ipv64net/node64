@@ -56,7 +56,7 @@ type hpModeConfig struct {
 	InfoPort  int              // 0 = keine Info-Seite
 	InfoToken string           // leer = Info-Seite nur aus privaten Netzen
 	IPv64Key  string           // fuer die Meldung an ipv64 (H2)
-	Report    bool             // Meldung an ipv64: mit Key, wenn NODE64_HONEYPOT_REPORT nicht 0 ist; ohne Key anonym nur mit NODE64_HONEYPOT_REPORT=1
+	Report    bool             // Meldung an ipv64: mit Key, wenn NODE64_HONEYPOT_REPORT nicht 0 ist; ohne Key anonym nur mit NODE64_HONEYPOT_REPORT=anon
 	APIBase   string           // NODE64_IPV64_API (leer = ipv64.net; nur fuer Tests)
 	Firewall  *firewall.Config // Firewall-Helfer (H6, NODE64_FIREWALL); nil = aus
 	Name      string           // Name in der Node-Uebersicht auf ipv64.net (NODE64_NAME, Standard Honeypot64)
@@ -182,7 +182,7 @@ func honeypotRun(ctx context.Context, cfg *config.Config, hc *hpModeConfig, base
 		log.Info("NODE64_HONEYPOT_REPORT=0; events stay local")
 		close(repDone)
 	default:
-		log.Info("NODE64_IPV64_KEY is not set; events stay local (NODE64_HONEYPOT_REPORT=1 reports anonymously)")
+		log.Info("NODE64_IPV64_KEY is not set; events stay local (NODE64_HONEYPOT_REPORT=anon reports anonymously)")
 		close(repDone)
 	}
 	if !hc.Report { // spaeter wieder eingeschaltet: nichts aus der Zeit ohne Meldung nachholen
@@ -419,13 +419,13 @@ func honeypotModeFromEnv(getenv func(string) string) (*hpModeConfig, error) {
 		return nil, fmt.Errorf("NODE64_HONEYPOT_COUNTRY %q is not a country code (ISO 3166-1 alpha-2, e.g. DE or SG)", get("NODE64_HONEYPOT_COUNTRY"))
 	}
 	switch strings.ToLower(get("NODE64_HONEYPOT_REPORT")) {
-	case "":
+	case "", "1", "true", "yes", "on": // 1 war der dokumentierte Standard: ohne Key weiter aus, nie stillschweigend anonym
 		hc.Report = hc.IPv64Key != ""
-	case "1", "true", "yes", "on": // ohne Key anonym
+	case "anon", "anonymous": // ohne Key anonym (ausdruecklich), mit Key normal
 		hc.Report = true
 	case "0", "false", "no", "off":
 	default:
-		return nil, fmt.Errorf("NODE64_HONEYPOT_REPORT %q is not 1 or 0", get("NODE64_HONEYPOT_REPORT"))
+		return nil, fmt.Errorf("NODE64_HONEYPOT_REPORT %q is not 1, 0 or anon", get("NODE64_HONEYPOT_REPORT"))
 	}
 	if hc.IPv64Key != "" && !ipv64api.KeyRe.MatchString(hc.IPv64Key) {
 		return nil, errors.New("NODE64_IPV64_KEY is not a valid ipv64 API key (16 to 64 letters and digits)")

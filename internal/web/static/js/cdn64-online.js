@@ -319,7 +319,10 @@
 	try {
 		if (window.sessionStorage.getItem("c64o-reload")) {
 			window.sessionStorage.removeItem("c64o-reload");
-			window.setTimeout(function () { window.location.reload(); }, 3000);
+			// nur nach Erfolg: eine Fehlermeldung (einmalig angezeigt) wuerde das zweite Laden wieder entfernen
+			if (!document.querySelector(".alert-danger, .alert-warning")) {
+				window.setTimeout(function () { window.location.reload(); }, 3000);
+			}
 		}
 	} catch (e) { /* kein Speicher */ }
 	// Verbindungen im Aufbau (Spinner in der Spalte CDN64): alle 2,5 s den Stand holen und nur diese Anzeige nachziehen -

@@ -37,6 +37,15 @@ func TestServersView(t *testing.T) {
 	if v.Current != 4 {
 		t.Fatalf("company, 4 chosen (not all): %+v", v)
 	}
+	// Lastausgleich laeuft (eine Zuteilung mehr): vorgewaehlt bleibt die Wahl, nicht die Zahl der Zuteilungen
+	v = newServersView(&ipv64api.CDN64Servers{Count: 3, Choice: 2, Max: 2, Total: 4, Selectable: true, Sessions: 2, SessionsMax: 2})
+	if v.Current != 2 {
+		t.Fatalf("business during balancing: %+v", v)
+	}
+	v = newServersView(&ipv64api.CDN64Servers{Count: 3, Choice: 2, Max: 4, All: true, Total: 4, Selectable: true, Sessions: 1, SessionsMax: 4})
+	if v.Current != 2 {
+		t.Fatalf("company 2 during balancing: %+v", v)
+	}
 	// Free: fest 1x1, keine Auswahl der Verbindungen
 	if v = newServersView(&ipv64api.CDN64Servers{Count: 1, Max: 1, Total: 4, Sessions: 1, SessionsMax: 1}); v.SessionOptions != nil || v.CurSessions != 1 {
 		t.Fatalf("free: %+v", v)

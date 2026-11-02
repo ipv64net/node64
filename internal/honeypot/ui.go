@@ -1,6 +1,7 @@
 package honeypot
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"io/fs"
@@ -559,6 +560,20 @@ func formInt(r *http.Request, name string) int {
 	return n
 }
 
+// reportFromForm uebernimmt den Haken "An ipv64 melden". Ohne Key schaltet er nur die anonyme Meldung (ReportAnon);
+// Report bleibt dann unveraendert, damit die Voreinstellung (mit Key an) beim spaeteren Eintragen des Keys gilt.
+func (m *Module) reportFromForm(ctx context.Context, r *http.Request, c *ModuleConfig) {
+	on := r.PostFormValue("report") != ""
+	if _, key := m.api(ctx); key != "" {
+		c.Report = on
+		return
+	}
+	c.ReportAnon = on
+	if on {
+		c.Report = true
+	}
+}
+
 func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	c := m.loadConfig(ctx)
@@ -580,10 +595,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 		c.Country = r.PostFormValue("country")
 		c.NotifyNew = r.PostFormValue("notify_new") != ""
 		c.NoLocalBlock = r.PostFormValue("local_block") == ""
-		c.Report = r.PostFormValue("report") != ""
-		if _, key := m.api(ctx); key == "" { // ohne Key: Haken = ausdruecklich anonym melden
-			c.ReportAnon = c.Report
-		}
+		m.reportFromForm(ctx, r, &c)
 		m.saveSettings(w, r, c, "", nil, nil, false)
 		return
 	}
@@ -622,10 +634,7 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	if r.PostFormValue("local_block_form") != "" { // Sofort-Sperre in PROXY64 (nur mit diesem Teil des Formulars)
 		c.NoLocalBlock = r.PostFormValue("local_block") == ""
 	}
-	c.Report = r.PostFormValue("report") != ""
-	if _, key := m.api(ctx); key == "" { // ohne Key: Haken = ausdruecklich anonym melden
-		c.ReportAnon = c.Report
-	}
+	m.reportFromForm(ctx, r, &c)
 	if _, ok := r.PostForm["start_page"]; ok {
 		c.StartPage = r.PostFormValue("start_page")
 	}
