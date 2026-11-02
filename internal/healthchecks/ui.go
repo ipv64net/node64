@@ -182,6 +182,9 @@ func (m *Module) rowOf(ctx context.Context, lang string, c *Check, pills map[str
 	if r.State == "" {
 		r.State = "pending"
 	}
+	if c.Paused { // auch Online-Checks: sie laufen nicht im lokalen Scheduler, ihr Zustand bliebe sonst "pending"
+		r.State = string(scheduler.StatePaused)
+	}
 	r.LastAt, r.Stale = rt.LastCheck, stale(c, rt.LastCheck, r.State)
 	if r.Stale { // nicht ueberwacht: der letzte Zustand ist unbekannt geworden, nicht mehr "OK"
 		r.LastSeen, r.State = r.State, "unchecked"
@@ -1450,6 +1453,9 @@ func (m *Module) Dashboard(ctx context.Context) (*module.DashboardInfo, error) {
 	for _, c := range list {
 		names[c.Token] = c.Name
 		rt := m.liveRuntime(c)
+		if c.Paused { // pausierte Online-Checks laufen nicht im lokalen Scheduler
+			rt.State = scheduler.StatePaused
+		}
 		if stale(c, rt.LastCheck, string(rt.State)) {
 			info.Unchecked++ // nicht "OK": ob der Dienst erreichbar ist, ist unbekannt
 			continue

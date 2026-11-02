@@ -1,5 +1,10 @@
 # Changes – Healthchecks
 
+## 2.51.2 – 2026-11-02
+
+### Fixed
+- Paused online checks (e.g. a fresh copy) show as "Paused" instead of "Waiting" in the list and on the dashboard.
+
 ## 2.51.1 – 2026-11-02
 
 ### Changed

@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Healthchecks: paused online checks, such as a fresh copy, show as "Paused" instead of "Waiting".
 - v64 Blocklist: an address is only listed once three independent accounts have reported it, for every type of attack
   (previously two with login attempts were enough while few accounts were reporting); from 151 reporting accounts 2 %
   without a jump.

@@ -1,5 +1,10 @@
 # Änderungen – Healthchecks
 
+## 2.51.2 – 2026-11-02
+
+### Behoben
+- Pausierte Online-Checks (z. B. eine frische Kopie) stehen in Liste und Dashboard als „Pausiert“ statt „Wartet“.
+
 ## 2.51.1 – 2026-11-02
 
 ### Geändert
