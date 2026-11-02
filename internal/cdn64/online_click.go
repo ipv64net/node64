@@ -52,6 +52,11 @@ type ipv64Online struct{ k *ipv64api.Key }
 
 func (o ipv64Online) Ready(ctx context.Context) bool { return o.k != nil && o.k.Get(ctx) != "" }
 
+// SetServers: Anzahl der CDN64-Server des Kontos (Business/Company, 0 = alle).
+func (o ipv64Online) SetServers(ctx context.Context, count int) (*ipv64api.CDN64Servers, error) {
+	return o.k.Client().CDN64SetServers(ctx, o.k.Get(ctx), count)
+}
+
 // SetLists: Freigabe- und Sperrliste fuer die CDN64-Server (online_lists.go).
 func (o ipv64Online) SetLists(ctx context.Context, tunnelID string, allow, deny []string) error {
 	return o.k.Client().CDN64SetLists(ctx, o.k.Get(ctx), tunnelID, allow, deny)

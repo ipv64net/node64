@@ -37,6 +37,7 @@ func (m *Module) c4Routes(mux *http.ServeMux, page func(http.HandlerFunc) http.H
 	mux.Handle("POST /cdn64/limits/unban", page(m.pageLimitsUnban))
 	mux.Handle("POST /cdn64/honeypot", page(m.pageHoneypotSave))
 	mux.Handle("POST /cdn64/honeypot/unblock", page(m.pageHoneypotUnblock))
+	mux.Handle("POST /cdn64/online/servers", page(m.pageOnlineServers))
 }
 
 func (m *Module) c4APIRoutes(mux *http.ServeMux, api func(http.HandlerFunc) http.Handler) {

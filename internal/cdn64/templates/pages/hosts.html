@@ -193,6 +193,16 @@
 		<div class="progress mt-1" style="height:.5rem" role="progressbar" aria-valuenow="{{.TrafficPct}}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar {{.TrafficClass}}" style="width:{{.TrafficBar}}%"></div></div>
 		<div class="small mt-1 {{if .Short}}text-warning-emphasis{{else}}text-body-secondary{{end}}">{{if .Short}}<i class="bi bi-exclamation-triangle"></i> {{$.T "cdn64.online.q_short" "date" ($.Date .EmptyAt) "n" ($.Bytes .Projected)}}{{else if .Projected}}{{$.T "cdn64.online.q_ok" "n" ($.Bytes .Projected)}}{{else}}{{$.T "cdn64.online.q_early"}}{{end}}</div>
 	</div><i class="bi bi-arrow-down-up stat-icon"></i></div></div></div>
+	{{with $d.Servers}}<div class="col-12"><div class="card stat stat-info" id="cdn-servers"><div class="card-body"><div class="stat-text">
+		<div class="stat-label">{{$.T "cdn64.online.q_servers"}}{{$.Doc "cdn64-online#server-je-konto"}}</div>
+		<div class="stat-value">{{len .Assigned}}{{if .All}} / {{$.T "cdn64.online.servers_all_short"}}{{else if .Max}} / {{.Max}}{{end}}</div>
+		<div class="small text-body-secondary mt-1">{{.Names}}{{if .Selectable}} · {{$.T "cdn64.online.servers_hint"}}{{end}}</div>
+		{{if .Selectable}}<form method="post" action="/cdn64/online/servers" class="d-flex gap-2 mt-2" style="max-width:22rem">
+			<input type="hidden" name="_csrf" value="{{$.CSRF}}">
+			<select class="form-select form-select-sm" name="count" aria-label="{{$.T "cdn64.online.q_servers"}}">{{$cur := .Current}}{{range .Options}}<option value="{{.}}"{{if eq . $cur}} selected{{end}}>{{if eq . 0}}{{$.T "cdn64.online.servers_all"}}{{else}}{{$.T "cdn64.online.servers_n" "n" .}}{{end}}</option>{{end}}</select>
+			<button class="btn btn-sm btn-primary text-nowrap" type="submit">{{$.T "common.save"}}</button>
+		</form>{{end}}
+	</div><i class="bi bi-hdd-network stat-icon"></i></div></div></div>{{end}}
 </div>{{end}}
 <p class="small text-body-secondary mt-2">{{if eq $d.Kind "proxy"}}{{.T "cdn64.list_hint"}}{{else}}{{.T "cdn64.list_hint_other"}}{{end}}{{if $d.CacheN}} · {{.T "cdn64.cache_info" "n" $d.CacheN "size" (.Bytes $d.CacheB)}}{{end}}</p>
 {{end}}

@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: a tile below the proxy hosts shows the account’s CDN64 servers; Business and Company choose the number
+  there.
 - PROXY64: When the list of CDN64 servers changes, tunnels to the remaining servers keep running without
   interruption.
 - Interface: hint texts much shorter (details are in the docs); the API page shows a short sentence instead of the long

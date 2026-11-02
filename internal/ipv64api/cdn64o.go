@@ -143,12 +143,24 @@ type CDN64Quota struct {
 	BandwidthMbit int `json:"bandwidth_mbit"` // 0 = frei
 }
 
+// CDN64Servers sind die Server des Kontos (Anzahl nach Klasse; Business und Company waehlen).
+type CDN64Servers struct {
+	Count      int      `json:"count"`      // zugeteilt
+	Max        int      `json:"max"`        // hoechstens waehlbar
+	All        bool     `json:"all"`        // Klasse ohne Obergrenze (alle, auch kuenftige)
+	Total      int      `json:"total"`      // Server insgesamt
+	Selectable bool     `json:"selectable"` // Anzahl waehlbar
+	Assigned   []string `json:"assigned"`
+	Active     []string `json:"active"` // gerade im DNS (ohne ausgefallene, mit Ersatz)
+}
+
 // CDN64Overview ist GET /cdn64o.
 type CDN64Overview struct {
 	Quota   CDN64Quota    `json:"quota"`
 	Edges   []CDN64Edge   `json:"edges"`
 	Tunnels []CDN64Tunnel `json:"tunnels"`
 	Hosts   []CDN64Host   `json:"hosts"`
+	Servers *CDN64Servers `json:"servers,omitempty"` // nil = Portal ohne Server je Konto
 }
 
 // CDN64 liefert Kontingent, Server, Tunnels und Namen des Accounts.
@@ -219,6 +231,15 @@ func (c *Client) CDN64SetMode(ctx context.Context, key string, id int64, mode in
 func (c *Client) CDN64SetPaused(ctx context.Context, key string, id int64, paused bool) (*CDN64Host, error) {
 	var out CDN64Host
 	if err := c.do(ctx, http.MethodPatch, key, "/cdn64o/hosts/"+strconv.FormatInt(id, 10), map[string]bool{"paused": paused}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CDN64SetServers setzt die Anzahl der Server des Kontos (Business/Company; 0 = alle, auch kuenftige).
+func (c *Client) CDN64SetServers(ctx context.Context, key string, count int) (*CDN64Servers, error) {
+	var out CDN64Servers
+	if err := c.do(ctx, http.MethodPut, key, "/cdn64o/servers", map[string]int{"count": count}, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

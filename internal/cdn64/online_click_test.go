@@ -48,6 +48,8 @@ type fakeOnline struct {
 	protDays []int                     // abgefragte Zeitraeume
 	waf      map[int64]bool            // WAF je Name (gesetzt ueber SetProtection)
 	ja4      map[int64]string          // JA4-Stufe je Name
+	servers  *ipv64api.CDN64Servers    // Server je Konto (nil = altes Portal)
+	setCount []int                     // Aufrufe von SetServers
 }
 
 func (f *fakeOnline) Ready(context.Context) bool { f.mu.Lock(); defer f.mu.Unlock(); return f.ready }
@@ -72,7 +74,25 @@ func (f *fakeOnline) Overview(context.Context) (*ipv64api.CDN64Overview, error) 
 		}
 		ov.Hosts = append(ov.Hosts, h)
 	}
+	ov.Servers = f.servers
 	return ov, nil
+}
+
+func (f *fakeOnline) SetServers(_ context.Context, n int) (*ipv64api.CDN64Servers, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.setCount = append(f.setCount, n)
+	if f.servers == nil || !f.servers.Selectable {
+		return nil, &ipv64api.APIError{Status: 403, Code: "plan_not_allowed"}
+	}
+	all := []string{"srv07", "srv08", "srv09", "srv10"}
+	if n == 0 || n > len(all) {
+		n = len(all)
+	}
+	s := *f.servers
+	s.Count, s.Assigned = n, all[:n]
+	f.servers = &s
+	return &s, nil
 }
 
 func (f *fakeOnline) CreateTunnel(context.Context, string) (*ipv64api.CDN64Tunnel, error) {

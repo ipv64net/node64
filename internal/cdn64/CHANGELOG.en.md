@@ -1,5 +1,13 @@
 # Changes – PROXY64
 
+## 1.47.0 – 2026-11-02
+
+### New
+- CDN64: a “CDN64 servers” tile below the proxy hosts shows which servers the account’s names use. Business and
+  Company choose the number there (Business 1–2, Company 1 to all, including future ones); Free and Supporter have a
+  fixed number. Needs the portal with “servers per account”.
+- Texts name the CDN64 servers generally instead of srv07/srv08.
+
 ## 1.46.1 – 2026-11-02
 
 ### Changed
