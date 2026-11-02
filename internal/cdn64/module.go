@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/netip"
 	"path/filepath"
@@ -287,6 +288,14 @@ func (m *Module) Card(ctx context.Context) (*module.Card, error) {
 			}
 		}
 		c.Stats = append(c.Stats, module.CardStat{LabelKey: "cdn64.card.streams", Value: son})
+	}
+	fo := onlineFailover(m.onlineOwnTunnel(ctx))
+	for _, g := range slices.Sorted(maps.Keys(fo)) { // Failover der CDN64-Server: gelb, bis der Server zurueck ist
+		st := module.CardStat{LabelKey: "cdn64.card.failover", Text: g + " → " + fo[g], Class: "text-warning-emphasis"}
+		if fo[g] == "" {
+			st.LabelKey, st.Text = "cdn64.card.edge_down", g
+		}
+		c.Stats = append(c.Stats, st)
 	}
 	if down > 0 {
 		c.Stats = append(c.Stats, module.CardStat{LabelKey: "cdn64.card.down", Value: down, Class: "text-danger"})

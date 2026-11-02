@@ -1,0 +1,90 @@
+diff --git a/pages/cdn64.de.html b/pages/cdn64.de.html
+index 05173bb..71870ad 100644
+--- a/pages/cdn64.de.html
++++ b/pages/cdn64.de.html
+@@ -36,7 +36,7 @@
+ <h3 id="lastverteilung">Load-Balancing und Ausfallsicherheit</h3>
+ <ul>
+ 	<li><strong>Mehrere Server per DNS:</strong> Das DNS nennt die Adressen der Edge-Server deines Kontos. Ab zwei Servern liegt einer in Nürnberg und einer in Falkenstein; Besucher verteilen sich automatisch auf sie.</li>
+-	<li><strong>Server fällt aus:</strong> Meldet sich ein Edge-Server 45 Sekunden lang nicht bei IPv64.net und antwortet er auch nicht auf eine direkte Prüfung, nimmt IPv64.net seine Adressen aus dem DNS – solange ein anderer Server erreichbar ist. Bis dahin tragen die übrigen Server deines Kontos. Bleibt er länger als 3 Minuten weg (also nicht nur ein Neustart), springt für Konten, denen er zugeteilt ist, ein anderer Server ein, möglichst am selben Standort: Das DNS bekommt dessen Adressen, Node64 verbindet sich binnen einer Minute zusätzlich dorthin – ohne die Verbindungen zu den anderen Servern zu unterbrechen. Hat dein Konto nur einen Server (Free), ist der Name bis dahin nicht erreichbar. Ist der Server wieder 30 Sekunden da, gilt wieder die alte Zuteilung.</li>
++	<li><strong>Server fällt aus:</strong> Meldet sich ein Edge-Server 45 Sekunden lang nicht bei IPv64.net und antwortet er auch nicht auf eine direkte Prüfung, nimmt IPv64.net seine Adressen aus dem DNS – solange ein anderer Server erreichbar ist. Bis dahin tragen die übrigen Server deines Kontos. Bleibt er länger als 3 Minuten weg (also nicht nur ein Neustart), springt für Konten, denen er zugeteilt ist, ein anderer Server ein, möglichst am selben Standort: Das DNS bekommt dessen Adressen, Node64 verbindet sich binnen einer Minute zusätzlich dorthin – ohne die Verbindungen zu den anderen Servern zu unterbrechen. Hat dein Konto nur einen Server (Free), ist der Name bis dahin nicht erreichbar. Ist der Server wieder 30 Sekunden da, gilt wieder die alte Zuteilung. Sichtbar ist ein Failover auf ipv64.net/cdn64 (gelbes Abzeichen „failover“ am Namen, Hinweis am Tunnel), in Node64 (Dashboard-Karte PROXY64 und Abzeichen „srv08 → srv09“ in der Spalte <em>CDN64</em>), im Log der Node und in den Ereignissen der Namen.</li>
+ 	<li><strong>Parallele Verbindungen:</strong> Je nach Kontoklasse baut Node64 zu jedem Server mehrere parallele Tunnel-Verbindungen auf (Business bis 2, Company bis 4, je Tunnel wählbar; siehe <a href="#server-je-tunnel">Server je Tunnel</a>). Die Server geben neue Besucher an die am wenigsten belastete Verbindung.</li>
+ 	<li><strong>Mehrere Tunnel für einen Namen:</strong> Ein Name kann mehreren Tunneln (also mehreren Node64-Instanzen) zugeordnet sein. Die Reihenfolge ist die Priorität: Es bedient der erste Tunnel, der gerade verbunden ist. Das ist eine Ausfallreserve, keine Lastverteilung zwischen den Nodes. Festlegen lässt sich die Liste über die <a href="{{u "cdn64/api"}}#name-aendern">API</a> (Feld <code>tunnels</code>).</li>
+ </ul>
+diff --git a/pages/cdn64.en.html b/pages/cdn64.en.html
+index 32716bd..fd2a8a6 100644
+--- a/pages/cdn64.en.html
++++ b/pages/cdn64.en.html
+@@ -36,7 +36,7 @@
+ <h3 id="lastverteilung">Load balancing and failover</h3>
+ <ul>
+ 	<li><strong>Several servers via DNS:</strong> DNS returns the addresses of your account's edge servers. From two servers on, one is in Nuremberg and one in Falkenstein; visitors are spread across them automatically.</li>
+-	<li><strong>A server fails:</strong> if an edge server does not report to IPv64.net for 45 seconds and does not answer a direct check either, IPv64.net removes its addresses from DNS – as long as another server is reachable. Until then the other servers of your account carry the load. If it stays away for more than 3 minutes (so not just a restart), another server stands in for the accounts it is assigned to, preferably at the same location: DNS gets that server's addresses, and Node64 additionally connects to it within a minute – without interrupting the connections to the other servers. If your account has only one server (Free), the name is unreachable until then. Once the server is back for 30 seconds, the previous assignment applies again.</li>
++	<li><strong>A server fails:</strong> if an edge server does not report to IPv64.net for 45 seconds and does not answer a direct check either, IPv64.net removes its addresses from DNS – as long as another server is reachable. Until then the other servers of your account carry the load. If it stays away for more than 3 minutes (so not just a restart), another server stands in for the accounts it is assigned to, preferably at the same location: DNS gets that server's addresses, and Node64 additionally connects to it within a minute – without interrupting the connections to the other servers. If your account has only one server (Free), the name is unreachable until then. Once the server is back for 30 seconds, the previous assignment applies again. A failover is visible on ipv64.net/cdn64 (yellow “failover” badge at the name, note at the tunnel), in Node64 (PROXY64 dashboard card and badge “srv08 → srv09” in the <em>CDN64</em> column), in the node's log and in the events of the names.</li>
+ 	<li><strong>Parallel connections:</strong> depending on your account class, Node64 opens several parallel tunnel connections to each server (Business up to 2, Company up to 4, your choice per tunnel; see <a href="#server-je-tunnel">servers per tunnel</a>). The servers hand new visitors to the least loaded connection.</li>
+ 	<li><strong>Several tunnels for one name:</strong> a name can be assigned to several tunnels (i.e. several Node64 instances). The order is the priority: the first tunnel that is currently connected serves the name. This is a fallback, not load balancing between nodes. You set the list via the <a href="{{u "cdn64/api"}}#name-aendern">API</a> (field <code>tunnels</code>).</li>
+ </ul>
+diff --git a/pages/cdn64_api.de.html b/pages/cdn64_api.de.html
+index 1c2b70d..b92abd0 100644
+--- a/pages/cdn64_api.de.html
++++ b/pages/cdn64_api.de.html
+@@ -71,7 +71,7 @@ X-API-Key: DEIN_API_KEY</code></pre>
+ 		<tr><td><code>quota.mappings</code></td><td>Portmapper, gleiche Felder</td></tr>
+ 		<tr><td><code>quota.traffic_mb</code></td><td>Traffic dieses Monats in MB (ein + aus) und Grenze in MB</td></tr>
+ 		<tr><td><code>quota.bandwidth_mbit</code></td><td>Bandbreite der Klasse in Mbit/s, <code>0</code> = unbegrenzt</td></tr>
+-		<tr><td><code>edges</code></td><td>die Edge-Server, zu denen der Tunnel der fragenden Node verbindet (Kopfzeile <code>X-Node64-Node</code>; ohne sie alle Server der Tunnel des Kontos): Name, Hostname, Tunnel-Port, IP-Adressen, bei einem gerade ausgefallenen Server <code>standby</code> (<code>true</code>; die Node verbindet weiter, um seine Rückkehr zu bemerken). Die Server je Tunnel stehen in <code>tunnels</code> (<a href="{{u "cdn64"}}#server-je-tunnel">Server je Tunnel</a>).</td></tr>
++		<tr><td><code>edges</code></td><td>die Edge-Server, zu denen der Tunnel der fragenden Node verbindet (Kopfzeile <code>X-Node64-Node</code>; ohne sie alle Server der Tunnel des Kontos): Name, Hostname, Tunnel-Port, IP-Adressen, bei einem gerade ausgefallenen Server <code>standby</code> (<code>true</code>; die Node verbindet weiter, um seine Rückkehr zu bemerken), im Failover <code>replaced_by</code> (Ersatz) bzw. beim Ersatz <code>stands_in</code> (der ausgefallene). Die Server je Tunnel stehen in <code>tunnels</code> (<a href="{{u "cdn64"}}#server-je-tunnel">Server je Tunnel</a>).</td></tr>
+ 		<tr><td><code>tunnels</code></td><td>deine Tunnel (siehe <a href="#tunnel">Tunnel</a>)</td></tr>
+ 		<tr><td><code>hosts</code></td><td>deine Namen, je als <a href="#name-abfragen">Namens-Objekt</a></td></tr>
+ 	</tbody>
+@@ -100,6 +100,7 @@ X-API-Key: DEIN_API_KEY</code></pre>
+ 		<tr><td><code>selectable</code></td><td><code>true</code>: die Anzahl ist wählbar (Business, Company)</td></tr>
+ 		<tr><td><code>assigned</code></td><td>die zugeteilten Server (Namen)</td></tr>
+ 		<tr><td><code>active</code></td><td>die Server, die gerade im DNS der Namen des Tunnels stehen – fällt ein zugeteilter länger als 3 Minuten aus, steht hier sein Ersatz</td></tr>
++		<tr><td><code>replaced</code></td><td>Failover: ausgefallener Server → Ersatz (leer ohne Failover; dasselbe Feld hat auch jeder Name)</td></tr>
+ 	</tbody>
+ </table></div>
+ <p>Fehler: Klasse ohne Wahl <code>403</code> (<code>plan_not_allowed</code>), Anzahl außerhalb der Grenzen <code>422</code> (<code>out_of_range</code>), fremder Tunnel <code>404</code>. Nach einem <code>PUT</code> stellt IPv64.net das DNS der Namen um; jeder geänderte Name bekommt das Ereignis <code>servers_changed</code>.</p>
+@@ -293,8 +294,8 @@ curl -X DELETE "https://ipv64.net/api/v2/cdn64o/hosts/42/mappings/7" -H "Authori
+ 		<tr><td><code>paused</code>, <code>resumed</code></td><td>pausiert bzw. fortgesetzt</td></tr>
+ 		<tr><td><code>target</code>, <code>acl</code>, <code>mapping</code></td><td>Ziel, Zugriffsliste bzw. Portmapper geändert</td></tr>
+ 		<tr><td><code>blocked</code>, <code>unblocked</code></td><td>wegen Traffic gesperrt bzw. wieder frei</td></tr>
+-		<tr><td><code>edge_down</code>, <code>edge_back</code></td><td>ein Edge-Server wurde aus dem DNS genommen bzw. wieder eingetragen</td></tr>
+-		<tr><td><code>edge_replaced</code></td><td>ein zugeteilter Edge-Server ist länger als 3 Minuten weg, ein anderer springt ein (<code>message</code>: der ausgefallene)</td></tr>
++		<tr><td><code>edge_down</code>, <code>edge_back</code></td><td>ein Edge-Server wurde aus dem DNS genommen bzw. wieder eingetragen (<code>message</code> z. B. „srv08 nicht erreichbar“ bzw. „zurück auf srv08“)</td></tr>
++		<tr><td><code>edge_replaced</code></td><td>ein zugeteilter Edge-Server ist länger als 3 Minuten weg, ein anderer springt ein (<code>message</code> z. B. „Ersatz srv09 für srv08“)</td></tr>
+ 		<tr><td><code>servers_changed</code></td><td>die Edge-Server des Kontos haben sich geändert (Anzahl gewählt, Klasse gewechselt, Server in Wartung); <code>message</code> nennt die Server im DNS</td></tr>
+ 		<tr><td><code>acme</code></td><td>TXT-Record für ein Zertifikat gesetzt</td></tr>
+ 	</tbody>
+diff --git a/pages/cdn64_api.en.html b/pages/cdn64_api.en.html
+index 8f766ad..ee74530 100644
+--- a/pages/cdn64_api.en.html
++++ b/pages/cdn64_api.en.html
+@@ -71,7 +71,7 @@ X-API-Key: DEIN_API_KEY</code></pre>
+ 		<tr><td><code>quota.mappings</code></td><td>port mappings, same fields</td></tr>
+ 		<tr><td><code>quota.traffic_mb</code></td><td>traffic this month in MB (in + out) and limit in MB</td></tr>
+ 		<tr><td><code>quota.bandwidth_mbit</code></td><td>bandwidth of the class in Mbit/s, <code>0</code> = unlimited</td></tr>
+-		<tr><td><code>edges</code></td><td>the edge servers the tunnel of the requesting node connects to (header <code>X-Node64-Node</code>; without it all servers of the account's tunnels): name, host name, tunnel port, IP addresses, for a server that is currently down <code>standby</code> (<code>true</code>; the node keeps connecting to notice its return). The servers per tunnel are in <code>tunnels</code> (<a href="{{u "cdn64"}}#server-je-tunnel">servers per tunnel</a>).</td></tr>
++		<tr><td><code>edges</code></td><td>the edge servers the tunnel of the requesting node connects to (header <code>X-Node64-Node</code>; without it all servers of the account's tunnels): name, host name, tunnel port, IP addresses, for a server that is currently down <code>standby</code> (<code>true</code>; the node keeps connecting to notice its return), during a failover <code>replaced_by</code> (stand-in) or, at the stand-in, <code>stands_in</code> (the failed one). The servers per tunnel are in <code>tunnels</code> (<a href="{{u "cdn64"}}#server-je-tunnel">servers per tunnel</a>).</td></tr>
+ 		<tr><td><code>tunnels</code></td><td>your tunnels (see <a href="#tunnel">tunnels</a>)</td></tr>
+ 		<tr><td><code>hosts</code></td><td>your names, each as a <a href="#name-abfragen">name object</a></td></tr>
+ 	</tbody>
+@@ -100,6 +100,7 @@ X-API-Key: DEIN_API_KEY</code></pre>
+ 		<tr><td><code>selectable</code></td><td><code>true</code>: the number can be chosen (Business, Company)</td></tr>
+ 		<tr><td><code>assigned</code></td><td>the assigned servers (names)</td></tr>
+ 		<tr><td><code>active</code></td><td>the servers currently in the DNS of the tunnel's names – if an assigned one is down for more than 3 minutes, its stand-in is listed here</td></tr>
++		<tr><td><code>replaced</code></td><td>failover: failed server → stand-in (empty without failover; every name has the same field)</td></tr>
+ 	</tbody>
+ </table></div>
+ <p>Errors: class without a choice <code>403</code> (<code>plan_not_allowed</code>), number out of range <code>422</code> (<code>out_of_range</code>), foreign tunnel <code>404</code>. After a <code>PUT</code>, IPv64.net updates the DNS of the names; each changed name gets the event <code>servers_changed</code>.</p>
+@@ -293,8 +294,8 @@ curl -X DELETE "https://ipv64.net/api/v2/cdn64o/hosts/42/mappings/7" -H "Authori
+ 		<tr><td><code>paused</code>, <code>resumed</code></td><td>paused or resumed</td></tr>
+ 		<tr><td><code>target</code>, <code>acl</code>, <code>mapping</code></td><td>target, access list or port mapping changed</td></tr>
+ 		<tr><td><code>blocked</code>, <code>unblocked</code></td><td>blocked because of traffic or released again</td></tr>
+-		<tr><td><code>edge_down</code>, <code>edge_back</code></td><td>an edge server was removed from DNS or added back</td></tr>
+-		<tr><td><code>edge_replaced</code></td><td>an assigned edge server has been away for more than 3 minutes, another one stands in (<code>message</code>: the failed one)</td></tr>
++		<tr><td><code>edge_down</code>, <code>edge_back</code></td><td>an edge server was removed from DNS or added back (<code>message</code> in German, e.g. “srv08 nicht erreichbar” or “zurück auf srv08”)</td></tr>
++		<tr><td><code>edge_replaced</code></td><td>an assigned edge server has been away for more than 3 minutes, another one stands in (<code>message</code> e.g. “Ersatz srv09 für srv08”)</td></tr>
+ 		<tr><td><code>servers_changed</code></td><td>the edge servers of the account changed (number chosen, class changed, server in maintenance); <code>message</code> names the servers in DNS</td></tr>
+ 		<tr><td><code>acme</code></td><td>TXT record for a certificate set</td></tr>
+ 	</tbody>

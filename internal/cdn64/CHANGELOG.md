@@ -17,6 +17,9 @@
   2,5 Sekunden den Stand ab und zieht nur diese Anzeige nach. Ein Server, der länger als eine Minute nicht vollständig
   verbunden ist, dreht nicht weiter; einen Server, den ipv64 als ausgefallen meldet, zählt die Anzeige gar nicht mit
   (die Node verbindet sich weiter mit ihm, um seine Rückkehr zu bemerken).
+- CDN64: Ein Failover ist sichtbar – die Dashboard-Karte PROXY64 zeigt gelb „CDN64-Failover srv08 → srv09“ (bzw.
+  „CDN64-Server nicht erreichbar“, solange noch kein Ersatz einspringt), die Spalte CDN64 das Abzeichen „srv08 → srv09“
+  und beim Ersatz „springt ein für srv08“. Das Log nennt Ausfall, Ersatz und Rückkehr mit den Servernamen.
 - Texte nennen die CDN64-Server allgemein statt srv07/srv08.
 
 ## 1.46.1 – 2026-11-02

@@ -16,6 +16,9 @@
   saving, switching on, a restart or a drop; the tooltip shows “x of y”. The page then checks every 2.5 seconds and
   only updates this display. A server that has not been fully connected for more than a minute stops spinning; a server
   that ipv64 reports as down is not counted at all (the node keeps connecting to it to notice its return).
+- CDN64: a failover is visible – the PROXY64 dashboard card shows “CDN64 failover srv08 → srv09” in yellow (or “CDN64
+  server not reachable” while no stand-in has taken over yet), the CDN64 column the badge “srv08 → srv09” and at the
+  stand-in “stands in for srv08”. The log names failure, stand-in and return with the server names.
 - Texts name the CDN64 servers generally instead of srv07/srv08.
 
 ## 1.46.1 – 2026-11-02

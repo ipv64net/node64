@@ -60,16 +60,66 @@ func newServersView(s *ipv64api.CDN64Servers) *serversView {
 // onlineServers: Server des eigenen Tunnels aus dem letzten Abgleich (nil = kein Tunnel oder Portal ohne Server je
 // Tunnel).
 func (m *Module) onlineServers(ctx context.Context, ov *ipv64api.CDN64Overview) *serversView {
+	if t := ownTunnel(m, ctx, ov); t != nil {
+		return newServersView(t.Servers)
+	}
+	return nil
+}
+
+// ownTunnel: der Tunnel dieser Node in einer Uebersicht von ipv64 (nil = keiner).
+func ownTunnel(m *Module, ctx context.Context, ov *ipv64api.CDN64Overview) *ipv64api.CDN64Tunnel {
 	c, _, err := m.onlineConf(ctx)
 	if err != nil || c == nil || ov == nil {
 		return nil
 	}
-	for _, t := range ov.Tunnels {
-		if t.ID == c.Tunnel {
-			return newServersView(t.Servers)
+	for i := range ov.Tunnels {
+		if ov.Tunnels[i].ID == c.Tunnel {
+			return &ov.Tunnels[i]
 		}
 	}
 	return nil
+}
+
+// onlineOwnTunnel: der eigene Tunnel aus dem letzten Abgleich.
+func (m *Module) onlineOwnTunnel(ctx context.Context) *ipv64api.CDN64Tunnel {
+	if rm := m.online.remote.Load(); rm != nil {
+		return ownTunnel(m, ctx, rm.Data)
+	}
+	return nil
+}
+
+// onlineFailover: Server des Tunnels, die ipv64 als ausgefallen meldet -> Ersatz ("" = noch keiner, die anderen Server
+// tragen; der Ersatz kommt nach 3 Minuten).
+func onlineFailover(t *ipv64api.CDN64Tunnel) map[string]string {
+	out := map[string]string{}
+	if t == nil {
+		return out
+	}
+	for _, e := range t.Edges {
+		if e.Standby || e.ReplacedBy != "" {
+			out[e.Name] = e.ReplacedBy
+		}
+	}
+	return out
+}
+
+// onlineFailoverLog: Ausfall, Einspringen des Ersatzes und Rueckkehr je Server ins Log (beim Abgleich, unter op).
+func (m *Module) onlineFailoverLog(fo map[string]string) {
+	for g, s := range fo {
+		old, had := m.online.fo[g]
+		switch {
+		case !had && s == "":
+			m.log.Warn("cdn64 online: server not reachable (ipv64), the other servers carry the tunnel", "edge", g)
+		case s != "" && old != s:
+			m.log.Warn("cdn64 online: failover, stand-in server for the failed one", "edge", g, "stand_in", s)
+		}
+	}
+	for g, s := range m.online.fo {
+		if _, still := fo[g]; !still {
+			m.log.Info("cdn64 online: server back, failover ended", "edge", g, "stand_in", s)
+		}
+	}
+	m.online.fo = fo
 }
 
 // POST /cdn64/online/servers: Server und Verbindungen je Server des eigenen Tunnels setzen.

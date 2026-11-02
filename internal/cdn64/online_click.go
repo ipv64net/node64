@@ -609,6 +609,7 @@ func (m *Module) onlineSync(ctx context.Context) {
 	}
 	if c != nil {
 		m.onlineListsSync(ctx, c.Tunnel)
+		m.onlineFailoverLog(onlineFailover(ownTunnel(m, ctx, ov)))
 		for _, t := range ov.Tunnels {
 			if cur := m.core.SettingOr(ctx, setOnlineSessions, "1"); t.ID == c.Tunnel && t.Sessions > 0 && strconv.Itoa(t.Sessions) != cur {
 				// Klasse oder Auswahl je Tunnel geaendert: so viele Verbindungen je Server, die bleibenden laufen weiter
@@ -1098,6 +1099,8 @@ type onlineBadge struct {
 	Transport string
 	Via       string // quic, quic443, tls ("" = nicht verbunden)
 	Sessions  int    // verbundene parallele Verbindungen (mehr als 1: Business/Company)
+	// Failover laut ipv64: dieser Server ist ersetzt durch ReplacedBy bzw. springt ein fuer StandsIn
+	ReplacedBy, StandsIn string
 }
 
 // viaOrder: Wege vom besten zum schwaechsten (die Zeile zeigt den schwaechsten verbundenen).
@@ -1123,11 +1126,18 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 		up := false
 		st := cl.Status()
 		conUp, conWant, pending = onlinePending(st, time.Now())
+		fo := map[string]ipv64api.CDN64Edge{}
+		if t := m.onlineOwnTunnel(ctx); t != nil {
+			for _, e := range t.Edges {
+				fo[e.Name] = e
+			}
+		}
 		for _, e := range st {
 			up = up || e.Connected
 		}
 		for _, e := range st {
-			b := onlineBadge{Name: e.Name, State: "down", Transport: e.Transport, Via: e.Via, Sessions: e.Sessions}
+			b := onlineBadge{Name: e.Name, State: "down", Transport: e.Transport, Via: e.Via, Sessions: e.Sessions,
+				ReplacedBy: fo[e.Name].ReplacedBy, StandsIn: fo[e.Name].StandsIn}
 			if slices.Index(viaOrder, e.Via) > slices.Index(viaOrder, via) {
 				via = e.Via
 			}

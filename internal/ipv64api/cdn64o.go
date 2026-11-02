@@ -18,6 +18,9 @@ type CDN64Edge struct {
 	IPs  []string `json:"ips"`  // IPv6 zuerst
 	// Standby: laut ipv64 ausgefallen (ein anderer Server springt ein); die Node verbindet weiter, um die Rueckkehr zu sehen
 	Standby bool `json:"standby,omitempty"`
+	// Failover: dieser Server ist ersetzt durch ReplacedBy bzw. springt ein fuer StandsIn (Server je Tunnel)
+	ReplacedBy string `json:"replaced_by,omitempty"`
+	StandsIn   string `json:"stands_in,omitempty"`
 }
 
 // CDN64Tunnel ist ein Tunnel des Accounts (Token nur beim Anlegen bzw. neu Ausstellen).
@@ -160,6 +163,8 @@ type CDN64Servers struct {
 	// Verbindungen je Server: wirksam und hoechstens waehlbar (Grenze der Klasse)
 	Sessions    int `json:"sessions"`
 	SessionsMax int `json:"sessions_max"`
+	// Replaced: Failover - ausgefallener Server => Ersatz
+	Replaced map[string]string `json:"replaced,omitempty"`
 }
 
 // CDN64Overview ist GET /cdn64o.

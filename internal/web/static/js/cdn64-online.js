@@ -324,7 +324,14 @@
 	} catch (e) { /* kein Speicher */ }
 	// Verbindungen im Aufbau (Spinner in der Spalte CDN64): alle 2,5 s den Stand holen und nur diese Anzeige nachziehen -
 	// Abzeichen je Server, Spinner mit "x von y"; steht alles (oder ist ein Server ausgefallen), endet die Abfrage
-	function badge(b, e, anyUp) {
+	function badge(b, e, anyUp, fo) {
+		if (fo && fo[e.name] && !e.connected) { // Failover: ersetzt durch ...
+			b.className = "badge text-bg-warning me-1";
+			b.textContent = e.name + " ";
+			b.appendChild(el("i", "bi bi-arrow-right"));
+			b.appendChild(document.createTextNode(" " + fo[e.name]));
+			return;
+		}
 		var st = e.connected ? "success" : (anyUp ? "info" : "danger");
 		b.className = "badge text-bg-" + st + " me-1";
 		b.textContent = e.name + " ";
@@ -339,7 +346,7 @@
 				var anyUp = (v.edges || []).some(function (e) { return e.connected; });
 				(v.edges || []).forEach(function (e) {
 					document.querySelectorAll("[data-c64o-edge]").forEach(function (b) {
-						if (b.getAttribute("data-c64o-edge") === e.name) { badge(b, e, anyUp); }
+						if (b.getAttribute("data-c64o-edge") === e.name) { badge(b, e, anyUp, v.failover); }
 					});
 				});
 				document.querySelectorAll("[data-c64o-pending]").forEach(function (s) {

@@ -8,6 +8,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
   dunkel.
 - PROXY64: Business und Company wählen in der Spalte CDN64 je Tunnel, über wie viele CDN64-Server er läuft und mit
   wie vielen Verbindungen je Server; Änderungen laufen ohne Unterbrechung der bleibenden Verbindungen.
+- PROXY64: Ein Failover der CDN64-Server ist sichtbar: Dashboard, Spalte CDN64 („srv08 → srv09“) und Log.
 - PROXY64: Knöpfe der Spalte CDN64 zeigen beim Speichern einen Spinner; die Spalte selbst zeigt einen Spinner, bis alle
   Verbindungen zu den CDN64-Servern stehen.
 - PROXY64: Ändert sich die Liste der CDN64-Server, laufen die Tunnel zu den bleibenden Servern ohne Unterbrechung

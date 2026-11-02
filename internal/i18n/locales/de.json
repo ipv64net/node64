@@ -637,6 +637,8 @@
     "help_dns": "Die Domain muss per DNS auf deinen Anschluss zeigen, z. B. als CNAME auf deine DynDNS-Domain.",
     "card": {
       "hosts": "Proxy-Hosts aktiv",
+      "failover": "CDN64-Failover",
+      "edge_down": "CDN64-Server nicht erreichbar",
       "down": "Ziele nicht erreichbar",
       "requests": "Anfragen seit Start",
       "certs_soon": "Zertifikate < 14 Tage",
@@ -1084,6 +1086,8 @@
       "servers_now": "Jetzt: {list} · {n} Verbindung(en) je Server",
       "servers_sessions": "Verbindungen je Server",
       "conns_pending": "Verbindungen im Aufbau: {up} von {want} stehen",
+      "replaced": "Failover: {edge} ist nicht erreichbar, {by} springt ein, bis er zurück ist",
+      "stands_in": "springt ein für {edge}",
       "servers_sessions_n": "{n} je Server",
       "servers_count": "Anzahl der Server",
       "servers_all": "Alle Server (auch künftige)",

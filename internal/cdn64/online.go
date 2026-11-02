@@ -60,6 +60,7 @@ type onlineState struct {
 	notify  func(notify.Alert)                // Meldungen (nil = keine)
 	prot    protectionCache                   // CDN64 Statistik (protection_ui.go)
 	lists   string                            // letzter Fehler beim Schicken der Listen (online_lists.go; unter op)
+	fo      map[string]string                 // zuletzt gemeldeter Failover: ausgefallen -> Ersatz ("" = noch keiner; unter op)
 }
 
 // SetSecrets gibt den Schluessel fuer verschluesselt gespeicherte Werte (Tunnel-Token).
@@ -231,6 +232,8 @@ type onlineView struct {
 	Up      int  `json:"conns_up"`
 	Want    int  `json:"conns_wanted"`
 	Pending bool `json:"pending"`
+	// Failover laut ipv64: ausgefallener Server -> Ersatz ("" = noch keiner)
+	Failover map[string]string `json:"failover"`
 }
 
 func (m *Module) onlineStatus(ctx context.Context) onlineView {
@@ -261,6 +264,7 @@ func (m *Module) onlineStatus(ctx context.Context) onlineView {
 		v.Edges = cl.Status()
 		v.Up, v.Want, v.Pending = onlinePending(v.Edges, time.Now())
 	}
+	v.Failover = onlineFailover(m.onlineOwnTunnel(ctx))
 	return v
 }
 
