@@ -9,6 +9,7 @@ Short summary of what changes per version. Details per module are in the node un
 - PROXY64: Business and Company choose per tunnel in the CDN64 column how many CDN64 servers it uses and how many
   connections per server; changes keep the remaining connections running.
 - PROXY64: a failover of the CDN64 servers is visible: dashboard, CDN64 column (“srv08 → srv09”) and log.
+- PROXY64: load balancing of the CDN64 servers without interruption; the log names the move.
 - PROXY64: buttons in the CDN64 column show a spinner while saving; the column itself shows a spinner until all
   connections to the CDN64 servers are up.
 - PROXY64: When the list of CDN64 servers changes, tunnels to the remaining servers keep running without

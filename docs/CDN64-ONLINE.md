@@ -432,6 +432,20 @@ Tunnel-Objekt und `edge/config` liefern `sessions` je Tunnel (`c64o_tunnel_sessi
 Die Node übernimmt neue Verbindungen ohne Neustart (`tunnel.Client.SetSessions`: überzählige Slots enden, neue kommen
 dazu). `cdn64.php` zeigt je Tunnel Server und Verbindungen, ohne Auswahl.
 
+**Lastausgleich (2026-11-02 abends, Dennis: nur Notbremse, kein Gleichverteilen, kein Hin und Her):** Messung ohne neue
+Edge-Version aus der Meldung jede Minute (`POST /cdn64o/edge/report`: Byte-Differenzen je Name, verbundene Tunnel):
+`c64o_load_record` speichert je Server und Minute Mbit/s, Tunnel-Verbindungen und Mbit/s je Tunnel (Name -> erster
+Tunnel) in `cdn64o_edge_load` (2 h) sowie `cdn64o_tunnel_seen`. Offene Besucher-Verbindungen fehlen dabei (braeuchte
+cdn64-edge 0.20.6); entschieden wird nur nach dem Durchsatz. Kapazitaet `cdn64o_edges.capacity_mbit` (Standard 1000,
+0 = nie). Entscheidung `bots/cdn64_balance.php` (Job `cdn64bal`, alle 15 min, `--dry`): ueberlastet = 15 min durchgehend
+ueber 70 % und ein anderer im Mittel unter 40 % (gleicher Standort zuerst); hoechstens ein Tunnel je Lauf mit
+spuerbarem Verkehr (>= 2 % der Kapazitaet, >= 1 Mbit/s), der das Ziel nicht ueber 70 % bringt; Tunnel 24 h fest, Server
+1 h gesperrt; nie bei Failover (irgendein Server withdrawn), nie ohne feste Zuteilung (Company „alle“), nicht waehrend
+eines laufenden Umzugs. Ausfuehrung im Portal (`c64o_balance_step` aus `edge/config`): neuer Server dazu (Zuteilung
+darf waehrend `moving` einen mehr haben, Markierung `balance_from` fuer die Node), alter faellt weg, sobald der neue
+den Tunnel meldet; ohne Meldung nach 10 min Abbruch. Ereignis `balance` an den Namen, Log in der Node. SQL
+`deploy/sql/cdn64_balance.sql` vor dem PHP. Admin-Knopf zum Umziehen beim Hinzufuegen eines Servers: weggelassen.
+
 ### 8.6 Webseite ipv64.net
 
 - **Neue Seite** (z. B. `cdn64.php`, Menü „CDN64“), getrennt von `cdn.php`:

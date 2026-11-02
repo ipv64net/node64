@@ -1,0 +1,66 @@
+diff --git a/pages/cdn64.de.html b/pages/cdn64.de.html
+index 71870ad..aaa7067 100644
+--- a/pages/cdn64.de.html
++++ b/pages/cdn64.de.html
+@@ -48,6 +48,7 @@
+ 	<li><strong>Mehrere Tunnel für einen Namen:</strong> Das DNS nennt die Server des ersten Tunnels. Die Reserve-Tunnel verbinden sich zusätzlich zu diesen Servern, damit sie einspringen können.</li>
+ 	<li><strong>Klasse gewechselt:</strong> Die neue Anzahl gilt binnen weniger Minuten; bleiben Server übrig, behält der Tunnel die zuerst zugeteilten.</li>
+ 	<li><strong>Alter DNS-Eintrag beim Besucher:</strong> Landet ein Besucher noch bei einem Server, den der Tunnel nicht mehr nutzt, reicht dieser ihn an einen Server mit deinem Tunnel weiter.</li>
++	<li id="lastausgleich"><strong>Lastausgleich (Notbremse):</strong> Liegt ein Edge-Server 15 Minuten durchgehend über 70 % seiner Kapazität und ein anderer unter 40 %, zieht IPv64.net einen Tunnel mit spürbarem Verkehr dorthin um – höchstens einen je Viertelstunde, nie während eines Server-Ausfalls und nie bei Company mit „alle“. Der neue Server kommt zuerst dazu; der alte fällt erst weg, wenn dein Tunnel auf dem neuen steht, es gibt also keinen Ausfall. Ein umgezogener Tunnel bleibt danach 24 Stunden auf seinen Servern. Sichtbar ist der Umzug in den Ereignissen der Namen („Lastausgleich: srv08 → srv10“) und im Log von Node64.</li>
+ </ul>
+ 
+ <h2 id="modi">Die drei Modi</h2>
+diff --git a/pages/cdn64.en.html b/pages/cdn64.en.html
+index fd2a8a6..0c91fd7 100644
+--- a/pages/cdn64.en.html
++++ b/pages/cdn64.en.html
+@@ -48,6 +48,7 @@
+ 	<li><strong>Several tunnels for one name:</strong> DNS names the servers of the first tunnel. The backup tunnels additionally connect to these servers so they can take over.</li>
+ 	<li><strong>Class changed:</strong> the new number applies within a few minutes; the tunnel keeps the servers assigned first.</li>
+ 	<li><strong>Old DNS answer at the visitor:</strong> if a visitor still reaches a server the tunnel no longer uses, that server passes them on to a server with your tunnel.</li>
++	<li id="lastausgleich"><strong>Load balancing (emergency brake):</strong> if an edge server stays above 70 % of its capacity for 15 minutes and another one is below 40 %, IPv64.net moves one tunnel with noticeable traffic there – at most one per quarter of an hour, never during a server failure and never for Company with “all”. The new server is added first; the old one is dropped only when your tunnel is up on the new one, so there is no outage. A moved tunnel then stays on its servers for 24 hours. The move shows in the events of the names (“Lastausgleich: srv08 → srv10”) and in the Node64 log.</li>
+ </ul>
+ 
+ <h2 id="modi">The three modes</h2>
+diff --git a/pages/cdn64_api.de.html b/pages/cdn64_api.de.html
+index b92abd0..ed354df 100644
+--- a/pages/cdn64_api.de.html
++++ b/pages/cdn64_api.de.html
+@@ -71,7 +71,7 @@ X-API-Key: DEIN_API_KEY</code></pre>
+ 		<tr><td><code>quota.mappings</code></td><td>Portmapper, gleiche Felder</td></tr>
+ 		<tr><td><code>quota.traffic_mb</code></td><td>Traffic dieses Monats in MB (ein + aus) und Grenze in MB</td></tr>
+ 		<tr><td><code>quota.bandwidth_mbit</code></td><td>Bandbreite der Klasse in Mbit/s, <code>0</code> = unbegrenzt</td></tr>
+-		<tr><td><code>edges</code></td><td>die Edge-Server, zu denen der Tunnel der fragenden Node verbindet (Kopfzeile <code>X-Node64-Node</code>; ohne sie alle Server der Tunnel des Kontos): Name, Hostname, Tunnel-Port, IP-Adressen, bei einem gerade ausgefallenen Server <code>standby</code> (<code>true</code>; die Node verbindet weiter, um seine Rückkehr zu bemerken), im Failover <code>replaced_by</code> (Ersatz) bzw. beim Ersatz <code>stands_in</code> (der ausgefallene). Die Server je Tunnel stehen in <code>tunnels</code> (<a href="{{u "cdn64"}}#server-je-tunnel">Server je Tunnel</a>).</td></tr>
++		<tr><td><code>edges</code></td><td>die Edge-Server, zu denen der Tunnel der fragenden Node verbindet (Kopfzeile <code>X-Node64-Node</code>; ohne sie alle Server der Tunnel des Kontos): Name, Hostname, Tunnel-Port, IP-Adressen, bei einem gerade ausgefallenen Server <code>standby</code> (<code>true</code>; die Node verbindet weiter, um seine Rückkehr zu bemerken), im Failover <code>replaced_by</code> (Ersatz) bzw. beim Ersatz <code>stands_in</code> (der ausgefallene), beim <a href="{{u "cdn64"}}#lastausgleich">Lastausgleich</a> am neuen Server <code>balance_from</code> (der alte, fällt weg, sobald der Tunnel auf dem neuen steht). Die Server je Tunnel stehen in <code>tunnels</code> (<a href="{{u "cdn64"}}#server-je-tunnel">Server je Tunnel</a>).</td></tr>
+ 		<tr><td><code>tunnels</code></td><td>deine Tunnel (siehe <a href="#tunnel">Tunnel</a>)</td></tr>
+ 		<tr><td><code>hosts</code></td><td>deine Namen, je als <a href="#name-abfragen">Namens-Objekt</a></td></tr>
+ 	</tbody>
+@@ -297,6 +297,7 @@ curl -X DELETE "https://ipv64.net/api/v2/cdn64o/hosts/42/mappings/7" -H "Authori
+ 		<tr><td><code>edge_down</code>, <code>edge_back</code></td><td>ein Edge-Server wurde aus dem DNS genommen bzw. wieder eingetragen (<code>message</code> z. B. „srv08 nicht erreichbar“ bzw. „zurück auf srv08“)</td></tr>
+ 		<tr><td><code>edge_replaced</code></td><td>ein zugeteilter Edge-Server ist länger als 3 Minuten weg, ein anderer springt ein (<code>message</code> z. B. „Ersatz srv09 für srv08“)</td></tr>
+ 		<tr><td><code>servers_changed</code></td><td>die Edge-Server des Kontos haben sich geändert (Anzahl gewählt, Klasse gewechselt, Server in Wartung); <code>message</code> nennt die Server im DNS</td></tr>
++		<tr><td><code>balance</code></td><td><a href="{{u "cdn64"}}#lastausgleich">Lastausgleich</a>: neuer Server kommt dazu, Umzug fertig („Lastausgleich: srv08 → srv10“) bzw. abgebrochen</td></tr>
+ 		<tr><td><code>acme</code></td><td>TXT-Record für ein Zertifikat gesetzt</td></tr>
+ 	</tbody>
+ </table></div>
+diff --git a/pages/cdn64_api.en.html b/pages/cdn64_api.en.html
+index ee74530..fbf287a 100644
+--- a/pages/cdn64_api.en.html
++++ b/pages/cdn64_api.en.html
+@@ -71,7 +71,7 @@ X-API-Key: DEIN_API_KEY</code></pre>
+ 		<tr><td><code>quota.mappings</code></td><td>port mappings, same fields</td></tr>
+ 		<tr><td><code>quota.traffic_mb</code></td><td>traffic this month in MB (in + out) and limit in MB</td></tr>
+ 		<tr><td><code>quota.bandwidth_mbit</code></td><td>bandwidth of the class in Mbit/s, <code>0</code> = unlimited</td></tr>
+-		<tr><td><code>edges</code></td><td>the edge servers the tunnel of the requesting node connects to (header <code>X-Node64-Node</code>; without it all servers of the account's tunnels): name, host name, tunnel port, IP addresses, for a server that is currently down <code>standby</code> (<code>true</code>; the node keeps connecting to notice its return), during a failover <code>replaced_by</code> (stand-in) or, at the stand-in, <code>stands_in</code> (the failed one). The servers per tunnel are in <code>tunnels</code> (<a href="{{u "cdn64"}}#server-je-tunnel">servers per tunnel</a>).</td></tr>
++		<tr><td><code>edges</code></td><td>the edge servers the tunnel of the requesting node connects to (header <code>X-Node64-Node</code>; without it all servers of the account's tunnels): name, host name, tunnel port, IP addresses, for a server that is currently down <code>standby</code> (<code>true</code>; the node keeps connecting to notice its return), during a failover <code>replaced_by</code> (stand-in) or, at the stand-in, <code>stands_in</code> (the failed one), during <a href="{{u "cdn64"}}#lastausgleich">load balancing</a> at the new server <code>balance_from</code> (the old one, dropped once the tunnel is up on the new one). The servers per tunnel are in <code>tunnels</code> (<a href="{{u "cdn64"}}#server-je-tunnel">servers per tunnel</a>).</td></tr>
+ 		<tr><td><code>tunnels</code></td><td>your tunnels (see <a href="#tunnel">tunnels</a>)</td></tr>
+ 		<tr><td><code>hosts</code></td><td>your names, each as a <a href="#name-abfragen">name object</a></td></tr>
+ 	</tbody>
+@@ -297,6 +297,7 @@ curl -X DELETE "https://ipv64.net/api/v2/cdn64o/hosts/42/mappings/7" -H "Authori
+ 		<tr><td><code>edge_down</code>, <code>edge_back</code></td><td>an edge server was removed from DNS or added back (<code>message</code> in German, e.g. “srv08 nicht erreichbar” or “zurück auf srv08”)</td></tr>
+ 		<tr><td><code>edge_replaced</code></td><td>an assigned edge server has been away for more than 3 minutes, another one stands in (<code>message</code> e.g. “Ersatz srv09 für srv08”)</td></tr>
+ 		<tr><td><code>servers_changed</code></td><td>the edge servers of the account changed (number chosen, class changed, server in maintenance); <code>message</code> names the servers in DNS</td></tr>
++		<tr><td><code>balance</code></td><td><a href="{{u "cdn64"}}#lastausgleich">load balancing</a>: new server added, move done (“Lastausgleich: srv08 → srv10”) or cancelled</td></tr>
+ 		<tr><td><code>acme</code></td><td>TXT record for a certificate set</td></tr>
+ 	</tbody>
+ </table></div>

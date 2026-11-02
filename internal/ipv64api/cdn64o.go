@@ -21,6 +21,8 @@ type CDN64Edge struct {
 	// Failover: dieser Server ist ersetzt durch ReplacedBy bzw. springt ein fuer StandsIn (Server je Tunnel)
 	ReplacedBy string `json:"replaced_by,omitempty"`
 	StandsIn   string `json:"stands_in,omitempty"`
+	// BalanceFrom: Lastausgleich - dieser Server kommt statt BalanceFrom dazu (der faellt weg, sobald der Tunnel hier steht)
+	BalanceFrom string `json:"balance_from,omitempty"`
 }
 
 // CDN64Tunnel ist ein Tunnel des Accounts (Token nur beim Anlegen bzw. neu Ausstellen).

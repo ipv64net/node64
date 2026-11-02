@@ -610,6 +610,7 @@ func (m *Module) onlineSync(ctx context.Context) {
 	if c != nil {
 		m.onlineListsSync(ctx, c.Tunnel)
 		m.onlineFailoverLog(onlineFailover(ownTunnel(m, ctx, ov)))
+		m.onlineBalanceLog(ownTunnel(m, ctx, ov))
 		for _, t := range ov.Tunnels {
 			if cur := m.core.SettingOr(ctx, setOnlineSessions, "1"); t.ID == c.Tunnel && t.Sessions > 0 && strconv.Itoa(t.Sessions) != cur {
 				// Klasse oder Auswahl je Tunnel geaendert: so viele Verbindungen je Server, die bleibenden laufen weiter

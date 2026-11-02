@@ -19,6 +19,9 @@
 - CDN64: a failover is visible – the PROXY64 dashboard card shows “CDN64 failover srv08 → srv09” in yellow (or “CDN64
   server not reachable” while no stand-in has taken over yet), the CDN64 column the badge “srv08 → srv09” and at the
   stand-in “stands in for srv08”. The log names failure, stand-in and return with the server names.
+- CDN64: load balancing of the servers (emergency brake against overload, decided by ipv64): when ipv64 moves the
+  tunnel to a less loaded server, the new one is added and the old one is dropped only once the tunnel is up there.
+  The log names start and end of the move with both server names.
 - Texts name the CDN64 servers generally instead of srv07/srv08.
 
 ## 1.46.1 – 2026-11-02

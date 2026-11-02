@@ -61,6 +61,7 @@ type onlineState struct {
 	prot    protectionCache                   // CDN64 Statistik (protection_ui.go)
 	lists   string                            // letzter Fehler beim Schicken der Listen (online_lists.go; unter op)
 	fo      map[string]string                 // zuletzt gemeldeter Failover: ausgefallen -> Ersatz ("" = noch keiner; unter op)
+	bal     map[string]string                 // laufender Lastausgleich: neuer Server -> alter (unter op)
 }
 
 // SetSecrets gibt den Schluessel fuer verschluesselt gespeicherte Werte (Tunnel-Token).

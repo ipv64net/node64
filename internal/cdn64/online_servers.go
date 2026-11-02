@@ -122,6 +122,36 @@ func (m *Module) onlineFailoverLog(fo map[string]string) {
 	m.online.fo = fo
 }
 
+// onlineBalanceLog: Lastausgleich der Server (ipv64 zieht den Tunnel auf einen weniger belasteten um) ins Log - Beginn,
+// sobald der neue Server dazukommt, Ende, wenn der alte weggefallen ist (beim Abgleich, unter op).
+func (m *Module) onlineBalanceLog(t *ipv64api.CDN64Tunnel) {
+	now := map[string]string{}
+	have := map[string]bool{}
+	if t != nil {
+		for _, e := range t.Edges {
+			have[e.Name] = true
+			if e.BalanceFrom != "" {
+				now[e.Name] = e.BalanceFrom
+			}
+		}
+	}
+	for to, from := range now {
+		if m.online.bal[to] != from {
+			m.log.Info("cdn64 online: load balancing, tunnel moves to a less loaded server", "from", from, "to", to)
+		}
+	}
+	for to, from := range m.online.bal {
+		if _, still := now[to]; !still {
+			if have[from] {
+				m.log.Info("cdn64 online: load balancing cancelled, tunnel stays", "edge", from)
+			} else {
+				m.log.Info("cdn64 online: load balancing done", "from", from, "to", to)
+			}
+		}
+	}
+	m.online.bal = now
+}
+
 // POST /cdn64/online/servers: Server und Verbindungen je Server des eigenen Tunnels setzen.
 func (m *Module) pageOnlineServers(w http.ResponseWriter, r *http.Request) {
 	back := listPath(KindProxy)
