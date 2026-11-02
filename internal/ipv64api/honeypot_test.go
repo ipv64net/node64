@@ -60,6 +60,11 @@ func TestHoneypotReport(t *testing.T) {
 		hdr.Get("Content-Type") != "application/json" || hdr.Get("User-Agent") != "node64/test" {
 		t.Fatalf("request: %q %v", got, hdr)
 	}
+	// ohne Key: anonym, ohne Authorization und ohne Node-Kennung
+	c.SetNodeID(func() string { return "node-1" })
+	if res, err = c.HoneypotReport(ctx, "", body); err != nil || res.Status != 202 || hdr.Get("Authorization") != "" || hdr.Get(HeaderNode) != "" {
+		t.Fatalf("anonymous: %+v %v %v", res, err, hdr)
+	}
 
 	status, answer = http.StatusOK, `{"duplicate":true,"report_id":"s-1"}` // ohne Huelle
 	if res, err = c.HoneypotReport(ctx, "k", body); err != nil || !res.Duplicate || res.ReportID != "s-1" {

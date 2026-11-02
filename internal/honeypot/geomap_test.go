@@ -225,7 +225,8 @@ func TestCard(t *testing.T) {
 		ago bool
 	}{
 		{ReportStatus{}, "honeypot.card.report_off", false},
-		{ReportStatus{Enabled: true}, "honeypot.card.report_nokey", false},
+		{ReportStatus{Enabled: true, Active: true, Anonymous: true}, "honeypot.card.report_wait", false},
+		{ReportStatus{Enabled: true, Active: true, Anonymous: true, LastSuccess: now}, "honeypot.card.report_anon", true},
 		{ReportStatus{Enabled: true, KeySet: true, Active: true}, "honeypot.card.report_wait", false},
 		{ReportStatus{Enabled: true, KeySet: true, Active: true, LastSuccess: now}, "honeypot.card.report_ok", true},
 		{ReportStatus{Enabled: true, KeySet: true, Active: true, LastSuccess: now.Add(-time.Hour), LastError: "boom", LastErrorAt: now}, "honeypot.card.report_error", true},

@@ -567,7 +567,6 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 		m.saveSettings(w, r, c, "", nil, nil, false)
 		return
 	}
-	_, key := m.api(ctx)
 	if r.PostFormValue("simple") != "" { // einfacher Modus: Vorlage, Startseite, Benachrichtigung, Meldung an ipv64
 		if p := r.PostFormValue("profile"); p != ProfileCustom && p != c.Profile {
 			if _, ok := Profiles[p]; ok {
@@ -581,8 +580,9 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 		c.Country = r.PostFormValue("country")
 		c.NotifyNew = r.PostFormValue("notify_new") != ""
 		c.NoLocalBlock = r.PostFormValue("local_block") == ""
-		if key != "" { // ohne Key ist der Schalter gesperrt und kommt nicht mit
-			c.Report = r.PostFormValue("report") != ""
+		c.Report = r.PostFormValue("report") != ""
+		if _, key := m.api(ctx); key == "" { // ohne Key: Haken = ausdruecklich anonym melden
+			c.ReportAnon = c.Report
 		}
 		m.saveSettings(w, r, c, "", nil, nil, false)
 		return
@@ -622,8 +622,9 @@ func (m *Module) pageSettingsSave(w http.ResponseWriter, r *http.Request) {
 	if r.PostFormValue("local_block_form") != "" { // Sofort-Sperre in PROXY64 (nur mit diesem Teil des Formulars)
 		c.NoLocalBlock = r.PostFormValue("local_block") == ""
 	}
-	if key != "" { // ohne Key ist der Schalter gesperrt und kommt nicht mit
-		c.Report = r.PostFormValue("report") != ""
+	c.Report = r.PostFormValue("report") != ""
+	if _, key := m.api(ctx); key == "" { // ohne Key: Haken = ausdruecklich anonym melden
+		c.ReportAnon = c.Report
 	}
 	if _, ok := r.PostForm["start_page"]; ok {
 		c.StartPage = r.PostFormValue("start_page")

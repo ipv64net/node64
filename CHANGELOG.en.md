@@ -4,6 +4,9 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Honeypot64: Reporting to ipv64 now also works without an API key – anonymously, without an account; without a key
+  only when switched on explicitly.
+
 ## 0.12.0-alpha.36 – 2026-10-30
 
 - Honeypot64: New traps for ADB, Modbus, Siemens S7 and BACnet (read only, reply never larger than the request).

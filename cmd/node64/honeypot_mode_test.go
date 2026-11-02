@@ -52,7 +52,7 @@ func TestHoneypotModeFromEnv(t *testing.T) {
 	if hc.Profile != "minimal" || hc.Sensor.Scan || hc.Retention != 48*time.Hour || hc.InfoPort != 0 || hc.IPv64Key != "abcdefgh12345678" || len(hc.Sensor.Services) != 2 {
 		t.Fatalf("minimal: %+v", hc)
 	}
-	// Meldung an ipv64: an mit Key (Standard), aus mit NODE64_HONEYPOT_REPORT=0 oder ohne Key
+	// Meldung an ipv64: an mit Key (Standard), aus mit NODE64_HONEYPOT_REPORT=0; ohne Key nur mit =1 (anonym)
 	if !hc.Report {
 		t.Fatal("report must be on with a key")
 	}
@@ -60,8 +60,11 @@ func TestHoneypotModeFromEnv(t *testing.T) {
 		"NODE64_IPV64_API": "http://127.0.0.1:1/api/v2"})); err != nil || hc.Report || hc.APIBase != "http://127.0.0.1:1/api/v2" {
 		t.Fatalf("report=0: %+v %v", hc, err)
 	}
-	if hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_REPORT": "1"})); err != nil || hc.Report {
-		t.Fatalf("report without key: %+v %v", hc, err)
+	if hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_REPORT": "1"})); err != nil || !hc.Report || hc.IPv64Key != "" {
+		t.Fatalf("report=1 without key (anonymous): %+v %v", hc, err)
+	}
+	if hc, err = honeypotModeFromEnv(hpEnv(map[string]string{})); err != nil || hc.Report {
+		t.Fatalf("no key, no report setting: %+v %v", hc, err)
 	}
 	// Standort fuer die Live-Karte: Laendercode (auch Kleinstaaten als fester Punkt), sonst Fehler
 	if hc, err = honeypotModeFromEnv(hpEnv(map[string]string{"NODE64_HONEYPOT_COUNTRY": "sg"})); err != nil || hc.Country != "SG" {

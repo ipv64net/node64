@@ -52,11 +52,11 @@
 					{{if $d.Counters.Dropped}}· <span class="text-warning-emphasis">{{.T "honeypot.services.dropped" "count" $d.Counters.Dropped}}</span>{{end}}
 				</div>
 				<div class="small text-body-secondary mt-1" id="report-line"><i class="bi bi-cloud-upload"></i> {{.T "honeypot.report.title"}}:
-					{{if $d.Report.Active}}{{.T "honeypot.report.on"}} · {{.T "honeypot.report.last_success"}}: {{if $d.Report.LastSuccess.IsZero}}{{.T "honeypot.report.never"}}{{else}}{{.Time $d.Report.LastSuccess}}{{end}}
+					{{if $d.Report.Active}}{{.T "honeypot.report.on"}}{{if $d.Report.Anonymous}} ({{.T "honeypot.report.anon"}}){{end}} · {{.T "honeypot.report.last_success"}}: {{if $d.Report.LastSuccess.IsZero}}{{.T "honeypot.report.never"}}{{else}}{{.Time $d.Report.LastSuccess}}{{end}}
 					· {{.T "honeypot.report.sources"}}: {{.Int $d.Report.SourcesToday}} / {{.Int $d.Report.SourcesTotal}}
 					{{if $d.Report.LastRejected}}· <span class="text-warning-emphasis">{{.T "honeypot.report.rejected" "count" $d.Report.LastRejected "reasons" $d.Report.RejectedText}}</span>{{end}}
 					{{if and $d.Report.LastError ($d.Report.LastErrorAt.After $d.Report.LastSuccess)}}· <span class="text-danger" title="{{$d.Report.LastError}}">{{.T "honeypot.report.last_error"}}: {{.Time $d.Report.LastErrorAt}}</span>{{end}}
-					{{else}}<a href="/honeypot/settings">{{if $d.Report.KeySet}}{{.T "honeypot.report.off"}}{{else}}{{.T "honeypot.report.nokey"}}{{end}}</a>{{end}}
+					{{else}}<a href="/honeypot/settings">{{.T "honeypot.report.off"}}</a>{{end}}
 				</div>
 				<div class="small text-body-secondary mt-1" id="logs-line"><i class="bi bi-journal-text"></i> {{.T "honeypot.logs.title"}}:
 					{{if or $d.Logs.Files $d.Logs.Syslog}}{{$ok := 0}}{{$bad := 0}}{{range $d.Logs.Files}}{{if .OK}}{{$ok = add $ok 1}}{{else}}{{$bad = add $bad 1}}{{end}}{{end}}

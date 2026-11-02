@@ -4,6 +4,9 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Honeypot64: An ipv64 melden geht jetzt auch ohne API-Key – anonym, ohne Account; ohne Key nur, wenn ausdrücklich
+  eingeschaltet.
+
 ## 0.12.0-alpha.36 – 2026-10-30
 
 - Honeypot64: Neue Fallen für ADB, Modbus, Siemens S7 und BACnet (nur lesen, Antwort nie größer als die Anfrage).

@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -478,6 +477,25 @@ func TestReporterChunksAndLimits(t *testing.T) {
 	}
 }
 
+// TestReporterAnonymous: an ohne Key meldet anonym (ohne Authorization), Status zeigt es an.
+func TestReporterAnonymous(t *testing.T) {
+	f := newRepFixture(t)
+	ctx := context.Background()
+	f.key = ""
+	f.setLastEnd(t, repNow.Add(-10*time.Minute))
+	repWrite(t, f.s, Event{Time: repNow.Add(-time.Minute), Service: SvcSSH, Port: 22, Kind: KindSSHBrute, Src: ip("45.83.64.1")})
+	f.r.RunOnce(ctx)
+	f.srv.mu.Lock()
+	auth := append([]string(nil), f.srv.auth...)
+	f.srv.mu.Unlock()
+	if len(f.srv.reports()) != 1 || len(auth) != 1 || auth[0] != "" {
+		t.Fatalf("anonymous report: %d %q", len(f.srv.reports()), auth)
+	}
+	if st := f.r.Status(ctx); !st.Active || !st.Anonymous || st.KeySet || st.LastSuccess.IsZero() {
+		t.Fatalf("status: %+v", st)
+	}
+}
+
 func TestReporterOptIn(t *testing.T) {
 	f := newRepFixture(t)
 	ctx := context.Background()
@@ -489,14 +507,8 @@ func TestReporterOptIn(t *testing.T) {
 	if st := f.r.Status(ctx); len(f.srv.reports()) != 0 || st.Active || !st.NextAttempt.IsZero() {
 		t.Fatalf("opt-in off: %d %+v", len(f.srv.reports()), st)
 	}
-	// an, aber kein Key: nichts
-	f.enabled, f.key = true, ""
-	f.r.RunOnce(ctx)
-	if st := f.r.Status(ctx); len(f.srv.reports()) != 0 || st.KeySet || st.Active {
-		t.Fatalf("no key: %+v", st)
-	}
 	// Einschalten: Zeitraum beginnt jetzt (nichts von vorher)
-	f.key = repKey
+	f.enabled = true
 	if err := f.r.ResetWindow(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -558,20 +570,29 @@ func TestModuleReportOptIn(t *testing.T) {
 	if !c.Report {
 		t.Fatal("report must be on by default")
 	}
-	// ohne Key: Ausschalten geht, Einschalten abgelehnt
-	c.Report = false
+	// ohne Key: der Standard (an) meldet nicht, erst ausdruecklich anonym eingeschaltet
+	if st := m.rep.Status(ctx); st.Enabled || st.Active || st.KeySet {
+		t.Fatalf("default without key: %+v", st)
+	}
+	c.ReportAnon = true
+	before0 := time.Now().Add(-time.Second)
 	if _, err := m.SaveConfig(ctx, c); err != nil {
 		t.Fatal(err)
 	}
+	if st := m.rep.Status(ctx); !st.Enabled || !st.Active || !st.Anonymous || st.KeySet {
+		t.Fatalf("anonymous: %+v", st)
+	}
+	if st, _ := SettingsReportState(m.core).Load(ctx); st.LastEnd.Before(before0) {
+		t.Fatalf("anonymous: window not reset: %v", st.LastEnd)
+	}
+	c.Report, c.ReportAnon = false, false
+	if _, err := m.SaveConfig(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	if st := m.rep.Status(ctx); st.Enabled {
+		t.Fatalf("off: %+v", st)
+	}
 	c.Report = true
-	_, err := m.SaveConfig(ctx, c)
-	var fe FieldErrors
-	if !errors.As(err, &fe) || fe["report"] != "honeypot.err.report_key" {
-		t.Fatalf("without key: %v", err)
-	}
-	if st := m.rep.Status(ctx); st.Enabled || st.KeySet {
-		t.Fatalf("status: %+v", st)
-	}
 	// mit Key: an, Zeitraum beginnt jetzt
 	if err := m.core.SetSetting(ctx, ipv64api.SetKey, repKey); err != nil {
 		t.Fatal(err)
@@ -586,7 +607,7 @@ func TestModuleReportOptIn(t *testing.T) {
 		t.Fatalf("window not reset: %v", st.LastEnd)
 	}
 	rs := m.rep.Status(ctx)
-	if !rs.Active || rs.SensorID == "" {
+	if !rs.Active || rs.Anonymous || rs.SensorID == "" {
 		t.Fatalf("status: %+v", rs)
 	}
 	if id, _ := SensorIDFromSettings(ctx, m.core); id != rs.SensorID {

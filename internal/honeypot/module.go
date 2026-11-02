@@ -38,7 +38,7 @@ var changelog string
 var changelogEN string
 
 const (
-	version = "0.18.0"
+	version = "0.19.0"
 
 	setConfig = "honeypot.config" // Einstellung des Moduls als JSON (ModuleConfig)
 
@@ -66,11 +66,12 @@ const KindNotifyNew = notify.KindHoneypotNew
 type ModuleConfig struct {
 	Profile string `json:"profile"` // minimal, standard, full, proxy oder custom (dann gilt Services)
 	Config
-	RetentionDays int   `json:"retention_days"`   // Aufbewahrung der Ereignisse, Standard 7
-	MaxEvents     int64 `json:"max_events"`       // Obergrenze der gespeicherten Ereignisse, Standard 200000
-	NotifyNew     bool  `json:"notify_new"`       // Benachrichtigung bei neuen Angreifern (Standard aus)
-	Report        bool  `json:"report"`           // Meldung an ipv64 (Standard an; wirkt erst mit dem zentralen API-Key)
-	Expert        bool  `json:"expert,omitempty"` // Oberflaeche im Expertenmodus (alle Einstellungen); sonst einfacher Modus
+	RetentionDays int   `json:"retention_days"`        // Aufbewahrung der Ereignisse, Standard 7
+	MaxEvents     int64 `json:"max_events"`            // Obergrenze der gespeicherten Ereignisse, Standard 200000
+	NotifyNew     bool  `json:"notify_new"`            // Benachrichtigung bei neuen Angreifern (Standard aus)
+	Report        bool  `json:"report"`                // Meldung an ipv64 (Standard an; wirkt mit dem zentralen API-Key ...)
+	ReportAnon    bool  `json:"report_anon,omitempty"` // ... oder ohne Key anonym, wenn dort ausdruecklich eingeschaltet (Standard aus)
+	Expert        bool  `json:"expert,omitempty"`      // Oberflaeche im Expertenmodus (alle Einstellungen); sonst einfacher Modus
 	// Erkannte Angreifer nicht lokal in PROXY64 sperren (Standard: sperren, auch ohne Meldung an ipv64)
 	NoLocalBlock bool `json:"no_local_block,omitempty"`
 	// Standort des Sensors fuer die Live-Karte (ISO 3166-1, "" = automatisch aus der oeffentlichen IPv4); geht mit
@@ -156,7 +157,7 @@ func New(core *store.Store, log *slog.Logger, dataDir, nodeVersion string) *Modu
 	m := &Module{core: core, log: l, dataDir: dataDir, version: nodeVersion, st: st, sink: bridgeBlockSink(CountEvents(st.Sink())), every: notifyEvery, login: newLoginWatch(),
 		newSensor: func(log *slog.Logger, dir string) sensorAPI { return NewSensor(log, dir) },
 		newLogs:   func(log *slog.Logger) logSensorAPI { return NewLogSensor(log) }}
-	m.rep = NewReporter(ReporterConfig{Store: st, API: m.api, Enabled: func(ctx context.Context) bool { return m.loadConfig(ctx).Report },
+	m.rep = NewReporter(ReporterConfig{Store: st, API: m.api, Enabled: m.reportOn,
 		Profile:  func(ctx context.Context) string { return m.loadConfig(ctx).Profile },
 		SensorID: func(ctx context.Context) (string, error) { return SensorIDFromSettings(ctx, core) },
 		Country:  func(ctx context.Context) string { return m.loadConfig(ctx).Country },
@@ -174,6 +175,19 @@ func (m *Module) api(ctx context.Context) (*ipv64api.Client, string) {
 		return nil, ""
 	}
 	return m.key.Client(), m.key.Get(ctx)
+}
+
+// reportOn: Meldung wirksam an (mit Key nach der Einstellung, ohne Key nur ausdruecklich anonym eingeschaltet).
+func (m *Module) reportOn(ctx context.Context) bool {
+	c := m.loadConfig(ctx)
+	if !c.Report {
+		return false
+	}
+	if c.ReportAnon {
+		return true
+	}
+	_, key := m.api(ctx)
+	return key != ""
 }
 
 // Reporter liefert den Sender der Meldungen an ipv64.
@@ -883,11 +897,8 @@ func (m *Module) loadConfig(ctx context.Context) ModuleConfig {
 // SaveConfig prueft und speichert die Einstellung und uebernimmt sie sofort (laeuft das Modul).
 // Fehler je Feld kommen als FieldErrors.
 func (m *Module) SaveConfig(ctx context.Context, c ModuleConfig) (ModuleConfig, error) {
-	old := m.loadConfig(ctx)
+	wasOn := m.reportOn(ctx)
 	errs := m.validate(ctx, &c)
-	if _, key := m.api(ctx); c.Report && !old.Report && key == "" {
-		errs["report"] = "honeypot.err.report_key"
-	}
 	if len(errs) > 0 {
 		return c, errs
 	}
@@ -898,7 +909,7 @@ func (m *Module) SaveConfig(ctx context.Context, c ModuleConfig) (ModuleConfig, 
 	if err := m.core.SetSetting(ctx, setConfig, string(raw)); err != nil {
 		return c, err
 	}
-	if c.Report && !old.Report { // Opt-in: gemeldet wird erst ab jetzt, nichts von vorher
+	if m.reportOn(ctx) && !wasOn { // Opt-in: gemeldet wird erst ab jetzt, nichts von vorher
 		if err := m.rep.ResetWindow(ctx); err != nil {
 			m.log.Warn("honeypot report: state not saved", "err", err)
 		}
@@ -931,9 +942,6 @@ func (m *Module) Import(ctx context.Context, raw json.RawMessage) (int, error) {
 	c := DefaultConfig()
 	if err := json.Unmarshal(raw, &c); err != nil {
 		return 0, fmt.Errorf("honeypot: %w", err)
-	}
-	if _, key := m.api(ctx); key == "" && !m.loadConfig(ctx).Report {
-		c.Report = false // ohne API-Key hier nicht einschaltbar
 	}
 	if c.CertID > 0 && m.certs != nil { // Kennung gilt nur auf dieser Node: fehlt das Zertifikat hier, selbst signiert
 		if crt, err := m.certs.Get(ctx, c.CertID); err != nil || crt == nil {
@@ -1058,18 +1066,18 @@ func cardTrend(cur, prev int64) (note, class string) {
 	return "± 0 %", "text-body-secondary"
 }
 
-// cardReport: Zeile „Meldung an ipv64“ (aus, ohne Key, wartet, ok mit Zeitpunkt, Fehler mit Zeitpunkt und Text).
+// cardReport: Zeile „Meldung an ipv64“ (aus, wartet, ok bzw. anonym mit Zeitpunkt, Fehler mit Zeitpunkt und Text).
 func cardReport(rs ReportStatus) module.CardStat {
 	st := module.CardStat{LabelKey: "honeypot.card.report"}
 	switch {
 	case !rs.Enabled:
 		st.TextKey, st.Class = "honeypot.card.report_off", "text-body-secondary"
-	case !rs.KeySet:
-		st.TextKey, st.Class = "honeypot.card.report_nokey", "text-warning-emphasis"
 	case rs.LastError != "" && rs.LastErrorAt.After(rs.LastSuccess):
 		st.TextKey, st.Class, st.Title, st.Ago = "honeypot.card.report_error", "text-danger", rs.LastError, rs.LastErrorAt
 	case rs.LastSuccess.IsZero():
 		st.TextKey, st.Class = "honeypot.card.report_wait", "text-body-secondary"
+	case rs.Anonymous:
+		st.TextKey, st.Class, st.Ago = "honeypot.card.report_anon", "text-success", rs.LastSuccess
 	default:
 		st.TextKey, st.Class, st.Ago = "honeypot.card.report_ok", "text-success", rs.LastSuccess
 	}

@@ -1,5 +1,13 @@
 # Änderungen – Honeypot64
 
+## 0.19.0 – 2026-11-02
+
+### Neu
+- Meldung an ipv64 auch ohne API-Key: anonym, ohne Account, nur mit der Sensor-Kennung (ohne Node-Kennung). Ohne Key
+  meldet die Node erst, wenn „An ipv64 melden“ dort ausdrücklich angehakt wird; mit Key bleibt es wie bisher. Alle
+  anonymen Meldungen zählen bei ipv64 zusammen wie ein Account mit halbem Vertrauen (bestätigen, aber nie allein
+  listen). Ohne Oberfläche: `NODE64_HONEYPOT_REPORT=1` ohne `NODE64_IPV64_KEY` meldet anonym.
+
 ## 0.18.0 – 2026-10-30
 
 ### Neu

@@ -171,7 +171,7 @@ func SensorIDFromFile(dir string) (string, error) {
 // ReporterConfig verbindet den Sender mit Modul bzw. Modus ohne Oberflaeche.
 type ReporterConfig struct {
 	Store    *Store
-	API      func(ctx context.Context) (*ipv64api.Client, string) // Client und Key ("" = kein Key)
+	API      func(ctx context.Context) (*ipv64api.Client, string) // Client und Key ("" = kein Key: anonym melden)
 	Enabled  func(ctx context.Context) bool                       // Opt-in
 	Profile  func(ctx context.Context) string
 	SensorID func(ctx context.Context) (string, error)
@@ -222,9 +222,10 @@ func NewReporter(cfg ReporterConfig) *Reporter {
 
 // ReportStatus ist der Zustand der Meldung (Oberflaeche, API, Info-Seite).
 type ReportStatus struct {
-	Enabled      bool      `json:"enabled"` // Opt-in an
-	KeySet       bool      `json:"key_set"` // API-Key vorhanden
-	Active       bool      `json:"active"`  // beides: es wird gemeldet
+	Enabled      bool      `json:"enabled"`   // Opt-in an
+	KeySet       bool      `json:"key_set"`   // API-Key vorhanden
+	Active       bool      `json:"active"`    // Opt-in an: es wird gemeldet
+	Anonymous    bool      `json:"anonymous"` // aktiv ohne Key: anonym (ohne Account)
 	SensorID     string    `json:"sensor_id,omitempty"`
 	LastSuccess  time.Time `json:"last_success,omitzero"`  // letzte angenommene Meldung
 	LastEnd      time.Time `json:"last_end,omitzero"`      // gemeldet bis
@@ -244,7 +245,8 @@ type ReportStatus struct {
 func (r *Reporter) Status(ctx context.Context) ReportStatus {
 	_, key := r.cfg.API(ctx)
 	st := ReportStatus{Enabled: r.cfg.Enabled(ctx), KeySet: key != ""}
-	st.Active = st.Enabled && st.KeySet
+	st.Active = st.Enabled
+	st.Anonymous = st.Active && !st.KeySet
 	state := r.loadedState(ctx)
 	r.mu.Lock()
 	id := r.sensorID
@@ -348,7 +350,7 @@ func (r *Reporter) Run(ctx context.Context) {
 	}
 }
 
-// RunOnce ist ein Durchlauf (Opt-in aus oder kein Key: nichts). Liefert die Wartezeit bis zum naechsten.
+// RunOnce ist ein Durchlauf (Opt-in aus: nichts; ohne Key anonym). Liefert die Wartezeit bis zum naechsten.
 func (r *Reporter) RunOnce(ctx context.Context) time.Duration {
 	regular := r.every + jitter()
 	if !r.run.TryLock() {
@@ -359,7 +361,7 @@ func (r *Reporter) RunOnce(ctx context.Context) time.Duration {
 		return regular
 	}
 	client, key := r.cfg.API(ctx)
-	if key == "" || client == nil {
+	if client == nil {
 		return regular
 	}
 	id, err := r.cfg.SensorID(ctx)
