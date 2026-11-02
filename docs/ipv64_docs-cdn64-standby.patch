@@ -1,0 +1,26 @@
+diff --git a/pages/cdn64_api.de.html b/pages/cdn64_api.de.html
+index fbf707d..1c2b70d 100644
+--- a/pages/cdn64_api.de.html
++++ b/pages/cdn64_api.de.html
+@@ -71,7 +71,7 @@ X-API-Key: DEIN_API_KEY</code></pre>
+ 		<tr><td><code>quota.mappings</code></td><td>Portmapper, gleiche Felder</td></tr>
+ 		<tr><td><code>quota.traffic_mb</code></td><td>Traffic dieses Monats in MB (ein + aus) und Grenze in MB</td></tr>
+ 		<tr><td><code>quota.bandwidth_mbit</code></td><td>Bandbreite der Klasse in Mbit/s, <code>0</code> = unbegrenzt</td></tr>
+-		<tr><td><code>edges</code></td><td>die Edge-Server, zu denen der Tunnel der fragenden Node verbindet (Kopfzeile <code>X-Node64-Node</code>; ohne sie alle Server der Tunnel des Kontos): Name, Hostname, Tunnel-Port, IP-Adressen. Die Server je Tunnel stehen in <code>tunnels</code> (<a href="{{u "cdn64"}}#server-je-tunnel">Server je Tunnel</a>).</td></tr>
++		<tr><td><code>edges</code></td><td>die Edge-Server, zu denen der Tunnel der fragenden Node verbindet (Kopfzeile <code>X-Node64-Node</code>; ohne sie alle Server der Tunnel des Kontos): Name, Hostname, Tunnel-Port, IP-Adressen, bei einem gerade ausgefallenen Server <code>standby</code> (<code>true</code>; die Node verbindet weiter, um seine Rückkehr zu bemerken). Die Server je Tunnel stehen in <code>tunnels</code> (<a href="{{u "cdn64"}}#server-je-tunnel">Server je Tunnel</a>).</td></tr>
+ 		<tr><td><code>tunnels</code></td><td>deine Tunnel (siehe <a href="#tunnel">Tunnel</a>)</td></tr>
+ 		<tr><td><code>hosts</code></td><td>deine Namen, je als <a href="#name-abfragen">Namens-Objekt</a></td></tr>
+ 	</tbody>
+diff --git a/pages/cdn64_api.en.html b/pages/cdn64_api.en.html
+index aed5c45..8f766ad 100644
+--- a/pages/cdn64_api.en.html
++++ b/pages/cdn64_api.en.html
+@@ -71,7 +71,7 @@ X-API-Key: DEIN_API_KEY</code></pre>
+ 		<tr><td><code>quota.mappings</code></td><td>port mappings, same fields</td></tr>
+ 		<tr><td><code>quota.traffic_mb</code></td><td>traffic this month in MB (in + out) and limit in MB</td></tr>
+ 		<tr><td><code>quota.bandwidth_mbit</code></td><td>bandwidth of the class in Mbit/s, <code>0</code> = unlimited</td></tr>
+-		<tr><td><code>edges</code></td><td>the edge servers the tunnel of the requesting node connects to (header <code>X-Node64-Node</code>; without it all servers of the account's tunnels): name, host name, tunnel port, IP addresses. The servers per tunnel are in <code>tunnels</code> (<a href="{{u "cdn64"}}#server-je-tunnel">servers per tunnel</a>).</td></tr>
++		<tr><td><code>edges</code></td><td>the edge servers the tunnel of the requesting node connects to (header <code>X-Node64-Node</code>; without it all servers of the account's tunnels): name, host name, tunnel port, IP addresses, for a server that is currently down <code>standby</code> (<code>true</code>; the node keeps connecting to notice its return). The servers per tunnel are in <code>tunnels</code> (<a href="{{u "cdn64"}}#server-je-tunnel">servers per tunnel</a>).</td></tr>
+ 		<tr><td><code>tunnels</code></td><td>your tunnels (see <a href="#tunnel">tunnels</a>)</td></tr>
+ 		<tr><td><code>hosts</code></td><td>your names, each as a <a href="#name-abfragen">name object</a></td></tr>
+ 	</tbody>

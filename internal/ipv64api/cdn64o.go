@@ -16,6 +16,8 @@ type CDN64Edge struct {
 	Host string   `json:"host"`
 	Port int      `json:"port"` // Tunnel-Port
 	IPs  []string `json:"ips"`  // IPv6 zuerst
+	// Standby: laut ipv64 ausgefallen (ein anderer Server springt ein); die Node verbindet weiter, um die Rueckkehr zu sehen
+	Standby bool `json:"standby,omitempty"`
 }
 
 // CDN64Tunnel ist ein Tunnel des Accounts (Token nur beim Anlegen bzw. neu Ausstellen).

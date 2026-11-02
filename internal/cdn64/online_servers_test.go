@@ -72,6 +72,20 @@ func TestOnlineServersPage(t *testing.T) {
 	if c, _, _ := e.m.onlineConf(ctx); c != nil {
 		tun = c.Tunnel
 	}
+	// ipv64 meldet srv08 als ausgefallen (standby): gleiche Verbindung, nur die Markierung wechselt
+	e.m.online.mu.Lock()
+	cl0 := e.m.online.client
+	e.m.online.mu.Unlock()
+	f.mu.Lock()
+	f.tunEdges = []ipv64api.CDN64Edge{{Name: "srv08", Host: "127.0.0.1", Port: 2, IPs: []string{"127.0.0.1"}, Standby: true}}
+	f.mu.Unlock()
+	e.m.onlineSync(ctx)
+	e.m.online.mu.Lock()
+	cl1 := e.m.online.client
+	e.m.online.mu.Unlock()
+	if cl0 == nil || cl1 != cl0 || len(cl1.Status()) != 1 || !cl1.Status()[0].Standby {
+		t.Fatalf("standby not taken over in place: same client %v", cl1 == cl0)
+	}
 	var flash string
 	e.m.g.Flash = func(_ http.ResponseWriter, _ *http.Request, kind, text string) { flash = kind + ": " + text }
 	e.m.g.T = func(_ *http.Request, key string, _ ...any) string { return key }
@@ -136,6 +150,15 @@ func TestOnlinePending(t *testing.T) {
 	if up, want, p := onlinePending(st, now); up != 5 || want != 8 || !p {
 		t.Fatalf("building: %d/%d %v", up, want, p)
 	}
+	st[1].Standby, st[1].Sessions = true, 0 // laut ipv64 ausgefallen, keine Verbindung: zaehlt nicht mit, kein Spinner
+	if up, want, p := onlinePending(st, now); up != 4 || want != 4 || p {
+		t.Fatalf("standby server: %d/%d %v", up, want, p)
+	}
+	st[1].Sessions = 1 // schon zurueck, ipv64 weiss es noch nicht: zaehlt wieder
+	if up, want, p := onlinePending(st, now); up != 5 || want != 8 || !p {
+		t.Fatalf("standby but connected: %d/%d %v", up, want, p)
+	}
+	st[1].Standby = false
 	st[1].Changed = now.Add(-2 * time.Minute) // seit zwei Minuten unvollstaendig: ausgefallen bzw. abgelehnt
 	if _, _, p := onlinePending(st, now); p {
 		t.Fatal("long-down server must not spin")

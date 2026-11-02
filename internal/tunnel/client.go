@@ -26,6 +26,8 @@ type Edge struct {
 	Host string   `json:"host"`          // srv07.cdn64.de (Zertifikatsname)
 	Port int      `json:"port"`          // 7844
 	IPs  []string `json:"ips,omitempty"` // Rueckfall, wenn der DNS der Node klemmt
+	// Standby: laut ipv64 ausgefallen - weiter verbinden (Rueckkehr), in der Node aber nicht als "im Aufbau" zeigen
+	Standby bool `json:"standby,omitempty"`
 }
 
 // ClientConfig: Anmeldedaten, Server und was mit eingehenden Streams passiert.
@@ -69,6 +71,7 @@ type EdgeStatus struct {
 	Wanted     int       `json:"sessions_wanted"`       // gewuenschte (Konfiguration bzw. Grenze des Servers)
 	Slots      int       `json:"slots"`                 // eingestellte Verbindungen (Sessions der Node, auch vom Server abgelehnte)
 	Changed    time.Time `json:"changed,omitzero"`      // letzte Aenderung einer Verbindung (verbunden, getrennt, angelegt)
+	Standby    bool      `json:"standby,omitempty"`     // laut ipv64 ausgefallen (Edge.Standby)
 }
 
 // Client haelt die Tunnels zu allen Servern.
@@ -223,7 +226,7 @@ func (c *Client) Status() []EdgeStatus {
 			}
 		}
 		x := base.EdgeStatus
-		x.Streams, x.Total, x.Reconnects, x.Sessions, x.Wanted, x.Slots = 0, 0, 0, 0, 0, len(slots)
+		x.Streams, x.Total, x.Reconnects, x.Sessions, x.Wanted, x.Slots, x.Standby = 0, 0, 0, 0, 0, len(slots), e.Standby
 		for _, s := range slots {
 			if s.Since.After(x.Changed) {
 				x.Changed = s.Since

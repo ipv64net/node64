@@ -212,7 +212,7 @@ func (m *Module) onlineSave(ctx context.Context, id, tok string, edges []tunnel.
 func toEdges(list []ipv64api.CDN64Edge) []tunnel.Edge {
 	out := make([]tunnel.Edge, 0, len(list))
 	for _, e := range list {
-		out = append(out, tunnel.Edge{Name: e.Name, Host: e.Host, Port: e.Port, IPs: e.IPs})
+		out = append(out, tunnel.Edge{Name: e.Name, Host: e.Host, Port: e.Port, IPs: e.IPs, Standby: e.Standby})
 	}
 	return out
 }
@@ -227,7 +227,7 @@ func tunnelEdges(ov *ipv64api.CDN64Overview, t ipv64api.CDN64Tunnel) []tunnel.Ed
 
 func sameEdges(a, b []tunnel.Edge) bool {
 	return slices.EqualFunc(a, b, func(x, y tunnel.Edge) bool {
-		return x.Name == y.Name && x.Host == y.Host && x.Port == y.Port && slices.Equal(x.IPs, y.IPs)
+		return x.Name == y.Name && x.Host == y.Host && x.Port == y.Port && slices.Equal(x.IPs, y.IPs) && x.Standby == y.Standby
 	})
 }
 
@@ -1289,9 +1289,13 @@ func (m *Module) onlineStrings(r *http.Request) string {
 // stehen dann nicht alle Verbindungen, ist er ausgefallen bzw. lehnt sie ab - die Spalte zeigt ihn ohne Spinner.
 const onlineBuilding = 60 * time.Second
 
-// onlinePending: aufgebaute und eingestellte Verbindungen aller Server; pending = mindestens ein Server im Aufbau.
+// onlinePending: aufgebaute und eingestellte Verbindungen aller Server; pending = mindestens ein Server im Aufbau. Ein
+// laut ipv64 ausgefallener Server (Standby) ohne Verbindung zaehlt nicht mit.
 func onlinePending(st []tunnel.EdgeStatus, now time.Time) (up, want int, pending bool) {
 	for _, e := range st {
+		if e.Standby && e.Sessions == 0 {
+			continue
+		}
 		up += e.Sessions
 		want += e.Slots
 		if e.Sessions < e.Slots && now.Sub(e.Changed) < onlineBuilding {

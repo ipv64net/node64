@@ -15,7 +15,8 @@
 - CDN64: Spinner in der Spalte CDN64, solange noch nicht alle Verbindungen stehen (Server × Verbindungen je Server) –
   nach dem Speichern, Einschalten, einem Neustart oder Abbruch; der Tooltip zeigt „x von y“. Die Seite fragt dann alle
   2,5 Sekunden den Stand ab und zieht nur diese Anzeige nach. Ein Server, der länger als eine Minute nicht vollständig
-  verbunden ist (ausgefallen), dreht nicht weiter.
+  verbunden ist, dreht nicht weiter; einen Server, den ipv64 als ausgefallen meldet, zählt die Anzeige gar nicht mit
+  (die Node verbindet sich weiter mit ihm, um seine Rückkehr zu bemerken).
 - Texte nennen die CDN64-Server allgemein statt srv07/srv08.
 
 ## 1.46.1 – 2026-11-02

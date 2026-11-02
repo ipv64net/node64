@@ -14,8 +14,8 @@
   servers and connections); after “servers and connections” the page reloads 3 seconds later.
 - CDN64: spinner in the CDN64 column while not all connections are up yet (servers × connections per server) – after
   saving, switching on, a restart or a drop; the tooltip shows “x of y”. The page then checks every 2.5 seconds and
-  only updates this display. A server that has not been fully connected for more than a minute (failed) stops
-  spinning.
+  only updates this display. A server that has not been fully connected for more than a minute stops spinning; a server
+  that ipv64 reports as down is not counted at all (the node keeps connecting to it to notice its return).
 - Texts name the CDN64 servers generally instead of srv07/srv08.
 
 ## 1.46.1 – 2026-11-02
