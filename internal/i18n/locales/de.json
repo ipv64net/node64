@@ -4658,6 +4658,7 @@
     }
   },
   "pve": {
+    "nodes_maint": "{count} in Wartung",
     "ack_node": {
       "btn": "Offline ist richtig",
       "title": "Der Node ist absichtlich aus (z. B. Wartung) – keine Störung, bis er wieder online ist",
@@ -4669,7 +4670,7 @@
       "undo": "Doch als Störung melden",
       "undone": "Zurückgenommen: offline ist wieder eine Störung."
     },
-    "ack": {"btn": "Gestoppt ist richtig", "title": "Der Gast soll nicht laufen – Zustand ist in Ordnung (zurücknehmen in den Einstellungen: „Gestoppt ist eine Störung: automatisch“)", "confirm": "Gestoppt ist der richtige Zustand? Der Gast gilt dann als „soll nicht laufen“. Zurücknehmen in den Einstellungen des Gasts.", "done": "Gemerkt: gestoppt ist richtig. Zurücknehmen in den Einstellungen des Gasts („Gestoppt ist eine Störung: automatisch“).", "hint": "Gestört, weil gestoppt – der Gast lief schon einmal bzw. soll laufen. Ist gestoppt der richtige Zustand, hier bestätigen.", "active_hint": "Gestoppt ist hier der richtige Zustand („Gestoppt ist eine Störung: nein“) – keine Störung. Zurücknehmen in den Einstellungen unten („Gestoppt ist eine Störung: automatisch“).", "off_title": "Soll nicht laufen (gestoppt ist richtig)"},
+    "ack": {"btn": "Gestoppt ist richtig", "title": "Der Gast soll nicht laufen – Zustand ist in Ordnung (zurücknehmen in den Einstellungen: „Gestoppt ist eine Störung: automatisch“)", "confirm": "Gestoppt ist der richtige Zustand? Der Gast gilt dann als „soll nicht laufen“. Zurücknehmen in den Einstellungen des Gasts.", "done": "Gemerkt: gestoppt ist richtig. Zurücknehmen in den Einstellungen des Gasts („Gestoppt ist eine Störung: automatisch“).", "hint": "Gestört, weil gestoppt – der Gast lief schon einmal bzw. soll laufen. Ist gestoppt der richtige Zustand, hier bestätigen.", "active_hint": "Gestoppt ist hier der richtige Zustand („Gestoppt ist eine Störung: nein“) – keine Störung. Zurücknehmen in den Einstellungen unten („Gestoppt ist eine Störung: automatisch“).", "off_title": "Soll nicht laufen (gestoppt ist richtig)", "undo": "Doch als Störung melden", "undone": "Zurückgenommen: gestoppt ist wieder eine Störung (automatisch)."},
     "ev": {
       "down": {
         "crashed": "{type} „{name}“ ist abgestürzt ({detail}).",

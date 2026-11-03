@@ -1,5 +1,11 @@
 # Changes – Healthchecks
 
+## 2.51.3 – 2026-11-03
+
+### Fixed
+- Proxmox VE: a node confirmed as "offline is fine" (maintenance) no longer makes the system "partly impaired"; the overview and system page show it as "in maintenance".
+- Proxmox VE and Docker: "offline is fine" and "stopped is correct" can be undone right away (button "Report as incident again" in the node list and on the node, guest and container pages).
+
 ## 2.51.2 – 2026-11-02
 
 ### Fixed

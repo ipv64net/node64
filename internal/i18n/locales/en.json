@@ -4658,6 +4658,7 @@
     }
   },
   "pve": {
+    "nodes_maint": "{count} in maintenance",
     "ack_node": {
       "btn": "Offline is fine",
       "title": "The node is off on purpose (e.g. maintenance) – no incident until it is online again",
@@ -4669,7 +4670,7 @@
       "undo": "Report as incident after all",
       "undone": "Undone: offline is an incident again."
     },
-    "ack": {"btn": "Stopped is correct", "title": "The guest should not run – the state is fine (undo in the settings: “Stopped is a problem: automatic”)", "confirm": "Is stopped the right state? The guest then counts as “should not run”. Undo in the guest’s settings.", "done": "Noted: stopped is correct. Undo in the guest settings (“Stopped is a problem: automatic”).", "hint": "Problem because stopped – the guest has run before or should run. If stopped is the correct state, confirm here.", "active_hint": "Stopped is the correct state here (“Stopped is a problem: no”) – no problem. Undo in the settings below (“Stopped is a problem: automatic”).", "off_title": "Should not run (stopped is correct)"},
+    "ack": {"btn": "Stopped is correct", "title": "The guest should not run – the state is fine (undo in the settings: “Stopped is a problem: automatic”)", "confirm": "Is stopped the right state? The guest then counts as “should not run”. Undo in the guest’s settings.", "done": "Noted: stopped is correct. Undo in the guest settings (“Stopped is a problem: automatic”).", "hint": "Problem because stopped – the guest has run before or should run. If stopped is the correct state, confirm here.", "active_hint": "Stopped is the correct state here (“Stopped is a problem: no”) – no problem. Undo in the settings below (“Stopped is a problem: automatic”).", "off_title": "Should not run (stopped is correct)", "undo": "Report as incident again", "undone": "Undone: stopped is an incident again (automatic)."},
     "ev": {
       "down": {
         "crashed": "{type} “{name}” crashed ({detail}).",

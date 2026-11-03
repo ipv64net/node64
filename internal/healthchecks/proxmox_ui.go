@@ -49,6 +49,7 @@ type pveSysRow struct {
 	Snap        *proxmox.Snapshot
 	Nodes       int
 	NodesOnline int
+	NodesMaint  int // offline, aber als Wartung bestaetigt („offline ist richtig“): kein Problem des Systems
 	Guests      int
 	Running     int
 	Bad         int
@@ -60,6 +61,9 @@ type pveSysRow struct {
 	Update      *verUpdate // neuere Version von Proxmox VE, Backup Server bzw. Docker (nur Hinweis, latest.go)
 	Datastores  int        // Proxmox Backup Server: sichtbare Datastores
 }
+
+// NodesMissing: Nodes, die offline sind, ohne als Wartung bestaetigt zu sein.
+func (r pveSysRow) NodesMissing() int { return r.Nodes - r.NodesOnline - r.NodesMaint }
 
 // CPUText: belegte CPU bezogen auf die Kerne (Nodes bzw. Docker-Host), "" ohne Werte.
 func (r pveSysRow) CPUText() string {
@@ -292,6 +296,8 @@ func (m *Module) pveSysView(ctx context.Context, sys *proxmox.System) pveSysRow 
 				row.CPUMax += r.MaxCPU
 				row.Mem += r.Mem
 				row.MemMax += r.MaxMem
+			} else if it := set.Item(r.Key()); it != nil && it.ExpectRunning != nil && !*it.ExpectRunning {
+				row.NodesMaint++
 			}
 			continue
 		}
@@ -306,7 +312,7 @@ func (m *Module) pveSysView(ctx context.Context, sys *proxmox.System) pveSysRow 
 			row.Bad++
 		}
 	}
-	row.SysProblem = row.NodesOnline < row.Nodes || row.Quorum() == "lost"
+	row.SysProblem = row.NodesMissing() > 0 || row.Quorum() == "lost"
 	if row.SysProblem || row.Bad > 0 {
 		row.State = "warn"
 	}
@@ -370,6 +376,7 @@ type pveOverviewData struct {
 type pveSum struct {
 	Systems, SysBad      int // SysBad: eigenes Problem (nicht erreichbar, Node offline, Quorum weg)
 	Nodes, NodesOnline   int
+	NodesMaint           int
 	Guests, Running, Bad int
 	CPUCores, CPUMax     float64
 	Mem, MemMax          int64
@@ -382,6 +389,7 @@ func (s *pveSum) add(r pveSysRow) {
 	}
 	s.Nodes += r.Nodes
 	s.NodesOnline += r.NodesOnline
+	s.NodesMaint += r.NodesMaint
 	s.Guests += r.Guests
 	s.Running += r.Running
 	s.Bad += r.Bad
@@ -390,6 +398,9 @@ func (s *pveSum) add(r pveSysRow) {
 	s.Mem += r.Mem
 	s.MemMax += r.MemMax
 }
+
+// NodesMissing: Nodes aller Systeme, die offline sind, ohne als Wartung bestaetigt zu sein.
+func (s pveSum) NodesMissing() int { return s.Nodes - s.NodesOnline - s.NodesMaint }
 
 // CPUText: belegte CPU aller Nodes (online) bezogen auf ihre Kerne.
 func (s pveSum) CPUText() string {
@@ -1152,7 +1163,7 @@ func (m *Module) pagePVEAck(w http.ResponseWriter, r *http.Request) {
 	if it == nil {
 		it = &proxmox.Settings{SystemID: sys.ID, Key: key}
 	}
-	undo := level == "node" && r.PostFormValue("undo") == "1" // Node: Wartung zuruecknehmen (Gaeste: Einstellungen)
+	undo := r.PostFormValue("undo") == "1" // zuruecknehmen: Node wieder normal ueberwacht, Gast wieder „automatisch“
 	f := false
 	it.ExpectRunning = &f
 	if undo {
@@ -1166,7 +1177,10 @@ func (m *Module) pagePVEAck(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case undo:
 		m.auditText(r, "proxmox.ack_undo", sys.Name+pveKeySuffix(key))
-		msg = "pve.ack_node.undone"
+		msg = "pve.ack.undone"
+		if level == "node" {
+			msg = "pve.ack_node.undone"
+		}
 	case level == "node":
 		m.pveAckIncident(ctx, sys.ID, key)
 		m.auditText(r, "proxmox.ack", sys.Name+pveKeySuffix(key))

@@ -1,5 +1,11 @@
 # Änderungen – Healthchecks
 
+## 2.51.3 – 2026-11-03
+
+### Behoben
+- Proxmox VE: Ein Node, der als „Offline ist richtig“ (Wartung) bestätigt ist, macht das System nicht mehr „teilweise gestört“; Übersicht und Systemseite zeigen ihn als „in Wartung“.
+- Proxmox VE und Docker: „Offline ist richtig“ bzw. „Gestoppt ist richtig“ lässt sich direkt wieder zurücknehmen (Knopf „Doch als Störung melden“ in der Node-Liste und auf den Seiten von Node, Gast und Container).
+
 ## 2.51.2 – 2026-11-02
 
 ### Behoben

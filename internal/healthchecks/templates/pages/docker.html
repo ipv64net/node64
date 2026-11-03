@@ -143,7 +143,7 @@
 {{if not $r.Found}}<div class="alert alert-warning small"><i class="bi bi-question-circle"></i> {{if $x.Reach}}{{.T "docker.res_missing"}}{{else}}{{.T "pve.res_nodata"}}{{end}}</div>{{end}}
 {{if $r.AsCheck}}<div class="alert alert-info small py-2"><i class="bi bi-heart-pulse"></i> {{.T "docker.check.active_hint"}}</div>{{end}}
 {{if and $r.Found $r.Ack}}<div class="alert alert-danger small py-2 d-flex align-items-center justify-content-between flex-wrap gap-2"><span><i class="bi bi-exclamation-triangle"></i> {{.T "docker.ack.hint"}}</span><form method="post" action="{{$d.Act}}/ack" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="key" value="{{$x.Key}}"><input type="hidden" name="back" value="{{$r.Path}}"><button class="btn btn-sm btn-outline-secondary" type="submit" data-confirm="{{.T "pve.ack.confirm"}}"><i class="bi bi-check2-circle"></i> {{.T "pve.ack.btn"}}</button></form></div>
-{{else if $r.ExpectOff}}<div class="alert alert-light border small py-2"><i class="bi bi-check2-circle"></i> {{.T "pve.ack.active_hint"}}</div>{{end}}
+{{else if $r.ExpectOff}}<div class="alert alert-light border small py-2 d-flex align-items-center justify-content-between flex-wrap gap-2"><span><i class="bi bi-check2-circle"></i> {{.T "pve.ack.active_hint"}}</span><form method="post" action="{{$d.Act}}/ack" class="m-0"><input type="hidden" name="_csrf" value="{{.CSRF}}"><input type="hidden" name="key" value="{{$x.Key}}"><input type="hidden" name="undo" value="1"><input type="hidden" name="back" value="{{$r.Path}}"><button class="btn btn-sm btn-outline-secondary" type="submit">{{.T "pve.ack.undo"}}</button></form></div>{{end}}
 
 {{if $r.Found}}
 <div class="row g-2 mb-3">
