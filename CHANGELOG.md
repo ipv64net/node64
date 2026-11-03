@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 0.12.0-alpha.38.1 – 2026-11-03
+
 - Healthchecks: E-Mail-, SMS- und App-Kanäle des ipv64-Accounts sind auch ohne Healthchecks-Sync in der Alarmierung eines Checks wählbar.
 
 ## 0.12.0-alpha.38 – 2026-11-03
