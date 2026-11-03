@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Interface: links with a trailing slash (e.g. from a notification) open the page instead of "not found".
 - DNS64: top lists of the overview as a full list with pages, search and sorting ("All" button in the cards).
 - Interface: tables can be sorted by clicking a column header (an arrow shows the direction).
 - Cluster: an entry that a node cannot read no longer stops syncing the other entries.

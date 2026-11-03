@@ -62,6 +62,29 @@ func (s *Server) recoverer(next http.Handler) http.Handler {
 	})
 }
 
+// trailingSlash leitet GET/HEAD-Aufrufe mit Schraegstrich am Ende (z. B. /healthchecks/<token>/ aus einem Link in einer
+// Benachrichtigung, den ein Messenger oder Proxy ergaenzt hat) auf die Adresse ohne Schraegstrich um, wenn es nur
+// diese gibt. Adressen, die mit Schraegstrich registriert sind (/static/), bleiben unberuehrt.
+func (s *Server) trailingSlash(next *http.ServeMux) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && len(p) > 1 && strings.HasSuffix(p, "/") {
+			if _, pat := next.Handler(r); pat == "" || pat == "/" { // "/" = Seite nicht gefunden (notFound)
+				t := strings.TrimRight(p, "/")
+				if t != "" && !strings.HasPrefix(t, "//") { // nie auf einen fremden Host ("//host")
+					r2 := r.Clone(r.Context())
+					r2.URL.Path, r2.URL.RawPath = t, ""
+					if _, pat2 := next.Handler(r2); pat2 != "" && pat2 != "/" {
+						http.Redirect(w, r, (&url.URL{Path: t, RawQuery: r.URL.RawQuery}).String(), http.StatusMovedPermanently)
+						return
+					}
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()

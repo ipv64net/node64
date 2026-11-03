@@ -108,7 +108,7 @@ func New(d Deps) (*Server, error) {
 		return nil, err
 	}
 	s.routes()
-	s.handler = s.recoverer(s.securityHeaders(s.rateLimit(s.bodyLimit(s.session(s.apiLog(s.mux))))))
+	s.handler = s.recoverer(s.securityHeaders(s.rateLimit(s.bodyLimit(s.session(s.apiLog(s.trailingSlash(s.mux)))))))
 	if err := s.uiRoute(context.Background()); err != nil { // Oberflaeche unter eigenem Namen (Eingang)
 		s.log.Warn("web interface not registered at the edge", "err", err)
 	}

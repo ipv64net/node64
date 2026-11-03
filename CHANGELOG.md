@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Oberfläche: Links mit Schrägstrich am Ende (z. B. aus einer Benachrichtigung) führen auf die Seite statt auf „nicht gefunden“.
 - DNS64: Top-Listen der Übersicht als ganze Liste mit Seiten, Suche und Sortierung (Knopf „Alle“ in den Karten).
 - Oberfläche: Tabellen lassen sich per Klick auf die Spaltenüberschrift sortieren (Pfeil zeigt die Richtung).
 - Cluster: Ein Eintrag, den eine Node nicht lesen kann, hält den Abgleich der übrigen Einträge nicht mehr an.
