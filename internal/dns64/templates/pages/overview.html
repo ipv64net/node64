@@ -82,9 +82,9 @@
 	</div>
 </div>
 <div class="row g-3 mb-3">
-	<div class="col-lg-4"><div class="card h-100"><div class="card-header"><i class="bi bi-slash-circle text-danger"></i> {{.T "dns64.top.blocked"}}</div><ul class="list-group list-group-flush small" id="top-blocked"></ul></div></div>
-	<div class="col-lg-4"><div class="card h-100"><div class="card-header"><i class="bi bi-check-circle text-success"></i> {{.T "dns64.top.allowed"}}</div><ul class="list-group list-group-flush small" id="top-allowed"></ul></div></div>
-	<div class="col-lg-4"><div class="card h-100"><div class="card-header"><i class="bi bi-pc-display text-primary"></i> {{.T "dns64.top.clients"}}</div><ul class="list-group list-group-flush small" id="top-clients"></ul></div></div>
+	<div class="col-lg-4"><div class="card h-100"><div class="card-header d-flex align-items-center gap-2"><span><i class="bi bi-slash-circle text-danger"></i> {{.T "dns64.top.blocked"}}</span><a class="btn btn-sm btn-outline-secondary py-0 ms-auto" href="/dns64/top?kind=blocked" data-top-link="blocked" title="{{.T "dns64.top.all_title"}}"><i class="bi bi-list-ol"></i> {{.T "dns64.top.all"}}</a></div><ul class="list-group list-group-flush small" id="top-blocked"></ul></div></div>
+	<div class="col-lg-4"><div class="card h-100"><div class="card-header d-flex align-items-center gap-2"><span><i class="bi bi-check-circle text-success"></i> {{.T "dns64.top.allowed"}}</span><a class="btn btn-sm btn-outline-secondary py-0 ms-auto" href="/dns64/top?kind=allowed" data-top-link="allowed" title="{{.T "dns64.top.all_title"}}"><i class="bi bi-list-ol"></i> {{.T "dns64.top.all"}}</a></div><ul class="list-group list-group-flush small" id="top-allowed"></ul></div></div>
+	<div class="col-lg-4"><div class="card h-100"><div class="card-header d-flex align-items-center gap-2"><span><i class="bi bi-pc-display text-primary"></i> {{.T "dns64.top.clients"}}</span><a class="btn btn-sm btn-outline-secondary py-0 ms-auto" href="/dns64/top?kind=clients" data-top-link="clients" title="{{.T "dns64.top.all_title"}}"><i class="bi bi-list-ol"></i> {{.T "dns64.top.all"}}</a></div><ul class="list-group list-group-flush small" id="top-clients"></ul></div></div>
 </div>
 {{end}}
 <div class="toast-container position-fixed bottom-0 end-0 p-3"><div class="toast" id="dns64-toast" role="status"><div class="toast-body"></div></div></div>

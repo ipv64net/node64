@@ -1,5 +1,10 @@
 # Changes – DNS64
 
+## 1.32.0 – 2026-11-03
+
+### New
+- Overview: the cards top blocked/allowed domains and top clients have an "All" button at the top right. It opens the full list with pages, search and sorting by name, queries and blocked (API `GET /api/dns64/top/list`).
+
 ## 1.31.2 – 2026-11-02
 
 ### Changed

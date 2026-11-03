@@ -1,0 +1,50 @@
+{{define "content"}}
+{{$d := .Data}}
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+	<h1 class="h4 mb-0"><img src="/static/img/dns64.webp" alt="{{.T "dns64.title"}}" height="26" class="me-1 align-text-bottom logo logo-light"><img src="/static/img/dns64_dark.webp" alt="{{.T "dns64.title"}}" height="26" class="me-1 align-text-bottom logo logo-dark">{{.Doc "dns64#statistik"}}</h1>
+	{{if $d.Running}}<div class="btn-group btn-group-sm ms-auto" role="group" id="dns64-range" aria-label="{{.T "dns64.range"}}">
+		<button type="button" class="btn btn-outline-secondary" data-range="1h">{{.T "dns64.range_1h"}}</button>
+		<button type="button" class="btn btn-outline-secondary active" data-range="24h">{{.T "dns64.range_24h"}}</button>
+		<button type="button" class="btn btn-outline-secondary" data-range="7d">{{.T "dns64.range_7d"}}</button>
+	</div>{{end}}
+</div>
+<ul class="nav nav-tabs mb-3">
+	{{range $d.Tabs}}<li class="nav-item"><a class="nav-link{{if .Active}} active{{end}}" href="{{.Path}}"><i class="bi {{.Icon}}"></i> {{$.T .TitleKey}}</a></li>{{end}}
+</ul>
+{{if not $d.Running}}<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> {{.T "dns64.not_running"}}{{if $d.Err}}<div class="small mt-1 font-monospace">{{$d.Err}}</div><div class="small mt-1">{{.T "dns64.retrying"}}</div>{{end}}</div>{{end}}
+<script type="application/json" id="dns64-data">{{$d.JS}}</script>
+{{if $d.Running}}
+<div class="card" data-dns64-page="top">
+	<div class="card-header d-flex flex-wrap align-items-center gap-2">
+		<a href="/dns64" class="btn btn-sm btn-outline-secondary" title="{{.T "dns64.tab.overview"}}"><i class="bi bi-arrow-left"></i></a>
+		<div class="btn-group btn-group-sm flex-wrap" role="group" id="top-kind">
+			<button type="button" class="btn btn-outline-secondary" data-kind="blocked"><i class="bi bi-slash-circle text-danger"></i> {{.T "dns64.top.blocked"}}</button>
+			<button type="button" class="btn btn-outline-secondary" data-kind="allowed"><i class="bi bi-check-circle text-success"></i> {{.T "dns64.top.allowed"}}</button>
+			<button type="button" class="btn btn-outline-secondary" data-kind="clients"><i class="bi bi-pc-display text-primary"></i> {{.T "dns64.top.clients"}}</button>
+		</div>
+		<div class="input-group input-group-sm w-auto ms-md-auto"><span class="input-group-text"><i class="bi bi-search"></i></span><input type="search" class="form-control" id="top-search" placeholder="{{.T "dns64.top.search"}}" aria-label="{{.T "common.search"}}"></div>
+	</div>
+	<div class="table-responsive">
+		<table class="table table-sm table-hover align-middle mb-0 small table-stack" data-nosort>
+			<thead><tr><th class="ps-3 text-end" style="width:4em">#</th>
+				<th data-top-sort="name" class="th-sort" tabindex="0"><span id="top-col-name">{{.T "dns64.log.domain"}}</span><i class="bi bi-chevron-expand th-sort-icon"></i></th>
+				<th data-top-sort="count" class="th-sort text-end" tabindex="0">{{.T "dns64.top.col_count"}}<i class="bi bi-chevron-expand th-sort-icon"></i></th>
+				<th data-top-sort="blocked" class="th-sort text-end d-none" tabindex="0" id="top-col-blocked">{{.T "dns64.top.col_blocked"}}<i class="bi bi-chevron-expand th-sort-icon"></i></th>
+				<th style="width:25%"></th><th></th></tr></thead>
+			<tbody id="top-body"></tbody>
+		</table>
+	</div>
+	<div class="card-footer d-flex flex-wrap align-items-center gap-2 small">
+		<span id="page-info" class="text-body-secondary"></span>
+		<div class="ms-auto d-flex align-items-center gap-2">
+			<button type="button" class="btn btn-sm btn-outline-secondary" id="page-first">«</button>
+			<button type="button" class="btn btn-sm btn-outline-secondary" id="page-prev">‹</button>
+			<span id="page-num"></span>
+			<button type="button" class="btn btn-sm btn-outline-secondary" id="page-next">›</button>
+		</div>
+	</div>
+</div>
+{{end}}
+<div class="toast-container position-fixed bottom-0 end-0 p-3"><div class="toast" id="dns64-toast" role="status"><div class="toast-body"></div></div></div>
+{{end}}
+{{define "scripts"}}<script src="/static/js/dns64.js?v={{.Version}}"></script>{{end}}

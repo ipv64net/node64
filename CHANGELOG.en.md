@@ -4,6 +4,9 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- DNS64: top lists of the overview as a full list with pages, search and sorting ("All" button in the cards).
+- Interface: tables can be sorted by clicking a column header (an arrow shows the direction).
+- Cluster: an entry that a node cannot read no longer stops syncing the other entries.
 - Healthchecks: paused online checks, such as a fresh copy, show as "Paused" instead of "Waiting".
 - v64 Blocklist: an address is only listed once three independent accounts have reported it, for every type of attack
   (previously two with login attempts were enough while few accounts were reporting); from 151 reporting accounts 2 %

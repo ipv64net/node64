@@ -36,6 +36,7 @@ func (m *Module) apiRoutes(mux *http.ServeMux, g module.Guards) {
 	mux.Handle("GET /api/dns64/summary", api(m.apiSummary))
 	mux.Handle("GET /api/dns64/timeline", api(m.apiTimeline))
 	mux.Handle("GET /api/dns64/top", api(m.apiTop))
+	mux.Handle("GET /api/dns64/top/list", api(m.apiTopList))
 	mux.Handle("GET /api/dns64/log", api(m.apiLog))
 	mux.Handle("GET /api/dns64/lists", api(m.apiLists))
 	mux.Handle("GET /api/dns64/upstreams", api(m.apiUpstreams))
@@ -227,6 +228,30 @@ func (m *Module) apiTop(w http.ResponseWriter, r *http.Request, e *engine) {
 		}
 	}
 	writeJSON(w, http.StatusOK, items)
+}
+
+// apiTopList liefert eine Seite der vollstaendigen Top-Liste (Seite "Alle anzeigen"): Suche, Sortierung, Seiten.
+func (m *Module) apiTopList(w http.ResponseWriter, r *http.Request, e *engine) {
+	since, _ := rangeOf(r)
+	q := r.URL.Query()
+	f := querylog.TopFilter{Kind: q.Get("kind"), Since: since, Search: strings.TrimSpace(q.Get("q")), Sort: q.Get("sort"),
+		Desc: q.Get("dir") == "desc" || (q.Get("dir") == "" && q.Get("sort") != "name"), Limit: intParam(r, "limit", 50, 500), Offset: max(0, intParam(r, "offset", 0, 1<<30)), Total: true}
+	items, total, err := e.store.TopPage(r.Context(), f)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if f.Kind == "clients" {
+		ips := make([]string, len(items))
+		for i, it := range items {
+			ips[i] = it.Name
+		}
+		names := e.local.Hostnames(r.Context(), ips)
+		for i := range items {
+			items[i].Hostname = names[items[i].Name]
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": total})
 }
 
 func (m *Module) apiLog(w http.ResponseWriter, r *http.Request, e *engine) {

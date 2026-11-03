@@ -8151,6 +8151,117 @@
         }
       }
     },
+    "/dns64/top/list": {
+      "get": {
+        "tags": [
+          "DNS64"
+        ],
+        "summary": "Top-Liste vollständig (Seiten, Suche, Sortierung)",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "blocked",
+                "allowed",
+                "clients"
+              ]
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "description": "Zeitraum",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1h",
+                "24h",
+                "7d"
+              ],
+              "default": "24h"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Teil des Namens (Domain bzw. Client-IP)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "count",
+                "name",
+                "blocked"
+              ],
+              "default": "count"
+            }
+          },
+          {
+            "name": "dir",
+            "in": "query",
+            "description": "Standard: absteigend, bei name aufsteigend",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 500
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/DNS64TopItem"
+                      }
+                    },
+                    "total": {
+                      "type": "integer",
+                      "description": "Zahl aller Namen im Zeitraum (mit Suche)"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/dns64/log": {
       "get": {
         "tags": [

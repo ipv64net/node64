@@ -30,6 +30,7 @@ func (m *Module) uiRoutes(mux *http.ServeMux, g module.Guards) {
 	page := func(h http.HandlerFunc) http.Handler { return g.Enabled(g.Auth(h)) }
 	mux.Handle("GET /dns64", page(m.pageTab("overview", "dns64.title")))
 	mux.Handle("GET /dns64/log", page(m.pageTab("log", "dns64.log.title")))
+	mux.Handle("GET /dns64/top", page(m.pageTab("top", "dns64.top.title"))) // vollstaendige Top-Listen (aus der Uebersicht)
 	mux.Handle("GET /dns64/lists", page(m.pageTab("lists", "dns64.lists.title")))
 	mux.Handle("GET /dns64/local", page(m.pageTab("local", "dns64.local.title")))
 	mux.Handle("GET /dns64/records", page(redirectTo("/dns64/local"))) // alte Adresse
@@ -111,7 +112,7 @@ func (m *Module) pageTab(key, titleKey string) http.HandlerFunc {
 			set = localTabs
 		}
 		for _, t := range set {
-			t.Active = t.Key == key
+			t.Active = t.Key == key || (key == "top" && t.Key == "overview")
 			d.Tabs = append(d.Tabs, t)
 		}
 		if e := m.running(); e != nil {
@@ -172,7 +173,7 @@ var jsKeys = []string{"status.allowed", "status.blocked", "status.cached", "stat
 	"blocked_n", "no_entries", "via", "entries", "page", "live_paused", "flush_confirm", "flushed", "error", "active", "loading",
 	"sec", "min", "hours", "uptime", "allowed", "blocked", "no_conn", "reason_stale", "reason_released", "mode_parallel", "mode_ordered", "mode_fastest", "in_use", "off",
 	"proto.udp", "proto.tcp", "proto.doh", "proto.dot", "proto.doq", "reason_paused",
-	"reason_group", "reason_cat", "reason_off_hold", "reason_off_schedule", "reason_safesearch", "reason_canary", "reason_bypass_icloud", "fwd_ok", "fwd_fail", "reason_forward", "reason_rewrite", "rec_hint_A", "rec_hint_AAAA", "rec_hint_CNAME", "rec_hint_TXT", "rec_hint_MX", "rec_hint_SRV", "rec_hint_PTR", "rec_hint_CAA", "cat.social", "cat.games", "cat.streaming", "cat.gambling", "cat.adult"}
+	"reason_group", "reason_cat", "reason_off_hold", "reason_off_schedule", "reason_safesearch", "reason_canary", "reason_bypass_icloud", "fwd_ok", "fwd_fail", "reason_forward", "reason_rewrite", "rec_hint_A", "rec_hint_AAAA", "rec_hint_CNAME", "rec_hint_TXT", "rec_hint_MX", "rec_hint_SRV", "rec_hint_PTR", "rec_hint_CAA", "cat.social", "cat.games", "cat.streaming", "cat.gambling", "cat.adult", "top_col_domain", "top_col_client"}
 
 func (m *Module) jsTexts(r *http.Request) map[string]string {
 	out := make(map[string]string, len(jsKeys))

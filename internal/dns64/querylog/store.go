@@ -379,26 +379,63 @@ type TopItem struct {
 // Top returns the most frequent domains or clients. kind is one of
 // "blocked", "allowed" or "clients".
 func (s *Store) Top(ctx context.Context, kind string, since time.Time, limit int) ([]TopItem, error) {
-	k, ok := map[string]int{"blocked": topBlocked, "allowed": topAllowed, "clients": topClient}[kind]
+	items, _, err := s.TopPage(ctx, TopFilter{Kind: kind, Since: since, Limit: limit, Desc: true})
+	return items, err
+}
+
+// TopFilter waehlt eine Seite der vollstaendigen Top-Liste (Seite "Alle anzeigen").
+type TopFilter struct {
+	Kind   string // blocked | allowed | clients
+	Since  time.Time
+	Search string // Teil des Namens (Domain bzw. Client-IP)
+	Sort   string // count (Standard) | name | blocked
+	Desc   bool   // absteigend; bei count Standard
+	Limit  int
+	Offset int
+	Total  bool // Gesamtzahl der Namen mitzaehlen
+}
+
+// TopPage liefert eine Seite der Top-Liste und, wenn f.Total, die Zahl aller Namen im Zeitraum.
+func (s *Store) TopPage(ctx context.Context, f TopFilter) ([]TopItem, int64, error) {
+	k, ok := map[string]int{"blocked": topBlocked, "allowed": topAllowed, "clients": topClient}[f.Kind]
 	if !ok {
-		return nil, fmt.Errorf("unknown kind %q", kind)
+		return nil, 0, fmt.Errorf("unknown kind %q", f.Kind)
 	}
-	// aus den Stunden-Aggregaten (die angefangene erste Stunde zaehlt ganz mit)
-	rows, err := s.db.QueryContext(ctx, `SELECT name, SUM(n) AS c, SUM(blocked) FROM agg_top WHERE kind = ? AND h >= ?
-		GROUP BY name ORDER BY c DESC LIMIT ?`, k, since.UnixMilli()/3600000, limit)
+	order := map[string]string{"count": "c", "name": "name", "blocked": "b"}[f.Sort]
+	if order == "" {
+		order = "c"
+	}
+	dir := "ASC"
+	if f.Desc {
+		dir = "DESC"
+	}
+	where, args := "kind = ? AND h >= ?", []any{k, f.Since.UnixMilli() / 3600000}
+	if f.Search != "" {
+		where += " AND instr(name, ?) > 0"
+		args = append(args, strings.ToLower(f.Search))
+	}
+	var total int64
+	if f.Total {
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(DISTINCT name) FROM agg_top WHERE `+where, args...).Scan(&total); err != nil {
+			return nil, 0, err
+		}
+	}
+	// aus den Stunden-Aggregaten (die angefangene erste Stunde zaehlt ganz mit); bei gleichem Wert nach Name
+	rows, err := s.db.QueryContext(ctx, `SELECT name, SUM(n) AS c, SUM(blocked) AS b FROM agg_top WHERE `+where+`
+		GROUP BY name ORDER BY `+order+` `+dir+`, name LIMIT ? OFFSET ?`, append(args, f.Limit, f.Offset)...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 	out := []TopItem{}
 	for rows.Next() {
 		var it TopItem
 		if err := rows.Scan(&it.Name, &it.Count, &it.Blocked); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		out = append(out, it)
 	}
-	return out, rows.Err()
+	return out, total, rows.Err()
 }
 
 type LogRow struct {

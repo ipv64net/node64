@@ -3698,7 +3698,13 @@
     "top": {
       "blocked": "Top blocked domains",
       "allowed": "Top allowed domains",
-      "clients": "Top clients"
+      "clients": "Top clients",
+      "title": "Top lists",
+      "all": "All",
+      "all_title": "Full list with pages, search and sorting",
+      "search": "Search domain or client …",
+      "col_count": "Queries",
+      "col_blocked": "Blocked"
     },
     "settings": {
       "firefox_canary": "Firefox uses DNS64 (switch off Firefox’s own DoH)",
@@ -3755,6 +3761,8 @@
       "later": "Encrypted queries from devices (DoH/DoT/DoQ) are on the “Encryption” tab."
     },
     "js": {
+      "top_col_domain": "Domain",
+      "top_col_client": "Client",
       "fwd_ok": "OK: {rcode} from {server} in {ms} ms",
       "fwd_fail": "No answer: {err}",
       "reason_forward": "forwarding {domain} via {server}",

@@ -1,5 +1,10 @@
 # Änderungen – DNS64
 
+## 1.32.0 – 2026-11-03
+
+### Neu
+- Übersicht: Die Karten Top blockierte/erlaubte Domains und Top Clients haben oben rechts den Knopf „Alle“. Er öffnet die ganze Liste mit Seiten, Suche und Sortierung nach Name, Anfragen und Blockiert (API `GET /api/dns64/top/list`).
+
 ## 1.31.2 – 2026-11-02
 
 ### Geändert
