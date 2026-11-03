@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+## 0.12.0-alpha.38 – 2026-11-03
+
 - Healthchecks: Proxmox-Nodes in Wartung („Offline ist richtig“) machen das System nicht mehr „teilweise gestört“; die Bestätigung lässt sich per Knopf zurücknehmen.
 - Oberfläche: Links mit Schrägstrich am Ende (z. B. aus einer Benachrichtigung) führen auf die Seite statt auf „nicht gefunden“.
 - DNS64: Top-Listen der Übersicht als ganze Liste mit Seiten, Suche und Sortierung (Knopf „Alle“ in den Karten).

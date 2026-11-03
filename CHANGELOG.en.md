@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 0.12.0-alpha.38 – 2026-11-03
+
 - Healthchecks: Proxmox nodes in maintenance ("offline is fine") no longer make the system "partly impaired"; the confirmation can be undone with a button.
 - Interface: links with a trailing slash (e.g. from a notification) open the page instead of "not found".
 - DNS64: top lists of the overview as a full list with pages, search and sorting ("All" button in the cards).
