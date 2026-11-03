@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- PROXY64: CDN64 servers and connections can be chosen per proxy host instead of per tunnel (Business and Company, button in the CDN64 column).
+
 ## 0.12.0-alpha.38.1 – 2026-11-03
 
 - Healthchecks: e-mail, SMS and app channels of the ipv64 account can be chosen in a check's alerting even without health check sync.

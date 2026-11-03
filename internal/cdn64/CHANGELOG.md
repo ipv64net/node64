@@ -1,5 +1,20 @@
 # Änderungen – PROXY64
 
+## 1.48.0 – 2026-11-03
+
+### Neu
+- CDN64: Server und Verbindungen je Proxy-Host statt je Tunnel (Business und Company): Der Knopf in der Spalte CDN64
+  gehört zur Zeile und wählt, über wie viele CDN64-Server dieser Host mit allen seinen Namen läuft und wie viele
+  Verbindungen je Server – etwa Host A 1×1, Host B 4×4. Das DNS eines Namens nennt nur seine Server. Der Tunnel der
+  Node verbindet zu den Servern aller ihrer Hosts, je Server mit dem Höchstwert der Hosts dort; geänderte Verbindungen
+  kommen dazu bzw. fallen weg, ohne die übrigen zu trennen. Die Zeile zeigt nur die Server ihres Hosts (auch den
+  Spinner). Namen in Modus 3 (eingerichtet auf ipv64.net) wählen hier die Anzahl ihrer Server.
+- CDN64: Neue Hosts einer Node bekommen zuerst Server, die ihre anderen Hosts schon nutzen (weniger Verbindungen).
+- CDN64: Der Lastausgleich zieht einzelne Namen um statt des ganzen Tunnels; das Log nennt Beginn und Ende.
+
+### Hinweis
+- Braucht das Portal mit „Server je Name“; mit einem älteren Portal wählt der Knopf weiter je Tunnel.
+
 ## 1.47.0 – 2026-11-02
 
 ### Neu

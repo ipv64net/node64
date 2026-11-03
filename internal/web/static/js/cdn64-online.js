@@ -305,7 +305,7 @@
 			});
 		});
 	});
-	// Formulare mit Wartezeit (Server und Verbindungen je Tunnel, Schutz): Spinner im Knopf. Nach "Server und Verbindungen"
+	// Formulare mit Wartezeit (Server und Verbindungen je Proxy-Host, Schutz): Spinner im Knopf. Nach "Server und Verbindungen"
 	// laedt die Seite 3 s spaeter noch einmal, dann zeigt die Spalte CDN64 die neuen Verbindungen.
 	document.querySelectorAll("form[data-c64o-busy]").forEach(function (f) {
 		f.addEventListener("submit", function () {
@@ -352,9 +352,24 @@
 						if (b.getAttribute("data-c64o-edge") === e.name) { badge(b, e, anyUp, v.failover); }
 					});
 				});
+				// je Zeile nur ihre Server (Server je Proxy-Host): aufgebaut/eingestellt und ob noch einer im Aufbau ist
 				document.querySelectorAll("[data-c64o-pending]").forEach(function (s) {
-					s.title = (s.getAttribute("data-fmt") || "").split("{up}").join(String(v.conns_up)).split("{want}").join(String(v.conns_wanted));
-					if (!v.pending) { s.remove(); }
+					var cell = s.closest("td") || document;
+					var names = [];
+					cell.querySelectorAll("[data-c64o-edge]").forEach(function (b) { names.push(b.getAttribute("data-c64o-edge")); });
+					var up = 0, want = 0, pend = false;
+					(v.edges || []).forEach(function (e) {
+						if (names.indexOf(e.name) < 0 || (e.standby && !e.sessions)) { return; }
+						up += e.sessions || 0;
+						want += e.slots || 0;
+						if ((e.sessions || 0) < (e.slots || 0)) { pend = true; }
+					});
+					pend = pend && v.pending;
+					s.title = (s.getAttribute("data-fmt") || "").split("{up}").join(String(up)).split("{want}").join(String(want));
+					if (!pend) {
+						cell.querySelectorAll("[data-c64o-pending-btn]").forEach(function (x) { x.replaceWith(el("i", "bi bi-hdd-network")); });
+						s.remove();
+					}
 				});
 				if (!v.pending) {
 					document.querySelectorAll("[data-c64o-pending-btn]").forEach(function (s) { s.replaceWith(el("i", "bi bi-hdd-network")); });
@@ -366,6 +381,29 @@
 		window.setTimeout(tick, 2500);
 	}
 	watchConns();
+	// Server und Verbindungen je Proxy-Host: ein Dialog fuer alle Zeilen, der Knopf der Zeile setzt Host und Werte
+	// (Modus 3: nur die Anzahl; ohne Host: Auswahl des Tunnels, Portal ohne Server je Name)
+	var sm = document.querySelector("[data-c64o-servers-modal]");
+	if (sm) {
+		sm.addEventListener("show.bs.modal", function (ev) {
+			var b = ev.relatedTarget;
+			if (!b || !b.hasAttribute("data-c64o-servers")) { return; }
+			var f = sm.querySelector("form");
+			var m3 = b.getAttribute("data-mode") === "3";
+			f.querySelector("[data-c64o-servers-host]").value = b.getAttribute("data-c64o-servers") || "";
+			var c = f.querySelector("[name=count]");
+			if (c) { c.value = b.getAttribute("data-count"); }
+			var ses = f.querySelector("[name=sessions]");
+			if (ses) { ses.value = b.getAttribute("data-sessions"); }
+			var w = f.querySelector("[data-c64o-servers-ses]");
+			if (w) { w.classList.toggle("d-none", m3); }
+			var now = f.querySelector("[data-c64o-servers-now]");
+			if (now) {
+				now.textContent = (now.getAttribute(m3 ? "data-fmt3" : "data-fmt") || "").split("{list}").join(b.getAttribute("data-names") || "")
+					.split("{n}").join(b.getAttribute("data-sessions") || "");
+			}
+		});
+	}
 	startBtn.addEventListener("click", function () { if (!busy) { run(); } });
 	modalEl.addEventListener("hidden.bs.modal", function () { if (changed) { window.location.reload(); } });
 })();

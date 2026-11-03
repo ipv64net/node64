@@ -1,5 +1,20 @@
 # Changes – PROXY64
 
+## 1.48.0 – 2026-11-03
+
+### New
+- CDN64: servers and connections per proxy host instead of per tunnel (Business and Company): the button in the CDN64
+  column belongs to the row and chooses how many CDN64 servers this host runs over with all its names and how many
+  connections per server – e.g. host A 1×1, host B 4×4. The DNS of a name lists only its servers. The tunnel of the
+  node connects to the servers of all its hosts, per server with the highest value of the hosts there; changed
+  connections are added or dropped without disconnecting the others. The row shows only the servers of its host (the
+  spinner too). Names in mode 3 (set up on ipv64.net) choose the number of their servers here.
+- CDN64: new hosts of a node get servers its other hosts already use first (fewer connections).
+- CDN64: load balancing moves single names instead of the whole tunnel; the log names start and end.
+
+### Note
+- Needs the portal with “servers per name”; with an older portal the button keeps choosing per tunnel.
+
 ## 1.47.0 – 2026-11-02
 
 ### New

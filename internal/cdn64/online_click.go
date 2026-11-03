@@ -57,6 +57,11 @@ func (o ipv64Online) SetServers(ctx context.Context, tunnel string, count, sessi
 	return o.k.Client().CDN64SetServers(ctx, o.k.Get(ctx), tunnel, count, sessions)
 }
 
+// SetHostServers: wie SetServers fuer einen Namen bei ipv64 (Server je Name).
+func (o ipv64Online) SetHostServers(ctx context.Context, hostID int64, count, sessions int) (*ipv64api.CDN64Servers, error) {
+	return o.k.Client().CDN64SetHostServers(ctx, o.k.Get(ctx), hostID, count, sessions)
+}
+
 // SetLists: Freigabe- und Sperrliste fuer die CDN64-Server (online_lists.go).
 func (o ipv64Online) SetLists(ctx context.Context, tunnelID string, allow, deny []string) error {
 	return o.k.Client().CDN64SetLists(ctx, o.k.Get(ctx), tunnelID, allow, deny)
@@ -212,7 +217,7 @@ func (m *Module) onlineSave(ctx context.Context, id, tok string, edges []tunnel.
 func toEdges(list []ipv64api.CDN64Edge) []tunnel.Edge {
 	out := make([]tunnel.Edge, 0, len(list))
 	for _, e := range list {
-		out = append(out, tunnel.Edge{Name: e.Name, Host: e.Host, Port: e.Port, IPs: e.IPs, Standby: e.Standby})
+		out = append(out, tunnel.Edge{Name: e.Name, Host: e.Host, Port: e.Port, IPs: e.IPs, Standby: e.Standby, Sessions: e.Sessions})
 	}
 	return out
 }
@@ -227,7 +232,7 @@ func tunnelEdges(ov *ipv64api.CDN64Overview, t ipv64api.CDN64Tunnel) []tunnel.Ed
 
 func sameEdges(a, b []tunnel.Edge) bool {
 	return slices.EqualFunc(a, b, func(x, y tunnel.Edge) bool {
-		return x.Name == y.Name && x.Host == y.Host && x.Port == y.Port && slices.Equal(x.IPs, y.IPs) && x.Standby == y.Standby
+		return x.Name == y.Name && x.Host == y.Host && x.Port == y.Port && slices.Equal(x.IPs, y.IPs) && x.Standby == y.Standby && x.Sessions == y.Sessions
 	})
 }
 
@@ -1086,6 +1091,8 @@ type onlineRow struct {
 	Mappings []ipv64api.CDN64Mapping // Portmapper der Namen (Modus 3 zum Ziel, Modus 1/2 zu Streams der Node)
 	WAF      bool                    // Muster-WAF (erster Name)
 	JA4      string                  // Angriffs-Werkzeuge: off, count, block ("" = Portal kennt den Schutz noch nicht)
+	// Servers: Server und Verbindungen dieses Hosts (erster Name; nil = Portal ohne Server je Name, Knopf je Tunnel)
+	Servers *serversView
 }
 
 // onlineMonth: was srv07/srv08 fuer die Namen eines Hosts im laufenden Monat gezaehlt haben.
@@ -1117,39 +1124,20 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 	if len(list) == 0 && len(foreign) == 0 {
 		return nil
 	}
-	var badges []onlineBadge
-	via := ""
-	conUp, conWant, pending := 0, 0, false
+	var st []tunnel.EdgeStatus
+	fo := map[string]ipv64api.CDN64Edge{}
 	m.online.mu.Lock()
 	cl := m.online.client
 	m.online.mu.Unlock()
 	if cl != nil {
-		up := false
-		st := cl.Status()
-		conUp, conWant, pending = onlinePending(st, time.Now())
-		fo := map[string]ipv64api.CDN64Edge{}
+		st = cl.Status()
 		if t := m.onlineOwnTunnel(ctx); t != nil {
 			for _, e := range t.Edges {
 				fo[e.Name] = e
 			}
 		}
-		for _, e := range st {
-			up = up || e.Connected
-		}
-		for _, e := range st {
-			b := onlineBadge{Name: e.Name, State: "down", Transport: e.Transport, Via: e.Via, Sessions: e.Sessions,
-				ReplacedBy: fo[e.Name].ReplacedBy, StandsIn: fo[e.Name].StandsIn}
-			if slices.Index(viaOrder, e.Via) > slices.Index(viaOrder, via) {
-				via = e.Via
-			}
-			if e.Connected {
-				b.State = "direct"
-			} else if up {
-				b.State = "peer"
-			}
-			badges = append(badges, b)
-		}
 	}
+	badges, via, conUp, conWant, pending := onlineBadges(st, fo, nil)
 	remote := map[int64]ipv64api.CDN64Host{}
 	if rm := m.online.remote.Load(); rm != nil && rm.Data != nil {
 		for _, h := range rm.Data.Hosts {
@@ -1166,6 +1154,10 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 		r.Names = append(r.Names, x.Name)
 		r.Mode = max(r.Mode, x.Mode)
 		if rh, ok := remote[x.RemoteID]; ok {
+			if r.Servers == nil && rh.Servers != nil { // Server je Name: nur die Server dieses Hosts in der Zeile
+				r.Servers = newServersView(rh.Servers)
+				r.Edges, r.Via, r.Up, r.Want, r.Pending = onlineBadges(st, fo, serverNames(rh.Servers))
+			}
 			tm := rh.TrafficMonth
 			r.Month.Known = true
 			r.Month.Bytes += tm.BytesIn + tm.BytesOut
@@ -1201,7 +1193,7 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 			}
 			r := out[h.ID]
 			if r == nil {
-				r = &onlineRow{Foreign: true, RemoteID: rh.ID, Target: rh.Target, ACL: rh.ACL, WAF: rh.WAF, JA4: rh.JA4}
+				r = &onlineRow{Foreign: true, RemoteID: rh.ID, Target: rh.Target, ACL: rh.ACL, WAF: rh.WAF, JA4: rh.JA4, Servers: newServersView(rh.Servers)}
 				out[h.ID] = r
 			}
 			r.Mappings = append(r.Mappings, rh.Mappings...)
@@ -1221,6 +1213,48 @@ func (m *Module) onlineIndex(ctx context.Context, hosts []*Host) map[int64]*onli
 				}
 			}
 		}
+	}
+	return out
+}
+
+// onlineBadges: Abzeichen je Server und Verbindungen fuer eine Zeile; only != nil: nur diese Server (Server je Name).
+func onlineBadges(st []tunnel.EdgeStatus, fo map[string]ipv64api.CDN64Edge, only map[string]bool) (badges []onlineBadge, via string, up, want int, pending bool) {
+	var sel []tunnel.EdgeStatus
+	anyUp := false
+	for _, e := range st {
+		anyUp = anyUp || e.Connected
+		if only == nil || only[e.Name] {
+			sel = append(sel, e)
+		}
+	}
+	up, want, pending = onlinePending(sel, time.Now())
+	for _, e := range sel {
+		b := onlineBadge{Name: e.Name, State: "down", Transport: e.Transport, Via: e.Via, Sessions: e.Sessions,
+			ReplacedBy: fo[e.Name].ReplacedBy, StandsIn: fo[e.Name].StandsIn}
+		if slices.Index(viaOrder, e.Via) > slices.Index(viaOrder, via) {
+			via = e.Via
+		}
+		if e.Connected {
+			b.State = "direct"
+		} else if anyUp {
+			b.State = "peer" // der Tunnel steht zu einem anderen Server, der reicht weiter
+		}
+		badges = append(badges, b)
+	}
+	return badges, via, up, want, pending
+}
+
+// serverNames: Server eines Namens laut ipv64 - zugeteilt, gerade im DNS und Ersatz bei Ausfall.
+func serverNames(s *ipv64api.CDN64Servers) map[string]bool {
+	out := map[string]bool{}
+	for _, n := range s.Assigned {
+		out[n] = true
+	}
+	for _, n := range s.Active {
+		out[n] = true
+	}
+	for _, n := range s.Replaced {
+		out[n] = true
 	}
 	return out
 }

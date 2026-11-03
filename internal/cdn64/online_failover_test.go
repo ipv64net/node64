@@ -115,8 +115,8 @@ func TestOnlineFailover(t *testing.T) {
 	}
 }
 
-// Lastausgleich im Log: neuer Server mit balance_from -> Beginn, alter weg -> Ende; neuer wieder weg, alter bleibt ->
-// abgebrochen.
+// Lastausgleich im Log: neuer Server mit balance_from -> Beginn, Markierung weg und neuer bleibt -> Ende (auch wenn
+// der alte fuer andere Namen bleibt); neuer wieder weg -> abgebrochen.
 func TestOnlineBalanceLog(t *testing.T) {
 	e := newEnv(t)
 	logs := &syncBuf{}
@@ -124,16 +124,16 @@ func TestOnlineBalanceLog(t *testing.T) {
 	tun := func(edges ...ipv64api.CDN64Edge) *ipv64api.CDN64Tunnel { return &ipv64api.CDN64Tunnel{Edges: edges} }
 	e.m.onlineBalanceLog(tun(ipv64api.CDN64Edge{Name: "srv08"}, ipv64api.CDN64Edge{Name: "srv10", BalanceFrom: "srv08"}))
 	e.m.onlineBalanceLog(tun(ipv64api.CDN64Edge{Name: "srv08"}, ipv64api.CDN64Edge{Name: "srv10", BalanceFrom: "srv08"})) // unveraendert: kein zweiter Eintrag
-	if s := logs.String(); strings.Count(s, "load balancing, tunnel moves") != 1 || !strings.Contains(s, "from=srv08 to=srv10") {
+	if s := logs.String(); strings.Count(s, "load balancing, a name moves") != 1 || !strings.Contains(s, "from=srv08 to=srv10") {
 		t.Fatalf("start: %s", s)
 	}
-	e.m.onlineBalanceLog(tun(ipv64api.CDN64Edge{Name: "srv10"}))
-	if !strings.Contains(logs.String(), "load balancing done") {
+	e.m.onlineBalanceLog(tun(ipv64api.CDN64Edge{Name: "srv08"}, ipv64api.CDN64Edge{Name: "srv10"})) // srv08 bleibt fuer einen anderen Namen
+	if !strings.Contains(logs.String(), "load balancing done") || strings.Contains(logs.String(), "cancelled") {
 		t.Fatalf("done: %s", logs.String())
 	}
 	e.m.onlineBalanceLog(tun(ipv64api.CDN64Edge{Name: "srv10"}, ipv64api.CDN64Edge{Name: "srv09", BalanceFrom: "srv10"}))
 	e.m.onlineBalanceLog(tun(ipv64api.CDN64Edge{Name: "srv10"}))
-	if !strings.Contains(logs.String(), "load balancing cancelled, tunnel stays") {
+	if !strings.Contains(logs.String(), "load balancing cancelled, the name stays") {
 		t.Fatalf("aborted: %s", logs.String())
 	}
 }

@@ -189,3 +189,36 @@ func limitFixture(t *testing.T, f *fixture, limit *atomic.Int64) *fixture {
 	t.Cleanup(g.srv.Close)
 	return g
 }
+
+// Verbindungen je Server (Server je Name): Edge.Sessions gilt vor der Zahl des Tunnels; SetEdges aendert sie fuer einen
+// bleibenden Server, SetSessions nur fuer Server ohne eigene Zahl.
+func TestEdgeSessions(t *testing.T) {
+	slots := func(c *Client) map[string]int {
+		out := map[string]int{}
+		for _, s := range c.Status() {
+			out[s.Name] = s.Slots
+		}
+		return out
+	}
+	a, b := Edge{Name: "a", Host: "a.test", Port: 1, Sessions: 3}, Edge{Name: "b", Host: "b.test", Port: 2}
+	c := NewClient(ClientConfig{Tunnel: "t1", Token: "x", Edges: []Edge{a, b}, Sessions: 2})
+	if s := slots(c); s["a"] != 3 || s["b"] != 2 {
+		t.Fatalf("start: %v", s)
+	}
+	a.Sessions, b.Sessions = 1, 4
+	c.SetEdges([]Edge{a, b})
+	if s := slots(c); s["a"] != 1 || s["b"] != 4 {
+		t.Fatalf("set edges: %v", s)
+	}
+	b.Sessions = 0
+	c.SetEdges([]Edge{a, b})
+	c.SetSessions(3)
+	if s := slots(c); s["a"] != 1 || s["b"] != 3 {
+		t.Fatalf("set sessions: %v", s)
+	}
+	a.Sessions = 20
+	c.SetEdges([]Edge{a, b})
+	if s := slots(c); s["a"] != MaxSessions {
+		t.Fatalf("max: %v", s)
+	}
+}

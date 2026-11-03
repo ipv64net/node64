@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -190,5 +191,103 @@ func TestOnlinePending(t *testing.T) {
 	row.Online.Pending = false
 	if body = renderHosts(t, listData{Kind: KindProxy, OnlineOn: true, Rows: []hostRow{row}, Servers: sv}); strings.Contains(body, "data-c64o-pending") {
 		t.Fatal("no spinner once all connections are up")
+	}
+}
+
+// Server je Name: jeder Proxy-Host hat seine Auswahl (Knopf je Zeile, ein Dialog), die Zeile zeigt nur seine Server,
+// der Tunnel verbindet zu allen mit den Verbindungen je Server von ipv64 und uebernimmt Aenderungen ohne Neustart.
+func TestOnlineHostServers(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t)
+	all := []ipv64api.CDN64Edge{{Name: "srv07", Host: "127.0.0.1", Port: 1, IPs: []string{"127.0.0.1"}}, {Name: "srv08", Host: "127.0.0.1", Port: 2, IPs: []string{"127.0.0.1"}}}
+	f := &fakeOnline{ready: true, tunnels: map[string]bool{}, hosts: map[int64]string{}, modes: map[int64]int{}, edges: all, hostSrv: map[int64]*ipv64api.CDN64Servers{}}
+	e.m.SetOnlineAPI(f)
+	e.enable(t)
+	var hs []*Host
+	for _, n := range []string{"a.test", "b.test"} {
+		h := newHost()
+		h.Names, h.TargetHost, h.TargetPort = []string{n}, "93.184.216.34", 8080
+		if err := e.m.saveHost(ctx, h); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := e.m.onlineEnable(ctx, h, 1); err != nil {
+			t.Fatal(err)
+		}
+		hs = append(hs, h)
+	}
+	f.mu.Lock()
+	f.hostSrv[1] = &ipv64api.CDN64Servers{Count: 1, Choice: 1, Max: 4, All: true, Total: 4, Selectable: true, Assigned: []string{"srv08"}, Active: []string{"srv08"}, Sessions: 3, SessionsMax: 4}
+	f.hostSrv[2] = &ipv64api.CDN64Servers{Count: 1, Choice: 1, Max: 4, All: true, Total: 4, Selectable: true, Assigned: []string{"srv07"}, Active: []string{"srv07"}, Sessions: 1, SessionsMax: 4}
+	f.tunEdges = []ipv64api.CDN64Edge{{Name: "srv07", Host: "127.0.0.1", Port: 1, IPs: []string{"127.0.0.1"}, Sessions: 1}, {Name: "srv08", Host: "127.0.0.1", Port: 2, IPs: []string{"127.0.0.1"}, Sessions: 3}}
+	f.mu.Unlock()
+	e.m.onlineSync(ctx)
+	slots := func() map[string]int {
+		e.m.online.mu.Lock()
+		cl := e.m.online.client
+		e.m.online.mu.Unlock()
+		out := map[string]int{}
+		if cl != nil {
+			for _, s := range cl.Status() {
+				out[s.Name] = s.Slots
+			}
+		}
+		return out
+	}
+	if s := slots(); s["srv07"] != 1 || s["srv08"] != 3 {
+		t.Fatalf("connections per server from ipv64: %v", s)
+	}
+	e.m.online.mu.Lock()
+	cl0 := e.m.online.client
+	e.m.online.mu.Unlock()
+	f.mu.Lock()
+	f.tunEdges[1].Sessions = 2
+	f.mu.Unlock()
+	e.m.onlineSync(ctx)
+	e.m.online.mu.Lock()
+	cl1 := e.m.online.client
+	e.m.online.mu.Unlock()
+	if s := slots(); cl1 != cl0 || s["srv08"] != 2 || s["srv07"] != 1 {
+		t.Fatalf("changed in place: same client %v, %v", cl1 == cl0, s)
+	}
+
+	// Zeilen: je Host nur seine Server, eigene Auswahl
+	hl, _ := e.m.hosts(ctx)
+	idx := e.m.onlineIndex(ctx, hl)
+	ra, rb := idx[hs[0].ID], idx[hs[1].ID]
+	if ra == nil || rb == nil || ra.Servers == nil || ra.Servers.Names != "srv08" || ra.Servers.CurSessions != 3 || len(ra.Edges) != 1 || ra.Edges[0].Name != "srv08" ||
+		len(rb.Edges) != 1 || rb.Edges[0].Name != "srv07" || ra.Want != 2 || rb.Want != 1 {
+		t.Fatalf("rows: %+v / %+v", ra, rb)
+	}
+
+	// Speichern je Host: alle Namen des Hosts bei ipv64
+	var flash string
+	e.m.g.Flash = func(_ http.ResponseWriter, _ *http.Request, kind, text string) { flash = kind + ": " + text }
+	e.m.g.T = func(_ *http.Request, key string, _ ...any) string { return key }
+	e.m.g.Audit = func(*http.Request, string, string, string) {}
+	post := func(body string) {
+		req := httptest.NewRequest("POST", "/cdn64/online/servers", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		e.m.pageOnlineServers(httptest.NewRecorder(), req)
+	}
+	post("host=" + strconv.FormatInt(hs[0].ID, 10) + "&count=2&sessions=2")
+	if !strings.HasPrefix(flash, "success") || !slices.Equal(f.setHost, []int64{1}) || len(f.setCount) != 0 {
+		t.Fatalf("set host: %q %v %v", flash, f.setHost, f.setCount)
+	}
+	if r := e.m.onlineIndex(ctx, hl)[hs[0].ID]; r == nil || r.Servers == nil || r.Servers.Count != 2 || r.Servers.CurSessions != 2 {
+		t.Fatalf("remote not updated: %+v", r)
+	}
+	if post("host=999&count=1&sessions=1"); !strings.HasPrefix(flash, "danger") || len(f.setHost) != 1 {
+		t.Fatalf("unknown host: %q %v", flash, f.setHost)
+	}
+
+	// Seite: Knopf je Zeile mit Host und Werten, ein Dialog mit Feld fuer den Host
+	idx = e.m.onlineIndex(ctx, hl)
+	d := listData{Kind: KindProxy, OnlineOn: true, Rows: []hostRow{{Host: hs[0], Online: idx[hs[0].ID]}, {Host: hs[1], Online: idx[hs[1].ID]}}, Modal: idx[hs[0].ID].Servers}
+	body := renderHosts(t, d)
+	for _, want := range []string{`data-c64o-servers="` + strconv.FormatInt(hs[0].ID, 10) + `" data-count="2" data-sessions="2"`, `data-c64o-servers="` + strconv.FormatInt(hs[1].ID, 10) + `" data-count="1" data-sessions="1"`,
+		`id="cdn64-servers"`, `data-c64o-servers-host`, `data-c64o-servers-now`, `data-c64o-servers-ses`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("page misses %q", want)
+		}
 	}
 }

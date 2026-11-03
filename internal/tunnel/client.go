@@ -28,6 +28,8 @@ type Edge struct {
 	IPs  []string `json:"ips,omitempty"` // Rueckfall, wenn der DNS der Node klemmt
 	// Standby: laut ipv64 ausgefallen - weiter verbinden (Rueckkehr), in der Node aber nicht als "im Aufbau" zeigen
 	Standby bool `json:"standby,omitempty"`
+	// Sessions: Verbindungen zu diesem Server (Server je Name; < 1 = ClientConfig.Sessions, hoechstens MaxSessions)
+	Sessions int `json:"sessions,omitempty"`
 }
 
 // ClientConfig: Anmeldedaten, Server und was mit eingehenden Streams passiert.
@@ -110,9 +112,17 @@ func NewClient(cfg ClientConfig) *Client {
 }
 
 func (c *Client) addStates(e Edge) {
-	for range c.cfg.Sessions {
+	for range c.slots(e) {
 		c.st[e.Name] = append(c.st[e.Name], newState(e))
 	}
+}
+
+// slots: Verbindungen zu einem Server - seine eigene Zahl (Server je Name) oder die des Tunnels.
+func (c *Client) slots(e Edge) int {
+	if e.Sessions > 0 {
+		return min(e.Sessions, MaxSessions)
+	}
+	return c.cfg.Sessions
 }
 
 // newState: Verbindung noch nicht aufgebaut, "getrennt seit" jetzt (Anzeige "im Aufbau" in der Node).
@@ -120,7 +130,7 @@ func newState(e Edge) *edgeState {
 	return &edgeState{EdgeStatus: EdgeStatus{Name: e.Name, Host: e.Host, Since: time.Now()}}
 }
 
-// Run haelt zu jedem Server cfg.Sessions Tunnel-Verbindungen, bis ctx endet.
+// Run haelt zu jedem Server seine Tunnel-Verbindungen (slots), bis ctx endet.
 func (c *Client) Run(ctx context.Context) {
 	c.mu.Lock()
 	c.runCtx = ctx
@@ -137,7 +147,7 @@ func (c *Client) Run(ctx context.Context) {
 
 // startLocked startet die Verbindungen zu einem Server (c.mu gehalten, waehrend Run).
 func (c *Client) startLocked(e Edge) {
-	for slot := range c.cfg.Sessions {
+	for slot := range c.slots(e) {
 		c.startSlotLocked(e, slot)
 	}
 }
@@ -152,35 +162,41 @@ func (c *Client) startSlotLocked(e Edge, slot int) {
 	go func() { defer c.wg.Done(); c.loop(sctx, e, slot) }()
 }
 
-// SetSessions aendert die Zahl der parallelen Verbindungen je Server (Auswahl je Tunnel), ohne die bleibenden zu
-// trennen: zusaetzliche kommen dazu, ueberzaehlige (die hoechsten Slots) werden beendet.
+// SetSessions aendert die Zahl der parallelen Verbindungen je Server (Auswahl je Tunnel; Server mit eigener Zahl
+// behalten sie), ohne die bleibenden zu trennen: zusaetzliche kommen dazu, ueberzaehlige (die hoechsten Slots) werden
+// beendet.
 func (c *Client) SetSessions(n int) {
-	n = min(max(n, 1), MaxSessions)
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.cfg.Sessions = min(max(n, 1), MaxSessions)
 	for _, e := range c.cfg.Edges {
-		for len(c.st[e.Name]) < n {
-			slot := len(c.st[e.Name])
-			c.st[e.Name] = append(c.st[e.Name], newState(e))
-			if c.runCtx != nil {
-				c.startSlotLocked(e, slot)
-			}
-		}
-		for len(c.st[e.Name]) > n {
-			last := len(c.st[e.Name]) - 1
-			if l := c.cancels[e.Name]; last < len(l) {
-				l[last]()
-				c.cancels[e.Name] = l[:last]
-			}
-			c.st[e.Name] = c.st[e.Name][:last]
+		c.resizeLocked(e)
+	}
+}
+
+// resizeLocked bringt die Verbindungen zu einem Server auf slots(e) (c.mu gehalten).
+func (c *Client) resizeLocked(e Edge) {
+	n := c.slots(e)
+	for len(c.st[e.Name]) < n {
+		slot := len(c.st[e.Name])
+		c.st[e.Name] = append(c.st[e.Name], newState(e))
+		if c.runCtx != nil {
+			c.startSlotLocked(e, slot)
 		}
 	}
-	c.cfg.Sessions = n
+	for len(c.st[e.Name]) > n {
+		last := len(c.st[e.Name]) - 1
+		if l := c.cancels[e.Name]; last < len(l) {
+			l[last]()
+			c.cancels[e.Name] = l[:last]
+		}
+		c.st[e.Name] = c.st[e.Name][:last]
+	}
 }
 
 // SetEdges aendert die Serverliste, ohne die Verbindungen zu bleibenden Servern zu trennen: neue Server kommen dazu,
-// entfernte (oder mit geaenderter Adresse) werden getrennt. So bleibt der Tunnel bei Ersatz und Rueckkehr eines
-// Servers ohne Aussetzer.
+// entfernte (oder mit geaenderter Adresse) werden getrennt, bei bleibenden aendert sich nur die Zahl der Verbindungen
+// (Edge.Sessions). So bleibt der Tunnel bei Ersatz und Rueckkehr eines Servers ohne Aussetzer.
 func (c *Client) SetEdges(edges []Edge) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -203,6 +219,7 @@ func (c *Client) SetEdges(edges []Edge) {
 	}
 	for _, e := range edges {
 		if keep[e.Name] {
+			c.resizeLocked(e)
 			continue
 		}
 		c.addStates(e)

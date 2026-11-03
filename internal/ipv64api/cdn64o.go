@@ -23,6 +23,8 @@ type CDN64Edge struct {
 	StandsIn   string `json:"stands_in,omitempty"`
 	// BalanceFrom: Lastausgleich - dieser Server kommt statt BalanceFrom dazu (der faellt weg, sobald der Tunnel hier steht)
 	BalanceFrom string `json:"balance_from,omitempty"`
+	// Sessions: Verbindungen des Tunnels zu diesem Server (Server je Name: Hoechstwert seiner Namen dort; 0 = wie der Tunnel)
+	Sessions int `json:"sessions,omitempty"`
 }
 
 // CDN64Tunnel ist ein Tunnel des Accounts (Token nur beim Anlegen bzw. neu Ausstellen).
@@ -68,6 +70,9 @@ type CDN64Host struct {
 	JA4        string         `json:"ja4"`      // Angriffs-Werkzeuge (JA4): off, count, block ("" = Portal ohne Schutz-Statistik)
 	// Schutz der Server in den letzten 30 Tagen
 	Protection CDN64ProtectionCounts `json:"protection"`
+	// Servers: Server dieses Namens und Verbindungen je Server (nil = Portal ohne Server je Name, dann gilt die Auswahl
+	// des Tunnels)
+	Servers *CDN64Servers `json:"servers,omitempty"`
 }
 
 // CDN64ProtectionCounts: was srv07/srv08 abgewehrt bzw. gezaehlt haben (je Name, Tag oder Konto).
@@ -255,6 +260,16 @@ func (c *Client) CDN64SetServers(ctx context.Context, key, tunnelID string, coun
 	var out CDN64Servers
 	in := map[string]int{"count": count, "sessions": sessions}
 	if err := c.do(ctx, http.MethodPut, key, "/cdn64o/tunnels/"+url.PathEscape(tunnelID)+"/servers", in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CDN64SetHostServers setzt Server (0 = alle, auch kuenftige) und Verbindungen je Server eines Namens (Business/Company).
+func (c *Client) CDN64SetHostServers(ctx context.Context, key string, hostID int64, count, sessions int) (*CDN64Servers, error) {
+	var out CDN64Servers
+	in := map[string]int{"count": count, "sessions": sessions}
+	if err := c.do(ctx, http.MethodPut, key, "/cdn64o/hosts/"+strconv.FormatInt(hostID, 10)+"/servers", in, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

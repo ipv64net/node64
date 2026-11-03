@@ -446,6 +446,22 @@ darf waehrend `moving` einen mehr haben, Markierung `balance_from` fuer die Node
 den Tunnel meldet; ohne Meldung nach 10 min Abbruch. Ereignis `balance` an den Namen, Log in der Node. SQL
 `deploy/sql/cdn64_balance.sql` vor dem PHP. Admin-Knopf zum Umziehen beim Hinzufuegen eines Servers: weggelassen.
 
+**Server je Name (2026-11-03, Dennis: Host A 1×1, Host B 4×4 an derselben Node):** Eigentuemer der Zuteilung ist der
+Name (`cdn64o_edge_assign.owner = "h:<host-id>"`, alle Modi), Auswahl in `cdn64o_hosts.edges/sessions`
+(`deploy/sql/cdn64_servers_host.sql`, vor dem PHP; uebernimmt beim ersten Lauf Auswahl und Server des ersten Tunnels bzw.
+bei Modus 3 die des Accounts, das DNS bleibt). Das DNS eines Namens nennt nur seine Server. Der Tunnel bleibt einer je
+Node und verbindet zur Vereinigung der Server aller seiner Namen (auch als Reserve), je Server `sessions` = Hoechstwert
+der Namen dort (`c64o_tunnel_edges`; die Namen teilen sich die Verbindungen); `edge/config` gibt je Tunnel den
+Hoechstwert als Grenze. Ein Tunnel ohne Namen behaelt seine eigene Zuteilung (Eigentuemer Tunnel-ID). Neue Server eines
+Namens: je Standort zuerst, dann Server, die andere Namen derselben Tunnel schon nutzen (`c64o_near_edges`), dann die
+geringste Zuteilung; Ersatz bei Ausfall ebenso nach dem Standort. API: `GET|PUT /cdn64o/hosts/{id}/servers`, Host-Objekt
+`servers`, Tunnel-Kante `sessions`; `PUT /cdn64o/tunnels/{id}/servers` setzt fuer aeltere Nodes alle Namen des Tunnels.
+Lastausgleich je Name (`cdn64o_edge_load.hosts`, `cdn64o_balance.host_id`): fertig, sobald ein Tunnel des Namens am
+neuen Server gemeldet ist. Der Job `cdn64bal` raeumt verlassene Zuteilungen weg (alter Stand je Tunnel und `u:<id>`).
+Node (PROXY64 1.48.0): Knopf je Zeile, ein Dialog (Host per JS), Zeile zeigt nur die Server ihres Hosts, `Edge.Sessions`
+im Tunnel-Client (`SetEdges` passt die Verbindungen bleibender Server an). Tests: `servers_host_test.py`,
+`balance_test.py` (c64otest).
+
 ### 8.6 Webseite ipv64.net
 
 - **Neue Seite** (z. B. `cdn64.php`, Menü „CDN64“), getrennt von `cdn.php`:

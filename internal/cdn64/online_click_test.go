@@ -40,18 +40,20 @@ type fakeOnline struct {
 	calls    int                  // Abrufe von Overview
 	maps     map[int64][]ipv64api.CDN64Mapping
 	mapNext  int64
-	mapErr   error                     // naechstes AddMapping scheitert
-	delErr   error                     // DeleteMapping scheitert (bis zurueckgesetzt)
-	sessions int                       // parallele Verbindungen, die ipv64 der Klasse erlaubt
-	prot     *ipv64api.CDN64Protection // Antwort von /cdn64o/protection
-	protErr  error                     // /cdn64o/protection scheitert
-	protDays []int                     // abgefragte Zeitraeume
-	waf      map[int64]bool            // WAF je Name (gesetzt ueber SetProtection)
-	ja4      map[int64]string          // JA4-Stufe je Name
-	servers  *ipv64api.CDN64Servers    // Server je Tunnel (nil = altes Portal)
-	setCount []int                     // Aufrufe von SetServers
-	setTun   []string                  // Tunnel der Aufrufe von SetServers
-	tunEdges []ipv64api.CDN64Edge      // Server je Tunnel (nil = nur die Liste der Uebersicht)
+	mapErr   error                            // naechstes AddMapping scheitert
+	delErr   error                            // DeleteMapping scheitert (bis zurueckgesetzt)
+	sessions int                              // parallele Verbindungen, die ipv64 der Klasse erlaubt
+	prot     *ipv64api.CDN64Protection        // Antwort von /cdn64o/protection
+	protErr  error                            // /cdn64o/protection scheitert
+	protDays []int                            // abgefragte Zeitraeume
+	waf      map[int64]bool                   // WAF je Name (gesetzt ueber SetProtection)
+	ja4      map[int64]string                 // JA4-Stufe je Name
+	servers  *ipv64api.CDN64Servers           // Server je Tunnel (nil = altes Portal)
+	setCount []int                            // Aufrufe von SetServers
+	setTun   []string                         // Tunnel der Aufrufe von SetServers
+	tunEdges []ipv64api.CDN64Edge             // Server je Tunnel (nil = nur die Liste der Uebersicht)
+	hostSrv  map[int64]*ipv64api.CDN64Servers // Server je Name (nil = Portal ohne Server je Name)
+	setHost  []int64                          // Namen der Aufrufe von SetHostServers
 }
 
 func (f *fakeOnline) Ready(context.Context) bool { f.mu.Lock(); defer f.mu.Unlock(); return f.ready }
@@ -67,7 +69,7 @@ func (f *fakeOnline) Overview(context.Context) (*ipv64api.CDN64Overview, error) 
 	}
 	for id, n := range f.hosts {
 		ov.Hosts = append(ov.Hosts, ipv64api.CDN64Host{ID: id, FQDN: n, Status: "active", Mode: max(f.modes[id], 1), Paused: f.paused[id], Mappings: f.maps[id],
-			WAF: f.waf[id], JA4: f.ja4[id]})
+			WAF: f.waf[id], JA4: f.ja4[id], Servers: f.hostSrv[id]})
 	}
 	for _, h := range f.extra {
 		h.Paused = f.paused[h.ID]
@@ -93,6 +95,24 @@ func (f *fakeOnline) SetServers(_ context.Context, tunnel string, n, sessions in
 	s := *f.servers
 	s.Count, s.Assigned, s.Choice, s.Sessions = n, all[:n], n, sessions
 	f.servers, f.sessions = &s, sessions
+	return &s, nil
+}
+
+func (f *fakeOnline) SetHostServers(_ context.Context, id int64, n, sessions int) (*ipv64api.CDN64Servers, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.setHost = append(f.setHost, id)
+	cur := f.hostSrv[id]
+	if cur == nil || !cur.Selectable {
+		return nil, &ipv64api.APIError{Status: 403, Code: "plan_not_allowed"}
+	}
+	all := []string{"srv07", "srv08", "srv09", "srv10"}
+	if n == 0 || n > len(all) {
+		n = len(all)
+	}
+	s := *cur
+	s.Count, s.Assigned, s.Active, s.Choice, s.Sessions = n, all[:n], all[:n], n, sessions
+	f.hostSrv[id] = &s
 	return &s, nil
 }
 
