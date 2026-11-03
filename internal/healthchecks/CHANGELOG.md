@@ -1,5 +1,10 @@
 # Änderungen – Healthchecks
 
+## 2.52.0 – 2026-11-03
+
+### Geändert
+- Ist ipv64 kurz nicht erreichbar (kein hub erreichbar oder hub ohne Datenbank), stehen Online-Checks und Checks anderer Nodes nicht mehr als „Nicht überwacht“ da: Sie behalten den letzten bekannten Zustand mit einem Ausrufezeichen, über der Liste steht ein Hinweis, die Ergebnisse kommen nach. Dashboard, Statusseiten, API und Metriken zählen sie ebenso. Die Node fragt dafür jede Minute die Datenbank des hubs ab.
+
 ## 2.51.4 – 2026-11-03
 
 ### Behoben

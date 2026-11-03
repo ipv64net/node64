@@ -67,6 +67,7 @@
 
 {{if gt $d.QuotaLimit 0}}{{if ge $d.QuotaToday $d.QuotaLimit}}<div class="alert alert-warning py-2 small"><i class="bi bi-hourglass-split"></i> {{.T "hc.quota.reached" "today" $d.QuotaToday "limit" $d.QuotaLimit}} <a href="/plans">{{.T "hc.plans_link"}}</a></div>
 {{else if $d.QuotaNear}}<div class="alert alert-info py-2 small"><i class="bi bi-hourglass-top"></i> {{.T "hc.quota.near" "today" $d.QuotaToday "limit" $d.QuotaLimit}} <a href="/plans">{{.T "hc.plans_link"}}</a></div>{{end}}{{end}}
+{{if $d.Delayed}}<div class="alert alert-warning py-2 small"><i class="bi bi-exclamation-circle"></i> {{.T "hc.delayed_banner" "n" $d.Delayed}}</div>{{end}}
 <div id="hc-live" data-t-in="{{.T "hc.next_in"}}" data-t-now="{{.T "hc.next_now"}}" data-t-push="{{.T "hc.next_push_until"}}" data-t-overdue="{{.T "hc.next_overdue"}}">
 {{if not $d.Rows}}
 <div class="card"><div class="card-body text-center text-body-secondary py-4">
@@ -110,7 +111,7 @@
 		<td data-label="" class="d-none d-md-table-cell"><input type="checkbox" class="form-check-input" name="tokens" value="{{$c.Token}}"></td>
 		<td data-label="{{$.T "common.status"}}" class="hc-c-status">
 			<span class="badge hc-state-{{.State}}">{{$.T (print "hc.state." .State)}}</span>
-			{{if .Quota}}<i class="bi bi-hourglass-split text-body-secondary" title="{{$.T "hc.quota.paused_title"}}"></i>{{else if .Stale}}<i class="bi bi-hourglass-split text-warning-emphasis" title="{{$.T "hc.unchecked" "ago" ($.Ago .LastAt)}}"></i>{{end}}
+			{{if .Quota}}<i class="bi bi-hourglass-split text-body-secondary" title="{{$.T "hc.quota.paused_title"}}"></i>{{else if .Stale}}<i class="bi bi-hourglass-split text-warning-emphasis" title="{{$.T "hc.unchecked" "ago" ($.Ago .LastAt)}}"></i>{{else if .Delayed}}<i class="bi bi-exclamation-circle text-warning-emphasis" title="{{$.T "hc.delayed" "ago" ($.Ago .LastAt)}}"></i>{{end}}
 			{{if .Retrying}}<i class="bi bi-arrow-repeat text-warning" title="{{$.T "hc.retrying"}}"></i>{{end}}
 			{{if .Maint}}<i class="bi bi-wrench text-body-secondary" title="{{$.T "hc.maintenance"}}"></i>{{end}}
 		</td>

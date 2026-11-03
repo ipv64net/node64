@@ -4,6 +4,7 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+- Healthchecks: if ipv64 is briefly unreachable, online checks keep their last state with a note (!) instead of “Not monitored”.
 - PROXY64: CDN64 servers and connections can be chosen per proxy host instead of per tunnel (Business and Company, button in the CDN64 column).
 
 ## 0.12.0-alpha.38.1 – 2026-11-03

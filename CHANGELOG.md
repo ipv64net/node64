@@ -4,6 +4,7 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Healthchecks: Ist ipv64 kurz nicht erreichbar, behalten Online-Checks den letzten Zustand mit Hinweis (!) statt „Nicht überwacht“.
 - PROXY64: CDN64-Server und Verbindungen je Proxy-Host statt je Tunnel wählbar (Business und Company, Knopf in der Spalte CDN64).
 
 ## 0.12.0-alpha.38.1 – 2026-11-03

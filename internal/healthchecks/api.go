@@ -103,7 +103,7 @@ func (m *Module) toJSON(c *Check, r *http.Request) checkJSON {
 			LastLatencyMS: msf(rt.LastLatency), LastReason: string(rt.LastReason), LastMessage: rt.LastMessage, ConsecutiveFail: rt.ConsecutiveFail,
 			ConsecutiveOK: rt.ConsecutiveOK, LastPushAt: rt.LastPush, DownSince: rt.DownSince, IncidentID: rt.Incident,
 			Maintenance: m.st.InMaintenance(r.Context(), c.Token, time.Now())}}
-	out.State.Unchecked = stale(c, rt.LastCheck, string(rt.State))
+	out.State.Unchecked = m.unchecked(c, rt.LastCheck, string(rt.State), time.Now())
 	if out.Tags == nil {
 		out.Tags = []string{}
 	}

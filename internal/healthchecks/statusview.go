@@ -236,7 +236,7 @@ func (m *Module) statusItemState(c *Check, inMaint bool) (string, time.Time) {
 		return "paused", rt.Since
 	case inMaint:
 		return "maintenance", time.Time{}
-	case rt.State == "" || rt.State == scheduler.StatePending || staleAt(c, rt.LastCheck, string(rt.State), statusNow()):
+	case rt.State == "" || rt.State == scheduler.StatePending || m.unchecked(c, rt.LastCheck, string(rt.State), statusNow()):
 		return "unknown", time.Time{}
 	}
 	switch rt.State {

@@ -54,6 +54,7 @@ type Module struct {
 	accountCh  func(context.Context) []*notify.Channel // ohne Verknuepfung: ipv64-Kanaele des Accounts (E-Mail, SMS, App; IDs negativ)
 	viaCluster func() bool                             // nicht verknuepft, aber eine verknuepfte Node des Clusters reicht an ipv64 weiter
 	quota      func() (today, limit, locs int)         // Tageskontingent der Online-Checks, nil = standalone
+	outage     func() (bool, time.Time)                // ipv64 liefert gerade/zuletzt keine Daten (Sync), nil = standalone
 	api        *ipv64api.Key                           // zentraler API-Key: Online-Checks ohne Sync (online_api.go)
 	groupRole  GroupRole                               // lokale Gruppe: wer benachrichtigt (groupnotify.go), nil = keine Gruppe
 	groupPeers func(ctx context.Context) []Peer        // Nodes der lokalen Gruppe (Auswahl der Messstellen)
@@ -221,6 +222,10 @@ func (m *Module) onlineOK() bool {
 	return m.linked != nil && m.linked() || m.viaCluster != nil && m.viaCluster()
 }
 
+// SetIPv64Outage: ob ipv64 gerade keine Daten liefert und wann zuletzt (Checks von ipv64 bleiben dann beim letzten
+// Zustand statt "nicht ueberwacht", siehe ipv64Gap).
+func (m *Module) SetIPv64Outage(fn func() (bool, time.Time)) { m.outage = fn }
+
 // SetQuota liefert das Tageskontingent der Online-Checks (Hinweis in der Uebersicht).
 func (m *Module) SetQuota(fn func() (today, limit, locs int)) { m.quota = fn }
 
@@ -241,7 +246,7 @@ func (m *Module) SetPushForward(fn func(token string, down bool, msg, from strin
 }
 
 func (m *Module) Info() module.Info {
-	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Image: "health64.svg", Path: "/healthchecks", Available: true, Order: 10, Version: "2.51.4", Changelog: changelog, ChangelogEN: changelogEN}
+	return module.Info{Name: Name, TitleKey: "nav.healthchecks", Icon: "bi-heart-pulse", Image: "health64.svg", Path: "/healthchecks", Available: true, Order: 10, Version: "2.52.0", Changelog: changelog, ChangelogEN: changelogEN}
 }
 
 func (m *Module) Migrations() []store.Migration {

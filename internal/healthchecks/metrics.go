@@ -24,7 +24,7 @@ func (m *Module) Metrics(ctx context.Context, w *metrics.Writer) {
 		if state == "" {
 			state = "pending"
 		}
-		if stale(c, rt.LastCheck, state) {
+		if m.unchecked(c, rt.LastCheck, state, now) {
 			state = "unchecked"
 		}
 		if c.Paused {

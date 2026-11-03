@@ -78,6 +78,7 @@ type row struct {
 	LastAt   time.Time // letzte Messung
 	LastSeen string    // Zustand bei der letzten Messung (bei Stale steht in State "unchecked")
 	Quota    bool      // Stale, weil das Tageskontingent aufgebraucht ist (Online-Check, State "quota")
+	Delayed  bool      // Messungen von ipv64 kommen gerade nicht an (ipv64Gap): letzter Zustand, nicht Stale
 	CertDays int       // Restlaufzeit des Zertifikats (HTTPS), -1 = unbekannt
 	CertTill time.Time // Ablaufdatum
 }
@@ -135,6 +136,7 @@ type listData struct {
 	QuotaToday int      // Online-Messungen heute (Tageskontingent)
 	QuotaLimit int      // Tageskontingent (0 = unbegrenzt/standalone)
 	QuotaNear  bool     // mindestens 90 % verbraucht
+	Delayed    int      // Checks, deren Ergebnisse von ipv64 gerade nicht ankommen (Hinweis ueber der Tabelle)
 	Quota      *hcQuota // Karte unter der Tabelle (nur mit Tageskontingent, z. B. Free und Home/Supporter)
 	// Online-Checks direkt ueber die API (Key hinterlegt, kein Sync)
 	APIMode   bool
@@ -186,6 +188,9 @@ func (m *Module) rowOf(ctx context.Context, lang string, c *Check, pills map[str
 		r.State = string(scheduler.StatePaused)
 	}
 	r.LastAt, r.Stale = rt.LastCheck, stale(c, rt.LastCheck, r.State)
+	if r.Stale && m.ipv64Gap(c, time.Now()) { // die hubs messen weiter, nur die Ergebnisse fehlen
+		r.Stale, r.Delayed = false, true
+	}
 	if r.Stale { // nicht ueberwacht: der letzte Zustand ist unbekannt geworden, nicht mehr "OK"
 		r.LastSeen, r.State = r.State, "unchecked"
 		if c.Execution == "online" && m.quotaReached() { // Online-Check: ipv64 misst bis Mitternacht nicht
@@ -340,6 +345,9 @@ func (m *Module) pageList(w http.ResponseWriter, r *http.Request) {
 		}
 		d.Counts[rw.State]++
 		d.Total++
+		if rw.Delayed {
+			d.Delayed++
+		}
 		if st := f["state"]; st != "" && rw.State != st && (st != "problem" || !problemState(rw.State)) {
 			continue
 		}
@@ -1456,7 +1464,7 @@ func (m *Module) Dashboard(ctx context.Context) (*module.DashboardInfo, error) {
 		if c.Paused { // pausierte Online-Checks laufen nicht im lokalen Scheduler
 			rt.State = scheduler.StatePaused
 		}
-		if stale(c, rt.LastCheck, string(rt.State)) {
+		if m.unchecked(c, rt.LastCheck, string(rt.State), time.Now()) {
 			info.Unchecked++ // nicht "OK": ob der Dienst erreichbar ist, ist unbekannt
 			continue
 		}
@@ -1570,6 +1578,22 @@ func staleAt(c *Check, last time.Time, state string, now time.Time) bool {
 		window = 5 * time.Minute
 	}
 	return now.Sub(last) > window
+}
+
+// ipv64Gap: der Zustand dieses Checks kommt von ipv64 (hier nicht gemessen), und ipv64 lieferte innerhalb seines
+// letzten 3 Intervalle plus 5 min zeitweise keine Daten (kein hub erreichbar oder hub ohne Datenbank). Die
+// hubs messen weiter, nur die Ergebnisse fehlen: dann nicht "nicht ueberwacht", sondern letzter Zustand mit Hinweis.
+func (m *Module) ipv64Gap(c *Check, now time.Time) bool {
+	if m.outage == nil || c.MeasuredHere() {
+		return false
+	}
+	_, last := m.outage()
+	return !last.IsZero() && now.Sub(last) < 3*c.Interval+5*time.Minute
+}
+
+// unchecked wie staleAt, ohne die Luecken, die ein Ausfall von ipv64 erklaert (ipv64Gap).
+func (m *Module) unchecked(c *Check, last time.Time, state string, now time.Time) bool {
+	return staleAt(c, last, state, now) && !m.ipv64Gap(c, now)
 }
 
 // mergeEvents: lokale und von ipv64 bewertete Ereignisse nach Zeit (neueste zuerst), ohne doppelte Ereignis-IDs.

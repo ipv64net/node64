@@ -155,6 +155,7 @@ type Live struct {
 	pollMu        sync.Mutex // LinkPoll nur einmal gleichzeitig (Seite und Hintergrund fragen beide)
 	histMu        sync.Mutex // Nachladen des Verlaufs (history.go) nur einmal gleichzeitig
 	ackOK, ackBad time.Time  // letzte Bestaetigung ohne bzw. mit Fehler (hub erreichbar, aber z. B. ohne Datenbank)
+	downAt        time.Time  // Ende der letzten Sitzung (IPv64Outage)
 	sessionReady  bool       // aktuelle Sitzung hat hello/config erhalten
 	pushOnce      sync.Once  // Warteschlange fuer weitergereichte Pushes
 	pushQ         chan wire.Msg
@@ -304,6 +305,47 @@ func (c *Live) noteAck(ok bool) {
 	case !wasOK && ok:
 		c.log.Info("hub confirming again: notifications via ipv64")
 	}
+}
+
+// IPv64Outage: ipv64 liefert gerade keine Daten (verknuepft, aber ohne Sitzung oder hub ohne Datenbank) und wann das
+// zuletzt so war (Nullzeit = seit dem Start nie). Die hubs messen in der Zeit weiter, nur die Ergebnisse fehlen.
+func (c *Live) IPv64Outage() (bool, time.Time) {
+	if !c.Linked() {
+		return false, time.Time{}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.connected || (!c.ackBad.IsZero() && !c.ackOK.After(c.ackBad)) {
+		return true, time.Now()
+	}
+	last := c.downAt
+	if c.ackBad.After(last) {
+		last = c.ackBad
+	}
+	return false, last
+}
+
+// hubDB fragt die Datenbank des hubs ueber /v1/health ab (Feld "db"); known = Antwort lesbar und mit dem Feld.
+// So faellt ein hub ohne Datenbank auch einer Node auf, die nichts hochlaedt (nur Online-Checks).
+func (c *Live) hubDB(ctx context.Context, url string) (ok, known bool) {
+	hctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(hctx, http.MethodGet, url+"/v1/health", nil)
+	if err != nil {
+		return false, false
+	}
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return false, false
+	}
+	defer resp.Body.Close()
+	var h struct {
+		DB string `json:"db"`
+	}
+	if resp.StatusCode != 200 || json.NewDecoder(resp.Body).Decode(&h) != nil || h.DB == "" {
+		return false, false
+	}
+	return h.DB == "ok", true
 }
 
 // hubHealthy fragt /v1/health eines hubs ab.

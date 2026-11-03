@@ -1,5 +1,10 @@
 # Changes – Healthchecks
 
+## 2.52.0 – 2026-11-03
+
+### Changed
+- If ipv64 is briefly unreachable (no hub reachable or hub without database), online checks and checks of other nodes no longer show as “Not monitored”: they keep their last known state with an exclamation mark, a note appears above the list and the results follow. Dashboard, status pages, API and metrics count them the same way. For this the node queries the hub's database every minute.
+
 ## 2.51.4 – 2026-11-03
 
 ### Fixed

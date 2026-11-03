@@ -57,7 +57,7 @@ func (c *Live) loop(ctx context.Context) {
 		hub := c.pickEndpoint(failed)
 		err := c.runSession(ctx, hub)
 		c.mu.Lock()
-		c.connected, c.hub = false, ""
+		c.connected, c.hub, c.downAt = false, "", time.Now()
 		stable := c.sessionReady
 		c.sessionReady = false
 		c.mu.Unlock()
@@ -390,6 +390,9 @@ func (s *session) worker() {
 	// Eigener Ping: nur so faellt eine stille Netztrennung (Pakete werden verworfen) zeitnah auf.
 	ping := time.NewTicker(30 * time.Second)
 	defer ping.Stop()
+	// Datenbank des hubs (/v1/health): ohne sie kommen keine Ergebnisse der Online-Checks an
+	dbt := time.NewTicker(time.Minute)
+	defer dbt.Stop()
 	// Nicht beim Stamm-hub (nach einem Ausfall): nach 10-20 min pruefen, ob er wieder da ist, und zurueckwechseln.
 	home := time.NewTimer(time.Duration(10+rand.IntN(10)) * time.Minute)
 	defer home.Stop()
@@ -414,6 +417,12 @@ func (s *session) worker() {
 				s.cancel()
 				return
 			}
+		case <-dbt.C:
+			go func(hub string) {
+				if ok, known := c.hubDB(s.ctx, hub); known && s.ctx.Err() == nil {
+					c.noteAck(ok)
+				}
+			}(s.hub)
 		case <-c.wake:
 			s.pushNodeInfo()
 			s.pushNotifySettings()
