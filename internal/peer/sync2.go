@@ -33,6 +33,9 @@ type syncEntry struct {
 	Origin    string          `json:"origin"`
 	ChangedAt time.Time       `json:"changed_at"`
 	Data      json.RawMessage `json:"data,omitempty"`
+	// Unavailable: hier gerade nicht lesbar (ClusterGet mit Fehler) - die abholende Node holt ihn spaeter erneut
+	// (wie einen abgelehnten), der Stand laeuft weiter
+	Unavailable bool `json:"unavailable,omitempty"`
 }
 
 type syncOut struct {
@@ -211,11 +214,14 @@ func (m *Manager) handleSync2(w http.ResponseWriter, r *http.Request, _ *Member,
 		if allowed[e.Module+"/"+e.Item] {
 			if !e.Deleted {
 				data, found, err := m.provider(e.Module).ClusterGet(ctx, e.Item, e.ID)
-				if err != nil { // die Seite endet hier, der Eintrag kommt beim naechsten Abholen
+				if err != nil && out.Last > since { // die Seite endet hier, der Eintrag kommt beim naechsten Abholen
 					out.More = true
 					break
 				}
-				if found {
+				if err != nil { // erster der Seite: ohne Daten weiter (sonst bliebe der Abgleich fuer immer hier stehen)
+					m.d.Log.Warn("cluster entry not readable", "module", e.Module, "item", e.Item, "err", err)
+					e.Unavailable = true
+				} else if found {
 					e.Data = data
 					size += len(data)
 				} else {
@@ -337,6 +343,13 @@ func (m *Manager) pullSync2From(ctx context.Context, x Member, wants []string) e
 			if err != nil || !newer(e.ChangedAt, e.Origin, l) {
 				continue
 			}
+			if e.Unavailable { // dort gerade nicht lesbar: spaeter erneut abholen
+				m.d.Log.Debug("cluster entry not readable there", "from", x.Name, "module", e.Module, "item", e.Item)
+				if failed < 0 || e.Seq-1 < failed {
+					failed = e.Seq - 1
+				}
+				continue
+			}
 			if err := p.ClusterApply(WithMemberSince(WithClusterOrigin(ctx, e.Origin, e.ChangedAt), sinceOf(e.Origin, l)), e.Item, e.ID, e.Data, e.Deleted); err != nil {
 				if superseded(err) {
 					continue
@@ -354,6 +367,10 @@ func (m *Manager) pullSync2From(ctx context.Context, x Member, wants []string) e
 			if _, err := m.logSync(e.Module, e.Item, e.ID, e.Deleted, e.Origin, e.ChangedAt); err == nil {
 				applied++
 			}
+		}
+		if out.More && out.Last <= since { // kein Fortschritt (aeltere Node, Eintrag dort nicht lesbar): nicht 100-mal dasselbe
+			m.setRetry(ctx, x.NodeID, retry, failed, false)
+			return errors.New("cluster sync makes no progress (entry not readable there)")
 		}
 		if out.Last > since {
 			since = out.Last

@@ -20,6 +20,7 @@ type fakeProv struct {
 	mu    sync.Mutex
 	data  map[string]string // "bereich/id" -> Wert
 	deny  map[string]bool   // "bereich/id": ClusterApply lehnt ab
+	fail  map[string]bool   // "bereich/id": ClusterGet liefert einen Fehler
 }
 
 func newProv(n *testNode) *fakeProv {
@@ -61,6 +62,9 @@ func (p *fakeProv) ClusterIDs(_ context.Context, item string) ([]string, error) 
 func (p *fakeProv) ClusterGet(_ context.Context, item, id string) (json.RawMessage, bool, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.fail[item+"/"+id] {
+		return nil, false, errors.New("not readable")
+	}
 	v, ok := p.data[item+"/"+id]
 	if !ok {
 		return nil, false, nil
@@ -230,6 +234,52 @@ func TestClusterSync2Retry(t *testing.T) {
 	var retry int64
 	if err := b.m.db.QueryRow(`SELECT retry2 FROM peer_members WHERE node_id = ?`, a.m.d.NodeID()).Scan(&retry); err != nil || retry != -1 {
 		t.Fatalf("retry must be cleared: %d %v", retry, err)
+	}
+}
+
+// Ein Eintrag, den die liefernde Node dauerhaft nicht lesen kann (ClusterGet mit Fehler), haelt den Abgleich nicht
+// an: die Eintraege danach kommen an, er selbst wird spaeter erneut abgeholt (vorher blieb der Stand fuer immer davor
+// stehen, ohne Fehlermeldung).
+func TestClusterSync2Unreadable(t *testing.T) {
+	ctx := context.Background()
+	old := sync2RetryEvery
+	sync2RetryEvery = 0
+	t.Cleanup(func() { sync2RetryEvery = old })
+	a, b := newNode(t, "node-a", "A", 522), newNode(t, "node-b", "B", 522)
+	pa, pb := newProv(a), newProv(b)
+	code, _, _ := a.m.StartPairing()
+	if err := b.m.Join(ctx, a.srv.URL, code, b.srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	waitMembers(t, a, "B")
+	for _, n := range []*testNode{a, b} {
+		if err := n.m.SetSync(ctx, "demo", "", true); err != nil {
+			t.Fatal(err)
+		}
+		if err := n.m.SetSync(ctx, "demo", "a", true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pa.mu.Lock()
+	pa.fail = map[string]bool{"a/1": true}
+	pa.mu.Unlock()
+	pa.set("a", "1", "kaputt")
+	pa.set("a", "2", "danach")
+	round2(a, b)
+	if pb.get("a", "2") != "danach" {
+		t.Fatalf("entries after an unreadable one must arrive, a/2=%q", pb.get("a", "2"))
+	}
+	pa.set("a", "3", "spaeter")
+	round2(a, b)
+	if pb.get("a", "3") != "spaeter" {
+		t.Fatalf("later changes must arrive, a/3=%q", pb.get("a", "3"))
+	}
+	pa.mu.Lock()
+	pa.fail = nil // wieder lesbar
+	pa.mu.Unlock()
+	round2(a, b)
+	if pb.get("a", "1") != "kaputt" {
+		t.Fatalf("unreadable entry must be fetched again, got %q", pb.get("a", "1"))
 	}
 }
 
