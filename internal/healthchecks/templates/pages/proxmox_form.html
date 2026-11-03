@@ -111,6 +111,7 @@
 				<p>{{.T "pve.pbs.rights_hint"}}</p>
 				<pre class="p-2 rounded bg-body-tertiary mb-2"><code>proxmox-backup-manager user create {{$d.User}}
 proxmox-backup-manager user generate-token {{$d.User}} {{$d.TokenName}}
+proxmox-backup-manager acl update / Audit --auth-id '{{$d.User}}'
 proxmox-backup-manager acl update / Audit --auth-id '{{$d.User}}!{{$d.TokenName}}'</code></pre>
 				<p class="mb-0 text-body-secondary">{{.T "pve.pbs.rights_secret"}}</p>
 			</div>

@@ -1,5 +1,10 @@
 # Änderungen – Healthchecks
 
+## 2.52.1 – 2026-11-03
+
+### Behoben
+- Proxmox Backup Server: Die Anleitung beim Hinzufügen und der Rechte-Hinweis sagen jetzt, dass Benutzer **und** Token die Rolle Audit auf „/“ brauchen – nur einer von beiden reicht nicht. Die Befehle setzen beides.
+
 ## 2.52.0 – 2026-11-03
 
 ### Geändert

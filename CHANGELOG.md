@@ -4,6 +4,8 @@ Kurz, was sich je Version ändert. Einzelheiten je Modul stehen in der Node unte
 
 ## Unveröffentlicht
 
+- Healthchecks: Anleitung für Proxmox Backup Server nennt die Rolle Audit für Benutzer und Token (nur einer reicht nicht).
+
 ## 0.12.0-alpha.39 – 2026-11-03
 
 - Healthchecks: Ist ipv64 kurz nicht erreichbar, behalten Online-Checks den letzten Zustand mit Hinweis (!) statt „Nicht überwacht“.

@@ -4806,7 +4806,7 @@
       "ds_unmounted": "not mounted",
       "ds_empty": "No datastores visible – does the token lack rights (Datastore.Audit), or is none set up yet?",
       "warn_rights": "The token lacks read rights.",
-      "warn_rights_fix": "In PBS give the token the Audit role on “/” (Access Control → Permissions → API Token Permission).",
+      "warn_rights_fix": "In PBS give the Audit role on “/” to the user and to the token – both, one of them alone is not enough: the token has at most the rights of its user (Access Control → Permissions → User Permission and API Token Permission).",
       "service": "Service of the backup server",
       "services_down": "Service not running",
       "ds_groups": "Groups",
@@ -4822,7 +4822,7 @@
       "addresses_hint": "https://host:8007 – address of the backup server. More addresses (one per line) serve as fallback.",
       "name_hint": "Default: hostname",
       "rights": "Create a read-only token in the PBS",
-      "rights_hint": "On the backup server as root (shell) – read rights only (role Audit):",
+      "rights_hint": "On the backup server as root (shell) – read rights only (role Audit). Both the user and the token need the role; one of them alone is not enough:",
       "rights_secret": "The PBS shows the secret only once when creating it.",
       "about_text": "Read-only: host status, services, datastores, updates, backups and failed tasks. Host and datastore usage are alerted on; Node64 changes nothing in PBS."
     },
