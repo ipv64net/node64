@@ -4,6 +4,8 @@ Short summary of what changes per version. Details per module are in the node un
 
 ## Unreleased
 
+## 0.12.0-alpha.39.1 – 2026-11-03
+
 - Healthchecks: the Proxmox Backup Server instructions give the Audit role to the user and the token (one alone is not enough).
 
 ## 0.12.0-alpha.39 – 2026-11-03
